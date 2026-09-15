@@ -302,6 +302,36 @@ export async function handleResendVerification(req, res, body, baseUrl) {
   sendJson(res, 202, { status: 'verification_sent' });
 }
 
+// Proxies the Have I Been Pwned range API so the page can run a breach check
+// without relaxing connect-src to a third-party origin. Only the 5-character
+// hash prefix transits, and it is never logged.
+export async function handleBreachCheck(req, res, url) {
+  const ip = clientIp(req);
+  enforceLimit('verify', ip);
+  const prefix = String(url.searchParams.get('prefix') || '').toUpperCase();
+  if (!/^[0-9A-F]{5}$/.test(prefix)) {
+    registerFailure('verify', ip);
+    throw new HttpError(400, 'invalid_prefix', 'Préfixe de hachage invalide.');
+  }
+  // Counts against the same bucket so this cannot be used as a traffic amplifier.
+  registerFailure('verify', ip);
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
+      headers: { 'User-Agent': 'mon-budget-self-hosted' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!response.ok) throw new Error(`HIBP ${response.status}`);
+    const text = await response.text();
+    sendJson(res, 200, { suffixes: text.split('\n').map((line) => line.trim()).filter(Boolean) });
+  } catch (e) {
+    // The local strength rules still applied; this check is a bonus, not a gate.
+    sendJson(res, 200, { unavailable: true });
+  }
+}
+
 export async function handleChangePassword(req, res, body) {
   const { session, user } = requireSession(req);
   requireCsrf(req, session);

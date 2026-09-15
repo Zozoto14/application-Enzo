@@ -1,12 +1,25 @@
-const CACHE_NAME = 'mon-budget-v2';
+const CACHE_NAME = 'mon-budget-v3';
 const ASSETS = [
   './',
   './index.html',
+  './verifier-email.html',
   './css/style.css',
   './js/app.js',
-  './js/storage.js',
+  './js/account.js',
+  './js/api.js',
+  './js/backup.js',
+  './js/biometric.js',
   './js/charts.js',
   './js/crypto.js',
+  './js/modals.js',
+  './js/model.js',
+  './js/password-policy.js',
+  './js/storage.js',
+  './js/store.js',
+  './js/sync.js',
+  './js/ui.js',
+  './js/verify-email.js',
+  './js/views.js',
   './manifest.json',
   './icons/icon-180.png',
   './icons/icon-192.png',
@@ -29,6 +42,9 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  // API responses carry session state and encrypted payloads: they must never be
+  // served from cache, or a device could sync against a stale vault version.
+  if (new URL(event.request.url).pathname.startsWith('/api/')) return;
   event.respondWith(
     caches.match(event.request).then((cached) => {
       const network = fetch(event.request)

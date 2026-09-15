@@ -1,100 +1,81 @@
 import {
-  BUDGET_SPACES, spaceLabel, spaceIcon, uid,
-  hasVault, hasLegacyPlaintextData, readLegacyPlaintextState,
-  createVault, unlockVault, saveVault, changePin, wipeVault,
+  hasVault, getMode, getAccountInfo, hasQuickUnlock, hasBiometricUnlock,
+  createLocalVault, unlockLocalVault, changeLocalPin, unlockWithPin, enableQuickUnlock,
+  readLegacyPlaintextState, hasLegacyPlaintextData, wipeVault, saveVault,
   getLockStatus, registerFailedAttempt, registerSuccessfulUnlock,
-  loadPrefs, savePrefs,
+  loadPrefs, savePrefs, getSyncMeta, setSyncMeta,
 } from './storage.js';
-import { renderDonutChart, renderBarChart, PALETTE } from './charts.js';
-
-let state = null;
-let sessionKey = null;
-let idleTimer = null;
-
-const ui = {
-  tab: 'dashboard',
-  dashboardSpace: 'all',
-  dashboardPeriod: 'month',
-  txSpace: 'all',
-  txSearch: '',
-  editingId: null,
-};
-
-const currencyFmt = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
-const dateFmt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-const monthFmt = new Intl.DateTimeFormat('fr-FR', { month: 'short' });
+import {
+  defaultState, generateRecurringTransactions, getSetting, setSetting, categoryId,
+} from './model.js';
+import {
+  store, setRenderer, setToastHandler, showToast, openSession, closeSession,
+  isOpen, commit, removeWithUndo,
+} from './store.js';
+import { renderDashboard, renderTransactions, renderPlanning, renderSettings } from './views.js';
+import { openTransactionModal, openBudgetModal, openGoalModal, openRecurringModal, openModal, closeModal } from './modals.js';
+import { signup, login, logout, adoptAccountVault, changeAccountPassword, refreshSession } from './account.js';
+import { syncNow, onSyncChange, SyncStatus } from './sync.js';
+import { isBiometricSupported, isPlatformAuthenticatorAvailable, enrollBiometric, unlockWithBiometric, removeBiometric } from './biometric.js';
+import { buildBackup, downloadBackup, readBackupFile, restoreBackup } from './backup.js';
+import { escapeHtml } from './ui.js';
 
 const appRoot = document.getElementById('app');
 const lockRoot = document.getElementById('lock-root');
 const viewRoot = document.getElementById('view-root');
 const pageTitle = document.getElementById('page-title');
-const modalRoot = document.getElementById('modal-root');
+const toastRoot = document.getElementById('toast-root');
 const fabAdd = document.getElementById('fab-add');
 
-const TAB_TITLES = { dashboard: 'Tableau de bord', transactions: 'Transactions', categories: 'Catégories', security: 'Sécurité' };
+const TAB_TITLES = {
+  dashboard: 'Tableau de bord',
+  transactions: 'Transactions',
+  planning: 'Objectifs',
+  settings: 'Réglages',
+};
 
-async function persist() {
-  if (!sessionKey || !state) return;
-  try {
-    await saveVault(sessionKey, state);
-  } catch (e) {
-    console.error('Erreur de sauvegarde chiffrée', e);
+let idleTimer = null;
+let biometricAvailable = false;
+let syncState = { status: SyncStatus.IDLE, message: 'Synchronisé' };
+let toastTimer = null;
+
+// ---------- Toast ----------
+
+setToastHandler((message, action) => {
+  if (toastTimer) clearTimeout(toastTimer);
+  toastRoot.innerHTML = `
+    <div class="toast">
+      <span>${escapeHtml(message)}</span>
+      ${action ? `<button id="toast-action">${escapeHtml(action.label)}</button>` : ''}
+    </div>`;
+  if (action) {
+    toastRoot.querySelector('#toast-action').addEventListener('click', async () => {
+      toastRoot.innerHTML = '';
+      await action.handler();
+    });
+  }
+  toastTimer = setTimeout(() => { toastRoot.innerHTML = ''; }, action ? 7000 : 3500);
+});
+
+// ---------- Theme ----------
+
+function applyTheme(theme) {
+  if (theme === 'light' || theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', theme);
+  } else {
+    document.documentElement.removeAttribute('data-theme');
   }
 }
 
-function formatAmount(n) {
-  return currencyFmt.format(n);
+function currentTheme() {
+  return isOpen() ? getSetting(store.state, 'theme', 'auto') : 'auto';
 }
 
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function spacesInScope(spaceFilter) {
-  return spaceFilter === 'all' ? BUDGET_SPACES.map((s) => s.id) : [spaceFilter];
-}
-
-function inPeriod(tx, period) {
-  const d = new Date(tx.date);
-  const now = new Date();
-  if (period === 'month') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-  if (period === 'year') return d.getFullYear() === now.getFullYear();
-  return true;
-}
-
-function filteredTransactions({ space, period, search }) {
-  const scope = spacesInScope(space);
-  return state.transactions
-    .filter((tx) => scope.includes(tx.space))
-    .filter((tx) => (period ? inPeriod(tx, period) : true))
-    .filter((tx) => {
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return tx.description.toLowerCase().includes(q) || tx.category.toLowerCase().includes(q);
-    })
-    .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
-}
-
-function computeTotals(list) {
-  let income = 0;
-  let expense = 0;
-  list.forEach((tx) => {
-    if (tx.type === 'income') income += tx.amount;
-    else expense += tx.amount;
-  });
-  return { income, expense, balance: income - expense };
-}
-
-// ---------- Lock screen ----------
+// ---------- Lock screens ----------
 
 function showLockOverlay(html) {
   appRoot.style.display = 'none';
-  modalRoot.innerHTML = '';
+  closeModal();
   lockRoot.innerHTML = `<div class="lock-overlay">${html}</div>`;
 }
 
@@ -103,14 +84,29 @@ function hideLockOverlay() {
   appRoot.style.display = '';
 }
 
-function renderCreatePinScreen() {
+function renderWelcome() {
+  showLockOverlay(`
+    <div class="lock-card">
+      <div class="lock-icon">💶</div>
+      <h2>Mon Budget</h2>
+      <p class="lock-sub">Suivez vos dépenses personnelles, vos candidatures et vos projets. Vos données sont chiffrées sur l'appareil — et si vous créez un compte, elles le restent aussi sur le serveur.</p>
+      <button class="btn-primary" id="choose-account">Créer un compte et synchroniser</button>
+      <button class="btn-secondary" id="choose-login">J'ai déjà un compte</button>
+      <button class="btn-secondary" id="choose-local">Utiliser sur cet appareil uniquement</button>
+    </div>
+  `);
+  lockRoot.querySelector('#choose-account').addEventListener('click', () => renderAccountAuth('signup'));
+  lockRoot.querySelector('#choose-login').addEventListener('click', () => renderAccountAuth('login'));
+  lockRoot.querySelector('#choose-local').addEventListener('click', () => renderLocalPinSetup());
+}
+
+function renderLocalPinSetup() {
   const migrating = hasLegacyPlaintextData();
   showLockOverlay(`
     <div class="lock-card">
       <div class="lock-icon">🔒</div>
       <h2>Protégez votre budget</h2>
-      <p class="lock-sub">Créez un code d'accès. Vos données seront chiffrées sur cet appareil avec ce code.
-      ${migrating ? ' Vos transactions existantes seront conservées et chiffrées.' : ''}
+      <p class="lock-sub">Créez un code d'accès. Vos données seront chiffrées sur cet appareil avec ce code.${migrating ? ' Vos transactions existantes seront conservées et chiffrées.' : ''}
       <strong> Si vous l'oubliez, les données ne pourront pas être récupérées</strong> — il n'existe aucune porte dérobée.</p>
       <form id="create-pin-form">
         <div class="form-row">
@@ -123,15 +119,17 @@ function renderCreatePinScreen() {
         </div>
         <p class="lock-error" id="lock-error"></p>
         <button type="submit" class="btn-primary">Créer le code et continuer</button>
+        <button type="button" class="btn-secondary" id="back-welcome">Retour</button>
       </form>
     </div>
   `);
 
-  document.getElementById('create-pin-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const pin1 = document.getElementById('pin1').value;
-    const pin2 = document.getElementById('pin2').value;
-    const errorEl = document.getElementById('lock-error');
+  lockRoot.querySelector('#back-welcome').addEventListener('click', renderWelcome);
+  lockRoot.querySelector('#create-pin-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const pin1 = lockRoot.querySelector('#pin1').value;
+    const pin2 = lockRoot.querySelector('#pin2').value;
+    const errorEl = lockRoot.querySelector('#lock-error');
     if (pin1.length < 4) {
       errorEl.textContent = 'Le code doit contenir au moins 4 caractères.';
       return;
@@ -141,95 +139,243 @@ function renderCreatePinScreen() {
       return;
     }
     const legacy = migrating ? readLegacyPlaintextState() : null;
-    const { key, state: newState } = await createVault(pin1, legacy);
-    enterUnlockedSession(key, newState);
+    const { key, state } = await createLocalVault(pin1, legacy || defaultState());
+    await enterSession(key, state);
   });
 }
 
-function renderUnlockScreen() {
-  const status = getLockStatus();
-  const locked = status.remainingMs > 0;
-
+function renderAccountAuth(mode, prefill = {}) {
+  const isSignup = mode === 'signup';
   showLockOverlay(`
     <div class="lock-card">
-      <div class="lock-icon">🔒</div>
-      <h2>Mon Budget verrouillé</h2>
-      <p class="lock-sub">Entrez votre code d'accès pour continuer.</p>
-      <form id="unlock-form">
+      <div class="lock-icon">${isSignup ? '✨' : '👋'}</div>
+      <h2>${isSignup ? 'Créer un compte' : 'Connexion'}</h2>
+      <p class="lock-sub">${isSignup
+        ? "Votre mot de passe chiffre vos données avant qu'elles ne quittent l'appareil. Le serveur ne peut jamais les lire — et ne peut pas non plus réinitialiser ce mot de passe."
+        : 'Connectez-vous pour retrouver vos données synchronisées.'}</p>
+      <form id="account-form">
         <div class="form-row">
-          <label for="pin-unlock">Code d'accès</label>
-          <input type="password" id="pin-unlock" inputmode="numeric" autocomplete="current-password" required ${locked ? 'disabled' : 'autofocus'} />
+          <label for="acc-email">Adresse email</label>
+          <input type="email" id="acc-email" autocomplete="email" value="${escapeHtml(prefill.email || '')}" required />
         </div>
+        <div class="form-row">
+          <label for="acc-password">Mot de passe</label>
+          <input type="password" id="acc-password" autocomplete="${isSignup ? 'new-password' : 'current-password'}" required />
+        </div>
+        ${isSignup ? `
+          <div class="form-row">
+            <label for="acc-password2">Confirmez le mot de passe</label>
+            <input type="password" id="acc-password2" autocomplete="new-password" required />
+          </div>
+          <p class="row-sub">12 caractères minimum, avec majuscule, minuscule, chiffre et caractère spécial. Les mots de passe déjà présents dans des fuites connues sont refusés.</p>
+        ` : ''}
         <p class="lock-error" id="lock-error"></p>
-        <button type="submit" class="btn-primary" id="unlock-submit" ${locked ? 'disabled' : ''}>Déverrouiller</button>
+        <p class="lock-success" id="lock-success"></p>
+        <button type="submit" class="btn-primary" id="account-submit">${isSignup ? 'Créer le compte' : 'Se connecter'}</button>
+        <button type="button" class="btn-secondary" id="switch-mode">${isSignup ? "J'ai déjà un compte" : 'Créer un compte'}</button>
+        ${hasVault() ? '' : '<button type="button" class="btn-secondary" id="back-welcome">Retour</button>'}
       </form>
     </div>
   `);
 
-  let countdownInterval = null;
-  function updateLockedMessage() {
-    const s = getLockStatus();
-    const errorEl = document.getElementById('lock-error');
-    if (s.remainingMs <= 0) {
-      clearInterval(countdownInterval);
-      renderUnlockScreen();
-      return;
-    }
-    const seconds = Math.ceil(s.remainingMs / 1000);
-    errorEl.textContent = `Trop de tentatives. Réessayez dans ${seconds}s.`;
-  }
-  if (locked) {
-    updateLockedMessage();
-    countdownInterval = setInterval(updateLockedMessage, 1000);
-  }
+  const backButton = lockRoot.querySelector('#back-welcome');
+  if (backButton) backButton.addEventListener('click', renderWelcome);
+  lockRoot.querySelector('#switch-mode').addEventListener('click', () => renderAccountAuth(isSignup ? 'login' : 'signup', {
+    email: lockRoot.querySelector('#acc-email').value,
+  }));
 
-  document.getElementById('unlock-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const pin = document.getElementById('pin-unlock').value;
-    const submitBtn = document.getElementById('unlock-submit');
-    submitBtn.disabled = true;
-    const result = await unlockVault(pin);
-    if (result) {
-      registerSuccessfulUnlock();
-      if (countdownInterval) clearInterval(countdownInterval);
-      enterUnlockedSession(result.key, result.state);
-    } else {
-      const s = registerFailedAttempt();
-      submitBtn.disabled = false;
-      if (s.remainingMs > 0) {
-        renderUnlockScreen();
-      } else {
-        const remaining = Math.max(0, 5 - s.failedAttempts);
-        document.getElementById('lock-error').textContent = remaining > 0
-          ? `Code incorrect (${remaining} tentative${remaining > 1 ? 's' : ''} avant blocage temporaire).`
-          : 'Code incorrect.';
-        document.getElementById('pin-unlock').value = '';
-        document.getElementById('pin-unlock').focus();
+  lockRoot.querySelector('#account-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const errorEl = lockRoot.querySelector('#lock-error');
+    const successEl = lockRoot.querySelector('#lock-success');
+    const submitButton = lockRoot.querySelector('#account-submit');
+    errorEl.textContent = '';
+    successEl.textContent = '';
+    const email = lockRoot.querySelector('#acc-email').value.trim();
+    const password = lockRoot.querySelector('#acc-password').value;
+
+    submitButton.disabled = true;
+    submitButton.textContent = 'Veuillez patienter…';
+    try {
+      if (isSignup) {
+        if (password !== lockRoot.querySelector('#acc-password2').value) {
+          errorEl.textContent = 'Les deux mots de passe ne correspondent pas.';
+          return;
+        }
+        const result = await signup(email, password, isOpen() ? store.state : null);
+        if (!result.ok) {
+          errorEl.textContent = result.message;
+          return;
+        }
+        successEl.textContent = result.message;
+        submitButton.textContent = 'Compte créé';
+        setTimeout(() => renderAccountAuth('login', { email }), 2500);
+        return;
+      }
+
+      const result = await login(email, password);
+      if (!result.ok) {
+        errorEl.textContent = result.message;
+        return;
+      }
+      await adoptAccountAndOpen(result);
+    } finally {
+      if (lockRoot.querySelector('#account-submit')) {
+        submitButton.disabled = false;
+        if (!isSignup) submitButton.textContent = 'Se connecter';
       }
     }
   });
 }
 
-function enterUnlockedSession(key, loadedState) {
-  sessionKey = key;
-  state = loadedState;
+// Carries whatever is already on this device into the account vault, then lets the
+// sync merge decide per record against whatever the server holds.
+async function adoptAccountAndOpen(loginResult) {
+  const localState = isOpen() ? store.state : null;
+  const seed = localState || defaultState();
+  await adoptAccountVault(loginResult.account, loginResult.vaultKey, seed, 0);
+  await enterSession(loginResult.vaultKey, seed);
+  if (!loginResult.emailVerified) {
+    store.state && setSyncState(SyncStatus.UNVERIFIED, 'Confirmez votre email pour activer la synchronisation');
+  }
+  await runSync();
+}
+
+function renderUnlock() {
+  const mode = getMode();
+  const account = getAccountInfo();
+  const quickUnlock = hasQuickUnlock();
+  const canUsePin = mode === 'local' || quickUnlock;
+  const status = getLockStatus();
+  const lockedOut = status.remainingMs > 0;
+
+  showLockOverlay(`
+    <div class="lock-card">
+      <div class="lock-icon">🔒</div>
+      <h2>Mon Budget verrouillé</h2>
+      <p class="lock-sub">${account ? `Compte : ${escapeHtml(account.email)}` : 'Entrez votre code d\'accès pour continuer.'}</p>
+      ${hasBiometricUnlock() ? '<button class="btn-secondary" id="biometric-unlock">🫆 Déverrouiller avec Face ID / Touch ID</button>' : ''}
+      <form id="unlock-form">
+        <div class="form-row">
+          <label for="pin-unlock">${canUsePin ? "Code d'accès" : 'Mot de passe du compte'}</label>
+          <input type="password" id="pin-unlock" inputmode="${canUsePin ? 'numeric' : 'text'}" autocomplete="current-password" required ${lockedOut ? 'disabled' : 'autofocus'} />
+        </div>
+        <p class="lock-error" id="lock-error"></p>
+        <button type="submit" class="btn-primary" id="unlock-submit" ${lockedOut ? 'disabled' : ''}>Déverrouiller</button>
+        ${mode === 'account' && quickUnlock ? '<button type="button" class="btn-secondary" id="use-password">Utiliser le mot de passe du compte</button>' : ''}
+      </form>
+    </div>
+  `);
+
+  let countdown = null;
+  function tickCountdown() {
+    const current = getLockStatus();
+    if (current.remainingMs <= 0) {
+      clearInterval(countdown);
+      renderUnlock();
+      return;
+    }
+    lockRoot.querySelector('#lock-error').textContent = `Trop de tentatives. Réessayez dans ${Math.ceil(current.remainingMs / 1000)}s.`;
+  }
+  if (lockedOut) {
+    tickCountdown();
+    countdown = setInterval(tickCountdown, 1000);
+  }
+
+  const biometricButton = lockRoot.querySelector('#biometric-unlock');
+  if (biometricButton) {
+    biometricButton.addEventListener('click', async () => {
+      const result = await unlockWithBiometric();
+      if (!result.ok) {
+        lockRoot.querySelector('#lock-error').textContent = result.message;
+        return;
+      }
+      if (countdown) clearInterval(countdown);
+      registerSuccessfulUnlock();
+      await enterSession(result.key, result.state);
+      await runSync();
+    });
+  }
+
+  const passwordButton = lockRoot.querySelector('#use-password');
+  if (passwordButton) passwordButton.addEventListener('click', () => renderAccountAuth('login', { email: account ? account.email : '' }));
+
+  lockRoot.querySelector('#unlock-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const secret = lockRoot.querySelector('#pin-unlock').value;
+    const submitButton = lockRoot.querySelector('#unlock-submit');
+    const errorEl = lockRoot.querySelector('#lock-error');
+    submitButton.disabled = true;
+
+    let unlocked = null;
+    if (mode === 'local') unlocked = await unlockLocalVault(secret);
+    else if (quickUnlock) unlocked = await unlockWithPin(secret);
+
+    if (!unlocked && mode === 'account' && !quickUnlock) {
+      const result = await login(account.email, secret);
+      if (result.ok) {
+        await adoptAccountAndOpen(result);
+        if (countdown) clearInterval(countdown);
+        registerSuccessfulUnlock();
+        return;
+      }
+    }
+
+    if (unlocked) {
+      if (countdown) clearInterval(countdown);
+      registerSuccessfulUnlock();
+      await enterSession(unlocked.key, unlocked.state);
+      await runSync();
+      return;
+    }
+
+    const failure = registerFailedAttempt();
+    submitButton.disabled = false;
+    if (failure.remainingMs > 0) {
+      renderUnlock();
+      return;
+    }
+    const remaining = Math.max(0, 5 - failure.failedAttempts);
+    errorEl.textContent = remaining > 0
+      ? `Code incorrect (${remaining} tentative${remaining > 1 ? 's' : ''} avant blocage temporaire).`
+      : 'Code incorrect.';
+    lockRoot.querySelector('#pin-unlock').value = '';
+  });
+}
+
+async function enterSession(vaultKey, state) {
+  openSession(vaultKey, state);
+  store.ui.privacyMode = getSetting(state, 'privacyMode', false);
+  applyTheme(getSetting(state, 'theme', 'auto'));
+
+  const created = generateRecurringTransactions(store.state);
+  if (created.length) {
+    await commit(() => {}, { render: false });
+  }
+
+  biometricAvailable = await isPlatformAuthenticatorAvailable();
   hideLockOverlay();
   setupAutoLock();
-  setTab(ui.tab || 'dashboard');
+  setTab(store.ui.tab || 'dashboard');
+  if (created.length) {
+    const plural = created.length > 1 ? 's' : '';
+    setTimeout(() => showToast(`${created.length} transaction${plural} récurrente${plural} ajoutée${plural}.`), 400);
+  }
 }
 
 function lockApp() {
-  if (!sessionKey) return;
-  sessionKey = null;
-  state = null;
+  if (!isOpen()) return;
+  closeSession();
   teardownAutoLock();
-  renderUnlockScreen();
+  renderUnlock();
 }
 
 // ---------- Auto-lock ----------
 
+const idleEvents = ['pointerdown', 'keydown', 'touchstart'];
+
 function resetIdleTimer() {
-  if (!sessionKey) return;
+  if (!isOpen()) return;
   if (idleTimer) clearTimeout(idleTimer);
   const prefs = loadPrefs();
   if (!prefs.autoLockMinutes) return;
@@ -237,29 +383,56 @@ function resetIdleTimer() {
 }
 
 function onVisibilityChange() {
-  if (document.hidden && sessionKey) lockApp();
+  if (document.hidden && isOpen()) lockApp();
 }
-
-const idleEvents = ['pointerdown', 'keydown', 'touchstart'];
 
 function setupAutoLock() {
   resetIdleTimer();
-  idleEvents.forEach((evt) => document.addEventListener(evt, resetIdleTimer));
+  idleEvents.forEach((event) => document.addEventListener(event, resetIdleTimer));
   document.addEventListener('visibilitychange', onVisibilityChange);
 }
 
 function teardownAutoLock() {
   if (idleTimer) clearTimeout(idleTimer);
-  idleEvents.forEach((evt) => document.removeEventListener(evt, resetIdleTimer));
+  idleEvents.forEach((event) => document.removeEventListener(event, resetIdleTimer));
   document.removeEventListener('visibilitychange', onVisibilityChange);
 }
 
-// ---------- Tabs ----------
+// ---------- Sync ----------
+
+function setSyncState(status, message) {
+  syncState = { status, message };
+  if (store.ui.tab === 'settings' && isOpen()) render();
+}
+
+onSyncChange(({ status, message }) => {
+  const labels = {
+    [SyncStatus.IDLE]: 'Synchronisé',
+    [SyncStatus.SYNCING]: 'Synchronisation…',
+    [SyncStatus.OFFLINE]: 'Hors ligne — les modifications seront envoyées plus tard',
+    [SyncStatus.UNVERIFIED]: 'Confirmez votre email pour activer la synchronisation',
+    [SyncStatus.ERROR]: message || 'Erreur de synchronisation',
+  };
+  setSyncState(status, labels[status] || message || '');
+});
+
+async function runSync() {
+  if (!isOpen() || getMode() !== 'account') return;
+  const merged = await syncNow(store.vaultKey, store.state);
+  if (merged) {
+    store.state = merged;
+    store.ui.privacyMode = getSetting(merged, 'privacyMode', store.ui.privacyMode);
+    applyTheme(getSetting(merged, 'theme', 'auto'));
+    render();
+  }
+}
+
+// ---------- Tabs and rendering ----------
 
 function setTab(tab) {
-  ui.tab = tab;
-  document.querySelectorAll('.tab-btn').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.tab === tab);
+  store.ui.tab = tab;
+  document.querySelectorAll('.tab-btn').forEach((button) => {
+    button.classList.toggle('active', button.dataset.tab === tab);
   });
   pageTitle.textContent = TAB_TITLES[tab];
   fabAdd.style.display = tab === 'dashboard' || tab === 'transactions' ? 'flex' : 'none';
@@ -267,453 +440,423 @@ function setTab(tab) {
 }
 
 function render() {
-  if (ui.tab === 'dashboard') renderDashboard();
-  else if (ui.tab === 'transactions') renderTransactions();
-  else if (ui.tab === 'categories') renderCategories();
-  else if (ui.tab === 'security') renderSecurity();
-}
-
-// ---------- Dashboard ----------
-
-function renderDashboard() {
-  const list = filteredTransactions({ space: ui.dashboardSpace, period: ui.dashboardPeriod });
-  const totals = computeTotals(list);
-
-  const spaceChips = ['all', ...BUDGET_SPACES.map((s) => s.id)]
-    .map((id) => {
-      const label = id === 'all' ? 'Tous' : `${spaceIcon(id)} ${spaceLabel(id)}`;
-      return `<button data-space="${id}" class="${ui.dashboardSpace === id ? 'active' : ''}">${label}</button>`;
-    })
-    .join('');
-
-  const periodChips = [
-    ['month', 'Ce mois-ci'],
-    ['year', 'Cette année'],
-    ['all', 'Tout'],
-  ]
-    .map(([id, label]) => `<button data-period="${id}" class="${ui.dashboardPeriod === id ? 'active' : ''}">${label}</button>`)
-    .join('');
-
-  const expenseByCategory = {};
-  list.filter((tx) => tx.type === 'expense').forEach((tx) => {
-    expenseByCategory[tx.category] = (expenseByCategory[tx.category] || 0) + tx.amount;
-  });
-  const categoryData = Object.entries(expenseByCategory)
-    .map(([label, value]) => ({ label, value }))
-    .sort((a, b) => b.value - a.value);
-  categoryData.forEach((d, i) => (d.color = PALETTE[i % PALETTE.length]));
-
-  const months = [];
-  const now = new Date();
-  for (let i = 5; i >= 0; i -= 1) months.push(new Date(now.getFullYear(), now.getMonth() - i, 1));
-  const monthlyData = months.map((d) => {
-    const scope = spacesInScope(ui.dashboardSpace);
-    const txs = state.transactions.filter((tx) => {
-      if (!scope.includes(tx.space)) return false;
-      const td = new Date(tx.date);
-      return td.getFullYear() === d.getFullYear() && td.getMonth() === d.getMonth();
+  if (!isOpen()) return;
+  document.body.classList.toggle('privacy-on', store.ui.privacyMode);
+  if (store.ui.tab === 'dashboard') {
+    renderDashboard(viewRoot);
+    wireDashboard();
+  } else if (store.ui.tab === 'transactions') {
+    renderTransactions(viewRoot);
+    wireTransactions();
+  } else if (store.ui.tab === 'planning') {
+    renderPlanning(viewRoot);
+    wirePlanning();
+  } else if (store.ui.tab === 'settings') {
+    renderSettings(viewRoot, {
+      syncStatus: syncState.status,
+      syncMessage: syncState.message,
+      lastSyncAt: getSyncMeta().lastSyncAt,
+      prefs: loadPrefs(),
+      theme: currentTheme(),
+      biometricSupported: isBiometricSupported() && biometricAvailable,
+      biometricEnabled: hasBiometricUnlock(),
+      quickUnlockEnabled: hasQuickUnlock(),
     });
-    return { label: monthFmt.format(d), value: computeTotals(txs).balance };
+    wireSettings();
+  }
+}
+
+setRenderer(render);
+
+function wireDashboard() {
+  viewRoot.querySelector('#dash-space-chips').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-space]');
+    if (!button) return;
+    store.ui.dashboardSpace = button.dataset.space;
+    render();
   });
-
-  viewRoot.innerHTML = `
-    <div class="segmented" id="dash-space-chips">${spaceChips}</div>
-    <div class="segmented" id="dash-period-chips">${periodChips}</div>
-    <div class="summary-grid">
-      <div class="summary-card"><div class="label">Revenus</div><div class="value positive">${formatAmount(totals.income)}</div></div>
-      <div class="summary-card"><div class="label">Dépenses</div><div class="value negative">${formatAmount(totals.expense)}</div></div>
-      <div class="summary-card"><div class="label">Solde</div><div class="value ${totals.balance >= 0 ? 'positive' : 'negative'}">${formatAmount(totals.balance)}</div></div>
-    </div>
-    <div class="card">
-      <p class="section-title">Dépenses par catégorie</p>
-      ${categoryData.length ? `
-        <div class="chart-wrap"><svg id="donut-chart"></svg></div>
-        <div class="legend">
-          ${categoryData
-            .map((d) => `<div class="legend-item"><span class="legend-dot" style="background:${d.color}"></span>${escapeHtml(d.label)}<span class="legend-amount">${formatAmount(d.value)}</span></div>`)
-            .join('')}
-        </div>
-      ` : '<div class="empty-state">Aucune dépense sur cette période.</div>'}
-    </div>
-    <div class="card">
-      <p class="section-title">Solde mensuel (6 derniers mois)</p>
-      <div class="bar-chart-wrap"><svg id="bar-chart"></svg></div>
-    </div>
-  `;
-
-  if (categoryData.length) renderDonutChart(document.getElementById('donut-chart'), categoryData);
-  renderBarChart(document.getElementById('bar-chart'), monthlyData, { width: 320, height: 170 });
-
-  document.getElementById('dash-space-chips').addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-space]');
-    if (!btn) return;
-    ui.dashboardSpace = btn.dataset.space;
-    renderDashboard();
-  });
-  document.getElementById('dash-period-chips').addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-period]');
-    if (!btn) return;
-    ui.dashboardPeriod = btn.dataset.period;
-    renderDashboard();
+  viewRoot.querySelector('#dash-period-chips').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-period]');
+    if (!button) return;
+    store.ui.dashboardPeriod = button.dataset.period;
+    render();
   });
 }
 
-// ---------- Transactions ----------
-
-function renderTransactions() {
-  const list = filteredTransactions({ space: ui.txSpace, period: null, search: ui.txSearch });
-
-  const spaceChips = ['all', ...BUDGET_SPACES.map((s) => s.id)]
-    .map((id) => {
-      const label = id === 'all' ? 'Tous' : `${spaceIcon(id)} ${spaceLabel(id)}`;
-      return `<button data-space="${id}" class="${ui.txSpace === id ? 'active' : ''}">${label}</button>`;
-    })
-    .join('');
-
-  const groups = new Map();
-  list.forEach((tx) => {
-    if (!groups.has(tx.date)) groups.set(tx.date, []);
-    groups.get(tx.date).push(tx);
+function wireTransactions() {
+  const search = viewRoot.querySelector('#tx-search');
+  search.addEventListener('input', (event) => {
+    store.ui.txSearch = event.target.value;
+    renderTransactions(viewRoot);
+    wireTransactions();
+    const refreshed = viewRoot.querySelector('#tx-search');
+    refreshed.focus();
+    refreshed.setSelectionRange(refreshed.value.length, refreshed.value.length);
   });
-
-  let rowsHtml = '';
-  if (list.length === 0) {
-    rowsHtml = '<div class="empty-state">Aucune transaction. Appuyez sur + pour en ajouter une.</div>';
-  } else {
-    for (const [date, txs] of groups) {
-      rowsHtml += `<div class="tx-group-label">${dateFmt.format(new Date(date))}</div>`;
-      txs.forEach((tx) => {
-        rowsHtml += `
-          <div class="tx-row" data-id="${tx.id}">
-            <div class="tx-icon">${spaceIcon(tx.space)}</div>
-            <div class="tx-info">
-              <div class="tx-desc">${escapeHtml(tx.description || tx.category)}</div>
-              <div class="tx-meta">${escapeHtml(tx.category)} · ${spaceLabel(tx.space)}</div>
-            </div>
-            <div class="tx-amount ${tx.type === 'income' ? 'positive' : 'negative'}">${tx.type === 'income' ? '+' : '-'}${formatAmount(tx.amount)}</div>
-          </div>
-        `;
-      });
-    }
-  }
-
-  viewRoot.innerHTML = `
-    <input type="search" class="search-input" id="tx-search" placeholder="Rechercher..." value="${escapeHtml(ui.txSearch)}" />
-    <div class="segmented" id="tx-space-chips">${spaceChips}</div>
-    <div id="tx-list">${rowsHtml}</div>
-  `;
-
-  document.getElementById('tx-search').addEventListener('input', (e) => {
-    ui.txSearch = e.target.value;
-    renderTransactions();
+  viewRoot.querySelector('#tx-space-chips').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-space]');
+    if (!button) return;
+    store.ui.txSpace = button.dataset.space;
+    render();
   });
-  document.getElementById('tx-space-chips').addEventListener('click', (e) => {
-    const btn = e.target.closest('button[data-space]');
-    if (!btn) return;
-    ui.txSpace = btn.dataset.space;
-    renderTransactions();
-  });
-  document.getElementById('tx-list').addEventListener('click', (e) => {
-    const row = e.target.closest('.tx-row');
+  viewRoot.querySelector('#tx-list').addEventListener('click', (event) => {
+    const row = event.target.closest('.tx-row');
     if (!row) return;
     openTransactionModal(row.dataset.id);
   });
 }
 
-// ---------- Categories ----------
-
-function renderCategories() {
-  const sections = BUDGET_SPACES.map((space) => {
-    const cats = state.categories[space.id] || [];
-    const usedCategories = new Set(state.transactions.filter((t) => t.space === space.id).map((t) => t.category));
-    const rows = cats
-      .map((cat) => `
-        <div class="category-row" data-space="${space.id}" data-cat="${escapeHtml(cat)}">
-          <span>${escapeHtml(cat)}</span>
-          ${usedCategories.has(cat) ? '' : '<button data-action="delete-cat">Supprimer</button>'}
-        </div>
-      `)
-      .join('');
-    return `
-      <div class="card">
-        <p class="section-title">${space.icon} ${space.label}</p>
-        <div class="category-list">${rows || '<div class="empty-state">Aucune catégorie</div>'}</div>
-        <div class="add-category-row">
-          <input type="text" placeholder="Nouvelle catégorie" data-new-cat="${space.id}" />
-          <button data-add-cat="${space.id}">Ajouter</button>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  viewRoot.innerHTML = sections;
-
-  viewRoot.querySelectorAll('[data-add-cat]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const spaceId = btn.dataset.addCat;
-      const input = viewRoot.querySelector(`[data-new-cat="${spaceId}"]`);
-      const value = input.value.trim();
-      if (!value) return;
-      if (!state.categories[spaceId].includes(value)) {
-        state.categories[spaceId].push(value);
-        await persist();
-      }
-      renderCategories();
-    });
+function wirePlanning() {
+  viewRoot.querySelector('#add-budget').addEventListener('click', () => openBudgetModal(null));
+  viewRoot.querySelector('#add-goal').addEventListener('click', () => openGoalModal(null));
+  viewRoot.querySelector('#add-recurring').addEventListener('click', () => openRecurringModal(null));
+  viewRoot.querySelectorAll('[data-budget-id]').forEach((row) => {
+    row.addEventListener('click', () => openBudgetModal(row.dataset.budgetId));
   });
-
-  viewRoot.querySelectorAll('[data-action="delete-cat"]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const row = btn.closest('.category-row');
-      const spaceId = row.dataset.space;
-      const cat = row.dataset.cat;
-      state.categories[spaceId] = state.categories[spaceId].filter((c) => c !== cat);
-      await persist();
-      renderCategories();
-    });
+  viewRoot.querySelectorAll('[data-goal-id]').forEach((row) => {
+    row.addEventListener('click', () => openGoalModal(row.dataset.goalId));
+  });
+  viewRoot.querySelectorAll('[data-recurring-id]').forEach((row) => {
+    row.addEventListener('click', () => openRecurringModal(row.dataset.recurringId));
   });
 }
 
-// ---------- Security tab ----------
+function wireSettings() {
+  const byId = (id) => viewRoot.querySelector(`#${id}`);
 
-function renderSecurity() {
-  const prefs = loadPrefs();
-  const delayOptions = [
-    [1, '1 minute'],
-    [2, '2 minutes'],
-    [5, '5 minutes'],
-    [15, '15 minutes'],
-    [0, 'Jamais (déconseillé)'],
-  ];
+  const createAccountButton = byId('create-account-btn');
+  if (createAccountButton) createAccountButton.addEventListener('click', () => renderAccountAuth('signup'));
+  const loginButton = byId('login-account-btn');
+  if (loginButton) loginButton.addEventListener('click', () => renderAccountAuth('login'));
 
-  viewRoot.innerHTML = `
-    <div class="card">
-      <p class="section-title">Verrouillage</p>
-      <p class="lock-sub">L'application se verrouille automatiquement dès qu'elle passe en arrière-plan, et après une période d'inactivité.</p>
-      <div class="form-row">
-        <label for="autolock-select">Verrouiller après inactivité</label>
-        <select id="autolock-select">
-          ${delayOptions.map(([val, label]) => `<option value="${val}" ${prefs.autoLockMinutes === val ? 'selected' : ''}>${label}</option>`).join('')}
-        </select>
-      </div>
-      <button class="btn-secondary" id="lock-now-btn">Verrouiller maintenant</button>
-    </div>
+  const syncButton = byId('sync-now-btn');
+  if (syncButton) syncButton.addEventListener('click', () => runSync());
 
-    <div class="card">
-      <p class="section-title">Changer le code d'accès</p>
-      <form id="change-pin-form">
-        <div class="form-row">
-          <label for="old-pin">Code actuel</label>
-          <input type="password" id="old-pin" inputmode="numeric" autocomplete="current-password" required />
-        </div>
-        <div class="form-row">
-          <label for="new-pin1">Nouveau code</label>
-          <input type="password" id="new-pin1" inputmode="numeric" autocomplete="new-password" minlength="4" required />
-        </div>
-        <div class="form-row">
-          <label for="new-pin2">Confirmez le nouveau code</label>
-          <input type="password" id="new-pin2" inputmode="numeric" autocomplete="new-password" minlength="4" required />
-        </div>
-        <p class="lock-error" id="change-pin-error"></p>
-        <p class="lock-success" id="change-pin-success"></p>
-        <button type="submit" class="btn-primary">Mettre à jour le code</button>
-      </form>
-    </div>
+  const logoutButton = byId('logout-btn');
+  if (logoutButton) {
+    logoutButton.addEventListener('click', async () => {
+      if (!window.confirm('Se déconnecter de cet appareil ? Les données locales chiffrées seront effacées ; elles restent sur le serveur.')) return;
+      await logout();
+      wipeVault();
+      closeSession();
+      teardownAutoLock();
+      renderWelcome();
+    });
+  }
 
-    <div class="card">
-      <p class="section-title">Zone dangereuse</p>
-      <p class="lock-sub">Efface définitivement toutes les données et le code d'accès de cet appareil. Cette action est irréversible.</p>
-      <button class="btn-danger" id="wipe-btn">Réinitialiser toutes les données</button>
-    </div>
-  `;
+  const changePasswordButton = byId('change-password-btn');
+  if (changePasswordButton) changePasswordButton.addEventListener('click', openChangePasswordModal);
 
-  document.getElementById('autolock-select').addEventListener('change', (e) => {
-    savePrefs({ ...prefs, autoLockMinutes: Number(e.target.value) });
+  byId('autolock-select').addEventListener('change', (event) => {
+    savePrefs({ ...loadPrefs(), autoLockMinutes: Number(event.target.value) });
     resetIdleTimer();
   });
 
-  document.getElementById('lock-now-btn').addEventListener('click', () => lockApp());
-
-  document.getElementById('change-pin-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const oldPin = document.getElementById('old-pin').value;
-    const newPin1 = document.getElementById('new-pin1').value;
-    const newPin2 = document.getElementById('new-pin2').value;
-    const errorEl = document.getElementById('change-pin-error');
-    const successEl = document.getElementById('change-pin-success');
-    errorEl.textContent = '';
-    successEl.textContent = '';
-    if (newPin1.length < 4) {
-      errorEl.textContent = 'Le nouveau code doit contenir au moins 4 caractères.';
-      return;
-    }
-    if (newPin1 !== newPin2) {
-      errorEl.textContent = 'Les deux nouveaux codes ne correspondent pas.';
-      return;
-    }
-    const newKey = await changePin(oldPin, newPin1);
-    if (!newKey) {
-      errorEl.textContent = 'Code actuel incorrect.';
-      return;
-    }
-    sessionKey = newKey;
-    successEl.textContent = 'Code mis à jour.';
-    e.target.reset();
+  byId('privacy-toggle').addEventListener('change', async (event) => {
+    store.ui.privacyMode = event.target.checked;
+    await commit((state) => setSetting(state, 'privacyMode', event.target.checked));
   });
 
-  document.getElementById('wipe-btn').addEventListener('click', () => {
-    const confirmed = window.confirm('Effacer définitivement toutes les données de cet appareil ? Cette action est irréversible.');
-    if (!confirmed) return;
-    wipeVault();
-    sessionKey = null;
-    state = null;
-    teardownAutoLock();
-    renderCreatePinScreen();
-  });
-}
-
-// ---------- Add / Edit modal ----------
-
-function openTransactionModal(id) {
-  ui.editingId = id || null;
-  const existing = id ? state.transactions.find((t) => t.id === id) : null;
-  const type = existing ? existing.type : 'expense';
-  const space = existing ? existing.space : BUDGET_SPACES[0].id;
-  const amount = existing ? existing.amount : '';
-  const date = existing ? existing.date : new Date().toISOString().slice(0, 10);
-  const description = existing ? existing.description : '';
-  const category = existing ? existing.category : '';
-
-  const spaceOptions = BUDGET_SPACES.map((s) => `<option value="${s.id}" ${s.id === space ? 'selected' : ''}>${s.icon} ${s.label}</option>`).join('');
-  const categoryOptions = (state.categories[space] || [])
-    .map((c) => `<option value="${escapeHtml(c)}" ${c === category ? 'selected' : ''}>${escapeHtml(c)}</option>`)
-    .join('');
-
-  modalRoot.innerHTML = `
-    <div class="modal-overlay" id="modal-overlay">
-      <div class="modal-sheet">
-        <button class="modal-close" id="modal-close" aria-label="Fermer">✕</button>
-        <p class="modal-title">${existing ? 'Modifier' : 'Nouvelle'} transaction</p>
-        <form id="tx-form">
-          <div class="form-row">
-            <div class="type-toggle">
-              <button type="button" data-type="expense" class="${type === 'expense' ? 'active expense' : ''}">Dépense</button>
-              <button type="button" data-type="income" class="${type === 'income' ? 'active income' : ''}">Revenu</button>
-            </div>
-            <input type="hidden" name="type" value="${type}" />
-          </div>
-          <div class="form-row">
-            <label for="f-amount">Montant (€)</label>
-            <input type="number" id="f-amount" name="amount" inputmode="decimal" step="0.01" min="0" value="${amount}" required />
-          </div>
-          <div class="form-row">
-            <label for="f-space">Espace budgétaire</label>
-            <select id="f-space" name="space">${spaceOptions}</select>
-          </div>
-          <div class="form-row">
-            <label for="f-category">Catégorie</label>
-            <select id="f-category" name="category">${categoryOptions}</select>
-          </div>
-          <div class="form-row">
-            <label for="f-date">Date</label>
-            <input type="date" id="f-date" name="date" value="${date}" required />
-          </div>
-          <div class="form-row">
-            <label for="f-desc">Description</label>
-            <input type="text" id="f-desc" name="description" value="${escapeHtml(description)}" placeholder="Optionnel" />
-          </div>
-          <button type="submit" class="btn-primary">Enregistrer</button>
-          ${existing ? '<button type="button" class="btn-danger" id="tx-delete">Supprimer</button>' : ''}
-          <button type="button" class="btn-secondary" id="tx-cancel">Annuler</button>
-        </form>
-      </div>
-    </div>
-  `;
-
-  const overlay = document.getElementById('modal-overlay');
-  const form = document.getElementById('tx-form');
-  const spaceSelect = document.getElementById('f-space');
-  const categorySelect = document.getElementById('f-category');
-  const typeToggleBtns = form.querySelectorAll('.type-toggle button');
-  const typeHiddenInput = form.querySelector('input[name="type"]');
-
-  function closeModal() {
-    modalRoot.innerHTML = '';
-    ui.editingId = null;
-  }
-
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeModal();
-  });
-  document.getElementById('modal-close').addEventListener('click', closeModal);
-  document.getElementById('tx-cancel').addEventListener('click', closeModal);
-
-  typeToggleBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      typeToggleBtns.forEach((b) => b.classList.remove('active', 'income', 'expense'));
-      btn.classList.add('active', btn.dataset.type);
-      typeHiddenInput.value = btn.dataset.type;
-    });
-  });
-
-  function refreshCategoryOptions() {
-    const cats = state.categories[spaceSelect.value] || [];
-    categorySelect.innerHTML = cats.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
-  }
-  spaceSelect.addEventListener('change', refreshCategoryOptions);
-
-  if (existing) {
-    document.getElementById('tx-delete').addEventListener('click', async () => {
-      state.transactions = state.transactions.filter((t) => t.id !== existing.id);
-      await persist();
-      closeModal();
+  const biometricToggle = byId('biometric-toggle');
+  if (biometricToggle) {
+    biometricToggle.addEventListener('change', async (event) => {
+      if (!event.target.checked) {
+        removeBiometric();
+        render();
+        return;
+      }
+      const account = getAccountInfo();
+      const result = await enrollBiometric(store.vaultKey, account ? account.email : 'Mon Budget');
+      if (!result.ok) {
+        window.alert(result.message);
+      }
       render();
     });
   }
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const data = new FormData(form);
-    const amountValue = parseFloat(data.get('amount'));
-    if (Number.isNaN(amountValue) || amountValue <= 0) return;
-    const categoryValue = data.get('category') || (state.categories[data.get('space')] || [])[0] || 'Autres';
+  byId('lock-now-btn').addEventListener('click', lockApp);
+  byId('change-pin-btn').addEventListener('click', openPinModal);
+  byId('theme-select').addEventListener('change', async (event) => {
+    applyTheme(event.target.value);
+    await commit((state) => setSetting(state, 'theme', event.target.value));
+  });
 
-    const payload = {
-      type: data.get('type'),
-      amount: amountValue,
-      space: data.get('space'),
-      category: categoryValue,
-      date: data.get('date'),
-      description: (data.get('description') || '').trim(),
-    };
-
-    if (existing) {
-      Object.assign(existing, payload);
-    } else {
-      state.transactions.push({ id: uid(), ...payload });
+  byId('export-btn').addEventListener('click', openExportModal);
+  byId('import-btn').addEventListener('click', () => byId('import-file').click());
+  byId('import-file').addEventListener('change', async (event) => {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    const parsed = await readBackupFile(file);
+    if (!parsed.ok) {
+      window.alert(parsed.message);
+      return;
     }
-    await persist();
+    openImportModal(parsed.backup);
+  });
+
+  viewRoot.querySelectorAll('[data-add-cat]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const space = button.dataset.addCat;
+      const input = viewRoot.querySelector(`[data-new-cat="${space}"]`);
+      const name = input.value.trim();
+      if (!name) return;
+      const id = categoryId(space, name);
+      await commit((state) => {
+        state.categories[id] = { id, space, name, updatedAt: Date.now(), deleted: false };
+      });
+    });
+  });
+
+  viewRoot.querySelectorAll('[data-action="delete-cat"]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const row = button.closest('.category-row');
+      await removeWithUndo('categories', categoryId(row.dataset.space, row.dataset.cat), 'Catégorie supprimée');
+    });
+  });
+
+  byId('wipe-btn').addEventListener('click', () => {
+    if (!window.confirm('Effacer les données de cet appareil ? Cette action est irréversible sur cet appareil.')) return;
+    wipeVault();
+    closeSession();
+    teardownAutoLock();
+    renderWelcome();
+  });
+
+  const deleteAccountButton = byId('delete-account-btn');
+  if (deleteAccountButton) {
+    deleteAccountButton.addEventListener('click', async () => {
+      if (!window.confirm('Supprimer définitivement votre compte et toutes les données du serveur ? Cette action est irréversible.')) return;
+      try {
+        const { api } = await import('./api.js');
+        await api.deleteAccount();
+      } catch (error) {
+        window.alert(error.message);
+        return;
+      }
+      wipeVault();
+      closeSession();
+      teardownAutoLock();
+      renderWelcome();
+    });
+  }
+}
+
+// ---------- Settings modals ----------
+
+function openPinModal() {
+  const mode = getMode();
+  const isLocal = mode === 'local';
+  const sheet = openModal(`
+    <p class="modal-title">${isLocal ? "Changer le code d'accès" : "Code d'accès rapide"}</p>
+    <p class="lock-sub">${isLocal
+      ? 'Ce code chiffre vos données sur cet appareil.'
+      : "Ce code permet de rouvrir l'application sans retaper le mot de passe du compte. Il protège la clé stockée sur cet appareil."}</p>
+    <form id="pin-form">
+      ${isLocal ? `
+        <div class="form-row">
+          <label for="old-pin">Code actuel</label>
+          <input type="password" id="old-pin" inputmode="numeric" autocomplete="current-password" required />
+        </div>` : ''}
+      <div class="form-row">
+        <label for="new-pin1">${isLocal ? 'Nouveau code' : 'Code d\'accès'}</label>
+        <input type="password" id="new-pin1" inputmode="numeric" autocomplete="new-password" minlength="4" required />
+      </div>
+      <div class="form-row">
+        <label for="new-pin2">Confirmez</label>
+        <input type="password" id="new-pin2" inputmode="numeric" autocomplete="new-password" minlength="4" required />
+      </div>
+      <p class="lock-error" id="pin-error"></p>
+      <button type="submit" class="btn-primary">Enregistrer</button>
+      <button type="button" class="btn-secondary" id="pin-cancel">Annuler</button>
+    </form>
+  `);
+
+  sheet.querySelector('#pin-cancel').addEventListener('click', closeModal);
+  sheet.querySelector('#pin-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const errorEl = sheet.querySelector('#pin-error');
+    const pin1 = sheet.querySelector('#new-pin1').value;
+    const pin2 = sheet.querySelector('#new-pin2').value;
+    if (pin1.length < 4) {
+      errorEl.textContent = 'Le code doit contenir au moins 4 caractères.';
+      return;
+    }
+    if (pin1 !== pin2) {
+      errorEl.textContent = 'Les deux codes ne correspondent pas.';
+      return;
+    }
+
+    if (isLocal) {
+      const result = await changeLocalPin(sheet.querySelector('#old-pin').value, pin1);
+      if (!result) {
+        errorEl.textContent = 'Code actuel incorrect.';
+        return;
+      }
+      openSession(result.key, result.state);
+    } else {
+      await enableQuickUnlock(pin1, store.vaultKey);
+    }
     closeModal();
+    showToast('Code enregistré.');
     render();
   });
 }
 
-// ---------- Wiring ----------
+function openChangePasswordModal() {
+  const sheet = openModal(`
+    <p class="modal-title">Changer le mot de passe du compte</p>
+    <p class="lock-sub">Vos données seront rechiffrées avec le nouveau mot de passe, puis renvoyées au serveur. Vos autres appareils devront se reconnecter.</p>
+    <form id="password-form">
+      <div class="form-row">
+        <label for="cur-pass">Mot de passe actuel</label>
+        <input type="password" id="cur-pass" autocomplete="current-password" required />
+      </div>
+      <div class="form-row">
+        <label for="new-pass1">Nouveau mot de passe</label>
+        <input type="password" id="new-pass1" autocomplete="new-password" required />
+      </div>
+      <div class="form-row">
+        <label for="new-pass2">Confirmez</label>
+        <input type="password" id="new-pass2" autocomplete="new-password" required />
+      </div>
+      <p class="lock-error" id="pass-error"></p>
+      <button type="submit" class="btn-primary" id="pass-submit">Mettre à jour</button>
+      <button type="button" class="btn-secondary" id="pass-cancel">Annuler</button>
+    </form>
+  `);
 
-document.querySelectorAll('.tab-btn').forEach((btn) => {
-  btn.addEventListener('click', () => setTab(btn.dataset.tab));
+  sheet.querySelector('#pass-cancel').addEventListener('click', closeModal);
+  sheet.querySelector('#password-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const errorEl = sheet.querySelector('#pass-error');
+    const submitButton = sheet.querySelector('#pass-submit');
+    const newPassword = sheet.querySelector('#new-pass1').value;
+    if (newPassword !== sheet.querySelector('#new-pass2').value) {
+      errorEl.textContent = 'Les deux mots de passe ne correspondent pas.';
+      return;
+    }
+    submitButton.disabled = true;
+    submitButton.textContent = 'Mise à jour…';
+    const result = await changeAccountPassword(sheet.querySelector('#cur-pass').value, newPassword, store.state);
+    submitButton.disabled = false;
+    submitButton.textContent = 'Mettre à jour';
+    if (!result.ok) {
+      errorEl.textContent = result.message;
+      return;
+    }
+    store.vaultKey = result.vaultKey;
+    await saveVault(result.vaultKey, store.state);
+    setSyncMeta({ version: result.syncVersion, lastSyncAt: Date.now() });
+    // A quick-unlock PIN wraps the old key, so it has to be re-created or dropped.
+    if (hasQuickUnlock() || hasBiometricUnlock()) {
+      removeBiometric();
+      const { disableQuickUnlock } = await import('./storage.js');
+      disableQuickUnlock();
+    }
+    closeModal();
+    showToast('Mot de passe mis à jour. Reconfigurez le code rapide si besoin.');
+    render();
+  });
+}
+
+function openExportModal() {
+  const sheet = openModal(`
+    <p class="modal-title">Exporter mes données</p>
+    <p class="lock-sub">Choisissez un mot de passe pour protéger le fichier. Il vous sera demandé lors de la restauration — il n'est stocké nulle part.</p>
+    <form id="export-form">
+      <div class="form-row">
+        <label for="exp-pass1">Mot de passe du fichier</label>
+        <input type="password" id="exp-pass1" autocomplete="new-password" minlength="8" required />
+      </div>
+      <div class="form-row">
+        <label for="exp-pass2">Confirmez</label>
+        <input type="password" id="exp-pass2" autocomplete="new-password" minlength="8" required />
+      </div>
+      <p class="lock-error" id="exp-error"></p>
+      <button type="submit" class="btn-primary">Télécharger la sauvegarde</button>
+      <button type="button" class="btn-secondary" id="exp-cancel">Annuler</button>
+    </form>
+  `);
+
+  sheet.querySelector('#exp-cancel').addEventListener('click', closeModal);
+  sheet.querySelector('#export-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const errorEl = sheet.querySelector('#exp-error');
+    const pass1 = sheet.querySelector('#exp-pass1').value;
+    if (pass1.length < 8) {
+      errorEl.textContent = 'Utilisez au moins 8 caractères.';
+      return;
+    }
+    if (pass1 !== sheet.querySelector('#exp-pass2').value) {
+      errorEl.textContent = 'Les deux mots de passe ne correspondent pas.';
+      return;
+    }
+    const backup = await buildBackup(store.state, pass1);
+    downloadBackup(backup);
+    closeModal();
+    showToast('Sauvegarde chiffrée téléchargée.');
+  });
+}
+
+function openImportModal(backup) {
+  const sheet = openModal(`
+    <p class="modal-title">Restaurer une sauvegarde</p>
+    <p class="lock-sub">Sauvegarde du ${escapeHtml(new Date(backup.createdAt).toLocaleDateString('fr-FR'))}. Les données seront fusionnées avec celles de cet appareil : en cas de doublon, la version la plus récente est conservée.</p>
+    <form id="import-form">
+      <div class="form-row">
+        <label for="imp-pass">Mot de passe du fichier</label>
+        <input type="password" id="imp-pass" autocomplete="current-password" required />
+      </div>
+      <p class="lock-error" id="imp-error"></p>
+      <button type="submit" class="btn-primary">Restaurer</button>
+      <button type="button" class="btn-secondary" id="imp-cancel">Annuler</button>
+    </form>
+  `);
+
+  sheet.querySelector('#imp-cancel').addEventListener('click', closeModal);
+  sheet.querySelector('#import-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const errorEl = sheet.querySelector('#imp-error');
+    const result = await restoreBackup(backup, sheet.querySelector('#imp-pass').value, store.state);
+    if (!result.ok) {
+      errorEl.textContent = result.message;
+      return;
+    }
+    await commit((state) => {
+      Object.assign(state, result.state);
+    });
+    closeModal();
+    showToast('Sauvegarde restaurée.');
+    await runSync();
+  });
+}
+
+// ---------- Boot ----------
+
+document.querySelectorAll('.tab-btn').forEach((button) => {
+  button.addEventListener('click', () => setTab(button.dataset.tab));
 });
 
 fabAdd.addEventListener('click', () => openTransactionModal(null));
 
+window.addEventListener('online', () => runSync());
+window.addEventListener('focus', () => {
+  if (isOpen() && getMode() === 'account') runSync();
+});
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch((err) => console.error('SW registration failed', err));
+    navigator.serviceWorker.register('./sw.js').catch((error) => console.error('SW registration failed', error));
   });
 }
 
-if (hasVault()) {
-  renderUnlockScreen();
+applyTheme('auto');
+
+if (!hasVault()) {
+  if (hasLegacyPlaintextData()) renderLocalPinSetup();
+  else renderWelcome();
 } else {
-  renderCreatePinScreen();
+  renderUnlock();
+  refreshSession();
 }

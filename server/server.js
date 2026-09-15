@@ -5,7 +5,7 @@ import { HttpError, readJson, sendJson } from './http.js';
 import { cleanupExpired } from './db.js';
 import {
   handlePrelogin, handleSignup, handleLogin, handleLogout, handleSessionInfo,
-  handleVerifyEmail, handleResendVerification, handleChangePassword,
+  handleVerifyEmail, handleResendVerification, handleChangePassword, handleBreachCheck,
 } from './auth.js';
 import { handleGetVault, handlePutVault, handleDeleteAccount } from './sync.js';
 
@@ -99,6 +99,7 @@ const ROUTES = {
   'POST /api/auth/verify-email': async (req, res) => handleVerifyEmail(req, res, await readJson(req)),
   'POST /api/auth/resend-verification': async (req, res) => handleResendVerification(req, res, await readJson(req), baseUrlFor(req)),
   'POST /api/auth/change-password': async (req, res) => handleChangePassword(req, res, await readJson(req)),
+  'GET /api/auth/breach-check': async (req, res, url) => handleBreachCheck(req, res, url),
   'GET /api/vault': async (req, res) => handleGetVault(req, res),
   'PUT /api/vault': async (req, res) => handlePutVault(req, res, await readJson(req)),
   'DELETE /api/account': async (req, res) => handleDeleteAccount(req, res),
@@ -117,7 +118,7 @@ const server = createServer(async (req, res) => {
         sendJson(res, 404, { code: 'not_found', message: 'Route inconnue.' });
         return;
       }
-      await handler(req, res);
+      await handler(req, res, url);
     } catch (error) {
       if (error instanceof HttpError) {
         sendJson(res, error.status, { code: error.code, message: error.message, ...error.extra });

@@ -52,6 +52,57 @@ export function renderDonutChart(svgEl, data) {
   });
 }
 
+// Income and expenses side by side per month, so month-over-month differences are
+// readable without comparing two separate charts.
+export function renderGroupedBarChart(svgEl, data, opts = {}) {
+  svgEl.innerHTML = '';
+  const width = opts.width || 340;
+  const height = opts.height || 180;
+  const padding = 28;
+  svgEl.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+  const maxVal = Math.max(1, ...data.flatMap((d) => [d.income, d.expense]));
+  const zeroY = height - padding;
+  const slot = (width - padding * 2) / Math.max(data.length, 1);
+  const barWidth = Math.min(slot * 0.32, 16);
+  const usableHeight = height - padding * 2 - 10;
+
+  data.forEach((d, i) => {
+    const groupCenter = padding + i * slot + slot / 2;
+    [
+      { value: d.income, color: '#10B981', offset: -barWidth / 2 - 2 },
+      { value: d.expense, color: '#EF4444', offset: barWidth / 2 + 2 },
+    ].forEach(({ value, color, offset }) => {
+      const barHeight = (value / maxVal) * usableHeight;
+      const rect = document.createElementNS(SVG_NS, 'rect');
+      rect.setAttribute('x', groupCenter + offset - barWidth / 2);
+      rect.setAttribute('y', zeroY - Math.max(barHeight, 2));
+      rect.setAttribute('width', barWidth);
+      rect.setAttribute('height', Math.max(barHeight, 2));
+      rect.setAttribute('rx', 3);
+      rect.setAttribute('fill', color);
+      svgEl.appendChild(rect);
+    });
+
+    const label = document.createElementNS(SVG_NS, 'text');
+    label.setAttribute('x', groupCenter);
+    label.setAttribute('y', height - padding + 15);
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('font-size', '9.5');
+    label.setAttribute('fill', 'var(--text-muted)');
+    label.textContent = d.label;
+    svgEl.appendChild(label);
+  });
+
+  const baseline = document.createElementNS(SVG_NS, 'line');
+  baseline.setAttribute('x1', padding);
+  baseline.setAttribute('x2', width - padding);
+  baseline.setAttribute('y1', zeroY);
+  baseline.setAttribute('y2', zeroY);
+  baseline.setAttribute('stroke', 'var(--border)');
+  svgEl.appendChild(baseline);
+}
+
 export function renderBarChart(svgEl, data, opts = {}) {
   svgEl.innerHTML = '';
   const width = opts.width || 320;
