@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Confirmation email — Mon Budget</title>
+  <meta name="theme-color" content="#4F46E5" />
+  <meta name="referrer" content="no-referrer" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="lock-overlay">
+    <div class="lock-card">
+      <div class="lock-icon" id="status-icon">✉️</div>
+      <h2 id="status-title">Confirmation en cours…</h2>
+      <p class="lock-sub" id="status-message">Nous vérifions votre lien de confirmation.</p>
+      <a class="btn-primary" id="back-link" href="index.html" style="display:none; text-align:center; text-decoration:none;">Ouvrir Mon Budget</a>
+    </div>
+  </div>
+  <script type="module" src="js/verify-email.js"></script>
+</body>
+</html>
