@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mon-budget-v1';
+const CACHE_NAME = 'mon-budget-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const ASSETS = [
   './js/app.js',
   './js/storage.js',
   './js/charts.js',
+  './js/crypto.js',
   './manifest.json',
   './icons/icon-180.png',
   './icons/icon-192.png',

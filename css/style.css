@@ -456,3 +456,58 @@ html, body {
   #view-root { padding-top: 24px; }
   .summary-card .value { font-size: 17px; }
 }
+
+.lock-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 100;
+  padding-top: calc(24px + var(--safe-top));
+  padding-bottom: calc(24px + var(--safe-bottom));
+}
+
+.lock-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 24px;
+  text-align: center;
+}
+
+.lock-icon { font-size: 40px; margin-bottom: 8px; }
+
+.lock-card h2 { margin: 0 0 10px; font-size: 20px; }
+
+.lock-sub {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0 0 18px;
+  text-align: left;
+}
+
+.lock-card form { text-align: left; }
+
+.lock-error {
+  color: var(--danger);
+  font-size: 13px;
+  min-height: 18px;
+  margin: -4px 0 4px;
+}
+
+.lock-success {
+  color: var(--income);
+  font-size: 13px;
+  min-height: 18px;
+  margin: -4px 0 4px;
+}
+
+@media (min-width: 720px) {
+  .tabbar { max-width: 640px; left: 50%; transform: translateX(-50%); border-left: 1px solid var(--border); border-right: 1px solid var(--border); border-radius: 16px 16px 0 0; }
+}

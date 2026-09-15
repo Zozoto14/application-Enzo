@@ -1,7 +1,16 @@
-import { loadState, saveState, uid, BUDGET_SPACES, spaceLabel, spaceIcon } from './storage.js';
+import {
+  BUDGET_SPACES, spaceLabel, spaceIcon, uid,
+  hasVault, hasLegacyPlaintextData, readLegacyPlaintextState,
+  createVault, unlockVault, saveVault, changePin, wipeVault,
+  getLockStatus, registerFailedAttempt, registerSuccessfulUnlock,
+  loadPrefs, savePrefs,
+} from './storage.js';
 import { renderDonutChart, renderBarChart, PALETTE } from './charts.js';
 
-const state = loadState();
+let state = null;
+let sessionKey = null;
+let idleTimer = null;
+
 const ui = {
   tab: 'dashboard',
   dashboardSpace: 'all',
@@ -15,25 +24,35 @@ const currencyFmt = new Intl.NumberFormat('fr-FR', { style: 'currency', currency
 const dateFmt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 const monthFmt = new Intl.DateTimeFormat('fr-FR', { month: 'short' });
 
+const appRoot = document.getElementById('app');
+const lockRoot = document.getElementById('lock-root');
 const viewRoot = document.getElementById('view-root');
 const pageTitle = document.getElementById('page-title');
 const modalRoot = document.getElementById('modal-root');
 const fabAdd = document.getElementById('fab-add');
 
-const TAB_TITLES = { dashboard: 'Tableau de bord', transactions: 'Transactions', categories: 'Catégories' };
+const TAB_TITLES = { dashboard: 'Tableau de bord', transactions: 'Transactions', categories: 'Catégories', security: 'Sécurité' };
 
-function persist() {
-  saveState(state);
+async function persist() {
+  if (!sessionKey || !state) return;
+  try {
+    await saveVault(sessionKey, state);
+  } catch (e) {
+    console.error('Erreur de sauvegarde chiffrée', e);
+  }
 }
 
 function formatAmount(n) {
   return currencyFmt.format(n);
 }
 
-function allCategoriesFor(spaceIds) {
-  const set = new Set();
-  spaceIds.forEach((id) => (state.categories[id] || []).forEach((c) => set.add(c)));
-  return Array.from(set);
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function spacesInScope(spaceFilter) {
@@ -43,12 +62,8 @@ function spacesInScope(spaceFilter) {
 function inPeriod(tx, period) {
   const d = new Date(tx.date);
   const now = new Date();
-  if (period === 'month') {
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
-  }
-  if (period === 'year') {
-    return d.getFullYear() === now.getFullYear();
-  }
+  if (period === 'month') return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  if (period === 'year') return d.getFullYear() === now.getFullYear();
   return true;
 }
 
@@ -75,13 +90,179 @@ function computeTotals(list) {
   return { income, expense, balance: income - expense };
 }
 
+// ---------- Lock screen ----------
+
+function showLockOverlay(html) {
+  appRoot.style.display = 'none';
+  modalRoot.innerHTML = '';
+  lockRoot.innerHTML = `<div class="lock-overlay">${html}</div>`;
+}
+
+function hideLockOverlay() {
+  lockRoot.innerHTML = '';
+  appRoot.style.display = '';
+}
+
+function renderCreatePinScreen() {
+  const migrating = hasLegacyPlaintextData();
+  showLockOverlay(`
+    <div class="lock-card">
+      <div class="lock-icon">🔒</div>
+      <h2>Protégez votre budget</h2>
+      <p class="lock-sub">Créez un code d'accès. Vos données seront chiffrées sur cet appareil avec ce code.
+      ${migrating ? ' Vos transactions existantes seront conservées et chiffrées.' : ''}
+      <strong> Si vous l'oubliez, les données ne pourront pas être récupérées</strong> — il n'existe aucune porte dérobée.</p>
+      <form id="create-pin-form">
+        <div class="form-row">
+          <label for="pin1">Code d'accès (4 caractères minimum)</label>
+          <input type="password" id="pin1" inputmode="numeric" autocomplete="new-password" minlength="4" required />
+        </div>
+        <div class="form-row">
+          <label for="pin2">Confirmez le code</label>
+          <input type="password" id="pin2" inputmode="numeric" autocomplete="new-password" minlength="4" required />
+        </div>
+        <p class="lock-error" id="lock-error"></p>
+        <button type="submit" class="btn-primary">Créer le code et continuer</button>
+      </form>
+    </div>
+  `);
+
+  document.getElementById('create-pin-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const pin1 = document.getElementById('pin1').value;
+    const pin2 = document.getElementById('pin2').value;
+    const errorEl = document.getElementById('lock-error');
+    if (pin1.length < 4) {
+      errorEl.textContent = 'Le code doit contenir au moins 4 caractères.';
+      return;
+    }
+    if (pin1 !== pin2) {
+      errorEl.textContent = 'Les deux codes ne correspondent pas.';
+      return;
+    }
+    const legacy = migrating ? readLegacyPlaintextState() : null;
+    const { key, state: newState } = await createVault(pin1, legacy);
+    enterUnlockedSession(key, newState);
+  });
+}
+
+function renderUnlockScreen() {
+  const status = getLockStatus();
+  const locked = status.remainingMs > 0;
+
+  showLockOverlay(`
+    <div class="lock-card">
+      <div class="lock-icon">🔒</div>
+      <h2>Mon Budget verrouillé</h2>
+      <p class="lock-sub">Entrez votre code d'accès pour continuer.</p>
+      <form id="unlock-form">
+        <div class="form-row">
+          <label for="pin-unlock">Code d'accès</label>
+          <input type="password" id="pin-unlock" inputmode="numeric" autocomplete="current-password" required ${locked ? 'disabled' : 'autofocus'} />
+        </div>
+        <p class="lock-error" id="lock-error"></p>
+        <button type="submit" class="btn-primary" id="unlock-submit" ${locked ? 'disabled' : ''}>Déverrouiller</button>
+      </form>
+    </div>
+  `);
+
+  let countdownInterval = null;
+  function updateLockedMessage() {
+    const s = getLockStatus();
+    const errorEl = document.getElementById('lock-error');
+    if (s.remainingMs <= 0) {
+      clearInterval(countdownInterval);
+      renderUnlockScreen();
+      return;
+    }
+    const seconds = Math.ceil(s.remainingMs / 1000);
+    errorEl.textContent = `Trop de tentatives. Réessayez dans ${seconds}s.`;
+  }
+  if (locked) {
+    updateLockedMessage();
+    countdownInterval = setInterval(updateLockedMessage, 1000);
+  }
+
+  document.getElementById('unlock-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const pin = document.getElementById('pin-unlock').value;
+    const submitBtn = document.getElementById('unlock-submit');
+    submitBtn.disabled = true;
+    const result = await unlockVault(pin);
+    if (result) {
+      registerSuccessfulUnlock();
+      if (countdownInterval) clearInterval(countdownInterval);
+      enterUnlockedSession(result.key, result.state);
+    } else {
+      const s = registerFailedAttempt();
+      submitBtn.disabled = false;
+      if (s.remainingMs > 0) {
+        renderUnlockScreen();
+      } else {
+        const remaining = Math.max(0, 5 - s.failedAttempts);
+        document.getElementById('lock-error').textContent = remaining > 0
+          ? `Code incorrect (${remaining} tentative${remaining > 1 ? 's' : ''} avant blocage temporaire).`
+          : 'Code incorrect.';
+        document.getElementById('pin-unlock').value = '';
+        document.getElementById('pin-unlock').focus();
+      }
+    }
+  });
+}
+
+function enterUnlockedSession(key, loadedState) {
+  sessionKey = key;
+  state = loadedState;
+  hideLockOverlay();
+  setupAutoLock();
+  setTab(ui.tab || 'dashboard');
+}
+
+function lockApp() {
+  if (!sessionKey) return;
+  sessionKey = null;
+  state = null;
+  teardownAutoLock();
+  renderUnlockScreen();
+}
+
+// ---------- Auto-lock ----------
+
+function resetIdleTimer() {
+  if (!sessionKey) return;
+  if (idleTimer) clearTimeout(idleTimer);
+  const prefs = loadPrefs();
+  if (!prefs.autoLockMinutes) return;
+  idleTimer = setTimeout(lockApp, prefs.autoLockMinutes * 60 * 1000);
+}
+
+function onVisibilityChange() {
+  if (document.hidden && sessionKey) lockApp();
+}
+
+const idleEvents = ['pointerdown', 'keydown', 'touchstart'];
+
+function setupAutoLock() {
+  resetIdleTimer();
+  idleEvents.forEach((evt) => document.addEventListener(evt, resetIdleTimer));
+  document.addEventListener('visibilitychange', onVisibilityChange);
+}
+
+function teardownAutoLock() {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleEvents.forEach((evt) => document.removeEventListener(evt, resetIdleTimer));
+  document.removeEventListener('visibilitychange', onVisibilityChange);
+}
+
+// ---------- Tabs ----------
+
 function setTab(tab) {
   ui.tab = tab;
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.tab === tab);
   });
   pageTitle.textContent = TAB_TITLES[tab];
-  fabAdd.style.display = tab === 'categories' ? 'none' : 'flex';
+  fabAdd.style.display = tab === 'dashboard' || tab === 'transactions' ? 'flex' : 'none';
   render();
 }
 
@@ -89,6 +270,7 @@ function render() {
   if (ui.tab === 'dashboard') renderDashboard();
   else if (ui.tab === 'transactions') renderTransactions();
   else if (ui.tab === 'categories') renderCategories();
+  else if (ui.tab === 'security') renderSecurity();
 }
 
 // ---------- Dashboard ----------
@@ -123,19 +305,15 @@ function renderDashboard() {
 
   const months = [];
   const now = new Date();
-  for (let i = 5; i >= 0; i -= 1) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push(d);
-  }
+  for (let i = 5; i >= 0; i -= 1) months.push(new Date(now.getFullYear(), now.getMonth() - i, 1));
   const monthlyData = months.map((d) => {
+    const scope = spacesInScope(ui.dashboardSpace);
     const txs = state.transactions.filter((tx) => {
-      const scope = spacesInScope(ui.dashboardSpace);
       if (!scope.includes(tx.space)) return false;
       const td = new Date(tx.date);
       return td.getFullYear() === d.getFullYear() && td.getMonth() === d.getMonth();
     });
-    const t = computeTotals(txs);
-    return { label: monthFmt.format(d), value: t.balance };
+    return { label: monthFmt.format(d), value: computeTotals(txs).balance };
   });
 
   viewRoot.innerHTML = `
@@ -152,9 +330,7 @@ function renderDashboard() {
         <div class="chart-wrap"><svg id="donut-chart"></svg></div>
         <div class="legend">
           ${categoryData
-            .map(
-              (d) => `<div class="legend-item"><span class="legend-dot" style="background:${d.color}"></span>${d.label}<span class="legend-amount">${formatAmount(d.value)}</span></div>`
-            )
+            .map((d) => `<div class="legend-item"><span class="legend-dot" style="background:${d.color}"></span>${escapeHtml(d.label)}<span class="legend-amount">${formatAmount(d.value)}</span></div>`)
             .join('')}
         </div>
       ` : '<div class="empty-state">Aucune dépense sur cette période.</div>'}
@@ -165,9 +341,7 @@ function renderDashboard() {
     </div>
   `;
 
-  if (categoryData.length) {
-    renderDonutChart(document.getElementById('donut-chart'), categoryData);
-  }
+  if (categoryData.length) renderDonutChart(document.getElementById('donut-chart'), categoryData);
   renderBarChart(document.getElementById('bar-chart'), monthlyData, { width: 320, height: 170 });
 
   document.getElementById('dash-space-chips').addEventListener('click', (e) => {
@@ -253,14 +427,12 @@ function renderCategories() {
     const cats = state.categories[space.id] || [];
     const usedCategories = new Set(state.transactions.filter((t) => t.space === space.id).map((t) => t.category));
     const rows = cats
-      .map(
-        (cat) => `
+      .map((cat) => `
         <div class="category-row" data-space="${space.id}" data-cat="${escapeHtml(cat)}">
           <span>${escapeHtml(cat)}</span>
           ${usedCategories.has(cat) ? '' : '<button data-action="delete-cat">Supprimer</button>'}
         </div>
-      `
-      )
+      `)
       .join('');
     return `
       <div class="card">
@@ -277,28 +449,126 @@ function renderCategories() {
   viewRoot.innerHTML = sections;
 
   viewRoot.querySelectorAll('[data-add-cat]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const spaceId = btn.dataset.addCat;
       const input = viewRoot.querySelector(`[data-new-cat="${spaceId}"]`);
       const value = input.value.trim();
       if (!value) return;
       if (!state.categories[spaceId].includes(value)) {
         state.categories[spaceId].push(value);
-        persist();
+        await persist();
       }
       renderCategories();
     });
   });
 
   viewRoot.querySelectorAll('[data-action="delete-cat"]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const row = btn.closest('.category-row');
       const spaceId = row.dataset.space;
       const cat = row.dataset.cat;
       state.categories[spaceId] = state.categories[spaceId].filter((c) => c !== cat);
-      persist();
+      await persist();
       renderCategories();
     });
+  });
+}
+
+// ---------- Security tab ----------
+
+function renderSecurity() {
+  const prefs = loadPrefs();
+  const delayOptions = [
+    [1, '1 minute'],
+    [2, '2 minutes'],
+    [5, '5 minutes'],
+    [15, '15 minutes'],
+    [0, 'Jamais (déconseillé)'],
+  ];
+
+  viewRoot.innerHTML = `
+    <div class="card">
+      <p class="section-title">Verrouillage</p>
+      <p class="lock-sub">L'application se verrouille automatiquement dès qu'elle passe en arrière-plan, et après une période d'inactivité.</p>
+      <div class="form-row">
+        <label for="autolock-select">Verrouiller après inactivité</label>
+        <select id="autolock-select">
+          ${delayOptions.map(([val, label]) => `<option value="${val}" ${prefs.autoLockMinutes === val ? 'selected' : ''}>${label}</option>`).join('')}
+        </select>
+      </div>
+      <button class="btn-secondary" id="lock-now-btn">Verrouiller maintenant</button>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Changer le code d'accès</p>
+      <form id="change-pin-form">
+        <div class="form-row">
+          <label for="old-pin">Code actuel</label>
+          <input type="password" id="old-pin" inputmode="numeric" autocomplete="current-password" required />
+        </div>
+        <div class="form-row">
+          <label for="new-pin1">Nouveau code</label>
+          <input type="password" id="new-pin1" inputmode="numeric" autocomplete="new-password" minlength="4" required />
+        </div>
+        <div class="form-row">
+          <label for="new-pin2">Confirmez le nouveau code</label>
+          <input type="password" id="new-pin2" inputmode="numeric" autocomplete="new-password" minlength="4" required />
+        </div>
+        <p class="lock-error" id="change-pin-error"></p>
+        <p class="lock-success" id="change-pin-success"></p>
+        <button type="submit" class="btn-primary">Mettre à jour le code</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Zone dangereuse</p>
+      <p class="lock-sub">Efface définitivement toutes les données et le code d'accès de cet appareil. Cette action est irréversible.</p>
+      <button class="btn-danger" id="wipe-btn">Réinitialiser toutes les données</button>
+    </div>
+  `;
+
+  document.getElementById('autolock-select').addEventListener('change', (e) => {
+    savePrefs({ ...prefs, autoLockMinutes: Number(e.target.value) });
+    resetIdleTimer();
+  });
+
+  document.getElementById('lock-now-btn').addEventListener('click', () => lockApp());
+
+  document.getElementById('change-pin-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const oldPin = document.getElementById('old-pin').value;
+    const newPin1 = document.getElementById('new-pin1').value;
+    const newPin2 = document.getElementById('new-pin2').value;
+    const errorEl = document.getElementById('change-pin-error');
+    const successEl = document.getElementById('change-pin-success');
+    errorEl.textContent = '';
+    successEl.textContent = '';
+    if (newPin1.length < 4) {
+      errorEl.textContent = 'Le nouveau code doit contenir au moins 4 caractères.';
+      return;
+    }
+    if (newPin1 !== newPin2) {
+      errorEl.textContent = 'Les deux nouveaux codes ne correspondent pas.';
+      return;
+    }
+    const newKey = await changePin(oldPin, newPin1);
+    if (!newKey) {
+      errorEl.textContent = 'Code actuel incorrect.';
+      return;
+    }
+    sessionKey = newKey;
+    successEl.textContent = 'Code mis à jour.';
+    e.target.reset();
+  });
+
+  document.getElementById('wipe-btn').addEventListener('click', () => {
+    const confirmed = window.confirm('Effacer définitivement toutes les données de cet appareil ? Cette action est irréversible.');
+    if (!confirmed) return;
+    wipeVault();
+    sessionKey = null;
+    state = null;
+    teardownAutoLock();
+    renderCreatePinScreen();
   });
 }
 
@@ -393,15 +663,15 @@ function openTransactionModal(id) {
   spaceSelect.addEventListener('change', refreshCategoryOptions);
 
   if (existing) {
-    document.getElementById('tx-delete').addEventListener('click', () => {
+    document.getElementById('tx-delete').addEventListener('click', async () => {
       state.transactions = state.transactions.filter((t) => t.id !== existing.id);
-      persist();
+      await persist();
       closeModal();
       render();
     });
   }
 
-  form.addEventListener('submit', (e) => {
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = new FormData(form);
     const amountValue = parseFloat(data.get('amount'));
@@ -422,19 +692,10 @@ function openTransactionModal(id) {
     } else {
       state.transactions.push({ id: uid(), ...payload });
     }
-    persist();
+    await persist();
     closeModal();
     render();
   });
-}
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 // ---------- Wiring ----------
@@ -451,4 +712,8 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-setTab('dashboard');
+if (hasVault()) {
+  renderUnlockScreen();
+} else {
+  renderCreatePinScreen();
+}

@@ -10,6 +10,8 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Mon Budget" />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self';" />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="apple-touch-icon" href="icons/icon-180.png" />
@@ -36,9 +38,13 @@
       <button data-tab="categories" class="tab-btn">
         <span class="icon">🏷️</span><span>Catégories</span>
       </button>
+      <button data-tab="security" class="tab-btn">
+        <span class="icon">🔒</span><span>Sécurité</span>
+      </button>
     </nav>
   </div>
   <div id="modal-root"></div>
+  <div id="lock-root"></div>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>
