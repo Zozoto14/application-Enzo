@@ -16,7 +16,8 @@
     "bureau:build": "vite build",
     "bureau:app": "cross-env-shell APPLIBOURSE_DEV=http://localhost:5177 electron .",
     "bureau:exe": "npm run bureau:build && electron-builder --win",
-    "icone": "node scripts/icone.mjs"
+    "icone": "node scripts/icone.mjs",
+    "maj-pc": "node scripts/maj-pc.mjs"
   },
   "dependencies": {
     "@noble/ciphers": "^2.4.0",
