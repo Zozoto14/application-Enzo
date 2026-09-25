@@ -13,7 +13,6 @@ import {
   Text,
   TextInput,
   View,
-  useColorScheme,
   useWindowDimensions,
   type TextInputProps,
   type ViewProps,
@@ -22,7 +21,7 @@ import { ESPACEMENT, RAYON, couleurTendance, palettePour, type Palette } from '.
 import type { Tendance } from './format';
 
 export function usePalette(): Palette {
-  return palettePour(useColorScheme() === 'dark');
+  return palettePour();
 }
 
 export function Titre({ children }: { children: React.ReactNode }) {
@@ -128,8 +127,8 @@ export function Bouton({
       style={({ pressed }) => [
         styles.bouton,
         {
-          backgroundColor: plein ? palette.accent : 'transparent',
-          borderColor: palette.accent,
+          backgroundColor: plein ? palette.accentPlein : 'transparent',
+          borderColor: plein ? palette.accentPlein : palette.bordure,
           opacity: desactive ? 0.45 : pressed ? 0.8 : 1,
         },
       ]}>
@@ -197,18 +196,20 @@ const styles = StyleSheet.create({
   sousTitre: { fontSize: 14, lineHeight: 20 },
   carte: {
     borderRadius: RAYON.m,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: ESPACEMENT.m,
+    borderWidth: 1,
+    padding: ESPACEMENT.m + 4,
     gap: ESPACEMENT.s,
   },
   bouton: {
     borderRadius: RAYON.s,
     borderWidth: 1,
-    paddingVertical: ESPACEMENT.m - 4,
-    paddingHorizontal: ESPACEMENT.l,
+    paddingVertical: ESPACEMENT.s + 2,
+    paddingHorizontal: ESPACEMENT.m + 4,
+    minHeight: 44,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  texteBouton: { fontSize: 16, fontWeight: '600' },
+  texteBouton: { fontSize: 15, fontWeight: '600' },
   champ: { gap: ESPACEMENT.xs },
   etiquette: { fontSize: 13, fontWeight: '500' },
   saisie: {

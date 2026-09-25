@@ -104,7 +104,7 @@ export function BandeauMiseAJour({ palette }: { palette: Palette }) {
           onPress={installer}
           style={({ pressed }) => [
             styles.bouton,
-            { backgroundColor: palette.accent, opacity: enCours ? 0.5 : pressed ? 0.8 : 1 },
+            { backgroundColor: palette.accentPlein, opacity: enCours ? 0.5 : pressed ? 0.8 : 1 },
           ]}>
           <Text style={[styles.libelle, { color: palette.surAccent }]}>
             {enCours ? 'Lancement…' : 'Mettre à jour'}

@@ -17,9 +17,11 @@ import { ESPACEMENT, RAYON, couleurTendance } from './theme';
 import type { Tendance } from './format';
 import { explication, type CleExplication } from './vues/explications';
 import type { MesureAffichee } from './vues/onglets';
+import { useSignalerOuverture } from './superposition';
 
 export function Explication({ cle }: { cle: CleExplication }) {
   const [ouvert, setOuvert] = useState(false);
+  useSignalerOuverture(ouvert);
   const palette = usePalette();
   const contenu = explication(cle);
 
@@ -31,8 +33,9 @@ export function Explication({ cle }: { cle: CleExplication }) {
         accessibilityState={{ expanded: ouvert }}
         testID={`explication-${cle}`}
         onPress={() => setOuvert(precedent => !precedent)}
-        style={[styles.pastille, { borderColor: palette.bordure }]}>
-        <Text style={{ color: palette.texteSecondaire, fontWeight: '700' }}>?</Text>
+        hitSlop={10}
+        style={[styles.pastille, { borderColor: palette.texteSecondaire }]}>
+        <Text style={{ color: palette.texteSecondaire, fontWeight: '700', fontSize: 11 }}>?</Text>
       </Pressable>
 
       {ouvert ? (
@@ -40,7 +43,7 @@ export function Explication({ cle }: { cle: CleExplication }) {
           accessibilityLiveRegion="polite"
           style={[
             styles.panneau,
-            { backgroundColor: palette.fond, borderColor: palette.bordure },
+            { backgroundColor: palette.surfaceHaute, borderColor: palette.bordure },
           ]}>
           <Text style={[styles.titre, { color: palette.texte }]}>{contenu.titre}</Text>
           <Text style={{ color: palette.texte }}>{contenu.court}</Text>
@@ -157,18 +160,26 @@ export function Jauge({ fraction, tendance }: { fraction: number; tendance?: Ten
 }
 
 const styles = StyleSheet.create({
-  bloc: { gap: ESPACEMENT.s },
+  bloc: { position: 'relative', zIndex: 20 },
   pastille: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Bulle posée par-dessus le contenu : la déplier ne décale pas la carte.
   panneau: {
+    position: 'absolute',
+    top: 28,
+    left: -8,
+    width: 320,
+    maxWidth: 320,
+    zIndex: 100,
+    elevation: 10,
     borderRadius: RAYON.s,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     padding: ESPACEMENT.m - 4,
     gap: ESPACEMENT.s,
   },

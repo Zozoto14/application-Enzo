@@ -77,7 +77,7 @@ export function Reglages({
                 style={[
                   styles.pastille,
                   {
-                    backgroundColor: actif ? palette.accent : 'transparent',
+                    backgroundColor: actif ? palette.accentPlein : 'transparent',
                     borderColor: actif ? palette.accent : palette.bordure,
                   },
                 ]}>

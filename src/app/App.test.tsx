@@ -232,8 +232,11 @@ describe('parcours complet, session ouverte', () => {
     await fireEvent.press(screen.getByTestId('bouton-importer'));
 
     // Le resume affiche la valorisation du courtier, sans « cours inconnu ».
-    expect(screen.getByText(`12${FINE}047,88${INSEC}€`)).toBeTruthy();
-    expect(screen.getByText(`-20,58${INSEC}€`)).toBeTruthy();
+    // Elle figure deux fois : en tete du resume et sur la carte du compte.
+    expect(screen.getAllByText(`12${FINE}047,88${INSEC}€`).length).toBeGreaterThan(0);
+    // Plus-value latente et Total Return coincident : tout a ete verse pour
+    // acheter ces lignes.
+    expect(screen.getAllByText(`-20,58${INSEC}€`).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Cours inconnu/)).toBeNull();
 
     // Les lignes vivent dans l'onglet Positions.

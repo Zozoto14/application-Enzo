@@ -100,7 +100,7 @@ function Racine() {
     <View style={[styles.pleinEcran, { backgroundColor: palette.fond }]}>
       <BandeauMiseAJour palette={palette} />
       <View style={styles.pleinEcran}>
-        <App session={etat.session.session} />
+        <App session={etat.session.session} chargementAutomatique />
       </View>
     </View>
   );

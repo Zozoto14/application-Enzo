@@ -14,7 +14,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { StatusBar, useColorScheme } from 'react-native';
+import { StatusBar } from 'react-native';
 // SafeAreaView de react-native est deprecie ; celui de safe-area-context gere
 // en plus l'encoche et la barre de geste, et etait deja une dependance.
 import {
@@ -50,6 +50,15 @@ import { ErreurFusion, fusionnerDansBase } from '../sync/application';
 import { resumerFusion } from '../sync/fusion';
 import { creerGenerateurId, identifiantAppareil } from '../sync/identite';
 import { chargerHistoriques, resumeHistorique } from '../cours/historique';
+import {
+  INDICE_DEFAUT,
+  INDICES,
+  indiceParId,
+  plagePour,
+  separerHistorique,
+} from '../cours/indices';
+import { rejouer } from '../core/portfolio/engine';
+import { construireResume } from '../ui/vues/resume';
 import { chercherSymboles, type CandidatSymbole } from '../cours/symboles';
 import { Comparateur } from '../ui/ecrans/Comparateur';
 import { construireComparateur } from '../ui/vues/comparateur';
@@ -71,7 +80,7 @@ import {
   construirePerformance,
 } from '../ui/vues/onglets';
 import { serieValorisation } from '../core/performance/serie';
-import { Portefeuille } from '../ui/ecrans/Portefeuille';
+import { AUCUN_INDICE, Portefeuille, TOUS_LES_COMPTES } from '../ui/ecrans/Portefeuille';
 import { CreationCompte } from '../ui/ecrans/CreationCompte';
 import { CreationTitre } from '../ui/ecrans/CreationTitre';
 import { Deverrouillage } from '../ui/ecrans/Deverrouillage';
@@ -110,6 +119,11 @@ export interface AppProps {
   genererId?(prefixe: string): string;
   /** Date du jour, injectable de même. */
   aujourdhui?(): string;
+  /**
+   * Charge l'historique des cours au déverrouillage, une fois par jour.
+   * Désactivé par défaut : les tests ne doivent pas appeler le réseau.
+   */
+  chargementAutomatique?: boolean;
 }
 
 type Ecran =
@@ -228,9 +242,9 @@ function dividendesParTitre(
   return cumuls;
 }
 
-export function App({ session, genererId, aujourdhui }: AppProps) {
-  const sombre = useColorScheme() === 'dark';
+export function App({ session, genererId, aujourdhui, chargementAutomatique = false }: AppProps) {
   const [, forcerRendu] = useState(0);
+  const [compteFiltre, setCompteFiltre] = useState<string>(TOUS_LES_COMPTES);
   const [secrets, setSecrets] = useState<SecretsInitiaux | undefined>();
   const [erreur, setErreur] = useState<string | undefined>();
   const [enCours, setEnCours] = useState(false);
@@ -685,6 +699,12 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
     [session, rafraichir],
   );
 
+  /** Indice retenu pour la courbe du Résumé, le S&P 500 par défaut. */
+  const indiceChoisi = useCallback((): string => {
+    const lu = new DepotParametres(session.base()).lire(PARAMETRES.indiceReference);
+    return lu ?? INDICE_DEFAUT;
+  }, [session]);
+
   const lancerChargementHistorique = useCallback(() => {
     const contenuActuel = chargerEtat(session.base());
     // Detenues et surveillees : une valeur qu'on surveille merite son
@@ -700,6 +720,13 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
       .filter(titre => concernes.has(titre.id) && titre.ticker?.trim())
       .map(titre => ({ titreId: titre.id, nom: titre.nom, symbole: titre.ticker!.trim() }));
 
+    // L'indice de comparaison suit : sans lui, la courbe du Résumé resterait
+    // seule, sans rien à quoi se mesurer.
+    const indice = indiceParId(indiceChoisi());
+    if (indice && demandes.length > 0) {
+      demandes.push({ titreId: indice.id, nom: indice.nom, symbole: indice.symbole });
+    }
+
     if (demandes.length === 0) {
       setMessageHistorique(
         'Aucune valeur n’a de symbole : réglez-les avant de charger l’historique.',
@@ -707,11 +734,22 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
       return;
     }
 
+    const premiere = contenuActuel.transactions
+      .map(transaction => transaction.date)
+      .sort()[0];
+    const plage = plagePour(premiere, (aujourdhui ?? dateDuJour)());
+
     setHistoEnCours(true);
     setMessageHistorique(undefined);
 
-    chargerHistoriques(session.base(), demandes)
-      .then(rapport => setMessageHistorique(resumeHistorique(rapport)))
+    chargerHistoriques(session.base(), demandes, { plage })
+      .then(rapport => {
+        setMessageHistorique(resumeHistorique(rapport));
+        new DepotParametres(session.base()).ecrire(
+          PARAMETRES.historiqueChargeLe,
+          (aujourdhui ?? dateDuJour)(),
+        );
+      })
       .catch((e: unknown) =>
         setMessageHistorique(e instanceof Error ? e.message : String(e)),
       )
@@ -719,7 +757,39 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
         setHistoEnCours(false);
         rafraichir();
       });
-  }, [session, rafraichir]);
+  }, [session, rafraichir, indiceChoisi, aujourdhui]);
+
+  const choisirIndice = useCallback(
+    (indiceId: string) => {
+      new DepotParametres(session.base()).ecrire(PARAMETRES.indiceReference, indiceId);
+      rafraichir();
+
+      const indice = indiceParId(indiceId);
+      if (!indice) {
+        return;
+      }
+      // Déjà chargé : rien à télécharger, la courbe se redessine aussitôt.
+      if (new DepotCours(session.base()).historique().get(indice.id)?.length) {
+        return;
+      }
+      const premiere = chargerEtat(session.base())
+        .transactions.map(transaction => transaction.date)
+        .sort()[0];
+      setHistoEnCours(true);
+      chargerHistoriques(
+        session.base(),
+        [{ titreId: indice.id, nom: indice.nom, symbole: indice.symbole }],
+        { plage: plagePour(premiere, (aujourdhui ?? dateDuJour)()) },
+      )
+        .then(rapport => setMessageHistorique(resumeHistorique(rapport)))
+        .catch((e: unknown) => setMessageHistorique(e instanceof Error ? e.message : String(e)))
+        .finally(() => {
+          setHistoEnCours(false);
+          rafraichir();
+        });
+    },
+    [session, rafraichir, aujourdhui],
+  );
 
   const basculerComparaison = useCallback((titreId: string) => {
     setCompares(precedent =>
@@ -834,11 +904,50 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
 
   const deverrouille = statut === 'deverrouille' && !secrets;
 
+  // Au déverrouillage, une fois par jour : l'historique des cours, qui porte
+  // aussi le dernier cours de chaque valeur. Les courbes sont à jour sans
+  // qu'il faille penser à les rafraîchir.
+  useEffect(() => {
+    if (!chargementAutomatique || !deverrouille) {
+      return;
+    }
+    const parametres = new DepotParametres(session.base());
+    if (parametres.lire(PARAMETRES.historiqueChargeLe) === (aujourdhui ?? dateDuJour)()) {
+      return;
+    }
+    lancerChargementHistorique();
+    // Une seule fois par déverrouillage : le chargement lui-même ne doit pas
+    // relancer l'effet.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chargementAutomatique, deverrouille]);
+
   // Reconstruit a chaque rendu, sans memo. La base est une source externe
   // mutable : memoriser sa lecture demanderait de lister toutes les raisons
   // qu'elle a de changer, et la premiere oubliee afficherait un portefeuille
   // perime. Rejouer un journal personnel coute quelques millisecondes.
-  const contenu = deverrouille ? chargerEtat(session.base()) : undefined;
+  const contenuComplet = deverrouille ? chargerEtat(session.base()) : undefined;
+
+  // Filtre par compte : les vues d'analyse ne voient que le compte choisi,
+  // rejoué seul. Les écrans de saisie, eux, gardent tous les comptes.
+  const compteVu =
+    contenuComplet && compteFiltre !== TOUS_LES_COMPTES
+      ? contenuComplet.comptes.find(compte => compte.id === compteFiltre)
+      : undefined;
+  const contenu =
+    contenuComplet && compteVu
+      ? (() => {
+          const transactions = contenuComplet.transactions.filter(
+            transaction => transaction.compteId === compteVu.id,
+          );
+          return {
+            ...contenuComplet,
+            comptes: [compteVu],
+            transactions,
+            etat: rejouer([compteVu], transactions),
+          };
+        })()
+      : contenuComplet;
+
   const depotCours = contenu ? new DepotCours(session.base()) : undefined;
   const tableau: VueDashboard | undefined = contenu
     ? construireDashboard({
@@ -849,25 +958,42 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
       })
     : undefined;
 
+  const historiques = depotCours ? separerHistorique(depotCours.historique()) : undefined;
+  const pointsValorisation =
+    contenu && historiques
+      ? serieValorisation({
+          comptes: contenu.comptes,
+          transactions: contenu.transactions,
+          cours: historiques.titres,
+        })
+      : [];
+  const indiceRetenu = deverrouille ? indiceChoisi() : AUCUN_INDICE;
+  const indice = indiceParId(indiceRetenu);
+
   const onglets =
-    contenu && depotCours
+    contenu && depotCours && historiques
       ? {
+          resume: construireResume({
+            etat: contenu.etat,
+            comptes: contenu.comptes,
+            titres: contenu.titres,
+            transactions: contenu.transactions,
+            cours: depotCours.derniersCours(),
+            points: pointsValorisation,
+            reference:
+              indice && historiques.indices.get(indice.id)?.length
+                ? { nom: indice.court, serie: historiques.indices.get(indice.id)! }
+                : undefined,
+            aujourdhui: (aujourdhui ?? dateDuJour)(),
+          }),
           performance: construirePerformance({
-            points: serieValorisation({
-              comptes: contenu.comptes,
-              transactions: contenu.transactions,
-              cours: depotCours.historique(),
-            }),
+            points: pointsValorisation,
             transactions: contenu.transactions,
           }),
           comparaison: construireComparaison({
-            points: serieValorisation({
-              comptes: contenu.comptes,
-              transactions: contenu.transactions,
-              cours: depotCours.historique(),
-            }),
+            points: pointsValorisation,
             titres: contenu.titres,
-            historique: depotCours.historique(),
+            historique: historiques.titres,
             referenceId: new DepotParametres(session.base()).lire(
               PARAMETRES.titreReference,
             ),
@@ -884,7 +1010,7 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
             etat: contenu.etat,
             titres: contenu.titres,
             cours: depotCours.derniersCours(),
-            historique: depotCours.historique(),
+            historique: historiques.titres,
           }),
           flux: construireFlux(contenu.transactions, contenu.comptes),
           impots: construireImpots({
@@ -899,11 +1025,11 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
   // Valeur actuelle du portefeuille, proposee comme capital de depart de la
   // projection. Retaper ce montant serait une occasion de se tromper.
   const capitalActuel =
-    contenu && depotCours
+    contenuComplet && depotCours
       ? totaux(
-          valoriserPositions(contenu.etat.positions, depotCours.derniersCours())
+          valoriserPositions(contenuComplet.etat.positions, depotCours.derniersCours())
             .valorisees,
-          [...contenu.etat.comptes.values()],
+          [...contenuComplet.etat.comptes.values()],
         ).valeurTotale
       : Decimal.ZERO;
 
@@ -912,8 +1038,8 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics ?? METRIQUES_DE_REPLI}>
       <SafeAreaView
-        style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}>
-        <StatusBar barStyle={sombre ? 'light-content' : 'dark-content'} />
+        style={[stylesPartages.ecran, { backgroundColor: palettePour().fond }]}>
+        <StatusBar barStyle="light-content" />
 
       {secrets ? (
         <PremierLancement
@@ -935,23 +1061,23 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
         />
       ) : ecran === 'compte' ? (
         <CreationCompte
-          comptesExistants={contenu.comptes}
+          comptesExistants={contenuComplet!.comptes}
           onCreer={enregistrerCompte}
-          onAnnuler={contenu.comptes.length > 0 ? () => setEcran('tableau') : undefined}
+          onAnnuler={contenuComplet!.comptes.length > 0 ? () => setEcran('tableau') : undefined}
           genererId={() => identifiant('compte')}
         />
       ) : ecran === 'titre' ? (
         <CreationTitre
-          titresExistants={contenu.titres}
+          titresExistants={contenuComplet!.titres}
           onCreer={enregistrerTitre}
           onAnnuler={() => setEcran('saisie')}
           genererId={() => identifiant('titre')}
         />
       ) : ecran === 'saisie' ? (
         <SaisieOperation
-          comptes={contenu.comptes}
-          titres={contenu.titres}
-          positions={contenu.etat.positions}
+          comptes={contenuComplet!.comptes}
+          titres={contenuComplet!.titres}
+          positions={contenuComplet!.etat.positions}
           onEnregistrer={enregistrerOperation}
           onAnnuler={() => setEcran('tableau')}
           onCreerTitre={() => setEcran('titre')}
@@ -984,12 +1110,12 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
         <Comparateur
           vue={construireComparateur({
             retenus: compares,
-            titres: contenu?.titres ?? [],
-            etat: contenu?.etat ?? ETAT_VIDE,
+            titres: contenuComplet?.titres ?? [],
+            etat: contenuComplet?.etat ?? ETAT_VIDE,
             cours: depotCours?.derniersCours() ?? new Map(),
             historique: depotCours?.historique() ?? new Map(),
             dividendesDouzeMois: dividendesParTitre(
-              contenu?.transactions ?? [],
+              contenuComplet?.transactions ?? [],
               (aujourdhui ?? dateDuJour)(),
             ),
             surveilles: new Set(
@@ -1001,12 +1127,12 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
         />
       ) : ecran === 'symboles' ? (
         <Symboles
-          titres={(contenu?.titres ?? []).map(titre => ({
+          titres={(contenuComplet?.titres ?? []).map(titre => ({
             titreId: titre.id,
             nom: titre.nom,
             isin: titre.isin,
             symbole: titre.ticker ?? '',
-            detenue: (contenu?.etat.positions ?? []).some(
+            detenue: (contenuComplet?.etat.positions ?? []).some(
               position => position.titreId === titre.id,
             ),
             lien: titre.lienExterne ?? '',
@@ -1023,10 +1149,10 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
         <Watchlist
           vue={construireWatchlist({
             watchlist: new DepotWatchlist(session.base()).lister(),
-            titres: contenu?.titres ?? [],
+            titres: contenuComplet?.titres ?? [],
             cours: depotCours?.derniersCours() ?? new Map(),
             titresDetenus: new Set(
-              (contenu?.etat.positions ?? []).map(position => position.titreId),
+              (contenuComplet?.etat.positions ?? []).map(position => position.titreId),
             ),
             seuils: lireSeuils(session),
           })}
@@ -1080,13 +1206,13 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
             setEcran('symboles');
           }}
           sansSymbole={
-            (contenu?.etat.positions ?? []).filter(position => {
-              const titre = contenu?.titres.find(valeur => valeur.id === position.titreId);
+            (contenuComplet?.etat.positions ?? []).filter(position => {
+              const titre = contenuComplet?.titres.find(valeur => valeur.id === position.titreId);
               return !titre?.ticker?.trim();
             }).length
           }
           onChargerHistorique={lancerChargementHistorique}
-          avecSymbole={(contenu?.titres ?? []).filter(titre => titre.ticker?.trim()).length}
+          avecSymbole={(contenuComplet?.titres ?? []).filter(titre => titre.ticker?.trim()).length}
           chargementEnCours={histoEnCours}
           messageHistorique={messageHistorique}
         />
@@ -1098,6 +1224,20 @@ export function App({ session, genererId, aujourdhui }: AppProps) {
       ) : (
         <Portefeuille
           dashboard={tableau}
+          resume={onglets!.resume}
+          aujourdhui={(aujourdhui ?? dateDuJour)()}
+          optionsComptes={(contenuComplet?.comptes ?? []).map(compte => ({
+            valeur: compte.id,
+            libelle: compte.nom,
+          }))}
+          compteActif={compteVu ? compteVu.id : TOUS_LES_COMPTES}
+          onChoisirCompte={setCompteFiltre}
+          optionsIndices={INDICES.map(option => ({ valeur: option.id, libelle: option.nom }))}
+          indiceActif={indiceRetenu}
+          onChoisirIndice={choisirIndice}
+          onChargerHistorique={lancerChargementHistorique}
+          chargementHistorique={histoEnCours}
+          messageHistorique={messageHistorique}
           performance={onglets!.performance}
           comparaison={onglets!.comparaison}
           onChoisirReference={choisirReference}

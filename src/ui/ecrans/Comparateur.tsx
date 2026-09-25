@@ -49,7 +49,7 @@ export function Comparateur({ vue, onBasculer, onRetour }: ComparateurProps) {
                 styles.puce,
                 {
                   borderColor: candidat.retenu ? palette.accent : palette.bordure,
-                  backgroundColor: candidat.retenu ? palette.accent : 'transparent',
+                  backgroundColor: candidat.retenu ? palette.accentPlein : 'transparent',
                   opacity: vue.complet && !candidat.retenu ? 0.4 : 1,
                 },
               ]}>

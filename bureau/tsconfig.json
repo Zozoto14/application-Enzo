@@ -12,11 +12,17 @@
       "node"
     ],
     "jsx": "react-jsx",
-    "noEmit": true
+    "noEmit": true,
+    "moduleSuffixes": [
+      ".web",
+      ""
+    ]
   },
   "include": [
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    "../src/**/*.web.tsx",
+    "../src/**/*.web.ts"
   ],
   "exclude": [
     "../node_modules"

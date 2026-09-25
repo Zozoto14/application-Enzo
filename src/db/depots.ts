@@ -460,6 +460,10 @@ export const PARAMETRES = {
   seuilsAlertes: 'notifications.seuils',
   briefingsEnvoyes: 'notifications.envoyes',
   titreReference: 'performance.reference',
+  /** Indice de comparaison de la courbe du Résumé ; « aucun » pour n'en voir aucun. */
+  indiceReference: 'performance.indice',
+  /** Date du dernier chargement automatique de l'historique des cours. */
+  historiqueChargeLe: 'cours.historique_charge_le',
   identifiantAppareil: 'sync.appareil',
 } as const;
 

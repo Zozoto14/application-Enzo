@@ -23,6 +23,8 @@ import { construireFlux, construireImpots, construirePerformance } from '../src/
 import { CHAMPS_DEFAUT, construireProjection } from '../src/ui/vues/projection';
 import { construireRisque } from '../src/ui/vues/risque';
 import { construireWatchlist } from '../src/ui/vues/watchlist';
+import { construireResume } from '../src/ui/vues/resume';
+import { INDICES } from '../src/cours/indices';
 import { Comparateur } from '../src/ui/ecrans/Comparateur';
 import { Portefeuille } from '../src/ui/ecrans/Portefeuille';
 import { Projection } from '../src/ui/ecrans/Projection';
@@ -84,6 +86,9 @@ const points = historique.get('cw8')!.map(point => ({
   fluxExterne: d(0),
 }));
 
+/** Référence d'exemple, pour voir la seconde courbe. */
+const referenceExemple = serie(100, 260, 0.02);
+
 const DESTINATIONS: readonly Destination[] = [
   { cle: 'portefeuille', libelle: 'Portefeuille', glyphe: '▦' },
   { cle: 'surveillance', libelle: 'Surveillance', glyphe: '★' },
@@ -118,6 +123,24 @@ function Apercu() {
       {destination === 'portefeuille' ? (
         <Portefeuille
           dashboard={construireDashboard({ etat, comptes, titres, cours })}
+          resume={construireResume({
+            etat,
+            comptes,
+            titres,
+            transactions,
+            cours,
+            points,
+            reference: { nom: 'S&P 500', serie: referenceExemple },
+            aujourdhui: '2025-06-17',
+          })}
+          aujourdhui="2025-06-17"
+          optionsIndices={INDICES.map(indice => ({ valeur: indice.id, libelle: indice.nom }))}
+          indiceActif={INDICES[0].id}
+          onChoisirIndice={() => undefined}
+          onAjouterTransaction={() => undefined}
+          onImporter={() => undefined}
+          onRafraichirCours={() => undefined}
+          onReglages={() => undefined}
           performance={construirePerformance({ points, transactions })}
           comparaison={construireComparaison({ points, titres, historique })}
           dividendes={construireDividendes({

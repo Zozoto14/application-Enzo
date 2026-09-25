@@ -210,7 +210,7 @@ function creerFenetre() {
     height: 920,
     minWidth: 720,
     minHeight: 560,
-    backgroundColor: '#101319',
+    backgroundColor: '#000000',
     show: false,
     title: 'AppliBourse',
     // L'executable porte deja l'icone ; celle-ci sert a la fenetre et a la
