@@ -13,7 +13,7 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { PositionImportee } from '../../core/import/positions';
-import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
+import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
 import { apercuPositions } from '../vues/import';
 import { DepotFichier } from '../DepotFichier';
@@ -33,7 +33,7 @@ export function ImportPositions({ onImporter, onAnnuler }: ImportPositionsProps)
   return (
     <ScrollView
       style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.l }]}
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
       keyboardShouldPersistTaps="handled">
       <Titre>Importer vos positions</Titre>
       <SousTitre>
@@ -108,13 +108,15 @@ export function ImportPositions({ onImporter, onAnnuler }: ImportPositionsProps)
         </Carte>
       ) : null}
 
-      <Bouton
-        titre="Importer"
-        testID="bouton-importer"
-        desactive={!apercu.pret}
-        onPress={() => onImporter(apercu.positions)}
-      />
-      <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
+      <Actions>
+        <Bouton
+          titre="Importer"
+          testID="bouton-importer"
+          desactive={!apercu.pret}
+          onPress={() => onImporter(apercu.positions)}
+        />
+        <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
+      </Actions>
     </ScrollView>
   );
 }

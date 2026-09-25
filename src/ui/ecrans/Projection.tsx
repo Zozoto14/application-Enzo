@@ -9,7 +9,7 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { ECART_AFFICHE, type ChampsProjection, type VueProjection } from '../vues/projection';
-import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
+import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { Jauge } from '../indicateurs';
 import { ESPACEMENT, palettePour, stylesPartages } from '../theme';
 
@@ -53,7 +53,7 @@ export function Projection({
   return (
     <ScrollView
       style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.l }]}
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
       keyboardShouldPersistTaps="handled">
       <Titre>Projection</Titre>
       <SousTitre>
@@ -216,7 +216,9 @@ export function Projection({
         </SousTitre>
       </Carte>
 
-      <Bouton titre="Retour" variante="discret" onPress={onRetour} />
+      <Actions>
+        <Bouton titre="Retour" variante="discret" onPress={onRetour} />
+      </Actions>
     </ScrollView>
   );
 }

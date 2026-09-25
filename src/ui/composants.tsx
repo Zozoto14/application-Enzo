@@ -53,22 +53,15 @@ export const LARGEUR_CARTE = 380;
 
 export function Carte({ style, children, ...reste }: ViewProps) {
   const palette = usePalette();
-  const { width } = useWindowDimensions();
-
-  // La carte ne decide pas de la grille : elle se declare seulement etirable
-  // et donne sa largeur minimale. C'est le conteneur qui organise les lignes.
-  const enGrille =
-    width >= LARGEUR_MULTICOLONNE
-      ? { flexGrow: 1, flexShrink: 1, flexBasis: LARGEUR_CARTE, maxWidth: '100%' as const }
-      : undefined;
-
+  // Pas de base flexible ici : dans une colonne, elle deviendrait une hauteur
+  // minimale et creuserait un grand vide sous le contenu. Pour des cartes
+  // côte à côte, voir CarteSection et Rangee.
   return (
     <View
       {...reste}
       style={[
         styles.carte,
         { backgroundColor: palette.surface, borderColor: palette.bordure },
-        enGrille,
         style,
       ]}>
       {children}
@@ -105,6 +98,8 @@ export interface BoutonProps {
   variante?: 'plein' | 'discret';
   desactive?: boolean;
   testID?: string;
+  /** Garde toute la largeur même sur grand écran (colonne étroite). */
+  pleineLargeur?: boolean;
 }
 
 export function Bouton({
@@ -113,9 +108,13 @@ export function Bouton({
   variante = 'plein',
   desactive = false,
   testID,
+  pleineLargeur = false,
 }: BoutonProps) {
   const palette = usePalette();
   const plein = variante === 'plein';
+  // Sur grand écran, un bouton étiré sur toute la largeur se lit comme une
+  // barre, pas comme un bouton : il prend la taille de son libellé.
+  const large = useWindowDimensions().width >= LARGEUR_MULTICOLONNE;
 
   return (
     <Pressable
@@ -126,6 +125,7 @@ export function Bouton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.bouton,
+        large && !pleineLargeur && styles.boutonCompact,
         {
           backgroundColor: plein ? palette.accentPlein : 'transparent',
           borderColor: plein ? palette.accentPlein : palette.bordure,
@@ -140,6 +140,43 @@ export function Bouton({
         {titre}
       </Text>
     </Pressable>
+  );
+}
+
+/**
+ * Boutons d'action d'un formulaire.
+ *
+ * Sur grand écran, ils se rangent à droite, côte à côte, l'action principale
+ * en dernier — là où l'œil finit sa lecture. Sur téléphone, ils s'empilent
+ * sur toute la largeur, l'action principale en premier, sous le pouce.
+ */
+export function Actions({ children }: { children: React.ReactNode }) {
+  const { width } = useWindowDimensions();
+  const large = width >= LARGEUR_MULTICOLONNE;
+  const boutons = React.Children.toArray(children).filter(Boolean);
+  return (
+    <View style={large ? styles.actionsLarges : styles.actionsEtroites}>
+      {(large ? [...boutons].reverse() : boutons).map((bouton, rang) => (
+        <View key={rang} style={large ? styles.actionLarge : undefined}>
+          {bouton}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** Champs posés côte à côte sur grand écran, empilés sur téléphone. */
+export function LigneChamps({ children }: { children: React.ReactNode }) {
+  return (
+    <View style={styles.ligneChamps}>
+      {React.Children.toArray(children)
+        .filter(Boolean)
+        .map((champ, rang) => (
+          <View key={rang} style={styles.celluleChamp}>
+            {champ}
+          </View>
+        ))}
+    </View>
   );
 }
 
@@ -209,7 +246,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  boutonCompact: { alignSelf: 'flex-start', minWidth: 160 },
   texteBouton: { fontSize: 15, fontWeight: '600' },
+  actionsLarges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: ESPACEMENT.s + 4,
+    marginTop: ESPACEMENT.s,
+  },
+  actionsEtroites: { gap: ESPACEMENT.s + 4 },
+  actionLarge: { minWidth: 160, alignItems: 'stretch' },
+  ligneChamps: { flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.m },
+  celluleChamp: { flexGrow: 1, flexShrink: 1, flexBasis: 240, gap: ESPACEMENT.s },
   champ: { gap: ESPACEMENT.xs },
   etiquette: { fontSize: 13, fontWeight: '500' },
   saisie: {

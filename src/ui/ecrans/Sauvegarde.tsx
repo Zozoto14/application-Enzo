@@ -9,7 +9,7 @@
 
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
-import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
+import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { Explication } from '../indicateurs';
 import { ESPACEMENT, palettePour, stylesPartages } from '../theme';
 import type { SauvegardeSurDisque } from '../../sauvegarde/fichiers';
@@ -59,7 +59,7 @@ export function Sauvegarde({
   return (
     <ScrollView
       style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.l }]}
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
       keyboardShouldPersistTaps="handled">
       <Titre>Sauvegarde</Titre>
 
@@ -268,7 +268,9 @@ export function Sauvegarde({
         </Carte>
       ) : null}
 
-      <Bouton titre="Retour" variante="discret" onPress={onRetour} />
+      <Actions>
+        <Bouton titre="Retour" variante="discret" onPress={onRetour} />
+      </Actions>
     </ScrollView>
   );
 }

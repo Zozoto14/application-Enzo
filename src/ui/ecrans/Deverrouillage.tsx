@@ -45,7 +45,7 @@ export function Deverrouillage({
   return (
     <ScrollView
       style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.xl }]}
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.accueil, { paddingVertical: ESPACEMENT.xl }]}
       keyboardShouldPersistTaps="handled">
       <Titre>Déverrouiller</Titre>
       <SousTitre>
@@ -97,6 +97,7 @@ export function Deverrouillage({
       ) : (
         <Bouton
           titre="Déverrouiller"
+          pleineLargeur
           testID="bouton-deverrouiller"
           desactive={!complet || verrouille}
           onPress={() => onDeverrouiller(motDePasse, code)}
@@ -106,6 +107,7 @@ export function Deverrouillage({
       {onRecuperer ? (
         <Bouton
           titre="Mot de passe oublié"
+          pleineLargeur
           variante="discret"
           desactive={enCours}
           onPress={onRecuperer}

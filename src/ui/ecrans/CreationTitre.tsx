@@ -9,7 +9,7 @@
 import React, { useState } from 'react';
 import { ScrollView, Switch, Text, View, useColorScheme } from 'react-native';
 import type { Titre as TitreDomaine } from '../../core/domain/types';
-import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
+import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, palettePour, stylesPartages } from '../theme';
 import {
   FORMULAIRE_TITRE_VIDE,
@@ -62,7 +62,7 @@ export function CreationTitre({
   return (
     <ScrollView
       style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.l }]}
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
       keyboardShouldPersistTaps="handled">
       <Titre>Nouvelle valeur</Titre>
 
@@ -131,8 +131,10 @@ export function CreationTitre({
         </SousTitre>
       </Carte>
 
-      <Bouton titre="Créer la valeur" testID="bouton-creer-titre" onPress={creer} />
-      <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
+      <Actions>
+        <Bouton titre="Créer la valeur" testID="bouton-creer-titre" onPress={creer} />
+        <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
+      </Actions>
     </ScrollView>
   );
 }

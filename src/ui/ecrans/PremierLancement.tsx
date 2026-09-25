@@ -73,7 +73,7 @@ function Creation({
   return (
     <ScrollView
       style={[stylesPartages.ecran, style]}
-      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.xl }]}
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.accueil, { paddingVertical: ESPACEMENT.xl }]}
       keyboardShouldPersistTaps="handled">
       <Titre>Protéger vos données</Titre>
       <SousTitre>
@@ -110,6 +110,7 @@ function Creation({
       {erreur ? <Alerte message={erreur} /> : null}
 
       <Bouton
+        pleineLargeur
         titre={enCours ? 'Création en cours…' : 'Créer le coffre'}
         testID="bouton-creer"
         desactive={!valide || enCours}
@@ -134,7 +135,7 @@ function RemiseDesSecrets({
   return (
     <ScrollView
       style={[stylesPartages.ecran, style]}
-      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.xl }]}>
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.accueil, { paddingVertical: ESPACEMENT.xl }]}>
       <Titre>À noter maintenant</Titre>
       <SousTitre>
         Ces informations ne seront plus jamais affichées. Notez-les hors ligne,
@@ -191,6 +192,7 @@ function RemiseDesSecrets({
       </View>
 
       <Bouton
+        pleineLargeur
         titre="Continuer"
         testID="bouton-continuer"
         desactive={!confirme}

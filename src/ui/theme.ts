@@ -137,6 +137,20 @@ export const stylesPartages = StyleSheet.create({
     padding: ESPACEMENT.m,
     gap: ESPACEMENT.m,
   },
+  /** Écrans d'accueil (déverrouillage, premier lancement) : étroits et centrés. */
+  accueil: {
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  /** Colonne d'un formulaire : lisible sur grand écran, pleine largeur sur téléphone. */
+  formulaire: {
+    width: '100%',
+    maxWidth: 760,
+    alignSelf: 'center',
+  },
   ligne: {
     flexDirection: 'row',
     alignItems: 'center',

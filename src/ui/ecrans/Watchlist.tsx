@@ -9,7 +9,7 @@
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { VueWatchlist } from '../vues/watchlist';
-import { Bouton, Carte, Champ, SousTitre, Titre, Variation, usePalette } from '../composants';
+import { Actions, Bouton, Carte, Champ, SousTitre, Titre, Variation, usePalette } from '../composants';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
 
 export interface WatchlistProps {
@@ -35,7 +35,7 @@ export function Watchlist({
   return (
     <ScrollView
       style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.l }]}
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
       keyboardShouldPersistTaps="handled">
       <Titre>Surveillance</Titre>
       <SousTitre>
@@ -163,7 +163,9 @@ export function Watchlist({
         </Carte>
       ) : null}
 
-      <Bouton titre="Retour" variante="discret" onPress={onRetour} />
+      <Actions>
+        <Bouton titre="Retour" variante="discret" onPress={onRetour} />
+      </Actions>
     </ScrollView>
   );
 }

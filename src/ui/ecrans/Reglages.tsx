@@ -8,7 +8,7 @@
 
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
-import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
+import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
 import type { FournisseurCours } from '../../cours/fournisseur';
 
@@ -55,7 +55,7 @@ export function Reglages({
   return (
     <ScrollView
       style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.l }]}
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
       keyboardShouldPersistTaps="handled">
       <Titre>Cours automatiques</Titre>
       <SousTitre>
@@ -170,13 +170,15 @@ export function Reglages({
         </Carte>
       ) : null}
 
-      <Bouton
-        titre="Enregistrer"
-        testID="bouton-enregistrer-reglages"
-        desactive={cleManquante || choisi === ''}
-        onPress={() => onEnregistrer(choisi, cle || undefined)}
-      />
-      <Bouton titre="Retour" variante="discret" onPress={onAnnuler} />
+      <Actions>
+        <Bouton
+          titre="Enregistrer"
+          testID="bouton-enregistrer-reglages"
+          desactive={cleManquante || choisi === ''}
+          onPress={() => onEnregistrer(choisi, cle || undefined)}
+        />
+        <Bouton titre="Retour" variante="discret" onPress={onAnnuler} />
+      </Actions>
     </ScrollView>
   );
 }

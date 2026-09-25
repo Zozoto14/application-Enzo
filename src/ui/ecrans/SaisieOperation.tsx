@@ -12,7 +12,7 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { Compte, Position, Titre, Transaction, TypeTransaction } from '../../core/domain/types';
-import { Alerte, Bouton, Carte, Champ, SousTitre, Titre as TitreEcran, usePalette } from '../composants';
+import { Actions, Alerte, Bouton, Carte, Champ, LigneChamps, SousTitre, Titre as TitreEcran, usePalette } from '../composants';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
 import { formaterMontant } from '../format';
 import {
@@ -87,7 +87,7 @@ export function SaisieOperation({
   return (
     <ScrollView
       style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.l }]}
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
       keyboardShouldPersistTaps="handled">
       <TitreEcran>Nouvelle opération</TitreEcran>
 
@@ -123,16 +123,20 @@ export function SaisieOperation({
           />
           {erreurs.titreId ? <Alerte message={erreurs.titreId} /> : null}
           {onCreerTitre ? (
-            <Bouton
-              titre={titres.length === 0 ? 'Creer une valeur' : 'Valeur absente ?'}
-              testID="bouton-creer-titre-depuis-saisie"
-              variante="discret"
-              onPress={onCreerTitre}
-            />
+            <View style={{ alignSelf: 'flex-start' }}>
+              <Bouton
+                titre={titres.length === 0 ? 'Créer une valeur' : 'Valeur absente ?'}
+                testID="bouton-creer-titre-depuis-saisie"
+                variante="discret"
+                onPress={onCreerTitre}
+              />
+            </View>
           ) : null}
         </Carte>
       ) : null}
 
+      <LigneChamps>
+      <>
       <Champ
         etiquette="Date"
         value={formulaire.date}
@@ -141,6 +145,7 @@ export function SaisieOperation({
         keyboardType="numbers-and-punctuation"
       />
       {erreurs.date ? <Alerte message={erreurs.date} /> : null}
+      </>
 
       {visibles.has('quantite') ? (
         <>
@@ -153,6 +158,9 @@ export function SaisieOperation({
           {erreurs.quantite ? <Alerte message={erreurs.quantite} /> : null}
         </>
       ) : null}
+      </LigneChamps>
+
+      <LigneChamps>
 
       {visibles.has('prixUnitaire') ? (
         <>
@@ -178,6 +186,7 @@ export function SaisieOperation({
           {erreurs.frais ? <Alerte message={erreurs.frais} /> : null}
         </>
       ) : null}
+      </LigneChamps>
 
       {visibles.has('montant') ? (
         <>
@@ -209,8 +218,10 @@ export function SaisieOperation({
         </Carte>
       ) : null}
 
-      <Bouton titre="Enregistrer" testID="bouton-enregistrer" onPress={enregistrer} />
-      <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
+      <Actions>
+        <Bouton titre="Enregistrer" testID="bouton-enregistrer" onPress={enregistrer} />
+        <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
+      </Actions>
     </ScrollView>
   );
 }

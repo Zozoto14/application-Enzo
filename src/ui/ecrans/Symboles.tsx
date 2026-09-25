@@ -25,7 +25,7 @@ import type { CandidatSymbole } from '../../cours/symboles';
 // importee sous un autre nom pour que la collision saute aux yeux.
 import type { Titre as ValeurDomaine } from '../../core/domain/types';
 import { erreurLien, liensDe } from '../vues/liens';
-import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
+import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
 
 export interface TitreASymbole {
@@ -80,7 +80,7 @@ export function Symboles({
   return (
     <ScrollView
       style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.l }]}
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
       keyboardShouldPersistTaps="handled">
       <Titre>Symboles</Titre>
       <SousTitre>
@@ -207,7 +207,9 @@ export function Symboles({
         </Carte>
       ) : null}
 
-      <Bouton titre="Retour" variante="discret" onPress={onRetour} />
+      <Actions>
+        <Bouton titre="Retour" variante="discret" onPress={onRetour} />
+      </Actions>
     </ScrollView>
   );
 }

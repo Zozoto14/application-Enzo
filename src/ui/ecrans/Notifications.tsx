@@ -19,7 +19,7 @@ import {
   type Planning,
   type ProchainBriefing,
 } from '../../notifications/planification';
-import { Alerte, Bouton, Carte, Champ, SousTitre, Titre as TitreEcran, usePalette } from '../composants';
+import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre as TitreEcran, usePalette } from '../composants';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
 
 export interface SeuilAffiche {
@@ -76,7 +76,7 @@ export function Notifications({
   return (
     <ScrollView
       style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.l }]}
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
       keyboardShouldPersistTaps="handled">
       <TitreEcran>Notifications</TitreEcran>
 
@@ -223,7 +223,9 @@ export function Notifications({
         />
       ) : null}
 
-      <Bouton titre="Retour" variante="discret" onPress={onRetour} />
+      <Actions>
+        <Bouton titre="Retour" variante="discret" onPress={onRetour} />
+      </Actions>
     </ScrollView>
   );
 }

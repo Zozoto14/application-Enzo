@@ -8,7 +8,7 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { Compte, TypeCompte } from '../../core/domain/types';
-import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
+import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
 import {
   FORMULAIRE_COMPTE_VIDE,
@@ -61,7 +61,7 @@ export function CreationCompte({
   return (
     <ScrollView
       style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.l }]}
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
       keyboardShouldPersistTaps="handled">
       <Titre>Nouveau compte</Titre>
 
@@ -120,10 +120,10 @@ export function CreationCompte({
       />
       {erreurs.devise ? <Alerte message={erreurs.devise} /> : null}
 
-      <Bouton titre="Créer le compte" testID="bouton-creer-compte" onPress={creer} />
-      {onAnnuler ? (
-        <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
-      ) : null}
+      <Actions>
+        <Bouton titre="Créer le compte" testID="bouton-creer-compte" onPress={creer} />
+        {onAnnuler ? <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} /> : null}
+      </Actions>
     </ScrollView>
   );
 }
