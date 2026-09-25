@@ -477,6 +477,8 @@ export const PARAMETRES = {
   objectif: 'objectifs.epargne',
   /** Poids visés par valeur, en % (JSON { titreId: "30" }). */
   repartitionCible: 'objectifs.repartition',
+  /** Frais courants saisis pour les ETF, en %/an (JSON { titreId: "0,38" }). */
+  fraisEtf: 'exposition.frais',
 } as const;
 
 /**

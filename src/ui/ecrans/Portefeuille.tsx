@@ -47,6 +47,7 @@ import type { VueRisque } from '../vues/risque';
 import type { EntreesAnalyse } from '../vues/analyses';
 import { OngletDividendes } from './onglets/Dividendes';
 import { OngletFlux } from './onglets/Flux';
+import { OngletExposition } from './onglets/Exposition';
 import { OngletImpots } from './onglets/Impots';
 import { OngletPerformances } from './onglets/Performances';
 import { OngletPositions } from './onglets/Positions';
@@ -63,11 +64,13 @@ export type OngletPortefeuille =
   | 'dividendes'
   | 'risque'
   | 'flux'
-  | 'impots';
+  | 'impots'
+  | 'exposition';
 
 const ONGLETS: Array<{ cle: OngletPortefeuille; libelle: string }> = [
   { cle: 'resume', libelle: 'Résumé' },
   { cle: 'positions', libelle: 'Positions' },
+  { cle: 'exposition', libelle: 'Exposition' },
   { cle: 'risque', libelle: 'Risque' },
   { cle: 'performances', libelle: 'Performances' },
   { cle: 'dividendes', libelle: 'Dividendes' },
@@ -126,6 +129,9 @@ export interface PortefeuilleProps {
   messageRapport?: string;
   onRafraichirCours?(): void;
   messageCours?: string;
+  /** Frais courants saisis pour vos ETF, en %/an, par titre. */
+  fraisEtf?: Readonly<Record<string, number>>;
+  onChangerFraisEtf?(titreId: string, taux: string): void;
   /** Heure de la dernière actualisation automatique des cours, « 14:32:10 ». */
   coursActualisesA?: string;
   rafraichissementEnCours?: boolean;
@@ -189,6 +195,13 @@ export function Portefeuille(props: PortefeuilleProps) {
               dashboard={props.dashboard}
               analyse={props.analyse}
               onOuvrirTitre={props.onOuvrirTitre}
+            />
+          ) : null}
+          {actif === 'exposition' ? (
+            <OngletExposition
+              analyse={props.analyse}
+              fraisSaisis={props.fraisEtf}
+              onChangerFrais={props.onChangerFraisEtf}
             />
           ) : null}
           {actif === 'performances' ? (

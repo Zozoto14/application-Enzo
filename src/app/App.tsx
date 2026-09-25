@@ -206,6 +206,24 @@ function lignesCibles(
     });
 }
 
+/** Frais d'ETF saisis ; une saisie illisible est ignorée (le taux connu s'applique). */
+function fraisEtfSaisis(brut: string | undefined): Record<string, number> {
+  let saisis: Record<string, string> = {};
+  try {
+    saisis = JSON.parse(brut ?? '{}');
+  } catch {
+    return {};
+  }
+  const frais: Record<string, number> = {};
+  for (const [titreId, texte] of Object.entries(saisis)) {
+    const taux = Number(String(texte).replace(',', '.'));
+    if (String(texte).trim() !== '' && Number.isFinite(taux) && taux >= 0 && taux < 5) {
+      frais[titreId] = taux;
+    }
+  }
+  return frais;
+}
+
 /** Laisse React peindre avant un calcul qui bloque le fil. */
 function apresRendu(action: () => void): void {
   setTimeout(action, 0);
@@ -1894,6 +1912,18 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onRafraichirCours={lancerRafraichissement}
           messageCours={messageCours}
           coursActualisesA={coursActualisesA}
+          fraisEtf={fraisEtfSaisis(new DepotParametres(session.base()).lire(PARAMETRES.fraisEtf))}
+          onChangerFraisEtf={(titreId, taux) => {
+            const parametres = new DepotParametres(session.base());
+            let frais: Record<string, string> = {};
+            try {
+              frais = JSON.parse(parametres.lire(PARAMETRES.fraisEtf) ?? '{}');
+            } catch {
+              frais = {};
+            }
+            frais[titreId] = taux;
+            parametres.ecrire(PARAMETRES.fraisEtf, JSON.stringify(frais));
+          }}
           rafraichissementEnCours={coursEnCours}
           onVerrouiller={verrouiller}
         />
