@@ -39,6 +39,8 @@ export interface LigneAnneeDividendes {
   tendance: Tendance;
   /** Poids relatif, pour dessiner une barre. */
   fraction: number;
+  /** Montant, pour un graphique. */
+  valeur: number;
 }
 
 export interface LigneMois {
@@ -46,6 +48,8 @@ export interface LigneMois {
   mois: string;
   total: string;
   fraction: number;
+  /** Montant, pour un graphique. */
+  valeur: number;
   /** Vrai si rien n'a été encaissé ce mois-là. */
   vide: boolean;
 }
@@ -251,6 +255,7 @@ export function construireDividendes(entrees: EntreesDividendes): VueDividendes 
       evolution: ecart ? formaterMontant(ecart, { signeExplicite: true }) : undefined,
       tendance: tendance(ecart ?? null),
       fraction: maximumAnnee.estPositif() ? montant.div(maximumAnnee).toNumber() : 0,
+      valeur: montant.toNumber(),
     };
   });
 
@@ -267,6 +272,7 @@ export function construireDividendes(entrees: EntreesDividendes): VueDividendes 
       mois: MOIS_ABREGES[Number(cle.slice(5, 7)) - 1],
       total: formaterMontant(montant),
       fraction: maximumMois.estPositif() ? montant.div(maximumMois).toNumber() : 0,
+      valeur: montant.toNumber(),
       vide: montant.estZero(),
     };
   });

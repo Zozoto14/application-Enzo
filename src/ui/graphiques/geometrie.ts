@@ -333,6 +333,54 @@ export function indicesEtiquettes(nombre: number, maximum: number): number[] {
   return [...indices].sort((a, b) => a - b);
 }
 
+/**
+ * Indices des dates à étiqueter, réparties régulièrement dans le temps.
+ *
+ * Quand les points sont inégalement espacés — un relevé par jour pendant un
+ * an, puis un seul l'année suivante — répartir par rang entasserait les
+ * étiquettes là où les points sont denses.
+ */
+export function indicesEtiquettesTemps(temps: readonly number[], maximum: number): number[] {
+  if (temps.length === 0) {
+    return [];
+  }
+  const debut = temps[0];
+  const fin = temps[temps.length - 1];
+  if (temps.length === 1 || fin === debut || maximum < 2) {
+    return [0];
+  }
+  const indices = new Set<number>();
+  for (let k = 0; k < maximum; k++) {
+    const cible = debut + ((fin - debut) * k) / (maximum - 1);
+    indices.add(plusProche(temps, cible));
+  }
+  return [...indices].sort((a, b) => a - b);
+}
+
+/**
+ * Instants à étiqueter sur un axe de dates : répartis dans le temps, un seul
+ * par mois. Deux étiquettes du même mois se superposeraient pour rien.
+ */
+export function graduationsTemps(debut: number, fin: number, maximum: number): number[] {
+  if (!Number.isFinite(debut) || !Number.isFinite(fin)) {
+    return [];
+  }
+  if (fin <= debut || maximum < 2) {
+    return [debut];
+  }
+  const resultat: number[] = [];
+  const mois = new Set<string>();
+  for (let k = 0; k < maximum; k++) {
+    const instant = debut + ((fin - debut) * k) / (maximum - 1);
+    const cle = new Date(instant).toISOString().slice(0, 7);
+    if (!mois.has(cle)) {
+      mois.add(cle);
+      resultat.push(instant);
+    }
+  }
+  return resultat;
+}
+
 /** Indice du point le plus proche d'une abscisse, pour le survol. */
 export function plusProche(abscisses: readonly number[], x: number): number {
   if (abscisses.length === 0) {

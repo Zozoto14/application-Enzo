@@ -1,0 +1,390 @@
+/**
+ * Onglet Performances : combien le portefeuille a rapporté, sur la période
+ * choisie, mois par mois, et ligne par ligne face à la référence.
+ */
+
+import React, { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SousTitre, usePalette } from '../../composants';
+import {
+  CarteSection,
+  Metrique,
+  Rangee,
+  Segments,
+  Selecteur,
+  Signe,
+  Vide,
+  type OptionSelecteur,
+} from '../../elements';
+import { GraphiqueLignes } from '../../graphiques/Graphiques';
+import { Explication, IndicateurMesure } from '../../indicateurs';
+import { couleurChaleur } from '../../tableau';
+import { ESPACEMENT, RAYON } from '../../theme';
+import { PERIODES, type Periode } from '../../../core/performance/cumul';
+import {
+  construirePerformancesAvance,
+  courbeAction,
+  type EntreesAnalyse,
+} from '../../vues/analyses';
+import type { VueComparaison } from '../../vues/comparaison';
+import type { VuePerformance } from '../../vues/onglets';
+
+const MOIS = ['Jan.', 'Fév.', 'Mar.', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sep.', 'Oct.', 'Nov.', 'Déc.'];
+
+const pourcent = (valeur: number) =>
+  `${valeur.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} %`;
+const euros = (valeur: number) =>
+  `${valeur.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €`;
+
+type Mode = 'TWR' | 'Valeur';
+
+export interface OngletPerformancesProps {
+  vue: VuePerformance;
+  comparaison: VueComparaison;
+  analyse?: EntreesAnalyse;
+  onChoisirReference?(titreId: string): void;
+  optionsIndices?: readonly OptionSelecteur[];
+  indiceActif?: string;
+  onChoisirIndice?(indiceId: string): void;
+}
+
+export function OngletPerformances(props: OngletPerformancesProps) {
+  const { vue, comparaison, analyse, onChoisirReference } = props;
+  const palette = usePalette();
+  const [periode, setPeriode] = useState<Periode>('MAX');
+  const [mode, setMode] = useState<Mode>('TWR');
+  const [classement, setClassement] = useState<'Top' | 'Flop'>('Top');
+  const avance = useMemo(
+    () => (analyse ? construirePerformancesAvance(analyse, periode) : undefined),
+    [analyse, periode],
+  );
+  const [titreChoisi, setTitreChoisi] = useState<string | undefined>();
+  const titreVu = titreChoisi ?? avance?.actions[0]?.titreId;
+  const action = useMemo(
+    () => (analyse && titreVu ? courbeAction(analyse, titreVu, periode) : undefined),
+    [analyse, titreVu, periode],
+  );
+
+  const echelleMois = avance
+    ? Math.max(
+        1,
+        ...avance.mensuels.flatMap(ligne => ligne.mois.map(cellule => Math.abs(cellule?.brut ?? 0))),
+      )
+    : 1;
+
+  return (
+    <>
+      {avance ? (
+        <>
+          <View style={styles.filtres}>
+            <Segments<Periode>
+              options={PERIODES}
+              actif={periode}
+              onChoisir={valeur => setPeriode(valeur)}
+              prefixeTest="perf-periode"
+            />
+            {props.onChoisirIndice && props.optionsIndices ? (
+              <Selecteur
+                etiquette="Benchmark"
+                valeur={props.indiceActif ?? 'aucun'}
+                options={[...props.optionsIndices, { valeur: 'aucun', libelle: 'Aucune référence' }]}
+                onChoisir={props.onChoisirIndice}
+                largeur={210}
+              />
+            ) : null}
+          </View>
+
+          <Rangee>
+            <CarteSection titre="Métriques clés" explication="twr">
+              <View style={styles.grille}>
+                {avance.metriques.map(metrique => (
+                  <Metrique
+                    key={metrique.libelle}
+                    libelle={metrique.libelle}
+                    valeur={metrique.valeur}
+                    tendance={metrique.tendance}
+                  />
+                ))}
+              </View>
+            </CarteSection>
+
+            <CarteSection
+              titre="Performance (TWR)"
+              poids={1.7}
+              actions={<Segments<Mode> options={['TWR', 'Valeur']} actif={mode} onChoisir={valeur => setMode(valeur)} />}>
+              {mode === 'TWR' ? (
+                avance.twr.length > 1 ? (
+                  <GraphiqueLignes
+                    series={[
+                      { nom: 'Portefeuille', couleur: palette.series[0], points: avance.twr, aire: true },
+                      ...(avance.twrReference.length > 1 && avance.legendeReference
+                        ? [{ nom: 'Référence', couleur: palette.reference, points: avance.twrReference }]
+                        : []),
+                    ]}
+                    formater={pourcent}
+                    hauteur={300}
+                    legende={[
+                      { couleur: palette.series[0], texte: avance.legendeTwr },
+                      ...(avance.legendeReference && avance.twrReference.length > 1
+                        ? [{ couleur: palette.reference, texte: avance.legendeReference }]
+                        : []),
+                    ]}
+                  />
+                ) : (
+                  <Vide>Pas assez de valorisations sur cette période pour tracer une courbe.</Vide>
+                )
+              ) : avance.valeur.length > 1 ? (
+                <GraphiqueLignes
+                  series={[
+                    { nom: 'Valeur', couleur: palette.series[0], points: avance.valeur, aire: true },
+                    { nom: 'Montant investi', couleur: palette.reference, points: avance.investi },
+                  ]}
+                  formater={euros}
+                  hauteur={300}
+                  legende={[
+                    { couleur: palette.series[0], texte: 'Valeur du portefeuille' },
+                    { couleur: palette.reference, texte: 'Montant investi (versements nets)' },
+                  ]}
+                />
+              ) : (
+                <Vide>Pas assez de valorisations sur cette période pour tracer une courbe.</Vide>
+              )}
+            </CarteSection>
+          </Rangee>
+
+          {avance.mensuels.length > 0 ? (
+            <CarteSection titre="Rendements mensuels (TWR)">
+              <ScrollView horizontal>
+                <View>
+                  <View style={styles.ligneMois}>
+                    <View style={styles.celluleAnnee} />
+                    {[...MOIS, 'Année'].map(mois => (
+                      <View key={mois} style={styles.celluleMois}>
+                        <Text style={[styles.enteteMois, { color: palette.texteSecondaire }]}>{mois}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  {[...avance.mensuels, { annee: 'Moy.', mois: avance.moyenneMensuelle, annee_: null }].map(ligne => (
+                    <View key={ligne.annee} style={styles.ligneMois}>
+                      <View style={styles.celluleAnnee}>
+                        <Text style={{ color: palette.texte, fontWeight: '700', fontSize: 12 }}>{ligne.annee}</Text>
+                      </View>
+                      {[...ligne.mois, ligne.annee_].map((cellule, index) => (
+                        <View
+                          key={index}
+                          style={[
+                            styles.celluleMois,
+                            {
+                              backgroundColor: couleurChaleur(palette, cellule?.brut ?? null, echelleMois),
+                              borderColor: palette.bordure,
+                            },
+                          ]}>
+                          {cellule ? (
+                            <>
+                              <Text
+                                style={{
+                                  color: (cellule.brut ?? 0) >= 0 ? palette.hausse : palette.baisse,
+                                  fontSize: 11.5,
+                                  fontWeight: '700',
+                                }}>
+                                {cellule.valeur}
+                              </Text>
+                              {cellule.reference ? (
+                                <Text style={{ color: palette.texteSecondaire, fontSize: 9.5 }}>{cellule.reference}</Text>
+                              ) : null}
+                            </>
+                          ) : null}
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            </CarteSection>
+          ) : null}
+
+          <Rangee>
+            <CarteSection
+              titre="Performance des actions"
+              poids={1.7}
+              actions={
+                avance.actions.length > 0 && titreVu ? (
+                  <Selecteur
+                    etiquette="Titre"
+                    valeur={titreVu}
+                    options={avance.actions.map(ligne => ({ valeur: ligne.titreId, libelle: ligne.nom }))}
+                    onChoisir={setTitreChoisi}
+                    largeur={220}
+                  />
+                ) : null
+              }>
+              {action && action.titre.length > 1 ? (
+                <GraphiqueLignes
+                  series={[
+                    { nom: 'Titre', couleur: palette.series[0], points: action.titre, aire: true },
+                    ...(action.reference.length > 1
+                      ? [{ nom: 'Référence', couleur: palette.reference, points: action.reference }]
+                      : []),
+                  ]}
+                  marqueurs={action.marqueurs}
+                  formater={pourcent}
+                  hauteur={280}
+                  legende={[
+                    { couleur: palette.series[0], texte: 'Cours du titre' },
+                    ...(action.reference.length > 1 ? [{ couleur: palette.reference, texte: 'Référence' }] : []),
+                    { couleur: palette.hausse, texte: 'Achats' },
+                    { couleur: palette.baisse, texte: 'Ventes' },
+                  ]}
+                />
+              ) : (
+                <Vide>Aucun historique de cours pour ce titre sur la période.</Vide>
+              )}
+            </CarteSection>
+
+            <CarteSection
+              titre="Titres vs benchmark"
+              actions={
+                <Segments<'Top' | 'Flop'>
+                  options={['Top', 'Flop']}
+                  actif={classement}
+                  onChoisir={valeur => setClassement(valeur)}
+                />
+              }>
+              {(classement === 'Top' ? avance.titresVsReference.mieux : avance.titresVsReference.moins).length ===
+              0 ? (
+                <Vide>
+                  {classement === 'Top'
+                    ? 'Aucune ligne ne fait mieux que la référence sur la période.'
+                    : 'Aucune ligne ne fait moins bien que la référence sur la période.'}
+                </Vide>
+              ) : (
+                (classement === 'Top' ? avance.titresVsReference.mieux : avance.titresVsReference.moins).map(ligne => (
+                  <View key={ligne.titreId} style={[styles.ligneTitre, { borderBottomColor: palette.bordure }]}>
+                    <Text numberOfLines={1} style={{ color: palette.texte, fontWeight: '600', flex: 1 }}>
+                      {ligne.nom}
+                    </Text>
+                    <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>{ligne.perf}</Text>
+                    <Signe texte={ligne.ecart.texte} tendance={ligne.ecart.tendance} taille={13} />
+                  </View>
+                ))
+              )}
+            </CarteSection>
+          </Rangee>
+        </>
+      ) : null}
+
+      <Rangee>
+        <CarteSection titre="Sur tout l’historique">
+          {vue.messageHistorique ? (
+            <>
+              <Text style={{ color: palette.texte, fontWeight: '600' }}>Historique insuffisant</Text>
+              <SousTitre>{vue.messageHistorique}</SousTitre>
+            </>
+          ) : (
+            <SousTitre>
+              {vue.nombrePoints} valorisations sur {Math.round(vue.jours)} jours
+            </SousTitre>
+          )}
+          <View style={styles.paire}>
+            <IndicateurMesure etiquette="TWR" mesure={vue.twr} explication="twr" />
+            <IndicateurMesure etiquette="TRI" mesure={vue.tri} explication="tri" />
+          </View>
+          <View style={styles.paire}>
+            <IndicateurMesure etiquette="Rendement annualisé" mesure={vue.rendementAnnualise} explication="cagr" />
+            <IndicateurMesure etiquette="Volatilité" mesure={vue.volatilite} explication="volatilite" />
+          </View>
+          <View style={styles.paire}>
+            <IndicateurMesure etiquette="Ratio de Sharpe" mesure={vue.sharpe} explication="sharpe" />
+            <IndicateurMesure etiquette="Perte maximale" mesure={vue.perteMaximale} explication="drawdown" />
+          </View>
+          {vue.dateCreux ? <SousTitre>Creux atteint le {vue.dateCreux}.</SousTitre> : null}
+        </CarteSection>
+
+        <CarteSection
+          titre="Face à une de vos valeurs"
+          avantTitre={null}
+          actions={comparaison.nom ? <Explication cle="alpha" /> : null}>
+          {comparaison.nom ? (
+            <>
+              <View style={styles.paire}>
+                <IndicateurMesure etiquette="Vous" mesure={comparaison.portefeuille} />
+                <IndicateurMesure etiquette={comparaison.nom} mesure={comparaison.reference} />
+              </View>
+              <IndicateurMesure etiquette="Écart" mesure={comparaison.ecart} tendance={comparaison.tendanceEcart} />
+              {comparaison.verdict ? <SousTitre>{comparaison.verdict}</SousTitre> : null}
+              {comparaison.periode ? <SousTitre>{comparaison.periode}</SousTitre> : null}
+              <View style={styles.paire}>
+                <IndicateurMesure etiquette="Bêta" mesure={comparaison.beta} explication="beta" />
+                <IndicateurMesure etiquette="Alpha" mesure={comparaison.alpha} explication="alpha" />
+              </View>
+              <IndicateurMesure
+                etiquette="Corrélation à la référence"
+                mesure={comparaison.correlation}
+                explication="correlation"
+              />
+            </>
+          ) : null}
+
+          {comparaison.message ? <SousTitre>{comparaison.message}</SousTitre> : null}
+
+          {onChoisirReference ? (
+            <View style={styles.choix}>
+              {comparaison.choix.map(choix => (
+                <Pressable
+                  key={choix.titreId}
+                  testID={`reference-${choix.titreId}`}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: choix.retenu }}
+                  onPress={() => onChoisirReference(choix.titreId)}
+                  style={[
+                    styles.puce,
+                    {
+                      borderColor: choix.retenu ? palette.accentPlein : palette.bordure,
+                      backgroundColor: choix.retenu ? palette.accentPlein : 'transparent',
+                    },
+                  ]}>
+                  <Text style={{ fontSize: 13, color: choix.retenu ? palette.surAccent : palette.texte }}>
+                    {choix.nom} · {choix.releves} relevé(s)
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+        </CarteSection>
+      </Rangee>
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  filtres: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: ESPACEMENT.m, zIndex: 20 },
+  grille: { flexDirection: 'row', flexWrap: 'wrap', rowGap: ESPACEMENT.m, columnGap: ESPACEMENT.l },
+  paire: { flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.m },
+  ligneMois: { flexDirection: 'row' },
+  celluleAnnee: { width: 56, minHeight: 44, justifyContent: 'center' },
+  celluleMois: {
+    width: 74,
+    minHeight: 44,
+    margin: 1,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  enteteMois: { fontSize: 11.5, fontWeight: '700' },
+  ligneTitre: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ESPACEMENT.m,
+    minHeight: 40,
+    borderBottomWidth: 1,
+  },
+  choix: { flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.s },
+  puce: {
+    borderWidth: 1,
+    borderRadius: RAYON.l,
+    paddingHorizontal: ESPACEMENT.m,
+    paddingVertical: ESPACEMENT.s,
+  },
+});

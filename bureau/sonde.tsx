@@ -13,7 +13,7 @@ import { createRoot } from 'react-dom/client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { d } from '../src/core/money/decimal';
 import { rejouer } from '../src/core/portfolio/engine';
-import type { CoursDate } from '../src/core/performance/serie';
+import { serieValorisation, type CoursDate } from '../src/core/performance/serie';
 import { achat, compte, dividende, titre, versement } from '../src/core/testing/fixtures';
 import { construireComparaison } from '../src/ui/vues/comparaison';
 import { construireComparateur } from '../src/ui/vues/comparateur';
@@ -80,11 +80,7 @@ const historique = new Map<string, CoursDate[]>([
   ['cw8', serie(620, 260, 0.03)],
 ]);
 
-const points = historique.get('cw8')!.map(point => ({
-  date: point.date,
-  valeurTotale: point.cloture.mul(17).add(d('7000')),
-  fluxExterne: d(0),
-}));
+const points = serieValorisation({ comptes: [pea], transactions, cours: historique });
 
 /** Référence d'exemple, pour voir la seconde courbe. */
 const referenceExemple = serie(100, 260, 0.02);
@@ -134,6 +130,17 @@ function Apercu() {
             aujourdhui: '2025-06-17',
           })}
           aujourdhui="2025-06-17"
+          analyse={{
+            etat,
+            comptes,
+            titres,
+            transactions,
+            cours,
+            historique,
+            points,
+            indice: { nom: 'S&P 500', serie: referenceExemple },
+            aujourdhui: '2025-06-17',
+          }}
           optionsIndices={INDICES.map(indice => ({ valeur: indice.id, libelle: indice.nom }))}
           indiceActif={INDICES[0].id}
           onChoisirIndice={() => undefined}

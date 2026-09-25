@@ -13,7 +13,7 @@
  * au tableau de bord.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar } from 'react-native';
 // SafeAreaView de react-native est deprecie ; celui de safe-area-context gere
 // en plus l'encoche et la barre de geste, et etait deja une dependance.
@@ -243,7 +243,7 @@ function dividendesParTitre(
 }
 
 export function App({ session, genererId, aujourdhui, chargementAutomatique = false }: AppProps) {
-  const [, forcerRendu] = useState(0);
+  const [rendu, forcerRendu] = useState(0);
   const [compteFiltre, setCompteFiltre] = useState<string>(TOUS_LES_COMPTES);
   const [secrets, setSecrets] = useState<SecretsInitiaux | undefined>();
   const [erreur, setErreur] = useState<string | undefined>();
@@ -1022,6 +1022,32 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         }
       : undefined;
 
+  // Donnees des analyses avancees : frontiere efficiente, poids dans le temps,
+  // rendements mensuels. Couteuses a recalculer, elles ne le sont que lorsque
+  // le portefeuille a pu changer : chaque ecriture passe par rafraichir(), qui
+  // incremente `rendu`.
+  const analyse = useMemo(
+    () =>
+      contenu && depotCours && historiques
+        ? {
+            etat: contenu.etat,
+            comptes: contenu.comptes,
+            titres: contenu.titres,
+            transactions: contenu.transactions,
+            cours: depotCours.derniersCours(),
+            historique: historiques.titres,
+            points: pointsValorisation,
+            indice:
+              indice && historiques.indices.get(indice.id)?.length
+                ? { nom: indice.court, serie: historiques.indices.get(indice.id)! }
+                : undefined,
+            aujourdhui: (aujourdhui ?? dateDuJour)(),
+          }
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rendu, compteFiltre, indiceRetenu, deverrouille, aujourdhui],
+  );
+
   // Valeur actuelle du portefeuille, proposee comme capital de depart de la
   // projection. Retaper ce montant serait une occasion de se tromper.
   const capitalActuel =
@@ -1225,6 +1251,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         <Portefeuille
           dashboard={tableau}
           resume={onglets!.resume}
+          analyse={analyse}
           aujourdhui={(aujourdhui ?? dateDuJour)()}
           optionsComptes={(contenuComplet?.comptes ?? []).map(compte => ({
             valeur: compte.id,

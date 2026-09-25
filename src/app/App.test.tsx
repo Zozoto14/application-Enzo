@@ -240,8 +240,10 @@ describe('parcours complet, session ouverte', () => {
     expect(screen.queryByText(/Cours inconnu/)).toBeNull();
 
     // Les lignes vivent dans l'onglet Positions.
+    // Le nom figure dans le tableau des titres et dans les graphiques.
     await fireEvent.press(screen.getByTestId('onglet-positions'));
-    expect(screen.getByText('STELLANTIS')).toBeTruthy();
+    expect(screen.getByTestId('tableau-titres')).toBeTruthy();
+    expect(screen.getAllByText('STELLANTIS').length).toBeGreaterThan(0);
     expect(screen.getByText('2 ligne(s)')).toBeTruthy();
   });
 

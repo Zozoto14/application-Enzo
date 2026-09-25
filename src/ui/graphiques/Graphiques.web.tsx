@@ -22,6 +22,7 @@ import {
   echelle,
   graduations,
   indicesEtiquettes,
+  graduationsTemps,
   milieuArc,
   moisAnnee,
   plusProche,
@@ -271,15 +272,19 @@ export function GraphiqueLignes({
               </g>
             ))}
 
-            {indicesEtiquettes(calcul.dates.length, Math.max(2, Math.floor(utile.largeur / 90))).map(index => (
+            {graduationsTemps(
+              temps(calcul.dates[0]),
+              temps(calcul.dates[calcul.dates.length - 1]),
+              Math.max(2, Math.floor(utile.largeur / 95)),
+            ).map((instant, index, tous) => (
               <text
-                key={index}
-                x={calcul.abscisses[index]}
+                key={instant}
+                x={calcul.x(instant)}
                 y={hauteur - 6}
                 fontSize={POLICE}
                 fill={palette.texteSecondaire}
-                textAnchor={index === 0 ? 'start' : index === calcul.dates.length - 1 ? 'end' : 'middle'}>
-                {moisAnnee(calcul.dates[index])}
+                textAnchor={index === 0 ? 'start' : index === tous.length - 1 ? 'end' : 'middle'}>
+                {moisAnnee(new Date(instant).toISOString().slice(0, 10))}
               </text>
             ))}
 
@@ -539,7 +544,9 @@ export function Donut({ parts, formater, hauteur = 280, centre, testID }: Propri
               lignes: [
                 { couleur: secteurs[survol.index]?.part.couleur, texte: secteurs[survol.index]?.part.libelle ?? '', fort: true },
                 {
-                  texte: `${formater(secteurs[survol.index]?.part.valeur ?? 0)} · ${pourcentage(secteurs[survol.index]?.fraction ?? 0)}`,
+                  texte: [formater(secteurs[survol.index]?.part.valeur ?? 0), pourcentage(secteurs[survol.index]?.fraction ?? 0)]
+                    .filter(Boolean)
+                    .join(' · '),
                 },
                 ...(secteurs[survol.index]?.part.detail ? [{ texte: secteurs[survol.index].part.detail! }] : []),
               ],
@@ -803,7 +810,12 @@ export function Nuage({ points, lignes, formaterX, formaterY, hauteur = 300, leg
                   <circle cx={cx} cy={cy} r={12} fill="transparent" />
                   {forme}
                   {point.libelle ? (
-                    <text x={cx + 10} y={cy - 8} fontSize={10} fontWeight={700} fill={palette.texte}>
+                    <text
+                      x={cx + 10}
+                      y={point.forme === 'losange' ? cy + 18 : cy - 8}
+                      fontSize={10}
+                      fontWeight={700}
+                      fill={palette.texte}>
                       {point.libelle}
                     </text>
                   ) : null}

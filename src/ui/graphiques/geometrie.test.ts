@@ -5,6 +5,8 @@ import {
   echelle,
   graduations,
   indicesEtiquettes,
+  indicesEtiquettesTemps,
+  graduationsTemps,
   moisAnnee,
   plusProche,
   treemap,
@@ -134,5 +136,31 @@ describe('axes', () => {
   it('trouve le point survolé', () => {
     expect(plusProche([0, 10, 20, 30], 14)).toBe(1);
     expect(plusProche([0, 10, 20, 30], 26)).toBe(3);
+  });
+});
+
+describe('étiquettes dans le temps', () => {
+  it('répartit selon les dates, pas selon le nombre de points', () => {
+    // Cent points serrés, puis un seul très loin.
+    const temps = [...Array.from({ length: 100 }, (_, i) => i), 1000];
+    const indices = indicesEtiquettesTemps(temps, 3);
+    expect(indices).toEqual([0, 99, 100]);
+  });
+});
+
+describe('graduations de dates', () => {
+  it('ne met qu’une étiquette par mois', () => {
+    const debut = Date.parse('2026-01-01T00:00:00Z');
+    const fin = Date.parse('2026-01-20T00:00:00Z');
+    expect(graduationsTemps(debut, fin, 6)).toEqual([debut]);
+  });
+
+  it('répartit les étiquettes sur la durée', () => {
+    const debut = Date.parse('2024-01-01T00:00:00Z');
+    const fin = Date.parse('2026-01-01T00:00:00Z');
+    const instants = graduationsTemps(debut, fin, 5);
+    expect(instants).toHaveLength(5);
+    expect(instants[0]).toBe(debut);
+    expect(instants[4]).toBe(fin);
   });
 });
