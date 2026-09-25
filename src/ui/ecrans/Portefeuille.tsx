@@ -511,6 +511,15 @@ function Resume(props: PortefeuilleProps) {
             <Pastille texte={resume.totalReturnPct.texte} tendance={resume.totalReturnPct.tendance} />
             <Text style={{ color: palette.texte, fontSize: 12 }}>Total Return</Text>
           </View>
+          {resume.variationSeance ? (
+            <View style={styles.ligneEnTete} testID="variation-seance">
+              <Pastille texte={resume.variationSeance.pourcentage.texte} tendance={resume.variationSeance.pourcentage.tendance} />
+              <Signe texte={resume.variationSeance.montant.texte} tendance={resume.variationSeance.montant.tendance} taille={12} />
+              <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>
+                séance du {resume.variationSeance.date}
+              </Text>
+            </View>
+          ) : null}
           <View style={styles.paire}>
             <Indicateur etiquette="Liquidités" valeur={dashboard.cash} />
             <Indicateur

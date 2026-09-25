@@ -58,6 +58,8 @@ import {
   separerHistorique,
 } from '../cours/indices';
 import { rejouer } from '../core/portfolio/engine';
+import { resoudreSymboles } from '../cours/resolution';
+import { INTERVALLE_ACTUALISATION_MS, marcheOuvert } from '../cours/marche';
 import { construireResume } from '../ui/vues/resume';
 import { chargerValeur, type DonneesValeur } from '../fondamentaux/yahoo';
 import { construireFiche, type VueFiche } from '../ui/vues/fiche';
@@ -485,6 +487,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       }
 
       setEcran('tableau');
+      setImportsRecents(nombre => nombre + 1);
       rafraichir();
     },
     [session, rafraichir, identifiant, aujourdhui],
@@ -505,6 +508,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [session, rafraichir],
   );
 
+  // Déclarée plus bas ; la référence évite d'en dépendre ici.
+  const actualiserCoursDuJourRef = useRef<((silencieux: boolean) => void) | undefined>(undefined);
+
   const lancerRafraichissement = useCallback(() => {
     const base = session.base();
     const parametres = new DepotParametres(base);
@@ -513,6 +519,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     );
 
     if (!fournisseur) {
+      if (chargementAutomatique) {
+        // Sur le bureau, Yahoo répond sans configuration : on s'en sert.
+        actualiserCoursDuJourRef.current?.(false);
+        return;
+      }
       setMessageCours(
         'Aucun fournisseur de cours configure. Ouvrez les reglages pour en choisir un.',
       );
@@ -533,7 +544,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         setCoursEnCours(false);
         rafraichir();
       });
-  }, [session, rafraichir]);
+  }, [session, rafraichir, chargementAutomatique]);
 
   /**
    * Systeme de fichiers de l'appareil, absent sur un binaire compile sans
@@ -720,7 +731,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     return lu ?? INDICE_DEFAUT;
   }, [session]);
 
-  const lancerChargementHistorique = useCallback(() => {
+  const chargerHistoriqueConnu = useCallback(() => {
     const contenuActuel = chargerEtat(session.base());
     // Detenues et surveillees : une valeur qu'on surveille merite son
     // historique, c'est meme la qu'on le regarde avant d'acheter.
@@ -773,6 +784,107 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         rafraichir();
       });
   }, [session, rafraichir, indiceChoisi, aujourdhui]);
+
+
+  /**
+   * Charge l'historique, en cherchant d'abord les symboles qui manquent.
+   *
+   * Un import de courtier ne donne que l'ISIN : sans cette étape, il
+   * faudrait régler chaque valeur à la main avant de voir une courbe. La
+   * recherche n'a lieu que sur le bureau : les tests ne touchent pas au réseau.
+   */
+  const lancerChargementHistorique = useCallback(() => {
+    if (!chargementAutomatique) {
+      chargerHistoriqueConnu();
+      return;
+    }
+    const contenuActuel = chargerEtat(session.base());
+    const concernes = new Set(contenuActuel.etat.positions.map(position => position.titreId));
+    for (const ligne of new DepotWatchlist(session.base()).lister()) {
+      concernes.add(ligne.titreId);
+    }
+    const sansSymbole = contenuActuel.titres.filter(
+      titre => concernes.has(titre.id) && !titre.ticker?.trim(),
+    );
+    if (sansSymbole.length === 0) {
+      chargerHistoriqueConnu();
+      return;
+    }
+    setHistoEnCours(true);
+    setMessageHistorique('Recherche des symboles de vos valeurs…');
+    resoudreSymboles(sansSymbole)
+      .then(({ trouves }) => {
+        const depot = new DepotTitres(session.base());
+        for (const titre of depot.tous()) {
+          const symbole = trouves.get(titre.id);
+          if (symbole) {
+            depot.enregistrer({ ...titre, ticker: symbole });
+          }
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        setHistoEnCours(false);
+        chargerHistoriqueConnu();
+      });
+  }, [chargementAutomatique, session, chargerHistoriqueConnu]);
+
+  /**
+   * Cours du jour, sans fournisseur à configurer : les cinq dernières
+   * séances de chaque valeur détenue, dont la dernière est le cours actuel.
+   */
+  const actualiserCoursDuJour = useCallback(
+    (silencieux: boolean) => {
+      const contenuActuel = chargerEtat(session.base());
+      const detenus = new Set(contenuActuel.etat.positions.map(position => position.titreId));
+      const demandes = contenuActuel.titres
+        .filter(titre => detenus.has(titre.id) && titre.ticker?.trim())
+        .map(titre => ({ titreId: titre.id, nom: titre.nom, symbole: titre.ticker.trim() }));
+      const indice = indiceParId(indiceChoisi());
+      if (indice && demandes.length > 0) {
+        demandes.push({ titreId: indice.id, nom: indice.nom, symbole: indice.symbole });
+      }
+      if (demandes.length === 0) {
+        if (!silencieux) {
+          setMessageCours('Aucune valeur détenue n’a de symbole : chargez l’historique pour les trouver.');
+        }
+        return;
+      }
+      if (!silencieux) {
+        setCoursEnCours(true);
+        setMessageCours(undefined);
+      }
+      chargerHistoriques(session.base(), demandes, { plage: '5d' })
+        .then(rapport => {
+          if (!silencieux) {
+            setMessageCours(
+              rapport.echecs.length > 0
+                ? `Cours actualisés, sauf : ${rapport.echecs.map(echec => echec.nom).join(', ')}.`
+                : `Cours actualisés à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}.`,
+            );
+          }
+        })
+        .catch((e: unknown) => {
+          if (!silencieux) {
+            setMessageCours(e instanceof Error ? e.message : String(e));
+          }
+        })
+        .finally(() => {
+          setCoursEnCours(false);
+          rafraichir();
+        });
+    },
+    [session, rafraichir, indiceChoisi],
+  );
+
+  // Après un import, sur le bureau : symboles puis historique, sans rien demander.
+  const [importsRecents, setImportsRecents] = useState(0);
+  useEffect(() => {
+    if (chargementAutomatique && importsRecents > 0) {
+      lancerChargementHistorique();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importsRecents]);
 
   const choisirIndice = useCallback(
     (indiceId: string) => {
@@ -1003,6 +1115,21 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   const deverrouille = statut === 'deverrouille' && !secrets;
 
+  actualiserCoursDuJourRef.current = actualiserCoursDuJour;
+
+  // Cours en direct : toutes les cinq minutes pendant la séance de Paris.
+  useEffect(() => {
+    if (!chargementAutomatique || !deverrouille) {
+      return;
+    }
+    const minuterie = setInterval(() => {
+      if (marcheOuvert()) {
+        actualiserCoursDuJourRef.current?.(true);
+      }
+    }, INTERVALLE_ACTUALISATION_MS);
+    return () => clearInterval(minuterie);
+  }, [chargementAutomatique, deverrouille]);
+
   // Au déverrouillage, une fois par jour : l'historique des cours, qui porte
   // aussi le dernier cours de chaque valeur. Les courbes sont à jour sans
   // qu'il faille penser à les rafraîchir.
@@ -1012,6 +1139,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     }
     const parametres = new DepotParametres(session.base());
     if (parametres.lire(PARAMETRES.historiqueChargeLe) === (aujourdhui ?? dateDuJour)()) {
+      // Historique déjà chargé aujourd'hui : seulement les cours du moment.
+      actualiserCoursDuJourRef.current?.(true);
       return;
     }
     lancerChargementHistorique();

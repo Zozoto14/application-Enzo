@@ -17,6 +17,7 @@ import type { PositionImportee } from '../../core/import/positions';
 import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, palettePour, stylesPartages } from '../theme';
 import { apercuPositions } from '../vues/import';
+import { DepotFichier } from '../DepotFichier';
 
 export interface ImportPositionsProps {
   onImporter(positions: PositionImportee[]): void;
@@ -37,9 +38,11 @@ export function ImportPositions({ onImporter, onAnnuler }: ImportPositionsProps)
       keyboardShouldPersistTaps="handled">
       <Titre>Importer vos positions</Titre>
       <SousTitre>
-        Ouvrez l'export « positions instantanées » de votre courtier, copiez son
-        contenu entier, et collez-le ci-dessous.
+        Déposez l'export « positions instantanées » de votre courtier, ou
+        copiez son contenu entier et collez-le ci-dessous.
       </SousTitre>
+
+      <DepotFichier onContenu={texte => setContenu(texte)} />
 
       <Champ
         etiquette="Contenu du fichier"

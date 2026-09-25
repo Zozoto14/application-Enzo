@@ -78,6 +78,8 @@ export interface PartCompte {
 
 export interface VueResume {
   sousTitre: string;
+  /** Variation sur la dernière séance, versements neutralisés. */
+  variationSeance?: { montant: ValeurSignee; pourcentage: ValeurSignee; date: string };
   devise: string;
   valeurTotale: string;
   investi: string;
@@ -253,8 +255,24 @@ export function construireResume(entrees: EntreesResume): VueResume {
   const facteursPortefeuille = facteursTwr(entrees.points);
   const facteursReference = entrees.reference ? facteursCours(entrees.reference.serie) : [];
 
+  // Dernière séance : écart entre les deux derniers points, flux retirés.
+  const points = entrees.points;
+  const dernier = points[points.length - 1];
+  const veille = points[points.length - 2];
+  let variationSeance: VueResume['variationSeance'];
+  if (dernier && veille && veille.valeurTotale.estPositif()) {
+    const ecart = dernier.valeurTotale.sub(dernier.fluxExterne).sub(veille.valeurTotale);
+    const pct = ecart.div(veille.valeurTotale).mul(100);
+    variationSeance = {
+      montant: signe(ecart, formaterMontant(ecart, { signeExplicite: true })),
+      pourcentage: signe(pct, formaterPourcentage(pct)),
+      date: formaterDate(dernier.date),
+    };
+  }
+
   const nombre = entrees.comptes.length;
   return {
+    variationSeance,
     sousTitre:
       nombre === 0
         ? 'Commencez par créer un compte titre.'
