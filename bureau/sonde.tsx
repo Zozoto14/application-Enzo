@@ -36,6 +36,7 @@ import { Projection } from '../src/ui/ecrans/Projection';
 import { Watchlist } from '../src/ui/ecrans/Watchlist';
 import { useFondDocument } from './Bureau';
 import { definirDiscretion } from '../src/ui/discretion';
+import { Objectifs } from '../src/ui/ecrans/Objectifs';
 import { Coque, type Destination } from '../src/ui/Navigation';
 import { Podcast } from '../src/ui/ecrans/Podcast';
 import { construireEpisode } from '../src/podcast/episode';
@@ -100,6 +101,7 @@ const DESTINATIONS: readonly Destination[] = [
   { cle: 'projection', libelle: 'Projection', glyphe: '◔' },
   { cle: 'fiche', libelle: 'Fiche', glyphe: '◧' },
   { cle: 'podcast', libelle: 'Podcast', glyphe: '♫' },
+  { cle: 'objectifs', libelle: 'Objectifs', glyphe: '◎' },
 ];
 
 const episodeExemple = construireEpisode({
@@ -287,6 +289,20 @@ function Apercu() {
         />
       ) : null}
 
+      {destination === 'objectifs' ? (
+        <Objectifs
+          objectif={{ montant: 50000, date: '2031-06-30', rendement: 5 }}
+          valeurActuelle={19000}
+          aujourdhui="2026-09-25"
+          onEnregistrerObjectif={() => undefined}
+          lignes={[
+            { titreId: 'cw8', nom: 'Amundi MSCI World', valeur: 11700, cible: 70, cours: 585 },
+            { titreId: 'ai', nom: 'Air Liquide', valeur: 4600, cible: 20, cours: 178 },
+            { titreId: 'stla', nom: 'Stellantis', valeur: 2700, cible: 10, cours: 9 },
+          ]}
+          onChangerCible={() => undefined}
+        />
+      ) : null}
       {destination === 'podcast' ? <Podcast episode={episodeExemple} onGenerer={() => undefined} /> : null}
       {destination === 'projection' ? (
         <Projection

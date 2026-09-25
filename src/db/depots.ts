@@ -473,6 +473,10 @@ export const PARAMETRES = {
   identifiantAppareil: 'sync.appareil',
   /** « 1 » : mode discret, montants masqués. */
   discretion: 'affichage.discret',
+  /** Objectif d'épargne : montant, échéance, rendement supposé (JSON). */
+  objectif: 'objectifs.epargne',
+  /** Poids visés par valeur, en % (JSON { titreId: "30" }). */
+  repartitionCible: 'objectifs.repartition',
 } as const;
 
 /**

@@ -57,7 +57,7 @@ import {
   plagePour,
   separerHistorique,
 } from '../cours/indices';
-import { rejouer } from '../core/portfolio/engine';
+import { rejouer, type EtatPortefeuille } from '../core/portfolio/engine';
 import { resoudreSymboles } from '../cours/resolution';
 import { intervalleActualisation, seanceEnCours } from '../cours/marche';
 import { construireResume } from '../ui/vues/resume';
@@ -72,6 +72,8 @@ import { SOCIETES_MAXIMUM } from '../ui/vues/comparaisonFinanciere';
 import { chercherSymboles, type CandidatSymbole } from '../cours/symboles';
 import { Comparateur } from '../ui/ecrans/Comparateur';
 import { Podcast } from '../ui/ecrans/Podcast';
+import { Objectifs } from '../ui/ecrans/Objectifs';
+import { objectifDepuisJson, type LigneCible } from '../ui/vues/objectifs';
 import { preparerEpisode } from '../podcast/donnees';
 import type { Episode } from '../podcast/episode';
 import { chargerActualites } from '../fondamentaux/actualites';
@@ -164,7 +166,45 @@ type Ecran =
   | 'symboles'
   | 'comparateur'
   | 'fiche'
-  | 'podcast';
+  | 'podcast'
+  | 'objectifs';
+
+/**
+ * Lignes de l'écran Objectifs : une par valeur détenue (tous comptes),
+ * avec sa cible enregistrée, ou son poids actuel à défaut.
+ */
+function lignesCibles(
+  contenu: { etat: EtatPortefeuille; titres: readonly Titre[] },
+  cours: ReadonlyMap<string, Decimal>,
+  ciblesBrutes: string | undefined,
+): LigneCible[] {
+  let cibles: Record<string, string> = {};
+  try {
+    cibles = JSON.parse(ciblesBrutes ?? '{}');
+  } catch {
+    cibles = {};
+  }
+  const { valorisees } = valoriserPositions(contenu.etat.positions, cours);
+  const parTitre = new Map<string, number>();
+  for (const position of valorisees) {
+    parTitre.set(position.titreId, (parTitre.get(position.titreId) ?? 0) + position.valeurMarche.toNumber());
+  }
+  const total = [...parTitre.values()].reduce((somme, valeur) => somme + valeur, 0);
+  return [...parTitre.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([titreId, valeur]) => {
+      const saisie = Number((cibles[titreId] ?? '').replace(',', '.'));
+      return {
+        titreId,
+        nom: contenu.titres.find(titre => titre.id === titreId)?.nom ?? titreId,
+        valeur,
+        cible: cibles[titreId] !== undefined && Number.isFinite(saisie)
+          ? saisie
+          : total > 0 ? Math.round((valeur / total) * 1000) / 10 : 0,
+        cours: cours.get(titreId)?.toNumber(),
+      };
+    });
+}
 
 /** Laisse React peindre avant un calcul qui bloque le fil. */
 function apresRendu(action: () => void): void {
@@ -1474,6 +1514,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     { cle: 'watchlist', libelle: 'Surveillance', glyphe: '☆' },
     { cle: 'comparateur', libelle: 'Comparateur', glyphe: '⇄' },
     { cle: 'podcast', libelle: 'Podcast', glyphe: '♫' },
+    { cle: 'objectifs', libelle: 'Objectifs', glyphe: '◎' },
     { cle: 'projection', libelle: 'Projection', glyphe: '↗' },
     { cle: 'sauvegarde', libelle: 'Sauvegarde', glyphe: '⇪' },
     { cle: 'notifications', libelle: 'Alertes', glyphe: '◉' },
@@ -1621,6 +1662,33 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
               ? new DepotWatchlist(session.base()).lister().some(ligne => ligne.titreId === fiche.titreId)
               : undefined
           }
+        />
+      ) : ecran === 'objectifs' && contenuComplet && depotCours ? (
+        <Objectifs
+          objectif={objectifDepuisJson(new DepotParametres(session.base()).lire(PARAMETRES.objectif))}
+          valeurActuelle={capitalActuel.toNumber()}
+          aujourdhui={(aujourdhui ?? dateDuJour)()}
+          onEnregistrerObjectif={objectif => {
+            const parametres = new DepotParametres(session.base());
+            if (objectif) {
+              parametres.ecrire(PARAMETRES.objectif, JSON.stringify(objectif));
+            } else {
+              parametres.supprimer(PARAMETRES.objectif);
+            }
+            rafraichir();
+          }}
+          lignes={lignesCibles(contenuComplet, depotCours.derniersCours(), new DepotParametres(session.base()).lire(PARAMETRES.repartitionCible))}
+          onChangerCible={(titreId, cible) => {
+            const parametres = new DepotParametres(session.base());
+            let cibles: Record<string, string> = {};
+            try {
+              cibles = JSON.parse(parametres.lire(PARAMETRES.repartitionCible) ?? '{}');
+            } catch {
+              cibles = {};
+            }
+            cibles[titreId] = cible;
+            parametres.ecrire(PARAMETRES.repartitionCible, JSON.stringify(cibles));
+          }}
         />
       ) : ecran === 'podcast' ? (
         <Podcast
