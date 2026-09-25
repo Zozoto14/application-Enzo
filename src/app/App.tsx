@@ -1284,6 +1284,31 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     };
   }, [deverrouille, pontNotifications, verifierNotifications]);
 
+  // Podcast prêt au réveil : à l'heure choisie, une fois par jour, fenêtre ouverte.
+  // Rempli plus bas, une fois genererPodcast défini.
+  const genererPodcastRef = useRef<(minutes?: number, automatique?: boolean) => void>(() => undefined);
+  const podcastDuJourRef = useRef<string | undefined>(undefined);
+  podcastDuJourRef.current = podcast.date;
+  useEffect(() => {
+    if (!deverrouille || !chargementAutomatique) {
+      return;
+    }
+    const verifier = () => {
+      const heure = new DepotParametres(session.base()).lire(PARAMETRES.podcastAuto);
+      if (!heure) return;
+      const maintenant = new Date();
+      const actuelle = `${String(maintenant.getHours()).padStart(2, '0')}:${String(maintenant.getMinutes()).padStart(2, '0')}`;
+      const jour = (aujourdhui ?? dateDuJour)();
+      const dejaFait = new DepotParametres(session.base()).lire(PARAMETRES.podcastAutoFait) === jour;
+      if (actuelle >= heure && podcastDuJourRef.current !== jour && !dejaFait) {
+        new DepotParametres(session.base()).ecrire(PARAMETRES.podcastAutoFait, jour);
+        genererPodcastRef.current(undefined, true);
+      }
+    };
+    const minuterie = setInterval(verifier, 60_000);
+    return () => clearInterval(minuterie);
+  }, [deverrouille, chargementAutomatique, session, aujourdhui]);
+
   actualiserCoursDuJourRef.current = actualiserCoursDuJour;
 
   // Cours en direct, à l'intervalle choisi dans les paramètres (dix secondes
@@ -1469,7 +1494,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   // Podcast : écrit à l'ouverture de l'écran, une fois par jour, sur tout le
   // portefeuille (le filtre de compte ne s'applique pas).
-  const genererPodcast = (minutes = podcast.minutes) => {
+  const genererPodcast = (minutes = podcast.minutes, automatique = false) => {
     if (!contenuComplet || podcast.chargement) {
       return;
     }
@@ -1501,7 +1526,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       etape => setPodcast(precedent => ({ ...precedent, etape })),
       minutes,
     )
-      .then(({ episode, manques }) =>
+      .then(({ episode, manques }) => {
+        if (automatique) {
+          void pontNotifications
+            ?.notifier('Votre podcast est prêt', `${episode.titre} · environ ${episode.duree} minutes.`)
+            .catch(() => undefined);
+        }
         setPodcast({
           episode,
           date,
@@ -1511,8 +1541,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             manques > 0
               ? 'Certaines actualités ou fiches n’ont pas pu être chargées : l’épisode raconte ce qui est disponible.'
               : undefined,
-        }),
-      )
+        });
+      })
       .catch((e: unknown) =>
         setPodcast(precedent => ({
           ...precedent,
@@ -1521,6 +1551,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         })),
       );
   };
+  genererPodcastRef.current = genererPodcast;
 
   // Navigation latérale : chaque écran à un clic, où que l'on soit.
   const sansCompte = (contenuComplet?.comptes.length ?? 0) === 0;
@@ -1716,6 +1747,16 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           erreur={podcast.erreur}
           minutes={podcast.minutes}
           onGenerer={minutes => genererPodcast(minutes)}
+          heureAuto={new DepotParametres(session.base()).lire(PARAMETRES.podcastAuto) || undefined}
+          onChangerHeureAuto={heure => {
+            const parametres = new DepotParametres(session.base());
+            if (heure) {
+              parametres.ecrire(PARAMETRES.podcastAuto, heure);
+            } else {
+              parametres.supprimer(PARAMETRES.podcastAuto);
+            }
+            rafraichir();
+          }}
         />
       ) : ecran === 'comparateur' ? (
         <ComparateurFinancier

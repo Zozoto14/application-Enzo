@@ -7,8 +7,8 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Bouton, usePalette } from '../composants';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Bouton, Champ, usePalette } from '../composants';
 import { CarteSection, Rangee, Segments, Selecteur, Vide } from '../elements';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
 import { phrases, type Episode } from '../../podcast/episode';
@@ -28,13 +28,26 @@ export interface PodcastProps {
   erreur?: string;
   /** Durée visée, en minutes. */
   minutes?: number;
+  /** Heure de préparation automatique, « 07:30 » ; absente : désactivée. */
+  heureAuto?: string;
+  onChangerHeureAuto?(heure: string | undefined): void;
   onGenerer(minutes?: number): void;
 }
 
 type Format = '5 min' | '10 min' | '15 min';
 const FORMATS: Record<Format, number> = { '5 min': 5, '10 min': 10, '15 min': 15 };
 
-export function Podcast({ episode, chargement, etape, erreur, minutes = 10, onGenerer }: PodcastProps) {
+export function Podcast({
+  episode,
+  chargement,
+  etape,
+  erreur,
+  minutes = 10,
+  heureAuto,
+  onChangerHeureAuto,
+  onGenerer,
+}: PodcastProps) {
+  const [heureSaisie, setHeureSaisie] = useState(heureAuto ?? '07:30');
   const palette = usePalette();
   const lecteur = useMemo(() => creerLecteur(), []);
   const [etat, setEtat] = useState<'arret' | 'lecture' | 'pause'>('arret');
@@ -127,6 +140,34 @@ export function Podcast({ episode, chargement, etape, erreur, minutes = 10, onGe
             prefixeTest="format-podcast"
           />
         </View>
+
+        {onChangerHeureAuto ? (
+          <View style={styles.format} testID="podcast-auto">
+            <Switch
+              value={Boolean(heureAuto)}
+              onValueChange={actif => onChangerHeureAuto(actif && /^\d{2}:\d{2}$/.test(heureSaisie) ? heureSaisie : undefined)}
+              accessibilityLabel="Préparer le podcast automatiquement"
+            />
+            <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>Prêt chaque jour à</Text>
+            <View style={{ width: 90 }}>
+              <Champ
+                etiquette="Heure"
+                value={heureSaisie}
+                onChangeText={texte => {
+                  setHeureSaisie(texte);
+                  if (heureAuto && /^([01]\d|2[0-3]):[0-5]\d$/.test(texte)) onChangerHeureAuto(texte);
+                }}
+                placeholder="07:30"
+                testID="champ-heure-podcast"
+              />
+            </View>
+            <Text style={{ color: palette.texteSecondaire, fontSize: 12, flexShrink: 1 }}>
+              {heureAuto
+                ? 'L’application doit être ouverte (même réduite) : une notification vous prévient.'
+                : 'Désactivé.'}
+            </Text>
+          </View>
+        ) : null}
 
         {chargement ? (
           <CarteSection>

@@ -33,6 +33,14 @@ describe('écran Podcast', () => {
     expect(screen.getByText(/disponible sur l’ordinateur/)).toBeTruthy();
   });
 
+  it('active la préparation automatique à l’heure saisie', async () => {
+    const onChangerHeureAuto = jest.fn();
+    await render(<Podcast onGenerer={() => {}} onChangerHeureAuto={onChangerHeureAuto} />);
+    await fireEvent.changeText(screen.getByTestId('champ-heure-podcast'), '06:45');
+    await fireEvent(screen.getByLabelText('Préparer le podcast automatiquement'), 'valueChange', true);
+    expect(onChangerHeureAuto).toHaveBeenCalledWith('06:45');
+  });
+
   it('montre la préparation en cours', async () => {
     await render(<Podcast chargement etape="Tour des marchés…" onGenerer={() => {}} />);
     expect(screen.getByText('Tour des marchés…')).toBeTruthy();

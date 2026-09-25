@@ -479,6 +479,10 @@ export const PARAMETRES = {
   repartitionCible: 'objectifs.repartition',
   /** Frais courants saisis pour les ETF, en %/an (JSON { titreId: "0,38" }). */
   fraisEtf: 'exposition.frais',
+  /** Heure de préparation automatique du podcast, « 07:30 » ; vide : jamais. */
+  podcastAuto: 'podcast.heure_auto',
+  /** Dernier jour où le podcast automatique a été lancé. */
+  podcastAutoFait: 'podcast.auto_fait_le',
 } as const;
 
 /**
