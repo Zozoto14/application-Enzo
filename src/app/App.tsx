@@ -59,6 +59,9 @@ import {
 } from '../cours/indices';
 import { rejouer } from '../core/portfolio/engine';
 import { construireResume } from '../ui/vues/resume';
+import { chargerValeur, type DonneesValeur } from '../fondamentaux/yahoo';
+import { construireFiche, type VueFiche } from '../ui/vues/fiche';
+import { FicheValeur } from '../ui/ecrans/FicheValeur';
 import { chercherSymboles, type CandidatSymbole } from '../cours/symboles';
 import { Comparateur } from '../ui/ecrans/Comparateur';
 import { construireComparateur } from '../ui/vues/comparateur';
@@ -138,7 +141,8 @@ type Ecran =
   | 'projection'
   | 'watchlist'
   | 'symboles'
-  | 'comparateur';
+  | 'comparateur'
+  | 'fiche';
 
 /** Laisse React peindre avant un calcul qui bloque le fil. */
 function apresRendu(action: () => void): void {
@@ -245,6 +249,11 @@ function dividendesParTitre(
 export function App({ session, genererId, aujourdhui, chargementAutomatique = false }: AppProps) {
   const [rendu, forcerRendu] = useState(0);
   const [compteFiltre, setCompteFiltre] = useState<string>(TOUS_LES_COMPTES);
+  const [fiche, setFiche] = useState<
+    { symbole: string; titreId?: string; vue?: VueFiche; chargement: boolean; erreur?: string } | undefined
+  >();
+  // Une fiche déjà ouverte se rouvre sans nouvel appel réseau pendant la session.
+  const fichesEnCache = useRef(new Map<string, DonneesValeur>());
   const [secrets, setSecrets] = useState<SecretsInitiaux | undefined>();
   const [erreur, setErreur] = useState<string | undefined>();
   const [enCours, setEnCours] = useState(false);
@@ -791,6 +800,67 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [session, rafraichir, aujourdhui],
   );
 
+  const ouvrirSymbole = useCallback((symbole: string, titreId?: string, recharger = false) => {
+    setEcran('fiche');
+    const enCache = recharger ? undefined : fichesEnCache.current.get(symbole);
+    if (enCache) {
+      setFiche({
+        symbole,
+        titreId,
+        chargement: false,
+        vue: construireFiche(enCache.fiche, enCache.comptes, enCache.historique, enCache.manques),
+      });
+      return;
+    }
+    setFiche({ symbole, titreId, chargement: true });
+    chargerValeur(symbole)
+      .then(donnees => {
+        fichesEnCache.current.set(symbole, donnees);
+        setFiche(precedente =>
+          precedente?.symbole === symbole
+            ? {
+                ...precedente,
+                chargement: false,
+                erreur: undefined,
+                vue: construireFiche(donnees.fiche, donnees.comptes, donnees.historique, donnees.manques),
+              }
+            : precedente,
+        );
+      })
+      .catch((e: unknown) =>
+        setFiche(precedente =>
+          precedente?.symbole === symbole
+            ? { ...precedente, chargement: false, erreur: e instanceof Error ? e.message : String(e) }
+            : precedente,
+        ),
+      );
+  }, []);
+
+  const ouvrirTitre = useCallback(
+    (titreId: string) => {
+      const titre = new DepotTitres(session.base()).tous().find(candidat => candidat.id === titreId);
+      const symbole = titre?.ticker?.trim();
+      if (!symbole) {
+        setEcran('fiche');
+        setFiche({
+          symbole: titre?.nom ?? titreId,
+          titreId,
+          chargement: false,
+          erreur:
+            'Cette valeur n’a pas de symbole boursier. Renseignez-le dans Paramètres, rubrique Symboles, pour ouvrir sa fiche.',
+        });
+        return;
+      }
+      ouvrirSymbole(symbole, titreId);
+    },
+    [session, ouvrirSymbole],
+  );
+
+  const rechercherActions = useCallback(
+    async (texte: string) => (await chercherSymboles(texte)).candidats,
+    [],
+  );
+
   const basculerComparaison = useCallback((titreId: string) => {
     setCompares(precedent =>
       precedent.includes(titreId)
@@ -1132,6 +1202,25 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onRetour={() => setEcran('tableau')}
           message={messageNotifications}
         />
+      ) : ecran === 'fiche' && fiche ? (
+        <FicheValeur
+          symbole={fiche.symbole}
+          vue={fiche.vue}
+          chargement={fiche.chargement}
+          erreur={fiche.erreur}
+          onRetour={() => setEcran('tableau')}
+          onRecharger={
+            fiche.erreur?.includes('symbole boursier')
+              ? undefined
+              : () => ouvrirSymbole(fiche.symbole, fiche.titreId, true)
+          }
+          onSurveiller={fiche.titreId ? () => surveiller(fiche.titreId!) : undefined}
+          surveillee={
+            fiche.titreId
+              ? new DepotWatchlist(session.base()).lister().some(ligne => ligne.titreId === fiche.titreId)
+              : undefined
+          }
+        />
       ) : ecran === 'comparateur' ? (
         <Comparateur
           vue={construireComparateur({
@@ -1263,6 +1352,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           indiceActif={indiceRetenu}
           onChoisirIndice={choisirIndice}
           onChargerHistorique={lancerChargementHistorique}
+          onOuvrirTitre={ouvrirTitre}
+          onRechercher={rechercherActions}
+          onOuvrirSymbole={symbole => ouvrirSymbole(symbole)}
           chargementHistorique={histoEnCours}
           messageHistorique={messageHistorique}
           performance={onglets!.performance}

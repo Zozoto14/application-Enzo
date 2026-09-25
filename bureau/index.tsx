@@ -20,7 +20,40 @@ import { ESPACEMENT, palettePour } from '../src/ui/theme';
 import { useFondDocument } from './Bureau';
 import { BandeauMiseAJour } from './MiseAJour';
 import { ouvrirSessionBureau, type SessionBureau } from './session';
-import { stockageCourant } from './stockage';
+import { pont, stockageCourant } from './stockage';
+
+/**
+ * Les appels à Yahoo Finance passent par le processus principal.
+ *
+ * Depuis la fenêtre, le navigateur les bloquerait (appels entre origines,
+ * cookie de session) ; le processus principal, lui, n'a pas ces limites.
+ * Le reste du code continue d'appeler `fetch` sans rien savoir du détour.
+ */
+function relayerYahoo(): void {
+  const yahoo = pont()?.yahoo;
+  if (!yahoo) {
+    return;
+  }
+  const natif = globalThis.fetch.bind(globalThis);
+  globalThis.fetch = async (entree, init) => {
+    const url =
+      typeof entree === 'string' ? entree : entree instanceof URL ? entree.href : entree.url;
+    if (!/^https:\/\/query[12]\.finance\.yahoo\.com\//.test(url)) {
+      return natif(entree, init);
+    }
+    try {
+      const json = await yahoo.json(url);
+      return new Response(JSON.stringify(json), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (erreur) {
+      return new Response(erreur instanceof Error ? erreur.message : String(erreur), { status: 502 });
+    }
+  };
+}
+
+relayerYahoo();
 
 type Etat =
   | { phase: 'chargement' }

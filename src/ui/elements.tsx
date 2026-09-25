@@ -132,6 +132,22 @@ export function Rangee({
   );
 }
 
+/** Colonne de cartes empilées, qui occupe une part de la rangée. */
+export function Pile({ children, poids = 1 }: { children: React.ReactNode; poids?: number }) {
+  const large = useLarge();
+  return (
+    <DansRangee.Provider value={false}>
+      <View
+        style={[
+          styles.pile,
+          large ? { flexGrow: poids, flexShrink: 1, flexBasis: 0, minWidth: 300 } : undefined,
+        ]}>
+        {children}
+      </View>
+    </DansRangee.Provider>
+  );
+}
+
 /** Pastille teintée d'une variation : flèche, signe et couleur disent le sens. */
 export function Pastille({
   texte,

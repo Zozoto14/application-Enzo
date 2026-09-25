@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { DepotComptes, DepotTransactions } from '../db/depots';
 import { ouvrirBaseNode } from '../db/pilotes/node';
 import { appareilDe } from '../sync/identite';
@@ -245,6 +245,23 @@ describe('parcours complet, session ouverte', () => {
     expect(screen.getByTestId('tableau-titres')).toBeTruthy();
     expect(screen.getAllByText('STELLANTIS').length).toBeGreaterThan(0);
     expect(screen.getByText('2 ligne(s)')).toBeTruthy();
+  });
+
+  it('explique qu’une fiche valeur demande un symbole', async () => {
+    await ouvrir();
+    await creerCompte();
+    await fireEvent.press(screen.getByTestId('bouton-importer-positions'));
+    await fireEvent.changeText(screen.getByLabelText('Contenu du fichier'), EXPORT_REEL);
+    await fireEvent.press(screen.getByTestId('bouton-importer'));
+
+    // Les valeurs importées n'ont pas de symbole : la fiche le dit, sans
+    // appeler le réseau pour rien.
+    await fireEvent.press(screen.getByTestId('onglet-positions'));
+    await fireEvent.press(within(screen.getByTestId('tableau-titres')).getByText('STELLANTIS'));
+    expect(screen.getByText(/pas de symbole boursier/)).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('bouton-retour-fiche'));
+    expect(screen.getByText('Portefeuille')).toBeTruthy();
   });
 
   it('saisit une opération et la répercute sur les liquidités', async () => {

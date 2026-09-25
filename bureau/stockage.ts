@@ -38,6 +38,9 @@ interface PontBureau {
     notifier(titre: string, corps: string): Promise<boolean>;
     ouvrir(url: string): Promise<boolean>;
   };
+  yahoo?: {
+    json(url: string): Promise<unknown>;
+  };
   /** Absent des versions compilées avant l'arrivée des mises à jour. */
   maj?: {
     verifier(): Promise<EtatMiseAJourBureau>;

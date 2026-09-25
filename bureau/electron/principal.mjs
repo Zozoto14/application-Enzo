@@ -117,6 +117,76 @@ function installerPasserelle() {
   ipcMain.handle('maj:verifier', async () => verifierMiseAJour());
 
   ipcMain.handle('maj:installer', async () => lancerMiseAJour());
+
+  ipcMain.handle('yahoo:json', async (_evenement, url) => yahooJson(String(url)));
+}
+
+// ----------------------------------------------------------- Yahoo Finance
+//
+// Les données fondamentales de Yahoo exigent un cookie de session et un
+// jeton (« crumb ») que la fenêtre ne peut pas obtenir : le navigateur
+// bloque ces appels entre origines. Le processus principal les fait à sa
+// place, sur une liste fermée d'adresses — la fenêtre ne peut pas s'en
+// servir pour joindre autre chose.
+
+const CHEMINS_YAHOO = [
+  '/v10/finance/quoteSummary/',
+  '/ws/fundamentals-timeseries/v1/finance/timeseries/',
+  '/v8/finance/chart/',
+  '/v1/finance/search',
+];
+const AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
+
+let sessionYahoo;
+
+async function ouvrirSessionYahoo() {
+  // Le cookie vient de n'importe quelle page du domaine ; fc.yahoo.com le
+  // pose même en répondant 404.
+  const reponse = await fetch('https://fc.yahoo.com', { headers: { 'User-Agent': AGENT }, redirect: 'manual' });
+  const cookies = (reponse.headers.getSetCookie?.() ?? [reponse.headers.get('set-cookie') ?? ''])
+    .map(ligne => ligne.split(';')[0])
+    .filter(Boolean)
+    .join('; ');
+  const jeton = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
+    headers: { 'User-Agent': AGENT, Cookie: cookies },
+  });
+  const crumb = (await jeton.text()).trim();
+  if (!jeton.ok || !crumb || crumb.includes('<')) {
+    throw new Error(`Jeton Yahoo refusé (${jeton.status}).`);
+  }
+  return { cookies, crumb };
+}
+
+async function yahooJson(adresse) {
+  const url = new URL(adresse);
+  if (
+    url.protocol !== 'https:' ||
+    !/^query[12]\.finance\.yahoo\.com$/.test(url.hostname) ||
+    !CHEMINS_YAHOO.some(chemin => url.pathname.startsWith(chemin))
+  ) {
+    throw new Error(`Adresse non autorisée : ${url.hostname}${url.pathname}`);
+  }
+
+  for (let essai = 0; essai < 2; essai++) {
+    if (!sessionYahoo) {
+      sessionYahoo = await ouvrirSessionYahoo();
+    }
+    url.searchParams.set('crumb', sessionYahoo.crumb);
+    const reponse = await fetch(url, {
+      headers: { 'User-Agent': AGENT, Cookie: sessionYahoo.cookies, Accept: 'application/json' },
+    });
+    if (reponse.status === 401 || reponse.status === 403) {
+      // Jeton expiré : on en redemande un, une fois.
+      sessionYahoo = undefined;
+      continue;
+    }
+    if (!reponse.ok) {
+      throw new Error(`Yahoo a répondu ${reponse.status}.`);
+    }
+    return await reponse.json();
+  }
+  throw new Error('Yahoo refuse l’accès, même avec un nouveau jeton.');
 }
 
 // ------------------------------------------------------------ Mises à jour

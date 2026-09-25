@@ -30,6 +30,11 @@ contextBridge.exposeInMainWorld('applibourse', {
     ouvrir: url => ipcRenderer.invoke('systeme:ouvrir', url),
   },
 
+  yahoo: {
+    /** Réponse JSON d'une adresse Yahoo Finance autorisée. */
+    json: url => ipcRenderer.invoke('yahoo:json', url),
+  },
+
   maj: {
     /** Compare la version installée à celle de GitHub. */
     verifier: () => ipcRenderer.invoke('maj:verifier'),

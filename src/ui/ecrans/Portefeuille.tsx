@@ -11,6 +11,7 @@
  */
 
 import React, { useState } from 'react';
+import { TextInput } from 'react-native';
 import {
   Pressable,
   ScrollView,
@@ -51,6 +52,8 @@ import { OngletPerformances } from './onglets/Performances';
 import { OngletPositions } from './onglets/Positions';
 import { OngletRisque } from './onglets/Risque';
 import { courbePerformance, type LigneClassement, type VueResume } from '../vues/resume';
+import type { CandidatSymbole } from '../../cours/symboles';
+import { useSignalerOuverture } from '../superposition';
 
 export type OngletPortefeuille =
   | 'resume'
@@ -103,6 +106,9 @@ export interface PortefeuilleProps {
   chargementHistorique?: boolean;
   messageHistorique?: string;
   onOuvrirTitre?(titreId: string): void;
+  /** Recherche d'une action par nom ou symbole, pour ouvrir sa fiche. */
+  onRechercher?(texte: string): Promise<readonly CandidatSymbole[]>;
+  onOuvrirSymbole?(symbole: string): void;
   onCreerCompte?(): void;
   onAjouterTransaction?(): void;
   onImporter?(): void;
@@ -229,6 +235,9 @@ function EnTete(props: PortefeuilleProps) {
 
   return (
     <View style={styles.enTete}>
+      {props.onRechercher && props.onOuvrirSymbole ? (
+        <RechercheAction onRechercher={props.onRechercher} onOuvrir={props.onOuvrirSymbole} />
+      ) : null}
       <View style={styles.ligneTitre}>
         <View style={{ gap: 2, flexShrink: 1 }}>
           <Text style={[styles.grandTitre, { color: palette.texte }]} accessibilityRole="header">
@@ -332,6 +341,82 @@ function EnTete(props: PortefeuilleProps) {
         <Text accessibilityLiveRegion="polite" style={{ color: palette.texteSecondaire, fontSize: 13 }}>
           {props.messageCours}
         </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/** Champ « Rechercher une action… », qui ouvre la fiche de la valeur choisie. */
+function RechercheAction({
+  onRechercher,
+  onOuvrir,
+}: {
+  onRechercher(texte: string): Promise<readonly CandidatSymbole[]>;
+  onOuvrir(symbole: string): void;
+}) {
+  const palette = usePalette();
+  const [texte, setTexte] = useState('');
+  const [resultats, setResultats] = useState<readonly CandidatSymbole[] | undefined>();
+  const [enCours, setEnCours] = useState(false);
+  const [erreur, setErreur] = useState<string | undefined>();
+  useSignalerOuverture(resultats !== undefined || erreur !== undefined);
+
+  const chercher = () => {
+    if (!texte.trim()) {
+      return;
+    }
+    setEnCours(true);
+    setErreur(undefined);
+    onRechercher(texte)
+      .then(candidats => setResultats(candidats))
+      .catch((e: unknown) => setErreur(e instanceof Error ? e.message : String(e)))
+      .finally(() => setEnCours(false));
+  };
+
+  return (
+    <View style={[styles.recherche, { zIndex: 60 }]}>
+      <TextInput
+        accessibilityLabel="Rechercher une action"
+        testID="champ-recherche-action"
+        placeholder="Rechercher une action…"
+        placeholderTextColor={palette.texteSecondaire}
+        value={texte}
+        onChangeText={valeur => {
+          setTexte(valeur);
+          if (!valeur) {
+            setResultats(undefined);
+          }
+        }}
+        onSubmitEditing={chercher}
+        returnKeyType="search"
+        style={[styles.champRecherche, { color: palette.texte, backgroundColor: palette.surfaceHaute, borderColor: palette.bordure }]}
+      />
+      {enCours ? <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>Recherche…</Text> : null}
+      {resultats !== undefined || erreur ? (
+        <View style={[styles.resultats, { backgroundColor: palette.surfaceHaute, borderColor: palette.bordure }]}>
+          {erreur ? <Text style={{ color: palette.danger, padding: ESPACEMENT.s }}>{erreur}</Text> : null}
+          {resultats?.length === 0 ? (
+            <Text style={{ color: palette.texteSecondaire, padding: ESPACEMENT.s }}>Aucune valeur trouvée.</Text>
+          ) : null}
+          {(resultats ?? []).slice(0, 8).map(candidat => (
+            <Pressable
+              key={candidat.symbole}
+              accessibilityRole="button"
+              onPress={() => {
+                setResultats(undefined);
+                setTexte('');
+                onOuvrir(candidat.symbole);
+              }}
+              style={({ pressed }) => [styles.resultat, { backgroundColor: pressed ? palette.surface : 'transparent' }]}>
+              <Text style={{ color: palette.texte, fontWeight: '600', flex: 1 }} numberOfLines={1}>
+                {candidat.nom}
+              </Text>
+              <Text style={{ color: palette.accent, fontSize: 12 }}>
+                {candidat.symbole} · {candidat.place}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       ) : null}
     </View>
   );
@@ -717,6 +802,10 @@ const styles = StyleSheet.create({
     zIndex: 30,
   },
   grandTitre: { fontSize: 26, fontWeight: '800' },
+  recherche: { maxWidth: 520, gap: 4 },
+  champRecherche: { borderWidth: 1, borderRadius: 22, paddingHorizontal: ESPACEMENT.m, minHeight: 42, fontSize: 14 },
+  resultats: { position: 'absolute', top: 46, left: 0, right: 0, borderWidth: 1, borderRadius: RAYON.s, paddingVertical: 4, elevation: 8 },
+  resultat: { flexDirection: 'row', alignItems: 'center', gap: ESPACEMENT.s, paddingHorizontal: ESPACEMENT.m - 4, minHeight: 40 },
   commandes: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: ESPACEMENT.m },
   parametres: {
     borderRadius: 20,

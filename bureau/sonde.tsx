@@ -25,6 +25,10 @@ import { construireRisque } from '../src/ui/vues/risque';
 import { construireWatchlist } from '../src/ui/vues/watchlist';
 import { construireResume } from '../src/ui/vues/resume';
 import { INDICES } from '../src/cours/indices';
+import { COMPTES_EXEMPLE, RESUME_EXEMPLE, historiqueExemple } from '../src/fondamentaux/exemples';
+import { lireComptes, lireCoursEtDividendes, lireFiche } from '../src/fondamentaux/yahoo';
+import { construireFiche } from '../src/ui/vues/fiche';
+import { FicheValeur } from '../src/ui/ecrans/FicheValeur';
 import { Comparateur } from '../src/ui/ecrans/Comparateur';
 import { Portefeuille } from '../src/ui/ecrans/Portefeuille';
 import { Projection } from '../src/ui/ecrans/Projection';
@@ -90,7 +94,14 @@ const DESTINATIONS: readonly Destination[] = [
   { cle: 'surveillance', libelle: 'Surveillance', glyphe: '★' },
   { cle: 'comparateur', libelle: 'Comparer', glyphe: '⇄' },
   { cle: 'projection', libelle: 'Projection', glyphe: '◔' },
+  { cle: 'fiche', libelle: 'Fiche', glyphe: '◧' },
 ];
+
+const ficheExemple = construireFiche(
+  lireFiche('EXA.PA', RESUME_EXEMPLE),
+  lireComptes(COMPTES_EXEMPLE),
+  lireCoursEtDividendes(historiqueExemple()),
+);
 
 // ---------------------------------------------------------------- Aperçu
 
@@ -166,6 +177,15 @@ function Apercu() {
             cessions: etat.cessions,
             aujourdhui: '2026-09-25',
           })}
+        />
+      ) : null}
+
+      {destination === 'fiche' ? (
+        <FicheValeur
+          symbole="EXA.PA"
+          vue={ficheExemple}
+          onRetour={() => setDestination('portefeuille')}
+          onSurveiller={() => undefined}
         />
       ) : null}
 
