@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
-import { DepotComptes, DepotTransactions } from '../db/depots';
+import { DepotComptes, DepotParametres, DepotTransactions, PARAMETRES } from '../db/depots';
 import { ouvrirBaseNode } from '../db/pilotes/node';
 import { appareilDe } from '../sync/identite';
 import { aleatoireDeterministe } from '../securite/aleatoire';
@@ -869,6 +869,26 @@ describe('écran de notifications', () => {
     expect(screen.getByTestId('heure-lundi-soir').props.value).toBe('17:30');
     expect(screen.getByTestId('heure-mercredi-matin').props.value).toBe('09:00');
     expect(screen.getByTestId('heure-vendredi-soir').props.value).toBe('18:30');
+  });
+
+  it('sur l’ordinateur, envoie une notification de test et règle la forte séance', async () => {
+    const envoyees: string[] = [];
+    const global = globalThis as { applibourse?: unknown };
+    global.applibourse = {
+      systeme: { notifier: async (titre: string) => (envoyees.push(titre), true) },
+    };
+    try {
+      const session = await ouvrirNotifications();
+      await fireEvent.press(screen.getByTestId('bouton-tester-notification'));
+      await laisserTravailler();
+      expect(envoyees).toEqual(['AppliBourse']);
+      expect(screen.getByText('Notification de test envoyée.')).toBeTruthy();
+
+      await fireEvent.changeText(screen.getByTestId('champ-seuil-variation'), '3,5');
+      expect(new DepotParametres(session.base()).lire(PARAMETRES.seuilVariation)).toBe('3,5');
+    } finally {
+      delete global.applibourse;
+    }
   });
 
   it('coupe le week-end, donc n’affiche pas ses heures', async () => {

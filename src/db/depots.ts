@@ -458,6 +458,10 @@ export const PARAMETRES = {
   cleApiCours: 'cours.cle_api',
   planningBriefings: 'notifications.planning',
   seuilsAlertes: 'notifications.seuils',
+  /** État des notifications du bureau : briefings et alertes déjà envoyés, derniers cours vus. */
+  etatNotifications: 'notifications.etat_bureau',
+  /** Variation de séance, en %, qui déclenche une alerte ; « 0 » pour couper. */
+  seuilVariation: 'notifications.seuil_variation',
   briefingsEnvoyes: 'notifications.envoyes',
   titreReference: 'performance.reference',
   /** Indice de comparaison de la courbe du Résumé ; « aucun » pour n'en voir aucun. */

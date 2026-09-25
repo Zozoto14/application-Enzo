@@ -107,6 +107,16 @@ import {
   prochainBriefing,
   type Planning,
 } from '../notifications/planification';
+import { executerReveil } from '../notifications/reveil';
+import {
+  alerteVariation,
+  canalBureau,
+  etatDepuisJson,
+  seuilVariation,
+  seuilsDepuisJson,
+  variationSeance,
+  type PontNotifications,
+} from '../notifications/bureau';
 import { chargerModule } from '../natif/modules';
 import { gestionnaireDepuisFs } from '../maj/application';
 import { systemeDepuisRnfs } from '../fichiers/systeme';
@@ -1142,6 +1152,71 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   const deverrouille = statut === 'deverrouille' && !secrets;
 
+  // Notifications de l'ordinateur : le pont d'Electron les affiche. Absent
+  // sur téléphone (le réveil en arrière-plan s'en charge) et dans les tests.
+  const pontNotifications = (globalThis as { applibourse?: { systeme?: PontNotifications } }).applibourse
+    ?.systeme;
+  const verificationEnCours = useRef(false);
+  const verifierNotifications = useCallback(async () => {
+    if (!pontNotifications || verificationEnCours.current) {
+      return;
+    }
+    verificationEnCours.current = true;
+    try {
+      const base = session.base();
+      const parametres = new DepotParametres(base);
+      const depot = new DepotCours(base);
+      const canal = canalBureau(pontNotifications);
+      await executerReveil({
+        maintenant: new Date(),
+        planning: planningDepuisJson(parametres.lire(PARAMETRES.planningBriefings)),
+        seuils: seuilsDepuisJson(parametres.lire(PARAMETRES.seuilsAlertes)),
+        etatPersiste: etatDepuisJson(parametres.lire(PARAMETRES.etatNotifications)),
+        canal,
+        lirePortefeuille: async () => {
+          const contenuActuel = chargerEtat(base);
+          return { etat: contenuActuel.etat, titres: contenuActuel.titres };
+        },
+        // Les cours viennent d'être actualisés par la boucle des cours en direct.
+        rafraichirCours: async () => depot.derniersCours(),
+        enregistrer: async etat => parametres.ecrire(PARAMETRES.etatNotifications, JSON.stringify(etat)),
+      });
+
+      // Forte séance : une fois par jour et par sens.
+      const etat = etatDepuisJson(parametres.lire(PARAMETRES.etatNotifications));
+      const date = (aujourdhui ?? dateDuJour)();
+      const alerte = alerteVariation(
+        variationSeance(chargerEtat(base).etat, depot.derniersCours(), separerHistorique(depot.historique()).titres),
+        seuilVariation(parametres.lire(PARAMETRES.seuilVariation)),
+        date,
+        new Set(etat.briefingsEnvoyes),
+      );
+      if (alerte && seanceEnCours()) {
+        await canal.afficher(alerte);
+        parametres.ecrire(
+          PARAMETRES.etatNotifications,
+          JSON.stringify({ ...etat, briefingsEnvoyes: [...etat.briefingsEnvoyes, alerte.identifiant] }),
+        );
+      }
+    } catch {
+      // Une notification manquée ne doit jamais gêner l'application.
+    } finally {
+      verificationEnCours.current = false;
+    }
+  }, [pontNotifications, session, aujourdhui]);
+
+  useEffect(() => {
+    if (!deverrouille || !pontNotifications) {
+      return;
+    }
+    const premiere = setTimeout(() => void verifierNotifications(), 15_000);
+    const minuterie = setInterval(() => void verifierNotifications(), 60_000);
+    return () => {
+      clearTimeout(premiere);
+      clearInterval(minuterie);
+    };
+  }, [deverrouille, pontNotifications, verifierNotifications]);
+
   actualiserCoursDuJourRef.current = actualiserCoursDuJour;
 
   // Cours en direct, à l'intervalle choisi dans les paramètres (dix secondes
@@ -1474,10 +1549,33 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       ) : ecran === 'notifications' ? (
         <Notifications
           notificationsDisponibles={
-            chargerModule('@notifee/react-native').etat === 'disponible'
+            Boolean(pontNotifications) || chargerModule('@notifee/react-native').etat === 'disponible'
           }
           reveilDisponible={
+            Boolean(pontNotifications) ||
             chargerModule('react-native-background-fetch').etat === 'disponible'
+          }
+          surOrdinateur={Boolean(pontNotifications)}
+          seuilVariation={seuilVariation(new DepotParametres(session.base()).lire(PARAMETRES.seuilVariation))}
+          onChangerSeuilVariation={valeur => {
+            new DepotParametres(session.base()).ecrire(PARAMETRES.seuilVariation, valeur);
+            rafraichir();
+          }}
+          onTester={
+            pontNotifications
+              ? () => {
+                  pontNotifications
+                    .notifier('AppliBourse', 'Les notifications fonctionnent. Vous serez prévenu ici.')
+                    .then(affichee =>
+                      setMessageNotifications(
+                        affichee
+                          ? 'Notification de test envoyée.'
+                          : 'Windows a refusé la notification : vérifiez Paramètres › Système › Notifications.',
+                      ),
+                    )
+                    .catch(() => setMessageNotifications('La notification de test a échoué.'));
+                }
+              : undefined
           }
           planning={planningDepuisJson(
             new DepotParametres(session.base()).lire(PARAMETRES.planningBriefings),

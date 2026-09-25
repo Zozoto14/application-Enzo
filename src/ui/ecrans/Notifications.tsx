@@ -42,6 +42,11 @@ export interface NotificationsProps {
   onTester?(): void;
   onRetour(): void;
   message?: string;
+  /** Vrai dans l'application de bureau : notifications tant qu'elle est ouverte. */
+  surOrdinateur?: boolean;
+  /** Variation de séance, en %, qui déclenche une alerte ; 0 : coupée. */
+  seuilVariation?: number;
+  onChangerSeuilVariation?(valeur: string): void;
 }
 
 const LIBELLES_JOUR: Record<JourSemaine, string> = {
@@ -65,7 +70,13 @@ export function Notifications({
   onTester,
   onRetour,
   message,
+  surOrdinateur,
+  seuilVariation,
+  onChangerSeuilVariation,
 }: NotificationsProps) {
+  const [variationSaisie, setVariationSaisie] = useState(
+    seuilVariation ? String(seuilVariation).replace('.', ',') : '',
+  );
   const sombre = useColorScheme() === 'dark';
   const palette = usePalette();
 
@@ -90,6 +101,48 @@ export function Notifications({
             l'application. Les réglages ci-dessous seront conservés, mais rien
             ne sera envoyé.
           </SousTitre>
+        </Carte>
+      ) : null}
+
+      {surOrdinateur ? (
+        <Carte>
+          <Text style={{ color: palette.texte, fontWeight: '600' }}>Notifications Windows</Text>
+          <SousTitre>
+            Elles partent tant qu’AppliBourse est ouverte, même réduite dans la barre des tâches.
+            Un clic sur une notification ramène la fenêtre.
+          </SousTitre>
+          {onTester ? (
+            <View style={{ alignSelf: 'flex-start' }}>
+              <Bouton
+                titre="Envoyer une notification de test"
+                testID="bouton-tester-notification"
+                onPress={onTester}
+              />
+            </View>
+          ) : null}
+        </Carte>
+      ) : null}
+
+      {onChangerSeuilVariation ? (
+        <Carte>
+          <Text style={[styles.sectionTitre, { color: palette.texte }]}>Forte séance</Text>
+          <SousTitre>
+            Prévenu quand votre portefeuille monte ou baisse de plus de ce pourcentage sur la
+            séance, une fois par jour et par sens. Laissez vide pour couper.
+          </SousTitre>
+          <View style={styles.moitie}>
+            <Champ
+              etiquette="Seuil de variation (%)"
+              value={variationSaisie}
+              onChangeText={valeur => {
+                setVariationSaisie(valeur);
+                onChangerSeuilVariation(valeur.trim() === '' ? '0' : valeur.trim());
+              }}
+              keyboardType="decimal-pad"
+              placeholder="2"
+              testID="champ-seuil-variation"
+            />
+          </View>
         </Carte>
       ) : null}
 
@@ -214,7 +267,7 @@ export function Notifications({
         )}
       </Carte>
 
-      {onTester && notificationsDisponibles ? (
+      {onTester && notificationsDisponibles && !surOrdinateur ? (
         <Bouton
           titre="Envoyer une notification de test"
           testID="bouton-tester-notification"

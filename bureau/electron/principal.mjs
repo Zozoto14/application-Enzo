@@ -90,7 +90,17 @@ function installerPasserelle() {
     if (!Notification.isSupported()) {
       return false;
     }
-    new Notification({ title: String(titre), body: String(corps) }).show();
+    const notification = new Notification({ title: String(titre), body: String(corps) });
+    // Un clic sur la notification ramène la fenêtre au premier plan.
+    notification.on('click', () => {
+      const fenetre = BrowserWindow.getAllWindows()[0];
+      if (fenetre) {
+        if (fenetre.isMinimized()) fenetre.restore();
+        fenetre.show();
+        fenetre.focus();
+      }
+    });
+    notification.show();
     return true;
   });
 
@@ -372,6 +382,11 @@ if (!app.requestSingleInstanceLock()) {
     // Pas de menu « File, Edit, View » : il n'a rien à offrir ici. Les
     // raccourcis d'édition (copier, coller) restent gérés par la fenêtre.
     Menu.setApplicationMenu(null);
+    // Sans identifiant d'application, Windows n'affiche pas les notifications
+    // d'une application installée par NSIS. Même valeur que build.appId.
+    if (process.platform === 'win32') {
+      app.setAppUserModelId('fr.applibourse.bureau');
+    }
     // Barre de titre de Windows en sombre, assortie à l'interface.
     nativeTheme.themeSource = 'dark';
     installerPasserelle();
