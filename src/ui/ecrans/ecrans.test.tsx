@@ -7,6 +7,7 @@ import { compte, titre } from '../../core/testing/fixtures';
 import { construireDashboard } from '../vues/dashboard';
 import { Dashboard } from './Dashboard';
 import { Deverrouillage } from './Deverrouillage';
+import { ImportPositions } from './ImportPositions';
 import { PremierLancement } from './PremierLancement';
 import { Sauvegarde as SauvegardeEcran } from './Sauvegarde';
 
@@ -291,5 +292,14 @@ describe('Sauvegarde', () => {
     await fireEvent.press(screen.getByTestId('bouton-confirmer-fusion'));
 
     expect(appels).toEqual([[surDisque.chemin, 'mot-de-passe-archive']]);
+  });
+});
+
+describe('ImportPositions', () => {
+  it('explique où trouver l’export, et se replie', async () => {
+    await render(<ImportPositions onImporter={() => {}} onAnnuler={() => {}} />);
+    expect(screen.getByText(/boursobank\.com/)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('guide-export'));
+    expect(screen.queryByText(/boursobank\.com/)).toBeNull();
   });
 });

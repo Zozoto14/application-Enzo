@@ -67,6 +67,7 @@ export function DepotFichier({ onContenu }: DepotFichierProps) {
         cursor: 'pointer',
         color: palette.texte,
         fontSize: 14,
+        fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
       }}>
       <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
         {nom ? `Fichier chargé : ${nom}` : 'Glissez ici le fichier CSV de votre courtier'}

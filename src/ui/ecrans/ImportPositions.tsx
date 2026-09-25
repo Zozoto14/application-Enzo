@@ -1,10 +1,9 @@
 /**
  * Import d'un export de positions.
  *
- * Le contenu est **collé**, pas choisi dans un sélecteur de fichiers : celui-ci
- * demanderait un module natif de plus, pour un gain faible sur une opération
- * qu'on fait une fois. Ouvrir l'export dans un éditeur et le copier marche
- * partout, tout de suite.
+ * Sur l'ordinateur, le fichier se glisse dans l'écran ; sur le téléphone, son
+ * contenu se colle (un sélecteur de fichiers demanderait un module natif de
+ * plus). Un guide rappelle où trouver l'export chez le courtier.
  *
  * Rien n'est enregistré avant que l'aperçu n'ait été affiché. Un import de
  * portefeuille se défait mal : une étape de plus vaut mieux qu'un journal à
@@ -12,10 +11,10 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { PositionImportee } from '../../core/import/positions';
 import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
-import { ESPACEMENT, palettePour, stylesPartages } from '../theme';
+import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
 import { apercuPositions } from '../vues/import';
 import { DepotFichier } from '../DepotFichier';
 
@@ -41,6 +40,8 @@ export function ImportPositions({ onImporter, onAnnuler }: ImportPositionsProps)
         Déposez l'export « positions instantanées » de votre courtier, ou
         copiez son contenu entier et collez-le ci-dessous.
       </SousTitre>
+
+      <GuideExport ouvertAuDepart={contenu.trim() === ''} />
 
       <DepotFichier onContenu={texte => setContenu(texte)} />
 
@@ -118,7 +119,69 @@ export function ImportPositions({ onImporter, onAnnuler }: ImportPositionsProps)
   );
 }
 
+const ETAPES_BOURSOBANK = [
+  'Sur votre ordinateur, allez sur boursobank.com et connectez-vous (l’application mobile ne propose pas l’export).',
+  'Dans « Mes comptes », cliquez sur votre PEA ou votre compte-titres.',
+  'Ouvrez la liste de vos lignes : la partie « Positions » ou « Portefeuille ».',
+  'Au-dessus du tableau, en haut à droite, cliquez sur « Exporter » ou « Télécharger » (petite flèche vers le bas), puis choisissez CSV.',
+  'Le fichier arrive dans votre dossier Téléchargements : glissez-le dans le cadre ci-dessous.',
+];
+
+/** Où trouver l'export chez BoursoBank : ouvert tant qu'aucun fichier n'est chargé. */
+function GuideExport({ ouvertAuDepart }: { ouvertAuDepart: boolean }) {
+  const palette = usePalette();
+  const [ouvert, setOuvert] = useState<boolean | undefined>();
+  const deplie = ouvert ?? ouvertAuDepart;
+  return (
+    <View style={[styles.guide, { borderColor: palette.bordure, backgroundColor: palette.surface }]}>
+      <Pressable
+        testID="guide-export"
+        accessibilityRole="button"
+        accessibilityState={{ expanded: deplie }}
+        onPress={() => setOuvert(!deplie)}
+        style={stylesPartages.ligne}>
+        <Text style={[styles.sectionTitre, { color: palette.texte, flex: 1 }]}>
+          Où trouver ce fichier chez BoursoBank ?
+        </Text>
+        <Text style={{ color: palette.accent, fontWeight: '700' }}>{deplie ? 'Masquer' : 'Afficher'}</Text>
+      </Pressable>
+      {deplie ? (
+        <View style={{ gap: ESPACEMENT.s, marginTop: ESPACEMENT.s }}>
+          <Text style={{ color: palette.texteSecondaire }}>
+            Il vous faut l’export « positions instantanées » : la liste de ce que vous détenez
+            aujourd’hui, pas un relevé d’opérations.
+          </Text>
+          {ETAPES_BOURSOBANK.map((etape, rang) => (
+            <View key={etape} style={styles.etape}>
+              <View style={[styles.numero, { backgroundColor: palette.accentFond }]}>
+                <Text style={{ color: palette.accent, fontWeight: '800' }}>{rang + 1}</Text>
+              </View>
+              <Text style={{ color: palette.texte, flex: 1, lineHeight: 20 }}>{etape}</Text>
+            </View>
+          ))}
+          <Text style={{ color: palette.texteSecondaire }}>
+            Pour vérifier : ouvert avec le Bloc-notes, le fichier commence par
+          </Text>
+          <Text
+            selectable
+            style={[styles.code, { color: palette.texte, backgroundColor: palette.surfaceHaute }]}>
+            name;isin;quantity;buyingPrice;lastPrice;…
+          </Text>
+          <Text style={{ color: palette.texteSecondaire }}>
+            Importez-le une seule fois : un second import ajouterait les lignes en double. Ensuite,
+            l’application trouve seule les symboles boursiers et charge l’historique des cours.
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  guide: { borderWidth: 1, borderRadius: RAYON.m, padding: ESPACEMENT.m },
+  etape: { flexDirection: 'row', gap: ESPACEMENT.s, alignItems: 'flex-start' },
+  numero: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  code: { fontFamily: 'monospace', fontSize: 12, padding: ESPACEMENT.s, borderRadius: RAYON.s },
   zoneTexte: { minHeight: 120, textAlignVertical: 'top' },
   sectionTitre: { fontSize: 17, fontWeight: '700' },
   ligne: {
