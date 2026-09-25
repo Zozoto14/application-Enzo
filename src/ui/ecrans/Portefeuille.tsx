@@ -51,6 +51,7 @@ import { OngletImpots } from './onglets/Impots';
 import { OngletPerformances } from './onglets/Performances';
 import { OngletPositions } from './onglets/Positions';
 import { OngletRisque } from './onglets/Risque';
+import { useNavigationLaterale } from '../Navigation';
 import { courbePerformance, type LigneClassement, type VueResume } from '../vues/resume';
 import type { CandidatSymbole } from '../../cours/symboles';
 import { useSignalerOuverture } from '../superposition';
@@ -227,6 +228,8 @@ export function Portefeuille(props: PortefeuilleProps) {
 
 function EnTete(props: PortefeuilleProps) {
   const palette = usePalette();
+  // Avec la barre latérale, ces destinations y sont déjà : inutile de les répéter.
+  const lateral = useNavigationLaterale();
   const { dashboard, resume } = props;
   const comptes: OptionSelecteur[] = [
     { valeur: TOUS_LES_COMPTES, libelle: 'Tous' },
@@ -313,26 +316,26 @@ function EnTete(props: PortefeuilleProps) {
             onPress={props.onRafraichirCours}
           />
         ) : null}
-        {props.onWatchlist ? (
+        {props.onWatchlist && !lateral ? (
           <BoutonOutil titre="Surveillance" testID="bouton-watchlist" onPress={props.onWatchlist} />
         ) : null}
-        {props.onComparer ? (
+        {props.onComparer && !lateral ? (
           <BoutonOutil titre="Comparateur" testID="bouton-comparateur" onPress={props.onComparer} />
         ) : null}
-        {props.onProjection ? (
+        {props.onProjection && !lateral ? (
           <BoutonOutil titre="Projection" testID="bouton-projection" onPress={props.onProjection} />
         ) : null}
-        {props.onSauvegarder ? (
+        {props.onSauvegarder && !lateral ? (
           <BoutonOutil titre="Sauvegarde" testID="bouton-sauvegarde" onPress={props.onSauvegarder} />
         ) : null}
-        {props.onNotifications ? (
+        {props.onNotifications && !lateral ? (
           <BoutonOutil
             titre="Notifications"
             testID="bouton-notifications"
             onPress={props.onNotifications}
           />
         ) : null}
-        {props.onVerrouiller ? (
+        {props.onVerrouiller && !lateral ? (
           <BoutonOutil titre="Verrouiller" testID="bouton-verrouiller" onPress={props.onVerrouiller} />
         ) : null}
       </View>

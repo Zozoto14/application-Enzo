@@ -53,6 +53,8 @@ export type EtatMiseAJourBureau =
   | { etat: 'inconnue' }
   | { etat: 'a-jour'; commit: string }
   | { etat: 'disponible'; commit: string; nouveautes: string[] }
+  /** Nouveautés récupérées et appliquées toutes seules à ce lancement. */
+  | { etat: 'appliquee'; nouveautes: string[] }
   | { etat: 'erreur'; motif: string };
 
 /** Pont exposé par le préchargement, absent dans un navigateur ordinaire. */

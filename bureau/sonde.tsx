@@ -8,7 +8,7 @@
  */
 
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { useColorScheme } from 'react-native';
 import { createRoot } from 'react-dom/client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { d } from '../src/core/money/decimal';
@@ -34,8 +34,8 @@ import { Comparateur } from '../src/ui/ecrans/Comparateur';
 import { Portefeuille } from '../src/ui/ecrans/Portefeuille';
 import { Projection } from '../src/ui/ecrans/Projection';
 import { Watchlist } from '../src/ui/ecrans/Watchlist';
-import { ESPACEMENT, palettePour } from '../src/ui/theme';
-import { Bureau, useFondDocument, type Destination } from './Bureau';
+import { useFondDocument } from './Bureau';
+import { Coque, type Destination } from '../src/ui/Navigation';
 
 // ------------------------------------------------------------ Jeu d'essai
 
@@ -108,7 +108,6 @@ const ficheExemple = construireFiche(
 
 function Apercu() {
   const sombre = useColorScheme() === 'dark';
-  const palette = palettePour(sombre);
   useFondDocument(sombre);
 
   const [destination, setDestination] = useState('portefeuille');
@@ -116,18 +115,7 @@ function Apercu() {
   const [champs, setChamps] = useState(CHAMPS_DEFAUT);
 
   return (
-    <Bureau
-      destinations={DESTINATIONS}
-      actif={destination}
-      onNaviguer={setDestination}
-      pied="Aperçu"
-      bandeau={
-        <View style={[styles.bandeau, { borderColor: palette.bordure }]}>
-          <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>
-            Aperçu de disposition — données d’exemple, sans base ni chiffrement.
-          </Text>
-        </View>
-      }>
+    <Coque destinations={DESTINATIONS} actif={destination} onNaviguer={setDestination} onVerrouiller={() => undefined}>
       {destination === 'portefeuille' ? (
         <Portefeuille
           dashboard={construireDashboard({ etat, comptes, titres, cours })}
@@ -261,17 +249,9 @@ function Apercu() {
           onRetour={() => setDestination('portefeuille')}
         />
       ) : null}
-    </Bureau>
+    </Coque>
   );
 }
-
-const styles = StyleSheet.create({
-  bandeau: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: ESPACEMENT.m,
-    paddingVertical: ESPACEMENT.s,
-  },
-});
 
 createRoot(document.getElementById('racine')!).render(
   <SafeAreaProvider>

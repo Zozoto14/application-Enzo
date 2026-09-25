@@ -48,7 +48,46 @@ export function BandeauMiseAJour({ palette }: { palette: Palette }) {
     };
   }, []);
 
-  if (masque || etat?.etat !== 'disponible') {
+  if (masque || !etat) {
+    return null;
+  }
+
+  if (etat.etat === 'appliquee') {
+    // Déjà en place : on informe, sans rien demander.
+    const premieres = etat.nouveautes.slice(0, NOUVEAUTES_AFFICHEES);
+    return (
+      <View
+        accessibilityRole="alert"
+        accessibilityLiveRegion="polite"
+        style={[styles.bandeau, { backgroundColor: palette.surface, borderColor: palette.hausse }]}>
+        <View style={styles.texte}>
+          <Text style={[styles.titre, { color: palette.texte }]}>Application mise à jour</Text>
+          {premieres.map((ligne, index) => (
+            <Text key={`${index}-${ligne}`} numberOfLines={1} style={{ color: palette.texteSecondaire, fontSize: 13 }}>
+              • {ligne}
+            </Text>
+          ))}
+          {etat.nouveautes.length > premieres.length ? (
+            <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>
+              … et {etat.nouveautes.length - premieres.length} autre(s).
+            </Text>
+          ) : null}
+        </View>
+        <Pressable
+          testID="bouton-compris"
+          accessibilityRole="button"
+          onPress={() => setMasque(true)}
+          style={({ pressed }) => [
+            styles.bouton,
+            { borderColor: palette.bordure, borderWidth: 1, opacity: pressed ? 0.8 : 1 },
+          ]}>
+          <Text style={[styles.libelle, { color: palette.texte }]}>OK</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  if (etat.etat !== 'disponible') {
     return null;
   }
 
@@ -70,10 +109,11 @@ export function BandeauMiseAJour({ palette }: { palette: Palette }) {
       style={[styles.bandeau, { backgroundColor: palette.surface, borderColor: palette.accent }]}>
       <View style={styles.texte}>
         <Text style={[styles.titre, { color: palette.texte }]}>
-          Nouvelle version disponible sur GitHub
+          Réinstallation nécessaire
         </Text>
         <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>
-          {nombre} modification{nombre > 1 ? 's' : ''} depuis votre version :
+          L’interface est à jour, mais {nombre > 1 ? `${nombre} modifications touchent` : 'une modification touche'} le
+          moteur de l’application, qui ne se remplace qu’en réinstallant :
         </Text>
         {affichees.map((ligne, index) => (
           <Text
@@ -107,7 +147,7 @@ export function BandeauMiseAJour({ palette }: { palette: Palette }) {
             { backgroundColor: palette.accentPlein, opacity: enCours ? 0.5 : pressed ? 0.8 : 1 },
           ]}>
           <Text style={[styles.libelle, { color: palette.surAccent }]}>
-            {enCours ? 'Lancement…' : 'Mettre à jour'}
+            {enCours ? 'Lancement…' : 'Réinstaller'}
           </Text>
         </Pressable>
         <Pressable

@@ -21,7 +21,8 @@
  */
 
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { preparerInterface } from './interface.mjs';
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -206,52 +207,26 @@ async function lireVersionBuild() {
   }
 }
 
-function git(dossier, args, delai = 30_000) {
-  return new Promise((resoudre, rejeter) => {
-    execFile(
-      'git',
-      ['-C', dossier, ...args],
-      { timeout: delai, windowsHide: true, encoding: 'utf8' },
-      (erreur, sortie) => (erreur ? rejeter(erreur) : resoudre(sortie.trim())),
-    );
-  });
-}
+/** Page d'attente, le temps de récupérer et recompiler l'interface. */
+const PAGE_ATTENTE = `data:text/html;charset=utf-8,${encodeURIComponent(
+  '<!doctype html><meta charset="utf-8"><body style="margin:0;background:#000;color:#a1a1aa;font-family:Segoe UI,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh">' +
+    '<div style="text-align:center"><div style="color:#f4f4f5;font-size:20px;font-weight:700;margin-bottom:8px">AppliBourse</div>Recherche de mises à jour…</div></body>',
+)}`;
+
+/** Ce qui s'est passé au lancement, pour le bandeau. */
+let lancement = { appliquees: [], moteurPerime: false, nouveautesMoteur: [], erreur: undefined };
 
 async function verifierMiseAJour() {
-  const version = await lireVersionBuild();
-  if (!version?.commit || !version.dossierSource) {
-    return { etat: 'inconnue' };
+  if (lancement.moteurPerime) {
+    return { etat: 'disponible', nouveautes: lancement.nouveautesMoteur, commit: '' };
   }
-  if (!existsSync(version.dossierSource)) {
-    return { etat: 'erreur', motif: `Dossier du projet introuvable : ${version.dossierSource}` };
+  if (lancement.appliquees.length > 0) {
+    return { etat: 'appliquee', nouveautes: lancement.appliquees };
   }
-
-  try {
-    await git(version.dossierSource, ['fetch', '--quiet', 'origin', 'main']);
-    const distant = await git(version.dossierSource, ['rev-parse', 'origin/main']);
-    if (distant === version.commit) {
-      return { etat: 'a-jour', commit: version.commit.slice(0, 7) };
-    }
-
-    // Les titres des commits arrivés depuis la compilation : c'est ce qui
-    // dit à l'utilisateur ce qu'il gagnera à mettre à jour.
-    const journal = await git(version.dossierSource, [
-      'log',
-      '--format=%s',
-      `${version.commit}..origin/main`,
-    ]);
-    const nouveautes = journal ? journal.split('\n').filter(Boolean) : [];
-    if (nouveautes.length === 0) {
-      // Commit local plus récent que GitHub : rien à récupérer.
-      return { etat: 'a-jour', commit: version.commit.slice(0, 7) };
-    }
-    return { etat: 'disponible', nouveautes, commit: distant.slice(0, 7) };
-  } catch (erreur) {
-    return {
-      etat: 'erreur',
-      motif: erreur instanceof Error ? erreur.message : String(erreur),
-    };
+  if (lancement.erreur) {
+    return { etat: 'erreur', motif: lancement.erreur };
   }
+  return { etat: 'a-jour', commit: '' };
 }
 
 async function lancerMiseAJour() {
@@ -302,7 +277,7 @@ function creerFenetre() {
   // deux porteraient le prechargement.
   fenetre.webContents.on('will-navigate', (evenement, url) => {
     const attendu = DEV ?? 'file://';
-    if (!url.startsWith(attendu)) {
+    if (!url.startsWith(attendu) && !url.startsWith('data:text/html')) {
       evenement.preventDefault();
     }
   });
@@ -316,7 +291,14 @@ function creerFenetre() {
   if (DEV) {
     void fenetre.loadURL(DEV);
   } else {
-    void fenetre.loadFile(join(ici, '..', 'dist', 'index.html'));
+    // Page d'attente tout de suite, puis l'interface une fois à jour.
+    void fenetre.loadURL(PAGE_ATTENTE);
+    void lireVersionBuild()
+      .then(version => preparerInterface({ embarquee: join(ici, '..', 'dist', 'index.html'), version }))
+      .then(resultat => {
+        lancement = resultat.lancement;
+        return fenetre.loadFile(resultat.chemin);
+      });
   }
 
   return fenetre;

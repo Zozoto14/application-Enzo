@@ -62,6 +62,8 @@ import { construireResume } from '../ui/vues/resume';
 import { chargerValeur, type DonneesValeur } from '../fondamentaux/yahoo';
 import { construireFiche, type VueFiche } from '../ui/vues/fiche';
 import { FicheValeur } from '../ui/ecrans/FicheValeur';
+import { Coque, type Destination } from '../ui/Navigation';
+import type { OngletPortefeuille } from '../ui/ecrans/Portefeuille';
 import { ComparateurFinancier } from '../ui/ecrans/ComparateurFinancier';
 import { SOCIETES_MAXIMUM } from '../ui/vues/comparaisonFinanciere';
 import { chercherSymboles, type CandidatSymbole } from '../cours/symboles';
@@ -251,6 +253,8 @@ function dividendesParTitre(
 export function App({ session, genererId, aujourdhui, chargementAutomatique = false }: AppProps) {
   const [rendu, forcerRendu] = useState(0);
   const [compteFiltre, setCompteFiltre] = useState<string>(TOUS_LES_COMPTES);
+  // Retenu ici : revenir au portefeuille rouvre l'onglet qu'on avait quitté.
+  const [ongletPortefeuille, setOngletPortefeuille] = useState<OngletPortefeuille>('resume');
   const [fiche, setFiche] = useState<
     { symbole: string; titreId?: string; vue?: VueFiche; chargement: boolean; erreur?: string } | undefined
   >();
@@ -1156,12 +1160,51 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   const verrou = statut === 'non-initialise' ? undefined : session.verrou();
 
+  // Navigation latérale : chaque écran à un clic, où que l'on soit.
+  const sansCompte = (contenuComplet?.comptes.length ?? 0) === 0;
+  const destinations: Destination[] = [
+    { cle: 'tableau', libelle: 'Portefeuille', glyphe: '▦' },
+    ...(fiche ? [{ cle: 'fiche', libelle: fiche.vue?.entete.nom ?? fiche.symbole, glyphe: '◧' }] : []),
+    { cle: 'saisie', libelle: 'Nouvelle opération', glyphe: '+' },
+    { cle: 'import', libelle: 'Importer', glyphe: '↓' },
+    { cle: 'watchlist', libelle: 'Surveillance', glyphe: '☆' },
+    { cle: 'comparateur', libelle: 'Comparateur', glyphe: '⇄' },
+    { cle: 'projection', libelle: 'Projection', glyphe: '↗' },
+    { cle: 'sauvegarde', libelle: 'Sauvegarde', glyphe: '⇪' },
+    { cle: 'notifications', libelle: 'Alertes', glyphe: '◉' },
+    { cle: 'reglages', libelle: 'Paramètres', glyphe: '⚙\uFE0E' },
+  ];
+  const destinationActive =
+    ecran === 'symboles' ? 'reglages' : ecran === 'titre' ? 'saisie' : ecran === 'compte' ? 'tableau' : ecran;
+  const naviguer = (cle: string) => {
+    if ((cle === 'saisie' || cle === 'import') && sansCompte) {
+      // Sans compte, ni saisie ni import ne sont possibles : on commence par là.
+      setEcran('compte');
+      return;
+    }
+    if (cle === 'sauvegarde') {
+      rafraichirSauvegardes();
+    }
+    if (cle === 'notifications') {
+      setMessageNotifications(undefined);
+    }
+    if (cle === 'reglages') {
+      setRecherche(undefined);
+    }
+    setEcran(cle as Ecran);
+  };
+
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics ?? METRIQUES_DE_REPLI}>
       <SafeAreaView
         style={[stylesPartages.ecran, { backgroundColor: palettePour().fond }]}>
         <StatusBar barStyle="light-content" />
 
+      <Coque
+        destinations={deverrouille && contenuComplet && tableau ? destinations : []}
+        actif={destinationActive}
+        onNaviguer={naviguer}
+        onVerrouiller={deverrouille && contenuComplet && tableau ? verrouiller : undefined}>
       {secrets ? (
         <PremierLancement
           onCreer={creer}
@@ -1390,6 +1433,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           dashboard={tableau}
           resume={onglets!.resume}
           analyse={analyse}
+          onglet={ongletPortefeuille}
+          onChangerOnglet={setOngletPortefeuille}
           aujourdhui={(aujourdhui ?? dateDuJour)()}
           optionsComptes={(contenuComplet?.comptes ?? []).map(compte => ({
             valeur: compte.id,
@@ -1437,6 +1482,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onVerrouiller={verrouiller}
         />
         )}
+      </Coque>
       </SafeAreaView>
     </SafeAreaProvider>
   );
