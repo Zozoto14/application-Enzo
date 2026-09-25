@@ -596,6 +596,8 @@ describe('parcours complet, session ouverte', () => {
     );
     await fireEvent.press(screen.getByTestId('bouton-importer'));
     await fireEvent.press(screen.getByTestId('bouton-comparateur'));
+    // Le comparateur ouvre sur les états financiers ; les cours ont leur onglet.
+    await fireEvent.press(screen.getByTestId('comparateur-onglet-cours'));
 
     expect(screen.getByText(/Choisissez deux valeurs/)).toBeTruthy();
 

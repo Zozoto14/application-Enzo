@@ -29,6 +29,7 @@ import { COMPTES_EXEMPLE, RESUME_EXEMPLE, historiqueExemple } from '../src/fonda
 import { lireComptes, lireCoursEtDividendes, lireFiche } from '../src/fondamentaux/yahoo';
 import { construireFiche } from '../src/ui/vues/fiche';
 import { FicheValeur } from '../src/ui/ecrans/FicheValeur';
+import { ComparateurFinancier } from '../src/ui/ecrans/ComparateurFinancier';
 import { Comparateur } from '../src/ui/ecrans/Comparateur';
 import { Portefeuille } from '../src/ui/ecrans/Portefeuille';
 import { Projection } from '../src/ui/ecrans/Projection';
@@ -206,6 +207,26 @@ function Apercu() {
       ) : null}
 
       {destination === 'comparateur' ? (
+        <ComparateurFinancier
+          societes={[
+            { symbole: 'EXA.PA', nom: 'Exemple Industries SA', comptes: lireComptes(COMPTES_EXEMPLE) },
+            {
+              symbole: 'AUT.PA',
+              nom: 'Autre Groupe',
+              comptes: Object.fromEntries(
+                Object.entries(lireComptes(COMPTES_EXEMPLE)).map(([poste, points]) => [
+                  poste,
+                  (points ?? []).map((point, index) => ({ ...point, valeur: point.valeur * (0.4 + index * 0.08) })),
+                ]),
+              ),
+            },
+          ]}
+          suggestions={[{ symbole: 'CW8.PA', nom: 'Amundi MSCI World' }]}
+          onAjouter={() => undefined}
+          onRetirer={() => undefined}
+          onRechercher={async () => []}
+          onRetour={() => setDestination('portefeuille')}
+          comparaisonCours={
         <Comparateur
           vue={construireComparateur({
             retenus: compares,
@@ -224,6 +245,8 @@ function Apercu() {
             )
           }
           onRetour={() => setDestination('portefeuille')}
+        />
+          }
         />
       ) : null}
 

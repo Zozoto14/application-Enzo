@@ -83,7 +83,7 @@ export interface VueFiche {
     consensus?: string;
     estimations: Array<{ periode: string; bpa: string; ca: string; croissance: string }>;
   };
-  finances: { annees: string[]; etats: EtatFinancier[] };
+  finances: { annees: string[]; dates: string[]; etats: EtatFinancier[] };
   valorisation: {
     metriques: LigneInfo[];
     per: Array<{ date: string; valeur: number }>;
@@ -257,7 +257,7 @@ const ETATS: Array<{ titre: string; lignes: Array<{ poste: Poste; libelle: strin
   },
 ];
 
-export function etatsFinanciers(comptes: Comptes): { annees: string[]; etats: EtatFinancier[] } {
+export function etatsFinanciers(comptes: Comptes): { annees: string[]; dates: string[]; etats: EtatFinancier[] } {
   const dates = [...new Set(Object.values(comptes).flatMap(points => (points ?? []).map(point => point.date)))].sort();
   const annees = dates.map(annee);
   const etats = ETATS.map(etat => ({
@@ -285,7 +285,7 @@ export function etatsFinanciers(comptes: Comptes): { annees: string[]; etats: Et
         };
       }),
   })).filter(etat => etat.lignes.length > 0);
-  return { annees, etats };
+  return { annees, dates, etats };
 }
 
 // ------------------------------------------------------------ Fiche

@@ -99,23 +99,31 @@ export function Tableau<T>({ colonnes, lignes, cle, onPressLigne, pied, vide, te
           <Text style={[styles.vide, { color: palette.texteSecondaire }]}>{vide}</Text>
         ) : null}
 
-        {triees.map((ligne, index) => (
-          <Pressable
-            key={`${cle(ligne)}-${index}`}
-            disabled={!onPressLigne}
-            accessibilityRole={onPressLigne ? 'button' : undefined}
-            onPress={() => onPressLigne?.(ligne)}
-            style={({ pressed }) => [
-              styles.ligne,
-              { borderBottomColor: palette.bordure, backgroundColor: pressed ? palette.surfaceHaute : 'transparent' },
-            ]}>
-            {colonnes.map(colonne => (
-              <View key={colonne.cle} style={[styles.cellule, style(colonne)]}>
-                {colonne.rendu(ligne)}
-              </View>
-            ))}
-          </Pressable>
-        ))}
+        {triees.map((ligne, index) => {
+          const cellules = colonnes.map(colonne => (
+            <View key={colonne.cle} style={[styles.cellule, style(colonne)]}>
+              {colonne.rendu(ligne)}
+            </View>
+          ));
+          // Une ligne n'est un bouton que si elle mène quelque part : sinon,
+          // un bouton désactivé désactiverait aussi les cases qu'elle contient.
+          return onPressLigne ? (
+            <Pressable
+              key={`${cle(ligne)}-${index}`}
+              accessibilityRole="button"
+              onPress={() => onPressLigne(ligne)}
+              style={({ pressed }) => [
+                styles.ligne,
+                { borderBottomColor: palette.bordure, backgroundColor: pressed ? palette.surfaceHaute : 'transparent' },
+              ]}>
+              {cellules}
+            </Pressable>
+          ) : (
+            <View key={`${cle(ligne)}-${index}`} style={[styles.ligne, { borderBottomColor: palette.bordure }]}>
+              {cellules}
+            </View>
+          );
+        })}
 
         {pied ? <View style={[styles.pied, { borderTopColor: palette.bordure }]}>{pied}</View> : null}
       </View>

@@ -62,6 +62,8 @@ import { construireResume } from '../ui/vues/resume';
 import { chargerValeur, type DonneesValeur } from '../fondamentaux/yahoo';
 import { construireFiche, type VueFiche } from '../ui/vues/fiche';
 import { FicheValeur } from '../ui/ecrans/FicheValeur';
+import { ComparateurFinancier } from '../ui/ecrans/ComparateurFinancier';
+import { SOCIETES_MAXIMUM } from '../ui/vues/comparaisonFinanciere';
 import { chercherSymboles, type CandidatSymbole } from '../cours/symboles';
 import { Comparateur } from '../ui/ecrans/Comparateur';
 import { construireComparateur } from '../ui/vues/comparateur';
@@ -861,6 +863,29 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [],
   );
 
+  const [societesComparees, setSocietesComparees] = useState<string[]>([]);
+  const erreursComparaison = useRef(new Map<string, string>());
+  const ajouterSociete = useCallback(
+    (symbole: string) => {
+      setSocietesComparees(precedentes =>
+        precedentes.includes(symbole) || precedentes.length >= SOCIETES_MAXIMUM
+          ? precedentes
+          : [...precedentes, symbole],
+      );
+      if (fichesEnCache.current.has(symbole)) {
+        return;
+      }
+      erreursComparaison.current.delete(symbole);
+      chargerValeur(symbole)
+        .then(donnees => fichesEnCache.current.set(symbole, donnees))
+        .catch((e: unknown) =>
+          erreursComparaison.current.set(symbole, e instanceof Error ? e.message : String(e)),
+        )
+        .finally(rafraichir);
+    },
+    [rafraichir],
+  );
+
   const basculerComparaison = useCallback((titreId: string) => {
     setCompares(precedent =>
       precedent.includes(titreId)
@@ -1222,7 +1247,29 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }
         />
       ) : ecran === 'comparateur' ? (
-        <Comparateur
+        <ComparateurFinancier
+          societes={societesComparees.map(symbole => {
+            const donnees = fichesEnCache.current.get(symbole);
+            const erreurSociete = erreursComparaison.current.get(symbole);
+            return {
+              symbole,
+              nom: donnees?.fiche.nom ?? symbole,
+              comptes: donnees?.comptes,
+              chargement: !donnees && !erreurSociete,
+              erreur: erreurSociete,
+            };
+          })}
+          suggestions={(contenuComplet?.titres ?? [])
+            .filter(titre => titre.ticker?.trim())
+            .map(titre => ({ symbole: titre.ticker.trim(), nom: titre.nom }))}
+          onAjouter={ajouterSociete}
+          onRetirer={symbole =>
+            setSocietesComparees(precedentes => precedentes.filter(s => s !== symbole))
+          }
+          onRechercher={rechercherActions}
+          onRetour={() => setEcran('tableau')}
+          comparaisonCours={
+            <Comparateur
           vue={construireComparateur({
             retenus: compares,
             titres: contenuComplet?.titres ?? [],
@@ -1239,6 +1286,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           })}
           onBasculer={basculerComparaison}
           onRetour={() => setEcran('tableau')}
+            />
+          }
         />
       ) : ecran === 'symboles' ? (
         <Symboles
