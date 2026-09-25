@@ -7,6 +7,15 @@
  * valeurs en mémoire, sans base ni chiffrement.
  */
 
+import '@fontsource/manrope/400.css';
+import '@fontsource/manrope/500.css';
+import '@fontsource/manrope/600.css';
+import '@fontsource/manrope/700.css';
+import '@fontsource/manrope/800.css';
+import '@fontsource/fraunces/400.css';
+import '@fontsource/fraunces/500.css';
+import '@fontsource/fraunces/600.css';
+import '@fontsource/dm-serif-display/400.css';
 import React, { useState } from 'react';
 import { useColorScheme } from 'react-native';
 import { createRoot } from 'react-dom/client';
@@ -37,6 +46,7 @@ import { Watchlist } from '../src/ui/ecrans/Watchlist';
 import { useFondDocument } from './Bureau';
 import { definirDiscretion } from '../src/ui/discretion';
 import { Objectifs } from '../src/ui/ecrans/Objectifs';
+import { definirTheme } from '../src/ui/theme';
 import { Coque, type Destination } from '../src/ui/Navigation';
 import { Podcast } from '../src/ui/ecrans/Podcast';
 import { construireEpisode } from '../src/podcast/episode';
@@ -153,6 +163,9 @@ const ficheExemple = construireFiche(
 );
 
 // ---------------------------------------------------------------- Aperçu
+
+// Thème de l'aperçu : ?theme=ivoire, sauge…
+definirTheme(new URLSearchParams(location.search).get('theme') ?? undefined);
 
 function Apercu() {
   const sombre = useColorScheme() === 'dark';

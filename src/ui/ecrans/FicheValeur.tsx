@@ -14,7 +14,7 @@ import { Bouton, usePalette } from '../composants';
 import { CarteSection, Metrique, Pile, Rangee, Segments, Selecteur, Signe, Vide } from '../elements';
 import { Barres, Donut, GraphiqueLignes, Radar } from '../graphiques/Graphiques';
 import { Cellule, Tableau, type Colonne } from '../tableau';
-import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
+import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
 import { calculerPrixJuste, type GraphiqueAnnuel, type ParametresPrixJuste, type VueFiche } from '../vues/fiche';
 
 type OngletFiche = 'resume' | 'quantitatif' | 'dividende' | 'resultats' | 'finances' | 'valorisation' | 'societe';
@@ -150,7 +150,7 @@ function EnTete({ vue, surveillee, onSurveiller }: { vue: VueFiche; surveillee?:
         </Text>
       </View>
       <View style={{ gap: 4, flexShrink: 1 }}>
-        <Text style={[styles.nom, { color: palette.texte }]} accessibilityRole="header">
+        <Text {...POLICE_TITRE} style={[styles.nom, { color: palette.texte }]} accessibilityRole="header">
           {entete.nom}
         </Text>
         <View style={[styles.pillule, { backgroundColor: palette.accentFond }]}>

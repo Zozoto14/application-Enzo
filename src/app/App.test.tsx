@@ -9,6 +9,7 @@ import { codeTotp } from '../securite/totp';
 import { Session } from '../session/session';
 import { stockageMemoire } from '../session/stockage-coffre';
 import { App } from './App';
+import { definirTheme, palettePour } from '../ui/theme';
 
 const KDF_RAPIDE: ParametresKdf = {
   algorithme: 'argon2id',
@@ -919,6 +920,15 @@ describe('écran de notifications', () => {
     } finally {
       delete global.applibourse;
     }
+  });
+
+  it('change de thème depuis les paramètres', async () => {
+    const session = await ouvrirNotifications();
+    await fireEvent.press(screen.getByTestId('nav-reglages'));
+    await fireEvent.press(screen.getByTestId('theme-sauge'));
+    expect(new DepotParametres(session.base()).lire(PARAMETRES.theme)).toBe('sauge');
+    expect(palettePour().navigation).toBe('#EEF2EC');
+    definirTheme('classique');
   });
 
   it('coupe le week-end, donc n’affiche pas ses heures', async () => {

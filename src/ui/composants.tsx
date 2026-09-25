@@ -17,7 +17,7 @@ import {
   type TextInputProps,
   type ViewProps,
 } from 'react-native';
-import { ESPACEMENT, RAYON, couleurTendance, palettePour, type Palette } from './theme';
+import { ESPACEMENT, RAYON, couleurTendance, palettePour, type Palette, POLICE_TITRE } from './theme';
 import type { Tendance } from './format';
 
 export function usePalette(): Palette {
@@ -26,7 +26,11 @@ export function usePalette(): Palette {
 
 export function Titre({ children }: { children: React.ReactNode }) {
   const palette = usePalette();
-  return <Text style={[styles.titre, { color: palette.texte }]}>{children}</Text>;
+  return (
+    <Text {...POLICE_TITRE} style={[styles.titre, { color: palette.texte }]}>
+      {children}
+    </Text>
+  );
 }
 
 export function SousTitre({ children }: { children: React.ReactNode }) {

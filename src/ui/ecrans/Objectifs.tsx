@@ -11,7 +11,7 @@ import { CarteSection, Metrique, Rangee, Vide } from '../elements';
 import { GraphiqueLignes } from '../graphiques/Graphiques';
 import { Jauge } from '../indicateurs';
 import { formaterMontant } from '../format';
-import { ESPACEMENT, palettePour, stylesPartages } from '../theme';
+import { ESPACEMENT, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
 import { repartirVersement, suivreObjectif, type LigneCible, type Objectif } from '../vues/objectifs';
 
 export interface ObjectifsProps {
@@ -76,7 +76,7 @@ export function Objectifs({
   return (
     <View style={[stylesPartages.ecran, { backgroundColor: palettePour().fond }]}>
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-        <Text style={[styles.titre, { color: palette.texte }]} accessibilityRole="header">
+        <Text {...POLICE_TITRE} style={[styles.titre, { color: palette.texte }]} accessibilityRole="header">
           Objectifs
         </Text>
 

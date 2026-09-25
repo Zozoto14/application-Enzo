@@ -10,6 +10,10 @@
          contenu, et la barre latérale reste en place. */
       html, body { overflow: hidden; }
       #racine { display: flex; flex-direction: column; }
+      /* Polices du thème (Paramètres › Apparence). Sans thème à police, les
+         variables sont absentes et chaque texte garde la sienne. */
+      body * { font-family: var(--police-texte) !important; }
+      [data-police="titre"], [data-police="titre"] * { font-family: var(--police-titre, var(--police-texte)) !important; }
       body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
     </style>
   </head>

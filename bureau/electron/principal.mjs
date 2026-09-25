@@ -86,6 +86,11 @@ function installerPasserelle() {
 
   ipcMain.handle('fichier:dossier', async () => join(app.getPath('userData'), 'donnees'));
 
+  ipcMain.handle('systeme:theme', async (_evenement, sombre) => {
+    nativeTheme.themeSource = sombre ? 'dark' : 'light';
+    return true;
+  });
+
   ipcMain.handle('systeme:notifier', async (_evenement, titre, corps) => {
     if (!Notification.isSupported()) {
       return false;

@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('applibourse', {
   systeme: {
     notifier: (titre, corps) => ipcRenderer.invoke('systeme:notifier', titre, corps),
     ouvrir: url => ipcRenderer.invoke('systeme:ouvrir', url),
+    /** Barre de titre claire ou sombre, selon le thème. */
+    theme: sombre => ipcRenderer.invoke('systeme:theme', Boolean(sombre)),
   },
 
   yahoo: {

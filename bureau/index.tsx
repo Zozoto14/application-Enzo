@@ -6,6 +6,15 @@
  * lire le fichier scellé. D'où cet écran d'attente, puis le passage de relais.
  */
 
+import '@fontsource/manrope/400.css';
+import '@fontsource/manrope/500.css';
+import '@fontsource/manrope/600.css';
+import '@fontsource/manrope/700.css';
+import '@fontsource/manrope/800.css';
+import '@fontsource/fraunces/400.css';
+import '@fontsource/fraunces/500.css';
+import '@fontsource/fraunces/600.css';
+import '@fontsource/dm-serif-display/400.css';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { createRoot } from 'react-dom/client';

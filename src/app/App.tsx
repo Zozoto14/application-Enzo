@@ -137,7 +137,7 @@ import {
   PremierLancement,
   type SecretsInitiaux,
 } from '../ui/ecrans/PremierLancement';
-import { palettePour, stylesPartages } from '../ui/theme';
+import { definirTheme, palettePour, stylesPartages, themeCourant } from '../ui/theme';
 
 export interface AppProps {
   session: Session;
@@ -1211,6 +1211,14 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   const deverrouille = statut === 'deverrouille' && !secrets;
 
+  // Thème : lu à chaque rendu déverrouillé, appliqué avant de dessiner.
+  const themeEnregistre = deverrouille
+    ? new DepotParametres(session.base()).lire(PARAMETRES.theme)
+    : undefined;
+  if (deverrouille && (themeEnregistre ?? 'classique') !== themeCourant()) {
+    definirTheme(themeEnregistre);
+  }
+
   // Mode discret : lu avant de construire les vues, qui formatent les montants.
   const discret = deverrouille && new DepotParametres(session.base()).lire(PARAMETRES.discretion) === '1';
   definirDiscretion(discret);
@@ -1596,7 +1604,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     <SafeAreaProvider initialMetrics={initialWindowMetrics ?? METRIQUES_DE_REPLI}>
       <SafeAreaView
         style={[stylesPartages.ecran, { backgroundColor: palettePour().fond }]}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle={palettePour().sombre === false ? 'dark-content' : 'light-content'} />
 
       <Coque
         destinations={deverrouille && contenuComplet && tableau ? destinations : []}
@@ -1889,6 +1897,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }
           onChargerHistorique={lancerChargementHistorique}
           intervalleActualisation={intervalleS}
+          theme={themeCourant()}
+          onChoisirTheme={cle => {
+            new DepotParametres(session.base()).ecrire(PARAMETRES.theme, cle);
+            definirTheme(cle);
+            rafraichir();
+          }}
           onChoisirIntervalle={secondes => {
             new DepotParametres(session.base()).ecrire(PARAMETRES.intervalleActualisation, String(secondes));
             rafraichir();

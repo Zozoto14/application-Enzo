@@ -18,7 +18,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { usePalette } from './composants';
-import { ESPACEMENT, RAYON } from './theme';
+import { ESPACEMENT, POLICE_TITRE, RAYON } from './theme';
 
 export interface Destination {
   cle: string;
@@ -76,7 +76,7 @@ export function Coque({
     return (
       <NavigationPresente.Provider value>
       <View style={[styles.colonne, { backgroundColor: palette.fond }]}>
-        <View style={[styles.bandeau, { backgroundColor: palette.surface, borderBottomColor: palette.bordure }]}>
+        <View style={[styles.bandeau, { backgroundColor: palette.navigation ?? palette.surface, borderBottomColor: palette.bordure }]}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -127,12 +127,13 @@ export function Coque({
           styles.barre,
           {
             width: libelles ? 216 : 92,
-            backgroundColor: palette.surface,
+            backgroundColor: palette.navigation ?? palette.surface,
             borderRightColor: palette.bordure,
           },
         ]}
       >
         <Text
+          {...POLICE_TITRE}
           style={[
             styles.marque,
             { color: palette.texte },

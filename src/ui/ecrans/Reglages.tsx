@@ -9,7 +9,7 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
-import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
+import { CLES_THEMES, ESPACEMENT, RAYON, THEMES, palettePour, stylesPartages, type CleTheme } from '../theme';
 import { Segments } from '../elements';
 import { INTERVALLES_ACTUALISATION, INTERVALLE_PAR_DEFAUT_S, libelleIntervalle } from '../../cours/marche';
 import type { FournisseurCours } from '../../cours/fournisseur';
@@ -33,6 +33,9 @@ export interface ReglagesProps {
   /** Secondes entre deux actualisations des cours ; 0 : jamais. */
   intervalleActualisation?: number;
   onChoisirIntervalle?(secondes: number): void;
+  /** Thème actif et changement de thème. */
+  theme?: CleTheme;
+  onChoisirTheme?(theme: CleTheme): void;
   onAnnuler(): void;
 }
 
@@ -48,6 +51,8 @@ export function Reglages({
   messageHistorique,
   intervalleActualisation,
   onChoisirIntervalle,
+  theme,
+  onChoisirTheme,
   onEnregistrer,
   onAnnuler,
 }: ReglagesProps) {
@@ -64,6 +69,45 @@ export function Reglages({
       style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
       contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
       keyboardShouldPersistTaps="handled">
+      {onChoisirTheme ? (
+        <>
+          <Titre>Apparence</Titre>
+          <View style={styles.themes}>
+            {CLES_THEMES.map(cle => {
+              const choix = THEMES[cle];
+              const actif = cle === theme;
+              return (
+                <Pressable
+                  key={cle}
+                  testID={`theme-${cle}`}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: actif }}
+                  accessibilityLabel={`Thème ${choix.nom}`}
+                  onPress={() => onChoisirTheme(cle)}
+                  style={[
+                    styles.theme,
+                    {
+                      backgroundColor: choix.palette.fond,
+                      borderColor: actif ? palette.accent : palette.bordure,
+                      borderWidth: actif ? 2 : 1,
+                    },
+                  ]}>
+                  <View style={[styles.apercuTheme, { backgroundColor: choix.palette.surface, borderColor: choix.palette.bordure }]}>
+                    <Text style={{ color: choix.palette.texte, fontWeight: '700', fontSize: 15 }}>{choix.nom}</Text>
+                    <View style={styles.pastillesTheme}>
+                      {choix.palette.series.slice(0, 4).map(couleur => (
+                        <View key={couleur} style={[styles.pastilleTheme, { backgroundColor: couleur }]} />
+                      ))}
+                    </View>
+                  </View>
+                  <Text style={{ color: choix.palette.texteSecondaire, fontSize: 12 }}>{choix.description}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
+
       <Titre>Cours automatiques</Titre>
 
       {onChoisirIntervalle ? (
@@ -208,6 +252,11 @@ export function Reglages({
 }
 
 const styles = StyleSheet.create({
+  themes: { flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.m },
+  theme: { flexGrow: 1, flexBasis: 200, borderRadius: RAYON.m, padding: ESPACEMENT.m - 4, gap: ESPACEMENT.s },
+  apercuTheme: { borderRadius: RAYON.s, borderWidth: 1, padding: ESPACEMENT.m - 4, gap: ESPACEMENT.s },
+  pastillesTheme: { flexDirection: 'row', gap: 6 },
+  pastilleTheme: { width: 22, height: 10, borderRadius: 5 },
   pastilles: { flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.s },
   pastille: {
     borderRadius: RAYON.l,

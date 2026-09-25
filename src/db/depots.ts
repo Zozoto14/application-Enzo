@@ -473,6 +473,8 @@ export const PARAMETRES = {
   identifiantAppareil: 'sync.appareil',
   /** « 1 » : mode discret, montants masqués. */
   discretion: 'affichage.discret',
+  /** Thème de l'interface (Paramètres › Apparence). */
+  theme: 'affichage.theme',
   /** Objectif d'épargne : montant, échéance, rendement supposé (JSON). */
   objectif: 'objectifs.epargne',
   /** Poids visés par valeur, en % (JSON { titreId: "30" }). */

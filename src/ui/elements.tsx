@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { usePalette } from './composants';
 import { Explication } from './indicateurs';
-import { ESPACEMENT, RAYON } from './theme';
+import { ESPACEMENT, RAYON, POLICE_TITRE } from './theme';
 import type { Tendance } from './format';
 import type { CleExplication } from './vues/explications';
 import {
@@ -88,6 +88,7 @@ export function CarteSection({
               {avantTitre}
               {titre ? (
                 <Text
+                  {...POLICE_TITRE}
                   style={[styles.titre, { color: palette.texte }]}
                   accessibilityRole="header"
                 >

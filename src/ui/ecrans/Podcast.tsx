@@ -10,7 +10,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Bouton, Champ, usePalette } from '../composants';
 import { CarteSection, Rangee, Segments, Selecteur, Vide } from '../elements';
-import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
+import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
 import { phrases, type Episode } from '../../podcast/episode';
 import { creerLecteur, type PhraseALire } from '../../podcast/lecteur';
 
@@ -119,7 +119,7 @@ export function Podcast({
     <View style={[stylesPartages.ecran, { backgroundColor: palettePour().fond }]}>
       <ScrollView contentContainerStyle={styles.page}>
         <View style={{ gap: 4 }}>
-          <Text style={[styles.titre, { color: palette.texte }]} accessibilityRole="header">
+          <Text {...POLICE_TITRE} style={[styles.titre, { color: palette.texte }]} accessibilityRole="header">
             Podcast
           </Text>
           <Text style={{ color: palette.texteSecondaire }}>

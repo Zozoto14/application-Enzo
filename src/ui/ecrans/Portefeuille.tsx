@@ -37,7 +37,7 @@ import {
 } from '../elements';
 import { Barres, Donut, GraphiqueLignes } from '../graphiques/Graphiques';
 import { Explication, Indicateur } from '../indicateurs';
-import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
+import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
 import { PERIODES, type Periode } from '../../core/performance/cumul';
 import type { VueDashboard } from '../vues/dashboard';
 import type { VueComparaison } from '../vues/comparaison';
@@ -258,7 +258,7 @@ function EnTete(props: PortefeuilleProps) {
       ) : null}
       <View style={styles.ligneTitre}>
         <View style={{ gap: 2, flexShrink: 1 }}>
-          <Text style={[styles.grandTitre, { color: palette.texte }]} accessibilityRole="header">
+          <Text {...POLICE_TITRE} style={[styles.grandTitre, { color: palette.texte }]} accessibilityRole="header">
             Portefeuille
           </Text>
           {resume ? (
@@ -458,6 +458,9 @@ function euros(valeur: number): string {
 
 function Resume(props: PortefeuilleProps) {
   const palette = usePalette();
+  // Thèmes à cartes teintées (Sauge) : chaque carte chiffrée a sa couleur.
+  const teinte = (rang: number) =>
+    palette.teintesCartes ? { backgroundColor: palette.teintesCartes[rang], borderColor: palette.teintesCartes[rang] } : undefined;
   const { dashboard, resume } = props;
   const gain = props.analyse ? courbeGain(props.analyse.points) : [];
 
@@ -529,9 +532,10 @@ function Resume(props: PortefeuilleProps) {
       {avertissements}
 
       <Rangee>
-        <CarteSection titre="Valeur totale" explication="valeurTotale" testID="carte-valeur-totale">
+        <CarteSection titre="Valeur totale" explication="valeurTotale" testID="carte-valeur-totale"
+          style={teinte(0)}>
           <View style={styles.chiffre}>
-            <Text style={[styles.grandChiffre, { color: palette.texte }]}>{resume.valeurTotale}</Text>
+            <Text {...POLICE_TITRE} style={[styles.grandChiffre, { color: palette.texte }]}>{resume.valeurTotale}</Text>
             <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>
               sur <Text style={{ color: palette.texte, fontWeight: '700' }}>{resume.investi}</Text>{' '}
               investis
@@ -560,7 +564,8 @@ function Resume(props: PortefeuilleProps) {
           </View>
         </CarteSection>
 
-        <CarteSection titre="Total Return" explication="totalReturn" testID="carte-total-return">
+        <CarteSection titre="Total Return" explication="totalReturn" testID="carte-total-return"
+          style={teinte(1)}>
           <Signe texte={resume.totalReturn.texte} tendance={resume.totalReturn.tendance} taille={26} />
           <View style={styles.ligneEnTete}>
             {resume.tri ? (
@@ -592,9 +597,10 @@ function Resume(props: PortefeuilleProps) {
           ) : null}
         </CarteSection>
 
-        <CarteSection titre="Dividendes" explication="rendementCourant" testID="carte-dividendes">
+        <CarteSection titre="Dividendes" explication="rendementCourant" testID="carte-dividendes"
+          style={teinte(2)}>
           <View style={styles.chiffre}>
-            <Text style={[styles.grandChiffre, { color: palette.texte }]}>{resume.dividendes}</Text>
+            <Text {...POLICE_TITRE} style={[styles.grandChiffre, { color: palette.texte }]}>{resume.dividendes}</Text>
             <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>de dividendes perçus</Text>
           </View>
           <View style={styles.ligneEnTete}>
@@ -608,7 +614,12 @@ function Resume(props: PortefeuilleProps) {
                 barres={[...props.dividendes.parAnnee]
                   .sort((a, b) => a.annee.localeCompare(b.annee))
                   .slice(-6)
-                  .map(ligne => ({ libelle: ligne.annee, valeur: ligne.valeur, detail: ligne.total }))}
+                  .map((ligne, rang) => ({
+                    libelle: ligne.annee,
+                    valeur: ligne.valeur,
+                    detail: ligne.total,
+                    couleur: palette.series[rang % palette.series.length],
+                  }))}
                 formater={euros}
                 hauteur={130}
               />
