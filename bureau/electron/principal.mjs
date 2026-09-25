@@ -20,7 +20,7 @@
  * navigateur du système — jamais dans une fenêtre qui porte le préchargement.
  */
 
-import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, Notification, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { preparerInterface } from './interface.mjs';
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
@@ -257,6 +257,7 @@ function creerFenetre() {
     minHeight: 560,
     backgroundColor: '#000000',
     show: false,
+    autoHideMenuBar: true,
     title: 'AppliBourse',
     // L'executable porte deja l'icone ; celle-ci sert a la fenetre et a la
     // barre des taches pendant le developpement.
@@ -320,6 +321,11 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   void app.whenReady().then(() => {
+    // Pas de menu « File, Edit, View » : il n'a rien à offrir ici. Les
+    // raccourcis d'édition (copier, coller) restent gérés par la fenêtre.
+    Menu.setApplicationMenu(null);
+    // Barre de titre de Windows en sombre, assortie à l'interface.
+    nativeTheme.themeSource = 'dark';
     installerPasserelle();
     creerFenetre();
 
