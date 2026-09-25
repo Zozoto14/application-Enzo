@@ -86,6 +86,110 @@ export interface VueDividendes {
   aucunDividende: boolean;
   /** Explication affichée quand l'historique ne porte pas douze mois. */
   messageHistorique?: string;
+  /** Les douze prochains mois, estimés. */
+  calendrier: VueCalendrierDividendes;
+}
+
+export interface MoisCalendrier {
+  /** « 2026-10 ». */
+  cle: string;
+  /** « oct. 2026 ». */
+  libelle: string;
+  valeur: number;
+  total: string;
+  lignes: Array<{ nom: string; valeur: number; montant: string; date: string }>;
+}
+
+export interface VueCalendrierDividendes {
+  mois: MoisCalendrier[];
+  total: string;
+  valeurTotale: number;
+  /** Vrai si aucun dividende n'est attendu faute d'historique. */
+  vide: boolean;
+}
+
+const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+
+/**
+ * Dividendes attendus sur les douze prochains mois.
+ *
+ * Hypothèse simple et dite comme telle : chaque valeur détenue verse à la
+ * même période que l'an dernier, le même montant par action. Le montant
+ * reçu l'an dernier est donc ramené à la quantité détenue aujourd'hui.
+ */
+export function calendrierDividendes(entrees: {
+  etat: EtatPortefeuille;
+  transactions: readonly Transaction[];
+  titres: readonly Titre[];
+  aujourdhui: string;
+}): VueCalendrierDividendes {
+  const noms = new Map(entrees.titres.map(titre => [titre.id, titre.nom]));
+  const detenu = new Map<string, Decimal>();
+  for (const position of entrees.etat.positions) {
+    detenu.set(position.titreId, (detenu.get(position.titreId) ?? Decimal.ZERO).add(position.quantite));
+  }
+
+  const ordonnees = [...entrees.transactions].sort((a, b) => a.date.localeCompare(b.date));
+  const quantiteAu = (titreId: string, date: string) => {
+    let quantite = Decimal.ZERO;
+    for (const transaction of ordonnees) {
+      if (transaction.date > date) break;
+      if (transaction.type === 'ACHAT' && transaction.titreId === titreId) quantite = quantite.add(transaction.quantite);
+      if (transaction.type === 'VENTE' && transaction.titreId === titreId) quantite = quantite.sub(transaction.quantite);
+    }
+    return quantite;
+  };
+
+  const debut = new Date(`${entrees.aujourdhui}T12:00:00Z`);
+  const ilYAUnAn = new Date(debut);
+  ilYAUnAn.setUTCFullYear(debut.getUTCFullYear() - 1);
+  const limite = ilYAUnAn.toISOString().slice(0, 10);
+
+  const mois: MoisCalendrier[] = Array.from({ length: 12 }, (_, rang) => {
+    const date = new Date(Date.UTC(debut.getUTCFullYear(), debut.getUTCMonth() + rang, 1));
+    return {
+      cle: date.toISOString().slice(0, 7),
+      libelle: `${MOIS_COURTS[date.getUTCMonth()]} ${date.getUTCFullYear()}`,
+      valeur: 0,
+      total: '',
+      lignes: [],
+    };
+  });
+
+  for (const transaction of ordonnees) {
+    if (transaction.type !== 'DIVIDENDE' || transaction.date <= limite || transaction.date > entrees.aujourdhui) {
+      continue;
+    }
+    const aujourdhuiDetenu = detenu.get(transaction.titreId);
+    const alors = quantiteAu(transaction.titreId, transaction.date);
+    if (!aujourdhuiDetenu?.estPositif() || !alors.estPositif()) {
+      continue;
+    }
+    // Même mois, un an plus tard.
+    const annee = Number(transaction.date.slice(0, 4)) + 1;
+    const cle = `${annee}-${transaction.date.slice(5, 7)}`;
+    const cible = mois.find(candidat => candidat.cle === cle);
+    if (!cible) continue;
+    const valeur = transaction.montantNet.mul(aujourdhuiDetenu).div(alors).toNumber();
+    cible.valeur += valeur;
+    cible.lignes.push({
+      nom: noms.get(transaction.titreId) ?? transaction.titreId,
+      valeur,
+      montant: formaterMontant(Decimal.de(valeur.toFixed(2))),
+      date: `vers le ${Number(transaction.date.slice(8, 10))} ${MOIS_COURTS[Number(transaction.date.slice(5, 7)) - 1]}`,
+    });
+  }
+
+  const valeurTotale = mois.reduce((somme, ligne) => somme + ligne.valeur, 0);
+  for (const ligne of mois) {
+    ligne.total = formaterMontant(Decimal.de(ligne.valeur.toFixed(2)));
+  }
+  return {
+    mois,
+    total: formaterMontant(Decimal.de(valeurTotale.toFixed(2))),
+    valeurTotale,
+    vide: valeurTotale === 0,
+  };
 }
 
 export interface MesureDividende {
@@ -343,5 +447,6 @@ export function construireDividendes(entrees: EntreesDividendes): VueDividendes 
     })),
     aucunDividende: dividendes.length === 0,
     messageHistorique: motifHistorique,
+    calendrier: calendrierDividendes(entrees),
   };
 }

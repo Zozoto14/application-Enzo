@@ -99,6 +99,52 @@ export function OngletDividendes({ vue }: { vue: VueDividendes }) {
         </CarteSection>
       </Rangee>
 
+      <CarteSection titre="Les douze prochains mois" testID="calendrier-dividendes">
+        {vue.calendrier.vide ? (
+          <SousTitre>
+            Pas encore d’estimation : il faut au moins un dividende reçu ces douze derniers mois sur une
+            valeur que vous détenez toujours.
+          </SousTitre>
+        ) : (
+          <>
+            <SousTitre>
+              Environ {vue.calendrier.total} attendus, si chaque valeur verse comme l’an dernier, ramené au
+              nombre d’actions que vous détenez aujourd’hui.
+            </SousTitre>
+            <Barres
+              barres={vue.calendrier.mois.map(mois => ({
+                libelle: mois.libelle.split(' ')[0],
+                valeur: mois.valeur,
+                detail: `${mois.libelle} : ${mois.total}`,
+              }))}
+              formater={valeur => `${valeur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €`}
+              hauteur={200}
+            />
+            <View style={styles.calendrier}>
+              {vue.calendrier.mois
+                .filter(mois => mois.lignes.length > 0)
+                .map(mois => (
+                  <View key={mois.cle} style={[styles.moisCalendrier, { borderColor: palette.bordure }]}>
+                    <Text style={{ color: palette.texte, fontWeight: '700' }}>{mois.libelle}</Text>
+                    {mois.lignes.map((ligne, rang) => (
+                      <View key={`${mois.cle}-${rang}`} style={styles.ligneCalendrier}>
+                        <Text style={{ color: palette.texte, flex: 1 }} numberOfLines={1}>
+                          {ligne.nom}
+                        </Text>
+                        <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>{ligne.date}</Text>
+                        <Text style={{ color: palette.hausse, fontWeight: '700', minWidth: 80, textAlign: 'right' }}>
+                          {ligne.montant}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+            </View>
+          </>
+        )}
+      </CarteSection>
+
+      
       <Rangee>
         <CarteSection titre="Les douze derniers mois" poids={1.5}>
           <Barres
@@ -148,6 +194,9 @@ export function OngletDividendes({ vue }: { vue: VueDividendes }) {
 }
 
 const styles = StyleSheet.create({
+  calendrier: { flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.m, marginTop: ESPACEMENT.s },
+  moisCalendrier: { flexGrow: 1, flexBasis: 260, borderTopWidth: 1, paddingTop: ESPACEMENT.s, gap: 6 },
+  ligneCalendrier: { flexDirection: 'row', alignItems: 'center', gap: ESPACEMENT.s },
   grand: { fontSize: 26, fontWeight: '800' },
   grille: { flexDirection: 'row', flexWrap: 'wrap', rowGap: ESPACEMENT.m, columnGap: ESPACEMENT.l },
   paire: { flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.m },

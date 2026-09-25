@@ -2,7 +2,7 @@ import { d } from '../../core/money/decimal';
 import type { Transaction } from '../../core/domain/types';
 import { rejouer } from '../../core/portfolio/engine';
 import { achat, compte, dividende, titre, vente, versement } from '../../core/testing/fixtures';
-import { construireDividendes, type EntreesDividendes } from './dividendes';
+import { calendrierDividendes, construireDividendes, type EntreesDividendes } from './dividendes';
 
 const pea = compte();
 const airLiquide = titre();
@@ -295,5 +295,48 @@ describe('construireDividendes', () => {
     );
 
     expect(vue.moyenneMensuelle).toBe(`10,00${INSEC}€`);
+  });
+});
+
+describe('calendrierDividendes', () => {
+  it('projette le dividende de l’an dernier sur la quantité détenue aujourd’hui', () => {
+    // 10 actions en mai 2026 : 30 € reçus. On en a acheté 10 de plus depuis.
+    const transactions: Transaction[] = [
+      versement('2026-01-02', 5000),
+      achat('2026-01-02', 10, 150, 0),
+      dividende('2026-05-20', 30),
+      achat('2026-07-01', 10, 160, 0),
+    ];
+    const etat = rejouer([compte()], transactions);
+    const vue = calendrierDividendes({
+      etat,
+      transactions,
+      titres: [titre()],
+      aujourdhui: '2026-09-25',
+    });
+    expect(vue.mois.map(mois => mois.cle)[0]).toBe('2026-09');
+    expect(vue.mois).toHaveLength(12);
+    const mai = vue.mois.find(mois => mois.cle === '2027-05')!;
+    expect(mai.valeur).toBeCloseTo(60);
+    expect(mai.libelle).toBe('mai 2027');
+    expect(mai.lignes[0]).toMatchObject({ nom: 'Air Liquide', date: 'vers le 20 mai' });
+    expect(vue.valeurTotale).toBeCloseTo(60);
+    expect(vue.vide).toBe(false);
+  });
+
+  it('ignore les valeurs vendues depuis', () => {
+    const transactions: Transaction[] = [
+      versement('2026-01-02', 5000),
+      achat('2026-01-02', 10, 150, 0),
+      dividende('2026-05-20', 30),
+      vente('2026-06-01', 10, 160, 0),
+    ];
+    const vue = calendrierDividendes({
+      etat: rejouer([compte()], transactions),
+      transactions,
+      titres: [titre()],
+      aujourdhui: '2026-09-25',
+    });
+    expect(vue.vide).toBe(true);
   });
 });
