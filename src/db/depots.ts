@@ -464,6 +464,8 @@ export const PARAMETRES = {
   indiceReference: 'performance.indice',
   /** Date du dernier chargement automatique de l'historique des cours. */
   historiqueChargeLe: 'cours.historique_charge_le',
+  /** Secondes entre deux actualisations des cours, fenêtre ouverte ; « 0 » pour ne jamais actualiser. */
+  intervalleActualisation: 'cours.intervalle_s',
   identifiantAppareil: 'sync.appareil',
 } as const;
 

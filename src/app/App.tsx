@@ -59,7 +59,7 @@ import {
 } from '../cours/indices';
 import { rejouer } from '../core/portfolio/engine';
 import { resoudreSymboles } from '../cours/resolution';
-import { INTERVALLE_ACTUALISATION_MS, marcheOuvert } from '../cours/marche';
+import { intervalleActualisation, seanceEnCours } from '../cours/marche';
 import { construireResume } from '../ui/vues/resume';
 import { chargerValeur, type DonneesValeur } from '../fondamentaux/yahoo';
 import { construireFiche, type VueFiche } from '../ui/vues/fiche';
@@ -838,8 +838,16 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
    * Cours du jour, sans fournisseur à configurer : les cinq dernières
    * séances de chaque valeur détenue, dont la dernière est le cours actuel.
    */
+  // Une actualisation à la fois : à dix secondes d'intervalle, une réponse
+  // lente de Yahoo ne doit pas empiler les requêtes.
+  const actualisationEnVol = useRef(false);
+  const [coursActualisesA, setCoursActualisesA] = useState<string | undefined>();
+
   const actualiserCoursDuJour = useCallback(
     (silencieux: boolean) => {
+      if (actualisationEnVol.current) {
+        return;
+      }
       const contenuActuel = chargerEtat(session.base());
       const detenus = new Set(contenuActuel.etat.positions.map(position => position.titreId));
       const demandes = contenuActuel.titres
@@ -859,8 +867,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         setCoursEnCours(true);
         setMessageCours(undefined);
       }
+      actualisationEnVol.current = true;
       chargerHistoriques(session.base(), demandes, { plage: '5d' })
         .then(rapport => {
+          if (rapport.echecs.length < demandes.length) {
+            setCoursActualisesA(new Date().toLocaleTimeString('fr-FR'));
+          }
           if (!silencieux) {
             setMessageCours(
               rapport.echecs.length > 0
@@ -875,6 +887,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }
         })
         .finally(() => {
+          actualisationEnVol.current = false;
           setCoursEnCours(false);
           rafraichir();
         });
@@ -1131,18 +1144,26 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   actualiserCoursDuJourRef.current = actualiserCoursDuJour;
 
-  // Cours en direct : toutes les cinq minutes pendant la séance de Paris.
+  // Cours en direct, à l'intervalle choisi dans les paramètres (dix secondes
+  // par défaut) : seulement fenêtre visible, et pendant la séance de Paris
+  // ou de New York — hors séance, les cours ne bougent pas.
+  const intervalleS = deverrouille
+    ? intervalleActualisation(new DepotParametres(session.base()).lire(PARAMETRES.intervalleActualisation))
+    : 0;
   useEffect(() => {
-    if (!chargementAutomatique || !deverrouille) {
+    if (!chargementAutomatique || !deverrouille || intervalleS === 0) {
       return;
     }
     const minuterie = setInterval(() => {
-      if (marcheOuvert()) {
+      // Fenêtre réduite ou cachée : on n'actualise pas (pas de DOM sur téléphone).
+      const doc = (globalThis as { document?: { visibilityState?: string } }).document;
+      const visible = doc?.visibilityState !== 'hidden';
+      if (visible && seanceEnCours()) {
         actualiserCoursDuJourRef.current?.(true);
       }
-    }, INTERVALLE_ACTUALISATION_MS);
+    }, intervalleS * 1000);
     return () => clearInterval(minuterie);
-  }, [chargementAutomatique, deverrouille]);
+  }, [chargementAutomatique, deverrouille, intervalleS]);
 
   // Au déverrouillage, une fois par jour : l'historique des cours, qui porte
   // aussi le dernier cours de chaque valeur. Les courbes sont à jour sans
@@ -1631,6 +1652,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             }).length
           }
           onChargerHistorique={lancerChargementHistorique}
+          intervalleActualisation={intervalleS}
+          onChoisirIntervalle={secondes => {
+            new DepotParametres(session.base()).ecrire(PARAMETRES.intervalleActualisation, String(secondes));
+            rafraichir();
+          }}
           avecSymbole={(contenuComplet?.titres ?? []).filter(titre => titre.ticker?.trim()).length}
           chargementEnCours={histoEnCours}
           messageHistorique={messageHistorique}
@@ -1690,6 +1716,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onComparer={() => setEcran('comparateur')}
           onRafraichirCours={lancerRafraichissement}
           messageCours={messageCours}
+          coursActualisesA={coursActualisesA}
           rafraichissementEnCours={coursEnCours}
           onVerrouiller={verrouiller}
         />

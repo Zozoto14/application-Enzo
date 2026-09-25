@@ -10,6 +10,8 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
+import { Segments } from '../elements';
+import { INTERVALLES_ACTUALISATION, INTERVALLE_PAR_DEFAUT_S, libelleIntervalle } from '../../cours/marche';
 import type { FournisseurCours } from '../../cours/fournisseur';
 
 export interface ReglagesProps {
@@ -28,6 +30,9 @@ export interface ReglagesProps {
   avecSymbole?: number;
   chargementEnCours?: boolean;
   messageHistorique?: string;
+  /** Secondes entre deux actualisations des cours ; 0 : jamais. */
+  intervalleActualisation?: number;
+  onChoisirIntervalle?(secondes: number): void;
   onAnnuler(): void;
 }
 
@@ -41,6 +46,8 @@ export function Reglages({
   avecSymbole,
   chargementEnCours,
   messageHistorique,
+  intervalleActualisation,
+  onChoisirIntervalle,
   onEnregistrer,
   onAnnuler,
 }: ReglagesProps) {
@@ -58,6 +65,23 @@ export function Reglages({
       contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
       keyboardShouldPersistTaps="handled">
       <Titre>Cours automatiques</Titre>
+
+      {onChoisirIntervalle ? (
+        <Carte>
+          <Text style={{ color: palette.texte, fontSize: 16, fontWeight: '700' }}>Actualisation des cours</Text>
+          <SousTitre>
+            Tant que la fenêtre est ouverte, les cours de vos valeurs sont relus à ce rythme,
+            pendant les séances de Paris et de New York.
+          </SousTitre>
+          <Segments<string>
+            options={INTERVALLES_ACTUALISATION.map(String)}
+            actif={String(intervalleActualisation ?? INTERVALLE_PAR_DEFAUT_S)}
+            libelle={valeur => libelleIntervalle(Number(valeur))}
+            onChoisir={valeur => onChoisirIntervalle(Number(valeur))}
+            prefixeTest="intervalle"
+          />
+        </Carte>
+      ) : null}
       <SousTitre>
         Choisissez un fournisseur de cotations et renseignez sa clé d'API.
       </SousTitre>

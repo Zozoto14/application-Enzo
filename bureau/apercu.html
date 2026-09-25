@@ -6,6 +6,10 @@
     <title>AppliBourse — aperçu</title>
     <style>
       html, body, #racine { height: 100%; margin: 0; }
+      /* La fenêtre ne défile jamais : chaque écran fait défiler son propre
+         contenu, et la barre latérale reste en place. */
+      html, body { overflow: hidden; }
+      #racine { display: flex; flex-direction: column; }
       body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
     </style>
   </head>

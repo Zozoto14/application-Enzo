@@ -126,6 +126,8 @@ export interface PortefeuilleProps {
   messageRapport?: string;
   onRafraichirCours?(): void;
   messageCours?: string;
+  /** Heure de la dernière actualisation automatique des cours, « 14:32:10 ». */
+  coursActualisesA?: string;
   rafraichissementEnCours?: boolean;
   onVerrouiller?(): void;
 }
@@ -248,6 +250,11 @@ function EnTete(props: PortefeuilleProps) {
           </Text>
           {resume ? (
             <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>{resume.sousTitre}</Text>
+          ) : null}
+          {props.coursActualisesA ? (
+            <Text testID="cours-actualises" style={{ color: palette.texteSecondaire, fontSize: 12 }}>
+              <Text style={{ color: palette.hausse }}>●</Text> Cours à jour à {props.coursActualisesA}
+            </Text>
           ) : null}
         </View>
 
