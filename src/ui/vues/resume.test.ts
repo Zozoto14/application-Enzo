@@ -2,7 +2,7 @@ import { Decimal } from '../../core/money/decimal';
 import { rejouer } from '../../core/portfolio/engine';
 import { serieValorisation } from '../../core/performance/serie';
 import { achat, compte, titre, versement } from '../../core/testing/fixtures';
-import { construireResume, courbePerformance } from './resume';
+import { construireResume, courbeGain, courbePerformance } from './resume';
 
 const FINE = '\u202f';
 const INSEC = '\u00a0';
@@ -101,5 +101,22 @@ describe('construireResume', () => {
     const base = scenario();
     const vue = construireResume({ ...base, points: base.points.slice(0, 1) });
     expect(vue.sansHistorique).toBe(true);
+  });
+});
+
+describe('courbeGain', () => {
+  it('retire les versements de la valeur', () => {
+    const d = (texte: string) => Decimal.de(texte);
+    expect(
+      courbeGain([
+        { date: '2026-01-02', valeurTotale: d('1000'), fluxExterne: d('1000') },
+        { date: '2026-02-02', valeurTotale: d('1600'), fluxExterne: d('500') },
+        { date: '2026-03-02', valeurTotale: d('1300'), fluxExterne: d('-200') },
+      ]),
+    ).toEqual([
+      { date: '2026-01-02', valeur: 0 },
+      { date: '2026-02-02', valeur: 100 },
+      { date: '2026-03-02', valeur: 0 },
+    ]);
   });
 });

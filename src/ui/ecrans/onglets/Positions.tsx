@@ -168,6 +168,28 @@ export function OngletPositions({
               />
             ))}
           </View>
+          {vue.lignes.length > 0 ? (
+            <View testID="barres-gain-lignes" style={{ marginTop: ESPACEMENT.s }}>
+              <Text style={[styles.sousTitreGraphique, { color: palette.texteSecondaire }]}>
+                Gain latent par ligne
+              </Text>
+              <Barres
+                horizontal
+                barres={[...vue.lignes]
+                  .sort((a, b) => b.brut.latent - a.brut.latent)
+                  .slice(0, 8)
+                  .map(ligne => ({
+                    libelle: ligne.nom,
+                    valeur: ligne.brut.latent,
+                    couleur: ligne.brut.latent >= 0 ? palette.hausse : palette.baisse,
+                    detail: `${ligne.latent.texte} (${ligne.latentPct.texte})`,
+                  }))}
+                formater={valeur =>
+                  `${valeur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €`
+                }
+              />
+            </View>
+          ) : null}
         </CarteSection>
       </Rangee>
 
@@ -253,6 +275,7 @@ export function OngletPositions({
 }
 
 const styles = StyleSheet.create({
+  sousTitreGraphique: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
   nom: { flexDirection: 'row', alignItems: 'center', gap: ESPACEMENT.s },
   logo: {
     width: 30,

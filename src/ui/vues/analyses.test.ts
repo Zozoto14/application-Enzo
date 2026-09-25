@@ -9,6 +9,7 @@ import {
   construireRisqueAvance,
   courbeAction,
   type EntreesAnalyse,
+  histogrammeRendements,
 } from './analyses';
 
 const INSEC = ' ';
@@ -124,5 +125,18 @@ describe('flux avancés', () => {
     expect(vue.moyenneMensuelle?.valeur).toBe(250);
     expect(vue.cumul[vue.cumul.length - 1]).toEqual({ date: '2025-10-27', valeur: 2400 });
     expect(vue.fluxNet).toBe(`+2${' '}400,00${INSEC}€`);
+  });
+});
+
+describe('histogrammeRendements', () => {
+  it('range chaque mois dans sa tranche de deux points', () => {
+    expect(histogrammeRendements([-2.5, -0.9, 0.9, 1.2, 5.4])).toEqual([
+      { libelle: '-4 à -2 %', debut: -4, nombre: 1 },
+      { libelle: '-2 à 0 %', debut: -2, nombre: 1 },
+      { libelle: '0 à +2 %', debut: 0, nombre: 2 },
+      { libelle: '+2 à +4 %', debut: 2, nombre: 0 },
+      { libelle: '+4 à +6 %', debut: 4, nombre: 1 },
+    ]);
+    expect(histogrammeRendements([])).toEqual([]);
   });
 });

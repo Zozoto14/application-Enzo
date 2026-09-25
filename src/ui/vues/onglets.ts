@@ -25,6 +25,7 @@ import {
   type PointValorisation,
 } from '../../core/performance/rendements';
 import { fluxPourTri } from '../../core/performance/serie';
+import { valoriserPositions } from '../../core/portfolio/valorisation';
 import { impotSurGainCTO } from '../../core/tax/impots';
 import {
   ancienneteEnAnnees,
@@ -317,6 +318,17 @@ export interface VueCompteFiscal {
   situationFiscale: string;
   /** Vrai si la vente est imposable sur ce compte. */
   venteImposable: boolean;
+  /** Estimation si tout était vendu et retiré aujourd'hui, quand les cours sont connus. */
+  sortie?: SortieEstimee;
+}
+
+export interface SortieEstimee {
+  gain: number;
+  impot: number;
+  net: number;
+  /** « 17,2 % » ou « 30 % ». */
+  taux: string;
+  explication: string;
 }
 
 export interface LigneAnnee {
@@ -340,6 +352,48 @@ export interface EntreesImpots {
   cessions: readonly Cession[];
   /** Date du jour, au format ISO. */
   aujourdhui: string;
+  /** Derniers cours : sans eux, pas d'estimation de sortie. */
+  cours?: ReadonlyMap<string, Decimal>;
+}
+
+/**
+ * Ce que coûterait une sortie complète aujourd'hui.
+ *
+ * PEA : le gain est la valeur du plan moins les versements ; au-delà de cinq
+ * ans seuls les prélèvements sociaux (17,2 %) s'appliquent, avant, le
+ * prélèvement forfaitaire de 30 %. Compte-titres : 30 % sur les plus-values
+ * latentes des lignes. Une moins-value ne coûte rien.
+ */
+function sortieEstimee(
+  entrees: EntreesImpots,
+  compte: Compte,
+  pea: boolean,
+  exonere: boolean,
+): SortieEstimee | undefined {
+  if (!entrees.cours) {
+    return undefined;
+  }
+  const etatCompte = entrees.etat.comptes.get(compte.id);
+  const positions = entrees.etat.positions.filter(position => position.compteId === compte.id);
+  const { valorisees } = valoriserPositions(positions, entrees.cours);
+  const latent = Decimal.somme(valorisees.map(position => position.plusValueLatente)).toNumber();
+  const valeur =
+    Decimal.somme(valorisees.map(position => position.valeurMarche)).toNumber() +
+    (etatCompte?.cash.toNumber() ?? 0);
+  const gain = pea ? valeur - (etatCompte?.versementsCumules.toNumber() ?? 0) : latent;
+  const taux = pea && exonere ? 0.172 : 0.3;
+  const impot = Math.max(0, gain) * taux;
+  return {
+    gain,
+    impot,
+    net: gain - impot,
+    taux: pea && exonere ? '17,2 %' : '30 %',
+    explication: pea
+      ? exonere
+        ? 'Retrait total : prélèvements sociaux sur le gain du plan, rien d’autre.'
+        : 'Retrait avant cinq ans : 30 % sur le gain, et le plan serait clôturé.'
+      : 'Vente de toutes les lignes : 30 % sur les plus-values latentes.',
+  };
 }
 
 export function construireImpots(entrees: EntreesImpots): VueImpots {
@@ -356,6 +410,7 @@ export function construireImpots(entrees: EntreesImpots): VueImpots {
         situationFiscale:
           'Chaque vente en gain est imposable, au prélèvement forfaitaire unique de 30 % par défaut.',
         venteImposable: true,
+        sortie: sortieEstimee(entrees, compte, false, false),
       };
     }
 
@@ -381,6 +436,7 @@ export function construireImpots(entrees: EntreesImpots): VueImpots {
         ? 'Plan de plus de cinq ans : les gains échappent à l’impôt sur le revenu. Les prélèvements sociaux de 17,2 % restent dus.'
         : `Plan de ${annees} an${annees > 1 ? 's' : ''} : un retrait serait taxé à 30 % et fermerait le plan. L’exonération arrive à cinq ans.`,
       venteImposable: false,
+      sortie: sortieEstimee(entrees, compte, true, exonere),
     };
   });
 

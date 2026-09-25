@@ -1259,6 +1259,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             comptes: contenu.comptes,
             cessions: contenu.etat.cessions,
             aujourdhui: (aujourdhui ?? dateDuJour)(),
+            cours: depotCours.derniersCours(),
           }),
         }
       : undefined;

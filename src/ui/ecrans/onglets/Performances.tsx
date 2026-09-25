@@ -16,7 +16,7 @@ import {
   Vide,
   type OptionSelecteur,
 } from '../../elements';
-import { GraphiqueLignes } from '../../graphiques/Graphiques';
+import { Barres, GraphiqueLignes } from '../../graphiques/Graphiques';
 import { Explication, IndicateurMesure } from '../../indicateurs';
 import { couleurChaleur } from '../../tableau';
 import { ESPACEMENT, RAYON } from '../../theme';
@@ -65,6 +65,21 @@ export function OngletPerformances(props: OngletPerformancesProps) {
     [analyse, titreVu, periode],
   );
 
+  // Une barre par année civile, du plus ancien au plus récent.
+  const annees = avance
+    ? [...avance.mensuels]
+        .filter(ligne => ligne.annee_?.brut !== null && ligne.annee_?.brut !== undefined)
+        .sort((a, b) => a.annee.localeCompare(b.annee))
+        .map(ligne => ({
+          libelle: ligne.annee,
+          valeur: ligne.annee_!.brut!,
+          couleur: ligne.annee_!.brut! >= 0 ? palette.hausse : palette.baisse,
+          detail: ligne.annee_!.reference
+            ? `${ligne.annee_!.valeur} · référence ${ligne.annee_!.reference}`
+            : ligne.annee_!.valeur,
+        }))
+    : [];
+
   const echelleMois = avance
     ? Math.max(
         1,
@@ -106,6 +121,19 @@ export function OngletPerformances(props: OngletPerformancesProps) {
                   />
                 ))}
               </View>
+              {annees.length > 0 ? (
+                <View testID="barres-annees" style={{ marginTop: ESPACEMENT.s }}>
+                  <Text style={[styles.sousTitreGraphique, { color: palette.texteSecondaire }]}>
+                    Rendement par année
+                  </Text>
+                  <Barres
+                    barres={annees}
+                    formater={valeur => `${valeur.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %`}
+                    hauteur={150}
+                    valeursVisibles
+                  />
+                </View>
+              ) : null}
             </CarteSection>
 
             <CarteSection
@@ -357,6 +385,7 @@ export function OngletPerformances(props: OngletPerformancesProps) {
 }
 
 const styles = StyleSheet.create({
+  sousTitreGraphique: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
   filtres: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: ESPACEMENT.m, zIndex: 20 },
   grille: { flexDirection: 'row', flexWrap: 'wrap', rowGap: ESPACEMENT.m, columnGap: ESPACEMENT.l },
   paire: { flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.m },

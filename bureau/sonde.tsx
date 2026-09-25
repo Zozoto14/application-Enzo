@@ -201,6 +201,7 @@ function Apercu() {
             comptes,
             cessions: etat.cessions,
             aujourdhui: '2026-09-25',
+            cours,
           })}
         />
       ) : null}

@@ -186,6 +186,35 @@ describe('construireImpots', () => {
     expect(plafond.fraction).toBeCloseTo(0.2);
   });
 
+  it('estime le coût d’une sortie complète', () => {
+    // PEA de plus de cinq ans : 1 000 € versés, 10 actions achetées 90 €
+    // valant 110 € aujourd'hui. Gain du plan : 1 200 − 1 000 = 200 €.
+    const transactions = [
+      versement('2026-01-05', 1000),
+      achat('2026-01-05', 10, 90, 0),
+      versement('2026-01-05', 500, { compteId: 'cto' }),
+      achat('2026-01-05', 5, 100, 0, { compteId: 'cto' }),
+    ];
+    const etat = rejouer([pea, cto], transactions);
+    const vue = construireImpots({
+      comptes: [pea, cto],
+      aujourdhui: '2026-06-15',
+      etat,
+      cessions: etat.cessions,
+      cours: new Map([['air-liquide', d('110')]]),
+    });
+
+    expect(vue.comptes[0].sortie).toMatchObject({ gain: 200, taux: '17,2 %' });
+    expect(vue.comptes[0].sortie!.impot).toBeCloseTo(34.4);
+    // Compte-titres : 30 % sur la seule plus-value latente, 5 × 10 €.
+    expect(vue.comptes[1].sortie).toMatchObject({ gain: 50, impot: 15, net: 35, taux: '30 %' });
+  });
+
+  it('n’estime rien sans les cours', () => {
+    const etat = rejouer([pea], [versement('2026-01-05', 1000)]);
+    expect(construireImpots({ ...base, etat, cessions: etat.cessions }).comptes[0].sortie).toBeUndefined();
+  });
+
   it('signale un dépassement de plafond', () => {
     const transactions = [versement('2026-01-05', 160000)];
     const etat = rejouer([pea], transactions);

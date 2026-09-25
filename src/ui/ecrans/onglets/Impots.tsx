@@ -8,8 +8,13 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SousTitre, usePalette } from '../../composants';
 import { CarteSection, Rangee, Signe } from '../../elements';
 import { Explication, Jauge } from '../../indicateurs';
+import { Barres } from '../../graphiques/Graphiques';
 import { ESPACEMENT, RAYON } from '../../theme';
 import type { VueImpots } from '../../vues/onglets';
+
+function euros(valeur: number): string {
+  return `${valeur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €`;
+}
 
 export function OngletImpots({
   vue,
@@ -68,6 +73,40 @@ export function OngletImpots({
           </CarteSection>
         ))}
       </Rangee>
+
+      {vue.comptes.some(compte => compte.sortie) ? (
+        <Rangee>
+          {vue.comptes.map(compte =>
+            compte.sortie ? (
+              <CarteSection
+                key={`sortie-${compte.nom}`}
+                titre={`Si vous sortiez aujourd’hui · ${compte.nom}`}
+                testID={`sortie-${compte.nom}`}>
+                <SousTitre>{compte.sortie.explication}</SousTitre>
+                <Barres
+                  barres={[
+                    {
+                      libelle: 'Gain',
+                      valeur: compte.sortie.gain,
+                      couleur: compte.sortie.gain >= 0 ? palette.hausse : palette.baisse,
+                    },
+                    {
+                      libelle: `Impôts (${compte.sortie.taux})`,
+                      valeur: compte.sortie.impot,
+                      couleur: palette.baisse,
+                    },
+                    { libelle: 'Net en poche', valeur: compte.sortie.net, couleur: palette.series[0] },
+                  ]}
+                  formater={euros}
+                  hauteur={200}
+                  valeursVisibles
+                />
+                <SousTitre>Estimation indicative, hors frais et moins-values reportables.</SousTitre>
+              </CarteSection>
+            ) : null,
+          )}
+        </Rangee>
+      ) : null}
 
       <Rangee>
         <CarteSection titre="Plus-values réalisées" explication="plusValueRealisee">

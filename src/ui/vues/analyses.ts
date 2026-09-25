@@ -399,6 +399,38 @@ export interface VueRisqueAvance {
   motifFrontiere?: string;
   matrice: { noms: string[]; valeurs: Array<Array<number | null>> };
   periode?: string;
+  /** Combien de mois dans chaque tranche de rendement : l'allure du risque. */
+  distribution: TrancheRendement[];
+}
+
+export interface TrancheRendement {
+  libelle: string;
+  /** Borne basse de la tranche, en %. */
+  debut: number;
+  nombre: number;
+}
+
+/**
+ * Histogramme des rendements mensuels, par tranches de `pas` points.
+ * Les tranches vides du milieu sont gardées : un trou dit aussi quelque chose.
+ */
+export function histogrammeRendements(rendements: readonly number[], pas = 2): TrancheRendement[] {
+  if (rendements.length === 0) {
+    return [];
+  }
+  const indice = (valeur: number) => Math.floor(valeur / pas);
+  const premier = Math.min(...rendements.map(indice));
+  const dernier = Math.max(...rendements.map(indice));
+  const tranches: TrancheRendement[] = [];
+  for (let rang = premier; rang <= dernier; rang++) {
+    const debut = rang * pas;
+    tranches.push({
+      libelle: `${debut > 0 ? '+' : ''}${debut} à ${debut + pas > 0 ? '+' : ''}${debut + pas} %`,
+      debut,
+      nombre: rendements.filter(valeur => indice(valeur) === rang).length,
+    });
+  }
+  return tranches;
 }
 
 /** Lignes retenues dans la frontière et la matrice : les plus lourdes. */
@@ -525,6 +557,9 @@ export function construireRisqueAvance(entrees: EntreesAnalyse): VueRisqueAvance
   );
 
   return {
+    distribution: histogrammeRendements(
+      [...rendementsMensuels(facteurs).parMois.values()].flatMap(ligne => [...ligne.values()]),
+    ),
     metriques,
     drawdown: serieDd,
     metriquesDrawdown,

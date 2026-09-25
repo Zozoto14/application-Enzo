@@ -35,7 +35,7 @@ import {
   Vide,
   type OptionSelecteur,
 } from '../elements';
-import { Donut, GraphiqueLignes } from '../graphiques/Graphiques';
+import { Barres, Donut, GraphiqueLignes } from '../graphiques/Graphiques';
 import { Explication, Indicateur } from '../indicateurs';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
 import { PERIODES, type Periode } from '../../core/performance/cumul';
@@ -52,7 +52,7 @@ import { OngletPerformances } from './onglets/Performances';
 import { OngletPositions } from './onglets/Positions';
 import { OngletRisque } from './onglets/Risque';
 import { useNavigationLaterale } from '../Navigation';
-import { courbePerformance, type LigneClassement, type VueResume } from '../vues/resume';
+import { courbeGain, courbePerformance, type LigneClassement, type VueResume } from '../vues/resume';
 import type { CandidatSymbole } from '../../cours/symboles';
 import { useSignalerOuverture } from '../superposition';
 
@@ -427,9 +427,19 @@ function RechercheAction({
 
 // ------------------------------------------------------------------ Résumé
 
+/** Montant court pour un axe : « 1,2 k€ », « 350 € ». */
+function euros(valeur: number): string {
+  const abs = Math.abs(valeur);
+  if (abs >= 1000) {
+    return `${(valeur / 1000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} k€`;
+  }
+  return `${Math.round(valeur).toLocaleString('fr-FR')} €`;
+}
+
 function Resume(props: PortefeuilleProps) {
   const palette = usePalette();
   const { dashboard, resume } = props;
+  const gain = props.analyse ? courbeGain(props.analyse.points) : [];
 
   const avertissements = (
     <>
@@ -542,6 +552,24 @@ function Resume(props: PortefeuilleProps) {
             <Explication cle="tri" />
           </View>
           {!resume.tri && resume.motifTri ? <Vide>{resume.motifTri}</Vide> : null}
+          {gain.length > 1 ? (
+            <View testID="courbe-gain">
+              <Text style={[styles.legendeMini, { color: palette.texteSecondaire }]}>Gain cumulé</Text>
+              <GraphiqueLignes
+                series={[
+                  {
+                    nom: 'Gain',
+                    couleur: gain[gain.length - 1].valeur >= 0 ? palette.hausse : palette.baisse,
+                    points: gain,
+                    aire: true,
+                  },
+                ]}
+                formater={euros}
+                hauteur={130}
+                repere={{ valeur: 0 }}
+              />
+            </View>
+          ) : null}
         </CarteSection>
 
         <CarteSection titre="Dividendes" explication="rendementCourant" testID="carte-dividendes">
@@ -553,6 +581,19 @@ function Resume(props: PortefeuilleProps) {
             <Pastille texte={resume.rendementDividendes} tendance="neutre" />
             <Text style={{ color: palette.texte, fontSize: 12 }}>de rendement sur douze mois</Text>
           </View>
+          {props.dividendes.parAnnee.length > 0 ? (
+            <View testID="barres-dividendes-resume">
+              <Text style={[styles.legendeMini, { color: palette.texteSecondaire }]}>Par année</Text>
+              <Barres
+                barres={[...props.dividendes.parAnnee]
+                  .sort((a, b) => a.annee.localeCompare(b.annee))
+                  .slice(-6)
+                  .map(ligne => ({ libelle: ligne.annee, valeur: ligne.valeur, detail: ligne.total }))}
+                formater={euros}
+                hauteur={130}
+              />
+            </View>
+          ) : null}
         </CarteSection>
       </Rangee>
 
@@ -568,7 +609,7 @@ function Resume(props: PortefeuilleProps) {
             formater={valeur =>
               `${valeur.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
             }
-            hauteur={300}
+            hauteur={resume.repartitionComptes.length > 1 ? 280 : 220}
             testID="donut-comptes"
           />
         </CarteSection>
@@ -798,6 +839,7 @@ function Classement({
 }
 
 const styles = StyleSheet.create({
+  legendeMini: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: ESPACEMENT.s },
   page: { paddingBottom: ESPACEMENT.xl },
   enTete: {
     paddingHorizontal: ESPACEMENT.m + 4,

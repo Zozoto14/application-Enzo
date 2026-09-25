@@ -11,7 +11,7 @@ import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SousTitre, usePalette } from '../../composants';
 import { CarteSection, Metrique, Rangee, Vide } from '../../elements';
-import { GraphiqueLignes, Nuage } from '../../graphiques/Graphiques';
+import { Barres, GraphiqueLignes, Nuage } from '../../graphiques/Graphiques';
 import { Explication, Indicateur, Jauge } from '../../indicateurs';
 import { ESPACEMENT } from '../../theme';
 import { construireRisqueAvance, type EntreesAnalyse } from '../../vues/analyses';
@@ -53,6 +53,23 @@ export function OngletRisque({ vue, analyse }: { vue: VueRisque; analyse?: Entre
                 ))}
               </View>
               {avance.periode ? <Vide>{avance.periode}</Vide> : null}
+              {avance.distribution.length > 1 ? (
+                <View testID="histogramme-mensuel" style={{ marginTop: ESPACEMENT.s }}>
+                  <Text style={[styles.sousTitreGraphique, { color: palette.texteSecondaire }]}>
+                    Répartition des rendements mensuels (en %)
+                  </Text>
+                  <Barres
+                    barres={avance.distribution.map(tranche => ({
+                      libelle: `${tranche.debut > 0 ? '+' : ''}${tranche.debut}`,
+                      valeur: tranche.nombre,
+                      couleur: tranche.debut < 0 ? palette.baisse : palette.hausse,
+                      detail: `${tranche.libelle} : ${tranche.nombre} mois`,
+                    }))}
+                    formater={valeur => (Number.isInteger(valeur) ? `${valeur} mois` : '')}
+                    hauteur={150}
+                  />
+                </View>
+              ) : null}
             </CarteSection>
 
             <CarteSection titre="Frontière efficiente" poids={1.4}>
@@ -149,49 +166,6 @@ export function OngletRisque({ vue, analyse }: { vue: VueRisque; analyse?: Entre
             </CarteSection>
           </Rangee>
 
-          {avance.matrice.noms.length > 1 ? (
-            <CarteSection titre="Matrice de corrélation" explication="correlation">
-              <ScrollView horizontal>
-                <View>
-                  <View style={styles.ligneMatrice}>
-                    <View style={styles.enteteMatrice} />
-                    {avance.matrice.noms.map(nom => (
-                      <View key={nom} style={styles.celluleMatrice}>
-                        <Text style={[styles.texteMatrice, { color: palette.texteSecondaire }]}>{nom}</Text>
-                      </View>
-                    ))}
-                  </View>
-                  {avance.matrice.valeurs.map((ligne, i) => (
-                    <View key={avance.matrice.noms[i]} style={styles.ligneMatrice}>
-                      <View style={styles.enteteMatrice}>
-                        <Text style={[styles.texteMatrice, { color: palette.texteSecondaire }]}>
-                          {avance.matrice.noms[i]}
-                        </Text>
-                      </View>
-                      {ligne.map((valeur, j) => (
-                        <View
-                          key={`${i}-${j}`}
-                          style={[
-                            styles.celluleMatrice,
-                            {
-                              backgroundColor:
-                                valeur === null
-                                  ? 'transparent'
-                                  : `rgba(77, 140, 245, ${(0.12 + Math.abs(valeur) * 0.5).toFixed(2)})`,
-                              borderColor: i === j ? palette.accent : palette.bordure,
-                            },
-                          ]}>
-                          <Text style={[styles.texteMatrice, { color: palette.texte }]}>
-                            {valeur === null ? '—' : valeur.toFixed(2).replace('.', ',')}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  ))}
-                </View>
-              </ScrollView>
-            </CarteSection>
-          ) : null}
         </>
       ) : null}
 
@@ -250,6 +224,50 @@ export function OngletRisque({ vue, analyse }: { vue: VueRisque; analyse?: Entre
         </CarteSection>
       </Rangee>
 
+      <Rangee>
+      {avance && avance.matrice.noms.length > 1 ? (
+            <CarteSection titre="Matrice de corrélation" explication="correlation">
+              <ScrollView horizontal>
+                <View>
+                  <View style={styles.ligneMatrice}>
+                    <View style={styles.enteteMatrice} />
+                    {avance.matrice.noms.map(nom => (
+                      <View key={nom} style={styles.celluleMatrice}>
+                        <Text style={[styles.texteMatrice, { color: palette.texteSecondaire }]}>{nom}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  {avance.matrice.valeurs.map((ligne, i) => (
+                    <View key={avance.matrice.noms[i]} style={styles.ligneMatrice}>
+                      <View style={styles.enteteMatrice}>
+                        <Text style={[styles.texteMatrice, { color: palette.texteSecondaire }]}>
+                          {avance.matrice.noms[i]}
+                        </Text>
+                      </View>
+                      {ligne.map((valeur, j) => (
+                        <View
+                          key={`${i}-${j}`}
+                          style={[
+                            styles.celluleMatrice,
+                            {
+                              backgroundColor:
+                                valeur === null
+                                  ? 'transparent'
+                                  : `rgba(77, 140, 245, ${(0.12 + Math.abs(valeur) * 0.5).toFixed(2)})`,
+                              borderColor: i === j ? palette.accent : palette.bordure,
+                            },
+                          ]}>
+                          <Text style={[styles.texteMatrice, { color: palette.texte }]}>
+                            {valeur === null ? '—' : valeur.toFixed(2).replace('.', ',')}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            </CarteSection>
+      ) : null}
       <CarteSection titre="Vos lignes bougent-elles ensemble ?" explication="correlation">
         {vue.motifCorrelations ? <SousTitre>{vue.motifCorrelations}</SousTitre> : null}
         {vue.correlations.map((paire, index) => (
@@ -273,6 +291,7 @@ export function OngletRisque({ vue, analyse }: { vue: VueRisque; analyse?: Entre
           </View>
         ))}
       </CarteSection>
+      </Rangee>
 
       <Rangee>
         <RepartitionListe titre="Par secteur" lignes={vue.parSecteur} />
@@ -307,6 +326,7 @@ function RepartitionListe({
 }
 
 const styles = StyleSheet.create({
+  sousTitreGraphique: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
   grille: { flexDirection: 'row', flexWrap: 'wrap', rowGap: ESPACEMENT.m, columnGap: ESPACEMENT.l },
   paire: { flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.m },
   ligne: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: ESPACEMENT.s },

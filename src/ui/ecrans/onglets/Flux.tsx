@@ -145,7 +145,7 @@ export function OngletFlux({
               <Donut
                 parts={avance.parCompte.map(part => ({ libelle: part.libelle, valeur: part.valeur, detail: part.detail }))}
                 formater={euros}
-                hauteur={260}
+                hauteur={avance.parCompte.length > 1 ? 260 : 210}
               />
             </CarteSection>
             <CarteSection titre="Évolution cumulée">

@@ -343,3 +343,18 @@ export function courbePerformance(
     cagrReference: annualiseTexte(reference),
   };
 }
+
+/**
+ * Gain cumulé, en euros, à chaque valorisation : la valeur du portefeuille
+ * moins tout ce qui y a été versé (retraits déduits). C'est le Total Return
+ * au fil du temps, que les versements ne gonflent pas.
+ */
+export function courbeGain(
+  points: readonly { date: string; valeurTotale: Decimal; fluxExterne: Decimal }[],
+): Array<{ date: string; valeur: number }> {
+  let verse = Decimal.ZERO;
+  return points.map(point => {
+    verse = verse.add(point.fluxExterne);
+    return { date: point.date, valeur: point.valeurTotale.sub(verse).toNumber() };
+  });
+}
