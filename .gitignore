@@ -7,3 +7,6 @@ backups/
 bureau/paquet/
 node_modules/
 *.exe
+
+# Clé privée de signature des mises à jour : reste sur le PC, jamais sur GitHub
+cle-maj-privee.txt
