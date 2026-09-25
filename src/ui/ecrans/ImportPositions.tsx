@@ -17,16 +17,47 @@ import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } f
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
 import { apercuPositions } from '../vues/import';
 import { DepotFichier } from '../DepotFichier';
+import { Segments } from '../elements';
+import { ImportOperations } from './ImportOperations';
+import type { ApercuOperations, ContexteApercu } from '../vues/importOperations';
 
 export interface ImportPositionsProps {
   onImporter(positions: PositionImportee[]): void;
   onAnnuler(): void;
+  /** Import de l'historique : proposé quand l'application en fournit le contexte. */
+  operations?: {
+    contexte: ContexteApercu;
+    onImporter(apercu: ApercuOperations, remplacerReprise: boolean): void;
+  };
 }
 
-export function ImportPositions({ onImporter, onAnnuler }: ImportPositionsProps) {
+type Mode = 'Positions' | 'Opérations';
+
+export function ImportPositions({ onImporter, onAnnuler, operations }: ImportPositionsProps) {
   const sombre = useColorScheme() === 'dark';
   const palette = usePalette();
   const [contenu, setContenu] = useState('');
+  const [mode, setMode] = useState<Mode>('Positions');
+
+  const bascule = operations ? (
+    <Segments<Mode>
+      options={['Positions', 'Opérations']}
+      actif={mode}
+      onChoisir={valeur => setMode(valeur)}
+      prefixeTest="mode-import"
+    />
+  ) : null;
+
+  if (operations && mode === 'Opérations') {
+    return (
+      <ImportOperations
+        contexte={operations.contexte}
+        onImporter={operations.onImporter}
+        onAnnuler={onAnnuler}
+        bascule={bascule}
+      />
+    );
+  }
 
   const apercu = apercuPositions(contenu);
 
@@ -36,6 +67,7 @@ export function ImportPositions({ onImporter, onAnnuler }: ImportPositionsProps)
       contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
       keyboardShouldPersistTaps="handled">
       <Titre>Importer vos positions</Titre>
+      {bascule}
       <SousTitre>
         Déposez l'export « positions instantanées » de votre courtier, ou
         copiez son contenu entier et collez-le ci-dessous.

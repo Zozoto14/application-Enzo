@@ -1860,6 +1860,44 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         <ImportPositions
           onImporter={enregistrerImport}
           onAnnuler={() => setEcran('tableau')}
+          operations={
+            contenuComplet && contenuComplet.comptes[0]
+              ? {
+                  contexte: {
+                    compteId: contenuComplet.comptes[0].id,
+                    devise: contenuComplet.comptes[0].devise,
+                    titres: contenuComplet.titres,
+                    existantes: contenuComplet.transactions,
+                    genererId: identifiant,
+                  },
+                  onImporter: (apercu, remplacerReprise) => {
+                    const base = session.base();
+                    const compte = contenuComplet.comptes[0];
+                    const depotTitres = new DepotTitres(base);
+                    for (const nouveau of apercu.nouveauxTitres) {
+                      depotTitres.enregistrer({
+                        id: nouveau.id,
+                        isin: nouveau.isin,
+                        nom: nouveau.nom,
+                        ticker: '',
+                        deviseCotation: compte.devise,
+                        eligiblePEA: true,
+                      });
+                    }
+                    const depot = new DepotTransactions(base);
+                    if (remplacerReprise) {
+                      for (const ancienne of apercu.reprise) {
+                        depot.supprimer(ancienne.id);
+                      }
+                    }
+                    depot.enregistrerLot(apercu.transactions);
+                    setEcran('tableau');
+                    setImportsRecents(nombre => nombre + 1);
+                    rafraichir();
+                  },
+                }
+              : undefined
+          }
         />
       ) : (
         <Portefeuille

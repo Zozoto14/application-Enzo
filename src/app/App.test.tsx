@@ -247,6 +247,36 @@ describe('parcours complet, session ouverte', () => {
     expect(screen.getByText('2 ligne(s)')).toBeTruthy();
   });
 
+  it('importe l’historique des opérations à la place de la reprise de positions', async () => {
+    const session = await ouvrir();
+    await creerCompte();
+    await fireEvent.press(screen.getByTestId('bouton-importer-positions'));
+    await fireEvent.changeText(screen.getByLabelText('Contenu du fichier'), EXPORT_REEL);
+    await fireEvent.press(screen.getByTestId('bouton-importer'));
+    const avant = new DepotTransactions(session.base()).toutes().length;
+
+    await fireEvent.press(screen.getByTestId('bouton-importer-positions'));
+    await fireEvent.press(screen.getByTestId('mode-import-Opérations'));
+    await fireEvent.changeText(
+      screen.getByLabelText('Contenu du fichier'),
+      [
+        'date,operation,libelle,isin,ticker,quantite,prix_unitaire,montant,frais,devise',
+        '2024-10-01,versement,Virement,,,,,12100,,EUR',
+        '2024-10-02,achat,AMUNDI MSCI WORLD,LU1681043599,,17,703.89,,0,EUR',
+        '2024-10-02,achat,STELLANTIS,NL00150001Q9,,20,5.12,,0,EUR',
+      ].join('\n'),
+    );
+    expect(screen.getByText('3 opérations à importer')).toBeTruthy();
+    expect(screen.getByText('Remplacer la reprise de positions')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('bouton-importer-operations'));
+
+    const apres = new DepotTransactions(session.base()).toutes();
+    // La reprise (1 versement + 2 achats) est remplacée par les 3 vraies opérations.
+    expect(apres).toHaveLength(avant);
+    expect(apres.some(transaction => transaction.note?.startsWith('Reprise'))).toBe(false);
+    expect(apres.find(transaction => transaction.type === 'VERSEMENT')!.date).toBe('2024-10-01');
+  });
+
   it('explique qu’une fiche valeur demande un symbole', async () => {
     await ouvrir();
     await creerCompte();
