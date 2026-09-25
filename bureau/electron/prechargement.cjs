@@ -35,6 +35,13 @@ contextBridge.exposeInMainWorld('applibourse', {
     json: url => ipcRenderer.invoke('yahoo:json', url),
   },
 
+  voix: {
+    /** Voix naturelles proposées. */
+    liste: () => ipcRenderer.invoke('voix:liste'),
+    /** MP3 d'une phrase lue par une voix naturelle. */
+    synthetiser: (texte, voix, vitesse) => ipcRenderer.invoke('voix:synthetiser', texte, voix, vitesse),
+  },
+
   maj: {
     /** Compare la version installée à celle de GitHub. */
     verifier: () => ipcRenderer.invoke('maj:verifier'),

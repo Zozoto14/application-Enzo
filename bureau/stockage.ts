@@ -41,6 +41,10 @@ interface PontBureau {
   yahoo?: {
     json(url: string): Promise<unknown>;
   };
+  voix?: {
+    liste(): Promise<Array<{ id: string; nom: string; langue: string }>>;
+    synthetiser(texte: string, voix: string, vitesse: number): Promise<Uint8Array>;
+  };
   /** Absent des versions compilées avant l'arrivée des mises à jour. */
   maj?: {
     verifier(): Promise<EtatMiseAJourBureau>;

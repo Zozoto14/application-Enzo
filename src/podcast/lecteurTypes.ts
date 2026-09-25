@@ -9,6 +9,8 @@ export interface VoixDisponible {
   id: string;
   nom: string;
   langue: string;
+  /** Voix neuronale, lue en ligne : bien plus naturelle que celles de Windows. */
+  naturelle?: boolean;
 }
 
 export interface Lecteur {
@@ -21,7 +23,12 @@ export interface Lecteur {
     file: readonly PhraseALire[],
     depuis: number,
     options: { vitesse: number; voixFrancaise?: string },
-    rappels: { surPhrase(index: number): void; surFin(): void },
+    rappels: {
+      surPhrase(index: number): void;
+      surFin(): void;
+      /** La voix choisie a échoué : la lecture continue avec une voix de Windows. */
+      surErreur?(message: string): void;
+    },
   ): void;
   pause(): void;
   reprendre(): void;

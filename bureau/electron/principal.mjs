@@ -23,6 +23,7 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, Notification, shell } from 'electron';
 import { spawn } from 'node:child_process';
 import { preparerInterface } from './interface.mjs';
+import { synthetiser, VOIX_NATURELLES } from './voix.mjs';
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -120,6 +121,11 @@ function installerPasserelle() {
   ipcMain.handle('maj:installer', async () => lancerMiseAJour());
 
   ipcMain.handle('yahoo:json', async (_evenement, url) => yahooJson(String(url)));
+
+  ipcMain.handle('voix:liste', async () => VOIX_NATURELLES);
+  ipcMain.handle('voix:synthetiser', async (_evenement, texte, voix, vitesse) =>
+    synthetiser(String(texte), String(voix), Number(vitesse) || 1),
+  );
 }
 
 // ----------------------------------------------------------- Yahoo Finance

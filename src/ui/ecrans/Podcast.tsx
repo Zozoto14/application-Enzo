@@ -37,6 +37,7 @@ export function Podcast({ episode, chargement, etape, erreur, onGenerer }: Podca
   const [vitesse, setVitesse] = useState<Vitesse>('1×');
   const [voix, setVoix] = useState(lecteur.voix());
   const [voixChoisie, setVoixChoisie] = useState<string | undefined>();
+  const [avertissement, setAvertissement] = useState<string | undefined>();
 
   useEffect(() => lecteur.surChangementVoix(() => setVoix(lecteur.voix())), [lecteur]);
   // Quitter l'écran arrête la lecture.
@@ -62,8 +63,10 @@ export function Podcast({ episode, chargement, etape, erreur, onGenerer }: Podca
   const lireDepuis = (index: number, vitesseLecture = VITESSES[vitesse], voixLecture = voixChoisie) => {
     setCourante(index);
     setEtat('lecture');
-    lecteur.lire(file, index, { vitesse: vitesseLecture, voixFrancaise: voixLecture }, {
+    setAvertissement(undefined);
+    lecteur.lire(file, index, { vitesse: vitesseLecture, voixFrancaise: voixLecture ?? voix[0]?.id }, {
       surPhrase: setCourante,
+      surErreur: setAvertissement,
       surFin: () => {
         setEtat('arret');
         setCourante(0);
@@ -225,6 +228,8 @@ export function Podcast({ episode, chargement, etape, erreur, onGenerer }: Podca
               </View>
               {!lecteur.disponible ? (
                 <Vide>La lecture à voix haute est disponible sur l’ordinateur. Le texte de l’épisode est ci-dessous.</Vide>
+              ) : avertissement ? (
+                <Vide>{avertissement}</Vide>
               ) : voix.length === 0 ? (
                 <Vide>
                   Aucune voix française trouvée dans Windows : ajoutez-en une dans Paramètres › Heure et langue › Voix.
