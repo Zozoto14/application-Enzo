@@ -70,6 +70,10 @@ import { ComparateurFinancier } from '../ui/ecrans/ComparateurFinancier';
 import { SOCIETES_MAXIMUM } from '../ui/vues/comparaisonFinanciere';
 import { chercherSymboles, type CandidatSymbole } from '../cours/symboles';
 import { Comparateur } from '../ui/ecrans/Comparateur';
+import { Podcast } from '../ui/ecrans/Podcast';
+import { preparerEpisode } from '../podcast/donnees';
+import type { Episode } from '../podcast/episode';
+import { chargerActualites } from '../fondamentaux/actualites';
 import { construireComparateur } from '../ui/vues/comparateur';
 import { Projection } from '../ui/ecrans/Projection';
 import { Symboles } from '../ui/ecrans/Symboles';
@@ -148,7 +152,8 @@ type Ecran =
   | 'watchlist'
   | 'symboles'
   | 'comparateur'
-  | 'fiche';
+  | 'fiche'
+  | 'podcast';
 
 /** Laisse React peindre avant un calcul qui bloque le fil. */
 function apresRendu(action: () => void): void {
@@ -979,6 +984,14 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [],
   );
 
+  const [podcast, setPodcast] = useState<{
+    episode?: Episode;
+    chargement: boolean;
+    etape?: string;
+    erreur?: string;
+    date?: string;
+  }>({ chargement: false });
+
   const [societesComparees, setSocietesComparees] = useState<string[]>([]);
   const erreursComparaison = useRef(new Map<string, string>());
   const ajouterSociete = useCallback(
@@ -1289,6 +1302,52 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   const verrou = statut === 'non-initialise' ? undefined : session.verrou();
 
+  // Podcast : écrit à l'ouverture de l'écran, une fois par jour, sur tout le
+  // portefeuille (le filtre de compte ne s'applique pas).
+  const genererPodcast = () => {
+    if (!contenuComplet || podcast.chargement) {
+      return;
+    }
+    const date = (aujourdhui ?? dateDuJour)();
+    const complet = separerHistorique(new DepotCours(session.base()).historique());
+    const entrees = {
+      etat: contenuComplet.etat,
+      titres: contenuComplet.titres,
+      cours: new DepotCours(session.base()).derniersCours(),
+      historique: complet.titres,
+      indices: complet.indices,
+      aujourdhui: date,
+    };
+    const horsLigne = () => Promise.reject(new Error('hors ligne'));
+    setPodcast(precedent => ({ ...precedent, chargement: true, erreur: undefined, etape: undefined }));
+    preparerEpisode(
+      entrees,
+      chargementAutomatique
+        ? { valeur: symbole => chargerValeur(symbole), actualites: requete => chargerActualites(requete) }
+        : { valeur: horsLigne, actualites: horsLigne },
+      fichesEnCache.current,
+      etape => setPodcast(precedent => ({ ...precedent, etape })),
+    )
+      .then(({ episode, manques }) =>
+        setPodcast({
+          episode,
+          date,
+          chargement: false,
+          erreur:
+            manques > 0
+              ? 'Certaines actualités ou fiches n’ont pas pu être chargées : l’épisode raconte ce qui est disponible.'
+              : undefined,
+        }),
+      )
+      .catch((e: unknown) =>
+        setPodcast(precedent => ({
+          ...precedent,
+          chargement: false,
+          erreur: e instanceof Error ? e.message : String(e),
+        })),
+      );
+  };
+
   // Navigation latérale : chaque écran à un clic, où que l'on soit.
   const sansCompte = (contenuComplet?.comptes.length ?? 0) === 0;
   const destinations: Destination[] = [
@@ -1298,6 +1357,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     { cle: 'import', libelle: 'Importer', glyphe: '↓' },
     { cle: 'watchlist', libelle: 'Surveillance', glyphe: '☆' },
     { cle: 'comparateur', libelle: 'Comparateur', glyphe: '⇄' },
+    { cle: 'podcast', libelle: 'Podcast', glyphe: '♫' },
     { cle: 'projection', libelle: 'Projection', glyphe: '↗' },
     { cle: 'sauvegarde', libelle: 'Sauvegarde', glyphe: '⇪' },
     { cle: 'notifications', libelle: 'Alertes', glyphe: '◉' },
@@ -1319,6 +1379,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     }
     if (cle === 'reglages') {
       setRecherche(undefined);
+    }
+    if (cle === 'podcast' && podcast.date !== (aujourdhui ?? dateDuJour)()) {
+      genererPodcast();
     }
     setEcran(cle as Ecran);
   };
@@ -1417,6 +1480,14 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
               ? new DepotWatchlist(session.base()).lister().some(ligne => ligne.titreId === fiche.titreId)
               : undefined
           }
+        />
+      ) : ecran === 'podcast' ? (
+        <Podcast
+          episode={podcast.episode}
+          chargement={podcast.chargement}
+          etape={podcast.etape}
+          erreur={podcast.erreur}
+          onGenerer={genererPodcast}
         />
       ) : ecran === 'comparateur' ? (
         <ComparateurFinancier

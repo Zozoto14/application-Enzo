@@ -36,6 +36,8 @@ import { Projection } from '../src/ui/ecrans/Projection';
 import { Watchlist } from '../src/ui/ecrans/Watchlist';
 import { useFondDocument } from './Bureau';
 import { Coque, type Destination } from '../src/ui/Navigation';
+import { Podcast } from '../src/ui/ecrans/Podcast';
+import { construireEpisode } from '../src/podcast/episode';
 
 // ------------------------------------------------------------ Jeu d'essai
 
@@ -96,7 +98,41 @@ const DESTINATIONS: readonly Destination[] = [
   { cle: 'comparateur', libelle: 'Comparer', glyphe: '⇄' },
   { cle: 'projection', libelle: 'Projection', glyphe: '◔' },
   { cle: 'fiche', libelle: 'Fiche', glyphe: '◧' },
+  { cle: 'podcast', libelle: 'Podcast', glyphe: '♫' },
 ];
+
+const episodeExemple = construireEpisode({
+  aujourdhui: '2025-06-17',
+  valeurTotale: 19000,
+  totalReturn: 1450,
+  totalReturnPct: 8.3,
+  seance: { montant: 112, pourcentage: 0.6 },
+  lignes: [
+    { nom: 'Amundi MSCI World', variationJour: 0.8, latentPct: 12.4, poids: 58 },
+    { nom: 'Air Liquide', variationJour: 1.9, latentPct: 21, poids: 24 },
+    { nom: 'Stellantis', variationJour: -2.3, latentPct: -17.5, poids: 18 },
+  ],
+  valeurs: [
+    {
+      nom: 'Air Liquide',
+      actualites: [
+        { titre: 'Air Liquide signe un contrat d’hydrogène en Allemagne', source: 'Les Echos', date: '2025-06-16', langue: 'fr' },
+        { titre: 'Air Liquide shares rise after new hydrogen deal', source: 'Reuters', date: '2025-06-16', langue: 'en' },
+      ],
+      consensus: 'Achat',
+      objectifMoyen: 195,
+      cours: 178,
+      devise: 'EUR',
+      prochainsResultats: '2025-07-29',
+    },
+  ],
+  indices: [
+    { nom: 'CAC 40', seancePct: 0.4 },
+    { nom: 'S&P 500', seancePct: -0.2 },
+  ],
+  actualitesMarche: [{ titre: 'La BCE maintient ses taux', source: 'Boursorama', date: '2025-06-17', langue: 'fr' }],
+  sujet: { titre: 'Le PRU', court: 'Le prix de revient unitaire.', detail: 'Il inclut les frais d’achat.' },
+});
 
 const ficheExemple = construireFiche(
   lireFiche('EXA.PA', RESUME_EXEMPLE),
@@ -238,6 +274,7 @@ function Apercu() {
         />
       ) : null}
 
+      {destination === 'podcast' ? <Podcast episode={episodeExemple} onGenerer={() => undefined} /> : null}
       {destination === 'projection' ? (
         <Projection
           champs={champs}
