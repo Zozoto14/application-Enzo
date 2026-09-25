@@ -101,3 +101,74 @@ describe('épisode', () => {
     expect(sujetDuJour(['a', 'b', 'c'], '2026-01-02')).toBe('b');
   });
 });
+
+describe('épisode long', () => {
+  const article = (rang: number, langue: 'fr' | 'en') => ({
+    titre: `${langue === 'fr' ? 'Les marchés européens' : 'Wall Street stocks'} numéro ${rang} bougent`,
+    resume:
+      langue === 'fr'
+        ? 'La séance a été marquée par les annonces des banques centrales. Les investisseurs restent prudents avant les chiffres de l’emploi.'
+        : 'Stocks moved on Thursday as investors weighed central bank comments. Traders remain cautious ahead of jobs data.',
+    source: langue === 'fr' ? 'Les Echos' : 'CNBC',
+    date: '2026-09-25',
+    langue,
+  });
+  const presse = [
+    ...Array.from({ length: 30 }, (_, rang) => article(rang, 'fr')),
+    ...Array.from({ length: 10 }, (_, rang) => article(rang, 'en')),
+  ];
+  const base = {
+    aujourdhui: '2026-09-25',
+    valeurTotale: 22658,
+    totalReturn: 2658,
+    totalReturnPct: 13.3,
+    lignes: [{ nom: 'Air Liquide', variationJour: 1.9, latentPct: 12.6, poids: 38 }],
+    valeurs: [
+      {
+        nom: 'Air Liquide',
+        actualites: [],
+        articles: [{ ...article(99, 'fr'), titre: 'Air Liquide signe un contrat dans l’hydrogène' }],
+        cours: 177,
+        plusHaut52: 190,
+        plusBas52: 150,
+        per: 28.4,
+        rendementDividende: 1.8,
+      },
+    ],
+    indices: [{ nom: 'le CAC 40', seancePct: 0.4 }],
+    actualitesMarche: [],
+    sujet: { titre: 'Le PRU', court: 'Le prix de revient unitaire.', detail: 'Il inclut les frais.' },
+    presse,
+  };
+
+  it('remplit dix minutes avec la revue de presse, sans les dépasser', () => {
+    const episode = construireEpisode({ ...base, cibleMinutes: 10 });
+    const titres = episode.chapitres.map(chapitre => chapitre.titre);
+    expect(titres).toEqual(
+      expect.arrayContaining(['La revue de presse', 'À l’international', 'Le sujet du jour : Le PRU']),
+    );
+    expect(episode.duree).toBeGreaterThanOrEqual(8);
+    expect(episode.duree).toBeLessThanOrEqual(10);
+    // Le sommaire annonce les chapitres.
+    expect(episode.chapitres[0].segments.at(-1)!.texte).toMatch(/^Au programme : .*la revue de presse, à l’international/);
+  });
+
+  it('raccourcit en cinq minutes', () => {
+    const court = construireEpisode({ ...base, cibleMinutes: 5 });
+    const long = construireEpisode({ ...base, cibleMinutes: 15 });
+    expect(court.duree).toBeLessThanOrEqual(5);
+    expect(long.duree).toBeGreaterThan(court.duree);
+  });
+
+  it('raconte la valeur : poids, presse, valorisation et position sur un an', () => {
+    const une = construireEpisode(base).chapitres.find(chapitre => chapitre.titre === 'Vos valeurs à la une')!;
+    const texte = une.segments.map(segment => segment.texte).join(' ');
+    expect(texte).toContain('Parlons de Air Liquide, qui représente 38 pour cent de vos titres, en plus-value de 13 pour cent.');
+    expect(texte).toContain('Dans la presse, chez Les Echos :');
+    expect(texte).toContain('le titre se paie 28 fois ses bénéfices');
+    expect(texte).toContain('sous son plus haut sur un an');
+    // L'article déjà raconté avec la valeur ne revient pas dans la revue de presse.
+    const revue = construireEpisode(base).chapitres.find(chapitre => chapitre.titre === 'La revue de presse')!;
+    expect(revue.segments.some(segment => segment.texte.includes('hydrogène'))).toBe(false);
+  });
+});

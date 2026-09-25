@@ -14,6 +14,7 @@ import type { CoursDate } from '../core/performance/serie';
 import { totaux, valoriserPositions } from '../core/portfolio/valorisation';
 import { INDICES } from '../cours/indices';
 import type { Actualite } from '../fondamentaux/actualites';
+import { chargerMedias, concerne, type ArticleMedia } from './medias';
 import type { DonneesValeur } from '../fondamentaux/yahoo';
 import { EXPLICATIONS } from '../ui/vues/explications';
 import {
@@ -85,6 +86,8 @@ export function entreesEpisode(
   fiches: ReadonlyMap<string, DonneesValeur>,
   actualites: ReadonlyMap<string, readonly Actualite[]>,
   actualitesMarche: readonly Actualite[],
+  presse: readonly ArticleMedia[] = [],
+  cibleMinutes = 10,
 ): EntreesEpisode {
   const lignes = lignesDuPortefeuille(entrees);
   const { valorisees } = valoriserPositions(entrees.etat.positions, entrees.cours);
@@ -115,6 +118,14 @@ export function entreesEpisode(
       prochainsResultats: fiche?.resultats.prochaineDate,
       detachement: fiche?.dividende.dateDetachement,
       paiement: fiche?.dividende.datePaiement,
+      articles: presse.filter(article => concerne(article, fiche?.nom ?? ligne.nom) || concerne(article, ligne.nom)),
+      per: fiche?.valorisation.per,
+      rendementDividende:
+        fiche?.dividende.rendement !== null && fiche?.dividende.rendement !== undefined
+          ? fiche.dividende.rendement * 100
+          : null,
+      plusHaut52: fiche?.marche.plusHaut52,
+      plusBas52: fiche?.marche.plusBas52,
     };
   });
 
@@ -135,12 +146,16 @@ export function entreesEpisode(
     })),
     actualitesMarche,
     sujet: sujetDuJour(Object.values(EXPLICATIONS), entrees.aujourdhui),
+    presse,
+    cibleMinutes,
   };
 }
 
 export interface Chargeurs {
   valeur(symbole: string): Promise<DonneesValeur>;
   actualites(requete: string): Promise<Actualite[]>;
+  /** Texte d'un flux RSS ; absent hors de l'application de bureau. */
+  flux?(url: string): Promise<string>;
 }
 
 /**
@@ -152,6 +167,7 @@ export async function preparerEpisode(
   chargeurs: Chargeurs,
   cache: Map<string, DonneesValeur>,
   surEtape?: (texte: string) => void,
+  cibleMinutes = 10,
 ): Promise<{ episode: Episode; manques: number }> {
   const symboles = lignesDuPortefeuille(entrees)
     .slice(0, VALEURS_RACONTEES)
@@ -180,6 +196,10 @@ export async function preparerEpisode(
     }),
   );
 
+  surEtape?.('Revue de presse…');
+  const presse = chargeurs.flux ? await chargerMedias(chargeurs.flux) : { articles: [], echecs: 0 };
+  manques += presse.echecs;
+
   surEtape?.('Tour des marchés…');
   const marche = await chargeurs.actualites('bourse marchés actions').catch(() => {
     manques += 1;
@@ -187,5 +207,8 @@ export async function preparerEpisode(
   });
 
   surEtape?.('Écriture de l’épisode…');
-  return { episode: construireEpisode(entreesEpisode(entrees, cache, actualites, marche)), manques };
+  return {
+    episode: construireEpisode(entreesEpisode(entrees, cache, actualites, marche, presse.articles, cibleMinutes)),
+    manques,
+  };
 }

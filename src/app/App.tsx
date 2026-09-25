@@ -990,7 +990,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     etape?: string;
     erreur?: string;
     date?: string;
-  }>({ chargement: false });
+    minutes: number;
+  }>({ chargement: false, minutes: 10 });
 
   const [societesComparees, setSocietesComparees] = useState<string[]>([]);
   const erreursComparaison = useRef(new Map<string, string>());
@@ -1305,7 +1306,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   // Podcast : écrit à l'ouverture de l'écran, une fois par jour, sur tout le
   // portefeuille (le filtre de compte ne s'applique pas).
-  const genererPodcast = () => {
+  const genererPodcast = (minutes = podcast.minutes) => {
     if (!contenuComplet || podcast.chargement) {
       return;
     }
@@ -1320,19 +1321,28 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       aujourdhui: date,
     };
     const horsLigne = () => Promise.reject(new Error('hors ligne'));
-    setPodcast(precedent => ({ ...precedent, chargement: true, erreur: undefined, etape: undefined }));
+    setPodcast(precedent => ({ ...precedent, minutes, chargement: true, erreur: undefined, etape: undefined }));
+    // Les flux RSS passent par le processus principal (liste fermée d'adresses).
+    const pontMedias = (globalThis as { applibourse?: { medias?: { flux(url: string): Promise<string> } } })
+      .applibourse?.medias;
     preparerEpisode(
       entrees,
       chargementAutomatique
-        ? { valeur: symbole => chargerValeur(symbole), actualites: requete => chargerActualites(requete) }
+        ? {
+            valeur: symbole => chargerValeur(symbole),
+            actualites: requete => chargerActualites(requete),
+            flux: pontMedias ? url => pontMedias.flux(url) : undefined,
+          }
         : { valeur: horsLigne, actualites: horsLigne },
       fichesEnCache.current,
       etape => setPodcast(precedent => ({ ...precedent, etape })),
+      minutes,
     )
       .then(({ episode, manques }) =>
         setPodcast({
           episode,
           date,
+          minutes,
           chargement: false,
           erreur:
             manques > 0
@@ -1488,7 +1498,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           chargement={podcast.chargement}
           etape={podcast.etape}
           erreur={podcast.erreur}
-          onGenerer={genererPodcast}
+          minutes={podcast.minutes}
+          onGenerer={minutes => genererPodcast(minutes)}
         />
       ) : ecran === 'comparateur' ? (
         <ComparateurFinancier

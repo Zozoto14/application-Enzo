@@ -13,6 +13,7 @@
  */
 
 import type { Actualite } from '../fondamentaux/actualites';
+import type { ArticleMedia } from './medias';
 
 export interface Segment {
   texte: string;
@@ -30,6 +31,8 @@ export interface Episode {
   chapitres: Chapitre[];
   /** Durée approximative d'écoute, en minutes. */
   duree: number;
+  /** Articles racontés, pour les retrouver après l'écoute. */
+  sources: Array<{ titre: string; source: string; lien?: string }>;
 }
 
 export interface LigneEpisode {
@@ -52,6 +55,13 @@ export interface ValeurEpisode {
   prochainsResultats?: string;
   detachement?: string;
   paiement?: string;
+  /** Articles de la revue de presse qui citent la valeur. */
+  articles?: readonly ArticleMedia[];
+  per?: number | null;
+  /** Rendement du dividende, en pourcentage. */
+  rendementDividende?: number | null;
+  plusHaut52?: number | null;
+  plusBas52?: number | null;
 }
 
 export interface EntreesEpisode {
@@ -65,6 +75,51 @@ export interface EntreesEpisode {
   indices: ReadonlyArray<{ nom: string; seancePct: number | null }>;
   actualitesMarche: readonly Actualite[];
   sujet?: { titre: string; court: string; detail: string; piege?: string };
+  /** Revue de presse : articles des médias, du plus récent au plus ancien. */
+  presse?: readonly ArticleMedia[];
+  /** Durée visée, en minutes : 5, 10 ou 15. Dix par défaut. */
+  cibleMinutes?: number;
+}
+
+/**
+ * Les articles, une source après l'autre : la revue passe des Echos au
+ * Monde puis au Figaro, au lieu d'enchaîner dix titres du même journal.
+ */
+function alterner(articles: readonly ArticleMedia[]): ArticleMedia[] {
+  const parSource = new Map<string, ArticleMedia[]>();
+  for (const article of articles) {
+    parSource.set(article.source, [...(parSource.get(article.source) ?? []), article]);
+  }
+  const files = [...parSource.values()];
+  const resultat: ArticleMedia[] = [];
+  for (let rang = 0; resultat.length < articles.length; rang++) {
+    for (const file of files) {
+      if (rang < file.length) {
+        resultat.push(file[rang]);
+      }
+    }
+  }
+  return resultat;
+}
+
+/** Débit d'une voix de synthèse posée, en mots par minute. */
+export const MOTS_PAR_MINUTE = 150;
+
+function compterMots(segments: readonly Segment[]): number {
+  return segments.reduce((total, segment) => total + segment.texte.split(/\s+/).filter(Boolean).length, 0);
+}
+
+const nombreParle = (valeur: number, decimales = 1) =>
+  valeur.toLocaleString('fr-FR', { maximumFractionDigits: decimales });
+
+/** Un article raconté : la source, le titre, puis le résumé s'il y en a un. */
+function raconterArticle(article: ArticleMedia, introduction: string): Segment[] {
+  const segments: Segment[] = [fr(`${introduction}${article.source ? ` ${article.source}` : ''} :`)];
+  segments.push({ texte: titreFini(article.titre), langue: article.langue });
+  if (article.resume) {
+    segments.push({ texte: titreFini(article.resume), langue: article.langue });
+  }
+  return segments;
 }
 
 // ------------------------------------------------------------- À l'oral
@@ -204,10 +259,29 @@ export function construireEpisode(entrees: EntreesEpisode): Episode {
   }
 
   // --- Vos valeurs à la une
+  const cible = entrees.cibleMinutes ?? 10;
   const une: Segment[] = [];
-  for (const valeur of entrees.valeurs) {
+  const articlesUtilises = new Set<ArticleMedia>();
+  for (const valeur of entrees.valeurs.slice(0, cible <= 5 ? 3 : 5)) {
     const titres = valeur.actualites.filter(a => recente(a, entrees.aujourdhui)).slice(0, 2);
     const phrases: Segment[] = [];
+    const ligne = entrees.lignes.find(candidate => candidate.nom === valeur.nom);
+    if (ligne) {
+      phrases.push(
+        fr(
+          `Parlons de ${valeur.nom}, qui représente ${pourcentParle(ligne.poids, false)} de vos titres${
+            ligne.latentPct !== null
+              ? `, ${ligne.latentPct >= 0 ? 'en plus-value' : 'en moins-value'} de ${pourcentParle(Math.abs(ligne.latentPct), false)}`
+              : ''
+          }.`,
+        ),
+      );
+    }
+    const articles = (valeur.articles ?? []).filter(a => recente(a, entrees.aujourdhui)).slice(0, cible >= 15 ? 3 : 2);
+    for (const article of articles) {
+      articlesUtilises.add(article);
+      phrases.push(...raconterArticle(article, 'Dans la presse, chez'));
+    }
     if (titres.length > 0) {
       phrases.push(fr(`${valeur.nom}. ${titres.length > 1 ? 'Deux titres' : 'Un titre'} dans la presse${titres[0].source ? `, notamment chez ${titres[0].source}` : ''} :`));
       for (const actualite of titres) {
@@ -220,7 +294,27 @@ export function construireEpisode(entrees: EntreesEpisode): Episode {
         const potentiel = (valeur.objectifMoyen / valeur.cours - 1) * 100;
         phrase += `, avec un objectif moyen ${potentiel >= 0 ? 'supérieur' : 'inférieur'} de ${pourcentParle(Math.abs(potentiel), false)} au cours actuel`;
       }
-      phrases.push(fr(titres.length > 0 ? `${phrase}.` : `${valeur.nom} : ${phrase.charAt(0).toLowerCase()}${phrase.slice(1)}.`));
+      phrases.push(fr(titres.length > 0 || ligne ? `${phrase}.` : `${valeur.nom} : ${phrase.charAt(0).toLowerCase()}${phrase.slice(1)}.`));
+    }
+    const valorisation: string[] = [];
+    if (valeur.per && valeur.per > 0) {
+      valorisation.push(`le titre se paie ${nombreParle(valeur.per, 0)} fois ses bénéfices`);
+    }
+    if (valeur.rendementDividende && valeur.rendementDividende > 0) {
+      valorisation.push(`son dividende rapporte ${pourcentParle(valeur.rendementDividende, false)} par an`);
+    }
+    if (valorisation.length > 0) {
+      phrases.push(fr(`Côté valorisation, ${valorisation.join(', et ')}.`));
+    }
+    if (valeur.cours && valeur.plusHaut52 && valeur.plusBas52 && valeur.plusHaut52 > valeur.plusBas52) {
+      const ecartHaut = (1 - valeur.cours / valeur.plusHaut52) * 100;
+      phrases.push(
+        fr(
+          ecartHaut < 2
+            ? 'Le cours évolue tout près de son plus haut de l’année.'
+            : `Le cours se situe ${pourcentParle(ecartHaut, false)} sous son plus haut sur un an, et ${pourcentParle((valeur.cours / valeur.plusBas52 - 1) * 100, false)} au-dessus de son plus bas.`,
+        ),
+      );
     }
     une.push(...phrases);
   }
@@ -275,31 +369,90 @@ export function construireEpisode(entrees: EntreesEpisode): Episode {
   }
 
   // --- Le sujet du jour
-  if (entrees.sujet) {
-    const sujet = entrees.sujet;
+  const sujetChapitre: Chapitre | undefined = entrees.sujet
+    ? {
+        titre: `Le sujet du jour : ${entrees.sujet.titre}`,
+        segments: [
+          fr(`Place au sujet du jour : ${entrees.sujet.titre}.`),
+          fr(entrees.sujet.court),
+          fr(entrees.sujet.detail),
+          ...(entrees.sujet.piege ? [fr(`Attention au piège : ${entrees.sujet.piege}`)] : []),
+        ],
+      }
+    : undefined;
+
+  const cloture: Chapitre = {
+    titre: 'Clôture',
+    segments: [
+      fr('C’est la fin de ce point bourse. Rien de ce qui a été dit n’est un conseil d’investissement : ce sont vos chiffres et l’actualité, racontés.'),
+      fr('Bonne journée, et à demain.'),
+    ],
+  };
+
+  // --- Revue de presse et international : elles remplissent le temps qui reste.
+  const budget = cible * MOTS_PAR_MINUTE;
+  let mots = compterMots([...chapitres, ...(sujetChapitre ? [sujetChapitre] : []), cloture].flatMap(c => c.segments)) + 60;
+  const presse = (entrees.presse ?? []).filter(a => !articlesUtilises.has(a) && recente(a, entrees.aujourdhui));
+  const choisir = (langue: 'fr' | 'en', maximum: number, introduction: string) => {
+    const segments: Segment[] = [];
+    let nombre = 0;
+    for (const article of alterner(presse.filter(a => a.langue === langue))) {
+      if (nombre >= maximum) break;
+      const raconte = raconterArticle(article, introduction);
+      const cout = compterMots(raconte);
+      if (mots + cout > budget) continue;
+      segments.push(...raconte);
+      articlesUtilises.add(article);
+      mots += cout;
+      nombre += 1;
+    }
+    return segments;
+  };
+  const revue = choisir('fr', cible >= 15 ? 36 : cible >= 10 ? 24 : 8, 'Selon');
+  if (revue.length > 0) {
     chapitres.push({
-      titre: `Le sujet du jour : ${sujet.titre}`,
-      segments: [
-        fr(`Pour finir, le sujet du jour : ${sujet.titre}.`),
-        fr(sujet.court),
-        fr(sujet.detail),
-        ...(sujet.piege ? [fr(`Attention au piège : ${sujet.piege}`)] : []),
-      ],
+      titre: 'La revue de presse',
+      segments: [fr('Passons à la revue de presse économique.'), ...revue],
     });
   }
+  const international = choisir('en', cible >= 15 ? 10 : cible >= 10 ? 6 : 2, 'On lit chez');
+  if (international.length > 0) {
+    chapitres.push({
+      titre: 'À l’international',
+      segments: [fr('Direction l’international, avec la presse anglo-saxonne.'), ...international],
+    });
+  }
+  if (sujetChapitre) {
+    chapitres.push(sujetChapitre);
+  }
+  chapitres.push(cloture);
 
-  chapitres.push({
-    titre: 'Clôture',
-    segments: [fr('C’est tout pour aujourd’hui. Bonne journée, et à demain pour un nouveau point.')],
-  });
+  // --- Le sommaire, dit en ouverture.
+  const sommaire = chapitres
+    .slice(1, -1)
+    .map(chapitre =>
+      chapitre.titre
+        .replace(/^L[’']/, 'l’')
+        .replace(/^À /, 'à ')
+        .replace(/^(Les|La|Le|Vos|Votre)\b/, mot => mot.toLowerCase()),
+    );
+  if (sommaire.length > 1) {
+    chapitres[0].segments.push(
+      fr(`Au programme : ${sommaire.slice(0, -1).join(', ')}, et ${sommaire[sommaire.length - 1]}.`),
+    );
+  }
 
-  // Environ 160 mots par minute à vitesse normale.
-  const mots = chapitres.flatMap(c => c.segments).reduce((total, s) => total + s.texte.split(/\s+/).length, 0);
+  const total = compterMots(chapitres.flatMap(c => c.segments));
   return {
     titre: `Votre point bourse du ${dateParlee(entrees.aujourdhui, false)}`,
     date,
     chapitres,
-    duree: Math.max(1, Math.round(mots / 160)),
+    duree: Math.max(1, Math.round(total / MOTS_PAR_MINUTE)),
+    sources: [...articlesUtilises].map(article => ({
+      titre: article.titre,
+      source: article.source,
+      lien: article.lien,
+    })),
   };
 }
 

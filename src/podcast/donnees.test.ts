@@ -57,7 +57,10 @@ const ficheCw8 = {
     devise: 'EUR',
     analystes: { recommandation: 'buy', objectifMoyen: 1200 },
     resultats: { prochaineDate: '2026-10-20' },
-    dividende: {},
+    dividende: { rendement: 0.012 },
+    nom: 'Amundi MSCI World',
+    valorisation: { per: null },
+    marche: { plusHaut52: 1150, plusBas52: 900 },
   },
 } as unknown as DonneesValeur;
 
@@ -91,6 +94,8 @@ describe('données du podcast', () => {
     });
     expect(entrees.valeurs[0].actualites).toHaveLength(1);
     expect(entrees.valeurs[1].actualites).toEqual([]);
+    expect(entrees.valeurs[0]).toMatchObject({ plusHaut52: 1150, plusBas52: 900 });
+    expect(entrees.valeurs[0].rendementDividende).toBeCloseTo(1.2);
     expect(entrees.sujet?.titre).toBeTruthy();
   });
 
@@ -114,5 +119,27 @@ describe('données du podcast', () => {
     await preparerEpisode(scenario(), { valeur, actualites: async () => [] }, cache);
     expect(valeur).toHaveBeenCalledTimes(1);
     expect(valeur).toHaveBeenCalledWith('STLAP.PA');
+  });
+});
+
+describe('revue de presse dans l’épisode', () => {
+  it('raconte l’article qui cite une valeur détenue et le garde dans les sources', async () => {
+    const rss = `<rss><channel><item><title>Le MSCI World au plus haut</title>
+      <description>L’indice mondial a gagné 1 % cette semaine. Les valeurs technologiques mènent la danse.</description>
+      <pubDate>Fri, 25 Sep 2026 08:00:00 GMT</pubDate><link>https://exemple.fr/msci</link></item></channel></rss>`;
+    const { episode } = await preparerEpisode(
+      scenario(),
+      {
+        valeur: () => Promise.reject(new Error('hors ligne')),
+        actualites: async () => [],
+        flux: async url => (url.includes('lesechos.fr/rss/les-echos-finance') ? rss : Promise.reject(new Error('404'))),
+      },
+      new Map(),
+    );
+    const une = episode.chapitres.find(chapitre => chapitre.titre === 'Vos valeurs à la une')!;
+    expect(une.segments.map(segment => segment.texte).join(' ')).toContain('Le MSCI World au plus haut.');
+    expect(episode.sources).toEqual([
+      { titre: 'Le MSCI World au plus haut', source: 'Les Echos', lien: 'https://exemple.fr/msci' },
+    ]);
   });
 });

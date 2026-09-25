@@ -41,6 +41,9 @@ interface PontBureau {
   yahoo?: {
     json(url: string): Promise<unknown>;
   };
+  medias?: {
+    flux(url: string): Promise<string>;
+  };
   voix?: {
     liste(): Promise<Array<{ id: string; nom: string; langue: string }>>;
     synthetiser(texte: string, voix: string, vitesse: number): Promise<Uint8Array>;

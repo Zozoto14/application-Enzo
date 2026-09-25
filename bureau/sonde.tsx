@@ -132,6 +132,15 @@ const episodeExemple = construireEpisode({
   ],
   actualitesMarche: [{ titre: 'La BCE maintient ses taux', source: 'Boursorama', date: '2025-06-17', langue: 'fr' }],
   sujet: { titre: 'Le PRU', court: 'Le prix de revient unitaire.', detail: 'Il inclut les frais d’achat.' },
+  presse: [
+    { titre: 'La BCE laisse ses taux inchangés et reste prudente', resume: 'L’institution de Francfort maintient son taux de dépôt. Elle surveille une inflation qui reflue lentement.', source: 'Les Echos', date: '2025-06-17', langue: 'fr', lien: 'https://www.lesechos.fr' },
+    { titre: 'Le luxe marque le pas en Chine', resume: 'Les ventes des grandes maisons ralentissent au deuxième trimestre. Les investisseurs guettent les résultats de LVMH.', source: 'Le Monde', date: '2025-06-17', langue: 'fr' },
+    { titre: 'Le pétrole recule après la hausse des stocks américains', resume: 'Le baril de Brent perd près de deux pour cent. Les réserves ont augmenté plus que prévu.', source: 'Le Figaro', date: '2025-06-17', langue: 'fr' },
+    { titre: 'L’inflation française ralentit en mai', resume: 'Les prix à la consommation progressent de 0,7 % sur un an selon l’Insee. L’énergie tire l’indice vers le bas.', source: 'franceinfo', date: '2025-06-17', langue: 'fr' },
+    { titre: 'Nvidia tops $4 trillion as AI rally extends', resume: 'The chipmaker became the most valuable company in the world. Investors keep betting on AI spending.', source: 'CNBC', date: '2025-06-17', langue: 'en' },
+    { titre: 'Treasury yields slip ahead of Fed decision', resume: 'The 10-year yield fell to 4.3%. Traders expect rates to stay on hold.', source: 'MarketWatch', date: '2025-06-17', langue: 'en' },
+  ],
+  cibleMinutes: 10,
 });
 
 const ficheExemple = construireFiche(

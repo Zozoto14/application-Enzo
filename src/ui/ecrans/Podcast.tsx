@@ -7,7 +7,7 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Bouton, usePalette } from '../composants';
 import { CarteSection, Rangee, Segments, Selecteur, Vide } from '../elements';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
@@ -26,10 +26,15 @@ export interface PodcastProps {
   chargement?: boolean;
   etape?: string;
   erreur?: string;
-  onGenerer(): void;
+  /** Durée visée, en minutes. */
+  minutes?: number;
+  onGenerer(minutes?: number): void;
 }
 
-export function Podcast({ episode, chargement, etape, erreur, onGenerer }: PodcastProps) {
+type Format = '5 min' | '10 min' | '15 min';
+const FORMATS: Record<Format, number> = { '5 min': 5, '10 min': 10, '15 min': 15 };
+
+export function Podcast({ episode, chargement, etape, erreur, minutes = 10, onGenerer }: PodcastProps) {
   const palette = usePalette();
   const lecteur = useMemo(() => creerLecteur(), []);
   const [etat, setEtat] = useState<'arret' | 'lecture' | 'pause'>('arret');
@@ -105,8 +110,22 @@ export function Podcast({ episode, chargement, etape, erreur, onGenerer }: Podca
             Podcast
           </Text>
           <Text style={{ color: palette.texteSecondaire }}>
-            Votre point bourse du jour : portefeuille, actualités de vos valeurs, agenda et un sujet à comprendre.
+            Votre point bourse du jour : portefeuille, actualités de vos valeurs, revue de presse, marchés et un sujet à comprendre.
           </Text>
+        </View>
+
+        <View style={styles.format}>
+          <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>Durée de l’épisode</Text>
+          <Segments<Format>
+            options={Object.keys(FORMATS) as Format[]}
+            actif={(Object.keys(FORMATS) as Format[]).find(cle => FORMATS[cle] === minutes) ?? '10 min'}
+            onChoisir={valeur => {
+              if (FORMATS[valeur] !== minutes && !chargement) {
+                onGenerer(FORMATS[valeur]);
+              }
+            }}
+            prefixeTest="format-podcast"
+          />
         </View>
 
         {chargement ? (
@@ -128,7 +147,7 @@ export function Podcast({ episode, chargement, etape, erreur, onGenerer }: Podca
           <CarteSection>
             <Vide>Aucun épisode pour l’instant.</Vide>
             <View style={{ alignSelf: 'flex-start' }}>
-              <Bouton titre="Préparer l’épisode du jour" onPress={onGenerer} testID="bouton-generer-podcast" />
+              <Bouton titre="Préparer l’épisode du jour" onPress={() => onGenerer()} testID="bouton-generer-podcast" />
             </View>
           </CarteSection>
         ) : null}
@@ -222,7 +241,7 @@ export function Podcast({ episode, chargement, etape, erreur, onGenerer }: Podca
                     largeur={280}
                   />
                 ) : null}
-                <Pressable accessibilityRole="button" onPress={onGenerer} style={[styles.petitBouton, { borderColor: palette.bordure, paddingHorizontal: 12 }]}>
+                <Pressable accessibilityRole="button" onPress={() => onGenerer()} style={[styles.petitBouton, { borderColor: palette.bordure, paddingHorizontal: 12 }]}>
                   <Text style={{ color: palette.texte, fontSize: 13 }}>Régénérer</Text>
                 </Pressable>
               </View>
@@ -285,6 +304,26 @@ export function Podcast({ episode, chargement, etape, erreur, onGenerer }: Podca
                 </ScrollView>
               </CarteSection>
             </Rangee>
+
+            {episode.sources.length > 0 ? (
+              <CarteSection titre={`Sources (${episode.sources.length})`} testID="sources-podcast">
+                {episode.sources.map((source, rang) => (
+                  <Pressable
+                    key={`${rang}-${source.titre}`}
+                    accessibilityRole={source.lien ? 'link' : undefined}
+                    disabled={!source.lien}
+                    onPress={() => (source.lien ? Linking.openURL(source.lien).catch(() => undefined) : undefined)}
+                    style={[styles.source, { borderColor: palette.bordure }]}>
+                    <Text style={{ color: palette.texteSecondaire, fontSize: 12, fontWeight: '700', minWidth: 96 }}>
+                      {source.source}
+                    </Text>
+                    <Text style={{ color: source.lien ? palette.accent : palette.texte, flex: 1, fontSize: 13 }}>
+                      {source.titre}
+                    </Text>
+                  </Pressable>
+                ))}
+              </CarteSection>
+            ) : null}
           </>
         ) : null}
       </ScrollView>
@@ -294,6 +333,14 @@ export function Podcast({ episode, chargement, etape, erreur, onGenerer }: Podca
 
 const styles = StyleSheet.create({
   page: { padding: ESPACEMENT.m + 4, gap: ESPACEMENT.m },
+  format: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: ESPACEMENT.m },
+  source: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: ESPACEMENT.s,
+    paddingVertical: ESPACEMENT.s,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
   titre: { fontSize: 26, fontWeight: '800' },
   centre: { alignItems: 'center', gap: ESPACEMENT.s, padding: ESPACEMENT.m },
   lecteur: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: ESPACEMENT.l },

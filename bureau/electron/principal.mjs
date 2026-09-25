@@ -122,6 +122,8 @@ function installerPasserelle() {
 
   ipcMain.handle('yahoo:json', async (_evenement, url) => yahooJson(String(url)));
 
+  ipcMain.handle('medias:flux', async (_evenement, url) => fluxMedia(String(url)));
+
   ipcMain.handle('voix:liste', async () => VOIX_NATURELLES);
   ipcMain.handle('voix:synthetiser', async (_evenement, texte, voix, vitesse) =>
     synthetiser(String(texte), String(voix), Number(vitesse) || 1),
@@ -163,6 +165,37 @@ async function ouvrirSessionYahoo() {
     throw new Error(`Jeton Yahoo refusé (${jeton.status}).`);
   }
   return { cookies, crumb };
+}
+
+/**
+ * Flux RSS de la revue de presse. Liste fermée, la même que
+ * src/podcast/medias.ts : le rendu ne peut pas faire télécharger autre chose.
+ */
+const FLUX_MEDIAS = new Set([
+  'https://services.lesechos.fr/rss/les-echos-finance-marches.xml',
+  'https://services.lesechos.fr/rss/les-echos-economie.xml',
+  'https://www.lemonde.fr/economie/rss_full.xml',
+  'https://www.lefigaro.fr/rss/figaro_economie.xml',
+  'https://www.francetvinfo.fr/economie.rss',
+  'https://www.bfmtv.com/rss/economie/',
+  'https://www.cnbc.com/id/100003114/device/rss/rss.html',
+  'https://feeds.content.dowjones.io/public/rss/mw_topstories',
+]);
+const TAILLE_MAX_FLUX = 3 * 1024 * 1024;
+
+async function fluxMedia(adresse) {
+  if (!FLUX_MEDIAS.has(adresse)) {
+    throw new Error('Flux non autorisé.');
+  }
+  const reponse = await fetch(adresse, {
+    headers: { 'User-Agent': AGENT, Accept: 'application/rss+xml, application/xml, text/xml, */*' },
+    signal: AbortSignal.timeout(12_000),
+  });
+  if (!reponse.ok) {
+    throw new Error(`Le flux a répondu ${reponse.status}.`);
+  }
+  const texte = await reponse.text();
+  return texte.length > TAILLE_MAX_FLUX ? texte.slice(0, TAILLE_MAX_FLUX) : texte;
 }
 
 async function yahooJson(adresse) {

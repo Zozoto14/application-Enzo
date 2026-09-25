@@ -35,6 +35,11 @@ contextBridge.exposeInMainWorld('applibourse', {
     json: url => ipcRenderer.invoke('yahoo:json', url),
   },
 
+  medias: {
+    /** Texte d'un flux RSS de la revue de presse (liste fermée). */
+    flux: url => ipcRenderer.invoke('medias:flux', url),
+  },
+
   voix: {
     /** Voix naturelles proposées. */
     liste: () => ipcRenderer.invoke('voix:liste'),
