@@ -504,6 +504,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignItems: 'center',
     gap: ESPACEMENT.s,
+    // Sur une carte étroite, les contrôles passent à la ligne au lieu de
+    // déborder hors du cadre.
+    flexShrink: 1,
+    maxWidth: '100%',
   },
   rangee: {
     flexDirection: 'row',

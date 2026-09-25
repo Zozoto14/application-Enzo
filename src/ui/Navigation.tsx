@@ -8,7 +8,7 @@
  * bouton de retour.
  */
 
-import React from 'react';
+import React, { createContext, useContext } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -32,8 +32,15 @@ export const LARGEUR_NAVIGATION = 900;
 /** Au-dessus, la barre affiche les libellés à côté des pictogrammes. */
 const LARGEUR_LIBELLES = 1180;
 
+/** Vrai sous une Coque qui affiche la navigation (barre latérale ou bandeau). */
+const NavigationPresente = createContext(false);
+
+/**
+ * Vrai quand la navigation de la Coque est affichée : les écrans n'ont alors
+ * pas à répéter ses destinations dans leur propre barre d'outils.
+ */
 export function useNavigationLaterale(): boolean {
-  return useWindowDimensions().width >= LARGEUR_NAVIGATION;
+  return useContext(NavigationPresente);
 }
 
 export function Coque({
@@ -51,12 +58,50 @@ export function Coque({
 }) {
   const palette = usePalette();
   const { width } = useWindowDimensions();
-  if (width < LARGEUR_NAVIGATION || destinations.length === 0) {
+  if (destinations.length === 0) {
     return <>{children}</>;
+  }
+  if (width < LARGEUR_NAVIGATION) {
+    // Tablette, téléphone, petite fenêtre : la barre latérale n'a pas la
+    // place. Les mêmes destinations passent en bandeau défilant, en haut.
+    return (
+      <NavigationPresente.Provider value>
+      <View style={[styles.colonne, { backgroundColor: palette.fond }]}>
+        <View style={[styles.bandeau, { backgroundColor: palette.surface, borderBottomColor: palette.bordure }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.liensBandeau}>
+            {destinations.map(destination => (
+              <Lien
+                key={destination.cle}
+                destination={destination}
+                actif={actif}
+                libelles
+                compact
+                onPress={() => onNaviguer(destination.cle)}
+              />
+            ))}
+            {onVerrouiller ? (
+              <Lien
+                destination={{ cle: 'verrouiller', libelle: 'Verrouiller', glyphe: '⏻' }}
+                actif={actif}
+                libelles
+                compact
+                onPress={onVerrouiller}
+              />
+            ) : null}
+          </ScrollView>
+        </View>
+        <View style={styles.contenu}>{children}</View>
+      </View>
+      </NavigationPresente.Provider>
+    );
   }
   const libelles = width >= LARGEUR_LIBELLES;
 
   return (
+    <NavigationPresente.Provider value>
     <View style={[styles.rangee, { backgroundColor: palette.fond }]}>
       <View
         accessibilityRole="tablist"
@@ -115,6 +160,7 @@ export function Coque({
       </View>
       <View style={styles.contenu}>{children}</View>
     </View>
+    </NavigationPresente.Provider>
   );
 }
 
@@ -123,11 +169,14 @@ function Lien({
   onPress,
   actif,
   libelles,
+  compact = false,
 }: {
   destination: Destination;
   onPress(): void;
   actif: string;
   libelles: boolean;
+  /** Pastille du bandeau horizontal. */
+  compact?: boolean;
 }) {
   const palette = usePalette();
   const selectionne = destination.cle === actif;
@@ -147,6 +196,7 @@ function Lien({
       }) => [
         styles.lien,
         libelles ? styles.lienLarge : styles.lienEtroit,
+        compact && styles.lienCompact,
         {
           backgroundColor: selectionne
             ? palette.accentFond
@@ -218,4 +268,8 @@ const styles = StyleSheet.create({
   petitLibelle: { fontSize: 10.5 },
   pied: { borderTopWidth: 1, paddingTop: ESPACEMENT.s },
   contenu: { flex: 1 },
+  colonne: { flex: 1 },
+  bandeau: { borderBottomWidth: 1, paddingVertical: 6 },
+  liensBandeau: { paddingHorizontal: ESPACEMENT.s, gap: 4, alignItems: 'center' },
+  lienCompact: { minHeight: 38, paddingHorizontal: ESPACEMENT.s + 2, gap: 6 },
 });

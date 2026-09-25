@@ -73,7 +73,7 @@ describe('parcours de premier lancement', () => {
     await fireEvent.press(screen.getByTestId('bouton-continuer'));
 
     // 3. Tableau de bord, aucun compte encore cree.
-    expect(screen.getByText('Portefeuille')).toBeTruthy();
+    expect(screen.getAllByText('Portefeuille').length).toBeGreaterThan(0);
     expect(screen.getByText(/Aucun compte/)).toBeTruthy();
   });
 });
@@ -99,7 +99,7 @@ describe('parcours de déverrouillage', () => {
     await fireEvent.press(screen.getByTestId('bouton-deverrouiller'));
     await laisserTravailler();
 
-    expect(screen.getByText('Portefeuille')).toBeTruthy();
+    expect(screen.getAllByText('Portefeuille').length).toBeGreaterThan(0);
   });
 
   it('reste verrouillé et affiche un message indistinct sur un code faux', async () => {
@@ -141,7 +141,7 @@ describe('parcours de déverrouillage', () => {
     await fireEvent.press(screen.getByTestId('bouton-deverrouiller'));
     await laisserTravailler();
 
-    await fireEvent.press(screen.getByText('Verrouiller'));
+    await fireEvent.press(screen.getByTestId('nav-verrouiller'));
     expect(screen.getByTestId('bouton-deverrouiller')).toBeTruthy();
   });
 
@@ -261,7 +261,7 @@ describe('parcours complet, session ouverte', () => {
     expect(screen.getByText(/pas de symbole boursier/)).toBeTruthy();
 
     await fireEvent.press(screen.getByTestId('bouton-retour-fiche'));
-    expect(screen.getByText('Portefeuille')).toBeTruthy();
+    expect(screen.getAllByText('Portefeuille').length).toBeGreaterThan(0);
   });
 
   it('saisit une opération et la répercute sur les liquidités', async () => {
@@ -438,7 +438,7 @@ describe('parcours complet, session ouverte', () => {
     );
     await fireEvent.press(screen.getByTestId('bouton-importer'));
 
-    await fireEvent.press(screen.getByTestId('bouton-projection'));
+    await fireEvent.press(screen.getByTestId('nav-projection'));
 
     // Le capital de depart reprend la valeur du portefeuille sans qu'on la
     // retape : c'est le cas courant, et une occasion de se tromper en moins.
@@ -451,7 +451,7 @@ describe('parcours complet, session ouverte', () => {
     await ouvrir();
     await creerCompte();
 
-    await fireEvent.press(screen.getByTestId('bouton-projection'));
+    await fireEvent.press(screen.getByTestId('nav-projection'));
     await fireEvent.changeText(screen.getByTestId('projection-annees'), '200');
 
     expect(screen.getByText('Au maximum 50.')).toBeTruthy();
@@ -469,7 +469,7 @@ describe('parcours complet, session ouverte', () => {
     );
     await fireEvent.press(screen.getByTestId('bouton-importer'));
 
-    await fireEvent.press(screen.getByTestId('bouton-watchlist'));
+    await fireEvent.press(screen.getByTestId('nav-watchlist'));
     expect(screen.getByText(/Aucune valeur surveillée/)).toBeTruthy();
 
     await fireEvent.press(screen.getByText(/^STELLANTIS/));
@@ -492,7 +492,7 @@ describe('parcours complet, session ouverte', () => {
     );
     await fireEvent.press(screen.getByTestId('bouton-importer'));
 
-    await fireEvent.press(screen.getByTestId('bouton-watchlist'));
+    await fireEvent.press(screen.getByTestId('nav-watchlist'));
     await fireEvent.press(screen.getByText(/^STELLANTIS/));
     expect(screen.queryByText(/Aucune valeur surveillée/)).toBeNull();
 
@@ -516,11 +516,11 @@ describe('parcours complet, session ouverte', () => {
     await fireEvent.press(screen.getByTestId('bouton-creer-titre'));
     await fireEvent.press(screen.getByText('Annuler'));
 
-    await fireEvent.press(screen.getByTestId('bouton-watchlist'));
+    await fireEvent.press(screen.getByTestId('nav-watchlist'));
     await fireEvent.press(screen.getByText(/^Amundi MSCI World/));
     await fireEvent.press(screen.getByText('Retour'));
 
-    await fireEvent.press(screen.getByTestId('bouton-notifications'));
+    await fireEvent.press(screen.getByTestId('nav-notifications'));
 
     expect(screen.getByText('Amundi MSCI World')).toBeTruthy();
     expect(screen.queryByText(/Aucune valeur détenue/)).toBeNull();
@@ -595,7 +595,7 @@ describe('parcours complet, session ouverte', () => {
       EXPORT_REEL,
     );
     await fireEvent.press(screen.getByTestId('bouton-importer'));
-    await fireEvent.press(screen.getByTestId('bouton-comparateur'));
+    await fireEvent.press(screen.getByTestId('nav-comparateur'));
     // Le comparateur ouvre sur les états financiers ; les cours ont leur onglet.
     await fireEvent.press(screen.getByTestId('comparateur-onglet-cours'));
 
@@ -767,7 +767,7 @@ describe('création d’une valeur en cours de saisie', () => {
     await fireEvent.changeText(screen.getByLabelText('ISIN'), 'NL00150001Q9');
     await fireEvent.press(screen.getByTestId('bouton-creer-titre'));
 
-    expect(screen.getByText('Nouvelle opération')).toBeTruthy();
+    expect(screen.getAllByText('Nouvelle opération').length).toBeGreaterThan(0);
     expect(screen.getByText('Stellantis')).toBeTruthy();
   });
 
@@ -819,7 +819,7 @@ describe('écran de sauvegarde', () => {
         aujourdhui={() => '2026-09-22'}
       />,
     );
-    await fireEvent.press(screen.getByTestId('bouton-sauvegarde'));
+    await fireEvent.press(screen.getByTestId('nav-sauvegarde'));
   }
 
   it('annonce son indisponibilité quand le module de fichiers manque', async () => {
@@ -827,7 +827,7 @@ describe('écran de sauvegarde', () => {
     // react-native-fs : l'écran doit le dire au lieu d'échouer en silence.
     await ouvrirSauvegarde();
 
-    expect(screen.getByText('Sauvegarde')).toBeTruthy();
+    expect(screen.getAllByText('Sauvegarde').length).toBeGreaterThan(1);
     expect(screen.getByText(/Indisponible sur cette version/)).toBeTruthy();
     expect(
       screen.getByTestId('bouton-creer-sauvegarde').props.accessibilityState.disabled,
@@ -842,7 +842,7 @@ describe('écran de sauvegarde', () => {
   it('revient au portefeuille', async () => {
     await ouvrirSauvegarde();
     await fireEvent.press(screen.getByText('Retour'));
-    expect(screen.getByText('Portefeuille')).toBeTruthy();
+    expect(screen.getAllByText('Portefeuille').length).toBeGreaterThan(0);
   });
 });
 
@@ -858,7 +858,7 @@ describe('écran de notifications', () => {
         aujourdhui={() => '2026-09-22'}
       />,
     );
-    await fireEvent.press(screen.getByTestId('bouton-notifications'));
+    await fireEvent.press(screen.getByTestId('nav-notifications'));
     return session;
   }
 
@@ -916,6 +916,6 @@ describe('écran de notifications', () => {
   it('revient au portefeuille', async () => {
     await ouvrirNotifications();
     await fireEvent.press(screen.getByText('Retour'));
-    expect(screen.getByText('Portefeuille')).toBeTruthy();
+    expect(screen.getAllByText('Portefeuille').length).toBeGreaterThan(0);
   });
 });
