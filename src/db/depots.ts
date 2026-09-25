@@ -471,6 +471,8 @@ export const PARAMETRES = {
   /** Secondes entre deux actualisations des cours, fenêtre ouverte ; « 0 » pour ne jamais actualiser. */
   intervalleActualisation: 'cours.intervalle_s',
   identifiantAppareil: 'sync.appareil',
+  /** « 1 » : mode discret, montants masqués. */
+  discretion: 'affichage.discret',
 } as const;
 
 /**

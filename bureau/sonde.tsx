@@ -35,6 +35,7 @@ import { Portefeuille } from '../src/ui/ecrans/Portefeuille';
 import { Projection } from '../src/ui/ecrans/Projection';
 import { Watchlist } from '../src/ui/ecrans/Watchlist';
 import { useFondDocument } from './Bureau';
+import { definirDiscretion } from '../src/ui/discretion';
 import { Coque, type Destination } from '../src/ui/Navigation';
 import { Podcast } from '../src/ui/ecrans/Podcast';
 import { construireEpisode } from '../src/podcast/episode';
@@ -156,11 +157,13 @@ function Apercu() {
   useFondDocument(sombre);
 
   const [destination, setDestination] = useState('portefeuille');
+  const [discret, setDiscret] = useState(false);
+  definirDiscretion(discret);
   const [compares, setCompares] = useState<readonly string[]>(['air-liquide', 'cw8']);
   const [champs, setChamps] = useState(CHAMPS_DEFAUT);
 
   return (
-    <Coque destinations={DESTINATIONS} actif={destination} onNaviguer={setDestination} onVerrouiller={() => undefined}>
+    <Coque destinations={DESTINATIONS} actif={destination} onNaviguer={setDestination} onVerrouiller={() => undefined} discret={discret} onBasculerDiscretion={() => setDiscret(!discret)}>
       {destination === 'portefeuille' ? (
         <Portefeuille
           dashboard={construireDashboard({ etat, comptes, titres, cours })}

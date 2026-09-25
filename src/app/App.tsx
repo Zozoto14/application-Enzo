@@ -64,6 +64,7 @@ import { construireResume } from '../ui/vues/resume';
 import { chargerValeur, type DonneesValeur } from '../fondamentaux/yahoo';
 import { construireFiche, type VueFiche } from '../ui/vues/fiche';
 import { FicheValeur } from '../ui/ecrans/FicheValeur';
+import { definirDiscretion } from '../ui/discretion';
 import { Coque, type Destination } from '../ui/Navigation';
 import type { OngletPortefeuille } from '../ui/ecrans/Portefeuille';
 import { ComparateurFinancier } from '../ui/ecrans/ComparateurFinancier';
@@ -1152,6 +1153,14 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   const deverrouille = statut === 'deverrouille' && !secrets;
 
+  // Mode discret : lu avant de construire les vues, qui formatent les montants.
+  const discret = deverrouille && new DepotParametres(session.base()).lire(PARAMETRES.discretion) === '1';
+  definirDiscretion(discret);
+  const basculerDiscretion = () => {
+    new DepotParametres(session.base()).ecrire(PARAMETRES.discretion, discret ? '0' : '1');
+    rafraichir();
+  };
+
   // Notifications de l'ordinateur : le pont d'Electron les affiche. Absent
   // sur téléphone (le réveil en arrière-plan s'en charge) et dans les tests.
   const pontNotifications = (globalThis as { applibourse?: { systeme?: PontNotifications } }).applibourse
@@ -1384,7 +1393,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }
         : undefined,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rendu, compteFiltre, indiceRetenu, deverrouille, aujourdhui],
+    [rendu, compteFiltre, indiceRetenu, deverrouille, aujourdhui, discret],
   );
 
   // Valeur actuelle du portefeuille, proposee comme capital de depart de la
@@ -1503,7 +1512,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         destinations={deverrouille && contenuComplet && tableau ? destinations : []}
         actif={destinationActive}
         onNaviguer={naviguer}
-        onVerrouiller={deverrouille && contenuComplet && tableau ? verrouiller : undefined}>
+        onVerrouiller={deverrouille && contenuComplet && tableau ? verrouiller : undefined}
+        discret={discret}
+        onBasculerDiscretion={deverrouille && contenuComplet && tableau ? basculerDiscretion : undefined}>
       {secrets ? (
         <PremierLancement
           onCreer={creer}

@@ -43,17 +43,26 @@ export function useNavigationLaterale(): boolean {
   return useContext(NavigationPresente);
 }
 
+function lienDiscretion(discret: boolean): Destination {
+  return { cle: 'discretion', libelle: discret ? 'Afficher les €' : 'Masquer les €', glyphe: discret ? '◉' : '◌' };
+}
+
 export function Coque({
   destinations,
   actif,
   onNaviguer,
   onVerrouiller,
+  discret = false,
+  onBasculerDiscretion,
   children,
 }: {
   destinations: readonly Destination[];
   actif: string;
   onNaviguer(cle: string): void;
   onVerrouiller?(): void;
+  /** Mode discret : montants masqués. */
+  discret?: boolean;
+  onBasculerDiscretion?(): void;
   children: React.ReactNode;
 }) {
   const palette = usePalette();
@@ -82,6 +91,15 @@ export function Coque({
                 onPress={() => onNaviguer(destination.cle)}
               />
             ))}
+            {onBasculerDiscretion ? (
+              <Lien
+                destination={lienDiscretion(discret)}
+                actif={discret ? 'discretion' : actif}
+                libelles
+                compact
+                onPress={onBasculerDiscretion}
+              />
+            ) : null}
             {onVerrouiller ? (
               <Lien
                 destination={{ cle: 'verrouiller', libelle: 'Verrouiller', glyphe: '⏻' }}
@@ -143,18 +161,28 @@ export function Coque({
             />
           ))}
         </ScrollView>
-        {onVerrouiller ? (
+        {onVerrouiller || onBasculerDiscretion ? (
           <View style={[styles.pied, { borderTopColor: palette.bordure }]}>
-            <Lien
-              destination={{
-                cle: 'verrouiller',
-                libelle: 'Verrouiller',
-                glyphe: '⏻',
-              }}
-              actif={actif}
-              libelles={libelles}
-              onPress={onVerrouiller}
-            />
+            {onBasculerDiscretion ? (
+              <Lien
+                destination={lienDiscretion(discret)}
+                actif={discret ? 'discretion' : actif}
+                libelles={libelles}
+                onPress={onBasculerDiscretion}
+              />
+            ) : null}
+            {onVerrouiller ? (
+              <Lien
+                destination={{
+                  cle: 'verrouiller',
+                  libelle: 'Verrouiller',
+                  glyphe: '⏻',
+                }}
+                actif={actif}
+                libelles={libelles}
+                onPress={onVerrouiller}
+              />
+            ) : null}
           </View>
         ) : null}
       </View>

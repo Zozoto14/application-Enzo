@@ -12,6 +12,7 @@
  *    le formatage n'en prend qu'une photo.
  */
 
+import { MONTANT_MASQUE, discretionActive } from './discretion';
 import { Decimal, type ValeurDecimale } from '../core/money/decimal';
 
 /** Espace insécable étroite, séparateur de milliers de la typographie française. */
@@ -40,6 +41,10 @@ export function formaterMontant(
   const decimal = Decimal.de(valeur);
   const decimales = options.decimales ?? 2;
   const devise = options.devise === undefined ? '€' : options.devise;
+  // Mode discret : seuls les montants en devise sont masqués, pas les pourcentages.
+  if (discretionActive() && devise && devise !== '%') {
+    return `${MONTANT_MASQUE}${ESPACE_INSECABLE}${devise}`;
+  }
 
   const texte = decimal.abs().toFixed(decimales);
   const [entiere, fraction] = texte.split('.');

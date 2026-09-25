@@ -10,6 +10,7 @@
  * formes et gérer le survol.
  */
 
+import { formateurDiscret } from '../discretion';
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { usePalette } from '../composants';
 import { formaterDate } from '../format';
@@ -177,6 +178,7 @@ export function GraphiqueLignes({
   legende,
   testID,
 }: ProprietesLignes) {
+  formater = formateurDiscret(formater);
   const palette = usePalette();
   const identifiant = useId().replace(/:/g, '');
   const [ref, largeur] = useLargeur();
@@ -459,6 +461,7 @@ function Vide({ palette, hauteur }: { palette: Palette; hauteur: number }) {
 // ------------------------------------------------------------------- Donut
 
 export function Donut({ parts, formater, hauteur = 280, centre, testID }: ProprietesDonut) {
+  formater = formateurDiscret(formater);
   const palette = usePalette();
   const [ref, largeur] = useLargeur();
   const [survol, setSurvol] = useState<{ index: number; x: number; y: number } | null>(null);
@@ -567,7 +570,8 @@ export function Donut({ parts, formater, hauteur = 280, centre, testID }: Propri
 
 // ------------------------------------------------------------------ Barres
 
-export function Barres(proprietes: ProprietesBarres) {
+export function Barres(brutes: ProprietesBarres) {
+  const proprietes = { ...brutes, formater: formateurDiscret(brutes.formater) };
   return proprietes.horizontal ? <BarresHorizontales {...proprietes} /> : <BarresVerticales {...proprietes} />;
 }
 
