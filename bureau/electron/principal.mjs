@@ -239,7 +239,8 @@ async function lancerMiseAJour() {
   // et l'utilisateur doit voir qu'elle avance, ou pourquoi elle échoue.
   const enfant = spawn(
     'cmd.exe',
-    ['/c', 'start', 'AppliBourse - mise a jour', 'powershell', '-NoExit', '-Command', 'npm run maj-pc'],
+    // Fenêtre réduite : la réinstallation est silencieuse et relance l'appli.
+    ['/c', 'start', '/min', 'AppliBourse - mise a jour', 'powershell', '-Command', 'npm run maj-pc'],
     { cwd: version.dossierSource, detached: true, stdio: 'ignore' },
   );
   enfant.unref();
@@ -295,9 +296,17 @@ function creerFenetre() {
     // Page d'attente tout de suite, puis l'interface une fois à jour.
     void fenetre.loadURL(PAGE_ATTENTE);
     void lireVersionBuild()
-      .then(version => preparerInterface({ embarquee: join(ici, '..', 'dist', 'index.html'), version }))
+      .then(version => preparerInterface({
+        embarquee: globalThis.interfaceEmbarquee ?? join(ici, '..', 'dist', 'index.html'),
+        version,
+      }))
       .then(resultat => {
-        lancement = resultat.lancement;
+        // Le lanceur a peut-être déjà récupéré du code : on l'ajoute au bilan.
+        lancement = {
+          ...resultat.lancement,
+          appliquees: [...(globalThis.miseAJourAuLancement ?? []), ...resultat.lancement.appliquees],
+          erreur: resultat.lancement.erreur ?? globalThis.erreurAuLancement,
+        };
         return fenetre.loadFile(resultat.chemin);
       });
   }

@@ -127,12 +127,12 @@ export async function preparerInterface({ embarquee, version, construire }) {
     }
 
     if (version?.commit && version.commit !== tete) {
-      const moteur = (await git(dossier, ['diff', '--name-only', version.commit, tete, '--', 'bureau/electron']))
+      const moteur = (await git(dossier, ['diff', '--name-only', version.commit, tete, '--', 'bureau/electron/lanceur.mjs']))
         .split('\n')
         .filter(Boolean);
       if (moteur.length > 0) {
         lancement.moteurPerime = true;
-        lancement.nouveautesMoteur = (await git(dossier, ['log', '--format=%s', `${version.commit}..${tete}`, '--', 'bureau/electron']))
+        lancement.nouveautesMoteur = (await git(dossier, ['log', '--format=%s', `${version.commit}..${tete}`, '--', 'bureau/electron/lanceur.mjs']))
           .split('\n')
           .filter(Boolean);
       }

@@ -77,7 +77,7 @@
     "esbuild@0.28.2": true,
     "electron@40.10.6": true
   },
-  "main": "bureau/electron/principal.mjs",
+  "main": "bureau/electron/lanceur.mjs",
   "build": {
     "appId": "fr.applibourse.bureau",
     "productName": "AppliBourse",

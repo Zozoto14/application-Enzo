@@ -56,7 +56,7 @@ executer('npm', ['run', 'bureau:exe']);
 
 // --- 4. Lancement de l'installeur -------------------------------------------
 // package.json est relu ici : le git pull a pu changer le dossier de sortie.
-console.log('\n[4/4] Lancement de l’installeur');
+console.log('\n[4/4] Installation');
 const config = JSON.parse(readFileSync(resolve(racine, 'package.json'), 'utf8'));
 const sortie = resolve(racine, config.build?.directories?.output ?? 'dist');
 
@@ -73,5 +73,15 @@ if (installeurs.length === 0) {
 }
 
 console.log(`→ ${installeurs[0]}`);
-spawn(installeurs[0], [], { detached: true, stdio: 'ignore' }).unref();
-console.log('\nL’installeur est ouvert : fermez AppliBourse si elle tourne, puis suivez les étapes.');
+// Installation silencieuse (/S) : aucune fenêtre, aucun clic. L'installeur
+// ferme lui-même une AppliBourse encore ouverte.
+execFileSync(installeurs[0], ['/S'], { stdio: 'inherit' });
+
+// Puis on relance l'application installée.
+const executable = resolve(process.env.LOCALAPPDATA ?? '', 'Programs', 'AppliBourse', 'AppliBourse.exe');
+if (existsSync(executable)) {
+  spawn(executable, [], { detached: true, stdio: 'ignore' }).unref();
+  console.log('\nAppliBourse est installée et relancée.');
+} else {
+  console.log(`\nAppliBourse est installée. Lancez-la depuis le menu Démarrer (${executable} introuvable).`);
+}
