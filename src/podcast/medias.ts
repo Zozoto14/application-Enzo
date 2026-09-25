@@ -66,6 +66,9 @@ export function texteBrut(brut: string): string {
     .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
     .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(parseInt(code, 16)))
     .replace(/&([a-z]+);/gi, (tout: string, nom: string) => ENTITES[nom.toLowerCase()] ?? tout)
+    // Certains flux encodent leur HTML en entités : on retire aussi ces balises-là.
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&([a-z]+);/gi, (tout: string, nom: string) => ENTITES[nom.toLowerCase()] ?? tout)
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -184,4 +187,37 @@ export async function chargerMedias(
   }
   articles.sort((a, b) => b.date.localeCompare(a.date));
   return { articles, echecs };
+}
+
+// ------------------------------------------------ Actualités par valeur
+
+const RECHERCHE_ACTUALITES = 'https://news.google.com/rss/search';
+
+/** Requête pour une valeur : ses mots distinctifs, entre guillemets. */
+export function requeteValeur(nom: string): string | undefined {
+  const mots = motsCles(nom).slice(0, 3);
+  return mots.length > 0 ? `"${mots.join(' ')}"` : undefined;
+}
+
+/** Flux de recherche Google Actualités, en français, sur les sept derniers jours. */
+export function urlActualitesValeur(nom: string): string | undefined {
+  const requete = requeteValeur(nom);
+  return requete
+    ? `${RECHERCHE_ACTUALITES}?q=${encodeURIComponent(`${requete} when:7d`)}&hl=fr&gl=FR&ceid=FR:fr`
+    : undefined;
+}
+
+/**
+ * Articles d'une recherche Google Actualités. Chaque titre y finit par
+ * « - Source » : on en tire le vrai média, et la description, qui ne fait
+ * que répéter titre et source, est écartée.
+ */
+export function lireRechercheActualites(xml: string): ArticleMedia[] {
+  return lireFlux(xml, { nom: 'Google Actualités', langue: 'fr' }).map(article => {
+    const separateur = article.titre.lastIndexOf(' - ');
+    const titre = separateur > 0 ? article.titre.slice(0, separateur).trim() : article.titre;
+    const source = separateur > 0 ? article.titre.slice(separateur + 3).trim() : article.source;
+    const resume = article.resume && !article.resume.startsWith(titre) ? article.resume : '';
+    return { ...article, titre, source, resume };
+  });
 }

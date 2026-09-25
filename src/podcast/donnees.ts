@@ -14,7 +14,13 @@ import type { CoursDate } from '../core/performance/serie';
 import { totaux, valoriserPositions } from '../core/portfolio/valorisation';
 import { INDICES } from '../cours/indices';
 import type { Actualite } from '../fondamentaux/actualites';
-import { chargerMedias, concerne, type ArticleMedia } from './medias';
+import {
+  chargerMedias,
+  concerne,
+  lireRechercheActualites,
+  urlActualitesValeur,
+  type ArticleMedia,
+} from './medias';
 import type { DonneesValeur } from '../fondamentaux/yahoo';
 import { EXPLICATIONS } from '../ui/vues/explications';
 import {
@@ -88,6 +94,7 @@ export function entreesEpisode(
   actualitesMarche: readonly Actualite[],
   presse: readonly ArticleMedia[] = [],
   cibleMinutes = 10,
+  articlesParValeur: ReadonlyMap<string, readonly ArticleMedia[]> = new Map(),
 ): EntreesEpisode {
   const lignes = lignesDuPortefeuille(entrees);
   const { valorisees } = valoriserPositions(entrees.etat.positions, entrees.cours);
@@ -118,7 +125,12 @@ export function entreesEpisode(
       prochainsResultats: fiche?.resultats.prochaineDate,
       detachement: fiche?.dividende.dateDetachement,
       paiement: fiche?.dividende.datePaiement,
-      articles: presse.filter(article => concerne(article, fiche?.nom ?? ligne.nom) || concerne(article, ligne.nom)),
+      // D'abord les articles résumés des grands médias, puis ceux de la
+      // recherche par valeur, sans doublon de titre.
+      articles: dedoublonner([
+        ...presse.filter(article => concerne(article, fiche?.nom ?? ligne.nom) || concerne(article, ligne.nom)),
+        ...(articlesParValeur.get(ligne.nom) ?? []),
+      ]),
       per: fiche?.valorisation.per,
       rendementDividende:
         fiche?.dividende.rendement !== null && fiche?.dividende.rendement !== undefined
@@ -149,6 +161,16 @@ export function entreesEpisode(
     presse,
     cibleMinutes,
   };
+}
+
+function dedoublonner(articles: readonly ArticleMedia[]): ArticleMedia[] {
+  const vus = new Set<string>();
+  return articles.filter(article => {
+    const cle = article.titre.toLowerCase().replace(/[^a-z0-9à-ÿ]+/g, ' ').trim();
+    if (vus.has(cle)) return false;
+    vus.add(cle);
+    return true;
+  });
 }
 
 export interface Chargeurs {
@@ -200,6 +222,26 @@ export async function preparerEpisode(
   const presse = chargeurs.flux ? await chargerMedias(chargeurs.flux) : { articles: [], echecs: 0 };
   manques += presse.echecs;
 
+  // Actualités de chacune de vos plus grosses lignes, tous médias confondus.
+  const articlesParValeur = new Map<string, ArticleMedia[]>();
+  if (chargeurs.flux) {
+    surEtape?.('Actualités de vos valeurs dans la presse…');
+    const flux = chargeurs.flux;
+    await Promise.all(
+      lignesDuPortefeuille(entrees)
+        .slice(0, VALEURS_RACONTEES)
+        .map(async ligne => {
+          const url = urlActualitesValeur(ligne.nom);
+          if (!url) return;
+          try {
+            articlesParValeur.set(ligne.nom, lireRechercheActualites(await flux(url)).slice(0, 8));
+          } catch {
+            manques += 1;
+          }
+        }),
+    );
+  }
+
   surEtape?.('Tour des marchés…');
   const marche = await chargeurs.actualites('bourse marchés actions').catch(() => {
     manques += 1;
@@ -208,7 +250,9 @@ export async function preparerEpisode(
 
   surEtape?.('Écriture de l’épisode…');
   return {
-    episode: construireEpisode(entreesEpisode(entrees, cache, actualites, marche, presse.articles, cibleMinutes)),
+    episode: construireEpisode(
+      entreesEpisode(entrees, cache, actualites, marche, presse.articles, cibleMinutes, articlesParValeur),
+    ),
     manques,
   };
 }

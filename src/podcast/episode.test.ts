@@ -172,3 +172,46 @@ describe('épisode long', () => {
     expect(revue.segments.some(segment => segment.texte.includes('hydrogène'))).toBe(false);
   });
 });
+
+describe('revue de presse reliée au portefeuille', () => {
+  const presse = [
+    { titre: 'Le Tour de France passe par Lyon', resume: 'Une étape de montagne.', source: 'Le Monde', date: '2026-09-25', langue: 'fr' as const },
+    { titre: 'Apple bondit avec le nouvel iPhone', resume: 'Les précommandes dépassent les attentes.', source: 'Les Echos', date: '2026-09-25', langue: 'fr' as const },
+  ];
+  const episode = construireEpisode({
+    aujourdhui: '2026-09-25',
+    valeurTotale: 10000,
+    totalReturn: 500,
+    totalReturnPct: 5,
+    lignes: [
+      { nom: 'AMUNDI MSCI WORLD SWAP UCITS ETF EUR ACC', variationJour: 0.3, latentPct: 5, poids: 70 },
+      { nom: 'Air Liquide', variationJour: 1, latentPct: 8, poids: 30 },
+    ],
+    valeurs: [
+      {
+        nom: 'Air Liquide',
+        actualites: [],
+        articles: [
+          { titre: 'Air Liquide relève ses objectifs', resume: '', source: 'Zonebourse', date: '2026-09-24', langue: 'fr' as const },
+        ],
+      },
+    ],
+    indices: [],
+    actualitesMarche: [],
+    presse,
+  });
+
+  it('place en tête l’article qui touche vos lignes, avec « Pour vous »', () => {
+    const revue = episode.chapitres.find(chapitre => chapitre.titre === 'La revue de presse')!;
+    const textes = revue.segments.map(segment => segment.texte);
+    expect(textes[2]).toBe('Apple bondit avec le nouvel iPhone.');
+    expect(textes.find(texte => texte.startsWith('Pour vous'))).toContain('Apple pèse environ 4,5 pour cent du MSCI World');
+  });
+
+  it('cite les titres sur vos valeurs, avec leur source', () => {
+    const une = episode.chapitres.find(chapitre => chapitre.titre === 'Vos valeurs à la une')!;
+    const texte = une.segments.map(segment => segment.texte).join(' ');
+    expect(texte).toContain('Cette semaine, Air Liquide fait parler d’elle : Air Liquide relève ses objectifs. C’était chez Zonebourse.');
+    expect(episode.sources.map(source => source.source)).toEqual(expect.arrayContaining(['Zonebourse', 'Les Echos']));
+  });
+});

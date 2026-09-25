@@ -14,6 +14,7 @@
 
 import type { Actualite } from '../fondamentaux/actualites';
 import type { ArticleMedia } from './medias';
+import { expositionDe, impactPourVous, type ExpositionPortefeuille } from './impacts';
 
 export interface Segment {
   texte: string;
@@ -112,12 +113,23 @@ function compterMots(segments: readonly Segment[]): number {
 const nombreParle = (valeur: number, decimales = 1) =>
   valeur.toLocaleString('fr-FR', { maximumFractionDigits: decimales });
 
-/** Un article raconté : la source, le titre, puis le résumé s'il y en a un. */
-function raconterArticle(article: ArticleMedia, introduction: string): Segment[] {
+/**
+ * Un article raconté : la source, le titre, le résumé s'il y en a un, puis
+ * — si l'on sait le dire — ce que la nouvelle change pour vos lignes.
+ */
+function raconterArticle(
+  article: ArticleMedia,
+  introduction: string,
+  expose?: ExpositionPortefeuille,
+): Segment[] {
   const segments: Segment[] = [fr(`${introduction}${article.source ? ` ${article.source}` : ''} :`)];
   segments.push({ texte: titreFini(article.titre), langue: article.langue });
   if (article.resume) {
     segments.push({ texte: titreFini(article.resume), langue: article.langue });
+  }
+  const impact = expose ? impactPourVous(article, expose) : undefined;
+  if (impact) {
+    segments.push(fr(impact));
   }
   return segments;
 }
@@ -277,10 +289,25 @@ export function construireEpisode(entrees: EntreesEpisode): Episode {
         ),
       );
     }
-    const articles = (valeur.articles ?? []).filter(a => recente(a, entrees.aujourdhui)).slice(0, cible >= 15 ? 3 : 2);
-    for (const article of articles) {
+    const recents = (valeur.articles ?? []).filter(a => recente(a, entrees.aujourdhui));
+    // Les articles résumés sont racontés ; les autres, cités en titres.
+    const resumes = recents.filter(a => a.resume).slice(0, cible >= 15 ? 3 : 2);
+    for (const article of resumes) {
       articlesUtilises.add(article);
       phrases.push(...raconterArticle(article, 'Dans la presse, chez'));
+    }
+    const titresSeuls = recents
+      .filter(a => !resumes.includes(a))
+      .slice(0, cible >= 15 ? 5 : cible >= 10 ? 3 : 1);
+    if (titresSeuls.length > 0) {
+      phrases.push(fr(resumes.length > 0 ? 'D’autres titres cette semaine :' : `Cette semaine, ${valeur.nom} fait parler d’elle :`));
+      for (const article of titresSeuls) {
+        articlesUtilises.add(article);
+        phrases.push({ texte: titreFini(article.titre), langue: article.langue });
+        if (article.source) {
+          phrases.push(fr(`C’était chez ${article.source}.`));
+        }
+      }
     }
     if (titres.length > 0) {
       phrases.push(fr(`${valeur.nom}. ${titres.length > 1 ? 'Deux titres' : 'Un titre'} dans la presse${titres[0].source ? `, notamment chez ${titres[0].source}` : ''} :`));
@@ -393,12 +420,19 @@ export function construireEpisode(entrees: EntreesEpisode): Episode {
   const budget = cible * MOTS_PAR_MINUTE;
   let mots = compterMots([...chapitres, ...(sujetChapitre ? [sujetChapitre] : []), cloture].flatMap(c => c.segments)) + 60;
   const presse = (entrees.presse ?? []).filter(a => !articlesUtilises.has(a) && recente(a, entrees.aujourdhui));
+  const expose = expositionDe(entrees.lignes.map(ligne => ({ nom: ligne.nom, poids: ligne.poids })));
   const choisir = (langue: 'fr' | 'en', maximum: number, introduction: string) => {
     const segments: Segment[] = [];
     let nombre = 0;
-    for (const article of alterner(presse.filter(a => a.langue === langue))) {
+    // Les articles qui touchent vos lignes passent en premier.
+    const candidats = alterner(presse.filter(a => a.langue === langue));
+    const ordonnes = [
+      ...candidats.filter(a => impactPourVous(a, expose)),
+      ...candidats.filter(a => !impactPourVous(a, expose)),
+    ];
+    for (const article of ordonnes) {
       if (nombre >= maximum) break;
-      const raconte = raconterArticle(article, introduction);
+      const raconte = raconterArticle(article, introduction, expose);
       const cout = compterMots(raconte);
       if (mots + cout > budget) continue;
       segments.push(...raconte);

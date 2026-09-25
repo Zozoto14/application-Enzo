@@ -193,8 +193,23 @@ const FLUX_MEDIAS = new Set([
 ]);
 const TAILLE_MAX_FLUX = 3 * 1024 * 1024;
 
+/** Recherche d'actualités par valeur : seule la requête varie. */
+function rechercheActualitesAutorisee(adresse) {
+  try {
+    const url = new URL(adresse);
+    return (
+      url.origin === 'https://news.google.com' &&
+      url.pathname === '/rss/search' &&
+      adresse.length < 400 &&
+      [...url.searchParams.keys()].every(cle => ['q', 'hl', 'gl', 'ceid'].includes(cle))
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function fluxMedia(adresse) {
-  if (!FLUX_MEDIAS.has(adresse)) {
+  if (!FLUX_MEDIAS.has(adresse) && !rechercheActualitesAutorisee(adresse)) {
     throw new Error('Flux non autorisé.');
   }
   const reponse = await fetch(adresse, {

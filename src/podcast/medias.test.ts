@@ -1,4 +1,14 @@
-import { chargerMedias, concerne, lireFlux, motsCles, resumeCourt, texteBrut } from './medias';
+import {
+  chargerMedias,
+  concerne,
+  lireFlux,
+  lireRechercheActualites,
+  motsCles,
+  requeteValeur,
+  resumeCourt,
+  texteBrut,
+  urlActualitesValeur,
+} from './medias';
 
 const RSS = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel><title>Les Echos</title>
@@ -80,6 +90,28 @@ describe('revue de presse', () => {
     expect(articles.map(article => article.titre)).toEqual([
       'Air Liquide signe un contrat géant dans l’hydrogène',
       'La BCE maintient ses taux',
+    ]);
+  });
+});
+
+describe('actualités par valeur', () => {
+  it('fabrique la recherche et lit le média dans le titre', () => {
+    expect(requeteValeur('AMUNDI MSCI WORLD SWAP UCITS ETF EUR ACC')).toBe('"msci world"');
+    expect(urlActualitesValeur('Air Liquide')).toBe(
+      'https://news.google.com/rss/search?q=%22air%20liquide%22%20when%3A7d&hl=fr&gl=FR&ceid=FR:fr',
+    );
+    const xml = `<rss><channel><item><title>Air Liquide relève ses objectifs - Zonebourse</title>
+      <description>&lt;a href="x"&gt;Air Liquide relève ses objectifs&lt;/a&gt;&amp;nbsp;&lt;font&gt;Zonebourse&lt;/font&gt;</description>
+      <pubDate>Fri, 25 Sep 2026 08:00:00 GMT</pubDate><link>https://news.google.com/x</link></item></channel></rss>`;
+    expect(lireRechercheActualites(xml)).toEqual([
+      {
+        titre: 'Air Liquide relève ses objectifs',
+        resume: '',
+        source: 'Zonebourse',
+        date: '2026-09-25',
+        lien: 'https://news.google.com/x',
+        langue: 'fr',
+      },
     ]);
   });
 });
