@@ -29,4 +29,11 @@ contextBridge.exposeInMainWorld('applibourse', {
     notifier: (titre, corps) => ipcRenderer.invoke('systeme:notifier', titre, corps),
     ouvrir: url => ipcRenderer.invoke('systeme:ouvrir', url),
   },
+
+  maj: {
+    /** Compare la version installée à celle de GitHub. */
+    verifier: () => ipcRenderer.invoke('maj:verifier'),
+    /** Lance `npm run maj-pc` dans une fenêtre, puis ferme l'application. */
+    installer: () => ipcRenderer.invoke('maj:installer'),
+  },
 });

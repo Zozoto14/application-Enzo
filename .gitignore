@@ -10,3 +10,9 @@ node_modules/
 
 # Clé privée de signature des mises à jour : reste sur le PC, jamais sur GitHub
 cle-maj-privee.txt
+
+# Gravé à chaque compilation par scripts/version-build.mjs
+bureau/electron/version-build.json
+
+# Résultat de vite build, régénéré à chaque compilation
+bureau/dist/

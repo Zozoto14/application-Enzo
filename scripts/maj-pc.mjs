@@ -9,7 +9,7 @@
  */
 
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -21,9 +21,24 @@ function executer(commande, args) {
 
 // --- 1. Récupérer le code ---------------------------------------------------
 console.log('\n[1/4] Récupération du code depuis GitHub');
+
+// La clé de signature n'est plus suivie par git : un pull qui la retire du
+// dépôt la supprimerait aussi du disque. On la garde en mémoire le temps du
+// pull, et on la remet si elle a disparu.
+const cheminCle = resolve(racine, 'cle-maj-privee.txt');
+const cle = existsSync(cheminCle) ? readFileSync(cheminCle) : undefined;
+const remettreCle = () => {
+  if (cle && !existsSync(cheminCle)) {
+    writeFileSync(cheminCle, cle);
+    console.log('Clé de signature cle-maj-privee.txt conservée.');
+  }
+};
+
 try {
   executer('git', ['pull']);
+  remettreCle();
 } catch {
+  remettreCle();
   console.error(
     '\nLe git pull a échoué. Le plus souvent, un fichier a été modifié sur ce PC :\n' +
       'lancez "git status" pour voir lequel.',

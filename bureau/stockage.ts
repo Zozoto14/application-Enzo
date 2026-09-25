@@ -38,7 +38,19 @@ interface PontBureau {
     notifier(titre: string, corps: string): Promise<boolean>;
     ouvrir(url: string): Promise<boolean>;
   };
+  /** Absent des versions compilées avant l'arrivée des mises à jour. */
+  maj?: {
+    verifier(): Promise<EtatMiseAJourBureau>;
+    installer(): Promise<boolean>;
+  };
 }
+
+/** Réponse du processus principal à « y a-t-il plus récent sur GitHub ? ». */
+export type EtatMiseAJourBureau =
+  | { etat: 'inconnue' }
+  | { etat: 'a-jour'; commit: string }
+  | { etat: 'disponible'; commit: string; nouveautes: string[] }
+  | { etat: 'erreur'; motif: string };
 
 /** Pont exposé par le préchargement, absent dans un navigateur ordinaire. */
 export function pont(): PontBureau | undefined {

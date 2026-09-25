@@ -18,6 +18,7 @@ import { App } from '../src/app/App';
 import { Titre } from '../src/ui/composants';
 import { ESPACEMENT, palettePour } from '../src/ui/theme';
 import { useFondDocument } from './Bureau';
+import { BandeauMiseAJour } from './MiseAJour';
 import { ouvrirSessionBureau, type SessionBureau } from './session';
 import { stockageCourant } from './stockage';
 
@@ -95,10 +96,18 @@ function Racine() {
     );
   }
 
-  return <App session={etat.session.session} />;
+  return (
+    <View style={[styles.pleinEcran, { backgroundColor: palette.fond }]}>
+      <BandeauMiseAJour palette={palette} />
+      <View style={styles.pleinEcran}>
+        <App session={etat.session.session} />
+      </View>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
+  pleinEcran: { flex: 1 },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: ESPACEMENT.xl },
   motif: { textAlign: 'center', maxWidth: 520, marginTop: ESPACEMENT.m, lineHeight: 22 },
 });

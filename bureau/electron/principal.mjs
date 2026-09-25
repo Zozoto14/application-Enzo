@@ -21,6 +21,7 @@
  */
 
 import { app, BrowserWindow, dialog, ipcMain, Notification, shell } from 'electron';
+import { execFile, spawn } from 'node:child_process';
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -112,6 +113,95 @@ function installerPasserelle() {
     await writeFile(filePath, Buffer.from(contenu));
     return true;
   });
+
+  ipcMain.handle('maj:verifier', async () => verifierMiseAJour());
+
+  ipcMain.handle('maj:installer', async () => lancerMiseAJour());
+}
+
+// ------------------------------------------------------------ Mises à jour
+//
+// L'application ne télécharge rien elle-même. Elle connaît le commit qui l'a
+// produite et le dossier du projet (gravés par scripts/version-build.mjs) ;
+// elle demande à git ce que GitHub a de plus récent, avec les identifiants
+// déjà configurés sur le PC — le dépôt est privé, une requête anonyme ne
+// verrait rien.
+
+/** Informations gravées à la compilation, absentes en développement. */
+async function lireVersionBuild() {
+  try {
+    return JSON.parse(await readFile(join(ici, 'version-build.json'), 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+function git(dossier, args, delai = 30_000) {
+  return new Promise((resoudre, rejeter) => {
+    execFile(
+      'git',
+      ['-C', dossier, ...args],
+      { timeout: delai, windowsHide: true, encoding: 'utf8' },
+      (erreur, sortie) => (erreur ? rejeter(erreur) : resoudre(sortie.trim())),
+    );
+  });
+}
+
+async function verifierMiseAJour() {
+  const version = await lireVersionBuild();
+  if (!version?.commit || !version.dossierSource) {
+    return { etat: 'inconnue' };
+  }
+  if (!existsSync(version.dossierSource)) {
+    return { etat: 'erreur', motif: `Dossier du projet introuvable : ${version.dossierSource}` };
+  }
+
+  try {
+    await git(version.dossierSource, ['fetch', '--quiet', 'origin', 'main']);
+    const distant = await git(version.dossierSource, ['rev-parse', 'origin/main']);
+    if (distant === version.commit) {
+      return { etat: 'a-jour', commit: version.commit.slice(0, 7) };
+    }
+
+    // Les titres des commits arrivés depuis la compilation : c'est ce qui
+    // dit à l'utilisateur ce qu'il gagnera à mettre à jour.
+    const journal = await git(version.dossierSource, [
+      'log',
+      '--format=%s',
+      `${version.commit}..origin/main`,
+    ]);
+    const nouveautes = journal ? journal.split('\n').filter(Boolean) : [];
+    if (nouveautes.length === 0) {
+      // Commit local plus récent que GitHub : rien à récupérer.
+      return { etat: 'a-jour', commit: version.commit.slice(0, 7) };
+    }
+    return { etat: 'disponible', nouveautes, commit: distant.slice(0, 7) };
+  } catch (erreur) {
+    return {
+      etat: 'erreur',
+      motif: erreur instanceof Error ? erreur.message : String(erreur),
+    };
+  }
+}
+
+async function lancerMiseAJour() {
+  const version = await lireVersionBuild();
+  if (!version?.dossierSource || !existsSync(version.dossierSource)) {
+    return false;
+  }
+
+  // Une fenêtre PowerShell visible : la compilation prend quelques minutes
+  // et l'utilisateur doit voir qu'elle avance, ou pourquoi elle échoue.
+  const enfant = spawn(
+    'cmd.exe',
+    ['/c', 'start', 'AppliBourse - mise a jour', 'powershell', '-NoExit', '-Command', 'npm run maj-pc'],
+    { cwd: version.dossierSource, detached: true, stdio: 'ignore' },
+  );
+  enfant.unref();
+
+  // L'installeur remplacera l'application : elle doit être fermée d'ici là.
+  setTimeout(() => app.quit(), 1500);
+  return true;
 }
 
 function creerFenetre() {

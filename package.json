@@ -15,7 +15,7 @@
     "bureau": "vite",
     "bureau:build": "vite build",
     "bureau:app": "cross-env-shell APPLIBOURSE_DEV=http://localhost:5177 electron .",
-    "bureau:exe": "npm run bureau:build && electron-builder --win",
+    "bureau:exe": "node scripts/version-build.mjs && npm run bureau:build && electron-builder --win",
     "icone": "node scripts/icone.mjs",
     "maj-pc": "node scripts/maj-pc.mjs"
   },
