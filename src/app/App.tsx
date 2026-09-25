@@ -1,0 +1,1135 @@
+/**
+ * Assemblage de l'application.
+ *
+ * Aiguille entre les écrans selon l'état de la session, et fait le lien entre
+ * l'interface et les couches métier. Les dépendances sont injectées : les
+ * tests montent l'application complète avec un SQLite de test, et l'appareil
+ * y branchera op-sqlite sans que ce fichier change.
+ *
+ * Un détail d'exécution qui n'en est pas un : la dérivation Argon2id bloque le
+ * fil JavaScript pendant près d'une seconde. Chaque appel est donc différé
+ * d'un tour de boucle, le temps que l'indicateur d'attente s'affiche. Sans ce
+ * report, l'écran resterait figé sans rien montrer, puis sauterait d'un coup
+ * au tableau de bord.
+ */
+
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { StatusBar, useColorScheme } from 'react-native';
+// SafeAreaView de react-native est deprecie ; celui de safe-area-context gere
+// en plus l'encoche et la barre de geste, et etait deja une dependance.
+import {
+  SafeAreaProvider,
+  SafeAreaView,
+  initialWindowMetrics,
+} from 'react-native-safe-area-context';
+import type { Compte, Titre, Transaction } from '../core/domain/types';
+import {
+  transactionsDeReprise,
+  type PositionImportee,
+} from '../core/import/positions';
+import {
+  chargerEtat,
+  DepotComptes,
+  DepotCours,
+  DepotParametres,
+  DepotTitres,
+  DepotTransactions,
+  DepotWatchlist,
+  PARAMETRES,
+} from '../db/depots';
+import { FOURNISSEURS, fournisseurParId } from '../cours/fournisseurs';
+import { rafraichirCours, resumeRafraichissement } from '../cours/rafraichir';
+import { ErreurDeverrouillage } from '../securite/coffre';
+import { ErreurTemporisation, Session } from '../session/session';
+import { construireDashboard, type VueDashboard } from '../ui/vues/dashboard';
+import { anneesDisponibles, construireRapportAnnuel } from '../rapport/annuel';
+import { ecrireRapport } from '../rapport/fichiers';
+import { Decimal } from '../core/money/decimal';
+import { totaux, valoriserPositions } from '../core/portfolio/valorisation';
+import { ErreurFusion, fusionnerDansBase } from '../sync/application';
+import { resumerFusion } from '../sync/fusion';
+import { creerGenerateurId, identifiantAppareil } from '../sync/identite';
+import { chargerHistoriques, resumeHistorique } from '../cours/historique';
+import { chercherSymboles, type CandidatSymbole } from '../cours/symboles';
+import { Comparateur } from '../ui/ecrans/Comparateur';
+import { construireComparateur } from '../ui/vues/comparateur';
+import { Projection } from '../ui/ecrans/Projection';
+import { Symboles } from '../ui/ecrans/Symboles';
+import { Watchlist } from '../ui/ecrans/Watchlist';
+import { construireWatchlist } from '../ui/vues/watchlist';
+import { construireComparaison } from '../ui/vues/comparaison';
+import {
+  CHAMPS_DEFAUT,
+  construireProjection,
+  type ChampsProjection,
+} from '../ui/vues/projection';
+import { construireDividendes } from '../ui/vues/dividendes';
+import { construireRisque } from '../ui/vues/risque';
+import {
+  construireFlux,
+  construireImpots,
+  construirePerformance,
+} from '../ui/vues/onglets';
+import { serieValorisation } from '../core/performance/serie';
+import { Portefeuille } from '../ui/ecrans/Portefeuille';
+import { CreationCompte } from '../ui/ecrans/CreationCompte';
+import { CreationTitre } from '../ui/ecrans/CreationTitre';
+import { Deverrouillage } from '../ui/ecrans/Deverrouillage';
+import { ImportPositions } from '../ui/ecrans/ImportPositions';
+import { Reglages } from '../ui/ecrans/Reglages';
+import { Sauvegarde } from '../ui/ecrans/Sauvegarde';
+import { Notifications, type SeuilAffiche } from '../ui/ecrans/Notifications';
+import {
+  planningDepuisJson,
+  planningVersJson,
+  prochainBriefing,
+  type Planning,
+} from '../notifications/planification';
+import { chargerModule } from '../natif/modules';
+import { gestionnaireDepuisFs } from '../maj/application';
+import { systemeDepuisRnfs } from '../fichiers/systeme';
+import { exporterDepuisBase, restaurerDansBase } from '../sauvegarde/depot';
+import { ouvrirArchive } from '../sauvegarde/archive';
+import {
+  ecrireSauvegarde,
+  lireSauvegarde,
+  listerSauvegardes,
+  supprimerSauvegarde,
+  type SauvegardeSurDisque,
+} from '../sauvegarde/fichiers';
+import { SaisieOperation } from '../ui/ecrans/SaisieOperation';
+import {
+  PremierLancement,
+  type SecretsInitiaux,
+} from '../ui/ecrans/PremierLancement';
+import { palettePour, stylesPartages } from '../ui/theme';
+
+export interface AppProps {
+  session: Session;
+  /** Injectable pour rendre les identifiants déterministes dans les tests. */
+  genererId?(prefixe: string): string;
+  /** Date du jour, injectable de même. */
+  aujourdhui?(): string;
+}
+
+type Ecran =
+  | 'tableau'
+  | 'compte'
+  | 'titre'
+  | 'saisie'
+  | 'import'
+  | 'reglages'
+  | 'sauvegarde'
+  | 'notifications'
+  | 'projection'
+  | 'watchlist'
+  | 'symboles'
+  | 'comparateur';
+
+/** Laisse React peindre avant un calcul qui bloque le fil. */
+function apresRendu(action: () => void): void {
+  setTimeout(action, 0);
+}
+
+/**
+ * Metriques de repli quand l'appareil n'en fournit pas encore.
+ *
+ * Sans elles, SafeAreaProvider ne rend rien tant qu'il n'a pas mesure l'ecran :
+ * l'application resterait blanche au premier rendu, et les tests ne verraient
+ * jamais le moindre ecran.
+ */
+const METRIQUES_DE_REPLI = {
+  frame: { x: 0, y: 0, width: 0, height: 0 },
+  insets: { top: 0, left: 0, right: 0, bottom: 0 },
+};
+
+/**
+ * Delai avant de considerer le demarrage comme abouti.
+ * Assez long pour couvrir le montage complet de l'interface, assez court pour
+ * que l'utilisateur n'ait pas le temps de fermer l'application avant.
+ */
+const DELAI_CONFIRMATION_DEMARRAGE = 4000;
+
+/**
+ * Seuils d'alerte des titres detenus, prets a afficher.
+ * Les alertes ne portent que sur les positions ouvertes : surveiller une
+ * valeur qu'on ne detient pas releve de la watchlist, pas des alertes.
+ */
+/** Seuils enregistres, tolerants a un reglage illisible. */
+function lireSeuils(session: Session): Record<string, { haut?: string; bas?: string }> {
+  try {
+    return JSON.parse(
+      new DepotParametres(session.base()).lire(PARAMETRES.seuilsAlertes) ?? '{}',
+    );
+  } catch {
+    // Un reglage corrompu ne doit pas priver de l'ecran entier.
+    return {};
+  }
+}
+
+/**
+ * Valeurs sur lesquelles une alerte de cours a un sens : celles qu'on detient,
+ * et celles qu'on surveille sans les detenir. Surveiller une valeur qu'on n'a
+ * pas est precisement le cas ou l'alerte sert le plus.
+ */
+function seuilsAffiches(
+  session: Session,
+  contenu: { titres: readonly { id: string; nom: string }[]; etat: { positions: readonly { titreId: string }[] } },
+): SeuilAffiche[] {
+  const enregistres = lireSeuils(session);
+  const concernes = new Set(contenu.etat.positions.map(position => position.titreId));
+  for (const ligne of new DepotWatchlist(session.base()).lister()) {
+    concernes.add(ligne.titreId);
+  }
+
+  return contenu.titres
+    .filter(titre => concernes.has(titre.id))
+    .map(titre => ({
+      titreId: titre.id,
+      nom: titre.nom,
+      haut: enregistres[titre.id]?.haut ?? '',
+      bas: enregistres[titre.id]?.bas ?? '',
+    }));
+}
+
+function dateDuJour(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Etat vide, quand la base n'est pas encore lisible. */
+const ETAT_VIDE = {
+  positions: [],
+  positionsSoldees: [],
+  cessions: [],
+  comptes: new Map(),
+};
+
+/**
+ * Dividendes encaisses sur douze mois glissants, par titre.
+ * Le comparateur en a besoin pour rapporter un rendement au prix de revient.
+ */
+function dividendesParTitre(
+  transactions: readonly Transaction[],
+  aujourdhui: string,
+): Map<string, Decimal> {
+  const [annee, mois, jour] = aujourdhui.split('-');
+  const debut = `${Number(annee) - 1}-${mois}-${jour}`;
+
+  const cumuls = new Map<string, Decimal>();
+  for (const transaction of transactions) {
+    if (transaction.type !== 'DIVIDENDE' || transaction.date <= debut) {
+      continue;
+    }
+    cumuls.set(
+      transaction.titreId,
+      (cumuls.get(transaction.titreId) ?? Decimal.ZERO).add(transaction.montantNet),
+    );
+  }
+  return cumuls;
+}
+
+export function App({ session, genererId, aujourdhui }: AppProps) {
+  const sombre = useColorScheme() === 'dark';
+  const [, forcerRendu] = useState(0);
+  const [secrets, setSecrets] = useState<SecretsInitiaux | undefined>();
+  const [erreur, setErreur] = useState<string | undefined>();
+  const [enCours, setEnCours] = useState(false);
+  const [ecran, setEcran] = useState<Ecran>('tableau');
+  const [messageCours, setMessageCours] = useState<string | undefined>();
+  const [coursEnCours, setCoursEnCours] = useState(false);
+  const [sauvegardes, setSauvegardes] = useState<SauvegardeSurDisque[]>([]);
+  const [messageSauvegarde, setMessageSauvegarde] = useState<string | undefined>();
+  const [erreurSauvegarde, setErreurSauvegarde] = useState<string | undefined>();
+  const [messageRapport, setMessageRapport] = useState<string | undefined>();
+  const [recherche, setRecherche] = useState<
+    | {
+        titreId: string;
+        candidats: readonly CandidatSymbole[];
+        avertissement?: string;
+        enCours?: boolean;
+      }
+    | undefined
+  >();
+  const [erreurSymboles, setErreurSymboles] = useState<string | undefined>();
+  const [compares, setCompares] = useState<readonly string[]>([]);
+  const [messageHistorique, setMessageHistorique] = useState<string | undefined>();
+  const [histoEnCours, setHistoEnCours] = useState(false);
+  const [champsProjection, setChampsProjection] =
+    useState<ChampsProjection>(CHAMPS_DEFAUT);
+  const [sauvegardeEnCours, setSauvegardeEnCours] = useState(false);
+  const [messageNotifications, setMessageNotifications] = useState<string | undefined>();
+
+  const rafraichir = useCallback(() => forcerRendu(n => n + 1), []);
+
+  /**
+   * Confirme au code natif que ce demarrage a abouti.
+   *
+   * Sans cet appel, le marqueur pose avant de charger une mise a jour ne
+   * serait jamais efface, et chaque redemarrage annulerait la mise a jour :
+   * le filet de securite se retournerait contre l'application, qui resterait
+   * eternellement sur son paquet d'origine.
+   *
+   * Differe de quelques secondes : un plantage survenant pendant le montage
+   * initial doit encore declencher le retour arriere.
+   */
+  useEffect(() => {
+    const gestionnaire = gestionnaireDepuisFs(
+      chargerModule<unknown>('react-native-fs').module,
+    );
+    if (!gestionnaire) {
+      return undefined;
+    }
+    const minuterie = setTimeout(() => {
+      gestionnaire.confirmerDemarrage().catch(() => {
+        // Un echec ici laisse le marqueur en place : la mise a jour sera
+        // ecartee au prochain demarrage, ce qui est le comportement sur.
+      });
+    }, DELAI_CONFIRMATION_DEMARRAGE);
+
+    return () => clearTimeout(minuterie);
+  }, []);
+  /**
+   * Generateur d'identifiants de cette installation, cree au premier besoin.
+   *
+   * Il porte l'identifiant de l'appareil, qui vit dans la base chiffree : on
+   * ne peut donc le lire qu'une fois deverrouille, d'ou la creation paresseuse.
+   * Sans ce prefixe, deux operations differentes saisies dans la meme
+   * milliseconde sur l'iPhone et sur l'iPad porteraient le meme identifiant,
+   * et la fusion en supprimerait une sans rien dire.
+   */
+  const generateurLocal = useRef<((prefixe: string) => string) | undefined>(undefined);
+  const identifiant = useCallback(
+    (prefixe: string) => {
+      if (genererId) {
+        return genererId(prefixe);
+      }
+      if (!generateurLocal.current) {
+        const parametres = new DepotParametres(session.base());
+        generateurLocal.current = creerGenerateurId(
+          identifiantAppareil(parametres, PARAMETRES.identifiantAppareil),
+        );
+      }
+      return generateurLocal.current(prefixe);
+    },
+    [genererId, session],
+  );
+
+  const statut = session.statut();
+
+  const executer = useCallback(
+    (action: () => void) => {
+      setErreur(undefined);
+      setEnCours(true);
+      apresRendu(() => {
+        try {
+          action();
+        } catch (e) {
+          // Le message vient de la couche session, qui ne distingue pas quel
+          // facteur a échoué. L'interface ne doit pas en dire davantage.
+          setErreur(
+            e instanceof ErreurDeverrouillage || e instanceof ErreurTemporisation
+              ? e.message
+              : e instanceof Error
+                ? e.message
+                : String(e),
+          );
+        } finally {
+          setEnCours(false);
+          rafraichir();
+        }
+      });
+    },
+    [rafraichir],
+  );
+
+  const creer = useCallback(
+    (motDePasse: string) =>
+      executer(() => setSecrets(session.initialiser({ motDePasse }))),
+    [executer, session],
+  );
+
+  const deverrouiller = useCallback(
+    (motDePasse: string, codeTotp: string) =>
+      executer(() => session.deverrouiller({ motDePasse, codeTotp })),
+    [executer, session],
+  );
+
+  const verrouiller = useCallback(() => {
+    session.verrouiller();
+    setEcran('tableau');
+    rafraichir();
+  }, [session, rafraichir]);
+
+  const enregistrerCompte = useCallback(
+    (compte: Compte) => {
+      new DepotComptes(session.base()).enregistrer(compte);
+      setEcran('tableau');
+      rafraichir();
+    },
+    [session, rafraichir],
+  );
+
+  const enregistrerTitre = useCallback(
+    (titre: Titre) => {
+      new DepotTitres(session.base()).enregistrer(titre);
+      // Retour a la saisie, d'ou l'on vient : creer une valeur n'est jamais
+      // une fin en soi, c'est un detour pour pouvoir saisir une operation.
+      setEcran('saisie');
+      rafraichir();
+    },
+    [session, rafraichir],
+  );
+
+  const enregistrerOperation = useCallback(
+    (transaction: Transaction) => {
+      new DepotTransactions(session.base()).enregistrer(transaction);
+      setEcran('tableau');
+      rafraichir();
+    },
+    [session, rafraichir],
+  );
+
+  /**
+   * Enregistre un import de positions.
+   * Les titres absents sont créés au passage : sans eux, les transactions de
+   * reprise violeraient la clé étrangère de la base.
+   */
+  const enregistrerImport = useCallback(
+    (positions: PositionImportee[]) => {
+      const base = session.base();
+      const depotTitres = new DepotTitres(base);
+      const compte = new DepotComptes(base).tous()[0];
+      if (!compte) {
+        return;
+      }
+
+      const idParIsin = new Map<string, string>();
+      for (const position of positions) {
+        const existant = depotTitres.parIsin(position.isin);
+        const id = existant?.id ?? identifiant(`titre-${position.isin}`);
+        idParIsin.set(position.isin, id);
+        if (!existant) {
+          depotTitres.enregistrer({
+            id,
+            isin: position.isin,
+            nom: position.nom,
+            // Pas de ticker : l'export n'en porte pas, et en fabriquer un a
+            // partir du nom — « STELLANT » — donnerait un symbole plausible
+            // qui n'existe sur aucun marche. Il echouerait en silence au
+            // rafraichissement, et surtout il ferait croire la valeur
+            // configuree. Vide, elle est comptee parmi celles a regler, et
+            // l'ecran Symboles y mene.
+            ticker: '',
+            deviseCotation: compte.devise,
+            // L'export ne dit rien de l'éligibilité au PEA. La présumer fausse
+            // bloquerait des saisies légitimes sur un plan où ces titres sont
+            // déjà logés ; à corriger à la main si besoin.
+            eligiblePEA: true,
+          });
+        }
+      }
+
+      const date = (aujourdhui ?? dateDuJour)();
+
+      new DepotTransactions(base).enregistrerLot(
+        transactionsDeReprise(positions, {
+          compteId: compte.id,
+          date,
+          devise: compte.devise,
+          resoudreTitre: position => idParIsin.get(position.isin)!,
+          genererId: position => identifiant(`reprise-${position.isin}`),
+        }),
+      );
+
+      // Sans cours, le tableau de bord afficherait « cours inconnu » pour tout
+      // juste après l'import. On retient le cours implicite — valeur de marché
+      // divisée par la quantité — et non le dernier cours affiché, arrondi au
+      // centime par le courtier.
+      const depotCours = new DepotCours(base);
+      for (const position of positions) {
+        const cours = position.valeurMarche
+          ? position.valeurMarche.div(position.quantite)
+          : position.dernierCours;
+        if (cours) {
+          depotCours.enregistrer(idParIsin.get(position.isin)!, date, cours);
+        }
+      }
+
+      setEcran('tableau');
+      rafraichir();
+    },
+    [session, rafraichir, identifiant, aujourdhui],
+  );
+
+  const enregistrerReglages = useCallback(
+    (fournisseurId: string, cle?: string) => {
+      const parametres = new DepotParametres(session.base());
+      parametres.ecrire(PARAMETRES.fournisseurCours, fournisseurId);
+      // Une cle vide signifie « ne pas changer » : on n'ecrase jamais une cle
+      // existante par du vide, sous peine de la perdre sans le vouloir.
+      if (cle) {
+        parametres.ecrire(PARAMETRES.cleApiCours, cle);
+      }
+      setEcran('tableau');
+      rafraichir();
+    },
+    [session, rafraichir],
+  );
+
+  const lancerRafraichissement = useCallback(() => {
+    const base = session.base();
+    const parametres = new DepotParametres(base);
+    const fournisseur = fournisseurParId(
+      parametres.lire(PARAMETRES.fournisseurCours) ?? '',
+    );
+
+    if (!fournisseur) {
+      setMessageCours(
+        'Aucun fournisseur de cours configure. Ouvrez les reglages pour en choisir un.',
+      );
+      return;
+    }
+
+    setCoursEnCours(true);
+    setMessageCours(undefined);
+    rafraichirCours(base, {
+      fournisseur,
+      cle: parametres.lire(PARAMETRES.cleApiCours),
+    })
+      .then(rapport => setMessageCours(resumeRafraichissement(rapport)))
+      .catch((erreur: unknown) =>
+        setMessageCours(erreur instanceof Error ? erreur.message : String(erreur)),
+      )
+      .finally(() => {
+        setCoursEnCours(false);
+        rafraichir();
+      });
+  }, [session, rafraichir]);
+
+  /**
+   * Systeme de fichiers de l'appareil, absent sur un binaire compile sans
+   * react-native-fs et dans les tests. L'ecran de sauvegarde le dit plutot que
+   * d'echouer silencieusement.
+   */
+  const fichiers = systemeDepuisRnfs(
+    chargerModule<unknown>('react-native-fs').module,
+  );
+
+  const rafraichirSauvegardes = useCallback(() => {
+    if (!fichiers) {
+      return;
+    }
+    listerSauvegardes(fichiers)
+      .then(setSauvegardes)
+      .catch(() => setSauvegardes([]));
+  }, [fichiers]);
+
+  const creerSauvegarde = useCallback(
+    (motDePasse: string) => {
+      if (!fichiers) {
+        return;
+      }
+      setSauvegardeEnCours(true);
+      setErreurSauvegarde(undefined);
+      setMessageSauvegarde(undefined);
+
+      apresRendu(() => {
+        try {
+          const archive = exporterDepuisBase(session.base(), {
+            motDePasse,
+            date: (aujourdhui ?? dateDuJour)(),
+          });
+          ecrireSauvegarde(fichiers, archive)
+            .then(ecrite => {
+              setMessageSauvegarde(`Sauvegarde créée : ${ecrite.nom}`);
+              rafraichirSauvegardes();
+            })
+            .catch((e: unknown) =>
+              setErreurSauvegarde(e instanceof Error ? e.message : String(e)),
+            )
+            .finally(() => setSauvegardeEnCours(false));
+        } catch (e) {
+          setErreurSauvegarde(e instanceof Error ? e.message : String(e));
+          setSauvegardeEnCours(false);
+        }
+      });
+    },
+    [fichiers, session, aujourdhui, rafraichirSauvegardes],
+  );
+
+  const fusionnerSauvegarde = useCallback(
+    (chemin: string, motDePasse: string) => {
+      if (!fichiers) {
+        return;
+      }
+      setSauvegardeEnCours(true);
+      setErreurSauvegarde(undefined);
+      setMessageSauvegarde(undefined);
+
+      lireSauvegarde(fichiers, chemin)
+        .then(archive => {
+          const lecture = ouvrirArchive(archive, motDePasse);
+          if (!lecture.ouverte) {
+            setErreurSauvegarde(lecture.motif);
+            return;
+          }
+
+          const fusion = fusionnerDansBase(session.base(), lecture.contenu);
+          const resume = resumerFusion(fusion);
+          const divergences =
+            fusion.conflits.length === 0
+              ? ''
+              : ` ${fusion.conflits.length} divergence(s) : ${fusion.conflits
+                  .map(conflit => `${conflit.nom} (${conflit.champs.join(', ')})`)
+                  .join(' ; ')}. Votre version a été gardée.`;
+          setMessageSauvegarde(`${resume.texte}${divergences}`);
+        })
+        .catch((e: unknown) =>
+          setErreurSauvegarde(
+            e instanceof ErreurFusion || e instanceof Error ? e.message : String(e),
+          ),
+        )
+        .finally(() => {
+          setSauvegardeEnCours(false);
+          rafraichir();
+        });
+    },
+    [fichiers, session, rafraichir],
+  );
+
+  const restaurerSauvegarde = useCallback(
+    (chemin: string, motDePasse: string) => {
+      if (!fichiers) {
+        return;
+      }
+      setSauvegardeEnCours(true);
+      setErreurSauvegarde(undefined);
+      setMessageSauvegarde(undefined);
+
+      lireSauvegarde(fichiers, chemin)
+        .then(archive => {
+          const lecture = ouvrirArchive(archive, motDePasse);
+          if (!lecture.ouverte) {
+            setErreurSauvegarde(lecture.motif);
+            return;
+          }
+          const rapport = restaurerDansBase(session.base(), lecture.contenu);
+          setMessageSauvegarde(
+            `Restauration terminée : ${rapport.comptes} compte(s), ${rapport.transactions} opération(s).`,
+          );
+          setEcran('tableau');
+          rafraichir();
+        })
+        .catch((e: unknown) =>
+          setErreurSauvegarde(e instanceof Error ? e.message : String(e)),
+        )
+        .finally(() => setSauvegardeEnCours(false));
+    },
+    [fichiers, session, rafraichir],
+  );
+
+  const genererRapport = useCallback(
+    (annee: number) => {
+      if (!fichiers) {
+        setMessageRapport(
+          'Écriture de fichiers indisponible dans cette version de l’application.',
+        );
+        return;
+      }
+
+      const contenuActuel = chargerEtat(session.base());
+      const rapport = construireRapportAnnuel({
+        annee,
+        etat: contenuActuel.etat,
+        comptes: contenuActuel.comptes,
+        titres: contenuActuel.titres,
+        transactions: contenuActuel.transactions,
+        cours: new DepotCours(session.base()).derniersCours(),
+        aujourdhui: (aujourdhui ?? dateDuJour)(),
+      });
+
+      setMessageRapport(undefined);
+      ecrireRapport(fichiers, rapport)
+        .then(ecrit =>
+          setMessageRapport(
+            `Rapport ${annee} écrit : ${ecrit.nom}. Ouvrez-le depuis Fichiers, puis imprimez-le en PDF.`,
+          ),
+        )
+        .catch((e: unknown) =>
+          setMessageRapport(e instanceof Error ? e.message : String(e)),
+        );
+    },
+    [fichiers, session, aujourdhui],
+  );
+
+  const surveiller = useCallback(
+    (titreId: string) => {
+      // Le cours du jour est fige a l'ajout : c'est le point de comparaison
+      // du suivi, et l'historique peut tres bien ne rien contenir a cette date.
+      const cours = new DepotCours(session.base()).derniersCours().get(titreId);
+      new DepotWatchlist(session.base()).ajouter({
+        titreId,
+        ajouteLe: (aujourdhui ?? dateDuJour)(),
+        coursAjout: cours,
+      });
+      rafraichir();
+    },
+    [session, aujourdhui, rafraichir],
+  );
+
+  const nePlusSurveiller = useCallback(
+    (titreId: string) => {
+      new DepotWatchlist(session.base()).retirer(titreId);
+      rafraichir();
+    },
+    [session, rafraichir],
+  );
+
+  const lancerChargementHistorique = useCallback(() => {
+    const contenuActuel = chargerEtat(session.base());
+    // Detenues et surveillees : une valeur qu'on surveille merite son
+    // historique, c'est meme la qu'on le regarde avant d'acheter.
+    const concernes = new Set(
+      contenuActuel.etat.positions.map(position => position.titreId),
+    );
+    for (const ligne of new DepotWatchlist(session.base()).lister()) {
+      concernes.add(ligne.titreId);
+    }
+
+    const demandes = contenuActuel.titres
+      .filter(titre => concernes.has(titre.id) && titre.ticker?.trim())
+      .map(titre => ({ titreId: titre.id, nom: titre.nom, symbole: titre.ticker!.trim() }));
+
+    if (demandes.length === 0) {
+      setMessageHistorique(
+        'Aucune valeur n’a de symbole : réglez-les avant de charger l’historique.',
+      );
+      return;
+    }
+
+    setHistoEnCours(true);
+    setMessageHistorique(undefined);
+
+    chargerHistoriques(session.base(), demandes)
+      .then(rapport => setMessageHistorique(resumeHistorique(rapport)))
+      .catch((e: unknown) =>
+        setMessageHistorique(e instanceof Error ? e.message : String(e)),
+      )
+      .finally(() => {
+        setHistoEnCours(false);
+        rafraichir();
+      });
+  }, [session, rafraichir]);
+
+  const basculerComparaison = useCallback((titreId: string) => {
+    setCompares(precedent =>
+      precedent.includes(titreId)
+        ? precedent.filter(id => id !== titreId)
+        : [...precedent, titreId],
+    );
+  }, []);
+
+  const chercherSymbole = useCallback((titreId: string, requete: string) => {
+    setErreurSymboles(undefined);
+    setRecherche({ titreId, candidats: [], enCours: true });
+
+    chercherSymboles(requete)
+      .then(resultat =>
+        setRecherche({
+          titreId,
+          candidats: resultat.candidats,
+          avertissement: resultat.avertissement,
+        }),
+      )
+      .catch((e: unknown) => {
+        setRecherche(undefined);
+        setErreurSymboles(e instanceof Error ? e.message : String(e));
+      });
+  }, []);
+
+  const retenirSymbole = useCallback(
+    (titreId: string, symbole: string) => {
+      const depot = new DepotTitres(session.base());
+      const titre = depot.tous().find(candidat => candidat.id === titreId);
+      if (!titre) {
+        return;
+      }
+      depot.enregistrer({ ...titre, ticker: symbole });
+      setRecherche(undefined);
+      rafraichir();
+    },
+    [session, rafraichir],
+  );
+
+  const enregistrerLien = useCallback(
+    (titreId: string, lien: string) => {
+      const depot = new DepotTitres(session.base());
+      const titre = depot.tous().find(candidat => candidat.id === titreId);
+      if (!titre) {
+        return;
+      }
+      depot.enregistrer({ ...titre, lienExterne: lien || undefined });
+      rafraichir();
+    },
+    [session, rafraichir],
+  );
+
+  const effacerSymbole = useCallback(
+    (titreId: string) => {
+      const depot = new DepotTitres(session.base());
+      const titre = depot.tous().find(candidat => candidat.id === titreId);
+      if (!titre) {
+        return;
+      }
+      depot.enregistrer({ ...titre, ticker: '' });
+      rafraichir();
+    },
+    [session, rafraichir],
+  );
+
+  const choisirReference = useCallback(
+    (titreId: string) => {
+      const parametres = new DepotParametres(session.base());
+      // Retoucher la meme valeur retire la reference : sans cela on ne
+      // pourrait plus revenir a « aucune comparaison ».
+      if (parametres.lire(PARAMETRES.titreReference) === titreId) {
+        parametres.supprimer(PARAMETRES.titreReference);
+      } else {
+        parametres.ecrire(PARAMETRES.titreReference, titreId);
+      }
+      rafraichir();
+    },
+    [session, rafraichir],
+  );
+
+  const enregistrerPlanning = useCallback(
+    (planning: Planning) => {
+      new DepotParametres(session.base()).ecrire(
+        PARAMETRES.planningBriefings,
+        planningVersJson(planning),
+      );
+      rafraichir();
+    },
+    [session, rafraichir],
+  );
+
+  const enregistrerSeuil = useCallback(
+    (titreId: string, champ: 'haut' | 'bas', valeur: string) => {
+      const parametres = new DepotParametres(session.base());
+      let seuils: Record<string, { haut?: string; bas?: string }> = {};
+      try {
+        seuils = JSON.parse(parametres.lire(PARAMETRES.seuilsAlertes) ?? '{}');
+      } catch {
+        // Un reglage illisible est remplace plutot que de bloquer la saisie.
+        seuils = {};
+      }
+
+      const existant = seuils[titreId] ?? {};
+      seuils[titreId] = { ...existant, [champ]: valeur.trim() || undefined };
+      parametres.ecrire(PARAMETRES.seuilsAlertes, JSON.stringify(seuils));
+      rafraichir();
+    },
+    [session, rafraichir],
+  );
+
+  const deverrouille = statut === 'deverrouille' && !secrets;
+
+  // Reconstruit a chaque rendu, sans memo. La base est une source externe
+  // mutable : memoriser sa lecture demanderait de lister toutes les raisons
+  // qu'elle a de changer, et la premiere oubliee afficherait un portefeuille
+  // perime. Rejouer un journal personnel coute quelques millisecondes.
+  const contenu = deverrouille ? chargerEtat(session.base()) : undefined;
+  const depotCours = contenu ? new DepotCours(session.base()) : undefined;
+  const tableau: VueDashboard | undefined = contenu
+    ? construireDashboard({
+        etat: contenu.etat,
+        comptes: contenu.comptes,
+        titres: contenu.titres,
+        cours: depotCours!.derniersCours(),
+      })
+    : undefined;
+
+  const onglets =
+    contenu && depotCours
+      ? {
+          performance: construirePerformance({
+            points: serieValorisation({
+              comptes: contenu.comptes,
+              transactions: contenu.transactions,
+              cours: depotCours.historique(),
+            }),
+            transactions: contenu.transactions,
+          }),
+          comparaison: construireComparaison({
+            points: serieValorisation({
+              comptes: contenu.comptes,
+              transactions: contenu.transactions,
+              cours: depotCours.historique(),
+            }),
+            titres: contenu.titres,
+            historique: depotCours.historique(),
+            referenceId: new DepotParametres(session.base()).lire(
+              PARAMETRES.titreReference,
+            ),
+          }),
+          dividendes: construireDividendes({
+            etat: contenu.etat,
+            transactions: contenu.transactions,
+            comptes: contenu.comptes,
+            titres: contenu.titres,
+            cours: depotCours.derniersCours(),
+            aujourdhui: (aujourdhui ?? dateDuJour)(),
+          }),
+          risque: construireRisque({
+            etat: contenu.etat,
+            titres: contenu.titres,
+            cours: depotCours.derniersCours(),
+            historique: depotCours.historique(),
+          }),
+          flux: construireFlux(contenu.transactions, contenu.comptes),
+          impots: construireImpots({
+            etat: contenu.etat,
+            comptes: contenu.comptes,
+            cessions: contenu.etat.cessions,
+            aujourdhui: (aujourdhui ?? dateDuJour)(),
+          }),
+        }
+      : undefined;
+
+  // Valeur actuelle du portefeuille, proposee comme capital de depart de la
+  // projection. Retaper ce montant serait une occasion de se tromper.
+  const capitalActuel =
+    contenu && depotCours
+      ? totaux(
+          valoriserPositions(contenu.etat.positions, depotCours.derniersCours())
+            .valorisees,
+          [...contenu.etat.comptes.values()],
+        ).valeurTotale
+      : Decimal.ZERO;
+
+  const verrou = statut === 'non-initialise' ? undefined : session.verrou();
+
+  return (
+    <SafeAreaProvider initialMetrics={initialWindowMetrics ?? METRIQUES_DE_REPLI}>
+      <SafeAreaView
+        style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}>
+        <StatusBar barStyle={sombre ? 'light-content' : 'dark-content'} />
+
+      {secrets ? (
+        <PremierLancement
+          onCreer={creer}
+          secrets={secrets}
+          onTermine={() => {
+            setSecrets(undefined);
+            rafraichir();
+          }}
+        />
+      ) : statut === 'non-initialise' ? (
+        <PremierLancement onCreer={creer} enCours={enCours} erreur={erreur} />
+      ) : !contenu || !tableau ? (
+        <Deverrouillage
+          onDeverrouiller={deverrouiller}
+          erreur={erreur}
+          enCours={enCours}
+          secondesAvantNouvelEssai={verrou?.verrouille ? verrou.secondesRestantes : 0}
+        />
+      ) : ecran === 'compte' ? (
+        <CreationCompte
+          comptesExistants={contenu.comptes}
+          onCreer={enregistrerCompte}
+          onAnnuler={contenu.comptes.length > 0 ? () => setEcran('tableau') : undefined}
+          genererId={() => identifiant('compte')}
+        />
+      ) : ecran === 'titre' ? (
+        <CreationTitre
+          titresExistants={contenu.titres}
+          onCreer={enregistrerTitre}
+          onAnnuler={() => setEcran('saisie')}
+          genererId={() => identifiant('titre')}
+        />
+      ) : ecran === 'saisie' ? (
+        <SaisieOperation
+          comptes={contenu.comptes}
+          titres={contenu.titres}
+          positions={contenu.etat.positions}
+          onEnregistrer={enregistrerOperation}
+          onAnnuler={() => setEcran('tableau')}
+          onCreerTitre={() => setEcran('titre')}
+          genererId={() => identifiant('op')}
+        />
+      ) : ecran === 'notifications' ? (
+        <Notifications
+          notificationsDisponibles={
+            chargerModule('@notifee/react-native').etat === 'disponible'
+          }
+          reveilDisponible={
+            chargerModule('react-native-background-fetch').etat === 'disponible'
+          }
+          planning={planningDepuisJson(
+            new DepotParametres(session.base()).lire(PARAMETRES.planningBriefings),
+          )}
+          onChangerPlanning={enregistrerPlanning}
+          prochain={prochainBriefing(
+            planningDepuisJson(
+              new DepotParametres(session.base()).lire(PARAMETRES.planningBriefings),
+            ),
+            new Date(),
+          )}
+          seuils={seuilsAffiches(session, contenu)}
+          onChangerSeuil={enregistrerSeuil}
+          onRetour={() => setEcran('tableau')}
+          message={messageNotifications}
+        />
+      ) : ecran === 'comparateur' ? (
+        <Comparateur
+          vue={construireComparateur({
+            retenus: compares,
+            titres: contenu?.titres ?? [],
+            etat: contenu?.etat ?? ETAT_VIDE,
+            cours: depotCours?.derniersCours() ?? new Map(),
+            historique: depotCours?.historique() ?? new Map(),
+            dividendesDouzeMois: dividendesParTitre(
+              contenu?.transactions ?? [],
+              (aujourdhui ?? dateDuJour)(),
+            ),
+            surveilles: new Set(
+              new DepotWatchlist(session.base()).lister().map(ligne => ligne.titreId),
+            ),
+          })}
+          onBasculer={basculerComparaison}
+          onRetour={() => setEcran('tableau')}
+        />
+      ) : ecran === 'symboles' ? (
+        <Symboles
+          titres={(contenu?.titres ?? []).map(titre => ({
+            titreId: titre.id,
+            nom: titre.nom,
+            isin: titre.isin,
+            symbole: titre.ticker ?? '',
+            detenue: (contenu?.etat.positions ?? []).some(
+              position => position.titreId === titre.id,
+            ),
+            lien: titre.lienExterne ?? '',
+          }))}
+          recherche={recherche}
+          onChercher={chercherSymbole}
+          onRetenir={retenirSymbole}
+          onEffacer={effacerSymbole}
+          onChangerLien={enregistrerLien}
+          onRetour={() => setEcran('reglages')}
+          erreur={erreurSymboles}
+        />
+      ) : ecran === 'watchlist' ? (
+        <Watchlist
+          vue={construireWatchlist({
+            watchlist: new DepotWatchlist(session.base()).lister(),
+            titres: contenu?.titres ?? [],
+            cours: depotCours?.derniersCours() ?? new Map(),
+            titresDetenus: new Set(
+              (contenu?.etat.positions ?? []).map(position => position.titreId),
+            ),
+            seuils: lireSeuils(session),
+          })}
+          onAjouter={surveiller}
+          onRetirer={nePlusSurveiller}
+          onChangerSeuil={enregistrerSeuil}
+          onCreerTitre={() => setEcran('titre')}
+          onRetour={() => setEcran('tableau')}
+        />
+      ) : ecran === 'projection' ? (
+        <Projection
+          champs={champsProjection}
+          vue={construireProjection({ champs: champsProjection, capitalActuel })}
+          capitalActuel={tableau?.valeurTotale ?? '0,00 €'}
+          onChanger={(champ, valeur) =>
+            setChampsProjection(precedent => ({ ...precedent, [champ]: valeur }))
+          }
+          onRetour={() => setEcran('tableau')}
+        />
+      ) : ecran === 'sauvegarde' ? (
+        <Sauvegarde
+          disponible={Boolean(fichiers)}
+          sauvegardes={sauvegardes}
+          onCreer={creerSauvegarde}
+          onRestaurer={restaurerSauvegarde}
+          onFusionner={fusionnerSauvegarde}
+          onSupprimer={chemin => {
+            if (fichiers) {
+              supprimerSauvegarde(fichiers, chemin).then(rafraichirSauvegardes);
+            }
+          }}
+          onRetour={() => setEcran('tableau')}
+          message={messageSauvegarde}
+          erreur={erreurSauvegarde}
+          enCours={sauvegardeEnCours}
+        />
+      ) : ecran === 'reglages' ? (
+        <Reglages
+          fournisseurs={FOURNISSEURS}
+          fournisseurActuel={new DepotParametres(session.base()).lire(
+            PARAMETRES.fournisseurCours,
+          )}
+          cleEnregistree={Boolean(
+            new DepotParametres(session.base()).lire(PARAMETRES.cleApiCours),
+          )}
+          onEnregistrer={enregistrerReglages}
+          onAnnuler={() => setEcran('tableau')}
+          onSymboles={() => {
+            setRecherche(undefined);
+            setErreurSymboles(undefined);
+            setEcran('symboles');
+          }}
+          sansSymbole={
+            (contenu?.etat.positions ?? []).filter(position => {
+              const titre = contenu?.titres.find(valeur => valeur.id === position.titreId);
+              return !titre?.ticker?.trim();
+            }).length
+          }
+          onChargerHistorique={lancerChargementHistorique}
+          avecSymbole={(contenu?.titres ?? []).filter(titre => titre.ticker?.trim()).length}
+          chargementEnCours={histoEnCours}
+          messageHistorique={messageHistorique}
+        />
+      ) : ecran === 'import' ? (
+        <ImportPositions
+          onImporter={enregistrerImport}
+          onAnnuler={() => setEcran('tableau')}
+        />
+      ) : (
+        <Portefeuille
+          dashboard={tableau}
+          performance={onglets!.performance}
+          comparaison={onglets!.comparaison}
+          onChoisirReference={choisirReference}
+          anneesRapport={contenu ? anneesDisponibles(contenu.transactions) : []}
+          onGenererRapport={genererRapport}
+          messageRapport={messageRapport}
+          dividendes={onglets!.dividendes}
+          risque={onglets!.risque}
+          flux={onglets!.flux}
+          impots={onglets!.impots}
+          onCreerCompte={() => setEcran('compte')}
+          onAjouterTransaction={() => setEcran('saisie')}
+          onImporter={() => setEcran('import')}
+          onReglages={() => setEcran('reglages')}
+          onSauvegarder={() => {
+            rafraichirSauvegardes();
+            setEcran('sauvegarde');
+          }}
+          onNotifications={() => {
+            setMessageNotifications(undefined);
+            setEcran('notifications');
+          }}
+          onProjection={() => setEcran('projection')}
+          onWatchlist={() => setEcran('watchlist')}
+          onComparer={() => setEcran('comparateur')}
+          onRafraichirCours={lancerRafraichissement}
+          messageCours={messageCours}
+          rafraichissementEnCours={coursEnCours}
+          onVerrouiller={verrouiller}
+        />
+        )}
+      </SafeAreaView>
+    </SafeAreaProvider>
+  );
+}

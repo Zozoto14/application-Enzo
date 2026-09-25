@@ -1,0 +1,219 @@
+/**
+ * Premier lancement : création du coffre, puis remise des secrets.
+ *
+ * L'écran est en deux temps, et le second est le plus important de toute
+ * l'application : les codes de récupération et le secret TOTP n'y sont montrés
+ * **qu'une seule fois**. Le coffre n'en garde que la forme chiffrée, et rien ne
+ * permettra de les retrouver ensuite.
+ *
+ * D'où le verrou de sortie : tant que la case de confirmation n'est pas cochée,
+ * le bouton reste inactif. Un utilisateur qui passe trop vite perd l'accès à
+ * ses données le jour où il oublie son mot de passe.
+ */
+
+import React, { useState } from 'react';
+import { ScrollView, StyleSheet, Switch, Text, View, useColorScheme } from 'react-native';
+import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
+import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
+
+export interface SecretsInitiaux {
+  codesRecuperation: string[];
+  secretTotp: string;
+  uriTotp: string;
+}
+
+export interface PremierLancementProps {
+  onCreer(motDePasse: string): void;
+  /** Renseigné une fois le coffre créé : l'écran passe alors en remise des secrets. */
+  secrets?: SecretsInitiaux;
+  onTermine?: () => void;
+  enCours?: boolean;
+  erreur?: string;
+}
+
+/** Longueur minimale exigée. Le mot de passe est censé venir d'un gestionnaire. */
+export const LONGUEUR_MINIMALE_MOT_DE_PASSE = 12;
+
+export function PremierLancement({
+  onCreer,
+  secrets,
+  onTermine,
+  enCours = false,
+  erreur,
+}: PremierLancementProps) {
+  const sombre = useColorScheme() === 'dark';
+  const fond = { backgroundColor: palettePour(sombre).fond };
+
+  if (secrets) {
+    return (
+      <RemiseDesSecrets secrets={secrets} onTermine={onTermine} style={fond} />
+    );
+  }
+  return <Creation onCreer={onCreer} enCours={enCours} erreur={erreur} style={fond} />;
+}
+
+function Creation({
+  onCreer,
+  enCours,
+  erreur,
+  style,
+}: {
+  onCreer(motDePasse: string): void;
+  enCours: boolean;
+  erreur?: string;
+  style: object;
+}) {
+  const [motDePasse, setMotDePasse] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+
+  const tropCourt = motDePasse.length < LONGUEUR_MINIMALE_MOT_DE_PASSE;
+  const discordant = confirmation.length > 0 && confirmation !== motDePasse;
+  const valide = !tropCourt && !discordant && confirmation === motDePasse;
+
+  return (
+    <ScrollView
+      style={[stylesPartages.ecran, style]}
+      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.xl }]}
+      keyboardShouldPersistTaps="handled">
+      <Titre>Protéger vos données</Titre>
+      <SousTitre>
+        Ce mot de passe chiffre l'intégralité de votre portefeuille sur cet
+        appareil. Utilisez un mot de passe long, généré par votre gestionnaire.
+      </SousTitre>
+
+      <Champ
+        etiquette="Mot de passe"
+        value={motDePasse}
+        onChangeText={setMotDePasse}
+        secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        editable={!enCours}
+        textContentType="newPassword"
+        autoComplete="new-password"
+        indication={`${LONGUEUR_MINIMALE_MOT_DE_PASSE} caractères au minimum, sans maximum. Un mot de passe de 128 caractères généré par votre gestionnaire convient parfaitement : il se colle, il ne se tape pas.`}
+      />
+
+      <Champ
+        etiquette="Confirmation"
+        value={confirmation}
+        onChangeText={setConfirmation}
+        secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        editable={!enCours}
+        textContentType="newPassword"
+        autoComplete="new-password"
+      />
+
+      {discordant ? <Alerte message="Les deux saisies diffèrent." /> : null}
+      {erreur ? <Alerte message={erreur} /> : null}
+
+      <Bouton
+        titre={enCours ? 'Création en cours…' : 'Créer le coffre'}
+        testID="bouton-creer"
+        desactive={!valide || enCours}
+        onPress={() => onCreer(motDePasse)}
+      />
+    </ScrollView>
+  );
+}
+
+function RemiseDesSecrets({
+  secrets,
+  onTermine,
+  style,
+}: {
+  secrets: SecretsInitiaux;
+  onTermine?: () => void;
+  style: object;
+}) {
+  const [confirme, setConfirme] = useState(false);
+  const palette = usePalette();
+
+  return (
+    <ScrollView
+      style={[stylesPartages.ecran, style]}
+      contentContainerStyle={[stylesPartages.contenu, { paddingTop: ESPACEMENT.xl }]}>
+      <Titre>À noter maintenant</Titre>
+      <SousTitre>
+        Ces informations ne seront plus jamais affichées. Notez-les hors ligne,
+        sur papier, et rangez-les en lieu sûr.
+      </SousTitre>
+
+      <Carte>
+        <Text style={[styles.sectionTitre, { color: palette.texte }]}>
+          Codes de récupération
+        </Text>
+        <SousTitre>
+          Chacun ouvre vos données une seule fois si vous perdez votre mot de
+          passe. Sans eux, un oubli est définitif.
+        </SousTitre>
+        <View style={styles.grilleCodes}>
+          {secrets.codesRecuperation.map(code => (
+            <Text
+              key={code}
+              selectable
+              style={[
+                styles.code,
+                { color: palette.texte, borderColor: palette.bordure },
+              ]}>
+              {code}
+            </Text>
+          ))}
+        </View>
+      </Carte>
+
+      <Carte>
+        <Text style={[styles.sectionTitre, { color: palette.texte }]}>
+          Code d'authentification
+        </Text>
+        <SousTitre>
+          Ajoutez cette clé à votre application d'authentification. Elle sera
+          demandée à chaque ouverture, en plus du mot de passe.
+        </SousTitre>
+        <Text
+          selectable
+          style={[styles.code, { color: palette.texte, borderColor: palette.bordure }]}>
+          {secrets.secretTotp}
+        </Text>
+      </Carte>
+
+      <View style={[stylesPartages.ligne, { gap: ESPACEMENT.m }]}>
+        <Text style={{ color: palette.texte, flex: 1 }}>
+          J'ai noté ces codes hors ligne.
+        </Text>
+        <Switch
+          value={confirme}
+          onValueChange={setConfirme}
+          accessibilityLabel="J'ai noté ces codes hors ligne"
+        />
+      </View>
+
+      <Bouton
+        titre="Continuer"
+        testID="bouton-continuer"
+        desactive={!confirme}
+        onPress={() => onTermine?.()}
+      />
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  sectionTitre: { fontSize: 17, fontWeight: '700' },
+  grilleCodes: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: ESPACEMENT.s,
+  },
+  code: {
+    fontFamily: 'Courier',
+    fontSize: 15,
+    letterSpacing: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: RAYON.s,
+    paddingVertical: ESPACEMENT.xs,
+    paddingHorizontal: ESPACEMENT.s,
+  },
+});
