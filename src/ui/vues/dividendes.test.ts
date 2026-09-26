@@ -324,6 +324,31 @@ describe('calendrierDividendes', () => {
     expect(vue.vide).toBe(false);
   });
 
+  it('sans dividende saisi, estime d’après l’historique par action, converti en euros', () => {
+    // Portefeuille importé : 20 actions, aucun dividende enregistré.
+    const transactions: Transaction[] = [versement('2026-01-02', 5000), achat('2026-01-02', 20, 150, 0)];
+    const etat = rejouer([compte()], transactions);
+    const vue = calendrierDividendes({
+      etat,
+      transactions,
+      titres: [titre()],
+      aujourdhui: '2026-09-25',
+      parAction: new Map([
+        ['air-liquide', { devise: 'USD', versements: [{ date: '2026-05-18', montant: 1.5 }, { date: '2024-05-18', montant: 1.2 }] }],
+      ]),
+      versEuros: (montant, devise) => (devise === 'USD' ? montant * 0.9 : undefined),
+      valeurPortefeuille: 3000,
+    });
+    const mai = vue.mois.find(mois => mois.cle === '2027-05')!;
+    // 20 actions × 1,50 $ × 0,9 = 27 €.
+    expect(mai.valeur).toBeCloseTo(27);
+    expect(mai.lignes[0].source).toBe('historique');
+    expect(vue.depuisHistorique).toBe(true);
+    expect(vue.valeurTotale).toBeCloseTo(27);
+    expect(vue.parMoisMoyen).toMatch(/^2,25/);
+    expect(vue.rendement).toMatch(/^0,90/);
+  });
+
   it('ignore les valeurs vendues depuis', () => {
     const transactions: Transaction[] = [
       versement('2026-01-02', 5000),

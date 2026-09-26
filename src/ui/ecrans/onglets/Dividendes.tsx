@@ -21,6 +21,8 @@ export function OngletDividendes({ vue }: { vue: VueDividendes }) {
 
   if (vue.aucunDividende) {
     return (
+      <>
+      <CalendrierRevenus vue={vue} />
       <CarteSection>
         <Text style={{ color: palette.texte }}>Aucun dividende encaissé.</Text>
         <SousTitre>
@@ -28,6 +30,7 @@ export function OngletDividendes({ vue }: { vue: VueDividendes }) {
           que vos lignes ont coûté.
         </SousTitre>
       </CarteSection>
+      </>
     );
   }
 
@@ -99,50 +102,7 @@ export function OngletDividendes({ vue }: { vue: VueDividendes }) {
         </CarteSection>
       </Rangee>
 
-      <CarteSection titre="Les douze prochains mois" testID="calendrier-dividendes">
-        {vue.calendrier.vide ? (
-          <SousTitre>
-            Pas encore d’estimation : il faut au moins un dividende reçu ces douze derniers mois sur une
-            valeur que vous détenez toujours.
-          </SousTitre>
-        ) : (
-          <>
-            <SousTitre>
-              Environ {vue.calendrier.total} attendus, si chaque valeur verse comme l’an dernier, ramené au
-              nombre d’actions que vous détenez aujourd’hui.
-            </SousTitre>
-            <Barres
-              barres={vue.calendrier.mois.map(mois => ({
-                libelle: mois.libelle.split(' ')[0],
-                valeur: mois.valeur,
-                detail: `${mois.libelle} : ${mois.total}`,
-              }))}
-              formater={valeur => `${valeur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €`}
-              hauteur={200}
-            />
-            <View style={styles.calendrier}>
-              {vue.calendrier.mois
-                .filter(mois => mois.lignes.length > 0)
-                .map(mois => (
-                  <View key={mois.cle} style={[styles.moisCalendrier, { borderColor: palette.bordure }]}>
-                    <Text style={{ color: palette.texte, fontWeight: '700' }}>{mois.libelle}</Text>
-                    {mois.lignes.map((ligne, rang) => (
-                      <View key={`${mois.cle}-${rang}`} style={styles.ligneCalendrier}>
-                        <Text style={{ color: palette.texte, flex: 1 }} numberOfLines={1}>
-                          {ligne.nom}
-                        </Text>
-                        <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>{ligne.date}</Text>
-                        <Text style={{ color: palette.hausse, fontWeight: '700', minWidth: 80, textAlign: 'right' }}>
-                          {ligne.montant}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                ))}
-            </View>
-          </>
-        )}
-      </CarteSection>
+      <CalendrierRevenus vue={vue} />
 
       
       <Rangee>
@@ -193,8 +153,72 @@ export function OngletDividendes({ vue }: { vue: VueDividendes }) {
   );
 }
 
+/** Revenus à venir : salaire passif et calendrier des douze prochains mois. */
+function CalendrierRevenus({ vue }: { vue: VueDividendes }) {
+  const palette = usePalette();
+  return (
+      <CarteSection titre="Revenus à venir : les douze prochains mois" testID="calendrier-dividendes">
+      {vue.calendrier.vide ? (
+        <SousTitre>
+          Pas encore d’estimation : il faut un dividende reçu ces douze derniers mois, ou l’historique des
+          valeurs (il se charge avec les fiches, dans l’application de bureau).
+        </SousTitre>
+      ) : (
+        <>
+          <View style={styles.salaire} testID="salaire-passif">
+            <Text style={{ color: palette.texteSecondaire, fontSize: 12, fontWeight: '700' }}>SALAIRE PASSIF ESTIMÉ</Text>
+            <Text style={{ color: palette.hausse, fontSize: 24, fontWeight: '800' }}>
+              {vue.calendrier.total} <Text style={{ fontSize: 14, color: palette.texteSecondaire }}>par an</Text>
+            </Text>
+            <Text style={{ color: palette.texte }}>
+              soit {vue.calendrier.parMoisMoyen} par mois en moyenne
+              {vue.calendrier.rendement ? ` · rendement ${vue.calendrier.rendement}` : ''}
+            </Text>
+          </View>
+          <SousTitre>
+            Si chaque valeur verse comme l’an dernier, ramené au nombre d’actions que vous détenez aujourd’hui
+            {vue.calendrier.depuisHistorique
+              ? '. Pour les valeurs sans dividende saisi, l’estimation vient de leur historique de versements par action, converti en euros.'
+              : '.'}
+          </SousTitre>
+          <Barres
+            barres={vue.calendrier.mois.map(mois => ({
+              libelle: mois.libelle.split(' ')[0],
+              valeur: mois.valeur,
+              detail: `${mois.libelle} : ${mois.total}`,
+            }))}
+            formater={valeur => `${valeur.toLocaleString('fr-FR', { maximumFractionDigits: 0 })} €`}
+            hauteur={200}
+          />
+          <View style={styles.calendrier}>
+            {vue.calendrier.mois
+              .filter(mois => mois.lignes.length > 0)
+              .map(mois => (
+                <View key={mois.cle} style={[styles.moisCalendrier, { borderColor: palette.bordure }]}>
+                  <Text style={{ color: palette.texte, fontWeight: '700' }}>{mois.libelle}</Text>
+                  {mois.lignes.map((ligne, rang) => (
+                    <View key={`${mois.cle}-${rang}`} style={styles.ligneCalendrier}>
+                      <Text style={{ color: palette.texte, flex: 1 }} numberOfLines={1}>
+                        {ligne.nom}
+                      </Text>
+                      <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>{ligne.date}</Text>
+                      <Text style={{ color: palette.hausse, fontWeight: '700', minWidth: 80, textAlign: 'right' }}>
+                        {ligne.montant}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+          </View>
+        </>
+      )}
+    </CarteSection>
+  );
+}
+
 const styles = StyleSheet.create({
   calendrier: { flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.m, marginTop: ESPACEMENT.s },
+  salaire: { gap: 2, marginBottom: ESPACEMENT.s },
   moisCalendrier: { flexGrow: 1, flexBasis: 260, borderTopWidth: 1, paddingTop: ESPACEMENT.s, gap: 6 },
   ligneCalendrier: { flexDirection: 'row', alignItems: 'center', gap: ESPACEMENT.s },
   grand: { fontSize: 26, fontWeight: '800' },

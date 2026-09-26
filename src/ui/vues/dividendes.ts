@@ -97,7 +97,7 @@ export interface MoisCalendrier {
   libelle: string;
   valeur: number;
   total: string;
-  lignes: Array<{ nom: string; valeur: number; montant: string; date: string }>;
+  lignes: Array<{ nom: string; valeur: number; montant: string; date: string; source?: 'versements' | 'historique' }>;
 }
 
 export interface VueCalendrierDividendes {
@@ -106,6 +106,18 @@ export interface VueCalendrierDividendes {
   valeurTotale: number;
   /** Vrai si aucun dividende n'est attendu faute d'historique. */
   vide: boolean;
+  /** Salaire passif : total annuel et moyenne par mois. */
+  parMoisMoyen: string;
+  /** Rendement du portefeuille en dividendes, si la valeur est connue. */
+  rendement?: string;
+  /** Vrai si une partie vient de l'historique des valeurs et pas de vos versements. */
+  depuisHistorique: boolean;
+}
+
+/** Dividendes versés par action (historique de la valeur), dans sa devise. */
+export interface DividendesParAction {
+  devise: string;
+  versements: ReadonlyArray<{ date: string; montant: number }>;
 }
 
 const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
@@ -122,6 +134,15 @@ export function calendrierDividendes(entrees: {
   transactions: readonly Transaction[];
   titres: readonly Titre[];
   aujourdhui: string;
+  /**
+   * Historique par action, pour les valeurs dont aucun dividende n'a été
+   * saisi (portefeuille importé depuis un relevé, achat récent).
+   */
+  parAction?: ReadonlyMap<string, DividendesParAction>;
+  /** Conversion en euros ; sans elle, seules les valeurs en euros comptent. */
+  versEuros?(montant: number, devise: string): number | undefined;
+  /** Valeur du portefeuille, pour le rendement. */
+  valeurPortefeuille?: number;
 }): VueCalendrierDividendes {
   const noms = new Map(entrees.titres.map(titre => [titre.id, titre.nom]));
   const detenu = new Map<string, Decimal>();
@@ -140,6 +161,7 @@ export function calendrierDividendes(entrees: {
     return quantite;
   };
 
+  const avecVersements = new Set<string>();
   const debut = new Date(`${entrees.aujourdhui}T12:00:00Z`);
   const ilYAUnAn = new Date(debut);
   ilYAUnAn.setUTCFullYear(debut.getUTCFullYear() - 1);
@@ -177,7 +199,36 @@ export function calendrierDividendes(entrees: {
       valeur,
       montant: formaterMontant(Decimal.de(valeur.toFixed(2))),
       date: `vers le ${Number(transaction.date.slice(8, 10))} ${MOIS_COURTS[Number(transaction.date.slice(5, 7)) - 1]}`,
+      source: 'versements',
     });
+    avecVersements.add(transaction.titreId);
+  }
+
+  // Valeurs sans dividende saisi : l'historique par action, ramené à la
+  // quantité détenue aujourd'hui, un an plus tard.
+  let depuisHistorique = false;
+  for (const [titreId, quantite] of detenu) {
+    if (avecVersements.has(titreId) || !quantite.estPositif()) continue;
+    const historique = entrees.parAction?.get(titreId);
+    if (!historique) continue;
+    for (const versement of historique.versements) {
+      if (versement.date <= limite || versement.date > entrees.aujourdhui) continue;
+      const brut = versement.montant * quantite.toNumber();
+      const euros = historique.devise === 'EUR' ? brut : entrees.versEuros?.(brut, historique.devise);
+      if (euros === undefined || euros <= 0) continue;
+      const cle = `${Number(versement.date.slice(0, 4)) + 1}-${versement.date.slice(5, 7)}`;
+      const cible = mois.find(candidat => candidat.cle === cle);
+      if (!cible) continue;
+      cible.valeur += euros;
+      cible.lignes.push({
+        nom: noms.get(titreId) ?? titreId,
+        valeur: euros,
+        montant: formaterMontant(Decimal.de(euros.toFixed(2))),
+        date: `vers le ${Number(versement.date.slice(8, 10))} ${MOIS_COURTS[Number(versement.date.slice(5, 7)) - 1]}`,
+        source: 'historique',
+      });
+      depuisHistorique = true;
+    }
   }
 
   const valeurTotale = mois.reduce((somme, ligne) => somme + ligne.valeur, 0);
@@ -189,6 +240,12 @@ export function calendrierDividendes(entrees: {
     total: formaterMontant(Decimal.de(valeurTotale.toFixed(2))),
     valeurTotale,
     vide: valeurTotale === 0,
+    parMoisMoyen: formaterMontant(Decimal.de((valeurTotale / 12).toFixed(2))),
+    rendement:
+      entrees.valeurPortefeuille && entrees.valeurPortefeuille > 0 && valeurTotale > 0
+        ? formaterPourcentage(Decimal.de(((valeurTotale / entrees.valeurPortefeuille) * 100).toFixed(4)), 2, { signeExplicite: false })
+        : undefined,
+    depuisHistorique,
   };
 }
 
@@ -205,6 +262,9 @@ export interface EntreesDividendes {
   cours: ReadonlyMap<string, Decimal>;
   /** Date du jour, au format ISO. */
   aujourdhui: string;
+  parAction?: ReadonlyMap<string, DividendesParAction>;
+  versEuros?(montant: number, devise: string): number | undefined;
+  valeurPortefeuille?: number;
 }
 
 const MOIS_ABREGES = [

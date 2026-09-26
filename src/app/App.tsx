@@ -89,7 +89,7 @@ import { Screener } from '../ui/ecrans/Screener';
 import { Carnet } from '../ui/ecrans/Carnet';
 import { Diagnostic } from '../ui/ecrans/Diagnostic';
 import { testsDuBureau } from '../diagnostic/testsBureau';
-import { installerConvertisseur } from '../cours/change';
+import { convertisseur, installerConvertisseur } from '../cours/change';
 import { VERSION_VISITE, VisiteGuidee } from '../ui/VisiteGuidee';
 import { CLE_PLANNING_LOCAL, stockageLocal, useNotificationsBureau } from './notificationsBureau';
 import { useSauvegardes } from './sauvegardesApp';
@@ -1494,6 +1494,17 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             titres: contenu.titres,
             cours: depotCours.derniersCours(),
             aujourdhui: (aujourdhui ?? dateDuJour)(),
+            // Historique par action des fiches déjà chargées (alertes, podcast, fiche).
+            parAction: new Map(
+              contenu.titres.flatMap(titre => {
+                const donnees = titre.ticker ? fichesEnCache.current.get(titre.ticker.trim()) : undefined;
+                return donnees
+                  ? [[titre.id, { devise: donnees.fiche.devise, versements: donnees.historique.dividendes }] as const]
+                  : [];
+              }),
+            ),
+            versEuros: (montant, devise) => convertisseur().enEuros(montant, devise),
+            valeurPortefeuille: capitalActuel.toNumber(),
           }),
           risque: construireRisque({
             etat: contenu.etat,
