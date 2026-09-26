@@ -1,4 +1,5 @@
 import {
+  memeSujet,
   autresSources,
   chargerMedias,
   concerne,
@@ -141,5 +142,15 @@ describe('fiabilité des sources', () => {
     expect(autresSources(a, tous)).toEqual(['Les Echos']);
     expect(statutSource(c, tous)).toBe('reconnue');
     expect(statutSource(d, tous)).toBe('non-verifiee');
+  });
+});
+
+describe('même sujet', () => {
+  it('reconnaît deux titres courts sur la même nouvelle', () => {
+    expect(memeSujet({ titre: 'La BCE maintient ses taux' }, { titre: 'La BCE maintient ses taux directeurs' })).toBe(true);
+  });
+  it('distingue deux nouvelles différentes', () => {
+    expect(memeSujet({ titre: 'Apple bondit avec le nouvel iPhone' }, { titre: 'Le luxe marque le pas en Chine' })).toBe(false);
+    expect(memeSujet({ titre: 'La BCE maintient ses taux' }, { titre: 'La Fed baisse ses taux' })).toBe(false);
   });
 });

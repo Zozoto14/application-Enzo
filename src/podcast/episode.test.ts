@@ -1,5 +1,5 @@
 import { langueProbable, lireActualites } from '../fondamentaux/actualites';
-import { construireEpisode, dateParlee, eurosParles, phrases, pourcentParle, sujetDuJour } from './episode';
+import { construireEpisode, enchainer, dateParlee, eurosParles, phrases, pourcentParle, sujetDuJour } from './episode';
 
 describe('à l’oral', () => {
   it('dit les dates, les montants et les pourcentages', () => {
@@ -104,7 +104,9 @@ describe('épisode', () => {
 
 describe('épisode long', () => {
   const article = (rang: number, langue: 'fr' | 'en') => ({
-    titre: `${langue === 'fr' ? 'Les marchés européens' : 'Wall Street stocks'} numéro ${rang} bougent`,
+    // Des informations distinctes : des titres trop proches seraient, à
+    // raison, regroupés en une seule nouvelle.
+    titre: langue === 'fr' ? `La societe${rang} publie ses comptes` : `Company${rang} posts results`,
     resume:
       langue === 'fr'
         ? 'La séance a été marquée par les annonces des banques centrales. Les investisseurs restent prudents avant les chiffres de l’emploi.'
@@ -164,7 +166,10 @@ describe('épisode long', () => {
     const une = construireEpisode(base).chapitres.find(chapitre => chapitre.titre === 'Vos valeurs à la une')!;
     const texte = une.segments.map(segment => segment.texte).join(' ');
     expect(texte).toContain('Parlons de Air Liquide, qui représente 38 pour cent de vos titres, en plus-value de 13 pour cent.');
-    expect(texte).toContain('Dans la presse, chez Les Echos :');
+    expect(texte).toContain('Selon Les Echos, Air Liquide signe un contrat dans l’hydrogène.');
+    // Le résumé de l'article est raconté, pas seulement son titre.
+    expect(texte).toContain('La séance a été marquée par les annonces des banques centrales.');
+    expect(texte).toMatch(/Source reconnue|média reconnu|Média fiable/);
     expect(texte).toContain('le titre se paie 28 fois ses bénéfices');
     expect(texte).toContain('sous son plus haut sur un an');
     // L'article déjà raconté avec la valeur ne revient pas dans la revue de presse.
@@ -204,14 +209,82 @@ describe('revue de presse reliée au portefeuille', () => {
   it('place en tête l’article qui touche vos lignes, avec « Pour vous »', () => {
     const revue = episode.chapitres.find(chapitre => chapitre.titre === 'La revue de presse')!;
     const textes = revue.segments.map(segment => segment.texte);
-    expect(textes[2]).toBe('Apple bondit avec le nouvel iPhone.');
+    expect(textes[1]).toMatch(/Les Echos.* Apple bondit avec le nouvel iPhone\.$/);
     expect(textes.find(texte => texte.startsWith('Pour vous'))).toContain('Apple pèse environ 4,5 pour cent du MSCI World');
   });
 
   it('cite les titres sur vos valeurs, avec leur source', () => {
     const une = episode.chapitres.find(chapitre => chapitre.titre === 'Vos valeurs à la une')!;
     const texte = une.segments.map(segment => segment.texte).join(' ');
-    expect(texte).toContain('Cette semaine, Air Liquide fait parler d’elle : Air Liquide relève ses objectifs. C’était chez Zonebourse.');
+    expect(texte).toContain('Selon Zonebourse, Air Liquide relève ses objectifs.');
+    expect(texte).toContain('Source reconnue, mais pas encore recoupée par un autre média.');
     expect(episode.sources.map(source => source.source)).toEqual(expect.arrayContaining(['Zonebourse', 'Les Echos']));
+  });
+});
+
+describe('une information dite une seule fois, et vérifiée', () => {
+  const article = (titre: string, source: string, resume = '') => ({
+    titre,
+    resume,
+    source,
+    date: '2026-09-25',
+    langue: 'fr' as const,
+  });
+  const episode = construireEpisode({
+    aujourdhui: '2026-09-25',
+    valeurTotale: 10000,
+    totalReturn: 500,
+    totalReturnPct: 5,
+    lignes: [{ nom: 'Nvidia', variationJour: 2, latentPct: 20, poids: 100 }],
+    valeurs: [
+      {
+        nom: 'Nvidia',
+        actualites: [
+          {
+            titre: 'Nvidia publie un chiffre d’affaires record',
+            source: 'Yahoo Finance',
+            date: '2026-09-25',
+            langue: 'fr',
+            resume: 'Les ventes atteignent 46 milliards de dollars, portées par les centres de données.',
+          },
+        ],
+        articles: [
+          article('Nvidia publie un chiffre d’affaires record au trimestre', 'Les Echos'),
+          article('Chiffre d’affaires record pour Nvidia qui publie ses comptes', 'BFM Bourse'),
+        ],
+      },
+    ],
+    indices: [],
+    actualitesMarche: [],
+    presse: [
+      article('Nvidia publie un chiffre d’affaires record, Wall Street salue', 'Le Figaro', 'Les ventes bondissent.'),
+      article('Le luxe marque le pas en Chine', 'bourse-express-gratuit.net', 'Les ventes ralentissent.'),
+    ],
+  });
+  const texte = episode.chapitres.flatMap(chapitre => chapitre.segments.map(segment => segment.texte)).join(' ');
+
+  it('raconte le contenu de l’article, pas seulement son titre', () => {
+    expect(texte).toContain('Les ventes atteignent 46 milliards de dollars, portées par les centres de données.');
+  });
+
+  it('ne répète pas la même nouvelle rapportée par plusieurs médias', () => {
+    expect(texte.match(/chiffre d’affaires record/gi)).toHaveLength(1);
+  });
+
+  it('dit que l’information est recoupée, et par qui', () => {
+    expect(texte).toMatch(/(vérifiée|recoupée).*(Les Echos|BFM Bourse|Le Figaro)|(Les Echos|BFM Bourse|Le Figaro).*recoupée/);
+  });
+
+  it('prévient quand la source n’est pas vérifiée', () => {
+    expect(texte).toMatch(/bourse-express-gratuit\.net n’est pas un média que l’application connaît|source non vérifiée/);
+  });
+});
+
+describe('enchaînement à l’oral', () => {
+  it('accorde l’introduction et le titre', () => {
+    expect(enchainer('Selon Le Figaro,', 'La BCE maintient ses taux.')).toBe('Selon Le Figaro, la BCE maintient ses taux.');
+    expect(enchainer('Les Echos rapporte que', 'Air Liquide investit.')).toBe('Les Echos rapporte qu’Air Liquide investit.');
+    expect(enchainer('Les Echos rapporte que', 'Nvidia bondit.')).toBe('Les Echos rapporte que Nvidia bondit.');
+    expect(enchainer('À noter :', 'La BCE agit.')).toBe('À noter : La BCE agit.');
   });
 });

@@ -1666,8 +1666,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     const horsLigne = () => Promise.reject(new Error('hors ligne'));
     setPodcast(precedent => ({ ...precedent, minutes, chargement: true, erreur: undefined, etape: undefined }));
     // Les flux RSS passent par le processus principal (liste fermée d'adresses).
-    const pontMedias = (globalThis as { applibourse?: { medias?: { flux(url: string): Promise<string> } } })
-      .applibourse?.medias;
+    const pontMedias = (
+      globalThis as {
+        applibourse?: { medias?: { flux(url: string): Promise<string>; page?(url: string): Promise<string> } };
+      }
+    ).applibourse?.medias;
     preparerEpisode(
       entrees,
       chargementAutomatique
@@ -1675,6 +1678,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             valeur: symbole => chargerValeur(symbole),
             actualites: requete => chargerActualites(requete),
             flux: pontMedias ? url => pontMedias.flux(url) : undefined,
+            // L'essentiel des articles, lu sur leur page : pas seulement leurs titres.
+            page: pontMedias?.page ? url => pontMedias.page!(url) : undefined,
           }
         : { valeur: horsLigne, actualites: horsLigne },
       fichesEnCache.current,

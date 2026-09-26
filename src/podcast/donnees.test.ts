@@ -2,7 +2,7 @@ import { Decimal } from '../core/money/decimal';
 import { rejouer } from '../core/portfolio/engine';
 import { achat, compte, titre, versement } from '../core/testing/fixtures';
 import type { DonneesValeur } from '../fondamentaux/yahoo';
-import { entreesEpisode, lignesDuPortefeuille, preparerEpisode } from './donnees';
+import { enrichirResumes, entreesEpisode, lignesDuPortefeuille, preparerEpisode } from './donnees';
 
 function scenario() {
   const comptes = [compte()];
@@ -137,9 +137,34 @@ describe('revue de presse dans l’épisode', () => {
       new Map(),
     );
     const une = episode.chapitres.find(chapitre => chapitre.titre === 'Vos valeurs à la une')!;
-    expect(une.segments.map(segment => segment.texte).join(' ')).toContain('Le MSCI World au plus haut.');
+    expect(une.segments.map(segment => segment.texte).join(' ')).toContain('Selon Les Echos, le MSCI World au plus haut.');
     expect(episode.sources).toEqual([
       { titre: 'Le MSCI World au plus haut', source: 'Les Echos', lien: 'https://exemple.fr/msci', statut: 'reconnue', confirmations: [] },
     ]);
+  });
+});
+
+describe('lecture des articles', () => {
+  it('donne un résumé aux articles de médias connus, sans toucher aux autres', async () => {
+    const pages: string[] = [];
+    const page = async (url: string) => {
+      pages.push(url);
+      if (url.includes('lent')) throw new Error('délai dépassé');
+      return '<meta property="og:description" content="Le groupe relève ses prévisions annuelles après un trimestre record.">';
+    };
+    const [lu, dejaResume, inconnu, enPanne] = await enrichirResumes(
+      [
+        { titre: 'A', lien: 'https://www.lesechos.fr/a' },
+        { titre: 'B', lien: 'https://www.lesechos.fr/b', resume: 'Déjà là.' },
+        { titre: 'C', lien: 'https://site-inconnu.net/c' },
+        { titre: 'D', lien: 'https://www.lefigaro.fr/lent' },
+      ],
+      page,
+    );
+    expect(lu.resume).toBe('Le groupe relève ses prévisions annuelles après un trimestre record.');
+    expect(dejaResume.resume).toBe('Déjà là.');
+    expect(inconnu.resume).toBeUndefined();
+    expect(enPanne.resume).toBeUndefined();
+    expect(pages).toEqual(['https://www.lesechos.fr/a', 'https://www.lefigaro.fr/lent']);
   });
 });

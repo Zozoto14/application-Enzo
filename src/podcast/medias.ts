@@ -261,15 +261,36 @@ function motsPorteurs(titre: string): Set<string> {
   return new Set(nomNormalise(titre).split(' ').filter(mot => mot.length >= 4));
 }
 
+/** Sigles de trois lettres, porteurs eux aussi : BCE, FED, OPA. */
+function sigles(titre: string): Set<string> {
+  return new Set((titre.match(/\b[A-Z]{3}\b/g) ?? []).map(sigle => sigle.toLowerCase()));
+}
+
+/**
+ * Deux articles parlent-ils de la même chose ? Trois mots porteurs en
+ * commun, ou, pour des titres courts, presque tous leurs mots porteurs :
+ * « La BCE maintient ses taux » et « La BCE maintient ses taux directeurs ».
+ */
+export function memeSujet(a: Pick<ArticleMedia, 'titre'>, b: Pick<ArticleMedia, 'titre'>): boolean {
+  const motsA = new Set([...motsPorteurs(a.titre), ...sigles(a.titre)]);
+  const motsB = new Set([...motsPorteurs(b.titre), ...sigles(b.titre)]);
+  let communs = 0;
+  for (const mot of motsB) if (motsA.has(mot)) communs += 1;
+  const plusCourt = Math.min(motsA.size, motsB.size);
+  return communs >= 3 || (plusCourt >= 2 && communs >= 2 && communs / plusCourt >= 0.67);
+}
+
+/** Même média, écrit autrement : « Les Echos » et « les échos ». */
+export function memeSource(a: string, b: string): boolean {
+  return nomNormalise(a) === nomNormalise(b);
+}
+
 /** Autres médias qui rapportent la même information (titres proches). */
 export function autresSources(article: ArticleMedia, tous: readonly ArticleMedia[]): string[] {
-  const mots = motsPorteurs(article.titre);
   const autres = new Set<string>();
   for (const candidat of tous) {
-    if (candidat === article || nomNormalise(candidat.source) === nomNormalise(article.source)) continue;
-    let communs = 0;
-    for (const mot of motsPorteurs(candidat.titre)) if (mots.has(mot)) communs += 1;
-    if (communs >= 3) autres.add(candidat.source);
+    if (candidat === article || !candidat.source || memeSource(candidat.source, article.source)) continue;
+    if (memeSujet(article, candidat)) autres.add(candidat.source);
   }
   return [...autres];
 }

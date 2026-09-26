@@ -153,6 +153,7 @@ function installerPasserelle() {
   ipcMain.handle('yahoo:json', async (_evenement, url) => yahooJson(String(url)));
 
   ipcMain.handle('medias:flux', async (_evenement, url) => fluxMedia(String(url)));
+  ipcMain.handle('medias:page', async (_evenement, url) => pageArticle(String(url)));
 
   ipcMain.handle('voix:liste', async () => VOIX_NATURELLES);
   ipcMain.handle('voix:synthetiser', async (_evenement, texte, voix, vitesse) =>
@@ -249,6 +250,46 @@ function adresseThesesAutorisee(adresse) {
   } catch {
     return false;
   }
+}
+
+/**
+ * Pages d'articles des médias connus, pour en tirer le chapeau. Même liste
+ * que src/podcast/extraits.ts ; la redirection finale est vérifiée aussi.
+ */
+const SITES_ARTICLES = [
+  'lesechos.fr', 'lemonde.fr', 'lefigaro.fr', 'bfmtv.com', 'francetvinfo.fr', 'boursorama.com',
+  'zonebourse.com', 'capital.fr', 'latribune.fr', 'challenges.fr', 'lexpress.fr', 'lepoint.fr',
+  'leparisien.fr', 'ouest-france.fr', 'abcbourse.com', 'boursier.com', 'cnbc.com', 'marketwatch.com',
+  'reuters.com', 'finance.yahoo.com', 'fool.com', 'investing.com', 'morningstar.fr', 'morningstar.com',
+];
+const TAILLE_MAX_PAGE = 800 * 1024;
+
+function pageAutorisee(adresse) {
+  try {
+    const url = new URL(adresse);
+    return (
+      url.protocol === 'https:' &&
+      adresse.length < 600 &&
+      SITES_ARTICLES.some(site => url.hostname === site || url.hostname.endsWith(`.${site}`))
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function pageArticle(adresse) {
+  if (!pageAutorisee(adresse)) {
+    throw new Error('Page non autorisée.');
+  }
+  const reponse = await fetch(adresse, {
+    headers: { 'User-Agent': AGENT, Accept: 'text/html', 'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8' },
+    signal: AbortSignal.timeout(8_000),
+  });
+  if (!reponse.ok || !pageAutorisee(reponse.url || adresse)) {
+    throw new Error(`La page a répondu ${reponse.status}.`);
+  }
+  const texte = await reponse.text();
+  return texte.length > TAILLE_MAX_PAGE ? texte.slice(0, TAILLE_MAX_PAGE) : texte;
 }
 
 async function fluxMedia(adresse) {

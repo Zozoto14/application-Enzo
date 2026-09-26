@@ -13,6 +13,8 @@ export interface Actualite {
   date: string;
   lien?: string;
   langue: 'fr' | 'en';
+  /** L'essentiel de l'article, tiré de sa page quand on a pu la lire. */
+  resume?: string;
 }
 
 type Recuperer = (url: string) => Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>;

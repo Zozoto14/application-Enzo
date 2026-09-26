@@ -42,6 +42,8 @@ contextBridge.exposeInMainWorld('applibourse', {
   medias: {
     /** Texte d'un flux RSS de la revue de presse (liste fermée). */
     flux: url => ipcRenderer.invoke('medias:flux', url),
+    /** HTML d'une page d'article d'un média connu, pour en tirer l'essentiel. */
+    page: url => ipcRenderer.invoke('medias:page', url),
   },
 
   voix: {

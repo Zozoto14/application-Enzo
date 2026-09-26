@@ -22,6 +22,7 @@ import {
   type ArticleMedia,
 } from './medias';
 import type { DonneesValeur } from '../fondamentaux/yahoo';
+import { extraireResume, pageAutorisee } from './extraits';
 import { EXPLICATIONS } from '../ui/vues/explications';
 import {
   construireEpisode,
@@ -178,6 +179,40 @@ export interface Chargeurs {
   actualites(requete: string): Promise<Actualite[]>;
   /** Texte d'un flux RSS ; absent hors de l'application de bureau. */
   flux?(url: string): Promise<string>;
+  /** HTML d'une page d'article d'un média connu ; absent hors du bureau. */
+  page?(url: string): Promise<string>;
+}
+
+/** Articles lus en entier au plus, pour garder une préparation rapide. */
+export const PAGES_LUES = 14;
+
+/**
+ * Donne un résumé aux articles qui n'ont qu'un titre, en lisant leur page
+ * chez les médias connus. Les éléments sont traités dans l'ordre donné :
+ * le plus important d'abord. Une page qui ne répond pas est ignorée.
+ */
+export async function enrichirResumes<T extends { lien?: string; resume?: string }>(
+  elements: readonly T[],
+  page: (url: string) => Promise<string>,
+  maximum = PAGES_LUES,
+  parallele = 4,
+): Promise<T[]> {
+  const resultat = elements.map(element => ({ ...element }));
+  const aLire = resultat.filter(element => !element.resume && pageAutorisee(element.lien)).slice(0, maximum);
+  let suivant = 0;
+  const ouvrier = async () => {
+    while (suivant < aLire.length) {
+      const element = aLire[suivant++];
+      try {
+        const resume = extraireResume(await page(element.lien!));
+        if (resume) element.resume = resume;
+      } catch {
+        // Page payante, lente ou absente : l'article garde son seul titre.
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(parallele, aLire.length) }, ouvrier));
+  return resultat;
 }
 
 /**
@@ -248,10 +283,24 @@ export async function preparerEpisode(
     return [] as Actualite[];
   });
 
+  // Les titres seuls ne disent pas grand-chose : on lit l'essentiel des
+  // articles, vos valeurs d'abord, puis les marchés et la presse.
+  let marcheLu = marche;
+  let presseLue = presse.articles;
+  if (chargeurs.page) {
+    surEtape?.('Lecture des articles…');
+    const page = chargeurs.page;
+    for (const [symbole, liste] of actualites) {
+      actualites.set(symbole, await enrichirResumes(liste, page, 3));
+    }
+    marcheLu = await enrichirResumes(marche, page, 3);
+    presseLue = await enrichirResumes(presse.articles, page, 6);
+  }
+
   surEtape?.('Écriture de l’épisode…');
   return {
     episode: construireEpisode(
-      entreesEpisode(entrees, cache, actualites, marche, presse.articles, cibleMinutes, articlesParValeur),
+      entreesEpisode(entrees, cache, actualites, marcheLu, presseLue, cibleMinutes, articlesParValeur),
     ),
     manques,
   };
