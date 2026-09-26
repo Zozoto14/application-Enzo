@@ -98,7 +98,19 @@ export function useSynchro({
   // QR code (lien du site, ou applibourse://liaison?code=… pour l'app iPhone).
   useEffect(() => {
     const pont = (globalThis as { applibourse?: PontRelais }).applibourse?.relais;
-    pont?.config?.().then(liaison => liaison && setLiaisonDuPc(liaison)).catch(() => undefined);
+    let trouve = false;
+    const chercher = () =>
+      pont?.config?.()
+        .then(liaison => {
+          if (liaison) {
+            trouve = true;
+            setLiaisonDuPc(liaison);
+          }
+        })
+        .catch(() => undefined);
+    void chercher();
+    // Relais installé pendant que l'application tourne : il apparaît seul.
+    const minuterie = pont?.config ? setInterval(() => !trouve && void chercher(), 5_000) : undefined;
     const depuisLien = (url: string | null | undefined) => {
       const liaison = url ? decoderLiaison(url) : undefined;
       if (liaison) {
@@ -107,7 +119,12 @@ export function useSynchro({
     };
     Linking.getInitialURL?.().then(depuisLien).catch(() => undefined);
     const abonnement = Linking.addEventListener?.('url', ({ url }) => depuisLien(url));
-    return () => abonnement?.remove?.();
+    return () => {
+      abonnement?.remove?.();
+      if (minuterie) {
+        clearInterval(minuterie);
+      }
+    };
   }, []);
 
   // Sur l'iPhone : date d'expiration de la signature, et rappels programmés.

@@ -119,16 +119,62 @@ export function CarteSynchro({
             <Text style={{ color: palette.hausse, fontWeight: '600' }} testID="relais-du-pc">
               ✅ Relais reconnu : rien à recopier.
             </Text>
+          ) : synchro.plateforme === 'bureau' ? (
+            <View style={[styles.etapes, { borderColor: palette.bordure }]} testID="relais-a-installer">
+              <Text style={{ color: palette.texte, fontWeight: '700' }}>
+                Le relais n’est pas encore installé sur ce PC
+              </Text>
+              <Text style={{ color: palette.texte }}>
+                Sur le PC, il n’y a pas de code à recopier : c’est lui qui le crée. Pour cela :
+              </Text>
+              <Text style={{ color: palette.texte }}>
+                1. Ouvrez un terminal (PowerShell) dans le dossier d’AppliBourse — celui où vous lanciez « npm run maj-pc ».
+              </Text>
+              <Text style={{ color: palette.texte }}>2. Tapez : npm run relais:deployer</Text>
+              <Text style={{ color: palette.texte }}>
+                3. Connectez-vous à Cloudflare dans le navigateur qui s’ouvre, puis attendez « Terminé ».
+              </Text>
+              <Text style={{ color: palette.texte }}>
+                4. Revenez ici : le relais apparaît tout seul en quelques secondes, avec « ✅ Relais reconnu ».
+              </Text>
+              <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>
+                Vous avez déjà un code d’un autre appareil ? Collez-le quand même ci-dessous.
+              </Text>
+              <Champ
+                etiquette="Code de liaison (facultatif ici)"
+                value={code}
+                onChangeText={setCode}
+                autoCapitalize="none"
+                autoCorrect={false}
+                testID="champ-liaison"
+              />
+            </View>
           ) : (
-            <Champ
-              etiquette="Code de liaison"
-              indication="Affiché sur le PC, dans Paramètres › Synchronisation. Il commence par AB1."
-              value={code}
-              onChangeText={setCode}
-              autoCapitalize="none"
-              autoCorrect={false}
-              testID="champ-liaison"
-            />
+            <View style={[styles.etapes, { borderColor: palette.bordure }]}>
+              <Text style={{ color: palette.texte, fontWeight: '700' }}>Où trouver le code de liaison ?</Text>
+              <Text style={{ color: palette.texte }}>
+                C’est l’adresse de votre relais et sa clé d’accès, en une ligne. Il se trouve sur le PC déjà relié :
+              </Text>
+              <Text style={{ color: palette.texte }}>1. Sur le PC, ouvrez Paramètres › Synchronisation entre appareils.</Text>
+              <Text style={{ color: palette.texte }}>2. Cliquez sur « Relier un autre appareil ».</Text>
+              <Text style={{ color: palette.texte }}>
+                3. Le plus simple : scannez le QR code avec l’appareil photo de ce téléphone — le code est rempli tout
+                seul. Sinon, recopiez le texte affiché sous « Ou recopiez ce code » : il commence par AB1. et fait une
+                centaine de caractères (le plus sûr : l’envoyer par Notes ou iMessage à vous-même, puis le coller).
+              </Text>
+              <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>
+                Il ne contient pas le mot de passe de synchronisation : celui-ci se tape à part, juste en dessous.
+              </Text>
+              <Champ
+                etiquette="Code de liaison"
+                placeholder="AB1.…"
+                value={code}
+                onChangeText={setCode}
+                autoCapitalize="none"
+                autoCorrect={false}
+                testID="champ-liaison"
+              />
+            </View>
           )}
           <Champ etiquette="Nom de cet appareil" value={nom} onChangeText={setNom} testID="champ-nom-appareil" />
           <Champ
@@ -155,12 +201,6 @@ export function CarteSynchro({
               testID="bouton-relier"
             />
           </View>
-          {!liaisonDuPc && !code ? (
-            <SousTitre>
-              Pas encore de relais ? Sur le PC, dans le dossier d’AppliBourse, lancez « npm run relais:deployer ».
-              Le guide pas à pas est dans docs/iphone.md.
-            </SousTitre>
-          ) : null}
         </Carte>
       </>
     );
@@ -253,6 +293,7 @@ export function CarteSynchro({
 
 const styles = StyleSheet.create({
   boutons: { flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.s },
+  etapes: { borderWidth: 1, borderRadius: RAYON.m, padding: ESPACEMENT.m, gap: ESPACEMENT.xs + 2 },
   appareil: {
     flexDirection: 'row',
     alignItems: 'center',

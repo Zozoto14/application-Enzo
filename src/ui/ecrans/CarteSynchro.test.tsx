@@ -23,6 +23,24 @@ describe('CarteSynchro', () => {
     expect(onRelier).toHaveBeenCalledWith(expect.stringMatching(/^AB1\./), 'secret-commun', 'PC');
   });
 
+  it('sur le PC sans relais : explique comment l’installer', async () => {
+    await render(
+      <CarteSynchro synchro={{ ...nonRelie, plateforme: 'bureau' }} nomParDefaut="PC" onRelier={jest.fn()}
+        onSynchroniser={jest.fn()} onDelier={jest.fn()} onOublier={jest.fn()} />,
+    );
+    expect(screen.getByTestId('relais-a-installer')).toBeTruthy();
+    expect(screen.getByText(/npm run relais:deployer/)).toBeTruthy();
+  });
+
+  it('sur l’iPhone : dit où trouver le code', async () => {
+    await render(
+      <CarteSynchro synchro={{ ...nonRelie, plateforme: 'ios' }} nomParDefaut="iPhone" onRelier={jest.fn()}
+        onSynchroniser={jest.fn()} onDelier={jest.fn()} onOublier={jest.fn()} />,
+    );
+    expect(screen.getByText('Où trouver le code de liaison ?')).toBeTruthy();
+    expect(screen.getByText(/Relier un autre appareil/)).toBeTruthy();
+  });
+
   it('refuse deux mots de passe différents', async () => {
     const onRelier = jest.fn();
     await render(
