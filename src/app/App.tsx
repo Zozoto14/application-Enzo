@@ -124,7 +124,7 @@ import { CreationCompte } from '../ui/ecrans/CreationCompte';
 import { CreationTitre } from '../ui/ecrans/CreationTitre';
 import { Deverrouillage } from '../ui/ecrans/Deverrouillage';
 import { ImportPositions } from '../ui/ecrans/ImportPositions';
-import { Reglages } from '../ui/ecrans/Reglages';
+import { Reglages, type EtatVerificationMaj } from '../ui/ecrans/Reglages';
 import { Sauvegarde } from '../ui/ecrans/Sauvegarde';
 import { Notifications, type SeuilAffiche } from '../ui/ecrans/Notifications';
 import {
@@ -1213,6 +1213,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // sur téléphone (le réveil en arrière-plan s'en charge) et dans les tests.
   const pontNotifications = (globalThis as { applibourse?: { systeme?: PontNotifications } }).applibourse
     ?.systeme;
+  const pontMaj = (
+    globalThis as {
+      applibourse?: { maj?: { chercher?(): Promise<EtatVerificationMaj>; redemarrer?(): Promise<boolean> } };
+    }
+  ).applibourse?.maj;
   const pontEnregistrerSous = (
     globalThis as { applibourse?: { fichiers?: { enregistrerSous?(nom: string, contenu: Uint8Array): Promise<boolean> } } }
   ).applibourse?.fichiers?.enregistrerSous;
@@ -2228,6 +2233,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
               : undefined
           }
           messageExport={messageExport}
+          onChercherMiseAJour={pontMaj?.chercher ? () => pontMaj.chercher!() : undefined}
+          onRedemarrerPourMaj={pontMaj?.redemarrer ? () => void pontMaj.redemarrer!() : undefined}
           onAnnuler={() => setEcran('tableau')}
           onSymboles={() => {
             setRecherche(undefined);

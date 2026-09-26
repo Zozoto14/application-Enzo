@@ -26,7 +26,10 @@ interface Pont {
     synthetiser(texte: string, voix: string, vitesse: number): Promise<Uint8Array>;
   };
   sauvegardes?: { dossier(): Promise<string>; lister(): Promise<string[]> };
-  maj?: { verifier(): Promise<{ etat: string; motif?: string; commit?: string; nouveautes?: string[] }> };
+  maj?: {
+    verifier(): Promise<{ etat: string; motif?: string; commit?: string; nouveautes?: string[] }>;
+    chercher?(): Promise<{ etat: string; motif?: string; commit?: string; nouveautes?: string[] }>;
+  };
 }
 
 const HORS_BUREAU = 'Disponible dans l’application de bureau.';
@@ -157,7 +160,8 @@ export function testsDuBureau(pont: Pont | undefined = pontBureau()): Test[] {
       libelle: 'Mises à jour (GitHub)',
       executer: pont?.maj
         ? async () => {
-            const etat = await pont.maj!.verifier();
+            // GitHub interrogé maintenant quand la version le permet.
+            const etat = await (pont.maj!.chercher ?? pont.maj!.verifier)();
             if (etat.etat === 'erreur') throw new Error(etat.motif ?? 'erreur inconnue');
             return etat.etat === 'a-jour'
               ? `à jour (${etat.commit?.slice(0, 7)}).`

@@ -81,5 +81,9 @@ contextBridge.exposeInMainWorld('applibourse', {
     verifier: () => ipcRenderer.invoke('maj:verifier'),
     /** Lance `npm run maj-pc` dans une fenêtre, puis ferme l'application. */
     installer: () => ipcRenderer.invoke('maj:installer'),
+    /** Interroge GitHub maintenant, application ouverte. */
+    chercher: () => ipcRenderer.invoke('maj:chercher'),
+    /** Redémarre : le lanceur récupère le code et reconstruit l'interface. */
+    redemarrer: () => ipcRenderer.invoke('maj:redemarrer'),
   },
 });

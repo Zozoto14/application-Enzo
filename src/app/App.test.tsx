@@ -425,6 +425,29 @@ describe('parcours complet, session ouverte', () => {
     }
   });
 
+  it('vérifie les mises à jour application ouverte, et propose de redémarrer', async () => {
+    const redemarrer = jest.fn(async () => true);
+    const global = globalThis as { applibourse?: unknown };
+    global.applibourse = {
+      maj: {
+        chercher: async () => ({ etat: 'disponible', commit: 'abc1234', nouveautes: ['Screener façon Baggr', 'Export Excel'] }),
+        redemarrer,
+      },
+    };
+    try {
+      await ouvrir();
+      await creerCompte();
+      await fireEvent.press(screen.getByTestId('nav-reglages'));
+      await fireEvent.press(screen.getByTestId('bouton-verifier-maj'));
+      await laisserTravailler();
+      expect(screen.getByText('• Screener façon Baggr')).toBeTruthy();
+      await fireEvent.press(screen.getByTestId('bouton-redemarrer-maj'));
+      expect(redemarrer).toHaveBeenCalled();
+    } finally {
+      delete global.applibourse;
+    }
+  });
+
   it('refuse un compte sans date d’ouverture', async () => {
     // Pour un PEA, cette date fait courir l'antériorité fiscale.
     await ouvrir();

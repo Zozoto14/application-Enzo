@@ -22,7 +22,7 @@
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, shell, Tray } from 'electron';
 import { spawn } from 'node:child_process';
-import { preparerInterface } from './interface.mjs';
+import { git, preparerInterface } from './interface.mjs';
 import { synthetiser, VOIX_NATURELLES } from './voix.mjs';
 import { readFile, writeFile, mkdir, rename, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -193,6 +193,8 @@ function installerPasserelle() {
   ipcMain.handle('maj:verifier', async () => verifierMiseAJour());
 
   ipcMain.handle('maj:installer', async () => lancerMiseAJour());
+  ipcMain.handle('maj:chercher', async () => chercherMiseAJour());
+  ipcMain.handle('maj:redemarrer', async () => redemarrerPourMettreAJour());
 
   ipcMain.handle('yahoo:json', async (_evenement, url) => yahooJson(String(url)));
 
@@ -463,6 +465,41 @@ async function verifierMiseAJour() {
   return { etat: 'a-jour', commit: '' };
 }
 
+/**
+ * Vérification à la demande, application ouverte : GitHub a-t-il du
+ * nouveau depuis le code en service ? Rien n'est appliqué ici.
+ */
+async function chercherMiseAJour() {
+  const version = await lireVersionBuild();
+  const dossier = version?.dossierSource;
+  if (!dossier || !existsSync(dossier)) {
+    return { etat: 'erreur', motif: 'Dossier du projet introuvable : les mises à jour se font par réinstallation.' };
+  }
+  try {
+    await git(dossier, ['fetch', '--quiet', 'origin', 'main'], 30_000);
+    const local = await git(dossier, ['rev-parse', 'HEAD']);
+    const distant = await git(dossier, ['rev-parse', 'origin/main']);
+    if (local === distant) {
+      return { etat: 'a-jour', commit: local.slice(0, 7) };
+    }
+    const nouveautes = (await git(dossier, ['log', '--format=%s', 'HEAD..origin/main'])).split('\n').filter(Boolean);
+    return { etat: 'disponible', commit: distant.slice(0, 7), nouveautes };
+  } catch (erreur) {
+    return { etat: 'erreur', motif: erreur instanceof Error ? erreur.message : String(erreur) };
+  }
+}
+
+/**
+ * Appliquer : redémarrer. Au lancement, le lanceur récupère le code et
+ * reconstruit l'interface — le même chemin, éprouvé, que chaque matin.
+ */
+function redemarrerPourMettreAJour() {
+  quitterVraiment = true;
+  app.relaunch({ args: process.argv.slice(1).filter(argument => argument !== '--demarrage') });
+  setTimeout(() => app.exit(0), 300);
+  return true;
+}
+
 async function lancerMiseAJour() {
   const version = await lireVersionBuild();
   if (!version?.dossierSource || !existsSync(version.dossierSource)) {
@@ -525,6 +562,11 @@ function creerPlateau() {
   plateau.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Ouvrir AppliBourse', click: montrerFenetre },
+      {
+        label: 'Vérifier les mises à jour',
+        // Ouvre les Paramètres, où se trouve la vérification.
+        click: () => montrerFenetre().webContents.send('notification:ouvrir', 'reglages'),
+      },
       { type: 'separator' },
       {
         label: 'Quitter',

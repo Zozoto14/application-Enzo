@@ -14,6 +14,11 @@ import { Segments } from '../elements';
 import { INTERVALLES_ACTUALISATION, INTERVALLE_PAR_DEFAUT_S, libelleIntervalle } from '../../cours/marche';
 import type { FournisseurCours } from '../../cours/fournisseur';
 
+export type EtatVerificationMaj =
+  | { etat: 'a-jour'; commit?: string }
+  | { etat: 'disponible'; commit?: string; nouveautes: string[] }
+  | { etat: 'erreur'; motif: string };
+
 export interface ReglagesProps {
   fournisseurs: readonly FournisseurCours[];
   fournisseurActuel?: string;
@@ -40,6 +45,10 @@ export interface ReglagesProps {
   onRenouvelerCodes?(): string[];
   /** Relance la visite guidée des nouveautés. */
   onRevoirVisite?(): void;
+  /** Interroge GitHub maintenant (bureau). */
+  onChercherMiseAJour?(): Promise<EtatVerificationMaj>;
+  /** Redémarre l'application pour appliquer la mise à jour. */
+  onRedemarrerPourMaj?(): void;
   /** Exporte le portefeuille dans un fichier Excel. */
   onExporterExcel?(): void;
   messageExport?: string;
@@ -64,6 +73,8 @@ export function Reglages({
   onRevoirVisite,
   onExporterExcel,
   messageExport,
+  onChercherMiseAJour,
+  onRedemarrerPourMaj,
   onEnregistrer,
   onAnnuler,
 }: ReglagesProps) {
@@ -82,6 +93,10 @@ export function Reglages({
       style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
       contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
       keyboardShouldPersistTaps="handled">
+      {onChercherMiseAJour ? (
+        <CarteMiseAJour chercher={onChercherMiseAJour} redemarrer={onRedemarrerPourMaj} />
+      ) : null}
+
       {onChoisirTheme ? (
         <>
           <Titre>Apparence</Titre>
@@ -333,6 +348,86 @@ export function Reglages({
         <Bouton titre="Retour" variante="discret" onPress={onAnnuler} />
       </Actions>
     </ScrollView>
+  );
+}
+
+/** Vérifier les mises à jour sans relancer l'application. */
+function CarteMiseAJour({
+  chercher,
+  redemarrer,
+}: {
+  chercher(): Promise<EtatVerificationMaj>;
+  redemarrer?(): void;
+}) {
+  const palette = usePalette();
+  const [enCours, setEnCours] = useState(false);
+  const [resultat, setResultat] = useState<EtatVerificationMaj | undefined>();
+  const [redemarrage, setRedemarrage] = useState(false);
+  const verifier = () => {
+    setEnCours(true);
+    chercher()
+      .then(setResultat)
+      .catch((e: unknown) => setResultat({ etat: 'erreur', motif: e instanceof Error ? e.message : String(e) }))
+      .finally(() => setEnCours(false));
+  };
+  return (
+    <>
+      <Titre>Mises à jour</Titre>
+      <Carte>
+        <SousTitre>
+          L’application se met à jour à chaque lancement. Ce bouton regarde tout de suite si une nouvelle version
+          est disponible, sans avoir à la fermer.
+        </SousTitre>
+        <View style={{ alignSelf: 'flex-start' }}>
+          <Bouton
+            titre={enCours ? 'Vérification…' : 'Vérifier les mises à jour'}
+            desactive={enCours || redemarrage}
+            onPress={verifier}
+            testID="bouton-verifier-maj"
+          />
+        </View>
+        {resultat?.etat === 'a-jour' ? (
+          <Text style={{ color: palette.hausse, fontWeight: '600' }} testID="maj-a-jour">
+            ✅ Vous avez la dernière version{resultat.commit ? ` (${resultat.commit})` : ''}.
+          </Text>
+        ) : null}
+        {resultat?.etat === 'erreur' ? (
+          <Alerte message={`Vérification impossible : ${resultat.motif}`} />
+        ) : null}
+        {resultat?.etat === 'disponible' ? (
+          <View style={{ gap: ESPACEMENT.s }} testID="maj-disponible">
+            <Text style={{ color: palette.accent, fontWeight: '700' }}>
+              🆕 Nouvelle version disponible : {resultat.nouveautes.length} nouveauté{resultat.nouveautes.length > 1 ? 's' : ''}
+            </Text>
+            {resultat.nouveautes.slice(0, 8).map(titre => (
+              <Text key={titre} style={{ color: palette.texte }}>
+                • {titre}
+              </Text>
+            ))}
+            {resultat.nouveautes.length > 8 ? (
+              <SousTitre>…et {resultat.nouveautes.length - 8} autre(s).</SousTitre>
+            ) : null}
+            {redemarrer ? (
+              <View style={{ alignSelf: 'flex-start' }}>
+                <Bouton
+                  titre={redemarrage ? 'Redémarrage…' : 'Installer et redémarrer'}
+                  desactive={redemarrage}
+                  onPress={() => {
+                    setRedemarrage(true);
+                    redemarrer();
+                  }}
+                  testID="bouton-redemarrer-maj"
+                />
+              </View>
+            ) : null}
+            <SousTitre>
+              L’application se ferme et se rouvre à jour ; la première ouverture prend une ou deux minutes. Vos
+              données ne sont pas touchées.
+            </SousTitre>
+          </View>
+        ) : null}
+      </Carte>
+    </>
   );
 }
 
