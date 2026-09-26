@@ -24,7 +24,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, Notification, s
 import { spawn } from 'node:child_process';
 import { preparerInterface } from './interface.mjs';
 import { synthetiser, VOIX_NATURELLES } from './voix.mjs';
-import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -85,6 +85,37 @@ function installerPasserelle() {
   ipcMain.handle('fichier:existe', async (_evenement, nom) => existsSync(cheminDe(nom)));
 
   ipcMain.handle('fichier:dossier', async () => join(app.getPath('userData'), 'donnees'));
+
+  // Sauvegardes : un dossier visible dans Documents, que l'on peut copier,
+  // synchroniser (OneDrive) ou emporter. La fenêtre ne donne qu'un nom de
+  // fichier, vérifié ici : impossible de sortir du dossier.
+  const dossierSauvegardes = () => join(app.getPath('documents'), 'AppliBourse Sauvegardes');
+  const cheminSauvegarde = nom => {
+    const propre = String(nom);
+    if (!/^[A-Za-z0-9._-]+\.sauvegarde\.json$/.test(propre)) {
+      throw new Error('Nom de sauvegarde refusé.');
+    }
+    return join(dossierSauvegardes(), propre);
+  };
+  ipcMain.handle('sauvegardes:dossier', async () => {
+    await mkdir(dossierSauvegardes(), { recursive: true });
+    return dossierSauvegardes();
+  });
+  ipcMain.handle('sauvegardes:lister', async () => {
+    await mkdir(dossierSauvegardes(), { recursive: true });
+    return (await readdir(dossierSauvegardes())).filter(nom => nom.endsWith('.sauvegarde.json'));
+  });
+  ipcMain.handle('sauvegardes:existe', async (_evenement, nom) => existsSync(cheminSauvegarde(nom)));
+  ipcMain.handle('sauvegardes:lire', async (_evenement, nom) => readFile(cheminSauvegarde(nom), 'utf8'));
+  ipcMain.handle('sauvegardes:ecrire', async (_evenement, nom, contenu) => {
+    await mkdir(dossierSauvegardes(), { recursive: true });
+    await ecrireAtomique(cheminSauvegarde(nom), Buffer.from(String(contenu), 'utf8'));
+  });
+  ipcMain.handle('sauvegardes:supprimer', async (_evenement, nom) => rm(cheminSauvegarde(nom), { force: true }));
+  ipcMain.handle('sauvegardes:ouvrir-dossier', async () => {
+    await mkdir(dossierSauvegardes(), { recursive: true });
+    return (await shell.openPath(dossierSauvegardes())) === '';
+  });
 
   ipcMain.handle('systeme:theme', async (_evenement, sombre) => {
     nativeTheme.themeSource = sombre ? 'dark' : 'light';

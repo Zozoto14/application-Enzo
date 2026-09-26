@@ -34,6 +34,17 @@ contextBridge.exposeInMainWorld('applibourse', {
     demarrage: activer => ipcRenderer.invoke('systeme:demarrage', activer),
   },
 
+  /** Sauvegardes chiffrées, rangées dans Documents\\AppliBourse Sauvegardes. */
+  sauvegardes: {
+    dossier: () => ipcRenderer.invoke('sauvegardes:dossier'),
+    lister: () => ipcRenderer.invoke('sauvegardes:lister'),
+    existe: nom => ipcRenderer.invoke('sauvegardes:existe', nom),
+    lire: nom => ipcRenderer.invoke('sauvegardes:lire', nom),
+    ecrire: (nom, contenu) => ipcRenderer.invoke('sauvegardes:ecrire', nom, contenu),
+    supprimer: nom => ipcRenderer.invoke('sauvegardes:supprimer', nom),
+    ouvrirDossier: () => ipcRenderer.invoke('sauvegardes:ouvrir-dossier'),
+  },
+
   yahoo: {
     /** Réponse JSON d'une adresse Yahoo Finance autorisée. */
     json: url => ipcRenderer.invoke('yahoo:json', url),

@@ -14,7 +14,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StatusBar } from 'react-native';
+import { Linking, StatusBar, Text, View } from 'react-native';
 // SafeAreaView de react-native est deprecie ; celui de safe-area-context gere
 // en plus l'encoche et la barre de geste, et etait deja une dependance.
 import {
@@ -83,6 +83,8 @@ import { construireComparateur } from '../ui/vues/comparateur';
 import { Projection } from '../ui/ecrans/Projection';
 import { Symboles } from '../ui/ecrans/Symboles';
 import { Watchlist } from '../ui/ecrans/Watchlist';
+import { Recuperation } from '../ui/ecrans/Recuperation';
+import { ACCUEIL_BAGGR } from '../ui/vues/liens';
 import { Recherche } from '../ui/ecrans/Recherche';
 import { ajouterHistorique, historiqueDepuisJson } from '../ui/vues/historiqueRecherche';
 import { chargerTheses, type ValeurCherchee } from '../fondamentaux/theses';
@@ -115,7 +117,7 @@ import {
   prochainBriefing,
   type Planning,
 } from '../notifications/planification';
-import { executerReveil } from '../notifications/reveil';
+import { executerReveil, oublierBriefingsModifies } from '../notifications/reveil';
 import { rappelsDus, retenirRappels } from '../notifications/rappelVerrouille';
 import { composerBriefing } from '../notifications/briefing';
 import {
@@ -130,6 +132,7 @@ import {
 import { chargerModule } from '../natif/modules';
 import { gestionnaireDepuisFs } from '../maj/application';
 import { systemeDepuisRnfs } from '../fichiers/systeme';
+import { systemeDepuisBureau, type PontSauvegardes } from '../fichiers/bureau';
 import { exporterDepuisBase, restaurerDansBase } from '../sauvegarde/depot';
 import { ouvrirArchive } from '../sauvegarde/archive';
 import {
@@ -144,7 +147,8 @@ import {
   PremierLancement,
   type SecretsInitiaux,
 } from '../ui/ecrans/PremierLancement';
-import { definirTheme, palettePour, stylesPartages, themeCourant } from '../ui/theme';
+import { ESPACEMENT, definirTheme, palettePour, stylesPartages, themeCourant } from '../ui/theme';
+import { Bouton, Carte } from '../ui/composants';
 
 export interface AppProps {
   session: Session;
@@ -479,6 +483,24 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [executer, session],
   );
 
+  // Mot de passe oublié : un code de récupération rouvre la base, et un
+  // nouveau mot de passe est enregistré dans la foulée.
+  const [enRecuperation, setEnRecuperation] = useState(false);
+  const [avisRecuperation, setAvisRecuperation] = useState<string | undefined>();
+  const recuperer = useCallback(
+    (codeRecuperation: string, nouveauMotDePasse: string) =>
+      executer(() => {
+        const { codesRestants } = session.recuperer({ codeRecuperation, nouveauMotDePasse });
+        setEnRecuperation(false);
+        setAvisRecuperation(
+          `Accès retrouvé : votre nouveau mot de passe est enregistré. Il vous reste ${codesRestants} code${
+            codesRestants > 1 ? 's' : ''
+          } de récupération${codesRestants <= 2 ? ' — pensez à en regénérer dans Paramètres' : ''}.`,
+        );
+      }),
+    [executer, session],
+  );
+
   const verrouiller = useCallback(() => {
     // Le podcast parle de votre argent : il se tait quand on verrouille.
     lecturePartagee().arreter();
@@ -670,9 +692,17 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
    * react-native-fs et dans les tests. L'ecran de sauvegarde le dit plutot que
    * d'echouer silencieusement.
    */
-  const fichiers = systemeDepuisRnfs(
-    chargerModule<unknown>('react-native-fs').module,
+  // Sur l'ordinateur, le pont d'Electron range les sauvegardes dans Documents.
+  const pontSauvegardes = (globalThis as { applibourse?: { sauvegardes?: PontSauvegardes } }).applibourse
+    ?.sauvegardes;
+  const fichiers = useMemo(
+    () => systemeDepuisBureau(pontSauvegardes) ?? systemeDepuisRnfs(chargerModule<unknown>('react-native-fs').module),
+    [pontSauvegardes],
   );
+  const [dossierSauvegardes, setDossierSauvegardes] = useState<string | undefined>();
+  useEffect(() => {
+    pontSauvegardes?.dossier().then(setDossierSauvegardes).catch(() => undefined);
+  }, [pontSauvegardes]);
 
   const rafraichirSauvegardes = useCallback(() => {
     if (!fichiers) {
@@ -1146,7 +1176,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         titreId = identifiant('titre');
         depot.enregistrer({
           id: titreId,
-          isin: '',
+          // La recherche ne donne pas d'ISIN, et la base en exige un unique :
+          // le symbole en tient lieu, sous une forme qu'aucun ISIN ne prend.
+          isin: `SYMBOLE:${candidat.symbole.toUpperCase()}`,
           nom: candidat.nom,
           ticker: candidat.symbole,
           deviseCotation: candidat.devise ?? (candidat.paris ? 'EUR' : 'USD'),
@@ -1156,6 +1188,20 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       surveiller(titreId);
     },
     [session, identifiant, surveiller],
+  );
+  const [erreurAjout, setErreurAjout] = useState<string | undefined>();
+  const surveillerCandidatSur = useCallback(
+    (candidat: CandidatSymbole) => {
+      try {
+        setErreurAjout(undefined);
+        surveillerCandidat(candidat);
+      } catch (e) {
+        setErreurAjout(
+          `Impossible d’ajouter ${candidat.nom} à la watchlist : ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    },
+    [surveillerCandidat],
   );
 
   /** La valeur de ce symbole est-elle déjà en surveillance ? */
@@ -1285,10 +1331,26 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   const enregistrerPlanning = useCallback(
     (planning: Planning) => {
-      new DepotParametres(session.base()).ecrire(
+      const parametres = new DepotParametres(session.base());
+      const avant = planningDepuisJson(parametres.lire(PARAMETRES.planningBriefings));
+      // Un horaire déplacé aujourd'hui doit pouvoir sonner aujourd'hui.
+      parametres.ecrire(
+        PARAMETRES.etatNotifications,
+        JSON.stringify(
+          oublierBriefingsModifies(
+            etatDepuisJson(parametres.lire(PARAMETRES.etatNotifications)),
+            avant,
+            planning,
+            new Date(),
+          ),
+        ),
+      );
+      parametres.ecrire(
         PARAMETRES.planningBriefings,
         planningVersJson(planning),
       );
+      // Vérifié tout de suite plutôt qu'à la minute suivante.
+      setTimeout(() => void verifierNotificationsRef.current(), 1_500);
       try {
         stockageLocal()?.setItem(CLE_PLANNING_LOCAL, planningVersJson(planning));
       } catch {
@@ -1347,6 +1409,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     pontDemarrage?.().then(setDemarrageAuto).catch(() => undefined);
   }, [pontDemarrage]);
   const verificationEnCours = useRef(false);
+  const verifierNotificationsRef = useRef<() => Promise<void>>(async () => undefined);
+  const [journalNotifications, setJournalNotifications] = useState<string | undefined>();
   const verifierNotifications = useCallback(async () => {
     if (!pontNotifications || verificationEnCours.current) {
       return;
@@ -1357,7 +1421,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       const parametres = new DepotParametres(base);
       const depot = new DepotCours(base);
       const canal = canalBureau(pontNotifications);
-      await executerReveil({
+      const resultat = await executerReveil({
         maintenant: new Date(),
         planning: planningDepuisJson(parametres.lire(PARAMETRES.planningBriefings)),
         seuils: seuilsDepuisJson(parametres.lire(PARAMETRES.seuilsAlertes)),
@@ -1373,6 +1437,19 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         // Sur l'ordinateur, le briefing part à l'heure dite, même sans mouvement.
         toujoursParler: true,
       });
+      const heure = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const envoyes = [...resultat.briefingsEnvoyes, ...resultat.alertesEnvoyees];
+      if (resultat.echecs.length > 0) {
+        setJournalNotifications(`${heure} — Windows a refusé la notification : ${resultat.echecs[0]}`);
+      } else if (envoyes.length > 0) {
+        setJournalNotifications(
+          `${heure} — envoyé : ${envoyes
+            .map(id => (id.endsWith('-matin') ? 'briefing du matin' : id.endsWith('-soir') ? 'briefing du soir' : 'alerte de cours'))
+            .join(', ')}.`,
+        );
+      } else {
+        setJournalNotifications(precedent => precedent ?? `${heure} — rien à envoyer pour l’instant.`);
+      }
       try {
         stockageLocal()?.setItem(CLE_PLANNING_LOCAL, parametres.lire(PARAMETRES.planningBriefings) ?? '');
       } catch {
@@ -1401,6 +1478,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       verificationEnCours.current = false;
     }
   }, [pontNotifications, session, aujourdhui]);
+  verifierNotificationsRef.current = verifierNotifications;
 
   useEffect(() => {
     if (!deverrouille || !pontNotifications) {
@@ -1730,10 +1808,16 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     { cle: 'sauvegarde', libelle: 'Sauvegarde', glyphe: '⇪' },
     { cle: 'notifications', libelle: 'Alertes', glyphe: '◉' },
     { cle: 'reglages', libelle: 'Paramètres', glyphe: '⚙\uFE0E' },
+    // Baggr s'ouvre dans le navigateur : ce n'est pas un écran de l'application.
+    { cle: 'baggr', libelle: 'Baggr ↗', glyphe: '◆' },
   ];
   const destinationActive =
     ecran === 'symboles' ? 'reglages' : ecran === 'titre' ? 'saisie' : ecran === 'compte' ? 'tableau' : ecran;
   const naviguer = (cle: string) => {
+    if (cle === 'baggr') {
+      Linking.openURL(ACCUEIL_BAGGR).catch(() => undefined);
+      return;
+    }
     if ((cle === 'saisie' || cle === 'import') && sansCompte) {
       // Sans compte, ni saisie ni import ne sont possibles : on commence par là.
       setCompteEdite(undefined);
@@ -1769,6 +1853,18 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         discret={discret}
         onBasculerDiscretion={deverrouille && contenuComplet && tableau ? basculerDiscretion : undefined}
         flottant={ecran !== 'podcast' ? <LecteurFlottant onOuvrir={() => setEcran('podcast')} /> : null}>
+      {avisRecuperation && deverrouille ? (
+        <View style={{ padding: ESPACEMENT.m, paddingBottom: 0 }}>
+          <Carte>
+            <Text style={{ color: palettePour().texte }} testID="avis-recuperation">
+              {avisRecuperation}
+            </Text>
+            <View style={{ alignSelf: 'flex-start' }}>
+              <Bouton titre="Compris" variante="discret" onPress={() => setAvisRecuperation(undefined)} />
+            </View>
+          </Carte>
+        </View>
+      ) : null}
       {secrets ? (
         <PremierLancement
           onCreer={creer}
@@ -1781,12 +1877,28 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       ) : statut === 'non-initialise' ? (
         <PremierLancement onCreer={creer} enCours={enCours} erreur={erreur} />
       ) : !contenu || !tableau ? (
-        <Deverrouillage
-          onDeverrouiller={deverrouiller}
-          erreur={erreur}
-          enCours={enCours}
-          secondesAvantNouvelEssai={verrou?.verrouille ? verrou.secondesRestantes : 0}
-        />
+        enRecuperation ? (
+          <Recuperation
+            onRecuperer={recuperer}
+            onAnnuler={() => {
+              setErreur(undefined);
+              setEnRecuperation(false);
+            }}
+            erreur={erreur}
+            enCours={enCours}
+          />
+        ) : (
+          <Deverrouillage
+            onDeverrouiller={deverrouiller}
+            onRecuperer={() => {
+              setErreur(undefined);
+              setEnRecuperation(true);
+            }}
+            erreur={erreur}
+            enCours={enCours}
+            secondesAvantNouvelEssai={verrou?.verrouille ? verrou.secondesRestantes : 0}
+          />
+        )
       ) : ecran === 'compte' ? (
         <CreationCompte
           key={compteEdite ?? 'nouveau'}
@@ -1825,6 +1937,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             chargerModule('react-native-background-fetch').etat === 'disponible'
           }
           surOrdinateur={Boolean(pontNotifications)}
+          journal={journalNotifications}
           demarrageAuto={pontDemarrage ? demarrageAuto ?? false : undefined}
           onChangerDemarrage={
             pontDemarrage
@@ -1895,13 +2008,16 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
               : () => ouvrirSymbole(fiche.symbole, fiche.titreId, true)
           }
           chargerTheses={chargerThesesValeur}
+          lienBaggr={
+            (contenuComplet?.titres ?? []).find(titre => titre.id === fiche.titreId)?.lienExterne ?? ACCUEIL_BAGGR
+          }
           onSurveiller={
             fiche.vue
               ? () => {
                   // Depuis la fiche, même une valeur inconnue du portefeuille se
                   // met en surveillance : elle est créée au besoin.
                   const donnees = fichesEnCache.current.get(fiche.symbole)?.fiche;
-                  surveillerCandidat({
+                  surveillerCandidatSur({
                     symbole: fiche.symbole,
                     nom: donnees?.nom ?? fiche.vue!.entete.nom,
                     place: donnees?.bourse ?? '',
@@ -2062,7 +2178,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
               })(),
             )
           }
-          onSurveiller={surveillerCandidat}
+          onSurveiller={surveillerCandidatSur}
+          erreurAjout={erreurAjout}
           onOuvrirFiche={symbole =>
             ouvrirSymbole(
               symbole,
@@ -2102,6 +2219,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       ) : ecran === 'sauvegarde' ? (
         <Sauvegarde
           disponible={Boolean(fichiers)}
+          emplacement={dossierSauvegardes}
+          onOuvrirDossier={pontSauvegardes?.ouvrirDossier ? () => void pontSauvegardes.ouvrirDossier!() : undefined}
           sauvegardes={sauvegardes}
           onCreer={creerSauvegarde}
           onRestaurer={restaurerSauvegarde}
@@ -2126,6 +2245,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             new DepotParametres(session.base()).lire(PARAMETRES.cleApiCours),
           )}
           onEnregistrer={enregistrerReglages}
+          onRenouvelerCodes={() => session.renouvelerCodesRecuperation()}
           onAnnuler={() => setEcran('tableau')}
           onSymboles={() => {
             setRecherche(undefined);

@@ -17,6 +17,9 @@ import type { SauvegardeSurDisque } from '../../sauvegarde/fichiers';
 export interface SauvegardeProps {
   /** Faux si le module de fichiers n'est pas dans le binaire. */
   disponible: boolean;
+  /** Dossier où sont rangées les sauvegardes (ordinateur). */
+  emplacement?: string;
+  onOuvrirDossier?(): void;
   sauvegardes: readonly SauvegardeSurDisque[];
   onCreer(motDePasse: string): void;
   onRestaurer(chemin: string, motDePasse: string): void;
@@ -33,6 +36,8 @@ const LONGUEUR_MINIMALE = 12;
 
 export function Sauvegarde({
   disponible,
+  emplacement,
+  onOuvrirDossier,
   sauvegardes,
   onCreer,
   onRestaurer,
@@ -72,6 +77,24 @@ export function Sauvegarde({
             Le module d'accès aux fichiers n'est pas présent dans l'application.
             La sauvegarde exige un nouveau build.
           </SousTitre>
+        </Carte>
+      ) : null}
+
+      {disponible && emplacement ? (
+        <Carte>
+          <SousTitre>Vos sauvegardes chiffrées sont rangées dans :</SousTitre>
+          <Text selectable style={{ color: palette.texte, fontWeight: '600' }} testID="emplacement-sauvegardes">
+            {emplacement}
+          </Text>
+          <SousTitre>
+            Copiez-les sur une clé USB ou laissez OneDrive les synchroniser : une sauvegarde qui reste sur le
+            même disque ne protège pas d’une panne de l’ordinateur.
+          </SousTitre>
+          {onOuvrirDossier ? (
+            <View style={{ alignSelf: 'flex-start' }}>
+              <Bouton titre="Ouvrir le dossier" variante="discret" onPress={onOuvrirDossier} />
+            </View>
+          ) : null}
         </Carte>
       ) : null}
 

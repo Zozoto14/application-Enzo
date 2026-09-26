@@ -103,6 +103,32 @@ describe('parcours de déverrouillage', () => {
     expect(screen.getAllByText('Portefeuille').length).toBeGreaterThan(0);
   });
 
+  it('rouvre avec un code de récupération et un nouveau mot de passe', async () => {
+    const { session, initialisation } = await ouvrirPuisVerrouiller();
+
+    await fireEvent.press(screen.getByText('Mot de passe oublié'));
+    await fireEvent.changeText(screen.getByTestId('champ-code-recuperation'), initialisation.codesRecuperation[0]);
+    await fireEvent.changeText(screen.getByTestId('champ-nouveau-mot-de-passe'), 'nouveau-mot-de-passe-solide');
+    await fireEvent.changeText(screen.getByTestId('champ-confirmation-mot-de-passe'), 'autre-chose-completement');
+    await fireEvent.press(screen.getByTestId('bouton-recuperer'));
+    expect(screen.getByText('Les deux mots de passe ne correspondent pas.')).toBeTruthy();
+
+    await fireEvent.changeText(screen.getByTestId('champ-confirmation-mot-de-passe'), 'nouveau-mot-de-passe-solide');
+    await fireEvent.press(screen.getByTestId('bouton-recuperer'));
+    await laisserTravailler();
+
+    expect(session.statut()).toBe('deverrouille');
+    expect(screen.getByTestId('avis-recuperation')).toBeTruthy();
+    // Le nouveau mot de passe ouvre la base ; le code, lui, est consommé.
+    session.verrouiller();
+    expect(() =>
+      session.deverrouiller({
+        motDePasse: 'nouveau-mot-de-passe-solide',
+        codeTotp: codeTotp(initialisation.secretTotp, INSTANT),
+      }),
+    ).not.toThrow();
+  });
+
   it('reste verrouillé et affiche un message indistinct sur un code faux', async () => {
     await ouvrirPuisVerrouiller();
 
@@ -240,6 +266,7 @@ describe('parcours complet, session ouverte', () => {
       json: async () => ({
         quotes: [
           { symbol: 'NVDA', shortname: 'NVIDIA Corporation', exchange: 'NMS', quoteType: 'EQUITY', currency: 'USD' },
+          { symbol: 'ASML', shortname: 'ASML Holding N.V.', exchange: 'NMS', quoteType: 'EQUITY', currency: 'USD' },
         ],
       }),
     })) as unknown as typeof fetch;
@@ -255,6 +282,11 @@ describe('parcours complet, session ouverte', () => {
       expect(titre).toMatchObject({ nom: 'NVIDIA Corporation', deviseCotation: 'USD' });
       expect(new DepotWatchlist(session.base()).lister().map(ligne => ligne.titreId)).toEqual([titre!.id]);
       expect(screen.getByText('★ Surveillée')).toBeTruthy();
+      // Une deuxième valeur sans ISIN s'ajoute aussi (elle échouait avant).
+      await fireEvent.press(screen.getByTestId('surveiller-ASML'));
+      expect(new DepotWatchlist(session.base()).lister()).toHaveLength(2);
+      expect(screen.queryByText(/Impossible d’ajouter/)).toBeNull();
+
       // Le terme tapé et la valeur consultée restent dans l'historique.
       expect(screen.getByTestId('historique-nvidia')).toBeTruthy();
       expect(screen.getByTestId('historique-NVDA')).toBeTruthy();
@@ -917,8 +949,8 @@ describe('écran de sauvegarde', () => {
   }
 
   it('annonce son indisponibilité quand le module de fichiers manque', async () => {
-    // C'est le cas sur le PC, et ce serait celui d'un binaire compilé sans
-    // react-native-fs : l'écran doit le dire au lieu d'échouer en silence.
+    // Ce serait le cas d'un binaire compilé sans react-native-fs : l'écran
+    // doit le dire au lieu d'échouer en silence.
     await ouvrirSauvegarde();
 
     expect(screen.getAllByText('Sauvegarde').length).toBeGreaterThan(1);
@@ -926,6 +958,29 @@ describe('écran de sauvegarde', () => {
     expect(
       screen.getByTestId('bouton-creer-sauvegarde').props.accessibilityState.disabled,
     ).toBe(true);
+  });
+
+  it('sur l’ordinateur, range les sauvegardes dans Documents', async () => {
+    const ecrits = new Map<string, string>();
+    const global = globalThis as { applibourse?: unknown };
+    global.applibourse = {
+      sauvegardes: {
+        dossier: async () => 'C:\\Users\\moi\\Documents\\AppliBourse Sauvegardes',
+        lister: async () => [...ecrits.keys()],
+        existe: async (nom: string) => ecrits.has(nom),
+        lire: async (nom: string) => ecrits.get(nom)!,
+        ecrire: async (nom: string, contenu: string) => void ecrits.set(nom, contenu),
+        supprimer: async (nom: string) => void ecrits.delete(nom),
+      },
+    };
+    try {
+      await ouvrirSauvegarde();
+      await laisserTravailler();
+      expect(screen.queryByText(/Indisponible sur cette version/)).toBeNull();
+      expect(screen.getByTestId('emplacement-sauvegardes').props.children).toMatch(/AppliBourse Sauvegardes/);
+    } finally {
+      delete global.applibourse;
+    }
   });
 
   it('explique pourquoi une sauvegarde est nécessaire', async () => {

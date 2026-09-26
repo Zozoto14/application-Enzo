@@ -26,6 +26,7 @@ import type { CanalNotifications } from './envoi';
 import {
   briefingsDus,
   identifiantBriefing,
+  jourDe,
   type Planning,
   type MomentBriefing,
 } from './planification';
@@ -73,10 +74,36 @@ export interface ResultatReveil {
   /** Briefings dus mais sans rien à dire : traités, non envoyés. */
   briefingsTus: string[];
   alertesEnvoyees: string[];
+  /** Affichages refusés par le système, avec leur motif. */
+  echecs: string[];
   /** Renseigné quand rien n'a été envoyé, pour le journal de diagnostic. */
   motif?: MotifSilence;
   /** Vrai si le rafraîchissement des cours a échoué et qu'on a pris les derniers connus. */
   coursPerimes: boolean;
+}
+
+/**
+ * Un horaire changé rend son briefing du jour à nouveau possible : sans
+ * cela, déplacer le briefing du matin de 10:00 à 11:25 après qu'il est
+ * passé ne donne rien avant le lendemain.
+ */
+export function oublierBriefingsModifies(
+  etat: EtatPersiste,
+  avant: Planning,
+  apres: Planning,
+  maintenant: Date,
+): EtatPersiste {
+  const jour = jourDe(maintenant);
+  const aOublier = (['matin', 'soir'] as const)
+    .filter(moment => {
+      const a = avant[jour];
+      const b = apres[jour];
+      return (a?.actif ? a[moment] : undefined) !== (b?.actif ? b[moment] : undefined);
+    })
+    .map(moment => identifiantBriefing(maintenant, moment));
+  return aOublier.length === 0
+    ? etat
+    : { ...etat, briefingsEnvoyes: etat.briefingsEnvoyes.filter(id => !aOublier.includes(id)) };
 }
 
 /** Jours de briefings conservés dans l'état persisté. */
@@ -161,6 +188,7 @@ export async function executerReveil(
     briefingsEnvoyes: [],
     briefingsTus: [],
     alertesEnvoyees: [],
+    echecs: [],
     coursPerimes: false,
   };
 
@@ -238,9 +266,10 @@ export async function executerReveil(
       resultat.briefingsEnvoyes.push(identifiant);
       dejaEnvoyes.add(identifiant);
       valeurPrecedente = briefing.valeur;
-    } catch {
+    } catch (erreur) {
       // L'affichage a échoué : on ne marque rien, le prochain réveil
       // retentera tant que la tolérance court.
+      resultat.echecs.push(erreur instanceof Error ? erreur.message : String(erreur));
     }
   }
 
@@ -266,8 +295,9 @@ export async function executerReveil(
       });
       resultat.alertesEnvoyees.push(alerte.identifiant);
       dejaEnvoyes.add(alerte.identifiant);
-    } catch {
+    } catch (erreur) {
       // Idem : sans marque, l'alerte repartira au prochain réveil.
+      resultat.echecs.push(erreur instanceof Error ? erreur.message : String(erreur));
     }
   }
 

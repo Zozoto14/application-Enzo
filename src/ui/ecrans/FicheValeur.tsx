@@ -7,7 +7,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Bouton, usePalette } from '../composants';
 import { CarteSection, Metrique, Pile, Rangee, Segments, Selecteur, Signe, Vide } from '../elements';
 import { Barres, Donut, GraphiqueLignes, Radar } from '../graphiques/Graphiques';
@@ -60,6 +60,8 @@ export interface FicheValeurProps {
   surveillee?: boolean;
   /** Thèses et actualités de la valeur (bureau). */
   chargerTheses?: ChargerTheses;
+  /** Fiche Baggr de la valeur si elle est connue, sinon l'accueil de Baggr. */
+  lienBaggr?: string;
 }
 
 function ThesesValeur({
@@ -103,6 +105,17 @@ export function FicheValeur(props: FicheValeurProps) {
           <Pressable accessibilityRole="button" onPress={props.onRetour} testID="bouton-retour-fiche" style={styles.retour}>
             <Text style={{ color: palette.accent, fontWeight: '700' }}>← Portefeuille</Text>
           </Pressable>
+          {props.lienBaggr ? (
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => Linking.openURL(props.lienBaggr!).catch(() => undefined)}
+              testID="bouton-baggr-fiche"
+              style={styles.retour}>
+              <Text style={{ color: palette.accent, fontWeight: '600' }}>
+                {props.lienBaggr.includes('/screener/') ? 'Fiche Baggr ↗' : 'Ouvrir Baggr ↗'}
+              </Text>
+            </Pressable>
+          ) : null}
           {props.onRecharger ? (
             <Pressable accessibilityRole="button" onPress={props.onRecharger} style={styles.retour}>
               <Text style={{ color: palette.texteSecondaire }}>Recharger</Text>

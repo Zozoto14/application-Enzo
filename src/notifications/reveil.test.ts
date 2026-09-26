@@ -8,6 +8,7 @@ import {
   ETAT_PERSISTE_VIDE,
   elaguerEnvoyes,
   executerReveil,
+  oublierBriefingsModifies,
   type DependancesReveil,
   type EtatPersiste,
 } from './reveil';
@@ -335,5 +336,22 @@ describe('sérialisation des cours', () => {
     const relu = Decimal.de(enregistres[0].coursPrecedents['air-liquide']);
 
     expect(relu.eq(d('110.25'))).toBe(true);
+  });
+});
+
+describe('horaire modifié', () => {
+  it('rend possible le briefing du jour déplacé, et lui seul', () => {
+    const samedi = new Date(2026, 8, 26, 11, 25);
+    const avant = { ...PLANNING_DEFAUT, samedi: { actif: true, matin: '10:00', soir: '22:00' } };
+    const apres = { ...PLANNING_DEFAUT, samedi: { actif: true, matin: '11:25', soir: '22:00' } };
+    const etat = {
+      ...ETAT_PERSISTE_VIDE,
+      briefingsEnvoyes: ['briefing-2026-09-26-matin', 'briefing-2026-09-26-soir', 'briefing-2026-09-25-matin'],
+    };
+    expect(oublierBriefingsModifies(etat, avant, apres, samedi).briefingsEnvoyes).toEqual([
+      'briefing-2026-09-26-soir',
+      'briefing-2026-09-25-matin',
+    ]);
+    expect(oublierBriefingsModifies(etat, avant, avant, samedi)).toBe(etat);
   });
 });

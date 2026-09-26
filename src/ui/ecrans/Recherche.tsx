@@ -23,6 +23,8 @@ export interface RechercheProps {
   historique?: readonly EntreeHistorique[];
   onNoterHistorique?(entree: Omit<EntreeHistorique, 'quand'>): void;
   onEffacerHistorique?(): void;
+  /** Échec du dernier ajout à la watchlist. */
+  erreurAjout?: string;
 }
 
 const TYPES: Record<string, string> = {
@@ -44,6 +46,7 @@ export function Recherche({
   historique = [],
   onNoterHistorique,
   onEffacerHistorique,
+  erreurAjout,
 }: RechercheProps) {
   const palette = usePalette();
   const [texte, setTexte] = useState('');
@@ -129,6 +132,7 @@ export function Recherche({
           </View>
         ) : null}
 
+        {erreurAjout ? <Alerte message={erreurAjout} /> : null}
         {erreur ? <Alerte message={`La recherche n’a pas abouti : ${erreur}`} /> : null}
 
         {enCours ? (

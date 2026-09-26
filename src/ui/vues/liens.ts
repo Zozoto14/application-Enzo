@@ -103,7 +103,8 @@ export function liensDe(titre: Titre): LienExterne[] {
     });
   }
 
-  if (titre.isin) {
+  // Un vrai ISIN seulement : une valeur ajoutée depuis la recherche n'en a pas.
+  if (/^[A-Z]{2}[A-Z0-9]{10}$/.test(titre.isin)) {
     liens.push({
       cle: 'euronext',
       libelle: 'Euronext',

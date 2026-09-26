@@ -50,6 +50,8 @@ export interface NotificationsProps {
   /** Ouverture au démarrage de Windows (bureau seulement). */
   demarrageAuto?: boolean;
   onChangerDemarrage?(activer: boolean): void;
+  /** Résultat de la dernière vérification (bureau). */
+  journal?: string;
 }
 
 const LIBELLES_JOUR: Record<JourSemaine, string> = {
@@ -78,6 +80,7 @@ export function Notifications({
   onChangerSeuilVariation,
   demarrageAuto,
   onChangerDemarrage,
+  journal,
 }: NotificationsProps) {
   const [variationSaisie, setVariationSaisie] = useState(
     seuilVariation ? String(seuilVariation).replace('.', ',') : '',
@@ -117,6 +120,9 @@ export function Notifications({
             Verrouillée, elle vous prévient que le briefing attend ; les chiffres arrivent dès que vous
             déverrouillez. Un clic sur une notification ramène la fenêtre.
           </SousTitre>
+          <Text style={{ color: palette.texteSecondaire, fontSize: 13 }} testID="journal-notifications">
+            Dernière vérification : {journal ?? 'dans moins d’une minute.'}
+          </Text>
           {onChangerDemarrage ? (
             <View style={styles.ligneInterrupteur}>
               <View style={{ flex: 1 }}>

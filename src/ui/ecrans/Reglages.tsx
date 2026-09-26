@@ -36,6 +36,8 @@ export interface ReglagesProps {
   /** Thème actif et changement de thème. */
   theme?: CleTheme;
   onChoisirTheme?(theme: CleTheme): void;
+  /** Remplace les codes de récupération et rend les nouveaux, à noter. */
+  onRenouvelerCodes?(): string[];
   onAnnuler(): void;
 }
 
@@ -53,6 +55,7 @@ export function Reglages({
   onChoisirIntervalle,
   theme,
   onChoisirTheme,
+  onRenouvelerCodes,
   onEnregistrer,
   onAnnuler,
 }: ReglagesProps) {
@@ -60,6 +63,8 @@ export function Reglages({
   const palette = usePalette();
   const [choisi, setChoisi] = useState(fournisseurActuel ?? fournisseurs[0]?.id ?? '');
   const [cle, setCle] = useState('');
+  const [confirmerCodes, setConfirmerCodes] = useState(false);
+  const [nouveauxCodes, setNouveauxCodes] = useState<string[] | undefined>();
 
   const fournisseur = fournisseurs.find(candidat => candidat.id === choisi);
   const cleManquante = Boolean(fournisseur?.cleRequise) && !cleEnregistree && cle === '';
@@ -238,6 +243,56 @@ export function Reglages({
         </Carte>
       ) : null}
 
+      {onRenouvelerCodes ? (
+        <>
+          <Titre>Codes de récupération</Titre>
+          <Carte>
+            <SousTitre>
+              Ils servent si vous oubliez votre mot de passe : à l’écran de déverrouillage, « Mot de passe
+              oublié ». Chacun ne sert qu’une fois. Générez-en de nouveaux si vous les avez perdus ou presque
+              tous utilisés : les anciens cesseront de fonctionner.
+            </SousTitre>
+            {nouveauxCodes ? (
+              <View style={{ gap: ESPACEMENT.s }} testID="nouveaux-codes">
+                <Alerte message="Notez-les maintenant, sur papier ou dans votre gestionnaire de mots de passe : ils ne seront plus jamais affichés." />
+                {nouveauxCodes.map(code => (
+                  <Text key={code} selectable style={[styles.code, { color: palette.texte, borderColor: palette.bordure }]}>
+                    {code}
+                  </Text>
+                ))}
+                <View style={{ alignSelf: 'flex-start' }}>
+                  <Bouton titre="C’est noté" variante="discret" onPress={() => setNouveauxCodes(undefined)} />
+                </View>
+              </View>
+            ) : confirmerCodes ? (
+              <View style={{ gap: ESPACEMENT.s }}>
+                <Text style={{ color: palette.danger }}>Les codes actuels ne marcheront plus. Continuer ?</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.s }}>
+                  <Bouton
+                    titre="Générer de nouveaux codes"
+                    testID="bouton-confirmer-codes"
+                    onPress={() => {
+                      setNouveauxCodes(onRenouvelerCodes());
+                      setConfirmerCodes(false);
+                    }}
+                  />
+                  <Bouton titre="Annuler" variante="discret" onPress={() => setConfirmerCodes(false)} />
+                </View>
+              </View>
+            ) : (
+              <View style={{ alignSelf: 'flex-start' }}>
+                <Bouton
+                  titre="Générer de nouveaux codes…"
+                  variante="discret"
+                  testID="bouton-renouveler-codes"
+                  onPress={() => setConfirmerCodes(true)}
+                />
+              </View>
+            )}
+          </Carte>
+        </>
+      ) : null}
+
       <Actions>
         <Bouton
           titre="Enregistrer"
@@ -252,6 +307,16 @@ export function Reglages({
 }
 
 const styles = StyleSheet.create({
+  code: {
+    fontFamily: 'monospace',
+    fontSize: 17,
+    letterSpacing: 1,
+    borderWidth: 1,
+    borderRadius: RAYON.s,
+    paddingHorizontal: ESPACEMENT.m,
+    paddingVertical: ESPACEMENT.s,
+    alignSelf: 'flex-start',
+  },
   themes: { flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.m },
   theme: { flexGrow: 1, flexBasis: 200, borderRadius: RAYON.m, padding: ESPACEMENT.m - 4, gap: ESPACEMENT.s },
   apercuTheme: { borderRadius: RAYON.s, borderWidth: 1, padding: ESPACEMENT.m - 4, gap: ESPACEMENT.s },
