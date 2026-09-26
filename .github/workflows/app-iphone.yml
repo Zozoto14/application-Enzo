@@ -71,6 +71,9 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             build | tee xcodebuild.log | grep -E "error:|warning: .*deprecated|\*\* BUILD" || true
           test -d build/Build/Products/Release-iphoneos/AppliBourse.app
+          # Sans le paquet JavaScript, l'app s'ouvrirait sur un écran rouge.
+          test -f build/Build/Products/Release-iphoneos/AppliBourse.app/main.jsbundle
+          grep -E "\*\* BUILD" xcodebuild.log
 
       - name: Paquet .ipa
         run: |
