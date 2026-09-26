@@ -11,6 +11,7 @@
  */
 
 import type { ResultatSiIndice } from '../vues/siIndice';
+import type { LigneVendable } from '../vues/simulationVente';
 import React, { useState } from 'react';
 import { TextInput } from 'react-native';
 import {
@@ -95,6 +96,8 @@ export interface PortefeuilleProps {
   risque: VueRisque;
   flux: VueFlux;
   impots: VueImpots;
+  /** Lignes proposées au simulateur de vente. */
+  ventes?: readonly LigneVendable[];
   /** Date du jour, qui fixe le début des périodes YTD, 1A… */
   aujourdhui?: string;
   /** Données brutes des analyses avancées : graphiques et tableaux des onglets. */
@@ -234,6 +237,8 @@ export function Portefeuille(props: PortefeuilleProps) {
           {actif === 'impots' ? (
             <OngletImpots
               vue={props.impots}
+              ventes={props.ventes}
+              aujourdhui={props.aujourdhui ?? new Date().toISOString().slice(0, 10)}
               annees={props.anneesRapport}
               onGenerer={props.onGenererRapport}
               message={props.messageRapport}

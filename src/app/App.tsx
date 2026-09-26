@@ -91,6 +91,7 @@ import { Screener } from '../ui/ecrans/Screener';
 import { Carnet } from '../ui/ecrans/Carnet';
 import { carnetDepuisJson, construireCarnet, rappelsCarnet } from '../ui/vues/carnet';
 import { simulerToutSurIndice } from '../ui/vues/siIndice';
+import type { LigneVendable } from '../ui/vues/simulationVente';
 import { lireScreener, requeteScreener, type CleCategorie, type Region, type TriScreener } from '../fondamentaux/screener';
 import { ajouterHistorique, historiqueDepuisJson } from '../ui/vues/historiqueRecherche';
 import { chargerTheses, type ValeurCherchee } from '../fondamentaux/theses';
@@ -360,6 +361,41 @@ function stockageLocal(): StockageLocal | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** Positions proposées au simulateur de vente, avec la valeur de leur plan. */
+function lignesVendables(
+  contenu: { etat: EtatPortefeuille; comptes: readonly Compte[]; titres: readonly Titre[] },
+  cours: ReadonlyMap<string, Decimal>,
+): LigneVendable[] {
+  const noms = new Map(contenu.titres.map(titre => [titre.id, titre.nom]));
+  return contenu.etat.positions
+    .filter(position => position.quantite.estPositif())
+    .flatMap(position => {
+      const compte = contenu.comptes.find(candidat => candidat.id === position.compteId);
+      if (!compte) return [];
+      const etatCompte = contenu.etat.comptes.get(compte.id);
+      const pea = compte.type === 'PEA' || compte.type === 'PEA_PME';
+      const valeurPlan = pea
+        ? totaux(
+            valoriserPositions(contenu.etat.positions.filter(p => p.compteId === compte.id), cours).valorisees,
+            etatCompte ? [etatCompte] : [],
+          ).valeurTotale.toNumber()
+        : undefined;
+      return [
+        {
+          cle: `${compte.id}|${position.titreId}`,
+          libelle: `${noms.get(position.titreId) ?? position.titreId} · ${compte.nom}`,
+          enveloppe: pea ? ('PEA' as const) : ('CTO' as const),
+          dateOuverture: compte.dateOuverture,
+          quantite: position.quantite.toNumber(),
+          pru: position.pru.toNumber(),
+          cours: cours.get(position.titreId)?.toNumber(),
+          valeurPlan,
+          versementsPlan: pea ? etatCompte?.versementsCumules.toNumber() : undefined,
+        },
+      ];
+    });
 }
 
 export function App({ session, genererId, aujourdhui, chargementAutomatique = false }: AppProps) {
@@ -1888,6 +1924,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             historique: historiques.titres,
           }),
           flux: construireFlux(contenu.transactions, contenu.comptes),
+          ventes: lignesVendables(contenu, depotCours.derniersCours()),
           impots: construireImpots({
             etat: contenu.etat,
             comptes: contenu.comptes,
@@ -2627,6 +2664,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           risque={onglets!.risque}
           flux={onglets!.flux}
           impots={onglets!.impots}
+          ventes={onglets!.ventes}
           onCreerCompte={() => {
             setCompteEdite(undefined);
             setEcran('compte');
