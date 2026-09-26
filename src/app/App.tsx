@@ -88,6 +88,8 @@ import { Recherche } from '../ui/ecrans/Recherche';
 import { Screener } from '../ui/ecrans/Screener';
 import { Carnet } from '../ui/ecrans/Carnet';
 import { Diagnostic } from '../ui/ecrans/Diagnostic';
+import { Journal } from '../ui/ecrans/Journal';
+import { construireJournal } from '../ui/vues/journal';
 import { testsDuBureau } from '../diagnostic/testsBureau';
 import { convertisseur, installerConvertisseur } from '../cours/change';
 import { VERSION_VISITE, VisiteGuidee } from '../ui/VisiteGuidee';
@@ -178,6 +180,7 @@ type Ecran =
   | 'screener'
   | 'carnet'
   | 'diagnostic'
+  | 'journal'
   | 'symboles'
   | 'comparateur'
   | 'fiche'
@@ -1620,6 +1623,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     ...(fiche ? [{ cle: 'fiche', libelle: fiche.vue?.entete.nom ?? fiche.symbole, glyphe: '◧', sous: true }] : []),
     { cle: 'watchlist', libelle: 'Watchlist', glyphe: '☆' },
     { cle: 'carnet', libelle: 'Mon carnet', glyphe: '✎' },
+    { cle: 'journal', libelle: 'Journal des décisions', glyphe: '☰', sous: true },
     { cle: 'comparateur', libelle: 'Comparateur', glyphe: '⇄' },
     { cle: 'podcast', libelle: 'Podcast', glyphe: '♫' },
     { cle: 'objectifs', libelle: 'Objectifs', glyphe: '◎' },
@@ -2048,6 +2052,22 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         />
       ) : ecran === 'diagnostic' ? (
         <Diagnostic tests={testsDuBureau()} />
+      ) : ecran === 'journal' ? (
+        <Journal
+          vue={construireJournal({
+            transactions: contenuComplet?.transactions ?? [],
+            titres: contenuComplet?.titres ?? [],
+            cours: depotCours?.derniersCours() ?? new Map(),
+            carnet: carnetDepuisJson(new DepotParametres(session.base()).lire(PARAMETRES.carnetTheses)),
+          })}
+          onNoter={(transactionId, note) => {
+            const depot = new DepotTransactions(session.base());
+            const transaction = depot.toutes().find(candidate => candidate.id === transactionId);
+            if (!transaction) return;
+            depot.enregistrer({ ...transaction, note: note || undefined });
+            rafraichir();
+          }}
+        />
       ) : ecran === 'carnet' ? (
         <Carnet
           lignes={lignesCarnet()}

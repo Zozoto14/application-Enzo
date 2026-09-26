@@ -382,6 +382,24 @@ describe('parcours complet, session ouverte', () => {
     }
   });
 
+  it('note la raison d’une décision dans le journal', async () => {
+    const session = await ouvrir();
+    await creerCompte();
+    await fireEvent.press(screen.getByTestId('bouton-importer-positions'));
+    await fireEvent.changeText(screen.getByLabelText('Contenu du fichier'), EXPORT_REEL);
+    await fireEvent.press(screen.getByTestId('bouton-importer'));
+
+    await fireEvent.press(screen.getByTestId('nav-journal'));
+    const achat = new DepotTransactions(session.base()).toutes().find(t => t.type === 'ACHAT')!;
+    expect(screen.getByTestId(`decision-${achat.id}`)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId(`noter-${achat.id}`));
+    await fireEvent.changeText(screen.getByTestId(`note-${achat.id}`), 'Renforcement sur repli');
+    await fireEvent.press(screen.getByTestId(`enregistrer-note-${achat.id}`));
+
+    expect(new DepotTransactions(session.base()).toutes().find(t => t.id === achat.id)!.note).toBe('Renforcement sur repli');
+    expect(screen.getByText('« Renforcement sur repli »')).toBeTruthy();
+  });
+
   it('refuse un compte sans date d’ouverture', async () => {
     // Pour un PEA, cette date fait courir l'antériorité fiscale.
     await ouvrir();
