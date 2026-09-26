@@ -47,6 +47,9 @@ export interface NotificationsProps {
   /** Variation de séance, en %, qui déclenche une alerte ; 0 : coupée. */
   seuilVariation?: number;
   onChangerSeuilVariation?(valeur: string): void;
+  /** Ouverture au démarrage de Windows (bureau seulement). */
+  demarrageAuto?: boolean;
+  onChangerDemarrage?(activer: boolean): void;
 }
 
 const LIBELLES_JOUR: Record<JourSemaine, string> = {
@@ -73,6 +76,8 @@ export function Notifications({
   surOrdinateur,
   seuilVariation,
   onChangerSeuilVariation,
+  demarrageAuto,
+  onChangerDemarrage,
 }: NotificationsProps) {
   const [variationSaisie, setVariationSaisie] = useState(
     seuilVariation ? String(seuilVariation).replace('.', ',') : '',
@@ -109,7 +114,26 @@ export function Notifications({
           <Text style={{ color: palette.texte, fontWeight: '600' }}>Notifications Windows</Text>
           <SousTitre>
             Elles partent tant qu’AppliBourse est ouverte, même réduite dans la barre des tâches.
-            Un clic sur une notification ramène la fenêtre.
+            Verrouillée, elle vous prévient que le briefing attend ; les chiffres arrivent dès que vous
+            déverrouillez. Un clic sur une notification ramène la fenêtre.
+          </SousTitre>
+          {onChangerDemarrage ? (
+            <View style={styles.ligneInterrupteur}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: palette.texte }}>Ouvrir AppliBourse au démarrage de Windows</Text>
+                <SousTitre>Fermée, l’application ne peut rien envoyer : ceci garantit vos briefings.</SousTitre>
+              </View>
+              <Switch
+                value={Boolean(demarrageAuto)}
+                onValueChange={onChangerDemarrage}
+                testID="interrupteur-demarrage"
+                accessibilityLabel="Ouvrir AppliBourse au démarrage de Windows"
+              />
+            </View>
+          ) : null}
+          <SousTitre>
+            Rien ne s’affiche ? Vérifiez dans Windows : Paramètres › Système › Notifications (AppliBourse
+            autorisée) et que le mode « Ne pas déranger » est coupé.
           </SousTitre>
           {onTester ? (
             <View style={{ alignSelf: 'flex-start' }}>
@@ -324,6 +348,7 @@ function ChampHeure({
 }
 
 const styles = StyleSheet.create({
+  ligneInterrupteur: { flexDirection: 'row', alignItems: 'center', gap: ESPACEMENT.m },
   sectionTitre: { fontSize: 17, fontWeight: '700' },
   heures: { flexDirection: 'row', gap: ESPACEMENT.m },
   moitie: { flex: 1, minWidth: 120 },

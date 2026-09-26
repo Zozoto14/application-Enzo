@@ -58,6 +58,8 @@ export interface DependancesReveil {
   /** Persiste le nouvel état. Appelé une seule fois, à la fin. */
   enregistrer(etat: EtatPersiste): Promise<void>;
   toleranceMinutes?: number;
+  /** Envoyer le briefing même sans mouvement (ordinateur). */
+  toujoursParler?: boolean;
 }
 
 export type MotifSilence =
@@ -216,6 +218,8 @@ export async function executerReveil(
       cours,
       valeurPrecedente,
       date,
+      coursPrecedents,
+      toujours: deps.toujoursParler,
     });
 
     if (!briefing) {

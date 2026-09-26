@@ -30,6 +30,8 @@ contextBridge.exposeInMainWorld('applibourse', {
     ouvrir: url => ipcRenderer.invoke('systeme:ouvrir', url),
     /** Barre de titre claire ou sombre, selon le thème. */
     theme: sombre => ipcRenderer.invoke('systeme:theme', Boolean(sombre)),
+    /** Ouverture au démarrage de Windows : lit l'état, ou le change si un booléen est donné. */
+    demarrage: activer => ipcRenderer.invoke('systeme:demarrage', activer),
   },
 
   yahoo: {

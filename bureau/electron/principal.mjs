@@ -95,7 +95,13 @@ function installerPasserelle() {
     if (!Notification.isSupported()) {
       return false;
     }
-    const notification = new Notification({ title: String(titre), body: String(corps) });
+    const notification = new Notification({
+      title: String(titre),
+      body: String(corps),
+      // Le logo d'AppliBourse à côté du texte, plutôt qu'une notification anonyme.
+      icon: join(ici, '..', 'icone', 'icone-256.png'),
+      silent: false,
+    });
     // Un clic sur la notification ramène la fenêtre au premier plan.
     notification.on('click', () => {
       const fenetre = BrowserWindow.getAllWindows()[0];
@@ -107,6 +113,15 @@ function installerPasserelle() {
     });
     notification.show();
     return true;
+  });
+
+  // Ouverture au démarrage de Windows : sans elle, AppliBourse fermée ne
+  // peut envoyer aucun briefing.
+  ipcMain.handle('systeme:demarrage', async (_evenement, activer) => {
+    if (typeof activer === 'boolean') {
+      app.setLoginItemSettings({ openAtLogin: activer, args: ['--demarrage'] });
+    }
+    return app.getLoginItemSettings({ args: ['--demarrage'] }).openAtLogin;
   });
 
   ipcMain.handle('systeme:ouvrir', async (_evenement, url) => {

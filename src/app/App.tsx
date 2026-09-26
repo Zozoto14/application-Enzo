@@ -84,6 +84,7 @@ import { Projection } from '../ui/ecrans/Projection';
 import { Symboles } from '../ui/ecrans/Symboles';
 import { Watchlist } from '../ui/ecrans/Watchlist';
 import { Recherche } from '../ui/ecrans/Recherche';
+import { ajouterHistorique, historiqueDepuisJson } from '../ui/vues/historiqueRecherche';
 import { chargerTheses, type ValeurCherchee } from '../fondamentaux/theses';
 import { construireWatchlist } from '../ui/vues/watchlist';
 import { construireComparaison } from '../ui/vues/comparaison';
@@ -115,6 +116,8 @@ import {
   type Planning,
 } from '../notifications/planification';
 import { executerReveil } from '../notifications/reveil';
+import { rappelsDus, retenirRappels } from '../notifications/rappelVerrouille';
+import { composerBriefing } from '../notifications/briefing';
 import {
   alerteVariation,
   canalBureau,
@@ -329,6 +332,18 @@ function dividendesParTitre(
     );
   }
   return cumuls;
+}
+
+/** Copie du planning et rappels envoyés : hors du coffre, lisibles verrouillé. */
+const CLE_PLANNING_LOCAL = 'applibourse.planningBriefings';
+const CLE_RAPPELS_LOCAL = 'applibourse.rappelsBriefing';
+type StockageLocal = { getItem(cle: string): string | null; setItem(cle: string, valeur: string): void };
+function stockageLocal(): StockageLocal | undefined {
+  try {
+    return (globalThis as { localStorage?: StockageLocal }).localStorage;
+  } catch {
+    return undefined;
+  }
 }
 
 export function App({ session, genererId, aujourdhui, chargementAutomatique = false }: AppProps) {
@@ -1130,6 +1145,18 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [session, identifiant, surveiller],
   );
 
+  /** La valeur de ce symbole est-elle déjà en surveillance ? */
+  const symboleSurveille = (symbole: string): boolean => {
+    const cible = symbole.trim().toUpperCase();
+    const ids = new Set(
+      new DepotTitres(session.base())
+        .tous()
+        .filter(titre => titre.ticker.trim().toUpperCase() === cible)
+        .map(titre => titre.id),
+    );
+    return ids.size > 0 && new DepotWatchlist(session.base()).lister().some(ligne => ids.has(ligne.titreId));
+  };
+
   const [podcast, setPodcast] = useState<{
     episode?: Episode;
     chargement: boolean;
@@ -1249,6 +1276,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         PARAMETRES.planningBriefings,
         planningVersJson(planning),
       );
+      try {
+        stockageLocal()?.setItem(CLE_PLANNING_LOCAL, planningVersJson(planning));
+      } catch {
+        // Rappel verrouillé indisponible : sans conséquence.
+      }
       rafraichir();
     },
     [session, rafraichir],
@@ -1295,6 +1327,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // sur téléphone (le réveil en arrière-plan s'en charge) et dans les tests.
   const pontNotifications = (globalThis as { applibourse?: { systeme?: PontNotifications } }).applibourse
     ?.systeme;
+  const pontDemarrage = (globalThis as { applibourse?: { systeme?: { demarrage?(activer?: boolean): Promise<boolean> } } })
+    .applibourse?.systeme?.demarrage;
+  const [demarrageAuto, setDemarrageAuto] = useState<boolean | undefined>(undefined);
+  useEffect(() => {
+    pontDemarrage?.().then(setDemarrageAuto).catch(() => undefined);
+  }, [pontDemarrage]);
   const verificationEnCours = useRef(false);
   const verifierNotifications = useCallback(async () => {
     if (!pontNotifications || verificationEnCours.current) {
@@ -1319,7 +1357,14 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         // Les cours viennent d'être actualisés par la boucle des cours en direct.
         rafraichirCours: async () => depot.derniersCours(),
         enregistrer: async etat => parametres.ecrire(PARAMETRES.etatNotifications, JSON.stringify(etat)),
+        // Sur l'ordinateur, le briefing part à l'heure dite, même sans mouvement.
+        toujoursParler: true,
       });
+      try {
+        stockageLocal()?.setItem(CLE_PLANNING_LOCAL, parametres.lire(PARAMETRES.planningBriefings) ?? '');
+      } catch {
+        // Sans stockage local, pas de rappel verrouillé : rien de plus.
+      }
 
       // Forte séance : une fois par jour et par sens.
       const etat = etatDepuisJson(parametres.lire(PARAMETRES.etatNotifications));
@@ -1355,6 +1400,31 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       clearInterval(minuterie);
     };
   }, [deverrouille, pontNotifications, verifierNotifications]);
+
+  // Verrouillée, l'application ne peut pas lire le portefeuille : à l'heure
+  // d'un briefing, elle prévient seulement qu'il attend.
+  useEffect(() => {
+    if (deverrouille || !pontNotifications) {
+      return;
+    }
+    const verifier = () => {
+      const stockage = stockageLocal();
+      if (!stockage) return;
+      try {
+        const deja: string[] = JSON.parse(stockage.getItem(CLE_RAPPELS_LOCAL) ?? '[]');
+        const rappels = rappelsDus(stockage.getItem(CLE_PLANNING_LOCAL) ?? undefined, new Date(), deja);
+        if (rappels.length === 0) return;
+        stockage.setItem(CLE_RAPPELS_LOCAL, JSON.stringify(retenirRappels(deja, rappels.map(r => r.identifiant))));
+        for (const rappel of rappels) {
+          void pontNotifications.notifier(rappel.titre, rappel.corps).catch(() => undefined);
+        }
+      } catch {
+        // Un rappel manqué ne doit jamais gêner l'écran de déverrouillage.
+      }
+    };
+    const minuterie = setInterval(verifier, 60_000);
+    return () => clearInterval(minuterie);
+  }, [deverrouille, pontNotifications]);
 
   // Podcast prêt au réveil : à l'heure choisie, une fois par jour, fenêtre ouverte.
   // Rempli plus bas, une fois genererPodcast défini.
@@ -1629,10 +1699,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const sansCompte = (contenuComplet?.comptes.length ?? 0) === 0;
   const destinations: Destination[] = [
     { cle: 'tableau', libelle: 'Portefeuille', glyphe: '▦' },
-    ...(fiche ? [{ cle: 'fiche', libelle: fiche.vue?.entete.nom ?? fiche.symbole, glyphe: '◧' }] : []),
     { cle: 'saisie', libelle: 'Nouvelle opération', glyphe: '+' },
     { cle: 'import', libelle: 'Importer', glyphe: '↓' },
     { cle: 'recherche', libelle: 'Recherche', glyphe: '⌕' },
+    // La fiche ouverte se range sous la Recherche, d'où on l'ouvre le plus souvent.
+    ...(fiche ? [{ cle: 'fiche', libelle: fiche.vue?.entete.nom ?? fiche.symbole, glyphe: '◧', sous: true }] : []),
     { cle: 'watchlist', libelle: 'Surveillance', glyphe: '☆' },
     { cle: 'comparateur', libelle: 'Comparateur', glyphe: '⇄' },
     { cle: 'podcast', libelle: 'Podcast', glyphe: '♫' },
@@ -1736,6 +1807,14 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             chargerModule('react-native-background-fetch').etat === 'disponible'
           }
           surOrdinateur={Boolean(pontNotifications)}
+          demarrageAuto={pontDemarrage ? demarrageAuto ?? false : undefined}
+          onChangerDemarrage={
+            pontDemarrage
+              ? activer => {
+                  pontDemarrage(activer).then(setDemarrageAuto).catch(() => undefined);
+                }
+              : undefined
+          }
           seuilVariation={seuilVariation(new DepotParametres(session.base()).lire(PARAMETRES.seuilVariation))}
           onChangerSeuilVariation={valeur => {
             new DepotParametres(session.base()).ecrire(PARAMETRES.seuilVariation, valeur);
@@ -1744,8 +1823,21 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onTester={
             pontNotifications
               ? () => {
+                  // L'essai montre un vrai briefing, avec vos chiffres du moment.
+                  const contenuActuel = chargerEtat(session.base());
+                  const essai = composerBriefing({
+                    moment: new Date().getHours() < 13 ? 'matin' : 'soir',
+                    etat: contenuActuel.etat,
+                    titres: contenuActuel.titres,
+                    cours: new DepotCours(session.base()).derniersCours(),
+                    date: (aujourdhui ?? dateDuJour)(),
+                    toujours: true,
+                  });
                   pontNotifications
-                    .notifier('AppliBourse', 'Les notifications fonctionnent. Vous serez prévenu ici.')
+                    .notifier(
+                      essai?.titre ?? '✅ AppliBourse',
+                      essai?.corps ?? 'Les notifications fonctionnent. Vos briefings arriveront ici.',
+                    )
                     .then(affichee =>
                       setMessageNotifications(
                         affichee
@@ -1785,12 +1877,23 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
               : () => ouvrirSymbole(fiche.symbole, fiche.titreId, true)
           }
           chargerTheses={chargerThesesValeur}
-          onSurveiller={fiche.titreId ? () => surveiller(fiche.titreId!) : undefined}
-          surveillee={
-            fiche.titreId
-              ? new DepotWatchlist(session.base()).lister().some(ligne => ligne.titreId === fiche.titreId)
+          onSurveiller={
+            fiche.vue
+              ? () => {
+                  // Depuis la fiche, même une valeur inconnue du portefeuille se
+                  // met en surveillance : elle est créée au besoin.
+                  const donnees = fichesEnCache.current.get(fiche.symbole)?.fiche;
+                  surveillerCandidat({
+                    symbole: fiche.symbole,
+                    nom: donnees?.nom ?? fiche.vue!.entete.nom,
+                    place: donnees?.bourse ?? '',
+                    devise: donnees?.devise,
+                    paris: fiche.symbole.toUpperCase().endsWith('.PA'),
+                  });
+                }
               : undefined
           }
+          surveillee={symboleSurveille(fiche.symbole)}
         />
       ) : ecran === 'objectifs' && contenuComplet && depotCours ? (
         <Objectifs
@@ -1942,6 +2045,24 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             )
           }
           chargerTheses={chargerThesesValeur}
+          historique={historiqueDepuisJson(new DepotParametres(session.base()).lire(PARAMETRES.historiqueRecherche))}
+          onNoterHistorique={entree => {
+            const parametres = new DepotParametres(session.base());
+            parametres.ecrire(
+              PARAMETRES.historiqueRecherche,
+              JSON.stringify(
+                ajouterHistorique(historiqueDepuisJson(parametres.lire(PARAMETRES.historiqueRecherche)), {
+                  ...entree,
+                  quand: (aujourdhui ?? dateDuJour)(),
+                }),
+              ),
+            );
+            rafraichir();
+          }}
+          onEffacerHistorique={() => {
+            new DepotParametres(session.base()).supprimer(PARAMETRES.historiqueRecherche);
+            rafraichir();
+          }}
         />
       ) : ecran === 'projection' ? (
         <Projection

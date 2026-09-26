@@ -30,12 +30,12 @@ describe('composerBriefing', () => {
     // 10 titres a 110 plus 0 de liquidites restantes.
     const briefing = composerBriefing(entrees())!;
 
-    expect(briefing.titre).toBe(`Clôture — 1${FINE}100,00${INSEC}€`);
+    expect(briefing.titre).toBe(`🌙 Clôture — 1${FINE}100,00${INSEC}€`);
   });
 
   it('distingue le matin du soir', () => {
     expect(composerBriefing(entrees({ moment: 'matin' }))!.titre).toMatch(
-      /^Avant ouverture/,
+      /^☀️ Avant ouverture/,
     );
   });
 
@@ -51,6 +51,15 @@ describe('composerBriefing', () => {
     expect(briefing.corps).toMatch(/\+10,00/);
   });
 
+  it('nomme la ligne qui a le plus bougé, une information par ligne', () => {
+    const briefing = composerBriefing(
+      entrees({ valeurPrecedente: d('1000'), coursPrecedents: new Map([['air-liquide', d('100')]]) }),
+    )!;
+    expect(briefing.corps).toMatch(/🏆 Air Liquide \+10,00/);
+    expect(briefing.corps.split('\n').length).toBeGreaterThanOrEqual(3);
+    expect(briefing.corps).toMatch(/^▲ /);
+  });
+
   it('porte un identifiant stable, pour remplacer le briefing du jour', () => {
     const briefing = composerBriefing(entrees())!;
     expect(briefing.identifiant).toBe('briefing-2026-09-22-soir');
@@ -61,6 +70,11 @@ describe('composerBriefing', () => {
       // Un briefing identique la veille et le lendemain finit par etre ignore,
       // et avec lui ceux qui comptent.
       expect(composerBriefing(entrees({ valeurPrecedente: d('1100') }))).toBeUndefined();
+    });
+
+    it('parle quand même si on le lui demande, en disant que rien n’a bougé', () => {
+      const briefing = composerBriefing(entrees({ moment: 'matin', valeurPrecedente: d('1100'), toujours: true }))!;
+      expect(briefing.corps).toMatch(/Stable depuis le dernier point : les marchés n’ont pas encore ouvert/);
     });
 
     it('parle pour une variation d’un centime', () => {

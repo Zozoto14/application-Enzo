@@ -218,9 +218,10 @@ function EnTete({ vue, surveillee, onSurveiller }: { vue: VueFiche; surveillee?:
           accessibilityRole="button"
           disabled={surveillee}
           onPress={onSurveiller}
+          testID="bouton-surveiller-fiche"
           style={[styles.suivre, { backgroundColor: surveillee ? palette.surfaceHaute : palette.accentPlein }]}>
           <Text style={{ color: surveillee ? palette.texteSecondaire : palette.surAccent, fontWeight: '700' }}>
-            {surveillee ? 'Surveillée' : 'Suivre'}
+            {surveillee ? '★ Dans ma watchlist' : '☆ Ajouter à ma watchlist'}
           </Text>
         </Pressable>
       ) : null}

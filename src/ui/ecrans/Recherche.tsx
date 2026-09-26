@@ -9,6 +9,7 @@ import type { CandidatSymbole } from '../../cours/symboles';
 import { Alerte, SousTitre, usePalette } from '../composants';
 import { CarteSection, Rangee, Segments, Vide } from '../elements';
 import { FilTheses, type ChargerTheses } from '../theses';
+import type { EntreeHistorique } from '../vues/historiqueRecherche';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
 
 export interface RechercheProps {
@@ -18,6 +19,10 @@ export interface RechercheProps {
   onSurveiller(candidat: CandidatSymbole): void;
   onOuvrirFiche(symbole: string): void;
   chargerTheses?: ChargerTheses;
+  /** Recherches récentes, la plus récente d'abord. */
+  historique?: readonly EntreeHistorique[];
+  onNoterHistorique?(entree: Omit<EntreeHistorique, 'quand'>): void;
+  onEffacerHistorique?(): void;
 }
 
 const TYPES: Record<string, string> = {
@@ -30,7 +35,16 @@ const TYPES: Record<string, string> = {
   CURRENCY: 'Devise',
 };
 
-export function Recherche({ onRechercher, surveilles, onSurveiller, onOuvrirFiche, chargerTheses }: RechercheProps) {
+export function Recherche({
+  onRechercher,
+  surveilles,
+  onSurveiller,
+  onOuvrirFiche,
+  chargerTheses,
+  historique = [],
+  onNoterHistorique,
+  onEffacerHistorique,
+}: RechercheProps) {
   const palette = usePalette();
   const [texte, setTexte] = useState('');
   const [enCours, setEnCours] = useState(false);
@@ -39,15 +53,21 @@ export function Recherche({ onRechercher, surveilles, onSurveiller, onOuvrirFich
   const [choisi, setChoisi] = useState<CandidatSymbole | undefined>();
   const [onglet, setOnglet] = useState<'theses' | 'actualites'>('theses');
 
-  const lancer = () => {
-    const terme = texte.trim();
+  /** Retient une valeur consultée : elle revient d'un clic depuis l'historique. */
+  const noterValeur = (candidat: CandidatSymbole) =>
+    onNoterHistorique?.({ texte: candidat.nom, symbole: candidat.symbole, nom: candidat.nom });
+
+  const lancer = (saisie: string = texte, symboleVise?: string) => {
+    const terme = saisie.trim();
     if (!terme) return;
+    setTexte(terme);
     setEnCours(true);
     setErreur(undefined);
+    if (!symboleVise) onNoterHistorique?.({ texte: terme });
     onRechercher(terme)
       .then(candidats => {
         setResultats(candidats);
-        setChoisi(candidats[0]);
+        setChoisi(candidats.find(candidat => candidat.symbole === symboleVise) ?? candidats[0]);
       })
       .catch((e: unknown) => setErreur(e instanceof Error ? e.message : String(e)))
       .finally(() => setEnCours(false));
@@ -65,7 +85,7 @@ export function Recherche({ onRechercher, surveilles, onSurveiller, onOuvrirFich
           <TextInput
             value={texte}
             onChangeText={setTexte}
-            onSubmitEditing={lancer}
+            onSubmitEditing={() => lancer()}
             placeholder="Rechercher une action, un ETF… (nom, ticker ou ISIN)"
             placeholderTextColor={palette.texteSecondaire}
             returnKeyType="search"
@@ -76,12 +96,38 @@ export function Recherche({ onRechercher, surveilles, onSurveiller, onOuvrirFich
           />
           <Pressable
             accessibilityRole="button"
-            onPress={lancer}
+            onPress={() => lancer()}
             testID="bouton-rechercher-action"
             style={[styles.bouton, { backgroundColor: palette.accentPlein }]}>
             <Text style={{ color: palette.surAccent, fontWeight: '700' }}>Rechercher</Text>
           </Pressable>
         </View>
+
+        {historique.length > 0 ? (
+          <View style={styles.historique} testID="historique-recherche">
+            <Text style={{ color: palette.texteSecondaire, fontSize: 12, fontWeight: '700' }}>RÉCENTES</Text>
+            {historique.map(entree => (
+              <Pressable
+                key={`${entree.symbole ?? ''}|${entree.texte}`}
+                accessibilityRole="button"
+                onPress={() => lancer(entree.symbole ?? entree.texte, entree.symbole)}
+                testID={`historique-${entree.symbole ?? entree.texte}`}
+                style={({ pressed }) => [
+                  styles.puce,
+                  { borderColor: palette.bordure, backgroundColor: pressed ? palette.surfaceHaute : palette.surface },
+                ]}>
+                <Text style={{ color: palette.texte, fontSize: 13 }} numberOfLines={1}>
+                  {entree.symbole ? `◧ ${entree.nom ?? entree.texte} · ${entree.symbole}` : `⌕ ${entree.texte}`}
+                </Text>
+              </Pressable>
+            ))}
+            {onEffacerHistorique ? (
+              <Pressable accessibilityRole="button" onPress={onEffacerHistorique} testID="effacer-historique">
+                <Text style={{ color: palette.texteSecondaire, fontSize: 12, textDecorationLine: 'underline' }}>Effacer</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
 
         {erreur ? <Alerte message={`La recherche n’a pas abouti : ${erreur}`} /> : null}
 
@@ -105,7 +151,10 @@ export function Recherche({ onRechercher, surveilles, onSurveiller, onOuvrirFich
                 return (
                   <Pressable
                     key={candidat.symbole}
-                    onPress={() => setChoisi(candidat)}
+                    onPress={() => {
+                      setChoisi(candidat);
+                      noterValeur(candidat);
+                    }}
                     testID={`resultat-${candidat.symbole}`}
                     accessibilityRole="button"
                     accessibilityState={{ selected: selectionne }}
@@ -127,7 +176,10 @@ export function Recherche({ onRechercher, surveilles, onSurveiller, onOuvrirFich
                       <Pressable
                         accessibilityRole="button"
                         disabled={suivi}
-                        onPress={() => onSurveiller(candidat)}
+                        onPress={() => {
+                          noterValeur(candidat);
+                          onSurveiller(candidat);
+                        }}
                         testID={`surveiller-${candidat.symbole}`}
                         style={[styles.petit, { borderColor: suivi ? palette.bordure : palette.accent }]}>
                         <Text style={{ color: suivi ? palette.texteSecondaire : palette.accent, fontWeight: '600', fontSize: 13 }}>
@@ -136,7 +188,10 @@ export function Recherche({ onRechercher, surveilles, onSurveiller, onOuvrirFich
                       </Pressable>
                       <Pressable
                         accessibilityRole="button"
-                        onPress={() => onOuvrirFiche(candidat.symbole)}
+                        onPress={() => {
+                          noterValeur(candidat);
+                          onOuvrirFiche(candidat.symbole);
+                        }}
                         testID={`fiche-${candidat.symbole}`}
                         style={[styles.petit, { borderColor: palette.bordure }]}>
                         <Text style={{ color: palette.texte, fontWeight: '600', fontSize: 13 }}>Fiche</Text>
@@ -200,5 +255,7 @@ const styles = StyleSheet.create({
     borderRadius: RAYON.s,
   },
   actions: { flexDirection: 'row', gap: ESPACEMENT.s },
+  historique: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: ESPACEMENT.s, maxWidth: 900 },
+  puce: { borderWidth: 1, borderRadius: 999, paddingHorizontal: ESPACEMENT.m, paddingVertical: 6, maxWidth: 280 },
   petit: { borderWidth: 1, borderRadius: RAYON.s, paddingHorizontal: ESPACEMENT.s + 2, paddingVertical: 6 },
 });

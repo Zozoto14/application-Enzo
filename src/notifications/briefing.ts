@@ -40,12 +40,44 @@ export interface EntreesBriefing {
   valeurPrecedente?: Decimal;
   /** Date du jour, au format ISO. */
   date: string;
+  /** Cours du point précédent : de quoi nommer les lignes qui ont bougé. */
+  coursPrecedents?: ReadonlyMap<string, Decimal>;
+  /**
+   * Parler même quand rien n'a bougé. Sur l'ordinateur, le briefing est un
+   * rendez-vous demandé : le taire avant l'ouverture ou le week-end, c'est
+   * donner l'impression qu'il ne marche pas.
+   */
+  toujours?: boolean;
 }
 
 const SALUTATIONS: Record<MomentBriefing, string> = {
-  matin: 'Avant ouverture',
-  soir: 'Clôture',
+  matin: '☀️ Avant ouverture',
+  soir: '🌙 Clôture',
 };
+
+/** Meilleure et moins bonne ligne depuis le point précédent. */
+function mouvements(entrees: EntreesBriefing): string | undefined {
+  if (!entrees.coursPrecedents) return undefined;
+  const noms = new Map(entrees.titres.map(titre => [titre.id, titre.nom]));
+  const variations: Array<{ nom: string; pct: number }> = [];
+  for (const position of entrees.etat.positions) {
+    const avant = entrees.coursPrecedents.get(position.titreId);
+    const maintenant = entrees.cours.get(position.titreId);
+    if (!avant || !maintenant || !avant.estPositif()) continue;
+    const pct = maintenant.div(avant).sub(Decimal.de('1')).mul(100).toNumber();
+    if (Math.abs(pct) >= 0.01) variations.push({ nom: noms.get(position.titreId) ?? position.titreId, pct });
+  }
+  if (variations.length === 0) return undefined;
+  variations.sort((a, b) => b.pct - a.pct);
+  const texte = (v: { nom: string; pct: number }) =>
+    `${v.nom} ${formaterPourcentage(Decimal.de(v.pct.toFixed(2)))}`;
+  const meilleure = variations[0];
+  const pire = variations[variations.length - 1];
+  if (variations.length === 1) return `${meilleure.pct >= 0 ? '🏆' : '🔻'} ${texte(meilleure)}`;
+  return [meilleure.pct > 0 ? `🏆 ${texte(meilleure)}` : undefined, pire.pct < 0 ? `🔻 ${texte(pire)}` : undefined]
+    .filter(Boolean)
+    .join('  ·  ');
+}
 
 /**
  * Compose le briefing, ou renvoie `undefined` s'il n'y a rien à dire.
@@ -74,23 +106,36 @@ export function composerBriefing(entrees: EntreesBriefing): Briefing | undefined
     ? agregats.valeurTotale.sub(entrees.valeurPrecedente)
     : undefined;
 
-  // Rien n'a bougé : se taire plutôt que d'habituer à ignorer l'application.
-  if (evolution && evolution.enCentimes().estZero()) {
+  const immobile = Boolean(evolution && evolution.enCentimes().estZero());
+  // Rien n'a bougé : se taire plutôt que d'habituer à ignorer l'application
+  // — sauf quand le briefing est un rendez-vous qu'on attend.
+  if (immobile && !entrees.toujours) {
     return undefined;
   }
 
   const lignes: string[] = [];
 
-  if (evolution && entrees.valeurPrecedente?.estPositif()) {
+  if (immobile) {
+    lignes.push(
+      entrees.moment === 'matin'
+        ? '＝ Stable depuis le dernier point : les marchés n’ont pas encore ouvert.'
+        : '＝ Stable depuis le dernier point.',
+    );
+  } else if (evolution && entrees.valeurPrecedente?.estPositif()) {
     const pourcent = evolution.div(entrees.valeurPrecedente).mul(100);
     lignes.push(
-      `${formaterMontant(evolution, { signeExplicite: true })} depuis le dernier point (${formaterPourcentage(pourcent)}).`,
+      `${evolution.estPositif() ? '▲' : '▼'} ${formaterMontant(evolution, { signeExplicite: true })} depuis le dernier point (${formaterPourcentage(pourcent)}).`,
     );
+  }
+
+  const bougent = mouvements(entrees);
+  if (bougent && !immobile) {
+    lignes.push(bougent);
   }
 
   if (agregats.plusValueLatentePct) {
     lignes.push(
-      `Plus-value latente : ${formaterMontant(agregats.plusValueLatente, {
+      `💼 Plus-value latente : ${formaterMontant(agregats.plusValueLatente, {
         signeExplicite: true,
       })} (${formaterPourcentage(agregats.plusValueLatentePct)}).`,
     );
@@ -101,13 +146,14 @@ export function composerBriefing(entrees: EntreesBriefing): Briefing | undefined
     const noms = new Map(entrees.titres.map(titre => [titre.id, titre.nom]));
     const manquants = sansCours.map(position => noms.get(position.titreId) ?? position.titreId);
     lignes.push(
-      `${manquants.length} valeur(s) sans cours, exclues du total : ${manquants.join(', ')}.`,
+      `⚠️ ${manquants.length} valeur(s) sans cours, exclues du total : ${manquants.join(', ')}.`,
     );
   }
 
   return {
     titre: `${SALUTATIONS[entrees.moment]} — ${formaterMontant(agregats.valeurTotale)}`,
-    corps: lignes.join(' '),
+    // Une information par ligne : Windows et iOS les affichent l'une sous l'autre.
+    corps: lignes.join('\n'),
     valeur: agregats.valeurTotale,
     identifiant: `briefing-${entrees.date}-${entrees.moment}`,
   };

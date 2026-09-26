@@ -485,6 +485,8 @@ export const PARAMETRES = {
   podcastAuto: 'podcast.heure_auto',
   /** Dernier jour où le podcast automatique a été lancé. */
   podcastAutoFait: 'podcast.auto_fait_le',
+  /** Recherches récentes de l'écran Recherche (JSON). */
+  historiqueRecherche: 'recherche.historique',
 } as const;
 
 /**

@@ -25,6 +25,8 @@ export interface Destination {
   libelle: string;
   /** Pictogramme simple : aucune police d'icônes à embarquer. */
   glyphe: string;
+  /** Sous-catégorie de la destination qui la précède : affichée en retrait. */
+  sous?: boolean;
 }
 
 /** En dessous, pas de barre latérale : la place manque. */
@@ -235,6 +237,7 @@ function Lien({
         styles.lien,
         libelles ? styles.lienLarge : styles.lienEtroit,
         compact && styles.lienCompact,
+        destination.sous && !compact && (libelles ? styles.sousLarge : styles.sousEtroit),
         {
           backgroundColor: selectionne
             ? palette.accentFond
@@ -244,13 +247,17 @@ function Lien({
         },
       ]}
     >
+      {destination.sous && libelles && !compact ? (
+        <View style={[styles.filet, { borderColor: palette.bordure }]} />
+      ) : null}
       <Text
         style={[
           styles.glyphe,
+          destination.sous && styles.glypheSous,
           { color: selectionne ? palette.accent : palette.texteSecondaire },
         ]}
       >
-        {destination.glyphe}
+        {destination.sous && compact ? '↳' : destination.glyphe}
       </Text>
       {libelles ? (
         <Text
@@ -258,7 +265,7 @@ function Lien({
           style={{
             color: selectionne ? palette.accent : palette.texte,
             fontWeight: selectionne ? '700' : '500',
-            fontSize: 14,
+            fontSize: destination.sous ? 13 : 14,
             flexShrink: 1,
           }}
         >
@@ -303,6 +310,10 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   glyphe: { fontSize: 18, width: 22, textAlign: 'center' },
+  glypheSous: { fontSize: 14, width: 16 },
+  sousLarge: { marginLeft: 22, minHeight: 36, paddingHorizontal: ESPACEMENT.s },
+  sousEtroit: { minHeight: 36, transform: [{ scale: 0.9 }] },
+  filet: { width: 8, height: 14, borderLeftWidth: 1, borderBottomWidth: 1, borderBottomLeftRadius: 4, marginTop: -10 },
   petitLibelle: { fontSize: 10.5 },
   pied: { borderTopWidth: 1, paddingTop: ESPACEMENT.s },
   contenu: { flex: 1 },

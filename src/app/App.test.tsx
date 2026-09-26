@@ -255,6 +255,11 @@ describe('parcours complet, session ouverte', () => {
       expect(titre).toMatchObject({ nom: 'NVIDIA Corporation', deviseCotation: 'USD' });
       expect(new DepotWatchlist(session.base()).lister().map(ligne => ligne.titreId)).toEqual([titre!.id]);
       expect(screen.getByText('★ Surveillée')).toBeTruthy();
+      // Le terme tapé et la valeur consultée restent dans l'historique.
+      expect(screen.getByTestId('historique-nvidia')).toBeTruthy();
+      expect(screen.getByTestId('historique-NVDA')).toBeTruthy();
+      await fireEvent.press(screen.getByTestId('effacer-historique'));
+      expect(screen.queryByTestId('historique-recherche')).toBeNull();
 
       await fireEvent.press(screen.getByTestId('nav-watchlist'));
       expect(screen.getByText('NVIDIA Corporation')).toBeTruthy();
@@ -971,7 +976,7 @@ describe('écran de notifications', () => {
       const session = await ouvrirNotifications();
       await fireEvent.press(screen.getByTestId('bouton-tester-notification'));
       await laisserTravailler();
-      expect(envoyees).toEqual(['AppliBourse']);
+      expect(envoyees).toEqual(['✅ AppliBourse']);
       expect(screen.getByText('Notification de test envoyée.')).toBeTruthy();
 
       await fireEvent.changeText(screen.getByTestId('champ-seuil-variation'), '3,5');
