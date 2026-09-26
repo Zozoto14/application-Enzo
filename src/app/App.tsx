@@ -53,6 +53,7 @@ import { chargerHistoriques, resumeHistorique } from '../cours/historique';
 import {
   INDICE_DEFAUT,
   INDICES,
+  PREFIXE_INDICE,
   indiceParId,
   plagePour,
   separerHistorique,
@@ -89,6 +90,7 @@ import { Recherche } from '../ui/ecrans/Recherche';
 import { Screener } from '../ui/ecrans/Screener';
 import { Carnet } from '../ui/ecrans/Carnet';
 import { carnetDepuisJson, construireCarnet, rappelsCarnet } from '../ui/vues/carnet';
+import { simulerToutSurIndice } from '../ui/vues/siIndice';
 import { lireScreener, requeteScreener, type CleCategorie, type Region, type TriScreener } from '../fondamentaux/screener';
 import { ajouterHistorique, historiqueDepuisJson } from '../ui/vues/historiqueRecherche';
 import { chargerTheses, type ValeurCherchee } from '../fondamentaux/theses';
@@ -955,6 +957,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     const indice = indiceParId(indiceChoisi());
     if (indice && demandes.length > 0) {
       demandes.push({ titreId: indice.id, nom: indice.nom, symbole: indice.symbole });
+    }
+    // Le MSCI World aussi, toujours : il sert à « Et si tout était sur le MSCI World ? ».
+    const monde = indiceParId(`${PREFIXE_INDICE}msci-world`);
+    if (monde && demandes.length > 0 && !demandes.some(demande => demande.titreId === monde.id)) {
+      demandes.push({ titreId: monde.id, nom: monde.nom, symbole: monde.symbole });
     }
 
     if (demandes.length === 0) {
@@ -1824,6 +1831,15 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const indiceRetenu = deverrouille ? indiceChoisi() : AUCUN_INDICE;
   const indice = indiceParId(indiceRetenu);
 
+  const capitalActuel =
+    contenuComplet && depotCours
+      ? totaux(
+          valoriserPositions(contenuComplet.etat.positions, depotCours.derniersCours())
+            .valorisees,
+          [...contenuComplet.etat.comptes.values()],
+        ).valeurTotale
+      : Decimal.ZERO;
+
   const onglets =
     contenu && depotCours && historiques
       ? {
@@ -1843,6 +1859,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           performance: construirePerformance({
             points: pointsValorisation,
             transactions: contenu.transactions,
+          }),
+          siIndice: simulerToutSurIndice({
+            transactions: contenu.transactions,
+            serie: historiques.indices.get(`${PREFIXE_INDICE}msci-world`) ?? [],
+            valeurReelle: capitalActuel.toNumber(),
           }),
           comparaison: construireComparaison({
             points: pointsValorisation,
@@ -1905,14 +1926,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   // Valeur actuelle du portefeuille, proposee comme capital de depart de la
   // projection. Retaper ce montant serait une occasion de se tromper.
-  const capitalActuel =
-    contenuComplet && depotCours
-      ? totaux(
-          valoriserPositions(contenuComplet.etat.positions, depotCours.derniersCours())
-            .valorisees,
-          [...contenuComplet.etat.comptes.values()],
-        ).valeurTotale
-      : Decimal.ZERO;
 
   const verrou = statut === 'non-initialise' ? undefined : session.verrou();
 
@@ -2604,6 +2617,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           chargementHistorique={histoEnCours}
           messageHistorique={messageHistorique}
           performance={onglets!.performance}
+          siIndice={onglets!.siIndice}
           comparaison={onglets!.comparaison}
           onChoisirReference={choisirReference}
           anneesRapport={contenu ? anneesDisponibles(contenu.transactions) : []}

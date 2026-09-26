@@ -28,6 +28,9 @@ import {
 } from '../../vues/analyses';
 import type { VueComparaison } from '../../vues/comparaison';
 import type { VuePerformance } from '../../vues/onglets';
+import type { ResultatSiIndice } from '../../vues/siIndice';
+import { formaterMontant } from '../../format';
+import { Decimal } from '../../../core/money/decimal';
 
 const MOIS = ['Jan.', 'Fév.', 'Mar.', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Août', 'Sep.', 'Oct.', 'Nov.', 'Déc.'];
 
@@ -40,6 +43,7 @@ type Mode = 'TWR' | 'Valeur';
 
 export interface OngletPerformancesProps {
   vue: VuePerformance;
+  siIndice?: ResultatSiIndice;
   comparaison: VueComparaison;
   analyse?: EntreesAnalyse;
   onChoisirReference?(titreId: string): void;
@@ -89,6 +93,7 @@ export function OngletPerformances(props: OngletPerformancesProps) {
 
   return (
     <>
+      {props.siIndice ? <SiIndice resultat={props.siIndice} /> : null}
       {avance ? (
         <>
           <View style={styles.filtres}>
@@ -417,3 +422,40 @@ const styles = StyleSheet.create({
     paddingVertical: ESPACEMENT.s,
   },
 });
+
+const eurosSi = (valeur: number) => formaterMontant(Decimal.de(valeur.toFixed(2)), { decimales: 0 });
+const pourcentSi = (valeur: number | null) =>
+  valeur === null ? '—' : `${valeur >= 0 ? '+' : ''}${valeur.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %`;
+
+/** « Et si tout était sur le MSCI World ? » : vos choix face à un placement tout simple. */
+function SiIndice({ resultat }: { resultat: ResultatSiIndice }) {
+  const palette = usePalette();
+  const mieux = resultat.ecart >= 0;
+  return (
+    <CarteSection titre="Et si tout était sur le MSCI World ?" testID="si-indice">
+      <Text style={{ color: palette.texte, fontSize: 16, lineHeight: 23 }}>
+        {Math.abs(resultat.ecart) < 1
+          ? 'Vos choix font exactement comme le MSCI World.'
+          : mieux
+            ? `Vos choix vous ont rapporté ${eurosSi(resultat.ecart)} de plus que si chaque euro était allé dans un ETF MSCI World.`
+            : `Un ETF MSCI World aurait rapporté ${eurosSi(-resultat.ecart)} de plus que vos choix, avec le même argent aux mêmes dates.`}
+      </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.l }}>
+        <Metrique libelle="Argent investi" valeur={eurosSi(resultat.investi)} />
+        <Metrique libelle="Votre portefeuille" valeur={`${eurosSi(resultat.valeurReelle)} · ${pourcentSi(resultat.performanceReelle)}`} tendance={mieux ? 'hausse' : 'baisse'} />
+        <Metrique libelle="Tout en MSCI World" valeur={`${eurosSi(resultat.valeurIndice)} · ${pourcentSi(resultat.performanceIndice)}`} />
+      </View>
+      {resultat.courbe.length > 1 ? (
+        <GraphiqueLignes
+          series={[{ nom: 'Tout en MSCI World', couleur: palette.reference, points: resultat.courbe, aire: true }]}
+          formater={valeur => eurosSi(valeur)}
+          hauteur={180}
+        />
+      ) : null}
+      <SousTitre>
+        Chaque versement (ou, à défaut, chaque achat) est rejoué le même jour dans l’ETF CW8, au cours de clôture.
+        {resultat.approximatif ? ' Certains flux précèdent l’historique chargé : leur prix est approché par le premier cours connu.' : ''}
+      </SousTitre>
+    </CarteSection>
+  );
+}

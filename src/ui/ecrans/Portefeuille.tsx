@@ -10,6 +10,7 @@
  * TRI, et une plus-value latente se prend pour un gain acquis.
  */
 
+import type { ResultatSiIndice } from '../vues/siIndice';
 import React, { useState } from 'react';
 import { TextInput } from 'react-native';
 import {
@@ -87,6 +88,8 @@ export interface PortefeuilleProps {
   dashboard: VueDashboard;
   resume?: VueResume;
   performance: VuePerformance;
+  /** « Et si tout était sur le MSCI World ? » */
+  siIndice?: ResultatSiIndice;
   comparaison: VueComparaison;
   dividendes: VueDividendes;
   risque: VueRisque;
@@ -209,6 +212,7 @@ export function Portefeuille(props: PortefeuilleProps) {
           {actif === 'performances' ? (
             <OngletPerformances
               vue={props.performance}
+              siIndice={props.siIndice}
               comparaison={props.comparaison}
               analyse={props.analyse}
               onChoisirReference={props.onChoisirReference}
