@@ -20,7 +20,7 @@
  * navigateur du système — jamais dans une fenêtre qui porte le préchargement.
  */
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, Notification, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, shell, Tray } from 'electron';
 import { spawn } from 'node:child_process';
 import { preparerInterface } from './interface.mjs';
 import { synthetiser, VOIX_NATURELLES } from './voix.mjs';
@@ -134,14 +134,7 @@ function installerPasserelle() {
       silent: false,
     });
     // Un clic sur la notification ramène la fenêtre au premier plan.
-    notification.on('click', () => {
-      const fenetre = BrowserWindow.getAllWindows()[0];
-      if (fenetre) {
-        if (fenetre.isMinimized()) fenetre.restore();
-        fenetre.show();
-        fenetre.focus();
-      }
-    });
+    notification.on('click', montrerFenetre);
     notification.show();
     return true;
   });
@@ -153,6 +146,20 @@ function installerPasserelle() {
       app.setLoginItemSettings({ openAtLogin: activer, args: ['--demarrage'] });
     }
     return app.getLoginItemSettings({ args: ['--demarrage'] }).openAtLogin;
+  });
+
+  // Infobulle de l'icône : la valeur du portefeuille, ou « verrouillée ».
+  ipcMain.handle('systeme:infobulle', async (_evenement, texte) => {
+    plateau?.setToolTip(String(texte).slice(0, 120));
+    return true;
+  });
+
+  ipcMain.handle('systeme:plateau', async (_evenement, activer) => {
+    if (typeof activer === 'boolean') {
+      resterDansPlateau = activer;
+      await ecrireReglagesBureau({ ...(await lireReglagesBureau()), resterDansPlateau: activer });
+    }
+    return resterDansPlateau;
   });
 
   ipcMain.handle('systeme:ouvrir', async (_evenement, url) => {
@@ -429,6 +436,59 @@ async function lancerMiseAJour() {
   return true;
 }
 
+// ------------------------------------------------ Zone de notification
+//
+// Fermer la fenêtre ne quitte pas : AppliBourse reste près de l'horloge,
+// pour que briefings et alertes continuent de partir. « Quitter » dans le
+// menu de l'icône arrête vraiment. Le choix se règle dans l'écran Alertes.
+
+let quitterVraiment = false;
+let plateau;
+let avertiDuPlateau = false;
+const FICHIER_BUREAU = () => join(app.getPath('userData'), 'reglages-bureau.json');
+
+async function lireReglagesBureau() {
+  try {
+    return JSON.parse(await readFile(FICHIER_BUREAU(), 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+async function ecrireReglagesBureau(reglages) {
+  await ecrireAtomique(FICHIER_BUREAU(), Buffer.from(JSON.stringify(reglages), 'utf8'));
+}
+
+let resterDansPlateau = true;
+
+function montrerFenetre() {
+  const fenetre = BrowserWindow.getAllWindows()[0] ?? creerFenetre();
+  if (fenetre.isMinimized()) fenetre.restore();
+  fenetre.show();
+  fenetre.focus();
+}
+
+function creerPlateau() {
+  if (plateau) return;
+  const image = nativeImage.createFromPath(join(ici, '..', 'icone', process.platform === 'win32' ? 'icone-32.png' : 'icone-16.png'));
+  plateau = new Tray(image);
+  plateau.setToolTip('AppliBourse');
+  plateau.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Ouvrir AppliBourse', click: montrerFenetre },
+      { type: 'separator' },
+      {
+        label: 'Quitter',
+        click: () => {
+          quitterVraiment = true;
+          app.quit();
+        },
+      },
+    ]),
+  );
+  plateau.on('click', montrerFenetre);
+}
+
 function creerFenetre() {
   const fenetre = new BrowserWindow({
     width: 1440,
@@ -452,7 +512,25 @@ function creerFenetre() {
 
   // La fenetre ne s'affiche qu'une fois peinte : sinon on voit un rectangle
   // blanc puis le theme sombre, ce qui pique les yeux le soir.
-  fenetre.once('ready-to-show', () => fenetre.show());
+  // Lancée au démarrage de Windows, elle attend discrètement près de l'horloge.
+  const auDemarrage = process.argv.includes('--demarrage');
+  fenetre.once('ready-to-show', () => {
+    if (!auDemarrage) fenetre.show();
+  });
+
+  fenetre.on('close', evenement => {
+    if (quitterVraiment || !resterDansPlateau || !plateau) return;
+    evenement.preventDefault();
+    fenetre.hide();
+    if (!avertiDuPlateau && Notification.isSupported()) {
+      avertiDuPlateau = true;
+      new Notification({
+        title: 'AppliBourse reste disponible',
+        body: 'Elle continue près de l’horloge pour vos briefings et alertes. Clic droit sur l’icône › Quitter pour l’arrêter.',
+        icon: join(ici, '..', 'icone', 'icone-256.png'),
+      }).show();
+    }
+  });
 
   // Aucune navigation hors de l'application, et aucune fenetre fille : les
   // deux porteraient le prechargement.
@@ -498,14 +576,9 @@ function creerFenetre() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    const [existante] = BrowserWindow.getAllWindows();
-    if (existante) {
-      if (existante.isMinimized()) {
-        existante.restore();
-      }
-      existante.focus();
-    }
+  app.on('second-instance', () => montrerFenetre());
+  app.on('before-quit', () => {
+    quitterVraiment = true;
   });
 
   void app.whenReady().then(() => {
@@ -520,6 +593,10 @@ if (!app.requestSingleInstanceLock()) {
     // Barre de titre de Windows en sombre, assortie à l'interface.
     nativeTheme.themeSource = 'dark';
     installerPasserelle();
+    void lireReglagesBureau().then(reglages => {
+      resterDansPlateau = reglages.resterDansPlateau !== false;
+    });
+    creerPlateau();
     creerFenetre();
 
     app.on('activate', () => {

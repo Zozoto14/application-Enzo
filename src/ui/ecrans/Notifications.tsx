@@ -52,6 +52,9 @@ export interface NotificationsProps {
   onChangerDemarrage?(activer: boolean): void;
   /** Résultat de la dernière vérification (bureau). */
   journal?: string;
+  /** Rester près de l'horloge à la fermeture de la fenêtre (bureau). */
+  resterPlateau?: boolean;
+  onChangerPlateau?(activer: boolean): void;
 }
 
 const LIBELLES_JOUR: Record<JourSemaine, string> = {
@@ -81,6 +84,8 @@ export function Notifications({
   demarrageAuto,
   onChangerDemarrage,
   journal,
+  resterPlateau,
+  onChangerPlateau,
 }: NotificationsProps) {
   const [variationSaisie, setVariationSaisie] = useState(
     seuilVariation ? String(seuilVariation).replace('.', ',') : '',
@@ -123,6 +128,20 @@ export function Notifications({
           <Text style={{ color: palette.texteSecondaire, fontSize: 13 }} testID="journal-notifications">
             Dernière vérification : {journal ?? 'dans moins d’une minute.'}
           </Text>
+          {onChangerPlateau ? (
+            <View style={styles.ligneInterrupteur}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: palette.texte }}>Rester près de l’horloge quand je ferme la fenêtre</Text>
+                <SousTitre>L’icône AppliBourse garde les briefings actifs ; clic droit › Quitter pour l’arrêter.</SousTitre>
+              </View>
+              <Switch
+                value={Boolean(resterPlateau)}
+                onValueChange={onChangerPlateau}
+                testID="interrupteur-plateau"
+                accessibilityLabel="Rester près de l’horloge quand je ferme la fenêtre"
+              />
+            </View>
+          ) : null}
           {onChangerDemarrage ? (
             <View style={styles.ligneInterrupteur}>
               <View style={{ flex: 1 }}>

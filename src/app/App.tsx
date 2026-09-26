@@ -149,6 +149,7 @@ import {
 } from '../ui/ecrans/PremierLancement';
 import { ESPACEMENT, definirTheme, palettePour, stylesPartages, themeCourant } from '../ui/theme';
 import { Bouton, Carte } from '../ui/composants';
+import { formaterMontant } from '../ui/format';
 
 export interface AppProps {
   session: Session;
@@ -1405,6 +1406,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const pontDemarrage = (globalThis as { applibourse?: { systeme?: { demarrage?(activer?: boolean): Promise<boolean> } } })
     .applibourse?.systeme?.demarrage;
   const [demarrageAuto, setDemarrageAuto] = useState<boolean | undefined>(undefined);
+  const pontPlateau = (globalThis as { applibourse?: { systeme?: { plateau?(activer?: boolean): Promise<boolean> } } })
+    .applibourse?.systeme?.plateau;
+  const [resterPlateau, setResterPlateau] = useState<boolean | undefined>(undefined);
+  useEffect(() => {
+    pontPlateau?.().then(setResterPlateau).catch(() => undefined);
+  }, [pontPlateau]);
   useEffect(() => {
     pontDemarrage?.().then(setDemarrageAuto).catch(() => undefined);
   }, [pontDemarrage]);
@@ -1725,6 +1732,19 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   const verrou = statut === 'non-initialise' ? undefined : session.verrou();
 
+  // Infobulle de l'icône près de l'horloge : la valeur, sauf en mode discret
+  // ou verrouillée — elle se lit par-dessus l'épaule.
+  const pontSysteme = (globalThis as { applibourse?: { systeme?: { infobulle?(texte: string): Promise<boolean> } } })
+    .applibourse?.systeme;
+  const texteInfobulle = !deverrouille
+    ? 'AppliBourse — verrouillée'
+    : discret || capitalActuel.estZero()
+      ? 'AppliBourse'
+      : `AppliBourse — ${formaterMontant(capitalActuel, { decimales: 0 })}`;
+  useEffect(() => {
+    pontSysteme?.infobulle?.(texteInfobulle).catch(() => undefined);
+  }, [pontSysteme, texteInfobulle]);
+
   // Podcast : écrit à l'ouverture de l'écran, une fois par jour, sur tout le
   // portefeuille (le filtre de compte ne s'applique pas).
   const genererPodcast = (minutes = podcast.minutes, automatique = false) => {
@@ -1939,6 +1959,14 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           surOrdinateur={Boolean(pontNotifications)}
           journal={journalNotifications}
           demarrageAuto={pontDemarrage ? demarrageAuto ?? false : undefined}
+          resterPlateau={pontPlateau ? resterPlateau ?? true : undefined}
+          onChangerPlateau={
+            pontPlateau
+              ? activer => {
+                  pontPlateau(activer).then(setResterPlateau).catch(() => undefined);
+                }
+              : undefined
+          }
           onChangerDemarrage={
             pontDemarrage
               ? activer => {

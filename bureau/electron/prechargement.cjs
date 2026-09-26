@@ -32,6 +32,10 @@ contextBridge.exposeInMainWorld('applibourse', {
     theme: sombre => ipcRenderer.invoke('systeme:theme', Boolean(sombre)),
     /** Ouverture au démarrage de Windows : lit l'état, ou le change si un booléen est donné. */
     demarrage: activer => ipcRenderer.invoke('systeme:demarrage', activer),
+    /** Texte au survol de l'icône près de l'horloge. */
+    infobulle: texte => ipcRenderer.invoke('systeme:infobulle', texte),
+    /** Rester près de l'horloge quand on ferme la fenêtre : lit, ou change si un booléen est donné. */
+    plateau: activer => ipcRenderer.invoke('systeme:plateau', activer),
   },
 
   /** Sauvegardes chiffrées, rangées dans Documents\\AppliBourse Sauvegardes. */
