@@ -29,6 +29,7 @@ import {
 import type { VueComparaison } from '../../vues/comparaison';
 import type { VuePerformance } from '../../vues/onglets';
 import type { ResultatSiIndice } from '../../vues/siIndice';
+import { mesurerPeriode, periodesComparees, type ChoixPeriodes, type MesuresPeriode } from '../../vues/comparaisonPeriodes';
 import { formaterMontant } from '../../format';
 import { Decimal } from '../../../core/money/decimal';
 
@@ -94,6 +95,7 @@ export function OngletPerformances(props: OngletPerformancesProps) {
   return (
     <>
       {props.siIndice ? <SiIndice resultat={props.siIndice} /> : null}
+      {analyse ? <ComparaisonPeriodes analyse={analyse} /> : null}
       {avance ? (
         <>
           <View style={styles.filtres}>
@@ -390,6 +392,9 @@ export function OngletPerformances(props: OngletPerformancesProps) {
 }
 
 const styles = StyleSheet.create({
+  ligneComparaison: { flexDirection: 'row', alignItems: 'center', paddingVertical: ESPACEMENT.s, borderTopWidth: StyleSheet.hairlineWidth, gap: ESPACEMENT.s },
+  celluleLibelle: { flex: 1.2, fontSize: 13 },
+  cellule: { flex: 1, textAlign: 'right', fontSize: 13 },
   sousTitreGraphique: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
   filtres: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: ESPACEMENT.m, zIndex: 20 },
   grille: { flexDirection: 'row', flexWrap: 'wrap', rowGap: ESPACEMENT.m, columnGap: ESPACEMENT.l },
@@ -456,6 +461,66 @@ function SiIndice({ resultat }: { resultat: ResultatSiIndice }) {
         Chaque versement (ou, à défaut, chaque achat) est rejoué le même jour dans l’ETF CW8, au cours de clôture.
         {resultat.approximatif ? ' Certains flux précèdent l’historique chargé : leur prix est approché par le premier cours connu.' : ''}
       </SousTitre>
+    </CarteSection>
+  );
+}
+
+/** Cette année face à la même période l'an dernier ; trimestre ; mois. */
+function ComparaisonPeriodes({ analyse }: { analyse: EntreesAnalyse }) {
+  const palette = usePalette();
+  const [choix, setChoix] = useState<ChoixPeriodes>('annee');
+  const { actuelle, precedente } = periodesComparees(choix, analyse.aujourdhui);
+  const a = mesurerPeriode(actuelle, analyse.points, analyse.transactions);
+  const b = mesurerPeriode(precedente, analyse.points, analyse.transactions);
+  const lignes: Array<{ libelle: string; lire(m: MesuresPeriode): number | null; format: 'pct' | 'euros' | 'nombre'; plusEstMieux?: boolean }> = [
+    { libelle: 'Performance', lire: m => m.performance, format: 'pct', plusEstMieux: true },
+    { libelle: 'Gain', lire: m => m.gain, format: 'euros', plusEstMieux: true },
+    { libelle: 'Dividendes reçus', lire: m => m.dividendes, format: 'euros', plusEstMieux: true },
+    { libelle: 'Versements nets', lire: m => m.versementsNets, format: 'euros' },
+    { libelle: 'Achats', lire: m => m.achats, format: 'euros' },
+    { libelle: 'Ventes', lire: m => m.ventes, format: 'euros' },
+    { libelle: 'Opérations', lire: m => m.operations, format: 'nombre' },
+  ];
+  const texte = (valeur: number | null, format: 'pct' | 'euros' | 'nombre') =>
+    valeur === null ? '—' : format === 'pct' ? pourcentSi(valeur) : format === 'euros' ? eurosSi(valeur) : String(valeur);
+  return (
+    <CarteSection
+      titre="Comparer deux périodes"
+      testID="comparaison-periodes"
+      actions={
+        <Segments<ChoixPeriodes>
+          options={['annee', 'trimestre', 'mois']}
+          actif={choix}
+          onChoisir={setChoix}
+          libelle={option => (option === 'annee' ? 'Année' : option === 'trimestre' ? 'Trimestre' : 'Mois')}
+          prefixeTest="periodes"
+        />
+      }>
+      <View style={[styles.ligneComparaison, { borderColor: palette.bordure }]}>
+        <Text style={[styles.celluleLibelle, { color: palette.texteSecondaire }]} />
+        <Text style={[styles.cellule, { color: palette.texte, fontWeight: '700' }]}>{actuelle.libelle}</Text>
+        <Text style={[styles.cellule, { color: palette.texteSecondaire, fontWeight: '700' }]}>{precedente.libelle}</Text>
+      </View>
+      {lignes.map(ligne => {
+        const va = ligne.lire(a);
+        const vb = ligne.lire(b);
+        const mieux = ligne.plusEstMieux && va !== null && vb !== null && va !== vb ? va > vb : undefined;
+        return (
+          <View key={ligne.libelle} style={[styles.ligneComparaison, { borderColor: palette.bordure }]}>
+            <Text style={[styles.celluleLibelle, { color: palette.texteSecondaire }]}>{ligne.libelle}</Text>
+            <Text
+              style={[
+                styles.cellule,
+                { color: mieux === undefined ? palette.texte : mieux ? palette.hausse : palette.baisse, fontWeight: '700' },
+              ]}>
+              {texte(va, ligne.format)}
+              {mieux === undefined ? '' : mieux ? ' ↗' : ' ↘'}
+            </Text>
+            <Text style={[styles.cellule, { color: palette.texteSecondaire }]}>{texte(vb, ligne.format)}</Text>
+          </View>
+        );
+      })}
+      <SousTitre>À durée égale : la période précédente s’arrête au même jour pour que la comparaison soit juste.</SousTitre>
     </CarteSection>
   );
 }
