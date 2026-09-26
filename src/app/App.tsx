@@ -97,6 +97,8 @@ import { dateSaisie, reglageVersementDepuisJson } from '../ui/vues/versementMens
 import type { FormulaireOperation } from '../ui/vues/saisie';
 import { CLE_PLANNING_LOCAL, stockageLocal, useNotificationsBureau } from './notificationsBureau';
 import { useSauvegardes } from './sauvegardesApp';
+import { nomParDefaut, useSynchro } from './synchroApp';
+import { CarteSynchro } from '../ui/ecrans/CarteSynchro';
 import { dividendesParTitre, lignesCibles, lignesVendables } from './calculs';
 import { exporterExcel } from '../rapport/exportExcel';
 import { carnetDepuisJson, construireCarnet } from '../ui/vues/carnet';
@@ -652,6 +654,16 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     fusionnerSauvegarde,
     restaurerSauvegarde,
   } = useSauvegardes({ session, aujourdhui, deverrouille, rafraichir, onRestaure: allerAuTableau });
+
+  const {
+    synchro,
+    liaisonDuPc,
+    plateforme: plateformeSynchro,
+    relier: relierSynchro,
+    delier: delierSynchro,
+    oublier: oublierAppareilSynchro,
+    synchroniserMaintenant,
+  } = useSynchro({ session, deverrouille, rafraichir });
 
   const genererRapport = useCallback(
     (annee: number) => {
@@ -2260,6 +2272,17 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           messageExport={messageExport}
           onChercherMiseAJour={pontMaj?.chercher ? () => pontMaj.chercher!() : undefined}
           onRedemarrerPourMaj={pontMaj?.redemarrer ? () => void pontMaj.redemarrer!() : undefined}
+          carteSynchro={
+            <CarteSynchro
+              synchro={synchro}
+              liaisonDuPc={liaisonDuPc}
+              nomParDefaut={nomParDefaut(plateformeSynchro)}
+              onRelier={relierSynchro}
+              onSynchroniser={() => void synchroniserMaintenant()}
+              onDelier={delierSynchro}
+              onOublier={id => void oublierAppareilSynchro(id)}
+            />
+          }
           onAnnuler={() => setEcran('tableau')}
           onSymboles={() => {
             setRecherche(undefined);

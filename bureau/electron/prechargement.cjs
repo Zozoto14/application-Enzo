@@ -86,4 +86,9 @@ contextBridge.exposeInMainWorld('applibourse', {
     /** Redémarre : le lanceur récupère le code et reconstruit l'interface. */
     redemarrer: () => ipcRenderer.invoke('maj:redemarrer'),
   },
+
+  relais: {
+    /** Relais installé par `npm run relais:deployer` sur ce PC, s'il existe. */
+    config: () => ipcRenderer.invoke('relais:config'),
+  },
 });

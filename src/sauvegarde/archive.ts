@@ -132,7 +132,7 @@ function reconstruireDecimal(valeur: unknown): Decimal | undefined {
   return typeof valeur === 'string' && valeur !== '' ? Decimal.de(valeur) : undefined;
 }
 
-function reconstruireTransaction(brut: Record<string, unknown>): Transaction {
+export function reconstruireTransaction(brut: Record<string, unknown>): Transaction {
   const base = {
     id: String(brut.id),
     compteId: String(brut.compteId),

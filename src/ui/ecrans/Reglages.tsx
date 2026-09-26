@@ -52,6 +52,8 @@ export interface ReglagesProps {
   /** Exporte le portefeuille dans un fichier Excel. */
   onExporterExcel?(): void;
   messageExport?: string;
+  /** Carte de synchronisation entre appareils, composée par l'application. */
+  carteSynchro?: React.ReactNode;
   onAnnuler(): void;
 }
 
@@ -75,6 +77,7 @@ export function Reglages({
   messageExport,
   onChercherMiseAJour,
   onRedemarrerPourMaj,
+  carteSynchro,
   onEnregistrer,
   onAnnuler,
 }: ReglagesProps) {
@@ -96,6 +99,8 @@ export function Reglages({
       {onChercherMiseAJour ? (
         <CarteMiseAJour chercher={onChercherMiseAJour} redemarrer={onRedemarrerPourMaj} />
       ) : null}
+
+      {carteSynchro}
 
       {onChoisirTheme ? (
         <>

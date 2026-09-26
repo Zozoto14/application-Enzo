@@ -471,6 +471,10 @@ export const PARAMETRES = {
   /** Secondes entre deux actualisations des cours, fenêtre ouverte ; « 0 » pour ne jamais actualiser. */
   intervalleActualisation: 'cours.intervalle_s',
   identifiantAppareil: 'sync.appareil',
+  /** Relais de synchronisation : adresse, jeton, clé dérivée, nom de l'appareil (JSON). */
+  relaisSynchro: 'sync.relais',
+  /** État de la synchronisation automatique (JSON, voir src/sync/relais/moteur.ts). */
+  etatSynchro: 'sync.etat',
   /** « 1 » : mode discret, montants masqués. */
   discretion: 'affichage.discret',
   /** Thème de l'interface (Paramètres › Apparence). */

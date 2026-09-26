@@ -24,6 +24,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, No
 import { spawn } from 'node:child_process';
 import { git, preparerInterface } from './interface.mjs';
 import { synthetiser, VOIX_NATURELLES } from './voix.mjs';
+import { fluxMedia, pageArticle, yahooJson, yahooScreener } from './reseau.mjs';
 import { readFile, writeFile, mkdir, rename, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -195,6 +196,7 @@ function installerPasserelle() {
   ipcMain.handle('maj:installer', async () => lancerMiseAJour());
   ipcMain.handle('maj:chercher', async () => chercherMiseAJour());
   ipcMain.handle('maj:redemarrer', async () => redemarrerPourMettreAJour());
+  ipcMain.handle('relais:config', async () => lireRelaisLocal());
 
   ipcMain.handle('yahoo:json', async (_evenement, url) => yahooJson(String(url)));
 
@@ -214,216 +216,48 @@ function installerPasserelle() {
 // jeton (« crumb ») que la fenêtre ne peut pas obtenir : le navigateur
 // bloque ces appels entre origines. Le processus principal les fait à sa
 // place, sur une liste fermée d'adresses — la fenêtre ne peut pas s'en
-// servir pour joindre autre chose.
+// servir pour joindre autre chose. Le code est dans reseau.mjs, partagé
+// avec le relais Cloudflare.
 
-const CHEMINS_YAHOO = [
-  '/v10/finance/quoteSummary/',
-  '/ws/fundamentals-timeseries/v1/finance/timeseries/',
-  '/v8/finance/chart/',
-  '/v1/finance/search',
-];
-const AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36';
+// ------------------------------------------------------ Relais Cloudflare
+//
+// scripts/deployer-relais.mjs écrit relais/relais-local.json dans le dossier
+// du projet : adresse du relais, jeton, adresse du site. La fenêtre le lit
+// pour se relier sans rien saisir, et afficher le QR code de l'iPhone.
 
-let sessionYahoo;
-
-async function ouvrirSessionYahoo() {
-  // Le cookie vient de n'importe quelle page du domaine ; fc.yahoo.com le
-  // pose même en répondant 404.
-  const reponse = await fetch('https://fc.yahoo.com', { headers: { 'User-Agent': AGENT }, redirect: 'manual' });
-  const cookies = (reponse.headers.getSetCookie?.() ?? [reponse.headers.get('set-cookie') ?? ''])
-    .map(ligne => ligne.split(';')[0])
-    .filter(Boolean)
-    .join('; ');
-  const jeton = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', {
-    headers: { 'User-Agent': AGENT, Cookie: cookies },
-  });
-  const crumb = (await jeton.text()).trim();
-  if (!jeton.ok || !crumb || crumb.includes('<')) {
-    throw new Error(`Jeton Yahoo refusé (${jeton.status}).`);
-  }
-  return { cookies, crumb };
-}
-
-/**
- * Flux RSS de la revue de presse. Liste fermée, la même que
- * src/podcast/medias.ts : le rendu ne peut pas faire télécharger autre chose.
- */
-const FLUX_MEDIAS = new Set([
-  'https://services.lesechos.fr/rss/les-echos-finance-marches.xml',
-  'https://services.lesechos.fr/rss/les-echos-economie.xml',
-  'https://www.lemonde.fr/economie/rss_full.xml',
-  'https://www.lefigaro.fr/rss/figaro_economie.xml',
-  'https://www.francetvinfo.fr/economie.rss',
-  'https://www.bfmtv.com/rss/economie/',
-  'https://www.cnbc.com/id/100003114/device/rss/rss.html',
-  'https://feeds.content.dowjones.io/public/rss/mw_topstories',
-]);
-const TAILLE_MAX_FLUX = 3 * 1024 * 1024;
-
-/** Recherche d'actualités par valeur : seule la requête varie. */
-function rechercheActualitesAutorisee(adresse) {
+async function lireRelaisLocal() {
+  const version = await lireVersionBuild();
+  const dossier = version?.dossierSource ?? join(ici, '..', '..');
   try {
-    const url = new URL(adresse);
-    return (
-      url.origin === 'https://news.google.com' &&
-      url.pathname === '/rss/search' &&
-      adresse.length < 400 &&
-      [...url.searchParams.keys()].every(cle => ['q', 'hl', 'gl', 'ceid'].includes(cle))
-    );
+    const local = JSON.parse(await readFile(join(dossier, 'relais', 'relais-local.json'), 'utf8'));
+    return typeof local.relais === 'string' && typeof local.jeton === 'string'
+      ? { relais: local.relais, jeton: local.jeton, site: typeof local.site === 'string' ? local.site : undefined }
+      : undefined;
   } catch {
-    return false;
+    return undefined;
   }
 }
 
 /**
- * Thèses d'une valeur : analyses Seeking Alpha et discussions Reddit, sur
- * des chemins fixes. Même règle que src/fondamentaux/theses.ts.
+ * Après une mise à jour du code, republie le site de secours en fond, pour
+ * qu'il reste au niveau de l'application. Silencieux : un échec (pas de
+ * connexion, session Cloudflare expirée) laisse simplement l'ancien site.
  */
-function adresseThesesAutorisee(adresse) {
-  try {
-    const url = new URL(adresse);
-    if (adresse.length >= 500) return false;
-    if (url.origin === 'https://seekingalpha.com') {
-      return /^\/api\/sa\/combined\/[A-Z]{1,5}(-[A-Z])?\.xml$/.test(url.pathname) && url.search === '';
-    }
-    if (url.origin === 'https://www.reddit.com') {
-      return (
-        ['/r/vosfinances+Bourse/search.rss', '/r/stocks+investing+ValueInvesting/search.rss'].includes(url.pathname) &&
-        [...url.searchParams.keys()].every(cle => ['q', 'restrict_sr', 'sort', 't'].includes(cle))
-      );
-    }
-    return false;
-  } catch {
-    return false;
+async function republierSiteEnFond() {
+  const version = await lireVersionBuild();
+  const dossier = version?.dossierSource;
+  if (!dossier || !(await lireRelaisLocal())?.site) {
+    return;
   }
-}
-
-/**
- * Pages d'articles des médias connus, pour en tirer le chapeau. Même liste
- * que src/podcast/extraits.ts ; la redirection finale est vérifiée aussi.
- */
-const SITES_ARTICLES = [
-  'lesechos.fr', 'lemonde.fr', 'lefigaro.fr', 'bfmtv.com', 'francetvinfo.fr', 'boursorama.com',
-  'zonebourse.com', 'capital.fr', 'latribune.fr', 'challenges.fr', 'lexpress.fr', 'lepoint.fr',
-  'leparisien.fr', 'ouest-france.fr', 'abcbourse.com', 'boursier.com', 'cnbc.com', 'marketwatch.com',
-  'reuters.com', 'finance.yahoo.com', 'fool.com', 'investing.com', 'morningstar.fr', 'morningstar.com',
-];
-const TAILLE_MAX_PAGE = 800 * 1024;
-
-function pageAutorisee(adresse) {
-  try {
-    const url = new URL(adresse);
-    return (
-      url.protocol === 'https:' &&
-      adresse.length < 600 &&
-      SITES_ARTICLES.some(site => url.hostname === site || url.hostname.endsWith(`.${site}`))
-    );
-  } catch {
-    return false;
-  }
-}
-
-async function pageArticle(adresse) {
-  if (!pageAutorisee(adresse)) {
-    throw new Error('Page non autorisée.');
-  }
-  const reponse = await fetch(adresse, {
-    headers: { 'User-Agent': AGENT, Accept: 'text/html', 'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8' },
-    signal: AbortSignal.timeout(8_000),
+  const enfant = spawn('npm', ['run', 'relais:site'], {
+    cwd: dossier,
+    shell: process.platform === 'win32',
+    stdio: 'ignore',
+    windowsHide: true,
+    detached: true,
   });
-  if (!reponse.ok || !pageAutorisee(reponse.url || adresse)) {
-    throw new Error(`La page a répondu ${reponse.status}.`);
-  }
-  const texte = await reponse.text();
-  return texte.length > TAILLE_MAX_PAGE ? texte.slice(0, TAILLE_MAX_PAGE) : texte;
-}
-
-async function fluxMedia(adresse) {
-  if (!FLUX_MEDIAS.has(adresse) && !rechercheActualitesAutorisee(adresse) && !adresseThesesAutorisee(adresse)) {
-    throw new Error('Flux non autorisé.');
-  }
-  const reponse = await fetch(adresse, {
-    headers: { 'User-Agent': AGENT, Accept: 'application/rss+xml, application/xml, text/xml, */*' },
-    signal: AbortSignal.timeout(12_000),
-  });
-  if (!reponse.ok) {
-    throw new Error(`Le flux a répondu ${reponse.status}.`);
-  }
-  const texte = await reponse.text();
-  return texte.length > TAILLE_MAX_FLUX ? texte.slice(0, TAILLE_MAX_FLUX) : texte;
-}
-
-/**
- * Screener de Yahoo : une requête POST sur une seule adresse. Le corps est
- * composé par src/fondamentaux/screener.ts ; ici, on vérifie seulement que
- * c'est un petit objet JSON.
- */
-async function yahooScreener(corps) {
-  const texte = JSON.stringify(corps ?? {});
-  if (texte.length > 8_000 || typeof corps !== 'object' || Array.isArray(corps)) {
-    throw new Error('Requête de screener refusée.');
-  }
-  for (let essai = 0; essai < 2; essai++) {
-    if (!sessionYahoo) {
-      sessionYahoo = await ouvrirSessionYahoo();
-    }
-    const url = new URL('https://query1.finance.yahoo.com/v1/finance/screener');
-    url.searchParams.set('crumb', sessionYahoo.crumb);
-    url.searchParams.set('lang', 'fr-FR');
-    url.searchParams.set('region', 'FR');
-    url.searchParams.set('formatted', 'false');
-    const reponse = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'User-Agent': AGENT,
-        Cookie: sessionYahoo.cookies,
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: texte,
-    });
-    if (reponse.status === 401 || reponse.status === 403) {
-      sessionYahoo = undefined;
-      continue;
-    }
-    if (!reponse.ok) {
-      throw new Error(`Le screener Yahoo a répondu ${reponse.status}.`);
-    }
-    return await reponse.json();
-  }
-  throw new Error('Yahoo refuse l’accès au screener.');
-}
-
-async function yahooJson(adresse) {
-  const url = new URL(adresse);
-  if (
-    url.protocol !== 'https:' ||
-    !/^query[12]\.finance\.yahoo\.com$/.test(url.hostname) ||
-    !CHEMINS_YAHOO.some(chemin => url.pathname.startsWith(chemin))
-  ) {
-    throw new Error(`Adresse non autorisée : ${url.hostname}${url.pathname}`);
-  }
-
-  for (let essai = 0; essai < 2; essai++) {
-    if (!sessionYahoo) {
-      sessionYahoo = await ouvrirSessionYahoo();
-    }
-    url.searchParams.set('crumb', sessionYahoo.crumb);
-    const reponse = await fetch(url, {
-      headers: { 'User-Agent': AGENT, Cookie: sessionYahoo.cookies, Accept: 'application/json' },
-    });
-    if (reponse.status === 401 || reponse.status === 403) {
-      // Jeton expiré : on en redemande un, une fois.
-      sessionYahoo = undefined;
-      continue;
-    }
-    if (!reponse.ok) {
-      throw new Error(`Yahoo a répondu ${reponse.status}.`);
-    }
-    return await reponse.json();
-  }
-  throw new Error('Yahoo refuse l’accès, même avec un nouveau jeton.');
+  enfant.on('error', () => undefined);
+  enfant.unref();
 }
 
 // ------------------------------------------------------------ Mises à jour
@@ -662,6 +496,9 @@ function creerFenetre() {
           appliquees: [...(globalThis.miseAJourAuLancement ?? []), ...resultat.lancement.appliquees],
           erreur: resultat.lancement.erreur ?? globalThis.erreurAuLancement,
         };
+        if (lancement.appliquees?.length) {
+          void republierSiteEnFond();
+        }
         return fenetre.loadFile(resultat.chemin);
       });
   }

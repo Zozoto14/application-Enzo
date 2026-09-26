@@ -16,3 +16,10 @@ bureau/electron/version-build.json
 
 # Résultat de vite build, régénéré à chaque compilation
 bureau/dist/
+
+# Relais Cloudflare : jeton et identifiants propres à votre compte (scripts/deployer-relais.mjs)
+relais/relais-local.json
+relais/wrangler.local.toml
+relais/.wrangler/
+site-dist/
+.wrangler/
