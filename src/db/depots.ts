@@ -491,6 +491,10 @@ export const PARAMETRES = {
   sauvegardeAutoMotDePasse: 'sauvegarde.auto_mot_de_passe',
   /** Date de la dernière sauvegarde automatique. */
   sauvegardeAutoDerniere: 'sauvegarde.auto_derniere',
+  /** Alertes résultats, dividendes, grosses actus : '0' pour les couper. */
+  evenementsActifs: 'notifications.evenements_actifs',
+  /** Identifiants des alertes d'événements déjà envoyées (JSON). */
+  evenementsEnvoyes: 'notifications.evenements_envoyes',
 } as const;
 
 /**

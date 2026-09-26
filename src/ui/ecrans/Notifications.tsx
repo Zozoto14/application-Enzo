@@ -55,6 +55,9 @@ export interface NotificationsProps {
   /** Rester près de l'horloge à la fermeture de la fenêtre (bureau). */
   resterPlateau?: boolean;
   onChangerPlateau?(activer: boolean): void;
+  /** Alertes résultats, dividendes et grosses actualités. */
+  evenementsActifs?: boolean;
+  onChangerEvenements?(actifs: boolean): void;
 }
 
 const LIBELLES_JOUR: Record<JourSemaine, string> = {
@@ -86,6 +89,8 @@ export function Notifications({
   journal,
   resterPlateau,
   onChangerPlateau,
+  evenementsActifs,
+  onChangerEvenements,
 }: NotificationsProps) {
   const [variationSaisie, setVariationSaisie] = useState(
     seuilVariation ? String(seuilVariation).replace('.', ',') : '',
@@ -169,6 +174,26 @@ export function Notifications({
               />
             </View>
           ) : null}
+        </Carte>
+      ) : null}
+
+      {onChangerEvenements ? (
+        <Carte>
+          <View style={styles.ligneInterrupteur}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionTitre, { color: palette.texte }]}>Résultats, dividendes et grosses actus</Text>
+              <SousTitre>
+                Sur vos valeurs détenues et suivies : la veille et le jour des résultats et du détachement du
+                dividende, et toute information recoupée par au moins trois médias.
+              </SousTitre>
+            </View>
+            <Switch
+              value={Boolean(evenementsActifs)}
+              onValueChange={onChangerEvenements}
+              testID="interrupteur-evenements"
+              accessibilityLabel="Alertes résultats, dividendes et grosses actualités"
+            />
+          </View>
         </Carte>
       ) : null}
 

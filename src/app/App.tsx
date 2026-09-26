@@ -121,6 +121,8 @@ import {
 } from '../notifications/planification';
 import { executerReveil, oublierBriefingsModifies } from '../notifications/reveil';
 import { rappelsDus, retenirRappels } from '../notifications/rappelVerrouille';
+import { alertesEvenements, retenirEvenements, type ValeurSuivie } from '../notifications/evenements';
+import { lireRechercheActualites, urlActualitesValeur } from '../podcast/medias';
 import { composerBriefing } from '../notifications/briefing';
 import {
   alerteVariation,
@@ -1571,6 +1573,78 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     };
   }, [deverrouille, pontNotifications, verifierNotifications]);
 
+  // Événements sur vos valeurs (détenues et suivies) : résultats, dividende,
+  // grosse actualité recoupée. Une fois par heure, en journée.
+  const evenementsEnCours = useRef(false);
+  const verifierEvenements = useCallback(async () => {
+    if (!pontNotifications || !chargementAutomatique || evenementsEnCours.current) return;
+    if (new Date().getHours() < 7) return;
+    const parametres = new DepotParametres(session.base());
+    if (parametres.lire(PARAMETRES.evenementsActifs) === '0') return;
+    evenementsEnCours.current = true;
+    try {
+      const contenuActuel = chargerEtat(session.base());
+      const titres = new Map(contenuActuel.titres.map(titre => [titre.id, titre]));
+      const ids = [
+        ...contenuActuel.etat.positions.map(position => position.titreId),
+        ...new DepotWatchlist(session.base()).lister().map(ligne => ligne.titreId),
+      ];
+      const suivis = [...new Set(ids)]
+        .map(id => titres.get(id))
+        .filter((titre): titre is Titre => Boolean(titre?.ticker?.trim()))
+        .slice(0, 12);
+      const pontMedias = (globalThis as { applibourse?: { medias?: { flux(url: string): Promise<string> } } }).applibourse
+        ?.medias;
+      const valeurs: ValeurSuivie[] = await Promise.all(
+        suivis.map(async titre => {
+          const symbole = titre.ticker.trim();
+          let donnees = fichesEnCache.current.get(symbole);
+          if (!donnees) {
+            donnees = await chargerValeur(symbole).catch(() => undefined);
+            if (donnees) fichesEnCache.current.set(symbole, donnees);
+          }
+          const url = urlActualitesValeur(titre.nom);
+          const articles =
+            pontMedias && url ? await pontMedias.flux(url).then(lireRechercheActualites).catch(() => []) : [];
+          return {
+            nom: titre.nom,
+            prochainsResultats: donnees?.fiche.resultats.prochaineDate,
+            detachement: donnees?.fiche.dividende.dateDetachement,
+            articles,
+          };
+        }),
+      );
+      let deja: string[] = [];
+      try {
+        deja = JSON.parse(parametres.lire(PARAMETRES.evenementsEnvoyes) ?? '[]');
+      } catch {
+        deja = [];
+      }
+      const alertes = alertesEvenements(valeurs, (aujourdhui ?? dateDuJour)(), new Set(deja));
+      const envoyees: string[] = [];
+      for (const alerte of alertes) {
+        if (await pontNotifications.notifier(alerte.titre, alerte.corps).catch(() => false)) envoyees.push(alerte.identifiant);
+      }
+      if (envoyees.length > 0) {
+        parametres.ecrire(PARAMETRES.evenementsEnvoyes, JSON.stringify(retenirEvenements(deja, envoyees)));
+      }
+    } catch {
+      // Une alerte manquée ne doit jamais gêner l'application.
+    } finally {
+      evenementsEnCours.current = false;
+    }
+  }, [pontNotifications, chargementAutomatique, session, aujourdhui]);
+
+  useEffect(() => {
+    if (!deverrouille || !pontNotifications || !chargementAutomatique) return;
+    const premiere = setTimeout(() => void verifierEvenements(), 60_000);
+    const minuterie = setInterval(() => void verifierEvenements(), 3_600_000);
+    return () => {
+      clearTimeout(premiere);
+      clearInterval(minuterie);
+    };
+  }, [deverrouille, pontNotifications, chargementAutomatique, verifierEvenements]);
+
   // Verrouillée, l'application ne peut pas lire le portefeuille : à l'heure
   // d'un briefing, elle prévient seulement qu'il attend.
   useEffect(() => {
@@ -2041,6 +2115,15 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }
           surOrdinateur={Boolean(pontNotifications)}
           journal={journalNotifications}
+          evenementsActifs={new DepotParametres(session.base()).lire(PARAMETRES.evenementsActifs) !== '0'}
+          onChangerEvenements={
+            pontNotifications
+              ? actifs => {
+                  new DepotParametres(session.base()).ecrire(PARAMETRES.evenementsActifs, actifs ? '1' : '0');
+                  rafraichir();
+                }
+              : undefined
+          }
           demarrageAuto={pontDemarrage ? demarrageAuto ?? false : undefined}
           resterPlateau={pontPlateau ? resterPlateau ?? true : undefined}
           onChangerPlateau={
