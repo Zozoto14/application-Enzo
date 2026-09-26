@@ -92,7 +92,7 @@ import { Journal } from '../ui/ecrans/Journal';
 import { construireJournal } from '../ui/vues/journal';
 import { testsDuBureau } from '../diagnostic/testsBureau';
 import { convertisseur, installerConvertisseur } from '../cours/change';
-import { VERSION_VISITE, VisiteGuidee } from '../ui/VisiteGuidee';
+import { ETAPES_VISITE, VisiteGuidee, etapesNouvelles, marquerVues, type EtapeVisite } from '../ui/VisiteGuidee';
 import { dateSaisie, reglageVersementDepuisJson } from '../ui/vues/versementMensuel';
 import type { FormulaireOperation } from '../ui/vues/saisie';
 import { CLE_PLANNING_LOCAL, stockageLocal, useNotificationsBureau } from './notificationsBureau';
@@ -430,7 +430,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // Mot de passe oublié : un code de récupération rouvre la base, et un
   // nouveau mot de passe est enregistré dans la foulée.
   const [enRecuperation, setEnRecuperation] = useState(false);
-  const [visiteForcee, setVisiteForcee] = useState(false);
+  // Étapes de la visite en cours, figées à l'ouverture (undefined : pas de visite).
+  const [etapesVisite, setEtapesVisite] = useState<readonly EtapeVisite[] | undefined>();
+  const visiteDecidee = useRef(false);
   const [messageExport, setMessageExport] = useState<string | undefined>();
   /** Saisie pré-remplie : le versement du mois, depuis Objectifs. */
   const [saisieInitiale, setSaisieInitiale] = useState<Partial<FormulaireOperation> | undefined>();
@@ -1670,6 +1672,20 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     setEcran(cle as Ecran);
   };
 
+  // La visite ne s'ouvre que s'il reste des nouveautés jamais vues, et pas
+  // pour un tout nouveau portefeuille (rien à montrer encore).
+  const nombreComptes = contenuComplet?.comptes.length ?? 0;
+  useEffect(() => {
+    if (visiteDecidee.current || !deverrouille || nombreComptes === 0) {
+      return;
+    }
+    visiteDecidee.current = true;
+    const nouvelles = etapesNouvelles(ETAPES_VISITE, new DepotParametres(session.base()).lire(PARAMETRES.visiteVue));
+    if (nouvelles.length > 0) {
+      setEtapesVisite(nouvelles);
+    }
+  }, [deverrouille, nombreComptes, session]);
+
   // Clic sur une notification : la fenêtre s'ouvre sur la bonne page. Si
   // l'application est verrouillée, la page s'ouvre juste après le déverrouillage.
   const [destinationEnAttente, setDestinationEnAttente] = useState<string | undefined>();
@@ -1713,17 +1729,26 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         flottant={ecran !== 'podcast' ? <LecteurFlottant onOuvrir={() => setEcran('podcast')} /> : null}>
       {deverrouille && contenuComplet && tableau ? (
         <VisiteGuidee
-          visible={
-            visiteForcee ||
-            // Première ouverture d'un portefeuille déjà en route : pas pour un tout nouvel utilisateur.
-            (contenuComplet.comptes.length > 0 &&
-              new DepotParametres(session.base()).lire(PARAMETRES.visiteVue) !== VERSION_VISITE)
-          }
-          onNaviguer={cle => naviguer(cle)}
+          visible={etapesVisite !== undefined}
+          etapes={etapesVisite}
+          onNaviguer={(cle, onglet) => {
+            naviguer(cle);
+            if (onglet) {
+              setOngletPortefeuille(onglet as OngletPortefeuille);
+            }
+          }}
+          onVue={id => {
+            const depot = new DepotParametres(session.base());
+            depot.ecrire(PARAMETRES.visiteVue, marquerVues(depot.lire(PARAMETRES.visiteVue), [id]));
+          }}
           onTerminer={() => {
-            new DepotParametres(session.base()).ecrire(PARAMETRES.visiteVue, VERSION_VISITE);
-            setVisiteForcee(false);
-            rafraichir();
+            // Passer la visite vaut aussi pour les étapes restantes : elles ne reviennent pas.
+            const depot = new DepotParametres(session.base());
+            depot.ecrire(
+              PARAMETRES.visiteVue,
+              marquerVues(depot.lire(PARAMETRES.visiteVue), (etapesVisite ?? []).map(etape => etape.id)),
+            );
+            setEtapesVisite(undefined);
           }}
         />
       ) : null}
@@ -2214,7 +2239,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           )}
           onEnregistrer={enregistrerReglages}
           onRenouvelerCodes={() => session.renouvelerCodesRecuperation()}
-          onRevoirVisite={() => setVisiteForcee(true)}
+          onRevoirVisite={() => setEtapesVisite(ETAPES_VISITE)}
           onExporterExcel={
             pontEnregistrerSous
               ? () => {

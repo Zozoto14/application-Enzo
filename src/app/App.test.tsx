@@ -322,16 +322,26 @@ describe('parcours complet, session ouverte', () => {
     expect(carnet[stellantis.id]).toMatchObject({ pourquoi: 'Décote forte, dividende élevé.', objectif: 20, ecriteLe: '2026-09-22' });
   });
 
-  it('présente les nouveautés une fois, et se revoit depuis Paramètres', async () => {
+  it('présente les nouveautés une fois, ouvre les pages, et se revoit depuis Paramètres', async () => {
     const session = await ouvrir();
     expect(screen.queryByTestId('visite-guidee')).toBeNull(); // pas pour un tout nouveau portefeuille
     await creerCompte();
     expect(screen.getByTestId('visite-guidee')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('visite-suivant'));
     expect(screen.getByText('Le Screener')).toBeTruthy();
+
+    // « Ouvrir la page » emmène sur l'écran et replie la visite en bandeau.
+    await fireEvent.press(screen.getByTestId('visite-voir'));
+    expect(screen.queryByTestId('visite-guidee')).toBeNull();
+    expect(screen.getByTestId('visite-bandeau')).toBeTruthy();
+    expect(screen.getByTestId('nav-screener').props.accessibilityState).toMatchObject({ selected: true });
+    await fireEvent.press(screen.getByTestId('visite-continuer'));
+    expect(screen.getByText('La Watchlist')).toBeTruthy();
+
     await fireEvent.press(screen.getByTestId('visite-passer'));
     expect(screen.queryByTestId('visite-guidee')).toBeNull();
-    expect(new DepotParametres(session.base()).lire(PARAMETRES.visiteVue)).toBeTruthy();
+    const vues = JSON.parse(new DepotParametres(session.base()).lire(PARAMETRES.visiteVue)!);
+    expect(vues).toEqual(expect.arrayContaining(['intro', 'screener', 'watchlist', 'diagnostic']));
 
     await fireEvent.press(screen.getByTestId('nav-reglages'));
     await fireEvent.press(screen.getByTestId('revoir-visite'));
