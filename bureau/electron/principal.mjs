@@ -311,12 +311,13 @@ async function chercherMiseAJour() {
   }
   try {
     await git(dossier, ['fetch', '--quiet', 'origin', 'main'], 30_000);
-    const local = await git(dossier, ['rev-parse', 'HEAD']);
+    // Comparé à la version affichée : une relance a pu récupérer le code sans le charger.
+    const local = commitAuLancement ?? (await git(dossier, ['rev-parse', 'HEAD']));
     const distant = await git(dossier, ['rev-parse', 'origin/main']);
     if (local === distant) {
       return { etat: 'a-jour', commit: local.slice(0, 7) };
     }
-    const nouveautes = (await git(dossier, ['log', '--format=%s', 'HEAD..origin/main'])).split('\n').filter(Boolean);
+    const nouveautes = (await git(dossier, ['log', '--format=%s', `${local}..origin/main`])).split('\n').filter(Boolean);
     return { etat: 'disponible', commit: distant.slice(0, 7), nouveautes };
   } catch (erreur) {
     return { etat: 'erreur', motif: erreur instanceof Error ? erreur.message : String(erreur) };
@@ -327,11 +328,89 @@ async function chercherMiseAJour() {
  * Appliquer : redémarrer. Au lancement, le lanceur récupère le code et
  * reconstruit l'interface — le même chemin, éprouvé, que chaque matin.
  */
-function redemarrerPourMettreAJour() {
+function redemarrerPourMettreAJour({ discret = false } = {}) {
   quitterVraiment = true;
-  app.relaunch({ args: process.argv.slice(1).filter(argument => argument !== '--demarrage') });
-  setTimeout(() => app.exit(0), 300);
+  const args = process.argv.slice(1).filter(argument => argument !== '--demarrage');
+  // En fond (fenêtre cachée), l'application revient réduite, comme au démarrage de Windows.
+  app.relaunch({ args: discret ? [...args, '--demarrage'] : args });
+  // Fermeture normale d'abord, pour que la fenêtre enregistre la base ; puis on force.
+  app.quit();
+  setTimeout(() => app.exit(0), 5_000);
   return true;
+}
+
+// ----------------------------------------- Mises à jour, application ouverte
+//
+// AppliBourse démarre avec Windows (souvent avant qu'internet soit prêt) et
+// reste ensuite près de l'horloge : elle n'est presque jamais « relancée ».
+// Sans ce qui suit, les mises à jour, appliquées seulement au lancement,
+// n'arriveraient plus. Donc :
+//  - relancer l'application alors qu'elle tourne déjà vérifie et, s'il y a du
+//    nouveau, redémarre sur la nouvelle version ;
+//  - toutes les heures, une vérification en fond : fenêtre cachée, on
+//    redémarre discrètement ; fenêtre affichée, une notification propose.
+
+let commitAuLancement;
+let derniereProposee;
+const INTERVALLE_MAJ_FOND = 60 * 60_000;
+
+async function retenirCommitAuLancement() {
+  const dossier = (await lireVersionBuild())?.dossierSource;
+  if (dossier && existsSync(dossier)) {
+    commitAuLancement = await git(dossier, ['rev-parse', 'HEAD']).catch(() => undefined);
+  }
+}
+
+/** Vrai si GitHub, ou le dossier du projet, a plus récent que la version affichée. */
+async function nouvelleVersionDisponible() {
+  const dossier = (await lireVersionBuild())?.dossierSource;
+  if (!dossier || !existsSync(dossier) || !commitAuLancement) {
+    return undefined;
+  }
+  await git(dossier, ['fetch', '--quiet', 'origin', 'main'], 30_000);
+  const tete = await git(dossier, ['rev-parse', 'HEAD']);
+  const distant = await git(dossier, ['rev-parse', 'origin/main']);
+  // Une relance a pu récupérer le code sans que cette instance le charge.
+  return distant !== commitAuLancement || tete !== commitAuLancement ? distant : undefined;
+}
+
+async function verifierEnFond(raison) {
+  let disponible;
+  try {
+    disponible = await nouvelleVersionDisponible();
+  } catch {
+    return; // Hors ligne : on réessaiera.
+  }
+  if (!disponible) {
+    return;
+  }
+  const fenetre = BrowserWindow.getAllWindows()[0];
+  const visible = fenetre && fenetre.isVisible() && !fenetre.isMinimized();
+  // Mise à jour suspendue par un fichier modifié sur ce PC : redémarrer n'y
+  // changerait rien et recommencerait toutes les heures. Le bandeau le dit.
+  // (Une simple absence de réseau au démarrage, elle, se rattrape ainsi.)
+  if (/modifi/i.test(lancement?.erreur ?? '')) {
+    return;
+  }
+  if (raison === 'relance') {
+    redemarrerPourMettreAJour();
+  } else if (!visible) {
+    redemarrerPourMettreAJour({ discret: true });
+  } else if (derniereProposee !== disponible && Notification.isSupported()) {
+    derniereProposee = disponible;
+    const notification = new Notification({
+      title: '🆕 Nouvelle version d’AppliBourse',
+      body: 'Cliquez pour l’installer : l’application redémarre en une minute, vos données restent là.',
+    });
+    notification.on('click', () => redemarrerPourMettreAJour());
+    notification.show();
+  }
+}
+
+function surveillerMisesAJour() {
+  // Premier essai deux minutes après le démarrage : le temps qu'internet arrive.
+  setTimeout(() => void verifierEnFond('minuterie'), 2 * 60_000);
+  setInterval(() => void verifierEnFond('minuterie'), INTERVALLE_MAJ_FOND);
 }
 
 async function lancerMiseAJour() {
@@ -499,6 +578,8 @@ function creerFenetre() {
         if (lancement.appliquees?.length) {
           void republierSiteEnFond();
         }
+        // La version réellement affichée : c'est à elle qu'on compare ensuite.
+        void retenirCommitAuLancement();
         return fenetre.loadFile(resultat.chemin);
       });
   }
@@ -511,7 +592,11 @@ function creerFenetre() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => montrerFenetre());
+  app.on('second-instance', () => {
+    montrerFenetre();
+    // Relancer, c'est vouloir la dernière version : on vérifie tout de suite.
+    void verifierEnFond('relance');
+  });
   app.on('before-quit', () => {
     quitterVraiment = true;
   });
@@ -539,6 +624,9 @@ if (!app.requestSingleInstanceLock()) {
     });
     creerPlateau();
     creerFenetre();
+    if (!DEV) {
+      surveillerMisesAJour();
+    }
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
