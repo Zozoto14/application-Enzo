@@ -83,6 +83,8 @@ import { construireComparateur } from '../ui/vues/comparateur';
 import { Projection } from '../ui/ecrans/Projection';
 import { Symboles } from '../ui/ecrans/Symboles';
 import { Watchlist } from '../ui/ecrans/Watchlist';
+import { Recherche } from '../ui/ecrans/Recherche';
+import { chargerTheses, type ValeurCherchee } from '../fondamentaux/theses';
 import { construireWatchlist } from '../ui/vues/watchlist';
 import { construireComparaison } from '../ui/vues/comparaison';
 import {
@@ -165,6 +167,7 @@ type Ecran =
   | 'notifications'
   | 'projection'
   | 'watchlist'
+  | 'recherche'
   | 'symboles'
   | 'comparateur'
   | 'fiche'
@@ -1093,6 +1096,40 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [],
   );
 
+  /** Thèses et actualités d'une valeur, par le processus principal du bureau. */
+  const pontFlux = (globalThis as { applibourse?: { medias?: { flux(url: string): Promise<string> } } }).applibourse
+    ?.medias;
+  const chargerThesesValeur = useMemo(
+    () =>
+      pontFlux ? (valeur: ValeurCherchee) => chargerTheses(valeur, url => pontFlux.flux(url)) : undefined,
+    [pontFlux],
+  );
+
+  /**
+   * Surveiller une valeur trouvée par la recherche : on la crée si elle
+   * n'existe pas encore, repérée par son symbole.
+   */
+  const surveillerCandidat = useCallback(
+    (candidat: CandidatSymbole) => {
+      const depot = new DepotTitres(session.base());
+      const existant = depot.tous().find(titre => titre.ticker.trim().toUpperCase() === candidat.symbole.toUpperCase());
+      let titreId = existant?.id;
+      if (!titreId) {
+        titreId = identifiant('titre');
+        depot.enregistrer({
+          id: titreId,
+          isin: '',
+          nom: candidat.nom,
+          ticker: candidat.symbole,
+          deviseCotation: candidat.devise ?? (candidat.paris ? 'EUR' : 'USD'),
+          eligiblePEA: false,
+        });
+      }
+      surveiller(titreId);
+    },
+    [session, identifiant, surveiller],
+  );
+
   const [podcast, setPodcast] = useState<{
     episode?: Episode;
     chargement: boolean;
@@ -1595,6 +1632,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     ...(fiche ? [{ cle: 'fiche', libelle: fiche.vue?.entete.nom ?? fiche.symbole, glyphe: '◧' }] : []),
     { cle: 'saisie', libelle: 'Nouvelle opération', glyphe: '+' },
     { cle: 'import', libelle: 'Importer', glyphe: '↓' },
+    { cle: 'recherche', libelle: 'Recherche', glyphe: '⌕' },
     { cle: 'watchlist', libelle: 'Surveillance', glyphe: '☆' },
     { cle: 'comparateur', libelle: 'Comparateur', glyphe: '⇄' },
     { cle: 'podcast', libelle: 'Podcast', glyphe: '♫' },
@@ -1746,6 +1784,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
               ? undefined
               : () => ouvrirSymbole(fiche.symbole, fiche.titreId, true)
           }
+          chargerTheses={chargerThesesValeur}
           onSurveiller={fiche.titreId ? () => surveiller(fiche.titreId!) : undefined}
           surveillee={
             fiche.titreId
@@ -1877,7 +1916,32 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onRetirer={nePlusSurveiller}
           onChangerSeuil={enregistrerSeuil}
           onCreerTitre={() => setEcran('titre')}
+          onRechercher={() => setEcran('recherche')}
+          chargerTheses={chargerThesesValeur}
           onRetour={() => setEcran('tableau')}
+        />
+      ) : ecran === 'recherche' ? (
+        <Recherche
+          onRechercher={rechercherActions}
+          surveilles={
+            new Set(
+              (() => {
+                const titres = new Map((contenuComplet?.titres ?? []).map(titre => [titre.id, titre.ticker.toUpperCase()]));
+                return new DepotWatchlist(session.base())
+                  .lister()
+                  .map(ligne => titres.get(ligne.titreId) ?? '')
+                  .filter(Boolean);
+              })(),
+            )
+          }
+          onSurveiller={surveillerCandidat}
+          onOuvrirFiche={symbole =>
+            ouvrirSymbole(
+              symbole,
+              (contenuComplet?.titres ?? []).find(titre => titre.ticker.toUpperCase() === symbole.toUpperCase())?.id,
+            )
+          }
+          chargerTheses={chargerThesesValeur}
         />
       ) : ecran === 'projection' ? (
         <Projection

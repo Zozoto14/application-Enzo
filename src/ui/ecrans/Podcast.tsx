@@ -13,6 +13,7 @@ import { CarteSection, Rangee, Segments, Selecteur, Vide } from '../elements';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
 import type { Episode } from '../../podcast/episode';
 import { useEtatLecture, useLecture } from '../lecturePodcast';
+import { voixEffective } from '../../podcast/lecture';
 import type { StatutSource } from '../../podcast/medias';
 
 type Vitesse = '0,9×' | '1×' | '1,15×' | '1,3×';
@@ -210,7 +211,7 @@ export function Podcast({
                 {voix.length > 0 ? (
                   <Selecteur
                     etiquette="Voix"
-                    valeur={voixChoisie ?? voix[0].id}
+                    valeur={voixEffective({ voix, voixChoisie }) ?? voix[0].id}
                     options={voix.map(element => ({ valeur: element.id, libelle: element.nom }))}
                     onChoisir={valeur => lecture.changerVoix(valeur)}
                     largeur={280}

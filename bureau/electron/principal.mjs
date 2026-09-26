@@ -213,8 +213,31 @@ function rechercheActualitesAutorisee(adresse) {
   }
 }
 
+/**
+ * Thèses d'une valeur : analyses Seeking Alpha et discussions Reddit, sur
+ * des chemins fixes. Même règle que src/fondamentaux/theses.ts.
+ */
+function adresseThesesAutorisee(adresse) {
+  try {
+    const url = new URL(adresse);
+    if (adresse.length >= 500) return false;
+    if (url.origin === 'https://seekingalpha.com') {
+      return /^\/api\/sa\/combined\/[A-Z]{1,5}(-[A-Z])?\.xml$/.test(url.pathname) && url.search === '';
+    }
+    if (url.origin === 'https://www.reddit.com') {
+      return (
+        ['/r/vosfinances+Bourse/search.rss', '/r/stocks+investing+ValueInvesting/search.rss'].includes(url.pathname) &&
+        [...url.searchParams.keys()].every(cle => ['q', 'restrict_sr', 'sort', 't'].includes(cle))
+      );
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 async function fluxMedia(adresse) {
-  if (!FLUX_MEDIAS.has(adresse) && !rechercheActualitesAutorisee(adresse)) {
+  if (!FLUX_MEDIAS.has(adresse) && !rechercheActualitesAutorisee(adresse) && !adresseThesesAutorisee(adresse)) {
     throw new Error('Flux non autorisé.');
   }
   const reponse = await fetch(adresse, {

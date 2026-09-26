@@ -3,6 +3,8 @@
 export interface PhraseALire {
   texte: string;
   langue: 'fr' | 'en';
+  /** En duo, qui parle : les deux animateurs se passent la parole par chapitre. */
+  interlocuteur?: 0 | 1;
 }
 
 export interface VoixDisponible {

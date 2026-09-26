@@ -6,10 +6,12 @@
  * vous détenez aussi, pour que la confusion soit impossible.
  */
 
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import type { VueWatchlist } from '../vues/watchlist';
 import { Actions, Bouton, Carte, Champ, SousTitre, Titre, Variation, usePalette } from '../composants';
+import { Segments } from '../elements';
+import { FilTheses, type ChargerTheses } from '../theses';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
 
 export interface WatchlistProps {
@@ -18,6 +20,9 @@ export interface WatchlistProps {
   onRetirer(titreId: string): void;
   onChangerSeuil(titreId: string, champ: 'haut' | 'bas', valeur: string): void;
   onCreerTitre?(): void;
+  /** Mène à l'écran Recherche, pour trouver une nouvelle valeur. */
+  onRechercher?(): void;
+  chargerTheses?: ChargerTheses;
   onRetour(): void;
 }
 
@@ -27,10 +32,17 @@ export function Watchlist({
   onRetirer,
   onChangerSeuil,
   onCreerTitre,
+  onRechercher,
+  chargerTheses,
   onRetour,
 }: WatchlistProps) {
   const sombre = useColorScheme() === 'dark';
   const palette = usePalette();
+  const [onglet, setOnglet] = useState<'suivi' | 'theses' | 'actualites'>('suivi');
+  const valeurs = useMemo(
+    () => vue.lignes.map(ligne => ({ nom: ligne.nom, symbole: ligne.ticker || undefined })),
+    [vue.lignes],
+  );
 
   return (
     <ScrollView
@@ -44,7 +56,36 @@ export function Watchlist({
         avant même de les acheter.
       </SousTitre>
 
-      {vue.message ? (
+      <View style={styles.barreOnglets}>
+        <Segments<'suivi' | 'theses' | 'actualites'>
+          options={['suivi', 'theses', 'actualites']}
+          actif={onglet}
+          onChoisir={setOnglet}
+          libelle={option => (option === 'suivi' ? 'Suivi' : option === 'theses' ? 'Thèses' : 'Actualités')}
+          prefixeTest="onglet-surveillance"
+        />
+        {onRechercher ? (
+          <Bouton titre="⌕ Rechercher une valeur" variante="discret" onPress={onRechercher} testID="bouton-vers-recherche" />
+        ) : null}
+      </View>
+
+      {onglet !== 'suivi' ? (
+        <Carte>
+          {vue.lignes.length === 0 ? (
+            <Text style={{ color: palette.texteSecondaire }}>
+              Surveillez d’abord une valeur : ses thèses et son actualité s’afficheront ici.
+            </Text>
+          ) : chargerTheses ? (
+            <FilTheses valeurs={valeurs} chargerTheses={chargerTheses} mode={onglet} testID={`fil-${onglet}`} />
+          ) : (
+            <Text style={{ color: palette.texteSecondaire }}>
+              Les thèses et actualités se lisent dans l’application de bureau.
+            </Text>
+          )}
+        </Carte>
+      ) : null}
+
+      {onglet === 'suivi' && vue.message ? (
         <Carte>
           <Text style={{ color: palette.texte }}>{vue.message}</Text>
           {onCreerTitre && vue.candidats.length === 0 ? (
@@ -58,7 +99,7 @@ export function Watchlist({
         </Carte>
       ) : null}
 
-      {vue.lignes.map(ligne => (
+      {onglet !== 'suivi' ? null : vue.lignes.map(ligne => (
         <Carte key={ligne.titreId}>
           <View style={stylesPartages.ligne}>
             <Text style={styles.nom} numberOfLines={1}>
@@ -130,7 +171,7 @@ export function Watchlist({
         </Carte>
       ))}
 
-      {vue.candidats.length > 0 ? (
+      {onglet === 'suivi' && vue.candidats.length > 0 ? (
         <Carte>
           <Text style={[styles.sectionTitre, { color: palette.texte }]}>Ajouter</Text>
           <SousTitre>
@@ -172,6 +213,7 @@ export function Watchlist({
 
 const styles = StyleSheet.create({
   sectionTitre: { fontSize: 17, fontWeight: '700' },
+  barreOnglets: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: ESPACEMENT.s },
   nom: { fontSize: 16, fontWeight: '600', flex: 1, marginRight: ESPACEMENT.s },
   etiquettes: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: ESPACEMENT.s },
   pastille: {

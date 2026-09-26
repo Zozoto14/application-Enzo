@@ -1,5 +1,5 @@
 import { construireEpisode } from './episode';
-import { creerLecture } from './lecture';
+import { creerLecture, fileDe, voixEffective } from './lecture';
 import type { Lecteur } from './lecteurTypes';
 
 function faux() {
@@ -75,5 +75,25 @@ describe('lecture partagée du podcast', () => {
     expect(appels.at(-1)).toBe('lire:0:1.3');
     expect(notifications).toBeGreaterThan(2);
     desabonner();
+  });
+});
+
+describe('voix du podcast', () => {
+  it('fait alterner les deux animateurs d’un chapitre à l’autre', () => {
+    const file = fileDe(episode);
+    for (const phrase of file) {
+      expect(phrase.interlocuteur).toBe(phrase.chapitre % 2);
+    }
+    expect(new Set(file.map(phrase => phrase.interlocuteur)).size).toBe(2);
+  });
+
+  it('retombe sur la première voix si la voix retenue a disparu', () => {
+    const voix = [
+      { id: 'naturelle:duo', nom: 'Duo', langue: 'fr-FR' },
+      { id: 'naturelle:fr-FR-DeniseNeural', nom: 'Denise', langue: 'fr-FR' },
+    ];
+    expect(voixEffective({ voix, voixChoisie: 'naturelle:fr-FR-DeniseNeural' })).toBe('naturelle:fr-FR-DeniseNeural');
+    expect(voixEffective({ voix, voixChoisie: 'Microsoft Hortense' })).toBe('naturelle:duo');
+    expect(voixEffective({ voix, voixChoisie: undefined })).toBe('naturelle:duo');
   });
 });

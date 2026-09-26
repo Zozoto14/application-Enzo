@@ -27,13 +27,55 @@ export interface EtatLecture {
 export function fileDe(episode: Episode | undefined): PhraseDeChapitre[] {
   return (episode?.chapitres ?? []).flatMap((chapitre, rang) =>
     chapitre.segments.flatMap(segment =>
-      phrases(segment.texte).map(texte => ({ texte, langue: segment.langue, chapitre: rang })),
+      phrases(segment.texte).map(texte => ({
+        texte,
+        langue: segment.langue,
+        chapitre: rang,
+        interlocuteur: (rang % 2) as 0 | 1,
+      })),
     ),
   );
 }
 
+const CLE_VOIX = 'applibourse.voix';
+
+type Stockage = { getItem(cle: string): string | null; setItem(cle: string, valeur: string): void };
+const stockage = () => (globalThis as { localStorage?: Stockage }).localStorage;
+
+/** La voix choisie survit au redémarrage ; sans stockage, on s'en passe. */
+function voixRetenue(): string | undefined {
+  try {
+    return stockage()?.getItem(CLE_VOIX) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function retenirVoix(voix: string): void {
+  try {
+    stockage()?.setItem(CLE_VOIX, voix);
+  } catch {
+    // Stockage indisponible : le choix vaut pour la session.
+  }
+}
+
+/** La voix retenue, si elle existe encore ; sinon la première proposée. */
+export function voixEffective(etat: Pick<EtatLecture, 'voix' | 'voixChoisie'>): string | undefined {
+  if (etat.voixChoisie && (etat.voix.length === 0 || etat.voix.some(voix => voix.id === etat.voixChoisie))) {
+    return etat.voixChoisie;
+  }
+  return etat.voix[0]?.id;
+}
+
 export function creerLecture(lecteur: Lecteur = creerLecteur()) {
-  let etat: EtatLecture = { file: [], etat: 'arret', courante: 0, vitesse: 1, voix: lecteur.voix() };
+  let etat: EtatLecture = {
+    file: [],
+    etat: 'arret',
+    courante: 0,
+    vitesse: 1,
+    voix: lecteur.voix(),
+    voixChoisie: voixRetenue(),
+  };
   const abonnes = new Set<() => void>();
   const changer = (partiel: Partial<EtatLecture>) => {
     etat = { ...etat, ...partiel };
@@ -46,7 +88,7 @@ export function creerLecture(lecteur: Lecteur = creerLecteur()) {
     lecteur.lire(
       etat.file,
       index,
-      { vitesse: etat.vitesse, voixFrancaise: etat.voixChoisie ?? etat.voix[0]?.id },
+      { vitesse: etat.vitesse, voixFrancaise: voixEffective(etat) },
       {
         surPhrase: courante => changer({ courante }),
         surErreur: avertissement => changer({ avertissement }),
@@ -105,6 +147,7 @@ export function creerLecture(lecteur: Lecteur = creerLecteur()) {
       if (etat.etat === 'lecture') lireDepuis(etat.courante);
     },
     changerVoix(voixChoisie: string) {
+      retenirVoix(voixChoisie);
       changer({ voixChoisie });
       if (etat.etat === 'lecture') lireDepuis(etat.courante);
     },

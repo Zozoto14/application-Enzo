@@ -2,10 +2,8 @@
  * Fiche d'une valeur : profil, comptes, dividendes, consensus, états
  * financiers, valorisation et actionnariat, depuis Yahoo Finance.
  *
- * Les onglets communautaires des outils en ligne — thèses publiées, grands
- * investisseurs suivis — n'ont pas d'équivalent ici : ils supposent une
- * communauté et des données payantes. L'écran le dit plutôt que de laisser
- * croire à un oubli.
+ * L'onglet « Thèses & actus » rassemble ce qu'on dit de la valeur : analyses
+ * d'investisseurs, avis de particuliers, articles de presse.
  */
 
 import React, { useMemo, useState } from 'react';
@@ -15,9 +13,18 @@ import { CarteSection, Metrique, Pile, Rangee, Segments, Selecteur, Signe, Vide 
 import { Barres, Donut, GraphiqueLignes, Radar } from '../graphiques/Graphiques';
 import { Cellule, Tableau, type Colonne } from '../tableau';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
+import { FilTheses, type ChargerTheses } from '../theses';
 import { calculerPrixJuste, type GraphiqueAnnuel, type ParametresPrixJuste, type VueFiche } from '../vues/fiche';
 
-type OngletFiche = 'resume' | 'quantitatif' | 'dividende' | 'resultats' | 'finances' | 'valorisation' | 'societe';
+type OngletFiche =
+  | 'resume'
+  | 'quantitatif'
+  | 'dividende'
+  | 'resultats'
+  | 'finances'
+  | 'valorisation'
+  | 'societe'
+  | 'theses';
 
 const ONGLETS: Array<{ cle: OngletFiche; libelle: string }> = [
   { cle: 'resume', libelle: 'Résumé' },
@@ -27,6 +34,7 @@ const ONGLETS: Array<{ cle: OngletFiche; libelle: string }> = [
   { cle: 'finances', libelle: 'Finances' },
   { cle: 'valorisation', libelle: 'Valorisation' },
   { cle: 'societe', libelle: 'Société' },
+  { cle: 'theses', libelle: 'Thèses & actus' },
 ];
 
 const nombreFr = (valeur: number, decimales = 2) =>
@@ -50,6 +58,37 @@ export interface FicheValeurProps {
   /** Ajouter la valeur à la surveillance, si elle ne l'est pas déjà. */
   onSurveiller?(): void;
   surveillee?: boolean;
+  /** Thèses et actualités de la valeur (bureau). */
+  chargerTheses?: ChargerTheses;
+}
+
+function ThesesValeur({
+  nom,
+  symbole,
+  chargerTheses,
+}: {
+  nom: string;
+  symbole: string;
+  chargerTheses?: ChargerTheses;
+}) {
+  const [mode, setMode] = useState<'theses' | 'actualites'>('theses');
+  const valeurs = useMemo(() => [{ nom, symbole }], [nom, symbole]);
+  return (
+    <CarteSection titre="Ce qu’on en dit" testID="fiche-theses-contenu">
+      <Segments<'theses' | 'actualites'>
+        options={['theses', 'actualites']}
+        actif={mode}
+        onChoisir={setMode}
+        libelle={option => (option === 'theses' ? 'Thèses' : 'Actualités')}
+        prefixeTest="fiche-mode"
+      />
+      {chargerTheses ? (
+        <FilTheses valeurs={valeurs} chargerTheses={chargerTheses} mode={mode} />
+      ) : (
+        <Vide>Les thèses et actualités se lisent dans l’application de bureau.</Vide>
+      )}
+    </CarteSection>
+  );
 }
 
 export function FicheValeur(props: FicheValeurProps) {
@@ -127,10 +166,13 @@ export function FicheValeur(props: FicheValeurProps) {
             {onglet === 'finances' ? <Finances vue={vue} /> : null}
             {onglet === 'valorisation' ? <Valorisation vue={vue} /> : null}
             {onglet === 'societe' ? <Societe vue={vue} /> : null}
+            {onglet === 'theses' ? (
+              <ThesesValeur nom={vue.entete.nom} symbole={props.symbole} chargerTheses={props.chargerTheses} />
+            ) : null}
 
             <Text style={[styles.source, { color: palette.texteSecondaire }]}>
-              Données Yahoo Finance, fournies telles quelles. Les thèses communautaires et le suivi des grands
-              investisseurs ne sont pas disponibles dans une application personnelle.
+              Données Yahoo Finance, fournies telles quelles. Thèses : Seeking Alpha, Reddit et la presse, via
+              Google Actualités.
             </Text>
           </>
         ) : null}

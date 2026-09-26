@@ -24,6 +24,13 @@ interface PontVoix {
 }
 
 const PREFIXE_NATURELLE = 'naturelle:';
+/**
+ * Le duo : deux animateurs qui se passent la parole à chaque chapitre, comme
+ * dans un vrai podcast. Une seule voix pendant dix minutes lasse l'oreille ;
+ * l'alternance relance l'attention.
+ */
+export const DUO = 'duo';
+export const VOIX_DUO: readonly [string, string] = ['fr-FR-VivienneMultilingualNeural', 'fr-FR-RemyMultilingualNeural'];
 /** Phrases préparées d'avance. */
 const AVANCE = 2;
 const CACHE_MAX = 300;
@@ -45,12 +52,24 @@ export function creerLecteur(): Lecteur {
   pont
     ?.liste()
     .then(liste => {
-      naturelles = liste.map(voix => ({
+      const seules = liste.map(voix => ({
         id: `${PREFIXE_NATURELLE}${voix.id}`,
         nom: `${voix.nom} · voix naturelle`,
         langue: voix.langue,
         naturelle: true,
       }));
+      const duoPossible = VOIX_DUO.every(id => liste.some(voix => voix.id === id));
+      naturelles = duoPossible
+        ? [
+            {
+              id: `${PREFIXE_NATURELLE}${DUO}`,
+              nom: 'Duo Vivienne & Rémy · deux animateurs',
+              langue: 'fr-FR',
+              naturelle: true,
+            },
+            ...seules,
+          ]
+        : seules;
       abonnes.forEach(rappel => rappel());
     })
     .catch(() => undefined);
@@ -167,8 +186,9 @@ export function creerLecteur(): Lecteur {
         return;
       }
       const voix = choisie.slice(PREFIXE_NATURELLE.length);
-      const preparer = (index: number) =>
-        mp3(file[index].texte, voixNaturelle(voix, file[index]), options.vitesse);
+      const voixDe = (phrase: PhraseALire) =>
+        voix === DUO ? VOIX_DUO[phrase.interlocuteur ?? 0] : voixNaturelle(voix, phrase);
+      const preparer = (index: number) => mp3(file[index].texte, voixDe(file[index]), options.vitesse);
 
       const jouer = (index: number) => {
         if (numero !== generation) {

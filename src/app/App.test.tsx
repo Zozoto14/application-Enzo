@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
-import { DepotComptes, DepotParametres, DepotTransactions, PARAMETRES } from '../db/depots';
+import { DepotComptes, DepotParametres, DepotTitres, DepotTransactions, DepotWatchlist, PARAMETRES } from '../db/depots';
 import { ouvrirBaseNode } from '../db/pilotes/node';
 import { appareilDe } from '../sync/identite';
 import { aleatoireDeterministe } from '../securite/aleatoire';
@@ -230,6 +230,39 @@ describe('parcours complet, session ouverte', () => {
     expect(new DepotComptes(session.base()).tous()).toEqual([]);
     expect(new DepotTransactions(session.base()).toutes()).toEqual([]);
     expect(screen.getByText(/Aucun compte/)).toBeTruthy();
+  });
+
+  it('recherche une entreprise et l’ajoute à la surveillance', async () => {
+    const fetchOrigine = globalThis.fetch;
+    globalThis.fetch = jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        quotes: [
+          { symbol: 'NVDA', shortname: 'NVIDIA Corporation', exchange: 'NMS', quoteType: 'EQUITY', currency: 'USD' },
+        ],
+      }),
+    })) as unknown as typeof fetch;
+    try {
+      const session = await ouvrir();
+      await fireEvent.press(screen.getByTestId('nav-recherche'));
+      await fireEvent.changeText(screen.getByTestId('champ-recherche-action'), 'nvidia');
+      await fireEvent.press(screen.getByTestId('bouton-rechercher-action'));
+      await screen.findByTestId('resultat-NVDA');
+
+      await fireEvent.press(screen.getByTestId('surveiller-NVDA'));
+      const titre = new DepotTitres(session.base()).tous().find(t => t.ticker === 'NVDA');
+      expect(titre).toMatchObject({ nom: 'NVIDIA Corporation', deviseCotation: 'USD' });
+      expect(new DepotWatchlist(session.base()).lister().map(ligne => ligne.titreId)).toEqual([titre!.id]);
+      expect(screen.getByText('★ Surveillée')).toBeTruthy();
+
+      await fireEvent.press(screen.getByTestId('nav-watchlist'));
+      expect(screen.getByText('NVIDIA Corporation')).toBeTruthy();
+      await fireEvent.press(screen.getByTestId('onglet-surveillance-theses'));
+      expect(screen.getByText(/application de bureau/)).toBeTruthy();
+    } finally {
+      globalThis.fetch = fetchOrigine;
+    }
   });
 
   it('refuse un compte sans date d’ouverture', async () => {

@@ -134,7 +134,8 @@ export function lireFlux(xml: string, media: Pick<Media, 'nom' | 'langue'>): Art
 const MOTS_GENERIQUES = new Set([
   'amundi', 'lyxor', 'ishares', 'bnp', 'paribas', 'easy', 'etf', 'ucits', 'swap', 'acc', 'dist', 'eur', 'usd',
   'sa', 'se', 'nv', 'plc', 'inc', 'corp', 'group', 'groupe', 'the', 'de', 'du', 'des', 'la', 'le', 'les', 'et',
-  'pea', 'index', 'indice', 'fund', 'c', 'd',
+  'pea', 'index', 'indice', 'fund', 'c', 'd', 'corporation', 'incorporated', 'holding', 'holdings',
+  'company', 'ltd', 'limited', 'ag', 'co', 'class',
 ]);
 
 /** Mots qui désignent la valeur dans un article : « Air Liquide », « Stellantis », « MSCI World ». */

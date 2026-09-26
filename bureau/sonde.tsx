@@ -43,6 +43,8 @@ import { Comparateur } from '../src/ui/ecrans/Comparateur';
 import { Portefeuille } from '../src/ui/ecrans/Portefeuille';
 import { Projection } from '../src/ui/ecrans/Projection';
 import { Watchlist } from '../src/ui/ecrans/Watchlist';
+import { Recherche } from '../src/ui/ecrans/Recherche';
+import type { ResultatTheses } from '../src/fondamentaux/theses';
 import { useFondDocument } from './Bureau';
 import { definirDiscretion } from '../src/ui/discretion';
 import { Objectifs } from '../src/ui/ecrans/Objectifs';
@@ -107,6 +109,7 @@ const referenceExemple = serie(100, 260, 0.02);
 
 const DESTINATIONS: readonly Destination[] = [
   { cle: 'portefeuille', libelle: 'Portefeuille', glyphe: '▦' },
+  { cle: 'recherche', libelle: 'Recherche', glyphe: '⌕' },
   { cle: 'surveillance', libelle: 'Surveillance', glyphe: '★' },
   { cle: 'comparateur', libelle: 'Comparer', glyphe: '⇄' },
   { cle: 'projection', libelle: 'Projection', glyphe: '◔' },
@@ -164,6 +167,20 @@ const ficheExemple = construireFiche(
   lireComptes(COMPTES_EXEMPLE),
   lireCoursEtDividendes(historiqueExemple()),
 );
+
+// Thèses d'exemple : l'aperçu ne va pas sur le réseau.
+const thesesExemple = async (valeur: { nom: string }): Promise<ResultatTheses> => ({
+  theses: [
+    { titre: 'Jusqu’où peut aller Nvidia ?', resume: 'Les centres de données tirent la croissance, mais la valorisation suppose que la demande en puces IA reste soutenue plusieurs années.', source: 'Seeking Alpha', auteur: 'Julien M.', date: '2026-09-14', lien: 'https://seekingalpha.com', langue: 'en', genre: 'analyse', ton: 'optimiste', valeur: valeur.nom },
+    { titre: 'Le maillon faible de l’IA', resume: 'Dépendance à TSMC, clients qui conçoivent leurs propres puces : les risques que le marché oublie.', source: 'Reddit · r/vosfinances', auteur: '/u/marc_antoine', date: '2026-08-27', langue: 'fr', genre: 'discussion', ton: 'prudent', valeur: valeur.nom },
+    { titre: 'Faut-il encore acheter Nvidia après son record ?', resume: '', source: 'Investir', date: '2026-08-20', langue: 'fr', genre: 'presse', valeur: valeur.nom },
+  ],
+  actualites: [
+    { titre: 'Nvidia dévoile sa nouvelle génération de puces', resume: '', source: 'Les Echos', date: '2026-09-20', langue: 'fr' },
+  ],
+  echecs: 0,
+  sources: 5,
+});
 
 // ---------------------------------------------------------------- Aperçu
 
@@ -245,6 +262,19 @@ function Apercu() {
         />
       ) : null}
 
+      {destination === 'recherche' ? (
+        <Recherche
+          onRechercher={async () => [
+            { symbole: 'NVDA', nom: 'NVIDIA Corporation', place: 'NMS', devise: 'USD', type: 'EQUITY', paris: false },
+            { symbole: 'NVD.DE', nom: 'NVIDIA Corporation', place: 'GER', devise: 'EUR', type: 'EQUITY', paris: false },
+          ]}
+          surveilles={new Set(['NVD.DE'])}
+          onSurveiller={() => undefined}
+          onOuvrirFiche={() => undefined}
+          chargerTheses={thesesExemple}
+        />
+      ) : null}
+
       {destination === 'surveillance' ? (
         <Watchlist
           vue={construireWatchlist({
@@ -257,6 +287,8 @@ function Apercu() {
           onAjouter={() => undefined}
           onRetirer={() => undefined}
           onChangerSeuil={() => undefined}
+          onRechercher={() => setDestination('recherche')}
+          chargerTheses={thesesExemple}
           onRetour={() => setDestination('portefeuille')}
         />
       ) : null}
