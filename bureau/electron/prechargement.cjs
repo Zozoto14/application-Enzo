@@ -26,7 +26,13 @@ contextBridge.exposeInMainWorld('applibourse', {
   },
 
   systeme: {
-    notifier: (titre, corps) => ipcRenderer.invoke('systeme:notifier', titre, corps),
+    notifier: (titre, corps, destination) => ipcRenderer.invoke('systeme:notifier', titre, corps, destination),
+    /** Appelé avec la destination quand on clique sur une notification ; rend de quoi se désabonner. */
+    surNotificationOuverte: rappel => {
+      const ecouteur = (_evenement, destination) => rappel(String(destination));
+      ipcRenderer.on('notification:ouvrir', ecouteur);
+      return () => ipcRenderer.removeListener('notification:ouvrir', ecouteur);
+    },
     ouvrir: url => ipcRenderer.invoke('systeme:ouvrir', url),
     /** Barre de titre claire ou sombre, selon le thème. */
     theme: sombre => ipcRenderer.invoke('systeme:theme', Boolean(sombre)),

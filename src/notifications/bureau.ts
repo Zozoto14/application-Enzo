@@ -15,9 +15,11 @@ import { valoriserPositions } from '../core/portfolio/valorisation';
 import type { SeuilAlerte } from './briefing';
 import type { CanalNotifications } from './envoi';
 import { ETAT_PERSISTE_VIDE, type EtatPersiste } from './reveil';
+import { destinationDe } from './destinations';
 
 export interface PontNotifications {
-  notifier(titre: string, corps: string): Promise<boolean>;
+  /** `destination` : la page ouverte au clic (voir destinations.ts). */
+  notifier(titre: string, corps: string, destination?: string): Promise<boolean>;
 }
 
 /** Canal qui passe par le processus principal d'Electron. */
@@ -27,7 +29,7 @@ export function canalBureau(pont: PontNotifications): CanalNotifications {
     // Windows ne demande pas d'autorisation à une application installée.
     demanderPermission: async () => true,
     afficher: async notification => {
-      const affichee = await pont.notifier(notification.titre, notification.corps);
+      const affichee = await pont.notifier(notification.titre, notification.corps, destinationDe(notification.identifiant));
       if (!affichee) {
         throw new Error('Notifications non prises en charge par le système.');
       }

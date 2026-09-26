@@ -400,6 +400,31 @@ describe('parcours complet, session ouverte', () => {
     expect(screen.getByText('« Renforcement sur repli »')).toBeTruthy();
   });
 
+  it('ouvre la bonne page au clic sur une notification', async () => {
+    let cliquer: ((destination: string) => void) | undefined;
+    const global = globalThis as { applibourse?: unknown };
+    global.applibourse = {
+      systeme: {
+        notifier: async () => true,
+        surNotificationOuverte: (rappel: (destination: string) => void) => {
+          cliquer = rappel;
+          return () => undefined;
+        },
+      },
+    };
+    try {
+      await ouvrir();
+      await creerCompte();
+      expect(cliquer).toBeDefined();
+      await act(async () => cliquer!('objectifs'));
+      expect(screen.getByTestId('carte-versement-mensuel')).toBeTruthy();
+      await act(async () => cliquer!('page-qui-n-existe-pas'));
+      expect(screen.queryByTestId('carte-versement-mensuel')).toBeNull();
+    } finally {
+      delete global.applibourse;
+    }
+  });
+
   it('refuse un compte sans date d’ouverture', async () => {
     // Pour un PEA, cette date fait courir l'antériorité fiscale.
     await ouvrir();

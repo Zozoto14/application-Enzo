@@ -122,7 +122,7 @@ export function useNotificationsBureau({
       }
       const rappelsEnvoyes: string[] = [];
       for (const rappel of rappelsCarnet(lignesCarnet(), new Set(deja))) {
-        if (await pontNotifications.notifier(rappel.titre, rappel.corps).catch(() => false)) {
+        if (await pontNotifications.notifier(rappel.titre, rappel.corps, 'carnet').catch(() => false)) {
           rappelsEnvoyes.push(rappel.identifiant);
         }
       }
@@ -136,7 +136,7 @@ export function useNotificationsBureau({
           reglage.montant,
         );
         const message = messageVersement(reglage, achats);
-        if (await pontNotifications.notifier(message.titre, message.corps).catch(() => false)) {
+        if (await pontNotifications.notifier(message.titre, message.corps, 'objectifs').catch(() => false)) {
           rappelsEnvoyes.push(identifiantVersement(maintenant));
         }
       }
@@ -220,6 +220,7 @@ export function useNotificationsBureau({
             pontMedias && url ? await pontMedias.flux(url).then(lireRechercheActualites).catch(() => []) : [];
           return {
             nom: titre.nom,
+            symbole,
             prochainsResultats: donnees?.fiche.resultats.prochaineDate,
             detachement: donnees?.fiche.dividende.dateDetachement,
             articles,
@@ -235,7 +236,9 @@ export function useNotificationsBureau({
       const alertes = alertesEvenements(valeurs, (aujourdhui ?? dateDuJour)(), new Set(deja));
       const envoyees: string[] = [];
       for (const alerte of alertes) {
-        if (await pontNotifications.notifier(alerte.titre, alerte.corps).catch(() => false)) envoyees.push(alerte.identifiant);
+        if (await pontNotifications.notifier(alerte.titre, alerte.corps, alerte.destination).catch(() => false)) {
+          envoyees.push(alerte.identifiant);
+        }
       }
       if (envoyees.length > 0) {
         parametres.ecrire(PARAMETRES.evenementsEnvoyes, JSON.stringify(retenirEvenements(deja, envoyees)));
@@ -272,7 +275,7 @@ export function useNotificationsBureau({
         if (rappels.length === 0) return;
         stockage.setItem(CLE_RAPPELS_LOCAL, JSON.stringify(retenirRappels(deja, rappels.map(r => r.identifiant))));
         for (const rappel of rappels) {
-          void pontNotifications.notifier(rappel.titre, rappel.corps).catch(() => undefined);
+          void pontNotifications.notifier(rappel.titre, rappel.corps, 'tableau').catch(() => undefined);
         }
       } catch {
         // Un rappel manqué ne doit jamais gêner l'écran de déverrouillage.

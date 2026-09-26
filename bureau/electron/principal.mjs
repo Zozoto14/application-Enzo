@@ -122,7 +122,7 @@ function installerPasserelle() {
     return true;
   });
 
-  ipcMain.handle('systeme:notifier', async (_evenement, titre, corps) => {
+  ipcMain.handle('systeme:notifier', async (_evenement, titre, corps, destination) => {
     if (!Notification.isSupported()) {
       return false;
     }
@@ -134,7 +134,13 @@ function installerPasserelle() {
       silent: false,
     });
     // Un clic sur la notification ramène la fenêtre au premier plan.
-    notification.on('click', montrerFenetre);
+    // Le clic ouvre la fenêtre sur la bonne page : la destination est
+    // renvoyée à l'interface, qui navigue (après déverrouillage si besoin).
+    const cible = typeof destination === 'string' ? destination.slice(0, 120) : '';
+    notification.on('click', () => {
+      const fenetre = montrerFenetre();
+      if (cible) fenetre.webContents.send('notification:ouvrir', cible);
+    });
     notification.show();
     return true;
   });
@@ -508,6 +514,7 @@ function montrerFenetre() {
   if (fenetre.isMinimized()) fenetre.restore();
   fenetre.show();
   fenetre.focus();
+  return fenetre;
 }
 
 function creerPlateau() {
@@ -557,7 +564,14 @@ function creerFenetre() {
   // Lancée au démarrage de Windows, elle attend discrètement près de l'horloge.
   const auDemarrage = process.argv.includes('--demarrage');
   fenetre.once('ready-to-show', () => {
-    if (!auDemarrage) fenetre.show();
+    if (auDemarrage) {
+      // Au démarrage de Windows : ouverte mais réduite dans la barre des
+      // tâches, sans voler la main à ce que vous ouvrez en même temps.
+      fenetre.showInactive();
+      fenetre.minimize();
+    } else {
+      fenetre.show();
+    }
   });
 
   fenetre.on('close', evenement => {
@@ -635,8 +649,14 @@ if (!app.requestSingleInstanceLock()) {
     // Barre de titre de Windows en sombre, assortie à l'interface.
     nativeTheme.themeSource = 'dark';
     installerPasserelle();
-    void lireReglagesBureau().then(reglages => {
+    void lireReglagesBureau().then(async reglages => {
       resterDansPlateau = reglages.resterDansPlateau !== false;
+      // Démarrage avec Windows activé d'office, une seule fois : ensuite,
+      // c'est le réglage de l'écran Alertes qui décide.
+      if (app.isPackaged && !reglages.demarrageInitialise) {
+        app.setLoginItemSettings({ openAtLogin: true, args: ['--demarrage'] });
+        await ecrireReglagesBureau({ ...reglages, demarrageInitialise: true });
+      }
     });
     creerPlateau();
     creerFenetre();

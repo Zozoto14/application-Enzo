@@ -134,6 +134,7 @@ import {
   type Planning,
 } from '../notifications/planification';
 import { oublierBriefingsModifies } from '../notifications/reveil';
+import { lireDestination } from '../notifications/destinations';
 import { composerBriefing } from '../notifications/briefing';
 import {
   etatDepuisJson,
@@ -1587,7 +1588,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       .then(({ episode, manques }) => {
         if (automatique) {
           void pontNotifications
-            ?.notifier('Votre podcast est prêt', `${episode.titre} · environ ${episode.duree} minutes.`)
+            ?.notifier('🎙️ Votre podcast est prêt', `${episode.titre} · environ ${episode.duree} minutes.`, 'podcast')
             .catch(() => undefined);
         }
         setPodcast({
@@ -1663,6 +1664,33 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     }
     setEcran(cle as Ecran);
   };
+
+  // Clic sur une notification : la fenêtre s'ouvre sur la bonne page. Si
+  // l'application est verrouillée, la page s'ouvre juste après le déverrouillage.
+  const [destinationEnAttente, setDestinationEnAttente] = useState<string | undefined>();
+  useEffect(() => {
+    const systeme = (
+      globalThis as { applibourse?: { systeme?: { surNotificationOuverte?(rappel: (destination: string) => void): () => void } } }
+    ).applibourse?.systeme;
+    return systeme?.surNotificationOuverte?.(setDestinationEnAttente);
+  }, []);
+  const naviguerRef = useRef(naviguer);
+  naviguerRef.current = naviguer;
+  const ecransRef = useRef<ReadonlySet<string>>(new Set());
+  ecransRef.current = new Set(destinations.map(destination => destination.cle));
+  useEffect(() => {
+    if (!destinationEnAttente || !deverrouille || !contenuComplet || !tableau) return;
+    setDestinationEnAttente(undefined);
+    const cible = lireDestination(destinationEnAttente, ecransRef.current);
+    if (cible.genre === 'titre') {
+      ouvrirTitre(cible.titreId);
+    } else if (cible.genre === 'symbole') {
+      const connu = contenuComplet.titres.find(titre => titre.ticker.trim().toUpperCase() === cible.symbole.toUpperCase());
+      ouvrirSymbole(cible.symbole, connu?.id);
+    } else {
+      naviguerRef.current(cible.cle);
+    }
+  }, [destinationEnAttente, deverrouille, contenuComplet, tableau, ouvrirTitre, ouvrirSymbole]);
 
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics ?? METRIQUES_DE_REPLI}>
@@ -1837,6 +1865,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
                     .notifier(
                       essai?.titre ?? '✅ AppliBourse',
                       essai?.corps ?? 'Les notifications fonctionnent. Vos briefings arriveront ici.',
+                      'tableau',
                     )
                     .then(affichee =>
                       setMessageNotifications(

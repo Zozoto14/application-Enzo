@@ -16,6 +16,8 @@ import { memeSource, type ArticleMedia } from '../podcast/medias';
 
 export interface ValeurSuivie {
   nom: string;
+  /** Symbole de cotation : un clic sur l'alerte ouvre sa fiche. */
+  symbole?: string;
   prochainsResultats?: string;
   detachement?: string;
   /** Articles récents sur la valeur, tous médias confondus. */
@@ -26,6 +28,8 @@ export interface AlerteEvenement {
   identifiant: string;
   titre: string;
   corps: string;
+  /** Page ouverte au clic. */
+  destination: string;
 }
 
 export const SOURCES_POUR_GROSSE_ACTU = 3;
@@ -58,11 +62,11 @@ export function alertesEvenements(
   dejaEnvoyees: ReadonlySet<string>,
 ): AlerteEvenement[] {
   const alertes: AlerteEvenement[] = [];
-  const ajouter = (alerte: AlerteEvenement) => {
-    if (!dejaEnvoyees.has(alerte.identifiant)) alertes.push(alerte);
-  };
-
   for (const valeur of valeurs) {
+    const destination = valeur.symbole ? `symbole:${valeur.symbole}` : 'watchlist';
+    const ajouter = (alerte: Omit<AlerteEvenement, 'destination'>) => {
+      if (!dejaEnvoyees.has(alerte.identifiant)) alertes.push({ ...alerte, destination });
+    };
     if (valeur.prochainsResultats) {
       const ecart = joursEntre(aujourdhui, valeur.prochainsResultats);
       if (ecart === 0 || ecart === 1) {
