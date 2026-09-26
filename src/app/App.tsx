@@ -133,6 +133,7 @@ import { chargerModule } from '../natif/modules';
 import { gestionnaireDepuisFs } from '../maj/application';
 import { systemeDepuisRnfs } from '../fichiers/systeme';
 import { systemeDepuisBureau, type PontSauvegardes } from '../fichiers/bureau';
+import { SUFFIXE_AUTO, aElaguer, sauvegardeDue } from '../sauvegarde/automatique';
 import { exporterDepuisBase, restaurerDansBase } from '../sauvegarde/depot';
 import { ouvrirArchive } from '../sauvegarde/archive';
 import {
@@ -713,6 +714,51 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       .then(setSauvegardes)
       .catch(() => setSauvegardes([]));
   }, [fichiers]);
+
+  /**
+   * Sauvegarde automatique : à l'ouverture puis toutes les heures, une
+   * archive part si la dernière a une semaine ; les huit plus récentes
+   * restent. Le mot de passe dort dans la base, elle-même chiffrée.
+   */
+  const sauvegardeAutoEnCours = useRef(false);
+  const sauvegarderSiDu = useCallback(async () => {
+    if (!fichiers || sauvegardeAutoEnCours.current) return;
+    const parametres = new DepotParametres(session.base());
+    const motDePasse = parametres.lire(PARAMETRES.sauvegardeAutoMotDePasse);
+    const jour = (aujourdhui ?? dateDuJour)();
+    if (!motDePasse || !sauvegardeDue(parametres.lire(PARAMETRES.sauvegardeAutoDerniere), jour)) return;
+    sauvegardeAutoEnCours.current = true;
+    try {
+      const archive = exporterDepuisBase(session.base(), { motDePasse, date: jour });
+      await ecrireSauvegarde(fichiers, archive, SUFFIXE_AUTO);
+      parametres.ecrire(PARAMETRES.sauvegardeAutoDerniere, jour);
+      for (const ancienne of aElaguer(await listerSauvegardes(fichiers))) {
+        await supprimerSauvegarde(fichiers, ancienne.chemin);
+      }
+      rafraichirSauvegardes();
+    } catch {
+      // Réessayée à la prochaine heure ; l'écran Sauvegarde montre la date de la dernière réussie.
+    } finally {
+      sauvegardeAutoEnCours.current = false;
+    }
+  }, [fichiers, session, aujourdhui, rafraichirSauvegardes]);
+
+  const activerSauvegardeAuto = useCallback(
+    (motDePasse: string | undefined) => {
+      const parametres = new DepotParametres(session.base());
+      if (motDePasse) {
+        parametres.ecrire(PARAMETRES.sauvegardeAutoMotDePasse, motDePasse);
+        parametres.supprimer(PARAMETRES.sauvegardeAutoDerniere);
+        setMessageSauvegarde('Sauvegarde automatique activée : une première archive est créée maintenant.');
+        void sauvegarderSiDu();
+      } else {
+        parametres.supprimer(PARAMETRES.sauvegardeAutoMotDePasse);
+        setMessageSauvegarde('Sauvegarde automatique désactivée. Les archives existantes sont conservées.');
+      }
+      rafraichir();
+    },
+    [session, sauvegarderSiDu, rafraichir],
+  );
 
   const creerSauvegarde = useCallback(
     (motDePasse: string) => {
@@ -1732,6 +1778,16 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   const verrou = statut === 'non-initialise' ? undefined : session.verrou();
 
+  useEffect(() => {
+    if (!deverrouille || !fichiers) return;
+    const premiere = setTimeout(() => void sauvegarderSiDu(), 20_000);
+    const minuterie = setInterval(() => void sauvegarderSiDu(), 3_600_000);
+    return () => {
+      clearTimeout(premiere);
+      clearInterval(minuterie);
+    };
+  }, [deverrouille, fichiers, sauvegarderSiDu]);
+
   // Infobulle de l'icône près de l'horloge : la valeur, sauf en mode discret
   // ou verrouillée — elle se lit par-dessus l'épaule.
   const pontSysteme = (globalThis as { applibourse?: { systeme?: { infobulle?(texte: string): Promise<boolean> } } })
@@ -2248,6 +2304,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         <Sauvegarde
           disponible={Boolean(fichiers)}
           emplacement={dossierSauvegardes}
+          automatique={{
+            active: Boolean(new DepotParametres(session.base()).lire(PARAMETRES.sauvegardeAutoMotDePasse)),
+            derniere: new DepotParametres(session.base()).lire(PARAMETRES.sauvegardeAutoDerniere),
+            aujourdhui: (aujourdhui ?? dateDuJour)(),
+          }}
+          onChangerAutomatique={activerSauvegardeAuto}
           onOuvrirDossier={pontSauvegardes?.ouvrirDossier ? () => void pontSauvegardes.ouvrirDossier!() : undefined}
           sauvegardes={sauvegardes}
           onCreer={creerSauvegarde}

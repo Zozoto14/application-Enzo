@@ -10,6 +10,7 @@
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
+import { joursAvantProchaine } from '../../sauvegarde/automatique';
 import { Explication } from '../indicateurs';
 import { ESPACEMENT, palettePour, stylesPartages } from '../theme';
 import type { SauvegardeSurDisque } from '../../sauvegarde/fichiers';
@@ -20,6 +21,10 @@ export interface SauvegardeProps {
   /** Dossier où sont rangées les sauvegardes (ordinateur). */
   emplacement?: string;
   onOuvrirDossier?(): void;
+  /** Sauvegarde automatique hebdomadaire. */
+  automatique?: { active: boolean; derniere?: string; aujourdhui: string };
+  /** Un mot de passe l'active, `undefined` la coupe. */
+  onChangerAutomatique?(motDePasse: string | undefined): void;
   sauvegardes: readonly SauvegardeSurDisque[];
   onCreer(motDePasse: string): void;
   onRestaurer(chemin: string, motDePasse: string): void;
@@ -38,6 +43,8 @@ export function Sauvegarde({
   disponible,
   emplacement,
   onOuvrirDossier,
+  automatique,
+  onChangerAutomatique,
   sauvegardes,
   onCreer,
   onRestaurer,
@@ -107,6 +114,10 @@ export function Sauvegarde({
       ) : null}
 
       {erreur ? <Alerte message={erreur} /> : null}
+
+      {automatique && onChangerAutomatique && disponible ? (
+        <Automatique {...automatique} onChanger={onChangerAutomatique} />
+      ) : null}
 
       {/* --- Création --- */}
       <Carte>
@@ -308,3 +319,82 @@ const styles = StyleSheet.create({
   },
   actions: { flexDirection: 'row', gap: ESPACEMENT.s },
 });
+
+function Automatique({
+  active,
+  derniere,
+  aujourdhui,
+  onChanger,
+}: {
+  active: boolean;
+  derniere?: string;
+  aujourdhui: string;
+  onChanger(motDePasse: string | undefined): void;
+}) {
+  const palette = usePalette();
+  const [ouvert, setOuvert] = useState(false);
+  const [motDePasse, setMotDePasse] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const valide = motDePasse.length >= LONGUEUR_MINIMALE && motDePasse === confirmation;
+  const dateFr = (iso: string) => iso.split('-').reverse().join('/');
+  const prochaine = joursAvantProchaine(derniere, aujourdhui);
+  return (
+    <Carte>
+      <Text style={{ color: palette.texte, fontWeight: '700', fontSize: 17 }}>Sauvegarde automatique</Text>
+      <SousTitre>
+        Une archive chiffrée chaque semaine, à l’ouverture de l’application. Les huit dernières sont gardées ;
+        vos sauvegardes manuelles ne sont jamais supprimées.
+      </SousTitre>
+      {active ? (
+        <>
+          <Text style={{ color: palette.hausse, fontWeight: '600' }} testID="etat-sauvegarde-auto">
+            Activée{derniere ? ` · dernière le ${dateFr(derniere)}` : ''} ·{' '}
+            {prochaine === 0 ? 'prochaine aujourd’hui' : `prochaine dans ${prochaine} jour${prochaine > 1 ? 's' : ''}`}
+          </Text>
+          <View style={{ alignSelf: 'flex-start' }}>
+            <Bouton titre="Désactiver" variante="discret" onPress={() => onChanger(undefined)} testID="desactiver-sauvegarde-auto" />
+          </View>
+        </>
+      ) : ouvert ? (
+        <>
+          <Champ
+            etiquette="Mot de passe des sauvegardes"
+            value={motDePasse}
+            onChangeText={setMotDePasse}
+            secureTextEntry
+            autoCapitalize="none"
+            indication={`${LONGUEUR_MINIMALE} caractères au minimum. Il faudra le donner pour restaurer : notez-le.`}
+            testID="champ-mdp-sauvegarde-auto"
+          />
+          <Champ
+            etiquette="Confirmer"
+            value={confirmation}
+            onChangeText={setConfirmation}
+            secureTextEntry
+            autoCapitalize="none"
+            testID="champ-confirmation-sauvegarde-auto"
+          />
+          {confirmation.length > 0 && confirmation !== motDePasse ? <Alerte message="Les deux saisies diffèrent." /> : null}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.s }}>
+            <Bouton
+              titre="Activer"
+              desactive={!valide}
+              testID="activer-sauvegarde-auto"
+              onPress={() => {
+                onChanger(motDePasse);
+                setOuvert(false);
+                setMotDePasse('');
+                setConfirmation('');
+              }}
+            />
+            <Bouton titre="Annuler" variante="discret" onPress={() => setOuvert(false)} />
+          </View>
+        </>
+      ) : (
+        <View style={{ alignSelf: 'flex-start' }}>
+          <Bouton titre="Activer la sauvegarde automatique…" variante="discret" onPress={() => setOuvert(true)} testID="ouvrir-sauvegarde-auto" />
+        </View>
+      )}
+    </Carte>
+  );
+}

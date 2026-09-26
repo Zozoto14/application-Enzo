@@ -487,6 +487,10 @@ export const PARAMETRES = {
   podcastAutoFait: 'podcast.auto_fait_le',
   /** Recherches récentes de l'écran Recherche (JSON). */
   historiqueRecherche: 'recherche.historique',
+  /** Mot de passe des sauvegardes automatiques ; vide : désactivées. Reste dans la base chiffrée. */
+  sauvegardeAutoMotDePasse: 'sauvegarde.auto_mot_de_passe',
+  /** Date de la dernière sauvegarde automatique. */
+  sauvegardeAutoDerniere: 'sauvegarde.auto_derniere',
 } as const;
 
 /**

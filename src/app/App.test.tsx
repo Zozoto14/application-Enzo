@@ -983,6 +983,35 @@ describe('écran de sauvegarde', () => {
     }
   });
 
+  it('active la sauvegarde automatique et crée aussitôt une première archive', async () => {
+    const ecrits = new Map<string, string>();
+    const global = globalThis as { applibourse?: unknown };
+    global.applibourse = {
+      sauvegardes: {
+        dossier: async () => 'Documents/AppliBourse Sauvegardes',
+        lister: async () => [...ecrits.keys()],
+        existe: async (nom: string) => ecrits.has(nom),
+        lire: async (nom: string) => ecrits.get(nom)!,
+        ecrire: async (nom: string, contenu: string) => void ecrits.set(nom, contenu),
+        supprimer: async (nom: string) => void ecrits.delete(nom),
+      },
+    };
+    try {
+      await ouvrirSauvegarde();
+      await fireEvent.press(screen.getByTestId('ouvrir-sauvegarde-auto'));
+      await fireEvent.changeText(screen.getByTestId('champ-mdp-sauvegarde-auto'), 'mot-de-passe-des-sauvegardes');
+      await fireEvent.changeText(screen.getByTestId('champ-confirmation-sauvegarde-auto'), 'mot-de-passe-des-sauvegardes');
+      await fireEvent.press(screen.getByTestId('activer-sauvegarde-auto'));
+      await laisserTravailler();
+      await laisserTravailler();
+
+      expect([...ecrits.keys()].some(nom => nom.includes('-auto.'))).toBe(true);
+      expect(screen.getByTestId('etat-sauvegarde-auto').props.children.join('')).toMatch(/Activée · dernière le 22\/09\/2026/);
+    } finally {
+      delete global.applibourse;
+    }
+  });
+
   it('explique pourquoi une sauvegarde est nécessaire', async () => {
     await ouvrirSauvegarde();
     expect(screen.getByText(/protègent votre clé, pas vos données/)).toBeTruthy();
