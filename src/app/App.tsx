@@ -46,8 +46,6 @@ import { anneesDisponibles, construireRapportAnnuel } from '../rapport/annuel';
 import { ecrireRapport } from '../rapport/fichiers';
 import { Decimal } from '../core/money/decimal';
 import { totaux, valoriserPositions } from '../core/portfolio/valorisation';
-import { ErreurFusion, fusionnerDansBase } from '../sync/application';
-import { resumerFusion } from '../sync/fusion';
 import { creerGenerateurId, identifiantAppareil } from '../sync/identite';
 import { chargerHistoriques, resumeHistorique } from '../cours/historique';
 import {
@@ -93,9 +91,11 @@ import { Diagnostic } from '../ui/ecrans/Diagnostic';
 import { testsDuBureau } from '../diagnostic/testsBureau';
 import { installerConvertisseur } from '../cours/change';
 import { VERSION_VISITE, VisiteGuidee } from '../ui/VisiteGuidee';
-import { carnetDepuisJson, construireCarnet, rappelsCarnet } from '../ui/vues/carnet';
+import { CLE_PLANNING_LOCAL, stockageLocal, useNotificationsBureau } from './notificationsBureau';
+import { useSauvegardes } from './sauvegardesApp';
+import { dividendesParTitre, lignesVendables } from './calculs';
+import { carnetDepuisJson, construireCarnet } from '../ui/vues/carnet';
 import { simulerToutSurIndice } from '../ui/vues/siIndice';
-import type { LigneVendable } from '../ui/vues/simulationVente';
 import { lireScreener, requeteScreener, type CleCategorie, type Region, type TriScreener } from '../fondamentaux/screener';
 import { ajouterHistorique, historiqueDepuisJson } from '../ui/vues/historiqueRecherche';
 import { chargerTheses, type ValeurCherchee } from '../fondamentaux/theses';
@@ -128,34 +128,16 @@ import {
   prochainBriefing,
   type Planning,
 } from '../notifications/planification';
-import { executerReveil, oublierBriefingsModifies } from '../notifications/reveil';
-import { rappelsDus, retenirRappels } from '../notifications/rappelVerrouille';
-import { alertesEvenements, retenirEvenements, type ValeurSuivie } from '../notifications/evenements';
-import { lireRechercheActualites, urlActualitesValeur } from '../podcast/medias';
+import { oublierBriefingsModifies } from '../notifications/reveil';
 import { composerBriefing } from '../notifications/briefing';
 import {
-  alerteVariation,
-  canalBureau,
   etatDepuisJson,
   seuilVariation,
-  seuilsDepuisJson,
-  variationSeance,
   type PontNotifications,
 } from '../notifications/bureau';
 import { chargerModule } from '../natif/modules';
 import { gestionnaireDepuisFs } from '../maj/application';
-import { systemeDepuisRnfs } from '../fichiers/systeme';
-import { systemeDepuisBureau, type PontSauvegardes } from '../fichiers/bureau';
-import { SUFFIXE_AUTO, aElaguer, sauvegardeDue } from '../sauvegarde/automatique';
-import { exporterDepuisBase, restaurerDansBase } from '../sauvegarde/depot';
-import { ouvrirArchive } from '../sauvegarde/archive';
-import {
-  ecrireSauvegarde,
-  lireSauvegarde,
-  listerSauvegardes,
-  supprimerSauvegarde,
-  type SauvegardeSurDisque,
-} from '../sauvegarde/fichiers';
+import { supprimerSauvegarde } from '../sauvegarde/fichiers';
 import { SaisieOperation } from '../ui/ecrans/SaisieOperation';
 import {
   PremierLancement,
@@ -332,76 +314,8 @@ const ETAT_VIDE = {
   comptes: new Map(),
 };
 
-/**
- * Dividendes encaisses sur douze mois glissants, par titre.
- * Le comparateur en a besoin pour rapporter un rendement au prix de revient.
- */
-function dividendesParTitre(
-  transactions: readonly Transaction[],
-  aujourdhui: string,
-): Map<string, Decimal> {
-  const [annee, mois, jour] = aujourdhui.split('-');
-  const debut = `${Number(annee) - 1}-${mois}-${jour}`;
 
-  const cumuls = new Map<string, Decimal>();
-  for (const transaction of transactions) {
-    if (transaction.type !== 'DIVIDENDE' || transaction.date <= debut) {
-      continue;
-    }
-    cumuls.set(
-      transaction.titreId,
-      (cumuls.get(transaction.titreId) ?? Decimal.ZERO).add(transaction.montantNet),
-    );
-  }
-  return cumuls;
-}
 
-/** Copie du planning et rappels envoyés : hors du coffre, lisibles verrouillé. */
-const CLE_PLANNING_LOCAL = 'applibourse.planningBriefings';
-const CLE_RAPPELS_LOCAL = 'applibourse.rappelsBriefing';
-type StockageLocal = { getItem(cle: string): string | null; setItem(cle: string, valeur: string): void };
-function stockageLocal(): StockageLocal | undefined {
-  try {
-    return (globalThis as { localStorage?: StockageLocal }).localStorage;
-  } catch {
-    return undefined;
-  }
-}
-
-/** Positions proposées au simulateur de vente, avec la valeur de leur plan. */
-function lignesVendables(
-  contenu: { etat: EtatPortefeuille; comptes: readonly Compte[]; titres: readonly Titre[] },
-  cours: ReadonlyMap<string, Decimal>,
-): LigneVendable[] {
-  const noms = new Map(contenu.titres.map(titre => [titre.id, titre.nom]));
-  return contenu.etat.positions
-    .filter(position => position.quantite.estPositif())
-    .flatMap(position => {
-      const compte = contenu.comptes.find(candidat => candidat.id === position.compteId);
-      if (!compte) return [];
-      const etatCompte = contenu.etat.comptes.get(compte.id);
-      const pea = compte.type === 'PEA' || compte.type === 'PEA_PME';
-      const valeurPlan = pea
-        ? totaux(
-            valoriserPositions(contenu.etat.positions.filter(p => p.compteId === compte.id), cours).valorisees,
-            etatCompte ? [etatCompte] : [],
-          ).valeurTotale.toNumber()
-        : undefined;
-      return [
-        {
-          cle: `${compte.id}|${position.titreId}`,
-          libelle: `${noms.get(position.titreId) ?? position.titreId} · ${compte.nom}`,
-          enveloppe: pea ? ('PEA' as const) : ('CTO' as const),
-          dateOuverture: compte.dateOuverture,
-          quantite: position.quantite.toNumber(),
-          pru: position.pru.toNumber(),
-          cours: cours.get(position.titreId)?.toNumber(),
-          valeurPlan,
-          versementsPlan: pea ? etatCompte?.versementsCumules.toNumber() : undefined,
-        },
-      ];
-    });
-}
 
 export function App({ session, genererId, aujourdhui, chargementAutomatique = false }: AppProps) {
   const [rendu, forcerRendu] = useState(0);
@@ -419,9 +333,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const [ecran, setEcran] = useState<Ecran>('tableau');
   const [messageCours, setMessageCours] = useState<string | undefined>();
   const [coursEnCours, setCoursEnCours] = useState(false);
-  const [sauvegardes, setSauvegardes] = useState<SauvegardeSurDisque[]>([]);
-  const [messageSauvegarde, setMessageSauvegarde] = useState<string | undefined>();
-  const [erreurSauvegarde, setErreurSauvegarde] = useState<string | undefined>();
   const [messageRapport, setMessageRapport] = useState<string | undefined>();
   const [recherche, setRecherche] = useState<
     | {
@@ -438,7 +349,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const [histoEnCours, setHistoEnCours] = useState(false);
   const [champsProjection, setChampsProjection] =
     useState<ChampsProjection>(CHAMPS_DEFAUT);
-  const [sauvegardeEnCours, setSauvegardeEnCours] = useState(false);
   const [messageNotifications, setMessageNotifications] = useState<string | undefined>();
 
   const rafraichir = useCallback(() => forcerRendu(n => n + 1), []);
@@ -497,6 +407,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   );
 
   const statut = session.statut();
+  const deverrouille = statut === 'deverrouille' && !secrets;
 
   // Taux de change du jour, pour afficher en euros les cours cotés ailleurs
   // (Varsovie, New York, Londres…). Seulement quand le réseau est permis.
@@ -750,180 +661,21 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       });
   }, [session, rafraichir, chargementAutomatique]);
 
-  /**
-   * Systeme de fichiers de l'appareil, absent sur un binaire compile sans
-   * react-native-fs et dans les tests. L'ecran de sauvegarde le dit plutot que
-   * d'echouer silencieusement.
-   */
-  // Sur l'ordinateur, le pont d'Electron range les sauvegardes dans Documents.
-  const pontSauvegardes = (globalThis as { applibourse?: { sauvegardes?: PontSauvegardes } }).applibourse
-    ?.sauvegardes;
-  const fichiers = useMemo(
-    () => systemeDepuisBureau(pontSauvegardes) ?? systemeDepuisRnfs(chargerModule<unknown>('react-native-fs').module),
-    [pontSauvegardes],
-  );
-  const [dossierSauvegardes, setDossierSauvegardes] = useState<string | undefined>();
-  useEffect(() => {
-    pontSauvegardes?.dossier().then(setDossierSauvegardes).catch(() => undefined);
-  }, [pontSauvegardes]);
-
-  const rafraichirSauvegardes = useCallback(() => {
-    if (!fichiers) {
-      return;
-    }
-    listerSauvegardes(fichiers)
-      .then(setSauvegardes)
-      .catch(() => setSauvegardes([]));
-  }, [fichiers]);
-
-  /**
-   * Sauvegarde automatique : à l'ouverture puis toutes les heures, une
-   * archive part si la dernière a une semaine ; les huit plus récentes
-   * restent. Le mot de passe dort dans la base, elle-même chiffrée.
-   */
-  const sauvegardeAutoEnCours = useRef(false);
-  const sauvegarderSiDu = useCallback(async () => {
-    if (!fichiers || sauvegardeAutoEnCours.current) return;
-    const parametres = new DepotParametres(session.base());
-    const motDePasse = parametres.lire(PARAMETRES.sauvegardeAutoMotDePasse);
-    const jour = (aujourdhui ?? dateDuJour)();
-    if (!motDePasse || !sauvegardeDue(parametres.lire(PARAMETRES.sauvegardeAutoDerniere), jour)) return;
-    sauvegardeAutoEnCours.current = true;
-    try {
-      const archive = exporterDepuisBase(session.base(), { motDePasse, date: jour });
-      await ecrireSauvegarde(fichiers, archive, SUFFIXE_AUTO);
-      parametres.ecrire(PARAMETRES.sauvegardeAutoDerniere, jour);
-      for (const ancienne of aElaguer(await listerSauvegardes(fichiers))) {
-        await supprimerSauvegarde(fichiers, ancienne.chemin);
-      }
-      rafraichirSauvegardes();
-    } catch {
-      // Réessayée à la prochaine heure ; l'écran Sauvegarde montre la date de la dernière réussie.
-    } finally {
-      sauvegardeAutoEnCours.current = false;
-    }
-  }, [fichiers, session, aujourdhui, rafraichirSauvegardes]);
-
-  const activerSauvegardeAuto = useCallback(
-    (motDePasse: string | undefined) => {
-      const parametres = new DepotParametres(session.base());
-      if (motDePasse) {
-        parametres.ecrire(PARAMETRES.sauvegardeAutoMotDePasse, motDePasse);
-        parametres.supprimer(PARAMETRES.sauvegardeAutoDerniere);
-        setMessageSauvegarde('Sauvegarde automatique activée : une première archive est créée maintenant.');
-        void sauvegarderSiDu();
-      } else {
-        parametres.supprimer(PARAMETRES.sauvegardeAutoMotDePasse);
-        setMessageSauvegarde('Sauvegarde automatique désactivée. Les archives existantes sont conservées.');
-      }
-      rafraichir();
-    },
-    [session, sauvegarderSiDu, rafraichir],
-  );
-
-  const creerSauvegarde = useCallback(
-    (motDePasse: string) => {
-      if (!fichiers) {
-        return;
-      }
-      setSauvegardeEnCours(true);
-      setErreurSauvegarde(undefined);
-      setMessageSauvegarde(undefined);
-
-      apresRendu(() => {
-        try {
-          const archive = exporterDepuisBase(session.base(), {
-            motDePasse,
-            date: (aujourdhui ?? dateDuJour)(),
-          });
-          ecrireSauvegarde(fichiers, archive)
-            .then(ecrite => {
-              setMessageSauvegarde(`Sauvegarde créée : ${ecrite.nom}`);
-              rafraichirSauvegardes();
-            })
-            .catch((e: unknown) =>
-              setErreurSauvegarde(e instanceof Error ? e.message : String(e)),
-            )
-            .finally(() => setSauvegardeEnCours(false));
-        } catch (e) {
-          setErreurSauvegarde(e instanceof Error ? e.message : String(e));
-          setSauvegardeEnCours(false);
-        }
-      });
-    },
-    [fichiers, session, aujourdhui, rafraichirSauvegardes],
-  );
-
-  const fusionnerSauvegarde = useCallback(
-    (chemin: string, motDePasse: string) => {
-      if (!fichiers) {
-        return;
-      }
-      setSauvegardeEnCours(true);
-      setErreurSauvegarde(undefined);
-      setMessageSauvegarde(undefined);
-
-      lireSauvegarde(fichiers, chemin)
-        .then(archive => {
-          const lecture = ouvrirArchive(archive, motDePasse);
-          if (!lecture.ouverte) {
-            setErreurSauvegarde(lecture.motif);
-            return;
-          }
-
-          const fusion = fusionnerDansBase(session.base(), lecture.contenu);
-          const resume = resumerFusion(fusion);
-          const divergences =
-            fusion.conflits.length === 0
-              ? ''
-              : ` ${fusion.conflits.length} divergence(s) : ${fusion.conflits
-                  .map(conflit => `${conflit.nom} (${conflit.champs.join(', ')})`)
-                  .join(' ; ')}. Votre version a été gardée.`;
-          setMessageSauvegarde(`${resume.texte}${divergences}`);
-        })
-        .catch((e: unknown) =>
-          setErreurSauvegarde(
-            e instanceof ErreurFusion || e instanceof Error ? e.message : String(e),
-          ),
-        )
-        .finally(() => {
-          setSauvegardeEnCours(false);
-          rafraichir();
-        });
-    },
-    [fichiers, session, rafraichir],
-  );
-
-  const restaurerSauvegarde = useCallback(
-    (chemin: string, motDePasse: string) => {
-      if (!fichiers) {
-        return;
-      }
-      setSauvegardeEnCours(true);
-      setErreurSauvegarde(undefined);
-      setMessageSauvegarde(undefined);
-
-      lireSauvegarde(fichiers, chemin)
-        .then(archive => {
-          const lecture = ouvrirArchive(archive, motDePasse);
-          if (!lecture.ouverte) {
-            setErreurSauvegarde(lecture.motif);
-            return;
-          }
-          const rapport = restaurerDansBase(session.base(), lecture.contenu);
-          setMessageSauvegarde(
-            `Restauration terminée : ${rapport.comptes} compte(s), ${rapport.transactions} opération(s).`,
-          );
-          setEcran('tableau');
-          rafraichir();
-        })
-        .catch((e: unknown) =>
-          setErreurSauvegarde(e instanceof Error ? e.message : String(e)),
-        )
-        .finally(() => setSauvegardeEnCours(false));
-    },
-    [fichiers, session, rafraichir],
-  );
+  const allerAuTableau = useCallback(() => setEcran('tableau'), []);
+  const {
+    fichiers,
+    pontSauvegardes,
+    dossierSauvegardes,
+    sauvegardes,
+    messageSauvegarde,
+    erreurSauvegarde,
+    sauvegardeEnCours,
+    rafraichirSauvegardes,
+    activerSauvegardeAuto,
+    creerSauvegarde,
+    fusionnerSauvegarde,
+    restaurerSauvegarde,
+  } = useSauvegardes({ session, aujourdhui, deverrouille, rafraichir, onRestaure: allerAuTableau });
 
   const genererRapport = useCallback(
     (annee: number) => {
@@ -1483,6 +1235,20 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [session, rafraichir],
   );
 
+  // Notifications de l'ordinateur : le pont d'Electron les affiche. Absent
+  // sur téléphone (le réveil en arrière-plan s'en charge) et dans les tests.
+  const pontNotifications = (globalThis as { applibourse?: { systeme?: PontNotifications } }).applibourse
+    ?.systeme;
+  const { journalNotifications, verifierNotificationsRef } = useNotificationsBureau({
+    session,
+    deverrouille,
+    aujourdhui,
+    chargementAutomatique,
+    pontNotifications,
+    fichesEnCache,
+    lignesCarnet,
+  });
+
   const enregistrerPlanning = useCallback(
     (planning: Planning) => {
       const parametres = new DepotParametres(session.base());
@@ -1512,7 +1278,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       }
       rafraichir();
     },
-    [session, rafraichir],
+    [session, rafraichir, verifierNotificationsRef],
   );
 
   const enregistrerSeuil = useCallback(
@@ -1534,7 +1300,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [session, rafraichir],
   );
 
-  const deverrouille = statut === 'deverrouille' && !secrets;
 
   // Thème : lu à chaque rendu déverrouillé, appliqué avant de dessiner.
   const themeEnregistre = deverrouille
@@ -1552,10 +1317,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     rafraichir();
   };
 
-  // Notifications de l'ordinateur : le pont d'Electron les affiche. Absent
-  // sur téléphone (le réveil en arrière-plan s'en charge) et dans les tests.
-  const pontNotifications = (globalThis as { applibourse?: { systeme?: PontNotifications } }).applibourse
-    ?.systeme;
   const pontDemarrage = (globalThis as { applibourse?: { systeme?: { demarrage?(activer?: boolean): Promise<boolean> } } })
     .applibourse?.systeme?.demarrage;
   const [demarrageAuto, setDemarrageAuto] = useState<boolean | undefined>(undefined);
@@ -1568,204 +1329,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   useEffect(() => {
     pontDemarrage?.().then(setDemarrageAuto).catch(() => undefined);
   }, [pontDemarrage]);
-  const verificationEnCours = useRef(false);
-  const verifierNotificationsRef = useRef<() => Promise<void>>(async () => undefined);
-  const [journalNotifications, setJournalNotifications] = useState<string | undefined>();
-  const verifierNotifications = useCallback(async () => {
-    if (!pontNotifications || verificationEnCours.current) {
-      return;
-    }
-    verificationEnCours.current = true;
-    try {
-      const base = session.base();
-      const parametres = new DepotParametres(base);
-      const depot = new DepotCours(base);
-      const canal = canalBureau(pontNotifications);
-      const resultat = await executerReveil({
-        maintenant: new Date(),
-        planning: planningDepuisJson(parametres.lire(PARAMETRES.planningBriefings)),
-        seuils: seuilsDepuisJson(parametres.lire(PARAMETRES.seuilsAlertes)),
-        etatPersiste: etatDepuisJson(parametres.lire(PARAMETRES.etatNotifications)),
-        canal,
-        lirePortefeuille: async () => {
-          const contenuActuel = chargerEtat(base);
-          return { etat: contenuActuel.etat, titres: contenuActuel.titres };
-        },
-        // Les cours viennent d'être actualisés par la boucle des cours en direct.
-        rafraichirCours: async () => depot.derniersCours(),
-        enregistrer: async etat => parametres.ecrire(PARAMETRES.etatNotifications, JSON.stringify(etat)),
-        // Sur l'ordinateur, le briefing part à l'heure dite, même sans mouvement.
-        toujoursParler: true,
-      });
-      const heure = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      const envoyes = [...resultat.briefingsEnvoyes, ...resultat.alertesEnvoyees];
-      if (resultat.echecs.length > 0) {
-        setJournalNotifications(`${heure} — Windows a refusé la notification : ${resultat.echecs[0]}`);
-      } else if (envoyes.length > 0) {
-        setJournalNotifications(
-          `${heure} — envoyé : ${envoyes
-            .map(id => (id.endsWith('-matin') ? 'briefing du matin' : id.endsWith('-soir') ? 'briefing du soir' : 'alerte de cours'))
-            .join(', ')}.`,
-        );
-      } else {
-        setJournalNotifications(precedent => precedent ?? `${heure} — rien à envoyer pour l’instant.`);
-      }
-
-      // Carnet : la thèse relue quand le cours atteint l'objectif ou le seuil.
-      let deja: string[] = [];
-      try {
-        deja = JSON.parse(parametres.lire(PARAMETRES.evenementsEnvoyes) ?? '[]');
-      } catch {
-        deja = [];
-      }
-      const rappelsEnvoyes: string[] = [];
-      for (const rappel of rappelsCarnet(lignesCarnet(), new Set(deja))) {
-        if (await pontNotifications.notifier(rappel.titre, rappel.corps).catch(() => false)) {
-          rappelsEnvoyes.push(rappel.identifiant);
-        }
-      }
-      if (rappelsEnvoyes.length > 0) {
-        parametres.ecrire(PARAMETRES.evenementsEnvoyes, JSON.stringify(retenirEvenements(deja, rappelsEnvoyes)));
-      }
-      try {
-        stockageLocal()?.setItem(CLE_PLANNING_LOCAL, parametres.lire(PARAMETRES.planningBriefings) ?? '');
-      } catch {
-        // Sans stockage local, pas de rappel verrouillé : rien de plus.
-      }
-
-      // Forte séance : une fois par jour et par sens.
-      const etat = etatDepuisJson(parametres.lire(PARAMETRES.etatNotifications));
-      const date = (aujourdhui ?? dateDuJour)();
-      const alerte = alerteVariation(
-        variationSeance(chargerEtat(base).etat, depot.derniersCours(), separerHistorique(depot.historique()).titres),
-        seuilVariation(parametres.lire(PARAMETRES.seuilVariation)),
-        date,
-        new Set(etat.briefingsEnvoyes),
-      );
-      if (alerte && seanceEnCours()) {
-        await canal.afficher(alerte);
-        parametres.ecrire(
-          PARAMETRES.etatNotifications,
-          JSON.stringify({ ...etat, briefingsEnvoyes: [...etat.briefingsEnvoyes, alerte.identifiant] }),
-        );
-      }
-    } catch {
-      // Une notification manquée ne doit jamais gêner l'application.
-    } finally {
-      verificationEnCours.current = false;
-    }
-  }, [pontNotifications, session, aujourdhui, lignesCarnet]);
-  verifierNotificationsRef.current = verifierNotifications;
-
-  useEffect(() => {
-    if (!deverrouille || !pontNotifications) {
-      return;
-    }
-    const premiere = setTimeout(() => void verifierNotifications(), 15_000);
-    const minuterie = setInterval(() => void verifierNotifications(), 60_000);
-    return () => {
-      clearTimeout(premiere);
-      clearInterval(minuterie);
-    };
-  }, [deverrouille, pontNotifications, verifierNotifications]);
-
-  // Événements sur vos valeurs (détenues et suivies) : résultats, dividende,
-  // grosse actualité recoupée. Une fois par heure, en journée.
-  const evenementsEnCours = useRef(false);
-  const verifierEvenements = useCallback(async () => {
-    if (!pontNotifications || !chargementAutomatique || evenementsEnCours.current) return;
-    if (new Date().getHours() < 7) return;
-    const parametres = new DepotParametres(session.base());
-    if (parametres.lire(PARAMETRES.evenementsActifs) === '0') return;
-    evenementsEnCours.current = true;
-    try {
-      const contenuActuel = chargerEtat(session.base());
-      const titres = new Map(contenuActuel.titres.map(titre => [titre.id, titre]));
-      const ids = [
-        ...contenuActuel.etat.positions.map(position => position.titreId),
-        ...new DepotWatchlist(session.base()).lister().map(ligne => ligne.titreId),
-      ];
-      const suivis = [...new Set(ids)]
-        .map(id => titres.get(id))
-        .filter((titre): titre is Titre => Boolean(titre?.ticker?.trim()))
-        .slice(0, 12);
-      const pontMedias = (globalThis as { applibourse?: { medias?: { flux(url: string): Promise<string> } } }).applibourse
-        ?.medias;
-      const valeurs: ValeurSuivie[] = await Promise.all(
-        suivis.map(async titre => {
-          const symbole = titre.ticker.trim();
-          let donnees = fichesEnCache.current.get(symbole);
-          if (!donnees) {
-            donnees = await chargerValeur(symbole).catch(() => undefined);
-            if (donnees) fichesEnCache.current.set(symbole, donnees);
-          }
-          const url = urlActualitesValeur(titre.nom);
-          const articles =
-            pontMedias && url ? await pontMedias.flux(url).then(lireRechercheActualites).catch(() => []) : [];
-          return {
-            nom: titre.nom,
-            prochainsResultats: donnees?.fiche.resultats.prochaineDate,
-            detachement: donnees?.fiche.dividende.dateDetachement,
-            articles,
-          };
-        }),
-      );
-      let deja: string[] = [];
-      try {
-        deja = JSON.parse(parametres.lire(PARAMETRES.evenementsEnvoyes) ?? '[]');
-      } catch {
-        deja = [];
-      }
-      const alertes = alertesEvenements(valeurs, (aujourdhui ?? dateDuJour)(), new Set(deja));
-      const envoyees: string[] = [];
-      for (const alerte of alertes) {
-        if (await pontNotifications.notifier(alerte.titre, alerte.corps).catch(() => false)) envoyees.push(alerte.identifiant);
-      }
-      if (envoyees.length > 0) {
-        parametres.ecrire(PARAMETRES.evenementsEnvoyes, JSON.stringify(retenirEvenements(deja, envoyees)));
-      }
-    } catch {
-      // Une alerte manquée ne doit jamais gêner l'application.
-    } finally {
-      evenementsEnCours.current = false;
-    }
-  }, [pontNotifications, chargementAutomatique, session, aujourdhui]);
-
-  useEffect(() => {
-    if (!deverrouille || !pontNotifications || !chargementAutomatique) return;
-    const premiere = setTimeout(() => void verifierEvenements(), 60_000);
-    const minuterie = setInterval(() => void verifierEvenements(), 3_600_000);
-    return () => {
-      clearTimeout(premiere);
-      clearInterval(minuterie);
-    };
-  }, [deverrouille, pontNotifications, chargementAutomatique, verifierEvenements]);
-
-  // Verrouillée, l'application ne peut pas lire le portefeuille : à l'heure
-  // d'un briefing, elle prévient seulement qu'il attend.
-  useEffect(() => {
-    if (deverrouille || !pontNotifications) {
-      return;
-    }
-    const verifier = () => {
-      const stockage = stockageLocal();
-      if (!stockage) return;
-      try {
-        const deja: string[] = JSON.parse(stockage.getItem(CLE_RAPPELS_LOCAL) ?? '[]');
-        const rappels = rappelsDus(stockage.getItem(CLE_PLANNING_LOCAL) ?? undefined, new Date(), deja);
-        if (rappels.length === 0) return;
-        stockage.setItem(CLE_RAPPELS_LOCAL, JSON.stringify(retenirRappels(deja, rappels.map(r => r.identifiant))));
-        for (const rappel of rappels) {
-          void pontNotifications.notifier(rappel.titre, rappel.corps).catch(() => undefined);
-        }
-      } catch {
-        // Un rappel manqué ne doit jamais gêner l'écran de déverrouillage.
-      }
-    };
-    const minuterie = setInterval(verifier, 60_000);
-    return () => clearInterval(minuterie);
-  }, [deverrouille, pontNotifications]);
-
   // Podcast prêt au réveil : à l'heure choisie, une fois par jour, fenêtre ouverte.
   // Rempli plus bas, une fois genererPodcast défini.
   const genererPodcastRef = useRef<(minutes?: number, automatique?: boolean) => void>(() => undefined);
@@ -1981,15 +1544,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   const verrou = statut === 'non-initialise' ? undefined : session.verrou();
 
-  useEffect(() => {
-    if (!deverrouille || !fichiers) return;
-    const premiere = setTimeout(() => void sauvegarderSiDu(), 20_000);
-    const minuterie = setInterval(() => void sauvegarderSiDu(), 3_600_000);
-    return () => {
-      clearTimeout(premiere);
-      clearInterval(minuterie);
-    };
-  }, [deverrouille, fichiers, sauvegarderSiDu]);
 
   // Infobulle de l'icône près de l'horloge : la valeur, sauf en mode discret
   // ou verrouillée — elle se lit par-dessus l'épaule.
