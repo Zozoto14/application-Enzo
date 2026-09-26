@@ -302,6 +302,26 @@ describe('parcours complet, session ouverte', () => {
     }
   });
 
+  it('écrit une thèse dans le carnet et la retrouve', async () => {
+    const session = await ouvrir();
+    await creerCompte();
+    await fireEvent.press(screen.getByTestId('bouton-importer-positions'));
+    await fireEvent.changeText(screen.getByLabelText('Contenu du fichier'), EXPORT_REEL);
+    await fireEvent.press(screen.getByTestId('bouton-importer'));
+
+    await fireEvent.press(screen.getByTestId('nav-carnet'));
+    const stellantis = new DepotTitres(session.base()).tous().find(titre => /STELLANTIS/.test(titre.nom))!;
+    await fireEvent.press(screen.getByTestId(`ecrire-${stellantis.id}`));
+    await fireEvent.changeText(screen.getByTestId('champ-pourquoi'), 'Décote forte, dividende élevé.');
+    await fireEvent.changeText(screen.getByTestId('champ-objectif-these'), '20');
+    await fireEvent.press(screen.getByTestId('enregistrer-these'));
+
+    expect(screen.getByTestId(`these-${stellantis.id}`)).toBeTruthy();
+    expect(screen.getByText('Décote forte, dividende élevé.')).toBeTruthy();
+    const carnet = JSON.parse(new DepotParametres(session.base()).lire(PARAMETRES.carnetTheses)!);
+    expect(carnet[stellantis.id]).toMatchObject({ pourquoi: 'Décote forte, dividende élevé.', objectif: 20, ecriteLe: '2026-09-22' });
+  });
+
   it('refuse un compte sans date d’ouverture', async () => {
     // Pour un PEA, cette date fait courir l'antériorité fiscale.
     await ouvrir();

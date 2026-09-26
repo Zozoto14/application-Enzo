@@ -495,6 +495,8 @@ export const PARAMETRES = {
   evenementsActifs: 'notifications.evenements_actifs',
   /** Identifiants des alertes d'événements déjà envoyées (JSON). */
   evenementsEnvoyes: 'notifications.evenements_envoyes',
+  /** Carnet de thèses, par valeur (JSON). */
+  carnetTheses: 'carnet.theses',
 } as const;
 
 /**

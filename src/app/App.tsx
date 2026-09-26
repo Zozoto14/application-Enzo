@@ -87,6 +87,8 @@ import { Recuperation } from '../ui/ecrans/Recuperation';
 import { ACCUEIL_BAGGR } from '../ui/vues/liens';
 import { Recherche } from '../ui/ecrans/Recherche';
 import { Screener } from '../ui/ecrans/Screener';
+import { Carnet } from '../ui/ecrans/Carnet';
+import { carnetDepuisJson, construireCarnet, rappelsCarnet } from '../ui/vues/carnet';
 import { lireScreener, requeteScreener, type CleCategorie, type Region, type TriScreener } from '../fondamentaux/screener';
 import { ajouterHistorique, historiqueDepuisJson } from '../ui/vues/historiqueRecherche';
 import { chargerTheses, type ValeurCherchee } from '../fondamentaux/theses';
@@ -182,6 +184,7 @@ type Ecran =
   | 'watchlist'
   | 'recherche'
   | 'screener'
+  | 'carnet'
   | 'symboles'
   | 'comparateur'
   | 'fiche'
@@ -1268,6 +1271,24 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [surveillerCandidat],
   );
 
+  /** Lignes du carnet : valeurs détenues puis suivies, sans doublon. */
+  const lignesCarnet = useCallback(() => {
+    const base = session.base();
+    const contenuActuel = chargerEtat(base);
+    const noms = new Map(contenuActuel.titres.map(titre => [titre.id, titre.nom]));
+    const ids = [
+      ...new Set([
+        ...contenuActuel.etat.positions.map(position => position.titreId),
+        ...new DepotWatchlist(base).lister().map(ligne => ligne.titreId),
+      ]),
+    ];
+    return construireCarnet(
+      ids.map(titreId => ({ titreId, nom: noms.get(titreId) ?? titreId })),
+      carnetDepuisJson(new DepotParametres(base).lire(PARAMETRES.carnetTheses)),
+      new DepotCours(base).derniersCours(),
+    );
+  }, [session]);
+
   /** Symboles des valeurs en watchlist, en majuscules. */
   const symbolesSurveilles = (): Set<string> => {
     const titres = new Map(new DepotTitres(session.base()).tous().map(titre => [titre.id, titre.ticker.toUpperCase()]));
@@ -1531,6 +1552,23 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       } else {
         setJournalNotifications(precedent => precedent ?? `${heure} — rien à envoyer pour l’instant.`);
       }
+
+      // Carnet : la thèse relue quand le cours atteint l'objectif ou le seuil.
+      let deja: string[] = [];
+      try {
+        deja = JSON.parse(parametres.lire(PARAMETRES.evenementsEnvoyes) ?? '[]');
+      } catch {
+        deja = [];
+      }
+      const rappelsEnvoyes: string[] = [];
+      for (const rappel of rappelsCarnet(lignesCarnet(), new Set(deja))) {
+        if (await pontNotifications.notifier(rappel.titre, rappel.corps).catch(() => false)) {
+          rappelsEnvoyes.push(rappel.identifiant);
+        }
+      }
+      if (rappelsEnvoyes.length > 0) {
+        parametres.ecrire(PARAMETRES.evenementsEnvoyes, JSON.stringify(retenirEvenements(deja, rappelsEnvoyes)));
+      }
       try {
         stockageLocal()?.setItem(CLE_PLANNING_LOCAL, parametres.lire(PARAMETRES.planningBriefings) ?? '');
       } catch {
@@ -1558,7 +1596,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     } finally {
       verificationEnCours.current = false;
     }
-  }, [pontNotifications, session, aujourdhui]);
+  }, [pontNotifications, session, aujourdhui, lignesCarnet]);
   verifierNotificationsRef.current = verifierNotifications;
 
   useEffect(() => {
@@ -1978,6 +2016,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     // La fiche ouverte se range sous la Recherche, d'où on l'ouvre le plus souvent.
     ...(fiche ? [{ cle: 'fiche', libelle: fiche.vue?.entete.nom ?? fiche.symbole, glyphe: '◧', sous: true }] : []),
     { cle: 'watchlist', libelle: 'Watchlist', glyphe: '☆' },
+    { cle: 'carnet', libelle: 'Mon carnet', glyphe: '✎' },
     { cle: 'comparateur', libelle: 'Comparateur', glyphe: '⇄' },
     { cle: 'podcast', libelle: 'Podcast', glyphe: '♫' },
     { cle: 'objectifs', libelle: 'Objectifs', glyphe: '◎' },
@@ -2357,6 +2396,19 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             )
           }
           onRetour={() => setEcran('tableau')}
+        />
+      ) : ecran === 'carnet' ? (
+        <Carnet
+          lignes={lignesCarnet()}
+          aujourdhui={(aujourdhui ?? dateDuJour)()}
+          onEnregistrer={(titreId, these) => {
+            const parametres = new DepotParametres(session.base());
+            const carnet = carnetDepuisJson(parametres.lire(PARAMETRES.carnetTheses));
+            if (these) carnet[titreId] = these;
+            else delete carnet[titreId];
+            parametres.ecrire(PARAMETRES.carnetTheses, JSON.stringify(carnet));
+            rafraichir();
+          }}
         />
       ) : ecran === 'screener' ? (
         <Screener
