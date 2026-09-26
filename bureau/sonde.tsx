@@ -47,6 +47,7 @@ import { useFondDocument } from './Bureau';
 import { definirDiscretion } from '../src/ui/discretion';
 import { Objectifs } from '../src/ui/ecrans/Objectifs';
 import { definirTheme } from '../src/ui/theme';
+import { LecteurFlottant } from '../src/ui/lecturePodcast';
 import { Coque, type Destination } from '../src/ui/Navigation';
 import { Podcast } from '../src/ui/ecrans/Podcast';
 import { construireEpisode } from '../src/podcast/episode';
@@ -180,7 +181,7 @@ function Apercu() {
   const [champs, setChamps] = useState(CHAMPS_DEFAUT);
 
   return (
-    <Coque destinations={DESTINATIONS} actif={destination} onNaviguer={setDestination} onVerrouiller={() => undefined} discret={discret} onBasculerDiscretion={() => setDiscret(!discret)}>
+    <Coque destinations={DESTINATIONS} actif={destination} onNaviguer={setDestination} onVerrouiller={() => undefined} discret={discret} onBasculerDiscretion={() => setDiscret(!discret)} flottant={destination !== 'podcast' ? <LecteurFlottant onOuvrir={() => setDestination('podcast')} /> : null}>
       {destination === 'portefeuille' ? (
         <Portefeuille
           dashboard={construireDashboard({ etat, comptes, titres, cours })}

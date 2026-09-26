@@ -72,6 +72,8 @@ import { SOCIETES_MAXIMUM } from '../ui/vues/comparaisonFinanciere';
 import { chercherSymboles, type CandidatSymbole } from '../cours/symboles';
 import { Comparateur } from '../ui/ecrans/Comparateur';
 import { Podcast } from '../ui/ecrans/Podcast';
+import { LecteurFlottant } from '../ui/lecturePodcast';
+import { lecturePartagee } from '../podcast/lecture';
 import { Objectifs } from '../ui/ecrans/Objectifs';
 import { objectifDepuisJson, type LigneCible } from '../ui/vues/objectifs';
 import { preparerEpisode } from '../podcast/donnees';
@@ -460,6 +462,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   );
 
   const verrouiller = useCallback(() => {
+    // Le podcast parle de votre argent : il se tait quand on verrouille.
+    lecturePartagee().arreter();
     session.verrouiller();
     setEcran('tableau');
     rafraichir();
@@ -1612,7 +1616,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         onNaviguer={naviguer}
         onVerrouiller={deverrouille && contenuComplet && tableau ? verrouiller : undefined}
         discret={discret}
-        onBasculerDiscretion={deverrouille && contenuComplet && tableau ? basculerDiscretion : undefined}>
+        onBasculerDiscretion={deverrouille && contenuComplet && tableau ? basculerDiscretion : undefined}
+        flottant={ecran !== 'podcast' ? <LecteurFlottant onOuvrir={() => setEcran('podcast')} /> : null}>
       {secrets ? (
         <PremierLancement
           onCreer={creer}

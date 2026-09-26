@@ -6,21 +6,17 @@
  * la vitesse et la voix, et suivre le texte pendant la lecture.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Bouton, Champ, usePalette } from '../composants';
 import { CarteSection, Rangee, Segments, Selecteur, Vide } from '../elements';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
-import { phrases, type Episode } from '../../podcast/episode';
+import type { Episode } from '../../podcast/episode';
+import { useEtatLecture, useLecture } from '../lecturePodcast';
 import type { StatutSource } from '../../podcast/medias';
-import { creerLecteur, type PhraseALire } from '../../podcast/lecteur';
 
 type Vitesse = '0,9×' | '1×' | '1,15×' | '1,3×';
 const VITESSES: Record<Vitesse, number> = { '0,9×': 0.9, '1×': 1, '1,15×': 1.15, '1,3×': 1.3 };
-
-interface PhraseDeChapitre extends PhraseALire {
-  chapitre: number;
-}
 
 export interface PodcastProps {
   episode?: Episode;
@@ -50,71 +46,21 @@ export function Podcast({
 }: PodcastProps) {
   const [heureSaisie, setHeureSaisie] = useState(heureAuto ?? '07:30');
   const palette = usePalette();
-  const lecteur = useMemo(() => creerLecteur(), []);
-  const [etat, setEtat] = useState<'arret' | 'lecture' | 'pause'>('arret');
-  const [courante, setCourante] = useState(0);
-  const [vitesse, setVitesse] = useState<Vitesse>('1×');
-  const [voix, setVoix] = useState(lecteur.voix());
-  const [voixChoisie, setVoixChoisie] = useState<string | undefined>();
-  const [avertissement, setAvertissement] = useState<string | undefined>();
+  // La lecture est partagée par toute l'application : quitter cet écran ne
+  // la coupe pas, le lecteur flottant prend le relais.
+  const lecture = useLecture();
+  const { lecteur } = lecture;
+  const { etat, courante, file, voix, voixChoisie, avertissement, vitesse: vitesseLue } = useEtatLecture();
+  const vitesse = (Object.keys(VITESSES) as Vitesse[]).find(cle => VITESSES[cle] === vitesseLue) ?? '1×';
 
-  useEffect(() => lecteur.surChangementVoix(() => setVoix(lecteur.voix())), [lecteur]);
-  // Quitter l'écran arrête la lecture.
-  useEffect(() => () => lecteur.arreter(), [lecteur]);
-
-  const file: PhraseDeChapitre[] = useMemo(
-    () =>
-      (episode?.chapitres ?? []).flatMap((chapitre, rang) =>
-        chapitre.segments.flatMap(segment =>
-          phrases(segment.texte).map(texte => ({ texte, langue: segment.langue, chapitre: rang })),
-        ),
-      ),
-    [episode],
-  );
-
-  // Nouvel épisode : on repart du début.
+  // Un nouvel épisode remplace l'ancien ; revenir sur l'écran ne change rien.
   useEffect(() => {
-    lecteur.arreter();
-    setEtat('arret');
-    setCourante(0);
-  }, [episode, lecteur]);
+    lecture.charger(episode);
+  }, [episode, lecture]);
 
-  const lireDepuis = (index: number, vitesseLecture = VITESSES[vitesse], voixLecture = voixChoisie) => {
-    setCourante(index);
-    setEtat('lecture');
-    setAvertissement(undefined);
-    lecteur.lire(file, index, { vitesse: vitesseLecture, voixFrancaise: voixLecture ?? voix[0]?.id }, {
-      surPhrase: setCourante,
-      surErreur: setAvertissement,
-      surFin: () => {
-        setEtat('arret');
-        setCourante(0);
-      },
-    });
-  };
-
-  const basculer = () => {
-    if (etat === 'lecture') {
-      lecteur.pause();
-      setEtat('pause');
-    } else if (etat === 'pause') {
-      lecteur.reprendre();
-      setEtat('lecture');
-    } else {
-      lireDepuis(courante);
-    }
-  };
-
+  const basculer = () => lecture.basculer();
   const chapitreCourant = file[courante]?.chapitre ?? 0;
-  const debutChapitre = (rang: number) => Math.max(0, file.findIndex(phrase => phrase.chapitre === rang));
-  const allerAuChapitre = (rang: number) => {
-    const index = debutChapitre(rang);
-    if (etat === 'arret') {
-      setCourante(index);
-    } else {
-      lireDepuis(index);
-    }
-  };
+  const allerAuChapitre = (rang: number) => lecture.allerAuChapitre(rang);
 
   return (
     <View style={[stylesPartages.ecran, { backgroundColor: palettePour().fond }]}>
@@ -249,10 +195,7 @@ export function Podcast({
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Arrêter"
-                    onPress={() => {
-                      lecteur.arreter();
-                      setEtat('arret');
-                    }}
+                    onPress={() => lecture.arreter()}
                     style={[styles.petitBouton, { borderColor: palette.bordure }]}>
                     <Text style={{ color: palette.texte, fontSize: 16 }}>■</Text>
                   </Pressable>
@@ -262,24 +205,14 @@ export function Podcast({
                 <Segments<Vitesse>
                   options={Object.keys(VITESSES) as Vitesse[]}
                   actif={vitesse}
-                  onChoisir={valeur => {
-                    setVitesse(valeur);
-                    if (etat === 'lecture') {
-                      lireDepuis(courante, VITESSES[valeur]);
-                    }
-                  }}
+                  onChoisir={valeur => lecture.changerVitesse(VITESSES[valeur])}
                 />
                 {voix.length > 0 ? (
                   <Selecteur
                     etiquette="Voix"
                     valeur={voixChoisie ?? voix[0].id}
                     options={voix.map(element => ({ valeur: element.id, libelle: element.nom }))}
-                    onChoisir={valeur => {
-                      setVoixChoisie(valeur);
-                      if (etat === 'lecture') {
-                        lireDepuis(courante, VITESSES[vitesse], valeur);
-                      }
-                    }}
+                    onChoisir={valeur => lecture.changerVoix(valeur)}
                     largeur={280}
                   />
                 ) : null}
@@ -330,7 +263,7 @@ export function Podcast({
                           .map(({ phrase, index }) => (
                             <Text
                               key={index}
-                              onPress={() => (etat === 'arret' ? setCourante(index) : lireDepuis(index))}
+                              onPress={() => lecture.placer(index)}
                               style={{
                                 color: index === courante && etat !== 'arret' ? palette.texte : palette.texteSecondaire,
                                 backgroundColor: index === courante && etat !== 'arret' ? palette.accentFond : 'transparent',

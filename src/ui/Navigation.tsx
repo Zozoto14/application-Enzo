@@ -54,6 +54,7 @@ export function Coque({
   onVerrouiller,
   discret = false,
   onBasculerDiscretion,
+  flottant,
   children,
 }: {
   destinations: readonly Destination[];
@@ -63,6 +64,8 @@ export function Coque({
   /** Mode discret : montants masqués. */
   discret?: boolean;
   onBasculerDiscretion?(): void;
+  /** Élément posé par-dessus le contenu (le lecteur du podcast). */
+  flottant?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const palette = usePalette();
@@ -111,7 +114,10 @@ export function Coque({
             ) : null}
           </ScrollView>
         </View>
-        <View style={styles.contenu}>{children}</View>
+        <View style={styles.contenu}>
+          {children}
+          {flottant}
+        </View>
       </View>
       </NavigationPresente.Provider>
     );
@@ -187,7 +193,10 @@ export function Coque({
           </View>
         ) : null}
       </View>
-      <View style={styles.contenu}>{children}</View>
+      <View style={styles.contenu}>
+          {children}
+          {flottant}
+        </View>
     </View>
     </NavigationPresente.Provider>
   );

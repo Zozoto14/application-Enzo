@@ -111,7 +111,11 @@ function Comptes(props: ComparateurFinancierProps) {
   const [postes, setPostes] = useState<string[]>(['Chiffre d’affaires']);
   const [base100, setBase100] = useState(false);
 
-  const societeActive = props.societes.find(societe => societe.symbole === actif) ?? props.societes.find(s => s.comptes);
+  // Par défaut, la première société qui a vraiment des comptes : un ETF n'en a pas.
+  const societeActive =
+    props.societes.find(societe => societe.symbole === actif) ??
+    props.societes.find(aDesComptes) ??
+    props.societes[0];
   const etats = etatsDe(societeActive);
   const etat = etats?.etats.find(element => element.titre === titreEtat) ?? etats?.etats[0];
   const series = useMemo(
@@ -188,8 +192,8 @@ function Comptes(props: ComparateurFinancierProps) {
                   { borderColor: choisie ? palette.accent : palette.bordure, backgroundColor: choisie ? palette.accentFond : 'transparent' },
                 ]}>
                 <View style={[styles.pastille, { backgroundColor: palette.series[index % palette.series.length] }]} />
-                <Pressable accessibilityRole="button" onPress={() => setActif(societe.symbole)}>
-                  <Text style={{ color: choisie ? palette.accent : palette.texte, fontWeight: '700', fontSize: 13 }} numberOfLines={1}>
+                <Pressable accessibilityRole="button" onPress={() => setActif(societe.symbole)} style={{ flexShrink: 1 }}>
+                  <Text style={{ color: choisie ? palette.accent : palette.texte, fontWeight: '700', fontSize: 13, flexShrink: 1 }} numberOfLines={1}>
                     {societe.nom}
                     {societe.chargement ? ' · chargement…' : ''}
                   </Text>
@@ -290,9 +294,27 @@ function Comptes(props: ComparateurFinancierProps) {
         <CarteSection>
           <Vide>Chargement des comptes…</Vide>
         </CarteSection>
+      ) : societeActive ? (
+        <CarteSection testID="comparateur-sans-comptes">
+          <Vide>
+            {estFonds(societeActive.nom)
+              ? `${societeActive.nom} est un fonds (ETF) : il n’a pas de comptes de société — chiffre d’affaires, bénéfices — à comparer. Ajoutez des entreprises, comme Air Liquide ou Stellantis, ou comparez son cours dans l’onglet « Cours de vos valeurs ».`
+              : `Yahoo Finance n’a pas renvoyé les comptes de ${societeActive.nom}. Réessayez plus tard, ou retirez-la et ajoutez-la de nouveau.`}
+          </Vide>
+        </CarteSection>
       ) : null}
     </>
   );
+}
+
+/** Une société dont au moins un poste des comptes est connu. */
+function aDesComptes(societe: SocieteComparee): boolean {
+  return Boolean(societe.comptes && Object.values(societe.comptes).some(points => points && points.length > 0));
+}
+
+/** ETF, fonds, tracker : pas de comptes de société. */
+function estFonds(nom: string): boolean {
+  return /\b(etf|ucits|index|fund|fonds|tracker|sicav|msci|s&p 500|nasdaq|stoxx)\b/i.test(nom);
 }
 
 function Ajout({ onRechercher, onAjouter }: ComparateurFinancierProps) {
