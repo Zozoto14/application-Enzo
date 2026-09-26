@@ -13,7 +13,7 @@
  */
 
 import type { Actualite } from '../fondamentaux/actualites';
-import type { ArticleMedia } from './medias';
+import { autresSources, mediaReconnu, statutSource, type ArticleMedia, type StatutSource } from './medias';
 import { expositionDe, impactPourVous, type ExpositionPortefeuille } from './impacts';
 
 export interface Segment {
@@ -33,7 +33,15 @@ export interface Episode {
   /** Durée approximative d'écoute, en minutes. */
   duree: number;
   /** Articles racontés, pour les retrouver après l'écoute. */
-  sources: Array<{ titre: string; source: string; lien?: string }>;
+  sources: Array<{
+    titre: string;
+    source: string;
+    lien?: string;
+    /** Recoupée par un autre média, signée par un média reconnu, ou non vérifiée. */
+    statut: StatutSource;
+    /** Médias qui rapportent la même information. */
+    confirmations: string[];
+  }>;
 }
 
 export interface LigneEpisode {
@@ -122,7 +130,9 @@ function raconterArticle(
   introduction: string,
   expose?: ExpositionPortefeuille,
 ): Segment[] {
-  const segments: Segment[] = [fr(`${introduction}${article.source ? ` ${article.source}` : ''} :`)];
+  // Un site inconnu est annoncé comme tel : l'auditeur pèse l'information.
+  const prudence = article.source && !mediaReconnu(article.source) ? ', un site que l’application ne connaît pas' : '';
+  const segments: Segment[] = [fr(`${introduction}${article.source ? ` ${article.source}` : ''}${prudence} :`)];
   segments.push({ texte: titreFini(article.titre), langue: article.langue });
   if (article.resume) {
     segments.push({ texte: titreFini(article.resume), langue: article.langue });
@@ -305,7 +315,7 @@ export function construireEpisode(entrees: EntreesEpisode): Episode {
         articlesUtilises.add(article);
         phrases.push({ texte: titreFini(article.titre), langue: article.langue });
         if (article.source) {
-          phrases.push(fr(`C’était chez ${article.source}.`));
+          phrases.push(fr(`C’était chez ${article.source}${mediaReconnu(article.source) ? '' : ', une source non vérifiée'}.`));
         }
       }
     }
@@ -476,6 +486,10 @@ export function construireEpisode(entrees: EntreesEpisode): Episode {
     );
   }
 
+  const tousLesArticles = [
+    ...(entrees.presse ?? []),
+    ...entrees.valeurs.flatMap(valeur => valeur.articles ?? []),
+  ];
   const total = compterMots(chapitres.flatMap(c => c.segments));
   return {
     titre: `Votre point bourse du ${dateParlee(entrees.aujourdhui, false)}`,
@@ -486,6 +500,8 @@ export function construireEpisode(entrees: EntreesEpisode): Episode {
       titre: article.titre,
       source: article.source,
       lien: article.lien,
+      statut: statutSource(article, tousLesArticles),
+      confirmations: autresSources(article, tousLesArticles),
     })),
   };
 }

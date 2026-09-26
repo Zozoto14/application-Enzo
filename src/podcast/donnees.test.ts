@@ -139,7 +139,7 @@ describe('revue de presse dans l’épisode', () => {
     const une = episode.chapitres.find(chapitre => chapitre.titre === 'Vos valeurs à la une')!;
     expect(une.segments.map(segment => segment.texte).join(' ')).toContain('Le MSCI World au plus haut.');
     expect(episode.sources).toEqual([
-      { titre: 'Le MSCI World au plus haut', source: 'Les Echos', lien: 'https://exemple.fr/msci' },
+      { titre: 'Le MSCI World au plus haut', source: 'Les Echos', lien: 'https://exemple.fr/msci', statut: 'reconnue', confirmations: [] },
     ]);
   });
 });

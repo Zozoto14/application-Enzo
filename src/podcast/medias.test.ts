@@ -1,11 +1,14 @@
 import {
+  autresSources,
   chargerMedias,
   concerne,
   lireFlux,
   lireRechercheActualites,
+  mediaReconnu,
   motsCles,
   requeteValeur,
   resumeCourt,
+  statutSource,
   texteBrut,
   urlActualitesValeur,
 } from './medias';
@@ -113,5 +116,30 @@ describe('actualités par valeur', () => {
         langue: 'fr',
       },
     ]);
+  });
+});
+
+describe('fiabilité des sources', () => {
+  const article = (titre: string, source: string) => ({ titre, resume: '', source, date: '2026-09-25', langue: 'fr' as const });
+
+  it('reconnaît les médias établis, quelle que soit la graphie', () => {
+    expect(mediaReconnu('Les Echos')).toBe(true);
+    expect(mediaReconnu('BFM Bourse')).toBe(true);
+    expect(mediaReconnu('Boursorama.com')).toBe(true);
+    expect(mediaReconnu('Le Figaro Économie')).toBe(true);
+    expect(mediaReconnu('super-bourse-gratuite.net')).toBe(false);
+    expect(mediaReconnu('')).toBe(false);
+  });
+
+  it('dit recoupée quand un autre média rapporte la même information', () => {
+    const a = article('Air Liquide relève ses objectifs annuels après un bon trimestre', 'Zonebourse');
+    const b = article('Air Liquide relève ses objectifs pour l’année', 'Les Echos');
+    const c = article('La BCE maintient ses taux directeurs', 'Le Monde');
+    const d = article('Air Liquide : un blogueur prédit un triplement', 'monblogbourse.fr');
+    const tous = [a, b, c, d];
+    expect(statutSource(a, tous)).toBe('recoupee');
+    expect(autresSources(a, tous)).toEqual(['Les Echos']);
+    expect(statutSource(c, tous)).toBe('reconnue');
+    expect(statutSource(d, tous)).toBe('non-verifiee');
   });
 });

@@ -151,6 +151,8 @@ const episodeExemple = construireEpisode({
     { titre: 'Le pétrole recule après la hausse des stocks américains', resume: 'Le baril de Brent perd près de deux pour cent. Les réserves ont augmenté plus que prévu.', source: 'Le Figaro', date: '2025-06-17', langue: 'fr' },
     { titre: 'L’inflation française ralentit en mai', resume: 'Les prix à la consommation progressent de 0,7 % sur un an selon l’Insee. L’énergie tire l’indice vers le bas.', source: 'franceinfo', date: '2025-06-17', langue: 'fr' },
     { titre: 'Nvidia tops $4 trillion as AI rally extends', resume: 'The chipmaker became the most valuable company in the world. Investors keep betting on AI spending.', source: 'CNBC', date: '2025-06-17', langue: 'en' },
+    { titre: 'La BCE laisse ses taux inchangés, sans surprise', resume: 'Christine Lagarde reste prudente sur la suite.', source: 'Le Figaro', date: '2025-06-17', langue: 'fr' },
+    { titre: 'Ce petit ETF va exploser en 2026, selon un analyste', resume: 'Un placement présenté comme sans risque.', source: 'bourse-express-gratuit.net', date: '2025-06-17', langue: 'fr' },
     { titre: 'Treasury yields slip ahead of Fed decision', resume: 'The 10-year yield fell to 4.3%. Traders expect rates to stay on hold.', source: 'MarketWatch', date: '2025-06-17', langue: 'en' },
   ],
   cibleMinutes: 10,

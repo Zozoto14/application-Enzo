@@ -221,3 +221,63 @@ export function lireRechercheActualites(xml: string): ArticleMedia[] {
     return { ...article, titre, source, resume };
   });
 }
+
+// ---------------------------------------------------- Fiabilité des sources
+
+/**
+ * Rédactions établies, connues pour leur travail de presse économique.
+ * Ce n'est pas un gage de vérité — seulement la garantie qu'un journal
+ * identifié, avec une rédaction, signe l'article.
+ */
+const MEDIAS_RECONNUS = [
+  'les echos', 'le monde', 'le figaro', 'franceinfo', 'france info', 'bfm', 'bfm business', 'bfm bourse',
+  'boursorama', 'zonebourse', 'investir', 'capital', 'challenges', 'la tribune', 'l agefi', 'agefi',
+  'le revenu', 'mieux vivre votre argent', 'l express', 'le point', 'le parisien', 'liberation',
+  'ouest france', 'afp', 'reuters', 'bloomberg', 'financial times', 'the wall street journal',
+  'wall street journal', 'cnbc', 'marketwatch', 'barron s', 'the economist', 'associated press',
+  'yahoo finance', 'morningstar', 'abc bourse', 'boursier com', 'tradingsat', 'radio france', 'rfi',
+  'france 24', 'euronews', 'les echos investir', 'le journal des finances', 'forbes', 'fortune',
+];
+
+export type StatutSource = 'recoupee' | 'reconnue' | 'non-verifiee';
+
+function nomNormalise(texte: string): string {
+  return texte
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+export function mediaReconnu(source: string): boolean {
+  const nom = nomNormalise(source);
+  return Boolean(nom) && MEDIAS_RECONNUS.some(connu => nom === connu || nom.startsWith(`${connu} `));
+}
+
+/** Mots porteurs d'un titre : quatre lettres et plus. */
+function motsPorteurs(titre: string): Set<string> {
+  return new Set(nomNormalise(titre).split(' ').filter(mot => mot.length >= 4));
+}
+
+/** Autres médias qui rapportent la même information (titres proches). */
+export function autresSources(article: ArticleMedia, tous: readonly ArticleMedia[]): string[] {
+  const mots = motsPorteurs(article.titre);
+  const autres = new Set<string>();
+  for (const candidat of tous) {
+    if (candidat === article || nomNormalise(candidat.source) === nomNormalise(article.source)) continue;
+    let communs = 0;
+    for (const mot of motsPorteurs(candidat.titre)) if (mots.has(mot)) communs += 1;
+    if (communs >= 3) autres.add(candidat.source);
+  }
+  return [...autres];
+}
+
+/**
+ * Recoupée : au moins un autre média rapporte la même information.
+ * Reconnue : un média établi la signe. Sinon : non vérifiée.
+ */
+export function statutSource(article: ArticleMedia, tous: readonly ArticleMedia[]): StatutSource {
+  if (autresSources(article, tous).length > 0) return 'recoupee';
+  return mediaReconnu(article.source) ? 'reconnue' : 'non-verifiee';
+}

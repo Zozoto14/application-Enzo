@@ -12,6 +12,7 @@ import { Bouton, Champ, usePalette } from '../composants';
 import { CarteSection, Rangee, Segments, Selecteur, Vide } from '../elements';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
 import { phrases, type Episode } from '../../podcast/episode';
+import type { StatutSource } from '../../podcast/medias';
 import { creerLecteur, type PhraseALire } from '../../podcast/lecteur';
 
 type Vitesse = '0,9×' | '1×' | '1,15×' | '1,3×';
@@ -348,6 +349,16 @@ export function Podcast({
 
             {episode.sources.length > 0 ? (
               <CarteSection titre={`Sources (${episode.sources.length})`} testID="sources-podcast">
+                <View style={styles.legende}>
+                  {(['recoupee', 'reconnue', 'non-verifiee'] as const).map(statut => (
+                    <View key={statut} style={styles.legendeLigne}>
+                      <Badge statut={statut} />
+                      <Text style={{ color: palette.texteSecondaire, fontSize: 12, flexShrink: 1 }}>
+                        {EXPLICATIONS_STATUT[statut]}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
                 {episode.sources.map((source, rang) => (
                   <Pressable
                     key={`${rang}-${source.titre}`}
@@ -358,9 +369,17 @@ export function Podcast({
                     <Text style={{ color: palette.texteSecondaire, fontSize: 12, fontWeight: '700', minWidth: 96 }}>
                       {source.source}
                     </Text>
-                    <Text style={{ color: source.lien ? palette.accent : palette.texte, flex: 1, fontSize: 13 }}>
-                      {source.titre}
-                    </Text>
+                    <View style={{ flex: 1, minWidth: 200, gap: 4 }}>
+                      <Text style={{ color: source.lien ? palette.accent : palette.texte, fontSize: 13 }}>
+                        {source.titre}
+                      </Text>
+                      {source.confirmations.length > 0 ? (
+                        <Text style={{ color: palette.texteSecondaire, fontSize: 11 }}>
+                          Aussi chez {source.confirmations.slice(0, 3).join(', ')}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <Badge statut={source.statut} />
                   </Pressable>
                 ))}
               </CarteSection>
@@ -372,7 +391,41 @@ export function Podcast({
   );
 }
 
+const LIBELLES_STATUT: Record<StatutSource, string> = {
+  recoupee: '✓✓ Recoupée',
+  reconnue: '✓ Média reconnu',
+  'non-verifiee': '! Non vérifiée',
+};
+
+const EXPLICATIONS_STATUT: Record<StatutSource, string> = {
+  recoupee: 'au moins deux médias différents rapportent la même information',
+  reconnue: 'signée par un média de presse économique établi, une seule source',
+  'non-verifiee': 'site inconnu de l’application : à prendre avec prudence',
+};
+
+/** Pastille de fiabilité d'une source : ce n'est pas une vérification des faits. */
+function Badge({ statut }: { statut: StatutSource }) {
+  const palette = usePalette();
+  const couleurs =
+    statut === 'recoupee'
+      ? { fond: palette.hausseFond, texte: palette.hausse }
+      : statut === 'reconnue'
+        ? { fond: palette.surfaceHaute, texte: palette.texte }
+        : { fond: palette.baisseFond, texte: palette.baisse };
+  return (
+    <View
+      accessibilityLabel={`Source : ${LIBELLES_STATUT[statut]}`}
+      testID={`badge-${statut}`}
+      style={[styles.badge, { backgroundColor: couleurs.fond }]}>
+      <Text style={{ color: couleurs.texte, fontSize: 11, fontWeight: '800' }}>{LIBELLES_STATUT[statut]}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  badge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start' },
+  legende: { gap: 6, paddingBottom: ESPACEMENT.s },
+  legendeLigne: { flexDirection: 'row', alignItems: 'center', gap: ESPACEMENT.s, flexWrap: 'wrap' },
   page: { padding: ESPACEMENT.m + 4, gap: ESPACEMENT.m },
   format: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: ESPACEMENT.m },
   source: {
