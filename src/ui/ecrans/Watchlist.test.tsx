@@ -1,6 +1,7 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Watchlist } from './Watchlist';
+import { installerConvertisseur } from '../../cours/change';
 import type { LigneSurveillee, VueWatchlist } from '../vues/watchlist';
 import { construireFiche } from '../vues/fiche';
 import { COMPTES_EXEMPLE, RESUME_EXEMPLE, historiqueExemple } from '../../fondamentaux/exemples';
@@ -10,6 +11,7 @@ const ligne = (partiel: Partial<LigneSurveillee>): LigneSurveillee => ({
   titreId: 'x',
   nom: 'X',
   ticker: 'X',
+  devise: 'EUR',
   tendance: 'neutre',
   depuis: 'Suivie depuis le 01/09/2026.',
   seuilHaut: '',
@@ -71,5 +73,28 @@ describe('Watchlist façon Baggr', () => {
     await fireEvent.press(screen.getByTestId('onglet-surveillance-theses'));
     expect(screen.getByText('Thèses — Watchlist')).toBeTruthy();
     expect(screen.getByText(/application de bureau/)).toBeTruthy();
+  });
+
+  it('affiche en euros un cours coté en zlotys, avec le prix d’origine en dessous', async () => {
+    installerConvertisseur(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ chart: { result: [{ meta: { regularMarketPrice: 0.2316 } }] } }),
+    }));
+    try {
+      await render(
+        <Watchlist
+          {...base}
+          vue={{
+            ...vue,
+            lignes: [ligne({ titreId: 'nvda-wa', nom: 'NVIDIA Corporation', ticker: 'NVDA.WA', coursBrut: 865, devise: 'PLN' })],
+          }}
+        />,
+      );
+      expect(await screen.findAllByText(/^200,3\d €$/)).not.toHaveLength(0);
+      expect(screen.getAllByText('865,00 PLN').length).toBeGreaterThan(0);
+    } finally {
+      installerConvertisseur(undefined);
+    }
   });
 });

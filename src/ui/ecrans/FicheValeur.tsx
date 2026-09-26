@@ -14,6 +14,8 @@ import { Barres, Donut, GraphiqueLignes, Radar } from '../graphiques/Graphiques'
 import { Cellule, Tableau, type Colonne } from '../tableau';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
 import { FilTheses, type ChargerTheses } from '../theses';
+import { useEnEuros } from '../../cours/change';
+import { libellesEnEuros } from '../devises';
 import { calculerPrixJuste, type GraphiqueAnnuel, type ParametresPrixJuste, type VueFiche } from '../vues/fiche';
 
 type OngletFiche =
@@ -197,6 +199,8 @@ export function FicheValeur(props: FicheValeurProps) {
 function EnTete({ vue, surveillee, onSurveiller }: { vue: VueFiche; surveillee?: boolean; onSurveiller?(): void }) {
   const palette = usePalette();
   const { entete } = vue;
+  const enEuros = useEnEuros();
+  const enEurosEntete = libellesEnEuros(entete.coursBrut, entete.deviseCode, enEuros);
   return (
     <View style={styles.entete}>
       <View style={[styles.logo, { backgroundColor: palette.surfaceHaute, borderColor: palette.bordure }]}>
@@ -217,9 +221,18 @@ function EnTete({ vue, surveillee, onSurveiller }: { vue: VueFiche; surveillee?:
       </View>
       <View style={[styles.separateur, { backgroundColor: palette.bordure }]} />
       <View style={{ gap: 2 }}>
-        <Text style={{ color: palette.texte, fontSize: 22, fontWeight: '800' }}>
-          {entete.cours} <Text style={{ fontSize: 12, color: palette.texteSecondaire }}>{entete.devise}</Text>
-        </Text>
+        {enEurosEntete.origine ? (
+          <>
+            <Text style={{ color: palette.texte, fontSize: 22, fontWeight: '800' }} testID="cours-en-euros">
+              {enEurosEntete.principal}
+            </Text>
+            <Text style={{ fontSize: 12, color: palette.texteSecondaire }}>{enEurosEntete.origine} à la cotation</Text>
+          </>
+        ) : (
+          <Text style={{ color: palette.texte, fontSize: 22, fontWeight: '800' }}>
+            {entete.cours} <Text style={{ fontSize: 12, color: palette.texteSecondaire }}>{entete.devise}</Text>
+          </Text>
+        )}
         {entete.variation ? <Signe texte={entete.variation.texte} tendance={entete.variation.tendance} taille={13} /> : null}
       </View>
       <View style={[styles.note, { backgroundColor: palette.hausseFond }]} accessibilityLabel="Note maison, moyenne du profil quantitatif">

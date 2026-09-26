@@ -91,6 +91,7 @@ import { Screener } from '../ui/ecrans/Screener';
 import { Carnet } from '../ui/ecrans/Carnet';
 import { Diagnostic } from '../ui/ecrans/Diagnostic';
 import { testsDuBureau } from '../diagnostic/testsBureau';
+import { installerConvertisseur } from '../cours/change';
 import { carnetDepuisJson, construireCarnet, rappelsCarnet } from '../ui/vues/carnet';
 import { simulerToutSurIndice } from '../ui/vues/siIndice';
 import type { LigneVendable } from '../ui/vues/simulationVente';
@@ -495,6 +496,15 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   );
 
   const statut = session.statut();
+
+  // Taux de change du jour, pour afficher en euros les cours cotés ailleurs
+  // (Varsovie, New York, Londres…). Seulement quand le réseau est permis.
+  useState(() => {
+    if (chargementAutomatique) {
+      installerConvertisseur(url => fetch(url));
+    }
+    return true;
+  });
 
   const executer = useCallback(
     (action: () => void) => {

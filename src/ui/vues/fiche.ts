@@ -58,6 +58,10 @@ export interface VueFiche {
     symbole: string;
     bourse: string;
     devise: string;
+    /** Code ISO de la devise de cotation (« PLN »), pour la conversion en euros. */
+    deviseCode: string;
+    /** Cours brut, dans la devise de cotation. */
+    coursBrut: number | null;
     cours: string;
     variation: ValeurSignee | null;
     note: string;
@@ -458,6 +462,8 @@ export function construireFiche(
       symbole: fiche.symbole,
       bourse: fiche.bourse,
       devise: symboleDevise,
+      deviseCode: fiche.devise,
+      coursBrut: fiche.cours,
       cours: fiche.cours === null ? '—' : formaterMontant(fiche.cours, { devise: null }),
       variation: variation === null ? null : { texte: formaterPourcentage(variation), tendance: tendance(variation) },
       note: note === null ? '—' : `${note.toFixed(1).replace('.', ',')}/20`,

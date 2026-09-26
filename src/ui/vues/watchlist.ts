@@ -25,6 +25,9 @@ export interface LigneSurveillee {
   ticker: string;
   /** Cours actuel, absent s'il n'est pas connu. */
   cours?: string;
+  /** Cours brut et devise de cotation, pour l'affichage en euros. */
+  coursBrut?: number;
+  devise: string;
   /** Écart depuis l'ajout, absent si l'un des deux cours manque. */
   ecart?: string;
   ecartPourcent?: string;
@@ -94,6 +97,11 @@ function franchi(cours: Decimal, seuil: SeuilSaisi): boolean {
   return Boolean((haut && cours.gte(haut)) || (bas && cours.lte(bas)));
 }
 
+/** « € » pour l'euro, le code ISO pour les autres : « 865,00 PLN ». */
+function symboleDevise(devise: string | undefined): string {
+  return !devise || devise === 'EUR' ? '€' : devise === 'USD' ? '$' : devise;
+}
+
 export function construireWatchlist(entrees: EntreesWatchlist): VueWatchlist {
   const parId = new Map(entrees.titres.map(titre => [titre.id, titre]));
   const surveillees = new Set(entrees.watchlist.map(ligne => ligne.titreId));
@@ -110,15 +118,18 @@ export function construireWatchlist(entrees: EntreesWatchlist): VueWatchlist {
       titreId: ligne.titreId,
       nom: titre?.nom ?? ligne.titreId,
       ticker: titre?.ticker ?? '',
-      cours: cours ? formaterMontant(cours) : undefined,
-      ecart: ecart ? formaterMontant(ecart, { signeExplicite: true }) : undefined,
+      // Dans la devise de cotation : l'écran le convertit en euros.
+      cours: cours ? formaterMontant(cours, { devise: symboleDevise(titre?.deviseCotation) }) : undefined,
+      coursBrut: cours?.toNumber(),
+      devise: titre?.deviseCotation ?? 'EUR',
+      ecart: ecart ? formaterMontant(ecart, { signeExplicite: true, devise: symboleDevise(titre?.deviseCotation) }) : undefined,
       ecartPourcent: ecart
         ? formaterPourcentage(ecart.div(ligne.coursAjout!).mul(100))
         : undefined,
       ecartPct: ecart ? ecart.div(ligne.coursAjout!).mul(100).toNumber() : undefined,
       tendance: tendance(ecart ?? null),
       depuis: `Suivie depuis le ${formaterDate(ligne.ajouteLe)}${
-        ligne.coursAjout ? `, à ${formaterMontant(ligne.coursAjout)}` : ''
+        ligne.coursAjout ? `, à ${formaterMontant(ligne.coursAjout, { devise: symboleDevise(titre?.deviseCotation) })}` : ''
       }.`,
       motifEcart: mesurable
         ? undefined

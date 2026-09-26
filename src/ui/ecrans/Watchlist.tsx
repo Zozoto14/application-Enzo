@@ -22,6 +22,8 @@ import { CarteSection, Pastille, Pile, Rangee, Segments, Selecteur, Signe, Vide 
 import { GraphiqueLignes } from '../graphiques/Graphiques';
 import { Tableau, type Colonne } from '../tableau';
 import { FilTheses, type ChargerTheses } from '../theses';
+import { useEnEuros } from '../../cours/change';
+import { libellesEnEuros } from '../devises';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
 
 export interface WatchlistProps {
@@ -218,6 +220,8 @@ export function Watchlist(props: WatchlistProps) {
 
 function LigneListe({ ligne, selectionnee, onPress }: { ligne: LigneSurveillee; selectionnee: boolean; onPress(): void }) {
   const palette = usePalette();
+  const enEuros = useEnEuros();
+  const prix = libellesEnEuros(ligne.coursBrut, ligne.devise, enEuros);
   return (
     <Pressable
       accessibilityRole="button"
@@ -240,7 +244,8 @@ function LigneListe({ ligne, selectionnee, onPress }: { ligne: LigneSurveillee; 
         </Text>
       </View>
       <View style={{ alignItems: 'flex-end' }}>
-        <Text style={{ color: palette.texte, fontWeight: '700' }}>{ligne.cours ?? '—'}</Text>
+        <Text style={{ color: palette.texte, fontWeight: '700' }}>{ligne.coursBrut === undefined ? '—' : prix.principal}</Text>
+        {prix.origine ? <Text style={{ color: palette.texteSecondaire, fontSize: 11 }}>{prix.origine}</Text> : null}
         {ligne.ecartPourcent ? (
           <Signe texte={ligne.ecartPourcent} tendance={ligne.tendance} taille={12} />
         ) : (
@@ -313,6 +318,8 @@ function Panneau({ ligne, ...props }: WatchlistProps & { ligne: LigneSurveillee 
   }, [ligne.ticker, props.chargerFiche]);
 
   const vue = fiche.vue;
+  const enEuros = useEnEuros();
+  const prixPanneau = libellesEnEuros(vue?.entete.coursBrut ?? ligne.coursBrut, vue?.entete.deviseCode ?? ligne.devise, enEuros);
   const cours = useMemo(() => {
     const serie = vue?.cours ?? [];
     if (periode === 'MAX' || serie.length === 0) return serie;
@@ -369,10 +376,10 @@ function Panneau({ ligne, ...props }: WatchlistProps & { ligne: LigneSurveillee 
         <View style={[styles.graphique, { borderColor: palette.bordure }]}>
           <View style={styles.enTeteGraphique}>
             <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: ESPACEMENT.s }}>
-              <Text style={{ color: palette.texte, fontSize: 20, fontWeight: '800' }}>
-                {vue?.entete.cours ?? ligne.cours ?? '—'}{' '}
-                <Text style={{ fontSize: 12, color: palette.texteSecondaire }}>{vue?.entete.devise ?? ''}</Text>
-              </Text>
+              <Text style={{ color: palette.texte, fontSize: 20, fontWeight: '800' }}>{prixPanneau.principal}</Text>
+              {prixPanneau.origine ? (
+                <Text style={{ fontSize: 12, color: palette.texteSecondaire }}>{prixPanneau.origine}</Text>
+              ) : null}
               {vue?.entete.variation ? (
                 <Signe texte={vue.entete.variation.texte} tendance={vue.entete.variation.tendance} taille={13} />
               ) : null}
@@ -487,6 +494,18 @@ function Panneau({ ligne, ...props }: WatchlistProps & { ligne: LigneSurveillee 
   );
 }
 
+/** Prix en euros, avec la devise d'origine en dessous quand elle diffère. */
+function PrixEnEuros({ montant, devise }: { montant?: number; devise: string }) {
+  const palette = usePalette();
+  const prix = libellesEnEuros(montant, devise, useEnEuros());
+  return (
+    <View style={{ alignItems: 'flex-end' }}>
+      <Text style={{ color: palette.texte }}>{prix.principal}</Text>
+      {prix.origine ? <Text style={{ color: palette.texteSecondaire, fontSize: 11 }}>{prix.origine}</Text> : null}
+    </View>
+  );
+}
+
 function Metrique({ libelle, valeur, couleur }: { libelle: string; valeur: string; couleur: string }) {
   const palette = usePalette();
   return (
@@ -571,7 +590,7 @@ function TableauWatchlist({ vue, onRetirer, onOuvrirFiche }: WatchlistProps) {
       titre: 'Cours',
       largeur: 110,
       alignement: 'droite',
-      rendu: ligne => <Text style={{ color: palette.texte }}>{ligne.cours ?? '—'}</Text>,
+      rendu: ligne => <PrixEnEuros montant={ligne.coursBrut} devise={ligne.devise} />,
     },
     {
       cle: 'bas',

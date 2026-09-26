@@ -19,6 +19,8 @@ import {
 import { Alerte, Bouton, SousTitre, usePalette } from '../composants';
 import { CarteSection, Pastille, Segments, Selecteur, Vide } from '../elements';
 import { Tableau, type Colonne } from '../tableau';
+import { useEnEuros } from '../../cours/change';
+import { libellesEnEuros } from '../devises';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
 
 export interface ScreenerProps {
@@ -55,6 +57,7 @@ const DRAPEAUX: Record<string, string> = {
 
 export function Screener({ chargerScreener, surveilles, onSurveiller, onOuvrirFiche, erreurAjout }: ScreenerProps) {
   const palette = usePalette();
+  const enEuros = useEnEuros();
   const [categorie, setCategorie] = useState<CleCategorie>('tout');
   const [region, setRegion] = useState<Region>('monde');
   const [tri, setTri] = useState<TriScreener>('capitalisation');
@@ -125,11 +128,15 @@ export function Screener({ chargerScreener, surveilles, onSurveiller, onOuvrirFi
       largeur: 100,
       alignement: 'droite',
       tri: action => action.cours,
-      rendu: action => (
-        <Text style={{ color: palette.texte }}>
-          {action.cours === null ? '—' : `${nombreFr(action.cours)} ${action.devise ?? ''}`}
-        </Text>
-      ),
+      rendu: action => {
+        const prix = libellesEnEuros(action.cours, action.devise, enEuros);
+        return (
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={{ color: palette.texte }}>{prix.principal}</Text>
+            {prix.origine ? <Text style={{ color: palette.texteSecondaire, fontSize: 11 }}>{prix.origine}</Text> : null}
+          </View>
+        );
+      },
     },
     {
       cle: 'variation',
@@ -153,7 +160,14 @@ export function Screener({ chargerScreener, surveilles, onSurveiller, onOuvrirFi
       largeur: 120,
       alignement: 'droite',
       tri: action => action.capitalisation,
-      rendu: action => <Text style={{ color: palette.texte }}>{compact(action.capitalisation, action.devise)}</Text>,
+      rendu: action => {
+        const euros = action.capitalisation === null ? undefined : enEuros(action.capitalisation, action.devise);
+        return (
+          <Text style={{ color: palette.texte }}>
+            {euros === undefined ? compact(action.capitalisation, action.devise) : compact(euros, '€')}
+          </Text>
+        );
+      },
     },
     {
       cle: 'per',
