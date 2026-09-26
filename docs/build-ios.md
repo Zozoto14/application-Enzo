@@ -182,10 +182,22 @@ Si l'application affiche un message sur SQLCipher, c'est que l'étape 2 du
 script a échoué : la base ne serait pas chiffrée, et l'application refuse de
 démarrer plutôt que de laisser croire le contraire.
 
-### 7. Installation durable via AltStore PAL
+### 7. Signature : sept jours, renouvelés par AltServer
 
-Suivre la procédure d'AltStore PAL sur l'iPhone. C'est ce qui évite la
-réinstallation tous les sept jours du sideload classique.
+AltStore PAL n'évite **pas** la réinstallation hebdomadaire : y publier une
+application demande une adhésion au programme développeur Apple et un droit
+de distribution alternative, ce qui n'a aucun sens pour une application
+personnelle.
+
+La réalité ne se contourne pas par du code : un compte Apple gratuit signe
+pour sept jours, un compte payant pour un an. AltServer, sur le PC Windows,
+re-signe automatiquement quand l'iPhone est sur le même Wi-Fi — ce qui rend
+le compte gratuit vivable, à condition que le PC soit joignable chaque
+semaine. Voir [iphone.md](iphone.md).
+
+Deux problèmes distincts, à ne pas confondre : les mises à jour signées
+règlent celui du **Mac** (livrer du code sans machine Apple) ; elles ne
+prolongent pas une **signature** expirée.
 
 ## Après la session : les mises à jour
 
