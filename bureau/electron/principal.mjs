@@ -190,6 +190,7 @@ function installerPasserelle() {
 
   ipcMain.handle('yahoo:json', async (_evenement, url) => yahooJson(String(url)));
 
+  ipcMain.handle('yahoo:screener', async (_evenement, corps) => yahooScreener(corps));
   ipcMain.handle('medias:flux', async (_evenement, url) => fluxMedia(String(url)));
   ipcMain.handle('medias:page', async (_evenement, url) => pageArticle(String(url)));
 
@@ -343,6 +344,47 @@ async function fluxMedia(adresse) {
   }
   const texte = await reponse.text();
   return texte.length > TAILLE_MAX_FLUX ? texte.slice(0, TAILLE_MAX_FLUX) : texte;
+}
+
+/**
+ * Screener de Yahoo : une requête POST sur une seule adresse. Le corps est
+ * composé par src/fondamentaux/screener.ts ; ici, on vérifie seulement que
+ * c'est un petit objet JSON.
+ */
+async function yahooScreener(corps) {
+  const texte = JSON.stringify(corps ?? {});
+  if (texte.length > 8_000 || typeof corps !== 'object' || Array.isArray(corps)) {
+    throw new Error('Requête de screener refusée.');
+  }
+  for (let essai = 0; essai < 2; essai++) {
+    if (!sessionYahoo) {
+      sessionYahoo = await ouvrirSessionYahoo();
+    }
+    const url = new URL('https://query1.finance.yahoo.com/v1/finance/screener');
+    url.searchParams.set('crumb', sessionYahoo.crumb);
+    url.searchParams.set('lang', 'fr-FR');
+    url.searchParams.set('region', 'FR');
+    url.searchParams.set('formatted', 'false');
+    const reponse = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'User-Agent': AGENT,
+        Cookie: sessionYahoo.cookies,
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: texte,
+    });
+    if (reponse.status === 401 || reponse.status === 403) {
+      sessionYahoo = undefined;
+      continue;
+    }
+    if (!reponse.ok) {
+      throw new Error(`Le screener Yahoo a répondu ${reponse.status}.`);
+    }
+    return await reponse.json();
+  }
+  throw new Error('Yahoo refuse l’accès au screener.');
 }
 
 async function yahooJson(adresse) {

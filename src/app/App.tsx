@@ -86,6 +86,8 @@ import { Watchlist } from '../ui/ecrans/Watchlist';
 import { Recuperation } from '../ui/ecrans/Recuperation';
 import { ACCUEIL_BAGGR } from '../ui/vues/liens';
 import { Recherche } from '../ui/ecrans/Recherche';
+import { Screener } from '../ui/ecrans/Screener';
+import { lireScreener, requeteScreener, type CleCategorie, type Region, type TriScreener } from '../fondamentaux/screener';
 import { ajouterHistorique, historiqueDepuisJson } from '../ui/vues/historiqueRecherche';
 import { chargerTheses, type ValeurCherchee } from '../fondamentaux/theses';
 import { construireWatchlist } from '../ui/vues/watchlist';
@@ -177,6 +179,7 @@ type Ecran =
   | 'projection'
   | 'watchlist'
   | 'recherche'
+  | 'screener'
   | 'symboles'
   | 'comparateur'
   | 'fiche'
@@ -1201,6 +1204,18 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [chargementAutomatique],
   );
 
+  /** Screener de Yahoo, par le processus principal du bureau. */
+  const pontScreener = (globalThis as { applibourse?: { yahoo?: { screener?(corps: unknown): Promise<unknown> } } })
+    .applibourse?.yahoo?.screener;
+  const chargerScreener = useMemo(
+    () =>
+      pontScreener
+        ? async (categorie: CleCategorie, region: Region, page: number, tri: TriScreener) =>
+            lireScreener(await pontScreener(requeteScreener(categorie, region, { page, tri })))
+        : undefined,
+    [pontScreener],
+  );
+
   /** Thèses et actualités d'une valeur, par le processus principal du bureau. */
   const pontFlux = (globalThis as { applibourse?: { medias?: { flux(url: string): Promise<string> } } }).applibourse
     ?.medias;
@@ -1250,6 +1265,17 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     },
     [surveillerCandidat],
   );
+
+  /** Symboles des valeurs en watchlist, en majuscules. */
+  const symbolesSurveilles = (): Set<string> => {
+    const titres = new Map(new DepotTitres(session.base()).tous().map(titre => [titre.id, titre.ticker.toUpperCase()]));
+    return new Set(
+      new DepotWatchlist(session.base())
+        .lister()
+        .map(ligne => titres.get(ligne.titreId) ?? '')
+        .filter(Boolean),
+    );
+  };
 
   /** La valeur de ce symbole est-elle déjà en surveillance ? */
   const symboleSurveille = (symbole: string): boolean => {
@@ -1874,6 +1900,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     { cle: 'saisie', libelle: 'Nouvelle opération', glyphe: '+' },
     { cle: 'import', libelle: 'Importer', glyphe: '↓' },
     { cle: 'recherche', libelle: 'Recherche', glyphe: '⌕' },
+    { cle: 'screener', libelle: 'Screener', glyphe: '▤' },
     // La fiche ouverte se range sous la Recherche, d'où on l'ouvre le plus souvent.
     ...(fiche ? [{ cle: 'fiche', libelle: fiche.vue?.entete.nom ?? fiche.symbole, glyphe: '◧', sous: true }] : []),
     { cle: 'watchlist', libelle: 'Watchlist', glyphe: '☆' },
@@ -2248,20 +2275,31 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }
           onRetour={() => setEcran('tableau')}
         />
+      ) : ecran === 'screener' ? (
+        <Screener
+          chargerScreener={chargerScreener}
+          surveilles={symbolesSurveilles()}
+          erreurAjout={erreurAjout}
+          onSurveiller={action =>
+            surveillerCandidatSur({
+              symbole: action.symbole,
+              nom: action.nom,
+              place: action.place,
+              devise: action.devise,
+              paris: action.symbole.toUpperCase().endsWith('.PA'),
+            })
+          }
+          onOuvrirFiche={symbole =>
+            ouvrirSymbole(
+              symbole,
+              (contenuComplet?.titres ?? []).find(titre => titre.ticker.toUpperCase() === symbole.toUpperCase())?.id,
+            )
+          }
+        />
       ) : ecran === 'recherche' ? (
         <Recherche
           onRechercher={rechercherActions}
-          surveilles={
-            new Set(
-              (() => {
-                const titres = new Map((contenuComplet?.titres ?? []).map(titre => [titre.id, titre.ticker.toUpperCase()]));
-                return new DepotWatchlist(session.base())
-                  .lister()
-                  .map(ligne => titres.get(ligne.titreId) ?? '')
-                  .filter(Boolean);
-              })(),
-            )
-          }
+          surveilles={symbolesSurveilles()}
           onSurveiller={surveillerCandidatSur}
           erreurAjout={erreurAjout}
           onOuvrirFiche={symbole =>

@@ -44,6 +44,7 @@ import { Portefeuille } from '../src/ui/ecrans/Portefeuille';
 import { Projection } from '../src/ui/ecrans/Projection';
 import { Watchlist } from '../src/ui/ecrans/Watchlist';
 import { Recherche } from '../src/ui/ecrans/Recherche';
+import { Screener } from '../src/ui/ecrans/Screener';
 import type { ResultatTheses } from '../src/fondamentaux/theses';
 import { useFondDocument } from './Bureau';
 import { definirDiscretion } from '../src/ui/discretion';
@@ -110,6 +111,7 @@ const referenceExemple = serie(100, 260, 0.02);
 const DESTINATIONS: readonly Destination[] = [
   { cle: 'portefeuille', libelle: 'Portefeuille', glyphe: '▦' },
   { cle: 'recherche', libelle: 'Recherche', glyphe: '⌕' },
+  { cle: 'screener', libelle: 'Screener', glyphe: '▤' },
   { cle: 'surveillance', libelle: 'Surveillance', glyphe: '★' },
   { cle: 'comparateur', libelle: 'Comparer', glyphe: '⇄' },
   { cle: 'projection', libelle: 'Projection', glyphe: '◔' },
@@ -259,6 +261,28 @@ function Apercu() {
           vue={ficheExemple}
           onRetour={() => setDestination('portefeuille')}
           onSurveiller={() => undefined}
+        />
+      ) : null}
+
+      {destination === 'screener' ? (
+        <Screener
+          chargerScreener={async () => ({
+            total: 51234,
+            actions: [
+              ['NVDA', 'NVIDIA Corporation', 225.07, 0.22, 5.45e12, 52.1, 40.2, 0.02, 'US'],
+              ['AAPL', 'Apple Inc.', 262.3, -0.41, 5.0e12, 38.4, 55.1, 0.4, 'US'],
+              ['MSFT', 'Microsoft Corporation', 505.1, 0.85, 3.83e12, 36.2, 11.3, 0.7, 'US'],
+              ['TSM', 'Taiwan Semiconductor', 290.4, 1.9, 2.02e12, 28.7, 8.1, 1.1, 'TW'],
+              ['MC.PA', 'LVMH Moët Hennessy', 612.4, -1.2, 3.05e11, 24.3, 5.2, 2.1, 'FR'],
+            ].map(([symbole, nom, cours, variation, capitalisation, per, pb, rendement, pays]) => ({
+              symbole: symbole as string, nom: nom as string, place: '', devise: symbole === 'MC.PA' ? 'EUR' : 'USD',
+              cours: cours as number, variation: variation as number, capitalisation: capitalisation as number,
+              per: per as number, prixSurActif: pb as number, rendement: rendement as number, pays: pays as string,
+            })),
+          })}
+          surveilles={new Set(['NVDA'])}
+          onSurveiller={() => undefined}
+          onOuvrirFiche={() => undefined}
         />
       ) : null}
 

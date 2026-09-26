@@ -52,6 +52,8 @@ contextBridge.exposeInMainWorld('applibourse', {
   yahoo: {
     /** Réponse JSON d'une adresse Yahoo Finance autorisée. */
     json: url => ipcRenderer.invoke('yahoo:json', url),
+    /** Résultats du screener de Yahoo pour une requête composée par l'interface. */
+    screener: corps => ipcRenderer.invoke('yahoo:screener', corps),
   },
 
   medias: {
