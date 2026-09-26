@@ -16,8 +16,14 @@ import type { FournisseurCours } from '../../cours/fournisseur';
 
 export type EtatVerificationMaj =
   | { etat: 'a-jour'; commit?: string }
-  | { etat: 'disponible'; commit?: string; nouveautes: string[] }
+  | { etat: 'disponible'; commit?: string; nouveautes: string[]; echecPrecedent?: string }
   | { etat: 'erreur'; motif: string };
+
+/** Réponse de « Installer et redémarrer » : un échec est affiché tel quel. */
+export interface ResultatRedemarrage {
+  ok: boolean;
+  motif?: string;
+}
 
 export interface ReglagesProps {
   fournisseurs: readonly FournisseurCours[];
@@ -47,8 +53,8 @@ export interface ReglagesProps {
   onRevoirVisite?(): void;
   /** Interroge GitHub maintenant (bureau). */
   onChercherMiseAJour?(): Promise<EtatVerificationMaj>;
-  /** Redémarre l'application pour appliquer la mise à jour. */
-  onRedemarrerPourMaj?(): void;
+  /** Récupère la mise à jour puis redémarre l'application. */
+  onRedemarrerPourMaj?(): Promise<ResultatRedemarrage>;
   /** Exporte le portefeuille dans un fichier Excel. */
   onExporterExcel?(): void;
   messageExport?: string;
@@ -362,12 +368,13 @@ function CarteMiseAJour({
   redemarrer,
 }: {
   chercher(): Promise<EtatVerificationMaj>;
-  redemarrer?(): void;
+  redemarrer?(): Promise<ResultatRedemarrage>;
 }) {
   const palette = usePalette();
   const [enCours, setEnCours] = useState(false);
   const [resultat, setResultat] = useState<EtatVerificationMaj | undefined>();
   const [redemarrage, setRedemarrage] = useState(false);
+  const [echec, setEchec] = useState<string | undefined>();
   const verifier = () => {
     setEnCours(true);
     chercher()
@@ -404,6 +411,9 @@ function CarteMiseAJour({
             <Text style={{ color: palette.accent, fontWeight: '700' }}>
               🆕 Nouvelle version disponible : {resultat.nouveautes.length} nouveauté{resultat.nouveautes.length > 1 ? 's' : ''}
             </Text>
+            {resultat.echecPrecedent ? (
+              <Alerte message={`La mise à jour automatique au lancement a échoué : ${resultat.echecPrecedent}`} />
+            ) : null}
             {resultat.nouveautes.slice(0, 8).map(titre => (
               <Text key={titre} style={{ color: palette.texte }}>
                 • {titre}
@@ -419,12 +429,24 @@ function CarteMiseAJour({
                   desactive={redemarrage}
                   onPress={() => {
                     setRedemarrage(true);
-                    redemarrer();
+                    setEchec(undefined);
+                    redemarrer()
+                      .then(resultat => {
+                        if (!resultat.ok) {
+                          setRedemarrage(false);
+                          setEchec(resultat.motif ?? 'La mise à jour n’a pas pu être récupérée.');
+                        }
+                      })
+                      .catch((e: unknown) => {
+                        setRedemarrage(false);
+                        setEchec(e instanceof Error ? e.message : String(e));
+                      });
                   }}
                   testID="bouton-redemarrer-maj"
                 />
               </View>
             ) : null}
+            {echec ? <Alerte message={`Mise à jour impossible : ${echec}`} /> : null}
             <SousTitre>
               L’application se ferme et se rouvre à jour ; la première ouverture prend une ou deux minutes. Vos
               données ne sont pas touchées.

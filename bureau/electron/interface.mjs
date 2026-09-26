@@ -68,9 +68,12 @@ export async function recupererCode(dossier) {
   if (modifies.includes('package-lock.json')) {
     await git(dossier, ['checkout', '--', 'package-lock.json']);
   }
+  // Autre fichier modifié sur ce PC (npm, fins de ligne, une retouche) : il
+  // est mis de côté avec `git stash` — récupérable par `git stash pop` —
+  // plutôt que de bloquer toutes les mises à jour pour lui.
   const bloquants = modifies.filter(fichier => fichier !== 'package-lock.json');
   if (bloquants.length > 0) {
-    throw new Error(`Fichiers modifiés sur ce PC, mise à jour suspendue : ${bloquants.join(', ')}`);
+    await git(dossier, ['stash', 'push', '--quiet', '-m', `AppliBourse : mis de côté avant mise à jour (${bloquants.join(', ')})`]);
   }
 
   const titres = (await git(dossier, ['log', '--format=%s', 'HEAD..origin/main'])).split('\n').filter(Boolean);

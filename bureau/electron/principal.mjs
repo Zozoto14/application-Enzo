@@ -22,7 +22,7 @@
 
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, shell, Tray } from 'electron';
 import { spawn } from 'node:child_process';
-import { git, preparerInterface } from './interface.mjs';
+import { git, preparerInterface, recupererCode } from './interface.mjs';
 import { synthetiser, VOIX_NATURELLES } from './voix.mjs';
 import { fluxMedia, pageArticle, yahooJson, yahooScreener } from './reseau.mjs';
 import { readFile, writeFile, mkdir, rename, readdir, rm } from 'node:fs/promises';
@@ -195,7 +195,7 @@ function installerPasserelle() {
 
   ipcMain.handle('maj:installer', async () => lancerMiseAJour());
   ipcMain.handle('maj:chercher', async () => chercherMiseAJour());
-  ipcMain.handle('maj:redemarrer', async () => redemarrerPourMettreAJour());
+  ipcMain.handle('maj:redemarrer', async () => installerPuisRedemarrer());
   ipcMain.handle('relais:config', async () => lireRelaisLocal());
 
   ipcMain.handle('yahoo:json', async (_evenement, url) => yahooJson(String(url)));
@@ -318,7 +318,7 @@ async function chercherMiseAJour() {
       return { etat: 'a-jour', commit: local.slice(0, 7) };
     }
     const nouveautes = (await git(dossier, ['log', '--format=%s', `${local}..origin/main`])).split('\n').filter(Boolean);
-    return { etat: 'disponible', commit: distant.slice(0, 7), nouveautes };
+    return { etat: 'disponible', commit: distant.slice(0, 7), nouveautes, echecPrecedent: lancement.erreur };
   } catch (erreur) {
     return { etat: 'erreur', motif: erreur instanceof Error ? erreur.message : String(erreur) };
   }
@@ -337,6 +337,23 @@ function redemarrerPourMettreAJour({ discret = false } = {}) {
   app.quit();
   setTimeout(() => app.exit(0), 5_000);
   return true;
+}
+
+/**
+ * « Installer et redémarrer » : le code est récupéré ici, fenêtre ouverte,
+ * pour que l'échec éventuel s'affiche au lieu de se perdre au redémarrage.
+ */
+async function installerPuisRedemarrer() {
+  const dossier = (await lireVersionBuild())?.dossierSource;
+  if (dossier && existsSync(dossier)) {
+    try {
+      await recupererCode(dossier);
+    } catch (erreur) {
+      return { ok: false, motif: erreur instanceof Error ? erreur.message : String(erreur) };
+    }
+  }
+  redemarrerPourMettreAJour();
+  return { ok: true };
 }
 
 // ----------------------------------------- Mises à jour, application ouverte

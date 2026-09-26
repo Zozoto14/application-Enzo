@@ -126,7 +126,7 @@ import { CreationCompte } from '../ui/ecrans/CreationCompte';
 import { CreationTitre } from '../ui/ecrans/CreationTitre';
 import { Deverrouillage } from '../ui/ecrans/Deverrouillage';
 import { ImportPositions } from '../ui/ecrans/ImportPositions';
-import { Reglages, type EtatVerificationMaj } from '../ui/ecrans/Reglages';
+import { Reglages, type EtatVerificationMaj, type ResultatRedemarrage } from '../ui/ecrans/Reglages';
 import { Sauvegarde } from '../ui/ecrans/Sauvegarde';
 import { Notifications, type SeuilAffiche } from '../ui/ecrans/Notifications';
 import {
@@ -1229,7 +1229,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     ?.systeme;
   const pontMaj = (
     globalThis as {
-      applibourse?: { maj?: { chercher?(): Promise<EtatVerificationMaj>; redemarrer?(): Promise<boolean> } };
+      applibourse?: { maj?: { chercher?(): Promise<EtatVerificationMaj>; redemarrer?(): Promise<ResultatRedemarrage | boolean> } };
     }
   ).applibourse?.maj;
   const pontEnregistrerSous = (
@@ -2271,7 +2271,15 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }
           messageExport={messageExport}
           onChercherMiseAJour={pontMaj?.chercher ? () => pontMaj.chercher!() : undefined}
-          onRedemarrerPourMaj={pontMaj?.redemarrer ? () => void pontMaj.redemarrer!() : undefined}
+          onRedemarrerPourMaj={
+            pontMaj?.redemarrer
+              ? async () => {
+                  const resultat = await pontMaj.redemarrer!();
+                  // Anciennes versions du moteur : un simple booléen.
+                  return typeof resultat === 'boolean' ? { ok: resultat } : resultat;
+                }
+              : undefined
+          }
           carteSynchro={
             <CarteSynchro
               synchro={synchro}
