@@ -89,6 +89,8 @@ import { ACCUEIL_BAGGR } from '../ui/vues/liens';
 import { Recherche } from '../ui/ecrans/Recherche';
 import { Screener } from '../ui/ecrans/Screener';
 import { Carnet } from '../ui/ecrans/Carnet';
+import { Diagnostic } from '../ui/ecrans/Diagnostic';
+import { testsDuBureau } from '../diagnostic/testsBureau';
 import { carnetDepuisJson, construireCarnet, rappelsCarnet } from '../ui/vues/carnet';
 import { simulerToutSurIndice } from '../ui/vues/siIndice';
 import type { LigneVendable } from '../ui/vues/simulationVente';
@@ -188,6 +190,7 @@ type Ecran =
   | 'recherche'
   | 'screener'
   | 'carnet'
+  | 'diagnostic'
   | 'symboles'
   | 'comparateur'
   | 'fiche'
@@ -2074,6 +2077,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     { cle: 'sauvegarde', libelle: 'Sauvegarde', glyphe: '⇪' },
     { cle: 'notifications', libelle: 'Alertes', glyphe: '◉' },
     { cle: 'reglages', libelle: 'Paramètres', glyphe: '⚙\uFE0E' },
+    { cle: 'diagnostic', libelle: 'Diagnostic', glyphe: '✚', sous: true },
     // Baggr s'ouvre dans le navigateur : ce n'est pas un écran de l'application.
     { cle: 'baggr', libelle: 'Baggr ↗', glyphe: '◆' },
   ];
@@ -2447,6 +2451,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }
           onRetour={() => setEcran('tableau')}
         />
+      ) : ecran === 'diagnostic' ? (
+        <Diagnostic tests={testsDuBureau()} />
       ) : ecran === 'carnet' ? (
         <Carnet
           lignes={lignesCarnet()}
