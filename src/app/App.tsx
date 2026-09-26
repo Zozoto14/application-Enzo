@@ -96,6 +96,7 @@ import type { FormulaireOperation } from '../ui/vues/saisie';
 import { CLE_PLANNING_LOCAL, stockageLocal, useNotificationsBureau } from './notificationsBureau';
 import { useSauvegardes } from './sauvegardesApp';
 import { dividendesParTitre, lignesCibles, lignesVendables } from './calculs';
+import { exporterExcel } from '../rapport/exportExcel';
 import { carnetDepuisJson, construireCarnet } from '../ui/vues/carnet';
 import { simulerToutSurIndice } from '../ui/vues/siIndice';
 import { lireScreener, requeteScreener, type CleCategorie, type Region, type TriScreener } from '../fondamentaux/screener';
@@ -426,6 +427,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // nouveau mot de passe est enregistré dans la foulée.
   const [enRecuperation, setEnRecuperation] = useState(false);
   const [visiteForcee, setVisiteForcee] = useState(false);
+  const [messageExport, setMessageExport] = useState<string | undefined>();
   /** Saisie pré-remplie : le versement du mois, depuis Objectifs. */
   const [saisieInitiale, setSaisieInitiale] = useState<Partial<FormulaireOperation> | undefined>();
   const [avisRecuperation, setAvisRecuperation] = useState<string | undefined>();
@@ -1207,6 +1209,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // sur téléphone (le réveil en arrière-plan s'en charge) et dans les tests.
   const pontNotifications = (globalThis as { applibourse?: { systeme?: PontNotifications } }).applibourse
     ?.systeme;
+  const pontEnregistrerSous = (
+    globalThis as { applibourse?: { fichiers?: { enregistrerSous?(nom: string, contenu: Uint8Array): Promise<boolean> } } }
+  ).applibourse?.fichiers?.enregistrerSous;
   const { journalNotifications, verifierNotificationsRef } = useNotificationsBureau({
     session,
     deverrouille,
@@ -2156,6 +2161,24 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onEnregistrer={enregistrerReglages}
           onRenouvelerCodes={() => session.renouvelerCodesRecuperation()}
           onRevoirVisite={() => setVisiteForcee(true)}
+          onExporterExcel={
+            pontEnregistrerSous
+              ? () => {
+                  const contenuActuel = chargerEtat(session.base());
+                  const octets = exporterExcel({
+                    etat: contenuActuel.etat,
+                    comptes: contenuActuel.comptes,
+                    titres: contenuActuel.titres,
+                    transactions: contenuActuel.transactions,
+                    cours: new DepotCours(session.base()).derniersCours(),
+                  });
+                  pontEnregistrerSous(`AppliBourse ${(aujourdhui ?? dateDuJour)()}.xlsx`, octets)
+                    .then(enregistre => setMessageExport(enregistre ? '✅ Fichier Excel enregistré.' : 'Export annulé.'))
+                    .catch((e: unknown) => setMessageExport(`L’export a échoué : ${e instanceof Error ? e.message : String(e)}`));
+                }
+              : undefined
+          }
+          messageExport={messageExport}
           onAnnuler={() => setEcran('tableau')}
           onSymboles={() => {
             setRecherche(undefined);

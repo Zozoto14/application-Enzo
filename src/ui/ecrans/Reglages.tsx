@@ -40,6 +40,9 @@ export interface ReglagesProps {
   onRenouvelerCodes?(): string[];
   /** Relance la visite guidée des nouveautés. */
   onRevoirVisite?(): void;
+  /** Exporte le portefeuille dans un fichier Excel. */
+  onExporterExcel?(): void;
+  messageExport?: string;
   onAnnuler(): void;
 }
 
@@ -59,6 +62,8 @@ export function Reglages({
   onChoisirTheme,
   onRenouvelerCodes,
   onRevoirVisite,
+  onExporterExcel,
+  messageExport,
   onEnregistrer,
   onAnnuler,
 }: ReglagesProps) {
@@ -244,6 +249,22 @@ export function Reglages({
             </Text>
           ) : null}
         </Carte>
+      ) : null}
+
+      {onExporterExcel ? (
+        <>
+          <Titre>Exporter</Titre>
+          <Carte>
+            <SousTitre>
+              Tout votre portefeuille dans un fichier Excel : positions, opérations, dividendes et comptes, une
+              feuille chacun, avec des nombres qu’on peut trier et additionner.
+            </SousTitre>
+            <View style={{ alignSelf: 'flex-start' }}>
+              <Bouton titre="Exporter vers Excel (.xlsx)" onPress={onExporterExcel} testID="bouton-export-excel" />
+            </View>
+            {messageExport ? <Text style={{ color: palette.texte }} testID="message-export">{messageExport}</Text> : null}
+          </Carte>
+        </>
       ) : null}
 
       {onRenouvelerCodes ? (

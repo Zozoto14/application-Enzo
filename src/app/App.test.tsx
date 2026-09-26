@@ -360,6 +360,28 @@ describe('parcours complet, session ouverte', () => {
     expect(screen.getByTestId('carte-versement-mensuel')).toBeTruthy();
   });
 
+  it('exporte le portefeuille dans un fichier Excel', async () => {
+    const enregistres: Array<{ nom: string; octets: Uint8Array }> = [];
+    const global = globalThis as { applibourse?: unknown };
+    global.applibourse = {
+      fichiers: {
+        enregistrerSous: async (nom: string, octets: Uint8Array) => (enregistres.push({ nom, octets }), true),
+      },
+    };
+    try {
+      await ouvrir();
+      await creerCompte();
+      await fireEvent.press(screen.getByTestId('nav-reglages'));
+      await fireEvent.press(screen.getByTestId('bouton-export-excel'));
+      await laisserTravailler();
+      expect(enregistres[0].nom).toBe('AppliBourse 2026-09-22.xlsx');
+      expect([...enregistres[0].octets.slice(0, 2)]).toEqual([0x50, 0x4b]);
+      expect(screen.getByTestId('message-export').props.children).toBe('✅ Fichier Excel enregistré.');
+    } finally {
+      delete global.applibourse;
+    }
+  });
+
   it('refuse un compte sans date d’ouverture', async () => {
     // Pour un PEA, cette date fait courir l'antériorité fiscale.
     await ouvrir();
