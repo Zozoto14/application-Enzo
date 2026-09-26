@@ -322,6 +322,22 @@ describe('parcours complet, session ouverte', () => {
     expect(carnet[stellantis.id]).toMatchObject({ pourquoi: 'Décote forte, dividende élevé.', objectif: 20, ecriteLe: '2026-09-22' });
   });
 
+  it('présente les nouveautés une fois, et se revoit depuis Paramètres', async () => {
+    const session = await ouvrir();
+    expect(screen.queryByTestId('visite-guidee')).toBeNull(); // pas pour un tout nouveau portefeuille
+    await creerCompte();
+    expect(screen.getByTestId('visite-guidee')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('visite-suivant'));
+    expect(screen.getByText('Le Screener')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('visite-passer'));
+    expect(screen.queryByTestId('visite-guidee')).toBeNull();
+    expect(new DepotParametres(session.base()).lire(PARAMETRES.visiteVue)).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('nav-reglages'));
+    await fireEvent.press(screen.getByTestId('revoir-visite'));
+    expect(screen.getByTestId('visite-guidee')).toBeTruthy();
+  });
+
   it('refuse un compte sans date d’ouverture', async () => {
     // Pour un PEA, cette date fait courir l'antériorité fiscale.
     await ouvrir();

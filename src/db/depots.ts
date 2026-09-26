@@ -497,6 +497,8 @@ export const PARAMETRES = {
   evenementsEnvoyes: 'notifications.evenements_envoyes',
   /** Carnet de thèses, par valeur (JSON). */
   carnetTheses: 'carnet.theses',
+  /** Dernière version de la visite guidée vue. */
+  visiteVue: 'visite.version_vue',
 } as const;
 
 /**

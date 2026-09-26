@@ -92,6 +92,7 @@ import { Carnet } from '../ui/ecrans/Carnet';
 import { Diagnostic } from '../ui/ecrans/Diagnostic';
 import { testsDuBureau } from '../diagnostic/testsBureau';
 import { installerConvertisseur } from '../cours/change';
+import { VERSION_VISITE, VisiteGuidee } from '../ui/VisiteGuidee';
 import { carnetDepuisJson, construireCarnet, rappelsCarnet } from '../ui/vues/carnet';
 import { simulerToutSurIndice } from '../ui/vues/siIndice';
 import type { LigneVendable } from '../ui/vues/simulationVente';
@@ -547,6 +548,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // Mot de passe oublié : un code de récupération rouvre la base, et un
   // nouveau mot de passe est enregistré dans la foulée.
   const [enRecuperation, setEnRecuperation] = useState(false);
+  const [visiteForcee, setVisiteForcee] = useState(false);
   const [avisRecuperation, setAvisRecuperation] = useState<string | undefined>();
   const recuperer = useCallback(
     (codeRecuperation: string, nouveauMotDePasse: string) =>
@@ -2133,6 +2135,22 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         discret={discret}
         onBasculerDiscretion={deverrouille && contenuComplet && tableau ? basculerDiscretion : undefined}
         flottant={ecran !== 'podcast' ? <LecteurFlottant onOuvrir={() => setEcran('podcast')} /> : null}>
+      {deverrouille && contenuComplet && tableau ? (
+        <VisiteGuidee
+          visible={
+            visiteForcee ||
+            // Première ouverture d'un portefeuille déjà en route : pas pour un tout nouvel utilisateur.
+            (contenuComplet.comptes.length > 0 &&
+              new DepotParametres(session.base()).lire(PARAMETRES.visiteVue) !== VERSION_VISITE)
+          }
+          onNaviguer={cle => naviguer(cle)}
+          onTerminer={() => {
+            new DepotParametres(session.base()).ecrire(PARAMETRES.visiteVue, VERSION_VISITE);
+            setVisiteForcee(false);
+            rafraichir();
+          }}
+        />
+      ) : null}
       {avisRecuperation && deverrouille ? (
         <View style={{ padding: ESPACEMENT.m, paddingBottom: 0 }}>
           <Carte>
@@ -2575,6 +2593,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           )}
           onEnregistrer={enregistrerReglages}
           onRenouvelerCodes={() => session.renouvelerCodesRecuperation()}
+          onRevoirVisite={() => setVisiteForcee(true)}
           onAnnuler={() => setEcran('tableau')}
           onSymboles={() => {
             setRecherche(undefined);

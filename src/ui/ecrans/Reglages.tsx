@@ -38,6 +38,8 @@ export interface ReglagesProps {
   onChoisirTheme?(theme: CleTheme): void;
   /** Remplace les codes de récupération et rend les nouveaux, à noter. */
   onRenouvelerCodes?(): string[];
+  /** Relance la visite guidée des nouveautés. */
+  onRevoirVisite?(): void;
   onAnnuler(): void;
 }
 
@@ -56,6 +58,7 @@ export function Reglages({
   theme,
   onChoisirTheme,
   onRenouvelerCodes,
+  onRevoirVisite,
   onEnregistrer,
   onAnnuler,
 }: ReglagesProps) {
@@ -291,6 +294,12 @@ export function Reglages({
             )}
           </Carte>
         </>
+      ) : null}
+
+      {onRevoirVisite ? (
+        <View style={{ alignSelf: 'flex-start' }}>
+          <Bouton titre="Revoir la visite des nouveautés" variante="discret" onPress={onRevoirVisite} testID="revoir-visite" />
+        </View>
       ) : null}
 
       <Actions>
