@@ -338,6 +338,28 @@ describe('parcours complet, session ouverte', () => {
     expect(screen.getByTestId('visite-guidee')).toBeTruthy();
   });
 
+  it('règle le versement mensuel et le saisit pré-rempli', async () => {
+    const session = await ouvrir();
+    await creerCompte();
+    await fireEvent.press(screen.getByTestId('bouton-importer-positions'));
+    await fireEvent.changeText(screen.getByLabelText('Contenu du fichier'), EXPORT_REEL);
+    await fireEvent.press(screen.getByTestId('bouton-importer'));
+
+    await fireEvent.press(screen.getByTestId('nav-objectifs'));
+    await fireEvent(screen.getByTestId('interrupteur-versement'), 'valueChange', true);
+    expect(JSON.parse(new DepotParametres(session.base()).lire(PARAMETRES.versementMensuel)!)).toMatchObject({ actif: true, jour: 5, montant: 200 });
+
+    await fireEvent.press(screen.getByTestId('saisir-versement-mois'));
+    expect(screen.getByLabelText('Montant').props.value).toBe('200');
+    const avant = new DepotTransactions(session.base()).toutes().length;
+    await fireEvent.press(screen.getByTestId('bouton-enregistrer'));
+    const versements = new DepotTransactions(session.base()).toutes().filter(t => t.type === 'VERSEMENT');
+    expect(new DepotTransactions(session.base()).toutes()).toHaveLength(avant + 1);
+    expect(versements.some(t => t.date === '2026-09-22' && t.note === 'Versement mensuel')).toBe(true);
+    // Retour aux Objectifs, pour voir quoi acheter.
+    expect(screen.getByTestId('carte-versement-mensuel')).toBeTruthy();
+  });
+
   it('refuse un compte sans date d’ouverture', async () => {
     // Pour un PEA, cette date fait courir l'antériorité fiscale.
     await ouvrir();

@@ -56,7 +56,7 @@ import {
   plagePour,
   separerHistorique,
 } from '../cours/indices';
-import { rejouer, type EtatPortefeuille } from '../core/portfolio/engine';
+import { rejouer } from '../core/portfolio/engine';
 import { resoudreSymboles } from '../cours/resolution';
 import { intervalleActualisation, seanceEnCours } from '../cours/marche';
 import { construireResume } from '../ui/vues/resume';
@@ -74,7 +74,7 @@ import { Podcast } from '../ui/ecrans/Podcast';
 import { LecteurFlottant } from '../ui/lecturePodcast';
 import { lecturePartagee } from '../podcast/lecture';
 import { Objectifs } from '../ui/ecrans/Objectifs';
-import { objectifDepuisJson, type LigneCible } from '../ui/vues/objectifs';
+import { objectifDepuisJson } from '../ui/vues/objectifs';
 import { preparerEpisode } from '../podcast/donnees';
 import type { Episode } from '../podcast/episode';
 import { chargerActualites } from '../fondamentaux/actualites';
@@ -91,9 +91,11 @@ import { Diagnostic } from '../ui/ecrans/Diagnostic';
 import { testsDuBureau } from '../diagnostic/testsBureau';
 import { convertisseur, installerConvertisseur } from '../cours/change';
 import { VERSION_VISITE, VisiteGuidee } from '../ui/VisiteGuidee';
+import { dateSaisie, reglageVersementDepuisJson } from '../ui/vues/versementMensuel';
+import type { FormulaireOperation } from '../ui/vues/saisie';
 import { CLE_PLANNING_LOCAL, stockageLocal, useNotificationsBureau } from './notificationsBureau';
 import { useSauvegardes } from './sauvegardesApp';
-import { dividendesParTitre, lignesVendables } from './calculs';
+import { dividendesParTitre, lignesCibles, lignesVendables } from './calculs';
 import { carnetDepuisJson, construireCarnet } from '../ui/vues/carnet';
 import { simulerToutSurIndice } from '../ui/vues/siIndice';
 import { lireScreener, requeteScreener, type CleCategorie, type Region, type TriScreener } from '../fondamentaux/screener';
@@ -181,42 +183,6 @@ type Ecran =
   | 'podcast'
   | 'objectifs';
 
-/**
- * Lignes de l'écran Objectifs : une par valeur détenue (tous comptes),
- * avec sa cible enregistrée, ou son poids actuel à défaut.
- */
-function lignesCibles(
-  contenu: { etat: EtatPortefeuille; titres: readonly Titre[] },
-  cours: ReadonlyMap<string, Decimal>,
-  ciblesBrutes: string | undefined,
-): LigneCible[] {
-  let cibles: Record<string, string> = {};
-  try {
-    cibles = JSON.parse(ciblesBrutes ?? '{}');
-  } catch {
-    cibles = {};
-  }
-  const { valorisees } = valoriserPositions(contenu.etat.positions, cours);
-  const parTitre = new Map<string, number>();
-  for (const position of valorisees) {
-    parTitre.set(position.titreId, (parTitre.get(position.titreId) ?? 0) + position.valeurMarche.toNumber());
-  }
-  const total = [...parTitre.values()].reduce((somme, valeur) => somme + valeur, 0);
-  return [...parTitre.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([titreId, valeur]) => {
-      const saisie = Number((cibles[titreId] ?? '').replace(',', '.'));
-      return {
-        titreId,
-        nom: contenu.titres.find(titre => titre.id === titreId)?.nom ?? titreId,
-        valeur,
-        cible: cibles[titreId] !== undefined && Number.isFinite(saisie)
-          ? saisie
-          : total > 0 ? Math.round((valeur / total) * 1000) / 10 : 0,
-        cours: cours.get(titreId)?.toNumber(),
-      };
-    });
-}
 
 /** Frais d'ETF saisis ; une saisie illisible est ignorée (le taux connu s'applique). */
 function fraisEtfSaisis(brut: string | undefined): Record<string, number> {
@@ -460,6 +426,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // nouveau mot de passe est enregistré dans la foulée.
   const [enRecuperation, setEnRecuperation] = useState(false);
   const [visiteForcee, setVisiteForcee] = useState(false);
+  /** Saisie pré-remplie : le versement du mois, depuis Objectifs. */
+  const [saisieInitiale, setSaisieInitiale] = useState<Partial<FormulaireOperation> | undefined>();
   const [avisRecuperation, setAvisRecuperation] = useState<string | undefined>();
   const recuperer = useCallback(
     (codeRecuperation: string, nouveauMotDePasse: string) =>
@@ -1661,6 +1629,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const destinationActive =
     ecran === 'symboles' ? 'reglages' : ecran === 'titre' ? 'saisie' : ecran === 'compte' ? 'tableau' : ecran;
   const naviguer = (cle: string) => {
+    setSaisieInitiale(undefined);
     if (cle === 'baggr') {
       Linking.openURL(ACCUEIL_BAGGR).catch(() => undefined);
       return;
@@ -1782,11 +1751,22 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         />
       ) : ecran === 'saisie' ? (
         <SaisieOperation
+          key={saisieInitiale ? 'pre-rempli' : 'vide'}
+          initial={saisieInitiale}
           comptes={contenuComplet!.comptes}
           titres={contenuComplet!.titres}
           positions={contenuComplet!.etat.positions}
-          onEnregistrer={enregistrerOperation}
-          onAnnuler={() => setEcran('tableau')}
+          onEnregistrer={transaction => {
+            // Après le versement du mois, on revient voir quoi acheter.
+            const retour = saisieInitiale?.type === 'VERSEMENT';
+            setSaisieInitiale(undefined);
+            enregistrerOperation(transaction);
+            if (retour) setEcran('objectifs');
+          }}
+          onAnnuler={() => {
+            setSaisieInitiale(undefined);
+            setEcran('tableau');
+          }}
           onCreerTitre={() => setEcran('titre')}
           genererId={() => identifiant('op')}
         />
@@ -1924,6 +1904,23 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             rafraichir();
           }}
           lignes={lignesCibles(contenuComplet, depotCours.derniersCours(), new DepotParametres(session.base()).lire(PARAMETRES.repartitionCible))}
+          versementMensuel={reglageVersementDepuisJson(new DepotParametres(session.base()).lire(PARAMETRES.versementMensuel))}
+          comptes={contenuComplet.comptes.map(compte => ({ id: compte.id, nom: compte.nom }))}
+          onEnregistrerVersement={reglage => {
+            new DepotParametres(session.base()).ecrire(PARAMETRES.versementMensuel, JSON.stringify(reglage));
+            rafraichir();
+          }}
+          onSaisirVersement={() => {
+            const reglage = reglageVersementDepuisJson(new DepotParametres(session.base()).lire(PARAMETRES.versementMensuel));
+            setSaisieInitiale({
+              type: 'VERSEMENT',
+              compteId: reglage.compteId ?? contenuComplet.comptes[0]?.id ?? '',
+              montant: String(reglage.montant).replace('.', ','),
+              date: dateSaisie((aujourdhui ?? dateDuJour)()),
+              note: 'Versement mensuel',
+            });
+            setEcran('saisie');
+          }}
           onChangerCible={(titreId, cible) => {
             const parametres = new DepotParametres(session.base());
             let cibles: Record<string, string> = {};

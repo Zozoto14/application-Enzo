@@ -8,6 +8,7 @@ import { Decimal } from '../core/money/decimal';
 import type { EtatPortefeuille } from '../core/portfolio/engine';
 import { totaux, valoriserPositions } from '../core/portfolio/valorisation';
 import type { LigneVendable } from '../ui/vues/simulationVente';
+import type { LigneCible } from '../ui/vues/objectifs';
 
 /**
  * Dividendes encaisses sur douze mois glissants, par titre.
@@ -65,5 +66,42 @@ export function lignesVendables(
           versementsPlan: pea ? etatCompte?.versementsCumules.toNumber() : undefined,
         },
       ];
+    });
+}
+
+/**
+ * Lignes de l'écran Objectifs : une par valeur détenue (tous comptes),
+ * avec sa cible enregistrée, ou son poids actuel à défaut.
+ */
+export function lignesCibles(
+  contenu: { etat: EtatPortefeuille; titres: readonly Titre[] },
+  cours: ReadonlyMap<string, Decimal>,
+  ciblesBrutes: string | undefined,
+): LigneCible[] {
+  let cibles: Record<string, string> = {};
+  try {
+    cibles = JSON.parse(ciblesBrutes ?? '{}');
+  } catch {
+    cibles = {};
+  }
+  const { valorisees } = valoriserPositions(contenu.etat.positions, cours);
+  const parTitre = new Map<string, number>();
+  for (const position of valorisees) {
+    parTitre.set(position.titreId, (parTitre.get(position.titreId) ?? 0) + position.valeurMarche.toNumber());
+  }
+  const total = [...parTitre.values()].reduce((somme, valeur) => somme + valeur, 0);
+  return [...parTitre.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([titreId, valeur]) => {
+      const saisie = Number((cibles[titreId] ?? '').replace(',', '.'));
+      return {
+        titreId,
+        nom: contenu.titres.find(titre => titre.id === titreId)?.nom ?? titreId,
+        valeur,
+        cible: cibles[titreId] !== undefined && Number.isFinite(saisie)
+          ? saisie
+          : total > 0 ? Math.round((valeur / total) * 1000) / 10 : 0,
+        cours: cours.get(titreId)?.toNumber(),
+      };
     });
 }

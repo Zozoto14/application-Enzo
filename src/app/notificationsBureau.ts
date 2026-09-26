@@ -33,6 +33,9 @@ import { alertesEvenements, retenirEvenements, type ValeurSuivie } from '../noti
 import { lireRechercheActualites, urlActualitesValeur } from '../podcast/medias';
 import { rappelsCarnet, type LigneCarnet } from '../ui/vues/carnet';
 import type { Session } from '../session/session';
+import { lignesCibles } from './calculs';
+import { repartirVersement } from '../ui/vues/objectifs';
+import { identifiantVersement, messageVersement, reglageVersementDepuisJson, versementDu } from '../ui/vues/versementMensuel';
 
 /** Copie du planning et rappels envoyés : hors du coffre, lisibles verrouillé. */
 export const CLE_PLANNING_LOCAL = 'applibourse.planningBriefings';
@@ -121,6 +124,20 @@ export function useNotificationsBureau({
       for (const rappel of rappelsCarnet(lignesCarnet(), new Set(deja))) {
         if (await pontNotifications.notifier(rappel.titre, rappel.corps).catch(() => false)) {
           rappelsEnvoyes.push(rappel.identifiant);
+        }
+      }
+      // Versement du mois : une fois, le jour choisi, avec la répartition conseillée.
+      const reglage = reglageVersementDepuisJson(parametres.lire(PARAMETRES.versementMensuel));
+      const maintenant = new Date();
+      if (versementDu(reglage, maintenant, new Set(deja))) {
+        const contenuActuel = chargerEtat(base);
+        const achats = repartirVersement(
+          lignesCibles(contenuActuel, depot.derniersCours(), parametres.lire(PARAMETRES.repartitionCible)),
+          reglage.montant,
+        );
+        const message = messageVersement(reglage, achats);
+        if (await pontNotifications.notifier(message.titre, message.corps).catch(() => false)) {
+          rappelsEnvoyes.push(identifiantVersement(maintenant));
         }
       }
       if (rappelsEnvoyes.length > 0) {

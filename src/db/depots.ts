@@ -499,6 +499,8 @@ export const PARAMETRES = {
   carnetTheses: 'carnet.theses',
   /** Dernière version de la visite guidée vue. */
   visiteVue: 'visite.version_vue',
+  /** Rappel de versement mensuel (JSON : actif, jour, montant, compte). */
+  versementMensuel: 'objectifs.versement_mensuel',
 } as const;
 
 /**

@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Decimal } from '../../core/money/decimal';
 import { Actions, Alerte, Bouton, Champ, LigneChamps, SousTitre, usePalette } from '../composants';
 import { CarteSection, Metrique, Rangee, Vide } from '../elements';
@@ -13,6 +13,7 @@ import { Jauge } from '../indicateurs';
 import { formaterMontant } from '../format';
 import { ESPACEMENT, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
 import { repartirVersement, suivreObjectif, type LigneCible, type Objectif } from '../vues/objectifs';
+import type { ReglageVersement } from '../vues/versementMensuel';
 
 export interface ObjectifsProps {
   objectif?: Objectif;
@@ -21,6 +22,12 @@ export interface ObjectifsProps {
   onEnregistrerObjectif(objectif: Objectif | undefined): void;
   lignes: readonly LigneCible[];
   onChangerCible(titreId: string, cible: string): void;
+  /** Rappel de versement mensuel. */
+  versementMensuel?: ReglageVersement;
+  comptes?: ReadonlyArray<{ id: string; nom: string }>;
+  onEnregistrerVersement?(reglage: ReglageVersement): void;
+  /** Ouvre la saisie du versement de ce mois, pré-remplie. */
+  onSaisirVersement?(): void;
 }
 
 const euros = (valeur: number) => formaterMontant(Decimal.de(valeur.toFixed(2)), { decimales: 0 });
@@ -46,13 +53,19 @@ export function Objectifs({
   onEnregistrerObjectif,
   lignes,
   onChangerCible,
+  versementMensuel,
+  comptes = [],
+  onEnregistrerVersement,
+  onSaisirVersement,
 }: ObjectifsProps) {
   const palette = usePalette();
   const [montant, setMontant] = useState(objectif ? String(objectif.montant) : '');
   const [echeance, setEcheance] = useState(objectif ? versFrancais(objectif.date) : '');
   const [rendement, setRendement] = useState(objectif ? String(objectif.rendement).replace('.', ',') : '5');
   const [erreur, setErreur] = useState<string | undefined>();
-  const [versement, setVersement] = useState('500');
+  const [versement, setVersement] = useState(
+    versementMensuel?.actif ? String(versementMensuel.montant) : '500',
+  );
   const [cibles, setCibles] = useState<Record<string, string>>(
     Object.fromEntries(lignes.map(ligne => [ligne.titreId, String(ligne.cible).replace('.', ',')])),
   );
@@ -169,6 +182,14 @@ export function Objectifs({
             )}
           </CarteSection>
 
+          {versementMensuel && onEnregistrerVersement ? (
+            <RappelVersement
+              reglage={versementMensuel}
+              comptes={comptes}
+              onEnregistrer={onEnregistrerVersement}
+              onSaisir={onSaisirVersement}
+            />
+          ) : null}
           <CarteSection titre="Prochain versement" poids={1.4}>
             <View style={{ maxWidth: 240 }}>
               <Champ etiquette="Montant à investir (€)" value={versement} onChangeText={setVersement} keyboardType="decimal-pad" testID="champ-versement" />
@@ -206,6 +227,80 @@ export function Objectifs({
         </Rangee>
       </ScrollView>
     </View>
+  );
+}
+
+/** Jour, montant et compte du versement mensuel ; le rappel part ce jour-là. */
+function RappelVersement({
+  reglage,
+  comptes,
+  onEnregistrer,
+  onSaisir,
+}: {
+  reglage: ReglageVersement;
+  comptes: ReadonlyArray<{ id: string; nom: string }>;
+  onEnregistrer(reglage: ReglageVersement): void;
+  onSaisir?(): void;
+}) {
+  const palette = usePalette();
+  const [jour, setJour] = useState(String(reglage.jour));
+  const [montant, setMontant] = useState(String(reglage.montant));
+  const compteId = reglage.compteId ?? comptes[0]?.id;
+  const enregistrer = (partiel: Partial<ReglageVersement>) =>
+    onEnregistrer({
+      ...reglage,
+      compteId,
+      jour: Math.min(28, Math.max(1, Math.round(nombre(jour) || reglage.jour))),
+      montant: nombre(montant) > 0 ? nombre(montant) : reglage.montant,
+      ...partiel,
+    });
+  return (
+    <CarteSection titre="Versement mensuel" testID="carte-versement-mensuel">
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESPACEMENT.m }}>
+        <Text style={{ color: palette.texte, flex: 1 }}>Me le rappeler chaque mois</Text>
+        <Switch value={reglage.actif} onValueChange={actif => enregistrer({ actif })} testID="interrupteur-versement" />
+      </View>
+      <LigneChamps>
+        <Champ
+          etiquette="Le (jour du mois)"
+          value={jour}
+          onChangeText={setJour}
+          onBlur={() => enregistrer({})}
+          keyboardType="number-pad"
+          testID="champ-jour-versement"
+        />
+        <Champ
+          etiquette="Montant (€)"
+          value={montant}
+          onChangeText={setMontant}
+          onBlur={() => enregistrer({})}
+          keyboardType="decimal-pad"
+          testID="champ-montant-versement"
+        />
+      </LigneChamps>
+      {comptes.length > 1 ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.s }}>
+          {comptes.map(compte => (
+            <Bouton
+              key={compte.id}
+              titre={compte.nom}
+              variante={compte.id === compteId ? 'plein' : 'discret'}
+              onPress={() => enregistrer({ compteId: compte.id })}
+            />
+          ))}
+        </View>
+      ) : null}
+      <SousTitre>
+        {reglage.actif
+          ? `Une notification le ${reglage.jour} de chaque mois, avec les achats qui gardent votre répartition cible.`
+          : 'Activez le rappel : l’application vous proposera quoi acheter pour garder votre répartition.'}
+      </SousTitre>
+      {onSaisir ? (
+        <Actions>
+          <Bouton titre="Saisir le versement de ce mois" onPress={onSaisir} testID="saisir-versement-mois" />
+        </Actions>
+      ) : null}
+    </CarteSection>
   );
 }
 

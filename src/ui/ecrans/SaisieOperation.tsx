@@ -34,6 +34,8 @@ export interface SaisieOperationProps {
   /** Ouvre la creation d'une valeur absente de la liste. */
   onCreerTitre?(): void;
   genererId?(): string;
+  /** Formulaire pré-rempli (rappel de versement mensuel, par exemple). */
+  initial?: Partial<FormulaireOperation>;
 }
 
 const TYPES: TypeTransaction[] = [
@@ -53,6 +55,7 @@ export function SaisieOperation({
   onAnnuler,
   onCreerTitre,
   genererId,
+  initial,
 }: SaisieOperationProps) {
   const sombre = useColorScheme() === 'dark';
   const palette = usePalette();
@@ -60,6 +63,7 @@ export function SaisieOperation({
   const [formulaire, setFormulaire] = useState<FormulaireOperation>({
     ...FORMULAIRE_VIDE,
     compteId: comptes[0]?.id ?? '',
+    ...initial,
   });
   const [erreurs, setErreurs] = useState<ErreursSaisie>({});
 
