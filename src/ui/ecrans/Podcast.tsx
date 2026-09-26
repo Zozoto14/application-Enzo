@@ -32,8 +32,8 @@ export interface PodcastProps {
   onGenerer(minutes?: number): void;
 }
 
-type Format = '5 min' | '10 min' | '15 min';
-const FORMATS: Record<Format, number> = { '5 min': 5, '10 min': 10, '15 min': 15 };
+type Format = 'Flash 2 min' | '5 min' | '10 min' | '15 min';
+const FORMATS: Record<Format, number> = { 'Flash 2 min': 2, '5 min': 5, '10 min': 10, '15 min': 15 };
 
 export function Podcast({
   episode,

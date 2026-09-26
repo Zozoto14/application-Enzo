@@ -94,8 +94,15 @@ export interface EntreesEpisode {
   sujet?: { titre: string; court: string; detail: string; piege?: string };
   /** Revue de presse : articles des médias, du plus récent au plus ancien. */
   presse?: readonly ArticleMedia[];
-  /** Durée visée, en minutes : 5, 10 ou 15. Dix par défaut. */
+  /** Durée visée, en minutes : 2 (flash), 5, 10 ou 15. Dix par défaut. */
   cibleMinutes?: number;
+  /** Bilan des cinq dernières séances, raconté le vendredi. */
+  semaine?: {
+    montant: number;
+    pourcentage: number;
+    lignes: ReadonlyArray<{ nom: string; pourcentage: number }>;
+    indices: ReadonlyArray<{ nom: string; pourcentage: number }>;
+  };
 }
 
 /**
@@ -325,7 +332,122 @@ const RECOMMANDATIONS: Record<string, string> = {
   'Vente forte': 'recommandent franchement la vente',
 };
 
+function estVendredi(iso: string): boolean {
+  return new Date(`${iso}T12:00:00Z`).getUTCDay() === 5;
+}
+
+/** Le bilan de la semaine : le portefeuille, ses extrêmes, les indices. */
+function chapitreSemaine(semaine: NonNullable<EntreesEpisode['semaine']>): Chapitre {
+  const segments: Segment[] = [
+    fr(
+      Math.abs(semaine.pourcentage) < 0.05
+        ? 'Sur la semaine, votre portefeuille termine stable.'
+        : `Sur la semaine, votre portefeuille a ${semaine.montant > 0 ? 'gagné' : 'perdu'} ${eurosParles(semaine.montant)}, soit ${pourcentParle(semaine.pourcentage)}.`,
+    ),
+  ];
+  const triees = [...semaine.lignes].sort((a, b) => b.pourcentage - a.pourcentage);
+  const meilleure = triees[0];
+  const pire = triees[triees.length - 1];
+  if (meilleure && meilleure.pourcentage >= 0.05) {
+    segments.push(fr(`La meilleure de la semaine : ${meilleure.nom}, ${pourcentParle(meilleure.pourcentage)}.`));
+  }
+  if (pire && pire !== meilleure && pire.pourcentage <= -0.05) {
+    segments.push(fr(`La plus en retrait : ${pire.nom}, ${pourcentParle(pire.pourcentage)}.`));
+  }
+  if (semaine.indices.length > 0) {
+    segments.push(
+      fr(`Côté indices, sur cinq séances : ${semaine.indices.slice(0, 3).map(indice => `${indice.nom} ${pourcentParle(indice.pourcentage)}`).join(', ')}.`),
+    );
+  }
+  return { titre: 'La semaine en bref', segments };
+}
+
+/**
+ * Le flash : deux minutes pour l'essentiel. Valeur et séance, les deux
+ * lignes qui ont le plus bougé, les indices, et les deux informations les
+ * plus reprises par la presse, avec leur vérification.
+ */
+function construireFlash(entrees: EntreesEpisode): Episode {
+  const date = dateParlee(entrees.aujourdhui);
+  const chapitres: Chapitre[] = [
+    { titre: 'Ouverture', segments: [fr(`Bonjour, voici votre flash bourse du ${date}.`)] },
+  ];
+
+  const essentiel: Segment[] = [];
+  if (entrees.valeurTotale !== null) {
+    essentiel.push(
+      fr(
+        entrees.seance && Math.abs(entrees.seance.pourcentage) >= 0.05
+          ? `Votre portefeuille vaut environ ${eurosParles(entrees.valeurTotale)}, ${pourcentParle(entrees.seance.pourcentage)} sur la dernière séance.`
+          : `Votre portefeuille vaut environ ${eurosParles(entrees.valeurTotale)}.`,
+      ),
+    );
+  }
+  const mobiles = entrees.lignes.filter(ligne => ligne.variationJour !== null && Math.abs(ligne.variationJour) >= 0.05);
+  const haut = [...mobiles].sort((a, b) => b.variationJour! - a.variationJour!)[0];
+  const bas = [...mobiles].sort((a, b) => a.variationJour! - b.variationJour!)[0];
+  if (haut && haut.variationJour! > 0) essentiel.push(fr(`En tête, ${haut.nom}, ${pourcentParle(haut.variationJour!)}.`));
+  if (bas && bas !== haut && bas.variationJour! < 0) essentiel.push(fr(`En queue, ${bas.nom}, ${pourcentParle(bas.variationJour!)}.`));
+  const indices = entrees.indices.filter(indice => indice.seancePct !== null).slice(0, 2);
+  if (indices.length > 0) {
+    essentiel.push(fr(`${indices.map(indice => `${indice.nom} ${pourcentParle(indice.seancePct!)}`).join(', ')}.`));
+  }
+  if (estVendredi(entrees.aujourdhui) && entrees.semaine) {
+    essentiel.push(
+      fr(`Sur la semaine, votre portefeuille fait ${pourcentParle(entrees.semaine.pourcentage)}.`),
+    );
+  }
+  if (essentiel.length > 0) chapitres.push({ titre: 'L’essentiel', segments: essentiel });
+
+  // Les deux informations les plus reprises, celles qui touchent vos lignes d'abord.
+  const tous = [
+    ...(entrees.presse ?? []),
+    ...entrees.valeurs.flatMap(valeur => [...(valeur.articles ?? []), ...valeur.actualites.map(versArticle)]),
+    ...entrees.actualitesMarche.map(versArticle),
+  ].filter(article => recente(article, entrees.aujourdhui));
+  const expose = expositionDe(entrees.lignes.map(ligne => ({ nom: ligne.nom, poids: ligne.poids })));
+  const narrateur = new Narrateur(tous);
+  const retenus = regrouper(tous)
+    .map((groupe, rang) => ({
+      groupe,
+      rang,
+      poids:
+        (groupe.some(article => impactPourVous(article, expose)) ? 100 : 0) +
+        new Set(groupe.map(article => article.source)).size * 10 +
+        (representant(groupe).resume ? 5 : 0),
+    }))
+    .sort((a, b) => b.poids - a.poids || a.rang - b.rang)
+    .slice(0, 2)
+    .map(({ groupe }) => groupe);
+  const aRetenir = retenus.flatMap(groupe => narrateur.raconter(groupe, expose));
+  if (aRetenir.length > 0) chapitres.push({ titre: 'À retenir', segments: aRetenir });
+
+  chapitres.push({
+    titre: 'Clôture',
+    segments: [fr('C’était votre flash. Pas un conseil : vos chiffres et l’actualité. Bonne journée.')],
+  });
+
+  const utilises = retenus.flat();
+  const total = compterMots(chapitres.flatMap(chapitre => chapitre.segments));
+  return {
+    titre: `Votre flash bourse du ${dateParlee(entrees.aujourdhui, false)}`,
+    date,
+    chapitres,
+    duree: Math.max(1, Math.round(total / MOTS_PAR_MINUTE)),
+    sources: utilises.map(article => ({
+      titre: article.titre,
+      source: article.source,
+      lien: article.lien,
+      statut: statutSource(article, tous),
+      confirmations: autresSources(article, tous),
+    })),
+  };
+}
+
 export function construireEpisode(entrees: EntreesEpisode): Episode {
+  if ((entrees.cibleMinutes ?? 10) <= 2) {
+    return construireFlash(entrees);
+  }
   const chapitres: Chapitre[] = [];
   const date = dateParlee(entrees.aujourdhui);
 
@@ -395,6 +517,11 @@ export function construireEpisode(entrees: EntreesEpisode): Episode {
       );
     }
     chapitres.push({ titre: 'Les mouvements du jour', segments: mouvements });
+  }
+
+  // --- Le vendredi, le bilan de la semaine
+  if (estVendredi(entrees.aujourdhui) && entrees.semaine) {
+    chapitres.push(chapitreSemaine(entrees.semaine));
   }
 
   // --- Vos valeurs à la une

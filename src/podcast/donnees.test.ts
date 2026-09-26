@@ -1,8 +1,8 @@
-import { Decimal } from '../core/money/decimal';
+import { Decimal, d } from '../core/money/decimal';
 import { rejouer } from '../core/portfolio/engine';
 import { achat, compte, titre, versement } from '../core/testing/fixtures';
 import type { DonneesValeur } from '../fondamentaux/yahoo';
-import { enrichirResumes, entreesEpisode, lignesDuPortefeuille, preparerEpisode } from './donnees';
+import { enrichirResumes, entreesEpisode, variationSemaine, lignesDuPortefeuille, preparerEpisode } from './donnees';
 
 function scenario() {
   const comptes = [compte()];
@@ -166,5 +166,13 @@ describe('lecture des articles', () => {
     expect(inconnu.resume).toBeUndefined();
     expect(enPanne.resume).toBeUndefined();
     expect(pages).toEqual(['https://www.lesechos.fr/a', 'https://www.lefigaro.fr/lent']);
+  });
+});
+
+describe('variation sur la semaine', () => {
+  it('compare la dernière clôture à celle d’il y a cinq séances', () => {
+    const serie = [100, 101, 99, 102, 103, 110].map((valeur, rang) => ({ date: `2026-09-${18 + rang}`, cloture: d(valeur) }));
+    expect(variationSemaine(serie)).toBeCloseTo(10);
+    expect(variationSemaine(serie.slice(1))).toBeNull();
   });
 });

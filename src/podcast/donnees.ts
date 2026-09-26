@@ -63,6 +63,16 @@ function variationSeance(serie: readonly CoursDate[] | undefined): number | null
   return veille > 0 ? (dernier / veille - 1) * 100 : null;
 }
 
+/** Variation sur cinq séances : la dernière clôture face à celle d'il y a une semaine. */
+export function variationSemaine(serie: readonly CoursDate[] | undefined): number | null {
+  if (!serie || serie.length < 6) {
+    return null;
+  }
+  const avant = serie[serie.length - 6].cloture.toNumber();
+  const dernier = serie[serie.length - 1].cloture.toNumber();
+  return avant > 0 ? (dernier / avant - 1) * 100 : null;
+}
+
 /** Positions triées de la plus grosse à la plus petite, avec leur symbole. */
 export function lignesDuPortefeuille(
   entrees: EntreesPortefeuille,
@@ -142,7 +152,31 @@ export function entreesEpisode(
     };
   });
 
+  // Semaine : même calcul que la séance, sur cinq séances.
+  let montantSemaine = 0;
+  let semaineConnue = false;
+  const lignesSemaine: Array<{ nom: string; pourcentage: number }> = [];
+  for (const ligne of lignes) {
+    const pct = variationSemaine(entrees.historique.get(ligne.titreId));
+    if (pct !== null) {
+      semaineConnue = true;
+      montantSemaine += ligne.valeur - ligne.valeur / (1 + pct / 100);
+      lignesSemaine.push({ nom: ligne.nom, pourcentage: pct });
+    }
+  }
+  const baseSemaine = somme.valeurTotale.toNumber() - montantSemaine;
+
   return {
+    semaine:
+      semaineConnue && baseSemaine > 0
+        ? {
+            montant: montantSemaine,
+            pourcentage: (montantSemaine / baseSemaine) * 100,
+            lignes: lignesSemaine,
+            indices: INDICES.map(indice => ({ nom: indice.court, pourcentage: variationSemaine(entrees.indices.get(indice.id)) }))
+              .filter((indice): indice is { nom: string; pourcentage: number } => indice.pourcentage !== null),
+          }
+        : undefined,
     aujourdhui: entrees.aujourdhui,
     valeurTotale: somme.valeurTotale.toNumber(),
     totalReturn: somme.plusValueLatente.toNumber(),

@@ -288,3 +288,61 @@ describe('enchaînement à l’oral', () => {
     expect(enchainer('À noter :', 'La BCE agit.')).toBe('À noter : La BCE agit.');
   });
 });
+
+describe('flash de deux minutes et semaine en bref', () => {
+  const article = (titre: string, source: string, resume = '') => ({ titre, resume, source, date: '2026-09-25', langue: 'fr' as const });
+  const base = {
+    aujourdhui: '2026-09-25', // un vendredi
+    valeurTotale: 22658,
+    totalReturn: 2658,
+    totalReturnPct: 13.3,
+    seance: { montant: 211, pourcentage: 0.94 },
+    lignes: [
+      { nom: 'Air Liquide', variationJour: 1.9, latentPct: 12.6, poids: 38 },
+      { nom: 'Stellantis', variationJour: -1.2, latentPct: -20, poids: 5 },
+    ],
+    valeurs: [],
+    indices: [{ nom: 'le CAC 40', seancePct: 0.4 }],
+    actualitesMarche: [],
+    presse: [
+      article('La BCE maintient ses taux directeurs', 'Les Echos', 'Le taux de dépôt reste à 2 %.'),
+      article('La BCE maintient ses taux', 'Le Figaro'),
+      article('Le luxe marque le pas en Chine', 'Le Monde', 'Les ventes ralentissent.'),
+      ...Array.from({ length: 20 }, (_, rang) => article(`La societe${rang} publie ses comptes`, 'BFM Bourse', 'Des comptes solides.')),
+    ],
+    semaine: {
+      montant: 420,
+      pourcentage: 1.9,
+      lignes: [
+        { nom: 'Air Liquide', pourcentage: 3.2 },
+        { nom: 'Stellantis', pourcentage: -4.1 },
+      ],
+      indices: [{ nom: 'CAC 40', pourcentage: 1.1 }],
+    },
+  };
+
+  it('dit l’essentiel en deux minutes au plus, avec l’info la plus reprise et sa vérification', () => {
+    const flash = construireEpisode({ ...base, cibleMinutes: 2 });
+    expect(flash.titre).toMatch(/^Votre flash bourse/);
+    expect(flash.duree).toBeLessThanOrEqual(2);
+    expect(flash.chapitres.map(chapitre => chapitre.titre)).toEqual(['Ouverture', 'L’essentiel', 'À retenir', 'Clôture']);
+    const texte = flash.chapitres.flatMap(chapitre => chapitre.segments.map(segment => segment.texte)).join(' ');
+    expect(texte).toContain('En tête, Air Liquide, plus 1,9 pour cent.');
+    expect(texte).toContain('En queue, Stellantis, moins 1,2 pour cent.');
+    expect(texte).toContain('Sur la semaine, votre portefeuille fait plus 1,9 pour cent.');
+    // La BCE, reprise par deux journaux, passe en premier, une seule fois, vérifiée.
+    expect(texte.match(/BCE maintient/g)).toHaveLength(1);
+    expect(texte).toMatch(/Information vérifiée|recoupée|la même chose/);
+  });
+
+  it('ajoute la semaine en bref le vendredi, et seulement le vendredi', () => {
+    const vendredi = construireEpisode(base);
+    const semaine = vendredi.chapitres.find(chapitre => chapitre.titre === 'La semaine en bref')!;
+    const texte = semaine.segments.map(segment => segment.texte).join(' ');
+    expect(texte).toContain('Sur la semaine, votre portefeuille a gagné 420 euros, soit plus 1,9 pour cent.');
+    expect(texte).toContain('La meilleure de la semaine : Air Liquide, plus 3,2 pour cent.');
+    expect(texte).toContain('La plus en retrait : Stellantis, moins 4,1 pour cent.');
+    const jeudi = construireEpisode({ ...base, aujourdhui: '2026-09-24' });
+    expect(jeudi.chapitres.some(chapitre => chapitre.titre === 'La semaine en bref')).toBe(false);
+  });
+});
