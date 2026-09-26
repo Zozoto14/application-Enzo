@@ -46,10 +46,26 @@ export function indicationDate(type: TypeCompte): string {
     : "Date d'ouverture du compte.";
 }
 
+/** Formulaire prérempli pour modifier un compte existant. */
+export function formulaireDepuisCompte(compte: Compte): FormulaireCompte {
+  const [annee, mois, jour] = compte.dateOuverture.split('-');
+  return {
+    nom: compte.nom,
+    type: compte.type,
+    dateOuverture: `${jour}/${mois}/${annee}`,
+    devise: compte.devise,
+  };
+}
+
+/**
+ * Valide le formulaire. Avec `compteModifie`, c'est une modification : le
+ * compte garde son identifiant, et son propre nom ne compte pas comme doublon.
+ */
 export function validerCompte(
   formulaire: FormulaireCompte,
   comptesExistants: readonly Compte[],
   genererId: () => string,
+  compteModifie?: Compte,
 ): ResultatCompte {
   const erreurs: ErreursCompte = {};
 
@@ -57,7 +73,9 @@ export function validerCompte(
   if (nom === '') {
     erreurs.nom = 'Champ obligatoire';
   } else if (
-    comptesExistants.some(compte => compte.nom.toLowerCase() === nom.toLowerCase())
+    comptesExistants.some(
+      compte => compte.id !== compteModifie?.id && compte.nom.toLowerCase() === nom.toLowerCase(),
+    )
   ) {
     erreurs.nom = 'Un compte porte déjà ce nom';
   }
@@ -84,7 +102,7 @@ export function validerCompte(
   return {
     erreurs: {},
     compte: {
-      id: genererId(),
+      id: compteModifie?.id ?? genererId(),
       nom,
       type: formulaire.type,
       dateOuverture: dateOuverture!,

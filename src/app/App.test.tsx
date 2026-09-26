@@ -206,6 +206,32 @@ describe('parcours complet, session ouverte', () => {
     expect(screen.queryByText(/Aucun compte/)).toBeNull();
   });
 
+  it('modifie puis supprime un compte avec ses opérations', async () => {
+    const session = await ouvrir();
+    await creerCompte();
+    await fireEvent.press(screen.getByTestId('bouton-importer-positions'));
+    await fireEvent.changeText(screen.getByLabelText('Contenu du fichier'), EXPORT_REEL);
+    await fireEvent.press(screen.getByTestId('bouton-importer'));
+
+    const compte = new DepotComptes(session.base()).tous()[0];
+    await fireEvent.press(screen.getByTestId(`modifier-compte-${compte.id}`));
+    expect(screen.getByText('Modifier le compte')).toBeTruthy();
+    // Des opérations existent : la devise est figée.
+    expect(screen.getByText(/sa devise ne peut plus changer/)).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText('Nom'), 'Mon PEA');
+    await fireEvent.press(screen.getByTestId('bouton-enregistrer-compte'));
+    expect(new DepotComptes(session.base()).tous()).toEqual([{ ...compte, nom: 'Mon PEA' }]);
+
+    await fireEvent.press(screen.getByTestId(`modifier-compte-${compte.id}`));
+    await fireEvent.press(screen.getByTestId('bouton-supprimer-compte'));
+    expect(screen.getByText(/Supprimer « Mon PEA » et ses 3 opération\(s\) \?/)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('bouton-confirmer-suppression-compte'));
+
+    expect(new DepotComptes(session.base()).tous()).toEqual([]);
+    expect(new DepotTransactions(session.base()).toutes()).toEqual([]);
+    expect(screen.getByText(/Aucun compte/)).toBeTruthy();
+  });
+
   it('refuse un compte sans date d’ouverture', async () => {
     // Pour un PEA, cette date fait courir l'antériorité fiscale.
     await ouvrir();

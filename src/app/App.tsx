@@ -478,6 +478,29 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [session, rafraichir],
   );
 
+  const [compteEdite, setCompteEdite] = useState<string | undefined>();
+
+  // Supprimer un compte efface aussi ses opérations : sans elles, il ne
+  // resterait que des lignes orphelines qui fausseraient les totaux.
+  const supprimerCompte = useCallback(
+    (compteId: string) => {
+      const base = session.base();
+      const depotTransactions = new DepotTransactions(base);
+      // Tout ou rien : un compte à moitié effacé serait pire que pas effacé.
+      base.transaction(() => {
+        for (const transaction of depotTransactions.parCompte(compteId)) {
+          depotTransactions.supprimer(transaction.id);
+        }
+        new DepotComptes(base).supprimer(compteId);
+      });
+      setCompteEdite(undefined);
+      setCompteFiltre(TOUS_LES_COMPTES);
+      setEcran('tableau');
+      rafraichir();
+    },
+    [session, rafraichir],
+  );
+
   const enregistrerTitre = useCallback(
     (titre: Titre) => {
       new DepotTitres(session.base()).enregistrer(titre);
@@ -1586,6 +1609,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const naviguer = (cle: string) => {
     if ((cle === 'saisie' || cle === 'import') && sansCompte) {
       // Sans compte, ni saisie ni import ne sont possibles : on commence par là.
+      setCompteEdite(undefined);
       setEcran('compte');
       return;
     }
@@ -1638,10 +1662,14 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         />
       ) : ecran === 'compte' ? (
         <CreationCompte
+          key={compteEdite ?? 'nouveau'}
           comptesExistants={contenuComplet!.comptes}
           onCreer={enregistrerCompte}
           onAnnuler={contenuComplet!.comptes.length > 0 ? () => setEcran('tableau') : undefined}
           genererId={() => identifiant('compte')}
+          compteAModifier={contenuComplet!.comptes.find(compte => compte.id === compteEdite)}
+          nombreOperations={contenuComplet!.transactions.filter(transaction => transaction.compteId === compteEdite).length}
+          onSupprimer={compteEdite ? () => supprimerCompte(compteEdite) : undefined}
         />
       ) : ecran === 'titre' ? (
         <CreationTitre
@@ -1992,7 +2020,14 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           risque={onglets!.risque}
           flux={onglets!.flux}
           impots={onglets!.impots}
-          onCreerCompte={() => setEcran('compte')}
+          onCreerCompte={() => {
+            setCompteEdite(undefined);
+            setEcran('compte');
+          }}
+          onModifierCompte={compteId => {
+            setCompteEdite(compteId);
+            setEcran('compte');
+          }}
           onAjouterTransaction={() => setEcran('saisie')}
           onImporter={() => setEcran('import')}
           onReglages={() => setEcran('reglages')}

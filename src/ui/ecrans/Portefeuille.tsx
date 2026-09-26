@@ -129,6 +129,8 @@ export interface PortefeuilleProps {
   messageRapport?: string;
   onRafraichirCours?(): void;
   messageCours?: string;
+  /** Ouvre la modification (ou la suppression) d'un compte. */
+  onModifierCompte?(compteId: string): void;
   /** Frais courants saisis pour vos ETF, en %/an, par titre. */
   fraisEtf?: Readonly<Record<string, number>>;
   onChangerFraisEtf?(titreId: string, taux: string): void;
@@ -684,6 +686,16 @@ function Resume(props: PortefeuilleProps) {
               <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>
                 Solde : <Text style={{ color: palette.hausse, fontWeight: '700' }}>{compte.solde}</Text>
               </Text>
+              {props.onModifierCompte ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Modifier ou supprimer ${compte.nom}`}
+                  testID={`modifier-compte-${compte.compteId}`}
+                  onPress={() => props.onModifierCompte?.(compte.compteId)}
+                  style={[styles.boutonCompte, { borderColor: palette.bordure }]}>
+                  <Text style={{ color: palette.accent, fontWeight: '700', fontSize: 12 }}>Modifier</Text>
+                </Pressable>
+              ) : null}
             </View>
             <View style={styles.blocCompte}>
               <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>Valeur totale</Text>
@@ -870,6 +882,7 @@ function Classement({
 }
 
 const styles = StyleSheet.create({
+  boutonCompte: { alignSelf: 'flex-start', marginTop: 6, borderWidth: 1, borderRadius: RAYON.s, paddingHorizontal: 12, minHeight: 32, justifyContent: 'center' },
   legendeMini: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: ESPACEMENT.s },
   page: { paddingBottom: ESPACEMENT.xl },
   enTete: {
