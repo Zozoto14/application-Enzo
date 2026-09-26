@@ -2389,6 +2389,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           flux={onglets!.flux}
           impots={onglets!.impots}
           ventes={onglets!.ventes}
+          onRecupererAppareils={synchro.configure ? undefined : () => naviguer('reglages')}
           onCreerCompte={() => {
             setCompteEdite(undefined);
             setEcran('compte');

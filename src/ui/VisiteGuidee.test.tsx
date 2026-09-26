@@ -3,8 +3,9 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { ETAPES_VISITE, VERSION_VISITE, VisiteGuidee, etapesDejaVues, etapesNouvelles, marquerVues, type EtapeVisite } from './VisiteGuidee';
 
 describe('étapes vues de la visite', () => {
-  it('ne repropose rien après la visite de la version précédente', () => {
-    expect(etapesNouvelles(ETAPES_VISITE, VERSION_VISITE)).toEqual([]);
+  it('après la visite de la version précédente, ne propose que les étapes arrivées depuis', () => {
+    expect(etapesNouvelles(ETAPES_VISITE, VERSION_VISITE).map(etape => etape.id)).toEqual(['synchro']);
+    expect(etapesNouvelles(ETAPES_VISITE, marquerVues(VERSION_VISITE, ['synchro']))).toEqual([]);
   });
 
   it('propose tout la première fois', () => {
@@ -14,7 +15,7 @@ describe('étapes vues de la visite', () => {
 
   it('ne montre que les nouveautés jamais vues', () => {
     const avecNouvelle: EtapeVisite[] = [...ETAPES_VISITE, { id: 'nouvelle', emoji: '✨', titre: 'Nouvelle', texte: '…', destination: 'carnet' }];
-    expect(etapesNouvelles(avecNouvelle, VERSION_VISITE).map(etape => etape.id)).toEqual(['nouvelle']);
+    expect(etapesNouvelles(avecNouvelle, VERSION_VISITE).map(etape => etape.id)).toEqual(['synchro', 'nouvelle']);
   });
 
   it("ne rouvre pas la visite pour la seule introduction", () => {

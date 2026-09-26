@@ -120,6 +120,8 @@ export interface PortefeuilleProps {
   onRechercher?(texte: string): Promise<readonly CandidatSymbole[]>;
   onOuvrirSymbole?(symbole: string): void;
   onCreerCompte?(): void;
+  /** Appareil neuf : récupérer le portefeuille des autres appareils. */
+  onRecupererAppareils?(): void;
   onAjouterTransaction?(): void;
   onImporter?(): void;
   onReglages?(): void;
@@ -483,11 +485,17 @@ function Resume(props: PortefeuilleProps) {
             Créez d&apos;abord un compte : c&apos;est lui qui portera vos positions et vos
             liquidités.
           </Vide>
-          {props.onCreerCompte ? (
-            <View style={{ alignSelf: 'flex-start' }}>
-              <Bouton titre="Créer un compte" onPress={props.onCreerCompte} />
-            </View>
-          ) : null}
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.s }}>
+            {props.onCreerCompte ? <Bouton titre="Créer un compte" onPress={props.onCreerCompte} /> : null}
+            {props.onRecupererAppareils ? (
+              <Bouton
+                titre="Récupérer depuis mes autres appareils"
+                variante="discret"
+                onPress={props.onRecupererAppareils}
+                testID="bouton-recuperer-appareils"
+              />
+            ) : null}
+          </View>
         </CarteSection>
       ) : dashboard.portefeuilleVide ? (
         <CarteSection titre="Aucune position pour l'instant.">

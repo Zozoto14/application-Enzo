@@ -2,8 +2,18 @@
 <html lang="fr">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>AppliBourse</title>
+    <!-- Site de secours : s'ajoute à l'écran d'accueil de l'iPhone comme une app.
+         Pas de start_url dans le manifeste : l'icône garde l'adresse complète,
+         code de liaison compris. Sans effet dans l'application de bureau. -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icone-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="AppliBourse" />
+    <meta name="theme-color" content="#000000" />
     <style>
       html, body, #racine { height: 100%; margin: 0; }
       /* La fenêtre ne défile jamais : chaque écran fait défiler son propre

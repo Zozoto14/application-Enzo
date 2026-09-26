@@ -133,6 +133,13 @@ export const ETAPES_VISITE: readonly EtapeVisite[] = [
     texte: 'Un bouton teste tout pour de vrai. Si quelque chose ne marche pas, copiez le rapport et envoyez-le.',
     destination: 'diagnostic',
   },
+  {
+    id: 'synchro',
+    emoji: '🔄',
+    titre: 'Vos appareils synchronisés',
+    texte: 'Le PC, l’iPhone et le site de secours partagent le même portefeuille, chiffré. Dans Paramètres › Synchronisation : le mot de passe, puis le QR code pour l’iPhone.',
+    destination: 'reglages',
+  },
 ];
 
 export function VisiteGuidee({

@@ -30,6 +30,7 @@ import { useFondDocument } from './Bureau';
 import { BandeauMiseAJour } from './MiseAJour';
 import { ouvrirSessionBureau, type SessionBureau } from './session';
 import { pont, stockageCourant } from './stockage';
+import { installerPontWeb } from './web';
 
 /**
  * Les appels à Yahoo Finance passent par le processus principal.
@@ -63,6 +64,10 @@ function relayerYahoo(): void {
 }
 
 relayerYahoo();
+// Hors d'Electron (site de secours), Yahoo et les médias passent par le relais.
+if (!pont()) {
+  installerPontWeb();
+}
 
 type Etat =
   | { phase: 'chargement' }

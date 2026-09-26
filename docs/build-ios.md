@@ -1,5 +1,10 @@
 # Session de build iOS
 
+> **Plus besoin de Mac.** L'app se compile désormais sur un Mac de GitHub et
+> s'installe par AltStore : voir [iphone.md](iphone.md). Les réglages natifs
+> décrits ci-dessous (étapes 3, 4 et 4 bis) sont déjà appliqués dans `ios/`.
+> Ce document reste pour mémoire.
+
 Une seule session, sur un Mac emprunté. Après quoi **plus aucun Mac ne sera
 nécessaire** : les mises à jour JavaScript se fabriquent sur le PC.
 

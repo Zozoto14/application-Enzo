@@ -18,7 +18,7 @@ import { encoderLiaison, lienApp, lienSite, type Liaison } from '../../sync/rela
 
 export interface CarteSynchroProps {
   synchro: EtatSynchroApp;
-  /** Relais installé sur ce PC par le script, proposé sans rien saisir. */
+  /** Relais déjà connu (script du PC, lien scanné) : proposé sans rien saisir. */
   liaisonDuPc?: Liaison;
   nomParDefaut: string;
   onRelier(code: string, motDePasse: string, nom: string): Promise<void>;
@@ -117,7 +117,7 @@ export function CarteSynchro({
           </SousTitre>
           {liaisonDuPc ? (
             <Text style={{ color: palette.hausse, fontWeight: '600' }} testID="relais-du-pc">
-              ✅ Relais installé sur ce PC : rien à recopier.
+              ✅ Relais reconnu : rien à recopier.
             </Text>
           ) : (
             <Champ
@@ -184,6 +184,11 @@ export function CarteSynchro({
         </SousTitre>
         {synchro.expireLe ? <Expiration expireLe={synchro.expireLe} maintenant={maintenant} /> : null}
         {synchro.message ? <Text style={{ color: palette.texte }}>{synchro.message}</Text> : null}
+        {synchro.maj ? (
+          <Text style={{ color: palette.accent, fontWeight: '600' }} testID="maj-telechargee">
+            {synchro.maj}
+          </Text>
+        ) : null}
         {synchro.erreur ? <Alerte message={synchro.erreur} /> : null}
         <View style={styles.boutons}>
           <Bouton

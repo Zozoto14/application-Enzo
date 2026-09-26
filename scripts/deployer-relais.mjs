@@ -18,9 +18,9 @@
  * rien : il reprend la boîte, le jeton et le site déjà en place.
  */
 
-import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -112,6 +112,8 @@ async function publierSite(local) {
   etape('Compilation du site de secours');
   await lancer('npx', ['vite', 'build', '--outDir', '../site-dist', '--emptyOutDir']);
 
+  await joindreMiseAJourIphone(local);
+
   etape('Publication du site');
   if (!local.projetPages) {
     local.projetPages = `applibourse-${randomBytes(3).toString('hex')}`;
@@ -135,6 +137,31 @@ async function publierSite(local) {
     }
   }
   ecrireLocal(local);
+}
+
+/**
+ * Paquet JavaScript signé pour l'app iPhone, publié avec le site : l'app le
+ * télécharge seule et n'a besoin d'AltStore que pour le code natif. Refait
+ * seulement quand le code a changé ; sans clé de signature, on passe.
+ */
+async function joindreMiseAJourIphone(local) {
+  if (!existsSync(resolve(racine, 'cle-maj-privee.txt'))) {
+    console.log('\n(Pas de clé de signature des mises à jour : l’app iPhone ne se mettra à jour que par AltStore.)');
+    return;
+  }
+  const git = args => execFileSync('git', args, { cwd: racine, encoding: 'utf8' }).trim();
+  const commit = git(['rev-parse', 'HEAD']);
+  if (commit !== local.majCommit || !existsSync(resolve(racine, 'maj', 'main.jsbundle'))) {
+    etape('Mise à jour de l’app iPhone');
+    const notes = git(['log', '-1', '--format=%s']).replace(/"/g, '');
+    await lancer('node', ['scripts/publier-maj.mjs', '--notes', process.platform === 'win32' ? `"${notes}"` : notes]);
+    local.majCommit = commit;
+    ecrireLocal(local);
+  }
+  mkdirSync(resolve(racine, 'site-dist', 'maj'), { recursive: true });
+  for (const nom of ['main.jsbundle', 'manifeste.json']) {
+    copyFileSync(resolve(racine, 'maj', nom), resolve(racine, 'site-dist', 'maj', nom));
+  }
 }
 
 try {

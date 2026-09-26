@@ -1,0 +1,94 @@
+# App iPhone pour AltStore : compilée sur un Mac de GitHub, sans signature.
+#
+# AltStore (AltServer sur le PC) signe lui-même le fichier avec votre
+# identifiant Apple gratuit au moment de l'installation. Aucun Mac, aucun
+# compte développeur payant.
+#
+# Lancement : onglet Actions du dépôt › « App iPhone (AltStore) » › Run
+# workflow ; ou tout seul quand le code natif (dossier ios/, dépendances)
+# change. Le fichier AppliBourse.ipa se télécharge en bas de la page de
+# l'exécution, rubrique Artifacts. Guide complet : docs/iphone.md.
+#
+# Les modifications ordinaires (écrans, calculs) n'ont pas besoin de ce
+# fichier : l'app les télécharge seule depuis le site de secours.
+
+name: App iPhone (AltStore)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/app-iphone.yml'
+
+concurrency:
+  group: app-iphone
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Dépendances
+        run: npm ci --no-audit --no-fund
+
+      - name: Vérification du code
+        run: |
+          npx tsc --noEmit
+          npx jest --silent
+
+      - name: Pods (SQLCipher activé par package.json)
+        working-directory: ios
+        run: pod install
+
+      - name: Compilation (sans signature)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace ios/AppliBourse.xcworkspace \
+            -scheme AppliBourse \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build | tee xcodebuild.log | grep -E "error:|warning: .*deprecated|\*\* BUILD" || true
+          test -d build/Build/Products/Release-iphoneos/AppliBourse.app
+
+      - name: Paquet .ipa
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/AppliBourse.app Payload/
+          zip -qry AppliBourse.ipa Payload
+          ls -lh AppliBourse.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AppliBourse-ipa
+          path: AppliBourse.ipa
+          retention-days: 30
+
+      - name: Journal de compilation (en cas d'échec)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journal-xcodebuild
+          path: xcodebuild.log
+          if-no-files-found: ignore

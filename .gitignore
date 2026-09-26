@@ -23,3 +23,5 @@ relais/wrangler.local.toml
 relais/.wrangler/
 site-dist/
 .wrangler/
+# Paquets JavaScript signés (npm run publier-maj), publiés avec le site de secours
+/maj/
