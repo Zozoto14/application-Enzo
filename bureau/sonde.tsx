@@ -278,7 +278,10 @@ function Apercu() {
       {destination === 'surveillance' ? (
         <Watchlist
           vue={construireWatchlist({
-            watchlist: [{ titreId: 'cw8', ajouteLe: '2025-03-12', coursAjout: d('612') }],
+            watchlist: [
+            { titreId: 'cw8', ajouteLe: '2025-03-12', coursAjout: d('612') },
+            { titreId: 'air-liquide', ajouteLe: '2025-04-02', coursAjout: d('150') },
+          ],
             titres,
             cours,
             titresDetenus: new Set(etat.positions.map(position => position.titreId)),
@@ -289,6 +292,8 @@ function Apercu() {
           onChangerSeuil={() => undefined}
           onRechercher={() => setDestination('recherche')}
           chargerTheses={thesesExemple}
+          chargerFiche={async () => ficheExemple}
+          onOuvrirFiche={() => setDestination('fiche')}
           onRetour={() => setDestination('portefeuille')}
         />
       ) : null}

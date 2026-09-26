@@ -1111,6 +1111,19 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [],
   );
 
+  /** Vue de fiche d'un symbole, pour le panneau de la Watchlist (réseau requis). */
+  const chargerVueFiche = useMemo(
+    () =>
+      chargementAutomatique
+        ? async (symbole: string) => {
+            const donnees = fichesEnCache.current.get(symbole) ?? (await chargerValeur(symbole));
+            fichesEnCache.current.set(symbole, donnees);
+            return construireFiche(donnees.fiche, donnees.comptes, donnees.historique, donnees.manques);
+          }
+        : undefined,
+    [chargementAutomatique],
+  );
+
   /** Thèses et actualités d'une valeur, par le processus principal du bureau. */
   const pontFlux = (globalThis as { applibourse?: { medias?: { flux(url: string): Promise<string> } } }).applibourse
     ?.medias;
@@ -1704,7 +1717,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     { cle: 'recherche', libelle: 'Recherche', glyphe: '⌕' },
     // La fiche ouverte se range sous la Recherche, d'où on l'ouvre le plus souvent.
     ...(fiche ? [{ cle: 'fiche', libelle: fiche.vue?.entete.nom ?? fiche.symbole, glyphe: '◧', sous: true }] : []),
-    { cle: 'watchlist', libelle: 'Surveillance', glyphe: '☆' },
+    { cle: 'watchlist', libelle: 'Watchlist', glyphe: '☆' },
     { cle: 'comparateur', libelle: 'Comparateur', glyphe: '⇄' },
     { cle: 'podcast', libelle: 'Podcast', glyphe: '♫' },
     { cle: 'objectifs', libelle: 'Objectifs', glyphe: '◎' },
@@ -2021,6 +2034,13 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onCreerTitre={() => setEcran('titre')}
           onRechercher={() => setEcran('recherche')}
           chargerTheses={chargerThesesValeur}
+          chargerFiche={chargerVueFiche}
+          onOuvrirFiche={symbole =>
+            ouvrirSymbole(
+              symbole,
+              (contenuComplet?.titres ?? []).find(titre => titre.ticker.toUpperCase() === symbole.toUpperCase())?.id,
+            )
+          }
           onRetour={() => setEcran('tableau')}
         />
       ) : ecran === 'recherche' ? (

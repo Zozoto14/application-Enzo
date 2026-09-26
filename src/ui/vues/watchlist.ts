@@ -28,6 +28,8 @@ export interface LigneSurveillee {
   /** Écart depuis l'ajout, absent si l'un des deux cours manque. */
   ecart?: string;
   ecartPourcent?: string;
+  /** Écart en %, pour trier ; absent s'il ne se mesure pas. */
+  ecartPct?: number;
   tendance: Tendance;
   /** Phrase qui situe le suivi : « suivie depuis le 12/03/2026 ». */
   depuis: string;
@@ -113,6 +115,7 @@ export function construireWatchlist(entrees: EntreesWatchlist): VueWatchlist {
       ecartPourcent: ecart
         ? formaterPourcentage(ecart.div(ligne.coursAjout!).mul(100))
         : undefined,
+      ecartPct: ecart ? ecart.div(ligne.coursAjout!).mul(100).toNumber() : undefined,
       tendance: tendance(ecart ?? null),
       depuis: `Suivie depuis le ${formaterDate(ligne.ajouteLe)}${
         ligne.coursAjout ? `, à ${formaterMontant(ligne.coursAjout)}` : ''

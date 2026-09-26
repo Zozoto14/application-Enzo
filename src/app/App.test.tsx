@@ -262,7 +262,7 @@ describe('parcours complet, session ouverte', () => {
       expect(screen.queryByTestId('historique-recherche')).toBeNull();
 
       await fireEvent.press(screen.getByTestId('nav-watchlist'));
-      expect(screen.getByText('NVIDIA Corporation')).toBeTruthy();
+      expect(screen.getAllByText('NVIDIA Corporation').length).toBeGreaterThan(0);
       await fireEvent.press(screen.getByTestId('onglet-surveillance-theses'));
       expect(screen.getByText(/application de bureau/)).toBeTruthy();
     } finally {
@@ -613,7 +613,6 @@ describe('parcours complet, session ouverte', () => {
 
     await fireEvent.press(screen.getByTestId('nav-watchlist'));
     await fireEvent.press(screen.getByText(/^Amundi MSCI World/));
-    await fireEvent.press(screen.getByText('Retour'));
 
     await fireEvent.press(screen.getByTestId('nav-notifications'));
 
