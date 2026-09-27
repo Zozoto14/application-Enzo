@@ -96,7 +96,15 @@ async function deployerRelais(local) {
   writeFileSync(configLocale, modele.replace('A_REMPLIR_PAR_LE_SCRIPT', local.kv));
 
   etape('Relais');
-  const sortie = await wrangler(['deploy', '--config', CONFIG_WRANGLER]);
+  const sortie = await wrangler(['deploy', '--config', CONFIG_WRANGLER], { tolerer: true });
+  if (/register a workers\.dev subdomain/i.test(sortie) && !/https:\/\/[a-z0-9.-]+\.workers\.dev/.test(sortie)) {
+    // Compte Cloudflare neuf : le sous-domaine se choisit une fois, sur le site
+    // (wrangler ne peut pas le demander ici, sa sortie étant lue par le script).
+    const lien = /https:\/\/dash\.cloudflare\.com\/\S+\/workers\/onboarding/.exec(sortie)?.[0] ?? 'https://dash.cloudflare.com › Workers';
+    throw new Error(
+      `Il faut d’abord choisir votre sous-domaine workers.dev (une seule fois) :\n  1. Ouvrez ${lien}\n  2. Choisissez un nom (par exemple votre pseudo) et validez\n  3. Relancez : npm run relais:deployer`,
+    );
+  }
   const adresse = /https:\/\/[a-z0-9.-]+\.workers\.dev/.exec(sortie)?.[0];
   if (adresse) {
     local.relais = adresse;
