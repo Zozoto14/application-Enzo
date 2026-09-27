@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { CarteSynchro } from './CarteSynchro';
+import { CarteSynchro, imageQr } from './CarteSynchro';
 import type { EtatSynchroApp } from '../../app/synchroApp';
 
 const LIAISON = { relais: 'https://relais.exemple.workers.dev', jeton: 'jeton-0123456789abcdef', site: 'https://ab.pages.dev' };
@@ -81,5 +81,20 @@ describe('CarteSynchro', () => {
     expect(screen.getByTestId('code-liaison').props.children).toMatch(/^AB1\./);
     await fireEvent.press(screen.getByTestId('oublier-bbbb2222'));
     expect(onOublier).toHaveBeenCalledWith('bbbb2222');
+  });
+});
+
+describe('imageQr', () => {
+  it('dessine en vectoriel sur le PC, à taille fixe', () => {
+    const { uri, taille } = imageQr('https://ab.pages.dev/#liaison=AB1.xyz', true);
+    expect(uri.startsWith('data:image/svg+xml')).toBe(true);
+    expect(decodeURIComponent(uri)).toContain('<svg');
+    expect(taille).toBe(260);
+  });
+
+  it('en pixels ailleurs, à sa taille exacte pour rester net', () => {
+    const { uri, taille } = imageQr('applibourse://liaison?code=AB1.xyz', false);
+    expect(uri.startsWith('data:image/gif')).toBe(true);
+    expect(taille % 4).toBe(0);
   });
 });

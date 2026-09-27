@@ -9,7 +9,7 @@
 
 import qrcode from 'qrcode-generator';
 import React, { useMemo, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON } from '../theme';
 import type { EtatSynchroApp } from '../../app/synchroApp';
@@ -40,17 +40,33 @@ function ilYA(iso: string, maintenant: Date): string {
   return `il y a ${Math.round(heures / 24)} jours`;
 }
 
+/** Côté affiché du QR code, en points. */
+const TAILLE_QR = 260;
+
+/**
+ * QR code en dessin vectoriel (SVG) : net à toute taille et à tout zoom
+ * d'écran. Une image en pixels réduite à l'affichage devient floue, et
+ * l'appareil photo ne la lit plus. Hors navigateur (iPhone), l'image en
+ * pixels est gardée, à sa taille exacte.
+ */
+export function imageQr(texte: string, vectoriel = Platform.OS === 'web'): { uri: string; taille: number } {
+  const qr = qrcode(0, 'M');
+  qr.addData(texte);
+  qr.make();
+  if (vectoriel) {
+    const svg = qr.createSvgTag({ cellSize: 4, margin: 16, scalable: true });
+    return { uri: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`, taille: TAILLE_QR };
+  }
+  const case_ = 4;
+  return { uri: qr.createDataURL(case_, 16), taille: (qr.getModuleCount() + 8) * case_ };
+}
+
 function QrCode({ texte, legende, testID }: { texte: string; legende: string; testID: string }) {
-  const uri = useMemo(() => {
-    const qr = qrcode(0, 'M');
-    qr.addData(texte);
-    qr.make();
-    return qr.createDataURL(4, 3);
-  }, [texte]);
+  const { uri, taille } = useMemo(() => imageQr(texte), [texte]);
   return (
     <View style={styles.qr} testID={testID}>
-      <Image source={{ uri }} style={styles.imageQr} accessibilityLabel={legende} />
-      <Text style={{ color: '#111', fontWeight: '600', textAlign: 'center', maxWidth: 200 }}>{legende}</Text>
+      <Image source={{ uri }} style={{ width: taille, height: taille }} accessibilityLabel={legende} />
+      <Text style={{ color: '#111', fontWeight: '600', textAlign: 'center', maxWidth: taille }}>{legende}</Text>
     </View>
   );
 }
@@ -304,7 +320,6 @@ const styles = StyleSheet.create({
   },
   qrs: { flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.l },
   qr: { alignItems: 'center', gap: ESPACEMENT.xs, backgroundColor: '#fff', padding: ESPACEMENT.s, borderRadius: RAYON.m },
-  imageQr: { width: 200, height: 200 },
   code: {
     fontFamily: 'monospace',
     fontSize: 12,
