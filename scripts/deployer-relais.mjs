@@ -28,6 +28,10 @@ const racine = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dossierRelais = resolve(racine, 'relais');
 const fichierLocal = resolve(dossierRelais, 'relais-local.json');
 const configLocale = resolve(dossierRelais, 'wrangler.local.toml');
+// Chemin passé à wrangler : relatif au projet (dossier courant), et donc sans
+// les espaces du chemin complet (« Agent IA », « Logiciel de … ») que le
+// shell de Windows couperait en plusieurs arguments.
+const CONFIG_WRANGLER = 'relais/wrangler.local.toml';
 const siteSeulement = process.argv.includes('--site');
 const WRANGLER = ['--yes', 'wrangler@4'];
 
@@ -92,7 +96,7 @@ async function deployerRelais(local) {
   writeFileSync(configLocale, modele.replace('A_REMPLIR_PAR_LE_SCRIPT', local.kv));
 
   etape('Relais');
-  const sortie = await wrangler(['deploy', '--config', configLocale]);
+  const sortie = await wrangler(['deploy', '--config', CONFIG_WRANGLER]);
   const adresse = /https:\/\/[a-z0-9.-]+\.workers\.dev/.exec(sortie)?.[0];
   if (adresse) {
     local.relais = adresse;
@@ -103,7 +107,7 @@ async function deployerRelais(local) {
   if (!local.jeton) {
     local.jeton = randomBytes(24).toString('base64url');
     etape('Jeton du relais');
-    await wrangler(['secret', 'put', 'JETON', '--config', configLocale], { entree: `${local.jeton}\n` });
+    await wrangler(['secret', 'put', 'JETON', '--config', CONFIG_WRANGLER], { entree: `${local.jeton}\n` });
   }
   ecrireLocal(local);
 }
