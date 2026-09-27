@@ -107,6 +107,15 @@ export function CarteSynchro({
   const [erreur, setErreur] = useState<string | undefined>();
   const [enCours, setEnCours] = useState(false);
   const [montrerCodes, setMontrerCodes] = useState(false);
+  const [copie, setCopie] = useState<'code' | 'lien' | undefined>();
+  const copier = (texte: string, quoi: 'code' | 'lien') => {
+    const pressePapiers = (globalThis as { navigator?: { clipboard?: { writeText(t: string): Promise<void> } } }).navigator
+      ?.clipboard;
+    pressePapiers
+      ?.writeText(texte)
+      .then(() => setCopie(quoi))
+      .catch(() => setCopie(undefined));
+  };
 
   const codeUtilise = code.trim() || (liaisonDuPc ? encoderLiaison(liaisonDuPc) : '');
 
@@ -282,15 +291,38 @@ export function CarteSynchro({
               n’est pas dans le QR code.
             </SousTitre>
             <View style={styles.qrs}>
-              <QrCode texte={lienApp(liaison)} legende="App iPhone (AltStore)" testID="qr-app" />
               {lienSite(liaison) ? (
-                <QrCode texte={lienSite(liaison)!} legende="Site de secours" testID="qr-site" />
+                <QrCode texte={lienSite(liaison)!} legende="Site de secours (Safari)" testID="qr-site" />
               ) : null}
+              <QrCode
+                texte={lienApp(liaison)}
+                legende="App iPhone — seulement une fois l’app installée par AltStore"
+                testID="qr-app"
+              />
             </View>
-            <Text style={{ color: palette.texteSecondaire }}>Ou recopiez ce code :</Text>
+            <Text style={{ color: palette.texteSecondaire }}>
+              Sans QR code : copiez ce code, envoyez-le-vous (iMessage, WhatsApp, e-mail, Notes), puis collez-le sur
+              l’iPhone dans Paramètres › Synchronisation › Code de liaison.
+            </Text>
             <Text selectable style={[styles.code, { color: palette.texte, borderColor: palette.bordure }]} testID="code-liaison">
               {encoderLiaison(liaison)}
             </Text>
+            <View style={styles.boutons}>
+              <Bouton
+                titre={copie === 'code' ? '✅ Code copié' : 'Copier le code'}
+                variante="discret"
+                onPress={() => copier(encoderLiaison(liaison), 'code')}
+                testID="copier-code"
+              />
+              {lienSite(liaison) ? (
+                <Bouton
+                  titre={copie === 'lien' ? '✅ Lien copié' : 'Copier le lien du site (code inclus)'}
+                  variante="discret"
+                  onPress={() => copier(lienSite(liaison)!, 'lien')}
+                  testID="copier-lien-site"
+                />
+              ) : null}
+            </View>
             {liaison.site ? (
               <Text selectable style={{ color: palette.accent }}>
                 Site de secours : {liaison.site}
