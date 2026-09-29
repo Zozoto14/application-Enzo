@@ -117,7 +117,7 @@ export function ecouterActivite(rappel: () => void): () => void {
  * caches du site, puis recharge la page depuis le serveur. Faux hors web.
  */
 export async function rechargerApp(): Promise<boolean> {
-  const g = globalThis as {
+  const g = globalThis as unknown as {
     navigator?: { serviceWorker?: { getRegistrations?(): Promise<Array<{ update?(): Promise<unknown>; unregister(): Promise<boolean> }>> } };
     caches?: { keys(): Promise<string[]>; delete(cle: string): Promise<boolean> };
     location?: { reload(): void };
