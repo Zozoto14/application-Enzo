@@ -23,6 +23,7 @@ export const TYPES_EVENEMENT = [
   'securite',
   'reglages',
   'connexion',
+  'acces-admin',
   'export',
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
@@ -36,6 +37,7 @@ export const LIBELLES_TYPE: Record<TypeEvenement, string> = {
   securite: 'Sécurité',
   reglages: 'Réglages',
   connexion: 'Connexion',
+  'acces-admin': 'Accès administrateur',
   export: 'Export',
 };
 

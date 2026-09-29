@@ -1,29 +1,48 @@
 /**
  * App « Administration » du hub, réservée au profil administrateur.
  *
- * Elle s'appuie entièrement sur le système de profils existant : chaque ami
- * est un profil, avec son coffre et son portefeuille chiffrés à part. Ce que
- * l'administrateur règle ici :
+ * Six sections : Tableau de bord · Utilisateurs · Applications · Sécurité ·
+ * Journal · Réglages (`admin/ui/`). Cet écran les assemble et leur fournit
+ * les outils communs (`OutilsAdmin`) :
  *
- *  - la **création** d'un compte : l'app génère le mot de passe, le secret
- *    TOTP et les codes de récupération (mêmes mécanismes qu'au premier
- *    lancement), et les montre **une seule fois** ;
- *  - les **apps** ouvertes à l'ami (une case par app du registre) ;
- *  - la **régénération** des identifiants, la désactivation, la suppression.
+ *  - les **données de l'Administration** (réglages, notes, journal) vivent
+ *    dans la base chiffrée de l'administrateur (`admin/donnees.ts`) ;
+ *  - toute modification des comptes passe par l'hôte (`ControleProfils`),
+ *    qui revalide et chiffre l'annuaire, puis est **journalisée** ;
+ *  - le panneau se **verrouille** après un délai sans activité, et les
+ *    actions sensibles redemandent mot de passe + code (`Session.verifierIdentite`,
+ *    mêmes temporisations qu'au déverrouillage) ;
+ *  - les connexions des amis survenues depuis la dernière visite sont
+ *    reportées au journal à l'ouverture.
  */
 
-import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
-import { QrCode } from '../ui/ecrans/CarteSynchro';
-import type { IdentifiantsAmi } from '../profils/identifiants';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { Profil } from '../profils/profils';
-import { appsAttribuables, basculerApp, nombreUtilisateurs, peutOuvrir } from './permissions';
-import { BoutonHub, RetourHub } from './Hub';
+import { RetourHub } from './Hub';
+import { nouvellesConnexions } from './admin/comptes';
+import { avecEvenement, chargerDonnees, donneesVides, enregistrerDonnees, evaluerRobustesse, type DonneesAdmin } from './admin/donnees';
+import type { EvenementAudit } from './admin/journal';
+import { apresVerification, confianceValide, doitVerrouiller, etatInitial, noterActivite, verrouiller, type EtatVerrouPanel } from './admin/verrouillage';
+import { Applications } from './admin/ui/Applications';
+import { Avis, BoutonHub, Champ, Panneau, styleTitre, type IdSection, type OutilsAdmin } from './admin/ui/commun';
+import { Journal } from './admin/ui/Journal';
+import { Reglages } from './admin/ui/Reglages';
+import { Securite } from './admin/ui/Securite';
+import { Tableau } from './admin/ui/Tableau';
+import { Utilisateurs } from './admin/ui/Utilisateurs';
 import { police, teinteTransparente, type ThemeHub } from './themes';
-import type { AppHub, PropsRacineApp } from './types';
+import type { PropsRacineApp } from './types';
+import { ecouterActivite } from './web';
 
-type Onglet = 'utilisateurs' | 'apps';
-type Confirmation = { genre: 'regenerer' | 'supprimer'; id: string } | undefined;
+const SECTIONS: ReadonlyArray<readonly [IdSection, string, string]> = [
+  ['tableau', '◧', 'Tableau de bord'],
+  ['utilisateurs', '👥', 'Utilisateurs'],
+  ['applications', '▦', 'Applications'],
+  ['securite', '🛡', 'Sécurité'],
+  ['journal', '☰', 'Journal'],
+  ['reglages', '⚙', 'Réglages'],
+];
 
 /** Laisse l'indicateur s'afficher avant Argon2id, qui bloque le fil un instant. */
 function apresRendu<T>(action: () => Promise<T>): Promise<T> {
@@ -38,495 +57,308 @@ function message(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : String(erreur);
 }
 
-export function Administration({ contexte, theme, registre, onRetour }: PropsRacineApp) {
+type Demande = { raison: string; action: () => void };
+
+export function Administration({ contexte, theme, registre, onRetour, onTheme }: PropsRacineApp) {
   const controle = contexte.profils;
+  const services = contexte.admin;
   const { width } = useWindowDimensions();
-  const [onglet, setOnglet] = useState<Onglet>('utilisateurs');
-  const [choisi, setChoisi] = useState<string | undefined>();
-  const [creation, setCreation] = useState(false);
-  const [identifiants, setIdentifiants] = useState<{ nom: string; valeurs: IdentifiantsAmi } | undefined>();
-  const [confirmation, setConfirmation] = useState<Confirmation>();
+  const large = width >= 900;
+  const maintenant = useCallback(() => contexte.maintenant ?? Date.now(), [contexte.maintenant]);
+  const [section, setSection] = useState<IdSection>('tableau');
+  const [cible, setCible] = useState<string | undefined>();
   const [enCours, setEnCours] = useState<string | undefined>();
   const [erreur, setErreur] = useState<string | undefined>();
   const [avis, setAvis] = useState<string | undefined>();
-  const accent = theme.teintes.admin;
-  const large = width >= 820;
+  const [demande, setDemande] = useState<Demande | undefined>();
+  const donneesRef = useRef<DonneesAdmin>(services ? chargerDonnees(services.stockage) : donneesVides());
+  const [donnees, setDonnees] = useState<DonneesAdmin>(donneesRef.current);
+  const [verrou, setVerrou] = useState<EtatVerrouPanel>(() => etatInitial(maintenant()));
+  const verrouRef = useRef(verrou);
+  verrouRef.current = verrou;
+
+  const majDonnees = useCallback(
+    (changer: (d: DonneesAdmin) => DonneesAdmin) => {
+      const suivantes = changer(donneesRef.current);
+      donneesRef.current = suivantes;
+      if (services) {
+        enregistrerDonnees(services.stockage, suivantes);
+      }
+      setDonnees(suivantes);
+    },
+    [services],
+  );
+  const journaliser = useCallback(
+    (evenement: Omit<EvenementAudit, 'date'>) => majDonnees(d => avecEvenement(d, evenement, maintenant())),
+    [majDonnees, maintenant],
+  );
+
+  // Connexions des amis depuis la dernière visite : reportées au journal.
+  const tous = controle?.tous ?? [];
+  const signatureConnexions = tous.map(p => `${p.id}:${p.connexions ?? 0}`).join(',');
+  useEffect(() => {
+    const nouvelles = nouvellesConnexions(tous, donneesRef.current.connexionsVues);
+    if (nouvelles.length === 0) {
+      return;
+    }
+    majDonnees(d => {
+      let suivant = d;
+      for (const { profil, nombre } of nouvelles) {
+        suivant = avecEvenement(
+          suivant,
+          { type: 'connexion', cible: profil.id, nomCible: profil.nom, action: `${profil.nom} a ouvert son compte${nombre > 1 ? ` (${nombre} fois)` : ''}`, date: profil.derniereConnexion } as Omit<EvenementAudit, 'date'>,
+          maintenant(),
+        );
+      }
+      return { ...suivant, connexionsVues: { ...suivant.connexionsVues, ...Object.fromEntries(nouvelles.map(({ profil }) => [profil.id, profil.connexions ?? 0])) } };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seule la signature des compteurs compte.
+  }, [signatureConnexions]);
+
+  // Verrouillage sur inactivité.
+  const activite = useCallback(() => setVerrou(v => noterActivite(v, maintenant())), [maintenant]);
+  useEffect(() => ecouterActivite(activite), [activite]);
+  useEffect(() => {
+    const minuterie = setInterval(() => {
+      if (doitVerrouiller(verrouRef.current, maintenant(), donneesRef.current.reglages.verrouMinutes)) {
+        setVerrou(v => verrouiller(v));
+        setDemande(undefined);
+        journaliser({ type: 'securite', action: `Panneau verrouillé après ${donneesRef.current.reglages.verrouMinutes} min sans activité` });
+      }
+    }, 5_000);
+    return () => clearInterval(minuterie);
+  }, [maintenant, journaliser]);
 
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
-  const titre = {
-    color: theme.texte,
-    fontWeight: theme.poidsTitre,
-    textTransform: theme.majuscules ? ('uppercase' as const) : ('none' as const),
-    ...police(theme.policeTitre),
-  };
 
   // Défense en profondeur : le hub ne propose pas cette app à un ami, mais
   // l'écran refuse aussi de s'afficher pour lui.
-  if (!controle || (contexte.profil && !contexte.profil.admin) || !controle.actuel.admin) {
+  if (!controle || (contexte.profil && !contexte.profil.admin) || !controle.actuel.admin || controle.sessionAdmin) {
     return (
       <View style={[styles.racine, { backgroundColor: theme.fond, padding: 24 }]}>
         <RetourHub theme={theme} onRetour={onRetour} />
-        <Text style={[titre, { fontSize: 28, marginTop: 24 }]}>Réservé à l’administrateur</Text>
+        <Text style={[styleTitre(theme), { fontSize: 28, marginTop: 24 }]}>Réservé à l’administrateur</Text>
       </View>
     );
   }
 
-  const tous = controle.tous;
-  const attribuables = appsAttribuables(registre);
-  const selection = tous.find(profil => profil.id === choisi);
-
-  const agir = (libelle: string, action: () => Promise<void>) => {
+  const agir = (libelle: string, action: () => Promise<string | void>) => {
     setErreur(undefined);
     setAvis(undefined);
     setEnCours(libelle);
     apresRendu(action)
+      .then(resultat => {
+        if (resultat) setAvis(resultat);
+      })
       .catch(e => setErreur(message(e)))
       .finally(() => setEnCours(undefined));
   };
 
-  const pilule = (profil: Profil) =>
-    profil.admin
-      ? { texte: 'admin', couleur: accent }
-      : profil.actif === false
-        ? { texte: 'désactivé', couleur: theme.critique }
-        : { texte: 'actif', couleur: theme.ok };
+  const exigerIdentite = (raison: string, action: () => void, forcer = false) => {
+    if (!services) {
+      action();
+      return;
+    }
+    if (!forcer && confianceValide(verrouRef.current, maintenant(), donneesRef.current.reglages.confianceMinutes)) {
+      action();
+      return;
+    }
+    setDemande({ raison, action });
+  };
 
-  const nomsApps = (profil: Profil) =>
-    profil.admin
-      ? 'Toutes'
-      : registre.filter(app => peutOuvrir(app, profil)).map(app => app.nom).join(', ') || 'Aucune';
-
-  const listeUtilisateurs = (
-    <View style={[styles.panneau, { borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen, padding: 0 }, large && { flex: 1.5 }]}>
-      {tous.map((profil, index) => {
-        const etat = pilule(profil);
-        const selectionne = profil.id === choisi && !creation;
-        return (
-          <Pressable
-            key={profil.id}
-            testID={`admin-ligne-${profil.id}`}
-            accessibilityRole="button"
-            accessibilityState={{ selected: selectionne }}
-            onPress={() => {
-              setCreation(false);
-              setConfirmation(undefined);
-              setChoisi(profil.id);
-            }}
-            style={(e: { pressed: boolean; hovered?: boolean }) => [
-              styles.ligne,
-              index > 0 && { borderTopWidth: 1, borderTopColor: theme.ligne },
-              selectionne
-                ? { backgroundColor: teinteTransparente(accent, 0.14) }
-                : e.hovered
-                  ? { backgroundColor: teinteTransparente(theme.sombre ? '#FFFFFF' : '#000000', 0.04) }
-                  : null,
-            ]}>
-            <View style={[styles.avatar, { backgroundColor: profil.admin ? accent : teinteTransparente(accent, 0.18), borderRadius: theme.rayonGrand ? 16 : 0 }]}>
-              <Text style={{ color: profil.admin ? theme.surAccent : accent, fontWeight: '700' }}>{profil.nom.slice(0, 1).toUpperCase()}</Text>
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[texte, { fontWeight: '600' }]} numberOfLines={1}>
-                {profil.nom}
-              </Text>
-              <Text style={[attenue, { fontSize: 12 }]} numberOfLines={1}>
-                {profil.creeLe ? `Créé le ${profil.creeLe} · ` : ''}Apps : {nomsApps(profil)}
-              </Text>
-            </View>
-            <Text
-              style={[
-                styles.pilule,
-                police(theme.policeChiffres),
-                { color: etat.couleur, backgroundColor: teinteTransparente(etat.couleur, 0.16), borderRadius: theme.rayonGrand ? 999 : 0 },
-              ]}>
-              {etat.texte}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-
-  const panneauDetail = identifiants ? (
-    <PanneauIdentifiants theme={theme} nom={identifiants.nom} valeurs={identifiants.valeurs} onTermine={() => setIdentifiants(undefined)} />
-  ) : creation ? (
-    <FormulaireCreation
-      theme={theme}
-      apps={attribuables}
-      enCours={Boolean(enCours)}
-      onAnnuler={() => setCreation(false)}
-      onCreer={(nom, apps) =>
-        agir('Création du compte…', async () => {
-          const valeurs = await controle.onCreerCompte!(nom, apps);
-          setCreation(false);
-          setIdentifiants({ nom: nom.trim(), valeurs });
-        })
+  const outils: OutilsAdmin = {
+    theme,
+    registre,
+    controle,
+    tous,
+    maintenant,
+    donnees,
+    majDonnees,
+    journaliser,
+    agir,
+    enCours,
+    exigerIdentite,
+    modifierProfils: (changer, evenements, texteAvis) => {
+      if (!controle.onModifierProfils) {
+        setErreur('Modification des comptes indisponible sur cette plateforme.');
+        return;
       }
-    />
-  ) : selection ? (
-    <View style={[styles.panneau, { borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen }]} testID="admin-detail">
-      <Text style={[titre, { fontSize: 20 }]}>{selection.nom}</Text>
-      {selection.admin ? (
-        <Text style={attenue}>Administrateur : accès à toutes les apps. Ce profil ne se désactive pas et ne se supprime pas.</Text>
-      ) : (
-        <>
-          <Text style={[attenue, styles.intertitre]}>ACCÈS AUX APPS</Text>
-          {attribuables.map((app, index) => {
-            const ouverte = peutOuvrir(app, selection);
-            return (
-              <View key={app.id} style={[styles.ligneApp, index > 0 && { borderTopWidth: 1, borderTopColor: theme.ligne }]}>
-                <View style={[styles.carre, { backgroundColor: theme.teintes[app.teinte], borderRadius: Math.min(theme.rayonMoyen, 8) }]}>
-                  <Text style={{ color: theme.surAccent, fontWeight: '700' }}>{app.icone}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[texte, { fontWeight: '600' }]}>{app.nom}</Text>
-                  <Text style={[attenue, { fontSize: 12 }]}>{app.description}</Text>
-                </View>
-                <Switch
-                  testID={`admin-app-${selection.id}-${app.id}`}
-                  accessibilityLabel={`${app.nom} pour ${selection.nom}`}
-                  value={ouverte}
-                  disabled={Boolean(enCours) || !controle.onAutoriser}
-                  trackColor={{ true: accent, false: theme.ligne }}
-                  onValueChange={valeur =>
-                    agir('Enregistrement…', () =>
-                      controle.onAutoriser!(selection.id, basculerApp(selection.apps ?? [], app.id, valeur)),
-                    )
-                  }
-                />
-              </View>
-            );
-          })}
-          <Text style={[attenue, styles.intertitre]}>COMPTE</Text>
-          {confirmation?.id === selection.id ? (
-            <View style={[styles.avis, { backgroundColor: teinteTransparente(theme.alerte, 0.16) }]}>
-              <Text style={{ color: theme.alerte }}>
-                {confirmation.genre === 'regenerer'
-                  ? `De nouveaux identifiants remplacent les anciens. Le portefeuille actuel de ${selection.nom} est scellé par l’ancienne clé : il sera effacé. (S’il a seulement oublié son mot de passe, il peut plutôt utiliser « Mot de passe oublié ? » avec un code de récupération.)`
-                  : `Le profil de ${selection.nom} et tout son portefeuille seront effacés de cet appareil.`}
-              </Text>
-              <View style={styles.actions}>
-                <BoutonHub
-                  theme={theme}
-                  variante="danger"
-                  titre={confirmation.genre === 'regenerer' ? 'Régénérer' : 'Supprimer'}
-                  testID="admin-confirmer"
-                  desactive={Boolean(enCours)}
-                  onPress={() => {
-                    const { genre, id } = confirmation;
-                    setConfirmation(undefined);
-                    if (genre === 'regenerer') {
-                      agir('Génération des identifiants…', async () => {
-                        const valeurs = await controle.onRegenerer!(id);
-                        setIdentifiants({ nom: selection.nom, valeurs });
-                      });
-                    } else {
-                      agir('Suppression…', async () => {
-                        await controle.onSupprimer(id);
-                        setChoisi(undefined);
-                        setAvis(`Profil « ${selection.nom} » supprimé.`);
-                      });
-                    }
-                  }}
-                />
-                <BoutonHub theme={theme} titre="Annuler" onPress={() => setConfirmation(undefined)} />
-              </View>
-            </View>
-          ) : (
-            <View style={styles.actions}>
-              {controle.onRegenerer ? (
-                <BoutonHub
-                  theme={theme}
-                  titre="Régénérer les identifiants"
-                  testID="admin-regenerer"
-                  desactive={Boolean(enCours)}
-                  onPress={() => setConfirmation({ genre: 'regenerer', id: selection.id })}
-                />
-              ) : null}
-              {controle.onActiver ? (
-                <BoutonHub
-                  theme={theme}
-                  titre={selection.actif === false ? 'Réactiver' : 'Désactiver'}
-                  testID="admin-activer"
-                  desactive={Boolean(enCours)}
-                  onPress={() =>
-                    agir('Enregistrement…', async () => {
-                      await controle.onActiver!(selection.id, selection.actif === false);
-                      setAvis(selection.actif === false ? `${selection.nom} peut de nouveau ouvrir son profil.` : `${selection.nom} ne peut plus ouvrir son profil.`);
-                    })
-                  }
-                />
-              ) : null}
-              <BoutonHub
-                theme={theme}
-                variante="danger"
-                titre="Supprimer"
-                testID="admin-supprimer"
-                desactive={Boolean(enCours)}
-                onPress={() => setConfirmation({ genre: 'supprimer', id: selection.id })}
-              />
-            </View>
-          )}
-        </>
-      )}
-    </View>
-  ) : (
-    <View style={[styles.panneau, { borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen }]}>
-      <Text style={attenue}>Sélectionnez un utilisateur pour régler ses accès, ou créez un compte pour un ami.</Text>
-    </View>
-  );
+      agir('Enregistrement…', async () => {
+        await controle.onModifierProfils!(changer(controle.tous as Profil[]));
+        for (const evenement of evenements) {
+          journaliser(evenement);
+        }
+        return texteAvis;
+      });
+    },
+    services,
+    onTheme,
+    allerA: (id, choisi) => {
+      setSection(id);
+      setCible(choisi);
+    },
+    large,
+  };
+
+  const verifier = (motDePasse: string, code: string, raison: string, suite: () => void) =>
+    agir('Vérification…', async () => {
+      try {
+        services!.verifierIdentite(motDePasse, code);
+      } catch (e) {
+        journaliser({ type: 'securite', action: `Échec de vérification d’identité (${raison})` });
+        throw e;
+      }
+      const niveau = evaluerRobustesse(motDePasse);
+      majDonnees(d => ({ ...d, robustesse: { niveau, le: new Date(maintenant()).toISOString() } }));
+      setVerrou(v => apresVerification(v, maintenant()));
+      journaliser({ type: 'securite', action: `Identité vérifiée : ${raison}` });
+      setDemande(undefined);
+      suite();
+    });
+
+  if (verrou.verrouille) {
+    return (
+      <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="admin-verrouille">
+        <ScrollView contentContainerStyle={styles.page}>
+          <RetourHub theme={theme} onRetour={onRetour} />
+          <Text style={[styleTitre(theme), styles.h1]}>🔒 Panneau verrouillé</Text>
+          <Text style={[attenue, styles.lead]}>Aucune activité depuis un moment : confirmez votre identité pour continuer.</Text>
+          {erreur ? <Avis theme={theme} genre="critique" texte={erreur} testID="admin-erreur" /> : null}
+          <FormulaireIdentite theme={theme} raison="Déverrouiller le panneau d’administration" enCours={Boolean(enCours)} onValider={(m, c) => verifier(m, c, 'déverrouillage du panneau', () => undefined)} />
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
-    <ScrollView style={[styles.racine, { backgroundColor: theme.fond }]} contentContainerStyle={styles.page} testID="app-administration">
-      <RetourHub theme={theme} onRetour={onRetour} />
-      <Text style={[titre, styles.h1]} accessibilityRole="header">
-        Administration
-      </Text>
-      <Text style={[attenue, styles.lead]}>Comptes des amis, identifiants et accès aux apps de ce hub.</Text>
-
-      <View style={styles.onglets} accessibilityRole="tablist">
-        {(
-          [
-            ['utilisateurs', `Utilisateurs ${tous.length}`],
-            ['apps', `Apps ${registre.length}`],
-          ] as const
-        ).map(([cle, libelle]) => {
-          const actif = onglet === cle;
-          return (
-            <Pressable
-              key={cle}
-              testID={`admin-onglet-${cle}`}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: actif }}
-              onPress={() => setOnglet(cle)}
-              style={[
-                styles.onglet,
-                {
-                  backgroundColor: actif ? accent : theme.surface,
-                  borderColor: actif ? accent : theme.ligne,
-                  borderRadius: theme.rayonGrand ? 999 : 0,
-                },
-              ]}>
-              <Text style={{ color: actif ? theme.surAccent : theme.attenue, fontWeight: '600', ...police(theme.policeTexte) }}>{libelle}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {enCours ? <Text style={[attenue, { marginBottom: 12 }]}>{enCours}</Text> : null}
-      {erreur ? (
-        <Text style={[styles.avis, { color: theme.critique, backgroundColor: teinteTransparente(theme.critique, 0.14) }]} testID="admin-erreur">
-          {erreur}
+    <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="app-administration" onTouchStart={activite}>
+      <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+        <RetourHub theme={theme} onRetour={onRetour} />
+        <Text style={[styleTitre(theme), styles.h1]} accessibilityRole="header">
+          Administration
         </Text>
-      ) : null}
-      {avis ? (
-        <Text style={[styles.avis, { color: theme.ok, backgroundColor: teinteTransparente(theme.ok, 0.14) }]}>{avis}</Text>
-      ) : null}
+        <Text style={[attenue, styles.lead]}>Comptes, accès aux apps, sécurité et journal de ce hub.</Text>
 
-      {onglet === 'utilisateurs' ? (
-        <>
-          <View style={styles.barre}>
-            <View style={{ flex: 1, minWidth: 200 }}>
-              <Text style={[titre, { fontSize: 20 }]}>Utilisateurs</Text>
-              <Text style={[attenue, { fontSize: 13, marginTop: 2 }]}>Sélectionnez une ligne pour modifier l’accès aux apps.</Text>
-            </View>
-            <BoutonHub
-              theme={theme}
-              variante="plein"
-              couleur={accent}
-              titre="Nouvel utilisateur"
-              testID="admin-nouveau"
-              desactive={Boolean(enCours) || Boolean(identifiants) || !controle.onCreerCompte}
-              onPress={() => {
-                setConfirmation(undefined);
-                setCreation(true);
+        <View style={styles.onglets} accessibilityRole="tablist">
+          {SECTIONS.map(([id, icone, libelle]) => {
+            const actif = section === id;
+            return (
+              <Pressable
+                key={id}
+                testID={`admin-onglet-${id}`}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: actif }}
+                onPress={() => {
+                  setSection(id);
+                  setCible(undefined);
+                  setErreur(undefined);
+                  setAvis(undefined);
+                }}
+                style={[
+                  styles.onglet,
+                  {
+                    backgroundColor: actif ? theme.teintes.admin : theme.surface,
+                    borderColor: actif ? theme.teintes.admin : theme.ligne,
+                    borderRadius: theme.rayonGrand ? 999 : 0,
+                  },
+                ]}>
+                <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', ...police(theme.policeTexte) }}>
+                  {icone} {libelle}
+                  {id === 'utilisateurs' ? ` ${tous.length}` : ''}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {enCours ? <Text style={[attenue, { marginBottom: 12 }]}>{enCours}</Text> : null}
+        {erreur ? <Avis theme={theme} genre="critique" texte={erreur} testID="admin-erreur" /> : null}
+        {avis ? <Avis theme={theme} genre="ok" texte={avis} testID="admin-avis" /> : null}
+        {demande ? (
+          <FormulaireIdentite
+            theme={theme}
+            raison={demande.raison}
+            enCours={Boolean(enCours)}
+            onAnnuler={() => setDemande(undefined)}
+            onValider={(m, c) => verifier(m, c, demande.raison, demande.action)}
+          />
+        ) : null}
+
+        <View style={{ marginTop: 12 }}>
+          {section === 'tableau' ? <Tableau outils={outils} /> : null}
+          {section === 'utilisateurs' ? <Utilisateurs key={cible ?? 'liste'} outils={outils} cible={cible} /> : null}
+          {section === 'applications' ? <Applications outils={outils} /> : null}
+          {section === 'securite' ? (
+            <Securite
+              outils={outils}
+              onVerrouiller={() => {
+                setVerrou(v => verrouiller(v));
+                journaliser({ type: 'securite', action: 'Panneau verrouillé à la main' });
               }}
             />
-          </View>
-          <View style={[styles.partage, large && { flexDirection: 'row', alignItems: 'flex-start' }]}>
-            {listeUtilisateurs}
-            <View style={large ? { flex: 1, minWidth: 0 } : undefined}>{panneauDetail}</View>
-          </View>
-        </>
-      ) : (
-        <View style={[styles.panneau, { borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen }]}>
-          <Text style={[attenue, { fontSize: 13 }]}>Lecture seule : les apps viennent du registre (src/hub/registre.tsx).</Text>
-          {registre.map((app, index) => (
-            <View key={app.id} style={[styles.ligneApp, index > 0 && { borderTopWidth: 1, borderTopColor: theme.ligne }]} testID={`admin-registre-${app.id}`}>
-              <View style={[styles.carre, { backgroundColor: theme.teintes[app.teinte], borderRadius: Math.min(theme.rayonMoyen, 8) }]}>
-                <Text style={{ color: theme.surAccent, fontWeight: '700' }}>{app.icone}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[texte, { fontWeight: '600' }]}>{app.nom}</Text>
-                <Text style={[attenue, { fontSize: 12 }, police(theme.policeChiffres)]}>{app.id}</Text>
-              </View>
-              <Text style={[attenue, { fontSize: 13 }]}>
-                {app.adminSeulement ? 'Administrateur seulement' : `${nombreUtilisateurs(app, tous)} utilisateur(s)`}
-              </Text>
-            </View>
-          ))}
+          ) : null}
+          {section === 'journal' ? <Journal outils={outils} /> : null}
+          {section === 'reglages' ? <Reglages outils={outils} /> : null}
         </View>
-      )}
-    </ScrollView>
+        <Text style={[texte, { fontSize: 12, marginTop: 24, color: theme.attenue }]}>
+          Aucun secret n’est conservé ni journalisé : mots de passe, clés et codes de récupération ne s’affichent qu’une fois.
+        </Text>
+      </ScrollView>
+    </View>
   );
 }
 
-function FormulaireCreation({
+/** Redemande mot de passe + code TOTP de l'administrateur. */
+function FormulaireIdentite({
   theme,
-  apps,
+  raison,
   enCours,
+  onValider,
   onAnnuler,
-  onCreer,
 }: {
   theme: ThemeHub;
-  apps: readonly AppHub[];
+  raison: string;
   enCours: boolean;
-  onAnnuler(): void;
-  onCreer(nom: string, apps: string[]): void;
+  onValider(motDePasse: string, code: string): void;
+  onAnnuler?(): void;
 }) {
-  const [nom, setNom] = useState('');
-  const [choisies, setChoisies] = useState<string[]>(apps.length > 0 ? [apps[0].id] : []);
-  const texte = { color: theme.texte, ...police(theme.policeTexte) };
+  const [motDePasse, setMotDePasse] = useState('');
+  const [code, setCode] = useState('');
   return (
-    <View style={[styles.panneau, { borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen }]} testID="admin-creation">
-      <Text style={[texte, { fontSize: 20, fontWeight: theme.poidsTitre, ...police(theme.policeTitre) }]}>Nouvel utilisateur</Text>
-      <Text style={[texte, { fontWeight: '600', fontSize: 13 }]}>Prénom de l’ami</Text>
-      <TextInput
-        testID="admin-nom"
-        value={nom}
-        onChangeText={setNom}
-        placeholder="ex. Lucas"
-        placeholderTextColor={theme.attenue}
-        autoCapitalize="words"
-        autoCorrect={false}
-        maxLength={30}
-        style={[styles.champ, texte, { backgroundColor: theme.fond, borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 10) }]}
-      />
-      <Text style={[texte, { fontWeight: '600', fontSize: 13 }]}>Apps autorisées</Text>
-      {apps.map(app => (
-        <View key={app.id} style={styles.ligneApp}>
-          <Text style={[texte, { flex: 1 }]}>
-            {app.icone} {app.nom}
-          </Text>
-          <Switch
-            testID={`admin-nouveau-app-${app.id}`}
-            accessibilityLabel={`Autoriser ${app.nom}`}
-            value={choisies.includes(app.id)}
-            trackColor={{ true: theme.teintes.admin, false: theme.ligne }}
-            onValueChange={valeur => setChoisies(liste => basculerApp(liste, app.id, valeur))}
-          />
-        </View>
-      ))}
-      <Text style={{ color: theme.attenue, fontSize: 12 }}>
-        Un mot de passe, une clé d’authentification (TOTP) et des codes de récupération seront générés et affichés une seule fois.
+    <Panneau theme={theme} testID="admin-identite" style={{ borderColor: theme.teintes.admin, backgroundColor: teinteTransparente(theme.teintes.admin, 0.06), marginVertical: 8 }}>
+      <Text style={[styleTitre(theme), { fontSize: 18 }]}>Vérification d’identité</Text>
+      <Text style={{ color: theme.attenue, fontSize: 13 }}>
+        {raison} : saisissez votre mot de passe et le code de votre application d’authentification (mêmes vérifications qu’au déverrouillage).
       </Text>
-      <View style={[styles.actions, { justifyContent: 'flex-end' }]}>
-        <BoutonHub theme={theme} titre="Annuler" onPress={onAnnuler} />
+      <Champ theme={theme} libelle="Mot de passe" valeur={motDePasse} onChanger={setMotDePasse} secret testID="admin-identite-mdp" />
+      <Champ theme={theme} libelle="Code à 6 chiffres" valeur={code} onChanger={v => setCode(v.replace(/[^\d]/g, ''))} clavier="number-pad" maxLength={6} testID="admin-identite-code" />
+      <View style={styles.actions}>
         <BoutonHub
           theme={theme}
           variante="plein"
           couleur={theme.teintes.admin}
-          titre="Créer et afficher les identifiants"
-          testID="admin-creer"
-          desactive={enCours || !nom.trim()}
-          onPress={() => onCreer(nom, choisies)}
+          titre={enCours ? 'Vérification…' : 'Confirmer'}
+          desactive={enCours || !motDePasse || code.length !== 6}
+          onPress={() => {
+            onValider(motDePasse, code);
+            setMotDePasse('');
+            setCode('');
+          }}
+          testID="admin-identite-valider"
         />
+        {onAnnuler ? <BoutonHub theme={theme} titre="Annuler" onPress={onAnnuler} testID="admin-identite-annuler" /> : null}
       </View>
-    </View>
-  );
-}
-
-function PanneauIdentifiants({
-  theme,
-  nom,
-  valeurs,
-  onTermine,
-}: {
-  theme: ThemeHub;
-  nom: string;
-  valeurs: IdentifiantsAmi;
-  onTermine(): void;
-}) {
-  const [transmis, setTransmis] = useState(false);
-  const mono = police(theme.policeChiffres);
-  const code = { color: theme.fond, ...mono, fontSize: 13.5, lineHeight: 23 };
-  const cle = { color: theme.sombre ? '#555' : '#AAA', ...mono, fontSize: 13.5, lineHeight: 23 };
-  return (
-    <View style={[styles.panneau, { borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen }]} testID="admin-identifiants">
-      <Text style={{ color: theme.texte, fontSize: 20, fontWeight: theme.poidsTitre, ...police(theme.policeTitre) }}>Identifiants de {nom}</Text>
-      <Text style={[styles.avis, { color: theme.alerte, backgroundColor: teinteTransparente(theme.alerte, 0.16) }]}>
-        Affichés une seule fois : ils ne sont conservés nulle part en clair. Transmettez-les à {nom} de vive voix ou sur papier, puis
-        ne les gardez pas.
-      </Text>
-      <View style={[styles.bloc, { backgroundColor: theme.texte, borderRadius: Math.min(theme.rayonMoyen, 10) }]}>
-        <Text selectable style={code}>
-          <Text style={cle}>Profil        </Text>
-          {nom}
-        </Text>
-        <Text selectable style={code} testID="admin-mot-de-passe">
-          <Text style={cle}>Mot de passe  </Text>
-          {valeurs.motDePasse}
-        </Text>
-        <Text selectable style={code} testID="admin-secret-totp">
-          <Text style={cle}>Clé TOTP      </Text>
-          {valeurs.secretTotp}
-        </Text>
-      </View>
-      <Text style={{ color: theme.attenue, fontSize: 13 }}>
-        À scanner dans son application d’authentification (le code à 6 chiffres est demandé à chaque ouverture, avec le mot de passe) :
-      </Text>
-      <View style={{ alignItems: 'flex-start' }}>
-        <QrCode texte={valeurs.uriTotp} legende={`AppliBourse · ${nom}`} testID="admin-qr-totp" />
-      </View>
-      <Text style={{ color: theme.texte, fontWeight: '600' }}>Codes de récupération</Text>
-      <Text style={{ color: theme.attenue, fontSize: 13 }}>
-        Chacun ouvre son profil une seule fois s’il perd son mot de passe (« Mot de passe oublié ? »), et lui fait choisir un
-        nouveau mot de passe.
-      </Text>
-      <View style={styles.codes}>
-        {valeurs.codesRecuperation.map(valeur => (
-          <Text key={valeur} selectable style={[styles.code, mono, { color: theme.texte, borderColor: theme.ligne }]}>
-            {valeur}
-          </Text>
-        ))}
-      </View>
-      <View style={styles.ligneApp}>
-        <Text style={{ color: theme.texte, flex: 1 }}>J’ai transmis ces identifiants.</Text>
-        <Switch
-          testID="admin-transmis"
-          value={transmis}
-          onValueChange={setTransmis}
-          trackColor={{ true: theme.teintes.admin, false: theme.ligne }}
-          accessibilityLabel="J’ai transmis ces identifiants"
-        />
-      </View>
-      <View style={[styles.actions, { justifyContent: 'flex-end' }]}>
-        <BoutonHub theme={theme} variante="plein" couleur={theme.teintes.admin} titre="Terminé" testID="admin-termine" desactive={!transmis} onPress={onTermine} />
-      </View>
-    </View>
+    </Panneau>
   );
 }
 
 const styles = StyleSheet.create({
   racine: { flex: 1 },
-  page: { width: '100%', maxWidth: 1080, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 24, paddingBottom: 48 },
+  page: { width: '100%', maxWidth: 1180, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 24, paddingBottom: 48 },
   h1: { fontSize: 44, letterSpacing: -1, marginTop: 24 },
-  lead: { marginTop: 16, fontSize: 18 },
-  onglets: { flexDirection: 'row', gap: 6, marginTop: 32, marginBottom: 16, flexWrap: 'wrap' },
-  onglet: { paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1 },
-  barre: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  partage: { gap: 16 },
-  panneau: { borderWidth: 1, padding: 16, gap: 12, minWidth: 0 },
-  ligne: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 12 },
-  avatar: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-  pilule: { fontSize: 11, paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
-  intertitre: { fontSize: 11, fontWeight: '600', letterSpacing: 1, marginTop: 4 },
-  ligneApp: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
-  carre: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  lead: { marginTop: 12, fontSize: 17 },
+  onglets: { flexDirection: 'row', gap: 6, marginTop: 28, marginBottom: 12, flexWrap: 'wrap' },
+  onglet: { paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, minHeight: 38, justifyContent: 'center' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
-  avis: { padding: 10, borderRadius: 8, fontSize: 13, gap: 10, marginBottom: 12, overflow: 'hidden' },
-  champ: { borderWidth: 1, paddingVertical: 8, paddingHorizontal: 10, fontSize: 15 },
-  bloc: { padding: 14 },
-  codes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  code: { fontSize: 14, letterSpacing: 1, borderWidth: 1, borderRadius: 6, paddingVertical: 4, paddingHorizontal: 8 },
 });

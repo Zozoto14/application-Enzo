@@ -320,7 +320,7 @@ export function statistiques(profils: readonly Profil[], registre: readonly AppH
   };
 }
 
-export type GenreAlerte = 'jamais-connecte' | 'inactif' | 'invitation-expiree' | 'invitation-proche' | 'acces-expire' | 'securite';
+export type GenreAlerte = 'jamais-connecte' | 'inactif' | 'invitation-expiree' | 'invitation-proche' | 'acces-expire' | 'securite' | 'sequestre-absent';
 
 export interface AlerteAdmin {
   genre: GenreAlerte;
@@ -337,6 +337,14 @@ export function alertesComptes(profils: readonly Profil[], maintenant: number, i
       continue;
     }
     const statut = statutCompte(p, maintenant);
+    if (p.sequestre === 'attendu' || p.sequestre === 'absent') {
+      alertes.push({
+        genre: 'sequestre-absent',
+        gravite: 'info',
+        cible: p.id,
+        message: `${p.nom} : séquestre absent, à créer à la prochaine connexion de l’ami ou par régénération d’identifiants.`,
+      });
+    }
     if (statut === 'invitation-expiree') {
       alertes.push({ genre: 'invitation-expiree', gravite: 'alerte', cible: p.id, message: `Invitation de ${p.nom} expirée sans avoir été acceptée.` });
       continue;
