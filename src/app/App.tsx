@@ -105,12 +105,13 @@ import type { Coffre } from '../securite/coffre';
 import { CarteSynchro } from '../ui/ecrans/CarteSynchro';
 import { CarteProfils, type ControleProfils } from '../ui/ecrans/CarteProfils';
 import { Hub } from '../hub/Hub';
-import { appsVisibles, peutOuvrir } from '../hub/permissions';
+import { appsVisibles, etatTuile, peutOuvrir } from '../hub/permissions';
+import { niveauProfil } from '../hub/admin/comptes';
 import { chargerPrefs, enregistrerPrefs, CLE_THEME, type PrefsHub } from '../hub/personnalisation';
 import { ID_PORTEFEUILLE, REGISTRE } from '../hub/registre';
 import { THEME_HUB_DEFAUT, themeHub, type IdThemeHub } from '../hub/themes';
-import type { ContexteHub, ResumePortefeuille } from '../hub/types';
-import { ecouterTouche } from '../hub/web';
+import type { ContexteHub, ResumePortefeuille, ServicesAdmin } from '../hub/types';
+import { ecouterTouche, octetsUtf8, telechargerWeb } from '../hub/web';
 import { dividendesParTitre, lignesCibles, lignesVendables } from './calculs';
 import { exporterExcel } from '../rapport/exportExcel';
 import { carnetDepuisJson, construireCarnet } from '../ui/vues/carnet';
@@ -402,6 +403,21 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   const statut = session.statut();
   const deverrouille = statut === 'deverrouille' && !secrets;
+
+  // Chaque déverrouillage est noté dans la liste des profils (date, compteur) :
+  // l'Administration s'en sert pour la dernière activité et les alertes.
+  const connexionNotee = useRef(false);
+  const noterConnexionProfil = profils?.onConnexion;
+  useEffect(() => {
+    if (!deverrouille) {
+      connexionNotee.current = false;
+      return;
+    }
+    if (!connexionNotee.current) {
+      connexionNotee.current = true;
+      noterConnexionProfil?.();
+    }
+  }, [deverrouille, noterConnexionProfil]);
 
   // Taux de change du jour, pour afficher en euros les cours cotés ailleurs
   // (Varsovie, New York, Londres…). Seulement quand le réseau est permis.
@@ -1784,7 +1800,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const [appHub, setAppHub] = useState<string | undefined>();
   const [themeHubId, setThemeHubId] = useState<IdThemeHub>(THEME_HUB_DEFAUT);
   const [prefsHub, setPrefsHub] = useState<PrefsHub | undefined>();
-  const portefeuillePermis = !hub || peutOuvrir({ id: ID_PORTEFEUILLE }, profils?.actuel);
+  const appPortefeuille = REGISTRE.find(app => app.id === ID_PORTEFEUILLE)!;
+  const portefeuillePermis =
+    !hub ||
+    (peutOuvrir(appPortefeuille, profils?.actuel) && etatTuile(appPortefeuille, { profil: profils?.actuel, profils }).ouvrable &&
+      appsVisibles([appPortefeuille], { profil: profils?.actuel, profils }).length > 0);
   // Les préférences vivent dans la base chiffrée du profil : elles sont donc
   // propres à chaque profil, et ne demandent aucun nouveau fichier.
   const stockagePrefs = useMemo(
@@ -1836,12 +1856,35 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             : undefined,
         }
       : undefined;
-  const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub };
+  // Services de l'Administration : seulement pour l'administrateur. Rien ici
+  // ne rend un secret : on revérifie l'identité, on ne relit rien.
+  const servicesAdmin = useMemo<ServicesAdmin | undefined>(
+    () =>
+      estAdmin
+        ? {
+            stockage: stockagePrefs,
+            verifierIdentite: (motDePasse, codeTotp) => session.verifierIdentite({ motDePasse, codeTotp }),
+            etatCoffre: () => session.etatCoffre(),
+            enregistrerFichier: async (nom, contenu, type) => {
+              const enregistrerSous = (
+                globalThis as { applibourse?: { fichiers?: { enregistrerSous?(nom: string, contenu: Uint8Array): Promise<boolean> } } }
+              ).applibourse?.fichiers?.enregistrerSous;
+              if (enregistrerSous) {
+                return enregistrerSous(nom, octetsUtf8(contenu));
+              }
+              return telechargerWeb(nom, contenu, type);
+            },
+          }
+        : undefined,
+    [estAdmin, session, stockagePrefs],
+  );
+  const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin };
   const themeDuHub = themeHub(themeHubId);
   const appOuverte = surUneApp ? REGISTRE.find(app => app.id === appHub) : undefined;
   const ouvrirApp = (id: string) => {
     const app = appsVisibles(REGISTRE, contexteHub).find(candidate => candidate.id === id);
-    if (app) {
+    // Une app en maintenance ne s'ouvre pas pour un ami (sa tuile le dit).
+    if (app && etatTuile(app, contexteHub).ouvrable) {
       setAppHub(app.id);
     }
   };
@@ -1962,6 +2005,15 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }}
           onVerrouiller={verrouiller}
           onChangerProfil={profils && profils.tous.length > 1 ? profils.onChanger : undefined}
+          onReglagesPortefeuille={
+            portefeuillePermis
+              ? () => {
+                  setAppHub(ID_PORTEFEUILLE);
+                  setRecherche(undefined);
+                  setEcran('reglages');
+                }
+              : undefined
+          }
         />
       ) : appOuverte?.Racine ? (
         <appOuverte.Racine
@@ -1969,6 +2021,15 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           theme={themeDuHub}
           registre={REGISTRE}
           onRetour={() => setAppHub(undefined)}
+          niveau={niveauProfil(profils?.actuel, appOuverte)}
+          onTheme={id => {
+            setThemeHubId(id);
+            try {
+              stockagePrefs.ecrire(CLE_THEME, id);
+            } catch {
+              // Non mémorisé : le thème reste appliqué jusqu'à la fermeture.
+            }
+          }}
         />
       ) : ecran === 'compte' ? (
         <CreationCompte

@@ -206,6 +206,46 @@ export class Session {
   }
 
   /**
+   * Revérifie l'identité (mot de passe + code TOTP) d'une session déjà
+   * ouverte, pour une action sensible. Mêmes contrôles et mêmes
+   * temporisations après échec qu'au déverrouillage ; la clé reconstituée
+   * est effacée aussitôt, rien ne change dans la session en cas de succès.
+   */
+  verifierIdentite(options: OptionsDeverrouillage): void {
+    const coffre = this.exigerCoffre();
+    this.exigerCleMaitresse();
+    this.exigerAbsenceDeTemporisation();
+    let cle: Uint8Array;
+    try {
+      cle = deverrouillerParMotDePasse(coffre, options.motDePasse);
+    } catch (erreur) {
+      if (erreur instanceof ErreurDeverrouillage) {
+        this.enregistrerEchec();
+        throw new ErreurDeverrouillage('Mot de passe ou code incorrect');
+      }
+      throw erreur;
+    }
+    const secretTotp = lireSecretTotp(coffre, cle);
+    cle.fill(0);
+    if (secretTotp && !verifierCodeTotp(secretTotp, options.codeTotp, this.horloge())) {
+      this.enregistrerEchec();
+      throw new ErreurDeverrouillage('Mot de passe ou code incorrect');
+    }
+  }
+
+  /** État du coffre sans rien déchiffrer : TOTP enrôlé, codes de récupération restants. */
+  etatCoffre(): { totpActif: boolean; codesRecuperation: number } | undefined {
+    const coffre = this.deps.stockage.lire();
+    if (!coffre) {
+      return undefined;
+    }
+    return {
+      totpActif: Boolean(coffre.totp),
+      codesRecuperation: coffre.enveloppes.filter(enveloppe => enveloppe.usage === 'recuperation').length,
+    };
+  }
+
+  /**
    * Reprise en main avec un code de récupération.
    * Le code est consommé et un nouveau mot de passe est défini dans la foulée :
    * un code de récupération sert à retrouver l'accès, pas à s'en passer.

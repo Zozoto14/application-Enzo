@@ -12,7 +12,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { appsVisibles } from './permissions';
+import { appsVisibles, etatTuile, type EtatTuile } from './permissions';
+import { BoutonMiseAJour, PanneauParametres, useMiseAJour } from './ParametresHub';
 import { salutation } from './infos';
 import {
   LIBELLES_TAILLE,
@@ -48,6 +49,8 @@ export interface HubProps {
   onVerrouiller?(): void;
   /** Revenir à « Qui utilise AppliBourse ? », quand il y a plusieurs profils. */
   onChangerProfil?(): void;
+  /** Ouvre les Paramètres de l'app Portefeuille (panneau « Paramètres »). */
+  onReglagesPortefeuille?(): void;
   /** Heure locale, injectable pour les tests. */
   heure?: number;
 }
@@ -65,9 +68,11 @@ const TRANSITION_WEB: object = SUR_LE_WEB
   ? { transitionProperty: 'width, opacity, transform, min-height', transitionDuration: '260ms', transitionTimingFunction: 'ease' }
   : {};
 
-export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, heure }: HubProps) {
+export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, onReglagesPortefeuille, heure }: HubProps) {
   const { width } = useWindowDimensions();
   const [menuOuvert, setMenuOuvert] = useState(false);
+  const [parametres, setParametres] = useState(false);
+  const maj = useMiseAJour();
   const [edition, setEdition] = useState(false);
   const [annonce, setAnnonce] = useState('');
   const glisse = useRef<string | undefined>(undefined);
@@ -94,7 +99,7 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
 
   // Échap ferme d'abord le menu des thèmes, puis le mode édition.
   useEffect(() => {
-    if (!menuOuvert && !edition) {
+    if ((!menuOuvert && !edition) || parametres) {
       return undefined;
     }
     return ecouterTouche('Escape', () => {
@@ -104,7 +109,7 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
         setEdition(false);
       }
     });
-  }, [menuOuvert, edition]);
+  }, [menuOuvert, edition, parametres]);
 
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const titreStyle = {
@@ -138,6 +143,17 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
                   }}
                 />
               ) : null}
+              <BoutonMiseAJour theme={theme} maj={maj} />
+              <BoutonHub
+                theme={theme}
+                titre={width >= 520 ? '⚙︎ Paramètres' : '⚙︎'}
+                testID="hub-parametres-ouvrir"
+                libelle="Paramètres du hub"
+                onPress={() => {
+                  setMenuOuvert(false);
+                  setParametres(true);
+                }}
+              />
               <SelecteurTheme theme={theme} ouvert={menuOuvert} onBasculer={() => setMenuOuvert(o => !o)} onChoisir={id => {
                 setMenuOuvert(false);
                 onTheme(id);
@@ -238,6 +254,36 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
           </Text>
         </View>
       </ScrollView>
+      {parametres ? (
+        <PanneauParametres
+          theme={theme}
+          prefs={personnalisable ? courantes : undefined}
+          onPrefs={onPrefs}
+          onTheme={onTheme}
+          maj={maj}
+          nomProfil={contexte.profil?.nom}
+          onFermer={() => setParametres(false)}
+          onPersonnaliser={
+            personnalisable
+              ? () => {
+                  setParametres(false);
+                  setEdition(true);
+                }
+              : undefined
+          }
+          onReglagesPortefeuille={onReglagesPortefeuille}
+          onAdministration={
+            autorisees.some(app => app.id === 'administration')
+              ? () => {
+                  setParametres(false);
+                  onOuvrir('administration');
+                }
+              : undefined
+          }
+          onVerrouiller={onVerrouiller}
+          onChangerProfil={onChangerProfil}
+        />
+      ) : null}
     </View>
   );
 }
@@ -448,6 +494,7 @@ function Cellule({
       ) : null}
       <Tuile
         app={app}
+        etat={etatTuile(app, contexte)}
         info={app.info?.(contexte)}
         theme={theme}
         taille={taille}
@@ -545,6 +592,7 @@ function BarreTuile({
 
 function Tuile({
   app,
+  etat: etatApp,
   info,
   theme,
   taille,
@@ -555,6 +603,7 @@ function Tuile({
   onPress,
 }: {
   app: AppHub;
+  etat?: EtatTuile;
   info?: InfoLive;
   theme: ThemeHub;
   taille: TailleTuile;
@@ -619,8 +668,31 @@ function Tuile({
       ))}
     </View>
   );
+  const ouvrable = etatApp?.ouvrable ?? true;
+  const bandeau = etatApp?.maintenance || etatApp?.desactivee ? (
+    <Text
+      testID={`tuile-${app.id}-statut`}
+      style={[
+        styles.bandeauTuile,
+        {
+          color: theme.texte,
+          backgroundColor: theme.surface,
+          borderColor: etatApp.maintenance ? theme.alerte : theme.critique,
+          borderRadius: Math.min(theme.rayonMoyen, 8),
+          ...police(theme.policeTexte),
+        },
+      ]}>
+      {etatApp.maintenance ? `🛠 ${etatApp.maintenance}` : 'Désactivée pour les autres utilisateurs'}
+      {etatApp.maintenance && ouvrable ? ' (visible par vous seul·e : vous pouvez l’ouvrir)' : ''}
+    </Text>
+  ) : null;
   const etiquette = (
     <View style={styles.etiquettes}>
+      {etatApp?.niveau === 'lecture' ? (
+        <Text style={[styles.etiquette, { color: hautAttenue, borderColor: blocs ? 'rgba(255,255,255,0.4)' : theme.ligne, borderRadius: theme.rayonGrand ? 999 : 0 }]}>
+          LECTURE SEULE
+        </Text>
+      ) : null}
       {epinglee ? <Text style={{ color: hautAttenue, fontSize: 12 }} accessibilityLabel="Épinglée">★</Text> : null}
       <Text
         style={[
@@ -636,8 +708,15 @@ function Tuile({
     <Pressable
       testID={`tuile-${app.id}`}
       accessibilityRole="button"
-      accessibilityLabel={edition ? `${app.nom}, en cours de personnalisation` : `Ouvrir ${app.nom}`}
-      disabled={edition}
+      accessibilityLabel={
+        edition
+          ? `${app.nom}, en cours de personnalisation`
+          : ouvrable
+            ? `Ouvrir ${app.nom}${etatApp?.maintenance ? ` (en maintenance : ${etatApp.maintenance})` : ''}`
+            : `${app.nom} : en maintenance. ${etatApp?.maintenance ?? ''}`
+      }
+      accessibilityState={{ disabled: edition || !ouvrable }}
+      disabled={edition || !ouvrable}
       onPress={onPress}
       style={(etat: EtatPresse) => [
         styles.tuile,
@@ -647,7 +726,8 @@ function Tuile({
           borderColor: !edition && (etat.hovered || etat.focused) ? couleur : theme.ligne,
           borderRadius: theme.rayonGrand,
           minHeight: hauteur,
-          transform: [{ scale: etat.pressed && !edition ? 0.99 : etat.hovered && !edition ? 1.03 : 1 }],
+          transform: [{ scale: etat.pressed && !edition ? 0.99 : etat.hovered && !edition && ouvrable ? 1.03 : 1 }],
+          opacity: ouvrable ? 1 : 0.72,
         },
         edition && SUR_LE_WEB && ({ cursor: 'grab' } as object),
         liste && styles.tuileListe,
@@ -670,6 +750,7 @@ function Tuile({
               {indicateurs.length > 0 ? valeurs : null}
               {etiquette}
             </View>
+            {bandeau ? <View style={{ paddingHorizontal: marge, paddingBottom: marge }}>{bandeau}</View> : null}
           </>
         ) : (
           <>
@@ -694,8 +775,9 @@ function Tuile({
               </View>
             </View>
             <View style={[styles.tuileBas, { paddingHorizontal: marge, paddingBottom: marge }]}>
+              {bandeau}
               {indicateurs.length > 0 ? valeurs : null}
-              {!petite && !edition ? (
+              {!petite && !edition && ouvrable ? (
                 <Text style={[styles.ouvrir, { color: couleur, opacity: etat.hovered || !SUR_LE_WEB ? 1 : 0 }]}>Ouvrir →</Text>
               ) : null}
             </View>
@@ -820,11 +902,14 @@ export function BoutonHub({
   variante = 'normal',
   desactive = false,
   couleur,
+  libelle,
 }: {
   theme: ThemeHub;
   titre: string;
   onPress(): void;
   testID?: string;
+  /** Nom accessible, quand le titre visible est abrégé (pictogramme). */
+  libelle?: string;
   variante?: 'normal' | 'plein' | 'danger';
   desactive?: boolean;
   /** Accent du bouton plein ; celui du thème à défaut. */
@@ -835,6 +920,7 @@ export function BoutonHub({
     <Pressable
       testID={testID}
       accessibilityRole="button"
+      accessibilityLabel={libelle}
       accessibilityState={{ disabled: desactive }}
       disabled={desactive}
       onPress={onPress}
@@ -939,4 +1025,5 @@ const styles = StyleSheet.create({
   separateur: { width: 1, alignSelf: 'stretch', backgroundColor: 'rgba(128,128,128,0.35)', marginHorizontal: 2 },
   retour: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   echap: { fontSize: 11, letterSpacing: 0.9 },
+  bandeauTuile: { fontSize: 13, lineHeight: 18, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderLeftWidth: 4, marginTop: 12, overflow: 'hidden' },
 });

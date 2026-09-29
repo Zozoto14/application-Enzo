@@ -8,7 +8,7 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON } from '../theme';
-import type { Profil } from '../../profils/profils';
+import type { OptionsNouveauProfil, Profil } from '../../profils/profils';
 import type { IdentifiantsAmi } from '../../profils/identifiants';
 
 export interface ControleProfils {
@@ -24,11 +24,19 @@ export interface ControleProfils {
    * créer le coffre d'un autre profil.
    */
   /** Crée le compte d'un ami et rend ses identifiants, à montrer une fois. */
-  onCreerCompte?(nom: string, apps: readonly string[]): Promise<IdentifiantsAmi>;
+  onCreerCompte?(nom: string, apps: readonly string[], options?: OptionsNouveauProfil): Promise<IdentifiantsAmi>;
   /** Nouveau coffre pour l'ami : l'ancien, et le portefeuille qu'il scelle, sont effacés. */
   onRegenerer?(id: string): Promise<IdentifiantsAmi>;
   onAutoriser?(id: string, apps: readonly string[]): Promise<void>;
   onActiver?(id: string, actif: boolean): Promise<void>;
+  /**
+   * Enregistre une liste de profils modifiée par l'Administration (niveaux,
+   * invitations, suspensions, politique des apps, actions groupées). L'hôte
+   * n'accepte ni ajout ni retrait de profil par ce chemin, et revalide tout.
+   */
+  onModifierProfils?(suivants: readonly Profil[]): Promise<void>;
+  /** Note l'ouverture (déverrouillage) du profil courant sur cet appareil. */
+  onConnexion?(): void;
 }
 
 export function CarteProfils({ controle }: { controle: ControleProfils }) {

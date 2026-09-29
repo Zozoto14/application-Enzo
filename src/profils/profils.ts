@@ -328,6 +328,24 @@ export function noterConnexion(profils: readonly Profil[], id: string, maintenan
   });
 }
 
+/**
+ * Contrôle d'une liste modifiée par l'Administration avant de l'enregistrer :
+ * mêmes profils (ni ajout ni retrait par ce chemin, qui ne crée ni n'efface
+ * de fichier), prénoms uniques, et un passage par l'écriture/relecture qui
+ * retire tout champ inattendu (un ami ne devient jamais administrateur).
+ */
+export function validerModification(avant: readonly Profil[], apres: readonly Profil[]): Profil[] {
+  const ids = (liste: readonly Profil[]) => liste.map(p => p.id).sort().join(',');
+  if (ids(avant) !== ids(apres)) {
+    throw new ErreurProfil('Modification refusée : la liste des profils a changé entre-temps.');
+  }
+  const noms = new Set(apres.map(p => p.nom.trim().toLowerCase()));
+  if (noms.size !== apres.length || apres.some(p => !p.nom.trim())) {
+    throw new ErreurProfil('Deux profils ne peuvent pas porter le même prénom.');
+  }
+  return lireProfils(ecrireProfils(apres.map(p => ({ ...p, nom: p.nom.trim().slice(0, 30), admin: p.id === ID_PRINCIPAL }))));
+}
+
 /** Fichiers d'un profil : ceux d'avant pour le principal, suffixés sinon. */
 export function fichiersDuProfil(id: string): { coffre: string; portefeuille: string } {
   return id === ID_PRINCIPAL

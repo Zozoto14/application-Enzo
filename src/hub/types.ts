@@ -7,7 +7,7 @@
 import type React from 'react';
 import type { ControleProfils } from '../ui/ecrans/CarteProfils';
 import type { Profil } from '../profils/profils';
-import type { TeinteApp, ThemeHub } from './themes';
+import type { IdThemeHub, TeinteApp, ThemeHub } from './themes';
 import type { NiveauAcces, NiveauDeclare } from './admin/niveaux';
 import type { StockagePrefs } from './personnalisation';
 
@@ -71,6 +71,8 @@ export interface PropsRacineApp {
   onRetour(): void;
   /** Niveau d'accès du profil à cette app (« complet » pour l'administrateur). */
   niveau?: NiveauAcces;
+  /** Change le thème du hub (Réglages de l'Administration). */
+  onTheme?(id: IdThemeHub): void;
 }
 
 export interface AppHub {

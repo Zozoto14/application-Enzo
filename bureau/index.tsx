@@ -40,8 +40,11 @@ import {
   ecrireProfils,
   fichiersDuProfil,
   lireProfils,
+  motifFermeture,
+  noterConnexion,
   nouvelIdentifiant,
   profilOuvrable,
+  validerModification,
   renommerProfil,
   supprimerProfil,
   type Profil,
@@ -127,8 +130,9 @@ function Racine() {
           },
         });
         const profil = profils.find(p => p.id === id) ?? profils[0];
-        if (!profilOuvrable(profil)) {
-          throw new Error('Ce profil est désactivé : demandez à l’administrateur de le réactiver.');
+        const motif = motifFermeture(profil);
+        if (motif) {
+          throw new Error(motif);
         }
         setEtat({ phase: 'prete', session, profils, profil });
       } catch (erreur) {
@@ -222,11 +226,11 @@ function Racine() {
       await enregistrer(renommerProfil(profils, id, nom));
     },
     // Administration : réservée au profil administrateur, aussi côté données.
-    onCreerCompte: async (nom, apps) => {
+    onCreerCompte: async (nom, apps, options) => {
       exigerAdmin();
       const id = nouvelIdentifiant(n => crypto.getRandomValues(new Uint8Array(n)));
       // On valide le nom et l'identifiant avant de créer le moindre fichier.
-      const suivante = ajouterProfil(profils, nom, id, new Date().toISOString().slice(0, 10), apps);
+      const suivante = ajouterProfil(profils, nom, id, new Date().toISOString().slice(0, 10), apps, options);
       const identifiants = await creerCoffreAmi(id, nom.trim());
       await enregistrer(suivante);
       return identifiants;
@@ -249,6 +253,16 @@ function Racine() {
     onActiver: async (id, actif) => {
       exigerAdmin();
       await enregistrer(activerProfil(profils, id, actif));
+    },
+    onModifierProfils: async suivants => {
+      exigerAdmin();
+      await enregistrer(validerModification(profils, suivants));
+    },
+    onConnexion: () => {
+      // Date de la dernière ouverture, pour l'Administration ; jamais bloquant.
+      void enregistrer(noterConnexion(profils, profil.id, new Date().toISOString())).catch(erreur =>
+        console.warn('Connexion non notée :', erreur),
+      );
     },
   };
   function exigerAdmin() {

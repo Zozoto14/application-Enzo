@@ -10,11 +10,25 @@
  *    se substituent sans que le code metier connaisse leur existence.
  */
 
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
 const ici = chemin => fileURLToPath(new URL(chemin, import.meta.url));
+
+/** Version affichée dans les Paramètres du hub : paquet + commit compilé. */
+function versionApp() {
+  const paquet = JSON.parse(readFileSync(ici('./package.json'), 'utf8')).version;
+  let commit = '';
+  try {
+    commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ici('.'), encoding: 'utf8' }).trim();
+  } catch {
+    // Pas de git (archive) : la version du paquet suffit.
+  }
+  return commit ? `${paquet} (${commit})` : paquet;
+}
 
 export default defineConfig({
   root: 'bureau',
@@ -26,6 +40,7 @@ export default defineConfig({
     // Attendu par react-native-web et par plusieurs modules du noyau.
     global: 'globalThis',
     __DEV__: JSON.stringify(process.env.NODE_ENV !== 'production'),
+    __VERSION_APP__: JSON.stringify(versionApp()),
   },
   resolve: {
     alias: [
