@@ -9,7 +9,8 @@
     "types": [
       "react",
       "react-dom",
-      "node"
+      "node",
+      "jest"
     ],
     "jsx": "react-jsx",
     "noEmit": true,

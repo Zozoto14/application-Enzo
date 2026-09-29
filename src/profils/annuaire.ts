@@ -245,9 +245,45 @@ export interface CompteTrouve {
   id: string;
   nom: string;
   admin: boolean;
+  /**
+   * Administrateur historique sans prénom : le prénom saisi, à lui donner
+   * après un déverrouillage réussi (voir `adopterPrenomAdmin`).
+   */
+  prenomAAdopter?: string;
 }
 
 const MOTS_ADMIN = new Set(['admin', 'administrateur', 'administratrice']);
+
+/**
+ * Nom provisoire de l'administrateur des versions antérieures au hub : ces
+ * versions ne lui demandaient jamais de prénom et l'enregistraient sous
+ * « Moi ». Ce n'est pas un prénom : personne ne le saisit à la connexion.
+ */
+export const NOM_ADMIN_PROVISOIRE = 'Moi';
+
+/**
+ * Vrai tant que l'administrateur n'a pas de vrai prénom dans l'annuaire :
+ * liste en clair avec « Moi » (ou sans nom), annuaire sans empreinte pour
+ * lui, ou empreinte de « Moi ». Tant que c'est le cas, un prénom qui n'est
+ * celui d'aucun ami mène à SON coffre — et non au leurre —, sans quoi il ne
+ * pourrait jamais se connecter en saisissant son prénom.
+ */
+export function adminSansPrenom(annuaire: Annuaire): boolean {
+  if (annuaire.heritage) {
+    const nom = normaliserNom(annuaire.heritage[0]?.nom ?? '');
+    return !nom || nom === normaliserNom(NOM_ADMIN_PROVISOIRE);
+  }
+  if (!annuaire.admin.empreinte) {
+    return true;
+  }
+  return Boolean(annuaire.sel) && annuaire.admin.empreinte === empreinteNom(annuaire.sel, NOM_ADMIN_PROVISOIRE);
+}
+
+/** L'administrateur historique, ouvert avec le prénom qu'il vient de saisir. */
+function adminAAdopter(saisie: string): CompteTrouve {
+  const nom = saisie.trim().slice(0, 30);
+  return { id: ID_PRINCIPAL, nom, admin: true, prenomAAdopter: nom };
+}
 
 /**
  * Compte correspondant au prénom saisi, ou rien. Ne parcourt que des
@@ -258,15 +294,18 @@ export function trouverCompte(annuaire: Annuaire, saisie: string): CompteTrouve 
   if (!cherche) {
     return undefined;
   }
+  // Un prénom inconnu mène au leurre… sauf tant que l'administrateur n'a pas
+  // de prénom : c'est alors forcément le sien qu'il saisit.
+  const inconnu = () => (adminSansPrenom(annuaire) && !MOTS_ADMIN.has(cherche) ? adminAAdopter(saisie) : undefined);
   if (annuaire.heritage) {
     const trouve = annuaire.heritage.find(p => normaliserNom(p.nom) === cherche) ?? (MOTS_ADMIN.has(cherche) ? annuaire.heritage[0] : undefined);
-    return trouve ? { id: trouve.id, nom: trouve.nom, admin: trouve.admin } : undefined;
+    return trouve ? { id: trouve.id, nom: trouve.nom, admin: trouve.admin } : inconnu();
   }
   if (MOTS_ADMIN.has(cherche)) {
     return { id: ID_PRINCIPAL, nom: nomAdminPublic(annuaire, saisie) ?? 'Administrateur', admin: true };
   }
   if (!annuaire.sel) {
-    return undefined;
+    return inconnu();
   }
   const empreinte = empreinteNom(annuaire.sel, cherche);
   if (annuaire.admin.empreinte === empreinte) {
@@ -274,7 +313,7 @@ export function trouverCompte(annuaire: Annuaire, saisie: string): CompteTrouve 
   }
   const entree = annuaire.comptes.find(c => c.empreinte === empreinte);
   if (!entree) {
-    return undefined;
+    return inconnu();
   }
   let nom = saisie.trim();
   try {
@@ -489,7 +528,7 @@ export function ouvrirAnnuaireAdmin(source: Annuaire, cles: ClesAdmin, alea: Sou
     const profils: Profil[] = [
       {
         id: ID_PRINCIPAL,
-        nom: prive.nomAdmin ?? 'Moi',
+        nom: prive.nomAdmin ?? NOM_ADMIN_PROVISOIRE,
         admin: true,
         creeLe: prive.creeLeAdmin ?? '',
         ...(annuaire.politique ? { politique: annuaire.politique } : {}),
@@ -570,6 +609,38 @@ export function appliquerProfilsAdmin(source: Annuaire, profils: readonly Profil
   prive.anterieurs = prive.anterieurs.filter(id => ids.has(id));
   annuaire.prive = ecrirePrive(prive, cles, alea);
   return annuaire;
+}
+
+/**
+ * Donne à l'administrateur historique le prénom qu'il vient de saisir à la
+ * connexion (après un déverrouillage réussi) : l'annuaire est migré au
+ * besoin, puis son prénom scellé comme celui de tout compte. Idempotent :
+ * rien ne change (`undefined`) quand il a déjà un prénom, quand la saisie
+ * est vide ou réservée (« admin »), ou quand c'est le prénom d'un ami.
+ */
+export function adopterPrenomAdmin(
+  source: Annuaire,
+  prenom: string,
+  cles: ClesAdmin,
+  alea: SourceAleatoire = aleatoireParDefaut,
+  maintenantIso = new Date().toISOString(),
+): Annuaire | undefined {
+  const propre = prenom.trim().slice(0, 30);
+  const cherche = normaliserNom(propre);
+  if (!cherche || MOTS_ADMIN.has(cherche) || cherche === normaliserNom(NOM_ADMIN_PROVISOIRE) || !adminSansPrenom(source)) {
+    return undefined;
+  }
+  const vue = ouvrirAnnuaireAdmin(source, cles, alea, maintenantIso);
+  const empreinte = empreinteNom(vue.annuaire.sel, propre);
+  if (vue.annuaire.comptes.some(c => c.empreinte === empreinte)) {
+    return undefined;
+  }
+  return appliquerProfilsAdmin(
+    vue.annuaire,
+    vue.profils.map(p => (p.admin ? { ...p, nom: propre } : p)),
+    cles,
+    alea,
+  );
 }
 
 /** Remplace le séquestre d'un compte par un dépôt neuf (création, régénération des identifiants). */

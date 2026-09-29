@@ -6,6 +6,9 @@
  * peut aussi saisir « admin »), puis ouvre son coffre avec son mot de passe
  * et son code. Un prénom inconnu mène au même écran de déverrouillage qu'un
  * vrai compte (coffre leurre) : on ne peut pas deviner quels comptes existent.
+ * Exception : tant que l'administrateur d'avant la mise à jour n'a pas de
+ * prénom (il s'appelait « Moi »), le prénom qu'il saisit mène à son coffre
+ * et lui est ensuite attribué (voir `adminSansPrenom` dans annuaire.ts).
  */
 
 import React, { useState } from 'react';
@@ -34,7 +37,7 @@ export function Connexion({ onContinuer, enCours }: { onContinuer(prenom: string
       <View style={{ gap: ESPACEMENT.s, maxWidth: 420, width: '100%' }}>
         <Champ
           etiquette="Prénom"
-          indication="Administrateur : votre prénom ou « admin »."
+          indication="Administrateur : votre prénom ou « admin ». Compte créé avant la mise à jour : saisissez votre prénom, il sera retenu."
           value={prenom}
           onChangeText={setPrenom}
           onSubmitEditing={valider}
