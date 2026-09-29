@@ -105,6 +105,7 @@ import type { Coffre } from '../securite/coffre';
 import { CarteSynchro } from '../ui/ecrans/CarteSynchro';
 import { CarteProfils, type ControleProfils } from '../ui/ecrans/CarteProfils';
 import { Hub } from '../hub/Hub';
+import { GardeErreur } from '../ui/GardeErreur';
 import { appsVisibles, etatTuile, peutOuvrir } from '../hub/permissions';
 import { niveauProfil } from '../hub/admin/comptes';
 import { chargerPrefs, enregistrerPrefs, CLE_THEME, type PrefsHub } from '../hub/personnalisation';
@@ -2050,7 +2051,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           />
         )
       ) : surLeHub ? (
-        <>
+        <GardeErreur quoi="le hub" onRevenir={profils?.onChanger}>
         <Hub
           registre={REGISTRE}
           contexte={contexteHub}
@@ -2097,8 +2098,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             disponible={cible => cible.genre !== 'app' || appsVisibles(REGISTRE, contexteHub).some(app => app.id === cible.app)}
           />
         ) : null}
-        </>
+        </GardeErreur>
       ) : appOuverte?.Racine ? (
+        <GardeErreur quoi={appOuverte.nom} onRevenir={profils?.onChanger}>
         <appOuverte.Racine
           contexte={contexteHub}
           theme={themeDuHub}
@@ -2114,6 +2116,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             }
           }}
         />
+        </GardeErreur>
       ) : ecran === 'compte' ? (
         <CreationCompte
           key={compteEdite ?? 'nouveau'}
