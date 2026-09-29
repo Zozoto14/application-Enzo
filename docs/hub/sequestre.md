@@ -73,6 +73,13 @@ Un prénom inconnu ouvre un **coffre leurre** (`src/profils/leurre.ts`) : même
 n'annonce son état qu'après un mot de passe **et** un code justes. On ne peut
 donc pas deviner quels comptes existent.
 
+Administrateur d'avant la mise à jour : les versions sans hub ne lui
+demandaient pas de prénom (il s'appelait « Moi »). Tant que c'est le cas
+(`adminSansPrenom`), un prénom qui n'est celui d'aucun ami mène à **son**
+coffre plutôt qu'au leurre — mot de passe et code restent exigés — et, après
+un déverrouillage réussi, ce prénom lui est attribué (`adopterPrenomAdmin`).
+Dès lors, le leurre reprend pour tout prénom inconnu.
+
 Limite assumée : un prénom est devinable par dictionnaire à partir de son
 empreinte si l'on a le fichier. L'empreinte empêche la liste, pas la
 confirmation d'un prénom deviné.

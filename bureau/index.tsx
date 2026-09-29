@@ -31,6 +31,7 @@ import { BandeauMiseAJour } from './MiseAJour';
 import { ouvrirSessionBureau, type SessionBureau } from './session';
 import { pont, stockageCourant, type NomFichier, type Stockage } from './stockage';
 import { Connexion } from '../src/ui/ecrans/ChoixProfil';
+import { GardeErreur } from '../src/ui/GardeErreur';
 import type { ControleProfils } from '../src/ui/ecrans/CarteProfils';
 import {
   ID_PRINCIPAL,
@@ -48,6 +49,7 @@ import {
 } from '../src/profils/profils';
 import {
   aDesAmis,
+  adopterPrenomAdmin,
   appliquerProfilsAdmin,
   codeAcces,
   deposerSequestre,
@@ -128,6 +130,8 @@ type Etat =
       /** Session de l'administrateur sur le compte d'un ami (accès par séquestre). */
       adminSur?: string;
       transparence?: { dernierAccesAdmin?: string; sequestreActif: boolean };
+      /** Administrateur historique sans prénom : celui saisi à la connexion, à lui donner une fois déverrouillé. */
+      prenomAAdopter?: string;
     }
   | { phase: 'echec'; motif: string };
 
@@ -228,7 +232,7 @@ function Racine() {
           new DepotParametres(session.session.base()).ecrire(PARAM_ACCES_ADMIN, JSON.stringify(acces));
           transparence = { dernierAccesAdmin: acces[acces.length - 1], sequestreActif: true };
         }
-        setEtat({ phase: 'prete', session, profil, profils: [profil], adminSur: options.adminSur, transparence });
+        setEtat({ phase: 'prete', session, profil, profils: [profil], adminSur: options.adminSur, transparence, prenomAAdopter: compte.prenomAAdopter });
       } catch (erreur) {
         options.cle?.fill(0);
         setEtat({ phase: 'echec', motif: erreurTexte(erreur) });
@@ -472,7 +476,18 @@ function Racine() {
         const maintenant = new Date().toISOString();
         if (profil.admin) {
           const annuaire = annuaireCourant();
-          await rafraichirAdmin({ ...annuaire, admin: { ...annuaire.admin, derniereConnexion: maintenant } }, true);
+          let suivant: Annuaire = { ...annuaire, admin: { ...annuaire.admin, derniereConnexion: maintenant } };
+          if (etat.prenomAAdopter) {
+            // Compte historique : le prénom saisi devient le sien (il ouvrira
+            // désormais son compte comme les autres, et le leurre protège le reste).
+            const cles = clesAdminDe(session);
+            try {
+              suivant = adopterPrenomAdmin(suivant, etat.prenomAAdopter, cles) ?? suivant;
+            } finally {
+              effacer(cles);
+            }
+          }
+          await rafraichirAdmin(suivant, true);
           return;
         }
         const depot = new DepotParametres(session.session.base());
@@ -570,7 +585,9 @@ function Racine() {
         </View>
       ) : null}
       <View style={styles.pleinEcran}>
-        <App key={`${profil.id}-${adminSur ?? ''}`} session={session.session} chargementAutomatique profils={controle} hub />
+        <GardeErreur quoi="votre compte" onRevenir={() => quitterCompte(session)}>
+          <App key={`${profil.id}-${adminSur ?? ''}`} session={session.session} chargementAutomatique profils={controle} hub />
+        </GardeErreur>
       </View>
     </View>
   );
