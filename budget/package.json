@@ -1,0 +1,14 @@
+{
+  "name": "mon-budget",
+  "version": "1.0.0",
+  "description": "Suivi de budget personnel, candidatures et projets — PWA chiffrée de bout en bout",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node --test tests/"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}

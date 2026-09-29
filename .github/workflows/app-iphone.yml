@@ -7,7 +7,7 @@
 # Lancement : onglet Actions du dépôt › « App iPhone (AltStore) » › Run
 # workflow ; ou tout seul quand le code natif (dossier ios/, dépendances)
 # change. Le fichier AppliBourse.ipa se télécharge en bas de la page de
-# l'exécution, rubrique Artifacts. Guide complet : docs/iphone.md.
+# l'exécution, rubrique Artifacts. Guide complet : portefeuille/docs/iphone.md.
 #
 # Les modifications ordinaires (écrans, calculs) n'ont pas besoin de ce
 # fichier : l'app les télécharge seule depuis le site de secours.
@@ -19,10 +19,15 @@ on:
   push:
     branches: [main]
     paths:
-      - 'ios/**'
-      - 'package.json'
-      - 'package-lock.json'
+      - 'portefeuille/ios/**'
+      - 'portefeuille/package.json'
+      - 'portefeuille/package-lock.json'
+      # Resolution de l'alias @hub (code du hub dans hub/src) par Metro.
+      - 'portefeuille/metro.config.js'
+      - 'portefeuille/babel.config.js'
       - '.github/workflows/app-iphone.yml'
+      # Comme portefeuille/src, hub/src n'est pas surveille : ses changements
+      # ordinaires arrivent par la mise a jour du paquet JavaScript.
 
 concurrency:
   group: app-iphone
@@ -31,6 +36,9 @@ concurrency:
 jobs:
   ipa:
     runs-on: macos-15
+    defaults:
+      run:
+        working-directory: portefeuille
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
@@ -43,17 +51,20 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          # Le hub (hub/src) n'a pas de dependances a lui : un seul verrou.
+          cache-dependency-path: portefeuille/package-lock.json
 
       - name: Dépendances
         run: npm ci --no-audit --no-fund
 
+      # tsc et Jest couvrent aussi hub/src (alias @hub, voir hub/README.md).
       - name: Vérification du code
         run: |
           npx tsc --noEmit
           npx jest --silent
 
       - name: Pods (SQLCipher activé par package.json)
-        working-directory: ios
+        working-directory: portefeuille/ios
         run: pod install
 
       - name: Compilation (sans signature)
@@ -85,7 +96,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: AppliBourse-ipa
-          path: AppliBourse.ipa
+          path: portefeuille/AppliBourse.ipa
           retention-days: 30
 
       - name: Journal de compilation (en cas d'échec)
@@ -93,5 +104,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: journal-xcodebuild
-          path: xcodebuild.log
+          path: portefeuille/xcodebuild.log
           if-no-files-found: ignore

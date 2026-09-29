@@ -1,0 +1,178 @@
+import { creerAccesAmi, genererMotDePasse, type CoffreInitialisable } from './identifiants';
+import { appsAttribuables, appsVisibles, basculerApp, nombreUtilisateurs, peutOuvrir } from './permissions';
+import {
+  appliquerPrefs, basculerEpinglee, basculerMasquee, chargerPrefs, definirDensite, definirDisposition, definirTaille,
+  deplacer, deplacerVers, empan, enregistrerPrefs, ecrirePrefs, lirePrefs, migrerId, reinitialiser, sontParDefaut, CLE_PREFS,
+} from './personnalisation';
+import { appAdministration, creerRegistre, ID_ADMINISTRATION } from './registre';
+import { THEMES_HUB, THEME_HUB_DEFAUT, themeHub } from './themes';
+import type { AppHub, ContexteHub, ProfilHub } from './types';
+
+// Le hub ne connaît aucune app de l'hôte : une app factice tient lieu de portefeuille.
+const ID_PORTEFEUILLE = 'portefeuille';
+const admin: ProfilHub = { id: 'principal', nom: 'Moi', admin: true, creeLe: '' };
+const ami = (apps: string[]): ProfilHub => ({ id: 'abcdef1234', nom: 'Lucas', admin: false, creeLe: '', apps, actif: true });
+const factice = (id: string, extra: Partial<AppHub> = {}): AppHub => ({ id, nom: id, categorie: 'x', description: '', icone: '*', teinte: 'quatre', ...extra });
+const controle = { onCreerCompte: () => undefined } as unknown as ContexteHub['profils'];
+const QrCode = () => null;
+const REGISTRE = creerRegistre([factice(ID_PORTEFEUILLE, { teinte: 'portefeuille' }), appAdministration({ QrCode })]);
+
+describe('registre', () => {
+  it('a des identifiants uniques et valides, avec l’app de l’hôte et l’administration', () => {
+    const ids = REGISTRE.map(a => a.id);
+    expect(ids).toEqual([ID_PORTEFEUILLE, ID_ADMINISTRATION]);
+    expect(REGISTRE.find(a => a.id === ID_ADMINISTRATION)?.adminSeulement).toBe(true);
+    expect(REGISTRE.find(a => a.id === ID_ADMINISTRATION)?.Racine).toBeDefined();
+  });
+
+  it('refuse un identifiant invalide ou en double', () => {
+    expect(() => creerRegistre([factice('A B')])).toThrow(/invalide/);
+    expect(() => creerRegistre([factice('aa'), factice('aa')])).toThrow(/double/);
+  });
+
+  it('l’administration résume les profils', () => {
+    const app = REGISTRE[1];
+    const tous = [admin, ami([]), { ...ami([]), id: 'zzzzzz9999', actif: false }];
+    expect(app.info?.({ profils: { ...controle!, tous, actuel: admin } })?.indicateurs.map(i => i.valeur)).toEqual(['3', '1']);
+  });
+});
+
+describe('permissions', () => {
+  it('l’administrateur voit tout ; sans profil (appareil seul) aussi', () => {
+    expect(appsVisibles(REGISTRE, { profil: admin, profils: controle }).map(a => a.id)).toEqual([ID_PORTEFEUILLE, ID_ADMINISTRATION]);
+    expect(peutOuvrir(factice('a'), undefined)).toBe(true);
+  });
+
+  it('un ami ne voit que ses apps, jamais l’administration, même retouchée', () => {
+    const contexte = { profil: ami([ID_PORTEFEUILLE, ID_ADMINISTRATION]), profils: controle };
+    expect(appsVisibles(REGISTRE, contexte).map(a => a.id)).toEqual([ID_PORTEFEUILLE]);
+    expect(appsVisibles(REGISTRE, { profil: ami([]), profils: controle })).toEqual([]);
+  });
+
+  it('respecte « disponible » et attribue seulement les apps non réservées', () => {
+    expect(appsVisibles(REGISTRE, { profil: admin }).map(a => a.id)).toEqual([ID_PORTEFEUILLE]);
+    expect(appsAttribuables(REGISTRE).map(a => a.id)).toEqual([ID_PORTEFEUILLE]);
+  });
+
+  it('compte les utilisateurs actifs et bascule une autorisation', () => {
+    const p = [admin, ami([ID_PORTEFEUILLE]), { ...ami([ID_PORTEFEUILLE]), id: 'zzzzzz9999', actif: false }];
+    expect(nombreUtilisateurs(REGISTRE[0], p)).toBe(2);
+    expect(basculerApp(['a'], 'b', true)).toEqual(['a', 'b']);
+    expect(basculerApp(['a', 'b'], 'a', false)).toEqual(['b']);
+  });
+});
+
+describe('personnalisation', () => {
+  const apps = [factice('aa'), factice('bb'), factice('cc')];
+  const ids = (p: ReturnType<typeof lirePrefs>) => appliquerPrefs(apps, p).map(t => t.app.id);
+
+  it('retombe sur les défauts si le contenu est absent, corrompu ou retouché', () => {
+    expect(sontParDefaut(lirePrefs(undefined))).toBe(true);
+    expect(sontParDefaut(lirePrefs('{oups'))).toBe(true);
+    expect(sontParDefaut(lirePrefs('[1]'))).toBe(true);
+    const p = lirePrefs(JSON.stringify({ ordre: ['aa', 3, '../x'], tailles: { aa: 'énorme', bb: 'grande' }, densite: 'x', disposition: 'liste' }));
+    expect(p).toMatchObject({ ordre: ['aa'], tailles: { bb: 'grande' }, densite: 'aere', disposition: 'liste' });
+  });
+
+  it('réordonne au clavier et par glisser-déposer', () => {
+    let p = lirePrefs(undefined);
+    p = deplacer(p, ['aa', 'bb', 'cc'], 'cc', -1);
+    expect(ids(p)).toEqual(['aa', 'cc', 'bb']);
+    p = deplacerVers(p, ['aa', 'cc', 'bb'], 'bb', 'aa');
+    expect(ids(p)).toEqual(['bb', 'aa', 'cc']);
+    expect(deplacer(p, ['bb', 'aa', 'cc'], 'bb', -1)).toBe(p);
+  });
+
+  it('épingle en premier, et un déplacement ne franchit pas le groupe', () => {
+    let p = basculerEpinglee(lirePrefs(undefined), ['aa', 'bb', 'cc'], 'cc', true);
+    expect(ids(p)).toEqual(['cc', 'aa', 'bb']);
+    expect(deplacer(p, ['cc', 'aa', 'bb'], 'aa', -1)).toBe(p);
+    p = basculerEpinglee(p, ['cc', 'aa', 'bb'], 'cc', false);
+    expect(p.epinglees).toEqual([]);
+  });
+
+  it('taille, masquage, densité, disposition et réinitialisation', () => {
+    let p = definirTaille(lirePrefs(undefined), 'aa', 'grande');
+    p = basculerMasquee(p, 'bb', true);
+    p = definirDisposition(definirDensite(p, 'compact'), 'liste');
+    const t = appliquerPrefs(apps, p);
+    expect(t[0].taille).toBe('grande');
+    expect(t[1]).toMatchObject({ taille: 'moyenne', masquee: true });
+    expect(sontParDefaut(p)).toBe(false);
+    expect(sontParDefaut(reinitialiser())).toBe(true);
+    expect(empan('grande', 3)).toBe(2);
+    expect(empan('grande', 1)).toBe(1);
+  });
+
+  it('n’affiche jamais une app non autorisée, même citée dans les préférences', () => {
+    const contexte = { profil: ami([ID_PORTEFEUILLE]), profils: controle };
+    const p = basculerEpinglee(lirePrefs(undefined), [], ID_ADMINISTRATION, true);
+    const tuiles = appliquerPrefs(appsVisibles(REGISTRE, contexte), p);
+    expect(tuiles.map(t => t.app.id)).toEqual([ID_PORTEFEUILLE]);
+  });
+
+  it('mémorise via le stockage, et tolère un stockage en panne', () => {
+    const m = new Map<string, string>();
+    const stockage = { lire: (c: string) => m.get(c), ecrire: (c: string, v: string) => void m.set(c, v) };
+    const p = definirDensite(lirePrefs(undefined), 'compact');
+    expect(enregistrerPrefs(stockage, p)).toBe(true);
+    expect(m.get(CLE_PREFS)).toBe(ecrirePrefs(p));
+    expect(chargerPrefs(stockage).densite).toBe('compact');
+    const casse = { lire: () => { throw new Error('x'); }, ecrire: () => { throw new Error('x'); } };
+    expect(chargerPrefs(casse).densite).toBe('aere');
+    expect(enregistrerPrefs(casse, p)).toBe(false);
+  });
+});
+
+describe('thèmes', () => {
+  it('propose les 8 thèmes, Nuit par défaut, et retombe dessus si inconnu', () => {
+    expect(THEMES_HUB).toHaveLength(8);
+    expect(new Set(THEMES_HUB.map(t => t.id)).size).toBe(8);
+    expect(themeHub(undefined).id).toBe(THEME_HUB_DEFAUT);
+    expect(themeHub('nimporte').id).toBe('nuit');
+    expect(THEMES_HUB.map(t => t.nom)).toEqual(expect.arrayContaining(['Nuit', 'Ivoire', 'Sauge', 'Terminal']));
+  });
+});
+
+describe('migration des anciens identifiants', () => {
+  it("traduit « portfolio » en « portefeuille » dans les préférences et les autorisations", () => {
+    const p = lirePrefs(JSON.stringify({ ordre: ['portfolio', 'administration'], tailles: { portfolio: 'grande' }, masquees: ['portfolio'] }));
+    expect(p.ordre).toEqual(['portefeuille', 'administration']);
+    expect(p.tailles).toEqual({ portefeuille: 'grande' });
+    expect(p.masquees).toEqual(['portefeuille']);
+    expect(migrerId('portfolio')).toBe('portefeuille');
+    expect(migrerId('autre')).toBe('autre');
+  });
+});
+
+describe('identifiants d’un ami', () => {
+  let graine = 1;
+  const alea = (n: number) => Uint8Array.from({ length: n }, () => (graine = (graine * 1103515245 + 12345) % 2 ** 31) % 256);
+
+  it('génère un mot de passe de 4 groupes, sans caractère ambigu, différent à chaque tirage', () => {
+    const a = genererMotDePasse(alea);
+    expect(a).toMatch(/^[a-km-zA-HJ-NP-Z2-9]{5}(-[a-km-zA-HJ-NP-Z2-9]{5}){3}$/);
+    expect(genererMotDePasse(alea)).not.toBe(a);
+  });
+
+  it('initialise un coffre vierge fourni par l’hôte, puis le verrouille', () => {
+    const journal: string[] = [];
+    let statut = 'non-initialise';
+    const coffre: CoffreInitialisable = {
+      statut: () => statut,
+      initialiser: ({ motDePasse, compte }) => {
+        journal.push(`init ${compte} ${motDePasse.length}`);
+        statut = 'deverrouille';
+        return { codesRecuperation: ['c1'], secretTotp: 'S', uriTotp: `otpauth://totp/${compte}` };
+      },
+      verrouiller: () => {
+        journal.push('verrou');
+        statut = 'verrouille';
+      },
+    };
+    const acces = creerAccesAmi(coffre, 'Lucas', alea);
+    expect(acces).toMatchObject({ codesRecuperation: ['c1'], secretTotp: 'S', uriTotp: 'otpauth://totp/Lucas' });
+    expect(journal).toEqual(['init Lucas 23', 'verrou']);
+    expect(() => creerAccesAmi(coffre, 'Lucas', alea)).toThrow(/déjà un coffre/);
+  });
+});
