@@ -127,7 +127,7 @@ describe('PremierLancement', () => {
     const secrets = {
       codesRecuperation: ['ABCD-EFGH-JKMN-PQRS', '1234-5678-9ABC-DEFG'],
       secretTotp: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
-      uriTotp: 'otpauth://totp/AppliBourse:moi',
+      uriTotp: 'otpauth://totp/AppDashboard:moi',
     };
 
     it('affiche les codes et le secret', async () => {

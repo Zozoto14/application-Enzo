@@ -30,7 +30,7 @@ export interface ControleProfils {
    * accéder), avec la date de son dernier accès s'il y en a eu.
    */
   transparence?: { dernierAccesAdmin?: string; sequestreActif: boolean };
-  /** Revenir à « Qui utilise AppliBourse ? ». */
+  /** Revenir à « Qui utilise AppDashboard ? ». */
   onChanger(): void;
   onAjouter(nom: string): Promise<void>;
   onSupprimer(id: string): Promise<void>;
@@ -99,7 +99,7 @@ export function CarteProfils({ controle }: { controle: ControleProfils }) {
           </SousTitre>
         ) : actuel.admin ? (
           <SousTitre>
-            Un ami veut suivre son portefeuille ici ? Ajoutez-lui un profil : au démarrage, AppliBourse demandera qui
+            Un ami veut suivre son portefeuille ici ? Ajoutez-lui un profil : au démarrage, AppDashboard demandera qui
             l’utilise, et il créera son propre mot de passe et son code. Ses données sont chiffrées à part — vous ne
             pouvez pas les lire, lui non plus les vôtres. La synchronisation avec l’iPhone reste réservée à votre profil.
           </SousTitre>

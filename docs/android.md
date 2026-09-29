@@ -1,4 +1,4 @@
-# AppliBourse sur un téléphone Android
+# AppDashboard sur un téléphone Android
 
 Le code du téléphone est le même que celui de l'ordinateur (React Native).
 Il n'a encore jamais été compilé pour Android : la première compilation peut

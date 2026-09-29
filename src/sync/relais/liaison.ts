@@ -6,6 +6,8 @@
  * code donne accès à la boîte, mais pas à ce qu'elle contient.
  */
 
+import { SITE_PRINCIPAL } from '../../config/site';
+
 export interface Liaison {
   /** Adresse du relais, sans barre finale. */
   relais: string;
@@ -70,7 +72,9 @@ export function decoderLiaison(texte: string): Liaison | undefined {
 
 /** Lien à scanner avec l'appareil photo : ouvre le site de secours déjà relié. */
 export function lienSite(liaison: Liaison): string | undefined {
-  return liaison.site ? `${liaison.site}/#liaison=${encoderLiaison(liaison)}` : undefined;
+  // Un code sans adresse (ou émis avant le changement de nom) garde la sienne ;
+  // sinon, l'adresse du site de secours vient de la configuration.
+  return `${liaison.site ?? SITE_PRINCIPAL}/#liaison=${encoderLiaison(liaison)}`;
 }
 
 /** Lien qui ouvre l'app iPhone (schéma applibourse://) déjà reliée. */

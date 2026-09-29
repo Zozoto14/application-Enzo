@@ -58,7 +58,7 @@ export function messageVersement(
     titre: `💰 C’est le ${reglage.jour} : vous versez vos ${euros(reglage.montant)} ?`,
     corps: utiles.length
       ? `Pour rester sur votre cible : ${utiles.map(achat => `${achat.nom} +${euros(achat.montant)}`).join(' · ')}.`
-      : 'Ouvrez AppliBourse pour saisir le versement du mois.',
+      : 'Ouvrez AppDashboard pour saisir le versement du mois.',
   };
 }
 

@@ -105,10 +105,10 @@ export class ErreurEnveloppe extends Error {
 
 export function ouvrirEnveloppe<T>(cleHex: string, enveloppe: Enveloppe): T {
   if (enveloppe.format !== 'applibourse-relais') {
-    throw new ErreurEnveloppe('Ce dépôt n’est pas une enveloppe AppliBourse.');
+    throw new ErreurEnveloppe('Ce dépôt n’est pas une enveloppe AppDashboard.');
   }
   if (enveloppe.version > VERSION_ENVELOPPE) {
-    throw new ErreurEnveloppe('Un appareil utilise une version plus récente d’AppliBourse : mettez celui-ci à jour.');
+    throw new ErreurEnveloppe('Un appareil utilise une version plus récente d’AppDashboard : mettez celui-ci à jour.');
   }
   let clair: Uint8Array;
   try {

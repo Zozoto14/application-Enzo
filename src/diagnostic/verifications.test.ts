@@ -22,7 +22,7 @@ describe('diagnostic', () => {
     expect(vus).toHaveLength(4);
 
     const texte = rapportTexte(resultats, '26/09/2026 14:00');
-    expect(texte.split('\n')[0]).toBe('Diagnostic AppliBourse — 26/09/2026 14:00');
+    expect(texte.split('\n')[0]).toBe('Diagnostic AppDashboard — 26/09/2026 14:00');
     expect(texte).toContain('❌ Voix naturelles : connexion refusée');
     expect(texte).toContain('➖ Notifications : Uniquement sur l’ordinateur.');
   });

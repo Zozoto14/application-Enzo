@@ -233,7 +233,7 @@ export type ResultatLecture =
  */
 export function ouvrirArchive(archive: Archive, motDePasse: string): ResultatLecture {
   if (archive.format !== 'applibourse-sauvegarde') {
-    return { ouverte: false, motif: 'Ce fichier n’est pas une sauvegarde AppliBourse.' };
+    return { ouverte: false, motif: 'Ce fichier n’est pas une sauvegarde AppDashboard.' };
   }
   if (archive.version > VERSION_ARCHIVE) {
     return {

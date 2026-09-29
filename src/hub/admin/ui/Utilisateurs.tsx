@@ -775,7 +775,7 @@ function PanneauIdentifiants({ theme, nom, valeurs, onTermine }: { theme: ThemeH
       </View>
       <Text style={{ color: theme.attenue, fontSize: 13 }}>À scanner dans son application d’authentification (le code à 6 chiffres est demandé à chaque ouverture, avec le mot de passe) :</Text>
       <View style={{ alignItems: 'flex-start' }}>
-        <QrCode texte={valeurs.uriTotp} legende={`AppliBourse · ${nom}`} testID="admin-qr-totp" />
+        <QrCode texte={valeurs.uriTotp} legende={`AppDashboard · ${nom}`} testID="admin-qr-totp" />
       </View>
       <Text style={{ color: theme.texte, fontWeight: '600' }}>Codes de récupération</Text>
       <View style={commun.grille}>

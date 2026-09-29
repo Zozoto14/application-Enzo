@@ -130,7 +130,7 @@ describe('uriOtpauth', () => {
   it('compose une URI lisible par les applications d’authentification', () => {
     const uri = uriOtpauth({ secret: SECRET_RFC, compte: 'moi@exemple.fr' });
 
-    expect(uri).toContain('otpauth://totp/AppliBourse:moi%40exemple.fr');
+    expect(uri).toContain('otpauth://totp/AppDashboard:moi%40exemple.fr');
     expect(uri).toContain(`secret=${SECRET_RFC}`);
     expect(uri).toContain('algorithm=SHA1');
     expect(uri).toContain('digits=6');

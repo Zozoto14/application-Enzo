@@ -126,7 +126,7 @@ export function Notifications({
         <Carte>
           <Text style={{ color: palette.texte, fontWeight: '600' }}>Notifications Windows</Text>
           <SousTitre>
-            Elles partent tant qu’AppliBourse est ouverte, même réduite dans la barre des tâches.
+            Elles partent tant qu’AppDashboard est ouverte, même réduite dans la barre des tâches.
             Verrouillée, elle vous prévient que le briefing attend ; les chiffres arrivent dès que vous
             déverrouillez. Un clic sur une notification ramène la fenêtre.
           </SousTitre>
@@ -137,7 +137,7 @@ export function Notifications({
             <View style={styles.ligneInterrupteur}>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: palette.texte }}>Rester près de l’horloge quand je ferme la fenêtre</Text>
-                <SousTitre>L’icône AppliBourse garde les briefings actifs ; clic droit › Quitter pour l’arrêter.</SousTitre>
+                <SousTitre>L’icône AppDashboard garde les briefings actifs ; clic droit › Quitter pour l’arrêter.</SousTitre>
               </View>
               <Switch
                 value={Boolean(resterPlateau)}
@@ -150,19 +150,19 @@ export function Notifications({
           {onChangerDemarrage ? (
             <View style={styles.ligneInterrupteur}>
               <View style={{ flex: 1 }}>
-                <Text style={{ color: palette.texte }}>Ouvrir AppliBourse au démarrage de Windows</Text>
+                <Text style={{ color: palette.texte }}>Ouvrir AppDashboard au démarrage de Windows</Text>
                 <SousTitre>Fermée, l’application ne peut rien envoyer : ceci garantit vos briefings.</SousTitre>
               </View>
               <Switch
                 value={Boolean(demarrageAuto)}
                 onValueChange={onChangerDemarrage}
                 testID="interrupteur-demarrage"
-                accessibilityLabel="Ouvrir AppliBourse au démarrage de Windows"
+                accessibilityLabel="Ouvrir AppDashboard au démarrage de Windows"
               />
             </View>
           ) : null}
           <SousTitre>
-            Rien ne s’affiche ? Vérifiez dans Windows : Paramètres › Système › Notifications (AppliBourse
+            Rien ne s’affiche ? Vérifiez dans Windows : Paramètres › Système › Notifications (AppDashboard
             autorisée) et que le mode « Ne pas déranger » est coupé.
           </SousTitre>
           {onTester ? (

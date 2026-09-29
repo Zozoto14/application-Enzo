@@ -1,7 +1,7 @@
 /**
  * Notifications de l'application de bureau, vérifiées en tâche de fond.
  *
- * Tant qu'AppliBourse est ouverte (même réduite près de l'horloge) :
+ * Tant qu'AppDashboard est ouverte (même réduite près de l'horloge) :
  * - chaque minute, briefings, alertes de cours, rappels du carnet et forte
  *   séance ;
  * - chaque heure en journée, les événements des valeurs (résultats,

@@ -72,7 +72,7 @@ export const ETAPES_VISITE: readonly EtapeVisite[] = [
   {
     id: 'intro',
     emoji: '👋',
-    titre: 'Quoi de neuf dans AppliBourse',
+    titre: 'Quoi de neuf dans AppDashboard',
     texte: 'Un petit tour des nouveautés, en une minute. À chaque étape, « Ouvrir la page » vous y emmène pour voir à quoi ça ressemble, puis la visite reprend. Elle se relance depuis Paramètres.',
   },
   {
@@ -123,7 +123,7 @@ export const ETAPES_VISITE: readonly EtapeVisite[] = [
     id: 'alertes',
     emoji: '🔔',
     titre: 'Les alertes',
-    texte: 'Résultats, dividendes, grosses actus recoupées. Fermer la fenêtre laisse AppliBourse près de l’horloge, pour qu’elles partent.',
+    texte: 'Résultats, dividendes, grosses actus recoupées. Fermer la fenêtre laisse AppDashboard près de l’horloge, pour qu’elles partent.',
     destination: 'notifications',
   },
   {

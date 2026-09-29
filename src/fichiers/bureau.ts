@@ -2,7 +2,7 @@
  * Système de fichiers de l'application de bureau, pour les sauvegardes.
  *
  * La fenêtre n'a pas accès au disque : elle nomme un fichier de sauvegarde,
- * et le processus principal le range dans « Documents\AppliBourse
+ * et le processus principal le range dans « Documents\AppDashboard
  * Sauvegardes ». Les chemins sont donc logiques — « bureau:/sauvegardes/x »
  * — et seul leur dernier segment, le nom, traverse le pont.
  */

@@ -14,6 +14,7 @@ import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../c
 import { ESPACEMENT, RAYON } from '../theme';
 import type { EtatSynchroApp } from '../../app/synchroApp';
 import { joursRestants } from '../../natif/signature';
+import { SITE_PRINCIPAL } from '../../config/site';
 import { encoderLiaison, lienApp, lienSite, type Liaison } from '../../sync/relais/liaison';
 
 export interface CarteSynchroProps {
@@ -147,7 +148,7 @@ export function CarteSynchro({
                 Sur le PC, il n’y a pas de code à recopier : c’est lui qui le crée. Pour cela :
               </Text>
               <Text style={{ color: palette.texte }}>
-                1. Ouvrez un terminal (PowerShell) dans le dossier d’AppliBourse — celui où vous lanciez « npm run maj-pc ».
+                1. Ouvrez un terminal (PowerShell) dans le dossier d’AppDashboard — celui où vous lanciez « npm run maj-pc ».
               </Text>
               <Text style={{ color: palette.texte }}>2. Tapez : npm run relais:deployer</Text>
               <Text style={{ color: palette.texte }}>
@@ -303,11 +304,9 @@ export function CarteSynchro({
                 />
               ) : null}
             </View>
-            {liaison.site ? (
-              <Text selectable style={{ color: palette.accent }}>
-                Site de secours : {liaison.site}
-              </Text>
-            ) : null}
+            <Text selectable style={{ color: palette.accent }}>
+              Site de secours : {liaison.site ?? SITE_PRINCIPAL}
+            </Text>
           </View>
         ) : null}
 

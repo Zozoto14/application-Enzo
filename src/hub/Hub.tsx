@@ -15,6 +15,7 @@ import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, Vi
 import { appsVisibles, etatTuile, type EtatTuile } from './permissions';
 import { BoutonMiseAJour, PanneauParametres, useMiseAJour } from './ParametresHub';
 import { salutation } from './infos';
+import { LogoHub } from './LogoHub';
 import {
   LIBELLES_TAILLE,
   TAILLES,
@@ -47,7 +48,7 @@ export interface HubProps {
   prefs?: PrefsHub;
   onPrefs?(prefs: PrefsHub): void;
   onVerrouiller?(): void;
-  /** Revenir à « Qui utilise AppliBourse ? », quand il y a plusieurs profils. */
+  /** Revenir à « Qui utilise AppDashboard ? », quand il y a plusieurs profils. */
   onChangerProfil?(): void;
   /** Ouvre les Paramètres de l'app Portefeuille (panneau « Paramètres »). */
   onReglagesPortefeuille?(): void;
@@ -144,10 +145,8 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
         <View style={[styles.page, compact && { paddingTop: 20, paddingBottom: 32 }]}>
           <View style={[styles.entete, { zIndex: 10 }]}>
             <View style={styles.marque}>
-              <View style={[styles.logo, { backgroundColor: theme.accent, borderRadius: Math.min(theme.rayonMoyen, 10) }]}>
-                <Text style={{ color: theme.surAccent, fontSize: 16, fontWeight: '800' }}>▦</Text>
-              </View>
-              <Text style={[titreStyle, { fontSize: 16 }]}>AppliBourse</Text>
+              <LogoHub taille={32} fond={theme.accent} trait={theme.surAccent} rayon={Math.min(theme.rayonMoyen, 10)} testID="hub-logo" />
+              <Text style={[titreStyle, { fontSize: 16 }]}>AppDashboard</Text>
             </View>
             <View style={styles.actionsEntete}>
               {personnalisable ? (
@@ -990,7 +989,6 @@ const styles = StyleSheet.create({
   page: { width: '100%', maxWidth: 1200, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 32, paddingBottom: 48, flexGrow: 1 },
   entete: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },
   marque: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  logo: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   actionsEntete: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   intro: { marginTop: 48, marginBottom: 32 },
   salut: { fontSize: 44, lineHeight: 50, letterSpacing: -1 },

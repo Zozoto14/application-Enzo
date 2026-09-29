@@ -134,7 +134,7 @@ export function testsDuBureau(pont: Pont | undefined = pontBureau()): Test[] {
       libelle: 'Notifications Windows',
       executer: pont?.systeme?.notifier
         ? async () => {
-            const affichee = await pont.systeme!.notifier!('🩺 Diagnostic AppliBourse', 'Si vous lisez ceci, les notifications fonctionnent.');
+            const affichee = await pont.systeme!.notifier!('🩺 Diagnostic AppDashboard', 'Si vous lisez ceci, les notifications fonctionnent.');
             if (!affichee) throw new Error('Windows refuse les notifications : Paramètres › Système › Notifications.');
             const demarrage = await pont.systeme!.demarrage?.().catch(() => undefined);
             const plateau = await pont.systeme!.plateau?.().catch(() => undefined);

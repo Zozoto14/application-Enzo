@@ -33,6 +33,11 @@ import { fileURLToPath } from 'node:url';
 
 const ici = dirname(fileURLToPath(import.meta.url));
 
+// Le nom affiché est « AppDashboard », mais les données restent dans l'ancien
+// dossier utilisateur « AppliBourse » : renommer le produit ne doit ni les
+// perdre ni casser les mises à jour. À fixer avant tout accès à userData.
+app.setPath('userData', join(app.getPath('appData'), 'AppliBourse'));
+
 /** Adresse du serveur de développement, absente dans l'application livrée. */
 const DEV = process.env.APPLIBOURSE_DEV;
 
@@ -185,7 +190,7 @@ function installerPasserelle() {
     const notification = new Notification({
       title: String(titre),
       body: String(corps),
-      // Le logo d'AppliBourse à côté du texte, plutôt qu'une notification anonyme.
+      // Le logo d'AppDashboard à côté du texte, plutôt qu'une notification anonyme.
       icon: join(ici, '..', 'icone', 'icone-256.png'),
       silent: false,
     });
@@ -201,7 +206,7 @@ function installerPasserelle() {
     return true;
   });
 
-  // Ouverture au démarrage de Windows : sans elle, AppliBourse fermée ne
+  // Ouverture au démarrage de Windows : sans elle, AppDashboard fermée ne
   // peut envoyer aucun briefing.
   ipcMain.handle('systeme:demarrage', async (_evenement, activer) => {
     if (typeof activer === 'boolean') {
@@ -335,7 +340,7 @@ async function lireVersionBuild() {
 /** Page d'attente, le temps de récupérer et recompiler l'interface. */
 const PAGE_ATTENTE = `data:text/html;charset=utf-8,${encodeURIComponent(
   '<!doctype html><meta charset="utf-8"><body style="margin:0;background:#000;color:#a1a1aa;font-family:Segoe UI,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh">' +
-    '<div style="text-align:center"><div style="color:#f4f4f5;font-size:20px;font-weight:700;margin-bottom:8px">AppliBourse</div>Recherche de mises à jour…</div></body>',
+    '<div style="text-align:center"><div style="color:#f4f4f5;font-size:20px;font-weight:700;margin-bottom:8px">AppDashboard</div>Recherche de mises à jour…</div></body>',
 )}`;
 
 /** Ce qui s'est passé au lancement, pour le bandeau. */
@@ -413,7 +418,7 @@ async function installerPuisRedemarrer() {
 
 // ----------------------------------------- Mises à jour, application ouverte
 //
-// AppliBourse démarre avec Windows (souvent avant qu'internet soit prêt) et
+// AppDashboard démarre avec Windows (souvent avant qu'internet soit prêt) et
 // reste ensuite près de l'horloge : elle n'est presque jamais « relancée ».
 // Sans ce qui suit, les mises à jour, appliquées seulement au lancement,
 // n'arriveraient plus. Donc :
@@ -471,7 +476,7 @@ async function verifierEnFond(raison) {
   } else if (derniereProposee !== disponible && Notification.isSupported()) {
     derniereProposee = disponible;
     const notification = new Notification({
-      title: '🆕 Nouvelle version d’AppliBourse',
+      title: '🆕 Nouvelle version d’AppDashboard',
       body: 'Cliquez pour l’installer : l’application redémarre en une minute, vos données restent là.',
     });
     notification.on('click', () => redemarrerPourMettreAJour());
@@ -496,7 +501,7 @@ async function lancerMiseAJour() {
   const enfant = spawn(
     'cmd.exe',
     // Fenêtre réduite : la réinstallation est silencieuse et relance l'appli.
-    ['/c', 'start', '/min', 'AppliBourse - mise a jour', 'powershell', '-Command', 'npm run maj-pc'],
+    ['/c', 'start', '/min', 'AppDashboard - mise a jour', 'powershell', '-Command', 'npm run maj-pc'],
     { cwd: version.dossierSource, detached: true, stdio: 'ignore' },
   );
   enfant.unref();
@@ -508,7 +513,7 @@ async function lancerMiseAJour() {
 
 // ------------------------------------------------ Zone de notification
 //
-// Fermer la fenêtre ne quitte pas : AppliBourse reste près de l'horloge,
+// Fermer la fenêtre ne quitte pas : AppDashboard reste près de l'horloge,
 // pour que briefings et alertes continuent de partir. « Quitter » dans le
 // menu de l'icône arrête vraiment. Le choix se règle dans l'écran Alertes.
 
@@ -543,10 +548,10 @@ function creerPlateau() {
   if (plateau) return;
   const image = nativeImage.createFromPath(join(ici, '..', 'icone', process.platform === 'win32' ? 'icone-32.png' : 'icone-16.png'));
   plateau = new Tray(image);
-  plateau.setToolTip('AppliBourse');
+  plateau.setToolTip('AppDashboard');
   plateau.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Ouvrir AppliBourse', click: montrerFenetre },
+      { label: 'Ouvrir AppDashboard', click: montrerFenetre },
       {
         label: 'Vérifier les mises à jour',
         // Ouvre les Paramètres, où se trouve la vérification.
@@ -574,7 +579,7 @@ function creerFenetre() {
     backgroundColor: '#000000',
     show: false,
     autoHideMenuBar: true,
-    title: 'AppliBourse',
+    title: 'AppDashboard',
     // L'executable porte deja l'icone ; celle-ci sert a la fenetre et a la
     // barre des taches pendant le developpement.
     icon: join(ici, '..', 'icone', 'icone-256.png'),
@@ -608,7 +613,7 @@ function creerFenetre() {
     if (!avertiDuPlateau && Notification.isSupported()) {
       avertiDuPlateau = true;
       new Notification({
-        title: 'AppliBourse reste disponible',
+        title: 'AppDashboard reste disponible',
         body: 'Elle continue près de l’horloge pour vos briefings et alertes. Clic droit sur l’icône › Quitter pour l’arrêter.',
         icon: join(ici, '..', 'icone', 'icone-256.png'),
       }).show();

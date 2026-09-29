@@ -136,7 +136,7 @@ export interface OptionsUri {
 
 /** URI `otpauth://` à présenter en QR code lors de l'enrôlement. */
 export function uriOtpauth(options: OptionsUri): string {
-  const emetteur = options.emetteur ?? 'AppliBourse';
+  const emetteur = options.emetteur ?? 'AppDashboard';
   const etiquette = `${encodeURIComponent(emetteur)}:${encodeURIComponent(options.compte)}`;
 
   const parametres = new URLSearchParams({

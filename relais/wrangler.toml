@@ -1,4 +1,4 @@
-# Relais AppliBourse : déployé par `npm run relais:deployer` (scripts/deployer-relais.mjs),
+# Relais AppDashboard : déployé par `npm run relais:deployer` (scripts/deployer-relais.mjs),
 # qui crée la boîte (KV), renseigne son identifiant ci-dessous et tire le jeton.
 name = "applibourse-relais"
 main = "worker.mjs"

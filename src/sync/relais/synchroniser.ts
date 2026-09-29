@@ -111,7 +111,7 @@ export async function recupererCoffre(liaison: Liaison, requete: Fetch = fetch):
   const reponse = await appeler(liaison, `/boite/${ID_COFFRE}`, {}, requete);
   if (reponse.status === 404) {
     throw new ErreurRelais(
-      'Aucun compte sur ce relais pour l’instant : ouvrez d’abord AppliBourse sur le PC (déjà relié), attendez deux minutes, puis réessayez.',
+      'Aucun compte sur ce relais pour l’instant : ouvrez d’abord AppDashboard sur le PC (déjà relié), attendez deux minutes, puis réessayez.',
       404,
     );
   }

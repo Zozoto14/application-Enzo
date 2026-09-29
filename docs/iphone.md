@@ -1,4 +1,4 @@
-# AppliBourse sur l'iPhone (et l'iPad)
+# AppDashboard sur l'iPhone (et l'iPad)
 
 Trois morceaux, qui se protègent l'un l'autre :
 
@@ -22,13 +22,13 @@ renouvelez-la.
 >
 > **Profils.** Un ami peut avoir son propre portefeuille sur le PC ou le site :
 > Paramètres › Profils › Ajouter un profil (réservé à l'administrateur, le
-> profil d'origine). Au démarrage, AppliBourse demande qui l'utilise.
+> profil d'origine). Au démarrage, AppDashboard demande qui l'utilise.
 
 ## 1. Le relais et le site (sur le PC, une fois)
 
 1. Créez un compte gratuit sur **dash.cloudflare.com** (un e-mail suffit, pas
    de carte bancaire).
-2. Dans le dossier d'AppliBourse, ouvrez un terminal et lancez :
+2. Dans le dossier d'AppDashboard, ouvrez un terminal et lancez :
 
    ```
    npm run relais:deployer
@@ -42,7 +42,7 @@ renouvelez-la.
    Relancer la commande ne recrée rien. Les identifiants restent sur le PC
    (`relais/relais-local.json`), jamais sur GitHub.
 
-3. Ouvrez AppliBourse sur le PC › **Paramètres › Synchronisation entre
+3. Ouvrez AppDashboard sur le PC › **Paramètres › Synchronisation entre
    appareils**. Le relais est reconnu tout seul. Choisissez un **mot de passe
    de synchronisation** (8 caractères minimum), notez-le dans Bitwarden, puis
    **Relier cet appareil**.
@@ -87,7 +87,7 @@ l'application le republie en arrière-plan.
 
 ### Fabriquer l'app
 
-1. Sur **github.com**, dans le dépôt AppliBourse : onglet **Actions** ›
+1. Sur **github.com**, dans le dépôt AppDashboard : onglet **Actions** ›
    **App iPhone (AltStore)** › **Run workflow**.
 2. Une vingtaine de minutes plus tard, ouvrez l'exécution terminée : en bas,
    rubrique **Artifacts**, téléchargez **AppliBourse-ipa** et dézippez-le.

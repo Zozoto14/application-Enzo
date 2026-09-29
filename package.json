@@ -88,7 +88,7 @@
   "main": "bureau/electron/lanceur.mjs",
   "build": {
     "appId": "fr.applibourse.bureau",
-    "productName": "AppliBourse",
+    "productName": "AppDashboard",
     "directories": {
       "output": "C:/Users/zozot/AppData/Local/AppliBourse-paquet"
     },
@@ -110,7 +110,7 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "AppliBourse"
+      "shortcutName": "AppDashboard"
     }
   },
   "description": "Suivi de portefeuille personnel, chiffre et hors ligne",

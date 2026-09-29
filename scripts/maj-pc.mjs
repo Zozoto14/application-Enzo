@@ -74,14 +74,19 @@ if (installeurs.length === 0) {
 
 console.log(`→ ${installeurs[0]}`);
 // Installation silencieuse (/S) : aucune fenêtre, aucun clic. L'installeur
-// ferme lui-même une AppliBourse encore ouverte.
+// ferme lui-même une AppDashboard encore ouverte.
 execFileSync(installeurs[0], ['/S'], { stdio: 'inherit' });
 
 // Puis on relance l'application installée.
-const executable = resolve(process.env.LOCALAPPDATA ?? '', 'Programs', 'AppliBourse', 'AppliBourse.exe');
+// Nouveau nom affiché, ou ancien dossier d'installation (avant le changement de nom).
+const candidats = [
+  resolve(process.env.LOCALAPPDATA ?? '', 'Programs', 'AppDashboard', 'AppDashboard.exe'),
+  resolve(process.env.LOCALAPPDATA ?? '', 'Programs', 'AppliBourse', 'AppliBourse.exe'),
+];
+const executable = candidats.find(existsSync) ?? candidats[0];
 if (existsSync(executable)) {
   spawn(executable, [], { detached: true, stdio: 'ignore' }).unref();
-  console.log('\nAppliBourse est installée et relancée.');
+  console.log('\nAppDashboard est installée et relancée.');
 } else {
-  console.log(`\nAppliBourse est installée. Lancez-la depuis le menu Démarrer (${executable} introuvable).`);
+  console.log(`\nAppDashboard est installée. Lancez-la depuis le menu Démarrer (${executable} introuvable).`);
 }

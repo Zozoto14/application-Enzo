@@ -1,5 +1,5 @@
 /**
- * Relais Cloudflare d'AppliBourse.
+ * Relais Cloudflare d'AppDashboard.
  *
  * Deux services, sur un compte Cloudflare gratuit :
  *
@@ -112,7 +112,7 @@ async function boite(requete, env, identifiant) {
       typeof enveloppe.date !== 'string' ||
       typeof enveloppe.charge !== 'string'
     ) {
-      return erreur('Ce n’est pas une enveloppe AppliBourse.', 400);
+      return erreur('Ce n’est pas une enveloppe AppDashboard.', 400);
     }
     await env.BOITE.put(cle, texte);
     const index = await lireIndex(env);

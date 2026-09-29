@@ -28,7 +28,7 @@ export function rappelsDus(
   return briefingsDus(planningDepuisJson(planningJson), maintenant, { dejaEnvoyes: faits }).map(du => ({
     identifiant: `rappel-${identifiantBriefing(maintenant, du.moment)}`,
     titre: du.moment === 'matin' ? '☀️ Votre briefing du matin est prêt' : '🌙 Votre briefing de clôture est prêt',
-    corps: '🔒 Déverrouillez AppliBourse pour voir où en est votre portefeuille.',
+    corps: '🔒 Déverrouillez AppDashboard pour voir où en est votre portefeuille.',
   }));
 }
 

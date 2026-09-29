@@ -73,7 +73,7 @@ export async function recupererCode(dossier) {
   // plutôt que de bloquer toutes les mises à jour pour lui.
   const bloquants = modifies.filter(fichier => fichier !== 'package-lock.json');
   if (bloquants.length > 0) {
-    await git(dossier, ['stash', 'push', '--quiet', '-m', `AppliBourse : mis de côté avant mise à jour (${bloquants.join(', ')})`]);
+    await git(dossier, ['stash', 'push', '--quiet', '-m', `AppDashboard : mis de côté avant mise à jour (${bloquants.join(', ')})`]);
   }
 
   const titres = (await git(dossier, ['log', '--format=%s', 'HEAD..origin/main'])).split('\n').filter(Boolean);

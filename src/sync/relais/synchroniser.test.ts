@@ -4,6 +4,7 @@ import type { PiloteSqlite } from '../../db/pilote';
 import { ouvrirBaseNode } from '../../db/pilotes/node';
 import { migrer } from '../../db/schema';
 import { deriverCleSynchro, depuisBase64, ouvrirEnveloppe, sceller, versBase64 } from './chiffrement';
+import { ANCIENS_SITES, SITE_PRINCIPAL, estSiteConnu } from '../../config/site';
 import { decoderLiaison, encoderLiaison, lienSite } from './liaison';
 import { ecrireConfigRelais, lireEtatSynchro, recupererCoffre, synchroniser } from './synchroniser';
 
@@ -205,6 +206,17 @@ describe('enveloppes et code de liaison', () => {
     expect(decoderLiaison(code)).toEqual(liaison);
     expect(decoderLiaison(lienSite(liaison)!)).toEqual(liaison);
     expect(decoderLiaison('AB1.nimportequoi')).toBeUndefined();
+  });
+
+  it('le lien du site vient de la configuration, sans adresse propre au code', () => {
+    const lien = lienSite({ relais: RELAIS, jeton: JETON })!;
+    expect(lien.startsWith(`${SITE_PRINCIPAL}/#liaison=AB1.`)).toBe(true);
+    expect(SITE_PRINCIPAL).toBe('https://appdashboard.pages.dev');
+    // Un code émis avec l'ancienne adresse reste lisible et garde son site.
+    const ancien = { relais: RELAIS, jeton: JETON, site: ANCIENS_SITES[0] };
+    expect(estSiteConnu(ancien.site)).toBe(true);
+    expect(decoderLiaison(lienSite(ancien)!)?.site).toBe(ancien.site);
+    expect(lienSite(ancien)!.startsWith(`${ANCIENS_SITES[0]}/#`)).toBe(true);
     expect(decoderLiaison(encoderLiaison({ relais: 'http://pas-https', jeton: JETON }))).toBeUndefined();
   });
 });

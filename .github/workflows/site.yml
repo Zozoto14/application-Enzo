@@ -1,0 +1,88 @@
+# Site de secours (AppDashboard) : publié sur Cloudflare Pages à chaque
+# changement du code de l'app sur `main`. Mode d'emploi et secrets à créer :
+# docs/site-deploiement.md.
+#
+# Jamais de déploiement depuis une autre branche : le job est réservé à main.
+
+name: Site (Cloudflare Pages)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.github/workflows/app-iphone.yml'
+      - 'ios/**'
+      - 'android/**'
+      - 'pour-le-mac/**'
+  workflow_dispatch:
+
+concurrency:
+  group: site-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deployer:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vérifier les secrets Cloudflare
+        run: |
+          manque=0
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Secret CLOUDFLARE_API_TOKEN absent : GitHub > Settings > Secrets and variables > Actions > New repository secret (voir docs/site-deploiement.md)."
+            manque=1
+          fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Secret CLOUDFLARE_ACCOUNT_ID absent : GitHub > Settings > Secrets and variables > Actions > New repository secret (voir docs/site-deploiement.md)."
+            manque=1
+          fi
+          exit $manque
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Vérifier les types
+        run: npx tsc --noEmit
+
+      - name: Tests
+        run: npm test -- --silent
+
+      - name: Construire le site
+        run: npx vite build --outDir ../site-dist --emptyOutDir
+
+      # Le paquet de mise à jour de l'app iPhone est signé sur le PC (clé privée
+      # jamais sur GitHub) et publié avec le site : republier sans lui le ferait
+      # disparaître. On reprend donc celui qui est déjà en ligne.
+      - name: Conserver le paquet de mise à jour iPhone en ligne
+        run: |
+          site=$(node -p "require('./src/config/site.json').site")
+          mkdir -p site-dist/maj
+          for f in main.jsbundle manifeste.json; do
+            curl -fsSL --retry 2 "$site/maj/$f" -o "site-dist/maj/$f" || rm -f "site-dist/maj/$f"
+          done
+          ls -l site-dist/maj || true
+
+      - name: Créer le projet Pages s'il n'existe pas
+        run: |
+          projet=$(node -p "require('./src/config/site.json').projetPages")
+          npx --yes wrangler@4 pages project create "$projet" --production-branch main || echo "(projet déjà existant : on continue)"
+
+      - name: Publier sur Cloudflare Pages
+        run: |
+          projet=$(node -p "require('./src/config/site.json').projetPages")
+          npx --yes wrangler@4 pages deploy site-dist --project-name "$projet" --branch main --commit-dirty=true

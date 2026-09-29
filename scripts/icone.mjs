@@ -1,5 +1,5 @@
 /**
- * Génère l'icône de l'application.
+ * Génère l'icône d'AppDashboard (logo du hub).
  *
  * Écrit un PNG sans aucune dépendance : le tracé est fait à la main, par
  * tests géométriques, puis encodé avec le `zlib` de Node. Une icône est un
@@ -11,24 +11,27 @@
  *  - **Elle doit tenir à 16 pixels**, sa taille réelle dans la barre des
  *    tâches. D'où une silhouette pleine plutôt qu'un trait fin, et deux
  *    couleurs, pas six.
- *  - **Elle doit dire ce que fait l'application** : un bouclier pour ce qui
- *    est gardé, une courbe qui monte pour ce qui est suivi.
+ *  - **Elle doit être celle d'AppDashboard** : le logo en grille du hub
+ *    (carré arrondi, grille 2×2 et « + »), en blanc sur l'accent.
  *
  * Usage : node scripts/icone.mjs
+ *
+ * Écrit aussi les copies du site : bureau/public/icone-192.png (256 px, voir
+ * le manifest) et icone-512.png.
  */
 
 import { deflateSync } from 'node:zlib';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ICI = dirname(fileURLToPath(import.meta.url));
 const SORTIE = join(ICI, '..', 'bureau', 'icone');
+const PUBLIC = join(ICI, '..', 'bureau', 'public');
 
 /** Couleurs du thème sombre de l'application. */
-const FOND = [0x10, 0x13, 0x19];
 const ACCENT = [0x2f, 0x5b, 0xd8];
-const HAUSSE = [0x4a, 0xc5, 0x85];
+const TRAIT = [0xff, 0xff, 0xff];
 
 /** Échantillons par axe et par pixel : c'est ce qui lisse les bords. */
 const SUPER = 4;
@@ -58,68 +61,44 @@ function dansCarreArrondi(x, y, rayon) {
   return Math.hypot(x - cx, y - cy) <= rayon;
 }
 
-/** Contour du bouclier, échantillonné une fois pour toutes. */
-function contourBouclier() {
-  const HAUT = 0.2;
-  const EPAULE = 0.52;
-  const BAS = 0.86;
-  const DEMI = 0.27;
-
-  const bezier = (t, p0, p1, p2) => {
-    const u = 1 - t;
-    return [
-      u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0],
-      u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1],
-    ];
-  };
-
-  const points = [[0.5 - DEMI, HAUT], [0.5 + DEMI, HAUT], [0.5 + DEMI, EPAULE]];
-  // Flanc droit, puis flanc gauche par symetrie : la pointe du bas est le
-  // seul endroit ou les deux se rejoignent.
-  for (let i = 1; i <= 24; i++) {
-    points.push(bezier(i / 24, [0.5 + DEMI, EPAULE], [0.5 + DEMI, BAS - 0.04], [0.5, BAS]));
-  }
-  for (let i = 1; i <= 24; i++) {
-    points.push(bezier(i / 24, [0.5, BAS], [0.5 - DEMI, BAS - 0.04], [0.5 - DEMI, EPAULE]));
-  }
-  return points;
-}
-
-const BOUCLIER = contourBouclier();
-
-function dansPolygone(x, y, points) {
-  let dedans = false;
-  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
-    const [xi, yi] = points[i];
-    const [xj, yj] = points[j];
-    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) {
-      dedans = !dedans;
-    }
-  }
-  return dedans;
-}
-
-/** Courbe ascendante, en fraction du côté. */
-const COURBE = [
-  [0.345, 0.635],
-  [0.44, 0.545],
-  [0.545, 0.6],
-  [0.66, 0.44],
+/**
+ * Logo d'AppDashboard : grille 2×2 dont la quatrième case est un « + ».
+ * Même motif que `src/hub/LogoHub.web.tsx` (repère de 24, épaisseur 2,2),
+ * centré et agrandi pour rester lisible à 16 pixels.
+ */
+const ECHELLE = 0.64 / 24; // le motif occupe 64 % du côté
+const DEBUT = (1 - 24 * ECHELLE) / 2;
+const EPAISSEUR = 2.2 * ECHELLE;
+const CASES = [
+  [3, 3],
+  [14, 3],
+  [3, 14],
 ];
-const EPAISSEUR = 0.045;
 
-function surLaCourbe(x, y) {
-  for (let i = 0; i < COURBE.length - 1; i++) {
-    const [ax, ay] = COURBE[i];
-    const [bx, by] = COURBE[i + 1];
-    if (distanceSegment(x, y, ax, ay, bx, by) <= EPAISSEUR) {
-      return true;
-    }
+const enPlan = v => DEBUT + v * ECHELLE;
+
+/** Point dans un rectangle aux coins arrondis (fractions du côté). */
+function dansRectArrondi(x, y, x0, y0, w, h, rayon) {
+  const cx = Math.min(Math.max(x, x0 + rayon), x0 + w - rayon);
+  const cy = Math.min(Math.max(y, y0 + rayon), y0 + h - rayon);
+  return Math.hypot(x - cx, y - cy) <= rayon && x >= x0 && x <= x0 + w && y >= y0 && y <= y0 + h;
+}
+
+function surLeMotif(x, y) {
+  const e = EPAISSEUR / 2;
+  for (const [cx, cy] of CASES) {
+    const x0 = enPlan(cx);
+    const y0 = enPlan(cy);
+    const cote = 7 * ECHELLE;
+    const rayon = 2 * ECHELLE;
+    const dehors = dansRectArrondi(x, y, x0 - e, y0 - e, cote + 2 * e, cote + 2 * e, rayon + e);
+    const dedans = dansRectArrondi(x, y, x0 + e, y0 + e, cote - 2 * e, cote - 2 * e, Math.max(rayon - e, 0));
+    if (dehors && !dedans) return true;
   }
-  // Pastille en bout de courbe : un disque survit a la reduction la ou une
-  // fleche se brouille.
-  const [fx, fy] = COURBE[COURBE.length - 1];
-  return Math.hypot(x - fx, y - fy) <= EPAISSEUR * 1.5;
+  return (
+    distanceSegment(x, y, enPlan(17.5), enPlan(14), enPlan(17.5), enPlan(21)) <= e ||
+    distanceSegment(x, y, enPlan(14), enPlan(17.5), enPlan(21), enPlan(17.5)) <= e
+  );
 }
 
 // ------------------------------------------------------------------- Rendu
@@ -140,11 +119,7 @@ function dessiner(taille) {
           if (!dansCarreArrondi(x, y, 0.22)) {
             continue;
           }
-          const teinte = surLaCourbe(x, y)
-            ? HAUSSE
-            : dansPolygone(x, y, BOUCLIER)
-              ? ACCENT
-              : FOND;
+          const teinte = surLeMotif(x, y) ? TRAIT : ACCENT;
 
           couleur = [
             couleur[0] + teinte[0],
@@ -230,3 +205,7 @@ for (const taille of [512, 256, 64, 32, 16]) {
   writeFileSync(fichier, encoderPng(dessiner(taille), taille));
   console.log(`${fichier} (${taille}×${taille})`);
 }
+
+copyFileSync(join(SORTIE, 'icone-256.png'), join(PUBLIC, 'icone-192.png'));
+copyFileSync(join(SORTIE, 'icone-512.png'), join(PUBLIC, 'icone-512.png'));
+console.log('Copies du site : bureau/public/icone-192.png, icone-512.png');

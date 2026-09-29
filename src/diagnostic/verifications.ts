@@ -87,7 +87,7 @@ export async function executerDiagnostic(
 export function rapportTexte(verifications: readonly Verification[], date: string): string {
   const icone = { ok: '✅', echec: '❌', absent: '➖' } as const;
   return [
-    `Diagnostic AppliBourse — ${date}`,
+    `Diagnostic AppDashboard — ${date}`,
     ...verifications.map(
       verification =>
         `${icone[verification.statut]} ${verification.libelle} : ${verification.detail}${

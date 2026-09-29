@@ -1,6 +1,6 @@
 {
-  "name": "AppliBourse",
-  "short_name": "AppliBourse",
+  "name": "AppDashboard",
+  "short_name": "AppDashboard",
   "description": "Votre portefeuille, version de secours.",
   "display": "standalone",
   "background_color": "#000000",

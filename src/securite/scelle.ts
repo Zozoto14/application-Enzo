@@ -23,7 +23,7 @@ import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { aleatoireParDefaut, type SourceAleatoire } from './aleatoire';
 
-/** « ABDB » : AppliBourse, base de données. */
+/** « ABDB » : AppDashboard, base de données. */
 export const SIGNATURE = Uint8Array.from([0x41, 0x42, 0x44, 0x42]);
 
 export const VERSION_SCELLE = 1;

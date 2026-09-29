@@ -1624,10 +1624,10 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const pontSysteme = (globalThis as { applibourse?: { systeme?: { infobulle?(texte: string): Promise<boolean> } } })
     .applibourse?.systeme;
   const texteInfobulle = !deverrouille
-    ? 'AppliBourse — verrouillée'
+    ? 'AppDashboard — verrouillée'
     : discret || capitalActuel.estZero()
-      ? 'AppliBourse'
-      : `AppliBourse — ${formaterMontant(capitalActuel, { decimales: 0 })}`;
+      ? 'AppDashboard'
+      : `AppDashboard — ${formaterMontant(capitalActuel, { decimales: 0 })}`;
   useEffect(() => {
     pontSysteme?.infobulle?.(texteInfobulle).catch(() => undefined);
   }, [pontSysteme, texteInfobulle]);
@@ -2212,7 +2212,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
                   });
                   pontNotifications
                     .notifier(
-                      essai?.titre ?? '✅ AppliBourse',
+                      essai?.titre ?? '✅ AppDashboard',
                       essai?.corps ?? 'Les notifications fonctionnent. Vos briefings arriveront ici.',
                       'tableau',
                     )
@@ -2570,7 +2570,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
                     transactions: contenuActuel.transactions,
                     cours: new DepotCours(session.base()).derniersCours(),
                   });
-                  pontEnregistrerSous(`AppliBourse ${(aujourdhui ?? dateDuJour)()}.xlsx`, octets)
+                  pontEnregistrerSous(`AppDashboard ${(aujourdhui ?? dateDuJour)()}.xlsx`, octets)
                     .then(enregistre => setMessageExport(enregistre ? '✅ Fichier Excel enregistré.' : 'Export annulé.'))
                     .catch((e: unknown) => setMessageExport(`L’export a échoué : ${e instanceof Error ? e.message : String(e)}`));
                 }

@@ -1,4 +1,4 @@
-# AppliBourse
+# AppDashboard (ex-AppliBourse)
 
 Suivi de portefeuille boursier, local et chiffré, pour iPhone et iPad.
 Aucun serveur, aucune connexion bancaire automatique : saisie manuelle ou
@@ -88,3 +88,5 @@ acceptable ; l'appel à l'API iOS reste à brancher.
 
 **Le reste de la feuille de route** (V2 et V3 du cadrage) : fiscalité avancée,
 performance TWR/MWR, dividendes, synchronisation Syncthing, alertes.
+
+Site de secours : https://appdashboard.pages.dev (adresse dans `src/config/site.json`) ; publication et mises à jour automatiques : `docs/site-deploiement.md`.

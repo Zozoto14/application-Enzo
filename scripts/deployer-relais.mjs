@@ -25,6 +25,10 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const racine = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// Source unique de l'adresse du site (lue aussi par src/config/site.ts).
+const { projetPages: PROJET_PAGES, site: SITE } = JSON.parse(
+  readFileSync(resolve(racine, 'src', 'config', 'site.json'), 'utf8'),
+);
 const dossierRelais = resolve(racine, 'relais');
 const fichierLocal = resolve(dossierRelais, 'relais-local.json');
 const configLocale = resolve(dossierRelais, 'wrangler.local.toml');
@@ -127,28 +131,71 @@ async function publierSite(local) {
   await joindreMiseAJourIphone(local);
 
   etape('Publication du site');
-  if (!local.projetPages) {
-    local.projetPages = `applibourse-${randomBytes(3).toString('hex')}`;
-    const creation = await wrangler(['pages', 'project', 'create', local.projetPages, '--production-branch', 'main'], {
-      tolerer: true,
-    });
-    const adresse = /https:\/\/[a-z0-9-]+\.pages\.dev/.exec(creation)?.[0];
-    if (adresse) {
-      local.site = adresse;
-    }
-    ecrireLocal(local);
+  // Adresse et projet viennent de src/config/site.json (source unique). Un
+  // ancien projet « applibourse-… » n'est plus utilisé : il reste en ligne,
+  // ce qui garde valables les liens de liaison déjà émis.
+  if (local.projetPages && local.projetPages !== PROJET_PAGES) {
+    local.ancienProjetPages = local.projetPages;
+    local.ancienSite = local.ancienSite ?? local.site;
   }
-  const sortie = await wrangler([
-    'pages', 'deploy', 'site-dist', '--project-name', local.projetPages, '--branch', 'main', '--commit-dirty=true',
-  ]);
-  if (!local.site) {
-    // L'adresse de production est celle du déploiement, sans son préfixe.
-    const deploiement = /https:\/\/[a-z0-9]+\.([a-z0-9-]+\.pages\.dev)/.exec(sortie);
-    if (deploiement) {
-      local.site = `https://${deploiement[1]}`;
-    }
+  local.projetPages = PROJET_PAGES;
+  local.site = SITE;
+  ecrireLocal(local);
+
+  // Création du projet s'il n'existe pas (non interactif) ; « existe déjà »
+  // n'est pas une erreur.
+  const creation = await wrangler(['pages', 'project', 'create', PROJET_PAGES, '--production-branch', 'main'], {
+    tolerer: true,
+  });
+  const adresse = /https:\/\/[a-z0-9.-]+\.workers\.dev/.exec(sortie)?.[0];
+  if (adresse) {
+    local.relais = adresse;
+  }
+  if (!local.relais) {
+    throw new Error('Adresse du relais introuvable. Sur dash.cloudflare.com › Workers, activez le sous-domaine workers.dev puis relancez.');
+  }
+  if (!local.jeton) {
+    local.jeton = randomBytes(24).toString('base64url');
+    etape('Jeton du relais');
+    await wrangler(['secret', 'put', 'JETON', '--config', CONFIG_WRANGLER], { entree: `${local.jeton}\n` });
   }
   ecrireLocal(local);
+}
+
+async function publierSite(local) {
+  etape('Compilation du site de secours');
+  await lancer('npx', ['vite', 'build', '--outDir', '../site-dist', '--emptyOutDir']);
+
+  await joindreMiseAJourIphone(local);
+
+  etape('Publication du site');
+  // Adresse et projet viennent de src/config/site.json (source unique). Un
+  // ancien projet « applibourse-… » n'est plus utilisé : il reste en ligne,
+  // ce qui garde valables les liens de liaison déjà émis.
+  if (local.projetPages && local.projetPages !== PROJET_PAGES) {
+    local.ancienProjetPages = local.projetPages;
+    local.ancienSite = local.ancienSite ?? local.site;
+  }
+  local.projetPages = PROJET_PAGES;
+  local.site = SITE;
+  ecrireLocal(local);
+
+  // Création du projet s'il n'existe pas (non interactif) ; « existe déjà »
+  // n'est pas une erreur.
+  const creation = await wrangler(['pages', 'project', 'create', PROJET_PAGES, '--production-branch', 'main'], {
+    tolerer: true,
+  });
+  if (!/already exists|existe d[ée]j[àa]|8000002|created|Successfully/i.test(creation) && !/https:\/\//.test(creation)) {
+    console.log('(Le projet Pages n’a pas pu être créé : on tente quand même la publication.)');
+  }
+  const adresse = /https:\/\/([a-z0-9-]+)\.pages\.dev/.exec(creation)?.[0];
+  if (adresse && adresse !== SITE) {
+    console.log(`\n⚠ Cloudflare a attribué ${adresse} et non ${SITE} : le nom « ${PROJET_PAGES} » était pris.`);
+    console.log('  Choisissez un autre nom dans src/config/site.json (projetPages et site), puis relancez.');
+  }
+  await wrangler([
+    'pages', 'deploy', 'site-dist', '--project-name', PROJET_PAGES, '--branch', 'main', '--commit-dirty=true',
+  ]);
 }
 
 /**
@@ -187,7 +234,7 @@ try {
   etape('Terminé');
   console.log(`Relais : ${local.relais ?? '?'}`);
   console.log(`Site de secours : ${local.site ?? '?'}`);
-  console.log('\nOuvrez AppliBourse sur le PC › Paramètres › Synchronisation : le relais est reconnu tout seul.');
+  console.log('\nOuvrez AppDashboard sur le PC › Paramètres › Synchronisation : le relais est reconnu tout seul.');
   console.log('Choisissez le mot de passe de synchronisation, puis scannez le QR code avec l’iPhone.');
 } catch (erreur) {
   console.error(`\n✖ ${erreur instanceof Error ? erreur.message : erreur}`);
