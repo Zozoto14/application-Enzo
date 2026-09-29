@@ -1,0 +1,652 @@
+/**
+ * Annuaire des comptes (format 3 de la liste des profils).
+ *
+ * Ce fichier doit être lisible **avant** tout déverrouillage — c'est lui qui
+ * dit quel coffre ouvrir — et c'est le seul que tous les profils partagent.
+ * Il ne contient donc que le strict nécessaire, et rien qui liste ou nomme
+ * les autres comptes :
+ *
+ *  - pour chaque compte : un identifiant opaque, l'**empreinte salée** de son
+ *    prénom (on retrouve un compte quand on connaît son prénom, on ne peut
+ *    pas lister les prénoms), son prénom scellé par une clé tirée du prénom
+ *    lui-même, ses règles d'accès (apps, activation, dates : il faut les
+ *    appliquer avant que l'administrateur ne soit là), l'état de son
+ *    séquestre, et son suivi de connexion **scellé pour l'administrateur** ;
+ *  - la clé **publique** de séquestre de l'administrateur, et sa clé privée
+ *    scellée par une clé tirée de SA clé maîtresse ;
+ *  - un bloc `prive` scellé pour l'administrateur : prénoms en clair, dates
+ *    de création, codes d'accès administrateur.
+ *
+ * Les formats 1 et 2 (liste en clair) se lisent encore (`heritage`) ; la
+ * migration se fait à la première ouverture de l'administrateur, seul à
+ * pouvoir sceller le bloc privé. Schéma complet : `docs/hub/sequestre.md`.
+ */
+
+import { ecrirePolitique, lirePolitique, type PolitiqueHub } from '../hub/admin/politique';
+import type { NiveauAcces } from '../hub/admin/niveaux';
+import {
+  ErreurSequestre,
+  bytesToHex,
+  cleDuNom,
+  cleEnveloppeAcces,
+  descellerAvecContexte,
+  descellerTexte,
+  empreinteNom,
+  genererCodeAcces,
+  genererPaireSequestre,
+  normaliserCode,
+  normaliserNom,
+  ouvrirDepot,
+  publiqueDepuisPrivee,
+  scellerAvecContexte,
+  scellerPourAdmin,
+  scellerTexte,
+  utf8DepuisOctets,
+} from '../securite/sequestre';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
+import { aleatoireParDefaut, type SourceAleatoire } from '../securite/aleatoire';
+import { usageSequestre } from '../session/session';
+import { ID_PRINCIPAL, lireProfils, nettoyerApps, nettoyerNiveaux, type EtatSequestre, type Profil } from './profils';
+
+export const VERSION_ANNUAIRE = 3;
+const MOTIF_ID = /^[a-z0-9]{6,16}$/;
+const MOTIF_HEXA = /^[0-9a-f]+$/;
+const MOTIF_DEPOT = /^[0-9a-f]{64}\.[0-9a-f]+$/;
+
+/** Ce qu'il faut appliquer à l'ouverture d'un compte, sans l'administrateur. */
+export interface AccesPublic {
+  apps: string[];
+  actif: boolean;
+  niveaux?: Record<string, NiveauAcces>;
+  invitationExpireLe?: string;
+  expireLe?: string;
+  desactiveJusquau?: string;
+}
+
+export interface SequestreCompte {
+  etat: Exclude<EtatSequestre, 'absent'>;
+  /** Clé maîtresse de l'ami, scellée pour la clé publique de l'administrateur (en attente de conversion). */
+  depot?: string;
+  /** Clé maîtresse de l'ami, enveloppée par (clé privée de séquestre + code d'accès). */
+  enveloppe?: string;
+}
+
+export interface EntreeCompte {
+  id: string;
+  empreinte: string;
+  /** Prénom scellé par la clé tirée du prénom. */
+  nom: string;
+  acces: AccesPublic;
+  sequestre: SequestreCompte;
+  /** Dernière connexion et compteur, scellés pour l'administrateur. */
+  suivi?: string;
+}
+
+export interface Annuaire {
+  v: typeof VERSION_ANNUAIRE;
+  /** Sel des empreintes de prénoms (hexadécimal). */
+  sel: string;
+  admin: {
+    empreinte?: string;
+    nom?: string;
+    /** Clé publique X25519 de séquestre (hexadécimal). */
+    cleSequestre?: string;
+    /** Clé privée de séquestre, scellée par une clé tirée de la clé maîtresse de l'administrateur. */
+    priveeScellee?: string;
+    derniereConnexion?: string;
+  };
+  politique?: PolitiqueHub;
+  comptes: EntreeCompte[];
+  /** Bloc scellé pour l'administrateur (voir `Prive`). */
+  prive?: string;
+  /** Liste en clair des formats 1 et 2, à migrer par l'administrateur. */
+  heritage?: Profil[];
+}
+
+/** Contenu du bloc privé : jamais lisible sans la clé maîtresse de l'administrateur. */
+interface Prive {
+  nomAdmin?: string;
+  creeLeAdmin?: string;
+  noms: Record<string, string>;
+  creeLe: Record<string, string>;
+  anterieurs: string[];
+  codes: Record<string, { code: string; creeLe: string }>;
+}
+
+/** Clés d'usage de l'administrateur (tirées de sa clé maîtresse par `Session.cleDerivee`). */
+export interface ClesAdmin {
+  /** Scelle le bloc privé. */
+  annuaire: Uint8Array;
+  /** Scelle la clé privée de séquestre. */
+  sequestre: Uint8Array;
+}
+
+const USAGE_PRIVE = 'annuaire/prive';
+const USAGE_PRIVEE = 'sequestre/cle-privee';
+const usageEnveloppe = (id: string) => `sequestre/enveloppe/${id}`;
+const usageSuivi = (id: string) => `annuaire/suivi/${id}`;
+const usageNom = (id: string) => `annuaire/nom/${id}`;
+
+export class ErreurAnnuaire extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ErreurAnnuaire';
+  }
+}
+
+// --- Lecture / écriture ------------------------------------------------------------
+
+function dateIso(valeur: unknown): string | undefined {
+  return typeof valeur === 'string' && valeur.length <= 40 && !Number.isNaN(Date.parse(valeur)) ? valeur : undefined;
+}
+
+function hexa(valeur: unknown, longueur?: number): string | undefined {
+  return typeof valeur === 'string' && MOTIF_HEXA.test(valeur) && valeur.length <= 4096 && (longueur === undefined || valeur.length === longueur)
+    ? valeur
+    : undefined;
+}
+
+function lireAcces(brut: unknown): AccesPublic {
+  const o = brut && typeof brut === 'object' && !Array.isArray(brut) ? (brut as Record<string, unknown>) : {};
+  const apps = nettoyerApps(o.apps);
+  const acces: AccesPublic = { apps, actif: o.actif !== false };
+  const niveaux = nettoyerNiveaux(o.niveaux, apps);
+  if (niveaux) acces.niveaux = niveaux;
+  for (const cle of ['invitationExpireLe', 'expireLe', 'desactiveJusquau'] as const) {
+    const d = dateIso(o[cle]);
+    if (d) acces[cle] = d;
+  }
+  return acces;
+}
+
+function lireSequestre(brut: unknown): SequestreCompte {
+  const o = brut && typeof brut === 'object' && !Array.isArray(brut) ? (brut as Record<string, unknown>) : {};
+  const etat = o.etat;
+  if (etat === 'actif' && hexa(o.enveloppe)) {
+    return { etat, enveloppe: o.enveloppe as string };
+  }
+  if (etat === 'depose' && typeof o.depot === 'string' && MOTIF_DEPOT.test(o.depot) && o.depot.length <= 4096) {
+    return { etat, depot: o.depot };
+  }
+  if (etat === 'revoque') {
+    return { etat };
+  }
+  return { etat: 'attendu' };
+}
+
+/** Relit l'annuaire, quel que soit le format enregistré. Tout ce qui est invalide est écarté. */
+export function lireAnnuaire(brut: string | undefined): Annuaire {
+  let lu: unknown;
+  try {
+    lu = brut ? JSON.parse(brut) : undefined;
+  } catch {
+    lu = undefined;
+  }
+  if (Array.isArray(lu)) {
+    const heritage = lireProfils(brut);
+    const annuaire: Annuaire = { v: VERSION_ANNUAIRE, sel: '', admin: {}, comptes: [], heritage };
+    if (heritage[0]?.politique) annuaire.politique = heritage[0].politique;
+    return annuaire;
+  }
+  const o = lu && typeof lu === 'object' ? (lu as Record<string, unknown>) : {};
+  const admin = o.admin && typeof o.admin === 'object' ? (o.admin as Record<string, unknown>) : {};
+  const vus = new Set<string>();
+  const comptes: EntreeCompte[] = [];
+  for (const e of Array.isArray(o.comptes) ? o.comptes : []) {
+    if (!e || typeof e !== 'object') continue;
+    const c = e as Record<string, unknown>;
+    if (typeof c.id !== 'string' || !MOTIF_ID.test(c.id) || c.id === ID_PRINCIPAL || vus.has(c.id)) continue;
+    const empreinte = hexa(c.empreinte, 64);
+    const nom = hexa(c.nom);
+    if (!empreinte || !nom) continue;
+    vus.add(c.id);
+    const entree: EntreeCompte = { id: c.id, empreinte, nom, acces: lireAcces(c.acces), sequestre: lireSequestre(c.sequestre) };
+    if (typeof c.suivi === 'string' && MOTIF_DEPOT.test(c.suivi) && c.suivi.length <= 4096) entree.suivi = c.suivi;
+    comptes.push(entree);
+  }
+  const annuaire: Annuaire = { v: VERSION_ANNUAIRE, sel: hexa(o.sel, 32) ?? '', admin: {}, comptes };
+  const a = annuaire.admin;
+  const empreinte = hexa(admin.empreinte, 64);
+  if (empreinte) a.empreinte = empreinte;
+  const nom = hexa(admin.nom);
+  if (nom) a.nom = nom;
+  const cle = hexa(admin.cleSequestre, 64);
+  if (cle) a.cleSequestre = cle;
+  const privee = hexa(admin.priveeScellee);
+  if (privee) a.priveeScellee = privee;
+  const derniere = dateIso(admin.derniereConnexion);
+  if (derniere) a.derniereConnexion = derniere;
+  if (o.politique !== undefined) {
+    const politique = ecrirePolitique(lirePolitique(o.politique));
+    if (politique) annuaire.politique = politique;
+  }
+  const prive = hexa(o.prive);
+  if (prive) annuaire.prive = prive;
+  return annuaire;
+}
+
+export function ecrireAnnuaire(annuaire: Annuaire): string {
+  if (annuaire.heritage) {
+    throw new ErreurAnnuaire('Annuaire à migrer : seul l’administrateur peut l’écrire.');
+  }
+  const { heritage: _ignore, ...reste } = annuaire;
+  return JSON.stringify({ ...reste, format: 'annuaire', v: VERSION_ANNUAIRE });
+}
+
+/** Vrai quand l'appareil a d'autres comptes que l'administrateur. */
+export function aDesAmis(annuaire: Annuaire): boolean {
+  return annuaire.heritage ? annuaire.heritage.length > 1 : annuaire.comptes.length > 0;
+}
+
+// --- Connexion : retrouver un compte par son prénom ----------------------------------------
+
+export interface CompteTrouve {
+  id: string;
+  nom: string;
+  admin: boolean;
+}
+
+const MOTS_ADMIN = new Set(['admin', 'administrateur', 'administratrice']);
+
+/**
+ * Compte correspondant au prénom saisi, ou rien. Ne parcourt que des
+ * empreintes : l'annuaire ne rend jamais la liste des comptes.
+ */
+export function trouverCompte(annuaire: Annuaire, saisie: string): CompteTrouve | undefined {
+  const cherche = normaliserNom(saisie);
+  if (!cherche) {
+    return undefined;
+  }
+  if (annuaire.heritage) {
+    const trouve = annuaire.heritage.find(p => normaliserNom(p.nom) === cherche) ?? (MOTS_ADMIN.has(cherche) ? annuaire.heritage[0] : undefined);
+    return trouve ? { id: trouve.id, nom: trouve.nom, admin: trouve.admin } : undefined;
+  }
+  if (MOTS_ADMIN.has(cherche)) {
+    return { id: ID_PRINCIPAL, nom: nomAdminPublic(annuaire, saisie) ?? 'Administrateur', admin: true };
+  }
+  if (!annuaire.sel) {
+    return undefined;
+  }
+  const empreinte = empreinteNom(annuaire.sel, cherche);
+  if (annuaire.admin.empreinte === empreinte) {
+    return { id: ID_PRINCIPAL, nom: nomAdminPublic(annuaire, saisie) ?? saisie.trim(), admin: true };
+  }
+  const entree = annuaire.comptes.find(c => c.empreinte === empreinte);
+  if (!entree) {
+    return undefined;
+  }
+  let nom = saisie.trim();
+  try {
+    nom = descellerTexte(cleDuNom(annuaire.sel, cherche), entree.nom, usageNom(entree.id));
+  } catch {
+    // Prénom scellé illisible : on garde la saisie.
+  }
+  return { id: entree.id, nom, admin: false };
+}
+
+function nomAdminPublic(annuaire: Annuaire, saisie: string): string | undefined {
+  if (!annuaire.admin.nom || !annuaire.sel) return undefined;
+  try {
+    return descellerTexte(cleDuNom(annuaire.sel, saisie), annuaire.admin.nom, usageNom(ID_PRINCIPAL));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Profil d'un ami tel que LUI le voit : son prénom et ses accès, rien
+ * d'autre. Aucune donnée d'un autre compte n'y figure.
+ */
+export function profilAmi(annuaire: Annuaire, id: string, nom: string): Profil {
+  if (annuaire.heritage) {
+    const p = annuaire.heritage.find(h => h.id === id && !h.admin);
+    if (!p) throw new ErreurAnnuaire('Compte introuvable.');
+    const { politique: _politique, connexions: _c, derniereConnexion: _d, ...soi } = p;
+    return soi;
+  }
+  const entree = annuaire.comptes.find(c => c.id === id);
+  if (!entree) {
+    throw new ErreurAnnuaire('Compte introuvable.');
+  }
+  return { id, nom, admin: false, creeLe: '', ...entree.acces };
+}
+
+/** Profil de l'administrateur avant déverrouillage (rien d'autre n'est lisible). */
+export function profilAdminVerrouille(nom: string): Profil {
+  return { id: ID_PRINCIPAL, nom, admin: true, creeLe: '' };
+}
+
+// --- Côté ami : connexion et dépôt de séquestre -----------------------------------------
+
+/**
+ * Note la connexion d'un ami : son invitation est acceptée, son suivi est
+ * scellé pour l'administrateur (il ne peut pas le relire), et son séquestre
+ * est déposé s'il est attendu. `deposer` reçoit la clé publique de
+ * l'administrateur et rend le dépôt (voir `Session.deposerPourSequestre`).
+ */
+export function noterConnexionAmi(
+  annuaire: Annuaire,
+  id: string,
+  maintenantIso: string,
+  connexions: number,
+  deposer?: (publique: string) => string,
+  alea: SourceAleatoire = aleatoireParDefaut,
+): Annuaire {
+  if (annuaire.heritage) {
+    return annuaire;
+  }
+  const publique = annuaire.admin.cleSequestre;
+  return {
+    ...annuaire,
+    comptes: annuaire.comptes.map(c => {
+      if (c.id !== id) return c;
+      const suivant: EntreeCompte = { ...c, acces: { ...c.acces } };
+      delete suivant.acces.invitationExpireLe;
+      if (publique) {
+        suivant.suivi = scellerPourAdmin(publique, utf8ToBytes(JSON.stringify({ derniereConnexion: maintenantIso, connexions })), usageSuivi(id), alea);
+        if (c.sequestre.etat === 'attendu' && deposer) {
+          suivant.sequestre = { etat: 'depose', depot: deposer(publique) };
+        }
+      }
+      return suivant;
+    }),
+  };
+}
+
+// --- Côté administrateur ------------------------------------------------------------
+
+function lirePrive(annuaire: Annuaire, cles: ClesAdmin): Prive {
+  const vide: Prive = { noms: {}, creeLe: {}, anterieurs: [], codes: {} };
+  if (!annuaire.prive) return vide;
+  let o: Record<string, unknown>;
+  try {
+    o = JSON.parse(utf8DepuisOctets(descellerAvecContexte(cles.annuaire, annuaire.prive, USAGE_PRIVE)));
+  } catch {
+    throw new ErreurAnnuaire('Bloc privé de l’annuaire illisible avec cette clé.');
+  }
+  const dict = (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+  const prive = { ...vide };
+  if (typeof o.nomAdmin === 'string') prive.nomAdmin = o.nomAdmin.slice(0, 30);
+  if (typeof o.creeLeAdmin === 'string') prive.creeLeAdmin = o.creeLeAdmin.slice(0, 40);
+  for (const [id, nom] of Object.entries(dict(o.noms))) if (MOTIF_ID.test(id) && typeof nom === 'string') prive.noms[id] = nom.slice(0, 30);
+  for (const [id, d] of Object.entries(dict(o.creeLe))) if (MOTIF_ID.test(id) && typeof d === 'string') prive.creeLe[id] = d.slice(0, 40);
+  prive.anterieurs = Array.isArray(o.anterieurs) ? o.anterieurs.filter((id): id is string => typeof id === 'string' && MOTIF_ID.test(id)) : [];
+  for (const [id, c] of Object.entries(dict(o.codes))) {
+    const code = dict(c);
+    if (MOTIF_ID.test(id) && typeof code.code === 'string' && typeof code.creeLe === 'string') prive.codes[id] = { code: code.code, creeLe: code.creeLe };
+  }
+  return prive;
+}
+
+function ecrirePrive(prive: Prive, cles: ClesAdmin, alea: SourceAleatoire): string {
+  return scellerAvecContexte(cles.annuaire, utf8ToBytes(JSON.stringify(prive)), USAGE_PRIVE, alea);
+}
+
+/** Clé privée de séquestre (à effacer après usage). */
+function clePrivee(annuaire: Annuaire, cles: ClesAdmin): Uint8Array {
+  if (!annuaire.admin.priveeScellee) {
+    throw new ErreurAnnuaire('Pas encore de clé de séquestre : ouvrez d’abord le compte administrateur.');
+  }
+  const privee = descellerAvecContexte(cles.sequestre, annuaire.admin.priveeScellee, USAGE_PRIVEE);
+  if (annuaire.admin.cleSequestre && bytesToHex(publiqueDepuisPrivee(privee)) !== annuaire.admin.cleSequestre) {
+    privee.fill(0);
+    throw new ErreurAnnuaire('Clé publique de séquestre incohérente : annuaire modifié hors de l’app.');
+  }
+  return privee;
+}
+
+function sceller(sel: string, id: string, nom: string, alea: SourceAleatoire): { empreinte: string; nom: string } {
+  return { empreinte: empreinteNom(sel, nom), nom: scellerTexte(cleDuNom(sel, nom), nom.trim(), usageNom(id), alea) };
+}
+
+export interface VueAdmin {
+  annuaire: Annuaire;
+  /** Liste complète, pour l'administrateur seulement. */
+  profils: Profil[];
+  /** Vrai quand l'annuaire a changé (migration, clés, séquestres convertis) : à enregistrer. */
+  modifie: boolean;
+}
+
+/**
+ * Ouvre l'annuaire pour l'administrateur déverrouillé : migre un ancien
+ * format, crée sa paire de séquestre au besoin, convertit les dépôts de
+ * séquestre en enveloppes protégées par un code d'accès, relit les suivis
+ * de connexion. Rend la liste complète des profils.
+ */
+export function ouvrirAnnuaireAdmin(source: Annuaire, cles: ClesAdmin, alea: SourceAleatoire = aleatoireParDefaut, maintenantIso = new Date().toISOString()): VueAdmin {
+  let modifie = false;
+  const annuaire: Annuaire = { ...source, admin: { ...source.admin }, comptes: source.comptes.map(c => ({ ...c, acces: { ...c.acces }, sequestre: { ...c.sequestre } })) };
+  if (!annuaire.sel) {
+    annuaire.sel = bytesToHex(alea(16));
+    modifie = true;
+  }
+  let prive: Prive = annuaire.heritage ? { noms: {}, creeLe: {}, anterieurs: [], codes: {} } : lirePrive(annuaire, cles);
+
+  // Paire de séquestre de l'administrateur.
+  if (!annuaire.admin.priveeScellee) {
+    const paire = genererPaireSequestre(alea);
+    annuaire.admin.cleSequestre = bytesToHex(paire.publique);
+    annuaire.admin.priveeScellee = scellerAvecContexte(cles.sequestre, paire.privee, USAGE_PRIVEE, alea);
+    paire.privee.fill(0);
+    modifie = true;
+  }
+
+  // Migration des formats 1 et 2 : les prénoms passent dans le bloc privé.
+  const suivisHerites: Record<string, { derniereConnexion?: string; connexions?: number }> = {};
+  if (annuaire.heritage) {
+    const [admin, ...amis] = annuaire.heritage;
+    prive = { ...prive, nomAdmin: admin.nom, creeLeAdmin: admin.creeLe };
+    Object.assign(annuaire.admin, sceller(annuaire.sel, ID_PRINCIPAL, admin.nom, alea));
+    if (admin.derniereConnexion) annuaire.admin.derniereConnexion = admin.derniereConnexion;
+    for (const ami of amis) {
+      prive.noms[ami.id] = ami.nom;
+      prive.creeLe[ami.id] = ami.creeLe;
+      if (ami.anterieur) prive.anterieurs.push(ami.id);
+      suivisHerites[ami.id] = { derniereConnexion: ami.derniereConnexion, connexions: ami.connexions };
+      annuaire.comptes.push({ id: ami.id, ...sceller(annuaire.sel, ami.id, ami.nom, alea), acces: accesDe(ami), sequestre: { etat: 'attendu' } });
+    }
+    delete annuaire.heritage;
+    modifie = true;
+  }
+
+  // Dépôts de séquestre → enveloppes protégées par le code d'accès.
+  const privee = clePrivee(annuaire, cles);
+  try {
+    for (const c of annuaire.comptes) {
+      if (c.sequestre.etat !== 'depose' || !c.sequestre.depot) continue;
+      let cle: Uint8Array | undefined;
+      try {
+        cle = ouvrirDepot(privee, c.sequestre.depot, usageSequestre(c.id));
+        const code = prive.codes[c.id]?.code ?? genererCodeAcces(alea);
+        c.sequestre = { etat: 'actif', enveloppe: scellerAvecContexte(cleEnveloppeAcces(privee, c.id, code), cle, usageEnveloppe(c.id), alea) };
+        prive.codes[c.id] = { code, creeLe: prive.codes[c.id]?.creeLe ?? maintenantIso };
+      } catch {
+        // Dépôt fait pour une autre clé (ancienne paire) : l'ami redéposera.
+        c.sequestre = { etat: 'attendu' };
+      } finally {
+        cle?.fill(0);
+      }
+      modifie = true;
+    }
+
+    // Nettoyage : rien du bloc privé ne survit à un compte supprimé.
+    const ids = new Set(annuaire.comptes.map(c => c.id));
+    for (const table of [prive.noms, prive.creeLe, prive.codes] as Array<Record<string, unknown>>) {
+      for (const id of Object.keys(table)) {
+        if (!ids.has(id)) {
+          delete table[id];
+          modifie = true;
+        }
+      }
+    }
+    if (modifie) annuaire.prive = ecrirePrive(prive, cles, alea);
+
+    const profils: Profil[] = [
+      {
+        id: ID_PRINCIPAL,
+        nom: prive.nomAdmin ?? 'Moi',
+        admin: true,
+        creeLe: prive.creeLeAdmin ?? '',
+        ...(annuaire.politique ? { politique: annuaire.politique } : {}),
+        ...(annuaire.admin.derniereConnexion ? { derniereConnexion: annuaire.admin.derniereConnexion } : {}),
+      },
+      ...annuaire.comptes.map(c => {
+        const suivi = suivisHerites[c.id] ?? lireSuivi(privee, c);
+        const profil: Profil = { id: c.id, nom: prive.noms[c.id] ?? '(prénom inconnu)', admin: false, creeLe: prive.creeLe[c.id] ?? '', ...c.acces, sequestre: c.sequestre.etat };
+        if (suivi.derniereConnexion) profil.derniereConnexion = suivi.derniereConnexion;
+        if (suivi.connexions !== undefined) profil.connexions = suivi.connexions;
+        if (prive.anterieurs.includes(c.id)) profil.anterieur = true;
+        return profil;
+      }),
+    ];
+    return { annuaire, profils, modifie };
+  } finally {
+    privee.fill(0);
+  }
+}
+
+function lireSuivi(privee: Uint8Array, c: EntreeCompte): { derniereConnexion?: string; connexions?: number } {
+  if (!c.suivi) return {};
+  try {
+    const o = JSON.parse(utf8DepuisOctets(ouvrirDepot(privee, c.suivi, usageSuivi(c.id))));
+    return {
+      derniereConnexion: dateIso(o.derniereConnexion),
+      connexions: typeof o.connexions === 'number' && Number.isFinite(o.connexions) && o.connexions >= 0 ? Math.floor(o.connexions) : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function accesDe(p: Profil): AccesPublic {
+  return lireAcces({ apps: p.apps, actif: p.actif, niveaux: p.niveaux, invitationExpireLe: p.invitationExpireLe, expireLe: p.expireLe, desactiveJusquau: p.desactiveJusquau });
+}
+
+/**
+ * Enregistre la liste modifiée par l'administrateur : accès, prénoms,
+ * politique, comptes ajoutés ou retirés. Les séquestres ne changent pas par
+ * ce chemin (voir `deposerSequestre`, `regenererCodeAcces`, `revoquerSequestre`).
+ */
+export function appliquerProfilsAdmin(source: Annuaire, profils: readonly Profil[], cles: ClesAdmin, alea: SourceAleatoire = aleatoireParDefaut): Annuaire {
+  const base = source.heritage ? ouvrirAnnuaireAdmin(source, cles, alea).annuaire : source;
+  const prive = lirePrive(base, cles);
+  const annuaire: Annuaire = { ...base, admin: { ...base.admin }, comptes: [] };
+  const admin = profils.find(p => p.admin);
+  if (admin) {
+    if (admin.nom !== prive.nomAdmin) {
+      Object.assign(annuaire.admin, sceller(annuaire.sel, ID_PRINCIPAL, admin.nom, alea));
+      prive.nomAdmin = admin.nom;
+    }
+    const politique = admin.politique ? ecrirePolitique(admin.politique) : undefined;
+    if (politique) annuaire.politique = politique;
+    else delete annuaire.politique;
+    if (admin.derniereConnexion) annuaire.admin.derniereConnexion = admin.derniereConnexion;
+  }
+  const empreintes = new Set<string>([annuaire.admin.empreinte ?? '']);
+  for (const p of profils) {
+    if (p.admin || p.id === ID_PRINCIPAL || !MOTIF_ID.test(p.id)) continue;
+    const avant = base.comptes.find(c => c.id === p.id);
+    const nom = p.nom.trim().slice(0, 30);
+    const scelle = avant && prive.noms[p.id] === nom ? { empreinte: avant.empreinte, nom: avant.nom } : sceller(annuaire.sel, p.id, nom, alea);
+    if (empreintes.has(scelle.empreinte) || MOTS_ADMIN.has(normaliserNom(nom))) {
+      throw new ErreurAnnuaire(`Le prénom « ${nom} » est déjà pris ou réservé.`);
+    }
+    empreintes.add(scelle.empreinte);
+    prive.noms[p.id] = nom;
+    if (p.creeLe) prive.creeLe[p.id] = p.creeLe;
+    const entree: EntreeCompte = { id: p.id, ...scelle, acces: accesDe(p), sequestre: avant?.sequestre ?? { etat: 'attendu' } };
+    if (avant?.suivi) entree.suivi = avant.suivi;
+    annuaire.comptes.push(entree);
+  }
+  const ids = new Set(annuaire.comptes.map(c => c.id));
+  for (const table of [prive.noms, prive.creeLe, prive.codes] as Array<Record<string, unknown>>) {
+    for (const id of Object.keys(table)) if (!ids.has(id)) delete table[id];
+  }
+  prive.anterieurs = prive.anterieurs.filter(id => ids.has(id));
+  annuaire.prive = ecrirePrive(prive, cles, alea);
+  return annuaire;
+}
+
+/** Remplace le séquestre d'un compte par un dépôt neuf (création, régénération des identifiants). */
+export function deposerSequestre(annuaire: Annuaire, id: string, depot: string): Annuaire {
+  if (!annuaire.comptes.some(c => c.id === id)) throw new ErreurAnnuaire('Compte introuvable.');
+  return { ...annuaire, comptes: annuaire.comptes.map(c => (c.id === id ? { ...c, sequestre: { etat: 'depose', depot } } : c)) };
+}
+
+/** Code d'accès administrateur d'un compte, s'il en a un. */
+export function codeAcces(annuaire: Annuaire, id: string, cles: ClesAdmin): { code: string; creeLe: string } | undefined {
+  return lirePrive(annuaire, cles).codes[id];
+}
+
+/**
+ * Relit la clé maîtresse d'un ami avec le code d'accès. Lève si le code est
+ * faux, si le séquestre est absent ou révoqué. La clé rendue est à effacer.
+ */
+export function ouvrirSequestre(annuaire: Annuaire, id: string, code: string, cles: ClesAdmin): Uint8Array {
+  const c = annuaire.comptes.find(e => e.id === id);
+  if (!c) throw new ErreurAnnuaire('Compte introuvable.');
+  if (c.sequestre.etat !== 'actif' || !c.sequestre.enveloppe) {
+    throw new ErreurAnnuaire(
+      c.sequestre.etat === 'revoque'
+        ? 'L’accès administrateur à ce compte est révoqué.'
+        : 'Séquestre absent : il sera créé à la prochaine connexion de l’ami, ou en régénérant ses identifiants.',
+    );
+  }
+  const privee = clePrivee(annuaire, cles);
+  try {
+    return descellerAvecContexte(cleEnveloppeAcces(privee, id, code), c.sequestre.enveloppe, usageEnveloppe(id));
+  } catch (erreur) {
+    if (erreur instanceof ErreurSequestre) throw new ErreurAnnuaire('Code d’accès administrateur incorrect.');
+    throw erreur;
+  } finally {
+    privee.fill(0);
+  }
+}
+
+/** Nouveau code d'accès : l'ancien cesse aussitôt de fonctionner. */
+export function regenererCodeAcces(annuaire: Annuaire, id: string, cles: ClesAdmin, alea: SourceAleatoire = aleatoireParDefaut, maintenantIso = new Date().toISOString()): { annuaire: Annuaire; code: string } {
+  const prive = lirePrive(annuaire, cles);
+  const ancien = prive.codes[id];
+  if (!ancien) throw new ErreurAnnuaire('Aucun code d’accès pour ce compte.');
+  const cle = ouvrirSequestre(annuaire, id, ancien.code, cles);
+  const privee = clePrivee(annuaire, cles);
+  try {
+    const code = genererCodeAcces(alea);
+    const enveloppe = scellerAvecContexte(cleEnveloppeAcces(privee, id, code), cle, usageEnveloppe(id), alea);
+    prive.codes[id] = { code, creeLe: maintenantIso };
+    return {
+      code,
+      annuaire: {
+        ...annuaire,
+        prive: ecrirePrive(prive, cles, alea),
+        comptes: annuaire.comptes.map(c => (c.id === id ? { ...c, sequestre: { etat: 'actif', enveloppe } } : c)),
+      },
+    };
+  } finally {
+    cle.fill(0);
+    privee.fill(0);
+  }
+}
+
+/** Révoque l'accès administrateur : enveloppe et code sont effacés, l'ami ne redépose plus. */
+export function revoquerSequestre(annuaire: Annuaire, id: string, cles: ClesAdmin, alea: SourceAleatoire = aleatoireParDefaut): Annuaire {
+  const prive = lirePrive(annuaire, cles);
+  delete prive.codes[id];
+  return {
+    ...annuaire,
+    prive: ecrirePrive(prive, cles, alea),
+    comptes: annuaire.comptes.map(c => (c.id === id ? { ...c, sequestre: { etat: 'revoque' } } : c)),
+  };
+}
+
+/** Rétablit un séquestre révoqué : l'ami redéposera à sa prochaine connexion. */
+export function retablirSequestre(annuaire: Annuaire, id: string): Annuaire {
+  return { ...annuaire, comptes: annuaire.comptes.map(c => (c.id === id && c.sequestre.etat === 'revoque' ? { ...c, sequestre: { etat: 'attendu' } } : c)) };
+}
+
+/** Politique des apps, lisible par tous (le hub d'un ami l'applique). */
+export function politiqueAnnuaire(annuaire: Annuaire): PolitiqueHub | undefined {
+  return annuaire.politique;
+}
+
+export { normaliserCode };

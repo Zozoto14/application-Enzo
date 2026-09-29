@@ -43,7 +43,22 @@ import {
   type Verrou,
 } from '../securite/politique';
 import { genererSecretTotp, uriOtpauth, verifierCodeTotp } from '../securite/totp';
+import { scellerPourAdmin } from '../securite/sequestre';
 import type { StockageCoffre } from './stockage-coffre';
+
+/**
+ * Contexte de dérivation d'une clé d'usage. Le profil principal garde le
+ * contexte historique (sa clé de synchronisation est partagée avec ses
+ * autres appareils) ; tout autre profil y ajoute son identifiant.
+ */
+export function contexteDerivation(usage: string, profil: string | undefined): string {
+  return !profil || profil === 'principal' ? `applibourse/${usage}/v1|` : `applibourse/${usage}/profil/${profil}/v1|`;
+}
+
+/** Contexte du dépôt de séquestre d'un compte. */
+export function usageSequestre(idCompte: string): string {
+  return `sequestre/cle-maitresse/${idCompte}`;
+}
 
 export class ErreurSession extends Error {
   constructor(message: string) {
@@ -80,6 +95,12 @@ export interface DependancesSession {
    * plus s'ouvrir. Ses données reviennent par la synchronisation.
    */
   reinitialiserBase?(): void;
+  /**
+   * Profil dont c'est la session (« principal » par défaut). Il entre dans
+   * le contexte de dérivation des clés (`cleDerivee`) : deux profils
+   * n'obtiennent jamais la même clé pour le même usage.
+   */
+  profil?: string;
 }
 
 export interface Initialisation {
@@ -347,7 +368,37 @@ export class Session {
    */
   cleDerivee(usage: string): string {
     const cle = this.exigerCleMaitresse();
-    return bytesToHex(sha256(concatBytes(utf8ToBytes(`applibourse/${usage}/v1|`), cle)));
+    return bytesToHex(sha256(concatBytes(utf8ToBytes(contexteDerivation(usage, this.deps.profil)), cle)));
+  }
+
+  /**
+   * Dépose la clé maîtresse pour l'administrateur (séquestre), scellée pour
+   * sa clé publique : ce profil ne peut pas relire le dépôt, ni rien tirer
+   * de la clé publique. Le contexte lie le dépôt à ce compte.
+   */
+  deposerPourSequestre(publiqueAdmin: string, idCompte: string): string {
+    return scellerPourAdmin(publiqueAdmin, this.exigerCleMaitresse(), usageSequestre(idCompte), this.alea);
+  }
+
+  /**
+   * Ouvre la session avec une clé maîtresse obtenue autrement que par le mot
+   * de passe : celle que l'administrateur relit du séquestre. La clé est
+   * d'abord éprouvée contre le coffre (secret TOTP scellé) ; une clé fausse
+   * est refusée sans rien ouvrir. La session prend possession de la clé.
+   */
+  ouvrirAvecCle(cleMaitresse: Uint8Array): void {
+    const coffre = this.exigerCoffre();
+    try {
+      if (!coffre.totp) {
+        throw new ErreurDeverrouillage('Coffre sans secret d’authentification : clé invérifiable.');
+      }
+      lireSecretTotp(coffre, cleMaitresse);
+    } catch {
+      cleMaitresse.fill(0);
+      throw new ErreurDeverrouillage('Clé de séquestre refusée par ce coffre.');
+    }
+    this.verrouiller();
+    this.ouvrir(cleMaitresse);
   }
 
   /** Base ouverte. Lève tant que la session est verrouillée. */
@@ -367,8 +418,15 @@ export class Session {
   }
 
   private ouvrir(cleMaitresse: Uint8Array): void {
-    this.pilote = this.deps.ouvrirBase(cleHexadecimale(cleMaitresse));
-    migrer(this.pilote);
+    try {
+      this.pilote = this.deps.ouvrirBase(cleHexadecimale(cleMaitresse));
+      migrer(this.pilote);
+    } catch (erreur) {
+      // Base refusée (profil fermé, fichier illisible) : la clé ne reste pas en mémoire.
+      this.pilote = undefined;
+      cleMaitresse.fill(0);
+      throw erreur;
+    }
     this.cleMaitresse = cleMaitresse;
     this.etatVerrou = apresSucces(this.horloge());
   }

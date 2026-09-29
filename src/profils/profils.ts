@@ -26,6 +26,14 @@ export const ID_PRINCIPAL = 'principal';
  */
 export const VERSION_PROFILS = 2;
 
+/**
+ * Séquestre d'un compte ami (vu par l'administrateur seulement) :
+ * `actif` — ouvrable avec le code d'accès ; `depose` — dépôt reçu, à
+ * convertir ; `attendu` — créé à la prochaine connexion de l'ami ;
+ * `revoque` — l'administrateur y a renoncé.
+ */
+export type EtatSequestre = 'actif' | 'depose' | 'attendu' | 'revoque' | 'absent';
+
 export interface Profil {
   id: string;
   nom: string;
@@ -56,6 +64,8 @@ export interface Profil {
   anterieur?: boolean;
   /** Entrée de l'administrateur seulement : politique globale des apps. */
   politique?: PolitiqueHub;
+  /** Vue de l'administrateur : état du séquestre de ce compte ami. */
+  sequestre?: EtatSequestre;
 }
 
 const PRINCIPAL: Profil = { id: ID_PRINCIPAL, nom: 'Moi', admin: true, creeLe: '' };
