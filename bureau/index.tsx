@@ -34,15 +34,19 @@ import { ChoixProfil } from '../src/ui/ecrans/ChoixProfil';
 import type { ControleProfils } from '../src/ui/ecrans/CarteProfils';
 import {
   ID_PRINCIPAL,
+  activerProfil,
   ajouterProfil,
+  autoriserApps,
   ecrireProfils,
   fichiersDuProfil,
   lireProfils,
   nouvelIdentifiant,
+  profilOuvrable,
   renommerProfil,
   supprimerProfil,
   type Profil,
 } from '../src/profils/profils';
+import { creerAccesAmi, type IdentifiantsAmi } from '../src/profils/identifiants';
 import { installerPontWeb } from './web';
 
 /**
@@ -123,6 +127,9 @@ function Racine() {
           },
         });
         const profil = profils.find(p => p.id === id) ?? profils[0];
+        if (!profilOuvrable(profil)) {
+          throw new Error('Ce profil est désactivé : demandez à l’administrateur de le réactiver.');
+        }
         setEtat({ phase: 'prete', session, profils, profil });
       } catch (erreur) {
         setEtat({ phase: 'echec', motif: erreur instanceof Error ? erreur.message : String(erreur) });
@@ -133,7 +140,7 @@ function Racine() {
 
   useEffect(() => {
     void lireListeProfils(stockage)
-      .then(profils => (profils.length > 1 ? setEtat({ phase: 'choix', profils }) : ouvrir(profils, ID_PRINCIPAL)))
+      .then(profils => (profils.filter(profilOuvrable).length > 1 ? setEtat({ phase: 'choix', profils }) : ouvrir(profils, ID_PRINCIPAL)))
       .catch(erreur => setEtat({ phase: 'echec', motif: erreur instanceof Error ? erreur.message : String(erreur) }));
   }, [stockage, ouvrir]);
 
@@ -183,7 +190,8 @@ function Racine() {
   }
 
   if (etat.phase === 'choix') {
-    return <ChoixProfil profils={etat.profils} onChoisir={id => void ouvrir(etat.profils, id)} />;
+    // Un profil désactivé n'est plus proposé (et `ouvrir` le refuserait de toute façon).
+    return <ChoixProfil profils={etat.profils.filter(profilOuvrable)} onChoisir={id => void ouvrir(etat.profils, id)} />;
   }
 
   const { session, profils, profil } = etat;
@@ -213,13 +221,82 @@ function Racine() {
     onRenommer: async (id, nom) => {
       await enregistrer(renommerProfil(profils, id, nom));
     },
+    // Administration : réservée au profil administrateur, aussi côté données.
+    onCreerCompte: async (nom, apps) => {
+      exigerAdmin();
+      const id = nouvelIdentifiant(n => crypto.getRandomValues(new Uint8Array(n)));
+      // On valide le nom et l'identifiant avant de créer le moindre fichier.
+      const suivante = ajouterProfil(profils, nom, id, new Date().toISOString().slice(0, 10), apps);
+      const identifiants = await creerCoffreAmi(id, nom.trim());
+      await enregistrer(suivante);
+      return identifiants;
+    },
+    onRegenerer: async id => {
+      exigerAdmin();
+      const ami = profils.find(p => p.id === id);
+      if (!ami || ami.admin) {
+        throw new Error('Profil introuvable.');
+      }
+      const fichiers = fichiersDuProfil(id) as { coffre: NomFichier; portefeuille: NomFichier };
+      await stockage.ecrire(fichiers.coffre, new Uint8Array(0));
+      await stockage.ecrire(fichiers.portefeuille, new Uint8Array(0));
+      return creerCoffreAmi(id, ami.nom);
+    },
+    onAutoriser: async (id, apps) => {
+      exigerAdmin();
+      await enregistrer(autoriserApps(profils, id, apps));
+    },
+    onActiver: async (id, actif) => {
+      exigerAdmin();
+      await enregistrer(activerProfil(profils, id, actif));
+    },
   };
+  function exigerAdmin() {
+    if (!profil.admin) {
+      throw new Error('Réservé à l’administrateur.');
+    }
+  }
+  /**
+   * Crée le coffre d'un ami dans ses propres fichiers. Les écritures de la
+   * session partent en arrière-plan : on les attend toutes avant de rendre
+   * les identifiants, pour ne jamais montrer un mot de passe dont le coffre
+   * n'est pas encore sur le disque. En cas d'échec, rien ne subsiste.
+   */
+  async function creerCoffreAmi(id: string, nom: string): Promise<IdentifiantsAmi> {
+    const ecritures: Array<Promise<void>> = [];
+    const suivi: Stockage = {
+      ...stockage,
+      emplacement: () => stockage.emplacement(),
+      lire: nomFichier => stockage.lire(nomFichier),
+      ecrire: (nomFichier, octets) => {
+        const promesse = stockage.ecrire(nomFichier, octets);
+        ecritures.push(promesse);
+        return promesse;
+      },
+    };
+    const fichiers = fichiersDuProfil(id) as { coffre: NomFichier; portefeuille: NomFichier };
+    try {
+      const ami = await ouvrirSessionBureau({
+        fabrique: fabriqueRef.current as never,
+        stockage: suivi,
+        profil: id,
+        surErreur: erreur => console.error('Enregistrement impossible', erreur),
+      });
+      const identifiants = creerAccesAmi(ami.session, nom);
+      await Promise.all(ecritures);
+      return identifiants;
+    } catch (erreur) {
+      await stockage.ecrire(fichiers.coffre, new Uint8Array(0)).catch(() => undefined);
+      await stockage.ecrire(fichiers.portefeuille, new Uint8Array(0)).catch(() => undefined);
+      throw erreur;
+    }
+  }
 
   return (
     <View style={[styles.pleinEcran, { backgroundColor: palette.fond }]}>
       <BandeauMiseAJour palette={palette} />
       <View style={styles.pleinEcran}>
-        <App key={profil.id} session={session.session} chargementAutomatique profils={controle} />
+        <App key={profil.id} session={session.session} chargementAutomatique profils={controle} hub />
       </View>
     </View>
   );

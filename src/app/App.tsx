@@ -104,6 +104,13 @@ import { recupererCoffre } from '../sync/relais/synchroniser';
 import type { Coffre } from '../securite/coffre';
 import { CarteSynchro } from '../ui/ecrans/CarteSynchro';
 import { CarteProfils, type ControleProfils } from '../ui/ecrans/CarteProfils';
+import { Hub } from '../hub/Hub';
+import { appsVisibles, peutOuvrir } from '../hub/permissions';
+import { chargerPrefs, enregistrerPrefs, CLE_THEME, type PrefsHub } from '../hub/personnalisation';
+import { ID_PORTEFEUILLE, REGISTRE } from '../hub/registre';
+import { THEME_HUB_DEFAUT, themeHub, type IdThemeHub } from '../hub/themes';
+import type { ContexteHub, ResumePortefeuille } from '../hub/types';
+import { ecouterTouche } from '../hub/web';
 import { dividendesParTitre, lignesCibles, lignesVendables } from './calculs';
 import { exporterExcel } from '../rapport/exportExcel';
 import { carnetDepuisJson, construireCarnet } from '../ui/vues/carnet';
@@ -173,6 +180,11 @@ export interface AppProps {
   chargementAutomatique?: boolean;
   /** Profils de l'appareil (bureau, site) : absent, un seul utilisateur. */
   profils?: ControleProfils;
+  /**
+   * Hub : après le déverrouillage, une grille d'apps au lieu d'ouvrir
+   * directement le portefeuille. Désactivé par défaut (tests, appareil).
+   */
+  hub?: boolean;
 }
 
 type Ecran =
@@ -297,7 +309,7 @@ const ETAT_VIDE = {
 
 
 
-export function App({ session, genererId, aujourdhui, chargementAutomatique = false, profils }: AppProps) {
+export function App({ session, genererId, aujourdhui, chargementAutomatique = false, profils, hub = false }: AppProps) {
   // Profil d'ami : ni synchronisation ni liaison, réservées à l'administrateur.
   const estAdmin = profils?.actuel.admin ?? true;
   const [rendu, forcerRendu] = useState(0);
@@ -1664,6 +1676,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // Navigation latérale : chaque écran à un clic, où que l'on soit.
   const sansCompte = (contenuComplet?.comptes.length ?? 0) === 0;
   const destinations: Destination[] = [
+    ...(hub ? [{ cle: 'hub', libelle: '← Hub', glyphe: '⌂' }] : []),
     { cle: 'tableau', libelle: 'Portefeuille', glyphe: '▦' },
     { cle: 'saisie', libelle: 'Nouvelle opération', glyphe: '+' },
     { cle: 'import', libelle: 'Importer', glyphe: '↓' },
@@ -1688,6 +1701,18 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const destinationActive =
     ecran === 'symboles' ? 'reglages' : ecran === 'titre' ? 'saisie' : ecran === 'compte' ? 'tableau' : ecran;
   const naviguer = (cle: string) => {
+    if (cle === 'hub') {
+      setAppHub(undefined);
+      return;
+    }
+    // Toute navigation vers un écran du portefeuille passe par le hub : elle
+    // ouvre l'app Portefeuille, si le profil y a droit.
+    if (hub) {
+      if (!portefeuillePermis) {
+        return;
+      }
+      setAppHub(ID_PORTEFEUILLE);
+    }
     setSaisieInitiale(undefined);
     if (cle === 'baggr') {
       Linking.openURL(ACCUEIL_BAGGR).catch(() => undefined);
@@ -1755,6 +1780,72 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     }
   }, [destinationEnAttente, deverrouille, contenuComplet, tableau, ouvrirTitre, ouvrirSymbole]);
 
+  // --- Hub : quelle app est ouverte, thème et préférences du profil ------------
+  const [appHub, setAppHub] = useState<string | undefined>();
+  const [themeHubId, setThemeHubId] = useState<IdThemeHub>(THEME_HUB_DEFAUT);
+  const [prefsHub, setPrefsHub] = useState<PrefsHub | undefined>();
+  const portefeuillePermis = !hub || peutOuvrir({ id: ID_PORTEFEUILLE }, profils?.actuel);
+  // Les préférences vivent dans la base chiffrée du profil : elles sont donc
+  // propres à chaque profil, et ne demandent aucun nouveau fichier.
+  const stockagePrefs = useMemo(
+    () => ({
+      lire: (cle: string) => new DepotParametres(session.base()).lire(cle),
+      ecrire: (cle: string, valeur: string) => new DepotParametres(session.base()).ecrire(cle, valeur),
+    }),
+    [session],
+  );
+  useEffect(() => {
+    if (!hub) {
+      return;
+    }
+    if (!deverrouille) {
+      // Reverrouillé : au prochain déverrouillage, on repart du hub.
+      setAppHub(undefined);
+      setPrefsHub(undefined);
+      return;
+    }
+    setPrefsHub(chargerPrefs(stockagePrefs));
+    try {
+      setThemeHubId(themeHub(stockagePrefs.lire(CLE_THEME)).id);
+    } catch {
+      setThemeHubId(THEME_HUB_DEFAUT);
+    }
+  }, [hub, deverrouille, stockagePrefs]);
+  const hubAffiche = hub && deverrouille && Boolean(contenuComplet && tableau);
+  const surLeHub = hubAffiche && (appHub === undefined || (appHub === ID_PORTEFEUILLE && !portefeuillePermis));
+  const surUneApp = hubAffiche && !surLeHub && appHub !== ID_PORTEFEUILLE;
+  // « Échap » ramène au hub depuis n'importe quelle app.
+  useEffect(() => {
+    if (!hubAffiche || appHub === undefined) {
+      return undefined;
+    }
+    return ecouterTouche('Escape', () => setAppHub(undefined), { ignorerChamps: true });
+  }, [hubAffiche, appHub]);
+  const resumeHub: ResumePortefeuille | undefined =
+    hubAffiche && onglets
+      ? {
+          valeur: onglets.resume.valeurTotale,
+          sansCompte,
+          variation: onglets.resume.variationSeance
+            ? {
+                pourcentage: onglets.resume.variationSeance.pourcentage.texte,
+                montant: onglets.resume.variationSeance.montant.texte,
+                tendance: onglets.resume.variationSeance.pourcentage.tendance,
+                date: onglets.resume.variationSeance.date,
+              }
+            : undefined,
+        }
+      : undefined;
+  const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub };
+  const themeDuHub = themeHub(themeHubId);
+  const appOuverte = surUneApp ? REGISTRE.find(app => app.id === appHub) : undefined;
+  const ouvrirApp = (id: string) => {
+    const app = appsVisibles(REGISTRE, contexteHub).find(candidate => candidate.id === id);
+    if (app) {
+      setAppHub(app.id);
+    }
+  };
+
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics ?? METRIQUES_DE_REPLI}>
       <SafeAreaView
@@ -1762,13 +1853,13 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         <StatusBar barStyle={palettePour().sombre === false ? 'dark-content' : 'light-content'} />
 
       <Coque
-        destinations={deverrouille && contenuComplet && tableau ? destinations : []}
+        destinations={deverrouille && contenuComplet && tableau && !surLeHub && !surUneApp ? destinations : []}
         actif={destinationActive}
         onNaviguer={naviguer}
-        onVerrouiller={deverrouille && contenuComplet && tableau ? verrouiller : undefined}
+        onVerrouiller={deverrouille && contenuComplet && tableau && !surLeHub && !surUneApp ? verrouiller : undefined}
         discret={discret}
-        onBasculerDiscretion={deverrouille && contenuComplet && tableau ? basculerDiscretion : undefined}
-        flottant={ecran !== 'podcast' ? <LecteurFlottant onOuvrir={() => setEcran('podcast')} /> : null}>
+        onBasculerDiscretion={deverrouille && contenuComplet && tableau && !surLeHub && !surUneApp ? basculerDiscretion : undefined}
+        flottant={ecran !== 'podcast' && !surLeHub && !surUneApp ? <LecteurFlottant onOuvrir={() => setEcran('podcast')} /> : null}>
       {deverrouille && contenuComplet && tableau ? (
         <VisiteGuidee
           visible={etapesVisite !== undefined}
@@ -1850,6 +1941,35 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             message={messageDeverrouillage}
           />
         )
+      ) : surLeHub ? (
+        <Hub
+          registre={REGISTRE}
+          contexte={contexteHub}
+          theme={themeDuHub}
+          onTheme={id => {
+            setThemeHubId(id);
+            try {
+              stockagePrefs.ecrire(CLE_THEME, id);
+            } catch {
+              // Non mémorisé : le thème reste appliqué jusqu'à la fermeture.
+            }
+          }}
+          onOuvrir={ouvrirApp}
+          prefs={prefsHub}
+          onPrefs={suivant => {
+            setPrefsHub(suivant);
+            enregistrerPrefs(stockagePrefs, suivant);
+          }}
+          onVerrouiller={verrouiller}
+          onChangerProfil={profils && profils.tous.length > 1 ? profils.onChanger : undefined}
+        />
+      ) : appOuverte?.Racine ? (
+        <appOuverte.Racine
+          contexte={contexteHub}
+          theme={themeDuHub}
+          registre={REGISTRE}
+          onRetour={() => setAppHub(undefined)}
+        />
       ) : ecran === 'compte' ? (
         <CreationCompte
           key={compteEdite ?? 'nouveau'}

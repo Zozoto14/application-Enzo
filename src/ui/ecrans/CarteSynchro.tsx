@@ -61,7 +61,7 @@ export function imageQr(texte: string, vectoriel = Platform.OS === 'web'): { uri
   return { uri: qr.createDataURL(case_, 16), taille: (qr.getModuleCount() + 8) * case_ };
 }
 
-function QrCode({ texte, legende, testID }: { texte: string; legende: string; testID: string }) {
+export function QrCode({ texte, legende, testID }: { texte: string; legende: string; testID: string }) {
   const { uri, taille } = useMemo(() => imageQr(texte), [texte]);
   return (
     <View style={styles.qr} testID={testID}>

@@ -9,6 +9,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON } from '../theme';
 import type { Profil } from '../../profils/profils';
+import type { IdentifiantsAmi } from '../../profils/identifiants';
 
 export interface ControleProfils {
   actuel: Profil;
@@ -18,6 +19,16 @@ export interface ControleProfils {
   onAjouter(nom: string): Promise<void>;
   onSupprimer(id: string): Promise<void>;
   onRenommer(id: string, nom: string): Promise<void>;
+  /**
+   * Administration (app du hub). Absentes là où la plateforme ne sait pas
+   * créer le coffre d'un autre profil.
+   */
+  /** Crée le compte d'un ami et rend ses identifiants, à montrer une fois. */
+  onCreerCompte?(nom: string, apps: readonly string[]): Promise<IdentifiantsAmi>;
+  /** Nouveau coffre pour l'ami : l'ancien, et le portefeuille qu'il scelle, sont effacés. */
+  onRegenerer?(id: string): Promise<IdentifiantsAmi>;
+  onAutoriser?(id: string, apps: readonly string[]): Promise<void>;
+  onActiver?(id: string, actif: boolean): Promise<void>;
 }
 
 export function CarteProfils({ controle }: { controle: ControleProfils }) {
@@ -43,7 +54,12 @@ export function CarteProfils({ controle }: { controle: ControleProfils }) {
         <Text style={{ color: palette.texte, fontWeight: '700' }}>
           Profil ouvert : {actuel.nom} {actuel.admin ? '· administrateur' : ''}
         </Text>
-        {actuel.admin ? (
+        {actuel.admin && controle.onCreerCompte ? (
+          <SousTitre>
+            Chaque ami a son propre portefeuille, chiffré à part, et n’ouvre que les apps que vous lui autorisez. La
+            synchronisation avec l’iPhone reste réservée à votre profil.
+          </SousTitre>
+        ) : actuel.admin ? (
           <SousTitre>
             Un ami veut suivre son portefeuille ici ? Ajoutez-lui un profil : au démarrage, AppliBourse demandera qui
             l’utilise, et il créera son propre mot de passe et son code. Ses données sont chiffrées à part — vous ne
@@ -68,7 +84,12 @@ export function CarteProfils({ controle }: { controle: ControleProfils }) {
           />
         </View>
 
-        {actuel.admin ? (
+        {actuel.admin && controle.onCreerCompte ? (
+          <SousTitre>
+            Les comptes de vos amis (création, identifiants, accès aux apps, désactivation) se gèrent dans l’app
+            Administration du hub.
+          </SousTitre>
+        ) : actuel.admin ? (
           <>
             {tous
               .filter(profil => !profil.admin)
