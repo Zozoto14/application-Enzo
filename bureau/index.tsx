@@ -15,7 +15,7 @@ import '@fontsource/fraunces/400.css';
 import '@fontsource/fraunces/500.css';
 import '@fontsource/fraunces/600.css';
 import '@fontsource/dm-serif-display/400.css';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { createRoot } from 'react-dom/client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -29,7 +29,20 @@ import { ESPACEMENT, palettePour } from '../src/ui/theme';
 import { useFondDocument } from './Bureau';
 import { BandeauMiseAJour } from './MiseAJour';
 import { ouvrirSessionBureau, type SessionBureau } from './session';
-import { pont, stockageCourant } from './stockage';
+import { pont, stockageCourant, type NomFichier, type Stockage } from './stockage';
+import { ChoixProfil } from '../src/ui/ecrans/ChoixProfil';
+import type { ControleProfils } from '../src/ui/ecrans/CarteProfils';
+import {
+  ID_PRINCIPAL,
+  ajouterProfil,
+  ecrireProfils,
+  fichiersDuProfil,
+  lireProfils,
+  nouvelIdentifiant,
+  renommerProfil,
+  supprimerProfil,
+  type Profil,
+} from '../src/profils/profils';
 import { installerPontWeb } from './web';
 
 /**
@@ -74,8 +87,17 @@ if (!pont()) {
 
 type Etat =
   | { phase: 'chargement' }
-  | { phase: 'prete'; session: SessionBureau }
+  | { phase: 'choix'; profils: Profil[] }
+  | { phase: 'prete'; session: SessionBureau; profils: Profil[]; profil: Profil }
   | { phase: 'echec'; motif: string };
+
+const decodeur = new TextDecoder();
+const encodeur = new TextEncoder();
+
+async function lireListeProfils(stockage: Stockage): Promise<Profil[]> {
+  const brut = await stockage.lire('profils');
+  return lireProfils(brut && brut.length > 0 ? decodeur.decode(brut) : undefined);
+}
 
 function Racine() {
   const sombre = useColorScheme() === 'dark';
@@ -83,38 +105,37 @@ function Racine() {
   useFondDocument(sombre);
 
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
+  const fabriqueRef = useRef<unknown>(undefined);
+  const stockage = useMemo(() => stockageCourant(), []);
 
-  useEffect(() => {
-    let vivant = true;
-
-    void (async () => {
+  const ouvrir = useCallback(
+    async (profils: Profil[], id: string) => {
+      setEtat({ phase: 'chargement' });
       try {
-        const fabrique = await initSqlJs({ locateFile: () => urlWasm });
+        fabriqueRef.current ??= await initSqlJs({ locateFile: () => urlWasm });
         const session = await ouvrirSessionBureau({
-          fabrique: fabrique as never,
-          stockage: stockageCourant(),
+          fabrique: fabriqueRef.current as never,
+          stockage,
+          profil: id,
           surErreur: erreur => {
             // Une ecriture perdue en silence serait le pire defaut possible.
             console.error('Enregistrement impossible', erreur);
           },
         });
-        if (vivant) {
-          setEtat({ phase: 'prete', session });
-        }
+        const profil = profils.find(p => p.id === id) ?? profils[0];
+        setEtat({ phase: 'prete', session, profils, profil });
       } catch (erreur) {
-        if (vivant) {
-          setEtat({
-            phase: 'echec',
-            motif: erreur instanceof Error ? erreur.message : String(erreur),
-          });
-        }
+        setEtat({ phase: 'echec', motif: erreur instanceof Error ? erreur.message : String(erreur) });
       }
-    })();
+    },
+    [stockage],
+  );
 
-    return () => {
-      vivant = false;
-    };
-  }, []);
+  useEffect(() => {
+    void lireListeProfils(stockage)
+      .then(profils => (profils.length > 1 ? setEtat({ phase: 'choix', profils }) : ouvrir(profils, ID_PRINCIPAL)))
+      .catch(erreur => setEtat({ phase: 'echec', motif: erreur instanceof Error ? erreur.message : String(erreur) }));
+  }, [stockage, ouvrir]);
 
   // Dernier filet : on force l'ecriture avant la fermeture de la fenetre.
   useEffect(() => {
@@ -161,11 +182,44 @@ function Racine() {
     );
   }
 
+  if (etat.phase === 'choix') {
+    return <ChoixProfil profils={etat.profils} onChoisir={id => void ouvrir(etat.profils, id)} />;
+  }
+
+  const { session, profils, profil } = etat;
+  const enregistrer = async (liste: Profil[]) => {
+    await stockage.ecrire('profils', encodeur.encode(ecrireProfils(liste)));
+    setEtat({ phase: 'prete', session, profils: liste, profil: liste.find(p => p.id === profil.id) ?? profil });
+  };
+  const controle: ControleProfils = {
+    actuel: profil,
+    tous: profils,
+    onChanger: () => {
+      void session.vider().finally(() => {
+        session.session.verrouiller();
+        setEtat({ phase: 'choix', profils });
+      });
+    },
+    onAjouter: async nom => {
+      const id = nouvelIdentifiant(n => crypto.getRandomValues(new Uint8Array(n)));
+      await enregistrer(ajouterProfil(profils, nom, id, new Date().toISOString().slice(0, 10)));
+    },
+    onSupprimer: async id => {
+      const fichiers = fichiersDuProfil(id) as { coffre: NomFichier; portefeuille: NomFichier };
+      await stockage.ecrire(fichiers.coffre, new Uint8Array(0));
+      await stockage.ecrire(fichiers.portefeuille, new Uint8Array(0));
+      await enregistrer(supprimerProfil(profils, id));
+    },
+    onRenommer: async (id, nom) => {
+      await enregistrer(renommerProfil(profils, id, nom));
+    },
+  };
+
   return (
     <View style={[styles.pleinEcran, { backgroundColor: palette.fond }]}>
       <BandeauMiseAJour palette={palette} />
       <View style={styles.pleinEcran}>
-        <App session={etat.session.session} chargementAutomatique />
+        <App key={profil.id} session={session.session} chargementAutomatique profils={controle} />
       </View>
     </View>
   );

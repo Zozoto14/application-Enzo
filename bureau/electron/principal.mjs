@@ -44,10 +44,21 @@ const DEV = process.env.APPLIBOURSE_DEV;
 const FICHIERS = {
   portefeuille: 'portefeuille.ab',
   coffre: 'coffre.json',
+  profils: 'profils.json',
 };
 
+/**
+ * Fichiers d'un profil d'ami : même liste fermée, suffixée d'un identifiant
+ * court fait de lettres et de chiffres seulement — pas de « ../ » possible.
+ */
+function fichierDeProfil(nom) {
+  const trouve = /^(portefeuille|coffre)-([a-z0-9]{6,16})$/.exec(String(nom));
+  if (!trouve) return undefined;
+  return trouve[1] === 'portefeuille' ? `portefeuille-${trouve[2]}.ab` : `coffre-${trouve[2]}.json`;
+}
+
 function cheminDe(nom) {
-  const fichier = FICHIERS[nom];
+  const fichier = Object.hasOwn(FICHIERS, nom) ? FICHIERS[nom] : fichierDeProfil(nom);
   if (!fichier) {
     throw new Error(`Fichier inconnu : ${nom}`);
   }

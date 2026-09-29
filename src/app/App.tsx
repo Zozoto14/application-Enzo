@@ -103,6 +103,7 @@ import { definirLiaisonEnAttente, liaisonEnAttente } from '../sync/relais/actif'
 import { recupererCoffre } from '../sync/relais/synchroniser';
 import type { Coffre } from '../securite/coffre';
 import { CarteSynchro } from '../ui/ecrans/CarteSynchro';
+import { CarteProfils, type ControleProfils } from '../ui/ecrans/CarteProfils';
 import { dividendesParTitre, lignesCibles, lignesVendables } from './calculs';
 import { exporterExcel } from '../rapport/exportExcel';
 import { carnetDepuisJson, construireCarnet } from '../ui/vues/carnet';
@@ -170,6 +171,8 @@ export interface AppProps {
    * Désactivé par défaut : les tests ne doivent pas appeler le réseau.
    */
   chargementAutomatique?: boolean;
+  /** Profils de l'appareil (bureau, site) : absent, un seul utilisateur. */
+  profils?: ControleProfils;
 }
 
 type Ecran =
@@ -294,7 +297,9 @@ const ETAT_VIDE = {
 
 
 
-export function App({ session, genererId, aujourdhui, chargementAutomatique = false }: AppProps) {
+export function App({ session, genererId, aujourdhui, chargementAutomatique = false, profils }: AppProps) {
+  // Profil d'ami : ni synchronisation ni liaison, réservées à l'administrateur.
+  const estAdmin = profils?.actuel.admin ?? true;
   const [rendu, forcerRendu] = useState(0);
   const [compteFiltre, setCompteFiltre] = useState<string>(TOUS_LES_COMPTES);
   // Retenu ici : revenir au portefeuille rouvre l'onglet qu'on avait quitté.
@@ -667,12 +672,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     delier: delierSynchro,
     oublier: oublierAppareilSynchro,
     synchroniserMaintenant,
-  } = useSynchro({ session, deverrouille, rafraichir });
+  } = useSynchro({ session, deverrouille: deverrouille && estAdmin, rafraichir });
 
   // « Lier à mon compte » : ce nouvel appareil adopte le compte du PC.
   const [messageDeverrouillage, setMessageDeverrouillage] = useState<string | undefined>();
   const codeLiaisonConnu = liaisonDuPc ? encoderLiaison(liaisonDuPc) : liaisonEnAttente();
-  const lier = {
+  const lier = !estAdmin ? undefined : {
     codeConnu: codeLiaisonConnu && decoderLiaison(codeLiaisonConnu) ? codeLiaisonConnu : undefined,
     onLier: async (code: string) => {
       const liaison = decoderLiaison(code);
@@ -1801,6 +1806,14 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           </Carte>
         </View>
       ) : null}
+      {profils && profils.tous.length > 1 && !deverrouille && !secrets ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: ESPACEMENT.s, paddingTop: ESPACEMENT.m }}>
+          <Text style={{ color: palettePour().texteSecondaire }} testID="profil-ouvert">
+            Profil : {profils.actuel.nom}
+          </Text>
+          <Bouton titre="Changer de profil" variante="discret" onPress={profils.onChanger} testID="changer-profil-verrou" />
+        </View>
+      ) : null}
       {secrets ? (
         <PremierLancement
           onCreer={creer}
@@ -2307,8 +2320,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
                 }
               : undefined
           }
+          carteProfils={profils ? <CarteProfils controle={profils} /> : undefined}
           carteSynchro={
-            <CarteSynchro
+            !estAdmin ? undefined : <CarteSynchro
               synchro={synchro}
               liaisonDuPc={liaisonDuPc}
               nomParDefaut={nomParDefaut(plateformeSynchro)}

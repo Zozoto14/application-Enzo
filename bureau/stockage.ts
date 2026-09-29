@@ -14,7 +14,8 @@
  * d'accueil le dit.
  */
 
-export type NomFichier = 'portefeuille' | 'coffre';
+/** Fichiers logiques ; ceux d'un profil d'ami portent son identifiant. */
+export type NomFichier = 'portefeuille' | 'coffre' | 'profils' | `portefeuille-${string}` | `coffre-${string}`;
 
 export interface Stockage {
   lire(nom: NomFichier): Promise<Uint8Array | undefined>;

@@ -60,6 +60,8 @@ export interface ReglagesProps {
   messageExport?: string;
   /** Carte de synchronisation entre appareils, composée par l'application. */
   carteSynchro?: React.ReactNode;
+  /** Carte des profils (administrateur : ajouter un ami). */
+  carteProfils?: React.ReactNode;
   onAnnuler(): void;
 }
 
@@ -84,6 +86,7 @@ export function Reglages({
   onChercherMiseAJour,
   onRedemarrerPourMaj,
   carteSynchro,
+  carteProfils,
   onEnregistrer,
   onAnnuler,
 }: ReglagesProps) {
@@ -107,6 +110,7 @@ export function Reglages({
       ) : null}
 
       {carteSynchro}
+      {carteProfils}
 
       {onChoisirTheme ? (
         <>

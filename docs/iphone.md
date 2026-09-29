@@ -15,6 +15,15 @@ renouvelez-la.
 
 ---
 
+> **Un seul mot de passe partout.** Sur un nouvel appareil (iPhone, site),
+> touchez **Lier à mon compte** sur le premier écran : il récupère le compte
+> du PC et s'ouvre ensuite avec **le même mot de passe et le même code
+> d'authentification**. Il n'y a plus de mot de passe de synchronisation.
+>
+> **Profils.** Un ami peut avoir son propre portefeuille sur le PC ou le site :
+> Paramètres › Profils › Ajouter un profil (réservé à l'administrateur, le
+> profil d'origine). Au démarrage, AppliBourse demande qui l'utilise.
+
 ## 1. Le relais et le site (sur le PC, une fois)
 
 1. Créez un compte gratuit sur **dash.cloudflare.com** (un e-mail suffit, pas
@@ -93,7 +102,8 @@ l'application le republie en arrière-plan.
 
 Puis ouvrez l'app, créez son mot de passe, et scannez le QR code
 **« App iPhone »** affiché par le PC (ou recopiez le code qui commence par
-`AB1.`). Mot de passe de synchronisation, **Relier** : c'est fait.
+`AB1.`), puis **Lier à mon compte** : l'app s'ouvre avec le mot de passe et le code
+d'authentification du PC, et le portefeuille arrive tout seul.
 
 ## 4. Au quotidien
 

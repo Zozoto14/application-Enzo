@@ -29,7 +29,8 @@ import { descellerOctets, scellerOctets } from '../src/securite/scelle';
 import type { StockageCoffre } from '../src/session/stockage-coffre';
 import { ouvrirBaseSqlJs, type FabriqueSqlJs, type PiloteMemoire } from '../src/db/pilotes/sqljs';
 import type { PiloteSqlite, ValeurSql } from '../src/db/pilote';
-import type { Stockage } from './stockage';
+import type { NomFichier, Stockage } from './stockage';
+import { ID_PRINCIPAL, fichiersDuProfil } from '../src/profils/profils';
 
 /** Délai avant d'écrire sur le disque après une modification. */
 export const DELAI_ECRITURE = 400;
@@ -62,6 +63,8 @@ export interface OptionsSessionBureau {
   /** Signale une écriture impossible : silencieuse, elle perdrait des données. */
   surErreur?(erreur: unknown): void;
   delaiEcriture?: number;
+  /** Profil à ouvrir ; le principal par défaut. */
+  profil?: string;
 }
 
 /**
@@ -76,8 +79,9 @@ export async function ouvrirSessionBureau(
   const delai = options.delaiEcriture ?? DELAI_ECRITURE;
   const signaler = options.surErreur ?? (() => undefined);
 
-  const coffreBrut = await stockage.lire('coffre');
-  let scelle = await stockage.lire('portefeuille');
+  const fichiers = fichiersDuProfil(options.profil ?? ID_PRINCIPAL) as { coffre: NomFichier; portefeuille: NomFichier };
+  const coffreBrut = await stockage.lire(fichiers.coffre);
+  let scelle = await stockage.lire(fichiers.portefeuille);
   const emplacement = await stockage.emplacement();
 
   // --- Coffre : lu maintenant, tenu en memoire, reecrit a chaque changement.
@@ -100,12 +104,12 @@ export async function ouvrirSessionBureau(
     ecrire: nouveau => {
       coffre = nouveau;
       void stockage
-        .ecrire('coffre', encodeur.encode(JSON.stringify(nouveau)))
+        .ecrire(fichiers.coffre, encodeur.encode(JSON.stringify(nouveau)))
         .catch(signaler);
     },
     effacer: () => {
       coffre = undefined;
-      void stockage.ecrire('coffre', new Uint8Array(0)).catch(signaler);
+      void stockage.ecrire(fichiers.coffre, new Uint8Array(0)).catch(signaler);
     },
   };
 
@@ -120,7 +124,7 @@ export async function ouvrirSessionBureau(
       return;
     }
     const octets = dernierPilote.exporter();
-    await stockage.ecrire('portefeuille', scellerOctets(derniereCle, octets));
+    await stockage.ecrire(fichiers.portefeuille, scellerOctets(derniereCle, octets));
   };
 
   const planifier = () => {
@@ -171,7 +175,7 @@ export async function ouvrirSessionBureau(
       clearTimeout(enAttente);
       enAttente = undefined;
     }
-    void stockage.ecrire('portefeuille', new Uint8Array(0)).catch(signaler);
+    void stockage.ecrire(fichiers.portefeuille, new Uint8Array(0)).catch(signaler);
   };
 
   return {
