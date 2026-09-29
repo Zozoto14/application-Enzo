@@ -2,8 +2,8 @@ import { decider, etapesVisite, fonctionnalitesPour, lireEtat, marquerLues } fro
 import { ENTREES, type EntreeDevblog } from './entrees';
 
 const v2: EntreeDevblog = {
-  version: '2026.10.01',
-  date: '2026-10-01',
+  version: '2026.10.02',
+  date: '2026-10-02',
   titre: 'Suivante',
   resume: 'r',
   illustration: 'hub',
@@ -59,14 +59,17 @@ describe('devblog', () => {
   });
 
   it('« tu es gestionnaire » n’est vue que d’un gestionnaire ; l’administrateur voit la nouveauté d’attribution', () => {
-    const entree = ENTREES[0];
+    const entree = ENTREES.find(e => e.version === '2026.09.30')!;
     const ids = (admin: boolean, gestionnaire: boolean) => fonctionnalitesPour(entree, admin, gestionnaire).map(f => f.id);
     expect(ids(false, true)).toEqual(['roles', 'tu-es-gestionnaire']);
     expect(ids(false, false)).toEqual(['roles']);
     expect(ids(true, false)).toEqual(expect.arrayContaining(['role-gestionnaire']));
     expect(ids(true, false)).not.toContain('tu-es-gestionnaire');
     // Un simple ami voit l'information générale, pas « tu es gestionnaire ».
-    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('afficher');
+    expect(decider(undefined, { profilNeuf: false, admin: false }, [entree]).genre).toBe('afficher');
+    // La synchronisation (dernière entrée) est réservée à l'administrateur : rien pour un ami.
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('rien');
+    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.01', '2026.09.30', '2026.09.29']);
   });
 
   it('marquer lu est idempotent et tolère un état corrompu', () => {

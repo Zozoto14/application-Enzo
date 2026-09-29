@@ -11,6 +11,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { BoutonHub } from './Hub';
+import { IndicateurSynchro, type SynchroHub } from './IndicateurSynchro';
 import {
   libelleBouton,
   messageEtat,
@@ -234,6 +235,8 @@ export interface PanneauParametresProps {
   /** Compte ami : l'administrateur peut y accéder (avertissement de transparence). */
   transparence?: { dernierAccesAdmin?: string; sequestreActif: boolean };
   nomProfil?: string;
+  /** État de la synchronisation ; absent : section masquée. */
+  synchro?: SynchroHub;
   maj: MiseAJour;
   onFermer(): void;
 }
@@ -417,6 +420,13 @@ export function PanneauParametres(props: PanneauParametresProps) {
                     : 'Aucun accès de l’administrateur à ce jour.'}
                 </Text>
               </View>
+            </>
+          ) : null}
+
+          {props.synchro ? (
+            <>
+              {section('Synchronisation')}
+              <IndicateurSynchro theme={theme} synchro={props.synchro} detaille />
             </>
           ) : null}
 

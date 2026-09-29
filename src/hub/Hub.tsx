@@ -14,6 +14,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { appsVisibles, etatTuile, type EtatTuile } from './permissions';
 import { BoutonMiseAJour, PanneauParametres, useMiseAJour } from './ParametresHub';
+import { IndicateurSynchro, type SynchroHub } from './IndicateurSynchro';
 import { salutation } from './infos';
 import { LogoHub } from './LogoHub';
 import {
@@ -54,6 +55,8 @@ export interface HubProps {
   onReglagesPortefeuille?(): void;
   /** Ouvre l'historique des nouveautés (Paramètres › Nouveautés). */
   onNouveautes?(): void;
+  /** État de la synchronisation PC ↔ site ; absent : pas d'indicateur (compte non relié). */
+  synchro?: SynchroHub;
   /**
    * Demande d'ouverture venue d'ailleurs (« Essayer » du devblog) : le
    * panneau Paramètres ou le mode personnalisation. Le compteur la rend unique.
@@ -76,7 +79,7 @@ const TRANSITION_WEB: object = SUR_LE_WEB
   ? { transitionProperty: 'width, opacity, transform, min-height', transitionDuration: '260ms', transitionTimingFunction: 'ease' }
   : {};
 
-export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, onReglagesPortefeuille, onNouveautes, demande, heure }: HubProps) {
+export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, onReglagesPortefeuille, onNouveautes, synchro, demande, heure }: HubProps) {
   const { width } = useWindowDimensions();
   const [menuOuvert, setMenuOuvert] = useState(false);
   const [parametres, setParametres] = useState(false);
@@ -149,6 +152,7 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
               <Text style={[titreStyle, { fontSize: 16 }]}>AppDashboard</Text>
             </View>
             <View style={styles.actionsEntete}>
+              {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} /> : null}
               {personnalisable ? (
                 <BoutonHub
                   theme={theme}
@@ -279,6 +283,7 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
           onPrefs={onPrefs}
           onTheme={onTheme}
           maj={maj}
+          synchro={synchro}
           nomProfil={contexte.profil?.nom}
           onFermer={() => setParametres(false)}
           onPersonnaliser={

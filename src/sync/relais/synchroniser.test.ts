@@ -140,13 +140,13 @@ describe('synchronisation par le relais', () => {
     const parametres = new DepotParametres(pc);
     parametres.ecrire(PARAMETRES.carnetTheses, JSON.stringify({ 'air-liquide': { pourquoi: 'Qualité', ecriteLe: '2026-09-01' } }));
     parametres.ecrire(PARAMETRES.objectif, '{"montant":"50000"}');
-    parametres.ecrire(PARAMETRES.theme, 'clair');
+    parametres.ecrire(PARAMETRES.discretion, '1');
     await tour(pc, 'aaaa1111');
     await tour(iphone, 'bbbb2222');
     const recus = new DepotParametres(iphone);
     expect(JSON.parse(recus.lire(PARAMETRES.carnetTheses)!)['air-liquide'].pourquoi).toBe('Qualité');
     expect(recus.lire(PARAMETRES.objectif)).toBe('{"montant":"50000"}');
-    expect(recus.lire(PARAMETRES.theme)).toBeUndefined();
+    expect(recus.lire(PARAMETRES.discretion)).toBeUndefined();
   });
 
   it('ne renvoie rien quand rien n’a changé', async () => {
