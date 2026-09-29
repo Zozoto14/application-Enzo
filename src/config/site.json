@@ -1,5 +1,6 @@
 {
-  "projetPages": "appdashboard",
-  "site": "https://appdashboard.pages.dev",
-  "anciensSites": ["https://applibourse-ef0ddb.pages.dev"]
+  "projetPages": "applibourse-ef0ddb",
+  "site": "https://applibourse-ef0ddb.pages.dev",
+  "verifie": true,
+  "anciensSites": []
 }

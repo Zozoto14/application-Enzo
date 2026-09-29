@@ -14,7 +14,7 @@ import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../c
 import { ESPACEMENT, RAYON } from '../theme';
 import type { EtatSynchroApp } from '../../app/synchroApp';
 import { joursRestants } from '../../natif/signature';
-import { SITE_PRINCIPAL } from '../../config/site';
+import { choisirSite } from '../../config/site';
 import { encoderLiaison, lienApp, lienSite, type Liaison } from '../../sync/relais/liaison';
 
 export interface CarteSynchroProps {
@@ -304,9 +304,15 @@ export function CarteSynchro({
                 />
               ) : null}
             </View>
-            <Text selectable style={{ color: palette.accent }}>
-              Site de secours : {liaison.site ?? SITE_PRINCIPAL}
-            </Text>
+            {lienSite(liaison) ? (
+              <Text selectable style={{ color: palette.accent }}>
+                Site de secours : {choisirSite(liaison.site)}
+              </Text>
+            ) : (
+              <Text style={{ color: palette.texteSecondaire }} testID="site-non-publie">
+                Publiez d’abord le site (npm run relais:site) : en attendant, seul le code ci-dessus est à copier.
+              </Text>
+            )}
           </View>
         ) : null}
 

@@ -38,12 +38,18 @@ const configLocale = resolve(dossierRelais, 'wrangler.local.toml');
 const CONFIG_WRANGLER = 'relais/wrangler.local.toml';
 const siteSeulement = process.argv.includes('--site');
 const WRANGLER = ['--yes', 'wrangler@4'];
+// --a-blanc : affiche ce qui serait fait, sans rien exécuter ni écrire.
+const aBlanc = process.argv.includes('--a-blanc');
 
 const lireLocal = () => (existsSync(fichierLocal) ? JSON.parse(readFileSync(fichierLocal, 'utf8')) : {});
-const ecrireLocal = donnees => writeFileSync(fichierLocal, `${JSON.stringify(donnees, null, 2)}\n`);
+const ecrireLocal = donnees => aBlanc || writeFileSync(fichierLocal, `${JSON.stringify(donnees, null, 2)}\n`);
 
 /** Lance une commande, affiche sa sortie et la renvoie. */
 function lancer(commande, args, { entree, silencieux = false, tolerer = false } = {}) {
+  if (aBlanc) {
+    console.log(`[à blanc] ${commande} ${args.join(' ')}`);
+    return Promise.resolve('');
+  }
   return new Promise((resoudre, rejeter) => {
     const enfant = spawn(commande, args, {
       cwd: racine,
@@ -84,6 +90,11 @@ async function connexion() {
 }
 
 async function deployerRelais(local) {
+  if (aBlanc) {
+    etape('Relais');
+    console.log('[à blanc] npx --yes wrangler@4 kv namespace create applibourse-boite (si absente), puis deploy --config ' + CONFIG_WRANGLER + ' et secret put JETON');
+    return;
+  }
   etape('Boîte aux lettres');
   if (!local.kv) {
     const sortie = await wrangler(['kv', 'namespace', 'create', 'applibourse-boite']);
@@ -97,7 +108,7 @@ async function deployerRelais(local) {
     console.log('Déjà créée.');
   }
   const modele = readFileSync(resolve(dossierRelais, 'wrangler.toml'), 'utf8');
-  writeFileSync(configLocale, modele.replace('A_REMPLIR_PAR_LE_SCRIPT', local.kv));
+  if (!aBlanc) writeFileSync(configLocale, modele.replace('A_REMPLIR_PAR_LE_SCRIPT', local.kv));
 
   etape('Relais');
   const sortie = await wrangler(['deploy', '--config', CONFIG_WRANGLER], { tolerer: true });
@@ -142,60 +153,37 @@ async function publierSite(local) {
   local.site = SITE;
   ecrireLocal(local);
 
-  // Création du projet s'il n'existe pas (non interactif) ; « existe déjà »
-  // n'est pas une erreur.
-  const creation = await wrangler(['pages', 'project', 'create', PROJET_PAGES, '--production-branch', 'main'], {
-    tolerer: true,
-  });
-  const adresse = /https:\/\/[a-z0-9.-]+\.workers\.dev/.exec(sortie)?.[0];
-  if (adresse) {
-    local.relais = adresse;
-  }
-  if (!local.relais) {
-    throw new Error('Adresse du relais introuvable. Sur dash.cloudflare.com › Workers, activez le sous-domaine workers.dev puis relancez.');
-  }
-  if (!local.jeton) {
-    local.jeton = randomBytes(24).toString('base64url');
-    etape('Jeton du relais');
-    await wrangler(['secret', 'put', 'JETON', '--config', CONFIG_WRANGLER], { entree: `${local.jeton}\n` });
-  }
-  ecrireLocal(local);
-}
-
-async function publierSite(local) {
-  etape('Compilation du site de secours');
-  await lancer('npx', ['vite', 'build', '--outDir', '../site-dist', '--emptyOutDir']);
-
-  await joindreMiseAJourIphone(local);
-
-  etape('Publication du site');
-  // Adresse et projet viennent de src/config/site.json (source unique). Un
-  // ancien projet « applibourse-… » n'est plus utilisé : il reste en ligne,
-  // ce qui garde valables les liens de liaison déjà émis.
-  if (local.projetPages && local.projetPages !== PROJET_PAGES) {
-    local.ancienProjetPages = local.projetPages;
-    local.ancienSite = local.ancienSite ?? local.site;
-  }
-  local.projetPages = PROJET_PAGES;
-  local.site = SITE;
-  ecrireLocal(local);
-
-  // Création du projet s'il n'existe pas (non interactif) ; « existe déjà »
-  // n'est pas une erreur.
-  const creation = await wrangler(['pages', 'project', 'create', PROJET_PAGES, '--production-branch', 'main'], {
-    tolerer: true,
-  });
-  if (!/already exists|existe d[ée]j[àa]|8000002|created|Successfully/i.test(creation) && !/https:\/\//.test(creation)) {
-    console.log('(Le projet Pages n’a pas pu être créé : on tente quand même la publication.)');
-  }
-  const adresse = /https:\/\/([a-z0-9-]+)\.pages\.dev/.exec(creation)?.[0];
-  if (adresse && adresse !== SITE) {
-    console.log(`\n⚠ Cloudflare a attribué ${adresse} et non ${SITE} : le nom « ${PROJET_PAGES} » était pris.`);
-    console.log('  Choisissez un autre nom dans src/config/site.json (projetPages et site), puis relancez.');
-  }
+  // Le nom d'un projet *.pages.dev est unique mondialement : on ne déploie
+  // jamais sur un projet qui n'est pas dans le compte Cloudflare de
+  // l'utilisateur, et on n'en crée jamais un autre à sa place.
+  await verifierProjetDuCompte();
   await wrangler([
     'pages', 'deploy', 'site-dist', '--project-name', PROJET_PAGES, '--branch', 'main', '--commit-dirty=true',
   ]);
+}
+
+async function verifierProjetDuCompte() {
+  etape('Vérification du projet Pages');
+  if (aBlanc) {
+    await wrangler(['pages', 'project', 'list', '--json']);
+    console.log(`[à blanc] le projet « ${PROJET_PAGES} » doit figurer dans la liste du compte ; sinon arrêt avec un message (aucune création).`);
+    return;
+  }
+  const sortie = await wrangler(['pages', 'project', 'list', '--json'], { silencieux: true });
+  let noms;
+  try {
+    const liste = JSON.parse(sortie.slice(sortie.indexOf('[')));
+    noms = liste.flatMap(projet => Object.values(projet).filter(valeur => typeof valeur === 'string'));
+  } catch {
+    noms = sortie.split(/[\s│|,"]+/);
+  }
+  if (!noms.includes(PROJET_PAGES)) {
+    throw new Error(
+      `Le projet Cloudflare Pages « ${PROJET_PAGES} » n’est pas dans votre compte : publication annulée (rien n’a été créé ni envoyé).\n` +
+        '  Vérifiez que vous êtes connecté au bon compte Cloudflare (npx wrangler login), ou corrigez src/config/site.json.',
+    );
+  }
+  console.log(`Projet « ${PROJET_PAGES} » trouvé dans votre compte (${SITE}).`);
 }
 
 /**
@@ -206,6 +194,10 @@ async function publierSite(local) {
 async function joindreMiseAJourIphone(local) {
   if (!existsSync(resolve(racine, 'cle-maj-privee.txt'))) {
     console.log('\n(Pas de clé de signature des mises à jour : l’app iPhone ne se mettra à jour que par AltStore.)');
+    return;
+  }
+  if (aBlanc) {
+    console.log('[à blanc] paquet de mise à jour iPhone : joint si cle-maj-privee.txt existe.');
     return;
   }
   const git = args => execFileSync('git', args, { cwd: racine, encoding: 'utf8' }).trim();
@@ -225,6 +217,9 @@ async function joindreMiseAJourIphone(local) {
 
 try {
   const local = lireLocal();
+  if (aBlanc) {
+    console.log(`[à blanc] projet Pages : ${PROJET_PAGES} (${SITE}), dossier publié : site-dist, mode : ${siteSeulement ? 'site seul' : 'relais + site'}`);
+  }
   await connexion();
   if (!siteSeulement) {
     await deployerRelais(local);

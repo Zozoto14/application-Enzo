@@ -77,12 +77,29 @@ jobs:
           done
           ls -l site-dist/maj || true
 
-      - name: Créer le projet Pages s'il n'existe pas
+      - name: Lire le projet Pages (site.json) et vérifier qu'il est dans le compte
         run: |
-          projet=$(node -p "require('./src/config/site.json').projetPages")
-          npx --yes wrangler@4 pages project create "$projet" --production-branch main || echo "(projet déjà existant : on continue)"
+          projet=$(node -p "require('./src/config/site.json').projetPages || ''")
+          site=$(node -p "require('./src/config/site.json').site || ''")
+          verifie=$(node -p "require('./src/config/site.json').verifie === true")
+          if [ -z "$projet" ] || [ -z "$site" ]; then
+            echo "::error::src/config/site.json : projetPages ou site absent."
+            exit 1
+          fi
+          if [ "$verifie" != "true" ]; then
+            echo "::error::src/config/site.json : verifie n'est pas true, publication refusée."
+            exit 1
+          fi
+          if [ "$site" != "https://$projet.pages.dev" ]; then
+            echo "::error::site.json : $site ne correspond pas au projet $projet."
+            exit 1
+          fi
+          npx --yes wrangler@4 pages project list --json > projets.json
+          if ! grep -q "\"$projet\"" projets.json; then
+            echo "::error::Le projet Pages $projet n'est pas dans le compte Cloudflare : rien n'est publié."
+            exit 1
+          fi
+          echo "PROJET_PAGES=$projet" >> "$GITHUB_ENV"
 
       - name: Publier sur Cloudflare Pages
-        run: |
-          projet=$(node -p "require('./src/config/site.json').projetPages")
-          npx --yes wrangler@4 pages deploy site-dist --project-name "$projet" --branch main --commit-dirty=true
+        run: npx --yes wrangler@4 pages deploy site-dist --project-name "$PROJET_PAGES" --branch main --commit-dirty=true

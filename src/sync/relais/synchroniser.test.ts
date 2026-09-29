@@ -4,7 +4,7 @@ import type { PiloteSqlite } from '../../db/pilote';
 import { ouvrirBaseNode } from '../../db/pilotes/node';
 import { migrer } from '../../db/schema';
 import { deriverCleSynchro, depuisBase64, ouvrirEnveloppe, sceller, versBase64 } from './chiffrement';
-import { ANCIENS_SITES, SITE_PRINCIPAL, estSiteConnu } from '../../config/site';
+import { SITE_PRINCIPAL, SITE_VERIFIE, choisirSite, estSiteConnu } from '../../config/site';
 import { decoderLiaison, encoderLiaison, lienSite } from './liaison';
 import { ecrireConfigRelais, lireEtatSynchro, recupererCoffre, synchroniser } from './synchroniser';
 
@@ -200,7 +200,7 @@ describe('enveloppes et code de liaison', () => {
   });
 
   it('code de liaison aller-retour, y compris dans un lien', () => {
-    const liaison = { relais: RELAIS, jeton: JETON, site: 'https://applibourse.pages.dev' };
+    const liaison = { relais: RELAIS, jeton: JETON, site: SITE_PRINCIPAL };
     const code = encoderLiaison(liaison);
     expect(code.startsWith('AB1.')).toBe(true);
     expect(decoderLiaison(code)).toEqual(liaison);
@@ -208,15 +208,25 @@ describe('enveloppes et code de liaison', () => {
     expect(decoderLiaison('AB1.nimportequoi')).toBeUndefined();
   });
 
-  it('le lien du site vient de la configuration, sans adresse propre au code', () => {
+  it('le lien du site vient de la configuration, vérifiée, et jamais d\'une adresse inconnue', () => {
+    expect(SITE_VERIFIE).toBe(true);
+    expect(SITE_PRINCIPAL).toBe('https://applibourse-ef0ddb.pages.dev');
+    expect(estSiteConnu(SITE_PRINCIPAL)).toBe(true);
     const lien = lienSite({ relais: RELAIS, jeton: JETON })!;
     expect(lien.startsWith(`${SITE_PRINCIPAL}/#liaison=AB1.`)).toBe(true);
-    expect(SITE_PRINCIPAL).toBe('https://appdashboard.pages.dev');
-    // Un code émis avec l'ancienne adresse reste lisible et garde son site.
-    const ancien = { relais: RELAIS, jeton: JETON, site: ANCIENS_SITES[0] };
-    expect(estSiteConnu(ancien.site)).toBe(true);
-    expect(decoderLiaison(lienSite(ancien)!)?.site).toBe(ancien.site);
-    expect(lienSite(ancien)!.startsWith(`${ANCIENS_SITES[0]}/#`)).toBe(true);
+    // Un code qui porte l'adresse d'un tiers ne fabrique pas de lien vers elle.
+    const tiers = lienSite({ relais: RELAIS, jeton: JETON, site: 'https://intrus-inconnu.pages.dev' })!;
+    expect(tiers.startsWith(`${SITE_PRINCIPAL}/#`)).toBe(true);
+    expect(tiers).not.toContain('intrus');
     expect(decoderLiaison(encoderLiaison({ relais: 'http://pas-https', jeton: JETON }))).toBeUndefined();
+  });
+
+  it('site non vérifié : aucun lien, le code seul', () => {
+    const config = { principal: 'https://x.pages.dev', verifie: false, anciens: [] as string[] };
+    expect(choisirSite(undefined, config)).toBeUndefined();
+    expect(choisirSite('https://x.pages.dev', config)).toBeUndefined();
+    const ok = { ...config, verifie: true };
+    expect(choisirSite(undefined, ok)).toBe('https://x.pages.dev');
+    expect(choisirSite('https://autre.pages.dev/', ok)).toBe('https://x.pages.dev');
   });
 });
