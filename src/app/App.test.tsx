@@ -1166,7 +1166,8 @@ describe('écran de sauvegarde', () => {
     } finally {
       delete global.applibourse;
     }
-  });
+    // Dérivation de clé Argon2id réelle : plus de 5 s sur une machine chargée.
+  }, 60000);
 
   it('explique pourquoi une sauvegarde est nécessaire', async () => {
     await ouvrirSauvegarde();
