@@ -65,6 +65,8 @@ export const LONGUEUR_MAX_ACTION = 200;
  */
 const MOTIFS_SECRETS: readonly RegExp[] = [
   /otpauth:\/\/\S+/gi,
+  // Code d'accès administrateur (séquestre) : 4 groupes de 4.
+  /\b[A-Za-z0-9]{4}(?:-[A-Za-z0-9]{4}){3}\b/g,
   /\b[A-Za-z0-9]{5}(?:-[A-Za-z0-9]{5}){3}\b/g,
   /\b[A-Z2-7]{16,}\b/g,
   /\b(?=[A-Za-z0-9-]*\d)[A-Za-z0-9]{4,5}(?:-[A-Za-z0-9]{4,5})+\b/g,
