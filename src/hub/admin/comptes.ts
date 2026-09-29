@@ -56,11 +56,14 @@ export function compteOuvrable(profil: Profil, maintenant: number): boolean {
 // --- Niveaux par app -----------------------------------------------------------
 
 /** Niveau effectif d'un profil sur une app (l'administrateur a tout). */
-export function niveauProfil(profil: Pick<Profil, 'admin' | 'apps' | 'niveaux'> | undefined, app: Pick<AppHub, 'id' | 'adminSeulement' | 'niveaux'>): NiveauAcces {
+export function niveauProfil(profil: Pick<Profil, 'admin' | 'apps' | 'niveaux' | 'role'> | undefined, app: Pick<AppHub, 'id' | 'adminSeulement' | 'gestionnaire' | 'niveaux'>): NiveauAcces {
   if (!profil || profil.admin) {
     return 'complet';
   }
-  if (app.adminSeulement || !(profil.apps ?? []).includes(app.id)) {
+  if (app.adminSeulement) {
+    return profil.role === 'gestionnaire' && app.gestionnaire === true ? 'complet' : 'aucun';
+  }
+  if (!(profil.apps ?? []).includes(app.id)) {
     return 'aucun';
   }
   const voulu = profil.niveaux?.[app.id] ?? 'complet';
@@ -232,6 +235,8 @@ export interface FiltreComptes {
   statut?: StatutCompte | 'tous';
   /** Identifiant d'app : seuls les comptes qui y ont accès. */
   app?: string;
+  /** Rôle : seuls les amis ordinaires, ou seuls les gestionnaires. */
+  role?: 'ami' | 'gestionnaire' | 'tous';
   tri?: TriComptes;
 }
 
@@ -260,6 +265,9 @@ export function filtrerComptes(profils: readonly Profil[], filtre: FiltreComptes
       return false;
     }
     if (filtre.app && (!app || niveauProfil(p, app) === 'aucun')) {
+      return false;
+    }
+    if (filtre.role && filtre.role !== 'tous' && (p.admin || (p.role === 'gestionnaire' ? 'gestionnaire' : 'ami') !== filtre.role)) {
       return false;
     }
     return true;

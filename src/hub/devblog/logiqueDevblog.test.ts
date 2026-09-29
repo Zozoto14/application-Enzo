@@ -19,7 +19,7 @@ describe('devblog', () => {
       expect(e.version).toMatch(/^\d{4}\.\d{2}\.\d{2}$/);
       expect(e.fonctionnalites.length).toBeGreaterThan(0);
     });
-    expect(ENTREES[0].fonctionnalites.map(f => f.id)).toEqual(
+    expect(ENTREES.find(e => e.version === '2026.09.29')?.fonctionnalites.map(f => f.id)).toEqual(
       expect.arrayContaining(['admin-avance', 'isolation', 'acces-admin', 'maj-parametres', 'themes', 'personnalisation']),
     );
   });
@@ -53,8 +53,20 @@ describe('devblog', () => {
   });
 
   it('un ami ne voit pas les nouveautés réservées à l’administrateur', () => {
-    expect(fonctionnalitesPour(ENTREES[0], false).some(f => f.id === 'admin-avance')).toBe(false);
-    expect(fonctionnalitesPour(ENTREES[0], true).some(f => f.id === 'admin-avance')).toBe(true);
+    const entree = ENTREES.find(e => e.version === '2026.09.29')!;
+    expect(fonctionnalitesPour(entree, false).some(f => f.id === 'admin-avance')).toBe(false);
+    expect(fonctionnalitesPour(entree, true).some(f => f.id === 'admin-avance')).toBe(true);
+  });
+
+  it('« tu es gestionnaire » n’est vue que d’un gestionnaire ; l’administrateur voit la nouveauté d’attribution', () => {
+    const entree = ENTREES[0];
+    const ids = (admin: boolean, gestionnaire: boolean) => fonctionnalitesPour(entree, admin, gestionnaire).map(f => f.id);
+    expect(ids(false, true)).toEqual(['roles', 'tu-es-gestionnaire']);
+    expect(ids(false, false)).toEqual(['roles']);
+    expect(ids(true, false)).toEqual(expect.arrayContaining(['role-gestionnaire']));
+    expect(ids(true, false)).not.toContain('tu-es-gestionnaire');
+    // Un simple ami voit l'information générale, pas « tu es gestionnaire ».
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('afficher');
   });
 
   it('marquer lu est idempotent et tolère un état corrompu', () => {

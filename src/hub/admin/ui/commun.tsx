@@ -12,6 +12,8 @@ import { police, teinteTransparente, type ThemeHub } from '../../themes';
 import type { AppHub, ServicesAdmin } from '../../types';
 import type { DonneesAdmin } from '../donnees';
 import type { EvenementAudit } from '../journal';
+import type { PolitiqueHub } from '../politique';
+import type { RoleAdmin } from '../roles';
 
 export { BoutonHub } from '../../Hub';
 
@@ -20,7 +22,15 @@ export interface OutilsAdmin {
   theme: ThemeHub;
   registre: readonly AppHub[];
   controle: ControleProfils;
+  /** Le compte qui agit : chaque action est revérifiée contre son rôle (`roles.ts`). */
+  acteur: Profil;
+  role: RoleAdmin;
+  /** Comptes que l'acteur peut voir et gérer (tous pour l'administrateur ; ses propres créations pour un gestionnaire). */
   tous: readonly Profil[];
+  /** Tous les comptes de l'appareil, sans prénom pour un gestionnaire : chiffres du tableau de bord. */
+  apercu: readonly Profil[];
+  /** Politique globale des apps (activation, maintenance), lisible par tous. */
+  politique?: PolitiqueHub;
   maintenant(): number;
   donnees: DonneesAdmin;
   majDonnees(changer: (donnees: DonneesAdmin) => DonneesAdmin): void;

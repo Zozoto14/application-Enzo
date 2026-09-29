@@ -3,7 +3,8 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { THEMES_HUB, police } from '../../themes';
-import { BORNES_REGLAGES, REGLAGES_DEFAUT, avecReglages, type ReglagesAdmin } from '../donnees';
+import { avecReglagesPar } from '../actions';
+import { BORNES_REGLAGES, REGLAGES_DEFAUT, type ReglagesAdmin } from '../donnees';
 import { Avis, BoutonHub, Champ, Intertitre, Panneau, commun, type OutilsAdmin } from './commun';
 
 const CHAMPS: ReadonlyArray<{ cle: keyof ReglagesAdmin; libelle: string; unite: string; aide: string }> = [
@@ -31,8 +32,8 @@ export function Reglages({ outils }: { outils: OutilsAdmin }) {
     }
     const appliquer = () => {
       const avant = donnees.reglages;
-      outils.majDonnees(d => avecReglages(d, changement, outils.maintenant()));
-      const apres = avecReglages(donnees, changement, outils.maintenant()).reglages;
+      outils.majDonnees(d => avecReglagesPar(outils.acteur, d, changement, outils.maintenant()));
+      const apres = avecReglagesPar(outils.acteur, donnees, changement, outils.maintenant()).reglages;
       setBrouillon(Object.fromEntries(CHAMPS.map(c => [c.cle, String(apres[c.cle])])) as Record<keyof ReglagesAdmin, string>);
       const modifies = CHAMPS.filter(c => avant[c.cle] !== apres[c.cle]).map(c => `${c.libelle.toLowerCase()} : ${apres[c.cle]} ${c.unite.split(' ')[0]}`);
       if (modifies.length > 0) {

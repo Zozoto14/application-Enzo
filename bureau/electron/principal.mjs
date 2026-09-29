@@ -24,7 +24,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, No
 import { spawn } from 'node:child_process';
 import { git, preparerInterface, recupererCode } from './interface.mjs';
 import { synthetiser, VOIX_NATURELLES } from './voix.mjs';
-import { MOTIF_PROFIL, changementPermis, fichierAutorise } from './portee.mjs';
+import { MOTIF_PROFIL, changementPermis, extensionPermise, fichierAutorise } from './portee.mjs';
 import { fluxMedia, pageArticle, yahooJson, yahooScreener } from './reseau.mjs';
 import { readFile, writeFile, mkdir, rename, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -73,10 +73,12 @@ function fichierDeProfil(nom) {
  * erreur, le fichier d'un autre.
  */
 let portee;
+/** Comptes que le gestionnaire ouvert a demandé à atteindre (création, régénération). Vidée à chaque changement de compte. */
+let etendues = [];
 
 
 function cheminDe(nom) {
-  if (!fichierAutorise(String(nom), portee)) {
+  if (!fichierAutorise(String(nom), portee, etendues)) {
     throw new Error(`Fichier d’un autre compte refusé : ${nom}`);
   }
   const fichier = Object.hasOwn(FICHIERS, nom) ? FICHIERS[nom] : fichierDeProfil(nom);
@@ -123,12 +125,21 @@ function installerPasserelle() {
       throw new Error('Changez de compte avant d’en ouvrir un autre.');
     }
     portee = propre;
+    etendues = [];
+    return true;
+  });
+
+  ipcMain.handle('profil:etendre', async (_evenement, id) => {
+    const propre = String(id);
+    if (!extensionPermise(portee, propre, etendues)) throw new Error('Portée non étendue : réservé à un gestionnaire ouvert.');
+    if (!etendues.includes(propre)) etendues.push(propre);
     return true;
   });
 
   ipcMain.handle('profil:fermer', async evenement => {
     const avant = portee;
     portee = undefined;
+    etendues = [];
     // Rechargement : plus rien du compte précédent ne reste dans la page.
     if (avant !== undefined) setTimeout(() => evenement.sender.reload(), 0);
     return true;

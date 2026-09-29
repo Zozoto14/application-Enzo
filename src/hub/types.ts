@@ -89,6 +89,11 @@ export interface AppHub {
   /** Réservée à l'administrateur : jamais proposée dans les autorisations d'un ami. */
   adminSeulement?: boolean;
   /**
+   * Avec `adminSeulement` : l'app s'ouvre aussi aux gestionnaires (rôle
+   * limité, voir `admin/roles.ts`) ; elle s'adapte alors à leurs droits.
+   */
+  gestionnaire?: boolean;
+  /**
    * Niveaux que l'app sait faire respecter, en plus de « aucun accès ».
    * Absent : un seul, l'accès complet. Ne déclarez « lecture » que si l'app
    * retire réellement la modification à ce niveau.

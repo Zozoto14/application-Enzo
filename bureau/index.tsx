@@ -67,6 +67,12 @@ import {
   type Annuaire,
   type ClesAdmin,
   type CompteTrouve,
+  ajouterCompteGere,
+  ajouterEvenementGestion,
+  apercuAnonyme,
+  appliquerAccesGeres,
+  compteGere,
+  roleDuCompte,
 } from '../src/profils/annuaire';
 import { changerDEspace } from '../src/profils/espace';
 import { coffreLeurre } from '../src/profils/leurre';
@@ -76,6 +82,10 @@ import { Session } from '../src/session/session';
 import { stockageMemoire } from '../src/session/stockage-coffre';
 import { creerAccesAmi, type IdentifiantsAmi } from '../src/profils/identifiants';
 import { installerPontWeb } from './web';
+import { exiger } from '../src/hub/admin/roles';
+import { avecEvenement, chargerDonnees, enregistrerDonnees } from '../src/hub/admin/donnees';
+import { CLE_CARNET_GESTION, ajouterAuCarnet, ecrireCarnet, lireCarnet } from '../src/hub/admin/gestion';
+import type { TypeEvenement } from '../src/hub/admin/journal';
 
 /**
  * Les appels à Yahoo Finance passent par le processus principal.
@@ -353,6 +363,15 @@ function Racine() {
     const cles = clesAdminDe(session);
     try {
       const vue = ouvrirAnnuaireAdmin(annuaire, cles);
+      if (vue.evenementsGestion.length > 0) {
+        // Actions des gestionnaires : reportées au journal AVANT d'effacer la file de l'annuaire.
+        const depot = new DepotParametres(session.session.base());
+        let donnees = chargerDonnees(depot);
+        for (const evenement of vue.evenementsGestion) {
+          donnees = avecEvenement(donnees, evenement, Date.now());
+        }
+        enregistrerDonnees(depot, donnees);
+      }
       if (vue.modifie || forcer) {
         await ecrireAnnuaireDisque(vue.annuaire);
       }
@@ -438,6 +457,10 @@ function Racine() {
       throw new Error('Clé de séquestre absente : rouvrez votre compte administrateur.');
     }
     return publique;
+  };
+  /** Portée des fichiers d'un compte à créer ou régénérer, demandée au processus principal (PC). */
+  const autoriserFichiers = async (id: string) => {
+    await pont()?.profil?.etendre?.(id);
   };
   const effacerFichiers = async (id: string) => {
     const fichiers = fichiersDuProfil(id) as { coffre: NomFichier; portefeuille: NomFichier };
@@ -563,6 +586,101 @@ function Racine() {
         await session.vider();
         session.session.verrouiller();
         await ouvrir({ id, nom: ami.nom, admin: false }, { cle, adminSur: profil.nom });
+      },
+    } satisfies Partial<ControleProfils>);
+  }
+
+  // Gestionnaire : un ami à l'Administration limitée. Il agit sur la partie publique de
+  // l'annuaire (règles d'accès), ne voit que les amis qu'il a créés (son carnet, dans sa
+  // propre base) et n'a aucune clé de l'administrateur. Son rôle est relu dans l'annuaire à
+  // CHAQUE action : une rétrogradation prend effet aussitôt.
+  const estGestionnaire = profil.role === 'gestionnaire' && !profil.admin && !adminSur && profil.id !== 'leurre';
+  if (estGestionnaire) {
+    const depotGestion = () => new DepotParametres(session.session.base());
+    const carnetCourant = () => lireCarnet(depotGestion().lire(CLE_CARNET_GESTION));
+    const rafraichirGestion = () => setEtat(courant => (courant.phase === 'prete' ? { ...courant } : courant));
+    const exigerGestionnaire = async (): Promise<Annuaire> => {
+      if (session.session.statut() !== 'deverrouille') {
+        throw new Error('Déverrouillez votre compte.');
+      }
+      const annuaire = await lireAnnuaireDisque();
+      if (roleDuCompte(annuaire, profil.id) !== 'gestionnaire') {
+        throw new Error('Ce compte n’est plus gestionnaire.');
+      }
+      return annuaire;
+    };
+    // Vue calculée à la demande : le carnet est dans la base, illisible avant le déverrouillage.
+    Object.defineProperty(controle, 'gestion', {
+      enumerable: true,
+      get: () => {
+        try {
+          const annuaire = annuaireRef.current;
+          if (!annuaire || annuaire.heritage || session.session.statut() !== 'deverrouille') {
+            return undefined;
+          }
+          const comptes = carnetCourant()
+            .filter(e => roleDuCompte(annuaire, e.id) === 'ami')
+            .map(e => compteGere(annuaire, e.id, e.nom, profil.id))
+            .filter((c): c is Profil => c !== undefined);
+          return { comptes, apercu: apercuAnonyme(annuaire), autres: Math.max(0, annuaire.comptes.length - 1 - comptes.length) };
+        } catch {
+          return undefined;
+        }
+      },
+    });
+    Object.assign(controle, {
+      onCreerCompte: async (nom: string, apps: readonly string[], options?: OptionsNouveauProfil) => {
+        exiger(profil, 'creer-ami');
+        const id = nouvelIdentifiant(n => crypto.getRandomValues(new Uint8Array(n)));
+        const maintenant = new Date().toISOString();
+        const nouveau = { id, nom, gestionnaireId: profil.id, apps, niveaux: options?.niveaux, invitationExpireLe: options?.invitationExpireLe, expireLe: options?.expireLe };
+        // Validation (prénom libre, rôle, clé de séquestre) AVANT de créer le moindre fichier.
+        const verifie = await exigerGestionnaire();
+        ajouterCompteGere(verifie, nouveau, maintenant);
+        const publique = verifie.admin.cleSequestre as string;
+        await autoriserFichiers(id);
+        const { identifiants, depot } = await creerCoffreAmi(id, nom.trim(), publique);
+        try {
+          const frais = await exigerGestionnaire();
+          await ecrireAnnuaireDisque(deposerSequestre(ajouterCompteGere(frais, nouveau, maintenant), id, depot));
+        } catch (erreur) {
+          await effacerFichiers(id).catch(() => undefined);
+          throw erreur;
+        }
+        depotGestion().ecrire(CLE_CARNET_GESTION, ecrireCarnet(ajouterAuCarnet(carnetCourant(), { id, nom: nom.trim().slice(0, 30), creeLe: maintenant.slice(0, 10) })));
+        rafraichirGestion();
+        return identifiants;
+      },
+      onRegenerer: async (id: string) => {
+        const annuaire = await exigerGestionnaire();
+        const entree = carnetCourant().find(e => e.id === id);
+        // Seuls les amis créés par ce gestionnaire, et jamais un autre gestionnaire.
+        exiger(profil, 'regenerer-identifiants', { id, admin: false, role: roleDuCompte(annuaire, id) === 'gestionnaire' ? 'gestionnaire' : 'ami', creePar: entree ? profil.id : undefined });
+        if (!entree || !annuaire.admin.cleSequestre) {
+          throw new Error('Profil introuvable.');
+        }
+        await autoriserFichiers(id);
+        await effacerFichiers(id);
+        const { identifiants, depot } = await creerCoffreAmi(id, entree.nom, annuaire.admin.cleSequestre);
+        await ecrireAnnuaireDisque(deposerSequestre(await exigerGestionnaire(), id, depot));
+        rafraichirGestion();
+        return identifiants;
+      },
+      onModifierProfils: async (suivants: readonly Profil[]) => {
+        const annuaire = await exigerGestionnaire();
+        const carnet = carnetCourant();
+        const ids = new Set(carnet.map(e => e.id));
+        for (const p of suivants) {
+          if (!ids.has(p.id) || p.nom !== carnet.find(e => e.id === p.id)?.nom) {
+            throw new Error('Ce compte ne fait pas partie de ceux que vous gérez.');
+          }
+        }
+        await ecrireAnnuaireDisque(appliquerAccesGeres(annuaire, profil.id, suivants, ids));
+        rafraichirGestion();
+      },
+      onJournalGestion: async (evenement: { type: string; action: string; cible?: string; nomCible?: string; app?: string }) => {
+        const annuaire = await exigerGestionnaire();
+        await ecrireAnnuaireDisque(ajouterEvenementGestion(annuaire, profil.id, { ...evenement, type: evenement.type as TypeEvenement, date: new Date().toISOString() }));
       },
     } satisfies Partial<ControleProfils>);
   }

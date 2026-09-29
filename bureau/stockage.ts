@@ -32,6 +32,8 @@ interface PontBureau {
   profil?: {
     ouvrir(id: string): Promise<boolean>;
     fermer(): Promise<boolean>;
+    /** Gestionnaire : autorise les fichiers d'un compte qu'il crée ou régénère (absent des versions antérieures). */
+    etendre?(id: string): Promise<boolean>;
   };
   fichiers: {
     lire(nom: string): Promise<Uint8Array | undefined>;

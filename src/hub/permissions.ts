@@ -5,7 +5,9 @@
  * l'unique utilisateur est administrateur) voit toutes les apps disponibles ;
  * un ami ne voit que celles que l'administrateur lui a ouvertes, et jamais
  * une app réservée à l'administrateur — même si la liste enregistrée, qui
- * est lisible sans déverrouillage, a été retouchée pour la lui donner.
+ * est lisible sans déverrouillage, a été retouchée pour la lui donner. Seule
+ * exception : une app réservée qui se déclare ouverte aux gestionnaires
+ * (l'Administration, en version limitée) s'ouvre à un ami de rôle gestionnaire.
  *
  * La politique globale (`admin/politique.ts`) s'ajoute : une app désactivée
  * disparaît pour tous sauf l'administrateur ; une app en maintenance reste
@@ -18,14 +20,15 @@ import type { NiveauAcces } from './admin/niveaux';
 import { etatApp, messageMaintenance, type PolitiqueHub } from './admin/politique';
 import type { AppHub, ContexteHub } from './types';
 
-type ProfilAcces = Pick<Profil, 'admin' | 'apps'>;
+type ProfilAcces = Pick<Profil, 'admin' | 'apps' | 'role'>;
 
-export function peutOuvrir(app: Pick<AppHub, 'id' | 'adminSeulement'>, profil: ProfilAcces | undefined): boolean {
+export function peutOuvrir(app: Pick<AppHub, 'id' | 'adminSeulement' | 'gestionnaire'>, profil: ProfilAcces | undefined): boolean {
   if (!profil || profil.admin) {
     return true;
   }
   if (app.adminSeulement) {
-    return false;
+    // Seule exception : une app réservée qui s'ouvre aux gestionnaires (version limitée).
+    return profil.role === 'gestionnaire' && app.gestionnaire === true;
   }
   return (profil.apps ?? []).includes(app.id);
 }
