@@ -10,7 +10,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Linking, Platform } from 'react-native';
-import { DepotParametres as _DepotParametres } from '../db/depots';
 import { DepotParametres, PARAMETRES } from '../db/depots';
 import { expirationSignature, programmerRappelsExpiration } from '../natif/signature';
 import type { Session } from '../session/session';

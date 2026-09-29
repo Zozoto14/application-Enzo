@@ -75,8 +75,6 @@ export interface EtatSynchro {
   appareils: Record<string, InfoAppareil>;
   /** Empreinte du dernier envoi, pour ne pas renvoyer la même chose. */
   dernierEnvoi?: string;
-  /** Empreinte du dernier dépôt lancé à la fermeture de la page (résultat inconnu). */
-  dernierVidage?: string;
   /** Date du dernier dépôt réussi (délai minimal entre deux dépôts). */
   dernierDepotLe?: string;
   /** Dernière réparation de l'index du relais (au plus une par heure). */

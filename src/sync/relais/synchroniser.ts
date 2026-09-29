@@ -344,6 +344,9 @@ export async function synchroniser(options: OptionsSynchro): Promise<ResultatSyn
  * l'envoi aboutit, donc `dernierEnvoi` n'avance pas : au prochain lancement
  * le tour complet redépose (idempotent). Renvoie vrai si un envoi est parti.
  */
+/** Signature du dernier dépôt lancé à la fermeture (en mémoire : la page va disparaître). */
+let dernierVidage: string | undefined;
+
 export function deposerAvantFermeture(options: OptionsSynchro): boolean {
   const { pilote, appareil } = options;
   const config = lireConfigRelais(pilote);
@@ -353,7 +356,8 @@ export function deposerAvantFermeture(options: OptionsSynchro): boolean {
   try {
     const maintenant = (options.maintenant ?? (() => new Date()))().toISOString();
     const etat = noterChangementsLocaux(lireEtatSynchro(pilote), extraireEntites(pilote), maintenant);
-    new DepotParametres(pilote).ecrire(PARAMETRES.etatSynchro, JSON.stringify(etat));
+    // Rien n'est écrit dans la base ici : à la fermeture, l'écriture sur disque est déjà en cours
+    // (voir bureau/index.tsx) ; le tour suivant relira les changements de toute façon.
     if (!etat.enAttente) {
       return false;
     }
@@ -361,7 +365,7 @@ export function deposerAvantFermeture(options: OptionsSynchro): boolean {
     const nouveauxGenres = Object.keys(etat.appareils).length > 0 && autresComprennentV2(etat, etat.appareils, appareil, ID_COFFRE);
     const charge = chargeLocale(pilote, etat, { ...options.moi, nom: config.nom }, nouveauxGenres);
     const signature = empreinte(charge);
-    if (signature === etat.dernierEnvoi || signature === etat.dernierVidage) {
+    if (signature === etat.dernierEnvoi || signature === dernierVidage) {
       return false; // Rien de neuf depuis le dernier dépôt ou vidage : pas d'écriture inutile sur le relais.
     }
     const corps = JSON.stringify(sceller(config.cle, charge, appareil, maintenant));
@@ -369,7 +373,7 @@ export function deposerAvantFermeture(options: OptionsSynchro): boolean {
     if (corps.length > 60_000) {
       return false;
     }
-    new DepotParametres(pilote).ecrire(PARAMETRES.etatSynchro, JSON.stringify({ ...etat, dernierVidage: signature }));
+    dernierVidage = signature;
     void (options.requete ?? fetch)(`${config.relais}/boite/${encodeURIComponent(appareil)}`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${config.jeton}`, 'Content-Type': 'application/json' },
