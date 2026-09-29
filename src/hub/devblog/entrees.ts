@@ -39,6 +39,41 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.09.30',
+    date: '2026-09-30',
+    titre: 'Synchronisation complète',
+    resume:
+      'Votre PC et le site restent alignés tout seuls : thème, tuiles et nouveautés déjà lues voyagent aussi, et un indicateur vous dit toujours où en est la synchronisation.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'sync-hub',
+        emoji: '🎨',
+        titre: 'Thèmes et disposition synchronisés',
+        texte:
+          'Le thème du hub, celui du portefeuille, l’ordre et la taille des tuiles suivent d’un appareil à l’autre. Les nouveautés déjà lues ne reviennent plus : lisez-les une fois, elles disparaissent partout.',
+        adminSeulement: true,
+      },
+      {
+        id: 'sync-auto',
+        emoji: '⟳',
+        titre: 'Synchronisation automatique',
+        texte:
+          'Un tour part à l’ouverture, au retour sur l’application, quand la connexion revient, peu après une modification, et à la fermeture de la page. Après un échec, l’essai reprend vite (5 s, 30 s, 2 min, 10 min).',
+        adminSeulement: true,
+      },
+      {
+        id: 'sync-indicateur',
+        emoji: '✓',
+        titre: 'Indicateur de synchronisation',
+        texte:
+          '« À jour · il y a 2 min », « 3 éléments en attente (hors ligne) » ou une erreur claire, en haut du hub et dans Paramètres, avec le bouton « Synchroniser maintenant ». Hors connexion, rien n’est perdu : tout part au retour du réseau.',
+        essayer: { genre: 'parametres' },
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.09.29',
     date: '2026-09-29',
     titre: 'Un hub qui vous ressemble, des comptes vraiment séparés',

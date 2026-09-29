@@ -110,7 +110,7 @@ import { appsVisibles, etatTuile, peutOuvrir } from '../hub/permissions';
 import { niveauProfil } from '../hub/admin/comptes';
 import { chargerPrefs, enregistrerPrefs, CLE_THEME, type PrefsHub } from '../hub/personnalisation';
 import { Devblog } from '../hub/devblog/Devblog';
-import { CLE_DEVBLOG, decider as deciderDevblog, etapesVisite as etapesDevblog, marquerLues as marquerDevblogLu } from '../hub/devblog/logiqueDevblog';
+import { CLE_DEVBLOG, lireEtat as lireEtatDevblog, decider as deciderDevblog, etapesVisite as etapesDevblog, marquerLues as marquerDevblogLu } from '../hub/devblog/logiqueDevblog';
 import type { CibleEssai, EntreeDevblog } from '../hub/devblog/entrees';
 import { ID_PORTEFEUILLE, REGISTRE } from '../hub/registre';
 import { THEME_HUB_DEFAUT, themeHub, type IdThemeHub } from '../hub/themes';
@@ -351,6 +351,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const [messageNotifications, setMessageNotifications] = useState<string | undefined>();
 
   const rafraichir = useCallback(() => forcerRendu(n => n + 1), []);
+  // Après un tour de synchro qui a reçu des changements : le hub relit thème, tuiles et nouveautés vues.
+  const [versionSynchro, setVersionSynchro] = useState(0);
+  const apresReception = useCallback(() => setVersionSynchro(n => n + 1), []);
 
   /**
    * Confirme au code natif que ce demarrage a abouti.
@@ -709,7 +712,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     delier: delierSynchro,
     oublier: oublierAppareilSynchro,
     synchroniserMaintenant,
-  } = useSynchro({ session, deverrouille: deverrouille && estAdmin, rafraichir });
+  } = useSynchro({ session, deverrouille: deverrouille && estAdmin, rafraichir, apresReception });
 
   // « Lier à mon compte » : ce nouvel appareil adopte le compte du PC.
   const [messageDeverrouillage, setMessageDeverrouillage] = useState<string | undefined>();
@@ -1839,7 +1842,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     } catch {
       setThemeHubId(THEME_HUB_DEFAUT);
     }
-  }, [hub, deverrouille, stockagePrefs]);
+  }, [hub, deverrouille, stockagePrefs, versionSynchro]);
   const hubAffiche = hub && deverrouille && Boolean(contenuComplet && tableau);
   const surLeHub = hubAffiche && (appHub === undefined || (appHub === ID_PORTEFEUILLE && !portefeuillePermis));
   const surUneApp = hubAffiche && !surLeHub && appHub !== ID_PORTEFEUILLE;
@@ -1905,6 +1908,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     if (devblogDecide.current || etapesVisite !== undefined) {
       return;
     }
+    // Compte admin relié à un relais : on attend le premier tour de synchro, qui peut rapporter
+    // les versions déjà vues sur un autre appareil (un profil qui les a vues n'est pas « neuf »).
+    const liaisonAttendue = !synchro.configure && Boolean(liaisonDuPc || liaisonEnAttente());
+    if (estAdmin && (synchro.configure || liaisonAttendue) && !synchro.premierTourFait) {
+      return;
+    }
     try {
       // La visite guidée passe d'abord ; le devblog attend qu'elle soit finie.
       const visite = nombreComptes > 0 && etapesNouvelles(ETAPES_VISITE, new DepotParametres(session.base()).lire(PARAMETRES.visiteVue)).length > 0;
@@ -1925,7 +1934,21 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     } catch {
       // Préférence illisible : pas de devblog cette fois, rien ne casse.
     }
-  }, [hub, deverrouille, tableau, profils?.sessionAdmin, etapesVisite, nombreComptes, nombreOperations, session, stockagePrefs, estAdmin]);
+  }, [hub, deverrouille, tableau, profils?.sessionAdmin, etapesVisite, nombreComptes, nombreOperations, session, stockagePrefs, estAdmin, synchro.configure, synchro.premierTourFait, liaisonDuPc]);
+  // Une autre appareil vient de rapporter que cette version a déjà été vue : plus de patch notes ici.
+  useEffect(() => {
+    const entree = devblog?.entree;
+    if (!entree || versionSynchro === 0) {
+      return;
+    }
+    try {
+      if (lireEtatDevblog(stockagePrefs.lire(CLE_DEVBLOG))?.vues.includes(entree.version)) {
+        setDevblog(undefined);
+      }
+    } catch {
+      // Illisible : on laisse la fenêtre ouverte.
+    }
+  }, [versionSynchro, devblog, stockagePrefs]);
   const fermerDevblog = () => {
     const entree = devblog?.entree;
     if (entree) {
@@ -2072,6 +2095,20 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }}
           onVerrouiller={verrouiller}
           onNouveautes={() => setDevblog({})}
+          synchro={
+            estAdmin && synchro.configure
+              ? {
+                  vue: {
+                    enCours: synchro.enCours,
+                    derniere: synchro.derniere,
+                    enAttente: synchro.enAttente,
+                    erreur: synchro.erreur,
+                    enLigne: synchro.enLigne,
+                  },
+                  onSynchroniser: () => void synchroniserMaintenant(),
+                }
+              : undefined
+          }
           demande={demandeHub}
           onChangerProfil={profils && (profils.peutChanger ?? profils.tous.length > 1) ? profils.onChanger : undefined}
           onReglagesPortefeuille={

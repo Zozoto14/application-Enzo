@@ -16,6 +16,7 @@
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import type { PiloteSqlite } from '../db/pilote';
+import { ecouterEcritures } from '../db/ecoute';
 import { migrer } from '../db/schema';
 import { aleatoireParDefaut, type SourceAleatoire } from '../securite/aleatoire';
 import {
@@ -401,6 +402,14 @@ export class Session {
     this.ouvrir(cleMaitresse);
   }
 
+  private readonly ecouteurs = new Set<() => void>();
+
+  /** Prévient à chaque écriture d'une donnée synchronisée (voir db/ecoute.ts). Renvoie la fonction qui désabonne. */
+  surEcriture(rappel: () => void): () => void {
+    this.ecouteurs.add(rappel);
+    return () => void this.ecouteurs.delete(rappel);
+  }
+
   /** Base ouverte. Lève tant que la session est verrouillée. */
   base(): PiloteSqlite {
     if (!this.pilote) {
@@ -419,8 +428,9 @@ export class Session {
 
   private ouvrir(cleMaitresse: Uint8Array): void {
     try {
-      this.pilote = this.deps.ouvrirBase(cleHexadecimale(cleMaitresse));
-      migrer(this.pilote);
+      const brut = this.deps.ouvrirBase(cleHexadecimale(cleMaitresse));
+      migrer(brut);
+      this.pilote = ecouterEcritures(brut, this.ecouteurs);
     } catch (erreur) {
       // Base refusée (profil fermé, fichier illisible) : la clé ne reste pas en mémoire.
       this.pilote = undefined;

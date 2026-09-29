@@ -16,6 +16,7 @@ import { ouvrirEnveloppe, sceller, type Enveloppe } from './chiffrement';
 import { liaisonValide, type Liaison } from './liaison';
 import {
   appliquerCharge,
+  autresComprennentV2,
   chargeLocale,
   etatDepuisJson,
   noterChangementsLocaux,
@@ -68,21 +69,31 @@ export class ErreurRelais extends Error {
   }
 }
 
+/** Au-delà, un appel sans réponse est abandonné (sinon un tour resterait bloqué). */
+export const DELAI_APPEL_MS = 25_000;
+
 async function appeler(
   liaison: Liaison,
   chemin: string,
-  options: { methode?: string; corps?: string } = {},
+  options: { methode?: string; corps?: string; keepalive?: boolean } = {},
   requete: Fetch = fetch,
 ): Promise<Response> {
   let reponse: Response;
+  const controle = typeof AbortController === 'undefined' ? undefined : new AbortController();
+  const minuterie = controle && !options.keepalive ? setTimeout(() => controle.abort(), DELAI_APPEL_MS) : undefined;
   try {
     reponse = await requete(`${liaison.relais}${chemin}`, {
       method: options.methode ?? 'GET',
       headers: { Authorization: `Bearer ${liaison.jeton}`, 'Content-Type': 'application/json' },
       body: options.corps,
+      ...(options.keepalive ? { keepalive: true } : { signal: controle?.signal }),
     });
   } catch {
     throw new ErreurRelais('Relais injoignable : pas de connexion, ou adresse incorrecte.');
+  } finally {
+    if (minuterie) {
+      clearTimeout(minuterie);
+    }
   }
   if (reponse.status === 401) {
     throw new ErreurRelais('Le relais refuse ce code de liaison.', 401);
@@ -130,6 +141,8 @@ export interface ResultatSynchro {
   recus: number;
   bilan: BilanFusion;
   envoye: boolean;
+  /** Un dépôt est à faire mais attend la fin du délai minimal (ms restantes). */
+  differeDans?: number;
   /** Dépôts illisibles (mot de passe différent, version plus récente). */
   erreurs: string[];
   appareils: Record<string, InfoAppareil>;
@@ -144,12 +157,40 @@ export interface OptionsSynchro {
   requete?: Fetch;
   /** Coffre de cet appareil, déposé pour qu'un nouvel appareil puisse se lier. */
   coffre?: unknown;
+  /** Bouton « Synchroniser maintenant » : passe outre le délai minimal entre deux dépôts. */
+  force?: boolean;
+}
+
+/**
+ * Délai minimal entre deux dépôts sur le relais (le stockage Cloudflare KV
+ * gratuit limite les écritures : ~1 000 par jour, et chaque dépôt en coûte deux).
+ * Les modifications faites entre-temps sont regroupées dans le dépôt suivant.
+ */
+export const DELAI_MIN_DEPOTS_MS = 30_000;
+/** Réparation de l'index du relais : au plus une fois par heure. */
+const DELAI_REPARATION_INDEX_MS = 3_600_000;
+
+/** Note un échec d'envoi dans la file : premier échec, nombre d'essais, motif. */
+export function noterEchec(etat: EtatSynchro, maintenant: string, motif: string): EtatSynchro {
+  if (!etat.enAttente) {
+    return etat;
+  }
+  return {
+    ...etat,
+    enAttente: {
+      ...etat.enAttente,
+      premierEchec: etat.enAttente.premierEchec ?? maintenant,
+      essais: etat.enAttente.essais + 1,
+      motif,
+    },
+  };
 }
 
 export async function synchroniser(options: OptionsSynchro): Promise<ResultatSynchro> {
   const { pilote, appareil } = options;
   const requete = options.requete ?? fetch;
-  const maintenant = (options.maintenant ?? (() => new Date()))().toISOString();
+  const horloge = options.maintenant ?? (() => new Date());
+  const maintenant = horloge().toISOString();
   const config = lireConfigRelais(pilote);
   if (!config) {
     throw new ErreurRelais('Synchronisation non configurée.');
@@ -157,98 +198,188 @@ export async function synchroniser(options: OptionsSynchro): Promise<ResultatSyn
   const parametres = new DepotParametres(pilote);
   const sauver = (etat: EtatSynchro) => parametres.ecrire(PARAMETRES.etatSynchro, JSON.stringify(etat));
 
+  // `etat` est mis à jour au fil du tour et sauvé à chaque étape : si le tour
+  // est interrompu (réseau coupé, page fermée), rien n'est perdu et le
+  // suivant reprend, la file `enAttente` gardant ce qui n'est pas parti.
   let etat = noterChangementsLocaux(lireEtatSynchro(pilote), extraireEntites(pilote), maintenant);
   sauver(etat);
-
-  const bilan: BilanFusion = { ajoutes: 0, modifies: 0, supprimes: 0, echecs: [] };
-  const erreurs: string[] = [];
-  let recus = 0;
-
-  const reponseIndex = await appeler(config, '/boite', {}, requete);
-  if (!reponseIndex.ok) {
-    throw new ErreurRelais(`Le relais a répondu ${reponseIndex.status}.`, reponseIndex.status);
-  }
-  const index = ((await reponseIndex.json()) as { appareils?: Record<string, { date: string }> }).appareils ?? {};
-
-  for (const [autre, { date }] of Object.entries(index)) {
-    if (autre === appareil || autre === ID_COFFRE || (etat.lus[autre] ?? '') >= date) {
-      continue;
-    }
-    const reponse = await appeler(config, `/boite/${encodeURIComponent(autre)}`, {}, requete);
-    if (!reponse.ok) {
-      continue;
-    }
-    try {
-      const charge = ouvrirEnveloppe<Charge>(config.cle, (await reponse.json()) as Enveloppe);
-      const applique = appliquerCharge(pilote, etat, charge);
-      etat = {
-        ...applique.etat,
-        lus: { ...applique.etat.lus, [autre]: date },
-        appareils: { ...applique.etat.appareils, [autre]: { ...charge.appareil, vuLe: date } },
-      };
-      sauver(etat);
-      recus++;
-      bilan.ajoutes += applique.bilan.ajoutes;
-      bilan.modifies += applique.bilan.modifies;
-      bilan.supprimes += applique.bilan.supprimes;
-      bilan.echecs.push(...applique.bilan.echecs);
-    } catch (erreur) {
-      erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
-    }
-  }
-  // Un appareil oublié du relais disparaît aussi de la liste.
-  for (const autre of Object.keys(etat.appareils)) {
-    if (!(autre in index)) {
-      const reste = { ...etat.appareils };
-      delete reste[autre];
-      etat = { ...etat, appareils: reste };
-    }
+  try {
+    return await tour();
+  } catch (erreur) {
+    etat = noterEchec(etat, horloge().toISOString(), erreur instanceof Error ? erreur.message : String(erreur));
+    sauver(etat);
+    throw erreur;
   }
 
-  const charge = chargeLocale(pilote, etat, { ...options.moi, nom: config.nom });
-  const signature = empreinte(charge);
-  let envoye = false;
-  if (signature !== etat.dernierEnvoi) {
-    const enveloppe = sceller(config.cle, charge, appareil, maintenant);
-    const reponse = await appeler(
-      config,
-      `/boite/${encodeURIComponent(appareil)}`,
-      { methode: 'PUT', corps: JSON.stringify(enveloppe) },
-      requete,
-    );
-    if (!reponse.ok) {
-      throw new ErreurRelais(`Dépôt refusé par le relais (${reponse.status}).`, reponse.status);
+  async function tour(): Promise<ResultatSynchro> {
+    const bilan: BilanFusion = { ajoutes: 0, modifies: 0, supprimes: 0, echecs: [] };
+    const erreurs: string[] = [];
+    let recus = 0;
+
+    const reponseIndex = await appeler(config!, '/boite', {}, requete);
+    if (!reponseIndex.ok) {
+      throw new ErreurRelais(`Le relais a répondu ${reponseIndex.status}.`, reponseIndex.status);
     }
-    etat = { ...etat, dernierEnvoi: signature };
-    envoye = true;
-  }
-  if (options.coffre) {
-    const empreinteCoffre = empreinte(options.coffre);
-    if (empreinteCoffre !== etat.coffreEnvoye) {
-      const reponse = await appeler(
-        config,
-        `/boite/${ID_COFFRE}`,
-        {
-          methode: 'PUT',
-          corps: JSON.stringify({
-            format: 'applibourse-relais',
-            version: 1,
-            appareil: ID_COFFRE,
-            date: maintenant,
-            charge: JSON.stringify(options.coffre),
-          }),
-        },
-        requete,
-      );
-      if (reponse.ok) {
-        etat = { ...etat, coffreEnvoye: empreinteCoffre };
+    const index = ((await reponseIndex.json()) as { appareils?: Record<string, { date: string }> }).appareils ?? {};
+
+    for (const [autre, { date }] of Object.entries(index)) {
+      if (autre === appareil || autre === ID_COFFRE || (etat.lus[autre] ?? '') >= date) {
+        continue;
+      }
+      const reponse = await appeler(config!, `/boite/${encodeURIComponent(autre)}`, {}, requete);
+      if (!reponse.ok) {
+        continue;
+      }
+      try {
+        const charge = ouvrirEnveloppe<Charge>(config!.cle, (await reponse.json()) as Enveloppe);
+        // Une modification faite pendant les appels réseau n'a pas encore de date :
+        // on la note avant d'appliquer, pour qu'elle ne soit pas écrasée.
+        etat = noterChangementsLocaux(etat, extraireEntites(pilote), horloge().toISOString());
+        const applique = appliquerCharge(pilote, etat, charge);
+        etat = {
+          ...applique.etat,
+          lus: { ...applique.etat.lus, [autre]: date },
+          appareils: {
+            ...applique.etat.appareils,
+            [autre]: { ...charge.appareil, vuLe: date, versionCharge: charge.appareil?.versionCharge ?? charge.version ?? 1 },
+          },
+        };
+        sauver(etat);
+        recus++;
+        bilan.ajoutes += applique.bilan.ajoutes;
+        bilan.modifies += applique.bilan.modifies;
+        bilan.supprimes += applique.bilan.supprimes;
+        bilan.echecs.push(...applique.bilan.echecs);
+      } catch (erreur) {
+        erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
       }
     }
-  }
+    // Un appareil oublié du relais disparaît aussi de la liste.
+    for (const autre of Object.keys(etat.appareils)) {
+      if (!(autre in index)) {
+        const reste = { ...etat.appareils };
+        delete reste[autre];
+        etat = { ...etat, appareils: reste };
+      }
+    }
 
-  etat = { ...etat, derniereSynchro: maintenant };
-  sauver(etat);
-  return { recus, bilan, envoye, erreurs, appareils: etat.appareils };
+    // Ce qui vient d'être reçu a pu changer la base : on note aussi ce qui a bougé ici entre-temps.
+    etat = noterChangementsLocaux(etat, extraireEntites(pilote), horloge().toISOString());
+    const nouveauxGenres = autresComprennentV2(etat, index, appareil, ID_COFFRE);
+    const charge = chargeLocale(pilote, etat, { ...options.moi, nom: config!.nom }, nouveauxGenres);
+    const signature = empreinte(charge);
+    // Course connue du relais : deux dépôts simultanés réécrivent l'index à tour de rôle et l'un
+    // peut disparaître de la liste. Absent de l'index alors qu'on a déjà déposé : on redépose.
+    const absentDeLIndex =
+      etat.dernierEnvoi !== undefined &&
+      !(appareil in index) &&
+      Date.parse(maintenant) - Date.parse(etat.reparationIndexLe ?? '1970-01-01') > DELAI_REPARATION_INDEX_MS;
+    let envoye = false;
+    let differeDans: number | undefined;
+    const apresDernierDepot = Date.parse(maintenant) - Date.parse(etat.dernierDepotLe ?? '1970-01-01');
+    const aEnvoyer = signature !== etat.dernierEnvoi || absentDeLIndex;
+    if (aEnvoyer && !options.force && apresDernierDepot < DELAI_MIN_DEPOTS_MS) {
+      // Trop tôt : le changement reste dans la file, un prochain tour l'enverra avec les suivants.
+      differeDans = DELAI_MIN_DEPOTS_MS - apresDernierDepot;
+    } else if (aEnvoyer) {
+      const enveloppe = sceller(config!.cle, charge, appareil, maintenant);
+      const reponse = await appeler(
+        config!,
+        `/boite/${encodeURIComponent(appareil)}`,
+        { methode: 'PUT', corps: JSON.stringify(enveloppe) },
+        requete,
+      );
+      if (!reponse.ok) {
+        throw new ErreurRelais(`Dépôt refusé par le relais (${reponse.status}).`, reponse.status);
+      }
+      // Succès complet : c'est seulement maintenant que la file se vide et que `dernierEnvoi` avance.
+      etat = {
+        ...etat,
+        dernierEnvoi: signature,
+        dernierDepotLe: maintenant,
+        reparationIndexLe: absentDeLIndex ? maintenant : etat.reparationIndexLe,
+        enAttente: undefined,
+      };
+      envoye = true;
+      sauver(etat);
+    } else if (etat.enAttente) {
+      // Rien de différent à envoyer (le changement local est revenu à l'état déjà déposé).
+      etat = { ...etat, enAttente: undefined };
+    }
+    if (options.coffre) {
+      const empreinteCoffre = empreinte(options.coffre);
+      if (empreinteCoffre !== etat.coffreEnvoye) {
+        const reponse = await appeler(
+          config!,
+          `/boite/${ID_COFFRE}`,
+          {
+            methode: 'PUT',
+            corps: JSON.stringify({
+              format: 'applibourse-relais',
+              version: 1,
+              appareil: ID_COFFRE,
+              date: maintenant,
+              charge: JSON.stringify(options.coffre),
+            }),
+          },
+          requete,
+        );
+        if (reponse.ok) {
+          etat = { ...etat, coffreEnvoye: empreinteCoffre };
+        }
+      }
+    }
+
+    etat = { ...etat, derniereSynchro: maintenant };
+    sauver(etat);
+    return { recus, bilan, envoye, differeDans, erreurs, appareils: etat.appareils };
+  }
+}
+
+/**
+ * Dépôt de dernière minute, à la fermeture de la page (`pagehide`).
+ *
+ * Tout est synchrone jusqu'à l'appel `fetch(..., { keepalive: true })` : le
+ * navigateur le mène à terme même si la page se ferme. On ne sait pas si
+ * l'envoi aboutit, donc `dernierEnvoi` n'avance pas : au prochain lancement
+ * le tour complet redépose (idempotent). Renvoie vrai si un envoi est parti.
+ */
+export function deposerAvantFermeture(options: OptionsSynchro): boolean {
+  const { pilote, appareil } = options;
+  const config = lireConfigRelais(pilote);
+  if (!config) {
+    return false;
+  }
+  try {
+    const maintenant = (options.maintenant ?? (() => new Date()))().toISOString();
+    const etat = noterChangementsLocaux(lireEtatSynchro(pilote), extraireEntites(pilote), maintenant);
+    new DepotParametres(pilote).ecrire(PARAMETRES.etatSynchro, JSON.stringify(etat));
+    if (!etat.enAttente) {
+      return false;
+    }
+    // On ne sait pas ce que les autres comprennent sans l'index : on n'envoie que les genres d'origine.
+    const nouveauxGenres = Object.keys(etat.appareils).length > 0 && autresComprennentV2(etat, etat.appareils, appareil, ID_COFFRE);
+    const charge = chargeLocale(pilote, etat, { ...options.moi, nom: config.nom }, nouveauxGenres);
+    const signature = empreinte(charge);
+    if (signature === etat.dernierEnvoi || signature === etat.dernierVidage) {
+      return false; // Rien de neuf depuis le dernier dépôt ou vidage : pas d'écriture inutile sur le relais.
+    }
+    const corps = JSON.stringify(sceller(config.cle, charge, appareil, maintenant));
+    // keepalive : au plus 64 Kio en tout ; au-delà, le tour complet fera le travail au prochain lancement.
+    if (corps.length > 60_000) {
+      return false;
+    }
+    new DepotParametres(pilote).ecrire(PARAMETRES.etatSynchro, JSON.stringify({ ...etat, dernierVidage: signature }));
+    void (options.requete ?? fetch)(`${config.relais}/boite/${encodeURIComponent(appareil)}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${config.jeton}`, 'Content-Type': 'application/json' },
+      body: corps,
+      keepalive: true,
+    }).catch(() => undefined);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Retire un ancien appareil du relais. */

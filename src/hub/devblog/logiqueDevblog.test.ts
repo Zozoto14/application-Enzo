@@ -19,7 +19,7 @@ describe('devblog', () => {
       expect(e.version).toMatch(/^\d{4}\.\d{2}\.\d{2}$/);
       expect(e.fonctionnalites.length).toBeGreaterThan(0);
     });
-    expect(ENTREES[0].fonctionnalites.map(f => f.id)).toEqual(
+    expect(ENTREES.find(e => e.version === '2026.09.29')!.fonctionnalites.map(f => f.id)).toEqual(
       expect.arrayContaining(['admin-avance', 'isolation', 'acces-admin', 'maj-parametres', 'themes', 'personnalisation']),
     );
   });
@@ -53,8 +53,8 @@ describe('devblog', () => {
   });
 
   it('un ami ne voit pas les nouveautés réservées à l’administrateur', () => {
-    expect(fonctionnalitesPour(ENTREES[0], false).some(f => f.id === 'admin-avance')).toBe(false);
-    expect(fonctionnalitesPour(ENTREES[0], true).some(f => f.id === 'admin-avance')).toBe(true);
+    expect(fonctionnalitesPour(ENTREES.find(e => e.version === '2026.09.29')!, false).some(f => f.id === 'admin-avance')).toBe(false);
+    expect(fonctionnalitesPour(ENTREES.find(e => e.version === '2026.09.29')!, true).some(f => f.id === 'admin-avance')).toBe(true);
   });
 
   it('marquer lu est idempotent et tolère un état corrompu', () => {
