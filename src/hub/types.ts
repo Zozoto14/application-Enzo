@@ -8,6 +8,8 @@ import type React from 'react';
 import type { ControleProfils } from '../ui/ecrans/CarteProfils';
 import type { Profil } from '../profils/profils';
 import type { TeinteApp, ThemeHub } from './themes';
+import type { NiveauAcces, NiveauDeclare } from './admin/niveaux';
+import type { StockagePrefs } from './personnalisation';
 
 export type Tendance = 'hausse' | 'baisse' | 'neutre';
 
@@ -33,6 +35,33 @@ export interface ContexteHub {
   profil?: Profil;
   profils?: ControleProfils;
   portefeuille?: ResumePortefeuille;
+  /** Services de l'administration ; présents seulement pour l'administrateur. */
+  admin?: ServicesAdmin;
+  /** Horloge injectable (tests) ; `Date.now` à défaut. */
+  maintenant?: number;
+}
+
+/** État du coffre de l'administrateur, lisible sans rien déchiffrer. */
+export interface EtatCoffre {
+  totpActif: boolean;
+  codesRecuperation: number;
+}
+
+/**
+ * Ce que l'hôte donne à l'Administration. Rien ici ne rend un secret : on
+ * peut vérifier l'identité de l'administrateur, pas relire son mot de passe.
+ */
+export interface ServicesAdmin {
+  /** Clé/valeur de la base chiffrée de l'administrateur. */
+  stockage: StockagePrefs;
+  /**
+   * Revérifie mot de passe + code TOTP, comme au déverrouillage (mêmes
+   * temporisations après échecs). Lève en cas d'échec ; ne change rien sinon.
+   */
+  verifierIdentite(motDePasse: string, codeTotp: string): void;
+  etatCoffre(): EtatCoffre | undefined;
+  /** Propose d'enregistrer un fichier (export) ; faux si l'utilisateur annule. */
+  enregistrerFichier?(nom: string, contenu: string, type: string): Promise<boolean>;
 }
 
 export interface PropsRacineApp {
@@ -40,6 +69,8 @@ export interface PropsRacineApp {
   theme: ThemeHub;
   registre: readonly AppHub[];
   onRetour(): void;
+  /** Niveau d'accès du profil à cette app (« complet » pour l'administrateur). */
+  niveau?: NiveauAcces;
 }
 
 export interface AppHub {
@@ -55,6 +86,14 @@ export interface AppHub {
   teinte: TeinteApp;
   /** Réservée à l'administrateur : jamais proposée dans les autorisations d'un ami. */
   adminSeulement?: boolean;
+  /**
+   * Niveaux que l'app sait faire respecter, en plus de « aucun accès ».
+   * Absent : un seul, l'accès complet. Ne déclarez « lecture » que si l'app
+   * retire réellement la modification à ce niveau.
+   */
+  niveaux?: readonly NiveauDeclare[];
+  /** Ce que change chaque niveau, affiché dans l'Administration. */
+  descriptionNiveaux?: Partial<Record<NiveauDeclare, string>>;
   /** Faux quand la plateforme ne peut pas la faire tourner (ex. pas de profils). */
   disponible?(contexte: ContexteHub): boolean;
   /** Information en direct de la tuile. */
