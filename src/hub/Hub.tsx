@@ -577,8 +577,11 @@ function Tuile({
     textTransform: theme.majuscules ? ('uppercase' as const) : ('none' as const),
     ...police(theme.policeTitre),
   };
-  const indicateurs = info ? (petite ? info.indicateurs.slice(0, 1) : info.indicateurs) : [];
-  const hauteur = liste ? undefined : petite ? (compact ? 150 : 200) : compact ? 250 : 340;
+  const { width: largeurEcran } = useWindowDimensions();
+  // Une ligne de liste étroite (téléphone) n'a de place que pour le nom et l'étiquette.
+  const etroit = liste && largeurEcran < 640;
+  const indicateurs = info && !etroit ? (petite ? info.indicateurs.slice(0, 1) : info.indicateurs) : [];
+  const hauteur = liste ? 0 : petite ? (compact ? 150 : 200) : compact ? 250 : 340;
 
   const icone = (
     <View
@@ -597,7 +600,7 @@ function Tuile({
     <View style={[styles.indicateurs, liste ? styles.indicateursListe : { borderTopColor: theme.ligne }, grande && !liste && { gap: 40 }]}>
       {indicateurs.map(indicateur => (
         <View key={indicateur.libelle} style={styles.indicateur}>
-          <Text style={[styles.libelleIndicateur, { color: theme.attenue }]}>{indicateur.libelle.toUpperCase()}</Text>
+          <Text style={[styles.libelleIndicateur, { color: blocs && liste ? hautAttenue : theme.attenue }]}>{indicateur.libelle.toUpperCase()}</Text>
           <Text
             testID={`tuile-${app.id}-${indicateur.libelle}`}
             style={[
@@ -607,7 +610,7 @@ function Tuile({
               police(theme.policeChiffres),
               {
                 color:
-                  indicateur.tendance === 'hausse' ? theme.ok : indicateur.tendance === 'baisse' ? theme.critique : theme.texte,
+                  indicateur.tendance === 'hausse' ? theme.ok : indicateur.tendance === 'baisse' ? theme.critique : blocs && liste ? hautTexte : theme.texte,
               },
             ]}>
             {indicateur.valeur}
@@ -652,7 +655,7 @@ function Tuile({
       {(etat: EtatPresse) =>
         liste ? (
           <>
-            <View style={[styles.ligneListe, { padding: marge }]}>
+            <View style={[styles.ligneListe, { padding: marge }, blocs && { backgroundColor: couleur }]}>
               {icone}
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={[titre, styles.nomApp, { color: hautTexte, fontSize: petite ? 17 : 20 }]} numberOfLines={1}>
@@ -880,7 +883,7 @@ const styles = StyleSheet.create({
   accroche: { marginTop: 16, fontSize: 18 },
   grille: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -8 },
   cellule: { padding: 8 },
-  tuile: { minHeight: 340, borderWidth: 1, overflow: 'hidden' },
+  tuile: { minHeight: 340, flexGrow: 1, borderWidth: 1, overflow: 'hidden' },
   tuileHaut: { flex: 1, justifyContent: 'space-between', gap: 32, padding: 24 },
   tuileTete: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   icone: { width: 64, height: 64, alignItems: 'center', justifyContent: 'center' },
@@ -920,7 +923,7 @@ const styles = StyleSheet.create({
   menuTitre: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6, fontSize: 11, fontWeight: '600', letterSpacing: 1.1 },
   menuLigne: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9, paddingHorizontal: 10 },
   bouton: { paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  tuileListe: { minHeight: undefined },
+  tuileListe: { minHeight: 0 },
   ligneListe: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   indicateursListe: { marginTop: 0, paddingTop: 0, borderTopWidth: 0, gap: 24, flexWrap: 'nowrap' },
   etiquettes: { flexDirection: 'row', alignItems: 'center', gap: 8 },
