@@ -108,6 +108,9 @@ import { Hub } from '../hub/Hub';
 import { appsVisibles, etatTuile, peutOuvrir } from '../hub/permissions';
 import { niveauProfil } from '../hub/admin/comptes';
 import { chargerPrefs, enregistrerPrefs, CLE_THEME, type PrefsHub } from '../hub/personnalisation';
+import { Devblog } from '../hub/devblog/Devblog';
+import { CLE_DEVBLOG, decider as deciderDevblog, etapesVisite as etapesDevblog, marquerLues as marquerDevblogLu } from '../hub/devblog/devblog';
+import type { CibleEssai, EntreeDevblog } from '../hub/devblog/entrees';
 import { ID_PORTEFEUILLE, REGISTRE } from '../hub/registre';
 import { THEME_HUB_DEFAUT, themeHub, type IdThemeHub } from '../hub/themes';
 import type { ContexteHub, ResumePortefeuille, ServicesAdmin } from '../hub/types';
@@ -1881,6 +1884,59 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin };
   const themeDuHub = themeHub(themeHubId);
   const appOuverte = surUneApp ? REGISTRE.find(app => app.id === appHub) : undefined;
+  // --- Devblog « Quoi de neuf » : une fois par profil et par version -----------
+  const [devblog, setDevblog] = useState<{ entree?: EntreeDevblog } | undefined>();
+  const [demandeHub, setDemandeHub] = useState<{ genre: 'parametres' | 'personnaliser'; n: number } | undefined>();
+  const devblogDecide = useRef(false);
+  const nombreOperations = contenuComplet?.transactions.length ?? 0;
+  useEffect(() => {
+    if (!hub || !deverrouille || !tableau || profils?.sessionAdmin) {
+      if (!deverrouille) {
+        devblogDecide.current = false;
+      }
+      return;
+    }
+    if (devblogDecide.current || etapesVisite !== undefined) {
+      return;
+    }
+    try {
+      // La visite guidée passe d'abord ; le devblog attend qu'elle soit finie.
+      const visite = nombreComptes > 0 && etapesNouvelles(ETAPES_VISITE, new DepotParametres(session.base()).lire(PARAMETRES.visiteVue)).length > 0;
+      if (visite) {
+        return;
+      }
+      devblogDecide.current = true;
+      const decision = deciderDevblog(stockagePrefs.lire(CLE_DEVBLOG), { profilNeuf: nombreComptes === 0 && nombreOperations === 0, admin: estAdmin });
+      if (decision.genre === 'marquer') {
+        stockagePrefs.ecrire(CLE_DEVBLOG, decision.valeur);
+      } else if (decision.genre === 'afficher') {
+        setDevblog({ entree: decision.entree });
+      }
+    } catch {
+      // Préférence illisible : pas de devblog cette fois, rien ne casse.
+    }
+  }, [hub, deverrouille, tableau, profils?.sessionAdmin, etapesVisite, nombreComptes, nombreOperations, session, stockagePrefs, estAdmin]);
+  const fermerDevblog = () => {
+    const entree = devblog?.entree;
+    if (entree) {
+      try {
+        stockagePrefs.ecrire(CLE_DEVBLOG, marquerDevblogLu(stockagePrefs.lire(CLE_DEVBLOG), [entree.version]));
+      } catch {
+        // Non mémorisé : il reviendra, c'est tout.
+      }
+    }
+    setDevblog(undefined);
+  };
+  const essayer = (cible: CibleEssai) => {
+    fermerDevblog();
+    if (cible.genre === 'app') {
+      ouvrirApp(cible.app);
+    } else {
+      setAppHub(undefined);
+      setDemandeHub(courante => ({ genre: cible.genre, n: (courante?.n ?? 0) + 1 }));
+    }
+  };
+
   const ouvrirApp = (id: string) => {
     const app = appsVisibles(REGISTRE, contexteHub).find(candidate => candidate.id === id);
     // Une app en maintenance ne s'ouvre pas pour un ami (sa tuile le dit).
@@ -1940,12 +1996,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           </Carte>
         </View>
       ) : null}
-      {profils && profils.tous.length > 1 && !deverrouille && !secrets ? (
+      {profils && (profils.peutChanger ?? profils.tous.length > 1) && !deverrouille && !secrets ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: ESPACEMENT.s, paddingTop: ESPACEMENT.m }}>
           <Text style={{ color: palettePour().texteSecondaire }} testID="profil-ouvert">
-            Profil : {profils.actuel.nom}
+            Compte : {profils.actuel.nom}
           </Text>
-          <Bouton titre="Changer de profil" variante="discret" onPress={profils.onChanger} testID="changer-profil-verrou" />
+          <Bouton titre="Changer de compte" variante="discret" onPress={profils.onChanger} testID="changer-profil-verrou" />
         </View>
       ) : null}
       {secrets ? (
@@ -1985,6 +2041,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           />
         )
       ) : surLeHub ? (
+        <>
         <Hub
           registre={REGISTRE}
           contexte={contexteHub}
@@ -2004,7 +2061,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             enregistrerPrefs(stockagePrefs, suivant);
           }}
           onVerrouiller={verrouiller}
-          onChangerProfil={profils && profils.tous.length > 1 ? profils.onChanger : undefined}
+          onNouveautes={() => setDevblog({})}
+          demande={demandeHub}
+          onChangerProfil={profils && (profils.peutChanger ?? profils.tous.length > 1) ? profils.onChanger : undefined}
           onReglagesPortefeuille={
             portefeuillePermis
               ? () => {
@@ -2015,6 +2074,21 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
               : undefined
           }
         />
+        {devblog ? (
+          <Devblog
+            theme={themeDuHub}
+            admin={estAdmin}
+            entree={devblog.entree}
+            onFermer={fermerDevblog}
+            onEssayer={essayer}
+            onVisite={entree => {
+              fermerDevblog();
+              setEtapesVisite(etapesDevblog(entree, estAdmin));
+            }}
+            disponible={cible => cible.genre !== 'app' || appsVisibles(REGISTRE, contexteHub).some(app => app.id === cible.app)}
+          />
+        ) : null}
+        </>
       ) : appOuverte?.Racine ? (
         <appOuverte.Racine
           contexte={contexteHub}

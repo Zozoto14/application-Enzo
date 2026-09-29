@@ -6,6 +6,7 @@
  * depuis n'importe quel écran. Les écrans s'abonnent à cet état.
  */
 
+import { stockageDuProfil, surChangementDeCompte } from '../profils/espace';
 import { phrases, type Episode } from './episode';
 import { creerLecteur, type Lecteur, type PhraseALire, type VoixDisponible } from './lecteur';
 
@@ -40,7 +41,7 @@ export function fileDe(episode: Episode | undefined): PhraseDeChapitre[] {
 const CLE_VOIX = 'applibourse.voix';
 
 type Stockage = { getItem(cle: string): string | null; setItem(cle: string, valeur: string): void };
-const stockage = () => (globalThis as { localStorage?: Stockage }).localStorage;
+const stockage = () => stockageDuProfil((globalThis as { localStorage?: Stockage }).localStorage);
 
 /** La voix choisie survit au redémarrage ; sans stockage, on s'en passe. */
 function voixRetenue(): string | undefined {
@@ -157,6 +158,12 @@ export function creerLecture(lecteur: Lecteur = creerLecteur()) {
 export type Lecture = ReturnType<typeof creerLecture>;
 
 let partagee: Lecture | undefined;
+
+// Changer de compte arrête la lecture et l'oublie : le suivant repart de zéro.
+surChangementDeCompte(() => {
+  partagee?.arreter();
+  partagee = undefined;
+});
 
 /** La lecture de l'application, créée au premier usage. */
 export function lecturePartagee(): Lecture {

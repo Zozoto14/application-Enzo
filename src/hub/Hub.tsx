@@ -51,6 +51,13 @@ export interface HubProps {
   onChangerProfil?(): void;
   /** Ouvre les Paramètres de l'app Portefeuille (panneau « Paramètres »). */
   onReglagesPortefeuille?(): void;
+  /** Ouvre l'historique des nouveautés (Paramètres › Nouveautés). */
+  onNouveautes?(): void;
+  /**
+   * Demande d'ouverture venue d'ailleurs (« Essayer » du devblog) : le
+   * panneau Paramètres ou le mode personnalisation. Le compteur la rend unique.
+   */
+  demande?: { genre: 'parametres' | 'personnaliser'; n: number };
   /** Heure locale, injectable pour les tests. */
   heure?: number;
 }
@@ -68,7 +75,7 @@ const TRANSITION_WEB: object = SUR_LE_WEB
   ? { transitionProperty: 'width, opacity, transform, min-height', transitionDuration: '260ms', transitionTimingFunction: 'ease' }
   : {};
 
-export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, onReglagesPortefeuille, heure }: HubProps) {
+export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, onReglagesPortefeuille, onNouveautes, demande, heure }: HubProps) {
   const { width } = useWindowDimensions();
   const [menuOuvert, setMenuOuvert] = useState(false);
   const [parametres, setParametres] = useState(false);
@@ -77,6 +84,18 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
   const [annonce, setAnnonce] = useState('');
   const glisse = useRef<string | undefined>(undefined);
   const personnalisable = Boolean(prefs && onPrefs);
+  useEffect(() => {
+    if (!demande) {
+      return;
+    }
+    if (demande.genre === 'parametres') {
+      setParametres(true);
+    } else if (personnalisable) {
+      setParametres(false);
+      setEdition(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seule une nouvelle demande compte.
+  }, [demande?.n]);
   const modifie = edition && personnalisable;
   const courantes = prefs ?? reinitialiser();
   const autorisees = appsVisibles(registre, contexte);
@@ -159,7 +178,7 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
                 onTheme(id);
               }} />
               {onChangerProfil ? (
-                <BoutonHub theme={theme} titre="Changer de profil" onPress={onChangerProfil} testID="hub-changer-profil" />
+                <BoutonHub theme={theme} titre="Changer de compte" onPress={onChangerProfil} testID="hub-changer-profil" />
               ) : null}
               {onVerrouiller ? (
                 <BoutonHub theme={theme} titre="⏻ Verrouiller" onPress={onVerrouiller} testID="hub-verrouiller" />
@@ -282,6 +301,15 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
           }
           onVerrouiller={onVerrouiller}
           onChangerProfil={onChangerProfil}
+          onNouveautes={
+            onNouveautes
+              ? () => {
+                  setParametres(false);
+                  onNouveautes();
+                }
+              : undefined
+          }
+          transparence={contexte.profil && !contexte.profil.admin ? contexte.profils?.transparence : undefined}
         />
       ) : null}
     </View>

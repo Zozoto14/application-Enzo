@@ -9,11 +9,27 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON } from '../theme';
 import type { OptionsNouveauProfil, Profil } from '../../profils/profils';
+import type { PolitiqueHub } from '../../hub/admin/politique';
 import type { IdentifiantsAmi } from '../../profils/identifiants';
 
 export interface ControleProfils {
   actuel: Profil;
+  /**
+   * Profils visibles par le compte ouvert : la liste complète pour
+   * l'administrateur, **lui seul** pour un ami (isolation des comptes).
+   */
   tous: readonly Profil[];
+  /** Vrai quand « Changer de compte » a un sens (plusieurs comptes, ou session administrateur). */
+  peutChanger?: boolean;
+  /** Politique des apps (activation, maintenance), lisible par le hub d'un ami. */
+  politique?: PolitiqueHub;
+  /** Session de l'administrateur sur le compte d'un ami : prénom de l'ami (bandeau). */
+  sessionAdmin?: { nomCompte: string };
+  /**
+   * Compte ami : avertissement de transparence (l'administrateur peut y
+   * accéder), avec la date de son dernier accès s'il y en a eu.
+   */
+  transparence?: { dernierAccesAdmin?: string; sequestreActif: boolean };
   /** Revenir à « Qui utilise AppliBourse ? ». */
   onChanger(): void;
   onAjouter(nom: string): Promise<void>;
@@ -37,7 +53,21 @@ export interface ControleProfils {
   onModifierProfils?(suivants: readonly Profil[]): Promise<void>;
   /** Note l'ouverture (déverrouillage) du profil courant sur cet appareil. */
   onConnexion?(): void;
+  /**
+   * Accès administrateur aux comptes des amis (séquestre). Réservés à
+   * l'administrateur déverrouillé ; jamais fournis à un ami.
+   */
+  onCodeAcces?(id: string): Promise<{ code: string; creeLe: string } | undefined>;
+  onRegenererCode?(id: string): Promise<string>;
+  onRevoquerAcces?(id: string): Promise<void>;
+  onRetablirAcces?(id: string): Promise<void>;
+  /** Ouvre le compte d'un ami avec son code d'accès (la session de l'administrateur se ferme). */
+  onOuvrirCompte?(id: string, code: string): Promise<void>;
 }
+
+/** Texte de transparence montré à un ami (création du compte, Paramètres). */
+export const AVERTISSEMENT_TRANSPARENCE =
+  'L’administrateur peut accéder à ton compte. Chaque accès est inscrit à son journal, et la date du dernier accès s’affiche ici.';
 
 export function CarteProfils({ controle }: { controle: ControleProfils }) {
   const palette = usePalette();
@@ -74,12 +104,23 @@ export function CarteProfils({ controle }: { controle: ControleProfils }) {
             pouvez pas les lire, lui non plus les vôtres. La synchronisation avec l’iPhone reste réservée à votre profil.
           </SousTitre>
         ) : (
-          <SousTitre>
-            Ce profil a été créé par l’administrateur de cet appareil. Il reste sur cet appareil (pas de synchronisation).
-          </SousTitre>
+          <>
+            <SousTitre>
+              Ce profil a été créé par l’administrateur de cet appareil. Il reste sur cet appareil (pas de synchronisation). Aucun
+              autre compte ne voit tes données, et tu ne vois pas les leurs.
+            </SousTitre>
+            <View style={[styles.profil, { borderColor: palette.accent }]} testID="transparence-admin">
+              <Text style={{ color: palette.texte, flex: 1 }}>
+                ⚠️ {AVERTISSEMENT_TRANSPARENCE}
+                {controle.transparence?.dernierAccesAdmin
+                  ? ` Dernier accès : ${new Date(controle.transparence.dernierAccesAdmin).toLocaleString('fr-FR')}.`
+                  : ' Aucun accès de l’administrateur pour l’instant.'}
+              </Text>
+            </View>
+          </>
         )}
 
-        <View style={styles.ligne}>
+        {actuel.admin ? <View style={styles.ligne}>
           <View style={{ flex: 1 }}>
             <Champ etiquette="Nom de mon profil" value={monNom} onChangeText={setMonNom} testID="champ-mon-nom" />
           </View>
@@ -90,7 +131,7 @@ export function CarteProfils({ controle }: { controle: ControleProfils }) {
             onPress={() => agir(controle.onRenommer(actuel.id, monNom), 'Profil renommé.')}
             testID="renommer-profil"
           />
-        </View>
+        </View> : null}
 
         {actuel.admin && controle.onCreerCompte ? (
           <SousTitre>
@@ -148,9 +189,9 @@ export function CarteProfils({ controle }: { controle: ControleProfils }) {
         {message ? <Text style={{ color: palette.hausse, fontWeight: '600' }}>{message}</Text> : null}
         {erreur ? <Alerte message={erreur} /> : null}
 
-        {tous.length > 1 ? (
+        {controle.peutChanger ?? tous.length > 1 ? (
           <View style={{ alignSelf: 'flex-start' }}>
-            <Bouton titre="Changer de profil" variante="discret" onPress={controle.onChanger} testID="changer-profil" />
+            <Bouton titre="Changer de compte" variante="discret" onPress={controle.onChanger} testID="changer-profil" />
           </View>
         ) : null}
       </Carte>

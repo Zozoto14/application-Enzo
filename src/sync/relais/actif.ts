@@ -7,12 +7,20 @@
  * dans la base chiffrée ; ce petit registre fait le lien.
  */
 
+import { stockageDuProfil, surChangementDeCompte } from '../../profils/espace';
+
 export interface RelaisActif {
   relais: string;
   jeton: string;
 }
 
 let actif: RelaisActif | undefined;
+
+// Le relais (et son jeton) appartient au profil qui l'a configuré.
+surChangementDeCompte(() => {
+  actif = undefined;
+  enAttente = undefined;
+});
 
 export function definirRelaisActif(relais: RelaisActif | undefined): void {
   actif = relais;
@@ -31,7 +39,7 @@ export function relaisActif(): RelaisActif | undefined {
 
 const CLE_LIAISON = 'applibourse.liaison';
 type Memoire = { getItem(cle: string): string | null; setItem(cle: string, valeur: string): void };
-const memoire = () => (globalThis as { localStorage?: Memoire }).localStorage;
+const memoire = () => stockageDuProfil((globalThis as { localStorage?: Memoire }).localStorage);
 let enAttente: string | undefined;
 
 export function definirLiaisonEnAttente(code: string | undefined): void {

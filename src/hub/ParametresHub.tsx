@@ -227,6 +227,10 @@ export interface PanneauParametresProps {
   onAdministration?(): void;
   onVerrouiller?(): void;
   onChangerProfil?(): void;
+  /** Historique des nouveautés (devblog). */
+  onNouveautes?(): void;
+  /** Compte ami : l'administrateur peut y accéder (avertissement de transparence). */
+  transparence?: { dernierAccesAdmin?: string; sequestreActif: boolean };
   nomProfil?: string;
   maj: MiseAJour;
   onFermer(): void;
@@ -368,6 +372,36 @@ export function PanneauParametres(props: PanneauParametresProps) {
           </Text>
           <DetailMiseAJour theme={theme} maj={maj} testID="parametres-maj" />
 
+          {props.onNouveautes ? (
+            <>
+              {section('Nouveautés')}
+              <Text style={[attenue, { fontSize: 13 }]}>Ce qu’apporte chaque version, avec « Essayer » pour ouvrir la fonctionnalité.</Text>
+              <View style={styles.actions}>
+                <BoutonHub theme={theme} titre="✨ Voir les nouveautés" onPress={props.onNouveautes} testID="parametres-nouveautes" />
+              </View>
+            </>
+          ) : null}
+
+          {props.transparence ? (
+            <>
+              {section('Confidentialité')}
+              <View
+                style={{ padding: 12, borderRadius: rayon, borderLeftWidth: 4, borderLeftColor: theme.alerte, backgroundColor: teinteTransparente(theme.alerte, 0.14), gap: 4 }}
+                testID="parametres-transparence">
+                <Text style={[texte, { fontWeight: '700' }]}>L’administrateur peut accéder à ton compte.</Text>
+                <Text style={[attenue, { fontSize: 13 }]}>
+                  Il peut ouvrir ton compte avec un code d’accès qui lui est propre, sans ton mot de passe. Chaque accès est inscrit à son
+                  journal d’audit et un bandeau reste affiché pendant qu’il est sur ton compte. Aucun autre compte ne voit tes données.
+                </Text>
+                <Text style={[attenue, { fontSize: 13 }]} testID="parametres-dernier-acces-admin">
+                  {props.transparence.dernierAccesAdmin
+                    ? `Dernier accès de l’administrateur : ${new Date(props.transparence.dernierAccesAdmin).toLocaleString('fr-FR')}.`
+                    : 'Aucun accès de l’administrateur à ce jour.'}
+                </Text>
+              </View>
+            </>
+          ) : null}
+
           {props.onReglagesPortefeuille || props.onAdministration ? section('Raccourcis') : null}
           <View style={styles.actions}>
             {props.onReglagesPortefeuille ? (
@@ -379,9 +413,9 @@ export function PanneauParametres(props: PanneauParametresProps) {
           </View>
 
           {section('Session')}
-          {props.nomProfil ? <Text style={[attenue, { fontSize: 13 }]}>Profil ouvert : {props.nomProfil}</Text> : null}
+          {props.nomProfil ? <Text style={[attenue, { fontSize: 13 }]}>Compte ouvert : {props.nomProfil}</Text> : null}
           <View style={styles.actions}>
-            {props.onChangerProfil ? <BoutonHub theme={theme} titre="Changer de profil" onPress={props.onChangerProfil} testID="parametres-changer-profil" /> : null}
+            {props.onChangerProfil ? <BoutonHub theme={theme} titre="Changer de compte" onPress={props.onChangerProfil} testID="parametres-changer-profil" /> : null}
             {props.onVerrouiller ? <BoutonHub theme={theme} titre="⏻ Verrouiller maintenant" onPress={props.onVerrouiller} testID="parametres-verrouiller" /> : null}
           </View>
         </ScrollView>

@@ -1,53 +1,51 @@
 /**
- * « Qui utilise AppliBourse ? » — affiché au démarrage dès qu'il y a plus
- * d'un profil sur l'appareil. Chacun ouvre ensuite son propre portefeuille
- * avec son propre mot de passe.
+ * Écran de connexion, affiché au démarrage dès qu'il y a plusieurs comptes
+ * sur l'appareil.
+ *
+ * Il ne **liste aucun compte** : chacun saisit son prénom (l'administrateur
+ * peut aussi saisir « admin »), puis ouvre son coffre avec son mot de passe
+ * et son code. Un prénom inconnu mène au même écran de déverrouillage qu'un
+ * vrai compte (coffre leurre) : on ne peut pas deviner quels comptes existent.
  */
 
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SousTitre, Titre, usePalette } from '../composants';
-import { ESPACEMENT, RAYON, stylesPartages } from '../theme';
-import type { Profil } from '../../profils/profils';
+import React, { useState } from 'react';
+import { ScrollView, View } from 'react-native';
+import { Bouton, Champ, SousTitre, Titre, usePalette } from '../composants';
+import { ESPACEMENT, stylesPartages } from '../theme';
 
-export function ChoixProfil({ profils, onChoisir }: { profils: readonly Profil[]; onChoisir(id: string): void }) {
+export function Connexion({ onContinuer, enCours }: { onContinuer(prenom: string): void; enCours?: boolean }) {
   const palette = usePalette();
+  const [prenom, setPrenom] = useState('');
+  const valider = () => {
+    if (prenom.trim()) {
+      onContinuer(prenom);
+    }
+  };
   return (
     <ScrollView
       style={[stylesPartages.ecran, { backgroundColor: palette.fond }]}
-      contentContainerStyle={[stylesPartages.contenu, stylesPartages.accueil, { paddingVertical: ESPACEMENT.xl, gap: ESPACEMENT.m }]}>
-      <Titre>Qui utilise AppliBourse ?</Titre>
-      <SousTitre>Chaque profil a son propre portefeuille, son mot de passe et son code d’authentification.</SousTitre>
-      <View style={styles.grille}>
-        {profils.map(profil => (
-          <Pressable
-            key={profil.id}
-            accessibilityRole="button"
-            accessibilityLabel={`Ouvrir le profil ${profil.nom}`}
-            onPress={() => onChoisir(profil.id)}
-            testID={`profil-${profil.id}`}
-            style={({ pressed }) => [
-              styles.carte,
-              { backgroundColor: palette.surface, borderColor: pressed ? palette.accent : palette.bordure },
-            ]}>
-            <View style={[styles.avatar, { backgroundColor: profil.admin ? palette.accent : palette.surfaceHaute }]}>
-              <Text style={{ color: profil.admin ? '#fff' : palette.texte, fontSize: 28, fontWeight: '800' }}>
-                {profil.nom.slice(0, 1).toUpperCase()}
-              </Text>
-            </View>
-            <Text style={{ color: palette.texte, fontWeight: '700', fontSize: 16 }} numberOfLines={1}>
-              {profil.nom}
-            </Text>
-            <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>{profil.admin ? 'Administrateur' : 'Profil'}</Text>
-          </Pressable>
-        ))}
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.accueil, { paddingVertical: ESPACEMENT.xl, gap: ESPACEMENT.m }]}
+      keyboardShouldPersistTaps="handled">
+      <Titre>Connexion</Titre>
+      <SousTitre>
+        Chaque compte a son propre espace chiffré, son mot de passe et son code d’authentification. Saisissez votre prénom pour
+        ouvrir le vôtre.
+      </SousTitre>
+      <View style={{ gap: ESPACEMENT.s, maxWidth: 420, width: '100%' }}>
+        <Champ
+          etiquette="Prénom"
+          indication="Administrateur : votre prénom ou « admin »."
+          value={prenom}
+          onChangeText={setPrenom}
+          onSubmitEditing={valider}
+          autoCapitalize="words"
+          autoCorrect={false}
+          autoComplete="off"
+          maxLength={30}
+          testID="connexion-prenom"
+        />
+        <Bouton titre={enCours ? 'Ouverture…' : 'Continuer'} onPress={valider} desactive={enCours || !prenom.trim()} testID="connexion-continuer" />
       </View>
     </ScrollView>
   );
 }
-
-const styles = StyleSheet.create({
-  grille: { flexDirection: 'row', flexWrap: 'wrap', gap: ESPACEMENT.m, justifyContent: 'center' },
-  carte: { width: 150, alignItems: 'center', gap: ESPACEMENT.s, padding: ESPACEMENT.m, borderWidth: 1.5, borderRadius: RAYON.l },
-  avatar: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
-});

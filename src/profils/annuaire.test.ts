@@ -1,4 +1,4 @@
-import { hexToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
 import { ouvrirBaseNode } from '../db/pilotes/node';
 import { aleatoireDeterministe } from '../securite/aleatoire';
 import type { ParametresKdf } from '../securite/kdf';
@@ -56,7 +56,7 @@ describe('séquestre : briques', () => {
     const alea = aleatoireDeterministe(3);
     const paire = genererPaireSequestre(alea);
     const autre = genererPaireSequestre(alea);
-    const depot = scellerPourAdmin(Buffer.from(paire.publique).toString('hex'), Uint8Array.from([1, 2, 3]), 'test/a', alea);
+    const depot = scellerPourAdmin(bytesToHex(paire.publique), Uint8Array.from([1, 2, 3]), 'test/a', alea);
     expect(Array.from(ouvrirDepot(paire.privee, depot, 'test/a'))).toEqual([1, 2, 3]);
     expect(() => ouvrirDepot(autre.privee, depot, 'test/a')).toThrow();
     expect(() => ouvrirDepot(paire.privee, depot, 'test/b')).toThrow();

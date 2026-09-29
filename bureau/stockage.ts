@@ -28,6 +28,11 @@ export interface Stockage {
 
 interface PontBureau {
   bureau: true;
+  /** Absent des versions compilées avant l'isolation des comptes. */
+  profil?: {
+    ouvrir(id: string): Promise<boolean>;
+    fermer(): Promise<boolean>;
+  };
   fichiers: {
     lire(nom: string): Promise<Uint8Array | undefined>;
     ecrire(nom: string, octets: Uint8Array): Promise<void>;

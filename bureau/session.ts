@@ -65,6 +65,12 @@ export interface OptionsSessionBureau {
   delaiEcriture?: number;
   /** Profil à ouvrir ; le principal par défaut. */
   profil?: string;
+  /**
+   * Appelé juste avant d'ouvrir la base, donc après un mot de passe et un
+   * code justes : lève pour refuser l'ouverture (compte désactivé, expiré).
+   * Seul le titulaire apprend ainsi l'état de son compte.
+   */
+  verifierOuverture?(): void;
 }
 
 /**
@@ -143,6 +149,7 @@ export async function ouvrirSessionBureau(
   };
 
   const ouvrirBase = (cleHexadecimale: string): PiloteSqlite => {
+    options.verifierOuverture?.();
     const cle = octetsDepuisHexa(cleHexadecimale);
     const octets = scelle && scelle.length > 0 ? descellerOctets(cle, scelle) : undefined;
     const pilote = ouvrirBaseSqlJs(fabrique, octets);
@@ -184,7 +191,7 @@ export async function ouvrirSessionBureau(
   };
 
   return {
-    session: new Session({ stockage: stockageCoffre, ouvrirBase, reinitialiserBase }),
+    session: new Session({ stockage: stockageCoffre, ouvrirBase, reinitialiserBase, profil: options.profil ?? ID_PRINCIPAL }),
     emplacement,
     surDisque: stockage.surDisque,
     async vider() {

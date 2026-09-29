@@ -29,6 +29,7 @@ import {
   type PontNotifications,
 } from '../notifications/bureau';
 import { rappelsDus, retenirRappels } from '../notifications/rappelVerrouille';
+import { stockageDuProfil } from '../profils/espace';
 import { alertesEvenements, retenirEvenements, type ValeurSuivie } from '../notifications/evenements';
 import { lireRechercheActualites, urlActualitesValeur } from '../podcast/medias';
 import { rappelsCarnet, type LigneCarnet } from '../ui/vues/carnet';
@@ -43,7 +44,8 @@ const CLE_RAPPELS_LOCAL = 'applibourse.rappelsBriefing';
 type StockageLocal = { getItem(cle: string): string | null; setItem(cle: string, valeur: string): void };
 export function stockageLocal(): StockageLocal | undefined {
   try {
-    return (globalThis as { localStorage?: StockageLocal }).localStorage;
+    // Rangé sous le profil ouvert : un ami ne lit jamais le planning d'un autre.
+    return stockageDuProfil((globalThis as { localStorage?: StockageLocal }).localStorage);
   } catch {
     return undefined;
   }

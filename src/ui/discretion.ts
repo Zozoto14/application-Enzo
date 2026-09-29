@@ -7,7 +7,13 @@
  * `masquerMontants`.
  */
 
+import { surChangementDeCompte } from '../profils/espace';
+
 let actif = false;
+
+surChangementDeCompte(() => {
+  actif = false;
+});
 
 export const MONTANT_MASQUE = '••••';
 

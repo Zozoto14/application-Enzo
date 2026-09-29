@@ -16,6 +16,13 @@ contextBridge.exposeInMainWorld('applibourse', {
   /** Vrai dans l'application installée, absent dans un simple navigateur. */
   bureau: true,
 
+  /** Portée du compte ouvert : ses fichiers seulement (voir principal.mjs). */
+  profil: {
+    ouvrir: id => ipcRenderer.invoke('profil:ouvrir', id),
+    /** Quitte le compte : la fenêtre se recharge. */
+    fermer: () => ipcRenderer.invoke('profil:fermer'),
+  },
+
   fichiers: {
     lire: nom => ipcRenderer.invoke('fichier:lire', nom),
     ecrire: (nom, octets) => ipcRenderer.invoke('fichier:ecrire', nom, octets),

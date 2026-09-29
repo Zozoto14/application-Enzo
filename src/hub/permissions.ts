@@ -32,7 +32,8 @@ export function peutOuvrir(app: Pick<AppHub, 'id' | 'adminSeulement'>, profil: P
 
 /** Politique globale des apps, portée par l'entrée de l'administrateur. */
 export function politiqueDe(contexte: Pick<ContexteHub, 'profils'>): PolitiqueHub | undefined {
-  return contexte.profils?.tous.find(profil => profil.admin)?.politique;
+  // Un ami ne reçoit pas la liste des profils : la politique lui est donnée à part.
+  return contexte.profils?.politique ?? contexte.profils?.tous?.find(profil => profil.admin)?.politique;
 }
 
 function estAdmin(contexte: Pick<ContexteHub, 'profil'>): boolean {

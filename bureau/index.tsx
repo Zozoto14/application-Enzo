@@ -24,31 +24,54 @@ import initSqlJs from 'sql.js';
 // cherche a cote de la page, ou il n'est pas.
 import urlWasm from 'sql.js/dist/sql-wasm.wasm?url';
 import { App } from '../src/app/App';
-import { Titre } from '../src/ui/composants';
+import { Bouton, Titre } from '../src/ui/composants';
 import { ESPACEMENT, palettePour } from '../src/ui/theme';
 import { useFondDocument } from './Bureau';
 import { BandeauMiseAJour } from './MiseAJour';
 import { ouvrirSessionBureau, type SessionBureau } from './session';
 import { pont, stockageCourant, type NomFichier, type Stockage } from './stockage';
-import { ChoixProfil } from '../src/ui/ecrans/ChoixProfil';
+import { Connexion } from '../src/ui/ecrans/ChoixProfil';
 import type { ControleProfils } from '../src/ui/ecrans/CarteProfils';
 import {
   ID_PRINCIPAL,
   activerProfil,
   ajouterProfil,
   autoriserApps,
-  ecrireProfils,
   fichiersDuProfil,
-  lireProfils,
   motifFermeture,
-  noterConnexion,
   nouvelIdentifiant,
-  profilOuvrable,
   validerModification,
   renommerProfil,
   supprimerProfil,
+  type OptionsNouveauProfil,
   type Profil,
 } from '../src/profils/profils';
+import {
+  aDesAmis,
+  appliquerProfilsAdmin,
+  codeAcces,
+  deposerSequestre,
+  ecrireAnnuaire,
+  lireAnnuaire,
+  noterConnexionAmi,
+  ouvrirAnnuaireAdmin,
+  ouvrirSequestre,
+  profilAdminVerrouille,
+  profilAmi,
+  regenererCodeAcces,
+  retablirSequestre,
+  revoquerSequestre,
+  trouverCompte,
+  type Annuaire,
+  type ClesAdmin,
+  type CompteTrouve,
+} from '../src/profils/annuaire';
+import { changerDEspace } from '../src/profils/espace';
+import { coffreLeurre } from '../src/profils/leurre';
+import { hexToBytes } from '@noble/hashes/utils.js';
+import { DepotParametres } from '../src/db/depots';
+import { Session } from '../src/session/session';
+import { stockageMemoire } from '../src/session/stockage-coffre';
 import { creerAccesAmi, type IdentifiantsAmi } from '../src/profils/identifiants';
 import { installerPontWeb } from './web';
 
@@ -93,17 +116,50 @@ if (!pont()) {
 }
 
 type Etat =
-  | { phase: 'chargement' }
-  | { phase: 'choix'; profils: Profil[] }
-  | { phase: 'prete'; session: SessionBureau; profils: Profil[]; profil: Profil }
+  | { phase: 'chargement'; message?: string }
+  | { phase: 'connexion'; enCours?: boolean }
+  | {
+      phase: 'prete';
+      session: SessionBureau;
+      /** Le compte ouvert. */
+      profil: Profil;
+      /** Ce que ce compte a le droit de voir : tout pour l'administrateur déverrouillé, lui seul sinon. */
+      profils: Profil[];
+      /** Session de l'administrateur sur le compte d'un ami (accès par séquestre). */
+      adminSur?: string;
+      transparence?: { dernierAccesAdmin?: string; sequestreActif: boolean };
+    }
   | { phase: 'echec'; motif: string };
 
 const decodeur = new TextDecoder();
 const encodeur = new TextEncoder();
+/** Paramètres de la base d'un ami (sa propre base chiffrée). */
+const PARAM_CONNEXIONS = 'compte.connexions';
+const PARAM_ACCES_ADMIN = 'compte.accesAdmin';
 
-async function lireListeProfils(stockage: Stockage): Promise<Profil[]> {
-  const brut = await stockage.lire('profils');
-  return lireProfils(brut && brut.length > 0 ? decodeur.decode(brut) : undefined);
+function erreurTexte(erreur: unknown): string {
+  return erreur instanceof Error ? erreur.message : String(erreur);
+}
+
+/** Clés d'usage de l'administrateur, tirées de sa clé maîtresse (à effacer après usage). */
+function clesAdminDe(session: SessionBureau): ClesAdmin {
+  return { annuaire: hexToBytes(session.session.cleDerivee('annuaire')), sequestre: hexToBytes(session.session.cleDerivee('sequestre')) };
+}
+
+function effacer(cles: ClesAdmin): void {
+  cles.annuaire.fill(0);
+  cles.sequestre.fill(0);
+}
+
+/** Dates des accès de l'administrateur à ce compte (lues dans la base de l'ami). */
+function accesAdminLus(session: SessionBureau): string[] {
+  try {
+    const brut = new DepotParametres(session.session.base()).lire(PARAM_ACCES_ADMIN);
+    const liste = brut ? JSON.parse(brut) : [];
+    return Array.isArray(liste) ? liste.filter((d): d is string => typeof d === 'string' && !Number.isNaN(Date.parse(d))) : [];
+  } catch {
+    return [];
+  }
 }
 
 function Racine() {
@@ -114,39 +170,99 @@ function Racine() {
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const fabriqueRef = useRef<unknown>(undefined);
   const stockage = useMemo(() => stockageCourant(), []);
+  // Dernier annuaire connu (lu ou écrit) : la seule source de vérité des comptes.
+  const annuaireRef = useRef<Annuaire | undefined>(undefined);
 
-  const ouvrir = useCallback(
-    async (profils: Profil[], id: string) => {
-      setEtat({ phase: 'chargement' });
-      try {
-        fabriqueRef.current ??= await initSqlJs({ locateFile: () => urlWasm });
-        const session = await ouvrirSessionBureau({
-          fabrique: fabriqueRef.current as never,
-          stockage,
-          profil: id,
-          surErreur: erreur => {
-            // Une ecriture perdue en silence serait le pire defaut possible.
-            console.error('Enregistrement impossible', erreur);
-          },
-        });
-        const profil = profils.find(p => p.id === id) ?? profils[0];
-        const motif = motifFermeture(profil);
-        if (motif) {
-          throw new Error(motif);
-        }
-        setEtat({ phase: 'prete', session, profils, profil });
-      } catch (erreur) {
-        setEtat({ phase: 'echec', motif: erreur instanceof Error ? erreur.message : String(erreur) });
-      }
+  const lireAnnuaireDisque = useCallback(async () => {
+    const brut = await stockage.lire('profils');
+    const annuaire = lireAnnuaire(brut && brut.length > 0 ? decodeur.decode(brut) : undefined);
+    annuaireRef.current = annuaire;
+    return annuaire;
+  }, [stockage]);
+
+  const ecrireAnnuaireDisque = useCallback(
+    async (annuaire: Annuaire) => {
+      await stockage.ecrire('profils', encodeur.encode(ecrireAnnuaire(annuaire)));
+      annuaireRef.current = annuaire;
     },
     [stockage],
   );
 
+  /**
+   * Ouvre un compte. Tout état du compte précédent est d'abord effacé
+   * (`changerDEspace`) et la portée des fichiers passe à ce compte.
+   * `cle` : clé maîtresse relue du séquestre (session administrateur).
+   */
+  const ouvrir = useCallback(
+    async (compte: CompteTrouve, options: { cle?: Uint8Array; adminSur?: string } = {}) => {
+      setEtat({ phase: 'chargement', message: options.adminSur ? `Ouverture du compte de ${compte.nom}…` : undefined });
+      try {
+        fabriqueRef.current ??= await initSqlJs({ locateFile: () => urlWasm });
+        changerDEspace(compte.id);
+        await pont()?.profil?.ouvrir(compte.id);
+        const annuaire = annuaireRef.current ?? (await lireAnnuaireDisque());
+        const session = await ouvrirSessionBureau({
+          fabrique: fabriqueRef.current as never,
+          stockage,
+          profil: compte.id,
+          surErreur: erreur => {
+            // Une ecriture perdue en silence serait le pire defaut possible.
+            console.error('Enregistrement impossible', erreur);
+          },
+          // Compte fermé : refusé seulement après un mot de passe et un code justes.
+          verifierOuverture: compte.admin || options.adminSur
+            ? undefined
+            : () => {
+                const motif = motifFermeture(profilAmi(annuaireRef.current ?? annuaire, compte.id, compte.nom));
+                if (motif) {
+                  throw new Error(motif);
+                }
+              },
+        });
+        const profil = compte.admin ? profilAdminVerrouille(compte.nom) : profilAmi(annuaire, compte.id, compte.nom);
+        let transparence: { dernierAccesAdmin?: string; sequestreActif: boolean } | undefined;
+        if (options.cle) {
+          session.session.ouvrirAvecCle(options.cle);
+          // L'accès est noté dans la base de l'ami : il le verra dans ses Paramètres.
+          const acces = [...accesAdminLus(session), new Date().toISOString()].slice(-20);
+          new DepotParametres(session.session.base()).ecrire(PARAM_ACCES_ADMIN, JSON.stringify(acces));
+          transparence = { dernierAccesAdmin: acces[acces.length - 1], sequestreActif: true };
+        }
+        setEtat({ phase: 'prete', session, profil, profils: [profil], adminSur: options.adminSur, transparence });
+      } catch (erreur) {
+        options.cle?.fill(0);
+        setEtat({ phase: 'echec', motif: erreurTexte(erreur) });
+      }
+    },
+    [stockage, lireAnnuaireDisque],
+  );
+
+  /** Prénom inconnu : même écran de déverrouillage, coffre qu'aucune clé n'ouvre. */
+  const ouvrirLeurre = useCallback((prenom: string) => {
+    changerDEspace('leurre');
+    const session = new Session({
+      stockage: stockageMemoire(coffreLeurre()),
+      ouvrirBase: () => {
+        throw new Error('Mot de passe ou code incorrect');
+      },
+      profil: 'leurre',
+    });
+    const leurre: SessionBureau = { session, emplacement: '', surDisque: stockage.surDisque, vider: async () => undefined };
+    const profil: Profil = { id: 'leurre', nom: prenom.trim().slice(0, 30), admin: false, creeLe: '', apps: [], actif: true };
+    setEtat({ phase: 'prete', session: leurre, profil, profils: [profil] });
+  }, [stockage]);
+
   useEffect(() => {
-    void lireListeProfils(stockage)
-      .then(profils => (profils.filter(profilOuvrable).length > 1 ? setEtat({ phase: 'choix', profils }) : ouvrir(profils, ID_PRINCIPAL)))
-      .catch(erreur => setEtat({ phase: 'echec', motif: erreur instanceof Error ? erreur.message : String(erreur) }));
-  }, [stockage, ouvrir]);
+    void lireAnnuaireDisque()
+      .then(annuaire => {
+        if (aDesAmis(annuaire)) {
+          setEtat({ phase: 'connexion' });
+        } else {
+          void ouvrir({ id: ID_PRINCIPAL, nom: annuaire.heritage?.[0]?.nom ?? 'Moi', admin: true });
+        }
+      })
+      .catch(erreur => setEtat({ phase: 'echec', motif: erreurTexte(erreur) }));
+  }, [lireAnnuaireDisque, ouvrir]);
 
   // Dernier filet : on force l'ecriture avant la fermeture de la fenetre.
   useEffect(() => {
@@ -178,7 +294,7 @@ function Racine() {
       <View style={[styles.centre, { backgroundColor: palette.fond }]}>
         <ActivityIndicator color={palette.accent} />
         <Text style={{ color: palette.texteSecondaire, marginTop: ESPACEMENT.m }}>
-          Ouverture du portefeuille…
+          {etat.message ?? 'Ouverture du portefeuille…'}
         </Text>
       </View>
     );
@@ -189,94 +305,98 @@ function Racine() {
       <View style={[styles.centre, { backgroundColor: palette.fond }]}>
         <Titre>Impossible d’ouvrir</Titre>
         <Text style={[styles.motif, { color: palette.texte }]}>{etat.motif}</Text>
+        <View style={{ marginTop: ESPACEMENT.m }}>
+          <Bouton titre="Revenir à la connexion" variante="discret" onPress={() => quitterCompte(undefined)} testID="echec-revenir" />
+        </View>
       </View>
     );
   }
 
-  if (etat.phase === 'choix') {
-    // Un profil désactivé n'est plus proposé (et `ouvrir` le refuserait de toute façon).
-    return <ChoixProfil profils={etat.profils.filter(profilOuvrable)} onChoisir={id => void ouvrir(etat.profils, id)} />;
+  if (etat.phase === 'connexion') {
+    // Aucun compte n'est listé : on retrouve le sien par son prénom.
+    return (
+      <Connexion
+        enCours={etat.enCours}
+        onContinuer={prenom => {
+          const annuaire = annuaireRef.current;
+          const trouve = annuaire ? trouverCompte(annuaire, prenom) : undefined;
+          if (trouve) {
+            void ouvrir(trouve);
+          } else {
+            ouvrirLeurre(prenom);
+          }
+        }}
+      />
+    );
   }
 
-  const { session, profils, profil } = etat;
-  const enregistrer = async (liste: Profil[]) => {
-    await stockage.ecrire('profils', encodeur.encode(ecrireProfils(liste)));
-    setEtat({ phase: 'prete', session, profils: liste, profil: liste.find(p => p.id === profil.id) ?? profil });
+  const { session, profil, profils, adminSur } = etat;
+  const annuaireCourant = () => {
+    if (!annuaireRef.current) {
+      throw new Error('Liste des comptes indisponible.');
+    }
+    return annuaireRef.current;
   };
-  const controle: ControleProfils = {
-    actuel: profil,
-    tous: profils,
-    onChanger: () => {
-      void session.vider().finally(() => {
-        session.session.verrouiller();
-        setEtat({ phase: 'choix', profils });
-      });
-    },
-    onAjouter: async nom => {
-      const id = nouvelIdentifiant(n => crypto.getRandomValues(new Uint8Array(n)));
-      await enregistrer(ajouterProfil(profils, nom, id, new Date().toISOString().slice(0, 10)));
-    },
-    onSupprimer: async id => {
-      const fichiers = fichiersDuProfil(id) as { coffre: NomFichier; portefeuille: NomFichier };
-      await stockage.ecrire(fichiers.coffre, new Uint8Array(0));
-      await stockage.ecrire(fichiers.portefeuille, new Uint8Array(0));
-      await enregistrer(supprimerProfil(profils, id));
-    },
-    onRenommer: async (id, nom) => {
-      await enregistrer(renommerProfil(profils, id, nom));
-    },
-    // Administration : réservée au profil administrateur, aussi côté données.
-    onCreerCompte: async (nom, apps, options) => {
-      exigerAdmin();
-      const id = nouvelIdentifiant(n => crypto.getRandomValues(new Uint8Array(n)));
-      // On valide le nom et l'identifiant avant de créer le moindre fichier.
-      const suivante = ajouterProfil(profils, nom, id, new Date().toISOString().slice(0, 10), apps, options);
-      const identifiants = await creerCoffreAmi(id, nom.trim());
-      await enregistrer(suivante);
-      return identifiants;
-    },
-    onRegenerer: async id => {
-      exigerAdmin();
-      const ami = profils.find(p => p.id === id);
-      if (!ami || ami.admin) {
-        throw new Error('Profil introuvable.');
-      }
-      const fichiers = fichiersDuProfil(id) as { coffre: NomFichier; portefeuille: NomFichier };
-      await stockage.ecrire(fichiers.coffre, new Uint8Array(0));
-      await stockage.ecrire(fichiers.portefeuille, new Uint8Array(0));
-      return creerCoffreAmi(id, ami.nom);
-    },
-    onAutoriser: async (id, apps) => {
-      exigerAdmin();
-      await enregistrer(autoriserApps(profils, id, apps));
-    },
-    onActiver: async (id, actif) => {
-      exigerAdmin();
-      await enregistrer(activerProfil(profils, id, actif));
-    },
-    onModifierProfils: async suivants => {
-      exigerAdmin();
-      await enregistrer(validerModification(profils, suivants));
-    },
-    onConnexion: () => {
-      // Date de la dernière ouverture, pour l'Administration ; jamais bloquant.
-      void enregistrer(noterConnexion(profils, profil.id, new Date().toISOString())).catch(erreur =>
-        console.warn('Connexion non notée :', erreur),
-      );
-    },
-  };
+  // Administration : réservée à l'administrateur déverrouillé, sur son propre compte.
+  const admin = profil.admin && !adminSur;
   function exigerAdmin() {
-    if (!profil.admin) {
+    if (!admin || session.session.statut() !== 'deverrouille') {
       throw new Error('Réservé à l’administrateur.');
     }
   }
+  /** Relit l'annuaire pour l'administrateur (et l'enregistre s'il a changé). */
+  const rafraichirAdmin = async (annuaire: Annuaire, forcer = false) => {
+    const cles = clesAdminDe(session);
+    try {
+      const vue = ouvrirAnnuaireAdmin(annuaire, cles);
+      if (vue.modifie || forcer) {
+        await ecrireAnnuaireDisque(vue.annuaire);
+      }
+      annuaireRef.current = vue.annuaire;
+      setEtat({ phase: 'prete', session, profil: vue.profils[0], profils: vue.profils });
+      return vue;
+    } finally {
+      effacer(cles);
+    }
+  };
+  const avecCles = async <T,>(action: (cles: ClesAdmin, annuaire: Annuaire) => Promise<T> | T): Promise<T> => {
+    exigerAdmin();
+    const cles = clesAdminDe(session);
+    try {
+      return await action(cles, annuaireCourant());
+    } finally {
+      effacer(cles);
+    }
+  };
+  const enregistrer = (liste: readonly Profil[]) =>
+    avecCles(async (cles, annuaire) => {
+      await rafraichirAdmin(appliquerProfilsAdmin(annuaire, liste, cles), true);
+    });
+
+  function quitterCompte(courante: SessionBureau | undefined) {
+    // Changer de compte : tout est écrit, la clé effacée, puis la page est
+    // rechargée — plus rien du compte précédent ne reste en mémoire.
+    void (courante?.vider() ?? Promise.resolve())
+      .catch(() => undefined)
+      .finally(() => {
+        courante?.session.verrouiller();
+        changerDEspace(ID_PRINCIPAL);
+        const fermer = pont()?.profil?.fermer;
+        if (fermer) {
+          void fermer().catch(() => window.location.reload());
+        } else {
+          window.location.reload();
+        }
+      });
+  }
+
   /**
-   * Crée le coffre d'un ami dans ses propres fichiers. Les écritures de la
+   * Crée le coffre d'un ami dans ses propres fichiers et dépose sa clé
+   * maîtresse pour le séquestre de l'administrateur. Les écritures de la
    * session partent en arrière-plan : on les attend toutes avant de rendre
-   * les identifiants, pour ne jamais montrer un mot de passe dont le coffre
-   * n'est pas encore sur le disque. En cas d'échec, rien ne subsiste.
+   * les identifiants. En cas d'échec, rien ne subsiste.
    */
-  async function creerCoffreAmi(id: string, nom: string): Promise<IdentifiantsAmi> {
+  async function creerCoffreAmi(id: string, nom: string, publique: string): Promise<{ identifiants: IdentifiantsAmi; depot: string }> {
     const ecritures: Array<Promise<void>> = [];
     const suivi: Stockage = {
       ...stockage,
@@ -296,21 +416,155 @@ function Racine() {
         profil: id,
         surErreur: erreur => console.error('Enregistrement impossible', erreur),
       });
-      const identifiants = creerAccesAmi(ami.session, nom);
+      let depot = '';
+      const identifiants = creerAccesAmi(ami.session, nom, undefined, session => {
+        depot = session.deposerPourSequestre(publique, id);
+      });
       await Promise.all(ecritures);
-      return identifiants;
+      return { identifiants, depot };
     } catch (erreur) {
       await stockage.ecrire(fichiers.coffre, new Uint8Array(0)).catch(() => undefined);
       await stockage.ecrire(fichiers.portefeuille, new Uint8Array(0)).catch(() => undefined);
       throw erreur;
     }
   }
+  const clePublique = () => {
+    const publique = annuaireCourant().admin.cleSequestre;
+    if (!publique) {
+      throw new Error('Clé de séquestre absente : rouvrez votre compte administrateur.');
+    }
+    return publique;
+  };
+  const effacerFichiers = async (id: string) => {
+    const fichiers = fichiersDuProfil(id) as { coffre: NomFichier; portefeuille: NomFichier };
+    await stockage.ecrire(fichiers.coffre, new Uint8Array(0));
+    await stockage.ecrire(fichiers.portefeuille, new Uint8Array(0));
+  };
+
+  const controle: ControleProfils = {
+    actuel: profil,
+    tous: profils,
+    peutChanger: Boolean(adminSur) || (annuaireRef.current ? aDesAmis(annuaireRef.current) : false) || profil.id === 'leurre',
+    politique: annuaireRef.current?.politique,
+    sessionAdmin: adminSur ? { nomCompte: profil.nom } : undefined,
+    transparence: profil.admin || profil.id === 'leurre' ? undefined : etat.transparence ?? { sequestreActif: false },
+    onChanger: () => quitterCompte(session),
+    onAjouter: async nom => {
+      exigerAdmin();
+      const id = nouvelIdentifiant(n => crypto.getRandomValues(new Uint8Array(n)));
+      await enregistrer(ajouterProfil(profils, nom, id, new Date().toISOString().slice(0, 10)));
+    },
+    onSupprimer: async id => {
+      exigerAdmin();
+      await effacerFichiers(id);
+      await enregistrer(supprimerProfil(profils, id));
+    },
+    onRenommer: async (id, nom) => {
+      exigerAdmin();
+      await enregistrer(renommerProfil(profils, id, nom));
+    },
+    onConnexion: () => {
+      // Jamais bloquant : un échec ici n'empêche pas d'utiliser le compte.
+      const noter = async () => {
+        if (adminSur || profil.id === 'leurre') {
+          return;
+        }
+        const maintenant = new Date().toISOString();
+        if (profil.admin) {
+          const annuaire = annuaireCourant();
+          await rafraichirAdmin({ ...annuaire, admin: { ...annuaire.admin, derniereConnexion: maintenant } }, true);
+          return;
+        }
+        const depot = new DepotParametres(session.session.base());
+        const connexions = (Number(depot.lire(PARAM_CONNEXIONS)) || 0) + 1;
+        depot.ecrire(PARAM_CONNEXIONS, String(connexions));
+        const annuaire = await lireAnnuaireDisque();
+        const suivant = noterConnexionAmi(annuaire, profil.id, maintenant, connexions, publique =>
+          session.session.deposerPourSequestre(publique, profil.id),
+        );
+        if (!suivant.heritage) {
+          await ecrireAnnuaireDisque(suivant);
+        }
+        const entree = suivant.comptes.find(c => c.id === profil.id);
+        const acces = accesAdminLus(session);
+        setEtat(courant =>
+          courant.phase === 'prete' && courant.session === session
+            ? { ...courant, transparence: { dernierAccesAdmin: acces[acces.length - 1], sequestreActif: entree ? entree.sequestre.etat !== 'revoque' : false } }
+            : courant,
+        );
+      };
+      void noter().catch(erreur => console.warn('Connexion non notée :', erreurTexte(erreur)));
+    },
+  };
+  if (admin) {
+    Object.assign(controle, {
+      onCreerCompte: async (nom: string, apps: readonly string[], options?: OptionsNouveauProfil) => {
+        exigerAdmin();
+        const id = nouvelIdentifiant(n => crypto.getRandomValues(new Uint8Array(n)));
+        // On valide le nom et l'identifiant avant de créer le moindre fichier.
+        const suivante = ajouterProfil(profils, nom, id, new Date().toISOString().slice(0, 10), apps, options);
+        const { identifiants, depot } = await creerCoffreAmi(id, nom.trim(), clePublique());
+        await avecCles(async (cles, annuaire) => {
+          await rafraichirAdmin(deposerSequestre(appliquerProfilsAdmin(annuaire, suivante, cles), id, depot), true);
+        });
+        return identifiants;
+      },
+      onRegenerer: async (id: string) => {
+        exigerAdmin();
+        const ami = profils.find(p => p.id === id);
+        if (!ami || ami.admin) {
+          throw new Error('Profil introuvable.');
+        }
+        await effacerFichiers(id);
+        const { identifiants, depot } = await creerCoffreAmi(id, ami.nom, clePublique());
+        await rafraichirAdmin(deposerSequestre(annuaireCourant(), id, depot), true);
+        return identifiants;
+      },
+      onAutoriser: async (id: string, apps: readonly string[]) => enregistrer(autoriserApps(profils, id, apps)),
+      onActiver: async (id: string, actif: boolean) => enregistrer(activerProfil(profils, id, actif)),
+      onModifierProfils: async (suivants: readonly Profil[]) => enregistrer(validerModification(profils, suivants)),
+      onCodeAcces: async (id: string) => avecCles((cles, annuaire) => codeAcces(annuaire, id, cles)),
+      onRegenererCode: async (id: string) =>
+        avecCles(async (cles, annuaire) => {
+          const { annuaire: suivant, code } = regenererCodeAcces(annuaire, id, cles);
+          await rafraichirAdmin(suivant, true);
+          return code;
+        }),
+      onRevoquerAcces: async (id: string) =>
+        avecCles(async (cles, annuaire) => {
+          await rafraichirAdmin(revoquerSequestre(annuaire, id, cles), true);
+        }),
+      onRetablirAcces: async (id: string) =>
+        avecCles(async (_cles, annuaire) => {
+          await rafraichirAdmin(retablirSequestre(annuaire, id), true);
+        }),
+      onOuvrirCompte: async (id: string, code: string) => {
+        const ami = profils.find(p => p.id === id && !p.admin);
+        if (!ami) {
+          throw new Error('Compte introuvable.');
+        }
+        // La clé de l'ami est relue AVANT de fermer la session de l'administrateur.
+        const cle = await avecCles((cles, annuaire) => ouvrirSequestre(annuaire, id, code, cles));
+        await session.vider();
+        session.session.verrouiller();
+        await ouvrir({ id, nom: ami.nom, admin: false }, { cle, adminSur: profil.nom });
+      },
+    } satisfies Partial<ControleProfils>);
+  }
 
   return (
     <View style={[styles.pleinEcran, { backgroundColor: palette.fond }]}>
       <BandeauMiseAJour palette={palette} />
+      {adminSur ? (
+        <View style={[styles.bandeauAdmin, { backgroundColor: palette.danger }]} testID="bandeau-session-admin" accessibilityRole="alert">
+          <Text style={{ color: '#fff', fontWeight: '700', flex: 1 }}>
+            Session administrateur sur le compte de {profil.nom}
+          </Text>
+          <Bouton titre="Revenir à mon compte" variante="discret" onPress={() => quitterCompte(session)} testID="quitter-session-admin" />
+        </View>
+      ) : null}
       <View style={styles.pleinEcran}>
-        <App key={profil.id} session={session.session} chargementAutomatique profils={controle} hub />
+        <App key={`${profil.id}-${adminSur ?? ''}`} session={session.session} chargementAutomatique profils={controle} hub />
       </View>
     </View>
   );
@@ -320,6 +574,7 @@ const styles = StyleSheet.create({
   pleinEcran: { flex: 1 },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: ESPACEMENT.xl },
   motif: { textAlign: 'center', maxWidth: 520, marginTop: ESPACEMENT.m, lineHeight: 22 },
+  bandeauAdmin: { flexDirection: 'row', alignItems: 'center', gap: ESPACEMENT.s, paddingVertical: ESPACEMENT.s, paddingHorizontal: ESPACEMENT.m, flexWrap: 'wrap' },
 });
 
 createRoot(document.getElementById('racine')!).render(

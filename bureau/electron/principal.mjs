@@ -24,6 +24,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, No
 import { spawn } from 'node:child_process';
 import { git, preparerInterface, recupererCode } from './interface.mjs';
 import { synthetiser, VOIX_NATURELLES } from './voix.mjs';
+import { MOTIF_PROFIL, changementPermis, fichierAutorise } from './portee.mjs';
 import { fluxMedia, pageArticle, yahooJson, yahooScreener } from './reseau.mjs';
 import { readFile, writeFile, mkdir, rename, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -57,7 +58,27 @@ function fichierDeProfil(nom) {
   return trouve[1] === 'portefeuille' ? `portefeuille-${trouve[2]}.ab` : `coffre-${trouve[2]}.json`;
 }
 
+/**
+ * Portée du profil ouvert (isolation des comptes, défense en profondeur).
+ *
+ *  - `undefined` : aucun compte ouvert (écran de connexion, ou interface
+ *    antérieure qui ne déclare pas de profil) — rien d'ouvert, rien à cacher ;
+ *  - `principal` : l'administrateur, qui gère aussi les fichiers des amis ;
+ *  - l'identifiant d'un ami : SES fichiers, et la liste des profils.
+ *
+ * Quitter la portée d'un ami (`profil:fermer`) recharge la fenêtre : l'état en
+ * mémoire du compte (clés, base, caches) disparaît avec la page. La vraie
+ * barrière reste cryptographique — chaque coffre est scellé par sa propre
+ * clé — ; cette portée empêche en plus qu'un compte ami demande, même par
+ * erreur, le fichier d'un autre.
+ */
+let portee;
+
+
 function cheminDe(nom) {
+  if (!fichierAutorise(String(nom), portee)) {
+    throw new Error(`Fichier d’un autre compte refusé : ${nom}`);
+  }
   const fichier = Object.hasOwn(FICHIERS, nom) ? FICHIERS[nom] : fichierDeProfil(nom);
   if (!fichier) {
     throw new Error(`Fichier inconnu : ${nom}`);
@@ -94,6 +115,25 @@ function installerPasserelle() {
     await ecrireAtomique(cheminDe(nom), Buffer.from(octets));
   });
 
+  ipcMain.handle('profil:ouvrir', async (_evenement, id) => {
+    const propre = String(id);
+    if (!MOTIF_PROFIL.test(propre)) throw new Error('Profil invalide.');
+    // Seul l'administrateur passe directement à un autre compte (accès par séquestre).
+    if (!changementPermis(portee, propre)) {
+      throw new Error('Changez de compte avant d’en ouvrir un autre.');
+    }
+    portee = propre;
+    return true;
+  });
+
+  ipcMain.handle('profil:fermer', async evenement => {
+    const avant = portee;
+    portee = undefined;
+    // Rechargement : plus rien du compte précédent ne reste dans la page.
+    if (avant !== undefined) setTimeout(() => evenement.sender.reload(), 0);
+    return true;
+  });
+
   ipcMain.handle('fichier:existe', async (_evenement, nom) => existsSync(cheminDe(nom)));
 
   ipcMain.handle('fichier:dossier', async () => join(app.getPath('userData'), 'donnees'));
@@ -101,7 +141,11 @@ function installerPasserelle() {
   // Sauvegardes : un dossier visible dans Documents, que l'on peut copier,
   // synchroniser (OneDrive) ou emporter. La fenêtre ne donne qu'un nom de
   // fichier, vérifié ici : impossible de sortir du dossier.
-  const dossierSauvegardes = () => join(app.getPath('documents'), 'AppliBourse Sauvegardes');
+  // Chaque ami a son sous-dossier : il ne liste ni ne lit les sauvegardes des autres.
+  const dossierSauvegardes = () =>
+    portee && portee !== 'principal'
+      ? join(app.getPath('documents'), 'AppliBourse Sauvegardes', `profil-${portee}`)
+      : join(app.getPath('documents'), 'AppliBourse Sauvegardes');
   const cheminSauvegarde = nom => {
     const propre = String(nom);
     if (!/^[A-Za-z0-9._-]+\.sauvegarde\.json$/.test(propre)) {

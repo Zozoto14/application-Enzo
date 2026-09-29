@@ -15,6 +15,7 @@
  */
 
 import { StyleSheet } from 'react-native';
+import { cleLocale, surChangementDeCompte } from '../profils/espace';
 
 export interface Palette {
   fond: string;
@@ -235,7 +236,7 @@ const MEMOIRE_THEME = 'applibourse.theme';
 function themeMemorise(): CleTheme {
   try {
     const lu = (globalThis as { localStorage?: { getItem(cle: string): string | null } }).localStorage?.getItem(
-      MEMOIRE_THEME,
+      cleLocale(MEMOIRE_THEME),
     );
     return lu && lu in THEMES ? (lu as CleTheme) : 'classique';
   } catch {
@@ -244,6 +245,11 @@ function themeMemorise(): CleTheme {
 }
 
 let themeActif: CleTheme = themeMemorise();
+// Au changement de compte, on repart du thème classique : celui du profil
+// suivant s'applique à son déverrouillage.
+surChangementDeCompte(() => {
+  themeActif = 'classique';
+});
 
 /**
  * Change de thème. Sur le bureau, pose aussi les polices (variables CSS lues
@@ -276,7 +282,7 @@ export function definirTheme(cle: CleTheme | string | undefined): void {
   }
   try {
     (globalThis as { localStorage?: { setItem(cle: string, valeur: string): void } }).localStorage?.setItem(
-      MEMOIRE_THEME,
+      cleLocale(MEMOIRE_THEME),
       retenu,
     );
   } catch {

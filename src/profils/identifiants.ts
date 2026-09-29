@@ -57,13 +57,19 @@ export function creerAccesAmi(
   session: Session,
   compte: string,
   alea: SourceAleatoire = aleatoireParDefaut,
+  /** Appelé session ouverte, juste avant le verrouillage (dépôt de séquestre). */
+  avantVerrou?: (session: Session) => void,
 ): IdentifiantsAmi {
   if (session.statut() !== 'non-initialise') {
     throw new Error('Ce profil a déjà un coffre : effacez-le avant d’en créer un nouveau.');
   }
   const motDePasse = genererMotDePasse(alea);
   const initialisation = session.initialiser({ motDePasse, compte });
-  session.verrouiller();
+  try {
+    avantVerrou?.(session);
+  } finally {
+    session.verrouiller();
+  }
   return {
     motDePasse,
     codesRecuperation: initialisation.codesRecuperation,
