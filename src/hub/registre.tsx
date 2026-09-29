@@ -1,0 +1,43 @@
+/**
+ * Registre des apps du hub.
+ *
+ * **Ajouter une app = ajouter une entrée ici** : identifiant, nom, icône,
+ * teinte, information en direct et écran racine. Le hub en fait une tuile,
+ * l'Administration une case d'autorisation, sans autre modification.
+ *
+ * L'identifiant est enregistré dans les autorisations des profils : ne le
+ * changez pas une fois l'app livrée.
+ */
+
+import { Administration } from './Administration';
+import { infoAdministration, infoPortefeuille } from './infos';
+import type { AppHub } from './types';
+
+export const ID_PORTEFEUILLE = 'portefeuille';
+export const ID_ADMINISTRATION = 'administration';
+
+export const REGISTRE: readonly AppHub[] = [
+  {
+    id: ID_PORTEFEUILLE,
+    nom: 'Portefeuille',
+    categorie: 'Finance',
+    description: 'Positions, performance, alertes et podcast du jour.',
+    icone: '↗',
+    teinte: 'portefeuille',
+    info: contexte => infoPortefeuille(contexte.portefeuille),
+    // Pas de Racine : l'arbre du portefeuille est celui d'App, déjà monté.
+  },
+  {
+    id: ID_ADMINISTRATION,
+    nom: 'Administration',
+    categorie: 'Admin',
+    description: 'Comptes des amis, identifiants et accès aux apps.',
+    icone: '⚙︎',
+    teinte: 'admin',
+    adminSeulement: true,
+    // Il faut une plateforme qui sache créer le coffre d'un autre profil.
+    disponible: contexte => Boolean(contexte.profils?.onCreerCompte),
+    info: contexte => infoAdministration(contexte.profils?.tous),
+    Racine: Administration,
+  },
+];
