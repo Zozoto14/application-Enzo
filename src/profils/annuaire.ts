@@ -229,7 +229,8 @@ export function ecrireAnnuaire(annuaire: Annuaire): string {
   if (annuaire.heritage) {
     throw new ErreurAnnuaire('Annuaire à migrer : seul l’administrateur peut l’écrire.');
   }
-  const { heritage: _ignore, ...reste } = annuaire;
+  const reste: Partial<Annuaire> = { ...annuaire };
+  delete reste.heritage;
   return JSON.stringify({ ...reste, format: 'annuaire', v: VERSION_ANNUAIRE });
 }
 
@@ -301,7 +302,11 @@ export function profilAmi(annuaire: Annuaire, id: string, nom: string): Profil {
   if (annuaire.heritage) {
     const p = annuaire.heritage.find(h => h.id === id && !h.admin);
     if (!p) throw new ErreurAnnuaire('Compte introuvable.');
-    const { politique: _politique, connexions: _c, derniereConnexion: _d, ...soi } = p;
+    // Rien de ce que l'administrateur seul doit voir.
+    const soi: Profil = { ...p };
+    delete soi.politique;
+    delete soi.connexions;
+    delete soi.derniereConnexion;
     return soi;
   }
   const entree = annuaire.comptes.find(c => c.id === id);

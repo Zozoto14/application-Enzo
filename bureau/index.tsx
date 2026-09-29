@@ -16,7 +16,7 @@ import '@fontsource/fraunces/500.css';
 import '@fontsource/fraunces/600.css';
 import '@fontsource/dm-serif-display/400.css';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { createRoot } from 'react-dom/client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import initSqlJs from 'sql.js';
@@ -560,7 +560,13 @@ function Racine() {
           <Text style={{ color: '#fff', fontWeight: '700', flex: 1 }}>
             Session administrateur sur le compte de {profil.nom}
           </Text>
-          <Bouton titre="Revenir à mon compte" variante="discret" onPress={() => quitterCompte(session)} testID="quitter-session-admin" />
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => quitterCompte(session)}
+            testID="quitter-session-admin"
+            style={({ pressed }) => [styles.boutonBandeau, { backgroundColor: pressed ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.12)' }]}>
+            <Text style={{ color: '#fff', fontWeight: '700' }}>Revenir à mon compte</Text>
+          </Pressable>
         </View>
       ) : null}
       <View style={styles.pleinEcran}>
@@ -574,6 +580,7 @@ const styles = StyleSheet.create({
   pleinEcran: { flex: 1 },
   centre: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: ESPACEMENT.xl },
   motif: { textAlign: 'center', maxWidth: 520, marginTop: ESPACEMENT.m, lineHeight: 22 },
+  boutonBandeau: { borderWidth: 1, borderColor: '#fff', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14, minHeight: 36, justifyContent: 'center' },
   bandeauAdmin: { flexDirection: 'row', alignItems: 'center', gap: ESPACEMENT.s, paddingVertical: ESPACEMENT.s, paddingHorizontal: ESPACEMENT.m, flexWrap: 'wrap' },
 });
 

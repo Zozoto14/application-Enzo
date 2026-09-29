@@ -457,9 +457,14 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [rafraichir],
   );
 
+  // Coffre créé pendant cette ouverture : premier lancement du profil (pas de devblog).
+  const coffreCreeIci = useRef(false);
   const creer = useCallback(
     (motDePasse: string) =>
-      executer(() => setSecrets(session.initialiser({ motDePasse }))),
+      executer(() => {
+        setSecrets(session.initialiser({ motDePasse }));
+        coffreCreeIci.current = true;
+      }),
     [executer, session],
   );
 
@@ -1906,7 +1911,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         return;
       }
       devblogDecide.current = true;
-      const decision = deciderDevblog(stockagePrefs.lire(CLE_DEVBLOG), { profilNeuf: nombreComptes === 0 && nombreOperations === 0, admin: estAdmin });
+      // Profil neuf : coffre créé à l'instant, ou toute première ouverture d'un
+      // compte ami créé par l'administrateur (portefeuille encore vide).
+      const premiereOuvertureAmi =
+        !estAdmin && stockagePrefs.lire('compte.connexions') === '1' && nombreComptes === 0 && nombreOperations === 0;
+      const decision = deciderDevblog(stockagePrefs.lire(CLE_DEVBLOG), { profilNeuf: coffreCreeIci.current || premiereOuvertureAmi, admin: estAdmin });
       if (decision.genre === 'marquer') {
         stockagePrefs.ecrire(CLE_DEVBLOG, decision.valeur);
       } else if (decision.genre === 'afficher') {
