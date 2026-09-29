@@ -7,6 +7,7 @@ import type { ParametresKdf } from '../securite/kdf';
 import { Session } from '../session/session';
 import { stockageMemoire } from '../session/stockage-coffre';
 import {
+  adopterPrenomAdmin,
   ajouterCompteGere,
   ajouterEvenementGestion,
   apercuAnonyme,
@@ -186,6 +187,17 @@ describe('gestionnaire : ce que l’annuaire lui permet', () => {
     ]);
     expect(vue.annuaire.journalGestion).toBeUndefined();
     expect(ouvrirAnnuaireAdmin(vue.annuaire, k, aleatoireDeterministe(14), MAINTENANT).evenementsGestion).toEqual([]);
+  });
+
+  it('l’adoption du prénom de l’administrateur ne perd pas les actions en attente', () => {
+    const { k, annuaire } = appareil();
+    const avec = ajouterEvenementGestion(annuaire, 'lea0000001', { type: 'compte', action: 'Action en attente', date: MAINTENANT }, aleatoireDeterministe(21));
+    // Administrateur historique sans prénom : « Moi » (jamais nommé).
+    const sansPrenom = { ...avec, admin: { ...avec.admin, empreinte: undefined, nom: undefined } };
+    const adopte = adopterPrenomAdmin(sansPrenom, 'Enzo', k, aleatoireDeterministe(22), MAINTENANT);
+    expect(adopte).toBeDefined();
+    const vue = ouvrirAnnuaireAdmin(adopte as Annuaire, k, aleatoireDeterministe(23), MAINTENANT);
+    expect(vue.evenementsGestion.map(e => e.action)).toEqual(['Action en attente']);
   });
 
   it('un dépôt de journal signé d’un non-gestionnaire est ignoré, et aucun secret ne passe', () => {

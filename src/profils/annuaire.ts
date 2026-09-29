@@ -707,12 +707,15 @@ export function adopterPrenomAdmin(
   if (vue.annuaire.comptes.some(c => c.empreinte === empreinte)) {
     return undefined;
   }
-  return appliquerProfilsAdmin(
+  const suivant = appliquerProfilsAdmin(
     vue.annuaire,
     vue.profils.map(p => (p.admin ? { ...p, nom: propre } : p)),
     cles,
     alea,
   );
+  // L'ouverture ci-dessus a consommé les actions des gestionnaires en attente sans les reporter
+  // au journal : on les remet, elles seront lues par la prochaine ouverture ordinaire.
+  return source.journalGestion ? { ...suivant, journalGestion: source.journalGestion } : suivant;
 }
 
 /** Remplace le séquestre d'un compte par un dépôt neuf (création, régénération des identifiants). */

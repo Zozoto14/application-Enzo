@@ -151,6 +151,17 @@ const encodeur = new TextEncoder();
 const PARAM_CONNEXIONS = 'compte.connexions';
 const PARAM_ACCES_ADMIN = 'compte.accesAdmin';
 
+/**
+ * Écritures de l'annuaire par un gestionnaire, une à la fois : chacune relit le
+ * fichier puis le réécrit, deux en parallèle s'écraseraient (action + journal).
+ */
+let fileGestion: Promise<unknown> = Promise.resolve();
+function enFile<T>(action: () => Promise<T>): Promise<T> {
+  const suite = fileGestion.then(action, action);
+  fileGestion = suite.catch(() => undefined);
+  return suite;
+}
+
 function erreurTexte(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : String(erreur);
 }
@@ -641,8 +652,10 @@ function Racine() {
         await autoriserFichiers(id);
         const { identifiants, depot } = await creerCoffreAmi(id, nom.trim(), publique);
         try {
-          const frais = await exigerGestionnaire();
-          await ecrireAnnuaireDisque(deposerSequestre(ajouterCompteGere(frais, nouveau, maintenant), id, depot));
+          await enFile(async () => {
+            const frais = await exigerGestionnaire();
+            await ecrireAnnuaireDisque(deposerSequestre(ajouterCompteGere(frais, nouveau, maintenant), id, depot));
+          });
         } catch (erreur) {
           await effacerFichiers(id).catch(() => undefined);
           throw erreur;
@@ -662,25 +675,29 @@ function Racine() {
         await autoriserFichiers(id);
         await effacerFichiers(id);
         const { identifiants, depot } = await creerCoffreAmi(id, entree.nom, annuaire.admin.cleSequestre);
-        await ecrireAnnuaireDisque(deposerSequestre(await exigerGestionnaire(), id, depot));
+        await enFile(async () => ecrireAnnuaireDisque(deposerSequestre(await exigerGestionnaire(), id, depot)));
         rafraichirGestion();
         return identifiants;
       },
-      onModifierProfils: async (suivants: readonly Profil[]) => {
-        const annuaire = await exigerGestionnaire();
-        const carnet = carnetCourant();
-        const ids = new Set(carnet.map(e => e.id));
-        for (const p of suivants) {
-          if (!ids.has(p.id) || p.nom !== carnet.find(e => e.id === p.id)?.nom) {
-            throw new Error('Ce compte ne fait pas partie de ceux que vous gérez.');
+      onModifierProfils: (suivants: readonly Profil[]) =>
+        enFile(async () => {
+          const annuaire = await exigerGestionnaire();
+          const carnet = carnetCourant();
+          const ids = new Set(carnet.map(e => e.id));
+          for (const p of suivants) {
+            if (!ids.has(p.id) || p.nom !== carnet.find(e => e.id === p.id)?.nom) {
+              throw new Error('Ce compte ne fait pas partie de ceux que vous gérez.');
+            }
           }
-        }
-        await ecrireAnnuaireDisque(appliquerAccesGeres(annuaire, profil.id, suivants, ids));
-        rafraichirGestion();
-      },
-      onJournalGestion: async (evenement: { type: string; action: string; cible?: string; nomCible?: string; app?: string }) => {
-        const annuaire = await exigerGestionnaire();
-        await ecrireAnnuaireDisque(ajouterEvenementGestion(annuaire, profil.id, { ...evenement, type: evenement.type as TypeEvenement, date: new Date().toISOString() }));
+          await ecrireAnnuaireDisque(appliquerAccesGeres(annuaire, profil.id, suivants, ids));
+          rafraichirGestion();
+        }),
+      onJournalGestion: (evenement: { type: string; action: string; cible?: string; nomCible?: string; app?: string }) => {
+        const date = new Date().toISOString();
+        return enFile(async () => {
+          const annuaire = await exigerGestionnaire();
+          await ecrireAnnuaireDisque(ajouterEvenementGestion(annuaire, profil.id, { ...evenement, type: evenement.type as TypeEvenement, date }));
+        });
       },
     } satisfies Partial<ControleProfils>);
   }

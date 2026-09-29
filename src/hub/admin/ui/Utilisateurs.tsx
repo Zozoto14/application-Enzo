@@ -426,6 +426,11 @@ function Fiche({
         <Text style={[styleTitre(theme), { fontSize: 22, flex: 1 }]}>{profil.nom}</Text>
         <Pilule theme={theme} texte={LIBELLES_STATUT[statut]} couleur={couleurStatut(theme, statut)} testID="admin-fiche-statut" />
       </View>
+      {!gestionnaire && profil.creePar ? (
+        <Text style={[attenue, { fontSize: 13 }]} testID="admin-fiche-cree-par">
+          Créé par le gestionnaire {outils.tous.find(p => p.id === profil.creePar)?.nom ?? 'inconnu (rôle retiré ou compte supprimé)'}.
+        </Text>
+      ) : null}
       {gestionnaire ? (
         <Text style={[attenue, { fontSize: 13 }]}>Ami que vous avez créé : ses connexions et son contenu ne vous sont pas communiqués.</Text>
       ) : (

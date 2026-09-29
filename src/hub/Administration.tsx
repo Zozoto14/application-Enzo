@@ -265,7 +265,9 @@ export function Administration({ contexte, theme, registre, onRetour, onTheme }:
           {estGestionnaire ? 'Administration limitée : les amis que vous avez créés, leurs accès aux apps et le journal de vos actions.' : 'Comptes, accès aux apps, sécurité et journal de ce hub.'}
         </Text>
         {estGestionnaire ? (
-          <Avis theme={theme} genre="info" texte={`Vous êtes connecté·e en tant que ${LIBELLES_ROLE.gestionnaire.toLowerCase()}. Vous ne pouvez ouvrir le compte de personne, et les autres comptes ne vous sont pas montrés.`} testID="admin-bandeau-gestionnaire" />
+          <View style={{ marginTop: 14 }}>
+            <Avis theme={theme} genre="info" texte={`Vous êtes connecté·e en tant que ${LIBELLES_ROLE.gestionnaire.toLowerCase()}. Vous ne pouvez ouvrir le compte de personne, et les autres comptes ne vous sont pas montrés.`} testID="admin-bandeau-gestionnaire" />
+          </View>
         ) : null}
 
         <View style={styles.onglets} accessibilityRole="tablist">
