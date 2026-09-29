@@ -124,7 +124,12 @@ export async function ouvrirSessionBureau(
       return;
     }
     const octets = dernierPilote.exporter();
-    await stockage.ecrire(fichiers.portefeuille, scellerOctets(derniereCle, octets));
+    const nouveau = scellerOctets(derniereCle, octets);
+    // Garde aussi la copie en mémoire à jour : un reverrouillage suivi d'un
+    // déverrouillage, sans recharger la page, rouvre ce qui vient d'être écrit
+    // (et non l'état lu au démarrage, qui ferait perdre les modifications).
+    scelle = nouveau;
+    await stockage.ecrire(fichiers.portefeuille, nouveau);
   };
 
   const planifier = () => {
