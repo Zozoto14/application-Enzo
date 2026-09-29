@@ -13,7 +13,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } fr
 import { BoutonHub } from '../Hub';
 import { police, teinteTransparente, type ThemeHub } from '../themes';
 import { ecouterTouche } from '../web';
-import { fonctionnalitesPour } from './devblog';
+import { fonctionnalitesPour } from './logiqueDevblog';
 import { ENTREES, type CibleEssai, type EntreeDevblog, type Illustration } from './entrees';
 
 export interface DevblogProps {

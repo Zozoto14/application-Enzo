@@ -1,4 +1,4 @@
-import { decider, etapesVisite, fonctionnalitesPour, lireEtat, marquerLues } from './devblog';
+import { decider, etapesVisite, fonctionnalitesPour, lireEtat, marquerLues } from './logiqueDevblog';
 import { ENTREES, type EntreeDevblog } from './entrees';
 
 const v2: EntreeDevblog = {
