@@ -54,6 +54,15 @@ export interface ControleProfils {
   /** Note l'ouverture (déverrouillage) du profil courant sur cet appareil. */
   onConnexion?(): void;
   /**
+   * Gestionnaire seulement. `comptes` : les amis qu'il a lui-même créés (avec
+   * le prénom qu'il a saisi) ; `apercu` : tous les comptes de l'appareil SANS
+   * prénom, pour les chiffres du tableau de bord ; `autres` : combien de
+   * comptes lui restent invisibles. Jamais fourni à un ami ni à l'administrateur.
+   */
+  gestion?: { comptes: readonly Profil[]; apercu: readonly Profil[]; autres: number };
+  /** Gestionnaire : met une de ses actions en attente pour le journal de l'administrateur. */
+  onJournalGestion?(evenement: { type: string; action: string; cible?: string; nomCible?: string; app?: string }): Promise<void>;
+  /**
    * Accès administrateur aux comptes des amis (séquestre). Réservés à
    * l'administrateur déverrouillé ; jamais fournis à un ami.
    */

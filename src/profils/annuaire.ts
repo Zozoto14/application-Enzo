@@ -46,6 +46,7 @@ import {
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { aleatoireParDefaut, type SourceAleatoire } from '../securite/aleatoire';
 import { usageSequestre } from '../session/session';
+import { lireEvenement, type EvenementAudit } from '../hub/admin/journal';
 import { ID_PRINCIPAL, lireProfils, nettoyerApps, nettoyerNiveaux, type EtatSequestre, type Profil } from './profils';
 
 export const VERSION_ANNUAIRE = 3;
@@ -61,6 +62,11 @@ export interface AccesPublic {
   invitationExpireLe?: string;
   expireLe?: string;
   desactiveJusquau?: string;
+  /**
+   * Rôle de gestionnaire (absent : ami). Comme le reste de `acces`, il n'est
+   * pas protégé en intégrité : voir « Rôles » dans `docs/hub/sequestre.md`.
+   */
+  role?: 'gestionnaire';
 }
 
 export interface SequestreCompte {
@@ -80,6 +86,12 @@ export interface EntreeCompte {
   sequestre: SequestreCompte;
   /** Dernière connexion et compteur, scellés pour l'administrateur. */
   suivi?: string;
+  /**
+   * Compte créé par un gestionnaire : prénom, date et créateur, scellés pour
+   * l'administrateur (le gestionnaire ne peut pas écrire son bloc privé). Lu
+   * puis effacé à sa prochaine ouverture.
+   */
+  creation?: string;
 }
 
 export interface Annuaire {
@@ -97,6 +109,11 @@ export interface Annuaire {
   };
   politique?: PolitiqueHub;
   comptes: EntreeCompte[];
+  /**
+   * Actions des gestionnaires en attente, scellées une à une pour
+   * l'administrateur : il les reporte à son journal à sa prochaine ouverture.
+   */
+  journalGestion?: string[];
   /** Bloc scellé pour l'administrateur (voir `Prive`). */
   prive?: string;
   /** Liste en clair des formats 1 et 2, à migrer par l'administrateur. */
@@ -109,6 +126,8 @@ interface Prive {
   creeLeAdmin?: string;
   noms: Record<string, string>;
   creeLe: Record<string, string>;
+  /** Gestionnaire qui a créé chaque compte (le cas échéant). */
+  creePar: Record<string, string>;
   anterieurs: string[];
   codes: Record<string, { code: string; creeLe: string }>;
 }
@@ -126,6 +145,10 @@ const USAGE_PRIVEE = 'sequestre/cle-privee';
 const usageEnveloppe = (id: string) => `sequestre/enveloppe/${id}`;
 const usageSuivi = (id: string) => `annuaire/suivi/${id}`;
 const usageNom = (id: string) => `annuaire/nom/${id}`;
+const usageCreation = (id: string) => `annuaire/creation/${id}`;
+const USAGE_JOURNAL_GESTION = 'annuaire/journal-gestion';
+/** Nombre maximal d'actions de gestionnaires gardées en attente. */
+export const MAX_JOURNAL_GESTION = 500;
 
 export class ErreurAnnuaire extends Error {
   constructor(message: string) {
@@ -152,6 +175,7 @@ function lireAcces(brut: unknown): AccesPublic {
   const acces: AccesPublic = { apps, actif: o.actif !== false };
   const niveaux = nettoyerNiveaux(o.niveaux, apps);
   if (niveaux) acces.niveaux = niveaux;
+  if (o.role === 'gestionnaire') acces.role = 'gestionnaire';
   for (const cle of ['invitationExpireLe', 'expireLe', 'desactiveJusquau'] as const) {
     const d = dateIso(o[cle]);
     if (d) acces[cle] = d;
@@ -202,6 +226,7 @@ export function lireAnnuaire(brut: string | undefined): Annuaire {
     vus.add(c.id);
     const entree: EntreeCompte = { id: c.id, empreinte, nom, acces: lireAcces(c.acces), sequestre: lireSequestre(c.sequestre) };
     if (typeof c.suivi === 'string' && MOTIF_DEPOT.test(c.suivi) && c.suivi.length <= 4096) entree.suivi = c.suivi;
+    if (typeof c.creation === 'string' && MOTIF_DEPOT.test(c.creation) && c.creation.length <= 4096) entree.creation = c.creation;
     comptes.push(entree);
   }
   const annuaire: Annuaire = { v: VERSION_ANNUAIRE, sel: hexa(o.sel, 32) ?? '', admin: {}, comptes };
@@ -222,6 +247,10 @@ export function lireAnnuaire(brut: string | undefined): Annuaire {
   }
   const prive = hexa(o.prive);
   if (prive) annuaire.prive = prive;
+  if (Array.isArray(o.journalGestion)) {
+    const scelles = o.journalGestion.filter((e): e is string => typeof e === 'string' && MOTIF_DEPOT.test(e) && e.length <= 4096).slice(-MAX_JOURNAL_GESTION);
+    if (scelles.length > 0) annuaire.journalGestion = scelles;
+  }
   return annuaire;
 }
 
@@ -400,7 +429,7 @@ export function noterConnexionAmi(
 // --- Côté administrateur ------------------------------------------------------------
 
 function lirePrive(annuaire: Annuaire, cles: ClesAdmin): Prive {
-  const vide: Prive = { noms: {}, creeLe: {}, anterieurs: [], codes: {} };
+  const vide: Prive = { noms: {}, creeLe: {}, creePar: {}, anterieurs: [], codes: {} };
   if (!annuaire.prive) return vide;
   let o: Record<string, unknown>;
   try {
@@ -414,6 +443,7 @@ function lirePrive(annuaire: Annuaire, cles: ClesAdmin): Prive {
   if (typeof o.creeLeAdmin === 'string') prive.creeLeAdmin = o.creeLeAdmin.slice(0, 40);
   for (const [id, nom] of Object.entries(dict(o.noms))) if (MOTIF_ID.test(id) && typeof nom === 'string') prive.noms[id] = nom.slice(0, 30);
   for (const [id, d] of Object.entries(dict(o.creeLe))) if (MOTIF_ID.test(id) && typeof d === 'string') prive.creeLe[id] = d.slice(0, 40);
+  for (const [id, par] of Object.entries(dict(o.creePar))) if (MOTIF_ID.test(id) && typeof par === 'string' && MOTIF_ID.test(par)) prive.creePar[id] = par;
   prive.anterieurs = Array.isArray(o.anterieurs) ? o.anterieurs.filter((id): id is string => typeof id === 'string' && MOTIF_ID.test(id)) : [];
   for (const [id, c] of Object.entries(dict(o.codes))) {
     const code = dict(c);
@@ -449,6 +479,8 @@ export interface VueAdmin {
   profils: Profil[];
   /** Vrai quand l'annuaire a changé (migration, clés, séquestres convertis) : à enregistrer. */
   modifie: boolean;
+  /** Actions de gestionnaires reçues depuis la dernière ouverture, à reporter au journal (puis effacées de l'annuaire). */
+  evenementsGestion: EvenementAudit[];
 }
 
 /**
@@ -464,7 +496,7 @@ export function ouvrirAnnuaireAdmin(source: Annuaire, cles: ClesAdmin, alea: Sou
     annuaire.sel = bytesToHex(alea(16));
     modifie = true;
   }
-  let prive: Prive = annuaire.heritage ? { noms: {}, creeLe: {}, anterieurs: [], codes: {} } : lirePrive(annuaire, cles);
+  let prive: Prive = annuaire.heritage ? { noms: {}, creeLe: {}, creePar: {}, anterieurs: [], codes: {} } : lirePrive(annuaire, cles);
 
   // Paire de séquestre de l'administrateur.
   if (!annuaire.admin.priveeScellee) {
@@ -513,9 +545,47 @@ export function ouvrirAnnuaireAdmin(source: Annuaire, cles: ClesAdmin, alea: Sou
       modifie = true;
     }
 
+    // Comptes créés par un gestionnaire : prénom, date et créateur passent dans le bloc privé.
+    // Premier écrit gagnant : un dépôt ne remplace jamais un prénom déjà connu, et le
+    // créateur n'est retenu que s'il est réellement gestionnaire.
+    const gestionnaires = new Set(annuaire.comptes.filter(c => c.acces.role === 'gestionnaire').map(c => c.id));
+    for (const c of annuaire.comptes) {
+      if (!c.creation) continue;
+      try {
+        const o = JSON.parse(utf8DepuisOctets(ouvrirDepot(privee, c.creation, usageCreation(c.id)))) as Record<string, unknown>;
+        if (prive.noms[c.id] === undefined && typeof o.nom === 'string' && o.nom.trim()) {
+          prive.noms[c.id] = o.nom.trim().slice(0, 30);
+          if (typeof o.creeLe === 'string') prive.creeLe[c.id] = o.creeLe.slice(0, 40);
+          if (typeof o.par === 'string' && gestionnaires.has(o.par)) prive.creePar[c.id] = o.par;
+        }
+      } catch {
+        // Dépôt illisible (autre clé, fichier retouché) : ignoré.
+      }
+      delete c.creation;
+      modifie = true;
+    }
+
+    // Actions des gestionnaires : reportées au journal de l'administrateur.
+    const evenementsGestion: EvenementAudit[] = [];
+    for (const scelle of annuaire.journalGestion ?? []) {
+      try {
+        const o = JSON.parse(utf8DepuisOctets(ouvrirDepot(privee, scelle, USAGE_JOURNAL_GESTION))) as { par?: unknown; evenement?: unknown };
+        if (typeof o.par !== 'string' || !gestionnaires.has(o.par)) continue;
+        const brut = o.evenement && typeof o.evenement === 'object' ? (o.evenement as Record<string, unknown>) : {};
+        const evenement = lireEvenement({ ...brut, acteur: prive.noms[o.par] ?? 'Gestionnaire' });
+        if (evenement) evenementsGestion.push(evenement);
+      } catch {
+        // Illisible : ignoré.
+      }
+    }
+    if (annuaire.journalGestion) {
+      delete annuaire.journalGestion;
+      modifie = true;
+    }
+
     // Nettoyage : rien du bloc privé ne survit à un compte supprimé.
     const ids = new Set(annuaire.comptes.map(c => c.id));
-    for (const table of [prive.noms, prive.creeLe, prive.codes] as Array<Record<string, unknown>>) {
+    for (const table of [prive.noms, prive.creeLe, prive.codes, prive.creePar] as Array<Record<string, unknown>>) {
       for (const id of Object.keys(table)) {
         if (!ids.has(id)) {
           delete table[id];
@@ -540,10 +610,11 @@ export function ouvrirAnnuaireAdmin(source: Annuaire, cles: ClesAdmin, alea: Sou
         if (suivi.derniereConnexion) profil.derniereConnexion = suivi.derniereConnexion;
         if (suivi.connexions !== undefined) profil.connexions = suivi.connexions;
         if (prive.anterieurs.includes(c.id)) profil.anterieur = true;
+        if (prive.creePar[c.id]) profil.creePar = prive.creePar[c.id];
         return profil;
       }),
     ];
-    return { annuaire, profils, modifie };
+    return { annuaire, profils, modifie, evenementsGestion };
   } finally {
     privee.fill(0);
   }
@@ -563,7 +634,7 @@ function lireSuivi(privee: Uint8Array, c: EntreeCompte): { derniereConnexion?: s
 }
 
 function accesDe(p: Profil): AccesPublic {
-  return lireAcces({ apps: p.apps, actif: p.actif, niveaux: p.niveaux, invitationExpireLe: p.invitationExpireLe, expireLe: p.expireLe, desactiveJusquau: p.desactiveJusquau });
+  return lireAcces({ apps: p.apps, actif: p.actif, niveaux: p.niveaux, invitationExpireLe: p.invitationExpireLe, expireLe: p.expireLe, desactiveJusquau: p.desactiveJusquau, role: p.role });
 }
 
 /**
@@ -600,10 +671,11 @@ export function appliquerProfilsAdmin(source: Annuaire, profils: readonly Profil
     if (p.creeLe) prive.creeLe[p.id] = p.creeLe;
     const entree: EntreeCompte = { id: p.id, ...scelle, acces: accesDe(p), sequestre: avant?.sequestre ?? { etat: 'attendu' } };
     if (avant?.suivi) entree.suivi = avant.suivi;
+    if (avant?.creation) entree.creation = avant.creation;
     annuaire.comptes.push(entree);
   }
   const ids = new Set(annuaire.comptes.map(c => c.id));
-  for (const table of [prive.noms, prive.creeLe, prive.codes] as Array<Record<string, unknown>>) {
+  for (const table of [prive.noms, prive.creeLe, prive.codes, prive.creePar] as Array<Record<string, unknown>>) {
     for (const id of Object.keys(table)) if (!ids.has(id)) delete table[id];
   }
   prive.anterieurs = prive.anterieurs.filter(id => ids.has(id));
@@ -635,12 +707,15 @@ export function adopterPrenomAdmin(
   if (vue.annuaire.comptes.some(c => c.empreinte === empreinte)) {
     return undefined;
   }
-  return appliquerProfilsAdmin(
+  const suivant = appliquerProfilsAdmin(
     vue.annuaire,
     vue.profils.map(p => (p.admin ? { ...p, nom: propre } : p)),
     cles,
     alea,
   );
+  // L'ouverture ci-dessus a consommé les actions des gestionnaires en attente sans les reporter
+  // au journal : on les remet, elles seront lues par la prochaine ouverture ordinaire.
+  return source.journalGestion ? { ...suivant, journalGestion: source.journalGestion } : suivant;
 }
 
 /** Remplace le séquestre d'un compte par un dépôt neuf (création, régénération des identifiants). */
@@ -726,3 +801,138 @@ export function politiqueAnnuaire(annuaire: Annuaire): PolitiqueHub | undefined 
 }
 
 export { normaliserCode };
+
+
+// --- Côté gestionnaire ---------------------------------------------------------------
+//
+// Un gestionnaire est un ami : il n'a aucune clé de l'administrateur. Il agit
+// sur la partie PUBLIQUE de l'annuaire (les règles d'accès `acces`, comme
+// l'ami qui note sa connexion) et ne voit que les comptes qu'il a créés, dont
+// il connaît le prénom parce qu'il l'a saisi (il le garde dans sa propre base
+// chiffrée, voir `hub/admin/gestion.ts`). Tout ce qui doit revenir à
+// l'administrateur (prénom, créateur, actions) lui est scellé avec sa clé
+// PUBLIQUE de séquestre — le même mécanisme que le suivi des connexions.
+
+/** Rôle du compte dans l'annuaire (relu à chaque action : une rétrogradation prend effet aussitôt). */
+export function roleDuCompte(annuaire: Annuaire, id: string): 'gestionnaire' | 'ami' | undefined {
+  const c = annuaire.comptes.find(e => e.id === id);
+  return c ? (c.acces.role === 'gestionnaire' ? 'gestionnaire' : 'ami') : undefined;
+}
+
+function exigerGestionnaire(annuaire: Annuaire, gestionnaireId: string): void {
+  if (annuaire.heritage) {
+    throw new ErreurAnnuaire('Annuaire à migrer : l’administrateur doit d’abord ouvrir son compte.');
+  }
+  if (roleDuCompte(annuaire, gestionnaireId) !== 'gestionnaire') {
+    throw new ErreurAnnuaire('Ce compte n’est pas gestionnaire.');
+  }
+}
+
+/**
+ * Vue des comptes qui ne montre AUCUN prénom : de quoi faire les chiffres du
+ * tableau de bord d'un gestionnaire (nombre de comptes, actifs, invités, apps).
+ */
+export function apercuAnonyme(annuaire: Annuaire): Profil[] {
+  const admin: Profil = { id: ID_PRINCIPAL, nom: 'Administrateur', admin: true, creeLe: '', ...(annuaire.politique ? { politique: annuaire.politique } : {}) };
+  return [admin, ...annuaire.comptes.map(c => ({ id: c.id, nom: 'Compte', admin: false, creeLe: '', anterieur: true, ...c.acces }))];
+}
+
+/** Compte de l'annuaire vu par son gestionnaire, avec le prénom que celui-ci a saisi. */
+export function compteGere(annuaire: Annuaire, id: string, nom: string, gestionnaireId: string): Profil | undefined {
+  const c = annuaire.comptes.find(e => e.id === id);
+  if (!c) return undefined;
+  const acces = { ...c.acces };
+  delete acces.role;
+  return { id, nom, admin: false, creeLe: '', anterieur: true, ...acces, creePar: gestionnaireId };
+}
+
+export interface NouveauCompteGere {
+  id: string;
+  nom: string;
+  gestionnaireId: string;
+  apps: readonly string[];
+  niveaux?: Record<string, NiveauAcces>;
+  invitationExpireLe?: string;
+  expireLe?: string;
+}
+
+/**
+ * Ajoute le compte qu'un gestionnaire vient de créer. Refuse un prénom déjà
+ * pris de façon volontairement vague (« pas disponible »). Limite assumée :
+ * ce refus laisse deviner qu'un prénom existe (comme la « limite assumée »
+ * du dictionnaire de prénoms) ; un compte créé est toujours simple ami.
+ */
+export function ajouterCompteGere(source: Annuaire, nouveau: NouveauCompteGere, maintenantIso: string, alea: SourceAleatoire = aleatoireParDefaut): Annuaire {
+  exigerGestionnaire(source, nouveau.gestionnaireId);
+  const publique = source.admin.cleSequestre;
+  if (!publique || !source.sel) {
+    throw new ErreurAnnuaire('L’administrateur doit d’abord ouvrir son compte avant que l’on puisse créer des amis.');
+  }
+  const nom = nouveau.nom.trim().slice(0, 30);
+  if (!nom) throw new ErreurAnnuaire('Donnez un prénom au profil.');
+  if (!MOTIF_ID.test(nouveau.id) || source.comptes.some(c => c.id === nouveau.id)) {
+    throw new ErreurAnnuaire('Identifiant de profil invalide.');
+  }
+  const scelle = sceller(source.sel, nouveau.id, nom, alea);
+  if (MOTS_ADMIN.has(normaliserNom(nom)) || scelle.empreinte === source.admin.empreinte || source.comptes.some(c => c.empreinte === scelle.empreinte)) {
+    throw new ErreurAnnuaire('Ce prénom n’est pas disponible : choisissez-en un autre.');
+  }
+  const creation = scellerPourAdmin(
+    publique,
+    utf8ToBytes(JSON.stringify({ nom, creeLe: maintenantIso.slice(0, 10), par: nouveau.gestionnaireId })),
+    usageCreation(nouveau.id),
+    alea,
+  );
+  const entree: EntreeCompte = {
+    id: nouveau.id,
+    ...scelle,
+    acces: lireAcces({ apps: nettoyerApps(nouveau.apps), actif: true, niveaux: nouveau.niveaux, invitationExpireLe: nouveau.invitationExpireLe, expireLe: nouveau.expireLe }),
+    sequestre: { etat: 'attendu' },
+    creation,
+  };
+  return { ...source, comptes: [...source.comptes, entree] };
+}
+
+/**
+ * Enregistre les règles d'accès des comptes qu'un gestionnaire gère. Seuls
+ * les comptes de `idsGeres` (jamais lui-même, jamais un autre gestionnaire)
+ * changent, et seul leur `acces` : ni rôle, ni prénom, ni séquestre, ni
+ * politique, ni bloc privé.
+ */
+export function appliquerAccesGeres(source: Annuaire, gestionnaireId: string, modifies: readonly Profil[], idsGeres: ReadonlySet<string>): Annuaire {
+  exigerGestionnaire(source, gestionnaireId);
+  const parId = new Map(modifies.map(p => [p.id, p]));
+  for (const id of parId.keys()) {
+    if (id === gestionnaireId || !idsGeres.has(id)) {
+      throw new ErreurAnnuaire('Ce compte ne fait pas partie de ceux que vous gérez.');
+    }
+    if (roleDuCompte(source, id) !== 'ami') {
+      throw new ErreurAnnuaire('Un gestionnaire ne peut pas agir sur ce compte.');
+    }
+  }
+  return {
+    ...source,
+    comptes: source.comptes.map(c => {
+      const p = parId.get(c.id);
+      if (!p) return c;
+      const acces = accesDe({ ...p, role: undefined });
+      return { ...c, acces };
+    }),
+  };
+}
+
+/** Met une action du gestionnaire en attente pour le journal de l'administrateur (scellée pour lui seul). */
+export function ajouterEvenementGestion(
+  source: Annuaire,
+  gestionnaireId: string,
+  evenement: Omit<EvenementAudit, 'acteur' | 'date'> & { date: string },
+  alea: SourceAleatoire = aleatoireParDefaut,
+): Annuaire {
+  exigerGestionnaire(source, gestionnaireId);
+  const publique = source.admin.cleSequestre;
+  if (!publique) return source;
+  const propre = lireEvenement(evenement);
+  if (!propre) return source;
+  const scelle = scellerPourAdmin(publique, utf8ToBytes(JSON.stringify({ par: gestionnaireId, evenement: propre })), USAGE_JOURNAL_GESTION, alea);
+  return { ...source, journalGestion: [...(source.journalGestion ?? []), scelle].slice(-MAX_JOURNAL_GESTION) };
+}

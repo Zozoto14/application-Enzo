@@ -5,7 +5,8 @@ import { Text, View } from 'react-native';
 import type { Profil } from '../../../profils/profils';
 import { police } from '../../themes';
 import type { AppHub } from '../../types';
-import { changerPolitique, niveauProfil } from '../comptes';
+import { changerPolitiquePar } from '../actions';
+import { niveauProfil } from '../comptes';
 import { LIBELLES_NIVEAU, niveauxDe } from '../niveaux';
 import { LONGUEUR_MAX_MESSAGE, etatApp, modifierEtatApp } from '../politique';
 import { BoutonHub, Champ, Interrupteur, Panneau, Pilule, Segments, commun, type OutilsAdmin } from './commun';
@@ -27,15 +28,14 @@ export function Applications({ outils }: { outils: OutilsAdmin }) {
 
 function CarteApp({ outils, app }: { outils: OutilsAdmin; app: AppHub }) {
   const { theme, tous } = outils;
-  const politique = tous.find(p => p.admin)?.politique;
-  const etat = etatApp(politique, app.id);
+  const etat = etatApp(outils.politique, app.id);
   const [message, setMessage] = useState(etat.maintenance ?? '');
   const utilisateurs = tous.filter(p => niveauProfil(p, app) !== 'aucun').length;
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
   const modifier = (changement: Parameters<typeof modifierEtatApp>[2], action: string) =>
     outils.modifierProfils(
-      (liste: readonly Profil[]) => changerPolitique(liste, modifierEtatApp(liste.find(p => p.admin)?.politique, app.id, changement)),
+      (liste: readonly Profil[]) => changerPolitiquePar(outils.acteur, liste, modifierEtatApp(liste.find(p => p.admin)?.politique, app.id, changement)),
       [{ type: 'app', app: app.id, action }],
     );
   const statut = !etat.active ? { texte: 'désactivée', couleur: theme.critique } : etat.maintenance !== undefined ? { texte: 'maintenance', couleur: theme.alerte } : { texte: 'active', couleur: theme.ok };
@@ -59,7 +59,9 @@ function CarteApp({ outils, app }: { outils: OutilsAdmin; app: AppHub }) {
       </View>
       <Text style={[attenue, { fontSize: 13 }]}>{app.description}</Text>
       {app.adminSeulement ? (
-        <Text style={[attenue, { fontSize: 12 }]}>Réservée à l’administrateur : ni activation globale ni maintenance.</Text>
+        <Text style={[attenue, { fontSize: 12 }]}>
+          Réservée à l’administrateur (les gestionnaires n’y ont qu’une version limitée) : ni activation globale ni maintenance.
+        </Text>
       ) : (
         <>
           <View style={commun.ligne}>
@@ -99,6 +101,10 @@ function CarteApp({ outils, app }: { outils: OutilsAdmin; app: AppHub }) {
               placeholder="ex. Mise à jour en cours, retour vers 18 h"
               testID={`admin-app-message-${app.id}`}
             />
+            <Text style={[attenue, { fontSize: 12 }]} testID={`admin-app-maintenance-aide-${app.id}`}>
+              En maintenance, l’app reste visible sur le hub avec ton message, mais les amis ne peuvent pas l’ouvrir ; toi seul·e peux encore l’ouvrir. Utile
+              pour une mise à jour ou un souci. À ne pas confondre avec Désactiver : l’app disparaît alors pour tous sauf toi.
+            </Text>
             {etat.maintenance !== undefined && message !== etat.maintenance ? (
               <View style={commun.actions}>
                 <BoutonHub

@@ -25,6 +25,8 @@ export const ID_PRINCIPAL = 'principal';
  * lirait une liste 2 en ignore simplement les champs nouveaux.
  */
 export const VERSION_PROFILS = 2;
+// Le rôle (facultatif, « ami » par défaut) s'ajoute à la version 2 sans la changer :
+// une version antérieure ignore simplement le champ.
 
 /**
  * Séquestre d'un compte ami (vu par l'administrateur seulement) :
@@ -33,6 +35,18 @@ export const VERSION_PROFILS = 2;
  * `revoque` — l'administrateur y a renoncé.
  */
 export type EtatSequestre = 'actif' | 'depose' | 'attendu' | 'revoque' | 'absent';
+
+/**
+ * Rôle d'un compte qui n'est pas l'administrateur. Absent = « ami » (défaut
+ * des listes enregistrées avant les rôles : rien à migrer, rien à perdre).
+ * « gestionnaire » : un ami à qui l'administrateur confie une Administration
+ * limitée (voir `src/hub/admin/roles.ts`) — jamais le contenu d'un compte.
+ */
+export type RoleProfil = 'ami' | 'gestionnaire';
+
+export function estRole(valeur: unknown): valeur is RoleProfil {
+  return valeur === 'ami' || valeur === 'gestionnaire';
+}
 
 export interface Profil {
   id: string;
@@ -66,6 +80,10 @@ export interface Profil {
   politique?: PolitiqueHub;
   /** Vue de l'administrateur : état du séquestre de ce compte ami. */
   sequestre?: EtatSequestre;
+  /** Rôle du compte ; absent pour l'administrateur, et pour un ami « ordinaire ». */
+  role?: RoleProfil;
+  /** Vue de l'administrateur : identifiant du gestionnaire qui a créé ce compte, s'il y en a un. */
+  creePar?: string;
 }
 
 const PRINCIPAL: Profil = { id: ID_PRINCIPAL, nom: 'Moi', admin: true, creeLe: '' };
@@ -119,6 +137,8 @@ function migrerProfil(p: Record<string, unknown>, version: number): Profil {
   };
   const niveaux = nettoyerNiveaux(p.niveaux, apps);
   const optionnels = {
+    // Rôle « ami » par défaut : seule la valeur « gestionnaire » est conservée.
+    role: p.role === 'gestionnaire' ? 'gestionnaire' : undefined,
     niveaux,
     invitationExpireLe: dateIso(p.invitationExpireLe),
     expireLe: dateIso(p.expireLe),
@@ -177,6 +197,7 @@ export function ecrireProfils(profils: readonly Profil[]): string {
         creeLe: p.creeLe,
         apps,
         actif: p.actif !== false,
+        role: p.role === 'gestionnaire' ? 'gestionnaire' : undefined,
         niveaux: nettoyerNiveaux(p.niveaux, apps),
         invitationExpireLe: p.invitationExpireLe,
         expireLe: p.expireLe,

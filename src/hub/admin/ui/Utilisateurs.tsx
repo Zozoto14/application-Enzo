@@ -17,25 +17,22 @@ import type { Profil } from '../../../profils/profils';
 import { police, teinteTransparente, type ThemeHub } from '../../themes';
 import type { AppHub } from '../../types';
 import {
-  LIBELLES_STATUT,
-  annulerInvitation,
-  appliquerGroupe,
-  definirExpiration,
-  definirNiveaux,
-  desactiver,
-  filtrerComptes,
-  niveauProfil,
-  niveauxProfil,
-  prolongerInvitation,
-  reactiver,
-  recapitulatif,
-  statutCompte,
-  suspendre,
-  versAutorisations,
-  type StatutCompte,
-  type TriComptes,
-} from '../comptes';
-import { avecNote, LONGUEUR_MAX_NOTE } from '../donnees';
+  annulerInvitationPar,
+  appliquerGroupePar,
+  avecNotePar,
+  definirExpirationPar,
+  definirNiveauxPar,
+  definirRolePar,
+  desactiverPar,
+  prolongerInvitationPar,
+  reactiverPar,
+  renommerProfilPar,
+  suspendrePar,
+  verifierSur,
+} from '../actions';
+import { LIBELLES_STATUT, filtrerComptes, niveauProfil, niveauxProfil, recapitulatif, statutCompte, versAutorisations, type StatutCompte, type TriComptes } from '../comptes';
+import { LONGUEUR_MAX_NOTE } from '../donnees';
+import { CE_QUE_NE_PERMET_PAS_GESTIONNAIRE, CE_QUE_PERMET_GESTIONNAIRE, LIBELLES_ROLE, autorise, roleDe } from '../roles';
 import { LIBELLES_NIVEAU, MODELES, modeleCorrespondant, niveauxDe, niveauxDuModele, type IdModele, type Niveaux } from '../niveaux';
 import { etatApp } from '../politique';
 import { Avis, BoutonHub, Case, Champ, Intertitre, Panneau, Pilule, Segments, commun, dansJours, dateLisible, relatif, styleTitre, type OutilsAdmin } from './commun';
@@ -73,12 +70,14 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
   const [statut, setStatut] = useState<Filtre>('tous');
   const [app, setApp] = useState<string>('toutes');
   const [tri, setTri] = useState<TriComptes>('nom');
+  const [roleFiltre, setRoleFiltre] = useState<'tous' | 'ami' | 'gestionnaire'>('tous');
   const [selection, setSelection] = useState<string[]>([]);
   const [choisi, setChoisi] = useState<string | undefined>(cible);
   const [creation, setCreation] = useState(false);
   const [identifiants, setIdentifiants] = useState<{ nom: string; valeurs: IdentifiantsAmi } | undefined>();
+  const gestionnaire = outils.role === 'gestionnaire';
   const attribuables = registre.filter(a => !a.adminSeulement);
-  const liste = filtrerComptes(tous, { recherche, statut, app: app === 'toutes' ? undefined : app, tri }, registre, maintenant);
+  const liste = filtrerComptes(tous, { recherche, statut, app: app === 'toutes' ? undefined : app, tri, role: roleFiltre }, registre, maintenant);
   const amisVisibles = liste.filter(p => !p.admin).map(p => p.id);
   const selectionnes = selection.filter(id => tous.some(p => p.id === id && !p.admin));
   const profil = tous.find(p => p.id === choisi);
@@ -107,7 +106,16 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
     <Fiche key={profil.id} outils={outils} profil={profil} apps={attribuables} onIdentifiants={(nom, valeurs) => setIdentifiants({ nom, valeurs })} onSupprime={() => setChoisi(undefined)} />
   ) : (
     <Panneau theme={theme}>
-      <Text style={attenue}>Sélectionnez un utilisateur pour ouvrir sa fiche, ou créez un compte.</Text>
+      <Text style={attenue}>
+        {gestionnaire
+          ? 'Sélectionnez un ami pour ouvrir sa fiche, ou créez un compte. Seuls les amis que vous avez créés apparaissent ici : les autres comptes de cet appareil restent isolés.'
+          : 'Sélectionnez un utilisateur pour ouvrir sa fiche, ou créez un compte.'}
+      </Text>
+      {gestionnaire ? null : (
+        <Text style={[attenue, { fontSize: 12 }]} testID="admin-admin-complet-bientot">
+          Administrateur complet : bientôt (nécessite de re-sceller les clés de chaque compte).
+        </Text>
+      )}
     </Panneau>
   );
 
@@ -115,14 +123,14 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
     <View style={{ gap: 16 }} testID="admin-section-utilisateurs">
       <Panneau theme={theme}>
         <View style={[commun.ligne, { justifyContent: 'space-between', flexWrap: 'wrap', paddingVertical: 0 }]}>
-          <Text style={[styleTitre(theme), { fontSize: 20 }]}>{`${tous.length} compte${tous.length > 1 ? 's' : ''}`}</Text>
+          <Text style={[styleTitre(theme), { fontSize: 20 }]}>{gestionnaire ? `${tous.length} ami${tous.length > 1 ? 's' : ''} que vous gérez` : `${tous.length} compte${tous.length > 1 ? 's' : ''}`}</Text>
           <BoutonHub
             theme={theme}
             variante="plein"
             couleur={theme.teintes.admin}
             titre="＋ Nouvel utilisateur"
             testID="admin-nouveau"
-            desactive={Boolean(outils.enCours) || Boolean(identifiants) || !controle.onCreerCompte}
+            desactive={Boolean(outils.enCours) || Boolean(identifiants) || !controle.onCreerCompte || !autorise(outils.acteur, 'creer-ami').ok}
             onPress={() => {
               setChoisi(undefined);
               setCreation(true);
@@ -138,6 +146,16 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
           onChoisir={setStatut}
           testID="admin-filtre-statut"
         />
+        {gestionnaire ? null : (
+          <Segments<'tous' | 'ami' | 'gestionnaire'>
+            theme={theme}
+            libelle="Rôle"
+            valeur={roleFiltre}
+            options={[['tous', 'Tous les rôles'], ['ami', 'Amis'], ['gestionnaire', 'Gestionnaires']]}
+            onChoisir={setRoleFiltre}
+            testID="admin-filtre-role"
+          />
+        )}
         <View style={[commun.grille, { alignItems: 'center' }]}>
           <Segments
             theme={theme}
@@ -213,10 +231,11 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
                             .filter(a => niveauProfil(p, a) !== 'aucun')
                             .map(a => (niveauProfil(p, a) === 'lecture' ? `${a.nom} (lecture)` : a.nom))
                             .join(', ') || 'Aucune app'}
-                      {' · '}
-                      {p.derniereConnexion ? `vu ${relatif(p.derniereConnexion, maintenant)}` : 'jamais connecté'}
+                      {gestionnaire ? '' : ' · '}
+                      {gestionnaire ? '' : p.derniereConnexion ? `vu ${relatif(p.derniereConnexion, maintenant)}` : 'jamais connecté'}
                     </Text>
                   </View>
+                  {roleDe(p) === 'gestionnaire' ? <Pilule theme={theme} texte={LIBELLES_ROLE.gestionnaire} couleur={theme.teintes.admin} testID={`admin-role-${p.id}`} /> : null}
                   <Pilule theme={theme} texte={LIBELLES_STATUT[s]} couleur={couleurStatut(theme, s)} testID={`admin-statut-${p.id}`} />
                 </Pressable>
               </View>
@@ -235,9 +254,9 @@ function ActionsGroupees({ outils, ids, apps, onFini }: { outils: OutilsAdmin; i
   const { theme, tous } = outils;
   const [modele, setModele] = useState<IdModele>('ami');
   const noms = ids.map(id => tous.find(p => p.id === id)?.nom ?? id);
-  const appliquer = (action: Parameters<typeof appliquerGroupe>[2], libelle: string) => {
+  const appliquer = (action: Parameters<typeof appliquerGroupePar>[3], libelle: string) => {
     outils.modifierProfils(
-      liste => appliquerGroupe(liste, ids, action, apps, outils.maintenant()).profils,
+      liste => appliquerGroupePar(outils.acteur, liste, ids, action, apps, outils.maintenant()).profils,
       ids.map(id => ({ type: action.genre === 'niveaux' ? 'permissions' : action.genre === 'prolonger' ? 'invitation' : 'compte', cible: id, nomCible: tous.find(p => p.id === id)?.nom, action: libelle })),
       `${libelle} : ${noms.join(', ')}.`,
     );
@@ -309,6 +328,8 @@ function Fiche({
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const niveaux = niveauxProfil(profil, registre);
   const cibleJournal = { cible: profil.id, nomCible: profil.nom };
+  const gestionnaire = outils.role === 'gestionnaire';
+  const [confirmationRole, setConfirmationRole] = useState(false);
 
   if (profil.admin) {
     return (
@@ -322,12 +343,13 @@ function Fiche({
   }
 
   const changerNiveaux = (suivants: Niveaux, libelle: string) =>
-    outils.modifierProfils(liste => definirNiveaux(liste, profil.id, registre, suivants), [{ type: 'permissions', ...cibleJournal, action: libelle }]);
+    outils.modifierProfils(liste => definirNiveauxPar(outils.acteur, liste, profil.id, registre, suivants), [{ type: 'permissions', ...cibleJournal, action: libelle }]);
   const modele = modeleCorrespondant(apps, niveaux);
 
   const regenerer = () =>
     outils.exigerIdentite(`Régénérer les identifiants de ${profil.nom}`, () =>
       outils.agir('Génération des identifiants…', async () => {
+        verifierSur(outils.acteur, 'regenerer-identifiants', outils.tous, profil.id);
         const valeurs = await controle.onRegenerer!(profil.id);
         outils.journaliser({ type: 'identifiants', ...cibleJournal, action: `Identifiants régénérés pour ${profil.nom} (nouveau séquestre, nouveau code d’accès)` });
         onIdentifiants(profil.nom, valeurs);
@@ -337,8 +359,9 @@ function Fiche({
   const supprimer = () =>
     outils.exigerIdentite(`Supprimer le compte de ${profil.nom}`, () =>
       outils.agir('Suppression…', async () => {
+        verifierSur(outils.acteur, 'supprimer-ami', outils.tous, profil.id);
         await controle.onSupprimer(profil.id);
-        outils.majDonnees(d => avecNote(d, profil.id, ''));
+        outils.majDonnees(d => avecNotePar(outils.acteur, d, outils.tous, profil.id, ''));
         outils.journaliser({ type: 'compte', ...cibleJournal, action: `Compte de ${profil.nom} supprimé (coffre et portefeuille effacés)` });
         onSupprime();
         return `Compte « ${profil.nom} » supprimé.`;
@@ -348,6 +371,7 @@ function Fiche({
   const afficherCode = () =>
     outils.exigerIdentite(`Afficher le code d’accès administrateur de ${profil.nom}`, () =>
       outils.agir('Lecture du code…', async () => {
+        verifierSur(outils.acteur, 'acces-sequestre', outils.tous, profil.id);
         const lu = await controle.onCodeAcces?.(profil.id);
         setCode(lu);
         outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Code d’accès administrateur de ${profil.nom} affiché` });
@@ -357,6 +381,7 @@ function Fiche({
   const regenererCode = () =>
     outils.exigerIdentite(`Régénérer le code d’accès de ${profil.nom}`, () =>
       outils.agir('Nouveau code…', async () => {
+        verifierSur(outils.acteur, 'acces-sequestre', outils.tous, profil.id);
         const nouveau = await controle.onRegenererCode!(profil.id);
         setCode({ code: nouveau, creeLe: new Date(outils.maintenant()).toISOString() });
         outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Code d’accès administrateur de ${profil.nom} régénéré (l’ancien ne fonctionne plus)` });
@@ -366,6 +391,7 @@ function Fiche({
   const revoquer = () =>
     outils.exigerIdentite(`Révoquer l’accès administrateur au compte de ${profil.nom}`, () =>
       outils.agir('Révocation…', async () => {
+        verifierSur(outils.acteur, 'acces-sequestre', outils.tous, profil.id);
         await controle.onRevoquerAcces!(profil.id);
         setCode(undefined);
         outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Accès administrateur au compte de ${profil.nom} révoqué` });
@@ -374,6 +400,7 @@ function Fiche({
     );
   const retablir = () =>
     outils.agir('Enregistrement…', async () => {
+      verifierSur(outils.acteur, 'acces-sequestre', outils.tous, profil.id);
       await controle.onRetablirAcces!(profil.id);
       outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Accès administrateur au compte de ${profil.nom} rétabli (séquestre attendu à sa prochaine connexion)` });
       return 'Le séquestre sera recréé à la prochaine connexion de l’ami.';
@@ -384,6 +411,7 @@ function Fiche({
         // Inscrit AVANT de quitter la session : le journal vit dans la base de l'administrateur.
         outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Ouverture du compte de ${profil.nom} par l’administrateur (code d’accès)` });
         try {
+          verifierSur(outils.acteur, 'ouvrir-compte', outils.tous, profil.id);
           await controle.onOuvrirCompte!(profil.id, codeSaisi);
         } catch (erreur) {
           outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Échec de l’ouverture du compte de ${profil.nom} : ${erreur instanceof Error ? erreur.message : 'erreur'}` });
@@ -398,10 +426,20 @@ function Fiche({
         <Text style={[styleTitre(theme), { fontSize: 22, flex: 1 }]}>{profil.nom}</Text>
         <Pilule theme={theme} texte={LIBELLES_STATUT[statut]} couleur={couleurStatut(theme, statut)} testID="admin-fiche-statut" />
       </View>
-      <Text style={[attenue, { fontSize: 13 }]}>
-        Créé le {profil.creeLe || 'date inconnue'} · dernière connexion : {dateLisible(profil.derniereConnexion, true)} · {profil.connexions ?? 0} ouverture
-        {(profil.connexions ?? 0) > 1 ? 's' : ''}
-      </Text>
+      {!gestionnaire && profil.creePar ? (
+        <Text style={[attenue, { fontSize: 13 }]} testID="admin-fiche-cree-par">
+          Créé par le gestionnaire {outils.tous.find(p => p.id === profil.creePar)?.nom ?? 'inconnu (rôle retiré ou compte supprimé)'}.
+        </Text>
+      ) : null}
+      {gestionnaire ? (
+        <Text style={[attenue, { fontSize: 13 }]}>Ami que vous avez créé : ses connexions et son contenu ne vous sont pas communiqués.</Text>
+      ) : (
+        <Text style={[attenue, { fontSize: 13 }]}>
+          Créé le {profil.creeLe || 'date inconnue'} · dernière connexion : {dateLisible(profil.derniereConnexion, true)} · {profil.connexions ?? 0} ouverture
+          {(profil.connexions ?? 0) > 1 ? 's' : ''}
+        </Text>
+      )}
+      {gestionnaire ? null : (
       <View style={[commun.grille, { alignItems: 'flex-end' }]}>
         <Champ theme={theme} libelle="Prénom" valeur={nom} onChanger={setNom} maxLength={30} testID="admin-fiche-nom" style={{ flexBasis: 200, flexGrow: 1 }} />
         <BoutonHub
@@ -410,7 +448,7 @@ function Fiche({
           desactive={!nom.trim() || nom.trim() === profil.nom}
           onPress={() =>
             outils.modifierProfils(
-              liste => liste.map(p => (p.id === profil.id ? { ...p, nom: nom.trim() } : p)),
+              liste => renommerProfilPar(outils.acteur, liste, profil.id, nom.trim()),
               [{ type: 'compte', cible: profil.id, nomCible: nom.trim(), action: `« ${profil.nom} » renommé « ${nom.trim()} »` }],
               'Compte renommé : l’ami se connecte désormais avec ce prénom.',
             )
@@ -418,6 +456,74 @@ function Fiche({
           testID="admin-fiche-renommer"
         />
       </View>
+      )}
+
+      {gestionnaire ? null : (
+        <>
+          <Intertitre theme={theme}>Rôle</Intertitre>
+          <View style={[commun.ligne, { paddingVertical: 0, flexWrap: 'wrap' }]}>
+            <Pilule theme={theme} texte={LIBELLES_ROLE[roleDe(profil)]} couleur={roleDe(profil) === 'gestionnaire' ? theme.teintes.admin : theme.attenue} testID="admin-fiche-role" />
+            {confirmationRole ? null : (
+              <BoutonHub
+                theme={theme}
+                titre={roleDe(profil) === 'gestionnaire' ? 'Retirer le rôle de Gestionnaire' : 'Promouvoir Gestionnaire'}
+                onPress={() => setConfirmationRole(true)}
+                testID="admin-role-changer"
+              />
+            )}
+          </View>
+          {confirmationRole ? (
+            <View style={[commun.avis, { borderLeftColor: theme.alerte, backgroundColor: teinteTransparente(theme.alerte, 0.14), gap: 8 }]} testID="admin-role-confirmation">
+              {roleDe(profil) === 'gestionnaire' ? (
+                <Text style={texte}>
+                  {profil.nom} n’aura plus d’Administration : sa tuile disparaît à sa prochaine ouverture. Les amis qu’il a créés restent en place, sous votre seule gestion.
+                </Text>
+              ) : (
+                <>
+                  <Text style={[texte, { fontWeight: '700' }]}>Promouvoir {profil.nom} Gestionnaire ?</Text>
+                  <Text style={texte}>Une fois connecté·e avec son propre compte, {profil.nom} aura une tuile « Administration » limitée. Il·elle pourra :</Text>
+                  {CE_QUE_PERMET_GESTIONNAIRE.map(ligne => (
+                    <Text key={ligne} style={[texte, { fontSize: 13 }]}>• {ligne}</Text>
+                  ))}
+                  <Text style={texte}>Il·elle ne pourra jamais :</Text>
+                  {CE_QUE_NE_PERMET_PAS_GESTIONNAIRE.map(ligne => (
+                    <Text key={ligne} style={[texte, { fontSize: 13 }]}>• {ligne}</Text>
+                  ))}
+                  <Text style={[attenue, { fontSize: 12 }]}>{profil.nom} en sera averti·e dans ses Paramètres. Chaque action d’un gestionnaire est inscrite à votre journal, avec son nom.</Text>
+                </>
+              )}
+              <View style={commun.actions}>
+                <BoutonHub
+                  theme={theme}
+                  variante="plein"
+                  couleur={theme.teintes.admin}
+                  titre={roleDe(profil) === 'gestionnaire' ? 'Retirer le rôle (mot de passe + code)' : 'Promouvoir (mot de passe + code)'}
+                  testID="admin-role-confirmer"
+                  desactive={Boolean(outils.enCours)}
+                  onPress={() => {
+                    const promotion = roleDe(profil) !== 'gestionnaire';
+                    setConfirmationRole(false);
+                    outils.exigerIdentite(
+                      promotion ? `Promouvoir ${profil.nom} Gestionnaire` : `Retirer le rôle de Gestionnaire à ${profil.nom}`,
+                      () =>
+                        outils.modifierProfils(
+                          liste => definirRolePar(outils.acteur, liste, profil.id, promotion ? 'gestionnaire' : 'ami'),
+                          [{ type: 'role', ...cibleJournal, action: promotion ? `${profil.nom} promu·e Gestionnaire` : `${profil.nom} n’est plus Gestionnaire` }],
+                          promotion ? `${profil.nom} est maintenant Gestionnaire : elle·il verra l’Administration limitée à sa prochaine connexion.` : `${profil.nom} n’est plus Gestionnaire.`,
+                        ),
+                      true,
+                    );
+                  }}
+                />
+                <BoutonHub theme={theme} titre="Annuler" onPress={() => setConfirmationRole(false)} testID="admin-role-annuler" />
+              </View>
+            </View>
+          ) : null}
+          <Text style={[attenue, { fontSize: 12 }]} testID="admin-admin-complet-bientot-fiche">
+            Administrateur complet : bientôt (nécessite de re-sceller les clés de chaque compte).
+          </Text>
+        </>
+      )}
 
       <Intertitre theme={theme}>Accès aux apps</Intertitre>
       <Segments
@@ -433,7 +539,7 @@ function Fiche({
         testID="admin-fiche-modele"
       />
       {apps.map(a => {
-        const politique = etatApp(outils.tous.find(p => p.admin)?.politique, a.id);
+        const politique = etatApp(outils.politique, a.id);
         return (
           <View key={a.id} style={[commun.ligne, { flexWrap: 'wrap' }]}>
             <View style={[commun.carre, { backgroundColor: theme.teintes[a.teinte], borderRadius: Math.min(theme.rayonMoyen, 8) }]}>
@@ -467,7 +573,7 @@ function Fiche({
             theme={theme}
             titre={`Prolonger de ${outils.donnees.reglages.invitationJours} j`}
             onPress={() =>
-              outils.modifierProfils(liste => prolongerInvitation(liste, profil.id, outils.donnees.reglages.invitationJours, outils.maintenant()), [
+              outils.modifierProfils(liste => prolongerInvitationPar(outils.acteur, liste, profil.id, outils.donnees.reglages.invitationJours, outils.maintenant()), [
                 { type: 'invitation', ...cibleJournal, action: `Invitation de ${profil.nom} prolongée de ${outils.donnees.reglages.invitationJours} jours` },
               ])
             }
@@ -478,7 +584,7 @@ function Fiche({
           <BoutonHub
             theme={theme}
             titre="Annuler l’invitation"
-            onPress={() => outils.modifierProfils(liste => annulerInvitation(liste, profil.id, outils.maintenant()), [{ type: 'invitation', ...cibleJournal, action: `Invitation de ${profil.nom} annulée` }])}
+            onPress={() => outils.modifierProfils(liste => annulerInvitationPar(outils.acteur, liste, profil.id, outils.maintenant()), [{ type: 'invitation', ...cibleJournal, action: `Invitation de ${profil.nom} annulée` }])}
             testID="admin-invitation-annuler"
           />
         ) : null}
@@ -490,7 +596,7 @@ function Fiche({
           titre="Enregistrer la fin d’accès"
           desactive={expiration !== '' && (!/^\d{4}-\d{2}-\d{2}$/.test(expiration) || Number.isNaN(Date.parse(expiration)))}
           onPress={() =>
-            outils.modifierProfils(liste => definirExpiration(liste, profil.id, expiration ? `${expiration}T23:59:59.000Z` : undefined), [
+            outils.modifierProfils(liste => definirExpirationPar(outils.acteur, liste, profil.id, expiration ? `${expiration}T23:59:59.000Z` : undefined), [
               { type: 'compte', ...cibleJournal, action: expiration ? `Fin d’accès de ${profil.nom} fixée au ${expiration}` : `Fin d’accès de ${profil.nom} retirée` },
             ])
           }
@@ -506,7 +612,7 @@ function Fiche({
             variante="plein"
             couleur={theme.ok}
             titre="Réactiver"
-            onPress={() => outils.modifierProfils(liste => reactiver(liste, profil.id), [{ type: 'compte', ...cibleJournal, action: `Compte de ${profil.nom} réactivé` }], `${profil.nom} peut de nouveau ouvrir son compte.`)}
+            onPress={() => outils.modifierProfils(liste => reactiverPar(outils.acteur, liste, profil.id), [{ type: 'compte', ...cibleJournal, action: `Compte de ${profil.nom} réactivé` }], `${profil.nom} peut de nouveau ouvrir son compte.`)}
             testID="admin-activer"
           />
         ) : (
@@ -517,7 +623,7 @@ function Fiche({
               titre="Suspendre"
               desactive={!Number(suspension)}
               onPress={() =>
-                outils.modifierProfils(liste => suspendre(liste, profil.id, dansJours(outils.maintenant(), Number(suspension)), outils.maintenant()), [
+                outils.modifierProfils(liste => suspendrePar(outils.acteur, liste, profil.id, dansJours(outils.maintenant(), Number(suspension)), outils.maintenant()), [
                   { type: 'compte', ...cibleJournal, action: `Compte de ${profil.nom} suspendu ${suspension} jours` },
                 ])
               }
@@ -526,13 +632,15 @@ function Fiche({
             <BoutonHub
               theme={theme}
               titre="Désactiver"
-              onPress={() => outils.modifierProfils(liste => desactiver(liste, profil.id), [{ type: 'compte', ...cibleJournal, action: `Compte de ${profil.nom} désactivé` }], `${profil.nom} ne peut plus ouvrir son compte.`)}
+              onPress={() => outils.modifierProfils(liste => desactiverPar(outils.acteur, liste, profil.id), [{ type: 'compte', ...cibleJournal, action: `Compte de ${profil.nom} désactivé` }], `${profil.nom} ne peut plus ouvrir son compte.`)}
               testID="admin-desactiver"
             />
           </>
         )}
       </View>
 
+      {gestionnaire ? null : (
+        <>
       <Intertitre theme={theme}>Accès administrateur (séquestre)</Intertitre>
       <Text style={[texte, { fontSize: 13 }]} testID="admin-sequestre-etat">
         {LIBELLES_SEQUESTRE[profil.sequestre ?? 'absent']}
@@ -577,6 +685,11 @@ function Fiche({
         )
       ) : null}
 
+        </>
+      )}
+
+      {gestionnaire ? null : (
+        <>
       <Intertitre theme={theme}>Notes privées</Intertitre>
       <Champ theme={theme} libelle="Visibles de vous seul (chiffrées avec vos données)" valeur={note} onChanger={setNote} multiligne maxLength={LONGUEUR_MAX_NOTE} testID="admin-note" />
       <View style={commun.actions}>
@@ -585,14 +698,17 @@ function Fiche({
           titre="Enregistrer la note"
           desactive={note === (donnees.notes[profil.id] ?? '')}
           onPress={() => {
-            outils.majDonnees(d => avecNote(d, profil.id, note));
+            outils.majDonnees(d => avecNotePar(outils.acteur, d, outils.tous, profil.id, note));
             outils.journaliser({ type: 'compte', ...cibleJournal, action: `Note privée sur ${profil.nom} modifiée` });
           }}
           testID="admin-note-enregistrer"
         />
       </View>
 
-      <Intertitre theme={theme}>Identifiants et suppression</Intertitre>
+        </>
+      )}
+
+      <Intertitre theme={theme}>{gestionnaire ? 'Identifiants' : 'Identifiants et suppression'}</Intertitre>
       {confirmation ? (
         <View style={[commun.avis, { borderLeftColor: theme.critique, backgroundColor: teinteTransparente(theme.critique, 0.12), gap: 8 }]} testID="admin-confirmation">
           <Text style={texte}>
@@ -645,7 +761,7 @@ function Fiche({
       ) : (
         <View style={commun.actions}>
           {controle.onRegenerer ? <BoutonHub theme={theme} titre="Régénérer les identifiants" onPress={() => setConfirmation('regenerer')} testID="admin-regenerer" /> : null}
-          <BoutonHub theme={theme} variante="danger" titre="Supprimer le compte" onPress={() => setConfirmation('supprimer')} testID="admin-supprimer" />
+          {gestionnaire ? null : <BoutonHub theme={theme} variante="danger" titre="Supprimer le compte" onPress={() => setConfirmation('supprimer')} testID="admin-supprimer" />}
         </View>
       )}
     </Panneau>
@@ -666,9 +782,8 @@ function FormulaireCreation({
   onCree(nom: string, valeurs: IdentifiantsAmi): void;
 }) {
   const { theme, controle, registre } = outils;
-  const politique = outils.tous.find(p => p.admin)?.politique;
   const [nom, setNom] = useState('');
-  const [niveaux, setNiveaux] = useState<Niveaux>(() => Object.fromEntries(apps.map(a => [a.id, etatApp(politique, a.id).defaut])));
+  const [niveaux, setNiveaux] = useState<Niveaux>(() => Object.fromEntries(apps.map(a => [a.id, etatApp(outils.politique, a.id).defaut])));
   const [invitation, setInvitation] = useState(String(outils.donnees.reglages.invitationJours));
   const [expiration, setExpiration] = useState('');
   const [informe, setInforme] = useState(false);

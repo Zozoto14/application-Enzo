@@ -20,6 +20,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { Profil } from '../profils/profils';
 import { RetourHub } from './Hub';
+import { roleDe, LIBELLES_ROLE, autorise } from './admin/roles';
+import { politiqueDe } from './permissions';
 import { nouvellesConnexions } from './admin/comptes';
 import { avecEvenement, chargerDonnees, donneesVides, enregistrerDonnees, evaluerRobustesse, type DonneesAdmin } from './admin/donnees';
 import type { EvenementAudit } from './admin/journal';
@@ -34,6 +36,9 @@ import { Utilisateurs } from './admin/ui/Utilisateurs';
 import { police, teinteTransparente, type ThemeHub } from './themes';
 import type { PropsRacineApp } from './types';
 import { ecouterActivite } from './web';
+
+/** Sections d'un gestionnaire : ni applications globales, ni sécurité, ni réglages. */
+const SECTIONS_GESTIONNAIRE: readonly IdSection[] = ['tableau', 'utilisateurs', 'journal'];
 
 const SECTIONS: ReadonlyArray<readonly [IdSection, string, string]> = [
   ['tableau', '◧', 'Tableau de bord'],
@@ -62,6 +67,9 @@ type Demande = { raison: string; action: () => void };
 export function Administration({ contexte, theme, registre, onRetour, onTheme }: PropsRacineApp) {
   const controle = contexte.profils;
   const services = contexte.admin;
+  const acteur = controle?.actuel;
+  const role = roleDe(acteur);
+  const estGestionnaire = role === 'gestionnaire';
   const { width } = useWindowDimensions();
   const large = width >= 900;
   const maintenant = useCallback(() => contexte.maintenant ?? Date.now(), [contexte.maintenant]);
@@ -88,13 +96,23 @@ export function Administration({ contexte, theme, registre, onRetour, onTheme }:
     },
     [services],
   );
+  const nomActeur = acteur?.nom;
   const journaliser = useCallback(
-    (evenement: Omit<EvenementAudit, 'date'>) => majDonnees(d => avecEvenement(d, evenement, maintenant())),
-    [majDonnees, maintenant],
+    (evenement: Omit<EvenementAudit, 'date'>) => {
+      // Les actions d'un gestionnaire portent son nom ; celles qui touchent des
+      // comptes sont aussi mises en attente, scellées, pour le journal de l'administrateur.
+      const complet = estGestionnaire ? { ...evenement, acteur: nomActeur } : evenement;
+      majDonnees(d => avecEvenement(d, complet, maintenant()));
+      if (estGestionnaire && ['compte', 'permissions', 'invitation', 'identifiants'].includes(evenement.type)) {
+        void controle?.onJournalGestion?.({ type: evenement.type, action: evenement.action, cible: evenement.cible, nomCible: evenement.nomCible, app: evenement.app }).catch(() => undefined);
+      }
+    },
+    [majDonnees, maintenant, estGestionnaire, nomActeur, controle],
   );
 
   // Connexions des amis depuis la dernière visite : reportées au journal.
-  const tous = controle?.tous ?? [];
+  const tous = (estGestionnaire ? controle?.gestion?.comptes : controle?.tous) ?? [];
+  const apercu = (estGestionnaire ? controle?.gestion?.apercu : controle?.tous) ?? [];
   const signatureConnexions = tous.map(p => `${p.id}:${p.connexions ?? 0}`).join(',');
   useEffect(() => {
     const nouvelles = nouvellesConnexions(tous, donneesRef.current.connexionsVues);
@@ -132,13 +150,14 @@ export function Administration({ contexte, theme, registre, onRetour, onTheme }:
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
 
-  // Défense en profondeur : le hub ne propose pas cette app à un ami, mais
-  // l'écran refuse aussi de s'afficher pour lui.
-  if (!controle || (contexte.profil && !contexte.profil.admin) || !controle.actuel.admin || controle.sessionAdmin) {
+  // Défense en profondeur : le hub ne propose pas cette app à un simple ami, mais
+  // l'écran refuse aussi de s'afficher pour lui (et pour une session administrateur
+  // ouverte sur le compte d'un ami).
+  if (!controle || !acteur || controle.sessionAdmin || !autorise(acteur, 'voir-tableau').ok || (estGestionnaire && !controle.gestion)) {
     return (
       <View style={[styles.racine, { backgroundColor: theme.fond, padding: 24 }]}>
         <RetourHub theme={theme} onRetour={onRetour} />
-        <Text style={[styleTitre(theme), { fontSize: 28, marginTop: 24 }]}>Réservé à l’administrateur</Text>
+        <Text style={[styleTitre(theme), { fontSize: 28, marginTop: 24 }]}>Réservé à l’administrateur et aux gestionnaires</Text>
       </View>
     );
   }
@@ -171,7 +190,11 @@ export function Administration({ contexte, theme, registre, onRetour, onTheme }:
     theme,
     registre,
     controle,
+    acteur,
+    role,
     tous,
+    apercu,
+    politique: politiqueDe(contexte) ?? tous.find(p => p.admin)?.politique,
     maintenant,
     donnees,
     majDonnees,
@@ -185,7 +208,7 @@ export function Administration({ contexte, theme, registre, onRetour, onTheme }:
         return;
       }
       agir('Enregistrement…', async () => {
-        await controle.onModifierProfils!(changer(controle.tous as Profil[]));
+        await controle.onModifierProfils!(changer(tous as Profil[]));
         for (const evenement of evenements) {
           journaliser(evenement);
         }
@@ -238,10 +261,17 @@ export function Administration({ contexte, theme, registre, onRetour, onTheme }:
         <Text style={[styleTitre(theme), styles.h1]} accessibilityRole="header">
           Administration
         </Text>
-        <Text style={[attenue, styles.lead]}>Comptes, accès aux apps, sécurité et journal de ce hub.</Text>
+        <Text style={[attenue, styles.lead]}>
+          {estGestionnaire ? 'Administration limitée : les amis que vous avez créés, leurs accès aux apps et le journal de vos actions.' : 'Comptes, accès aux apps, sécurité et journal de ce hub.'}
+        </Text>
+        {estGestionnaire ? (
+          <View style={{ marginTop: 14 }}>
+            <Avis theme={theme} genre="info" texte={`Vous êtes connecté·e en tant que ${LIBELLES_ROLE.gestionnaire.toLowerCase()}. Vous ne pouvez ouvrir le compte de personne, et les autres comptes ne vous sont pas montrés.`} testID="admin-bandeau-gestionnaire" />
+          </View>
+        ) : null}
 
         <View style={styles.onglets} accessibilityRole="tablist">
-          {SECTIONS.map(([id, icone, libelle]) => {
+          {SECTIONS.filter(([id]) => !estGestionnaire || SECTIONS_GESTIONNAIRE.includes(id)).map(([id, icone, libelle]) => {
             const actif = section === id;
             return (
               <Pressable
@@ -288,8 +318,8 @@ export function Administration({ contexte, theme, registre, onRetour, onTheme }:
         <View style={{ marginTop: 12 }}>
           {section === 'tableau' ? <Tableau outils={outils} /> : null}
           {section === 'utilisateurs' ? <Utilisateurs key={cible ?? 'liste'} outils={outils} cible={cible} /> : null}
-          {section === 'applications' ? <Applications outils={outils} /> : null}
-          {section === 'securite' ? (
+          {section === 'applications' && !estGestionnaire ? <Applications outils={outils} /> : null}
+          {section === 'securite' && !estGestionnaire ? (
             <Securite
               outils={outils}
               onVerrouiller={() => {
@@ -299,7 +329,7 @@ export function Administration({ contexte, theme, registre, onRetour, onTheme }:
             />
           ) : null}
           {section === 'journal' ? <Journal outils={outils} /> : null}
-          {section === 'reglages' ? <Reglages outils={outils} /> : null}
+          {section === 'reglages' && !estGestionnaire ? <Reglages outils={outils} /> : null}
         </View>
         <Text style={[texte, { fontSize: 12, marginTop: 24, color: theme.attenue }]}>
           Aucun secret n’est conservé ni journalisé : mots de passe, clés et codes de récupération ne s’affichent qu’une fois.

@@ -3,7 +3,9 @@
 import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 import { police } from '../../themes';
-import { LIBELLES_TYPE, TYPES_EVENEMENT, exporterCsv, exporterJson, filtrerJournal, type TypeEvenement } from '../journal';
+import { exporterJournalPar } from '../actions';
+import { LIBELLES_TYPE, TYPES_EVENEMENT, filtrerJournal, type TypeEvenement } from '../journal';
+import { autorise } from '../roles';
 import { Avis, BoutonHub, Champ, Intertitre, Panneau, Segments, commun, dateLisible, type OutilsAdmin } from './commun';
 
 const PAGE = 50;
@@ -38,8 +40,9 @@ export function Journal({ outils }: { outils: OutilsAdmin }) {
     cibles.set(p.id, p.nom);
   }
 
+  const peutExporter = autorise(outils.acteur, 'exporter-journal').ok;
   const exporter = (format: 'json' | 'csv') => {
-    const contenu = format === 'json' ? exporterJson([...filtres].reverse()) : exporterCsv([...filtres].reverse());
+    const contenu = exporterJournalPar(outils.acteur, format, [...filtres].reverse());
     const nom = `journal-administration-${new Date(outils.maintenant()).toISOString().slice(0, 10)}.${format}`;
     const enregistrer = outils.services?.enregistrerFichier;
     if (!enregistrer) {
@@ -87,9 +90,17 @@ export function Journal({ outils }: { outils: OutilsAdmin }) {
         </View>
         {(du && !dateValide(du)) || (au && !dateValide(au)) ? <Avis theme={theme} genre="alerte" texte="Date à saisir au format AAAA-MM-JJ." /> : null}
         <View style={commun.actions}>
-          <BoutonHub theme={theme} titre="Exporter en JSON" onPress={() => exporter('json')} testID="admin-journal-export-json" />
-          <BoutonHub theme={theme} titre="Exporter en CSV" onPress={() => exporter('csv')} testID="admin-journal-export-csv" />
-          <Text style={[attenue, { fontSize: 12 }]}>L’export reprend les entrées filtrées ; il ne contient aucun secret.</Text>
+          {peutExporter ? (
+            <>
+              <BoutonHub theme={theme} titre="Exporter en JSON" onPress={() => exporter('json')} testID="admin-journal-export-json" />
+              <BoutonHub theme={theme} titre="Exporter en CSV" onPress={() => exporter('csv')} testID="admin-journal-export-csv" />
+              <Text style={[attenue, { fontSize: 12 }]}>L’export reprend les entrées filtrées ; il ne contient aucun secret.</Text>
+            </>
+          ) : (
+            <Text style={[attenue, { fontSize: 12 }]} testID="admin-journal-perso">
+              Ce journal ne contient que vos propres actions, sans aucun secret. L’export est réservé à l’administrateur.
+            </Text>
+          )}
         </View>
         {message ? <Avis theme={theme} genre="info" texte={message} testID="admin-journal-message" /> : null}
       </Panneau>
@@ -101,7 +112,10 @@ export function Journal({ outils }: { outils: OutilsAdmin }) {
           <View key={`${e.date}-${index}`} style={[commun.ligne, { alignItems: 'flex-start', flexWrap: 'wrap' }, index > 0 && { borderTopWidth: 1, borderTopColor: theme.ligne }]}>
             <Text style={[attenue, { fontSize: 12, width: 128 }, police(theme.policeChiffres)]}>{dateLisible(e.date, true)}</Text>
             <Text style={[texte, { fontSize: 12, fontWeight: '700', width: 96 }]}>{LIBELLES_TYPE[e.type]}</Text>
-            <Text style={[texte, { fontSize: 13, flex: 1, minWidth: 180 }]}>{e.action}</Text>
+            <Text style={[texte, { fontSize: 13, flex: 1, minWidth: 180 }]}>
+              {e.acteur ? <Text style={{ fontWeight: '700' }}>[{e.acteur}] </Text> : null}
+              {e.action}
+            </Text>
           </View>
         ))}
         {filtres.length > limite ? <BoutonHub theme={theme} titre={`Afficher ${Math.min(PAGE, filtres.length - limite)} de plus`} onPress={() => setLimite(l => l + PAGE)} /> : null}

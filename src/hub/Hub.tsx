@@ -308,6 +308,7 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
                 }
               : undefined
           }
+          gestionnaire={contexte.profil?.role === 'gestionnaire' && !contexte.profil.admin}
           transparence={contexte.profil && !contexte.profil.admin ? contexte.profils?.transparence : undefined}
         />
       ) : null}

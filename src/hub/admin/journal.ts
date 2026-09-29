@@ -25,6 +25,7 @@ export const TYPES_EVENEMENT = [
   'connexion',
   'acces-admin',
   'export',
+  'role',
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -39,6 +40,7 @@ export const LIBELLES_TYPE: Record<TypeEvenement, string> = {
   connexion: 'Connexion',
   'acces-admin': 'Accès administrateur',
   export: 'Export',
+  role: 'Rôle',
 };
 
 export interface EvenementAudit {
@@ -53,6 +55,8 @@ export interface EvenementAudit {
   nomCible?: string;
   /** App concernée (identifiant du registre). */
   app?: string;
+  /** Prénom du gestionnaire qui a fait l'action (absent : l'administrateur). */
+  acteur?: string;
 }
 
 export const TAILLE_MAX_JOURNAL = 2000;
@@ -113,6 +117,10 @@ export function lireEvenement(brut: unknown): EvenementAudit | undefined {
   }
   if (typeof e.app === 'string' && MOTIF_ID.test(e.app)) {
     evenement.app = e.app;
+  }
+  const acteur = nettoyerTexte(e.acteur, 30);
+  if (acteur) {
+    evenement.acteur = acteur;
   }
   return evenement;
 }
@@ -179,7 +187,7 @@ export function filtrerJournal(journal: readonly EvenementAudit[], filtre: Filtr
         return false;
       }
       if (cherche) {
-        const botte = sansAccents(`${e.action} ${e.nomCible ?? ''} ${e.app ?? ''} ${LIBELLES_TYPE[e.type]}`);
+        const botte = sansAccents(`${e.action} ${e.nomCible ?? ''} ${e.app ?? ''} ${e.acteur ?? ''} ${LIBELLES_TYPE[e.type]}`);
         return botte.includes(cherche);
       }
       return true;
@@ -189,7 +197,7 @@ export function filtrerJournal(journal: readonly EvenementAudit[], filtre: Filtr
 
 // --- Exports -------------------------------------------------------------------
 
-const COLONNES: ReadonlyArray<keyof EvenementAudit> = ['date', 'type', 'action', 'cible', 'nomCible', 'app'];
+const COLONNES: ReadonlyArray<keyof EvenementAudit> = ['date', 'type', 'action', 'cible', 'nomCible', 'app', 'acteur'];
 
 /** JSON indenté ; chaque entrée est renettoyée. */
 export function exporterJson(journal: readonly EvenementAudit[]): string {

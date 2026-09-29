@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('applibourse', {
     ouvrir: id => ipcRenderer.invoke('profil:ouvrir', id),
     /** Quitte le compte : la fenêtre se recharge. */
     fermer: () => ipcRenderer.invoke('profil:fermer'),
+    /** Gestionnaire : ajoute à sa portée les fichiers d'un compte qu'il crée ou régénère. */
+    etendre: id => ipcRenderer.invoke('profil:etendre', id),
   },
 
   fichiers: {

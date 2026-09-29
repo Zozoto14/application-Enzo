@@ -317,6 +317,8 @@ const ETAT_VIDE = {
 export function App({ session, genererId, aujourdhui, chargementAutomatique = false, profils, hub = false }: AppProps) {
   // Profil d'ami : ni synchronisation ni liaison, réservées à l'administrateur.
   const estAdmin = profils?.actuel.admin ?? true;
+  // Gestionnaire : un ami à l'Administration limitée (jamais en session administrateur sur son compte).
+  const estGestionnaire = !estAdmin && profils?.actuel.role === 'gestionnaire' && !profils.sessionAdmin;
   const [rendu, forcerRendu] = useState(0);
   const [compteFiltre, setCompteFiltre] = useState<string>(TOUS_LES_COMPTES);
   // Retenu ici : revenir au portefeuille rouvre l'onglet qu'on avait quitté.
@@ -1869,12 +1871,13 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // ne rend un secret : on revérifie l'identité, on ne relit rien.
   const servicesAdmin = useMemo<ServicesAdmin | undefined>(
     () =>
-      estAdmin
+      estAdmin || estGestionnaire
         ? {
             stockage: stockagePrefs,
             verifierIdentite: (motDePasse, codeTotp) => session.verifierIdentite({ motDePasse, codeTotp }),
             etatCoffre: () => session.etatCoffre(),
-            enregistrerFichier: async (nom, contenu, type) => {
+            // Pas d'export de fichier pour un gestionnaire (journal, récapitulatifs).
+            enregistrerFichier: estGestionnaire ? undefined : async (nom, contenu, type) => {
               const enregistrerSous = (
                 globalThis as { applibourse?: { fichiers?: { enregistrerSous?(nom: string, contenu: Uint8Array): Promise<boolean> } } }
               ).applibourse?.fichiers?.enregistrerSous;
@@ -1885,7 +1888,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             },
           }
         : undefined,
-    [estAdmin, session, stockagePrefs],
+    [estAdmin, estGestionnaire, session, stockagePrefs],
   );
   const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin };
   const themeDuHub = themeHub(themeHubId);
@@ -1916,7 +1919,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       // compte ami créé par l'administrateur (portefeuille encore vide).
       const premiereOuvertureAmi =
         !estAdmin && stockagePrefs.lire('compte.connexions') === '1' && nombreComptes === 0 && nombreOperations === 0;
-      const decision = deciderDevblog(stockagePrefs.lire(CLE_DEVBLOG), { profilNeuf: coffreCreeIci.current || premiereOuvertureAmi, admin: estAdmin });
+      const decision = deciderDevblog(stockagePrefs.lire(CLE_DEVBLOG), { profilNeuf: coffreCreeIci.current || premiereOuvertureAmi, admin: estAdmin, gestionnaire: estGestionnaire });
       if (decision.genre === 'marquer') {
         stockagePrefs.ecrire(CLE_DEVBLOG, decision.valeur);
       } else if (decision.genre === 'afficher') {
@@ -1925,7 +1928,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     } catch {
       // Préférence illisible : pas de devblog cette fois, rien ne casse.
     }
-  }, [hub, deverrouille, tableau, profils?.sessionAdmin, etapesVisite, nombreComptes, nombreOperations, session, stockagePrefs, estAdmin]);
+  }, [hub, deverrouille, tableau, profils?.sessionAdmin, etapesVisite, nombreComptes, nombreOperations, session, stockagePrefs, estAdmin, estGestionnaire]);
   const fermerDevblog = () => {
     const entree = devblog?.entree;
     if (entree) {
@@ -2088,12 +2091,13 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           <Devblog
             theme={themeDuHub}
             admin={estAdmin}
+            gestionnaire={estGestionnaire}
             entree={devblog.entree}
             onFermer={fermerDevblog}
             onEssayer={essayer}
             onVisite={entree => {
               fermerDevblog();
-              setEtapesVisite(etapesDevblog(entree, estAdmin));
+              setEtapesVisite(etapesDevblog(entree, estAdmin, estGestionnaire));
             }}
             disponible={cible => cible.genre !== 'app' || appsVisibles(REGISTRE, contexteHub).some(app => app.id === cible.app)}
           />

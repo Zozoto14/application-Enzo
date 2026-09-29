@@ -9,11 +9,13 @@ import { alertesSecurite } from './Securite';
 import { Intertitre, Panneau, commun, dateLisible, relatif, styleTitre, type OutilsAdmin } from './commun';
 
 export function Tableau({ outils }: { outils: OutilsAdmin }) {
-  const { theme, tous, registre, donnees } = outils;
+  const { theme, tous, apercu, registre, donnees } = outils;
+  const gestionnaire = outils.role === 'gestionnaire';
   const maintenant = outils.maintenant();
-  const politique = tous.find(p => p.admin)?.politique;
-  const stats = statistiques(tous, registre, politique, maintenant);
-  const alertes: AlerteAdmin[] = [...alertesSecurite(outils), ...alertesComptes(tous, maintenant, donnees.reglages.inactifJours)];
+  // Un gestionnaire ne reçoit que des chiffres : `apercu` ne porte aucun prénom.
+  const stats = statistiques(apercu, registre, outils.politique, maintenant);
+  const alertes: AlerteAdmin[] = [...(gestionnaire ? [] : alertesSecurite(outils)), ...alertesComptes(tous, maintenant, donnees.reglages.inactifJours)];
+  const autres = outils.controle.gestion?.autres ?? 0;
   const recents = [...donnees.journal].reverse().slice(0, 8);
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
@@ -51,6 +53,16 @@ export function Tableau({ outils }: { outils: OutilsAdmin }) {
         {chiffre('Invités en attente', stats.invites, 'admin-stat-invites', () => outils.allerA('utilisateurs'))}
       </View>
 
+      {gestionnaire ? (
+        <Panneau theme={theme} testID="admin-gestion-resume">
+          <Intertitre theme={theme}>Vos comptes</Intertitre>
+          <Text style={texte}>
+            Vous gérez {tous.length} ami{tous.length > 1 ? 's' : ''} (ceux que vous avez créés).{' '}
+            {autres > 0 ? `${autres} autre${autres > 1 ? 's' : ''} compte${autres > 1 ? 's' : ''} de cet appareil ne vous ${autres > 1 ? 'sont' : 'est'} pas montré${autres > 1 ? 's' : ''} : chaque compte reste isolé.` : 'Les autres comptes de cet appareil ne vous sont pas montrés : chaque compte reste isolé.'}
+          </Text>
+        </Panneau>
+      ) : null}
+
       <View style={[{ gap: 16 }, outils.large && { flexDirection: 'row', alignItems: 'flex-start' }]}>
         <Panneau theme={theme} style={outils.large ? { flex: 1 } : undefined} testID="admin-alertes">
           <Intertitre theme={theme}>{`Alertes (${alertes.length})`}</Intertitre>
@@ -84,15 +96,17 @@ export function Tableau({ outils }: { outils: OutilsAdmin }) {
               </Text>
             </View>
           ))}
-          <Text style={[attenue, { fontSize: 13 }]} testID="admin-derniere-activite">
-            Dernière activité : {stats.derniereActivite ? `${stats.derniereActivite.nom}, ${relatif(stats.derniereActivite.date, maintenant)}` : 'aucune connexion notée'}
-          </Text>
+          {gestionnaire ? null : (
+            <Text style={[attenue, { fontSize: 13 }]} testID="admin-derniere-activite">
+              Dernière activité : {stats.derniereActivite ? `${stats.derniereActivite.nom}, ${relatif(stats.derniereActivite.date, maintenant)}` : 'aucune connexion notée'}
+            </Text>
+          )}
         </Panneau>
       </View>
 
       <Panneau theme={theme}>
         <View style={[commun.ligne, { justifyContent: 'space-between', paddingVertical: 0 }]}>
-          <Intertitre theme={theme}>Activité récente</Intertitre>
+          <Intertitre theme={theme}>{gestionnaire ? 'Vos dernières actions' : 'Activité récente'}</Intertitre>
           <Pressable accessibilityRole="link" onPress={() => outils.allerA('journal')} testID="admin-voir-journal">
             <Text style={{ color: theme.teintes.admin, fontWeight: '600' }}>Tout le journal →</Text>
           </Pressable>
@@ -102,7 +116,7 @@ export function Tableau({ outils }: { outils: OutilsAdmin }) {
           <View key={`${e.date}-${index}`} style={[commun.ligne, index > 0 && { borderTopWidth: 1, borderTopColor: theme.ligne }]}>
             <Text style={[attenue, { fontSize: 12, width: 120 }, police(theme.policeChiffres)]}>{dateLisible(e.date, true)}</Text>
             <Text style={[texte, { flex: 1, fontSize: 13 }]}>
-              <Text style={{ fontWeight: '700' }}>{LIBELLES_TYPE[e.type]}</Text> · {e.action}
+              <Text style={{ fontWeight: '700' }}>{LIBELLES_TYPE[e.type]}</Text> · {e.acteur ? `[${e.acteur}] ` : ''}{e.action}
             </Text>
           </View>
         ))}

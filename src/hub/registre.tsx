@@ -35,9 +35,11 @@ export const REGISTRE: readonly AppHub[] = [
     icone: '⚙︎',
     teinte: 'admin',
     adminSeulement: true,
+    // Les gestionnaires (amis promus) l'ouvrent en version limitée : voir `admin/roles.ts`.
+    gestionnaire: true,
     // Il faut une plateforme qui sache créer le coffre d'un autre profil.
     disponible: contexte => Boolean(contexte.profils?.onCreerCompte),
-    info: contexte => infoAdministration(contexte.profils?.tous),
+    info: contexte => infoAdministration(contexte.profils?.gestion?.comptes ?? contexte.profils?.tous),
     Racine: Administration,
   },
 ];

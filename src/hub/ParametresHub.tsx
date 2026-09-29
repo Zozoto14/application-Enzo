@@ -229,6 +229,8 @@ export interface PanneauParametresProps {
   onChangerProfil?(): void;
   /** Historique des nouveautés (devblog). */
   onNouveautes?(): void;
+  /** Compte gestionnaire : bandeau qui dit ce que ce rôle permet (et interdit). */
+  gestionnaire?: boolean;
   /** Compte ami : l'administrateur peut y accéder (avertissement de transparence). */
   transparence?: { dernierAccesAdmin?: string; sequestreActif: boolean };
   nomProfil?: string;
@@ -378,6 +380,22 @@ export function PanneauParametres(props: PanneauParametresProps) {
               <Text style={[attenue, { fontSize: 13 }]}>Ce qu’apporte chaque version, avec « Essayer » pour ouvrir la fonctionnalité.</Text>
               <View style={styles.actions}>
                 <BoutonHub theme={theme} titre="✨ Voir les nouveautés" onPress={props.onNouveautes} testID="parametres-nouveautes" />
+              </View>
+            </>
+          ) : null}
+
+          {props.gestionnaire ? (
+            <>
+              {section('Ton rôle')}
+              <View
+                style={{ padding: 12, borderRadius: rayon, borderLeftWidth: 4, borderLeftColor: theme.teintes.admin, backgroundColor: teinteTransparente(theme.teintes.admin, 0.14), gap: 4 }}
+                testID="parametres-role-gestionnaire">
+                <Text style={[texte, { fontWeight: '700' }]}>Tu es gestionnaire.</Text>
+                <Text style={[attenue, { fontSize: 13 }]}>
+                  L’administrateur t’a confié une Administration limitée : tu peux créer des amis et gérer ceux que tu as créés (accès aux apps, activation,
+                  suspension, identifiants). Tu ne peux ouvrir le compte de personne, et tes actions sont inscrites au journal de l’administrateur, avec ton
+                  nom. Retrouve-la dans la tuile « Administration ».
+                </Text>
               </View>
             </>
           ) : null}

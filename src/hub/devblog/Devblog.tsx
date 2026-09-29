@@ -19,6 +19,8 @@ import { ENTREES, type CibleEssai, type EntreeDevblog, type Illustration } from 
 export interface DevblogProps {
   theme: ThemeHub;
   admin: boolean;
+  /** Compte gestionnaire : voit aussi « Tu es gestionnaire ». */
+  gestionnaire?: boolean;
   /** Entrée à présenter ; absente : historique de toutes les versions. */
   entree?: EntreeDevblog;
   onFermer(): void;
@@ -29,7 +31,7 @@ export interface DevblogProps {
   disponible(cible: CibleEssai): boolean;
 }
 
-export function Devblog({ theme, admin, entree, onFermer, onEssayer, onVisite, disponible }: DevblogProps) {
+export function Devblog({ theme, admin, gestionnaire, entree, onFermer, onEssayer, onVisite, disponible }: DevblogProps) {
   const { width, height } = useWindowDimensions();
   const [ouverte, setOuverte] = useState<string | undefined>(entree?.version ?? ENTREES[0]?.version);
   useEffect(() => ecouterTouche('Escape', onFermer), [onFermer]);
@@ -64,7 +66,7 @@ export function Devblog({ theme, admin, entree, onFermer, onEssayer, onVisite, d
           ) : null}
           {liste.map(e => {
             const deplie = Boolean(entree) || ouverte === e.version;
-            const fonctions = fonctionnalitesPour(e, admin);
+            const fonctions = fonctionnalitesPour(e, admin, gestionnaire);
             return (
               <View key={e.version} style={{ gap: 14 }} testID={`devblog-entree-${e.version}`}>
                 {entree ? null : (

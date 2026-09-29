@@ -188,3 +188,69 @@ administrateur (le code est lui-même dans `prive`).
   l'administrateur passe directement à un autre compte (séquestre).
   La barrière décisive reste cryptographique : chaque fichier est scellé
   par la clé de son compte.
+
+## 7. Rôles : le Gestionnaire (niveau 1, sans toucher à la cryptographie)
+
+Trois rôles : **administrateur** (tout, séquestre compris), **gestionnaire**
+(un ami à l'Administration limitée) et **ami**. Le séquestre reste celui de
+l'administrateur seul : un second administrateur « complet » (qui pourrait
+ouvrir les comptes) exigerait de re-sceller la clé de chaque compte pour lui —
+c'est le **niveau 2**, volontairement absent (l'interface l'annonce : « bientôt »).
+
+Code : `src/hub/admin/roles.ts` (matrice des droits, seule source de vérité),
+`src/hub/admin/actions.ts` (chaque action revérifie le rôle de l'appelant),
+`src/hub/admin/gestion.ts` (carnet), `src/profils/annuaire.ts` (partie
+« côté gestionnaire »). Tests : `roles.test.ts`, `src/profils/gestionnaire.test.ts`.
+
+**Ce que peut un gestionnaire** : tableau de bord (chiffres sans prénoms),
+créer/inviter des amis, régler l'accès par app, activer/désactiver/suspendre,
+prolonger/annuler une invitation, régénérer les identifiants — **uniquement pour
+les amis qu'il a lui-même créés** — et lire le journal de ses propres actions.
+**Jamais** : séquestre, code d'accès, ouvrir un compte, agir sur
+l'administrateur, sur un autre gestionnaire ou sur lui-même, promouvoir/rétrograder,
+sécurité, apps globales (activation, maintenance), exporter le journal,
+renommer ou supprimer un compte.
+
+### Choix d'isolation (option la plus protectrice)
+
+L'annuaire ne nomme personne et un prénom inconnu mène au coffre leurre : un
+gestionnaire ne doit donc **pas** recevoir la liste des comptes. Il ne connaît
+que les amis qu'il a créés, dont il a saisi le prénom ; il les garde dans **sa
+propre base chiffrée** (`gestion.comptes`, avec l'identifiant opaque). Pour tous
+les autres comptes il n'a que des chiffres (`apercuAnonyme` : aucun prénom).
+Écarté : que l'administrateur « confie » des comptes existants — cela demanderait
+soit de lui transmettre leurs prénoms (casser le leurre : il pourrait sonder les
+prénoms), soit de sceller pour lui avec une nouvelle clé (niveau 2).
+
+### Mécanique
+
+- Le rôle est le champ `role` (« gestionnaire », absent = ami) : dans la liste
+  v2 (migration : « ami » par défaut, idempotente) et dans `acces` de l'annuaire
+  (lu à la connexion de l'ami, relu à **chaque** action : une rétrogradation
+  prend effet aussitôt).
+- Un gestionnaire n'a aucune clé de l'administrateur. Il écrit la partie publique
+  de l'annuaire (`appliquerAccesGeres` : uniquement `acces`, uniquement les
+  comptes de son carnet, jamais un gestionnaire, jamais le rôle) — comme l'ami
+  qui note sa connexion.
+- Ce qui doit revenir à l'administrateur lui est **scellé avec sa clé publique**
+  (`scellerPourAdmin`, mécanisme existant, aucune primitive nouvelle) :
+  `creation` (prénom, date, créateur du compte) et `journalGestion` (actions).
+  À sa prochaine ouverture il les déchiffre, les reporte à son journal (avec le
+  nom du gestionnaire, champ `acteur`) et les efface de l'annuaire. Un dépôt ne
+  remplace jamais un prénom déjà connu ; un journal ou un créateur attribué à un
+  compte qui n'est pas gestionnaire est ignoré.
+- Le compte créé par un gestionnaire est déposé sous séquestre **de l'administrateur**
+  (transparence inchangée pour l'ami).
+
+### Limites assumées
+
+- Comme `apps` ou `actif`, `role` n'est pas protégé en intégrité (la liste doit
+  être lisible avant tout déverrouillage). Qui modifie le fichier local peut
+  s'attribuer une tuile Administration limitée ; il n'obtient aucun contenu de
+  compte (tout est scellé), au pire il crée des amis et voit des chiffres.
+- Créer un ami refuse un prénom déjà pris (« pas disponible ») : cela laisse
+  deviner qu'un prénom existe, comme la limite du dictionnaire (§3).
+- Electron : le processus principal ne connaît pas les rôles ; un gestionnaire
+  demande l'extension de sa portée aux fichiers du compte qu'il crée/régénère
+  (`profil:etendre`, ≤ 16 comptes, jamais `principal`). La logique de l'app exige
+  le rôle ; la barrière qui protège le contenu reste cryptographique.

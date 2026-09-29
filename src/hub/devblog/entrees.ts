@@ -25,6 +25,8 @@ export interface Fonctionnalite {
   essayer?: CibleEssai;
   /** Réservée à l'administrateur (un ami ne la voit pas dans son devblog). */
   adminSeulement?: boolean;
+  /** Réservée aux gestionnaires (« tu es gestionnaire ») : ni l'administrateur ni un simple ami ne la voient. */
+  gestionnaireSeulement?: boolean;
 }
 
 export interface EntreeDevblog {
@@ -38,6 +40,50 @@ export interface EntreeDevblog {
 }
 
 export const ENTREES: readonly EntreeDevblog[] = [
+  {
+    version: '2026.09.30',
+    date: '2026-09-30',
+    titre: 'Un ami peut devenir gestionnaire',
+    resume:
+      'L’administrateur peut confier une Administration limitée à un ami : créer et gérer des amis, sans jamais pouvoir ouvrir le compte de quelqu’un. Les comptes restent isolés.',
+    illustration: 'administration',
+    fonctionnalites: [
+      {
+        id: 'roles',
+        emoji: '🧑‍💼',
+        titre: 'Le rôle « Gestionnaire »',
+        texte:
+          'L’administrateur peut désormais confier à un ami une Administration limitée (créer et gérer des amis). Si c’est ton cas, un bandeau te le dit dans tes Paramètres. Un gestionnaire ne peut jamais ouvrir ton compte : les comptes restent isolés.',
+      },
+      {
+        id: 'role-gestionnaire',
+        emoji: '🧑‍💼',
+        titre: 'Nouveau rôle « Gestionnaire »',
+        texte:
+          'Depuis la fiche d’un utilisateur, promouvez un ami Gestionnaire en un clic (avec votre mot de passe et votre code). Il voit une tuile « Administration » limitée : tableau de bord sans prénoms, création d’amis, accès par app, activation et suspension des amis qu’il a créés. Pas de séquestre, pas de sécurité, pas d’apps globales ; ses actions sont à votre journal, avec son nom. Administrateur complet : bientôt.',
+        essayer: { genre: 'app', app: 'administration' },
+        adminSeulement: true,
+      },
+      {
+        id: 'tu-es-gestionnaire',
+        emoji: '🧑‍💼',
+        titre: 'Tu es gestionnaire',
+        texte:
+          'L’administrateur t’a confié une Administration limitée. Tu peux créer des amis et gérer ceux que tu as créés (accès aux apps, activation, suspension, identifiants). Tu ne peux ouvrir le compte de personne, et les autres comptes ne te sont pas montrés. Tes actions sont inscrites au journal de l’administrateur, avec ton nom.',
+        essayer: { genre: 'app', app: 'administration' },
+        gestionnaireSeulement: true,
+      },
+      {
+        id: 'aide-maintenance',
+        emoji: '🛠',
+        titre: 'Maintenance, expliquée',
+        texte:
+          'Dans Applications, une phrase explique désormais le mode maintenance : l’app reste visible avec votre message mais les amis ne peuvent pas l’ouvrir, contrairement à « Désactiver » qui la fait disparaître.',
+        essayer: { genre: 'app', app: 'administration' },
+        adminSeulement: true,
+      },
+    ],
+  },
   {
     version: '2026.09.29',
     date: '2026-09-29',
