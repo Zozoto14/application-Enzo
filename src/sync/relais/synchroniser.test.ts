@@ -5,7 +5,7 @@ import { ouvrirBaseNode } from '../../db/pilotes/node';
 import { migrer } from '../../db/schema';
 import { deriverCleSynchro, depuisBase64, ouvrirEnveloppe, sceller, versBase64 } from './chiffrement';
 import { decoderLiaison, encoderLiaison, lienSite } from './liaison';
-import { ecrireConfigRelais, lireEtatSynchro, synchroniser } from './synchroniser';
+import { ecrireConfigRelais, lireEtatSynchro, recupererCoffre, synchroniser } from './synchroniser';
 
 const KDF_RAPIDE = { algorithme: 'argon2id' as const, passes: 1, memoireKio: 8, fils: 1, longueurCle: 32 };
 const JETON = 'jeton-du-relais-0123456789';
@@ -153,6 +153,25 @@ describe('synchronisation par le relais', () => {
     const second = await tour(pc, 'aaaa1111');
     expect(second.envoye).toBe(false);
     expect(lireEtatSynchro(pc).derniereSynchro).toBeDefined();
+  });
+
+  it('dépose le coffre pour qu’un nouvel appareil se lie, et ne le prend pas pour un appareil', async () => {
+    const coffre = { version: 1, enveloppes: [{ usage: 'motdepasse' }] };
+    await synchroniser({ pilote: pc, appareil: 'aaaa1111', moi: { plateforme: 'bureau' }, maintenant, requete: relais.requete, coffre });
+    expect(await recupererCoffre({ relais: RELAIS, jeton: JETON }, relais.requete)).toEqual(coffre);
+
+    const reception = await tour(iphone, 'bbbb2222');
+    expect(reception.erreurs).toEqual([]);
+    expect(Object.keys(reception.appareils)).toEqual(['aaaa1111']);
+
+    // Inchangé : pas de nouveau dépôt.
+    const avant = relais.boite.get('coffre');
+    await synchroniser({ pilote: pc, appareil: 'aaaa1111', moi: { plateforme: 'bureau' }, maintenant, requete: relais.requete, coffre });
+    expect(relais.boite.get('coffre')).toBe(avant);
+  });
+
+  it('dit clairement quand aucun compte n’a encore été déposé', async () => {
+    await expect(recupererCoffre({ relais: RELAIS, jeton: JETON }, relais.requete)).rejects.toThrow(/Aucun compte/);
   });
 
   it('signale un mot de passe différent sans rien casser', async () => {

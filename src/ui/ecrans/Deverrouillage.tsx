@@ -13,9 +13,10 @@
  */
 
 import React, { useState } from 'react';
-import { ActivityIndicator, ScrollView, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View, useColorScheme } from 'react-native';
 import { Alerte, Bouton, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, palettePour, stylesPartages } from '../theme';
+import { LierCompte, type OptionsLier } from './LierCompte';
 
 export interface DeverrouillageProps {
   onDeverrouiller(motDePasse: string, codeTotp: string): void;
@@ -25,6 +26,10 @@ export interface DeverrouillageProps {
   /** Secondes restantes avant de pouvoir réessayer, 0 si aucune. */
   secondesAvantNouvelEssai?: number;
   enCours?: boolean;
+  /** Remplacer le compte de cet appareil par celui du PC. */
+  lier?: OptionsLier;
+  /** Message d'accueil, par exemple juste après une liaison. */
+  message?: string;
 }
 
 export function Deverrouillage({
@@ -33,7 +38,10 @@ export function Deverrouillage({
   erreur,
   secondesAvantNouvelEssai = 0,
   enCours = false,
+  lier,
+  message,
 }: DeverrouillageProps) {
+  const [montrerLier, setMontrerLier] = useState(false);
   const [motDePasse, setMotDePasse] = useState('');
   const [code, setCode] = useState('');
   const palette = usePalette();
@@ -51,6 +59,11 @@ export function Deverrouillage({
       <SousTitre>
         Mot de passe et code à six chiffres sont tous deux nécessaires.
       </SousTitre>
+      {message ? (
+        <Text style={{ color: palette.hausse, fontWeight: '600' }} testID="message-deverrouillage">
+          {message}
+        </Text>
+      ) : null}
 
       <Champ
         etiquette="Mot de passe"
@@ -112,6 +125,20 @@ export function Deverrouillage({
           desactive={enCours}
           onPress={onRecuperer}
         />
+      ) : null}
+      {lier ? (
+        montrerLier ? (
+          <LierCompte {...lier} remplace />
+        ) : (
+          <Bouton
+            titre="Lier à mon compte du PC"
+            pleineLargeur
+            variante="discret"
+            desactive={enCours}
+            onPress={() => setMontrerLier(true)}
+            testID="montrer-lier"
+          />
+        )
       ) : null}
     </ScrollView>
   );

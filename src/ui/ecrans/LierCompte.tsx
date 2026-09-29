@@ -1,0 +1,84 @@
+/**
+ * « Lier à mon compte » : sur un nouvel appareil (ou le site), récupère le
+ * compte du PC par le relais. L'appareil s'ouvre ensuite avec le même mot de
+ * passe et le même code d'authentification, et le portefeuille arrive par la
+ * synchronisation.
+ */
+
+import React, { useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { Alerte, Bouton, Champ, SousTitre, usePalette } from '../composants';
+import { ESPACEMENT, RAYON } from '../theme';
+
+export interface OptionsLier {
+  /** Code déjà connu (lien scanné, relais du PC) : rien à recopier. */
+  codeConnu?: string;
+  onLier(code: string): Promise<void>;
+}
+
+export function LierCompte({
+  codeConnu,
+  onLier,
+  remplace = false,
+}: OptionsLier & {
+  /** Un compte existe déjà sur cet appareil : il sera remplacé. */
+  remplace?: boolean;
+}) {
+  const palette = usePalette();
+  const [code, setCode] = useState('');
+  const [enCours, setEnCours] = useState(false);
+  const [erreur, setErreur] = useState<string | undefined>();
+  const utilise = code.trim() || codeConnu || '';
+
+  const lier = () => {
+    setErreur(undefined);
+    setEnCours(true);
+    onLier(utilise)
+      .catch((e: unknown) => setErreur(e instanceof Error ? e.message : String(e)))
+      .finally(() => setEnCours(false));
+  };
+
+  return (
+    <View style={[styles.cadre, { borderColor: palette.accent, backgroundColor: palette.surface }]} testID="lier-compte">
+      <Text style={{ color: palette.texte, fontWeight: '800', fontSize: 17 }}>🔗 Déjà un compte sur votre PC ?</Text>
+      <SousTitre>
+        Liez cet appareil : il s’ouvrira avec le même mot de passe et le même code d’authentification que le PC, et
+        votre portefeuille arrivera tout seul.
+      </SousTitre>
+      {codeConnu ? (
+        <Text style={{ color: palette.hausse, fontWeight: '600' }} testID="code-connu">
+          ✅ Code de liaison reconnu : rien à recopier.
+        </Text>
+      ) : (
+        <Champ
+          etiquette="Code de liaison"
+          indication="Sur le PC : Paramètres › Synchronisation › Relier un autre appareil › Copier le code. Il commence par AB1."
+          placeholder="AB1.…"
+          value={code}
+          onChangeText={setCode}
+          autoCapitalize="none"
+          autoCorrect={false}
+          testID="champ-code-lier"
+        />
+      )}
+      {remplace ? (
+        <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>
+          Le compte actuel de cet appareil sera remplacé par celui du PC. Ce qui n’a jamais été synchronisé depuis cet
+          appareil sera perdu.
+        </Text>
+      ) : null}
+      {erreur ? <Alerte message={erreur} /> : null}
+      <Bouton
+        pleineLargeur
+        titre={enCours ? 'Liaison…' : 'Lier à mon compte'}
+        desactive={enCours || !utilise}
+        onPress={lier}
+        testID="bouton-lier-compte"
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  cadre: { borderWidth: 1.5, borderRadius: RAYON.m, padding: ESPACEMENT.m, gap: ESPACEMENT.s },
+});

@@ -67,6 +67,9 @@ relayerYahoo();
 // Hors d'Electron (site de secours), Yahoo et les médias passent par le relais.
 if (!pont()) {
   installerPontWeb();
+  // Demande au navigateur de ne pas effacer les données du site pour faire de
+  // la place (Safari le fait sinon au bout de quelques semaines sans visite).
+  void navigator.storage?.persist?.().catch(() => undefined);
 }
 
 type Etat =
@@ -119,8 +122,23 @@ function Racine() {
       return;
     }
     const avantFermeture = () => void etat.session.vider();
+    // Sur iPhone, Safari n'envoie presque jamais « beforeunload » : une page
+    // quittée ou mise en arrière-plan ne prévient que par « pagehide » et
+    // « visibilitychange ». Sans eux, la configuration de la synchronisation
+    // et les dernières opérations pouvaient ne jamais être enregistrées.
+    const siCachee = () => {
+      if (document.visibilityState === 'hidden') {
+        avantFermeture();
+      }
+    };
     window.addEventListener('beforeunload', avantFermeture);
-    return () => window.removeEventListener('beforeunload', avantFermeture);
+    window.addEventListener('pagehide', avantFermeture);
+    document.addEventListener('visibilitychange', siCachee);
+    return () => {
+      window.removeEventListener('beforeunload', avantFermeture);
+      window.removeEventListener('pagehide', avantFermeture);
+      document.removeEventListener('visibilitychange', siCachee);
+    };
   }, [etat]);
 
   if (etat.phase === 'chargement') {

@@ -15,6 +15,7 @@ import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View, useColorScheme } from 'react-native';
 import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
+import { LierCompte, type OptionsLier } from './LierCompte';
 
 export interface SecretsInitiaux {
   codesRecuperation: string[];
@@ -29,6 +30,8 @@ export interface PremierLancementProps {
   onTermine?: () => void;
   enCours?: boolean;
   erreur?: string;
+  /** Lier à un compte existant (PC) au lieu d'en créer un. */
+  lier?: OptionsLier;
 }
 
 /** Longueur minimale exigée. Le mot de passe est censé venir d'un gestionnaire. */
@@ -40,6 +43,7 @@ export function PremierLancement({
   onTermine,
   enCours = false,
   erreur,
+  lier,
 }: PremierLancementProps) {
   const sombre = useColorScheme() === 'dark';
   const fond = { backgroundColor: palettePour(sombre).fond };
@@ -49,7 +53,7 @@ export function PremierLancement({
       <RemiseDesSecrets secrets={secrets} onTermine={onTermine} style={fond} />
     );
   }
-  return <Creation onCreer={onCreer} enCours={enCours} erreur={erreur} style={fond} />;
+  return <Creation onCreer={onCreer} enCours={enCours} erreur={erreur} style={fond} lier={lier} />;
 }
 
 function Creation({
@@ -57,11 +61,13 @@ function Creation({
   enCours,
   erreur,
   style,
+  lier,
 }: {
   onCreer(motDePasse: string): void;
   enCours: boolean;
   erreur?: string;
   style: object;
+  lier?: OptionsLier;
 }) {
   const [motDePasse, setMotDePasse] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -75,6 +81,12 @@ function Creation({
       style={[stylesPartages.ecran, style]}
       contentContainerStyle={[stylesPartages.contenu, stylesPartages.accueil, { paddingVertical: ESPACEMENT.xl }]}
       keyboardShouldPersistTaps="handled">
+      {lier ? (
+        <>
+          <LierCompte {...lier} />
+          <Text style={{ color: palettePour().texteSecondaire, textAlign: 'center' }}>— ou, nouveau compte sur cet appareil —</Text>
+        </>
+      ) : null}
       <Titre>Protéger vos données</Titre>
       <SousTitre>
         Ce mot de passe chiffre l'intégralité de votre portefeuille sur cet

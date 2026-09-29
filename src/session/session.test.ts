@@ -467,3 +467,43 @@ describe('renouvellement des codes de récupération', () => {
     expect(() => session.renouvelerCodesRecuperation()).toThrow(/verrouillée/);
   });
 });
+
+describe('lier un nouvel appareil au compte du PC', () => {
+  it('adopte le coffre : même mot de passe, même code, même clé', () => {
+    const pc = demarrer();
+    const cleSynchroPc = pc.session.cleDerivee('synchro');
+
+    const iphone = creerSession();
+    let effacee = false;
+    const telephone = new Session({
+      stockage: iphone.stockage,
+      ouvrirBase: cle => {
+        iphone.basesOuvertes.push(cle);
+        return ouvrirBaseNode();
+      },
+      horloge: () => DEPART,
+      kdf: KDF_RAPIDE,
+      reinitialiserBase: () => {
+        effacee = true;
+      },
+    });
+    telephone.adopterCoffre(pc.session.coffreActuel()!);
+    expect(effacee).toBe(true);
+    expect(telephone.statut()).toBe('verrouille');
+
+    telephone.deverrouiller({
+      motDePasse: MOT_DE_PASSE,
+      codeTotp: codeTotp(pc.initialisation.secretTotp, DEPART),
+    });
+    expect(telephone.statut()).toBe('deverrouille');
+    expect(iphone.basesOuvertes.at(-1)).toBe(pc.basesOuvertes.at(-1));
+    expect(telephone.cleDerivee('synchro')).toBe(cleSynchroPc);
+    expect(telephone.cleDerivee('synchro')).not.toBe(telephone.cleDerivee('autre'));
+  });
+
+  it('refuse un coffre illisible sans rien effacer', () => {
+    const { session } = demarrer();
+    expect(() => session.adopterCoffre({} as never)).toThrow(ErreurSession);
+    expect(session.statut()).toBe('deverrouille');
+  });
+});

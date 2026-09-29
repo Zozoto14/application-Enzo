@@ -98,6 +98,10 @@ import type { FormulaireOperation } from '../ui/vues/saisie';
 import { CLE_PLANNING_LOCAL, stockageLocal, useNotificationsBureau } from './notificationsBureau';
 import { useSauvegardes } from './sauvegardesApp';
 import { nomParDefaut, useSynchro } from './synchroApp';
+import { decoderLiaison, encoderLiaison } from '../sync/relais/liaison';
+import { definirLiaisonEnAttente, liaisonEnAttente } from '../sync/relais/actif';
+import { recupererCoffre } from '../sync/relais/synchroniser';
+import type { Coffre } from '../securite/coffre';
 import { CarteSynchro } from '../ui/ecrans/CarteSynchro';
 import { dividendesParTitre, lignesCibles, lignesVendables } from './calculs';
 import { exporterExcel } from '../rapport/exportExcel';
@@ -664,6 +668,27 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     oublier: oublierAppareilSynchro,
     synchroniserMaintenant,
   } = useSynchro({ session, deverrouille, rafraichir });
+
+  // « Lier à mon compte » : ce nouvel appareil adopte le compte du PC.
+  const [messageDeverrouillage, setMessageDeverrouillage] = useState<string | undefined>();
+  const codeLiaisonConnu = liaisonDuPc ? encoderLiaison(liaisonDuPc) : liaisonEnAttente();
+  const lier = {
+    codeConnu: codeLiaisonConnu && decoderLiaison(codeLiaisonConnu) ? codeLiaisonConnu : undefined,
+    onLier: async (code: string) => {
+      const liaison = decoderLiaison(code);
+      if (!liaison) {
+        throw new Error('Code de liaison illisible : copiez-le depuis le PC (il commence par AB1.).');
+      }
+      const coffre = await recupererCoffre(liaison);
+      session.adopterCoffre(coffre as Coffre);
+      definirLiaisonEnAttente(encoderLiaison(liaison));
+      setErreur(undefined);
+      setMessageDeverrouillage(
+        '✅ Compte du PC trouvé. Entrez le mot de passe et le code à six chiffres de votre PC : le portefeuille arrivera ensuite tout seul.',
+      );
+      rafraichir();
+    },
+  };
 
   const genererRapport = useCallback(
     (annee: number) => {
@@ -1786,7 +1811,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }}
         />
       ) : statut === 'non-initialise' ? (
-        <PremierLancement onCreer={creer} enCours={enCours} erreur={erreur} />
+        <PremierLancement onCreer={creer} enCours={enCours} erreur={erreur} lier={lier} />
       ) : !contenu || !tableau ? (
         enRecuperation ? (
           <Recuperation
@@ -1808,6 +1833,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             erreur={erreur}
             enCours={enCours}
             secondesAvantNouvelEssai={verrou?.verrouille ? verrou.secondesRestantes : 0}
+            lier={lier}
+            message={messageDeverrouillage}
           />
         )
       ) : ecran === 'compte' ? (

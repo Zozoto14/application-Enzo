@@ -21,3 +21,37 @@ export function definirRelaisActif(relais: RelaisActif | undefined): void {
 export function relaisActif(): RelaisActif | undefined {
   return actif;
 }
+
+// ------------------------------------------------- Liaison en attente
+//
+// « Lier » sur l'écran d'ouverture récupère le coffre avant tout
+// déverrouillage : la configuration du relais, elle, ne peut s'écrire que
+// dans la base chiffrée, donc après. Le code attend ici (et dans le
+// stockage du navigateur, pour survivre à un rechargement du site).
+
+const CLE_LIAISON = 'applibourse.liaison';
+type Memoire = { getItem(cle: string): string | null; setItem(cle: string, valeur: string): void };
+const memoire = () => (globalThis as { localStorage?: Memoire }).localStorage;
+let enAttente: string | undefined;
+
+export function definirLiaisonEnAttente(code: string | undefined): void {
+  enAttente = code;
+  try {
+    if (code) {
+      memoire()?.setItem(CLE_LIAISON, code);
+    }
+  } catch {
+    // Navigation privée : la mémoire suffit pour cette ouverture.
+  }
+}
+
+export function liaisonEnAttente(): string | undefined {
+  if (enAttente) {
+    return enAttente;
+  }
+  try {
+    return memoire()?.getItem(CLE_LIAISON) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}

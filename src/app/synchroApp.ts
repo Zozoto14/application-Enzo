@@ -10,7 +10,6 @@ import { AppState, Linking, Platform } from 'react-native';
 import { DepotParametres, PARAMETRES } from '../db/depots';
 import { expirationSignature, programmerRappelsExpiration } from '../natif/signature';
 import type { Session } from '../session/session';
-import { deriverCleSynchro } from '../sync/relais/chiffrement';
 import { identifiantAppareil } from '../sync/identite';
 import { decoderLiaison, type Liaison } from '../sync/relais/liaison';
 import type { InfoAppareil } from '../sync/relais/moteur';
@@ -22,7 +21,7 @@ import {
   synchroniser,
   testerLiaison,
 } from '../sync/relais/synchroniser';
-import { definirRelaisActif } from '../sync/relais/actif';
+import { definirRelaisActif, liaisonEnAttente } from '../sync/relais/actif';
 import { chargerModule } from '../natif/modules';
 import { systemeDepuisRnfs } from '../fichiers/systeme';
 import { GestionnaireMiseAJour } from '../maj/application';
@@ -62,9 +61,6 @@ export function plateformeActuelle(): string {
 export function nomParDefaut(plateforme: string): string {
   return plateforme === 'bureau' ? 'PC' : plateforme === 'ios' ? 'iPhone' : plateforme === 'site' ? 'Site de secours' : 'Téléphone';
 }
-
-/** Laisse React peindre avant un calcul qui bloque le fil (Argon2). */
-const apresRendu = () => new Promise<void>(resoudre => setTimeout(resoudre, 30));
 
 export function useSynchro({
   session,
@@ -173,6 +169,8 @@ export function useSynchro({
         pilote: session.base(),
         appareil: identifiantAppareil(new DepotParametres(session.base()), PARAMETRES.identifiantAppareil),
         moi: { plateforme, expireLe: expireLe.current },
+        // Déposé pour qu'un nouvel appareil puisse se « Lier » avec le même compte.
+        coffre: session.coffreActuel(),
       });
       const changes = resultat.bilan.ajoutes + resultat.bilan.modifies + resultat.bilan.supprimes;
       if (changes > 0) {
@@ -218,25 +216,57 @@ export function useSynchro({
     };
   }, [deverrouille, Boolean(config)]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * Relie cet appareil : la clé de synchronisation est tirée de la clé
+   * maîtresse du coffre, commune à tous les appareils liés — pas d'autre mot
+   * de passe à retenir.
+   */
   const relier = useCallback(
-    async (code: string, motDePasse: string, nom: string) => {
+    async (code: string, nom: string) => {
       const liaison = decoderLiaison(code);
       if (!liaison) {
         throw new Error('Code de liaison illisible : recopiez-le depuis le PC (il commence par AB1.).');
       }
-      if (motDePasse.length < 8) {
-        throw new Error('Le mot de passe de synchronisation doit faire au moins 8 caractères.');
-      }
       await testerLiaison(liaison);
-      setEtat(courant => ({ ...courant, enCours: true, message: 'Préparation de la clé…', erreur: undefined }));
-      await apresRendu();
-      const cle = deriverCleSynchro(motDePasse, liaison.jeton);
-      ecrireConfigRelais(session.base(), { ...liaison, cle, nom: nom.trim() || nomParDefaut(plateforme) });
-      setEtat(courant => ({ ...courant, enCours: false, message: 'Appareil relié.' }));
+      ecrireConfigRelais(session.base(), {
+        ...liaison,
+        cle: session.cleDerivee('synchro'),
+        nom: nom.trim() || nomParDefaut(plateforme),
+      });
+      setEtat(courant => ({ ...courant, message: 'Appareil relié.', erreur: undefined }));
       setVersion(v => v + 1);
     },
     [session, plateforme],
   );
+
+  /**
+   * À chaque ouverture : la clé suit le coffre (ancienne clé tirée d'un mot
+   * de passe de synchronisation → remplacée), et un appareil qui connaît le
+   * relais (script du PC, lien scanné, « Lier ») mais dont la configuration
+   * s'est perdue se relie tout seul. C'est ce qui garde le téléphone relié.
+   */
+  useEffect(() => {
+    if (!deverrouille) {
+      return;
+    }
+    const pilote = session.base();
+    const cle = session.cleDerivee('synchro');
+    const actuelle = lireConfigRelais(pilote);
+    if (actuelle && actuelle.cle !== cle) {
+      ecrireConfigRelais(pilote, { ...actuelle, cle });
+      const parametres = new DepotParametres(pilote);
+      const suivi = lireEtatSynchro(pilote);
+      parametres.ecrire(PARAMETRES.etatSynchro, JSON.stringify({ ...suivi, dernierEnvoi: undefined, lus: {} }));
+      setVersion(v => v + 1);
+      return;
+    }
+    const connue = liaisonDuPc ?? decoderLiaison(liaisonEnAttente() ?? '');
+    if (!actuelle && connue) {
+      ecrireConfigRelais(pilote, { ...connue, cle, nom: nomParDefaut(plateforme) });
+      setEtat(courant => ({ ...courant, message: 'Appareil relié automatiquement.' }));
+      setVersion(v => v + 1);
+    }
+  }, [deverrouille, session, liaisonDuPc, plateforme]);
 
   const delier = useCallback(() => {
     ecrireConfigRelais(session.base(), undefined);

@@ -21,7 +21,7 @@ export interface CarteSynchroProps {
   /** Relais déjà connu (script du PC, lien scanné) : proposé sans rien saisir. */
   liaisonDuPc?: Liaison;
   nomParDefaut: string;
-  onRelier(code: string, motDePasse: string, nom: string): Promise<void>;
+  onRelier(code: string, nom: string): Promise<void>;
   onSynchroniser(): void;
   onDelier(): void;
   onOublier(appareil: string): void;
@@ -102,8 +102,6 @@ export function CarteSynchro({
   const palette = usePalette();
   const [code, setCode] = useState('');
   const [nom, setNom] = useState(nomParDefaut);
-  const [motDePasse, setMotDePasse] = useState('');
-  const [confirmation, setConfirmation] = useState('');
   const [erreur, setErreur] = useState<string | undefined>();
   const [enCours, setEnCours] = useState(false);
   const [montrerCodes, setMontrerCodes] = useState(false);
@@ -121,13 +119,9 @@ export function CarteSynchro({
 
   if (!synchro.configure) {
     const relier = () => {
-      if (motDePasse !== confirmation) {
-        setErreur('Les deux mots de passe ne sont pas identiques.');
-        return;
-      }
       setErreur(undefined);
       setEnCours(true);
-      onRelier(codeUtilise, motDePasse, nom)
+      onRelier(codeUtilise, nom)
         .catch((e: unknown) => setErreur(e instanceof Error ? e.message : String(e)))
         .finally(() => setEnCours(false));
     };
@@ -136,9 +130,9 @@ export function CarteSynchro({
         <Titre>Synchronisation entre appareils</Titre>
         <Carte testID="carte-synchro">
           <SousTitre>
-            Le PC, l’iPhone et le site de secours partagent le même portefeuille. Tout est chiffré sur l’appareil
-            avant de partir : le relais ne voit que du bruit. Le mot de passe de synchronisation doit être le même
-            partout, et n’est enregistré nulle part.
+            Le PC, l’iPhone et le site de secours partagent le même portefeuille, et s’ouvrent avec le même mot
+            de passe et le même code d’authentification. Tout est chiffré sur l’appareil avant de partir : le
+            relais ne voit que du bruit.
           </SousTitre>
           {liaisonDuPc ? (
             <Text style={{ color: palette.hausse, fontWeight: '600' }} testID="relais-du-pc">
@@ -188,7 +182,8 @@ export function CarteSynchro({
                 centaine de caractères (le plus sûr : l’envoyer par Notes ou iMessage à vous-même, puis le coller).
               </Text>
               <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>
-                Il ne contient pas le mot de passe de synchronisation : celui-ci se tape à part, juste en dessous.
+                Il ne contient aucun mot de passe : l’appareil s’ouvre ensuite avec le mot de passe et le code de
+                votre PC.
               </Text>
               <Champ
                 etiquette="Code de liaison"
@@ -202,26 +197,11 @@ export function CarteSynchro({
             </View>
           )}
           <Champ etiquette="Nom de cet appareil" value={nom} onChangeText={setNom} testID="champ-nom-appareil" />
-          <Champ
-            etiquette="Mot de passe de synchronisation"
-            indication="Au moins 8 caractères. Différent de celui qui ouvre l’application, c’est mieux."
-            value={motDePasse}
-            onChangeText={setMotDePasse}
-            secureTextEntry
-            testID="champ-mdp-synchro"
-          />
-          <Champ
-            etiquette="Confirmation"
-            value={confirmation}
-            onChangeText={setConfirmation}
-            secureTextEntry
-            testID="champ-mdp-synchro-confirmation"
-          />
           {erreur ? <Alerte message={erreur} /> : null}
           <View style={{ alignSelf: 'flex-start' }}>
             <Bouton
               titre={enCours ? 'Liaison…' : 'Relier cet appareil'}
-              desactive={enCours || !codeUtilise || motDePasse.length === 0}
+              desactive={enCours || !codeUtilise}
               onPress={relier}
               testID="bouton-relier"
             />
@@ -287,8 +267,8 @@ export function CarteSynchro({
         {montrerCodes && liaison ? (
           <View style={{ gap: ESPACEMENT.s }} testID="codes-liaison">
             <SousTitre>
-              Scannez avec l’appareil photo de l’iPhone. Le mot de passe de synchronisation vous sera demandé ; il
-              n’est pas dans le QR code.
+              Scannez avec l’appareil photo de l’iPhone, puis touchez « Lier à mon compte » : l’appareil s’ouvre
+              avec le même mot de passe et le même code que ce PC. Ni l’un ni l’autre n’est dans le QR code.
             </SousTitre>
             <View style={styles.qrs}>
               {lienSite(liaison) ? (

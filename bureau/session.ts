@@ -77,7 +77,7 @@ export async function ouvrirSessionBureau(
   const signaler = options.surErreur ?? (() => undefined);
 
   const coffreBrut = await stockage.lire('coffre');
-  const scelle = await stockage.lire('portefeuille');
+  let scelle = await stockage.lire('portefeuille');
   const emplacement = await stockage.emplacement();
 
   // --- Coffre : lu maintenant, tenu en memoire, reecrit a chaque changement.
@@ -163,8 +163,19 @@ export async function ouvrirSessionBureau(
     };
   };
 
+  const reinitialiserBase = () => {
+    scelle = undefined;
+    dernierPilote = undefined;
+    derniereCle = undefined;
+    if (enAttente) {
+      clearTimeout(enAttente);
+      enAttente = undefined;
+    }
+    void stockage.ecrire('portefeuille', new Uint8Array(0)).catch(signaler);
+  };
+
   return {
-    session: new Session({ stockage: stockageCoffre, ouvrirBase }),
+    session: new Session({ stockage: stockageCoffre, ouvrirBase, reinitialiserBase }),
     emplacement,
     surDisque: stockage.surDisque,
     async vider() {

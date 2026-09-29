@@ -17,10 +17,8 @@ describe('CarteSynchro', () => {
     );
     expect(screen.getByTestId('relais-du-pc')).toBeTruthy();
     expect(screen.queryByTestId('champ-liaison')).toBeNull();
-    await fireEvent.changeText(screen.getByTestId('champ-mdp-synchro'), 'secret-commun');
-    await fireEvent.changeText(screen.getByTestId('champ-mdp-synchro-confirmation'), 'secret-commun');
     await fireEvent.press(screen.getByTestId('bouton-relier'));
-    expect(onRelier).toHaveBeenCalledWith(expect.stringMatching(/^AB1\./), 'secret-commun', 'PC');
+    expect(onRelier).toHaveBeenCalledWith(expect.stringMatching(/^AB1\./), 'PC');
   });
 
   it('sur le PC sans relais : explique comment l’installer', async () => {
@@ -39,20 +37,6 @@ describe('CarteSynchro', () => {
     );
     expect(screen.getByText('Où trouver le code de liaison ?')).toBeTruthy();
     expect(screen.getByText(/Relier un autre appareil/)).toBeTruthy();
-  });
-
-  it('refuse deux mots de passe différents', async () => {
-    const onRelier = jest.fn();
-    await render(
-      <CarteSynchro synchro={nonRelie} nomParDefaut="iPhone" onRelier={onRelier}
-        onSynchroniser={jest.fn()} onDelier={jest.fn()} onOublier={jest.fn()} />,
-    );
-    await fireEvent.changeText(screen.getByTestId('champ-liaison'), 'AB1.xxx');
-    await fireEvent.changeText(screen.getByTestId('champ-mdp-synchro'), 'un');
-    await fireEvent.changeText(screen.getByTestId('champ-mdp-synchro-confirmation'), 'deux');
-    await fireEvent.press(screen.getByTestId('bouton-relier'));
-    expect(onRelier).not.toHaveBeenCalled();
-    expect(screen.getByText(/pas identiques/)).toBeTruthy();
   });
 
   it('montre l’iPhone, son expiration, et les QR codes de liaison', async () => {

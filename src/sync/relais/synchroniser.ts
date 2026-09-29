@@ -98,6 +98,34 @@ export async function testerLiaison(liaison: Liaison, requete: Fetch = fetch): P
   }
 }
 
+/**
+ * Place du coffre dans la boîte : il y voyage dans une enveloppe au même
+ * format que les dépôts, pour que le relais n'ait rien à connaître de neuf.
+ * Il n'est pas chiffré en plus — il ne s'ouvre qu'avec le mot de passe (ou
+ * un code de récupération), exactement comme sur le disque de l'appareil.
+ */
+export const ID_COFFRE = 'coffre';
+
+/** Récupère le coffre déposé par un appareil déjà relié. */
+export async function recupererCoffre(liaison: Liaison, requete: Fetch = fetch): Promise<unknown> {
+  const reponse = await appeler(liaison, `/boite/${ID_COFFRE}`, {}, requete);
+  if (reponse.status === 404) {
+    throw new ErreurRelais(
+      'Aucun compte sur ce relais pour l’instant : ouvrez d’abord AppliBourse sur le PC (déjà relié), attendez deux minutes, puis réessayez.',
+      404,
+    );
+  }
+  if (!reponse.ok) {
+    throw new ErreurRelais(`Le relais a répondu ${reponse.status}.`, reponse.status);
+  }
+  const enveloppe = (await reponse.json()) as { charge?: string };
+  try {
+    return JSON.parse(String(enveloppe.charge));
+  } catch {
+    throw new ErreurRelais('Le compte déposé sur le relais est illisible.');
+  }
+}
+
 export interface ResultatSynchro {
   recus: number;
   bilan: BilanFusion;
@@ -114,6 +142,8 @@ export interface OptionsSynchro {
   moi: Omit<InfoAppareil, 'nom' | 'vuLe'>;
   maintenant?: () => Date;
   requete?: Fetch;
+  /** Coffre de cet appareil, déposé pour qu'un nouvel appareil puisse se lier. */
+  coffre?: unknown;
 }
 
 export async function synchroniser(options: OptionsSynchro): Promise<ResultatSynchro> {
@@ -141,7 +171,7 @@ export async function synchroniser(options: OptionsSynchro): Promise<ResultatSyn
   const index = ((await reponseIndex.json()) as { appareils?: Record<string, { date: string }> }).appareils ?? {};
 
   for (const [autre, { date }] of Object.entries(index)) {
-    if (autre === appareil || (etat.lus[autre] ?? '') >= date) {
+    if (autre === appareil || autre === ID_COFFRE || (etat.lus[autre] ?? '') >= date) {
       continue;
     }
     const reponse = await appeler(config, `/boite/${encodeURIComponent(autre)}`, {}, requete);
@@ -192,6 +222,30 @@ export async function synchroniser(options: OptionsSynchro): Promise<ResultatSyn
     etat = { ...etat, dernierEnvoi: signature };
     envoye = true;
   }
+  if (options.coffre) {
+    const empreinteCoffre = empreinte(options.coffre);
+    if (empreinteCoffre !== etat.coffreEnvoye) {
+      const reponse = await appeler(
+        config,
+        `/boite/${ID_COFFRE}`,
+        {
+          methode: 'PUT',
+          corps: JSON.stringify({
+            format: 'applibourse-relais',
+            version: 1,
+            appareil: ID_COFFRE,
+            date: maintenant,
+            charge: JSON.stringify(options.coffre),
+          }),
+        },
+        requete,
+      );
+      if (reponse.ok) {
+        etat = { ...etat, coffreEnvoye: empreinteCoffre };
+      }
+    }
+  }
+
   etat = { ...etat, derniereSynchro: maintenant };
   sauver(etat);
   return { recus, bilan, envoye, erreurs, appareils: etat.appareils };

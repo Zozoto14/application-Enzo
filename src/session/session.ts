@@ -13,6 +13,8 @@
  * clair à côté du coffre.
  */
 
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex, concatBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import type { PiloteSqlite } from '../db/pilote';
 import { migrer } from '../db/schema';
 import { aleatoireParDefaut, type SourceAleatoire } from '../securite/aleatoire';
@@ -72,6 +74,12 @@ export interface DependancesSession {
   alea?: SourceAleatoire;
   politique?: PolitiqueVerrouillage;
   kdf?: ParametresKdf;
+  /**
+   * Efface le portefeuille local, avant d'adopter le coffre d'un autre
+   * appareil : l'ancienne base est scellée par une autre clé et ne pourrait
+   * plus s'ouvrir. Ses données reviennent par la synchronisation.
+   */
+  reinitialiserBase?(): void;
 }
 
 export interface Initialisation {
@@ -261,6 +269,45 @@ export class Session {
     );
     this.deps.stockage.ecrire(renouvele);
     return codesRecuperation;
+  }
+
+  /**
+   * Coffre de cet appareil, pour le partager avec les autres. Il n'est pas
+   * secret : ses enveloppes ne s'ouvrent qu'avec le mot de passe ou un code
+   * de récupération, et le secret TOTP y est scellé par la clé maîtresse.
+   */
+  coffreActuel(): Coffre | undefined {
+    return this.deps.stockage.lire();
+  }
+
+  /**
+   * Adopte le coffre d'un autre appareil : même mot de passe, même code
+   * d'authentification, même clé maîtresse. Le portefeuille local est
+   * effacé (il revient par la synchronisation) et la session se verrouille.
+   */
+  adopterCoffre(coffre: Coffre): void {
+    if (
+      !coffre ||
+      typeof coffre.version !== 'number' ||
+      !Array.isArray(coffre.enveloppes) ||
+      !coffre.enveloppes.some(enveloppe => enveloppe.usage === 'motdepasse')
+    ) {
+      throw new ErreurSession('Ce coffre est illisible.');
+    }
+    this.verrouiller();
+    this.deps.reinitialiserBase?.();
+    this.deps.stockage.ecrire(coffre);
+    this.etatVerrou = ETAT_INITIAL;
+  }
+
+  /**
+   * Secret tiré de la clé maîtresse pour un usage donné (hexadécimal).
+   * Identique sur tous les appareils qui partagent le coffre : c'est ce qui
+   * leur donne la même clé de synchronisation sans autre mot de passe.
+   */
+  cleDerivee(usage: string): string {
+    const cle = this.exigerCleMaitresse();
+    return bytesToHex(sha256(concatBytes(utf8ToBytes(`applibourse/${usage}/v1|`), cle)));
   }
 
   /** Base ouverte. Lève tant que la session est verrouillée. */

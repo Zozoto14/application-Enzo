@@ -52,6 +52,8 @@ export interface EtatSynchro {
   appareils: Record<string, InfoAppareil>;
   /** Empreinte du dernier envoi, pour ne pas renvoyer la même chose. */
   dernierEnvoi?: string;
+  /** Empreinte du dernier coffre déposé. */
+  coffreEnvoye?: string;
   derniereSynchro?: string;
 }
 

@@ -49,9 +49,19 @@ export function creerSessionAppareil(): Session {
     );
   }
 
+  // Nom de la base en cours : il change quand l'appareil adopte le coffre
+  // d'un autre (l'ancienne base, scellée par une autre clé, est abandonnée).
+  coffre.executer('CREATE TABLE IF NOT EXISTS reglages (cle TEXT PRIMARY KEY, valeur TEXT NOT NULL)');
+  const nomBase = () =>
+    coffre.lire<{ valeur: string }>("SELECT valeur FROM reglages WHERE cle = 'base'")[0]?.valeur ?? NOM_BASE_PORTEFEUILLE;
+
   return new Session({
     stockage: stockageSqlite(coffre),
-    ouvrirBase: cleHexadecimale =>
-      ouvrirBaseChiffree({ nom: NOM_BASE_PORTEFEUILLE, cleHexadecimale }),
+    ouvrirBase: cleHexadecimale => ouvrirBaseChiffree({ nom: nomBase(), cleHexadecimale }),
+    reinitialiserBase: () =>
+      coffre.executer(
+        "INSERT INTO reglages (cle, valeur) VALUES ('base', ?) ON CONFLICT(cle) DO UPDATE SET valeur = excluded.valeur",
+        [`portefeuille-${Date.now().toString(36)}.sqlite`],
+      ),
   });
 }
