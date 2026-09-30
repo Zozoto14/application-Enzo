@@ -17,7 +17,7 @@ import {
   type ResultatClasse,
 } from './appariement';
 import { ErreurMoteur, messageDe } from './erreurs';
-import { classerMedia, type TypeMedia, urlHttpSure } from './garde';
+import { classerMedia, type TypeMedia, urlPubliqueSure } from './garde';
 import { choisir, lirePage, sembleRenduEnJs, suggererSelecteurs, texteCompact, type Noeud, type Page } from './lecteurPage';
 import type { ClientSur } from './reseau';
 import {
@@ -243,7 +243,7 @@ export async function lecteursSur(ctx: ContexteResolution, src: DefinitionSource
   const sortie: Lecteur[] = [];
   const vus = new Set<string>();
   const ajouter = (brut: string | null, nom: string) => {
-    const url = absolue(brut, src.baseUrl);
+    const url = urlPubliqueSure(absolue(brut, src.baseUrl));
     if (!url || vus.has(url)) {
       return;
     }
@@ -357,7 +357,8 @@ export function lecteursDansHtml(html: string, urlPage: string, label = 'Lien ma
   const sortie: Lecteur[] = [];
   const vus = new Set<string>();
   const pousser = (brut: string | null, nom: string) => {
-    const url = urlHttpSure(absolue(brut, urlPage));
+    // Un lecteur qui viserait le reseau local est ecarte (iframe = requete de l'appareil).
+    const url = urlPubliqueSure(absolue(brut, urlPage));
     if (!url || vus.has(url)) {
       return;
     }

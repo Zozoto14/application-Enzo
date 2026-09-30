@@ -190,6 +190,15 @@ export function verifierUrlPubliqueSync(brut: unknown, options: OptionsGarde = {
   return adresseEnTexte(a);
 }
 
+/** Variante qui ne leve pas : adresse publique canonique, ou null. */
+export function urlPubliqueSure(brut: unknown, options: OptionsGarde = {}, base?: string | null): string | null {
+  try {
+    return verifierUrlPubliqueSync(brut, options, base);
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Verification complete : la version synchrone, puis, si un resolveur est
  * fourni, chaque IP de l'hote doit etre publique (un nom public peut
