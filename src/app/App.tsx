@@ -105,6 +105,17 @@ import type { Coffre } from '../securite/coffre';
 import { CarteSynchro } from '../ui/ecrans/CarteSynchro';
 import { CarteProfils, type ControleProfils } from '../ui/ecrans/CarteProfils';
 import { Hub } from '../hub/Hub';
+import { GardeInactivite } from '../hub/GardeInactivite';
+import { PageSupport } from '../hub/PageSupport';
+import { AcceptationJuridique, LiensJuridiques, PageJuridique } from '../hub/PageJuridique';
+import { ReglageJuridique, ReglageSupport } from '../hub/ReglagesSupportJuridique';
+import { ReglageVerrouAuto } from '../hub/ReglageVerrouAuto';
+import { useSupport } from '../support/useSupport';
+import { infosTechniques } from '../support/tickets';
+import { CLE_VERROU_AUTO, ecrireDelaiAppareil, lireDelaiAppareil, lireSurchargeEssai, messageVerrou, type MotifVerrou } from '../securite/verrouAuto';
+import { accepter, doitAccepter, lireAcceptations, versionJuridique, type IdDocument } from '../juridique/modele';
+import { relaisActif } from '../sync/relais/actif';
+import { versionApp } from '../hub/version';
 import { BarreApp, BarreAppContexte } from '../hub/BarreApp';
 import { IndicateurSynchro, type SynchroHub } from '../hub/IndicateurSynchro';
 import { PageParametres } from '../hub/PageParametres';
@@ -2075,7 +2086,65 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onSynchroniser: () => void synchroniserMaintenant(),
         }
       : undefined;
-  const barreApp = <BarreApp theme={themeDuHub} synchro={synchroHub} onParametres={ouvrirParametres} />;
+  // --- Verrouillage automatique global, Support, documents légaux --------------
+  const stockageAppareil = stockageLocalAppareil();
+  const [delaiVerrou, setDelaiVerrou] = useState<number>(() => lireDelaiAppareil(stockageAppareil));
+  useEffect(() => {
+    // Natif (pas de localStorage) : le réglage vit dans la base locale du profil, hors synchronisation.
+    if (deverrouille && !stockageAppareil) {
+      setDelaiVerrou(lireDelaiAppareil(undefined, () => new DepotParametres(session.base()).lire(PARAMETRES.verrouAutoMinutes) ?? undefined));
+    }
+  }, [deverrouille, stockageAppareil, session]);
+  const choisirDelaiVerrou = (minutes: number) => {
+    setDelaiVerrou(minutes);
+    ecrireDelaiAppareil(stockageAppareil, minutes, valeur => new DepotParametres(session.base()).ecrire(PARAMETRES.verrouAutoMinutes, valeur));
+  };
+  const essaiVerrou = useMemo(() => lireSurchargeEssai(stockageAppareil), [stockageAppareil]);
+  const delaiVerrouEffectif = essaiVerrou.delaiMinutes ?? delaiVerrou;
+  const verrouillerAuto = (motif: MotifVerrou) => {
+    setMessageDeverrouillage(messageVerrou(motif, delaiVerrouEffectif));
+    verrouiller();
+  };
+
+  const [supportOuvert, setSupportOuvert] = useState(false);
+  const [juridiqueOuvert, setJuridiqueOuvert] = useState<{ id?: IdDocument } | undefined>();
+  const depotSupport = useMemo(() => {
+    if (!deverrouille) return undefined;
+    const d = new DepotParametres(session.base());
+    return { lire: () => d.lire(PARAMETRES.ticketsSupport) ?? undefined, ecrire: (valeur: string) => d.ecrire(PARAMETRES.ticketsSupport, valeur) };
+  }, [deverrouille, session]);
+  const optionsSupport = useMemo(
+    () =>
+      depotSupport
+        ? {
+            depot: depotSupport,
+            liaison: async () => {
+              const actif = relaisActif() ?? liaisonDuPc;
+              if (actif) return { relais: actif.relais, jeton: actif.jeton };
+              const pont = (globalThis as { applibourse?: { relais?: { config?(): Promise<{ relais: string; jeton: string } | undefined> } } }).applibourse?.relais;
+              const config = await pont?.config?.();
+              return config ? { relais: config.relais, jeton: config.jeton } : undefined;
+            },
+            technique: () => infosTechniques({ version: versionApp(), plateforme: plateformeSynchro, rang: profils?.actuel.role ?? (profils?.actuel.admin === false ? 'ami' : 'fondateur'), idCompte: profils?.actuel.id }),
+          }
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [depotSupport],
+  );
+  const { service: serviceSupport, tickets: ticketsSupport } = useSupport(optionsSupport);
+  const ouvrirSupport = useCallback(() => {
+    setParametres(undefined);
+    setSupportOuvert(true);
+  }, []);
+  useEffect(() => {
+    if (!deverrouille || parametres) setSupportOuvert(false);
+  }, [deverrouille, parametres]);
+  const [versionAcceptation, setVersionAcceptation] = useState(0);
+  const versionJuridiqueCourante = versionJuridique(profils?.juridique);
+  const acceptations = deverrouille ? lireAcceptations(new DepotParametres(session.base()).lire(PARAMETRES.acceptationsJuridiques)) : [];
+  void versionAcceptation;
+  const acceptationRequise = deverrouille && !profils?.sessionAdmin && doitAccepter(acceptations, versionJuridiqueCourante);
+  const barreApp = <BarreApp theme={themeDuHub} synchro={synchroHub} onParametres={ouvrirParametres} onSupport={ouvrirSupport} />;
   const surParametres = Boolean(parametres) && deverrouille && Boolean(contenuComplet && tableau);
   const fermerParametres = useCallback(() => setParametres(undefined), []);
   const depuisParametres = (action: () => void) => () => {
@@ -2090,6 +2159,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     'compte',
     'securite-coffre',
     'codes-recuperation',
+    'verrou-auto',
+    'support',
+    'juridique',
     'version',
     'mise-a-jour',
     ...(hub ? (['tuiles', 'nouveautes'] as const) : []),
@@ -2243,6 +2315,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         return <ReglageCoffre theme={themeDuHub} etat={session.etatCoffre()} />;
       case 'codes-recuperation':
         return <ReglageCodes onRenouveler={() => session.renouvelerCodesRecuperation()} />;
+      case 'verrou-auto':
+        return <ReglageVerrouAuto theme={themeDuHub} minutes={delaiVerrou} onChoisir={choisirDelaiVerrou} />;
+      case 'support':
+        return <ReglageSupport theme={themeDuHub} tickets={ticketsSupport} onOuvrir={ouvrirSupport} />;
+      case 'juridique':
+        return <ReglageJuridique theme={themeDuHub} acceptations={acceptations} onOuvrir={id => setJuridiqueOuvert({ id })} />;
       case 'sauvegarde-auto':
         return (
           <ReglageSauvegardeAuto
@@ -2375,6 +2453,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       <SafeAreaView
         style={[stylesPartages.ecran, { backgroundColor: palettePour().fond }]}>
         <StatusBar barStyle={palettePour().sombre === false ? 'dark-content' : 'light-content'} />
+      <GardeInactivite theme={themeDuHub} actif={deverrouille} delaiMinutes={delaiVerrouEffectif} presenceSecondes={essaiVerrou.presenceSecondes} onVerrouiller={verrouillerAuto}>
 
       <Coque
         destinations={deverrouille && contenuComplet && tableau && !surLeHub && !surUneApp && !surParametres ? destinations : []}
@@ -2430,7 +2509,16 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           <Bouton titre="Changer de compte" variante="discret" onPress={profils.onChanger} testID="changer-profil-verrou" />
         </View>
       ) : null}
-      {secrets ? (
+      {juridiqueOuvert ? (
+        <PageJuridique
+          theme={themeDuHub}
+          docs={profils?.juridique}
+          idInitial={juridiqueOuvert.id}
+          onEnregistrer={deverrouille ? profils?.onJuridique : undefined}
+          nomEditeur={profils?.actuel.nom}
+          onFermer={() => setJuridiqueOuvert(undefined)}
+        />
+      ) : secrets ? (
         <PremierLancement
           onCreer={creer}
           secrets={secrets}
@@ -2467,6 +2555,29 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             suggererAutreCoffre={Boolean(profils?.lier?.suggererAutreCoffre)}
           />
         )
+) : acceptationRequise ? (
+        <AcceptationJuridique
+          theme={themeDuHub}
+          nouvelleVersion={acceptations.length > 0}
+          onLire={id => setJuridiqueOuvert({ id })}
+          onRefuser={() => verrouillerAuto('manuel')}
+          onAccepter={() => {
+            const depot = new DepotParametres(session.base());
+            depot.ecrire(PARAMETRES.acceptationsJuridiques, JSON.stringify(accepter(lireAcceptations(depot.lire(PARAMETRES.acceptationsJuridiques)), versionJuridiqueCourante, new Date().toISOString())));
+            setVersionAcceptation(n => n + 1);
+          }}
+        />
+      ) : supportOuvert && deverrouille ? (
+        <GardeErreur quoi="le support" onRevenir={() => setSupportOuvert(false)}>
+          <PageSupport
+            theme={themeDuHub}
+            service={serviceSupport}
+            infos={infosTechniques({ version: versionApp(), plateforme: plateformeSynchro, rang: profils?.actuel.role ?? (profils?.actuel.admin === false ? 'ami' : 'fondateur'), idCompte: profils?.actuel.id })}
+            tickets={ticketsSupport}
+            actif={!devblog}
+            onFermer={() => setSupportOuvert(false)}
+          />
+        </GardeErreur>
       ) : surParametres ? (
         <GardeErreur quoi="les paramètres" onRevenir={fermerParametres}>
           <PageParametres
@@ -2496,6 +2607,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }}
           onVerrouiller={verrouiller}
           onParametres={ouvrirParametres}
+          onSupport={ouvrirSupport}
           synchro={synchroHub}
           demande={demandeHub}
           onChangerProfil={profils && (profils.peutChanger ?? profils.tous.length > 1) ? profils.onChanger : undefined}
@@ -2970,6 +3082,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onVerrouiller={verrouiller}
         />
         )}
+      {!deverrouille && !juridiqueOuvert && !secrets ? <LiensJuridiques theme={themeDuHub} onOuvrir={id => setJuridiqueOuvert({ id })} /> : null}
       </Coque>
       {devblog && deverrouille ? (
         <Devblog
@@ -2986,6 +3099,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           disponible={cible => cible.genre !== 'app' || appsVisibles(REGISTRE, contexteHub).some(app => app.id === cible.app)}
         />
       ) : null}
+      </GardeInactivite>
       </SafeAreaView>
     </SafeAreaProvider>
   );

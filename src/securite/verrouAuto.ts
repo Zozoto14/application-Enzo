@@ -161,3 +161,20 @@ export function ecrireDelaiAppareil(local: StockageTexte | undefined, minutes: n
     // Stockage refusé : le réglage vaut pour cette session seulement.
   }
 }
+
+/** Réglages d'essai (tests de bout en bout) : un délai court, posé dans le stockage de l'appareil. Ne peut que raccourcir. */
+export const CLE_VERROU_AUTO_ESSAI_MS = 'appdashboard.verrou-auto-essai-ms';
+export const CLE_PRESENCE_ESSAI_S = 'appdashboard.presence-essai-s';
+
+export function lireSurchargeEssai(local: { getItem(cle: string): string | null } | undefined): { delaiMinutes?: number; presenceSecondes?: number } {
+  try {
+    const ms = Number(local?.getItem(CLE_VERROU_AUTO_ESSAI_MS));
+    const s = Number(local?.getItem(CLE_PRESENCE_ESSAI_S));
+    return {
+      ...(Number.isFinite(ms) && ms >= 500 && ms <= 120_000 ? { delaiMinutes: ms / 60_000 } : {}),
+      ...(Number.isFinite(s) && s >= 1 && s <= 60 ? { presenceSecondes: s } : {}),
+    };
+  } catch {
+    return {};
+  }
+}

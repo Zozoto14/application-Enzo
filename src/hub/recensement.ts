@@ -13,7 +13,7 @@
  * marcherait pas sur la plateforme ou pour le rôle du compte.
  */
 
-export type IdSection = 'general' | 'synchro' | 'securite' | 'portefeuille' | 'administration' | 'tsuzuku' | 'nouveautes' | 'apropos';
+export type IdSection = 'general' | 'synchro' | 'securite' | 'portefeuille' | 'administration' | 'tsuzuku' | 'nouveautes' | 'support' | 'apropos';
 
 export interface SectionParametres {
   id: IdSection;
@@ -31,6 +31,7 @@ export const SECTIONS: readonly SectionParametres[] = [
   { id: 'administration', titre: 'Administration', icone: '🛡', description: 'Panneau, comptes, journal, verrouillage.' },
   { id: 'tsuzuku', titre: 'Tsuzuku', icone: '▶', description: 'Catalogue de films, doublage, lecture, déjà vus.' },
   { id: 'nouveautes', titre: 'Nouveautés', icone: '✨', description: 'Historique des versions.' },
+  { id: 'support', titre: 'Support', icone: '?', description: 'Écrire à l’équipe : bug, question, demande.' },
   { id: 'apropos', titre: 'À propos', icone: 'ⓘ', description: 'Version de l’application et mise à jour.' },
 ];
 
@@ -62,6 +63,9 @@ export type IdReglage =
   | 'tsuzuku-tmdb'
   | 'tsuzuku-lecture'
   | 'nouveautes'
+  | 'verrou-auto'
+  | 'support'
+  | 'juridique'
   | 'version'
   | 'mise-a-jour';
 
@@ -144,6 +148,14 @@ export const REGLAGES: readonly Reglage[] = [
     description: 'Générer de nouveaux codes si vous avez oublié votre mot de passe ; les anciens cessent de marcher.',
     mots: ['recuperation', 'oublie', 'codes', 'secours', 'renouveler'],
     ancienEmplacement: ['Portefeuille › Paramètres › Codes de récupération'],
+  },
+  {
+    id: 'verrou-auto',
+    section: 'securite',
+    titre: 'Verrouillage automatique',
+    description: 'Verrouille l’application après un temps sans activité (45 minutes par défaut) ; pendant un film, elle demande d’abord si vous êtes toujours là.',
+    mots: ['verrouillage', 'verrouiller', 'inactivite', 'automatique', 'minutes', 'delai', 'veille', 'presence', 'toujours la', 'film', 'serie'],
+    ancienEmplacement: ['(nouveau : auparavant seul le panneau d’administration se verrouillait)'],
   },
   {
     id: 'sauvegarde-auto',
@@ -301,7 +313,24 @@ export const REGLAGES: readonly Reglage[] = [
     mots: ['devblog', 'versions', 'changements', 'patch', 'notes', 'quoi de neuf'],
     ancienEmplacement: ['Hub › Paramètres › Nouveautés'],
   },
+  // --- Support
+  {
+    id: 'support',
+    section: 'support',
+    titre: 'Support et tickets',
+    description: 'Écrire à l’équipe (bug, question, demande) et retrouver vos tickets.',
+    mots: ['support', 'ticket', 'aide', 'bug', 'probleme', 'question', 'contact', 'discord', 'signaler', 'assistance'],
+    ancienEmplacement: ['(nouveau)'],
+  },
   // --- À propos
+  {
+    id: 'juridique',
+    section: 'apropos',
+    titre: 'Conditions, confidentialité et mentions légales',
+    description: 'Conditions d’utilisation, politique de confidentialité, cookies et stockage local, mentions légales.',
+    mots: ['conditions', 'cgu', 'confidentialite', 'cookies', 'mentions', 'legales', 'rgpd', 'donnees', 'privee', 'juridique', 'stockage'],
+    ancienEmplacement: ['(nouveau)'],
+  },
   {
     id: 'version',
     section: 'apropos',
