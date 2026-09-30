@@ -568,7 +568,7 @@ async function support(requete, env, portee) {
     return erreur('Discord est injoignable pour le moment.', 502);
   }
   if (reponseDiscord.status === 429) {
-    return erreur('Discord est occupé : réessayez dans un instant.', 503);
+    return erreur('Discord est occupé : réessayez dans un instant.', 502);
   }
   if (!reponseDiscord.ok) {
     // Le corps de la réponse de Discord n'est jamais renvoyé (il peut citer le webhook).
