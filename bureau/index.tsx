@@ -112,6 +112,7 @@ import {
   preparerLiaison,
   retenirLiaison,
   synchroniserAnnuaire,
+  lireAbonnementAmi,
   synchroniserCompteAmi,
   synchroniserComptesAdmin,
   type CompteRelie,
@@ -654,6 +655,9 @@ function Racine() {
             // Tsuzuku : ses sources partagées arrivent dans SA base (lecture seule).
             tsuzuku: { base: { lire: cle => baseAmi.lire(cle), ecrire: (cle, valeur) => baseAmi.ecrire(cle, valeur) } },
           });
+          if (bilan.abonnementChange) {
+            setVersionComptes(v => v + 1);
+          }
           if (bilan.annuaireChange && annuaireRef.current) {
             const suivant = profilAmi(annuaireRef.current, profil.id, profil.nom);
             let profilsVus: Profil[] = [suivant];
@@ -936,6 +940,7 @@ function Racine() {
     tous: profils,
     lier: adminSur ? undefined : lierSite,
     versionComptes,
+    abonnement: profil.admin || adminSur || profil.id === 'leurre' ? undefined : lireAbonnementAmi(memoireNavigateur, profil.id),
     peutChanger: Boolean(adminSur) || (annuaireRef.current ? aDesAmis(annuaireRef.current) : false) || profil.id === 'leurre',
     politique: annuaireRef.current?.politique,
     sessionAdmin: adminSur ? { nomCompte: profil.nom, par: adminSur, ...(etat.rangSur ? { rang: LIBELLES_RANG[etat.rangSur] } : {}) } : undefined,

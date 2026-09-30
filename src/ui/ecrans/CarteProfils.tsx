@@ -99,6 +99,8 @@ export interface ControleProfils {
   lier?: OptionsLier & { suggererAutreCoffre?: boolean };
   /** Change quand la synchronisation des comptes a reçu quelque chose (Administration à relire). */
   versionComptes?: number;
+  /** Sa propre ligne d'abonnement (mode, échéance, message de rappel), reçue du relais : jamais celle d'un autre. */
+  abonnement?: import('../../hub/abonnements/abonnements').ProjectionAbo;
 }
 
 /** Texte de transparence montré à un ami (création du compte, Paramètres). */

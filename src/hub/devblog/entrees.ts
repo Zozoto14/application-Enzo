@@ -41,6 +41,40 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.06',
+    date: '2026-10-06',
+    titre: 'Gestion des abonnements',
+    resume:
+      'Un suivi manuel des abonnements dans l’Administration : qui a payé, prochaine échéance, rappels. Rien n’est prélevé ni coupé automatiquement.',
+    illustration: 'administration',
+    fonctionnalites: [
+      {
+        id: 'abonnements-suivi',
+        emoji: '💳',
+        titre: 'Suivi des paiements',
+        texte:
+          'Administration › Abonnements : statut de chaque compte (À jour, Échéance proche, En retard, Offert, Suspendu), « Marquer payé » avec recalcul de l’échéance, paiement partiel, pause, historique et export CSV. Réservé aux Fondateurs ; informatif, sans conseil fiscal ni juridique.',
+        essayer: { genre: 'app', app: 'administration' },
+        adminSeulement: true,
+      },
+      {
+        id: 'abonnements-rappels',
+        emoji: '🔔',
+        titre: 'Rappels',
+        texte:
+          'Une cloche dans le hub et le tableau de bord (« 2 abonnements en retard, 3 échéances cette semaine »), une notification locale par jour si activée, et un message de rappel à copier pour l’envoyer vous-même. Réglages dans Paramètres › Administration.',
+        adminSeulement: true,
+      },
+      {
+        id: 'abonnements-ami',
+        emoji: '🙂',
+        titre: 'Un rappel amical, le tien seulement',
+        texte:
+          'Si l’administrateur l’a activé, tu vois un petit rappel dans ton hub quand ton échéance approche, une fois par jour. Tu ne vois que ton propre état : ni notes, ni les autres comptes.',
+      },
+    ],
+  },
+  {
     version: '2026.10.05',
     date: '2026-10-05',
     titre: 'Rangs : Fondateur, Administrateur, Gestionnaire',
