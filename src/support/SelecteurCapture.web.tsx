@@ -8,7 +8,7 @@ function versBase64(octets: Uint8Array): string {
   for (let i = 0; i < octets.length; i += 0x8000) {
     binaire += String.fromCharCode(...octets.subarray(i, i + 0x8000));
   }
-  return btoa(binaire);
+  return (globalThis as unknown as { btoa(s: string): string }).btoa(binaire);
 }
 
 export interface PropsSelecteurCapture {
