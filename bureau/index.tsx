@@ -619,6 +619,8 @@ function Racine() {
             cles: () => clesAdminDe(session),
             effacerFichiers: effacerDe,
             donnees: { lire: () => depot.lire(CLE_DONNEES), ecrire: valeur => depot.ecrire(CLE_DONNEES, valeur), cleSynchro: session.session.cleDerivee('synchro') },
+            // Tsuzuku : les sources partagées par le compte historique partent vers chaque bénéficiaire.
+            tsuzuku: { base: { lire: cle => depot.lire(cle) } },
           });
           if (bilan.annuaireChange && annuaireRef.current) {
             const cles = clesAdminDe(session);
@@ -641,6 +643,7 @@ function Racine() {
             return;
           }
           await session.vider();
+          const baseAmi = new DepotParametres(session.session.base());
           const bilan = await synchroniserCompteAmi({
             liaison,
             id: profil.id,
@@ -648,6 +651,8 @@ function Racine() {
             fichiers: stockage as never,
             lire: lireAnnuaireDisque,
             ecrire: ecrireAnnuaireDisque,
+            // Tsuzuku : ses sources partagées arrivent dans SA base (lecture seule).
+            tsuzuku: { base: { lire: cle => baseAmi.lire(cle), ecrire: (cle, valeur) => baseAmi.ecrire(cle, valeur) } },
           });
           if (bilan.annuaireChange && annuaireRef.current) {
             const suivant = profilAmi(annuaireRef.current, profil.id, profil.nom);

@@ -49,6 +49,14 @@ import { ESPACE_ADMIN, compteDeLiaison, estMaitre, peutOuvrirEspace } from '../s
 import { ErreurRelais, recupererCoffre } from '../src/sync/relais/synchroniser';
 import { lireDonnees, ecrireDonnees } from '../src/hub/admin/donnees';
 import { donneesDepuisEntites, entitesDonnees, fusionsDonnees } from '../src/hub/admin/fusionDonnees';
+import type { BasePrefs } from '../src/tsuzuku/plateforme/stockage';
+import {
+  OBJETS_TSUZUKU,
+  publierSourcesPartagees,
+  recevoirSourcesPartagees,
+  type EtatPublications,
+  type SuiviReception,
+} from '../src/tsuzuku/plateforme/partage';
 
 type Fetch = typeof fetch;
 
@@ -78,6 +86,10 @@ export const CLES_MEMOIRE = {
   coffreRelie: 'applibourse.synchro.coffreRelie',
   /** Empreinte des délégations des titulaires publiées sur le relais. */
   delegations: 'applibourse.synchro.delegations',
+  /** Tsuzuku : sources partagées publiées par le compte historique, par compte. */
+  tsuzuku: 'applibourse.synchro.tsuzuku',
+  /** Tsuzuku : clé de réception déposée et sources reçues, par compte ouvert ici. */
+  tsuzukuRecu: 'applibourse.synchro.tsuzuku.recu',
 } as const;
 
 // ------------------------------------------------------------ Mémoire
@@ -155,7 +167,7 @@ export function liaisonPourCompte(memoire: Memoire, id: string, pontMaitre?: Lia
 
 /** Oublie tout le suivi de synchronisation des comptes (remplacement des données du navigateur). */
 export function oublierSuivi(memoire: Memoire): void {
-  for (const cle of [CLES_MEMOIRE.annuaire, CLES_MEMOIRE.admin, CLES_MEMOIRE.fichiers, CLES_MEMOIRE.comptes, CLES_MEMOIRE.coffreRelie]) {
+  for (const cle of [CLES_MEMOIRE.annuaire, CLES_MEMOIRE.admin, CLES_MEMOIRE.fichiers, CLES_MEMOIRE.comptes, CLES_MEMOIRE.coffreRelie, CLES_MEMOIRE.tsuzuku, CLES_MEMOIRE.tsuzukuRecu]) {
     try {
       memoire.removeItem(cle);
     } catch {
@@ -206,6 +218,8 @@ export interface BilanComptes {
   fichiersRecus: number;
   depots: number;
   erreurs: string[];
+  /** Tsuzuku : la copie des sources partagées de ce compte a changé. */
+  tsuzukuChange?: boolean;
 }
 
 const bilanVide = (): BilanComptes => ({ annuaireChange: false, donneesChangent: false, fichiersRecus: 0, depots: 0, erreurs: [] });
@@ -275,6 +289,8 @@ export interface OptionsSynchroAdmin extends Omit<OptionsAnnuaireAdmin, 'objets'
   donnees?: { lire(): string | undefined; ecrire(valeur: string): void; cleSynchro: string };
   /** Efface les fichiers d'un compte supprimé ailleurs. */
   effacerFichiers(id: string): Promise<void>;
+  /** Tsuzuku : base du compte historique (ses sources et leurs partages), pour publier les sources partagées. */
+  tsuzuku?: { base: Pick<BasePrefs, 'lire'> };
 }
 
 /**
@@ -335,6 +351,7 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
 
   // 3. Chaque ami : sa projection, ses fichiers.
   let etatFichiers = lireJson<EtatFichiers>(o.memoire, CLES_MEMOIRE.fichiers, {});
+  const objetsParCompte = new Map<string, Record<string, { date: string }>>();
   const presents = new Set(annuaire.annuaire.comptes.map(c => c.id));
   for (const compte of annuaire.annuaire.comptes) {
     try {
@@ -347,6 +364,7 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
         bilan.depots++;
       }
       const objets = listes.get(compte.id) ?? (await espaces.lister(compte.id));
+      objetsParCompte.set(compte.id, objets);
       const noms = fichiersDuProfil(compte.id);
       for (const objet of ['coffre', 'portefeuille'] as const) {
         const issue = await synchroniserFichier({
@@ -371,7 +389,7 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
   for (const id of Object.keys(suivis)) {
     if (presents.has(id)) continue;
     try {
-      for (const nom of ['annuaire', 'coffre', 'portefeuille', 'compte']) {
+      for (const nom of ['annuaire', 'coffre', 'portefeuille', 'compte', ...OBJETS_TSUZUKU]) {
         await espaces.supprimer(id, nom);
       }
       delete suivis[id];
@@ -384,6 +402,25 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
   }
   ecrireJson(o.memoire, CLES_MEMOIRE.fichiers, etatFichiers);
   ecrireJson(o.memoire, CLES_MEMOIRE.comptes, suivis);
+
+  // 3 ter. Tsuzuku : chaque compte reçoit SES sources partagées, scellées pour sa clé.
+  if (o.tsuzuku) {
+    try {
+      const resultat = await publierSourcesPartagees({
+        espaces,
+        comptes: annuaire.annuaire.comptes.map(c => ({ id: c.id, apps: c.acces.apps, actif: c.acces.actif })),
+        base: o.tsuzuku.base,
+        etat: lireJson<EtatPublications>(o.memoire, CLES_MEMOIRE.tsuzuku, {}),
+        maintenant: horloge().toISOString(),
+        objets: async id => objetsParCompte.get(id) ?? (await espaces.lister(id)),
+      });
+      ecrireJson(o.memoire, CLES_MEMOIRE.tsuzuku, resultat.etat);
+      bilan.depots += resultat.depots;
+      bilan.erreurs.push(...resultat.erreurs);
+    } catch (erreur) {
+      bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
+    }
+  }
 
   // 3 bis. Délégations des titulaires : le coffre et le portefeuille des comptes de rang inférieur.
   try {
@@ -465,6 +502,8 @@ export interface OptionsSynchroAmi {
   ecrire(annuaire: Annuaire): Promise<void>;
   maintenant?: () => Date;
   requete?: Fetch;
+  /** Tsuzuku : base chiffrée du compte ouvert, où ranger les sources qui lui sont partagées. */
+  tsuzuku?: { base: BasePrefs };
 }
 
 /**
@@ -506,6 +545,19 @@ export async function synchroniserCompteAmi(o: OptionsSynchroAmi): Promise<Bilan
       await espaces.deposer(o.id, 'compte', JSON.stringify(retour), horloge().toISOString());
       suivi.retour = h;
       bilan.depots++;
+    }
+  }
+
+  // Tsuzuku : sa clé de réception part, ses sources partagées arrivent (lecture seule).
+  if (o.tsuzuku) {
+    try {
+      const suivis = lireJson<Record<string, SuiviReception>>(o.memoire, CLES_MEMOIRE.tsuzukuRecu, {});
+      const r = await recevoirSourcesPartagees({ espaces, id: o.id, base: o.tsuzuku.base, objets, suivi: suivis[o.id] ?? {}, maintenant: horloge().toISOString() });
+      ecrireJson(o.memoire, CLES_MEMOIRE.tsuzukuRecu, { ...suivis, [o.id]: r.suivi });
+      bilan.depots += r.depots;
+      if (r.change) bilan.tsuzukuChange = true;
+    } catch (erreur) {
+      bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
     }
   }
 
