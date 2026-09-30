@@ -32,7 +32,8 @@ describe('adaptateur Electron (IPC simulé)', () => {
     const pont: PontTsuzuku = {
       requete: async r => {
         urls.push(r.url);
-        return r.url.includes('depart') ? { statut: 302, entetes: { location: 'http://192.168.1.1/admin' }, corps: '' } : { statut: 200, entetes: {}, corps: 'x' };
+        const entetes: Record<string, string> = r.url.includes('depart') ? { location: 'http://192.168.1.1/admin' } : {};
+        return { statut: r.url.includes('depart') ? 302 : 200, entetes, corps: 'x' };
       },
     };
     const client = creerClient(reseauElectron(pont));

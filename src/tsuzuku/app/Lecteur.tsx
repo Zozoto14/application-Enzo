@@ -36,7 +36,7 @@ async function chargerMeta(s: ReturnType<typeof useTsuzuku>['s'], kind: Genre, i
 }
 
 export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; numero?: number }) {
-  const { s, theme, aller, remplacer, retour, changee } = useTsuzuku();
+  const { s, theme, remplacer, retour, changee } = useTsuzuku();
   const n = kind === 'anime' ? Math.max(1, numero ?? 1) : 1;
   const [choix, setChoix] = useState(0);
   const charge = useCharger<{ meta: Meta; lecture: Lecture; suivantAuto: boolean }>(async () => {

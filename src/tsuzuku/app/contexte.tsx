@@ -1,6 +1,6 @@
 /** Contexte partagé par les écrans de Tsuzuku : services du profil, thème du mode, navigation. */
 
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { ThemeHub } from '../../hub/themes';
 import type { Genre } from '../moteur/bibliotheque';
 import { messageDe } from '../moteur/erreurs';
