@@ -71,6 +71,13 @@ contextBridge.exposeInMainWorld('applibourse', {
     screener: corps => ipcRenderer.invoke('yahoo:screener', corps),
   },
 
+  tsuzuku: {
+    /** Requête réseau du moteur (garde anti-SSRF côté processus principal ; redirections non suivies). */
+    requete: requete => ipcRenderer.invoke('tsuzuku:requete', requete),
+    /** Déclare le site d'un lecteur (iframe) : le processus principal ne le laisse charger qu'après ça. */
+    lecteur: url => ipcRenderer.invoke('tsuzuku:lecteur', url),
+  },
+
   medias: {
     /** Texte d'un flux RSS de la revue de presse (liste fermée). */
     flux: url => ipcRenderer.invoke('medias:flux', url),
