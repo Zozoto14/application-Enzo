@@ -67,6 +67,16 @@ describe('Planificateur de synchro', () => {
     issues = [];
   });
 
+  it('premier tour immédiat après le déverrouillage : aucune attente, aucune minuterie', () => {
+    creer();
+    p.demarrer();
+    // Le tour part pendant l'appel même : ni délai de modification (3 s), ni tic périodique (2 min).
+    expect(raisons).toEqual(['ouverture']);
+    // Seul le tic périodique est armé (une minuterie), pas de délai avant le premier tour.
+    expect(h.actives()).toBe(1);
+    p.arreter();
+  });
+
   it('lance un tour à l’ouverture puis toutes les deux minutes', async () => {
     creer();
     p.demarrer();

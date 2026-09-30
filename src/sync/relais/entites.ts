@@ -54,8 +54,15 @@ export const CLE_DEVBLOG_VUES = 'hub.devblog';
 export const PREFS_SYNCHRONISEES: Readonly<Record<string, string>> = {
   hub: CLE_PREFS_HUB,
   theme: CLE_THEME_HUB,
+  /**
+   * Ancien thème propre au portefeuille : il n'y a plus qu'un thème (`prefs:theme`). L'entité reste
+   * LUE (un appareil pas encore à jour l'envoie ; la migration du thème unique s'en sert si le hub
+   * n'a pas encore de thème) mais n'est plus jamais écrite par cet appareil.
+   */
   'theme-portefeuille': PARAMETRES.theme,
 };
+/** Entités `prefs:<id>` reçues mais jamais émises. */
+export const PREFS_LECTURE_SEULE: readonly string[] = ['theme-portefeuille'];
 export const ID_DEVBLOG_VUES = 'vues';
 const TAILLE_MAX_PREF = 50_000;
 
@@ -93,7 +100,6 @@ export const PARAMETRES_A_SYNCHRONISER: readonly string[] = [
   PARAMETRES.carnetTheses,
   CLE_PREFS_HUB,
   CLE_THEME_HUB,
-  PARAMETRES.theme,
   CLE_DEVBLOG_VUES,
 ];
 
@@ -151,6 +157,9 @@ export function extraireEntites(pilote: PiloteSqlite): Entites {
     }
   }
   for (const [id, cle] of Object.entries(PREFS_SYNCHRONISEES)) {
+    if (PREFS_LECTURE_SEULE.includes(id)) {
+      continue;
+    }
     const valeur = parametres.lire(cle);
     if (valeur !== undefined) {
       entites[cleEntite('prefs', id)] = valeur;

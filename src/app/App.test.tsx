@@ -10,6 +10,7 @@ import { Session } from '../session/session';
 import { stockageMemoire } from '../session/stockage-coffre';
 import { App } from './App';
 import { definirTheme, palettePour } from '../ui/theme';
+import { CLE_THEME } from '../hub/personnalisation';
 
 const KDF_RAPIDE: ParametresKdf = {
   algorithme: 'argon2id',
@@ -448,10 +449,11 @@ describe('parcours complet, session ouverte', () => {
       await ouvrir();
       await creerCompte();
       await fireEvent.press(screen.getByTestId('nav-reglages'));
-      await fireEvent.press(screen.getByTestId('bouton-verifier-maj'));
+      await fireEvent.press(screen.getByTestId('parametres-section-apropos'));
+      await fireEvent.press(screen.getByTestId('maj-verifier'));
       await laisserTravailler();
       expect(screen.getByText('• Screener façon Baggr')).toBeTruthy();
-      await fireEvent.press(screen.getByTestId('bouton-redemarrer-maj'));
+      await fireEvent.press(screen.getByTestId('maj-installer'));
       expect(redemarrer).toHaveBeenCalled();
     } finally {
       delete global.applibourse;
@@ -802,7 +804,7 @@ describe('parcours complet, session ouverte', () => {
     await fireEvent.press(screen.getByTestId('nav-watchlist'));
     await fireEvent.press(screen.getByText(/^Amundi MSCI World/));
 
-    await fireEvent.press(screen.getByTestId('nav-notifications'));
+    await fireEvent.press(screen.getByTestId('nav-reglages'));
 
     expect(screen.getByText('Amundi MSCI World')).toBeTruthy();
     expect(screen.queryByText(/Aucune valeur détenue/)).toBeNull();
@@ -1154,6 +1156,10 @@ describe('écran de sauvegarde', () => {
     };
     try {
       await ouvrirSauvegarde();
+      await laisserTravailler();
+      // Le réglage n'est plus dans l'écran Sauvegarde : il est dans Paramètres › Sécurité.
+      expect(screen.getByTestId('ouvrir-parametres-sauvegarde')).toBeTruthy();
+      await fireEvent.press(screen.getByTestId('ouvrir-parametres-sauvegarde'));
       await fireEvent.press(screen.getByTestId('ouvrir-sauvegarde-auto'));
       await fireEvent.changeText(screen.getByTestId('champ-mdp-sauvegarde-auto'), 'mot-de-passe-des-sauvegardes');
       await fireEvent.changeText(screen.getByTestId('champ-confirmation-sauvegarde-auto'), 'mot-de-passe-des-sauvegardes');
@@ -1193,7 +1199,7 @@ describe('écran de notifications', () => {
         aujourdhui={() => '2026-09-22'}
       />,
     );
-    await fireEvent.press(screen.getByTestId('nav-notifications'));
+    await fireEvent.press(screen.getByTestId('nav-reglages'));
     return session;
   }
 
@@ -1226,13 +1232,15 @@ describe('écran de notifications', () => {
     }
   });
 
-  it('change de thème depuis les paramètres', async () => {
+  it('change de thème depuis les paramètres, pour toute l’application', async () => {
     const session = await ouvrirNotifications();
-    await fireEvent.press(screen.getByTestId('nav-reglages'));
-    await fireEvent.press(screen.getByTestId('theme-sauge'));
-    expect(new DepotParametres(session.base()).lire(PARAMETRES.theme)).toBe('sauge');
-    expect(palettePour().navigation).toBe('#EEF2EC');
-    definirTheme('classique');
+    await fireEvent.press(screen.getByTestId('parametres-section-general'));
+    await fireEvent.press(screen.getByTestId('parametres-theme-sauge'));
+    expect(new DepotParametres(session.base()).lire(CLE_THEME)).toBe('sauge');
+    // Une seule valeur : le portefeuille n'a plus de thème à lui.
+    expect(new DepotParametres(session.base()).lire(PARAMETRES.theme)).toBeUndefined();
+    expect(palettePour().fond).toBe('#EEF2EC');
+    definirTheme('nuit');
   });
 
   it('coupe le week-end, donc n’affiche pas ses heures', async () => {
@@ -1277,9 +1285,10 @@ describe('écran de notifications', () => {
     expect(screen.getByText(/^Prochain :/)).toBeTruthy();
   });
 
-  it('revient au portefeuille', async () => {
+  it('revient au portefeuille en fermant les paramètres', async () => {
     await ouvrirNotifications();
-    await fireEvent.press(screen.getByText('Retour'));
+    await fireEvent.press(screen.getByTestId('hub-parametres-fermer'));
     expect(screen.getAllByText('Portefeuille').length).toBeGreaterThan(0);
+    expect(screen.queryByTestId('hub-parametres')).toBeNull();
   });
 });

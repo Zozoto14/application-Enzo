@@ -204,6 +204,12 @@ export function themeCourant(): IdThemeHub {
   return themeActif;
 }
 
+/** Oublie le thème en mémoire : le prochain appel relit le cache de l'appareil (démarrage à froid, tests). */
+export function relireThemeMemorise(): void {
+  themeActif = undefined;
+  profilDuTheme = undefined;
+}
+
 /**
  * Change de thème. Retient le choix dans le cache de l'appareil (par profil ;
  * le thème n'est pas un secret) et, sur le bureau, pose aussi les polices

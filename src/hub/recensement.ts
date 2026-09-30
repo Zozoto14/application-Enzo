@@ -108,14 +108,6 @@ export const REGLAGES: readonly Reglage[] = [
     mots: ['session', 'profil', 'verrouiller', 'deconnexion', 'utilisateur'],
     ancienEmplacement: ['Hub › Paramètres › Session', 'Hub › en-tête (Verrouiller, Changer de compte)'],
   },
-  {
-    id: 'visite',
-    section: 'general',
-    titre: 'Visite guidée',
-    description: 'Revoir la visite des nouveautés de l’application.',
-    mots: ['tutoriel', 'aide', 'decouverte', 'visite', 'nouveautes'],
-    ancienEmplacement: ['Portefeuille › Paramètres › Revoir la visite'],
-  },
   // --- Synchronisation
   {
     id: 'synchro-etat',
@@ -238,6 +230,14 @@ export const REGLAGES: readonly Reglage[] = [
     description: 'Préparer chaque jour le podcast à une heure donnée.',
     mots: ['podcast', 'heure', 'automatique', 'episode', 'quotidien', 'audio'],
     ancienEmplacement: ['Portefeuille › Podcast › Préparer automatiquement'],
+  },
+  {
+    id: 'visite',
+    section: 'portefeuille',
+    titre: 'Visite guidée',
+    description: 'Revoir la visite des nouveautés de l’application.',
+    mots: ['tutoriel', 'aide', 'decouverte', 'visite', 'nouveautes'],
+    ancienEmplacement: ['Portefeuille › Paramètres › Revoir la visite'],
   },
   // --- Administration
   {
