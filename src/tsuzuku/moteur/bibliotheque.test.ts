@@ -28,7 +28,7 @@ const V1 = {
 
 describe('migration', () => {
   it('v1 -> v2 : rien de perdu, champs ajoutes, entrees invalides ecartees', () => {
-    const db = migrerBibliotheque(structuredClone(V1));
+    const db = migrerBibliotheque(JSON.parse(JSON.stringify(V1)));
     expect(db.version).toBe(VERSION_BIBLIOTHEQUE);
     expect(db.anime).toHaveLength(1);
     expect(db.anime[0]).toMatchObject({ id: '5114', kind: 'anime', currentEpisode: 5, rating: 9, watchedElsewhere: null, comment: null, champInconnu: 'garde' });
@@ -37,8 +37,8 @@ describe('migration', () => {
     expect(db.history).toHaveLength(1);
   });
   it('idempotente et tolerante', () => {
-    const une = migrerBibliotheque(structuredClone(V1));
-    expect(migrerBibliotheque(structuredClone(une))).toEqual(une);
+    const une = migrerBibliotheque(JSON.parse(JSON.stringify(V1)));
+    expect(migrerBibliotheque(JSON.parse(JSON.stringify(une)))).toEqual(une);
     expect(migrerBibliotheque({ anime: 'x', movies: [null, { id: 'tmdb-1', title: 'X' }], history: {}, manualSources: 12 })).toMatchObject({ anime: [], history: [], manualSources: { anime: {}, movies: {} } });
     expect(migrerBibliotheque(null).anime).toEqual([]);
     expect(migrerBibliotheque({ movies: [{ id: 5 }] }).movies[0].id).toBe('5');
@@ -142,7 +142,7 @@ describe('vu ailleurs et deja vu', () => {
 
 describe('export / import', () => {
   const rempli = () => {
-    const db = migrerBibliotheque(structuredClone(V1));
+    const db = migrerBibliotheque(JSON.parse(JSON.stringify(V1)));
     marquerVuAilleurs(db, { title: 'Hors plateforme', date: '2025-01-01' }, ctx);
     ajouterOuMettreAJour(db, 'movie', { id: 'tmdb-1', title: 'F' }, ctx);
     return db;

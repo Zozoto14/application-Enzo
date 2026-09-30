@@ -123,6 +123,7 @@ le reste des la saisie et a chaque requete.
 | Paquet | Pourquoi |
 | --- | --- |
 | `htmlparser2` | Analyse HTML tolerante, 100 % JS |
+| `@babel/plugin-transform-export-namespace-from` (dev) | Deja dans le lockfile (transitive) ; declaree et activee dans `babel.config.js` car Metro choisit le build ES de htmlparser2 (`export * as`) que le preset RN ne transforme pas |
 | `domhandler`, `domutils` | Arbre DOM et utilitaires (texte, attributs) de htmlparser2 |
 | `css-select` | Selecteurs CSS sur cet arbre (equivalent de cheerio sans sa couche jQuery) |
 
