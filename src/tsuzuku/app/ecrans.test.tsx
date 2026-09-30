@@ -52,7 +52,7 @@ async function monter(o: { profil?: Profil; lecture?: boolean; stockage?: Return
   const services = creerServices({
     choix: { plateforme: lecture ? 'pc' : 'site', reseau, lectureSources: lecture },
     stockage,
-    estAdmin: (o.profil ?? admin).admin,
+    rang: (o.profil ?? admin).admin ? 'fondateur' : 'ami',
     catalogue: { attendre: attenteNulle },
   });
   const onRetour = jest.fn();
@@ -246,58 +246,28 @@ describe('Tsuzuku : sur le site', () => {
   });
 });
 
-describe('Tsuzuku : sources (administrateur)', () => {
-  it('vides par défaut ; l’administrateur en ajoute une, l’active, la modifie, la supprime', async () => {
-    const { services } = await monter();
-    await fireEvent.press(screen.getByTestId('onglet-app-sources'));
-    expect(await screen.findByTestId('sources-vide')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('source-ajouter'));
-    await texte('source-nom', 'Ma médiathèque');
-    await texte('source-adresse', 'https://mediatheque-exemple.fr');
-    await texte('source-champ-search.path', '/recherche?q={query}');
-    await texte('source-champ-search.item', 'li.res');
-    await texte('source-champ-movies.search.path', '/films?q={query}');
-    await texte('source-champ-movies.search.item', 'li.film');
-    await fireEvent.press(screen.getByTestId('source-langue-vf'));
-    await fireEvent.press(screen.getByTestId('source-enregistrer'));
-    await waitFor(async () => expect(await services.sources()).toHaveLength(1));
-    const [src] = await services.sources();
-    expect(src).toMatchObject({ name: 'Ma médiathèque', language: 'vf', enabled: true, baseUrl: 'https://mediatheque-exemple.fr/' });
-    expect(src.movies.search.path).toBe('/films?q={query}');
-    expect(await screen.findByTestId(`source-${src.id}`)).toBeTruthy();
-    await fireEvent.press(screen.getByTestId(`source-activer-${src.id}`));
-    await waitFor(async () => expect((await services.sources())[0].enabled).toBe(false));
-    await fireEvent.press(screen.getByTestId(`source-supprimer-${src.id}`));
-    await waitFor(async () => expect(await services.sources()).toEqual([]));
-  });
-
-  it('refuse une adresse non publique avec un message', async () => {
-    await monter();
-    await fireEvent.press(screen.getByTestId('onglet-app-sources'));
-    await fireEvent.press(await screen.findByTestId('source-ajouter'));
-    await texte('source-nom', 'Maison');
-    await texte('source-adresse', 'http://192.168.1.10');
-    await fireEvent.press(screen.getByTestId('source-enregistrer'));
-    expect(await screen.findByTestId('sources-erreur')).toBeTruthy();
-  });
-
-  it('importe un ancien sources.json (entrées invalides écartées)', async () => {
-    const { services } = await monter();
-    await fireEvent.press(screen.getByTestId('onglet-app-sources'));
-    const ancien = { sources: [{ id: 'a', name: 'A', baseUrl: 'https://a-exemple.fr', enabled: true, search: { path: '/s?q={query}', item: 'li' } }, { name: 'Locale', baseUrl: 'http://localhost:3000' }] };
-    await texte('sources-import-texte', JSON.stringify(ancien));
-    await fireEvent.press(screen.getByTestId('sources-importer'));
-    expect((await screen.findByTestId('sources-avis')).props.children).toMatch(/1 source\(s\) importée\(s\), 1 écartée/);
-    expect((await services.sources()).map(s => s.id)).toEqual(['a']);
-  });
-
-  it('un ami voit les sources de l’administrateur mais ne peut rien modifier', async () => {
-    const stockage = stockageMemoire({ [CLES.sourcesAdmin]: JSON.stringify(importerSources([{ id: 'x', name: 'X', baseUrl: 'https://x-exemple.fr', enabled: true }]).sources) });
-    await monter({ profil: ami, stockage });
-    await fireEvent.press(screen.getByTestId('onglet-app-sources'));
-    expect(await screen.findByTestId('tsuzuku-sources-interdit')).toBeTruthy();
+describe('Tsuzuku : rien de technique dans l’app, mention en pied de page', () => {
+  it('aucun onglet « Sources » (ni pour le Fondateur ni pour un ami) : tout est dans Paramètres', async () => {
+    await monter({ profil: ami });
+    expect(screen.queryByTestId('onglet-app-sources')).toBeNull();
     expect(screen.queryByTestId('source-ajouter')).toBeNull();
-    expect(screen.getByText('1 source(s) disponible(s) pour vous.')).toBeTruthy();
+  });
+
+  it('pied de page honnête sur toutes les pages, avec « En savoir plus »', async () => {
+    const { onParametres } = await monter();
+    expect(screen.queryByTestId('onglet-app-sources')).toBeNull();
+    const mention = await screen.findByTestId('tsuzuku-mention');
+    expect(mention.props.children).toBe(
+      'Tsuzuku n’héberge ni ne télécharge aucun contenu : il affiche des contenus fournis par des sources ajoutées par l’administrateur. Chacun est responsable de n’utiliser que des sources dont il a le droit de consulter les contenus (droit d’auteur).',
+    );
+    // Rien qui prétende que le service est légal ou que « ne rien télécharger » protège.
+    expect(String(mention.props.children)).not.toMatch(/légal|protège|autorisé par la loi/i);
+    for (const onglet of ['catalogue', 'bibliotheque', 'accueil']) {
+      await fireEvent.press(screen.getByTestId(`onglet-app-${onglet}`));
+      expect(screen.getByTestId('tsuzuku-pied')).toBeTruthy();
+    }
+    await fireEvent.press(screen.getByTestId('tsuzuku-mention-plus'));
+    expect(onParametres).toHaveBeenCalledWith('apropos');
   });
 });
 

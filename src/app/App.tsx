@@ -133,7 +133,10 @@ import { Devblog } from '../hub/devblog/Devblog';
 import { CLE_DEVBLOG, lireEtat as lireEtatDevblog, decider as deciderDevblog, etapesVisite as etapesDevblog, marquerLues as marquerDevblogLu } from '../hub/devblog/logiqueDevblog';
 import type { CibleEssai, EntreeDevblog } from '../hub/devblog/entrees';
 import { ID_PORTEFEUILLE, REGISTRE } from '../hub/registre';
-import { ReglageCleTmdb, ReglageLectureTsuzuku } from '../tsuzuku/app/ParametresTsuzuku';
+import { ReglageLectureTsuzuku } from '../tsuzuku/app/ParametresTsuzuku';
+import { ReglageAvancesTsuzuku, ReglageSourcesPartagees, ReglageSourcesTsuzuku } from '../tsuzuku/app/AdminTsuzuku';
+import { peutGererSources } from '../tsuzuku/app/gestion';
+import { rangDe } from '../hub/admin/roles';
 import { resumerBibliotheque } from '../tsuzuku/app/resume';
 import { CLES as CLES_TSUZUKU, type BasePrefs } from '../tsuzuku/plateforme/stockage';
 import { themeHub, type IdThemeHub } from '../hub/themes';
@@ -2103,7 +2106,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     ...((estAdmin || estTitulaireRang) && servicesAdmin ? (['admin-reglages'] as const) : []),
     ...(estAdmin && profils ? (['admin-comptes'] as const) : []),
     ...(estGestionnaire || estTitulaireRang ? (['role-gestionnaire'] as const) : []),
-    ...(hub && tsuzukuVisible ? (['tsuzuku-tmdb', 'tsuzuku-lecture'] as const) : []),
+    // Tsuzuku : le technique (sources, clés d'API) en Administration, rangs habilités seulement ; le confort pour tous.
+    ...(hub && tsuzukuVisible && peutGererSources(rangDe(profils?.actuel)) ? (['admin-tsuzuku-sources', 'admin-tsuzuku-cles'] as const) : []),
+    ...(hub && tsuzukuVisible ? (['tsuzuku-lecture', 'tsuzuku-sources-partagees'] as const) : []),
   ];
   const contenuNotifications = () => (
         <Notifications
@@ -2263,8 +2268,21 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             />
           </View>
         );
-      case 'tsuzuku-tmdb':
-        return <ReglageCleTmdb theme={themeDuHub} base={baseProfil} />;
+      case 'admin-tsuzuku-sources':
+        return (
+          <ReglageSourcesTsuzuku
+            theme={themeDuHub}
+            base={baseProfil}
+            rang={rangDe(profils?.actuel)}
+            // Bénéficiaires possibles : comptes actifs autorisés à Tsuzuku (le partage est publié par le compte historique).
+            comptes={(profils?.tous ?? []).filter(p => p.id !== 'principal' && p.actif !== false && (p.apps ?? []).includes('tsuzuku')).map(p => ({ id: p.id, nom: p.nom }))}
+            partageActif={!profils || profils.actuel.id === 'principal'}
+          />
+        );
+      case 'admin-tsuzuku-cles':
+        return <ReglageAvancesTsuzuku theme={themeDuHub} base={baseProfil} rang={rangDe(profils?.actuel)} />;
+      case 'tsuzuku-sources-partagees':
+        return <ReglageSourcesPartagees theme={themeDuHub} base={baseProfil} rang={rangDe(profils?.actuel)} />;
       case 'tsuzuku-lecture':
         return <ReglageLectureTsuzuku theme={themeDuHub} base={baseProfil} />;
       case 'confidentialite':

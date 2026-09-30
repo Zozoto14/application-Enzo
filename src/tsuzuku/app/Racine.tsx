@@ -4,8 +4,9 @@
  * Même mot de passe, mêmes profils et mêmes permissions que le hub : l'app
  * n'a ni serveur ni compte à elle. Ses données sont dans la base chiffrée du
  * profil ouvert (`plateforme/stockage.ts`), le réseau passe par l'adaptateur de
- * la plateforme (`plateforme/reseau.ts`). Les sources sont réservées à
- * l'administrateur ; il n'y a pas d'écran de réglages ici : Paramètres › Tsuzuku.
+ * la plateforme (`plateforme/reseau.ts`). Rien de technique ici : les sources,
+ * clés d'API et options du moteur sont en Paramètres › Administration › Tsuzuku
+ * (Fondateurs) ; le confort et les sources partagées, en Paramètres › Tsuzuku.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -26,7 +27,8 @@ import { FicheFilmEcran } from './FicheFilm';
 import { ImportBibliotheque } from './Import';
 import { LecteurEcran } from './Lecteur';
 import { creerServices, type ServicesTsuzuku } from './services';
-import { Sources } from './Sources';
+import { lireAvances } from './gestion';
+import { PiedTsuzuku } from './PiedTsuzuku';
 import { LIBELLE_MODE, themeDuMode, type Mode } from './themeTsuzuku';
 import { Avis, Bouton, styleAttenue } from './ui';
 import { MESSAGE_SITE } from '../plateforme/reseauWeb';
@@ -35,26 +37,35 @@ const ONGLETS: ReadonlyArray<readonly [Route['t'], string]> = [
   ['accueil', 'Accueil'],
   ['catalogue', 'Catalogue'],
   ['bibliotheque', 'Bibliothèque'],
-  ['sources', 'Sources'],
 ];
+
+function avancesDe(base: { lire(cle: string): string | undefined | null }) {
+  try {
+    return lireAvances(base.lire(CLES.avance));
+  } catch {
+    return undefined;
+  }
+}
 
 /** Services du profil ouvert. Une instance par profil : rien n'est partagé d'un profil à l'autre. */
 export function useServices(contexte: PropsRacineApp['contexte'], choix?: ChoixReseau): ServicesTsuzuku {
   const base = contexte.baseProfil;
-  // Rangs : les sources sont celles d'un Fondateur (le compte historique en tête) ;
-  // Administrateurs, Gestionnaires et Amis les utilisent sans les modifier.
-  const estAdmin = rangDe(contexte.profil) === 'fondateur';
+  // Rangs : seuls les Fondateurs gèrent les sources (`gestion.ts`) ; les autres
+  // utilisent celles qui leur sont partagées.
+  const rang = rangDe(contexte.profil);
   const idProfil = contexte.profil?.id ?? 'principal';
   return useMemo(
     () =>
       creerServices({
         choix: choix ?? choisirReseau(),
         stockage: base ? stockageDepuisBase(base) : stockageMemoire(),
-        estAdmin,
+        rang,
+        // Options avancées du moteur (Administration › Tsuzuku), lues dans la base du profil.
+        avances: base ? avancesDe(base) : undefined,
       }),
     // La base est propre au profil : un autre profil = de nouveaux services.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [base, idProfil, estAdmin, choix],
+    [base, idProfil, rang, choix],
   );
 }
 
@@ -124,8 +135,6 @@ export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, context
         return <LecteurEcran kind={route.kind} id={route.id} numero={route.numero} />;
       case 'bibliotheque':
         return <Bibliotheque />;
-      case 'sources':
-        return <Sources />;
       case 'import':
         return <ImportBibliotheque />;
     }
@@ -184,6 +193,7 @@ export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, context
             </View>
             {!s.lectureSources ? <Avis texte={MESSAGE_SITE} testID="tsuzuku-site" /> : null}
             <View testID={`ecran-${route.t}`}>{ecran}</View>
+            <PiedTsuzuku theme={theme} onEnSavoirPlus={onParametres ? () => onParametres('apropos') : undefined} />
           </View>
         </ScrollView>
       </View>
