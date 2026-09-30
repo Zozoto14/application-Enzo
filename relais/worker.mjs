@@ -104,21 +104,52 @@ export async function porteeDuJeton(recu, jetonMaitre) {
   return jetonValide(recu, await jetonDeProfil(jetonMaitre, morceaux[1])) ? { profil: morceaux[1] } : undefined;
 }
 
-async function lireIndex(env) {
-  const brut = await env.BOITE.get(CLE_INDEX);
+// ------------------------------------------------------------- Index
+//
+// Chaque liste (l'historique `index` des appareils, et `p:<id>:~index` pour un
+// espace) est une clé tenue à jour à chaque dépôt : une seule lecture par tour
+// de synchronisation. Deux dépôts simultanés peuvent encore s'y écraser
+// (lecture-modification-écriture) ; mais chaque valeur porte ses métadonnées
+// ({ date, taille }), et l'index est RÉPARÉ à partir de la liste de la boîte
+// (`KV.list`) au plus une fois par heure (six pour un espace) : les listes
+// sont comptées à part sur l'offre gratuite (1 000 par jour), on ne peut pas
+// en faire une à chaque tour.
+
+const REPARE = '~repare';
+const DELAI_REPARATION_BOITE_MS = 3_600_000;
+const DELAI_REPARATION_ESPACE_MS = 6 * 3_600_000;
+const DATE_INCONNUE = '1970-01-01T00:00:00.000Z';
+
+async function lireIndexCle(env, cle) {
+  const brut = await env.BOITE.get(cle);
+  let lu = {};
   try {
-    const index = brut ? JSON.parse(brut) : {};
-    return index && typeof index === 'object' && !Array.isArray(index) ? index : {};
+    lu = brut ? JSON.parse(brut) : {};
   } catch {
-    return {};
+    lu = {};
   }
+  if (!lu || typeof lu !== 'object' || Array.isArray(lu)) lu = {};
+  const entrees = {};
+  for (const [nom, meta] of Object.entries(lu)) {
+    if (!nom.startsWith('~') && meta && typeof meta === 'object') entrees[nom] = meta;
+  }
+  return { entrees, repare: typeof lu[REPARE] === 'string' ? lu[REPARE] : undefined };
 }
 
-/**
- * Liste des clés d'un préfixe, avec leurs métadonnées ({ date, taille }).
- * L'index est ainsi tiré de la boîte elle-même (`KV.list`) : deux dépôts
- * simultanés ne peuvent plus s'effacer l'un l'autre de la liste.
- */
+async function ecrireIndexCle(env, cle, entrees, repare) {
+  await env.BOITE.put(cle, JSON.stringify(repare ? { ...entrees, [REPARE]: repare } : entrees));
+}
+
+/** Lecture-modification-écriture d'une entrée (dépôt ou suppression). */
+async function majIndex(env, cle, nom, meta) {
+  const { entrees, repare } = await lireIndexCle(env, cle);
+  if (meta) entrees[nom] = meta;
+  else if (nom in entrees) delete entrees[nom];
+  else return;
+  await ecrireIndexCle(env, cle, entrees, repare);
+}
+
+/** Liste des clés d'un préfixe (avec pagination), et leurs métadonnées. */
 async function lister(env, prefixe) {
   const trouves = {};
   let curseur;
@@ -126,12 +157,28 @@ async function lister(env, prefixe) {
     const page = await env.BOITE.list({ prefix: prefixe, cursor: curseur });
     for (const cle of page.keys ?? []) {
       const nom = cle.name.slice(prefixe.length);
-      const meta = cle.metadata && typeof cle.metadata === 'object' ? cle.metadata : {};
-      trouves[nom] = typeof meta.date === 'string' ? { date: meta.date, taille: Number(meta.taille) || 0 } : undefined;
+      const meta = cle.metadata && typeof cle.metadata === 'object' ? cle.metadata : undefined;
+      trouves[nom] = meta && typeof meta.date === 'string' ? { date: meta.date, taille: Number(meta.taille) || 0 } : undefined;
     }
     curseur = page.list_complete === false ? page.cursor : undefined;
   } while (curseur);
   return trouves;
+}
+
+/** L'index, réparé depuis la liste de la boîte s'il ne l'a pas été depuis `delai`. */
+async function lireIndex(env, cle, prefixeValeurs, delai) {
+  const { entrees, repare } = await lireIndexCle(env, cle);
+  const maintenant = Date.now();
+  if (typeof env.BOITE.list !== 'function' || (repare && maintenant - Date.parse(repare) < delai)) {
+    return entrees;
+  }
+  const repares = {};
+  for (const [nom, meta] of Object.entries(await lister(env, prefixeValeurs))) {
+    if (nom.startsWith('~')) continue;
+    repares[nom] = meta ?? entrees[nom] ?? { date: DATE_INCONNUE, taille: 0 };
+  }
+  await ecrireIndexCle(env, cle, repares, new Date(maintenant).toISOString());
+  return repares;
 }
 
 async function corpsJson(requete) {
@@ -172,17 +219,7 @@ async function boite(requete, env, identifiant) {
     if (requete.method !== 'GET') {
       return erreur('Méthode non autorisée.', 405);
     }
-    const ancien = await lireIndex(env);
-    if (typeof env.BOITE.list !== 'function') {
-      return reponse({ appareils: ancien });
-    }
-    // La liste de la boîte fait foi : un dépôt listé existe. Ses métadonnées
-    // (dépôts depuis la version 2) donnent la date ; les plus anciens, sans
-    // métadonnées, restent décrits par l'ancien index.
-    const index = {};
-    for (const [nom, meta] of Object.entries(await lister(env, 'appareil:'))) {
-      index[nom] = meta ?? ancien[nom] ?? { date: '1970-01-01T00:00:00.000Z', taille: 0 };
-    }
+    const index = await lireIndex(env, CLE_INDEX, 'appareil:', DELAI_REPARATION_BOITE_MS);
     return reponse({ appareils: index });
   }
   if (!IDENTIFIANT_APPAREIL.test(identifiant)) {
@@ -199,22 +236,13 @@ async function boite(requete, env, identifiant) {
     const { refus, texte, meta } = await lireEnveloppe(requete, identifiant);
     if (refus) return refus;
     await env.BOITE.put(cle, texte, { metadata: meta });
-    if (typeof env.BOITE.list !== 'function') {
-      // Boîte sans liste (très ancien environnement) : l'index d'avant.
-      const index = await lireIndex(env);
-      index[identifiant] = meta;
-      await env.BOITE.put(CLE_INDEX, JSON.stringify(index));
-    }
+    await majIndex(env, CLE_INDEX, identifiant, meta);
     return reponse({ ok: true });
   }
 
   if (requete.method === 'DELETE') {
     await env.BOITE.delete(cle);
-    const index = await lireIndex(env);
-    if (identifiant in index) {
-      delete index[identifiant];
-      await env.BOITE.put(CLE_INDEX, JSON.stringify(index));
-    }
+    await majIndex(env, CLE_INDEX, identifiant, undefined);
     return reponse({ ok: true });
   }
 
@@ -239,8 +267,7 @@ async function espace(requete, env, portee, id, nom) {
     if (requete.method !== 'GET') {
       return erreur('Méthode non autorisée.', 405);
     }
-    const objets = await lister(env, prefixe);
-    return reponse({ objets: Object.fromEntries(Object.entries(objets).map(([n, m]) => [n, m ?? { date: '1970-01-01T00:00:00.000Z', taille: 0 }])) });
+    return reponse({ objets: await lireIndex(env, `${prefixe}~index`, prefixe, DELAI_REPARATION_ESPACE_MS) });
   }
   if (!NOM_OBJET.test(nom)) {
     return erreur('Nom d’objet invalide.', 400);
@@ -254,10 +281,12 @@ async function espace(requete, env, portee, id, nom) {
     const { refus, texte, meta } = await lireEnveloppe(requete, nom);
     if (refus) return refus;
     await env.BOITE.put(cle, texte, { metadata: meta });
+    await majIndex(env, `${prefixe}~index`, nom, meta);
     return reponse({ ok: true });
   }
   if (requete.method === 'DELETE') {
     await env.BOITE.delete(cle);
+    await majIndex(env, `${prefixe}~index`, nom, undefined);
     return reponse({ ok: true });
   }
   return erreur('Méthode non autorisée.', 405);

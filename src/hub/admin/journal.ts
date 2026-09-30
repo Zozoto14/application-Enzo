@@ -215,3 +215,35 @@ export function exporterCsv(journal: readonly EvenementAudit[]): string {
   const lignes = lireJournal(journal).map(e => COLONNES.map(colonne => celluleCsv(String(e[colonne] ?? ''))).join(';'));
   return [COLONNES.join(';'), ...lignes].join('\n');
 }
+
+// --- Identifiant d'événement (fusion entre appareils) ------------------------------
+
+/** Petite empreinte FNV-1a sur 2 × 32 bits : stable, sans dépendance. */
+function fnv(texte: string, graine: number): string {
+  let h = graine >>> 0;
+  for (let i = 0; i < texte.length; i++) {
+    h ^= texte.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+/**
+ * Identifiant d'un événement, tiré de son contenu : le même événement noté sur
+ * deux appareils (connexion d'un ami reportée par chacun) a le même
+ * identifiant, et la fusion par union ne le garde qu'une fois.
+ */
+export function idEvenement(e: EvenementAudit): string {
+  const texte = [e.date, e.type, e.action, e.cible ?? '', e.nomCible ?? '', e.app ?? '', e.acteur ?? ''].join('\u0001');
+  return fnv(texte, 0x811c9dc5) + fnv(texte, 0x9e3779b9);
+}
+
+/** Union de deux journaux (par identifiant), triée par date. */
+export function unionJournaux(a: readonly EvenementAudit[], b: readonly EvenementAudit[]): EvenementAudit[] {
+  const parId = new Map<string, EvenementAudit>();
+  for (const e of [...a, ...b]) {
+    const propre = lireEvenement(e);
+    if (propre) parId.set(idEvenement(propre), propre);
+  }
+  return [...parId.values()].sort((x, y) => (x.date === y.date ? (idEvenement(x) < idEvenement(y) ? -1 : 1) : Date.parse(x.date) - Date.parse(y.date)));
+}

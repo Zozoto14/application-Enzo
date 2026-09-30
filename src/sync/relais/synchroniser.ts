@@ -72,7 +72,7 @@ export class ErreurRelais extends Error {
 /** Au-delà, un appel sans réponse est abandonné (sinon un tour resterait bloqué). */
 export const DELAI_APPEL_MS = 25_000;
 
-async function appeler(
+export async function appeler(
   liaison: Liaison,
   chemin: string,
   options: { methode?: string; corps?: string; keepalive?: boolean } = {},

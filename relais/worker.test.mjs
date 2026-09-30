@@ -170,14 +170,28 @@ test('espaces : noms et identifiants validés, enveloppe au bon nom', async () =
   assert.equal(env.BOITE.donnees.size, 0);
 });
 
-test('index tiré de la liste de la boîte : plus de course entre deux dépôts simultanés', async () => {
-  const env = { JETON, BOITE: kvMemoire() };
+test('course sur l’index : réparé depuis la liste de la boîte, au plus une fois par heure', async () => {
+  const kv = kvMemoire();
+  let listes = 0;
+  const lister = kv.list;
+  kv.list = async o => {
+    listes++;
+    return lister(o);
+  };
+  const env = { JETON, BOITE: kv };
   const noms = ['pc000001', 'ip000002', 'si000003', 'ta000004', 'mc000005'];
+  // Dépôts simultanés : les lectures-modifications-écritures de l'index s'écrasent.
   await Promise.all(noms.map(n => appeler(env, `/boite/${n}`, { method: 'PUT', body: enveloppe(n) })));
+  const perdus = noms.filter(n => !(n in JSON.parse(kv.donnees.get('index'))));
+  assert.ok(perdus.length > 0, 'la course se produit bien dans ce test');
   const index = (await (await appeler(env, '/boite')).json()).appareils;
   assert.deepEqual(Object.keys(index).sort(), [...noms].sort());
-  // Plus d'écriture de l'ancien index à chaque dépôt : une seule écriture par dépôt.
-  assert.equal(env.BOITE.donnees.has('index'), false);
+  assert.equal(index.pc000001.date, '2026-09-26T10:00:00Z');
+  assert.equal('~repare' in index, false);
+  assert.equal(listes, 3, 'une réparation (5 clés, pages de 2)');
+  await appeler(env, '/boite');
+  await appeler(env, '/boite');
+  assert.equal(listes, 3, 'pas de nouvelle liste dans l’heure');
 });
 
 test('compatibilité : les dépôts d’avant (ancien index, sans métadonnées) restent listés', async () => {
@@ -191,7 +205,7 @@ test('compatibilité : les dépôts d’avant (ancien index, sans métadonnées)
   assert.equal(index.ancien01.date, '2026-01-01T00:00:00Z');
   await appeler(env, '/boite/ancien01', { method: 'DELETE' });
   assert.deepEqual(Object.keys((await (await appeler(env, '/boite')).json()).appareils), ['nouveau1']);
-  // Boîte sans liste : on retombe sur l'ancien index.
+  // Boîte sans liste : l'index tenu à chaque dépôt suffit.
   const vieil = { JETON, BOITE: kvMemoire({ sansListe: true }) };
   await appeler(vieil, '/boite/pc123456', { method: 'PUT', body: enveloppe('pc123456') });
   assert.deepEqual(Object.keys((await (await appeler(vieil, '/boite')).json()).appareils), ['pc123456']);

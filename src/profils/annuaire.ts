@@ -118,6 +118,13 @@ export interface Annuaire {
   prive?: string;
   /** Liste en clair des formats 1 et 2, à migrer par l'administrateur. */
   heritage?: Profil[];
+  /**
+   * Annuaire RESTREINT d'un ami (navigateur relié avec son propre code) : son
+   * seul compte, sans rien de l'administrateur hormis sa clé publique de
+   * séquestre. Aucun prénom n'y mène à l'administrateur : tout autre prénom
+   * ouvre le leurre. Voir `projectionAmi` (synchroAnnuaire.ts).
+   */
+  restreint?: true;
 }
 
 /** Contenu du bloc privé : jamais lisible sans la clé maîtresse de l'administrateur. */
@@ -230,6 +237,7 @@ export function lireAnnuaire(brut: string | undefined): Annuaire {
     comptes.push(entree);
   }
   const annuaire: Annuaire = { v: VERSION_ANNUAIRE, sel: hexa(o.sel, 32) ?? '', admin: {}, comptes };
+  if (o.restreint === true) annuaire.restreint = true;
   const a = annuaire.admin;
   const empreinte = hexa(admin.empreinte, 64);
   if (empreinte) a.empreinte = empreinte;
@@ -298,6 +306,9 @@ export const NOM_ADMIN_PROVISOIRE = 'Moi';
  * pourrait jamais se connecter en saisissant son prénom.
  */
 export function adminSansPrenom(annuaire: Annuaire): boolean {
+  if (annuaire.restreint) {
+    return false;
+  }
   if (annuaire.heritage) {
     const nom = normaliserNom(annuaire.heritage[0]?.nom ?? '');
     return !nom || nom === normaliserNom(NOM_ADMIN_PROVISOIRE);
@@ -331,13 +342,14 @@ export function trouverCompte(annuaire: Annuaire, saisie: string): CompteTrouve 
     return trouve ? { id: trouve.id, nom: trouve.nom, admin: trouve.admin } : inconnu();
   }
   if (MOTS_ADMIN.has(cherche)) {
-    return { id: ID_PRINCIPAL, nom: nomAdminPublic(annuaire, saisie) ?? 'Administrateur', admin: true };
+    // Annuaire restreint d'un ami : l'administrateur n'est pas sur ce navigateur (leurre).
+    return annuaire.restreint ? undefined : { id: ID_PRINCIPAL, nom: nomAdminPublic(annuaire, saisie) ?? 'Administrateur', admin: true };
   }
   if (!annuaire.sel) {
     return inconnu();
   }
   const empreinte = empreinteNom(annuaire.sel, cherche);
-  if (annuaire.admin.empreinte === empreinte) {
+  if (annuaire.admin.empreinte === empreinte && !annuaire.restreint) {
     return { id: ID_PRINCIPAL, nom: nomAdminPublic(annuaire, saisie) ?? saisie.trim(), admin: true };
   }
   const entree = annuaire.comptes.find(c => c.empreinte === empreinte);
@@ -722,6 +734,45 @@ export function adopterPrenomAdmin(
 export function deposerSequestre(annuaire: Annuaire, id: string, depot: string): Annuaire {
   if (!annuaire.comptes.some(c => c.id === id)) throw new ErreurAnnuaire('Compte introuvable.');
   return { ...annuaire, comptes: annuaire.comptes.map(c => (c.id === id ? { ...c, sequestre: { etat: 'depose', depot } } : c)) };
+}
+
+/**
+ * Deux blocs privés divergents (modifiés sur deux appareils de
+ * l'administrateur) : réunit leur contenu, celui du gagnant prioritaire,
+ * limité aux comptes encore présents. Rend le bloc à garder : le gagnant
+ * tel quel s'il contient déjà tout (pas de rescellement, donc pas de
+ * va-et-vient), sinon un bloc rescellé. Rend le gagnant si un bloc est illisible.
+ */
+export function fusionnerBlocsPrives(
+  gagnant: string,
+  perdant: string,
+  idsPresents: ReadonlySet<string>,
+  cles: ClesAdmin,
+  alea: SourceAleatoire = aleatoireParDefaut,
+): string {
+  if (gagnant === perdant) return gagnant;
+  let a: Prive;
+  let b: Prive;
+  try {
+    a = lirePrive({ prive: gagnant } as Annuaire, cles);
+    b = lirePrive({ prive: perdant } as Annuaire, cles);
+  } catch {
+    return gagnant;
+  }
+  const garder = <T,>(table: Record<string, T>) => Object.fromEntries(Object.entries(table).filter(([id]) => idsPresents.has(id)));
+  const fusion: Prive = {
+    nomAdmin: a.nomAdmin ?? b.nomAdmin,
+    creeLeAdmin: a.creeLeAdmin ?? b.creeLeAdmin,
+    noms: { ...garder(b.noms), ...a.noms },
+    creeLe: { ...garder(b.creeLe), ...a.creeLe },
+    creePar: { ...garder(b.creePar), ...a.creePar },
+    anterieurs: [...new Set([...a.anterieurs, ...b.anterieurs.filter(id => idsPresents.has(id))])],
+    codes: { ...garder(b.codes), ...a.codes },
+  };
+  if (fusion.nomAdmin === undefined) delete fusion.nomAdmin;
+  if (fusion.creeLeAdmin === undefined) delete fusion.creeLeAdmin;
+  const taille = (p: Prive) => Object.keys(p.noms).length + Object.keys(p.creeLe).length + Object.keys(p.creePar).length + p.anterieurs.length + Object.keys(p.codes).length + (p.nomAdmin ? 1 : 0);
+  return taille(fusion) === taille(a) ? gagnant : ecrirePrive(fusion, cles, alea);
 }
 
 /** Code d'accès administrateur d'un compte, s'il en a un. */
