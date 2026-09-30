@@ -509,7 +509,7 @@ export interface VariablesMessage {
 }
 
 /** Remplit le modèle ; une variable inconnue reste telle quelle, une variable vide laisse un repère. */
-export function rendreModele(modele: string, v: VariablesMessage): string {
+export function rendreModele(modele: string, v: VariablesMessage, garder: readonly string[] = []): string {
   const valeurs: Record<string, string> = {
     prenom: v.prenom,
     montant: v.montant,
@@ -517,7 +517,7 @@ export function rendreModele(modele: string, v: VariablesMessage): string {
     moyens: v.moyens.length > 0 ? v.moyens.join(', ') : 'à convenir avec moi',
     retard: v.retard && v.retard > 0 ? ` (en retard de ${v.retard} jour${v.retard > 1 ? 's' : ''})` : '',
   };
-  return modele.replace(/\{(\w+)\}/g, (tout, nom: string) => (nom in valeurs ? valeurs[nom] : tout));
+  return modele.replace(/\{(\w+)\}/g, (tout, nom: string) => (nom in valeurs && !garder.includes(nom) ? valeurs[nom] : tout));
 }
 
 export function messageRappel(ligne: LigneAbo, reglages: ReglagesAbo): string {
@@ -546,19 +546,24 @@ export interface ProjectionAbo {
   message: string;
 }
 
-export function projectionPour(donnees: DonneesAbo, id: string, nom: string): ProjectionAbo {
+export function projectionPour(donnees: DonneesAbo, id: string): ProjectionAbo {
   const compte = donnees.comptes[id] ?? compteVide(donnees.reglages, '1970-01-01T00:00:00.000Z');
   const p: ProjectionAbo = {
     v: 1,
     mode: compte.mode,
     joursAvance: donnees.reglages.joursAvance,
     rappel: donnees.reglages.rappelAmi,
-    message: rendreModele(donnees.reglages.messageAmi, {
-      prenom: nom,
-      montant: formaterMontant(resteDu(compte) > 0 ? resteDu(compte) : compte.montant, donnees.reglages.devise),
-      echeance: compte.echeance,
-      moyens: donnees.reglages.moyens,
-    }),
+    // {prenom} et {echeance} sont remplis chez l'utilisateur (son prénom, sa date) ; le reste, ici.
+    message: rendreModele(
+      donnees.reglages.messageAmi,
+      {
+        prenom: '',
+        montant: formaterMontant(resteDu(compte) > 0 ? resteDu(compte) : compte.montant, donnees.reglages.devise),
+        echeance: compte.echeance,
+        moyens: donnees.reglages.moyens,
+      },
+      ['prenom', 'echeance'],
+    ),
   };
   if (compte.echeance) p.echeance = compte.echeance;
   return p;
@@ -594,10 +599,18 @@ export function statutProjection(p: ProjectionAbo, aujourdhui: string): StatutAb
  * l'administrateur l'a activé, que l'échéance approche ou est dépassée, et
  * pas déjà montré aujourd'hui (`dernierJour`).
  */
-export function rappelPourAmi(p: ProjectionAbo | undefined, aujourdhui: string, dernierJour: string | undefined): { statut: StatutAbo; message: string } | undefined {
+export function rappelPourAmi(
+  p: ProjectionAbo | undefined,
+  aujourdhui: string,
+  dernierJour: string | undefined,
+  prenom = '',
+): { statut: StatutAbo; message: string } | undefined {
   if (!p || !p.rappel || !p.message || dernierJour === aujourdhui) return undefined;
   const statut = statutProjection(p, aujourdhui);
-  return statut === 'echeance-proche' || statut === 'en-retard' ? { statut, message: p.message } : undefined;
+  if (statut !== 'echeance-proche' && statut !== 'en-retard') return undefined;
+  const jours = p.echeance ? joursAvant(p.echeance, aujourdhui) : 0;
+  const message = rendreModele(p.message, { prenom, montant: '{montant}', echeance: p.echeance, moyens: [], retard: jours < 0 ? -jours : undefined });
+  return { statut, message };
 }
 
 // --- Export CSV ---------------------------------------------------------------

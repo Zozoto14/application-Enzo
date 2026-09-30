@@ -49,6 +49,7 @@ import { ESPACE_ADMIN, compteDeLiaison, estMaitre, peutOuvrirEspace } from '../s
 import { ErreurRelais, recupererCoffre } from '../src/sync/relais/synchroniser';
 import { lireDonnees, ecrireDonnees } from '../src/hub/admin/donnees';
 import { donneesDepuisEntites, entitesDonnees, fusionsDonnees } from '../src/hub/admin/fusionDonnees';
+import { lireProjection, projectionPour, type ProjectionAbo } from '../src/hub/abonnements/abonnements';
 
 type Fetch = typeof fetch;
 
@@ -78,6 +79,10 @@ export const CLES_MEMOIRE = {
   coffreRelie: 'applibourse.synchro.coffreRelie',
   /** Empreinte des délégations des titulaires publiées sur le relais. */
   delegations: 'applibourse.synchro.delegations',
+  /** Côté administrateur : empreinte de la ligne d'abonnement publiée pour chaque compte. */
+  abonnements: 'applibourse.synchro.abonnements',
+  /** Côté ami : préfixe de la ligne d'abonnement reçue (suivie du compte). */
+  abonnementRecu: 'applibourse.abonnement.',
 } as const;
 
 // ------------------------------------------------------------ Mémoire
@@ -155,7 +160,7 @@ export function liaisonPourCompte(memoire: Memoire, id: string, pontMaitre?: Lia
 
 /** Oublie tout le suivi de synchronisation des comptes (remplacement des données du navigateur). */
 export function oublierSuivi(memoire: Memoire): void {
-  for (const cle of [CLES_MEMOIRE.annuaire, CLES_MEMOIRE.admin, CLES_MEMOIRE.fichiers, CLES_MEMOIRE.comptes, CLES_MEMOIRE.coffreRelie]) {
+  for (const cle of [CLES_MEMOIRE.annuaire, CLES_MEMOIRE.admin, CLES_MEMOIRE.fichiers, CLES_MEMOIRE.comptes, CLES_MEMOIRE.coffreRelie, CLES_MEMOIRE.abonnements]) {
     try {
       memoire.removeItem(cle);
     } catch {
@@ -173,6 +178,8 @@ interface SuiviCompte {
   retourLu?: string;
   /** Empreinte du retour déposé (côté ami). */
   retour?: string;
+  /** Date de la ligne d'abonnement lue (côté ami). */
+  abonnementLu?: string;
   /** Côté Fondateur : empreintes des actions d'un titulaire déjà reprises au journal. */
   journalVus?: string[];
 }
@@ -203,6 +210,8 @@ export interface BilanComptes {
   annuaireChange: boolean;
   /** Les données d'administration d'ici ont changé. */
   donneesChangent: boolean;
+  /** Côté ami : sa ligne d'abonnement a changé. */
+  abonnementChange?: boolean;
   fichiersRecus: number;
   depots: number;
   erreurs: string[];
@@ -371,7 +380,7 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
   for (const id of Object.keys(suivis)) {
     if (presents.has(id)) continue;
     try {
-      for (const nom of ['annuaire', 'coffre', 'portefeuille', 'compte']) {
+      for (const nom of ['annuaire', 'coffre', 'portefeuille', 'compte', 'abonnement']) {
         await espaces.supprimer(id, nom);
       }
       delete suivis[id];
@@ -430,6 +439,31 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
         bilan.depots++;
       }
       ecrireJson(o.memoire, CLES_MEMOIRE.admin, resultat.etat);
+    } catch (erreur) {
+      bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
+    }
+    // 4 bis. Abonnements : chaque compte reçoit SA ligne seulement (mode, échéance, message), dans son espace.
+    try {
+      const finales = lireDonnees(o.donnees.lire());
+      const publiees = lireJson<Record<string, string>>(o.memoire, CLES_MEMOIRE.abonnements, {});
+      for (const compte of annuaire.annuaire.comptes) {
+        const projection = projectionPour(finales.abonnements, compte.id);
+        const h = empreinte(projection);
+        // Rien n'est publié pour un compte jamais suivi : l'espace d'un ami reste tel qu'avant.
+        if (!finales.abonnements.comptes[compte.id] && publiees[compte.id] === undefined) continue;
+        if (publiees[compte.id] === h) continue;
+        try {
+          await espaces.deposer(compte.id, 'abonnement', JSON.stringify(projection), horloge().toISOString());
+          publiees[compte.id] = h;
+          bilan.depots++;
+        } catch (erreur) {
+          bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
+        }
+      }
+      for (const id of Object.keys(publiees)) {
+        if (!presents.has(id)) delete publiees[id];
+      }
+      ecrireJson(o.memoire, CLES_MEMOIRE.abonnements, publiees);
     } catch (erreur) {
       bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
     }
@@ -507,6 +541,25 @@ export async function synchroniserCompteAmi(o: OptionsSynchroAmi): Promise<Bilan
       suivi.retour = h;
       bilan.depots++;
     }
+  }
+
+  // Sa ligne d'abonnement (mode + échéance + message de rappel) : lecture seule, dans son seul espace.
+  try {
+    const dateAbo = objets.abonnement?.date;
+    if (dateAbo && dateAbo > (suivi.abonnementLu ?? '')) {
+      const recu = await lireDocument(espaces, o.id, 'abonnement');
+      const projection = lireProjection(recu?.brut);
+      if (projection) {
+        o.memoire.setItem(CLES_MEMOIRE.abonnementRecu + o.id, JSON.stringify(projection));
+        bilan.abonnementChange = true;
+      }
+      suivi.abonnementLu = dateAbo;
+    } else if (!dateAbo && o.memoire.getItem(CLES_MEMOIRE.abonnementRecu + o.id)) {
+      o.memoire.removeItem(CLES_MEMOIRE.abonnementRecu + o.id);
+      bilan.abonnementChange = true;
+    }
+  } catch (erreur) {
+    bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
   }
 
   let etatFichiers = lireJson<EtatFichiers>(o.memoire, CLES_MEMOIRE.fichiers, {});
@@ -700,6 +753,16 @@ export async function preparerLiaison(code: string, requete?: Fetch): Promise<Co
   // PC d'une version antérieure : pas d'annuaire publié, mais son coffre l'est peut-être.
   await recupererCoffre(liaison, requete);
   return { liaison, annuaire: lireAnnuaire(undefined) };
+}
+
+/** Ligne d'abonnement de CE compte, telle que reçue du relais (rien sans suivi ni avant la première synchronisation). */
+export function lireAbonnementAmi(memoire: Memoire, id: string): ProjectionAbo | undefined {
+  try {
+    const brut = memoire.getItem(CLES_MEMOIRE.abonnementRecu + id);
+    return brut ? lireProjection(JSON.parse(brut)) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export { encodeur as encodeurTexte };

@@ -191,21 +191,21 @@ describe('isolation : un utilisateur ne reçoit que sa ligne', () => {
     },
   };
   it('la projection ne contient ni notes, ni historique, ni autre compte', () => {
-    const brut = JSON.stringify(projectionPour(d, 'hugo000002', 'Hugo'));
+    const brut = JSON.stringify(projectionPour(d, 'hugo000002'));
     expect(brut).not.toMatch(/NOTE-SECRETE/);
     expect(brut).not.toMatch(/pay00020|paiements|notes|zoe0000003|Zoé|2026-11-10/);
     expect(brut).toContain('2026-10-01');
     expect(Object.keys(JSON.parse(brut)).sort()).toEqual(['echeance', 'joursAvance', 'message', 'mode', 'rappel', 'v']);
   });
   it('la projection d’un ami est relue telle quelle et son statut se recalcule sur sa date', () => {
-    const p = lireProjection(JSON.parse(JSON.stringify(projectionPour(d, 'hugo000002', 'Hugo'))))!;
+    const p = lireProjection(JSON.parse(JSON.stringify(projectionPour(d, 'hugo000002'))))!;
     expect(statutProjection(p, '2026-10-05')).toBe('en-retard');
     expect(statutProjection(p, '2026-09-28')).toBe('echeance-proche');
     expect(lireProjection({ v: 2 })).toBeUndefined();
     expect(lireProjection('x')).toBeUndefined();
   });
   it('un compte inconnu reçoit une projection vide, pas celle d’un autre', () => {
-    const p = projectionPour(d, 'inconnu0001', 'Inconnu');
+    const p = projectionPour(d, 'inconnu0001');
     expect(p.echeance).toBeUndefined();
     expect(JSON.stringify(p)).not.toMatch(/2026-10-01|2026-11-10/);
   });
@@ -297,11 +297,14 @@ describe('rappels', () => {
     expect(notificationDuJour(resumeRappels([]), R, undefined, auj)).toBeUndefined();
   });
   it('rappel dans le hub de l’ami : si approche ou dépassée, activé, une fois par jour', () => {
-    const p = projectionPour(d, 'hugo000002', 'Hugo');
+    const p = projectionPour(d, 'hugo000002');
     expect(rappelPourAmi(p, auj, undefined)?.statut).toBe('en-retard');
+    expect(rappelPourAmi(p, auj, undefined, 'Hugo')?.message).toContain('01/10/2026');
+    expect(p.message).toContain('{echeance}');
+    expect(p.message).not.toContain('Hugo');
     expect(rappelPourAmi(p, auj, auj)).toBeUndefined();
     expect(rappelPourAmi({ ...p, rappel: false }, auj, undefined)).toBeUndefined();
-    expect(rappelPourAmi(projectionPour(d, 'adm0000001', 'Ada'), auj, undefined)).toBeUndefined();
+    expect(rappelPourAmi(projectionPour(d, 'adm0000001'), auj, undefined)).toBeUndefined();
     expect(rappelPourAmi({ ...p, echeance: '2027-01-01' }, auj, undefined)).toBeUndefined();
     expect(rappelPourAmi(undefined, auj, undefined)).toBeUndefined();
   });
