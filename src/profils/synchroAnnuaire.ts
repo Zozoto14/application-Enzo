@@ -27,7 +27,6 @@ import {
 import { fusionner, noterLocal, type DocumentLww, type EtatLww, type ResultatLww, type Valeurs } from '../sync/relais/fusionLww';
 import type { SourceAleatoire } from '../securite/aleatoire';
 
-const PREFIXES_COMPTE = ['compte', 'sequestre', 'suivi', 'creation'] as const;
 
 /** L'annuaire, découpé en entrées. Un annuaire à migrer (formats 1 et 2) ne se découpe pas. */
 export function entitesAnnuaire(annuaire: Annuaire): Valeurs {

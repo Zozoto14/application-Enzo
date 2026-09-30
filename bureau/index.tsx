@@ -86,6 +86,27 @@ import { exiger } from '../src/hub/admin/roles';
 import { avecEvenement, chargerDonnees, enregistrerDonnees } from '../src/hub/admin/donnees';
 import { CLE_CARNET_GESTION, ajouterAuCarnet, ecrireCarnet, lireCarnet } from '../src/hub/admin/gestion';
 import type { TypeEvenement } from '../src/hub/admin/journal';
+import { CLE_DONNEES } from '../src/hub/admin/donnees';
+import { AccueilSite, RemplacerDonnees } from './AccueilSite';
+import {
+  avantOuverture,
+  coffreAdminEtranger,
+  liaisonPourCompte,
+  lireLiaisons,
+  oublierSuivi,
+  preparerLiaison,
+  retenirLiaison,
+  synchroniserAnnuaire,
+  synchroniserCompteAmi,
+  synchroniserComptesAdmin,
+  type CompteRelie,
+  type Memoire,
+} from './synchroComptes';
+import { decoderLiaison, encoderLiaison, lienSite, type Liaison } from '../src/sync/relais/liaison';
+import { compteDeLiaison, estMaitre, liaisonPourProfil } from '../src/sync/relais/portees';
+import { lireConfigRelais } from '../src/sync/relais/synchroniser';
+import { versBase64 } from '../src/sync/relais/chiffrement';
+import type { OptionsLier } from '../src/ui/ecrans/LierCompte';
 
 /**
  * Les appels à Yahoo Finance passent par le processus principal.
@@ -142,8 +163,14 @@ type Etat =
       transparence?: { dernierAccesAdmin?: string; sequestreActif: boolean };
       /** Administrateur historique sans prénom : celui saisi à la connexion, à lui donner une fois déverrouillé. */
       prenomAAdopter?: string;
+      /** Le coffre d'ici n'est pas celui du compte relié (créé sur ce navigateur autrefois). */
+      autreCoffre?: boolean;
     }
-  | { phase: 'echec'; motif: string };
+  | { phase: 'echec'; motif: string }
+  /** Navigateur neuf : relier un compte existant (d'abord), ou créer un coffre. */
+  | { phase: 'accueil'; code?: string; erreur?: string }
+  /** Ce navigateur a déjà un coffre : remplacer ses données par celles du compte relié ? */
+  | { phase: 'remplacer'; relie: CompteRelie };
 
 const decodeur = new TextDecoder();
 const encodeur = new TextEncoder();
@@ -165,6 +192,60 @@ function enFile<T>(action: () => Promise<T>): Promise<T> {
 function erreurTexte(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : String(erreur);
 }
+
+/** Stockage du navigateur, sans lever (navigation privée, stockage interdit). */
+const memoireNavigateur: Memoire = {
+  getItem: cle => {
+    try {
+      return globalThis.localStorage?.getItem(cle) ?? null;
+    } catch {
+      return null;
+    }
+  },
+  setItem: (cle, valeur) => {
+    try {
+      globalThis.localStorage?.setItem(cle, valeur);
+    } catch {
+      // Rien : la mémoire de la page suffit pour cette ouverture.
+    }
+  },
+  removeItem: cle => {
+    try {
+      globalThis.localStorage?.removeItem(cle);
+    } catch {
+      // Rien.
+    }
+  },
+};
+
+/** Code apporté par un lien `…/#liaison=AB1.…` (site ouvert depuis un QR code). */
+function codeDuLien(): string | undefined {
+  try {
+    const trouve = /AB1\.[A-Za-z0-9_-]+/.exec(decodeURIComponent(globalThis.location?.hash ?? ''));
+    return trouve && decoderLiaison(trouve[0]) ? trouve[0] : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Liaison de l'administrateur connue du processus principal (PC relié par le script). */
+async function liaisonDuPont(): Promise<Liaison | undefined> {
+  try {
+    const relais = (globalThis as { applibourse?: { relais?: { config?(): Promise<Liaison | undefined> } } }).applibourse?.relais;
+    const liaison = await relais?.config?.();
+    return liaison && estMaitre(liaison) ? liaison : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Au plus `ms` : le réseau ne bloque jamais l'ouverture (hors ligne, on continue avec ce qu'on a). */
+function auPlus<T>(promesse: Promise<T>, ms: number): Promise<T | undefined> {
+  return Promise.race([promesse.catch(() => undefined), new Promise<undefined>(ok => setTimeout(() => ok(undefined), ms))]);
+}
+
+/** Délai entre deux tours de synchronisation des comptes. */
+const INTERVALLE_COMPTES_MS = 120_000;
 
 /** Clés d'usage de l'administrateur, tirées de sa clé maîtresse (à effacer après usage). */
 function clesAdminDe(session: SessionBureau): ClesAdmin {
@@ -205,10 +286,16 @@ function Racine() {
     return annuaire;
   }, [stockage]);
 
+  // Synchronisation des comptes : un tour à demander après une modification de l'annuaire.
+  const planComptes = useRef<{ demander(delai?: number): void; enTour: boolean } | undefined>(undefined);
+  const [versionComptes, setVersionComptes] = useState(0);
   const ecrireAnnuaireDisque = useCallback(
     async (annuaire: Annuaire) => {
       await stockage.ecrire('profils', encodeur.encode(ecrireAnnuaire(annuaire)));
       annuaireRef.current = annuaire;
+      if (planComptes.current && !planComptes.current.enTour) {
+        planComptes.current.demander(2_000);
+      }
     },
     [stockage],
   );
@@ -226,6 +313,16 @@ function Racine() {
         changerDEspace(compte.id);
         await pont()?.profil?.ouvrir(compte.id);
         const annuaire = annuaireRef.current ?? (await lireAnnuaireDisque());
+        if (!options.adminSur) {
+          // Le coffre de CE compte (et, pour un ami, son portefeuille) s'il est plus récent sur le relais.
+          await auPlus(avantOuverture({ memoire: memoireNavigateur, fichiers: stockage as never, compte: compte.id, pontMaitre: await liaisonDuPont() }), 15_000);
+          if (!compte.admin || (!pont() && lireLiaisons(memoireNavigateur).maitre)) {
+            const coffre = await stockage.lire(fichiersDuProfil(compte.id).coffre as NomFichier);
+            if (!coffre || coffre.length === 0) {
+              throw new Error('Impossible de récupérer ce compte pour l’instant (relais injoignable, ou compte pas encore publié par l’administrateur). Vérifiez la connexion, puis réessayez.');
+            }
+          }
+        }
         const session = await ouvrirSessionBureau({
           fabrique: fabriqueRef.current as never,
           stockage,
@@ -253,7 +350,8 @@ function Racine() {
           new DepotParametres(session.session.base()).ecrire(PARAM_ACCES_ADMIN, JSON.stringify(acces));
           transparence = { dernierAccesAdmin: acces[acces.length - 1], sequestreActif: true };
         }
-        setEtat({ phase: 'prete', session, profil, profils: [profil], adminSur: options.adminSur, transparence, prenomAAdopter: compte.prenomAAdopter });
+        const autreCoffre = compte.admin && !options.adminSur && !pont() ? await coffreAdminEtranger(memoireNavigateur, stockage as never) : false;
+        setEtat({ phase: 'prete', session, profil, profils: [profil], adminSur: options.adminSur, transparence, prenomAAdopter: compte.prenomAAdopter, autreCoffre });
       } catch (erreur) {
         options.cle?.fill(0);
         setEtat({ phase: 'echec', motif: erreurTexte(erreur) });
@@ -263,7 +361,10 @@ function Racine() {
   );
 
   /** Prénom inconnu : même écran de déverrouillage, coffre qu'aucune clé n'ouvre. */
-  const ouvrirLeurre = useCallback((prenom: string) => {
+  const ouvrirLeurre = useCallback(async (prenom: string) => {
+    setEtat({ phase: 'chargement' });
+    // Même appel au relais qu'un vrai compte (voir avantOuverture) : rien ne trahit un prénom inconnu.
+    await auPlus(avantOuverture({ memoire: memoireNavigateur, fichiers: stockage as never, compte: undefined, pontMaitre: await liaisonDuPont() }), 15_000);
     changerDEspace('leurre');
     const session = new Session({
       stockage: stockageMemoire(coffreLeurre()),
@@ -277,17 +378,121 @@ function Racine() {
     setEtat({ phase: 'prete', session: leurre, profil, profils: [profil] });
   }, [stockage]);
 
-  useEffect(() => {
-    void lireAnnuaireDisque()
-      .then(annuaire => {
-        if (aDesAmis(annuaire)) {
-          setEtat({ phase: 'connexion' });
-        } else {
-          void ouvrir({ id: ID_PRINCIPAL, nom: annuaire.heritage?.[0]?.nom ?? 'Moi', admin: true });
+  /** Après le chargement (ou une liaison) : écran prénom, accueil du navigateur, ou compte unique. */
+  const demarrer = useCallback(
+    async (annuaire: Annuaire) => {
+      if (aDesAmis(annuaire)) {
+        setEtat({ phase: 'connexion' });
+        return;
+      }
+      if (!pont()) {
+        const coffre = await stockage.lire('coffre');
+        if (!coffre || coffre.length === 0) {
+          const liaisons = lireLiaisons(memoireNavigateur);
+          // Navigateur neuf : relier d'abord. Un navigateur déjà relié (code de l'administrateur) ouvre son compte.
+          if (!liaisons.maitre) {
+            setEtat({ phase: 'accueil', code: codeDuLien() });
+            return;
+          }
         }
-      })
-      .catch(erreur => setEtat({ phase: 'echec', motif: erreurTexte(erreur) }));
-  }, [lireAnnuaireDisque, ouvrir]);
+      }
+      void ouvrir({ id: ID_PRINCIPAL, nom: annuaire.heritage?.[0]?.nom ?? 'Moi', admin: true });
+    },
+    [ouvrir, stockage],
+  );
+
+  useEffect(() => {
+    void (async () => {
+      let annuaire = await lireAnnuaireDisque();
+      const lien = codeDuLien();
+      const liaisons = lireLiaisons(memoireNavigateur);
+      const connus = [liaisons.maitre, ...Object.values(liaisons.comptes)];
+      if (!pont() && lien && !connus.includes(encoderLiaison(decoderLiaison(lien)!))) {
+        // Lien de liaison nouveau pour ce navigateur : on propose de relier ce compte.
+        setEtat({ phase: 'accueil', code: lien });
+        return;
+      }
+      // Comptes ajoutés ou modifiés ailleurs : l'écran prénom les connaît avant la connexion.
+      const maitre = liaisons.maitre ? decoderLiaison(liaisons.maitre) : await liaisonDuPont();
+      if (maitre && !annuaire.restreint) {
+        const resultat = await auPlus(
+          synchroniserAnnuaire({ liaison: maitre, memoire: memoireNavigateur, lire: async () => annuaire, ecrire: ecrireAnnuaireDisque }),
+          6_000,
+        );
+        if (resultat) annuaire = resultat.annuaire;
+      } else if (annuaire.restreint && annuaire.comptes[0]) {
+        const id = annuaire.comptes[0].id;
+        const liaison = liaisonPourCompte(memoireNavigateur, id);
+        if (liaison) {
+          await auPlus(
+            synchroniserCompteAmi({ liaison, id, memoire: memoireNavigateur, fichiers: stockage as never, lire: async () => annuaire, ecrire: ecrireAnnuaireDisque }),
+            6_000,
+          );
+          annuaire = annuaireRef.current ?? annuaire;
+        }
+      }
+      annuaireRef.current = annuaire;
+      await demarrer(annuaire);
+    })().catch(erreur => setEtat({ phase: 'echec', motif: erreurTexte(erreur) }));
+  }, [lireAnnuaireDisque, ecrireAnnuaireDisque, demarrer, stockage]);
+
+  // ------------------------------------------------ Relier ce navigateur à un compte
+
+  /** Fichiers de ce navigateur (compte principal et comptes de l'annuaire d'ici). */
+  const fichiersLocaux = useCallback(async (): Promise<NomFichier[]> => {
+    const annuaire = await lireAnnuaireDisque();
+    const ids = annuaire.heritage ? annuaire.heritage.map(p => p.id) : [ID_PRINCIPAL, ...annuaire.comptes.map(c => c.id)];
+    return ['profils', ...[...new Set([ID_PRINCIPAL, ...ids])].flatMap(id => Object.values(fichiersDuProfil(id)) as NomFichier[])];
+  }, [lireAnnuaireDisque]);
+
+  /** Installe le compte relié : l'ancien contenu du navigateur est effacé, le code retenu. */
+  const installerLiaison = useCallback(
+    async (relie: CompteRelie) => {
+      setEtat({ phase: 'chargement', message: 'Installation du compte…' });
+      for (const nom of await fichiersLocaux()) {
+        if (nom !== 'profils') await stockage.ecrire(nom, new Uint8Array(0));
+      }
+      oublierSuivi(memoireNavigateur);
+      await ecrireAnnuaireDisque(relie.annuaire);
+      retenirLiaison(memoireNavigateur, relie.liaison);
+      // Page rechargée : plus rien de l'ancien contenu ni de l'ancienne session en mémoire.
+      window.location.reload();
+    },
+    [fichiersLocaux, stockage, ecrireAnnuaireDisque],
+  );
+
+  /** « Relier » : vérifie le code, puis installe — ou demande d'abord s'il faut remplacer un ancien coffre. */
+  const relier = useCallback(
+    async (code: string) => {
+      const relie = await preparerLiaison(code);
+      const annuaire = await lireAnnuaireDisque();
+      const coffre = await stockage.lire('coffre');
+      const ancien = (coffre && coffre.length > 0) || aDesAmis(annuaire);
+      if (ancien) {
+        setEtat({ phase: 'remplacer', relie });
+      } else {
+        await installerLiaison(relie);
+      }
+    },
+    [lireAnnuaireDisque, stockage, installerLiaison],
+  );
+
+  /** Sauvegarde de l'ancien contenu du navigateur, tel quel (chiffré), dans un fichier téléchargé. */
+  const exporterAncien = useCallback(async () => {
+    const fichiers: Record<string, string> = {};
+    for (const nom of await fichiersLocaux()) {
+      const octets = await stockage.lire(nom);
+      if (octets && octets.length > 0) fichiers[nom] = versBase64(octets);
+    }
+    const contenu = JSON.stringify({ format: 'applibourse-ancien-navigateur', version: 1, date: new Date().toISOString(), fichiers }, null, 1);
+    const lien = document.createElement('a');
+    lien.href = URL.createObjectURL(new Blob([contenu], { type: 'application/json' }));
+    lien.download = `appdashboard-ancien-coffre-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(lien);
+    lien.click();
+    lien.remove();
+    return true;
+  }, [fichiersLocaux, stockage]);
 
   // Dernier filet : on force l'ecriture avant la fermeture de la fenetre.
   useEffect(() => {
@@ -314,6 +519,122 @@ function Racine() {
     };
   }, [etat]);
 
+  // Tours de synchronisation des comptes, une fois le compte déverrouillé (voir synchroComptes.ts).
+  const etatRef = useRef(etat);
+  etatRef.current = etat;
+  const sessionPrete = etat.phase === 'prete' && !etat.adminSur && etat.profil.id !== 'leurre' ? etat.session : undefined;
+  useEffect(() => {
+    const courant = etatRef.current;
+    if (!sessionPrete || courant.phase !== 'prete') {
+      return undefined;
+    }
+    const session = sessionPrete;
+    const profil = courant.profil;
+    let arrete = false;
+    let dernier = 0;
+    let minuterie: ReturnType<typeof setTimeout> | undefined;
+    const plan = { enTour: false, demander: (delai = 0) => undefined as void };
+    const effacerDe = async (id: string) => {
+      const noms = fichiersDuProfil(id) as { coffre: NomFichier; portefeuille: NomFichier };
+      await stockage.ecrire(noms.coffre, new Uint8Array(0));
+      await stockage.ecrire(noms.portefeuille, new Uint8Array(0));
+    };
+    const tour = async () => {
+      if (arrete || plan.enTour || session.session.statut() !== 'deverrouille') {
+        return;
+      }
+      plan.enTour = true;
+      try {
+        const pontMaitre = await liaisonDuPont();
+        if (profil.admin) {
+          const config = lireConfigRelais(session.session.base());
+          const liaison: Liaison | undefined = config
+            ? { relais: config.relais, jeton: config.jeton, ...(config.site ? { site: config.site } : {}) }
+            : liaisonPourCompte(memoireNavigateur, ID_PRINCIPAL, pontMaitre);
+          if (!liaison || !estMaitre(liaison)) {
+            return;
+          }
+          // Retenu hors de la base : l'écran prénom de ce navigateur connaîtra les comptes avant la connexion.
+          retenirLiaison(memoireNavigateur, liaison);
+          const depot = new DepotParametres(session.session.base());
+          const bilan = await synchroniserComptesAdmin({
+            liaison,
+            memoire: memoireNavigateur,
+            fichiers: stockage as never,
+            lire: lireAnnuaireDisque,
+            ecrire: ecrireAnnuaireDisque,
+            cles: () => clesAdminDe(session),
+            effacerFichiers: effacerDe,
+            donnees: { lire: () => depot.lire(CLE_DONNEES), ecrire: valeur => depot.ecrire(CLE_DONNEES, valeur), cleSynchro: session.session.cleDerivee('synchro') },
+          });
+          if (bilan.annuaireChange && annuaireRef.current) {
+            const cles = clesAdminDe(session);
+            try {
+              const vue = ouvrirAnnuaireAdmin(annuaireRef.current, cles);
+              setEtat(c => (c.phase === 'prete' && c.session === session ? { ...c, profil: vue.profils[0], profils: vue.profils } : c));
+            } finally {
+              effacer(cles);
+            }
+          }
+          if (bilan.annuaireChange || bilan.donneesChangent) {
+            setVersionComptes(v => v + 1);
+          }
+          if (bilan.erreurs.length > 0) {
+            console.warn('Synchronisation des comptes :', bilan.erreurs[0]);
+          }
+        } else {
+          const liaison = liaisonPourCompte(memoireNavigateur, profil.id, pontMaitre);
+          if (!liaison) {
+            return;
+          }
+          await session.vider();
+          const bilan = await synchroniserCompteAmi({
+            liaison,
+            id: profil.id,
+            memoire: memoireNavigateur,
+            fichiers: stockage as never,
+            lire: lireAnnuaireDisque,
+            ecrire: ecrireAnnuaireDisque,
+          });
+          if (bilan.annuaireChange && annuaireRef.current) {
+            const suivant = profilAmi(annuaireRef.current, profil.id, profil.nom);
+            setEtat(c => (c.phase === 'prete' && c.session === session ? { ...c, profil: suivant, profils: [suivant] } : c));
+          }
+        }
+      } catch (erreur) {
+        console.warn('Synchronisation des comptes :', erreurTexte(erreur));
+      } finally {
+        plan.enTour = false;
+        dernier = Date.now();
+      }
+    };
+    plan.demander = (delai = 0) => {
+      if (minuterie) clearTimeout(minuterie);
+      minuterie = setTimeout(() => void tour(), delai);
+    };
+    planComptes.current = plan;
+    const intervalle = setInterval(() => {
+      if (session.session.statut() === 'deverrouille' && Date.now() - dernier > INTERVALLE_COMPTES_MS) {
+        void tour();
+      }
+    }, 3_000);
+    const ecoute = session.session.surEcriture?.(() => {
+      if (!plan.enTour) plan.demander(5_000);
+    });
+    const visible = () => {
+      if (document.visibilityState === 'visible') plan.demander(500);
+    };
+    document.addEventListener('visibilitychange', visible);
+    return () => {
+      arrete = true;
+      clearInterval(intervalle);
+      if (minuterie) clearTimeout(minuterie);
+      ecoute?.();
+      document.removeEventListener('visibilitychange', visible);
+      if (planComptes.current === plan) planComptes.current = undefined;
+    };
+  }, [sessionPrete, stockage, lireAnnuaireDisque, ecrireAnnuaireDisque]);
+
   if (etat.phase === 'chargement') {
     return (
       <View style={[styles.centre, { backgroundColor: palette.fond }]}>
@@ -337,6 +658,29 @@ function Racine() {
     );
   }
 
+  if (etat.phase === 'accueil') {
+    return (
+      <AccueilSite
+        codeConnu={etat.code}
+        erreur={etat.erreur}
+        onRelier={relier}
+        onCreer={() => void ouvrir({ id: ID_PRINCIPAL, nom: 'Moi', admin: true })}
+      />
+    );
+  }
+
+  if (etat.phase === 'remplacer') {
+    const ami = etat.relie.compte;
+    return (
+      <RemplacerDonnees
+        compte={ami ? 'votre compte' : 'votre compte du PC'}
+        onExporter={exporterAncien}
+        onRemplacer={() => installerLiaison(etat.relie)}
+        onAnnuler={() => window.location.reload()}
+      />
+    );
+  }
+
   if (etat.phase === 'connexion') {
     // Aucun compte n'est listé : on retrouve le sien par son prénom.
     return (
@@ -348,7 +692,7 @@ function Racine() {
           if (trouve) {
             void ouvrir(trouve);
           } else {
-            ouvrirLeurre(prenom);
+            void ouvrirLeurre(prenom);
           }
         }}
       />
@@ -479,9 +823,20 @@ function Racine() {
     await stockage.ecrire(fichiers.portefeuille, new Uint8Array(0));
   };
 
+  // Site : « Lier à mon compte » pour TOUS (administrateur avec le code du PC, ami avec le sien).
+  const liaisonsIci = lireLiaisons(memoireNavigateur);
+  const lierSite: ControleProfils['lier'] = pont()
+    ? undefined
+    : {
+        codeConnu: liaisonsIci.comptes[profil.id] ?? liaisonsIci.maitre ?? Object.values(liaisonsIci.comptes)[0],
+        onLier: relier,
+        suggererAutreCoffre: Boolean(etat.autreCoffre),
+      };
   const controle: ControleProfils = {
     actuel: profil,
     tous: profils,
+    lier: adminSur ? undefined : lierSite,
+    versionComptes,
     peutChanger: Boolean(adminSur) || (annuaireRef.current ? aDesAmis(annuaireRef.current) : false) || profil.id === 'leurre',
     politique: annuaireRef.current?.politique,
     sessionAdmin: adminSur ? { nomCompte: profil.nom } : undefined,
@@ -587,6 +942,23 @@ function Racine() {
         avecCles(async (_cles, annuaire) => {
           await rafraichirAdmin(retablirSequestre(annuaire, id), true);
         }),
+      onCodeSite: async (id: string) => {
+        exigerAdmin();
+        if (!profils.some(p => p.id === id && !p.admin)) {
+          throw new Error('Compte introuvable.');
+        }
+        const config = lireConfigRelais(session.session.base());
+        const maitre: Liaison | undefined = config
+          ? { relais: config.relais, jeton: config.jeton, ...(config.site ? { site: config.site } : {}) }
+          : liaisonPourCompte(memoireNavigateur, ID_PRINCIPAL, await liaisonDuPont());
+        if (!maitre || !estMaitre(maitre)) {
+          throw new Error('Reliez d’abord cet appareil au relais (Paramètres › Synchronisation), puis réessayez.');
+        }
+        const liaison = liaisonPourProfil(maitre, id);
+        // Son compte (projection, coffre, portefeuille) part tout de suite sur le relais.
+        planComptes.current?.demander(300);
+        return { code: encoderLiaison(liaison), lien: lienSite(liaison) };
+      },
       onOuvrirCompte: async (id: string, code: string) => {
         const ami = profils.find(p => p.id === id && !p.admin);
         if (!ami) {

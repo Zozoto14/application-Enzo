@@ -85,9 +85,18 @@ export function Administration({ contexte, theme, registre, onRetour, onTheme }:
   const verrouRef = useRef(verrou);
   verrouRef.current = verrou;
 
+  // Données reçues d'un autre appareil (synchronisation des comptes) : relues.
+  const versionComptes = controle?.versionComptes ?? 0;
+  useEffect(() => {
+    if (services && versionComptes > 0) {
+      donneesRef.current = chargerDonnees(services.stockage);
+      setDonnees(donneesRef.current);
+    }
+  }, [services, versionComptes]);
   const majDonnees = useCallback(
     (changer: (d: DonneesAdmin) => DonneesAdmin) => {
-      const suivantes = changer(donneesRef.current);
+      // Toujours à partir de ce qui est enregistré : une réception entre-temps n'est pas écrasée.
+      const suivantes = changer(services ? chargerDonnees(services.stockage) : donneesRef.current);
       donneesRef.current = suivantes;
       if (services) {
         enregistrerDonnees(services.stockage, suivantes);

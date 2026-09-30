@@ -40,10 +40,10 @@ export function LierCompte({
 
   return (
     <View style={[styles.cadre, { borderColor: palette.accent, backgroundColor: palette.surface }]} testID="lier-compte">
-      <Text style={{ color: palette.texte, fontWeight: '800', fontSize: 17 }}>🔗 Déjà un compte sur votre PC ?</Text>
+      <Text style={{ color: palette.texte, fontWeight: '800', fontSize: 17 }}>🔗 Déjà un compte ailleurs ?</Text>
       <SousTitre>
-        Liez cet appareil : il s’ouvrira avec le même mot de passe et le même code d’authentification que le PC, et
-        votre portefeuille arrivera tout seul.
+        Liez cet appareil : il s’ouvrira avec le même prénom, le même mot de passe et le même code d’authentification
+        qu’ailleurs, et votre portefeuille arrivera tout seul.
       </SousTitre>
       {codeConnu ? (
         <Text style={{ color: palette.hausse, fontWeight: '600' }} testID="code-connu">
@@ -52,7 +52,7 @@ export function LierCompte({
       ) : (
         <Champ
           etiquette="Code de liaison"
-          indication="Sur le PC : Paramètres › Synchronisation › Relier un autre appareil › Copier le code. Il commence par AB1."
+          indication="Administrateur : sur le PC, Paramètres › Synchronisation › Relier un autre appareil › Copier le code. Ami : le code de connexion envoyé par l’administrateur. Il commence par AB1."
           placeholder="AB1.…"
           value={code}
           onChangeText={setCode}
@@ -63,8 +63,8 @@ export function LierCompte({
       )}
       {remplace ? (
         <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>
-          Le compte actuel de cet appareil sera remplacé par celui du PC. Ce qui n’a jamais été synchronisé depuis cet
-          appareil sera perdu.
+          Le coffre actuel de cet appareil sera remplacé par celui de votre compte (sur le site, une sauvegarde de l’ancien
+          vous est d’abord proposée).
         </Text>
       ) : null}
       {erreur ? <Alerte message={erreur} /> : null}

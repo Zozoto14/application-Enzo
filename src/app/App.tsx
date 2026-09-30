@@ -719,7 +719,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // « Lier à mon compte » : ce nouvel appareil adopte le compte du PC.
   const [messageDeverrouillage, setMessageDeverrouillage] = useState<string | undefined>();
   const codeLiaisonConnu = liaisonDuPc ? encoderLiaison(liaisonDuPc) : liaisonEnAttente();
-  const lier = !estAdmin ? undefined : {
+  // Sur le site, l'hôte fournit son propre « Lier » (tous les comptes, remplacement d'un ancien coffre).
+  const lier = profils?.lier ?? (!estAdmin ? undefined : {
     codeConnu: codeLiaisonConnu && decoderLiaison(codeLiaisonConnu) ? codeLiaisonConnu : undefined,
     onLier: async (code: string) => {
       const liaison = decoderLiaison(code);
@@ -735,7 +736,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       );
       rafraichir();
     },
-  };
+  });
 
   const genererRapport = useCallback(
     (annee: number) => {
@@ -2074,6 +2075,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             secondesAvantNouvelEssai={verrou?.verrouille ? verrou.secondesRestantes : 0}
             lier={lier}
             message={messageDeverrouillage}
+            suggererAutreCoffre={Boolean(profils?.lier?.suggererAutreCoffre)}
           />
         )
       ) : surLeHub ? (

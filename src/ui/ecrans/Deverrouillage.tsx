@@ -30,6 +30,11 @@ export interface DeverrouillageProps {
   lier?: OptionsLier;
   /** Message d'accueil, par exemple juste après une liaison. */
   message?: string;
+  /**
+   * Ce navigateur contient un autre coffre que celui du compte relié : après
+   * un échec, proposer de reprendre celui du compte (code de liaison connu).
+   */
+  suggererAutreCoffre?: boolean;
 }
 
 export function Deverrouillage({
@@ -40,6 +45,7 @@ export function Deverrouillage({
   enCours = false,
   lier,
   message,
+  suggererAutreCoffre = false,
 }: DeverrouillageProps) {
   const [montrerLier, setMontrerLier] = useState(false);
   const [motDePasse, setMotDePasse] = useState('');
@@ -89,6 +95,14 @@ export function Deverrouillage({
       />
 
       {erreur ? <Alerte message={erreur} /> : null}
+      {erreur && suggererAutreCoffre && lier?.codeConnu && !montrerLier ? (
+        <View style={{ gap: ESPACEMENT.s }} testID="suggestion-autre-coffre">
+          <Text style={{ color: palette.texte, fontWeight: '600' }}>
+            Ce navigateur contient un autre coffre : reprendre celui de ton compte ?
+          </Text>
+          <Bouton titre="Reprendre le coffre de mon compte" variante="discret" pleineLargeur onPress={() => setMontrerLier(true)} testID="reprendre-coffre" />
+        </View>
+      ) : null}
 
       {verrouille ? (
         <Alerte
@@ -131,7 +145,7 @@ export function Deverrouillage({
           <LierCompte {...lier} remplace />
         ) : (
           <Bouton
-            titre="Lier à mon compte du PC"
+            titre="Lier à mon compte (code de liaison)"
             pleineLargeur
             variante="discret"
             desactive={enCours}

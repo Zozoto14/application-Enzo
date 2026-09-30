@@ -323,6 +323,7 @@ function Fiche({
   const [code, setCode] = useState<{ code: string; creeLe: string } | undefined>();
   const [codeSaisi, setCodeSaisi] = useState('');
   const [ouverture, setOuverture] = useState(false);
+  const [codeSite, setCodeSite] = useState<{ code: string; lien?: string } | undefined>();
   const statut = statutCompte(profil, maintenant);
   const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
@@ -376,6 +377,16 @@ function Fiche({
         setCode(lu);
         outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Code d’accès administrateur de ${profil.nom} affiché` });
         return lu ? undefined : 'Aucun code : le séquestre de ce compte n’existe pas encore.';
+      }),
+    );
+  const envoyerCodeSite = () =>
+    outils.exigerIdentite(`Code de connexion au site pour ${profil.nom}`, () =>
+      outils.agir('Préparation du code…', async () => {
+        verifierSur(outils.acteur, 'regenerer-identifiants', outils.tous, profil.id);
+        const valeurs = await controle.onCodeSite!(profil.id);
+        setCodeSite(valeurs);
+        outils.journaliser({ type: 'identifiants', ...cibleJournal, action: `Code de connexion au site préparé pour ${profil.nom}` });
+        return `Code de ${profil.nom} prêt : son compte est publié sur le relais d’ici une minute.`;
       }),
     );
   const regenererCode = () =>
@@ -638,6 +649,31 @@ function Fiche({
           </>
         )}
       </View>
+
+      {gestionnaire || !controle.onCodeSite ? null : (
+        <>
+          <Intertitre theme={theme}>Connexion sur le site ou un téléphone</Intertitre>
+          <Text style={[attenue, { fontSize: 12 }]}>
+            Un code PROPRE à {profil.nom} : il n’ouvre que son compte (ni l’annuaire, ni les autres comptes). {profil.nom} le saisit une fois sur son navigateur, puis se connecte avec son prénom, son mot de passe et son code, comme ici.
+          </Text>
+          {codeSite ? (
+            <View style={[commun.avis, { borderLeftColor: theme.teintes.admin, backgroundColor: teinteTransparente(theme.teintes.admin, 0.12), gap: 4 }]}>
+              <Text style={[texte, { fontSize: 12 }]} selectable testID="admin-code-site">
+                {codeSite.code}
+              </Text>
+              {codeSite.lien ? (
+                <Text style={[attenue, { fontSize: 12 }]} selectable testID="admin-lien-site">
+                  Lien direct : {codeSite.lien}
+                </Text>
+              ) : null}
+              <Text style={[attenue, { fontSize: 12 }]}>À transmettre à {profil.nom} seul·e, par un canal privé.</Text>
+            </View>
+          ) : null}
+          <View style={commun.actions}>
+            <BoutonHub theme={theme} titre="Envoyer un code de connexion au site" onPress={envoyerCodeSite} testID="admin-code-site-generer" />
+          </View>
+        </>
+      )}
 
       {gestionnaire ? null : (
         <>

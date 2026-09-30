@@ -11,6 +11,7 @@ import { ESPACEMENT, RAYON } from '../theme';
 import type { OptionsNouveauProfil, Profil } from '../../profils/profils';
 import type { PolitiqueHub } from '../../hub/admin/politique';
 import type { IdentifiantsAmi } from '../../profils/identifiants';
+import type { OptionsLier } from './LierCompte';
 
 export interface ControleProfils {
   actuel: Profil;
@@ -72,6 +73,19 @@ export interface ControleProfils {
   onRetablirAcces?(id: string): Promise<void>;
   /** Ouvre le compte d'un ami avec son code d'accès (la session de l'administrateur se ferme). */
   onOuvrirCompte?(id: string, code: string): Promise<void>;
+  /**
+   * « Envoyer un code de connexion au site » : code de liaison PROPRE à cet
+   * ami (jeton de profil, jamais le jeton maître), et le lien qui le porte.
+   */
+  onCodeSite?(id: string): Promise<{ code: string; lien?: string }>;
+  /**
+   * « Lier à mon compte » fourni par l'hôte (site) : remplace celui de l'app,
+   * pour tous les comptes. `suggererAutreCoffre` : après un échec de
+   * déverrouillage, proposer de reprendre le coffre du compte relié.
+   */
+  lier?: OptionsLier & { suggererAutreCoffre?: boolean };
+  /** Change quand la synchronisation des comptes a reçu quelque chose (Administration à relire). */
+  versionComptes?: number;
 }
 
 /** Texte de transparence montré à un ami (création du compte, Paramètres). */
@@ -115,8 +129,8 @@ export function CarteProfils({ controle }: { controle: ControleProfils }) {
         ) : (
           <>
             <SousTitre>
-              Ce profil a été créé par l’administrateur de cet appareil. Il reste sur cet appareil (pas de synchronisation). Aucun
-              autre compte ne voit tes données, et tu ne vois pas les leurs.
+              Ce profil a été créé par l’administrateur. Pour l’ouvrir aussi sur le site ou ton téléphone, demande-lui ton code de
+              connexion : il n’ouvre que ton compte. Aucun autre compte ne voit tes données, et tu ne vois pas les leurs.
             </SousTitre>
             <View style={[styles.profil, { borderColor: palette.accent }]} testID="transparence-admin">
               <Text style={{ color: palette.texte, flex: 1 }}>
