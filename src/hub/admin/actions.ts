@@ -170,9 +170,8 @@ export function verifierModifications(acteur: Acteur | undefined, avant: readonl
     const a = avant.find(x => x.id === p.id);
     if (!a || JSON.stringify(a) === JSON.stringify(p)) continue;
     if (p.admin) {
-      const { politique: _pa, ...resteA } = a;
-      const { politique: _pp, ...resteP } = p;
-      if (JSON.stringify(resteA) !== JSON.stringify(resteP)) exiger(acteur, 'modifier-admin');
+      const sansPolitique = (x: Profil) => JSON.stringify({ ...x, politique: undefined });
+      if (sansPolitique(a) !== sansPolitique(p)) exiger(acteur, 'modifier-admin');
       exiger(acteur, 'politique-apps');
       continue;
     }

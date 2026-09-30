@@ -41,6 +41,39 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.04',
+    date: '2026-10-04',
+    titre: 'Rangs : Fondateur, Administrateur, Gestionnaire',
+    resume:
+      'Quatre rangs ordonnés — Fondateur › Administrateur › Gestionnaire › Ami. Chacun n’agit que sur les rangs strictement inférieurs, et la clé d’un compte n’est scellée que pour les rangs au-dessus.',
+    illustration: 'sequestre',
+    fonctionnalites: [
+      {
+        id: 'rangs-regle',
+        emoji: '🏅',
+        titre: 'Un rang n’agit que vers le bas',
+        texte:
+          'Un Administrateur gère les Gestionnaires et les Amis — jusqu’à ouvrir leur compte avec SES propres codes d’accès — mais ne voit, n’ouvre ni ne modifie jamais un Fondateur ou un autre Administrateur. Chaque accès est journalisé, avec son nom.',
+      },
+      {
+        id: 'rangs-changer',
+        emoji: '🔁',
+        titre: '« Changer le rang »',
+        texte:
+          'Fiche d’un compte › Rang : seuls les rangs permis sont proposés, avec ce que chacun permet. Nommer un Administrateur crée sa clé de séquestre et lui re-scelle les comptes inférieurs ; nommer un Fondateur demande une confirmation forte.',
+        essayer: { genre: 'app', app: 'administration' },
+        adminSeulement: true,
+      },
+      {
+        id: 'rangs-transparence',
+        emoji: '👁️',
+        titre: 'Qui peut accéder à ton compte',
+        texte:
+          'Paramètres › Confidentialité le dit selon ton rang : « Les administrateurs et fondateurs peuvent accéder à ton compte » (amis), « Les fondateurs peuvent accéder à ton compte » (administrateurs), rien pour un Fondateur. Le dernier accès indique qui.',
+      },
+    ],
+  },
+  {
     version: '2026.10.03',
     date: '2026-10-03',
     titre: 'Le site, exactement comme le PC',
