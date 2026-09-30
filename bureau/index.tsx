@@ -1002,6 +1002,10 @@ function Racine() {
         throw new Error('Déverrouillez votre compte.');
       }
       const annuaire = await lireAnnuaireDisque();
+      if (annuaire.restreint) {
+        // Navigateur relié avec le code propre à ce compte : il ne connaît que lui.
+        throw new Error('Sur ce navigateur, seul votre compte est connu : gérez vos amis depuis l’appareil de l’administrateur.');
+      }
       if (roleDuCompte(annuaire, profil.id) !== 'gestionnaire') {
         throw new Error('Ce compte n’est plus gestionnaire.');
       }
@@ -1013,7 +1017,7 @@ function Racine() {
       get: () => {
         try {
           const annuaire = annuaireRef.current;
-          if (!annuaire || annuaire.heritage || session.session.statut() !== 'deverrouille') {
+          if (!annuaire || annuaire.heritage || annuaire.restreint || session.session.statut() !== 'deverrouille') {
             return undefined;
           }
           const comptes = carnetCourant()

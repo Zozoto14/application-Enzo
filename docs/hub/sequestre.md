@@ -254,3 +254,28 @@ prénoms), soit de sceller pour lui avec une nouvelle clé (niveau 2).
   demande l'extension de sa portée aux fichiers du compte qu'il crée/régénère
   (`profil:etendre`, ≤ 16 comptes, jamais `principal`). La logique de l'app exige
   le rôle ; la barrière qui protège le contenu reste cryptographique.
+
+## 8. Plusieurs appareils : ce qui passe par le relais
+
+Détail et tableau complet : `docs/synchro-relais.md` (« Portées du relais », « Ce qui est publié »).
+
+- **L'annuaire complet** part dans l'espace de l'administrateur (`p/principal/`), lisible avec le seul jeton
+  maître. Il est déjà opaque (empreintes salées, prénoms scellés par une clé tirée du prénom, bloc `prive` et
+  suivis scellés pour l'administrateur) ; un test vérifie qu'aucun prénom n'y figure en clair.
+- **Un ami** ne reçoit que sa **projection** (`projectionAmi`) : son entrée, le sel, la politique des apps et la
+  clé publique de séquestre — ni l'empreinte ni le prénom de l'administrateur, ni les autres comptes, ni le bloc
+  privé. Sur son navigateur, l'annuaire est marqué `restreint` : « admin », le prénom de l'administrateur ou celui
+  d'un autre ami mènent au **leurre**, exactement comme un prénom inconnu.
+- **Code propre à l'ami** : « Envoyer un code de connexion au site » (fiche du compte, après vérification
+  d'identité, inscrit au journal) rend un code AB1 portant un jeton de profil `p1.<id>.<HMAC(jeton maître, id)>`.
+  Ce jeton n'ouvre que `p/<id>/` : ni l'annuaire, ni les données d'administration, ni un autre ami (403). Il ne
+  contient pas le jeton maître et ne permet pas de le retrouver (HMAC-SHA256).
+- **Coffre et portefeuille de l'ami** voyagent tels qu'ils sont sur le disque : le relais et l'administrateur n'y lisent
+  rien de plus qu'avant. Le séquestre ne change pas : l'administrateur ouvre toujours le compte d'un ami avec le code
+  d'accès, sur n'importe lequel de ses appareils (les fichiers de l'ami y sont synchronisés).
+- **Retour de l'ami** (`p/<id>/compte`) : suivi de connexion et dépôt de séquestre, déjà scellés pour la clé publique de
+  l'administrateur. L'administrateur n'en reprend que cela.
+- **Limites assumées** : un ami peut réécrire sa propre projection sur le relais (comme il peut modifier le fichier
+  `profils` de son appareil) — l'administrateur ne la relit jamais, ses accès font foi. Un gestionnaire relié avec son
+  seul code n'a pas d'Administration sur ce navigateur (il ne connaît que son compte) : il gère ses amis depuis
+  l'appareil de l'administrateur.

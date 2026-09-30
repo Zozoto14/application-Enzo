@@ -67,9 +67,11 @@ describe('devblog', () => {
     expect(ids(true, false)).not.toContain('tu-es-gestionnaire');
     // Un simple ami voit l'information générale, pas « tu es gestionnaire ».
     expect(decider(undefined, { profilNeuf: false, admin: false }, [entree]).genre).toBe('afficher');
-    // La synchronisation (dernière entrée) est réservée à l'administrateur : rien pour un ami.
-    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('rien');
-    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.01', '2026.09.30', '2026.09.29']);
+    // La synchronisation (2026.10.01) est réservée à l'administrateur : rien pour un ami.
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES.slice(1)).genre).toBe('rien');
+    // Le site comme le PC (dernière entrée) : « relier un navigateur » concerne aussi les amis.
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('afficher');
+    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.03', '2026.10.01', '2026.09.30', '2026.09.29']);
   });
 
   it('marquer lu est idempotent et tolère un état corrompu', () => {

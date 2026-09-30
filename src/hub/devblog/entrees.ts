@@ -41,6 +41,40 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.03',
+    date: '2026-10-03',
+    titre: 'Le site, exactement comme le PC',
+    resume:
+      'Sur le site ou un téléphone, on retrouve son compte : même prénom, même mot de passe, même code. Les comptes, la politique des apps et le journal de l’Administration sont les mêmes partout.',
+    illustration: 'isolation',
+    fonctionnalites: [
+      {
+        id: 'site-relier',
+        emoji: '🔗',
+        titre: 'Relier un navigateur d’abord',
+        texte:
+          'Un navigateur neuf propose en premier « J’ai déjà un compte (le relier) » : le code du PC, une seule fois, puis l’écran prénom comme sur le PC. Un ancien coffre créé sur le site se remplace après une sauvegarde proposée.',
+      },
+      {
+        id: 'site-comptes',
+        emoji: '👥',
+        titre: 'Comptes et Administration synchronisés',
+        texte:
+          'Un compte ajouté sur le PC apparaît sur le site (et inversement) ; accès, politique des apps, réglages et journal suivent. Rien n’est lisible sur le relais : empreintes, blocs scellés.',
+        essayer: { genre: 'app', app: 'administration' },
+        adminSeulement: true,
+      },
+      {
+        id: 'site-code-ami',
+        emoji: '🎟️',
+        titre: 'Un code de connexion par ami',
+        texte:
+          'Fiche d’un compte › « Envoyer un code de connexion au site » : ce code n’ouvre que le compte de cet ami — jamais l’annuaire, ni les autres comptes, ni le vôtre.',
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.01',
     date: '2026-10-01',
     titre: 'Synchronisation complète',
