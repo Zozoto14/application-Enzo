@@ -34,9 +34,9 @@ import { Avis, Bouton, styleAttenue } from './ui';
 import { MESSAGE_SITE } from '../plateforme/reseauWeb';
 
 const ONGLETS: ReadonlyArray<readonly [Route['t'], string]> = [
-  ['accueil', 'Accueil'],
+  ['accueil', 'Découvrir'],
   ['catalogue', 'Catalogue'],
-  ['bibliotheque', 'Bibliothèque'],
+  ['bibliotheque', 'Ma bibliothèque'],
 ];
 
 function avancesDe(base: { lire(cle: string): string | undefined | null }) {
@@ -147,14 +147,17 @@ export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, context
         <ScrollView style={{ flex: 1 }} contentContainerStyle={st.defilement} keyboardShouldPersistTaps="handled">
           <View style={st.page}>
             <RetourHub theme={themeHub} onRetour={onRetour} />
-            <View style={st.entete}>
-              <View style={{ flexShrink: 1 }}>
-                <Text accessibilityRole="header" style={{ color: theme.texte, fontSize: 30, fontWeight: theme.poidsTitre, letterSpacing: -0.5, ...police(theme.policeTitre) }}>
+            {/* En-tête comme l'ancienne version : marque, sélecteur Animés | Films (l'actif prend l'accent de son univers), sections. */}
+            <View style={[st.entete, { borderBottomColor: theme.ligne }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ width: 34, height: 34, borderRadius: Math.min(theme.rayonMoyen, 8), backgroundColor: theme.accent, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: theme.surAccent, fontSize: 15, fontWeight: '900' }}>▶</Text>
+                </View>
+                <Text accessibilityRole="header" style={{ color: theme.texte, fontSize: 24, fontWeight: theme.poidsTitre, letterSpacing: -0.4, ...police(theme.policeTitre) }}>
                   Tsuzuku <Text style={{ color: theme.accent }}>続く</Text>
                 </Text>
-                <Text style={styleAttenue(theme, 13)}>Animés et films, sans serveur.</Text>
               </View>
-              <View style={st.modes} accessibilityRole="radiogroup" accessibilityLabel="Type de contenu">
+              <View style={[st.modes, { backgroundColor: themeHub.surface, borderColor: themeHub.ligne }]} accessibilityRole="radiogroup" accessibilityLabel="Type de contenu">
                 {(['anime', 'movie'] as const).map(m => {
                   const actif = m === mode;
                   const t = themeDuMode(themeHub, m);
@@ -166,29 +169,32 @@ export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, context
                       accessibilityState={{ checked: actif }}
                       accessibilityLabel={LIBELLE_MODE[m]}
                       onPress={() => choisirMode(m)}
-                      style={[st.mode, { borderRadius: Math.min(t.rayonMoyen, 10), backgroundColor: actif ? t.accent : 'transparent', borderColor: t.accent }]}>
-                      <Text style={{ color: actif ? t.surAccent : themeHub.texte, fontWeight: '700', fontSize: 14, ...police(themeHub.policeTexte) }}>{LIBELLE_MODE[m]}</Text>
+                      style={[st.mode, { backgroundColor: actif ? t.accent : 'transparent' }]}>
+                      <Text style={{ color: actif ? t.surAccent : themeHub.attenue, fontWeight: '800', fontSize: 14, ...police(themeHub.policeTexte) }}>
+                        {m === 'anime' ? '✦ ' : '▤ '}
+                        {LIBELLE_MODE[m]}
+                      </Text>
                     </Pressable>
                   );
                 })}
               </View>
-            </View>
-            <View style={st.onglets} accessibilityRole="tablist" accessibilityLabel="Sections de Tsuzuku">
-              {ONGLETS.map(([t, titre]) => {
-                const actif = ongletActif === t;
-                return (
-                  <Pressable
-                    key={t}
-                    testID={`onglet-app-${t}`}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected: actif }}
-                    accessibilityLabel={titre}
-                    onPress={() => onglet(t)}
-                    style={[st.onglet, { borderBottomColor: actif ? theme.accent : 'transparent' }]}>
-                    <Text style={{ color: actif ? theme.texte : theme.attenue, fontWeight: actif ? '700' : '500', fontSize: 15, ...police(theme.policeTexte) }}>{titre}</Text>
-                  </Pressable>
-                );
-              })}
+              <View style={st.onglets} accessibilityRole="tablist" accessibilityLabel="Sections de Tsuzuku">
+                {ONGLETS.map(([t, titre]) => {
+                  const actif = ongletActif === t;
+                  return (
+                    <Pressable
+                      key={t}
+                      testID={`onglet-app-${t}`}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected: actif }}
+                      accessibilityLabel={titre}
+                      onPress={() => onglet(t)}
+                      style={[st.onglet, { borderBottomColor: actif ? theme.accent : 'transparent' }]}>
+                      <Text style={{ color: actif ? theme.texte : theme.attenue, fontWeight: actif ? '800' : '600', fontSize: 15, ...police(theme.policeTexte) }}>{titre}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
               {onParametres ? <Bouton titre="⚙︎ Réglages" libelle="Réglages de Tsuzuku (Paramètres)" onPress={() => onParametres('tsuzuku')} testID="tsuzuku-reglages" style={{ marginLeft: 'auto' }} /> : null}
             </View>
             {!s.lectureSources ? <Avis texte={MESSAGE_SITE} testID="tsuzuku-site" /> : null}
@@ -205,9 +211,9 @@ const st = StyleSheet.create({
   racine: { flex: 1 },
   defilement: { flexGrow: 1 },
   page: { width: '100%', maxWidth: 1100, alignSelf: 'center', paddingHorizontal: 16, paddingTop: 20, paddingBottom: 56, gap: 18 },
-  entete: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },
-  modes: { flexDirection: 'row', gap: 8 },
-  mode: { minHeight: 44, minWidth: 92, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 2 },
-  onglets: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4, borderBottomWidth: 1, borderBottomColor: 'transparent' },
-  onglet: { minHeight: 44, paddingHorizontal: 12, justifyContent: 'center', borderBottomWidth: 3 },
+  entete: { flexDirection: 'row', alignItems: 'center', gap: 14, rowGap: 10, flexWrap: 'wrap', paddingBottom: 12, borderBottomWidth: 1 },
+  modes: { flexDirection: 'row', gap: 4, padding: 4, borderRadius: 999, borderWidth: 1 },
+  mode: { minHeight: 38, minWidth: 96, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', borderRadius: 999 },
+  onglets: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
+  onglet: { minHeight: 44, paddingHorizontal: 8, justifyContent: 'center', borderBottomWidth: 2 },
 });

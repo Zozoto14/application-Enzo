@@ -1,7 +1,8 @@
 /** Lecteur : trouve les lecteurs (lien manuel puis sources), joue, note la progression, enchaîne. */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { police } from '../../hub/themes';
 import { ajouterOuMettreAJour, enregistrerProgression, trouver, type Genre } from '../moteur/bibliotheque';
 import type { Lecteur } from '../moteur/resolution';
 import { useCharger, useTsuzuku } from './contexte';
@@ -84,12 +85,24 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
 
   return (
     <View style={{ gap: 14 }} testID="tsuzuku-lecteur">
-      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-        <Bouton titre="← Fiche" onPress={retour} testID="lecteur-retour" />
-        {kind === 'anime' ? <Bouton titre="◀ Précédent" desactive={n <= 1} onPress={() => remplacer({ t: 'lecteur', kind, id, numero: n - 1 })} testID="lecteur-precedent" /> : null}
-        {kind === 'anime' ? <Bouton titre="Suivant ▶" desactive={!aSuivant} onPress={suivant} testID="lecteur-suivant" /> : null}
+      {/* En-tête du lecteur (comme l'ancienne version) : retour à la fiche, « Épisode n sur N », titre, Précédent / Suivant. */}
+      <Pressable testID="lecteur-retour" accessibilityRole="link" accessibilityLabel="Retour à la fiche" onPress={retour} style={{ alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' }}>
+        <Text style={{ color: theme.accent, fontSize: 14, fontWeight: '800', ...police(theme.policeTexte) }}>← {meta?.titre ?? 'Fiche'}</Text>
+      </Pressable>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+        <View style={{ flexShrink: 1, gap: 2 }}>
+          <Text style={{ color: theme.attenue, fontSize: 11, fontWeight: '800', letterSpacing: 1.6, ...police(theme.policeTexte) }}>
+            {kind === 'anime' ? `ÉPISODE ${n}${meta?.total ? ` SUR ${meta.total}` : ''}` : `FILM${meta?.annee ? ` · ${meta.annee}` : ''}${meta?.duree ? ` · ${meta.duree} MIN` : ''}`}
+          </Text>
+          <Titre taille={28} testID="lecteur-titre">{meta ? `${meta.titre}${kind === 'anime' ? ` · Épisode ${n}` : ''}` : 'Lecture'}</Titre>
+        </View>
+        {kind === 'anime' ? (
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Bouton titre="‹ Précédent" desactive={n <= 1} onPress={() => remplacer({ t: 'lecteur', kind, id, numero: n - 1 })} testID="lecteur-precedent" />
+            <Bouton titre="Suivant ›" variante="plein" desactive={!aSuivant} onPress={suivant} testID="lecteur-suivant" />
+          </View>
+        ) : null}
       </View>
-      <Titre taille={20} testID="lecteur-titre">{meta ? `${meta.titre}${kind === 'anime' ? ` · Épisode ${n}` : ''}` : 'Lecture'}</Titre>
       <Etat enCours={charge.enCours} erreur={charge.erreur} onRecharger={charge.recharger}>
         {lecture && meta ? (
           <View style={{ gap: 12 }}>

@@ -452,7 +452,7 @@ export function RangeeReprendre({ titre, entrees, onLire, testID = 'rangee-repre
           return (
             <Pressable
               key={`${e.kind}-${e.id}`}
-              testID={`carte-${e.kind}-${e.id}`}
+              testID={`reprendre-${e.kind}-${e.id}`}
               accessibilityRole="button"
               accessibilityLabel={`${film ? 'Regarder' : 'Reprendre'} ${e.title}${film ? '' : `, épisode ${suivant}`}`}
               onPress={() => onLire(e)}
