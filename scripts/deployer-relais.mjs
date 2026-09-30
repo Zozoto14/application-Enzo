@@ -92,7 +92,7 @@ async function connexion() {
 async function deployerRelais(local) {
   if (aBlanc) {
     etape('Relais');
-    console.log('[à blanc] npx --yes wrangler@4 kv namespace create applibourse-boite (si absente), puis deploy --config ' + CONFIG_WRANGLER + ' et secret put JETON');
+    console.log('[à blanc] npx --yes wrangler@4 kv namespace create applibourse-boite (si absente), puis deploy --config ' + CONFIG_WRANGLER + ' et secret put JETON (puis DISCORD_WEBHOOK_URL si la variable existe)');
     return;
   }
   etape('Boîte aux lettres');
@@ -133,6 +133,25 @@ async function deployerRelais(local) {
     await wrangler(['secret', 'put', 'JETON', '--config', CONFIG_WRANGLER], { entree: `${local.jeton}\n` });
   }
   ecrireLocal(local);
+  await webhookSupport();
+}
+
+/**
+ * Support : l'adresse du webhook Discord est un SECRET du Worker, jamais écrite dans un fichier.
+ * Si DISCORD_WEBHOOK_URL est dans l'environnement du script, elle est transmise à wrangler (entrée
+ * standard, pas d'argument visible) ; sinon on rappelle la commande à lancer (docs/support-discord.md).
+ */
+async function webhookSupport() {
+  const adresse = process.env.DISCORD_WEBHOOK_URL?.trim();
+  if (!adresse) {
+    console.log('\nSupport : pour recevoir les tickets dans Discord, lancez une fois\n  npx --yes wrangler@4 secret put DISCORD_WEBHOOK_URL --config ' + CONFIG_WRANGLER + '\net collez l’adresse du webhook (voir docs/support-discord.md). Un redéploiement conserve ce secret.');
+    return;
+  }
+  if (!/^https:\/\/(?:(?:canary|ptb)\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(adresse)) {
+    throw new Error('DISCORD_WEBHOOK_URL n’a pas la forme d’une adresse de webhook Discord (https://discord.com/api/webhooks/…).');
+  }
+  etape('Webhook Discord du support');
+  await wrangler(['secret', 'put', 'DISCORD_WEBHOOK_URL', '--config', CONFIG_WRANGLER], { entree: `${adresse}\n` });
 }
 
 async function publierSite(local) {
