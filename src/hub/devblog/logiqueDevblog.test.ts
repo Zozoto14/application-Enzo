@@ -77,10 +77,13 @@ describe('devblog', () => {
     expect(ENTREES.find(e => e.version === '2026.10.04')!.titre).toBe('Tsuzuku arrive dans le hub');
     // Les rangs : la transparence concerne aussi les amis.
     expect(ENTREES.find(e => e.version === '2026.10.05')!.titre).toBe('Rangs : Fondateur, Administrateur, Gestionnaire');
-    // Les abonnements (dernière entrée) : un rappel amical concerne aussi les amis.
-    expect(ENTREES[0].titre).toBe('Gestion des abonnements');
+    // Les abonnements : un rappel amical concerne aussi les amis.
+    expect(ENTREES.find(e => e.version === '2026.10.06')!.titre).toBe('Gestion des abonnements');
+    // Tsuzuku (dernière entrée) : les sources partagées concernent aussi les amis.
+    expect(ENTREES[0].titre).toBe('Tsuzuku : sources partagées et assistant d’ajout');
+    expect(ENTREES[0].fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['tsuzuku-sources-partagees', 'tsuzuku-design']);
     expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('afficher');
-    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
+    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.07', '2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
   });
 
   it('marquer lu est idempotent et tolère un état corrompu', () => {

@@ -41,6 +41,50 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.07',
+    date: '2026-10-07',
+    titre: 'Tsuzuku : sources partagées et assistant d’ajout',
+    resume:
+      'Les sources de Tsuzuku sont désormais gérées par les Fondateurs dans Paramètres › Administration › Tsuzuku, et partagées, chiffrées, avec les utilisateurs choisis. Un assistant aide à décrire une nouvelle source à partir d’un lien. Et Tsuzuku retrouve son allure d’avant.',
+    illustration: 'isolation',
+    fonctionnalites: [
+      {
+        id: 'tsuzuku-sources-partagees',
+        emoji: '🔗',
+        titre: 'Sources partagées avec vous',
+        texte:
+          'Paramètres › Tsuzuku : les sources que l’administration vous partage (nom, animés ou films, état). Activez ou désactivez chacune pour vous seul ; vous ne pouvez pas les modifier, et aucune clé d’API ne vous est transmise.',
+        essayer: { genre: 'parametres' },
+      },
+      {
+        id: 'tsuzuku-partage-admin',
+        emoji: '🛡',
+        titre: 'Qui a accès à chaque source',
+        texte:
+          'Administration › Tsuzuku › Sources : pour chaque source, vous seul, tous les utilisateurs de Tsuzuku ou une sélection. La liste part chiffrée dans l’espace de chaque bénéficiaire ; un retrait est propagé. Clés d’API et options du moteur sont à côté, jamais réaffichées en entier.',
+        essayer: { genre: 'parametres' },
+        adminSeulement: true,
+      },
+      {
+        id: 'tsuzuku-assistant',
+        emoji: '🧭',
+        titre: 'Assistant d’ajout par lien',
+        texte:
+          'Collez l’adresse d’une page : l’app en résume la structure et prépare un texte à donner à une IA, qui propose la description complète de la source. Collez sa réponse : elle est vérifiée puis testée avant l’enregistrement. N’ajoutez que des sources dont vous avez le droit d’utiliser le contenu.',
+        essayer: { genre: 'parametres' },
+        adminSeulement: true,
+      },
+      {
+        id: 'tsuzuku-design',
+        emoji: '🎬',
+        titre: 'Tsuzuku comme avant',
+        texte:
+          'Bandeau « à la une », rangée « Reprendre » avec la progression, affiches avec note et badges « Déjà vu » / « Vu ailleurs », fiche immersive, liste d’épisodes numérotée, lecteur plus clair — dans le thème de votre hub.',
+        essayer: { genre: 'app', app: 'tsuzuku' },
+      },
+    ],
+  },
+  {
     version: '2026.10.06',
     date: '2026-10-06',
     titre: 'Gestion des abonnements',
