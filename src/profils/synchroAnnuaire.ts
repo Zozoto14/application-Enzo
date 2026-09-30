@@ -123,16 +123,17 @@ export function fusionnerAnnuaire(
   if (privesDiffèrent && typeof resultat.entites.prive === 'string') {
     const gagnant = resultat.entites.prive;
     const perdant = gagnant === locales.prive ? (distant!.entites.prive as string) : (locales.prive as string);
-    const ids = new Set(Object.keys(resultat.entites).filter(c => c.startsWith('compte:')).map(c => c.slice(8)));
+    const ids = new Set(Object.keys(resultat.entites).filter(c => c.startsWith('compte:')).map(c => c.slice('compte:'.length)));
     const reuni = fusionnerBlocsPrives(gagnant, perdant, ids, cles!, alea);
     if (reuni !== gagnant) {
       const entites = { ...resultat.entites, prive: reuni };
       const etatReuni = { ...resultat.etat, dates: { ...resultat.etat.dates, prive: maintenant } };
-      resultat = fusionner(entites, { ...etatReuni, connus: { ...etatReuni.connus, prive: '' } }, distant);
+      const retirees = resultat.retirees;
+      resultat = { ...fusionner(entites, etatReuni, distant), retirees, changeIci: true };
     }
   }
   const annuaire = annuaireDepuisEntites(resultat.entites, local.comptes.map(c => c.id));
-  const comptesRetires = resultat.retirees.filter(c => c.startsWith('compte:')).map(c => c.slice(8));
+  const comptesRetires = resultat.retirees.filter(c => c.startsWith('compte:')).map(c => c.slice('compte:'.length));
   return { ...resultat, annuaire, comptesRetires };
 }
 
