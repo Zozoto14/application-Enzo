@@ -75,3 +75,15 @@ export function espacesDuRelais(liaison: Liaison, requete: Fetch = fetch): Espac
 
 export const octetsEnCharge = (octets: Uint8Array): string => versBase64(octets);
 export const chargeEnOctets = (charge: string): Uint8Array => depuisBase64(charge);
+
+/**
+ * Délégations des titulaires (Administrateurs, Fondateurs autres que le
+ * compte historique) : pour chacun, les comptes de rang inférieur dont il
+ * peut lire et écrire le coffre et le portefeuille (jeton maître seulement).
+ */
+export async function publierDelegations(liaison: Liaison, delegations: Record<string, string[]>, requete: Fetch = fetch): Promise<void> {
+  const reponse = await appeler(liaison, '/rangs', { methode: 'PUT', corps: JSON.stringify({ delegations }) }, requete);
+  if (!reponse.ok) {
+    throw new ErreurRelais(reponse.status === 404 ? 'Relais à redéployer pour les rangs (délégations).' : `Le relais a répondu ${reponse.status} (délégations).`, reponse.status);
+  }
+}

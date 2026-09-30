@@ -26,13 +26,14 @@ import {
   annuaireDepuisEntites,
   appliquerRetourAmi,
   fusionnerAnnuaire,
-  projectionAmi,
+  projectionTitulaire,
   recevoirProjection,
   retourAmi,
   type RetourAmi,
 } from '../src/profils/synchroAnnuaire';
 import { ID_PRINCIPAL, fichiersDuProfil } from '../src/profils/profils';
-import { espacesDuRelais, type Espaces } from '../src/sync/relais/espaces';
+import { espacesDuRelais, publierDelegations, type Espaces } from '../src/sync/relais/espaces';
+import { NIVEAU_RANG } from '../src/hub/admin/roles';
 import {
   empreinte,
   fusionner,
@@ -75,6 +76,8 @@ export const CLES_MEMOIRE = {
   comptes: 'applibourse.synchro.comptes',
   /** Empreinte du coffre de l'administrateur reçu du relais (coffre « relié »). */
   coffreRelie: 'applibourse.synchro.coffreRelie',
+  /** Empreinte des délégations des titulaires publiées sur le relais. */
+  delegations: 'applibourse.synchro.delegations',
 } as const;
 
 // ------------------------------------------------------------ Mémoire
@@ -170,6 +173,8 @@ interface SuiviCompte {
   retourLu?: string;
   /** Empreinte du retour déposé (côté ami). */
   retour?: string;
+  /** Côté Fondateur : empreintes des actions d'un titulaire déjà reprises au journal. */
+  journalVus?: string[];
 }
 
 // ------------------------------------------------------------- Annuaire
@@ -295,10 +300,18 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
         const date = objets.compte?.date;
         if (date && date > (suivis[compte.id]?.retourLu ?? '')) {
           const recu = await lireDocument(espaces, compte.id, 'compte');
+          let journalVus = suivis[compte.id]?.journalVus ?? [];
           if (recu && recu.brut && typeof recu.brut === 'object') {
-            modifie = appliquerRetourAmi(modifie, compte.id, recu.brut as RetourAmi);
+            const retour = { ...(recu.brut as RetourAmi) };
+            // Actions d'un titulaire : chacune n'est reprise qu'une fois (son retour les garde toutes).
+            if (Array.isArray(retour.journal)) {
+              const vus = new Set(journalVus);
+              retour.journal = retour.journal.filter(e => typeof e === 'string' && !vus.has(empreinte(e)));
+              journalVus = [...journalVus, ...retour.journal.map(e => empreinte(e))].slice(-1000);
+            }
+            modifie = appliquerRetourAmi(modifie, compte.id, retour);
           }
-          suivis[compte.id] = { ...suivis[compte.id], retourLu: date };
+          suivis[compte.id] = { ...suivis[compte.id], retourLu: date, ...(journalVus.length > 0 ? { journalVus } : {}) };
         }
       } catch (erreur) {
         bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
@@ -325,7 +338,8 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
   const presents = new Set(annuaire.annuaire.comptes.map(c => c.id));
   for (const compte of annuaire.annuaire.comptes) {
     try {
-      const projection = projectionAmi(annuaire.annuaire, compte.id);
+      // Un titulaire reçoit aussi les comptes inférieurs (Administration sur le site) ; un ami, son entrée seule.
+      const projection = projectionTitulaire(annuaire.annuaire, compte.id);
       const h = projection ? empreinte(projection) : undefined;
       if (projection && h !== suivis[compte.id]?.projection) {
         await espaces.deposer(compte.id, 'annuaire', JSON.stringify(projection), horloge().toISOString());
@@ -371,6 +385,21 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
   ecrireJson(o.memoire, CLES_MEMOIRE.fichiers, etatFichiers);
   ecrireJson(o.memoire, CLES_MEMOIRE.comptes, suivis);
 
+  // 3 bis. Délégations des titulaires : le coffre et le portefeuille des comptes de rang inférieur.
+  try {
+    const delegations = delegationsDe(annuaire.annuaire);
+    const h = empreinte(delegations);
+    const publiee = lireJson<string | undefined>(o.memoire, CLES_MEMOIRE.delegations, undefined);
+    // Rien à publier tant qu'aucun titulaire n'existe (relais pas encore redéployé : aucune erreur).
+    if (h !== publiee && (publiee !== undefined || Object.keys(delegations).length > 0)) {
+      await publierDelegations(o.liaison, delegations, o.requete);
+      ecrireJson(o.memoire, CLES_MEMOIRE.delegations, h);
+      bilan.depots++;
+    }
+  } catch (erreur) {
+    bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
+  }
+
   // 4. Données d'administration (scellées par la clé de synchronisation).
   if (o.donnees) {
     try {
@@ -406,6 +435,22 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
     }
   }
   return bilan;
+}
+
+/**
+ * Délégations à publier : pour chaque Administrateur ou Fondateur (autre que
+ * le compte historique) qui a une paire, les comptes de rang strictement
+ * inférieur. Jamais un compte de rang égal ou supérieur.
+ */
+export function delegationsDe(annuaire: Annuaire): Record<string, string[]> {
+  const delegations: Record<string, string[]> = {};
+  for (const t of annuaire.comptes) {
+    const rang = t.acces.role;
+    if ((rang !== 'administrateur' && rang !== 'fondateur') || !t.titulaire?.cle) continue;
+    const ids = annuaire.comptes.filter(c => c.id !== t.id && NIVEAU_RANG[c.acces.role ?? 'ami'] < NIVEAU_RANG[rang]).map(c => c.id).sort();
+    if (ids.length > 0) delegations[t.id] = ids;
+  }
+  return delegations;
 }
 
 // ------------------------------------------------------------ Côté ami
@@ -481,6 +526,36 @@ export async function synchroniserCompteAmi(o: OptionsSynchroAmi): Promise<Bilan
     etatFichiers = issue.etat;
     if (issue.envoye) bilan.depots++;
   }
+  // Titulaire sur ce navigateur : les comptes inférieurs qu'il a ouverts ici (séquestre) repartent,
+  // et reviennent s'ils ont changé ailleurs. Par délégation, seulement coffre et portefeuille.
+  if (local.restreint && local.proprietaire === o.id && local.comptes.length > 1) {
+    for (const compte of local.comptes) {
+      if (compte.id === o.id) continue;
+      const nomsCompte = fichiersDuProfil(compte.id);
+      const present = await o.fichiers.lire(nomsCompte.coffre);
+      if (!present || present.length === 0) continue;
+      try {
+        const objetsCompte = await espaces.lister(compte.id);
+        for (const objet of ['coffre', 'portefeuille'] as const) {
+          const issue = await synchroniserFichier({
+            espaces,
+            compte: compte.id,
+            objet,
+            fichier: nomsCompte[objet],
+            stockage: o.fichiers,
+            etat: etatFichiers,
+            maintenant: horloge().toISOString(),
+            dateDistante: objetsCompte[objet]?.date ?? null,
+          });
+          etatFichiers = issue.etat;
+          if (issue.envoye) bilan.depots++;
+          if (issue.recu) bilan.fichiersRecus++;
+        }
+      } catch (erreur) {
+        bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
+      }
+    }
+  }
   ecrireJson(o.memoire, CLES_MEMOIRE.fichiers, etatFichiers);
   ecrireJson(o.memoire, CLES_MEMOIRE.comptes, { ...suivis, [o.id]: suivi });
   return bilan;
@@ -495,6 +570,8 @@ export interface OptionsAvantOuverture {
   compte?: string;
   /** Liaison de l'administrateur connue par le processus principal (PC), le cas échéant. */
   pontMaitre?: Liaison;
+  /** Liaison à employer (titulaire qui ouvre un compte inférieur par délégation). */
+  liaison?: Liaison;
   maintenant?: () => Date;
   requete?: Fetch;
 }
@@ -520,7 +597,7 @@ export async function avantOuverture(o: OptionsAvantOuverture): Promise<boolean>
     }
     return false;
   }
-  const liaison = liaisonPourCompte(o.memoire, o.compte, o.pontMaitre);
+  const liaison = o.liaison ?? liaisonPourCompte(o.memoire, o.compte, o.pontMaitre);
   if (!liaison) {
     return false;
   }
@@ -610,7 +687,7 @@ export async function preparerLiaison(code: string, requete?: Fetch): Promise<Co
       );
     }
     const annuaire = recevoirProjection(undefined, lireAnnuaire(JSON.stringify(recu.brut)), compte);
-    if (annuaire.comptes.length !== 1) {
+    if (!annuaire.comptes.some(c => c.id === compte)) {
       throw new ErreurRelais('Le compte publié sur le relais est illisible.');
     }
     return { liaison, annuaire, compte };

@@ -25,7 +25,7 @@ import {
   yahooScreener,
 } from '../bureau/electron/reseau.mjs';
 
-export const VERSION_RELAIS = 2;
+export const VERSION_RELAIS = 3;
 /** Une enveloppe chiffrée : quelques centaines de Kio en pratique. */
 const TAILLE_MAX_ENVELOPPE = 20 * 1024 * 1024;
 const IDENTIFIANT_APPAREIL = /^[a-z0-9]{4,32}$/;
@@ -260,7 +260,15 @@ async function espace(requete, env, portee, id, nom) {
     return erreur('Espace invalide.', 400);
   }
   if (!portee.maitre && portee.profil !== id) {
-    return erreur('Cet espace n’est pas le vôtre.', 403);
+    // Délégation d'un titulaire (Administrateur, Fondateur) sur un compte de rang inférieur :
+    // la liste de ses fichiers, et son coffre et son portefeuille seulement.
+    const permis =
+      id !== 'principal' &&
+      (nom === undefined ? requete.method === 'GET' : OBJETS_DELEGUES.includes(nom) && (requete.method === 'GET' || requete.method === 'PUT')) &&
+      (await delegue(env, portee.profil, id));
+    if (!permis) {
+      return erreur('Cet espace n’est pas le vôtre.', 403);
+    }
   }
   const prefixe = `p:${id}:`;
   if (nom === undefined) {
@@ -287,6 +295,62 @@ async function espace(requete, env, portee, id, nom) {
   if (requete.method === 'DELETE') {
     await env.BOITE.delete(cle);
     await majIndex(env, `${prefixe}~index`, nom, undefined);
+    return reponse({ ok: true });
+  }
+  return erreur('Méthode non autorisée.', 405);
+}
+
+// ------------------------------------------------------------ Délégations (rangs)
+//
+// Un Administrateur (ou un Fondateur autre que le compte historique) administre
+// aussi depuis le site : pour ouvrir le compte d'un rang inférieur (séquestre),
+// il lui faut le coffre et le portefeuille de ce compte. Le compte historique
+// (jeton maître) publie la liste de ces délégations (`PUT /rangs`) ; le relais
+// la relit à chaque accès croisé. Jamais `principal`, jamais l'annuaire ni le
+// retour d'un autre compte : seulement `coffre` et `portefeuille`, déjà scellés
+// par la clé de leur compte (que le titulaire n'ouvre qu'avec son code d'accès).
+
+const CLE_RANGS = 'rangs';
+const OBJETS_DELEGUES = ['coffre', 'portefeuille'];
+const MOTIF_COMPTE = /^[a-z0-9]{6,16}$/;
+
+function lireDelegations(brut) {
+  const propres = {};
+  const source = brut && typeof brut === 'object' && brut.delegations && typeof brut.delegations === 'object' ? brut.delegations : {};
+  for (const [titulaire, ids] of Object.entries(source).slice(0, 64)) {
+    if (!MOTIF_COMPTE.test(titulaire) || titulaire === 'principal' || !Array.isArray(ids)) continue;
+    const liste = [...new Set(ids.filter(id => typeof id === 'string' && MOTIF_COMPTE.test(id) && id !== titulaire && id !== 'principal'))].slice(0, 500);
+    if (liste.length > 0) propres[titulaire] = liste;
+  }
+  return propres;
+}
+
+async function delegue(env, titulaire, id) {
+  let lu;
+  try {
+    lu = JSON.parse((await env.BOITE.get(CLE_RANGS)) ?? '{}');
+  } catch {
+    lu = {};
+  }
+  return Array.isArray(lu.delegations?.[titulaire]) && lu.delegations[titulaire].includes(id);
+}
+
+async function rangs(requete, env) {
+  if (requete.method === 'GET') {
+    let lu;
+    try {
+      lu = JSON.parse((await env.BOITE.get(CLE_RANGS)) ?? '{}');
+    } catch {
+      lu = {};
+    }
+    return reponse({ delegations: lireDelegations(lu) });
+  }
+  if (requete.method === 'PUT') {
+    const corps = await corpsJson(requete);
+    if (!corps || typeof corps !== 'object') {
+      return erreur('Requête illisible.', 400);
+    }
+    await env.BOITE.put(CLE_RANGS, JSON.stringify({ delegations: lireDelegations(corps) }));
     return reponse({ ok: true });
   }
   return erreur('Méthode non autorisée.', 405);
@@ -333,6 +397,12 @@ export default {
     const { pathname } = new URL(requete.url);
     if (pathname === '/sante') {
       return reponse({ ok: true, version: VERSION_RELAIS, portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}) });
+    }
+    if (pathname === '/rangs') {
+      if (!env.BOITE) {
+        return erreur('Boîte non configurée sur le relais.', 500);
+      }
+      return portee.maitre ? rangs(requete, env) : erreur('Réservé au jeton de l’administrateur.', 403);
     }
     const dansEspace = /^\/p\/([^/]+)\/boite(?:\/([^/]*))?\/?$/.exec(pathname);
     if (dansEspace || pathname === '/boite' || pathname.startsWith('/boite/')) {

@@ -219,3 +219,38 @@ test('la passerelle reste ouverte aux jetons de profil (site d’un ami)', async
   const faux = `p1.ami001.${'0'.repeat(64)}`;
   assert.equal((await avec(env, faux, '/sante')).status, 401);
 });
+
+test('rangs : un titulaire délégué n’atteint que le coffre et le portefeuille des comptes inférieurs publiés', async () => {
+  const env = { JETON, BOITE: kvMemoire() };
+  const admin = await jetonDeProfil(JETON, 'adm001');
+  const ami = await jetonDeProfil(JETON, 'ami001');
+  for (const nom of ['coffre', 'portefeuille', 'annuaire', 'compte']) {
+    await avec(env, JETON, `/p/ami001/boite/${nom}`, { method: 'PUT', body: enveloppe(nom) });
+    await avec(env, JETON, `/p/fon001/boite/${nom}`, { method: 'PUT', body: enveloppe(nom) });
+  }
+  // Sans délégation : 403 partout.
+  assert.equal((await avec(env, admin, '/p/ami001/boite/coffre')).status, 403);
+  // Seul le jeton maître publie (ou lit) les délégations.
+  assert.equal((await avec(env, admin, '/rangs', { method: 'PUT', body: JSON.stringify({ delegations: { adm001: ['ami001', 'fon001'] } }) })).status, 403);
+  assert.equal((await avec(env, ami, '/rangs')).status, 403);
+  assert.equal((await avec(env, JETON, '/rangs', { method: 'PUT', body: JSON.stringify({ delegations: { adm001: ['ami001', 'principal', 'adm001', 'A!'] } }) })).status, 200);
+  assert.deepEqual((await (await avec(env, JETON, '/rangs')).json()).delegations, { adm001: ['ami001'] });
+
+  assert.equal((await avec(env, admin, '/p/ami001/boite')).status, 200);
+  assert.equal((await avec(env, admin, '/p/ami001/boite/coffre')).status, 200);
+  assert.equal((await avec(env, admin, '/p/ami001/boite/portefeuille', { method: 'PUT', body: enveloppe('portefeuille') })).status, 200);
+  // Ni l'annuaire ni le retour de l'ami, ni suppression.
+  assert.equal((await avec(env, admin, '/p/ami001/boite/annuaire')).status, 403);
+  assert.equal((await avec(env, admin, '/p/ami001/boite/compte')).status, 403);
+  assert.equal((await avec(env, admin, '/p/ami001/boite/coffre', { method: 'DELETE' })).status, 403);
+  // Rien d'un compte non délégué (un Fondateur), ni de l'espace du compte historique.
+  assert.equal((await avec(env, admin, '/p/fon001/boite/coffre')).status, 403);
+  assert.equal((await avec(env, admin, '/p/fon001/boite')).status, 403);
+  assert.equal((await avec(env, admin, '/p/principal/boite/annuaire')).status, 403);
+  // L'ami ne gagne rien en sens inverse.
+  assert.equal((await avec(env, ami, '/p/adm001/boite')).status, 403);
+
+  // Rétrogradation : la délégation retirée, l'accès cesse aussitôt.
+  assert.equal((await avec(env, JETON, '/rangs', { method: 'PUT', body: JSON.stringify({ delegations: {} }) })).status, 200);
+  assert.equal((await avec(env, admin, '/p/ami001/boite/coffre')).status, 403);
+});

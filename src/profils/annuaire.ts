@@ -157,6 +157,11 @@ export interface Annuaire {
   proprietaire?: string;
   /** Registre et clé commune des Fondateurs (voir `rangs.ts`). */
   fondateurs?: BlocFondateurs;
+  /**
+   * Annuaire restreint d'un titulaire : règles d'accès qu'il a modifiées sur
+   * ce navigateur, en attente d'être reprises par un Fondateur (retour).
+   */
+  modifications?: Record<string, AccesPublic>;
 }
 
 /** Contenu du bloc privé : jamais lisible sans la clé maîtresse de l'administrateur. */
@@ -320,6 +325,13 @@ export function lireAnnuaire(brut: string | undefined): Annuaire {
   if (typeof o.proprietaire === 'string' && MOTIF_ID.test(o.proprietaire) && vus.has(o.proprietaire)) annuaire.proprietaire = o.proprietaire;
   const fondateurs = lireFondateurs(o.fondateurs);
   if (fondateurs) annuaire.fondateurs = fondateurs;
+  if (annuaire.restreint && o.modifications && typeof o.modifications === 'object' && !Array.isArray(o.modifications)) {
+    const modifications: Record<string, AccesPublic> = {};
+    for (const [id, acces] of Object.entries(o.modifications as Record<string, unknown>)) {
+      if (vus.has(id)) modifications[id] = lireAcces(acces);
+    }
+    if (Object.keys(modifications).length > 0) annuaire.modifications = modifications;
+  }
   const a = annuaire.admin;
   const empreinte = hexa(admin.empreinte, 64);
   if (empreinte) a.empreinte = empreinte;

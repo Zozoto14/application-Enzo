@@ -28,12 +28,29 @@ export function relaisPortees(jetonMaitre = JETON_TEST) {
     const p = portee((init.headers as Record<string, string> | undefined)?.Authorization);
     if (!p) return repondre({ erreur: 'jeton' }, 401);
     if (chemin === '/sante') return repondre({ ok: true, portee: p.maitre ? 'maitre' : 'profil' });
+    if (chemin === '/rangs') {
+      if (!p.maitre) return repondre({ erreur: 'portée' }, 403);
+      if (methode === 'PUT') {
+        boite.set('rangs', String(init.body));
+        return repondre({ ok: true });
+      }
+      return repondre(boite.get('rangs') ?? '{"delegations":{}}');
+    }
     const espace = /^\/p\/([^/]+)\/boite(?:\/([^/]+))?$/.exec(chemin);
     let cle: string | undefined;
     let prefixe: string;
     if (espace) {
       const id = decodeURIComponent(espace[1]);
-      if (!p.maitre && p.profil !== id) return repondre({ erreur: 'portée' }, 403);
+      if (!p.maitre && p.profil !== id) {
+        // Délégation d'un titulaire (même règle que le vrai relais) : liste, coffre et portefeuille.
+        const delegations = (JSON.parse(boite.get('rangs') ?? '{}') as { delegations?: Record<string, string[]> }).delegations ?? {};
+        const nom = espace[2] ? decodeURIComponent(espace[2]) : undefined;
+        const permis =
+          id !== 'principal' &&
+          (delegations[p.profil!] ?? []).includes(id) &&
+          (nom === undefined ? methode === 'GET' : ['coffre', 'portefeuille'].includes(nom) && (methode === 'GET' || methode === 'PUT'));
+        if (!permis) return repondre({ erreur: 'portée' }, 403);
+      }
       prefixe = `p:${id}:`;
       cle = espace[2] ? prefixe + decodeURIComponent(espace[2]) : undefined;
     } else if (chemin.startsWith('/boite')) {
