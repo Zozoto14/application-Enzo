@@ -18,10 +18,39 @@ type Fetch = typeof fetch;
 export interface ObjetEspace {
   date: string;
   charge: string;
+  /**
+   * Estampille posée par le relais (jamais par l'appareil) : `maitre` (jeton de
+   * l'administrateur), `compte` (jeton du compte), `delegue` (titulaire d'un
+   * rang). Absente sur un relais d'avant, ou pour un dépôt d'avant.
+   */
+  auteur?: string;
 }
 
+/** Entrée de la liste d'un espace. */
+export interface MetaObjet {
+  date: string;
+  taille: number;
+  auteur?: string;
+}
+
+/**
+ * Objets qu'un compte écrit lui-même dans son espace (même liste que
+ * `OBJETS_DU_COMPTE` de relais/worker.mjs). Tout le reste est publié par
+ * l'administrateur seul (voir « Qui peut écrire quoi », docs/synchro-relais.md).
+ */
+export const OBJETS_DU_COMPTE = ['coffre', 'portefeuille', 'compte', 'tsuzuku-cle'] as const;
+
+/**
+ * Un objet publié par l'administrateur (projection d'annuaire, abonnement,
+ * sources partagées) n'est cru que s'il vient bien de lui : estampille
+ * `maitre`. Sans estampille (relais pas encore redéployé, ou dépôt d'avant),
+ * il est accepté comme avant : c'est le relais redéployé qui interdit au
+ * compte de l'écrire.
+ */
+export const publieParAdmin = (auteur: string | undefined): boolean => auteur === undefined || auteur === 'maitre';
+
 export interface Espaces {
-  lister(id: string): Promise<Record<string, { date: string; taille: number }>>;
+  lister(id: string): Promise<Record<string, MetaObjet>>;
   /** L'objet, ou rien s'il n'existe pas. */
   lire(id: string, nom: string): Promise<ObjetEspace | undefined>;
   deposer(id: string, nom: string, charge: string, date: string): Promise<void>;
@@ -44,7 +73,7 @@ export function espacesDuRelais(liaison: Liaison, requete: Fetch = fetch): Espac
     async lister(id) {
       const reponse = await appeler(liaison, chemin(id), {}, requete);
       verifier(reponse, 'liste');
-      const corps = (await reponse.json()) as { objets?: Record<string, { date: string; taille: number }> };
+      const corps = (await reponse.json()) as { objets?: Record<string, MetaObjet> };
       return corps.objets ?? {};
     },
     async lire(id, nom) {
@@ -53,11 +82,11 @@ export function espacesDuRelais(liaison: Liaison, requete: Fetch = fetch): Espac
         return undefined;
       }
       verifier(reponse, nom);
-      const enveloppe = (await reponse.json()) as { date?: unknown; charge?: unknown };
+      const enveloppe = (await reponse.json()) as { date?: unknown; charge?: unknown; auteur?: unknown };
       if (typeof enveloppe.date !== 'string' || typeof enveloppe.charge !== 'string') {
         throw new ErreurRelais(`Dépôt illisible sur le relais (${nom}).`);
       }
-      return { date: enveloppe.date, charge: enveloppe.charge };
+      return { date: enveloppe.date, charge: enveloppe.charge, ...(typeof enveloppe.auteur === 'string' ? { auteur: enveloppe.auteur } : {}) };
     },
     async deposer(id, nom, charge, date) {
       const corps = JSON.stringify({ format: 'applibourse-relais', version: 1, appareil: nom, date, charge });

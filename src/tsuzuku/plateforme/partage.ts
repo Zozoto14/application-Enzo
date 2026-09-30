@@ -24,7 +24,7 @@
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { genererPaireSequestre, ouvrirDepot, publiqueDepuisPrivee, scellerPourAdmin, utf8DepuisOctets } from '../../securite/sequestre';
 import { aleatoireParDefaut, type SourceAleatoire } from '../../securite/aleatoire';
-import type { Espaces } from '../../sync/relais/espaces';
+import { publieParAdmin, type Espaces } from '../../sync/relais/espaces';
 import { empreinte } from '../../sync/relais/fusionLww';
 import type { DefinitionSource } from '../moteur/sources';
 import { ecrireRecues, lireRecues, lireListeSources, lirePartages, publicationsParCompte, type CompteBeneficiaire } from '../app/gestion';
@@ -225,7 +225,8 @@ export async function recevoirSourcesPartagees(o: OptionsRecevoir): Promise<{ su
   const actuelle = o.base.lire(CLES.sourcesRecues);
   if (date && date !== suivi.sourcesLues) {
     const objet = await o.espaces.lire(o.id, OBJET_SOURCES);
-    if (objet) {
+    // Seules les sources déposées par le compte historique sont crues (estampille du relais).
+    if (objet && publieParAdmin(objet.auteur)) {
       try {
         const recu = ouvrirPublication(paire, o.id, objet.charge);
         const texte = ecrireRecues(recu);

@@ -69,7 +69,8 @@ redéployés. Tests : `relais/worker.test.mjs` (« course sur l'index… »).
 
 - Le relais recalcule le HMAC à chaque appel (rien à stocker) ; l'administrateur fabrique le jeton d'un ami hors ligne
   avec le même calcul (`src/sync/relais/portees.ts`). Aucun jeton de profil n'existe pour `principal`.
-- Lecture, écriture et suppression d'un espace : son titulaire ou l'administrateur. Un autre jeton reçoit **403, que
+- Lecture d'un espace : son titulaire ou l'administrateur. Écriture et suppression : l'administrateur pour tout, le
+  titulaire pour ses **données propres seulement** (voir « Qui peut écrire quoi »). Un autre jeton reçoit **403, que
   l'objet existe ou non** (pas de 404 révélateur).
 - Rétrocompatible : les routes `/sante`, `/boite`, `/boite/<appareil>` sont inchangées pour le jeton maître ; les anciens
   appareils continuent de fonctionner sans mise à jour.
@@ -97,8 +98,57 @@ redéployés. Tests : `relais/worker.test.mjs` (« course sur l'index… »).
 | `/p/<id>/boite/compte` | ce que l'ami renvoie : suivi de connexion (scellé pour l'administrateur), dépôt de séquestre (scellé), invitation acceptée ; pour un titulaire, aussi sa paire et son bloc privé, SES séquestres (conversions, codes, révocations), ses modifications d'accès et son journal (scellé pour le compte historique) | scellés | le titulaire (ou l'ami) et le compte historique |
 | `/p/<id>/boite/tsuzuku-cle` | clé PUBLIQUE X25519 de réception des sources Tsuzuku (la privée reste dans la base du compte) | aucun secret | le compte (qui l'écrit) et le compte historique |
 | `/p/<id>/boite/tsuzuku-sources` | SES sources Tsuzuku partagées (ni autre compte, ni clé d'API) | ECIES X25519 + XChaCha20-Poly1305 pour sa clé, usage lié à son identifiant | écrit/effacé par le jeton maître SEUL (le relais refuse PUT/DELETE d'un jeton de profil) ; lu par le compte |
+| `/p/<id>/boite/abonnement` | SA ligne d'abonnement (`projectionPour`) : mode, échéance, jours d'avance, rappel activé, message déjà rédigé. Ni notes privées, ni paiements, ni autre compte | aucun secret (rien d'autre que ce qui s'affiche chez lui) | écrit/effacé par le jeton maître SEUL ; lu par le compte |
 
 L'annuaire complet n'est **jamais** déposé dans un espace lisible par un ami.
+
+## Qui peut écrire quoi
+
+Règle du relais (`OBJETS_DU_COMPTE`, `relais/worker.mjs`, même liste dans `src/sync/relais/espaces.ts`) : dans son
+espace, un jeton de profil n'écrit (`PUT`) ni n'efface (`DELETE`) **que** `coffre`, `portefeuille`, `compte` et
+`tsuzuku-cle`. Tout autre nom — objets publiés par l'administrateur, et tout nom inconnu ou futur — répond **403**
+pour lui ; seul le jeton maître l'écrit. La lecture (`GET`, liste) de son espace reste ouverte au compte.
+
+| Objet (espace `p/<id>/`) | Écrit par | Qui doit pouvoir écrire / effacer | Relais avant (v3) | Relais maintenant |
+| --- | --- | --- | --- | --- |
+| `annuaire` (projection, politique des apps, rangs inférieurs d'un titulaire) | administrateur | **administrateur seul** | ami : PUT/DELETE **acceptés** (faille) | ami : 403 ; délégué : 403 |
+| `abonnement` (statut, échéance, message) | administrateur | **administrateur seul** | ami : PUT/DELETE **acceptés** (faille signalée) | ami : 403 ; délégué : 403 |
+| `tsuzuku-sources` (sources partagées) | administrateur | **administrateur seul** | ami : 403 (déjà) | ami : 403 ; délégué : 403 |
+| tout autre nom (inconnu, futur) | — | **administrateur seul** | ami : accepté | ami : 403 |
+| `coffre`, `portefeuille` | l'ami (ses données), l'administrateur (sauvegarde), un titulaire délégué | ami propriétaire + administrateur ; titulaire délégué : lecture/écriture, jamais suppression | idem | idem (inchangé) |
+| `compte` (retour : suivi, séquestre, invitation, actions d'un titulaire) | l'ami | ami propriétaire (+ administrateur pour le vider à la suppression du compte) | idem | idem (inchangé) |
+| `tsuzuku-cle` (clé PUBLIQUE de réception) | l'ami | ami propriétaire (+ administrateur à la suppression) | idem | idem (inchangé) |
+| liste de l'espace (`GET /p/<id>/boite`) | — (lecture) | ami, administrateur, titulaire délégué | idem | idem, avec l'estampille `auteur` |
+| `p/principal/*` (`annuaire` complet, `admin`) | administrateur | **administrateur seul** (aucun jeton de profil n'existe pour `principal`) | 403 pour tout jeton de profil | idem |
+| `/rangs` (délégations) | administrateur | **administrateur seul** | 403 pour tout jeton de profil | idem |
+| `/boite…` (portefeuille et coffre de l'administrateur) | administrateur | **administrateur seul** | 403 pour tout jeton de profil | idem |
+
+**Estampille d'auteur.** Chaque dépôt dans un espace est estampillé PAR LE RELAIS (`auteur` : `maitre`, `compte`
+ou `delegue`, selon le jeton présenté ; une valeur envoyée par l'appareil est remplacée), dans l'enveloppe relue et
+dans la liste de l'espace (métadonnée KV). Il n'existe pas de primitive de signature de l'administrateur pour ces
+objets (la clé ed25519 existante ne signe que les mises à jour ; la clé de séquestre est une clé de chiffrement
+X25519, qu'un ami ne peut pas vérifier) : l'estampille du relais en tient lieu.
+
+**Côté administrateur** (`synchroniserComptesAdmin`) : il ne LIT dans l'espace d'un ami que `compte` (filtré par
+`appliquerRetourAmi` : jamais un accès, un rang ni un abonnement), `coffre`, `portefeuille` et `tsuzuku-cle`. La
+projection d'annuaire, l'abonnement et les sources partagées y sont seulement écrits : **jamais fusionnés** dans sa
+base, qui reste la seule source de vérité (testé : une ligne `abonnement` falsifiée ne change rien à ses données).
+S'il trouve l'un de ses dépôts effacé ou estampillé par un autre que lui (`depotAltere`), il le réécrit au tour
+suivant.
+
+**Côté ami** (`synchroniserCompteAmi`, `preparerLiaison`, `recevoirSourcesPartagees`) : une projection, une ligne
+d'abonnement ou des sources partagées estampillées par un autre que `maitre` sont **ignorées** (la valeur
+précédente reste). Sans estampille (relais pas encore redéployé, ou dépôt d'avant), l'objet est lu comme avant.
+
+**Limites.**
+- Tant que le relais n'est pas redéployé (`npm run relais:deployer`), un ami peut encore écrire ces objets et
+  aucune estampille n'existe : c'est le redéploiement qui ferme la faille.
+- L'estampille repose sur le relais : un relais compromis (ou le détenteur du jeton maître) peut tout écrire.
+- Un ami qui modifie SON appareil (stockage du navigateur, code) peut changer SON affichage (se voir « À jour »,
+  masquer le rappel) : cela ne change **rien** au statut réel, tenu dans la base chiffrée de l'administrateur, ni
+  à ce que voient ses autres appareils.
+- Compatibilité : les anciens appareils n'écrivent jamais ces objets avec un jeton de profil ; ils ignorent le
+  champ `auteur` (enveloppe et liste). Le relais redéployé accepte toujours les dépôts d'avant (sans estampille).
 
 ## Fusion
 

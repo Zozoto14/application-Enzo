@@ -275,3 +275,63 @@ test('Tsuzuku : les sources partagées sont en lecture seule pour le compte, sa 
   // L'administrateur efface (retrait complet).
   assert.equal((await appeler(env, '/p/amitsu01/boite/tsuzuku-sources', { method: 'DELETE' })).status, 200);
 });
+
+test('qui peut écrire quoi : les objets publiés par l’administrateur sont en lecture seule pour le compte (403)', async () => {
+  const env = { JETON, BOITE: kvMemoire() };
+  const ami = await jetonDeProfil(JETON, 'ami001');
+  // L'administrateur publie la projection d'annuaire, l'abonnement et les sources partagées.
+  for (const nom of ['annuaire', 'abonnement', 'tsuzuku-sources']) {
+    assert.equal((await avec(env, JETON, `/p/ami001/boite/${nom}`, { method: 'PUT', body: enveloppe(nom) })).status, 200, nom);
+  }
+  const avant = new Map(env.BOITE.donnees);
+  for (const nom of ['annuaire', 'abonnement', 'tsuzuku-sources', 'politique', 'rangs', 'admin', 'inconnu']) {
+    // L'ami lit ce qui existe…
+    if (['annuaire', 'abonnement', 'tsuzuku-sources'].includes(nom)) assert.equal((await avec(env, ami, `/p/ami001/boite/${nom}`)).status, 200, nom);
+    // … mais ne l'écrit ni ne l'efface, qu'il existe ou non ; même une estampille « maitre » forgée n'y change rien.
+    const forge = JSON.stringify({ ...JSON.parse(enveloppe(nom)), auteur: 'maitre' });
+    assert.equal((await avec(env, ami, `/p/ami001/boite/${nom}`, { method: 'PUT', body: forge })).status, 403, `PUT ${nom}`);
+    assert.equal((await avec(env, ami, `/p/ami001/boite/${nom}`, { method: 'DELETE' })).status, 403, `DELETE ${nom}`);
+  }
+  assert.deepEqual(env.BOITE.donnees, avant, 'rien n’a bougé dans la boîte');
+  // Un titulaire délégué n'y gagne rien non plus.
+  await avec(env, JETON, '/rangs', { method: 'PUT', body: JSON.stringify({ delegations: { adm001: ['ami001'] } }) });
+  const titulaire = await jetonDeProfil(JETON, 'adm001');
+  for (const nom of ['annuaire', 'abonnement', 'tsuzuku-sources']) {
+    assert.equal((await avec(env, titulaire, `/p/ami001/boite/${nom}`, { method: 'PUT', body: enveloppe(nom) })).status, 403, `délégué ${nom}`);
+  }
+  // Le jeton maître garde tous les droits (mise à jour et retrait).
+  assert.equal((await avec(env, JETON, '/p/ami001/boite/abonnement', { method: 'PUT', body: enveloppe('abonnement', '2026-09-27T10:00:00Z') })).status, 200);
+  assert.equal((await avec(env, JETON, '/p/ami001/boite/abonnement', { method: 'DELETE' })).status, 200);
+});
+
+test('qui peut écrire quoi : le compte écrit et efface ses données propres', async () => {
+  const env = { JETON, BOITE: kvMemoire() };
+  const ami = await jetonDeProfil(JETON, 'ami001');
+  for (const nom of ['coffre', 'portefeuille', 'compte', 'tsuzuku-cle']) {
+    assert.equal((await avec(env, ami, `/p/ami001/boite/${nom}`, { method: 'PUT', body: enveloppe(nom) })).status, 200, nom);
+    assert.equal((await avec(env, ami, `/p/ami001/boite/${nom}`)).status, 200, nom);
+  }
+  assert.equal((await avec(env, ami, '/p/ami001/boite/compte', { method: 'DELETE' })).status, 200);
+  assert.equal((await avec(env, ami, '/p/ami001/boite/compte')).status, 404);
+});
+
+test('estampille : le relais note l’auteur réel de chaque dépôt (lecture et liste), l’appareil ne la choisit pas', async () => {
+  const env = { JETON, BOITE: kvMemoire() };
+  const ami = await jetonDeProfil(JETON, 'ami001');
+  const forge = nom => JSON.stringify({ ...JSON.parse(enveloppe(nom)), auteur: 'maitre' });
+  await avec(env, ami, '/p/ami001/boite/coffre', { method: 'PUT', body: forge('coffre') });
+  await avec(env, JETON, '/p/ami001/boite/abonnement', { method: 'PUT', body: enveloppe('abonnement') });
+  await avec(env, JETON, '/rangs', { method: 'PUT', body: JSON.stringify({ delegations: { adm001: ['ami001'] } }) });
+  await avec(env, await jetonDeProfil(JETON, 'adm001'), '/p/ami001/boite/portefeuille', { method: 'PUT', body: enveloppe('portefeuille') });
+  assert.equal((await (await avec(env, ami, '/p/ami001/boite/coffre')).json()).auteur, 'compte');
+  assert.equal((await (await avec(env, ami, '/p/ami001/boite/abonnement')).json()).auteur, 'maitre');
+  assert.equal((await (await avec(env, ami, '/p/ami001/boite/portefeuille')).json()).auteur, 'delegue');
+  const liste = (await (await avec(env, ami, '/p/ami001/boite')).json()).objets;
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(liste).map(([n, m]) => [n, m.auteur])),
+    { coffre: 'compte', abonnement: 'maitre', portefeuille: 'delegue' },
+  );
+  // Compatibilité : un dépôt d'avant (sans estampille) reste lisible et listé, sans auteur.
+  await env.BOITE.put('p:ami001:annuaire', enveloppe('annuaire'));
+  assert.equal((await (await avec(env, ami, '/p/ami001/boite/annuaire')).json()).auteur, undefined);
+});

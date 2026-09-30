@@ -6,6 +6,9 @@
 
 import { jetonDeProfil } from '../portees';
 
+/** Objets qu'un jeton de profil écrit dans son espace (même liste que relais/worker.mjs). */
+const OBJETS_DU_COMPTE = ['coffre', 'portefeuille', 'compte', 'tsuzuku-cle'];
+
 export const RELAIS_TEST = 'https://relais.test';
 export const JETON_TEST = 'jeton-maitre-de-test-0123456789';
 
@@ -39,6 +42,7 @@ export function relaisPortees(jetonMaitre = JETON_TEST) {
     const espace = /^\/p\/([^/]+)\/boite(?:\/([^/]+))?$/.exec(chemin);
     let cle: string | undefined;
     let prefixe: string;
+    let auteur: string | undefined;
     if (espace) {
       const id = decodeURIComponent(espace[1]);
       if (!p.maitre && p.profil !== id) {
@@ -53,8 +57,11 @@ export function relaisPortees(jetonMaitre = JETON_TEST) {
       }
       prefixe = `p:${id}:`;
       cle = espace[2] ? prefixe + decodeURIComponent(espace[2]) : undefined;
-      // Objets écrits par l'administrateur seul (sources partagées de Tsuzuku) : lecture seule pour le compte.
-      if (!p.maitre && espace[2] === 'tsuzuku-sources' && methode !== 'GET') return repondre({ erreur: 'lecture seule' }, 403);
+      // Un jeton de profil n'écrit que les données propres du compte (même liste que OBJETS_DU_COMPTE du relais).
+      if (!p.maitre && methode !== 'GET' && espace[2] && !OBJETS_DU_COMPTE.includes(decodeURIComponent(espace[2]))) {
+        return repondre({ erreur: 'lecture seule' }, 403);
+      }
+      auteur = p.maitre ? 'maitre' : p.profil === id ? 'compte' : 'delegue';
     } else if (chemin.startsWith('/boite')) {
       if (!p.maitre) return repondre({ erreur: 'portée' }, 403);
       prefixe = 'appareil:';
@@ -63,12 +70,17 @@ export function relaisPortees(jetonMaitre = JETON_TEST) {
       return repondre({ erreur: 'inconnu' }, 404);
     }
     if (cle === undefined) {
-      const liste: Record<string, { date: string; taille: number }> = {};
-      for (const [k, v] of boite) if (k.startsWith(prefixe)) liste[k.slice(prefixe.length)] = { date: JSON.parse(v).date, taille: v.length };
+      const liste: Record<string, { date: string; taille: number; auteur?: string }> = {};
+      for (const [k, v] of boite) {
+        if (!k.startsWith(prefixe)) continue;
+        const lu = JSON.parse(v) as { date: string; auteur?: string };
+        liste[k.slice(prefixe.length)] = { date: lu.date, taille: v.length, ...(lu.auteur ? { auteur: lu.auteur } : {}) };
+      }
       return repondre(espace ? { objets: liste } : { appareils: liste });
     }
     if (methode === 'PUT') {
-      boite.set(cle, String(init.body));
+      // Estampille posée par le relais (espaces seulement), comme le vrai.
+      boite.set(cle, auteur ? JSON.stringify({ ...(JSON.parse(String(init.body)) as object), auteur }) : String(init.body));
       return repondre({ ok: true });
     }
     if (methode === 'DELETE') {

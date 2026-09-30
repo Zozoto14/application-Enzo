@@ -163,7 +163,10 @@ async function lister(env, prefixe) {
     for (const cle of page.keys ?? []) {
       const nom = cle.name.slice(prefixe.length);
       const meta = cle.metadata && typeof cle.metadata === 'object' ? cle.metadata : undefined;
-      trouves[nom] = meta && typeof meta.date === 'string' ? { date: meta.date, taille: Number(meta.taille) || 0 } : undefined;
+      trouves[nom] =
+        meta && typeof meta.date === 'string'
+          ? { date: meta.date, taille: Number(meta.taille) || 0, ...(AUTEURS.includes(meta.auteur) ? { auteur: meta.auteur } : {}) }
+          : undefined;
     }
     curseur = page.list_complete === false ? page.cursor : undefined;
   } while (curseur);
@@ -215,7 +218,7 @@ async function lireEnveloppe(requete, nom) {
   ) {
     return { refus: erreur('Ce n’est pas une enveloppe AppDashboard.', 400) };
   }
-  return { texte, meta: { date: enveloppe.date, taille: texte.length } };
+  return { texte, enveloppe, meta: { date: enveloppe.date, taille: texte.length } };
 }
 
 /** Routes historiques (`/boite`) : jeton maître seulement, comme avant. */
@@ -255,10 +258,18 @@ async function boite(requete, env, identifiant) {
 }
 
 /**
- * Espace d'un compte : `/p/<id>/boite[/<nom>]`. Lecture, écriture et
- * suppression réservées au titulaire (son jeton de profil) et à
- * l'administrateur (jeton maître). Tout autre jeton reçoit 403, que l'objet
- * existe ou non : la réponse ne dit rien de l'espace d'un autre.
+ * Espace d'un compte : `/p/<id>/boite[/<nom>]`. Lecture réservée au titulaire
+ * (son jeton de profil) et à l'administrateur (jeton maître). Tout autre jeton
+ * reçoit 403, que l'objet existe ou non : la réponse ne dit rien de l'espace
+ * d'un autre.
+ *
+ * Écriture et suppression (voir « Qui peut écrire quoi » dans
+ * docs/synchro-relais.md) : le jeton maître écrit tout ; le jeton de profil
+ * n'écrit dans SON espace que ses données propres (`OBJETS_DU_COMPTE`) ; tout
+ * le reste (projection d'annuaire, abonnement, sources partagées, et tout nom
+ * inconnu) est en lecture seule pour lui (403). Chaque dépôt est estampillé
+ * par le relais (`auteur` : `maitre`, `compte` ou `delegue`, jamais celui que
+ * l'appareil prétend) : un appareil vérifie ainsi l'origine de ce qu'il lit.
  */
 async function espace(requete, env, portee, id, nom) {
   if (!IDENTIFIANT_PROFIL.test(id)) {
@@ -286,8 +297,9 @@ async function espace(requete, env, portee, id, nom) {
     return erreur('Nom d’objet invalide.', 400);
   }
   const cle = prefixe + nom;
-  // Objets écrits par l'administrateur seul (sources partagées de Tsuzuku) : lecture seule pour le compte.
-  if (!portee.maitre && OBJETS_ADMIN_SEULEMENT.includes(nom) && requete.method !== 'GET') {
+  // Un jeton de profil n'écrit (ni n'efface) que les données propres du compte : le reste est publié par
+  // l'administrateur seul (annuaire, abonnement, sources partagées…), en lecture seule pour le compte.
+  if (!portee.maitre && requete.method !== 'GET' && !OBJETS_DU_COMPTE.includes(nom)) {
     return erreur('Objet en lecture seule pour ce compte.', 403);
   }
   if (requete.method === 'GET') {
@@ -295,8 +307,12 @@ async function espace(requete, env, portee, id, nom) {
     return enveloppe === null ? erreur('Aucun dépôt.', 404) : reponse(enveloppe);
   }
   if (requete.method === 'PUT') {
-    const { refus, texte, meta } = await lireEnveloppe(requete, nom);
+    const { refus, enveloppe } = await lireEnveloppe(requete, nom);
     if (refus) return refus;
+    // Estampille posée ICI (celle que l'appareil aurait mise est remplacée).
+    const auteur = portee.maitre ? 'maitre' : portee.profil === id ? 'compte' : 'delegue';
+    const texte = JSON.stringify({ ...enveloppe, auteur });
+    const meta = { date: enveloppe.date, taille: texte.length, auteur };
     await env.BOITE.put(cle, texte, { metadata: meta });
     await majIndex(env, `${prefixe}~index`, nom, meta);
     return reponse({ ok: true });
@@ -321,8 +337,14 @@ async function espace(requete, env, portee, id, nom) {
 
 const CLE_RANGS = 'rangs';
 const OBJETS_DELEGUES = ['coffre', 'portefeuille'];
-/** Objets d'un espace que seul le jeton maître écrit ou efface (le compte les lit). */
-const OBJETS_ADMIN_SEULEMENT = ['tsuzuku-sources'];
+/**
+ * Objets qu'un jeton de profil peut écrire ou effacer dans SON espace : ses données propres
+ * (coffre, portefeuille, retour `compte`, clé publique de réception Tsuzuku). Tout autre nom
+ * (`annuaire`, `abonnement`, `tsuzuku-sources`, noms futurs…) n'est écrit que par le jeton maître.
+ */
+export const OBJETS_DU_COMPTE = ['coffre', 'portefeuille', 'compte', 'tsuzuku-cle'];
+/** Estampilles possibles d'un dépôt dans un espace. */
+const AUTEURS = ['maitre', 'compte', 'delegue'];
 const MOTIF_COMPTE = /^[a-z0-9]{6,16}$/;
 
 function lireDelegations(brut) {
