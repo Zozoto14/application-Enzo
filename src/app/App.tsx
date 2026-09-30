@@ -112,7 +112,7 @@ import { ReglageJuridique, ReglageSupport } from '../hub/ReglagesSupportJuridiqu
 import { ReglageVerrouAuto } from '../hub/ReglageVerrouAuto';
 import { useSupport } from '../support/useSupport';
 import { infosTechniques } from '../support/tickets';
-import { CLE_VERROU_AUTO, ecrireDelaiAppareil, lireDelaiAppareil, lireSurchargeEssai, messageVerrou, type MotifVerrou } from '../securite/verrouAuto';
+import { ecrireDelaiAppareil, lireDelaiAppareil, lireSurchargeEssai, messageVerrou, type MotifVerrou } from '../securite/verrouAuto';
 import { accepter, doitAccepter, lireAcceptations, versionJuridique, type IdDocument } from '../juridique/modele';
 import { relaisActif } from '../sync/relais/actif';
 import { versionApp } from '../hub/version';

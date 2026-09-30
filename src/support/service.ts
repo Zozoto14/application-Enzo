@@ -74,7 +74,10 @@ export class ServiceSupport {
     try {
       const resultat = await envoyerTicket(await this.o.liaison().catch(() => undefined), ticket, this.o.requete);
       this.remplacer(numero, t => {
-        const { piece, erreur, ...reste } = t;
+        const reste: Ticket = { ...t };
+        const piece = reste.piece;
+        delete reste.piece;
+        delete reste.erreur;
         if (resultat.ok) {
           return { ...reste, statut: 'envoye' as const, tentatives: t.tentatives + 1 };
         }

@@ -21,7 +21,6 @@ import { App } from './App';
 
 const KDF_RAPIDE: ParametresKdf = { algorithme: 'argon2id', passes: 1, memoireKio: 64, fils: 1, longueurCle: 32 };
 const MOT_DE_PASSE = 'correct-cheval-batterie-agrafe';
-const IVOIRE_FOND = '#F6F3EC';
 const INSTANT = 1_700_000_000_000;
 
 /** `preparer` écrit dans la base à chaque ouverture (en test, chaque déverrouillage repart d'une base neuve). */

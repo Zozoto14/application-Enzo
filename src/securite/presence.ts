@@ -16,12 +16,14 @@ export const ContextePresence = createContext<Presence>(AUCUNE_PRESENCE);
 
 /** Hors `GardeInactivite` (tests d'un écran seul), les déclarations sont sans effet. */
 export function utiliserPresence(): Presence {
+  // eslint-disable-next-line react-hooks/rules-of-hooks -- hook nommé en français (API demandée : utiliserPresence).
   return useContext(ContextePresence);
 }
 
 /** Déclare une lecture en cours tant que `enCours` est vrai (et jusqu'au démontage). */
 export function utiliserLectureEnCours(enCours: boolean): void {
   const { declarerLecture } = utiliserPresence();
+  // eslint-disable-next-line react-hooks/rules-of-hooks -- idem.
   useEffect(() => {
     if (!enCours) {
       return undefined;
