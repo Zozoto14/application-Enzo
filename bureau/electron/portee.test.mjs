@@ -23,6 +23,10 @@ test('un ami ne passe pas à un autre compte sans quitter le sien', () => {
   assert.equal(changementPermis('lea0000001', 'lea0000001'), true);
   assert.equal(changementPermis('principal', 'lea0000001'), true);
   assert.equal(changementPermis(undefined, 'lea0000001'), true);
+  // Un titulaire (Administrateur) passe au compte qu'il a ajouté à sa portée (séquestre) ; jamais à principal.
+  assert.equal(changementPermis('hugo000002', 'lea0000001', ['lea0000001']), true);
+  assert.equal(changementPermis('hugo000002', 'max0000003', ['lea0000001']), false);
+  assert.equal(changementPermis('hugo000002', 'principal', ['principal']), false);
 });
 
 test('identifiants de profil : ni chemin ni joker', () => {

@@ -40,7 +40,11 @@ export function extensionPermise(porteeCourante, id, etendues = []) {
   );
 }
 
-/** Passer d'un compte à un autre sans le quitter : seul l'administrateur le peut. */
-export function changementPermis(porteeCourante, cible) {
-  return porteeCourante === undefined || porteeCourante === 'principal' || porteeCourante === cible;
+/**
+ * Passer d'un compte à un autre sans le quitter : le compte historique, ou un
+ * titulaire (Administrateur, Fondateur) vers un compte qu'il a ajouté à sa
+ * portée (séquestre d'un rang inférieur). Jamais vers `principal`.
+ */
+export function changementPermis(porteeCourante, cible, etendues = []) {
+  return porteeCourante === undefined || porteeCourante === 'principal' || porteeCourante === cible || (cible !== 'principal' && etendues.includes(cible));
 }

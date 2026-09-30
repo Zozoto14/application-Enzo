@@ -126,7 +126,7 @@ function installerPasserelle() {
     const propre = String(id);
     if (!MOTIF_PROFIL.test(propre)) throw new Error('Profil invalide.');
     // Seul l'administrateur passe directement à un autre compte (accès par séquestre).
-    if (!changementPermis(portee, propre)) {
+    if (!changementPermis(portee, propre, etendues)) {
       throw new Error('Changez de compte avant d’en ouvrir un autre.');
     }
     portee = propre;

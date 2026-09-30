@@ -158,3 +158,24 @@ export function exporterJournalPar(acteur: Acteur | undefined, format: 'json' | 
   exiger(acteur, 'exporter-journal');
   return format === 'json' ? exporterJson(journal) : exporterCsv(journal);
 }
+
+/**
+ * Liste modifiée par l'Administration (accès, suspensions, invitations,
+ * politique…) : tout compte qui change doit être de rang STRICTEMENT
+ * inférieur à l'acteur ; le compte historique ne change que par sa politique
+ * des apps (Fondateurs). Lève `ErreurPermission` sinon, sans rien modifier.
+ */
+export function verifierModifications(acteur: Acteur | undefined, avant: readonly Profil[], apres: readonly Profil[]): void {
+  for (const p of apres) {
+    const a = avant.find(x => x.id === p.id);
+    if (!a || JSON.stringify(a) === JSON.stringify(p)) continue;
+    if (p.admin) {
+      const { politique: _pa, ...resteA } = a;
+      const { politique: _pp, ...resteP } = p;
+      if (JSON.stringify(resteA) !== JSON.stringify(resteP)) exiger(acteur, 'modifier-admin');
+      exiger(acteur, 'politique-apps');
+      continue;
+    }
+    exiger(acteur, 'permissions-ami', a);
+  }
+}

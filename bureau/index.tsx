@@ -56,7 +56,6 @@ import {
   ecrireAnnuaire,
   lireAnnuaire,
   noterConnexionAmi,
-  ouvrirAnnuaireAdmin,
   ouvrirSequestre,
   profilAdminVerrouille,
   profilAmi,
@@ -75,6 +74,21 @@ import {
   roleDuCompte,
 } from '../src/profils/annuaire';
 import { changerDEspace } from '../src/profils/espace';
+import {
+  ajouterCompteParTitulaire,
+  appliquerAccesParTitulaire,
+  changerRang,
+  codeAccesTitulaire,
+  ouvrirAnnuaireAdmin,
+  ouvrirAnnuaireTitulaire,
+  ouvrirSequestreTitulaire,
+  publiqueTitulaire,
+  regenererCodeTitulaire,
+  regenererSequestres,
+  retablirSequestreTitulaire,
+  revoquerSequestreTitulaire,
+  supprimerCompteParTitulaire,
+} from '../src/profils/rangs';
 import { coffreLeurre } from '../src/profils/leurre';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { DepotParametres } from '../src/db/depots';
@@ -82,8 +96,9 @@ import { Session } from '../src/session/session';
 import { stockageMemoire } from '../src/session/stockage-coffre';
 import { creerAccesAmi, type IdentifiantsAmi } from '../src/profils/identifiants';
 import { installerPontWeb } from './web';
-import { exiger } from '../src/hub/admin/roles';
+import { LIBELLES_RANG, exiger, exigerRang, rangDe, type Rang } from '../src/hub/admin/roles';
 import { avecEvenement, chargerDonnees, enregistrerDonnees } from '../src/hub/admin/donnees';
+import { verifierModifications } from '../src/hub/admin/actions';
 import { CLE_CARNET_GESTION, ajouterAuCarnet, ecrireCarnet, lireCarnet } from '../src/hub/admin/gestion';
 import type { TypeEvenement } from '../src/hub/admin/journal';
 import { CLE_DONNEES } from '../src/hub/admin/donnees';
@@ -158,9 +173,11 @@ type Etat =
       profil: Profil;
       /** Ce que ce compte a le droit de voir : tout pour l'administrateur déverrouillé, lui seul sinon. */
       profils: Profil[];
-      /** Session de l'administrateur sur le compte d'un ami (accès par séquestre). */
+      /** Session d'un titulaire (Fondateur, Administrateur) sur le compte d'un rang inférieur (séquestre) : son prénom. */
       adminSur?: string;
-      transparence?: { dernierAccesAdmin?: string; sequestreActif: boolean };
+      /** … et son rang (bandeau). */
+      rangSur?: Rang;
+      transparence?: { dernierAccesAdmin?: string; sequestreActif: boolean; par?: string; rangPar?: string };
       /** Administrateur historique sans prénom : celui saisi à la connexion, à lui donner une fois déverrouillé. */
       prenomAAdopter?: string;
       /** Le coffre d'ici n'est pas celui du compte relié (créé sur ce navigateur autrefois). */
@@ -260,16 +277,40 @@ function effacer(cles: ClesAdmin): void {
   cles.sequestre.fill(0);
 }
 
-/** Dates des accès de l'administrateur à ce compte (lues dans la base de l'ami). */
-function accesAdminLus(session: SessionBureau): string[] {
+/** Un accès au compte par séquestre : date, et (depuis les rangs) qui et de quel rang. */
+interface AccesNote {
+  date: string;
+  par?: string;
+  rang?: string;
+}
+
+/** Accès des titulaires à ce compte (lus dans la base du compte) ; les anciennes entrées ne sont que des dates. */
+function accesAdminLus(session: SessionBureau): AccesNote[] {
   try {
     const brut = new DepotParametres(session.session.base()).lire(PARAM_ACCES_ADMIN);
-    const liste = brut ? JSON.parse(brut) : [];
-    return Array.isArray(liste) ? liste.filter((d): d is string => typeof d === 'string' && !Number.isNaN(Date.parse(d))) : [];
+    const liste: unknown = brut ? JSON.parse(brut) : [];
+    if (!Array.isArray(liste)) return [];
+    return liste.flatMap((d): AccesNote[] => {
+      if (typeof d === 'string' && !Number.isNaN(Date.parse(d))) return [{ date: d }];
+      if (d && typeof d === 'object' && typeof (d as AccesNote).date === 'string' && !Number.isNaN(Date.parse((d as AccesNote).date))) {
+        const o = d as AccesNote;
+        return [{ date: o.date, ...(typeof o.par === 'string' ? { par: o.par.slice(0, 30) } : {}), ...(typeof o.rang === 'string' ? { rang: o.rang.slice(0, 20) } : {}) }];
+      }
+      return [];
+    });
   } catch {
     return [];
   }
 }
+
+/** Transparence d'un compte : dernier accès (date, titulaire, rang). */
+function transparenceDe(acces: readonly AccesNote[], sequestreActif: boolean) {
+  const dernier = acces[acces.length - 1];
+  return { dernierAccesAdmin: dernier?.date, sequestreActif, ...(dernier?.par ? { par: dernier.par } : {}), ...(dernier?.rang ? { rangPar: dernier.rang } : {}) };
+}
+
+/** Rang d'administration (autre que le compte historique) : ouvre des comptes inférieurs par séquestre. */
+const estTitulaireRole = (role: Profil['role']): role is 'administrateur' | 'fondateur' => role === 'administrateur' || role === 'fondateur';
 
 function Racine() {
   const sombre = useColorScheme() === 'dark';
@@ -309,7 +350,7 @@ function Racine() {
    * `cle` : clé maîtresse relue du séquestre (session administrateur).
    */
   const ouvrir = useCallback(
-    async (compte: CompteTrouve, options: { cle?: Uint8Array; adminSur?: string; creation?: boolean } = {}) => {
+    async (compte: CompteTrouve, options: { cle?: Uint8Array; adminSur?: string; rangSur?: Rang; creation?: boolean } = {}) => {
       setEtat({ phase: 'chargement', message: options.adminSur ? `Ouverture du compte de ${compte.nom}…` : undefined });
       try {
         fabriqueRef.current ??= await initSqlJs({ locateFile: () => urlWasm });
@@ -353,16 +394,17 @@ function Racine() {
               },
         });
         const profil = compte.admin ? profilAdminVerrouille(compte.nom) : profilAmi(annuaire, compte.id, compte.nom);
-        let transparence: { dernierAccesAdmin?: string; sequestreActif: boolean } | undefined;
+        let transparence: { dernierAccesAdmin?: string; sequestreActif: boolean; par?: string; rangPar?: string } | undefined;
         if (options.cle) {
           session.session.ouvrirAvecCle(options.cle);
-          // L'accès est noté dans la base de l'ami : il le verra dans ses Paramètres.
-          const acces = [...accesAdminLus(session), new Date().toISOString()].slice(-20);
+          // L'accès est noté dans la base du compte, avec le titulaire et son rang : il le verra dans ses Paramètres.
+          const note: AccesNote = { date: new Date().toISOString(), ...(options.adminSur ? { par: options.adminSur } : {}), ...(options.rangSur ? { rang: LIBELLES_RANG[options.rangSur] } : {}) };
+          const acces = [...accesAdminLus(session), note].slice(-20);
           new DepotParametres(session.session.base()).ecrire(PARAM_ACCES_ADMIN, JSON.stringify(acces));
-          transparence = { dernierAccesAdmin: acces[acces.length - 1], sequestreActif: true };
+          transparence = transparenceDe(acces, true);
         }
         const autreCoffre = compte.admin && !options.adminSur && !pont() ? await coffreAdminEtranger(memoireNavigateur, stockage as never) : false;
-        setEtat({ phase: 'prete', session, profil, profils: [profil], adminSur: options.adminSur, transparence, prenomAAdopter: compte.prenomAAdopter, autreCoffre });
+        setEtat({ phase: 'prete', session, profil, profils: [profil], adminSur: options.adminSur, rangSur: options.rangSur, transparence, prenomAAdopter: compte.prenomAAdopter, autreCoffre });
       } catch (erreur) {
         options.cle?.fill(0);
         setEtat({ phase: 'echec', motif: erreurTexte(erreur) });
@@ -609,7 +651,21 @@ function Racine() {
           });
           if (bilan.annuaireChange && annuaireRef.current) {
             const suivant = profilAmi(annuaireRef.current, profil.id, profil.nom);
-            setEtat(c => (c.phase === 'prete' && c.session === session ? { ...c, profil: suivant, profils: [suivant] } : c));
+            let profilsVus: Profil[] = [suivant];
+            if (estTitulaireRole(suivant.role)) {
+              // Titulaire : sa vue (comptes inférieurs), avec les dépôts reçus convertis.
+              const cles = clesAdminDe(session);
+              try {
+                const vue = ouvrirAnnuaireTitulaire(annuaireRef.current, profil.id, profil.nom, cles);
+                if (vue.modifie) await ecrireAnnuaireDisque(vue.annuaire);
+                profilsVus = vue.profils;
+              } catch (erreur) {
+                console.warn('Rangs :', erreurTexte(erreur));
+              } finally {
+                effacer(cles);
+              }
+            }
+            setEtat(c => (c.phase === 'prete' && c.session === session ? { ...c, profil: profilsVus[0], profils: profilsVus } : c));
           }
         }
       } catch (erreur) {
@@ -752,6 +808,22 @@ function Racine() {
       effacer(cles);
     }
   };
+  /** Titulaire (Administrateur, Fondateur autre que le compte historique) : relit sa vue, enregistre ce qui a changé. */
+  const rafraichirTitulaire = async (annuaire: Annuaire, forcer = false) => {
+    const cles = clesAdminDe(session);
+    try {
+      const vue = ouvrirAnnuaireTitulaire(annuaire, profil.id, profil.nom, cles);
+      if (vue.modifie || forcer) {
+        await ecrireAnnuaireDisque(vue.annuaire);
+      } else {
+        annuaireRef.current = annuaire;
+      }
+      setEtat(c => (c.phase === 'prete' && c.session === session ? { ...c, profil: vue.profils[0], profils: vue.profils } : c));
+      return vue;
+    } finally {
+      effacer(cles);
+    }
+  };
   const avecCles = async <T,>(action: (cles: ClesAdmin, annuaire: Annuaire) => Promise<T> | T): Promise<T> => {
     exigerAdmin();
     const cles = clesAdminDe(session);
@@ -789,7 +861,12 @@ function Racine() {
    * session partent en arrière-plan : on les attend toutes avant de rendre
    * les identifiants. En cas d'échec, rien ne subsiste.
    */
-  async function creerCoffreAmi(id: string, nom: string, publique: string): Promise<{ identifiants: IdentifiantsAmi; depot: string }> {
+  async function creerCoffreAmi(
+    id: string,
+    nom: string,
+    publique: string,
+    pourTitulaire?: (session: Session) => string,
+  ): Promise<{ identifiants: IdentifiantsAmi; depot: string; depotTitulaire?: string }> {
     const ecritures: Array<Promise<void>> = [];
     const suivi: Stockage = {
       ...stockage,
@@ -810,11 +887,13 @@ function Racine() {
         surErreur: erreur => console.error('Enregistrement impossible', erreur),
       });
       let depot = '';
+      let depotTitulaire: string | undefined;
       const identifiants = creerAccesAmi(ami.session, nom, undefined, session => {
         depot = session.deposerPourSequestre(publique, id);
+        depotTitulaire = pourTitulaire?.(session);
       });
       await Promise.all(ecritures);
-      return { identifiants, depot };
+      return { identifiants, depot, depotTitulaire };
     } catch (erreur) {
       await stockage.ecrire(fichiers.coffre, new Uint8Array(0)).catch(() => undefined);
       await stockage.ecrire(fichiers.portefeuille, new Uint8Array(0)).catch(() => undefined);
@@ -854,8 +933,9 @@ function Racine() {
     versionComptes,
     peutChanger: Boolean(adminSur) || (annuaireRef.current ? aDesAmis(annuaireRef.current) : false) || profil.id === 'leurre',
     politique: annuaireRef.current?.politique,
-    sessionAdmin: adminSur ? { nomCompte: profil.nom } : undefined,
-    transparence: profil.admin || profil.id === 'leurre' ? undefined : etat.transparence ?? { sequestreActif: false },
+    sessionAdmin: adminSur ? { nomCompte: profil.nom, par: adminSur, ...(etat.rangSur ? { rang: LIBELLES_RANG[etat.rangSur] } : {}) } : undefined,
+    // Un Fondateur n'est scellé pour personne : pas d'avertissement.
+    transparence: profil.admin || profil.id === 'leurre' || rangDe(profil) === 'fondateur' ? undefined : etat.transparence ?? { sequestreActif: false },
     onChanger: () => quitterCompte(session),
     onAjouter: async nom => {
       exigerAdmin();
@@ -864,11 +944,13 @@ function Racine() {
     },
     onSupprimer: async id => {
       exigerAdmin();
+      exiger(profil, 'supprimer-ami', profils.find(p => p.id === id));
       await effacerFichiers(id);
       await enregistrer(supprimerProfil(profils, id));
     },
     onRenommer: async (id, nom) => {
       exigerAdmin();
+      if (id !== profil.id) exiger(profil, 'renommer-ami', profils.find(p => p.id === id));
       await enregistrer(renommerProfil(profils, id, nom));
     },
     onConnexion: () => {
@@ -908,9 +990,13 @@ function Racine() {
         const acces = accesAdminLus(session);
         setEtat(courant =>
           courant.phase === 'prete' && courant.session === session
-            ? { ...courant, transparence: { dernierAccesAdmin: acces[acces.length - 1], sequestreActif: entree ? entree.sequestre.etat !== 'revoque' : false } }
+            ? { ...courant, transparence: transparenceDe(acces, entree ? entree.sequestre.etat !== 'revoque' || Boolean(entree.sequestres) : false) }
             : courant,
         );
+        if (!suivant.heritage && estTitulaireRole(entree?.acces.role)) {
+          // Administrateur ou Fondateur : sa paire (créée au besoin), ses dépôts convertis, sa vue des comptes inférieurs.
+          await rafraichirTitulaire(suivant);
+        }
       };
       void noter().catch(erreur => console.warn('Connexion non notée :', erreurTexte(erreur)));
     },
@@ -934,6 +1020,7 @@ function Racine() {
         if (!ami || ami.admin) {
           throw new Error('Profil introuvable.');
         }
+        exiger(profil, 'regenerer-identifiants', ami);
         await effacerFichiers(id);
         const { identifiants, depot } = await creerCoffreAmi(id, ami.nom, clePublique());
         await rafraichirAdmin(deposerSequestre(annuaireCourant(), id, depot), true);
@@ -941,8 +1028,15 @@ function Racine() {
       },
       onAutoriser: async (id: string, apps: readonly string[]) => enregistrer(autoriserApps(profils, id, apps)),
       onActiver: async (id: string, actif: boolean) => enregistrer(activerProfil(profils, id, actif)),
-      onModifierProfils: async (suivants: readonly Profil[]) => enregistrer(validerModification(profils, suivants)),
-      onCodeAcces: async (id: string) => avecCles((cles, annuaire) => codeAcces(annuaire, id, cles)),
+      onModifierProfils: async (suivants: readonly Profil[]) => {
+        // Règle des rangs : aucun compte de rang égal (un autre Fondateur) ne change par ce chemin.
+        verifierModifications(profil, profils, suivants);
+        await enregistrer(validerModification(profils, suivants));
+      },
+      onCodeAcces: async (id: string) => {
+        exiger(profil, 'acces-sequestre', profils.find(p => p.id === id));
+        return avecCles((cles, annuaire) => codeAcces(annuaire, id, cles));
+      },
       onRegenererCode: async (id: string) =>
         avecCles(async (cles, annuaire) => {
           const { annuaire: suivant, code } = regenererCodeAcces(annuaire, id, cles);
@@ -979,11 +1073,22 @@ function Racine() {
         if (!ami) {
           throw new Error('Compte introuvable.');
         }
+        exiger(profil, 'ouvrir-compte', ami);
         // La clé de l'ami est relue AVANT de fermer la session de l'administrateur.
         const cle = await avecCles((cles, annuaire) => ouvrirSequestre(annuaire, id, code, cles));
         await session.vider();
         session.session.verrouiller();
-        await ouvrir({ id, nom: ami.nom, admin: false }, { cle, adminSur: profil.nom });
+        await ouvrir({ id, nom: ami.nom, admin: false }, { cle, adminSur: profil.nom, rangSur: 'fondateur' });
+      },
+      onChangerRang: async (id: string, rang: Rang) => {
+        exigerAdmin();
+        // Règle des rangs d'abord (acteur et cible), puis registre, paire, re-scellement.
+        exigerRang(profil, profils.find(p => p.id === id), rang);
+        return avecCles(async (cles, annuaire) => {
+          const r = changerRang(annuaire, ID_PRINCIPAL, cles, id, rang);
+          await rafraichirAdmin(r.annuaire, true);
+          return { enAttente: r.enAttente };
+        });
       },
     } satisfies Partial<ControleProfils>);
   }
@@ -1093,13 +1198,185 @@ function Racine() {
     } satisfies Partial<ControleProfils>);
   }
 
+  // Administrateur (ou Fondateur autre que le compte historique) : l'Administration complète sur
+  // les rangs STRICTEMENT inférieurs, avec SA paire de séquestre et SES codes d'accès. Son rang est
+  // relu dans l'annuaire à chaque action ; chaque fonction de `rangs.ts` revérifie la règle des rangs.
+  const estTitulaireIci = estTitulaireRole(profil.role) && !profil.admin && !adminSur && profil.id !== 'leurre';
+  if (estTitulaireIci) {
+    const rangT = profil.role as 'administrateur' | 'fondateur';
+    const restreintIci = Boolean(annuaireRef.current?.restreint);
+    const exigerTitulaire = async (): Promise<Annuaire> => {
+      if (session.session.statut() !== 'deverrouille') {
+        throw new Error('Déverrouillez votre compte.');
+      }
+      const annuaire = await lireAnnuaireDisque();
+      if (!estTitulaireRole(roleDuCompte(annuaire, profil.id))) {
+        throw new Error('Ce compte n’est plus Administrateur ni Fondateur.');
+      }
+      return annuaire;
+    };
+    const avecClesT = async <T,>(action: (cles: ClesAdmin, annuaire: Annuaire) => Promise<T> | T): Promise<T> => {
+      const annuaire = await exigerTitulaire();
+      const cles = clesAdminDe(session);
+      try {
+        return await action(cles, annuaire);
+      } finally {
+        effacer(cles);
+      }
+    };
+    const cibleVue = (id: string) => profils.find(p => p.id === id);
+    const surPc = (quoi: string) => {
+      if (restreintIci) {
+        throw new Error(`${quoi} se fait depuis l’appareil qui a l’annuaire complet (le PC), pas depuis ce navigateur.`);
+      }
+    };
+    const clesPubliques = (annuaire: Annuaire) => {
+      const principal = annuaire.admin.cleSequestre;
+      const mienne = publiqueTitulaire(annuaire, profil.id);
+      if (!principal || !mienne) {
+        throw new Error('Clé de séquestre absente : reconnectez-vous, puis réessayez.');
+      }
+      return { principal, mienne };
+    };
+    Object.assign(controle, {
+      restreint: restreintIci,
+      onCreerCompte: restreintIci
+        ? undefined
+        : async (nom: string, apps: readonly string[], options?: OptionsNouveauProfil) => {
+            exiger(profil, 'creer-ami');
+            const id = nouvelIdentifiant(n => crypto.getRandomValues(new Uint8Array(n)));
+            const maintenant = new Date().toISOString();
+            const nouveau = { id, nom, gestionnaireId: profil.id, apps, niveaux: options?.niveaux, invitationExpireLe: options?.invitationExpireLe, expireLe: options?.expireLe };
+            // Validation (prénom libre, rang, clés) AVANT de créer le moindre fichier.
+            const verifie = await exigerTitulaire();
+            ajouterCompteGere(verifie, nouveau, maintenant);
+            const { principal, mienne } = clesPubliques(verifie);
+            await autoriserFichiers(id);
+            const { identifiants, depot, depotTitulaire } = await creerCoffreAmi(id, nom.trim(), principal, ami =>
+              ami.deposerPourTitulaire(mienne, profil.id, id, { nom: nom.trim().slice(0, 30), creeLe: maintenant.slice(0, 10) }),
+            );
+            try {
+              await enFile(async () => {
+                const frais = await exigerTitulaire();
+                await rafraichirTitulaire(ajouterCompteParTitulaire(frais, nouveau, { principal: depot, titulaire: depotTitulaire! }, maintenant), true);
+              });
+            } catch (erreur) {
+              await effacerFichiers(id).catch(() => undefined);
+              throw erreur;
+            }
+            return identifiants;
+          },
+      onRegenerer: restreintIci
+        ? undefined
+        : async (id: string) => {
+            const cible = cibleVue(id);
+            exiger(profil, 'regenerer-identifiants', cible);
+            const { principal, mienne } = clesPubliques(await exigerTitulaire());
+            await autoriserFichiers(id);
+            await effacerFichiers(id);
+            const { identifiants, depot, depotTitulaire } = await creerCoffreAmi(id, cible!.nom, principal, ami =>
+              ami.deposerPourTitulaire(mienne, profil.id, id, { nom: cible!.nom, ...(cible!.creeLe ? { creeLe: cible!.creeLe } : {}) }),
+            );
+            await enFile(async () => rafraichirTitulaire(regenererSequestres(await exigerTitulaire(), profil.id, id, { principal: depot, titulaire: depotTitulaire }), true));
+            return identifiants;
+          },
+      onModifierProfils: (suivants: readonly Profil[]) =>
+        enFile(async () => {
+          const annuaire = await exigerTitulaire();
+          let suivant = appliquerAccesParTitulaire(annuaire, profil.id, suivants);
+          if (suivant.restreint) {
+            // Sur ce navigateur : en attente, repris par un Fondateur au prochain tour (retour).
+            const modifications = { ...(annuaire.modifications ?? {}) };
+            for (const c of suivant.comptes) {
+              const avant = annuaire.comptes.find(e => e.id === c.id);
+              if (avant && JSON.stringify(avant.acces) !== JSON.stringify(c.acces)) modifications[c.id] = c.acces;
+            }
+            suivant = { ...suivant, modifications };
+          }
+          await rafraichirTitulaire(suivant, true);
+        }),
+      onSupprimer: async (id: string) => {
+        surPc('Supprimer un compte');
+        exiger(profil, 'supprimer-ami', cibleVue(id));
+        await enFile(async () => {
+          const suivant = supprimerCompteParTitulaire(await exigerTitulaire(), profil.id, id);
+          await autoriserFichiers(id);
+          await effacerFichiers(id);
+          await rafraichirTitulaire(suivant, true);
+        });
+      },
+      onCodeAcces: async (id: string) => {
+        exiger(profil, 'acces-sequestre', cibleVue(id));
+        return avecClesT((cles, annuaire) => codeAccesTitulaire(annuaire, profil.id, cles, id));
+      },
+      onRegenererCode: async (id: string) => {
+        exiger(profil, 'acces-sequestre', cibleVue(id));
+        return avecClesT(async (cles, annuaire) => {
+          const { annuaire: suivant, code } = regenererCodeTitulaire(annuaire, profil.id, cles, id);
+          await rafraichirTitulaire(suivant, true);
+          return code;
+        });
+      },
+      onRevoquerAcces: async (id: string) => {
+        exiger(profil, 'acces-sequestre', cibleVue(id));
+        await avecClesT(async (cles, annuaire) => rafraichirTitulaire(revoquerSequestreTitulaire(annuaire, profil.id, cles, id), true));
+      },
+      onRetablirAcces: async (id: string) => {
+        exiger(profil, 'acces-sequestre', cibleVue(id));
+        await avecClesT(async (_cles, annuaire) => rafraichirTitulaire(retablirSequestreTitulaire(annuaire, profil.id, id), true));
+      },
+      onOuvrirCompte: async (id: string, code: string) => {
+        const cible = cibleVue(id);
+        exiger(profil, 'ouvrir-compte', cible);
+        if (restreintIci) {
+          // Navigateur relié : le coffre et le portefeuille de ce compte arrivent par délégation.
+          const liaison = liaisonPourCompte(memoireNavigateur, profil.id);
+          if (liaison) {
+            await auPlus(avantOuverture({ memoire: memoireNavigateur, fichiers: stockage as never, compte: id, liaison }), 15_000);
+          }
+        }
+        await autoriserFichiers(id);
+        // La clé est relue AVANT de fermer la session du titulaire.
+        const cle = await avecClesT((cles, annuaire) => ouvrirSequestreTitulaire(annuaire, profil.id, cles, id, code));
+        await session.vider();
+        session.session.verrouiller();
+        await ouvrir({ id, nom: cible!.nom, admin: false }, { cle, adminSur: profil.nom, rangSur: rangT });
+      },
+      onChangerRang: restreintIci
+        ? undefined
+        : async (id: string, rang: Rang) => {
+            exigerRang(profil, cibleVue(id), rang);
+            return avecClesT(async (cles, annuaire) => {
+              const r = changerRang(annuaire, profil.id, cles, id, rang);
+              await rafraichirTitulaire(r.annuaire, true);
+              return { enAttente: r.enAttente };
+            });
+          },
+      onPolitique:
+        rangT === 'fondateur' && !restreintIci
+          ? async (politique: NonNullable<Annuaire['politique']>) => {
+              exiger(profil, 'politique-apps');
+              await enFile(async () => rafraichirTitulaire({ ...(await exigerTitulaire()), politique }, true));
+            }
+          : undefined,
+      onJournalGestion: (evenement: { type: string; action: string; cible?: string; nomCible?: string; app?: string }) => {
+        const date = new Date().toISOString();
+        return enFile(async () => {
+          const annuaire = await exigerTitulaire();
+          await ecrireAnnuaireDisque(ajouterEvenementGestion(annuaire, profil.id, { ...evenement, type: evenement.type as TypeEvenement, date }));
+        });
+      },
+    } satisfies Partial<ControleProfils>);
+  }
+
+  const libelleRangSur = etat.rangSur ? LIBELLES_RANG[etat.rangSur] : 'Administrateur';
   return (
     <View style={[styles.pleinEcran, { backgroundColor: palette.fond }]}>
       <BandeauMiseAJour palette={palette} />
       {adminSur ? (
         <View style={[styles.bandeauAdmin, { backgroundColor: palette.danger }]} testID="bandeau-session-admin" accessibilityRole="alert">
-          <Text style={{ color: '#fff', fontWeight: '700', flex: 1 }}>
-            Session administrateur sur le compte de {profil.nom}
+          <Text style={{ color: '#fff', fontWeight: '700', flex: 1 }} testID="bandeau-session-texte">
+            Session de {adminSur} ({libelleRangSur}) sur le compte de {profil.nom} — accès journalisé
           </Text>
           <Pressable
             accessibilityRole="button"

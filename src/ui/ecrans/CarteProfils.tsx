@@ -12,6 +12,7 @@ import type { OptionsNouveauProfil, Profil } from '../../profils/profils';
 import type { PolitiqueHub } from '../../hub/admin/politique';
 import type { IdentifiantsAmi } from '../../profils/identifiants';
 import type { OptionsLier } from './LierCompte';
+import { rangDe, texteTransparence } from '../../hub/admin/roles';
 
 export interface ControleProfils {
   actuel: Profil;
@@ -24,13 +25,25 @@ export interface ControleProfils {
   peutChanger?: boolean;
   /** Politique des apps (activation, maintenance), lisible par le hub d'un ami. */
   politique?: PolitiqueHub;
-  /** Session de l'administrateur sur le compte d'un ami : prénom de l'ami (bandeau). */
-  sessionAdmin?: { nomCompte: string };
+  /** Session d'un titulaire sur le compte d'un autre (séquestre) : prénom du compte ouvert, et qui l'a ouvert (bandeau). */
+  sessionAdmin?: { nomCompte: string; par?: string; rang?: string };
   /**
-   * Compte ami : avertissement de transparence (l'administrateur peut y
-   * accéder), avec la date de son dernier accès s'il y en a eu.
+   * Compte d'un rang inférieur à Fondateur : avertissement de transparence
+   * (les rangs supérieurs peuvent y accéder), avec le dernier accès (date,
+   * titulaire et son rang) s'il y en a eu. Absent pour un Fondateur.
    */
-  transparence?: { dernierAccesAdmin?: string; sequestreActif: boolean };
+  transparence?: { dernierAccesAdmin?: string; sequestreActif: boolean; par?: string; rangPar?: string };
+  /**
+   * Changer le rang d'un compte (Fondateur, Administrateur, Gestionnaire,
+   * Ami) : l'hôte revérifie la règle des rangs, met à jour le registre des
+   * Fondateurs, crée la paire du promu et re-scelle (ou retire) les séquestres.
+   * `enAttente` : la paire du promu sera créée à sa prochaine connexion.
+   */
+  onChangerRang?(id: string, rang: 'fondateur' | 'administrateur' | 'gestionnaire' | 'ami'): Promise<{ enAttente: boolean }>;
+  /** Politique globale des apps, pour un Fondateur autre que le compte historique (qui passe par la liste). */
+  onPolitique?(politique: PolitiqueHub): Promise<void>;
+  /** Navigateur relié avec le code d'un titulaire : ce qui exige l'annuaire complet n'est pas disponible ici. */
+  restreint?: boolean;
   /** Revenir à « Qui utilise AppDashboard ? ». */
   onChanger(): void;
   onAjouter(nom: string): Promise<void>;
@@ -90,7 +103,7 @@ export interface ControleProfils {
 
 /** Texte de transparence montré à un ami (création du compte, Paramètres). */
 export const AVERTISSEMENT_TRANSPARENCE =
-  'L’administrateur peut accéder à ton compte. Chaque accès est inscrit à son journal, et la date du dernier accès s’affiche ici.';
+  'Les administrateurs et fondateurs peuvent accéder à ton compte. Chaque accès est inscrit à leur journal, et le dernier accès s’affiche ici.';
 
 export function CarteProfils({ controle }: { controle: ControleProfils }) {
   const palette = usePalette();
@@ -131,14 +144,16 @@ export function CarteProfils({ controle }: { controle: ControleProfils }) {
               Ce profil a été créé par l’administrateur. Pour l’ouvrir aussi sur le site ou ton téléphone, demande-lui ton code de
               connexion : il n’ouvre que ton compte. Aucun autre compte ne voit tes données, et tu ne vois pas les leurs.
             </SousTitre>
-            <View style={[styles.profil, { borderColor: palette.accent }]} testID="transparence-admin">
-              <Text style={{ color: palette.texte, flex: 1 }}>
-                ⚠️ {AVERTISSEMENT_TRANSPARENCE}
-                {controle.transparence?.dernierAccesAdmin
-                  ? ` Dernier accès : ${new Date(controle.transparence.dernierAccesAdmin).toLocaleString('fr-FR')}.`
-                  : ' Aucun accès de l’administrateur pour l’instant.'}
-              </Text>
-            </View>
+            {texteTransparence(rangDe(actuel)) ? (
+              <View style={[styles.profil, { borderColor: palette.accent }]} testID="transparence-admin">
+                <Text style={{ color: palette.texte, flex: 1 }}>
+                  ⚠️ {texteTransparence(rangDe(actuel))} Chaque accès est inscrit à leur journal, et le dernier accès s’affiche ici.
+                  {controle.transparence?.dernierAccesAdmin
+                    ? ` Dernier accès : ${new Date(controle.transparence.dernierAccesAdmin).toLocaleString('fr-FR')}${controle.transparence.par ? ` (${controle.transparence.par}${controle.transparence.rangPar ? `, ${controle.transparence.rangPar}` : ''})` : ''}.`
+                    : ' Aucun accès pour l’instant.'}
+                </Text>
+              </View>
+            ) : null}
           </>
         )}
 
