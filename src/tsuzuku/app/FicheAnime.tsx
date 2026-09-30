@@ -19,7 +19,7 @@ export function FicheAnimeEcran({ id }: { id: string }) {
   const f = fiche.donnees;
   const entree = lib.donnees ? trouver(lib.donnees, 'anime', id) : null;
   const min: FicheMin | undefined = f ? { kind: 'anime', id, title: f.title, image: f.image, year: f.year, totalEpisodes: f.totalEpisodes } : undefined;
-  const suivant = prochainEpisode(lib.donnees, id);
+  const suivant = prochainEpisode(lib.donnees, id, f?.totalEpisodes);
   const listeEps = eps.donnees?.length ? eps.donnees : f?.totalEpisodes ? Array.from({ length: f.totalEpisodes }, (_, i) => ({ number: i + 1, title: null, aired: null, filler: false, url: null })) : [];
 
   return (
@@ -40,7 +40,7 @@ export function FicheAnimeEcran({ id }: { id: string }) {
                 {entree ? <Text style={[styleTexte(theme, 13), { fontWeight: '700', color: theme.accent }]} testID="fiche-statut">{LIBELLE_STATUT[entree.status]}{entree.currentEpisode ? ` · épisode ${entree.currentEpisode}` : ''}</Text> : null}
                 <Synopsis texte={f.synopsis} />
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
-                  <Bouton titre={`▶ Lire l’épisode ${suivant}`} variante="plein" onPress={() => aller({ t: 'lecteur', kind: 'anime', id, numero: suivant })} testID="fiche-lire" />
+                  <Bouton titre={suivant === 1 && (entree?.currentEpisode ?? 0) > 0 ? '▶ Revoir depuis l’épisode 1' : `▶ Lire l’épisode ${suivant}`} variante="plein" onPress={() => aller({ t: 'lecteur', kind: 'anime', id, numero: suivant })} testID="fiche-lire" />
                 </View>
               </View>
             </View>

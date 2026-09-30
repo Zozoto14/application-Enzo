@@ -8,6 +8,7 @@ import { importerSources } from '../moteur/sources';
 import { CLES } from '../plateforme/stockage';
 import { APP_TSUZUKU, ID_TSUZUKU } from '../registre';
 import { lireReglages, REGLAGES_DEFAUT } from './reglages';
+import { prochainEpisode } from './LienAnime';
 import { lireAnime, lireFilm } from './resoudre';
 import { infoTsuzuku, resumerBibliotheque } from './resume';
 import { creerServices } from './services';
@@ -205,5 +206,16 @@ describe('catalogue', () => {
     expect(r.source).toBe('tmdb');
     expect(r.items[0].title).toBe('Matrix');
     expect(reseau.urls().some(u => u.includes('api_key=cle-secrete-123'))).toBe(true);
+  });
+});
+
+describe('épisode suivant', () => {
+  const db = (courant: number) => ({ version: 2, anime: [{ id: '1', kind: 'anime', title: 'A', currentEpisode: courant }], movies: [], history: [], manualSources: { anime: {}, movies: {} } }) as never;
+  it('suit la progression, et recommence quand tout est vu', () => {
+    expect(prochainEpisode(undefined, '1', 12)).toBe(1);
+    expect(prochainEpisode(db(0), '1', 12)).toBe(1);
+    expect(prochainEpisode(db(4), '1', 12)).toBe(5);
+    expect(prochainEpisode(db(12), '1', 12)).toBe(1);
+    expect(prochainEpisode(db(1000), '1', null)).toBe(1001);
   });
 });

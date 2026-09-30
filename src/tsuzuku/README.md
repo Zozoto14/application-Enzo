@@ -1,10 +1,10 @@
 # TSUZUKU : moteur (phase P1)
 
 Streaming d'animes et de films, **sans serveur** : le moteur tourne sur
-chaque appareil (Electron, iPhone/iPad, navigateur). Cette phase ne contient
-que le **moteur pur et ses tests** : ni interface, ni integration au hub.
-Il remplace le backend Express de Tsuzuku (`backend/`), dont la logique est
-portee module par module.
+chaque appareil (Electron, iPhone/iPad, navigateur). La phase P1 est le
+**moteur pur et ses tests** (`moteur/`) ; la phase P2 en fait une **app du hub**
+(`app/`, `plateforme/`, voir la fin de ce fichier). Il remplace le backend
+Express de Tsuzuku (`backend/`), dont la logique est portee module par module.
 
 ## Regle de contenu
 
@@ -115,8 +115,7 @@ le reste des la saisie et a chaque requete.
 - Jikan : ~3 requetes/s, gere par une file interne ; AniList sans cle.
 - L'appariement de titres est heuristique : en dessous du seuil, le moteur
   ecarte le candidat (`refuse`) plutot que de lire la mauvaise serie.
-- Reste a faire (phases suivantes) : interface, enregistrement dans le hub,
-  adaptateurs `Reseau`/`Stockage` par plateforme, synchronisation.
+- Reste a faire : voir « Phase 2 » ci-dessous (P3 a P6).
 
 ## Dependances ajoutees
 
@@ -137,3 +136,63 @@ Jikan/AniList/TMDB simulees (`outilsTest.ts`, faux `Reseau`), aucun reseau
 reel. Couvre l'anti-SSRF (IP decimales/octales/hexa/IPv6, ports, DNS,
 redirections), les motifs `{n}`, la migration des anciennes bibliotheques, le
 « vu ailleurs », VF/VOSTFR, les replis Jikan/AniList/TMDB.
+
+## Phase 2 : Tsuzuku, app du hub
+
+Meme mot de passe, memes profils, memes permissions que le hub ; aucun serveur.
+
+### Ou est quoi
+
+| Chemin | Role |
+| --- | --- |
+| `registre.ts` | Entree `id: 'tsuzuku'` du registre du hub (nom, icone, teinte `anime`, information en direct) |
+| `app/Racine.tsx` | Ecran racine : « ← Hub » + Echap, Animes / Films, onglets Accueil · Catalogue · Bibliotheque · Sources |
+| `app/Accueil`, `Catalogue`, `FicheAnime`, `FicheFilm`, `Lecteur`, `Bibliotheque`, `Sources`, `Import` | Ecrans React Native (390 px, accessibilite) |
+| `app/LienAnime`, `LienFilm` | Liens manuels : episode + suivants (motif `{n}`) ; film : lien direct |
+| `app/LecteurMedia.web.tsx` / `LecteurMedia.tsx` | Site et PC : iframe `sandbox`, `<video>`, HLS (hls.js charge a la demande). iPhone : « Ouvrir dans Safari » en attendant la WebView (P4) |
+| `app/services.ts`, `resoudre.ts` | Assemblage du moteur par profil ; lien manuel puis sources -> lecteurs |
+| `app/reglages.ts`, `ParametresTsuzuku.tsx` | Reglages (Parametres > Tsuzuku) : cle TMDB, VF/VOSTFR, episode suivant auto, masquer les deja vus |
+| `app/resume.ts` | Information en direct de la tuile : « Reprendre <titre> · Ep. N » ou « N a voir » |
+| `plateforme/reseau*.ts` | Adaptateurs `Reseau` (voir ci-dessous) |
+| `plateforme/stockage.ts` | `Stockage` = base chiffree du profil courant |
+| `../../bureau/electron/tsuzuku.mjs` | Reseau du processus principal d'Electron (garde anti-SSRF, DNS, sous-cadres) |
+
+### Adaptateurs `Reseau`
+
+| Plateforme | Adaptateur | Ce qu'il fait |
+| --- | --- | --- |
+| PC (Electron) | `reseauElectron` -> IPC `tsuzuku:requete` | Le processus principal refait la garde (http(s), ports 80/443/8080/8443, hote public, DNS verifie A LA CONNEXION via `lookup`), ne suit AUCUNE redirection (le moteur re-verifie chaque saut), n'envoie et ne garde AUCUN cookie, borne delai (30 s) et taille (16 Mo), ne transmet que quelques en-tetes |
+| Site (navigateur) | `reseauWeb` | CORS : seuls Jikan, AniList, TMDB. Toute autre adresse est refusee : « Lecture des sources disponible sur l'app PC/iPhone ; sur le site, bientot. » Catalogue, bibliotheque et liens manuels directs restent disponibles |
+| iPhone/iPad | `reseauNatif` (`fetch` natif) | Le `fetch` de React Native suit lui-meme les redirections : l'adresse FINALE est re-verifiee apres coup et la reponse jetee si elle est privee (un saut intermediaire n'est pas empechable) |
+
+Lecteurs (iframe) sur PC : la fenetre declare le site (`tsuzuku:lecteur`) ; le
+processus principal n'accepte un sous-cadre que pour un hote declare et public
+(`onBeforeRequest` + `will-frame-navigate`). L'iframe est en `sandbox` (pas de
+navigation du parent, pas de fenetre).
+
+### Stockage et isolation
+
+Les donnees sont des parametres de la base chiffree du profil ouvert, sous le
+prefixe `tsuzuku.` (`tsuzuku.bibliotheque`, `tsuzuku.reglages`, `tsuzuku.mode`,
+`tsuzuku.sources`). Une base par profil : la bibliotheque, les liens manuels et
+la cle TMDB ne sont jamais partages entre profils. Les services (cache du
+catalogue compris) sont recrees par profil.
+
+### Sources et permissions
+
+- Les sources sont **reservees au rang administrateur** (`roleDe(profil) === 'admin'`) : la regle est
+  dans `services.enregistrerSources` (403), pas seulement dans l'ecran. VIDES par defaut.
+- Un ami voit les sources de l'administrateur en lecture seule. **Reste a faire (P3)** : la copie
+  n'est pas encore poussee par la synchro ; l'ami lit `tsuzuku.sources.admin` dans sa propre base
+  (vide tant que la synchro ne la remplit pas). En attendant l'ami utilise le catalogue, la
+  bibliotheque et ses liens manuels.
+- Permissions par app : comme toute app (l'Administration propose la case « Tsuzuku » ; un ami sans
+  `tsuzuku` n'a pas la tuile). Desactivation et maintenance de la politique globale s'appliquent.
+- Regle de contenu : aucune source preconfiguree, aucun site de streaming non autorise nomme.
+
+### Reste a faire
+
+- **P3** : synchro de la bibliotheque, des liens manuels et de la copie des sources de l'administrateur vers les amis.
+- **P4** : WebView native (lecteur integre sur iPhone/iPad).
+- **P5/P6** : voir le plan du hub.
+- Site : lecture des sources par un relais (les pages tierces y sont bloquees par le CORS).

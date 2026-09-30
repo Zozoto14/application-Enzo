@@ -139,7 +139,9 @@ export function LienAnime({ id, numeroCourant, catalogue }: { id: string; numero
 }
 
 /** Numéro de l'épisode suivant à regarder pour une entrée de bibliothèque. */
-export function prochainEpisode(db: Parameters<typeof trouver>[0] | undefined, id: string): number {
+export function prochainEpisode(db: Parameters<typeof trouver>[0] | undefined, id: string, total?: number | null): number {
   const e = db ? trouver(db, 'anime', id) : null;
-  return Math.max(1, (e?.currentEpisode ?? 0) + 1);
+  const vus = e?.currentEpisode ?? 0;
+  // Tout est vu : on propose de recommencer plutôt qu'un épisode qui n'existe pas.
+  return total && vus >= total ? 1 : Math.max(1, vus + 1);
 }
