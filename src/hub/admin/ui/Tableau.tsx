@@ -6,6 +6,8 @@ import { police, teinteTransparente } from '../../themes';
 import { alertesComptes, statistiques, type AlerteAdmin } from '../comptes';
 import { LIBELLES_TYPE } from '../journal';
 import { alertesSecurite } from './Securite';
+import { dateDuJour, lignesAbo, resumeRappels } from '../../abonnements/abonnements';
+import { comptesSuivis, peutVoirAbonnements } from '../../abonnements/actionsAbo';
 import { Intertitre, Panneau, commun, dateLisible, relatif, styleTitre, type OutilsAdmin } from './commun';
 
 export function Tableau({ outils }: { outils: OutilsAdmin }) {
@@ -15,6 +17,7 @@ export function Tableau({ outils }: { outils: OutilsAdmin }) {
   // Un gestionnaire ne reçoit que des chiffres : `apercu` ne porte aucun prénom.
   const stats = statistiques(apercu, registre, outils.politique, maintenant);
   const alertes: AlerteAdmin[] = [...(gestionnaire ? [] : alertesSecurite(outils)), ...alertesComptes(tous, maintenant, donnees.reglages.inactifJours)];
+  const resumeAbo = peutVoirAbonnements(outils.acteur) ? resumeRappels(lignesAbo(comptesSuivis(outils.acteur, tous), donnees.abonnements, dateDuJour(maintenant))) : undefined;
   const autres = outils.controle.gestion?.autres ?? 0;
   const recents = [...donnees.journal].reverse().slice(0, 8);
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
@@ -52,6 +55,16 @@ export function Tableau({ outils }: { outils: OutilsAdmin }) {
         {chiffre('Désactivés', stats.desactives, 'admin-stat-desactives', () => outils.allerA('utilisateurs'))}
         {chiffre('Invités en attente', stats.invites, 'admin-stat-invites', () => outils.allerA('utilisateurs'))}
       </View>
+
+      {resumeAbo && resumeAbo.texte ? (
+        <Pressable
+          testID="admin-abonnements-rappel"
+          accessibilityRole="button"
+          onPress={() => outils.allerA('abonnements')}
+          style={[commun.avis, { borderLeftColor: resumeAbo.retard > 0 ? theme.critique : theme.alerte, backgroundColor: teinteTransparente(resumeAbo.retard > 0 ? theme.critique : theme.alerte, 0.12) }]}>
+          <Text style={[texte, { fontSize: 13, fontWeight: '600' }]}>🔔 {resumeAbo.texte}</Text>
+        </Pressable>
+      ) : null}
 
       {gestionnaire ? (
         <Panneau theme={theme} testID="admin-gestion-resume">

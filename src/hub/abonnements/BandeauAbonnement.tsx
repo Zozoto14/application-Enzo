@@ -8,7 +8,7 @@
  * Informatif seulement : aucun blocage, aucune action automatique.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { BoutonHub } from '../Hub';
 import { chargerDonnees } from '../admin/donnees';
@@ -16,7 +16,7 @@ import { autorise } from '../admin/roles';
 import { demanderSectionAdmin } from '../admin/navigation';
 import { police, teinteTransparente, type ThemeHub } from '../themes';
 import type { ContexteHub } from '../types';
-import { dateDuJour, lignesAbo, rappelPourAmi, resumeRappels } from './abonnements';
+import { dateDuJour, lignesAbo, notificationDuJour, rappelPourAmi, resumeRappels } from './abonnements';
 import { comptesSuivis } from './actionsAbo';
 
 export const CLE_RAPPEL_AMI_VU = 'hub.abonnement.rappelVu';
@@ -31,6 +31,24 @@ export function resumeAdminDuContexte(contexte: ContexteHub, maintenant: number)
   const suivis = comptesSuivis(acteur, contexte.profils?.tous ?? []);
   const lignes = lignesAbo(suivis, donnees.abonnements, dateDuJour(maintenant));
   return { resume: resumeRappels(lignes), reglages: donnees.abonnements.reglages };
+}
+
+/** Notification système (Electron) ou du navigateur si déjà autorisée ; jamais de demande d'autorisation ici. */
+export async function notifierLocalement(titre: string, corps: string): Promise<boolean> {
+  try {
+    const g = globalThis as {
+      applibourse?: { systeme?: { notifier?(t: string, c: string): Promise<boolean> } };
+      Notification?: { permission?: string; new (t: string, o?: { body?: string }): unknown };
+    };
+    if (g.applibourse?.systeme?.notifier) return await g.applibourse.systeme.notifier(titre, corps);
+    if (g.Notification && g.Notification.permission === 'granted') {
+      new g.Notification(titre, { body: corps });
+      return true;
+    }
+  } catch {
+    // Notifications indisponibles.
+  }
+  return false;
 }
 
 export function BandeauAbonnement({
@@ -54,6 +72,27 @@ export function BandeauAbonnement({
   }, [contexte.admin, contexte.profil, contexte.profils?.tous, version, maintenant]);
 
   const aujourdhui = dateDuJour(maintenant);
+
+  // Notification locale de l'administrateur : à l'ouverture, puis une fois par jour si l'app reste ouverte.
+  useEffect(() => {
+    if (!admin || !contexte.baseProfil) return undefined;
+    const base = contexte.baseProfil;
+    const verifier = () => {
+      try {
+        const jour = dateDuJour(Date.now());
+        const n = notificationDuJour(admin.resume, admin.reglages, base.lire(CLE_NOTIF_ADMIN_VUE) ?? undefined, jour);
+        if (!n) return;
+        base.ecrire(CLE_NOTIF_ADMIN_VUE, jour);
+        void notifierLocalement(n.titre, n.corps);
+      } catch {
+        // Une notification manquée n'empêche rien : le bandeau reste affiché.
+      }
+    };
+    verifier();
+    const minuteur = setInterval(verifier, 3_600_000);
+    return () => clearInterval(minuteur);
+  }, [admin, contexte.baseProfil]);
+
   const [rappel] = useState(() => {
     const projection = contexte.profils?.abonnement;
     if (!projection || contexte.admin) return undefined;

@@ -21,6 +21,7 @@ import { THEMES_HUB, police, teinteTransparente, type IdThemeHub, type ThemeHub 
 import type { EtatCoffre, ServicesAdmin } from './types';
 import { versionApp } from './version';
 import { texteTransparence } from './admin/roles';
+import { ReglagesAbonnements } from './abonnements/ReglagesAbonnements';
 import type { Profil } from '../profils/profils';
 
 const rayonDe = (theme: ThemeHub) => Math.min(theme.rayonMoyen, 10);
@@ -354,6 +355,7 @@ export function ReglagesAdministration({ theme, services, acteur, maintenant = D
           {message}
         </Text>
       ) : null}
+      <ReglagesAbonnements theme={theme} services={services} acteur={acteur} maintenant={maintenant} />
     </View>
   );
 }
