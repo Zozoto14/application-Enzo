@@ -90,3 +90,4 @@ acceptable ; l'appel à l'API iOS reste à brancher.
 performance TWR/MWR, dividendes, synchronisation Syncthing, alertes.
 
 Site de secours : https://applibourse-ef0ddb.pages.dev (adresse dans `src/config/site.json`) ; publication et mises à jour automatiques : `docs/site-deploiement.md`.
+Support (tickets vers Discord par le relais) : `docs/support-discord.md`.
