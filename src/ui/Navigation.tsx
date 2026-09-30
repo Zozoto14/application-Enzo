@@ -57,6 +57,7 @@ export function Coque({
   discret = false,
   onBasculerDiscretion,
   flottant,
+  enTete,
   children,
 }: {
   destinations: readonly Destination[];
@@ -68,10 +69,22 @@ export function Coque({
   onBasculerDiscretion?(): void;
   /** Élément posé par-dessus le contenu (le lecteur du podcast). */
   flottant?: React.ReactNode;
+  /** Barre commune à toutes les pages d'app : pastille de synchro et bouton Paramètres. */
+  enTete?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const palette = usePalette();
   const { width } = useWindowDimensions();
+  const contenu = (
+    <>
+      {enTete ? (
+        <View style={[styles.enTete, { backgroundColor: palette.fond }]} testID="entete-app">
+          {enTete}
+        </View>
+      ) : null}
+      <View style={styles.contenu}>{children}</View>
+    </>
+  );
   if (destinations.length === 0) {
     return <>{children}</>;
   }
@@ -117,7 +130,7 @@ export function Coque({
           </ScrollView>
         </View>
         <View style={styles.contenu}>
-          {children}
+          {contenu}
           {flottant}
         </View>
       </View>
@@ -196,7 +209,7 @@ export function Coque({
         ) : null}
       </View>
       <View style={styles.contenu}>
-          {children}
+          {contenu}
           {flottant}
         </View>
     </View>
@@ -317,6 +330,7 @@ const styles = StyleSheet.create({
   petitLibelle: { fontSize: 10.5 },
   pied: { borderTopWidth: 1, paddingTop: ESPACEMENT.s },
   contenu: { flex: 1 },
+  enTete: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: ESPACEMENT.m, paddingTop: ESPACEMENT.s },
   colonne: { flex: 1 },
   bandeau: { borderBottomWidth: 1, paddingVertical: 6 },
   liensBandeau: { paddingHorizontal: ESPACEMENT.s, gap: 4, alignItems: 'center' },

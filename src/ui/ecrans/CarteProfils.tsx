@@ -96,8 +96,7 @@ export function CarteProfils({ controle }: { controle: ControleProfils }) {
 
   return (
     <>
-      <Titre>Profils</Titre>
-      <Carte testID="carte-profils">
+      <View style={{ gap: ESPACEMENT.s }} testID="carte-profils">
         <Text style={{ color: palette.texte, fontWeight: '700' }}>
           Profil ouvert : {actuel.nom} {actuel.admin ? '· administrateur' : ''}
         </Text>
@@ -203,7 +202,7 @@ export function CarteProfils({ controle }: { controle: ControleProfils }) {
             <Bouton titre="Changer de compte" variante="discret" onPress={controle.onChanger} testID="changer-profil" />
           </View>
         ) : null}
-      </Carte>
+      </View>
     </>
   );
 }

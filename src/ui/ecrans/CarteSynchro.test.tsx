@@ -13,7 +13,7 @@ describe('CarteSynchro', () => {
     const onRelier = jest.fn().mockResolvedValue(undefined);
     await render(
       <CarteSynchro synchro={nonRelie} liaisonDuPc={LIAISON} nomParDefaut="PC" onRelier={onRelier}
-        onSynchroniser={jest.fn()} onDelier={jest.fn()} onOublier={jest.fn()} maintenant={maintenant} />,
+        onDelier={jest.fn()} onOublier={jest.fn()} maintenant={maintenant} />,
     );
     expect(screen.getByTestId('relais-du-pc')).toBeTruthy();
     expect(screen.queryByTestId('champ-liaison')).toBeNull();
@@ -24,7 +24,7 @@ describe('CarteSynchro', () => {
   it('sur le PC sans relais : explique comment l’installer', async () => {
     await render(
       <CarteSynchro synchro={{ ...nonRelie, plateforme: 'bureau' }} nomParDefaut="PC" onRelier={jest.fn()}
-        onSynchroniser={jest.fn()} onDelier={jest.fn()} onOublier={jest.fn()} />,
+        onDelier={jest.fn()} onOublier={jest.fn()} />,
     );
     expect(screen.getByTestId('relais-a-installer')).toBeTruthy();
     expect(screen.getByText(/npm run relais:deployer/)).toBeTruthy();
@@ -33,7 +33,7 @@ describe('CarteSynchro', () => {
   it('sur l’iPhone : dit où trouver le code', async () => {
     await render(
       <CarteSynchro synchro={{ ...nonRelie, plateforme: 'ios' }} nomParDefaut="iPhone" onRelier={jest.fn()}
-        onSynchroniser={jest.fn()} onDelier={jest.fn()} onOublier={jest.fn()} />,
+        onDelier={jest.fn()} onOublier={jest.fn()} />,
     );
     expect(screen.getByText('Où trouver le code de liaison ?')).toBeTruthy();
     expect(screen.getByText(/Relier un autre appareil/)).toBeTruthy();
@@ -55,7 +55,7 @@ describe('CarteSynchro', () => {
     const onOublier = jest.fn();
     await render(
       <CarteSynchro synchro={relie} nomParDefaut="PC" onRelier={jest.fn()}
-        onSynchroniser={jest.fn()} onDelier={jest.fn()} onOublier={onOublier} maintenant={maintenant} />,
+        onDelier={jest.fn()} onOublier={onOublier} maintenant={maintenant} />,
     );
     expect(screen.getByText(/il y a 2 min/)).toBeTruthy();
     expect(screen.getByText(/Expire demain/)).toBeTruthy();

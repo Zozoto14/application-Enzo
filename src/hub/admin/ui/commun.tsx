@@ -43,7 +43,8 @@ export interface OutilsAdmin {
   /** Transforme et enregistre la liste des profils, puis journalise. */
   modifierProfils(changer: (liste: readonly Profil[]) => Profil[], evenements: ReadonlyArray<Omit<EvenementAudit, 'date'>>, avis?: string): void;
   services?: ServicesAdmin;
-  onTheme?(id: import('../../themes').IdThemeHub): void;
+  /** Ouvre la page Paramètres (unique), sur une section. */
+  onParametres?(section?: import('../../recensement').IdSection): void;
   /** Aller à une autre section (depuis le tableau de bord). */
   allerA(section: IdSection, cible?: string): void;
   large: boolean;

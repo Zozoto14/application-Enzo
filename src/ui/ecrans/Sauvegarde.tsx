@@ -23,8 +23,8 @@ export interface SauvegardeProps {
   onOuvrirDossier?(): void;
   /** Sauvegarde automatique hebdomadaire. */
   automatique?: { active: boolean; derniere?: string; aujourdhui: string };
-  /** Un mot de passe l'active, `undefined` la coupe. */
-  onChangerAutomatique?(motDePasse: string | undefined): void;
+  /** Ouvre Paramètres › Sécurité, où se règle la sauvegarde automatique. */
+  onOuvrirParametres?(): void;
   sauvegardes: readonly SauvegardeSurDisque[];
   onCreer(motDePasse: string): void;
   onRestaurer(chemin: string, motDePasse: string): void;
@@ -44,7 +44,7 @@ export function Sauvegarde({
   emplacement,
   onOuvrirDossier,
   automatique,
-  onChangerAutomatique,
+  onOuvrirParametres,
   sauvegardes,
   onCreer,
   onRestaurer,
@@ -115,8 +115,16 @@ export function Sauvegarde({
 
       {erreur ? <Alerte message={erreur} /> : null}
 
-      {automatique && onChangerAutomatique && disponible ? (
-        <Automatique {...automatique} onChanger={onChangerAutomatique} />
+      {automatique && onOuvrirParametres && disponible ? (
+        <Carte>
+          <Text style={{ color: palette.texte, fontWeight: '700', fontSize: 17 }}>Sauvegarde automatique</Text>
+          <SousTitre>
+            {automatique.active ? 'Activée' : 'Désactivée'} · elle se règle dans les Paramètres, avec tous les autres réglages.
+          </SousTitre>
+          <View style={{ alignSelf: 'flex-start' }}>
+            <Bouton titre="Ouvrir les Paramètres" variante="discret" onPress={onOuvrirParametres} testID="ouvrir-parametres-sauvegarde" />
+          </View>
+        </Carte>
       ) : null}
 
       {/* --- Création --- */}
@@ -320,7 +328,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: ESPACEMENT.s },
 });
 
-function Automatique({
+/** Réglage de la sauvegarde automatique, montré dans Paramètres › Sécurité. */
+export function ReglageSauvegardeAuto({
   active,
   derniere,
   aujourdhui,
@@ -339,8 +348,7 @@ function Automatique({
   const dateFr = (iso: string) => iso.split('-').reverse().join('/');
   const prochaine = joursAvantProchaine(derniere, aujourdhui);
   return (
-    <Carte>
-      <Text style={{ color: palette.texte, fontWeight: '700', fontSize: 17 }}>Sauvegarde automatique</Text>
+    <View style={{ gap: ESPACEMENT.s }}>
       <SousTitre>
         Une archive chiffrée chaque semaine, à l’ouverture de l’application. Les huit dernières sont gardées ;
         vos sauvegardes manuelles ne sont jamais supprimées.
@@ -395,6 +403,6 @@ function Automatique({
           <Bouton titre="Activer la sauvegarde automatique…" variante="discret" onPress={() => setOuvert(true)} testID="ouvrir-sauvegarde-auto" />
         </View>
       )}
-    </Carte>
+    </View>
   );
 }

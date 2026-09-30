@@ -64,7 +64,7 @@ function message(erreur: unknown): string {
 
 type Demande = { raison: string; action: () => void };
 
-export function Administration({ contexte, theme, registre, onRetour, onTheme }: PropsRacineApp) {
+export function Administration({ contexte, theme, registre, onRetour, onParametres }: PropsRacineApp) {
   const controle = contexte.profils;
   const services = contexte.admin;
   const acteur = controle?.actuel;
@@ -216,7 +216,7 @@ export function Administration({ contexte, theme, registre, onRetour, onTheme }:
       });
     },
     services,
-    onTheme,
+    onParametres,
     allerA: (id, choisi) => {
       setSection(id);
       setCible(choisi);
@@ -340,7 +340,7 @@ export function Administration({ contexte, theme, registre, onRetour, onTheme }:
 }
 
 /** Redemande mot de passe + code TOTP de l'administrateur. */
-function FormulaireIdentite({
+export function FormulaireIdentite({
   theme,
   raison,
   enCours,

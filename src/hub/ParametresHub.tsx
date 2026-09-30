@@ -1,11 +1,8 @@
 /**
- * Deux boutons de l'en-tête du hub :
- *
- *  - « Mettre à jour » : pilote le mécanisme de mise à jour existant de la
- *    plateforme (voir `miseAJour.ts`) et affiche son état ;
- *  - « Paramètres » : panneau des réglages du hub (thème, personnalisation,
- *    version, mises à jour, raccourcis vers les Paramètres du portefeuille,
- *    verrouillage). Échap le ferme ; le focus y entre à l'ouverture.
+ * Mise à jour, dans l'en-tête du hub : le bouton « Mettre à jour » pilote le
+ * mécanisme de mise à jour existant de la plateforme (voir `miseAJour.ts`) et
+ * affiche son état. Le détail (`DetailMiseAJour`) est aussi montré dans la page
+ * Paramètres › À propos ; les réglages eux-mêmes sont dans `PageParametres.tsx`.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -70,7 +67,7 @@ export function useMiseAJour() {
     } else {
       envoyer({
         type: 'info',
-        message: `Version en service : ${versionApp()}. Sur iPhone et iPad, les mises à jour signées s’installent depuis Paramètres › Mises à jour du portefeuille.`,
+        message: `Version en service : ${versionApp()}. Sur iPhone et iPad, les mises à jour signées s’installent d’elles-mêmes à la réouverture (Paramètres › À propos).`,
       });
     }
   }, [envoyer, plateforme]);
@@ -104,7 +101,7 @@ export function useMiseAJour() {
   return { etat, plateforme, verifier, installer, actualiser, fermer };
 }
 
-type MiseAJour = ReturnType<typeof useMiseAJour>;
+export type MiseAJour = ReturnType<typeof useMiseAJour>;
 
 /** Détail de l'état de mise à jour, avec l'action qui suit. */
 export function DetailMiseAJour({ theme, maj, testID }: { theme: ThemeHub; maj: MiseAJour; testID?: string }) {
@@ -214,240 +211,6 @@ export function BoutonMiseAJour({ theme, maj }: { theme: ThemeHub; maj: MiseAJou
           </View>
         </View>
       ) : null}
-    </View>
-  );
-}
-
-export interface PanneauParametresProps {
-  theme: ThemeHub;
-  prefs?: PrefsHub;
-  onPrefs?(prefs: PrefsHub): void;
-  onTheme(id: IdThemeHub): void;
-  onPersonnaliser?(): void;
-  onReglagesPortefeuille?(): void;
-  onAdministration?(): void;
-  onVerrouiller?(): void;
-  onChangerProfil?(): void;
-  /** Historique des nouveautés (devblog). */
-  onNouveautes?(): void;
-  /** Compte gestionnaire : bandeau qui dit ce que ce rôle permet (et interdit). */
-  gestionnaire?: boolean;
-  /** Compte ami : l'administrateur peut y accéder (avertissement de transparence). */
-  transparence?: { dernierAccesAdmin?: string; sequestreActif: boolean };
-  nomProfil?: string;
-  /** État de la synchronisation ; absent : section masquée. */
-  synchro?: SynchroHub;
-  maj: MiseAJour;
-  onFermer(): void;
-}
-
-/** Panneau « Paramètres » du hub, en surimpression. */
-export function PanneauParametres(props: PanneauParametresProps) {
-  const { theme, prefs, onPrefs, maj, onFermer } = props;
-  const { width, height } = useWindowDimensions();
-  const fermer = useRef<unknown>(null);
-  useEffect(() => ecouterTouche('Escape', onFermer), [onFermer]);
-  useEffect(() => {
-    // Le focus entre dans le panneau : le clavier y est aussitôt.
-    const noeud = fermer.current as unknown as { focus?(): void } | null;
-    noeud?.focus?.();
-  }, []);
-  const texte = { color: theme.texte, ...police(theme.policeTexte) };
-  const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
-  const rayon = Math.min(theme.rayonMoyen, 10);
-  const section = (titre: string) => (
-    <Text style={[styles.section, { color: theme.attenue }]} accessibilityRole="header">
-      {titre.toUpperCase()}
-    </Text>
-  );
-  const segments = <T extends string>(libelle: string, valeur: T, options: ReadonlyArray<readonly [T, string]>, choisir: (v: T) => void, testID: string) => (
-    <View style={{ gap: 6 }}>
-      <Text style={[attenue, { fontSize: 13 }]}>{libelle}</Text>
-      <View style={[styles.segments, { borderColor: theme.ligne, borderRadius: rayon }]} accessibilityRole="radiogroup">
-        {options.map(([cle, nom]) => {
-          const actif = cle === valeur;
-          return (
-            <Pressable
-              key={cle}
-              testID={`${testID}-${cle}`}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: actif }}
-              accessibilityLabel={`${libelle} : ${nom}`}
-              onPress={() => choisir(cle)}
-              style={[styles.segment, { backgroundColor: actif ? theme.accent : 'transparent' }]}>
-              <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: 13, ...police(theme.policeTexte) }}>{nom}</Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
-  const etroit = width < 640;
-  return (
-    <View style={[StyleSheet.absoluteFill, styles.voile, { backgroundColor: teinteTransparente('#000000', 0.45) }]} testID="hub-parametres">
-      <Pressable accessibilityLabel="Fermer les paramètres" style={StyleSheet.absoluteFill} onPress={onFermer} />
-      <View
-        accessibilityRole={'dialog' as never}
-        accessibilityLabel="Paramètres du hub"
-        aria-modal
-        style={[
-          styles.panneau,
-          {
-            backgroundColor: theme.surface,
-            borderColor: theme.ligne,
-            borderRadius: etroit ? 0 : theme.rayonMoyen,
-            width: etroit ? width : Math.min(480, width - 48),
-            maxHeight: etroit ? height : height - 48,
-          },
-          etroit && { alignSelf: 'stretch', height },
-        ]}>
-        <View style={styles.tete}>
-          <Text style={[texte, { fontSize: 22, fontWeight: theme.poidsTitre, ...police(theme.policeTitre) }]} accessibilityRole="header">
-            Paramètres
-          </Text>
-          <Pressable
-            ref={fermer as React.Ref<never>}
-            testID="hub-parametres-fermer"
-            accessibilityRole="button"
-            accessibilityLabel="Fermer (Échap)"
-            onPress={onFermer}
-            style={[styles.bouton, { borderColor: theme.ligne, borderRadius: rayon, backgroundColor: theme.surface }]}>
-            <Text style={texte}>✕</Text>
-          </Pressable>
-        </View>
-        <ScrollView contentContainerStyle={{ gap: 14, paddingBottom: 8 }}>
-          {section('Apparence')}
-          <View style={styles.themes} accessibilityRole="radiogroup" accessibilityLabel="Thème du hub">
-            {THEMES_HUB.map(candidat => {
-              const choisi = candidat.id === theme.id;
-              return (
-                <Pressable
-                  key={candidat.id}
-                  testID={`parametres-theme-${candidat.id}`}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: choisi }}
-                  accessibilityLabel={`Thème ${candidat.nom}`}
-                  onPress={() => props.onTheme(candidat.id)}
-                  style={[
-                    styles.theme,
-                    { borderColor: choisi ? theme.accent : theme.ligne, borderRadius: rayon, backgroundColor: candidat.fond },
-                    choisi && { borderWidth: 2 },
-                  ]}>
-                  <View style={{ flexDirection: 'row', gap: 3 }}>
-                    {[candidat.accent, candidat.teintes.portefeuille, candidat.teintes.admin].map((c, i) => (
-                      <View key={i} style={{ width: 10, height: 10, backgroundColor: c, borderRadius: 3 }} />
-                    ))}
-                  </View>
-                  <Text style={{ color: candidat.texte, fontSize: 12, fontWeight: '600' }} numberOfLines={1}>
-                    {candidat.nom}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          {prefs && onPrefs ? (
-            <>
-              {segments('Disposition', prefs.disposition, [['grille', '▦ Grille'], ['liste', '☰ Liste']] as const, v => onPrefs(definirDisposition(prefs, v)), 'parametres-disposition')}
-              {segments('Densité', prefs.densite, [['aere', 'Aéré'], ['compact', 'Compact']] as const, v => onPrefs(definirDensite(prefs, v)), 'parametres-densite')}
-              <View style={styles.actions}>
-                {props.onPersonnaliser ? (
-                  <BoutonHub theme={theme} titre="✎ Personnaliser les tuiles" onPress={props.onPersonnaliser} testID="parametres-personnaliser" />
-                ) : null}
-                <BoutonHub
-                  theme={theme}
-                  titre="Réinitialiser la disposition"
-                  desactive={sontParDefaut(prefs)}
-                  onPress={() => onPrefs(reinitialiser())}
-                  testID="parametres-reinitialiser"
-                />
-              </View>
-            </>
-          ) : null}
-
-          {section('Application')}
-          <Text style={[texte, { fontSize: 14 }]} testID="parametres-version">
-            Version : <Text style={police(theme.policeChiffres)}>{versionApp()}</Text>
-          </Text>
-          <Text style={[attenue, { fontSize: 13 }]}>
-            {maj.plateforme === 'bureau'
-              ? 'Mises à jour automatiques : l’application vérifie à chaque lancement puis toutes les heures, et propose d’installer (réglage géré par le système de mise à jour du PC).'
-              : maj.plateforme === 'web'
-                ? 'Site web : il prend la dernière version publiée à chaque chargement ; « Actualiser l’app » vide le cache.'
-                : 'iPhone / iPad : les mises à jour signées s’installent depuis les Paramètres du portefeuille.'}
-          </Text>
-          <DetailMiseAJour theme={theme} maj={maj} testID="parametres-maj" />
-
-          {props.onNouveautes ? (
-            <>
-              {section('Nouveautés')}
-              <Text style={[attenue, { fontSize: 13 }]}>Ce qu’apporte chaque version, avec « Essayer » pour ouvrir la fonctionnalité.</Text>
-              <View style={styles.actions}>
-                <BoutonHub theme={theme} titre="✨ Voir les nouveautés" onPress={props.onNouveautes} testID="parametres-nouveautes" />
-              </View>
-            </>
-          ) : null}
-
-          {props.gestionnaire ? (
-            <>
-              {section('Ton rôle')}
-              <View
-                style={{ padding: 12, borderRadius: rayon, borderLeftWidth: 4, borderLeftColor: theme.teintes.admin, backgroundColor: teinteTransparente(theme.teintes.admin, 0.14), gap: 4 }}
-                testID="parametres-role-gestionnaire">
-                <Text style={[texte, { fontWeight: '700' }]}>Tu es gestionnaire.</Text>
-                <Text style={[attenue, { fontSize: 13 }]}>
-                  L’administrateur t’a confié une Administration limitée : tu peux créer des amis et gérer ceux que tu as créés (accès aux apps, activation,
-                  suspension, identifiants). Tu ne peux ouvrir le compte de personne, et tes actions sont inscrites au journal de l’administrateur, avec ton
-                  nom. Retrouve-la dans la tuile « Administration ».
-                </Text>
-              </View>
-            </>
-          ) : null}
-
-          {props.transparence ? (
-            <>
-              {section('Confidentialité')}
-              <View
-                style={{ padding: 12, borderRadius: rayon, borderLeftWidth: 4, borderLeftColor: theme.alerte, backgroundColor: teinteTransparente(theme.alerte, 0.14), gap: 4 }}
-                testID="parametres-transparence">
-                <Text style={[texte, { fontWeight: '700' }]}>L’administrateur peut accéder à ton compte.</Text>
-                <Text style={[attenue, { fontSize: 13 }]}>
-                  Il peut ouvrir ton compte avec un code d’accès qui lui est propre, sans ton mot de passe. Chaque accès est inscrit à son
-                  journal d’audit et un bandeau reste affiché pendant qu’il est sur ton compte. Aucun autre compte ne voit tes données.
-                </Text>
-                <Text style={[attenue, { fontSize: 13 }]} testID="parametres-dernier-acces-admin">
-                  {props.transparence.dernierAccesAdmin
-                    ? `Dernier accès de l’administrateur : ${new Date(props.transparence.dernierAccesAdmin).toLocaleString('fr-FR')}.`
-                    : 'Aucun accès de l’administrateur à ce jour.'}
-                </Text>
-              </View>
-            </>
-          ) : null}
-
-          {props.synchro ? (
-            <>
-              {section('Synchronisation')}
-              <IndicateurSynchro theme={theme} synchro={props.synchro} detaille />
-            </>
-          ) : null}
-
-          {props.onReglagesPortefeuille || props.onAdministration ? section('Raccourcis') : null}
-          <View style={styles.actions}>
-            {props.onReglagesPortefeuille ? (
-              <BoutonHub theme={theme} titre="Paramètres du portefeuille →" onPress={props.onReglagesPortefeuille} testID="parametres-portefeuille" />
-            ) : null}
-            {props.onAdministration ? (
-              <BoutonHub theme={theme} titre="Administration →" onPress={props.onAdministration} testID="parametres-administration" />
-            ) : null}
-          </View>
-
-          {section('Session')}
-          {props.nomProfil ? <Text style={[attenue, { fontSize: 13 }]}>Compte ouvert : {props.nomProfil}</Text> : null}
-          <View style={styles.actions}>
-            {props.onChangerProfil ? <BoutonHub theme={theme} titre="Changer de compte" onPress={props.onChangerProfil} testID="parametres-changer-profil" /> : null}
-            {props.onVerrouiller ? <BoutonHub theme={theme} titre="⏻ Verrouiller maintenant" onPress={props.onVerrouiller} testID="parametres-verrouiller" /> : null}
-          </View>
-        </ScrollView>
-      </View>
     </View>
   );
 }
