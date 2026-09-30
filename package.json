@@ -36,6 +36,7 @@
     "css-select": "^5.2.2",
     "domhandler": "^5.0.3",
     "domutils": "^3.2.2",
+    "hls.js": "^1.7.3",
     "htmlparser2": "^10.1.0",
     "qrcode-generator": "^2.0.4",
     "react": "19.2.3",
