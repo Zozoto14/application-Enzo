@@ -146,7 +146,7 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
             couleur={theme.teintes.admin}
             titre="＋ Nouvel utilisateur"
             testID="admin-nouveau"
-            desactive={Boolean(outils.enCours) || Boolean(identifiants) || !controle.onCreerCompte || !autorise(outils.acteur, 'creer-ami').ok}
+            desactive={Boolean(outils.enCours) || Boolean(identifiants) || !controle.onCreerCompte || controle.restreint === true || !autorise(outils.acteur, 'creer-ami').ok}
             onPress={() => {
               setChoisi(undefined);
               setCreation(true);

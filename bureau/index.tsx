@@ -1240,9 +1240,10 @@ function Racine() {
     };
     Object.assign(controle, {
       restreint: restreintIci,
-      onCreerCompte: restreintIci
-        ? undefined
-        : async (nom: string, apps: readonly string[], options?: OptionsNouveauProfil) => {
+      // Sur un navigateur relié (annuaire restreint), la création exige l'annuaire complet : refusée avec
+      // un message clair (la fonction reste fournie : c'est elle qui rend l'Administration disponible ici).
+      onCreerCompte: async (nom: string, apps: readonly string[], options?: OptionsNouveauProfil) => {
+            surPc('Créer un compte');
             exiger(profil, 'creer-ami');
             const id = nouvelIdentifiant(n => crypto.getRandomValues(new Uint8Array(n)));
             const maintenant = new Date().toISOString();

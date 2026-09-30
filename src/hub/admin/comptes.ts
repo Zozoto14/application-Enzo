@@ -18,7 +18,7 @@ const JOUR = 86_400_000;
 export type StatutCompte = 'admin' | 'actif' | 'invite' | 'invitation-expiree' | 'suspendu' | 'desactive' | 'expire';
 
 export const LIBELLES_STATUT: Record<StatutCompte, string> = {
-  admin: 'Administrateur',
+  admin: 'Compte historique',
   actif: 'Actif',
   invite: 'Invitation en attente',
   'invitation-expiree': 'Invitation expirée',
