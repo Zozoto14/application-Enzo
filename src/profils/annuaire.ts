@@ -22,6 +22,7 @@
  * pouvoir sceller le bloc privé. Schéma complet : `docs/hub/sequestre.md`.
  */
 
+import { lireDocsJuridiques, type DocsJuridiques } from '../juridique/modele';
 import { ecrirePolitique, lirePolitique, type PolitiqueHub } from '../hub/admin/politique';
 import type { NiveauAcces } from '../hub/admin/niveaux';
 import {
@@ -162,6 +163,8 @@ export interface Annuaire {
    * ce navigateur, en attente d'être reprises par un Fondateur (retour).
    */
   modifications?: Record<string, AccesPublic>;
+  /** Textes légaux modifiés par un Fondateur (voir `juridique/modele.ts`) ; absent : modèle par défaut. Synchronisé, lisible par tous les comptes. */
+  juridique?: DocsJuridiques;
 }
 
 /** Contenu du bloc privé : jamais lisible sans la clé maîtresse de l'administrateur. */
@@ -347,6 +350,8 @@ export function lireAnnuaire(brut: string | undefined): Annuaire {
     const politique = ecrirePolitique(lirePolitique(o.politique));
     if (politique) annuaire.politique = politique;
   }
+  const juridique = lireDocsJuridiques(o.juridique);
+  if (juridique) annuaire.juridique = juridique;
   const prive = hexa(o.prive);
   if (prive) annuaire.prive = prive;
   if (Array.isArray(o.journalGestion)) {

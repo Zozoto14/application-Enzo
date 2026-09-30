@@ -933,6 +933,16 @@ function Racine() {
     versionComptes,
     peutChanger: Boolean(adminSur) || (annuaireRef.current ? aDesAmis(annuaireRef.current) : false) || profil.id === 'leurre',
     politique: annuaireRef.current?.politique,
+    juridique: annuaireRef.current?.juridique,
+    // Textes légaux : seul un Fondateur, et seulement là où l'annuaire complet est disponible (pas sur un navigateur relié).
+    onJuridique:
+      rangDe(profil) === 'fondateur' && !adminSur && profil.id !== 'leurre' && !annuaireRef.current?.restreint
+        ? async (docs: NonNullable<Annuaire['juridique']>) => {
+            if (session.session.statut() !== 'deverrouille') throw new Error('Déverrouillez votre compte.');
+            await enFile(async () => ecrireAnnuaireDisque({ ...(await lireAnnuaireDisque()), juridique: docs }));
+            setVersionComptes(v => v + 1);
+          }
+        : undefined,
     sessionAdmin: adminSur ? { nomCompte: profil.nom, par: adminSur, ...(etat.rangSur ? { rang: LIBELLES_RANG[etat.rangSur] } : {}) } : undefined,
     // Un Fondateur n'est scellé pour personne : pas d'avertissement.
     transparence: profil.admin || profil.id === 'leurre' || rangDe(profil) === 'fondateur' ? undefined : etat.transparence ?? { sequestreActif: false },

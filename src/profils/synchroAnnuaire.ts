@@ -45,6 +45,7 @@ export function entitesAnnuaire(annuaire: Annuaire): Valeurs {
   if (derniereConnexion) e['admin-connexion'] = derniereConnexion;
   if (annuaire.politique) e.politique = annuaire.politique;
   if (annuaire.prive) e.prive = annuaire.prive;
+  if (annuaire.juridique) e.juridique = annuaire.juridique;
   if (annuaire.journalGestion?.length) e.gestion = annuaire.journalGestion;
   for (const c of annuaire.comptes) {
     e[`compte:${c.id}`] = { empreinte: c.empreinte, nom: c.nom, acces: c.acces };
@@ -99,6 +100,7 @@ export function annuaireDepuisEntites(e: Valeurs, ordre: readonly string[] = [])
     comptes,
     ...(e.gestion ? { journalGestion: e.gestion } : {}),
     ...(e.prive ? { prive: e.prive } : {}),
+    ...(e.juridique ? { juridique: e.juridique } : {}),
     ...(Object.keys(partage).length + Object.keys(registre).length > 0 ? { fondateurs: { partage, registre } } : {}),
   };
   return lireAnnuaire(JSON.stringify(brut));
@@ -169,6 +171,7 @@ export function projectionAmi(annuaire: Annuaire, id: string): Annuaire | undefi
     sel: annuaire.sel,
     admin: annuaire.admin.cleSequestre ? { cleSequestre: annuaire.admin.cleSequestre } : {},
     ...(annuaire.politique ? { politique: annuaire.politique } : {}),
+    ...(annuaire.juridique ? { juridique: annuaire.juridique } : {}),
     comptes: [entree],
     restreint: true,
   };
@@ -211,6 +214,7 @@ export function projectionTitulaire(annuaire: Annuaire, id: string): Annuaire | 
     sel: annuaire.sel,
     admin: annuaire.admin.cleSequestre ? { cleSequestre: annuaire.admin.cleSequestre } : {},
     ...(annuaire.politique ? { politique: annuaire.politique } : {}),
+    ...(annuaire.juridique ? { juridique: annuaire.juridique } : {}),
     comptes: [moi, ...inferieurs],
     restreint: true,
     proprietaire: id,

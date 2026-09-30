@@ -12,6 +12,7 @@ import type { OptionsNouveauProfil, Profil } from '../../profils/profils';
 import type { PolitiqueHub } from '../../hub/admin/politique';
 import type { IdentifiantsAmi } from '../../profils/identifiants';
 import type { OptionsLier } from './LierCompte';
+import type { DocsJuridiques } from '../../juridique/modele';
 import { rangDe, texteTransparence } from '../../hub/admin/roles';
 
 export interface ControleProfils {
@@ -25,6 +26,10 @@ export interface ControleProfils {
   peutChanger?: boolean;
   /** Politique des apps (activation, maintenance), lisible par le hub d'un ami. */
   politique?: PolitiqueHub;
+  /** Textes légaux modifiés par un Fondateur (absent : modèle par défaut). Lisibles par tous les comptes. */
+  juridique?: DocsJuridiques;
+  /** Fondateur seulement : enregistre de nouveaux textes légaux (synchronisés avec l'annuaire). */
+  onJuridique?(docs: DocsJuridiques): Promise<void>;
   /** Session d'un titulaire sur le compte d'un autre (séquestre) : prénom du compte ouvert, et qui l'a ouvert (bandeau). */
   sessionAdmin?: { nomCompte: string; par?: string; rang?: string };
   /**
