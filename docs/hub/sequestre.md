@@ -165,7 +165,7 @@ administrateur (le code est lui-même dans `prive`).
 
 - À la création : avertissement dans le formulaire (case à cocher
   obligatoire), et phrase à transmettre à l'ami avec ses identifiants.
-- Chez l'ami : Paramètres du hub › Confidentialité et Paramètres › Profils —
+- Chez l'ami : Paramètres › Sécurité › Confidentialité de votre compte —
   « L'administrateur peut accéder à ton compte », avec la date du dernier
   accès.
 - Chaque accès, affichage, régénération ou révocation du code est journalisé.

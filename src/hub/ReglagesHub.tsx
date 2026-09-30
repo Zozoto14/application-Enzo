@@ -48,6 +48,7 @@ export function ReglageTheme({ theme, onTheme }: { theme: ThemeHub; onTheme(id: 
               testID={`parametres-theme-${candidat.id}`}
               accessibilityRole="radio"
               accessibilityState={{ checked: choisi }}
+              aria-checked={choisi}
               accessibilityLabel={`Thème ${candidat.nom}`}
               onPress={() => onTheme(candidat.id)}
               style={[styles.theme, { borderColor: choisi ? theme.accent : theme.ligne, borderRadius: rayon, backgroundColor: candidat.fond }, choisi && { borderWidth: 2 }]}>
@@ -81,6 +82,7 @@ function Segments<T extends string>({ theme, libelle, valeur, options, onChoisir
               testID={`${testID}-${cle}`}
               accessibilityRole="radio"
               accessibilityState={{ checked: actif }}
+              aria-checked={actif}
               accessibilityLabel={`${libelle} : ${nom}`}
               onPress={() => onChoisir(cle)}
               style={[styles.segment, { backgroundColor: actif ? theme.accent : 'transparent' }]}>

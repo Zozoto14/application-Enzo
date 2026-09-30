@@ -1,5 +1,5 @@
 /**
- * Paramètres › Profils. L'administrateur ajoute un profil pour un ami, le
+ * Paramètres › Administration › Comptes des proches. L'administrateur ajoute un profil pour un ami, le
  * renomme ou le supprime ; il ne peut pas en lire le contenu. Un ami, lui,
  * ne voit que son profil et le bouton pour changer.
  */

@@ -21,7 +21,7 @@ renouvelez-la.
 > d'authentification**. Il n'y a plus de mot de passe de synchronisation.
 >
 > **Profils.** Un ami peut avoir son propre portefeuille sur le PC ou le site :
-> Paramètres › Profils › Ajouter un profil (réservé à l'administrateur, le
+> Paramètres › Administration › Comptes des proches › Ajouter un profil (réservé à l'administrateur, le
 > profil d'origine). Au démarrage, AppDashboard demande qui l'utilise.
 
 ## 1. Le relais et le site (sur le PC, une fois)
@@ -42,8 +42,7 @@ renouvelez-la.
    Relancer la commande ne recrée rien. Les identifiants restent sur le PC
    (`relais/relais-local.json`), jamais sur GitHub.
 
-3. Ouvrez AppDashboard sur le PC › **Paramètres › Synchronisation entre
-   appareils**. Le relais est reconnu tout seul. Choisissez un **mot de passe
+3. Ouvrez AppDashboard sur le PC › **Paramètres › Synchronisation**. Le relais est reconnu tout seul. Choisissez un **mot de passe
    de synchronisation** (8 caractères minimum), notez-le dans Bitwarden, puis
    **Relier cet appareil**.
 
@@ -55,7 +54,7 @@ l'application le republie en arrière-plan.
 
 ## 2. Le site de secours sur l'iPhone
 
-1. Sur le PC : **Paramètres › Synchronisation › Relier un autre appareil**.
+1. Sur le PC : **Paramètres › Synchronisation › Appareils liés › Relier un autre appareil**.
    Deux QR codes s'affichent.
 2. Avec l'appareil photo de l'iPhone, scannez **« Site de secours »**. Safari
    s'ouvre.

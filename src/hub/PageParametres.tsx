@@ -59,19 +59,17 @@ export function PageParametres({ theme, section, n, disponibles, rendu, synchro,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seule une nouvelle demande compte.
   }, [section, n]);
 
-  useEffect(
-    () =>
-      actif
-        ? ecouterTouche('Escape', () => {
-            if (requeteRef.current) {
-              setRequete('');
-            } else {
-              onFermer();
-            }
-          })
-        : undefined,
-    [onFermer, actif],
-  );
+  // Échap efface d'abord la recherche, puis ferme la page.
+  const surEchap = () => {
+    if (requeteRef.current) {
+      setRequete('');
+    } else {
+      onFermer();
+    }
+  };
+  const surEchapRef = useRef(surEchap);
+  surEchapRef.current = surEchap;
+  useEffect(() => (actif ? ecouterTouche('Escape', () => surEchapRef.current()) : undefined), [actif]);
   useEffect(() => (actif ? ecouterTouche('/', () => recherche.current?.focus?.(), { ignorerChamps: true }) : undefined), [actif]);
 
   const enRecherche = requete.trim().length > 0;
@@ -95,7 +93,10 @@ export function PageParametres({ theme, section, n, disponibles, rendu, synchro,
     }
   };
   const surTouche = (evenement: ToucheReact) => {
-    const rang = sections.findIndex(s => s.id === actuelle);
+    // On part de l'onglet qui a le focus (à défaut, de la section ouverte).
+    const focalise = (globalThis as { document?: { activeElement?: unknown } }).document?.activeElement;
+    const enFocus = sections.find(s => onglets.current.get(s.id) === focalise)?.id ?? actuelle;
+    const rang = sections.findIndex(s => s.id === enFocus);
     const suite: Record<string, number> = { ArrowDown: rang + 1, ArrowRight: rang + 1, ArrowUp: rang - 1, ArrowLeft: rang - 1, Home: 0, End: sections.length - 1 };
     if (!(evenement.key in suite) || sections.length === 0) {
       return;
@@ -148,6 +149,12 @@ export function PageParametres({ theme, section, n, disponibles, rendu, synchro,
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="search"
+        // Dans un champ, le navigateur ne fait pas remonter Échap jusqu'au document : on le traite ici.
+        onKeyPress={(evenement: { nativeEvent: { key: string } }) => {
+          if (evenement.nativeEvent.key === 'Escape') {
+            surEchap();
+          }
+        }}
         style={[texte, styles.champ, { outlineStyle: 'none' } as object]}
       />
       {enRecherche ? (
@@ -181,6 +188,7 @@ export function PageParametres({ theme, section, n, disponibles, rendu, synchro,
             testID={`parametres-section-${s.id}`}
             accessibilityRole={'tab' as never}
             accessibilityState={{ selected: actif }}
+            aria-selected={actif}
             accessibilityLabel={compte === undefined ? s.titre : `${s.titre}, ${compte} résultat${compte > 1 ? 's' : ''}`}
             onPress={() => aller(s.id)}
             style={(etat: EtatPresse) => [

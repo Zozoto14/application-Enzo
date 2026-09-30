@@ -52,7 +52,7 @@ export function LierCompte({
       ) : (
         <Champ
           etiquette="Code de liaison"
-          indication="Sur le PC : Paramètres › Synchronisation › Relier un autre appareil › Copier le code. Il commence par AB1."
+          indication="Sur le PC : Paramètres › Synchronisation › Appareils liés › Relier un autre appareil › Copier le code. Il commence par AB1."
           placeholder="AB1.…"
           value={code}
           onChangeText={setCode}

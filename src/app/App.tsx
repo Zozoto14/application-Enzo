@@ -1900,11 +1900,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const surUneApp = hubAffiche && !surLeHub && appHub !== ID_PORTEFEUILLE;
   // « Échap » ramène au hub depuis n'importe quelle app.
   useEffect(() => {
-    if (!hubAffiche || appHub === undefined) {
+    // La page Paramètres, ouverte par-dessus une app, garde Échap pour elle : elle se ferme, l'app reste.
+    if (!hubAffiche || appHub === undefined || parametres) {
       return undefined;
     }
     return ecouterTouche('Escape', () => setAppHub(undefined), { ignorerChamps: true });
-  }, [hubAffiche, appHub]);
+  }, [hubAffiche, appHub, parametres]);
   const resumeHub: ResumePortefeuille | undefined =
     hubAffiche && onglets
       ? {
