@@ -1039,16 +1039,19 @@ function Racine() {
       },
       onRegenererCode: async (id: string) =>
         avecCles(async (cles, annuaire) => {
+          exiger(profil, 'acces-sequestre', profils.find(p => p.id === id));
           const { annuaire: suivant, code } = regenererCodeAcces(annuaire, id, cles);
           await rafraichirAdmin(suivant, true);
           return code;
         }),
       onRevoquerAcces: async (id: string) =>
         avecCles(async (cles, annuaire) => {
+          exiger(profil, 'acces-sequestre', profils.find(p => p.id === id));
           await rafraichirAdmin(revoquerSequestre(annuaire, id, cles), true);
         }),
       onRetablirAcces: async (id: string) =>
         avecCles(async (_cles, annuaire) => {
+          exiger(profil, 'acces-sequestre', profils.find(p => p.id === id));
           await rafraichirAdmin(retablirSequestre(annuaire, id), true);
         }),
       onCodeSite: async (id: string) => {
@@ -1056,6 +1059,7 @@ function Racine() {
         if (!profils.some(p => p.id === id && !p.admin)) {
           throw new Error('Compte introuvable.');
         }
+        exiger(profil, 'code-site', profils.find(p => p.id === id));
         const config = lireConfigRelais(session.session.base());
         const maitre: Liaison | undefined = config
           ? { relais: config.relais, jeton: config.jeton, ...(config.site ? { site: config.site } : {}) }
