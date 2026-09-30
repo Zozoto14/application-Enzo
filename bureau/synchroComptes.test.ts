@@ -23,6 +23,7 @@ import {
   CLES_MEMOIRE,
   avantOuverture,
   coffreAdminEtranger,
+  lireAbonnementAmi,
   lireAnnuaireFichier,
   preparerLiaison,
   retenirLiaison,
@@ -428,5 +429,89 @@ describe('Tsuzuku : sources partagées par le relais', () => {
     const bilan = await tourAdmin(pc, relais);
     expect(bilan.erreurs).toEqual([]);
     expect([...relais.boite.keys()].some(k => k.includes('tsuzuku'))).toBe(false);
+  });
+});
+
+describe('abonnements : objets publiés par l’administrateur, en lecture seule pour l’ami', () => {
+  const LEA = 'lea0000001';
+  const vraie = { mode: 'normal', periodicite: 'mensuel', montant: 500, echeance: '2026-09-01', paiements: [], notes: 'note privée', modifieLe: '2026-09-01T00:00:00.000Z' };
+  const falsifiee = (auteur?: string) =>
+    JSON.stringify({
+      format: 'applibourse-relais',
+      version: 1,
+      appareil: 'abonnement',
+      date: '2099-01-01T00:00:00.000Z',
+      charge: JSON.stringify({ v: 1, mode: 'offert', echeance: '2099-12-31', joursAvance: 7, rappel: false, message: '' }),
+      ...(auteur ? { auteur } : {}),
+    });
+
+  async function scene() {
+    const relais = relaisPortees();
+    const pc = await pcAvecLea();
+    const d = donneesVides();
+    d.abonnements.comptes[LEA] = { ...vraie } as never;
+    d.abonnements.reglages.rappelAmi = true;
+    pc.donnees = ecrireDonnees(d);
+    expect((await tourAdmin(pc, relais)).erreurs).toEqual([]);
+    const telephone = appareil();
+    const liaison = liaisonPourProfil(MAITRE, LEA);
+    await telephone.ecrire((await preparerLiaison(encoderLiaison(liaison), relais.requete)).annuaire);
+    const tourLea = () =>
+      synchroniserCompteAmi({ liaison, id: LEA, memoire: telephone.mem, fichiers: telephone.fichiers, lire: telephone.lire, ecrire: telephone.ecrire, maintenant: horloge, requete: relais.requete });
+    await tourLea();
+    return { relais, pc, telephone, liaison, tourLea };
+  }
+
+  it('l’ami ne peut ni réécrire ni effacer sa ligne d’abonnement (403)', async () => {
+    const { relais, liaison, telephone } = await scene();
+    expect(JSON.parse(relais.boite.get(`p:${LEA}:abonnement`)!).auteur).toBe('maitre');
+    expect(lireAbonnementAmi(telephone.mem, LEA)).toMatchObject({ mode: 'normal', echeance: '2026-09-01' });
+    const espacesLea = espacesDuRelais(liaison, relais.requete);
+    await expect(espacesLea.deposer(LEA, 'abonnement', '{"v":1,"mode":"offert"}', '2099-01-01T00:00:00Z')).rejects.toMatchObject({ statut: 403 });
+    await expect(espacesLea.supprimer(LEA, 'abonnement')).rejects.toMatchObject({ statut: 403 });
+    await expect(espacesLea.deposer(LEA, 'annuaire', '{}', '2099-01-01T00:00:00Z')).rejects.toMatchObject({ statut: 403 });
+    // Ses données propres restent à lui.
+    await expect(espacesLea.deposer(LEA, 'compte', '{}', '2099-01-01T00:00:00Z')).resolves.toBeUndefined();
+  });
+
+  it('une ligne falsifiée dans l’espace de l’ami n’altère jamais les données de l’administrateur, et elle est réécrite', async () => {
+    const { relais, pc } = await scene();
+    const avant = pc.donnees;
+    // Dépôt forcé (relais d'avant, ou contournement) : estampille d'un autre que l'administrateur.
+    relais.boite.set(`p:${LEA}:abonnement`, falsifiee('compte'));
+    expect((await tourAdmin(pc, relais)).erreurs).toEqual([]);
+    expect(pc.donnees).toBe(avant);
+    expect(lireDonnees(pc.donnees).abonnements.comptes[LEA]).toMatchObject({ mode: 'normal', echeance: '2026-09-01', notes: 'note privée' });
+    // L'administrateur a réécrit la vraie ligne (sa base est la seule source de vérité).
+    const reecrite = JSON.parse(relais.boite.get(`p:${LEA}:abonnement`)!);
+    expect(reecrite.auteur).toBe('maitre');
+    expect(JSON.parse(reecrite.charge)).toMatchObject({ mode: 'normal', echeance: '2026-09-01' });
+    expect(reecrite.charge).not.toContain('note privée');
+    // Effacée : republiée aussi.
+    relais.boite.delete(`p:${LEA}:abonnement`);
+    await tourAdmin(pc, relais);
+    expect(JSON.parse(relais.boite.get(`p:${LEA}:abonnement`)!).auteur).toBe('maitre');
+    // Intacte : plus rien ne repart.
+    const puts = relais.appels.filter(a => a.methode === 'PUT').length;
+    await tourAdmin(pc, relais);
+    expect(relais.appels.filter(a => a.methode === 'PUT').length).toBe(puts);
+  });
+
+  it('côté ami : une ligne (ou une projection) qui ne vient pas de l’administrateur est ignorée', async () => {
+    const { relais, telephone, tourLea } = await scene();
+    relais.boite.set(`p:${LEA}:abonnement`, falsifiee('compte'));
+    const annuaireAvant = await telephone.lire();
+    relais.boite.set(
+      `p:${LEA}:annuaire`,
+      JSON.stringify({ format: 'applibourse-relais', version: 1, appareil: 'annuaire', date: '2099-01-01T00:00:00.000Z', charge: '{"v":3,"comptes":[]}', auteur: 'compte' }),
+    );
+    const bilan = await tourLea();
+    expect(bilan.abonnementChange).toBeUndefined();
+    expect(bilan.annuaireChange).toBe(false);
+    expect(lireAbonnementAmi(telephone.mem, LEA)).toMatchObject({ mode: 'normal', echeance: '2026-09-01' });
+    expect(await telephone.lire()).toEqual(annuaireAvant);
+    // Compatibilité : un dépôt sans estampille (relais pas encore redéployé) est lu comme avant.
+    relais.boite.set(`p:${LEA}:abonnement`, falsifiee().replace('2099-01-01T00:00:00.000Z', '2099-01-02T00:00:00.000Z'));
+    expect((await tourLea()).abonnementChange).toBe(true);
   });
 });

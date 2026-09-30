@@ -32,7 +32,7 @@ import {
   type RetourAmi,
 } from '../src/profils/synchroAnnuaire';
 import { ID_PRINCIPAL, fichiersDuProfil } from '../src/profils/profils';
-import { espacesDuRelais, publierDelegations, type Espaces } from '../src/sync/relais/espaces';
+import { espacesDuRelais, publieParAdmin, publierDelegations, type Espaces } from '../src/sync/relais/espaces';
 import { NIVEAU_RANG } from '../src/hub/admin/roles';
 import {
   empreinte,
@@ -192,6 +192,9 @@ interface SuiviCompte {
   retour?: string;
   /** Date de la ligne d'abonnement lue (côté ami). */
   abonnementLu?: string;
+  /** Côté administrateur : dates de la projection et de la ligne d'abonnement qu'il a déposées (réparation d'une altération). */
+  projectionDeposee?: string;
+  abonnementDepose?: string;
   /** Côté Fondateur : empreintes des actions d'un titulaire déjà reprises au journal. */
   journalVus?: string[];
 }
@@ -207,11 +210,11 @@ export async function lireAnnuaireFichier(fichiers: Fichiers): Promise<Annuaire>
 }
 
 /** Document d'annuaire lu dans un espace (celui de l'administrateur, ou la projection d'un ami). */
-async function lireDocument(espaces: Espaces, id: string, nom: string): Promise<{ date: string; brut: unknown } | undefined> {
+async function lireDocument(espaces: Espaces, id: string, nom: string): Promise<{ date: string; brut: unknown; auteur?: string } | undefined> {
   const objet = await espaces.lire(id, nom);
   if (!objet) return undefined;
   try {
-    return { date: objet.date, brut: JSON.parse(objet.charge) as unknown };
+    return { date: objet.date, brut: JSON.parse(objet.charge) as unknown, ...(objet.auteur ? { auteur: objet.auteur } : {}) };
   } catch {
     throw new ErreurRelais(`Dépôt illisible sur le relais (${nom}).`);
   }
@@ -303,8 +306,26 @@ export interface OptionsSynchroAdmin extends Omit<OptionsAnnuaireAdmin, 'objets'
 }
 
 /**
+ * Dépôt de l'administrateur à refaire dans l'espace d'un compte : effacé
+ * depuis qu'il l'a déposé, ou estampillé par un autre que lui (relais
+ * redéployé). La date seule ne suffit pas : un autre appareil de
+ * l'administrateur a pu republier entre-temps (sans cela, ils se
+ * relanceraient à chaque tour). L'administrateur ne LIT jamais ces objets :
+ * sa base chiffrée reste la seule source de vérité, il les réécrit seulement.
+ */
+export function depotAltere(meta: { date: string; auteur?: string } | undefined, depose: string | undefined): boolean {
+  if (!meta) return depose !== undefined;
+  return !publieParAdmin(meta.auteur);
+}
+
+/**
  * Un tour complet pour l'administrateur déverrouillé : retours des amis,
  * annuaire, projections et fichiers de chaque ami, données d'administration.
+ *
+ * Seuls `compte` (retour filtré par `appliquerRetourAmi`), `coffre`,
+ * `portefeuille` et `tsuzuku-cle` sont lus dans l'espace d'un ami ; la
+ * projection d'annuaire, l'abonnement et les sources partagées y sont
+ * seulement ÉCRITS (jamais fusionnés ici), et réécrits s'ils ont été altérés.
  */
 export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<BilanComptes> {
   const bilan = bilanVide();
@@ -367,13 +388,14 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
       // Un titulaire reçoit aussi les comptes inférieurs (Administration sur le site) ; un ami, son entrée seule.
       const projection = projectionTitulaire(annuaire.annuaire, compte.id);
       const h = projection ? empreinte(projection) : undefined;
-      if (projection && h !== suivis[compte.id]?.projection) {
-        await espaces.deposer(compte.id, 'annuaire', JSON.stringify(projection), horloge().toISOString());
-        suivis[compte.id] = { ...suivis[compte.id], projection: h };
-        bilan.depots++;
-      }
       const objets = listes.get(compte.id) ?? (await espaces.lister(compte.id));
       objetsParCompte.set(compte.id, objets);
+      if (projection && (h !== suivis[compte.id]?.projection || depotAltere(objets.annuaire, suivis[compte.id]?.projectionDeposee))) {
+        const date = horloge().toISOString();
+        await espaces.deposer(compte.id, 'annuaire', JSON.stringify(projection), date);
+        suivis[compte.id] = { ...suivis[compte.id], projection: h, projectionDeposee: date };
+        bilan.depots++;
+      }
       const noms = fichiersDuProfil(compte.id);
       for (const objet of ['coffre', 'portefeuille'] as const) {
         const issue = await synchroniserFichier({
@@ -488,10 +510,14 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
         const h = empreinte(projection);
         // Rien n'est publié pour un compte jamais suivi : l'espace d'un ami reste tel qu'avant.
         if (!finales.abonnements.comptes[compte.id] && publiees[compte.id] === undefined) continue;
-        if (publiees[compte.id] === h) continue;
+        // Déjà publiée ET intacte sur le relais (sinon réécrite : un ami ne peut pas s'y mettre « à jour »).
+        const listee = objetsParCompte.get(compte.id);
+        if (publiees[compte.id] === h && !(listee && depotAltere(listee.abonnement, suivis[compte.id]?.abonnementDepose))) continue;
         try {
-          await espaces.deposer(compte.id, 'abonnement', JSON.stringify(projection), horloge().toISOString());
+          const date = horloge().toISOString();
+          await espaces.deposer(compte.id, 'abonnement', JSON.stringify(projection), date);
           publiees[compte.id] = h;
+          suivis[compte.id] = { ...suivis[compte.id], abonnementDepose: date };
           bilan.depots++;
         } catch (erreur) {
           bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
@@ -501,6 +527,7 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
         if (!presents.has(id)) delete publiees[id];
       }
       ecrireJson(o.memoire, CLES_MEMOIRE.abonnements, publiees);
+      ecrireJson(o.memoire, CLES_MEMOIRE.comptes, suivis);
     } catch (erreur) {
       bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
     }
@@ -563,7 +590,8 @@ export async function synchroniserCompteAmi(o: OptionsSynchroAmi): Promise<Bilan
     const date = objets.annuaire?.date;
     if (date && date > (suivi.projectionLue ?? '')) {
       const recu = await lireDocument(espaces, o.id, 'annuaire');
-      if (recu) {
+      // Seule une projection déposée par l'administrateur est crue (estampille du relais).
+      if (recu && publieParAdmin(recu.auteur)) {
         const suivant = recevoirProjection(local, lireAnnuaire(JSON.stringify(recu.brut)), o.id);
         if (empreinte(suivant) !== empreinte(local)) {
           await o.ecrire(suivant);
@@ -600,7 +628,8 @@ export async function synchroniserCompteAmi(o: OptionsSynchroAmi): Promise<Bilan
     const dateAbo = objets.abonnement?.date;
     if (dateAbo && dateAbo > (suivi.abonnementLu ?? '')) {
       const recu = await lireDocument(espaces, o.id, 'abonnement');
-      const projection = lireProjection(recu?.brut);
+      // Une ligne qui ne vient pas de l'administrateur est ignorée (la précédente reste affichée).
+      const projection = recu && publieParAdmin(recu.auteur) ? lireProjection(recu.brut) : undefined;
       if (projection) {
         o.memoire.setItem(CLES_MEMOIRE.abonnementRecu + o.id, JSON.stringify(projection));
         bilan.abonnementChange = true;
@@ -785,6 +814,9 @@ export async function preparerLiaison(code: string, requete?: Fetch): Promise<Co
   const compte = compteDeLiaison(liaison);
   if (compte) {
     const recu = await lireDocument(espaces, compte, 'annuaire');
+    if (recu && !publieParAdmin(recu.auteur)) {
+      throw new ErreurRelais('Le compte publié sur le relais ne vient pas de l’administrateur : demandez-lui de rouvrir AppDashboard sur son PC.');
+    }
     if (!recu) {
       throw new ErreurRelais(
         'Votre compte n’est pas encore publié sur le relais : demandez à l’administrateur d’ouvrir AppDashboard sur son PC (déverrouillé), puis réessayez dans deux minutes.',
