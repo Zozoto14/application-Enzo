@@ -11,9 +11,11 @@
  *    secours : un navigateur n'a pas le droit de les appeler lui-même. Même
  *    liste fermée d'adresses que l'application de bureau (reseau.mjs).
  *
- * Tout appel exige le jeton du relais (`Authorization: Bearer …`), tiré au
- * hasard au déploiement : sans lui, personne ne peut remplir la boîte ni se
- * servir du relais comme d'un proxy.
+ * Tout appel exige un jeton (`Authorization: Bearer …`) : le jeton maître,
+ * tiré au hasard au déploiement (administrateur), ou un jeton de PROFIL qui
+ * n'ouvre que l'espace de son compte (`/p/<id>/…`, voir « Portées » plus bas
+ * et docs/synchro-relais.md). Sans jeton valable, personne ne peut remplir la
+ * boîte ni se servir du relais comme d'un proxy.
  */
 
 import {
@@ -23,11 +25,16 @@ import {
   yahooScreener,
 } from '../bureau/electron/reseau.mjs';
 
-export const VERSION_RELAIS = 1;
+export const VERSION_RELAIS = 2;
 /** Une enveloppe chiffrée : quelques centaines de Kio en pratique. */
 const TAILLE_MAX_ENVELOPPE = 20 * 1024 * 1024;
 const IDENTIFIANT_APPAREIL = /^[a-z0-9]{4,32}$/;
+/** Compte d'ami (même motif que l'annuaire) ; `principal` est l'espace de l'administrateur. */
+const IDENTIFIANT_PROFIL = /^(principal|[a-z0-9]{6,16})$/;
+/** Nom d'un objet dans un espace : annuaire, coffre, portefeuille, compte… */
+const NOM_OBJET = /^[a-z0-9][a-z0-9-]{1,39}$/;
 const CLE_INDEX = 'index';
+const PREFIXE_JETON_PROFIL = 'p1.';
 
 const ENTETES_CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -57,6 +64,46 @@ export function jetonValide(recu, attendu) {
   return difference === 0;
 }
 
+// ------------------------------------------------------------ Portées
+//
+// Deux sortes de jetons :
+//  - le jeton MAÎTRE (`env.JETON`, celui de l'administrateur) : tous les droits,
+//    routes historiques comprises ;
+//  - un jeton de PROFIL `p1.<id>.<hmac>`, avec hmac = HMAC-SHA256(JETON,
+//    « applibourse-profil-v1|<id> ») : il n'ouvre que l'espace `p/<id>/` (et la
+//    passerelle Yahoo/médias). Le relais le recalcule à chaque appel : rien à
+//    stocker, et l'administrateur le fabrique hors ligne (même calcul).
+// Aucun jeton de profil n'existe pour `principal` : l'espace de l'administrateur
+// (annuaire, données d'administration) n'est lisible qu'avec le jeton maître.
+
+const encodeur = new TextEncoder();
+
+function hexa(octets) {
+  return [...new Uint8Array(octets)].map(o => o.toString(16).padStart(2, '0')).join('');
+}
+
+/** Jeton de profil attendu pour `id` (même calcul que src/sync/relais/portees.ts). */
+export async function jetonDeProfil(jetonMaitre, id) {
+  const cle = await crypto.subtle.importKey('raw', encodeur.encode(jetonMaitre), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = await crypto.subtle.sign('HMAC', cle, encodeur.encode(`applibourse-profil-v1|${id}`));
+  return `${PREFIXE_JETON_PROFIL}${id}.${hexa(signature)}`;
+}
+
+/** Portée du jeton présenté : `{ maitre: true }`, `{ profil: id }`, ou rien (refusé). */
+export async function porteeDuJeton(recu, jetonMaitre) {
+  if (typeof jetonMaitre !== 'string' || jetonMaitre.length < 16 || typeof recu !== 'string') {
+    return undefined;
+  }
+  if (jetonValide(recu, jetonMaitre)) {
+    return { maitre: true };
+  }
+  const morceaux = /^p1\.([a-z0-9]{6,16})\.[0-9a-f]{64}$/.exec(recu);
+  if (!morceaux || morceaux[1] === 'principal') {
+    return undefined;
+  }
+  return jetonValide(recu, await jetonDeProfil(jetonMaitre, morceaux[1])) ? { profil: morceaux[1] } : undefined;
+}
+
 async function lireIndex(env) {
   const brut = await env.BOITE.get(CLE_INDEX);
   try {
@@ -67,6 +114,26 @@ async function lireIndex(env) {
   }
 }
 
+/**
+ * Liste des clés d'un préfixe, avec leurs métadonnées ({ date, taille }).
+ * L'index est ainsi tiré de la boîte elle-même (`KV.list`) : deux dépôts
+ * simultanés ne peuvent plus s'effacer l'un l'autre de la liste.
+ */
+async function lister(env, prefixe) {
+  const trouves = {};
+  let curseur;
+  do {
+    const page = await env.BOITE.list({ prefix: prefixe, cursor: curseur });
+    for (const cle of page.keys ?? []) {
+      const nom = cle.name.slice(prefixe.length);
+      const meta = cle.metadata && typeof cle.metadata === 'object' ? cle.metadata : {};
+      trouves[nom] = typeof meta.date === 'string' ? { date: meta.date, taille: Number(meta.taille) || 0 } : undefined;
+    }
+    curseur = page.list_complete === false ? page.cursor : undefined;
+  } while (curseur);
+  return trouves;
+}
+
 async function corpsJson(requete) {
   try {
     return await requete.json();
@@ -75,15 +142,48 @@ async function corpsJson(requete) {
   }
 }
 
-async function boite(requete, env, identifiant) {
-  if (!env.BOITE) {
-    return erreur('Boîte non configurée sur le relais.', 500);
+/** Lit et valide une enveloppe déposée (même format partout). */
+async function lireEnveloppe(requete, nom) {
+  const texte = await requete.text();
+  if (texte.length > TAILLE_MAX_ENVELOPPE) {
+    return { refus: erreur('Enveloppe trop volumineuse.', 413) };
   }
+  let enveloppe;
+  try {
+    enveloppe = JSON.parse(texte);
+  } catch {
+    return { refus: erreur('Enveloppe illisible.', 400) };
+  }
+  if (
+    enveloppe?.format !== 'applibourse-relais' ||
+    enveloppe.appareil !== nom ||
+    typeof enveloppe.date !== 'string' ||
+    enveloppe.date.length > 40 ||
+    typeof enveloppe.charge !== 'string'
+  ) {
+    return { refus: erreur('Ce n’est pas une enveloppe AppDashboard.', 400) };
+  }
+  return { texte, meta: { date: enveloppe.date, taille: texte.length } };
+}
+
+/** Routes historiques (`/boite`) : jeton maître seulement, comme avant. */
+async function boite(requete, env, identifiant) {
   if (identifiant === undefined) {
     if (requete.method !== 'GET') {
       return erreur('Méthode non autorisée.', 405);
     }
-    return reponse({ appareils: await lireIndex(env) });
+    const ancien = await lireIndex(env);
+    if (typeof env.BOITE.list !== 'function') {
+      return reponse({ appareils: ancien });
+    }
+    // La liste de la boîte fait foi : un dépôt listé existe. Ses métadonnées
+    // (dépôts depuis la version 2) donnent la date ; les plus anciens, sans
+    // métadonnées, restent décrits par l'ancien index.
+    const index = {};
+    for (const [nom, meta] of Object.entries(await lister(env, 'appareil:'))) {
+      index[nom] = meta ?? ancien[nom] ?? { date: '1970-01-01T00:00:00.000Z', taille: 0 };
+    }
+    return reponse({ appareils: index });
   }
   if (!IDENTIFIANT_APPAREIL.test(identifiant)) {
     return erreur('Identifiant d’appareil invalide.', 400);
@@ -96,39 +196,70 @@ async function boite(requete, env, identifiant) {
   }
 
   if (requete.method === 'PUT') {
-    const texte = await requete.text();
-    if (texte.length > TAILLE_MAX_ENVELOPPE) {
-      return erreur('Enveloppe trop volumineuse.', 413);
+    const { refus, texte, meta } = await lireEnveloppe(requete, identifiant);
+    if (refus) return refus;
+    await env.BOITE.put(cle, texte, { metadata: meta });
+    if (typeof env.BOITE.list !== 'function') {
+      // Boîte sans liste (très ancien environnement) : l'index d'avant.
+      const index = await lireIndex(env);
+      index[identifiant] = meta;
+      await env.BOITE.put(CLE_INDEX, JSON.stringify(index));
     }
-    let enveloppe;
-    try {
-      enveloppe = JSON.parse(texte);
-    } catch {
-      return erreur('Enveloppe illisible.', 400);
-    }
-    if (
-      enveloppe?.format !== 'applibourse-relais' ||
-      enveloppe.appareil !== identifiant ||
-      typeof enveloppe.date !== 'string' ||
-      typeof enveloppe.charge !== 'string'
-    ) {
-      return erreur('Ce n’est pas une enveloppe AppDashboard.', 400);
-    }
-    await env.BOITE.put(cle, texte);
-    const index = await lireIndex(env);
-    index[identifiant] = { date: enveloppe.date, taille: texte.length };
-    await env.BOITE.put(CLE_INDEX, JSON.stringify(index));
     return reponse({ ok: true });
   }
 
   if (requete.method === 'DELETE') {
     await env.BOITE.delete(cle);
     const index = await lireIndex(env);
-    delete index[identifiant];
-    await env.BOITE.put(CLE_INDEX, JSON.stringify(index));
+    if (identifiant in index) {
+      delete index[identifiant];
+      await env.BOITE.put(CLE_INDEX, JSON.stringify(index));
+    }
     return reponse({ ok: true });
   }
 
+  return erreur('Méthode non autorisée.', 405);
+}
+
+/**
+ * Espace d'un compte : `/p/<id>/boite[/<nom>]`. Lecture, écriture et
+ * suppression réservées au titulaire (son jeton de profil) et à
+ * l'administrateur (jeton maître). Tout autre jeton reçoit 403, que l'objet
+ * existe ou non : la réponse ne dit rien de l'espace d'un autre.
+ */
+async function espace(requete, env, portee, id, nom) {
+  if (!IDENTIFIANT_PROFIL.test(id)) {
+    return erreur('Espace invalide.', 400);
+  }
+  if (!portee.maitre && portee.profil !== id) {
+    return erreur('Cet espace n’est pas le vôtre.', 403);
+  }
+  const prefixe = `p:${id}:`;
+  if (nom === undefined) {
+    if (requete.method !== 'GET') {
+      return erreur('Méthode non autorisée.', 405);
+    }
+    const objets = await lister(env, prefixe);
+    return reponse({ objets: Object.fromEntries(Object.entries(objets).map(([n, m]) => [n, m ?? { date: '1970-01-01T00:00:00.000Z', taille: 0 }])) });
+  }
+  if (!NOM_OBJET.test(nom)) {
+    return erreur('Nom d’objet invalide.', 400);
+  }
+  const cle = prefixe + nom;
+  if (requete.method === 'GET') {
+    const enveloppe = await env.BOITE.get(cle);
+    return enveloppe === null ? erreur('Aucun dépôt.', 404) : reponse(enveloppe);
+  }
+  if (requete.method === 'PUT') {
+    const { refus, texte, meta } = await lireEnveloppe(requete, nom);
+    if (refus) return refus;
+    await env.BOITE.put(cle, texte, { metadata: meta });
+    return reponse({ ok: true });
+  }
+  if (requete.method === 'DELETE') {
+    await env.BOITE.delete(cle);
+    return reponse({ ok: true });
+  }
   return erreur('Méthode non autorisée.', 405);
 }
 
@@ -165,19 +296,30 @@ export default {
       return new Response(null, { status: 204, headers: ENTETES_CORS });
     }
     const autorisation = requete.headers.get('Authorization') ?? '';
-    if (!jetonValide(autorisation.replace(/^Bearer\s+/i, ''), env.JETON)) {
+    const portee = await porteeDuJeton(autorisation.replace(/^Bearer\s+/i, ''), env.JETON);
+    if (!portee) {
       return erreur('Jeton du relais manquant ou incorrect.', 401);
     }
 
     const { pathname } = new URL(requete.url);
     if (pathname === '/sante') {
-      return reponse({ ok: true, version: VERSION_RELAIS });
+      return reponse({ ok: true, version: VERSION_RELAIS, portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}) });
     }
-    if (pathname === '/boite' || pathname === '/boite/') {
-      return boite(requete, env, undefined);
-    }
-    if (pathname.startsWith('/boite/')) {
-      return boite(requete, env, decodeURIComponent(pathname.slice('/boite/'.length)));
+    const dansEspace = /^\/p\/([^/]+)\/boite(?:\/([^/]*))?\/?$/.exec(pathname);
+    if (dansEspace || pathname === '/boite' || pathname.startsWith('/boite/')) {
+      if (!env.BOITE) {
+        return erreur('Boîte non configurée sur le relais.', 500);
+      }
+      if (dansEspace) {
+        const nom = dansEspace[2] ? decodeURIComponent(dansEspace[2]) : undefined;
+        return espace(requete, env, portee, decodeURIComponent(dansEspace[1]), nom);
+      }
+      if (!portee.maitre) {
+        return erreur('Réservé au jeton de l’administrateur.', 403);
+      }
+      return pathname === '/boite' || pathname === '/boite/'
+        ? boite(requete, env, undefined)
+        : boite(requete, env, decodeURIComponent(pathname.slice('/boite/'.length)));
     }
     return passerelle(requete, pathname);
   },

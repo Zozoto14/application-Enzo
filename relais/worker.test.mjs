@@ -1,17 +1,36 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import relais, { jetonValide } from './worker.mjs';
+import relais, { jetonDeProfil, jetonValide, porteeDuJeton } from './worker.mjs';
 
 const JETON = 'jeton-de-test-0123456789abcdef';
 
-function kvMemoire() {
+function kvMemoire({ sansListe = false } = {}) {
   const donnees = new Map();
-  return {
+  const metas = new Map();
+  const kv = {
     donnees,
     get: async cle => (donnees.has(cle) ? donnees.get(cle) : null),
-    put: async (cle, valeur) => void donnees.set(cle, valeur),
-    delete: async cle => void donnees.delete(cle),
+    put: async (cle, valeur, options) => {
+      donnees.set(cle, valeur);
+      if (options?.metadata) metas.set(cle, options.metadata);
+      else metas.delete(cle);
+    },
+    delete: async cle => {
+      donnees.delete(cle);
+      metas.delete(cle);
+    },
   };
+  if (!sansListe) {
+    // Pages de deux clés : la pagination (curseur) est exercée.
+    kv.list = async ({ prefix = '', cursor } = {}) => {
+      const toutes = [...donnees.keys()].filter(c => c.startsWith(prefix)).sort();
+      const debut = cursor ? Number(cursor) : 0;
+      const page = toutes.slice(debut, debut + 2);
+      const fin = debut + 2 >= toutes.length;
+      return { keys: page.map(name => ({ name, metadata: metas.get(name) })), list_complete: fin, cursor: fin ? undefined : String(debut + 2) };
+    };
+  }
+  return kv;
 }
 
 const appeler = (env, chemin, options = {}) =>
@@ -80,4 +99,109 @@ test('la passerelle refuse les adresses hors liste', async () => {
   assert.equal(flux.status, 403);
   const page = await appeler(env, '/medias/page', { method: 'POST', body: JSON.stringify({ url: 'http://lemonde.fr/x' }) });
   assert.equal(page.status, 403);
+});
+
+// ------------------------------------------------------------------ Portées
+
+const avec = (env, jeton, chemin, options = {}) =>
+  relais.fetch(new Request(`https://relais.test${chemin}`, { ...options, headers: { Authorization: `Bearer ${jeton}` } }), env);
+
+test('jeton de profil : dérivé du jeton maître, propre au compte, jamais pour principal', async () => {
+  const a = await jetonDeProfil(JETON, 'ami001');
+  assert.match(a, /^p1\.ami001\.[0-9a-f]{64}$/);
+  assert.notEqual(a, await jetonDeProfil(JETON, 'ami002'));
+  assert.notEqual(a, await jetonDeProfil('autre-jeton-maitre-0123456789', 'ami001'));
+  assert.deepEqual(await porteeDuJeton(a, JETON), { profil: 'ami001' });
+  assert.deepEqual(await porteeDuJeton(JETON, JETON), { maitre: true });
+  // Signature d'un autre compte recollée sous un autre identifiant : refusée.
+  assert.equal(await porteeDuJeton(a.replace('ami001', 'ami002'), JETON), undefined);
+  const principal = await jetonDeProfil(JETON, 'principal');
+  assert.equal(await porteeDuJeton(principal, JETON), undefined);
+  assert.equal(await porteeDuJeton(a, undefined), undefined);
+});
+
+test('un jeton de profil lit et écrit SON espace, et rien d’autre', async () => {
+  const env = { JETON, BOITE: kvMemoire() };
+  const ami = await jetonDeProfil(JETON, 'ami001');
+  const autre = await jetonDeProfil(JETON, 'ami002');
+  const sante = await (await avec(env, ami, '/sante')).json();
+  assert.equal(sante.portee, 'profil');
+  assert.equal(sante.profil, 'ami001');
+
+  assert.equal((await avec(env, ami, '/p/ami001/boite/coffre', { method: 'PUT', body: enveloppe('coffre') })).status, 200);
+  assert.equal((await avec(env, ami, '/p/ami001/boite/coffre')).status, 200);
+  const liste = await (await avec(env, ami, '/p/ami001/boite')).json();
+  assert.deepEqual(Object.keys(liste.objets), ['coffre']);
+  assert.equal(liste.objets.coffre.date, '2026-09-26T10:00:00Z');
+
+  // Refus croisés : l'autre ami ne lit, n'écrit ni ne supprime rien ici (403, existant ou non).
+  assert.equal((await avec(env, autre, '/p/ami001/boite/coffre')).status, 403);
+  assert.equal((await avec(env, autre, '/p/ami001/boite/absent')).status, 403);
+  assert.equal((await avec(env, autre, '/p/ami001/boite')).status, 403);
+  assert.equal((await avec(env, autre, '/p/ami001/boite/coffre', { method: 'PUT', body: enveloppe('coffre') })).status, 403);
+  assert.equal((await avec(env, autre, '/p/ami001/boite/coffre', { method: 'DELETE' })).status, 403);
+  assert.ok(env.BOITE.donnees.has('p:ami001:coffre'));
+
+  // Ni l'espace de l'administrateur (annuaire), ni les routes historiques.
+  assert.equal((await avec(env, JETON, '/p/principal/boite/annuaire', { method: 'PUT', body: enveloppe('annuaire') })).status, 200);
+  assert.equal((await avec(env, ami, '/p/principal/boite/annuaire')).status, 403);
+  assert.equal((await avec(env, ami, '/p/principal/boite')).status, 403);
+  assert.equal((await avec(env, ami, '/boite')).status, 403);
+  assert.equal((await avec(env, ami, '/boite/coffre')).status, 403);
+  assert.equal((await avec(env, ami, '/boite/pc123456', { method: 'PUT', body: enveloppe('pc123456') })).status, 403);
+});
+
+test('le jeton maître a tous les droits sur tous les espaces', async () => {
+  const env = { JETON, BOITE: kvMemoire() };
+  const ami = await jetonDeProfil(JETON, 'ami001');
+  await avec(env, ami, '/p/ami001/boite/portefeuille', { method: 'PUT', body: enveloppe('portefeuille') });
+  assert.equal((await avec(env, JETON, '/p/ami001/boite/portefeuille')).status, 200);
+  assert.equal((await avec(env, JETON, '/p/ami001/boite/coffre', { method: 'PUT', body: enveloppe('coffre') })).status, 200);
+  assert.equal((await avec(env, JETON, '/p/ami001/boite/portefeuille', { method: 'DELETE' })).status, 200);
+  assert.equal((await avec(env, ami, '/p/ami001/boite/portefeuille')).status, 404);
+  assert.deepEqual(Object.keys((await (await avec(env, JETON, '/p/ami001/boite')).json()).objets), ['coffre']);
+});
+
+test('espaces : noms et identifiants validés, enveloppe au bon nom', async () => {
+  const env = { JETON, BOITE: kvMemoire() };
+  assert.equal((await avec(env, JETON, '/p/AMI/boite/coffre')).status, 400);
+  assert.equal((await avec(env, JETON, '/p/ami001/boite/..%2Fx')).status, 400);
+  assert.equal((await avec(env, JETON, '/p/ami001/boite/coffre', { method: 'PUT', body: enveloppe('autre') })).status, 400);
+  assert.equal(env.BOITE.donnees.size, 0);
+});
+
+test('index tiré de la liste de la boîte : plus de course entre deux dépôts simultanés', async () => {
+  const env = { JETON, BOITE: kvMemoire() };
+  const noms = ['pc000001', 'ip000002', 'si000003', 'ta000004', 'mc000005'];
+  await Promise.all(noms.map(n => appeler(env, `/boite/${n}`, { method: 'PUT', body: enveloppe(n) })));
+  const index = (await (await appeler(env, '/boite')).json()).appareils;
+  assert.deepEqual(Object.keys(index).sort(), [...noms].sort());
+  // Plus d'écriture de l'ancien index à chaque dépôt : une seule écriture par dépôt.
+  assert.equal(env.BOITE.donnees.has('index'), false);
+});
+
+test('compatibilité : les dépôts d’avant (ancien index, sans métadonnées) restent listés', async () => {
+  const kv = kvMemoire();
+  await kv.put('appareil:ancien01', enveloppe('ancien01', '2026-01-01T00:00:00Z'));
+  await kv.put('index', JSON.stringify({ ancien01: { date: '2026-01-01T00:00:00Z', taille: 10 }, parti001: { date: '2026-01-01T00:00:00Z', taille: 1 } }));
+  const env = { JETON, BOITE: kv };
+  await appeler(env, '/boite/nouveau1', { method: 'PUT', body: enveloppe('nouveau1') });
+  const index = (await (await appeler(env, '/boite')).json()).appareils;
+  assert.deepEqual(Object.keys(index).sort(), ['ancien01', 'nouveau1']);
+  assert.equal(index.ancien01.date, '2026-01-01T00:00:00Z');
+  await appeler(env, '/boite/ancien01', { method: 'DELETE' });
+  assert.deepEqual(Object.keys((await (await appeler(env, '/boite')).json()).appareils), ['nouveau1']);
+  // Boîte sans liste : on retombe sur l'ancien index.
+  const vieil = { JETON, BOITE: kvMemoire({ sansListe: true }) };
+  await appeler(vieil, '/boite/pc123456', { method: 'PUT', body: enveloppe('pc123456') });
+  assert.deepEqual(Object.keys((await (await appeler(vieil, '/boite')).json()).appareils), ['pc123456']);
+});
+
+test('la passerelle reste ouverte aux jetons de profil (site d’un ami)', async () => {
+  const env = { JETON, BOITE: kvMemoire() };
+  const ami = await jetonDeProfil(JETON, 'ami001');
+  const r = await avec(env, ami, '/yahoo/json', { method: 'POST', body: JSON.stringify({ url: 'https://evil.example/x' }) });
+  assert.equal(r.status, 403);
+  const faux = `p1.ami001.${'0'.repeat(64)}`;
+  assert.equal((await avec(env, faux, '/sante')).status, 401);
 });
