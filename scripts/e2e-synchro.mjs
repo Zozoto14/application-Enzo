@@ -50,7 +50,8 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
   const morceaux = [];
   for await (const m of req) morceaux.push(m);
   const corps = Buffer.concat(morceaux);
-  if (req.method === 'PUT') compteurs.put++;
+  // Seuls les dépôts du portefeuille comptent ici (pas ceux des comptes, dans /p/…).
+  if (req.method === 'PUT' && req.url.startsWith('/boite/')) compteurs.put++;
   if (req.method === 'GET' && req.url.startsWith('/boite')) compteurs.get++;
   const requete = new Request(`https://localhost:${PORT_RELAIS}${req.url}`, {
     method: req.method,
@@ -129,6 +130,9 @@ try {
   // ----- Appareil A : création du coffre, liaison au relais
   log('A : premier lancement');
   await A.goto(URL_SITE);
+  // Navigateur neuf : relier d'abord ; ici, on crée un coffre neuf (après l'avertissement).
+  await A.getByTestId('accueil-creer').click({ timeout: 60_000 });
+  await A.getByTestId('accueil-creer-confirmer').click();
   const champs = A.locator('input[type=password]');
   await champs.nth(0).waitFor({ timeout: 60_000 });
   await champs.nth(0).fill(MOT_DE_PASSE);
@@ -161,8 +165,8 @@ try {
   // ----- Appareil B : « Lier à mon compte », déverrouillage
   log('B : liaison');
   await B.goto(URL_SITE);
-  await B.getByTestId('bouton-lier-compte').waitFor({ timeout: 60_000 });
-  await B.getByTestId('bouton-lier-compte').click();
+  await B.getByTestId('bouton-relier-accueil').waitFor({ timeout: 60_000 });
+  await B.getByTestId('bouton-relier-accueil').click();
   await B.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
   await deverrouiller(B, secret);
   await B.getByTestId('synchro-indicateur').waitFor({ timeout: 60_000 });

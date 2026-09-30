@@ -230,6 +230,9 @@ function codeDuLien(): string | undefined {
 
 /** Liaison de l'administrateur connue du processus principal (PC relié par le script). */
 async function liaisonDuPont(): Promise<Liaison | undefined> {
+  if (!pont()) {
+    return undefined; // Site : le « pont » web ne fait que relire le lien (voir web.ts).
+  }
   try {
     const relais = (globalThis as { applibourse?: { relais?: { config?(): Promise<Liaison | undefined> } } }).applibourse?.relais;
     const liaison = await relais?.config?.();
@@ -306,7 +309,7 @@ function Racine() {
    * `cle` : clé maîtresse relue du séquestre (session administrateur).
    */
   const ouvrir = useCallback(
-    async (compte: CompteTrouve, options: { cle?: Uint8Array; adminSur?: string } = {}) => {
+    async (compte: CompteTrouve, options: { cle?: Uint8Array; adminSur?: string; creation?: boolean } = {}) => {
       setEtat({ phase: 'chargement', message: options.adminSur ? `Ouverture du compte de ${compte.nom}…` : undefined });
       try {
         fabriqueRef.current ??= await initSqlJs({ locateFile: () => urlWasm });
@@ -316,7 +319,7 @@ function Racine() {
         if (!options.adminSur) {
           // Le coffre de CE compte (et, pour un ami, son portefeuille) s'il est plus récent sur le relais.
           await auPlus(avantOuverture({ memoire: memoireNavigateur, fichiers: stockage as never, compte: compte.id, pontMaitre: await liaisonDuPont() }), 15_000);
-          if (!compte.admin || (!pont() && lireLiaisons(memoireNavigateur).maitre)) {
+          if (!compte.admin || (!pont() && !options.creation && lireLiaisons(memoireNavigateur).maitre)) {
             const coffre = await stockage.lire(fichiersDuProfil(compte.id).coffre as NomFichier);
             if ((!coffre || coffre.length === 0) && compte.admin) {
               // Code de l'administrateur connu, mais aucun coffre sur le relais : on le dit, sans créer en douce.
@@ -675,7 +678,7 @@ function Racine() {
         onCreer={() => {
           // Coffre neuf, indépendant : le code d'un autre compte retenu ici ne s'applique plus.
           for (const cle of ['applibourse.liaisons', 'applibourse.liaison']) memoireNavigateur.removeItem(cle);
-          void ouvrir({ id: ID_PRINCIPAL, nom: 'Moi', admin: true });
+          void ouvrir({ id: ID_PRINCIPAL, nom: 'Moi', admin: true }, { creation: true });
         }}
       />
     );
