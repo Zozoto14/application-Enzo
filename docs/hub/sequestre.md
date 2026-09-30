@@ -4,6 +4,10 @@ Ce document décrit précisément comment les comptes du hub sont séparés les
 uns des autres, et comment l'administrateur peut ouvrir le compte d'un ami
 sans lui demander son mot de passe — de façon **transparente** pour l'ami.
 
+**Rangs** (§ 7) : « l'administrateur » des § 1 à 6 est le compte historique, désormais
+**Fondateur**. Les Administrateurs et les autres Fondateurs ont chacun leur propre paire et
+leurs propres codes d'accès ; une clé n'est scellée que pour les rangs strictement supérieurs.
+
 Code : `src/securite/sequestre.ts` (primitives), `src/profils/annuaire.ts`
 (format de l'annuaire, séquestre), `src/session/session.ts`
 (`cleDerivee`, `deposerPourSequestre`, `ouvrirAvecCle`), `bureau/index.tsx`
@@ -166,8 +170,9 @@ administrateur (le code est lui-même dans `prive`).
 - À la création : avertissement dans le formulaire (case à cocher
   obligatoire), et phrase à transmettre à l'ami avec ses identifiants.
 - Chez l'ami : Paramètres › Sécurité › Confidentialité de votre compte —
-  « L'administrateur peut accéder à ton compte », avec la date du dernier
-  accès.
+  « Les administrateurs et fondateurs peuvent accéder à ton compte » (« Les
+  fondateurs… » pour un Administrateur, rien pour un Fondateur : § 7), avec
+  le dernier accès (date, qui, rang).
 - Chaque accès, affichage, régénération ou révocation du code est journalisé.
 - Comptes sans séquestre : alerte au tableau de bord (« séquestre absent, à
   créer à la prochaine connexion de l'ami ou par régénération
@@ -189,13 +194,126 @@ administrateur (le code est lui-même dans `prive`).
   La barrière décisive reste cryptographique : chaque fichier est scellé
   par la clé de son compte.
 
-## 7. Rôles : le Gestionnaire (niveau 1, sans toucher à la cryptographie)
+## 7. Rangs : Fondateur › Administrateur › Gestionnaire › Ami
 
-Trois rôles : **administrateur** (tout, séquestre compris), **gestionnaire**
-(un ami à l'Administration limitée) et **ami**. Le séquestre reste celui de
-l'administrateur seul : un second administrateur « complet » (qui pourrait
-ouvrir les comptes) exigerait de re-sceller la clé de chaque compte pour lui —
-c'est le **niveau 2**, volontairement absent (l'interface l'annonce : « bientôt »).
+Code : `src/hub/admin/roles.ts` (règle des rangs, seule source de vérité des droits),
+`src/hub/admin/actions.ts` (chaque action revérifie acteur ET cible), `src/profils/rangs.ts`
+(séquestre par rang, registre des Fondateurs, promotion/rétrogradation), `bureau/index.tsx`
+(hôte : PC et site). Tests : `src/hub/admin/roles.test.ts`, `src/profils/rangs.test.ts`,
+`bureau/rangsRelais.test.ts`, `relais/worker.test.mjs` ; bout en bout : `scripts/e2e-rangs.mjs`
+(captures dans `docs/captures-rangs/`).
+
+### Règle
+
+- Quatre rangs strictement ordonnés : **Fondateur > Administrateur > Gestionnaire > Ami**.
+- Un rang n'agit que sur des rangs **strictement inférieurs** : voir la fiche, modifier les accès,
+  suspendre, supprimer, régénérer les identifiants, afficher/régénérer/révoquer SON code d'accès,
+  ouvrir le compte, envoyer un code de connexion au site, changer le rang. Jamais sur un égal, un
+  supérieur, ni sur soi-même.
+- **Fondateur** : tout sur les rangs inférieurs, apps globales, promeut/rétrograde les Administrateurs,
+  nomme d'autres Fondateurs (confirmation forte : saisir le prénom, puis mot de passe + code).
+  Le compte historique (`principal`) est Fondateur et le reste (migration : aucune donnée à réécrire,
+  `rangDe` le rend Fondateur quel que soit son champ `role`) ; il reste donc toujours au moins un
+  Fondateur actif. Personne ne rétrograde un Fondateur (même rang).
+- **Administrateur** : l'Administration complète sur Gestionnaires et Amis, séquestre compris, avec
+  SES propres codes d'accès ; il ne voit ni n'ouvre un Fondateur ou un autre Administrateur, ne nomme
+  personne Administrateur/Fondateur, ne renomme pas (le prénom vit dans le bloc privé des Fondateurs),
+  ne règle pas les apps globales et n'envoie pas de code de site (il faut le jeton maître).
+- **Gestionnaire** : inchangé (§ 7 bis). **Ami** : aucune Administration.
+- Interface : badge de rang, filtre par rang (seuls les rangs visibles), « Changer le rang » qui ne
+  propose que `rangsAttribuables`, avec ce que permet/interdit le rang choisi et l'effet sur le
+  séquestre ; sections du panneau par rang (Administrateur : pas d'« Applications ») ; Paramètres ›
+  « Votre rang ». Chaque bouton masqué est aussi refusé par la logique (`exiger`, `rangs.ts`).
+
+### Séquestre par rang
+
+La clé maîtresse `K` d'un compte est scellée pour chaque **titulaire** (Administrateur ou Fondateur
+possédant une paire X25519) de rang **strictement supérieur** :
+
+| Compte | Scellé pour |
+|---|---|
+| Ami, Gestionnaire | Administrateurs ET Fondateurs |
+| Administrateur | Fondateurs seulement |
+| Fondateur | personne (pas même le compte historique : son `sequestre` passe à `revoque`) |
+
+- **Paires** : celle du compte historique est inchangée (`annuaire.admin`). Celle d'un autre titulaire
+  est dans son entrée : `titulaire.cle` (publique), `titulaire.privee` = XChaCha20-Poly1305(clé =
+  `cleDerivee('sequestre')` DE CE COMPTE, contexte `sequestre/cle-privee/<id>`). Son **bloc privé**
+  `titulaire.prive` (scellé par sa `cleDerivee('annuaire')`) garde SES codes d'accès et les prénoms
+  des comptes qu'il tient.
+- **Dépôts** : `sequestres[<titulaire>]` de chaque entrée (le compte historique garde `sequestre`,
+  compatible avec les versions précédentes). Dépôt = ECIES (même schéma qu'au § 4) de
+  `{ k, nom, creeLe }`, contexte `sequestre/titulaire/<titulaire>/<id>` : le titulaire apprend le
+  prénom en même temps que la clé. À sa prochaine ouverture, il le convertit en enveloppe
+  `HKDF(sa clé privée, id, code)` avec SON code (`sequestre/enveloppe/<titulaire>/<id>`).
+  **Codes par titulaire** : chacun a les siens, révocables (révoquer = `sequestres[t] = revoque`).
+- **Registre des Fondateurs** : les rangs de l'annuaire (`acces.role`) ne sont pas protégés en
+  intégrité. Les Fondateurs tiennent donc à part, dans `fondateurs`, une **clé commune** (déposée
+  ECIES pour chaque Fondateur : `partage[<id>]`) et un **registre** (`registre[<id>]` = scellé par la
+  clé commune : `{ rang, cle }`). Seule une clé publique **confirmée** au registre reçoit des dépôts ;
+  un Fondateur la confirme après avoir OUVERT le compte concerné et vérifié que sa clé privée y est
+  bien scellée par la clé de ce compte. S'attribuer « administrateur » en retouchant le fichier ne
+  donne donc aucune clé : le Fondateur retire le rang, efface la paire, ne dépose rien (testé).
+- **Étapes d'un Fondateur** (à chaque ouverture de l'annuaire complet, `etapesFondateur`) : créer la
+  clé commune (compte historique, première fois) ; confirmer ou créer la paire des titulaires qu'il
+  peut ouvrir ; retirer tout dépôt qui ne respecte plus la règle (titulaire rétrogradé, compte devenu
+  Fondateur, clé changée) ; **re-sceller** pour chaque titulaire confirmé la clé des comptes de rang
+  inférieur qu'il peut lui-même ouvrir. Idempotent : sans changement, rien n'est réécrit.
+
+### Promotion, rétrogradation
+
+- **Promotion au rang Administrateur** (ou Fondateur) par un Fondateur : inscription au registre, puis,
+  si le Fondateur peut ouvrir le compte promu, sa paire est **générée tout de suite** (clé privée
+  scellée par la clé maîtresse du promu, que le Fondateur tient un instant) et la clé de chaque compte
+  inférieur lui est **re-scellée** (dépôts). Sinon la promotion est « **en attente** » : la paire est
+  créée à la prochaine connexion du promu, confirmée puis servie en dépôts à la prochaine ouverture
+  d'un Fondateur qui peut l'ouvrir. Au rang Fondateur : la clé commune lui est déposée, et son propre
+  compte n'est plus scellé pour personne.
+- **Rétrogradation** (Fondateur seulement) : retrait du registre, de la clé commune, de la paire et de
+  TOUS ses dépôts et enveloppes ; sa délégation sur le relais disparaît au tour suivant.
+  **Limite assumée** : ce qu'il a déjà pu lire (une clé maîtresse obtenue en ouvrant un compte, le
+  contenu vu) ne peut pas être « désappris ». Si c'est un risque, **régénérez les identifiants** des
+  comptes concernés : nouvelle clé maîtresse, tous les anciens séquestres deviennent inutiles.
+- Régénérer les identifiants d'un compte efface tous ses séquestres de titulaires (et sa paire s'il
+  en avait une) : ils sont re-scellés avec la nouvelle clé.
+
+### Accès, journal, transparence
+
+- Ouvrir un compte : vérification d'identité, code d'accès PROPRE au titulaire, journal du titulaire
+  (« Ouverture du compte de Léa par Hugo (Administrateur, code d'accès) ») ; pour un titulaire autre
+  que le compte historique, l'événement part aussi, scellé pour le compte historique, dans son journal
+  (`journalGestion`, avec le nom). La base du compte ouvert note `{ date, par, rang }`.
+- Bandeau pendant la session : « Session de Hugo (Administrateur) sur le compte de Léa — accès journalisé ».
+- Transparence (Paramètres › Confidentialité) selon le rang du compte : Amis et Gestionnaires « Les
+  administrateurs et fondateurs peuvent accéder à ton compte » ; Administrateurs « Les fondateurs
+  peuvent accéder à ton compte » ; Fondateurs : rien. Le dernier accès indique qui et de quel rang.
+
+### Compatibilité et migration
+
+- Idempotente et sans réécriture : le compte historique devient Fondateur par `rangDe` ; `acces.role`
+  accepte `administrateur`/`fondateur` (liste v2 et annuaire), « ami » par défaut ; les annuaires des
+  versions précédentes (formats 1 à 3, `sequestre` du compte historique) se lisent tels quels. Le
+  registre est créé à la première ouverture du Fondateur historique.
+- Un appareil d'une version antérieure qui réécrirait l'annuaire perdrait les champs nouveaux
+  (`sequestres`, `titulaire`, `fondateurs`) : les Administrateurs retomberaient « en attente » jusqu'à
+  la prochaine ouverture d'un Fondateur à jour. Mettez à jour tous les appareils.
+
+### Limites assumées
+
+- Un prénom n'arrive à un titulaire qu'avec le dépôt de la clé : un compte jamais connecté (pas encore
+  ouvrable par un Fondateur) apparaît « (prénom inconnu) » chez un Administrateur.
+- Sur un navigateur relié avec son code, un Administrateur administre (voir, accès, suspendre, ouvrir
+  par séquestre, codes, journal) ; créer, supprimer, régénérer ou changer un rang exigent l'annuaire
+  complet (le PC). Un Fondateur autre que le compte historique fait ses étapes de Fondateur sur le PC.
+- Electron : un titulaire étend sa portée au compte qu'il ouvre (`profil:etendre`, puis `profil:ouvrir`
+  accepte ce compte, jamais `principal`). Le processus principal ne connaît pas les rangs ; la
+  barrière qui protège le contenu reste cryptographique.
+
+### 7 bis. Le Gestionnaire (sans toucher à la cryptographie)
+
+Le Gestionnaire n'a aucune paire de séquestre : il n'ouvre aucun compte. Son
+fonctionnement est inchangé depuis les « rôles » ; « l'administrateur » ci-dessous
+désigne le compte historique (Fondateur).
 
 Code : `src/hub/admin/roles.ts` (matrice des droits, seule source de vérité),
 `src/hub/admin/actions.ts` (chaque action revérifie le rôle de l'appelant),
@@ -275,6 +393,15 @@ Détail et tableau complet : `docs/synchro-relais.md` (« Portées du relais »,
   d'accès, sur n'importe lequel de ses appareils (les fichiers de l'ami y sont synchronisés).
 - **Retour de l'ami** (`p/<id>/compte`) : suivi de connexion et dépôt de séquestre, déjà scellés pour la clé publique de
   l'administrateur. L'administrateur n'en reprend que cela.
+- **Titulaire (Administrateur, Fondateur autre que le compte historique)** : sa projection
+  (`projectionTitulaire`) contient son entrée (paire et bloc privé scellés par SA clé) et les comptes de
+  rang strictement inférieur réduits à l'empreinte, au prénom scellé, aux accès et à SON séquestre. Rien
+  d'un compte de rang égal ou supérieur, ni registre, ni clé commune, ni bloc privé ou empreinte du
+  compte historique (testé : `bureau/rangsRelais.test.ts`, `scripts/e2e-rangs.mjs`). Pour ouvrir un
+  compte depuis le site, le coffre et le portefeuille de ce compte lui arrivent par **délégation**
+  (`PUT /rangs`, jeton maître seulement) ; son retour porte ses conversions, codes, modifications
+  d'accès et son journal, repris par le compte historique si son rang le permet encore. Le jeton maître
+  reste au(x) Fondateur(s).
 - **Limites assumées** : un ami peut réécrire sa propre projection sur le relais (comme il peut modifier le fichier
   `profils` de son appareil) — l'administrateur ne la relit jamais, ses accès font foi. Un gestionnaire relié avec son
   seul code n'a pas d'Administration sur ce navigateur (il ne connaît que son compte) : il gère ses amis depuis

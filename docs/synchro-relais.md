@@ -65,6 +65,7 @@ redéployés. Tests : `relais/worker.test.mjs` (« course sur l'index… »).
 | --- | --- | --- |
 | **maître** (administrateur) | tiré au déploiement (`env.JETON`) | tout : routes historiques `/boite…`, tous les espaces `/p/<id>/…`, passerelle |
 | **de profil** (un ami) | `p1.<id>.<HMAC-SHA256(JETON, « applibourse-profil-v1\|<id> »)>` | SON espace `/p/<id>/boite[/<nom>]` et la passerelle Yahoo/médias ; rien d'autre (403) |
+| **de profil d'un titulaire** (Administrateur, Fondateur autre que le compte historique) | le même `p1.<id>.…` | son espace, plus — par **délégation** publiée par le compte historique (`PUT /rangs`) — la liste, le `coffre` et le `portefeuille` (lecture, écriture) des comptes de rang strictement inférieur ; jamais `principal`, jamais l'`annuaire` ou le `compte` d'un autre, jamais de suppression |
 
 - Le relais recalcule le HMAC à chaque appel (rien à stocker) ; l'administrateur fabrique le jeton d'un ami hors ligne
   avec le même calcul (`src/sync/relais/portees.ts`). Aucun jeton de profil n'existe pour `principal`.
@@ -73,6 +74,13 @@ redéployés. Tests : `relais/worker.test.mjs` (« course sur l'index… »).
 - Rétrocompatible : les routes `/sante`, `/boite`, `/boite/<appareil>` sont inchangées pour le jeton maître ; les anciens
   appareils continuent de fonctionner sans mise à jour.
 - **Redéploiement nécessaire** du relais pour les espaces (`npm run relais:deployer`, qui reprend boîte et jeton).
+- **Rangs (version 3 du relais)** : `GET`/`PUT /rangs` (jeton maître seulement) lit/publie
+  `{ delegations: { <titulaire>: [<ids inférieurs>] } }` (clé KV `rangs`, validée : identifiants, jamais
+  `principal` ni le titulaire lui-même). Le relais la relit à chaque accès croisé (1 lecture). Le compte
+  historique la republie quand elle change (`delegationsDe`, `bureau/synchroComptes.ts`) — rien tant
+  qu'aucun titulaire n'existe (un relais pas encore redéployé ne produit donc aucune erreur). Une
+  rétrogradation retire la délégation au tour suivant : l'accès cesse aussitôt (403). Redéployer le
+  relais pour les rangs.
 
 ## Ce qui est publié, et qui peut le lire
 
@@ -83,8 +91,10 @@ redéployés. Tests : `relais/worker.test.mjs` (« course sur l'index… »).
 | `/p/principal/boite/annuaire` | annuaire découpé pour la fusion (empreintes salées, prénoms scellés, accès, séquestres scellés, politique des apps) | déjà opaque, **aucun prénom en clair** (testé) | jeton maître **seulement** |
 | `/p/principal/boite/admin` | données d'administration (réglages, notes, journal, connexions vues, robustesse) | enveloppe scellée par `cleDerivee('synchro')` | jeton maître, et seul l'administrateur l'ouvre |
 | `/p/<id>/boite/annuaire` | **projection** de l'ami : son entrée, le sel, la politique des apps, la clé PUBLIQUE de séquestre | opaque | l'ami (son code) et l'administrateur |
+| `/p/<id>/boite/annuaire` (titulaire) | **projection par rang** : son entrée (sa paire et son bloc privé, scellés par SA clé) et les comptes de rang STRICTEMENT inférieur (empreinte, prénom scellé, accès, SON séquestre). Rien d'un Fondateur ni d'un autre Administrateur, ni registre, ni clé commune, ni bloc privé / empreinte / clé privée du compte historique (testé) | opaque | le titulaire (son code) et le compte historique |
+| `/rangs` (clé KV) | délégations des titulaires (identifiants seulement) | aucun secret | jeton maître |
 | `/p/<id>/boite/coffre`, `…/portefeuille` | fichiers de l'ami tels que sur disque | coffre : Argon2id ; portefeuille : clé maîtresse de l'ami | l'ami et l'administrateur (qui ne peut pas les ouvrir) |
-| `/p/<id>/boite/compte` | ce que l'ami renvoie : suivi de connexion (scellé pour l'administrateur), dépôt de séquestre (scellé), invitation acceptée | scellés pour la clé publique de l'administrateur | l'ami et l'administrateur |
+| `/p/<id>/boite/compte` | ce que l'ami renvoie : suivi de connexion (scellé pour l'administrateur), dépôt de séquestre (scellé), invitation acceptée ; pour un titulaire, aussi sa paire et son bloc privé, SES séquestres (conversions, codes, révocations), ses modifications d'accès et son journal (scellé pour le compte historique) | scellés | le titulaire (ou l'ami) et le compte historique |
 
 L'annuaire complet n'est **jamais** déposé dans un espace lisible par un ami.
 
@@ -92,7 +102,9 @@ L'annuaire complet n'est **jamais** déposé dans un espace lisible par un ami.
 
 - **Annuaire** (`src/profils/synchroAnnuaire.ts`, `src/sync/relais/fusionLww.ts`) : découpé en `sel`, `admin`,
   `admin-connexion`, `politique`, `prive`, `gestion`, et par compte `compte:<id>` (empreinte, prénom scellé, accès),
-  `sequestre:<id>`, `suivi:<id>`, `creation:<id>`. Dernier gagnant par entrée (dates déduites en comparant au tour
+  `sequestre:<id>`, `sequestres:<id>` (séquestres des titulaires), `titulaire:<id>` (paire d'un titulaire), `suivi:<id>`,
+  `creation:<id>`, plus `partage:<id>` et `registre:<id>` (clé commune et registre des Fondateurs, une entrée par
+  titulaire : deux Fondateurs qui promeuvent chacun quelqu'un ne s'écrasent pas). Dernier gagnant par entrée (dates déduites en comparant au tour
   précédent), suppression d'un compte = pierre tombale datée de `compte:<id>` (gardée 365 jours) : les fichiers du compte
   sont effacés sur les autres appareils et son espace vidé sur le relais. Deux blocs `prive` divergents sont réunis
   (administrateur déverrouillé) sans rescellement inutile, pour ne pas faire de va-et-vient. Au premier tour d'un
@@ -105,6 +117,12 @@ L'annuaire complet n'est **jamais** déposé dans un espace lisible par un ami.
   Limite assumée : deux modifications simultanées du même ami sur deux appareils → la plus récente gagne.
 - **Retour de l'ami** : l'administrateur n'accepte de `compte` que le suivi, un dépôt de séquestre (si attendu) et
   l'invitation acceptée — jamais les accès, le prénom ou la politique.
+- **Retour d'un titulaire** (`appliquerRetourAmi`) : accepté seulement si son rang, relu dans l'annuaire du compte
+  historique, est encore Administrateur/Fondateur, et seulement sur des comptes de rang strictement inférieur : sa
+  paire, SES séquestres (un état qu'il peut avoir produit : `actif` après `depose`/`actif`, ou `revoque`), ses
+  modifications d'accès (jamais le rang), et son journal (chaque action reprise une fois, empreintes retenues).
+  Côté titulaire (`recevoirProjection`), ce qu'il a fait ici l'emporte tant que la projection ne l'a pas repris ;
+  un séquestre retiré là-bas (rétrogradation) disparaît.
 
 ## Tours (`bureau/synchroComptes.ts`, branchés dans `bureau/index.tsx`)
 
@@ -113,6 +131,9 @@ L'annuaire complet n'est **jamais** déposé dans un espace lisible par un ami.
   chaque ami → données d'administration. Un tour sans changement n'écrit rien (lectures seules : ~2 + nombre d'amis).
 - **Ami déverrouillé** avec une liaison pour son compte : ses fichiers partent, sa projection arrive (accès modifiés,
   désactivation), son retour part. Uniquement son espace.
+- **Titulaire déverrouillé** sur un navigateur relié : comme un ami, et en plus les coffres/portefeuilles des comptes
+  inférieurs qu'il a ouverts ici (séquestre) repartent et reviennent par délégation. Avant d'ouvrir un compte par
+  séquestre, son coffre et son portefeuille sont tirés par délégation.
 - **Avant la connexion** : l'annuaire (administrateur) ou la projection (ami) est relu, pour que l'écran prénom
   connaisse les comptes ajoutés ailleurs ; après le prénom, seul le coffre de CE compte (et le portefeuille d'un ami) est
   tiré s'il est plus récent. Le leurre fait le même appel (liste d'un espace existant) : même durée, aucune erreur.
@@ -130,6 +151,6 @@ L'annuaire complet n'est **jamais** déposé dans un espace lisible par un ami.
    déverrouillage du site, pour tous ; après un échec, un navigateur dont le coffre n'est pas celui du compte relié
    propose « Ce navigateur contient un autre coffre : reprendre celui de ton compte ? ».
 
-Tests : `relais/worker.test.mjs`, `bureau/synchroComptes.test.ts`, `bureau/AccueilSite.test.tsx`,
-`src/sync/relais/fusionLww.test.ts` ; bout en bout : `scripts/e2e-site-connexion.mjs` (captures dans
-`docs/captures-connexion/`).
+Tests : `relais/worker.test.mjs`, `bureau/synchroComptes.test.ts`, `bureau/rangsRelais.test.ts`,
+`bureau/AccueilSite.test.tsx`, `src/sync/relais/fusionLww.test.ts` ; bout en bout : `scripts/e2e-site-connexion.mjs`
+(captures dans `docs/captures-connexion/`) et `scripts/e2e-rangs.mjs` (rangs : `docs/captures-rangs/`).
