@@ -563,6 +563,7 @@ try {
   await activerPontPc();
   await ouvrirTsuzuku(page);
   await page.getByTestId('onglet-app-accueil').click();
+  await page.getByTestId('mode-anime').click();
   await page.getByTestId('accueil-recherche').fill('Dandadan');
   await page.getByTestId('accueil-chercher').click();
   await page.getByTestId('carte-anime-2').first().waitFor({ timeout: 20_000 }).catch(async e => {
