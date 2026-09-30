@@ -26,7 +26,7 @@ import { avecNote, avecReglages, type DonneesAdmin, type ReglagesAdmin } from '.
 import { exporterCsv, exporterJson, type EvenementAudit } from './journal';
 import type { Niveaux } from './niveaux';
 import type { PolitiqueHub } from './politique';
-import { definirRole, exiger, type ActionAdmin } from './roles';
+import { definirRang, exiger, exigerRang, type ActionAdmin, type Rang } from './roles';
 
 type Acteur = Pick<Profil, 'id' | 'admin' | 'role'>;
 
@@ -122,10 +122,20 @@ export function supprimerProfilPar(acteur: Acteur | undefined, profils: readonly
   return supprimerProfil(profils, id);
 }
 
-/** Promotion / rétrogradation : administrateur seulement. */
+/**
+ * Changer le rang d'un compte : l'appelant doit être strictement au-dessus de
+ * la cible ET du rang donné (seul un Fondateur nomme un Administrateur ou un
+ * Fondateur). La partie cryptographique (paire de séquestre, re-scellement,
+ * retrait des dépôts) est faite par l'hôte (`src/profils/rangs.ts`).
+ */
+export function definirRangPar(acteur: Acteur | undefined, profils: readonly Profil[], id: string, rang: Rang): Profil[] {
+  exigerRang(acteur, cibleDe(profils, id), rang);
+  return definirRang(profils, id, rang);
+}
+
+/** Ancien nom : Gestionnaire ou Ami. */
 export function definirRolePar(acteur: Acteur | undefined, profils: readonly Profil[], id: string, role: 'ami' | 'gestionnaire'): Profil[] {
-  verifierSur(acteur, 'changer-role', profils, id);
-  return definirRole(profils, id, role);
+  return definirRangPar(acteur, profils, id, role);
 }
 
 /** Politique globale des apps (activation, maintenance, accès par défaut) : administrateur seulement. */

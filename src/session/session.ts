@@ -61,6 +61,11 @@ export function usageSequestre(idCompte: string): string {
   return `sequestre/cle-maitresse/${idCompte}`;
 }
 
+/** Contexte du dépôt pour un titulaire (le compte historique garde le contexte d'origine). */
+export function usageDepotTitulaire(titulaire: string, idCompte: string): string {
+  return titulaire === 'principal' ? usageSequestre(idCompte) : `sequestre/titulaire/${titulaire}/${idCompte}`;
+}
+
 export class ErreurSession extends Error {
   constructor(message: string) {
     super(message);
@@ -379,6 +384,16 @@ export class Session {
    */
   deposerPourSequestre(publiqueAdmin: string, idCompte: string): string {
     return scellerPourAdmin(publiqueAdmin, this.exigerCleMaitresse(), usageSequestre(idCompte), this.alea);
+  }
+
+  /**
+   * Dépose la clé maîtresse pour un titulaire autre que le compte historique
+   * (Administrateur, Fondateur), avec le prénom et la date de création du
+   * compte pour son bloc privé. Même ECIES ; le contexte nomme le titulaire.
+   */
+  deposerPourTitulaire(publique: string, titulaire: string, idCompte: string, meta: { nom?: string; creeLe?: string } = {}): string {
+    const k = bytesToHex(this.exigerCleMaitresse());
+    return scellerPourAdmin(publique, utf8ToBytes(JSON.stringify({ k, ...meta })), usageDepotTitulaire(titulaire, idCompte), this.alea);
   }
 
   /**

@@ -22,13 +22,19 @@ import type { AppHub, ContexteHub } from './types';
 
 type ProfilAcces = Pick<Profil, 'admin' | 'apps' | 'role'>;
 
+/** Rang (autre que le compte historique) qui ouvre l'Administration. */
+export function rangAdministration(role: Profil['role']): boolean {
+  return role === 'gestionnaire' || role === 'administrateur' || role === 'fondateur';
+}
+
 export function peutOuvrir(app: Pick<AppHub, 'id' | 'adminSeulement' | 'gestionnaire'>, profil: ProfilAcces | undefined): boolean {
   if (!profil || profil.admin) {
     return true;
   }
   if (app.adminSeulement) {
-    // Seule exception : une app réservée qui s'ouvre aux gestionnaires (version limitée).
-    return profil.role === 'gestionnaire' && app.gestionnaire === true;
+    // Seule exception : une app réservée qui s'ouvre aux rangs d'administration
+    // (Fondateur, Administrateur, Gestionnaire — ce dernier en version limitée).
+    return rangAdministration(profil.role) && app.gestionnaire === true;
   }
   return (profil.apps ?? []).includes(app.id);
 }

@@ -11,6 +11,7 @@ import { ErreurProfil, ID_PRINCIPAL, motifFermeture, type Profil } from '../../p
 import type { AppHub } from '../types';
 import { ajusterNiveau, type NiveauAcces, type Niveaux } from './niveaux';
 import { etatApp, type PolitiqueHub } from './politique';
+import { NIVEAU_RANG, rangDe, type Rang } from './roles';
 
 const JOUR = 86_400_000;
 
@@ -61,7 +62,7 @@ export function niveauProfil(profil: Pick<Profil, 'admin' | 'apps' | 'niveaux' |
     return 'complet';
   }
   if (app.adminSeulement) {
-    return profil.role === 'gestionnaire' && app.gestionnaire === true ? 'complet' : 'aucun';
+    return (profil.role === 'gestionnaire' || profil.role === 'administrateur' || profil.role === 'fondateur') && app.gestionnaire === true ? 'complet' : 'aucun';
   }
   if (!(profil.apps ?? []).includes(app.id)) {
     return 'aucun';
@@ -235,8 +236,8 @@ export interface FiltreComptes {
   statut?: StatutCompte | 'tous';
   /** Identifiant d'app : seuls les comptes qui y ont accès. */
   app?: string;
-  /** Rôle : seuls les amis ordinaires, ou seuls les gestionnaires. */
-  role?: 'ami' | 'gestionnaire' | 'tous';
+  /** Rang : seuls les comptes de ce rang. */
+  role?: Rang | 'tous';
   tri?: TriComptes;
 }
 
@@ -267,7 +268,7 @@ export function filtrerComptes(profils: readonly Profil[], filtre: FiltreComptes
     if (filtre.app && (!app || niveauProfil(p, app) === 'aucun')) {
       return false;
     }
-    if (filtre.role && filtre.role !== 'tous' && (p.admin || (p.role === 'gestionnaire' ? 'gestionnaire' : 'ami') !== filtre.role)) {
+    if (filtre.role && filtre.role !== 'tous' && rangDe(p) !== filtre.role) {
       return false;
     }
     return true;
@@ -275,9 +276,12 @@ export function filtrerComptes(profils: readonly Profil[], filtre: FiltreComptes
   const tri = filtre.tri ?? 'nom';
   const date = (v: string | undefined) => (v ? Date.parse(v) || 0 : 0);
   return gardes.sort((a, b) => {
-    // L'administrateur reste en tête.
+    // Le compte historique reste en tête, puis les rangs du plus haut au plus bas.
     if (a.admin !== b.admin) {
       return a.admin ? -1 : 1;
+    }
+    if (rangDe(a) !== rangDe(b)) {
+      return NIVEAU_RANG[rangDe(b)] - NIVEAU_RANG[rangDe(a)];
     }
     switch (tri) {
       case 'creation':

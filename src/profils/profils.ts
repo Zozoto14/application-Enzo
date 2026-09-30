@@ -42,10 +42,15 @@ export type EtatSequestre = 'actif' | 'depose' | 'attendu' | 'revoque' | 'absent
  * « gestionnaire » : un ami à qui l'administrateur confie une Administration
  * limitée (voir `src/hub/admin/roles.ts`) — jamais le contenu d'un compte.
  */
-export type RoleProfil = 'ami' | 'gestionnaire';
+export type RoleProfil = 'ami' | 'gestionnaire' | 'administrateur' | 'fondateur';
 
 export function estRole(valeur: unknown): valeur is RoleProfil {
-  return valeur === 'ami' || valeur === 'gestionnaire';
+  return valeur === 'ami' || valeur === 'gestionnaire' || valeur === 'administrateur' || valeur === 'fondateur';
+}
+
+/** Rang enregistré d'un compte (jamais « ami », qui est l'absence de rang). */
+export function roleEnregistre(valeur: unknown): Exclude<RoleProfil, 'ami'> | undefined {
+  return valeur === 'gestionnaire' || valeur === 'administrateur' || valeur === 'fondateur' ? valeur : undefined;
 }
 
 export interface Profil {
@@ -80,8 +85,15 @@ export interface Profil {
   politique?: PolitiqueHub;
   /** Vue de l'administrateur : état du séquestre de ce compte ami. */
   sequestre?: EtatSequestre;
-  /** Rôle du compte ; absent pour l'administrateur, et pour un ami « ordinaire ». */
+  /** Rang du compte ; absent pour le compte historique (toujours Fondateur), et pour un ami « ordinaire ». */
   role?: RoleProfil;
+  /**
+   * Vue d'un titulaire : état de la paire de séquestre d'un Administrateur ou
+   * d'un Fondateur — `actif` (confirmée, les comptes inférieurs lui sont
+   * scellés) ou `en-attente` (créée à sa prochaine connexion, ou à confirmer
+   * par un Fondateur).
+   */
+  titulaire?: 'actif' | 'en-attente';
   /** Vue de l'administrateur : identifiant du gestionnaire qui a créé ce compte, s'il y en a un. */
   creePar?: string;
 }
@@ -137,8 +149,8 @@ function migrerProfil(p: Record<string, unknown>, version: number): Profil {
   };
   const niveaux = nettoyerNiveaux(p.niveaux, apps);
   const optionnels = {
-    // Rôle « ami » par défaut : seule la valeur « gestionnaire » est conservée.
-    role: p.role === 'gestionnaire' ? 'gestionnaire' : undefined,
+    // Rang « ami » par défaut : seuls Gestionnaire, Administrateur et Fondateur sont conservés.
+    role: roleEnregistre(p.role),
     niveaux,
     invitationExpireLe: dateIso(p.invitationExpireLe),
     expireLe: dateIso(p.expireLe),
@@ -197,7 +209,7 @@ export function ecrireProfils(profils: readonly Profil[]): string {
         creeLe: p.creeLe,
         apps,
         actif: p.actif !== false,
-        role: p.role === 'gestionnaire' ? 'gestionnaire' : undefined,
+        role: roleEnregistre(p.role),
         niveaux: nettoyerNiveaux(p.niveaux, apps),
         invitationExpireLe: p.invitationExpireLe,
         expireLe: p.expireLe,
