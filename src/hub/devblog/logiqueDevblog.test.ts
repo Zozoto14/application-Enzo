@@ -75,10 +75,12 @@ describe('devblog', () => {
     // Le site comme le PC : « relier un navigateur » concerne aussi les amis.
     expect(ENTREES.find(e => e.version === '2026.10.03')!.titre).toBe('Le site, exactement comme le PC');
     expect(ENTREES.find(e => e.version === '2026.10.04')!.titre).toBe('Tsuzuku arrive dans le hub');
-    // Les rangs (dernière entrée) : la transparence concerne aussi les amis.
-    expect(ENTREES[0].titre).toBe('Rangs : Fondateur, Administrateur, Gestionnaire');
+    // Les rangs : la transparence concerne aussi les amis.
+    expect(ENTREES.find(e => e.version === '2026.10.05')!.titre).toBe('Rangs : Fondateur, Administrateur, Gestionnaire');
+    // Les abonnements (dernière entrée) : un rappel amical concerne aussi les amis.
+    expect(ENTREES[0].titre).toBe('Gestion des abonnements');
     expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('afficher');
-    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
+    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
   });
 
   it('marquer lu est idempotent et tolère un état corrompu', () => {
