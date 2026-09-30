@@ -90,7 +90,6 @@ describe('documents légaux et verrouillage automatique dans l’application', (
     expect(screen.getByText('Cookies et stockage local')).toBeTruthy();
     expect(screen.getByTestId('juridique-avertissement')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('juridique-fermer'));
-    await fireEvent.press(screen.getByTestId('juridique-fermer'));
     expect(screen.getByTestId('bouton-deverrouiller')).toBeTruthy();
   });
 

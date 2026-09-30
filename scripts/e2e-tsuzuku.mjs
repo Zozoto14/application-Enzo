@@ -565,6 +565,10 @@ try {
   await page.getByTestId('onglet-app-accueil').click();
   await page.getByTestId('accueil-recherche').fill('Dandadan');
   await page.getByTestId('accueil-chercher').click();
+  await page.getByTestId('carte-anime-2').first().waitFor({ timeout: 20_000 }).catch(async e => {
+    await capture(page, 'echec-presence-recherche');
+    throw e;
+  });
   await page.getByTestId('carte-anime-2').first().click();
   await page.getByTestId('fiche-titre').waitFor({ timeout: 20_000 });
   await page.getByTestId('episode-4').click();

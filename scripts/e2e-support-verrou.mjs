@@ -267,7 +267,7 @@ try {
     return trouves;
   }, WEBHOOK);
   verifier(fuites.length === 0, `l’adresse du webhook n’apparaît ni dans la page ni dans le stockage du navigateur (${fuites.join(',') || 'rien'})`);
-  verifier(!kv.has('support') && ![...kv.keys()].some(c => /ticket|support/i.test(c) && c !== 'support:limite'), 'aucun ticket n’est stocké sur le relais');
+  verifier(![...kv.keys()].some(c => /ticket|support/i.test(c) && !c.startsWith('support:limite:')), `aucun ticket n’est stocké sur le relais (seul le compteur de limite de débit existe : ${[...kv.keys()].filter(c => /support/.test(c)).join(', ')})`);
   // Retour sans jeton : refus.
   const sansJeton = await fetchReel(`https://localhost:${PORT_RELAIS}/support`, { method: 'POST', body: '{}' }).then(r => r.status, () => 0).catch(() => 0);
   verifier(sansJeton === 401 || sansJeton === 0, 'POST /support sans jeton refusé (401)');
@@ -312,7 +312,6 @@ try {
   // ================================================================ Verrouillage automatique (délai d'essai court)
   log('Verrouillage automatique : délai court');
   await page.getByTestId('juridique-fermer').click();
-  await page.getByTestId('juridique-fermer').click().catch(() => undefined);
   await page.evaluate(() => {
     localStorage.setItem('appdashboard.verrou-auto-essai-ms', '3000');
     window.dispatchEvent(new StorageEvent('storage', { key: 'appdashboard.verrou-auto-essai-ms' }));
@@ -327,7 +326,6 @@ try {
   await page.getByTestId('hub-juridique').waitFor({ timeout: 10_000 });
   verifier(/Conditions personnalisées/.test(await page.getByTestId('juridique-texte').innerText()), 'les documents se lisent sans être connecté, avec le texte du Fondateur');
   await capture(page, '11-document-avant-connexion');
-  await page.getByTestId('juridique-fermer').click();
   await page.getByTestId('juridique-fermer').click();
 
   // Un geste repousse l'échéance (et la version acceptée est mémorisée : pas de nouvelle demande).

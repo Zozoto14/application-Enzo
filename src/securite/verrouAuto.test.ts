@@ -38,6 +38,7 @@ describe('verrouillage automatique : décision', () => {
     expect(libelleDelaiVerrou(0)).toBe('Jamais');
     expect(libelleDelaiVerrou(120)).toBe('2 h');
     expect(libelleDelaiVerrou(45)).toBe('45 min');
+    expect(libelleDelaiVerrou(0.05)).toBe('3 s');
   });
 
   it('ne fait rien avant l’échéance, verrouille à 45 minutes sans activité', () => {

@@ -41,6 +41,7 @@ export function lireDelaiVerrou(brut: string | null | undefined): number {
 
 export function libelleDelaiVerrou(minutes: number): string {
   if (minutes === 0) return 'Jamais';
+  if (minutes < 1) return `${Math.max(1, Math.round(minutes * 60))} s`;
   if (minutes >= 60 && minutes % 60 === 0) return `${minutes / 60} h`;
   return `${minutes} min`;
 }

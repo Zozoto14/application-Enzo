@@ -83,7 +83,8 @@ export function PageJuridique({ theme, docs, idInitial, actif = true, onEnregist
   const [edition, setEdition] = useState<string | undefined>();
   const [message, setMessage] = useState<string | undefined>();
   const [enCours, setEnCours] = useState(false);
-  const fermer = () => (edition !== undefined ? setEdition(undefined) : id ? setId(undefined) : onFermer());
+  // Ouvert sur un document précis (lien, écran d'acceptation) : « Retour » revient d'où l'on vient, sans passer par la liste.
+  const fermer = () => (edition !== undefined ? setEdition(undefined) : id && !idInitial ? setId(undefined) : onFermer());
   useEffect(() => (actif ? ecouterTouche('Escape', fermer) : undefined)); // eslint-disable-line react-hooks/exhaustive-deps
   const titre = { color: theme.texte, fontWeight: theme.poidsTitre, textTransform: theme.majuscules ? ('uppercase' as const) : ('none' as const), ...police(theme.policeTitre) };
   const carte = [styles.carte, { backgroundColor: theme.surface, borderColor: theme.ligne, borderRadius: theme.rayonMoyen }];
