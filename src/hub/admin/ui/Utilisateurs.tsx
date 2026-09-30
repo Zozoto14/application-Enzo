@@ -22,7 +22,6 @@ import {
   avecNotePar,
   definirExpirationPar,
   definirNiveauxPar,
-  definirRolePar,
   desactiverPar,
   prolongerInvitationPar,
   reactiverPar,
@@ -32,7 +31,7 @@ import {
 } from '../actions';
 import { LIBELLES_STATUT, filtrerComptes, niveauProfil, niveauxProfil, recapitulatif, statutCompte, versAutorisations, type StatutCompte, type TriComptes } from '../comptes';
 import { LONGUEUR_MAX_NOTE } from '../donnees';
-import { CE_QUE_NE_PERMET_PAS_GESTIONNAIRE, CE_QUE_PERMET_GESTIONNAIRE, LIBELLES_ROLE, autorise, roleDe } from '../roles';
+import { CE_QUE_NE_PERMET_PAS, CE_QUE_PERMET, LIBELLES_RANG, NIVEAU_RANG, RANGS, autorise, rangDe, rangsAttribuables, type Rang } from '../roles';
 import { LIBELLES_NIVEAU, MODELES, modeleCorrespondant, niveauxDe, niveauxDuModele, type IdModele, type Niveaux } from '../niveaux';
 import { etatApp } from '../politique';
 import { Avis, BoutonHub, Case, Champ, Intertitre, Panneau, Pilule, Segments, commun, dansJours, dateLisible, relatif, styleTitre, type OutilsAdmin } from './commun';
@@ -56,12 +55,24 @@ function couleurStatut(theme: ThemeHub, statut: StatutCompte): string {
 }
 
 const LIBELLES_SEQUESTRE: Record<NonNullable<Profil['sequestre']>, string> = {
-  actif: 'Accès administrateur possible (code d’accès)',
-  depose: 'Dépôt reçu : il sera converti à la prochaine ouverture de l’Administration',
-  attendu: 'Séquestre absent : à créer à la prochaine connexion de l’ami ou par régénération d’identifiants',
-  revoque: 'Accès administrateur révoqué',
+  actif: 'Accès possible avec VOTRE code d’accès (chaque titulaire a le sien)',
+  depose: 'Dépôt reçu : il sera converti à votre prochaine ouverture de l’Administration',
+  attendu: 'Pas encore de séquestre pour vous : créé à la prochaine connexion du compte, ou re-scellé par un Fondateur',
+  revoque: 'Votre accès à ce compte est révoqué',
   absent: 'Séquestre absent',
 };
+
+/** Couleur d'un rang (badge). */
+function couleurRang(theme: ThemeHub, rang: Rang): string {
+  return rang === 'fondateur' ? theme.critique : rang === 'administrateur' ? theme.teintes.admin : rang === 'gestionnaire' ? theme.accent : theme.attenue;
+}
+
+/** Badge de rang (rien pour un simple ami). */
+function BadgeRang({ theme, profil, testID }: { theme: ThemeHub; profil: Profil; testID?: string }) {
+  const rang = rangDe(profil);
+  if (rang === 'ami') return null;
+  return <Pilule theme={theme} texte={LIBELLES_RANG[rang]} couleur={couleurRang(theme, rang)} testID={testID} />;
+}
 
 export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: string }) {
   const { theme, tous, registre, controle } = outils;
@@ -70,7 +81,7 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
   const [statut, setStatut] = useState<Filtre>('tous');
   const [app, setApp] = useState<string>('toutes');
   const [tri, setTri] = useState<TriComptes>('nom');
-  const [roleFiltre, setRoleFiltre] = useState<'tous' | 'ami' | 'gestionnaire'>('tous');
+  const [roleFiltre, setRoleFiltre] = useState<'tous' | Rang>('tous');
   const [selection, setSelection] = useState<string[]>([]);
   const [choisi, setChoisi] = useState<string | undefined>(cible);
   const [creation, setCreation] = useState(false);
@@ -78,8 +89,12 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
   const gestionnaire = outils.role === 'gestionnaire';
   const attribuables = registre.filter(a => !a.adminSeulement);
   const liste = filtrerComptes(tous, { recherche, statut, app: app === 'toutes' ? undefined : app, tri, role: roleFiltre }, registre, maintenant);
-  const amisVisibles = liste.filter(p => !p.admin).map(p => p.id);
-  const selectionnes = selection.filter(id => tous.some(p => p.id === id && !p.admin));
+  // Seuls les comptes de rang strictement inférieur se sélectionnent (actions groupées).
+  const actionnable = (p: Profil) => autorise(outils.acteur, 'etat-ami', p).ok;
+  const amisVisibles = liste.filter(actionnable).map(p => p.id);
+  const selectionnes = selection.filter(id => tous.some(p => p.id === id && actionnable(p)));
+  // Filtre par rang : les rangs que l'acteur peut voir (le sien pour un Fondateur, qui voit ses pairs).
+  const rangsVisibles = RANGS.filter(r => NIVEAU_RANG[r] < NIVEAU_RANG[outils.role] || (r === 'fondateur' && outils.role === 'fondateur'));
   const profil = tous.find(p => p.id === choisi);
   const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
@@ -112,8 +127,9 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
           : 'Sélectionnez un utilisateur pour ouvrir sa fiche, ou créez un compte.'}
       </Text>
       {gestionnaire ? null : (
-        <Text style={[attenue, { fontSize: 12 }]} testID="admin-admin-complet-bientot">
-          Administrateur complet : bientôt (nécessite de re-sceller les clés de chaque compte).
+        <Text style={[attenue, { fontSize: 12 }]} testID="admin-rangs-explication">
+          Rangs : Fondateur › Administrateur › Gestionnaire › Ami. Chacun n’agit que sur les rangs strictement inférieurs ; la clé d’un compte n’est
+          scellée que pour les Administrateurs et Fondateurs de rang supérieur.
         </Text>
       )}
     </Panneau>
@@ -147,13 +163,13 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
           testID="admin-filtre-statut"
         />
         {gestionnaire ? null : (
-          <Segments<'tous' | 'ami' | 'gestionnaire'>
+          <Segments<'tous' | Rang>
             theme={theme}
-            libelle="Rôle"
+            libelle="Rang"
             valeur={roleFiltre}
-            options={[['tous', 'Tous les rôles'], ['ami', 'Amis'], ['gestionnaire', 'Gestionnaires']]}
+            options={[['tous', 'Tous les rangs'], ...rangsVisibles.map(r => [r, `${LIBELLES_RANG[r]}s`] as const)]}
             onChoisir={setRoleFiltre}
-            testID="admin-filtre-role"
+            testID="admin-filtre-rang"
           />
         )}
         <View style={[commun.grille, { alignItems: 'center' }]}>
@@ -206,7 +222,7 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
                   index > 0 && { borderTopWidth: 1, borderTopColor: theme.ligne },
                   actif && { backgroundColor: teinteTransparente(theme.teintes.admin, 0.12) },
                 ]}>
-                {p.admin ? <View style={{ width: 22 }} /> : <Case theme={theme} coche={selection.includes(p.id)} libelle={`Sélectionner ${p.nom}`} onChanger={v => basculer(p.id, v)} testID={`admin-case-${p.id}`} />}
+                {!actionnable(p) ? <View style={{ width: 22 }} /> : <Case theme={theme} coche={selection.includes(p.id)} libelle={`Sélectionner ${p.nom}`} onChanger={v => basculer(p.id, v)} testID={`admin-case-${p.id}`} />}
                 <Pressable
                   testID={`admin-ligne-${p.id}`}
                   accessibilityRole="button"
@@ -235,7 +251,8 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
                       {gestionnaire ? '' : p.derniereConnexion ? `vu ${relatif(p.derniereConnexion, maintenant)}` : 'jamais connecté'}
                     </Text>
                   </View>
-                  {roleDe(p) === 'gestionnaire' ? <Pilule theme={theme} texte={LIBELLES_ROLE.gestionnaire} couleur={theme.teintes.admin} testID={`admin-role-${p.id}`} /> : null}
+                  <BadgeRang theme={theme} profil={p} testID={`admin-rang-${p.id}`} />
+                  {p.titulaire === 'en-attente' ? <Pilule theme={theme} texte="Clé en attente" couleur={theme.alerte} testID={`admin-titulaire-${p.id}`} /> : null}
                   <Pilule theme={theme} texte={LIBELLES_STATUT[s]} couleur={couleurStatut(theme, s)} testID={`admin-statut-${p.id}`} />
                 </Pressable>
               </View>
@@ -330,15 +347,25 @@ function Fiche({
   const niveaux = niveauxProfil(profil, registre);
   const cibleJournal = { cible: profil.id, nomCible: profil.nom };
   const gestionnaire = outils.role === 'gestionnaire';
-  const [confirmationRole, setConfirmationRole] = useState(false);
+  const [rangChoisi, setRangChoisi] = useState<Rang | undefined>();
+  const [saisieRang, setSaisieRang] = useState('');
+  const attribuables = rangsAttribuables(outils.acteur, profil);
 
-  if (profil.admin) {
+  // Règle des rangs : on ne voit la fiche que d'un compte de rang STRICTEMENT inférieur.
+  if (!autorise(outils.acteur, 'voir-compte', profil).ok) {
+    const soi = profil.id === outils.acteur.id;
     return (
       <Panneau theme={theme} testID="admin-detail">
         <Text style={[styleTitre(theme), { fontSize: 22 }]}>{profil.nom}</Text>
-        <Pilule theme={theme} texte="Administrateur" couleur={theme.teintes.admin} />
-        <Text style={attenue}>Accès à toutes les apps. Ce compte ne se désactive pas et ne se supprime pas.</Text>
-        <Text style={attenue}>Dernière connexion : {dateLisible(profil.derniereConnexion, true)}</Text>
+        <View style={[commun.ligne, { paddingVertical: 0 }]}>
+          <BadgeRang theme={theme} profil={profil} testID="admin-fiche-rang" />
+        </View>
+        <Text style={attenue} testID="admin-fiche-lecture-seule">
+          {soi
+            ? 'C’est votre compte : on n’agit pas sur son propre compte depuis l’Administration.'
+            : `Même rang que vous (${LIBELLES_RANG[rangDe(profil)]}) : aucune action possible sur ce compte, ni ouverture, ni modification.`}
+        </Text>
+        {profil.admin ? <Text style={attenue}>Compte historique : toujours Fondateur. Dernière connexion : {dateLisible(profil.derniereConnexion, true)}</Text> : null}
       </Panneau>
     );
   }
@@ -420,7 +447,7 @@ function Fiche({
     outils.exigerIdentite(`Ouvrir le compte de ${profil.nom}`, () =>
       outils.agir(`Ouverture du compte de ${profil.nom}…`, async () => {
         // Inscrit AVANT de quitter la session : le journal vit dans la base de l'administrateur.
-        outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Ouverture du compte de ${profil.nom} par l’administrateur (code d’accès)` });
+        outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Ouverture du compte de ${profil.nom} par ${outils.acteur.nom} (${LIBELLES_RANG[outils.role]}, code d’accès)` });
         try {
           verifierSur(outils.acteur, 'ouvrir-compte', outils.tous, profil.id);
           await controle.onOuvrirCompte!(profil.id, codeSaisi);
@@ -439,7 +466,7 @@ function Fiche({
       </View>
       {!gestionnaire && profil.creePar ? (
         <Text style={[attenue, { fontSize: 13 }]} testID="admin-fiche-cree-par">
-          Créé par le gestionnaire {outils.tous.find(p => p.id === profil.creePar)?.nom ?? 'inconnu (rôle retiré ou compte supprimé)'}.
+          Créé par {outils.tous.find(p => p.id === profil.creePar)?.nom ?? 'un compte inconnu (rang retiré ou compte supprimé)'}.
         </Text>
       ) : null}
       {gestionnaire ? (
@@ -450,7 +477,7 @@ function Fiche({
           {(profil.connexions ?? 0) > 1 ? 's' : ''}
         </Text>
       )}
-      {gestionnaire ? null : (
+      {!autorise(outils.acteur, 'renommer-ami', profil).ok ? null : (
       <View style={[commun.grille, { alignItems: 'flex-end' }]}>
         <Champ theme={theme} libelle="Prénom" valeur={nom} onChanger={setNom} maxLength={30} testID="admin-fiche-nom" style={{ flexBasis: 200, flexGrow: 1 }} />
         <BoutonHub
@@ -471,68 +498,92 @@ function Fiche({
 
       {gestionnaire ? null : (
         <>
-          <Intertitre theme={theme}>Rôle</Intertitre>
+          <Intertitre theme={theme}>Rang</Intertitre>
           <View style={[commun.ligne, { paddingVertical: 0, flexWrap: 'wrap' }]}>
-            <Pilule theme={theme} texte={LIBELLES_ROLE[roleDe(profil)]} couleur={roleDe(profil) === 'gestionnaire' ? theme.teintes.admin : theme.attenue} testID="admin-fiche-role" />
-            {confirmationRole ? null : (
-              <BoutonHub
-                theme={theme}
-                titre={roleDe(profil) === 'gestionnaire' ? 'Retirer le rôle de Gestionnaire' : 'Promouvoir Gestionnaire'}
-                onPress={() => setConfirmationRole(true)}
-                testID="admin-role-changer"
-              />
-            )}
+            <Pilule theme={theme} texte={LIBELLES_RANG[rangDe(profil)]} couleur={couleurRang(theme, rangDe(profil))} testID="admin-fiche-rang" />
+            {profil.titulaire ? (
+              <Text style={[attenue, { fontSize: 12 }]} testID="admin-fiche-titulaire">
+                {profil.titulaire === 'actif' ? 'Clé de séquestre confirmée : les comptes inférieurs lui sont scellés.' : 'Clé de séquestre en attente : créée ou confirmée à sa prochaine connexion (ou à celle d’un Fondateur qui peut l’ouvrir).'}
+              </Text>
+            ) : null}
+            {rangChoisi === undefined && attribuables.length > 0 && controle.onChangerRang ? (
+              <BoutonHub theme={theme} titre="Changer le rang" onPress={() => setRangChoisi(attribuables[0])} testID="admin-rang-changer" />
+            ) : null}
           </View>
-          {confirmationRole ? (
-            <View style={[commun.avis, { borderLeftColor: theme.alerte, backgroundColor: teinteTransparente(theme.alerte, 0.14), gap: 8 }]} testID="admin-role-confirmation">
-              {roleDe(profil) === 'gestionnaire' ? (
-                <Text style={texte}>
-                  {profil.nom} n’aura plus d’Administration : sa tuile disparaît à sa prochaine ouverture. Les amis qu’il a créés restent en place, sous votre seule gestion.
-                </Text>
-              ) : (
-                <>
-                  <Text style={[texte, { fontWeight: '700' }]}>Promouvoir {profil.nom} Gestionnaire ?</Text>
-                  <Text style={texte}>Une fois connecté·e avec son propre compte, {profil.nom} aura une tuile « Administration » limitée. Il·elle pourra :</Text>
-                  {CE_QUE_PERMET_GESTIONNAIRE.map(ligne => (
-                    <Text key={ligne} style={[texte, { fontSize: 13 }]}>• {ligne}</Text>
-                  ))}
-                  <Text style={texte}>Il·elle ne pourra jamais :</Text>
-                  {CE_QUE_NE_PERMET_PAS_GESTIONNAIRE.map(ligne => (
-                    <Text key={ligne} style={[texte, { fontSize: 13 }]}>• {ligne}</Text>
-                  ))}
-                  <Text style={[attenue, { fontSize: 12 }]}>{profil.nom} en sera averti·e dans ses Paramètres. Chaque action d’un gestionnaire est inscrite à votre journal, avec son nom.</Text>
-                </>
-              )}
+          {attribuables.length > 0 && !controle.onChangerRang ? (
+            <Text style={[attenue, { fontSize: 12 }]}>Changer le rang se fait depuis l’appareil qui a l’annuaire complet (le PC).</Text>
+          ) : null}
+          {rangChoisi !== undefined ? (
+            <View style={[commun.avis, { borderLeftColor: theme.alerte, backgroundColor: teinteTransparente(theme.alerte, 0.14), gap: 8 }]} testID="admin-rang-confirmation">
+              <Segments<Rang>
+                theme={theme}
+                libelle={`Nouveau rang de ${profil.nom}`}
+                valeur={rangChoisi}
+                options={attribuables.map(r => [r, LIBELLES_RANG[r]] as const)}
+                onChoisir={r => {
+                  setRangChoisi(r);
+                  setSaisieRang('');
+                }}
+                testID="admin-rang-choix"
+              />
+              <Text style={[texte, { fontWeight: '700' }]}>
+                {NIVEAU_RANG[rangChoisi] > NIVEAU_RANG[rangDe(profil)] ? 'Promouvoir' : 'Rétrograder'} {profil.nom} : {LIBELLES_RANG[rangDe(profil)]} → {LIBELLES_RANG[rangChoisi]} ?
+              </Text>
+              <Text style={texte}>Il·elle pourra :</Text>
+              {CE_QUE_PERMET[rangChoisi].map(ligne => (
+                <Text key={ligne} style={[texte, { fontSize: 13 }]}>• {ligne}</Text>
+              ))}
+              {CE_QUE_NE_PERMET_PAS[rangChoisi].length > 0 ? <Text style={texte}>Il·elle ne pourra jamais :</Text> : null}
+              {CE_QUE_NE_PERMET_PAS[rangChoisi].map(ligne => (
+                <Text key={ligne} style={[texte, { fontSize: 13 }]}>• {ligne}</Text>
+              ))}
+              <Text style={[attenue, { fontSize: 12 }]} testID="admin-rang-sequestre">
+                {rangChoisi === 'administrateur'
+                  ? `Séquestre : une paire de clés est créée pour ${profil.nom} (scellée par SA clé), puis la clé de chaque Gestionnaire et Ami est re-scellée pour lui·elle, avec ses propres codes d’accès. Son compte reste scellé pour les Fondateurs seulement.`
+                  : rangChoisi === 'fondateur'
+                    ? `Séquestre : ${profil.nom} reçoit les clés des Administrateurs, Gestionnaires et Amis, et le registre des Fondateurs. Son propre compte ne sera plus scellé pour personne — vous ne pourrez plus l’ouvrir, ni le rétrograder.`
+                    : rangDe(profil) === 'administrateur'
+                      ? `Séquestre : tous les dépôts de ${profil.nom} et sa paire de clés sont supprimés, ainsi que sa délégation sur le relais. Ce qu’il·elle a déjà pu lire ne peut pas être « désappris » : si besoin, régénérez les identifiants des comptes concernés.`
+                      : 'Aucune clé n’est touchée : ce rang n’ouvre aucun compte.'}
+              </Text>
+              {rangChoisi === 'fondateur' ? (
+                <Champ theme={theme} libelle={`Confirmation forte : saisissez « ${profil.nom} »`} valeur={saisieRang} onChanger={setSaisieRang} testID="admin-rang-saisie" />
+              ) : null}
               <View style={commun.actions}>
                 <BoutonHub
                   theme={theme}
                   variante="plein"
                   couleur={theme.teintes.admin}
-                  titre={roleDe(profil) === 'gestionnaire' ? 'Retirer le rôle (mot de passe + code)' : 'Promouvoir (mot de passe + code)'}
-                  testID="admin-role-confirmer"
-                  desactive={Boolean(outils.enCours)}
+                  titre="Confirmer (mot de passe + code)"
+                  testID="admin-rang-confirmer"
+                  desactive={Boolean(outils.enCours) || (rangChoisi === 'fondateur' && saisieRang.trim() !== profil.nom)}
                   onPress={() => {
-                    const promotion = roleDe(profil) !== 'gestionnaire';
-                    setConfirmationRole(false);
+                    const rang = rangChoisi;
+                    const promotion = NIVEAU_RANG[rang] > NIVEAU_RANG[rangDe(profil)];
+                    setRangChoisi(undefined);
+                    setSaisieRang('');
                     outils.exigerIdentite(
-                      promotion ? `Promouvoir ${profil.nom} Gestionnaire` : `Retirer le rôle de Gestionnaire à ${profil.nom}`,
+                      `${promotion ? 'Promouvoir' : 'Rétrograder'} ${profil.nom} ${LIBELLES_RANG[rang]}`,
                       () =>
-                        outils.modifierProfils(
-                          liste => definirRolePar(outils.acteur, liste, profil.id, promotion ? 'gestionnaire' : 'ami'),
-                          [{ type: 'role', ...cibleJournal, action: promotion ? `${profil.nom} promu·e Gestionnaire` : `${profil.nom} n’est plus Gestionnaire` }],
-                          promotion ? `${profil.nom} est maintenant Gestionnaire : elle·il verra l’Administration limitée à sa prochaine connexion.` : `${profil.nom} n’est plus Gestionnaire.`,
-                        ),
+                        outils.agir('Changement de rang…', async () => {
+                          const { enAttente } = await controle.onChangerRang!(profil.id, rang);
+                          outils.journaliser({
+                            type: 'role',
+                            ...cibleJournal,
+                            action: `${profil.nom} : ${LIBELLES_RANG[rangDe(profil)]} → ${LIBELLES_RANG[rang]}${enAttente ? ' (clé en attente de sa prochaine connexion)' : ''}`,
+                          });
+                          return enAttente
+                            ? `${profil.nom} est ${LIBELLES_RANG[rang]}. Sa clé de séquestre sera créée à sa prochaine connexion ; les comptes inférieurs lui seront alors re-scellés.`
+                            : `${profil.nom} est maintenant ${LIBELLES_RANG[rang]}.`;
+                        }),
                       true,
                     );
                   }}
                 />
-                <BoutonHub theme={theme} titre="Annuler" onPress={() => setConfirmationRole(false)} testID="admin-role-annuler" />
+                <BoutonHub theme={theme} titre="Annuler" onPress={() => setRangChoisi(undefined)} testID="admin-rang-annuler" />
               </View>
             </View>
           ) : null}
-          <Text style={[attenue, { fontSize: 12 }]} testID="admin-admin-complet-bientot-fiche">
-            Administrateur complet : bientôt (nécessite de re-sceller les clés de chaque compte).
-          </Text>
         </>
       )}
 
@@ -677,12 +728,12 @@ function Fiche({
 
       {gestionnaire ? null : (
         <>
-      <Intertitre theme={theme}>Accès administrateur (séquestre)</Intertitre>
+      <Intertitre theme={theme}>Accès par séquestre (vos codes)</Intertitre>
       <Text style={[texte, { fontSize: 13 }]} testID="admin-sequestre-etat">
         {LIBELLES_SEQUESTRE[profil.sequestre ?? 'absent']}
       </Text>
       <Text style={[attenue, { fontSize: 12 }]}>
-        {profil.nom} est averti dans ses Paramètres que l’administrateur peut accéder à son compte ; chaque accès est inscrit au journal.
+        {profil.nom} est averti·e dans ses Paramètres : « {rangDe(profil) === 'administrateur' ? 'Les fondateurs peuvent accéder à ton compte' : 'Les administrateurs et fondateurs peuvent accéder à ton compte'} ». Chaque accès est inscrit au journal, avec votre nom.
       </Text>
       {code ? (
         <View style={[commun.avis, { borderLeftColor: theme.teintes.admin, backgroundColor: teinteTransparente(theme.teintes.admin, 0.12), gap: 4 }]}>
@@ -712,7 +763,7 @@ function Fiche({
               <BoutonHub theme={theme} variante="plein" couleur={theme.teintes.admin} titre={`Ouvrir le compte de ${profil.nom}`} desactive={codeSaisi.replace(/[^A-Za-z0-9]/g, '').length < 16} onPress={ouvrirCompte} testID="admin-ouvrir-confirmer" />
               <BoutonHub theme={theme} titre="Annuler" onPress={() => setOuverture(false)} />
             </View>
-            <Text style={[attenue, { fontSize: 12 }]}>Votre session se ferme ; un bandeau « Session administrateur » reste affiché sur le compte de {profil.nom}.</Text>
+            <Text style={[attenue, { fontSize: 12 }]}>Votre session se ferme ; un bandeau « Session de {outils.acteur.nom} ({LIBELLES_RANG[outils.role]}) » reste affiché sur le compte de {profil.nom}.</Text>
           </View>
         ) : (
           <View style={commun.actions}>
@@ -797,7 +848,9 @@ function Fiche({
       ) : (
         <View style={commun.actions}>
           {controle.onRegenerer ? <BoutonHub theme={theme} titre="Régénérer les identifiants" onPress={() => setConfirmation('regenerer')} testID="admin-regenerer" /> : null}
-          {gestionnaire ? null : <BoutonHub theme={theme} variante="danger" titre="Supprimer le compte" onPress={() => setConfirmation('supprimer')} testID="admin-supprimer" />}
+          {gestionnaire || controle.restreint || !autorise(outils.acteur, 'supprimer-ami', profil).ok ? null : (
+            <BoutonHub theme={theme} variante="danger" titre="Supprimer le compte" onPress={() => setConfirmation('supprimer')} testID="admin-supprimer" />
+          )}
         </View>
       )}
     </Panneau>
@@ -834,7 +887,7 @@ function FormulaireCreation({
         invitationExpireLe: jours > 0 ? dansJours(outils.maintenant(), jours) : undefined,
         expireLe: expiration ? `${expiration}T23:59:59.000Z` : undefined,
       });
-      outils.journaliser({ type: 'compte', nomCible: nom.trim(), action: `Compte de ${nom.trim()} créé (apps : ${ouvertes.join(', ') || 'aucune'} ; séquestre administrateur créé ; ami averti)` });
+      outils.journaliser({ type: 'compte', nomCible: nom.trim(), action: `Compte de ${nom.trim()} créé (apps : ${ouvertes.join(', ') || 'aucune'} ; séquestre créé pour les rangs supérieurs ; ami averti)` });
       onCree(nom.trim(), valeurs);
       return `Compte de ${nom.trim()} créé.`;
     });
@@ -871,14 +924,15 @@ function FormulaireCreation({
         <Champ theme={theme} libelle="Fin d’accès (AAAA-MM-JJ, facultatif)" valeur={expiration} onChanger={setExpiration} maxLength={10} testID="admin-nouveau-expiration" style={{ flexBasis: 200, flexGrow: 1 }} />
       </View>
       <View style={[commun.avis, { borderLeftColor: theme.alerte, backgroundColor: teinteTransparente(theme.alerte, 0.14), gap: 6 }]} testID="admin-avertissement-transparence">
-        <Text style={[texte, { fontWeight: '700' }]}>⚠️ L’administrateur peut accéder à ce compte.</Text>
+        <Text style={[texte, { fontWeight: '700' }]}>⚠️ Les administrateurs et fondateurs peuvent accéder à ce compte.</Text>
         <Text style={[texte, { fontSize: 13 }]}>
-          Une copie de la clé du compte est mise sous séquestre pour vous : avec le code d’accès de ce compte, vous pourrez l’ouvrir sans son mot de
-          passe. L’ami en est averti dans ses Paramètres, et chaque accès est inscrit au journal. Dites-le lui en lui remettant ses identifiants.
+          Une copie de la clé du compte est mise sous séquestre pour chaque Administrateur et Fondateur : avec SON code d’accès, chacun pourra
+          l’ouvrir sans son mot de passe. L’ami en est averti dans ses Paramètres, et chaque accès est inscrit au journal. Dites-le lui en lui
+          remettant ses identifiants.
         </Text>
         <View style={commun.ligne}>
-          <Case theme={theme} coche={informe} libelle="J’informerai l’ami que l’administrateur peut accéder à son compte" onChanger={setInforme} testID="admin-nouveau-informe" />
-          <Text style={[texte, { flex: 1, fontSize: 13 }]}>J’informerai l’ami que l’administrateur peut accéder à son compte.</Text>
+          <Case theme={theme} coche={informe} libelle="J’informerai l’ami que les administrateurs et fondateurs peuvent accéder à son compte" onChanger={setInforme} testID="admin-nouveau-informe" />
+          <Text style={[texte, { flex: 1, fontSize: 13 }]}>J’informerai l’ami que les administrateurs et fondateurs peuvent accéder à son compte.</Text>
         </View>
       </View>
       <Text style={{ color: theme.attenue, fontSize: 12 }}>
@@ -936,7 +990,7 @@ function PanneauIdentifiants({ theme, nom, valeurs, onTermine }: { theme: ThemeH
           </Text>
         ))}
       </View>
-      <Avis theme={theme} genre="info" texte={`À dire à ${nom} : « L’administrateur peut accéder à ton compte. Chaque accès est journalisé et tu le verras dans tes Paramètres. Pour te connecter, saisis ton prénom. »`} />
+      <Avis theme={theme} genre="info" texte={`À dire à ${nom} : « Les administrateurs et fondateurs peuvent accéder à ton compte. Chaque accès est journalisé et tu le verras dans tes Paramètres. Pour te connecter, saisis ton prénom. »`} />
       <View style={commun.ligne}>
         <Case theme={theme} coche={transmis} libelle="J’ai transmis ces identifiants" onChanger={setTransmis} testID="admin-transmis" />
         <Text style={{ color: theme.texte, flex: 1 }}>J’ai transmis ces identifiants (et l’avertissement).</Text>

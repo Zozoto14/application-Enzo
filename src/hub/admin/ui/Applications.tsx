@@ -9,6 +9,7 @@ import { changerPolitiquePar } from '../actions';
 import { niveauProfil } from '../comptes';
 import { LIBELLES_NIVEAU, niveauxDe } from '../niveaux';
 import { LONGUEUR_MAX_MESSAGE, etatApp, modifierEtatApp } from '../politique';
+import { exiger } from '../roles';
 import { BoutonHub, Champ, Interrupteur, Panneau, Pilule, Segments, commun, type OutilsAdmin } from './commun';
 
 export function Applications({ outils }: { outils: OutilsAdmin }) {
@@ -34,7 +35,14 @@ function CarteApp({ outils, app }: { outils: OutilsAdmin; app: AppHub }) {
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
   const modifier = (changement: Parameters<typeof modifierEtatApp>[2], action: string) =>
-    outils.modifierProfils(
+    outils.controle.onPolitique
+      ? // Fondateur autre que le compte historique : la politique s'enregistre à part.
+        outils.agir('Enregistrement…', async () => {
+          exiger(outils.acteur, 'politique-apps');
+          await outils.controle.onPolitique!(modifierEtatApp(outils.politique, app.id, changement));
+          outils.journaliser({ type: 'app', app: app.id, action });
+        })
+      : outils.modifierProfils(
       (liste: readonly Profil[]) => changerPolitiquePar(outils.acteur, liste, modifierEtatApp(liste.find(p => p.admin)?.politique, app.id, changement)),
       [{ type: 'app', app: app.id, action }],
     );

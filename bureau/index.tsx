@@ -1338,6 +1338,8 @@ function Racine() {
         await autoriserFichiers(id);
         // La clé est relue AVANT de fermer la session du titulaire.
         const cle = await avecClesT((cles, annuaire) => ouvrirSequestreTitulaire(annuaire, profil.id, cles, id, code));
+        // Le journal de cet accès (scellé pour les Fondateurs) part AVANT de fermer la session.
+        await enFile(async () => undefined);
         await session.vider();
         session.session.verrouiller();
         await ouvrir({ id, nom: cible!.nom, admin: false }, { cle, adminSur: profil.nom, rangSur: rangT });

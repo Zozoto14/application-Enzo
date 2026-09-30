@@ -20,7 +20,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type { Profil } from '../profils/profils';
 import { RetourHub } from './Hub';
-import { roleDe, LIBELLES_ROLE, autorise } from './admin/roles';
+import { roleDe, LIBELLES_ROLE, autorise, type Rang } from './admin/roles';
 import { politiqueDe } from './permissions';
 import { nouvellesConnexions } from './admin/comptes';
 import { avecEvenement, chargerDonnees, donneesVides, enregistrerDonnees, evaluerRobustesse, type DonneesAdmin } from './admin/donnees';
@@ -37,8 +37,13 @@ import { police, teinteTransparente, type ThemeHub } from './themes';
 import type { PropsRacineApp } from './types';
 import { ecouterActivite } from './web';
 
-/** Sections d'un gestionnaire : ni applications globales, ni sécurité, ni réglages. */
-const SECTIONS_GESTIONNAIRE: readonly IdSection[] = ['tableau', 'utilisateurs', 'journal'];
+/** Sections par rang : un gestionnaire n'a ni applications globales, ni sécurité, ni réglages ; un administrateur, pas les apps globales. */
+const SECTIONS_PAR_RANG: Record<Rang, readonly IdSection[]> = {
+  fondateur: ['tableau', 'utilisateurs', 'applications', 'securite', 'journal', 'reglages'],
+  administrateur: ['tableau', 'utilisateurs', 'securite', 'journal', 'reglages'],
+  gestionnaire: ['tableau', 'utilisateurs', 'journal'],
+  ami: [],
+};
 
 const SECTIONS: ReadonlyArray<readonly [IdSection, string, string]> = [
   ['tableau', '◧', 'Tableau de bord'],
@@ -70,6 +75,9 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
   const acteur = controle?.actuel;
   const role = roleDe(acteur);
   const estGestionnaire = role === 'gestionnaire';
+  // Rang d'Administration autre que le compte historique : ses actions partent aussi, scellées, au journal des Fondateurs.
+  const horsHistorique = Boolean(acteur && !acteur.admin && role !== 'ami');
+  const sectionsPermises = SECTIONS_PAR_RANG[role].filter(id => id !== 'applications' || acteur?.admin || Boolean(controle?.onPolitique));
   const { width } = useWindowDimensions();
   const large = width >= 900;
   const maintenant = useCallback(() => contexte.maintenant ?? Date.now(), [contexte.maintenant]);
@@ -110,13 +118,13 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
     (evenement: Omit<EvenementAudit, 'date'>) => {
       // Les actions d'un gestionnaire portent son nom ; celles qui touchent des
       // comptes sont aussi mises en attente, scellées, pour le journal de l'administrateur.
-      const complet = estGestionnaire ? { ...evenement, acteur: nomActeur } : evenement;
+      const complet = horsHistorique ? { ...evenement, acteur: nomActeur } : evenement;
       majDonnees(d => avecEvenement(d, complet, maintenant()));
-      if (estGestionnaire && ['compte', 'permissions', 'invitation', 'identifiants'].includes(evenement.type)) {
+      if (horsHistorique && ['compte', 'permissions', 'invitation', 'identifiants', 'acces-admin', 'role', 'app'].includes(evenement.type)) {
         void controle?.onJournalGestion?.({ type: evenement.type, action: evenement.action, cible: evenement.cible, nomCible: evenement.nomCible, app: evenement.app }).catch(() => undefined);
       }
     },
-    [majDonnees, maintenant, estGestionnaire, nomActeur, controle],
+    [majDonnees, maintenant, horsHistorique, nomActeur, controle],
   );
 
   // Connexions des amis depuis la dernière visite : reportées au journal.
@@ -166,7 +174,7 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
     return (
       <View style={[styles.racine, { backgroundColor: theme.fond, padding: 24 }]}>
         <RetourHub theme={theme} onRetour={onRetour} />
-        <Text style={[styleTitre(theme), { fontSize: 28, marginTop: 24 }]}>Réservé à l’administrateur et aux gestionnaires</Text>
+        <Text style={[styleTitre(theme), { fontSize: 28, marginTop: 24 }]}>Réservé aux fondateurs, administrateurs et gestionnaires</Text>
       </View>
     );
   }
@@ -271,16 +279,39 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
           Administration
         </Text>
         <Text style={[attenue, styles.lead]}>
-          {estGestionnaire ? 'Administration limitée : les amis que vous avez créés, leurs accès aux apps et le journal de vos actions.' : 'Comptes, accès aux apps, sécurité et journal de ce hub.'}
+          {estGestionnaire
+            ? 'Administration limitée : les amis que vous avez créés, leurs accès aux apps et le journal de vos actions.'
+            : role === 'administrateur'
+              ? 'Comptes des Gestionnaires et des Amis, séquestre avec vos propres codes d’accès, sécurité et journal.'
+              : 'Comptes, rangs, accès aux apps, sécurité et journal de ce hub.'}
         </Text>
+        <View style={{ marginTop: 14, flexDirection: 'row', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Text style={[attenue, { fontSize: 13 }]}>Votre rang :</Text>
+          <View style={{ paddingVertical: 3, paddingHorizontal: 10, borderRadius: 999, backgroundColor: theme.teintes.admin }} testID="admin-mon-rang">
+            <Text style={{ color: theme.surAccent, fontWeight: '700', fontSize: 12 }}>{LIBELLES_ROLE[role]}</Text>
+          </View>
+        </View>
         {estGestionnaire ? (
           <View style={{ marginTop: 14 }}>
             <Avis theme={theme} genre="info" texte={`Vous êtes connecté·e en tant que ${LIBELLES_ROLE.gestionnaire.toLowerCase()}. Vous ne pouvez ouvrir le compte de personne, et les autres comptes ne vous sont pas montrés.`} testID="admin-bandeau-gestionnaire" />
           </View>
+        ) : role === 'administrateur' ? (
+          <View style={{ marginTop: 14 }}>
+            <Avis
+              theme={theme}
+              genre="info"
+              texte={`Vous êtes Administrateur : vous gérez les Gestionnaires et les Amis, et pouvez ouvrir leur compte avec VOS codes d’accès (chaque accès est journalisé). Les Fondateurs et les autres Administrateurs ne vous sont pas montrés.${controle.restreint ? ' Sur ce navigateur : création, suppression et changement de rang se font depuis le PC.' : ''}`}
+              testID="admin-bandeau-administrateur"
+            />
+          </View>
+        ) : controle.restreint ? (
+          <View style={{ marginTop: 14 }}>
+            <Avis theme={theme} genre="info" texte="Sur ce navigateur : création, suppression et changement de rang se font depuis le PC (annuaire complet)." testID="admin-bandeau-restreint" />
+          </View>
         ) : null}
 
         <View style={styles.onglets} accessibilityRole="tablist">
-          {SECTIONS.filter(([id]) => !estGestionnaire || SECTIONS_GESTIONNAIRE.includes(id)).map(([id, icone, libelle]) => {
+          {SECTIONS.filter(([id]) => sectionsPermises.includes(id)).map(([id, icone, libelle]) => {
             const actif = section === id;
             return (
               <Pressable
@@ -327,8 +358,8 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
         <View style={{ marginTop: 12 }}>
           {section === 'tableau' ? <Tableau outils={outils} /> : null}
           {section === 'utilisateurs' ? <Utilisateurs key={cible ?? 'liste'} outils={outils} cible={cible} /> : null}
-          {section === 'applications' && !estGestionnaire ? <Applications outils={outils} /> : null}
-          {section === 'securite' && !estGestionnaire ? (
+          {section === 'applications' && sectionsPermises.includes('applications') ? <Applications outils={outils} /> : null}
+          {section === 'securite' && sectionsPermises.includes('securite') ? (
             <Securite
               outils={outils}
               onVerrouiller={() => {
@@ -338,7 +369,7 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
             />
           ) : null}
           {section === 'journal' ? <Journal outils={outils} /> : null}
-          {section === 'reglages' && !estGestionnaire ? <Reglages outils={outils} /> : null}
+          {section === 'reglages' && sectionsPermises.includes('reglages') ? <Reglages outils={outils} /> : null}
         </View>
         <Text style={[texte, { fontSize: 12, marginTop: 24, color: theme.attenue }]}>
           Aucun secret n’est conservé ni journalisé : mots de passe, clés et codes de récupération ne s’affichent qu’une fois.

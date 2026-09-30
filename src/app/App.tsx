@@ -350,6 +350,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const estAdmin = profils?.actuel.admin ?? true;
   // Gestionnaire : un ami à l'Administration limitée (jamais en session administrateur sur son compte).
   const estGestionnaire = !estAdmin && profils?.actuel.role === 'gestionnaire' && !profils.sessionAdmin;
+  // Administrateur, ou Fondateur autre que le compte historique : l'Administration complète sur les rangs inférieurs.
+  const estTitulaireRang = !estAdmin && (profils?.actuel.role === 'administrateur' || profils?.actuel.role === 'fondateur') && !profils?.sessionAdmin;
   const [rendu, forcerRendu] = useState(0);
   const [compteFiltre, setCompteFiltre] = useState<string>(TOUS_LES_COMPTES);
   // Retenu ici : revenir au portefeuille rouvre l'onglet qu'on avait quitté.
@@ -1926,7 +1928,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // ne rend un secret : on revérifie l'identité, on ne relit rien.
   const servicesAdmin = useMemo<ServicesAdmin | undefined>(
     () =>
-      estAdmin || estGestionnaire
+      estAdmin || estGestionnaire || estTitulaireRang
         ? {
             stockage: stockagePrefs,
             verifierIdentite: (motDePasse, codeTotp) => session.verifierIdentite({ motDePasse, codeTotp }),
@@ -1943,7 +1945,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             },
           }
         : undefined,
-    [estAdmin, estGestionnaire, session, stockagePrefs],
+    [estAdmin, estGestionnaire, estTitulaireRang, session, stockagePrefs],
   );
   const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin };
   const themeDuHub = themeHub(themeAffiche);
@@ -2073,9 +2075,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     ...(fichiers ? (['sauvegarde-auto', 'sauvegardes'] as const) : []),
     ...(profils?.transparence && !estAdmin ? (['confidentialite'] as const) : []),
     ...(hub && administrationVisible ? (['admin-panel'] as const) : []),
-    ...(estAdmin && servicesAdmin ? (['admin-reglages'] as const) : []),
+    ...((estAdmin || estTitulaireRang) && servicesAdmin ? (['admin-reglages'] as const) : []),
     ...(estAdmin && profils ? (['admin-comptes'] as const) : []),
-    ...(estGestionnaire ? (['role-gestionnaire'] as const) : []),
+    ...(estGestionnaire || estTitulaireRang ? (['role-gestionnaire'] as const) : []),
   ];
   const contenuNotifications = () => (
         <Notifications
@@ -2236,7 +2238,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           </View>
         );
       case 'confidentialite':
-        return profils?.transparence ? <BandeauConfidentialite theme={themeDuHub} transparence={profils.transparence} /> : null;
+        return profils?.transparence ? <BandeauConfidentialite theme={themeDuHub} transparence={profils.transparence} rang={profils.actuel.role} /> : null;
       case 'cours-intervalle':
         return (
           <ReglageIntervalle
@@ -2326,7 +2328,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       case 'admin-comptes':
         return profils ? <CarteProfils controle={profils} /> : null;
       case 'role-gestionnaire':
-        return <BandeauRole theme={themeDuHub} />;
+        return <BandeauRole theme={themeDuHub} rang={profils?.actuel.role} />;
       case 'nouveautes':
         return <ReglageNouveautes theme={themeDuHub} onOuvrir={() => setDevblog({})} />;
       case 'version':

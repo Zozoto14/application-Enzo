@@ -20,6 +20,8 @@ import { definirDensite, definirDisposition, reinitialiser, sontParDefaut } from
 import { THEMES_HUB, police, teinteTransparente, type IdThemeHub, type ThemeHub } from './themes';
 import type { EtatCoffre, ServicesAdmin } from './types';
 import { versionApp } from './version';
+import { texteTransparence } from './admin/roles';
+import type { Profil } from '../profils/profils';
 
 const rayonDe = (theme: ThemeHub) => Math.min(theme.rayonMoyen, 10);
 
@@ -176,36 +178,50 @@ export function ReglageAdminPanel({ theme, onOuvrir }: { theme: ThemeHub; onOuvr
   );
 }
 
-export function BandeauRole({ theme }: { theme: ThemeHub }) {
+export function BandeauRole({ theme, rang = 'gestionnaire' }: { theme: ThemeHub; rang?: Profil['role'] }) {
+  const titre = rang === 'fondateur' ? 'Tu es Fondateur.' : rang === 'administrateur' ? 'Tu es Administrateur.' : 'Tu es gestionnaire.';
+  const texte =
+    rang === 'fondateur'
+      ? 'Tu as tous les droits sur les Administrateurs, Gestionnaires et Amis : ouvrir leur compte avec tes propres codes d’accès, les promouvoir ou les rétrograder, nommer d’autres Fondateurs. Tu n’agis pas sur un autre Fondateur, et personne ne peut ouvrir ton compte.'
+      : rang === 'administrateur'
+        ? 'Tu as l’Administration complète sur les Gestionnaires et les Amis, y compris ouvrir leur compte avec TES propres codes d’accès (chaque accès est journalisé, et le compte ouvert le voit). Tu ne peux ni voir ni ouvrir un Fondateur ou un autre Administrateur, ni nommer quelqu’un Administrateur. Les fondateurs peuvent accéder à ton compte.'
+        : 'Un Fondateur ou un Administrateur t’a confié une Administration limitée : tu peux créer des amis et gérer ceux que tu as créés (accès aux apps, activation, suspension, identifiants). Tu ne peux ouvrir le compte de personne, et tes actions sont inscrites à leur journal, avec ton nom. Retrouve-la dans la tuile « Administration ».';
   return (
     <View
       style={{ padding: 12, borderRadius: rayonDe(theme), borderLeftWidth: 4, borderLeftColor: theme.teintes.admin, backgroundColor: teinteTransparente(theme.teintes.admin, 0.14), gap: 4 }}
       testID="parametres-role-gestionnaire">
-      <Texte theme={theme} fort>
-        Tu es gestionnaire.
+      <Texte theme={theme} fort testID="parametres-rang">
+        {titre}
       </Texte>
-      <Texte theme={theme}>
-        L’administrateur t’a confié une Administration limitée : tu peux créer des amis et gérer ceux que tu as créés (accès aux apps, activation, suspension, identifiants). Tu ne peux ouvrir le compte de personne, et tes actions sont inscrites au journal de l’administrateur, avec ton nom. Retrouve-la dans la tuile « Administration ».
-      </Texte>
+      <Texte theme={theme}>{texte}</Texte>
     </View>
   );
 }
 
-export function BandeauConfidentialite({ theme, transparence }: { theme: ThemeHub; transparence: { dernierAccesAdmin?: string; sequestreActif: boolean } }) {
+export function BandeauConfidentialite({
+  theme,
+  transparence,
+  rang,
+}: {
+  theme: ThemeHub;
+  transparence: { dernierAccesAdmin?: string; sequestreActif: boolean; par?: string; rangPar?: string };
+  rang?: Profil['role'];
+}) {
+  const qui = texteTransparence(rang === 'administrateur' ? 'administrateur' : 'ami');
   return (
     <View
       style={{ padding: 12, borderRadius: rayonDe(theme), borderLeftWidth: 4, borderLeftColor: theme.alerte, backgroundColor: teinteTransparente(theme.alerte, 0.14), gap: 4 }}
       testID="parametres-transparence">
-      <Texte theme={theme} fort>
-        L’administrateur peut accéder à ton compte.
+      <Texte theme={theme} fort testID="parametres-transparence-qui">
+        {qui}
       </Texte>
       <Texte theme={theme}>
-        Il peut ouvrir ton compte avec un code d’accès qui lui est propre, sans ton mot de passe. Chaque accès est inscrit à son journal d’audit et un bandeau reste affiché pendant qu’il est sur ton compte. Aucun autre compte ne voit tes données.
+        Chacun d’eux peut ouvrir ton compte avec un code d’accès qui lui est propre, sans ton mot de passe. Chaque accès est inscrit à son journal d’audit et un bandeau reste affiché pendant qu’il est sur ton compte. Aucun autre compte ne voit tes données.
       </Texte>
       <Texte theme={theme} testID="parametres-dernier-acces-admin">
         {transparence.dernierAccesAdmin
-          ? `Dernier accès de l’administrateur : ${new Date(transparence.dernierAccesAdmin).toLocaleString('fr-FR')}.`
-          : 'Aucun accès de l’administrateur à ce jour.'}
+          ? `Dernier accès : ${new Date(transparence.dernierAccesAdmin).toLocaleString('fr-FR')}${transparence.par ? `, par ${transparence.par}${transparence.rangPar ? ` (${transparence.rangPar})` : ''}` : ''}.`
+          : 'Aucun accès à ce jour.'}
       </Texte>
     </View>
   );

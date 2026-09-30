@@ -162,7 +162,7 @@ export const REGLAGES: readonly Reglage[] = [
     id: 'confidentialite',
     section: 'securite',
     titre: 'Confidentialité de votre compte',
-    description: 'Ce que l’administrateur peut voir, et dernier accès à votre compte.',
+    description: 'Qui peut accéder à votre compte (selon votre rang), et dernier accès.',
     mots: ['confidentialite', 'transparence', 'acces', 'admin', 'audit'],
     ancienEmplacement: ['Hub › Paramètres › Confidentialité'],
   },
@@ -267,9 +267,9 @@ export const REGLAGES: readonly Reglage[] = [
   {
     id: 'role-gestionnaire',
     section: 'administration',
-    titre: 'Votre rôle',
-    description: 'Ce que permet, et interdit, le rôle de gestionnaire.',
-    mots: ['gestionnaire', 'role', 'droits', 'limite'],
+    titre: 'Votre rang',
+    description: 'Ce que permet, et interdit, votre rang (Gestionnaire, Administrateur, Fondateur).',
+    mots: ['gestionnaire', 'administrateur', 'fondateur', 'rang', 'role', 'droits', 'limite'],
     ancienEmplacement: ['Hub › Paramètres › Ton rôle'],
   },
   // --- Nouveautés
