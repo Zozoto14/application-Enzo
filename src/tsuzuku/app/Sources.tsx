@@ -109,11 +109,11 @@ export function Sources() {
     setListe(nouvelle);
     changee();
   };
-  const agir = async (fn: () => Promise<void>, ok?: string) => {
+  const agir = async (fn: () => Promise<void | string>, ok?: string) => {
     try {
       setErreur(undefined);
-      await fn();
-      setAvis(ok);
+      const message = await fn();
+      setAvis(typeof message === 'string' ? message : ok);
     } catch (e) {
       setAvis(undefined);
       setErreur(messageDe(e));
@@ -132,7 +132,7 @@ export function Sources() {
       const ids = new Set(sources.map(x => x.id));
       await enregistrer([...sources, ...lues.filter(x => !ids.has(x.id))]);
       setJsonImport('');
-      setAvis(`${lues.length} source(s) importée(s)${ecartees ? `, ${ecartees} écartée(s)` : ''}.`);
+      return `${lues.length} source(s) importée(s)${ecartees ? `, ${ecartees} écartée(s)` : ''}.`;
     });
   const tester = (src: DefinitionSource) =>
     agir(async () => {
