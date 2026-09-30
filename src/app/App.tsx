@@ -133,6 +133,9 @@ import { Devblog } from '../hub/devblog/Devblog';
 import { CLE_DEVBLOG, lireEtat as lireEtatDevblog, decider as deciderDevblog, etapesVisite as etapesDevblog, marquerLues as marquerDevblogLu } from '../hub/devblog/logiqueDevblog';
 import type { CibleEssai, EntreeDevblog } from '../hub/devblog/entrees';
 import { ID_PORTEFEUILLE, REGISTRE } from '../hub/registre';
+import { ReglageCleTmdb, ReglageLectureTsuzuku } from '../tsuzuku/app/ParametresTsuzuku';
+import { resumerBibliotheque } from '../tsuzuku/app/resume';
+import { CLES as CLES_TSUZUKU, type BasePrefs } from '../tsuzuku/plateforme/stockage';
 import { themeHub, type IdThemeHub } from '../hub/themes';
 import type { ContexteHub, ResumePortefeuille, ServicesAdmin } from '../hub/types';
 import { ecouterTouche, octetsUtf8, telechargerWeb } from '../hub/web';
@@ -1924,6 +1927,16 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             : undefined,
         }
       : undefined;
+  // Enregistrement d'un fichier : boîte « Enregistrer sous » du PC, sinon téléchargement du navigateur.
+  const enregistrerFichierHote = useCallback(async (nom: string, contenu: string, type: string) => {
+    const enregistrerSous = (
+      globalThis as { applibourse?: { fichiers?: { enregistrerSous?(nom: string, contenu: Uint8Array): Promise<boolean> } } }
+    ).applibourse?.fichiers?.enregistrerSous;
+    if (enregistrerSous) {
+      return enregistrerSous(nom, octetsUtf8(contenu));
+    }
+    return telechargerWeb(nom, contenu, type);
+  }, []);
   // Services de l'Administration : seulement pour l'administrateur. Rien ici
   // ne rend un secret : on revérifie l'identité, on ne relit rien.
   const servicesAdmin = useMemo<ServicesAdmin | undefined>(
@@ -1934,20 +1947,31 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             verifierIdentite: (motDePasse, codeTotp) => session.verifierIdentite({ motDePasse, codeTotp }),
             etatCoffre: () => session.etatCoffre(),
             // Pas d'export de fichier pour un gestionnaire (journal, récapitulatifs).
-            enregistrerFichier: estGestionnaire ? undefined : async (nom, contenu, type) => {
-              const enregistrerSous = (
-                globalThis as { applibourse?: { fichiers?: { enregistrerSous?(nom: string, contenu: Uint8Array): Promise<boolean> } } }
-              ).applibourse?.fichiers?.enregistrerSous;
-              if (enregistrerSous) {
-                return enregistrerSous(nom, octetsUtf8(contenu));
-              }
-              return telechargerWeb(nom, contenu, type);
-            },
+            enregistrerFichier: estGestionnaire ? undefined : enregistrerFichierHote,
           }
         : undefined,
-    [estAdmin, estGestionnaire, estTitulaireRang, session, stockagePrefs],
+    [estAdmin, estGestionnaire, estTitulaireRang, session, stockagePrefs, enregistrerFichierHote],
   );
-  const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin };
+  // Tsuzuku : ses données sont des paramètres de la base chiffrée du profil OUVERT (une base par
+  // profil : rien n'est partagé). La tuile du hub lit un résumé de sa bibliothèque.
+  const baseProfil = useMemo<BasePrefs>(() => {
+    const depot = () => new DepotParametres(session.base());
+    return { lire: cle => depot().lire(cle), ecrire: (cle, valeur) => depot().ecrire(cle, valeur), supprimer: cle => depot().supprimer(cle) };
+  }, [session]);
+  const resumeTsuzuku = useMemo(
+    () => {
+      if (!hubAffiche) return undefined;
+      try {
+        return resumerBibliotheque(baseProfil.lire(CLES_TSUZUKU.bibliotheque) ?? '');
+      } catch {
+        return undefined;
+      }
+    },
+    // Relu au retour sur le hub (appHub change) et après une synchro : la tuile est à jour.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hubAffiche, baseProfil, appHub, versionSynchro],
+  );
+  const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin, baseProfil, tsuzuku: resumeTsuzuku, enregistrerFichier: enregistrerFichierHote };
   const themeDuHub = themeHub(themeAffiche);
   const appOuverte = surUneApp ? REGISTRE.find(app => app.id === appHub) : undefined;
   // --- Devblog « Quoi de neuf » : une fois par profil et par version -----------
@@ -2059,6 +2083,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     action();
   };
   const administrationVisible = appsVisibles(REGISTRE, contexteHub).some(app => app.id === 'administration');
+  const tsuzukuVisible = appsVisibles(REGISTRE, contexteHub).some(app => app.id === 'tsuzuku');
   const disponiblesParametres: IdReglage[] = [
     'theme',
     'langue',
@@ -2078,6 +2103,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     ...((estAdmin || estTitulaireRang) && servicesAdmin ? (['admin-reglages'] as const) : []),
     ...(estAdmin && profils ? (['admin-comptes'] as const) : []),
     ...(estGestionnaire || estTitulaireRang ? (['role-gestionnaire'] as const) : []),
+    ...(hub && tsuzukuVisible ? (['tsuzuku-tmdb', 'tsuzuku-lecture'] as const) : []),
   ];
   const contenuNotifications = () => (
         <Notifications
@@ -2237,6 +2263,10 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             />
           </View>
         );
+      case 'tsuzuku-tmdb':
+        return <ReglageCleTmdb theme={themeDuHub} base={baseProfil} />;
+      case 'tsuzuku-lecture':
+        return <ReglageLectureTsuzuku theme={themeDuHub} base={baseProfil} />;
       case 'confidentialite':
         return profils?.transparence ? <BandeauConfidentialite theme={themeDuHub} transparence={profils.transparence} rang={profils.actuel.role} /> : null;
       case 'cours-intervalle':

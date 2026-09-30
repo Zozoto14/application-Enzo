@@ -20,12 +20,13 @@
  * navigateur du système — jamais dans une fenêtre qui porte le préchargement.
  */
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, session, shell, Tray } from 'electron';
 import { spawn } from 'node:child_process';
 import { git, preparerInterface, recupererCode } from './interface.mjs';
 import { synthetiser, VOIX_NATURELLES } from './voix.mjs';
 import { MOTIF_PROFIL, changementPermis, extensionPermise, fichierAutorise } from './portee.mjs';
 import { fluxMedia, pageArticle, yahooJson, yahooScreener } from './reseau.mjs';
+import { creerListeLecteurs, requeteTsuzuku } from './tsuzuku.mjs';
 import { readFile, writeFile, mkdir, rename, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -274,6 +275,12 @@ function installerPasserelle() {
   ipcMain.handle('yahoo:screener', async (_evenement, corps) => yahooScreener(corps));
   ipcMain.handle('medias:flux', async (_evenement, url) => fluxMedia(String(url)));
   ipcMain.handle('medias:page', async (_evenement, url) => pageArticle(String(url)));
+
+  // Tsuzuku : le moteur tourne dans la fenêtre, le réseau passe ici (garde anti-SSRF refaite
+  // dans tsuzuku.mjs, redirections rendues au moteur, aucun cookie). Les lecteurs (iframe) ne
+  // sont affichables que pour les sites que l'interface a déclarés et que la garde accepte.
+  ipcMain.handle('tsuzuku:requete', async (_evenement, requete) => requeteTsuzuku(requete));
+  ipcMain.handle('tsuzuku:lecteur', async (_evenement, url) => lecteursTsuzuku.autoriser(url));
 
   ipcMain.handle('voix:liste', async () => VOIX_NATURELLES);
   ipcMain.handle('voix:synthetiser', async (_evenement, texte, voix, vitesse) =>
@@ -581,6 +588,10 @@ function creerPlateau() {
   plateau.on('click', montrerFenetre);
 }
 
+/** Sites de lecteur que la fenêtre peut afficher en sous-cadre (voir tsuzuku.mjs). */
+const lecteursTsuzuku = creerListeLecteurs();
+let filtreSousCadresPose = false;
+
 function creerFenetre() {
   const fenetre = new BrowserWindow({
     width: 1440,
@@ -636,6 +647,18 @@ function creerFenetre() {
   fenetre.webContents.on('will-navigate', (evenement, url) => {
     const attendu = DEV ?? 'file://';
     if (!url.startsWith(attendu) && !url.startsWith('data:text/html')) {
+      evenement.preventDefault();
+    }
+  });
+  // Sous-cadres (lecteurs de Tsuzuku) : seulement les sites déclarés, y compris après redirection.
+  if (!filtreSousCadresPose) {
+    filtreSousCadresPose = true;
+    session.defaultSession.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (details, rappel) => {
+      rappel({ cancel: details.resourceType === 'subFrame' && !lecteursTsuzuku.sousCadreAutorise(details.url) });
+    });
+  }
+  fenetre.webContents.on('will-frame-navigate', evenement => {
+    if (!evenement.isMainFrame && !lecteursTsuzuku.sousCadreAutorise(evenement.url)) {
       evenement.preventDefault();
     }
   });

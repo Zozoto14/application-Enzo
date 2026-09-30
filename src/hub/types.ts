@@ -11,6 +11,8 @@ import type { IdThemeHub, TeinteApp, ThemeHub } from './themes';
 import type { NiveauAcces, NiveauDeclare } from './admin/niveaux';
 import type { StockagePrefs } from './personnalisation';
 import type { IdSection } from './recensement';
+import type { ResumeTsuzuku } from '../tsuzuku/app/resume';
+import type { BasePrefs } from '../tsuzuku/plateforme/stockage';
 
 export type Tendance = 'hausse' | 'baisse' | 'neutre';
 
@@ -36,6 +38,12 @@ export interface ContexteHub {
   profil?: Profil;
   profils?: ControleProfils;
   portefeuille?: ResumePortefeuille;
+  /** Base chiffrée du profil ouvert (clé/valeur) : c'est là que les apps rangent leurs données. */
+  baseProfil?: BasePrefs;
+  /** Résumé de la bibliothèque Tsuzuku du profil, pour l'information en direct de sa tuile. */
+  tsuzuku?: ResumeTsuzuku;
+  /** Propose d'enregistrer un fichier (export) ; faux si l'utilisateur annule. */
+  enregistrerFichier?(nom: string, contenu: string, type: string): Promise<boolean>;
   /** Services de l'administration ; présents seulement pour l'administrateur. */
   admin?: ServicesAdmin;
   /** Horloge injectable (tests) ; `Date.now` à défaut. */

@@ -11,6 +11,7 @@
 
 import { Administration } from './Administration';
 import { infoAdministration, infoPortefeuille } from './infos';
+import { APP_TSUZUKU } from '../tsuzuku/registre';
 import type { AppHub } from './types';
 
 export const ID_PORTEFEUILLE = 'portefeuille';
@@ -27,6 +28,7 @@ export const REGISTRE: readonly AppHub[] = [
     info: contexte => infoPortefeuille(contexte.portefeuille),
     // Pas de Racine : l'arbre du portefeuille est celui d'App, déjà monté.
   },
+  APP_TSUZUKU,
   {
     id: ID_ADMINISTRATION,
     nom: 'Administration',

@@ -13,7 +13,7 @@
  * marcherait pas sur la plateforme ou pour le rôle du compte.
  */
 
-export type IdSection = 'general' | 'synchro' | 'securite' | 'portefeuille' | 'administration' | 'nouveautes' | 'apropos';
+export type IdSection = 'general' | 'synchro' | 'securite' | 'portefeuille' | 'administration' | 'tsuzuku' | 'nouveautes' | 'apropos';
 
 export interface SectionParametres {
   id: IdSection;
@@ -29,6 +29,7 @@ export const SECTIONS: readonly SectionParametres[] = [
   { id: 'securite', titre: 'Sécurité', icone: '🔒', description: 'Mot de passe, code d’authentification, récupération, sauvegardes.' },
   { id: 'portefeuille', titre: 'Portefeuille', icone: '▦', description: 'Cours, alertes, podcast, affichage des montants.' },
   { id: 'administration', titre: 'Administration', icone: '🛡', description: 'Panneau, comptes, journal, verrouillage.' },
+  { id: 'tsuzuku', titre: 'Tsuzuku', icone: '▶', description: 'Catalogue de films, doublage, lecture, déjà vus.' },
   { id: 'nouveautes', titre: 'Nouveautés', icone: '✨', description: 'Historique des versions.' },
   { id: 'apropos', titre: 'À propos', icone: 'ⓘ', description: 'Version de l’application et mise à jour.' },
 ];
@@ -58,6 +59,8 @@ export type IdReglage =
   | 'admin-reglages'
   | 'admin-comptes'
   | 'role-gestionnaire'
+  | 'tsuzuku-tmdb'
+  | 'tsuzuku-lecture'
   | 'nouveautes'
   | 'version'
   | 'mise-a-jour';
@@ -271,6 +274,23 @@ export const REGLAGES: readonly Reglage[] = [
     description: 'Ce que permet, et interdit, votre rang (Gestionnaire, Administrateur, Fondateur).',
     mots: ['gestionnaire', 'administrateur', 'fondateur', 'rang', 'role', 'droits', 'limite'],
     ancienEmplacement: ['Hub › Paramètres › Ton rôle'],
+  },
+  // --- Tsuzuku
+  {
+    id: 'tsuzuku-tmdb',
+    section: 'tsuzuku',
+    titre: 'Clé TMDB (films)',
+    description: 'Clé facultative pour tout le catalogue de films ; sans elle, seuls les films d’animation (Jikan) sont proposés.',
+    mots: ['tmdb', 'cle', 'films', 'catalogue', 'api', 'cinema', 'jeton'],
+    ancienEmplacement: ['Tsuzuku › Réglages (clé TMDB)'],
+  },
+  {
+    id: 'tsuzuku-lecture',
+    section: 'tsuzuku',
+    titre: 'Lecture et catalogue',
+    description: 'Doublage préféré (VF ou VOSTFR), épisode suivant automatique, masquer les titres déjà vus.',
+    mots: ['tsuzuku', 'anime', 'animes', 'vf', 'vostfr', 'doublage', 'langue', 'episode', 'suivant', 'automatique', 'deja vus', 'masquer', 'streaming'],
+    ancienEmplacement: ['Tsuzuku › Réglages (lecture)'],
   },
   // --- Nouveautés
   {

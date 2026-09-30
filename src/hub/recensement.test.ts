@@ -25,13 +25,14 @@ describe('recensement des réglages', () => {
     }
   });
 
-  it('a les sept sections demandées, dans l’ordre, et aucune n’est vide', () => {
+  it('a les huit sections demandées, dans l’ordre, et aucune n’est vide', () => {
     expect(SECTIONS.map(s => s.titre)).toEqual([
       'Général',
       'Synchronisation',
       'Sécurité',
       'Portefeuille',
       'Administration',
+      'Tsuzuku',
       'Nouveautés',
       'À propos',
     ]);

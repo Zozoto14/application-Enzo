@@ -41,8 +41,8 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
-    version: '2026.10.04',
-    date: '2026-10-04',
+    version: '2026.10.05',
+    date: '2026-10-05',
     titre: 'Rangs : Fondateur, Administrateur, Gestionnaire',
     resume:
       'Quatre rangs ordonnés — Fondateur › Administrateur › Gestionnaire › Ami. Chacun n’agit que sur les rangs strictement inférieurs, et la clé d’un compte n’est scellée que pour les rangs au-dessus.',
@@ -70,6 +70,45 @@ export const ENTREES: readonly EntreeDevblog[] = [
         titre: 'Qui peut accéder à ton compte',
         texte:
           'Paramètres › Confidentialité le dit selon ton rang : « Les administrateurs et fondateurs peuvent accéder à ton compte » (amis), « Les fondateurs peuvent accéder à ton compte » (administrateurs), rien pour un Fondateur. Le dernier accès indique qui.',
+      },
+    ],
+  },
+  {
+    version: '2026.10.04',
+    date: '2026-10-04',
+    titre: 'Tsuzuku arrive dans le hub',
+    resume:
+      'Animés et films dans une nouvelle app du hub : même mot de passe, mêmes profils, mêmes permissions, et aucun serveur. Votre bibliothèque reste dans votre compte chiffré.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'tsuzuku-app',
+        emoji: '▶',
+        titre: 'Animés et films, sans serveur',
+        texte:
+          'Catalogue, fiches, lecteur, bibliothèque avec « vu ailleurs » et statistiques : tout tourne sur votre appareil. Animés en couleurs vives, films en version cinéma sobre.',
+        essayer: { genre: 'app', app: 'tsuzuku' },
+      },
+      {
+        id: 'tsuzuku-liens',
+        emoji: '🔗',
+        titre: 'Vos liens, vos épisodes',
+        texte:
+          'Collez l’adresse d’un épisode : Tsuzuku en déduit celle des suivants. Pour un film, un lien direct suffit. Rien n’est préconfiguré : vous branchez ce que vous avez le droit d’utiliser.',
+      },
+      {
+        id: 'tsuzuku-reglages',
+        emoji: '⚙︎',
+        titre: 'Réglages dans les Paramètres',
+        texte: 'Clé TMDB facultative, VF ou VOSTFR, épisode suivant automatique, masquer les déjà vus : tout est dans Paramètres › Tsuzuku.',
+        essayer: { genre: 'parametres' },
+      },
+      {
+        id: 'tsuzuku-sources',
+        emoji: '🧩',
+        titre: 'Sources et import',
+        texte: 'Les sources se règlent depuis l’app par l’administrateur, et l’ancienne bibliothèque Tsuzuku s’importe dans le profil ouvert. Les amis utilisent les sources de l’administrateur.',
+        adminSeulement: true,
       },
     ],
   },
