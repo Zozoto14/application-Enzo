@@ -53,6 +53,8 @@ export function relaisPortees(jetonMaitre = JETON_TEST) {
       }
       prefixe = `p:${id}:`;
       cle = espace[2] ? prefixe + decodeURIComponent(espace[2]) : undefined;
+      // Objets écrits par l'administrateur seul (sources partagées de Tsuzuku) : lecture seule pour le compte.
+      if (!p.maitre && espace[2] === 'tsuzuku-sources' && methode !== 'GET') return repondre({ erreur: 'lecture seule' }, 403);
     } else if (chemin.startsWith('/boite')) {
       if (!p.maitre) return repondre({ erreur: 'portée' }, 403);
       prefixe = 'appareil:';

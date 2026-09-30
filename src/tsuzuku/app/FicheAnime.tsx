@@ -1,17 +1,18 @@
 /** Fiche d'un animé : synopsis, bibliothèque, épisodes, lecture, lien manuel, « vu ailleurs ». */
 
 import React, { useState } from 'react';
-import { Image, Pressable, ScrollView, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { teinteTransparente } from '../../hub/themes';
 import { trouver } from '../moteur/bibliotheque';
 import { useCharger, useTsuzuku } from './contexte';
-import { BlocBibliotheque, BlocVuAilleurs, LiensLegaux, Meta, Synopsis, type FicheMin } from './FicheCommune';
+import { BandeauFiche, BlocBibliotheque, BlocVuAilleurs, LiensLegaux, type FicheMin } from './FicheCommune';
 import { LienAnime, prochainEpisode } from './LienAnime';
-import { Bouton, Etat, LIBELLE_STATUT, Titre, styleAttenue, styleTexte } from './ui';
+import { Bouton, Etat, LIBELLE_STATUT, TitreSection, styleAttenue, styleTexte } from './ui';
 
 const PAR_PAGE = 30;
 
 export function FicheAnimeEcran({ id }: { id: string }) {
-  const { s, theme, aller, retour, version, large } = useTsuzuku();
+  const { s, theme, aller, retour, version } = useTsuzuku();
   const fiche = useCharger(async () => (await s.catalogue.animes.parId(id)).data, [s, id]);
   const eps = useCharger(async () => (await s.catalogue.animes.episodes(id)).data, [s, id]);
   const lib = useCharger(() => s.depot.lire(), [s, version]);
@@ -30,29 +31,37 @@ export function FicheAnimeEcran({ id }: { id: string }) {
       <Etat enCours={fiche.enCours} erreur={fiche.erreur} onRecharger={fiche.recharger}>
         {f && min ? (
           <View style={{ gap: 18 }}>
-            <View style={{ flexDirection: large ? 'row' : 'column', gap: 16 }}>
-              {f.image ? <Image source={{ uri: f.image }} accessibilityIgnoresInvertColors accessibilityLabel={`Affiche de ${f.title}`} style={{ width: 150, height: 218, borderRadius: theme.rayonMoyen, backgroundColor: theme.surface }} /> : null}
-              <View style={{ flex: 1, gap: 8 }}>
-                <Titre taille={26} testID="fiche-titre">{f.title}</Titre>
-                {f.titleJapanese ? <Text style={styleAttenue(theme)}>{f.titleJapanese}</Text> : null}
-                <Meta lignes={[f.type, f.year, f.totalEpisodes ? `${f.totalEpisodes} épisodes` : null, f.airingStatus, f.score ? `★ ${f.score}` : null, f.studios.slice(0, 2).join(', ')]} />
-                <Meta lignes={[f.genres.slice(0, 5).join(', ')]} />
-                {entree ? <Text style={[styleTexte(theme, 13), { fontWeight: '700', color: theme.accent }]} testID="fiche-statut">{LIBELLE_STATUT[entree.status]}{entree.currentEpisode ? ` · épisode ${entree.currentEpisode}` : ''}</Text> : null}
-                <Synopsis texte={f.synopsis} />
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
-                  <Bouton titre={suivant === 1 && (entree?.currentEpisode ?? 0) > 0 ? '▶ Revoir depuis l’épisode 1' : `▶ Lire l’épisode ${suivant}`} variante="plein" onPress={() => aller({ t: 'lecteur', kind: 'anime', id, numero: suivant })} testID="fiche-lire" />
-                </View>
+            <BandeauFiche
+              image={f.image}
+              banniere={f.banner}
+              etiquette="ANIMÉ"
+              statut={entree?.status}
+              score={f.score}
+              titre={f.title}
+              sousTitre={f.titleJapanese && f.titleJapanese !== f.title ? f.titleJapanese : null}
+              meta={[f.type, f.year, f.totalEpisodes ? `${f.totalEpisodes} épisodes` : null, f.airingStatus, f.studios.slice(0, 2).join(', ')]}
+              genres={f.genres}
+              synopsis={f.synopsis}
+              progression={entree && f.totalEpisodes ? { vus: Math.min(entree.currentEpisode || 0, f.totalEpisodes), total: f.totalEpisodes } : null}>
+              {entree ? (
+                <Text style={[styleTexte(theme, 13), { fontWeight: '700', color: theme.accent }]} testID="fiche-statut">
+                  {LIBELLE_STATUT[entree.status]}
+                  {entree.currentEpisode ? ` · épisode ${entree.currentEpisode}` : ''}
+                </Text>
+              ) : null}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                <Bouton titre={suivant === 1 && (entree?.currentEpisode ?? 0) > 0 ? '▶ Revoir depuis l’épisode 1' : entree?.currentEpisode ? `▶ Reprendre l’épisode ${suivant}` : `▶ Lire l’épisode ${suivant}`} variante="plein" onPress={() => aller({ t: 'lecteur', kind: 'anime', id, numero: suivant })} testID="fiche-lire" />
               </View>
-            </View>
+            </BandeauFiche>
             <BlocBibliotheque fiche={min} entree={entree} />
             <BlocVuAilleurs fiche={min} entree={entree} />
             <LienAnime id={id} numeroCourant={suivant} catalogue={listeEps} />
             <LiensLegaux liens={f.streamingLinks} />
             <View style={{ gap: 8 }} testID="fiche-episodes">
-              <Titre taille={18}>Épisodes</Titre>
+              <TitreSection>Épisodes</TitreSection>
               <Etat enCours={eps.enCours && !eps.donnees} erreur={eps.erreur} onRecharger={eps.recharger} vide={!listeEps.length && !eps.enCours ? 'Aucune liste d’épisodes : utilisez « Lire l’épisode » ou un lien manuel.' : undefined}>
-                <ScrollView scrollEnabled={false}>
-                  {listeEps.slice(0, visibles).map(ep => {
+                <View style={{ borderWidth: 1, borderColor: theme.ligne, borderRadius: Math.max(theme.rayonMoyen, 8), overflow: 'hidden', backgroundColor: theme.surface }}>
+                  {listeEps.slice(0, visibles).map((ep, i) => {
                     const vu = (entree?.currentEpisode ?? 0) >= ep.number;
                     return (
                       <Pressable
@@ -61,15 +70,26 @@ export function FicheAnimeEcran({ id }: { id: string }) {
                         accessibilityRole="button"
                         accessibilityLabel={`Lire l’épisode ${ep.number}${ep.title ? `, ${ep.title}` : ''}${vu ? ', vu' : ''}`}
                         onPress={() => aller({ t: 'lecteur', kind: 'anime', id, numero: ep.number })}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: theme.ligne }}>
-                        <Text style={[styleTexte(theme, 14), { width: 34, fontWeight: '700', color: vu ? theme.attenue : theme.accent }]}>{ep.number}</Text>
-                        <Text numberOfLines={1} style={[styleTexte(theme, 14), { flex: 1, opacity: vu ? 0.6 : 1 }]}>{ep.title ?? `Épisode ${ep.number}`}</Text>
-                        {ep.filler ? <Text style={styleAttenue(theme, 11)}>Filler</Text> : null}
-                        <Text style={{ color: theme.accent, fontWeight: '700' }}>{vu ? '✓' : '▶'}</Text>
+                        style={(p: { hovered?: boolean; pressed: boolean }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 54, paddingHorizontal: 12, paddingVertical: 8, borderTopWidth: i ? 1 : 0, borderTopColor: theme.ligne, backgroundColor: p.hovered || p.pressed ? teinteTransparente(theme.texte, 0.05) : 'transparent' })}>
+                        <View style={{ width: 30, height: 30, borderRadius: Math.min(theme.rayonMoyen, 8), alignItems: 'center', justifyContent: 'center', backgroundColor: vu ? theme.accent : teinteTransparente(theme.texte, 0.08) }}>
+                          <Text style={{ color: vu ? theme.surAccent : theme.texte, fontWeight: '800', fontSize: 13 }}>{ep.number}</Text>
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text numberOfLines={1} style={styleTexte(theme, 14)}>
+                            {ep.title ?? `Épisode ${ep.number}`}
+                          </Text>
+                          {ep.aired ? <Text style={styleAttenue(theme, 12)}>{String(ep.aired).slice(0, 10)}</Text> : null}
+                        </View>
+                        {ep.filler ? (
+                          <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, backgroundColor: teinteTransparente(theme.texte, 0.08) }}>
+                            <Text style={styleAttenue(theme, 11)}>filler</Text>
+                          </View>
+                        ) : null}
+                        <Text style={{ color: vu ? theme.accent : theme.attenue, fontWeight: '800' }}>{vu ? '✓' : '▶'}</Text>
                       </Pressable>
                     );
                   })}
-                </ScrollView>
+                </View>
                 {listeEps.length > visibles ? <Bouton titre={`Afficher la suite (${listeEps.length - visibles})`} onPress={() => setVisibles(v => v + PAR_PAGE)} testID="episodes-plus" style={{ alignSelf: 'center' }} /> : null}
               </Etat>
             </View>

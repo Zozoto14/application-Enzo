@@ -146,12 +146,16 @@ Meme mot de passe, memes profils, memes permissions que le hub ; aucun serveur.
 | Chemin | Role |
 | --- | --- |
 | `registre.ts` | Entree `id: 'tsuzuku'` du registre du hub (nom, icone, teinte `anime`, information en direct) |
-| `app/Racine.tsx` | Ecran racine : « ← Hub » + Echap, Animes / Films, onglets Accueil · Catalogue · Bibliotheque · Sources |
-| `app/Accueil`, `Catalogue`, `FicheAnime`, `FicheFilm`, `Lecteur`, `Bibliotheque`, `Sources`, `Import` | Ecrans React Native (390 px, accessibilite) |
+| `app/Racine.tsx` | Ecran racine : « ← Hub » + Echap, selecteur Animes / Films, onglets Decouvrir · Catalogue · Ma bibliotheque ; pied de page (`PiedTsuzuku.tsx`) |
+| `app/Accueil`, `Catalogue`, `FicheAnime`, `FicheFilm`, `Lecteur`, `Bibliotheque`, `Import` | Ecrans React Native (390 px, accessibilite) |
+| `app/Sources.tsx`, `AdminTsuzuku.tsx` | Rendus dans Parametres : Administration › Tsuzuku (sources, partage, assistant, cles d'API) et Tsuzuku › Sources partagees |
+| `app/gestion.ts` | Droits par rang, partage, sources recues, reglages techniques (donnees pures) |
+| `plateforme/partage.ts` | Publication chiffree des sources partagees dans l'espace relais de chaque beneficiaire |
+| `moteur/assistant.ts` | Assistant d'ajout : analyse de page, prompt pour une IA, validation du JSON |
 | `app/LienAnime`, `LienFilm` | Liens manuels : episode + suivants (motif `{n}`) ; film : lien direct |
 | `app/LecteurMedia.web.tsx` / `LecteurMedia.tsx` | Site et PC : iframe `sandbox`, `<video>`, HLS (hls.js charge a la demande). iPhone : « Ouvrir dans Safari » en attendant la WebView (P4) |
 | `app/services.ts`, `resoudre.ts` | Assemblage du moteur par profil ; lien manuel puis sources -> lecteurs |
-| `app/reglages.ts`, `ParametresTsuzuku.tsx` | Reglages (Parametres > Tsuzuku) : cle TMDB, VF/VOSTFR, episode suivant auto, masquer les deja vus |
+| `app/reglages.ts`, `ParametresTsuzuku.tsx` | Reglages de confort (Parametres > Tsuzuku, tous) : VF/VOSTFR, episode suivant auto, masquer les deja vus |
 | `app/resume.ts` | Information en direct de la tuile : « Reprendre <titre> · Ep. N » ou « N a voir » |
 | `plateforme/reseau*.ts` | Adaptateurs `Reseau` (voir ci-dessous) |
 | `plateforme/stockage.ts` | `Stockage` = base chiffree du profil courant |
@@ -178,21 +182,52 @@ prefixe `tsuzuku.` (`tsuzuku.bibliotheque`, `tsuzuku.reglages`, `tsuzuku.mode`,
 la cle TMDB ne sont jamais partages entre profils. Les services (cache du
 catalogue compris) sont recrees par profil.
 
-### Sources et permissions
+### Sources et permissions (par rang)
 
-- Les sources sont **reservees aux Fondateurs** (`rangDe(profil) === 'fondateur'`, le compte historique en tete) : la regle est
-  dans `services.enregistrerSources` (403), pas seulement dans l'ecran. VIDES par defaut.
-- Un ami voit les sources de l'administrateur en lecture seule. **Reste a faire (P3)** : la copie
-  n'est pas encore poussee par la synchro ; l'ami lit `tsuzuku.sources.admin` dans sa propre base
-  (vide tant que la synchro ne la remplit pas). En attendant l'ami utilise le catalogue, la
-  bibliotheque et ses liens manuels.
-- Permissions par app : comme toute app (l'Administration propose la case « Tsuzuku » ; un ami sans
-  `tsuzuku` n'a pas la tuile). Desactivation et maintenance de la politique globale s'appliquent.
-- Regle de contenu : aucune source preconfiguree, aucun site de streaming non autorise nomme.
+- **Seuls les Fondateurs** ajoutent, modifient, suppriment, testent et partagent une source, et
+  reglent les cles d'API (TMDB) et les options du moteur (delai, taille) : `RANGS_GESTION_SOURCES`
+  dans `app/gestion.ts`, reverifie par les services (403), pas seulement par l'ecran. C'est l'option
+  la plus protectrice : une source decide du contenu que d'autres comptes verront, comme les
+  « apps globales », que les regles de rang reservent deja aux Fondateurs. Administrateurs,
+  Gestionnaires et Amis n'utilisent que les sources qui leur sont partagees.
+- Tout le technique est dans **Parametres › Administration › Tsuzuku** ; le confort (VF/VOSTFR,
+  episode suivant, deja vus) et les **sources partagees avec vous** dans Parametres › Tsuzuku.
+  L'app n'a plus d'onglet « Sources ».
+- Cles d'API : dans la base chiffree du Fondateur (`tsuzuku.avance`), jamais publiees ni
+  synchronisees en clair, jamais reaffichees en entier (`masquerCle`), jamais dans une
+  publication de sources.
+- Regle de contenu : aucune source preconfiguree, aucun site de streaming non autorise nomme
+  (code, tests, doc : fixtures neutres faites main).
+
+### Partage des sources (synchro par compte)
+
+- Pour chaque source : « moi seul » (defaut), « tous les utilisateurs de Tsuzuku » (comptes actifs
+  autorises a l'app) ou une selection (`tsuzuku.partages`, base du Fondateur).
+- Deux objets par espace relais `/p/<id>/boite/` (voir `plateforme/partage.ts`) :
+  `tsuzuku-cle` (cle PUBLIQUE X25519 de reception, deposee par le compte ; la privee reste dans sa
+  base) et `tsuzuku-sources` (ses sources, scellees ECIES X25519 + XChaCha20-Poly1305 pour sa cle,
+  usage lie a son identifiant ; ecrit par le jeton maitre SEUL : le relais refuse PUT/DELETE d'un
+  jeton de profil). Aucun autre compte ni cle d'API dans la charge.
+- Le compte historique publie a chaque tour (`synchroniserComptesAdmin`) ; le beneficiaire range sa
+  copie en lecture seule (`tsuzuku.sources.partagees`) et l'active/desactive pour lui seul
+  (`tsuzuku.sources.choix`). Retrait : liste vide publiee (ou objet efface), la copie se vide.
+- Compatibilite : un appareil ancien ignore ces objets ; un relais ancien les accepte (seule la
+  lecture seule cote ami demande le relais a jour). Un Fondateur autre que le compte historique
+  gere des sources pour lui seul (le partage est publie par le compte historique).
+
+### Assistant d'ajout par lien
+
+Administration › Tsuzuku › Sources › « Assistant » : l'adresse d'une page est lue par le client
+reseau protege (anti-SSRF, 2 Mo max ; sur le site, on colle le HTML), `analyserStructure` en tire
+un resume (balises/classes recurrentes, formulaires, liens d'episodes, iframes, menus), et
+`genererPrompt` compose un texte a copier vers une IA decrivant TOUT le format de source (animes et
+films) avec des regles de qualite. Le JSON renvoye est valide (`validerSourceJson` : schema du
+moteur, selecteurs CSS, `{query}`, adresse publique), teste pas a pas, puis enregistre (partage :
+personne). Rappel affiche : « N'ajoutez que des sources dont vous avez le droit d'utiliser le contenu. »
 
 ### Reste a faire
 
-- **P3** : synchro de la bibliotheque, des liens manuels et de la copie des sources de l'administrateur vers les amis.
+- **P3** : synchro de la bibliotheque et des liens manuels entre appareils d'un meme compte.
 - **P4** : WebView native (lecteur integre sur iPhone/iPad).
 - **P5/P6** : voir le plan du hub.
 - Site : lecture des sources par un relais (les pages tierces y sont bloquees par le CORS).

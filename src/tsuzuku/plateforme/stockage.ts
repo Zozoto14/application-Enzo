@@ -21,10 +21,21 @@ export const PREFIXE = 'tsuzuku.';
 
 export const CLES = {
   bibliotheque: 'tsuzuku.bibliotheque',
-  /** Sources : dans la base de l'administrateur. */
+  /** Sources d'un Fondateur (les siennes), dans SA base. */
   sources: 'tsuzuku.sources',
-  /** Copie lisible des sources de l'administrateur, dans la base d'un ami (remplie par la synchro, P3). */
+  /** Ancienne copie des sources de l'administrateur (jamais remplie) : plus lue. */
   sourcesAdmin: 'tsuzuku.sources.admin',
+  /** Partage de chaque source (Fondateur) : personne, tous, ou une sélection de comptes. */
+  partages: 'tsuzuku.partages',
+  /** Sources partagées reçues par la synchronisation (lecture seule), dans la base du bénéficiaire. */
+  sourcesRecues: 'tsuzuku.sources.partagees',
+  /** Choix personnels : source partagée activée ou non pour soi. */
+  choixSources: 'tsuzuku.sources.choix',
+  /** Paire X25519 de réception des sources partagées (clé privée : jamais hors de la base). */
+  reception: 'tsuzuku.reception',
+  /** Clés d'API et options avancées du moteur (Fondateur). */
+  avance: 'tsuzuku.avance',
+  /** Réglages de confort (doublage, épisode suivant, déjà vus). */
   reglages: 'tsuzuku.reglages',
   /** Dernier mode ouvert (animés ou films). */
   mode: 'tsuzuku.mode',

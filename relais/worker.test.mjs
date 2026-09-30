@@ -254,3 +254,24 @@ test('rangs : un titulaire délégué n’atteint que le coffre et le portefeuil
   assert.equal((await avec(env, JETON, '/rangs', { method: 'PUT', body: JSON.stringify({ delegations: {} }) })).status, 200);
   assert.equal((await avec(env, admin, '/p/ami001/boite/coffre')).status, 403);
 });
+
+test('Tsuzuku : les sources partagées sont en lecture seule pour le compte, sa clé de réception lui appartient', async () => {
+  const env = { JETON, BOITE: kvMemoire() };
+  const ami = await jetonDeProfil(JETON, 'amitsu01');
+  const autre = await jetonDeProfil(JETON, 'amitsu02');
+  const avec = (jeton, chemin, options = {}) => appeler(env, chemin, { ...options, headers: { Authorization: `Bearer ${jeton}` } });
+  const corps = nom => enveloppe(nom);
+  // L'administrateur (jeton maître) dépose les sources partagées de l'ami.
+  assert.equal((await appeler(env, '/p/amitsu01/boite/tsuzuku-sources', { method: 'PUT', body: corps('tsuzuku-sources') })).status, 200);
+  // L'ami les lit, mais ne peut ni les écrire ni les effacer.
+  assert.equal((await avec(ami, '/p/amitsu01/boite/tsuzuku-sources')).status, 200);
+  assert.equal((await avec(ami, '/p/amitsu01/boite/tsuzuku-sources', { method: 'PUT', body: corps('tsuzuku-sources') })).status, 403);
+  assert.equal((await avec(ami, '/p/amitsu01/boite/tsuzuku-sources', { method: 'DELETE' })).status, 403);
+  // Sa clé de réception : il la dépose lui-même.
+  assert.equal((await avec(ami, '/p/amitsu01/boite/tsuzuku-cle', { method: 'PUT', body: corps('tsuzuku-cle') })).status, 200);
+  // Un autre compte ne lit ni les sources ni la clé de l'ami.
+  assert.equal((await avec(autre, '/p/amitsu01/boite/tsuzuku-sources')).status, 403);
+  assert.equal((await avec(autre, '/p/amitsu01/boite/tsuzuku-cle')).status, 403);
+  // L'administrateur efface (retrait complet).
+  assert.equal((await appeler(env, '/p/amitsu01/boite/tsuzuku-sources', { method: 'DELETE' })).status, 200);
+});

@@ -95,6 +95,8 @@ redéployés. Tests : `relais/worker.test.mjs` (« course sur l'index… »).
 | `/rangs` (clé KV) | délégations des titulaires (identifiants seulement) | aucun secret | jeton maître |
 | `/p/<id>/boite/coffre`, `…/portefeuille` | fichiers de l'ami tels que sur disque | coffre : Argon2id ; portefeuille : clé maîtresse de l'ami | l'ami et l'administrateur (qui ne peut pas les ouvrir) |
 | `/p/<id>/boite/compte` | ce que l'ami renvoie : suivi de connexion (scellé pour l'administrateur), dépôt de séquestre (scellé), invitation acceptée ; pour un titulaire, aussi sa paire et son bloc privé, SES séquestres (conversions, codes, révocations), ses modifications d'accès et son journal (scellé pour le compte historique) | scellés | le titulaire (ou l'ami) et le compte historique |
+| `/p/<id>/boite/tsuzuku-cle` | clé PUBLIQUE X25519 de réception des sources Tsuzuku (la privée reste dans la base du compte) | aucun secret | le compte (qui l'écrit) et le compte historique |
+| `/p/<id>/boite/tsuzuku-sources` | SES sources Tsuzuku partagées (ni autre compte, ni clé d'API) | ECIES X25519 + XChaCha20-Poly1305 pour sa clé, usage lié à son identifiant | écrit/effacé par le jeton maître SEUL (le relais refuse PUT/DELETE d'un jeton de profil) ; lu par le compte |
 
 L'annuaire complet n'est **jamais** déposé dans un espace lisible par un ami.
 

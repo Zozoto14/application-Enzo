@@ -3,24 +3,45 @@
  * la base du profil, catalogue, bibliothèque, sources.
  *
  * Une instance par profil ouvert (jamais partagée) : le cache du catalogue et
- * la bibliothèque appartiennent au profil.
+ * la bibliothèque appartiennent au profil. Les DROITS sur les sources et les
+ * réglages techniques sont revérifiés ici (`gestion.ts`) : un écran oublié ne
+ * donne jamais un droit.
  */
 
+import type { Rang } from '../../hub/admin/roles';
 import { DepotBibliotheque, type Stockage } from '../moteur/bibliotheque';
 import { creerCatalogue, type Catalogue, type OptionsCatalogue } from '../moteur/catalogue';
-import { echec } from '../moteur/erreurs';
 import { creerClient, type ClientSur } from '../moteur/reseau';
 import type { ContexteResolution } from '../moteur/resolution';
-import { importerSources, type DefinitionSource } from '../moteur/sources';
+import type { DefinitionSource } from '../moteur/sources';
 import type { ChoixReseau } from '../plateforme/reseau';
 import { CLES } from '../plateforme/stockage';
+import {
+  ecrireAvances,
+  ecrirePartages,
+  exigerGestionSources,
+  lireAvances,
+  lireChoix,
+  lireListeSources,
+  lirePartages,
+  lireRecues,
+  nettoyerPartages,
+  peutGererSources,
+  sourcesUtilisables,
+  vueSourcesPartagees,
+  type Partages,
+  type ReglagesAvances,
+  type VueSourcePartagee,
+} from './gestion';
 import { ecrireReglages, lireReglages, type ReglagesTsuzuku } from './reglages';
 
 export interface ServicesTsuzuku {
   plateforme: ChoixReseau['plateforme'];
   /** Faux sur le site : pas de lecture de pages tierces (CORS). */
   lectureSources: boolean;
-  /** Rang administrateur : sources et import. */
+  /** Rang du profil (Fondateur, Administrateur, Gestionnaire, Ami). */
+  rang: Rang;
+  /** Rang habilité à gérer les sources, les clés d'API et les options avancées (Fondateur). */
   estAdmin: boolean;
   stockage: Stockage;
   client: ClientSur;
@@ -29,10 +50,22 @@ export interface ServicesTsuzuku {
   depot: DepotBibliotheque;
   reglages(): Promise<ReglagesTsuzuku>;
   enregistrerReglages(r: ReglagesTsuzuku): Promise<void>;
-  /** Sources actives pour ce profil : les siennes (administrateur) ou la copie de l'administrateur (ami). */
+  /** Sources utilisables par le moteur : les siennes (Fondateur) puis celles partagées avec lui, selon SES choix. */
   sources(): Promise<DefinitionSource[]>;
-  /** Réservé à l'administrateur : la règle est ici, pas seulement dans l'écran. */
+  /** Les sources du Fondateur (vide pour les autres rangs). */
+  sourcesPropres(): Promise<DefinitionSource[]>;
+  /** Réservé aux rangs habilités : la règle est ici, pas seulement dans l'écran. */
   enregistrerSources(liste: readonly DefinitionSource[]): Promise<void>;
+  /** Partage de chaque source (rangs habilités ; vide pour les autres). */
+  partages(): Promise<Partages>;
+  enregistrerPartages(p: Partages): Promise<void>;
+  /** Sources partagées avec ce profil : nom, type, état (activée pour lui ou non). */
+  sourcesPartagees(): Promise<VueSourcePartagee[]>;
+  /** Active ou désactive une source partagée pour ce profil SEULEMENT. */
+  choisirSourcePartagee(id: string, actif: boolean): Promise<void>;
+  /** Clés d'API et options avancées (rangs habilités). */
+  reglagesAvances(): Promise<ReglagesAvances>;
+  enregistrerReglagesAvances(a: ReglagesAvances): Promise<void>;
   /** Prévient le processus principal (Electron) qu'un lecteur va être affiché en iframe. */
   declarerLecteur(url: string): Promise<boolean>;
 }
@@ -40,42 +73,82 @@ export interface ServicesTsuzuku {
 export interface OptionsServices {
   choix: Pick<ChoixReseau, 'plateforme' | 'reseau' | 'lectureSources' | 'pont'>;
   stockage: Stockage;
-  estAdmin: boolean;
+  /** Rang du profil ouvert. */
+  rang?: Rang;
+  /** Ancienne option : vrai = Fondateur, faux = Ami (si `rang` est absent). */
+  estAdmin?: boolean;
   journal?: (message: string) => void;
   /** Réglages fins du catalogue (horloge, attente) : tests. */
   catalogue?: Partial<OptionsCatalogue>;
+  /** Options avancées déjà lues (le client réseau est créé avec) ; sinon les défauts du moteur. */
+  avances?: Pick<ReglagesAvances, 'delaiS' | 'tailleMaxMo'>;
 }
 
-export function creerServices({ choix, stockage, estAdmin, journal, catalogue }: OptionsServices): ServicesTsuzuku {
-  const client = creerClient(choix.reseau);
+export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: ancien, journal, catalogue, avances }: OptionsServices): ServicesTsuzuku {
+  const rang: Rang = rangDonne ?? (ancien === false ? 'ami' : 'fondateur');
+  const habilite = peutGererSources(rang);
+  const client = creerClient(choix.reseau, avances ? { delaiMs: avances.delaiS * 1000, tailleMax: avances.tailleMaxMo * 1024 * 1024 } : {});
   const reglages = async () => lireReglages(await stockage.lire(CLES.reglages));
+  const lireAvancesStockees = async () => lireAvances(await stockage.lire(CLES.avance), (await reglages()).cleTmdb);
+  const propres = async () => (habilite ? lireListeSources(await stockage.lire(CLES.sources)) : []);
+  const recues = async () => lireRecues(await stockage.lire(CLES.sourcesRecues));
+  const choixPerso = async () => lireChoix(await stockage.lire(CLES.choixSources));
   return {
     plateforme: choix.plateforme,
     lectureSources: choix.lectureSources,
-    estAdmin,
+    rang,
+    estAdmin: habilite,
     stockage,
     client,
     ctx: { client, journal },
-    catalogue: creerCatalogue({ client, cleTmdb: async () => (await reglages()).cleTmdb || null, journal, ...catalogue }),
+    // La clé TMDB est celle de la base du profil : jamais celle d'un autre compte.
+    catalogue: creerCatalogue({ client, cleTmdb: async () => (await lireAvancesStockees()).cleTmdb || null, journal, ...catalogue }),
     depot: new DepotBibliotheque(stockage, CLES.bibliotheque),
     reglages,
-    enregistrerReglages: r => stockage.ecrire(CLES.reglages, ecrireReglages(r)),
+    enregistrerReglages: async r => {
+      // La clé TMDB ne s'écrit plus par les réglages de confort : on garde celle déjà rangée.
+      const actuels = await reglages();
+      await stockage.ecrire(CLES.reglages, ecrireReglages({ ...r, cleTmdb: actuels.cleTmdb }));
+    },
     async sources() {
-      const texte = await stockage.lire(estAdmin ? CLES.sources : CLES.sourcesAdmin);
-      if (!texte) {
-        return [];
-      }
-      try {
-        return importerSources(JSON.parse(texte)).sources;
-      } catch {
-        return [];
+      return sourcesUtilisables(await propres(), await recues(), await choixPerso());
+    },
+    sourcesPropres: propres,
+    async enregistrerSources(liste) {
+      exigerGestionSources(rang);
+      await stockage.ecrire(CLES.sources, JSON.stringify(liste));
+      // Une source supprimée n'est plus partagée.
+      const p = lirePartages(await stockage.lire(CLES.partages));
+      const nettoyes = nettoyerPartages(p, liste);
+      if (Object.keys(nettoyes).length !== Object.keys(p).length) {
+        await stockage.ecrire(CLES.partages, ecrirePartages(nettoyes));
       }
     },
-    async enregistrerSources(liste) {
-      if (!estAdmin) {
-        throw echec('Les sources sont réservées à l’administrateur.', 'configuration', 403);
-      }
-      await stockage.ecrire(CLES.sources, JSON.stringify(liste));
+    async partages() {
+      return habilite ? lirePartages(await stockage.lire(CLES.partages)) : {};
+    },
+    async enregistrerPartages(p) {
+      exigerGestionSources(rang, 'Le partage des sources');
+      await stockage.ecrire(CLES.partages, ecrirePartages(nettoyerPartages(p, await propres())));
+    },
+    async sourcesPartagees() {
+      return vueSourcesPartagees(await recues(), await choixPerso());
+    },
+    async choisirSourcePartagee(id, actif) {
+      const r = await recues();
+      if (!r.sources.some(s => s.id === id)) return;
+      await stockage.ecrire(CLES.choixSources, JSON.stringify({ ...(await choixPerso()), [id]: actif }));
+    },
+    async reglagesAvances() {
+      exigerGestionSources(rang, 'Les réglages techniques');
+      return lireAvancesStockees();
+    },
+    async enregistrerReglagesAvances(a) {
+      exigerGestionSources(rang, 'Les réglages techniques');
+      await stockage.ecrire(CLES.avance, ecrireAvances(a));
+      // L'ancienne place de la clé (réglages de confort) est vidée : une seule clé, ici.
+      const r = await reglages();
+      if (r.cleTmdb) await stockage.ecrire(CLES.reglages, ecrireReglages({ ...r, cleTmdb: '' }));
     },
     async declarerLecteur(url) {
       try {

@@ -5,7 +5,7 @@ import { View } from 'react-native';
 import type { FicheAnime, FicheFilm } from '../moteur/catalogue';
 import { carteAnime, carteFilm, sansVus } from './elements';
 import { useCharger, useTsuzuku } from './contexte';
-import { Bouton, Champ, Etat, Grille, Puce, Titre } from './ui';
+import { Bouton, Champ, Etat, EtatVide, Grille, Puce, Titre } from './ui';
 
 export function Catalogue({ q: qInitial, genre: genreInitial }: { q?: string; genre?: string }) {
   const { s, mode, aller, version } = useTsuzuku();
@@ -57,7 +57,7 @@ export function Catalogue({ q: qInitial, genre: genreInitial }: { q?: string; ge
 
   return (
     <View style={{ gap: 16 }} testID="tsuzuku-catalogue">
-      <Titre>{q ? `Résultats pour « ${q} »` : mode === 'anime' ? 'Catalogue des animés' : 'Catalogue des films'}</Titre>
+      <Titre taille={30}>{q ? `Résultats pour « ${q} »` : mode === 'anime' ? 'Catalogue des animés' : 'Catalogue des films'}</Titre>
       <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
         <Champ libelle="Rechercher" valeur={saisie} onChanger={setSaisie} onValider={chercher} testID="catalogue-recherche" style={{ flex: 1 }} placeholder="Titre" />
         <Bouton titre="Chercher" onPress={chercher} variante="plein" testID="catalogue-chercher" />
@@ -70,7 +70,12 @@ export function Catalogue({ q: qInitial, genre: genreInitial }: { q?: string; ge
           ))}
         </View>
       ) : null}
-      <Etat enCours={resultats.enCours && !donnees} erreur={resultats.erreur} onRecharger={resultats.recharger} vide={donnees && !items.length ? 'Aucun résultat.' : undefined}>
+      <Etat enCours={resultats.enCours && !donnees} erreur={resultats.erreur} onRecharger={resultats.recharger} squelette="affiches">
+        {donnees && !items.length ? (
+          <EtatVide icone="⌕" titre="Aucun résultat">
+            Essayez une autre orthographe, le titre original ou un mot-clé plus court.
+          </EtatVide>
+        ) : null}
         <Grille elements={sansVus(cartes, Boolean(reg.donnees?.masquerVus))} testID="catalogue-grille" />
         {donnees?.suite && items.length ? (
           <Bouton

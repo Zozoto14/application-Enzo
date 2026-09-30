@@ -113,7 +113,7 @@ describe('sources : réservées à l’administrateur', () => {
     expect(await service(fauxReseau({})).sources()).toEqual([]);
   });
 
-  it('l’administrateur les enregistre dans SA base, l’ami ne peut ni les écrire ni les lire depuis la sienne', async () => {
+  it('le Fondateur les enregistre dans SA base ; un ami ne peut ni les écrire ni se servir d’une clé « sources » de sa base', async () => {
     const base = stockageMemoire();
     const a = service(fauxReseau({}), { stockage: base });
     await a.enregistrerSources(importerSources([SOURCE]).sources);
@@ -124,10 +124,11 @@ describe('sources : réservées à l’administrateur', () => {
     const b = service(fauxReseau({}), { admin: false, stockage: baseAmi });
     await expect(b.enregistrerSources([])).rejects.toMatchObject({ statut: 403 });
     expect(baseAmi.contenu.size).toBe(0);
-    // Sa propre clé « sources » est ignorée : seul le copie de l'administrateur (P3) compte.
+    // Sa propre clé « sources » (ou l'ancienne copie) est ignorée : seules les sources PARTAGÉES comptent.
     baseAmi.contenu.set(CLES.sources, JSON.stringify([SOURCE]));
-    expect(await b.sources()).toEqual([]);
     baseAmi.contenu.set(CLES.sourcesAdmin, JSON.stringify([SOURCE]));
+    expect(await b.sources()).toEqual([]);
+    baseAmi.contenu.set(CLES.sourcesRecues, JSON.stringify({ date: '2026-09-30T10:00:00Z', sources: [SOURCE] }));
     expect((await b.sources()).map(s => s.name)).toEqual(['Médiathèque']);
   });
 
@@ -198,10 +199,10 @@ describe('du lien au lecteur', () => {
 });
 
 describe('catalogue', () => {
-  it('la clé TMDB des réglages du profil sert aux films (et elle n’est pas dans l’URL de cache)', async () => {
+  it('la clé TMDB (réglages techniques du profil) sert aux films (et elle n’est pas dans l’URL de cache)', async () => {
     const reseau = fauxReseau({ 'https://api.themoviedb.org/3/genre/movie/list': json({ genres: [] }), 'https://api.themoviedb.org/3/search/movie': json({ page: 1, total_pages: 1, results: [{ id: 603, title: 'Matrix', release_date: '1999-03-30', poster_path: '/m.jpg' }] }) });
     const s = service(reseau);
-    await s.enregistrerReglages({ ...REGLAGES_DEFAUT, cleTmdb: 'cle-secrete-123' });
+    await s.enregistrerReglagesAvances({ cleTmdb: 'cle-secrete-123', delaiS: 15, tailleMaxMo: 8 });
     const r = await s.catalogue.films.rechercher('Matrix');
     expect(r.source).toBe('tmdb');
     expect(r.items[0].title).toBe('Matrix');

@@ -26,6 +26,7 @@ export const TYPES_EVENEMENT = [
   'acces-admin',
   'export',
   'role',
+  'abonnement',
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -41,6 +42,7 @@ export const LIBELLES_TYPE: Record<TypeEvenement, string> = {
   'acces-admin': 'Accès administrateur',
   export: 'Export',
   role: 'Rôle',
+  abonnement: 'Abonnement',
 };
 
 export interface EvenementAudit {

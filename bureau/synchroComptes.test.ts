@@ -364,3 +364,69 @@ describe('ancien coffre local', () => {
     expect(await coffreAdminEtranger(site.mem, site.fichiers)).toBe(true);
   });
 });
+
+describe('Tsuzuku : sources partagées par le relais', () => {
+  const SOURCES = JSON.stringify([
+    { id: 'src-a', name: 'Médiathèque A', baseUrl: 'https://mediatheque-exemple.fr/', enabled: true, language: 'vf', timeout: 15000, search: { path: '/r?q={query}', item: 'li', title: '', link: 'a' } },
+  ]);
+  const base = (initial: Record<string, string> = {}) => {
+    const m = new Map(Object.entries(initial));
+    return { m, lire: (c: string) => m.get(c), ecrire: (c: string, v: string) => void m.set(c, v) };
+  };
+
+  it('partagée à Léa seule : Léa la reçoit (scellée), Hugo non ; Léa ne peut pas la réécrire ; le retrait se propage', async () => {
+    const relais = relaisPortees();
+    const pc = appareil();
+    const alea = aleatoireDeterministe(21);
+    const vue = ouvrirAnnuaireAdmin(lireAnnuaire(undefined), copieCles(), alea);
+    let profils: Profil[] = vue.profils.map(p => (p.admin ? { ...p, nom: 'Enzo' } : p));
+    profils = ajouterProfil(profils, 'Léa', 'lea0000001', '2026-09-01', ['tsuzuku']);
+    profils = ajouterProfil(profils, 'Hugo', 'hugo000002', '2026-09-01', ['tsuzuku']);
+    await pc.ecrire(appliquerProfilsAdmin(vue.annuaire, profils, copieCles(), alea));
+    const baseEnzo = base({ 'tsuzuku.sources': SOURCES, 'tsuzuku.partages': JSON.stringify({ 'src-a': { mode: 'selection', comptes: ['lea0000001'] } }), 'tsuzuku.avance': JSON.stringify({ cleTmdb: 'CLE-TMDB-ENZO-SECRETE' }) });
+    const tourPc = () =>
+      synchroniserComptesAdmin({
+        liaison: MAITRE, memoire: pc.mem, fichiers: pc.fichiers, lire: pc.lire, ecrire: pc.ecrire, cles: copieCles, maintenant: horloge, requete: relais.requete,
+        effacerFichiers: async () => undefined,
+        tsuzuku: { base: baseEnzo },
+      });
+    const telephone = async (id: string) => {
+      const a = appareil();
+      const liaison = liaisonPourProfil(MAITRE, id);
+      await a.ecrire((await preparerLiaison(encoderLiaison(liaison), relais.requete)).annuaire);
+      const b = base();
+      return { a, b, liaison, tour: () => synchroniserCompteAmi({ liaison, id, memoire: a.mem, fichiers: a.fichiers, lire: a.lire, ecrire: a.ecrire, maintenant: horloge, requete: relais.requete, tsuzuku: { base: b } }) };
+    };
+    expect((await tourPc()).erreurs).toEqual([]);
+    const lea = await telephone('lea0000001');
+    const hugo = await telephone('hugo000002');
+    await lea.tour(); // dépose sa clé de réception
+    await hugo.tour();
+    await tourPc(); // scelle pour Léa
+    expect(relais.boite.get('p:lea0000001:tsuzuku-sources')).toBeDefined();
+    expect(relais.boite.get('p:lea0000001:tsuzuku-sources')).not.toMatch(/Médiathèque|mediatheque-exemple|CLE-TMDB|hugo/);
+    expect(relais.boite.get('p:hugo000002:tsuzuku-sources')).toBeUndefined();
+    expect((await lea.tour()).tsuzukuChange).toBe(true);
+    expect(JSON.parse(lea.b.m.get('tsuzuku.sources.partagees')!).sources.map((s: { name: string }) => s.name)).toEqual(['Médiathèque A']);
+    expect(JSON.stringify([...lea.b.m.values()])).not.toContain('CLE-TMDB');
+    await hugo.tour();
+    expect(hugo.b.m.get('tsuzuku.sources.partagees')).toBeUndefined();
+    // Léa (jeton de profil) ne peut ni réécrire ni effacer ses sources partagées ; Hugo ne lit pas celles de Léa.
+    const espacesLea = espacesDuRelais(lea.liaison, relais.requete);
+    await expect(espacesLea.deposer('lea0000001', 'tsuzuku-sources', '{}', '2026-09-30T12:00:00Z')).rejects.toBeTruthy();
+    await expect(espacesDuRelais(hugo.liaison, relais.requete).lire('lea0000001', 'tsuzuku-sources')).rejects.toBeTruthy();
+    // Retrait du partage : la copie de Léa se vide.
+    baseEnzo.ecrire('tsuzuku.partages', JSON.stringify({ 'src-a': { mode: 'personne', comptes: [] } }));
+    await tourPc();
+    expect((await lea.tour()).tsuzukuChange).toBe(true);
+    expect(JSON.parse(lea.b.m.get('tsuzuku.sources.partagees')!).sources).toEqual([]);
+  });
+
+  it('compatibilité : un appareil sans l’option Tsuzuku synchronise comme avant', async () => {
+    const relais = relaisPortees();
+    const pc = await pcAvecLea();
+    const bilan = await tourAdmin(pc, relais);
+    expect(bilan.erreurs).toEqual([]);
+    expect([...relais.boite.keys()].some(k => k.includes('tsuzuku'))).toBe(false);
+  });
+});

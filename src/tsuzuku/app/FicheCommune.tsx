@@ -1,7 +1,8 @@
 /** Blocs communs aux fiches d'animés et de films : bibliothèque, « vu ailleurs », liens légaux. */
 
 import React, { useState } from 'react';
-import { Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
+import { police, teinteTransparente } from '../../hub/themes';
 import {
   ajouterOuMettreAJour,
   marquerVuAilleurs,
@@ -17,7 +18,7 @@ import { messageDe } from '../moteur/erreurs';
 import { jourDe } from '../moteur/outils';
 import { useTsuzuku } from './contexte';
 import { ouvrirExterne } from './externe';
-import { Avis, Bouton, Champ, LIBELLE_STATUT, Puce, styleAttenue, styleTexte, styleTitre } from './ui';
+import { Avis, Bouton, Champ, LIBELLE_STATUT, PastilleStatut, Puce, styleAttenue, styleTexte, styleTitre } from './ui';
 
 export interface FicheMin {
   kind: Genre;
@@ -178,5 +179,96 @@ export function Synopsis({ texte }: { texte: string | null }) {
     <Text onPress={() => setTout(t => !t)} accessibilityRole="button" accessibilityLabel={tout ? 'Réduire le synopsis' : 'Lire tout le synopsis'} numberOfLines={tout ? undefined : 4} style={[styleTexte(theme, 14), { lineHeight: 21 }]}>
       {texte}
     </Text>
+  );
+}
+
+/**
+ * Bandeau immersif d'une fiche (comme l'ancienne version) : visuel plein cadre
+ * fondu dans le fond, affiche à gauche, étiquette, statut, note, titre,
+ * métadonnées, genres en puces, synopsis, actions et progression.
+ */
+export function BandeauFiche({
+  image,
+  banniere,
+  etiquette,
+  statut,
+  score,
+  titre,
+  sousTitre,
+  meta,
+  genres,
+  synopsis,
+  progression,
+  children,
+}: {
+  image: string | null;
+  banniere?: string | null;
+  etiquette: string;
+  statut?: Statut | null;
+  score?: number | null;
+  titre: string;
+  sousTitre?: string | null;
+  meta: (string | number | null | undefined | false)[];
+  genres: string[];
+  synopsis: string | null;
+  progression?: { vus: number; total: number } | null;
+  children?: React.ReactNode;
+}) {
+  const { theme, large } = useTsuzuku();
+  const visuel = banniere || image;
+  const rayon = Math.max(theme.rayonGrand, 12);
+  return (
+    <View testID="fiche-bandeau" style={{ borderRadius: rayon, overflow: 'hidden', borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface }}>
+      {visuel ? <Image source={{ uri: visuel }} accessibilityIgnoresInvertColors style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.5 }} resizeMode="cover" /> : null}
+      <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: teinteTransparente(theme.fond, 0.62) }} />
+      <View style={{ flexDirection: large ? 'row' : 'column', gap: large ? 30 : 18, padding: large ? 32 : 18, paddingTop: large ? 56 : 24 }}>
+        {image ? (
+          <Image
+            source={{ uri: image }}
+            accessibilityIgnoresInvertColors
+            accessibilityLabel={`Affiche de ${titre}`}
+            style={{ width: large ? 210 : 130, height: large ? 315 : 195, borderRadius: Math.max(theme.rayonMoyen, 6), borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface }}
+          />
+        ) : null}
+        <View style={{ flex: 1, minWidth: 0, gap: 12 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+            <View style={{ backgroundColor: theme.accent, paddingHorizontal: 8, paddingVertical: 3, borderRadius: Math.min(theme.rayonMoyen, 4) }}>
+              <Text style={{ color: theme.surAccent, fontSize: 11, fontWeight: '800', letterSpacing: 1.2 }}>{etiquette}</Text>
+            </View>
+            {statut ? <PastilleStatut statut={statut} /> : null}
+            {score ? <Text style={{ color: theme.accent, fontSize: 14, fontWeight: '800' }}>★ {score.toFixed(2)} / 10</Text> : null}
+          </View>
+          <Text accessibilityRole="header" testID="fiche-titre" style={{ color: theme.texte, fontSize: large ? 40 : 28, lineHeight: large ? 46 : 34, fontWeight: theme.poidsTitre === '400' ? '600' : '800', letterSpacing: -0.4, ...police(theme.policeTitre) }}>
+            {titre}
+          </Text>
+          {sousTitre ? <Text style={styleAttenue(theme, 14)}>{sousTitre}</Text> : null}
+          <Meta lignes={meta} />
+          {genres.length ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              {genres.slice(0, 6).map(g => (
+                <View key={g} style={{ paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: teinteTransparente(theme.texte, 0.1) }}>
+                  <Text style={{ color: theme.texte, fontSize: 12, fontWeight: '700', ...police(theme.policeTexte) }}>{g}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+          <Synopsis texte={synopsis} />
+          {children}
+          {progression && progression.total ? (
+            <View style={{ gap: 6, maxWidth: 380 }} testID="fiche-progression">
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={styleAttenue(theme, 12)}>Progression</Text>
+                <Text style={styleAttenue(theme, 12)}>
+                  {progression.vus} / {progression.total}
+                </Text>
+              </View>
+              <View style={{ height: 5, borderRadius: 999, overflow: 'hidden', backgroundColor: teinteTransparente(theme.texte, 0.12) }}>
+                <View style={{ width: `${Math.min(100, Math.round((progression.vus / progression.total) * 100))}%`, height: 5, backgroundColor: theme.accent }} />
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </View>
   );
 }

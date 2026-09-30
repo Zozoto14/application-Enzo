@@ -286,6 +286,10 @@ async function espace(requete, env, portee, id, nom) {
     return erreur('Nom d’objet invalide.', 400);
   }
   const cle = prefixe + nom;
+  // Objets écrits par l'administrateur seul (sources partagées de Tsuzuku) : lecture seule pour le compte.
+  if (!portee.maitre && OBJETS_ADMIN_SEULEMENT.includes(nom) && requete.method !== 'GET') {
+    return erreur('Objet en lecture seule pour ce compte.', 403);
+  }
   if (requete.method === 'GET') {
     const enveloppe = await env.BOITE.get(cle);
     return enveloppe === null ? erreur('Aucun dépôt.', 404) : reponse(enveloppe);
@@ -317,6 +321,8 @@ async function espace(requete, env, portee, id, nom) {
 
 const CLE_RANGS = 'rangs';
 const OBJETS_DELEGUES = ['coffre', 'portefeuille'];
+/** Objets d'un espace que seul le jeton maître écrit ou efface (le compte les lit). */
+const OBJETS_ADMIN_SEULEMENT = ['tsuzuku-sources'];
 const MOTIF_COMPTE = /^[a-z0-9]{6,16}$/;
 
 function lireDelegations(brut) {

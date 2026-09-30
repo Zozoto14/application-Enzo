@@ -28,8 +28,8 @@ export const SECTIONS: readonly SectionParametres[] = [
   { id: 'synchro', titre: 'Synchronisation', icone: '⇄', description: 'Appareils liés, synchronisation entre appareils.' },
   { id: 'securite', titre: 'Sécurité', icone: '🔒', description: 'Mot de passe, code d’authentification, récupération, sauvegardes.' },
   { id: 'portefeuille', titre: 'Portefeuille', icone: '▦', description: 'Cours, alertes, podcast, affichage des montants.' },
-  { id: 'administration', titre: 'Administration', icone: '🛡', description: 'Panneau, comptes, journal, verrouillage.' },
-  { id: 'tsuzuku', titre: 'Tsuzuku', icone: '▶', description: 'Catalogue de films, doublage, lecture, déjà vus.' },
+  { id: 'administration', titre: 'Administration', icone: '🛡', description: 'Panneau, comptes, journal, verrouillage, Tsuzuku (sources, clés).' },
+  { id: 'tsuzuku', titre: 'Tsuzuku', icone: '▶', description: 'Doublage, lecture, déjà vus, sources partagées avec vous.' },
   { id: 'nouveautes', titre: 'Nouveautés', icone: '✨', description: 'Historique des versions.' },
   { id: 'support', titre: 'Support', icone: '?', description: 'Écrire à l’équipe : bug, question, demande.' },
   { id: 'apropos', titre: 'À propos', icone: 'ⓘ', description: 'Version de l’application et mise à jour.' },
@@ -60,8 +60,10 @@ export type IdReglage =
   | 'admin-reglages'
   | 'admin-comptes'
   | 'role-gestionnaire'
-  | 'tsuzuku-tmdb'
+  | 'admin-tsuzuku-sources'
+  | 'admin-tsuzuku-cles'
   | 'tsuzuku-lecture'
+  | 'tsuzuku-sources-partagees'
   | 'nouveautes'
   | 'verrou-auto'
   | 'support'
@@ -287,15 +289,24 @@ export const REGLAGES: readonly Reglage[] = [
     mots: ['gestionnaire', 'administrateur', 'fondateur', 'rang', 'role', 'droits', 'limite'],
     ancienEmplacement: ['Hub › Paramètres › Ton rôle'],
   },
-  // --- Tsuzuku
+  // --- Administration › Tsuzuku (rangs habilités : Fondateur)
   {
-    id: 'tsuzuku-tmdb',
-    section: 'tsuzuku',
-    titre: 'Clé TMDB (films)',
-    description: 'Clé facultative pour tout le catalogue de films ; sans elle, seuls les films d’animation (Jikan) sont proposés.',
-    mots: ['tmdb', 'cle', 'films', 'catalogue', 'api', 'cinema', 'jeton'],
-    ancienEmplacement: ['Tsuzuku › Réglages (clé TMDB)'],
+    id: 'admin-tsuzuku-sources',
+    section: 'administration',
+    titre: 'Tsuzuku · Sources',
+    description: 'Ajouter, modifier, tester et supprimer les sources ; choisir qui y a accès ; assistant d’ajout par lien.',
+    mots: ['tsuzuku', 'sources', 'source', 'selecteurs', 'css', 'partage', 'partager', 'assistant', 'lien', 'site', 'importer', 'tester'],
+    ancienEmplacement: ['Tsuzuku › Sources'],
   },
+  {
+    id: 'admin-tsuzuku-cles',
+    section: 'administration',
+    titre: 'Tsuzuku · Clés d’API et options avancées',
+    description: 'Clé TMDB (films), délai et taille maximale des pages lues par le moteur. Jamais montrées aux autres comptes.',
+    mots: ['tmdb', 'cle', 'api', 'jeton', 'films', 'catalogue', 'delai', 'taille', 'avance', 'moteur', 'tsuzuku'],
+    ancienEmplacement: ['Paramètres › Tsuzuku › Clé TMDB (films)', 'Tsuzuku › Réglages (clé TMDB)'],
+  },
+  // --- Tsuzuku
   {
     id: 'tsuzuku-lecture',
     section: 'tsuzuku',
@@ -303,6 +314,14 @@ export const REGLAGES: readonly Reglage[] = [
     description: 'Doublage préféré (VF ou VOSTFR), épisode suivant automatique, masquer les titres déjà vus.',
     mots: ['tsuzuku', 'anime', 'animes', 'vf', 'vostfr', 'doublage', 'langue', 'episode', 'suivant', 'automatique', 'deja vus', 'masquer', 'streaming'],
     ancienEmplacement: ['Tsuzuku › Réglages (lecture)'],
+  },
+  {
+    id: 'tsuzuku-sources-partagees',
+    section: 'tsuzuku',
+    titre: 'Sources partagées avec vous',
+    description: 'Les sources que l’administration vous partage : activez ou désactivez chacune, pour vous seul.',
+    mots: ['tsuzuku', 'sources', 'partagees', 'partage', 'activer', 'desactiver'],
+    ancienEmplacement: ['Tsuzuku › Sources (lecture seule)'],
   },
   // --- Nouveautés
   {

@@ -10,6 +10,7 @@
  * forme les apps déjà autorisées : elles ne peuvent en montrer aucune autre.
  */
 
+import { BandeauAbonnement } from './abonnements/BandeauAbonnement';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { appsVisibles, etatTuile, type EtatTuile } from './permissions';
@@ -223,6 +224,8 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
               </Text>
             ) : null}
           </View>
+
+          {modifie ? null : <BandeauAbonnement contexte={contexte} theme={theme} onOuvrirAdministration={() => onOuvrir('administration')} />}
 
           {modifie ? (
             <BarrePersonnalisation

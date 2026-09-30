@@ -1,11 +1,12 @@
 /**
- * Paramètres › Tsuzuku : clé TMDB (facultative), doublage préféré, épisode suivant
- * automatique, masquer les déjà vus. Rangés dans la base du profil ; il n'y a pas
- * d'écran de réglages séparé dans l'app.
+ * Paramètres › Tsuzuku (tous les rangs) : réglages de CONFORT seulement —
+ * doublage préféré, épisode suivant automatique, masquer les déjà vus. Rangés
+ * dans la base du profil. Tout ce qui est technique (sources, clés d'API,
+ * options du moteur) est en Administration › Tsuzuku (`AdminTsuzuku.tsx`).
  */
 
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { police, type ThemeHub } from '../../hub/themes';
 import { LANGUES, type Langue } from '../moteur/sources';
 import { CLES, type BasePrefs } from '../plateforme/stockage';
@@ -53,54 +54,6 @@ function Segments<T extends string>({ theme, libelle, valeur, options, onChoisir
 }
 
 const texte = (theme: ThemeHub) => ({ color: theme.texte, fontSize: 14, ...police(theme.policeTexte) });
-const attenue = (theme: ThemeHub) => ({ color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) });
-
-/** Réglage « Clé TMDB ». */
-export function ReglageCleTmdb({ theme, base }: { theme: ThemeHub; base: BasePrefs }) {
-  const { r, maj, erreur } = useReglages(base);
-  const [saisie, setSaisie] = useState('');
-  return (
-    <View style={{ gap: 10 }}>
-      <Text style={attenue(theme)}>
-        Facultative. Sans clé, les films viennent de Jikan (films d’animation seulement) ; avec une clé TMDB (gratuite, v3 ou jeton), tout le catalogue de films est disponible. Elle reste dans la base chiffrée de ce compte.
-      </Text>
-      <TextInput
-        testID="tsuzuku-cle-tmdb"
-        accessibilityLabel="Clé TMDB"
-        value={saisie}
-        onChangeText={setSaisie}
-        secureTextEntry
-        autoCapitalize="none"
-        autoCorrect={false}
-        placeholder={r.cleTmdb ? '•••••••• (clé enregistrée)' : 'Coller la clé TMDB'}
-        placeholderTextColor={theme.attenue}
-        style={[st.champ, { color: theme.texte, backgroundColor: theme.fond, borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 10), ...police(theme.policeTexte) }]}
-      />
-      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-        <Pressable
-          testID="tsuzuku-cle-enregistrer"
-          accessibilityRole="button"
-          accessibilityLabel="Enregistrer la clé TMDB"
-          disabled={!saisie.trim()}
-          onPress={() => {
-            maj({ cleTmdb: saisie.trim() });
-            setSaisie('');
-          }}
-          style={[st.bouton, { backgroundColor: theme.accent, borderColor: theme.accent, opacity: saisie.trim() ? 1 : 0.45, borderRadius: Math.min(theme.rayonMoyen, 10) }]}>
-          <Text style={{ color: theme.surAccent, fontWeight: '600' }}>Enregistrer</Text>
-        </Pressable>
-        {r.cleTmdb ? (
-          <Pressable testID="tsuzuku-cle-effacer" accessibilityRole="button" accessibilityLabel="Effacer la clé TMDB" onPress={() => maj({ cleTmdb: '' })} style={[st.bouton, { borderColor: theme.critique, borderRadius: Math.min(theme.rayonMoyen, 10) }]}>
-            <Text style={{ color: theme.critique, fontWeight: '600' }}>Effacer</Text>
-          </Pressable>
-        ) : null}
-      </View>
-      <Text testID="tsuzuku-cle-etat" style={texte(theme)} accessibilityLiveRegion="polite">
-        {erreur ? 'Impossible d’enregistrer (base indisponible).' : r.cleTmdb ? '✓ Clé enregistrée.' : 'Aucune clé enregistrée.'}
-      </Text>
-    </View>
-  );
-}
 
 /** Réglage « Lecture et catalogue » : doublage, épisode suivant automatique, déjà vus. */
 export function ReglageLectureTsuzuku({ theme, base }: { theme: ThemeHub; base: BasePrefs }) {
@@ -124,7 +77,5 @@ export function ReglageLectureTsuzuku({ theme, base }: { theme: ThemeHub; base: 
 }
 
 const st = StyleSheet.create({
-  champ: { minHeight: 44, borderWidth: 1, paddingHorizontal: 12, fontSize: 15 },
-  bouton: { minHeight: 44, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   segment: { minHeight: 40, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
 });

@@ -1,14 +1,17 @@
 /** Bibliothèque : onglets par statut, « vu ailleurs », statistiques, historique, export. */
 
 import React, { useState } from 'react';
-import { Text, View } from 'react-native';
+import { Image, Text, View } from 'react-native';
+import { police } from '../../hub/themes';
 import { collection, exporterEnTexte, statistiques, type Statut } from '../moteur/bibliotheque';
 import { messageDe } from '../moteur/erreurs';
 import { jourDe } from '../moteur/outils';
 import { useCharger, useTsuzuku } from './contexte';
-import { Avis, Bouton, Champ, Etat, Grille, LIBELLE_STATUT, Puce, Titre, elementDepuisEntree, styleAttenue, styleTexte } from './ui';
+import { Avis, Bouton, Champ, Etat, EtatVide, Grille, LIBELLE_STATUT, Puce, RangeeReprendre, Titre, TitreSection, couleurStatut, elementDepuisEntree, styleAttenue, styleTexte } from './ui';
 
 type Onglet = 'tous' | Statut | 'favoris';
+
+const STATUTS_ORDRE: readonly Statut[] = ['en_cours', 'a_reprendre', 'a_voir', 'vu', 'vu_ailleurs'];
 
 const ONGLETS: ReadonlyArray<readonly [Onglet, string]> = [
   ['tous', 'Tous'],
@@ -53,40 +56,73 @@ export function Bibliotheque() {
 
   return (
     <View style={{ gap: 16 }} testID="tsuzuku-bibliotheque">
-      <Titre>{mode === 'anime' ? 'Ma bibliothèque d’animés' : 'Ma bibliothèque de films'}</Titre>
+      <Titre taille={32}>{mode === 'anime' ? 'Ma bibliothèque d’animés' : 'Ma bibliothèque de films'}</Titre>
       {bloc && stats ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }} testID="bibliotheque-stats" accessibilityLabel="Statistiques">
           {[
-            ['Titres', String(bloc.total)],
-            ['Vus', String(bloc.seen)],
-            ['Vus ailleurs', String(bloc.watchedElsewhere)],
-            mode === 'anime' ? ['Épisodes vus', String(stats.anime.episodesWatched)] : ['Heures vues', String(Math.round((stats.movies.minutesWatched / 60) * 10) / 10)],
-            ['Note moyenne', bloc.averageRating == null ? '—' : String(bloc.averageRating)],
-          ].map(([l, v]) => (
-            <View key={l} style={{ minWidth: 92, padding: 10, borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen }}>
-              <Text style={styleAttenue(theme, 11)}>{l.toUpperCase()}</Text>
-              <Text style={[styleTexte(theme, 20), { fontWeight: '600' }]}>{v}</Text>
+            ['Titres', String(bloc.total), `${liste.filter(e => e.favorite).length} favori(s)`],
+            ['Vus (ici + ailleurs)', String(bloc.seen), bloc.total ? `${Math.round((bloc.seen / bloc.total) * 100)} % de la liste` : ''],
+            ['Vus ailleurs', String(bloc.watchedElsewhere), ''],
+            mode === 'anime' ? ['Épisodes vus', String(stats.anime.episodesWatched), ''] : ['Heures vues', String(Math.round((stats.movies.minutesWatched / 60) * 10) / 10), ''],
+            ['Note moyenne', bloc.averageRating == null ? '—' : `${bloc.averageRating}/10`, ''],
+          ].map(([l, v, d]) => (
+            <View key={l} style={{ flexGrow: 1, minWidth: 140, padding: 16, gap: 4, borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: Math.max(theme.rayonMoyen, 8) + 2 }}>
+              <Text style={[styleTexte(theme, 30), { fontWeight: '800', ...police(theme.policeChiffres ?? theme.policeTitre) }]}>{v}</Text>
+              <Text style={{ color: theme.attenue, fontSize: 11, fontWeight: '800', letterSpacing: 1.2, ...police(theme.policeTexte) }}>{l.toUpperCase()}</Text>
+              {d ? <Text style={styleAttenue(theme, 12)}>{d}</Text> : null}
             </View>
           ))}
         </View>
       ) : null}
+      {liste.length ? (
+        <View style={{ gap: 10, padding: 16, borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: Math.max(theme.rayonMoyen, 8) + 2 }} testID="bibliotheque-repartition" accessibilityLabel="Répartition par statut">
+          <Text style={{ color: theme.attenue, fontSize: 11, fontWeight: '800', letterSpacing: 1.4, ...police(theme.policeTexte) }}>RÉPARTITION</Text>
+          <View style={{ flexDirection: 'row', height: 8, borderRadius: 999, overflow: 'hidden', gap: 2 }}>
+            {STATUTS_ORDRE.filter(st => compte(st)).map(st => (
+              <View key={st} style={{ flexGrow: compte(st), backgroundColor: couleurStatut(theme, st) }} />
+            ))}
+          </View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14 }}>
+            {STATUTS_ORDRE.map(st => (
+              <View key={st} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 999, backgroundColor: couleurStatut(theme, st) }} />
+                <Text style={styleTexte(theme, 13)}>
+                  {LIBELLE_STATUT[st]} <Text style={{ fontWeight: '800' }}>{compte(st)}</Text>
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+      <RangeeReprendre titre="Reprendre la lecture" testID="bibliotheque-reprendre" entrees={liste.filter(e => e.status === 'en_cours' || e.status === 'a_reprendre').slice(0, 10)} onLire={e => aller(e.kind === 'movie' ? { t: 'lecteur', kind: 'movie', id: e.id } : { t: 'lecteur', kind: 'anime', id: e.id, numero: (e.currentEpisode || 0) + 1 })} />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} accessibilityLabel="Statut">
         {ONGLETS.map(([cle, titre]) => (
           <Puce key={cle} titre={`${titre} (${compte(cle)})`} actif={onglet === cle} onPress={() => setOnglet(cle)} testID={`onglet-${cle}`} />
         ))}
       </View>
-      <Etat enCours={lib.enCours && !db} erreur={lib.erreur} onRecharger={lib.recharger} vide={db && !filtrees.length ? (liste.length ? 'Rien dans cet onglet.' : 'Votre bibliothèque est vide : ajoutez des titres depuis leur fiche.') : undefined}>
+      <Etat enCours={lib.enCours && !db} erreur={lib.erreur} onRecharger={lib.recharger} squelette="affiches">
+        {db && !filtrees.length ? (
+          <EtatVide icone={liste.length ? '◌' : '＋'} titre={liste.length ? 'Rien dans cet onglet' : 'Votre bibliothèque est vide'}>
+            {liste.length ? 'Choisissez un autre statut.' : 'Ajoutez des titres depuis leur fiche ou depuis « Découvrir ».'}
+          </EtatVide>
+        ) : null}
         <Grille elements={filtrees.map(e => elementDepuisEntree(e, () => aller({ t: 'fiche', kind: e.kind, id: e.id })))} testID="bibliotheque-grille" />
       </Etat>
       {db?.history.length ? (
-        <View style={{ gap: 6 }} testID="bibliotheque-historique">
-          <Titre taille={16}>Historique récent</Titre>
-          {db.history.slice(0, 8).map((h, i) => (
-            <Text key={`${h.animeId}-${h.episode}-${i}`} style={styleAttenue(theme, 13)}>
-              {String(h.watchedAt).slice(0, 10)} · {h.title}
-              {h.kind === 'anime' ? ` · Ép. ${h.episode}` : ''}
-            </Text>
-          ))}
+        <View style={{ gap: 12 }} testID="bibliotheque-historique">
+          <TitreSection>Historique</TitreSection>
+          <View style={{ borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: Math.max(theme.rayonMoyen, 8) + 2, overflow: 'hidden' }}>
+            {db.history.slice(0, 8).map((h, i) => (
+              <View key={`${h.animeId}-${h.episode}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, borderTopWidth: i ? 1 : 0, borderTopColor: theme.ligne }}>
+                <View style={{ width: 32, height: 46, borderRadius: 4, overflow: 'hidden', backgroundColor: theme.fond }}>{h.image ? <Image source={{ uri: h.image }} accessibilityIgnoresInvertColors style={{ width: 32, height: 46 }} /> : null}</View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text numberOfLines={1} style={styleTexte(theme, 14)}>{h.title}</Text>
+                  {h.kind === 'anime' ? <Text style={styleAttenue(theme, 12)}>Épisode {h.episode}</Text> : null}
+                </View>
+                <Text style={styleAttenue(theme, 12)}>{String(h.watchedAt).slice(0, 10)}</Text>
+              </View>
+            ))}
+          </View>
         </View>
       ) : null}
       <View style={{ gap: 10 }}>

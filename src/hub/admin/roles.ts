@@ -105,6 +105,10 @@ export type ActionAdmin =
   // Fondateurs seulement
   | 'politique-apps'
   | 'modifier-admin'
+  // Abonnements (suivi manuel) : Fondateurs seulement, sur des rangs strictement inférieurs
+  | 'abonnements-voir'
+  | 'abonnements-gerer'
+  | 'abonnements-reglages'
   // Séquestre
   | 'acces-sequestre'
   | 'ouvrir-compte';
@@ -126,7 +130,17 @@ export const ACTIONS_GESTIONNAIRE: readonly ActionAdmin[] = [
  * des Fondateurs). `code-site` exige le jeton maître du relais, qui reste aux
  * Fondateurs.
  */
-export const ACTIONS_REFUSEES_ADMINISTRATEUR: readonly ActionAdmin[] = ['politique-apps', 'modifier-admin', 'renommer-ami', 'code-site'];
+export const ACTIONS_REFUSEES_ADMINISTRATEUR: readonly ActionAdmin[] = [
+  'politique-apps',
+  'modifier-admin',
+  'renommer-ami',
+  'code-site',
+  // Abonnements : option la plus protectrice. Ces données (paiements, notes) vivent dans la base chiffrée du
+  // compte historique ; un Administrateur n'y touche pas, même sur ses Gestionnaires et Amis.
+  'abonnements-voir',
+  'abonnements-gerer',
+  'abonnements-reglages',
+];
 
 /** Actions qui visent un compte précis (et dont la cible est donc vérifiée). */
 const ACTIONS_SUR_CIBLE: readonly ActionAdmin[] = [
@@ -143,6 +157,7 @@ const ACTIONS_SUR_CIBLE: readonly ActionAdmin[] = [
   'changer-role',
   'acces-sequestre',
   'ouvrir-compte',
+  'abonnements-gerer',
 ];
 
 export class ErreurPermission extends ErreurProfil {

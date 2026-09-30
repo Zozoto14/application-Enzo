@@ -19,11 +19,14 @@
 import { borner, unionJournaux, type EvenementAudit } from './journal';
 import { lireDonnees, type DonneesAdmin } from './donnees';
 import type { Fusions, Valeurs } from '../../sync/relais/fusionLww';
+import { abonnementsDepuisEntites, entitesAbonnements, FUSIONS_ABONNEMENTS } from '../abonnements/abonnements';
 
 export function entitesDonnees(d: DonneesAdmin): Valeurs {
   const e: Valeurs = { reglages: d.reglages, journal: d.journal, vues: d.connexionsVues };
   for (const [id, note] of Object.entries(d.notes)) e[`note:${id}`] = note;
   if (d.robustesse) e.robustesse = d.robustesse;
+  // Abonnements : une entité par compte (`abo:<id>`, historique fusionné par union) + les réglages (dernier gagnant).
+  Object.assign(e, entitesAbonnements(d.abonnements));
   return e;
 }
 
@@ -32,13 +35,14 @@ export function donneesDepuisEntites(e: Valeurs, maintenant: number): DonneesAdm
   for (const [cle, valeur] of Object.entries(e)) {
     if (cle.startsWith('note:')) notes[cle.slice(5)] = valeur;
   }
-  const d = lireDonnees(JSON.stringify({ reglages: e.reglages, journal: e.journal, connexionsVues: e.vues, notes, robustesse: e.robustesse }));
+  const d = lireDonnees(JSON.stringify({ reglages: e.reglages, journal: e.journal, connexionsVues: e.vues, notes, robustesse: e.robustesse, abonnements: abonnementsDepuisEntites(e) }));
   return { ...d, journal: borner(d.journal, maintenant, d.reglages.retentionJours, d.reglages.tailleJournal) };
 }
 
 /** Fusions par union, bornées par les réglages d'ici (le même borne des deux côtés une fois les réglages alignés). */
 export function fusionsDonnees(reglages: DonneesAdmin['reglages'], maintenant: number): Fusions {
   return {
+    ...FUSIONS_ABONNEMENTS,
     journal: (a, b) =>
       borner(unionJournaux(a as EvenementAudit[], b as EvenementAudit[]), maintenant, reglages.retentionJours, reglages.tailleJournal),
     vues: (a, b) => {

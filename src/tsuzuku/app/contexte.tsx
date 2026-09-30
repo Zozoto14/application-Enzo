@@ -14,7 +14,6 @@ export type Route =
   | { t: 'fiche'; kind: Genre; id: string }
   | { t: 'lecteur'; kind: Genre; id: string; numero?: number }
   | { t: 'bibliotheque' }
-  | { t: 'sources' }
   | { t: 'import' };
 
 export interface CtxTsuzuku {
