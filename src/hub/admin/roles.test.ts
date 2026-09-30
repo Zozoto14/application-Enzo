@@ -316,4 +316,18 @@ describe('rangs : Fondateur > Administrateur > Gestionnaire > Ami', () => {
     expect(peutOuvrir(administration, adm)).toBe(true);
     expect(peutOuvrir(administration, fond2)).toBe(true);
   });
+
+  it('Tsuzuku suit les rangs : tuile par permission, et un Administrateur ne touche pas les permissions d’un rang égal ou supérieur', () => {
+    const tsuzuku = REGISTRE.find(a => a.id === 'tsuzuku')!;
+    expect(peutOuvrir(tsuzuku, { ...adm, apps: ['tsuzuku'] })).toBe(true);
+    expect(peutOuvrir(tsuzuku, { ...adm, apps: ['portefeuille'] })).toBe(false);
+    expect(peutOuvrir(tsuzuku, admin)).toBe(true);
+    // Ouvrir Tsuzuku à un compte = « permissions-ami » : jamais sur un Fondateur ni un autre Administrateur.
+    for (const cible of [admin, fond2, adm2]) {
+      expect(autorise(adm, 'permissions-ami', cible).ok).toBe(false);
+    }
+    expect(autorise(adm, 'permissions-ami', ami).ok).toBe(true);
+    // Les sources de Tsuzuku sont réservées aux Fondateurs (Racine.tsx).
+    expect([admin, fond2, adm, gest, ami].map(p => rangDe(p) === 'fondateur')).toEqual([true, true, false, false, false]);
+  });
 });

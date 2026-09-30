@@ -207,7 +207,11 @@ export function BandeauConfidentialite({
   transparence: { dernierAccesAdmin?: string; sequestreActif: boolean; par?: string; rangPar?: string };
   rang?: Profil['role'];
 }) {
-  const qui = texteTransparence(rang === 'administrateur' ? 'administrateur' : 'ami');
+  // Un Fondateur n'a personne au-dessus de lui : aucun bandeau.
+  const qui = texteTransparence(rang === 'fondateur' ? 'fondateur' : rang === 'administrateur' ? 'administrateur' : 'ami');
+  if (!qui) {
+    return null;
+  }
   return (
     <View
       style={{ padding: 12, borderRadius: rayonDe(theme), borderLeftWidth: 4, borderLeftColor: theme.alerte, backgroundColor: teinteTransparente(theme.alerte, 0.14), gap: 4 }}
