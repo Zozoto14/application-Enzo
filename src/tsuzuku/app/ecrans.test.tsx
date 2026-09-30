@@ -6,8 +6,6 @@ import { themeHub } from '../../hub/themes';
 import type { ContexteHub } from '../../hub/types';
 import { stockageMemoire } from '../moteur/bibliotheque';
 import { attenteNulle, fauxReseau, html, json } from '../moteur/outilsTest';
-import { importerSources } from '../moteur/sources';
-import { CLES } from '../plateforme/stockage';
 import { TsuzukuEcrans } from './Racine';
 import { creerServices } from './services';
 

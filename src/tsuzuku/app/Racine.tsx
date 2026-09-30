@@ -30,7 +30,7 @@ import { creerServices, type ServicesTsuzuku } from './services';
 import { lireAvances } from './gestion';
 import { PiedTsuzuku } from './PiedTsuzuku';
 import { LIBELLE_MODE, themeDuMode, type Mode } from './themeTsuzuku';
-import { Avis, Bouton, styleAttenue } from './ui';
+import { Avis, Bouton } from './ui';
 import { MESSAGE_SITE } from '../plateforme/reseauWeb';
 
 const ONGLETS: ReadonlyArray<readonly [Route['t'], string]> = [

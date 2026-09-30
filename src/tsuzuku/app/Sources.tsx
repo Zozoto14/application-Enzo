@@ -362,8 +362,10 @@ export function Sources({ comptes = [], partageActif = true }: { comptes?: reado
           onFermer={() => setAssistant(false)}
           onFormulaire={src => {
             setAssistant(false);
-            const { id: _id, createdAt: _date, ...reste } = src;
-            setEdition({ brouillon: JSON.parse(JSON.stringify(reste)) as Brouillon });
+            const brouillon = JSON.parse(JSON.stringify(src)) as Brouillon;
+            delete brouillon.id;
+            delete brouillon.createdAt;
+            setEdition({ brouillon });
           }}
           onEnregistrer={src =>
             agir(async () => {

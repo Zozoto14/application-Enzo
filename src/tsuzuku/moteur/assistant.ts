@@ -301,7 +301,9 @@ export function validerSourceJson(texte: string, analysee?: string, options: Opt
   let source: DefinitionSource;
   try {
     // L'identifiant et la date sont ceux de l'app, jamais ceux du JSON collé.
-    const { id: _id, createdAt: _date, enabled: _actif, ...reste } = brut as Record<string, unknown>;
+    const reste: Record<string, unknown> = { ...(brut as Record<string, unknown>) };
+    delete reste.id;
+    delete reste.createdAt;
     source = normaliserSource({ ...reste, enabled: true }, null, options);
   } catch (e) {
     return { erreurs: [messageDe(e)], avertissements };
