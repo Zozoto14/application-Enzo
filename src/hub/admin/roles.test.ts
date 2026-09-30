@@ -10,6 +10,7 @@ import {
   changerPolitiquePar,
   definirExpirationPar,
   definirNiveauxPar,
+  definirRangPar,
   definirRolePar,
   desactiverPar,
   exporterJournalPar,
@@ -23,7 +24,7 @@ import { filtrerComptes } from './comptes';
 import { donneesVides } from './donnees';
 import { journaliser, lireEvenement } from './journal';
 import { politiqueVide } from './politique';
-import { ACTIONS_GESTIONNAIRE, ErreurPermission, autorise, exiger, roleDe, type ActionAdmin } from './roles';
+import { ACTIONS_GESTIONNAIRE, ErreurPermission, LIBELLES_RANG, RANGS, autorise, definirRang, exiger, nombreFondateurs, rangDe, rangsAttribuables, roleDe, texteTransparence, type ActionAdmin } from './roles';
 
 const T = Date.parse('2026-09-29T12:00:00Z');
 const admin: Profil = { id: 'principal', nom: 'Enzo', admin: true, creeLe: '' };
@@ -58,13 +59,13 @@ const TOUTES: ActionAdmin[] = [
 
 describe('rôles : qui a le droit de quoi', () => {
   it('roleDe : administrateur, gestionnaire, ami (absent = ami), aucun profil = administrateur (appareil sans comptes)', () => {
-    expect(roleDe(admin)).toBe('admin');
+    expect(roleDe(admin)).toBe('fondateur');
     expect(roleDe(gest)).toBe('gestionnaire');
     expect(roleDe(ami)).toBe('ami');
     expect(roleDe({ admin: false })).toBe('ami');
-    expect(roleDe(undefined)).toBe('admin');
-    // Un champ « role » retouché sur l'administrateur n'y change rien.
-    expect(roleDe({ admin: true, role: 'ami' })).toBe('admin');
+    expect(roleDe(undefined)).toBe('fondateur');
+    // Un champ « role » retouché sur le compte historique n'y change rien : il reste Fondateur.
+    expect(roleDe({ admin: true, role: 'ami' })).toBe('fondateur');
   });
 
   it('un simple ami échoue sur TOUTES les actions', () => {
@@ -224,5 +225,95 @@ describe('journal : les actions d’un gestionnaire portent son nom', () => {
     expect(j[0].type).toBe('role');
     const secret = lireEvenement({ date: '2026-09-29T10:00:00Z', type: 'compte', action: 'x', acteur: 'abcde-FGHJK-23456-mnpqr' });
     expect(secret?.acteur).toBe('[masqué]');
+  });
+});
+
+describe('rangs : Fondateur > Administrateur > Gestionnaire > Ami', () => {
+  const fond2: Profil = { id: 'eve0000009', nom: 'Ève', admin: false, creeLe: '', apps: [], actif: true, role: 'fondateur' };
+  const adm: Profil = { id: 'ada0000007', nom: 'Ada', admin: false, creeLe: '', apps: [], actif: true, role: 'administrateur' };
+  const adm2: Profil = { id: 'bob0000008', nom: 'Bob', admin: false, creeLe: '', apps: [], actif: true, role: 'administrateur' };
+  const tous = [admin, fond2, adm, adm2, gest, ami, zoe];
+  const SUR_CIBLE: ActionAdmin[] = ['voir-compte', 'permissions-ami', 'etat-ami', 'invitation-ami', 'regenerer-identifiants', 'renommer-ami', 'supprimer-ami', 'code-site', 'changer-rang', 'acces-sequestre', 'ouvrir-compte'];
+
+  it('ordre et libellés', () => {
+    expect(RANGS).toEqual(['fondateur', 'administrateur', 'gestionnaire', 'ami']);
+    expect([admin, fond2, adm, gest, ami].map(p => rangDe(p))).toEqual(['fondateur', 'fondateur', 'administrateur', 'gestionnaire', 'ami']);
+    expect(LIBELLES_RANG.administrateur).toBe('Administrateur');
+  });
+
+  it('un Administrateur échoue sur un Fondateur (historique ou non) et sur un autre Administrateur, pour TOUTE action visant un compte', () => {
+    for (const action of SUR_CIBLE) {
+      for (const cible of [admin, fond2, adm2, adm]) {
+        expect(autorise(adm, action, cible).ok).toBe(false);
+        expect(() => exiger(adm, action, cible)).toThrow(ErreurPermission);
+      }
+    }
+    expect(autorise(adm, 'ouvrir-compte', admin).motif).toMatch(/Fondateur/);
+    expect(autorise(adm, 'ouvrir-compte', adm2).motif).toMatch(/autre administrateur/);
+  });
+
+  it('un Administrateur agit sur les Gestionnaires et les Amis (séquestre compris), sauf renommer, apps globales et code du site', () => {
+    for (const action of ['voir-compte', 'permissions-ami', 'etat-ami', 'invitation-ami', 'regenerer-identifiants', 'supprimer-ami', 'changer-rang', 'acces-sequestre', 'ouvrir-compte'] as const) {
+      expect(autorise(adm, action, ami).ok).toBe(true);
+      expect(autorise(adm, action, gest).ok).toBe(true);
+    }
+    for (const action of ['renommer-ami', 'code-site'] as const) expect(autorise(adm, action, ami).ok).toBe(false);
+    expect(autorise(adm, 'politique-apps').ok).toBe(false);
+    expect(() => changerPolitiquePar(adm, tous, politiqueVide())).toThrow(ErreurPermission);
+  });
+
+  it('« Changer le rang » n’offre que les rangs permis', () => {
+    expect(rangsAttribuables(admin, ami)).toEqual(['fondateur', 'administrateur', 'gestionnaire']);
+    expect(rangsAttribuables(admin, adm)).toEqual(['fondateur', 'gestionnaire', 'ami']);
+    expect(rangsAttribuables(fond2, adm)).toEqual(['fondateur', 'gestionnaire', 'ami']);
+    expect(rangsAttribuables(adm, ami)).toEqual(['gestionnaire']);
+    expect(rangsAttribuables(adm, gest)).toEqual(['ami']);
+    // Personne ne change le rang d'un Fondateur ni d'un égal.
+    expect(rangsAttribuables(admin, fond2)).toEqual([]);
+    expect(rangsAttribuables(adm, adm2)).toEqual([]);
+    expect(rangsAttribuables(gest, zoe)).toEqual([]);
+    expect(rangsAttribuables(ami, zoe)).toEqual([]);
+    // Et la logique le revérifie.
+    expect(() => definirRangPar(adm, tous, ami.id, 'administrateur')).toThrow(/Seul un Fondateur/);
+    expect(() => definirRangPar(adm, tous, ami.id, 'fondateur')).toThrow(/Seul un Fondateur/);
+    expect(() => definirRangPar(adm, tous, adm2.id, 'ami')).toThrow(ErreurPermission);
+    expect(() => definirRangPar(adm, tous, fond2.id, 'ami')).toThrow(ErreurPermission);
+    expect(() => definirRangPar(gest, tous, zoe.id, 'gestionnaire')).toThrow(ErreurPermission);
+    expect(rangDe(definirRangPar(admin, tous, ami.id, 'administrateur').find(p => p.id === ami.id))).toBe('administrateur');
+    expect(rangDe(definirRangPar(adm, tous, ami.id, 'gestionnaire').find(p => p.id === ami.id))).toBe('gestionnaire');
+    expect(rangDe(definirRangPar(admin, tous, adm.id, 'ami').find(p => p.id === adm.id))).toBe('ami');
+  });
+
+  it('un Gestionnaire et un Ami échouent là où ils doivent', () => {
+    for (const action of SUR_CIBLE) {
+      for (const cible of [admin, fond2, adm, gest2]) expect(autorise(gest, action, cible).ok).toBe(false);
+      for (const cible of [admin, adm, gest, zoe]) expect(autorise(ami, action, cible).ok).toBe(false);
+    }
+    for (const action of ['acces-sequestre', 'ouvrir-compte', 'code-site', 'changer-rang', 'supprimer-ami'] as const) expect(autorise(gest, action, zoe).ok).toBe(false);
+  });
+
+  it('le compte historique reste Fondateur ; il reste toujours au moins un Fondateur', () => {
+    expect(() => definirRang(tous, 'principal', 'ami')).toThrow(/historique/);
+    expect(nombreFondateurs(tous)).toBe(2);
+    expect(nombreFondateurs([admin])).toBe(1);
+  });
+
+  it('transparence selon le rang', () => {
+    expect(texteTransparence('ami')).toBe('Les administrateurs et fondateurs peuvent accéder à ton compte.');
+    expect(texteTransparence('gestionnaire')).toBe('Les administrateurs et fondateurs peuvent accéder à ton compte.');
+    expect(texteTransparence('administrateur')).toBe('Les fondateurs peuvent accéder à ton compte.');
+    expect(texteTransparence('fondateur')).toBeUndefined();
+  });
+
+  it('la liste se filtre par rang, du plus haut au plus bas', () => {
+    expect(filtrerComptes(tous, { role: 'administrateur' }, apps, T).map(p => p.id)).toEqual(['ada0000007', 'bob0000008']);
+    expect(filtrerComptes(tous, { role: 'fondateur' }, apps, T).map(p => p.id)).toEqual(['principal', 'eve0000009']);
+    expect(filtrerComptes(tous, { tri: 'nom' }, apps, T).map(p => rangDe(p))).toEqual(['fondateur', 'fondateur', 'administrateur', 'administrateur', 'gestionnaire', 'ami', 'ami']);
+  });
+
+  it('un Administrateur ouvre l’Administration ; un ami non', () => {
+    const administration = REGISTRE.find(a => a.id === 'administration')!;
+    expect(peutOuvrir(administration, adm)).toBe(true);
+    expect(peutOuvrir(administration, fond2)).toBe(true);
   });
 });

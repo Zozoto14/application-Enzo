@@ -263,8 +263,10 @@ function rangConfirme(annuaire: Annuaire, registre: Registre, id: string): Rang 
 export interface ResultatEtapes {
   annuaire: Annuaire;
   modifie: boolean;
-  /** Titulaires dont la paire n'a pas encore pu être créée ou confirmée (ou re-scellement en attente). */
+  /** Titulaires dont la paire n'a pas encore pu être créée ou confirmée, ou pour qui un re-scellement attend. */
   enAttente: string[];
+  /** Titulaires dont la paire n'a pas encore pu être créée ou confirmée. */
+  pairesEnAttente: string[];
   registre?: Registre;
 }
 
@@ -285,7 +287,7 @@ export function etapesFondateur(
   alea: SourceAleatoire = aleatoireParDefaut,
   maintenantIso = new Date().toISOString(),
 ): ResultatEtapes {
-  const inchange: ResultatEtapes = { annuaire: source, modifie: false, enAttente: [] };
+  const inchange: ResultatEtapes = { annuaire: source, modifie: false, enAttente: [], pairesEnAttente: [] };
   if (source.heritage || source.restreint) return inchange;
   const a = cloner(source);
   let modifie = false;
@@ -336,6 +338,7 @@ export function etapesFondateur(
       }
     };
     const enAttente: string[] = [];
+    const pairesEnAttente: string[] = [];
 
     // 2. Paires des titulaires : le registre fait foi pour le rang ; la clé est confirmée en ouvrant le compte.
     for (const [id, rec] of Object.entries({ ...registre })) {
@@ -355,6 +358,7 @@ export function etapesFondateur(
       const cle = ouvrir(e);
       if (!cle) {
         enAttente.push(id);
+        pairesEnAttente.push(id);
         continue;
       }
       const clesE = clesDepuisCle(cle, id);
@@ -449,7 +453,7 @@ export function etapesFondateur(
       }
     }
     void maintenantIso;
-    return { annuaire: modifie ? a : source, modifie, enAttente, registre };
+    return { annuaire: modifie ? a : source, modifie, enAttente, pairesEnAttente, registre };
   } finally {
     privee.fill(0);
     commune?.fill(0);
@@ -801,7 +805,7 @@ export function changerRang(
     commune.fill(0);
   }
   const etapes = etapesFondateur(a, acteur, cles, alea, maintenantIso);
-  return { annuaire: etapes.annuaire, enAttente: titulaires(rang) && etapes.enAttente.includes(cible) };
+  return { annuaire: etapes.annuaire, enAttente: titulaires(rang) && etapes.pairesEnAttente.includes(cible) };
 }
 
 // --- Gestion des comptes par un titulaire autre que le compte historique ------------------

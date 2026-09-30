@@ -983,7 +983,7 @@ function exigerGestionnaire(annuaire: Annuaire, gestionnaireId: string, rangs: r
     throw new ErreurAnnuaire('Annuaire à migrer : l’administrateur doit d’abord ouvrir son compte.');
   }
   if (!rangs.includes(roleDuCompte(annuaire, gestionnaireId) ?? 'ami')) {
-    throw new ErreurAnnuaire(rangs.length === 1 ? 'Ce compte n’est pas gestionnaire.' : 'Ce compte n’a pas ce rang.');
+    throw new ErreurAnnuaire(rangs.length === 1 ? 'Ce compte n’est pas gestionnaire.' : 'Ce compte n’est pas gestionnaire (ni Administrateur, ni Fondateur).');
   }
 }
 

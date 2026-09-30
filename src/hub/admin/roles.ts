@@ -226,17 +226,20 @@ export function exiger(acteur: Acteur | undefined, action: ActionAdmin, cible?: 
  * Ami ; personne d'autre. La cible doit être strictement inférieure.
  */
 export function rangsAttribuables(acteur: Acteur | undefined, cible: Cible | undefined): Rang[] {
+  return rangsPermis(acteur, cible).filter(r => !cible || r !== rangDe(cible));
+}
+
+/** Comme `rangsAttribuables`, rang actuel compris (redonner le même rang ne change rien). */
+function rangsPermis(acteur: Acteur | undefined, cible: Cible | undefined): Rang[] {
   if (!acteur || !cible || !autorise(acteur, 'changer-rang', cible).ok) {
     return [];
   }
-  const permis: Rang[] =
-    rangDe(acteur) === 'fondateur' ? ['fondateur', 'administrateur', 'gestionnaire', 'ami'] : rangDe(acteur) === 'administrateur' ? ['gestionnaire', 'ami'] : [];
-  return permis.filter(r => r !== rangDe(cible));
+  return rangDe(acteur) === 'fondateur' ? ['fondateur', 'administrateur', 'gestionnaire', 'ami'] : rangDe(acteur) === 'administrateur' ? ['gestionnaire', 'ami'] : [];
 }
 
 export function exigerRang(acteur: Acteur | undefined, cible: Cible | undefined, rang: Rang): void {
   exiger(acteur, 'changer-rang', cible);
-  if (!rangsAttribuables(acteur, cible).includes(rang)) {
+  if (!rangsPermis(acteur, cible).includes(rang)) {
     throw new ErreurPermission(
       rang === 'fondateur' || rang === 'administrateur' ? `Seul un Fondateur nomme un ${LIBELLES_RANG[rang]}.` : 'Ce rang ne peut pas être attribué ici.',
     );
