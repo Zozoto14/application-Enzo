@@ -7,7 +7,7 @@
  */
 
 import { DepotBibliotheque, type Stockage } from '../moteur/bibliotheque';
-import { creerCatalogue, type Catalogue } from '../moteur/catalogue';
+import { creerCatalogue, type Catalogue, type OptionsCatalogue } from '../moteur/catalogue';
 import { echec } from '../moteur/erreurs';
 import { creerClient, type ClientSur } from '../moteur/reseau';
 import type { ContexteResolution } from '../moteur/resolution';
@@ -42,9 +42,11 @@ export interface OptionsServices {
   stockage: Stockage;
   estAdmin: boolean;
   journal?: (message: string) => void;
+  /** Réglages fins du catalogue (horloge, attente) : tests. */
+  catalogue?: Partial<OptionsCatalogue>;
 }
 
-export function creerServices({ choix, stockage, estAdmin, journal }: OptionsServices): ServicesTsuzuku {
+export function creerServices({ choix, stockage, estAdmin, journal, catalogue }: OptionsServices): ServicesTsuzuku {
   const client = creerClient(choix.reseau);
   const reglages = async () => lireReglages(await stockage.lire(CLES.reglages));
   return {
@@ -54,7 +56,7 @@ export function creerServices({ choix, stockage, estAdmin, journal }: OptionsSer
     stockage,
     client,
     ctx: { client, journal },
-    catalogue: creerCatalogue({ client, cleTmdb: async () => (await reglages()).cleTmdb || null, journal }),
+    catalogue: creerCatalogue({ client, cleTmdb: async () => (await reglages()).cleTmdb || null, journal, ...catalogue }),
     depot: new DepotBibliotheque(stockage, CLES.bibliotheque),
     reglages,
     enregistrerReglages: r => stockage.ecrire(CLES.reglages, ecrireReglages(r)),

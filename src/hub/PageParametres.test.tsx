@@ -17,9 +17,9 @@ function page(props: Partial<React.ComponentProps<typeof PageParametres>> = {}) 
 }
 
 describe('page Paramètres', () => {
-  it('montre les sept sections et ouvre la première, Général', async () => {
+  it('montre les huit sections et ouvre la première, Général', async () => {
     await render(page());
-    for (const id of ['general', 'synchro', 'securite', 'portefeuille', 'administration', 'nouveautes', 'apropos']) {
+    for (const id of ['general', 'synchro', 'securite', 'portefeuille', 'administration', 'tsuzuku', 'nouveautes', 'apropos']) {
       expect(screen.getByTestId(`parametres-section-${id}`)).toBeTruthy();
     }
     expect(screen.getByTestId('parametres-section-general').props.accessibilityState.selected).toBe(true);

@@ -25,7 +25,7 @@ describe('registre', () => {
 
 describe('permissions', () => {
   it('l’administrateur voit tout ; sans profil (appareil seul) aussi', () => {
-    expect(appsVisibles(REGISTRE, { profil: admin, profils: controle }).map(a => a.id)).toEqual([ID_PORTEFEUILLE, ID_ADMINISTRATION]);
+    expect(appsVisibles(REGISTRE, { profil: admin, profils: controle }).map(a => a.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku', ID_ADMINISTRATION]);
     expect(peutOuvrir(factice('a'), undefined)).toBe(true);
   });
 
@@ -33,11 +33,14 @@ describe('permissions', () => {
     const contexte = { profil: ami([ID_PORTEFEUILLE, ID_ADMINISTRATION]), profils: controle };
     expect(appsVisibles(REGISTRE, contexte).map(a => a.id)).toEqual([ID_PORTEFEUILLE]);
     expect(appsVisibles(REGISTRE, { profil: ami([]), profils: controle })).toEqual([]);
+    // Tsuzuku : la tuile n'apparaît que si l'administrateur l'a ouverte à l'ami.
+    expect(appsVisibles(REGISTRE, { profil: ami(['tsuzuku']), profils: controle }).map(a => a.id)).toEqual(['tsuzuku']);
+    expect(appsVisibles(REGISTRE, { profil: ami([ID_PORTEFEUILLE]), profils: controle }).map(a => a.id)).not.toContain('tsuzuku');
   });
 
   it('respecte « disponible » et attribue seulement les apps non réservées', () => {
-    expect(appsVisibles(REGISTRE, { profil: admin }).map(a => a.id)).toEqual([ID_PORTEFEUILLE]);
-    expect(appsAttribuables(REGISTRE).map(a => a.id)).toEqual([ID_PORTEFEUILLE]);
+    expect(appsVisibles(REGISTRE, { profil: admin }).map(a => a.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku']);
+    expect(appsAttribuables(REGISTRE).map(a => a.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku']);
   });
 
   it('compte les utilisateurs actifs et bascule une autorisation', () => {
