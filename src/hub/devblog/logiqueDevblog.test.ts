@@ -2,8 +2,8 @@ import { decider, etapesVisite, fonctionnalitesPour, lireEtat, marquerLues } fro
 import { ENTREES, type EntreeDevblog } from './entrees';
 
 const v2: EntreeDevblog = {
-  version: '2026.10.02',
-  date: '2026-10-02',
+  version: '2026.10.09',
+  date: '2026-10-09',
   titre: 'Suivante',
   resume: 'r',
   illustration: 'hub',
@@ -67,9 +67,13 @@ describe('devblog', () => {
     expect(ids(true, false)).not.toContain('tu-es-gestionnaire');
     // Un simple ami voit l'information générale, pas « tu es gestionnaire ».
     expect(decider(undefined, { profilNeuf: false, admin: false }, [entree]).genre).toBe('afficher');
-    // La synchronisation (dernière entrée) est réservée à l'administrateur : rien pour un ami.
-    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('rien');
-    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.01', '2026.09.30', '2026.09.29']);
+    // La synchronisation est réservée à l'administrateur : rien pour un ami.
+    const synchro = ENTREES.find(e => e.version === '2026.10.01')!;
+    expect(decider(undefined, { profilNeuf: false, admin: false }, [synchro]).genre).toBe('rien');
+    // « Paramètres réunis et thème unique » (dernière entrée) concerne tout le monde.
+    expect(ENTREES[0].titre).toBe('Paramètres réunis et thème unique');
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('afficher');
+    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
   });
 
   it('marquer lu est idempotent et tolère un état corrompu', () => {

@@ -31,13 +31,15 @@ export interface PageParametresProps {
   rendu(id: IdReglage): React.ReactNode;
   /** État de la synchronisation, en pastille dans l'en-tête ; un clic ouvre la section Synchronisation. */
   synchro?: SynchroHub;
+  /** Faux quand une fenêtre (le devblog) est ouverte par-dessus : elle garde Échap pour elle. */
+  actif?: boolean;
   onFermer(): void;
 }
 
 type EtatPresse = { pressed: boolean; hovered?: boolean; focused?: boolean };
 type ToucheReact = { key: string; preventDefault?(): void };
 
-export function PageParametres({ theme, section, n, disponibles, rendu, synchro, onFermer }: PageParametresProps) {
+export function PageParametres({ theme, section, n, disponibles, rendu, synchro, actif = true, onFermer }: PageParametresProps) {
   const { width } = useWindowDimensions();
   const large = width >= 760;
   const sections = useMemo(() => sectionsVisibles(disponibles), [disponibles]);
@@ -59,16 +61,18 @@ export function PageParametres({ theme, section, n, disponibles, rendu, synchro,
 
   useEffect(
     () =>
-      ecouterTouche('Escape', () => {
-        if (requeteRef.current) {
-          setRequete('');
-        } else {
-          onFermer();
-        }
-      }),
-    [onFermer],
+      actif
+        ? ecouterTouche('Escape', () => {
+            if (requeteRef.current) {
+              setRequete('');
+            } else {
+              onFermer();
+            }
+          })
+        : undefined,
+    [onFermer, actif],
   );
-  useEffect(() => ecouterTouche('/', () => recherche.current?.focus?.(), { ignorerChamps: true }), []);
+  useEffect(() => (actif ? ecouterTouche('/', () => recherche.current?.focus?.(), { ignorerChamps: true }) : undefined), [actif]);
 
   const enRecherche = requete.trim().length > 0;
   const resultats = useMemo(() => (enRecherche ? rechercher(requete, disponibles) : []), [enRecherche, requete, disponibles]);

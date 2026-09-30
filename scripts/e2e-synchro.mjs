@@ -183,12 +183,15 @@ try {
   const cellulesApres = await A.locator('[data-testid^="cellule-"]').evaluateAll(n => n.map(e => e.getAttribute('data-testid')));
   verifier(JSON.stringify(cellulesAvant) !== JSON.stringify(cellulesApres), `A : ordre des tuiles changé (${cellulesAvant.join(',')} → ${cellulesApres.join(',')})`);
   await A.getByTestId('hub-parametres-ouvrir').click();
+  await A.getByTestId('parametres-section-nouveautes').click();
   await A.getByTestId('parametres-nouveautes').click();
   await A.getByText(/Synchronisation complète/).first().waitFor({ timeout: 10_000 });
   await A.screenshot({ path: join(CAPTURES, '03-A-devblog.png') });
   await A.keyboard.press('Escape');
   await A.getByText(/Terminé|Fermer|J’ai compris|Compris/).first().click({ timeout: 3000 }).catch(() => undefined);
   await pause(500);
+  // Le devblog s'ouvre par-dessus la page Paramètres : on revient au hub.
+  await A.getByTestId('hub-parametres-fermer').click().catch(() => undefined);
 
   // ----- B reçoit sans aucune action (retour au premier plan)
   log('B : retour au premier plan, attente de la réception automatique');
@@ -231,6 +234,7 @@ try {
   const libHors = await libelleSynchro(A);
   verifier(/en attente \(hors ligne\)/.test(libHors), `A hors ligne : « ${libHors} »`);
   await A.screenshot({ path: join(CAPTURES, '05-A-hors-ligne-en-attente.png') });
+  await A.getByTestId('parametres-section-synchro').click();
   await A.getByTestId('synchro-maintenant').scrollIntoViewIfNeeded();
   await A.screenshot({ path: join(CAPTURES, '05b-A-parametres-synchronisation.png') });
   const putsAvant = compteurs.put;

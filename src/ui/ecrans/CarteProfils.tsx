@@ -6,7 +6,7 @@
 
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
+import { Alerte, Bouton, Champ, SousTitre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON } from '../theme';
 import type { OptionsNouveauProfil, Profil } from '../../profils/profils';
 import type { PolitiqueHub } from '../../hub/admin/politique';

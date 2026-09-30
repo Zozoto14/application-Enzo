@@ -6,9 +6,8 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { BoutonHub } from './Hub';
-import { IndicateurSynchro, type SynchroHub } from './IndicateurSynchro';
 import {
   libelleBouton,
   messageEtat,
@@ -19,8 +18,7 @@ import {
   type PlateformeMaj,
   type ReponseVerification,
 } from './miseAJour';
-import { definirDensite, definirDisposition, reinitialiser, sontParDefaut, type PrefsHub } from './personnalisation';
-import { THEMES_HUB, police, teinteTransparente, type IdThemeHub, type ThemeHub } from './themes';
+import { police, type ThemeHub } from './themes';
 import { versionApp } from './version';
 import { ecouterTouche, rechargerApp, surLeWeb } from './web';
 

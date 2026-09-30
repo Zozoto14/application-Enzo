@@ -2441,6 +2441,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             disponibles={disponiblesParametres}
             rendu={renduParametres}
             synchro={synchroHub}
+            actif={!devblog}
             onFermer={fermerParametres}
           />
         </GardeErreur>
@@ -2935,6 +2936,21 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         />
         )}
       </Coque>
+      {devblog && deverrouille ? (
+        <Devblog
+          theme={themeDuHub}
+          admin={estAdmin}
+          gestionnaire={estGestionnaire}
+          entree={devblog.entree}
+          onFermer={fermerDevblog}
+          onEssayer={essayer}
+          onVisite={entree => {
+            fermerDevblog();
+            setEtapesVisite(etapesDevblog(entree, estAdmin, estGestionnaire));
+          }}
+          disponible={cible => cible.genre !== 'app' || appsVisibles(REGISTRE, contexteHub).some(app => app.id === cible.app)}
+        />
+      ) : null}
       </SafeAreaView>
     </SafeAreaProvider>
   );

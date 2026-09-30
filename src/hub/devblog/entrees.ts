@@ -41,6 +41,47 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.02',
+    date: '2026-10-02',
+    titre: 'Paramètres réunis et thème unique',
+    resume:
+      'Tous les réglages sont dans une seule page Paramètres, et un seul thème habille le hub, le portefeuille et l’administration. Au lancement, tout est déjà à sa place.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'parametres-unique',
+        emoji: '⚙︎',
+        titre: 'Une seule page Paramètres',
+        texte:
+          'Général, Synchronisation, Sécurité, Portefeuille, Administration, Nouveautés, À propos : chaque réglage a sa place, avec une recherche pour le retrouver (touche « / »). Le bouton Paramètres est le même dans le hub, le portefeuille et l’administration.',
+        essayer: { genre: 'parametres' },
+      },
+      {
+        id: 'theme-unique',
+        emoji: '🎨',
+        titre: 'Un thème pour toutes les pages',
+        texte:
+          'Le thème du hub s’applique aussi au portefeuille et à l’administration, et suit d’un appareil à l’autre. Le portefeuille garde son identité par sa couleur d’accent.',
+        essayer: { genre: 'parametres' },
+      },
+      {
+        id: 'demarrage-instantane',
+        emoji: '⚡',
+        titre: 'Thème appliqué dès le lancement',
+        texte:
+          'L’écran de connexion est déjà à votre thème, et la synchronisation démarre dès le déverrouillage : plus d’écran qui change de couleur quelques instants après l’ouverture.',
+      },
+      {
+        id: 'synchro-partout',
+        emoji: '✓',
+        titre: 'Synchronisation visible partout',
+        texte:
+          'La pastille « À jour · il y a 2 min » est aussi dans le portefeuille et l’administration ; un clic ouvre Paramètres › Synchronisation.',
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.01',
     date: '2026-10-01',
     titre: 'Synchronisation complète',
