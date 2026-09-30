@@ -55,6 +55,8 @@ export interface HubProps {
   onChangerProfil?(): void;
   /** Ouvre la page Paramètres (unique, pour tout le hub), sur une section. */
   onParametres?(section?: IdSection): void;
+  /** Ouvre la page Support (ticket vers l'équipe) ; absent : pas de bouton. */
+  onSupport?(): void;
   /** État de la synchronisation PC ↔ site ; absent : pas d'indicateur (compte non relié). */
   synchro?: SynchroHub;
   /**
@@ -79,7 +81,7 @@ const TRANSITION_WEB: object = SUR_LE_WEB
   ? { transitionProperty: 'width, opacity, transform, min-height', transitionDuration: '260ms', transitionTimingFunction: 'ease' }
   : {};
 
-export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, onParametres, synchro, demande, heure }: HubProps) {
+export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, onParametres, onSupport, synchro, demande, heure }: HubProps) {
   const { width } = useWindowDimensions();
   const [menuOuvert, setMenuOuvert] = useState(false);
   const maj = useMiseAJour();
@@ -174,6 +176,18 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
                   onParametres?.();
                 }}
               />
+              {onSupport ? (
+                <BoutonHub
+                  theme={theme}
+                  titre={width >= 520 ? '? Support' : '?'}
+                  testID="hub-support-ouvrir"
+                  libelle="Support : écrire à l’équipe"
+                  onPress={() => {
+                    setMenuOuvert(false);
+                    onSupport();
+                  }}
+                />
+              ) : null}
               <SelecteurTheme theme={theme} ouvert={menuOuvert} onBasculer={() => setMenuOuvert(o => !o)} onChoisir={id => {
                 setMenuOuvert(false);
                 onTheme(id);

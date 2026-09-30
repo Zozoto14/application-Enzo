@@ -16,6 +16,11 @@
  * n'ouvre que l'espace de son compte (`/p/<id>/…`, voir « Portées » plus bas
  * et docs/synchro-relais.md). Sans jeton valable, personne ne peut remplir la
  * boîte ni se servir du relais comme d'un proxy.
+ *
+ * Une troisième route, `POST /support`, relaie un ticket d'assistance vers un
+ * salon Discord (voir « Support » plus bas et docs/support-discord.md). L'adresse
+ * du webhook est un SECRET du Worker (`DISCORD_WEBHOOK_URL`) : elle ne figure ni
+ * dans le code, ni dans l'application, ni dans les données synchronisées.
  */
 
 import {
@@ -25,7 +30,7 @@ import {
   yahooScreener,
 } from '../bureau/electron/reseau.mjs';
 
-export const VERSION_RELAIS = 3;
+export const VERSION_RELAIS = 4;
 /** Une enveloppe chiffrée : quelques centaines de Kio en pratique. */
 const TAILLE_MAX_ENVELOPPE = 20 * 1024 * 1024;
 const IDENTIFIANT_APPAREIL = /^[a-z0-9]{4,32}$/;
@@ -356,6 +361,223 @@ async function rangs(requete, env) {
   return erreur('Méthode non autorisée.', 405);
 }
 
+
+// ------------------------------------------------------------ Support (tickets → Discord)
+//
+// `POST /support` (jeton maître OU jeton de profil) : valide le ticket, applique
+// une limite de débit par profil, puis le poste sur le webhook Discord dont
+// l'adresse est le secret `env.DISCORD_WEBHOOK_URL` (`wrangler secret put`).
+// Rien n'est conservé par le relais : ni le ticket, ni la pièce jointe ; la
+// réception se fait dans Discord. Aucune réponse ne révèle l'adresse du webhook.
+
+const CATEGORIES_SUPPORT = { bug: 'Bug', question: 'Question', demande: 'Demande', autre: 'Autre' };
+const COULEURS_SUPPORT = { bug: 0xd64545, question: 0x3b82f6, demande: 0x22a06b, autre: 0x8b8b9a };
+const TAILLE_MAX_TICKET = 6 * 1024 * 1024;
+const TAILLE_MAX_PIECE = 4 * 1024 * 1024;
+const LIMITE_TICKETS = 5;
+const FENETRE_LIMITE_MS = 3_600_000;
+const MOTIF_WEBHOOK = /^https:\/\/(?:(?:canary|ptb)\.)?discord(?:app)?\.com\/api\/webhooks\/\d{5,25}\/[A-Za-z0-9_-]{10,200}$/;
+const TYPES_PIECE = {
+  'image/png': [0x89, 0x50, 0x4e, 0x47],
+  'image/jpeg': [0xff, 0xd8, 0xff],
+  'image/gif': [0x47, 0x49, 0x46, 0x38],
+  'image/webp': [0x52, 0x49, 0x46, 0x46],
+};
+const EXTENSIONS_PIECE = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
+const limitesMemoire = new Map();
+
+/** Texte de ticket : sans caractères de contrôle, mentions neutralisées, tronqué. */
+export function nettoyerTexteDiscord(valeur, max) {
+  let texte = String(valeur ?? '')
+    .normalize('NFC')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f‪-‮⁦-⁩]/g, '')
+    .replace(/\r\n?/g, '\n')
+    // @everyone, @here, <@id>, <@&role>, <#salon> : rendus inoffensifs en plus de allowed_mentions.
+    .replace(/@(everyone|here)/gi, '@​$1')
+    .replace(/<(@[!&]?|#)(\d+)>/g, '<​$1$2>');
+  if (texte.length > max) {
+    texte = `${texte.slice(0, max - 1)}…`;
+  }
+  return texte;
+}
+
+function versOctets(base64) {
+  try {
+    const binaire = atob(base64);
+    const octets = new Uint8Array(binaire.length);
+    for (let i = 0; i < binaire.length; i++) octets[i] = binaire.charCodeAt(i);
+    return octets;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Ticket reçu, validé ; `{ refus }` sinon. */
+export function validerTicket(corps) {
+  if (!corps || typeof corps !== 'object' || Array.isArray(corps)) {
+    return { refus: erreur('Ticket illisible.', 400) };
+  }
+  if (!Object.hasOwn(CATEGORIES_SUPPORT, corps.categorie)) {
+    return { refus: erreur('Catégorie inconnue.', 400) };
+  }
+  const sujet = nettoyerTexteDiscord(typeof corps.sujet === 'string' ? corps.sujet : '', 100).replace(/\n+/g, ' ').trim();
+  const message = nettoyerTexteDiscord(typeof corps.message === 'string' ? corps.message : '', 2000).trim();
+  if (sujet.length < 3) return { refus: erreur('Le sujet est trop court (3 caractères au moins).', 400) };
+  if (message.length < 10) return { refus: erreur('Le message est trop court (10 caractères au moins).', 400) };
+  const numero = Number.isInteger(corps.numero) && corps.numero > 0 && corps.numero < 1_000_000 ? corps.numero : undefined;
+
+  let technique;
+  if (corps.technique !== undefined) {
+    const t = corps.technique;
+    if (!t || typeof t !== 'object' || Array.isArray(t)) return { refus: erreur('Informations techniques invalides.', 400) };
+    technique = {};
+    // Liste fermée de champs : un secret glissé dans un autre champ n'est jamais relayé.
+    for (const [cle, max] of [['version', 40], ['plateforme', 40], ['rang', 30], ['compte', 12]]) {
+      if (typeof t[cle] === 'string' && t[cle]) technique[cle] = nettoyerTexteDiscord(t[cle], max).replace(/\n+/g, ' ');
+    }
+  }
+
+  let piece;
+  if (corps.piece !== undefined) {
+    const p = corps.piece;
+    if (!p || typeof p !== 'object' || typeof p.donnees !== 'string' || !Object.hasOwn(TYPES_PIECE, p.type)) {
+      return { refus: erreur('Pièce jointe refusée : une image PNG, JPEG, GIF ou WebP est attendue.', 400) };
+    }
+    if (p.donnees.length > Math.ceil((TAILLE_MAX_PIECE * 4) / 3) + 8) {
+      return { refus: erreur('Pièce jointe trop volumineuse (4 Mo au plus).', 413) };
+    }
+    const octets = versOctets(p.donnees);
+    if (!octets || octets.length === 0 || octets.length > TAILLE_MAX_PIECE) {
+      return { refus: erreur('Pièce jointe illisible ou trop volumineuse (4 Mo au plus).', 400) };
+    }
+    if (!TYPES_PIECE[p.type].every((valeur, i) => octets[i] === valeur)) {
+      return { refus: erreur('Le contenu de la pièce jointe ne correspond pas à son type.', 400) };
+    }
+    const base = String(p.nom ?? 'capture').replace(/\.[^.]*$/, '').replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'capture';
+    piece = { octets, type: p.type, nom: `${base}.${EXTENSIONS_PIECE[p.type]}` };
+  }
+  return { ticket: { categorie: corps.categorie, sujet, message, numero, technique, piece } };
+}
+
+/** Limite de débit : `LIMITE_TICKETS` par heure et par profil (KV si la boîte existe, sinon mémoire du Worker). */
+async function limiterSupport(env, qui) {
+  const maintenant = Date.now();
+  const cle = `support:limite:${qui}`;
+  let dates = [];
+  if (env.BOITE) {
+    try {
+      const lu = JSON.parse((await env.BOITE.get(cle)) ?? '[]');
+      if (Array.isArray(lu)) dates = lu.filter(d => Number.isFinite(d));
+    } catch {
+      dates = [];
+    }
+  } else {
+    dates = limitesMemoire.get(cle) ?? [];
+  }
+  dates = dates.filter(d => maintenant - d < FENETRE_LIMITE_MS);
+  if (dates.length >= LIMITE_TICKETS) {
+    return { ok: false, attenteS: Math.max(1, Math.ceil((dates[0] + FENETRE_LIMITE_MS - maintenant) / 1000)) };
+  }
+  return {
+    ok: true,
+    enregistrer: async () => {
+      const suivantes = [...dates, maintenant];
+      if (env.BOITE) {
+        await env.BOITE.put(cle, JSON.stringify(suivantes), { expirationTtl: 3700 });
+      } else {
+        limitesMemoire.set(cle, suivantes);
+      }
+    },
+  };
+}
+
+function messageDiscord(ticket) {
+  const titre = `${ticket.numero ? `#${ticket.numero} · ` : ''}${CATEGORIES_SUPPORT[ticket.categorie]} · ${ticket.sujet}`;
+  const champs = [];
+  if (ticket.technique) {
+    const libelles = { version: 'Version', plateforme: 'Plateforme', rang: 'Rang', compte: 'Compte' };
+    for (const [cle, libelle] of Object.entries(libelles)) {
+      if (ticket.technique[cle]) champs.push({ name: libelle, value: ticket.technique[cle], inline: true });
+    }
+  }
+  const embed = {
+    title: nettoyerTexteDiscord(titre, 256),
+    description: ticket.message,
+    color: COULEURS_SUPPORT[ticket.categorie],
+    timestamp: new Date().toISOString(),
+    footer: { text: ticket.technique ? 'Informations techniques jointes' : 'Sans informations techniques' },
+    ...(champs.length > 0 ? { fields: champs } : {}),
+    ...(ticket.piece ? { image: { url: `attachment://${ticket.piece.nom}` } } : {}),
+  };
+  return {
+    username: 'AppDashboard Support',
+    // Aucune mention ne notifie qui que ce soit, quoi que contienne le ticket.
+    allowed_mentions: { parse: [] },
+    embeds: [embed],
+  };
+}
+
+async function support(requete, env, portee) {
+  if (requete.method !== 'POST') {
+    return erreur('Méthode non autorisée.', 405);
+  }
+  const webhook = env.DISCORD_WEBHOOK_URL;
+  if (typeof webhook !== 'string' || !MOTIF_WEBHOOK.test(webhook.trim())) {
+    // Ni l'adresse, ni ce qui ne va pas avec elle n'est divulgué.
+    return erreur('Le support n’est pas configuré sur le relais.', 503);
+  }
+  const longueur = Number(requete.headers.get('Content-Length') ?? 0);
+  if (longueur > TAILLE_MAX_TICKET) {
+    return erreur('Ticket trop volumineux.', 413);
+  }
+  const texte = await requete.text();
+  if (texte.length > TAILLE_MAX_TICKET) {
+    return erreur('Ticket trop volumineux.', 413);
+  }
+  let corps;
+  try {
+    corps = JSON.parse(texte);
+  } catch {
+    return erreur('Ticket illisible.', 400);
+  }
+  const { refus, ticket } = validerTicket(corps);
+  if (refus) return refus;
+
+  const limite = await limiterSupport(env, portee.maitre ? 'maitre' : portee.profil);
+  if (!limite.ok) {
+    const r = erreur(`Trop de tickets : ${LIMITE_TICKETS} par heure au plus. Réessayez dans ${Math.ceil(limite.attenteS / 60)} min.`, 429);
+    r.headers.set('Retry-After', String(limite.attenteS));
+    return r;
+  }
+
+  const charge = messageDiscord(ticket);
+  let envoi;
+  if (ticket.piece) {
+    const formulaire = new FormData();
+    formulaire.append('payload_json', JSON.stringify({ ...charge, attachments: [{ id: 0, filename: ticket.piece.nom }] }));
+    formulaire.append('files[0]', new Blob([ticket.piece.octets], { type: ticket.piece.type }), ticket.piece.nom);
+    envoi = { method: 'POST', body: formulaire };
+  } else {
+    envoi = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(charge) };
+  }
+  let reponseDiscord;
+  try {
+    reponseDiscord = await fetch(webhook.trim(), envoi);
+  } catch {
+    return erreur('Discord est injoignable pour le moment.', 502);
+  }
+  if (reponseDiscord.status === 429) {
+    return erreur('Discord est occupé : réessayez dans un instant.', 503);
+  }
+  if (!reponseDiscord.ok) {
+    // Le corps de la réponse de Discord n'est jamais renvoyé (il peut citer le webhook).
+    return erreur('Discord a refusé le message.', 502);
+  }
+  await limite.enregistrer();
+  return reponse({ ok: true, ...(ticket.numero ? { numero: ticket.numero } : {}) });
+}
+
 async function passerelle(requete, chemin) {
   if (requete.method !== 'POST') {
     return erreur('Méthode non autorisée.', 405);
@@ -397,6 +619,9 @@ export default {
     const { pathname } = new URL(requete.url);
     if (pathname === '/sante') {
       return reponse({ ok: true, version: VERSION_RELAIS, portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}) });
+    }
+    if (pathname === '/support') {
+      return support(requete, env, portee);
     }
     if (pathname === '/rangs') {
       if (!env.BOITE) {

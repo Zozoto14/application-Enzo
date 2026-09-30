@@ -23,7 +23,7 @@ export function useBarreApp(): React.ReactNode {
   return useContext(BarreAppContexte);
 }
 
-export function BarreApp({ theme, synchro, onParametres }: { theme: ThemeHub; synchro?: SynchroHub; onParametres(section?: IdSection): void }) {
+export function BarreApp({ theme, synchro, onParametres, onSupport }: { theme: ThemeHub; synchro?: SynchroHub; onParametres(section?: IdSection): void; onSupport?(): void }) {
   const { width } = useWindowDimensions();
   return (
     <View style={styles.barre} testID="barre-app">
@@ -35,6 +35,9 @@ export function BarreApp({ theme, synchro, onParametres }: { theme: ThemeHub; sy
         testID="app-parametres-ouvrir"
         onPress={() => onParametres()}
       />
+      {onSupport ? (
+        <BoutonHub theme={theme} titre={width >= 520 ? '? Support' : '?'} libelle="Support : écrire à l’équipe" testID="app-support-ouvrir" onPress={onSupport} />
+      ) : null}
     </View>
   );
 }
