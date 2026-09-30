@@ -30,7 +30,7 @@ export const SECTIONS: readonly SectionParametres[] = [
   { id: 'portefeuille', titre: 'Portefeuille', icone: '▦', description: 'Cours, alertes, podcast, affichage des montants.' },
   { id: 'administration', titre: 'Administration', icone: '🛡', description: 'Panneau, comptes, journal, verrouillage.' },
   { id: 'nouveautes', titre: 'Nouveautés', icone: '✨', description: 'Historique des versions.' },
-  { id: 'apropos', titre: 'À propos et mise à jour', icone: 'ⓘ', description: 'Version, mise à jour.' },
+  { id: 'apropos', titre: 'À propos', icone: 'ⓘ', description: 'Version de l’application et mise à jour.' },
 ];
 
 export type IdReglage =

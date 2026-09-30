@@ -33,7 +33,7 @@ describe('recensement des réglages', () => {
       'Portefeuille',
       'Administration',
       'Nouveautés',
-      'À propos et mise à jour',
+      'À propos',
     ]);
     for (const s of SECTIONS) {
       expect(reglagesDeSection(s.id, TOUS).length).toBeGreaterThan(0);
