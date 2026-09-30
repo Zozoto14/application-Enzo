@@ -187,12 +187,15 @@ try {
   const cellulesApres = await A.locator('[data-testid^="cellule-"]').evaluateAll(n => n.map(e => e.getAttribute('data-testid')));
   verifier(JSON.stringify(cellulesAvant) !== JSON.stringify(cellulesApres), `A : ordre des tuiles changé (${cellulesAvant.join(',')} → ${cellulesApres.join(',')})`);
   await A.getByTestId('hub-parametres-ouvrir').click();
+  await A.getByTestId('parametres-section-nouveautes').click();
   await A.getByTestId('parametres-nouveautes').click();
   await A.getByText(/Synchronisation complète/).first().waitFor({ timeout: 10_000 });
   await A.screenshot({ path: join(CAPTURES, '03-A-devblog.png') });
   await A.keyboard.press('Escape');
   await A.getByText(/Terminé|Fermer|J’ai compris|Compris/).first().click({ timeout: 3000 }).catch(() => undefined);
   await pause(500);
+  // Le devblog s'ouvre par-dessus la page Paramètres : on revient au hub.
+  await A.getByTestId('hub-parametres-fermer').click().catch(() => undefined);
 
   // ----- B reçoit sans aucune action (retour au premier plan)
   log('B : retour au premier plan, attente de la réception automatique');
@@ -235,6 +238,7 @@ try {
   const libHors = await libelleSynchro(A);
   verifier(/en attente \(hors ligne\)/.test(libHors), `A hors ligne : « ${libHors} »`);
   await A.screenshot({ path: join(CAPTURES, '05-A-hors-ligne-en-attente.png') });
+  await A.getByTestId('parametres-section-synchro').click();
   await A.getByTestId('synchro-maintenant').scrollIntoViewIfNeeded();
   await A.screenshot({ path: join(CAPTURES, '05b-A-parametres-synchronisation.png') });
   const putsAvant = compteurs.put;
@@ -255,6 +259,162 @@ try {
     recu2 = (await themeB()) !== fond2;
   }
   verifier(recu2, 'B a reçu le thème « terminal » choisi hors ligne sur A');
+
+  // ----- Un seul thème pour toutes les pages, pastille de synchro partout, démarrage sans flash
+  log('A : thème unique et pastille de synchro dans le portefeuille et l’administration');
+  const rgb = hex => `rgb(${Number.parseInt(hex.slice(1, 3), 16)}, ${Number.parseInt(hex.slice(3, 5), 16)}, ${Number.parseInt(hex.slice(5, 7), 16)})`;
+  // Fond effectif d'un élément : celui de son premier ancêtre non transparent.
+  const fondDe = (page, id) =>
+    page.getByTestId(id).first().evaluate(e => {
+      for (let n = e; n; n = n.parentElement) {
+        const c = getComputedStyle(n).backgroundColor;
+        if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') return c;
+      }
+      return 'transparent';
+    });
+  const TERMINAL = rgb('#0A0A0A');
+  const IVOIRE = rgb('#F6F3EC');
+  await A.getByTestId('hub').waitFor({ timeout: 30_000 });
+  verifier((await fondDe(A, 'hub')) === TERMINAL, 'hub au thème Terminal');
+
+  await A.getByTestId('tuile-portefeuille').click();
+  await A.getByTestId('entete-app').waitFor({ timeout: 30_000 });
+  verifier((await A.locator('[data-testid="entete-app"] [data-testid="synchro-indicateur"]').count()) === 1, 'portefeuille : la pastille de synchro est dans l’en-tête');
+  verifier(/À jour|attente|Synchronisation/.test(await A.locator('[data-testid="entete-app"] [data-testid="synchro-libelle"]').textContent()), 'portefeuille : la pastille dit l’état');
+  verifier((await fondDe(A, 'entete-app')) === TERMINAL, 'portefeuille au thème Terminal (celui du hub)');
+  await A.screenshot({ path: join(CAPTURES, '07-portefeuille-pastille-synchro.png') });
+  await A.locator('[data-testid="entete-app"] [data-testid="synchro-indicateur"]').click();
+  await A.getByTestId('parametres-panneau-synchro').waitFor({ timeout: 10_000 });
+  verifier(true, 'la pastille du portefeuille ouvre Paramètres › Synchronisation');
+  await A.getByTestId('hub-parametres-fermer').click();
+  await A.getByTestId('entete-app').waitFor({ timeout: 10_000 });
+  verifier(true, 'Retour ramène au portefeuille');
+  await A.keyboard.press('Escape');
+  await A.getByTestId('hub').waitFor({ timeout: 10_000 });
+
+  await A.getByTestId('tuile-administration').click();
+  await A.getByTestId('retour-hub').waitFor({ timeout: 30_000 });
+  verifier((await A.getByTestId('synchro-indicateur').count()) === 1 && (await A.getByTestId('app-parametres-ouvrir').count()) === 1, 'administration : pastille de synchro et bouton Paramètres dans la barre');
+  verifier((await fondDe(A, 'app-administration')) === TERMINAL, 'administration au thème Terminal');
+  await A.screenshot({ path: join(CAPTURES, '08-administration-pastille-synchro.png') });
+
+  // Le thème change depuis la page Paramètres et s'applique à toutes les pages.
+  await A.getByTestId('app-parametres-ouvrir').click();
+  await A.getByTestId('parametres-theme-ivoire').click();
+  await pause(300);
+  verifier((await fondDe(A, 'hub-parametres')) === IVOIRE, 'page Paramètres en Ivoire');
+  await A.screenshot({ path: join(CAPTURES, '09-parametres-general-ivoire.png') });
+  await A.getByTestId('hub-parametres-fermer').click();
+  verifier((await fondDe(A, 'app-administration')) === IVOIRE, 'administration passée en Ivoire');
+  await A.keyboard.press('Escape');
+  await A.getByTestId('hub').waitFor({ timeout: 10_000 });
+  verifier((await fondDe(A, 'hub')) === IVOIRE, 'hub passé en Ivoire');
+  await A.getByTestId('tuile-portefeuille').click();
+  await A.getByTestId('entete-app').waitFor({ timeout: 10_000 });
+  verifier((await fondDe(A, 'entete-app')) === IVOIRE, 'portefeuille passé en Ivoire');
+  await A.screenshot({ path: join(CAPTURES, '10-portefeuille-ivoire.png') });
+  await A.keyboard.press('Escape');
+
+  // Chaque section, la recherche, le clavier.
+  log('A : sections, recherche, clavier');
+  await A.getByTestId('hub-parametres-ouvrir').click();
+  for (const id of ['general', 'synchro', 'securite', 'portefeuille', 'administration', 'nouveautes', 'apropos']) {
+    await A.getByTestId(`parametres-section-${id}`).click();
+    await A.getByTestId(`parametres-panneau-${id}`).waitFor({ timeout: 10_000 });
+    await A.screenshot({ path: join(CAPTURES, `11-parametres-${id}.png`) });
+  }
+  verifier(true, 'les sept sections s’ouvrent');
+  await A.getByTestId('parametres-recherche').fill('récupération');
+  await A.getByTestId('parametres-resultats').waitFor({ timeout: 10_000 });
+  const trouves = await A.locator('[data-testid^="reglage-"]').count();
+  verifier(trouves >= 1 && (await A.getByTestId('reglage-codes-recuperation').count()) === 1, `recherche « récupération » : ${trouves} réglage(s), dont les codes de récupération`);
+  await A.screenshot({ path: join(CAPTURES, '12-parametres-recherche.png') });
+  await A.keyboard.press('Escape');
+  await pause(300);
+  verifier((await A.getByTestId('parametres-recherche').inputValue()) === '' && (await A.getByTestId('hub-parametres').count()) === 1, 'Échap efface la recherche sans fermer la page');
+  await A.getByTestId('parametres-section-general').focus();
+  await A.keyboard.press('ArrowDown');
+  await pause(300);
+  verifier((await A.getByTestId('parametres-section-synchro').getAttribute('aria-selected')) === 'true', 'flèche bas : section suivante');
+  await A.keyboard.press('ArrowUp');
+  await pause(300);
+  verifier((await A.getByTestId('parametres-section-general').getAttribute('aria-selected')) === 'true', 'flèche haut : section précédente');
+  await A.getByTestId('parametres-section-general').focus();
+  await A.keyboard.press('/');
+  await pause(300);
+  verifier(await A.getByTestId('parametres-recherche').evaluate(e => e === document.activeElement), 'la touche « / » va à la recherche');
+  await A.keyboard.press('Escape');
+  await A.getByTestId('hub').waitFor({ timeout: 10_000 });
+  verifier(true, 'Échap ferme la page Paramètres');
+
+  // Les huit thèmes s'appliquent à la page Paramètres et au portefeuille.
+  for (const id of ['nuit', 'ivoire', 'ivoire-couleur', 'nuit-editoriale', 'sauge', 'nuit-vive', 'blocs', 'terminal']) {
+    await A.getByTestId('hub-parametres-ouvrir').click();
+    await A.getByTestId(`parametres-theme-${id}`).click();
+    await pause(150);
+    await A.screenshot({ path: join(CAPTURES, `13-theme-${id}-parametres.png`) });
+    await A.getByTestId('hub-parametres-fermer').click();
+  }
+  await A.getByTestId('hub-parametres-ouvrir').click();
+  await A.getByTestId('parametres-theme-ivoire').click();
+  await A.getByTestId('hub-parametres-fermer').click();
+  await pause(500);
+
+  // Lancement à froid : l'écran de connexion est déjà en Ivoire, sans image dans un autre thème.
+  log('A : lancement à froid avec le thème Ivoire mémorisé');
+  await A.addInitScript(() => {
+    window.__fonds = new Set();
+    const relever = () => {
+      // Deux coins de la page (hors champs de saisie, dont le fond est celui des cartes).
+      for (const [x, y] of [[4, 4], [window.innerWidth - 4, window.innerHeight - 4]]) {
+        let n = document.elementFromPoint(x, y);
+        let couleur = 'transparent';
+        for (; n; n = n.parentElement) {
+          const c = getComputedStyle(n).backgroundColor;
+          if (c && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') {
+            couleur = c;
+            break;
+          }
+        }
+        window.__fonds.add(couleur);
+      }
+      requestAnimationFrame(relever);
+    };
+    requestAnimationFrame(relever);
+  });
+  await A.reload();
+  await A.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
+  await A.screenshot({ path: join(CAPTURES, '14-lancement-a-froid-connexion-ivoire.png') });
+  const fondsConnexion = await A.evaluate(() => [...window.__fonds]);
+  verifier(fondsConnexion.length > 0 && fondsConnexion.every(c => c === IVOIRE || c === 'transparent'), `écran de connexion déjà en Ivoire (fonds vus : ${fondsConnexion.join(' | ')})`);
+  await deverrouiller(A, secret);
+  await A.getByTestId('synchro-indicateur').waitFor({ timeout: 60_000 });
+  await pause(800);
+  const fondsApres = await A.evaluate(() => [...window.__fonds]);
+  verifier(fondsApres.every(c => c === IVOIRE || c === 'transparent'), `aucun flash au déverrouillage (fonds vus : ${fondsApres.join(' | ')})`);
+  await A.screenshot({ path: join(CAPTURES, '15-hub-apres-deverrouillage-ivoire.png') });
+
+  // Mobile 390 px.
+  log('A : mobile 390 px');
+  await A.setViewportSize({ width: 390, height: 844 });
+  await pause(300);
+  await A.getByTestId('hub-parametres-ouvrir').click();
+  for (const id of ['general', 'synchro', 'securite', 'portefeuille', 'administration', 'apropos']) {
+    await A.getByTestId(`parametres-section-${id}`).click();
+    await A.getByTestId(`parametres-panneau-${id}`).waitFor({ timeout: 10_000 });
+    const debord = await A.evaluate(() => {
+      const largeur = window.innerWidth;
+      const cartes = [...document.querySelectorAll('[data-testid^="reglage-"]')];
+      return { pageDebordante: document.documentElement.scrollWidth > largeur + 1, cartesDebordantes: cartes.filter(c => c.getBoundingClientRect().right > largeur + 1).length };
+    });
+    verifier(!debord.pageDebordante && debord.cartesDebordantes === 0, `390 px, section ${id} : pas de défilement horizontal de la page`);
+    await A.screenshot({ path: join(CAPTURES, `16-mobile-${id}.png`) });
+  }
+  await A.getByTestId('hub-parametres-fermer').click();
+  await A.getByTestId('tuile-portefeuille').click();
+  await A.getByTestId('entete-app').waitFor({ timeout: 10_000 });
+  await A.screenshot({ path: join(CAPTURES, '17-mobile-portefeuille.png') });
+
   log(`relais : ${compteurs.put} PUT, ${compteurs.get} GET`);
 } finally {
   await navigateur.close();

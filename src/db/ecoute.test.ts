@@ -20,9 +20,8 @@ describe('écoute des écritures synchronisées', () => {
     pilote.executer('DELETE FROM cours');
     expect(n).toBe(1);
     new DepotParametres(pilote).ecrire('hub.theme', 'ivoire');
-    new DepotParametres(pilote).ecrire(PARAMETRES.theme, 'clair');
     new DepotParametres(pilote).ecrire('hub.devblog', '{}');
-    expect(n).toBe(4);
+    expect(n).toBe(3);
     expect(new DepotWatchlist(pilote).lister()).toEqual([]);
     brut.fermer();
   });

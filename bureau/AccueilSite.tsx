@@ -57,7 +57,7 @@ export function AccueilSite({
       <View style={[styles.cadre, { borderColor: palette.accent, backgroundColor: palette.surface }]}>
         <Text style={{ color: palette.texte, fontWeight: '800', fontSize: 18 }}>🔗 J’ai déjà un compte (le relier)</Text>
         <Text style={{ color: palette.texteSecondaire }}>
-          Administrateur : le code de liaison de votre PC (Paramètres › Synchronisation › Relier un autre appareil). Ami : le code
+          Administrateur : le code de liaison de votre PC (Paramètres › Synchronisation › Appareils liés › Relier un autre appareil). Ami : le code
           de connexion que l’administrateur vous a envoyé. Il commence par AB1. et ne se saisit qu’une fois.
         </Text>
         {codeConnu ? (

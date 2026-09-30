@@ -40,7 +40,9 @@ export interface NotificationsProps {
   seuils: readonly SeuilAffiche[];
   onChangerSeuil(titreId: string, champ: 'haut' | 'bas', valeur: string): void;
   onTester?(): void;
-  onRetour(): void;
+  /** Absent dans la page Paramètres, où ces réglages sont montrés (pas de retour ni de titre). */
+  onRetour?(): void;
+  integre?: boolean;
   message?: string;
   /** Vrai dans l'application de bureau : notifications tant qu'elle est ouverte. */
   surOrdinateur?: boolean;
@@ -80,6 +82,7 @@ export function Notifications({
   onChangerSeuil,
   onTester,
   onRetour,
+  integre = false,
   message,
   surOrdinateur,
   seuilVariation,
@@ -102,12 +105,18 @@ export function Notifications({
     onChangerPlanning({ ...planning, [jour]: { ...planning[jour], ...horaire } });
   };
 
+  const Racine: React.ComponentType<Record<string, unknown>> = integre ? View : ScrollView;
+  const propsRacine = integre
+    ? { style: { gap: ESPACEMENT.m }, testID: 'notifications-integrees' }
+    : {
+        style: [stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }],
+        contentContainerStyle: [stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }],
+        keyboardShouldPersistTaps: 'handled',
+      };
+
   return (
-    <ScrollView
-      style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
-      keyboardShouldPersistTaps="handled">
-      <TitreEcran>Notifications</TitreEcran>
+    <Racine {...propsRacine}>
+      {integre ? null : <TitreEcran>Notifications</TitreEcran>}
 
       {!notificationsDisponibles ? (
         <Carte>
@@ -350,10 +359,12 @@ export function Notifications({
         />
       ) : null}
 
-      <Actions>
-        <Bouton titre="Retour" variante="discret" onPress={onRetour} />
-      </Actions>
-    </ScrollView>
+      {onRetour && !integre ? (
+        <Actions>
+          <Bouton titre="Retour" variante="discret" onPress={onRetour} />
+        </Actions>
+      ) : null}
+    </Racine>
   );
 }
 

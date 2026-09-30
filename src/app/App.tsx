@@ -13,7 +13,7 @@
  * au tableau de bord.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Linking, StatusBar, Text, View } from 'react-native';
 // SafeAreaView de react-native est deprecie ; celui de safe-area-context gere
 // en plus l'encoche et la barre de geste, et etait deja une dependance.
@@ -105,15 +105,35 @@ import type { Coffre } from '../securite/coffre';
 import { CarteSynchro } from '../ui/ecrans/CarteSynchro';
 import { CarteProfils, type ControleProfils } from '../ui/ecrans/CarteProfils';
 import { Hub } from '../hub/Hub';
+import { BarreApp, BarreAppContexte } from '../hub/BarreApp';
+import { IndicateurSynchro, type SynchroHub } from '../hub/IndicateurSynchro';
+import { PageParametres } from '../hub/PageParametres';
+import { useMiseAJour } from '../hub/ParametresHub';
+import {
+  BandeauConfidentialite,
+  BandeauRole,
+  ReglageAdminPanel,
+  ReglageCompte,
+  ReglageCoffre,
+  ReglageLangue,
+  ReglageMiseAJour,
+  ReglageNouveautes,
+  ReglageTheme,
+  ReglageTuiles,
+  ReglageVersion,
+  ReglagesAdministration,
+} from '../hub/ReglagesHub';
+import type { IdReglage, IdSection } from '../hub/recensement';
+import { CLE_CACHE_AFFICHAGE, lireAffichageMemorise, memoriserAffichage, migrerThemeUnique, stockageLocalAppareil } from '../hub/themeUnique';
 import { GardeErreur } from '../ui/GardeErreur';
 import { appsVisibles, etatTuile, peutOuvrir } from '../hub/permissions';
 import { niveauProfil } from '../hub/admin/comptes';
-import { chargerPrefs, enregistrerPrefs, CLE_THEME, type PrefsHub } from '../hub/personnalisation';
+import { chargerPrefs, enregistrerPrefs, reinitialiser, CLE_THEME, type PrefsHub } from '../hub/personnalisation';
 import { Devblog } from '../hub/devblog/Devblog';
 import { CLE_DEVBLOG, lireEtat as lireEtatDevblog, decider as deciderDevblog, etapesVisite as etapesDevblog, marquerLues as marquerDevblogLu } from '../hub/devblog/logiqueDevblog';
 import type { CibleEssai, EntreeDevblog } from '../hub/devblog/entrees';
 import { ID_PORTEFEUILLE, REGISTRE } from '../hub/registre';
-import { THEME_HUB_DEFAUT, themeHub, type IdThemeHub } from '../hub/themes';
+import { themeHub, type IdThemeHub } from '../hub/themes';
 import type { ContexteHub, ResumePortefeuille, ServicesAdmin } from '../hub/types';
 import { ecouterTouche, octetsUtf8, telechargerWeb } from '../hub/web';
 import { dividendesParTitre, lignesCibles, lignesVendables } from './calculs';
@@ -143,8 +163,18 @@ import { CreationCompte } from '../ui/ecrans/CreationCompte';
 import { CreationTitre } from '../ui/ecrans/CreationTitre';
 import { Deverrouillage } from '../ui/ecrans/Deverrouillage';
 import { ImportPositions } from '../ui/ecrans/ImportPositions';
-import { Reglages, type EtatVerificationMaj, type ResultatRedemarrage } from '../ui/ecrans/Reglages';
-import { Sauvegarde } from '../ui/ecrans/Sauvegarde';
+import {
+  ReglageCodes,
+  ReglageDiscretion,
+  ReglageExport,
+  ReglageFournisseur,
+  ReglageHistorique,
+  ReglageIntervalle,
+  ReglagePodcast,
+  ReglageSymboles,
+  ReglageVisite,
+} from '../ui/ecrans/CartesReglages';
+import { ReglageSauvegardeAuto, Sauvegarde } from '../ui/ecrans/Sauvegarde';
 import { Notifications, type SeuilAffiche } from '../ui/ecrans/Notifications';
 import {
   planningDepuisJson,
@@ -168,6 +198,7 @@ import {
   PremierLancement,
   type SecretsInitiaux,
 } from '../ui/ecrans/PremierLancement';
+import { cleLocale } from '../profils/espace';
 import { ESPACEMENT, definirTheme, palettePour, stylesPartages, themeCourant } from '../ui/theme';
 import { Bouton, Carte } from '../ui/composants';
 import { formaterMontant } from '../ui/format';
@@ -356,6 +387,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // Après un tour de synchro qui a reçu des changements : le hub relit thème, tuiles et nouveautés vues.
   const [versionSynchro, setVersionSynchro] = useState(0);
   const apresReception = useCallback(() => setVersionSynchro(n => n + 1), []);
+  // Thème unique de toute l'application. Au démarrage : le dernier thème appliqué, lu de façon
+  // synchrone dans le cache de l'appareil (l'écran de connexion est déjà au bon thème, sans
+  // flash). Après déverrouillage : réconcilié avec la valeur du profil (voir plus bas).
+  const [themeHubId, setThemeHubId] = useState<IdThemeHub>(() => themeCourant());
+  const [parametres, setParametres] = useState<{ section?: IdSection; n: number } | undefined>();
+  const ouvrirParametres = useCallback((section?: IdSection) => setParametres(precedent => ({ section, n: (precedent?.n ?? 0) + 1 })), []);
 
   /**
    * Confirme au code natif que ce demarrage a abouti.
@@ -1300,11 +1337,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // sur téléphone (le réveil en arrière-plan s'en charge) et dans les tests.
   const pontNotifications = (globalThis as { applibourse?: { systeme?: PontNotifications } }).applibourse
     ?.systeme;
-  const pontMaj = (
-    globalThis as {
-      applibourse?: { maj?: { chercher?(): Promise<EtatVerificationMaj>; redemarrer?(): Promise<ResultatRedemarrage | boolean> } };
-    }
-  ).applibourse?.maj;
   const pontEnregistrerSous = (
     globalThis as { applibourse?: { fichiers?: { enregistrerSous?(nom: string, contenu: Uint8Array): Promise<boolean> } } }
   ).applibourse?.fichiers?.enregistrerSous;
@@ -1370,12 +1402,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   );
 
 
-  // Thème : lu à chaque rendu déverrouillé, appliqué avant de dessiner.
-  const themeEnregistre = deverrouille
-    ? new DepotParametres(session.base()).lire(PARAMETRES.theme)
-    : undefined;
-  if (deverrouille && (themeEnregistre ?? 'classique') !== themeCourant()) {
-    definirTheme(themeEnregistre);
+  // Thème unique : appliqué avant de dessiner. Verrouillé, c'est celui du cache de l'appareil ;
+  // déverrouillé, celui du profil (réconcilié dès le déverrouillage, avant le premier affichage).
+  const themeAffiche: IdThemeHub = deverrouille ? themeHubId : themeCourant();
+  if (themeAffiche !== themeCourant()) {
+    definirTheme(themeAffiche);
   }
 
   // Mode discret : lu avant de construire les vues, qui formatent les montants.
@@ -1723,7 +1754,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     { cle: 'objectifs', libelle: 'Objectifs', glyphe: '◎' },
     { cle: 'projection', libelle: 'Projection', glyphe: '↗' },
     { cle: 'sauvegarde', libelle: 'Sauvegarde', glyphe: '⇪' },
-    { cle: 'notifications', libelle: 'Alertes', glyphe: '◉' },
     { cle: 'reglages', libelle: 'Paramètres', glyphe: '⚙\uFE0E' },
     { cle: 'diagnostic', libelle: 'Diagnostic', glyphe: '✚', sous: true },
     // Baggr s'ouvre dans le navigateur : ce n'est pas un écran de l'application.
@@ -1734,6 +1764,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const naviguer = (cle: string) => {
     if (cle === 'hub') {
       setAppHub(undefined);
+      return;
+    }
+    // Les réglages (et les alertes, qui en font partie) sont dans la page Paramètres, unique.
+    if (cle === 'reglages' || cle === 'notifications') {
+      ouvrirParametres('portefeuille');
       return;
     }
     // Toute navigation vers un écran du portefeuille passe par le hub : elle
@@ -1757,12 +1792,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     }
     if (cle === 'sauvegarde') {
       rafraichirSauvegardes();
-    }
-    if (cle === 'notifications') {
-      setMessageNotifications(undefined);
-    }
-    if (cle === 'reglages') {
-      setRecherche(undefined);
     }
     if (cle === 'podcast' && podcast.date !== (aujourdhui ?? dateDuJour)()) {
       genererPodcast();
@@ -1813,8 +1842,13 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   // --- Hub : quelle app est ouverte, thème et préférences du profil ------------
   const [appHub, setAppHub] = useState<string | undefined>();
-  const [themeHubId, setThemeHubId] = useState<IdThemeHub>(THEME_HUB_DEFAUT);
-  const [prefsHub, setPrefsHub] = useState<PrefsHub | undefined>();
+  // Disposition et densité : dernières valeurs mémorisées sur l'appareil, pour que le hub s'affiche
+  // dans sa forme définitive dès la première image (le reste vient du profil au déverrouillage).
+  const prefsMemorisees = useCallback((): PrefsHub | undefined => {
+    const memo = lireAffichageMemorise(stockageLocalAppareil(), cleLocale(CLE_CACHE_AFFICHAGE));
+    return memo ? { ...reinitialiser(), ...memo } : undefined;
+  }, []);
+  const [prefsHub, setPrefsHub] = useState<PrefsHub | undefined>(() => (hub ? prefsMemorisees() : undefined));
   const appPortefeuille = REGISTRE.find(app => app.id === ID_PORTEFEUILLE)!;
   const portefeuillePermis =
     !hub ||
@@ -1829,33 +1863,50 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     }),
     [session],
   );
-  useEffect(() => {
-    if (!hub) {
-      return;
-    }
+  // Réconciliation avec le profil, avant la première image (useLayoutEffect) : au déverrouillage,
+  // et après chaque tour de synchro qui a reçu des changements. Migre au passage l'ancien thème
+  // du portefeuille vers le thème unique (idempotent).
+  useLayoutEffect(() => {
     if (!deverrouille) {
-      // Reverrouillé : au prochain déverrouillage, on repart du hub.
+      // Reverrouillé : au prochain déverrouillage, on repart du hub, sans rien garder du profil.
       setAppHub(undefined);
-      setPrefsHub(undefined);
+      setParametres(undefined);
+      if (hub) {
+        setPrefsHub(prefsMemorisees());
+      }
       return;
     }
-    setPrefsHub(chargerPrefs(stockagePrefs));
-    try {
-      setThemeHubId(themeHub(stockagePrefs.lire(CLE_THEME)).id);
-    } catch {
-      setThemeHubId(THEME_HUB_DEFAUT);
+    const { theme } = migrerThemeUnique(stockagePrefs);
+    setThemeHubId(theme);
+    if (hub) {
+      const lues = chargerPrefs(stockagePrefs);
+      setPrefsHub(lues);
+      memoriserAffichage(stockageLocalAppareil(), cleLocale(CLE_CACHE_AFFICHAGE), lues);
     }
-  }, [hub, deverrouille, stockagePrefs, versionSynchro]);
+  }, [hub, deverrouille, stockagePrefs, versionSynchro, prefsMemorisees]);
+  const choisirTheme = useCallback(
+    (id: IdThemeHub) => {
+      setThemeHubId(id);
+      definirTheme(id);
+      try {
+        stockagePrefs.ecrire(CLE_THEME, id);
+      } catch {
+        // Non mémorisé : le thème reste appliqué jusqu'à la fermeture.
+      }
+    },
+    [stockagePrefs],
+  );
   const hubAffiche = hub && deverrouille && Boolean(contenuComplet && tableau);
   const surLeHub = hubAffiche && (appHub === undefined || (appHub === ID_PORTEFEUILLE && !portefeuillePermis));
   const surUneApp = hubAffiche && !surLeHub && appHub !== ID_PORTEFEUILLE;
   // « Échap » ramène au hub depuis n'importe quelle app.
   useEffect(() => {
-    if (!hubAffiche || appHub === undefined) {
+    // La page Paramètres, ouverte par-dessus une app, garde Échap pour elle : elle se ferme, l'app reste.
+    if (!hubAffiche || appHub === undefined || parametres) {
       return undefined;
     }
     return ecouterTouche('Escape', () => setAppHub(undefined), { ignorerChamps: true });
-  }, [hubAffiche, appHub]);
+  }, [hubAffiche, appHub, parametres]);
   const resumeHub: ResumePortefeuille | undefined =
     hubAffiche && onglets
       ? {
@@ -1895,7 +1946,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [estAdmin, estGestionnaire, session, stockagePrefs],
   );
   const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin };
-  const themeDuHub = themeHub(themeHubId);
+  const themeDuHub = themeHub(themeAffiche);
   const appOuverte = surUneApp ? REGISTRE.find(app => app.id === appHub) : undefined;
   // --- Devblog « Quoi de neuf » : une fois par profil et par version -----------
   const [devblog, setDevblog] = useState<{ entree?: EntreeDevblog } | undefined>();
@@ -1966,6 +2017,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   };
   const essayer = (cible: CibleEssai) => {
     fermerDevblog();
+    setParametres(undefined);
     if (cible.genre === 'app') {
       ouvrirApp(cible.app);
     } else {
@@ -1982,6 +2034,310 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     }
   };
 
+  // --- Paramètres : UNE page pour tout (voir src/hub/recensement.ts) ------------
+  const maj = useMiseAJour();
+  const synchroHub: SynchroHub | undefined =
+    estAdmin && synchro.configure
+      ? {
+          vue: {
+            enCours: synchro.enCours,
+            derniere: synchro.derniere,
+            enAttente: synchro.enAttente,
+            erreur: synchro.erreur,
+            enLigne: synchro.enLigne,
+          },
+          onSynchroniser: () => void synchroniserMaintenant(),
+        }
+      : undefined;
+  const barreApp = <BarreApp theme={themeDuHub} synchro={synchroHub} onParametres={ouvrirParametres} />;
+  const surParametres = Boolean(parametres) && deverrouille && Boolean(contenuComplet && tableau);
+  const fermerParametres = useCallback(() => setParametres(undefined), []);
+  const depuisParametres = (action: () => void) => () => {
+    setParametres(undefined);
+    action();
+  };
+  const administrationVisible = appsVisibles(REGISTRE, contexteHub).some(app => app.id === 'administration');
+  const disponiblesParametres: IdReglage[] = [
+    'theme',
+    'langue',
+    'compte',
+    'securite-coffre',
+    'codes-recuperation',
+    'version',
+    'mise-a-jour',
+    ...(hub ? (['tuiles', 'nouveautes'] as const) : []),
+    ...(portefeuillePermis ? (['visite', 'cours-intervalle', 'cours-fournisseur', 'symboles', 'historique-cours', 'discretion', 'notifications', 'podcast'] as const) : []),
+    ...(portefeuillePermis && pontEnregistrerSous ? (['export-excel'] as const) : []),
+    ...(synchroHub ? (['synchro-etat'] as const) : []),
+    ...(estAdmin ? (['synchro-appareils'] as const) : []),
+    ...(fichiers ? (['sauvegarde-auto', 'sauvegardes'] as const) : []),
+    ...(profils?.transparence && !estAdmin ? (['confidentialite'] as const) : []),
+    ...(hub && administrationVisible ? (['admin-panel'] as const) : []),
+    ...(estAdmin && servicesAdmin ? (['admin-reglages'] as const) : []),
+    ...(estAdmin && profils ? (['admin-comptes'] as const) : []),
+    ...(estGestionnaire ? (['role-gestionnaire'] as const) : []),
+  ];
+  const contenuNotifications = () => (
+        <Notifications
+          notificationsDisponibles={
+            Boolean(pontNotifications) || chargerModule('@notifee/react-native').etat === 'disponible'
+          }
+          reveilDisponible={
+            Boolean(pontNotifications) ||
+            chargerModule('react-native-background-fetch').etat === 'disponible'
+          }
+          surOrdinateur={Boolean(pontNotifications)}
+          journal={journalNotifications}
+          evenementsActifs={new DepotParametres(session.base()).lire(PARAMETRES.evenementsActifs) !== '0'}
+          onChangerEvenements={
+            pontNotifications
+              ? actifs => {
+                  new DepotParametres(session.base()).ecrire(PARAMETRES.evenementsActifs, actifs ? '1' : '0');
+                  rafraichir();
+                }
+              : undefined
+          }
+          demarrageAuto={pontDemarrage ? demarrageAuto ?? false : undefined}
+          resterPlateau={pontPlateau ? resterPlateau ?? true : undefined}
+          onChangerPlateau={
+            pontPlateau
+              ? activer => {
+                  pontPlateau(activer).then(setResterPlateau).catch(() => undefined);
+                }
+              : undefined
+          }
+          onChangerDemarrage={
+            pontDemarrage
+              ? activer => {
+                  pontDemarrage(activer).then(setDemarrageAuto).catch(() => undefined);
+                }
+              : undefined
+          }
+          seuilVariation={seuilVariation(new DepotParametres(session.base()).lire(PARAMETRES.seuilVariation))}
+          onChangerSeuilVariation={valeur => {
+            new DepotParametres(session.base()).ecrire(PARAMETRES.seuilVariation, valeur);
+            rafraichir();
+          }}
+          onTester={
+            pontNotifications
+              ? () => {
+                  // L'essai montre un vrai briefing, avec vos chiffres du moment.
+                  const contenuActuel = chargerEtat(session.base());
+                  const essai = composerBriefing({
+                    moment: new Date().getHours() < 13 ? 'matin' : 'soir',
+                    etat: contenuActuel.etat,
+                    titres: contenuActuel.titres,
+                    cours: new DepotCours(session.base()).derniersCours(),
+                    date: (aujourdhui ?? dateDuJour)(),
+                    toujours: true,
+                  });
+                  pontNotifications
+                    .notifier(
+                      essai?.titre ?? '✅ AppDashboard',
+                      essai?.corps ?? 'Les notifications fonctionnent. Vos briefings arriveront ici.',
+                      'tableau',
+                    )
+                    .then(affichee =>
+                      setMessageNotifications(
+                        affichee
+                          ? 'Notification de test envoyée.'
+                          : 'Windows a refusé la notification : vérifiez Paramètres › Système › Notifications.',
+                      ),
+                    )
+                    .catch(() => setMessageNotifications('La notification de test a échoué.'));
+                }
+              : undefined
+          }
+          planning={planningDepuisJson(
+            new DepotParametres(session.base()).lire(PARAMETRES.planningBriefings),
+          )}
+          onChangerPlanning={enregistrerPlanning}
+          prochain={prochainBriefing(
+            planningDepuisJson(
+              new DepotParametres(session.base()).lire(PARAMETRES.planningBriefings),
+            ),
+            new Date(),
+          )}
+          seuils={contenu ? seuilsAffiches(session, contenu) : []}
+          onChangerSeuil={enregistrerSeuil}
+          integre
+          message={messageNotifications}
+        />
+  );
+  const renduParametres = (id: IdReglage): React.ReactNode => {
+    const depot = () => new DepotParametres(session.base());
+    switch (id) {
+      case 'theme':
+        return <ReglageTheme theme={themeDuHub} onTheme={choisirTheme} />;
+      case 'tuiles':
+        return (
+          <ReglageTuiles
+            theme={themeDuHub}
+            prefs={prefsHub ?? reinitialiser()}
+            onPrefs={suivant => {
+              setPrefsHub(suivant);
+              enregistrerPrefs(stockagePrefs, suivant);
+              memoriserAffichage(stockageLocalAppareil(), cleLocale(CLE_CACHE_AFFICHAGE), suivant);
+            }}
+            onPersonnaliser={depuisParametres(() => {
+              setAppHub(undefined);
+              setDemandeHub(courante => ({ genre: 'personnaliser', n: (courante?.n ?? 0) + 1 }));
+            })}
+          />
+        );
+      case 'langue':
+        return <ReglageLangue theme={themeDuHub} />;
+      case 'compte':
+        return (
+          <ReglageCompte
+            theme={themeDuHub}
+            nomProfil={profils?.actuel.nom}
+            onChangerProfil={profils && (profils.peutChanger ?? profils.tous.length > 1) ? depuisParametres(profils.onChanger) : undefined}
+            onVerrouiller={depuisParametres(verrouiller)}
+          />
+        );
+      case 'visite':
+        return <ReglageVisite onRevoir={depuisParametres(() => setEtapesVisite(ETAPES_VISITE))} />;
+      case 'synchro-etat':
+        return synchroHub ? <IndicateurSynchro theme={themeDuHub} synchro={synchroHub} detaille /> : null;
+      case 'synchro-appareils':
+        return (
+          <CarteSynchro
+            synchro={synchro}
+            liaisonDuPc={liaisonDuPc}
+            nomParDefaut={nomParDefaut(plateformeSynchro)}
+            onRelier={relierSynchro}
+            onDelier={delierSynchro}
+            onOublier={autre => void oublierAppareilSynchro(autre)}
+          />
+        );
+      case 'securite-coffre':
+        return <ReglageCoffre theme={themeDuHub} etat={session.etatCoffre()} />;
+      case 'codes-recuperation':
+        return <ReglageCodes onRenouveler={() => session.renouvelerCodesRecuperation()} />;
+      case 'sauvegarde-auto':
+        return (
+          <ReglageSauvegardeAuto
+            active={Boolean(depot().lire(PARAMETRES.sauvegardeAutoMotDePasse))}
+            derniere={depot().lire(PARAMETRES.sauvegardeAutoDerniere)}
+            aujourdhui={(aujourdhui ?? dateDuJour)()}
+            onChanger={activerSauvegardeAuto}
+          />
+        );
+      case 'sauvegardes':
+        return (
+          <View style={{ alignSelf: 'flex-start' }}>
+            <Bouton
+              titre="Ouvrir les sauvegardes"
+              variante="discret"
+              testID="ouvrir-sauvegardes"
+              onPress={depuisParametres(() => naviguer('sauvegarde'))}
+            />
+          </View>
+        );
+      case 'confidentialite':
+        return profils?.transparence ? <BandeauConfidentialite theme={themeDuHub} transparence={profils.transparence} /> : null;
+      case 'cours-intervalle':
+        return (
+          <ReglageIntervalle
+            intervalle={intervalleS}
+            onChoisir={secondes => {
+              depot().ecrire(PARAMETRES.intervalleActualisation, String(secondes));
+              rafraichir();
+            }}
+          />
+        );
+      case 'cours-fournisseur':
+        return (
+          <ReglageFournisseur
+            fournisseurs={FOURNISSEURS}
+            fournisseurActuel={depot().lire(PARAMETRES.fournisseurCours)}
+            cleEnregistree={Boolean(depot().lire(PARAMETRES.cleApiCours))}
+            onEnregistrer={enregistrerReglages}
+          />
+        );
+      case 'symboles':
+        return (
+          <ReglageSymboles
+            sansSymbole={
+              (contenuComplet?.etat.positions ?? []).filter(position => {
+                const titre = contenuComplet?.titres.find(valeur => valeur.id === position.titreId);
+                return !titre?.ticker?.trim();
+              }).length
+            }
+            onSymboles={depuisParametres(() => {
+              setAppHub(ID_PORTEFEUILLE);
+              setRecherche(undefined);
+              setErreurSymboles(undefined);
+              setEcran('symboles');
+            })}
+          />
+        );
+      case 'historique-cours':
+        return (
+          <ReglageHistorique
+            onCharger={lancerChargementHistorique}
+            avecSymbole={(contenuComplet?.titres ?? []).filter(titre => titre.ticker?.trim()).length}
+            enCours={histoEnCours}
+            message={messageHistorique}
+          />
+        );
+      case 'export-excel':
+        return pontEnregistrerSous ? (
+          <ReglageExport
+            message={messageExport}
+            onExporter={() => {
+              const contenuActuel = chargerEtat(session.base());
+              const octets = exporterExcel({
+                etat: contenuActuel.etat,
+                comptes: contenuActuel.comptes,
+                titres: contenuActuel.titres,
+                transactions: contenuActuel.transactions,
+                cours: new DepotCours(session.base()).derniersCours(),
+              });
+              pontEnregistrerSous(`AppDashboard ${(aujourdhui ?? dateDuJour)()}.xlsx`, octets)
+                .then(enregistre => setMessageExport(enregistre ? '✅ Fichier Excel enregistré.' : 'Export annulé.'))
+                .catch((e: unknown) => setMessageExport(`L’export a échoué : ${e instanceof Error ? e.message : String(e)}`));
+            }}
+          />
+        ) : null;
+      case 'discretion':
+        return <ReglageDiscretion discret={discret} onBasculer={basculerDiscretion} />;
+      case 'notifications':
+        return contenuNotifications();
+      case 'podcast':
+        return (
+          <ReglagePodcast
+            heureAuto={depot().lire(PARAMETRES.podcastAuto) || undefined}
+            onChanger={heure => {
+              if (heure) {
+                depot().ecrire(PARAMETRES.podcastAuto, heure);
+              } else {
+                depot().supprimer(PARAMETRES.podcastAuto);
+              }
+              rafraichir();
+            }}
+          />
+        );
+      case 'admin-panel':
+        return <ReglageAdminPanel theme={themeDuHub} onOuvrir={depuisParametres(() => ouvrirApp('administration'))} />;
+      case 'admin-reglages':
+        return servicesAdmin ? <ReglagesAdministration theme={themeDuHub} services={servicesAdmin} acteur={profils?.actuel} /> : null;
+      case 'admin-comptes':
+        return profils ? <CarteProfils controle={profils} /> : null;
+      case 'role-gestionnaire':
+        return <BandeauRole theme={themeDuHub} />;
+      case 'nouveautes':
+        return <ReglageNouveautes theme={themeDuHub} onOuvrir={() => setDevblog({})} />;
+      case 'version':
+        return <ReglageVersion theme={themeDuHub} />;
+      case 'mise-a-jour':
+        return <ReglageMiseAJour theme={themeDuHub} maj={maj} />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics ?? METRIQUES_DE_REPLI}>
       <SafeAreaView
@@ -1989,13 +2345,14 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         <StatusBar barStyle={palettePour().sombre === false ? 'dark-content' : 'light-content'} />
 
       <Coque
-        destinations={deverrouille && contenuComplet && tableau && !surLeHub && !surUneApp ? destinations : []}
+        destinations={deverrouille && contenuComplet && tableau && !surLeHub && !surUneApp && !surParametres ? destinations : []}
+        enTete={barreApp}
         actif={destinationActive}
         onNaviguer={naviguer}
-        onVerrouiller={deverrouille && contenuComplet && tableau && !surLeHub && !surUneApp ? verrouiller : undefined}
+        onVerrouiller={deverrouille && contenuComplet && tableau && !surLeHub && !surUneApp && !surParametres ? verrouiller : undefined}
         discret={discret}
-        onBasculerDiscretion={deverrouille && contenuComplet && tableau && !surLeHub && !surUneApp ? basculerDiscretion : undefined}
-        flottant={ecran !== 'podcast' && !surLeHub && !surUneApp ? <LecteurFlottant onOuvrir={() => setEcran('podcast')} /> : null}>
+        onBasculerDiscretion={deverrouille && contenuComplet && tableau && !surLeHub && !surUneApp && !surParametres ? basculerDiscretion : undefined}
+        flottant={ecran !== 'podcast' && !surLeHub && !surUneApp && !surParametres ? <LecteurFlottant onOuvrir={() => setEcran('podcast')} /> : null}>
       {deverrouille && contenuComplet && tableau ? (
         <VisiteGuidee
           visible={etapesVisite !== undefined}
@@ -2078,87 +2435,53 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             suggererAutreCoffre={Boolean(profils?.lier?.suggererAutreCoffre)}
           />
         )
+      ) : surParametres ? (
+        <GardeErreur quoi="les paramètres" onRevenir={fermerParametres}>
+          <PageParametres
+            theme={themeDuHub}
+            section={parametres?.section}
+            n={parametres?.n}
+            disponibles={disponiblesParametres}
+            rendu={renduParametres}
+            synchro={synchroHub}
+            actif={!devblog}
+            onFermer={fermerParametres}
+          />
+        </GardeErreur>
       ) : surLeHub ? (
         <GardeErreur quoi="le hub" onRevenir={profils?.onChanger}>
         <Hub
           registre={REGISTRE}
           contexte={contexteHub}
           theme={themeDuHub}
-          onTheme={id => {
-            setThemeHubId(id);
-            try {
-              stockagePrefs.ecrire(CLE_THEME, id);
-            } catch {
-              // Non mémorisé : le thème reste appliqué jusqu'à la fermeture.
-            }
-          }}
+          onTheme={choisirTheme}
           onOuvrir={ouvrirApp}
           prefs={prefsHub}
           onPrefs={suivant => {
             setPrefsHub(suivant);
             enregistrerPrefs(stockagePrefs, suivant);
+            memoriserAffichage(stockageLocalAppareil(), cleLocale(CLE_CACHE_AFFICHAGE), suivant);
           }}
           onVerrouiller={verrouiller}
-          onNouveautes={() => setDevblog({})}
-          synchro={
-            estAdmin && synchro.configure
-              ? {
-                  vue: {
-                    enCours: synchro.enCours,
-                    derniere: synchro.derniere,
-                    enAttente: synchro.enAttente,
-                    erreur: synchro.erreur,
-                    enLigne: synchro.enLigne,
-                  },
-                  onSynchroniser: () => void synchroniserMaintenant(),
-                }
-              : undefined
-          }
+          onParametres={ouvrirParametres}
+          synchro={synchroHub}
           demande={demandeHub}
           onChangerProfil={profils && (profils.peutChanger ?? profils.tous.length > 1) ? profils.onChanger : undefined}
-          onReglagesPortefeuille={
-            portefeuillePermis
-              ? () => {
-                  setAppHub(ID_PORTEFEUILLE);
-                  setRecherche(undefined);
-                  setEcran('reglages');
-                }
-              : undefined
-          }
         />
-        {devblog ? (
-          <Devblog
-            theme={themeDuHub}
-            admin={estAdmin}
-            gestionnaire={estGestionnaire}
-            entree={devblog.entree}
-            onFermer={fermerDevblog}
-            onEssayer={essayer}
-            onVisite={entree => {
-              fermerDevblog();
-              setEtapesVisite(etapesDevblog(entree, estAdmin, estGestionnaire));
-            }}
-            disponible={cible => cible.genre !== 'app' || appsVisibles(REGISTRE, contexteHub).some(app => app.id === cible.app)}
-          />
-        ) : null}
         </GardeErreur>
       ) : appOuverte?.Racine ? (
         <GardeErreur quoi={appOuverte.nom} onRevenir={profils?.onChanger}>
+        <BarreAppContexte.Provider value={barreApp}>
         <appOuverte.Racine
           contexte={contexteHub}
           theme={themeDuHub}
           registre={REGISTRE}
           onRetour={() => setAppHub(undefined)}
           niveau={niveauProfil(profils?.actuel, appOuverte)}
-          onTheme={id => {
-            setThemeHubId(id);
-            try {
-              stockagePrefs.ecrire(CLE_THEME, id);
-            } catch {
-              // Non mémorisé : le thème reste appliqué jusqu'à la fermeture.
-            }
-          }}
+          onTheme={choisirTheme}
+          onParametres={ouvrirParametres}
         />
+        </BarreAppContexte.Provider>
         </GardeErreur>
       ) : ecran === 'compte' ? (
         <CreationCompte
@@ -2198,92 +2521,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }}
           onCreerTitre={() => setEcran('titre')}
           genererId={() => identifiant('op')}
-        />
-      ) : ecran === 'notifications' ? (
-        <Notifications
-          notificationsDisponibles={
-            Boolean(pontNotifications) || chargerModule('@notifee/react-native').etat === 'disponible'
-          }
-          reveilDisponible={
-            Boolean(pontNotifications) ||
-            chargerModule('react-native-background-fetch').etat === 'disponible'
-          }
-          surOrdinateur={Boolean(pontNotifications)}
-          journal={journalNotifications}
-          evenementsActifs={new DepotParametres(session.base()).lire(PARAMETRES.evenementsActifs) !== '0'}
-          onChangerEvenements={
-            pontNotifications
-              ? actifs => {
-                  new DepotParametres(session.base()).ecrire(PARAMETRES.evenementsActifs, actifs ? '1' : '0');
-                  rafraichir();
-                }
-              : undefined
-          }
-          demarrageAuto={pontDemarrage ? demarrageAuto ?? false : undefined}
-          resterPlateau={pontPlateau ? resterPlateau ?? true : undefined}
-          onChangerPlateau={
-            pontPlateau
-              ? activer => {
-                  pontPlateau(activer).then(setResterPlateau).catch(() => undefined);
-                }
-              : undefined
-          }
-          onChangerDemarrage={
-            pontDemarrage
-              ? activer => {
-                  pontDemarrage(activer).then(setDemarrageAuto).catch(() => undefined);
-                }
-              : undefined
-          }
-          seuilVariation={seuilVariation(new DepotParametres(session.base()).lire(PARAMETRES.seuilVariation))}
-          onChangerSeuilVariation={valeur => {
-            new DepotParametres(session.base()).ecrire(PARAMETRES.seuilVariation, valeur);
-            rafraichir();
-          }}
-          onTester={
-            pontNotifications
-              ? () => {
-                  // L'essai montre un vrai briefing, avec vos chiffres du moment.
-                  const contenuActuel = chargerEtat(session.base());
-                  const essai = composerBriefing({
-                    moment: new Date().getHours() < 13 ? 'matin' : 'soir',
-                    etat: contenuActuel.etat,
-                    titres: contenuActuel.titres,
-                    cours: new DepotCours(session.base()).derniersCours(),
-                    date: (aujourdhui ?? dateDuJour)(),
-                    toujours: true,
-                  });
-                  pontNotifications
-                    .notifier(
-                      essai?.titre ?? '✅ AppDashboard',
-                      essai?.corps ?? 'Les notifications fonctionnent. Vos briefings arriveront ici.',
-                      'tableau',
-                    )
-                    .then(affichee =>
-                      setMessageNotifications(
-                        affichee
-                          ? 'Notification de test envoyée.'
-                          : 'Windows a refusé la notification : vérifiez Paramètres › Système › Notifications.',
-                      ),
-                    )
-                    .catch(() => setMessageNotifications('La notification de test a échoué.'));
-                }
-              : undefined
-          }
-          planning={planningDepuisJson(
-            new DepotParametres(session.base()).lire(PARAMETRES.planningBriefings),
-          )}
-          onChangerPlanning={enregistrerPlanning}
-          prochain={prochainBriefing(
-            planningDepuisJson(
-              new DepotParametres(session.base()).lire(PARAMETRES.planningBriefings),
-            ),
-            new Date(),
-          )}
-          seuils={seuilsAffiches(session, contenu)}
-          onChangerSeuil={enregistrerSeuil}
-          onRetour={() => setEcran('tableau')}
-          message={messageNotifications}
         />
       ) : ecran === 'fiche' && fiche ? (
         <FicheValeur
@@ -2371,16 +2608,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           erreur={podcast.erreur}
           minutes={podcast.minutes}
           onGenerer={minutes => genererPodcast(minutes)}
-          heureAuto={new DepotParametres(session.base()).lire(PARAMETRES.podcastAuto) || undefined}
-          onChangerHeureAuto={heure => {
-            const parametres = new DepotParametres(session.base());
-            if (heure) {
-              parametres.ecrire(PARAMETRES.podcastAuto, heure);
-            } else {
-              parametres.supprimer(PARAMETRES.podcastAuto);
-            }
-            rafraichir();
-          }}
+          onOuvrirParametres={() => ouvrirParametres('portefeuille')}
         />
       ) : ecran === 'comparateur' ? (
         <ComparateurFinancier
@@ -2442,7 +2670,10 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onRetenir={retenirSymbole}
           onEffacer={effacerSymbole}
           onChangerLien={enregistrerLien}
-          onRetour={() => setEcran('reglages')}
+          onRetour={() => {
+            setEcran('tableau');
+            ouvrirParametres('portefeuille');
+          }}
           erreur={erreurSymboles}
         />
       ) : ecran === 'watchlist' ? (
@@ -2574,7 +2805,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             derniere: new DepotParametres(session.base()).lire(PARAMETRES.sauvegardeAutoDerniere),
             aujourdhui: (aujourdhui ?? dateDuJour)(),
           }}
-          onChangerAutomatique={activerSauvegardeAuto}
+          onOuvrirParametres={() => ouvrirParametres('securite')}
           onOuvrirDossier={pontSauvegardes?.ouvrirDossier ? () => void pontSauvegardes.ouvrirDossier!() : undefined}
           sauvegardes={sauvegardes}
           onCreer={creerSauvegarde}
@@ -2589,86 +2820,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           message={messageSauvegarde}
           erreur={erreurSauvegarde}
           enCours={sauvegardeEnCours}
-        />
-      ) : ecran === 'reglages' ? (
-        <Reglages
-          fournisseurs={FOURNISSEURS}
-          fournisseurActuel={new DepotParametres(session.base()).lire(
-            PARAMETRES.fournisseurCours,
-          )}
-          cleEnregistree={Boolean(
-            new DepotParametres(session.base()).lire(PARAMETRES.cleApiCours),
-          )}
-          onEnregistrer={enregistrerReglages}
-          onRenouvelerCodes={() => session.renouvelerCodesRecuperation()}
-          onRevoirVisite={() => setEtapesVisite(ETAPES_VISITE)}
-          onExporterExcel={
-            pontEnregistrerSous
-              ? () => {
-                  const contenuActuel = chargerEtat(session.base());
-                  const octets = exporterExcel({
-                    etat: contenuActuel.etat,
-                    comptes: contenuActuel.comptes,
-                    titres: contenuActuel.titres,
-                    transactions: contenuActuel.transactions,
-                    cours: new DepotCours(session.base()).derniersCours(),
-                  });
-                  pontEnregistrerSous(`AppDashboard ${(aujourdhui ?? dateDuJour)()}.xlsx`, octets)
-                    .then(enregistre => setMessageExport(enregistre ? '✅ Fichier Excel enregistré.' : 'Export annulé.'))
-                    .catch((e: unknown) => setMessageExport(`L’export a échoué : ${e instanceof Error ? e.message : String(e)}`));
-                }
-              : undefined
-          }
-          messageExport={messageExport}
-          onChercherMiseAJour={pontMaj?.chercher ? () => pontMaj.chercher!() : undefined}
-          onRedemarrerPourMaj={
-            pontMaj?.redemarrer
-              ? async () => {
-                  const resultat = await pontMaj.redemarrer!();
-                  // Anciennes versions du moteur : un simple booléen.
-                  return typeof resultat === 'boolean' ? { ok: resultat } : resultat;
-                }
-              : undefined
-          }
-          carteProfils={profils ? <CarteProfils controle={profils} /> : undefined}
-          carteSynchro={
-            !estAdmin ? undefined : <CarteSynchro
-              synchro={synchro}
-              liaisonDuPc={liaisonDuPc}
-              nomParDefaut={nomParDefaut(plateformeSynchro)}
-              onRelier={relierSynchro}
-              onSynchroniser={() => void synchroniserMaintenant()}
-              onDelier={delierSynchro}
-              onOublier={id => void oublierAppareilSynchro(id)}
-            />
-          }
-          onAnnuler={() => setEcran('tableau')}
-          onSymboles={() => {
-            setRecherche(undefined);
-            setErreurSymboles(undefined);
-            setEcran('symboles');
-          }}
-          sansSymbole={
-            (contenuComplet?.etat.positions ?? []).filter(position => {
-              const titre = contenuComplet?.titres.find(valeur => valeur.id === position.titreId);
-              return !titre?.ticker?.trim();
-            }).length
-          }
-          onChargerHistorique={lancerChargementHistorique}
-          intervalleActualisation={intervalleS}
-          theme={themeCourant()}
-          onChoisirTheme={cle => {
-            new DepotParametres(session.base()).ecrire(PARAMETRES.theme, cle);
-            definirTheme(cle);
-            rafraichir();
-          }}
-          onChoisirIntervalle={secondes => {
-            new DepotParametres(session.base()).ecrire(PARAMETRES.intervalleActualisation, String(secondes));
-            rafraichir();
-          }}
-          avecSymbole={(contenuComplet?.titres ?? []).filter(titre => titre.ticker?.trim()).length}
-          chargementEnCours={histoEnCours}
-          messageHistorique={messageHistorique}
         />
       ) : ecran === 'import' ? (
         <ImportPositions
@@ -2748,7 +2899,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           flux={onglets!.flux}
           impots={onglets!.impots}
           ventes={onglets!.ventes}
-          onRecupererAppareils={synchro.configure ? undefined : () => naviguer('reglages')}
+          onRecupererAppareils={synchro.configure ? undefined : () => ouvrirParametres('synchro')}
           onCreerCompte={() => {
             setCompteEdite(undefined);
             setEcran('compte');
@@ -2759,15 +2910,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }}
           onAjouterTransaction={() => setEcran('saisie')}
           onImporter={() => setEcran('import')}
-          onReglages={() => setEcran('reglages')}
+          onReglages={() => ouvrirParametres('portefeuille')}
           onSauvegarder={() => {
             rafraichirSauvegardes();
             setEcran('sauvegarde');
           }}
-          onNotifications={() => {
-            setMessageNotifications(undefined);
-            setEcran('notifications');
-          }}
+          onNotifications={() => ouvrirParametres('portefeuille')}
           onProjection={() => setEcran('projection')}
           onWatchlist={() => setEcran('watchlist')}
           onComparer={() => setEcran('comparateur')}
@@ -2791,6 +2939,21 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         />
         )}
       </Coque>
+      {devblog && deverrouille ? (
+        <Devblog
+          theme={themeDuHub}
+          admin={estAdmin}
+          gestionnaire={estGestionnaire}
+          entree={devblog.entree}
+          onFermer={fermerDevblog}
+          onEssayer={essayer}
+          onVisite={entree => {
+            fermerDevblog();
+            setEtapesVisite(etapesDevblog(entree, estAdmin, estGestionnaire));
+          }}
+          disponible={cible => cible.genre !== 'app' || appsVisibles(REGISTRE, contexteHub).some(app => app.id === cible.app)}
+        />
+      ) : null}
       </SafeAreaView>
     </SafeAreaProvider>
   );

@@ -9,8 +9,8 @@ entre profils : un ami ne peut pas ouvrir le dépôt de l'administrateur, et inv
 | --- | --- | --- |
 | `compte`, `titre`, `operation`, `surveille`, `these`, `parametre` (1) | portefeuille | dernier gagnant, suppressions 365 j |
 | `prefs:hub` (2) | `hub.prefs` : tuiles, disposition, densité | dernier gagnant |
-| `prefs:theme` (2) | `hub.theme` : thème du hub | dernier gagnant |
-| `prefs:theme-portefeuille` (2) | `affichage.theme` | dernier gagnant |
+| `prefs:theme` (2) | `hub.theme` : le thème unique de toute l'application | dernier gagnant |
+| `prefs:theme-portefeuille` (2) | `affichage.theme` : ancien thème du portefeuille. **Lecture seule** : reçue d'un appareil pas encore à jour (la migration du thème unique la reprend si `hub.theme` est absent), jamais émise | — |
 | `devblog:vues` (2) | versions du devblog déjà lues | **union**, jamais supprimée |
 
 Après « Lier » (`adopterCoffre`), la base locale est vide (l'ancienne est scellée par une autre clé) : les versions

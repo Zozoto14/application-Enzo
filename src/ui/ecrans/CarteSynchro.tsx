@@ -1,5 +1,5 @@
 /**
- * Paramètres › Synchronisation entre appareils.
+ * Paramètres › Synchronisation › Appareils liés.
  *
  * Relie cet appareil au relais (code de liaison + mot de passe de
  * synchronisation), montre les autres appareils — dont la date d'expiration
@@ -10,7 +10,7 @@
 import qrcode from 'qrcode-generator';
 import React, { useMemo, useState } from 'react';
 import { Image, Platform, StyleSheet, Text, View } from 'react-native';
-import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
+import { Alerte, Bouton, Champ, SousTitre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON } from '../theme';
 import type { EtatSynchroApp } from '../../app/synchroApp';
 import { joursRestants } from '../../natif/signature';
@@ -23,7 +23,6 @@ export interface CarteSynchroProps {
   liaisonDuPc?: Liaison;
   nomParDefaut: string;
   onRelier(code: string, nom: string): Promise<void>;
-  onSynchroniser(): void;
   onDelier(): void;
   onOublier(appareil: string): void;
   /** Horloge, remplaçable dans les tests. */
@@ -95,7 +94,6 @@ export function CarteSynchro({
   liaisonDuPc,
   nomParDefaut,
   onRelier,
-  onSynchroniser,
   onDelier,
   onOublier,
   maintenant = new Date(),
@@ -128,8 +126,7 @@ export function CarteSynchro({
     };
     return (
       <>
-        <Titre>Synchronisation entre appareils</Titre>
-        <Carte testID="carte-synchro">
+        <View style={{ gap: ESPACEMENT.s }} testID="carte-synchro">
           <SousTitre>
             Le PC, l’iPhone et le site de secours partagent le même portefeuille, et s’ouvrent avec le même mot
             de passe et le même code d’authentification. Tout est chiffré sur l’appareil avant de partir : le
@@ -175,7 +172,7 @@ export function CarteSynchro({
               <Text style={{ color: palette.texte }}>
                 C’est l’adresse de votre relais et sa clé d’accès, en une ligne. Il se trouve sur le PC déjà relié :
               </Text>
-              <Text style={{ color: palette.texte }}>1. Sur le PC, ouvrez Paramètres › Synchronisation entre appareils.</Text>
+              <Text style={{ color: palette.texte }}>1. Sur le PC, ouvrez Paramètres › Synchronisation.</Text>
               <Text style={{ color: palette.texte }}>2. Cliquez sur « Relier un autre appareil ».</Text>
               <Text style={{ color: palette.texte }}>
                 3. Le plus simple : scannez le QR code avec l’appareil photo de ce téléphone — le code est rempli tout
@@ -207,7 +204,7 @@ export function CarteSynchro({
               testID="bouton-relier"
             />
           </View>
-        </Carte>
+        </View>
       </>
     );
   }
@@ -216,8 +213,7 @@ export function CarteSynchro({
   const liaison = synchro.liaison;
   return (
     <>
-      <Titre>Synchronisation entre appareils</Titre>
-      <Carte testID="carte-synchro">
+      <View style={{ gap: ESPACEMENT.s }} testID="carte-synchro">
         <Text style={{ color: palette.texte, fontWeight: '700' }}>
           {EMOJI[synchro.plateforme ?? ''] ?? '🔗'} {synchro.nom} · relié
         </Text>
@@ -237,12 +233,6 @@ export function CarteSynchro({
         ) : null}
         {synchro.erreur ? <Alerte message={synchro.erreur} /> : null}
         <View style={styles.boutons}>
-          <Bouton
-            titre="Synchroniser maintenant"
-            desactive={synchro.enCours}
-            onPress={onSynchroniser}
-            testID="bouton-synchroniser"
-          />
           <Bouton titre={montrerCodes ? 'Masquer le code' : 'Relier un autre appareil'} variante="discret" onPress={() => setMontrerCodes(!montrerCodes)} testID="bouton-montrer-liaison" />
         </View>
 
@@ -283,7 +273,7 @@ export function CarteSynchro({
             </View>
             <Text style={{ color: palette.texteSecondaire }}>
               Sans QR code : copiez ce code, envoyez-le-vous (iMessage, WhatsApp, e-mail, Notes), puis collez-le sur
-              l’iPhone dans Paramètres › Synchronisation › Code de liaison.
+              l’iPhone dans Paramètres › Synchronisation › Appareils liés.
             </Text>
             <Text selectable style={[styles.code, { color: palette.texte, borderColor: palette.bordure }]} testID="code-liaison">
               {encoderLiaison(liaison)}
@@ -319,7 +309,7 @@ export function CarteSynchro({
         <View style={{ alignSelf: 'flex-start', marginTop: ESPACEMENT.s }}>
           <Bouton titre="Désactiver sur cet appareil" variante="discret" onPress={onDelier} testID="bouton-delier" />
         </View>
-      </Carte>
+      </View>
     </>
   );
 }

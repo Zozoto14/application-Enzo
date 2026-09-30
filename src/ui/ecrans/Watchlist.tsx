@@ -407,7 +407,7 @@ function Panneau({ ligne, ...props }: WatchlistProps & { ligne: LigneSurveillee 
           ) : (
             <Vide>
               {!ligne.ticker
-                ? 'Cette valeur n’a pas de symbole boursier : renseignez-le dans Paramètres › Symboles pour voir son graphique.'
+                ? 'Cette valeur n’a pas de symbole boursier : renseignez-le dans Paramètres › Portefeuille › Symboles de cotation pour voir son graphique.'
                 : fiche.erreur
                   ? `Graphique indisponible : ${fiche.erreur}`
                   : props.chargerFiche

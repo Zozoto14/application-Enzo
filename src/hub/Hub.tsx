@@ -13,7 +13,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { appsVisibles, etatTuile, type EtatTuile } from './permissions';
-import { BoutonMiseAJour, PanneauParametres, useMiseAJour } from './ParametresHub';
+import { BoutonMiseAJour, useMiseAJour } from './ParametresHub';
+import { useBarreApp } from './BarreApp';
+import type { IdSection } from './recensement';
 import { IndicateurSynchro, type SynchroHub } from './IndicateurSynchro';
 import { salutation } from './infos';
 import { LogoHub } from './LogoHub';
@@ -51,15 +53,13 @@ export interface HubProps {
   onVerrouiller?(): void;
   /** Revenir à « Qui utilise AppDashboard ? », quand il y a plusieurs profils. */
   onChangerProfil?(): void;
-  /** Ouvre les Paramètres de l'app Portefeuille (panneau « Paramètres »). */
-  onReglagesPortefeuille?(): void;
-  /** Ouvre l'historique des nouveautés (Paramètres › Nouveautés). */
-  onNouveautes?(): void;
+  /** Ouvre la page Paramètres (unique, pour tout le hub), sur une section. */
+  onParametres?(section?: IdSection): void;
   /** État de la synchronisation PC ↔ site ; absent : pas d'indicateur (compte non relié). */
   synchro?: SynchroHub;
   /**
-   * Demande d'ouverture venue d'ailleurs (« Essayer » du devblog) : le
-   * panneau Paramètres ou le mode personnalisation. Le compteur la rend unique.
+   * Demande d'ouverture venue d'ailleurs (« Essayer » du devblog) : la
+   * page Paramètres ou le mode personnalisation. Le compteur la rend unique.
    */
   demande?: { genre: 'parametres' | 'personnaliser'; n: number };
   /** Heure locale, injectable pour les tests. */
@@ -79,10 +79,9 @@ const TRANSITION_WEB: object = SUR_LE_WEB
   ? { transitionProperty: 'width, opacity, transform, min-height', transitionDuration: '260ms', transitionTimingFunction: 'ease' }
   : {};
 
-export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, onReglagesPortefeuille, onNouveautes, synchro, demande, heure }: HubProps) {
+export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, onParametres, synchro, demande, heure }: HubProps) {
   const { width } = useWindowDimensions();
   const [menuOuvert, setMenuOuvert] = useState(false);
-  const [parametres, setParametres] = useState(false);
   const maj = useMiseAJour();
   const [edition, setEdition] = useState(false);
   const [annonce, setAnnonce] = useState('');
@@ -93,9 +92,8 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
       return;
     }
     if (demande.genre === 'parametres') {
-      setParametres(true);
+      onParametres?.();
     } else if (personnalisable) {
-      setParametres(false);
       setEdition(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seule une nouvelle demande compte.
@@ -122,7 +120,7 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
 
   // Échap ferme d'abord le menu des thèmes, puis le mode édition.
   useEffect(() => {
-    if ((!menuOuvert && !edition) || parametres) {
+    if (!menuOuvert && !edition) {
       return undefined;
     }
     return ecouterTouche('Escape', () => {
@@ -132,7 +130,7 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
         setEdition(false);
       }
     });
-  }, [menuOuvert, edition, parametres]);
+  }, [menuOuvert, edition]);
 
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const titreStyle = {
@@ -152,7 +150,7 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
               <Text style={[titreStyle, { fontSize: 16 }]}>AppDashboard</Text>
             </View>
             <View style={styles.actionsEntete}>
-              {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} /> : null}
+              {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} onPress={() => onParametres?.('synchro')} /> : null}
               {personnalisable ? (
                 <BoutonHub
                   theme={theme}
@@ -173,7 +171,7 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
                 libelle="Paramètres du hub"
                 onPress={() => {
                   setMenuOuvert(false);
-                  setParametres(true);
+                  onParametres?.();
                 }}
               />
               <SelecteurTheme theme={theme} ouvert={menuOuvert} onBasculer={() => setMenuOuvert(o => !o)} onChoisir={id => {
@@ -276,47 +274,6 @@ export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPre
           </Text>
         </View>
       </ScrollView>
-      {parametres ? (
-        <PanneauParametres
-          theme={theme}
-          prefs={personnalisable ? courantes : undefined}
-          onPrefs={onPrefs}
-          onTheme={onTheme}
-          maj={maj}
-          synchro={synchro}
-          nomProfil={contexte.profil?.nom}
-          onFermer={() => setParametres(false)}
-          onPersonnaliser={
-            personnalisable
-              ? () => {
-                  setParametres(false);
-                  setEdition(true);
-                }
-              : undefined
-          }
-          onReglagesPortefeuille={onReglagesPortefeuille}
-          onAdministration={
-            autorisees.some(app => app.id === 'administration')
-              ? () => {
-                  setParametres(false);
-                  onOuvrir('administration');
-                }
-              : undefined
-          }
-          onVerrouiller={onVerrouiller}
-          onChangerProfil={onChangerProfil}
-          onNouveautes={
-            onNouveautes
-              ? () => {
-                  setParametres(false);
-                  onNouveautes();
-                }
-              : undefined
-          }
-          gestionnaire={contexte.profil?.role === 'gestionnaire' && !contexte.profil.admin}
-          transparence={contexte.profil && !contexte.profil.admin ? contexte.profils?.transparence : undefined}
-        />
-      ) : null}
     </View>
   );
 }
@@ -981,10 +938,15 @@ export function BoutonHub({
 
 /** Barre « ← Hub » des apps qui n'ont pas leur propre navigation. */
 export function RetourHub({ theme, onRetour }: { theme: ThemeHub; onRetour(): void }) {
+  // Pastille de synchro et bouton « Paramètres » : les mêmes que dans l'en-tête du hub.
+  const barre = useBarreApp();
   return (
     <View style={styles.retour}>
-      <BoutonHub theme={theme} titre="← Hub" onPress={onRetour} testID="retour-hub" />
-      {SUR_LE_WEB ? <Text style={[styles.echap, { color: theme.attenue }]}>ÉCHAP POUR FERMER</Text> : null}
+      <View style={styles.retourGauche}>
+        <BoutonHub theme={theme} titre="← Hub" onPress={onRetour} testID="retour-hub" />
+        {SUR_LE_WEB ? <Text style={[styles.echap, { color: theme.attenue }]}>ÉCHAP POUR FERMER</Text> : null}
+      </View>
+      {barre}
     </View>
   );
 }
@@ -1055,7 +1017,8 @@ const styles = StyleSheet.create({
   barreTuile: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: 6, borderWidth: 1, marginBottom: 8 },
   puce: { minWidth: 36, minHeight: 36, paddingHorizontal: 10, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   separateur: { width: 1, alignSelf: 'stretch', backgroundColor: 'rgba(128,128,128,0.35)', marginHorizontal: 2 },
-  retour: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  retour: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },
+  retourGauche: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   echap: { fontSize: 11, letterSpacing: 0.9 },
   bandeauTuile: { fontSize: 13, lineHeight: 18, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderLeftWidth: 4, marginTop: 12, overflow: 'hidden' },
 });

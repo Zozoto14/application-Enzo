@@ -6,9 +6,9 @@
  * la vitesse et la voix, et suivre le texte pendant la lecture.
  */
 
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import { Bouton, Champ, usePalette } from '../composants';
+import React, { useEffect } from 'react';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Bouton, usePalette } from '../composants';
 import { CarteSection, Rangee, Segments, Selecteur, Vide } from '../elements';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';
 import type { Episode } from '../../podcast/episode';
@@ -26,9 +26,8 @@ export interface PodcastProps {
   erreur?: string;
   /** Durée visée, en minutes. */
   minutes?: number;
-  /** Heure de préparation automatique, « 07:30 » ; absente : désactivée. */
-  heureAuto?: string;
-  onChangerHeureAuto?(heure: string | undefined): void;
+  /** Ouvre Paramètres › Portefeuille, où se règle la préparation automatique. */
+  onOuvrirParametres?(): void;
   onGenerer(minutes?: number): void;
 }
 
@@ -41,11 +40,9 @@ export function Podcast({
   etape,
   erreur,
   minutes = 10,
-  heureAuto,
-  onChangerHeureAuto,
+  onOuvrirParametres,
   onGenerer,
 }: PodcastProps) {
-  const [heureSaisie, setHeureSaisie] = useState(heureAuto ?? '07:30');
   const palette = usePalette();
   // La lecture est partagée par toute l'application : quitter cet écran ne
   // la coupe pas, le lecteur flottant prend le relais.
@@ -89,31 +86,12 @@ export function Podcast({
           />
         </View>
 
-        {onChangerHeureAuto ? (
-          <View style={styles.format} testID="podcast-auto">
-            <Switch
-              value={Boolean(heureAuto)}
-              onValueChange={actif => onChangerHeureAuto(actif && /^\d{2}:\d{2}$/.test(heureSaisie) ? heureSaisie : undefined)}
-              accessibilityLabel="Préparer le podcast automatiquement"
-            />
-            <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>Prêt chaque jour à</Text>
-            <View style={{ width: 90 }}>
-              <Champ
-                etiquette="Heure"
-                value={heureSaisie}
-                onChangeText={texte => {
-                  setHeureSaisie(texte);
-                  if (heureAuto && /^([01]\d|2[0-3]):[0-5]\d$/.test(texte)) onChangerHeureAuto(texte);
-                }}
-                placeholder="07:30"
-                testID="champ-heure-podcast"
-              />
-            </View>
-            <Text style={{ color: palette.texteSecondaire, fontSize: 12, flexShrink: 1 }}>
-              {heureAuto
-                ? 'L’application doit être ouverte (même réduite) : une notification vous prévient.'
-                : 'Désactivé.'}
+        {onOuvrirParametres ? (
+          <View style={styles.format}>
+            <Text style={{ color: palette.texteSecondaire, fontSize: 13, flexShrink: 1 }}>
+              La préparation automatique du podcast se règle dans les Paramètres.
             </Text>
+            <Bouton titre="Ouvrir les Paramètres" variante="discret" onPress={onOuvrirParametres} testID="ouvrir-parametres-podcast" />
           </View>
         ) : null}
 

@@ -10,6 +10,7 @@ import type { Profil } from '../profils/profils';
 import type { IdThemeHub, TeinteApp, ThemeHub } from './themes';
 import type { NiveauAcces, NiveauDeclare } from './admin/niveaux';
 import type { StockagePrefs } from './personnalisation';
+import type { IdSection } from './recensement';
 
 export type Tendance = 'hausse' | 'baisse' | 'neutre';
 
@@ -73,6 +74,8 @@ export interface PropsRacineApp {
   niveau?: NiveauAcces;
   /** Change le thème du hub (Réglages de l'Administration). */
   onTheme?(id: IdThemeHub): void;
+  /** Ouvre la page Paramètres (unique) ; l'app n'a pas de réglages à elle. */
+  onParametres?(section?: IdSection): void;
 }
 
 export interface AppHub {

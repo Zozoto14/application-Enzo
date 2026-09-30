@@ -96,18 +96,28 @@ describe('préférences, thèmes et devblog entre appareils', () => {
     expect(CLE_DEVBLOG_VUES).toBe(CLE_DEVBLOG);
   });
 
-  it('le thème du hub, l’ordre des tuiles et le thème du portefeuille arrivent sur l’autre appareil', async () => {
+  it('le thème unique et l’ordre des tuiles arrivent sur l’autre appareil', async () => {
     const p = new DepotParametres(pc);
     p.ecrire(CLE_THEME, 'ivoire');
     p.ecrire(CLE_PREFS, '{"version":1,"ordre":["administration","portefeuille"]}');
-    p.ecrire(PARAMETRES.theme, 'clair');
     await tour(pc, 'aaaa1111');
     const resultat = await tour(site, 'bbbb2222');
-    expect(resultat.bilan.ajoutes).toBeGreaterThanOrEqual(3);
+    expect(resultat.bilan.ajoutes).toBeGreaterThanOrEqual(2);
     const s = new DepotParametres(site);
     expect(s.lire(CLE_THEME)).toBe('ivoire');
     expect(s.lire(CLE_PREFS)).toBe('{"version":1,"ordre":["administration","portefeuille"]}');
-    expect(s.lire(PARAMETRES.theme)).toBe('clair');
+  });
+
+  it('l’ancienne entité prefs:theme-portefeuille reste lue, mais n’est plus jamais émise', () => {
+    // Un appareil pas encore à jour l'envoie : elle est écrite en clair dans l'ancien réglage,
+    // d'où la migration du thème unique la lit si le hub n'a pas encore de thème.
+    expect(ecrireEntite(pc, 'prefs:theme-portefeuille', 'sauge', id => id)).toBe(true);
+    expect(new DepotParametres(pc).lire(PARAMETRES.theme)).toBe('sauge');
+    // Rien ne la renvoie ensuite, même quand le réglage existe : le thème est celui du hub.
+    expect(Object.keys(extraireEntites(pc))).not.toContain('prefs:theme-portefeuille');
+    new DepotParametres(pc).ecrire(CLE_THEME, 'terminal');
+    expect(extraireEntites(pc)['prefs:theme']).toBe('terminal');
+    expect(Object.keys(extraireEntites(pc))).not.toContain('prefs:theme-portefeuille');
   });
 
   it('dernier gagnant par clé pour les préférences', async () => {
@@ -312,7 +322,7 @@ describe('file d’envoi, idempotence et économie d’écritures', () => {
     t += 60_000;
     await expect(tour()).rejects.toThrow(/injoignable/);
     const attente = lireEtatSynchro(pilote).enAttente!;
-    expect(attente.cles).toEqual(['prefs:theme', 'prefs:theme-portefeuille']);
+    expect(attente.cles).toEqual(['prefs:theme']);
     expect(attente.essais).toBe(2);
     expect(attente.premierEchec).toBe(premier);
     expect(attente.motif).toMatch(/injoignable/);
