@@ -11,3 +11,4 @@ export * from './resolution';
 export * from './catalogue';
 export * from './liensManuels';
 export * from './bibliotheque';
+export * from './assistant';

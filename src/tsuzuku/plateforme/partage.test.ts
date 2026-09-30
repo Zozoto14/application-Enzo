@@ -87,7 +87,7 @@ describe('partage des sources par le relais', () => {
   };
   const tourAmi = async (id: string, base: BasePrefs) => {
     const espaces = relais.pour(id);
-    const r = await recevoirSourcesPartagees({ espaces, id, base, objets: await espaces.lister(id), suivi: suivis[id] ?? {}, maintenant: date(), alea: aleatoireDeterministe(id.length + 3) });
+    const r = await recevoirSourcesPartagees({ espaces, id, base, objets: await espaces.lister(id), suivi: suivis[id] ?? {}, maintenant: date(), alea: aleatoireDeterministe(id === A ? 11 : 13) });
     suivis[id] = r.suivi;
     return r;
   };
