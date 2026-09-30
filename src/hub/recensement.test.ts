@@ -25,7 +25,7 @@ describe('recensement des réglages', () => {
     }
   });
 
-  it('a les huit sections demandées, dans l’ordre, et aucune n’est vide', () => {
+  it('a les neuf sections demandées, dans l’ordre, et aucune n’est vide', () => {
     expect(SECTIONS.map(s => s.titre)).toEqual([
       'Général',
       'Synchronisation',
@@ -34,6 +34,7 @@ describe('recensement des réglages', () => {
       'Administration',
       'Tsuzuku',
       'Nouveautés',
+      'Support',
       'À propos',
     ]);
     for (const s of SECTIONS) {

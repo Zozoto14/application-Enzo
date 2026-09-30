@@ -7,6 +7,7 @@
 import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { DepotParametres, PARAMETRES } from '../db/depots';
+import { versionJuridique } from '../juridique/modele';
 import { ouvrirBaseNode } from '../db/pilotes/node';
 import { migrer } from '../db/schema';
 import { CLE_PREFS, CLE_THEME } from '../hub/personnalisation';
@@ -162,6 +163,7 @@ describe('thème unique et migration au déverrouillage', () => {
     theme.relireThemeMemorise();
     const session = creerSession();
     session.initialiser({ motDePasse: MOT_DE_PASSE });
+    new DepotParametres(session.base()).ecrire(PARAMETRES.acceptationsJuridiques, JSON.stringify([{ version: versionJuridique(undefined), date: '2026-10-06T10:00:00.000Z' }]));
     new DepotParametres(session.base()).ecrire(CLE_PREFS, '{"version":1,"ordre":[],"tailles":{},"masquees":[],"epinglees":[],"densite":"compact","disposition":"liste"}');
 
     await render(<App session={session} hub />);

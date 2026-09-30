@@ -41,6 +41,38 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.06',
+    date: '2026-10-06',
+    titre: 'Verrouillage automatique, Support et mentions légales',
+    resume:
+      'L’application se verrouille seule après 45 minutes d’inactivité (réglable), vous pouvez écrire à l’équipe depuis un formulaire de support, et les conditions, la confidentialité, les cookies et les mentions légales sont consultables.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'verrou-auto',
+        emoji: '🔒',
+        titre: 'Verrouillage automatique',
+        texte:
+          'Sans geste de votre part pendant 45 minutes (5, 15, 30, 45, 60, 120 minutes ou jamais : Paramètres › Sécurité), l’application se verrouille et efface les clés de la mémoire. Pendant un film ou un épisode, elle demande d’abord « Êtes-vous toujours là ? » (60 secondes pour répondre).',
+      },
+      {
+        id: 'support-tickets',
+        emoji: '🛟',
+        titre: 'Support : écrire à l’équipe',
+        texte:
+          'Bouton « ? Support » du hub et de chaque app, ou Paramètres › Support : catégorie, sujet, message, capture facultative. Le ticket arrive dans le salon Discord de l’équipe ; « Mes tickets » garde l’historique, et un ticket écrit hors ligne part tout seul au retour du réseau.',
+      },
+      {
+        id: 'mentions-legales',
+        emoji: '📄',
+        titre: 'Conditions, confidentialité, cookies, mentions légales',
+        texte:
+          'Accessibles depuis l’écran de connexion et Paramètres › À propos. Vous les acceptez à la première connexion (et de nouveau quand elles changent) ; un Fondateur peut adapter les textes. Modèle informatif à faire relire par un professionnel du droit.',
+        essayer: { genre: 'parametres' },
+      },
+    ],
+  },
+  {
     version: '2026.10.05',
     date: '2026-10-05',
     titre: 'Rangs : Fondateur, Administrateur, Gestionnaire',

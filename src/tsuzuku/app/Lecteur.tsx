@@ -5,6 +5,7 @@ import { Text, View } from 'react-native';
 import { ajouterOuMettreAJour, enregistrerProgression, trouver, type Genre } from '../moteur/bibliotheque';
 import type { Lecteur } from '../moteur/resolution';
 import { useCharger, useTsuzuku } from './contexte';
+import { utiliserLectureEnCours } from '../../securite/presence';
 import { ouvrirExterne } from './externe';
 import { LecteurMedia } from './LecteurMedia';
 import { lireAnime, lireFilm, type Lecture } from './resoudre';
@@ -48,6 +49,8 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
   const { meta, lecture, suivantAuto } = charge.donnees ?? {};
   const lecteurs: Lecteur[] = lecture?.lecteurs ?? [];
   const courant = lecteurs[Math.min(choix, Math.max(0, lecteurs.length - 1))];
+  // Lecteur ouvert : le verrouillage automatique demande « Êtes-vous toujours là ? » au lieu de verrouiller.
+  utiliserLectureEnCours(Boolean(courant));
 
   // Progression : un épisode ouvert est noté « en cours » (une fois par épisode ouvert).
   const note = useRef<string>('');

@@ -14,37 +14,15 @@
  * avec un compte à rebours de 60 s ; sans réponse, l'application se verrouille.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, StyleSheet, Text, View } from 'react-native';
 import { DELAI_PRESENCE_SECONDES, SAUT_VEILLE_MS, confirmerPresence, etatInitial, evaluer, noterActivite, type MotifVerrou } from '../securite/verrouAuto';
+import { ContextePresence, type Presence } from '../securite/presence';
 import { BoutonHub } from './Hub';
 import { police, type ThemeHub } from './themes';
 import { ecouterTouche } from './web';
 
-export interface Presence {
-  /** Un lecteur déclare (true) qu'une lecture commence, puis (false) qu'elle s'arrête. Cumulatif. */
-  declarerLecture(enCours: boolean): void;
-}
-
-const AUCUNE_PRESENCE: Presence = { declarerLecture: () => undefined };
-const ContextePresence = createContext<Presence>(AUCUNE_PRESENCE);
-
-/** Hors `GardeInactivite` (tests d'un écran seul), les déclarations sont sans effet. */
-export function utiliserPresence(): Presence {
-  return useContext(ContextePresence);
-}
-
-/** Déclare une lecture en cours tant que `enCours` est vrai (et jusqu'au démontage). */
-export function utiliserLectureEnCours(enCours: boolean): void {
-  const { declarerLecture } = utiliserPresence();
-  useEffect(() => {
-    if (!enCours) {
-      return undefined;
-    }
-    declarerLecture(true);
-    return () => declarerLecture(false);
-  }, [enCours, declarerLecture]);
-}
+export { utiliserLectureEnCours, utiliserPresence } from '../securite/presence';
 
 interface CibleEvenements {
   addEventListener(type: string, rappel: () => void, options?: unknown): void;
@@ -124,8 +102,10 @@ export function GardeInactivite({ theme, actif, delaiMinutes, onVerrouiller, hor
       return undefined;
     }
     const minuterie = setInterval(verifier, pasMs);
-    const document = cible ?? (globalThis as { document?: CibleEvenements }).document;
-    const fenetre = cible ?? (globalThis as { window?: CibleEvenements }).window;
+    // Natif : `document` et `window` n'existent pas, ou sans `addEventListener` (simulations).
+    const valide = (c: CibleEvenements | undefined) => (c && typeof c.addEventListener === 'function' && typeof c.removeEventListener === 'function' ? c : undefined);
+    const document = valide(cible ?? (globalThis as { document?: CibleEvenements }).document);
+    const fenetre = valide(cible ?? (globalThis as { window?: CibleEvenements }).window);
     const options = { capture: true, passive: true };
     for (const nom of EVENEMENTS_ACTIVITE) {
       (nom === 'focus' ? fenetre : document)?.addEventListener(nom, activite, options);

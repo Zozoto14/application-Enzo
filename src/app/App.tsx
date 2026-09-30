@@ -2143,7 +2143,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const versionJuridiqueCourante = versionJuridique(profils?.juridique);
   const acceptations = deverrouille ? lireAcceptations(new DepotParametres(session.base()).lire(PARAMETRES.acceptationsJuridiques)) : [];
   void versionAcceptation;
-  const acceptationRequise = deverrouille && !profils?.sessionAdmin && doitAccepter(acceptations, versionJuridiqueCourante);
+  const acceptationRequise = hub && deverrouille && !profils?.sessionAdmin && doitAccepter(acceptations, versionJuridiqueCourante);
   const barreApp = <BarreApp theme={themeDuHub} synchro={synchroHub} onParametres={ouvrirParametres} onSupport={ouvrirSupport} />;
   const surParametres = Boolean(parametres) && deverrouille && Boolean(contenuComplet && tableau);
   const fermerParametres = useCallback(() => setParametres(undefined), []);
