@@ -318,6 +318,14 @@ function Racine() {
           await auPlus(avantOuverture({ memoire: memoireNavigateur, fichiers: stockage as never, compte: compte.id, pontMaitre: await liaisonDuPont() }), 15_000);
           if (!compte.admin || (!pont() && lireLiaisons(memoireNavigateur).maitre)) {
             const coffre = await stockage.lire(fichiersDuProfil(compte.id).coffre as NomFichier);
+            if ((!coffre || coffre.length === 0) && compte.admin) {
+              // Code de l'administrateur connu, mais aucun coffre sur le relais : on le dit, sans créer en douce.
+              setEtat({
+                phase: 'accueil',
+                erreur: 'Aucun coffre de l’administrateur n’a pu être récupéré avec le code retenu sur ce navigateur (relais injoignable, ou PC pas encore relié). Réessayez, saisissez un autre code, ou créez un nouveau coffre.',
+              });
+              return;
+            }
             if (!coffre || coffre.length === 0) {
               throw new Error('Impossible de récupérer ce compte pour l’instant (relais injoignable, ou compte pas encore publié par l’administrateur). Vérifiez la connexion, puis réessayez.');
             }
@@ -664,7 +672,11 @@ function Racine() {
         codeConnu={etat.code}
         erreur={etat.erreur}
         onRelier={relier}
-        onCreer={() => void ouvrir({ id: ID_PRINCIPAL, nom: 'Moi', admin: true })}
+        onCreer={() => {
+          // Coffre neuf, indépendant : le code d'un autre compte retenu ici ne s'applique plus.
+          for (const cle of ['applibourse.liaisons', 'applibourse.liaison']) memoireNavigateur.removeItem(cle);
+          void ouvrir({ id: ID_PRINCIPAL, nom: 'Moi', admin: true });
+        }}
       />
     );
   }

@@ -15,6 +15,7 @@ import { expirationSignature, programmerRappelsExpiration } from '../natif/signa
 import type { Session } from '../session/session';
 import { identifiantAppareil } from '../sync/identite';
 import { decoderLiaison, type Liaison } from '../sync/relais/liaison';
+import { estMaitre } from '../sync/relais/portees';
 import type { EnAttente, InfoAppareil } from '../sync/relais/moteur';
 import { Planificateur, type IssueTour, type RaisonTour } from '../sync/relais/planificateur';
 import {
@@ -330,6 +331,9 @@ export function useSynchro({
       if (!liaison) {
         throw new Error('Code de liaison illisible : recopiez-le depuis le PC (il commence par AB1.).');
       }
+      if (!estMaitre(liaison)) {
+        throw new Error('Ce code est celui d’un compte d’ami : il ne relie que ce compte (écran de connexion), pas la synchronisation de l’administrateur.');
+      }
       await testerLiaison(liaison);
       ecrireConfigRelais(session.base(), {
         ...liaison,
@@ -364,7 +368,8 @@ export function useSynchro({
       return;
     }
     const connue = liaisonDuPc ?? decoderLiaison(liaisonEnAttente() ?? '');
-    if (!actuelle && connue) {
+    // Seul le code de l'administrateur (jeton maître) relie sa synchronisation ; le code d'un ami ne sert qu'à son compte.
+    if (!actuelle && connue && estMaitre(connue)) {
       ecrireConfigRelais(pilote, { ...connue, cle, nom: nomParDefaut(plateforme) });
       setEtat(courant => ({ ...courant, message: 'Appareil relié automatiquement.' }));
       setVersion(v => v + 1);
