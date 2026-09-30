@@ -195,7 +195,7 @@ export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, context
                   );
                 })}
               </View>
-              {onParametres ? <Bouton titre="⚙︎ Réglages" libelle="Réglages de Tsuzuku (Paramètres)" onPress={() => onParametres('tsuzuku')} testID="tsuzuku-reglages" style={{ marginLeft: 'auto' }} /> : null}
+              {onParametres ? <Bouton titre={large ? '⚙︎ Réglages' : '⚙︎'} libelle="Réglages de Tsuzuku (Paramètres)" onPress={() => onParametres('tsuzuku')} testID="tsuzuku-reglages" style={{ marginLeft: 'auto' }} /> : null}
             </View>
             {!s.lectureSources ? <Avis texte={MESSAGE_SITE} testID="tsuzuku-site" /> : null}
             <View testID={`ecran-${route.t}`}>{ecran}</View>

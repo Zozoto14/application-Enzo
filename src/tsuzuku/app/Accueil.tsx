@@ -41,7 +41,10 @@ function BandeauUne({ une, entree }: { une: Une; entree: Entree | null }) {
     <View testID="tsuzuku-une" accessibilityLabel="À la une" style={{ borderRadius: Math.max(theme.rayonGrand, 12), overflow: 'hidden', borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface, minHeight: large ? 380 : 330, justifyContent: 'flex-end' }}>
       {visuel ? <Image source={{ uri: visuel }} accessibilityIgnoresInvertColors style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.85 }} resizeMode="cover" /> : null}
       {/* Voiles : le texte reste lisible sur n'importe quelle image, dans les 8 thèmes. */}
-      <View pointerEvents="none" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: large ? '62%' : '100%', backgroundColor: teinteTransparente(theme.fond, 0.72) }} />
+      {/* Fondu par paliers (pas de dégradé natif) : plus opaque à gauche, sous le texte. */}
+      {(large ? ['45%', '60%', '75%', '90%'] : ['100%']).map(l => (
+        <View key={l} pointerEvents="none" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: l as `${number}%`, backgroundColor: teinteTransparente(theme.fond, large ? 0.22 : 0.62) }} />
+      ))}
       <View pointerEvents="none" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: teinteTransparente(theme.fond, 0.25) }} />
       <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '45%', backgroundColor: teinteTransparente(theme.fond, 0.35) }} />
       <View style={{ padding: large ? 36 : 20, gap: 12, maxWidth: 680 }}>

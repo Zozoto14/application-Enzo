@@ -369,16 +369,21 @@ try {
   await page.getByTestId('lecteur-retour').click();
   await page.getByTestId('fiche-statut').filter({ hasText: 'Vu' }).waitFor({ timeout: 10_000 });
 
-  // ============================================================ Paramètres › Tsuzuku (clé TMDB)
-  log('Paramètres › Tsuzuku : clé TMDB');
+  // ============================================================ Paramètres : Administration › Tsuzuku (clé TMDB), Tsuzuku (confort)
+  log('Paramètres › Administration › Tsuzuku : clé TMDB ; Paramètres › Tsuzuku : confort');
   await page.getByTestId('tsuzuku-reglages').click();
   await page.getByTestId('hub-parametres').waitFor({ timeout: 20_000 });
   verifier(await page.getByTestId('parametres-section-tsuzuku').isVisible(), 'la page Paramètres a une section Tsuzuku');
   await page.getByTestId('parametres-section-tsuzuku').click();
-  verifier((await page.getByTestId('reglage-tsuzuku-tmdb').count()) === 1 && (await page.getByTestId('reglage-tsuzuku-lecture').count()) === 1, 'clé TMDB et lecture : dans la page unifiée (pas d’écran de réglages séparé)');
+  verifier((await page.getByTestId('reglage-tsuzuku-lecture').count()) === 1 && (await page.getByTestId('reglage-tsuzuku-sources-partagees').count()) === 1 && (await page.getByTestId('tsuzuku-cle-tmdb').count()) === 0, 'Paramètres › Tsuzuku : confort et sources partagées seulement (rien de technique)');
+  await page.getByTestId('parametres-section-administration').click();
+  verifier((await page.getByTestId('reglage-admin-tsuzuku-cles').count()) === 1 && (await page.getByTestId('reglage-admin-tsuzuku-sources').count()) === 1, 'Administration › Tsuzuku : sources et clés d’API (Fondateur)');
   await page.getByTestId('tsuzuku-cle-tmdb').fill('cle-tmdb-de-test-0123456789');
   await page.getByTestId('tsuzuku-cle-enregistrer').click();
-  verifier((await page.getByTestId('tsuzuku-cle-etat').innerText()).includes('Clé enregistrée'), 'la clé est enregistrée (dans la base du profil)');
+  await page.getByTestId('tsuzuku-cle-etat').filter({ hasText: 'Clé enregistrée' }).waitFor({ timeout: 10_000 });
+  verifier(!(await page.locator('body').innerText()).includes('cle-tmdb-de-test-0123456789'), 'la clé est enregistrée et jamais réaffichée en entier');
+  await capture(page, '15-parametres-administration-tsuzuku');
+  await page.getByTestId('parametres-section-tsuzuku').click();
   await page.getByTestId('tsuzuku-langue-vf').click();
   await page.getByTestId('tsuzuku-masquer-oui').click();
   await capture(page, '15-parametres-tsuzuku');
@@ -392,7 +397,7 @@ try {
   // « Masquer les déjà vus » : Dandadan (vu ailleurs) disparaît du catalogue des animés, Frieren (en cours) reste.
   await page.getByTestId('mode-anime').click();
   await page.getByTestId('rangee-trending').waitFor({ timeout: 20_000 });
-  verifier((await page.getByTestId('carte-anime-2').count()) === 0 && (await page.getByTestId('carte-anime-1').count()) > 0, 'réglage « masquer les déjà vus » : le titre vu ailleurs disparaît du catalogue');
+  verifier((await page.locator('[data-testid^="rangee-"]:not([data-testid="rangee-bibliotheque"]):not([data-testid="rangee-reprendre"]) [data-testid="carte-anime-2"]').count()) === 0 && (await page.getByTestId('carte-anime-1').count()) > 0, 'réglage « masquer les déjà vus » : le titre vu ailleurs disparaît des rangées du catalogue (il reste dans « Ma bibliothèque »)');
   await page.getByTestId('tsuzuku-reglages').click();
   await page.getByTestId('parametres-section-tsuzuku').click();
   await page.getByTestId('tsuzuku-masquer-non').click();
@@ -405,7 +410,9 @@ try {
   await activerPontPc();
   await ouvrirTsuzuku(page);
   verifier((await page.getByTestId('tsuzuku-site').count()) === 0, 'mode PC : plus de bandeau « site »');
-  await page.getByTestId('onglet-app-sources').click();
+  verifier((await page.getByTestId('onglet-app-sources').count()) === 0, 'pas d’onglet « Sources » dans l’app : Paramètres › Administration › Tsuzuku');
+  await page.getByTestId('tsuzuku-reglages').click();
+  await page.getByTestId('parametres-section-administration').click();
   verifier(await visible(page, 'sources-vide'), 'les sources sont VIDES par défaut');
   await page.getByTestId('source-ajouter').click();
   await page.getByTestId('source-nom').fill('Ma médiathèque (neutre)');
@@ -437,6 +444,9 @@ try {
   await page.getByTestId('source-enregistrer').click();
   verifier(await visible(page, 'sources-erreur'), 'une source visant le réseau local est refusée');
   await page.getByTestId('source-annuler').click();
+
+  await page.getByTestId('hub-parametres-fermer').click();
+  await page.getByTestId('tsuzuku-racine').waitFor({ timeout: 20_000 });
 
   // Garde côté principal, directement : le pont refuse ce que le moteur aurait dû refuser.
   const refus = await page.evaluate(async () => {
@@ -473,7 +483,6 @@ try {
     ['fiche', async () => page.getByTestId('lecteur-retour').click()],
     ['accueil', async () => { await page.getByTestId('fiche-retour').click(); }],
     ['bibliotheque', async () => page.getByTestId('onglet-app-bibliotheque').click()],
-    ['sources', async () => page.getByTestId('onglet-app-sources').click()],
   ]) {
     await action();
     await pause(700);
@@ -532,11 +541,18 @@ try {
   await ouvrirTsuzuku(page);
   verifier((await page.getByText(/Reprendre/).count()) === 0, 'la bibliothèque de Hugo est vide : rien de celle de l’administrateur (profils isolés)');
   await page.getByTestId('onglet-app-bibliotheque').click();
-  verifier(await page.getByText('Votre bibliothèque est vide', { exact: false }).isVisible().catch(() => false), 'Hugo voit une bibliothèque vide');
+  verifier(await page.getByText('Votre bibliothèque est vide', { exact: false }).first().isVisible().catch(() => false), 'Hugo voit une bibliothèque vide');
   verifier((await page.getByTestId('bibliotheque-importer').count()) === 0, 'Hugo n’a pas l’import (réservé à l’administrateur)');
-  await page.getByTestId('onglet-app-sources').click();
-  verifier(await visible(page, 'tsuzuku-sources-interdit'), 'Hugo voit les sources en lecture seule (gérées par l’administrateur)');
-  await capture(page, '25-ami-avec-tuile-sources');
+  verifier((await page.getByTestId('onglet-app-sources').count()) === 0, 'Hugo n’a pas d’onglet « Sources »');
+  verifier(await visible(page, 'tsuzuku-mention'), 'mention en pied de page de Tsuzuku');
+  await page.getByTestId('tsuzuku-reglages').click();
+  await page.getByTestId('hub-parametres').waitFor({ timeout: 20_000 });
+  verifier((await page.getByTestId('parametres-section-administration').count()) === 0 && (await page.getByTestId('tsuzuku-cle-tmdb').count()) === 0, 'Hugo (Ami) : ni Administration › Tsuzuku, ni clé d’API');
+  await page.getByTestId('parametres-section-tsuzuku').click();
+  verifier(await visible(page, 'sources-partagees-vide'), 'Hugo : « aucune source partagée » (rien ne lui est partagé)');
+  await capture(page, '25-ami-parametres-tsuzuku');
+  await page.getByTestId('hub-parametres-fermer').click();
+  await page.getByTestId('tsuzuku-racine').waitFor({ timeout: 20_000 });
   await page.keyboard.press('Escape');
   verifier(await visible(page, 'hub'), 'Échap ramène au hub depuis Tsuzuku');
 
