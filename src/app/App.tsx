@@ -2099,7 +2099,19 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     setDelaiVerrou(minutes);
     ecrireDelaiAppareil(stockageAppareil, minutes, valeur => new DepotParametres(session.base()).ecrire(PARAMETRES.verrouAutoMinutes, valeur));
   };
-  const essaiVerrou = useMemo(() => lireSurchargeEssai(stockageAppareil), [stockageAppareil]);
+  // Réglage d'appareil partagé entre onglets : un autre onglet qui le change (évènement `storage`) est suivi ici.
+  const [versionReglageAppareil, setVersionReglageAppareil] = useState(0);
+  useEffect(() => {
+    const fenetre = (globalThis as { addEventListener?(t: string, f: () => void): void; removeEventListener?(t: string, f: () => void): void });
+    const relire = () => {
+      setDelaiVerrou(lireDelaiAppareil(stockageAppareil));
+      setVersionReglageAppareil(n => n + 1);
+    };
+    fenetre.addEventListener?.('storage', relire);
+    return () => fenetre.removeEventListener?.('storage', relire);
+  }, [stockageAppareil]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const essaiVerrou = useMemo(() => lireSurchargeEssai(stockageAppareil), [stockageAppareil, versionReglageAppareil]);
   const delaiVerrouEffectif = essaiVerrou.delaiMinutes ?? delaiVerrou;
   const verrouillerAuto = (motif: MotifVerrou) => {
     setMessageDeverrouillage(messageVerrou(motif, delaiVerrouEffectif));
@@ -2514,7 +2526,17 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           theme={themeDuHub}
           docs={profils?.juridique}
           idInitial={juridiqueOuvert.id}
-          onEnregistrer={deverrouille ? profils?.onJuridique : undefined}
+          onEnregistrer={
+            deverrouille && profils?.onJuridique
+              ? async docs => {
+                  await profils.onJuridique!(docs);
+                  // Celui qui vient d'écrire les textes les a lus : pas de nouvelle acceptation à lui demander pour sa propre modification.
+                  const depot = new DepotParametres(session.base());
+                  depot.ecrire(PARAMETRES.acceptationsJuridiques, JSON.stringify(accepter(lireAcceptations(depot.lire(PARAMETRES.acceptationsJuridiques)), versionJuridique(docs), new Date().toISOString())));
+                  setVersionAcceptation(n => n + 1);
+                }
+              : undefined
+          }
           nomEditeur={profils?.actuel.nom}
           onFermer={() => setJuridiqueOuvert(undefined)}
         />

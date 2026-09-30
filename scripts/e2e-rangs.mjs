@@ -22,6 +22,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { nouveauContexte } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -248,7 +249,7 @@ const charge = cle => JSON.parse(JSON.parse(kv.get(cle)).charge ?? 'null');
 const navigateur = await chromium.launch({ headless: true });
 const options = { ignoreHTTPSErrors: true, viewport: { width: 1100, height: 860 }, acceptDownloads: true };
 try {
-  const pc = await (await navigateur.newContext(options)).newPage();
+  const pc = await (await nouveauContexte(navigateur, options)).newPage();
   pc.on('pageerror', e => log('erreur page PC :', e.message));
 
   // ================================================================ PC simulé : le Fondateur
@@ -345,7 +346,7 @@ try {
 
   // ================================================================ Navigateur de Hugo
   log('Navigateur de Hugo : relier avec SON code');
-  const nav = await (await navigateur.newContext(options)).newPage();
+  const nav = await (await nouveauContexte(navigateur, options)).newPage();
   nav.on('pageerror', e => log('erreur page navigateur de Hugo :', e.message));
   await relier(nav, codeHugo);
   await nav.getByTestId('connexion-prenom').waitFor({ timeout: 60_000 });

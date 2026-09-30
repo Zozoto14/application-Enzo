@@ -20,6 +20,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { nouveauContexte } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -121,8 +122,8 @@ async function deverrouiller(page, secret) {
 
 const navigateur = await chromium.launch({ headless: true });
 try {
-  const contexteA = await navigateur.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1100, height: 800 } });
-  const contexteB = await navigateur.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1100, height: 800 } });
+  const contexteA = await nouveauContexte(navigateur, { ignoreHTTPSErrors: true, viewport: { width: 1100, height: 800 } });
+  const contexteB = await nouveauContexte(navigateur, { ignoreHTTPSErrors: true, viewport: { width: 1100, height: 800 } });
   const A = await contexteA.newPage();
   const B = await contexteB.newPage();
   for (const [nom, p] of [['A', A], ['B', B]]) p.on('pageerror', e => log(`erreur page ${nom}:`, e.message));

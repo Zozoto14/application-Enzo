@@ -20,6 +20,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { nouveauContexte } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -183,7 +184,7 @@ async function relier(page, code) {
 const navigateur = await chromium.launch({ headless: true });
 const options = { ignoreHTTPSErrors: true, viewport: { width: 1100, height: 820 }, acceptDownloads: true };
 try {
-  const pc = await (await navigateur.newContext(options)).newPage();
+  const pc = await (await nouveauContexte(navigateur, options)).newPage();
   pc.on('pageerror', e => log('erreur page PC :', e.message));
 
   // ================================================================ PC simulé
@@ -229,7 +230,7 @@ try {
 
   // ================================================================ Navigateur neuf (administrateur)
   log('Navigateur neuf : relier avec le code du PC');
-  const site = await (await navigateur.newContext(options)).newPage();
+  const site = await (await nouveauContexte(navigateur, options)).newPage();
   site.on('pageerror', e => log('erreur page site :', e.message));
   await relier(site, CODE_PC);
   await site.getByTestId('connexion-prenom').waitFor({ timeout: 60_000 });
@@ -265,7 +266,7 @@ try {
 
   // ================================================================ Téléphone de Léa
   log('Téléphone de Léa : relier avec SON code');
-  const tel = await (await navigateur.newContext({ ...options, viewport: { width: 420, height: 860 } })).newPage();
+  const tel = await (await nouveauContexte(navigateur, { ...options, viewport: { width: 420, height: 860 } })).newPage();
   tel.on('pageerror', e => log('erreur page téléphone :', e.message));
   await relier(tel, codeLea);
   await tel.getByTestId('connexion-prenom').waitFor({ timeout: 60_000 });
@@ -303,7 +304,7 @@ try {
 
   // ================================================================ Ancien coffre local
   log('Navigateur avec un ancien coffre local : remplacement');
-  const ancien = await (await navigateur.newContext(options)).newPage();
+  const ancien = await (await nouveauContexte(navigateur, options)).newPage();
   ancien.on('pageerror', e => log('erreur page ancien :', e.message));
   await ancien.goto(SITE);
   await ancien.getByTestId('accueil-site').waitFor({ timeout: 60_000 });

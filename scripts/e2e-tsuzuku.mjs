@@ -24,6 +24,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { nouveauContexte } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -214,7 +215,7 @@ async function retourHub(page) {
 
 const navigateur = await chromium.launch({ headless: true });
 try {
-  const contexte = await navigateur.newContext({ viewport: { width: 1100, height: 820 }, acceptDownloads: true });
+  const contexte = await nouveauContexte(navigateur, { viewport: { width: 1100, height: 820 }, acceptDownloads: true });
   // Le réseau externe n'existe pas ici : tout ce qui vise nos faux sites part vers l'internet local.
   await contexte.route(url => HOTES.includes(url.hostname), async route => {
     const url = new URL(route.request().url());
@@ -539,6 +540,40 @@ try {
   await capture(page, '25-ami-avec-tuile-sources');
   await page.keyboard.press('Escape');
   verifier(await visible(page, 'hub'), 'Échap ramène au hub depuis Tsuzuku');
+
+  // ============================================================ Présence : verrouillage automatique pendant une lecture
+  log('Présence pendant une lecture');
+  await seConnecter('admin', { motDePasse: MDP_ADMIN, secret: secretAdmin });
+  await activerPontPc();
+  await ouvrirTsuzuku(page);
+  await page.getByTestId('onglet-app-accueil').click();
+  await page.getByTestId('accueil-recherche').fill('Dandadan');
+  await page.getByTestId('accueil-chercher').click();
+  await page.getByTestId('carte-anime-2').first().click();
+  await page.getByTestId('fiche-titre').waitFor({ timeout: 20_000 });
+  await page.getByTestId('episode-4').click();
+  await page.getByTestId('lecteur-iframe').waitFor({ timeout: 30_000 });
+  // Délai d'essai court (4 s) et 8 s pour répondre : posés comme le ferait un autre onglet (évènement storage).
+  const reglerEssai = (ms, secondes) =>
+    page.evaluate(([delai, presence]) => {
+      localStorage.setItem('appdashboard.verrou-auto-essai-ms', String(delai));
+      localStorage.setItem('appdashboard.presence-essai-s', String(presence));
+      window.dispatchEvent(new StorageEvent('storage', { key: 'appdashboard.verrou-auto-essai-ms' }));
+    }, [ms, secondes]);
+  await reglerEssai(4000, 8);
+  const dialogue = await page.getByTestId('presence-dialogue').waitFor({ timeout: 12_000 }).then(() => true, () => false);
+  verifier(dialogue, 'pendant la lecture, « Êtes-vous toujours là ? » s’affiche au lieu de verrouiller');
+  verifier((await page.getByTestId('bouton-deverrouiller').count()) === 0, 'l’application n’est pas verrouillée tant que le compte à rebours court');
+  await capture(page, '26-presence-etes-vous-toujours-la');
+  await page.getByTestId('presence-suis-la').click();
+  verifier(await page.getByTestId('presence-dialogue').waitFor({ state: 'detached', timeout: 5_000 }).then(() => true, () => false), '« Je suis là » ferme le dialogue');
+  verifier(await visible(page, 'lecteur-iframe'), 'la lecture continue après « Je suis là »');
+  const encore = await page.getByTestId('presence-dialogue').waitFor({ timeout: 12_000 }).then(() => true, () => false);
+  verifier(encore, 'le dialogue revient après un nouveau délai sans geste');
+  const verrouille = await page.getByTestId('bouton-deverrouiller').waitFor({ timeout: 14_000 }).then(() => true, () => false);
+  verifier(verrouille, 'sans réponse pendant le compte à rebours, l’application se verrouille');
+  verifier(/toujours là/.test(await page.getByTestId('message-deverrouillage').innerText().catch(() => '')), 'l’écran de connexion dit pourquoi');
+  await capture(page, '27-verrouille-sans-reponse-presence');
 
   verifier(erreursPage.length === 0, `aucune erreur JavaScript dans la page (${erreursPage.length})`);
 } finally {
