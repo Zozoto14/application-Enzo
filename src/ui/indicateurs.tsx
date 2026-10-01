@@ -11,7 +11,8 @@
  */
 
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Pressable, Text } from './mobile/adaptatif';
 import { SousTitre, usePalette, Variation } from './composants';
 import { ESPACEMENT, RAYON, couleurTendance } from './theme';
 import type { Tendance } from './format';

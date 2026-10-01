@@ -7,7 +7,8 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, Switch, Text, View, useColorScheme } from 'react-native';
+import { ScrollView, Switch, View, useColorScheme } from 'react-native';
+import { Text } from '../mobile/adaptatif';
 import type { Titre as TitreDomaine } from '../../core/domain/types';
 import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, palettePour, stylesPartages } from '../theme';

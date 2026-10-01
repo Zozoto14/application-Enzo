@@ -4,7 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '../mobile/adaptatif';
 import { Bouton, SousTitre, usePalette } from '../composants';
 import { CarteSection, Metrique, Segments, Vide } from '../elements';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages, POLICE_TITRE } from '../theme';

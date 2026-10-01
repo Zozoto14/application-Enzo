@@ -11,7 +11,8 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View, useColorScheme } from 'react-native';
+import { ScrollView, StyleSheet, Switch, View, useColorScheme } from 'react-native';
+import { Text } from '../mobile/adaptatif';
 import {
   JOURS,
   heureValide,

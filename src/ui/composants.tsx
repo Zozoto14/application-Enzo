@@ -7,16 +7,8 @@
  */
 
 import React from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  useWindowDimensions,
-  type TextInputProps,
-  type ViewProps,
-} from 'react-native';
+import { StyleSheet, View, useWindowDimensions, type TextInputProps, type ViewProps } from 'react-native';
+import { Pressable, Text, TextInput } from './mobile/adaptatif';
 import { ESPACEMENT, RAYON, couleurTendance, palettePour, type Palette, POLICE_TITRE } from './theme';
 import type { Tendance } from './format';
 import { useMobile } from './mobile/useMobile';

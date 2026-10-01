@@ -4,7 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { Text, TextInput } from '../mobile/adaptatif';
 import { executerDiagnostic, rapportTexte, type Test, type Verification } from '../../diagnostic/verifications';
 import { Bouton, SousTitre, usePalette } from '../composants';
 import { CarteSection } from '../elements';

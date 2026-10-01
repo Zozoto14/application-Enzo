@@ -6,7 +6,8 @@
  */
 
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { ScrollView, StyleSheet, View, useColorScheme } from 'react-native';
+import { Pressable, Text } from '../mobile/adaptatif';
 import type { Compte, TypeCompte } from '../../core/domain/types';
 import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';

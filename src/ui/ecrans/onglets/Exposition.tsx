@@ -4,7 +4,8 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Text } from '../../mobile/adaptatif';
 import { Decimal } from '../../../core/money/decimal';
 import { valoriserPositions } from '../../../core/portfolio/valorisation';
 import { Champ, SousTitre, usePalette } from '../../composants';

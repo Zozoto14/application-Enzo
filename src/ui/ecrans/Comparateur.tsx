@@ -8,7 +8,8 @@
  */
 
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { ScrollView, StyleSheet, View, useColorScheme } from 'react-native';
+import { Pressable, Text } from '../mobile/adaptatif';
 import type { ColonneComparaison, VueComparateur } from '../vues/comparateur';
 import { Bouton, Carte, SousTitre, Titre, Variation, usePalette } from '../composants';
 import { Explication } from '../indicateurs';

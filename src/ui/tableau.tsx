@@ -6,7 +6,8 @@
  */
 
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, Text } from './mobile/adaptatif';
 import { usePalette } from './composants';
 import { ESPACEMENT } from './theme';
 import type { Palette } from './theme';

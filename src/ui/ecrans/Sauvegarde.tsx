@@ -8,7 +8,8 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { ScrollView, StyleSheet, View, useColorScheme } from 'react-native';
+import { Text } from '../mobile/adaptatif';
 import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { joursAvantProchaine } from '../../sauvegarde/automatique';
 import { Explication } from '../indicateurs';

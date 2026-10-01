@@ -8,7 +8,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, StyleSheet, View } from 'react-native';
+import { Pressable, Text } from './mobile/adaptatif';
 import { Bouton, usePalette } from './composants';
 import { ESPACEMENT, RAYON, POLICE_TITRE } from './theme';
 

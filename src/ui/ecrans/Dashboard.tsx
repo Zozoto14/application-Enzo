@@ -13,7 +13,8 @@
  */
 
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { ScrollView, StyleSheet, View, useColorScheme } from 'react-native';
+import { Text } from '../mobile/adaptatif';
 import { Bouton, Carte, SousTitre, Titre, Variation, usePalette } from '../composants';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
 import type { LignePosition, VueDashboard } from '../vues/dashboard';

@@ -4,7 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Text } from '../mobile/adaptatif';
 import { Decimal } from '../../core/money/decimal';
 import { Actions, Alerte, Bouton, Champ, LigneChamps, SousTitre, usePalette } from '../composants';
 import { CarteSection, Metrique, Rangee, Vide } from '../elements';

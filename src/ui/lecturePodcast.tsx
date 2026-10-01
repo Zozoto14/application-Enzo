@@ -4,7 +4,8 @@
  */
 
 import React, { useSyncExternalStore } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Pressable, Text } from './mobile/adaptatif';
 import { lecturePartagee, type EtatLecture, type Lecture } from '../podcast/lecture';
 import { usePalette } from './composants';
 import { ESPACEMENT, RAYON } from './theme';

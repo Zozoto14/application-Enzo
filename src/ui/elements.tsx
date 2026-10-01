@@ -7,15 +7,8 @@
  */
 
 import React, { createContext, useContext, useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import { StyleSheet, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, Text } from './mobile/adaptatif';
 import { usePalette } from './composants';
 import { Explication } from './indicateurs';
 import { ESPACEMENT, RAYON, POLICE_TITRE } from './theme';

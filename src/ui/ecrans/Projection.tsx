@@ -7,7 +7,8 @@
  */
 
 import React from 'react';
-import { ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
+import { ScrollView, StyleSheet, View, useColorScheme } from 'react-native';
+import { Text } from '../mobile/adaptatif';
 import { ECART_AFFICHE, type ChampsProjection, type VueProjection } from '../vues/projection';
 import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { Jauge } from '../indicateurs';

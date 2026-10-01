@@ -4,7 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Pressable, Text } from '../../mobile/adaptatif';
 import { Champ, SousTitre, usePalette } from '../../composants';
 import { CarteSection, Metrique, Rangee, Selecteur, Signe } from '../../elements';
 import { simulerVente, type LigneVendable } from '../../vues/simulationVente';

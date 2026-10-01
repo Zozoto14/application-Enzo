@@ -4,7 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, Text, TextInput } from '../mobile/adaptatif';
 import type { CandidatSymbole } from '../../cours/symboles';
 import { Alerte, SousTitre, usePalette } from '../composants';
 import { CarteSection, Rangee, Segments, Vide } from '../elements';

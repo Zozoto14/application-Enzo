@@ -8,7 +8,8 @@
  */
 
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../../mobile/adaptatif';
 import { SousTitre, usePalette } from '../../composants';
 import { CarteSection, Metrique, Rangee, Vide } from '../../elements';
 import { Barres, GraphiqueLignes, Nuage } from '../../graphiques/Graphiques';

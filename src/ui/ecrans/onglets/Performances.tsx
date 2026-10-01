@@ -4,7 +4,8 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, Text } from '../../mobile/adaptatif';
 import { SousTitre, usePalette } from '../../composants';
 import {
   CarteSection,

@@ -4,7 +4,8 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Text } from '../mobile/adaptatif';
 import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { DepotFichier } from '../DepotFichier';
 import { formaterDate } from '../format';

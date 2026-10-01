@@ -13,14 +13,8 @@
 import type { ResultatSiIndice } from '../vues/siIndice';
 import type { LigneVendable } from '../vues/simulationVente';
 import React, { useState } from 'react';
-import { TextInput } from 'react-native';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, Text, TextInput } from '../mobile/adaptatif';
 import {
   Bouton,
   SousTitre,

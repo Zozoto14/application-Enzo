@@ -6,7 +6,8 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, Text } from '../mobile/adaptatif';
 import {
   CATEGORIES,
   REGIONS,

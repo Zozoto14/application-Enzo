@@ -4,7 +4,8 @@
  */
 
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Text } from '../../mobile/adaptatif';
 import { SousTitre, usePalette } from '../../composants';
 import { CarteSection, Metrique, Rangee, Signe } from '../../elements';
 import { Barres, Donut } from '../../graphiques/Graphiques';

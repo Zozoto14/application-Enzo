@@ -11,15 +11,8 @@
  */
 
 import React, { useState } from 'react';
-import {
-  Linking,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  useColorScheme,
-} from 'react-native';
+import { Linking, ScrollView, StyleSheet, View, useColorScheme } from 'react-native';
+import { Pressable, Text } from '../mobile/adaptatif';
 import type { CandidatSymbole } from '../../cours/symboles';
 // `Titre` designe ici le composant d'interface : la valeur du domaine est
 // importee sous un autre nom pour que la collision saute aux yeux.

@@ -7,7 +7,8 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Pressable, Text, TextInput } from '../mobile/adaptatif';
 import { Bouton, usePalette } from '../composants';
 import { CarteSection, Metrique, Pile, Rangee, Segments, Selecteur, Signe, Vide } from '../elements';
 import { Barres, Donut, GraphiqueLignes, Radar } from '../graphiques/Graphiques';

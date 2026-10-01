@@ -7,7 +7,8 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, StyleSheet, View } from 'react-native';
+import { Pressable, Text } from './mobile/adaptatif';
 import type { ResultatTheses, These, ValeurCherchee } from '../fondamentaux/theses';
 import type { ArticleMedia } from '../podcast/medias';
 import { usePalette } from './composants';

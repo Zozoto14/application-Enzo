@@ -14,7 +14,8 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, Text } from '../mobile/adaptatif';
 import type { LigneSurveillee, VueWatchlist } from '../vues/watchlist';
 import { calculerPrixJuste, type VueFiche } from '../vues/fiche';
 import { Bouton, Champ, SousTitre, usePalette } from '../composants';
