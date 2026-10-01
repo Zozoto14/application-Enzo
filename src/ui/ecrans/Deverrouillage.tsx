@@ -201,12 +201,16 @@ export function Deverrouillage({
                 accessibilityLabel="Diagnostic du déverrouillage"
                 onPress={ouvrirDiagnostic}
                 testID="lien-diagnostic"
-                style={{ color: palette.texteSecondaire, textDecorationLine: 'underline', fontSize: 13, padding: ESPACEMENT.s }}>
+                // Discret sur le bureau ; sur téléphone, cible tactile de 44 px et texte lisible.
+                style={[
+                  { color: palette.texteSecondaire, textDecorationLine: 'underline', fontSize: 13, padding: ESPACEMENT.s },
+                  mobile ? { fontSize: TEXTE.legende, minHeight: 44, minWidth: 44, paddingVertical: 12, textAlign: 'center' } : null,
+                ]}>
                 Diagnostic
               </Text>
               {diagOuvert ? (
                 <View style={{ gap: ESPACEMENT.s, alignSelf: 'stretch' }} testID="panneau-diagnostic">
-                  <Text selectable style={{ color: palette.texte, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12 }} testID="texte-diagnostic">
+                  <Text selectable style={{ color: palette.texte, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: mobile ? TEXTE.legende : 12 }} testID="texte-diagnostic">
                     {diag}
                   </Text>
                   <SousTitre>Aucun secret : ni mot de passe, ni code, ni identifiant de compte.</SousTitre>
