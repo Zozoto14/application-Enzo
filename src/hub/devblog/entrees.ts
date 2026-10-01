@@ -41,6 +41,52 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.10',
+    date: '2026-10-10',
+    titre: 'Déverrouillage : diagnostic et messages plus clairs',
+    resume:
+      'Des identifiants justes ne doivent plus être refusés sans explication : l’écran de déverrouillage distingue un problème de l’appareil d’un mauvais mot de passe, tolère les copier-coller imparfaits, repère une horloge décalée et propose un diagnostic à envoyer au support.',
+    illustration: 'isolation',
+    fonctionnalites: [
+      {
+        id: 'deverrouillage-erreur-technique',
+        emoji: '🧮',
+        titre: 'Problème de l’appareil ≠ mauvais mot de passe',
+        texte:
+          'Si le navigateur ne parvient pas à calculer la clé (mémoire insuffisante, par exemple sur un vieil iPad), l’écran le dit clairement au lieu d’afficher « Mot de passe ou code incorrect », et l’essai ne compte pas dans les tentatives. Un échec d’authentification, lui, ne dit toujours pas lequel des deux facteurs est faux.',
+      },
+      {
+        id: 'deverrouillage-copier-coller',
+        emoji: '📋',
+        titre: 'Copier-coller toléré',
+        texte:
+          'Un espace ou un retour à la ligne collé au début ou à la fin du mot de passe, un caractère invisible ou un accent décomposé ne font plus échouer le déverrouillage (la saisie exacte est toujours essayée en premier : rien ne change pour les mots de passe existants). Le code « 123 456 » collé avec une espace est accepté, et les correcteurs automatiques sont coupés.',
+      },
+      {
+        id: 'deverrouillage-horloge',
+        emoji: '⏱️',
+        titre: 'Horloge décalée détectée',
+        texte:
+          'Après un échec, l’heure de l’appareil est comparée à celle du relais : au-delà de 20 secondes d’écart, l’écran indique de combien elle est décalée et demande d’activer le réglage automatique de la date et de l’heure (les codes à six chiffres en dépendent).',
+      },
+      {
+        id: 'deverrouillage-coffre-pc',
+        emoji: '🔁',
+        titre: 'Mot de passe changé sur le PC',
+        texte:
+          'Le navigateur lit le coffre publié par votre PC : si le mot de passe y a été changé, le nouveau mot de passe ouvre aussi ce navigateur. Si ce navigateur garde un autre coffre que celui de votre PC, il le suggère après deux échecs (« relier mon compte »). Le compte à rebours « Trop de tentatives » avance désormais tout seul.',
+        adminSeulement: true,
+      },
+      {
+        id: 'deverrouillage-diagnostic',
+        emoji: '🩺',
+        titre: 'Lien « Diagnostic »',
+        texte:
+          'Sous l’écran de déverrouillage, un lien discret affiche la version, l’appareil, l’écart d’horloge, ce que le navigateur sait faire, l’état de la liaison et du coffre — sans aucun secret — avec un bouton « Copier le diagnostic » pour le support.',
+      },
+    ],
+  },
+  {
     version: '2026.10.09',
     date: '2026-10-09',
     titre: 'Synchronisation dès le démarrage',

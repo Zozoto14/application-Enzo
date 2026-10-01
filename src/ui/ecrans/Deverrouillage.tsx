@@ -52,7 +52,7 @@ export function chiffresDuCode(saisi: string): string {
   return saisi.normalize('NFKC').replace(/\D/g, '').slice(0, 6);
 }
 
-/** Délai pendant lequel un second appui est ignoré (double soumission). */
+/** Sans retour de l'hôte (enCours), un second appui redevient possible après ce délai. */
 const ANTI_REBOND_MS = 1500;
 
 export function Deverrouillage({
@@ -94,7 +94,13 @@ export function Deverrouillage({
     return () => clearInterval(minuterie);
   }, [secondesAvantNouvelEssai, erreur]);
 
-  const dernierEnvoi = useRef(0);
+  // Double soumission : un appui est ignoré tant que le précédent n'a pas été
+  // pris en charge (l'hôte passe enCours à vrai puis à faux) ; filet de 1,5 s
+  // pour un hôte qui ne signale rien.
+  const envoiEnCours = useRef(false);
+  useEffect(() => {
+    if (!enCours) envoiEnCours.current = false;
+  }, [enCours, erreur]);
   const [diag, setDiag] = useState<string | undefined>();
   const [diagOuvert, setDiagOuvert] = useState(false);
   const [copie, setCopie] = useState<string | undefined>();
@@ -104,9 +110,11 @@ export function Deverrouillage({
   const espacesAutour = motDePasse.length > 0 && motDePasse !== motDePasse.trim();
 
   const envoyer = () => {
-    const maintenant = Date.now();
-    if (enCours || verrouille || maintenant - dernierEnvoi.current < ANTI_REBOND_MS) return;
-    dernierEnvoi.current = maintenant;
+    if (enCours || verrouille || envoiEnCours.current) return;
+    envoiEnCours.current = true;
+    setTimeout(() => {
+      envoiEnCours.current = false;
+    }, ANTI_REBOND_MS);
     onDeverrouiller(motDePasse, code);
   };
 
