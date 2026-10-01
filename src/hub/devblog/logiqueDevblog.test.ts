@@ -2,8 +2,8 @@ import { decider, etapesVisite, fonctionnalitesPour, lireEtat, marquerLues } fro
 import { ENTREES, type EntreeDevblog } from './entrees';
 
 const v2: EntreeDevblog = {
-  version: '2026.10.09',
-  date: '2026-10-09',
+  version: '2099.12.31',
+  date: '2099-12-31',
   titre: 'Suivante',
   resume: 'r',
   illustration: 'hub',
@@ -83,10 +83,13 @@ describe('devblog', () => {
     const tsuzuku = ENTREES.find(e => e.version === '2026.10.07')!;
     expect(tsuzuku.titre).toBe('Tsuzuku : sources partagées et assistant d’ajout');
     expect(tsuzuku.fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['tsuzuku-sources-partagees', 'tsuzuku-design']);
-    // Verrouillage automatique, Support et mentions légales (dernière entrée) : pour tout le monde.
-    expect(ENTREES[0].titre).toBe('Verrouillage automatique, Support et mentions légales');
+    // Verrouillage automatique, Support et mentions légales : pour tout le monde.
+    expect(ENTREES[1].titre).toBe('Verrouillage automatique, Support et mentions légales');
+    // Synchronisation dès le démarrage (dernière entrée) : l'indicateur concerne aussi les amis.
+    expect(ENTREES[0].titre).toBe('Synchronisation dès le démarrage');
+    expect(ENTREES[0].fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['synchro-demarrage-indicateur']);
     expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('afficher');
-    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.08', '2026.10.07', '2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
+    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.09', '2026.10.08', '2026.10.07', '2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
   });
 
   it('marquer lu est idempotent et tolère un état corrompu', () => {

@@ -22,7 +22,72 @@ Ouverture après déverrouillage · retour au premier plan (`visibilitychange`, 
 `online` · ~3 s après une écriture locale (`Session.surEcriture`, `src/db/ecoute.ts`) · toutes les 2 min · `pagehide` et
 page masquée : dépôt `fetch` avec `keepalive` (`deposerAvantFermeture`) · après un échec : réessais à 5 s, 30 s, 2 min,
 10 min (le tic de 2 min se tait pendant ces paliers). Un seul tour à la fois ; une demande arrivée pendant un tour
-en déclenche un nouveau. Le tour ne tourne toujours que déverrouillé et pour l'administrateur.
+en déclenche un nouveau. Le tour ne tourne toujours que déverrouillé et pour l'administrateur ; avant le déverrouillage,
+le préchargement (section suivante) fait déjà le travail réseau sur des enveloppes chiffrées.
+
+## Préchargement au démarrage (`src/sync/relais/caches.ts`, `prechargement.ts`)
+
+La configuration du relais et la clé de synchro vivent dans la base chiffrée du profil : aucun dépôt ne s'ouvre avant
+le déverrouillage. Le **travail réseau**, lui, peut commencer dès le lancement, sur des enveloppes chiffrées :
+
+1. **Au lancement, sans clé** (`Prechargeur`, démarré par `bureau/index.tsx` — PC, y compris au démarrage de Windows
+   avec `--demarrage`, fenêtre réduite près de l'horloge, et site de secours). Liaison utilisée : celle de
+   l'administrateur **déjà connue** de l'appareil (code retenu par le navigateur — `applibourse.liaisons` —, ou
+   `relais-local.json` lu par le processus principal, `relais:config`), la même que pour Yahoo et les médias. Un jeton
+   de profil d'ami (`p1.…`) n'est jamais utilisé : `/boite` est réservée au jeton maître, et le préchargement s'arrête
+   avant tout appel. Un passage : `GET /boite` (index) → `GET /boite/<appareil>` pour chaque dépôt plus récent que ce
+   qui est déjà fusionné (`lus`) ou déjà en cache → cache **`entrant`** ; puis `PUT /boite/<moi>` de l'enveloppe du
+   cache **`sortant`**, si elle existe. Relancé au retour du réseau (`online`), après un échec (5 s, 30 s, 2 min,
+   10 min) et toutes les 5 min tant que l'appareil reste verrouillé ; suspendu pendant une session déverrouillée
+   (`Session.surOuverture` / `surFermeture`).
+2. **Pendant une session déverrouillée** (`preparerSortant`, branché dans `useSynchro`) : après chaque tour, ~2 s après
+   chaque écriture, à `pagehide` et juste avant le verrouillage, si la file `enAttente` n'est pas vide, la charge est
+   scellée (exactement comme un dépôt) et rangée dans `sortant` avec sa date et son empreinte ; file vide → `sortant`
+   vidé. `noterLus` recopie dans `entrant` les dates déjà fusionnées, pour que le démarrage ne retélécharge rien.
+3. **Au déverrouillage** (`integrerEntrant`, abonné à `Session.surOuverture`, donc **avant** la première image) : les
+   enveloppes d'`entrant` sont ouvertes avec la clé et fusionnées (même code que le tour réseau : `appliquerDepot`), de
+   façon synchrone ; le thème, les tuiles et les données reçus sont dans la base quand le hub relit ses préférences
+   (`useLayoutEffect`). Le cache est vidé, `lus` avance (le tour réseau qui suit ne retélécharge pas). Un envoi fait sans
+   clé au démarrage est reporté dans l'état chiffré (`dernierEnvoi`, `dernierDepotLe`) : pas de second PUT identique.
+
+**Budget d'écritures** : aucun PUT sans enveloppe en attente ; jamais deux dépôts à moins de 30 s
+(`dernierDepotLe`, recopié dans `sortant`) ; une enveloppe plus ancienne que le dépôt de cet appareil déjà indexé
+(envoi `keepalive` de fermeture, tour réussi) est abandonnée sans PUT ; réessais espacés. Les lectures restent
+minimes : un `GET /boite` toutes les 5 min au plus pendant que l'appareil est verrouillé.
+
+**Ce qui est sur le disque, en clair ou chiffré.** Fichiers logiques par profil, dans la liste fermée du processus
+principal (`synchro-entrant`, `synchro-sortant`, `synchro-entrant-<id>`, `synchro-sortant-<id>` →
+`synchro-*.json` dans `donnees/` ; IndexedDB sur le site ; en mémoire seulement dans l'app native) :
+
+| Donnée | Forme |
+| --- | --- |
+| Contenu des dépôts (portefeuille, thème, tuiles, devblog vu…) | **chiffré** (XChaCha20-Poly1305, clé de synchro jamais écrite hors de la base chiffrée) |
+| Enveloppe : identifiant aléatoire de l'appareil, date, nonce | en clair (déjà visibles sur le relais) |
+| `lus` (date du dernier dépôt fusionné par appareil), `dernierDepotLe`, essais, empreinte de la charge | en clair |
+| Liaison | seulement une **empreinte** SHA-256 de `relais|jeton` (sert à purger le cache si le relais change) ; ni jeton, ni clé, ni mot de passe |
+
+Chaque enveloppe est revérifiée à l'écriture **et** à la lecture (`enveloppeSure` : champs connus seulement, nonce
+hexadécimal, charge en base 64, appareil `[0-9a-f]{8}`) ; une charge en clair (le coffre, déposé en JSON) est refusée.
+Bornes : 8 Mio par enveloppe, 12 appareils dans `entrant` (une enveloppe par appareil, la plus récente), 2 dans
+`sortant`. Tests : `src/sync/relais/prechargement.test.ts` (fichiers écrits inspectés : ni contenu, ni clé, ni jeton).
+
+**Thème avant déverrouillage.** L'écran de connexion garde le cache déjà en place (dernier thème appliqué, par profil,
+`applibourse.affichage`). Un thème reçu dans `entrant` mais pas encore fusionné **n'est pas** appliqué avant le
+déverrouillage : il est chiffré, et le lire exigerait la clé. Il s'applique dès la première image après le
+déverrouillage, puis devient le thème mémorisé pour les lancements suivants.
+
+**Écran de connexion.** Une ligne discrète (`LigneSynchroDemarrage`, `testID="synchro-demarrage"`) : « N mises à jour
+reçues, en attente de déverrouillage », « N éléments prêts à envoyer », « Synchronisé il y a X min ». L'état
+(`applibourse.synchro.demarrage`) est **global à l'appareil** et ne contient que deux compteurs et une date : le même
+texte s'affiche quel que soit le prénom saisi (vrai compte ou leurre), il ne dit rien d'un compte.
+
+**Isolation et nettoyage.** Un profil ne lit que ses fichiers (`nomFichierCache`, et `fichierAutorise` côté Electron :
+un ami n'atteint ni `synchro-*` de l'administrateur, ni ceux d'un compte qu'il gère) ; seul le cache de
+l'administrateur (`principal`) est rempli avant le choix d'un compte. Relais ou jeton changé → caches ignorés puis
+vidés ; « Désactiver » la synchronisation ou relier ce navigateur à un autre compte → caches vidés ; appareil oublié
+(ici ou du relais) → son enveloppe retirée d'`entrant`. Les anciens appareils ne voient aucune différence (mêmes
+dépôts, même format). Limites : l'app iPhone garde ces caches en mémoire seulement (pas de préchargement à froid) ;
+les comptes d'amis ne synchronisent pas par `/boite` et ne sont pas concernés.
 
 ## Ordre de déploiement (compatibilité)
 

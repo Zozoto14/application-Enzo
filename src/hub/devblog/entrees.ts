@@ -41,6 +41,39 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.09',
+    date: '2026-10-09',
+    titre: 'Synchronisation dès le démarrage',
+    resume:
+      'La synchronisation n’attend plus le mot de passe : dès que l’application (ou le PC) démarre, elle récupère les nouveautés des autres appareils et envoie ce qui était resté en attente, toujours chiffré. Au déverrouillage, tout est déjà là, thème compris.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'synchro-demarrage-reception',
+        emoji: '⚡',
+        titre: 'Tout est prêt au déverrouillage',
+        texte:
+          'Au lancement, avant même le mot de passe, les modifications faites sur vos autres appareils sont téléchargées sous forme chiffrée (illisibles sans votre clé). Dès que vous déverrouillez, elles sont appliquées immédiatement : thème, tuiles et données s’affichent à jour dès la première image, sans attendre le réseau.',
+        adminSeulement: true,
+      },
+      {
+        id: 'synchro-demarrage-envoi',
+        emoji: '📤',
+        titre: 'Rien ne reste coincé hors ligne',
+        texte:
+          'Une modification faite sans connexion (ou juste avant une fermeture brutale) est préparée, chiffrée, pour l’envoi. Au démarrage suivant — y compris au démarrage de Windows, l’application près de l’horloge — elle part toute seule dès que le réseau revient, sans avoir à déverrouiller.',
+        adminSeulement: true,
+      },
+      {
+        id: 'synchro-demarrage-indicateur',
+        emoji: '🕒',
+        titre: 'L’état visible avant de se connecter',
+        texte:
+          'L’écran de connexion indique discrètement « 1 mise à jour reçue, en attente de déverrouillage », « 1 élément prêt à envoyer » et « Synchronisé il y a X min ». Rien d’autre : ni compte, ni contenu.',
+      },
+    ],
+  },
+  {
     version: '2026.10.08',
     date: '2026-10-08',
     titre: 'Verrouillage automatique, Support et mentions légales',

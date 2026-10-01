@@ -507,3 +507,28 @@ describe('lier un nouvel appareil au compte du PC', () => {
     expect(session.statut()).toBe('deverrouille');
   });
 });
+
+describe('abonnés à l’ouverture et à la fermeture de la base', () => {
+  it('préviennent juste après l’ouverture (base lisible) et juste avant la fermeture', () => {
+    const { session, initialisation, maintenant } = demarrer();
+    session.verrouiller();
+    const journal: string[] = [];
+    session.surOuverture(() => {
+      // La base est déjà ouverte : la fusion du cache de démarrage peut y écrire avant le premier rendu.
+      new DepotComptes(session.base()).enregistrer(compte({ id: 'recu', nom: 'Reçu avant déverrouillage' }));
+      journal.push('ouverture');
+    });
+    session.surOuverture(() => {
+      throw new Error('abonné fautif');
+    });
+    session.surFermeture(() => journal.push(`fermeture:${new DepotComptes(session.base()).tous().length}`));
+    session.deverrouiller({ motDePasse: MOT_DE_PASSE, codeTotp: codeTotp(initialisation.secretTotp, maintenant()) });
+    expect(journal).toEqual(['ouverture']);
+    expect(new DepotComptes(session.base()).tous().map(c => c.id)).toContain('recu');
+    session.verrouiller();
+    expect(journal).toEqual(['ouverture', 'fermeture:1']);
+    // Déjà verrouillée : personne n'est prévenu deux fois.
+    session.verrouiller();
+    expect(journal).toHaveLength(2);
+  });
+});
