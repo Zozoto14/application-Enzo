@@ -37,8 +37,8 @@ const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).hr
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-demarrage');
 mkdirSync(CAPTURES, { recursive: true });
 const JETON = 'jeton-e2e-0123456789abcdef';
-const PORT_RELAIS = 8789;
-const PORT_SITE = 5198;
+const PORT_RELAIS = 8795;
+const PORT_SITE = 5205;
 const MOT_DE_PASSE = 'un-mot-de-passe-e2e-très-long-42';
 
 // ------------------------------------------------------------- Faux relais
