@@ -279,6 +279,19 @@ export async function parcoursAdministration({ page, controler, verifier, log, M
   verifier(await visible(page, 'admin-section-securite', 20_000), 'panneau déverrouillé : retour sur la section Sécurité');
   await retour('admin-accueil');
 
+  // ----------------------------------------------------------------------- Paramètres › Administration › Tsuzuku · Sources
+  log('Paramètres › Administration › Tsuzuku · Sources');
+  await toucher(page, 'barre-basse-parametres');
+  await toucher(page, 'parametres-section-administration');
+  await page.getByTestId('parametres-panneau-administration').waitFor();
+  await controler(page, 'paramètres › administration');
+  await pause(500);
+  await controler(page, 'paramètres › administration (Tsuzuku · Sources)');
+  await toucher(page, 'parametres-retour').catch(() => undefined);
+  await toucher(page, 'barre-basse-accueil');
+  await page.getByTestId('hub').waitFor();
+  await ouvrirAdministration(page);
+
   // ----------------------------------------------------------------------- Petit iPhone
   log('Administration : 375 × 667');
   await page.setViewportSize({ width: 375, height: 667 });
