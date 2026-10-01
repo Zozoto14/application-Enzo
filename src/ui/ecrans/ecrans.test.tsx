@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { rejouer } from '../../core/portfolio/engine';
 import { importerPositions, transactionsDeReprise } from '../../core/import/positions';
 import { MODELE_BOURSOBANK_POSITIONS } from '../../core/import/modeles';
@@ -89,6 +89,84 @@ describe('Deverrouillage', () => {
   it('accorde le singulier à une seconde restante', async () => {
     await render(<Deverrouillage {...props} secondesAvantNouvelEssai={1} />);
     expect(screen.getByText(/dans 1 seconde\./)).toBeTruthy();
+  });
+
+  it('le compte à rebours avance tout seul, puis rend la main (il restait figé sur « 1 seconde »)', async () => {
+    jest.useFakeTimers();
+    try {
+      const fin = jest.fn();
+      await render(<Deverrouillage {...props} secondesAvantNouvelEssai={2} onFinTemporisation={fin} />);
+      expect(screen.getByText(/dans 2 secondes/)).toBeTruthy();
+      await act(async () => {
+        jest.advanceTimersByTime(1_100);
+      });
+      expect(screen.getByText(/dans 1 seconde\./)).toBeTruthy();
+      await act(async () => {
+        jest.advanceTimersByTime(1_000);
+      });
+      expect(screen.queryByText(/Trop de tentatives/)).toBeNull();
+      expect(fin).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('un double appui n’envoie qu’une tentative', async () => {
+    await render(<Deverrouillage {...props} />);
+    await fireEvent.changeText(screen.getByLabelText('Mot de passe'), 'motdepasse');
+    await fireEvent.changeText(screen.getByLabelText("Code d'authentification"), '123456');
+    await fireEvent.press(screen.getByTestId('bouton-deverrouiller'));
+    await fireEvent.press(screen.getByTestId('bouton-deverrouiller'));
+    expect(props.onDeverrouiller).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepte un code collé « 123 456 » (il était tronqué) et transmet le mot de passe tel quel', async () => {
+    await render(<Deverrouillage {...props} />);
+    await fireEvent.changeText(screen.getByLabelText('Mot de passe'), 'motdepasse ');
+    expect(screen.getByText(/aussi essayé sans/)).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText("Code d'authentification"), '123 456');
+    await fireEvent.press(screen.getByTestId('bouton-deverrouiller'));
+    expect(props.onDeverrouiller).toHaveBeenCalledWith('motdepasse ', '123456');
+  });
+
+  it('désactive les correcteurs automatiques iOS sur les deux champs', async () => {
+    await render(<Deverrouillage {...props} />);
+    for (const etiquette of ['Mot de passe', "Code d'authentification"]) {
+      const champ = screen.getByLabelText(etiquette);
+      expect(champ.props.autoCorrect).toBe(false);
+      expect(champ.props.autoCapitalize).toBe('none');
+      expect(champ.props.spellCheck).toBe(false);
+    }
+  });
+
+  it('affiche l’avis d’horloge et, après plusieurs échecs, la suggestion de relier le compte', async () => {
+    await render(
+      <Deverrouillage
+        {...props}
+        erreur="Mot de passe ou code incorrect"
+        avisHorloge="L’heure de cet appareil est décalée de 90 secondes (en retard) : activez le réglage automatique de la date et de l’heure, puis saisissez un nouveau code."
+        suggererAutreCoffre
+        lier={{ codeConnu: 'AB1.x', onLier: jest.fn() }}
+      />,
+    );
+    expect(screen.getByText(/décalée de 90 secondes/)).toBeTruthy();
+    expect(screen.getByText('Ce navigateur contient peut-être un autre coffre que celui de ton PC : relier mon compte.')).toBeTruthy();
+  });
+
+  it('lien Diagnostic : affiche le texte sans secret et le copie', async () => {
+    const ecrire = jest.fn(() => Promise.resolve());
+    const avant = (globalThis as { navigator?: unknown }).navigator;
+    (globalThis as { navigator?: unknown }).navigator = { clipboard: { writeText: ecrire } };
+    try {
+      await render(<Deverrouillage {...props} diagnostic={() => Promise.resolve('Diagnostic du déverrouillage\nVersion : 1')} />);
+      await fireEvent.press(screen.getByTestId('lien-diagnostic'));
+      expect(await screen.findByText(/Version : 1/)).toBeTruthy();
+      await fireEvent.press(screen.getByTestId('copier-diagnostic'));
+      expect(ecrire).toHaveBeenCalledWith('Diagnostic du déverrouillage\nVersion : 1');
+      expect(await screen.findByText(/Diagnostic copié/)).toBeTruthy();
+    } finally {
+      (globalThis as { navigator?: unknown }).navigator = avant;
+    }
   });
 });
 

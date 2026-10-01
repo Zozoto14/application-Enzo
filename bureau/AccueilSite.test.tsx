@@ -61,7 +61,7 @@ describe('remplacement d’un ancien coffre local', () => {
     await vue.rerender(
       <Deverrouillage onDeverrouiller={jest.fn()} lier={{ codeConnu: 'AB1.pc', onLier }} suggererAutreCoffre erreur="Mot de passe ou code incorrect" />,
     );
-    expect(screen.getByText(/Ce navigateur contient un autre coffre/)).toBeTruthy();
+    expect(screen.getByText(/contient peut-être un autre coffre que celui de ton PC/)).toBeTruthy();
     await fireEvent.press(screen.getByTestId('reprendre-coffre'));
     await fireEvent.press(screen.getByTestId('bouton-lier-compte'));
     expect(onLier).toHaveBeenCalledWith('AB1.pc');

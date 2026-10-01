@@ -40,7 +40,7 @@ import {
 import { FOURNISSEURS, fournisseurParId } from '../cours/fournisseurs';
 import { rafraichirCours, resumeRafraichissement } from '../cours/rafraichir';
 import { ErreurDeverrouillage } from '../securite/coffre';
-import { ErreurTemporisation, Session } from '../session/session';
+import { ErreurCoffreDifferent, ErreurTemporisation, Session } from '../session/session';
 import { construireDashboard, type VueDashboard } from '../ui/vues/dashboard';
 import { anneesDisponibles, construireRapportAnnuel } from '../rapport/annuel';
 import { ecrireRapport } from '../rapport/fichiers';
@@ -100,7 +100,8 @@ import { useSauvegardes } from './sauvegardesApp';
 import { nomParDefaut, useSynchro } from './synchroApp';
 import { decoderLiaison, encoderLiaison } from '../sync/relais/liaison';
 import { definirLiaisonEnAttente, liaisonEnAttente } from '../sync/relais/actif';
-import { recupererCoffre } from '../sync/relais/synchroniser';
+import { mesurerEcartHorloge, recupererCoffre } from '../sync/relais/synchroniser';
+import { formaterDiagnostic, lireEnvironnement, messageHorloge } from '../diagnostic/deverrouillage';
 import type { Coffre } from '../securite/coffre';
 import { CarteSynchro } from '../ui/ecrans/CarteSynchro';
 import { CarteProfils, type ControleProfils } from '../ui/ecrans/CarteProfils';
@@ -385,6 +386,13 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const [secrets, setSecrets] = useState<SecretsInitiaux | undefined>();
   const [erreur, setErreur] = useState<string | undefined>();
   const [enCours, setEnCours] = useState(false);
+  // Garde contre la double soumission : deux appuis dans la même image
+  // lançaient deux vérifications, donc deux échecs comptés pour une saisie.
+  const enCoursRef = useRef(false);
+  // Échecs d'authentification de cet écran (suggestion « autre coffre » à partir de 2).
+  const [echecsAuth, setEchecsAuth] = useState(0);
+  const [avisHorloge, setAvisHorloge] = useState<string | undefined>();
+  const mesurerHorlogeRef = useRef<(() => Promise<number | undefined>) | undefined>(undefined);
   const [ecran, setEcran] = useState<Ecran>('tableau');
   const [messageCours, setMessageCours] = useState<string | undefined>();
   const [coursEnCours, setCoursEnCours] = useState(false);
@@ -499,6 +507,10 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   const executer = useCallback(
     (action: () => void) => {
+      if (enCoursRef.current) {
+        return;
+      }
+      enCoursRef.current = true;
       setErreur(undefined);
       setEnCours(true);
       apresRendu(() => {
@@ -515,6 +527,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
                 : String(e),
           );
         } finally {
+          enCoursRef.current = false;
           setEnCours(false);
           rafraichir();
         }
@@ -536,9 +549,35 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   const deverrouiller = useCallback(
     (motDePasse: string, codeTotp: string) =>
-      executer(() => session.deverrouiller({ motDePasse, codeTotp })),
+      executer(() => {
+        try {
+          session.deverrouiller({ motDePasse, codeTotp });
+          setEchecsAuth(0);
+          setAvisHorloge(undefined);
+        } catch (e) {
+          if (e instanceof ErreurCoffreDifferent) {
+            // Identifiants du PC justes, base d'ici scellée par un autre coffre : « relier » tout de suite.
+            setEchecsAuth(n => Math.max(n + 1, 2));
+          }
+          if (e instanceof ErreurDeverrouillage) {
+            // Échec d'authentification (jamais une erreur technique) : l'horloge
+            // est comparée à celle du relais, un code TOTP refusé s'explique souvent ainsi.
+            setEchecsAuth(n => n + 1);
+            void mesurerHorlogeRef.current?.()
+              .then(ecart => setAvisHorloge(messageHorloge(ecart)))
+              .catch(() => undefined);
+          }
+          throw e;
+        }
+      }),
     [executer, session],
   );
+
+  // Autre compte ouvert : ses échecs et l'avis d'horloge ne le suivent pas.
+  useEffect(() => {
+    setEchecsAuth(0);
+    setAvisHorloge(undefined);
+  }, [session]);
 
   // Mot de passe oublié : un code de récupération rouvre la base, et un
   // nouveau mot de passe est enregistré dans la foulée.
@@ -779,6 +818,21 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // « Lier à mon compte » : ce nouvel appareil adopte le compte du PC.
   const [messageDeverrouillage, setMessageDeverrouillage] = useState<string | undefined>();
   const codeLiaisonConnu = liaisonDuPc ? encoderLiaison(liaisonDuPc) : liaisonEnAttente();
+  const liaisonHorloge = liaisonDuPc ?? (codeLiaisonConnu ? decoderLiaison(codeLiaisonConnu) : undefined);
+  mesurerHorlogeRef.current =
+    profils?.deverrouillage?.ecartHorloge ?? (liaisonHorloge ? () => mesurerEcartHorloge(liaisonHorloge) : undefined);
+  const diagnosticDeverrouillage =
+    profils?.deverrouillage?.diagnostic ??
+    (async () => {
+      const ecart = mesurerHorlogeRef.current ? await mesurerHorlogeRef.current().catch(() => undefined) : undefined;
+      return formaterDiagnostic({
+        version: versionApp(),
+        ...lireEnvironnement(),
+        ...(ecart === undefined ? {} : { ecartHorlogeS: Math.round(ecart / 1000) }),
+        liaisonRelais: Boolean(liaisonHorloge),
+        coffreLocal: session.statut() !== 'non-initialise',
+      });
+    });
   // Sur le site, l'hôte fournit son propre « Lier » (tous les comptes, remplacement d'un ancien coffre).
   const lier = profils?.lier ?? (!estAdmin ? undefined : {
     codeConnu: codeLiaisonConnu && decoderLiaison(codeLiaisonConnu) ? codeLiaisonConnu : undefined,
@@ -2616,9 +2670,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             erreur={erreur}
             enCours={enCours}
             secondesAvantNouvelEssai={verrou?.verrouille ? verrou.secondesRestantes : 0}
+            onFinTemporisation={rafraichir}
             lier={lier}
             message={messageDeverrouillage}
-            suggererAutreCoffre={Boolean(profils?.lier?.suggererAutreCoffre)}
+            suggererAutreCoffre={echecsAuth >= 2 && Boolean(profils?.lier?.suggererAutreCoffre)}
+            avisHorloge={avisHorloge}
+            diagnostic={diagnosticDeverrouillage}
           />
         )
 ) : acceptationRequise ? (

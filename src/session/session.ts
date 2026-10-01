@@ -20,6 +20,7 @@ import { ecouterEcritures } from '../db/ecoute';
 import { migrer } from '../db/schema';
 import { aleatoireParDefaut, type SourceAleatoire } from '../securite/aleatoire';
 import {
+  ErreurCalculCle,
   ErreurDeverrouillage,
   changerMotDePasse as changerMotDePasseCoffre,
   cleHexadecimale,
@@ -81,6 +82,51 @@ export class ErreurTemporisation extends ErreurSession {
   }
 }
 
+/**
+ * Les identifiants sont justes pour le coffre publié par un autre appareil
+ * (le PC), mais le portefeuille de cet appareil est scellé par une autre clé :
+ * il faut relier ce navigateur au compte (« Lier à mon compte »).
+ */
+export class ErreurCoffreDifferent extends ErreurSession {
+  constructor() {
+    super(
+      'Ces identifiants ouvrent le compte publié par votre PC, mais ce navigateur garde les données d’un autre coffre : utilisez « Lier à mon compte (code de liaison) » pour le remplacer.',
+    );
+    this.name = 'ErreurCoffreDifferent';
+  }
+}
+
+/** Seul message d'échec d'authentification : il ne dit jamais quel facteur est faux. */
+export const MESSAGE_ECHEC = 'Mot de passe ou code incorrect';
+
+/** Caractères invisibles qu'un copier-coller (gestionnaire, notes, courriel) peut ajouter. */
+const INVISIBLES = /[\u200B-\u200D\u2060\uFEFF\u00AD]/g;
+
+/**
+ * Formes du mot de passe essayées, dans l'ordre, la saisie BRUTE d'abord.
+ *
+ * Compatibilité : la dérivation a toujours reçu la chaîne telle quelle (aucune
+ * normalisation à la création). Essayer la valeur brute en premier garantit
+ * qu'un mot de passe existant qui commence ou finit par un espace, ou qui est
+ * en NFD, s'ouvre exactement comme avant. Les formes suivantes ne servent que
+ * si la brute échoue : NFC (clavier ou gestionnaire qui recompose les
+ * accents), puis sans caractères invisibles ni espaces/retours à la ligne de
+ * début et de fin (copier-coller). Au plus trois dérivations, une seule
+ * tentative comptée : la protection en ligne reste celle du limiteur, et une
+ * attaque hors ligne n'y gagne rien.
+ */
+export function variantesMotDePasse(saisi: string): string[] {
+  const nfc = saisi.normalize('NFC');
+  const nettoye = nfc.replace(INVISIBLES, '').trim();
+  const formes = [saisi, nfc, nettoye].filter(forme => forme.length > 0);
+  return [...new Set(formes)];
+}
+
+/** Le code TOTP saisi, réduit à ses chiffres (espace « 123 456 », chiffres pleine chasse, caractères invisibles). */
+export function normaliserCodeTotp(saisi: string): string {
+  return saisi.normalize('NFKC').replace(/\D/g, '');
+}
+
 export type StatutSession = 'non-initialise' | 'verrouille' | 'deverrouille';
 
 export interface DependancesSession {
@@ -101,6 +147,13 @@ export interface DependancesSession {
    * plus s'ouvrir. Ses données reviennent par la synchronisation.
    */
   reinitialiserBase?(): void;
+  /**
+   * Autres coffres du même compte, essayés si le coffre local refuse le mot
+   * de passe : celui que le PC a publié sur le relais, plus récent quand le
+   * mot de passe y a été changé. Adopté seulement s'il ouvre aussi la base
+   * de cet appareil (même clé maîtresse).
+   */
+  coffresAlternatifs?(): readonly Coffre[];
   /**
    * Profil dont c'est la session (« principal » par défaut). Il entre dans
    * le contexte de dérivation des clés (`cleDerivee`) : deux profils
@@ -138,6 +191,35 @@ export interface OptionsRecuperation {
 
 export interface ResultatRecuperation {
   codesRestants: number;
+}
+
+/** JSON aux clés triées : deux copies d'un même coffre se reconnaissent quel que soit l'ordre. */
+function canonique(valeur: unknown): string {
+  return JSON.stringify(valeur, (_cle, v: unknown) =>
+    v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v,
+  );
+}
+
+/** Forme minimale d'un coffre utilisable (au moins une enveloppe de mot de passe). */
+export function coffreValide(coffre: unknown): coffre is Coffre {
+  const c = coffre as Coffre | undefined;
+  return Boolean(
+    c &&
+      typeof c === 'object' &&
+      typeof c.version === 'number' &&
+      Array.isArray(c.enveloppes) &&
+      c.enveloppes.some(
+        enveloppe =>
+          enveloppe &&
+          enveloppe.usage === 'motdepasse' &&
+          typeof enveloppe.sel === 'string' &&
+          typeof enveloppe.nonce === 'string' &&
+          typeof enveloppe.charge === 'string' &&
+          Boolean(enveloppe.kdf),
+      ),
+  );
 }
 
 export class Session {
@@ -209,27 +291,69 @@ export class Session {
     const coffre = this.exigerCoffre();
     this.exigerAbsenceDeTemporisation();
 
-    let cleMaitresse: Uint8Array;
-    try {
-      cleMaitresse = deverrouillerParMotDePasse(coffre, options.motDePasse);
-    } catch (erreur) {
-      if (erreur instanceof ErreurDeverrouillage) {
-        this.enregistrerEchec();
-        throw new ErreurDeverrouillage('Mot de passe ou code incorrect');
-      }
-      throw erreur;
+    // ErreurCalculCle (mémoire, navigateur) traverse : ce n'est pas un échec
+    // d'authentification, il ne compte pas comme tentative.
+    const trouve = this.essayerMotDePasse(coffre, options.motDePasse, true);
+    if (!trouve) {
+      this.enregistrerEchec();
+      throw new ErreurDeverrouillage(MESSAGE_ECHEC);
     }
 
-    const secretTotp = lireSecretTotp(coffre, cleMaitresse);
-    if (secretTotp && !verifierCodeTotp(secretTotp, options.codeTotp, this.horloge())) {
+    const secretTotp = lireSecretTotp(trouve.coffre, trouve.cle);
+    if (secretTotp && !verifierCodeTotp(secretTotp, normaliserCodeTotp(options.codeTotp), this.horloge())) {
       // Le mot de passe était bon : la clé a été reconstituée. Elle est effacée
       // sans avoir servi, plutôt que gardée « au cas où ».
-      cleMaitresse.fill(0);
+      trouve.cle.fill(0);
       this.enregistrerEchec();
-      throw new ErreurDeverrouillage('Mot de passe ou code incorrect');
+      throw new ErreurDeverrouillage(MESSAGE_ECHEC);
     }
 
-    this.ouvrir(cleMaitresse);
+    if (trouve.coffre === coffre) {
+      this.ouvrir(trouve.cle);
+      return;
+    }
+    // Coffre plus récent publié par un autre appareil : adopté seulement s'il
+    // ouvre la base d'ici (même clé maîtresse, mot de passe changé ailleurs).
+    try {
+      this.ouvrir(trouve.cle);
+    } catch {
+      throw new ErreurCoffreDifferent();
+    }
+    this.deps.stockage.ecrire(trouve.coffre);
+  }
+
+  /**
+   * Clé maîtresse ouverte par l'une des formes du mot de passe, dans le
+   * coffre local puis (si permis) dans les coffres alternatifs.
+   */
+  private essayerMotDePasse(
+    coffre: Coffre,
+    motDePasse: string,
+    alternatifs: boolean,
+  ): { cle: Uint8Array; coffre: Coffre } | undefined {
+    const variantes = variantesMotDePasse(motDePasse);
+    const vus = new Set([canonique(coffre)]);
+    const candidats = [coffre];
+    if (alternatifs) {
+      for (const autre of this.deps.coffresAlternatifs?.() ?? []) {
+        if (coffreValide(autre) && !vus.has(canonique(autre))) {
+          vus.add(canonique(autre));
+          candidats.push(autre);
+        }
+      }
+    }
+    for (const candidat of candidats) {
+      for (const variante of variantes) {
+        try {
+          return { cle: deverrouillerParMotDePasse(candidat, variante), coffre: candidat };
+        } catch (erreur) {
+          if (!(erreur instanceof ErreurDeverrouillage)) {
+            throw erreur instanceof ErreurCalculCle ? erreur : new ErreurCalculCle(erreur);
+          }
+        }
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -242,21 +366,16 @@ export class Session {
     const coffre = this.exigerCoffre();
     this.exigerCleMaitresse();
     this.exigerAbsenceDeTemporisation();
-    let cle: Uint8Array;
-    try {
-      cle = deverrouillerParMotDePasse(coffre, options.motDePasse);
-    } catch (erreur) {
-      if (erreur instanceof ErreurDeverrouillage) {
-        this.enregistrerEchec();
-        throw new ErreurDeverrouillage('Mot de passe ou code incorrect');
-      }
-      throw erreur;
-    }
-    const secretTotp = lireSecretTotp(coffre, cle);
-    cle.fill(0);
-    if (secretTotp && !verifierCodeTotp(secretTotp, options.codeTotp, this.horloge())) {
+    const trouve = this.essayerMotDePasse(coffre, options.motDePasse, false);
+    if (!trouve) {
       this.enregistrerEchec();
-      throw new ErreurDeverrouillage('Mot de passe ou code incorrect');
+      throw new ErreurDeverrouillage(MESSAGE_ECHEC);
+    }
+    const secretTotp = lireSecretTotp(coffre, trouve.cle);
+    trouve.cle.fill(0);
+    if (secretTotp && !verifierCodeTotp(secretTotp, normaliserCodeTotp(options.codeTotp), this.horloge())) {
+      this.enregistrerEchec();
+      throw new ErreurDeverrouillage(MESSAGE_ECHEC);
     }
   }
 
@@ -353,12 +472,7 @@ export class Session {
    * effacé (il revient par la synchronisation) et la session se verrouille.
    */
   adopterCoffre(coffre: Coffre): void {
-    if (
-      !coffre ||
-      typeof coffre.version !== 'number' ||
-      !Array.isArray(coffre.enveloppes) ||
-      !coffre.enveloppes.some(enveloppe => enveloppe.usage === 'motdepasse')
-    ) {
+    if (!coffreValide(coffre)) {
       throw new ErreurSession('Ce coffre est illisible.');
     }
     this.verrouiller();

@@ -295,7 +295,7 @@ try {
   await tel.getByText(/Fermer|Terminé|Compris|Plus tard/).first().click({ timeout: 3000 }).catch(() => undefined);
   verifier((await tel.locator('[data-testid="cellule-administration"], [data-testid="tuile-administration"]').count()) === 0, 'Léa n’a pas d’Administration');
   const refusLea = journalRelais.filter(a => a.portee === idLea && a.statut === 403);
-  const horsEspace = journalRelais.filter(a => a.portee === idLea && !a.chemin.startsWith(`/p/${idLea}/`) && !/^\/(sante|yahoo|medias)/.test(a.chemin));
+  const horsEspace = journalRelais.filter(a => a.portee === idLea && !a.chemin.startsWith(`/p/${idLea}/`) && !/^\/(sante|heure|yahoo|medias)/.test(a.chemin));
   verifier(horsEspace.length === 0 && refusLea.length === 0, `le téléphone de Léa n’a appelé que son espace (${horsEspace.length} appel(s) ailleurs, ${refusLea.length} refus)`);
   const lire = chemin => worker.fetch(new Request(`https://relais${chemin}`, { headers: { Authorization: `Bearer ${decode.j}` } }), env);
   const statuts = [(await lire('/p/principal/boite/annuaire')).status, (await lire('/boite/coffre')).status, (await lire(`/p/${idLea === 'aaaaaaaa' ? 'bbbbbbbb' : 'aaaaaaaa'}/boite/coffre`)).status];

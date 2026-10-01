@@ -54,6 +54,17 @@ test('refuse sans le bon jeton', async () => {
   assert.equal((await appeler(env, '/sante')).status, 200);
 });
 
+test('/heure donne l’heure du relais (écart d’horloge), seulement avec le jeton', async () => {
+  const env = { JETON, BOITE: kvMemoire() };
+  assert.equal((await relais.fetch(new Request('https://relais.test/heure'), env)).status, 401);
+  const avant = Date.now();
+  const corps = await (await appeler(env, '/heure')).json();
+  assert.ok(corps.heure >= avant && corps.heure <= Date.now());
+  assert.deepEqual(Object.keys(corps), ['heure']);
+  const sante = await (await appeler(env, '/sante')).json();
+  assert.equal(typeof sante.heure, 'number');
+});
+
 test('un jeton trop court ne vaut rien, même identique', () => {
   assert.equal(jetonValide('court', 'court'), false);
   assert.equal(jetonValide(JETON, JETON), true);
