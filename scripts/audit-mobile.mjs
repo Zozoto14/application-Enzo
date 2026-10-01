@@ -167,13 +167,39 @@ try {
         await etape(page, `portefeuille-${id}`);
       });
     }
-    const destinations = await page.locator('[data-testid^="nav-"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid')));
-    for (const id of destinations.filter(d => !['nav-hub', 'nav-tableau', 'nav-reglages', 'nav-baggr', 'nav-podcast', 'nav-verrouiller', 'nav-discretion'].includes(d))) {
-      await essayer(id, async () => {
-        await toucher(page, id, { timeout: 4000 });
-        await pause(600);
-        await etape(page, `portefeuille-${id}`);
-      });
+    const EXCLUES = ['nav-hub', 'nav-tableau', 'nav-reglages', 'nav-baggr', 'nav-podcast', 'nav-verrouiller', 'nav-discretion'];
+    if (await visible(page, 'barre-basse-app', 1500)) {
+      // Coque du téléphone : sections principales dans la barre basse, les autres dans « Plus ».
+      const principales = await page.locator('[data-testid^="barre-basse-app-"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid')));
+      for (const id of principales.filter(d => d !== 'barre-basse-app-plus' && d !== 'barre-basse-app-tableau')) {
+        await essayer(id, async () => {
+          await toucher(page, id, { timeout: 4000 });
+          await pause(600);
+          await etape(page, `portefeuille-${id.replace('barre-basse-app-', 'nav-')}`);
+        });
+      }
+      await toucher(page, 'barre-basse-app-plus');
+      await pause(500);
+      await etape(page, 'portefeuille-feuille-plus');
+      const autres = await page.locator('[data-testid="feuille-plus"] [data-testid^="nav-"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid')));
+      await toucher(page, 'feuille-plus-fermer');
+      for (const id of autres.filter(d => !EXCLUES.includes(d))) {
+        await essayer(id, async () => {
+          await toucher(page, 'barre-basse-app-plus', { timeout: 4000 });
+          await toucher(page, id, { timeout: 4000 });
+          await pause(600);
+          await etape(page, `portefeuille-${id}`);
+        });
+      }
+    } else {
+      const destinations = await page.locator('[data-testid^="nav-"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid')));
+      for (const id of destinations.filter(d => !EXCLUES.includes(d))) {
+        await essayer(id, async () => {
+          await toucher(page, id, { timeout: 4000 });
+          await pause(600);
+          await etape(page, `portefeuille-${id}`);
+        });
+      }
     }
     await retourHub(page);
   });

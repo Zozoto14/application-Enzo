@@ -30,9 +30,13 @@ function useMaintenant(): number {
   return maintenant;
 }
 
-/** Libellé court de la version condensée (téléphone) : « À jour », « 2 éléments à envoyer »… */
-export function libelleCondense(libelle: string): string {
-  return libelle.split(' · ')[0];
+/** Libellé court de la version condensée (téléphone) : « À jour », « 2 à envoyer », « Hors ligne »… */
+export function libelleCondense(resume: { niveau: NiveauSynchro; libelle: string }): string {
+  const nombre = /^(\d+) élément/.exec(resume.libelle)?.[1];
+  if (resume.niveau === 'encours') return 'Synchro…';
+  if (resume.niveau === 'erreur') return 'Échec synchro';
+  if (resume.niveau === 'attente') return /hors ligne/i.test(resume.libelle) ? 'Hors ligne' : nombre ? `${nombre} à envoyer` : 'En attente';
+  return resume.libelle.startsWith('Pas encore') ? 'Non synchronisé' : 'À jour';
 }
 
 export function IndicateurSynchro({
@@ -76,7 +80,7 @@ export function IndicateurSynchro({
         <View style={[styles.point, { backgroundColor: teinte }]} />
         {condense ? null : <Text style={{ color: teinte, fontWeight: '800', fontSize: taille }}>{resume.icone}</Text>}
         <Text testID="synchro-libelle" style={{ color: theme.texte, fontSize: taille, fontWeight: '600', flexShrink: 1, ...police(theme.policeTexte) }} numberOfLines={detaille ? 3 : 1}>
-          {condense ? libelleCondense(resume.libelle) : resume.libelle}
+          {condense ? libelleCondense(resume) : resume.libelle}
         </Text>
       </Pastille>
       {detaille ? (

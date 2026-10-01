@@ -11,6 +11,7 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { lireEtatDemarrage, surEtatDemarrage, textesEtatDemarrage, type EtatDemarrage } from '../sync/relais/prechargement';
 import { police, type ThemeHub } from './themes';
+import { tt } from '../ui/mobile/jetons';
 
 export function LigneSynchroDemarrage({ theme }: { theme: ThemeHub }) {
   const [etat, setEtat] = useState<EtatDemarrage>(() => lireEtatDemarrage());
@@ -34,7 +35,7 @@ export function LigneSynchroDemarrage({ theme }: { theme: ThemeHub }) {
   return (
     <View style={styles.ligne} testID="synchro-demarrage" accessibilityRole="text" accessibilityLiveRegion="polite">
       {lignes.map(texte => (
-        <Text key={texte} style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>
+        <Text key={texte} style={{ color: theme.attenue, fontSize: tt(12), ...police(theme.policeTexte) }}>
           {texte}
         </Text>
       ))}

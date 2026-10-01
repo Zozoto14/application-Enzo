@@ -10,6 +10,7 @@
 
 import { themeHub, type ThemeHub } from '../../hub/themes';
 import { themeCourant } from '../theme';
+import { modeTelephoneCourant } from './useMobile';
 
 export const ESPACE = { xxs: 4, xs: 8, s: 12, m: 16, l: 20, xl: 24, xxl: 32 } as const;
 
@@ -73,3 +74,13 @@ export const DUREE = { courte: 160, moyenne: 240 } as const;
  * compteur uniquement. Le test de bout en bout mobile l'ignore ; l'utiliser ailleurs est une faute.
  */
 export const EXEMPTE_TEXTE = { dataSet: { texteExempte: 'oui' } } as unknown as Record<string, never>;
+
+/** Taille de texte : au moins 15 px en mode téléphone (contenus de pages déjà aiguillées). */
+export function tt(taille: number): number {
+  return tailleTexte(taille, modeTelephoneCourant());
+}
+
+/** Hauteur de contrôle : au moins 44 px en mode téléphone. */
+export function ct(hauteur: number): number {
+  return modeTelephoneCourant() ? Math.max(hauteur, CONTROLE.cible) : hauteur;
+}

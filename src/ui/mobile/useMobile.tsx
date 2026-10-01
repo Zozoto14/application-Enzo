@@ -11,7 +11,7 @@
  */
 
 import React, { createContext, useContext } from 'react';
-import { Platform, useWindowDimensions } from 'react-native';
+import { Dimensions, Platform, useWindowDimensions } from 'react-native';
 import { estTelephone, modeForce, type ModeAffichage } from './detection';
 
 const ContexteMode = createContext<ModeAffichage | undefined>(undefined);
@@ -32,4 +32,18 @@ export function useModeAffichage(): ModeAffichage {
 
 export function useMobile(): boolean {
   return useModeAffichage() === 'telephone';
+}
+
+/**
+ * Mode courant, lu sans hook (fenêtre actuelle). Réservé aux petites fonctions de style des contenus
+ * rendus DANS une page déjà aiguillée par `useMobile()` (cartes de réglages…) : elles sont rendues à
+ * nouveau avec leur parent quand la fenêtre change. Les pages, elles, utilisent `useMobile()`.
+ */
+export function modeTelephoneCourant(): boolean {
+  const force = modeForce();
+  if (force) {
+    return force === 'telephone';
+  }
+  const { width, height } = Dimensions.get('window');
+  return estTelephone({ largeur: width, hauteur: height, os: Platform.OS });
 }

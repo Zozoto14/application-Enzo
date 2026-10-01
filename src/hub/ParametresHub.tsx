@@ -21,6 +21,7 @@ import {
 import { police, type ThemeHub } from './themes';
 import { versionApp } from './version';
 import { ecouterTouche, rechargerApp, surLeWeb } from './web';
+import { tt } from '../ui/mobile/jetons';
 
 interface PontMaj {
   chercher?(): Promise<ReponseVerification>;
@@ -108,12 +109,12 @@ export function DetailMiseAJour({ theme, maj, testID }: { theme: ThemeHub; maj: 
     etat.phase === 'erreur' ? theme.critique : etat.phase === 'a-jour' ? theme.ok : etat.phase === 'disponible' ? theme.accent : theme.attenue;
   return (
     <View style={{ gap: 10 }} testID={testID}>
-      <Text accessibilityLiveRegion="polite" style={{ color: couleur, fontSize: 14, ...police(theme.policeTexte) }} testID="maj-etat">
+      <Text accessibilityLiveRegion="polite" style={{ color: couleur, fontSize: tt(14), ...police(theme.policeTexte) }} testID="maj-etat">
         {messageEtat(etat, plateforme)}
       </Text>
       {etat.phase === 'disponible'
         ? etat.nouveautes.slice(0, 5).map((ligne, index) => (
-            <Text key={`${index}-${ligne}`} numberOfLines={1} style={{ color: theme.attenue, fontSize: 13 }}>
+            <Text key={`${index}-${ligne}`} numberOfLines={1} style={{ color: theme.attenue, fontSize: tt(13) }}>
               • {ligne}
             </Text>
           ))
@@ -182,7 +183,7 @@ export function BoutonMiseAJour({ theme, maj }: { theme: ThemeHub; maj: MiseAJou
             borderRadius: theme.id === 'sauge' ? 999 : Math.min(theme.rayonMoyen, 10),
           },
         ]}>
-        <Text style={{ color: signal ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: 14, ...police(theme.policeTexte) }}>
+        <Text style={{ color: signal ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: tt(14), ...police(theme.policeTexte) }}>
           ⟳ {width >= 520 || signal ? (maj.etat.phase === 'repos' || maj.etat.phase === 'info' ? 'Mettre à jour' : libelleBouton(maj.etat)) : ''}
         </Text>
       </Pressable>
@@ -194,7 +195,7 @@ export function BoutonMiseAJour({ theme, maj }: { theme: ThemeHub; maj: MiseAJou
             styles.bulle,
             { backgroundColor: theme.surface, borderColor: theme.ligne, borderRadius: theme.rayonMoyen, width: Math.min(340, width - 32) },
           ]}>
-          <Text style={{ color: theme.attenue, fontSize: 11, fontWeight: '600', letterSpacing: 1.1 }}>MISE À JOUR</Text>
+          <Text style={{ color: theme.attenue, fontSize: tt(11), fontWeight: '600', letterSpacing: 1.1 }}>MISE À JOUR</Text>
           <DetailMiseAJour theme={theme} maj={maj} />
           <View style={styles.actions}>
             <BoutonHub

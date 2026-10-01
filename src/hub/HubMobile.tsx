@@ -104,18 +104,8 @@ export function HubMobile({ registre, contexte, theme, onOuvrir, prefs, onPrefs,
           </Text>
         </View>
         {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} condense onPress={() => onParametres?.('synchro')} /> : null}
-        {personnalisable ? (
-          modifie ? (
-            <Pressable
-              testID="hub-edition-termine"
-              accessibilityRole="button"
-              onPress={() => setEdition(false)}
-              style={[styles.termine, { backgroundColor: theme.accent, borderRadius: rayonControle(theme) }]}>
-              <Text style={{ color: theme.surAccent, fontWeight: '700', fontSize: TEXTE.legende, ...police(theme.policeTexte) }}>Terminé</Text>
-            </Pressable>
-          ) : (
-            <BoutonIcone theme={theme} titre="✎" libelle="Personnaliser l’accueil" onPress={() => setEdition(true)} testID="hub-personnaliser" />
-          )
+        {personnalisable && !modifie ? (
+          <BoutonIcone theme={theme} titre="✎" libelle="Personnaliser l’accueil" onPress={() => setEdition(true)} testID="hub-personnaliser" />
         ) : null}
       </View>
 
@@ -445,7 +435,6 @@ const styles = StyleSheet.create({
   racine: { flex: 1 },
   entete: { flexDirection: 'row', alignItems: 'center', gap: ESPACE.xxs, paddingHorizontal: GOUTTIERE - 4, minHeight: CONTROLE.entete, borderBottomWidth: StyleSheet.hairlineWidth },
   marque: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: ESPACE.xs, paddingLeft: 4 },
-  termine: { minHeight: CONTROLE.cible, paddingHorizontal: ESPACE.m, alignItems: 'center', justifyContent: 'center' },
   defilement: { flex: 1 },
   contenu: { paddingHorizontal: GOUTTIERE - 6, paddingTop: ESPACE.m, paddingBottom: ESPACE.xxl, gap: ESPACE.s, width: '100%', maxWidth: 640, alignSelf: 'center' },
   intro: { paddingHorizontal: 6, marginTop: ESPACE.xs, marginBottom: ESPACE.xs, gap: ESPACE.xxs },

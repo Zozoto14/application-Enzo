@@ -330,13 +330,22 @@ export function AcceptationJuridique({
 
 /** Liens du pied de page de l'écran de connexion et de Paramètres › À propos. */
 export function LiensJuridiques({ theme, onOuvrir }: { theme: ThemeHub; onOuvrir(id?: IdDocument): void }) {
-  // Téléphone : liens de 44 px de haut, texte de 15 px, au-dessus de la barre d'accueil.
   const mobile = useMobile();
+  if (mobile) {
+    // Téléphone : un seul lien (44 px), qui ouvre la liste des documents.
+    return (
+      <View style={[styles.liensMobile, margesSecurite(['bas']), { backgroundColor: theme.fond }]} testID="liens-juridiques">
+        <Pressable accessibilityRole="link" accessibilityLabel="Informations légales" testID="lien-juridique-liste" onPress={() => onOuvrir()} style={styles.lienMobile}>
+          <Text style={{ color: theme.attenue, fontSize: 15, textDecorationLine: 'underline', ...police(theme.policeTexte) }}>Informations légales</Text>
+        </Pressable>
+      </View>
+    );
+  }
   return (
-    <View style={[styles.liens, mobile && styles.liensMobile, mobile && margesSecurite(['bas'], { bas: 4 }), mobile && { backgroundColor: theme.fond }]} testID="liens-juridiques" accessibilityRole="menu">
+    <View style={styles.liens} testID="liens-juridiques" accessibilityRole="menu">
       {DOCUMENTS.map(d => (
-        <Pressable key={d.id} accessibilityRole="link" accessibilityLabel={d.titre} testID={`lien-juridique-${d.id}`} onPress={() => onOuvrir(d.id)} hitSlop={8} style={mobile ? styles.lienMobile : undefined}>
-          <Text style={{ color: theme.attenue, fontSize: mobile ? 15 : 12, textDecorationLine: 'underline', ...police(theme.policeTexte) }}>{mobile ? d.titreCourt ?? d.titre : d.titre}</Text>
+        <Pressable key={d.id} accessibilityRole="link" accessibilityLabel={d.titre} testID={`lien-juridique-${d.id}`} onPress={() => onOuvrir(d.id)} hitSlop={8}>
+          <Text style={{ color: theme.attenue, fontSize: 12, textDecorationLine: 'underline', ...police(theme.policeTexte) }}>{d.titre}</Text>
         </Pressable>
       ))}
     </View>
@@ -353,7 +362,7 @@ const styles = StyleSheet.create({
   ligneCase: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40 },
   case: { width: 24, height: 24, borderWidth: 2, borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
   liens: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 12 },
-  liensMobile: { columnGap: 4, rowGap: 0, paddingVertical: 0 },
+  liensMobile: { alignItems: 'center' },
   lienMobile: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
   ligneCaseMobile: { minHeight: 56, gap: 14 },
 });

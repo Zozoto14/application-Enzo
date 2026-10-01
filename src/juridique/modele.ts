@@ -21,15 +21,13 @@ export interface InfoDocument {
   id: IdDocument;
   titre: string;
   resume: string;
-  /** Libellé court (pied de page du téléphone). */
-  titreCourt?: string;
 }
 
 export const DOCUMENTS: readonly InfoDocument[] = [
-  { id: 'conditions', titre: 'Conditions d’utilisation', titreCourt: 'Conditions', resume: 'Ce que vous pouvez faire de l’application, et vos responsabilités.' },
-  { id: 'confidentialite', titre: 'Politique de confidentialité', titreCourt: 'Confidentialité', resume: 'Quelles données, où elles sont gardées, qui est contacté.' },
-  { id: 'cookies', titre: 'Cookies et stockage local', titreCourt: 'Cookies', resume: 'Aucun cookie de suivi ; ce qui est gardé sur votre appareil.' },
-  { id: 'mentions', titre: 'Mentions légales', titreCourt: 'Mentions légales', resume: 'Éditeur, hébergement, contact.' },
+  { id: 'conditions', titre: 'Conditions d’utilisation', resume: 'Ce que vous pouvez faire de l’application, et vos responsabilités.' },
+  { id: 'confidentialite', titre: 'Politique de confidentialité', resume: 'Quelles données, où elles sont gardées, qui est contacté.' },
+  { id: 'cookies', titre: 'Cookies et stockage local', resume: 'Aucun cookie de suivi ; ce qui est gardé sur votre appareil.' },
+  { id: 'mentions', titre: 'Mentions légales', resume: 'Éditeur, hébergement, contact.' },
 ];
 
 export const TAILLE_MAX_DOCUMENT = 30_000;
