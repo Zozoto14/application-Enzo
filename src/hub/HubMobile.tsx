@@ -99,7 +99,7 @@ export function HubMobile({ registre, contexte, theme, onOuvrir, prefs, onPrefs,
       <View style={[styles.entete, margesSecurite(['haut']), { backgroundColor: theme.fond, borderBottomColor: theme.ligne }]} testID="hub-entete-mobile">
         <View style={styles.marque}>
           <LogoHub taille={28} fond={theme.accent} trait={theme.surAccent} rayon={Math.min(theme.rayonMoyen, 8)} testID="hub-logo" />
-          <Text style={[titreStyle, { fontSize: 17 }]} numberOfLines={1}>
+          <Text style={[titreStyle, { fontSize: theme.majuscules ? 15 : 17 }]} numberOfLines={1}>
             AppDashboard
           </Text>
         </View>
@@ -333,7 +333,7 @@ function Personnalisation({
     </View>
   );
   return (
-    <View style={{ gap: ESPACE.l }} testID="hub-barre-edition">
+    <View style={{ gap: ESPACE.l, paddingHorizontal: 6 }} testID="hub-barre-edition">
       <Text style={{ color: theme.attenue, fontSize: TEXTE.legende + 1, lineHeight: 23, ...police(theme.policeTexte) }}>
         Réordonnez avec ▲ ▼, épinglez ★, masquez 👁 ou changez la taille de chaque app. L’accueil se met à jour en direct.
       </Text>

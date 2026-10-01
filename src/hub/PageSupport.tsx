@@ -28,7 +28,7 @@ import { BoutonPrincipal } from '../ui/mobile/BoutonPrincipal';
 import { ChampMobile } from '../ui/mobile/ChampMobile';
 import { EcranMobile } from '../ui/mobile/EcranMobile';
 import { EnTeteMobile } from '../ui/mobile/EnTeteMobile';
-import { tailleTexte } from '../ui/mobile/jetons';
+import { rayonControle, tailleTexte } from '../ui/mobile/jetons';
 import { GroupeCellules } from '../ui/mobile/ListeCellules';
 import { BarreBasseHub } from '../ui/mobile/NavigationMobile';
 import { useMobile } from '../ui/mobile/useMobile';
@@ -171,7 +171,7 @@ export function FormulaireSupport({ theme, service, infos, categorieInitiale = '
       )}
       <View style={{ gap: 6 }}>
         <Text style={[texte, { fontWeight: '600', fontSize: mobile ? 15 : 13 }]}>Capture d’écran (facultatif)</Text>
-        <SelecteurCapture key={cleSelecteur} couleur={theme.texte} grand={mobile} onChoisir={setPiece} onErreur={m => setRetour({ genre: 'erreur', texte: m })} />
+        <SelecteurCapture key={cleSelecteur} couleur={theme.texte} bordure={theme.ligne} rayon={rayonControle(theme)} grand={mobile} onChoisir={setPiece} onErreur={m => setRetour({ genre: 'erreur', texte: m })} />
         {piece ? (
           <Text style={attenue} testID="support-capture-nom">
             Jointe : {piece.nom}
