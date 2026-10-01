@@ -396,7 +396,7 @@ export function Sources({ comptes = [], partageActif = true, onCles, ajoutInitia
                   {s.lectureSources ? <Bouton titre={enTest === src.id ? 'Test…' : 'Tester'} desactive={enTest !== undefined} onPress={() => void tester(src)} testID={`source-tester-${src.id}`} /> : null}
                   <Bouton titre="Supprimer" variante="danger" onPress={() => void agir(() => enregistrer(supprimerSource(sources, src.id)), 'Source supprimée.')} testID={`source-supprimer-${src.id}`} />
                 </View>
-                {partageActif && partages ? <ChoixPartage partage={p} comptes={comptes} onChanger={x => void partager({ ...partages, [src.id]: x })} prefixe={`source-partage-${src.id}`} /> : null}
+                {partageActif && partages ? <ChoixPartage partage={p} comptes={comptes} onChanger={x => void partager({ ...partages, [src.id]: x })} prefixe={`source-partage-${src.id}`} sansResume /> : null}
                 {diag?.id === src.id ? (
                   <View style={{ gap: 6 }} testID="sources-diagnostic">
                     {diag.etapes.map(e => (

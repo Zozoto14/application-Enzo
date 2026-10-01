@@ -116,14 +116,14 @@ function IndicateurEtapes({ courante }: { courante: number }) {
 }
 
 /** Choix du partage d'une source (moi seul, tous, une sélection). */
-export function ChoixPartage({ partage, comptes, onChanger, prefixe }: { partage: PartageSource; comptes: readonly CompteTsuzuku[]; onChanger(p: PartageSource): void; prefixe: string }) {
+export function ChoixPartage({ partage, comptes, onChanger, prefixe, sansResume }: { partage: PartageSource; comptes: readonly CompteTsuzuku[]; onChanger(p: PartageSource): void; prefixe: string; /** Le résumé est déjà affiché à côté (liste des sources). */ sansResume?: boolean }) {
   const { theme } = useTsuzuku();
   const beneficiaires = partage.mode === 'tous' ? comptes : partage.mode === 'selection' ? comptes.filter(c => partage.comptes.includes(c.id)) : [];
   return (
     <View style={{ gap: 6 }} testID={prefixe} accessibilityLabel="Qui y a accès">
-      <Text style={styleTexte(theme, 13)} testID={`${prefixe}-resume`}>
+      {sansResume ? null : <Text style={styleTexte(theme, 13)} testID={`${prefixe}-resume`}>
         {partage.mode === 'personne' ? 'Accès : vous seul' : beneficiaires.length ? `Accès : vous + ${beneficiaires.map(c => c.nom).join(', ')}` : 'Accès : vous seul (aucun compte choisi)'}
-      </Text>
+      </Text>}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
         {(['personne', 'tous', 'selection'] as const).map(m => (
           <Puce key={m} titre={LIBELLE_PARTAGE[m]} actif={partage.mode === m} onPress={() => onChanger({ mode: m, comptes: partage.comptes })} testID={`${prefixe}-${m}`} />
