@@ -108,6 +108,7 @@ import { Hub } from '../hub/Hub';
 import { GardeInactivite } from '../hub/GardeInactivite';
 import { PageSupport } from '../hub/PageSupport';
 import { AcceptationJuridique, LiensJuridiques, PageJuridique } from '../hub/PageJuridique';
+import { LigneSynchroDemarrage } from '../hub/SynchroDemarrage';
 import { ReglageJuridique, ReglageSupport } from '../hub/ReglagesSupportJuridique';
 import { ReglageVerrouAuto } from '../hub/ReglageVerrouAuto';
 import { useSupport } from '../support/useSupport';
@@ -770,7 +771,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     delier: delierSynchro,
     oublier: oublierAppareilSynchro,
     synchroniserMaintenant,
-  } = useSynchro({ session, deverrouille: deverrouille && estAdmin, rafraichir, apresReception });
+  } = useSynchro({ session, deverrouille: deverrouille && estAdmin, rafraichir, apresReception, admin: estAdmin });
 
   // « Lier à mon compte » : ce nouvel appareil adopte le compte du PC.
   const [messageDeverrouillage, setMessageDeverrouillage] = useState<string | undefined>();
@@ -3122,6 +3123,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onVerrouiller={verrouiller}
         />
         )}
+      {!deverrouille && !juridiqueOuvert && !secrets ? <LigneSynchroDemarrage theme={themeDuHub} /> : null}
       {!deverrouille && !juridiqueOuvert && !secrets ? <LiensJuridiques theme={themeDuHub} onOuvrir={id => setJuridiqueOuvert({ id })} /> : null}
       </Coque>
       {devblog && deverrouille ? (

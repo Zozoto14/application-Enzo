@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { MAX_ETENDUES, MOTIF_PROFIL, changementPermis, extensionPermise, fichierAutorise } from './portee.mjs';
+import { MAX_ETENDUES, MOTIF_PROFIL, changementPermis, extensionPermise, fichierAutorise, fichierDeProfil } from './portee.mjs';
 
 test('un ami n’atteint que ses fichiers et la liste des profils', () => {
   assert.equal(fichierAutorise('coffre-lea0000001', 'lea0000001'), true);
@@ -54,4 +54,27 @@ test('l’extension de portée est refusée hors compte ami ouvert', () => {
   const pleines = Array.from({ length: MAX_ETENDUES }, (_, i) => `ami${String(i).padStart(7, '0')}`);
   assert.equal(extensionPermise('lea0000001', 'hugo000002', pleines), false);
   assert.equal(extensionPermise('lea0000001', pleines[0], pleines), true);
+});
+
+test('caches de synchronisation : chaque compte n’atteint que les siens', () => {
+  // Écran de connexion (aucun compte) et administrateur : les caches du démarrage (principal).
+  assert.equal(fichierAutorise('synchro-entrant', undefined), true);
+  assert.equal(fichierAutorise('synchro-sortant', 'principal'), true);
+  // Un ami : les siens, jamais ceux de l'administrateur ni d'un autre, même géré.
+  assert.equal(fichierAutorise('synchro-entrant-lea0000001', 'lea0000001'), true);
+  assert.equal(fichierAutorise('synchro-sortant-lea0000001', 'lea0000001'), true);
+  assert.equal(fichierAutorise('synchro-entrant', 'lea0000001'), false);
+  assert.equal(fichierAutorise('synchro-sortant', 'lea0000001'), false);
+  assert.equal(fichierAutorise('synchro-entrant-hugo000002', 'lea0000001'), false);
+  assert.equal(fichierAutorise('synchro-entrant-hugo000002', 'lea0000001', ['hugo000002']), false);
+});
+
+test('noms logiques des caches : liste fermée, pas de chemin libre', () => {
+  assert.equal(fichierDeProfil('synchro-entrant-lea0000001'), 'synchro-entrant-lea0000001.json');
+  assert.equal(fichierDeProfil('synchro-sortant-lea0000001'), 'synchro-sortant-lea0000001.json');
+  assert.equal(fichierDeProfil('coffre-lea0000001'), 'coffre-lea0000001.json');
+  assert.equal(fichierDeProfil('portefeuille-lea0000001'), 'portefeuille-lea0000001.ab');
+  for (const nom of ['synchro-entrant-../x', 'synchro-autre-lea0000001', 'synchro-entrant-LEA0000001', '../synchro-entrant', 'synchro-entrant-lea0000001/../coffre']) {
+    assert.equal(fichierDeProfil(nom), undefined, nom);
+  }
 });

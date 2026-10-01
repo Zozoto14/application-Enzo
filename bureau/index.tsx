@@ -29,7 +29,9 @@ import { ESPACEMENT, palettePour } from '../src/ui/theme';
 import { useFondDocument } from './Bureau';
 import { BandeauMiseAJour } from './MiseAJour';
 import { ouvrirSessionBureau, type SessionBureau } from './session';
-import { pont, stockageCourant, type NomFichier, type Stockage } from './stockage';
+import { pont, stockageCachesBureau, stockageCourant, type NomFichier, type Stockage } from './stockage';
+import { definirStockageCaches, cachesSynchro } from '../src/sync/relais/caches';
+import { Prechargeur, definirPrechargeur, noterEtatDemarrage } from '../src/sync/relais/prechargement';
 import { Connexion } from '../src/ui/ecrans/ChoixProfil';
 import { GardeErreur } from '../src/ui/GardeErreur';
 import type { ControleProfils } from '../src/ui/ecrans/CarteProfils';
@@ -310,6 +312,32 @@ function transparenceDe(acces: readonly AccesNote[], sequestreActif: boolean) {
   return { dernierAccesAdmin: dernier?.date, sequestreActif, ...(dernier?.par ? { par: dernier.par } : {}), ...(dernier?.rang ? { rangPar: dernier.rang } : {}) };
 }
 
+// ------------------------------------------------ Synchronisation dès le démarrage
+//
+// Avant tout choix de compte ou déverrouillage : la liaison de l'administrateur déjà connue
+// (code retenu par ce navigateur, ou relais-local.json du PC) suffit pour télécharger les
+// dépôts chiffrés des autres appareils et pousser l'enveloppe restée en attente. Rien ne
+// s'ouvre sans la clé : la fusion se fait au déverrouillage (voir src/sync/relais/prechargement.ts).
+const cachesDemarrage = definirStockageCaches(stockageCachesBureau(stockageCourant()));
+cachesDemarrage.surChangement(profil => {
+  if (profil === ID_PRINCIPAL) {
+    noterEtatDemarrage({
+      recus: Object.keys(cachesDemarrage.entrant(profil).elements).length,
+      aEnvoyer: cachesDemarrage.sortant(profil).elements.length,
+    });
+  }
+});
+const prechargeur = new Prechargeur({
+  liaison: async () => {
+    const maitre = lireLiaisons(memoireNavigateur).maitre;
+    return (maitre ? decoderLiaison(maitre) : undefined) ?? (await liaisonDuPont());
+  },
+  surBilan: bilan => noterEtatDemarrage({ ...(bilan.reussi ? { le: new Date().toISOString() } : {}), recus: bilan.enAttente, aEnvoyer: bilan.aEnvoyer }),
+});
+definirPrechargeur(prechargeur);
+globalThis.addEventListener?.('online', () => prechargeur.enLigne());
+prechargeur.demarrer();
+
 /** Rang d'administration (autre que le compte historique) : ouvre des comptes inférieurs par séquestre. */
 const estTitulaireRole = (role: Profil['role']): role is 'administrateur' | 'fondateur' => role === 'administrateur' || role === 'fondateur';
 
@@ -506,6 +534,9 @@ function Racine() {
       for (const nom of await fichiersLocaux()) {
         if (nom !== 'profils') await stockage.ecrire(nom, new Uint8Array(0));
       }
+      // Autre compte, autre relais : les enveloppes en attente de l'ancien partent aussi.
+      await cachesSynchro().vider(ID_PRINCIPAL);
+      noterEtatDemarrage({ le: undefined, recus: 0, aEnvoyer: 0 });
       oublierSuivi(memoireNavigateur);
       await ecrireAnnuaireDisque(relie.annuaire);
       retenirLiaison(memoireNavigateur, relie.liaison);

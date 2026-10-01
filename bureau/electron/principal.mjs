@@ -24,7 +24,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, No
 import { spawn } from 'node:child_process';
 import { git, preparerInterface, recupererCode } from './interface.mjs';
 import { synthetiser, VOIX_NATURELLES } from './voix.mjs';
-import { MOTIF_PROFIL, changementPermis, extensionPermise, fichierAutorise } from './portee.mjs';
+import { MOTIF_PROFIL, changementPermis, extensionPermise, fichierAutorise, fichierDeProfil } from './portee.mjs';
 import { fluxMedia, pageArticle, yahooJson, yahooScreener } from './reseau.mjs';
 import { creerListeLecteurs, requeteTsuzuku } from './tsuzuku.mjs';
 import { readFile, writeFile, mkdir, rename, readdir, rm } from 'node:fs/promises';
@@ -52,17 +52,10 @@ const FICHIERS = {
   portefeuille: 'portefeuille.ab',
   coffre: 'coffre.json',
   profils: 'profils.json',
+  // Caches de synchronisation du démarrage : enveloppes chiffrées seulement (voir src/sync/relais/caches.ts).
+  'synchro-entrant': 'synchro-entrant.json',
+  'synchro-sortant': 'synchro-sortant.json',
 };
-
-/**
- * Fichiers d'un profil d'ami : même liste fermée, suffixée d'un identifiant
- * court fait de lettres et de chiffres seulement — pas de « ../ » possible.
- */
-function fichierDeProfil(nom) {
-  const trouve = /^(portefeuille|coffre)-([a-z0-9]{6,16})$/.exec(String(nom));
-  if (!trouve) return undefined;
-  return trouve[1] === 'portefeuille' ? `portefeuille-${trouve[2]}.ab` : `coffre-${trouve[2]}.json`;
-}
 
 /**
  * Portée du profil ouvert (isolation des comptes, défense en profondeur).

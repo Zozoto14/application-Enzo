@@ -14,8 +14,20 @@
  * d'accueil le dit.
  */
 
+import type { StockageCaches } from '../src/sync/relais/caches';
+
 /** Fichiers logiques ; ceux d'un profil d'ami portent son identifiant. */
-export type NomFichier = 'portefeuille' | 'coffre' | 'profils' | `portefeuille-${string}` | `coffre-${string}`;
+export type NomFichier =
+  | 'portefeuille'
+  | 'coffre'
+  | 'profils'
+  | `portefeuille-${string}`
+  | `coffre-${string}`
+  /** Caches de synchronisation (enveloppes chiffrées), voir src/sync/relais/caches.ts. */
+  | 'synchro-entrant'
+  | 'synchro-sortant'
+  | `synchro-entrant-${string}`
+  | `synchro-sortant-${string}`;
 
 export interface Stockage {
   lire(nom: NomFichier): Promise<Uint8Array | undefined>;
@@ -153,4 +165,15 @@ export function stockageNavigateur(): Stockage {
 export function stockageCourant(): Stockage {
   const passerelle = pont();
   return passerelle ? stockageElectron(passerelle) : stockageNavigateur();
+}
+
+/** Les caches de synchronisation, rangés comme les autres fichiers logiques (texte UTF-8). */
+export function stockageCachesBureau(stockage: Stockage): StockageCaches {
+  return {
+    async lire(nom) {
+      const octets = await stockage.lire(nom as NomFichier);
+      return octets && octets.length > 0 ? new TextDecoder().decode(octets) : undefined;
+    },
+    ecrire: (nom, texte) => stockage.ecrire(nom as NomFichier, new TextEncoder().encode(texte)),
+  };
 }

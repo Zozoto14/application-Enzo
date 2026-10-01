@@ -186,6 +186,46 @@ export function noterEchec(etat: EtatSynchro, maintenant: string, motif: string)
   };
 }
 
+/**
+ * Ouvre le dépôt d'un autre appareil et l'applique à la base (le plus récent
+ * gagne). Partagé par le tour réseau et par la fusion immédiate du cache
+ * `entrant` au déverrouillage (voir prechargement.ts). Lève si l'enveloppe
+ * ne s'ouvre pas.
+ */
+export function appliquerDepot(
+  pilote: PiloteSqlite,
+  etatAvant: EtatSynchro,
+  cle: string,
+  autre: string,
+  date: string,
+  enveloppe: Enveloppe,
+  maintenant: string,
+): { etat: EtatSynchro; bilan: BilanFusion } {
+  const charge = ouvrirEnveloppe<Charge>(cle, enveloppe);
+  // Une modification faite pendant les appels réseau n'a pas encore de date :
+  // on la note avant d'appliquer, pour qu'elle ne soit pas écrasée.
+  const etat = noterChangementsLocaux(etatAvant, extraireEntites(pilote), maintenant);
+  const applique = appliquerCharge(pilote, etat, charge);
+  return {
+    bilan: applique.bilan,
+    etat: {
+      ...applique.etat,
+      lus: { ...applique.etat.lus, [autre]: date },
+      appareils: {
+        ...applique.etat.appareils,
+        [autre]: { ...charge.appareil, vuLe: date, versionCharge: charge.appareil?.versionCharge ?? charge.version ?? 1 },
+      },
+    },
+  };
+}
+
+export function cumulerBilan(total: BilanFusion, part: BilanFusion): void {
+  total.ajoutes += part.ajoutes;
+  total.modifies += part.modifies;
+  total.supprimes += part.supprimes;
+  total.echecs.push(...part.echecs);
+}
+
 export async function synchroniser(options: OptionsSynchro): Promise<ResultatSynchro> {
   const { pilote, appareil } = options;
   const requete = options.requete ?? fetch;
@@ -231,25 +271,11 @@ export async function synchroniser(options: OptionsSynchro): Promise<ResultatSyn
         continue;
       }
       try {
-        const charge = ouvrirEnveloppe<Charge>(config!.cle, (await reponse.json()) as Enveloppe);
-        // Une modification faite pendant les appels réseau n'a pas encore de date :
-        // on la note avant d'appliquer, pour qu'elle ne soit pas écrasée.
-        etat = noterChangementsLocaux(etat, extraireEntites(pilote), horloge().toISOString());
-        const applique = appliquerCharge(pilote, etat, charge);
-        etat = {
-          ...applique.etat,
-          lus: { ...applique.etat.lus, [autre]: date },
-          appareils: {
-            ...applique.etat.appareils,
-            [autre]: { ...charge.appareil, vuLe: date, versionCharge: charge.appareil?.versionCharge ?? charge.version ?? 1 },
-          },
-        };
+        const applique = appliquerDepot(pilote, etat, config!.cle, autre, date, (await reponse.json()) as Enveloppe, horloge().toISOString());
+        etat = applique.etat;
         sauver(etat);
         recus++;
-        bilan.ajoutes += applique.bilan.ajoutes;
-        bilan.modifies += applique.bilan.modifies;
-        bilan.supprimes += applique.bilan.supprimes;
-        bilan.echecs.push(...applique.bilan.echecs);
+        cumulerBilan(bilan, applique.bilan);
       } catch (erreur) {
         erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
       }
@@ -347,36 +373,51 @@ export async function synchroniser(options: OptionsSynchro): Promise<ResultatSyn
 /** Signature du dernier dépôt lancé à la fermeture (en mémoire : la page va disparaître). */
 let dernierVidage: string | undefined;
 
-export function deposerAvantFermeture(options: OptionsSynchro): boolean {
+/**
+ * Enveloppe de ce qui attend d'être envoyé (file `enAttente`), scellée par la
+ * clé de synchro, ou rien s'il n'y a rien de neuf. Ne touche pas la base.
+ */
+export function enveloppeEnAttente(
+  options: Pick<OptionsSynchro, 'pilote' | 'appareil' | 'moi' | 'maintenant'>,
+): { enveloppe: Enveloppe; signature: string; etat: EtatSynchro; config: ConfigRelais } | undefined {
   const { pilote, appareil } = options;
   const config = lireConfigRelais(pilote);
   if (!config) {
-    return false;
+    return undefined;
   }
+  const maintenant = (options.maintenant ?? (() => new Date()))().toISOString();
+  const etat = noterChangementsLocaux(lireEtatSynchro(pilote), extraireEntites(pilote), maintenant);
+  if (!etat.enAttente) {
+    return undefined;
+  }
+  // On ne sait pas ce que les autres comprennent sans l'index : on n'envoie que les genres d'origine.
+  const nouveauxGenres = Object.keys(etat.appareils).length > 0 && autresComprennentV2(etat, etat.appareils, appareil, ID_COFFRE);
+  const charge = chargeLocale(pilote, etat, { ...options.moi, nom: config.nom }, nouveauxGenres);
+  const signature = empreinte(charge);
+  if (signature === etat.dernierEnvoi) {
+    return undefined;
+  }
+  return { enveloppe: sceller(config.cle, charge, appareil, maintenant), signature, etat, config };
+}
+
+export function deposerAvantFermeture(options: OptionsSynchro): boolean {
+  const { appareil } = options;
   try {
-    const maintenant = (options.maintenant ?? (() => new Date()))().toISOString();
-    const etat = noterChangementsLocaux(lireEtatSynchro(pilote), extraireEntites(pilote), maintenant);
     // Rien n'est écrit dans la base ici : à la fermeture, l'écriture sur disque est déjà en cours
     // (voir bureau/index.tsx) ; le tour suivant relira les changements de toute façon.
-    if (!etat.enAttente) {
-      return false;
-    }
-    // On ne sait pas ce que les autres comprennent sans l'index : on n'envoie que les genres d'origine.
-    const nouveauxGenres = Object.keys(etat.appareils).length > 0 && autresComprennentV2(etat, etat.appareils, appareil, ID_COFFRE);
-    const charge = chargeLocale(pilote, etat, { ...options.moi, nom: config.nom }, nouveauxGenres);
-    const signature = empreinte(charge);
-    if (signature === etat.dernierEnvoi || signature === dernierVidage) {
+    const pret = enveloppeEnAttente(options);
+    if (!pret || pret.signature === dernierVidage) {
       return false; // Rien de neuf depuis le dernier dépôt ou vidage : pas d'écriture inutile sur le relais.
     }
-    const corps = JSON.stringify(sceller(config.cle, charge, appareil, maintenant));
+    const corps = JSON.stringify(pret.enveloppe);
     // keepalive : au plus 64 Kio en tout ; au-delà, le tour complet fera le travail au prochain lancement.
     if (corps.length > 60_000) {
       return false;
     }
-    dernierVidage = signature;
-    void (options.requete ?? fetch)(`${config.relais}/boite/${encodeURIComponent(appareil)}`, {
+    dernierVidage = pret.signature;
+    void (options.requete ?? fetch)(`${pret.config.relais}/boite/${encodeURIComponent(appareil)}`, {
       method: 'PUT',
-      headers: { Authorization: `Bearer ${config.jeton}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${pret.config.jeton}`, 'Content-Type': 'application/json' },
       body: corps,
       keepalive: true,
     }).catch(() => undefined);

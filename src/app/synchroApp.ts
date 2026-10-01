@@ -29,6 +29,16 @@ import {
 } from '../sync/relais/synchroniser';
 import { definirRelaisActif, liaisonEnAttente } from '../sync/relais/actif';
 import { chargerModule } from '../natif/modules';
+import { cachesSynchro } from '../sync/relais/caches';
+import {
+  PROFIL_DEMARRAGE,
+  integrerEntrant,
+  noterEtatDemarrage,
+  noterLus,
+  preparerSortant,
+  signalerDeverrouillage,
+} from '../sync/relais/prechargement';
+import { profilCourant } from '../profils/espace';
 import { systemeDepuisRnfs } from '../fichiers/systeme';
 import { GestionnaireMiseAJour } from '../maj/application';
 import { telechargerMiseAJour } from '../maj/telechargement';
@@ -98,12 +108,15 @@ export function useSynchro({
   deverrouille,
   rafraichir,
   apresReception,
+  admin = true,
 }: {
   session: Session;
   deverrouille: boolean;
   rafraichir(): void;
   /** Après un tour qui a reçu des changements : recharger thème, préférences du hub… */
   apresReception?(): void;
+  /** Compte qui synchronise (l'administrateur) : fusion du cache `entrant` au déverrouillage. */
+  admin?: boolean;
 }) {
   const plateforme = plateformeActuelle();
   const [etat, setEtat] = useState<
@@ -238,12 +251,95 @@ export function useSynchro({
       enCours.current = false;
       setEtat(courant => ({ ...courant, enCours: false, premierTourFait: true }));
       setVersion(v => v + 1);
+      // Ce qui n'a pas pu partir est scellé dans `sortant` : le prochain démarrage le poussera sans clé.
+      apresTourRef.current(reussi);
     }
     return { ok: reussi, rappelerDans };
   }, [deverrouille, session, plateforme, rafraichir, verifierMiseAJourDuSite]);
 
   const tourRef = useRef(tour);
   tourRef.current = tour;
+
+  /** Caches du démarrage (voir sync/relais/prechargement.ts) : `sortant` prêt, `lus` recopiés. */
+  const preparerCaches = useCallback(() => {
+    try {
+      const pilote = session.base();
+      if (!lireConfigRelais(pilote)) {
+        return;
+      }
+      const appareil = identifiantAppareil(new DepotParametres(pilote), PARAMETRES.identifiantAppareil);
+      const profil = profilCourant();
+      void preparerSortant({ pilote, appareil, profil, moi: { plateforme, expireLe: expireLe.current } }).catch(() => undefined);
+      void noterLus({ pilote, appareil, profil }).catch(() => undefined);
+    } catch {
+      // Session déjà verrouillée.
+    }
+  }, [session, plateforme]);
+  const apresTourRef = useRef((reussi: boolean) => {
+    void reussi;
+  });
+  apresTourRef.current = (reussi: boolean) => {
+    preparerCaches();
+    if (reussi && profilCourant() === PROFIL_DEMARRAGE) {
+      noterEtatDemarrage({ le: new Date().toISOString() });
+    }
+  };
+  const adminRef = useRef(admin);
+  adminRef.current = admin;
+
+  /**
+   * Au déverrouillage, AVANT la première image : les dépôts reçus pendant que
+   * l'appareil était verrouillé (cache `entrant`, chiffré) sont ouverts et
+   * fusionnés tout de suite ; le tour réseau habituel suit. Au verrouillage,
+   * ce qui n'est pas parti est scellé dans `sortant`.
+   */
+  useEffect(() => {
+    const integrer = (): number => {
+      const pilote = session.base();
+      const appareil = identifiantAppareil(new DepotParametres(pilote), PARAMETRES.identifiantAppareil);
+      const resultat = integrerEntrant({ pilote, appareil, profil: profilCourant() });
+      const changes = resultat.bilan.ajoutes + resultat.bilan.modifies + resultat.bilan.supprimes;
+      if (changes > 0) {
+        setEtat(courant => ({
+          ...courant,
+          recus: (courant.recus ?? 0) + 1,
+          message: `${changes} changement${changes > 1 ? 's' : ''} reçu${changes > 1 ? 's' : ''} des autres appareils.`,
+        }));
+      }
+      return changes;
+    };
+    const desabonner = session.surOuverture?.(() => {
+      signalerDeverrouillage(true);
+      if (!adminRef.current || !lireConfigRelais(session.base())) {
+        return;
+      }
+      const profil = profilCourant();
+      if (cachesSynchro().charge(profil)) {
+        integrer();
+        return;
+      }
+      // Caches pas encore lus du disque : fusion dès qu'ils le sont, puis l'affichage se recharge.
+      void cachesSynchro()
+        .charger(profil)
+        .then(() => {
+          if (session.statut() === 'deverrouille' && integrer() > 0) {
+            rafraichir();
+            apresReceptionRef.current?.();
+          }
+        })
+        .catch(() => undefined);
+    });
+    const desabonnerFermeture = session.surFermeture?.(() => {
+      if (adminRef.current) {
+        preparerCaches();
+      }
+      signalerDeverrouillage(false);
+    });
+    return () => {
+      desabonner?.();
+      desabonnerFermeture?.();
+    };
+  }, [session, rafraichir, preparerCaches]);
   const apresReceptionRef = useRef(apresReception);
   apresReceptionRef.current = apresReception;
   const planificateur = useRef<Planificateur | undefined>(undefined);
@@ -266,11 +362,18 @@ export function useSynchro({
         void plan.demander('premier-plan');
       }
     });
-    // Toute écriture dans une donnée partagée planifie un tour (regroupées sur ~3 s).
-    const ecoute = session.surEcriture?.(() => plan.modification());
+    // Toute écriture dans une donnée partagée planifie un tour (regroupées sur ~3 s),
+    // et l'enveloppe `sortant` est rescellée peu après (hors ligne, elle attendra le prochain démarrage).
+    let minuterieSortant: ReturnType<typeof setTimeout> | undefined;
+    const ecoute = session.surEcriture?.(() => {
+      plan.modification();
+      if (minuterieSortant) clearTimeout(minuterieSortant);
+      minuterieSortant = setTimeout(() => preparerCaches(), 2_000);
+    });
 
     const { cible, document } = navigateur();
     const vidageFermeture = () => {
+      preparerCaches();
       deposerAvantFermeture({
         pilote: session.base(),
         appareil: identifiantAppareil(new DepotParametres(session.base()), PARAMETRES.identifiantAppareil),
@@ -296,6 +399,7 @@ export function useSynchro({
     document?.addEventListener?.('visibilitychange', surVisibilite);
     return () => {
       clearTimeout(garde);
+      if (minuterieSortant) clearTimeout(minuterieSortant);
       setEtat(courant => ({ ...courant, premierTourFait: false }));
       plan.arreter();
       abonnement?.remove?.();
@@ -378,6 +482,11 @@ export function useSynchro({
 
   const delier = useCallback(() => {
     ecrireConfigRelais(session.base(), undefined);
+    // Plus de relais : les enveloppes en attente ne concernent plus cet appareil.
+    void cachesSynchro().vider(profilCourant());
+    if (profilCourant() === PROFIL_DEMARRAGE) {
+      noterEtatDemarrage({ le: undefined, recus: 0, aEnvoyer: 0 });
+    }
     setEtat({ enCours: false, premierTourFait: true, recus: 0, message: 'Synchronisation désactivée sur cet appareil.' });
     setVersion(v => v + 1);
   }, [session]);
@@ -385,6 +494,16 @@ export function useSynchro({
   const oublier = useCallback(
     async (autre: string) => {
       await oublierAppareil(session.base(), autre);
+      // Appareil oublié : son enveloppe en attente (cache `entrant`) part aussi.
+      const caches = cachesSynchro();
+      const profil = profilCourant();
+      await caches.charger(profil);
+      const entrant = caches.entrant(profil);
+      if (autre in entrant.elements) {
+        const elements = { ...entrant.elements };
+        delete elements[autre];
+        await caches.ecrireEntrant(profil, { ...entrant, elements });
+      }
       setVersion(v => v + 1);
     },
     [session],

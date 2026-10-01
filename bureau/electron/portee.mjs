@@ -12,7 +12,19 @@ export const MOTIF_PROFIL = /^(principal|[a-z0-9]{6,16})$/;
  */
 export function fichierAutorise(nom, porteeCourante, etendues = []) {
   if (porteeCourante === undefined || porteeCourante === 'principal' || nom === 'profils') return true;
-  return [porteeCourante, ...etendues].some(id => nom === `coffre-${id}` || nom === `portefeuille-${id}`);
+  if ([porteeCourante, ...etendues].some(id => nom === `coffre-${id}` || nom === `portefeuille-${id}`)) return true;
+  // Caches de synchronisation : ceux du compte ouvert seulement (jamais ceux d'un compte géré).
+  return nom === `synchro-entrant-${porteeCourante}` || nom === `synchro-sortant-${porteeCourante}`;
+}
+
+/**
+ * Fichiers d'un profil d'ami : même liste fermée, suffixée d'un identifiant
+ * court fait de lettres et de chiffres seulement — pas de « ../ » possible.
+ */
+export function fichierDeProfil(nom) {
+  const trouve = /^(portefeuille|coffre|synchro-entrant|synchro-sortant)-([a-z0-9]{6,16})$/.exec(String(nom));
+  if (!trouve) return undefined;
+  return trouve[1] === 'portefeuille' ? `portefeuille-${trouve[2]}.ab` : `${trouve[1]}-${trouve[2]}.json`;
 }
 
 /** Nombre maximal de comptes qu'un gestionnaire peut ajouter à sa portée pendant une session. */

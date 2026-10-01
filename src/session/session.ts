@@ -433,8 +433,36 @@ export class Session {
     return this.pilote;
   }
 
+  private readonly ouvertures = new Set<() => void>();
+  private readonly fermetures = new Set<() => void>();
+
+  /**
+   * Prévient juste après chaque ouverture de la base (déverrouillage, code de
+   * récupération, séquestre), avant que l'interface ne se redessine : la
+   * synchronisation y fusionne ce qu'elle a reçu avant le déverrouillage.
+   */
+  surOuverture(rappel: () => void): () => void {
+    this.ouvertures.add(rappel);
+    return () => void this.ouvertures.delete(rappel);
+  }
+
+  /** Prévient juste avant de fermer la base (la base est encore lisible). */
+  surFermeture(rappel: () => void): () => void {
+    this.fermetures.add(rappel);
+    return () => void this.fermetures.delete(rappel);
+  }
+
   /** Ferme la base et efface la clé de la mémoire. */
   verrouiller(): void {
+    if (this.pilote) {
+      for (const rappel of [...this.fermetures]) {
+        try {
+          rappel();
+        } catch {
+          // Un abonné fautif n'empêche jamais de verrouiller.
+        }
+      }
+    }
     this.pilote?.fermer();
     this.pilote = undefined;
     this.cleMaitresse?.fill(0);
@@ -454,6 +482,13 @@ export class Session {
     }
     this.cleMaitresse = cleMaitresse;
     this.etatVerrou = apresSucces(this.horloge());
+    for (const rappel of [...this.ouvertures]) {
+      try {
+        rappel();
+      } catch {
+        // La fusion du cache est un plus : son échec n'empêche pas d'ouvrir.
+      }
+    }
   }
 
   private exigerCoffre(): Coffre {
