@@ -2,13 +2,13 @@
 
 import React from 'react';
 
-export function SelecteurFichier({ onTexte }: { onTexte(texte: string): void }): React.ReactElement {
+export function SelecteurFichier({ onTexte, mobile }: { onTexte(texte: string): void; mobile?: boolean }): React.ReactElement {
   return React.createElement('input', {
     type: 'file',
     accept: '.json,application/json',
     'aria-label': 'Choisir un fichier JSON',
     'data-testid': 'import-fichier',
-    style: { fontSize: 14 },
+    style: mobile ? { fontSize: 16, minHeight: 48, width: '100%', boxSizing: 'border-box', padding: 8 } : { fontSize: 14 },
     onChange: (e: { target: { files?: ArrayLike<{ size: number; text(): Promise<string> }> } }) => {
       const f = e.target.files?.[0];
       // 20 Mo : largement de quoi contenir 20 000 entrées.

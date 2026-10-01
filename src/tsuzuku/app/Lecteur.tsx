@@ -10,6 +10,7 @@ import { utiliserLectureEnCours } from '../../securite/presence';
 import { ouvrirExterne } from './externe';
 import { LecteurMedia } from './LecteurMedia';
 import { lireAnime, lireFilm, type Lecture } from './resoudre';
+import { LecteurMobile } from './mobile/LecteurMobile';
 import { Avis, Bouton, Etat, Puce, Titre, styleAttenue } from './ui';
 
 interface Meta {
@@ -38,7 +39,7 @@ async function chargerMeta(s: ReturnType<typeof useTsuzuku>['s'], kind: Genre, i
 }
 
 export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; numero?: number }) {
-  const { s, theme, remplacer, retour, changee } = useTsuzuku();
+  const { s, theme, remplacer, retour, changee, mobile } = useTsuzuku();
   const n = kind === 'anime' ? Math.max(1, numero ?? 1) : 1;
   const [choix, setChoix] = useState(0);
   const charge = useCharger<{ meta: Meta; lecture: Lecture; suivantAuto: boolean }>(async () => {
@@ -86,6 +87,27 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
     else if (suivantAuto && aSuivant) suivant();
   };
 
+  if (mobile) {
+    return (
+      <LecteurMobile
+        kind={kind}
+        n={n}
+        meta={meta}
+        lecteurs={lecteurs}
+        courant={courant}
+        choix={Math.min(choix, Math.max(0, lecteurs.length - 1))}
+        onChoisir={setChoix}
+        message={lecture?.message}
+        charge={charge}
+        aSuivant={aSuivant}
+        onPrecedent={() => remplacer({ t: 'lecteur', kind, id, numero: n - 1 })}
+        onSuivant={suivant}
+        onFin={fin}
+        onMarquerVu={() => void marquerFilmVu()}
+        prete={Boolean(lecture && meta)}
+      />
+    );
+  }
   return (
     <View style={{ gap: 14 }} testID="tsuzuku-lecteur">
       {/* En-tête du lecteur (comme l'ancienne version) : retour à la fiche, « Épisode n sur N », titre, Précédent / Suivant. */}

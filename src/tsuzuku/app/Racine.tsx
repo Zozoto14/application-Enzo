@@ -121,7 +121,7 @@ function useEtat({ theme: themeHub, onParametres, contexte, services: s }: Props
       changee,
       large,
       mobile,
-      onParametres: onParametres ? () => onParametres('tsuzuku') : undefined,
+      onParametres: onParametres ? (section?: 'tsuzuku' | 'apropos') => onParametres(section ?? 'tsuzuku') : undefined,
       enregistrerFichier: contexte.enregistrerFichier,
     }),
     [s, theme, themeHub, mode, aller, remplacer, retour, version, changee, large, mobile, onParametres, contexte.enregistrerFichier],

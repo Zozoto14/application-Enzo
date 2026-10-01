@@ -224,7 +224,7 @@ export function EpisodesMobile({ id, episodes, entree, chargement, vide, onLire 
         Épisodes
       </Text>
       <Etat enCours={chargement.enCours && !chargement.aDonnees} erreur={chargement.erreur} onRecharger={chargement.recharger} vide={vide}>
-        <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.ligne, borderRadius: rayonCarte(theme), overflow: 'hidden', backgroundColor: theme.surface }}>
+        {episodes.length ? <View style={{ borderWidth: StyleSheet.hairlineWidth, borderColor: theme.ligne, borderRadius: rayonCarte(theme), overflow: 'hidden', backgroundColor: theme.surface }}>
           {episodes.slice(0, visibles).map((ep, i) => {
             const vu = (entree?.currentEpisode ?? 0) >= ep.number;
             return (
@@ -252,7 +252,7 @@ export function EpisodesMobile({ id, episodes, entree, chargement, vide, onLire 
               </Pressable>
             );
           })}
-        </View>
+        </View> : null}
         {episodes.length > visibles ? <BoutonPrincipal theme={theme} variante="discret" titre={`Afficher la suite (${episodes.length - visibles})`} onPress={() => setVisibles(v => v + PAR_PAGE)} testID="episodes-plus" /> : null}
       </Etat>
     </View>

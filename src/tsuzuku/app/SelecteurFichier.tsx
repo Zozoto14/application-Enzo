@@ -2,6 +2,6 @@
 
 import React from 'react';
 
-export function SelecteurFichier(_props: { onTexte(texte: string): void }): React.ReactElement | null {
+export function SelecteurFichier(_props: { onTexte(texte: string): void; mobile?: boolean }): React.ReactElement | null {
   return null;
 }

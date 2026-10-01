@@ -33,7 +33,7 @@ export interface CtxTsuzuku {
   large: boolean;
   /** Mode téléphone (< 768 px, ou natif en portrait) : mises en page dédiées. Absent hors de l'app (Paramètres). */
   mobile?: boolean;
-  onParametres?(): void;
+  onParametres?(section?: 'tsuzuku' | 'apropos'): void;
   /** Enregistre un fichier (export) ; faux si annulé ou impossible. Absent : l'export s'affiche à copier. */
   enregistrerFichier?(nom: string, contenu: string, type: string): Promise<boolean>;
 }

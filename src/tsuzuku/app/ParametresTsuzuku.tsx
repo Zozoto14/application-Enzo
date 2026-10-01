@@ -8,6 +8,8 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { police, type ThemeHub } from '../../hub/themes';
+import { ct, tt } from '../../ui/mobile/jetons';
+import { modeTelephoneCourant } from '../../ui/mobile/useMobile';
 import { LANGUES, type Langue } from '../moteur/sources';
 import { CLES, type BasePrefs } from '../plateforme/stockage';
 import { ecrireReglages, lireReglages, type ReglagesTsuzuku } from './reglages';
@@ -44,8 +46,8 @@ function Segments<T extends string>({ theme, libelle, valeur, options, onChoisir
             accessibilityState={{ checked: actif }}
             accessibilityLabel={`${libelle} : ${texte}`}
             onPress={() => onChoisir(cle)}
-            style={[st.segment, { borderRadius: Math.min(theme.rayonMoyen, 10), backgroundColor: actif ? theme.accent : 'transparent', borderColor: actif ? theme.accent : theme.ligne }]}>
-            <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: 13, ...police(theme.policeTexte) }}>{texte}</Text>
+            style={[st.segment, modeTelephoneCourant() && { flexGrow: 1 }, { minHeight: ct(40), borderRadius: Math.min(theme.rayonMoyen, 10), backgroundColor: actif ? theme.accent : 'transparent', borderColor: actif ? theme.accent : theme.ligne }]}>
+            <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: tt(13), ...police(theme.policeTexte) }}>{texte}</Text>
           </Pressable>
         );
       })}
@@ -53,7 +55,7 @@ function Segments<T extends string>({ theme, libelle, valeur, options, onChoisir
   );
 }
 
-const texte = (theme: ThemeHub) => ({ color: theme.texte, fontSize: 14, ...police(theme.policeTexte) });
+const texte = (theme: ThemeHub) => ({ color: theme.texte, fontSize: modeTelephoneCourant() ? 16 : 14, ...police(theme.policeTexte) });
 
 /** Réglage « Lecture et catalogue » : doublage, épisode suivant automatique, déjà vus. */
 export function ReglageLectureTsuzuku({ theme, base }: { theme: ThemeHub; base: BasePrefs }) {

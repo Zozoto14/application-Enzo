@@ -8,6 +8,7 @@ import { messageDe } from '../moteur/erreurs';
 import { jourDe } from '../moteur/outils';
 import { useCharger, useTsuzuku } from './contexte';
 import { Grille, RangeeReprendre } from './listes';
+import { BibliothequeMobile } from './mobile/BibliothequeMobile';
 import { Avis, Bouton, Champ, Etat, EtatVide, LIBELLE_STATUT, Puce, Titre, TitreSection, couleurStatut, elementDepuisEntree, styleAttenue, styleTexte } from './ui';
 
 type Onglet = 'tous' | Statut | 'favoris';
@@ -25,7 +26,7 @@ const ONGLETS: ReadonlyArray<readonly [Onglet, string]> = [
 ];
 
 export function Bibliotheque() {
-  const { s, mode, aller, theme, version, enregistrerFichier } = useTsuzuku();
+  const { s, mode, aller, theme, version, enregistrerFichier, mobile } = useTsuzuku();
   const [onglet, setOnglet] = useState<Onglet>('tous');
   const [export_, setExport] = useState<string | undefined>();
   const [avis, setAvis] = useState<{ texte: string; genre: 'ok' | 'critique' } | undefined>();
@@ -55,6 +56,38 @@ export function Bibliotheque() {
     }
   };
 
+  if (mobile) {
+    const tuiles: (readonly [string, string, string])[] = bloc && stats
+      ? [
+          ['Titres', String(bloc.total), `${liste.filter(e => e.favorite).length} favori(s)`],
+          ['Vus (ici + ailleurs)', String(bloc.seen), bloc.total ? `${Math.round((bloc.seen / bloc.total) * 100)} % de la liste` : ''],
+          ['Vus ailleurs', String(bloc.watchedElsewhere), ''],
+          mode === 'anime' ? (['Épisodes vus', String(stats.anime.episodesWatched), ''] as const) : (['Heures vues', String(Math.round((stats.movies.minutesWatched / 60) * 10) / 10), ''] as const),
+          ['Note moyenne', bloc.averageRating == null ? '—' : `${bloc.averageRating}/10`, ''],
+        ]
+      : [];
+    return (
+      <BibliothequeMobile
+        titre={mode === 'anime' ? 'Ma bibliothèque d’animés' : 'Ma bibliothèque de films'}
+        tuiles={tuiles}
+        repartition={liste.length ? STATUTS_ORDRE.map(st => [st, compte(st)] as const) : null}
+        reprendre={liste.filter(e => e.status === 'en_cours' || e.status === 'a_reprendre').slice(0, 10)}
+        onLire={e => aller(e.kind === 'movie' ? { t: 'lecteur', kind: 'movie', id: e.id } : { t: 'lecteur', kind: 'anime', id: e.id, numero: (e.currentEpisode || 0) + 1 })}
+        onglets={ONGLETS.map(([cle, titre]) => [cle, titre, compte(cle)] as const)}
+        onglet={onglet}
+        onOnglet={cle => setOnglet(cle as Onglet)}
+        chargement={{ enCours: lib.enCours, erreur: lib.erreur, recharger: lib.recharger, aDonnees: Boolean(db) }}
+        elements={filtrees.map(e => elementDepuisEntree(e, () => aller({ t: 'fiche', kind: e.kind, id: e.id })))}
+        vide={db && !filtrees.length ? { icone: liste.length ? '◌' : '＋', titre: liste.length ? 'Rien dans cet onglet' : 'Votre bibliothèque est vide', texte: liste.length ? 'Choisissez un autre statut.' : 'Ajoutez des titres depuis leur fiche ou depuis « Accueil ».' } : null}
+        historique={db?.history ?? []}
+        estAdmin={s.estAdmin}
+        onExporter={() => void exporter()}
+        onImporter={() => aller({ t: 'import' })}
+        exportTexte={export_}
+        avis={avis}
+      />
+    );
+  }
   return (
     <View style={{ gap: 16 }} testID="tsuzuku-bibliotheque">
       <Titre taille={32}>{mode === 'anime' ? 'Ma bibliothèque d’animés' : 'Ma bibliothèque de films'}</Titre>

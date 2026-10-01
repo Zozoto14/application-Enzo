@@ -21,6 +21,10 @@ import { FournisseurTsuzuku, useCharger, useTsuzuku, type CtxTsuzuku } from './c
 import { BORNES_AVANCES, lireAvances, masquerCle, peutGererSources, type ReglagesAvances, type VueSourcePartagee } from './gestion';
 import { creerServices, type ServicesTsuzuku } from './services';
 import { Sources, type CompteTsuzuku } from './Sources';
+import { ct } from '../../ui/mobile/jetons';
+import { modeTelephoneCourant } from '../../ui/mobile/useMobile';
+import { Cellule, GroupeCellules } from '../../ui/mobile/ListeCellules';
+import { useMobile } from '../../ui/mobile/useMobile';
 import { Avis, Bouton, Champ, styleAttenue, styleTexte } from './ui';
 
 export interface PropsReglageTsuzuku {
@@ -86,11 +90,13 @@ function CleTmdb({ avances, onEnregistrer }: { avances: ReglagesAvances; onEnreg
         value={saisie}
         onChangeText={setSaisie}
         secureTextEntry
+        autoComplete="off"
+        enterKeyHint="done"
         autoCapitalize="none"
         autoCorrect={false}
         placeholder={avances.cleTmdb ? `${masquerCle(avances.cleTmdb)} (clé enregistrée)` : 'Coller la clé TMDB'}
         placeholderTextColor={theme.attenue}
-        style={{ minHeight: 44, borderWidth: 1, paddingHorizontal: 12, fontSize: 15, color: theme.texte, backgroundColor: theme.fond, borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 10), ...police(theme.policeTexte) }}
+        style={{ minHeight: ct(44), borderWidth: 1, paddingHorizontal: 12, fontSize: modeTelephoneCourant() ? 17 : 15, color: theme.texte, backgroundColor: theme.fond, borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 10), ...police(theme.policeTexte) }}
       />
       <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
         <Bouton
@@ -176,6 +182,7 @@ const LIBELLE_LANGUE = { vf: 'VF', vostfr: 'VOSTFR', indifferent: 'VF/VOSTFR' } 
 
 function Partagees() {
   const { s, theme } = useTsuzuku();
+  const mobile = useMobile();
   const [liste, setListe] = useState<VueSourcePartagee[] | undefined>();
   const charge = useCharger(async () => {
     const l = await s.sourcesPartagees();
@@ -189,6 +196,26 @@ function Partagees() {
       <Text testID="sources-partagees-vide" style={styleAttenue(theme, 13)}>
         Aucune source ne vous est partagée pour le moment. L’administration choisit les sources partagées ; elles arrivent à la synchronisation.
       </Text>
+    );
+  }
+  if (mobile) {
+    // Téléphone : une cellule par source, avec son interrupteur (la ligne entière se touche).
+    return (
+      <View style={{ gap: 12 }} testID="sources-partagees">
+        <Text style={styleAttenue(theme, 15)}>Sources choisies par l’administration. Vous pouvez désactiver celles que vous ne voulez pas utiliser : ce choix ne concerne que vous.</Text>
+        <GroupeCellules theme={theme}>
+          {sources.map(src => (
+            <Cellule
+              key={src.id}
+              theme={theme}
+              titre={src.nom}
+              sousTitre={`${[src.animes ? 'Animés' : '', src.films ? 'Films' : ''].filter(Boolean).join(' · ') || 'Incomplète'} · ${LIBELLE_LANGUE[src.langue]}`}
+              interrupteur={{ valeur: src.actif, onChanger: v => void s.choisirSourcePartagee(src.id, v).then(() => s.sourcesPartagees().then(setListe)) }}
+              testID={`source-partagee-activer-${src.id}`}
+            />
+          ))}
+        </GroupeCellules>
+      </View>
     );
   }
   return (
