@@ -7,7 +7,8 @@ import { collection, exporterEnTexte, statistiques, type Statut } from '../moteu
 import { messageDe } from '../moteur/erreurs';
 import { jourDe } from '../moteur/outils';
 import { useCharger, useTsuzuku } from './contexte';
-import { Avis, Bouton, Champ, Etat, EtatVide, Grille, LIBELLE_STATUT, Puce, RangeeReprendre, Titre, TitreSection, couleurStatut, elementDepuisEntree, styleAttenue, styleTexte } from './ui';
+import { Grille, RangeeReprendre } from './listes';
+import { Avis, Bouton, Champ, Etat, EtatVide, LIBELLE_STATUT, Puce, Titre, TitreSection, couleurStatut, elementDepuisEntree, styleAttenue, styleTexte } from './ui';
 
 type Onglet = 'tous' | Statut | 'favoris';
 

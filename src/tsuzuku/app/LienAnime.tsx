@@ -25,10 +25,10 @@ import { useCharger, useTsuzuku } from './contexte';
 import { useAgir } from './FicheCommune';
 import { Avis, Bouton, Champ, styleAttenue, styleTitre } from './ui';
 
-export function LienAnime({ id, numeroCourant, catalogue }: { id: string; numeroCourant: number; catalogue: { number: number; title?: string | null }[] }) {
-  const { s, theme, version } = useTsuzuku();
+/** Logique du lien manuel d'un animé (partagée par l'affichage de bureau et celui du téléphone). */
+export function useLienAnime(id: string, numeroCourant: number, catalogue: { number: number; title?: string | null }[]) {
+  const { s, version } = useTsuzuku();
   const { agir, erreur } = useAgir();
-  const [ouvert, setOuvert] = useState(false);
   const [adresse, setAdresse] = useState('');
   const [episode, setEpisode] = useState(String(numeroCourant));
   const [motif, setMotif] = useState('');
@@ -101,6 +101,13 @@ export function LienAnime({ id, numeroCourant, catalogue }: { id: string; numero
   const retirer = () => agir(() => s.depot.modifier(db => void (db.manualSources = retirerAssociation(db.manualSources, id))));
 
   const resume = assoc ? (assoc.type === 'pattern' ? `Motif : ${assoc.pattern}` : `Liste de ${assoc.episodes.length} épisode(s)`) : undefined;
+  return { adresse, setAdresse, episode, setEpisode, motif, setMotif, apercu, assoc, resume, info, problemes, erreur, analyser, enregistrerMotif, seulementCeluiLa, lirePageSerie, retirer, lectureSources: s.lectureSources };
+}
+
+export function LienAnime({ id, numeroCourant, catalogue }: { id: string; numeroCourant: number; catalogue: { number: number; title?: string | null }[] }) {
+  const { theme } = useTsuzuku();
+  const [ouvert, setOuvert] = useState(false);
+  const { adresse, setAdresse, episode, setEpisode, motif, setMotif, apercu, assoc, resume, info, problemes, erreur, analyser, enregistrerMotif, seulementCeluiLa, lirePageSerie, retirer, lectureSources } = useLienAnime(id, numeroCourant, catalogue);
   return (
     <View style={{ gap: 10 }} testID="bloc-lien-anime">
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
@@ -115,7 +122,7 @@ export function LienAnime({ id, numeroCourant, catalogue }: { id: string; numero
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             <Bouton titre="Analyser l’adresse" onPress={analyser} desactive={!adresse.trim()} testID="lien-anime-analyser" />
             <Bouton titre="Cet épisode seulement" onPress={() => void seulementCeluiLa()} desactive={!adresse.trim()} testID="lien-anime-seul" />
-            {s.lectureSources ? <Bouton titre="Lire la page de série" onPress={() => void lirePageSerie()} desactive={!adresse.trim()} testID="lien-anime-serie" /> : null}
+            {lectureSources ? <Bouton titre="Lire la page de série" onPress={() => void lirePageSerie()} desactive={!adresse.trim()} testID="lien-anime-serie" /> : null}
           </View>
           {motif ? (
             <View style={{ gap: 8 }}>

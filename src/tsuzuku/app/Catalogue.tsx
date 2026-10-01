@@ -1,14 +1,20 @@
 /** Catalogue et recherche : champ, genres, résultats en grille. */
 
 import React, { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { police } from '../../hub/themes';
+import { FeuilleBasse } from '../../ui/mobile/FeuilleBasse';
+import { Cellule, GroupeCellules } from '../../ui/mobile/ListeCellules';
+import { ChampRecherche } from './mobile/ElementsMobile';
 import type { FicheAnime, FicheFilm } from '../moteur/catalogue';
 import { carteAnime, carteFilm, sansVus } from './elements';
 import { useCharger, useTsuzuku } from './contexte';
-import { Bouton, Champ, Etat, EtatVide, Grille, Puce, Titre } from './ui';
+import { Grille } from './listes';
+import { Bouton, Champ, Etat, EtatVide, Puce, Titre } from './ui';
 
 export function Catalogue({ q: qInitial, genre: genreInitial }: { q?: string; genre?: string }) {
-  const { s, mode, aller, version } = useTsuzuku();
+  const { s, theme, mode, aller, version, mobile } = useTsuzuku();
+  const [filtres, setFiltres] = useState(false);
   const [saisie, setSaisie] = useState(qInitial ?? '');
   const [q, setQ] = useState(qInitial ?? '');
   const [genre, setGenre] = useState<string | undefined>(genreInitial);
@@ -55,6 +61,69 @@ export function Catalogue({ q: qInitial, genre: genreInitial }: { q?: string; ge
       : carteFilm(f as FicheFilm, lib.donnees, id => aller({ t: 'fiche', kind: 'movie', id })),
   );
 
+  const choisirGenre = (id: string | undefined) => {
+    setGenre(id);
+    setQ('');
+    setSaisie('');
+    setPage(1);
+    setPlus([]);
+  };
+  if (mobile) {
+    const nomGenre = genre ? (genres.donnees?.find(g => g.id === genre)?.nom ?? genre) : undefined;
+    return (
+      <View style={{ gap: 16 }} testID="tsuzuku-catalogue">
+        <Titre taille={28}>{q ? `Résultats pour « ${q} »` : mode === 'anime' ? 'Catalogue des animés' : 'Catalogue des films'}</Titre>
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <ChampRecherche libelle="Rechercher" valeur={saisie} onChanger={setSaisie} onValider={chercher} testID="catalogue-recherche" placeholder="Titre" />
+          <Pressable
+            testID="catalogue-filtres"
+            accessibilityRole="button"
+            accessibilityLabel={nomGenre ? `Filtres, genre : ${nomGenre}` : 'Filtres'}
+            onPress={() => setFiltres(true)}
+            style={{ minHeight: 48, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: Math.min(theme.rayonMoyen, 12), borderColor: nomGenre ? theme.accent : theme.ligne, backgroundColor: theme.surface }}>
+            <Text style={{ color: nomGenre ? theme.accent : theme.texte, fontSize: 17, fontWeight: '600', ...police(theme.policeTexte) }}>⚲ Filtres</Text>
+          </Pressable>
+        </View>
+        {nomGenre ? (
+          <Pressable testID="catalogue-genre-actif" accessibilityRole="button" accessibilityLabel={`Retirer le filtre ${nomGenre}`} onPress={() => choisirGenre(undefined)} style={{ alignSelf: 'flex-start', minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, borderRadius: 999, backgroundColor: theme.accent }}>
+            <Text style={{ color: theme.surAccent, fontSize: 15, fontWeight: '700', ...police(theme.policeTexte) }}>{nomGenre}  ✕</Text>
+          </Pressable>
+        ) : null}
+        <Etat enCours={resultats.enCours && !donnees} erreur={resultats.erreur} onRecharger={resultats.recharger} squelette="affiches">
+          {donnees && !items.length ? (
+            <EtatVide icone="⌕" titre="Aucun résultat">
+              Essayez une autre orthographe, le titre original ou un mot-clé plus court.
+            </EtatVide>
+          ) : null}
+          <Grille elements={sansVus(cartes, Boolean(reg.donnees?.masquerVus))} testID="catalogue-grille" />
+          {donnees?.suite && items.length ? (
+            <Bouton
+              titre={resultats.enCours ? 'Chargement…' : 'Plus de résultats'}
+              desactive={resultats.enCours}
+              onPress={() => {
+                setPlus(items);
+                setPage(p => p + 1);
+              }}
+              testID="catalogue-plus"
+              style={{ minHeight: 48 }}
+            />
+          ) : null}
+        </Etat>
+        <FeuilleBasse theme={theme} visible={filtres} titre="Filtrer par genre" onFermer={() => setFiltres(false)} testID="catalogue-feuille-genres">
+          {genres.donnees?.length ? (
+            <GroupeCellules theme={theme}>
+              <Cellule theme={theme} titre="Tous les genres" coche={!genre} onPress={() => { choisirGenre(undefined); setFiltres(false); }} testID="genre-tous" />
+              {genres.donnees.map(g => (
+                <Cellule key={g.id} theme={theme} titre={g.nom} coche={genre === g.id} onPress={() => { choisirGenre(g.id); setFiltres(false); }} testID={`genre-${g.id}`} />
+              ))}
+            </GroupeCellules>
+          ) : (
+            <Text style={{ color: theme.attenue, fontSize: 16, ...police(theme.policeTexte) }}>Les genres ne sont pas disponibles pour le moment.</Text>
+          )}
+        </FeuilleBasse>
+      </View>
+    );
+  }
   return (
     <View style={{ gap: 16 }} testID="tsuzuku-catalogue">
       <Titre taille={30}>{q ? `Résultats pour « ${q} »` : mode === 'anime' ? 'Catalogue des animés' : 'Catalogue des films'}</Titre>

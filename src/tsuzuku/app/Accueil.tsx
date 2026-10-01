@@ -11,7 +11,10 @@ import { ajouterOuMettreAJour, trouver, type Entree } from '../moteur/bibliotheq
 import type { FicheAnime, FicheFilm, Rangee as RangeeCatalogue } from '../moteur/catalogue';
 import { carteAnime, carteFilm, sansVus } from './elements';
 import { useCharger, useTsuzuku } from './contexte';
-import { Avis, Bouton, Champ, Etat, EtatVide, Rangee, RangeeReprendre, elementDepuisEntree, styleAttenue } from './ui';
+import { Rangee, RangeeReprendre } from './listes';
+import { HeroMobile } from './mobile/HeroMobile';
+import { ChampRecherche } from './mobile/ElementsMobile';
+import { Avis, Bouton, Champ, Etat, EtatVide, elementDepuisEntree, styleAttenue } from './ui';
 
 type Donnees = { anime?: RangeeCatalogue<FicheAnime>[]; films?: RangeeCatalogue<FicheFilm>[]; source?: 'tmdb' | 'jikan' };
 type Une = { id: string; titre: string; image: string | null; banniere: string | null; score: number | null; meta: string; genres: string[]; synopsis: string | null; annee: number | null; total: number | null; duree: number | null };
@@ -30,13 +33,25 @@ function uneDepuis(d: Donnees | undefined): Une | undefined {
 
 /** Bandeau « à la une » : visuel plein cadre fondu dans le fond, titre, genres, synopsis, actions. */
 function BandeauUne({ une, entree }: { une: Une; entree: Entree | null }) {
-  const { s, theme, mode, aller, changee, large } = useTsuzuku();
+  const { s, theme, mode, aller, changee, large, mobile } = useTsuzuku();
   const film = mode === 'movie';
   const visuel = une.banniere || une.image;
   const ajouter = () =>
     void s.depot
       .modifier(db => void ajouterOuMettreAJour(db, film ? 'movie' : 'anime', { id: une.id, title: une.titre, image: une.image, year: une.annee, totalEpisodes: une.total, runtime: une.duree, status: 'a_voir' }))
       .then(changee, () => undefined);
+  if (mobile) {
+    return (
+      <HeroMobile
+        une={une}
+        film={film}
+        dejaDansBiblio={Boolean(entree)}
+        onPrincipal={() => aller(film ? { t: 'lecteur', kind: 'movie', id: une.id } : { t: 'fiche', kind: 'anime', id: une.id })}
+        onFiche={() => aller({ t: 'fiche', kind: 'movie', id: une.id })}
+        onAjouter={ajouter}
+      />
+    );
+  }
   return (
     <View testID="tsuzuku-une" accessibilityLabel="À la une" style={{ borderRadius: Math.max(theme.rayonGrand, 12), overflow: 'hidden', borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface, minHeight: large ? 380 : 330, justifyContent: 'flex-end' }}>
       {visuel ? <Image source={{ uri: visuel }} accessibilityIgnoresInvertColors style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0.85 }} resizeMode="cover" /> : null}
@@ -79,7 +94,7 @@ function BandeauUne({ une, entree }: { une: Une; entree: Entree | null }) {
 }
 
 export function Accueil() {
-  const { s, mode, aller, version } = useTsuzuku();
+  const { s, mode, aller, version, mobile } = useTsuzuku();
   const [q, setQ] = useState('');
   const lib = useCharger(() => s.depot.lire(), [s, version]);
   const reg = useCharger(() => s.reglages(), [s, version]);
@@ -99,13 +114,17 @@ export function Accueil() {
   const vide = !cat.enCours && !cat.erreur && !cat.donnees?.anime?.some(r => r.items.length) && !cat.donnees?.films?.some(r => r.items.length);
 
   return (
-    <View style={{ gap: 28 }} testID="tsuzuku-accueil">
-      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-end' }}>
+    <View style={{ gap: mobile ? 24 : 28 }} testID="tsuzuku-accueil">
+      <View style={{ flexDirection: 'row', gap: 8, alignItems: mobile ? 'center' : 'flex-end' }}>
+        {mobile ? (
+          <ChampRecherche libelle={mode === 'anime' ? 'Rechercher un animé' : 'Rechercher un film'} valeur={q} onChanger={setQ} onValider={chercher} testID="accueil-recherche" placeholder={mode === 'anime' ? 'Rechercher un animé…' : 'Rechercher un film…'} />
+        ) : (
         <Champ libelle={mode === 'anime' ? 'Rechercher un animé' : 'Rechercher un film'} cacherLibelle valeur={q} onChanger={setQ} onValider={chercher} testID="accueil-recherche" placeholder={mode === 'anime' ? '⌕  Rechercher un animé…' : '⌕  Rechercher un film…'} style={{ flex: 1 }} />
-        <Bouton titre="Chercher" onPress={chercher} variante="plein" testID="accueil-chercher" />
+        )}
+        <Bouton titre="Chercher" onPress={chercher} variante="plein" testID="accueil-chercher" style={mobile ? { minHeight: 48 } : undefined} />
       </View>
       <Etat enCours={cat.enCours} erreur={cat.erreur} onRecharger={cat.recharger} squelette="heros">
-        <View style={{ gap: 34 }}>
+        <View style={{ gap: mobile ? 28 : 34 }}>
           {une ? <BandeauUne une={une} entree={db ? trouver(db, kind, une.id) : null} /> : null}
           <RangeeReprendre
             titre={mode === 'anime' ? 'Reprendre' : 'À voir ce soir'}

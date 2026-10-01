@@ -7,12 +7,13 @@ import { trouver } from '../moteur/bibliotheque';
 import { useCharger, useTsuzuku } from './contexte';
 import { BandeauFiche, BlocBibliotheque, BlocVuAilleurs, LiensLegaux, type FicheMin } from './FicheCommune';
 import { LienAnime, prochainEpisode } from './LienAnime';
+import { EpisodesMobile, FicheMobile } from './mobile/FicheMobile';
 import { Bouton, Etat, LIBELLE_STATUT, TitreSection, styleAttenue, styleTexte } from './ui';
 
 const PAR_PAGE = 30;
 
 export function FicheAnimeEcran({ id }: { id: string }) {
-  const { s, theme, aller, retour, version } = useTsuzuku();
+  const { s, theme, aller, retour, version, mobile } = useTsuzuku();
   const fiche = useCharger(async () => (await s.catalogue.animes.parId(id)).data, [s, id]);
   const eps = useCharger(async () => (await s.catalogue.animes.episodes(id)).data, [s, id]);
   const lib = useCharger(() => s.depot.lire(), [s, version]);
@@ -23,6 +24,40 @@ export function FicheAnimeEcran({ id }: { id: string }) {
   const suivant = prochainEpisode(lib.donnees, id, f?.totalEpisodes);
   const listeEps = eps.donnees?.length ? eps.donnees : f?.totalEpisodes ? Array.from({ length: f.totalEpisodes }, (_, i) => ({ number: i + 1, title: null, aired: null, filler: false, url: null })) : [];
 
+  if (mobile) {
+    const reprise = entree?.currentEpisode ?? 0;
+    return (
+      <View style={{ flex: 1 }} testID="tsuzuku-fiche-anime">
+        <FicheMobile
+          fiche={min}
+          chargement={fiche}
+          entree={entree}
+          etiquette="Animé"
+          image={f?.image}
+          banniere={f?.banner}
+          titre={f?.title}
+          sousTitre={f?.titleJapanese && f.titleJapanese !== f.title ? f.titleJapanese : null}
+          meta={f ? [f.type, f.year, f.totalEpisodes ? `${f.totalEpisodes} épisodes` : null, f.airingStatus, f.studios.slice(0, 2).join(', ')] : []}
+          genres={f?.genres}
+          synopsis={f?.synopsis}
+          score={f?.score}
+          progression={entree && f?.totalEpisodes ? { vus: Math.min(reprise, f.totalEpisodes), total: f.totalEpisodes } : null}
+          libelleLire={suivant === 1 && reprise > 0 ? '▶ Revoir depuis l’épisode 1' : reprise ? `▶ Reprendre l’épisode ${suivant}` : `▶ Lire l’épisode ${suivant}`}
+          onLire={() => aller({ t: 'lecteur', kind: 'anime', id, numero: suivant })}
+          liens={f?.streamingLinks}
+          lien={{ kind: 'anime', numeroCourant: suivant, catalogue: listeEps }}>
+          <EpisodesMobile
+            id={id}
+            episodes={listeEps}
+            entree={entree}
+            chargement={{ enCours: eps.enCours, erreur: eps.erreur, recharger: eps.recharger, aDonnees: Boolean(eps.donnees) }}
+            vide={!listeEps.length && !eps.enCours ? 'Aucune liste d’épisodes : utilisez « Lire l’épisode » ou un lien manuel.' : undefined}
+            onLire={numero => aller({ t: 'lecteur', kind: 'anime', id, numero })}
+          />
+        </FicheMobile>
+      </View>
+    );
+  }
   return (
     <View style={{ gap: 18 }} testID="tsuzuku-fiche-anime">
       <View style={{ alignSelf: 'flex-start' }}>

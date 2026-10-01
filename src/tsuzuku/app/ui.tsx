@@ -4,6 +4,8 @@ import React from 'react';
 import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { Entree, Statut } from '../moteur/bibliotheque';
+import { modeTelephoneCourant } from '../../ui/mobile/useMobile';
+import { ct, tt } from '../../ui/mobile/jetons';
 import { useTsuzuku } from './contexte';
 
 type EtatPresse = { pressed: boolean; hovered?: boolean; focused?: boolean };
@@ -18,8 +20,8 @@ export function styleTitre(theme: ThemeHub, taille: number): TextStyle {
   };
 }
 
-export const styleTexte = (theme: ThemeHub, taille = 14): TextStyle => ({ color: theme.texte, fontSize: taille, ...police(theme.policeTexte) });
-export const styleAttenue = (theme: ThemeHub, taille = 13): TextStyle => ({ color: theme.attenue, fontSize: taille, ...police(theme.policeTexte) });
+export const styleTexte = (theme: ThemeHub, taille = 14): TextStyle => ({ color: theme.texte, fontSize: tt(taille), ...police(theme.policeTexte) });
+export const styleAttenue = (theme: ThemeHub, taille = 13): TextStyle => ({ color: theme.attenue, fontSize: tt(taille), ...police(theme.policeTexte) });
 
 export function Titre({ children, taille = 22, testID }: { children: React.ReactNode; taille?: number; testID?: string }) {
   const { theme } = useTsuzuku();
@@ -67,7 +69,7 @@ export function Bouton({
         },
         style,
       ]}>
-      <Text style={{ color: plein ? theme.surAccent : variante === 'danger' ? theme.critique : theme.texte, fontWeight: '600', fontSize: 14, ...police(theme.policeTexte) }}>{titre}</Text>
+      <Text style={{ color: plein ? theme.surAccent : variante === 'danger' ? theme.critique : theme.texte, fontWeight: '600', fontSize: tt(14), ...police(theme.policeTexte) }}>{titre}</Text>
     </Pressable>
   );
 }
@@ -81,8 +83,8 @@ export function Puce({ titre, actif, onPress, testID }: { titre: string; actif?:
       accessibilityState={{ selected: Boolean(actif) }}
       accessibilityLabel={titre}
       onPress={onPress}
-      style={[st.puce, { borderRadius: theme.rayonGrand > 8 ? 999 : theme.rayonMoyen, backgroundColor: actif ? theme.accent : 'transparent', borderColor: actif ? theme.accent : theme.ligne }]}>
-      <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: 13, ...police(theme.policeTexte) }}>{titre}</Text>
+      style={[st.puce, { minHeight: ct(36), borderRadius: theme.rayonGrand > 8 ? 999 : theme.rayonMoyen, backgroundColor: actif ? theme.accent : 'transparent', borderColor: actif ? theme.accent : theme.ligne }]}>
+      <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: tt(13), ...police(theme.policeTexte) }}>{titre}</Text>
     </Pressable>
   );
 }
@@ -113,7 +115,7 @@ export function Champ({
   const { theme } = useTsuzuku();
   return (
     <View style={[{ gap: 4 }, style]}>
-      {cacherLibelle ? null : <Text style={{ color: theme.texte, fontWeight: '600', fontSize: 13, ...police(theme.policeTexte) }}>{libelle}</Text>}
+      {cacherLibelle ? null : <Text style={{ color: theme.texte, fontWeight: '600', fontSize: tt(13), ...police(theme.policeTexte) }}>{libelle}</Text>}
       <TextInput
         testID={testID}
         accessibilityLabel={libelle}
@@ -126,9 +128,12 @@ export function Champ({
         secureTextEntry={secret}
         multiline={multiligne}
         returnKeyType={onValider ? 'search' : undefined}
+        enterKeyHint={onValider ? 'search' : undefined}
+        inputMode={modeTelephoneCourant() && !multiligne ? 'text' : undefined}
+        autoComplete={modeTelephoneCourant() ? 'off' : undefined}
         onSubmitEditing={onValider}
         onKeyPress={onValider && !multiligne ? (e: { nativeEvent: { key: string } }) => (e.nativeEvent.key === 'Enter' ? onValider() : undefined) : undefined}
-        style={[st.champ, { color: theme.texte, backgroundColor: theme.fond, borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 10), ...police(theme.policeTexte) }, multiligne && { minHeight: 110, textAlignVertical: 'top' }]}
+        style={[st.champ, modeTelephoneCourant() && { minHeight: 48, fontSize: 17 }, { color: theme.texte, backgroundColor: theme.fond, borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 10), ...police(theme.policeTexte) }, multiligne && { minHeight: 110, textAlignVertical: 'top' }]}
       />
     </View>
   );
@@ -142,7 +147,7 @@ export function Avis({ texte, genre = 'info', testID }: { texte: string; genre?:
       testID={testID}
       accessibilityLiveRegion="polite"
       accessibilityRole={genre === 'critique' ? 'alert' : undefined}
-      style={[st.avis, { color: theme.texte, borderLeftColor: couleur, backgroundColor: teinteTransparente(couleur, 0.14), ...police(theme.policeTexte) }]}>
+      style={[st.avis, { fontSize: tt(14), lineHeight: modeTelephoneCourant() ? 22 : 20 }, { color: theme.texte, borderLeftColor: couleur, backgroundColor: teinteTransparente(couleur, 0.14), ...police(theme.policeTexte) }]}>
       {texte}
     </Text>
   );
@@ -200,7 +205,25 @@ export function Squelette({ largeur, hauteur, rayon, style }: { largeur: number 
 
 /** Squelettes d'une rangée d'affiches (et du bandeau « à la une » si `heros`). */
 export function SquelettesAffiches({ nombre = 6, heros = false }: { nombre?: number; heros?: boolean }) {
-  const { large } = useTsuzuku();
+  const { large, mobile } = useTsuzuku();
+  if (mobile) {
+    // Téléphone : bandeau puis rangée (accueil), ou grille à 2 colonnes (catalogue, bibliothèque).
+    return (
+      <View style={{ gap: 20 }} testID="etat-chargement" accessibilityLabel="Chargement" accessibilityLiveRegion="polite">
+        {heros ? <Squelette largeur="100%" hauteur={380} rayon={16} /> : null}
+        {heros ? <Squelette largeur={160} hauteur={22} rayon={6} /> : null}
+        <View style={heros ? { flexDirection: 'row', gap: 12, overflow: 'hidden' } : { flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+          {Array.from({ length: heros ? 3 : 4 }, (_, i) => (
+            <View key={i} style={heros ? { gap: 8 } : { gap: 8, flexBasis: '47%', flexGrow: 1 }}>
+              <Squelette largeur={heros ? 140 : '100%'} hauteur={heros ? 210 : 250} />
+              <Squelette largeur={heros ? 110 : '80%'} hauteur={14} rayon={4} />
+              <Squelette largeur={heros ? 70 : '45%'} hauteur={14} rayon={4} />
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={{ gap: 22 }} testID="etat-chargement" accessibilityLabel="Chargement" accessibilityLiveRegion="polite">
       {heros ? <Squelette largeur="100%" hauteur={large ? 360 : 300} rayon={16} /> : null}
@@ -226,8 +249,8 @@ export function EtatVide({ icone = '◌', titre, children, action, testID = 'eta
       <View style={{ width: 48, height: 48, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: teinteTransparente(theme.texte, 0.08) }}>
         <Text style={{ color: theme.attenue, fontSize: 22 }}>{icone}</Text>
       </View>
-      <Text style={[styleTitre(theme, 17), { textAlign: 'center' }]}>{titre}</Text>
-      {children ? <Text style={[styleAttenue(theme, 14), { textAlign: 'center', lineHeight: 20 }]}>{children}</Text> : null}
+      <Text style={[styleTitre(theme, tt(17)), { textAlign: 'center' }]}>{titre}</Text>
+      {children ? <Text style={[styleAttenue(theme, 14), { textAlign: 'center', lineHeight: modeTelephoneCourant() ? 22 : 20 }]}>{children}</Text> : null}
       {action}
     </View>
   );

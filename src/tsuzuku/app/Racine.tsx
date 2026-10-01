@@ -21,7 +21,9 @@ import { CLES, stockageDepuisBase } from '../plateforme/stockage';
 import { Accueil } from './Accueil';
 import { Bibliotheque } from './Bibliotheque';
 import { Catalogue } from './Catalogue';
+import { useMobile } from '../../ui/mobile/useMobile';
 import { FournisseurTsuzuku, type Route } from './contexte';
+import { CoqueTsuzukuMobile } from './mobile/CoqueTsuzuku';
 import { FicheAnimeEcran } from './FicheAnime';
 import { FicheFilmEcran } from './FicheFilm';
 import { ImportBibliotheque } from './Import';
@@ -74,7 +76,8 @@ export function Tsuzuku(props: PropsRacineApp & { choix?: ChoixReseau }) {
   return <TsuzukuEcrans {...props} services={services} />;
 }
 
-export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, contexte, services: s }: PropsRacineApp & { services: ServicesTsuzuku }) {
+/** État de l'app (mode, pile d'écrans, contexte), tenu par le parent : tourner le téléphone ne fait pas perdre la place. */
+function useEtat({ theme: themeHub, onParametres, contexte, services: s }: PropsRacineApp & { services: ServicesTsuzuku }, mobile: boolean) {
   const { width } = useWindowDimensions();
   const large = width >= 700;
   const [mode, setMode] = useState<Mode>('anime');
@@ -117,32 +120,72 @@ export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, context
       version,
       changee,
       large,
+      mobile,
       onParametres: onParametres ? () => onParametres('tsuzuku') : undefined,
       enregistrerFichier: contexte.enregistrerFichier,
     }),
-    [s, theme, themeHub, mode, aller, remplacer, retour, version, changee, large, onParametres, contexte.enregistrerFichier],
+    [s, theme, themeHub, mode, aller, remplacer, retour, version, changee, large, mobile, onParametres, contexte.enregistrerFichier],
   );
 
-  const ecran = (() => {
-    switch (route.t) {
-      case 'accueil':
-        return <Accueil />;
-      case 'catalogue':
-        return <Catalogue key={`${mode}-${route.q ?? ''}-${route.genre ?? ''}`} q={route.q} genre={route.genre} />;
-      case 'fiche':
-        return route.kind === 'anime' ? <FicheAnimeEcran key={route.id} id={route.id} /> : <FicheFilmEcran key={route.id} id={route.id} />;
-      case 'lecteur':
-        return <LecteurEcran kind={route.kind} id={route.id} numero={route.numero} />;
-      case 'bibliotheque':
-        return <Bibliotheque />;
-      case 'import':
-        return <ImportBibliotheque />;
-    }
-  })();
   const ongletActif: Route['t'] = route.t === 'fiche' || route.t === 'lecteur' ? (pile.find(r => r.t === 'catalogue') ? 'catalogue' : 'accueil') : route.t === 'import' ? 'bibliotheque' : route.t;
+  return { mode, theme, themeHub, pile, route, ctx, choisirMode, onglet, retour, ongletActif };
+}
 
+/** L'écran de la route courante. */
+function EcranCourant({ route, mode }: { route: Route; mode: Mode }) {
+  switch (route.t) {
+    case 'accueil':
+      return <Accueil />;
+    case 'catalogue':
+      return <Catalogue key={`${mode}-${route.q ?? ''}-${route.genre ?? ''}`} q={route.q} genre={route.genre} />;
+    case 'fiche':
+      return route.kind === 'anime' ? <FicheAnimeEcran key={route.id} id={route.id} /> : <FicheFilmEcran key={route.id} id={route.id} />;
+    case 'lecteur':
+      return <LecteurEcran kind={route.kind} id={route.id} numero={route.numero} />;
+    case 'bibliotheque':
+      return <Bibliotheque />;
+    case 'import':
+      return <ImportBibliotheque />;
+  }
+}
+
+export function TsuzukuEcrans(props: PropsRacineApp & { services: ServicesTsuzuku }) {
+  const mobile = useMobile();
+  const etat = useEtat(props, mobile);
+  const ecran = <EcranCourant route={etat.route} mode={etat.mode} />;
   return (
-    <FournisseurTsuzuku value={ctx}>
+    <FournisseurTsuzuku value={etat.ctx}>
+      {mobile ? (
+        <CoqueTsuzukuMobile
+          theme={etat.theme}
+          themeHub={etat.themeHub}
+          mode={etat.mode}
+          route={etat.route}
+          ongletActif={etat.ongletActif}
+          peutRevenir={etat.pile.length > 1}
+          estAdmin={props.services.estAdmin}
+          siteSeulement={!props.services.lectureSources}
+          onRetourHub={props.onRetour}
+          onParametres={props.onParametres}
+          choisirMode={etat.choisirMode}
+          onglet={etat.onglet}
+          retour={etat.retour}>
+          {ecran}
+        </CoqueTsuzukuMobile>
+      ) : (
+        <TsuzukuBureau {...props} etat={etat}>
+          {ecran}
+        </TsuzukuBureau>
+      )}
+    </FournisseurTsuzuku>
+  );
+}
+
+function TsuzukuBureau({ theme: themeHub, onRetour, onParametres, services: s, etat, children }: PropsRacineApp & { services: ServicesTsuzuku; etat: ReturnType<typeof useEtat>; children: React.ReactNode }) {
+  const { theme, mode, route, ongletActif, choisirMode, onglet } = etat;
+  const { large } = etat.ctx;
+  const ecran = children;
+  return (
       <View style={[st.racine, { backgroundColor: theme.fond }]} testID="tsuzuku-racine">
         <ScrollView style={{ flex: 1 }} contentContainerStyle={st.defilement} keyboardShouldPersistTaps="handled">
           <View style={st.page}>
@@ -203,7 +246,6 @@ export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, context
           </View>
         </ScrollView>
       </View>
-    </FournisseurTsuzuku>
   );
 }
 

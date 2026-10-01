@@ -48,8 +48,9 @@ export function useAgir() {
   return { agir, erreur, setErreur };
 }
 
-export function BlocBibliotheque({ fiche, entree }: { fiche: FicheMin; entree: Entree | null }) {
-  const { s, theme } = useTsuzuku();
+/** Écritures de la bibliothèque pour une fiche (statut, note, favori, retrait), partagées bureau / téléphone. */
+export function useBibliotheque(fiche: FicheMin, entree: Entree | null) {
+  const { s } = useTsuzuku();
   const { agir, erreur } = useAgir();
   const statut = (st: Statut) =>
     agir(() =>
@@ -60,6 +61,15 @@ export function BlocBibliotheque({ fiche, entree }: { fiche: FicheMin; entree: E
         if (e && !e.year && fiche.year) e.year = fiche.year;
       }),
     );
+  const noter = (n: number) => agir(() => s.depot.modifier(db => void modifierEntree(db, fiche.kind, fiche.id, { rating: entree?.rating === n ? null : n })));
+  const basculerFavori = () => agir(() => s.depot.modifier(db => void modifierEntree(db, fiche.kind, fiche.id, { favorite: !entree?.favorite })));
+  const retirer = () => agir(() => s.depot.modifier(db => void supprimerEntree(db, fiche.kind, fiche.id)));
+  return { statut, noter, basculerFavori, retirer, erreur };
+}
+
+export function BlocBibliotheque({ fiche, entree }: { fiche: FicheMin; entree: Entree | null }) {
+  const { theme } = useTsuzuku();
+  const { statut, noter, basculerFavori, retirer, erreur } = useBibliotheque(fiche, entree);
   return (
     <View style={{ gap: 10 }} testID="bloc-bibliotheque">
       <Text accessibilityRole="header" style={styleTitre(theme, 16)}>
@@ -76,12 +86,12 @@ export function BlocBibliotheque({ fiche, entree }: { fiche: FicheMin; entree: E
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} accessibilityLabel="Note sur 10">
             <Text style={[styleAttenue(theme), { alignSelf: 'center' }]}>Note</Text>
             {[2, 4, 5, 6, 7, 8, 9, 10].map(n => (
-              <Puce key={n} titre={String(n)} actif={entree.rating === n} onPress={() => void agir(() => s.depot.modifier(db => void modifierEntree(db, fiche.kind, fiche.id, { rating: entree.rating === n ? null : n })))} testID={`note-${n}`} />
+              <Puce key={n} titre={String(n)} actif={entree.rating === n} onPress={() => void noter(n)} testID={`note-${n}`} />
             ))}
           </View>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            <Bouton titre={entree.favorite ? '♥ Favori' : '♡ Favori'} onPress={() => void agir(() => s.depot.modifier(db => void modifierEntree(db, fiche.kind, fiche.id, { favorite: !entree.favorite })))} testID="favori" />
-            <Bouton titre="Retirer de la bibliothèque" variante="danger" onPress={() => void agir(() => s.depot.modifier(db => void supprimerEntree(db, fiche.kind, fiche.id)))} testID="retirer" />
+            <Bouton titre={entree.favorite ? '♥ Favori' : '♡ Favori'} onPress={() => void basculerFavori()} testID="favori" />
+            <Bouton titre="Retirer de la bibliothèque" variante="danger" onPress={() => void retirer()} testID="retirer" />
           </View>
         </View>
       ) : null}
@@ -90,11 +100,10 @@ export function BlocBibliotheque({ fiche, entree }: { fiche: FicheMin; entree: E
   );
 }
 
-/** « Vu ailleurs » : marque le titre comme vu hors de la plateforme (date, note, commentaire, épisodes). */
-export function BlocVuAilleurs({ fiche, entree }: { fiche: FicheMin; entree: Entree | null }) {
-  const { s, theme } = useTsuzuku();
+/** Logique de « Vu ailleurs » (partagée par l'affichage de bureau et celui du téléphone). */
+export function useVuAilleurs(fiche: FicheMin, entree: Entree | null, apres?: () => void) {
+  const { s } = useTsuzuku();
   const { agir, erreur } = useAgir();
-  const [ouvert, setOuvert] = useState(false);
   const deja = entree?.watchedElsewhere;
   const [date, setDate] = useState(deja?.date ?? jourDe());
   const [note, setNote] = useState(deja?.rating != null ? String(deja.rating) : '');
@@ -118,8 +127,16 @@ export function BlocVuAilleurs({ fiche, entree }: { fiche: FicheMin; entree: Ent
         });
       }),
     );
-    if (ok) setOuvert(false);
+    if (ok) apres?.();
   };
+  return { deja, date, setDate, note, setNote, commentaire, setCommentaire, episodes, setEpisodes, enregistrer, erreur };
+}
+
+/** « Vu ailleurs » : marque le titre comme vu hors de la plateforme (date, note, commentaire, épisodes). */
+export function BlocVuAilleurs({ fiche, entree }: { fiche: FicheMin; entree: Entree | null }) {
+  const { theme } = useTsuzuku();
+  const [ouvert, setOuvert] = useState(false);
+  const { deja, date, setDate, note, setNote, commentaire, setCommentaire, episodes, setEpisodes, enregistrer, erreur } = useVuAilleurs(fiche, entree, () => setOuvert(false));
   return (
     <View style={{ gap: 10 }} testID="bloc-vu-ailleurs">
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
