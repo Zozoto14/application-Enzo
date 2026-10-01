@@ -399,8 +399,10 @@ try {
   log('A : mobile 390 px');
   await A.setViewportSize({ width: 390, height: 844 });
   await pause(300);
-  await A.getByTestId('hub-parametres-ouvrir').click();
+  // Téléphone : les Paramètres s'ouvrent par la barre basse (« Réglages ») ; liste → sous-page → « ‹ Réglages ».
+  await A.getByTestId('barre-basse-parametres').click();
   for (const id of ['general', 'synchro', 'securite', 'portefeuille', 'administration', 'apropos']) {
+    if (id !== 'general') await A.getByTestId('parametres-retour').click();
     await A.getByTestId(`parametres-section-${id}`).click();
     await A.getByTestId(`parametres-panneau-${id}`).waitFor({ timeout: 10_000 });
     const debord = await A.evaluate(() => {
@@ -411,6 +413,7 @@ try {
     verifier(!debord.pageDebordante && debord.cartesDebordantes === 0, `390 px, section ${id} : pas de défilement horizontal de la page`);
     await A.screenshot({ path: join(CAPTURES, `16-mobile-${id}.png`) });
   }
+  await A.getByTestId('parametres-retour').click();
   await A.getByTestId('hub-parametres-fermer').click();
   await A.getByTestId('tuile-portefeuille').click();
   await A.getByTestId('entete-app').waitFor({ timeout: 10_000 });
