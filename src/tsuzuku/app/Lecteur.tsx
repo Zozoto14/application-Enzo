@@ -9,6 +9,7 @@ import { useCharger, useTsuzuku } from './contexte';
 import { utiliserLectureEnCours } from '../../securite/presence';
 import { ouvrirExterne } from './externe';
 import { LecteurMedia } from './LecteurMedia';
+import { LienGererSources } from './EtatSources';
 import { lireAnime, lireFilm, type Lecture } from './resoudre';
 import { Avis, Bouton, Etat, Puce, Titre, styleAttenue } from './ui';
 
@@ -122,6 +123,7 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
               <View style={{ gap: 8 }}>
                 <Text style={styleAttenue(theme, 14)}>Vous pouvez coller un lien direct depuis la fiche.</Text>
                 <Bouton titre="Aller à la fiche" onPress={retour} testID="lecteur-vers-fiche" style={{ alignSelf: 'flex-start' }} />
+                <LienGererSources testID="lecteur-gerer-sources" />
               </View>
             ) : (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>

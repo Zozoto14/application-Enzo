@@ -12,7 +12,7 @@
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import type { Rang } from '../../hub/admin/roles';
 import { police, type ThemeHub } from '../../hub/themes';
 import { choisirReseau, type ChoixReseau } from '../plateforme/reseau';
@@ -46,11 +46,15 @@ function useServicesReglage({ base, rang, choix, services }: PropsReglageTsuzuku
 }
 
 /** Contexte minimal des écrans de Tsuzuku, hors de l'app (pas de navigation). */
-function Cadre({ theme, s, children }: { theme: ThemeHub; s: ServicesTsuzuku; children: React.ReactNode }) {
+function Cadre({ theme, s, children, enregistrerFichier }: { theme: ThemeHub; s: ServicesTsuzuku; children: React.ReactNode; enregistrerFichier?: CtxTsuzuku['enregistrerFichier'] }) {
   const [version, setVersion] = useState(0);
   const rien = useCallback(() => undefined, []);
   const changee = useCallback(() => setVersion(v => v + 1), []);
-  const ctx = useMemo<CtxTsuzuku>(() => ({ s, theme, themeHub: theme, mode: 'anime', aller: rien, remplacer: rien, retour: rien, version, changee, large: false }), [s, theme, version, changee, rien]);
+  const large = useWindowDimensions().width >= 700;
+  const ctx = useMemo<CtxTsuzuku>(
+    () => ({ s, theme, themeHub: theme, mode: 'anime', aller: rien, remplacer: rien, retour: rien, version, changee, large, enregistrerFichier }),
+    [s, theme, version, changee, rien, large, enregistrerFichier],
+  );
   return <FournisseurTsuzuku value={ctx}>{children}</FournisseurTsuzuku>;
 }
 
@@ -60,12 +64,16 @@ const Interdit = ({ theme }: { theme: ThemeHub }) => (
   </Text>
 );
 
-/** Administration › Tsuzuku › Sources. `partageActif` : faux pour un Fondateur autre que le compte historique. */
-export function ReglageSourcesTsuzuku(props: PropsReglageTsuzuku & { comptes?: readonly CompteTsuzuku[]; partageActif?: boolean }) {
+/**
+ * Administration › Tsuzuku › Sources : la MÊME page que l'onglet « Sources »
+ * de l'app (`Sources.tsx`). `partageActif` : faux pour un Fondateur autre que
+ * le compte historique.
+ */
+export function ReglageSourcesTsuzuku(props: PropsReglageTsuzuku & { comptes?: readonly CompteTsuzuku[]; partageActif?: boolean; enregistrerFichier?: CtxTsuzuku['enregistrerFichier'] }) {
   const s = useServicesReglage(props);
   if (!peutGererSources(props.rang)) return <Interdit theme={props.theme} />;
   return (
-    <Cadre theme={props.theme} s={s}>
+    <Cadre theme={props.theme} s={s} enregistrerFichier={props.enregistrerFichier}>
       <Sources comptes={props.comptes} partageActif={props.partageActif} />
     </Cadre>
   );

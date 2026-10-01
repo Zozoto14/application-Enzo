@@ -1,37 +1,36 @@
 /**
- * Administration › Tsuzuku › Sources (rangs habilités : Fondateur).
+ * Sources de Tsuzuku (rangs habilités : Fondateur). UNE implémentation, deux
+ * entrées :
+ *
+ *  - la page « Sources » de l'app (onglet de l'en-tête sur PC/tablette, de la
+ *    barre basse sur téléphone, avec le nombre de sources actives) ;
+ *  - Paramètres › Administration › Tsuzuku · Sources (`AdminTsuzuku.tsx`).
  *
  * Sites branchés par l'administration, décrits par des sélecteurs CSS. VIDE
- * par défaut : Tsuzuku n'en fournit aucune. Pour chaque source, le Fondateur
- * choisit qui y a accès (lui seul, tous les utilisateurs autorisés à Tsuzuku,
- * ou une sélection) ; la synchronisation publie ensuite, chiffrée, dans
- * l'espace de chaque bénéficiaire. Les autres rangs ne voient jamais cet
- * écran (Paramètres ne le leur propose pas) et la règle est revérifiée par
- * les services (`gestion.ts`).
- *
- * Rendu dans la page Paramètres (voir `AdminTsuzuku.tsx`), pas dans l'app.
+ * par défaut : Tsuzuku n'en fournit aucune. « + Ajouter une source » propose
+ * l'assistant (lien du site → prompt pour une IA → JSON → test →
+ * enregistrement, `AssistantSource.tsx`) ou la saisie du JSON. Pour chaque
+ * source, le Fondateur choisit qui y a accès (lui seul, tous les utilisateurs
+ * autorisés à Tsuzuku, ou une sélection) ; la synchronisation publie ensuite,
+ * chiffrée, dans l'espace de chaque bénéficiaire. Les autres rangs ne voient
+ * jamais cette page (ni onglet, ni Paramètres) et la règle est revérifiée par
+ * les services (`gestion.ts`, 403).
  */
 
 import React, { useState } from 'react';
-import { Platform, Text, View } from 'react-native';
-import { RAPPEL_DROITS, analyserSite, analyserStructure, extraitHtml, genererPrompt, validerSourceJson, type ResumeStructure, type ValidationSource } from '../moteur/assistant';
+import { Pressable, Text, View } from 'react-native';
+import { police, teinteTransparente } from '../../hub/themes';
+import { RAPPEL_DROITS, testReussi, testerSourcePasAPas, type EtapeTest } from '../moteur/assistant';
 import { messageDe } from '../moteur/erreurs';
-import { diagnostiquerRecherche, type DiagnosticEtape } from '../moteur/resolution';
-import { LANGUES, ajouterSource, importerSources, modifierSource, supporteAnimes, supporteFilms, supprimerSource, vueFilm, type DefinitionSource, type Langue } from '../moteur/sources';
+import { LANGUES, ajouterSource, modifierSource, supprimerSource, type DefinitionSource } from '../moteur/sources';
+import { AssistantSource, ChoixPartage, LIBELLE_LANGUE, typeDe, type CompteTsuzuku, type SourceAssistant } from './AssistantSource';
 import { useCharger, useTsuzuku } from './contexte';
-import { partageDe, type ModePartage, type Partages } from './gestion';
+import { exporterSources, importerExportSources, partageDe, quiRecoitQuoi, type Partages, type TestsSources } from './gestion';
 import { Avis, Bouton, Champ, Etat, Puce, Titre, styleAttenue, styleTexte, styleTitre } from './ui';
 
-const LIBELLE_LANGUE: Record<Langue, string> = { vf: 'VF', vostfr: 'VOSTFR', indifferent: 'Indifférent' };
-const LIBELLE_PARTAGE: Record<ModePartage, string> = { personne: 'Moi seul', tous: 'Tous les utilisateurs de Tsuzuku', selection: 'Une sélection' };
+export type { CompteTsuzuku } from './AssistantSource';
 
 type Brouillon = Record<string, unknown>;
-
-/** Compte à qui une source peut être partagée (actif, autorisé à Tsuzuku). */
-export interface CompteTsuzuku {
-  id: string;
-  nom: string;
-}
 
 const GROUPES: ReadonlyArray<{ titre: string; aide?: string; champs: ReadonlyArray<readonly [string, string, string?]> }> = [
   {
@@ -97,187 +96,77 @@ const ecrire = (o: Brouillon, chemin: string, valeur: string): Brouillon => {
   return { ...o, [tete]: ecrire((o[tete] as Brouillon | undefined) ?? {}, reste.join('.'), valeur) };
 };
 
-const typeDe = (src: DefinitionSource) => [supporteAnimes(src) ? 'animés' : '', supporteFilms(src) ? 'films' : ''].filter(Boolean).join(' + ') || 'incomplète';
 
-/** Copie dans le presse-papiers quand la plateforme le permet (site, PC). */
-async function copier(texte: string): Promise<boolean> {
-  try {
-    const presse = (globalThis as { navigator?: { clipboard?: { writeText(t: string): Promise<void> } } }).navigator?.clipboard;
-    if (Platform.OS === 'web' && presse) {
-      await presse.writeText(texte);
-      return true;
-    }
-  } catch {
-    // Refusé par le navigateur : le texte reste sélectionnable.
-  }
-  return false;
-}
-
-/** Assistant : lien → résumé de structure → prompt pour une IA → JSON validé → test → enregistrement. */
-function Assistant({ onFermer, onEnregistrer, onFormulaire }: { onFermer(): void; onEnregistrer(src: DefinitionSource): Promise<void>; onFormulaire(src: DefinitionSource): void }) {
-  const { s, theme } = useTsuzuku();
-  const [adresse, setAdresse] = useState('');
-  const [htmlColle, setHtmlColle] = useState('');
-  const [analyse, setAnalyse] = useState<{ resume: ResumeStructure; prompt: string } | undefined>();
-  const [enCours, setEnCours] = useState(false);
-  const [erreur, setErreur] = useState<string | undefined>();
-  const [copie, setCopie] = useState<string | undefined>();
-  const [json, setJson] = useState('');
-  const [validation, setValidation] = useState<ValidationSource | undefined>();
-  const [titreTest, setTitreTest] = useState('');
-  const [diag, setDiag] = useState<DiagnosticEtape[] | undefined>();
-
-  const analyser = async () => {
-    setErreur(undefined);
-    setEnCours(true);
-    try {
-      // Sur le site (pas de lecture de pages tierces), l'administrateur peut coller le code de la page.
-      const resultat = htmlColle.trim()
-        ? { resume: analyserStructure(htmlColle, adresse.trim() || 'adresse non précisée'), extrait: extraitHtml(htmlColle) }
-        : await analyserSite(s.client, adresse);
-      setAnalyse({ resume: resultat.resume, prompt: genererPrompt(resultat.resume, resultat.extrait) });
-    } catch (e) {
-      setAnalyse(undefined);
-      setErreur(messageDe(e));
-    } finally {
-      setEnCours(false);
-    }
-  };
-  const verifier = () => {
-    setDiag(undefined);
-    setValidation(validerSourceJson(json, analyse?.resume.url.startsWith('http') ? analyse.resume.url : undefined));
-  };
-  const tester = async (src: DefinitionSource) => {
-    const titre = titreTest.trim() || 'a';
-    const etapes: DiagnosticEtape[] = [];
-    if (supporteAnimes(src)) etapes.push({ ...(await diagnostiquerRecherche(s.ctx, src, titre)), nom: 'Animés · recherche' });
-    if (supporteFilms(src)) etapes.push({ ...(await diagnostiquerRecherche(s.ctx, vueFilm(src), titre)), nom: 'Films · recherche' });
-    setDiag(etapes);
-  };
-  const r = analyse?.resume;
-
-  return (
-    <View style={{ gap: 12, padding: 12, borderWidth: 1, borderColor: theme.accent, borderRadius: theme.rayonMoyen }} testID="assistant-source">
-      <Titre taille={18}>Assistant d’ajout de source</Titre>
-      <Avis genre="alerte" texte={RAPPEL_DROITS} testID="assistant-rappel" />
-      <Text style={styleAttenue(theme, 13)}>
-        1. Collez l’adresse d’une page du site (idéalement une page de résultats de recherche). 2. Copiez le prompt généré vers l’IA de votre choix. 3. Collez le JSON qu’elle renvoie : il est vérifié, puis testé pas à pas avant l’enregistrement.
-      </Text>
-      <Champ libelle="Adresse de la page à analyser" valeur={adresse} onChanger={setAdresse} placeholder="https://…" testID="assistant-adresse" />
-      {!s.lectureSources ? (
-        <Champ libelle="Sur le site, collez ici le code HTML de la page (lecture directe : app PC ou iPhone)" valeur={htmlColle} onChanger={setHtmlColle} multiligne testID="assistant-html" />
-      ) : null}
-      <Bouton titre={enCours ? 'Analyse…' : 'Analyser la page'} variante="plein" desactive={enCours || (!adresse.trim() && !htmlColle.trim())} onPress={() => void analyser()} testID="assistant-analyser" style={{ alignSelf: 'flex-start' }} />
-      {erreur ? <Avis genre="critique" texte={erreur} testID="assistant-erreur" /> : null}
-      {r && analyse ? (
-        <View style={{ gap: 8 }} testID="assistant-resume">
-          <Text style={styleTitre(theme, 15)}>Structure repérée</Text>
-          <Text style={styleTexte(theme, 13)}>
-            {r.titre || 'Page sans titre'} · {r.recurrents.length} élément(s) récurrent(s) · {r.formulaires.length} formulaire(s) · {r.liensEpisodes.length} lien(s) d’épisode · {r.iframes.length} iframe(s) · {r.menus.length} menu(s)
-          </Text>
-          {r.renduJs ? <Avis genre="alerte" texte="La page semble construite en JavaScript : les sélecteurs risquent de ne rien trouver." /> : null}
-          <Champ libelle="Prompt à copier vers une IA" valeur={analyse.prompt} onChanger={() => undefined} multiligne testID="assistant-prompt" />
-          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <Bouton titre="Copier le prompt" onPress={() => void copier(analyse.prompt).then(ok => setCopie(ok ? 'Prompt copié.' : 'Sélectionnez le texte du prompt pour le copier.'))} testID="assistant-copier" />
-            {copie ? <Text style={styleAttenue(theme, 13)}>{copie}</Text> : null}
-          </View>
-        </View>
-      ) : null}
-      <Champ
-        libelle="JSON renvoyé par l’IA"
-        valeur={json}
-        onChanger={v => {
-          setJson(v);
-          setValidation(undefined);
-        }}
-        multiligne
-        testID="assistant-json"
-      />
-      <Bouton titre="Vérifier le JSON" onPress={verifier} desactive={!json.trim()} testID="assistant-verifier" style={{ alignSelf: 'flex-start' }} />
-      {validation?.erreurs.length ? <Avis genre="critique" texte={validation.erreurs.join('\n')} testID="assistant-invalide" /> : null}
-      {validation?.avertissements.length ? <Avis genre="alerte" texte={validation.avertissements.join('\n')} testID="assistant-avertissements" /> : null}
-      {validation?.source ? (
-        <View style={{ gap: 8 }} testID="assistant-valide">
-          <Avis genre="ok" texte={`JSON conforme : « ${validation.source.name} » (${typeDe(validation.source)}, ${LIBELLE_LANGUE[validation.source.language]}).`} />
-          {s.lectureSources ? (
-            <View style={{ gap: 8 }}>
-              <Champ libelle="Titre pour le test pas à pas" valeur={titreTest} onChanger={setTitreTest} testID="assistant-titre-test" />
-              <Bouton titre="Tester" onPress={() => void tester(validation.source!).catch(e => setErreur(messageDe(e)))} testID="assistant-tester" style={{ alignSelf: 'flex-start' }} />
-              {diag?.map(e => (
-                <Avis key={e.nom} genre={e.ok ? 'ok' : 'alerte'} texte={`${e.nom} : ${e.detail}${e.pistes.length ? ` Pistes : ${e.pistes.slice(0, 4).join(', ')}` : ''}`} testID={`assistant-diag-${e.ok ? 'ok' : 'ko'}`} />
-              ))}
-            </View>
-          ) : (
-            <Avis texte="Le test pas à pas demande l’app PC ou iPhone (lecture des pages)." />
-          )}
-          <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-            <Bouton titre="Enregistrer la source" variante="plein" onPress={() => void onEnregistrer(validation.source!)} testID="assistant-enregistrer" />
-            <Bouton titre="Ouvrir dans le formulaire" onPress={() => onFormulaire(validation.source!)} testID="assistant-formulaire" />
-          </View>
-        </View>
-      ) : null}
-      <Bouton titre="Fermer l’assistant" onPress={onFermer} testID="assistant-fermer" style={{ alignSelf: 'flex-start' }} />
-    </View>
-  );
-}
-
-/** Choix du partage d'une source. */
-function Partage({ id, partages, comptes, onChanger }: { id: string; partages: Partages; comptes: readonly CompteTsuzuku[]; onChanger(p: Partages): void }) {
+/** Guide court de la page (bouton « ? »). */
+function Aide({ onFermer }: { onFermer(): void }) {
   const { theme } = useTsuzuku();
-  const p = partageDe(partages, id);
-  const choisir = (mode: ModePartage, liste = p.comptes) => onChanger({ ...partages, [id]: { mode, comptes: liste } });
-  const beneficiaires = p.mode === 'tous' ? comptes.length : p.mode === 'selection' ? comptes.filter(c => p.comptes.includes(c.id)).length : 0;
+  const bloc = (titre: string, texte: string) => (
+    <View style={{ gap: 2 }}>
+      <Text style={[styleTexte(theme, 14), { fontWeight: '800' }]}>{titre}</Text>
+      <Text style={[styleAttenue(theme, 14), { lineHeight: 20 }]}>{texte}</Text>
+    </View>
+  );
   return (
-    <View style={{ gap: 6 }} testID={`source-partage-${id}`} accessibilityLabel="Qui y a accès">
-      <Text style={styleTexte(theme, 13)} testID={`source-acces-${id}`}>
-        Accès : {p.mode === 'personne' ? 'vous seul' : `${beneficiaires} utilisateur(s) en plus de vous`}
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-        {(['personne', 'tous', 'selection'] as const).map(m => (
-          <Puce key={m} titre={LIBELLE_PARTAGE[m]} actif={p.mode === m} onPress={() => choisir(m)} testID={`source-partage-${id}-${m}`} />
-        ))}
-      </View>
-      {p.mode === 'selection' ? (
-        comptes.length ? (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-            {comptes.map(c => {
-              const coche = p.comptes.includes(c.id);
-              return (
-                <Puce
-                  key={c.id}
-                  titre={`${coche ? '✓ ' : ''}${c.nom}`}
-                  actif={coche}
-                  onPress={() => choisir('selection', coche ? p.comptes.filter(x => x !== c.id) : [...p.comptes, c.id])}
-                  testID={`source-partage-${id}-compte-${c.id}`}
-                />
-              );
-            })}
-          </View>
-        ) : (
-          <Text style={styleAttenue(theme, 13)}>Aucun autre compte n’a accès à Tsuzuku.</Text>
-        )
-      ) : null}
+    <View testID="sources-aide" accessibilityLabel="Aide sur les sources" style={{ gap: 10, padding: 14, borderRadius: theme.rayonMoyen, borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface }}>
+      {bloc('Qu’est-ce qu’une source ?', 'Un site que vous avez le droit d’utiliser (votre médiathèque, un service dont vous détenez les droits, un site de diffusion libre), décrit par des sélecteurs CSS : où chercher un titre, où trouver la liste des épisodes, où est le lecteur. Tsuzuku n’en fournit aucune.')}
+      {bloc('Comment marche l’assistant ?', '1. Collez l’adresse d’une page du site. 2. L’app l’analyse et prépare un prompt : copiez-le dans l’IA de votre choix. 3. Collez sa réponse (un JSON) : elle est vérifiée, et « Réparer avec l’IA » prépare un prompt de correction si besoin. 4. Testez, puis enregistrez.')}
+      {bloc('Que mettre dans le prompt ?', 'Rien à écrire : il est généré, avec tout le format de source, un exemple et l’extrait de la page. Donnez de préférence l’adresse d’une page de résultats de recherche ; sur le site web, collez le code HTML de la page ou demandez à l’IA d’analyser le site elle-même.')}
+      {bloc('Comment tester ?', 'Indiquez un titre présent sur le site : l’app le cherche, ouvre le premier résultat, lit ses épisodes et cherche un lecteur. Chaque étape affiche OK ou KO ; le dernier résultat reste affiché dans la liste.')}
+      <Text style={[styleTexte(theme, 13), { fontWeight: '700' }]}>{RAPPEL_DROITS}</Text>
+      <Bouton titre="Fermer l’aide" onPress={onFermer} testID="sources-aide-fermer" style={{ alignSelf: 'flex-start' }} />
     </View>
   );
 }
 
-export function Sources({ comptes = [], partageActif = true }: { comptes?: readonly CompteTsuzuku[]; partageActif?: boolean }) {
-  const { s, theme, version, changee } = useTsuzuku();
+/** Pastille d'état (activée, test OK/KO). */
+function Pastille({ texte, couleur, testID }: { texte: string; couleur: string; testID?: string }) {
+  const { theme } = useTsuzuku();
+  return (
+    <View testID={testID} style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: teinteTransparente(couleur, 0.16), borderWidth: 1, borderColor: teinteTransparente(couleur, 0.5) }}>
+      <Text style={{ color: theme.texte, fontSize: 12, fontWeight: '700', ...police(theme.policeTexte) }}>{texte}</Text>
+    </View>
+  );
+}
+
+const dateCourte = (iso: string) => (iso ? iso.slice(0, 10) : '');
+
+export interface PropsSources {
+  comptes?: readonly CompteTsuzuku[];
+  /** Faux pour un Fondateur autre que le compte historique (le partage est publié par celui-ci). */
+  partageActif?: boolean;
+  /** Ouvre Paramètres › Administration (clés d'API). Absent : déjà dans Paramètres. */
+  onCles?(): void;
+  /** Ouvre directement un chemin d'ajout (état vide « Ajouter une source avec l'assistant »). */
+  ajoutInitial?: 'assistant' | 'json';
+  /** Rendu comme page de l'app (titre) plutôt que dans Paramètres. */
+  page?: boolean;
+}
+
+type Vue = 'liste' | 'choix' | 'assistant' | 'json' | 'formulaire';
+
+export function Sources({ comptes = [], partageActif = true, onCles, ajoutInitial, page }: PropsSources) {
+  const { s, theme, version, changee, large, enregistrerFichier } = useTsuzuku();
   const [liste, setListe] = useState<DefinitionSource[] | undefined>();
   const [partages, setPartages] = useState<Partages | undefined>();
+  const [tests, setTests] = useState<TestsSources>({});
   const charge = useCharger(async () => {
-    const [l, p] = await Promise.all([s.sourcesPropres(), s.partages()]);
+    const [l, p, t] = await Promise.all([s.sourcesPropres(), s.partages(), s.derniersTests()]);
     setListe(l);
     setPartages(p);
+    setTests(t);
     return l;
   }, [s, version]);
+  const [vue, setVue] = useState<Vue>(ajoutInitial ?? 'liste');
   const [edition, setEdition] = useState<{ id?: string; brouillon: Brouillon } | undefined>();
-  const [assistant, setAssistant] = useState(false);
+  const [aide, setAide] = useState(false);
   const [erreur, setErreur] = useState<string | undefined>();
   const [avis, setAvis] = useState<string | undefined>();
   const [titreTest, setTitreTest] = useState('');
-  const [diag, setDiag] = useState<{ id: string; etape: DiagnosticEtape } | undefined>();
+  const [diag, setDiag] = useState<{ id: string; etapes: EtapeTest[] } | undefined>();
+  const [enTest, setEnTest] = useState<string | undefined>();
   const [jsonImport, setJsonImport] = useState('');
+  const [exportTexte, setExportTexte] = useState<string | undefined>();
+  const [nouvelle, setNouvelle] = useState<string | undefined>();
   const sources = liste ?? charge.donnees ?? [];
 
   if (!s.estAdmin) {
@@ -285,9 +174,10 @@ export function Sources({ comptes = [], partageActif = true }: { comptes?: reado
     return <Avis genre="info" texte="Les sources de Tsuzuku sont réservées aux Fondateurs." testID="tsuzuku-sources-interdit" />;
   }
 
-  const enregistrer = async (nouvelle: DefinitionSource[]) => {
-    await s.enregistrerSources(nouvelle);
-    setListe(nouvelle);
+  const actives = sources.filter(x => x.enabled).length;
+  const enregistrer = async (suite: DefinitionSource[]) => {
+    await s.enregistrerSources(suite);
+    setListe(suite);
     setPartages(await s.partages());
     changee();
   };
@@ -304,85 +194,139 @@ export function Sources({ comptes = [], partageActif = true }: { comptes?: reado
   const sauver = () =>
     agir(async () => {
       if (!edition) return;
-      const { liste: suite } = edition.id ? modifierSource(sources, edition.id, edition.brouillon) : ajouterSource(sources, { ...edition.brouillon, enabled: edition.brouillon.enabled ?? true });
+      const { liste: suite, source } = edition.id ? modifierSource(sources, edition.id, edition.brouillon) : ajouterSource(sources, { ...edition.brouillon, enabled: edition.brouillon.enabled ?? true });
       await enregistrer(suite);
+      setNouvelle(source.id);
       setEdition(undefined);
+      setVue('liste');
     }, 'Source enregistrée.');
   const importer = () =>
     agir(async () => {
-      const { sources: lues, ecartees } = importerSources(JSON.parse(jsonImport));
-      const ids = new Set(sources.map(x => x.id));
-      await enregistrer([...sources, ...lues.filter(x => !ids.has(x.id))]);
+      const { sources: lues, ecartees, doublons } = importerExportSources(jsonImport, sources);
+      await enregistrer([...sources, ...lues]);
       setJsonImport('');
-      return `${lues.length} source(s) importée(s)${ecartees ? `, ${ecartees} écartée(s)` : ''}.`;
+      return `${lues.length} source(s) importée(s)${ecartees ? `, ${ecartees} écartée(s) (adresse non publique ou sélecteur invalide)` : ''}${doublons ? `, ${doublons} déjà présente(s)` : ''}.`;
+    });
+  const exporter = () =>
+    agir(async () => {
+      const texte = exporterSources(sources, new Date().toISOString());
+      const nom = `tsuzuku-sources-${new Date().toISOString().slice(0, 10)}.json`;
+      if (enregistrerFichier && (await enregistrerFichier(nom, texte, 'application/json'))) {
+        setExportTexte(undefined);
+        return `${sources.length} source(s) exportée(s) dans « ${nom} » (sans clé d’API ni partage).`;
+      }
+      setExportTexte(texte);
+      return 'Copiez le texte ci-dessous (sans clé d’API ni partage) pour le coller sur un autre appareil.';
     });
   const tester = (src: DefinitionSource) =>
     agir(async () => {
-      setDiag({ id: src.id, etape: await diagnostiquerRecherche(s.ctx, supporteAnimes(src) ? src : vueFilm(src), titreTest || 'a') });
+      setEnTest(src.id);
+      try {
+        const etapes = await testerSourcePasAPas(s.ctx, src, titreTest);
+        setDiag({ id: src.id, etapes });
+        const resume = { ok: testReussi(etapes), date: new Date().toISOString(), detail: etapes.map(e => `${e.nom} : ${e.ok === true ? 'OK' : e.ok === false ? 'KO' : '—'}`).join(' · ') };
+        await s.enregistrerTest(src.id, resume);
+        setTests(await s.derniersTests());
+      } finally {
+        setEnTest(undefined);
+      }
     });
   const partager = (p: Partages) =>
     agir(async () => {
       await s.enregistrerPartages(p);
       setPartages(await s.partages());
     }, 'Partage enregistré : il part à la prochaine synchronisation.');
+  const depuisAssistant = async ({ source, partage, test }: SourceAssistant): Promise<boolean> => {
+    let ok = false;
+    await agir(async () => {
+      const { liste: suite, source: ajoutee } = ajouterSource(sources, source);
+      await enregistrer(suite);
+      if (partage.mode !== 'personne' && partageActif) {
+        await s.enregistrerPartages({ ...(await s.partages()), [ajoutee.id]: partage });
+        setPartages(await s.partages());
+      }
+      if (test) {
+        await s.enregistrerTest(ajoutee.id, { ...test, date: new Date().toISOString() });
+        setTests(await s.derniersTests());
+      }
+      setNouvelle(ajoutee.id);
+      setVue('liste');
+      ok = true;
+      return `Source « ${ajoutee.name} » ajoutée${partage.mode === 'personne' ? ' (pour vous seul pour l’instant)' : ''}.`;
+    });
+    return ok;
+  };
+  const recoit = partageActif && partages ? quiRecoitQuoi(sources, partages, comptes) : [];
 
   return (
     <View style={{ gap: 16 }} testID="tsuzuku-sources">
-      <Text style={styleAttenue(theme, 14)}>
-        Tsuzuku ne fournit aucune source. Branchez seulement des sites dont vous avez le droit d’utiliser le contenu (votre médiathèque, un service dont vous détenez les droits, un site de diffusion libre). Choisissez pour chacune qui y a accès : les autres utilisateurs la voient sans pouvoir la modifier.
-      </Text>
-      {!s.lectureSources ? <Avis genre="alerte" texte="Sur le site, les pages des sources ne peuvent pas être lues (CORS) : test et lecture sur l’app PC/iPhone. Vous pouvez néanmoins préparer et partager vos sources ici." /> : null}
-      {!partageActif ? <Avis texte="Le partage des sources est publié par le compte historique (Fondateur d’origine) : les sources ajoutées ici ne servent qu’à vous." testID="sources-partage-historique" /> : null}
-      <Etat enCours={charge.enCours && !liste} erreur={charge.erreur} onRecharger={charge.recharger}>
-        {sources.length === 0 ? (
-          <Text style={styleTexte(theme, 14)} testID="sources-vide">
-            Aucune source pour le moment.
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <View style={{ flexShrink: 1, gap: 2 }}>
+          {page ? <Titre taille={large ? 30 : 26} testID="sources-titre">Sources</Titre> : null}
+          <Text style={styleAttenue(theme, 14)} testID="sources-compte">
+            {sources.length ? `${sources.length} source(s) · ${actives} active(s)` : 'Aucune source pour le moment'}
           </Text>
-        ) : null}
-        {sources.map(src => (
-          <View key={src.id} testID={`source-${src.id}`} style={{ gap: 8, padding: 12, borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen }}>
-            <Text style={[styleTitre(theme, 16)]}>{src.name}</Text>
-            <Text style={styleAttenue(theme, 13)} numberOfLines={1}>
-              {src.baseUrl} · {typeDe(src)} · {LIBELLE_LANGUE[src.language]} · {src.enabled ? 'activée' : 'désactivée'}
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-              <Bouton titre={src.enabled ? 'Désactiver' : 'Activer'} onPress={() => void agir(() => enregistrer(sources.map(x => (x.id === src.id ? { ...x, enabled: !x.enabled } : x))))} testID={`source-activer-${src.id}`} />
-              <Bouton titre="Modifier" onPress={() => setEdition({ id: src.id, brouillon: JSON.parse(JSON.stringify(src)) as Brouillon })} testID={`source-modifier-${src.id}`} />
-              {s.lectureSources ? <Bouton titre="Tester" onPress={() => void tester(src)} testID={`source-tester-${src.id}`} /> : null}
-              <Bouton titre="Supprimer" variante="danger" onPress={() => void agir(() => enregistrer(supprimerSource(sources, src.id)), 'Source supprimée.')} testID={`source-supprimer-${src.id}`} />
-            </View>
-            {partageActif && partages ? <Partage id={src.id} partages={partages} comptes={comptes} onChanger={p => void partager(p)} /> : null}
-            {diag?.id === src.id ? <Avis genre={diag.etape.ok ? 'ok' : 'alerte'} texte={`${diag.etape.detail}${diag.etape.pistes.length ? ` Pistes : ${diag.etape.pistes.slice(0, 4).join(', ')}` : ''}`} testID="sources-diagnostic" /> : null}
+        </View>
+        <Pressable
+          testID="sources-aide-ouvrir"
+          accessibilityRole="button"
+          accessibilityLabel="Aide : comment ajouter une source"
+          accessibilityState={{ expanded: aide }}
+          onPress={() => setAide(a => !a)}
+          style={{ marginLeft: 'auto', width: 44, height: 44, borderRadius: 999, borderWidth: 1, borderColor: aide ? theme.accent : theme.ligne, backgroundColor: aide ? theme.accent : theme.surface, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ color: aide ? theme.surAccent : theme.texte, fontSize: 18, fontWeight: '800' }}>?</Text>
+        </Pressable>
+      </View>
+      {aide ? <Aide onFermer={() => setAide(false)} /> : null}
+      <Avis genre="alerte" texte={RAPPEL_DROITS} testID="sources-rappel" />
+      {!s.lectureSources ? <Avis texte="Sur le site web, les pages des sources ne peuvent pas être lues (CORS) : test et lecture sur l’app PC/iPhone. Vous pouvez néanmoins préparer, importer et partager vos sources ici." /> : null}
+      {!partageActif ? <Avis texte="Le partage des sources est publié par le compte historique (Fondateur d’origine) : les sources ajoutées ici ne servent qu’à vous." testID="sources-partage-historique" /> : null}
+
+      {vue === 'liste' ? (
+        <Bouton titre="+ Ajouter une source" variante="plein" onPress={() => setVue('choix')} testID="sources-ajouter" style={{ alignSelf: large ? 'flex-start' : 'stretch', minHeight: 48 }} />
+      ) : null}
+      {vue === 'choix' ? (
+        <View testID="sources-choix-ajout" style={{ gap: 10, padding: 14, borderRadius: theme.rayonMoyen, borderWidth: 1, borderColor: theme.accent, backgroundColor: theme.surface }}>
+          <Text style={styleTitre(theme, 17)}>Ajouter une source</Text>
+          <Pressable testID="sources-assistant" accessibilityRole="button" accessibilityLabel="Avec l’assistant (recommandé)" onPress={() => setVue('assistant')} style={{ gap: 2, padding: 12, borderRadius: theme.rayonMoyen, backgroundColor: theme.accent }}>
+            <Text style={{ color: theme.surAccent, fontWeight: '800', fontSize: 16, ...police(theme.policeTexte) }}>Avec l’assistant (recommandé)</Text>
+            <Text style={{ color: theme.surAccent, opacity: 0.9, fontSize: 13, ...police(theme.policeTexte) }}>Collez le lien du site : l’app prépare un prompt pour une IA, vérifie sa réponse et la teste.</Text>
+          </Pressable>
+          <Pressable testID="sources-json" accessibilityRole="button" accessibilityLabel="Saisir ou coller le JSON" onPress={() => setVue('json')} style={{ gap: 2, padding: 12, borderRadius: theme.rayonMoyen, borderWidth: 1, borderColor: theme.ligne }}>
+            <Text style={{ color: theme.texte, fontWeight: '800', fontSize: 16, ...police(theme.policeTexte) }}>Saisir ou coller le JSON</Text>
+            <Text style={styleAttenue(theme, 13)}>Vous avez déjà la définition de la source (JSON) : elle est vérifiée et testée avant l’enregistrement.</Text>
+          </Pressable>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            <Bouton titre="Remplir le formulaire champ par champ" onPress={() => { setEdition({ brouillon: { enabled: true, language: 'indifferent' } }); setVue('formulaire'); }} testID="source-ajouter" />
+            <Bouton titre="Annuler" onPress={() => setVue('liste')} testID="sources-choix-annuler" />
           </View>
-        ))}
-      </Etat>
-      {s.lectureSources && sources.length ? <Champ libelle="Titre pour tester la recherche" valeur={titreTest} onChanger={setTitreTest} testID="sources-titre-test" /> : null}
-      {assistant ? (
-        <Assistant
-          onFermer={() => setAssistant(false)}
+        </View>
+      ) : null}
+      {vue === 'assistant' || vue === 'json' ? (
+        <AssistantSource
+          key={vue}
+          depart={vue === 'json' ? 'json' : 'adresse'}
+          comptes={comptes}
+          partageActif={partageActif}
+          onFermer={() => setVue('liste')}
+          onEnregistrer={depuisAssistant}
           onFormulaire={src => {
-            setAssistant(false);
             const brouillon = JSON.parse(JSON.stringify(src)) as Brouillon;
             delete brouillon.id;
             delete brouillon.createdAt;
             setEdition({ brouillon });
+            setVue('formulaire');
           }}
-          onEnregistrer={src =>
-            agir(async () => {
-              await enregistrer(ajouterSource(sources, src).liste);
-              setAssistant(false);
-            }, `Source « ${src.name} » enregistrée (partagée avec personne pour l’instant).`)
-          }
         />
       ) : null}
-      {edition ? (
+      {vue === 'formulaire' && edition ? (
         <View style={{ gap: 12, padding: 12, borderWidth: 1, borderColor: theme.accent, borderRadius: theme.rayonMoyen }} testID="source-formulaire" accessibilityLabel={edition.id ? 'Modifier la source' : 'Nouvelle source'}>
           <Titre taille={18}>{edition.id ? 'Modifier la source' : 'Nouvelle source'}</Titre>
           <Champ libelle="Nom" valeur={lire(edition.brouillon, 'name')} onChanger={v => setEdition({ ...edition, brouillon: ecrire(edition.brouillon, 'name', v) })} testID="source-nom" />
           <Champ libelle="Adresse du site (https://…)" valeur={lire(edition.brouillon, 'baseUrl')} onChanger={v => setEdition({ ...edition, brouillon: ecrire(edition.brouillon, 'baseUrl', v) })} testID="source-adresse" />
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} accessibilityLabel="Langue">
             {LANGUES.map(l => (
-              <Puce key={l} titre={LIBELLE_LANGUE[l]} actif={(lire(edition.brouillon, 'language') || 'indifferent') === l} onPress={() => setEdition({ ...edition, brouillon: ecrire(edition.brouillon, 'language', l) })} testID={`source-langue-${l}`} />
+              <Puce key={l} titre={l === 'indifferent' ? 'Indifférent' : LIBELLE_LANGUE[l]} actif={(lire(edition.brouillon, 'language') || 'indifferent') === l} onPress={() => setEdition({ ...edition, brouillon: ecrire(edition.brouillon, 'language', l) })} testID={`source-langue-${l}`} />
             ))}
           </View>
           {GROUPES.map(g => (
@@ -403,24 +347,99 @@ export function Sources({ comptes = [], partageActif = true }: { comptes?: reado
               onPress={() => {
                 setEdition(undefined);
                 setErreur(undefined);
+                setVue('liste');
               }}
               testID="source-annuler"
             />
           </View>
         </View>
-      ) : !assistant ? (
-        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-          <Bouton titre="Assistant" variante="plein" libelle="Assistant d’ajout de source par lien" onPress={() => setAssistant(true)} testID="sources-assistant" />
-          <Bouton titre="+ Ajouter une source" onPress={() => setEdition({ brouillon: { enabled: true, language: 'indifferent' } })} testID="source-ajouter" />
-        </View>
       ) : null}
-      <View style={{ gap: 8 }}>
-        <Titre taille={16}>Importer d’anciennes sources</Titre>
-        <Champ libelle="Contenu d’un ancien sources.json" valeur={jsonImport} onChanger={setJsonImport} multiligne testID="sources-import-texte" />
-        <Bouton titre="Importer" onPress={() => void importer()} desactive={!jsonImport.trim()} testID="sources-importer" style={{ alignSelf: 'flex-start' }} />
-      </View>
+
       {avis ? <Avis genre="ok" texte={avis} testID="sources-avis" /> : null}
       {erreur ? <Avis genre="critique" texte={erreur} testID="sources-erreur" /> : null}
+
+      <Etat enCours={charge.enCours && !liste} erreur={charge.erreur} onRecharger={charge.recharger}>
+        {sources.length === 0 ? (
+          <Text style={styleTexte(theme, 14)} testID="sources-vide">
+            Aucune source pour le moment. Tsuzuku a besoin d’au moins une source pour lire des épisodes et des films : ajoutez-en une avec l’assistant.
+          </Text>
+        ) : null}
+        {s.lectureSources && sources.length ? <Champ libelle="Titre à chercher pour tester une source" valeur={titreTest} onChanger={setTitreTest} placeholder="Un titre présent sur le site" testID="sources-titre-test" /> : null}
+        <View style={{ gap: 10 }} testID="sources-liste">
+          {sources.map(src => {
+            const t = tests[src.id];
+            const p = partageDe(partages ?? {}, src.id);
+            const qui = p.mode === 'tous' ? comptes : p.mode === 'selection' ? comptes.filter(c => p.comptes.includes(c.id)) : [];
+            return (
+              <View
+                key={src.id}
+                testID={`source-${src.id}`}
+                style={{ gap: 8, padding: 12, borderWidth: nouvelle === src.id ? 2 : 1, borderColor: nouvelle === src.id ? theme.accent : theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen }}>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                  <Text style={[styleTitre(theme, 16), { marginRight: 4 }]}>{src.name}</Text>
+                  {nouvelle === src.id ? <Pastille texte="Nouvelle" couleur={theme.accent} testID="source-nouvelle" /> : null}
+                  <Pastille texte={src.enabled ? 'Activée' : 'Désactivée'} couleur={src.enabled ? theme.ok : theme.attenue} testID={`source-etat-${src.id}`} />
+                  <Pastille texte={typeDe(src)} couleur={theme.accent} />
+                  <Pastille texte={LIBELLE_LANGUE[src.language]} couleur={theme.attenue} />
+                  <Pastille texte={t ? `Dernier test : ${t.ok ? 'OK' : 'KO'}${t.date ? ` (${dateCourte(t.date)})` : ''}` : 'Jamais testée'} couleur={t ? (t.ok ? theme.ok : theme.critique) : theme.attenue} testID={`source-test-${src.id}`} />
+                </View>
+                <Text style={styleAttenue(theme, 13)} numberOfLines={1}>
+                  {src.baseUrl}
+                </Text>
+                <Text style={styleTexte(theme, 13)} testID={`source-acces-${src.id}`}>
+                  {partageActif ? (qui.length ? `Partagée avec : ${qui.map(c => c.nom).join(', ')}` : 'Accès : vous seul') : 'Accès : vous seul'}
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                  <Bouton titre={src.enabled ? 'Désactiver' : 'Activer'} onPress={() => void agir(() => enregistrer(sources.map(x => (x.id === src.id ? { ...x, enabled: !x.enabled } : x))))} testID={`source-activer-${src.id}`} />
+                  <Bouton titre="Modifier" onPress={() => { setEdition({ id: src.id, brouillon: JSON.parse(JSON.stringify(src)) as Brouillon }); setVue('formulaire'); }} testID={`source-modifier-${src.id}`} />
+                  {s.lectureSources ? <Bouton titre={enTest === src.id ? 'Test…' : 'Tester'} desactive={enTest !== undefined} onPress={() => void tester(src)} testID={`source-tester-${src.id}`} /> : null}
+                  <Bouton titre="Supprimer" variante="danger" onPress={() => void agir(() => enregistrer(supprimerSource(sources, src.id)), 'Source supprimée.')} testID={`source-supprimer-${src.id}`} />
+                </View>
+                {partageActif && partages ? <ChoixPartage partage={p} comptes={comptes} onChanger={x => void partager({ ...partages, [src.id]: x })} prefixe={`source-partage-${src.id}`} /> : null}
+                {diag?.id === src.id ? (
+                  <View style={{ gap: 6 }} testID="sources-diagnostic">
+                    {diag.etapes.map(e => (
+                      <Avis key={e.cle} genre={e.ok === true ? 'ok' : e.ok === false ? 'critique' : 'info'} texte={`${e.ok === true ? '✓' : e.ok === false ? '✗' : '–'} ${e.nom} : ${e.detail}${e.pistes.length ? ` Pistes : ${e.pistes.slice(0, 4).join(', ')}` : ''}`} />
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+      </Etat>
+
+      {partageActif && sources.length ? (
+        <View style={{ gap: 6 }} testID="sources-qui-recoit">
+          <Text style={styleTitre(theme, 16)}>Partage : qui reçoit quoi</Text>
+          {recoit.length ? (
+            recoit.map(c => (
+              <Text key={c.id} style={styleTexte(theme, 14)} testID={`sources-recoit-${c.id}`}>
+                {c.nom} : {c.sources.length ? c.sources.join(', ') : 'rien'}
+              </Text>
+            ))
+          ) : (
+            <Text style={styleAttenue(theme, 13)}>Aucun autre compte n’a accès à Tsuzuku : les sources ne servent qu’à vous.</Text>
+          )}
+          <Text style={styleAttenue(theme, 12)}>Une source désactivée n’est partagée avec personne. Le partage part, chiffré, à la prochaine synchronisation.</Text>
+        </View>
+      ) : null}
+
+      <View style={{ gap: 8 }} testID="sources-sauvegarde">
+        <Text style={styleTitre(theme, 16)}>Importer / exporter les sources (JSON)</Text>
+        <Text style={styleAttenue(theme, 13)}>Pour une sauvegarde ou pour les recopier sur un autre appareil. L’export ne contient que la définition des sources : ni clé d’API, ni partage. L’import vérifie chaque source (adresse publique, sélecteurs valides) et ignore celles déjà présentes.</Text>
+        <Bouton titre="Exporter les sources" onPress={() => void exporter()} desactive={!sources.length} testID="sources-exporter" style={{ alignSelf: 'flex-start' }} />
+        {exportTexte ? <Champ libelle="Export (à copier)" valeur={exportTexte} onChanger={() => undefined} multiligne lectureSeule testID="sources-export-texte" /> : null}
+        <Champ libelle="Coller un export de sources (ou un ancien sources.json)" valeur={jsonImport} onChanger={setJsonImport} multiligne testID="sources-import-texte" />
+        <Bouton titre="Importer" onPress={() => void importer()} desactive={!jsonImport.trim()} testID="sources-importer" style={{ alignSelf: 'flex-start' }} />
+      </View>
+      {onCles ? (
+        <View style={{ gap: 6 }}>
+          <Text style={styleTitre(theme, 16)}>Clés d’API</Text>
+          <Text style={styleAttenue(theme, 13)}>La clé TMDB (catalogue des films) reste dans Paramètres › Administration › Tsuzuku · Clés d’API : elle n’est jamais partagée ni exportée.</Text>
+          <Bouton titre="Ouvrir Tsuzuku · Clés d’API ›" onPress={onCles} testID="sources-cles" style={{ alignSelf: 'flex-start' }} />
+        </View>
+      ) : null}
     </View>
   );
 }

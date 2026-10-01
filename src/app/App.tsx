@@ -151,7 +151,7 @@ import type { CibleEssai, EntreeDevblog } from '../hub/devblog/entrees';
 import { ID_PORTEFEUILLE, REGISTRE } from '../hub/registre';
 import { ReglageLectureTsuzuku } from '../tsuzuku/app/ParametresTsuzuku';
 import { ReglageAvancesTsuzuku, ReglageSourcesPartagees, ReglageSourcesTsuzuku } from '../tsuzuku/app/AdminTsuzuku';
-import { peutGererSources } from '../tsuzuku/app/gestion';
+import { comptesPourPartage, peutGererSources } from '../tsuzuku/app/gestion';
 import { rangDe } from '../hub/admin/roles';
 import { resumerBibliotheque } from '../tsuzuku/app/resume';
 import { CLES as CLES_TSUZUKU, type BasePrefs } from '../tsuzuku/plateforme/stockage';
@@ -2423,8 +2423,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             base={baseProfil}
             rang={rangDe(profils?.actuel)}
             // Bénéficiaires possibles : comptes actifs autorisés à Tsuzuku (le partage est publié par le compte historique).
-            comptes={(profils?.tous ?? []).filter(p => p.id !== 'principal' && p.actif !== false && (p.apps ?? []).includes('tsuzuku')).map(p => ({ id: p.id, nom: p.nom }))}
+            comptes={comptesPourPartage(profils?.tous)}
             partageActif={!profils || profils.actuel.id === 'principal'}
+            enregistrerFichier={enregistrerFichierHote}
           />
         );
       case 'admin-tsuzuku-cles':

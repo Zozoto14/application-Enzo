@@ -98,6 +98,8 @@ export function Champ({
   onValider,
   style,
   cacherLibelle,
+  hauteur,
+  lectureSeule,
 }: {
   libelle: string;
   valeur: string;
@@ -109,6 +111,10 @@ export function Champ({
   onValider?(): void;
   style?: StyleProp<ViewStyle>;
   cacherLibelle?: boolean;
+  /** Hauteur minimale d'un champ multiligne (110 px par défaut). */
+  hauteur?: number;
+  /** Texte à lire et copier, pas à modifier. */
+  lectureSeule?: boolean;
 }) {
   const { theme } = useTsuzuku();
   return (
@@ -125,10 +131,11 @@ export function Champ({
         autoCorrect={false}
         secureTextEntry={secret}
         multiline={multiligne}
+        editable={lectureSeule ? false : undefined}
         returnKeyType={onValider ? 'search' : undefined}
         onSubmitEditing={onValider}
         onKeyPress={onValider && !multiligne ? (e: { nativeEvent: { key: string } }) => (e.nativeEvent.key === 'Enter' ? onValider() : undefined) : undefined}
-        style={[st.champ, { color: theme.texte, backgroundColor: theme.fond, borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 10), ...police(theme.policeTexte) }, multiligne && { minHeight: 110, textAlignVertical: 'top' }]}
+        style={[st.champ, { color: theme.texte, backgroundColor: theme.fond, borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 10), ...police(theme.policeTexte) }, multiligne && { minHeight: hauteur ?? 110, textAlignVertical: 'top' }]}
       />
     </View>
   );

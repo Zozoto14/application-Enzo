@@ -6,6 +6,7 @@ import { teinteTransparente } from '../../hub/themes';
 import { trouver } from '../moteur/bibliotheque';
 import { useCharger, useTsuzuku } from './contexte';
 import { BandeauFiche, BlocBibliotheque, BlocVuAilleurs, LiensLegaux, type FicheMin } from './FicheCommune';
+import { CarteSansSource, LienGererSources } from './EtatSources';
 import { LienAnime, prochainEpisode } from './LienAnime';
 import { Bouton, Etat, LIBELLE_STATUT, TitreSection, styleAttenue, styleTexte } from './ui';
 
@@ -55,7 +56,9 @@ export function FicheAnimeEcran({ id }: { id: string }) {
             </BandeauFiche>
             <BlocBibliotheque fiche={min} entree={entree} />
             <BlocVuAilleurs fiche={min} entree={entree} />
+            <CarteSansSource lieu="fiche" />
             <LienAnime id={id} numeroCourant={suivant} catalogue={listeEps} />
+            <LienGererSources testID="fiche-gerer-sources" />
             <LiensLegaux liens={f.streamingLinks} />
             <View style={{ gap: 8 }} testID="fiche-episodes">
               <TitreSection>Épisodes</TitreSection>

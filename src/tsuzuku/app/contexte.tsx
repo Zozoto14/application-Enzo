@@ -14,7 +14,9 @@ export type Route =
   | { t: 'fiche'; kind: Genre; id: string }
   | { t: 'lecteur'; kind: Genre; id: string; numero?: number }
   | { t: 'bibliotheque' }
-  | { t: 'import' };
+  | { t: 'import' }
+  /** Page « Sources » (rangs habilités) ; `ajout` ouvre directement un chemin d'ajout. */
+  | { t: 'sources'; ajout?: 'assistant' | 'json' };
 
 export interface CtxTsuzuku {
   s: ServicesTsuzuku;
@@ -32,6 +34,8 @@ export interface CtxTsuzuku {
   changee(): void;
   large: boolean;
   onParametres?(): void;
+  /** Ouvre une section précise de Paramètres (clés d'API : « administration »). */
+  onSection?(section: 'administration' | 'tsuzuku'): void;
   /** Enregistre un fichier (export) ; faux si annulé ou impossible. Absent : l'export s'affiche à copier. */
   enregistrerFichier?(nom: string, contenu: string, type: string): Promise<boolean>;
 }

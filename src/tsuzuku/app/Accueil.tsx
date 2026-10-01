@@ -10,6 +10,7 @@ import { police, teinteTransparente } from '../../hub/themes';
 import { ajouterOuMettreAJour, trouver, type Entree } from '../moteur/bibliotheque';
 import type { FicheAnime, FicheFilm, Rangee as RangeeCatalogue } from '../moteur/catalogue';
 import { carteAnime, carteFilm, sansVus } from './elements';
+import { CarteSansSource } from './EtatSources';
 import { useCharger, useTsuzuku } from './contexte';
 import { Avis, Bouton, Champ, Etat, EtatVide, Rangee, RangeeReprendre, elementDepuisEntree, styleAttenue } from './ui';
 
@@ -104,6 +105,7 @@ export function Accueil() {
         <Champ libelle={mode === 'anime' ? 'Rechercher un animé' : 'Rechercher un film'} cacherLibelle valeur={q} onChanger={setQ} onValider={chercher} testID="accueil-recherche" placeholder={mode === 'anime' ? '⌕  Rechercher un animé…' : '⌕  Rechercher un film…'} style={{ flex: 1 }} />
         <Bouton titre="Chercher" onPress={chercher} variante="plein" testID="accueil-chercher" />
       </View>
+      <CarteSansSource lieu="accueil" />
       <Etat enCours={cat.enCours} erreur={cat.erreur} onRecharger={cat.recharger} squelette="heros">
         <View style={{ gap: 34 }}>
           {une ? <BandeauUne une={une} entree={db ? trouver(db, kind, une.id) : null} /> : null}
