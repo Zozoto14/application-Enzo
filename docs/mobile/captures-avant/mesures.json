@@ -1,0 +1,2523 @@
+{
+  "accueil-site": {
+    "capture": "01-accueil-site.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 2,
+    "petitesCibles": 0,
+    "exemplesCibles": [],
+    "petitsTextes": 3,
+    "exemplesPetits": [
+      "Sur ce navigateur, rien n’est  (14px)",
+      "Administrateur : le code de li (14px)",
+      "✅ Code de liaison reçu par le  (14px)"
+    ],
+    "tailles": {
+      "14": 3,
+      "15": 2,
+      "18": 1,
+      "24": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "accueil-creer-avertissement": {
+    "capture": "02-accueil-creer-avertissement.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 3,
+    "petitesCibles": 0,
+    "exemplesCibles": [],
+    "petitsTextes": 5,
+    "exemplesPetits": [
+      "Sur ce navigateur, rien n’est  (14px)",
+      "Administrateur : le code de li (14px)",
+      "✅ Code de liaison reçu par le  (14px)",
+      "Créer un nouveau coffre ? (14px)",
+      "⚠️ Ce coffre sera NEUF et indé (14px)"
+    ],
+    "tailles": {
+      "14": 5,
+      "15": 3,
+      "18": 1,
+      "24": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "premier-lancement": {
+    "capture": "03-premier-lancement.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 9,
+    "petitesCibles": 7,
+    "exemplesCibles": [
+      "#champ-code-lier Code de liaison (324×40)",
+      "Mot de passe (358×40)",
+      "Confirmation (358×40)",
+      "#lien-juridique-conditions Conditions d’utilisation (119×14)",
+      "#lien-juridique-confidentialite Politique de confidentialité (139×14)",
+      "#lien-juridique-cookies Cookies et stockage local (136×14)",
+      "#lien-juridique-mentions Mentions légales (90×14)"
+    ],
+    "petitsTextes": 12,
+    "exemplesPetits": [
+      "Liez cet appareil : il s’ouvri (14px)",
+      "Code de liaison (13px)",
+      "Administrateur : sur le PC, Pa (12px)",
+      "— ou, nouveau compte sur cet a (14px)",
+      "Ce mot de passe chiffre l'inté (14px)",
+      "Mot de passe (13px)",
+      "12 caractères au minimum, sans (12px)",
+      "Confirmation (13px)"
+    ],
+    "tailles": {
+      "12": 6,
+      "13": 3,
+      "14": 3,
+      "15": 2,
+      "17": 1,
+      "24": 1
+    },
+    "champs": [
+      "#champ-code-lier Code de liaison [text] : sans enterkeyhint, sans inputmode",
+      "Mot de passe [password] : sans enterkeyhint",
+      "Confirmation [password] : sans enterkeyhint"
+    ],
+    "zonesSecurite": false
+  },
+  "premier-lancement-secrets": {
+    "capture": "04-premier-lancement-secrets.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 2,
+    "petitesCibles": 1,
+    "exemplesCibles": [
+      "J'ai noté ces codes hors ligne (40×20)"
+    ],
+    "petitsTextes": 4,
+    "exemplesPetits": [
+      "Ces informations ne seront plu (14px)",
+      "Chacun ouvre vos données une s (14px)",
+      "Ajoutez cette clé à votre appl (14px)",
+      "J'ai noté ces codes hors ligne (14px)"
+    ],
+    "tailles": {
+      "14": 4,
+      "15": 12,
+      "17": 2,
+      "24": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "acceptation-juridique": {
+    "capture": "05-acceptation-juridique.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 7,
+    "petitesCibles": 3,
+    "exemplesCibles": [
+      "#acceptation-case J’ai lu et j’accepte les conditions d’ut (358×40)",
+      "#acceptation-continuer Continuer (cochez d’abord la case) (96×34)",
+      "#acceptation-refuser Refuser et verrouiller (171×34)"
+    ],
+    "petitsTextes": 9,
+    "exemplesPetits": [
+      "Merci de lire les documents ci (14px)",
+      "Ce que vous pouvez faire de l’ (13px)",
+      "Quelles données, où elles sont (13px)",
+      "Aucun cookie de suivi ; ce qui (13px)",
+      "Éditeur, hébergement, contact. (13px)",
+      "Modèle informatif à faire reli (12px)",
+      "J’ai lu et j’accepte les condi (14px)",
+      "Continuer (14px)"
+    ],
+    "tailles": {
+      "12": 1,
+      "13": 4,
+      "14": 4,
+      "15": 4,
+      "26": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "document-juridique": {
+    "capture": "06-document-juridique.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 2,
+    "petitesCibles": 2,
+    "exemplesCibles": [
+      "#juridique-fermer Retour (Échap) (93×34)",
+      "#juridique-modifier Modifier (Fondateur) (166×34)"
+    ],
+    "petitsTextes": 19,
+    "exemplesPetits": [
+      "← Retour (14px)",
+      "Modèle informatif à faire reli (12px)",
+      "AppDashboard n’utilise aucun c (14px)",
+      "Sur le site et sur l’applicati (14px)",
+      "• (14px)",
+      "votre session et votre coffre  (14px)",
+      "• (14px)",
+      "le thème et la disposition cho (14px)"
+    ],
+    "tailles": {
+      "12": 1,
+      "14": 18,
+      "16": 5,
+      "26": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "hub": {
+    "capture": "07-hub.jpg",
+    "debordementPage": 0,
+    "deborde": [
+      "⏳1 élément à envoyer✎ Personnaliser⟳ ⚙︎?"
+    ],
+    "interactifs": 10,
+    "petitesCibles": 7,
+    "exemplesCibles": [
+      "#synchro-indicateur Synchronisation : 1 élément à envoyer (o (182×29)",
+      "#hub-personnaliser ✎ Personnaliser (139×34)",
+      "#hub-mettre-a-jour Mettre à jour. Recharge l’app depuis le  (42×40)",
+      "#hub-parametres-ouvrir Paramètres du hub (43×34)",
+      "#hub-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#hub-theme Choisir un thème, actuel : Nuit (94×40)",
+      "#hub-verrouiller ⏻ Verrouiller (114×35)"
+    ],
+    "petitsTextes": 24,
+    "exemplesPetits": [
+      "⏳ (13px)",
+      "1 élément à envoyer (13px)",
+      "✎ Personnaliser (14px)",
+      "⟳ (14px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "▾ (14px)",
+      "⏻ Verrouiller (14px)"
+    ],
+    "tailles": {
+      "11": 6,
+      "12": 1,
+      "13": 2,
+      "14": 10,
+      "16": 1,
+      "18": 1,
+      "20": 5,
+      "26": 4,
+      "28": 4,
+      "44": 2,
+      "10.5": 5
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "hub-page-entiere": {
+    "capture": "08-hub-page-entiere.jpg",
+    "debordementPage": 0,
+    "deborde": [
+      "⏳1 élément à envoyer✎ Personnaliser⟳ ⚙︎?"
+    ],
+    "interactifs": 10,
+    "petitesCibles": 7,
+    "exemplesCibles": [
+      "#synchro-indicateur Synchronisation : 1 élément à envoyer (o (182×29)",
+      "#hub-personnaliser ✎ Personnaliser (139×34)",
+      "#hub-mettre-a-jour Mettre à jour. Recharge l’app depuis le  (42×40)",
+      "#hub-parametres-ouvrir Paramètres du hub (43×34)",
+      "#hub-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#hub-theme Choisir un thème, actuel : Nuit (94×40)",
+      "#hub-verrouiller ⏻ Verrouiller (114×35)"
+    ],
+    "petitsTextes": 24,
+    "exemplesPetits": [
+      "⏳ (13px)",
+      "1 élément à envoyer (13px)",
+      "✎ Personnaliser (14px)",
+      "⟳ (14px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "▾ (14px)",
+      "⏻ Verrouiller (14px)"
+    ],
+    "tailles": {
+      "11": 6,
+      "12": 1,
+      "13": 2,
+      "14": 10,
+      "16": 1,
+      "18": 1,
+      "20": 5,
+      "26": 4,
+      "28": 4,
+      "44": 2,
+      "10.5": 5
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "hub-personnaliser": {
+    "capture": "09-hub-personnaliser.jpg",
+    "debordementPage": 0,
+    "deborde": [
+      "⏳1 élément à envoyer✓ Terminé⟳ ⚙︎?▾⏻ Ver"
+    ],
+    "interactifs": 37,
+    "petitesCibles": 34,
+    "exemplesCibles": [
+      "#synchro-indicateur Synchronisation : 1 élément à envoyer (o (182×29)",
+      "#hub-edition-termine ✓ Terminé (99×34)",
+      "#hub-mettre-a-jour Mettre à jour. Recharge l’app depuis le  (42×40)",
+      "#hub-parametres-ouvrir Paramètres du hub (43×34)",
+      "#hub-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#hub-theme Choisir un thème, actuel : Nuit (94×40)",
+      "#hub-verrouiller ⏻ Verrouiller (114×35)",
+      "#hub-disposition-grille Disposition : ▦ Grille (77×36)",
+      "#hub-disposition-liste Disposition : ☰ Liste (74×36)",
+      "#hub-densite-aere Densité : Aéré (57×36)"
+    ],
+    "petitsTextes": 53,
+    "exemplesPetits": [
+      "⏳ (13px)",
+      "1 élément à envoyer (13px)",
+      "✓ Terminé (14px)",
+      "⟳ (14px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "▾ (14px)",
+      "⏻ Verrouiller (14px)"
+    ],
+    "tailles": {
+      "11": 6,
+      "12": 1,
+      "13": 6,
+      "14": 12,
+      "16": 1,
+      "18": 1,
+      "20": 5,
+      "26": 4,
+      "28": 4,
+      "44": 2,
+      "10.5": 7,
+      "12.5": 21
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "hub-menu-themes": {
+    "capture": "10-hub-menu-themes.jpg",
+    "debordementPage": 0,
+    "deborde": [
+      "AppDashboard⏳1 élément à envoyer✎ Person",
+      "THÈMENuit✓Ivoire✓Ivoire couleur✓Nuit édi"
+    ],
+    "interactifs": 18,
+    "petitesCibles": 15,
+    "exemplesCibles": [
+      "#synchro-indicateur Synchronisation : 1 élément à envoyer (o (182×29)",
+      "#hub-personnaliser ✎ Personnaliser (139×34)",
+      "#hub-mettre-a-jour Mettre à jour. Recharge l’app depuis le  (42×40)",
+      "#hub-parametres-ouvrir Paramètres du hub (43×34)",
+      "#hub-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#hub-theme Choisir un thème, actuel : Nuit (94×40)",
+      "#hub-theme-nuit Nuit✓ (266×38)",
+      "#hub-theme-ivoire Ivoire✓ (266×38)",
+      "#hub-theme-ivoire-couleur Ivoire couleur✓ (266×38)",
+      "#hub-theme-nuit-editoriale Nuit éditoriale✓ (266×38)"
+    ],
+    "petitsTextes": 34,
+    "exemplesPetits": [
+      "⏳ (13px)",
+      "1 élément à envoyer (13px)",
+      "✎ Personnaliser (14px)",
+      "⟳ (14px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "▴ (14px)",
+      "THÈME (11px)"
+    ],
+    "tailles": {
+      "11": 7,
+      "12": 1,
+      "13": 2,
+      "14": 19,
+      "16": 1,
+      "18": 1,
+      "20": 5,
+      "26": 4,
+      "28": 4,
+      "44": 2,
+      "10.5": 5
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "parametres": {
+    "capture": "11-parametres.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 27,
+    "petitesCibles": 10,
+    "exemplesCibles": [
+      "#hub-parametres-fermer Fermer les paramètres (Échap) (93×34)",
+      "#synchro-indicateur Synchronisation : 1 élément à envoyer (o (182×29)",
+      "#parametres-recherche Rechercher un réglage (316×33)",
+      "#parametres-disposition-grille Disposition : ▦ Grille (77×36)",
+      "#parametres-disposition-liste Disposition : ☰ Liste (74×36)",
+      "#parametres-densite-aere Densité : Aéré (57×36)",
+      "#parametres-densite-compact Densité : Compact (84×36)",
+      "#parametres-personnaliser ✎ Personnaliser les tuiles (202×34)",
+      "#parametres-reinitialiser Réinitialiser la disposition (203×34)",
+      "#parametres-verrouiller ⏻ Verrouiller maintenant (193×35)"
+    ],
+    "petitsTextes": 36,
+    "exemplesPetits": [
+      "← Retour (14px)",
+      "⏳ (13px)",
+      "1 élément à envoyer (13px)",
+      "⌕ (14px)",
+      "Général (14px)",
+      "Synchronisation (14px)",
+      "Sécurité (14px)",
+      "Portefeuille (14px)"
+    ],
+    "tailles": {
+      "12": 8,
+      "13": 14,
+      "14": 14,
+      "15": 9,
+      "17": 4,
+      "22": 1,
+      "24": 1
+    },
+    "champs": [
+      "#parametres-recherche Rechercher un réglage [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "parametres-general": {
+    "capture": "12-parametres-general.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 27,
+    "petitesCibles": 10,
+    "exemplesCibles": [
+      "#hub-parametres-fermer Fermer les paramètres (Échap) (93×34)",
+      "#synchro-indicateur Synchronisation : 1 élément à envoyer (o (182×29)",
+      "#parametres-recherche Rechercher un réglage (316×33)",
+      "#parametres-disposition-grille Disposition : ▦ Grille (77×36)",
+      "#parametres-disposition-liste Disposition : ☰ Liste (74×36)",
+      "#parametres-densite-aere Densité : Aéré (57×36)",
+      "#parametres-densite-compact Densité : Compact (84×36)",
+      "#parametres-personnaliser ✎ Personnaliser les tuiles (202×34)",
+      "#parametres-reinitialiser Réinitialiser la disposition (203×34)",
+      "#parametres-verrouiller ⏻ Verrouiller maintenant (193×35)"
+    ],
+    "petitsTextes": 36,
+    "exemplesPetits": [
+      "← Retour (14px)",
+      "⏳ (13px)",
+      "1 élément à envoyer (13px)",
+      "⌕ (14px)",
+      "Général (14px)",
+      "Synchronisation (14px)",
+      "Sécurité (14px)",
+      "Portefeuille (14px)"
+    ],
+    "tailles": {
+      "12": 8,
+      "13": 14,
+      "14": 14,
+      "15": 9,
+      "17": 4,
+      "22": 1,
+      "24": 1
+    },
+    "champs": [
+      "#parametres-recherche Rechercher un réglage [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "parametres-synchro": {
+    "capture": "13-parametres-synchro.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 15,
+    "petitesCibles": 4,
+    "exemplesCibles": [
+      "#hub-parametres-fermer Fermer les paramètres (Échap) (93×34)",
+      "#synchro-indicateur Synchronisation : 1 élément à envoyer (o (182×29)",
+      "#parametres-recherche Rechercher un réglage (316×33)",
+      "#synchro-maintenant Synchroniser maintenant (198×34)"
+    ],
+    "petitsTextes": 25,
+    "exemplesPetits": [
+      "← Retour (14px)",
+      "⏳ (13px)",
+      "1 élément à envoyer (13px)",
+      "⌕ (14px)",
+      "Général (14px)",
+      "Synchronisation (14px)",
+      "Sécurité (14px)",
+      "Portefeuille (14px)"
+    ],
+    "tailles": {
+      "13": 6,
+      "14": 19,
+      "15": 11,
+      "17": 2,
+      "22": 1,
+      "24": 1
+    },
+    "champs": [
+      "#parametres-recherche Rechercher un réglage [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "parametres-securite": {
+    "capture": "14-parametres-securite.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 20,
+    "petitesCibles": 10,
+    "exemplesCibles": [
+      "#hub-parametres-fermer Fermer les paramètres (Échap) (93×34)",
+      "#synchro-indicateur Synchronisation : 1 élément à envoyer (o (182×29)",
+      "#parametres-recherche Rechercher un réglage (316×33)",
+      "#verrou-auto-5 Verrouiller après : 5 min (62×36)",
+      "#verrou-auto-15 Verrouiller après : 15 min (69×36)",
+      "#verrou-auto-30 Verrouiller après : 30 min (69×36)",
+      "#verrou-auto-45 Verrouiller après : 45 min (69×36)",
+      "#verrou-auto-60 Verrouiller après : 1 h (47×36)",
+      "#verrou-auto-120 Verrouiller après : 2 h (47×36)",
+      "#verrou-auto-0 Verrouiller après : Jamais (72×36)"
+    ],
+    "petitsTextes": 31,
+    "exemplesPetits": [
+      "← Retour (14px)",
+      "⏳ (13px)",
+      "1 élément à envoyer (13px)",
+      "⌕ (14px)",
+      "Général (14px)",
+      "Synchronisation (14px)",
+      "Sécurité (14px)",
+      "Portefeuille (14px)"
+    ],
+    "tailles": {
+      "13": 19,
+      "14": 12,
+      "15": 10,
+      "17": 3,
+      "22": 1,
+      "24": 1
+    },
+    "champs": [
+      "#parametres-recherche Rechercher un réglage [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "parametres-portefeuille": {
+    "capture": "15-parametres-portefeuille.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 47,
+    "petitesCibles": 34,
+    "exemplesCibles": [
+      "#hub-parametres-fermer Fermer les paramètres (Échap) (93×34)",
+      "#synchro-indicateur Synchronisation : 1 élément à envoyer (o (182×29)",
+      "#parametres-recherche Rechercher un réglage (316×33)",
+      "#intervalle-10 10 s (45×30)",
+      "#intervalle-30 30 s (45×30)",
+      "#intervalle-60 1 min (53×30)",
+      "#intervalle-300 5 min (53×30)",
+      "#intervalle-0 Jamais (63×30)",
+      "#fournisseur-yahoo Yahoo Finance (119×30)",
+      "#fournisseur-fmp Financial Modeling Prep (176×30)"
+    ],
+    "petitsTextes": 65,
+    "exemplesPetits": [
+      "← Retour (14px)",
+      "⏳ (13px)",
+      "1 élément à envoyer (13px)",
+      "⌕ (14px)",
+      "Général (14px)",
+      "Synchronisation (14px)",
+      "Sécurité (14px)",
+      "Portefeuille (14px)"
+    ],
+    "tailles": {
+      "12": 7,
+      "13": 18,
+      "14": 40,
+      "15": 13,
+      "17": 11,
+      "22": 1,
+      "24": 1
+    },
+    "champs": [
+      "#parametres-recherche Rechercher un réglage [text] : police < 16 px (zoom iOS), sans inputmode",
+      "Clé d'API [password] : sans enterkeyhint",
+      "#champ-seuil-variation Seuil de variation (%) [text] : sans enterkeyhint",
+      "#heure-lundi-matin Matin [text] : sans enterkeyhint, sans inputmode",
+      "#heure-lundi-soir Soir [text] : sans enterkeyhint, sans inputmode",
+      "#heure-mardi-matin Matin [text] : sans enterkeyhint, sans inputmode",
+      "#heure-mardi-soir Soir [text] : sans enterkeyhint, sans inputmode",
+      "#heure-mercredi-matin Matin [text] : sans enterkeyhint, sans inputmode",
+      "#heure-mercredi-soir Soir [text] : sans enterkeyhint, sans inputmode",
+      "#heure-jeudi-matin Matin [text] : sans enterkeyhint, sans inputmode",
+      "#heure-jeudi-soir Soir [text] : sans enterkeyhint, sans inputmode",
+      "#heure-vendredi-matin Matin [text] : sans enterkeyhint, sans inputmode",
+      "#heure-vendredi-soir Soir [text] : sans enterkeyhint, sans inputmode",
+      "#champ-heure-podcast Heure [text] : sans enterkeyhint, sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "parametres-administration": {
+    "capture": "16-parametres-administration.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 46,
+    "petitesCibles": 24,
+    "exemplesCibles": [
+      "#hub-parametres-fermer Fermer les paramètres (Échap) (93×34)",
+      "#synchro-indicateur Synchronisation : 1 élément à envoyer (o (182×29)",
+      "#parametres-recherche Rechercher un réglage (316×33)",
+      "#parametres-administration Administration → (147×34)",
+      "#admin-reglage-retentionJours Rétention du journal (jours) (324×40)",
+      "#admin-reglage-tailleJournal Taille maximale du journal (entrées) (324×40)",
+      "#admin-reglage-verrouMinutes Verrouillage du panneau après (min d’ina (324×40)",
+      "#admin-reglage-confianceMinutes Validité d’une vérification d’identité ( (324×40)",
+      "#admin-reglage-inactifJours Compte signalé inactif après (jours sans (324×40)",
+      "#admin-reglage-invitationJours Durée d’invitation par défaut (jours) (324×40)"
+    ],
+    "petitsTextes": 108,
+    "exemplesPetits": [
+      "← Retour (14px)",
+      "⏳ (13px)",
+      "1 élément à envoyer (13px)",
+      "⌕ (14px)",
+      "Général (14px)",
+      "Synchronisation (14px)",
+      "Sécurité (14px)",
+      "Portefeuille (14px)"
+    ],
+    "tailles": {
+      "13": 77,
+      "14": 31,
+      "15": 13,
+      "16": 1,
+      "17": 5,
+      "22": 1,
+      "24": 1
+    },
+    "champs": [
+      "#parametres-recherche Rechercher un réglage [text] : police < 16 px (zoom iOS), sans inputmode",
+      "#admin-reglage-retentionJours Rétention du journal (jours) [text] : police < 16 px (zoom iOS), sans enterkeyhint",
+      "#admin-reglage-tailleJournal Taille maximale du journal (entrées) [text] : police < 16 px (zoom iOS), sans enterkeyhint",
+      "#admin-reglage-verrouMinutes Verrouillage du panneau après (min d’ina [text] : police < 16 px (zoom iOS), sans enterkeyhint",
+      "#admin-reglage-confianceMinutes Validité d’une vérification d’identité ( [text] : police < 16 px (zoom iOS), sans enterkeyhint",
+      "#admin-reglage-inactifJours Compte signalé inactif après (jours sans [text] : police < 16 px (zoom iOS), sans enterkeyhint",
+      "#admin-reglage-invitationJours Durée d’invitation par défaut (jours) [text] : police < 16 px (zoom iOS), sans enterkeyhint",
+      "#abo-reglage-devise Devise [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode",
+      "#abo-reglage-montant Montant par défaut [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode",
+      "#abo-reglage-jours Rappel (jours d’avance, 1 à 60) [text] : police < 16 px (zoom iOS), sans enterkeyhint",
+      "#abo-reglage-moyens Moyens de paiement affichés (séparés par [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode",
+      "#abo-reglage-message-ami Message du rappel amical ({echeance}, {p [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode",
+      "#abo-reglage-modele Modèle du message à copier ({prenom} {mo [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode",
+      "#champ-mon-nom Nom de mon profil [text] : sans enterkeyhint, sans inputmode",
+      "#sources-import-texte Contenu d’un ancien sources.json [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode",
+      "#tsuzuku-cle-tmdb Clé TMDB [password] : police < 16 px (zoom iOS), sans enterkeyhint",
+      "#tsuzuku-avance-delai Délai d’une requête (5 à 60 s) [text] : police < 16 px (zoom iOS), sans inputmode",
+      "#tsuzuku-avance-taille Taille maximale d’une page (1 à 16 Mo) [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "parametres-tsuzuku": {
+    "capture": "17-parametres-tsuzuku.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 19,
+    "petitesCibles": 10,
+    "exemplesCibles": [
+      "#hub-parametres-fermer Fermer les paramètres (Échap) (93×34)",
+      "#synchro-indicateur Synchronisation : 1 élément à envoyer (o (182×29)",
+      "#parametres-recherche Rechercher un réglage (316×33)",
+      "#tsuzuku-langue-vf Doublage préféré : VF (47×40)",
+      "#tsuzuku-langue-vostfr Doublage préféré : VOSTFR (83×40)",
+      "#tsuzuku-langue-indifferent Doublage préféré : Peu importe (105×40)",
+      "#tsuzuku-suivant-oui Épisode suivant automatique : Oui (52×40)",
+      "#tsuzuku-suivant-non Épisode suivant automatique : Non (55×40)",
+      "#tsuzuku-masquer-oui Masquer les déjà vus : Oui (52×40)",
+      "#tsuzuku-masquer-non Masquer les déjà vus : Non (55×40)"
+    ],
+    "petitsTextes": 25,
+    "exemplesPetits": [
+      "← Retour (14px)",
+      "⏳ (13px)",
+      "1 élément à envoyer (13px)",
+      "⌕ (14px)",
+      "Général (14px)",
+      "Synchronisation (14px)",
+      "Sécurité (14px)",
+      "Portefeuille (14px)"
+    ],
+    "tailles": {
+      "13": 11,
+      "14": 14,
+      "15": 9,
+      "17": 2,
+      "22": 1,
+      "24": 1
+    },
+    "champs": [
+      "#parametres-recherche Rechercher un réglage [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "parametres-nouveautes": {
+    "capture": "18-parametres-nouveautes.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 13,
+    "petitesCibles": 4,
+    "exemplesCibles": [
+      "#hub-parametres-fermer Fermer les paramètres (Échap) (93×34)",
+      "#synchro-indicateur Synchronisation : 1 élément à envoyer (o (182×29)",
+      "#parametres-recherche Rechercher un réglage (316×33)",
+      "#parametres-nouveautes ✨ Voir les nouveautés (182×34)"
+    ],
+    "petitsTextes": 16,
+    "exemplesPetits": [
+      "← Retour (14px)",
+      "⏳ (13px)",
+      "1 élément à envoyer (13px)",
+      "⌕ (14px)",
+      "Général (14px)",
+      "Synchronisation (14px)",
+      "Sécurité (14px)",
+      "Portefeuille (14px)"
+    ],
+    "tailles": {
+      "13": 4,
+      "14": 12,
+      "15": 9,
+      "17": 1,
+      "22": 1,
+      "24": 1
+    },
+    "champs": [
+      "#parametres-recherche Rechercher un réglage [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "parametres-support": {
+    "capture": "19-parametres-support.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 13,
+    "petitesCibles": 4,
+    "exemplesCibles": [
+      "#hub-parametres-fermer Fermer les paramètres (Échap) (93×34)",
+      "#synchro-indicateur Synchronisation : 1 élément à envoyer (o (182×29)",
+      "#parametres-recherche Rechercher un réglage (316×33)",
+      "#parametres-support-ouvrir Ouvrir le support (144×34)"
+    ],
+    "petitsTextes": 16,
+    "exemplesPetits": [
+      "← Retour (14px)",
+      "⏳ (13px)",
+      "1 élément à envoyer (13px)",
+      "⌕ (14px)",
+      "Général (14px)",
+      "Synchronisation (14px)",
+      "Sécurité (14px)",
+      "Portefeuille (14px)"
+    ],
+    "tailles": {
+      "13": 4,
+      "14": 12,
+      "15": 9,
+      "17": 1,
+      "22": 1,
+      "24": 1
+    },
+    "champs": [
+      "#parametres-recherche Rechercher un réglage [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "parametres-apropos": {
+    "capture": "20-parametres-apropos.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 17,
+    "petitesCibles": 8,
+    "exemplesCibles": [
+      "#hub-parametres-fermer Fermer les paramètres (Échap) (93×34)",
+      "#synchro-indicateur Synchronisation : 1 élément à envoyer (o (182×29)",
+      "#parametres-recherche Rechercher un réglage (316×33)",
+      "#lien-juridique-conditions Conditions d’utilisation (119×14)",
+      "#lien-juridique-confidentialite Politique de confidentialité (139×14)",
+      "#lien-juridique-cookies Cookies et stockage local (136×14)",
+      "#lien-juridique-mentions Mentions légales (90×14)",
+      "#maj-actualiser Actualiser l’app (134×34)"
+    ],
+    "petitsTextes": 26,
+    "exemplesPetits": [
+      "← Retour (14px)",
+      "⏳ (13px)",
+      "1 élément à envoyer (13px)",
+      "⌕ (14px)",
+      "Général (14px)",
+      "Synchronisation (14px)",
+      "Sécurité (14px)",
+      "Portefeuille (14px)"
+    ],
+    "tailles": {
+      "12": 5,
+      "13": 6,
+      "14": 15,
+      "15": 9,
+      "17": 3,
+      "22": 1,
+      "24": 1
+    },
+    "champs": [
+      "#parametres-recherche Rechercher un réglage [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "support": {
+    "capture": "21-support.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 10,
+    "petitesCibles": 9,
+    "exemplesCibles": [
+      "#hub-support-fermer Fermer le support (Échap) (93×34)",
+      "#support-categorie-bug Catégorie : Bug (53×36)",
+      "#support-categorie-question Catégorie : Question (84×36)",
+      "#support-categorie-demande Catégorie : Demande (87×36)",
+      "#support-categorie-autre Catégorie : Autre (62×36)",
+      "#support-sujet Sujet du ticket (324×39)",
+      "#support-capture Joindre une capture d’écran (facultatif) (324×22)",
+      "#support-technique ✓Inclure les informations techniques (324×36)",
+      "#support-envoyer Envoyer le ticket (141×34)"
+    ],
+    "petitsTextes": 17,
+    "exemplesPetits": [
+      "← Retour (14px)",
+      "Un bug, une question, une idée (13px)",
+      "Bug (13px)",
+      "Question (13px)",
+      "Demande (13px)",
+      "Autre (13px)",
+      "Sujet (13px)",
+      "Message (13px)"
+    ],
+    "tailles": {
+      "12": 4,
+      "13": 10,
+      "14": 3,
+      "17": 2,
+      "28": 1
+    },
+    "champs": [
+      "#support-sujet Sujet du ticket [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode",
+      "#support-message Message du ticket [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "support-page-entiere": {
+    "capture": "22-support-page-entiere.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 10,
+    "petitesCibles": 9,
+    "exemplesCibles": [
+      "#hub-support-fermer Fermer le support (Échap) (93×34)",
+      "#support-categorie-bug Catégorie : Bug (53×36)",
+      "#support-categorie-question Catégorie : Question (84×36)",
+      "#support-categorie-demande Catégorie : Demande (87×36)",
+      "#support-categorie-autre Catégorie : Autre (62×36)",
+      "#support-sujet Sujet du ticket (324×39)",
+      "#support-capture Joindre une capture d’écran (facultatif) (324×22)",
+      "#support-technique ✓Inclure les informations techniques (324×36)",
+      "#support-envoyer Envoyer le ticket (141×34)"
+    ],
+    "petitsTextes": 17,
+    "exemplesPetits": [
+      "← Retour (14px)",
+      "Un bug, une question, une idée (13px)",
+      "Bug (13px)",
+      "Question (13px)",
+      "Demande (13px)",
+      "Autre (13px)",
+      "Sujet (13px)",
+      "Message (13px)"
+    ],
+    "tailles": {
+      "12": 4,
+      "13": 10,
+      "14": 3,
+      "17": 2,
+      "28": 1
+    },
+    "champs": [
+      "#support-sujet Sujet du ticket [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode",
+      "#support-message Message du ticket [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-vide": {
+    "capture": "23-portefeuille-vide.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 46,
+    "petitesCibles": 44,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (124×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 70,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "10": 1,
+      "11": 6,
+      "12": 15,
+      "13": 16,
+      "14": 32,
+      "15": 2,
+      "16": 8,
+      "18": 19,
+      "26": 4
+    },
+    "champs": [
+      "#champ-recherche-action Rechercher une action [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-creation-compte": {
+    "capture": "24-portefeuille-creation-compte.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 29,
+    "petitesCibles": 28,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (124×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 33,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "12": 1,
+      "13": 7,
+      "14": 25,
+      "15": 1,
+      "18": 17,
+      "24": 1
+    },
+    "champs": [
+      "Nom [text] : sans enterkeyhint, sans inputmode",
+      "Date d'ouverture [text] : sans enterkeyhint, sans inputmode",
+      "Devise [text] : sans enterkeyhint, sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-visite-guidee": {
+    "capture": "25-portefeuille-visite-guidee.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 51,
+    "petitesCibles": 49,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (124×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 91,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "10": 1,
+      "11": 11,
+      "12": 27,
+      "13": 19,
+      "14": 33,
+      "15": 4,
+      "16": 11,
+      "18": 19,
+      "22": 1,
+      "26": 4,
+      "44": 1
+    },
+    "champs": [
+      "#champ-recherche-action Rechercher une action [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-tableau": {
+    "capture": "26-portefeuille-tableau.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 49,
+    "petitesCibles": 48,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (124×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 90,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "10": 1,
+      "11": 11,
+      "12": 27,
+      "13": 19,
+      "14": 32,
+      "15": 2,
+      "16": 11,
+      "18": 19,
+      "26": 4
+    },
+    "champs": [
+      "#champ-recherche-action Rechercher une action [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-onglet-resume": {
+    "capture": "27-portefeuille-onglet-resume.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 49,
+    "petitesCibles": 48,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (124×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 90,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "10": 1,
+      "11": 11,
+      "12": 27,
+      "13": 19,
+      "14": 32,
+      "15": 2,
+      "16": 11,
+      "18": 19,
+      "26": 4
+    },
+    "champs": [
+      "#champ-recherche-action Rechercher une action [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-onglet-positions": {
+    "capture": "28-portefeuille-onglet-positions.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 36,
+    "petitesCibles": 36,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (124×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 42,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "13": 12,
+      "14": 30,
+      "18": 17,
+      "26": 1
+    },
+    "champs": [
+      "#champ-recherche-action Rechercher une action [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-onglet-exposition": {
+    "capture": "29-portefeuille-onglet-exposition.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 36,
+    "petitesCibles": 36,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (124×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 42,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "13": 12,
+      "14": 30,
+      "18": 17,
+      "26": 1
+    },
+    "champs": [
+      "#champ-recherche-action Rechercher une action [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-onglet-risque": {
+    "capture": "30-portefeuille-onglet-risque.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 36,
+    "petitesCibles": 36,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (124×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 43,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "13": 11,
+      "14": 32,
+      "18": 17,
+      "26": 1
+    },
+    "champs": [
+      "#champ-recherche-action Rechercher une action [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-onglet-performances": {
+    "capture": "31-portefeuille-onglet-performances.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 56,
+    "petitesCibles": 56,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (124×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 125,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "10": 1,
+      "11": 8,
+      "12": 12,
+      "13": 38,
+      "14": 56,
+      "16": 7,
+      "18": 23,
+      "26": 1,
+      "10.5": 10
+    },
+    "champs": [
+      "#champ-recherche-action Rechercher une action [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-onglet-dividendes": {
+    "capture": "32-portefeuille-onglet-dividendes.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 36,
+    "petitesCibles": 36,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (124×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 44,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "13": 11,
+      "14": 33,
+      "16": 1,
+      "18": 17,
+      "26": 1
+    },
+    "champs": [
+      "#champ-recherche-action Rechercher une action [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-onglet-flux": {
+    "capture": "33-portefeuille-onglet-flux.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 36,
+    "petitesCibles": 36,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (124×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 43,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "13": 11,
+      "14": 32,
+      "18": 17,
+      "26": 1
+    },
+    "champs": [
+      "#champ-recherche-action Rechercher une action [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-onglet-impots": {
+    "capture": "34-portefeuille-onglet-impots.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 40,
+    "petitesCibles": 40,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (124×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 67,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "11": 12,
+      "13": 11,
+      "14": 44,
+      "16": 4,
+      "18": 17,
+      "26": 1
+    },
+    "champs": [
+      "#champ-recherche-action Rechercher une action [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-nav-saisie": {
+    "capture": "35-portefeuille-nav-saisie.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 37,
+    "petitesCibles": 34,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (118×38)",
+      "#nav-saisie Nouvelle opération (174×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 41,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "12": 1,
+      "13": 9,
+      "14": 31,
+      "15": 3,
+      "18": 17,
+      "24": 1
+    },
+    "champs": [
+      "Date [text] : sans enterkeyhint, sans inputmode",
+      "Quantité [text] : sans enterkeyhint",
+      "Cours unitaire [text] : sans enterkeyhint",
+      "Frais [text] : sans enterkeyhint",
+      "Note [text] : sans enterkeyhint, sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-nav-import": {
+    "capture": "36-portefeuille-nav-import.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 29,
+    "petitesCibles": 25,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (118×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (105×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 45,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "12": 3,
+      "13": 6,
+      "14": 36,
+      "15": 2,
+      "16": 1,
+      "17": 1,
+      "18": 17,
+      "24": 1
+    },
+    "champs": [
+      "Contenu du fichier [text] : sans enterkeyhint, sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-nav-recherche": {
+    "capture": "37-portefeuille-nav-recherche.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 24,
+    "petitesCibles": 24,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (118×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (120×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 27,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "13": 4,
+      "14": 23,
+      "18": 18,
+      "26": 1
+    },
+    "champs": [
+      "#champ-recherche-action Rechercher une action [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-nav-screener": {
+    "capture": "38-portefeuille-nav-screener.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 35,
+    "petitesCibles": 27,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (118×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (108×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 43,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "10": 1,
+      "11": 1,
+      "12": 12,
+      "13": 7,
+      "14": 22,
+      "16": 17,
+      "18": 17,
+      "26": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "portefeuille-nav-watchlist": {
+    "capture": "39-portefeuille-nav-watchlist.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 28,
+    "petitesCibles": 27,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (118×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (110×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 32,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "13": 5,
+      "14": 27,
+      "15": 1,
+      "18": 17,
+      "26": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "portefeuille-nav-carnet": {
+    "capture": "40-portefeuille-nav-carnet.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 22,
+    "petitesCibles": 22,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (118×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (123×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 27,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "13": 5,
+      "14": 22,
+      "18": 17,
+      "26": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "portefeuille-nav-journal": {
+    "capture": "41-portefeuille-nav-journal.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 25,
+    "petitesCibles": 25,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (118×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (179×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 30,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "12": 3,
+      "13": 5,
+      "14": 22,
+      "18": 17,
+      "26": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "portefeuille-nav-comparateur": {
+    "capture": "42-portefeuille-nav-comparateur.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 26,
+    "petitesCibles": 26,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (118×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (135×38)"
+    ],
+    "petitsTextes": 34,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "13": 5,
+      "14": 29,
+      "18": 17,
+      "26": 1
+    },
+    "champs": [
+      "Ajouter une société [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-nav-objectifs": {
+    "capture": "43-portefeuille-nav-objectifs.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 31,
+    "petitesCibles": 29,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (118×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 36,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "13": 13,
+      "14": 23,
+      "15": 2,
+      "16": 5,
+      "18": 17,
+      "26": 1
+    },
+    "champs": [
+      "#champ-objectif-montant Montant visé (€) [text] : sans enterkeyhint",
+      "#champ-objectif-date Échéance [text] : sans enterkeyhint, sans inputmode",
+      "#champ-objectif-rendement Rendement supposé (%/an) [text] : sans enterkeyhint",
+      "#champ-jour-versement Le (jour du mois) [text] : sans enterkeyhint",
+      "#champ-montant-versement Montant (€) [text] : sans enterkeyhint",
+      "#champ-versement Montant à investir (€) [text] : sans enterkeyhint"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-nav-projection": {
+    "capture": "44-portefeuille-nav-projection.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 31,
+    "petitesCibles": 30,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (118×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 58,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "13": 12,
+      "14": 46,
+      "15": 1,
+      "17": 6,
+      "18": 17,
+      "19": 1,
+      "22": 2,
+      "24": 1
+    },
+    "champs": [
+      "#projection-capital Capital de départ [text] : sans enterkeyhint",
+      "#projection-versementMensuel Versement mensuel [text] : sans enterkeyhint",
+      "#projection-rendementAnnuel Rendement annuel % [text] : sans enterkeyhint",
+      "#projection-fraisAnnuels Frais annuels % [text] : sans enterkeyhint",
+      "#projection-inflation Inflation % [text] : sans enterkeyhint",
+      "#projection-annees Durée (années) [text] : sans enterkeyhint",
+      "#projection-depensesAnnuelles Dépenses annuelles [text] : sans enterkeyhint",
+      "#projection-tauxRetrait Taux de retrait % [text] : sans enterkeyhint"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-nav-sauvegarde": {
+    "capture": "45-portefeuille-nav-sauvegarde.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 26,
+    "petitesCibles": 24,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (118×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 32,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "12": 1,
+      "13": 6,
+      "14": 25,
+      "15": 2,
+      "17": 2,
+      "18": 17,
+      "24": 1
+    },
+    "champs": [
+      "Mot de passe de la sauvegarde [password] : sans enterkeyhint",
+      "Confirmation [password] : sans enterkeyhint"
+    ],
+    "zonesSecurite": false
+  },
+  "portefeuille-nav-diagnostic": {
+    "capture": "46-portefeuille-nav-diagnostic.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 23,
+    "petitesCibles": 22,
+    "exemplesCibles": [
+      "#nav-hub ← Hub (92×38)",
+      "#nav-tableau Portefeuille (118×38)",
+      "#nav-saisie Nouvelle opération (165×38)",
+      "#nav-import Importer (100×38)",
+      "#nav-recherche Recherche (116×38)",
+      "#nav-screener Screener (105×38)",
+      "#nav-watchlist Watchlist (104×38)",
+      "#nav-carnet Mon carnet (118×38)",
+      "#nav-journal Journal des décisions (167×38)",
+      "#nav-comparateur Comparateur (130×38)"
+    ],
+    "petitsTextes": 36,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "Portefeuille (14px)",
+      "Nouvelle opération (14px)",
+      "Importer (14px)",
+      "Recherche (14px)",
+      "Screener (14px)",
+      "Watchlist (14px)",
+      "Mon carnet (14px)"
+    ],
+    "tailles": {
+      "13": 4,
+      "14": 32,
+      "15": 1,
+      "16": 1,
+      "18": 27,
+      "26": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "administration": {
+    "capture": "47-administration.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 16,
+    "petitesCibles": 12,
+    "exemplesCibles": [
+      "#retour-hub ← Hub (75×34)",
+      "#synchro-indicateur Synchronisation : À jour · à l’instant ( (163×29)",
+      "#app-parametres-ouvrir Paramètres (43×34)",
+      "#app-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#admin-onglet-tableau ◧ Tableau de bord (154×38)",
+      "#admin-onglet-utilisateurs 👥 Utilisateurs 1 (139×38)",
+      "#admin-onglet-applications ▦ Applications (130×38)",
+      "#admin-onglet-abonnements 💳 Abonnements (144×38)",
+      "#admin-onglet-securite 🛡 Sécurité (103×38)",
+      "#admin-onglet-journal ☰ Journal (97×38)"
+    ],
+    "petitsTextes": 48,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "ÉCHAP POUR FERMER (11px)",
+      "✓ (13px)",
+      "À jour · à l’instant (13px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "Votre rang : (13px)",
+      "Fondateur (12px)"
+    ],
+    "tailles": {
+      "11": 8,
+      "12": 2,
+      "13": 11,
+      "14": 27,
+      "17": 1,
+      "30": 4,
+      "44": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "administration-tableau": {
+    "capture": "48-administration-tableau.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 16,
+    "petitesCibles": 12,
+    "exemplesCibles": [
+      "#retour-hub ← Hub (75×34)",
+      "#synchro-indicateur Synchronisation : À jour · à l’instant ( (163×29)",
+      "#app-parametres-ouvrir Paramètres (43×34)",
+      "#app-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#admin-onglet-tableau ◧ Tableau de bord (154×38)",
+      "#admin-onglet-utilisateurs 👥 Utilisateurs 1 (139×38)",
+      "#admin-onglet-applications ▦ Applications (130×38)",
+      "#admin-onglet-abonnements 💳 Abonnements (144×38)",
+      "#admin-onglet-securite 🛡 Sécurité (103×38)",
+      "#admin-onglet-journal ☰ Journal (97×38)"
+    ],
+    "petitsTextes": 48,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "ÉCHAP POUR FERMER (11px)",
+      "✓ (13px)",
+      "À jour · à l’instant (13px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "Votre rang : (13px)",
+      "Fondateur (12px)"
+    ],
+    "tailles": {
+      "11": 8,
+      "12": 2,
+      "13": 11,
+      "14": 27,
+      "17": 1,
+      "30": 4,
+      "44": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "administration-utilisateurs": {
+    "capture": "49-administration-utilisateurs.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 34,
+    "petitesCibles": 34,
+    "exemplesCibles": [
+      "#retour-hub ← Hub (75×34)",
+      "#synchro-indicateur Synchronisation : À jour · à l’instant ( (163×29)",
+      "#app-parametres-ouvrir Paramètres (43×34)",
+      "#app-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#admin-onglet-tableau ◧ Tableau de bord (154×38)",
+      "#admin-onglet-utilisateurs 👥 Utilisateurs 1 (139×38)",
+      "#admin-onglet-applications ▦ Applications (130×38)",
+      "#admin-onglet-abonnements 💳 Abonnements (144×38)",
+      "#admin-onglet-securite 🛡 Sécurité (103×38)",
+      "#admin-onglet-journal ☰ Journal (97×38)"
+    ],
+    "petitsTextes": 56,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "ÉCHAP POUR FERMER (11px)",
+      "✓ (13px)",
+      "À jour · à l’instant (13px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "Votre rang : (13px)",
+      "Fondateur (12px)"
+    ],
+    "tailles": {
+      "11": 3,
+      "12": 8,
+      "13": 23,
+      "14": 22,
+      "17": 1,
+      "20": 1,
+      "44": 1
+    },
+    "champs": [
+      "#admin-recherche Rechercher un prénom [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "administration-applications": {
+    "capture": "50-administration-applications.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 21,
+    "petitesCibles": 21,
+    "exemplesCibles": [
+      "#retour-hub ← Hub (75×34)",
+      "#synchro-indicateur Synchronisation : À jour · à l’instant ( (163×29)",
+      "#app-parametres-ouvrir Paramètres (43×34)",
+      "#app-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#admin-onglet-tableau ◧ Tableau de bord (154×38)",
+      "#admin-onglet-utilisateurs 👥 Utilisateurs 1 (139×38)",
+      "#admin-onglet-applications ▦ Applications (130×38)",
+      "#admin-onglet-abonnements 💳 Abonnements (144×38)",
+      "#admin-onglet-securite 🛡 Sécurité (103×38)",
+      "#admin-onglet-journal ☰ Journal (97×38)"
+    ],
+    "petitsTextes": 64,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "ÉCHAP POUR FERMER (11px)",
+      "✓ (13px)",
+      "À jour · à l’instant (13px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "Votre rang : (13px)",
+      "Fondateur (12px)"
+    ],
+    "tailles": {
+      "11": 4,
+      "12": 20,
+      "13": 15,
+      "14": 25,
+      "16": 3,
+      "17": 1,
+      "44": 1
+    },
+    "champs": [
+      "#admin-app-message-portefeuille Message affiché sur la tuile [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode",
+      "#admin-app-message-tsuzuku Message affiché sur la tuile [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "administration-abonnements": {
+    "capture": "51-administration-abonnements.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 16,
+    "petitesCibles": 16,
+    "exemplesCibles": [
+      "#retour-hub ← Hub (75×34)",
+      "#synchro-indicateur Synchronisation : À jour · à l’instant ( (163×29)",
+      "#app-parametres-ouvrir Paramètres (43×34)",
+      "#app-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#admin-onglet-tableau ◧ Tableau de bord (154×38)",
+      "#admin-onglet-utilisateurs 👥 Utilisateurs 1 (139×38)",
+      "#admin-onglet-applications ▦ Applications (130×38)",
+      "#admin-onglet-abonnements 💳 Abonnements (144×38)",
+      "#admin-onglet-securite 🛡 Sécurité (103×38)",
+      "#admin-onglet-journal ☰ Journal (97×38)"
+    ],
+    "petitsTextes": 36,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "ÉCHAP POUR FERMER (11px)",
+      "✓ (13px)",
+      "À jour · à l’instant (13px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "Votre rang : (13px)",
+      "Fondateur (12px)"
+    ],
+    "tailles": {
+      "11": 2,
+      "12": 5,
+      "13": 7,
+      "14": 22,
+      "17": 1,
+      "44": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "administration-securite": {
+    "capture": "52-administration-securite.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 14,
+    "petitesCibles": 14,
+    "exemplesCibles": [
+      "#retour-hub ← Hub (75×34)",
+      "#synchro-indicateur Synchronisation : À jour · à l’instant ( (163×29)",
+      "#app-parametres-ouvrir Paramètres (43×34)",
+      "#app-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#admin-onglet-tableau ◧ Tableau de bord (154×38)",
+      "#admin-onglet-utilisateurs 👥 Utilisateurs 1 (139×38)",
+      "#admin-onglet-applications ▦ Applications (130×38)",
+      "#admin-onglet-abonnements 💳 Abonnements (144×38)",
+      "#admin-onglet-securite 🛡 Sécurité (103×38)",
+      "#admin-onglet-journal ☰ Journal (97×38)"
+    ],
+    "petitsTextes": 46,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "ÉCHAP POUR FERMER (11px)",
+      "✓ (13px)",
+      "À jour · à l’instant (13px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "Votre rang : (13px)",
+      "Fondateur (12px)"
+    ],
+    "tailles": {
+      "11": 8,
+      "12": 2,
+      "13": 10,
+      "14": 26,
+      "17": 1,
+      "44": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "administration-journal": {
+    "capture": "53-administration-journal.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 31,
+    "petitesCibles": 31,
+    "exemplesCibles": [
+      "#retour-hub ← Hub (75×34)",
+      "#synchro-indicateur Synchronisation : À jour · à l’instant ( (163×29)",
+      "#app-parametres-ouvrir Paramètres (43×34)",
+      "#app-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#admin-onglet-tableau ◧ Tableau de bord (154×38)",
+      "#admin-onglet-utilisateurs 👥 Utilisateurs 1 (139×38)",
+      "#admin-onglet-applications ▦ Applications (130×38)",
+      "#admin-onglet-abonnements 💳 Abonnements (144×38)",
+      "#admin-onglet-securite 🛡 Sécurité (103×38)",
+      "#admin-onglet-journal ☰ Journal (97×38)"
+    ],
+    "petitsTextes": 48,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "ÉCHAP POUR FERMER (11px)",
+      "✓ (13px)",
+      "À jour · à l’instant (13px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "Votre rang : (13px)",
+      "Fondateur (12px)"
+    ],
+    "tailles": {
+      "11": 3,
+      "12": 3,
+      "13": 21,
+      "14": 21,
+      "17": 1,
+      "44": 1
+    },
+    "champs": [
+      "#admin-journal-du Du (AAAA-MM-JJ) [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode",
+      "#admin-journal-au Au (AAAA-MM-JJ) [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode",
+      "#admin-journal-recherche Rechercher [text] : police < 16 px (zoom iOS), sans enterkeyhint, sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "administration-reglages": {
+    "capture": "54-administration-reglages.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 12,
+    "petitesCibles": 12,
+    "exemplesCibles": [
+      "#retour-hub ← Hub (75×34)",
+      "#synchro-indicateur Synchronisation : À jour · à l’instant ( (163×29)",
+      "#app-parametres-ouvrir Paramètres (43×34)",
+      "#app-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#admin-onglet-tableau ◧ Tableau de bord (154×38)",
+      "#admin-onglet-utilisateurs 👥 Utilisateurs 1 (139×38)",
+      "#admin-onglet-applications ▦ Applications (130×38)",
+      "#admin-onglet-abonnements 💳 Abonnements (144×38)",
+      "#admin-onglet-securite 🛡 Sécurité (103×38)",
+      "#admin-onglet-journal ☰ Journal (97×38)"
+    ],
+    "petitsTextes": 27,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "ÉCHAP POUR FERMER (11px)",
+      "✓ (13px)",
+      "À jour · à l’instant (13px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "Votre rang : (13px)",
+      "Fondateur (12px)"
+    ],
+    "tailles": {
+      "11": 2,
+      "12": 2,
+      "13": 3,
+      "14": 20,
+      "17": 1,
+      "44": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "tsuzuku-accueil": {
+    "capture": "55-tsuzuku-accueil.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 30,
+    "petitesCibles": 8,
+    "exemplesCibles": [
+      "#retour-hub ← Hub (75×34)",
+      "#synchro-indicateur Synchronisation : À jour · à l’instant ( (163×29)",
+      "#app-parametres-ouvrir Paramètres (43×34)",
+      "#app-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#mode-anime Animés (98×38)",
+      "#mode-movie Films (96×38)",
+      "#tsuzuku-reglages Réglages de Tsuzuku (Paramètres) (43×44)",
+      "#tsuzuku-mention-plus En savoir plus : conditions d’utilisatio (82×32)"
+    ],
+    "petitsTextes": 83,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "ÉCHAP POUR FERMER (11px)",
+      "✓ (13px)",
+      "À jour · à l’instant (13px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "✦ (14px)",
+      "Animés (14px)"
+    ],
+    "tailles": {
+      "11": 33,
+      "12": 17,
+      "13": 21,
+      "14": 12,
+      "15": 5,
+      "19": 4,
+      "24": 2,
+      "32": 1
+    },
+    "champs": [
+      "#accueil-recherche Rechercher un animé [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "tsuzuku-catalogue": {
+    "capture": "56-tsuzuku-catalogue.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 15,
+    "petitesCibles": 8,
+    "exemplesCibles": [
+      "#retour-hub ← Hub (75×34)",
+      "#synchro-indicateur Synchronisation : À jour · à l’instant ( (163×29)",
+      "#app-parametres-ouvrir Paramètres (43×34)",
+      "#app-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#mode-anime Animés (98×38)",
+      "#mode-movie Films (96×38)",
+      "#tsuzuku-reglages Réglages de Tsuzuku (Paramètres) (43×44)",
+      "#tsuzuku-mention-plus En savoir plus : conditions d’utilisatio (82×32)"
+    ],
+    "petitsTextes": 21,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "ÉCHAP POUR FERMER (11px)",
+      "✓ (13px)",
+      "À jour · à l’instant (13px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "✦ (14px)",
+      "Animés (14px)"
+    ],
+    "tailles": {
+      "11": 3,
+      "12": 3,
+      "13": 4,
+      "14": 11,
+      "15": 4,
+      "24": 2,
+      "30": 1
+    },
+    "champs": [
+      "#catalogue-recherche Rechercher [text] : police < 16 px (zoom iOS), sans inputmode"
+    ],
+    "zonesSecurite": false
+  },
+  "tsuzuku-fiche": {
+    "capture": "57-tsuzuku-fiche.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 33,
+    "petitesCibles": 13,
+    "exemplesCibles": [
+      "#retour-hub ← Hub (75×34)",
+      "#synchro-indicateur Synchronisation : À jour · à l’instant ( (163×29)",
+      "#app-parametres-ouvrir Paramètres (43×34)",
+      "#app-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#mode-anime Animés (98×38)",
+      "#mode-movie Films (96×38)",
+      "#tsuzuku-reglages Réglages de Tsuzuku (Paramètres) (43×44)",
+      "Lire tout le synopsis (320×42)",
+      "#statut-a_voir À voir (63×36)",
+      "#statut-en_cours En cours (82×36)"
+    ],
+    "petitsTextes": 68,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "ÉCHAP POUR FERMER (11px)",
+      "✓ (13px)",
+      "À jour · à l’instant (13px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "✦ (14px)",
+      "Animés (14px)"
+    ],
+    "tailles": {
+      "11": 2,
+      "12": 4,
+      "13": 19,
+      "14": 43,
+      "15": 4,
+      "16": 2,
+      "19": 1,
+      "24": 2,
+      "28": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "tsuzuku-lecteur": {
+    "capture": "58-tsuzuku-lecteur.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 15,
+    "petitesCibles": 9,
+    "exemplesCibles": [
+      "#retour-hub ← Hub (75×34)",
+      "#synchro-indicateur Synchronisation : À jour · à l’instant ( (163×29)",
+      "#app-parametres-ouvrir Paramètres (43×34)",
+      "#app-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#mode-anime Animés (98×38)",
+      "#mode-movie Films (96×38)",
+      "#tsuzuku-reglages Réglages de Tsuzuku (Paramètres) (43×44)",
+      "#lecteur-retour Retour à la fiche (65×32)",
+      "#tsuzuku-mention-plus En savoir plus : conditions d’utilisatio (82×32)"
+    ],
+    "petitsTextes": 22,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "ÉCHAP POUR FERMER (11px)",
+      "✓ (13px)",
+      "À jour · à l’instant (13px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "✦ (14px)",
+      "Animés (14px)"
+    ],
+    "tailles": {
+      "11": 2,
+      "12": 2,
+      "13": 2,
+      "14": 16,
+      "15": 4,
+      "24": 2,
+      "28": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "tsuzuku-bibliotheque": {
+    "capture": "59-tsuzuku-bibliotheque.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 20,
+    "petitesCibles": 15,
+    "exemplesCibles": [
+      "#retour-hub ← Hub (75×34)",
+      "#synchro-indicateur Synchronisation : À jour · à l’instant ( (163×29)",
+      "#app-parametres-ouvrir Paramètres (43×34)",
+      "#app-support-ouvrir Support : écrire à l’équipe (39×34)",
+      "#mode-anime Animés (98×38)",
+      "#mode-movie Films (96×38)",
+      "#tsuzuku-reglages Réglages de Tsuzuku (Paramètres) (43×44)",
+      "#onglet-tous Tous (0) (76×36)",
+      "#onglet-a_voir À voir (0) (82×36)",
+      "#onglet-en_cours En cours (0) (101×36)"
+    ],
+    "petitsTextes": 30,
+    "exemplesPetits": [
+      "← Hub (14px)",
+      "ÉCHAP POUR FERMER (11px)",
+      "✓ (13px)",
+      "À jour · à l’instant (13px)",
+      "⚙︎ (14px)",
+      "? (14px)",
+      "✦ (14px)",
+      "Animés (14px)"
+    ],
+    "tailles": {
+      "11": 6,
+      "12": 3,
+      "13": 9,
+      "14": 12,
+      "15": 4,
+      "16": 1,
+      "17": 1,
+      "22": 1,
+      "24": 2,
+      "30": 5,
+      "32": 1
+    },
+    "champs": [],
+    "zonesSecurite": false
+  },
+  "deverrouillage": {
+    "capture": "60-deverrouillage.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 9,
+    "petitesCibles": 6,
+    "exemplesCibles": [
+      "Mot de passe (358×40)",
+      "Code d'authentification (358×40)",
+      "#lien-juridique-conditions Conditions d’utilisation (119×14)",
+      "#lien-juridique-confidentialite Politique de confidentialité (139×14)",
+      "#lien-juridique-cookies Cookies et stockage local (136×14)",
+      "#lien-juridique-mentions Mentions légales (90×14)"
+    ],
+    "petitsTextes": 10,
+    "exemplesPetits": [
+      "Mot de passe et code à six chi (14px)",
+      "Mot de passe (13px)",
+      "Un mot de passe long se colle  (12px)",
+      "Code d'authentification (13px)",
+      "Les six chiffres affichés par  (12px)",
+      "Synchronisé à l’instant (12px)",
+      "Conditions d’utilisation (12px)",
+      "Politique de confidentialité (12px)"
+    ],
+    "tailles": {
+      "12": 7,
+      "13": 2,
+      "14": 1,
+      "15": 3,
+      "24": 1
+    },
+    "champs": [
+      "Mot de passe [password] : sans enterkeyhint",
+      "Code d'authentification [text] : sans enterkeyhint"
+    ],
+    "zonesSecurite": false
+  },
+  "mot-de-passe-oublie": {
+    "capture": "61-mot-de-passe-oublie.jpg",
+    "debordementPage": 0,
+    "deborde": [],
+    "interactifs": 9,
+    "petitesCibles": 7,
+    "exemplesCibles": [
+      "#champ-code-recuperation Code de récupération (358×40)",
+      "#champ-nouveau-mot-de-passe Nouveau mot de passe (358×40)",
+      "#champ-confirmation-mot-de-passe Confirmer le nouveau mot de passe (358×40)",
+      "#lien-juridique-conditions Conditions d’utilisation (119×14)",
+      "#lien-juridique-confidentialite Politique de confidentialité (139×14)",
+      "#lien-juridique-cookies Cookies et stockage local (136×14)",
+      "#lien-juridique-mentions Mentions légales (90×14)"
+    ],
+    "petitsTextes": 11,
+    "exemplesPetits": [
+      "Saisissez l’un des codes de ré (14px)",
+      "Code de récupération (13px)",
+      "Tirets, espaces et majuscules  (12px)",
+      "Nouveau mot de passe (13px)",
+      "12 caractères au minimum. (12px)",
+      "Confirmer le nouveau mot de pa (13px)",
+      "Synchronisé à l’instant (12px)",
+      "Conditions d’utilisation (12px)"
+    ],
+    "tailles": {
+      "12": 7,
+      "13": 3,
+      "14": 1,
+      "15": 2,
+      "24": 1
+    },
+    "champs": [
+      "#champ-code-recuperation Code de récupération [text] : sans enterkeyhint, sans inputmode",
+      "#champ-nouveau-mot-de-passe Nouveau mot de passe [password] : sans enterkeyhint",
+      "#champ-confirmation-mot-de-passe Confirmer le nouveau mot de passe [password] : sans enterkeyhint"
+    ],
+    "zonesSecurite": false
+  }
+}

@@ -214,7 +214,10 @@ export async function toucher(page, testId, options = {}) {
   const el = page.getByTestId(testId).first();
   await el.waitFor({ timeout: options.timeout ?? 20_000 });
   await el.scrollIntoViewIfNeeded().catch(() => undefined);
-  await el.tap({ timeout: options.timeout ?? 20_000 });
+  // Sans écran tactile (fenêtre de PC), un clic.
+  const tactile = await page.evaluate(() => 'ontouchstart' in window || navigator.maxTouchPoints > 0);
+  if (tactile) await el.tap({ timeout: options.timeout ?? 20_000 });
+  else await el.click({ timeout: options.timeout ?? 20_000 });
 }
 
 export const visible = (page, id, delai = 20_000) => page.getByTestId(id).first().waitFor({ timeout: delai }).then(() => true, () => false);
@@ -244,7 +247,7 @@ export async function premierLancement(page, { site, code, motDePasse, etape = a
   await etape('premier-lancement-secrets');
   const secret = ((await page.locator('body').innerText()).match(/\b[A-Z2-7]{16,}\b/) ?? [])[0];
   if (!secret) throw new Error('secret TOTP introuvable');
-  await page.getByRole('switch').first().tap();
+  await page.getByRole('switch').first().click();
   await toucher(page, 'bouton-continuer');
   return secret;
 }
