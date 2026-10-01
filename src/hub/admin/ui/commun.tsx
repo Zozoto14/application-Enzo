@@ -9,6 +9,7 @@ import { Pressable, StyleSheet, Switch, Text, TextInput, View, type StyleProp, t
 import type { ControleProfils } from '../../../ui/ecrans/CarteProfils';
 import type { Profil } from '../../../profils/profils';
 import { police, teinteTransparente, type ThemeHub } from '../../themes';
+import { CONTROLE, ChampMobile, TEXTE, rayonControle, useMobile, type NatureChamp } from '../../../ui/mobile';
 import type { AppHub, ServicesAdmin } from '../../types';
 import type { DonneesAdmin } from '../donnees';
 import type { EvenementAudit } from '../journal';
@@ -70,19 +71,22 @@ export function Panneau({ theme, children, style, testID }: { theme: ThemeHub; c
 }
 
 export function Intertitre({ theme, children }: { theme: ThemeHub; children: string }) {
+  const mobile = useMobile();
   return (
-    <Text style={[commun.intertitre, { color: theme.attenue, ...police(theme.policeTexte) }]} accessibilityRole="header">
+    <Text style={[commun.intertitre, mobile && { fontSize: TEXTE.legende, letterSpacing: 0.6 }, { color: theme.attenue, ...police(theme.policeTexte) }]} accessibilityRole="header">
       {children.toUpperCase()}
     </Text>
   );
 }
 
 export function Pilule({ theme, texte, couleur, testID }: { theme: ThemeHub; texte: string; couleur: string; testID?: string }) {
+  const mobile = useMobile();
   return (
     <Text
       testID={testID}
       style={[
         commun.pilule,
+        mobile && { fontSize: TEXTE.legende, paddingVertical: 3, paddingHorizontal: 10 },
         police(theme.policeChiffres),
         { color: theme.sombre ? couleur : theme.texte, borderColor: couleur, backgroundColor: teinteTransparente(couleur, 0.16), borderRadius: theme.rayonGrand ? 999 : 0 },
       ]}>
@@ -116,6 +120,16 @@ export function Champ({
   maxLength?: number;
   style?: StyleProp<ViewStyle>;
 }) {
+  const mobile = useMobile();
+  if (mobile) {
+    // Téléphone : champ de 48 px, texte de 17 px, bon clavier (voir ui/mobile/ChampMobile).
+    const nature: NatureChamp = secret ? 'motDePasse' : multiligne ? 'multiligne' : clavier === 'number-pad' ? 'nombre' : 'texte';
+    return (
+      <View style={style}>
+        <ChampMobile theme={theme} etiquette={libelle} value={valeur} onChangeText={onChanger} nature={nature} placeholder={placeholder} maxLength={maxLength} testID={testID} />
+      </View>
+    );
+  }
   return (
     <View style={[{ gap: 4 }, style]}>
       <Text style={{ color: theme.texte, fontWeight: '600', fontSize: 13, ...police(theme.policeTexte) }}>{libelle}</Text>
@@ -158,6 +172,39 @@ export function Segments<T extends string>({
   testID: string;
 }) {
   const rayon = Math.min(theme.rayonMoyen, 10);
+  const mobile = useMobile();
+  if (mobile) {
+    // Téléphone : puces de 44 px qui passent à la ligne (jamais de défilement horizontal).
+    return (
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} accessibilityRole="radiogroup" accessibilityLabel={libelle}>
+        {options.map(([cle, texte]) => {
+          const actif = cle === valeur;
+          return (
+            <Pressable
+              key={cle}
+              testID={`${testID}-${cle}`}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: actif }}
+              accessibilityLabel={`${libelle} : ${texte}`}
+              onPress={() => onChoisir(cle)}
+              style={{
+                minHeight: CONTROLE.cible,
+                minWidth: CONTROLE.cible,
+                paddingHorizontal: 14,
+                justifyContent: 'center',
+                alignItems: 'center',
+                borderWidth: 1,
+                borderColor: actif ? theme.accent : theme.ligne,
+                backgroundColor: actif ? theme.accent : theme.surface,
+                borderRadius: rayonControle(theme) === 999 ? 22 : rayonControle(theme),
+              }}>
+              <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: TEXTE.legende, ...police(theme.policeTexte) }}>{texte}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
+  }
   return (
     <View style={[commun.segments, { borderColor: theme.ligne, borderRadius: rayon }]} accessibilityRole="radiogroup" accessibilityLabel={libelle}>
       {options.map(([cle, texte]) => {
@@ -208,6 +255,23 @@ export function Interrupteur({
 
 /** Case à cocher accessible (sélection multiple). */
 export function Case({ theme, coche, libelle, onChanger, testID }: { theme: ThemeHub; coche: boolean; libelle: string; onChanger(v: boolean): void; testID?: string }) {
+  const mobile = useMobile();
+  if (mobile) {
+    // Téléphone : zone tactile de 44 px autour d'une case de 28 px.
+    return (
+      <Pressable
+        testID={testID}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: coche }}
+        accessibilityLabel={libelle}
+        onPress={() => onChanger(!coche)}
+        style={{ width: CONTROLE.cible, height: CONTROLE.cible, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: 28, height: 28, borderWidth: 2, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderColor: coche ? theme.teintes.admin : theme.attenue, backgroundColor: coche ? theme.teintes.admin : 'transparent' }}>
+          <Text style={{ color: theme.surAccent, fontSize: 16, fontWeight: '800' }}>{coche ? '✓' : ''}</Text>
+        </View>
+      </Pressable>
+    );
+  }
   return (
     <Pressable
       testID={testID}
@@ -223,12 +287,13 @@ export function Case({ theme, coche, libelle, onChanger, testID }: { theme: Them
 }
 
 export function Avis({ theme, texte, genre, testID }: { theme: ThemeHub; texte: string; genre: 'ok' | 'alerte' | 'critique' | 'info'; testID?: string }) {
+  const mobile = useMobile();
   const couleur = genre === 'ok' ? theme.ok : genre === 'alerte' ? theme.alerte : genre === 'critique' ? theme.critique : theme.accent;
   return (
     <Text
       testID={testID}
       accessibilityLiveRegion="polite"
-      style={[commun.avis, { color: theme.texte, borderLeftColor: couleur, backgroundColor: teinteTransparente(couleur, 0.14), ...police(theme.policeTexte) }]}>
+      style={[commun.avis, mobile && { fontSize: TEXTE.legende, lineHeight: 22, padding: 12 }, { color: theme.texte, borderLeftColor: couleur, backgroundColor: teinteTransparente(couleur, 0.14), ...police(theme.policeTexte) }]}>
       {texte}
     </Text>
   );

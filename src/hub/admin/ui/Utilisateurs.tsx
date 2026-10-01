@@ -27,18 +27,18 @@ import {
   reactiverPar,
   renommerProfilPar,
   suspendrePar,
-  verifierSur,
 } from '../actions';
 import { LIBELLES_STATUT, filtrerComptes, niveauProfil, niveauxProfil, recapitulatif, statutCompte, versAutorisations, type StatutCompte, type TriComptes } from '../comptes';
 import { LONGUEUR_MAX_NOTE } from '../donnees';
 import { CE_QUE_NE_PERMET_PAS, CE_QUE_PERMET, LIBELLES_RANG, NIVEAU_RANG, RANGS, autorise, rangDe, rangsAttribuables, type Rang } from '../roles';
 import { LIBELLES_NIVEAU, MODELES, modeleCorrespondant, niveauxDe, niveauxDuModele, type IdModele, type Niveaux } from '../niveaux';
 import { etatApp } from '../politique';
+import { creerActionsCompte } from './actionsCompte';
 import { Avis, BoutonHub, Case, Champ, Intertitre, Panneau, Pilule, Segments, commun, dansJours, dateLisible, relatif, styleTitre, type OutilsAdmin } from './commun';
 
 type Filtre = StatutCompte | 'tous';
 
-function couleurStatut(theme: ThemeHub, statut: StatutCompte): string {
+export function couleurStatut(theme: ThemeHub, statut: StatutCompte): string {
   switch (statut) {
     case 'admin':
       return theme.teintes.admin;
@@ -54,7 +54,7 @@ function couleurStatut(theme: ThemeHub, statut: StatutCompte): string {
   }
 }
 
-const LIBELLES_SEQUESTRE: Record<NonNullable<Profil['sequestre']>, string> = {
+export const LIBELLES_SEQUESTRE: Record<NonNullable<Profil['sequestre']>, string> = {
   actif: 'Accès possible avec VOTRE code d’accès (chaque titulaire a le sien)',
   depose: 'Dépôt reçu : il sera converti à votre prochaine ouverture de l’Administration',
   attendu: 'Pas encore de séquestre pour vous : créé à la prochaine connexion du compte, ou re-scellé par un Fondateur',
@@ -63,7 +63,7 @@ const LIBELLES_SEQUESTRE: Record<NonNullable<Profil['sequestre']>, string> = {
 };
 
 /** Couleur d'un rang (badge). */
-function couleurRang(theme: ThemeHub, rang: Rang): string {
+export function couleurRang(theme: ThemeHub, rang: Rang): string {
   return rang === 'fondateur' ? theme.critique : rang === 'administrateur' ? theme.teintes.admin : rang === 'gestionnaire' ? theme.accent : theme.attenue;
 }
 
@@ -374,89 +374,15 @@ function Fiche({
     outils.modifierProfils(liste => definirNiveauxPar(outils.acteur, liste, profil.id, registre, suivants), [{ type: 'permissions', ...cibleJournal, action: libelle }]);
   const modele = modeleCorrespondant(apps, niveaux);
 
-  const regenerer = () =>
-    outils.exigerIdentite(`Régénérer les identifiants de ${profil.nom}`, () =>
-      outils.agir('Génération des identifiants…', async () => {
-        verifierSur(outils.acteur, 'regenerer-identifiants', outils.tous, profil.id);
-        const valeurs = await controle.onRegenerer!(profil.id);
-        outils.journaliser({ type: 'identifiants', ...cibleJournal, action: `Identifiants régénérés pour ${profil.nom} (nouveau séquestre, nouveau code d’accès)` });
-        onIdentifiants(profil.nom, valeurs);
-        return `Nouveaux identifiants de ${profil.nom} générés : l’ancien portefeuille a été effacé.`;
-      }),
-    );
-  const supprimer = () =>
-    outils.exigerIdentite(`Supprimer le compte de ${profil.nom}`, () =>
-      outils.agir('Suppression…', async () => {
-        verifierSur(outils.acteur, 'supprimer-ami', outils.tous, profil.id);
-        await controle.onSupprimer(profil.id);
-        outils.majDonnees(d => avecNotePar(outils.acteur, d, outils.tous, profil.id, ''));
-        outils.journaliser({ type: 'compte', ...cibleJournal, action: `Compte de ${profil.nom} supprimé (coffre et portefeuille effacés)` });
-        onSupprime();
-        return `Compte « ${profil.nom} » supprimé.`;
-      }),
-    );
-
-  const afficherCode = () =>
-    outils.exigerIdentite(`Afficher le code d’accès administrateur de ${profil.nom}`, () =>
-      outils.agir('Lecture du code…', async () => {
-        verifierSur(outils.acteur, 'acces-sequestre', outils.tous, profil.id);
-        const lu = await controle.onCodeAcces?.(profil.id);
-        setCode(lu);
-        outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Code d’accès administrateur de ${profil.nom} affiché` });
-        return lu ? undefined : 'Aucun code : le séquestre de ce compte n’existe pas encore.';
-      }),
-    );
-  const envoyerCodeSite = () =>
-    outils.exigerIdentite(`Code de connexion au site pour ${profil.nom}`, () =>
-      outils.agir('Préparation du code…', async () => {
-        verifierSur(outils.acteur, 'regenerer-identifiants', outils.tous, profil.id);
-        const valeurs = await controle.onCodeSite!(profil.id);
-        setCodeSite(valeurs);
-        outils.journaliser({ type: 'identifiants', ...cibleJournal, action: `Code de connexion au site préparé pour ${profil.nom}` });
-        return `Code de ${profil.nom} prêt : son compte est publié sur le relais d’ici une minute.`;
-      }),
-    );
-  const regenererCode = () =>
-    outils.exigerIdentite(`Régénérer le code d’accès de ${profil.nom}`, () =>
-      outils.agir('Nouveau code…', async () => {
-        verifierSur(outils.acteur, 'acces-sequestre', outils.tous, profil.id);
-        const nouveau = await controle.onRegenererCode!(profil.id);
-        setCode({ code: nouveau, creeLe: new Date(outils.maintenant()).toISOString() });
-        outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Code d’accès administrateur de ${profil.nom} régénéré (l’ancien ne fonctionne plus)` });
-        return 'Nouveau code généré : l’ancien ne fonctionne plus.';
-      }),
-    );
-  const revoquer = () =>
-    outils.exigerIdentite(`Révoquer l’accès administrateur au compte de ${profil.nom}`, () =>
-      outils.agir('Révocation…', async () => {
-        verifierSur(outils.acteur, 'acces-sequestre', outils.tous, profil.id);
-        await controle.onRevoquerAcces!(profil.id);
-        setCode(undefined);
-        outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Accès administrateur au compte de ${profil.nom} révoqué` });
-        return 'Accès administrateur révoqué : le code et l’enveloppe de séquestre sont effacés.';
-      }),
-    );
-  const retablir = () =>
-    outils.agir('Enregistrement…', async () => {
-      verifierSur(outils.acteur, 'acces-sequestre', outils.tous, profil.id);
-      await controle.onRetablirAcces!(profil.id);
-      outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Accès administrateur au compte de ${profil.nom} rétabli (séquestre attendu à sa prochaine connexion)` });
-      return 'Le séquestre sera recréé à la prochaine connexion de l’ami.';
-    });
-  const ouvrirCompte = () =>
-    outils.exigerIdentite(`Ouvrir le compte de ${profil.nom}`, () =>
-      outils.agir(`Ouverture du compte de ${profil.nom}…`, async () => {
-        // Inscrit AVANT de quitter la session : le journal vit dans la base de l'administrateur.
-        outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Ouverture du compte de ${profil.nom} par ${outils.acteur.nom} (${LIBELLES_RANG[outils.role]}, code d’accès)` });
-        try {
-          verifierSur(outils.acteur, 'ouvrir-compte', outils.tous, profil.id);
-          await controle.onOuvrirCompte!(profil.id, codeSaisi);
-        } catch (erreur) {
-          outils.journaliser({ type: 'acces-admin', ...cibleJournal, action: `Échec de l’ouverture du compte de ${profil.nom} : ${erreur instanceof Error ? erreur.message : 'erreur'}` });
-          throw erreur;
-        }
-      }),
-    );
+  const { regenerer, supprimer, afficherCode, envoyerCodeSite, regenererCode, revoquer, retablir, ouvrirCompte } = creerActionsCompte({
+    outils,
+    profil,
+    onIdentifiants,
+    onSupprime,
+    setCode,
+    setCodeSite,
+    codeSaisi,
+  });
 
   return (
     <Panneau theme={theme} testID="admin-detail">

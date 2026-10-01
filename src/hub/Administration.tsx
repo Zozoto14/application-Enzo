@@ -38,6 +38,8 @@ import { Utilisateurs } from './admin/ui/Utilisateurs';
 import { police, teinteTransparente, type ThemeHub } from './themes';
 import type { PropsRacineApp } from './types';
 import { ecouterActivite } from './web';
+import { AdministrationMobile } from './AdministrationMobile';
+import { BoutonPrincipal, ChampMobile, EcranMobile, EnTeteMobile, useMobile } from '../ui/mobile';
 
 /** Sections par rang : un gestionnaire n'a ni applications globales, ni sécurité, ni réglages ; un administrateur, pas les apps globales. */
 const SECTIONS_PAR_RANG: Record<Rang, readonly IdSection[]> = {
@@ -83,11 +85,14 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
   const sectionsPermises = SECTIONS_PAR_RANG[role].filter(id => id !== 'applications' || acteur?.admin || Boolean(controle?.onPolitique));
   const { width } = useWindowDimensions();
   const large = width >= 900;
+  const mobile = useMobile();
   const maintenant = useCallback(() => contexte.maintenant ?? Date.now(), [contexte.maintenant]);
-  const [section, setSection] = useState<IdSection>(() => {
+  // Téléphone : `undefined` = la liste des sections (accueil) ; bureau : le tableau de bord par défaut.
+  const [section, setSection] = useState<IdSection | undefined>(() => {
     const demandee = consommerSectionAdmin();
-    return demandee && SECTIONS_PAR_RANG[role].includes(demandee) ? demandee : 'tableau';
+    return demandee && SECTIONS_PAR_RANG[role].includes(demandee) ? demandee : mobile ? undefined : 'tableau';
   });
+  const sectionBureau: IdSection = section ?? 'tableau';
   const [cible, setCible] = useState<string | undefined>();
   const [enCours, setEnCours] = useState<string | undefined>();
   const [erreur, setErreur] = useState<string | undefined>();
@@ -177,6 +182,15 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
   // l'écran refuse aussi de s'afficher pour lui (et pour une session administrateur
   // ouverte sur le compte d'un ami).
   if (!controle || !acteur || controle.sessionAdmin || !autorise(acteur, 'voir-tableau').ok || (estGestionnaire && !controle.gestion)) {
+    if (mobile) {
+      return (
+        <View style={[styles.racine, { backgroundColor: theme.fond }]}>
+          <EcranMobile theme={theme} onRetour={onRetour} entete={<EnTeteMobile theme={theme} titre="Administration" onRetour={onRetour} libelleRetour="Accueil" testIDRetour="retour-hub" />}>
+            <Text style={[styleTitre(theme), { fontSize: 24 }]}>Réservé aux fondateurs, administrateurs et gestionnaires</Text>
+          </EcranMobile>
+        </View>
+      );
+    }
     return (
       <View style={[styles.racine, { backgroundColor: theme.fond, padding: 24 }]}>
         <RetourHub theme={theme} onRetour={onRetour} titre="Administration" />
@@ -263,6 +277,22 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
       suite();
     });
 
+  if (verrou.verrouille && mobile) {
+    return (
+      <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="admin-verrouille">
+        <EcranMobile
+          theme={theme}
+          onRetour={onRetour}
+          entete={<EnTeteMobile theme={theme} titre="Administration" onRetour={onRetour} libelleRetour="Accueil" testIDRetour="retour-hub" />}
+          centre>
+          <Text style={[styleTitre(theme), { fontSize: 28 }]}>🔒 Panneau verrouillé</Text>
+          <Text style={[attenue, { fontSize: 17, lineHeight: 24 }]}>Aucune activité depuis un moment : confirmez votre identité pour continuer.</Text>
+          {erreur ? <Avis theme={theme} genre="critique" texte={erreur} testID="admin-erreur" /> : null}
+          <FormulaireIdentite theme={theme} raison="Déverrouiller le panneau d’administration" enCours={Boolean(enCours)} onValider={(m, c) => verifier(m, c, 'déverrouillage du panneau', () => undefined)} />
+        </EcranMobile>
+      </View>
+    );
+  }
   if (verrou.verrouille) {
     return (
       <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="admin-verrouille">
@@ -273,6 +303,48 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
           {erreur ? <Avis theme={theme} genre="critique" texte={erreur} testID="admin-erreur" /> : null}
           <FormulaireIdentite theme={theme} raison="Déverrouiller le panneau d’administration" enCours={Boolean(enCours)} onValider={(m, c) => verifier(m, c, 'déverrouillage du panneau', () => undefined)} />
         </ScrollView>
+      </View>
+    );
+  }
+
+  if (mobile) {
+    return (
+      <View style={styles.racine} onTouchStart={activite}>
+        <AdministrationMobile
+          theme={theme}
+          outils={outils}
+          sectionsPermises={sectionsPermises}
+          section={section}
+          cible={cible}
+          estGestionnaire={estGestionnaire}
+          enCours={enCours}
+          erreur={erreur}
+          avis={avis}
+          demande={demande}
+          onRetourHub={onRetour}
+          onOuvrirSection={id => {
+            setSection(id);
+            setCible(undefined);
+            setErreur(undefined);
+            setAvis(undefined);
+          }}
+          onRetourSection={() => {
+            setSection(undefined);
+            setCible(undefined);
+            setErreur(undefined);
+            setAvis(undefined);
+          }}
+          onFermerMessages={() => {
+            setErreur(undefined);
+            setAvis(undefined);
+          }}
+          onAnnulerDemande={() => setDemande(undefined)}
+          onValiderIdentite={verifier}
+          onVerrouiller={() => {
+            setVerrou(v => verrouiller(v));
+            journaliser({ type: 'securite', action: 'Panneau verrouillé à la main' });
+          }}
+        />
       </View>
     );
   }
@@ -318,7 +390,7 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
 
         <View style={styles.onglets} accessibilityRole="tablist">
           {SECTIONS.filter(([id]) => sectionsPermises.includes(id)).map(([id, icone, libelle]) => {
-            const actif = section === id;
+            const actif = sectionBureau === id;
             return (
               <Pressable
                 key={id}
@@ -362,11 +434,11 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
         ) : null}
 
         <View style={{ marginTop: 12 }}>
-          {section === 'tableau' ? <Tableau outils={outils} /> : null}
-          {section === 'utilisateurs' ? <Utilisateurs key={cible ?? 'liste'} outils={outils} cible={cible} /> : null}
-          {section === 'applications' && sectionsPermises.includes('applications') ? <Applications outils={outils} /> : null}
-          {section === 'abonnements' && sectionsPermises.includes('abonnements') ? <Abonnements outils={outils} /> : null}
-          {section === 'securite' && sectionsPermises.includes('securite') ? (
+          {sectionBureau === 'tableau' ? <Tableau outils={outils} /> : null}
+          {sectionBureau === 'utilisateurs' ? <Utilisateurs key={cible ?? 'liste'} outils={outils} cible={cible} /> : null}
+          {sectionBureau === 'applications' && sectionsPermises.includes('applications') ? <Applications outils={outils} /> : null}
+          {sectionBureau === 'abonnements' && sectionsPermises.includes('abonnements') ? <Abonnements outils={outils} /> : null}
+          {sectionBureau === 'securite' && sectionsPermises.includes('securite') ? (
             <Securite
               outils={outils}
               onVerrouiller={() => {
@@ -375,8 +447,8 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
               }}
             />
           ) : null}
-          {section === 'journal' ? <Journal outils={outils} /> : null}
-          {section === 'reglages' && sectionsPermises.includes('reglages') ? <Reglages outils={outils} /> : null}
+          {sectionBureau === 'journal' ? <Journal outils={outils} /> : null}
+          {sectionBureau === 'reglages' && sectionsPermises.includes('reglages') ? <Reglages outils={outils} /> : null}
         </View>
         <Text style={[texte, { fontSize: 12, marginTop: 24, color: theme.attenue }]}>
           Aucun secret n’est conservé ni journalisé : mots de passe, clés et codes de récupération ne s’affichent qu’une fois.
@@ -402,6 +474,24 @@ export function FormulaireIdentite({
 }) {
   const [motDePasse, setMotDePasse] = useState('');
   const [code, setCode] = useState('');
+  const mobile = useMobile();
+  if (mobile) {
+    // Téléphone (panneau verrouillé) : champs de 48 px, bons claviers, action principale pleine largeur.
+    const valider = () => {
+      if (!motDePasse || code.length !== 6 || enCours) return;
+      onValider(motDePasse, code);
+      setMotDePasse('');
+      setCode('');
+    };
+    return (
+      <View style={{ gap: 16 }} testID="admin-identite">
+        <ChampMobile theme={theme} etiquette="Mot de passe" nature="motDePasse" value={motDePasse} onChangeText={setMotDePasse} testID="admin-identite-mdp" />
+        <ChampMobile theme={theme} etiquette="Code à 6 chiffres" nature="codeTotp" value={code} onChangeText={v => setCode(v.replace(/[^\d]/g, ''))} onSubmitEditing={valider} testID="admin-identite-code" />
+        <BoutonPrincipal theme={theme} titre={enCours ? 'Vérification…' : 'Confirmer'} enCours={enCours} desactive={!motDePasse || code.length !== 6} onPress={valider} testID="admin-identite-valider" />
+        {onAnnuler ? <BoutonPrincipal theme={theme} variante="discret" titre="Annuler" onPress={onAnnuler} testID="admin-identite-annuler" /> : null}
+      </View>
+    );
+  }
   return (
     <Panneau theme={theme} testID="admin-identite" style={{ borderColor: theme.teintes.admin, backgroundColor: teinteTransparente(theme.teintes.admin, 0.06), marginVertical: 8 }}>
       <Text style={[styleTitre(theme), { fontSize: 18 }]}>Vérification d’identité</Text>
