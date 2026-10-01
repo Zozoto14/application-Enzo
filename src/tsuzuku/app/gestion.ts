@@ -24,6 +24,7 @@
  */
 
 import type { Rang } from '../../hub/admin/roles';
+import { erreursSelecteurs } from '../moteur/assistant';
 import { echec } from '../moteur/erreurs';
 import { importerSources, supporteAnimes, supporteFilms, type DefinitionSource, type Langue } from '../moteur/sources';
 
@@ -260,4 +261,110 @@ export function masquerCle(cle: string): string {
   const c = cle.trim();
   if (!c) return '';
   return c.length >= 16 ? `••••••••${c.slice(-4)}` : '••••••••';
+}
+
+// ------------------------------------------------------------------ Comptes bénéficiaires
+
+/** Ce qu'il faut savoir d'un profil pour lui partager une source. */
+export interface ProfilPartage {
+  id: string;
+  nom: string;
+  actif?: boolean;
+  apps?: readonly string[];
+}
+
+/** Comptes à qui une source peut être partagée : actifs, autorisés à Tsuzuku, autres que le compte historique. */
+export function comptesPourPartage(tous: readonly ProfilPartage[] | undefined): Array<{ id: string; nom: string }> {
+  return (tous ?? []).filter(p => p.id !== ID_PRINCIPAL && p.actif !== false && (p.apps ?? []).includes('tsuzuku')).map(p => ({ id: p.id, nom: p.nom }));
+}
+
+/**
+ * « Qui reçoit quoi » : pour chaque compte, les sources (activées) qui lui
+ * sont partagées. Les comptes donnés sont déjà les bénéficiaires possibles.
+ */
+export function quiRecoitQuoi(sources: readonly DefinitionSource[], partages: Partages, comptes: ReadonlyArray<{ id: string; nom: string }>): Array<{ id: string; nom: string; sources: string[] }> {
+  return comptes.map(c => ({
+    id: c.id,
+    nom: c.nom,
+    sources: sources
+      .filter(s => s.enabled)
+      .filter(s => {
+        const p = partageDe(partages, s.id);
+        return p.mode === 'tous' || (p.mode === 'selection' && p.comptes.includes(c.id));
+      })
+      .map(s => s.name),
+  }));
+}
+
+// ------------------------------------------------------------------ Dernier test de chaque source
+
+export interface ResultatTestSource {
+  ok: boolean;
+  /** Date ISO du test. */
+  date: string;
+  detail: string;
+}
+
+export type TestsSources = Record<string, ResultatTestSource>;
+
+export function lireTests(texte: string | null | undefined): TestsSources {
+  const brut = json(texte);
+  if (!brut || typeof brut !== 'object' || Array.isArray(brut)) return {};
+  const sortie: TestsSources = {};
+  for (const [id, v] of Object.entries(brut as Record<string, unknown>).slice(0, MAX_SOURCES)) {
+    const r = v as { ok?: unknown; date?: unknown; detail?: unknown } | null;
+    if (!r || id.length > 100 || typeof r.ok !== 'boolean') continue;
+    sortie[id] = { ok: r.ok, date: typeof r.date === 'string' ? r.date.slice(0, 40) : '', detail: typeof r.detail === 'string' ? r.detail.slice(0, 300) : '' };
+  }
+  return sortie;
+}
+
+export const ecrireTests = (t: TestsSources): string => JSON.stringify(lireTests(JSON.stringify(t)));
+
+// ------------------------------------------------------------------ Export / import manuel (sauvegarde, autre appareil)
+
+export const FORMAT_EXPORT_SOURCES = 'tsuzuku-sources';
+
+/**
+ * Fichier d'export des sources : leurs définitions SEULES. Jamais de clé
+ * d'API (elles n'y sont pas), ni de partage (qui dépend des comptes de cet
+ * appareil), ni d'en-tête « userAgent » propre à l'appareil.
+ */
+export function exporterSources(sources: readonly DefinitionSource[], date: string): string {
+  const propres = sources.map(s => {
+    const copie = JSON.parse(JSON.stringify(s)) as DefinitionSource & Record<string, unknown>;
+    delete copie.userAgent;
+    for (const cle of Object.keys(copie)) {
+      if (/cle|key|token|secret|tmdb/i.test(cle)) delete copie[cle];
+    }
+    return copie;
+  });
+  return JSON.stringify({ format: FORMAT_EXPORT_SOURCES, v: 1, date, sources: propres }, null, 2);
+}
+
+export interface ImportSources {
+  sources: DefinitionSource[];
+  /** Entrées refusées (adresse non publique, sélecteur invalide, illisible). */
+  ecartees: number;
+  /** Sources déjà présentes (même identifiant), non dupliquées. */
+  doublons: number;
+}
+
+/**
+ * Lit un export (ou un ancien `sources.json`, ou un tableau) : chaque source
+ * passe le schéma du moteur (adresse publique) et la compilation de ses
+ * sélecteurs ; les doublons (même identifiant qu'une existante) sont ignorés.
+ */
+export function importerExportSources(texte: string, existantes: readonly DefinitionSource[]): ImportSources {
+  let brut: unknown;
+  try {
+    brut = JSON.parse(String(texte ?? '').trim());
+  } catch {
+    throw echec('Fichier illisible : ce n’est pas un JSON de sources.', 'configuration', 400);
+  }
+  const { sources, ecartees } = importerSources(brut);
+  const valides = sources.filter(s => erreursSelecteurs(s).length === 0);
+  const ids = new Set(existantes.map(s => s.id));
+  const nouvelles = valides.filter(s => !ids.has(s.id));
+  return { sources: nouvelles, ecartees: ecartees + (sources.length - valides.length), doublons: valides.length - nouvelles.length };
 }

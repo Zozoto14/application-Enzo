@@ -33,6 +33,8 @@ export const CLES = {
   choixSources: 'tsuzuku.sources.choix',
   /** Paire X25519 de réception des sources partagées (clé privée : jamais hors de la base). */
   reception: 'tsuzuku.reception',
+  /** Résultat du dernier test de chaque source (Fondateur) : OK/KO, date, détail. */
+  testsSources: 'tsuzuku.sources.tests',
   /** Clés d'API et options avancées du moteur (Fondateur). */
   avance: 'tsuzuku.avance',
   /** Réglages de confort (doublage, épisode suivant, déjà vus). */

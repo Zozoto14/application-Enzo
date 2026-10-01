@@ -19,18 +19,22 @@ import { CLES } from '../plateforme/stockage';
 import {
   ecrireAvances,
   ecrirePartages,
+  ecrireTests,
   exigerGestionSources,
   lireAvances,
   lireChoix,
   lireListeSources,
   lirePartages,
   lireRecues,
+  lireTests,
   nettoyerPartages,
   peutGererSources,
   sourcesUtilisables,
   vueSourcesPartagees,
   type Partages,
   type ReglagesAvances,
+  type ResultatTestSource,
+  type TestsSources,
   type VueSourcePartagee,
 } from './gestion';
 import { ecrireReglages, lireReglages, type ReglagesTsuzuku } from './reglages';
@@ -63,6 +67,9 @@ export interface ServicesTsuzuku {
   sourcesPartagees(): Promise<VueSourcePartagee[]>;
   /** Active ou désactive une source partagée pour ce profil SEULEMENT. */
   choisirSourcePartagee(id: string, actif: boolean): Promise<void>;
+  /** Dernier test de chaque source (rangs habilités ; vide pour les autres). */
+  derniersTests(): Promise<TestsSources>;
+  enregistrerTest(id: string, r: ResultatTestSource): Promise<void>;
   /** Clés d'API et options avancées (rangs habilités). */
   reglagesAvances(): Promise<ReglagesAvances>;
   enregistrerReglagesAvances(a: ReglagesAvances): Promise<void>;
@@ -138,6 +145,15 @@ export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: anci
       const r = await recues();
       if (!r.sources.some(s => s.id === id)) return;
       await stockage.ecrire(CLES.choixSources, JSON.stringify({ ...(await choixPerso()), [id]: actif }));
+    },
+    async derniersTests() {
+      return habilite ? lireTests(await stockage.lire(CLES.testsSources)) : {};
+    },
+    async enregistrerTest(id, r) {
+      exigerGestionSources(rang, 'Les tests de sources');
+      const ids = new Set((await propres()).map(x => x.id));
+      const tests = Object.fromEntries(Object.entries(lireTests(await stockage.lire(CLES.testsSources))).filter(([cle]) => ids.has(cle)));
+      await stockage.ecrire(CLES.testsSources, ecrireTests({ ...tests, [id]: r }));
     },
     async reglagesAvances() {
       exigerGestionSources(rang, 'Les réglages techniques');

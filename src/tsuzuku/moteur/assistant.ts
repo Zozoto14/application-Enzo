@@ -21,7 +21,9 @@
 import { echec, messageDe } from './erreurs';
 import { lirePage, sembleRenduEnJs, texteCompact, type Page } from './lecteurPage';
 import type { ClientSur } from './reseau';
-import { normaliserSource, supporteAnimes, supporteFilms, type DefinitionSource, type OptionsNormalisation } from './sources';
+import { verifierUrlPubliqueSync } from './garde';
+import { chercherSur, diagnostiquerRecherche, lecteursSur, lireEpisodes, type ContexteResolution } from './resolution';
+import { normaliserSource, supporteAnimes, supporteFilms, vueFilm, type DefinitionSource, type OptionsNormalisation } from './sources';
 
 /** Taille maximale d'une page analysée (plus petite que celle d'une lecture). */
 export const TAILLE_MAX_ANALYSE = 2 * 1024 * 1024;
@@ -206,27 +208,72 @@ function lignesResume(r: ResumeStructure): string[] {
   return l;
 }
 
+/** Ce que la source doit couvrir (choix de l'étape 1 de l'assistant). */
+export type CibleSource = 'animes' | 'films' | 'les-deux';
+export const LIBELLE_CIBLE: Record<CibleSource, string> = { animes: 'Animés', films: 'Films', 'les-deux': 'Les deux' };
+
+export interface OptionsPrompt {
+  /** Ce que la source doit couvrir (défaut : les deux). */
+  cible?: CibleSource;
+}
+
+/** Exemple COMPLET de réponse attendue (site fictif neutre), joint au prompt. */
+export const EXEMPLE_SOURCE = `{
+  "name": "Médiathèque exemple",
+  "baseUrl": "https://mediatheque-exemple.fr",
+  "language": "vostfr",
+  "timeout": 15000,
+  "search": { "path": "/recherche?q={query}", "pathVf": "", "pathVostfr": "", "item": "ul.resultats li", "title": "a.titre", "link": "a.titre", "image": "img", "imageAttr": "src", "year": "" },
+  "episodes": { "item": "ol.episodes li", "number": ".num", "title": ".nom", "link": "a" },
+  "player": { "iframe": "div.lecteur iframe", "attr": "src", "label": "Lecteur", "options": "", "optionAttr": "value", "optionLabel": "" },
+  "movies": {
+    "search": { "path": "/films?q={query}", "pathVf": "", "pathVostfr": "", "item": "div.film", "title": "h3", "link": "a", "image": "img", "imageAttr": "data-src", "year": ".annee" },
+    "player": { "iframe": "iframe.film", "attr": "src", "label": "Lecteur", "options": "", "optionAttr": "value", "optionLabel": "" }
+  }
+}`;
+
+const CONSIGNE_CIBLE: Record<CibleSource, string> = {
+  animes: 'La source sert aux ANIMÉS (recherche → liste d’épisodes → lecteur) : remplis search, episodes et player ; laisse movies vide ("").',
+  films: 'La source sert aux FILMS (recherche → page du film → lecteur) : remplis movies.search et movies.player ; laisse search, episodes et player vides ("").',
+  'les-deux': 'La source sert aux ANIMÉS (recherche → liste d’épisodes → lecteur) ET aux FILMS (recherche → page du film → lecteur) : remplis toutes les parties que le site propose.',
+};
+
+const REGLES_QUALITE = [
+  'Règles de qualité :',
+  '1. Sélecteurs CSS ROBUSTES : classes ou attributs stables et parlants ; évite les classes générées (suites aléatoires), les :nth-child et les chemins trop longs.',
+  '2. title, link, image, number et year sont RELATIFS à item ; « & » désigne item lui-même.',
+  '3. Les chemins de recherche commencent par « / » et contiennent {query} ; déduis-les du formulaire de recherche (action + nom du champ).',
+  '4. Vérifie chaque sélecteur sur AU MOINS 2 exemples (deux résultats, deux épisodes, deux lecteurs…) avant de répondre.',
+  '5. N’invente rien : une partie que tu ne vois pas (page d’épisode, lecteur, films) reste vide ("").',
+  '6. language : « vf », « vostfr » ou « indifferent » selon le doublage principal du site (VF = version française, VOSTFR = version originale sous-titrée).',
+  '7. Ne renvoie QUE le JSON, dans un bloc ```json, sans commentaire ni texte autour (les // du format ci-dessus sont des explications, pas à recopier).',
+];
+
+function enTetePrompt(cible: CibleSource): string[] {
+  return [
+    'Tu aides à configurer une source pour Tsuzuku, un lecteur qui lit des pages web par sélecteurs CSS (sans exécuter de JavaScript).',
+    CONSIGNE_CIBLE[cible],
+    '',
+    'Propose UNE définition de source complète, au format JSON ci-dessous (TOUS les paramètres ; mets "" pour une partie que le site n’a pas) :',
+    '',
+    FORMAT_SOURCE,
+    '',
+    'Exemple de réponse attendue (site fictif) :',
+    '```json',
+    EXEMPLE_SOURCE,
+    '```',
+    '',
+    ...REGLES_QUALITE,
+  ];
+}
+
 /**
  * Texte prêt à copier vers une IA : elle doit renvoyer UN objet JSON au format
  * de source du moteur, en s'appuyant sur le résumé et l'extrait joints.
  */
-export function genererPrompt(resume: ResumeStructure, extrait: string): string {
+export function genererPrompt(resume: ResumeStructure, extrait: string, options: OptionsPrompt = {}): string {
   return [
-    'Tu aides à configurer une source pour Tsuzuku, un lecteur qui lit des pages web par sélecteurs CSS.',
-    'La source peut servir aux ANIMÉS (recherche → liste d’épisodes → lecteur), aux FILMS (recherche → page du film → lecteur), ou aux deux.',
-    '',
-    'Propose UNE définition de source complète, au format JSON ci-dessous (tous les paramètres ; mets "" pour une partie que le site n’a pas) :',
-    '',
-    FORMAT_SOURCE,
-    '',
-    'Règles de qualité :',
-    '1. Sélecteurs CSS ROBUSTES : classes ou attributs stables et parlants ; évite les classes générées (suites aléatoires), les :nth-child et les chemins trop longs.',
-    '2. title, link, image, number et year sont RELATIFS à item ; « & » désigne item lui-même.',
-    '3. Les chemins de recherche commencent par « / » et contiennent {query} ; déduis-les du formulaire de recherche (action + nom du champ).',
-    '4. Vérifie chaque sélecteur sur AU MOINS 2 exemples de l’extrait (deux résultats, deux épisodes…) et indique-les brièvement après le JSON.',
-    '5. N’invente rien : si une partie n’apparaît pas dans l’extrait (page d’épisode, lecteur, films), laisse ses champs vides et dis quelle page me demander pour la compléter.',
-    '6. language : « vf », « vostfr » ou « indifferent » selon ce que la page montre.',
-    '7. Réponds d’abord par le JSON seul, dans un bloc ```json, sans commentaires à l’intérieur.',
+    ...enTetePrompt(options.cible ?? 'les-deux'),
     '',
     'Résumé de la structure de la page :',
     ...lignesResume(resume),
@@ -236,6 +283,65 @@ export function genererPrompt(resume: ResumeStructure, extrait: string): string 
     extrait,
     '```',
   ].join('\n');
+}
+
+/**
+ * Prompt SANS extrait (site web : les pages tierces ne peuvent pas être lues
+ * à cause du CORS, ou analyse impossible) : l'IA consulte elle-même le site.
+ */
+export function genererPromptSansExtrait(adresse: string, options: OptionsPrompt = {}): string {
+  return [
+    ...enTetePrompt(options.cible ?? 'les-deux'),
+    '',
+    `Adresse du site : ${String(adresse ?? '').trim() || '(non précisée)'}`,
+    'Je n’ai pas pu joindre le code de la page : analyse toi-même le site à cette adresse (page de recherche, page d’une série ou d’un film, page d’un épisode).',
+    'Si tu ne peux pas consulter le site, dis-le et demande-moi de coller le code HTML de la page de recherche plutôt que d’inventer des sélecteurs.',
+  ].join('\n');
+}
+
+/**
+ * Prompt de correction : renvoie à l'IA sa réponse et les erreurs trouvées
+ * par la validation, pour qu'elle renvoie un JSON corrigé.
+ */
+export function genererPromptReparation(reponse: string, erreurs: readonly string[], avertissements: readonly string[] = []): string {
+  return [
+    'Le JSON de source Tsuzuku que tu as proposé n’est pas accepté. Corrige-le.',
+    '',
+    'Erreurs à corriger :',
+    ...(erreurs.length ? erreurs.map(e => `- ${e}`) : ['- (aucune)']),
+    ...(avertissements.length ? ['', 'Points à vérifier :', ...avertissements.map(a => `- ${a}`)] : []),
+    '',
+    'Rappel du format attendu (tous les paramètres) :',
+    FORMAT_SOURCE,
+    '',
+    'Ta réponse précédente :',
+    '```json',
+    String(reponse ?? '').trim().slice(0, 20000),
+    '```',
+    '',
+    'Ne renvoie QUE le JSON corrigé, complet, dans un bloc ```json, sans texte autour.',
+  ].join('\n');
+}
+
+/** Résultat de la vérification de l'adresse saisie à l'étape 1. */
+export interface AdresseVerifiee {
+  url?: string;
+  erreur?: string;
+}
+
+/**
+ * Vérifie l'adresse d'un site AVANT toute requête : http(s), hôte public
+ * (anti-SSRF : ni localhost, ni réseau privé, ni port exotique).
+ */
+export function verifierAdresseSite(adresse: string): AdresseVerifiee {
+  const brut = String(adresse ?? '').trim();
+  if (!brut) return { erreur: 'Collez l’adresse d’une page du site (https://…).' };
+  const avecSchema = /^[a-z][a-z0-9+.-]*:/i.test(brut) ? brut : `https://${brut}`;
+  try {
+    return { url: verifierUrlPubliqueSync(avecSchema) };
+  } catch (e) {
+    return { erreur: `Adresse refusée : ${messageDe(e)}` };
+  }
 }
 
 // ------------------------------------------------------------------ Validation du JSON renvoyé
@@ -277,6 +383,50 @@ const CHAMPS_SELECTEURS: ReadonlyArray<readonly [string, (s: DefinitionSource) =
   ['movies.player.options', s => s.movies.player.options],
 ];
 
+/** Sélecteurs CSS d'une source qui ne se compilent pas (un message par champ). */
+export function erreursSelecteurs(source: DefinitionSource): string[] {
+  const page = lirePage('<p></p>');
+  const erreurs: string[] = [];
+  for (const [nom, lire] of CHAMPS_SELECTEURS) {
+    const sel = lire(source);
+    if (!sel || sel === '&') continue;
+    try {
+      page.tous(sel);
+    } catch {
+      erreurs.push(`Sélecteur CSS invalide pour ${nom} : « ${sel} ».`);
+    }
+  }
+  return erreurs;
+}
+
+/** Ligne et colonne (à partir de 1) d'une erreur de syntaxe JSON, avec le texte fautif. */
+export function positionErreurJson(texte: string, erreur: unknown): { ligne: number; colonne: number; indice: string } | undefined {
+  const message = erreur instanceof Error ? erreur.message : String(erreur ?? '');
+  let index: number | undefined;
+  const pos = /position\s+(\d+)/i.exec(message);
+  const lc = /line\s+(\d+)\s+column\s+(\d+)/i.exec(message);
+  if (lc) {
+    const lignes = texte.split('\n');
+    const l = Math.max(1, Math.min(lignes.length, Number(lc[1])));
+    index = lignes.slice(0, l - 1).reduce((n, x) => n + x.length + 1, 0) + Number(lc[2]) - 1;
+  } else if (pos) {
+    index = Number(pos[1]);
+  } else if (/end of (json )?input|unterminated/i.test(message)) {
+    index = texte.length;
+  }
+  if (index === undefined || !Number.isFinite(index)) return undefined;
+  index = Math.max(0, Math.min(texte.length, index));
+  const avant = texte.slice(0, index);
+  const ligne = avant.split('\n').length;
+  const colonne = index - (avant.lastIndexOf('\n') + 1) + 1;
+  const ligneTexte = (texte.split('\n')[ligne - 1] ?? '').trim();
+  const indice =
+    index >= texte.length
+      ? 'le JSON s’arrête trop tôt (accolade ou guillemet fermant manquant ?).'
+      : `caractère inattendu « ${texte[index]} » dans « ${ligneTexte.length > 80 ? `${ligneTexte.slice(0, 79)}…` : ligneTexte} » (virgule en trop ou manquante, guillemets, commentaire ?).`;
+  return { ligne, colonne, indice };
+}
+
 /**
  * Valide le JSON collé par l'administrateur : forme, schéma du moteur
  * (`normaliserSource` : adresse publique…), sélecteurs CSS compilables,
@@ -287,10 +437,18 @@ export function validerSourceJson(texte: string, analysee?: string, options: Opt
   const erreurs: string[] = [];
   const avertissements: string[] = [];
   let brut: unknown;
+  const extrait = jsonDepuisTexte(texte);
   try {
-    brut = JSON.parse(jsonDepuisTexte(texte));
-  } catch {
-    return { erreurs: ['Ce n’est pas un JSON valide : collez l’objet renvoyé par l’IA (le bloc ```json suffit).'], avertissements };
+    brut = JSON.parse(extrait);
+  } catch (e) {
+    const ou = positionErreurJson(extrait, e);
+    return {
+      erreurs: [
+        'Ce n’est pas un JSON valide : collez l’objet renvoyé par l’IA (le bloc ```json suffit).',
+        ...(ou ? [`Ligne ${ou.ligne}, colonne ${ou.colonne} : ${ou.indice}`] : []),
+      ],
+      avertissements,
+    };
   }
   if (Array.isArray(brut)) brut = brut[0];
   const liste = (brut as { sources?: unknown } | null)?.sources;
@@ -308,16 +466,7 @@ export function validerSourceJson(texte: string, analysee?: string, options: Opt
   } catch (e) {
     return { erreurs: [messageDe(e)], avertissements };
   }
-  const page = lirePage('<p></p>');
-  for (const [nom, lire] of CHAMPS_SELECTEURS) {
-    const sel = lire(source);
-    if (!sel || sel === '&') continue;
-    try {
-      page.tous(sel);
-    } catch {
-      erreurs.push(`Sélecteur CSS invalide pour ${nom} : « ${sel} ».`);
-    }
-  }
+  erreurs.push(...erreursSelecteurs(source));
   for (const [nom, chemin] of [
     ['search.path', source.search.path],
     ['search.pathVf', source.search.pathVf],
@@ -344,3 +493,95 @@ export function validerSourceJson(texte: string, analysee?: string, options: Opt
 
 /** Rappel affiché dans l'assistant. */
 export const RAPPEL_DROITS = 'N’ajoutez que des sources dont vous avez le droit d’utiliser le contenu.';
+
+// ------------------------------------------------------------------ Test pas à pas
+
+export type CleEtapeTest = 'recherche' | 'episodes' | 'lecteur' | 'films-recherche' | 'films-lecteur';
+
+export interface EtapeTest {
+  cle: CleEtapeTest;
+  nom: string;
+  /** `undefined` : étape non jouée (la précédente a échoué). */
+  ok: boolean | undefined;
+  detail: string;
+  pistes: string[];
+}
+
+/** Résumé d'un test : réussi si toutes les étapes jouées sont OK. */
+export const testReussi = (etapes: readonly EtapeTest[]): boolean => etapes.length > 0 && etapes.every(e => e.ok === true);
+
+const NON_JOUEE = 'Non testé : l’étape précédente a échoué.';
+
+/**
+ * Test complet d'une source, étape par étape, comme le ferait la lecture :
+ * animés = recherche → liste d'épisodes du premier résultat → lecteurs du
+ * premier épisode ; films = recherche → lecteurs du premier film. Chaque
+ * page passe par le client protégé (anti-SSRF). Ne lève jamais.
+ */
+export async function testerSourcePasAPas(ctx: ContexteResolution, src: DefinitionSource, titre: string): Promise<EtapeTest[]> {
+  const requete = String(titre ?? '').trim() || 'a';
+  const etapes: EtapeTest[] = [];
+  const jouer = async (cle: CleEtapeTest, nom: string, fn: () => Promise<Omit<EtapeTest, 'cle' | 'nom'>>) => {
+    try {
+      etapes.push({ cle, nom, ...(await fn()) });
+    } catch (e) {
+      etapes.push({ cle, nom, ok: false, detail: messageDe(e), pistes: [] });
+    }
+    return etapes[etapes.length - 1].ok === true;
+  };
+  const sauter = (cle: CleEtapeTest, nom: string) => etapes.push({ cle, nom, ok: undefined, detail: NON_JOUEE, pistes: [] });
+
+  if (supporteAnimes(src)) {
+    let serie: string | undefined;
+    let episode: string | undefined;
+    const okRecherche = await jouer('recherche', 'Animés · recherche', async () => {
+      const diag = await diagnostiquerRecherche(ctx, src, requete);
+      if (diag.ok) serie = (await chercherSur(ctx, src, requete))[0]?.url;
+      return { ok: diag.ok && Boolean(serie), detail: diag.ok ? `${diag.detail} Premier résultat : ${serie}` : diag.detail, pistes: diag.pistes };
+    });
+    if (!okRecherche || !serie) {
+      sauter('episodes', 'Animés · épisodes');
+      sauter('lecteur', 'Animés · lecteur');
+    } else {
+      const page = serie;
+      const okEpisodes = await jouer('episodes', 'Animés · épisodes', async () => {
+        if (!src.episodes.item) return { ok: false, detail: 'Pas de sélecteur d’épisode (episodes.item).', pistes: [] };
+        const eps = await lireEpisodes(ctx, src, page);
+        episode = eps[0]?.url;
+        return eps.length
+          ? { ok: true, detail: `${eps.length} épisode(s) lu(s) (n° ${eps[0].number} à ${eps[eps.length - 1].number}).`, pistes: [] }
+          : { ok: false, detail: `Aucun épisode trouvé sur ${page} avec « ${src.episodes.item} ».`, pistes: [] };
+      });
+      if (!okEpisodes || !episode) sauter('lecteur', 'Animés · lecteur');
+      else {
+        const urlEp = episode;
+        await jouer('lecteur', 'Animés · lecteur', async () => {
+          const l = await lecteursSur(ctx, src, urlEp);
+          return l.length
+            ? { ok: true, detail: `${l.length} lecteur(s) : ${l.slice(0, 3).map(x => x.url).join(', ')}`, pistes: [] }
+            : { ok: false, detail: `Aucun lecteur trouvé sur ${urlEp} (player.iframe ou player.options).`, pistes: [] };
+        });
+      }
+    }
+  }
+  if (supporteFilms(src)) {
+    const film = vueFilm(src);
+    let page: string | undefined;
+    const ok = await jouer('films-recherche', 'Films · recherche', async () => {
+      const diag = await diagnostiquerRecherche(ctx, film, requete);
+      if (diag.ok) page = (await chercherSur(ctx, film, requete))[0]?.url;
+      return { ok: diag.ok && Boolean(page), detail: diag.ok ? `${diag.detail} Premier résultat : ${page}` : diag.detail, pistes: diag.pistes };
+    });
+    if (!ok || !page) sauter('films-lecteur', 'Films · lecteur');
+    else {
+      const urlFilm = page;
+      await jouer('films-lecteur', 'Films · lecteur', async () => {
+        const l = await lecteursSur(ctx, film, urlFilm);
+        return l.length
+          ? { ok: true, detail: `${l.length} lecteur(s) : ${l.slice(0, 3).map(x => x.url).join(', ')}`, pistes: [] }
+          : { ok: false, detail: `Aucun lecteur trouvé sur ${urlFilm} (movies.player.iframe ou movies.player.options).`, pistes: [] };
+      });
+    }
+  }
+  return etapes;
+}
