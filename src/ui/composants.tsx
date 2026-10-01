@@ -13,7 +13,7 @@ import { ESPACEMENT, RAYON, couleurTendance, palettePour, type Palette, POLICE_T
 import type { Tendance } from './format';
 import { useMobile } from './mobile/useMobile';
 import { ChampMobile, type NatureChamp } from './mobile/ChampMobile';
-import { CONTROLE, TEXTE } from './mobile/jetons';
+import { CONTROLE, TEXTE, nombres } from './mobile/jetons';
 
 export function usePalette(): Palette {
   return palettePour();
@@ -87,6 +87,7 @@ export function Variation({
         color: couleurTendance(palette, tendance),
         fontSize: taille,
         fontWeight: '600',
+        ...nombres(),
       }}>
       {valeur}
     </Text>

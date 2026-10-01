@@ -560,6 +560,15 @@ function TableauWatchlist({ vue, onRetirer, onOuvrirFiche }: WatchlistProps) {
       titre: 'Nom',
       largeur: 220,
       extensible: 1,
+      mobile: 'titre',
+      renduMobile: ligne => (
+        <View>
+          <Text numberOfLines={2} style={{ color: palette.texte, fontWeight: '700', fontSize: 17 }}>
+            {ligne.nom}
+          </Text>
+          <Text style={{ color: palette.accent, fontSize: 15 }}>{ligne.ticker}</Text>
+        </View>
+      ),
       tri: ligne => ligne.nom,
       rendu: ligne => (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESPACEMENT.s }}>
@@ -578,6 +587,7 @@ function TableauWatchlist({ vue, onRetirer, onOuvrirFiche }: WatchlistProps) {
       titre: 'Depuis l’ajout',
       largeur: 120,
       alignement: 'droite',
+      mobile: 'valeur2',
       tri: ligne => ligne.ecartPct ?? null,
       rendu: ligne =>
         ligne.ecartPourcent ? (
@@ -591,6 +601,7 @@ function TableauWatchlist({ vue, onRetirer, onOuvrirFiche }: WatchlistProps) {
       titre: 'Cours',
       largeur: 110,
       alignement: 'droite',
+      mobile: 'valeur',
       rendu: ligne => <PrixEnEuros montant={ligne.coursBrut} devise={ligne.devise} />,
     },
     {
@@ -612,6 +623,7 @@ function TableauWatchlist({ vue, onRetirer, onOuvrirFiche }: WatchlistProps) {
       titre: 'Statut',
       largeur: 120,
       alignement: 'centre',
+      mobile: 'sous',
       rendu: ligne => (
         <Text style={{ color: ligne.seuilAtteint ? palette.danger : palette.texteSecondaire, fontSize: 12 }}>
           {ligne.seuilAtteint ? 'Seuil franchi' : ligne.detenue ? 'Détenue' : 'Suivie'}
@@ -642,7 +654,15 @@ function TableauWatchlist({ vue, onRetirer, onOuvrirFiche }: WatchlistProps) {
   ];
   return (
     <CarteSection>
-      <Tableau colonnes={colonnes} lignes={vue.lignes} cle={ligne => ligne.titreId} vide="Aucune valeur suivie." testID="tableau-watchlist" />
+      <Tableau
+        colonnes={colonnes}
+        lignes={vue.lignes}
+        cle={ligne => ligne.titreId}
+        vide="Aucune valeur suivie."
+        titreLigne={ligne => ligne.nom}
+        onOuvrirMobile={onOuvrirFiche ? ligne => (ligne.ticker ? onOuvrirFiche(ligne.ticker) : undefined) : undefined}
+        testID="tableau-watchlist"
+      />
     </CarteSection>
   );
 }

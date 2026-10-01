@@ -7,7 +7,8 @@
  */
 
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Text } from '../mobile/adaptatif';
 import { usePalette } from '../composants';
 import { formaterDate } from '../format';
 import { ESPACEMENT, RAYON } from '../theme';

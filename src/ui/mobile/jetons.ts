@@ -8,6 +8,7 @@
  *  - contrôles : 48 px de haut, zone tactile jamais sous 44 × 44 px.
  */
 
+import { Platform, type TextStyle } from 'react-native';
 import { themeHub, type ThemeHub } from '../../hub/themes';
 import { themeCourant } from '../theme';
 import { modeTelephoneCourant } from './useMobile';
@@ -83,4 +84,22 @@ export function tt(taille: number): number {
 /** Hauteur de contrôle : au moins 44 px en mode téléphone. */
 export function ct(hauteur: number): number {
   return modeTelephoneCourant() ? Math.max(hauteur, CONTROLE.cible) : hauteur;
+}
+
+/**
+ * Police des chiffres (montants, quantités, pourcentages) : à chasse fixe, chiffres tabulaires, pour
+ * que les colonnes de valeurs s'alignent et se lisent d'un coup d'œil. Réservée au mode téléphone.
+ */
+export const POLICE_NOMBRES = {
+  fontFamily: Platform.select({
+    web: 'ui-monospace, SFMono-Regular, "IBM Plex Mono", Menlo, Consolas, monospace',
+    ios: 'Menlo',
+    default: 'monospace',
+  }),
+  fontVariant: ['tabular-nums'],
+} as const;
+
+/** Style des chiffres : mono sur téléphone, inchangé ailleurs. */
+export function nombres(): TextStyle {
+  return modeTelephoneCourant() ? { fontFamily: POLICE_NOMBRES.fontFamily, fontVariant: ['tabular-nums'] } : {};
 }

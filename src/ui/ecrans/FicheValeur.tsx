@@ -557,6 +557,7 @@ export function TableauFinances({ vue }: { vue: VueFiche['finances'] }) {
       cle: 'libelle',
       titre: choisi.titre,
       largeur: 240,
+      mobile: 'titre',
       rendu: ligne => <Cellule gras={ligne.important}>{ligne.libelle}</Cellule>,
     },
     ...vue.annees.map((annee, index) => ({
@@ -564,6 +565,7 @@ export function TableauFinances({ vue }: { vue: VueFiche['finances'] }) {
       titre: annee,
       largeur: 96,
       extensible: 1,
+      mobile: index === vue.annees.length - 1 ? ('valeur' as const) : ('detail' as const),
       alignement: 'droite' as const,
       rendu: (ligne: (typeof choisi.lignes)[number]) => (
         <View style={{ alignItems: 'flex-end' }}>
@@ -746,11 +748,11 @@ function Societe({ vue }: { vue: VueFiche }) {
         <CarteSection titre="Principaux actionnaires" poids={1.6}>
           <Tableau
             colonnes={[
-              { cle: 'n', titre: 'Actionnaire', largeur: 200, extensible: 2, rendu: (l: (typeof s.actionnaires)[number]) => <Cellule gras>{l.nom}</Cellule> },
-              { cle: 'p', titre: '% détenu', largeur: 90, alignement: 'droite', rendu: l => <Cellule>{l.part}</Cellule> },
-              { cle: 'a', titre: 'Actions', largeur: 90, alignement: 'droite', rendu: l => <Cellule>{l.actions}</Cellule> },
-              { cle: 'v', titre: 'Valeur', largeur: 100, alignement: 'droite', rendu: l => <Cellule>{l.valeur}</Cellule> },
-              { cle: 'd', titre: 'Au', largeur: 100, alignement: 'droite', rendu: l => <Cellule>{l.date}</Cellule> },
+              { cle: 'n', titre: 'Actionnaire', largeur: 200, extensible: 2, mobile: 'titre', rendu: (l: (typeof s.actionnaires)[number]) => <Cellule gras>{l.nom}</Cellule> },
+              { cle: 'p', titre: '% détenu', largeur: 90, alignement: 'droite', mobile: 'valeur', rendu: l => <Cellule gras>{l.part}</Cellule> },
+              { cle: 'a', titre: 'Actions', largeur: 90, alignement: 'droite', mobile: 'detail', rendu: l => <Cellule>{l.actions}</Cellule> },
+              { cle: 'v', titre: 'Valeur', largeur: 100, alignement: 'droite', mobile: 'sous', rendu: l => <Cellule>{l.valeur}</Cellule> },
+              { cle: 'd', titre: 'Au', mobile: 'detail', largeur: 100, alignement: 'droite', rendu: l => <Cellule>{l.date}</Cellule> },
             ]}
             lignes={s.actionnaires}
             cle={l => l.nom}
@@ -761,12 +763,12 @@ function Societe({ vue }: { vue: VueFiche }) {
       <CarteSection titre="Transactions d’initiés">
         <Tableau
           colonnes={[
-            { cle: 'n', titre: 'Initié', largeur: 170, extensible: 1, rendu: (l: (typeof s.inities)[number]) => <Cellule gras>{l.nom}</Cellule> },
-            { cle: 'f', titre: 'Fonction', largeur: 180, extensible: 1, rendu: l => <Cellule>{l.fonction}</Cellule> },
-            { cle: 'o', titre: 'Opération', largeur: 200, extensible: 2, rendu: l => <Cellule>{l.operation}</Cellule> },
-            { cle: 'a', titre: 'Actions', largeur: 90, alignement: 'droite', rendu: l => <Cellule>{l.actions}</Cellule> },
-            { cle: 'v', titre: 'Valeur', largeur: 100, alignement: 'droite', rendu: l => <Cellule>{l.valeur}</Cellule> },
-            { cle: 'd', titre: 'Date', largeur: 100, alignement: 'droite', rendu: l => <Cellule>{l.date}</Cellule> },
+            { cle: 'n', titre: 'Initié', largeur: 170, extensible: 1, mobile: 'titre', rendu: (l: (typeof s.inities)[number]) => <Cellule gras>{l.nom}</Cellule> },
+            { cle: 'f', titre: 'Fonction', largeur: 180, extensible: 1, mobile: 'detail', rendu: l => <Cellule>{l.fonction}</Cellule> },
+            { cle: 'o', titre: 'Opération', largeur: 200, extensible: 2, mobile: 'sous', rendu: l => <Cellule petit>{l.operation}</Cellule> },
+            { cle: 'a', titre: 'Actions', largeur: 90, alignement: 'droite', mobile: 'detail', rendu: l => <Cellule>{l.actions}</Cellule> },
+            { cle: 'v', titre: 'Valeur', largeur: 100, alignement: 'droite', mobile: 'valeur', rendu: l => <Cellule gras>{l.valeur}</Cellule> },
+            { cle: 'd', titre: 'Date', largeur: 100, alignement: 'droite', mobile: 'valeur2', rendu: l => <Cellule>{l.date}</Cellule> },
           ]}
           lignes={s.inities}
           cle={l => `${l.nom}-${l.date}-${l.actions}`}

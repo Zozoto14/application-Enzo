@@ -15,6 +15,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { usePalette } from '../composants';
 import { formaterDate } from '../format';
 import type { Palette } from '../theme';
+import { useMobile } from '../mobile/useMobile';
 import {
   arcAnneau,
   cheminAire,
@@ -41,6 +42,12 @@ import type {
 export type * from './types';
 
 const POLICE = 11;
+
+/** Téléphone : 15 px au minimum partout, y compris dans le dessin. */
+const police = (mobile: boolean, taille = POLICE) => (mobile ? Math.max(15, taille) : taille);
+
+/** Téléphone : hauteur réservée au-dessus du graphique pour la valeur touchée. */
+const HAUTEUR_LECTURE = 60;
 
 /** Largeur disponible, suivie au redimensionnement de la fenêtre. */
 function useLargeur(): [React.RefObject<HTMLDivElement | null>, number] {
@@ -77,6 +84,43 @@ interface Survol {
 
 /** Info-bulle posée au-dessus du graphique, retenue dans son cadre. */
 function InfoBulle({ survol, largeur, palette }: { survol: Survol | null; largeur: number; palette: Palette }) {
+  const mobile = useMobile();
+  if (mobile) {
+    // Téléphone : pas de survol. La valeur touchée s'affiche dans un cadre fixe au-dessus du graphique.
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        data-testid="graphique-lecture"
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: -HAUTEUR_LECTURE,
+          height: HAUTEUR_LECTURE - 8,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          overflow: 'hidden',
+          fontSize: 15,
+          lineHeight: '20px',
+          color: palette.texte,
+        }}>
+        {survol ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 12 }}>
+            {survol.lignes.map((ligne, index) => (
+              <span key={index} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: ligne.fort ? 700 : 500, color: ligne.fort ? palette.texte : palette.texte }}>
+                {ligne.couleur ? <span style={{ width: 10, height: 10, borderRadius: 5, background: ligne.couleur, flexShrink: 0 }} /> : null}
+                {ligne.texte}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span style={{ color: palette.texteSecondaire }}>Touchez le graphique pour lire une valeur.</span>
+        )}
+      </div>
+    );
+  }
   if (!survol) {
     return null;
   }
@@ -114,6 +158,7 @@ function InfoBulle({ survol, largeur, palette }: { survol: Survol | null; largeu
 }
 
 function Legende({ elements, palette }: { elements?: readonly { couleur: string; texte: string }[]; palette: Palette }) {
+  const mobile = useMobile();
   if (!elements || elements.length === 0) {
     return null;
   }
@@ -122,10 +167,10 @@ function Legende({ elements, palette }: { elements?: readonly { couleur: string;
       style={{
         display: 'flex',
         flexWrap: 'wrap',
-        justifyContent: 'center',
-        gap: '6px 18px',
-        marginTop: 8,
-        fontSize: 12,
+        justifyContent: mobile ? 'flex-start' : 'center',
+        gap: mobile ? '8px 16px' : '6px 18px',
+        marginTop: mobile ? 12 : 8,
+        fontSize: mobile ? 15 : 12,
         color: palette.texte,
       }}>
       {elements.map((element, index) => (
@@ -180,11 +225,16 @@ export function GraphiqueLignes({
 }: ProprietesLignes) {
   formater = formateurDiscret(formater);
   const palette = usePalette();
+  const mobile = useMobile();
+  // Téléphone : courbe de 240 px au plus, valeurs de l'axe DANS le tracé, pas de pastilles de fin.
+  if (mobile) {
+    hauteur = Math.min(hauteur, 240);
+  }
   const identifiant = useId().replace(/:/g, '');
   const [ref, largeur] = useLargeur();
   const [survol, setSurvol] = useState<{ index: number; x: number; y: number } | null>(null);
 
-  const marges = { haut: 12, bas: 26, gauche: 8, droite: 78 };
+  const marges = mobile ? { haut: 12, bas: 32, gauche: 8, droite: 8 } : { haut: 12, bas: 26, gauche: 8, droite: 78 };
   const utile = {
     largeur: Math.max(10, largeur - marges.gauche - marges.droite),
     hauteur: Math.max(10, hauteur - marges.haut - marges.bas),
@@ -200,7 +250,7 @@ export function GraphiqueLignes({
     if (repere) {
       valeurs.push(repere.valeur);
     }
-    const { valeurs: graduationsY, domaine } = graduations(Math.min(...valeurs), Math.max(...valeurs), 5);
+    const { valeurs: graduationsY, domaine } = graduations(Math.min(...valeurs), Math.max(...valeurs), mobile ? 4 : 5);
     const x = echelle([temps(dates[0]), temps(dates[dates.length - 1])], [marges.gauche, marges.gauche + utile.largeur]);
     const y = echelle(domaine, [marges.haut + utile.hauteur, marges.haut]);
     const trajets = visibles.map(serie => {
@@ -216,7 +266,7 @@ export function GraphiqueLignes({
     return { dates, graduationsY, x, y, trajets, abscisses: dates.map(date => x(temps(date))) };
     // Les marges sont constantes ; la largeur et les données suffisent.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [series, repere, utile.largeur, utile.hauteur]);
+  }, [series, repere, utile.largeur, utile.hauteur, mobile]);
 
   const valeurA = (points: readonly { date: string; valeur: number }[], date: string) => {
     let retenu: number | undefined;
@@ -238,12 +288,14 @@ export function GraphiqueLignes({
     : [];
 
   const dateSurvolee = survol && calcul ? calcul.dates[survol.index] : undefined;
+  // Téléphone : sans doigt posé, la lecture montre la dernière valeur.
+  const dateLue = dateSurvolee ?? (mobile && calcul ? calcul.dates[calcul.dates.length - 1] : undefined);
 
   return (
-    <div data-testid={testID} style={{ width: '100%' }}>
+    <div data-testid={testID} style={{ width: '100%', paddingTop: mobile ? HAUTEUR_LECTURE : 0 }}>
       <div ref={ref} style={{ position: 'relative', width: '100%', height: hauteur }}>
         {largeur > 0 && calcul ? (
-          <svg width={largeur} height={hauteur} style={{ display: 'block', overflow: 'visible' }}>
+          <svg width={largeur} height={hauteur} style={{ display: 'block', overflow: 'visible', touchAction: 'pan-y' }}>
             <defs>
               {calcul.trajets.map((trajet, index) => (
                 <linearGradient key={index} id={`aire-${identifiant}-${index}`} x1="0" y1="0" x2="0" y2="1">
@@ -265,9 +317,9 @@ export function GraphiqueLignes({
                   opacity={0.6}
                 />
                 <text
-                  x={marges.gauche + utile.largeur + 8}
-                  y={calcul.y(valeur) + 4}
-                  fontSize={POLICE}
+                  x={mobile ? marges.gauche + 2 : marges.gauche + utile.largeur + 8}
+                  y={mobile ? calcul.y(valeur) - 6 : calcul.y(valeur) + 4}
+                  fontSize={police(mobile)}
                   fill={palette.texteSecondaire}>
                   {formater(valeur)}
                 </text>
@@ -277,13 +329,13 @@ export function GraphiqueLignes({
             {graduationsTemps(
               temps(calcul.dates[0]),
               temps(calcul.dates[calcul.dates.length - 1]),
-              Math.max(2, Math.floor(utile.largeur / 95)),
+              Math.max(2, Math.floor(utile.largeur / (mobile ? 120 : 95))),
             ).map((instant, index, tous) => (
               <text
                 key={instant}
                 x={calcul.x(instant)}
-                y={hauteur - 6}
-                fontSize={POLICE}
+                y={hauteur - 7}
+                fontSize={police(mobile)}
                 fill={palette.texteSecondaire}
                 textAnchor={index === 0 ? 'start' : index === tous.length - 1 ? 'end' : 'middle'}>
                 {moisAnnee(new Date(instant).toISOString().slice(0, 10))}
@@ -305,7 +357,7 @@ export function GraphiqueLignes({
                   <text
                     x={marges.gauche + utile.largeur - 4}
                     y={calcul.y(repere.valeur) - 6}
-                    fontSize={POLICE}
+                    fontSize={police(mobile)}
                     fontWeight={600}
                     textAnchor="end"
                     fill={palette.texte}>
@@ -365,7 +417,7 @@ export function GraphiqueLignes({
               </g>
             ) : null}
 
-            {etiquettesFinales
+            {etiquettesFinales && !mobile
               ? calcul.trajets.map((trajet, index) => {
                   const dernier = trajet.serie.points[trajet.serie.points.length - 1];
                   if (!dernier) {
@@ -410,24 +462,45 @@ export function GraphiqueLignes({
                   y: position.y + marges.haut,
                 });
               }}
-              onMouseLeave={() => setSurvol(null)}
+              onPointerDown={evenement => {
+                // Doigt : toucher ou glisser horizontalement lit la valeur (le défilement vertical reste libre).
+                if (evenement.pointerType === 'touch') {
+                  const position = positionSouris(evenement);
+                  setSurvol({
+                    index: plusProche(calcul.abscisses, position.x + marges.gauche),
+                    x: position.x + marges.gauche,
+                    y: position.y + marges.haut,
+                  });
+                }
+              }}
+              onPointerMove={evenement => {
+                if (evenement.pointerType === 'touch') {
+                  const position = positionSouris(evenement);
+                  setSurvol({
+                    index: plusProche(calcul.abscisses, position.x + marges.gauche),
+                    x: position.x + marges.gauche,
+                    y: position.y + marges.haut,
+                  });
+                }
+              }}
+              onMouseLeave={() => (mobile ? undefined : setSurvol(null))}
             />
           </svg>
         ) : largeur > 0 ? (
           <Vide palette={palette} hauteur={hauteur} />
         ) : null}
 
-        {dateSurvolee && survol && calcul ? (
+        {dateLue && calcul ? (
           <InfoBulle
             largeur={largeur}
             palette={palette}
             survol={{
-              x: survol.x,
-              y: survol.y,
+              x: survol?.x ?? 0,
+              y: survol?.y ?? 0,
               lignes: [
-                { texte: formaterDate(dateSurvolee), fort: true },
+                { texte: formaterDate(dateLue), fort: true },
                 ...calcul.trajets.flatMap(trajet => {
-                  const valeur = valeurA(trajet.serie.points, dateSurvolee);
+                  const valeur = valeurA(trajet.serie.points, dateLue);
                   return valeur === undefined
                     ? []
                     : [{ couleur: trajet.serie.couleur, texte: `${trajet.serie.nom} : ${formater(valeur)}` }];
@@ -435,6 +508,8 @@ export function GraphiqueLignes({
               ],
             }}
           />
+        ) : mobile ? (
+          <InfoBulle largeur={largeur} palette={palette} survol={null} />
         ) : null}
       </div>
       <Legende elements={legende} palette={palette} />
@@ -443,6 +518,7 @@ export function GraphiqueLignes({
 }
 
 function Vide({ palette, hauteur }: { palette: Palette; hauteur: number }) {
+  const mobile = useMobile();
   return (
     <div
       style={{
@@ -451,7 +527,7 @@ function Vide({ palette, hauteur }: { palette: Palette; hauteur: number }) {
         alignItems: 'center',
         justifyContent: 'center',
         color: palette.texteSecondaire,
-        fontSize: 13,
+        fontSize: mobile ? 15 : 13,
       }}>
       Aucune donnée à afficher
     </div>
@@ -463,6 +539,10 @@ function Vide({ palette, hauteur }: { palette: Palette; hauteur: number }) {
 export function Donut({ parts, formater, hauteur = 280, centre, testID }: ProprietesDonut) {
   formater = formateurDiscret(formater);
   const palette = usePalette();
+  const mobile = useMobile();
+  if (mobile) {
+    hauteur = Math.min(hauteur, 240);
+  }
   const [ref, largeur] = useLargeur();
   const [survol, setSurvol] = useState<{ index: number; x: number; y: number } | null>(null);
 
@@ -489,7 +569,7 @@ export function Donut({ parts, formater, hauteur = 280, centre, testID }: Propri
     `${(fraction * 100).toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`;
 
   return (
-    <div data-testid={testID} style={{ width: '100%' }}>
+    <div data-testid={testID} style={{ width: '100%', paddingTop: mobile ? HAUTEUR_LECTURE : 0 }}>
       <div ref={ref} style={{ position: 'relative', width: '100%', height: hauteur }}>
         {largeur > 0 && total > 0 ? (
           <svg width={largeur} height={hauteur} style={{ display: 'block' }}>
@@ -511,7 +591,7 @@ export function Donut({ parts, formater, hauteur = 280, centre, testID }: Propri
               );
             })}
             {secteurs
-              .filter(secteur => secteur.fraction >= 0.05)
+              .filter(secteur => secteur.fraction >= (mobile ? 0.09 : 0.05))
               .map(secteur => {
                 const milieu = milieuArc(cx, cy, (rayon + interieur) / 2, secteur.debut, secteur.fin);
                 return (
@@ -520,7 +600,7 @@ export function Donut({ parts, formater, hauteur = 280, centre, testID }: Propri
                     x={milieu.x}
                     y={milieu.y + 4}
                     textAnchor="middle"
-                    fontSize={11}
+                    fontSize={police(mobile)}
                     fontWeight={700}
                     fill="#0b0b0c"
                     pointerEvents="none">
@@ -529,7 +609,7 @@ export function Donut({ parts, formater, hauteur = 280, centre, testID }: Propri
                 );
               })}
             {centre ? (
-              <text x={cx} y={cy + 5} textAnchor="middle" fontSize={14} fontWeight={700} fill={palette.texte}>
+              <text x={cx} y={cy + 5} textAnchor="middle" fontSize={police(mobile, 14)} fontWeight={700} fill={palette.texte}>
                 {centre}
               </text>
             ) : null}
@@ -537,11 +617,11 @@ export function Donut({ parts, formater, hauteur = 280, centre, testID }: Propri
         ) : largeur > 0 ? (
           <Vide palette={palette} hauteur={hauteur} />
         ) : null}
-        {survol ? (
+        {survol || mobile ? (
           <InfoBulle
             largeur={largeur}
             palette={palette}
-            survol={{
+            survol={!survol ? null : {
               x: survol.x,
               y: survol.y,
               lignes: [
@@ -577,10 +657,14 @@ export function Barres(brutes: ProprietesBarres) {
 
 function BarresVerticales({ barres, formater, hauteur = 260, repere, valeursVisibles, legende, testID }: ProprietesBarres) {
   const palette = usePalette();
+  const mobile = useMobile();
+  if (mobile) {
+    hauteur = Math.min(hauteur, 240);
+  }
   const [ref, largeur] = useLargeur();
   const [survol, setSurvol] = useState<{ index: number; x: number; y: number } | null>(null);
 
-  const marges = { haut: 16, bas: 26, gauche: 8, droite: 58 };
+  const marges = mobile ? { haut: 16, bas: 32, gauche: 8, droite: 8 } : { haut: 16, bas: 26, gauche: 8, droite: 58 };
   const utileL = Math.max(10, largeur - marges.gauche - marges.droite);
   const utileH = Math.max(10, hauteur - marges.haut - marges.bas);
 
@@ -589,14 +673,14 @@ function BarresVerticales({ barres, formater, hauteur = 260, repere, valeursVisi
   if (repere) {
     valeurs.push(repere.valeur);
   }
-  const { valeurs: graduationsY, domaine } = graduations(Math.min(...valeurs), Math.max(...valeurs), 5);
+  const { valeurs: graduationsY, domaine } = graduations(Math.min(...valeurs), Math.max(...valeurs), mobile ? 4 : 5);
   const y = echelle(domaine, [marges.haut + utileH, marges.haut]);
   const bande = barres.length > 0 ? utileL / barres.length : utileL;
   const epaisseur = Math.max(2, Math.min(64, bande * 0.62));
   const zero = y(0);
 
   return (
-    <div data-testid={testID} style={{ width: '100%' }}>
+    <div data-testid={testID} style={{ width: '100%', paddingTop: mobile ? HAUTEUR_LECTURE : 0 }}>
       <div ref={ref} style={{ position: 'relative', width: '100%', height: hauteur }}>
         {largeur > 0 && barres.length > 0 ? (
           <svg width={largeur} height={hauteur} style={{ display: 'block' }}>
@@ -610,7 +694,11 @@ function BarresVerticales({ barres, formater, hauteur = 260, repere, valeursVisi
                   stroke={palette.bordure}
                   opacity={valeur === 0 ? 1 : 0.5}
                 />
-                <text x={marges.gauche + utileL + 8} y={y(valeur) + 4} fontSize={POLICE} fill={palette.texteSecondaire}>
+                <text
+                  x={mobile ? marges.gauche + 2 : marges.gauche + utileL + 8}
+                  y={mobile ? y(valeur) - 6 : y(valeur) + 4}
+                  fontSize={police(mobile)}
+                  fill={palette.texteSecondaire}>
                   {formater(valeur)}
                 </text>
               </g>
@@ -630,12 +718,12 @@ function BarresVerticales({ barres, formater, hauteur = 260, repere, valeursVisi
                   {barre.negatif ? (
                     <rect x={x} y={zero} width={epaisseur} height={Math.max(1, y(-barre.negatif) - zero)} rx={3} fill={palette.baisse} />
                   ) : null}
-                  {valeursVisibles && barre.valeur !== 0 ? (
+                  {valeursVisibles && barre.valeur !== 0 && (!mobile || bande >= 56) ? (
                     <text
                       x={x + epaisseur / 2}
                       y={bas - haut > 26 ? (haut + bas) / 2 + 4 : haut - 6}
                       textAnchor="middle"
-                      fontSize={10}
+                      fontSize={police(mobile, 10)}
                       fontWeight={600}
                       fill={bas - haut > 26 ? '#ffffff' : palette.texte}>
                       {formater(barre.valeur)}
@@ -644,13 +732,13 @@ function BarresVerticales({ barres, formater, hauteur = 260, repere, valeursVisi
                 </g>
               );
             })}
-            {indicesEtiquettes(barres.length, Math.max(2, Math.floor(utileL / 44))).map(index => (
+            {indicesEtiquettes(barres.length, Math.max(2, Math.floor(utileL / (mobile ? 64 : 44)))).map(index => (
               <text
                 key={`l-${index}`}
                 x={marges.gauche + index * bande + bande / 2}
                 y={hauteur - 7}
                 textAnchor="middle"
-                fontSize={POLICE}
+                fontSize={police(mobile)}
                 fill={palette.texteSecondaire}>
                 {barres[index].libelle}
               </text>
@@ -666,7 +754,7 @@ function BarresVerticales({ barres, formater, hauteur = 260, repere, valeursVisi
                   strokeDasharray="5 4"
                 />
                 {repere.libelle ? (
-                  <text x={marges.gauche + utileL - 4} y={y(repere.valeur) - 6} textAnchor="end" fontSize={POLICE} fontWeight={600} fill={palette.texte}>
+                  <text x={marges.gauche + utileL - 4} y={y(repere.valeur) - 6} textAnchor="end" fontSize={police(mobile)} fontWeight={600} fill={palette.texte}>
                     {repere.libelle}
                   </text>
                 ) : null}
@@ -676,11 +764,11 @@ function BarresVerticales({ barres, formater, hauteur = 260, repere, valeursVisi
         ) : largeur > 0 ? (
           <Vide palette={palette} hauteur={hauteur} />
         ) : null}
-        {survol && barres[survol.index] ? (
+        {(survol && barres[survol.index]) || mobile ? (
           <InfoBulle
             largeur={largeur}
             palette={palette}
-            survol={{
+            survol={!survol || !barres[survol.index] ? null : {
               x: survol.x,
               y: survol.y,
               lignes: [
@@ -702,11 +790,13 @@ function BarresVerticales({ barres, formater, hauteur = 260, repere, valeursVisi
 
 function BarresHorizontales({ barres, formater, repere, legende, testID }: ProprietesBarres) {
   const palette = usePalette();
+  const mobile = useMobile();
   const [ref, largeur] = useLargeur();
-  const hauteurLigne = 28;
+  // Téléphone : le libellé et la valeur se lisent sur une ligne, la barre dessous (rien n'est tronqué).
+  const hauteurLigne = mobile ? 52 : 28;
   const hauteur = barres.length * hauteurLigne + 8;
-  const gauche = Math.min(170, Math.max(90, largeur * 0.32));
-  const droite = 84;
+  const gauche = mobile ? 4 : Math.min(170, Math.max(90, largeur * 0.32));
+  const droite = mobile ? 4 : 84;
   const utile = Math.max(10, largeur - gauche - droite);
 
   const valeurs = barres.map(barre => barre.valeur);
@@ -719,7 +809,7 @@ function BarresHorizontales({ barres, formater, repere, legende, testID }: Propr
   const x = echelle([min, max], [gauche, gauche + utile]);
 
   return (
-    <div data-testid={testID} style={{ width: '100%' }}>
+    <div data-testid={testID} style={{ width: '100%', paddingTop: 0 }}>
       <div ref={ref} style={{ position: 'relative', width: '100%', height: hauteur }}>
         {largeur > 0 ? (
           <svg width={largeur} height={hauteur} style={{ display: 'block' }}>
@@ -727,6 +817,19 @@ function BarresHorizontales({ barres, formater, repere, legende, testID }: Propr
               const yLigne = 4 + index * hauteurLigne;
               const debut = x(Math.min(0, barre.valeur));
               const fin = x(Math.max(0, barre.valeur));
+              if (mobile) {
+                return (
+                  <g key={index}>
+                    <text x={gauche} y={yLigne + 17} fontSize={15} fill={palette.texteSecondaire}>
+                      {barre.libelle.length > 24 ? `${barre.libelle.slice(0, 23)}…` : barre.libelle}
+                    </text>
+                    <text x={gauche + utile} y={yLigne + 17} textAnchor="end" fontSize={15} fontWeight={700} fill={palette.texte}>
+                      {formater(barre.valeur)}
+                    </text>
+                    <rect x={debut} y={yLigne + 26} width={Math.max(2, fin - debut)} height={12} rx={4} fill={barre.couleur ?? palette.accent} />
+                  </g>
+                );
+              }
               return (
                 <g key={index}>
                   <text x={gauche - 8} y={yLigne + 17} textAnchor="end" fontSize={11} fill={palette.texteSecondaire}>
@@ -754,34 +857,38 @@ function BarresHorizontales({ barres, formater, repere, legende, testID }: Propr
 
 export function Nuage({ points, lignes, formaterX, formaterY, hauteur = 300, legende, testID }: ProprietesNuage) {
   const palette = usePalette();
+  const mobile = useMobile();
+  if (mobile) {
+    hauteur = Math.min(hauteur, 280);
+  }
   const [ref, largeur] = useLargeur();
   const [survol, setSurvol] = useState<{ index: number; x: number; y: number } | null>(null);
 
-  const marges = { haut: 12, bas: 26, gauche: 48, droite: 20 };
+  const marges = mobile ? { haut: 12, bas: 32, gauche: 64, droite: 16 } : { haut: 12, bas: 26, gauche: 48, droite: 20 };
   const utileL = Math.max(10, largeur - marges.gauche - marges.droite);
   const utileH = Math.max(10, hauteur - marges.haut - marges.bas);
 
   const tous = [...points, ...(lignes ?? []).flatMap(ligne => ligne.points)];
-  const gx = graduations(Math.min(...tous.map(p => p.x), 0), Math.max(...tous.map(p => p.x)), 6);
-  const gy = graduations(Math.min(...tous.map(p => p.y)), Math.max(...tous.map(p => p.y)), 6);
+  const gx = graduations(Math.min(...tous.map(p => p.x), 0), Math.max(...tous.map(p => p.x)), mobile ? 3 : 6);
+  const gy = graduations(Math.min(...tous.map(p => p.y)), Math.max(...tous.map(p => p.y)), mobile ? 4 : 6);
   const x = echelle(gx.domaine, [marges.gauche, marges.gauche + utileL]);
   const y = echelle(gy.domaine, [marges.haut + utileH, marges.haut]);
 
   return (
-    <div data-testid={testID} style={{ width: '100%' }}>
+    <div data-testid={testID} style={{ width: '100%', paddingTop: mobile ? HAUTEUR_LECTURE : 0 }}>
       <div ref={ref} style={{ position: 'relative', width: '100%', height: hauteur }}>
         {largeur > 0 && tous.length > 0 ? (
           <svg width={largeur} height={hauteur} style={{ display: 'block' }}>
             {gy.valeurs.map(valeur => (
               <g key={`y${valeur}`}>
                 <line x1={marges.gauche} x2={marges.gauche + utileL} y1={y(valeur)} y2={y(valeur)} stroke={palette.bordure} opacity={0.5} />
-                <text x={marges.gauche - 8} y={y(valeur) + 4} textAnchor="end" fontSize={POLICE} fill={palette.texteSecondaire}>
+                <text x={marges.gauche - 8} y={y(valeur) + 4} textAnchor="end" fontSize={police(mobile)} fill={palette.texteSecondaire}>
                   {formaterY(valeur)}
                 </text>
               </g>
             ))}
             {gx.valeurs.map(valeur => (
-              <text key={`x${valeur}`} x={x(valeur)} y={hauteur - 7} textAnchor="middle" fontSize={POLICE} fill={palette.texteSecondaire}>
+              <text key={`x${valeur}`} x={x(valeur)} y={hauteur - 7} textAnchor="middle" fontSize={police(mobile)} fill={palette.texteSecondaire}>
                 {formaterX(valeur)}
               </text>
             ))}
@@ -817,7 +924,7 @@ export function Nuage({ points, lignes, formaterX, formaterY, hauteur = 300, leg
                     <text
                       x={cx + 10}
                       y={point.forme === 'losange' ? cy + 18 : cy - 8}
-                      fontSize={10}
+                      fontSize={police(mobile, 10)}
                       fontWeight={700}
                       fill={palette.texte}>
                       {point.libelle}
@@ -830,11 +937,11 @@ export function Nuage({ points, lignes, formaterX, formaterY, hauteur = 300, leg
         ) : largeur > 0 ? (
           <Vide palette={palette} hauteur={hauteur} />
         ) : null}
-        {survol && points[survol.index] ? (
+        {(survol && points[survol.index]) || mobile ? (
           <InfoBulle
             largeur={largeur}
             palette={palette}
-            survol={{
+            survol={!survol || !points[survol.index] ? null : {
               x: survol.x,
               y: survol.y,
               lignes: [
@@ -856,13 +963,17 @@ export function Nuage({ points, lignes, formaterX, formaterY, hauteur = 300, leg
 
 export function Treemap({ tuiles, hauteur = 320, testID }: ProprietesTreemap) {
   const palette = usePalette();
+  const mobile = useMobile();
+  if (mobile) {
+    hauteur = Math.min(hauteur, 300);
+  }
   const [ref, largeur] = useLargeur();
   const [survol, setSurvol] = useState<{ index: number; x: number; y: number } | null>(null);
 
   const rectangles = treemap(tuiles, { x: 0, y: 0, largeur, hauteur });
 
   return (
-    <div data-testid={testID} style={{ width: '100%' }}>
+    <div data-testid={testID} style={{ width: '100%', paddingTop: mobile ? HAUTEUR_LECTURE : 0 }}>
       <div ref={ref} style={{ position: 'relative', width: '100%', height: hauteur }}>
         {largeur > 0 && tuiles.length > 0 ? (
           <svg width={largeur} height={hauteur} style={{ display: 'block' }}>
@@ -871,10 +982,11 @@ export function Treemap({ tuiles, hauteur = 320, testID }: ProprietesTreemap) {
                 return null;
               }
               const tuile = tuiles[index];
-              const assez = rectangle.largeur > 64 && rectangle.hauteur > 34;
+              const pas = mobile ? 20 : 16;
+              const assez = mobile ? rectangle.largeur > 92 && rectangle.hauteur > 36 : rectangle.largeur > 64 && rectangle.hauteur > 34;
               const lignes = [tuile.libelle, ...(tuile.lignes ?? [])].slice(
                 0,
-                Math.max(1, Math.floor((rectangle.hauteur - 8) / 16)),
+                Math.max(1, Math.floor((rectangle.hauteur - 8) / pas)),
               );
               return (
                 <g
@@ -895,9 +1007,9 @@ export function Treemap({ tuiles, hauteur = 320, testID }: ProprietesTreemap) {
                         <text
                           key={rang}
                           x={rectangle.x + rectangle.largeur / 2}
-                          y={rectangle.y + rectangle.hauteur / 2 - ((lignes.length - 1) * 16) / 2 + rang * 16 + 4}
+                          y={rectangle.y + rectangle.hauteur / 2 - ((lignes.length - 1) * pas) / 2 + rang * pas + 4}
                           textAnchor="middle"
-                          fontSize={rang === 0 ? 12 : 11}
+                          fontSize={police(mobile, rang === 0 ? 12 : 11)}
                           fontWeight={rang === 0 ? 700 : 500}
                           fill="#ffffff">
                           {ligne}
@@ -911,11 +1023,11 @@ export function Treemap({ tuiles, hauteur = 320, testID }: ProprietesTreemap) {
         ) : largeur > 0 ? (
           <Vide palette={palette} hauteur={hauteur} />
         ) : null}
-        {survol && tuiles[survol.index] ? (
+        {(survol && tuiles[survol.index]) || mobile ? (
           <InfoBulle
             largeur={largeur}
             palette={palette}
-            survol={{
+            survol={!survol || !tuiles[survol.index] ? null : {
               x: survol.x,
               y: survol.y,
               lignes: [
@@ -934,10 +1046,11 @@ export function Treemap({ tuiles, hauteur = 320, testID }: ProprietesTreemap) {
 
 export function Radar({ axes, couleur, hauteur = 260, testID }: ProprietesRadar) {
   const palette = usePalette();
+  const mobile = useMobile();
   const [ref, largeur] = useLargeur();
   const cx = largeur / 2;
   const cy = hauteur / 2;
-  const rayon = Math.max(10, Math.min(largeur, hauteur) / 2 - 36);
+  const rayon = Math.max(10, Math.min(largeur, hauteur) / 2 - (mobile ? 52 : 36));
 
   const sommet = (index: number, fraction: number) => {
     const angle = (index / axes.length) * Math.PI * 2;
@@ -962,7 +1075,7 @@ export function Radar({ axes, couleur, hauteur = 260, testID }: ProprietesRadar)
             return (
               <g key={axe.libelle}>
                 <line x1={cx} y1={cy} x2={bout.x} y2={bout.y} stroke={palette.bordure} />
-                <text x={etiquette.x} y={etiquette.y + 4} textAnchor="middle" fontSize={10} fill={palette.texteSecondaire}>
+                <text x={etiquette.x} y={etiquette.y + 4} textAnchor="middle" fontSize={police(mobile, 10)} fill={palette.texteSecondaire}>
                   {axe.libelle}
                 </text>
               </g>

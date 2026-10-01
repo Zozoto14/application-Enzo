@@ -36,10 +36,10 @@ export function OngletDividendes({ vue }: { vue: VueDividendes }) {
   }
 
   const colonnesTitres: Colonne<LigneTitreDividendes>[] = [
-    { cle: 'nom', titre: 'Valeur', largeur: 200, extensible: 2, rendu: l => <Cellule gras>{l.nom}</Cellule> },
-    { cle: 'total', titre: 'Total perçu', largeur: 110, alignement: 'droite', rendu: l => <Cellule>{l.total}</Cellule> },
-    { cle: 'part', titre: 'Part', largeur: 80, alignement: 'droite', rendu: l => <Cellule>{l.part}</Cellule> },
-    { cle: '12m', titre: 'Douze mois', largeur: 110, alignement: 'droite', rendu: l => <Cellule>{l.douzeMois}</Cellule> },
+    { cle: 'nom', titre: 'Valeur', largeur: 200, extensible: 2, mobile: 'titre', rendu: l => <Cellule gras>{l.nom}</Cellule> },
+    { cle: 'total', titre: 'Total perçu', largeur: 110, alignement: 'droite', mobile: 'valeur', rendu: l => <Cellule gras>{l.total}</Cellule> },
+    { cle: 'part', titre: 'Part', largeur: 80, alignement: 'droite', mobile: 'sous', renduMobile: l => <Cellule petit couleur={palette.texteSecondaire}>{`Part ${l.part}`}</Cellule>, rendu: l => <Cellule>{l.part}</Cellule> },
+    { cle: '12m', titre: 'Douze mois', largeur: 110, alignement: 'droite', mobile: 'valeur2', renduMobile: l => <Cellule petit couleur={palette.texteSecondaire}>{`12 mois : ${l.douzeMois}`}</Cellule>, rendu: l => <Cellule>{l.douzeMois}</Cellule> },
     {
       cle: 'rpr',
       titre: 'Sur revient',
@@ -57,8 +57,8 @@ export function OngletDividendes({ vue }: { vue: VueDividendes }) {
   ];
 
   const colonnesDerniers: Colonne<LigneDividende>[] = [
-    { cle: 'date', titre: 'Date', largeur: 100, rendu: l => <Cellule>{l.date}</Cellule> },
-    { cle: 'titre', titre: 'Valeur', largeur: 180, extensible: 2, rendu: l => <Cellule gras>{l.titre}</Cellule> },
+    { cle: 'date', titre: 'Date', largeur: 100, mobile: 'sous', rendu: l => <Cellule>{l.date}</Cellule> },
+    { cle: 'titre', titre: 'Valeur', largeur: 180, extensible: 2, mobile: 'titre', rendu: l => <Cellule gras>{l.titre}</Cellule> },
     { cle: 'compte', titre: 'Compte', largeur: 130, rendu: l => <Cellule>{l.compte}</Cellule> },
     {
       cle: 'retenue',
@@ -72,6 +72,7 @@ export function OngletDividendes({ vue }: { vue: VueDividendes }) {
       titre: 'Net',
       largeur: 110,
       alignement: 'droite',
+      mobile: 'valeur',
       rendu: l => <Signe texte={l.net} tendance="hausse" taille={12.5} />,
     },
   ];

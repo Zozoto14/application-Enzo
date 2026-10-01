@@ -5,6 +5,7 @@
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text } from '../../mobile/adaptatif';
+import { useMobile } from '../../mobile/useMobile';
 import { usePalette } from '../../composants';
 import { CarteSection, Metrique, Rangee, Selecteur, Signe, Vide } from '../../elements';
 import { Barres, Donut, GraphiqueLignes, Treemap } from '../../graphiques/Graphiques';
@@ -37,6 +38,7 @@ export function OngletPositions({
   onOuvrirTitre?(titreId: string): void;
 }) {
   const palette = usePalette();
+  const mobile = useMobile();
   const [critere, setCritere] = useState<Critere>('positions');
   const vue = useMemo(() => (analyse ? construirePositions(analyse) : undefined), [analyse]);
 
@@ -61,6 +63,8 @@ export function OngletPositions({
       titre: 'Nom',
       largeur: 220,
       extensible: 2,
+      mobile: 'titre',
+      renduMobile: ligne => <Cellule gras>{ligne.nom}</Cellule>,
       tri: ligne => ligne.nom,
       rendu: ligne => (
         <View style={styles.nom}>
@@ -87,7 +91,19 @@ export function OngletPositions({
       ),
     },
     { cle: 'compte', titre: 'Compte', largeur: 110, rendu: ligne => <Cellule>{ligne.compte}</Cellule>, tri: l => l.compte },
-    { cle: 'qte', titre: 'Qté', largeur: 60, alignement: 'droite', rendu: l => <Cellule>{l.quantite}</Cellule> },
+    {
+      cle: 'qte',
+      titre: 'Quantité',
+      largeur: 60,
+      alignement: 'droite',
+      mobile: 'sous',
+      renduMobile: l => (
+        <Cellule petit couleur={palette.texteSecondaire}>
+          {l.quantite} × {l.cours}
+        </Cellule>
+      ),
+      rendu: l => <Cellule>{l.quantite}</Cellule>,
+    },
     { cle: 'pru', titre: 'PRU', largeur: 90, alignement: 'droite', rendu: l => <Cellule>{l.pru}</Cellule> },
     { cle: 'cout', titre: 'Coût', largeur: 100, alignement: 'droite', rendu: l => <Cellule>{l.cout}</Cellule> },
     { cle: 'prix', titre: 'Prix', largeur: 90, alignement: 'droite', rendu: l => <Cellule>{l.cours}</Cellule> },
@@ -108,6 +124,7 @@ export function OngletPositions({
       titre: 'Total',
       largeur: 110,
       alignement: 'droite',
+      mobile: 'valeur',
       tri: l => l.brut.valeur,
       rendu: l => <Cellule gras>{l.valeur}</Cellule>,
     },
@@ -124,7 +141,9 @@ export function OngletPositions({
       titre: '+/- latent',
       largeur: 100,
       alignement: 'droite',
+      mobile: 'valeur2',
       tri: l => l.brut.latent,
+      renduMobile: l => <Signe texte={`${l.latent.texte} · ${l.latentPct.texte}`} tendance={l.latent.tendance} taille={15} />,
       rendu: l => <Signe texte={l.latent.texte} tendance={l.latent.tendance} taille={12} />,
     },
     {
@@ -137,8 +156,42 @@ export function OngletPositions({
     },
   ];
 
+  const carteTitres = (
+    <CarteSection titre="Titres" actions={<Text style={{ color: palette.texteSecondaire }}>{vue.nombreLignes}</Text>}>
+        <Tableau
+          colonnes={colonnes}
+          lignes={vue.lignes}
+          cle={ligne => `${ligne.titreId}-${ligne.compte}`}
+          onPressLigne={onOuvrirTitre ? ligne => onOuvrirTitre(ligne.titreId) : undefined}
+          titreLigne={ligne => ligne.nom}
+          testID="tableau-titres"
+          pied={
+            <>
+              <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>
+                Lignes : <Text style={{ color: palette.texte, fontWeight: '700' }}>{vue.pied.lignes}</Text>
+              </Text>
+              <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>
+                Latent : <Signe texte={vue.pied.latent.texte} tendance={vue.pied.latent.tendance} taille={12} />
+              </Text>
+              <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>
+                Réalisé : <Signe texte={vue.pied.realise.texte} tendance={vue.pied.realise.tendance} taille={12} />
+              </Text>
+              <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>
+                Dividendes (net) : <Text style={{ color: palette.texte, fontWeight: '700' }}>{vue.pied.dividendes}</Text>
+              </Text>
+              <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>
+                Total Return :{' '}
+                <Signe texte={vue.pied.totalReturn.texte} tendance={vue.pied.totalReturn.tendance} taille={12} />
+              </Text>
+            </>
+          }
+        />
+    </CarteSection>
+  );
+
   return (
     <>
+      {mobile ? carteTitres : null}
       <Rangee>
         <CarteSection
           titre="Répartition du portefeuille"
@@ -242,35 +295,7 @@ export function OngletPositions({
         </CarteSection>
       </Rangee>
 
-      <CarteSection titre="Titres" actions={<Text style={{ color: palette.texteSecondaire }}>{vue.nombreLignes}</Text>}>
-        <Tableau
-          colonnes={colonnes}
-          lignes={vue.lignes}
-          cle={ligne => `${ligne.titreId}-${ligne.compte}`}
-          onPressLigne={onOuvrirTitre ? ligne => onOuvrirTitre(ligne.titreId) : undefined}
-          testID="tableau-titres"
-          pied={
-            <>
-              <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>
-                Lignes : <Text style={{ color: palette.texte, fontWeight: '700' }}>{vue.pied.lignes}</Text>
-              </Text>
-              <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>
-                Latent : <Signe texte={vue.pied.latent.texte} tendance={vue.pied.latent.tendance} taille={12} />
-              </Text>
-              <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>
-                Réalisé : <Signe texte={vue.pied.realise.texte} tendance={vue.pied.realise.tendance} taille={12} />
-              </Text>
-              <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>
-                Dividendes (net) : <Text style={{ color: palette.texte, fontWeight: '700' }}>{vue.pied.dividendes}</Text>
-              </Text>
-              <Text style={{ color: palette.texteSecondaire, fontSize: 12 }}>
-                Total Return :{' '}
-                <Signe texte={vue.pied.totalReturn.texte} tendance={vue.pied.totalReturn.tendance} taille={12} />
-              </Text>
-            </>
-          }
-        />
-      </CarteSection>
+      {mobile ? null : carteTitres}
     </>
   );
 }

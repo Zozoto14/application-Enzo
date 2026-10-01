@@ -138,6 +138,7 @@ function Comptes(props: ComparateurFinancierProps) {
       cle: 'poste',
       titre: etat?.titre ?? '',
       largeur: 270,
+      mobile: 'titre',
       rendu: ligne => {
         const coche = postes.includes(ligne.libelle);
         return (
@@ -163,6 +164,7 @@ function Comptes(props: ComparateurFinancierProps) {
       titre: annee,
       largeur: 92,
       extensible: 1,
+      mobile: index === (etats?.annees.length ?? 0) - 1 ? ('valeur' as const) : ('detail' as const),
       alignement: 'droite' as const,
       rendu: (ligne: LigneFinance) => (
         <View style={{ alignItems: 'flex-end' }}>

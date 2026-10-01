@@ -102,6 +102,19 @@ export function Screener({ chargerScreener, surveilles, onSurveiller, onOuvrirFi
       titre: 'Nom',
       largeur: 230,
       extensible: 1,
+      mobile: 'titre',
+      renduMobile: action => (
+        <View>
+          <Text numberOfLines={2} style={{ color: palette.texte, fontWeight: '700', fontSize: 17 }}>
+            {action.nom}
+          </Text>
+          <Text numberOfLines={1} style={{ color: palette.accent, fontSize: 15 }}>
+            {action.pays ? `${DRAPEAUX[action.pays.toUpperCase()] ?? ''} ` : ''}
+            {action.symbole}
+            {action.place ? ` · ${action.place}` : ''}
+          </Text>
+        </View>
+      ),
       tri: action => action.nom,
       rendu: action => (
         <Pressable onPress={() => onOuvrirFiche(action.symbole)} style={styles.nom} accessibilityRole="link">
@@ -128,6 +141,7 @@ export function Screener({ chargerScreener, surveilles, onSurveiller, onOuvrirFi
       titre: 'Cours',
       largeur: 100,
       alignement: 'droite',
+      mobile: 'valeur',
       tri: action => action.cours,
       rendu: action => {
         const prix = libellesEnEuros(action.cours, action.devise, enEuros);
@@ -144,6 +158,7 @@ export function Screener({ chargerScreener, surveilles, onSurveiller, onOuvrirFi
       titre: 'Jour',
       largeur: 90,
       alignement: 'droite',
+      mobile: 'valeur2',
       tri: action => action.variation,
       rendu: action =>
         action.variation === null ? (
@@ -160,6 +175,7 @@ export function Screener({ chargerScreener, surveilles, onSurveiller, onOuvrirFi
       titre: 'Capitalisation',
       largeur: 120,
       alignement: 'droite',
+      mobile: 'sous',
       tri: action => action.capitalisation,
       rendu: action => {
         const euros = action.capitalisation === null ? undefined : enEuros(action.capitalisation, action.devise);
@@ -308,6 +324,8 @@ export function Screener({ chargerScreener, surveilles, onSurveiller, onOuvrirFi
                 lignes={etat.actions}
                 cle={action => action.symbole}
                 vide="Aucune action ne remplit ces critères."
+                titreLigne={action => action.nom}
+                onOuvrirMobile={action => onOuvrirFiche(action.symbole)}
                 testID="tableau-screener"
               />
               {etat.actions.length < etat.total ? (

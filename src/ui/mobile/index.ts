@@ -5,7 +5,7 @@
 
 export { POINTS_RUPTURE, estTelephone, forcerModeAffichage, modeForce, type ModeAffichage } from './detection';
 export { ModeAffichageForce, useMobile, useModeAffichage } from './useMobile';
-export { CONTROLE, DUREE, ESPACE, EXEMPTE_TEXTE, GOUTTIERE, TEXTE, TEXTE_MIN, rayonCarte, rayonControle, tailleTexte, themeActif } from './jetons';
+export { CONTROLE, DUREE, ESPACE, EXEMPTE_TEXTE, GOUTTIERE, TEXTE, TEXTE_MIN, POLICE_NOMBRES, nombres, rayonCarte, rayonControle, tailleTexte, themeActif } from './jetons';
 export { ZoneSecurite, margesSecurite, type Cote } from './ZoneSecurite';
 export { EnTeteMobile, BoutonIcone, type ActionEnTete } from './EnTeteMobile';
 export { BarreOnglets, MAX_ONGLETS, type EntreeOnglet } from './BarreOnglets';

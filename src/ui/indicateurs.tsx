@@ -19,12 +19,44 @@ import type { Tendance } from './format';
 import { explication, type CleExplication } from './vues/explications';
 import type { MesureAffichee } from './vues/onglets';
 import { useSignalerOuverture } from './superposition';
+import { FeuilleBasse } from './mobile/FeuilleBasse';
+import { nombres, themeActif } from './mobile/jetons';
+import { useMobile } from './mobile/useMobile';
 
 export function Explication({ cle }: { cle: CleExplication }) {
   const [ouvert, setOuvert] = useState(false);
   useSignalerOuverture(ouvert);
   const palette = usePalette();
+  const mobile = useMobile();
   const contenu = explication(cle);
+
+  if (mobile) {
+    // Téléphone : pas de bulle ni de survol. Un « ? » de 44 px ouvre l'explication dans une feuille basse.
+    const theme = themeActif();
+    return (
+      <View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Expliquer : ${contenu.titre}`}
+          testID={`explication-${cle}`}
+          onPress={() => setOuvert(true)}
+          style={styles.cibleMobile}>
+          <View style={[styles.pastilleMobile, { borderColor: palette.texteSecondaire }]}>
+            <Text style={{ color: palette.texteSecondaire, fontWeight: '700', fontSize: 15 }}>?</Text>
+          </View>
+        </Pressable>
+        <FeuilleBasse theme={theme} visible={ouvert} titre={contenu.titre} onFermer={() => setOuvert(false)} testID="feuille-explication">
+          <Text style={{ color: palette.texte, fontSize: 17, lineHeight: 25, fontWeight: '600' }}>{contenu.court}</Text>
+          <Text style={{ color: palette.texteSecondaire, fontSize: 16, lineHeight: 24 }}>{contenu.detail}</Text>
+          {contenu.piege ? (
+            <View style={[styles.piege, { borderLeftColor: palette.danger }]}>
+              <Text style={{ color: palette.texteSecondaire, fontSize: 16, lineHeight: 24 }}>{contenu.piege}</Text>
+            </View>
+          ) : null}
+        </FeuilleBasse>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.bloc}>
@@ -79,6 +111,7 @@ export function Indicateur({
   grand = false,
 }: IndicateurProps) {
   const palette = usePalette();
+  const mobile = useMobile();
 
   return (
     <View style={styles.indicateur}>
@@ -88,13 +121,14 @@ export function Indicateur({
       </View>
 
       {tendance ? (
-        <Variation valeur={valeur} tendance={tendance} taille={grand ? 28 : 18} />
+        <Variation valeur={valeur} tendance={tendance} taille={grand ? (mobile ? 32 : 28) : mobile ? 20 : 18} />
       ) : (
         <Text
           style={{
             color: palette.texte,
-            fontSize: grand ? 28 : 18,
+            fontSize: grand ? (mobile ? 32 : 28) : mobile ? 20 : 18,
             fontWeight: '700',
+            ...nombres(),
           }}>
           {valeur}
         </Text>
@@ -162,6 +196,8 @@ export function Jauge({ fraction, tendance }: { fraction: number; tendance?: Ten
 
 const styles = StyleSheet.create({
   bloc: { position: 'relative', zIndex: 20 },
+  cibleMobile: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  pastilleMobile: { width: 28, height: 28, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   pastille: {
     width: 18,
     height: 18,

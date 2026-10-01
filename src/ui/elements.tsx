@@ -7,12 +7,16 @@
  */
 
 import React, { createContext, useContext, useState } from 'react';
-import { StyleSheet, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+import { ScrollView, StyleSheet, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { Pressable, Text } from './mobile/adaptatif';
 import { usePalette } from './composants';
 import { Explication } from './indicateurs';
 import { ESPACEMENT, RAYON, POLICE_TITRE } from './theme';
 import type { Tendance } from './format';
+import { FeuilleBasse } from './mobile/FeuilleBasse';
+import { CONTROLE, ESPACE, TEXTE, nombres, rayonCarte, rayonControle, themeActif } from './mobile/jetons';
+import { Cellule, GroupeCellules } from './mobile/ListeCellules';
+import { useMobile } from './mobile/useMobile';
 import type { CleExplication } from './vues/explications';
 import {
   Superposition,
@@ -59,6 +63,7 @@ export function CarteSection({
 }: CarteSectionProps) {
   const palette = usePalette();
   const large = useLarge();
+  const mobile = useMobile();
   const enRangee = useContext(DansRangee);
   const [dessus, signaler] = useSuperposition();
   return (
@@ -67,6 +72,8 @@ export function CarteSection({
         testID={testID}
         style={[
           styles.carte,
+          mobile && styles.carteMobile,
+          mobile && { borderRadius: rayonCarte(themeActif()) },
           { backgroundColor: palette.surface, borderColor: palette.bordure },
           large && enRangee
             ? { flexGrow: poids, flexShrink: 1, flexBasis: 0, minWidth: 280 }
@@ -76,13 +83,13 @@ export function CarteSection({
         ]}
       >
         {titre || actions ? (
-          <View style={styles.enTete}>
+          <View style={[styles.enTete, mobile && styles.enTeteMobile]}>
             <View style={styles.titreBloc}>
               {avantTitre}
               {titre ? (
                 <Text
                   {...POLICE_TITRE}
-                  style={[styles.titre, { color: palette.texte }]}
+                  style={[styles.titre, mobile && styles.titreMobile, { color: palette.texte }]}
                   accessibilityRole="header"
                 >
                   {titre}
@@ -90,7 +97,7 @@ export function CarteSection({
               ) : null}
               {explication ? <Explication cle={explication} /> : null}
             </View>
-            {actions ? <View style={styles.actions}>{actions}</View> : null}
+            {actions ? <View style={[styles.actions, mobile && styles.actionsMobile]}>{actions}</View> : null}
           </View>
         ) : null}
         {children}
@@ -168,7 +175,7 @@ export function Pastille({
   const fleche = tendance === 'hausse' ? '↗' : tendance === 'baisse' ? '↘' : '';
   return (
     <View style={[styles.pastille, { backgroundColor: fond }]}>
-      <Text style={{ color: couleur, fontSize: taille, fontWeight: '700' }}>
+      <Text style={{ color: couleur, fontSize: taille, fontWeight: '700', ...nombres() }}>
         {fleche ? `${fleche} ` : ''}
         {texte}
       </Text>
@@ -201,6 +208,7 @@ export function Signe({
         color: couleur,
         fontSize: taille,
         fontWeight: gras ? '700' : '500',
+        ...nombres(),
       }}
     >
       {texte}
@@ -223,8 +231,13 @@ export function Segments<T extends string>({
   prefixeTest?: string;
 }) {
   const palette = usePalette();
-  return (
-    <View style={styles.segments} accessibilityRole="radiogroup">
+  const mobile = useMobile();
+  const theme = themeActif();
+  const rayon = rayonControle(theme) === 999 ? 24 : rayonControle(theme);
+  // Téléphone : contrôle segmenté, segments égaux de 44 px, qui défile au-delà de cinq choix.
+  const defile = mobile && options.length > 5;
+  const rangee = (
+    <View style={[styles.segments, mobile && styles.segmentsMobile, defile && { flexWrap: 'nowrap' }]} accessibilityRole="radiogroup">
       {options.map(option => {
         const selectionne = option === actif;
         return (
@@ -236,6 +249,10 @@ export function Segments<T extends string>({
             onPress={() => onChoisir(option)}
             style={({ pressed }) => [
               styles.segment,
+              mobile && styles.segmentMobile,
+              mobile && { borderRadius: rayon },
+              mobile && !defile && { flexGrow: 1, flexBasis: 0 },
+              mobile && defile && { paddingHorizontal: ESPACE.m },
               {
                 backgroundColor: selectionne
                   ? palette.accentPlein
@@ -251,7 +268,7 @@ export function Segments<T extends string>({
               style={{
                 color: selectionne
                   ? palette.surAccent
-                  : palette.texteSecondaire,
+                  : mobile ? palette.texte : palette.texteSecondaire,
                 fontSize: 12,
                 fontWeight: '700',
               }}
@@ -262,6 +279,13 @@ export function Segments<T extends string>({
         );
       })}
     </View>
+  );
+  return defile ? (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: ESPACE.m }}>
+      {rangee}
+    </ScrollView>
+  ) : (
+    rangee
   );
 }
 
@@ -292,9 +316,52 @@ export function Selecteur({
   testID?: string;
 }) {
   const palette = usePalette();
+  const mobile = useMobile();
   const [ouvert, setOuvert] = useState(false);
   useSignalerOuverture(ouvert);
   const courant = options.find(option => option.valeur === valeur);
+
+  if (mobile) {
+    // Téléphone : un champ de 48 px (« Compte  Tous ›») qui ouvre une feuille basse de choix.
+    const theme = themeActif();
+    return (
+      <View style={{ alignSelf: 'stretch', flexGrow: 1 }}>
+        <Pressable
+          testID={testID}
+          accessibilityRole="button"
+          accessibilityLabel={`${etiquette} : ${courant?.libelle ?? valeur}`}
+          accessibilityState={{ expanded: ouvert }}
+          onPress={() => setOuvert(true)}
+          style={({ pressed }) => [
+            styles.champSelecteurMobile,
+            { borderColor: palette.bordure, backgroundColor: pressed ? palette.surfaceHaute : palette.surface, borderRadius: rayonControle(theme) === 999 ? 24 : rayonControle(theme) },
+          ]}>
+          <Text style={{ color: palette.texteSecondaire, fontSize: TEXTE.legende }}>{etiquette}</Text>
+          <Text numberOfLines={1} style={{ color: palette.texte, fontSize: TEXTE.corps, fontWeight: '600', flex: 1, textAlign: 'right' }}>
+            {courant?.libelle ?? valeur}
+          </Text>
+          <Text style={{ color: palette.texteSecondaire, fontSize: 20 }}>›</Text>
+        </Pressable>
+        <FeuilleBasse theme={theme} visible={ouvert} titre={etiquette} onFermer={() => setOuvert(false)} testID={testID ? `${testID}-feuille` : 'feuille-choix'}>
+          <GroupeCellules theme={theme}>
+            {options.map(option => (
+              <Cellule
+                key={option.valeur}
+                theme={theme}
+                titre={option.libelle}
+                coche={option.valeur === valeur}
+                testID={testID ? `${testID}-${option.valeur}` : undefined}
+                onPress={() => {
+                  setOuvert(false);
+                  onChoisir(option.valeur);
+                }}
+              />
+            ))}
+          </GroupeCellules>
+        </FeuilleBasse>
+      </View>
+    );
+  }
 
   return (
     <View
@@ -434,6 +501,7 @@ export function Metrique({
   detail?: string;
 }) {
   const palette = usePalette();
+  const mobile = useMobile();
   const couleur =
     tendance === 'hausse'
       ? palette.hausse
@@ -443,11 +511,11 @@ export function Metrique({
   return (
     <View style={styles.metrique}>
       <Text
-        style={[styles.libelleMetrique, { color: palette.texteSecondaire }]}
+        style={[styles.libelleMetrique, mobile && styles.libelleMetriqueMobile, { color: palette.texteSecondaire }]}
       >
         {libelle}
       </Text>
-      <Text style={{ color: couleur, fontSize: 14, fontWeight: '700' }}>
+      <Text style={{ color: couleur, fontSize: mobile ? TEXTE.corps : 14, fontWeight: '700', ...nombres() }}>
         {valeur}
       </Text>
       {detail ? (
@@ -472,6 +540,21 @@ export function Vide({ children }: { children: React.ReactNode }) {
 }
 
 const styles = StyleSheet.create({
+  carteMobile: { padding: ESPACE.m, gap: ESPACE.s + 4 },
+  enTeteMobile: { flexDirection: 'column', alignItems: 'stretch', flexWrap: 'nowrap', gap: ESPACE.s },
+  titreMobile: { fontSize: TEXTE.section - 2, lineHeight: 26 },
+  actionsMobile: { alignSelf: 'stretch', maxWidth: '100%' },
+  segmentsMobile: { gap: ESPACE.xxs, padding: ESPACE.xxs, alignSelf: 'stretch', flexWrap: 'nowrap' },
+  segmentMobile: { minHeight: CONTROLE.cible, minWidth: CONTROLE.cible, paddingHorizontal: ESPACE.xs },
+  champSelecteurMobile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: ESPACE.s,
+    borderWidth: 1,
+    paddingHorizontal: ESPACE.m,
+    minHeight: CONTROLE.hauteur,
+  },
+  libelleMetriqueMobile: { textTransform: 'none', letterSpacing: 0, fontWeight: '500', fontSize: TEXTE.legende },
   carte: {
     borderRadius: RAYON.m,
     borderWidth: 1,

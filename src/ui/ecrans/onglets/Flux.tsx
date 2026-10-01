@@ -50,11 +50,12 @@ export function OngletFlux({
   }
 
   const colonnes: Colonne<MouvementFlux>[] = [
-    { cle: 'date', titre: 'Date', largeur: 110, rendu: m => <Cellule>{m.date}</Cellule> },
+    { cle: 'date', titre: 'Date', largeur: 110, mobile: 'sous', rendu: m => <Cellule>{m.date}</Cellule> },
     {
       cle: 'type',
       titre: 'Type',
       largeur: 100,
+      mobile: 'titre',
       rendu: m => (
         <View
           style={[
@@ -72,12 +73,13 @@ export function OngletFlux({
         </View>
       ),
     },
-    { cle: 'compte', titre: 'Compte', largeur: 160, extensible: 1, rendu: m => <Cellule>{m.compte}</Cellule> },
+    { cle: 'compte', titre: 'Compte', largeur: 160, extensible: 1, mobile: 'sous', rendu: m => <Cellule>{m.compte}</Cellule> },
     {
       cle: 'flux',
       titre: 'Flux',
       largeur: 140,
       alignement: 'droite',
+      mobile: 'valeur',
       rendu: m => <Signe texte={m.montant} tendance={m.tendance} taille={12.5} />,
     },
   ];
