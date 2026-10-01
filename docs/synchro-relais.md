@@ -81,6 +81,12 @@ reçues, en attente de déverrouillage », « N éléments prêts à envoyer »,
 (`applibourse.synchro.demarrage`) est **global à l'appareil** et ne contient que deux compteurs et une date : le même
 texte s'affiche quel que soit le prénom saisi (vrai compte ou leurre), il ne dit rien d'un compte.
 
+**Scénario de bout en bout** : `scripts/e2e-demarrage.mjs` (faux relais exécutant `relais/worker.mjs`, deux
+appareils), captures dans `docs/captures-demarrage/` : B change le thème et crée un compte pendant que A est fermé ;
+A démarre verrouillé (« 1 mise à jour reçue, en attente de déverrouillage ») ; A se déverrouille relais coupé : Ivoire
+dès la première image du hub, compte présent ; A change le thème relais coupé, redémarre (« 1 élément prêt à
+envoyer ») ; le relais revient : l'envoi part seul, A toujours verrouillé, et B reçoit le thème.
+
 **Isolation et nettoyage.** Un profil ne lit que ses fichiers (`nomFichierCache`, et `fichierAutorise` côté Electron :
 un ami n'atteint ni `synchro-*` de l'administrateur, ni ceux d'un compte qu'il gère) ; seul le cache de
 l'administrateur (`principal`) est rempli avant le choix d'un compte. Relais ou jeton changé → caches ignorés puis
