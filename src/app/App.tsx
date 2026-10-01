@@ -40,7 +40,7 @@ import {
 import { FOURNISSEURS, fournisseurParId } from '../cours/fournisseurs';
 import { rafraichirCours, resumeRafraichissement } from '../cours/rafraichir';
 import { ErreurDeverrouillage } from '../securite/coffre';
-import { ErreurTemporisation, Session } from '../session/session';
+import { ErreurCoffreDifferent, ErreurTemporisation, Session } from '../session/session';
 import { construireDashboard, type VueDashboard } from '../ui/vues/dashboard';
 import { anneesDisponibles, construireRapportAnnuel } from '../rapport/annuel';
 import { ecrireRapport } from '../rapport/fichiers';
@@ -552,6 +552,10 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           setEchecsAuth(0);
           setAvisHorloge(undefined);
         } catch (e) {
+          if (e instanceof ErreurCoffreDifferent) {
+            // Identifiants du PC justes, base d'ici scellée par un autre coffre : « relier » tout de suite.
+            setEchecsAuth(n => Math.max(n + 1, 2));
+          }
           if (e instanceof ErreurDeverrouillage) {
             // Échec d'authentification (jamais une erreur technique) : l'horloge
             // est comparée à celle du relais, un code TOTP refusé s'explique souvent ainsi.
