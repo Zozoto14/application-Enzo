@@ -22,6 +22,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { nouveauContexte } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -214,7 +215,7 @@ const JSON_IA = {
 const navigateur = await chromium.launch({ headless: true });
 const options = { ignoreHTTPSErrors: true, viewport: { width: 1100, height: 860 } };
 try {
-  const pc = await (await navigateur.newContext(options)).newPage();
+  const pc = await (await nouveauContexte(navigateur, options)).newPage();
   const erreursPage = [];
   pc.on('pageerror', e => {
     erreursPage.push(e.message);

@@ -19,6 +19,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { nouveauContexte } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -248,7 +249,7 @@ const options = { ignoreHTTPSErrors: true, viewport: { width: 1100, height: 900 
 const isoJour = decalage => new Date(Date.now() + decalage * 86_400_000).toISOString().slice(0, 10);
 const NOTE_SECRETE = 'NOTE-PRIVEE-ABO-XYZ';
 try {
-  const pc = await (await navigateur.newContext(options)).newPage();
+  const pc = await (await nouveauContexte(navigateur, options)).newPage();
   pc.on('pageerror', e => log('erreur page PC :', e.message));
 
   log('PC : coffre du Fondateur, relié au relais');
@@ -371,7 +372,7 @@ try {
     await identiteSiDemandee(pc, MDP_ADMIN, secretAdmin);
     await pc.getByTestId('admin-code-site').waitFor({ timeout: 20_000 });
     const code = (await pc.getByTestId('admin-code-site').innerText()).trim();
-    const nav = await (await navigateur.newContext(options)).newPage();
+    const nav = await (await nouveauContexte(navigateur, options)).newPage();
     nav.on('pageerror', e => log(`erreur page ${nom} :`, e.message));
     await relier(nav, code);
     await nav.getByTestId('connexion-prenom').waitFor({ timeout: 60_000 });
