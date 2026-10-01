@@ -16,7 +16,7 @@ import { Aide, CadreAdmin, CelluleChoix } from './briques';
 export function Applications({ outils, onRetour }: { outils: OutilsAdmin; onRetour(): void }) {
   const { theme, registre } = outils;
   return (
-    <CadreAdmin theme={theme} titre="Applications" libelleRetour="Administration" onRetour={onRetour} testID="admin-section-applications">
+    <CadreAdmin theme={theme} titre="Applications" libelleRetour="Admin" onRetour={onRetour} testID="admin-section-applications">
       <Aide theme={theme}>
         Les apps viennent du registre du hub. Une app désactivée disparaît du hub de tous les autres utilisateurs ; en maintenance, sa tuile affiche votre message et ne s’ouvre plus pour eux. Vous gardez toujours l’accès.
       </Aide>

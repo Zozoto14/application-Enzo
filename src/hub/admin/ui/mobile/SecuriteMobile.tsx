@@ -22,7 +22,7 @@ export function Securite({ outils, onRetour, onVerrouiller }: { outils: OutilsAd
     <CadreAdmin
       theme={theme}
       titre="Sécurité"
-      libelleRetour="Administration"
+      libelleRetour="Admin"
       onRetour={onRetour}
       testID="admin-section-securite"
       pied={<BoutonPrincipal theme={theme} titre="🔒 Verrouiller le panneau" onPress={onVerrouiller} desactive={!outils.services} testID="admin-verrouiller-panneau" />}>

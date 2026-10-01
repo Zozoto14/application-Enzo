@@ -115,7 +115,7 @@ export function Abonnements({ outils, onRetour }: { outils: OutilsAdmin; onRetou
     <CadreAdmin
       theme={theme}
       titre="Abonnements"
-      libelleRetour="Administration"
+      libelleRetour="Admin"
       onRetour={onRetour}
       testID="admin-section-abonnements"
       actions={[{ titre: '⇩', libelle: 'Exporter l’historique (CSV)', onPress: exporter, testID: 'admin-abo-export' }]}>

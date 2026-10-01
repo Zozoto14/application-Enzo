@@ -22,7 +22,7 @@ export function Tableau({ outils, onRetour }: { outils: OutilsAdmin; onRetour():
   const recents = [...donnees.journal].reverse().slice(0, 8);
   const vers = (id: 'utilisateurs') => () => outils.allerA(id);
   return (
-    <CadreAdmin theme={theme} titre="Tableau de bord" libelleRetour="Administration" onRetour={onRetour} testID="admin-section-tableau">
+    <CadreAdmin theme={theme} titre="Tableau de bord" libelleRetour="Admin" onRetour={onRetour} testID="admin-section-tableau">
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
         <TuileChiffre theme={theme} libelle="Comptes" valeur={stats.total} testID="admin-stat-total" onPress={vers('utilisateurs')} />
         <TuileChiffre theme={theme} libelle="Actifs" valeur={stats.actifs} testID="admin-stat-actifs" onPress={vers('utilisateurs')} />

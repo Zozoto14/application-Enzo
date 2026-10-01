@@ -98,7 +98,7 @@ function Liste({ outils, apps, onRetour, onOuvrir, onCreer, creationPossible }: 
     <CadreAdmin
       theme={theme}
       titre="Utilisateurs"
-      libelleRetour="Administration"
+      libelleRetour="Admin"
       onRetour={onRetour}
       testID="admin-section-utilisateurs"
       actions={tous.some(actionnable) ? [{ titre: mode ? '✕' : '☑︎', libelle: mode ? 'Quitter la sélection' : 'Sélectionner des comptes', onPress: mode ? quitterMode : () => setMode(true), testID: 'admin-selectionner' }] : undefined}

@@ -66,7 +66,7 @@ export function Journal({ outils, onRetour }: { outils: OutilsAdmin; onRetour():
     <CadreAdmin
       theme={theme}
       titre="Journal d’audit"
-      libelleRetour="Administration"
+      libelleRetour="Admin"
       onRetour={onRetour}
       testID="admin-section-journal"
       actions={peutExporter ? [{ titre: '⇩', libelle: 'Exporter le journal', onPress: () => setExport(true), testID: 'admin-journal-exporter' }] : undefined}>

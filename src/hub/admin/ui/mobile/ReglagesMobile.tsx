@@ -11,7 +11,7 @@ export function Reglages({ outils, onRetour }: { outils: OutilsAdmin; onRetour()
     <CadreAdmin
       theme={theme}
       titre="Réglages"
-      libelleRetour="Administration"
+      libelleRetour="Admin"
       onRetour={onRetour}
       testID="admin-section-reglages"
       pied={<BoutonPrincipal theme={theme} titre="Ouvrir les Paramètres" onPress={() => outils.onParametres?.('administration')} testID="admin-ouvrir-parametres" />}>
