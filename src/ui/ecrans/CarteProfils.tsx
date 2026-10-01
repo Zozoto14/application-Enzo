@@ -102,6 +102,11 @@ export interface ControleProfils {
    * déverrouillage, proposer de reprendre le coffre du compte relié.
    */
   lier?: OptionsLier & { suggererAutreCoffre?: boolean };
+  /**
+   * Écran de déverrouillage, fourni par l'hôte (site) : écart d'horloge avec
+   * le relais (ms, positif = appareil en avance) et texte du diagnostic sans secret.
+   */
+  deverrouillage?: { ecartHorloge?(): Promise<number | undefined>; diagnostic?(): Promise<string> };
   /** Change quand la synchronisation des comptes a reçu quelque chose (Administration à relire). */
   versionComptes?: number;
   /** Sa propre ligne d'abonnement (mode, échéance, message de rappel), reçue du relais : jamais celle d'un autre. */

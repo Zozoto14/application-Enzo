@@ -110,6 +110,35 @@ export async function testerLiaison(liaison: Liaison, requete: Fetch = fetch): P
 }
 
 /**
+ * Écart entre l'horloge de cet appareil et celle du relais, en millisecondes
+ * (positif : l'appareil est en avance). Mesuré au milieu de l'aller-retour.
+ * `undefined` si le relais ne donne pas l'heure (ancienne version) ou est
+ * injoignable. Sert à expliquer un code TOTP refusé, jamais à l'accepter.
+ */
+export async function mesurerEcartHorloge(
+  liaison: Liaison,
+  requete: Fetch = fetch,
+  horloge: () => number = () => Date.now(),
+): Promise<number | undefined> {
+  for (const chemin of ['/heure', '/sante']) {
+    try {
+      const avant = horloge();
+      const reponse = await appeler(liaison, chemin, {}, requete);
+      const apres = horloge();
+      if (!reponse.ok) continue;
+      const corps = (await reponse.json()) as { heure?: unknown };
+      if (typeof corps.heure === 'number' && Number.isFinite(corps.heure)) {
+        return Math.round((avant + apres) / 2 - corps.heure);
+      }
+    } catch {
+      // Relais injoignable : écart inconnu.
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Place du coffre dans la boîte : il y voyage dans une enveloppe au même
  * format que les dépôts, pour que le relais n'ait rien à connaître de neuf.
  * Il n'est pas chiffré en plus — il ne s'ouvre qu'avec le mot de passe (ou

@@ -71,6 +71,8 @@ export interface OptionsSessionBureau {
    * Seul le titulaire apprend ainsi l'état de son compte.
    */
   verifierOuverture?(): void;
+  /** Coffres du même compte publiés ailleurs (relais), essayés si le coffre local refuse le mot de passe. */
+  coffresAlternatifs?(): readonly Coffre[];
 }
 
 /**
@@ -191,7 +193,7 @@ export async function ouvrirSessionBureau(
   };
 
   return {
-    session: new Session({ stockage: stockageCoffre, ouvrirBase, reinitialiserBase, profil: options.profil ?? ID_PRINCIPAL }),
+    session: new Session({ stockage: stockageCoffre, ouvrirBase, reinitialiserBase, profil: options.profil ?? ID_PRINCIPAL, coffresAlternatifs: options.coffresAlternatifs }),
     emplacement,
     surDisque: stockage.surDisque,
     async vider() {
