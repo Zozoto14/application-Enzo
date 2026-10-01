@@ -65,6 +65,7 @@ describe('Administration › Tsuzuku › Sources', () => {
   it('vides par défaut ; le Fondateur en ajoute une, l’active, la supprime', async () => {
     const { services } = await monter(ReglageSourcesTsuzuku, 'fondateur');
     expect(await screen.findByTestId('sources-vide')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('sources-ajouter'));
     await fireEvent.press(screen.getByTestId('source-ajouter'));
     await texte('source-nom', 'Ma médiathèque');
     await texte('source-adresse', 'https://mediatheque-exemple.fr');
@@ -85,7 +86,8 @@ describe('Administration › Tsuzuku › Sources', () => {
 
   it('refuse une adresse non publique avec un message', async () => {
     await monter(ReglageSourcesTsuzuku, 'fondateur');
-    await fireEvent.press(await screen.findByTestId('source-ajouter'));
+    await fireEvent.press(await screen.findByTestId('sources-ajouter'));
+    await fireEvent.press(screen.getByTestId('source-ajouter'));
     await texte('source-nom', 'Maison');
     await texte('source-adresse', 'http://192.168.1.10');
     await fireEvent.press(screen.getByTestId('source-enregistrer'));
@@ -104,25 +106,31 @@ describe('Administration › Tsuzuku › Sources', () => {
   it('partage : personne par défaut, puis « une sélection » (Alice seule), puis retrait', async () => {
     const stockage = stockageMemoire({ [CLES.sources]: JSON.stringify(importerSources([{ id: 'src-a', name: 'Médiathèque A', baseUrl: 'https://mediatheque-exemple.fr', enabled: true, search: { path: '/r?q={query}', item: 'li' } }]).sources) });
     const { services } = await monter(ReglageSourcesTsuzuku, 'fondateur', { stockage, comptes: COMPTES });
-    expect((await screen.findByTestId('source-acces-src-a')).props.children.join('')).toMatch(/vous seul/);
+    expect((await screen.findByTestId('source-acces-src-a')).props.children).toMatch(/vous seul/);
     await fireEvent.press(screen.getByTestId('source-partage-src-a-selection'));
     await fireEvent.press(await screen.findByTestId('source-partage-src-a-compte-amiaaa01'));
     await waitFor(async () => expect(await services.partages()).toEqual({ 'src-a': { mode: 'selection', comptes: ['amiaaa01'] } }));
-    expect(screen.getByTestId('source-acces-src-a').props.children.join('')).toMatch(/1 utilisateur/);
+    expect(screen.getByTestId('source-acces-src-a').props.children).toBe('Partagée avec : Alice');
+    expect(screen.getByTestId('sources-recoit-amiaaa01').props.children.join('')).toBe('Alice : Médiathèque A');
+    expect(screen.getByTestId('sources-recoit-amibbb02').props.children.join('')).toBe('Bruno : rien');
     await fireEvent.press(screen.getByTestId('source-partage-src-a-personne'));
     await waitFor(async () => expect((await services.partages())['src-a'].mode).toBe('personne'));
   });
 
-  it('assistant : rappel des droits, analyse d’une page neutre, prompt, JSON validé, test pas à pas, enregistrement', async () => {
+  it('assistant (4 étapes) : rappel des droits, analyse d’une page neutre, prompt, JSON validé, test pas à pas, enregistrement', async () => {
     const { services, reseau } = await monter(ReglageSourcesTsuzuku, 'fondateur');
-    await fireEvent.press(await screen.findByTestId('sources-assistant'));
+    await fireEvent.press(await screen.findByTestId('sources-ajouter'));
+    await fireEvent.press(screen.getByTestId('sources-assistant'));
     expect(screen.getByTestId('assistant-rappel').props.children).toBe('N’ajoutez que des sources dont vous avez le droit d’utiliser le contenu.');
+    expect(screen.getByTestId('assistant-etape-1').props.accessibilityState.selected).toBe(true);
     await texte('assistant-adresse', 'https://mediatheque-exemple.fr/catalogue');
     await fireEvent.press(screen.getByTestId('assistant-analyser'));
     const prompt = (await screen.findByTestId('assistant-prompt')).props.value as string;
+    expect(screen.getByTestId('assistant-etape-2').props.accessibilityState.selected).toBe(true);
     expect(prompt).toContain('li.carte × 2');
     expect(prompt).toContain('"movies"');
     expect(reseau.urls()).toEqual(['https://mediatheque-exemple.fr/catalogue']);
+    await fireEvent.press(screen.getByTestId('assistant-suivant'));
     // JSON invalide : refusé avec le motif.
     await texte('assistant-json', '{"name":"X","baseUrl":"https://mediatheque-exemple.fr","search":{"path":"/recherche","item":"li"}}');
     await fireEvent.press(screen.getByTestId('assistant-verifier'));
@@ -132,9 +140,10 @@ describe('Administration › Tsuzuku › Sources', () => {
     await texte('assistant-json', '```json\n{"name":"Médiathèque exemple","baseUrl":"https://mediatheque-exemple.fr","language":"vostfr","search":{"path":"/recherche?q={query}","item":"ul.res li.carte","title":"a.t","link":"a.t"},"episodes":{"item":"li.ep","number":".n"},"player":{"iframe":"iframe"}}\n```');
     await fireEvent.press(screen.getByTestId('assistant-verifier'));
     expect(await screen.findByTestId('assistant-valide')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('assistant-suivant'));
     await texte('assistant-titre-test', 'Le voyage');
     await fireEvent.press(screen.getByTestId('assistant-tester'));
-    expect(await screen.findByTestId('assistant-diag-ok')).toBeTruthy();
+    expect(await screen.findByTestId('assistant-test-recherche-ok')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('assistant-enregistrer'));
     await waitFor(async () => expect((await services.sourcesPropres()).map(s => s.name)).toEqual(['Médiathèque exemple']));
     expect(await services.partages()).toEqual({});
@@ -142,7 +151,9 @@ describe('Administration › Tsuzuku › Sources', () => {
 
   it('assistant sur le site : on colle le code HTML (aucune requête)', async () => {
     const { reseau } = await monter(ReglageSourcesTsuzuku, 'fondateur', { lecture: false });
-    await fireEvent.press(await screen.findByTestId('sources-assistant'));
+    await fireEvent.press(await screen.findByTestId('sources-ajouter'));
+    await fireEvent.press(screen.getByTestId('sources-assistant'));
+    expect(screen.getByTestId('assistant-site')).toBeTruthy();
     await texte('assistant-html', PAGE);
     await fireEvent.press(screen.getByTestId('assistant-analyser'));
     expect(((await screen.findByTestId('assistant-prompt')).props.value as string)).toContain('GET /recherche ; champs : q');

@@ -143,7 +143,9 @@ describe('Tsuzuku : fiche, lien manuel, lecture, vu ailleurs, bibliothèque', ()
     await ouvrirFiche();
     await fireEvent.press(screen.getByTestId('fiche-lire'));
     expect(await screen.findByTestId('lecteur-message')).toBeTruthy();
-    expect(screen.getByText(/Aucune source/)).toBeTruthy();
+    expect(screen.getAllByText(/Aucune source/).length).toBeGreaterThan(0);
+    // Fondateur : « Ajouter/modifier les sources » à côté de « Aller à la fiche » (coller un lien).
+    expect(screen.getByTestId('lecteur-gerer-sources')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('lecteur-vers-fiche'));
     expect(await screen.findByTestId('fiche-titre')).toBeTruthy();
   });
@@ -244,8 +246,8 @@ describe('Tsuzuku : sur le site', () => {
   });
 });
 
-describe('Tsuzuku : rien de technique dans l’app, mention en pied de page', () => {
-  it('aucun onglet « Sources » (ni pour le Fondateur ni pour un ami) : tout est dans Paramètres', async () => {
+describe('Tsuzuku : onglet « Sources » réservé aux Fondateurs, mention en pied de page', () => {
+  it('un ami n’a ni onglet « Sources » ni bouton d’ajout', async () => {
     await monter({ profil: ami });
     expect(screen.queryByTestId('onglet-app-sources')).toBeNull();
     expect(screen.queryByTestId('source-ajouter')).toBeNull();
@@ -253,7 +255,7 @@ describe('Tsuzuku : rien de technique dans l’app, mention en pied de page', ()
 
   it('pied de page honnête sur toutes les pages, avec « En savoir plus »', async () => {
     const { onParametres } = await monter();
-    expect(screen.queryByTestId('onglet-app-sources')).toBeNull();
+    expect(screen.getByTestId('onglet-app-sources')).toBeTruthy();
     const mention = await screen.findByTestId('tsuzuku-mention');
     expect(mention.props.children).toBe(
       'Tsuzuku n’héberge ni ne télécharge aucun contenu : il affiche des contenus fournis par des sources ajoutées par l’administrateur. Chacun est responsable de n’utiliser que des sources dont il a le droit de consulter les contenus (droit d’auteur).',
