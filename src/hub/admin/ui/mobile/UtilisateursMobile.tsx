@@ -646,7 +646,7 @@ function Fiche({ outils, profil, apps, onRetour, onIdentifiants }: { outils: Out
       </FeuilleBasse>
 
       <FeuilleBasse theme={theme} visible={feuille === 'code' && Boolean(code)} titre={`Code d’accès de ${profil.nom}`} onFermer={fermer} testID="admin-feuille-code"
-        pied={<BoutonPrincipal theme={theme} titre="Terminé" onPress={fermer} />}>
+        pied={<BoutonPrincipal theme={theme} titre="Terminé" onPress={fermer} testID="admin-feuille-code-termine" />}>
         <View style={{ padding: ESPACE.m, borderRadius: rayonCarte(theme), backgroundColor: teinteTransparente(theme.teintes.admin, 0.12), borderWidth: 1, borderColor: theme.teintes.admin }}>
           <Text selectable testID="admin-code-acces" style={{ color: theme.texte, fontSize: 20, letterSpacing: 1.5, lineHeight: 30, ...police(theme.policeChiffres) }}>
             {code?.code}
@@ -656,7 +656,7 @@ function Fiche({ outils, profil, apps, onRetour, onIdentifiants }: { outils: Out
       </FeuilleBasse>
 
       <FeuilleBasse theme={theme} visible={feuille === 'codeSite' && Boolean(codeSite)} titre="Code de connexion au site" onFermer={fermer} testID="admin-feuille-code-site"
-        pied={<BoutonPrincipal theme={theme} titre="Terminé" onPress={fermer} />}>
+        pied={<BoutonPrincipal theme={theme} titre="Terminé" onPress={fermer} testID="admin-feuille-code-site-termine" />}>
         <View style={{ padding: ESPACE.m, borderRadius: rayonCarte(theme), backgroundColor: teinteTransparente(theme.teintes.admin, 0.12), borderWidth: 1, borderColor: theme.teintes.admin, gap: ESPACE.xs }}>
           <Text selectable testID="admin-code-site" style={{ color: theme.texte, fontSize: TEXTE.legende, lineHeight: 22, ...police(theme.policeChiffres) }}>
             {codeSite?.code}
