@@ -24,16 +24,24 @@ import {
   type IdDocument,
 } from '../juridique/modele';
 import { BoutonHub } from './Hub';
+import { BoutonPrincipal } from '../ui/mobile/BoutonPrincipal';
+import { EcranMobile } from '../ui/mobile/EcranMobile';
+import { EnTeteMobile } from '../ui/mobile/EnTeteMobile';
+import { Cellule, GroupeCellules } from '../ui/mobile/ListeCellules';
+import { tailleTexte } from '../ui/mobile/jetons';
+import { useMobile } from '../ui/mobile/useMobile';
+import { margesSecurite } from '../ui/mobile/ZoneSecurite';
 import { police, type ThemeHub } from './themes';
 import { ecouterTouche } from './web';
 
 function TexteDocument({ theme, texte }: { theme: ThemeHub; texte: string }) {
-  const corps = { color: theme.texte, fontSize: 14, lineHeight: 21, ...police(theme.policeTexte) };
+  const mobile = useMobile();
+  const corps = { color: theme.texte, fontSize: mobile ? 16 : 14, lineHeight: mobile ? 24 : 21, ...police(theme.policeTexte) };
   return (
     <View style={{ gap: 10 }} testID="juridique-texte">
       {blocsDuTexte(texte).map((bloc, i) =>
         bloc.genre === 'titre' ? (
-          <Text key={i} accessibilityRole="header" style={{ color: theme.texte, fontSize: 16, fontWeight: '700', marginTop: 6, ...police(theme.policeTitre) }}>
+          <Text key={i} accessibilityRole="header" style={{ color: theme.texte, fontSize: mobile ? 18 : 16, fontWeight: '700', marginTop: 6, ...police(theme.policeTitre) }}>
             {bloc.texte}
           </Text>
         ) : bloc.genre === 'puces' ? (
@@ -56,8 +64,9 @@ function TexteDocument({ theme, texte }: { theme: ThemeHub; texte: string }) {
 }
 
 function Avertissement({ theme }: { theme: ThemeHub }) {
+  const mobile = useMobile();
   return (
-    <Text style={{ color: theme.attenue, fontSize: 12, lineHeight: 17, fontStyle: 'italic', ...police(theme.policeTexte) }} testID="juridique-avertissement">
+    <Text style={{ color: theme.attenue, fontSize: mobile ? 15 : 12, lineHeight: mobile ? 21 : 17, fontStyle: 'italic', ...police(theme.policeTexte) }} testID="juridique-avertissement">
       {AVERTISSEMENT_JURIDIQUE}
     </Text>
   );
@@ -89,6 +98,8 @@ export function PageJuridique({ theme, docs, idInitial, actif = true, onEnregist
   const titre = { color: theme.texte, fontWeight: theme.poidsTitre, textTransform: theme.majuscules ? ('uppercase' as const) : ('none' as const), ...police(theme.policeTitre) };
   const carte = [styles.carte, { backgroundColor: theme.surface, borderColor: theme.ligne, borderRadius: theme.rayonMoyen }];
   const info = id ? DOCUMENTS.find(d => d.id === id) : undefined;
+  const mobile = useMobile();
+  const t = (taille: number) => tailleTexte(taille, mobile);
 
   const enregistrer = async (suivant: DocsJuridiques, reussite: string) => {
     if (!onEnregistrer) return;
@@ -105,16 +116,8 @@ export function PageJuridique({ theme, docs, idInitial, actif = true, onEnregist
     }
   };
 
-  return (
-    <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="hub-juridique" accessibilityLabel="Documents légaux">
-      <View style={styles.page}>
-        <View style={styles.entete}>
-          <BoutonHub theme={theme} titre="← Retour" libelle="Retour (Échap)" onPress={fermer} testID="juridique-fermer" />
-          <Text style={[titre, { fontSize: 26, flex: 1 }]} accessibilityRole="header">
-            {info ? info.titre : 'Informations légales'}
-          </Text>
-        </View>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 14, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
+  const corps = (
+    <>
           {!info ? (
             <>
               <Avertissement theme={theme} />
@@ -133,16 +136,16 @@ export function PageJuridique({ theme, docs, idInitial, actif = true, onEnregist
                     {d.titre}
                     {estModifie(d.id, docs) ? '  ·  personnalisé' : ''}
                   </Text>
-                  <Text style={{ color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) }}>{d.resume}</Text>
+                  <Text style={{ color: theme.attenue, fontSize: t(13), ...police(theme.policeTexte) }}>{d.resume}</Text>
                 </Pressable>
               ))}
-              <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>
+              <Text style={{ color: theme.attenue, fontSize: t(12), ...police(theme.policeTexte) }}>
                 Une question, une demande d’accès ou de suppression de vos données ? Écrivez à l’équipe depuis la section Support.
               </Text>
             </>
           ) : edition !== undefined ? (
             <View style={carte}>
-              <Text style={{ color: theme.attenue, fontSize: 13, lineHeight: 19, ...police(theme.policeTexte) }}>
+              <Text style={{ color: theme.attenue, fontSize: t(13), lineHeight: 19, ...police(theme.policeTexte) }}>
                 Intertitre : une ligne qui commence par « ## ». Puce : une ligne qui commence par « - ». Les paragraphes sont séparés par une ligne vide. Enregistrer demande à chacun d’accepter de nouveau les documents.
               </Text>
               <TextInput
@@ -152,7 +155,7 @@ export function PageJuridique({ theme, docs, idInitial, actif = true, onEnregist
                 onChangeText={setEdition}
                 accessibilityLabel={`Texte : ${info.titre}`}
                 testID="juridique-edition"
-                style={[styles.champ, { color: theme.texte, borderColor: theme.ligne, backgroundColor: theme.fond, borderRadius: Math.min(theme.rayonMoyen, 10), ...police(theme.policeTexte) }]}
+                style={[styles.champ, mobile && { fontSize: 17 }, { color: theme.texte, borderColor: theme.ligne, backgroundColor: theme.fond, borderRadius: Math.min(theme.rayonMoyen, 10), ...police(theme.policeTexte) }]}
               />
               <View style={styles.actions}>
                 <BoutonHub
@@ -170,7 +173,7 @@ export function PageJuridique({ theme, docs, idInitial, actif = true, onEnregist
               <Avertissement theme={theme} />
               <TexteDocument theme={theme} texte={texteDuDocument(info.id, docs)} />
               {docs?.modifieLe && estModifie(info.id, docs) ? (
-                <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>
+                <Text style={{ color: theme.attenue, fontSize: t(12), ...police(theme.policeTexte) }}>
                   Texte personnalisé{docs.par ? ` par ${docs.par}` : ''}, modifié le {docs.modifieLe.slice(0, 10)}.
                 </Text>
               ) : null}
@@ -190,10 +193,36 @@ export function PageJuridique({ theme, docs, idInitial, actif = true, onEnregist
             </View>
           )}
           {message ? (
-            <Text accessibilityLiveRegion="polite" style={{ color: theme.texte, fontSize: 13, ...police(theme.policeTexte) }} testID="juridique-message">
+            <Text accessibilityLiveRegion="polite" style={{ color: theme.texte, fontSize: t(13), ...police(theme.policeTexte) }} testID="juridique-message">
               {message}
             </Text>
           ) : null}
+    </>
+  );
+
+  if (mobile) {
+    return (
+      <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="hub-juridique" accessibilityLabel="Documents légaux">
+        <EcranMobile
+          theme={theme}
+          onRetour={fermer}
+          entete={<EnTeteMobile theme={theme} titre={info ? info.titre : 'Informations légales'} onRetour={fermer} testIDRetour="juridique-fermer" />}>
+          {corps}
+        </EcranMobile>
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="hub-juridique" accessibilityLabel="Documents légaux">
+      <View style={styles.page}>
+        <View style={styles.entete}>
+          <BoutonHub theme={theme} titre="← Retour" libelle="Retour (Échap)" onPress={fermer} testID="juridique-fermer" />
+          <Text style={[titre, { fontSize: 26, flex: 1 }]} accessibilityRole="header">
+            {info ? info.titre : 'Informations légales'}
+          </Text>
+        </View>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 14, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
+          {corps}
         </ScrollView>
       </View>
     </View>
@@ -217,6 +246,54 @@ export function AcceptationJuridique({
 }) {
   const [coche, setCoche] = useState(false);
   const titre = { color: theme.texte, fontWeight: theme.poidsTitre, ...police(theme.policeTitre) };
+  const mobile = useMobile();
+  const intro = nouvelleVersion
+    ? 'Les conditions d’utilisation, la politique de confidentialité ou les mentions légales ont été mises à jour : merci de les relire avant de continuer.'
+    : 'Merci de lire les documents ci-dessous. Vos données restent chiffrées sur vos appareils ; ces textes expliquent ce qui est gardé, où, et qui est contacté.';
+  const caseAccepter = (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: coche }}
+      aria-checked={coche}
+      accessibilityLabel="J’ai lu et j’accepte les conditions d’utilisation et la politique de confidentialité"
+      testID="acceptation-case"
+      onPress={() => setCoche(c => !c)}
+      style={[styles.ligneCase, mobile && styles.ligneCaseMobile]}>
+      <View style={[styles.case, { borderColor: theme.accent, backgroundColor: coche ? theme.accent : 'transparent' }]}>
+        {coche ? <Text style={{ color: theme.surAccent, fontWeight: '800', fontSize: mobile ? 15 : undefined }}>✓</Text> : null}
+      </View>
+      <Text style={{ color: theme.texte, flex: 1, fontSize: mobile ? 16 : 14, ...police(theme.policeTexte) }}>
+        J’ai lu et j’accepte les conditions d’utilisation et la politique de confidentialité.
+      </Text>
+    </Pressable>
+  );
+  if (mobile) {
+    // Téléphone : documents en liste, case pleine largeur, « Continuer » collé en bas.
+    return (
+      <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="acceptation-juridique" accessibilityLabel="Acceptation des conditions">
+        <EcranMobile
+          theme={theme}
+          pied={
+            <>
+              <BoutonPrincipal theme={theme} titre="Continuer" desactive={!coche} onPress={() => coche && onAccepter()} testID="acceptation-continuer" libelle={coche ? 'Continuer' : 'Continuer (cochez d’abord la case)'} />
+              <BoutonPrincipal theme={theme} variante="discret" titre="Refuser et verrouiller" onPress={onRefuser} testID="acceptation-refuser" />
+            </>
+          }>
+          <Text style={[titre, { fontSize: 28, lineHeight: 34 }]} accessibilityRole="header">
+            {nouvelleVersion ? 'Nos documents ont changé' : 'Avant de commencer'}
+          </Text>
+          <Text style={{ color: theme.attenue, fontSize: 16, lineHeight: 23, ...police(theme.policeTexte) }}>{intro}</Text>
+          <GroupeCellules theme={theme} titre="À lire">
+            {DOCUMENTS.map(d => (
+              <Cellule key={d.id} theme={theme} titre={d.titre} sousTitre={d.resume} chevron onPress={() => onLire(d.id)} testID={`acceptation-lire-${d.id}`} />
+            ))}
+          </GroupeCellules>
+          <Avertissement theme={theme} />
+          {caseAccepter}
+        </EcranMobile>
+      </View>
+    );
+  }
   return (
     <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="acceptation-juridique" accessibilityLabel="Acceptation des conditions">
       <View style={styles.page}>
@@ -225,9 +302,7 @@ export function AcceptationJuridique({
             {nouvelleVersion ? 'Nos documents ont changé' : 'Avant de commencer'}
           </Text>
           <Text style={{ color: theme.attenue, fontSize: 14, lineHeight: 21, ...police(theme.policeTexte) }}>
-            {nouvelleVersion
-              ? 'Les conditions d’utilisation, la politique de confidentialité ou les mentions légales ont été mises à jour : merci de les relire avant de continuer.'
-              : 'Merci de lire les documents ci-dessous. Vos données restent chiffrées sur vos appareils ; ces textes expliquent ce qui est gardé, où, et qui est contacté.'}
+            {intro}
           </Text>
           {DOCUMENTS.map(d => (
             <Pressable
@@ -242,21 +317,7 @@ export function AcceptationJuridique({
             </Pressable>
           ))}
           <Avertissement theme={theme} />
-          <Pressable
-            accessibilityRole="checkbox"
-            accessibilityState={{ checked: coche }}
-            aria-checked={coche}
-            accessibilityLabel="J’ai lu et j’accepte les conditions d’utilisation et la politique de confidentialité"
-            testID="acceptation-case"
-            onPress={() => setCoche(c => !c)}
-            style={styles.ligneCase}>
-            <View style={[styles.case, { borderColor: theme.accent, backgroundColor: coche ? theme.accent : 'transparent' }]}>
-              {coche ? <Text style={{ color: theme.surAccent, fontWeight: '800' }}>✓</Text> : null}
-            </View>
-            <Text style={{ color: theme.texte, flex: 1, fontSize: 14, ...police(theme.policeTexte) }}>
-              J’ai lu et j’accepte les conditions d’utilisation et la politique de confidentialité.
-            </Text>
-          </Pressable>
+          {caseAccepter}
           <View style={styles.actions}>
             <BoutonHub theme={theme} variante="plein" titre="Continuer" onPress={() => coche && onAccepter()} testID="acceptation-continuer" libelle={coche ? 'Continuer' : 'Continuer (cochez d’abord la case)'} />
             <BoutonHub theme={theme} titre="Refuser et verrouiller" onPress={onRefuser} testID="acceptation-refuser" />
@@ -269,11 +330,13 @@ export function AcceptationJuridique({
 
 /** Liens du pied de page de l'écran de connexion et de Paramètres › À propos. */
 export function LiensJuridiques({ theme, onOuvrir }: { theme: ThemeHub; onOuvrir(id?: IdDocument): void }) {
+  // Téléphone : liens de 44 px de haut, texte de 15 px, au-dessus de la barre d'accueil.
+  const mobile = useMobile();
   return (
-    <View style={styles.liens} testID="liens-juridiques" accessibilityRole="menu">
+    <View style={[styles.liens, mobile && styles.liensMobile, mobile && margesSecurite(['bas'], { bas: 4 }), mobile && { backgroundColor: theme.fond }]} testID="liens-juridiques" accessibilityRole="menu">
       {DOCUMENTS.map(d => (
-        <Pressable key={d.id} accessibilityRole="link" accessibilityLabel={d.titre} testID={`lien-juridique-${d.id}`} onPress={() => onOuvrir(d.id)} hitSlop={8}>
-          <Text style={{ color: theme.attenue, fontSize: 12, textDecorationLine: 'underline', ...police(theme.policeTexte) }}>{d.titre}</Text>
+        <Pressable key={d.id} accessibilityRole="link" accessibilityLabel={d.titre} testID={`lien-juridique-${d.id}`} onPress={() => onOuvrir(d.id)} hitSlop={8} style={mobile ? styles.lienMobile : undefined}>
+          <Text style={{ color: theme.attenue, fontSize: mobile ? 15 : 12, textDecorationLine: 'underline', ...police(theme.policeTexte) }}>{mobile ? d.titreCourt ?? d.titre : d.titre}</Text>
         </Pressable>
       ))}
     </View>
@@ -290,4 +353,7 @@ const styles = StyleSheet.create({
   ligneCase: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40 },
   case: { width: 24, height: 24, borderWidth: 2, borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
   liens: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 12 },
+  liensMobile: { columnGap: 4, rowGap: 0, paddingVertical: 0 },
+  lienMobile: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
+  ligneCaseMobile: { minHeight: 56, gap: 14 },
 });

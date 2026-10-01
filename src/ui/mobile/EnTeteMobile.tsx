@@ -61,6 +61,7 @@ export function EnTeteMobile({
   gauche,
   droite,
   testID = 'entete-mobile',
+  testIDRetour,
 }: {
   theme?: ThemeHub;
   titre: string;
@@ -74,6 +75,8 @@ export function EnTeteMobile({
   /** Élément libre à droite, avant les actions (pastille de synchro). */
   droite?: React.ReactNode;
   testID?: string;
+  /** testID du bouton retour (défaut : `${testID}-retour`). */
+  testIDRetour?: string;
 }) {
   const theme = themeActif(themeDonne);
   return (
@@ -83,7 +86,7 @@ export function EnTeteMobile({
       <View style={styles.ligne}>
         {onRetour ? (
           <Pressable
-            testID={`${testID}-retour`}
+            testID={testIDRetour ?? `${testID}-retour`}
             accessibilityRole="button"
             accessibilityLabel={libelleRetour}
             onPress={onRetour}

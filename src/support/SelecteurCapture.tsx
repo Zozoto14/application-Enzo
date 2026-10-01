@@ -13,7 +13,7 @@ interface Selecteur {
   }>;
 }
 
-export function SelecteurCapture({ onChoisir, onErreur, couleur }: PropsSelecteurCapture): React.ReactElement | null {
+export function SelecteurCapture({ onChoisir, onErreur, couleur, grand = false }: PropsSelecteurCapture): React.ReactElement | null {
   const module = chargerModule<Selecteur>('react-native-image-picker');
   if (module.etat !== 'disponible' || !module.module) {
     return null;
@@ -32,8 +32,8 @@ export function SelecteurCapture({ onChoisir, onErreur, couleur }: PropsSelecteu
       .catch(() => onErreur('La photothèque n’a pas pu s’ouvrir.'));
   };
   return (
-    <Pressable accessibilityRole="button" onPress={choisir} testID="support-capture">
-      <Text style={{ color: couleur, textDecorationLine: 'underline' }}>Joindre une capture d’écran</Text>
+    <Pressable accessibilityRole="button" onPress={choisir} testID="support-capture" style={grand ? { minHeight: 48, justifyContent: 'center' } : undefined}>
+      <Text style={{ color: couleur, textDecorationLine: 'underline', fontSize: grand ? 17 : undefined }}>Joindre une capture d’écran</Text>
     </Pressable>
   );
 }

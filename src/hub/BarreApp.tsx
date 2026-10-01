@@ -12,6 +12,8 @@
 import React, { createContext, useContext } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { BoutonHub } from './Hub';
+import { BoutonIcone } from '../ui/mobile/EnTeteMobile';
+import { useMobile } from '../ui/mobile/useMobile';
 import { IndicateurSynchro, type SynchroHub } from './IndicateurSynchro';
 import type { IdSection } from './recensement';
 import type { ThemeHub } from './themes';
@@ -25,6 +27,16 @@ export function useBarreApp(): React.ReactNode {
 
 export function BarreApp({ theme, synchro, onParametres, onSupport }: { theme: ThemeHub; synchro?: SynchroHub; onParametres(section?: IdSection): void; onSupport?(): void }) {
   const { width } = useWindowDimensions();
+  if (useMobile()) {
+    // Téléphone : dans l'en-tête compact, la synchro condensée et l'icône des Paramètres (le Support
+    // reste à un geste : Paramètres › Support, ou la barre basse du hub).
+    return (
+      <View style={styles.barreMobile} testID="barre-app-entete">
+        {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} condense onPress={() => onParametres('synchro')} /> : null}
+        <BoutonIcone theme={theme} titre="⚙︎" libelle="Paramètres" onPress={() => onParametres()} testID="app-parametres-ouvrir" />
+      </View>
+    );
+  }
   return (
     <View style={styles.barre} testID="barre-app">
       {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} onPress={() => onParametres('synchro')} /> : null}
@@ -43,5 +55,6 @@ export function BarreApp({ theme, synchro, onParametres, onSupport }: { theme: T
 }
 
 const styles = StyleSheet.create({
+  barreMobile: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   barre: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap', flexShrink: 1 },
 });

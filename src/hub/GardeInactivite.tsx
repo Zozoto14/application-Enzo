@@ -19,6 +19,9 @@ import { AppState, StyleSheet, Text, View } from 'react-native';
 import { DELAI_PRESENCE_SECONDES, SAUT_VEILLE_MS, confirmerPresence, etatInitial, evaluer, noterActivite, type MotifVerrou } from '../securite/verrouAuto';
 import { ContextePresence, type Presence } from '../securite/presence';
 import { BoutonHub } from './Hub';
+import { BoutonPrincipal } from '../ui/mobile/BoutonPrincipal';
+import { FeuilleBasse } from '../ui/mobile/FeuilleBasse';
+import { useMobile } from '../ui/mobile/useMobile';
 import { police, type ThemeHub } from './themes';
 import { ecouterTouche } from './web';
 
@@ -147,13 +150,35 @@ export function GardeInactivite({ theme, actif, delaiMinutes, onVerrouiller, hor
   }, []);
   const dialogue = actif && restantes !== undefined;
   useEffect(() => (dialogue ? ecouterTouche('Enter', jeSuisLa) : undefined), [dialogue, jeSuisLa]);
+  const mobile = useMobile();
 
   return (
     <ContextePresence.Provider value={presence}>
       {/* Natif : un toucher, où qu'il tombe, compte comme une activité (sans prendre la main sur l'enfant). */}
       <View style={styles.racine} onTouchStart={activite} onTouchMove={activite}>
         {children}
-        {dialogue ? (
+        {dialogue && mobile ? (
+          // Téléphone : feuille basse, boutons pleine largeur sous le pouce.
+          <FeuilleBasse
+            theme={theme}
+            visible
+            titre="Êtes-vous toujours là ?"
+            onFermer={jeSuisLa}
+            testID="presence-dialogue"
+            pied={
+              <>
+                <BoutonPrincipal theme={theme} titre="Je suis là" onPress={jeSuisLa} testID="presence-suis-la" />
+                <BoutonPrincipal theme={theme} variante="discret" titre="Verrouiller maintenant" onPress={verrouillerMaintenant} testID="presence-verrouiller" />
+              </>
+            }>
+            <Text style={{ color: theme.attenue, fontSize: 16, lineHeight: 23, ...police(theme.policeTexte) }}>
+              Une lecture est en cours et vous n’avez rien touché depuis un moment. Sans réponse, l’application se verrouille.
+            </Text>
+            <Text accessibilityLiveRegion="polite" style={{ color: theme.alerte, fontSize: 17, fontWeight: '700', ...police(theme.policeTexte) }} testID="presence-compte">
+              Verrouillage dans {restantes} s
+            </Text>
+          </FeuilleBasse>
+        ) : dialogue ? (
           <View style={[StyleSheet.absoluteFill, styles.voile]} accessibilityViewIsModal testID="presence-voile">
             <View
               accessibilityRole="alert"

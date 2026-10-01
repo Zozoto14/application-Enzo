@@ -41,6 +41,9 @@ import {
 import { THEMES_HUB, police, teinteTransparente, type IdThemeHub, type ThemeHub } from './themes';
 import { ecouterTouche, mouvementReduit, surLeWeb } from './web';
 import { useMobile } from '../ui/mobile/useMobile';
+import { HubMobile } from './HubMobile';
+import { BoutonIcone } from '../ui/mobile/EnTeteMobile';
+import { useNavigationMobile } from '../ui/mobile/NavigationMobile';
 import type { AppHub, ContexteHub, InfoLive } from './types';
 
 export interface HubProps {
@@ -83,7 +86,15 @@ const TRANSITION_WEB: object = SUR_LE_WEB
   ? { transitionProperty: 'width, opacity, transform, min-height', transitionDuration: '260ms', transitionTimingFunction: 'ease' }
   : {};
 
-export function Hub({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, onParametres, onSupport, synchro, demande, heure }: HubProps) {
+/**
+ * Aiguille : le hub du téléphone (`HubMobile`) ou celui du bureau, selon `useMobile()`. Les deux
+ * versions ont leurs propres hooks : on ne branche jamais les hooks d'un même composant sur le mode.
+ */
+export function Hub(props: HubProps) {
+  return useMobile() ? <HubMobile {...props} /> : <HubBureau {...props} />;
+}
+
+function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, onParametres, onSupport, synchro, demande, heure }: HubProps) {
   const { width } = useWindowDimensions();
   const [menuOuvert, setMenuOuvert] = useState(false);
   const maj = useMiseAJour();
@@ -958,9 +969,26 @@ export function BoutonHub({
 }
 
 /** Barre « ← Hub » des apps qui n'ont pas leur propre navigation. */
-export function RetourHub({ theme, onRetour }: { theme: ThemeHub; onRetour(): void }) {
+export function RetourHub({ theme, onRetour, titre }: { theme: ThemeHub; onRetour(): void; /** Nom de l'app (en-tête du téléphone). */ titre?: string }) {
   // Pastille de synchro et bouton « Paramètres » : les mêmes que dans l'en-tête du hub.
   const barre = useBarreApp();
+  const nav = useNavigationMobile();
+  if (useMobile()) {
+    // Téléphone : une ligne compacte, « ‹ Accueil » à gauche, synchro condensée et Réglages à droite.
+    return (
+      <View style={styles.retourMobile} testID="retour-hub-mobile">
+        <Pressable testID="retour-hub" accessibilityRole="button" accessibilityLabel="Retour à l’accueil" onPress={onRetour} style={styles.retourBouton}>
+          <Text style={{ color: theme.accent, fontSize: 26, lineHeight: 28, marginTop: -2 }}>‹</Text>
+          <Text style={{ color: theme.accent, fontSize: 17, fontWeight: '500', ...police(theme.policeTexte) }}>Accueil</Text>
+        </Pressable>
+        <Text numberOfLines={1} style={{ flex: 1, color: theme.texte, fontSize: 17, fontWeight: '600', textAlign: 'center', ...police(theme.policeTexte) }}>
+          {titre ?? ''}
+        </Text>
+        {nav?.synchro ? <IndicateurSynchro theme={theme} synchro={nav.synchro} condense onPress={() => nav.onParametres()} /> : null}
+        {nav ? <BoutonIcone theme={theme} titre="⚙︎" libelle="Paramètres" onPress={nav.onParametres} testID="app-parametres-ouvrir" /> : null}
+      </View>
+    );
+  }
   return (
     <View style={styles.retour}>
       <View style={styles.retourGauche}>
@@ -1041,6 +1069,8 @@ const styles = StyleSheet.create({
   separateur: { width: 1, alignSelf: 'stretch', backgroundColor: 'rgba(128,128,128,0.35)', marginHorizontal: 2 },
   retour: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },
   retourGauche: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  retourMobile: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 52, marginHorizontal: -8 },
+  retourBouton: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 44, minWidth: 44, paddingHorizontal: 6 },
   echap: { fontSize: 11, letterSpacing: 0.9 },
   bandeauTuile: { fontSize: 13, lineHeight: 18, paddingVertical: 8, paddingHorizontal: 10, borderWidth: 1, borderLeftWidth: 4, marginTop: 12, overflow: 'hidden' },
 });

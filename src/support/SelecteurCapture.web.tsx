@@ -15,15 +15,17 @@ export interface PropsSelecteurCapture {
   onChoisir(piece: PieceJointe | undefined): void;
   onErreur(message: string): void;
   couleur?: string;
+  /** Téléphone : contrôle de 48 px, texte de 16 px. */
+  grand?: boolean;
 }
 
-export function SelecteurCapture({ onChoisir, onErreur, couleur }: PropsSelecteurCapture): React.ReactElement {
+export function SelecteurCapture({ onChoisir, onErreur, couleur, grand = false }: PropsSelecteurCapture): React.ReactElement {
   return React.createElement('input', {
     type: 'file',
     accept: TYPES_PIECE.join(','),
     'aria-label': 'Joindre une capture d’écran (facultatif)',
     'data-testid': 'support-capture',
-    style: { fontSize: 14, color: couleur },
+    style: grand ? { fontSize: 16, color: couleur, minHeight: 48, width: '100%', boxSizing: 'border-box', padding: '10px 0' } : { fontSize: 14, color: couleur },
     onChange: (e: { target: { files?: ArrayLike<{ name: string; type: string; size: number; arrayBuffer(): Promise<ArrayBuffer> }> } }) => {
       const f = e.target.files?.[0];
       if (!f) {

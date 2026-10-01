@@ -21,6 +21,8 @@ import { IndicateurSynchro, type SynchroHub } from './IndicateurSynchro';
 import { REGLAGES, reglagesDeSection, rechercher, section as sectionDef, sectionsVisibles, type IdReglage, type IdSection } from './recensement';
 import { police, teinteTransparente, type ThemeHub } from './themes';
 import { ecouterTouche } from './web';
+import { PageParametresMobile } from './PageParametresMobile';
+import { useMobile } from '../ui/mobile/useMobile';
 
 export interface PageParametresProps {
   theme: ThemeHub;
@@ -39,7 +41,12 @@ export interface PageParametresProps {
 type EtatPresse = { pressed: boolean; hovered?: boolean; focused?: boolean };
 type ToucheReact = { key: string; preventDefault?(): void };
 
-export function PageParametres({ theme, section, n, disponibles, rendu, synchro, actif = true, onFermer }: PageParametresProps) {
+/** Aiguille : liste → sous-pages sur téléphone (`PageParametresMobile`), colonnes sur le bureau. */
+export function PageParametres(props: PageParametresProps) {
+  return useMobile() ? <PageParametresMobile {...props} /> : <PageParametresBureau {...props} />;
+}
+
+function PageParametresBureau({ theme, section, n, disponibles, rendu, synchro, actif = true, onFermer }: PageParametresProps) {
   const { width } = useWindowDimensions();
   const large = width >= 760;
   const sections = useMemo(() => sectionsVisibles(disponibles), [disponibles]);
