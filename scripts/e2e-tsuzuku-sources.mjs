@@ -209,9 +209,9 @@ async function assistant(pg, prefixe, nom, partage) {
   // Étape 3 : réponse fautive, erreurs ligne par ligne, réparation, puis bonne réponse.
   await pg.getByTestId('assistant-json').fill(REPONSE_FAUTIVE);
   await pg.getByTestId('assistant-verifier').click();
-  verifier(/Ligne 3, colonne/.test(await pg.getByTestId('assistant-invalide').innerText()), `${prefixe} : JSON fautif : erreur située (ligne, colonne)`);
+  verifier(/Ligne 4, colonne/.test(await pg.getByTestId('assistant-invalide').innerText()), `${prefixe} : JSON fautif : erreur située (ligne, colonne)`);
   await pg.getByTestId('assistant-reparer').click();
-  verifier((await pg.getByTestId('assistant-prompt-reparation').inputValue()).includes('Ligne 3, colonne'), `${prefixe} : « Réparer avec l’IA » prépare un prompt de correction contenant l’erreur`);
+  verifier((await pg.getByTestId('assistant-prompt-reparation').inputValue()).includes('Ligne 4, colonne'), `${prefixe} : « Réparer avec l’IA » prépare un prompt de correction contenant l’erreur`);
   await capture(pg, `${prefixe}-d-etape3-erreur-reparer`);
   await pg.getByTestId('assistant-json').fill(REPONSE_IA(nom));
   await pg.getByTestId('assistant-verifier').click();

@@ -400,7 +400,7 @@ export function erreursSelecteurs(source: DefinitionSource): string[] {
 }
 
 /** Ligne et colonne (à partir de 1) d'une erreur de syntaxe JSON, avec le texte fautif. */
-export function positionErreurJson(texte: string, erreur: unknown): { ligne: number; colonne: number; indice: string } | undefined {
+export function positionErreurJson(texte: string, erreur: unknown, complet = texte, decalage = 0): { ligne: number; colonne: number; indice: string } | undefined {
   const message = erreur instanceof Error ? erreur.message : String(erreur ?? '');
   let index: number | undefined;
   const pos = /position\s+(\d+)/i.exec(message);
@@ -416,12 +416,14 @@ export function positionErreurJson(texte: string, erreur: unknown): { ligne: num
   }
   if (index === undefined || !Number.isFinite(index)) return undefined;
   index = Math.max(0, Math.min(texte.length, index));
-  const avant = texte.slice(0, index);
+  const fin = index >= texte.length;
+  const absolu = Math.min(complet.length, decalage + index);
+  const avant = complet.slice(0, absolu);
   const ligne = avant.split('\n').length;
-  const colonne = index - (avant.lastIndexOf('\n') + 1) + 1;
-  const ligneTexte = (texte.split('\n')[ligne - 1] ?? '').trim();
+  const colonne = absolu - (avant.lastIndexOf('\n') + 1) + 1;
+  const ligneTexte = (complet.split('\n')[ligne - 1] ?? '').trim();
   const indice =
-    index >= texte.length
+    fin
       ? 'le JSON s’arrête trop tôt (accolade ou guillemet fermant manquant ?).'
       : `caractère inattendu « ${texte[index]} » dans « ${ligneTexte.length > 80 ? `${ligneTexte.slice(0, 79)}…` : ligneTexte} » (virgule en trop ou manquante, guillemets, commentaire ?).`;
   return { ligne, colonne, indice };
@@ -441,7 +443,9 @@ export function validerSourceJson(texte: string, analysee?: string, options: Opt
   try {
     brut = JSON.parse(extrait);
   } catch (e) {
-    const ou = positionErreurJson(extrait, e);
+    // Ligne et colonne dans le texte COLLÉ (bloc ```json compris), pas dans l'extrait.
+    const decalage = Math.max(0, String(texte ?? '').indexOf(extrait));
+    const ou = positionErreurJson(extrait, e, String(texte ?? ''), decalage);
     return {
       erreurs: [
         'Ce n’est pas un JSON valide : collez l’objet renvoyé par l’IA (le bloc ```json suffit).',

@@ -228,6 +228,8 @@ describe('assistant : adresse et erreurs JSON lisibles', () => {
   it('JSON cassé : ligne, colonne et indice', () => {
     const v = validerSourceJson('{\n  "name": "X",\n  "baseUrl": "https://exemple.fr",,\n}');
     expect(v.erreurs[1]).toMatch(/^Ligne 3, colonne \d+ : caractère inattendu « , »/);
+    // Dans un bloc ```json : la ligne est celle du texte collé.
+    expect(validerSourceJson('Voici :\n```json\n{\n  "name": "X",,\n}\n```').erreurs[1]).toMatch(/^Ligne 4, colonne 15 : /);
     const coupe = validerSourceJson('{\n  "name": "X"');
     expect(coupe.erreurs[1]).toMatch(/^Ligne 2, colonne \d+ : le JSON s’arrête trop tôt/);
   });

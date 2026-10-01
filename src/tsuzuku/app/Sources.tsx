@@ -278,7 +278,8 @@ export function Sources({ comptes = [], partageActif = true, onCles, ajoutInitia
         </Pressable>
       </View>
       {aide ? <Aide onFermer={() => setAide(false)} /> : null}
-      <Avis genre="alerte" texte={RAPPEL_DROITS} testID="sources-rappel" />
+      {/* Rappel visible en permanence ; l'assistant ouvert porte le sien (pas de doublon). */}
+      {vue !== 'assistant' && vue !== 'json' ? <Avis genre="alerte" texte={RAPPEL_DROITS} testID="sources-rappel" /> : null}
       {!s.lectureSources ? <Avis texte="Sur le site web, les pages des sources ne peuvent pas être lues (CORS) : test et lecture sur l’app PC/iPhone. Vous pouvez néanmoins préparer, importer et partager vos sources ici." /> : null}
       {!partageActif ? <Avis texte="Le partage des sources est publié par le compte historique (Fondateur d’origine) : les sources ajoutées ici ne servent qu’à vous." testID="sources-partage-historique" /> : null}
 
