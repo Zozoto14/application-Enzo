@@ -9,7 +9,8 @@
  */
 
 import React, { useState } from 'react';
-import { ActivityIndicator, ScrollView, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, View, useColorScheme } from 'react-native';
+import { EcranEntree } from './EcranEntree';
 import { formatValide } from '../../securite/codes-recuperation';
 import { Alerte, Bouton, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, palettePour, stylesPartages } from '../theme';
@@ -46,10 +47,20 @@ export function Recuperation({ onRecuperer, onAnnuler, erreur, enCours = false }
   };
 
   return (
-    <ScrollView
-      style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, stylesPartages.accueil, { paddingVertical: ESPACEMENT.xl }]}
-      keyboardShouldPersistTaps="handled">
+    <EcranEntree
+      styleBureau={{ backgroundColor: palettePour(sombre).fond }}
+      styleContenuBureau={[stylesPartages.contenu, stylesPartages.accueil, { paddingVertical: ESPACEMENT.xl }]}
+      pied={
+        enCours ? (
+          <View style={{ alignItems: 'center', gap: ESPACEMENT.s }}>
+            <ActivityIndicator color={palette.accent} />
+            <SousTitre>Vérification du code…</SousTitre>
+          </View>
+        ) : (
+          <Bouton titre="Retrouver l’accès" pleineLargeur testID="bouton-recuperer" onPress={valider} />
+        )
+      }
+      apresPied={<Bouton titre="Retour" pleineLargeur variante="discret" desactive={enCours} onPress={onAnnuler} testID="bouton-retour-recuperation" />}>
       <Titre>Mot de passe oublié</Titre>
       <SousTitre>
         Saisissez l’un des codes de récupération notés à la création de l’application, puis choisissez un
@@ -63,6 +74,8 @@ export function Recuperation({ onRecuperer, onAnnuler, erreur, enCours = false }
         autoCapitalize="characters"
         autoCorrect={false}
         placeholder="XXXX-XXXX-XXXX-XXXX"
+        nature="codeRecuperation"
+        enterKeyHint="next"
         testID="champ-code-recuperation"
         indication="Tirets, espaces et majuscules n’ont pas d’importance ; O et 0, I et 1 sont confondus exprès."
       />
@@ -72,6 +85,8 @@ export function Recuperation({ onRecuperer, onAnnuler, erreur, enCours = false }
         onChangeText={setMotDePasse}
         secureTextEntry
         autoCapitalize="none"
+        nature="nouveauMotDePasse"
+        autoComplete="new-password"
         testID="champ-nouveau-mot-de-passe"
         indication={`${LONGUEUR_MINIMALE_MOT_DE_PASSE} caractères au minimum.`}
       />
@@ -81,20 +96,15 @@ export function Recuperation({ onRecuperer, onAnnuler, erreur, enCours = false }
         onChangeText={setConfirmation}
         secureTextEntry
         autoCapitalize="none"
+        nature="nouveauMotDePasse"
+        autoComplete="new-password"
+        enterKeyHint="go"
+        onSubmitEditing={valider}
         testID="champ-confirmation-mot-de-passe"
       />
 
       {probleme ? <Alerte message={probleme} /> : erreur ? <Alerte message={erreur} /> : null}
 
-      {enCours ? (
-        <View style={{ alignItems: 'center', gap: ESPACEMENT.s }}>
-          <ActivityIndicator color={palette.accent} />
-          <SousTitre>Vérification du code…</SousTitre>
-        </View>
-      ) : (
-        <Bouton titre="Retrouver l’accès" pleineLargeur testID="bouton-recuperer" onPress={valider} />
-      )}
-      <Bouton titre="Retour" pleineLargeur variante="discret" desactive={enCours} onPress={onAnnuler} />
-    </ScrollView>
+    </EcranEntree>
   );
 }

@@ -13,6 +13,11 @@ import React, { useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Alerte, Bouton, Champ, SousTitre, Titre, usePalette } from '../src/ui/composants';
 import { ESPACEMENT, RAYON, stylesPartages } from '../src/ui/theme';
+import { BoutonPrincipal } from '../src/ui/mobile/BoutonPrincipal';
+import { EcranMobile } from '../src/ui/mobile/EcranMobile';
+import { FeuilleBasse } from '../src/ui/mobile/FeuilleBasse';
+import { Cellule, GroupeCellules } from '../src/ui/mobile/ListeCellules';
+import { useMobile } from '../src/ui/mobile/useMobile';
 
 function message(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : String(erreur);
@@ -36,6 +41,7 @@ export function AccueilSite({
   const [erreur, setErreur] = useState<string | undefined>(erreurInitiale);
   const [creer, setCreer] = useState(false);
   const utilise = code.trim() || codeConnu || '';
+  const mobile = useMobile();
 
   const relier = () => {
     setErreur(undefined);
@@ -44,6 +50,49 @@ export function AccueilSite({
       .catch(e => setErreur(message(e)))
       .finally(() => setEnCours(false));
   };
+
+  if (mobile) {
+    // Téléphone : relier est l'action principale (bouton collant) ; créer un coffre neuf passe par une
+    // feuille basse qui porte l'avertissement.
+    return (
+      <EcranMobile
+        testID="accueil-site"
+        pied={<BoutonPrincipal titre="Relier ce navigateur" desactive={!utilise} enCours={enCours} onPress={relier} testID="bouton-relier-accueil" />}>
+        <Titre>Bienvenue sur AppDashboard</Titre>
+        <SousTitre>Retrouvez votre compte : même prénom, même mot de passe et même code qu’ailleurs.</SousTitre>
+        <GroupeCellules titre="J’ai déjà un compte" note="Administrateur : le code de liaison de votre PC (Paramètres › Synchronisation › Appareils liés › Relier un autre appareil). Ami : le code de connexion envoyé par l’administrateur. Il commence par AB1. et ne se saisit qu’une fois.">
+          {codeConnu ? (
+            <Cellule titre="Code de liaison reçu par le lien" sousTitre="Rien à recopier." glyphe="✓" teinte={palette.hausse} testID="accueil-code-connu" />
+          ) : (
+            <View style={{ padding: ESPACEMENT.m }}>
+              <Champ etiquette="Code de liaison" placeholder="AB1.…" value={code} onChangeText={setCode} nature="codeLiaison" onSubmitEditing={relier} testID="champ-code-accueil" />
+            </View>
+          )}
+        </GroupeCellules>
+        {erreur ? <Alerte message={erreur} /> : null}
+        {enCours ? <SousTitre>Recherche du compte sur le relais…</SousTitre> : null}
+        <GroupeCellules>
+          <Cellule titre="Je n’ai pas de compte" sousTitre="Créer un nouveau coffre sur ce navigateur." glyphe="+" chevron onPress={() => setCreer(true)} testID="accueil-creer" />
+        </GroupeCellules>
+        <FeuilleBasse
+          visible={creer}
+          titre="Créer un nouveau coffre ?"
+          onFermer={() => setCreer(false)}
+          testID="feuille-creer-coffre"
+          pied={
+            <>
+              <BoutonPrincipal titre="Oui, créer un nouveau coffre" variante="danger" onPress={onCreer} testID="accueil-creer-confirmer" />
+              <BoutonPrincipal titre="Annuler" variante="discret" onPress={() => setCreer(false)} />
+            </>
+          }>
+          <Text style={{ color: palette.danger, fontSize: 16, lineHeight: 23 }} testID="accueil-avertissement">
+            ⚠️ Ce coffre sera NEUF et indépendant : il ne contiendra ni votre portefeuille du PC, ni les comptes de vos amis,
+            et il ne s’ouvrira pas avec les identifiants de votre PC. Si vous avez déjà un compte, reliez-le plutôt.
+          </Text>
+        </FeuilleBasse>
+      </EcranMobile>
+    );
+  }
 
   return (
     <ScrollView

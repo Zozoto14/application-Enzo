@@ -24,6 +24,14 @@ import {
   type Ticket,
 } from '../support/tickets';
 import { BoutonHub } from './Hub';
+import { BoutonPrincipal } from '../ui/mobile/BoutonPrincipal';
+import { ChampMobile } from '../ui/mobile/ChampMobile';
+import { EcranMobile } from '../ui/mobile/EcranMobile';
+import { EnTeteMobile } from '../ui/mobile/EnTeteMobile';
+import { rayonControle, tailleTexte } from '../ui/mobile/jetons';
+import { GroupeCellules } from '../ui/mobile/ListeCellules';
+import { BarreBasseHub } from '../ui/mobile/NavigationMobile';
+import { useMobile } from '../ui/mobile/useMobile';
 import { police, type ThemeHub } from './themes';
 import { ecouterTouche } from './web';
 
@@ -55,8 +63,10 @@ export function FormulaireSupport({ theme, service, infos, categorieInitiale = '
   const [envoi, setEnvoi] = useState(false);
   const [retour, setRetour] = useState<{ genre: 'ok' | 'attente' | 'erreur'; texte: string } | undefined>();
   const rayon = Math.min(theme.rayonMoyen, 10);
+  // Téléphone : champs du système mobile (17 px, 48 px), catégories en segments égaux de 44 px.
+  const mobile = useMobile();
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
-  const attenue = { color: theme.attenue, fontSize: 13, lineHeight: 19, ...police(theme.policeTexte) };
+  const attenue = { color: theme.attenue, fontSize: mobile ? 15 : 13, lineHeight: mobile ? 21 : 19, ...police(theme.policeTexte) };
   const champ = [styles.champ, texte, { borderColor: theme.ligne, backgroundColor: theme.fond, borderRadius: rayon }];
 
   const envoyer = async () => {
@@ -97,7 +107,7 @@ export function FormulaireSupport({ theme, service, infos, categorieInitiale = '
       <Text style={attenue}>
         Un bug, une question, une idée ? Votre message arrive sur le salon de l’équipe. Ne mettez jamais de mot de passe, de code ni de clé dans un ticket.
       </Text>
-      <View style={[styles.segments, { borderColor: theme.ligne, borderRadius: rayon }]} accessibilityRole="radiogroup" accessibilityLabel="Catégorie du ticket">
+      <View style={[styles.segments, mobile && styles.segmentsMobile, { borderColor: theme.ligne, borderRadius: rayon }]} accessibilityRole="radiogroup" accessibilityLabel="Catégorie du ticket">
         {CATEGORIES_TICKET.map(c => {
           const actif = c.id === categorie;
           return (
@@ -109,12 +119,32 @@ export function FormulaireSupport({ theme, service, infos, categorieInitiale = '
               aria-checked={actif}
               accessibilityLabel={`Catégorie : ${c.libelle}`}
               onPress={() => setCategorie(c.id)}
-              style={[styles.segment, { backgroundColor: actif ? theme.accent : 'transparent' }]}>
-              <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: 13, ...police(theme.policeTexte) }}>{c.libelle}</Text>
+              style={[styles.segment, mobile && styles.segmentMobile, { backgroundColor: actif ? theme.accent : 'transparent' }]}>
+              <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: mobile ? 15 : 13, ...police(theme.policeTexte) }}>{c.libelle}</Text>
             </Pressable>
           );
         })}
       </View>
+      {mobile ? (
+        <>
+          <ChampMobile theme={theme} etiquette="Sujet" nature="texte" autoCapitalize="sentences" testID="support-sujet" accessibilityLabel="Sujet du ticket" value={sujet} onChangeText={setSujet} maxLength={TAILLE_MAX_SUJET} placeholder="En quelques mots" />
+          <ChampMobile
+            theme={theme}
+            etiquette="Message"
+            nature="multiligne"
+            autoCapitalize="sentences"
+            testID="support-message"
+            accessibilityLabel="Message du ticket"
+            value={message}
+            onChangeText={setMessage}
+            maxLength={TAILLE_MAX_MESSAGE}
+            numberOfLines={6}
+            placeholder="Que s’est-il passé ? Que faisiez-vous ? Qu’attendiez-vous ?"
+            indication={`${message.length} / ${TAILLE_MAX_MESSAGE}`}
+          />
+        </>
+      ) : (
+        <>
       <View style={{ gap: 4 }}>
         <Text style={[texte, { fontWeight: '600', fontSize: 13 }]}>Sujet</Text>
         <TextInput testID="support-sujet" accessibilityLabel="Sujet du ticket" value={sujet} onChangeText={setSujet} maxLength={TAILLE_MAX_SUJET} placeholder="En quelques mots" placeholderTextColor={theme.attenue} style={champ as never} />
@@ -137,9 +167,11 @@ export function FormulaireSupport({ theme, service, infos, categorieInitiale = '
           {message.length} / {TAILLE_MAX_MESSAGE}
         </Text>
       </View>
+        </>
+      )}
       <View style={{ gap: 6 }}>
-        <Text style={[texte, { fontWeight: '600', fontSize: 13 }]}>Capture d’écran (facultatif)</Text>
-        <SelecteurCapture key={cleSelecteur} couleur={theme.texte} onChoisir={setPiece} onErreur={m => setRetour({ genre: 'erreur', texte: m })} />
+        <Text style={[texte, { fontWeight: '600', fontSize: mobile ? 15 : 13 }]}>Capture d’écran (facultatif)</Text>
+        <SelecteurCapture key={cleSelecteur} couleur={theme.texte} bordure={theme.ligne} rayon={rayonControle(theme)} grand={mobile} onChoisir={setPiece} onErreur={m => setRetour({ genre: 'erreur', texte: m })} />
         {piece ? (
           <Text style={attenue} testID="support-capture-nom">
             Jointe : {piece.nom}
@@ -152,25 +184,29 @@ export function FormulaireSupport({ theme, service, infos, categorieInitiale = '
         accessibilityState={{ checked: technique }}
         aria-checked={technique}
         onPress={() => setTechnique(v => !v)}
-        style={styles.ligneCase}>
+        style={[styles.ligneCase, mobile && styles.ligneCaseMobile]}>
         <View style={[styles.case, { borderColor: technique ? theme.accent : theme.ligne, backgroundColor: technique ? theme.accent : 'transparent' }]}>
-          {technique ? <Text style={{ color: theme.surAccent, fontSize: 12, fontWeight: '800' }}>✓</Text> : null}
+          {technique ? <Text style={{ color: theme.surAccent, fontSize: mobile ? 15 : 12, fontWeight: '800' }}>✓</Text> : null}
         </View>
-        <Text style={[texte, { flex: 1, fontSize: 14 }]}>Inclure les informations techniques</Text>
+        <Text style={[texte, { flex: 1, fontSize: mobile ? 16 : 14 }]}>Inclure les informations techniques</Text>
       </Pressable>
       <Text style={attenue} testID="support-technique-detail">
         {technique
           ? `Jointes : version ${infos.version}, plateforme ${infos.plateforme}, rang ${infos.rang}${infos.compte ? `, compte ${infos.compte}…` : ''}. Jamais de mot de passe ni de clé.`
           : 'Aucune information technique ne sera jointe.'}
       </Text>
-      <View style={styles.actions}>
-        <BoutonHub theme={theme} variante="plein" titre={envoi ? 'Envoi…' : 'Envoyer le ticket'} desactive={envoi || !service} onPress={() => void envoyer()} testID="support-envoyer" />
-      </View>
+      {mobile ? (
+        <BoutonPrincipal theme={theme} titre={envoi ? 'Envoi…' : 'Envoyer le ticket'} enCours={envoi} desactive={!service} onPress={() => void envoyer()} testID="support-envoyer" />
+      ) : (
+        <View style={styles.actions}>
+          <BoutonHub theme={theme} variante="plein" titre={envoi ? 'Envoi…' : 'Envoyer le ticket'} desactive={envoi || !service} onPress={() => void envoyer()} testID="support-envoyer" />
+        </View>
+      )}
       {retour ? (
         <Text
           accessibilityLiveRegion="polite"
           testID="support-resultat"
-          style={{ color: retour.genre === 'ok' ? theme.ok : retour.genre === 'attente' ? theme.alerte : theme.critique, fontSize: 13, lineHeight: 19 }}>
+          style={{ color: retour.genre === 'ok' ? theme.ok : retour.genre === 'attente' ? theme.alerte : theme.critique, fontSize: mobile ? 15 : 13, lineHeight: mobile ? 21 : 19 }}>
           {retour.texte}
         </Text>
       ) : null}
@@ -180,7 +216,9 @@ export function FormulaireSupport({ theme, service, infos, categorieInitiale = '
 
 export function MesTickets({ theme, tickets, service }: { theme: ThemeHub; tickets: readonly Ticket[]; service?: ServiceSupport }) {
   const rayon = Math.min(theme.rayonMoyen, 10);
-  const attenue = { color: theme.attenue, fontSize: 13, lineHeight: 19, ...police(theme.policeTexte) };
+  const mobile = useMobile();
+  const t15 = (taille: number) => tailleTexte(taille, mobile);
+  const attenue = { color: theme.attenue, fontSize: t15(13), lineHeight: mobile ? 21 : 19, ...police(theme.policeTexte) };
   if (tickets.length === 0) {
     return (
       <Text style={attenue} testID="support-aucun-ticket">
@@ -195,10 +233,10 @@ export function MesTickets({ theme, tickets, service }: { theme: ThemeHub; ticke
         return (
           <View key={t.numero} testID={`support-ticket-${t.numero}`} style={[styles.ticket, { borderColor: theme.ligne, borderRadius: rayon }]}>
             <View style={styles.enteteTicket}>
-              <Text style={{ color: theme.texte, fontWeight: '700', fontSize: 14, flex: 1, ...police(theme.policeTexte) }} numberOfLines={2}>
+              <Text style={{ color: theme.texte, fontWeight: '700', fontSize: t15(14), flex: 1, ...police(theme.policeTexte) }} numberOfLines={2}>
                 n° {t.numero} · {t.sujet}
               </Text>
-              <Text style={{ color: couleur, fontWeight: '700', fontSize: 12 }} testID={`support-ticket-${t.numero}-statut`}>
+              <Text style={{ color: couleur, fontWeight: '700', fontSize: t15(12) }} testID={`support-ticket-${t.numero}-statut`}>
                 {LIBELLES_STATUT[t.statut]}
               </Text>
             </View>
@@ -206,7 +244,7 @@ export function MesTickets({ theme, tickets, service }: { theme: ThemeHub; ticke
               {libelleCategorie(t.categorie)} · {dateCourte(t.date)}
               {t.pieceNom ? ` · capture : ${t.pieceNom}` : ''}
             </Text>
-            {t.statut !== 'envoye' && t.erreur ? <Text style={{ color: couleur, fontSize: 12, lineHeight: 17 }}>{t.erreur}</Text> : null}
+            {t.statut !== 'envoye' && t.erreur ? <Text style={{ color: couleur, fontSize: t15(12), lineHeight: mobile ? 21 : 17 }}>{t.erreur}</Text> : null}
             <View style={styles.actions}>
               {t.statut === 'erreur' ? <BoutonHub theme={theme} titre="Réessayer" onPress={() => void service?.reessayer(t.numero)} testID={`support-ticket-${t.numero}-reessayer`} /> : null}
               {t.statut === 'attente' ? <BoutonHub theme={theme} titre="Envoyer maintenant" onPress={() => void service?.envoyer(t.numero)} testID={`support-ticket-${t.numero}-envoyer`} /> : null}
@@ -228,6 +266,23 @@ export interface PropsPageSupport extends PropsFormulaireSupport {
 /** La page Support : formulaire puis « Mes tickets ». */
 export function PageSupport({ theme, service, infos, tickets, actif = true, onFermer, categorieInitiale }: PropsPageSupport) {
   useEffect(() => (actif ? ecouterTouche('Escape', onFermer) : undefined), [actif, onFermer]);
+  const mobile = useMobile();
+  if (mobile) {
+    // Téléphone : formulaire pleine page, « Mes tickets » en dessous, barre basse du hub.
+    return (
+      <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="hub-support" accessibilityLabel="Support">
+        <EcranMobile theme={theme} onRetour={onFermer} entete={<EnTeteMobile theme={theme} titre="Support" onRetour={onFermer} libelleRetour="Accueil" testIDRetour="hub-support-fermer" />}>
+          <FormulaireSupport theme={theme} service={service} infos={infos} categorieInitiale={categorieInitiale} />
+          <GroupeCellules theme={theme} titre={`Mes tickets${tickets.length ? ` (${tickets.length})` : ''}`}>
+            <View style={{ padding: 16 }}>
+              <MesTickets theme={theme} tickets={tickets} service={service} />
+            </View>
+          </GroupeCellules>
+        </EcranMobile>
+        <BarreBasseHub actif="support" />
+      </View>
+    );
+  }
   const titre = { color: theme.texte, fontWeight: theme.poidsTitre, textTransform: theme.majuscules ? ('uppercase' as const) : ('none' as const), ...police(theme.policeTitre) };
   const carte = [styles.carte, { backgroundColor: theme.surface, borderColor: theme.ligne, borderRadius: theme.rayonMoyen }];
   return (
@@ -267,6 +322,9 @@ const styles = StyleSheet.create({
   segments: { flexDirection: 'row', flexWrap: 'wrap', borderWidth: 1, overflow: 'hidden', alignSelf: 'flex-start' },
   segment: { paddingVertical: 8, paddingHorizontal: 14, minHeight: 36, justifyContent: 'center' },
   ligneCase: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 36 },
+  ligneCaseMobile: { minHeight: 48, gap: 12 },
+  segmentsMobile: { alignSelf: 'stretch', flexWrap: 'nowrap' },
+  segmentMobile: { flex: 1, minHeight: 44, paddingHorizontal: 4, alignItems: 'center' },
   case: { width: 22, height: 22, borderWidth: 2, borderRadius: 5, alignItems: 'center', justifyContent: 'center' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   ticket: { borderWidth: 1, padding: 12, gap: 6 },

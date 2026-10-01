@@ -23,12 +23,14 @@ import { versionApp } from './version';
 import { texteTransparence } from './admin/roles';
 import { ReglagesAbonnements } from './abonnements/ReglagesAbonnements';
 import type { Profil } from '../profils/profils';
+import { ct, tt } from '../ui/mobile/jetons';
+import { modeTelephoneCourant } from '../ui/mobile/useMobile';
 
 const rayonDe = (theme: ThemeHub) => Math.min(theme.rayonMoyen, 10);
 
 function Texte({ theme, children, testID, fort }: { theme: ThemeHub; children: React.ReactNode; testID?: string; fort?: boolean }) {
   return (
-    <Text testID={testID} style={{ color: fort ? theme.texte : theme.attenue, fontSize: 13, lineHeight: 19, fontWeight: fort ? '700' : '400', ...police(theme.policeTexte) }}>
+    <Text testID={testID} style={{ color: fort ? theme.texte : theme.attenue, fontSize: tt(13), lineHeight: 19, fontWeight: fort ? '700' : '400', ...police(theme.policeTexte) }}>
       {children}
     </Text>
   );
@@ -54,13 +56,13 @@ export function ReglageTheme({ theme, onTheme }: { theme: ThemeHub; onTheme(id: 
               aria-checked={choisi}
               accessibilityLabel={`Thème ${candidat.nom}`}
               onPress={() => onTheme(candidat.id)}
-              style={[styles.theme, { borderColor: choisi ? theme.accent : theme.ligne, borderRadius: rayon, backgroundColor: candidat.fond }, choisi && { borderWidth: 2 }]}>
+              style={[styles.theme, modeTelephoneCourant() && styles.themeMobile, { borderColor: choisi ? theme.accent : theme.ligne, borderRadius: rayon, backgroundColor: candidat.fond }, choisi && { borderWidth: 2 }]}>
               <View style={{ flexDirection: 'row', gap: 3 }}>
                 {[candidat.accent, candidat.teintes.portefeuille, candidat.teintes.admin].map((c, i) => (
                   <View key={i} style={{ width: 10, height: 10, backgroundColor: c, borderRadius: 3 }} />
                 ))}
               </View>
-              <Text style={{ color: candidat.texte, fontSize: 12, fontWeight: '600' }} numberOfLines={1}>
+              <Text style={{ color: candidat.texte, fontSize: tt(12), fontWeight: '600' }} numberOfLines={modeTelephoneCourant() ? 2 : 1}>
                 {candidat.nom}
               </Text>
             </Pressable>
@@ -88,8 +90,8 @@ function Segments<T extends string>({ theme, libelle, valeur, options, onChoisir
               aria-checked={actif}
               accessibilityLabel={`${libelle} : ${nom}`}
               onPress={() => onChoisir(cle)}
-              style={[styles.segment, { backgroundColor: actif ? theme.accent : 'transparent' }]}>
-              <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: 13, ...police(theme.policeTexte) }}>{nom}</Text>
+              style={[styles.segment, { minHeight: ct(36), backgroundColor: actif ? theme.accent : 'transparent' }]}>
+              <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: tt(13), ...police(theme.policeTexte) }}>{nom}</Text>
             </Pressable>
           );
         })}
@@ -136,7 +138,7 @@ export function ReglageCompte({ theme, nomProfil, onChangerProfil, onVerrouiller
 
 export function ReglageVersion({ theme }: { theme: ThemeHub }) {
   return (
-    <Text style={{ color: theme.texte, fontSize: 14, ...police(theme.policeTexte) }} testID="parametres-version">
+    <Text style={{ color: theme.texte, fontSize: tt(14), ...police(theme.policeTexte) }} testID="parametres-version">
       Version : <Text style={police(theme.policeChiffres)}>{versionApp()}</Text>
     </Text>
   );
@@ -346,12 +348,12 @@ export function ReglagesAdministration({ theme, services, acteur, maintenant = D
         <BoutonHub theme={theme} variante="plein" couleur={theme.teintes.admin} titre="Enregistrer les réglages" onPress={enregistrer} testID="admin-reglages-enregistrer" />
       </View>
       {erreur ? (
-        <Text style={{ color: theme.critique, fontSize: 13 }} testID="admin-reglages-erreur">
+        <Text style={{ color: theme.critique, fontSize: tt(13) }} testID="admin-reglages-erreur">
           {erreur}
         </Text>
       ) : null}
       {message ? (
-        <Text style={{ color: theme.ok, fontSize: 13 }} accessibilityLiveRegion="polite" testID="admin-reglages-message">
+        <Text style={{ color: theme.ok, fontSize: tt(13) }} accessibilityLiveRegion="polite" testID="admin-reglages-message">
           {message}
         </Text>
       ) : null}
@@ -363,6 +365,8 @@ export function ReglagesAdministration({ theme, services, acteur, maintenant = D
 const styles = StyleSheet.create({
   themes: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   theme: { width: 100, padding: 8, gap: 6, borderWidth: 1 },
+  // Téléphone : deux colonnes qui remplissent la largeur, noms entiers (« Ivoire contrasté »).
+  themeMobile: { width: '47%', flexGrow: 1, padding: 12, minHeight: 64 },
   segments: { flexDirection: 'row', borderWidth: 1, overflow: 'hidden', alignSelf: 'flex-start' },
   segment: { paddingVertical: 8, paddingHorizontal: 14, minHeight: 36, justifyContent: 'center' },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },

@@ -12,7 +12,9 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { View } from 'react-native';
+import { useMobile } from '../mobile/useMobile';
+import { EcranEntree } from './EcranEntree';
 import { Bouton, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, stylesPartages } from '../theme';
 
@@ -24,11 +26,13 @@ export function Connexion({ onContinuer, enCours }: { onContinuer(prenom: string
       onContinuer(prenom);
     }
   };
+  const mobile = useMobile();
+  const bouton = <Bouton titre={enCours ? 'Ouverture…' : 'Continuer'} onPress={valider} desactive={enCours || !prenom.trim()} testID="connexion-continuer" />;
   return (
-    <ScrollView
-      style={[stylesPartages.ecran, { backgroundColor: palette.fond }]}
-      contentContainerStyle={[stylesPartages.contenu, stylesPartages.accueil, { paddingVertical: ESPACEMENT.xl, gap: ESPACEMENT.m }]}
-      keyboardShouldPersistTaps="handled">
+    <EcranEntree
+      styleBureau={{ backgroundColor: palette.fond }}
+      styleContenuBureau={[stylesPartages.contenu, stylesPartages.accueil, { paddingVertical: ESPACEMENT.xl, gap: ESPACEMENT.m }]}
+      pied={mobile ? bouton : undefined}>
       <Titre>Connexion</Titre>
       <SousTitre>
         Chaque compte a son propre espace chiffré, son mot de passe et son code d’authentification. Saisissez votre prénom pour
@@ -43,12 +47,15 @@ export function Connexion({ onContinuer, enCours }: { onContinuer(prenom: string
           onSubmitEditing={valider}
           autoCapitalize="words"
           autoCorrect={false}
-          autoComplete="off"
+          // Téléphone : « username », pour que le gestionnaire de mots de passe associe prénom et coffre.
+          autoComplete={mobile ? 'username' : 'off'}
           maxLength={30}
+          nature="prenom"
+          enterKeyHint="go"
           testID="connexion-prenom"
         />
-        <Bouton titre={enCours ? 'Ouverture…' : 'Continuer'} onPress={valider} desactive={enCours || !prenom.trim()} testID="connexion-continuer" />
+        {mobile ? null : bouton}
       </View>
-    </ScrollView>
+    </EcranEntree>
   );
 }

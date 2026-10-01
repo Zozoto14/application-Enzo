@@ -8,7 +8,7 @@
  * bouton de retour.
  */
 
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -19,6 +19,12 @@ import {
 } from 'react-native';
 import { usePalette } from './composants';
 import { ESPACEMENT, POLICE_TITRE, RAYON } from './theme';
+import { BarreOnglets, type EntreeOnglet } from './mobile/BarreOnglets';
+import { EnTeteMobile } from './mobile/EnTeteMobile';
+import { FeuilleBasse } from './mobile/FeuilleBasse';
+import { themeActif } from './mobile/jetons';
+import { Cellule, GroupeCellules } from './mobile/ListeCellules';
+import { useMobile } from './mobile/useMobile';
 
 export interface Destination {
   cle: string;
@@ -27,6 +33,10 @@ export interface Destination {
   glyphe: string;
   /** Sous-catégorie de la destination qui la précède : affichée en retrait. */
   sous?: boolean;
+  /** Téléphone : entrée de la barre basse (4 au plus) ; les autres vont dans « Plus ». */
+  principale?: boolean;
+  /** Libellé court de la barre basse (« Opération »). */
+  libelleCourt?: string;
 }
 
 /** En dessous, pas de barre latérale : la place manque. */
@@ -75,6 +85,7 @@ export function Coque({
 }) {
   const palette = usePalette();
   const { width } = useWindowDimensions();
+  const mobile = useMobile();
   const contenu = (
     <>
       {enTete ? (
@@ -87,6 +98,23 @@ export function Coque({
   );
   if (destinations.length === 0) {
     return <>{children}</>;
+  }
+  if (mobile) {
+    return (
+      <NavigationPresente.Provider value>
+        <CoqueTelephone
+          destinations={destinations}
+          actif={actif}
+          onNaviguer={onNaviguer}
+          onVerrouiller={onVerrouiller}
+          discret={discret}
+          onBasculerDiscretion={onBasculerDiscretion}
+          enTete={enTete}
+          flottant={flottant}>
+          {children}
+        </CoqueTelephone>
+      </NavigationPresente.Provider>
+    );
   }
   if (width < LARGEUR_NAVIGATION) {
     // Tablette, téléphone, petite fenêtre : la barre latérale n'a pas la
@@ -214,6 +242,107 @@ export function Coque({
         </View>
     </View>
     </NavigationPresente.Provider>
+  );
+}
+
+/** Entrées de la barre basse d'une app (pure, testée) : les principales (4 au plus), puis « Plus ». */
+export function entreesBarreApp(destinations: readonly Destination[]): { principales: Destination[]; autres: Destination[] } {
+  const candidates = destinations.filter(d => d.cle !== 'hub');
+  const marquees = candidates.filter(d => d.principale);
+  const principales = (marquees.length > 0 ? marquees : candidates.filter(d => !d.sous)).slice(0, 4);
+  return { principales, autres: candidates.filter(d => !principales.includes(d)) };
+}
+
+/**
+ * Coque d'une app sur téléphone : en-tête compact (‹ Accueil, titre de l'écran, synchro, réglages),
+ * contenu, barre basse (4 sections principales + « Plus » : feuille basse avec le reste, le mode
+ * discret et le verrouillage).
+ */
+function CoqueTelephone({
+  destinations,
+  actif,
+  onNaviguer,
+  onVerrouiller,
+  discret,
+  onBasculerDiscretion,
+  enTete,
+  flottant,
+  children,
+}: {
+  destinations: readonly Destination[];
+  actif: string;
+  onNaviguer(cle: string): void;
+  onVerrouiller?(): void;
+  discret: boolean;
+  onBasculerDiscretion?(): void;
+  enTete?: React.ReactNode;
+  flottant?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const theme = themeActif();
+  const [plus, setPlus] = useState(false);
+  const { principales, autres } = entreesBarreApp(destinations);
+  const versHub = destinations.some(d => d.cle === 'hub');
+  const courante = destinations.find(d => d.cle === actif);
+  const entrees: EntreeOnglet[] = [
+    ...principales.map(d => ({ cle: d.cle, libelle: d.libelleCourt ?? d.libelle, glyphe: d.glyphe, description: d.libelle })),
+    { cle: 'plus', libelle: 'Plus', glyphe: '☰', description: 'Plus : autres sections, mode discret, verrouillage' },
+  ];
+  const choisir = (cle: string) => {
+    setPlus(false);
+    onNaviguer(cle);
+  };
+  return (
+    <View style={[styles.colonne, { backgroundColor: theme.fond }]} testID="coque-telephone">
+      <EnTeteMobile
+        theme={theme}
+        titre={courante?.libelle ?? ''}
+        onRetour={versHub ? () => onNaviguer('hub') : undefined}
+        libelleRetour="Accueil"
+        testIDRetour="nav-hub"
+        droite={enTete}
+        testID="entete-app"
+      />
+      <View style={styles.contenu}>
+        {children}
+        {flottant}
+      </View>
+      <BarreOnglets
+        theme={theme}
+        entrees={entrees}
+        actif={plus ? 'plus' : principales.some(d => d.cle === actif) ? actif : 'plus'}
+        onChoisir={cle => (cle === 'plus' ? setPlus(true) : choisir(cle))}
+        testID="barre-basse-app"
+      />
+      <FeuilleBasse theme={theme} visible={plus} titre="Plus" onFermer={() => setPlus(false)} testID="feuille-plus">
+        <GroupeCellules theme={theme}>
+          {autres.map(d => (
+            <Cellule key={d.cle} theme={theme} glyphe={d.glyphe} titre={d.libelle} chevron coche={d.cle === actif ? true : undefined} onPress={() => choisir(d.cle)} testID={`nav-${d.cle}`} />
+          ))}
+        </GroupeCellules>
+        {onBasculerDiscretion || onVerrouiller ? (
+          <GroupeCellules theme={theme}>
+            {onBasculerDiscretion ? (
+              <Cellule theme={theme} glyphe={discret ? '◉' : '◌'} titre="Masquer les montants" interrupteur={{ valeur: discret, onChanger: () => onBasculerDiscretion() }} testID="nav-discretion" />
+            ) : null}
+            {onVerrouiller ? (
+              <Cellule
+                theme={theme}
+                glyphe="⏻"
+                teinte={theme.critique}
+                danger
+                titre="Verrouiller"
+                onPress={() => {
+                  setPlus(false);
+                  onVerrouiller();
+                }}
+                testID="nav-verrouiller"
+              />
+            ) : null}
+          </GroupeCellules>
+        ) : null}
+      </FeuilleBasse>
+    </View>
   );
 }
 

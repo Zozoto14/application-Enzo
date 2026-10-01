@@ -15,6 +15,7 @@ import { Segments } from '../elements';
 import { ESPACEMENT, RAYON } from '../theme';
 import { INTERVALLES_ACTUALISATION, INTERVALLE_PAR_DEFAUT_S, libelleIntervalle } from '../../cours/marche';
 import type { FournisseurCours } from '../../cours/fournisseur';
+import { tt } from '../mobile/jetons';
 
 export function ReglageIntervalle({ intervalle, onChoisir }: { intervalle?: number; onChoisir(secondes: number): void }) {
   return (
@@ -239,7 +240,7 @@ export function ReglageDiscretion({ discret, onBasculer }: { discret: boolean; o
   return (
     <View style={styles.ligneSwitch}>
       <Switch value={discret} onValueChange={onBasculer} accessibilityLabel="Masquer les montants en euros" testID="reglage-discretion" />
-      <Text style={{ color: palette.texteSecondaire, fontSize: 13, flexShrink: 1 }}>
+      <Text style={{ color: palette.texteSecondaire, fontSize: tt(13), flexShrink: 1 }}>
         {discret ? 'Montants masqués (mode discret actif).' : 'Montants affichés.'}
       </Text>
     </View>
@@ -256,7 +257,7 @@ export function ReglagePodcast({ heureAuto, onChanger }: { heureAuto?: string; o
         onValueChange={actif => onChanger(actif && /^\d{2}:\d{2}$/.test(heureSaisie) ? heureSaisie : undefined)}
         accessibilityLabel="Préparer le podcast automatiquement"
       />
-      <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>Prêt chaque jour à</Text>
+      <Text style={{ color: palette.texteSecondaire, fontSize: tt(13) }}>Prêt chaque jour à</Text>
       <View style={{ width: 90 }}>
         <Champ
           etiquette="Heure"
@@ -269,7 +270,7 @@ export function ReglagePodcast({ heureAuto, onChanger }: { heureAuto?: string; o
           testID="champ-heure-podcast"
         />
       </View>
-      <Text style={{ color: palette.texteSecondaire, fontSize: 12, flexShrink: 1 }}>
+      <Text style={{ color: palette.texteSecondaire, fontSize: tt(12), flexShrink: 1 }}>
         {heureAuto ? 'L’application doit être ouverte (même réduite) : une notification vous prévient.' : 'Désactivé.'}
       </Text>
     </View>

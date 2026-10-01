@@ -146,7 +146,7 @@ export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, context
       <View style={[st.racine, { backgroundColor: theme.fond }]} testID="tsuzuku-racine">
         <ScrollView style={{ flex: 1 }} contentContainerStyle={st.defilement} keyboardShouldPersistTaps="handled">
           <View style={st.page}>
-            <RetourHub theme={themeHub} onRetour={onRetour} />
+            <RetourHub theme={themeHub} onRetour={onRetour} titre="Tsuzuku" />
             {/* En-tête comme l'ancienne version : marque, sélecteur Animés | Films (l'actif prend l'accent de son univers), sections. */}
             <View style={[st.entete, { borderBottomColor: theme.ligne }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>

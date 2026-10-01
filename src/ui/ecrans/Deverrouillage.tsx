@@ -12,14 +12,17 @@
  *    et pour un code faux. L'écran ne doit surtout pas préciser davantage.
  *    Une erreur TECHNIQUE (clé impossible à calculer) a son propre message.
  *
- *  - **Le compte à rebours avance tout seul**, et un double appui n'envoie
- *    qu'une tentative.
+ *  - **Le compte à rebours avance tout seul**, et un double appui (ou Entrée
+ *    puis clic) n'envoie qu'une tentative.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, ScrollView, Text, View, useColorScheme } from 'react-native';
+import { ActivityIndicator, Platform, Text, View, useColorScheme } from 'react-native';
 import { Alerte, Bouton, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, palettePour, stylesPartages } from '../theme';
+import { EcranEntree } from './EcranEntree';
+import { useMobile } from '../mobile/useMobile';
+import { TEXTE } from '../mobile/jetons';
 import { LierCompte, type OptionsLier } from './LierCompte';
 
 export interface DeverrouillageProps {
@@ -109,8 +112,9 @@ export function Deverrouillage({
   const complet = motDePasse.length > 0 && code.length === 6;
   const espacesAutour = motDePasse.length > 0 && motDePasse !== motDePasse.trim();
 
-  const envoyer = () => {
-    if (enCours || verrouille || envoiEnCours.current) return;
+  const mobile = useMobile();
+  const deverrouiller = () => {
+    if (!complet || enCours || verrouille || envoiEnCours.current) return;
     envoiEnCours.current = true;
     setTimeout(() => {
       envoiEnCours.current = false;
@@ -141,17 +145,85 @@ export function Deverrouillage({
     );
   };
 
+  const principal = enCours ? (
+    <View
+      accessibilityLiveRegion="polite"
+      style={{ alignItems: 'center', gap: ESPACEMENT.s }}>
+      <ActivityIndicator color={palette.accent} />
+      {/* Sans ce message, la seconde de dérivation de clé passe pour un
+          plantage et l'utilisateur relance l'application. */}
+      <SousTitre>Vérification en cours, cela prend un instant…</SousTitre>
+    </View>
+  ) : (
+    <Bouton
+      titre="Déverrouiller"
+      pleineLargeur
+      testID="bouton-deverrouiller"
+      desactive={!complet || verrouille}
+      onPress={deverrouiller}
+    />
+  );
+
   return (
-    <ScrollView
-      style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, stylesPartages.accueil, { paddingVertical: ESPACEMENT.xl }]}
-      keyboardShouldPersistTaps="handled">
+    <EcranEntree
+      styleBureau={{ backgroundColor: palettePour(sombre).fond }}
+      styleContenuBureau={[stylesPartages.contenu, stylesPartages.accueil, { paddingVertical: ESPACEMENT.xl }]}
+      pied={principal}
+      apresPied={
+        <>
+          {onRecuperer ? (
+            <Bouton
+              titre="Mot de passe oublié"
+              pleineLargeur
+              variante="discret"
+              desactive={enCours}
+              onPress={onRecuperer}
+            />
+          ) : null}
+          {lier ? (
+            montrerLier ? (
+              <LierCompte {...lier} remplace />
+            ) : (
+              <Bouton
+                titre="Lier à mon compte (code de liaison)"
+                pleineLargeur
+                variante="discret"
+                desactive={enCours}
+                onPress={() => setMontrerLier(true)}
+                testID="montrer-lier"
+              />
+            )
+          ) : null}
+          {diagnostic ? (
+            <View style={{ gap: ESPACEMENT.s, alignItems: 'center' }}>
+              <Text
+                accessibilityRole="button"
+                accessibilityLabel="Diagnostic du déverrouillage"
+                onPress={ouvrirDiagnostic}
+                testID="lien-diagnostic"
+                style={{ color: palette.texteSecondaire, textDecorationLine: 'underline', fontSize: 13, padding: ESPACEMENT.s }}>
+                Diagnostic
+              </Text>
+              {diagOuvert ? (
+                <View style={{ gap: ESPACEMENT.s, alignSelf: 'stretch' }} testID="panneau-diagnostic">
+                  <Text selectable style={{ color: palette.texte, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12 }} testID="texte-diagnostic">
+                    {diag}
+                  </Text>
+                  <SousTitre>Aucun secret : ni mot de passe, ni code, ni identifiant de compte.</SousTitre>
+                  <Bouton titre="Copier le diagnostic" variante="discret" pleineLargeur onPress={copierDiagnostic} testID="copier-diagnostic" />
+                  {copie ? <SousTitre>{copie}</SousTitre> : null}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+        </>
+      }>
       <Titre>Déverrouiller</Titre>
       <SousTitre>
         Mot de passe et code à six chiffres sont tous deux nécessaires.
       </SousTitre>
       {message ? (
-        <Text style={{ color: palette.hausse, fontWeight: '600' }} testID="message-deverrouillage">
+        <Text style={{ color: palette.hausse, fontWeight: '600', fontSize: mobile ? TEXTE.legende : undefined }} testID="message-deverrouillage">
           {message}
         </Text>
       ) : null}
@@ -167,6 +239,8 @@ export function Deverrouillage({
         editable={!enCours && !verrouille}
         textContentType="password"
         autoComplete="current-password"
+        nature="motDePasse"
+        enterKeyHint="next"
         indication={
           espacesAutour
             ? 'Espace ou retour à la ligne au début ou à la fin : le mot de passe sera aussi essayé sans.'
@@ -179,12 +253,16 @@ export function Deverrouillage({
         value={code}
         onChangeText={texte => setCode(chiffresDuCode(texte))}
         keyboardType="number-pad"
-        // Pas de maxLength : « 123 456 » collé était tronqué en « 123 45 ».
+        // Six chiffres gardés par chiffresDuCode : une limite à 6 tronquait « 123 456 » collé en « 123 45 ».
+        maxLength={12}
         autoCapitalize="none"
         autoCorrect={false}
         spellCheck={false}
         textContentType="oneTimeCode"
         autoComplete={Platform.OS === 'web' ? ('one-time-code' as never) : 'sms-otp'}
+        nature="codeTotp"
+        enterKeyHint="go"
+        onSubmitEditing={deverrouiller}
         editable={!enCours && !verrouille}
         indication="Les six chiffres affichés par votre application d'authentification."
       />
@@ -197,7 +275,7 @@ export function Deverrouillage({
       ) : null}
       {erreur && suggererAutreCoffre && lier?.codeConnu && !montrerLier ? (
         <View style={{ gap: ESPACEMENT.s }} testID="suggestion-autre-coffre">
-          <Text style={{ color: palette.texte, fontWeight: '600' }}>
+          <Text style={{ color: palette.texte, fontWeight: '600', fontSize: mobile ? TEXTE.legende : undefined }}>
             Ce navigateur contient peut-être un autre coffre que celui de ton PC : relier mon compte.
           </Text>
           <Bouton titre="Relier mon compte" variante="discret" pleineLargeur onPress={() => setMontrerLier(true)} testID="reprendre-coffre" />
@@ -210,70 +288,6 @@ export function Deverrouillage({
         />
       ) : null}
 
-      {enCours ? (
-        <View
-          accessibilityLiveRegion="polite"
-          style={{ alignItems: 'center', gap: ESPACEMENT.s }}>
-          <ActivityIndicator color={palette.accent} />
-          {/* Sans ce message, la seconde de dérivation de clé passe pour un
-              plantage et l'utilisateur relance l'application. */}
-          <SousTitre>Vérification en cours, cela prend un instant…</SousTitre>
-        </View>
-      ) : (
-        <Bouton
-          titre="Déverrouiller"
-          pleineLargeur
-          testID="bouton-deverrouiller"
-          desactive={!complet || verrouille}
-          onPress={envoyer}
-        />
-      )}
-
-      {onRecuperer ? (
-        <Bouton
-          titre="Mot de passe oublié"
-          pleineLargeur
-          variante="discret"
-          desactive={enCours}
-          onPress={onRecuperer}
-        />
-      ) : null}
-      {lier ? (
-        montrerLier ? (
-          <LierCompte {...lier} remplace />
-        ) : (
-          <Bouton
-            titre="Lier à mon compte (code de liaison)"
-            pleineLargeur
-            variante="discret"
-            desactive={enCours}
-            onPress={() => setMontrerLier(true)}
-            testID="montrer-lier"
-          />
-        )
-      ) : null}
-      {diagnostic ? (
-        <View style={{ gap: ESPACEMENT.s, alignItems: 'center' }}>
-          <Text
-            accessibilityRole="button"
-            accessibilityLabel="Diagnostic du déverrouillage"
-            onPress={ouvrirDiagnostic}
-            testID="lien-diagnostic"
-            style={{ color: palette.texteSecondaire, textDecorationLine: 'underline', fontSize: 13, padding: ESPACEMENT.s }}>
-            Diagnostic
-          </Text>
-          {diagOuvert ? (
-            <View style={{ gap: ESPACEMENT.s, alignSelf: 'stretch' }} testID="panneau-diagnostic">
-              <Text selectable style={{ color: palette.texte, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', fontSize: 12 }} testID="texte-diagnostic">
-                {diag}
-              </Text>
-              <SousTitre>Aucun secret : ni mot de passe, ni code, ni identifiant de compte.</SousTitre>
-              <Bouton titre="Copier le diagnostic" variante="discret" pleineLargeur onPress={copierDiagnostic} testID="copier-diagnostic" />
-              {copie ? <SousTitre>{copie}</SousTitre> : null}
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-    </ScrollView>
+    </EcranEntree>
   );
 }

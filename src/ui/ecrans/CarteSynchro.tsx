@@ -16,6 +16,7 @@ import type { EtatSynchroApp } from '../../app/synchroApp';
 import { joursRestants } from '../../natif/signature';
 import { choisirSite } from '../../config/site';
 import { encoderLiaison, lienApp, lienSite, type Liaison } from '../../sync/relais/liaison';
+import { tt } from '../mobile/jetons';
 
 export interface CarteSynchroProps {
   synchro: EtatSynchroApp;
@@ -66,7 +67,7 @@ export function QrCode({ texte, legende, testID }: { texte: string; legende: str
   return (
     <View style={styles.qr} testID={testID}>
       <Image source={{ uri }} style={{ width: taille, height: taille }} accessibilityLabel={legende} />
-      <Text style={{ color: '#111', fontWeight: '600', textAlign: 'center', maxWidth: taille }}>{legende}</Text>
+      <Text style={{ fontSize: tt(14), color: '#111', fontWeight: '600', textAlign: 'center', maxWidth: taille }}>{legende}</Text>
     </View>
   );
 }
@@ -77,13 +78,13 @@ export function Expiration({ expireLe, maintenant }: { expireLe: string; mainten
   const date = new Date(expireLe).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
   if (jours < 0) {
     return (
-      <Text style={{ color: palette.baisse, fontWeight: '700' }}>
+      <Text style={{ fontSize: tt(14), color: palette.baisse, fontWeight: '700' }}>
         ⛔ Signature expirée le {date} : passez sur le Wi-Fi du PC pour qu’AltStore la renouvelle.
       </Text>
     );
   }
   return (
-    <Text style={{ color: jours <= 2 ? palette.baisse : palette.texteSecondaire, fontWeight: jours <= 2 ? '700' : '400' }}>
+    <Text style={{ fontSize: tt(14), color: jours <= 2 ? palette.baisse : palette.texteSecondaire, fontWeight: jours <= 2 ? '700' : '400' }}>
       {jours <= 2 ? '⚠️ ' : ''}Expire {jours === 0 ? 'aujourd’hui' : jours === 1 ? 'demain' : `dans ${jours} jours`} ({date})
     </Text>
   );
@@ -133,28 +134,28 @@ export function CarteSynchro({
             relais ne voit que du bruit.
           </SousTitre>
           {liaisonDuPc ? (
-            <Text style={{ color: palette.hausse, fontWeight: '600' }} testID="relais-du-pc">
+            <Text style={{ fontSize: tt(14), color: palette.hausse, fontWeight: '600' }} testID="relais-du-pc">
               ✅ Relais reconnu : rien à recopier.
             </Text>
           ) : synchro.plateforme === 'bureau' ? (
             <View style={[styles.etapes, { borderColor: palette.bordure }]} testID="relais-a-installer">
-              <Text style={{ color: palette.texte, fontWeight: '700' }}>
+              <Text style={{ fontSize: tt(14), color: palette.texte, fontWeight: '700' }}>
                 Le relais n’est pas encore installé sur ce PC
               </Text>
-              <Text style={{ color: palette.texte }}>
+              <Text style={{ fontSize: tt(14), color: palette.texte }}>
                 Sur le PC, il n’y a pas de code à recopier : c’est lui qui le crée. Pour cela :
               </Text>
-              <Text style={{ color: palette.texte }}>
+              <Text style={{ fontSize: tt(14), color: palette.texte }}>
                 1. Ouvrez un terminal (PowerShell) dans le dossier d’AppDashboard — celui où vous lanciez « npm run maj-pc ».
               </Text>
-              <Text style={{ color: palette.texte }}>2. Tapez : npm run relais:deployer</Text>
-              <Text style={{ color: palette.texte }}>
+              <Text style={{ fontSize: tt(14), color: palette.texte }}>2. Tapez : npm run relais:deployer</Text>
+              <Text style={{ fontSize: tt(14), color: palette.texte }}>
                 3. Connectez-vous à Cloudflare dans le navigateur qui s’ouvre, puis attendez « Terminé ».
               </Text>
-              <Text style={{ color: palette.texte }}>
+              <Text style={{ fontSize: tt(14), color: palette.texte }}>
                 4. Revenez ici : le relais apparaît tout seul en quelques secondes, avec « ✅ Relais reconnu ».
               </Text>
-              <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>
+              <Text style={{ color: palette.texteSecondaire, fontSize: tt(13) }}>
                 Vous avez déjà un code d’un autre appareil ? Collez-le quand même ci-dessous.
               </Text>
               <Champ
@@ -168,18 +169,18 @@ export function CarteSynchro({
             </View>
           ) : (
             <View style={[styles.etapes, { borderColor: palette.bordure }]}>
-              <Text style={{ color: palette.texte, fontWeight: '700' }}>Où trouver le code de liaison ?</Text>
-              <Text style={{ color: palette.texte }}>
+              <Text style={{ fontSize: tt(14), color: palette.texte, fontWeight: '700' }}>Où trouver le code de liaison ?</Text>
+              <Text style={{ fontSize: tt(14), color: palette.texte }}>
                 C’est l’adresse de votre relais et sa clé d’accès, en une ligne. Il se trouve sur le PC déjà relié :
               </Text>
-              <Text style={{ color: palette.texte }}>1. Sur le PC, ouvrez Paramètres › Synchronisation.</Text>
-              <Text style={{ color: palette.texte }}>2. Cliquez sur « Relier un autre appareil ».</Text>
-              <Text style={{ color: palette.texte }}>
+              <Text style={{ fontSize: tt(14), color: palette.texte }}>1. Sur le PC, ouvrez Paramètres › Synchronisation.</Text>
+              <Text style={{ fontSize: tt(14), color: palette.texte }}>2. Cliquez sur « Relier un autre appareil ».</Text>
+              <Text style={{ fontSize: tt(14), color: palette.texte }}>
                 3. Le plus simple : scannez le QR code avec l’appareil photo de ce téléphone — le code est rempli tout
                 seul. Sinon, recopiez le texte affiché sous « Ou recopiez ce code » : il commence par AB1. et fait une
                 centaine de caractères (le plus sûr : l’envoyer par Notes ou iMessage à vous-même, puis le coller).
               </Text>
-              <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>
+              <Text style={{ color: palette.texteSecondaire, fontSize: tt(13) }}>
                 Il ne contient aucun mot de passe : l’appareil s’ouvre ensuite avec le mot de passe et le code de
                 votre PC.
               </Text>
@@ -214,7 +215,7 @@ export function CarteSynchro({
   return (
     <>
       <View style={{ gap: ESPACEMENT.s }} testID="carte-synchro">
-        <Text style={{ color: palette.texte, fontWeight: '700' }}>
+        <Text style={{ fontSize: tt(14), color: palette.texte, fontWeight: '700' }}>
           {EMOJI[synchro.plateforme ?? ''] ?? '🔗'} {synchro.nom} · relié
         </Text>
         <SousTitre>
@@ -225,9 +226,9 @@ export function CarteSynchro({
               : 'Première synchronisation en attente.'}
         </SousTitre>
         {synchro.expireLe ? <Expiration expireLe={synchro.expireLe} maintenant={maintenant} /> : null}
-        {synchro.message ? <Text style={{ color: palette.texte }}>{synchro.message}</Text> : null}
+        {synchro.message ? <Text style={{ fontSize: tt(14), color: palette.texte }}>{synchro.message}</Text> : null}
         {synchro.maj ? (
-          <Text style={{ color: palette.accent, fontWeight: '600' }} testID="maj-telechargee">
+          <Text style={{ fontSize: tt(14), color: palette.accent, fontWeight: '600' }} testID="maj-telechargee">
             {synchro.maj}
           </Text>
         ) : null}
@@ -236,18 +237,18 @@ export function CarteSynchro({
           <Bouton titre={montrerCodes ? 'Masquer le code' : 'Relier un autre appareil'} variante="discret" onPress={() => setMontrerCodes(!montrerCodes)} testID="bouton-montrer-liaison" />
         </View>
 
-        <Text style={{ color: palette.texte, fontWeight: '700', marginTop: ESPACEMENT.s }}>Autres appareils</Text>
+        <Text style={{ fontSize: tt(14), color: palette.texte, fontWeight: '700', marginTop: ESPACEMENT.s }}>Autres appareils</Text>
         {autres.length === 0 ? (
           <SousTitre>Aucun pour l’instant : reliez l’iPhone avec le QR code ci-dessous.</SousTitre>
         ) : null}
         {autres.map(([id, appareil]) => (
           <View key={id} style={[styles.appareil, { borderColor: palette.bordure }]} testID={`appareil-${id}`}>
             <View style={{ flex: 1, gap: 2 }}>
-              <Text style={{ color: palette.texte, fontWeight: '600' }}>
+              <Text style={{ fontSize: tt(14), color: palette.texte, fontWeight: '600' }}>
                 {EMOJI[appareil.plateforme] ?? '🔗'} {appareil.nom || 'Appareil'}
               </Text>
               {appareil.vuLe ? (
-                <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>Dernier envoi {ilYA(appareil.vuLe, maintenant)}</Text>
+                <Text style={{ color: palette.texteSecondaire, fontSize: tt(13) }}>Dernier envoi {ilYA(appareil.vuLe, maintenant)}</Text>
               ) : null}
               {appareil.expireLe ? <Expiration expireLe={appareil.expireLe} maintenant={maintenant} /> : null}
             </View>
@@ -271,11 +272,11 @@ export function CarteSynchro({
                 testID="qr-app"
               />
             </View>
-            <Text style={{ color: palette.texteSecondaire }}>
+            <Text style={{ fontSize: tt(14), color: palette.texteSecondaire }}>
               Sans QR code : copiez ce code, envoyez-le-vous (iMessage, WhatsApp, e-mail, Notes), puis collez-le sur
               l’iPhone dans Paramètres › Synchronisation › Appareils liés.
             </Text>
-            <Text selectable style={[styles.code, { color: palette.texte, borderColor: palette.bordure }]} testID="code-liaison">
+            <Text selectable style={[styles.code, { fontSize: tt(12) }, { color: palette.texte, borderColor: palette.bordure }]} testID="code-liaison">
               {encoderLiaison(liaison)}
             </Text>
             <View style={styles.boutons}>
@@ -299,7 +300,7 @@ export function CarteSynchro({
                 Site de secours : {choisirSite(liaison.site)}
               </Text>
             ) : (
-              <Text style={{ color: palette.texteSecondaire }} testID="site-non-publie">
+              <Text style={{ fontSize: tt(14), color: palette.texteSecondaire }} testID="site-non-publie">
                 Publiez d’abord le site (npm run relais:site) : en attendant, seul le code ci-dessus est à copier.
               </Text>
             )}

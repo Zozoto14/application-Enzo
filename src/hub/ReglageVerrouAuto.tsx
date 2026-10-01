@@ -4,10 +4,11 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { DELAIS_VERROU_MINUTES, DELAI_PRESENCE_SECONDES, libelleDelaiVerrou } from '../securite/verrouAuto';
 import { police, type ThemeHub } from './themes';
+import { ct, tt } from '../ui/mobile/jetons';
 
 export function ReglageVerrouAuto({ theme, minutes, onChoisir }: { theme: ThemeHub; minutes: number; onChoisir(minutes: number): void }) {
   const rayon = Math.min(theme.rayonMoyen, 10);
-  const attenue = { color: theme.attenue, fontSize: 13, lineHeight: 19, ...police(theme.policeTexte) };
+  const attenue = { color: theme.attenue, fontSize: tt(13), lineHeight: 19, ...police(theme.policeTexte) };
   return (
     <View style={{ gap: 10 }} testID="parametres-verrou-auto">
       <Text style={attenue}>
@@ -28,8 +29,8 @@ export function ReglageVerrouAuto({ theme, minutes, onChoisir }: { theme: ThemeH
               aria-checked={actif}
               accessibilityLabel={`Verrouiller après : ${libelleDelaiVerrou(valeur)}`}
               onPress={() => onChoisir(valeur)}
-              style={[styles.segment, { backgroundColor: actif ? theme.accent : 'transparent' }]}>
-              <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: 13, ...police(theme.policeTexte) }}>{libelleDelaiVerrou(valeur)}</Text>
+              style={[styles.segment, { minHeight: ct(36), backgroundColor: actif ? theme.accent : 'transparent' }]}>
+              <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: tt(13), ...police(theme.policeTexte) }}>{libelleDelaiVerrou(valeur)}</Text>
             </Pressable>
           );
         })}

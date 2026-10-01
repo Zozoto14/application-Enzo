@@ -11,6 +11,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { BoutonHub } from '../Hub';
+import { useMobile } from '../../ui/mobile/useMobile';
 import { chargerDonnees } from '../admin/donnees';
 import { autorise } from '../admin/roles';
 import { demanderSectionAdmin } from '../admin/navigation';
@@ -113,7 +114,9 @@ export function BandeauAbonnement({
     return r;
   });
   const [ferme, setFerme] = useState(false);
-  const texte = { color: theme.texte, ...police(theme.policeTexte) };
+  // Téléphone : texte de 16 px, bouton « OK » de 44 px.
+  const mobile = useMobile();
+  const texte = { color: theme.texte, ...police(theme.policeTexte), ...(mobile ? { fontSize: 16, lineHeight: 22 } : {}) };
 
   if (admin && admin.resume.texte) {
     const couleur = admin.resume.retard > 0 ? theme.critique : theme.alerte;
@@ -154,8 +157,8 @@ export function BandeauAbonnement({
         <Text style={[texte, { flex: 1, minWidth: 200 }]} testID="hub-abonnement-rappel-texte">
           {rappel.message}
         </Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="Fermer le rappel" onPress={() => setFerme(true)} testID="hub-abonnement-rappel-fermer" style={{ padding: 8 }}>
-          <Text style={{ color: theme.attenue, fontWeight: '700' }}>OK</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Fermer le rappel" onPress={() => setFerme(true)} testID="hub-abonnement-rappel-fermer" style={mobile ? { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' } : { padding: 8 }}>
+          <Text style={{ color: theme.attenue, fontWeight: '700', fontSize: mobile ? 16 : undefined }}>OK</Text>
         </Pressable>
       </View>
     );

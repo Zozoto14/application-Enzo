@@ -121,6 +121,9 @@ import { versionApp } from '../hub/version';
 import { BarreApp, BarreAppContexte } from '../hub/BarreApp';
 import { IndicateurSynchro, type SynchroHub } from '../hub/IndicateurSynchro';
 import { PageParametres } from '../hub/PageParametres';
+import { NavigationMobileContexte, type NavigationMobile } from '../ui/mobile/NavigationMobile';
+import { useMobile } from '../ui/mobile/useMobile';
+import { margesSecurite } from '../ui/mobile/ZoneSecurite';
 import { useMiseAJour } from '../hub/ParametresHub';
 import {
   BandeauConfidentialite,
@@ -154,7 +157,7 @@ import { resumerBibliotheque } from '../tsuzuku/app/resume';
 import { CLES as CLES_TSUZUKU, type BasePrefs } from '../tsuzuku/plateforme/stockage';
 import { themeHub, type IdThemeHub } from '../hub/themes';
 import type { ContexteHub, ResumePortefeuille, ServicesAdmin } from '../hub/types';
-import { ecouterTouche, octetsUtf8, telechargerWeb } from '../hub/web';
+import { ecouterTouche, octetsUtf8, rechargerApp, surLeWeb, telechargerWeb } from '../hub/web';
 import { dividendesParTitre, lignesCibles, lignesVendables } from './calculs';
 import { exporterExcel } from '../rapport/exportExcel';
 import { carnetDepuisJson, construireCarnet } from '../ui/vues/carnet';
@@ -1813,14 +1816,14 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const sansCompte = (contenuComplet?.comptes.length ?? 0) === 0;
   const destinations: Destination[] = [
     ...(hub ? [{ cle: 'hub', libelle: '← Hub', glyphe: '⌂' }] : []),
-    { cle: 'tableau', libelle: 'Portefeuille', glyphe: '▦' },
-    { cle: 'saisie', libelle: 'Nouvelle opération', glyphe: '+' },
+    { cle: 'tableau', libelle: 'Portefeuille', glyphe: '▦', principale: true },
+    { cle: 'saisie', libelle: 'Nouvelle opération', libelleCourt: 'Opération', glyphe: '+', principale: true },
     { cle: 'import', libelle: 'Importer', glyphe: '↓' },
-    { cle: 'recherche', libelle: 'Recherche', glyphe: '⌕' },
+    { cle: 'recherche', libelle: 'Recherche', glyphe: '⌕', principale: true },
     { cle: 'screener', libelle: 'Screener', glyphe: '▤' },
     // La fiche ouverte se range sous la Recherche, d'où on l'ouvre le plus souvent.
     ...(fiche ? [{ cle: 'fiche', libelle: fiche.vue?.entete.nom ?? fiche.symbole, glyphe: '◧', sous: true }] : []),
-    { cle: 'watchlist', libelle: 'Watchlist', glyphe: '☆' },
+    { cle: 'watchlist', libelle: 'Watchlist', glyphe: '☆', principale: true },
     { cle: 'carnet', libelle: 'Mon carnet', glyphe: '✎' },
     { cle: 'journal', libelle: 'Journal des décisions', glyphe: '☰', sous: true },
     { cle: 'comparateur', libelle: 'Comparateur', glyphe: '⇄' },
@@ -2533,7 +2536,29 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     }
   };
 
+  // Coque du téléphone : actions de la barre basse du hub (Accueil · Support · Réglages · Compte).
+  const mobile = useMobile();
+  const navigationMobile: NavigationMobile | undefined =
+    hub && deverrouille
+      ? {
+          theme: themeDuHub,
+          onAccueil: () => {
+            setParametres(undefined);
+            setSupportOuvert(false);
+            setAppHub(undefined);
+          },
+          onSupport: ouvrirSupport,
+          onParametres: () => ouvrirParametres(),
+          onVerrouiller: verrouiller,
+          onChangerProfil: profils && (profils.peutChanger ?? profils.tous.length > 1) ? profils.onChanger : undefined,
+          synchro: synchroHub,
+          compte: profils?.actuel.nom,
+          onRecharger: surLeWeb() ? () => void rechargerApp() : undefined,
+        }
+      : undefined;
+
   return (
+    <NavigationMobileContexte.Provider value={navigationMobile}>
     <SafeAreaProvider initialMetrics={initialWindowMetrics ?? METRIQUES_DE_REPLI}>
       <SafeAreaView
         style={[stylesPartages.ecran, { backgroundColor: palettePour().fond }]}>
@@ -2714,6 +2739,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       ) : appOuverte?.Racine ? (
         <GardeErreur quoi={appOuverte.nom} onRevenir={profils?.onChanger}>
         <BarreAppContexte.Provider value={barreApp}>
+        {/* Téléphone : l'app commence sous l'encoche (son en-tête sera repris en phase B). */}
+        <View style={[{ flex: 1, backgroundColor: themeDuHub.fond }, mobile ? margesSecurite(['haut']) : null]}>
         <appOuverte.Racine
           contexte={contexteHub}
           theme={themeDuHub}
@@ -2723,6 +2750,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onTheme={choisirTheme}
           onParametres={ouvrirParametres}
         />
+        </View>
         </BarreAppContexte.Provider>
         </GardeErreur>
       ) : ecran === 'compte' ? (
@@ -3201,5 +3229,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       </GardeInactivite>
       </SafeAreaView>
     </SafeAreaProvider>
+    </NavigationMobileContexte.Provider>
   );
 }

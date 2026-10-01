@@ -19,6 +19,9 @@ import {
 } from 'react-native';
 import { ESPACEMENT, RAYON, couleurTendance, palettePour, type Palette, POLICE_TITRE } from './theme';
 import type { Tendance } from './format';
+import { useMobile } from './mobile/useMobile';
+import { ChampMobile, type NatureChamp } from './mobile/ChampMobile';
+import { CONTROLE, TEXTE } from './mobile/jetons';
 
 export function usePalette(): Palette {
   return palettePour();
@@ -26,8 +29,9 @@ export function usePalette(): Palette {
 
 export function Titre({ children }: { children: React.ReactNode }) {
   const palette = usePalette();
+  const mobile = useMobile();
   return (
-    <Text {...POLICE_TITRE} style={[styles.titre, { color: palette.texte }]}>
+    <Text {...POLICE_TITRE} accessibilityRole="header" style={[styles.titre, mobile && styles.titreMobile, { color: palette.texte }]}>
       {children}
     </Text>
   );
@@ -35,8 +39,9 @@ export function Titre({ children }: { children: React.ReactNode }) {
 
 export function SousTitre({ children }: { children: React.ReactNode }) {
   const palette = usePalette();
+  const mobile = useMobile();
   return (
-    <Text style={[styles.sousTitre, { color: palette.texteSecondaire }]}>
+    <Text style={[styles.sousTitre, mobile && styles.sousTitreMobile, { color: palette.texteSecondaire }]}>
       {children}
     </Text>
   );
@@ -119,6 +124,8 @@ export function Bouton({
   // Sur grand écran, un bouton étiré sur toute la largeur se lit comme une
   // barre, pas comme un bouton : il prend la taille de son libellé.
   const large = useWindowDimensions().width >= LARGEUR_MULTICOLONNE;
+  // Téléphone : 48 px, texte de 17 px.
+  const mobile = useMobile();
 
   return (
     <Pressable
@@ -130,6 +137,7 @@ export function Bouton({
       style={({ pressed }) => [
         styles.bouton,
         large && !pleineLargeur && styles.boutonCompact,
+        mobile && styles.boutonMobile,
         {
           backgroundColor: plein ? palette.accentPlein : 'transparent',
           borderColor: plein ? palette.accentPlein : palette.bordure,
@@ -139,6 +147,7 @@ export function Bouton({
       <Text
         style={[
           styles.texteBouton,
+          mobile && styles.texteBoutonMobile,
           { color: plein ? palette.surAccent : palette.accent },
         ]}>
         {titre}
@@ -187,10 +196,16 @@ export function LigneChamps({ children }: { children: React.ReactNode }) {
 export interface ChampProps extends TextInputProps {
   etiquette: string;
   indication?: string;
+  /** Clavier et remplissage automatique (téléphone) : voir `ChampMobile`. */
+  nature?: NatureChamp;
 }
 
-export function Champ({ etiquette, indication, style, ...reste }: ChampProps) {
+export function Champ({ etiquette, indication, style, nature, ...reste }: ChampProps) {
   const palette = usePalette();
+  // Téléphone : le champ du système de design mobile (48 px, 17 px, bon clavier).
+  if (useMobile()) {
+    return <ChampMobile etiquette={etiquette} indication={indication} nature={nature} style={style} {...reste} />;
+  }
   return (
     <View style={styles.champ}>
       <Text style={[styles.etiquette, { color: palette.texteSecondaire }]}>
@@ -222,19 +237,22 @@ export function Champ({ etiquette, indication, style, ...reste }: ChampProps) {
 /** Message d'erreur, annoncé aux lecteurs d'écran dès son apparition. */
 export function Alerte({ message }: { message: string }) {
   const palette = usePalette();
+  const mobile = useMobile();
   return (
     <View
       accessibilityLiveRegion="polite"
       accessibilityRole="alert"
       style={[styles.alerte, { borderColor: palette.danger }]}>
-      <Text style={{ color: palette.danger }}>{message}</Text>
+      <Text style={{ color: palette.danger, fontSize: mobile ? TEXTE.legende : undefined }}>{message}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   titre: { fontSize: 24, fontWeight: '700' },
+  titreMobile: { fontSize: TEXTE.titre, lineHeight: 34 },
   sousTitre: { fontSize: 14, lineHeight: 20 },
+  sousTitreMobile: { fontSize: TEXTE.legende + 1, lineHeight: 23 },
   carte: {
     borderRadius: RAYON.m,
     borderWidth: 1,
@@ -252,6 +270,8 @@ const styles = StyleSheet.create({
   },
   boutonCompact: { alignSelf: 'flex-start', minWidth: 160 },
   texteBouton: { fontSize: 15, fontWeight: '600' },
+  boutonMobile: { minHeight: CONTROLE.hauteur },
+  texteBoutonMobile: { fontSize: TEXTE.corps, textAlign: 'center' },
   actionsLarges: {
     flexDirection: 'row',
     flexWrap: 'wrap',

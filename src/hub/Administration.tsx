@@ -179,7 +179,7 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
   if (!controle || !acteur || controle.sessionAdmin || !autorise(acteur, 'voir-tableau').ok || (estGestionnaire && !controle.gestion)) {
     return (
       <View style={[styles.racine, { backgroundColor: theme.fond, padding: 24 }]}>
-        <RetourHub theme={theme} onRetour={onRetour} />
+        <RetourHub theme={theme} onRetour={onRetour} titre="Administration" />
         <Text style={[styleTitre(theme), { fontSize: 28, marginTop: 24 }]}>Réservé aux fondateurs, administrateurs et gestionnaires</Text>
       </View>
     );
@@ -267,7 +267,7 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
     return (
       <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="admin-verrouille">
         <ScrollView contentContainerStyle={styles.page}>
-          <RetourHub theme={theme} onRetour={onRetour} />
+          <RetourHub theme={theme} onRetour={onRetour} titre="Administration" />
           <Text style={[styleTitre(theme), styles.h1]}>🔒 Panneau verrouillé</Text>
           <Text style={[attenue, styles.lead]}>Aucune activité depuis un moment : confirmez votre identité pour continuer.</Text>
           {erreur ? <Avis theme={theme} genre="critique" texte={erreur} testID="admin-erreur" /> : null}
@@ -280,7 +280,7 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
   return (
     <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="app-administration" onTouchStart={activite}>
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-        <RetourHub theme={theme} onRetour={onRetour} />
+        <RetourHub theme={theme} onRetour={onRetour} titre="Administration" />
         <Text style={[styleTitre(theme), styles.h1]} accessibilityRole="header">
           Administration
         </Text>

@@ -7,6 +7,7 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BoutonHub } from './Hub';
+import { useMobile } from '../ui/mobile/useMobile';
 import { resumerSynchro, type NiveauSynchro, type VueSynchroHub } from './etatSynchro';
 import { police, type ThemeHub } from './themes';
 
@@ -29,9 +30,33 @@ function useMaintenant(): number {
   return maintenant;
 }
 
-export function IndicateurSynchro({ theme, synchro, detaille = false, onPress }: { theme: ThemeHub; synchro: SynchroHub; detaille?: boolean; onPress?(): void }) {
+/** Libellé court de la version condensée (téléphone) : « À jour », « 2 à envoyer », « Hors ligne »… */
+export function libelleCondense(resume: { niveau: NiveauSynchro; libelle: string }): string {
+  const nombre = /^(\d+) élément/.exec(resume.libelle)?.[1];
+  if (resume.niveau === 'encours') return 'Synchro…';
+  if (resume.niveau === 'erreur') return 'Échec synchro';
+  if (resume.niveau === 'attente') return /hors ligne/i.test(resume.libelle) ? 'Hors ligne' : nombre ? `${nombre} à envoyer` : 'En attente';
+  return resume.libelle.startsWith('Pas encore') ? 'Non synchronisé' : 'À jour';
+}
+
+export function IndicateurSynchro({
+  theme,
+  synchro,
+  detaille = false,
+  condense = false,
+  onPress,
+}: {
+  theme: ThemeHub;
+  synchro: SynchroHub;
+  detaille?: boolean;
+  /** Version de l'en-tête du téléphone : point + libellé court, zone tactile de 44 px. */
+  condense?: boolean;
+  onPress?(): void;
+}) {
   const maintenant = useMaintenant();
   const resume = resumerSynchro(synchro.vue, maintenant);
+  const mobile = useMobile();
+  const taille = mobile ? 15 : 13;
   const teinte = couleur(theme, resume.niveau);
   const rayon = Math.min(theme.rayonMoyen, 10);
   // Cliquable (« ouvrir Paramètres › Synchronisation ») quand l'hôte donne `onPress`.
@@ -46,17 +71,22 @@ export function IndicateurSynchro({ theme, synchro, detaille = false, onPress }:
         accessibilityLabel={`Synchronisation : ${resume.libelle}${onPress ? ' (ouvrir les paramètres de synchronisation)' : ''}`}
         onPress={onPress}
         title={resume.detail} // infobulle (web)
-        style={[styles.pastille, { borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: detaille ? rayon : 999 }]}>
+        style={[
+          styles.pastille,
+          { borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: detaille ? rayon : 999 },
+          mobile && onPress && styles.pastilleMobile,
+          condense && styles.condense,
+        ]}>
         <View style={[styles.point, { backgroundColor: teinte }]} />
-        <Text style={{ color: teinte, fontWeight: '800', fontSize: 13 }}>{resume.icone}</Text>
-        <Text testID="synchro-libelle" style={{ color: theme.texte, fontSize: 13, fontWeight: '600', flexShrink: 1, ...police(theme.policeTexte) }} numberOfLines={detaille ? 3 : 1}>
-          {resume.libelle}
+        {condense ? null : <Text style={{ color: teinte, fontWeight: '800', fontSize: taille }}>{resume.icone}</Text>}
+        <Text testID="synchro-libelle" style={{ color: theme.texte, fontSize: taille, fontWeight: '600', flexShrink: 1, ...police(theme.policeTexte) }} numberOfLines={detaille ? 3 : 1}>
+          {condense ? libelleCondense(resume) : resume.libelle}
         </Text>
       </Pastille>
       {detaille ? (
         <>
           {resume.detail ? (
-            <Text testID="synchro-detail" style={{ color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) }}>
+            <Text testID="synchro-detail" style={{ color: theme.attenue, fontSize: taille, ...police(theme.policeTexte) }}>
               {resume.detail}
             </Text>
           ) : null}
@@ -78,5 +108,7 @@ export function IndicateurSynchro({ theme, synchro, detaille = false, onPress }:
 const styles = StyleSheet.create({
   pastille: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 6, alignSelf: 'flex-start', maxWidth: '100%' },
   point: { width: 8, height: 8, borderRadius: 4 },
+  pastilleMobile: { minHeight: 44 },
+  condense: { borderWidth: 0, backgroundColor: 'transparent', paddingHorizontal: 8, maxWidth: 170 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
 });

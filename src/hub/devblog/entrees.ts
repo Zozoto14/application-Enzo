@@ -41,8 +41,8 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
-    version: '2026.10.10',
-    date: '2026-10-10',
+    version: '2026.10.11',
+    date: '2026-10-11',
     titre: 'Déverrouillage : diagnostic et messages plus clairs',
     resume:
       'Des identifiants justes ne doivent plus être refusés sans explication : l’écran de déverrouillage distingue un problème de l’appareil d’un mauvais mot de passe, tolère les copier-coller imparfaits, repère une horloge décalée et propose un diagnostic à envoyer au support.',
@@ -83,6 +83,46 @@ export const ENTREES: readonly EntreeDevblog[] = [
         titre: 'Lien « Diagnostic »',
         texte:
           'Sous l’écran de déverrouillage, un lien discret affiche la version, l’appareil, l’écart d’horloge, ce que le navigateur sait faire, l’état de la liaison et du coffre — sans aucun secret — avec un bouton « Copier le diagnostic » pour le support.',
+      },
+    ],
+  },
+  {
+    version: '2026.10.10',
+    date: '2026-10-10',
+    titre: 'Affichage téléphone repensé (1/2)',
+    resume:
+      'Sur téléphone, l’application ne se contente plus de rétrécir l’affichage du PC : écrans d’entrée, hub, Paramètres et Support ont été refaits pour le pouce, avec une barre de navigation en bas, des textes lisibles et des boutons faciles à toucher. Le PC et la tablette en paysage ne changent pas. Les apps (Portefeuille, Administration, Tsuzuku) suivront dans la deuxième partie.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'mobile-barre-basse',
+        emoji: '📱',
+        titre: 'Une barre en bas de l’écran',
+        texte:
+          'Accueil, Support, Réglages et Compte sont toujours à portée de pouce. « Compte » ouvre une feuille avec l’état de la synchronisation, « Changer de compte » et « Verrouiller ». Un balayage depuis le bord gauche revient en arrière, comme sur iPhone.',
+      },
+      {
+        id: 'mobile-hub',
+        emoji: '🧩',
+        titre: 'Un hub fait pour le téléphone',
+        texte:
+          'Tuiles compactes sur deux colonnes, bandeaux lisibles en pleine largeur, et une personnalisation au doigt : chaque app a ses boutons pour monter, descendre, épingler, masquer ou changer de taille, sans glisser-déposer à deviner.',
+        essayer: { genre: 'personnaliser' },
+      },
+      {
+        id: 'mobile-reglages',
+        emoji: '⚙️',
+        titre: 'Des Paramètres en liste',
+        texte:
+          'Les Paramètres sont une liste de sections qui ouvrent chacune leur page, avec une recherche en tête. Les textes font au moins 15 px, les boutons au moins 44 px, et les champs ouvrent le bon clavier (chiffres pour les codes, remplissage automatique des mots de passe) sans que la page zoome.',
+        essayer: { genre: 'parametres' },
+      },
+      {
+        id: 'mobile-entree',
+        emoji: '🔐',
+        titre: 'Connexion et Support plus confortables',
+        texte:
+          'Connexion, déverrouillage, premier lancement, liaison d’un appareil et mot de passe oublié tiennent sur une colonne, avec le bouton principal collé en bas de l’écran, au-dessus du clavier. Les fenêtres de confirmation deviennent des feuilles qui montent du bas, et le formulaire de Support se remplit d’une main.',
       },
     ],
   },
