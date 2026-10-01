@@ -40,6 +40,7 @@ import {
 } from './personnalisation';
 import { THEMES_HUB, police, teinteTransparente, type IdThemeHub, type ThemeHub } from './themes';
 import { ecouterTouche, mouvementReduit, surLeWeb } from './web';
+import { useMobile } from '../ui/mobile/useMobile';
 import type { AppHub, ContexteHub, InfoLive } from './types';
 
 export interface HubProps {
@@ -923,6 +924,8 @@ export function BoutonHub({
   couleur?: string;
 }) {
   const accent = couleur ?? theme.accent;
+  // Téléphone : 44 px de haut au moins, texte de 15 px.
+  const mobile = useMobile();
   return (
     <Pressable
       testID={testID}
@@ -933,6 +936,7 @@ export function BoutonHub({
       onPress={onPress}
       style={(etat: EtatPresse) => [
         styles.bouton,
+        mobile && styles.boutonMobile,
         {
           borderRadius: theme.id === 'sauge' ? 999 : Math.min(theme.rayonMoyen, 10),
           backgroundColor: variante === 'plein' ? accent : theme.surface,
@@ -944,7 +948,7 @@ export function BoutonHub({
         style={{
           color: variante === 'plein' ? theme.surAccent : variante === 'danger' ? theme.critique : theme.texte,
           fontWeight: '600',
-          fontSize: 14,
+          fontSize: mobile ? 15 : 14,
           ...police(theme.policeTexte),
         }}>
         {titre}
@@ -1020,6 +1024,7 @@ const styles = StyleSheet.create({
   menuTitre: { paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6, fontSize: 11, fontWeight: '600', letterSpacing: 1.1 },
   menuLigne: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9, paddingHorizontal: 10 },
   bouton: { paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  boutonMobile: { minHeight: 44, minWidth: 44, paddingHorizontal: 16 },
   tuileListe: { minHeight: 0 },
   ligneListe: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   indicateursListe: { marginTop: 0, paddingTop: 0, borderTopWidth: 0, gap: 24, flexWrap: 'nowrap' },
