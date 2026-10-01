@@ -252,7 +252,7 @@ describe('Administration : téléphone', () => {
     await fireEvent.press(await screen.findByTestId('admin-journal-export-csv'));
     await screen.findByTestId('admin-journal-message');
     expect(enregistrer).toHaveBeenCalled();
-    expect(enregistrer.mock.calls[0][0]).toMatch(/^journal-administration-.*\.csv$/);
+    expect((enregistrer.mock.calls as unknown as string[][])[0][0]).toMatch(/^journal-administration-.*\.csv$/);
   });
 
   it('sécurité et réglages : points en cellules, verrouillage en bouton principal, renvoi vers les Paramètres', async () => {
