@@ -110,16 +110,12 @@ export function Catalogue({ q: qInitial, genre: genreInitial }: { q?: string; ge
           ) : null}
         </Etat>
         <FeuilleBasse theme={theme} visible={filtres} titre="Filtrer par genre" onFermer={() => setFiltres(false)} testID="catalogue-feuille-genres">
-          {genres.donnees?.length ? (
-            <GroupeCellules theme={theme}>
-              <Cellule theme={theme} titre="Tous les genres" coche={!genre} onPress={() => { choisirGenre(undefined); setFiltres(false); }} testID="genre-tous" />
-              {genres.donnees.map(g => (
-                <Cellule key={g.id} theme={theme} titre={g.nom} coche={genre === g.id} onPress={() => { choisirGenre(g.id); setFiltres(false); }} testID={`genre-${g.id}`} />
-              ))}
-            </GroupeCellules>
-          ) : (
-            <Text style={{ color: theme.attenue, fontSize: 16, ...police(theme.policeTexte) }}>Les genres ne sont pas disponibles pour le moment.</Text>
-          )}
+          <GroupeCellules theme={theme}>
+            <Cellule theme={theme} titre="Tous les genres" coche={!genre} onPress={() => { choisirGenre(undefined); setFiltres(false); }} testID="genre-tous" />
+            {(genres.donnees ?? []).map(g => (
+              <Cellule key={g.id} theme={theme} titre={g.nom} coche={genre === g.id} onPress={() => { choisirGenre(g.id); setFiltres(false); }} testID={`genre-${g.id}`} />
+            ))}
+          </GroupeCellules>
         </FeuilleBasse>
       </View>
     );
