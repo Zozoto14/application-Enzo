@@ -118,9 +118,15 @@ export function ReglagesAbonnements({
         testID="abo-reglage-retard"
       />
       <Text style={attenue}>« Restreindre » ne coupe rien seul : cela débloque le bouton manuel « Suspendre pour impayé », avec confirmation.</Text>
-      <Interrupteur theme={theme} libelle="Rappel amical dans le hub de chaque utilisateur (une fois par jour)" valeur={rappelAmi} onChanger={setRappelAmi} testID="abo-reglage-rappel-ami" />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Interrupteur theme={theme} libelle="Rappel amical dans le hub de chaque utilisateur (une fois par jour)" valeur={rappelAmi} onChanger={setRappelAmi} testID="abo-reglage-rappel-ami" />
+        <Text style={{ color: theme.texte, flexShrink: 1, fontSize: 14, ...police(theme.policeTexte) }}>Rappel amical dans le hub de chaque utilisateur (une fois par jour)</Text>
+      </View>
       <Champ theme={theme} libelle="Message du rappel amical ({echeance}, {prenom})" valeur={messageAmi} onChanger={setMessageAmi} multiligne maxLength={BORNES_ABO.modele} testID="abo-reglage-message-ami" />
-      <Interrupteur theme={theme} libelle="Notification locale (à l’ouverture, puis chaque jour)" valeur={notification} onChanger={setNotification} testID="abo-reglage-notification" />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Interrupteur theme={theme} libelle="Notification locale (à l’ouverture, puis chaque jour)" valeur={notification} onChanger={setNotification} testID="abo-reglage-notification" />
+        <Text style={{ color: theme.texte, flexShrink: 1, fontSize: 14, ...police(theme.policeTexte) }}>Notification locale (à l’ouverture, puis chaque jour)</Text>
+      </View>
       <Champ theme={theme} libelle="Modèle du message à copier ({prenom} {montant} {echeance} {moyens} {retard})" valeur={modele} onChanger={setModele} multiligne maxLength={BORNES_ABO.modele} testID="abo-reglage-modele" />
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <BoutonHub theme={theme} variante="plein" couleur={theme.teintes.admin} titre="Enregistrer les abonnements" onPress={enregistrer} testID="abo-reglage-enregistrer" />

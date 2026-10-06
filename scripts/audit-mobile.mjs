@@ -206,6 +206,7 @@ try {
 
   // ----- Administration : chaque section
   await essayer('administration', async () => {
+    await page.getByTestId('barre-basse-administration').tap();
     await page.locator('[data-testid="cellule-administration"], [data-testid="tuile-administration"]').first().tap();
     await page.getByTestId('app-administration').waitFor({ timeout: 20_000 });
     await pause(600);

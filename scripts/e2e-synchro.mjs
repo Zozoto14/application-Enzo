@@ -20,7 +20,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { nouveauContexte } from './e2e-acceptation.mjs';
+import { allerPageAdministration, nouveauContexte } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -293,6 +293,7 @@ try {
   await A.keyboard.press('Escape');
   await A.getByTestId('hub').waitFor({ timeout: 10_000 });
 
+  await allerPageAdministration(A);
   await A.getByTestId('tuile-administration').click();
   await A.getByTestId('retour-hub').waitFor({ timeout: 30_000 });
   verifier((await A.getByTestId('synchro-indicateur').count()) === 1 && (await A.getByTestId('app-parametres-ouvrir').count()) === 1, 'administration : pastille de synchro et bouton Paramètres dans la barre');
