@@ -26,6 +26,7 @@ export type NatureChamp =
   | 'url'
   | 'nombre'
   | 'decimal'
+  | 'date'
   | 'multiligne';
 
 /** Préréglages clavier de chaque nature (exportés pour les tests). */
@@ -54,6 +55,8 @@ export function prereglagesClavier(nature: NatureChamp): Partial<TextInputProps>
       return { inputMode: 'numeric', keyboardType: 'number-pad', autoComplete: 'off', enterKeyHint: 'next' };
     case 'decimal':
       return { inputMode: 'decimal', keyboardType: 'decimal-pad', autoComplete: 'off', enterKeyHint: 'next' };
+    case 'date':
+      return { inputMode: 'numeric', keyboardType: 'numbers-and-punctuation', autoComplete: 'off', enterKeyHint: 'next' };
     case 'multiligne':
       return { inputMode: 'text', autoComplete: 'off', multiline: true, enterKeyHint: 'enter', textAlignVertical: 'top' };
     default:

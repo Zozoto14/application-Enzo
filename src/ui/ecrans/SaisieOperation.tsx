@@ -10,11 +10,15 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View, useColorScheme } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Pressable, Text } from '../mobile/adaptatif';
 import type { Compte, Position, Titre, Transaction, TypeTransaction } from '../../core/domain/types';
 import { Actions, Alerte, Bouton, Carte, Champ, LigneChamps, SousTitre, Titre as TitreEcran, usePalette } from '../composants';
-import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
+import { ESPACEMENT, RAYON, stylesPartages } from '../theme';
+import { BoutonPrincipal } from '../mobile/BoutonPrincipal';
+import { PageFormulaire } from '../mobile/PageFormulaire';
+import { useMobile } from '../mobile/useMobile';
+import { Selecteur } from '../elements';
 import { formaterMontant } from '../format';
 import {
   FORMULAIRE_VIDE,
@@ -58,8 +62,8 @@ export function SaisieOperation({
   genererId,
   initial,
 }: SaisieOperationProps) {
-  const sombre = useColorScheme() === 'dark';
   const palette = usePalette();
+  const mobile = useMobile();
 
   const [formulaire, setFormulaire] = useState<FormulaireOperation>({
     ...FORMULAIRE_VIDE,
@@ -90,45 +94,43 @@ export function SaisieOperation({
   };
 
   return (
-    <ScrollView
-      style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
-      keyboardShouldPersistTaps="handled">
-      <TitreEcran>Nouvelle opération</TitreEcran>
+    <PageFormulaire
+      onRetour={onAnnuler}
+      pied={
+        <>
+          <BoutonPrincipal titre="Enregistrer" testID="bouton-enregistrer" onPress={enregistrer} />
+          <BoutonPrincipal titre="Annuler" variante="discret" onPress={onAnnuler} />
+        </>
+      }>
+      {mobile ? null : <TitreEcran>Nouvelle opération</TitreEcran>}
 
-      <Carte>
-        <SousTitre>Type d'opération</SousTitre>
-        <Choix
-          options={TYPES.map(type => ({ cle: type, libelle: LIBELLES_TYPE[type] }))}
-          selection={formulaire.type}
-          onSelection={cle => modifier('type', cle)}
-          prefixe="type"
-        />
-      </Carte>
+      <BlocChoix
+        titre="Type d'opération"
+        options={TYPES.map(type => ({ cle: type, libelle: LIBELLES_TYPE[type] }))}
+        selection={formulaire.type}
+        onSelection={cle => modifier('type', cle)}
+        prefixe="type"
+      />
 
-      <Carte>
-        <SousTitre>Compte</SousTitre>
-        <Choix
-          options={comptes.map(compte => ({ cle: compte.id, libelle: compte.nom }))}
-          selection={formulaire.compteId}
-          onSelection={cle => modifier('compteId', cle)}
-          prefixe="compte"
-        />
+      <BlocChoix
+        titre="Compte"
+        options={comptes.map(compte => ({ cle: compte.id, libelle: compte.nom }))}
+        selection={formulaire.compteId}
+        onSelection={cle => modifier('compteId', cle)}
+        prefixe="compte">
         {erreurs.compteId ? <Alerte message={erreurs.compteId} /> : null}
-      </Carte>
+      </BlocChoix>
 
       {visibles.has('titreId') ? (
-        <Carte>
-          <SousTitre>Valeur</SousTitre>
-          <Choix
-            options={titres.map(titre => ({ cle: titre.id, libelle: titre.nom }))}
-            selection={formulaire.titreId}
-            onSelection={cle => modifier('titreId', cle)}
-            prefixe="titre"
-          />
+        <BlocChoix
+          titre="Valeur"
+          options={titres.map(titre => ({ cle: titre.id, libelle: titre.nom }))}
+          selection={formulaire.titreId}
+          onSelection={cle => modifier('titreId', cle)}
+          prefixe="titre">
           {erreurs.titreId ? <Alerte message={erreurs.titreId} /> : null}
           {onCreerTitre ? (
-            <View style={{ alignSelf: 'flex-start' }}>
+            <View style={{ alignSelf: mobile ? 'stretch' : 'flex-start' }}>
               <Bouton
                 titre={titres.length === 0 ? 'Créer une valeur' : 'Valeur absente ?'}
                 testID="bouton-creer-titre-depuis-saisie"
@@ -137,7 +139,7 @@ export function SaisieOperation({
               />
             </View>
           ) : null}
-        </Carte>
+        </BlocChoix>
       ) : null}
 
       <LigneChamps>
@@ -148,6 +150,8 @@ export function SaisieOperation({
         onChangeText={texte => modifier('date', texte)}
         placeholder="JJ/MM/AAAA"
         keyboardType="numbers-and-punctuation"
+        nature="date"
+        testID="champ-date"
       />
       {erreurs.date ? <Alerte message={erreurs.date} /> : null}
       </>
@@ -159,6 +163,7 @@ export function SaisieOperation({
             value={formulaire.quantite}
             onChangeText={texte => modifier('quantite', texte)}
             keyboardType="decimal-pad"
+            nature="decimal"
           />
           {erreurs.quantite ? <Alerte message={erreurs.quantite} /> : null}
         </>
@@ -174,6 +179,7 @@ export function SaisieOperation({
             value={formulaire.prixUnitaire}
             onChangeText={texte => modifier('prixUnitaire', texte)}
             keyboardType="decimal-pad"
+            nature="decimal"
           />
           {erreurs.prixUnitaire ? <Alerte message={erreurs.prixUnitaire} /> : null}
         </>
@@ -186,6 +192,7 @@ export function SaisieOperation({
             value={formulaire.frais}
             onChangeText={texte => modifier('frais', texte)}
             keyboardType="decimal-pad"
+            nature="decimal"
             indication="Commission et taxe sur les transactions financières comprises."
           />
           {erreurs.frais ? <Alerte message={erreurs.frais} /> : null}
@@ -200,6 +207,7 @@ export function SaisieOperation({
             value={formulaire.montant}
             onChangeText={texte => modifier('montant', texte)}
             keyboardType="decimal-pad"
+            nature="decimal"
           />
           {erreurs.montant ? <Alerte message={erreurs.montant} /> : null}
         </>
@@ -210,6 +218,7 @@ export function SaisieOperation({
         value={formulaire.note}
         onChangeText={texte => modifier('note', texte)}
         placeholder="Facultatif"
+        nature="texte"
       />
 
       {resume ? (
@@ -223,11 +232,49 @@ export function SaisieOperation({
         </Carte>
       ) : null}
 
-      <Actions>
-        <Bouton titre="Enregistrer" testID="bouton-enregistrer" onPress={enregistrer} />
-        <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
-      </Actions>
-    </ScrollView>
+      {mobile ? null : (
+        <Actions>
+          <Bouton titre="Enregistrer" testID="bouton-enregistrer" onPress={enregistrer} />
+          <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
+        </Actions>
+      )}
+    </PageFormulaire>
+  );
+}
+
+/** Un choix : carte à pastilles sur le bureau ; champ qui ouvre une feuille basse sur téléphone. */
+function BlocChoix({
+  titre,
+  children,
+  ...choix
+}: {
+  titre: string;
+  options: OptionChoix[];
+  selection: string;
+  onSelection(cle: string): void;
+  prefixe: string;
+  children?: React.ReactNode;
+}) {
+  if (useMobile()) {
+    return (
+      <View style={{ gap: ESPACEMENT.s }}>
+        <Selecteur
+          etiquette={titre}
+          valeur={choix.selection}
+          options={choix.options.map(option => ({ valeur: option.cle, libelle: option.libelle }))}
+          onChoisir={choix.onSelection}
+          testID={choix.prefixe}
+        />
+        {children}
+      </View>
+    );
+  }
+  return (
+    <Carte>
+      <SousTitre>{titre}</SousTitre>
+      <Choix {...choix} />
+      {children}
+    </Carte>
   );
 }
 

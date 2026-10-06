@@ -920,7 +920,7 @@ export function Nuage({ points, lignes, formaterX, formaterY, hauteur = 300, leg
                   onMouseLeave={() => setSurvol(null)}>
                   <circle cx={cx} cy={cy} r={12} fill="transparent" />
                   {forme}
-                  {point.libelle ? (
+                  {point.libelle && !mobile ? (
                     <text
                       x={cx + 10}
                       y={point.forme === 'losange' ? cy + 18 : cy - 8}

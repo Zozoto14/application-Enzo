@@ -4,12 +4,17 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { StyleSheet, Switch, View } from 'react-native';
 import { Text } from '../mobile/adaptatif';
 import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { DepotFichier } from '../DepotFichier';
 import { formaterDate } from '../format';
-import { ESPACEMENT, palettePour, stylesPartages } from '../theme';
+import { ESPACEMENT, stylesPartages } from '../theme';
+import { BoutonPrincipal } from '../mobile/BoutonPrincipal';
+import { themeActif } from '../mobile/jetons';
+import { Cellule, GroupeCellules } from '../mobile/ListeCellules';
+import { PageFormulaire } from '../mobile/PageFormulaire';
+import { useMobile } from '../mobile/useMobile';
 import { apercuOperations, type ApercuOperations, type ContexteApercu } from '../vues/importOperations';
 
 const LIBELLES: Record<string, string> = {
@@ -31,17 +36,27 @@ export interface ImportOperationsProps {
 
 export function ImportOperations({ contexte, onImporter, onAnnuler, bascule }: ImportOperationsProps) {
   const palette = usePalette();
+  const mobile = useMobile();
   const [contenu, setContenu] = useState('');
   const [remplacer, setRemplacer] = useState(true);
   const apercu = useMemo(() => apercuOperations(contenu, contexte), [contenu, contexte]);
   const nombre = apercu.transactions.length;
 
   return (
-    <ScrollView
-      style={[stylesPartages.ecran, { backgroundColor: palettePour().fond }]}
-      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
-      keyboardShouldPersistTaps="handled">
-      <Titre>Importer vos opérations</Titre>
+    <PageFormulaire
+      onRetour={onAnnuler}
+      pied={
+        <>
+          <BoutonPrincipal
+            titre="Importer"
+            testID="bouton-importer-operations"
+            desactive={nombre === 0}
+            onPress={() => onImporter(apercu, remplacer && apercu.reprise.length > 0)}
+          />
+          <BoutonPrincipal titre="Annuler" variante="discret" onPress={onAnnuler} />
+        </>
+      }>
+      {mobile ? null : <Titre>Importer vos opérations</Titre>}
       {bascule}
       <SousTitre>
         L’historique complet (achats, ventes, dividendes, versements) rend exacts vos performances, votre
@@ -69,6 +84,7 @@ export function ImportOperations({ contexte, onImporter, onAnnuler, bascule }: I
         onChangeText={setContenu}
         multiline
         numberOfLines={6}
+        nature="multiligne"
         autoCapitalize="none"
         autoCorrect={false}
         placeholder="Date opération;Libellé;Débit;Crédit…"
@@ -112,7 +128,14 @@ export function ImportOperations({ contexte, onImporter, onAnnuler, bascule }: I
         </Carte>
       ) : null}
 
-      {apercu.reprise.length > 0 ? (
+      {apercu.reprise.length > 0 && mobile ? (
+        <GroupeCellules
+          theme={themeActif()}
+          titre="Reprise de positions"
+          note={`Vos positions ont été importées d’un bloc (${apercu.reprise.length} ligne(s) « reprise d’antériorité »). Garder les deux compterait vos actions deux fois. Recommandé : remplacer.`}>
+          <Cellule theme={themeActif()} titre="Remplacer la reprise de positions" interrupteur={{ valeur: remplacer, onChanger: setRemplacer }} />
+        </GroupeCellules>
+      ) : apercu.reprise.length > 0 ? (
         <Carte>
           <View style={stylesPartages.ligne}>
             <Text style={{ color: palette.texte, fontWeight: '600', flex: 1 }}>
@@ -141,16 +164,18 @@ export function ImportOperations({ contexte, onImporter, onAnnuler, bascule }: I
         </Carte>
       ) : null}
 
-      <Actions>
-        <Bouton
-          titre="Importer"
-          testID="bouton-importer-operations"
-          desactive={nombre === 0}
-          onPress={() => onImporter(apercu, remplacer && apercu.reprise.length > 0)}
-        />
-        <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
-      </Actions>
-    </ScrollView>
+      {mobile ? null : (
+        <Actions>
+          <Bouton
+            titre="Importer"
+            testID="bouton-importer-operations"
+            desactive={nombre === 0}
+            onPress={() => onImporter(apercu, remplacer && apercu.reprise.length > 0)}
+          />
+          <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
+        </Actions>
+      )}
+    </PageFormulaire>
   );
 }
 

@@ -11,11 +11,14 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View, useColorScheme } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Pressable, Text } from '../mobile/adaptatif';
 import type { PositionImportee } from '../../core/import/positions';
 import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
-import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
+import { ESPACEMENT, RAYON, stylesPartages } from '../theme';
+import { BoutonPrincipal } from '../mobile/BoutonPrincipal';
+import { PageFormulaire } from '../mobile/PageFormulaire';
+import { useMobile } from '../mobile/useMobile';
 import { apercuPositions } from '../vues/import';
 import { DepotFichier } from '../DepotFichier';
 import { Segments } from '../elements';
@@ -35,8 +38,8 @@ export interface ImportPositionsProps {
 type Mode = 'Positions' | 'Opérations';
 
 export function ImportPositions({ onImporter, onAnnuler, operations }: ImportPositionsProps) {
-  const sombre = useColorScheme() === 'dark';
   const palette = usePalette();
+  const mobile = useMobile();
   const [contenu, setContenu] = useState('');
   const [mode, setMode] = useState<Mode>('Positions');
 
@@ -63,11 +66,15 @@ export function ImportPositions({ onImporter, onAnnuler, operations }: ImportPos
   const apercu = apercuPositions(contenu);
 
   return (
-    <ScrollView
-      style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
-      keyboardShouldPersistTaps="handled">
-      <Titre>Importer vos positions</Titre>
+    <PageFormulaire
+      onRetour={onAnnuler}
+      pied={
+        <>
+          <BoutonPrincipal titre="Importer" testID="bouton-importer" desactive={!apercu.pret} onPress={() => onImporter(apercu.positions)} />
+          <BoutonPrincipal titre="Annuler" variante="discret" onPress={onAnnuler} />
+        </>
+      }>
+      {mobile ? null : <Titre>Importer vos positions</Titre>}
       {bascule}
       <SousTitre>
         Déposez l'export « positions instantanées » de votre courtier, ou
@@ -84,6 +91,7 @@ export function ImportPositions({ onImporter, onAnnuler, operations }: ImportPos
         onChangeText={setContenu}
         multiline
         numberOfLines={6}
+        nature="multiligne"
         autoCapitalize="none"
         autoCorrect={false}
         placeholder="name;isin;quantity;buyingPrice;…"
@@ -141,16 +149,18 @@ export function ImportPositions({ onImporter, onAnnuler, operations }: ImportPos
         </Carte>
       ) : null}
 
-      <Actions>
-        <Bouton
-          titre="Importer"
-          testID="bouton-importer"
-          desactive={!apercu.pret}
-          onPress={() => onImporter(apercu.positions)}
-        />
-        <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
-      </Actions>
-    </ScrollView>
+      {mobile ? null : (
+        <Actions>
+          <Bouton
+            titre="Importer"
+            testID="bouton-importer"
+            desactive={!apercu.pret}
+            onPress={() => onImporter(apercu.positions)}
+          />
+          <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
+        </Actions>
+      )}
+    </PageFormulaire>
   );
 }
 

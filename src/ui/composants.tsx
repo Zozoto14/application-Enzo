@@ -13,6 +13,7 @@ import { ESPACEMENT, RAYON, couleurTendance, palettePour, type Palette, POLICE_T
 import type { Tendance } from './format';
 import { useMobile } from './mobile/useMobile';
 import { ChampMobile, type NatureChamp } from './mobile/ChampMobile';
+import { ChampDate } from './mobile/ChampDate';
 import { CONTROLE, TEXTE, nombres } from './mobile/jetons';
 
 export function usePalette(): Palette {
@@ -197,6 +198,9 @@ export function Champ({ etiquette, indication, style, nature, ...reste }: ChampP
   const palette = usePalette();
   // Téléphone : le champ du système de design mobile (48 px, 17 px, bon clavier).
   if (useMobile()) {
+    if (nature === 'date') {
+      return <ChampDate etiquette={etiquette} indication={indication} style={style} {...reste} />;
+    }
     return <ChampMobile etiquette={etiquette} indication={indication} nature={nature} style={style} {...reste} />;
   }
   return (

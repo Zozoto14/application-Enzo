@@ -10,6 +10,7 @@
 import React, { useRef, useState } from 'react';
 import { usePalette } from './composants';
 import type { DepotFichierProps } from './depotFichierTypes';
+import { useMobile } from './mobile/useMobile';
 
 export type { DepotFichierProps };
 
@@ -24,6 +25,7 @@ async function lireTexte(fichier: File): Promise<string> {
 
 export function DepotFichier({ onContenu }: DepotFichierProps) {
   const palette = usePalette();
+  const mobile = useMobile();
   const [survol, setSurvol] = useState(false);
   const [nom, setNom] = useState<string | undefined>();
   const champ = useRef<HTMLInputElement>(null);
@@ -62,18 +64,20 @@ export function DepotFichier({ onContenu }: DepotFichierProps) {
         border: `2px dashed ${survol ? palette.accent : palette.bordure}`,
         background: survol ? palette.accentFond : palette.surface,
         borderRadius: 12,
-        padding: '28px 16px',
+        padding: mobile ? '14px 16px' : '28px 16px',
+        minHeight: mobile ? 56 : undefined,
+        boxSizing: 'border-box',
         textAlign: 'center',
         cursor: 'pointer',
         color: palette.texte,
-        fontSize: 14,
+        fontSize: mobile ? 17 : 14,
         fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
       }}>
-      <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
-        {nom ? `Fichier chargé : ${nom}` : 'Glissez ici le fichier CSV de votre courtier'}
+      <div style={{ fontSize: mobile ? 17 : 16, fontWeight: 700, marginBottom: mobile ? 2 : 6 }}>
+        {nom ? `Fichier chargé : ${nom}` : mobile ? 'Choisir un fichier CSV' : 'Glissez ici le fichier CSV de votre courtier'}
       </div>
-      <div style={{ color: palette.texteSecondaire, fontSize: 13 }}>
-        {nom ? 'Déposez-en un autre pour le remplacer.' : 'ou cliquez pour le choisir sur l’ordinateur'}
+      <div style={{ color: palette.texteSecondaire, fontSize: mobile ? 15 : 13 }}>
+        {nom ? (mobile ? 'Touchez pour en choisir un autre.' : 'Déposez-en un autre pour le remplacer.') : mobile ? 'ou collez son contenu ci-dessous' : 'ou cliquez pour le choisir sur l’ordinateur'}
       </div>
       <input
         ref={champ}

@@ -6,11 +6,17 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, View, useColorScheme } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Pressable, Text } from '../mobile/adaptatif';
 import type { Compte, TypeCompte } from '../../core/domain/types';
 import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
-import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
+import { ESPACEMENT, RAYON } from '../theme';
+import { Segments } from '../elements';
+import { BoutonPrincipal } from '../mobile/BoutonPrincipal';
+import { FeuilleBasse } from '../mobile/FeuilleBasse';
+import { themeActif } from '../mobile/jetons';
+import { PageFormulaire } from '../mobile/PageFormulaire';
+import { useMobile } from '../mobile/useMobile';
 import {
   FORMULAIRE_COMPTE_VIDE,
   LIBELLES_TYPE_COMPTE,
@@ -48,8 +54,8 @@ export function CreationCompte({
   // La devise d'un compte qui a déjà des opérations ne change plus : tous ses
   // montants sont exprimés dedans.
   const deviseFigee = Boolean(compteAModifier) && nombreOperations > 0;
-  const sombre = useColorScheme() === 'dark';
   const palette = usePalette();
+  const mobile = useMobile();
   const [formulaire, setFormulaire] = useState<FormulaireCompte>(
     compteAModifier ? formulaireDepuisCompte(compteAModifier) : FORMULAIRE_COMPTE_VIDE,
   );
@@ -74,12 +80,26 @@ export function CreationCompte({
   };
 
   return (
-    <ScrollView
-      style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
-      keyboardShouldPersistTaps="handled">
-      <Titre>{compteAModifier ? 'Modifier le compte' : 'Nouveau compte'}</Titre>
+    <PageFormulaire
+      onRetour={onAnnuler}
+      pied={
+        <>
+          <BoutonPrincipal
+            titre={compteAModifier ? 'Enregistrer' : 'Créer le compte'}
+            testID={compteAModifier ? 'bouton-enregistrer-compte' : 'bouton-creer-compte'}
+            onPress={creer}
+          />
+          {onAnnuler ? <BoutonPrincipal titre="Annuler" variante="discret" onPress={onAnnuler} /> : null}
+        </>
+      }>
+      {mobile ? null : <Titre>{compteAModifier ? 'Modifier le compte' : 'Nouveau compte'}</Titre>}
 
+      {mobile ? (
+        <View style={{ gap: ESPACEMENT.xs + 2 }}>
+          <Text style={{ color: palette.texte, fontSize: 15, fontWeight: '600' }}>Enveloppe</Text>
+          <Segments<TypeCompte> options={TYPES} actif={formulaire.type} onChoisir={type => modifier('type', type)} libelle={type => LIBELLES_TYPE_COMPTE[type]} prefixeTest="type-compte" />
+        </View>
+      ) : (
       <Carte>
         <SousTitre>Enveloppe</SousTitre>
         <View style={styles.pastilles}>
@@ -107,12 +127,14 @@ export function CreationCompte({
           })}
         </View>
       </Carte>
+      )}
 
       <Champ
         etiquette="Nom"
         value={formulaire.nom}
         onChangeText={texte => modifier('nom', texte)}
         placeholder="PEA BoursoBank"
+        nature="texte"
       />
       {erreurs.nom ? <Alerte message={erreurs.nom} /> : null}
 
@@ -122,6 +144,8 @@ export function CreationCompte({
         onChangeText={texte => modifier('dateOuverture', texte)}
         placeholder="JJ/MM/AAAA"
         keyboardType="numbers-and-punctuation"
+        nature="date"
+        testID="champ-date-ouverture"
         indication={indicationDate(formulaire.type)}
       />
       {erreurs.dateOuverture ? <Alerte message={erreurs.dateOuverture} /> : null}
@@ -137,14 +161,16 @@ export function CreationCompte({
       />
       {erreurs.devise ? <Alerte message={erreurs.devise} /> : null}
 
-      <Actions>
-        <Bouton
-          titre={compteAModifier ? 'Enregistrer' : 'Créer le compte'}
-          testID={compteAModifier ? 'bouton-enregistrer-compte' : 'bouton-creer-compte'}
-          onPress={creer}
-        />
-        {onAnnuler ? <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} /> : null}
-      </Actions>
+      {mobile ? null : (
+        <Actions>
+          <Bouton
+            titre={compteAModifier ? 'Enregistrer' : 'Créer le compte'}
+            testID={compteAModifier ? 'bouton-enregistrer-compte' : 'bouton-creer-compte'}
+            onPress={creer}
+          />
+          {onAnnuler ? <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} /> : null}
+        </Actions>
+      )}
 
       {compteAModifier && onSupprimer ? (
         <Carte>
@@ -154,7 +180,24 @@ export function CreationCompte({
               ? `Le compte et ses ${nombreOperations} opération${nombreOperations > 1 ? 's' : ''} seront effacés. C’est définitif : seule une sauvegarde permettrait de les retrouver.`
               : 'Le compte est vide : rien d’autre ne sera effacé.'}
           </SousTitre>
-          {confirmation ? (
+          {mobile ? (
+            <>
+              <BoutonPrincipal variante="danger" titre="Supprimer le compte…" testID="bouton-supprimer-compte" onPress={() => setConfirmation(true)} />
+              <FeuilleBasse
+                theme={themeActif()}
+                visible={confirmation}
+                titre="Supprimer ce compte ?"
+                description={`« ${compteAModifier.nom} »${nombreOperations > 0 ? ` et ses ${nombreOperations} opération(s)` : ''} seront effacés. C’est définitif.`}
+                onFermer={() => setConfirmation(false)}
+                pied={
+                  <>
+                    <BoutonPrincipal variante="danger" titre="Oui, supprimer" testID="bouton-confirmer-suppression-compte" onPress={onSupprimer} />
+                    <BoutonPrincipal variante="discret" titre="Non" onPress={() => setConfirmation(false)} />
+                  </>
+                }
+              />
+            </>
+          ) : confirmation ? (
             <View style={{ gap: ESPACEMENT.s }}>
               <Alerte message={`Supprimer « ${compteAModifier.nom} »${nombreOperations > 0 ? ` et ses ${nombreOperations} opération(s)` : ''} ?`} />
               <View style={styles.pastilles}>
@@ -174,7 +217,7 @@ export function CreationCompte({
           )}
         </Carte>
       ) : null}
-    </ScrollView>
+    </PageFormulaire>
   );
 }
 

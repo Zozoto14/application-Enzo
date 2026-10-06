@@ -7,11 +7,16 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, Switch, View, useColorScheme } from 'react-native';
+import { Switch, View } from 'react-native';
 import { Text } from '../mobile/adaptatif';
 import type { Titre as TitreDomaine } from '../../core/domain/types';
 import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
-import { ESPACEMENT, palettePour, stylesPartages } from '../theme';
+import { ESPACEMENT, stylesPartages } from '../theme';
+import { BoutonPrincipal } from '../mobile/BoutonPrincipal';
+import { themeActif } from '../mobile/jetons';
+import { Cellule, GroupeCellules } from '../mobile/ListeCellules';
+import { PageFormulaire } from '../mobile/PageFormulaire';
+import { useMobile } from '../mobile/useMobile';
 import {
   FORMULAIRE_TITRE_VIDE,
   paysDeLIsin,
@@ -33,8 +38,8 @@ export function CreationTitre({
   onAnnuler,
   genererId,
 }: CreationTitreProps) {
-  const sombre = useColorScheme() === 'dark';
   const palette = usePalette();
+  const mobile = useMobile();
   const [formulaire, setFormulaire] = useState<FormulaireTitre>(FORMULAIRE_TITRE_VIDE);
   const [erreurs, setErreurs] = useState<ErreursTitre>({});
 
@@ -61,17 +66,22 @@ export function CreationTitre({
   const pays = paysDeLIsin(formulaire.isin);
 
   return (
-    <ScrollView
-      style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
-      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
-      keyboardShouldPersistTaps="handled">
-      <Titre>Nouvelle valeur</Titre>
+    <PageFormulaire
+      onRetour={onAnnuler}
+      pied={
+        <>
+          <BoutonPrincipal titre="Créer la valeur" testID="bouton-creer-titre" onPress={creer} />
+          <BoutonPrincipal titre="Annuler" variante="discret" onPress={onAnnuler} />
+        </>
+      }>
+      {mobile ? null : <Titre>Nouvelle valeur</Titre>}
 
       <Champ
         etiquette="Nom"
         value={formulaire.nom}
         onChangeText={texte => modifier('nom', texte)}
         placeholder="Stellantis"
+        nature="texte"
       />
       {erreurs.nom ? <Alerte message={erreurs.nom} /> : null}
 
@@ -83,6 +93,8 @@ export function CreationTitre({
         autoCorrect={false}
         maxLength={12}
         placeholder="NL00150001Q9"
+        nature="codeLiaison"
+        spellCheck={false}
         indication={pays ? `Pays d'émission : ${pays}` : '12 caractères.'}
       />
       {erreurs.isin ? <Alerte message={erreurs.isin} /> : null}
@@ -92,6 +104,8 @@ export function CreationTitre({
         value={formulaire.ticker}
         onChangeText={texte => modifier('ticker', texte)}
         autoCapitalize="characters"
+        autoCorrect={false}
+        spellCheck={false}
         placeholder="Facultatif"
       />
 
@@ -118,6 +132,17 @@ export function CreationTitre({
         placeholder="Facultatif"
       />
 
+      {mobile ? (
+        <GroupeCellules
+          theme={themeActif()}
+          note="Une valeur non éligible logée dans un PEA expose à la clôture du plan.">
+          <Cellule
+            theme={themeActif()}
+            titre="Éligible au PEA"
+            interrupteur={{ valeur: formulaire.eligiblePEA, onChanger: valeur => modifier('eligiblePEA', valeur) }}
+          />
+        </GroupeCellules>
+      ) : (
       <Carte>
         <View style={[stylesPartages.ligne, { gap: ESPACEMENT.m }]}>
           <Text style={{ color: palette.texte, flex: 1 }}>Éligible au PEA</Text>
@@ -131,11 +156,14 @@ export function CreationTitre({
           Une valeur non éligible logée dans un PEA expose à la clôture du plan.
         </SousTitre>
       </Carte>
+      )}
 
-      <Actions>
-        <Bouton titre="Créer la valeur" testID="bouton-creer-titre" onPress={creer} />
-        <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
-      </Actions>
-    </ScrollView>
+      {mobile ? null : (
+        <Actions>
+          <Bouton titre="Créer la valeur" testID="bouton-creer-titre" onPress={creer} />
+          <Bouton titre="Annuler" variante="discret" onPress={onAnnuler} />
+        </Actions>
+      )}
+    </PageFormulaire>
   );
 }
