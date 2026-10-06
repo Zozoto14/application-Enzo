@@ -4,7 +4,21 @@
  * site réel, aucune source préconfigurée.
  */
 
-import { FORMAT_SOURCE, RAPPEL_DROITS, analyserSite, analyserStructure, extraitHtml, genererPrompt, validerSourceJson } from './assistant';
+import {
+  EXEMPLE_SOURCE,
+  FORMAT_SOURCE,
+  RAPPEL_DROITS,
+  analyserSite,
+  analyserStructure,
+  extraitHtml,
+  genererPrompt,
+  genererPromptReparation,
+  genererPromptSansExtrait,
+  testReussi,
+  testerSourcePasAPas,
+  validerSourceJson,
+  verifierAdresseSite,
+} from './assistant';
 import { creerClient } from './reseau';
 import { fauxReseau, html } from './outilsTest';
 
@@ -162,5 +176,93 @@ describe('assistant : lecture par le client protégé', () => {
   it('taille bornée : une page trop grosse est refusée', async () => {
     const client = creerClient(fauxReseau({ 'https://exemple.fr/grosse': html('x'.repeat(3 * 1024 * 1024)) }, { resoudre: async () => ['93.184.216.34'] }));
     await expect(analyserSite(client, 'https://exemple.fr/grosse')).rejects.toBeTruthy();
+  });
+});
+
+describe('assistant : prompt complet, sans extrait, réparation', () => {
+  const resume = analyserStructure(PAGE, 'https://mediatheque-exemple.fr/catalogue');
+
+  it('contient un exemple de JSON attendu, la consigne du type choisi et « ne renvoyer que du JSON »', () => {
+    const p = genererPrompt(resume, extraitHtml(PAGE), { cible: 'films' });
+    expect(p).toContain(EXEMPLE_SOURCE);
+    expect(p).toMatch(/sert aux FILMS/);
+    expect(p).toMatch(/Ne renvoie QUE le JSON/);
+    expect(p).toMatch(/VF = version française, VOSTFR = version originale sous-titrée/);
+    expect(JSON.parse(EXEMPLE_SOURCE)).toMatchObject({ search: { path: '/recherche?q={query}' }, movies: { player: { iframe: 'iframe.film' } } });
+  });
+
+  it('ne nomme aucun site : seulement des domaines d’exemple neutres et l’adresse donnée', () => {
+    for (const p of [genererPrompt(resume, extraitHtml(PAGE)), genererPromptSansExtrait('https://mediatheque-exemple.fr/'), genererPromptReparation('{}', ['x'])]) {
+      const domaines = [...p.matchAll(/https?:\/\/([a-z0-9.-]+)/gi)].map(m => m[1]);
+      for (const d of domaines) expect(d).toMatch(/-exemple\.fr$/);
+      // Aucun nom de domaine nu (« site.com », « site.tv »…) en dehors des exemples.
+      expect(p.replace(/[a-z0-9-]+-exemple\.fr/gi, '')).not.toMatch(/\b[a-z0-9-]+\.(com|net|org|io|tv|to|cc|me|co|ws|fr)\b/i);
+    }
+  });
+
+  it('sans extrait : tous les paramètres, l’adresse, et la consigne d’analyser le site soi-même', () => {
+    const p = genererPromptSansExtrait('https://mediatheque-exemple.fr/catalogue', { cible: 'animes' });
+    for (const cle of ['"search"', '"episodes"', '"player"', '"movies"', '"pathVf"', '"pathVostfr"', '"number"', '"iframe"', '"attr"', '"label"', '{query}']) expect(p).toContain(cle);
+    expect(p).toContain('Adresse du site : https://mediatheque-exemple.fr/catalogue');
+    expect(p).toMatch(/analyse toi-même le site/);
+    expect(p).not.toContain('```html');
+  });
+
+  it('prompt de réparation : erreurs, avertissements et réponse précédente', () => {
+    const v = validerSourceJson(JSON.stringify({ ...JSON_IA, search: { ...JSON_IA.search, path: '/recherche' } }));
+    const p = genererPromptReparation('{"name":"X"}', v.erreurs, ['Films : pas de lecteur']);
+    expect(p).toMatch(/search.path doit contenir \{query\}/);
+    expect(p).toMatch(/Points à vérifier :\n- Films : pas de lecteur/);
+    expect(p).toContain('{"name":"X"}');
+  });
+});
+
+describe('assistant : adresse et erreurs JSON lisibles', () => {
+  it('vérifie l’adresse (anti-SSRF) et complète https://', () => {
+    expect(verifierAdresseSite('mediatheque-exemple.fr/catalogue').url).toBe('https://mediatheque-exemple.fr/catalogue');
+    for (const a of ['', 'http://127.0.0.1/', 'http://10.0.0.2', 'http://192.168.1.10', 'https://exemple.fr:22', 'file:///etc/passwd', 'http://intranet']) {
+      expect(verifierAdresseSite(a).erreur).toBeTruthy();
+    }
+  });
+
+  it('JSON cassé : ligne, colonne et indice', () => {
+    const v = validerSourceJson('{\n  "name": "X",\n  "baseUrl": "https://exemple.fr",,\n}');
+    expect(v.erreurs[1]).toMatch(/^Ligne 3, colonne \d+ : caractère inattendu « , »/);
+    // Dans un bloc ```json : la ligne est celle du texte collé.
+    expect(validerSourceJson('Voici :\n```json\n{\n  "name": "X",,\n}\n```').erreurs[1]).toMatch(/^Ligne 4, colonne 15 : /);
+    const coupe = validerSourceJson('{\n  "name": "X"');
+    expect(coupe.erreurs[1]).toMatch(/^Ligne 2, colonne \d+ : le JSON s’arrête trop tôt/);
+  });
+});
+
+describe('assistant : test pas à pas (réseau simulé)', () => {
+  const RECHERCHE = '<ul class="resultats"><li class="carte"><a class="titre" href="/oeuvre/le-voyage">Le voyage</a></li></ul>';
+  const SERIE = '<ol class="episodes"><li class="ep"><a href="/oeuvre/le-voyage/episode-1"><span class="num">1</span></a></li><li class="ep"><a href="/oeuvre/le-voyage/episode-2"><span class="num">2</span></a></li></ol>';
+  const EPISODE = '<div class="lecteur"><iframe src="https://lecteur-exemple.fr/embed/abc"></iframe></div>';
+  const FILMS = '<div class="film"><h3>Le film</h3><a href="/film/1">voir</a></div>';
+  const source = () => validerSourceJson(JSON.stringify({ ...JSON_IA, search: { ...JSON_IA.search, path: '/r?q={query}' }, movies: { search: { path: '/films?q={query}', item: 'div.film', title: 'h3', link: 'a' }, player: { iframe: 'iframe' } } })).source!;
+  const ctx = (routes: Record<string, ReturnType<typeof html>>) => ({ client: creerClient(fauxReseau(routes, { resoudre: async () => ['93.184.216.34'] })) });
+
+  it('animés : recherche → épisodes → lecteur ; films : recherche → lecteur', async () => {
+    const etapes = await testerSourcePasAPas(
+      ctx({
+        'https://mediatheque-exemple.fr/r?q=': html(RECHERCHE),
+        'https://mediatheque-exemple.fr/oeuvre/le-voyage/episode-1': html(EPISODE),
+        'https://mediatheque-exemple.fr/oeuvre/le-voyage': html(SERIE),
+        'https://mediatheque-exemple.fr/films?q=': html(FILMS),
+        'https://mediatheque-exemple.fr/film/1': html(EPISODE),
+      }),
+      source(),
+      'Le voyage',
+    );
+    expect(etapes.map(e => [e.cle, e.ok])).toEqual([['recherche', true], ['episodes', true], ['lecteur', true], ['films-recherche', true], ['films-lecteur', true]]);
+    expect(etapes[1].detail).toMatch(/2 épisode\(s\)/);
+    expect(testReussi(etapes)).toBe(true);
+  });
+
+  it('échec à la recherche : les étapes suivantes ne sont pas jouées ; aucune erreur levée', async () => {
+    const etapes = await testerSourcePasAPas(ctx({}), source(), 'Le voyage');
+    expect(etapes.map(e => [e.cle, e.ok])).toEqual([['recherche', false], ['episodes', undefined], ['lecteur', undefined], ['films-recherche', false], ['films-lecteur', undefined]]);
+    expect(testReussi(etapes)).toBe(false);
   });
 });

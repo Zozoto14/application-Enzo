@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import type { FicheAnime, FicheFilm } from '../moteur/catalogue';
 import { carteAnime, carteFilm, sansVus } from './elements';
+import { CarteSansSource } from './EtatSources';
 import { useCharger, useTsuzuku } from './contexte';
 import { Bouton, Champ, Etat, EtatVide, Grille, Puce, Titre } from './ui';
 
@@ -62,6 +63,7 @@ export function Catalogue({ q: qInitial, genre: genreInitial }: { q?: string; ge
         <Champ libelle="Rechercher" valeur={saisie} onChanger={setSaisie} onValider={chercher} testID="catalogue-recherche" style={{ flex: 1 }} placeholder="Titre" />
         <Bouton titre="Chercher" onPress={chercher} variante="plein" testID="catalogue-chercher" />
       </View>
+      <CarteSansSource lieu={q ? 'recherche' : 'catalogue'} />
       {genres.donnees?.length ? (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} accessibilityLabel="Genres">
           <Puce titre="Tous" actif={!genre} onPress={() => { setGenre(undefined); setQ(''); setSaisie(''); setPage(1); setPlus([]); }} testID="genre-tous" />

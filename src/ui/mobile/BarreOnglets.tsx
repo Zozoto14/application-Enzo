@@ -65,7 +65,7 @@ export function BarreOnglets({
             <View>
               <Text style={[styles.glyphe, { color: couleur }]}>{entree.glyphe}</Text>
               {entree.pastille !== undefined ? (
-                <View style={[styles.pastille, { backgroundColor: entree.couleurPastille ?? theme.accent, borderColor: theme.surface }]} {...EXEMPTE_TEXTE}>
+                <View style={[styles.pastille, entree.pastille && entree.pastille !== '•' ? styles.pastilleNombre : null, { backgroundColor: entree.couleurPastille ?? theme.accent, borderColor: theme.surface }]} {...EXEMPTE_TEXTE}>
                   {entree.pastille && entree.pastille !== '•' ? <Text style={{ color: theme.surAccent, fontSize: 11, fontWeight: '800' }}>{entree.pastille}</Text> : null}
                 </View>
               ) : null}
@@ -87,4 +87,6 @@ const styles = StyleSheet.create({
   entree: { flex: 1, minHeight: CONTROLE.barreBasse, alignItems: 'center', justifyContent: 'center', gap: 2, paddingTop: 6, paddingBottom: 4 },
   glyphe: { fontSize: 21, lineHeight: 24, textAlign: 'center' },
   pastille: { position: 'absolute', top: -2, right: -10, minWidth: 12, height: 12, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  // Pastille chiffrée : assez grande pour lire le nombre (11 px).
+  pastilleNombre: { top: -6, right: -16, minWidth: 20, height: 20, borderRadius: 10, paddingHorizontal: 3 },
 });

@@ -84,18 +84,21 @@ describe('devblog', () => {
     expect(tsuzuku.titre).toBe('Tsuzuku : sources partagées et assistant d’ajout');
     expect(tsuzuku.fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['tsuzuku-sources-partagees', 'tsuzuku-design']);
     // Verrouillage automatique, Support et mentions légales : pour tout le monde.
-    expect(ENTREES[4].titre).toBe('Verrouillage automatique, Support et mentions légales');
+    expect(ENTREES.find(e => e.version === '2026.10.08')!.titre).toBe('Verrouillage automatique, Support et mentions légales');
     // Synchronisation dès le démarrage : l'indicateur concerne aussi les amis.
-    expect(ENTREES[3].titre).toBe('Synchronisation dès le démarrage');
-    expect(ENTREES[3].fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['synchro-demarrage-indicateur']);
+    expect(ENTREES.find(e => e.version === '2026.10.09')!.titre).toBe('Synchronisation dès le démarrage');
+    expect(ENTREES.find(e => e.version === '2026.10.09')!.fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['synchro-demarrage-indicateur']);
     // Affichage téléphone : pour tout le monde.
-    expect(ENTREES[2].titre).toBe('Affichage téléphone repensé (1/2)');
-    expect(ENTREES[2].fonctionnalites.every(f => !f.adminSeulement && !f.gestionnaireSeulement)).toBe(true);
-    // Déverrouillage (dernière entrée) : tout concerne aussi les amis, sauf le coffre publié par le PC.
-    expect(ENTREES[1].titre).toBe('Déverrouillage : diagnostic et messages plus clairs');
-    expect(ENTREES[1].fonctionnalites.filter(f => f.adminSeulement).map(f => f.id)).toEqual(['deverrouillage-coffre-pc']);
+    expect(ENTREES.find(e => e.version === '2026.10.10')!.titre).toBe('Affichage téléphone repensé (1/2)');
+    expect(ENTREES.find(e => e.version === '2026.10.10')!.fonctionnalites.every(f => !f.adminSeulement && !f.gestionnaireSeulement)).toBe(true);
+    // Tsuzuku, page Sources (dernière entrée) : les états vides concernent tout le monde, le reste les Fondateurs.
+    expect(ENTREES.find(e => e.version === '2026.10.12')!.titre).toBe('Tsuzuku : page Sources et assistant guidé');
+    expect(ENTREES.find(e => e.version === '2026.10.12')!.fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['tsuzuku-sans-source']);
+    // Déverrouillage : tout concerne aussi les amis, sauf le coffre publié par le PC.
+    expect(ENTREES.find(e => e.version === '2026.10.11')!.titre).toBe('Déverrouillage : diagnostic et messages plus clairs');
+    expect(ENTREES.find(e => e.version === '2026.10.11')!.fonctionnalites.filter(f => f.adminSeulement).map(f => f.id)).toEqual(['deverrouillage-coffre-pc']);
     expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('afficher');
-    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.12', '2026.10.11', '2026.10.10', '2026.10.09', '2026.10.08', '2026.10.07', '2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
+    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.13', '2026.10.12', '2026.10.11', '2026.10.10', '2026.10.09', '2026.10.08', '2026.10.07', '2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
   });
 
   it('marquer lu est idempotent et tolère un état corrompu', () => {
@@ -105,9 +108,9 @@ describe('devblog', () => {
   });
 
   it('la visite guidée réutilise les nouveautés de l’entrée', () => {
-    const etapes = etapesVisite(ENTREES[0], false);
-    expect(etapes[0].titre).toBe(ENTREES[0].titre);
-    expect(etapes.every(e => e.id.startsWith(`devblog-${ENTREES[0].version}`))).toBe(true);
+    const etapes = etapesVisite(ENTREES.find(e => e.version === '2026.10.11')!, false);
+    expect(etapes[0].titre).toBe(ENTREES.find(e => e.version === '2026.10.11')!.titre);
+    expect(etapes.every(e => e.id.startsWith(`devblog-${ENTREES.find(e => e.version === '2026.10.11')!.version}`))).toBe(true);
     expect(etapes.some(e => e.id.endsWith('admin-avance'))).toBe(false);
   });
 });

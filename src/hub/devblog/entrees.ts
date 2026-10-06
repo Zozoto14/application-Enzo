@@ -41,8 +41,8 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
-    version: '2026.10.12',
-    date: '2026-10-12',
+    version: '2026.10.13',
+    date: '2026-10-13',
     titre: 'Affichage téléphone repensé (2/3) : Administration',
     resume:
       'Sur téléphone, l’Administration n’est plus le panneau du PC rétréci : une liste de sections, des cartes à la place des tableaux, des formulaires en feuilles qui montent du bas et des boutons principaux sous le pouce. Le PC et la tablette en paysage ne changent pas.',
@@ -74,6 +74,49 @@ export const ENTREES: readonly EntreeDevblog[] = [
         emoji: '⌨️',
         titre: 'Champs et claviers adaptés',
         texte: 'Sur téléphone, les champs des réglages font 48 px, le texte 17 px, et chaque champ ouvre le bon clavier (numérique pour un code, sans correction pour un identifiant).',
+      },
+    ],
+  },
+  {
+    version: '2026.10.12',
+    date: '2026-10-12',
+    titre: 'Tsuzuku : page Sources et assistant guidé',
+    resume:
+      'Ajouter une source n’est plus caché dans les réglages : Tsuzuku a une page « Sources » (onglet sur PC, barre basse sur téléphone) avec un assistant pas à pas qui part du lien d’un site, et chaque écran dit clairement quoi faire quand aucune source n’est configurée.',
+    illustration: 'administration',
+    fonctionnalites: [
+      {
+        id: 'tsuzuku-page-sources',
+        emoji: '🧩',
+        titre: 'Page « Sources » dans Tsuzuku',
+        texte:
+          'Un onglet « Sources » (avec le nombre de sources actives) ouvre la liste : type animés/films, activée ou non, dernier test OK/KO, avec qui elle est partagée. « + Ajouter une source » propose l’assistant (recommandé) ou le JSON. C’est la même page que Paramètres › Administration › Tsuzuku · Sources, réservée aux Fondateurs.',
+        essayer: { genre: 'app', app: 'tsuzuku' },
+        adminSeulement: true,
+      },
+      {
+        id: 'tsuzuku-assistant-4-etapes',
+        emoji: '🪄',
+        titre: 'Assistant en 4 étapes',
+        texte:
+          '1. Collez l’adresse du site (vérifiée : sites publics seulement). 2. Copiez le prompt généré dans l’IA de votre choix (boutons « Copier », « Ouvrir ChatGPT / Claude »). 3. Collez sa réponse : les erreurs s’affichent ligne par ligne et « Réparer avec l’IA » prépare un prompt de correction. 4. Testez (recherche → épisodes → lecteur), puis enregistrez avec le partage voulu. Sur le site web, collez le code de la page ou laissez l’IA analyser le site.',
+        adminSeulement: true,
+      },
+      {
+        id: 'tsuzuku-sauvegarde-sources',
+        emoji: '💾',
+        titre: 'Importer / exporter les sources',
+        texte:
+          'Les sources s’exportent en JSON pour une sauvegarde ou un autre appareil, sans clé d’API ni partage ; l’import vérifie chaque source. Un bouton « ? » explique ce qu’est une source et comment la tester. N’ajoutez que des sources dont vous avez le droit d’utiliser le contenu.',
+        adminSeulement: true,
+      },
+      {
+        id: 'tsuzuku-sans-source',
+        emoji: '🧭',
+        titre: 'Quand aucune source n’est configurée',
+        texte:
+          'L’accueil, le catalogue, la recherche et les fiches l’indiquent clairement : Tsuzuku a besoin d’au moins une source pour lire des épisodes et des films. Les Fondateurs ont un bouton vers l’assistant ; les autres comptes savent qu’il faut demander à l’administrateur. Le lien direct reste disponible sur chaque fiche.',
+        essayer: { genre: 'app', app: 'tsuzuku' },
       },
     ],
   },

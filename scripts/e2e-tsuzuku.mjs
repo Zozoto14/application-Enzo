@@ -411,10 +411,11 @@ try {
   await activerPontPc();
   await ouvrirTsuzuku(page);
   verifier((await page.getByTestId('tsuzuku-site').count()) === 0, 'mode PC : plus de bandeau « site »');
-  verifier((await page.getByTestId('onglet-app-sources').count()) === 0, 'pas d’onglet « Sources » dans l’app : Paramètres › Administration › Tsuzuku');
+  verifier((await page.getByTestId('onglet-app-sources').count()) === 1, 'onglet « Sources » dans l’app pour le Fondateur (même page que Paramètres › Administration › Tsuzuku)');
   await page.getByTestId('tsuzuku-reglages').click();
   await page.getByTestId('parametres-section-administration').click();
   verifier(await visible(page, 'sources-vide'), 'les sources sont VIDES par défaut');
+  await page.getByTestId('sources-ajouter').click();
   await page.getByTestId('source-ajouter').click();
   await page.getByTestId('source-nom').fill('Ma médiathèque (neutre)');
   await page.getByTestId('source-adresse').fill('https://mediatheque-exemple.fr');
@@ -439,6 +440,7 @@ try {
   await capture(page, '18-sources-test');
 
   // Une source vers le réseau local est refusée dès la saisie.
+  await page.getByTestId('sources-ajouter').click();
   await page.getByTestId('source-ajouter').click();
   await page.getByTestId('source-nom').fill('Maison');
   await page.getByTestId('source-adresse').fill('http://192.168.1.10');

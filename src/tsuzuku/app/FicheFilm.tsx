@@ -6,6 +6,7 @@ import { trouver } from '../moteur/bibliotheque';
 import { ouvrirExterne } from './externe';
 import { useCharger, useTsuzuku } from './contexte';
 import { BandeauFiche, BlocBibliotheque, BlocVuAilleurs, LiensLegaux, type FicheMin } from './FicheCommune';
+import { CarteSansSource, LienGererSources } from './EtatSources';
 import { LienFilm } from './LienFilm';
 import { Bouton, Etat, LIBELLE_STATUT, styleTexte } from './ui';
 
@@ -47,7 +48,9 @@ export function FicheFilmEcran({ id }: { id: string }) {
             </BandeauFiche>
             <BlocBibliotheque fiche={min} entree={entree} />
             <BlocVuAilleurs fiche={min} entree={entree} />
+            <CarteSansSource lieu="fiche" />
             <LienFilm id={id} />
+            <LienGererSources testID="fiche-gerer-sources" />
             <LiensLegaux liens={f.streamingLinks} />
           </View>
         ) : null}

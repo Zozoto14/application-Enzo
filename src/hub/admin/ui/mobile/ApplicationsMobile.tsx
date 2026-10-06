@@ -113,7 +113,7 @@ function MessageMaintenance({ outils, app, message, onChanger, modifie, onEnregi
         value={message}
         onChangeText={onChanger}
         maxLength={LONGUEUR_MAX_MESSAGE}
-        placeholder="ex. Mise à jour en cours, retour vers 18 h"
+        placeholder="ex. Retour vers 18 h"
         indication="À ne pas confondre avec Désactiver : l’app disparaît alors pour tous sauf vous."
         enterKeyHint="done"
         testID={`admin-app-message-${app.id}`}

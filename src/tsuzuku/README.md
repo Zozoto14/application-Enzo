@@ -146,9 +146,12 @@ Meme mot de passe, memes profils, memes permissions que le hub ; aucun serveur.
 | Chemin | Role |
 | --- | --- |
 | `registre.ts` | Entree `id: 'tsuzuku'` du registre du hub (nom, icone, teinte `anime`, information en direct) |
-| `app/Racine.tsx` | Ecran racine : « ← Hub » + Echap, selecteur Animes / Films, onglets Decouvrir · Catalogue · Ma bibliotheque ; pied de page (`PiedTsuzuku.tsx`) |
+| `app/Racine.tsx` | Ecran racine : « ← Hub » + Echap, selecteur Animes / Films, onglets Decouvrir · Catalogue · Ma bibliotheque (+ Sources avec le nombre de sources actives, rangs habilites) ; sur telephone, ces sections passent dans une barre basse (`BarreOnglets`) ; pied de page (`PiedTsuzuku.tsx`) |
 | `app/Accueil`, `Catalogue`, `FicheAnime`, `FicheFilm`, `Lecteur`, `Bibliotheque`, `Import` | Ecrans React Native (390 px, accessibilite) |
-| `app/Sources.tsx`, `AdminTsuzuku.tsx` | Rendus dans Parametres : Administration › Tsuzuku (sources, partage, assistant, cles d'API) et Tsuzuku › Sources partagees |
+| `app/Sources.tsx` | Page « Sources » (une seule implementation, deux entrees : onglet de l'app et Parametres › Administration › Tsuzuku · Sources) : liste (type, etat, dernier test, partage), « + Ajouter une source », aide « ? », qui recoit quoi, import/export JSON, lien vers les cles d'API |
+| `app/AssistantSource.tsx` | Assistant en 4 etapes : adresse → prompt pour une IA → reponse (JSON) validee / « Reparer avec l'IA » → test pas a pas et enregistrement (nom, activee, partage) |
+| `app/EtatSources.tsx` | Etats vides guides (accueil, catalogue, recherche, fiches) et « Ajouter/modifier les sources » (habilites seulement) |
+| `app/AdminTsuzuku.tsx` | Rendus dans Parametres : Administration › Tsuzuku (sources, cles d'API) et Tsuzuku › Sources partagees |
 | `app/gestion.ts` | Droits par rang, partage, sources recues, reglages techniques (donnees pures) |
 | `plateforme/partage.ts` | Publication chiffree des sources partagees dans l'espace relais de chaque beneficiaire |
 | `moteur/assistant.ts` | Assistant d'ajout : analyse de page, prompt pour une IA, validation du JSON |
@@ -190,9 +193,12 @@ catalogue compris) sont recrees par profil.
   la plus protectrice : une source decide du contenu que d'autres comptes verront, comme les
   « apps globales », que les regles de rang reservent deja aux Fondateurs. Administrateurs,
   Gestionnaires et Amis n'utilisent que les sources qui leur sont partagees.
-- Tout le technique est dans **Parametres › Administration › Tsuzuku** ; le confort (VF/VOSTFR,
-  episode suivant, deja vus) et les **sources partagees avec vous** dans Parametres › Tsuzuku.
-  L'app n'a plus d'onglet « Sources ».
+- Les sources se gerent dans l'onglet **Sources** de l'app (PC/tablette : en-tete ; telephone : barre
+  basse) ou, a l'identique, dans **Parametres › Administration › Tsuzuku · Sources**. Les cles d'API
+  restent dans Parametres › Administration › Tsuzuku · Cles d'API (lien depuis la page Sources). Le
+  confort (VF/VOSTFR, episode suivant, deja vus) et les **sources partagees avec vous** sont dans
+  Parametres › Tsuzuku. Les autres rangs n'ont ni onglet ni page : les ecrans leur disent de demander
+  a l'administrateur quand aucune source n'est disponible.
 - Cles d'API : dans la base chiffree du Fondateur (`tsuzuku.avance`), jamais publiees ni
   synchronisees en clair, jamais reaffichees en entier (`masquerCle`), jamais dans une
   publication de sources.
@@ -217,13 +223,28 @@ catalogue compris) sont recrees par profil.
 
 ### Assistant d'ajout par lien
 
-Administration › Tsuzuku › Sources › « Assistant » : l'adresse d'une page est lue par le client
-reseau protege (anti-SSRF, 2 Mo max ; sur le site, on colle le HTML), `analyserStructure` en tire
-un resume (balises/classes recurrentes, formulaires, liens d'episodes, iframes, menus), et
-`genererPrompt` compose un texte a copier vers une IA decrivant TOUT le format de source (animes et
-films) avec des regles de qualite. Le JSON renvoye est valide (`validerSourceJson` : schema du
-moteur, selecteurs CSS, `{query}`, adresse publique), teste pas a pas, puis enregistre (partage :
-personne). Rappel affiche : « N'ajoutez que des sources dont vous avez le droit d'utiliser le contenu. »
+Sources › « + Ajouter une source » › « Avec l'assistant (recommande) » (ou « Saisir ou coller le
+JSON », qui commence a l'etape 3), en 4 etapes avec indicateur :
+
+1. **Adresse** : `verifierAdresseSite` (http(s), hote public, ports usuels : anti-SSRF avant toute
+   requete) et choix animes / films / les deux.
+2. **Prompt** : la page est lue par le client reseau protege (2 Mo max) ; `analyserStructure` en tire
+   un resume et `genererPrompt` compose le texte a copier (TOUT le format `FORMAT_SOURCE`, un exemple
+   complet `EXEMPLE_SOURCE` sur un site fictif, l'extrait HTML, des regles : selecteurs robustes,
+   verifier sur 2 exemples, ne renvoyer que du JSON). Boutons « Copier le prompt », « Ouvrir ChatGPT /
+   Claude » (liens externes simples). Sur le site web (CORS) : coller le HTML, ou
+   `genererPromptSansExtrait` (l'IA analyse elle-meme le site).
+3. **Reponse** : `validerSourceJson` (schema du moteur, selecteurs CSS, `{query}`, adresse publique),
+   erreurs une par ligne avec ligne/colonne pour un JSON casse (`positionErreurJson`) ; « Reparer avec
+   l'IA » produit `genererPromptReparation` (erreurs + reponse precedente).
+4. **Test et enregistrement** : `testerSourcePasAPas` (recherche → episodes → lecteur ; films :
+   recherche → lecteur ; une etape en echec saute les suivantes), puis nom, activee, partage (moi
+   seul / tous / selection). Le resultat du test est garde (`tsuzuku.sources.tests`) et affiche dans
+   la liste.
+
+Import/export : `exporterSources` (definitions seules : ni cle d'API, ni partage, ni agent) et
+`importerExportSources` (schema + selecteurs, doublons ignores). Rappel affiche : « N'ajoutez que des
+sources dont vous avez le droit d'utiliser le contenu. »
 
 ### Reste a faire
 

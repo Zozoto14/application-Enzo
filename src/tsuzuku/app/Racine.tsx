@@ -21,23 +21,35 @@ import { CLES, stockageDepuisBase } from '../plateforme/stockage';
 import { Accueil } from './Accueil';
 import { Bibliotheque } from './Bibliotheque';
 import { Catalogue } from './Catalogue';
-import { FournisseurTsuzuku, type Route } from './contexte';
+import { FournisseurTsuzuku, useCharger, type Route } from './contexte';
 import { FicheAnimeEcran } from './FicheAnime';
 import { FicheFilmEcran } from './FicheFilm';
 import { ImportBibliotheque } from './Import';
 import { LecteurEcran } from './Lecteur';
 import { creerServices, type ServicesTsuzuku } from './services';
-import { lireAvances } from './gestion';
+import { comptesPourPartage, lireAvances } from './gestion';
 import { PiedTsuzuku } from './PiedTsuzuku';
 import { LIBELLE_MODE, themeDuMode, type Mode } from './themeTsuzuku';
 import { Avis, Bouton } from './ui';
 import { MESSAGE_SITE } from '../plateforme/reseauWeb';
+import { BarreOnglets, useMobile, type EntreeOnglet } from '../../ui/mobile';
+import { Sources } from './Sources';
 
 const ONGLETS: ReadonlyArray<readonly [Route['t'], string]> = [
   ['accueil', 'Découvrir'],
   ['catalogue', 'Catalogue'],
   ['bibliotheque', 'Ma bibliothèque'],
 ];
+/** Onglet « Sources » : rangs habilités seulement (`gestion.ts`). */
+const ONGLET_SOURCES: readonly [Route['t'], string] = ['sources', 'Sources'];
+
+/** Barre basse du téléphone : mêmes sections, libellés courts. */
+const GLYPHES: Partial<Record<Route['t'], { glyphe: string; court: string }>> = {
+  accueil: { glyphe: '✦', court: 'Découvrir' },
+  catalogue: { glyphe: '▦', court: 'Catalogue' },
+  bibliotheque: { glyphe: '♥', court: 'Biblio.' },
+  sources: { glyphe: '⊕', court: 'Sources' },
+};
 
 function avancesDe(base: { lire(cle: string): string | undefined | null }) {
   try {
@@ -77,6 +89,7 @@ export function Tsuzuku(props: PropsRacineApp & { choix?: ChoixReseau }) {
 export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, contexte, services: s }: PropsRacineApp & { services: ServicesTsuzuku }) {
   const { width } = useWindowDimensions();
   const large = width >= 700;
+  const mobile = useMobile();
   const [mode, setMode] = useState<Mode>('anime');
   const [pile, setPile] = useState<Route[]>([{ t: 'accueil' }]);
   const [version, setVersion] = useState(0);
@@ -104,6 +117,9 @@ export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, context
   const retour = useCallback(() => setPile(p => (p.length > 1 ? p.slice(0, -1) : p)), []);
   const onglet = useCallback((t: Route['t']) => setPile([{ t } as Route]), []);
   const changee = useCallback(() => setVersion(v => v + 1), []);
+  // Badge de l'onglet « Sources » : nombre de sources actives (rangs habilités seulement).
+  const actives = useCharger(async () => (s.estAdmin ? (await s.sourcesPropres()).filter(x => x.enabled).length : 0), [s, version]);
+  const onglets = s.estAdmin ? [...ONGLETS, ONGLET_SOURCES] : ONGLETS;
 
   const ctx = useMemo(
     () => ({
@@ -118,6 +134,7 @@ export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, context
       changee,
       large,
       onParametres: onParametres ? () => onParametres('tsuzuku') : undefined,
+      onSection: onParametres ? (section: 'administration' | 'tsuzuku') => onParametres(section) : undefined,
       enregistrerFichier: contexte.enregistrerFichier,
     }),
     [s, theme, themeHub, mode, aller, remplacer, retour, version, changee, large, onParametres, contexte.enregistrerFichier],
@@ -137,6 +154,18 @@ export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, context
         return <Bibliotheque />;
       case 'import':
         return <ImportBibliotheque />;
+      case 'sources':
+        // Même page que Paramètres › Administration › Tsuzuku · Sources ; refusée aux autres rangs.
+        return (
+          <Sources
+            key={route.ajout ?? 'liste'}
+            page
+            ajoutInitial={route.ajout}
+            comptes={comptesPourPartage(contexte.profils?.tous)}
+            partageActif={!contexte.profils || contexte.profils.actuel.id === 'principal'}
+            onCles={onParametres ? () => onParametres('administration') : undefined}
+          />
+        );
     }
   })();
   const ongletActif: Route['t'] = route.t === 'fiche' || route.t === 'lecteur' ? (pile.find(r => r.t === 'catalogue') ? 'catalogue' : 'accueil') : route.t === 'import' ? 'bibliotheque' : route.t;
@@ -178,23 +207,31 @@ export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, context
                   );
                 })}
               </View>
-              <View style={st.onglets} accessibilityRole="tablist" accessibilityLabel="Sections de Tsuzuku">
-                {ONGLETS.map(([t, titre]) => {
-                  const actif = ongletActif === t;
-                  return (
-                    <Pressable
-                      key={t}
-                      testID={`onglet-app-${t}`}
-                      accessibilityRole="tab"
-                      accessibilityState={{ selected: actif }}
-                      accessibilityLabel={titre}
-                      onPress={() => onglet(t)}
-                      style={[st.onglet, { borderBottomColor: actif ? theme.accent : 'transparent' }]}>
-                      <Text style={{ color: actif ? theme.texte : theme.attenue, fontWeight: actif ? '800' : '600', fontSize: 15, ...police(theme.policeTexte) }}>{titre}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              {!mobile ? (
+                <View style={st.onglets} accessibilityRole="tablist" accessibilityLabel="Sections de Tsuzuku">
+                  {onglets.map(([t, titre]) => {
+                    const actif = ongletActif === t;
+                    const badge = t === 'sources' ? actives.donnees : undefined;
+                    return (
+                      <Pressable
+                        key={t}
+                        testID={`onglet-app-${t}`}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: actif }}
+                        accessibilityLabel={badge !== undefined ? `${titre} (${badge} active${badge > 1 ? 's' : ''})` : titre}
+                        onPress={() => onglet(t)}
+                        style={[st.onglet, { borderBottomColor: actif ? theme.accent : 'transparent', flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+                        <Text style={{ color: actif ? theme.texte : theme.attenue, fontWeight: actif ? '800' : '600', fontSize: 15, ...police(theme.policeTexte) }}>{titre}</Text>
+                        {badge !== undefined ? (
+                          <View testID="onglet-sources-badge" style={{ minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: badge ? theme.accent : theme.alerte }}>
+                            <Text style={{ color: badge ? theme.surAccent : theme.fond, fontSize: 11, fontWeight: '800' }}>{badge}</Text>
+                          </View>
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
               {onParametres ? <Bouton titre={large ? '⚙︎ Réglages' : '⚙︎'} libelle="Réglages de Tsuzuku (Paramètres)" onPress={() => onParametres('tsuzuku')} testID="tsuzuku-reglages" style={{ marginLeft: 'auto' }} /> : null}
             </View>
             {!s.lectureSources ? <Avis texte={MESSAGE_SITE} testID="tsuzuku-site" /> : null}
@@ -202,6 +239,23 @@ export function TsuzukuEcrans({ theme: themeHub, onRetour, onParametres, context
             <PiedTsuzuku theme={theme} onEnSavoirPlus={onParametres ? () => onParametres('apropos') : undefined} />
           </View>
         </ScrollView>
+        {mobile ? (
+          // Téléphone : les sections passent dans une barre basse, sous le pouce (Sources pour les rangs habilités).
+          <BarreOnglets
+            theme={theme}
+            testID="onglet-app"
+            entrees={onglets.map(([t, titre]): EntreeOnglet => ({
+              cle: t,
+              libelle: GLYPHES[t]?.court ?? titre,
+              glyphe: GLYPHES[t]?.glyphe ?? '•',
+              description: t === 'sources' && actives.donnees !== undefined ? `${titre} (${actives.donnees} active${actives.donnees > 1 ? 's' : ''})` : titre,
+              pastille: t === 'sources' && actives.donnees !== undefined ? String(actives.donnees) : undefined,
+              couleurPastille: t === 'sources' && actives.donnees === 0 ? theme.alerte : undefined,
+            }))}
+            actif={ongletActif}
+            onChoisir={cle => onglet(cle as Route['t'])}
+          />
+        ) : null}
       </View>
     </FournisseurTsuzuku>
   );
