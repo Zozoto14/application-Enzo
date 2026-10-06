@@ -9,7 +9,9 @@
  *  - `journal` : UNION par identifiant d'événement (`idEvenement`), bornée par
  *    la rétention et la taille réglées ;
  *  - `vues` (connexions déjà reportées) : maximum par compte, pour qu'une
- *    connexion ne soit pas reportée deux fois.
+ *    connexion ne soit pas reportée deux fois ;
+ *  - `prospect:<id>` (une fiche de l'app Prospects), `prospects-modeles` :
+ *    dernier gagnant (une fiche supprimée voyage comme suppression datée).
  *
  * Le document voyage scellé par la clé de synchronisation de l'administrateur
  * (`cleDerivee('synchro')`), dans son espace `p/principal/` : ni un ami ni
@@ -20,6 +22,7 @@ import { borner, unionJournaux, type EvenementAudit } from './journal';
 import { lireDonnees, type DonneesAdmin } from './donnees';
 import type { Fusions, Valeurs } from '../../sync/relais/fusionLww';
 import { abonnementsDepuisEntites, entitesAbonnements, FUSIONS_ABONNEMENTS } from '../abonnements/abonnements';
+import { entitesProspects, prospectsDepuisEntites } from '../../prospects/prospects';
 
 export function entitesDonnees(d: DonneesAdmin): Valeurs {
   const e: Valeurs = { reglages: d.reglages, journal: d.journal, vues: d.connexionsVues };
@@ -27,6 +30,8 @@ export function entitesDonnees(d: DonneesAdmin): Valeurs {
   if (d.robustesse) e.robustesse = d.robustesse;
   // Abonnements : une entité par compte (`abo:<id>`, historique fusionné par union) + les réglages (dernier gagnant).
   Object.assign(e, entitesAbonnements(d.abonnements));
+  // Prospects : une entité par fiche (`prospect:<id>`, dernier gagnant, suppression datée) + les modèles.
+  Object.assign(e, entitesProspects(d.prospects));
   return e;
 }
 
@@ -35,7 +40,7 @@ export function donneesDepuisEntites(e: Valeurs, maintenant: number): DonneesAdm
   for (const [cle, valeur] of Object.entries(e)) {
     if (cle.startsWith('note:')) notes[cle.slice(5)] = valeur;
   }
-  const d = lireDonnees(JSON.stringify({ reglages: e.reglages, journal: e.journal, connexionsVues: e.vues, notes, robustesse: e.robustesse, abonnements: abonnementsDepuisEntites(e) }));
+  const d = lireDonnees(JSON.stringify({ reglages: e.reglages, journal: e.journal, connexionsVues: e.vues, notes, robustesse: e.robustesse, abonnements: abonnementsDepuisEntites(e), prospects: prospectsDepuisEntites(e) }));
   return { ...d, journal: borner(d.journal, maintenant, d.reglages.retentionJours, d.reglages.tailleJournal) };
 }
 

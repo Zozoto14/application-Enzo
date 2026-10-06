@@ -14,6 +14,7 @@
 import { lireJournal, borner, journaliser, TAILLE_MAX_JOURNAL, type EvenementAudit } from './journal';
 import type { StockagePrefs } from '../personnalisation';
 import { abonnementsVides, lireAbonnements, type DonneesAbo } from '../abonnements/abonnements';
+import { lireProspects, prospectsVides, type DonneesProspects } from '../../prospects/prospects';
 
 export const VERSION_DONNEES = 1;
 export const CLE_DONNEES = 'admin.donnees';
@@ -64,6 +65,8 @@ export interface DonneesAdmin {
   connexionsVues: Record<string, number>;
   /** Suivi manuel des abonnements (voir `abonnements/abonnements.ts`). */
   abonnements: DonneesAbo;
+  /** Carnet de prospection du Fondateur (app Prospects, `src/prospects/prospects.ts`). */
+  prospects: DonneesProspects;
   /**
    * Robustesse du mot de passe administrateur, évaluée lors de la dernière
    * vérification d'identité (le mot de passe lui-même n'est jamais gardé).
@@ -75,7 +78,7 @@ export const LONGUEUR_MAX_NOTE = 1000;
 const MOTIF_ID = /^[a-z0-9]{2,16}$/;
 
 export function donneesVides(): DonneesAdmin {
-  return { version: VERSION_DONNEES, reglages: { ...REGLAGES_DEFAUT }, notes: {}, journal: [], connexionsVues: {}, abonnements: abonnementsVides() };
+  return { version: VERSION_DONNEES, reglages: { ...REGLAGES_DEFAUT }, notes: {}, journal: [], connexionsVues: {}, abonnements: abonnementsVides(), prospects: prospectsVides() };
 }
 
 export function bornerReglage(cle: keyof ReglagesAdmin, valeur: unknown): number {
@@ -149,6 +152,7 @@ export function lireDonnees(brut: string | undefined | null): DonneesAdmin {
     journal: lireJournal(o.journal).slice(-reglages.tailleJournal),
     connexionsVues: lireCompteurs(o.connexionsVues),
     abonnements: lireAbonnements(o.abonnements),
+    prospects: lireProspects(o.prospects),
   };
   const r = o.robustesse as { niveau?: unknown; le?: unknown } | undefined;
   if (r && (r.niveau === 'faible' || r.niveau === 'moyenne' || r.niveau === 'forte') && typeof r.le === 'string') {
