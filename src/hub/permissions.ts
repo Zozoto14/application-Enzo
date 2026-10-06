@@ -6,8 +6,11 @@
  * un ami ne voit que celles que l'administrateur lui a ouvertes, et jamais
  * une app réservée à l'administrateur — même si la liste enregistrée, qui
  * est lisible sans déverrouillage, a été retouchée pour la lui donner. Seule
- * exception : une app réservée qui se déclare ouverte aux gestionnaires
- * (l'Administration, en version limitée) s'ouvre à un ami de rôle gestionnaire.
+ * exception : une app réservée qui se déclare ouverte à des rangs (`rangs`, ou
+ * `gestionnaire` pour l'Administration en version limitée) s'ouvre à ces rangs.
+ *
+ * La page du hub où vit chaque tuile (« Applications » ou « Administration »)
+ * est donnée par le registre (`page`) : voir `pages.ts`.
  *
  * La politique globale (`admin/politique.ts`) s'ajoute : une app désactivée
  * disparaît pour tous sauf l'administrateur ; une app en maintenance reste
@@ -15,6 +18,7 @@
  */
 
 import type { Profil } from '../profils/profils';
+import { rangAdministration, reserveeOuverteAuRang } from './acces';
 import { niveauProfil } from './admin/comptes';
 import type { NiveauAcces } from './admin/niveaux';
 import { etatApp, messageMaintenance, type PolitiqueHub } from './admin/politique';
@@ -22,19 +26,17 @@ import type { AppHub, ContexteHub } from './types';
 
 type ProfilAcces = Pick<Profil, 'admin' | 'apps' | 'role'>;
 
-/** Rang (autre que le compte historique) qui ouvre l'Administration. */
-export function rangAdministration(role: Profil['role']): boolean {
-  return role === 'gestionnaire' || role === 'administrateur' || role === 'fondateur';
-}
+export { rangAdministration };
 
-export function peutOuvrir(app: Pick<AppHub, 'id' | 'adminSeulement' | 'gestionnaire'>, profil: ProfilAcces | undefined): boolean {
+export function peutOuvrir(app: Pick<AppHub, 'id' | 'adminSeulement' | 'gestionnaire' | 'rangs'>, profil: ProfilAcces | undefined): boolean {
   if (!profil || profil.admin) {
     return true;
   }
   if (app.adminSeulement) {
-    // Seule exception : une app réservée qui s'ouvre aux rangs d'administration
-    // (Fondateur, Administrateur, Gestionnaire — ce dernier en version limitée).
-    return rangAdministration(profil.role) && app.gestionnaire === true;
+    // Seule exception : une app réservée qui s'ouvre à certains rangs — ceux
+    // qu'elle liste (`rangs`, ex. Abonnements : Fondateurs), ou les rangs
+    // d'administration si elle accepte les gestionnaires (l'Administration).
+    return reserveeOuverteAuRang(app, profil.role);
   }
   return (profil.apps ?? []).includes(app.id);
 }

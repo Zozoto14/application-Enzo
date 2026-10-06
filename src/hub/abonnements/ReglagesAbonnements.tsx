@@ -1,5 +1,6 @@
 /**
- * Paramètres › Administration › Abonnements : devise, montant et périodicité
+ * Onglet « Réglages » de l'app Abonnements (autrefois dans Paramètres ›
+ * Administration) : devise, montant et périodicité
  * par défaut, jours d'avance du rappel, moyens de paiement, règle en cas de
  * retard, rappel amical, notification et modèle du message. Réservé à qui a le
  * droit « abonnements-reglages » (Fondateur) ; chaque changement est journalisé.
@@ -31,11 +32,14 @@ export function ReglagesAbonnements({
   services,
   acteur,
   maintenant = Date.now,
+  onEnregistre,
 }: {
   theme: ThemeHub;
   services: ServicesAdmin;
   acteur?: Pick<Profil, 'id' | 'admin' | 'role'>;
   maintenant?: () => number;
+  /** Prévient l'app que les données ont changé (elle les relit). */
+  onEnregistre?(): void;
 }) {
   const permis = autorise(acteur, 'abonnements-reglages').ok;
   const [courant, setCourant] = useState(() => chargerDonnees(services.stockage).abonnements.reglages);
@@ -78,6 +82,7 @@ export function ReglagesAbonnements({
         maintenant(),
       );
       enregistrerDonnees(services.stockage, suivantes);
+      onEnregistre?.();
       const r = suivantes.abonnements.reglages;
       setCourant(r);
       setDevise(r.devise);
@@ -93,7 +98,7 @@ export function ReglagesAbonnements({
   const attenue = { color: theme.attenue, fontSize: 13, lineHeight: 19, ...police(theme.policeTexte) };
   return (
     <View style={{ gap: 12, marginTop: 16 }} testID="parametres-abonnements">
-      <Text style={{ color: theme.texte, fontWeight: '700', fontSize: 15, ...police(theme.policeTexte) }}>Abonnements</Text>
+      <Text style={{ color: theme.texte, fontWeight: '700', fontSize: 15, ...police(theme.policeTexte) }}>Réglages des abonnements</Text>
       <Text style={attenue}>
         Suivi manuel et informatif : aucun paiement ni coupure automatique. Ce n’est pas un conseil fiscal ou juridique.
       </Text>

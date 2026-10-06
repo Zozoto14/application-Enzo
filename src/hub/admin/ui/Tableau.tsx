@@ -7,7 +7,7 @@ import { alertesComptes, statistiques, type AlerteAdmin } from '../comptes';
 import { LIBELLES_TYPE } from '../journal';
 import { alertesSecurite } from './Securite';
 import { dateDuJour, lignesAbo, resumeRappels } from '../../abonnements/abonnements';
-import { comptesSuivis, peutVoirAbonnements } from '../../abonnements/actionsAbo';
+import { ID_ABONNEMENTS, comptesSuivis, peutVoirAbonnements } from '../../abonnements/actionsAbo';
 import { Intertitre, Panneau, commun, dateLisible, relatif, styleTitre, type OutilsAdmin } from './commun';
 
 export function Tableau({ outils }: { outils: OutilsAdmin }) {
@@ -60,7 +60,9 @@ export function Tableau({ outils }: { outils: OutilsAdmin }) {
         <Pressable
           testID="admin-abonnements-rappel"
           accessibilityRole="button"
-          onPress={() => outils.allerA('abonnements')}
+          accessibilityHint="Ouvre l’app Abonnements"
+          disabled={!outils.onOuvrirApp}
+          onPress={() => outils.onOuvrirApp?.(ID_ABONNEMENTS)}
           style={[commun.avis, { borderLeftColor: resumeAbo.retard > 0 ? theme.critique : theme.alerte, backgroundColor: teinteTransparente(resumeAbo.retard > 0 ? theme.critique : theme.alerte, 0.12) }]}>
           <Text style={[texte, { fontSize: 13, fontWeight: '600' }]}>🔔 {resumeAbo.texte}</Text>
         </Pressable>

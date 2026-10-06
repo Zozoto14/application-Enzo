@@ -6,7 +6,7 @@
 
 import type React from 'react';
 import type { ControleProfils } from '../ui/ecrans/CarteProfils';
-import type { Profil } from '../profils/profils';
+import type { Profil, RoleProfil } from '../profils/profils';
 import type { IdThemeHub, TeinteApp, ThemeHub } from './themes';
 import type { NiveauAcces, NiveauDeclare } from './admin/niveaux';
 import type { StockagePrefs } from './personnalisation';
@@ -73,6 +73,14 @@ export interface ServicesAdmin {
   enregistrerFichier?(nom: string, contenu: string, type: string): Promise<boolean>;
 }
 
+/**
+ * Page du hub où l'app a sa tuile : « publique » (page « Applications », visible
+ * selon les autorisations habituelles) ou « administration » (page
+ * « Administration », qui n'apparaît qu'aux rangs habilités : elle n'existe
+ * que si au moins une de ses apps est visible). Voir `pages.ts`.
+ */
+export type CategorieApp = 'publique' | 'administration';
+
 export interface PropsRacineApp {
   contexte: ContexteHub;
   theme: ThemeHub;
@@ -84,6 +92,8 @@ export interface PropsRacineApp {
   onTheme?(id: IdThemeHub): void;
   /** Ouvre la page Paramètres (unique) ; l'app n'a pas de réglages à elle. */
   onParametres?(section?: IdSection): void;
+  /** Ouvre une autre app du hub (si le profil y a accès), par son identifiant. */
+  onOuvrirApp?(id: string): void;
 }
 
 export interface AppHub {
@@ -92,6 +102,11 @@ export interface AppHub {
   nom: string;
   /** Étiquette de la tuile (« Finance », « Admin »). */
   categorie: string;
+  /**
+   * Page du hub où vit la tuile (voir `CategorieApp`). Absente : « publique ».
+   * Une app réservée à l'administration déclare « administration ».
+   */
+  page?: CategorieApp;
   description: string;
   /** Pictogramme simple : aucune police d'icônes à embarquer. */
   icone: string;
@@ -104,6 +119,11 @@ export interface AppHub {
    * limité, voir `admin/roles.ts`) ; elle s'adapte alors à leurs droits.
    */
   gestionnaire?: boolean;
+  /**
+   * Avec `adminSeulement` : rangs (hors compte historique, qui voit tout) qui
+   * ouvrent l'app. Prioritaire sur `gestionnaire`. Ex. `['fondateur']`.
+   */
+  rangs?: readonly RoleProfil[];
   /**
    * Niveaux que l'app sait faire respecter, en plus de « aucun accès ».
    * Absent : un seul, l'accès complet. Ne déclarez « lecture » que si l'app

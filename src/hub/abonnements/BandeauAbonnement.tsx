@@ -1,7 +1,7 @@
 /**
  * Bandeau d'abonnement du hub :
  *  - pour un Fondateur : la cloche « 2 abonnements en retard, 3 échéances cette
- *    semaine » (rien s'il n'y a rien à signaler), avec un accès direct à la section ;
+ *    semaine » (rien s'il n'y a rien à signaler), avec un accès direct à l'app Abonnements ;
  *  - pour un utilisateur : SON rappel amical, si l'administrateur l'a activé et
  *    que son échéance approche ou est dépassée, affiché une fois par jour.
  *
@@ -14,7 +14,6 @@ import { BoutonHub } from '../Hub';
 import { useMobile } from '../../ui/mobile/useMobile';
 import { chargerDonnees } from '../admin/donnees';
 import { autorise } from '../admin/roles';
-import { demanderSectionAdmin } from '../admin/navigation';
 import { police, teinteTransparente, type ThemeHub } from '../themes';
 import type { ContexteHub } from '../types';
 import { dateDuJour, lignesAbo, notificationDuJour, rappelPourAmi, resumeRappels } from './abonnements';
@@ -55,11 +54,12 @@ export async function notifierLocalement(titre: string, corps: string): Promise<
 export function BandeauAbonnement({
   contexte,
   theme,
-  onOuvrirAdministration,
+  onOuvrirAbonnements,
 }: {
   contexte: ContexteHub;
   theme: ThemeHub;
-  onOuvrirAdministration?(): void;
+  /** Ouvre l'app Abonnements (page « Administration » du hub). */
+  onOuvrirAbonnements?(): void;
 }) {
   const maintenant = contexte.maintenant ?? Date.now();
   const version = contexte.profils?.versionComptes ?? 0;
@@ -131,14 +131,11 @@ export function BandeauAbonnement({
         <Text style={[texte, { flex: 1, minWidth: 200, fontWeight: '600' }]} testID="hub-abonnements-texte">
           {admin.resume.texte}
         </Text>
-        {onOuvrirAdministration ? (
+        {onOuvrirAbonnements ? (
           <BoutonHub
             theme={theme}
             titre="Voir les abonnements"
-            onPress={() => {
-              demanderSectionAdmin('abonnements');
-              onOuvrirAdministration();
-            }}
+            onPress={onOuvrirAbonnements}
             testID="hub-abonnements-voir"
           />
         ) : null}

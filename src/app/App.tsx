@@ -156,7 +156,8 @@ import { rangDe } from '../hub/admin/roles';
 import { resumerBibliotheque } from '../tsuzuku/app/resume';
 import { CLES as CLES_TSUZUKU, type BasePrefs } from '../tsuzuku/plateforme/stockage';
 import { themeHub, type IdThemeHub } from '../hub/themes';
-import type { ContexteHub, ResumePortefeuille, ServicesAdmin } from '../hub/types';
+import type { CategorieApp, ContexteHub, ResumePortefeuille, ServicesAdmin } from '../hub/types';
+import { pagesVisibles } from '../hub/pages';
 import { ecouterTouche, octetsUtf8, rechargerApp, surLeWeb, telechargerWeb } from '../hub/web';
 import { dividendesParTitre, lignesCibles, lignesVendables } from './calculs';
 import { exporterExcel } from '../rapport/exportExcel';
@@ -1919,6 +1920,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   // --- Hub : quelle app est ouverte, thème et préférences du profil ------------
   const [appHub, setAppHub] = useState<string | undefined>();
+  // Page du hub (« Applications » ou « Administration ») : tenue ici pour qu'on y revienne en quittant une app.
+  const [pageHub, setPageHub] = useState<CategorieApp>('publique');
   // Disposition et densité : dernières valeurs mémorisées sur l'appareil, pour que le hub s'affiche
   // dans sa forme définitive dès la première image (le reste vient du profil au déverrouillage).
   const prefsMemorisees = useCallback((): PrefsHub | undefined => {
@@ -2546,7 +2549,16 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             setParametres(undefined);
             setSupportOuvert(false);
             setAppHub(undefined);
+            setPageHub('publique');
           },
+          onAdministration: pagesVisibles(REGISTRE, contexteHub).includes('administration')
+            ? () => {
+                setParametres(undefined);
+                setSupportOuvert(false);
+                setAppHub(undefined);
+                setPageHub('administration');
+              }
+            : undefined,
           onSupport: ouvrirSupport,
           onParametres: () => ouvrirParametres(),
           onVerrouiller: verrouiller,
@@ -2733,6 +2745,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onSupport={ouvrirSupport}
           synchro={synchroHub}
           demande={demandeHub}
+          page={pageHub}
+          onPage={setPageHub}
           onChangerProfil={profils && (profils.peutChanger ?? profils.tous.length > 1) ? profils.onChanger : undefined}
         />
         </GardeErreur>
@@ -2749,6 +2763,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           niveau={niveauProfil(profils?.actuel, appOuverte)}
           onTheme={choisirTheme}
           onParametres={ouvrirParametres}
+          onOuvrirApp={ouvrirApp}
         />
         </View>
         </BarreAppContexte.Provider>
