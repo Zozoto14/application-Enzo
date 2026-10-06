@@ -41,6 +41,33 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.12',
+    date: '2026-10-12',
+    titre: 'Deux pages dans le hub, et une app Abonnements',
+    resume:
+      'Le hub sépare désormais vos applications des outils d’administration : un onglet « Applications » pour tout le monde, un onglet « Administration » pour les rangs habilités. Le suivi des abonnements devient une app à part entière.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'hub-pages-administration',
+        emoji: '🗂️',
+        titre: 'Applications · Administration',
+        texte:
+          'En haut du hub (ou par l’entrée « Admin » de la barre basse sur téléphone), passez de vos applications aux apps réservées à l’administration. L’onglet n’apparaît qu’aux rangs qui y ont au moins une app ; les autres comptes ne voient aucun changement.',
+        adminSeulement: true,
+      },
+      {
+        id: 'app-abonnements',
+        emoji: '💳',
+        titre: 'App Abonnements',
+        texte:
+          'Le suivi manuel des abonnements quitte l’Administration pour sa propre tuile, dans la page Administration : mêmes comptes, mêmes paiements, mêmes rappels, rien n’est perdu. Ses réglages (devise, rappels, modèle du message) sont dans son onglet Réglages. Réservée aux Fondateurs, comme avant.',
+        essayer: { genre: 'app', app: 'abonnements' },
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.11',
     date: '2026-10-11',
     titre: 'Déverrouillage : diagnostic et messages plus clairs',
