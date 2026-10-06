@@ -646,7 +646,11 @@ export default {
 
     const { pathname } = new URL(requete.url);
     if (pathname === '/sante') {
-      return reponse({ ok: true, version: VERSION_RELAIS, portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}) });
+      return reponse({ ok: true, version: VERSION_RELAIS, portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}), heure: Date.now() });
+    }
+    if (pathname === '/heure') {
+      // Ultra léger : l'appareil compare son horloge (codes TOTP) à celle du relais.
+      return reponse({ heure: Date.now() });
     }
     if (pathname === '/support') {
       return support(requete, env, portee);

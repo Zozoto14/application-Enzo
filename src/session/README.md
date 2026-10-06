@@ -71,6 +71,30 @@ erreur au lieu de passer pour une absence de coffre : confondre les deux
 ferait proposer la création d'un nouveau coffre, écrasant le seul moyen de
 déchiffrer les données.
 
+## Déverrouillage : ce qui n'est PAS un mauvais mot de passe
+
+- **Erreur technique.** Si la dérivation Argon2id ne peut pas tourner (mémoire
+  refusée par le navigateur, paramètres illisibles), le coffre lève
+  `ErreurCalculCle` : message propre (« Impossible de calculer la clé sur cet
+  appareil… »), aucune tentative comptée. Les paramètres d'un coffre existant
+  ne sont jamais allégés : ils sont scellés avec l'enveloppe, les changer
+  exigerait la clé ; la parade est de déverrouiller depuis un autre appareil.
+- **Saisie collée.** La forme BRUTE du mot de passe est essayée d'abord (rien
+  n'a jamais été normalisé à la création : un mot de passe existant avec des
+  espaces de bord, ou en NFD, s'ouvre exactement comme avant), puis sa forme
+  NFC, puis NFC sans caractères invisibles ni espaces/retours à la ligne de
+  bord. Au plus trois dérivations, UNE tentative comptée. Le code TOTP est
+  réduit à ses chiffres (« 123 456 », chiffres pleine chasse).
+- **Mot de passe changé sur le PC.** `coffresAlternatifs` (sur le site : le
+  coffre publié sur le relais) est essayé si le coffre local refuse ; il est
+  adopté seulement s'il ouvre la base d'ici (même clé maîtresse), sinon
+  `ErreurCoffreDifferent` invite à relier le navigateur.
+- **TOTP** : fenêtre ±1 pas (±30 s), pas d'anti-rejeu. Au-delà, l'écran compare
+  l'horloge à celle du relais (`/heure`) et affiche l'écart s'il dépasse 20 s.
+
+Un échec d'authentification garde son message unique, « Mot de passe ou code
+incorrect », qui ne dit jamais quel facteur est faux (leurre compris).
+
 ## Ce que les tests couvrent, et ce qu'ils ne couvrent pas
 
 Les tests injectent le pilote `node:sqlite`, qui **ignore la clé** : SQLCipher

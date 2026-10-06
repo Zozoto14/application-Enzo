@@ -94,7 +94,7 @@ import {
 import { coffreLeurre } from '../src/profils/leurre';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import { DepotParametres } from '../src/db/depots';
-import { Session } from '../src/session/session';
+import { Session, coffreValide } from '../src/session/session';
 import { stockageMemoire } from '../src/session/stockage-coffre';
 import { creerAccesAmi, type IdentifiantsAmi } from '../src/profils/identifiants';
 import { installerPontWeb } from './web';
@@ -108,6 +108,7 @@ import { AccueilSite, RemplacerDonnees } from './AccueilSite';
 import {
   avantOuverture,
   coffreAdminEtranger,
+  memeCoffre,
   liaisonPourCompte,
   lireLiaisons,
   oublierSuivi,
@@ -122,7 +123,10 @@ import {
 } from './synchroComptes';
 import { decoderLiaison, encoderLiaison, lienSite, type Liaison } from '../src/sync/relais/liaison';
 import { compteDeLiaison, estMaitre, liaisonPourProfil } from '../src/sync/relais/portees';
-import { lireConfigRelais } from '../src/sync/relais/synchroniser';
+import { lireConfigRelais, mesurerEcartHorloge } from '../src/sync/relais/synchroniser';
+import { formaterDiagnostic, lireEnvironnement } from '../src/diagnostic/deverrouillage';
+import { empreinte as empreinteCanonique } from '../src/sync/relais/fusionLww';
+import { versionApp } from '../src/hub/version';
 import { versBase64 } from '../src/sync/relais/chiffrement';
 import type { OptionsLier } from '../src/ui/ecrans/LierCompte';
 
@@ -338,6 +342,31 @@ definirPrechargeur(prechargeur);
 globalThis.addEventListener?.('online', () => prechargeur.enLigne());
 prechargeur.demarrer();
 
+const CLE_COFFRE_VU = 'applibourse.diagnostic.coffreVu';
+
+/** Note quand CE coffre a été vu la première fois sur ce navigateur (diagnostic : ancienneté). */
+function noterCoffreVu(coffre: unknown): void {
+  if (!coffre) return;
+  try {
+    const vu = JSON.parse(memoireNavigateur.getItem(CLE_COFFRE_VU) ?? 'null') as { e?: string } | null;
+    const e = empreinteCanonique(coffre);
+    if (vu?.e !== e) memoireNavigateur.setItem(CLE_COFFRE_VU, JSON.stringify({ e, le: new Date().toISOString() }));
+  } catch {
+    // Stockage refusé (navigation privée) : ancienneté inconnue.
+  }
+}
+
+/** Ancienneté (jours) du coffre d'ici, si elle a été notée. */
+function ageCoffreVu(coffre: unknown): number | undefined {
+  try {
+    const vu = JSON.parse(memoireNavigateur.getItem(CLE_COFFRE_VU) ?? 'null') as { e?: string; le?: string } | null;
+    if (!coffre || !vu?.le || vu.e !== empreinteCanonique(coffre)) return undefined;
+    return Math.max(0, Math.floor((Date.now() - Date.parse(vu.le)) / 86_400_000));
+  } catch {
+    return undefined;
+  }
+}
+
 /** Rang d'administration (autre que le compte historique) : ouvre des comptes inférieurs par séquestre. */
 const estTitulaireRole = (role: Profil['role']): role is 'administrateur' | 'fondateur' => role === 'administrateur' || role === 'fondateur';
 
@@ -348,6 +377,8 @@ function Racine() {
 
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const fabriqueRef = useRef<unknown>(undefined);
+  /** Pour le diagnostic du déverrouillage : coffre publié sur le relais lu à l'ouverture (jamais affiché). */
+  const diagnosticOuverture = useRef<{ coffreRelais?: unknown; compteAdmin?: boolean }>({});
   const stockage = useMemo(() => stockageCourant(), []);
   // Dernier annuaire connu (lu ou écrit) : la seule source de vérité des comptes.
   const annuaireRef = useRef<Annuaire | undefined>(undefined);
@@ -386,9 +417,21 @@ function Racine() {
         changerDEspace(compte.id);
         await pont()?.profil?.ouvrir(compte.id);
         const annuaire = annuaireRef.current ?? (await lireAnnuaireDisque());
+        let coffreRelais: unknown;
         if (!options.adminSur) {
           // Le coffre de CE compte (et, pour un ami, son portefeuille) s'il est plus récent sur le relais.
-          await auPlus(avantOuverture({ memoire: memoireNavigateur, fichiers: stockage as never, compte: compte.id, pontMaitre: await liaisonDuPont() }), 15_000);
+          await auPlus(
+            avantOuverture({
+              memoire: memoireNavigateur,
+              fichiers: stockage as never,
+              compte: compte.id,
+              pontMaitre: await liaisonDuPont(),
+              surCoffreRelais: publie => {
+                coffreRelais = publie;
+              },
+            }),
+            15_000,
+          );
           if (!compte.admin || (!pont() && !options.creation && lireLiaisons(memoireNavigateur).maitre)) {
             const coffre = await stockage.lire(fichiersDuProfil(compte.id).coffre as NomFichier);
             if ((!coffre || coffre.length === 0) && compte.admin) {
@@ -412,6 +455,8 @@ function Racine() {
             // Une ecriture perdue en silence serait le pire defaut possible.
             console.error('Enregistrement impossible', erreur);
           },
+          // Mot de passe changé sur le PC : le coffre qu'il a publié est essayé si celui d'ici refuse.
+          coffresAlternatifs: compte.admin && !options.adminSur ? () => (coffreValide(coffreRelais) ? [coffreRelais] : []) : undefined,
           // Compte fermé : refusé seulement après un mot de passe et un code justes.
           verifierOuverture: compte.admin || options.adminSur
             ? undefined
@@ -432,7 +477,9 @@ function Racine() {
           new DepotParametres(session.session.base()).ecrire(PARAM_ACCES_ADMIN, JSON.stringify(acces));
           transparence = transparenceDe(acces, true);
         }
-        const autreCoffre = compte.admin && !options.adminSur && !pont() ? await coffreAdminEtranger(memoireNavigateur, stockage as never) : false;
+        const autreCoffre = compte.admin && !options.adminSur && !pont() ? await coffreAdminEtranger(memoireNavigateur, stockage as never, coffreRelais) : false;
+        diagnosticOuverture.current = { coffreRelais, compteAdmin: compte.admin };
+        if (compte.admin) noterCoffreVu(session.session.coffreActuel());
         setEtat({ phase: 'prete', session, profil, profils: [profil], adminSur: options.adminSur, rangSur: options.rangSur, transparence, prenomAAdopter: compte.prenomAAdopter, autreCoffre });
       } catch (erreur) {
         options.cle?.fill(0);
@@ -448,6 +495,8 @@ function Racine() {
     // Même appel au relais qu'un vrai compte (voir avantOuverture) : rien ne trahit un prénom inconnu.
     await auPlus(avantOuverture({ memoire: memoireNavigateur, fichiers: stockage as never, compte: undefined, pontMaitre: await liaisonDuPont() }), 15_000);
     changerDEspace('leurre');
+    // Pas de coffre alternatif : un vrai compte n'en essaie un que dans le cas
+    // rare d'un mot de passe changé sur le PC ; le cas courant fait une seule série de dérivations, comme ici.
     const session = new Session({
       stockage: stockageMemoire(coffreLeurre()),
       ouvrirBase: () => {
@@ -966,7 +1015,37 @@ function Racine() {
         onLier: relier,
         suggererAutreCoffre: Boolean(etat.autreCoffre),
       };
+  /** Liaison employée par ce compte (le leurre : la même qu'à l'ouverture, voir avantOuverture). */
+  const liaisonIci = () => {
+    const propre = profil.id === 'leurre' ? undefined : liaisonPourCompte(memoireNavigateur, profil.id);
+    const premier = Object.values(liaisonsIci.comptes)[0];
+    return propre ?? (liaisonsIci.maitre ? decoderLiaison(liaisonsIci.maitre) : undefined) ?? (premier ? decoderLiaison(premier) : undefined);
+  };
+  const ecartHorloge = async () => {
+    const liaison = liaisonIci() ?? (await liaisonDuPont());
+    return liaison ? mesurerEcartHorloge(liaison) : undefined;
+  };
+  const deverrouillageSite: ControleProfils['deverrouillage'] = {
+    ecartHorloge,
+    diagnostic: async () => {
+      const ecart = await ecartHorloge().catch(() => undefined);
+      // Écran prénom (plusieurs comptes) : rien qui distingue un vrai compte du leurre.
+      const prive = annuaireRef.current ? aDesAmis(annuaireRef.current) : false;
+      const coffre = session.session.coffreActuel();
+      const { coffreRelais, compteAdmin } = diagnosticOuverture.current;
+      return formaterDiagnostic({
+        version: versionApp(),
+        ...lireEnvironnement(),
+        ...(ecart === undefined ? {} : { ecartHorlogeS: Math.round(ecart / 1000) }),
+        liaisonRelais: Boolean(liaisonIci() ?? (await liaisonDuPont())),
+        coffreLocal: prive || Boolean(coffre),
+        ...(prive ? {} : { coffreAgeJours: ageCoffreVu(coffre) }),
+        ...(!prive && compteAdmin && coffre && coffreRelais !== undefined ? { coffreIdentiqueAuRelais: memeCoffre(coffre, coffreRelais) } : {}),
+      });
+    },
+  };
   const controle: ControleProfils = {
+    deverrouillage: adminSur ? undefined : deverrouillageSite,
     actuel: profil,
     tous: profils,
     lier: adminSur ? undefined : lierSite,
