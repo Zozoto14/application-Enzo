@@ -18,6 +18,7 @@
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { capturesAdministration, parcoursAdministration } from './e2e-mobile-administration.mjs';
 import { chargerPlaywright, demarrerRelais, demarrerSite, deverrouiller, mesurer, optionsIphone, pause, premierLancement, racine, toucher, visible } from './mobile-outils.mjs';
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/mobile/captures-apres');
@@ -153,6 +154,9 @@ try {
   await deverrouiller(page, MDP, secret);
   verifier(true, 'connexion de nouveau, hub affiché');
 
+  // ================================================================ Administration (voir e2e-mobile-administration.mjs)
+  const { idLea } = await parcoursAdministration({ page, controler, verifier, log, MDP, secret });
+
   // ================================================================ Petit iPhone
   log('375 × 667');
   await page.setViewportSize({ width: 375, height: 667 });
@@ -189,6 +193,7 @@ try {
     await capture(page, theme, 'deverrouillage');
     await deverrouiller(page, MDP, secret);
     await controler(page, `hub (${theme})`);
+    await capturesAdministration(page, theme, idLea);
   }
 
   // Écrans d'entrée dans un navigateur neuf (thème par défaut)

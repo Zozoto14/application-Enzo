@@ -69,6 +69,12 @@ export const ENTREES: readonly EntreeDevblog[] = [
         texte: 'Supprimer un compte, régénérer ses identifiants ou nommer un Fondateur demande de saisir le prénom dans une feuille. La vérification d’identité (mot de passe et code) est aussi une feuille, avec le bon clavier.',
         adminSeulement: true,
       },
+      {
+        id: 'mobile-admin-champs',
+        emoji: '⌨️',
+        titre: 'Champs et claviers adaptés',
+        texte: 'Sur téléphone, les champs des réglages font 48 px, le texte 17 px, et chaque champ ouvre le bon clavier (numérique pour un code, sans correction pour un identifiant).',
+      },
     ],
   },
   {

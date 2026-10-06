@@ -396,8 +396,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const zoom = m.champs.filter(c => c.includes('zoom iOS'));
     verifier(zoom.length === 0, `${nom} : champs ≥ 16 px${zoom.length ? ` (${zoom.join(' | ')})` : ''}`);
   };
-  const site = await demarrerSite(5271);
-  const relais = await demarrerRelais(8871);
+  const site = await demarrerSite(Number(process.env.PORT_SITE ?? 5291));
+  const relais = await demarrerRelais(Number(process.env.PORT_RELAIS ?? 8891));
   const { chromium } = chargerPlaywright();
   const navigateur = await chromium.launch({ headless: true });
   try {
