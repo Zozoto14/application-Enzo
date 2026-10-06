@@ -23,6 +23,7 @@ import {
   CLES_MEMOIRE,
   avantOuverture,
   coffreAdminEtranger,
+  memeCoffre,
   lireAbonnementAmi,
   lireAnnuaireFichier,
   preparerLiaison,
@@ -363,6 +364,53 @@ describe('ancien coffre local', () => {
     expect(await coffreAdminEtranger(site.mem, site.fichiers)).toBe(false);
     retenirLiaison(site.mem, MAITRE);
     expect(await coffreAdminEtranger(site.mem, site.fichiers)).toBe(true);
+  });
+});
+
+describe('coffre changé sur le PC après la liaison du navigateur', () => {
+  const deposer = (relais: ReturnType<typeof relaisPortees>, charge: string) =>
+    relais.boite.set('appareil:coffre', JSON.stringify({ format: 'applibourse-relais', version: 1, appareil: 'coffre', date: '2026-09-30T08:00:00Z', charge }));
+
+  it('régression : le coffre publié est lu même quand le navigateur a le sien, sans écraser celui d’ici, et la différence est signalée', async () => {
+    const relais = relaisPortees();
+    const site = appareil();
+    retenirLiaison(site.mem, MAITRE);
+    deposer(relais, '{"version":1,"enveloppes":[{"usage":"motdepasse","v":1}]}');
+    expect(await avantOuverture({ memoire: site.mem, fichiers: site.fichiers, compte: 'principal', requete: relais.requete })).toBe(true);
+    const ici = decodeur.decode(site.fichiers.f.get('coffre'));
+
+    // Mot de passe changé sur le PC : il republie son coffre.
+    deposer(relais, '{"version":1,"enveloppes":[{"usage":"motdepasse","v":2}]}');
+    let publie: unknown;
+    expect(
+      await avantOuverture({ memoire: site.mem, fichiers: site.fichiers, compte: 'principal', requete: relais.requete, surCoffreRelais: c => (publie = c) }),
+    ).toBe(false);
+    expect(publie).toEqual({ version: 1, enveloppes: [{ usage: 'motdepasse', v: 2 }] });
+    // Le coffre d'ici n'est pas écrasé (il peut sceller des données non synchronisées)…
+    expect(decodeur.decode(site.fichiers.f.get('coffre'))).toBe(ici);
+    // … mais l'ancienne comparaison (empreinte notée à la liaison) le croyait « relié » :
+    expect(await coffreAdminEtranger(site.mem, site.fichiers)).toBe(false);
+    // la comparaison au coffre ACTUELLEMENT publié voit la différence.
+    expect(await coffreAdminEtranger(site.mem, site.fichiers, publie)).toBe(true);
+  });
+
+  it('coffre identique à celui publié (ordre des clés JSON indifférent) : rien à signaler', async () => {
+    const site = appareil();
+    retenirLiaison(site.mem, MAITRE);
+    await site.fichiers.ecrire('coffre', encodeur.encode('{"enveloppes":[{"usage":"motdepasse"}],"version":1}'));
+    expect(await coffreAdminEtranger(site.mem, site.fichiers, { version: 1, enveloppes: [{ usage: 'motdepasse' }] })).toBe(false);
+    expect(memeCoffre({ a: 1, b: [1, 2] }, { b: [1, 2], a: 1 })).toBe(true);
+    expect(memeCoffre({ a: 1 }, { a: 2 })).toBe(false);
+  });
+
+  it('le leurre lit aussi le coffre publié (même durée qu’un vrai compte administrateur)', async () => {
+    const relais = relaisPortees();
+    const site = appareil();
+    retenirLiaison(site.mem, MAITRE);
+    deposer(relais, '{"version":1,"enveloppes":[{"usage":"motdepasse"}]}');
+    relais.appels.length = 0;
+    await avantOuverture({ memoire: site.mem, fichiers: site.fichiers, compte: undefined, requete: relais.requete });
+    expect(relais.appels.some(a => a.chemin.endsWith("/boite/coffre"))).toBe(true);
   });
 });
 

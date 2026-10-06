@@ -33,6 +33,7 @@ export {
 } from './kdf';
 
 export {
+  ErreurCalculCle,
   ErreurDeverrouillage,
   LONGUEUR_CLE_MAITRESSE,
   NOMBRE_CODES_DEFAUT,

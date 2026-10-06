@@ -708,6 +708,13 @@ export interface OptionsAvantOuverture {
   liaison?: Liaison;
   maintenant?: () => Date;
   requete?: Fetch;
+  /**
+   * Coffre de l'administrateur tel que publié sur le relais (lu même quand
+   * ce navigateur a déjà le sien) : essayé au déverrouillage si le coffre
+   * local refuse le mot de passe (changé sur le PC), et comparé au coffre
+   * local pour le diagnostic. Jamais écrit ici.
+   */
+  surCoffreRelais?(coffre: unknown): void;
 }
 
 /**
@@ -728,6 +735,8 @@ export async function avantOuverture(o: OptionsAvantOuverture): Promise<boolean>
     const liaison = maitre ?? (propres[0] ? decoderLiaison(liaisons.comptes[propres[0]]) : undefined);
     if (liaison) {
       await espacesDuRelais(liaison, o.requete).lister(maitre ? ESPACE_ADMIN : propres[0]).catch(() => undefined);
+      // Même lecture du coffre qu'un vrai compte administrateur : même durée.
+      if (maitre) await recupererCoffre(maitre, o.requete).catch(() => undefined);
     }
     return false;
   }
@@ -741,9 +750,14 @@ export async function avantOuverture(o: OptionsAvantOuverture): Promise<boolean>
     // L'administrateur : son coffre n'arrive que sur un navigateur qui n'en a pas encore.
     const present = await o.fichiers.lire('coffre');
     if (present && present.length > 0) {
+      // Le coffre d'ici n'est jamais écrasé en douce (il peut sceller des
+      // données non synchronisées) ; celui du relais est seulement signalé.
+      const publie = await recupererCoffre(liaison, o.requete).catch(() => undefined);
+      if (publie !== undefined) o.surCoffreRelais?.(publie);
       return false;
     }
     const coffre = await recupererCoffre(liaison, o.requete);
+    o.surCoffreRelais?.(coffre);
     const octets = encodeur.encode(JSON.stringify(coffre));
     await o.fichiers.ecrire('coffre', octets);
     ecrireJson(o.memoire, CLES_MEMOIRE.coffreRelie, empreinte(JSON.stringify(coffre)));
@@ -777,10 +791,22 @@ export async function avantOuverture(o: OptionsAvantOuverture): Promise<boolean>
  * celui du compte relié ? Vrai quand un code de l'administrateur est connu
  * mais que le coffre d'ici n'est jamais venu du relais (créé ici autrefois).
  */
-export async function coffreAdminEtranger(memoire: Memoire, fichiers: Fichiers): Promise<boolean> {
+export async function coffreAdminEtranger(memoire: Memoire, fichiers: Fichiers, publie?: unknown): Promise<boolean> {
   if (!lireLiaisons(memoire).maitre) return false;
   const present = await fichiers.lire('coffre');
   if (!present || present.length === 0) return false;
+  if (publie !== undefined) {
+    // Comparaison avec le coffre ACTUELLEMENT publié (le PC a pu changer de
+    // mot de passe depuis) : identique, il est noté comme relié ; différent,
+    // ce navigateur garde un autre coffre (ancien ou d'un autre compte).
+    const local = coffreLu(present);
+    if (local === undefined) return true;
+    if (memeCoffre(local, publie)) {
+      ecrireJson(memoire, CLES_MEMOIRE.coffreRelie, empreinte(decodeur.decode(present)));
+      return false;
+    }
+    return true;
+  }
   let relie: string | undefined;
   try {
     relie = JSON.parse(memoire.getItem(CLES_MEMOIRE.coffreRelie) ?? 'null') ?? undefined;
@@ -788,6 +814,19 @@ export async function coffreAdminEtranger(memoire: Memoire, fichiers: Fichiers):
     relie = undefined;
   }
   return relie !== empreinte(decodeur.decode(present));
+}
+
+/** Deux coffres identiques, quel que soit l'ordre des clés JSON (empreinte canonique). */
+export function memeCoffre(a: unknown, b: unknown): boolean {
+  return empreinte(a) === empreinte(b);
+}
+
+function coffreLu(octets: Uint8Array): unknown {
+  try {
+    return JSON.parse(decodeur.decode(octets));
+  } catch {
+    return undefined;
+  }
 }
 
 // ----------------------------------------------------------------- Relier

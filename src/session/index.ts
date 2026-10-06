@@ -1,6 +1,11 @@
 export {
   ErreurSession,
   ErreurTemporisation,
+  ErreurCoffreDifferent,
+  MESSAGE_ECHEC,
+  coffreValide,
+  normaliserCodeTotp,
+  variantesMotDePasse,
   Session,
   type DependancesSession,
   type Initialisation,

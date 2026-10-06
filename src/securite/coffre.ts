@@ -77,6 +77,22 @@ export class ErreurDeverrouillage extends Error {
 }
 
 /**
+ * La clé n'a pas pu être CALCULÉE (mémoire refusée par le navigateur,
+ * paramètres de dérivation illisibles…). Ce n'est pas un échec
+ * d'authentification : rien ne permet de dire si le mot de passe est juste,
+ * et la tentative ne doit pas compter comme un échec.
+ */
+export class ErreurCalculCle extends Error {
+  constructor(readonly cause: unknown) {
+    super(
+      'Impossible de calculer la clé sur cet appareil (mémoire insuffisante ou navigateur trop limité). ' +
+        'Fermez les autres onglets ou applications puis réessayez, ou déverrouillez depuis un autre appareil.',
+    );
+    this.name = 'ErreurCalculCle';
+  }
+}
+
+/**
  * Donnée associée liant chaque enveloppe à son usage.
  * Une enveloppe de récupération ne peut donc pas être présentée à la place
  * d'une enveloppe de mot de passe : le déchiffrement échouerait.
@@ -165,8 +181,17 @@ export function creerCoffre(options: OptionsCreation): CoffreCree {
 }
 
 function ouvrir(enveloppe: Enveloppe, secret: string): Uint8Array | null {
+  let cle: Uint8Array;
   try {
-    const cle = deriverCle(secret, hexToBytes(enveloppe.sel), enveloppe.kdf);
+    cle = deriverCle(secret, hexToBytes(enveloppe.sel), enveloppe.kdf);
+  } catch (erreur) {
+    // La dérivation n'a PAS eu lieu (RangeError d'allocation sur Safari iOS,
+    // paramètres illisibles) : ce n'est pas un mot de passe faux. Le confondre
+    // avec un échec d'authentification faisait refuser des identifiants justes
+    // et consommait des tentatives.
+    throw new ErreurCalculCle(erreur);
+  }
+  try {
     return desceller(cle, enveloppe.nonce, enveloppe.charge, enveloppe.usage);
   } catch {
     // Échec d'authentification : secret faux, ou enveloppe altérée. Les deux
