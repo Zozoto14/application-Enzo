@@ -84,16 +84,16 @@ describe('devblog', () => {
     expect(tsuzuku.titre).toBe('Tsuzuku : sources partagées et assistant d’ajout');
     expect(tsuzuku.fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['tsuzuku-sources-partagees', 'tsuzuku-design']);
     // Verrouillage automatique, Support et mentions légales : pour tout le monde.
-    expect(ENTREES[3].titre).toBe('Verrouillage automatique, Support et mentions légales');
+    expect(ENTREES[4].titre).toBe('Verrouillage automatique, Support et mentions légales');
     // Synchronisation dès le démarrage : l'indicateur concerne aussi les amis.
-    expect(ENTREES[2].titre).toBe('Synchronisation dès le démarrage');
-    expect(ENTREES[2].fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['synchro-demarrage-indicateur']);
+    expect(ENTREES[3].titre).toBe('Synchronisation dès le démarrage');
+    expect(ENTREES[3].fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['synchro-demarrage-indicateur']);
     // Affichage téléphone : pour tout le monde.
-    expect(ENTREES[1].titre).toBe('Affichage téléphone repensé (1/2)');
-    expect(ENTREES[1].fonctionnalites.every(f => !f.adminSeulement && !f.gestionnaireSeulement)).toBe(true);
+    expect(ENTREES[2].titre).toBe('Affichage téléphone repensé (1/2)');
+    expect(ENTREES[2].fonctionnalites.every(f => !f.adminSeulement && !f.gestionnaireSeulement)).toBe(true);
     // Déverrouillage (dernière entrée) : tout concerne aussi les amis, sauf le coffre publié par le PC.
-    expect(ENTREES[0].titre).toBe('Déverrouillage : diagnostic et messages plus clairs');
-    expect(ENTREES[0].fonctionnalites.filter(f => f.adminSeulement).map(f => f.id)).toEqual(['deverrouillage-coffre-pc']);
+    expect(ENTREES[1].titre).toBe('Déverrouillage : diagnostic et messages plus clairs');
+    expect(ENTREES[1].fonctionnalites.filter(f => f.adminSeulement).map(f => f.id)).toEqual(['deverrouillage-coffre-pc']);
     expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('afficher');
     expect(ENTREES.map(e => e.version)).toEqual(['2026.10.11', '2026.10.10', '2026.10.09', '2026.10.08', '2026.10.07', '2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
   });

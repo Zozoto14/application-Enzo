@@ -41,6 +41,37 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.12',
+    date: '2026-10-12',
+    titre: 'Affichage téléphone repensé (2/3) : Administration',
+    resume:
+      'Sur téléphone, l’Administration n’est plus le panneau du PC rétréci : une liste de sections, des cartes à la place des tableaux, des formulaires en feuilles qui montent du bas et des boutons principaux sous le pouce. Le PC et la tablette en paysage ne changent pas.',
+    illustration: 'administration',
+    fonctionnalites: [
+      {
+        id: 'mobile-admin-sections',
+        emoji: '📋',
+        titre: 'Des sections en liste',
+        texte: 'Tableau de bord, Utilisateurs, Applications, Abonnements, Sécurité, Journal et Réglages sont des cellules ; chaque section s’ouvre avec « ‹ Admin » pour revenir (ou un balayage depuis le bord gauche).',
+        adminSeulement: true,
+      },
+      {
+        id: 'mobile-admin-utilisateurs',
+        emoji: '👥',
+        titre: 'Utilisateurs en cartes',
+        texte: 'Nom, rang, statut et dernière connexion sur chaque carte ; recherche, filtres et tri dans une feuille ; sélection pour les actions groupées ; fiche en groupes de cellules.',
+        adminSeulement: true,
+      },
+      {
+        id: 'mobile-admin-confirmations',
+        emoji: '🛡',
+        titre: 'Confirmations fortes',
+        texte: 'Supprimer un compte, régénérer ses identifiants ou nommer un Fondateur demande de saisir le prénom dans une feuille. La vérification d’identité (mot de passe et code) est aussi une feuille, avec le bon clavier.',
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.11',
     date: '2026-10-11',
     titre: 'Déverrouillage : diagnostic et messages plus clairs',
