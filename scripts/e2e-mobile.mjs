@@ -54,7 +54,13 @@ const capture = (page, theme, nom) => page.screenshot({ path: join(CAPTURES, `${
 
 
 // ================================================================== Tsuzuku
-const dansCadre = (page, texte) => page.frameLocator('[data-testid="lecteur-iframe"]').getByText(texte).waitFor({ timeout: 15_000 }).then(() => true, () => false);
+// Le faux lecteur de mobile-outils répond « Lecteur neutre » sans le chemin : on vérifie aussi l'adresse du cadre.
+const dansCadre = async (page, texte) => {
+  const chemin = /\(([^)]*)\)/.exec(texte)?.[1];
+  const ok = await page.frameLocator('[data-testid="lecteur-iframe"]').getByText(/Lecteur neutre/).waitFor({ timeout: 15_000 }).then(() => true, () => false);
+  const src = (await page.getByTestId('lecteur-iframe').getAttribute('src')) ?? '';
+  return ok && (!chemin || src.endsWith(chemin));
+};
 
 async function ouvrirTsuzuku(page) {
   await toucher(page, 'tuile-tsuzuku');
@@ -209,8 +215,7 @@ async function parcoursTsuzuku(page) {
   await controler(page, 'tsuzuku › Plus (feuille)');
   await toucher(page, 'tsuzuku-reglages');
   await page.getByTestId('hub-parametres').waitFor({ timeout: 20_000 });
-  await page.getByTestId('parametres-section-tsuzuku').waitFor({ timeout: 5000 });
-  await toucher(page, 'parametres-section-tsuzuku');
+  if (!(await visible(page, 'parametres-panneau-tsuzuku', 3000))) await toucher(page, 'parametres-section-tsuzuku');
   await page.getByTestId('parametres-panneau-tsuzuku').waitFor({ timeout: 5000 });
   verifier(await visible(page, 'reglage-tsuzuku-lecture', 3000), 'Paramètres › Tsuzuku : doublage, épisode suivant, déjà vus');
   await controler(page, 'paramètres › Tsuzuku');
