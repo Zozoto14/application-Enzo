@@ -8,7 +8,7 @@
 
 import type { AppHub } from '../hub/types';
 import { accesProspects, infoProspects } from './acces';
-import { Prospects } from './Prospects';
+import { Prospects } from './RacineProspects';
 
 export const ID_PROSPECTS = 'prospects';
 

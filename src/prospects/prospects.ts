@@ -571,7 +571,7 @@ export function rendreModele(modele: string, p: Pick<Prospect, 'nom' | 'entrepri
   const valeurs: Record<string, string> = { prenom: prenomDe(p), nom: p.nom.trim(), entreprise: p.entreprise.trim(), email: p.email.trim() };
   return modele
     .replace(/\{(prenom|nom|entreprise|email)\}/gi, (_m, cle: string) => valeurs[cle.toLowerCase()] ?? '')
-    .replace(/ +([,.!?])/g, '$1')
+    .replace(/ +([,.])/g, '$1')
     .replace(/[ \t]{2,}/g, ' ');
 }
 
