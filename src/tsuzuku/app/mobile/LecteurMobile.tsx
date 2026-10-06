@@ -52,7 +52,7 @@ export function LecteurMobile(p: LecteurMobileProps) {
     <View>
       <EnTeteMobile
         theme={theme}
-        titre={kind === 'anime' ? `Épisode ${n}${meta?.total ? ` sur ${meta.total}` : ''}` : 'Film'}
+        titre="Lecture"
         onRetour={retour}
         libelleRetour="Fiche"
         testIDRetour="lecteur-retour"

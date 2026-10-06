@@ -92,7 +92,7 @@ export function CoqueTsuzukuMobile({
             onRetour={peutRevenir ? retour : undefined}
             entete={
               <View style={[margesSecurite(['haut']), st.entete, { backgroundColor: theme.fond, borderBottomColor: theme.ligne }]} testID="tsuzuku-entete">
-                <RetourHub theme={themeHub} onRetour={onRetourHub} titre="Tsuzuku 続く" />
+                <RetourHub theme={themeHub} onRetour={onRetourHub} titre="Tsuzuku" />
                 <SelecteurModeMobile mode={mode} themeHub={themeHub} onChoisir={choisirMode} />
               </View>
             }>

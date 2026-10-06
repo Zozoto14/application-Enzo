@@ -1,5 +1,5 @@
 /**
- * Non-régression du bureau : capture trois écrans (hub, Paramètres, portefeuille) dans une fenêtre de PC
+ * Non-régression du bureau : capture six écrans (hub, Paramètres, portefeuille, Tsuzuku : accueil, fiche, bibliothèque) dans une fenêtre de PC
  * (1280×800) et, si un dossier de référence est donné, compare pixel à pixel.
  *
  *   npx vite build
@@ -12,7 +12,7 @@
 
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chargerPlaywright, demarrerSite, deverrouiller, pause, premierLancement, racine, toucher } from './mobile-outils.mjs';
+import { chargerPlaywright, demarrerSite, deverrouiller, pause, premierLancement, racine, simulerInternet, toucher } from './mobile-outils.mjs';
 
 const CAPTURES = join(racine, process.env.CAPTURES ?? 'docs/mobile/captures-bureau-apres');
 const REFERENCE = process.env.REFERENCE ? join(racine, process.env.REFERENCE) : undefined;
@@ -26,6 +26,7 @@ const navigateur = await chromium.launch({ headless: true });
 let ecarts = 0;
 try {
   const contexte = await navigateur.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+  await simulerInternet(contexte);
   const page = await contexte.newPage();
   // Heure figée : la salutation et les « il y a » ne bougent pas d'une passe à l'autre.
   await page.clock.install({ time: new Date('2026-10-01T10:00:00') });
@@ -61,6 +62,18 @@ try {
   await page.locator('[data-testid="cellule-portefeuille"]').click();
   await page.getByTestId('nav-tableau').waitFor({ timeout: 20_000 });
   await prendre('3-portefeuille');
+  // Tsuzuku (réseau externe simulé) : accueil, fiche, bibliothèque.
+  await page.getByTestId('nav-hub').click();
+  await page.getByTestId('hub').waitFor();
+  await page.locator('[data-testid="cellule-tsuzuku"], [data-testid="tuile-tsuzuku"]').first().click();
+  await page.getByTestId('rangee-trending').waitFor({ timeout: 30_000 });
+  await prendre('4-tsuzuku-accueil');
+  await page.getByTestId('carte-anime-1').first().click();
+  await page.getByTestId('episode-3').waitFor({ timeout: 20_000 });
+  await prendre('5-tsuzuku-fiche');
+  await page.getByTestId('onglet-app-bibliotheque').click();
+  await page.getByTestId('bibliotheque-stats').waitFor({ timeout: 10_000 }).catch(() => undefined);
+  await prendre('6-tsuzuku-bibliotheque');
 } finally {
   await navigateur.close();
   site.fermer();
