@@ -143,7 +143,7 @@ export function OngletPositions({
       alignement: 'droite',
       mobile: 'valeur2',
       tri: l => l.brut.latent,
-      renduMobile: l => <Signe texte={`${l.latent.texte} · ${l.latentPct.texte}`} tendance={l.latent.tendance} taille={15} />,
+      renduMobile: l => <Signe texte={l.latentPct.texte} tendance={l.latent.tendance} taille={15} />,
       rendu: l => <Signe texte={l.latent.texte} tendance={l.latent.tendance} taille={12} />,
     },
     {

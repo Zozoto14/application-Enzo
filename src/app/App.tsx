@@ -3206,6 +3206,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           }}
           rafraichissementEnCours={coursEnCours}
           onVerrouiller={verrouiller}
+          discret={discret}
+          onBasculerDiscretion={basculerDiscretion}
         />
         )}
       {!deverrouille && !juridiqueOuvert && !secrets ? <LigneSynchroDemarrage theme={themeDuHub} /> : null}

@@ -52,6 +52,8 @@ import { useNavigationLaterale } from '../Navigation';
 import { courbeGain, courbePerformance, type LigneClassement, type VueResume } from '../vues/resume';
 import type { CandidatSymbole } from '../../cours/symboles';
 import { useSignalerOuverture } from '../superposition';
+import { useMobile } from '../mobile/useMobile';
+import { PortefeuilleMobile } from './PortefeuilleMobile';
 
 export type OngletPortefeuille =
   | 'resume'
@@ -140,9 +142,22 @@ export interface PortefeuilleProps {
   coursActualisesA?: string;
   rafraichissementEnCours?: boolean;
   onVerrouiller?(): void;
+  /** Mode discret (montants masqués) et sa bascule : proposée en téléphone, sur la carte de synthèse. */
+  discret?: boolean;
+  onBasculerDiscretion?(): void;
 }
 
+/** Aiguille : version téléphone (< 768 px) ou bureau, sans changer l'affichage de bureau. */
 export function Portefeuille(props: PortefeuilleProps) {
+  const mobile = useMobile();
+  return mobile ? (
+    <PortefeuilleMobile {...props} onglets={ONGLETS} rendreOnglet={cle => <ContenuOnglet actif={cle} props={props} />} />
+  ) : (
+    <PortefeuilleBureau {...props} />
+  );
+}
+
+function PortefeuilleBureau(props: PortefeuilleProps) {
   const palette = usePalette();
   const [interne, setInterne] = useState<OngletPortefeuille>('resume');
   const actif = props.onglet ?? interne;
@@ -193,6 +208,17 @@ export function Portefeuille(props: PortefeuilleProps) {
         </View>
 
         <View style={contenuOnglet}>
+          <ContenuOnglet actif={actif} props={props} />
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+/** Contenu de l'onglet actif : le même sur le bureau et sur téléphone. */
+function ContenuOnglet({ actif, props }: { actif: OngletPortefeuille; props: PortefeuilleProps }) {
+  return (
+    <>
           {actif === 'resume' ? <Resume {...props} /> : null}
           {actif === 'positions' ? (
             <OngletPositions
@@ -240,9 +266,7 @@ export function Portefeuille(props: PortefeuilleProps) {
               message={props.messageRapport}
             />
           ) : null}
-        </View>
-      </ScrollView>
-    </View>
+    </>
   );
 }
 
@@ -465,6 +489,7 @@ function euros(valeur: number): string {
 
 function Resume(props: PortefeuilleProps) {
   const palette = usePalette();
+  const mobile = useMobile();
   // Thèmes à cartes teintées (Sauge) : chaque carte chiffrée a sa couleur.
   const teinte = (rang: number) =>
     palette.teintesCartes ? { backgroundColor: palette.teintesCartes[rang], borderColor: palette.teintesCartes[rang] } : undefined;
@@ -545,6 +570,7 @@ function Resume(props: PortefeuilleProps) {
       {avertissements}
 
       <Rangee>
+        {mobile ? null : (
         <CarteSection titre="Valeur totale" explication="valeurTotale" testID="carte-valeur-totale"
           style={teinte(0)}>
           <View style={styles.chiffre}>
@@ -576,7 +602,7 @@ function Resume(props: PortefeuilleProps) {
             />
           </View>
         </CarteSection>
-
+        )}
         <CarteSection titre="Total Return" explication="totalReturn" testID="carte-total-return"
           style={teinte(1)}>
           <Signe texte={resume.totalReturn.texte} tendance={resume.totalReturn.tendance} taille={26} />

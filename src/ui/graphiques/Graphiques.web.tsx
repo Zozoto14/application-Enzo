@@ -591,7 +591,7 @@ export function Donut({ parts, formater, hauteur = 280, centre, testID }: Propri
               );
             })}
             {secteurs
-              .filter(secteur => secteur.fraction >= (mobile ? 0.09 : 0.05))
+              .filter(secteur => !mobile && secteur.fraction >= 0.05)
               .map(secteur => {
                 const milieu = milieuArc(cx, cy, (rayon + interieur) / 2, secteur.debut, secteur.fin);
                 return (

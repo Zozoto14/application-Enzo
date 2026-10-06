@@ -224,7 +224,7 @@ function TableauMobile<T>({ colonnes, lignes, cle, onPressLigne: onPressBureau, 
 
   return (
     <View testID={testID} style={{ gap: ESPACE.s }}>
-      {colonnesTri.length > 1 && triees.length > 1 ? (
+      {colonnesTri.length > 1 && triees.length > 6 ? (
         <Pressable
           testID={testID ? `${testID}-tri` : undefined}
           accessibilityRole="button"
