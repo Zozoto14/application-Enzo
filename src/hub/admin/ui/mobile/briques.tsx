@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text } from 'react-native';
 import {
   BoutonPrincipal,
   Cellule,

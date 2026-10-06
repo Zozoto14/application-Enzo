@@ -38,7 +38,7 @@ type Feuille = 'nom' | 'rang' | 'note' | 'expiration' | 'suspension' | 'code' | 
 const dateOk = (d: string) => d === '' || (/^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d)));
 
 export function Utilisateurs({ outils, cible, onRetour }: { outils: OutilsAdmin; cible?: string; onRetour(): void }) {
-  const { theme, tous, registre, controle } = outils;
+  const { tous, registre, controle } = outils;
   const [choisi, setChoisi] = useState<string | undefined>(cible);
   const [creation, setCreation] = useState(false);
   const [identifiants, setIdentifiants] = useState<{ nom: string; valeurs: IdentifiantsAmi } | undefined>();
