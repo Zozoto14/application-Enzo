@@ -385,3 +385,48 @@ test('pont du PC : lecture, réglages en liste fermée, suppression et hook seul
     b.nettoyer();
   }
 });
+
+test('pont du PC, onglet Bureau : activité récente, sans contenu d’outil, rien relu si le journal n’a pas grandi', async () => {
+  const { brancherClaudeOffice, FENETRE_ACTIVITE_MS } = await import('./claudeOfficeIpc.mjs');
+  const b = bac();
+  try {
+    const gestionnaires = {};
+    brancherClaudeOffice({
+      ipcMain: { handle: (canal, f) => (gestionnaires[canal] = f) },
+      dialog: {}, BrowserWindow: { fromWebContents: () => undefined }, shell: {},
+      fichierReglages: () => join(b.racine, 'claude-office.json'),
+      ecrire: async () => undefined,
+      racineProjet: async () => racineProjet,
+      dossierHistorique: () => b.dossier,
+    });
+    const appel = (canal, ...args) => gestionnaires[canal]({ sender: {} }, ...args);
+    const env = { OFFICE_HISTORIQUE_DIR: b.dossier };
+    // Une demande ancienne (hors de la fenêtre d'activité) et une récente, plus un outil avec contenu enregistré.
+    enregistrerEvenement(demande('ancienne'), { env, maintenant: new Date(Date.now() - FENETRE_ACTIVITE_MS - 60_000) });
+    enregistrerEvenement(demande('récente'), { env });
+    ecrireReglages(b.dossier, { enregistrerSorties: true });
+    enregistrerEvenement({ hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_input: { command: 'ls' }, tool_response: 'CONTENU-SORTIE', session_id: 's1', cwd: '/p' }, { env });
+    const lu = await appel('claude-office:historique-activite', '');
+    assert.equal(lu.ok, true);
+    assert.deepEqual(lu.entrees.map(e => e.type), ['demande', 'outil']);
+    assert.match(lu.entrees[0].texte, /récente/);
+    assert.ok(!JSON.stringify(lu.entrees).includes('CONTENU-SORTIE'));
+    assert.match(lu.appareilId, /^[0-9a-f]{12}$/);
+    // Signature inchangée : rien n'est relu ni renvoyé.
+    const inchange = await appel('claude-office:historique-activite', lu.signature);
+    assert.deepEqual(inchange, { ok: true, inchange: true, signature: lu.signature });
+    enregistrerEvenement(demande('encore'), { env });
+    const apres = await appel('claude-office:historique-activite', lu.signature);
+    assert.equal(apres.inchange, undefined);
+    assert.equal(apres.entrees.length, 3);
+    // Argument inattendu : traité comme « rien de connu ».
+    assert.equal((await appel('claude-office:historique-activite', { chemin: '/etc' })).ok, true);
+  } finally {
+    b.nettoyer();
+  }
+});
+
+test('préchargement : le canal d’activité est en lecture seule et ne transmet qu’un texte court', () => {
+  const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'prechargement.cjs'), 'utf8');
+  assert.match(source, /activite: connu => ipcRenderer\.invoke\('claude-office:historique-activite', typeof connu === 'string' \? connu\.slice\(0, 200\) : ''\)/);
+});
