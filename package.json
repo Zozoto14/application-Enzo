@@ -21,7 +21,8 @@
     "apk": "node scripts/apk.mjs",
     "relais:deployer": "node scripts/deployer-relais.mjs",
     "relais:site": "node scripts/deployer-relais.mjs --site",
-    "relais:tester": "node --test relais/*.test.mjs"
+    "relais:tester": "node --test relais/*.test.mjs",
+    "office:hooks": "node scripts/office-hooks.mjs"
   },
   "dependencies": {
     "@fontsource/dm-serif-display": "^5.3.0",
