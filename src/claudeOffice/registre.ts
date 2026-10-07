@@ -12,6 +12,7 @@
 import { rangDe } from '../hub/admin/roles';
 import type { AppHub } from '../hub/types';
 import { ClaudeOffice } from './Racine';
+import { infoClaudeOffice } from './resumeHub';
 
 export const ID_CLAUDE_OFFICE = 'claude-office';
 
@@ -20,12 +21,14 @@ export const APP_CLAUDE_OFFICE: AppHub = {
   nom: 'Claude Office',
   categorie: 'Admin',
   page: 'administration',
-  description: 'Le bureau des agents Claude Code, sur le PC : état, ouverture, hooks.',
+  description: 'Le bureau des agents Claude Code, en direct sur le PC, partout ailleurs par copie chiffrée.',
   icone: '▣',
   teinte: 'quatre',
   adminSeulement: true,
   // Avec `adminSeulement`, laisse passer un Fondateur promu ; `disponible` écarte les autres rangs.
   gestionnaire: true,
   disponible: contexte => rangDe(contexte.profil) === 'fondateur',
+  // Petit état des agents sur la tuile (calculé par l'hôte, seulement pour un Fondateur).
+  info: contexte => infoClaudeOffice(contexte.claudeOffice),
   Racine: ClaudeOffice,
 };

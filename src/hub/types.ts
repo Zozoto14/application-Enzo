@@ -14,6 +14,7 @@ import type { IdSection } from './recensement';
 import type { ResumeTsuzuku } from '../tsuzuku/app/resume';
 import type { BasePrefs } from '../tsuzuku/plateforme/stockage';
 import type { ServiceHistoriqueRelais } from '../claudeOffice/synchroHistorique';
+import type { ResumeClaudeOffice } from '../claudeOffice/resumeHub';
 
 export type Tendance = 'hausse' | 'baisse' | 'neutre';
 
@@ -52,6 +53,8 @@ export interface ContexteHub {
    * seulement pour le compte principal relié au relais (jeton maître).
    */
   historiqueOffice?: ServiceHistoriqueRelais;
+  /** Résumé de l'activité de Claude Office (agents au travail), pour sa tuile ; Fondateur seulement. */
+  claudeOffice?: ResumeClaudeOffice;
   /** Horloge injectable (tests) ; `Date.now` à défaut. */
   maintenant?: number;
 }

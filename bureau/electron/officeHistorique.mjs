@@ -439,6 +439,22 @@ function lireDepuis(chemin, debut) {
 export function creerLecteur(dossier) {
   const caches = new Map();
   return {
+    /** Signature bon marché (noms et tailles des fichiers, sans les lire) : change dès qu'une ligne est ajoutée. */
+    signature() {
+      const morceaux = [];
+      const sources = [
+        ...fichiersJournal(dossier).map(nom => [nom, join(dossier, nom)]),
+        ...fichiersImportes(dossier).map(nom => [`importes/${nom}`, join(dossier, 'importes', nom)]),
+      ];
+      for (const [cle, chemin] of sources) {
+        try {
+          morceaux.push(`${cle}:${statSync(chemin).size}`);
+        } catch {
+          // Fichier retiré entre-temps : ignoré.
+        }
+      }
+      return morceaux.join('|');
+    },
     lire() {
       const vus = new Set();
       const sources = [

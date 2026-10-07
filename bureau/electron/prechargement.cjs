@@ -114,6 +114,8 @@ contextBridge.exposeInMainWorld('applibourse', {
     /** Historique : journal local des requêtes (lecture, réglages, import ; suppression et hook sur confirmation native). */
     historique: {
       lire: () => ipcRenderer.invoke('claude-office:historique-lire'),
+      /** Activité récente pour l'onglet « Bureau » (lecture seule ; signature : texte court, sinon ignorée). */
+      activite: connu => ipcRenderer.invoke('claude-office:historique-activite', typeof connu === 'string' ? connu.slice(0, 200) : ''),
       reglages: changements => ipcRenderer.invoke('claude-office:historique-reglages', changements),
       supprimer: critere => ipcRenderer.invoke('claude-office:historique-supprimer', critere),
       importer: () => ipcRenderer.invoke('claude-office:historique-importer'),
