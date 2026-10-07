@@ -169,6 +169,76 @@ kbd{font:600 12px var(--mono);padding:2px 6px;border-radius:6px;background:var(-
 .chart{margin-top:16px;padding:20px;border-radius:16px;background:#fff;border:1px solid rgba(15,26,19,.1)}
 .chart svg{width:100%;height:auto;display:block}
 
+/* ---------- Admin view (hidden, dev only) ---------- */
+.v-admin{--a-s1:rgba(255,255,255,.05);--a-s2:rgba(255,255,255,.09);--a-acc:#a855f7;--a-accfg:#fff;--a-accsoft:rgba(168,85,247,.2);
+  --a-ok:#5fd394;--a-oksoft:rgba(95,211,148,.16);--a-crit:#ff8a80;--a-critsoft:rgba(255,138,128,.16);--a-warn:#e8b654;--a-warnsoft:rgba(232,182,84,.16);
+  --a-code:#0a0f18;--a-codefg:#d6e0f0;--a-codedim:#7f90aa;
+  background:var(--bg);background-image:radial-gradient(60rem 30rem at 50% -10%,var(--bg-glow),transparent 70%);background-repeat:no-repeat;color:var(--text)}
+:root[data-theme="light"] .v-admin{--a-s1:#fff;--a-s2:rgba(0,0,0,.05);--a-acc:#7c3aed;--a-accsoft:rgba(124,58,237,.12);
+  --a-ok:#15803d;--a-oksoft:#dcf3e6;--a-crit:#b3261e;--a-critsoft:#fbe0dd;--a-warn:#8a5a00;--a-warnsoft:#fbeccb}
+.v-admin .back{background:var(--chip);border:1px solid var(--line)}
+.v-admin .back:hover{background:var(--a-s2)}
+.v-admin h1{font-size:clamp(28px,4.5vw,44px)}
+.a-tabs{display:flex;gap:6px;margin:24px 0 16px;flex-wrap:wrap}
+.a-tabs [role=tab]{padding:8px 14px;border-radius:999px;font-size:14px;font-weight:500;color:var(--muted);border:1px solid var(--line);background:var(--a-s1);display:inline-flex;gap:8px}
+.a-tabs [role=tab]:hover{color:var(--text)}
+.a-tabs [role=tab][aria-selected=true]{color:var(--a-accfg);background:var(--a-acc);border-color:var(--a-acc)}
+.a-pane[hidden]{display:none}
+.a-bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.a-bar h3{font-size:18px}.a-bar p{color:var(--muted);font-size:13px;margin-top:2px}
+.a-btn{font-size:14px;font-weight:500;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:var(--a-s1);color:var(--text)}
+.a-btn:hover:not(:disabled){border-color:var(--a-acc)}
+.a-btn:disabled{opacity:.45;cursor:default}
+.a-btn.primary{background:var(--a-acc);border-color:var(--a-acc);color:var(--a-accfg)}
+.a-btn.danger{color:var(--a-crit);border-color:var(--a-crit)}
+.a-btn.sm{padding:5px 10px;font-size:12.5px}
+.a-split{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px}
+@media(max-width:820px){.a-split{grid-template-columns:1fr}}
+.a-tw{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--a-s1)}
+.v-admin table{border-collapse:collapse;width:100%;font-size:14px}
+.v-admin th{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;padding:10px 12px;background:var(--a-s2);white-space:nowrap}
+.v-admin td{padding:10px 12px;border-top:1px solid var(--line);white-space:nowrap}
+.v-admin tr.row{cursor:pointer}
+.v-admin tr.row:hover td{background:var(--a-s2)}
+.v-admin tr.row[aria-selected=true] td{background:var(--a-accsoft)}
+.a-mono{font-family:var(--mono);font-size:12.5px}
+.a-muted{color:var(--muted)}
+.a-pill{display:inline-block;font:500 11px var(--mono);padding:2px 8px;border-radius:99px}
+.a-pill.ok{background:var(--a-oksoft);color:var(--a-ok)}
+.a-pill.off{background:var(--a-critsoft);color:var(--a-crit)}
+.a-pill.warn{background:var(--a-warnsoft);color:var(--a-warn)}
+.a-panel{border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0;background:var(--a-s1)}
+.a-panel>header{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.a-approw{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line)}
+.a-approw:first-child{border-top:0}
+.a-approw .grow{flex:1;min-width:0}
+.a-approw small{display:block;color:var(--muted);font-size:12px}
+.a-swatch{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;color:#fff;font:600 12px var(--mono);flex:none}
+.a-sw{position:relative;width:38px;height:22px;flex:none}
+.a-sw input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer;z-index:1}
+.a-sw span{position:absolute;inset:0;background:var(--line);border-radius:99px;transition:background .15s}
+.a-sw span::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s}
+.a-sw input:checked+span{background:var(--a-acc)}
+.a-sw input:checked+span::after{transform:translateX(16px)}
+.a-sw input:focus-visible+span{outline:2px solid var(--a-acc);outline-offset:2px}
+.a-sw input:disabled{cursor:default}.a-sw input:disabled+span{opacity:.5}
+.a-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.a-log{list-style:none;padding:0}
+.a-log li{display:grid;grid-template-columns:130px 100px minmax(0,1fr);gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:14px}
+.a-log li:first-child{border-top:0}
+@media(max-width:820px){.a-log li{grid-template-columns:1fr;gap:2px}}
+.v-admin dialog{border:1px solid var(--line);border-radius:16px;background:var(--bg);color:var(--text);padding:0;width:min(440px,calc(100vw - 32px))}
+.v-admin dialog::backdrop{background:rgba(8,12,20,.6)}
+.a-dlg{padding:20px;display:flex;flex-direction:column;gap:14px}
+.v-admin label.a-f{font-size:13px;font-weight:500;display:flex;flex-direction:column;gap:6px}
+.v-admin label.a-chk{flex-direction:row;align-items:center;gap:8px;font-weight:400;font-size:14px}
+.v-admin input[type=text]{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--a-s1);color:var(--text)}
+.a-cred{background:var(--a-code);color:var(--a-codefg);border-radius:10px;padding:14px;font:13.5px/1.7 var(--mono);display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 14px;overflow-wrap:anywhere}
+.a-cred dt{color:var(--a-codedim)}.a-cred dd{margin:0}
+.a-notice{background:var(--a-warnsoft);color:var(--a-warn);border-radius:8px;padding:8px 12px;font-size:13px}
+.a-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 16px;border-radius:8px;font-size:14px;z-index:5}
+.a-toast[hidden]{display:none}
+
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;transition-delay:0s!important}
   .spark path.line{stroke-dashoffset:0}
@@ -189,7 +259,7 @@ kbd{font:600 12px var(--mono);padding:2px 6px;border-radius:6px;background:var(-
 
 <main class="hub" id="hub">
   <header class="top">
-    <div class="brand">
+    <div class="brand" id="brand" data-app="admin" tabindex="-1">
       <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M17.5 14v7M14 17.5h7"/></svg></span>
       AppDashboard
     </div>
@@ -292,6 +362,52 @@ kbd{font:600 12px var(--mono);padding:2px 6px;border-radius:6px;background:var(-
       </div>
     </div>
   </section>
+  <section class="view v-admin" data-view="admin" role="dialog" aria-label="Admin">
+    <div class="view-inner">
+      <div class="vhead">
+        <button class="back" data-back><svg aria-hidden="true"><use href="#i-arrow-l"/></svg>Hub</button>
+        <span class="esc">Esc to close</span>
+      </div>
+      <h1>Admin</h1>
+      <p class="lead">Users, app access and activity. Mock data, nothing is saved.</p>
+      <div class="a-tabs" role="tablist" aria-label="Admin sections">
+        <button role="tab" aria-selected="true" data-tab="users">Users <span class="a-mono" id="aCount"></span></button>
+        <button role="tab" aria-selected="false" data-tab="apps">Apps <span class="a-mono">3</span></button>
+        <button role="tab" aria-selected="false" data-tab="log">Activity</button>
+      </div>
+
+      <div class="a-pane" data-pane="users">
+        <div class="a-bar"><div><h3>Users</h3><p>Select a row to edit app access.</p></div><button class="a-btn primary" id="aNew">New user</button></div>
+        <div class="a-split">
+          <div class="a-tw"><table>
+            <thead><tr><th>User</th><th>Created</th><th>Last login</th><th>Apps</th><th>Status</th></tr></thead>
+            <tbody id="aRows"></tbody></table></div>
+          <div class="a-panel" id="aDetail"></div>
+        </div>
+      </div>
+
+      <div class="a-pane" data-pane="apps" hidden>
+        <div class="a-bar"><div><h3>Registered apps</h3><p>Read-only. Apps come from the registry.</p></div></div>
+        <div class="a-tw"><table>
+          <thead><tr><th>App</th><th>ID</th><th>Color</th><th>Users</th><th>Status</th></tr></thead>
+          <tbody id="aApps"></tbody></table></div>
+      </div>
+
+      <div class="a-pane" data-pane="log" hidden>
+        <div class="a-bar"><div><h3>Activity</h3><p>Logins, app launches and account changes.</p></div></div>
+        <div class="a-panel"><ul class="a-log" id="aLogs" style="margin:0"></ul></div>
+      </div>
+    </div>
+
+    <dialog id="aCredDlg"><div class="a-dlg" id="aCredBody"></div></dialog>
+    <dialog id="aNewDlg"><form method="dialog" class="a-dlg" id="aNewForm">
+      <h3>New user</h3>
+      <label class="a-f" for="aNuName">Username<input type="text" id="aNuName" autocomplete="off" placeholder="e.g. marc" pattern="[a-z0-9_]{3,32}" required></label>
+      <div id="aNuApps"></div>
+      <div class="a-actions" style="justify-content:flex-end"><button type="button" class="a-btn" id="aNuCancel">Cancel</button><button class="a-btn primary" type="submit">Create and show credentials</button></div>
+    </form></dialog>
+    <div class="a-toast" id="aToast" hidden></div>
+  </section>
 </div>
 
 <script>
@@ -354,13 +470,130 @@ kbd{font:600 12px var(--mono);padding:2px 6px;border-radius:6px;background:var(-
     t.addEventListener('click',function(){open(t);});
   });
   stage.querySelectorAll('[data-back]').forEach(function(b){b.addEventListener('click',close);});
-  document.addEventListener('keydown',function(e){if(e.key==='Escape') close();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!stage.querySelector('dialog[open]')) close();});
+  /* ---------- Hidden admin entry (dev only) ---------- */
+  var DEV=/^(localhost|127\.0\.0\.1|\[::1\]|)$/.test(location.hostname)||/[?&]dev\b/.test(location.search);
+  function openAdmin(){ if(DEV) open(document.getElementById('brand')); }
+  document.getElementById('brand').addEventListener('dblclick',openAdmin);
+  document.addEventListener('keydown',function(e){
+    if(e.altKey&&e.shiftKey&&e.code==='KeyA'){e.preventDefault();openAdmin();}
+  });
+
   addEventListener('resize',function(){if(!current&&stage.classList.contains('show')&&lastTile) setRect(lastTile);});
 
   var nt=document.getElementById('newTile');
   nt.addEventListener('click',function(){
     nt.classList.remove('nudge'); void nt.offsetWidth; nt.classList.add('nudge');
   });
+})();
+</script>
+<script>
+/* ---------- Admin logic (mock data) ---------- */
+(function(){
+  var V=document.querySelector('.v-admin');
+  var APPS=[
+    {id:"anime",name:"Anime",color:"#ec4899",icon:"An",status:"live"},
+    {id:"portfolio",name:"Portfolio",color:"#16a34a",icon:"Pf",status:"live"},
+    {id:"budget",name:"Budget",color:"#0f766e",icon:"Bu",status:"planned"}
+  ];
+  var USERS=[
+    {id:"usr_k3m9x2q7ab1c",name:"lea",created:"2026-09-12",last:"2026-09-28 21:15",apps:["anime"],status:"active"},
+    {id:"usr_p8d2v6n1zt4w",name:"marc",created:"2026-09-14",last:"2026-09-27 18:02",apps:["portfolio","anime"],status:"active"},
+    {id:"usr_h5b7c3y9qe2r",name:"sofia",created:"2026-09-21",last:"never",apps:[],status:"active"},
+    {id:"usr_w1x4j8m6ks0d",name:"tom",created:"2026-08-30",last:"2026-09-02 12:40",apps:["portfolio"],status:"disabled"}
+  ];
+  var LOG=[
+    ["2026-09-28 21:15","lea","Opened Anime"],["2026-09-28 21:14","lea","Logged in"],
+    ["2026-09-27 18:02","marc","Opened Portfolio"],["2026-09-25 10:30","admin","Disabled account tom"],
+    ["2026-09-21 09:12","admin","Created user sofia"],["2026-09-20 09:41","admin","Permissions for lea: added anime"],
+    ["2026-09-14 20:05","admin","Created user marc"]
+  ];
+  var sel=USERS[1].id, draft=null;
+  function $(s){return V.querySelector(s)}
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+  function cur(){return USERS.filter(function(x){return x.id===sel})[0]}
+  function toast(t){var e=$("#aToast");e.textContent=t;e.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(function(){e.hidden=true},2200)}
+  function pill(u){return u.status==="active"?'<span class="a-pill ok">active</span>':'<span class="a-pill off">disabled</span>'}
+  function today(){return new Date().toISOString().slice(0,16).replace("T"," ")}
+  function gen(n,alpha){var a=new Uint32Array(n);crypto.getRandomValues(a);var s="";for(var i=0;i<n;i++)s+=alpha[a[i]%alpha.length];return s}
+
+  function render(){
+    $("#aCount").textContent=USERS.length;
+    $("#aRows").innerHTML=USERS.map(function(u){
+      return '<tr class="row" tabindex="0" data-id="'+u.id+'" aria-selected="'+(u.id===sel)+'"><td><b>'+esc(u.name)+'</b><div class="a-mono a-muted">'+u.id+'</div></td><td class="a-mono">'+u.created+'</td><td class="a-mono">'+u.last+'</td><td class="a-mono">'+u.apps.length+' / '+APPS.length+'</td><td>'+pill(u)+'</td></tr>';
+    }).join("");
+    detail();
+    $("#aApps").innerHTML=APPS.map(function(a){
+      var n=USERS.filter(function(u){return u.apps.indexOf(a.id)>-1}).length;
+      return '<tr><td><span style="display:inline-flex;gap:10px;align-items:center"><span class="a-swatch" style="background:'+a.color+'">'+a.icon+'</span>'+a.name+'</span></td><td class="a-mono">'+a.id+'</td><td class="a-mono">'+a.color+'</td><td class="a-mono">'+n+'</td><td><span class="a-pill '+(a.status==="live"?"ok":"warn")+'">'+a.status+'</span></td></tr>';
+    }).join("");
+    $("#aLogs").innerHTML=LOG.map(function(l){return '<li><span class="a-mono a-muted">'+l[0]+'</span><b>'+esc(l[1])+'</b><span>'+esc(l[2])+'</span></li>'}).join("");
+  }
+  function detail(){
+    var u=cur(); if(!u){$("#aDetail").innerHTML='<p class="a-muted">No user selected.</p>';return}
+    var c=draft&&draft.id===u.id?draft.apps:u.apps.slice();
+    var dirty=draft&&draft.id===u.id&&draft.apps.slice().sort().join()!==u.apps.slice().sort().join();
+    $("#aDetail").innerHTML='<header><div><h3>'+esc(u.name)+'</h3><div class="a-mono a-muted">created '+u.created+'</div></div>'+pill(u)+'</header>'+
+      '<div>'+APPS.map(function(a){
+        return '<div class="a-approw"><span class="a-swatch" style="background:'+a.color+'">'+a.icon+'</span><div class="grow"><b>'+a.name+'</b><small>'+(a.status==="live"?"Can open "+a.name:"Not deployed yet")+'</small></div><label class="a-sw" aria-label="'+a.name+' access"><input type="checkbox" data-app="'+a.id+'"'+(c.indexOf(a.id)>-1?" checked":"")+(u.status!=="active"?" disabled":"")+'><span></span></label></div>';
+      }).join("")+'</div>'+
+      '<div class="a-actions"><button class="a-btn primary" id="aSave"'+(dirty?"":" disabled")+'>Save access</button>'+(dirty?'<span class="a-pill warn">unsaved</span>':'')+'</div>'+
+      '<div class="a-actions" style="border-top:1px solid var(--line);padding-top:12px"><button class="a-btn sm" id="aRegen"'+(u.status!=="active"?" disabled":"")+'>Regenerate credentials</button><button class="a-btn sm" id="aTogg">'+(u.status==="active"?"Deactivate":"Reactivate")+'</button>'+(u.status!=="active"?'<button class="a-btn sm danger" id="aDel">Delete</button>':'')+'</div>';
+  }
+  function creds(name,title){
+    var pw=gen(20,"ABCDEFGHJKMNPQRSTUVWXYZ23456789A").match(/.{4}/g).join("-");
+    var totp=gen(32,"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567");
+    $("#aCredBody").innerHTML='<h3>'+esc(title)+'</h3><div class="a-notice">Shown once. Copy both now; they cannot be displayed again.</div><dl class="a-cred"><dt>user</dt><dd>'+esc(name)+'</dd><dt>password</dt><dd>'+pw+'</dd><dt>totp</dt><dd>'+totp+'</dd></dl><label class="a-f a-chk"><input type="checkbox" id="aSaved"> I saved these credentials</label><div class="a-actions" style="justify-content:flex-end"><button class="a-btn" id="aCopy">Copy all</button><button class="a-btn primary" id="aDone" disabled>Done</button></div>';
+    var d=$("#aCredDlg"); if(!d.open)d.showModal();
+    $("#aSaved").onchange=function(){$("#aDone").disabled=!this.checked};
+    $("#aDone").onclick=function(){$("#aCredBody").innerHTML="";d.close()};
+    $("#aCopy").onclick=function(){
+      var t="user: "+name+"\npassword: "+pw+"\ntotp: "+totp;
+      try{navigator.clipboard.writeText(t).then(function(){toast("Copied")},function(){toast("Select the text and copy it")})}catch(e){toast("Select the text and copy it")}
+    };
+  }
+  /* credentials dialog can only be closed via Done */
+  $("#aCredDlg").addEventListener("cancel",function(e){e.preventDefault()});
+
+  function pick(e){var r=e.target.closest("tr");if(r&&(e.type==="click"||e.key==="Enter"||e.key===" ")){e.preventDefault();sel=r.dataset.id;draft=null;render()}}
+  $("#aRows").addEventListener("click",pick);
+  $("#aRows").addEventListener("keydown",pick);
+  $("#aDetail").addEventListener("change",function(e){
+    var id=e.target.dataset.app; if(!id)return;
+    var u=cur(); if(!draft||draft.id!==sel)draft={id:sel,apps:u.apps.slice()};
+    var i=draft.apps.indexOf(id); if(e.target.checked&&i<0)draft.apps.push(id); if(!e.target.checked&&i>-1)draft.apps.splice(i,1);
+    detail();
+  });
+  $("#aDetail").addEventListener("click",function(e){
+    var u=cur(), id=e.target.id;
+    if(id==="aSave"){u.apps=draft.apps.slice();LOG.unshift([today(),"admin","Permissions for "+u.name+" updated"]);draft=null;render();toast("Access saved")}
+    if(id==="aRegen"){LOG.unshift([today(),"admin","Regenerated credentials for "+u.name]);creds(u.name,"New credentials for "+u.name);render()}
+    if(id==="aTogg"){u.status=u.status==="active"?"disabled":"active";LOG.unshift([today(),"admin",(u.status==="active"?"Reactivated ":"Disabled account ")+u.name]);render()}
+    if(id==="aDel"){if(e.target.dataset.arm){USERS=USERS.filter(function(x){return x!==u});LOG.unshift([today(),"admin","Deleted user "+u.name]);sel=USERS[0]&&USERS[0].id;draft=null;render()}else{e.target.dataset.arm=1;e.target.textContent="Confirm delete "+u.name}}
+  });
+
+  $("#aNew").onclick=function(){
+    $("#aNuApps").innerHTML='<div class="a-muted" style="font-size:13px;margin-bottom:4px">Initial app access</div>'+APPS.filter(function(a){return a.status==="live"}).map(function(a){return '<label class="a-f a-chk" style="padding:4px 0"><input type="checkbox" value="'+a.id+'"> '+a.name+'</label>'}).join("");
+    $("#aNuName").value="";$("#aNewDlg").showModal();
+  };
+  $("#aNuCancel").onclick=function(){$("#aNewDlg").close()};
+  $("#aNewForm").addEventListener("submit",function(e){
+    e.preventDefault();
+    var n=$("#aNuName").value.trim().toLowerCase();
+    if(!/^[a-z0-9_]{3,32}$/.test(n)){toast("Use 3-32 letters, digits or underscore");return}
+    if(USERS.some(function(u){return u.name===n})){toast("That username is taken");return}
+    var apps=[].map.call(V.querySelectorAll("#aNuApps input:checked"),function(i){return i.value});
+    var u={id:"usr_"+gen(12,"abcdefghjkmnpqrstuvwxyz23456789"),name:n,created:today().slice(0,10),last:"never",apps:apps,status:"active"};
+    USERS.push(u);sel=u.id;draft=null;LOG.unshift([today(),"admin","Created user "+n]);
+    $("#aNewDlg").close();render();creds(n,"Credentials for "+n);
+  });
+
+  V.querySelector(".a-tabs").addEventListener("click",function(e){
+    var b=e.target.closest("[role=tab]"); if(!b)return;
+    V.querySelectorAll(".a-tabs [role=tab]").forEach(function(t){t.setAttribute("aria-selected",t===b)});
+    V.querySelectorAll(".a-pane").forEach(function(p){p.hidden=p.dataset.pane!==b.dataset.tab});
+  });
+  render();
 })();
 </script>
 </body>
