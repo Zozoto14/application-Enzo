@@ -51,8 +51,9 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:16p
 .intro h1{font-size:clamp(28px,4vw,44px);letter-spacing:-.03em;line-height:1.1;font-weight:700}
 .intro p{margin-top:10px;color:var(--muted);font-size:16px}
 
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;flex:1;align-items:stretch}
-@media (max-width:900px){.grid{grid-template-columns:1fr;gap:16px}}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;flex:1;align-items:stretch}
+@media (max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}}
+@media (max-width:640px){.grid{grid-template-columns:1fr}}
 
 .tile{
   position:relative;display:flex;flex-direction:column;justify-content:space-between;text-align:left;
@@ -60,7 +61,7 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:16p
   transition:transform .45s var(--ease),box-shadow .45s var(--ease),opacity .35s,filter .35s;
   will-change:transform;
 }
-@media (max-width:900px){.tile{min-height:260px;padding:24px}}
+@media (max-width:1100px){.tile{min-height:260px;padding:24px}}
 .tile:hover,.tile:focus-visible{transform:scale(1.045);z-index:2}
 .tile:active{transform:scale(1.02);transition-duration:.15s}
 .grid:hover .tile:not(:hover){opacity:.72;filter:saturate(.8)}
@@ -110,7 +111,22 @@ header.top{display:flex;align-items:center;justify-content:space-between;gap:16p
 .spark path.line{fill:none;stroke:#16a34a;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:400;stroke-dashoffset:400;animation:draw 1.6s var(--ease) .3s forwards}
 @keyframes draw{to{stroke-dashoffset:0}}
 
-/* Tile 3 placeholder */
+/* Tile 3 admin */
+.t-admin{color:#f3e8ff;background:
+  radial-gradient(110% 80% at 100% 0%,rgba(168,85,247,.5),transparent 60%),
+  radial-gradient(80% 60% at 0% 100%,rgba(76,29,149,.7),transparent 70%),#0f0a1c;
+  box-shadow:0 20px 50px -20px rgba(124,58,237,.5),inset 0 0 0 1px rgba(196,148,255,.16)}
+.t-admin:hover{box-shadow:0 34px 80px -22px rgba(168,85,247,.65),inset 0 0 0 1px rgba(196,148,255,.32)}
+.t-admin .icon{background:linear-gradient(135deg,#7c3aed,#4c1d95);color:#fff;box-shadow:0 8px 24px -6px rgba(124,58,237,.8)}
+.t-admin .icon svg{transition:transform .6s var(--ease)}
+.t-admin:hover .icon svg{transform:rotate(90deg)}
+.t-admin .tag{background:rgba(168,85,247,.22);color:#e9d5ff}
+.t-admin .live{color:#c4a1ff}
+.t-admin h2{font-family:var(--mono);font-weight:600;letter-spacing:-.04em}
+.a-stat{margin-top:12px;font:500 15px var(--mono);letter-spacing:-.02em;color:#e9d5ff}
+.a-stat b{font-weight:700;color:#fff}
+
+/* Tile 4 placeholder */
 .t-new{color:var(--muted);border:2px dashed var(--line);background:transparent;align-items:center;justify-content:center;text-align:center;gap:16px;cursor:default;
   transition:transform .45s var(--ease),border-color .3s,color .3s,background .3s}
 .t-new:hover,.t-new:focus-visible{border-color:#a855f7;color:var(--text);background:var(--chip)}
@@ -169,7 +185,7 @@ kbd{font:600 12px var(--mono);padding:2px 6px;border-radius:6px;background:var(-
 .chart{margin-top:16px;padding:20px;border-radius:16px;background:#fff;border:1px solid rgba(15,26,19,.1)}
 .chart svg{width:100%;height:auto;display:block}
 
-/* ---------- Admin view (hidden, dev only) ---------- */
+/* ---------- Admin view ---------- */
 .v-admin{--a-s1:rgba(255,255,255,.05);--a-s2:rgba(255,255,255,.09);--a-acc:#a855f7;--a-accfg:#fff;--a-accsoft:rgba(168,85,247,.2);
   --a-ok:#5fd394;--a-oksoft:rgba(95,211,148,.16);--a-crit:#ff8a80;--a-critsoft:rgba(255,138,128,.16);--a-warn:#e8b654;--a-warnsoft:rgba(232,182,84,.16);
   --a-code:#0a0f18;--a-codefg:#d6e0f0;--a-codedim:#7f90aa;
@@ -252,6 +268,7 @@ kbd{font:600 12px var(--mono);padding:2px 6px;border-radius:6px;background:var(-
     <symbol id="i-arrow-r" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z" fill="currentColor"/></symbol>
     <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 17l5-5 4 4 8-9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 7h5v5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h0a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
     <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   </defs>
@@ -259,7 +276,7 @@ kbd{font:600 12px var(--mono);padding:2px 6px;border-radius:6px;background:var(-
 
 <main class="hub" id="hub">
   <header class="top">
-    <div class="brand" id="brand" data-app="admin" tabindex="-1">
+    <div class="brand" id="brand">
       <span class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M17.5 14v7M14 17.5h7"/></svg></span>
       AppDashboard
     </div>
@@ -301,6 +318,20 @@ kbd{font:600 12px var(--mono);padding:2px 6px;border-radius:6px;background:var(-
         <div class="big" style="margin-top:12px">€45,230</div>
         <span class="delta"><svg aria-hidden="true"><use href="#i-up"/></svg>+2.3%</span>
         <svg class="spark" viewBox="0 0 200 64" preserveAspectRatio="none" aria-hidden="true"><path class="line" d="M0 50 L20 44 L40 48 L60 34 L80 38 L100 26 L120 30 L140 18 L160 22 L180 10 L200 6"/></svg>
+        <span class="open-hint">Open <svg aria-hidden="true"><use href="#i-arrow-r"/></svg></span>
+      </div>
+    </button>
+
+    <button class="tile t-admin" data-app="admin" aria-label="Open Admin">
+      <div class="tile-head">
+        <span class="icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-gear"/></svg></span>
+        <span class="tag">Admin</span>
+      </div>
+      <div>
+        <div class="live"><span class="dot"></span>Live</div>
+        <h2>Admin</h2>
+        <p class="a-stat" id="adminLive"><b>4</b> users · <b>5</b> actions today</p>
+        <p class="sub">Users, access and activity</p>
         <span class="open-hint">Open <svg aria-hidden="true"><use href="#i-arrow-r"/></svg></span>
       </div>
     </button>
@@ -471,13 +502,6 @@ kbd{font:600 12px var(--mono);padding:2px 6px;border-radius:6px;background:var(-
   });
   stage.querySelectorAll('[data-back]').forEach(function(b){b.addEventListener('click',close);});
   document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!stage.querySelector('dialog[open]')) close();});
-  /* ---------- Hidden admin entry (dev only) ---------- */
-  var DEV=/^(localhost|127\.0\.0\.1|\[::1\]|)$/.test(location.hostname)||/[?&]dev\b/.test(location.search);
-  function openAdmin(){ if(DEV) open(document.getElementById('brand')); }
-  document.getElementById('brand').addEventListener('dblclick',openAdmin);
-  document.addEventListener('keydown',function(e){
-    if(e.altKey&&e.shiftKey&&e.code==='KeyA'){e.preventDefault();openAdmin();}
-  });
 
   addEventListener('resize',function(){if(!current&&stage.classList.contains('show')&&lastTile) setRect(lastTile);});
 
@@ -519,6 +543,7 @@ kbd{font:600 12px var(--mono);padding:2px 6px;border-radius:6px;background:var(-
 
   function render(){
     $("#aCount").textContent=USERS.length;
+    var lv=document.querySelector("#adminLive b");if(lv)lv.textContent=USERS.length;
     $("#aRows").innerHTML=USERS.map(function(u){
       return '<tr class="row" tabindex="0" data-id="'+u.id+'" aria-selected="'+(u.id===sel)+'"><td><b>'+esc(u.name)+'</b><div class="a-mono a-muted">'+u.id+'</div></td><td class="a-mono">'+u.created+'</td><td class="a-mono">'+u.last+'</td><td class="a-mono">'+u.apps.length+' / '+APPS.length+'</td><td>'+pill(u)+'</td></tr>';
     }).join("");
