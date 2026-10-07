@@ -25,22 +25,24 @@ import {
 } from '../../db/depots';
 import type { PiloteSqlite } from '../../db/pilote';
 import { reconstruireTransaction } from '../../sauvegarde/archive';
+import { CLES_TSUZUKU_SYNCHRONISEES, ecrireEntiteTsuzuku, entitesTsuzuku, supprimerEntiteTsuzuku } from './entitesTsuzuku';
 
 /** Genres connus depuis la première version de la synchro (charge sans numéro de version). */
 export type GenreV1 = 'compte' | 'titre' | 'operation' | 'surveille' | 'these' | 'parametre';
 /** Genres ajoutés en version 2 : préférences du hub, thèmes, nouveautés déjà vues. */
-export type GenreV2 = 'prefs' | 'devblog';
+export type GenreV2 = 'prefs' | 'devblog' | 'tsuzuku';
 export type Genre = GenreV1 | GenreV2;
 
 /**
  * Version du format de charge écrite par cet appareil.
  *  - absente / 1 : les six genres d'origine ;
- *  - 2 : + `prefs` et `devblog`.
+ *  - 2 : + `prefs` et `devblog` ; puis `tsuzuku` (sources du compte, voir
+ *    entitesTsuzuku.ts), ignoré sans erreur par un appareil qui ne le connaît pas.
  * Un appareil qui lit un genre qu'il ne connaît pas l'ignore sans erreur.
  */
 export const VERSION_CHARGE = 2;
-export const GENRES_V2: readonly GenreV2[] = ['prefs', 'devblog'];
-export const GENRES_CONNUS: readonly Genre[] = ['compte', 'titre', 'operation', 'surveille', 'these', 'parametre', 'prefs', 'devblog'];
+export const GENRES_V2: readonly GenreV2[] = ['prefs', 'devblog', 'tsuzuku'];
+export const GENRES_CONNUS: readonly Genre[] = ['compte', 'titre', 'operation', 'surveille', 'these', 'parametre', 'prefs', 'devblog', 'tsuzuku'];
 /** Genres qui se fusionnent par union et ne se suppriment jamais. */
 export const GENRES_UNION: readonly Genre[] = ['devblog'];
 
@@ -101,10 +103,12 @@ export const PARAMETRES_A_SYNCHRONISER: readonly string[] = [
   CLE_PREFS_HUB,
   CLE_THEME_HUB,
   CLE_DEVBLOG_VUES,
+  // Sources Tsuzuku du compte : un tour part ~3 s après chaque modification.
+  ...CLES_TSUZUKU_SYNCHRONISEES,
 ];
 
 /** Ordre d'écriture : ce dont les autres dépendent d'abord. */
-export const ORDRE_ECRITURE: readonly Genre[] = ['compte', 'titre', 'operation', 'surveille', 'these', 'parametre', 'prefs', 'devblog'];
+export const ORDRE_ECRITURE: readonly Genre[] = ['compte', 'titre', 'operation', 'surveille', 'these', 'parametre', 'prefs', 'devblog', 'tsuzuku'];
 
 export type Entites = Record<string, unknown>;
 
@@ -169,6 +173,7 @@ export function extraireEntites(pilote: PiloteSqlite): Entites {
   if (brutVues !== undefined) {
     entites[cleEntite('devblog', ID_DEVBLOG_VUES)] = unionVues(brutVues, undefined);
   }
+  Object.assign(entites, entitesTsuzuku(cle => parametres.lire(cle)));
   return entites;
 }
 
@@ -242,6 +247,10 @@ export function ecrireEntite(
       parametres.ecrire(CLE_DEVBLOG_VUES, JSON.stringify({ version: 1, vues }));
       return true;
     }
+    case 'tsuzuku': {
+      const parametres = new DepotParametres(pilote);
+      return ecrireEntiteTsuzuku({ lire: cle => parametres.lire(cle), ecrire: (cle, v) => parametres.ecrire(cle, v) }, id, valeur);
+    }
     default:
       // Genre ajouté par une version plus récente : ignoré sans erreur.
       return false;
@@ -273,6 +282,11 @@ export function supprimerEntite(pilote: PiloteSqlite, cle: string): void {
         new DepotParametres(pilote).supprimer(id);
       }
       return;
+    case 'tsuzuku': {
+      const parametres = new DepotParametres(pilote);
+      supprimerEntiteTsuzuku({ lire: cle => parametres.lire(cle), ecrire: (cle, v) => parametres.ecrire(cle, v) }, id);
+      return;
+    }
     case 'titre':
     case 'prefs':
     case 'devblog':
