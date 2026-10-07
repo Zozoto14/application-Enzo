@@ -39,6 +39,10 @@ Agent({
 // → read report → delegate implementation to Sonnet agent
 ```
 
+### GitHub : toujours tout envoyer
+- Après chaque livraison, TOUT est poussé sur GitHub (sans force, jamais sur `main` sans accord) et le rapport à l'utilisateur dit sur quelle branche/dépôt. Ne jamais finir un travail avec des commits seulement locaux.
+- Dépôts de l'utilisateur (compte `Zozoto14`) : `AppliBourse` (portefeuille + hub), `tsuzuku` (streaming). L'app Claude n'est installée que sur ce compte.
+
 ### When Not to Delegate
 - One-off tool calls (Read, Bash, Edit) already using MCP servers
 - Simple direct answers to questions
