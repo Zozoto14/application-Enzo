@@ -15,6 +15,7 @@ import { Hub } from './Hub';
 import { appsDeCategorie, appsDePage, categorieDe, pageEffective, pagesVisibles } from './pages';
 import { peutOuvrir } from './permissions';
 import { REGISTRE, ID_ADMINISTRATION, ID_PORTEFEUILLE } from './registre';
+import { ID_PROSPECTS } from '../prospects/registre';
 import { themeHub } from './themes';
 import type { AppHub, ContexteHub, ServicesAdmin } from './types';
 import type { ControleProfils } from '../ui/ecrans/CarteProfils';
@@ -59,13 +60,13 @@ describe('registre : catégorie de page', () => {
       expect(categorieDe(app) === 'administration').toBe(Boolean(app.adminSeulement));
     }
     expect(ids(appsDeCategorie(REGISTRE, 'publique'))).toEqual([ID_PORTEFEUILLE, 'tsuzuku']);
-    expect(ids(appsDeCategorie(REGISTRE, 'administration'))).toEqual([ID_ADMINISTRATION, ID_ABONNEMENTS]);
+    expect(ids(appsDeCategorie(REGISTRE, 'administration'))).toEqual([ID_ADMINISTRATION, ID_ABONNEMENTS, ID_PROSPECTS]);
   });
 
   it('une app sans catégorie est publique ; une nouvelle entrée suffit à remplir une page', () => {
-    const prospects: AppHub = { id: 'prospects', nom: 'Prospects', categorie: 'Admin', page: 'administration', description: '', icone: 'P', teinte: 'quatre', adminSeulement: true, rangs: ['fondateur'] };
+    const nouvelle: AppHub = { id: 'nouvelle-app', nom: 'Nouvelle app', categorie: 'Admin', page: 'administration', description: '', icone: 'P', teinte: 'quatre', adminSeulement: true, rangs: ['fondateur'] };
     expect(categorieDe({})).toBe('publique');
-    expect(ids(appsDePage([...REGISTRE, prospects], contexteDe(historique), 'administration'))).toEqual([ID_ADMINISTRATION, ID_ABONNEMENTS, 'prospects']);
+    expect(ids(appsDePage([...REGISTRE, nouvelle], contexteDe(historique), 'administration'))).toEqual([ID_ADMINISTRATION, ID_ABONNEMENTS, ID_PROSPECTS, 'nouvelle-app']);
   });
 
   it('Abonnements : page Administration, Fondateurs seulement', () => {
@@ -82,12 +83,15 @@ describe('registre : catégorie de page', () => {
 });
 
 describe('pages visibles selon le rang', () => {
-  it('Fondateur (historique ou promu) : deux pages, Administration et Abonnements', () => {
+  it('Fondateur (historique ou promu) : deux pages, Administration, Abonnements (et Prospects pour le compte historique)', () => {
     for (const fondateur of [historique, avecRang('fondateur')]) {
       const contexte = contexteDe(fondateur);
       expect(pagesVisibles(REGISTRE, contexte)).toEqual(['publique', 'administration']);
-      expect(ids(appsDePage(REGISTRE, contexte, 'administration'))).toEqual([ID_ADMINISTRATION, ID_ABONNEMENTS]);
+      // Prospects : le Fondateur du compte historique seul (droits de l'app inchangés), pas un Fondateur promu.
+      const prospects = fondateur.admin ? [ID_PROSPECTS] : [];
+      expect(ids(appsDePage(REGISTRE, contexte, 'administration'))).toEqual([ID_ADMINISTRATION, ID_ABONNEMENTS, ...prospects]);
       expect(ids(appsDePage(REGISTRE, contexte, 'publique'))).not.toContain(ID_ABONNEMENTS);
+      expect(ids(appsDePage(REGISTRE, contexte, 'publique'))).not.toContain(ID_PROSPECTS);
     }
   });
 

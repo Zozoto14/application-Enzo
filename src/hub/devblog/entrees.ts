@@ -41,6 +41,41 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.14',
+    date: '2026-10-14',
+    titre: 'Nouvelle app : Prospects',
+    resume:
+      'Un carnet de prospection personnel, réservé au Fondateur : vos contacts, leurs relances et vos modèles de messages, chiffrés et synchronisés entre vos appareils comme le reste de l’administration.',
+    illustration: 'administration',
+    fonctionnalites: [
+      {
+        id: 'prospects-carnet',
+        emoji: '✉️',
+        titre: 'Un carnet de prospects',
+        texte:
+          'Nom, entreprise, e-mail, téléphone, source, étiquettes, statut (nouveau → gagné ou perdu), prochaine relance, notes et historique des contacts. Recherche, filtres par statut ou étiquette, tri, compteurs, et la vue « À relancer aujourd’hui ».',
+        essayer: { genre: 'app', app: 'prospects' },
+        adminSeulement: true,
+      },
+      {
+        id: 'prospects-lot-csv',
+        emoji: '📋',
+        titre: 'Ajout en lot et CSV',
+        texte:
+          'Collez une liste d’adresses (une par ligne, ou séparées par des virgules ou points-virgules) : les doublons, quelle que soit la casse, et les adresses mal formées sont écartés. Import et export CSV complets.',
+        adminSeulement: true,
+      },
+      {
+        id: 'prospects-ecrire',
+        emoji: '✍️',
+        titre: '« Écrire », un message à la fois',
+        texte:
+          'Le bouton « Écrire » ouvre votre messagerie avec un modèle personnalisé ({prenom}, {entreprise}) ; rien n’est envoyé automatiquement et aucune adresse n’est collectée sur le web. Un rappel sur les règles de la prospection (RGPD, consentement, désinscription) est affiché, et « Ne plus contacter » bloque le bouton.',
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.13',
     date: '2026-10-13',
     titre: 'Deux pages dans le hub, et une app Abonnements',

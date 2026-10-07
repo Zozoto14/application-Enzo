@@ -16,6 +16,7 @@ import { Administration } from './Administration';
 import { infoAdministration, infoPortefeuille } from './infos';
 import { APP_TSUZUKU } from '../tsuzuku/registre';
 import { APP_ABONNEMENTS } from './abonnements/registre';
+import { APP_PROSPECTS } from '../prospects/registre';
 import type { AppHub } from './types';
 
 export const ID_PORTEFEUILLE = 'portefeuille';
@@ -51,4 +52,5 @@ export const REGISTRE: readonly AppHub[] = [
     Racine: Administration,
   },
   APP_ABONNEMENTS,
+  APP_PROSPECTS,
 ];
