@@ -5,7 +5,7 @@
  * Claude Office (serveur local + hooks de Claude Code) ne tourne que sur le PC.
  */
 
-import type { EntreeHistorique } from './historique';
+import type { EntreeHistorique } from './logiqueHistorique';
 
 export interface EtatServeurOffice {
   joignable: boolean;

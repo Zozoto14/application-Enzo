@@ -18,7 +18,7 @@ import type { ContexteHub } from '../hub/types';
 import {
   LIBELLES_TYPES, compter, exporterCsv, exporterJson, filtrer, fusionner, grouper, heure, libelleJour, nomExport, texteComplet, titreEntree,
   valeursFiltres, type EntreeHistorique, type Filtres,
-} from './historique';
+} from './logiqueHistorique';
 import { LIBELLE_HOOK_HISTORIQUE, type CritereSuppression, type EtatClaudeOffice, type LectureHistorique, type PlanHooks, type PontClaudeOffice, type PontHistorique } from './pont';
 import { ecrireEtatSynchro, lireEtatSynchro, synchroniserSiDu, type CopieAppareil, type EtatSynchroHistorique } from './synchroHistorique';
 

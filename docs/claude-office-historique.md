@@ -42,7 +42,7 @@ même quand AppDashboard et Claude Office sont fermés. L'onglet « Historique �
 | `scripts/office-historique-hook.mjs` | Le hook lancé par Claude Code (rien sur la sortie standard, toujours code 0) |
 | `bureau/electron/claudeOffice.mjs` | Plans d'installation (`planifierHistorique`, `enchainerPlans`) |
 | `bureau/electron/claudeOfficeIpc.mjs` | Canaux `claude-office:historique-*` (confirmation native pour suppression et hook) |
-| `src/claudeOffice/historique.ts` | Fusion, recherche, filtres, regroupement, compteurs, export JSON/CSV |
+| `src/claudeOffice/logiqueHistorique.ts` | Fusion, recherche, filtres, regroupement, compteurs, export JSON/CSV |
 | `src/claudeOffice/Historique.tsx` | Onglet « Historique » |
 | `src/claudeOffice/synchroHistorique.ts`, `synchroFond.ts` | Copie chiffrée sur le relais et dépôt en arrière-plan |
 

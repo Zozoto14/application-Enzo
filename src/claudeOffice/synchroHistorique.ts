@@ -21,7 +21,7 @@ import { ouvrirEnveloppe, sceller, type Enveloppe } from '../sync/relais/chiffre
 import { espacesDuRelais, publieParAdmin, type Espaces } from '../sync/relais/espaces';
 import type { Liaison } from '../sync/relais/liaison';
 import { ESPACE_ADMIN, estMaitre } from '../sync/relais/portees';
-import { entreeValide, type EntreeHistorique } from './historique';
+import { entreeValide, type EntreeHistorique } from './logiqueHistorique';
 
 export const PREFIXE_OBJET = 'office-historique-';
 /** Délai minimal entre deux dépôts automatiques (limite d'écritures KV du relais gratuit). */

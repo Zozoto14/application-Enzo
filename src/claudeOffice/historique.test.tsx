@@ -7,7 +7,7 @@ import type { Espaces, ObjetEspace } from '../sync/relais/espaces';
 import { jetonDeProfil } from '../sync/relais/portees';
 import {
   celluleCsv, compter, exporterCsv, exporterJson, filtrer, fusionner, grouper, titreEntree, valeursFiltres, type EntreeHistorique,
-} from './historique';
+} from './logiqueHistorique';
 import { ClaudeOffice } from './Racine';
 import type { LectureHistorique, PontClaudeOffice, PontHistorique } from './pont';
 import {
