@@ -846,7 +846,7 @@ function Tuile({
                 {info ? (
                   <View style={styles.direct}>
                     <View style={[styles.point, { backgroundColor: blocs ? '#FFFFFF' : couleur }]} />
-                    <Text style={[styles.directTexte, { color: blocs ? '#FFFFFF' : couleur }]}>EN DIRECT</Text>
+                    <Text style={[styles.directTexte, { color: blocs ? '#FFFFFF' : couleur }]}>{info.pastille ?? 'EN DIRECT'}</Text>
                   </View>
                 ) : null}
                 <Text style={[titre, styles.nomApp, { color: hautTexte, fontSize: petite ? 20 : grande ? 32 : 26 }]}>{app.nom}</Text>

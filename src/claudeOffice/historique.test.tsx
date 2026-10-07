@@ -206,10 +206,11 @@ describe('écran Historique', () => {
     expect(screen.getByText(/Un PC éteint, ou un appareil sans le hook, n’enregistre rien/)).toBeTruthy();
     expect(screen.getByTestId('historique-compte-entrées').props.children).toBe(5);
     expect(screen.getByTestId('historique-hook-etat').props.children.join('')).toMatch(/Pas encore installé/);
-    // Ingestion continue : relu toutes les 5 s.
-    expect(historique.lire).toHaveBeenCalledTimes(1);
+    // Ingestion continue : relu toutes les 5 s (l'onglet Bureau, quitté, ne lit plus rien).
+    const lectures = historique.lire.mock.calls.length;
+    expect(lectures).toBeGreaterThanOrEqual(1);
     await act(async () => void jest.advanceTimersByTime(5_000));
-    expect(historique.lire).toHaveBeenCalledTimes(2);
+    expect(historique.lire).toHaveBeenCalledTimes(lectures + 1);
 
     await fireEvent.changeText(screen.getByTestId('historique-recherche'), 'lecteur video');
     expect(screen.getByTestId('historique-compte-entrées').props.children).toBe(1);

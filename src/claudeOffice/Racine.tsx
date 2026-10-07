@@ -1,12 +1,13 @@
 /**
  * Claude Office, app du hub : écran racine.
  *
- * Claude Office (bureau en pixel art des agents de Claude Code, licence MIT,
- * W17ANT) tourne à part sur le PC : serveur local, interface web, hooks de
- * Claude Code. Cet écran le présente, dit s'il tourne, l'ouvre dans une
- * fenêtre à part et installe ses hooks — toujours après un aperçu et une
- * confirmation native, jamais tout seul. Sur le site et le téléphone, il
- * montre seulement la commande à lancer sur le PC. Voir docs/claude-office.md.
+ * Onglet « Bureau » (par défaut, partout : PC, site, téléphone) : le bureau
+ * des agents dessiné dans le hub (`Bureau.tsx`), sans serveur ni rien à
+ * installer sur l'appareil qui regarde. Onglet « Historique » : le journal des
+ * requêtes. Sur le PC seulement, en option avancée : le vrai Claude Office
+ * (licence MIT, W17ANT) — serveur local ouvert dans une fenêtre à part, et ses
+ * hooks, toujours après un aperçu et une confirmation native. Voir
+ * docs/claude-office.md.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -14,6 +15,8 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { BoutonHub, RetourHub } from '../hub/Hub';
 import { police, type ThemeHub } from '../hub/themes';
 import type { PropsRacineApp } from '../hub/types';
+import { useMobile } from '../ui/mobile/useMobile';
+import { OngletBureau } from './Bureau';
 import { Historique } from './Historique';
 import {
   COMMANDE_APERCU, COMMANDE_DOSSIER, COMMANDE_HOOKS, LIBELLE_HOOKS, libelleServeur, pontClaudeOffice,
@@ -188,8 +191,9 @@ function SurLePc({ theme, pont }: { theme: ThemeHub; pont: PontClaudeOffice }) {
   );
 }
 
-/** Onglets de l'écran : le bureau (serveur, hooks) et l'historique des requêtes. */
+/** Onglets de l'écran : le bureau des agents (visuel natif) et l'historique des requêtes. */
 function Onglets({ theme, onglet, onChange }: { theme: ThemeHub; onglet: 'bureau' | 'historique'; onChange(o: 'bureau' | 'historique'): void }) {
+  const mobile = useMobile();
   return (
     <View style={styles.onglets} accessibilityRole="tablist">
       {([['bureau', 'Bureau'], ['historique', 'Historique']] as const).map(([id, titre]) => (
@@ -201,44 +205,66 @@ function Onglets({ theme, onglet, onChange }: { theme: ThemeHub; onglet: 'bureau
           testID={`claude-office-onglet-${id}`}
           style={[styles.onglet, { borderColor: onglet === id ? theme.accent : theme.ligne, backgroundColor: onglet === id ? theme.accent : theme.surface }]}
         >
-          <Text style={{ color: onglet === id ? theme.surAccent : theme.texte, fontWeight: '600' }}>{titre}</Text>
+          <Text style={{ color: onglet === id ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: mobile ? 16 : 15 }}>{titre}</Text>
         </Pressable>
       ))}
     </View>
   );
 }
 
+/** Sur le PC : le vrai Claude Office (serveur local, fenêtre à part, ses hooks), replié par défaut. */
+function Avance({ theme, pont }: { theme: ThemeHub; pont: PontClaudeOffice }) {
+  const [ouvert, setOuvert] = useState(false);
+  return (
+    <View style={{ gap: 14 }} testID="claude-office-avance">
+      <BoutonHub
+        theme={theme}
+        titre={ouvert ? 'Masquer les options avancées' : 'Options avancées : Claude Office complet en fenêtre à part…'}
+        onPress={() => setOuvert(o => !o)}
+        testID="claude-office-avance-basculer"
+      />
+      {ouvert ? (
+        <>
+          <Text style={[styles.texte, { color: theme.attenue }, police(theme.policeTexte)]}>
+            Le bureau ci-dessus suffit au quotidien. Si vous avez aussi installé le vrai Claude Office (serveur local avec ses sprites, son fil de discussion), vous pouvez l’ouvrir ici dans une fenêtre à part.
+          </Text>
+          <SurLePc theme={theme} pont={pont} />
+          <Installation theme={theme} />
+        </>
+      ) : null}
+    </View>
+  );
+}
+
 export function ClaudeOffice({ theme, onRetour, contexte }: PropsRacineApp) {
   const pont = pontClaudeOffice();
+  const mobile = useMobile();
   const [onglet, setOnglet] = useState<'bureau' | 'historique'>('bureau');
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: theme.fond }} contentContainerStyle={styles.page}>
+    <ScrollView style={{ flex: 1, backgroundColor: theme.fond }} contentContainerStyle={[styles.page, mobile ? styles.pageMobile : null]}>
       <RetourHub theme={theme} onRetour={onRetour} titre="Claude Office" />
       <Text style={[styles.titre, { color: theme.texte, fontWeight: theme.poidsTitre }, police(theme.policeTitre)]}>Claude Office</Text>
-      <Text style={[styles.texte, { color: theme.attenue }, police(theme.policeTexte)]}>
-        Un bureau en pixel art où l’on voit les agents de Claude Code arriver, travailler et repartir, avec le fil de discussion du bureau.
+      <Text style={[styles.texte, mobile ? styles.texteMobile : null, { color: theme.attenue }, police(theme.policeTexte)]}>
+        Le bureau des agents de Claude Code : un personnage par session, qui écrit, utilise un outil, réfléchit ou attend — ici même, sur le PC, le site ou le téléphone.
       </Text>
       <Onglets theme={theme} onglet={onglet} onChange={setOnglet} />
       {onglet === 'historique' ? (
         <Historique theme={theme} contexte={contexte} office={pont} />
-      ) : pont ? (
-        <SurLePc theme={theme} pont={pont} />
       ) : (
-        <Carte theme={theme} titre="Sur le PC seulement" testID="claude-office-site">
-          <Text style={[styles.texte, { color: theme.texte }, police(theme.policeTexte)]}>
-            Claude Office tourne sur votre PC (serveur local et hooks de Claude Code) : depuis le site ou le téléphone, il ne peut être ni joint ni installé. Sur le PC, depuis le dossier d’AppDashboard, lancez :
-          </Text>
-          <Code theme={theme} testID="claude-office-commande-site">{COMMANDE_HOOKS}</Code>
-        </Carte>
+        <>
+          <OngletBureau theme={theme} contexte={contexte} office={pont} />
+          {pont ? <Avance theme={theme} pont={pont} /> : null}
+        </>
       )}
-      {onglet === 'bureau' ? <Installation theme={theme} /> : null}
-      <Text style={[styles.credit, { color: theme.attenue }]}>D’après Claude Office, © 2026 W17ANT, licence MIT.</Text>
+      <Text style={[styles.credit, mobile ? styles.texteMobile : null, { color: theme.attenue }]}>D’après Claude Office, © 2026 W17ANT, licence MIT.</Text>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   page: { padding: 20, gap: 14, maxWidth: 860, width: '100%', alignSelf: 'center' },
+  pageMobile: { padding: 16 },
+  texteMobile: { fontSize: 15, lineHeight: 21 },
   titre: { fontSize: 26 },
   texte: { fontSize: 14, lineHeight: 20 },
   carte: { borderWidth: StyleSheet.hairlineWidth, padding: 16, gap: 10 },
@@ -252,5 +278,5 @@ const styles = StyleSheet.create({
   code: { fontFamily: 'monospace', fontSize: 13, borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, padding: 10 },
   credit: { fontSize: 12, marginTop: 6 },
   onglets: { flexDirection: 'row', gap: 8 },
-  onglet: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8 },
+  onglet: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 18, minHeight: 44, minWidth: 44, justifyContent: 'center' },
 });

@@ -27,6 +27,9 @@ import {
 
 /** Au plus ce nombre d'entrées (les plus récentes) remis à la fenêtre d'un coup. */
 export const MAX_ENTREES_FENETRE = 20_000;
+/** Onglet « Bureau » : seulement l'activité récente (fenêtre et nombre bornés). */
+export const FENETRE_ACTIVITE_MS = 6 * 3_600_000;
+export const MAX_ENTREES_ACTIVITE = 2_000;
 const TAILLE_MAX_IMPORT = 50 * 1024 * 1024;
 
 /** Aperçu sans le texte complet des réglages (il peut contenir des secrets d'autres outils). */
@@ -97,6 +100,27 @@ export function brancherClaudeOffice({ ipcMain, dialog, BrowserWindow, shell, fi
         fichiers,
         reglages: { ...reglages, appareil: reglages.appareil ?? null },
       };
+    } catch (erreur) {
+      return { ok: false, erreur: erreur.message };
+    }
+  });
+
+  // Onglet « Bureau » : relu toutes les 2 s. Si la signature du journal (tailles des fichiers) n'a pas
+  // changé depuis l'appel précédent de la fenêtre, rien n'est relu ni renvoyé. Lecture seule.
+  ipcMain.handle('claude-office:historique-activite', async (_evenement, connu) => {
+    try {
+      const { dossier, lecteur: l } = lecteurCourant();
+      const signature = l.signature();
+      if (typeof connu === 'string' && connu !== '' && connu === signature) return { ok: true, inchange: true, signature };
+      const { entrees } = l.lire();
+      const depuis = Date.now() - FENETRE_ACTIVITE_MS;
+      let debut = entrees.length;
+      while (debut > 0 && Date.parse(entrees[debut - 1].ts) >= depuis) debut--;
+      const recentes = entrees.slice(Math.max(debut, entrees.length - MAX_ENTREES_ACTIVITE)).filter(e => !e.importe);
+      const reglages = lireReglages(dossier);
+      // Jamais le contenu des outils ici : le bureau n'en a pas besoin.
+      const legeres = recentes.map(({ entree: _entree, sortie: _sortie, ...reste }) => reste);
+      return { ok: true, signature, entrees: legeres, appareilId: reglages.appareilId, appareil: reglages.appareil ?? null };
     } catch (erreur) {
       return { ok: false, erreur: erreur.message };
     }

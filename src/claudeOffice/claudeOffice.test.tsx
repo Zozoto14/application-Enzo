@@ -7,7 +7,7 @@ import { themeHub } from '../hub/themes';
 import type { ContexteHub } from '../hub/types';
 import { ClaudeOffice } from './Racine';
 import { APP_CLAUDE_OFFICE, ID_CLAUDE_OFFICE } from './registre';
-import { COMMANDE_HOOKS, type EtatClaudeOffice, type PontClaudeOffice } from './pont';
+import type { EtatClaudeOffice, PontClaudeOffice } from './pont';
 
 const theme = themeHub('nuit');
 const principal: Profil = { id: 'principal', nom: 'Moi', admin: true, creeLe: '' };
@@ -69,17 +69,26 @@ describe('écran Claude Office', () => {
     delete globalPont.applibourse;
   });
 
-  it('sur le site ou le téléphone : seulement la commande à lancer sur le PC, aucun bouton d’installation', async () => {
+  it('sur le site ou le téléphone : le bureau s’affiche (onglet par défaut), sans commande ni bouton d’installation', async () => {
     await render(<ClaudeOffice contexte={{}} theme={theme} registre={REGISTRE} onRetour={jest.fn()} />);
-    expect(screen.getByTestId('claude-office-commande-site').props.children).toBe(COMMANDE_HOOKS);
+    await act(async () => undefined);
+    expect(screen.getByTestId('bureau-visuel')).toBeTruthy();
+    expect(screen.getByTestId('claude-office-onglet-bureau').props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId('bureau-vide-texte')).toBeTruthy();
+    expect(screen.queryByTestId('claude-office-commande-site')).toBeNull();
     expect(screen.queryByTestId('claude-office-installer')).toBeNull();
     expect(screen.queryByTestId('claude-office-ouvrir')).toBeNull();
+    expect(screen.queryByTestId('claude-office-avance')).toBeNull();
   });
 
   it('sur le PC : état du serveur, aperçu, puis installation seulement au clic', async () => {
     const pont = fauxPont();
     globalPont.applibourse = { bureau: true, claudeOffice: pont };
     await render(<ClaudeOffice contexte={{}} theme={theme} registre={REGISTRE} onRetour={jest.fn()} />);
+    await act(async () => undefined);
+    // Le vrai Claude Office (fenêtre à part) est une option avancée, repliée par défaut.
+    expect(screen.queryByTestId('claude-office-serveur')).toBeNull();
+    await fireEvent.press(screen.getByTestId('claude-office-avance-basculer'));
     await act(async () => undefined);
     expect(screen.getByTestId('claude-office-etat').props.children).toContain('2 agents actifs');
     expect(screen.getByTestId('claude-office-dossier').props.children).toBe(ETAT.dossier);
@@ -101,6 +110,8 @@ describe('écran Claude Office', () => {
     pont.etat.mockResolvedValue({ ...ETAT, serveur: { joignable: false }, hooks: 'installes' });
     globalPont.applibourse = { bureau: true, claudeOffice: pont };
     await render(<ClaudeOffice contexte={{}} theme={theme} registre={REGISTRE} onRetour={jest.fn()} />);
+    await act(async () => undefined);
+    await fireEvent.press(screen.getByTestId('claude-office-avance-basculer'));
     await act(async () => undefined);
     expect(screen.getByTestId('claude-office-etat').props.children).toContain('injoignable');
     expect(screen.getByTestId('claude-office-ouvrir').props.accessibilityState.disabled).toBe(true);

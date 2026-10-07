@@ -41,6 +41,42 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.18',
+    date: '2026-10-18',
+    titre: 'Claude Office : le bureau des agents, partout',
+    resume:
+      'Le bureau de Claude Office s’affiche maintenant directement dans le hub, sur le PC, le site et le téléphone, sans serveur à lancer ni rien à installer sur l’appareil où vous regardez. Un personnage par session de Claude Code, qui écrit, utilise un outil, réfléchit ou attend.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'claude-office-bureau',
+        emoji: '🧑‍💻',
+        titre: 'Onglet « Bureau », dessiné dans le hub',
+        texte:
+          'Chaque session de Claude Code a son poste et son personnage, animé selon ce qu’il fait, avec sa dernière demande résumée dans une bulle (secrets masqués) et des compteurs du jour. Animations coupées si votre système demande de les réduire. Le vrai Claude Office reste ouvrable en fenêtre à part sur le PC, en option avancée.',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+      {
+        id: 'claude-office-bureau-partout',
+        emoji: '📱',
+        titre: 'En direct sur le PC, à distance ailleurs',
+        texte:
+          'Sur le PC, le bureau relit le journal local toutes les 2 secondes. Sur le site et le téléphone, il lit la copie chiffrée que le PC dépose (à activer dans l’onglet Bureau du PC) et indique son âge : « à jour il y a 7 min ». La « présence rapide », facultative, réduit ce délai à 5 minutes pendant l’activité. Le hook reste nécessaire sur le PC où tourne Claude Code.',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+      {
+        id: 'claude-office-tuile',
+        emoji: '▣',
+        titre: 'État des agents sur la tuile',
+        texte: 'La tuile Claude Office de la page Administration montre combien d’agents travaillent, et depuis quand l’information date.',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.17',
     date: '2026-10-17',
     titre: 'Claude Office garde l’historique de vos requêtes',

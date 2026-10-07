@@ -52,8 +52,24 @@ export interface LectureHistorique {
 
 export type CritereSuppression = { ids: string[] } | { du: string; au: string } | { tout: true };
 
+/** Activité récente du journal local, pour l'onglet « Bureau » (lecture légère, relue toutes les 2 s). */
+export interface LectureActivitePc {
+  ok: boolean;
+  erreur?: string;
+  /** Rien n'a changé depuis la signature `connu` passée : `entrees` est absent. */
+  inchange?: boolean;
+  /** Signature du journal (taille des fichiers), à repasser à l'appel suivant. */
+  signature?: string;
+  /** Entrées des dernières heures seulement (les plus récentes). */
+  entrees?: EntreeHistorique[];
+  appareilId?: string;
+  appareil?: string | null;
+}
+
 export interface PontHistorique {
   lire(): Promise<LectureHistorique>;
+  /** Absent sur un PC dont l'application n'est pas encore à jour : `lire` sert alors. */
+  activite?(connu?: string): Promise<LectureActivitePc>;
   reglages(changements: Partial<Pick<ReglagesHistorique, 'actif' | 'enregistrerSorties' | 'masquerSecrets'>> & { appareil?: string }): Promise<{ ok: boolean; erreur?: string; reglages?: ReglagesHistorique }>;
   /** Le processus principal montre une confirmation native avant de supprimer. */
   supprimer(critere: CritereSuppression): Promise<{ ok: boolean; erreur?: string; annule?: boolean; supprimees?: number }>;

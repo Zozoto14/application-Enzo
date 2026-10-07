@@ -103,6 +103,8 @@ import { definirLiaisonEnAttente, liaisonEnAttente } from '../sync/relais/actif'
 import { lireConfigRelais, mesurerEcartHorloge, recupererCoffre } from '../sync/relais/synchroniser';
 import { creerServiceHistorique } from '../claudeOffice/synchroHistorique';
 import { useSynchroHistoriqueOffice } from '../claudeOffice/synchroFond';
+import { useResumeClaudeOffice } from '../claudeOffice/resumeHub';
+import { APP_CLAUDE_OFFICE } from '../claudeOffice/registre';
 import { formaterDiagnostic, lireEnvironnement, messageHorloge } from '../diagnostic/deverrouillage';
 import type { Coffre } from '../securite/coffre';
 import { CarteSynchro } from '../ui/ecrans/CarteSynchro';
@@ -2058,12 +2060,18 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         return undefined;
       }
     },
-    // Relu après une synchro : la liaison peut avoir été ajoutée ou retirée.
+    // Relu après une synchro, et quand la liaison est ajoutée ou retirée (un compte neuf ne reçoit encore rien).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [deverrouille, estAdmin, session, versionSynchro],
+    [deverrouille, estAdmin, session, versionSynchro, synchro.configure],
   );
   useSynchroHistoriqueOffice({ service: historiqueOffice, base: deverrouille ? baseProfil : undefined });
-  const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin, baseProfil, tsuzuku: resumeTsuzuku, enregistrerFichier: enregistrerFichierHote, historiqueOffice };
+  // Tuile Claude Office : état des agents, lu seulement sur le hub et pour qui voit la tuile (Fondateur).
+  const resumeClaudeOffice = useResumeClaudeOffice({
+    actif: Boolean(surLeHub && APP_CLAUDE_OFFICE.disponible?.({ profil: profils?.actuel })),
+    service: historiqueOffice,
+    base: deverrouille ? baseProfil : undefined,
+  });
+  const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin, baseProfil, tsuzuku: resumeTsuzuku, enregistrerFichier: enregistrerFichierHote, historiqueOffice, claudeOffice: resumeClaudeOffice };
   const themeDuHub = themeHub(themeAffiche);
   const appOuverte = surUneApp ? REGISTRE.find(app => app.id === appHub) : undefined;
   // --- Devblog « Quoi de neuf » : une fois par profil et par version -----------
