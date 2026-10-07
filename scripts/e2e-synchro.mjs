@@ -20,7 +20,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { allerPageAdministration, allerPageApplications, nouveauContexte } from './e2e-acceptation.mjs';
+import { allerPageAdministration, allerPageApplications, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -260,6 +260,68 @@ try {
     recu2 = (await themeB()) !== fond2;
   }
   verifier(recu2, 'B a reçu le thème « terminal » choisi hors ligne sur A');
+
+  // ----- Sources Tsuzuku du compte : ajoutées sur A, reçues sur B ; désactivées sur B, reçues sur A ; supprimées
+  log('Tsuzuku : sources du compte entre A et B');
+  const SOURCE = { name: 'Médiathèque synchro', baseUrl: 'https://mediatheque-exemple.fr', language: 'vostfr', search: { path: '/recherche?q={query}', item: 'li.carte', title: 'a', link: 'a' }, episodes: { item: 'li.ep', number: '.num', link: 'a' }, player: { iframe: 'iframe' } };
+  const ouvrirSources = async pg => {
+    await pg.getByTestId('hub-parametres-fermer').click().catch(() => undefined);
+    if (!(await pg.getByTestId('tsuzuku-racine').count())) {
+      await pg.getByTestId('retour-hub').click().catch(() => undefined);
+      await pg.getByTestId('hub').waitFor({ timeout: 20_000 });
+      await allerPageApplications(pg);
+      await tuileApp(pg, 'tsuzuku').first().click();
+      await pg.getByTestId('tsuzuku-racine').waitFor({ timeout: 20_000 });
+    }
+    await pg.getByTestId('onglet-app-accueil').click();
+    await pg.getByTestId('onglet-app-sources').click();
+    await pg.getByTestId('tsuzuku-sources').waitFor({ timeout: 20_000 });
+  };
+  /** Attend une condition sur la page Sources de `pg`, en relançant le tour (retour au premier plan) et en rouvrant la page. */
+  const attendreSources = async (pg, condition, delai = 120_000) => {
+    const debutS = Date.now();
+    while (Date.now() - debutS < delai) {
+      await pg.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+      await pause(4000);
+      await ouvrirSources(pg);
+      if (await condition()) return true;
+    }
+    return false;
+  };
+  await ouvrirSources(A);
+  await A.getByTestId('sources-ajouter').click();
+  await A.getByTestId('sources-json').click();
+  await A.getByTestId('assistant-json').fill(JSON.stringify(SOURCE));
+  await A.getByTestId('assistant-verifier').click();
+  await A.getByTestId('assistant-suivant').click();
+  await A.getByTestId('assistant-enregistrer').click();
+  await A.getByTestId('source-nouvelle').waitFor({ timeout: 20_000 });
+  verifier(await A.getByTestId('sources-synchro-en-attente').count().then(n => n === 1, () => false) || await A.getByTestId('sources-synchro-synchronise').count().then(n => n === 1), 'A : pastille de synchro des sources affichée');
+  await A.screenshot({ path: join(CAPTURES, '10-A-source-ajoutee-en-attente.png') });
+  const synchroA = await A.getByTestId('sources-synchro-synchronise').waitFor({ timeout: 90_000 }).then(() => true, () => false);
+  verifier(synchroA, 'A : la source part seule (déclencheur après modification), pastille « Synchronisé »');
+  await A.screenshot({ path: join(CAPTURES, '11-A-source-synchronisee.png') });
+  const recueB = await attendreSources(B, async () => (await B.getByText('Médiathèque synchro', { exact: true }).count()) > 0);
+  verifier(recueB, 'B (même compte, autre appareil) reçoit la source ajoutée sur A');
+  verifier(!JSON.stringify([...kv.values()]).includes('mediatheque-exemple.fr'), 'relais : l’adresse de la source n’y est jamais en clair (charge chiffrée)');
+  await B.screenshot({ path: join(CAPTURES, '12-B-source-recue.png') });
+  // B désactive la source : A reçoit l'état.
+  await B.locator('[data-testid^="source-activer-"]').first().click();
+  await pause(800);
+  const desactiveeA = await attendreSources(A, async () => (await A.locator('[data-testid^="source-activer-"]').first().innerText().catch(() => '')).includes('Activer'));
+  verifier(desactiveeA, 'A reçoit la désactivation faite sur B');
+  // A supprime la source : B la perd (pierre tombale), elle ne renaît pas.
+  await A.locator('[data-testid^="source-supprimer-"]').first().click();
+  const supprimeeB = await attendreSources(B, async () => (await B.getByText('Médiathèque synchro', { exact: true }).count()) === 0);
+  verifier(supprimeeB, 'B : la source supprimée sur A disparaît');
+  await pause(5000);
+  await ouvrirSources(A);
+  verifier((await A.getByText('Médiathèque synchro', { exact: true }).count()) === 0, 'A : la source supprimée ne renaît pas');
+  await B.screenshot({ path: join(CAPTURES, '13-B-source-supprimee.png') });
+  for (const pg of [A, B]) {
+    await pg.getByTestId('retour-hub').click().catch(() => undefined);
+    await pg.getByTestId('hub').waitFor({ timeout: 20_000 }).catch(() => undefined);
+  }
 
   // ----- Un seul thème pour toutes les pages, pastille de synchro partout, démarrage sans flash
   log('A : thème unique et pastille de synchro dans le portefeuille et l’administration');
