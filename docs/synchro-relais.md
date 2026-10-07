@@ -12,6 +12,16 @@ entre profils : un ami ne peut pas ouvrir le dépôt de l'administrateur, et inv
 | `prefs:theme` (2) | `hub.theme` : le thème unique de toute l'application | dernier gagnant |
 | `prefs:theme-portefeuille` (2) | `affichage.theme` : ancien thème du portefeuille. **Lecture seule** : reçue d'un appareil pas encore à jour (la migration du thème unique la reprend si `hub.theme` est absent), jamais émise | — |
 | `devblog:vues` (2) | versions du devblog déjà lues | **union**, jamais supprimée |
+| `tsuzuku:source:<id>`, `tsuzuku:partage:<id>`, `tsuzuku:test:<id>`, `tsuzuku:ordre`, `tsuzuku:avance` (2) | sources Tsuzuku du compte (définition et état activé, partage, dernier test, ordre de la liste, clés d'API et options du moteur) — `src/sync/relais/entitesTsuzuku.ts` | dernier gagnant **par source**, suppression = pierre tombale datée ; chaque entité reçue est revalidée (adresse publique, bornes). Un appareil qui ne connaît pas le genre l'ignore |
+
+Les sources Tsuzuku ne passaient autrefois par aucune entité : ajoutées sur le PC, elles n'arrivaient jamais sur le
+site ou le téléphone du même compte. Elles partent maintenant ~3 s après chaque modification (clés de
+`PARAMETRES_A_SYNCHRONISER`), dans la charge scellée (`cleDerivee('synchro')`) : le relais ne voit ni adresse de source
+ni clé d'API en clair. La page Sources affiche une pastille « Synchronisé / En attente » (`etatPastilleTsuzuku`).
+Limite : un Fondateur autre que le compte historique synchronise sa base comme un fichier entier (fichiers d'un ami,
+dernier gagnant au niveau du fichier) ; aucun changement du relais n'est nécessaire (rien de neuf côté Worker : tout
+voyage dans `/boite/<appareil>`, réservé au jeton maître, et `tsuzuku-sources` reste interdit en écriture aux jetons de
+profil).
 
 Après « Lier » (`adopterCoffre`), la base locale est vide (l'ancienne est scellée par une autre clé) : les versions
 vues reviennent par le premier tour, et le devblog attend ce premier tour avant de décider de s'afficher.

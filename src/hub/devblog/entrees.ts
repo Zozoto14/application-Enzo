@@ -41,6 +41,39 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.16',
+    date: '2026-10-16',
+    titre: 'Tsuzuku : les fiches trouvent enfin vos épisodes',
+    resume:
+      'Une source qui réussit son test trouve désormais aussi les épisodes depuis la fiche : même recherche, titres alternatifs du catalogue et diagnostic clair. Et vos sources suivent votre compte sur tous vos appareils.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'tsuzuku-fiche-sources',
+        emoji: '🔎',
+        titre: 'La fiche cherche comme le test',
+        texte:
+          'La fiche essaie le titre affiché, sa forme courte (sans sous-titre ni saison), le romaji, le titre français et les synonymes du catalogue, puis garde le résultat le plus ressemblant. Un bloc « Sur vos sources » dit ce qui a été trouvé, ou pourquoi rien ne l’est, avec « Réessayer » et « Chercher avec un autre titre ».',
+        essayer: { genre: 'app', app: 'tsuzuku' },
+      },
+      {
+        id: 'tsuzuku-test-catalogue',
+        emoji: '🧪',
+        titre: 'Tester une source sur un vrai titre du catalogue',
+        texte: 'Le test pas à pas de l’assistant suit exactement le chemin de la fiche, et peut prendre une fiche du catalogue avec tous ses titres.',
+        adminSeulement: true,
+      },
+      {
+        id: 'tsuzuku-sources-synchro',
+        emoji: '🔄',
+        titre: 'Vos sources sur tous vos appareils',
+        texte:
+          'Sources, activation, partage, dernier test et clés d’API se synchronisent chiffrés entre le PC, le site et le téléphone du même compte. Deux modifications sur deux appareils ne s’écrasent plus ; une suppression suit partout. Une pastille « Synchronisé / En attente » l’indique sur la page Sources.',
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.15',
     date: '2026-10-15',
     titre: 'Claude Office arrive dans le hub',
