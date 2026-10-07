@@ -41,6 +41,43 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.16',
+    date: '2026-10-16',
+    titre: 'Claude Office garde l’historique de vos requêtes',
+    resume:
+      'Chaque demande faite à Claude Code sur un PC équipé est notée dans un journal local, même quand AppDashboard et Claude Office sont fermés. Un nouvel onglet « Historique » permet de la retrouver, la filtrer, l’exporter ou la supprimer.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'claude-office-historique',
+        emoji: '🗂️',
+        titre: 'Onglet « Historique » de Claude Office',
+        texte:
+          'Liste par jour et par session, recherche dans les demandes, filtres (projet, appareil, période, outil), détail et copie, export JSON ou CSV, suppression d’une entrée, d’une période ou de tout (confirmée deux fois). Les secrets reconnus sont masqués avant l’écriture et les sorties d’outils ne sont pas gardées par défaut.',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+      {
+        id: 'claude-office-historique-hook',
+        emoji: '📝',
+        titre: 'Même application fermée',
+        texte:
+          'Le hook d’historique de Claude Code écrit directement dans ~/.agent-office/historique : rien ne se perd si AppDashboard est fermé. Installation : npm run office:hooks (aperçu, confirmation, sauvegarde). Un PC éteint ou un appareil sans le hook n’enregistre rien.',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+      {
+        id: 'claude-office-historique-synchro',
+        emoji: '🔐',
+        titre: 'Copie chiffrée, au choix',
+        texte:
+          'Désactivée par défaut : activez-la sur le PC pour relire l’historique depuis le site ou le téléphone, même PC éteint. Chiffrée avec votre clé de synchronisation, réservée au compte principal, déposée au plus toutes les 15 minutes.',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.15',
     date: '2026-10-15',
     titre: 'Claude Office arrive dans le hub',

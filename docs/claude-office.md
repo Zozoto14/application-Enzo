@@ -25,7 +25,8 @@ pauses café, fil de discussion). Source : [W17ANT/agent-office](https://github.
 | `src/claudeOffice/pont.ts` | Contrat du pont `window.applibourse.claudeOffice` (absent hors du PC) |
 | `bureau/electron/claudeOffice.mjs` | Logique Node pure : aperçu, fusion, sauvegarde, écriture, sonde `/health` |
 | `bureau/electron/claudeOfficeIpc.mjs` | Canaux `claude-office:*` du processus principal (confirmation native) |
-| `scripts/office-hooks.mjs` | `npm run office:hooks` |
+| `scripts/office-hooks.mjs` | `npm run office:hooks` (hooks de Claude Office + hook d'historique) |
+| `src/claudeOffice/Historique.tsx`, `bureau/electron/officeHistorique.mjs` | Onglet « Historique » et journal local : voir [`claude-office-historique.md`](claude-office-historique.md) |
 
 Rien de Node/Electron n'entre dans le bundle web : `src/claudeOffice` n'appelle que le pont, absent sur le site.
 
@@ -40,7 +41,9 @@ voient ni la tuile ni l'écran (tests : `src/claudeOffice/claudeOffice.test.tsx`
 Les seuls réglages (dossier de Claude Office, adresse du serveur) sont **propres au PC** : gardés par le processus
 principal dans `claude-office.json` des données de l'application. Ils ne sont pas synchronisés (un chemin et une
 adresse 127.0.0.1 n'ont pas de sens sur un autre appareil) : **rien ne part sur le relais**. Les données de Claude
-Office (historique, discussion) restent dans son dossier et `~/.agent-office`.
+Office (historique, discussion) restent dans son dossier et `~/.agent-office`. Seule exception, facultative et
+désactivée par défaut : la copie **chiffrée** de l'historique des requêtes (voir
+[`claude-office-historique.md`](claude-office-historique.md)).
 
 ## Audit de `hooks/install-hooks.mjs` (original)
 

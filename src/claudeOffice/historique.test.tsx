@@ -159,7 +159,7 @@ function fauxPontHistorique(entrees: EntreeHistorique[] = JOURNAL): jest.Mocked<
     ok: true, dossier: '/maison/.agent-office/historique', entrees, total: entrees.length, ignorees: 0, octets: 1000, fichiers: 1,
     reglages: { actif: true, enregistrerSorties: false, masquerSecrets: true, maxFichierMo: 10, maxTotalMo: 200, appareil: null, appareilId: 'aaaaaaaaaaaa' },
   };
-  return {
+  const pont = {
     lire: jest.fn(async () => lecture),
     reglages: jest.fn(async () => ({ ok: true, reglages: lecture.reglages })),
     supprimer: jest.fn(async () => ({ ok: true, supprimees: 1 })),
@@ -167,6 +167,7 @@ function fauxPontHistorique(entrees: EntreeHistorique[] = JOURNAL): jest.Mocked<
     apercuHooks: jest.fn(async () => ({ ok: true, plan: { fichier: 's.json', existe: true, commande: 'node h', change: true, ajouts: ['UserPromptSubmit'], retraits: [], description: '  + UserPromptSubmit : ajoute' } })),
     installerHooks: jest.fn(async () => ({ ok: true, ecrit: true, sauvegarde: 's.json.bak' })),
   };
+  return pont as unknown as jest.Mocked<PontHistorique>;
 }
 
 function fauxOffice(historique?: PontHistorique): PontClaudeOffice {
