@@ -6,7 +6,7 @@ Dépôt multi-applications, un dossier par application.
 | --- | --- |
 | `portefeuille/` | Gestion de portefeuille boursier (ex-AppliBourse) : React Native + Vite/Electron, relais Cloudflare, iOS, Android |
 | `budget/` | « mon-budget » : PWA de suivi de budget, serveur Node |
-| `hub/` | HUB central : maquette, doc, explications (le code du hub est dans `portefeuille/src/hub/`, voir `hub/README.md`) |
+| `hub/` | HUB central : code (`hub/src/`, alias `@hub`), maquette, doc (voir `hub/README.md`) |
 | `docs/` | Documentation commune |
 | `.github/` | Workflows (compilation iOS du portefeuille) |
 
@@ -31,8 +31,10 @@ npm start               # serveur sur server/server.js
 ```
 `npm test` (node --test tests/) attend un dossier `tests/` qui n'existe pas encore.
 
-**Hub** : maquette `hub/maquette/hub-mockup.html` ; le hub réel s'ouvre dans
-l'app du portefeuille.
+**Hub** : code dans `hub/src/`, sans `node_modules` à lui ; il s'ouvre dans l'app
+du portefeuille, qui l'importe par l'alias `@hub` et le compile (Vite, Metro,
+tsc, Jest depuis `portefeuille/` : `npx jest ../hub` pour ses seuls tests).
+Maquette : `hub/maquette/hub-mockup.html`.
 
 ## Sécurité
 Ne jamais versionner `cle-maj-privee.txt` (clé de signature des mises à jour du

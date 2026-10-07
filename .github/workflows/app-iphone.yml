@@ -22,7 +22,12 @@ on:
       - 'portefeuille/ios/**'
       - 'portefeuille/package.json'
       - 'portefeuille/package-lock.json'
+      # Resolution de l'alias @hub (code du hub dans hub/src) par Metro.
+      - 'portefeuille/metro.config.js'
+      - 'portefeuille/babel.config.js'
       - '.github/workflows/app-iphone.yml'
+      # Comme portefeuille/src, hub/src n'est pas surveille : ses changements
+      # ordinaires arrivent par la mise a jour du paquet JavaScript.
 
 concurrency:
   group: app-iphone
@@ -46,11 +51,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          # Le hub (hub/src) n'a pas de dependances a lui : un seul verrou.
           cache-dependency-path: portefeuille/package-lock.json
 
       - name: Dépendances
         run: npm ci --no-audit --no-fund
 
+      # tsc et Jest couvrent aussi hub/src (alias @hub, voir hub/README.md).
       - name: Vérification du code
         run: |
           npx tsc --noEmit

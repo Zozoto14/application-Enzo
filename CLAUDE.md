@@ -47,7 +47,7 @@ Agent({
 ---
 
 ## Repository Structure (multi-app "Application ENZO")
-- `hub/` : HUB (README, maquette `hub/maquette/hub-mockup.html`). Code exécutable du hub : `portefeuille/src/hub/` (il dépend des modules du portefeuille, voir `hub/README.md`)
+- `hub/` : HUB (README, maquette `hub/maquette/hub-mockup.html`, code dans `hub/src/` avec ses tests). Le hub ne dépend d'aucun module du portefeuille : il définit ses contrats, le portefeuille l'importe par l'alias `@hub` (tsconfig, Vite, Jest, Metro de `portefeuille/`) et enregistre son app dans `portefeuille/src/app/registreHub.ts` (voir `hub/README.md`)
 - `portefeuille/` : app de gestion de portefeuille (ex-AppliBourse) : `src/`, `bureau/`, `relais/`, `ios/`, `android/`, `scripts/`, `docs/`
 - `budget/` : app « mon-budget » (`js/`, `css/`, `server/`, PWA)
 - `docs/` : docs communes ; `README.md` : lancement de chaque app
@@ -69,4 +69,4 @@ Agent({
 
 ### HUB Project - `hub/`
 - Central dashboard for all apps, admin panel for access management, extensible registry of apps, 8 themes
-- Status: implemented in `portefeuille/src/hub/`; mockup in `hub/maquette/`
+- Status: implemented in `hub/src/` (alias `@hub`, no dependency on portefeuille modules); host wiring in `portefeuille/src/app/registreHub.ts`; mockup in `hub/maquette/`
