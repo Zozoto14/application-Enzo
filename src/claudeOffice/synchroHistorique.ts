@@ -229,7 +229,10 @@ export function selectionnerPresence(entrees: readonly EntreeHistorique[], appar
   const depuis = maintenant.getTime() - FENETRE_PRESENCE_MS;
   const recentes = entrees.filter(e => (!e.appareilId || e.appareilId === appareilId) && !e.importe && Date.parse(e.ts) >= depuis);
   return recentes.slice(-MAX_ENTREES_PRESENCE).map(e => {
-    const { entree: _entree, sortie: _sortie, importe: _importe, ...reste } = e;
+    const reste: EntreeHistorique = { ...e };
+    delete reste.entree;
+    delete reste.sortie;
+    delete reste.importe;
     return reste.texte && reste.texte.length > 500 ? { ...reste, texte: `${reste.texte.slice(0, 499)}…` } : reste;
   });
 }

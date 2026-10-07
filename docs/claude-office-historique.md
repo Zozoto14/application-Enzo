@@ -14,7 +14,9 @@ même quand AppDashboard et Claude Office sont fermés. L'onglet « Historique �
 3. **Borné et discret** : rotation (`AAAA-MM.2.jsonl` au-delà de 10 Mo), 200 Mo au total (les plus anciens effacés),
    dossier 0700 et fichiers 0600, secrets masqués avant écriture, sorties d'outils **non** enregistrées par défaut.
 4. **L'application lit, ne reçoit pas** : le processus principal d'Electron relit le journal (incrémental, toutes les
-   5 s pendant que l'écran est ouvert) ; la fenêtre n'a que six canaux `claude-office:historique-*`, sans chemin libre.
+   5 s pendant que l'onglet Historique est ouvert, 2 s pour l'onglet Bureau via `claude-office:historique-activite`,
+   en lecture seule, activité des 6 dernières heures sans contenu d'outil) ; la fenêtre n'a que sept canaux
+   `claude-office:historique-*`, sans chemin libre.
 5. **Copie chiffrée facultative** (désactivée par défaut) : un objet par PC dans l'espace `principal` du relais,
    scellé par la clé de synchronisation, au plus toutes les 15 min — **aucune modification du Worker**.
 
@@ -44,7 +46,7 @@ même quand AppDashboard et Claude Office sont fermés. L'onglet « Historique �
 | `bureau/electron/claudeOfficeIpc.mjs` | Canaux `claude-office:historique-*` (confirmation native pour suppression et hook) |
 | `src/claudeOffice/logiqueHistorique.ts` | Fusion, recherche, filtres, regroupement, compteurs, export JSON/CSV |
 | `src/claudeOffice/Historique.tsx` | Onglet « Historique » |
-| `src/claudeOffice/synchroHistorique.ts`, `synchroFond.ts` | Copie chiffrée sur le relais et dépôt en arrière-plan |
+| `src/claudeOffice/synchroHistorique.ts`, `synchroFond.ts` | Copie chiffrée sur le relais, présence rapide, dépôts en arrière-plan |
 
 ## Format d'une entrée
 
@@ -102,7 +104,8 @@ sont ignorés à l'affichage.
   maintenant »), seulement si le contenu a changé, en **un seul objet par PC** qui remplace le précédent (5 000 entrées
   les plus récentes, 3 Mo au plus). Une suppression sur le PC se propage au dépôt suivant.
 - Sur le site, le téléphone ou un autre PC (compte principal relié) : l'onglet lit et fusionne les copies de tous les
-  PC équipés, en lecture seule.
+  PC équipés, en lecture seule. L'onglet « Bureau » s'en sert aussi (avec la présence rapide facultative, voir
+  [`claude-office.md`](claude-office.md)).
 
 ## Droits
 

@@ -1,6 +1,7 @@
 /**
  * Captures de Claude Office dans le bureau (fenêtre de PC 1280×800) : la tuile dans le hub, l'écran sur le
- * site (commande à lancer sur le PC), puis l'écran avec un faux pont du PC (serveur en marche, aperçu des hooks).
+ * site (onglet « Bureau » natif, état vide), puis l'écran avec un faux pont du PC (options avancées : serveur en
+ * marche, aperçu des hooks). Le bureau natif lui-même : scripts/e2e-claude-office-bureau.mjs.
  * Vérifie au passage que rien ne s'installe sans clic.
  *
  *   npx vite build
@@ -44,7 +45,11 @@ try {
   await tuile.waitFor({ timeout: 20_000 });
   await prendre('1-hub-tuile');
   await tuile.click();
-  await page.getByTestId('claude-office-site').waitFor();
+  await page.getByTestId('bureau-vide').waitFor();
+  if ((await page.getByTestId('claude-office-avance').count()) !== 0) {
+    echec = true;
+    log('ÉCHEC : options du PC proposées sur le site');
+  }
   await prendre('2-ecran-site');
   await page.getByTestId('retour-hub').first().click();
 
@@ -70,6 +75,8 @@ try {
   });
   await allerPageAdministration(page);
   await tuile.click();
+  // Le vrai Claude Office (fenêtre à part) est une option avancée, repliée par défaut.
+  await page.getByTestId('claude-office-avance-basculer').click();
   await page.getByTestId('claude-office-serveur').waitFor();
   await page.getByText(/3 agents actifs/).waitFor();
   if ((await page.evaluate(() => window.__appelsInstaller)) !== 0) {
