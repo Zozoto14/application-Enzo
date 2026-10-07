@@ -3,6 +3,7 @@ import { lirePage, sembleRenduEnJs, suggererSelecteurs } from './lecteurPage';
 import { diagnostiquerRecherche, episodesSur, lecteursDansHtml, lecteursPourPage, lireEpisodes, trouverEpisodes, trouverFilm, trouverLecteurs } from './resolution';
 import { normaliserSource, type DefinitionSource } from './sources';
 import { fauxReseau, html } from './outilsTest';
+import { testerSourcePasAPas } from './assistant';
 
 const SITE = 'https://mediatheque-exemple.fr';
 const ctx = { genererId: () => 'src-1' };
@@ -220,5 +221,53 @@ describe('diagnostic', () => {
     expect(d.detail).toMatch(/ne correspond a aucun/);
     const ok = await diagnostiquerRecherche({ client: creerClient(r) }, source(), 'x');
     expect(ok.ok).toBe(true);
+  });
+});
+
+describe('même pipeline pour la fiche et le test de l’assistant (bogue : test OK, fiche KO)', () => {
+  const SRC = normaliserSource(
+    { name: 'Médiathèque', baseUrl: SITE, enabled: true, search: { path: '/recherche/?q={query}', item: 'li.carte', title: 'a', link: 'a' }, episodes: { item: 'li.ep', number: '.num', link: 'a' }, player: { iframe: 'iframe' } },
+    null,
+    { genererId: () => 'med' },
+  );
+  // Le site écrit « Frieren » (et sa saison 2) ; ses liens sont RELATIFS à la page de résultats.
+  const site = (titres = ['Frieren', 'Frieren Saison 2']) =>
+    fauxReseau({
+      [`${SITE}/recherche/?q=`]: r => {
+        const q = decodeURIComponent(new URL(r.url).searchParams.get('q') ?? '').toLowerCase();
+        return html(titres.filter(t => t.toLowerCase().includes(q)).map((t, i) => `<li class="carte"><a href="../serie/${i}/">${t}</a></li>`).join(''));
+      },
+      [`${SITE}/serie/0/`]: html('<li class="ep"><span class="num">1</span><a href="ep-1">1</a></li><li class="ep"><span class="num">2</span><a href="ep-2">2</a></li>'),
+      [`${SITE}/serie/0/ep-1`]: html('<iframe src="https://lecteur-exemple.fr/e/1"></iframe>'),
+    });
+  const CATALOGUE = ["Frieren: Beyond Journey's End", 'Sousou no Frieren', '葬送のフリーレン'];
+
+  it('le test avec « Frieren » passe ET la fiche (titres du catalogue) trouve les épisodes', async () => {
+    const ctxR = { client: creerClient(site()) };
+    expect((await testerSourcePasAPas(ctxR, SRC, 'Frieren')).map(e => e.ok)).toEqual([true, true, true]);
+    const fiche = await trouverEpisodes(ctxR, [SRC], { titres: CATALOGUE });
+    expect(fiche.episodes.map(e => e.number)).toEqual([1, 2]);
+    expect(fiche.serie?.title).toBe('Frieren');
+    // Liens relatifs lus par rapport à la page, comme un navigateur.
+    expect(fiche.episodes[0].url).toBe(`${SITE}/serie/0/ep-1`);
+    expect(fiche.diagnostics[0]).toMatchObject({ source: 'Médiathèque', statut: 'ok', episodes: 2 });
+    // Le test sur les titres du catalogue joue exactement la même recherche que la fiche.
+    const surCatalogue = await testerSourcePasAPas(ctxR, SRC, { titres: CATALOGUE });
+    expect(surCatalogue.map(e => e.ok)).toEqual([true, true, true]);
+    expect(surCatalogue[0].detail).toContain('Retenu : « Frieren »');
+  });
+
+  it('diagnostic : titre introuvable, aucun résultat, erreur réseau, aucune source configurée pour les animés', async () => {
+    const refuse = await trouverEpisodes({ client: creerClient(site(['Frieren Saison 2'])) }, [SRC], { titres: ['Frieren'] });
+    expect(refuse.diagnostics[0]).toMatchObject({ statut: 'titre-introuvable', refuse: { title: 'Frieren Saison 2' } });
+    expect(refuse.diagnostics[0].requetes[0]).toMatchObject({ requete: 'Frieren', resultats: 1 });
+    const vide = await trouverEpisodes({ client: creerClient(site([])) }, [SRC], { titres: ['Frieren'] });
+    expect(vide.diagnostics[0].statut).toBe('aucun-resultat');
+    const panne = fauxReseau({ [`${SITE}/recherche/?q=`]: () => { throw new Error('connexion refusée'); } });
+    const erreur = await trouverEpisodes({ client: creerClient(panne) }, [SRC], { titres: ['Frieren'] });
+    expect(erreur.diagnostics[0].statut).toBe('erreur');
+    expect(erreur.diagnostics[0].erreur).toBeTruthy();
+    const filmsSeuls = normaliserSource({ name: 'Films', baseUrl: SITE, enabled: true, movies: { search: { path: '/f?q={query}', item: 'li' } } }, null, { genererId: () => 'f' });
+    expect((await trouverEpisodes({ client: creerClient(site()) }, [filmsSeuls], { titres: ['Frieren'] })).diagnostics[0].statut).toBe('non-configuree');
   });
 });

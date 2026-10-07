@@ -11,6 +11,7 @@ import {
   classerResultats,
   numeroDepuisAdresse,
   SCORE_MINIMAL,
+  SCORE_SUR,
   variantesDeRecherche,
   type PreferenceLangue,
   type ResultatBrut,
@@ -25,6 +26,7 @@ import {
   adresseDeRecherche,
   sourcePourUrl,
   sourcesActives,
+  supporteAnimes,
   supporteFilms,
   vueFilm,
   type DefinitionSource,
@@ -71,7 +73,9 @@ export async function chercherSur(
   if (!url) {
     return [];
   }
-  const { page } = await chargerPage(ctx.client, url, src);
+  const { page, url: lue } = await chargerPage(ctx.client, url, src);
+  // Un lien relatif se lit par rapport à la page de résultats, comme dans un navigateur.
+  const base = lue || url;
   const sortie: ResultatBrut[] = [];
   for (const el of page.tous(src.search.item)) {
     const titre = choisir(page, el, src.search.title || '&');
@@ -79,11 +83,11 @@ export async function chercherSur(
     if (!titre || !lien) {
       continue;
     }
-    const adresse = absolue(lien, src.baseUrl);
+    const adresse = absolue(lien, base);
     if (!adresse) {
       continue;
     }
-    const image = absolue(choisir(page, el, src.search.image, src.search.imageAttr || 'src'), src.baseUrl);
+    const image = absolue(choisir(page, el, src.search.image, src.search.imageAttr || 'src'), base);
     const annee = choisir(page, el, src.search.year);
     sortie.push({ title: titre, url: adresse, image, year: annee });
   }
@@ -138,14 +142,14 @@ export async function lireEpisodes(ctx: ContexteResolution, src: DefinitionSourc
   if (!src.episodes.item) {
     return [];
   }
-  const { page } = await chargerPage(ctx.client, urlSerie, src);
+  const { page, url: lue } = await chargerPage(ctx.client, urlSerie, src);
   const collectes: { number: number | null; title: string | null; url: string }[] = [];
   for (const el of page.tous(src.episodes.item)) {
     const href = choisir(page, el, src.episodes.link || 'a', 'href');
     if (!href) {
       continue;
     }
-    const abs = absolue(href, src.baseUrl);
+    const abs = absolue(href, lue || urlSerie);
     if (!abs || estLienDeNavigation(abs, src.baseUrl, urlSerie)) {
       continue;
     }
@@ -165,69 +169,160 @@ export interface OptionsEpisodes {
   langue?: PreferenceLangue | null;
 }
 
+/** Une recherche lancée sur une source, pour le diagnostic affiché. */
+export interface RequeteDiagnostic {
+  requete: string;
+  url: string | null;
+  resultats: number;
+  erreur?: string;
+}
+
+/** Pourquoi une source donne (ou ne donne pas) le titre. */
+export type StatutSource = 'ok' | 'erreur' | 'titre-introuvable' | 'aucun-resultat' | 'aucun-episode' | 'non-configuree';
+
+export interface DiagnosticSource {
+  source: string;
+  sourceId: string;
+  statut: StatutSource;
+  requetes: RequeteDiagnostic[];
+  /** Résultat retenu (titre, adresse, score). */
+  serie: { title: string; url: string; score: number } | null;
+  /** Meilleur résultat écarté faute de ressemblance. */
+  refuse: { title: string; url: string; score: number } | null;
+  episodes: number;
+  erreur?: string;
+}
+
 export interface ResultatEpisodes {
   episodes: EpisodeSource[];
   source: DefinitionSource | null;
   serie: ResultatClasse | null;
   /** Meilleur candidat ecarte faute de score : explique pourquoi rien n'est lu. */
   refuse: ResultatClasse | null;
+  /** Une entrée par source essayée, dans l'ordre. */
+  diagnostics: DiagnosticSource[];
+}
+
+export interface RechercheSerie {
+  serie: ResultatClasse | null;
+  refuse: ResultatClasse | null;
+  requetes: RequeteDiagnostic[];
+  /** Toutes les recherches ont échoué (réseau, garde, sélecteur) : la dernière erreur. */
+  erreur?: string;
+}
+
+const resume = (r: ResultatClasse | null) => (r ? { title: r.title, url: r.url, score: r.baseScore } : null);
+
+/**
+ * Cherche une oeuvre sur UNE source, exactement comme la fiche et le test de
+ * l'assistant : variantes du titre (complet, réduit, autres titres du
+ * catalogue), résultats cumulés, meilleur par ressemblance (jamais « le
+ * premier »), seuil `SCORE_MINIMAL`. S'arrête dès une correspondance sûre.
+ * `choisir` départage les candidats acceptables (année d'un film).
+ */
+export async function chercherOeuvre(
+  ctx: ContexteResolution,
+  src: DefinitionSource,
+  o: { titres: readonly string[]; langue?: PreferenceLangue | null; choisir?: (classes: ResultatClasse[]) => ResultatClasse | undefined },
+): Promise<RechercheSerie> {
+  const voulus = [...o.titres].filter(Boolean);
+  const preference = (o.langue || src.language || 'indifferent') as PreferenceLangue;
+  const vus = new Map<string, ResultatBrut>();
+  const requetes: RequeteDiagnostic[] = [];
+  const meilleurDe = () => {
+    const classes = classerResultats([...vus.values()], voulus, preference);
+    return { classes, choisi: (o.choisir?.(classes) ?? classes[0]) || null };
+  };
+  let erreur: string | undefined;
+  for (const requete of variantesDeRecherche(voulus)) {
+    const url = adresseDeRecherche(src, requete, preference);
+    try {
+      const trouves = await chercherSur(ctx, src, requete, preference);
+      requetes.push({ requete, url, resultats: trouves.length });
+      for (const r of trouves) {
+        if (!vus.has(r.url)) {
+          vus.set(r.url, r);
+        }
+      }
+    } catch (err) {
+      erreur = messageDe(err);
+      requetes.push({ requete, url, resultats: 0, erreur });
+      journalDe(ctx)(`[source:${src.name}] recherche « ${requete} » : ${erreur}`);
+      continue;
+    }
+    const { choisi } = meilleurDe();
+    if (choisi && choisi.baseScore >= SCORE_SUR) {
+      break;
+    }
+  }
+  const { classes, choisi } = meilleurDe();
+  const serie = choisi && choisi.baseScore >= SCORE_MINIMAL ? choisi : null;
+  return {
+    serie,
+    refuse: serie ? null : classes[0] ?? null,
+    requetes,
+    erreur: requetes.length && requetes.every(r => r.erreur) ? erreur : undefined,
+  };
 }
 
 /** Cherche la serie sur UNE source puis lit ses episodes. */
 export async function episodesSur(ctx: ContexteResolution, src: DefinitionSource, o: OptionsEpisodes): Promise<ResultatEpisodes> {
-  const voulus = [...o.titres].filter(Boolean);
-  const preference = (o.langue || src.language || 'indifferent') as PreferenceLangue;
+  const diag: DiagnosticSource = { source: src.name, sourceId: src.id, statut: 'ok', requetes: [], serie: null, refuse: null, episodes: 0 };
+  if (!o.url && !supporteAnimes(src)) {
+    return { episodes: [], source: src, serie: null, refuse: null, diagnostics: [{ ...diag, statut: 'non-configuree' }] };
+  }
   let serie: ResultatClasse | null = null;
   let pageUrl = o.url ?? null;
-  let refuse: ResultatClasse | null = null;
-
   if (!pageUrl) {
-    const vus = new Map<string, ResultatBrut>();
-    for (const requete of variantesDeRecherche(voulus)) {
-      try {
-        for (const r of await chercherSur(ctx, src, requete, preference)) {
-          if (!vus.has(r.url)) {
-            vus.set(r.url, r);
-          }
-        }
-      } catch (err) {
-        journalDe(ctx)(`[source:${src.name}] recherche « ${requete} » : ${messageDe(err)}`);
-        continue;
-      }
-      const meilleur = classerResultats([...vus.values()], voulus, preference)[0];
-      if (meilleur && meilleur.baseScore >= SCORE_MINIMAL) {
-        serie = meilleur;
-        break;
-      }
+    const r = await chercherOeuvre(ctx, src, o);
+    diag.requetes = r.requetes;
+    diag.refuse = resume(r.refuse);
+    if (!r.serie) {
+      diag.statut = r.erreur ? 'erreur' : r.refuse ? 'titre-introuvable' : 'aucun-resultat';
+      diag.erreur = r.erreur;
+      return { episodes: [], source: src, serie: null, refuse: r.refuse, diagnostics: [diag] };
     }
-    if (!serie) {
-      refuse = classerResultats([...vus.values()], voulus, preference)[0] ?? null;
-      return { episodes: [], source: src, serie: null, refuse };
-    }
+    serie = r.serie;
+    diag.serie = resume(serie);
     pageUrl = serie.url;
   }
-  return { episodes: await lireEpisodes(ctx, src, pageUrl), source: src, serie, refuse };
+  try {
+    const episodes = await lireEpisodes(ctx, src, pageUrl);
+    diag.episodes = episodes.length;
+    diag.statut = episodes.length ? 'ok' : 'aucun-episode';
+    return { episodes, source: src, serie, refuse: null, diagnostics: [diag] };
+  } catch (err) {
+    diag.statut = 'erreur';
+    diag.erreur = `Page de la série illisible (${pageUrl}) : ${messageDe(err)}`;
+    journalDe(ctx)(`[source:${src.name}] ${diag.erreur}`);
+    return { episodes: [], source: src, serie, refuse: null, diagnostics: [diag] };
+  }
 }
 
-/** Parcourt les sources activees jusqu'a ce que l'une donne des episodes. */
+/** Parcourt les sources activees jusqu'a ce que l'une donne des episodes ; garde le diagnostic de chacune. */
 export async function trouverEpisodes(
   ctx: ContexteResolution,
   sources: readonly DefinitionSource[],
   o: OptionsEpisodes,
 ): Promise<ResultatEpisodes> {
   let refuse: ResultatClasse | null = null;
+  let partiel: ResultatEpisodes | null = null;
+  const diagnostics: DiagnosticSource[] = [];
   for (const src of sourcesActives(sources)) {
     try {
       const r = await episodesSur(ctx, src, o);
+      diagnostics.push(...r.diagnostics);
       if (r.episodes.length) {
-        return r;
+        return { ...r, diagnostics };
       }
       refuse = refuse ?? r.refuse;
+      partiel = partiel ?? (r.serie ? r : null);
     } catch (err) {
       journalDe(ctx)(`[source:${src.name}] ${messageDe(err)}`);
+      diagnostics.push({ source: src.name, sourceId: src.id, statut: 'erreur', requetes: [], serie: null, refuse: null, episodes: 0, erreur: messageDe(err) });
     }
   }
-  return { episodes: [], source: null, serie: null, refuse };
+  return { episodes: [], source: partiel?.source ?? null, serie: partiel?.serie ?? null, refuse, diagnostics };
 }
 
 // ---------------------------------------------------------------------------
@@ -239,11 +334,11 @@ export async function lecteursSur(ctx: ContexteResolution, src: DefinitionSource
   if (!urlPage) {
     return [];
   }
-  const { page } = await chargerPage(ctx.client, urlPage, src);
+  const { page, url: lue } = await chargerPage(ctx.client, urlPage, src);
   const sortie: Lecteur[] = [];
   const vus = new Set<string>();
   const ajouter = (brut: string | null, nom: string) => {
-    const url = urlPubliqueSure(absolue(brut, src.baseUrl));
+    const url = urlPubliqueSure(absolue(brut, lue || urlPage));
     if (!url || vus.has(url)) {
       return;
     }
@@ -290,6 +385,44 @@ export interface ResultatFilm {
   choisi: ResultatClasse | null;
   refuse: ResultatClasse | null;
   source: DefinitionSource | null;
+  diagnostics: DiagnosticSource[];
+}
+
+/** L'annee, quand elle figure dans le titre ou dans son bloc, departage un remake. */
+export const parAnnee = (annee: number | string | null | undefined) => (classes: ResultatClasse[]) =>
+  annee ? classes.find(r => r.baseScore >= SCORE_MINIMAL && `${r.title} ${r.year ?? ''}`.includes(String(annee))) ?? classes[0] : classes[0];
+
+/** Cherche le film sur UNE source (vue films), comme la lecture et le test de l'assistant. */
+export async function filmSur(
+  ctx: ContexteResolution,
+  brute: DefinitionSource,
+  o: { titres: readonly string[]; annee?: number | string | null; langue?: PreferenceLangue | null },
+): Promise<ResultatFilm> {
+  const diag: DiagnosticSource = { source: brute.name, sourceId: brute.id, statut: 'ok', requetes: [], serie: null, refuse: null, episodes: 0 };
+  if (!supporteFilms(brute)) {
+    return { sources: [], choisi: null, refuse: null, source: null, diagnostics: [{ ...diag, statut: 'non-configuree' }] };
+  }
+  const src = vueFilm(brute);
+  const r = await chercherOeuvre(ctx, src, { titres: o.titres, langue: o.langue ?? 'indifferent', choisir: parAnnee(o.annee) });
+  diag.requetes = r.requetes;
+  diag.refuse = resume(r.refuse);
+  if (!r.serie) {
+    diag.statut = r.erreur ? 'erreur' : r.refuse ? 'titre-introuvable' : 'aucun-resultat';
+    diag.erreur = r.erreur;
+    return { sources: [], choisi: null, refuse: r.refuse, source: null, diagnostics: [diag] };
+  }
+  diag.serie = resume(r.serie);
+  try {
+    const lecteurs = await lecteursSur(ctx, src, r.serie.url);
+    diag.episodes = lecteurs.length ? 1 : 0;
+    diag.statut = lecteurs.length ? 'ok' : 'aucun-episode';
+    return { sources: lecteurs, choisi: r.serie, refuse: null, source: lecteurs.length ? brute : null, diagnostics: [diag] };
+  } catch (err) {
+    diag.statut = 'erreur';
+    diag.erreur = `Page du film illisible (${r.serie.url}) : ${messageDe(err)}`;
+    journalDe(ctx)(`[source:${src.name}] ${diag.erreur}`);
+    return { sources: [], choisi: r.serie, refuse: null, source: null, diagnostics: [diag] };
+  }
 }
 
 /** Cherche le film chez chaque source ayant une section films. */
@@ -298,50 +431,26 @@ export async function trouverFilm(
   sources: readonly DefinitionSource[],
   o: { titres: readonly string[]; annee?: number | string | null },
 ): Promise<ResultatFilm> {
-  const voulus = [...o.titres].filter(Boolean);
   let refuse: ResultatClasse | null = null;
+  const diagnostics: DiagnosticSource[] = [];
   for (const brute of sourcesActives(sources)) {
     if (!supporteFilms(brute)) {
       continue;
     }
-    const src = vueFilm(brute);
-    const vus = new Map<string, ResultatBrut>();
-    let choisi: ResultatClasse | null = null;
-    for (const requete of variantesDeRecherche(voulus)) {
-      try {
-        for (const r of await chercherSur(ctx, src, requete)) {
-          if (!vus.has(r.url)) {
-            vus.set(r.url, r);
-          }
-        }
-      } catch (err) {
-        journalDe(ctx)(`[source:${src.name}] film « ${requete} » : ${messageDe(err)}`);
-        continue;
-      }
-      const classes = classerResultats([...vus.values()], voulus);
-      // L'annee, quand elle figure dans le titre ou dans son bloc, departage un remake.
-      const meilleur = o.annee
-        ? classes.find(r => r.baseScore >= SCORE_MINIMAL && `${r.title} ${r.year ?? ''}`.includes(String(o.annee))) ?? classes[0]
-        : classes[0];
-      if (meilleur && meilleur.baseScore >= SCORE_MINIMAL) {
-        choisi = meilleur;
-        break;
-      }
-    }
-    if (!choisi) {
-      refuse = refuse ?? classerResultats([...vus.values()], voulus)[0] ?? null;
-      continue;
-    }
     try {
-      const lecteurs = await lecteursSur(ctx, src, choisi.url);
-      if (lecteurs.length) {
-        return { sources: lecteurs, choisi, refuse: null, source: brute };
+      // Les films se cherchent sans preference de doublage (comme avant).
+      const r = await filmSur(ctx, brute, { ...o, langue: 'indifferent' });
+      diagnostics.push(...r.diagnostics);
+      if (r.sources.length) {
+        return { ...r, diagnostics };
       }
+      refuse = refuse ?? r.refuse;
     } catch (err) {
-      journalDe(ctx)(`[source:${src.name}] ${messageDe(err)}`);
+      journalDe(ctx)(`[source:${brute.name}] ${messageDe(err)}`);
+      diagnostics.push({ source: brute.name, sourceId: brute.id, statut: 'erreur', requetes: [], serie: null, refuse: null, episodes: 0, erreur: messageDe(err) });
     }
   }
-  return { sources: [], choisi: null, refuse, source: null };
+  return { sources: [], choisi: null, refuse, source: null, diagnostics };
 }
 
 // ---------------------------------------------------------------------------

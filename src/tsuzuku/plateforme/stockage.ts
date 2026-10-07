@@ -39,6 +39,8 @@ export const CLES = {
   avance: 'tsuzuku.avance',
   /** Réglages de confort (doublage, épisode suivant, déjà vus). */
   reglages: 'tsuzuku.reglages',
+  /** Titre choisi à la main pour chercher une fiche sur les sources (« Chercher avec un autre titre »), par fiche. */
+  titresRecherche: 'tsuzuku.recherche.titres',
   /** Dernier mode ouvert (animés ou films). */
   mode: 'tsuzuku.mode',
 } as const;
