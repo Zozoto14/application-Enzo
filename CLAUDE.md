@@ -46,17 +46,27 @@ Agent({
 
 ---
 
+## Repository Structure (multi-app "Application ENZO")
+- `hub/` : HUB (README, maquette `hub/maquette/hub-mockup.html`). Code exécutable du hub : `portefeuille/src/hub/` (il dépend des modules du portefeuille, voir `hub/README.md`)
+- `portefeuille/` : app de gestion de portefeuille (ex-AppliBourse) : `src/`, `bureau/`, `relais/`, `ios/`, `android/`, `scripts/`, `docs/`
+- `budget/` : app « mon-budget » (`js/`, `css/`, `server/`, PWA)
+- `docs/` : docs communes ; `README.md` : lancement de chaque app
+- `.github/workflows/` : CI (iOS du portefeuille, chemins `portefeuille/...`)
+- Ne jamais versionner `cle-maj-privee.txt`, `.env*`, `node_modules/`, builds
+- L'id d'app du portefeuille est `portefeuille` (ancien `portfolio` migré à la lecture)
+
 ## Current Projects
 
-### AppliBourse Portfolio App
+### Portefeuille (AppliBourse) - `portefeuille/`
 - Cross-platform React Native + react-native-web (Vite)
 - Cloudflare Workers relay with encryption (XChaCha20-Poly1305)
 - iOS via AltStore, PC desktop (Electron), rescue website
 - Multi-profile system (admin + friends)
 - Status: Core features stable, testing on iPad pending
 
-### HUB Project (New)
-- Central dashboard for all apps
-- Admin panel for user access management
-- Extensible registry of apps
-- Status: Planning phase, awaiting clarifications
+### Budget - `budget/`
+- PWA de suivi de budget, serveur Node (`npm start`)
+
+### HUB Project - `hub/`
+- Central dashboard for all apps, admin panel for access management, extensible registry of apps, 8 themes
+- Status: implemented in `portefeuille/src/hub/`; mockup in `hub/maquette/`
