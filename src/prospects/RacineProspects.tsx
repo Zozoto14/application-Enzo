@@ -465,6 +465,29 @@ function Compteurs({ theme, mobile, c }: { theme: ThemeHub; mobile: boolean; c: 
   );
 }
 
+/** Avis : celui de l'Administration sur le bureau ; texte de 15 px au moins sur téléphone. */
+function AvisP({ theme, mobile, texte, genre, testID }: { theme: ThemeHub; mobile: boolean; texte: string; genre: 'ok' | 'alerte' | 'critique' | 'info'; testID?: string }) {
+  if (!mobile) return <Avis theme={theme} genre={genre} texte={texte} testID={testID} />;
+  const couleur = genre === 'ok' ? theme.ok : genre === 'alerte' ? theme.alerte : genre === 'critique' ? theme.critique : theme.accent;
+  return (
+    <Text
+      testID={testID}
+      accessibilityLiveRegion="polite"
+      style={[styles.avisMobile, { color: theme.texte, borderLeftColor: couleur, backgroundColor: teinteTransparente(couleur, 0.14), ...police(theme.policeTexte) }]}>
+      {texte}
+    </Text>
+  );
+}
+
+/** Statut lisible sur téléphone (15 px). */
+function PastilleMobile({ theme, texte, couleur, testID }: { theme: ThemeHub; texte: string; couleur: string; testID?: string }) {
+  return (
+    <Text testID={testID} style={[styles.pastille, { color: theme.texte, borderColor: couleur, backgroundColor: teinteTransparente(couleur, 0.16), ...police(theme.policeTexte) }]}>
+      {texte}
+    </Text>
+  );
+}
+
 function RappelRgpd({ theme, mobile }: { theme: ThemeHub; mobile: boolean }) {
   return (
     <View style={[styles.rappel, { borderLeftColor: theme.teintes.quatre, backgroundColor: teinteTransparente(theme.teintes.quatre, 0.1) }]} testID="prospects-rgpd">
@@ -490,7 +513,7 @@ function FormulaireProspect({ theme, mobile, initial, onValider, onAnnuler }: { 
       <Text style={[styles.etiquette, { color: theme.texte, fontSize: mobile ? TEXTE.legende : 13 }]}>Statut</Text>
       <Puces<StatutProspect> theme={theme} mobile={mobile} libelle="Statut" valeur={s.statut} options={STATUTS.map(x => [x, LIBELLES_STATUT_PROSPECT[x]] as const)} onChoisir={v => setS(x => ({ ...x, statut: v }))} testID="prospects-form-statut" />
       <ChampP theme={theme} mobile={mobile} libelle="Prochaine relance (JJ/MM/AAAA)" valeur={s.relance} onChanger={champ('relance')} testID="prospects-form-relance" placeholder="Vide : aucune" />
-      {relanceInvalide ? <Avis theme={theme} genre="alerte" texte="Date attendue : JJ/MM/AAAA." /> : null}
+      {relanceInvalide ? <AvisP theme={theme} mobile={mobile} genre="alerte" texte="Date attendue : JJ/MM/AAAA." /> : null}
       <ChampP theme={theme} mobile={mobile} libelle="Notes" valeur={s.notes} onChanger={champ('notes')} testID="prospects-form-notes" multiligne />
       <Pressable
         testID="prospects-form-ne-plus-contacter"
@@ -559,7 +582,7 @@ function FormulaireContact({ theme, mobile, aujourdhui, onValider, onAnnuler }: 
       <ChampP theme={theme} mobile={mobile} libelle="Date (JJ/MM/AAAA)" valeur={date} onChanger={setDate} testID="prospects-contact-date" />
       <ChampP theme={theme} mobile={mobile} libelle="Note" valeur={note} onChanger={setNote} testID="prospects-contact-note" multiligne placeholder="Appel, e-mail envoyé, réponse…" />
       <ChampP theme={theme} mobile={mobile} libelle="Relancer dans (jours, 0 : pas de relance)" valeur={relance} onChanger={v => setRelance(v.replace(/[^\d]/g, '').slice(0, 3))} testID="prospects-contact-relance" nature="nombre" />
-      {!jour ? <Avis theme={theme} genre="alerte" texte="Date attendue : JJ/MM/AAAA." /> : null}
+      {!jour ? <AvisP theme={theme} mobile={mobile} genre="alerte" texte="Date attendue : JJ/MM/AAAA." /> : null}
       <View style={mobile ? styles.pileMobile : commun.actions}>
         <Bouton theme={theme} mobile={mobile} variante="plein" titre="Noter le contact" onPress={() => jour && onValider({ date: jour, note, relanceDans: Number(relance) || 0 })} testID="prospects-contact-valider" desactive={!jour} />
         <Bouton theme={theme} mobile={mobile} titre="Annuler" onPress={onAnnuler} testID="prospects-contact-annuler" />
@@ -575,7 +598,7 @@ function PanneauEcrire({ theme, mobile, prospect, modeles, aujourdhui, actions, 
   if (blocage) {
     return (
       <View style={styles.formulaire} testID="prospects-ecrire">
-        <Avis theme={theme} genre="critique" texte={`« Écrire » est bloqué : ${blocage}`} testID="prospects-ecrire-bloque" />
+        <AvisP theme={theme} mobile={mobile} genre="critique" texte={`« Écrire » est bloqué : ${blocage}`} testID="prospects-ecrire-bloque" />
         <Bouton theme={theme} mobile={mobile} titre="Fermer" onPress={onFermer} testID="prospects-ecrire-fermer" />
       </View>
     );
@@ -646,15 +669,15 @@ function EditeurModeles({ theme, mobile, modeles, actions, onFermer }: { theme: 
     <View style={styles.formulaire} testID="prospects-modeles">
       {modeles.length === 0 ? <Text style={[texte, { color: theme.attenue }]}>Aucun modèle.</Text> : null}
       {modeles.map(m => (
-        <View key={m.id} style={[styles.ligneModele, { borderColor: theme.ligne }]} testID={`prospects-modele-${m.id}`}>
-          <View style={{ flex: 1, minWidth: 160 }}>
+        <View key={m.id} style={[styles.ligneModele, mobile && styles.ligneModeleMobile, { borderColor: theme.ligne }]} testID={`prospects-modele-${m.id}`}>
+          <View style={mobile ? undefined : { flex: 1, minWidth: 160 }}>
             <Text style={[texte, { fontWeight: '700' }]}>{m.nom}</Text>
             <Text style={[texte, { color: theme.attenue }]} numberOfLines={2}>
               {m.sujet}
             </Text>
           </View>
-          <Bouton theme={theme} mobile={false} titre="Modifier" onPress={() => setEdite({ ...m })} testID={`prospects-modele-modifier-${m.id}`} />
-          <Bouton theme={theme} mobile={false} titre="Supprimer" variante="danger" onPress={() => actions.supprimerModele(m.id)} testID={`prospects-modele-supprimer-${m.id}`} />
+          <Bouton theme={theme} mobile={mobile} titre="Modifier" onPress={() => setEdite({ ...m })} testID={`prospects-modele-modifier-${m.id}`} />
+          <Bouton theme={theme} mobile={mobile} titre="Supprimer" variante="danger" onPress={() => actions.supprimerModele(m.id)} testID={`prospects-modele-supprimer-${m.id}`} />
         </View>
       ))}
       <View style={mobile ? styles.pileMobile : commun.actions}>
@@ -668,7 +691,7 @@ function EditeurModeles({ theme, mobile, modeles, actions, onFermer }: { theme: 
 function ConfirmationSuppression({ theme, mobile, prospect, onConfirmer, onAnnuler }: { theme: ThemeHub; mobile: boolean; prospect: Prospect; onConfirmer(): void; onAnnuler(): void }) {
   return (
     <View style={styles.formulaire} testID="prospects-suppression">
-      <Avis theme={theme} genre="critique" texte={`Supprimer définitivement la fiche de ${prospect.nom || prospect.email} et son historique ? Pour garder trace d’un refus, préférez « Ne plus contacter ».`} />
+      <AvisP theme={theme} mobile={mobile} genre="critique" texte={`Supprimer définitivement la fiche de ${prospect.nom || prospect.email} et son historique ? Pour garder trace d’un refus, préférez « Ne plus contacter ».`} />
       <View style={mobile ? styles.pileMobile : commun.actions}>
         <Bouton theme={theme} mobile={mobile} variante="danger" titre="Supprimer" onPress={onConfirmer} testID="prospects-confirmer-suppression" />
         <Bouton theme={theme} mobile={mobile} titre="Annuler" onPress={onAnnuler} testID="prospects-annuler-suppression" />
@@ -832,7 +855,7 @@ function VueMobile(v: PropsVue) {
         testID="prospects-defilement"
         pied={<BoutonPrincipal theme={theme} titre="Nouveau prospect" onPress={() => setOuvert({ g: 'nouveau' })} testID="prospects-nouveau" />}>
         <Compteurs theme={theme} mobile={mobile} c={v.compteurs} />
-        {v.avis && !ouvert ? <Avis theme={theme} genre={v.avis.genre} texte={v.avis.texte} testID="prospects-avis" /> : null}
+        {v.avis && !ouvert ? <AvisP theme={theme} mobile={mobile} genre={v.avis.genre} texte={v.avis.texte} testID="prospects-avis" /> : null}
         <ChampMobile theme={theme} etiquette="Rechercher" nature="recherche" value={v.recherche} onChangeText={v.setRecherche} placeholder="Nom, entreprise, e-mail…" testID="prospects-recherche" />
         <Puces<Vue> theme={theme} mobile={mobile} libelle="Vue" valeur={v.vue} options={[['tous', 'Tous'], ['relancer', `À relancer (${v.compteurs.aRelancer})`]]} onChoisir={v.setVue} testID="prospects-vue" />
         <GroupeCellules theme={theme}>
@@ -870,7 +893,7 @@ function VueMobile(v: PropsVue) {
       </EcranMobile>
 
       <FeuilleBasse theme={theme} visible={Boolean(ouvert)} titre={ouvert ? titres[ouvert.g] : ''} onFermer={fermer} testID="prospects-feuille">
-        {v.avis && ouvert ? <Avis theme={theme} genre={v.avis.genre} texte={v.avis.texte} testID="prospects-avis" /> : null}
+        {v.avis && ouvert ? <AvisP theme={theme} mobile={mobile} genre={v.avis.genre} texte={v.avis.texte} testID="prospects-avis" /> : null}
         {ouvert?.g === 'nouveau' ? <FormulaireProspect theme={theme} mobile={mobile} onValider={s => actions.enregistrer(s)} onAnnuler={fermer} /> : null}
         {ouvert?.g === 'lot' ? <FormulaireLot theme={theme} mobile={mobile} onValider={actions.lot} onAnnuler={fermer} /> : null}
         {ouvert?.g === 'import' ? <FormulaireImport theme={theme} mobile={mobile} onValider={actions.importer} onAnnuler={fermer} /> : null}
@@ -914,8 +937,8 @@ function FicheMobile({ theme, prospect: p, aujourdhui, actions, setOuvert }: { t
   return (
     <View style={styles.formulaire} testID={`prospects-fiche-${p.id}`}>
       <View style={[commun.ligne, { flexWrap: 'wrap', paddingVertical: 0 }]}>
-        <Pilule theme={theme} texte={LIBELLES_STATUT_PROSPECT[p.statut]} couleur={couleurStatut(p.statut, theme)} testID={`prospects-statut-${p.id}`} />
-        {p.nePlusContacter ? <Pilule theme={theme} texte="Ne plus contacter" couleur={theme.critique} testID={`prospects-refus-${p.id}`} /> : null}
+        <PastilleMobile theme={theme} texte={LIBELLES_STATUT_PROSPECT[p.statut]} couleur={couleurStatut(p.statut, theme)} testID={`prospects-statut-${p.id}`} />
+        {p.nePlusContacter ? <PastilleMobile theme={theme} texte="Ne plus contacter" couleur={theme.critique} testID={`prospects-refus-${p.id}`} /> : null}
       </View>
       {p.entreprise ? <Text style={texte}>{p.entreprise}</Text> : null}
       <Text style={texte} selectable>
@@ -955,6 +978,9 @@ const styles = StyleSheet.create({
   case: { width: 24, height: 24, borderWidth: 2, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
   apercu: { borderWidth: 1, borderRadius: 8, padding: 12, gap: 8 },
   ligneModele: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, borderBottomWidth: 1, paddingBottom: 10 },
+  ligneModeleMobile: { flexDirection: 'column', alignItems: 'stretch' },
   grille: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   carte: { flexGrow: 1, flexBasis: 340 },
+  avisMobile: { padding: 12, borderRadius: 8, fontSize: TEXTE.legende, lineHeight: 21, borderLeftWidth: 4, overflow: 'hidden' },
+  pastille: { fontSize: TEXTE.legende, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderRadius: 999, overflow: 'hidden' },
 });
