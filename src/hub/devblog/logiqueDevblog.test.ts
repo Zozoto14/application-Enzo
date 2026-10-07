@@ -91,14 +91,20 @@ describe('devblog', () => {
     // Affichage téléphone : pour tout le monde.
     expect(ENTREES.find(e => e.version === '2026.10.10')!.titre).toBe('Affichage téléphone repensé (1/2)');
     expect(ENTREES.find(e => e.version === '2026.10.10')!.fonctionnalites.every(f => !f.adminSeulement && !f.gestionnaireSeulement)).toBe(true);
-    // Tsuzuku, page Sources (dernière entrée) : les états vides concernent tout le monde, le reste les Fondateurs.
-    expect(ENTREES[0].titre).toBe('Tsuzuku : page Sources et assistant guidé');
-    expect(ENTREES[0].fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['tsuzuku-sans-source']);
+    // Tsuzuku, page Sources : les états vides concernent tout le monde, le reste les Fondateurs.
+    expect(ENTREES.find(e => e.version === '2026.10.12')!.titre).toBe('Tsuzuku : page Sources et assistant guidé');
+    expect(ENTREES.find(e => e.version === '2026.10.12')!.fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['tsuzuku-sans-source']);
     // Déverrouillage : tout concerne aussi les amis, sauf le coffre publié par le PC.
     expect(ENTREES.find(e => e.version === '2026.10.11')!.titre).toBe('Déverrouillage : diagnostic et messages plus clairs');
     expect(ENTREES.find(e => e.version === '2026.10.11')!.fonctionnalites.filter(f => f.adminSeulement).map(f => f.id)).toEqual(['deverrouillage-coffre-pc']);
-    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('afficher');
-    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.12', '2026.10.11', '2026.10.10', '2026.10.09', '2026.10.08', '2026.10.07', '2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES.slice(1)).genre).toBe('afficher');
+    // Pages du hub et app Abonnements (dernière entrée) : réservées à l'administration ; un ami n'a rien de vide.
+    expect(ENTREES[0].titre).toBe('Deux pages dans le hub, et une app Abonnements');
+    expect(ENTREES[0].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
+    expect(ENTREES[0].fonctionnalites.find(f => f.id === 'app-abonnements')?.essayer).toEqual({ genre: 'app', app: 'abonnements' });
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('rien');
+    expect(decider(undefined, { profilNeuf: false, admin: true }, ENTREES).genre).toBe('afficher');
+    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.13', '2026.10.12', '2026.10.11', '2026.10.10', '2026.10.09', '2026.10.08', '2026.10.07', '2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
   });
 
   it('marquer lu est idempotent et tolère un état corrompu', () => {

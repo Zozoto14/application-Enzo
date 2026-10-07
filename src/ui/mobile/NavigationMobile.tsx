@@ -1,11 +1,13 @@
 /**
  * Coque de navigation du mode téléphone, au niveau du hub.
  *
- * Barre basse retenue (4 entrées) :
+ * Barre basse retenue (4 entrées, 5 pour les rangs d'administration) :
  *
- *     ⌂ Accueil   ·   ? Support   ·   ⚙ Réglages   ·   ◉ Compte
+ *     ⌂ Accueil   ·   [◈ Admin]   ·   ? Support   ·   ⚙ Réglages   ·   ◉ Compte
  *
- *  - Accueil : le hub (changer d'app = revenir ici) ;
+ *  - Accueil : le hub, page « Applications » (changer d'app = revenir ici) ;
+ *  - Admin : le hub, page « Administration » (apps réservées : Administration, Abonnements…) ;
+ *    présente seulement si l'hôte fournit `onAdministration` (rang habilité, voir `hub/pages.ts`) ;
  *  - Support : écrire à l'équipe ;
  *  - Réglages : LA page Paramètres (liste → sous-pages) ;
  *  - Compte : feuille basse avec l'état de synchronisation détaillé (« Synchroniser maintenant »),
@@ -30,6 +32,8 @@ import { Cellule, GroupeCellules } from './ListeCellules';
 export interface NavigationMobile {
   theme: ThemeHub;
   onAccueil(): void;
+  /** Page « Administration » du hub ; absente : pas d'entrée « Admin » (rang non habilité). */
+  onAdministration?(): void;
   onSupport?(): void;
   onParametres(): void;
   onVerrouiller?(): void;
@@ -47,13 +51,14 @@ export function useNavigationMobile(): NavigationMobile | undefined {
   return useContext(NavigationMobileContexte);
 }
 
-export type EntreeHub = 'accueil' | 'support' | 'parametres' | 'compte';
+export type EntreeHub = 'accueil' | 'administration' | 'support' | 'parametres' | 'compte';
 
 /** Entrées de la barre basse du hub (pures, testées). */
-export function entreesBarreHub(nav: Pick<NavigationMobile, 'onSupport' | 'synchro'>, maintenant = Date.now()): EntreeOnglet[] {
+export function entreesBarreHub(nav: Pick<NavigationMobile, 'onSupport' | 'synchro' | 'onAdministration'>, maintenant = Date.now()): EntreeOnglet[] {
   const niveau = nav.synchro ? resumerSynchro(nav.synchro.vue, maintenant).niveau : undefined;
   return [
-    { cle: 'accueil', libelle: 'Accueil', glyphe: '⌂', description: 'Accueil : toutes les apps' },
+    { cle: 'accueil', libelle: 'Accueil', glyphe: '⌂', description: 'Accueil : vos applications' },
+    ...(nav.onAdministration ? [{ cle: 'administration', libelle: 'Admin', glyphe: '◈', description: 'Administration : apps réservées à l’administration' }] : []),
     ...(nav.onSupport ? [{ cle: 'support', libelle: 'Support', glyphe: '?', description: 'Support : écrire à l’équipe' }] : []),
     { cle: 'parametres', libelle: 'Réglages', glyphe: '⚙︎', description: 'Paramètres' },
     {
@@ -78,6 +83,7 @@ export function BarreBasseHub({ actif }: { actif?: EntreeHub }) {
   );
   const choisir = (cle: string) => {
     if (cle === 'accueil') nav.onAccueil();
+    else if (cle === 'administration') nav.onAdministration?.();
     else if (cle === 'support') nav.onSupport?.();
     else if (cle === 'parametres') nav.onParametres();
     else if (cle === 'compte') setCompteOuvert(true);

@@ -1,12 +1,15 @@
 /**
- * Section « Abonnements » : suivi MANUEL de qui a payé son abonnement au hub.
- * Rappels seulement : aucun paiement automatique, aucune coupure automatique.
- * Réservée aux Fondateurs (`abonnements/actionsAbo.ts` revérifie le rang).
+ * Onglet « Suivi » de l'app Abonnements : suivi MANUEL de qui a payé son
+ * abonnement au hub. Rappels seulement : aucun paiement automatique, aucune
+ * coupure automatique. Réservé aux Fondateurs (`actionsAbo.ts` revérifie le rang).
+ *
+ * Les données restent celles de l'Administration (`DonneesAdmin.abonnements`,
+ * base chiffrée du Fondateur, même synchronisation) : seul l'écran a changé d'app.
  */
 
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import type { Profil } from '../../../profils/profils';
+import type { Profil } from '../../profils/profils';
 import {
   LIBELLES_PERIODICITE,
   LIBELLES_STATUT,
@@ -28,11 +31,14 @@ import {
   type LigneAbo,
   type Periodicite,
   type StatutAbo,
-} from '../../abonnements/abonnements';
-import { comptesSuivis, exporterPaiementsPar, modifierCompteAboPar, suspendrePourImpayePar } from '../../abonnements/actionsAbo';
-import { police } from '../../themes';
-import { reactiverPar } from '../actions';
-import { Avis, BoutonHub, Champ, Intertitre, Panneau, Pilule, Segments, commun, type OutilsAdmin } from './commun';
+} from './abonnements';
+import { comptesSuivis, exporterPaiementsPar, modifierCompteAboPar, suspendrePourImpayePar } from './actionsAbo';
+import { police } from '../themes';
+import { reactiverPar } from '../admin/actions';
+import { Avis, BoutonHub, Champ, Intertitre, Panneau, Pilule, Segments, commun, type OutilsAdmin } from '../admin/ui/commun';
+
+/** Ce que l'app Abonnements fournit à son onglet « Suivi » (sous-ensemble des outils de l'Administration). */
+export type OutilsAbo = Pick<OutilsAdmin, 'theme' | 'donnees' | 'tous' | 'acteur' | 'maintenant' | 'majDonnees' | 'journaliser' | 'agir' | 'services' | 'modifierProfils'>;
 
 export const AIDE_ABONNEMENTS =
   'Suivi manuel et informatif : vous notez qui a payé, l’application calcule les échéances et vous rappelle. Aucun paiement n’est prélevé ni vérifié, et aucun compte n’est coupé automatiquement. Ce n’est ni une facturation ni un conseil fiscal ou juridique.';
@@ -61,7 +67,7 @@ async function copier(texte: string): Promise<boolean> {
   }
 }
 
-function couleurStatut(statut: StatutAbo, theme: OutilsAdmin['theme']): string {
+function couleurStatut(statut: StatutAbo, theme: OutilsAbo['theme']): string {
   return statut === 'en-retard' ? theme.critique : statut === 'echeance-proche' ? theme.alerte : statut === 'a-jour' ? theme.ok : theme.attenue;
 }
 
@@ -72,7 +78,7 @@ function texteEcheance(l: LigneAbo): string {
   return `Échéance ${dateFr(l.echeance)} (${relatif})`;
 }
 
-export function Abonnements({ outils }: { outils: OutilsAdmin }) {
+export function SuiviAbonnements({ outils, onReglages }: { outils: OutilsAbo; onReglages?(): void }) {
   const { theme, donnees, tous } = outils;
   const reglages = donnees.abonnements.reglages;
   const aujourdhui = dateDuJour(outils.maintenant());
@@ -128,7 +134,7 @@ export function Abonnements({ outils }: { outils: OutilsAdmin }) {
           {resume.texte || 'Aucun retard, aucune échéance cette semaine.'}
         </Text>
         <Text style={[attenue, { fontSize: 12 }]} testID="admin-abonnements-regle">
-          Règle en cas de retard : {reglages.actionRetard === 'restreindre' ? 'restreindre l’accès (suspension manuelle, avec confirmation)' : 'rappel seulement (rien de bloquant)'}. Réglable dans les Paramètres, section Administration.
+          Règle en cas de retard : {reglages.actionRetard === 'restreindre' ? 'restreindre l’accès (suspension manuelle, avec confirmation)' : 'rappel seulement (rien de bloquant)'}. Réglable dans l’onglet Réglages de cette app.
         </Text>
         <View style={commun.actions}>
           <Segments<'tous' | 'en-retard' | 'echeance'> theme={theme} libelle="Filtre" valeur={filtre} options={FILTRES} onChoisir={setFiltre} testID="admin-abo-filtre" />
@@ -136,7 +142,7 @@ export function Abonnements({ outils }: { outils: OutilsAdmin }) {
             <Champ theme={theme} libelle="Sous (jours)" valeur={sous} onChanger={v => setSous(v.replace(/[^\d]/g, ''))} clavier="number-pad" maxLength={3} testID="admin-abo-sous" style={{ width: 110 }} />
           ) : null}
           <BoutonHub theme={theme} titre="Exporter l’historique (CSV)" onPress={exporter} testID="admin-abo-export" />
-          <BoutonHub theme={theme} titre="Réglages des abonnements" onPress={() => outils.onParametres?.('administration')} testID="admin-abo-reglages" />
+          {onReglages ? <BoutonHub theme={theme} titre="Réglages des abonnements" onPress={onReglages} testID="admin-abo-reglages" /> : null}
         </View>
         {info ? <Avis theme={theme} genre="info" texte={info} testID="admin-abo-info" /> : null}
       </Panneau>
@@ -293,7 +299,7 @@ export function Abonnements({ outils }: { outils: OutilsAdmin }) {
   );
 }
 
-function Formulaire({ theme, children, testID }: { theme: OutilsAdmin['theme']; children: React.ReactNode; testID: string }) {
+function Formulaire({ theme, children, testID }: { theme: OutilsAbo['theme']; children: React.ReactNode; testID: string }) {
   return (
     <View testID={testID} style={{ gap: 10, padding: 12, borderTopWidth: 1, borderTopColor: theme.ligne }}>
       {children}
@@ -307,7 +313,7 @@ function FormulairePaiement({
   partiel,
   onValider,
 }: {
-  outils: OutilsAdmin;
+  outils: OutilsAbo;
   ligne: LigneAbo;
   partiel: boolean;
   onValider(saisie: { date: string; montant: number; remise: number; moyen: string }): void;
@@ -356,7 +362,7 @@ function FormulairePaiement({
   );
 }
 
-function FormulaireEcheance({ outils, ligne, onValider }: { outils: OutilsAdmin; ligne: LigneAbo; onValider(date: string): void }) {
+function FormulaireEcheance({ outils, ligne, onValider }: { outils: OutilsAbo; ligne: LigneAbo; onValider(date: string): void }) {
   const { theme } = outils;
   const [date, setDate] = useState(ligne.echeance ?? dateDuJour(outils.maintenant()));
   const [erreur, setErreur] = useState<string | undefined>();
@@ -376,7 +382,7 @@ function FormulaireCompte({
   ligne,
   onValider,
 }: {
-  outils: OutilsAdmin;
+  outils: OutilsAbo;
   ligne: LigneAbo;
   onValider(changement: { periodicite: Periodicite; montant: number; notes: string }): void;
 }) {
@@ -409,7 +415,7 @@ function FormulaireCompte({
   );
 }
 
-function Historique({ outils, ligne }: { outils: OutilsAdmin; ligne: LigneAbo }) {
+function Historique({ outils, ligne }: { outils: OutilsAbo; ligne: LigneAbo }) {
   const { theme } = outils;
   const { devise } = outils.donnees.abonnements.reglages;
   const liste = [...ligne.compte.paiements].reverse();
@@ -427,13 +433,13 @@ function Historique({ outils, ligne }: { outils: OutilsAdmin; ligne: LigneAbo })
   );
 }
 
-function MessageRappel({ outils, ligne, onCopie }: { outils: OutilsAdmin; ligne: LigneAbo; onCopie(copie: boolean): void }) {
+function MessageRappel({ outils, ligne, onCopie }: { outils: OutilsAbo; ligne: LigneAbo; onCopie(copie: boolean): void }) {
   const { theme, donnees } = outils;
   const [texte, setTexte] = useState(() => messageRappel(ligne, donnees.abonnements.reglages));
   return (
     <Formulaire theme={theme} testID={`admin-abo-form-message-${ligne.id}`}>
       <Text style={{ color: theme.attenue, fontSize: 12 }}>
-        Modèle personnalisable dans Paramètres › Administration › Abonnements. Vous l’envoyez vous-même, par le canal de votre choix : l’application n’envoie rien.
+        Modèle personnalisable dans l’onglet Réglages de cette app. Vous l’envoyez vous-même, par le canal de votre choix : l’application n’envoie rien.
       </Text>
       <Champ theme={theme} libelle="Message" valeur={texte} onChanger={setTexte} multiligne maxLength={600} testID="admin-abo-message-texte" />
       <View style={commun.actions}>
@@ -443,7 +449,7 @@ function MessageRappel({ outils, ligne, onCopie }: { outils: OutilsAdmin; ligne:
   );
 }
 
-function FormulaireSuspension({ outils, ligne, onValider }: { outils: OutilsAdmin; ligne: LigneAbo; onValider(jours: number): void }) {
+function FormulaireSuspension({ outils, ligne, onValider }: { outils: OutilsAbo; ligne: LigneAbo; onValider(jours: number): void }) {
   const { theme } = outils;
   const [jours, setJours] = useState('30');
   const [confirme, setConfirme] = useState(false);

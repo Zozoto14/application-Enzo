@@ -1,6 +1,7 @@
 /**
  * Test de bout en bout des ABONNEMENTS (suivi manuel) : Fondateur (PC simulé)
- * → crée Léa et Hugo → Administration › Abonnements : « Marquer payé »
+ * → crée Léa et Hugo → hub, page « Administration » → app Abonnements (plus
+ * d'onglet Abonnements dans l'Administration) : « Marquer payé »
  * (échéance recalculée), notes privées, échéance dépassée (« En retard »),
  * message à copier, export CSV → la ligne d'état de Léa arrive dans SON espace
  * du relais (sans notes, sans historique, sans Hugo) → sur le site, son hub
@@ -19,7 +20,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { nouveauContexte } from './e2e-acceptation.mjs';
+import { allerPageAdministration, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -152,6 +153,7 @@ async function confirmerIdentite(page, motDePasse, secret) {
 }
 
 async function ouvrirAdministration(page) {
+  await allerPageAdministration(page);
   const tuile = page.locator('[data-testid="cellule-administration"], [data-testid="tuile-administration"]').first();
   await tuile.click();
   await page.getByTestId('app-administration').waitFor({ timeout: 20_000 });
@@ -275,9 +277,20 @@ try {
   const lea = await creerAmi(pc, 'Léa');
   const hugo = await creerAmi(pc, 'Hugo');
 
-  // ---------------------------------------------------------------- Section Abonnements
-  log('PC : Administration › Abonnements');
-  await pc.getByTestId('admin-onglet-abonnements').click();
+  // ---------------------------------------------------------------- App Abonnements
+  verifier((await pc.getByTestId('admin-onglet-abonnements').count()) === 0 && (await pc.getByTestId('admin-section-abonnements').count()) === 0, 'Administration : plus d’onglet ni de section Abonnements');
+  log('PC : hub, page Administration → app Abonnements');
+  await pc.getByTestId('retour-hub').click();
+  await pc.getByTestId('hub').waitFor({ timeout: 20_000 });
+  verifier((await pc.getByTestId('hub-page-administration').getAttribute('aria-selected')) === 'true', 'retour de l’Administration : le hub reste sur la page Administration');
+  verifier((await tuileApp(pc, 'abonnements').count()) > 0 && (await tuileApp(pc, 'portefeuille').count()) === 0, 'page Administration : tuile Abonnements, pas de Portefeuille');
+  await pause(800); // apparition des tuiles
+  await capture(pc, '00-hub-page-administration');
+  await pc.getByTestId('hub-page-publique').click();
+  verifier((await tuileApp(pc, 'abonnements').count()) === 0 && (await tuileApp(pc, 'portefeuille').count()) > 0, 'page Applications : Portefeuille, pas d’Abonnements');
+  await allerPageAdministration(pc);
+  await tuileApp(pc, 'abonnements').first().click();
+  await pc.getByTestId('app-abonnements').waitFor({ timeout: 20_000 });
   await pc.getByTestId('admin-section-abonnements').waitFor({ timeout: 20_000 });
   const aide = await pc.getByTestId('admin-abonnements-aide').innerText();
   verifier(/manuel/i.test(aide) && /fiscal|juridique/i.test(aide), 'texte d’aide : suivi manuel, aucun conseil fiscal ou juridique');
@@ -341,10 +354,28 @@ try {
     verifier(false, 'export CSV : aucun téléchargement');
   }
 
-  // Tableau de bord et hub : la cloche.
+  // Réglages : un onglet de l'app (plus dans Paramètres › Administration).
+  await pc.getByTestId('abo-onglet-reglages').click();
+  verifier((await pc.getByTestId('parametres-abonnements').count()) === 1, 'app Abonnements : onglet Réglages');
+  await capture(pc, '02b-abonnements-reglages');
+  await pc.getByTestId('abo-onglet-suivi').click();
+  await pc.getByTestId('app-parametres-ouvrir').click();
+  await pc.getByTestId('parametres-section-administration').click();
+  await pc.getByTestId('reglage-admin-reglages').waitFor({ timeout: 10_000 }).catch(() => undefined);
+  verifier((await pc.getByTestId('parametres-abonnements').count()) === 0, 'Paramètres › Administration : plus de réglages des abonnements');
+  await pc.getByTestId('hub-parametres-fermer').click();
+
+  // Tableau de bord de l'Administration : la cloche ouvre l'app Abonnements.
+  await pc.keyboard.press('Escape');
+  await pc.getByTestId('hub').waitFor({ timeout: 20_000 });
+  await ouvrirAdministration(pc);
   await pc.getByTestId('admin-onglet-tableau').click();
   verifier((await pc.getByTestId('admin-abonnements-rappel').count()) === 1, 'tableau de bord : rappel des abonnements');
   await capture(pc, '03-tableau-rappel');
+  await pc.getByTestId('admin-abonnements-rappel').click();
+  verifier(await pc.getByTestId('app-abonnements').waitFor({ timeout: 20_000 }).then(() => true, () => false), 'le rappel du tableau de bord ouvre l’app Abonnements');
+  await pc.getByTestId('retour-hub').click();
+  await ouvrirAdministration(pc);
 
   // ---------------------------------------------------------------- Relais : isolation
   log('Relais : projection des comptes');
@@ -405,6 +436,9 @@ try {
   const cloche = await pc.getByTestId('hub-abonnements-texte').waitFor({ timeout: 30_000 }).then(() => pc.getByTestId('hub-abonnements-texte').innerText(), () => '');
   verifier(/1 abonnement en retard/.test(cloche), `hub de l’administrateur : cloche « ${cloche} »`);
   await capture(pc, '06-hub-admin-cloche');
+  await pc.getByTestId('hub-abonnements-voir').click();
+  verifier(await pc.getByTestId('app-abonnements').waitFor({ timeout: 20_000 }).then(() => true, () => false), '« Voir les abonnements » ouvre l’app Abonnements');
+  verifier(/En retard/.test(await pc.getByTestId(`admin-abo-statut-${idLea}`).innerText()), 'après reconnexion : les données des abonnements sont intactes (Léa en retard)');
 } catch (erreur) {
   echecs++;
   console.log('  ECHEC', erreur instanceof Error ? erreur.message.split('\n')[0] : erreur);

@@ -23,3 +23,26 @@ export async function nouveauContexte(navigateur, options) {
   await contexte.addInitScript(SCRIPT);
   return contexte;
 }
+
+/**
+ * Les apps réservées (Administration, Abonnements…) sont sur la page « Administration » du hub :
+ * onglet en haut sur le bureau, entrée « Admin » de la barre basse sur téléphone.
+ */
+export const ONGLET_ADMINISTRATION = '[data-testid="hub-page-administration"], [data-testid="barre-basse-administration"]';
+
+export async function allerPageAdministration(page, delai = 30_000) {
+  const onglet = page.locator(ONGLET_ADMINISTRATION).first();
+  await onglet.waitFor({ timeout: delai });
+  await onglet.click();
+}
+
+export const ONGLET_APPLICATIONS = '[data-testid="hub-page-publique"], [data-testid="barre-basse-accueil"]';
+
+export async function allerPageApplications(page, delai = 30_000) {
+  // Sans page réservée (ami), le hub n'a qu'une page : pas d'onglet à cliquer.
+  const onglet = page.locator(ONGLET_APPLICATIONS).first();
+  if (await onglet.waitFor({ timeout: Math.min(delai, 3_000) }).then(() => true, () => false)) await onglet.click();
+}
+
+/** Tuile d'une app du hub (bureau ou téléphone). */
+export const tuileApp = (page, id) => page.locator(`[data-testid="cellule-${id}"], [data-testid="tuile-${id}"]`);

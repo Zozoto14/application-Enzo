@@ -93,6 +93,8 @@ describe('jetons et règles pures', () => {
   it('barre basse du hub : Accueil · Support · Réglages · Compte, pastille quand la synchro attend', () => {
     expect(entreesBarreHub({ onSupport: () => undefined }).map(e => e.cle)).toEqual(['accueil', 'support', 'parametres', 'compte']);
     expect(entreesBarreHub({}).map(e => e.cle)).toEqual(['accueil', 'parametres', 'compte']);
+    // Rangs habilités : la page « Administration » du hub a sa propre entrée (5 au plus).
+    expect(entreesBarreHub({ onSupport: () => undefined, onAdministration: () => undefined }).map(e => e.cle)).toEqual(['accueil', 'administration', 'support', 'parametres', 'compte']);
     expect(entreesBarreHub({ synchro: synchroAttente }).find(e => e.cle === 'compte')?.pastille).toBe('•');
   });
 
@@ -268,6 +270,30 @@ describe('écrans du hub selon le mode', () => {
     await fireEvent.press(screen.getByTestId('edit-alpha-taille'));
     expect(prefs.at(-1)?.tailles.alpha).toBe('grande');
     expect(screen.getByTestId('edit-alpha-avant').props.accessibilityState.disabled).toBe(true);
+  });
+
+  it('téléphone : la page « Administration » du hub, par l’entrée « Admin » de la barre basse', async () => {
+    forcerModeAffichage('telephone');
+    const registre: AppHub[] = [...REGISTRE_TEST, { id: 'gamma', nom: 'Gamma', categorie: 'Admin', page: 'administration', description: '', icone: 'G', teinte: 'admin', adminSeulement: true }];
+    const pages: string[] = [];
+    const nav: NavigationMobile = { theme, onAccueil: () => pages.push('publique'), onAdministration: () => pages.push('administration'), onParametres: () => undefined };
+    const rendu = (page: 'publique' | 'administration') => (
+      <NavigationMobileContexte.Provider value={nav}>
+        <Hub registre={registre} contexte={{}} theme={theme} onTheme={() => undefined} onOuvrir={() => undefined} heure={10} page={page} />
+      </NavigationMobileContexte.Provider>
+    );
+    const { rerender } = await render(rendu('publique'));
+    expect(screen.queryByTestId('hub-pages')).toBeNull();
+    expect(screen.getByTestId('tuile-alpha')).toBeTruthy();
+    expect(screen.queryByTestId('tuile-gamma')).toBeNull();
+    expect(screen.getByTestId('barre-basse-accueil').props.accessibilityState.selected).toBe(true);
+    await fireEvent.press(screen.getByTestId('barre-basse-administration'));
+    expect(pages).toEqual(['administration']);
+    await rerender(rendu('administration'));
+    expect(screen.getByTestId('hub-titre-administration')).toBeTruthy();
+    expect(screen.getByTestId('tuile-gamma')).toBeTruthy();
+    expect(screen.queryByTestId('tuile-alpha')).toBeNull();
+    expect(screen.getByTestId('barre-basse-administration').props.accessibilityState.selected).toBe(true);
   });
 
   it('Paramètres sur téléphone : liste de sections → sous-page → retour ; recherche', async () => {

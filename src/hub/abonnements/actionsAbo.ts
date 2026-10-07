@@ -89,3 +89,6 @@ export function suspendrePourImpayePar(
   }
   return suspendrePar(acteur, profils, id, new Date(maintenant + jours * 86_400_000).toISOString(), maintenant);
 }
+
+/** Identifiant de l'app Abonnements dans le registre du hub (sans dépendance d'interface). */
+export const ID_ABONNEMENTS = 'abonnements';

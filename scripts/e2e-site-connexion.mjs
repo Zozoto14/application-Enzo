@@ -20,7 +20,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { nouveauContexte } from './e2e-acceptation.mjs';
+import { allerPageAdministration, nouveauContexte, ONGLET_ADMINISTRATION } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -154,6 +154,7 @@ async function confirmerIdentite(page, motDePasse, secret) {
 }
 
 async function ouvrirAdministration(page) {
+  await allerPageAdministration(page);
   const tuile = page.locator('[data-testid="cellule-administration"], [data-testid="tuile-administration"]').first();
   await tuile.click();
   await page.getByTestId('app-administration').waitFor({ timeout: 20_000 });
@@ -293,7 +294,7 @@ try {
   await tel.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
   await deverrouiller(tel, lea.motDePasse, lea.secret);
   await tel.getByText(/Fermer|Terminé|Compris|Plus tard/).first().click({ timeout: 3000 }).catch(() => undefined);
-  verifier((await tel.locator('[data-testid="cellule-administration"], [data-testid="tuile-administration"]').count()) === 0, 'Léa n’a pas d’Administration');
+  verifier((await tel.locator('[data-testid="cellule-administration"], [data-testid="tuile-administration"]').count()) === 0 && (await tel.locator(ONGLET_ADMINISTRATION).count()) === 0, 'Léa n’a pas d’Administration (ni tuile ni page)');
   const refusLea = journalRelais.filter(a => a.portee === idLea && a.statut === 403);
   const horsEspace = journalRelais.filter(a => a.portee === idLea && !a.chemin.startsWith(`/p/${idLea}/`) && !/^\/(sante|heure|yahoo|medias)/.test(a.chemin));
   verifier(horsEspace.length === 0 && refusLea.length === 0, `le téléphone de Léa n’a appelé que son espace (${horsEspace.length} appel(s) ailleurs, ${refusLea.length} refus)`);

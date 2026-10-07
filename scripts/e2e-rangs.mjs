@@ -22,7 +22,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { nouveauContexte } from './e2e-acceptation.mjs';
+import { allerPageAdministration, nouveauContexte, ONGLET_ADMINISTRATION } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -155,6 +155,7 @@ async function confirmerIdentite(page, motDePasse, secret) {
 }
 
 async function ouvrirAdministration(page) {
+  await allerPageAdministration(page);
   const tuile = page.locator('[data-testid="cellule-administration"], [data-testid="tuile-administration"]').first();
   await tuile.click();
   await page.getByTestId('app-administration').waitFor({ timeout: 20_000 });
@@ -289,7 +290,6 @@ try {
   // ================================================================ Hugo sur le PC
   log('PC : connexion en Hugo (Administrateur)');
   await connecter(pc, 'Hugo', hugo.motDePasse, hugo.secret);
-  await tuileAdministration(pc).first().waitFor({ timeout: 30_000 });
   await ouvrirAdministration(pc);
   verifier((await pc.getByTestId('admin-mon-rang').innerText()).includes('Administrateur'), 'Hugo se voit Administrateur');
   await pc.getByTestId('admin-onglet-utilisateurs').click();
@@ -366,7 +366,6 @@ try {
   await nav.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
   await deverrouiller(nav, hugo.motDePasse, hugo.secret);
   await fermerPopups(nav);
-  await tuileAdministration(nav).first().waitFor({ timeout: 30_000 });
   await ouvrirAdministration(nav);
   await nav.getByTestId('admin-onglet-utilisateurs').click();
   const leaSite = await attendre(async () => (await nav.getByTestId('admin-liste').getByText('Léa', { exact: true }).count()) > 0, 30_000);
@@ -411,11 +410,11 @@ try {
   const projectionApres = await attendre(() => (charge(`p:${idHugo}:annuaire`)?.comptes ?? []).length === 1, 60_000);
   verifier(projectionApres, 'l’espace de Hugo ne contient plus que son compte');
   await connecter(nav, 'Hugo', hugo.motDePasse, hugo.secret);
-  const sansTuileSite = await attendre(async () => (await tuileAdministration(nav).count()) === 0, 30_000);
+  const sansTuileSite = await attendre(async () => (await tuileAdministration(nav).count()) === 0 && (await nav.locator(ONGLET_ADMINISTRATION).count()) === 0, 30_000);
   verifier(sansTuileSite, 'site : Hugo n’a plus d’Administration');
   await capture(nav, '10-site-hugo-retrograde');
   await connecter(pc, 'Hugo', hugo.motDePasse, hugo.secret);
-  const sansTuilePc = await attendre(async () => (await tuileAdministration(pc).count()) === 0, 30_000);
+  const sansTuilePc = await attendre(async () => (await tuileAdministration(pc).count()) === 0 && (await pc.locator(ONGLET_ADMINISTRATION).count()) === 0, 30_000);
   verifier(sansTuilePc, 'PC : Hugo n’a plus d’Administration');
   await capture(pc, '11-pc-hugo-retrograde');
   log(`relais : ${compteurs.put} PUT, ${compteurs.get} GET, ${compteurs.list} listes`);

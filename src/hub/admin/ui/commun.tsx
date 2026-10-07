@@ -45,12 +45,14 @@ export interface OutilsAdmin {
   services?: ServicesAdmin;
   /** Ouvre la page Paramètres (unique), sur une section. */
   onParametres?(section?: import('../../recensement').IdSection): void;
+  /** Ouvre une autre app du hub (ex. Abonnements depuis le tableau de bord). */
+  onOuvrirApp?(id: string): void;
   /** Aller à une autre section (depuis le tableau de bord). */
   allerA(section: IdSection, cible?: string): void;
   large: boolean;
 }
 
-export type IdSection = 'tableau' | 'utilisateurs' | 'applications' | 'abonnements' | 'securite' | 'journal' | 'reglages';
+export type IdSection = 'tableau' | 'utilisateurs' | 'applications' | 'securite' | 'journal' | 'reglages';
 
 export function styleTitre(theme: ThemeHub) {
   return {

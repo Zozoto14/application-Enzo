@@ -2,7 +2,9 @@
  * App « Administration » du hub, réservée au profil administrateur.
  *
  * Six sections : Tableau de bord · Utilisateurs · Applications · Sécurité ·
- * Journal · Réglages (`admin/ui/`). Cet écran les assemble et leur fournit
+ * Journal · Réglages (`admin/ui/`). Le suivi des abonnements est une app à part
+ * (`abonnements/AppAbonnements.tsx`, page « Administration » du hub).
+ * Cet écran assemble les sections et leur fournit
  * les outils communs (`OutilsAdmin`) :
  *
  *  - les **données de l'Administration** (réglages, notes, journal) vivent
@@ -26,8 +28,6 @@ import { nouvellesConnexions } from './admin/comptes';
 import { avecEvenement, chargerDonnees, donneesVides, enregistrerDonnees, evaluerRobustesse, type DonneesAdmin } from './admin/donnees';
 import type { EvenementAudit } from './admin/journal';
 import { apresVerification, confianceValide, doitVerrouiller, etatInitial, noterActivite, verrouiller, type EtatVerrouPanel } from './admin/verrouillage';
-import { Abonnements } from './admin/ui/Abonnements';
-import { consommerSectionAdmin } from './admin/navigation';
 import { Applications } from './admin/ui/Applications';
 import { Avis, BoutonHub, Champ, Panneau, styleTitre, type IdSection, type OutilsAdmin } from './admin/ui/commun';
 import { Journal } from './admin/ui/Journal';
@@ -41,7 +41,7 @@ import { ecouterActivite } from './web';
 
 /** Sections par rang : un gestionnaire n'a ni applications globales, ni sécurité, ni réglages ; un administrateur, pas les apps globales. */
 const SECTIONS_PAR_RANG: Record<Rang, readonly IdSection[]> = {
-  fondateur: ['tableau', 'utilisateurs', 'applications', 'abonnements', 'securite', 'journal', 'reglages'],
+  fondateur: ['tableau', 'utilisateurs', 'applications', 'securite', 'journal', 'reglages'],
   administrateur: ['tableau', 'utilisateurs', 'securite', 'journal', 'reglages'],
   gestionnaire: ['tableau', 'utilisateurs', 'journal'],
   ami: [],
@@ -51,7 +51,6 @@ const SECTIONS: ReadonlyArray<readonly [IdSection, string, string]> = [
   ['tableau', '◧', 'Tableau de bord'],
   ['utilisateurs', '👥', 'Utilisateurs'],
   ['applications', '▦', 'Applications'],
-  ['abonnements', '💳', 'Abonnements'],
   ['securite', '🛡', 'Sécurité'],
   ['journal', '☰', 'Journal'],
   ['reglages', '⚙', 'Réglages'],
@@ -72,7 +71,7 @@ function message(erreur: unknown): string {
 
 type Demande = { raison: string; action: () => void };
 
-export function Administration({ contexte, theme, registre, onRetour, onParametres }: PropsRacineApp) {
+export function Administration({ contexte, theme, registre, onRetour, onParametres, onOuvrirApp }: PropsRacineApp) {
   const controle = contexte.profils;
   const services = contexte.admin;
   const acteur = controle?.actuel;
@@ -84,10 +83,7 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
   const { width } = useWindowDimensions();
   const large = width >= 900;
   const maintenant = useCallback(() => contexte.maintenant ?? Date.now(), [contexte.maintenant]);
-  const [section, setSection] = useState<IdSection>(() => {
-    const demandee = consommerSectionAdmin();
-    return demandee && SECTIONS_PAR_RANG[role].includes(demandee) ? demandee : 'tableau';
-  });
+  const [section, setSection] = useState<IdSection>('tableau');
   const [cible, setCible] = useState<string | undefined>();
   const [enCours, setEnCours] = useState<string | undefined>();
   const [erreur, setErreur] = useState<string | undefined>();
@@ -240,6 +236,7 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
     },
     services,
     onParametres,
+    onOuvrirApp,
     allerA: (id, choisi) => {
       setSection(id);
       setCible(choisi);
@@ -365,7 +362,6 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
           {section === 'tableau' ? <Tableau outils={outils} /> : null}
           {section === 'utilisateurs' ? <Utilisateurs key={cible ?? 'liste'} outils={outils} cible={cible} /> : null}
           {section === 'applications' && sectionsPermises.includes('applications') ? <Applications outils={outils} /> : null}
-          {section === 'abonnements' && sectionsPermises.includes('abonnements') ? <Abonnements outils={outils} /> : null}
           {section === 'securite' && sectionsPermises.includes('securite') ? (
             <Securite
               outils={outils}
