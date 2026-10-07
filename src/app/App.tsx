@@ -2060,9 +2060,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         return undefined;
       }
     },
-    // Relu après une synchro : la liaison peut avoir été ajoutée ou retirée.
+    // Relu après une synchro, et quand la liaison est ajoutée ou retirée (un compte neuf ne reçoit encore rien).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [deverrouille, estAdmin, session, versionSynchro],
+    [deverrouille, estAdmin, session, versionSynchro, synchro.configure],
   );
   useSynchroHistoriqueOffice({ service: historiqueOffice, base: deverrouille ? baseProfil : undefined });
   // Tuile Claude Office : état des agents, lu seulement sur le hub et pour qui voit la tuile (Fondateur).

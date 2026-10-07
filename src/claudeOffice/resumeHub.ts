@@ -63,6 +63,8 @@ export function infoClaudeOffice(resume: ResumeClaudeOffice | undefined): InfoLi
       : resume.source.genre === 'relais' && resume.source.date ? `Copie chiffrée · à jour ${ilYA(resume.source.date, resume.le)}` : 'Aucune copie reçue du PC';
   return {
     sousTitre,
+    // Hors du PC, l'information date du dernier dépôt : pas de « en direct ».
+    ...(resume.source.genre === 'local' ? {} : { pastille: 'DIFFÉRÉ' }),
     indicateurs: [
       { libelle: 'Au travail', valeur: String(resume.actifs) },
       { libelle: 'Inactifs', valeur: String(resume.inactifs) },

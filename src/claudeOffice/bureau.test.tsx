@@ -346,5 +346,7 @@ describe('bureau : droits et tuile du hub', () => {
     expect(local).toEqual({ sousTitre: 'En direct sur ce PC', indicateurs: [{ libelle: 'Au travail', valeur: '2' }, { libelle: 'Inactifs', valeur: '1' }] });
     const distant = APP_CLAUDE_OFFICE.info?.({ claudeOffice: { actifs: 0, inactifs: 0, termines: 0, source: { genre: 'relais', date: T0 - 12 * 60_000 }, le: T0 } });
     expect(distant?.sousTitre).toBe('Copie chiffrée · à jour il y a 12 min');
+    expect(distant?.pastille).toBe('DIFFÉRÉ');
+    expect(local?.pastille).toBeUndefined();
   });
 });

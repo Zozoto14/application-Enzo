@@ -22,6 +22,8 @@ export type Tendance = 'hausse' | 'baisse' | 'neutre';
 export interface InfoLive {
   /** Phrase courte sous le nom de l'app. */
   sousTitre?: string;
+  /** Pastille de la tuile (« EN DIRECT » à défaut) : une info différée le dit (ex. « DIFFÉRÉ »). */
+  pastille?: string;
   indicateurs: ReadonlyArray<{ libelle: string; valeur: string; tendance?: Tendance }>;
 }
 

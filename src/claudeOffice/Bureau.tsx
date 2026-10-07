@@ -99,7 +99,7 @@ function couleursScene(theme: ThemeHub): Couleurs {
     };
 }
 
-const ICONES_ETAT: Record<EtatAgent, string> = { ecrit: '⌨', outil: '⚙', reflechit: '…', inactif: 'z', termine: '✓' };
+const ICONES_ETAT: Record<EtatAgent, string> = { ecrit: '</>', outil: '⚙', reflechit: '…', inactif: 'z', termine: '✓' };
 
 /** Un poste de travail : bureau, écran, chaise et personnage, animés selon l'état. */
 function Poste({ agent, theme, couleurs, anime, maintenant, selectionne, onPress, largeur, mobile }: {
@@ -139,7 +139,7 @@ function Poste({ agent, theme, couleurs, anime, maintenant, selectionne, onPress
       </View>
 
       {/* Scène : icône d'état, personnage, bureau, écran. */}
-      <View style={styles.scene} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+      <View style={styles.scene} aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         <View style={styles.iconeEtat}>
           {etat === 'outil' ? (
             <Animated.Text style={[styles.icone, { color: teinte, transform: [{ rotate: tourne }] }]}>{ICONES_ETAT.outil}</Animated.Text>
@@ -195,7 +195,7 @@ function Poste({ agent, theme, couleurs, anime, maintenant, selectionne, onPress
 /** Bureau vide : un poste sans personne. */
 function BureauVide({ couleurs }: { couleurs: Couleurs }) {
   return (
-    <View style={[styles.scene, { alignSelf: 'center' }]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+    <View style={[styles.scene, { alignSelf: 'center' }]} aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
       <View style={[styles.dossier, { backgroundColor: couleurs.chaise }]} />
       <View style={[styles.ecran, { backgroundColor: couleurs.ecran }]} />
       <View style={[styles.pied, { backgroundColor: couleurs.ecran }]} />
