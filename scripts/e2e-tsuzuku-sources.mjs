@@ -38,6 +38,12 @@ const MDP_ADMIN = 'mot-de-passe-du-pc-e2e-sources-42';
 
 // ------------------------------------------------------------- Internet local (par nom d'hôte)
 const ANIMES = [[1, 'Frieren', 2023], [2, 'Dandadan', 2024], [3, 'One Piece', 1999], [4, 'Spy x Family', 2022]];
+// Bogue « test OK, fiche KO » : le catalogue donne un titre long (anglais + sous-titre), le site un titre court.
+const LONG = [5, 'Starlight Chronicles: The Long Voyage Home', 2025];
+const MINUIT = [6, 'Midnight Lanterns', 2024];
+const CATALOGUE_SEUL = [LONG, MINUIT];
+// Titres tels que la médiathèque NEUTRE les écrit (id de série → titre).
+const TITRES_SITE = [...ANIMES.map(a => [a[0], a[1]]), [5, 'Starlight Chronicles'], [50, 'Starlight Chronicles Saison 2'], [6, 'Lanternes de minuit']];
 const img = id => `https://img-exemple.fr/${id}.jpg`;
 const jikanAnime = ([id, titre, annee]) => ({
   mal_id: id, title: titre, title_english: titre, title_japanese: titre, synopsis: `Synopsis de ${titre} : une histoire neutre pour les besoins du test.`,
@@ -56,13 +62,15 @@ function repondre(hote, chemin) {
   const p = url.pathname;
   if (hote === 'api.jikan.moe') {
     if (/\/anime\/(\d+)\/full/.test(p)) {
-      const a = ANIMES.find(x => x[0] === Number(/\/anime\/(\d+)\/full/.exec(p)[1]));
-      return a ? j({ data: jikanAnime(a) }) : j({}, 404);
+      const a = [...ANIMES, ...CATALOGUE_SEUL].find(x => x[0] === Number(/\/anime\/(\d+)\/full/.exec(p)[1]));
+      const fiche = a && jikanAnime(a);
+      if (a === LONG) Object.assign(fiche, { title: 'Hoshizora no Kiroku', titles: [{ type: 'Default', title: 'Hoshizora no Kiroku' }, { type: 'English', title: LONG[1] }, { type: 'Japanese', title: '星空の記録' }] });
+      return a ? j({ data: fiche }) : j({}, 404);
     }
     if (/\/anime\/\d+\/episodes/.test(p)) return j({ data: Array.from({ length: 12 }, (_, i) => ({ mal_id: i + 1, title: `Épisode ${i + 1}` })), pagination: { last_visible_page: 1 } });
     if (p === '/v4/genres/anime') return j({ data: [{ mal_id: 1, name: 'Action' }] });
     const q = (url.searchParams.get('q') ?? '').toLowerCase();
-    const liste = ANIMES.map(jikanAnime);
+    const liste = (q ? [...ANIMES, ...CATALOGUE_SEUL] : ANIMES).map(jikanAnime);
     return j({ data: q ? liste.filter(a => a.title.toLowerCase().includes(q)) : liste, pagination: { current_page: 1, has_next_page: false, last_visible_page: 1 } });
   }
   if (hote === 'graphql.anilist.co') {
@@ -78,7 +86,7 @@ function repondre(hote, chemin) {
   if (hote === 'mediatheque-exemple.fr') {
     if (p === '/recherche' || p === '/') {
       const q = (url.searchParams.get('q') ?? '').toLowerCase();
-      const trouve = ANIMES.filter(a => a[1].toLowerCase().includes(q));
+      const trouve = TITRES_SITE.filter(a => a[1].toLowerCase().includes(q));
       return page(`<form class="recherche" action="/recherche"><input name="q"></form><ul class="resultats">${trouve.map(a => `<li class="carte"><a class="titre" href="/serie/${a[0]}">${a[1]}</a></li>`).join('')}</ul>`);
     }
     const serie = /^\/serie\/(\d+)$/.exec(p);
@@ -225,6 +233,12 @@ async function assistant(pg, prefixe, nom, partage) {
   await pg.getByTestId('assistant-test-bilan').waitFor({ timeout: 30_000 });
   const ok = ['recherche', 'episodes', 'lecteur'].map(c => pg.getByTestId(`assistant-test-${c}-ok`).count());
   verifier((await Promise.all(ok)).every(n => n === 1), `${prefixe} : test pas à pas OK (recherche → épisodes → lecteur, pages lues via le pont et sa garde)`);
+  await pg.getByTestId('assistant-titre-test').fill('Starlight');
+  await pg.getByTestId('assistant-tester-catalogue').click();
+  await pg.getByTestId('assistant-titre-catalogue').waitFor({ timeout: 30_000 });
+  await pg.getByTestId('assistant-test-recherche-ok').waitFor({ timeout: 30_000 }).catch(() => undefined);
+  const okCatalogue = ['recherche', 'episodes', 'lecteur'].map(c => pg.getByTestId(`assistant-test-${c}-ok`).count());
+  verifier((await Promise.all(okCatalogue)).every(n => n === 1) && (await pg.getByTestId('assistant-titre-catalogue').innerText()).includes('Hoshizora no Kiroku'), `${prefixe} : « Tester sur un vrai titre du catalogue » : tous les titres de la fiche, même pipeline que la fiche, OK`);
   if (partage) await pg.getByTestId(`assistant-partage-${partage}`).click();
   await voir(pg, 'assistant-enregistrer');
   await capture(pg, `${prefixe}-f-etape4-test`);
@@ -344,6 +358,58 @@ try {
   verifier(await pg.frameLocator('[data-testid="lecteur-iframe"]').getByText('Lecteur neutre (/embed/2-4)').waitFor({ timeout: 20_000 }).then(() => true, () => false), 'l’épisode 4 se lit par la source ajoutée avec l’assistant');
   await capture(pg, '05-pc-lecture-par-la-source');
   await pg.getByTestId('lecteur-retour').click();
+
+  // ============================================================ Bogue : test d'assistant OK, mais la fiche ne trouvait pas les épisodes
+  log('Fiche dont le titre du catalogue diffère du titre du site');
+  await pg.getByTestId('onglet-app-accueil').click();
+  await pg.getByTestId('accueil-recherche').fill('Starlight');
+  await pg.getByTestId('accueil-chercher').click();
+  await pg.getByTestId('carte-anime-5').first().click();
+  await pg.getByTestId('fiche-titre').waitFor({ timeout: 20_000 });
+  verifier(await visible(pg, 'fiche-sources-ok'), 'fiche « Starlight Chronicles: The Long Voyage Home » : trouvée sur la source sous « Starlight Chronicles » (refusée avant le correctif)');
+  verifier((await pg.getByTestId('fiche-sources-ok').innerText()).includes('12 épisode(s)'), 'la fiche annonce les 12 épisodes trouvés sur la source');
+  await voir(pg, 'fiche-sources');
+  await capture(pg, '07-pc-fiche-titre-long-trouve');
+  await pg.getByTestId('episode-3').click();
+  verifier(await pg.frameLocator('[data-testid="lecteur-iframe"]').getByText('Lecteur neutre (/embed/5-3)').waitFor({ timeout: 20_000 }).then(() => true, () => false), 'l’épisode 3 se lit (la saison 2 n’est pas prise à la place)');
+  await pg.getByTestId('lecteur-retour').click();
+  await pg.getByTestId('onglet-app-accueil').click();
+  await pg.getByTestId('accueil-recherche').fill('Midnight');
+  await pg.getByTestId('accueil-chercher').click();
+  await pg.getByTestId('carte-anime-6').first().click();
+  await pg.getByTestId('fiche-titre').waitFor({ timeout: 20_000 });
+  verifier(await visible(pg, 'fiche-sources-echec'), 'titre absent du site : la fiche dit pourquoi au lieu de « aucun épisode »');
+  verifier(/Titre non trouvé sur vos sources/.test(await pg.getByTestId('fiche-sources-echec-message').innerText()), 'raison : titre non trouvé (recherches sans résultat)');
+  await pg.getByTestId('fiche-sources-echec-detail-bouton').click();
+  const detail = await pg.getByTestId('fiche-sources-echec-detail').innerText();
+  verifier(detail.includes('Source « Médiathèque exemple »') && detail.includes('« Midnight Lanterns » → 0 résultat(s)'), 'détail du diagnostic : source, requête, nombre de résultats');
+  await voir(pg, 'fiche-sources');
+  await capture(pg, '08-pc-fiche-diagnostic');
+  await pg.getByTestId('fiche-sources-echec-autre-titre').fill('Lanternes de minuit');
+  await pg.getByTestId('fiche-sources-echec-chercher').click();
+  verifier(await visible(pg, 'fiche-sources-ok'), '« Chercher avec un autre titre » : trouvé, et retenu pour cette fiche');
+  await capture(pg, '09-pc-fiche-autre-titre');
+  await pg.getByTestId('episode-2').click();
+  verifier(await pg.frameLocator('[data-testid="lecteur-iframe"]').getByText('Lecteur neutre (/embed/6-2)').waitFor({ timeout: 20_000 }).then(() => true, () => false), 'le lecteur reprend le titre choisi à la main');
+  await pg.getByTestId('lecteur-retour').click();
+
+  // Site web (sans pont) : message clair au lieu de « aucun épisode ».
+  log('Site web : la fiche explique que les sources se lisent dans l’app');
+  await pg.getByTestId('retour-hub').click();
+  await pg.getByTestId('hub').waitFor({ timeout: 20_000 });
+  await pg.evaluate(() => { delete globalThis.applibourse; });
+  await ouvrirTsuzuku(pg);
+  await pg.getByTestId('accueil-recherche').fill('Starlight');
+  await pg.getByTestId('accueil-chercher').click();
+  await pg.getByTestId('carte-anime-5').first().click();
+  await pg.getByTestId('fiche-titre').waitFor({ timeout: 20_000 });
+  verifier(await visible(pg, 'fiche-sources-echec') && /CORS/.test(await pg.getByTestId('fiche-sources-echec-message').innerText()), 'site : « le navigateur ne peut pas lire les pages de vos sources (CORS) », pas « aucun épisode »');
+  await voir(pg, 'fiche-sources');
+  await capture(pg, '09b-site-fiche-message-clair');
+  await pg.getByTestId('retour-hub').click();
+  await pg.getByTestId('hub').waitFor({ timeout: 20_000 });
+  await activerPontPc();
+  await ouvrirTsuzuku(pg);
 
   // ============================================================ Paramètres : la même page
   await pg.getByTestId('tsuzuku-reglages').click();
