@@ -161,7 +161,7 @@ redéployés. Tests : `relais/worker.test.mjs` (« course sur l'index… »).
 | `/boite/<appareil>` | portefeuille de l'administrateur (entités) | `cleDerivee('synchro')` de l'administrateur | jeton maître |
 | `/boite/coffre` | coffre de l'administrateur (enveloppes) | Argon2id du mot de passe (comme sur disque) | jeton maître |
 | `/p/principal/boite/annuaire` | annuaire découpé pour la fusion (empreintes salées, prénoms scellés, accès, séquestres scellés, politique des apps) | déjà opaque, **aucun prénom en clair** (testé) | jeton maître **seulement** |
-| `/p/principal/boite/admin` | données d'administration (réglages, notes, journal, connexions vues, robustesse) | enveloppe scellée par `cleDerivee('synchro')` | jeton maître, et seul l'administrateur l'ouvre |
+| `/p/principal/boite/admin` | données d'administration (réglages, notes, journal, connexions vues, robustesse, abonnements, carnet Prospects — voir `docs/prospects.md`) | enveloppe scellée par `cleDerivee('synchro')` | jeton maître, et seul l'administrateur l'ouvre |
 | `/p/<id>/boite/annuaire` | **projection** de l'ami : son entrée, le sel, la politique des apps, la clé PUBLIQUE de séquestre | opaque | l'ami (son code) et l'administrateur |
 | `/p/<id>/boite/annuaire` (titulaire) | **projection par rang** : son entrée (sa paire et son bloc privé, scellés par SA clé) et les comptes de rang STRICTEMENT inférieur (empreinte, prénom scellé, accès, SON séquestre). Rien d'un Fondateur ni d'un autre Administrateur, ni registre, ni clé commune, ni bloc privé / empreinte / clé privée du compte historique (testé) | opaque | le titulaire (son code) et le compte historique |
 | `/rangs` (clé KV) | délégations des titulaires (identifiants seulement) | aucun secret | jeton maître |
@@ -234,7 +234,8 @@ précédente reste). Sans estampille (relais pas encore redéployé, ou dépôt 
   appareil, ce qui existe sur le relais l'emporte (un navigateur qu'on relie adopte l'annuaire du PC).
 - **Données d'administration** (`src/hub/admin/fusionDonnees.ts`) : journal par **union** (identifiant d'événement tiré du
   contenu, `idEvenement`), borné par la rétention et la taille réglées ; `reglages`, `robustesse`, `note:<id>` au dernier
-  gagnant ; connexions déjà reportées au maximum par compte.
+  gagnant ; connexions déjà reportées au maximum par compte ; `prospect:<id>` et `prospects-modeles` (app Prospects) au
+  dernier gagnant, une fiche supprimée voyage comme suppression datée.
 - **Fichiers d'un ami** (`src/sync/relais/fichiers.ts`) : au niveau du fichier, dernier gagnant (empreinte et date du
   dernier échange). Un fichier ouvert (session de l'ami en cours) n'est jamais écrasé ; il est tiré avant l'ouverture.
   Limite assumée : deux modifications simultanées du même ami sur deux appareils → la plus récente gagne.

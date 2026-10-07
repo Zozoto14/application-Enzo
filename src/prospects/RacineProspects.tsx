@@ -111,7 +111,9 @@ export function Prospects(props: PropsRacineApp) {
     // Garde : la tuile n'est pas proposée, mais un écran ouvert autrement ne montre rien.
     return (
       <View style={[styles.racine, { backgroundColor: props.theme.fond }]} testID="app-prospects">
-        <RetourHub theme={props.theme} onRetour={props.onRetour} titre="Prospects" />
+        <View style={styles.enteteMobile}>
+          <RetourHub theme={props.theme} onRetour={props.onRetour} titre="Prospects" />
+        </View>
         <View style={{ padding: 24 }}>
           <Avis theme={props.theme} genre="critique" texte="Réservé au Fondateur." testID="prospects-refuse" />
         </View>
@@ -728,7 +730,9 @@ function VueBureau(v: PropsVue) {
   const global = ouvert && (ouvert.g === 'nouveau' || ouvert.g === 'lot' || ouvert.g === 'import' || ouvert.g === 'modeles') ? ouvert.g : undefined;
   return (
     <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="app-prospects">
-      <RetourHub theme={theme} onRetour={v.onRetour} titre="Prospects" />
+      <View style={styles.enteteBureau}>
+        <RetourHub theme={theme} onRetour={v.onRetour} titre="Prospects" />
+      </View>
       <ScrollView contentContainerStyle={styles.page} testID="prospects-defilement">
         <Text style={[styleTitre(theme), { fontSize: 30 }]} accessibilityRole="header">
           Prospects
@@ -848,7 +852,10 @@ function VueMobile(v: PropsVue) {
   const filtresActifs = [v.statut !== 'tous' ? LIBELLES_STATUT_PROSPECT[v.statut as StatutProspect] : '', v.etiquette ? `#${v.etiquette}` : '', `tri : ${LIBELLES_TRI[v.tri].toLowerCase()}`].filter(Boolean).join(' · ');
   return (
     <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="app-prospects">
-      <RetourHub theme={theme} onRetour={v.onRetour} titre="Prospects" />
+      {/* L'en-tête compact déborde de 8 px de chaque côté : il attend la gouttière de 16 px. */}
+      <View style={styles.enteteMobile}>
+        <RetourHub theme={theme} onRetour={v.onRetour} titre="Prospects" />
+      </View>
       <EcranMobile
         theme={theme}
         onRetour={v.onRetour}
@@ -965,6 +972,8 @@ function FicheMobile({ theme, prospect: p, aujourdhui, actions, setOuvert }: { t
 
 const styles = StyleSheet.create({
   racine: { flex: 1 },
+  enteteBureau: { width: '100%', maxWidth: 1200, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 16 },
+  enteteMobile: { paddingHorizontal: 16 },
   page: { width: '100%', maxWidth: 1200, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 24, paddingBottom: 48, gap: 16 },
   compteurs: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   compteur: { borderWidth: 1, paddingVertical: 10, paddingHorizontal: 14, flexGrow: 1 },
