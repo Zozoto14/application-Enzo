@@ -17,7 +17,7 @@
  * les services (`gestion.ts`, 403).
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { police, teinteTransparente } from '../../hub/themes';
 import { RAPPEL_DROITS, testReussi, testerSourcePasAPas, type EtapeTest } from '../moteur/assistant';
@@ -266,6 +266,7 @@ export function Sources({ comptes = [], partageActif = true, onCles, ajoutInitia
           <Text style={styleAttenue(theme, 14)} testID="sources-compte">
             {sources.length ? `${sources.length} source(s) · ${actives} active(s)` : 'Aucune source pour le moment'}
           </Text>
+          <PastilleSynchro />
         </View>
         <Pressable
           testID="sources-aide-ouvrir"
@@ -441,6 +442,30 @@ export function Sources({ comptes = [], partageActif = true, onCles, ajoutInitia
           <Bouton titre="Ouvrir Tsuzuku · Clés d’API ›" onPress={onCles} testID="sources-cles" style={{ alignSelf: 'flex-start' }} />
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/** « Synchronisé » / « En attente » : les sources du compte entre ses appareils (relu toutes les 3 s). */
+function PastilleSynchro() {
+  const { s, theme, version } = useTsuzuku();
+  const [etat, setEtat] = useState(() => s.etatSynchroSources());
+  useEffect(() => {
+    setEtat(s.etatSynchroSources());
+    const minuterie = setInterval(() => setEtat(s.etatSynchroSources()), 3000);
+    return () => clearInterval(minuterie);
+  }, [s, version]);
+  const texte =
+    etat.etat === 'synchronise'
+      ? 'Synchronisé avec vos autres appareils'
+      : etat.etat === 'en-attente'
+        ? 'En attente de synchronisation…'
+        : 'Synchronisation entre appareils non configurée (Paramètres › Synchronisation)';
+  const couleur = etat.etat === 'synchronise' ? theme.ok : etat.etat === 'en-attente' ? theme.alerte : theme.attenue;
+  return (
+    <View testID="sources-synchro" accessibilityLabel={texte} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <View testID={`sources-synchro-${etat.etat}`} style={{ width: 9, height: 9, borderRadius: 999, backgroundColor: couleur }} />
+      <Text style={styleAttenue(theme, 13)}>{texte}</Text>
     </View>
   );
 }

@@ -16,6 +16,9 @@ import type { ContexteResolution } from '../moteur/resolution';
 import type { DefinitionSource } from '../moteur/sources';
 import type { ChoixReseau } from '../plateforme/reseau';
 import { CLES } from '../plateforme/stockage';
+import { PARAMETRES } from '../../db/depots';
+import { empreinte } from '../../sync/relais/entites';
+import { etatPastilleTsuzuku, type EtatPastille } from '../../sync/relais/entitesTsuzuku';
 import {
   ecrireAvances,
   ecrirePartages,
@@ -75,6 +78,8 @@ export interface ServicesTsuzuku {
   enregistrerReglagesAvances(a: ReglagesAvances): Promise<void>;
   /** Prévient le processus principal (Electron) qu'un lecteur va être affiché en iframe. */
   declarerLecteur(url: string): Promise<boolean>;
+  /** Pastille de la page Sources : sources synchronisées entre appareils, ou en attente d'envoi. */
+  etatSynchroSources(): { etat: EtatPastille; depuis?: string };
 }
 
 export interface OptionsServices {
@@ -87,11 +92,13 @@ export interface OptionsServices {
   journal?: (message: string) => void;
   /** Réglages fins du catalogue (horloge, attente) : tests. */
   catalogue?: Partial<OptionsCatalogue>;
+  /** Lecture brute de la base du profil (état de la synchro, hors préfixe `tsuzuku.`) : pastille de la page Sources. */
+  lireBase?: (cle: string) => string | undefined | null;
   /** Options avancées déjà lues (le client réseau est créé avec) ; sinon les défauts du moteur. */
   avances?: Pick<ReglagesAvances, 'delaiS' | 'tailleMaxMo'>;
 }
 
-export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: ancien, journal, catalogue, avances }: OptionsServices): ServicesTsuzuku {
+export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: ancien, journal, catalogue, avances, lireBase }: OptionsServices): ServicesTsuzuku {
   const rang: Rang = rangDonne ?? (ancien === false ? 'ami' : 'fondateur');
   const habilite = peutGererSources(rang);
   const client = creerClient(choix.reseau, avances ? { delaiMs: avances.delaiS * 1000, tailleMax: avances.tailleMaxMo * 1024 * 1024 } : {});
@@ -165,6 +172,14 @@ export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: anci
       // L'ancienne place de la clé (réglages de confort) est vidée : une seule clé, ici.
       const r = await reglages();
       if (r.cleTmdb) await stockage.ecrire(CLES.reglages, ecrireReglages({ ...r, cleTmdb: '' }));
+    },
+    etatSynchroSources() {
+      if (!lireBase) return { etat: 'non-configuree' };
+      try {
+        return etatPastilleTsuzuku(lireBase, { relais: PARAMETRES.relaisSynchro, etat: PARAMETRES.etatSynchro }, empreinte);
+      } catch {
+        return { etat: 'non-configuree' };
+      }
     },
     async declarerLecteur(url) {
       try {
