@@ -118,7 +118,7 @@ describe.each([
 
     // Hub de l'administrateur migré : jamais sans tuile.
     const contexte: ContexteHub = { profil: vue.profils[0], profils: { onCreerCompte: () => undefined, tous: vue.profils } as unknown as ContexteHub['profils'] };
-    expect(appsVisibles(REGISTRE, contexte).map(a => a.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku', ID_ADMINISTRATION]);
+    expect(appsVisibles(REGISTRE, contexte).map(a => a.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku', ID_ADMINISTRATION, 'claude-office']);
   });
 
   it('migré d’abord par « admin », le prénom est adopté à la connexion suivante', () => {

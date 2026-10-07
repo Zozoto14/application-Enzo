@@ -135,7 +135,10 @@ function SurLePc({ theme, pont }: { theme: ThemeHub; pont: PontClaudeOffice }) {
           />
         </View>
         <View style={styles.boutons}>
-          <BoutonHub theme={theme} variante="plein" titre="Ouvrir Claude Office" desactive={!joignable || occupe} onPress={() => agir(async () => (await pont.ouvrir(), undefined))} testID="claude-office-ouvrir" />
+          <BoutonHub theme={theme} variante="plein" titre="Ouvrir Claude Office" desactive={!joignable || occupe} onPress={() => agir(async () => {
+            await pont.ouvrir();
+            return undefined;
+          })} testID="claude-office-ouvrir" />
           <BoutonHub theme={theme} titre="Actualiser" desactive={occupe} onPress={() => void actualiser()} testID="claude-office-actualiser" />
           <BoutonHub
             theme={theme}
