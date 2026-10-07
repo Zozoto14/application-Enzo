@@ -177,3 +177,49 @@ test('le serveur doit être sur ce PC ; la sonde rend l’état sans lever', asy
   assert.deepEqual(lireReglagesOffice('{"url":"http://evil.example"}'), { dossier: undefined, url: URL_DEFAUT });
   assert.deepEqual(lireReglagesOffice('pas du json'), { dossier: undefined, url: URL_DEFAUT });
 });
+
+test('pont du PC : rien ne s’écrit sans la confirmation native, la fenêtre ne donne aucun chemin', async () => {
+  const { brancherClaudeOffice } = await import('./claudeOfficeIpc.mjs');
+  const b = bac();
+  const ancien = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = dirname(b.reglages);
+  try {
+    const gestionnaires = {};
+    const reponses = [];
+    const boites = [];
+    let reglagesOffice = '{}';
+    brancherClaudeOffice({
+      ipcMain: { handle: (canal, f) => (gestionnaires[canal] = f) },
+      dialog: { showMessageBox: async (_f, options) => (boites.push(options), { response: reponses.shift() ?? 0 }) },
+      BrowserWindow: { fromWebContents: () => undefined },
+      shell: {},
+      fichierReglages: () => join(b.racine, 'claude-office.json'),
+      ecrire: async (_f, octets) => (reglagesOffice = octets.toString()),
+      racineProjet: async () => join(b.racine, 'AppDashboard'),
+    });
+    const appel = (canal, ...args) => gestionnaires[canal]({ sender: {} }, ...args);
+    const etat = await appel('claude-office:etat');
+    assert.equal(etat.dossier, b.office);
+    assert.equal(etat.hooks, 'absents');
+    assert.equal(etat.serveur.joignable, false);
+    const apercu = await appel('claude-office:apercu-hooks', false);
+    assert.equal(apercu.plan.fichier, b.reglages);
+    assert.equal(existsSync(b.reglages), false);
+    // Annulé dans la boîte native : rien d'écrit.
+    assert.deepEqual(await appel('claude-office:installer-hooks', false), { ok: false, annule: true });
+    assert.equal(existsSync(b.reglages), false);
+    assert.match(boites[0].detail, /\+ PreToolUse/);
+    reponses.push(1);
+    const fait = await appel('claude-office:installer-hooks', false);
+    assert.equal(fait.ecrit, true);
+    assert.equal((await appel('claude-office:etat')).hooks, 'installes');
+    // L'adresse reste sur ce PC.
+    assert.equal((await appel('claude-office:regler-url', 'http://192.168.0.2:3334')).ok, false);
+    assert.equal((await appel('claude-office:regler-url', 'http://localhost:3333')).ok, true);
+    assert.equal(JSON.parse(reglagesOffice).url, 'http://localhost:3333');
+  } finally {
+    if (ancien === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = ancien;
+    b.nettoyer();
+  }
+});

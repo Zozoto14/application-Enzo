@@ -27,6 +27,7 @@ import { synthetiser, VOIX_NATURELLES } from './voix.mjs';
 import { MOTIF_PROFIL, changementPermis, extensionPermise, fichierAutorise, fichierDeProfil } from './portee.mjs';
 import { fluxMedia, pageArticle, yahooJson, yahooScreener } from './reseau.mjs';
 import { creerListeLecteurs, requeteTsuzuku } from './tsuzuku.mjs';
+import { brancherClaudeOffice } from './claudeOfficeIpc.mjs';
 import { readFile, writeFile, mkdir, rename, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -274,6 +275,14 @@ function installerPasserelle() {
   // sont affichables que pour les sites que l'interface a déclarés et que la garde accepte.
   ipcMain.handle('tsuzuku:requete', async (_evenement, requete) => requeteTsuzuku(requete));
   ipcMain.handle('tsuzuku:lecteur', async (_evenement, url) => lecteursTsuzuku.autoriser(url));
+
+  // Claude Office (app du hub) : état du serveur local, hooks de Claude Code sur confirmation native.
+  brancherClaudeOffice({
+    ipcMain, dialog, BrowserWindow, shell,
+    fichierReglages: () => join(app.getPath('userData'), 'claude-office.json'),
+    ecrire: ecrireAtomique,
+    racineProjet: async () => (await lireVersionBuild())?.dossierSource ?? join(ici, '..', '..'),
+  });
 
   ipcMain.handle('voix:liste', async () => VOIX_NATURELLES);
   ipcMain.handle('voix:synthetiser', async (_evenement, texte, voix, vitesse) =>
