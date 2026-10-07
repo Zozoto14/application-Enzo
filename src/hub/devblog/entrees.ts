@@ -41,6 +41,34 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.13',
+    date: '2026-10-13',
+    titre: 'Claude Office arrive dans le hub',
+    resume:
+      'Le bureau en pixel art des agents de Claude Code a sa tuile : il dit si Claude Office tourne sur le PC, l’ouvre dans sa fenêtre et installe ses hooks après vous avoir montré exactement ce qui change.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'claude-office-tuile',
+        emoji: '🏢',
+        titre: 'Tuile « Claude Office » (Fondateur)',
+        texte:
+          'Sur le PC : état du serveur local, nombre d’agents actifs, bouton « Ouvrir Claude Office » et choix du dossier. Sur le site et le téléphone : la commande à lancer sur le PC. Réservée au Fondateur, jamais proposée aux amis.',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+      {
+        id: 'claude-office-hooks',
+        emoji: '🪝',
+        titre: 'Hooks de Claude Code, sans surprise',
+        texte:
+          '« Voir ce qui sera modifié » montre le fichier et chaque ajout ; « Installer les hooks… » redemande confirmation, sauvegarde le fichier puis l’écrit. Relancer ne change rien. En terminal : npm run office:hooks (avec --a-blanc pour un aperçu seul).',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.12',
     date: '2026-10-12',
     titre: 'Tsuzuku : page Sources et assistant guidé',

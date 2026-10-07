@@ -31,6 +31,7 @@ simplement jamais tourné.
 | [`src/session`](src/session) | Enchaînement de l'ouverture | [README](src/session/README.md) |
 | [`src/ui`](src/ui) | Écrans et modèles de vue | [README](src/ui/README.md) |
 | `src/app` | Assemblage et navigation | |
+| [`src/claudeOffice`](src/claudeOffice) | App du hub « Claude Office » (bureau des agents Claude Code, PC) : `npm run office:hooks` | [doc](docs/claude-office.md) |
 
 ## Les décisions qui engagent le reste
 

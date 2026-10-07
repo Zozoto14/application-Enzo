@@ -13,6 +13,7 @@ import { Administration } from './Administration';
 import { infoAdministration, infoPortefeuille } from './infos';
 import { APP_TSUZUKU } from '../tsuzuku/registre';
 import type { AppHub } from './types';
+import { APP_CLAUDE_OFFICE } from '../claudeOffice/registre';
 
 export const ID_PORTEFEUILLE = 'portefeuille';
 export const ID_ADMINISTRATION = 'administration';
@@ -44,4 +45,5 @@ export const REGISTRE: readonly AppHub[] = [
     info: contexte => infoAdministration(contexte.profils?.gestion?.comptes ?? contexte.profils?.tous),
     Racine: Administration,
   },
+  APP_CLAUDE_OFFICE,
 ];

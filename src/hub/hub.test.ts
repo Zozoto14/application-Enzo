@@ -25,7 +25,7 @@ describe('registre', () => {
 
 describe('permissions', () => {
   it('l’administrateur voit tout ; sans profil (appareil seul) aussi', () => {
-    expect(appsVisibles(REGISTRE, { profil: admin, profils: controle }).map(a => a.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku', ID_ADMINISTRATION]);
+    expect(appsVisibles(REGISTRE, { profil: admin, profils: controle }).map(a => a.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku', ID_ADMINISTRATION, 'claude-office']);
     expect(peutOuvrir(factice('a'), undefined)).toBe(true);
   });
 
@@ -39,7 +39,7 @@ describe('permissions', () => {
   });
 
   it('respecte « disponible » et attribue seulement les apps non réservées', () => {
-    expect(appsVisibles(REGISTRE, { profil: admin }).map(a => a.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku']);
+    expect(appsVisibles(REGISTRE, { profil: admin }).map(a => a.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku', 'claude-office']);
     expect(appsAttribuables(REGISTRE).map(a => a.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku']);
   });
 
