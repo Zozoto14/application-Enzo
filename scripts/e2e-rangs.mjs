@@ -290,6 +290,7 @@ try {
   log('PC : connexion en Hugo (Administrateur)');
   await connecter(pc, 'Hugo', hugo.motDePasse, hugo.secret);
   await tuileAdministration(pc).first().waitFor({ timeout: 30_000 });
+  verifier((await pc.locator('[data-testid="cellule-claude-office"]').count()) === 0, 'Hugo (Administrateur) ne voit pas Claude Office, réservé au Fondateur');
   await ouvrirAdministration(pc);
   verifier((await pc.getByTestId('admin-mon-rang').innerText()).includes('Administrateur'), 'Hugo se voit Administrateur');
   await pc.getByTestId('admin-onglet-utilisateurs').click();
