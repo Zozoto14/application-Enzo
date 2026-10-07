@@ -11,9 +11,11 @@
  */
 
 import { BandeauAbonnement } from './abonnements/BandeauAbonnement';
+import { ID_ABONNEMENTS } from './abonnements/actionsAbo';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { appsVisibles, etatTuile, type EtatTuile } from './permissions';
+import { etatTuile, type EtatTuile } from './permissions';
+import { PAGES_HUB, appsDePage, pageEffective, pagesVisibles } from './pages';
 import { BoutonMiseAJour, useMiseAJour } from './ParametresHub';
 import { useBarreApp } from './BarreApp';
 import type { IdSection } from './recensement';
@@ -44,7 +46,7 @@ import { useMobile } from '../ui/mobile/useMobile';
 import { HubMobile } from './HubMobile';
 import { BoutonIcone } from '../ui/mobile/EnTeteMobile';
 import { useNavigationMobile } from '../ui/mobile/NavigationMobile';
-import type { AppHub, ContexteHub, InfoLive } from './types';
+import type { AppHub, CategorieApp, ContexteHub, InfoLive } from './types';
 
 export interface HubProps {
   registre: readonly AppHub[];
@@ -71,6 +73,30 @@ export interface HubProps {
   demande?: { genre: 'parametres' | 'personnaliser'; n: number };
   /** Heure locale, injectable pour les tests. */
   heure?: number;
+  /**
+   * Page affichée (« Applications » ou « Administration », voir `pages.ts`),
+   * tenue par l'hôte pour qu'elle survive à l'ouverture d'une app. Absente :
+   * le hub la tient lui-même.
+   */
+  page?: CategorieApp;
+  onPage?(page: CategorieApp): void;
+}
+
+/** Page courante du hub : celle de l'hôte, sinon un état local ; jamais une page non permise. */
+export function usePageHub(registre: readonly AppHub[], contexte: ContexteHub, page?: CategorieApp, onPage?: (page: CategorieApp) => void) {
+  const [locale, setLocale] = useState<CategorieApp>('publique');
+  const pages = pagesVisibles(registre, contexte);
+  const courante = pageEffective(page ?? locale, pages);
+  const choisir = (suivante: CategorieApp) => (onPage ? onPage(suivante) : setLocale(suivante));
+  return { pages, page: courante, choisir };
+}
+
+/** Phrase d'accroche quand la page n'a aucune app. */
+export function accrochePageVide(page: CategorieApp, pages: readonly CategorieApp[]): string {
+  if (page === 'administration') return 'Aucune app d’administration ne vous est ouverte.';
+  return pages.includes('administration')
+    ? 'Aucune app publique ne vous est encore ouverte : vos outils sont dans l’onglet Administration.'
+    : 'Aucune app ne vous est encore ouverte : demandez à l’administrateur de cet appareil.';
 }
 
 type EtatPresse = { pressed: boolean; hovered?: boolean; focused?: boolean };
@@ -94,7 +120,7 @@ export function Hub(props: HubProps) {
   return useMobile() ? <HubMobile {...props} /> : <HubBureau {...props} />;
 }
 
-function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, onParametres, onSupport, synchro, demande, heure }: HubProps) {
+function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, onParametres, onSupport, synchro, demande, heure, page: pageDemandee, onPage }: HubProps) {
   const { width } = useWindowDimensions();
   const [menuOuvert, setMenuOuvert] = useState(false);
   const maj = useMiseAJour();
@@ -115,7 +141,8 @@ function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPref
   }, [demande?.n]);
   const modifie = edition && personnalisable;
   const courantes = prefs ?? reinitialiser();
-  const autorisees = appsVisibles(registre, contexte);
+  const { pages, page, choisir: choisirPage } = usePageHub(registre, contexte, pageDemandee, onPage);
+  const autorisees = appsDePage(registre, contexte, page);
   const tuiles = appliquerPrefs(autorisees, courantes);
   const affichees = modifie ? tuiles : tuiles.filter(tuile => !tuile.masquee);
   const masquees = tuiles.filter(tuile => tuile.masquee).length;
@@ -230,14 +257,18 @@ function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPref
               <Text style={[texte, styles.accroche, { color: theme.attenue }]}>
                 {modifie
                   ? 'Mode personnalisation : réordonnez, redimensionnez, épinglez ou masquez vos tuiles. L’aperçu est en direct.'
-                  : autorisees.length > 0
-                    ? 'Reprenez là où vous en étiez.'
-                    : 'Aucune app ne vous est encore ouverte : demandez à l’administrateur de cet appareil.'}
+                  : autorisees.length === 0
+                    ? accrochePageVide(page, pages)
+                    : page === 'administration'
+                      ? 'Les apps réservées à l’administration de ce hub.'
+                      : 'Reprenez là où vous en étiez.'}
               </Text>
             ) : null}
           </View>
 
-          {modifie ? null : <BandeauAbonnement contexte={contexte} theme={theme} onOuvrirAdministration={() => onOuvrir('administration')} />}
+          {pages.length > 1 ? <OngletsPages theme={theme} pages={pages} page={page} onChoisir={choisirPage} /> : null}
+
+          {modifie ? null : <BandeauAbonnement contexte={contexte} theme={theme} onOuvrirAbonnements={() => onOuvrir(ID_ABONNEMENTS)} />}
 
           {modifie ? (
             <BarrePersonnalisation
@@ -248,7 +279,7 @@ function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPref
             />
           ) : null}
 
-          <View style={styles.grille} accessibilityLabel="Applications">
+          <View style={styles.grille} accessibilityLabel={PAGES_HUB.find(p => p.id === page)?.libelle ?? 'Applications'} testID={`hub-grille-${page}`}>
             {affichees.map(tuile => (
               <Cellule
                 key={tuile.app.id}
@@ -280,7 +311,7 @@ function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPref
                 onDeposer={cible => changer(deplacerVers(courantes, ids, glisse.current ?? '', cible))}
               />
             ))}
-            {!liste || !modifie ? (
+            {page === 'publique' && (!liste || !modifie) ? (
               <View style={[styles.cellule, { width: liste ? '100%' : `${100 / colonnes}%` }]}>
                 <TuileNouvelle theme={theme} compact={compact} liste={liste} />
               </View>
@@ -303,6 +334,39 @@ function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPref
           </Text>
         </View>
       </ScrollView>
+    </View>
+  );
+}
+
+/**
+ * Onglets « Applications · Administration » en haut du hub (bureau). Le
+ * second n'est rendu que si l'hôte le permet (`pagesVisibles`).
+ */
+function OngletsPages({ theme, pages, page, onChoisir }: { theme: ThemeHub; pages: readonly CategorieApp[]; page: CategorieApp; onChoisir(page: CategorieApp): void }) {
+  const rayon = Math.min(theme.rayonMoyen, 10);
+  return (
+    <View style={[styles.pages, { borderColor: theme.ligne, borderRadius: rayon }]} accessibilityRole="tablist" accessibilityLabel="Pages du hub" testID="hub-pages">
+      {PAGES_HUB.filter(p => pages.includes(p.id)).map(p => {
+        const actif = p.id === page;
+        return (
+          <Pressable
+            key={p.id}
+            testID={`hub-page-${p.id}`}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: actif }}
+            aria-selected={actif}
+            accessibilityLabel={p.description}
+            onPress={() => onChoisir(p.id)}
+            style={(etat: EtatPresse) => [
+              styles.pageOnglet,
+              { backgroundColor: actif ? theme.accent : etat.hovered ? teinteTransparente(theme.accent, 0.1) : 'transparent', borderRadius: Math.max(rayon - 3, 0) },
+            ]}>
+            <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: actif ? '700' : '600', fontSize: 15, ...police(theme.policeTexte) }}>
+              {p.glyphe} {p.libelle}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -1008,6 +1072,8 @@ const styles = StyleSheet.create({
   marque: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   actionsEntete: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   intro: { marginTop: 48, marginBottom: 32 },
+  pages: { flexDirection: 'row', alignSelf: 'flex-start', borderWidth: 1, padding: 3, gap: 3, marginBottom: 20 },
+  pageOnglet: { paddingVertical: 9, paddingHorizontal: 18, minHeight: 40, justifyContent: 'center' },
   salut: { fontSize: 44, lineHeight: 50, letterSpacing: -1 },
   accroche: { marginTop: 16, fontSize: 18 },
   grille: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -8 },

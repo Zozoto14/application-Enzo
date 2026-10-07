@@ -22,7 +22,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { nouveauContexte } from './e2e-acceptation.mjs';
+import { allerPageAdministration, nouveauContexte } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -240,6 +240,7 @@ try {
   await pc.getByTestId('bouton-continuer').click();
   await pc.getByTestId('hub').waitFor({ timeout: 60_000 }).catch(() => deverrouiller(pc, MDP_ADMIN, secretAdmin));
   await fermerPopups(pc);
+  await allerPageAdministration(pc);
   await pc.locator('[data-testid="cellule-administration"], [data-testid="tuile-administration"]').first().click();
   await pc.getByTestId('app-administration').waitFor({ timeout: 20_000 });
   const lea = await creerAmi(pc, 'Léa');

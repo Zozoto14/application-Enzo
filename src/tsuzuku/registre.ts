@@ -17,6 +17,7 @@ export const APP_TSUZUKU: AppHub = {
   id: ID_TSUZUKU,
   nom: 'Tsuzuku',
   categorie: 'Animés · Films',
+  page: 'publique',
   description: 'Animés et films : catalogue, lecture, bibliothèque, sans serveur.',
   icone: '▶',
   teinte: 'anime',

@@ -23,7 +23,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { nouveauContexte } from './e2e-acceptation.mjs';
+import { allerPageAdministration, allerPageApplications, nouveauContexte } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -167,6 +167,7 @@ async function creerAmi(pg, nom) {
   return { motDePasse, secret };
 }
 async function ouvrirTsuzuku(pg) {
+  await allerPageApplications(pg);
   await tuile(pg, 'tsuzuku').click();
   await pg.getByTestId('tsuzuku-racine').waitFor({ timeout: 20_000 });
 }
@@ -273,6 +274,7 @@ try {
   await fermerDevblog(pg);
   await pg.keyboard.press('Escape').catch(() => undefined);
   await pg.getByTestId('hub').waitFor({ timeout: 20_000 });
+  await allerPageAdministration(pg);
   await tuile(pg, 'administration').click();
   await pg.getByTestId('app-administration').waitFor({ timeout: 20_000 });
   const hugo = await creerAmi(pg, 'Hugo');

@@ -8,7 +8,8 @@
  *    « grande » prend toute la largeur ;
  *  - personnalisation TACTILE : une liste où chaque app a ses boutons (monter, descendre, épingler,
  *    masquer, taille), 44 px chacun — pas de glisser-déposer à deviner ;
- *  - barre basse du hub (Accueil · Support · Réglages · Compte).
+ *  - barre basse du hub (Accueil · Admin · Support · Réglages · Compte) : « Admin » ouvre la page
+ *    « Administration » du hub, seulement pour les rangs qui y ont au moins une app (`pages.ts`).
  *
  * Même logique que le hub de bureau (`personnalisation.ts`, `permissions.ts`), autre mise en page.
  */
@@ -16,12 +17,14 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { BandeauAbonnement } from './abonnements/BandeauAbonnement';
-import type { HubProps } from './Hub';
+import { accrochePageVide, usePageHub, type HubProps } from './Hub';
+import { ID_ABONNEMENTS } from './abonnements/actionsAbo';
+import { appsDePage } from './pages';
 import { IndicateurSynchro } from './IndicateurSynchro';
 import { salutation } from './infos';
 import { LogoHub } from './LogoHub';
 import { BoutonMiseAJour, useMiseAJour } from './ParametresHub';
-import { appsVisibles, etatTuile, type EtatTuile } from './permissions';
+import { etatTuile, type EtatTuile } from './permissions';
 import {
   LIBELLES_TAILLE,
   TAILLES,
@@ -51,7 +54,7 @@ export function colonnesMobile(largeur: number, disposition: 'grille' | 'liste')
   return disposition === 'liste' || largeur < 340 ? 1 : 2;
 }
 
-export function HubMobile({ registre, contexte, theme, onOuvrir, prefs, onPrefs, onParametres, synchro, demande, heure }: HubProps) {
+export function HubMobile({ registre, contexte, theme, onOuvrir, prefs, onPrefs, onParametres, synchro, demande, heure, page: pageDemandee, onPage }: HubProps) {
   const { width } = useWindowDimensions();
   const [edition, setEdition] = useState(false);
   const [annonce, setAnnonce] = useState('');
@@ -69,7 +72,9 @@ export function HubMobile({ registre, contexte, theme, onOuvrir, prefs, onPrefs,
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seule une nouvelle demande compte.
   }, [demande?.n]);
   const courantes = prefs ?? reinitialiser();
-  const autorisees = appsVisibles(registre, contexte);
+  // Page « Applications » ou « Administration » : on en change par la barre basse (entrée « Admin »).
+  const { pages, page } = usePageHub(registre, contexte, pageDemandee, onPage);
+  const autorisees = appsDePage(registre, contexte, page);
   const tuiles = appliquerPrefs(autorisees, courantes);
   const ids = tuiles.map(t => t.app.id);
   const affichees = tuiles.filter(t => !t.masquee);
@@ -110,7 +115,16 @@ export function HubMobile({ registre, contexte, theme, onOuvrir, prefs, onPrefs,
       </View>
 
       <ScrollView style={styles.defilement} contentContainerStyle={styles.contenu} keyboardShouldPersistTaps="handled">
-        {modifie ? null : (
+        {modifie ? null : page === 'administration' ? (
+          <View style={[styles.intro, compact && { marginTop: ESPACE.xs }]} testID="hub-titre-administration">
+            <Text style={[titreStyle, styles.salut]} accessibilityRole="header">
+              Administration
+            </Text>
+            <Text style={[texte, styles.accroche, { color: theme.attenue }]}>
+              {autorisees.length > 0 ? 'Les apps réservées à l’administration de ce hub.' : accrochePageVide(page, pages)}
+            </Text>
+          </View>
+        ) : (
           <View style={[styles.intro, compact && { marginTop: ESPACE.xs }]}>
             <Text style={[titreStyle, styles.salut]} accessibilityRole="header">
               {debut}
@@ -124,13 +138,13 @@ export function HubMobile({ registre, contexte, theme, onOuvrir, prefs, onPrefs,
             </Text>
             {!compact ? (
               <Text style={[texte, styles.accroche, { color: theme.attenue }]}>
-                {autorisees.length > 0 ? 'Reprenez là où vous en étiez.' : 'Aucune app ne vous est encore ouverte : demandez à l’administrateur de cet appareil.'}
+                {autorisees.length > 0 ? 'Reprenez là où vous en étiez.' : accrochePageVide(page, pages)}
               </Text>
             ) : null}
           </View>
         )}
 
-        {modifie ? null : <BandeauAbonnement contexte={contexte} theme={theme} onOuvrirAdministration={() => onOuvrir('administration')} />}
+        {modifie ? null : <BandeauAbonnement contexte={contexte} theme={theme} onOuvrirAbonnements={() => onOuvrir(ID_ABONNEMENTS)} />}
         {!modifie && maj.etat.phase === 'disponible' ? (
           <View style={styles.maj}>
             <BoutonMiseAJour theme={theme} maj={maj} />
@@ -140,7 +154,7 @@ export function HubMobile({ registre, contexte, theme, onOuvrir, prefs, onPrefs,
         {modifie ? (
           <Personnalisation theme={theme} prefs={courantes} tuiles={tuiles} ids={ids} onChanger={changer} />
         ) : (
-          <View style={styles.grille} accessibilityLabel="Applications">
+          <View style={styles.grille} accessibilityLabel={page === 'administration' ? 'Administration' : 'Applications'} testID={`hub-grille-${page}`}>
             {affichees.map(tuile => (
               <View
                 key={tuile.app.id}
@@ -175,7 +189,7 @@ export function HubMobile({ registre, contexte, theme, onOuvrir, prefs, onPrefs,
           <BoutonPrincipal theme={theme} titre="Terminé" onPress={() => setEdition(false)} testID="hub-terminer" />
         </View>
       ) : (
-        <BarreBasseHub actif="accueil" />
+        <BarreBasseHub actif={page === 'administration' ? 'administration' : 'accueil'} />
       )}
     </View>
   );

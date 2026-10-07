@@ -41,8 +41,8 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
-    version: '2026.10.13',
-    date: '2026-10-13',
+    version: '2026.10.15',
+    date: '2026-10-15',
     titre: 'Claude Office arrive dans le hub',
     resume:
       'Le bureau en pixel art des agents de Claude Code a sa tuile : il dit si Claude Office tourne sur le PC, l’ouvre dans sa fenêtre et installe ses hooks après vous avoir montré exactement ce qui change.',
@@ -64,6 +64,68 @@ export const ENTREES: readonly EntreeDevblog[] = [
         texte:
           '« Voir ce qui sera modifié » montre le fichier et chaque ajout ; « Installer les hooks… » redemande confirmation, sauvegarde le fichier puis l’écrit. Relancer ne change rien. En terminal : npm run office:hooks (avec --a-blanc pour un aperçu seul).',
         essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
+    version: '2026.10.14',
+    date: '2026-10-14',
+    titre: 'Nouvelle app : Prospects',
+    resume:
+      'Un carnet de prospection personnel, réservé au Fondateur : vos contacts, leurs relances et vos modèles de messages, chiffrés et synchronisés entre vos appareils comme le reste de l’administration.',
+    illustration: 'administration',
+    fonctionnalites: [
+      {
+        id: 'prospects-carnet',
+        emoji: '✉️',
+        titre: 'Un carnet de prospects',
+        texte:
+          'Nom, entreprise, e-mail, téléphone, source, étiquettes, statut (nouveau → gagné ou perdu), prochaine relance, notes et historique des contacts. Recherche, filtres par statut ou étiquette, tri, compteurs, et la vue « À relancer aujourd’hui ».',
+        essayer: { genre: 'app', app: 'prospects' },
+        adminSeulement: true,
+      },
+      {
+        id: 'prospects-lot-csv',
+        emoji: '📋',
+        titre: 'Ajout en lot et CSV',
+        texte:
+          'Collez une liste d’adresses (une par ligne, ou séparées par des virgules ou points-virgules) : les doublons, quelle que soit la casse, et les adresses mal formées sont écartés. Import et export CSV complets.',
+        adminSeulement: true,
+      },
+      {
+        id: 'prospects-ecrire',
+        emoji: '✍️',
+        titre: '« Écrire », un message à la fois',
+        texte:
+          'Le bouton « Écrire » ouvre votre messagerie avec un modèle personnalisé ({prenom}, {entreprise}) ; rien n’est envoyé automatiquement et aucune adresse n’est collectée sur le web. Un rappel sur les règles de la prospection (RGPD, consentement, désinscription) est affiché, et « Ne plus contacter » bloque le bouton.',
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
+    version: '2026.10.13',
+    date: '2026-10-13',
+    titre: 'Deux pages dans le hub, et une app Abonnements',
+    resume:
+      'Le hub sépare désormais vos applications des outils d’administration : un onglet « Applications » pour tout le monde, un onglet « Administration » pour les rangs habilités. Le suivi des abonnements devient une app à part entière.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'hub-pages-administration',
+        emoji: '🗂️',
+        titre: 'Applications · Administration',
+        texte:
+          'En haut du hub (ou par l’entrée « Admin » de la barre basse sur téléphone), passez de vos applications aux apps réservées à l’administration. L’onglet n’apparaît qu’aux rangs qui y ont au moins une app ; les autres comptes ne voient aucun changement.',
+        adminSeulement: true,
+      },
+      {
+        id: 'app-abonnements',
+        emoji: '💳',
+        titre: 'App Abonnements',
+        texte:
+          'Le suivi manuel des abonnements quitte l’Administration pour sa propre tuile, dans la page Administration : mêmes comptes, mêmes paiements, mêmes rappels, rien n’est perdu. Ses réglages (devise, rappels, modèle du message) sont dans son onglet Réglages. Réservée aux Fondateurs, comme avant.',
+        essayer: { genre: 'app', app: 'abonnements' },
         adminSeulement: true,
       },
     ],

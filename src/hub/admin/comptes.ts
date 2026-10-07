@@ -9,6 +9,7 @@
 
 import { ErreurProfil, ID_PRINCIPAL, motifFermeture, type Profil } from '../../profils/profils';
 import type { AppHub } from '../types';
+import { reserveeOuverteAuRang } from '../acces';
 import { ajusterNiveau, type NiveauAcces, type Niveaux } from './niveaux';
 import { etatApp, type PolitiqueHub } from './politique';
 import { NIVEAU_RANG, rangDe, type Rang } from './roles';
@@ -57,12 +58,12 @@ export function compteOuvrable(profil: Profil, maintenant: number): boolean {
 // --- Niveaux par app -----------------------------------------------------------
 
 /** Niveau effectif d'un profil sur une app (l'administrateur a tout). */
-export function niveauProfil(profil: Pick<Profil, 'admin' | 'apps' | 'niveaux' | 'role'> | undefined, app: Pick<AppHub, 'id' | 'adminSeulement' | 'gestionnaire' | 'niveaux'>): NiveauAcces {
+export function niveauProfil(profil: Pick<Profil, 'admin' | 'apps' | 'niveaux' | 'role'> | undefined, app: Pick<AppHub, 'id' | 'adminSeulement' | 'gestionnaire' | 'rangs' | 'niveaux'>): NiveauAcces {
   if (!profil || profil.admin) {
     return 'complet';
   }
   if (app.adminSeulement) {
-    return (profil.role === 'gestionnaire' || profil.role === 'administrateur' || profil.role === 'fondateur') && app.gestionnaire === true ? 'complet' : 'aucun';
+    return reserveeOuverteAuRang(app, profil.role) ? 'complet' : 'aucun';
   }
   if (!(profil.apps ?? []).includes(app.id)) {
     return 'aucun';

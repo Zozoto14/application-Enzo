@@ -2,8 +2,11 @@
  * Registre des apps du hub.
  *
  * **Ajouter une app = ajouter une entrée ici** : identifiant, nom, icône,
- * teinte, information en direct et écran racine. Le hub en fait une tuile,
- * l'Administration une case d'autorisation, sans autre modification.
+ * teinte, **catégorie de page** (`page` : « publique » → page « Applications »,
+ * « administration » → page « Administration », voir `pages.ts`), droits
+ * (`adminSeulement`, `rangs`), information en direct et écran racine. Le hub
+ * en fait une tuile sur la bonne page, l'Administration une case
+ * d'autorisation (apps publiques), sans autre modification.
  *
  * L'identifiant est enregistré dans les autorisations des profils : ne le
  * changez pas une fois l'app livrée.
@@ -12,8 +15,10 @@
 import { Administration } from './Administration';
 import { infoAdministration, infoPortefeuille } from './infos';
 import { APP_TSUZUKU } from '../tsuzuku/registre';
-import type { AppHub } from './types';
+import { APP_ABONNEMENTS } from './abonnements/registre';
+import { APP_PROSPECTS } from '../prospects/registre';
 import { APP_CLAUDE_OFFICE } from '../claudeOffice/registre';
+import type { AppHub } from './types';
 
 export const ID_PORTEFEUILLE = 'portefeuille';
 export const ID_ADMINISTRATION = 'administration';
@@ -23,6 +28,7 @@ export const REGISTRE: readonly AppHub[] = [
     id: ID_PORTEFEUILLE,
     nom: 'Portefeuille',
     categorie: 'Finance',
+    page: 'publique',
     description: 'Positions, performance, alertes et podcast du jour.',
     icone: '↗',
     teinte: 'portefeuille',
@@ -34,6 +40,7 @@ export const REGISTRE: readonly AppHub[] = [
     id: ID_ADMINISTRATION,
     nom: 'Administration',
     categorie: 'Admin',
+    page: 'administration',
     description: 'Comptes des amis, identifiants et accès aux apps.',
     icone: '⚙︎',
     teinte: 'admin',
@@ -45,5 +52,7 @@ export const REGISTRE: readonly AppHub[] = [
     info: contexte => infoAdministration(contexte.profils?.gestion?.comptes ?? contexte.profils?.tous),
     Racine: Administration,
   },
+  APP_ABONNEMENTS,
+  APP_PROSPECTS,
   APP_CLAUDE_OFFICE,
 ];

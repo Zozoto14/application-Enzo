@@ -20,7 +20,7 @@ pauses café, fil de discussion). Source : [W17ANT/agent-office](https://github.
 
 | Fichier | Rôle |
 | --- | --- |
-| `src/claudeOffice/registre.ts` | Entrée du registre (`src/hub/registre.tsx`) : tuile « Claude Office », catégorie Admin |
+| `src/claudeOffice/registre.ts` | Entrée du registre (`src/hub/registre.tsx`) : tuile « Claude Office », catégorie Admin, page « Administration » du hub (`page: 'administration'`) |
 | `src/claudeOffice/Racine.tsx` | Écran : état du serveur, ouvrir, dossier, aperçu/installation des hooks ; sur site/téléphone, la commande |
 | `src/claudeOffice/pont.ts` | Contrat du pont `window.applibourse.claudeOffice` (absent hors du PC) |
 | `bureau/electron/claudeOffice.mjs` | Logique Node pure : aperçu, fusion, sauvegarde, écriture, sonde `/health` |

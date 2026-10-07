@@ -665,7 +665,8 @@ function creerFenetre() {
     }
   });
   fenetre.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) {
+    // Pages web vers le navigateur ; `mailto:` (bouton « Écrire » de Prospects) vers la messagerie.
+    if (/^https?:\/\//i.test(url) || /^mailto:[^\s]+$/i.test(url)) {
       void shell.openExternal(url);
     }
     return { action: 'deny' };

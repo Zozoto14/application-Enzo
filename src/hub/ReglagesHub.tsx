@@ -21,7 +21,6 @@ import { THEMES_HUB, police, teinteTransparente, type IdThemeHub, type ThemeHub 
 import type { EtatCoffre, ServicesAdmin } from './types';
 import { versionApp } from './version';
 import { texteTransparence } from './admin/roles';
-import { ReglagesAbonnements } from './abonnements/ReglagesAbonnements';
 import type { Profil } from '../profils/profils';
 import { ct, tt } from '../ui/mobile/jetons';
 import { modeTelephoneCourant } from '../ui/mobile/useMobile';
@@ -357,7 +356,6 @@ export function ReglagesAdministration({ theme, services, acteur, maintenant = D
           {message}
         </Text>
       ) : null}
-      <ReglagesAbonnements theme={theme} services={services} acteur={acteur} maintenant={maintenant} />
     </View>
   );
 }

@@ -18,6 +18,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { allerPageAdministration } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -162,6 +163,7 @@ async function confirmerIdentite(page, motDePasse, secret) {
 }
 
 async function ouvrirAdministration(page) {
+  await allerPageAdministration(page);
   const tuile = page.locator('[data-testid="cellule-administration"], [data-testid="tuile-administration"]').first();
   await tuile.click();
   await page.getByTestId('app-administration').waitFor({ timeout: 20_000 });

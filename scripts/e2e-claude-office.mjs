@@ -11,6 +11,7 @@
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { allerPageAdministration } from './e2e-acceptation.mjs';
 import { chargerPlaywright, demarrerSite, deverrouiller, pause, premierLancement, racine, toucher } from './mobile-outils.mjs';
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-claude-office');
@@ -37,6 +38,8 @@ try {
     log(`${nom} : capturé`);
   };
 
+  // La tuile est sur la page « Administration » du hub.
+  await allerPageAdministration(page);
   const tuile = page.locator('[data-testid="cellule-claude-office"]');
   await tuile.waitFor({ timeout: 20_000 });
   await prendre('1-hub-tuile');
@@ -65,6 +68,7 @@ try {
       },
     };
   });
+  await allerPageAdministration(page);
   await tuile.click();
   await page.getByTestId('claude-office-serveur').waitFor();
   await page.getByText(/3 agents actifs/).waitFor();
