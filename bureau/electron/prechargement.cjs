@@ -103,6 +103,16 @@ contextBridge.exposeInMainWorld('applibourse', {
     redemarrer: () => ipcRenderer.invoke('maj:redemarrer'),
   },
 
+  /** Claude Office : serveur local et hooks de Claude Code (écriture seulement après confirmation native). */
+  claudeOffice: {
+    etat: () => ipcRenderer.invoke('claude-office:etat'),
+    choisirDossier: () => ipcRenderer.invoke('claude-office:choisir-dossier'),
+    reglerUrl: url => ipcRenderer.invoke('claude-office:regler-url', String(url)),
+    apercuHooks: desinstaller => ipcRenderer.invoke('claude-office:apercu-hooks', desinstaller === true),
+    installerHooks: desinstaller => ipcRenderer.invoke('claude-office:installer-hooks', desinstaller === true),
+    ouvrir: () => ipcRenderer.invoke('claude-office:ouvrir'),
+  },
+
   relais: {
     /** Relais installé par `npm run relais:deployer` sur ce PC, s'il existe. */
     config: () => ipcRenderer.invoke('relais:config'),

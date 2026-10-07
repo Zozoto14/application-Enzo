@@ -83,7 +83,7 @@ describe('parcours : administrateur historique après la mise à jour', () => {
       profils: { onCreerCompte: () => undefined, tous: vue.profils } as unknown as ContexteHub['profils'],
     };
     expect(vue.profils[0]).toMatchObject({ nom: 'Enzo', admin: true });
-    expect(appsVisibles(REGISTRE, contexte).map(app => app.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku', ID_ADMINISTRATION]);
+    expect(appsVisibles(REGISTRE, contexte).map(app => app.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku', ID_ADMINISTRATION, 'claude-office']);
     await bureau.vider();
 
     // Relance : le prénom est connu, l'amie aussi, un inconnu va au leurre.

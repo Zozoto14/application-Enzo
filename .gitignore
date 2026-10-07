@@ -25,3 +25,7 @@ site-dist/
 .wrangler/
 # Paquets JavaScript signés (npm run publier-maj), publiés avec le site de secours
 /maj/
+
+# Claude Office (dépôt à part) posé dans le dossier du projet : jamais versionné ici (docs/claude-office.md)
+/Claude Office/
+/claude-office/

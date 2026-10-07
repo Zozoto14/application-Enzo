@@ -97,18 +97,23 @@ describe('devblog', () => {
     // Déverrouillage : tout concerne aussi les amis, sauf le coffre publié par le PC.
     expect(ENTREES.find(e => e.version === '2026.10.11')!.titre).toBe('Déverrouillage : diagnostic et messages plus clairs');
     expect(ENTREES.find(e => e.version === '2026.10.11')!.fonctionnalites.filter(f => f.adminSeulement).map(f => f.id)).toEqual(['deverrouillage-coffre-pc']);
-    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES.slice(2)).genre).toBe('afficher');
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES.slice(3)).genre).toBe('afficher');
     // Pages du hub et app Abonnements : réservées à l'administration ; un ami n'a rien de vide.
-    expect(ENTREES[1].titre).toBe('Deux pages dans le hub, et une app Abonnements');
+    expect(ENTREES[2].titre).toBe('Deux pages dans le hub, et une app Abonnements');
+    expect(ENTREES[2].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
+    expect(ENTREES[2].fonctionnalites.find(f => f.id === 'app-abonnements')?.essayer).toEqual({ genre: 'app', app: 'abonnements' });
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES.slice(2)).genre).toBe('rien');
+    // Prospects : réservée au Fondateur ; un ami n'en voit rien.
+    expect(ENTREES[1].titre).toBe('Nouvelle app : Prospects');
     expect(ENTREES[1].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
-    expect(ENTREES[1].fonctionnalites.find(f => f.id === 'app-abonnements')?.essayer).toEqual({ genre: 'app', app: 'abonnements' });
-    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES.slice(1)).genre).toBe('rien');
-    // Prospects (dernière entrée) : réservée au Fondateur ; un ami n'en voit rien.
-    expect(ENTREES[0].titre).toBe('Nouvelle app : Prospects');
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES.slice(1)).genre).not.toBe('afficher');
+    // Claude Office (dernière entrée) : réservée au Fondateur, un ami n'en voit rien.
+    expect(ENTREES[0].titre).toBe('Claude Office arrive dans le hub');
     expect(ENTREES[0].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
+    expect(decider(undefined, { profilNeuf: false, admin: false }, [ENTREES[0]]).genre).toBe('rien');
     expect(decider(undefined, { profilNeuf: false, admin: true }, ENTREES).genre).toBe('afficher');
     expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).not.toBe('afficher');
-    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.14', '2026.10.13', '2026.10.12', '2026.10.11', '2026.10.10', '2026.10.09', '2026.10.08', '2026.10.07', '2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
+    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.15', '2026.10.14', '2026.10.13', '2026.10.12', '2026.10.11', '2026.10.10', '2026.10.09', '2026.10.08', '2026.10.07', '2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
   });
 
   it('marquer lu est idempotent et tolère un état corrompu', () => {
