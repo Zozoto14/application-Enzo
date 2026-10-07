@@ -33,10 +33,15 @@ const NEUTRES = new Set(['tv', 'anime', 'serie', 'series']);
 /** Années (« Titre (2023) ») : ni un mot en trop, ni un mot manquant. */
 const ANNEE = /^(19[5-9]\d|20[0-4]\d)$/;
 
-const mots = (valeur: unknown): string[] =>
-  normaliserTexte(valeur)
+/** Article en tête (« La Rivière » = « Rivière »), comme le font souvent les sites. */
+const ARTICLES = new Set(['le', 'la', 'les', 'l', 'the']);
+
+const mots = (valeur: unknown): string[] => {
+  const liste = normaliserTexte(valeur)
     .split(' ')
     .filter(t => t && !BRUIT.has(t) && !NEUTRES.has(t) && !ANNEE.test(t));
+  return liste.length > 1 && ARTICLES.has(liste[0]) ? liste.slice(1) : liste;
+};
 
 /** Score « texte contre texte » (titres complets ou titres de base). */
 function scorePaire(candidat: unknown, cible: unknown): number {

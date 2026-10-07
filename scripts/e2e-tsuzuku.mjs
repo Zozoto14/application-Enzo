@@ -439,7 +439,7 @@ try {
   await page.getByText('Ma médiathèque (neutre)', { exact: true }).first().waitFor({ timeout: 10_000 });
   await page.getByTestId('sources-titre-test').fill('Dandadan');
   await page.locator('[data-testid^="source-tester-"]').first().click();
-  verifier(await page.getByText(/1 resultat\(s\) sur 1 bloc\(s\)/).waitFor({ timeout: 15_000 }).then(() => true, () => false), 'le test de la source trouve « Dandadan » (page neutre lue via le pont, garde du principal)');
+  verifier(await page.getByText(/Retenu : « Dandadan »/).waitFor({ timeout: 15_000 }).then(() => true, () => false), 'le test de la source trouve « Dandadan » (page neutre lue via le pont, garde du principal)');
   await capture(page, '18-sources-test');
 
   // Une source vers le réseau local est refusée dès la saisie.

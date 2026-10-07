@@ -84,5 +84,7 @@ describe('titre du catalogue contre titre du site (bogue : test OK, fiche KO)', 
   });
   it('casse, accents et ponctuation ne comptent pas', () => {
     expect(scoreTitre('les chroniques de l etoile', ['Les Chroniques de l’Étoile'])).toBe(1000);
+    // Un article en tête ne compte pas : « Rivière » trouve « La Rivière ».
+    expect(scoreTitre('La Rivière', ['Rivière'])).toBe(1000);
   });
 });
