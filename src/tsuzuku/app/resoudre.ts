@@ -18,6 +18,7 @@ import {
   type ResultatEpisodes,
 } from '../moteur/resolution';
 import type { DefinitionSource } from '../moteur/sources';
+import type { CibleTest } from '../moteur/assistant';
 import { CLES } from '../plateforme/stockage';
 import { MESSAGE_SITE } from '../plateforme/reseauWeb';
 import type { ServicesTsuzuku } from './services';
@@ -238,4 +239,25 @@ export async function lireFilm(
   } catch (erreur) {
     return { lecteurs: [], origine: 'aucune', message: messageDe(erreur), diagnostic: { raison: 'erreur', titres: [...titres], sources: [] } };
   }
+}
+
+/**
+ * « Tester sur un vrai titre du catalogue » : la fiche du catalogue la plus
+ * proche de la saisie (ou la plus populaire), avec TOUS les titres que la fiche
+ * chercherait et la préférence de doublage de l'utilisateur.
+ */
+export async function cibleDuCatalogue(s: ServicesTsuzuku, saisie: string, kind: 'anime' | 'movie' = 'anime'): Promise<{ libelle: string; cible: CibleTest }> {
+  const langue = (await s.reglages()).langue;
+  if (kind === 'movie') {
+    const r = await s.catalogue.films.rechercher(saisie.trim() || 'a');
+    const f = r.items[0];
+    if (!f) throw new Error(`Aucun film du catalogue ne correspond à « ${saisie} ».`);
+    return { libelle: f.title, cible: { titres: titresPourSources(f), langue, annee: f.year } };
+  }
+  const liste = saisie.trim() ? (await s.catalogue.animes.rechercher(saisie.trim(), 5)).data : (await s.catalogue.animes.populaires(5)).data;
+  const premier = liste[0];
+  if (!premier?.id) throw new Error(`Aucun animé du catalogue ne correspond à « ${saisie} ».`);
+  // La fiche complète porte les titres alternatifs (comme à l'ouverture de la fiche).
+  const fiche = await s.catalogue.animes.parId(premier.id).then(r => r.data, () => premier);
+  return { libelle: fiche.title, cible: { titres: titresPourSources(fiche), langue } };
 }

@@ -10,8 +10,8 @@ import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 import { teinteTransparente } from '../../hub/themes';
 import type { DiagnosticSource, StatutSource } from '../moteur/resolution';
-import { useTsuzuku } from './contexte';
-import type { DiagnosticLecture } from './resoudre';
+import { useCharger, useTsuzuku } from './contexte';
+import { enregistrerTitrePerso, episodesDisponibles, lireTitresPerso, type DiagnosticLecture } from './resoudre';
 import { Avis, Bouton, Champ, styleAttenue, styleTexte } from './ui';
 
 export const LIBELLE_STATUT_SOURCE: Record<StatutSource, string> = {
@@ -49,7 +49,8 @@ export function PanneauEchec({
   onAutreTitre,
   testID = 'sources-echec',
 }: {
-  message: string;
+  /** Absent : le message est déjà affiché à côté (lecteur). */
+  message?: string;
   diagnostic?: DiagnosticLecture;
   titrePerso?: string;
   enCours?: boolean;
@@ -64,7 +65,7 @@ export function PanneauEchec({
   const recherchable = diagnostic && diagnostic.raison !== 'site' && diagnostic.raison !== 'aucune-source';
   return (
     <View testID={testID} style={{ gap: 10, padding: 12, borderRadius: Math.max(theme.rayonMoyen, 8), borderWidth: 1, borderColor: theme.ligne, backgroundColor: teinteTransparente(theme.texte, 0.03) }}>
-      <Avis genre={diagnostic?.raison === 'erreur' ? 'critique' : 'alerte'} texte={message} testID={`${testID}-message`} />
+      {message ? <Avis genre={diagnostic?.raison === 'erreur' ? 'critique' : 'alerte'} texte={message} testID={`${testID}-message`} /> : null}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {diagnostic?.raison !== 'aucune-source' ? <Bouton titre={enCours ? 'Recherche…' : 'Réessayer'} desactive={enCours} onPress={onReessayer} testID={`${testID}-reessayer`} /> : null}
         {diagnostic ? <Bouton titre={detail ? 'Masquer le détail' : 'Détail du diagnostic'} onPress={() => setDetail(v => !v)} testID={`${testID}-detail-bouton`} /> : null}
@@ -86,6 +87,54 @@ export function PanneauEchec({
             </Text>
           ))}
         </View>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * Fiche d'un animé : « Sur vos sources » — la recherche que fera le lecteur,
+ * lancée dès l'ouverture de la fiche (résultat gardé 10 min pour le lecteur).
+ */
+export function DisponibiliteSources({ id, titres }: { id: string; titres: readonly string[] }) {
+  const { s, theme, version } = useTsuzuku();
+  const [essai, setEssai] = useState(0);
+  const etat = useCharger(async () => {
+    const d = await episodesDisponibles(s, { id, titres, forcer: essai > 0 });
+    return { d, perso: (await lireTitresPerso(s))[`anime:${id}`] };
+  }, [s, id, titres.join('|'), essai, version]);
+  const d = etat.donnees?.d;
+  // Aucune source : la carte « Aucune source configurée » le dit déjà.
+  if (d?.diagnostic.raison === 'aucune-source' && !d.episodes.length) return null;
+  const relancer = () => setEssai(v => v + 1);
+  return (
+    <View style={{ gap: 8 }} testID="fiche-sources">
+      <Text style={styleTexte(theme, 15)}>Sur vos sources</Text>
+      {etat.enCours && !d ? (
+        <Text style={styleAttenue(theme, 13)} testID="fiche-sources-recherche">
+          Recherche sur vos sources…
+        </Text>
+      ) : etat.erreur ? (
+        <PanneauEchec message={etat.erreur} enCours={etat.enCours} onReessayer={relancer} testID="fiche-sources-echec" />
+      ) : d && d.episodes.length ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          <Avis
+            genre="ok"
+            testID="fiche-sources-ok"
+            texte={`« ${d.resultat?.serie?.title ?? titres[0]} » trouvé sur « ${d.resultat?.source?.name ?? 'la source'} » : ${d.episodes.length} épisode(s) (n° ${d.episodes[0].number} à ${d.episodes[d.episodes.length - 1].number}).`}
+          />
+          <Bouton titre={etat.enCours ? 'Recherche…' : 'Rechercher à nouveau'} desactive={etat.enCours} onPress={relancer} testID="fiche-sources-reessayer" />
+        </View>
+      ) : d ? (
+        <PanneauEchec
+          message={d.message ?? 'Rien trouvé sur vos sources.'}
+          diagnostic={d.diagnostic}
+          titrePerso={etat.donnees?.perso}
+          enCours={etat.enCours}
+          onReessayer={relancer}
+          onAutreTitre={t => void enregistrerTitrePerso(s, `anime:${id}`, t).then(relancer)}
+          testID="fiche-sources-echec"
+        />
       ) : null}
     </View>
   );

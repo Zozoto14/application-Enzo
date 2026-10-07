@@ -41,6 +41,7 @@ import {
 import { messageDe } from '../moteur/erreurs';
 import { supporteAnimes, supporteFilms, type DefinitionSource, type Langue } from '../moteur/sources';
 import { useTsuzuku } from './contexte';
+import { cibleDuCatalogue } from './resoudre';
 import { ouvrirExterne } from './externe';
 import type { ModePartage, PartageSource } from './gestion';
 import { Avis, Bouton, Champ, Puce, Titre, styleAttenue, styleTexte, styleTitre } from './ui';
@@ -240,11 +241,20 @@ export function AssistantSource({
     setValidation(v);
     if (v.source) setNom(v.source.name);
   };
-  const tester = async (src: DefinitionSource) => {
+  const [titreCatalogue, setTitreCatalogue] = useState<string | undefined>();
+  const tester = async (src: DefinitionSource, catalogue = false) => {
     setErreur(undefined);
     setEnCours(true);
     try {
-      setTest(await testerSourcePasAPas(s.ctx, src, titreTest));
+      // Même pipeline que la fiche : variantes, ressemblance, seuil, préférence de doublage.
+      if (catalogue) {
+        const c = await cibleDuCatalogue(s, titreTest, supporteAnimes(src) ? 'anime' : 'movie');
+        setTitreCatalogue(`${c.libelle} — titres essayés : ${c.cible.titres.join(' · ')}`);
+        setTest(await testerSourcePasAPas(s.ctx, src, c.cible));
+      } else {
+        setTitreCatalogue(undefined);
+        setTest(await testerSourcePasAPas(s.ctx, src, { titres: [titreTest.trim() || 'a'], langue: (await s.reglages()).langue }));
+      }
     } catch (e) {
       setErreur(messageDe(e));
     } finally {
@@ -377,7 +387,12 @@ export function AssistantSource({
             <View style={{ gap: 8 }}>
               <Text style={styleAttenue(theme, 14)}>Indiquez un titre présent sur le site : l’app cherche ce titre, ouvre le premier résultat, lit la liste des épisodes, puis cherche le lecteur du premier épisode.</Text>
               <Champ libelle="Titre à chercher pour le test" valeur={titreTest} onChanger={setTitreTest} testID="assistant-titre-test" />
-              <Bouton titre={enCours ? 'Test en cours…' : 'Tester'} desactive={enCours} onPress={() => void tester(validation.source!)} testID="assistant-tester" style={{ alignSelf: 'flex-start' }} />
+              <View style={rangee}>
+                <Bouton titre={enCours ? 'Test en cours…' : 'Tester'} desactive={enCours} onPress={() => void tester(validation.source!)} testID="assistant-tester" />
+                <Bouton titre="Tester sur un vrai titre du catalogue" desactive={enCours} onPress={() => void tester(validation.source!, true)} testID="assistant-tester-catalogue" />
+              </View>
+              <Text style={styleAttenue(theme, 13)}>Le test suit exactement le chemin de la fiche. « Vrai titre du catalogue » : la fiche du catalogue la plus proche du titre saisi (ou la plus populaire), avec tous ses titres (anglais, romaji, français, synonymes).</Text>
+              {titreCatalogue ? <Text style={styleTexte(theme, 13)} testID="assistant-titre-catalogue">Titre du catalogue : {titreCatalogue}</Text> : null}
               {test ? (
                 <View style={{ gap: 6 }} testID="assistant-resultat-test">
                   {test.map(e => (

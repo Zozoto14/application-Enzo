@@ -222,7 +222,7 @@ export function Sources({ comptes = [], partageActif = true, onCles, ajoutInitia
     agir(async () => {
       setEnTest(src.id);
       try {
-        const etapes = await testerSourcePasAPas(s.ctx, src, titreTest);
+        const etapes = await testerSourcePasAPas(s.ctx, src, { titres: [titreTest.trim() || 'a'], langue: (await s.reglages()).langue });
         setDiag({ id: src.id, etapes });
         const resume = { ok: testReussi(etapes), date: new Date().toISOString(), detail: etapes.map(e => `${e.nom} : ${e.ok === true ? 'OK' : e.ok === false ? 'KO' : '—'}`).join(' · ') };
         await s.enregistrerTest(src.id, resume);

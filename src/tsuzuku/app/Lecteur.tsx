@@ -10,7 +10,8 @@ import { utiliserLectureEnCours } from '../../securite/presence';
 import { ouvrirExterne } from './externe';
 import { LecteurMedia } from './LecteurMedia';
 import { LienGererSources } from './EtatSources';
-import { lireAnime, lireFilm, type Lecture } from './resoudre';
+import { enregistrerTitrePerso, lireAnime, lireFilm, lireTitresPerso, titresPourSources, type Lecture } from './resoudre';
+import { PanneauEchec } from './DiagnosticSources';
 import { Avis, Bouton, Etat, Puce, Titre, styleAttenue } from './ui';
 
 interface Meta {
@@ -26,10 +27,10 @@ async function chargerMeta(s: ReturnType<typeof useTsuzuku>['s'], kind: Genre, i
   try {
     if (kind === 'anime') {
       const f = (await s.catalogue.animes.parId(id)).data;
-      return { titre: f.title, titres: [f.title, f.titleOriginal, f.titleJapanese].filter(Boolean) as string[], image: f.image, total: f.totalEpisodes, annee: f.year, duree: null };
+      return { titre: f.title, titres: titresPourSources(f), image: f.image, total: f.totalEpisodes, annee: f.year, duree: null };
     }
     const f = (await s.catalogue.films.parId(id)).film;
-    return { titre: f.title, titres: [f.title, f.originalTitle].filter(Boolean) as string[], image: f.image, total: null, annee: f.year, duree: f.runtime };
+    return { titre: f.title, titres: titresPourSources(f), image: f.image, total: null, annee: f.year, duree: f.runtime };
   } catch (erreur) {
     // Catalogue injoignable : la bibliothèque connaît déjà le titre, et un lien manuel peut suffire.
     const e = trouver(await s.depot.lire(), kind, id);
@@ -42,11 +43,13 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
   const { s, theme, remplacer, retour, changee } = useTsuzuku();
   const n = kind === 'anime' ? Math.max(1, numero ?? 1) : 1;
   const [choix, setChoix] = useState(0);
-  const charge = useCharger<{ meta: Meta; lecture: Lecture; suivantAuto: boolean }>(async () => {
+  // « Réessayer » et « Chercher avec un autre titre » relancent la recherche (sans le cache).
+  const [essai, setEssai] = useState(0);
+  const charge = useCharger<{ meta: Meta; lecture: Lecture; suivantAuto: boolean; perso?: string }>(async () => {
     const meta = await chargerMeta(s, kind, id);
-    const lecture = kind === 'anime' ? await lireAnime(s, { id, titres: meta.titres, numero: n }) : await lireFilm(s, { id, titres: meta.titres, annee: meta.annee });
-    return { meta, lecture, suivantAuto: (await s.reglages()).suivantAuto };
-  }, [s, kind, id, n]);
+    const lecture = kind === 'anime' ? await lireAnime(s, { id, titres: meta.titres, numero: n, forcer: essai > 0 }) : await lireFilm(s, { id, titres: meta.titres, annee: meta.annee });
+    return { meta, lecture, suivantAuto: (await s.reglages()).suivantAuto, perso: (await lireTitresPerso(s))[`${kind}:${id}`] };
+  }, [s, kind, id, n, essai]);
   useEffect(() => setChoix(0), [id, n]);
   const { meta, lecture, suivantAuto } = charge.donnees ?? {};
   const lecteurs: Lecteur[] = lecture?.lecteurs ?? [];
@@ -119,6 +122,16 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
             ) : null}
             {courant ? <LecteurMedia key={courant.url} lecteur={courant} titre={meta.titre} onFin={fin} /> : null}
             {lecture.message ? <Avis genre={courant ? 'alerte' : 'info'} texte={lecture.message} testID="lecteur-message" /> : null}
+            {!courant && lecture.diagnostic ? (
+              <PanneauEchec
+                testID="lecteur-diagnostic"
+                diagnostic={lecture.diagnostic}
+                titrePerso={charge.donnees?.perso}
+                enCours={charge.enCours}
+                onReessayer={() => setEssai(v => v + 1)}
+                onAutreTitre={t => void enregistrerTitrePerso(s, `${kind}:${id}`, t).then(() => setEssai(v => v + 1))}
+              />
+            ) : null}
             {!courant ? (
               <View style={{ gap: 8 }}>
                 <Text style={styleAttenue(theme, 14)}>Vous pouvez coller un lien direct depuis la fiche.</Text>
