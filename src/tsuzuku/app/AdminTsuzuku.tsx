@@ -41,7 +41,7 @@ function useServicesReglage({ base, rang, choix, services }: PropsReglageTsuzuku
     } catch {
       avances = undefined;
     }
-    return creerServices({ choix: choix ?? choisirReseau(), stockage: stockageDepuisBase(base), rang, avances });
+    return creerServices({ choix: choix ?? choisirReseau(), stockage: stockageDepuisBase(base), rang, avances, lireBase: cle => base.lire(cle) });
   }, [base, rang, choix, services]);
 }
 

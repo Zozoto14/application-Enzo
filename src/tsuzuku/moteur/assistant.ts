@@ -22,7 +22,8 @@ import { echec, messageDe } from './erreurs';
 import { lirePage, sembleRenduEnJs, texteCompact, type Page } from './lecteurPage';
 import type { ClientSur } from './reseau';
 import { verifierUrlPubliqueSync } from './garde';
-import { chercherSur, diagnostiquerRecherche, lecteursSur, lireEpisodes, type ContexteResolution } from './resolution';
+import { SCORE_MINIMAL, type PreferenceLangue } from './appariement';
+import { chercherOeuvre, diagnostiquerRecherche, parAnnee, lecteursSur, lireEpisodes, type ContexteResolution, type RequeteDiagnostic } from './resolution';
 import { normaliserSource, supporteAnimes, supporteFilms, vueFilm, type DefinitionSource, type OptionsNormalisation } from './sources';
 
 /** Taille maximale d'une page analysée (plus petite que celle d'une lecture). */
@@ -516,14 +517,49 @@ export const testReussi = (etapes: readonly EtapeTest[]): boolean => etapes.leng
 
 const NON_JOUEE = 'Non testé : l’étape précédente a échoué.';
 
+/** Ce que le test cherche : un titre saisi, ou les titres d'une fiche du catalogue (comme la fiche). */
+export interface CibleTest {
+  titres: readonly string[];
+  /** Préférence de doublage de l'utilisateur (Paramètres › Tsuzuku), comme à la lecture. */
+  langue?: PreferenceLangue | null;
+  annee?: number | string | null;
+}
+
+/** Résumé lisible des recherches lancées (diagnostic). */
+export function resumeRequetes(requetes: readonly RequeteDiagnostic[]): string {
+  return requetes.map(r => `« ${r.requete} » → ${r.erreur ? `erreur (${r.erreur})` : `${r.resultats} résultat(s)`}`).join(' ; ');
+}
+
+/** Étape « recherche » : MÊME code que la fiche (`chercherOeuvre`), donc même titre, même seuil, même choix. */
+async function etapeRecherche(ctx: ContexteResolution, src: DefinitionSource, cible: CibleTest, film: boolean): Promise<{ etape: Omit<EtapeTest, 'cle' | 'nom'>; url?: string }> {
+  const r = await chercherOeuvre(ctx, src, film ? { titres: cible.titres, langue: 'indifferent', choisir: parAnnee(cible.annee) } : { titres: cible.titres, langue: cible.langue });
+  const requetes = resumeRequetes(r.requetes);
+  if (r.serie) {
+    return { etape: { ok: true, detail: `Recherches : ${requetes}. Retenu : « ${r.serie.title} » (ressemblance ${r.serie.baseScore}) → ${r.serie.url}`, pistes: [] }, url: r.serie.url };
+  }
+  if (r.refuse) {
+    return {
+      etape: {
+        ok: false,
+        detail: `Recherches : ${requetes}. Aucun résultat assez proche du titre : le meilleur, « ${r.refuse.title} » (ressemblance ${r.refuse.baseScore}, minimum ${SCORE_MINIMAL}), ne serait pas choisi par la fiche.`,
+        pistes: ['Essayez le titre tel que le site l’écrit, ou « Tester avec un titre du catalogue ».'],
+      },
+    };
+  }
+  // Rien de lisible : le diagnostic des sélecteurs dit pourquoi (page vide, sélecteur, rendu JavaScript).
+  const diag = await diagnostiquerRecherche(ctx, src, cible.titres[0] ?? '');
+  return { etape: { ok: false, detail: `Recherches : ${requetes || 'aucune'}. ${r.erreur ?? diag.detail}`, pistes: diag.pistes } };
+}
+
 /**
- * Test complet d'une source, étape par étape, comme le ferait la lecture :
- * animés = recherche → liste d'épisodes du premier résultat → lecteurs du
- * premier épisode ; films = recherche → lecteurs du premier film. Chaque
- * page passe par le client protégé (anti-SSRF). Ne lève jamais.
+ * Test complet d'une source, étape par étape, avec EXACTEMENT le pipeline de
+ * la lecture (fiche, lecteur) : animés = recherche (variantes du titre,
+ * meilleur résultat par ressemblance, seuil) → liste d'épisodes → lecteurs du
+ * premier épisode ; films = recherche → lecteurs du film. `cible` : un titre
+ * saisi, ou les titres d'une fiche du catalogue. Ne lève jamais.
  */
-export async function testerSourcePasAPas(ctx: ContexteResolution, src: DefinitionSource, titre: string): Promise<EtapeTest[]> {
-  const requete = String(titre ?? '').trim() || 'a';
+export async function testerSourcePasAPas(ctx: ContexteResolution, src: DefinitionSource, cible: string | CibleTest): Promise<EtapeTest[]> {
+  const c: CibleTest = typeof cible === 'string' ? { titres: [String(cible ?? '').trim() || 'a'] } : { ...cible, titres: cible.titres.filter(Boolean).length ? cible.titres.filter(Boolean) : ['a'] };
   const etapes: EtapeTest[] = [];
   const jouer = async (cle: CleEtapeTest, nom: string, fn: () => Promise<Omit<EtapeTest, 'cle' | 'nom'>>) => {
     try {
@@ -539,9 +575,9 @@ export async function testerSourcePasAPas(ctx: ContexteResolution, src: Definiti
     let serie: string | undefined;
     let episode: string | undefined;
     const okRecherche = await jouer('recherche', 'Animés · recherche', async () => {
-      const diag = await diagnostiquerRecherche(ctx, src, requete);
-      if (diag.ok) serie = (await chercherSur(ctx, src, requete))[0]?.url;
-      return { ok: diag.ok && Boolean(serie), detail: diag.ok ? `${diag.detail} Premier résultat : ${serie}` : diag.detail, pistes: diag.pistes };
+      const r = await etapeRecherche(ctx, src, c, false);
+      serie = r.url;
+      return r.etape;
     });
     if (!okRecherche || !serie) {
       sauter('episodes', 'Animés · épisodes');
@@ -572,9 +608,9 @@ export async function testerSourcePasAPas(ctx: ContexteResolution, src: Definiti
     const film = vueFilm(src);
     let page: string | undefined;
     const ok = await jouer('films-recherche', 'Films · recherche', async () => {
-      const diag = await diagnostiquerRecherche(ctx, film, requete);
-      if (diag.ok) page = (await chercherSur(ctx, film, requete))[0]?.url;
-      return { ok: diag.ok && Boolean(page), detail: diag.ok ? `${diag.detail} Premier résultat : ${page}` : diag.detail, pistes: diag.pistes };
+      const r = await etapeRecherche(ctx, film, c, true);
+      page = r.url;
+      return r.etape;
     });
     if (!ok || !page) sauter('films-lecteur', 'Films · lecteur');
     else {

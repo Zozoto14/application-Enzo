@@ -26,6 +26,8 @@ export interface FicheAnime {
   title: string;
   titleOriginal: string | null;
   titleJapanese: string | null;
+  /** Autres titres connus du catalogue (français d'abord, puis synonymes, anglais…) : servent à chercher sur les sources. */
+  titresAlternatifs?: string[];
   synopsis: string | null;
   image: string | null;
   banner?: string | null;
@@ -95,6 +97,29 @@ export interface InfosPage {
 // Conversions (pures)
 // ---------------------------------------------------------------------------
 
+/** Titres distincts (casse et accents ignorés), au plus 12. */
+function sansDoublon(liste: readonly unknown[]): string[] {
+  const vus = new Set<string>();
+  const sortie: string[] = [];
+  for (const brut of liste) {
+    const t = typeof brut === 'string' ? brut.trim() : '';
+    const cle = t.toLowerCase();
+    if (t && t.length <= 200 && !vus.has(cle)) {
+      vus.add(cle);
+      sortie.push(t);
+    }
+  }
+  return sortie.slice(0, 12);
+}
+
+/** Titres Jikan (`titles`, `title_synonyms`) : le français d'abord, puis synonymes et autres langues. */
+function titresJikan(a: Brut): string[] {
+  const titres: Array<{ type?: string; title?: string }> = Array.isArray(a.titles) ? a.titles : [];
+  const rang = (type = '') => (/french/i.test(type) ? 0 : /synonym/i.test(type) ? 1 : /english/i.test(type) ? 2 : /default/i.test(type) ? 3 : 4);
+  const tries = [...titres].sort((x, y) => rang(x.type) - rang(y.type)).map(t => t.title);
+  return sansDoublon([...tries, ...(Array.isArray(a.title_synonyms) ? a.title_synonyms : []), a.title_english, a.title]);
+}
+
 export function mapperAnimeJikan(a: Brut): FicheAnime | null {
   if (!a) {
     return null;
@@ -104,6 +129,7 @@ export function mapperAnimeJikan(a: Brut): FicheAnime | null {
     title: a.title_english || a.title,
     titleOriginal: a.title ?? null,
     titleJapanese: a.title_japanese || null,
+    titresAlternatifs: titresJikan(a),
     synopsis: a.synopsis || null,
     image: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || null,
     trailer: a.trailer?.embed_url || null,
@@ -159,6 +185,7 @@ export function mapperMediaAnilist(m: Brut): FicheAnime | null {
     title: m.title?.english || m.title?.romaji || 'Sans titre',
     titleOriginal: m.title?.romaji || m.title?.english || null,
     titleJapanese: m.title?.native || null,
+    titresAlternatifs: sansDoublon([m.title?.english, m.title?.romaji, ...(Array.isArray(m.synonyms) ? m.synonyms : [])]),
     synopsis: retirerHtml(m.description),
     image: m.coverImage?.extraLarge || m.coverImage?.large || null,
     banner: m.bannerImage || null,
@@ -323,6 +350,7 @@ export type FournisseurAnime = 'jikan' | 'anilist';
 const CHAMPS_MEDIA = `
   id idMal
   title { romaji english native }
+  synonyms
   description(asHtml: false)
   episodes duration status format season seasonYear
   averageScore popularity genres

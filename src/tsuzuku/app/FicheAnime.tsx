@@ -7,6 +7,8 @@ import { trouver } from '../moteur/bibliotheque';
 import { useCharger, useTsuzuku } from './contexte';
 import { BandeauFiche, BlocBibliotheque, BlocVuAilleurs, LiensLegaux, type FicheMin } from './FicheCommune';
 import { CarteSansSource, LienGererSources } from './EtatSources';
+import { DisponibiliteSources } from './DiagnosticSources';
+import { titresPourSources } from './resoudre';
 import { LienAnime, prochainEpisode } from './LienAnime';
 import { Bouton, Etat, LIBELLE_STATUT, TitreSection, styleAttenue, styleTexte } from './ui';
 
@@ -57,6 +59,7 @@ export function FicheAnimeEcran({ id }: { id: string }) {
             <BlocBibliotheque fiche={min} entree={entree} />
             <BlocVuAilleurs fiche={min} entree={entree} />
             <CarteSansSource lieu="fiche" />
+            <DisponibiliteSources id={id} titres={titresPourSources(f)} />
             <LienAnime id={id} numeroCourant={suivant} catalogue={listeEps} />
             <LienGererSources testID="fiche-gerer-sources" />
             <LiensLegaux liens={f.streamingLinks} />

@@ -74,6 +74,7 @@ export function useServices(contexte: PropsRacineApp['contexte'], choix?: ChoixR
         rang,
         // Options avancées du moteur (Administration › Tsuzuku), lues dans la base du profil.
         avances: base ? avancesDe(base) : undefined,
+        lireBase: base ? cle => base.lire(cle) : undefined,
       }),
     // La base est propre au profil : un autre profil = de nouveaux services.
     // eslint-disable-next-line react-hooks/exhaustive-deps

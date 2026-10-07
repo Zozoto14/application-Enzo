@@ -229,8 +229,10 @@ export function appliquerCharge(
       delete dates[cle];
     }
 
+    // L'ordre des sources Tsuzuku s'applique après les sources elles-mêmes.
+    const dernier = (cle: string) => (cle === 'tsuzuku:ordre' ? 1 : 0);
     const arrivees = Object.entries(entitesRecues).sort(
-      ([a], [b]) => ORDRE_ECRITURE.indexOf(decouper(a).genre) - ORDRE_ECRITURE.indexOf(decouper(b).genre),
+      ([a], [b]) => ORDRE_ECRITURE.indexOf(decouper(a).genre) - ORDRE_ECRITURE.indexOf(decouper(b).genre) || dernier(a) - dernier(b),
     );
     for (const [cle, valeur] of arrivees) {
       const date = datesRecues[cle] ?? '';

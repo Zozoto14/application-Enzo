@@ -239,7 +239,7 @@ describe('assistant : test pas à pas (réseau simulé)', () => {
   const RECHERCHE = '<ul class="resultats"><li class="carte"><a class="titre" href="/oeuvre/le-voyage">Le voyage</a></li></ul>';
   const SERIE = '<ol class="episodes"><li class="ep"><a href="/oeuvre/le-voyage/episode-1"><span class="num">1</span></a></li><li class="ep"><a href="/oeuvre/le-voyage/episode-2"><span class="num">2</span></a></li></ol>';
   const EPISODE = '<div class="lecteur"><iframe src="https://lecteur-exemple.fr/embed/abc"></iframe></div>';
-  const FILMS = '<div class="film"><h3>Le film</h3><a href="/film/1">voir</a></div>';
+  const FILMS = '<div class="film"><h3>Le voyage (le film)</h3><a href="/film/1">voir</a></div><div class="film"><h3>Le voyage</h3><a href="/film/2">voir</a></div>';
   const source = () => validerSourceJson(JSON.stringify({ ...JSON_IA, search: { ...JSON_IA.search, path: '/r?q={query}' }, movies: { search: { path: '/films?q={query}', item: 'div.film', title: 'h3', link: 'a' }, player: { iframe: 'iframe' } } })).source!;
   const ctx = (routes: Record<string, ReturnType<typeof html>>) => ({ client: creerClient(fauxReseau(routes, { resoudre: async () => ['93.184.216.34'] })) });
 
@@ -250,7 +250,7 @@ describe('assistant : test pas à pas (réseau simulé)', () => {
         'https://mediatheque-exemple.fr/oeuvre/le-voyage/episode-1': html(EPISODE),
         'https://mediatheque-exemple.fr/oeuvre/le-voyage': html(SERIE),
         'https://mediatheque-exemple.fr/films?q=': html(FILMS),
-        'https://mediatheque-exemple.fr/film/1': html(EPISODE),
+        'https://mediatheque-exemple.fr/film/2': html(EPISODE),
       }),
       source(),
       'Le voyage',
