@@ -24,7 +24,7 @@ import http from 'node:http';
 import { createRequire } from 'node:module';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { nouveauContexte } from './e2e-acceptation.mjs';
+import { allerPageAdministration, allerPageApplications, nouveauContexte } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -205,12 +205,14 @@ async function creerAmi(page, nom) {
 }
 
 async function ouvrirTsuzuku(page) {
+  await allerPageApplications(page);
   await tuile(page, 'tsuzuku').click();
   await page.getByTestId('tsuzuku-racine').waitFor({ timeout: 20_000 });
 }
 async function retourHub(page) {
   await page.getByTestId('retour-hub').click();
   await page.getByTestId('hub').waitFor({ timeout: 20_000 });
+  await allerPageApplications(page);
 }
 
 const navigateur = await chromium.launch({ headless: true });
@@ -259,6 +261,7 @@ try {
 
   // ============================================================ Amis : Léa sans Tsuzuku, Hugo avec
   log('Administration : Léa (sans Tsuzuku) et Hugo (avec)');
+  await allerPageAdministration(page);
   await tuile(page, 'administration').click();
   await page.getByTestId('app-administration').waitFor({ timeout: 20_000 });
   const lea = await creerAmi(page, 'Léa');

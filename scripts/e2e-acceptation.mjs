@@ -36,5 +36,13 @@ export async function allerPageAdministration(page, delai = 30_000) {
   await onglet.click();
 }
 
+export const ONGLET_APPLICATIONS = '[data-testid="hub-page-publique"], [data-testid="barre-basse-accueil"]';
+
+export async function allerPageApplications(page, delai = 30_000) {
+  // Sans page réservée (ami), le hub n'a qu'une page : pas d'onglet à cliquer.
+  const onglet = page.locator(ONGLET_APPLICATIONS).first();
+  if (await onglet.waitFor({ timeout: Math.min(delai, 3_000) }).then(() => true, () => false)) await onglet.click();
+}
+
 /** Tuile d'une app du hub (bureau ou téléphone). */
 export const tuileApp = (page, id) => page.locator(`[data-testid="cellule-${id}"], [data-testid="tuile-${id}"]`);

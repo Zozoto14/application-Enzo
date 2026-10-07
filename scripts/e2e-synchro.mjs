@@ -20,7 +20,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { allerPageAdministration, nouveauContexte } from './e2e-acceptation.mjs';
+import { allerPageAdministration, allerPageApplications, nouveauContexte } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -310,6 +310,7 @@ try {
   verifier((await fondDe(A, 'app-administration')) === IVOIRE, 'administration passée en Ivoire');
   await A.keyboard.press('Escape');
   await A.getByTestId('hub').waitFor({ timeout: 10_000 });
+  await allerPageApplications(A);
   verifier((await fondDe(A, 'hub')) === IVOIRE, 'hub passé en Ivoire');
   await A.getByTestId('tuile-portefeuille').click();
   await A.getByTestId('entete-app').waitFor({ timeout: 10_000 });
@@ -416,6 +417,7 @@ try {
   }
   await A.getByTestId('parametres-retour').click();
   await A.getByTestId('hub-parametres-fermer').click();
+  await allerPageApplications(A);
   await A.getByTestId('tuile-portefeuille').click();
   await A.getByTestId('entete-app').waitFor({ timeout: 10_000 });
   await A.screenshot({ path: join(CAPTURES, '17-mobile-portefeuille.png') });
