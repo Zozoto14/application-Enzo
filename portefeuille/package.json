@@ -1,0 +1,118 @@
+{
+  "name": "AppliBourse",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "lint": "eslint .",
+    "start": "react-native start",
+    "test": "jest",
+    "cles-maj": "node scripts/cles-maj.mjs",
+    "publier-maj": "node scripts/publier-maj.mjs",
+    "preparer-mac": "node scripts/preparer-mac.mjs",
+    "verifier": "npx tsc --noEmit && npx tsc --noEmit -p bureau/tsconfig.json && npx jest --silent && npx eslint src App.tsx --ext .ts,.tsx",
+    "bureau": "vite",
+    "bureau:build": "vite build",
+    "bureau:app": "cross-env-shell APPLIBOURSE_DEV=http://localhost:5177 electron .",
+    "bureau:exe": "node scripts/version-build.mjs && npm run bureau:build && electron-builder --win",
+    "icone": "node scripts/icone.mjs",
+    "maj-pc": "node scripts/maj-pc.mjs",
+    "apk": "node scripts/apk.mjs",
+    "relais:deployer": "node scripts/deployer-relais.mjs",
+    "relais:site": "node scripts/deployer-relais.mjs --site",
+    "relais:tester": "node --test relais/*.test.mjs"
+  },
+  "dependencies": {
+    "@fontsource/dm-serif-display": "^5.3.0",
+    "@fontsource/fraunces": "^5.3.0",
+    "@fontsource/manrope": "^5.3.0",
+    "@noble/ciphers": "^2.4.0",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "@notifee/react-native": "^9.1.8",
+    "@op-engineering/op-sqlite": "^18.2.5",
+    "@react-native/new-app-screen": "0.87.1",
+    "qrcode-generator": "^2.0.4",
+    "react": "19.2.3",
+    "react-native": "0.87.1",
+    "react-native-background-fetch": "^4.4.2",
+    "react-native-biometrics": "^3.0.1",
+    "react-native-calendar-events": "^2.2.0",
+    "react-native-fs": "^2.20.0",
+    "react-native-get-random-values": "^2.0.0",
+    "react-native-image-picker": "^8.2.1",
+    "react-native-safe-area-context": "^5.5.2",
+    "sql.js": "^1.14.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2",
+    "@babel/preset-env": "^7.25.3",
+    "@babel/runtime": "^7.25.0",
+    "@react-native-community/cli": "20.2.0",
+    "@react-native-community/cli-platform-android": "20.2.0",
+    "@react-native-community/cli-platform-ios": "20.2.0",
+    "@react-native/babel-preset": "0.87.1",
+    "@react-native/eslint-config": "0.87.1",
+    "@react-native/jest-preset": "0.87.1",
+    "@react-native/metro-config": "0.87.1",
+    "@react-native/typescript-config": "0.87.1",
+    "@testing-library/react-native": "^14.0.1",
+    "@types/jest": "^29.5.13",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/react-test-renderer": "^19.1.0",
+    "@types/sql.js": "^1.4.11",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^40.10.6",
+    "electron-builder": "^26.15.3",
+    "eslint": "^8.19.0",
+    "jest": "^29.6.3",
+    "prettier": "2.8.8",
+    "react-dom": "^19.2.3",
+    "react-native-web": "^0.21.2",
+    "react-test-renderer": "19.2.3",
+    "typescript": "^6.0.3",
+    "vite": "^7.3.6"
+  },
+  "engines": {
+    "node": ">= 22.11.0"
+  },
+  "op-sqlite": {
+    "sqlcipher": true
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "electron@40.10.6": true
+  },
+  "main": "bureau/electron/lanceur.mjs",
+  "build": {
+    "appId": "fr.applibourse.bureau",
+    "productName": "AppliBourse",
+    "directories": {
+      "output": "C:/Users/zozot/AppData/Local/AppliBourse-paquet"
+    },
+    "files": [
+      "bureau/dist/**/*",
+      "bureau/electron/**/*",
+      "bureau/icone/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "bureau/icone/icone-256.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "AppliBourse"
+    }
+  },
+  "description": "Suivi de portefeuille personnel, chiffre et hors ligne",
+  "author": "Zozoto"
+}

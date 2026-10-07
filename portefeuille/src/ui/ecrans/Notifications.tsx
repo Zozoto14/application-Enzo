@@ -1,0 +1,411 @@
+/**
+ * Réglages des notifications.
+ *
+ * Deux sections : les briefings, programmés jour par jour, et les alertes de
+ * cours, définies valeur par valeur.
+ *
+ * L'écran dit d'emblée ce que le système autorise réellement. Régler des
+ * horaires alors que le module de notifications n'est pas dans le binaire, ou
+ * que le réveil en arrière-plan est absent, produirait un silence
+ * incompréhensible.
+ */
+
+import React, { useState } from 'react';
+import { ScrollView, StyleSheet, Switch, Text, View, useColorScheme } from 'react-native';
+import {
+  JOURS,
+  heureValide,
+  type JourSemaine,
+  type Planning,
+  type ProchainBriefing,
+} from '../../notifications/planification';
+import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre as TitreEcran, usePalette } from '../composants';
+import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
+
+export interface SeuilAffiche {
+  titreId: string;
+  nom: string;
+  haut: string;
+  bas: string;
+}
+
+export interface NotificationsProps {
+  /** Faux si @notifee n'est pas dans le binaire. */
+  notificationsDisponibles: boolean;
+  /** Faux si le réveil en arrière-plan n'est pas dans le binaire. */
+  reveilDisponible: boolean;
+  planning: Planning;
+  onChangerPlanning(planning: Planning): void;
+  prochain?: ProchainBriefing;
+  seuils: readonly SeuilAffiche[];
+  onChangerSeuil(titreId: string, champ: 'haut' | 'bas', valeur: string): void;
+  onTester?(): void;
+  onRetour(): void;
+  message?: string;
+  /** Vrai dans l'application de bureau : notifications tant qu'elle est ouverte. */
+  surOrdinateur?: boolean;
+  /** Variation de séance, en %, qui déclenche une alerte ; 0 : coupée. */
+  seuilVariation?: number;
+  onChangerSeuilVariation?(valeur: string): void;
+  /** Ouverture au démarrage de Windows (bureau seulement). */
+  demarrageAuto?: boolean;
+  onChangerDemarrage?(activer: boolean): void;
+  /** Résultat de la dernière vérification (bureau). */
+  journal?: string;
+  /** Rester près de l'horloge à la fermeture de la fenêtre (bureau). */
+  resterPlateau?: boolean;
+  onChangerPlateau?(activer: boolean): void;
+  /** Alertes résultats, dividendes et grosses actualités. */
+  evenementsActifs?: boolean;
+  onChangerEvenements?(actifs: boolean): void;
+}
+
+const LIBELLES_JOUR: Record<JourSemaine, string> = {
+  lundi: 'Lundi',
+  mardi: 'Mardi',
+  mercredi: 'Mercredi',
+  jeudi: 'Jeudi',
+  vendredi: 'Vendredi',
+  samedi: 'Samedi',
+  dimanche: 'Dimanche',
+};
+
+export function Notifications({
+  notificationsDisponibles,
+  reveilDisponible,
+  planning,
+  onChangerPlanning,
+  prochain,
+  seuils,
+  onChangerSeuil,
+  onTester,
+  onRetour,
+  message,
+  surOrdinateur,
+  seuilVariation,
+  onChangerSeuilVariation,
+  demarrageAuto,
+  onChangerDemarrage,
+  journal,
+  resterPlateau,
+  onChangerPlateau,
+  evenementsActifs,
+  onChangerEvenements,
+}: NotificationsProps) {
+  const [variationSaisie, setVariationSaisie] = useState(
+    seuilVariation ? String(seuilVariation).replace('.', ',') : '',
+  );
+  const sombre = useColorScheme() === 'dark';
+  const palette = usePalette();
+
+  const modifierJour = (jour: JourSemaine, horaire: Partial<Planning[JourSemaine]>) => {
+    onChangerPlanning({ ...planning, [jour]: { ...planning[jour], ...horaire } });
+  };
+
+  return (
+    <ScrollView
+      style={[stylesPartages.ecran, { backgroundColor: palettePour(sombre).fond }]}
+      contentContainerStyle={[stylesPartages.contenu, stylesPartages.formulaire, { paddingTop: ESPACEMENT.l }]}
+      keyboardShouldPersistTaps="handled">
+      <TitreEcran>Notifications</TitreEcran>
+
+      {!notificationsDisponibles ? (
+        <Carte>
+          <Text style={{ color: palette.danger, fontWeight: '600' }}>
+            Notifications indisponibles
+          </Text>
+          <SousTitre>
+            Le module de notifications n'est pas présent dans cette version de
+            l'application. Les réglages ci-dessous seront conservés, mais rien
+            ne sera envoyé.
+          </SousTitre>
+        </Carte>
+      ) : null}
+
+      {surOrdinateur ? (
+        <Carte>
+          <Text style={{ color: palette.texte, fontWeight: '600' }}>Notifications Windows</Text>
+          <SousTitre>
+            Elles partent tant qu’AppliBourse est ouverte, même réduite dans la barre des tâches.
+            Verrouillée, elle vous prévient que le briefing attend ; les chiffres arrivent dès que vous
+            déverrouillez. Un clic sur une notification ramène la fenêtre.
+          </SousTitre>
+          <Text style={{ color: palette.texteSecondaire, fontSize: 13 }} testID="journal-notifications">
+            Dernière vérification : {journal ?? 'dans moins d’une minute.'}
+          </Text>
+          {onChangerPlateau ? (
+            <View style={styles.ligneInterrupteur}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: palette.texte }}>Rester près de l’horloge quand je ferme la fenêtre</Text>
+                <SousTitre>L’icône AppliBourse garde les briefings actifs ; clic droit › Quitter pour l’arrêter.</SousTitre>
+              </View>
+              <Switch
+                value={Boolean(resterPlateau)}
+                onValueChange={onChangerPlateau}
+                testID="interrupteur-plateau"
+                accessibilityLabel="Rester près de l’horloge quand je ferme la fenêtre"
+              />
+            </View>
+          ) : null}
+          {onChangerDemarrage ? (
+            <View style={styles.ligneInterrupteur}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: palette.texte }}>Ouvrir AppliBourse au démarrage de Windows</Text>
+                <SousTitre>Fermée, l’application ne peut rien envoyer : ceci garantit vos briefings.</SousTitre>
+              </View>
+              <Switch
+                value={Boolean(demarrageAuto)}
+                onValueChange={onChangerDemarrage}
+                testID="interrupteur-demarrage"
+                accessibilityLabel="Ouvrir AppliBourse au démarrage de Windows"
+              />
+            </View>
+          ) : null}
+          <SousTitre>
+            Rien ne s’affiche ? Vérifiez dans Windows : Paramètres › Système › Notifications (AppliBourse
+            autorisée) et que le mode « Ne pas déranger » est coupé.
+          </SousTitre>
+          {onTester ? (
+            <View style={{ alignSelf: 'flex-start' }}>
+              <Bouton
+                titre="Envoyer une notification de test"
+                testID="bouton-tester-notification"
+                onPress={onTester}
+              />
+            </View>
+          ) : null}
+        </Carte>
+      ) : null}
+
+      {onChangerEvenements ? (
+        <Carte>
+          <View style={styles.ligneInterrupteur}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.sectionTitre, { color: palette.texte }]}>Résultats, dividendes et grosses actus</Text>
+              <SousTitre>
+                Sur vos valeurs détenues et suivies : la veille et le jour des résultats et du détachement du
+                dividende, et toute information recoupée par au moins trois médias.
+              </SousTitre>
+            </View>
+            <Switch
+              value={Boolean(evenementsActifs)}
+              onValueChange={onChangerEvenements}
+              testID="interrupteur-evenements"
+              accessibilityLabel="Alertes résultats, dividendes et grosses actualités"
+            />
+          </View>
+        </Carte>
+      ) : null}
+
+      {onChangerSeuilVariation ? (
+        <Carte>
+          <Text style={[styles.sectionTitre, { color: palette.texte }]}>Forte séance</Text>
+          <SousTitre>
+            Prévenu quand votre portefeuille monte ou baisse de plus de ce pourcentage sur la
+            séance, une fois par jour et par sens. Laissez vide pour couper.
+          </SousTitre>
+          <View style={styles.moitie}>
+            <Champ
+              etiquette="Seuil de variation (%)"
+              value={variationSaisie}
+              onChangeText={valeur => {
+                setVariationSaisie(valeur);
+                onChangerSeuilVariation(valeur.trim() === '' ? '0' : valeur.trim());
+              }}
+              keyboardType="decimal-pad"
+              placeholder="2"
+              testID="champ-seuil-variation"
+            />
+          </View>
+        </Carte>
+      ) : null}
+
+      {notificationsDisponibles && !reveilDisponible ? (
+        <Carte>
+          <Text style={{ color: palette.texte, fontWeight: '600' }}>
+            Briefings figés à la dernière ouverture
+          </Text>
+          <SousTitre>
+            Le réveil en arrière-plan n'est pas disponible. Les briefings
+            partiront bien, mais avec les valeurs connues au moment où vous avez
+            ouvert l'application pour la dernière fois, pas celles du jour.
+          </SousTitre>
+        </Carte>
+      ) : null}
+
+      {message ? (
+        <Carte>
+          <Text accessibilityLiveRegion="polite" style={{ color: palette.texte }}>
+            {message}
+          </Text>
+        </Carte>
+      ) : null}
+
+      {/* --- Briefings --- */}
+      <Carte>
+        <Text style={[styles.sectionTitre, { color: palette.texte }]}>Briefings</Text>
+        <SousTitre>
+          Un résumé du portefeuille, le matin avant ouverture et le soir après
+          clôture. Rien n'est envoyé si la valeur n'a pas bougé.
+        </SousTitre>
+
+        {prochain ? (
+          <SousTitre>
+            Prochain : {prochain.aujourdhui ? "aujourd'hui" : LIBELLES_JOUR[prochain.jour]}{' '}
+            à {prochain.heure}.
+          </SousTitre>
+        ) : (
+          <SousTitre>Aucun briefing programmé.</SousTitre>
+        )}
+      </Carte>
+
+      {JOURS.map(jour => {
+        const horaire = planning[jour];
+        return (
+          <Carte key={jour}>
+            <View style={stylesPartages.ligne}>
+              <Text style={{ color: palette.texte, fontWeight: '600' }}>
+                {LIBELLES_JOUR[jour]}
+              </Text>
+              <Switch
+                value={horaire.actif}
+                onValueChange={actif => modifierJour(jour, { actif })}
+                accessibilityLabel={`Briefings du ${LIBELLES_JOUR[jour].toLowerCase()}`}
+              />
+            </View>
+
+            {horaire.actif ? (
+              <View style={styles.heures}>
+                <ChampHeure
+                  etiquette="Matin"
+                  jour={jour}
+                  moment="matin"
+                  valeur={horaire.matin ?? ''}
+                  onChange={valeur => modifierJour(jour, { matin: valeur || undefined })}
+                />
+                <ChampHeure
+                  etiquette="Soir"
+                  jour={jour}
+                  moment="soir"
+                  valeur={horaire.soir ?? ''}
+                  onChange={valeur => modifierJour(jour, { soir: valeur || undefined })}
+                />
+              </View>
+            ) : null}
+          </Carte>
+        );
+      })}
+
+      {/* --- Alertes de cours --- */}
+      <Carte>
+        <Text style={[styles.sectionTitre, { color: palette.texte }]}>
+          Alertes de cours
+        </Text>
+        <SousTitre>
+          Vous êtes prévenu au franchissement d'un seuil, une seule fois par
+          franchissement. Laissez vide pour ne pas surveiller.
+        </SousTitre>
+
+        {seuils.length === 0 ? (
+          <SousTitre>
+            Aucune valeur détenue. Les alertes portent sur vos positions.
+          </SousTitre>
+        ) : (
+          seuils.map(seuil => (
+            <View
+              key={seuil.titreId}
+              style={[styles.ligneSeuil, { borderColor: palette.bordure }]}>
+              <Text style={{ color: palette.texte }}>{seuil.nom}</Text>
+              <View style={styles.heures}>
+                <View style={styles.moitie}>
+                  <Champ
+                    etiquette="Seuil bas"
+                    value={seuil.bas}
+                    onChangeText={valeur => onChangerSeuil(seuil.titreId, 'bas', valeur)}
+                    keyboardType="decimal-pad"
+                    placeholder="—"
+                  />
+                </View>
+                <View style={styles.moitie}>
+                  <Champ
+                    etiquette="Seuil haut"
+                    value={seuil.haut}
+                    onChangeText={valeur => onChangerSeuil(seuil.titreId, 'haut', valeur)}
+                    keyboardType="decimal-pad"
+                    placeholder="—"
+                  />
+                </View>
+              </View>
+            </View>
+          ))
+        )}
+      </Carte>
+
+      {onTester && notificationsDisponibles && !surOrdinateur ? (
+        <Bouton
+          titre="Envoyer une notification de test"
+          testID="bouton-tester-notification"
+          variante="discret"
+          onPress={onTester}
+        />
+      ) : null}
+
+      <Actions>
+        <Bouton titre="Retour" variante="discret" onPress={onRetour} />
+      </Actions>
+    </ScrollView>
+  );
+}
+
+/** Champ d'heure au format HH:MM, avec sa validation. */
+function ChampHeure({
+  etiquette,
+  jour,
+  moment,
+  valeur,
+  onChange,
+}: {
+  etiquette: string;
+  jour: JourSemaine;
+  moment: 'matin' | 'soir';
+  valeur: string;
+  onChange(valeur: string): void;
+}) {
+  const [saisie, setSaisie] = useState(valeur);
+  const invalide = saisie !== '' && !heureValide(saisie);
+
+  return (
+    <View style={styles.moitie}>
+      <Champ
+        etiquette={etiquette}
+        testID={`heure-${jour}-${moment}`}
+        value={saisie}
+        onChangeText={texte => {
+          setSaisie(texte);
+          // On ne remonte que ce qui est exploitable : une saisie en cours de
+          // frappe ne doit pas effacer l'horaire enregistré.
+          if (texte === '' || heureValide(texte)) {
+            onChange(texte);
+          }
+        }}
+        keyboardType="numbers-and-punctuation"
+        placeholder="HH:MM"
+        maxLength={5}
+      />
+      {invalide ? <Alerte message="Format attendu : HH:MM" /> : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  ligneInterrupteur: { flexDirection: 'row', alignItems: 'center', gap: ESPACEMENT.m },
+  sectionTitre: { fontSize: 17, fontWeight: '700' },
+  heures: { flexDirection: 'row', gap: ESPACEMENT.m },
+  moitie: { flex: 1, minWidth: 120 },
+  ligneSeuil: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: ESPACEMENT.s,
+    gap: ESPACEMENT.xs,
+    borderRadius: RAYON.s,
+  },
+});

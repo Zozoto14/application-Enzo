@@ -1,0 +1,44 @@
+SESSION MAC — AIDE-MEMOIRE
+===========================
+
+1. git clone applibourse.bundle applibourse
+2. cd applibourse
+3. bash scripts/session-mac.sh
+
+Le script installe, verifie, active SQLCipher et prepare les pods.
+
+Il reste TROIS gestes manuels :
+
+  a. PATCH NATIF — ouvrir ios/AppliBourse/AppDelegate.swift et coller
+     le corps de bundleURL() donne dans build-ios.md, etape 3.
+     C'est lui qui rend toutes les mises a jour futures possibles
+     sans Mac. Ne pas le sauter.
+
+  b. SIGNATURE — ouvrir ios/AppliBourse.xcworkspace
+     Onglet "Signing & Capabilities"
+     Cocher "Automatically manage signing"
+     Choisir votre equipe personnelle (votre identifiant Apple)
+     En profiter pour renseigner teamID dans ios/ExportOptions.plist
+
+  c. LANCEMENT — iPhone branche et deverrouille :
+       npx react-native run-ios --device
+
+PUIS, PENDANT QUE LE MAC EST ENCORE LA — voir docs/build-ios.md,
+section "Premier lancement". Ne pas sauter cette etape : c'est le
+seul moment ou un probleme peut encore etre diagnostique.
+
+LE WIDGET, EN DERNIER
+---------------------
+Le squelette est pret, mais l'entitlement App Groups n'est probablement pas
+delivre a un identifiant Apple gratuit. A tenter APRES que tout le reste
+fonctionne. Voir docs/widget.md.
+
+IMPORTANT
+---------
+Apres cette session, plus aucun Mac ne sera necessaire : les mises a
+jour JavaScript se fabriquent sur le PC avec "npm run publier-maj".
+Seul un changement de code natif en exigerait un nouveau, et tous les
+modules natifs previsibles sont deja embarques.
+
+Sauvegardez cle-maj-privee.txt dans Bitwarden. Sans elle, plus aucune
+mise a jour ne sera possible.

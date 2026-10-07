@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Options d'export du .ipa.
+
+  Sert au chemin « machine distante ou virtuelle », ou l'iPhone ne peut pas
+  etre branche en USB : on produit une archive, on en exporte un .ipa, et on
+  l'installe via AltStore PAL, qui l'accepte sans rien brancher.
+
+  method vaut « development » : c'est le mode d'une signature personnelle,
+  sans compte developpeur payant. Ce n'est pas une distribution App Store.
+
+  teamID doit etre renseigne avec l'identifiant de votre equipe personnelle,
+  visible dans Xcode sous Settings > Accounts, ou via :
+    security find-identity -v -p codesigning
+-->
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>development</string>
+
+	<key>signingStyle</key>
+	<string>automatic</string>
+
+	<!-- A remplacer par votre identifiant d'equipe, par exemple ABCDE12345. -->
+	<key>teamID</key>
+	<string>REMPLACER_PAR_VOTRE_TEAM_ID</string>
+
+	<!-- Bitcode est retire depuis Xcode 14 ; le laisser actif fait echouer l'export. -->
+	<key>compileBitcode</key>
+	<false/>
+
+	<key>stripSwiftSymbols</key>
+	<true/>
+
+	<!-- Pas de remontee de symboles : aucun service tiers ne doit recevoir quoi que ce soit. -->
+	<key>uploadSymbols</key>
+	<false/>
+</dict>
+</plist>
