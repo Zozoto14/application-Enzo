@@ -13,6 +13,7 @@ import type { StockagePrefs } from './personnalisation';
 import type { IdSection } from './recensement';
 import type { ResumeTsuzuku } from '../tsuzuku/app/resume';
 import type { BasePrefs } from '../tsuzuku/plateforme/stockage';
+import type { ServiceHistoriqueRelais } from '../claudeOffice/synchroHistorique';
 
 export type Tendance = 'hausse' | 'baisse' | 'neutre';
 
@@ -46,6 +47,11 @@ export interface ContexteHub {
   enregistrerFichier?(nom: string, contenu: string, type: string): Promise<boolean>;
   /** Services de l'administration ; présents seulement pour l'administrateur. */
   admin?: ServicesAdmin;
+  /**
+   * Copie chiffrée de l'historique de Claude Office sur le relais ; présente
+   * seulement pour le compte principal relié au relais (jeton maître).
+   */
+  historiqueOffice?: ServiceHistoriqueRelais;
   /** Horloge injectable (tests) ; `Date.now` à défaut. */
   maintenant?: number;
 }

@@ -111,6 +111,15 @@ contextBridge.exposeInMainWorld('applibourse', {
     apercuHooks: desinstaller => ipcRenderer.invoke('claude-office:apercu-hooks', desinstaller === true),
     installerHooks: desinstaller => ipcRenderer.invoke('claude-office:installer-hooks', desinstaller === true),
     ouvrir: () => ipcRenderer.invoke('claude-office:ouvrir'),
+    /** Historique : journal local des requêtes (lecture, réglages, import ; suppression et hook sur confirmation native). */
+    historique: {
+      lire: () => ipcRenderer.invoke('claude-office:historique-lire'),
+      reglages: changements => ipcRenderer.invoke('claude-office:historique-reglages', changements),
+      supprimer: critere => ipcRenderer.invoke('claude-office:historique-supprimer', critere),
+      importer: () => ipcRenderer.invoke('claude-office:historique-importer'),
+      apercuHooks: desinstaller => ipcRenderer.invoke('claude-office:historique-apercu-hooks', desinstaller === true),
+      installerHooks: desinstaller => ipcRenderer.invoke('claude-office:historique-installer-hooks', desinstaller === true),
+    },
   },
 
   relais: {

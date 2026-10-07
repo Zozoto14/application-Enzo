@@ -5,6 +5,8 @@
  * Claude Office (serveur local + hooks de Claude Code) ne tourne que sur le PC.
  */
 
+import type { EntreeHistorique } from './historique';
+
 export interface EtatServeurOffice {
   joignable: boolean;
   agents?: number;
@@ -18,7 +20,47 @@ export interface EtatClaudeOffice {
   /** Dossier de Claude Office trouvé ou choisi sur ce PC ; null s'il est introuvable. */
   dossier: string | null;
   hooks: 'absents' | 'installes' | 'illisibles' | 'inconnus';
+  /** Hook d'historique (journal local) dans les réglages de Claude Code. */
+  historique?: 'absents' | 'installes' | 'illisibles';
   serveur: EtatServeurOffice;
+}
+
+/** Réglages du journal d'historique (fichier `reglages.json` du journal, propre au PC). */
+export interface ReglagesHistorique {
+  actif: boolean;
+  enregistrerSorties: boolean;
+  masquerSecrets: boolean;
+  maxFichierMo: number;
+  maxTotalMo: number;
+  appareil: string | null;
+  appareilId?: string;
+}
+
+export interface LectureHistorique {
+  ok: boolean;
+  erreur?: string;
+  dossier?: string;
+  entrees?: EntreeHistorique[];
+  /** Nombre total d'entrées (la fenêtre n'en reçoit que les plus récentes). */
+  total?: number;
+  /** Lignes illisibles ignorées (ligne tronquée par un crash…). */
+  ignorees?: number;
+  octets?: number;
+  fichiers?: number;
+  reglages?: ReglagesHistorique;
+}
+
+export type CritereSuppression = { ids: string[] } | { du: string; au: string } | { tout: true };
+
+export interface PontHistorique {
+  lire(): Promise<LectureHistorique>;
+  reglages(changements: Partial<Pick<ReglagesHistorique, 'actif' | 'enregistrerSorties' | 'masquerSecrets'>> & { appareil?: string }): Promise<{ ok: boolean; erreur?: string; reglages?: ReglagesHistorique }>;
+  /** Le processus principal montre une confirmation native avant de supprimer. */
+  supprimer(critere: CritereSuppression): Promise<{ ok: boolean; erreur?: string; annule?: boolean; supprimees?: number }>;
+  /** Boîte d'ouverture native : journal JSONL d'un autre appareil équipé. */
+  importer(): Promise<{ ok: boolean; erreur?: string; annule?: boolean; importees?: number; ignorees?: number }>;
+  apercuHooks(desinstaller?: boolean): Promise<ResultatOffice>;
+  installerHooks(desinstaller?: boolean): Promise<ResultatOffice>;
 }
 
 export interface PlanHooks {
@@ -51,6 +93,8 @@ export interface PontClaudeOffice {
   /** Le processus principal montre une confirmation native avant d'écrire. */
   installerHooks(desinstaller?: boolean): Promise<ResultatOffice>;
   ouvrir(): Promise<boolean>;
+  /** Absent sur un PC dont l'application n'est pas encore à jour. */
+  historique?: PontHistorique;
 }
 
 export function pontClaudeOffice(): PontClaudeOffice | undefined {
@@ -80,4 +124,10 @@ export const LIBELLE_HOOKS: Record<EtatClaudeOffice['hooks'], string> = {
   absents: 'Pas encore installés',
   illisibles: 'Réglages de Claude Code illisibles (JSON invalide ?)',
   inconnus: 'Inconnu : choisissez d’abord le dossier de Claude Office',
+};
+
+export const LIBELLE_HOOK_HISTORIQUE: Record<NonNullable<EtatClaudeOffice['historique']>, string> = {
+  installes: 'Installé : chaque requête de Claude Code sur ce PC est enregistrée',
+  absents: 'Pas encore installé : rien n’est enregistré',
+  illisibles: 'Réglages de Claude Code illisibles (JSON invalide ?)',
 };

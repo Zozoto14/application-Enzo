@@ -16,10 +16,18 @@
  * Les modules Electron sont injectés : ce fichier ne les importe pas.
  */
 
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
+import { basename } from 'node:path';
 import {
-  adresseLocale, appliquerHooks, decrirePlan, dossierValide, lireReglagesOffice, planifierHooks, sonderServeur, trouverDossier,
+  adresseLocale, appliquerHooks, decrirePlan, dossierValide, lireReglagesOffice, planifierHistorique, planifierHooks, sonderServeur, trouverDossier,
 } from './claudeOffice.mjs';
+import {
+  compterSuppression, creerLecteur, dossierHistorique as dossierParDefaut, ecrireReglages, importerJournal, lireReglages, supprimerEntrees,
+} from './officeHistorique.mjs';
+
+/** Au plus ce nombre d'entrées (les plus récentes) remis à la fenêtre d'un coup. */
+export const MAX_ENTREES_FENETRE = 20_000;
+const TAILLE_MAX_IMPORT = 50 * 1024 * 1024;
 
 /** Aperçu sans le texte complet des réglages (il peut contenir des secrets d'autres outils). */
 function resume(plan) {
@@ -34,7 +42,7 @@ function resume(plan) {
   };
 }
 
-export function brancherClaudeOffice({ ipcMain, dialog, BrowserWindow, shell, fichierReglages, ecrire, racineProjet }) {
+export function brancherClaudeOffice({ ipcMain, dialog, BrowserWindow, shell, fichierReglages, ecrire, racineProjet, dossierHistorique = () => dossierParDefaut() }) {
   const lire = async () => lireReglagesOffice(await readFile(fichierReglages(), 'utf8').catch(() => '{}'));
   const enregistrer = async reglages => ecrire(fichierReglages(), Buffer.from(JSON.stringify(reglages), 'utf8'));
   const dossierDe = async reglages => trouverDossier({ enregistre: reglages.dossier, racineProjet: await racineProjet() });
@@ -50,7 +58,131 @@ export function brancherClaudeOffice({ ipcMain, dialog, BrowserWindow, shell, fi
         hooks = 'illisibles';
       }
     }
-    return { url: reglages.url, dossier: dossier ?? null, hooks: hooks ?? 'inconnus', serveur: await sonderServeur(reglages.url) };
+    let historique;
+    try {
+      historique = planifierHistorique({ racineProjet: await racineProjet() }).change ? 'absents' : 'installes';
+    } catch {
+      historique = 'illisibles';
+    }
+    return { url: reglages.url, dossier: dossier ?? null, hooks: hooks ?? 'inconnus', historique, serveur: await sonderServeur(reglages.url) };
+  });
+
+  // ------------------------------------------------------------ historique
+  // Lecture du journal local (incrémentale : seules les lignes ajoutées sont relues). Les écritures
+  // (réglages, suppression, import, hook) passent par ici, la suppression et le hook après une
+  // confirmation NATIVE ; la fenêtre ne donne jamais de chemin.
+  let lecteur;
+  let lecteurDe;
+  const lecteurCourant = () => {
+    const dossier = dossierHistorique();
+    if (!lecteur || lecteurDe !== dossier) {
+      lecteur = creerLecteur(dossier);
+      lecteurDe = dossier;
+    }
+    return { dossier, lecteur };
+  };
+
+  ipcMain.handle('claude-office:historique-lire', async () => {
+    try {
+      const { dossier, lecteur: l } = lecteurCourant();
+      const { entrees, ignorees, octets, fichiers } = l.lire();
+      const reglages = lireReglages(dossier);
+      return {
+        ok: true,
+        dossier,
+        entrees: entrees.slice(-MAX_ENTREES_FENETRE),
+        total: entrees.length,
+        ignorees,
+        octets,
+        fichiers,
+        reglages: { ...reglages, appareil: reglages.appareil ?? null },
+      };
+    } catch (erreur) {
+      return { ok: false, erreur: erreur.message };
+    }
+  });
+
+  ipcMain.handle('claude-office:historique-reglages', async (_evenement, changements) => {
+    try {
+      const c = changements && typeof changements === 'object' ? changements : {};
+      // Liste fermée de réglages ; tout le reste est ignoré.
+      const propres = {};
+      for (const cle of ['actif', 'enregistrerSorties', 'masquerSecrets']) if (typeof c[cle] === 'boolean') propres[cle] = c[cle];
+      if (typeof c.appareil === 'string') propres.appareil = c.appareil.slice(0, 40);
+      const reglages = ecrireReglages(dossierHistorique(), propres);
+      return { ok: true, reglages: { ...reglages, appareil: reglages.appareil ?? null } };
+    } catch (erreur) {
+      return { ok: false, erreur: erreur.message };
+    }
+  });
+
+  ipcMain.handle('claude-office:historique-supprimer', async (evenement, critere) => {
+    try {
+      const dossier = dossierHistorique();
+      const { nombre, description } = compterSuppression(dossier, critere);
+      if (nombre === 0) return { ok: true, supprimees: 0 };
+      const { response } = await dialog.showMessageBox(BrowserWindow.fromWebContents(evenement.sender), {
+        type: 'warning',
+        title: 'Historique de Claude Office',
+        message: `Supprimer définitivement ${nombre} entrée${nombre > 1 ? 's' : ''} de l’historique ?`,
+        detail: `Concerne : ${description}.\nLes lignes sont retirées des fichiers du journal de ce PC ; c’est irréversible.`,
+        buttons: ['Annuler', 'Supprimer'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      });
+      if (response !== 1) return { ok: false, annule: true };
+      return { ok: true, ...supprimerEntrees(dossier, critere) };
+    } catch (erreur) {
+      return { ok: false, erreur: erreur.message };
+    }
+  });
+
+  ipcMain.handle('claude-office:historique-importer', async evenement => {
+    try {
+      const { canceled, filePaths } = await dialog.showOpenDialog(BrowserWindow.fromWebContents(evenement.sender), {
+        title: 'Journal d’historique d’un autre appareil',
+        properties: ['openFile'],
+        filters: [{ name: 'Journal JSONL', extensions: ['jsonl'] }],
+      });
+      if (canceled || !filePaths[0]) return { ok: false, annule: true };
+      if ((await stat(filePaths[0])).size > TAILLE_MAX_IMPORT) return { ok: false, erreur: 'Fichier trop volumineux (50 Mo au plus).' };
+      const texte = await readFile(filePaths[0], 'utf8');
+      const r = importerJournal(dossierHistorique(), texte, { origine: basename(filePaths[0]) });
+      return r.importees ? { ok: true, ...r } : { ok: false, erreur: 'Aucune entrée d’historique valide dans ce fichier.' };
+    } catch (erreur) {
+      return { ok: false, erreur: erreur.message };
+    }
+  });
+
+  ipcMain.handle('claude-office:historique-apercu-hooks', async (_evenement, desinstaller) => {
+    try {
+      return { ok: true, plan: resume(planifierHistorique({ racineProjet: await racineProjet(), desinstaller: desinstaller === true })) };
+    } catch (erreur) {
+      return { ok: false, erreur: erreur.message };
+    }
+  });
+
+  ipcMain.handle('claude-office:historique-installer-hooks', async (evenement, desinstaller) => {
+    try {
+      const plan = planifierHistorique({ racineProjet: await racineProjet(), desinstaller: desinstaller === true });
+      if (!plan.change) return { ok: true, ecrit: false, plan: resume(plan) };
+      const { response } = await dialog.showMessageBox(BrowserWindow.fromWebContents(evenement.sender), {
+        type: 'warning',
+        title: 'Historique de Claude Office',
+        message: desinstaller ? 'Retirer le hook d’historique des réglages de Claude Code ?' : 'Installer le hook d’historique dans les réglages de Claude Code ?',
+        detail: decrirePlan(plan),
+        buttons: ['Annuler', desinstaller ? 'Retirer' : 'Modifier settings.json'],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      });
+      if (response !== 1) return { ok: false, annule: true };
+      const { sauvegarde } = appliquerHooks(plan);
+      return { ok: true, ecrit: true, sauvegarde, plan: resume(plan) };
+    } catch (erreur) {
+      return { ok: false, erreur: erreur.message };
+    }
   });
 
   ipcMain.handle('claude-office:choisir-dossier', async evenement => {

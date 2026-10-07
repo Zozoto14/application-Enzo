@@ -10,10 +10,11 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BoutonHub, RetourHub } from '../hub/Hub';
 import { police, type ThemeHub } from '../hub/themes';
 import type { PropsRacineApp } from '../hub/types';
+import { Historique } from './Historique';
 import {
   COMMANDE_APERCU, COMMANDE_DOSSIER, COMMANDE_HOOKS, LIBELLE_HOOKS, libelleServeur, pontClaudeOffice,
   type EtatClaudeOffice, type PlanHooks, type PontClaudeOffice,
@@ -187,8 +188,29 @@ function SurLePc({ theme, pont }: { theme: ThemeHub; pont: PontClaudeOffice }) {
   );
 }
 
-export function ClaudeOffice({ theme, onRetour }: PropsRacineApp) {
+/** Onglets de l'écran : le bureau (serveur, hooks) et l'historique des requêtes. */
+function Onglets({ theme, onglet, onChange }: { theme: ThemeHub; onglet: 'bureau' | 'historique'; onChange(o: 'bureau' | 'historique'): void }) {
+  return (
+    <View style={styles.onglets} accessibilityRole="tablist">
+      {([['bureau', 'Bureau'], ['historique', 'Historique']] as const).map(([id, titre]) => (
+        <Pressable
+          key={id}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: onglet === id }}
+          onPress={() => onChange(id)}
+          testID={`claude-office-onglet-${id}`}
+          style={[styles.onglet, { borderColor: onglet === id ? theme.accent : theme.ligne, backgroundColor: onglet === id ? theme.accent : theme.surface }]}
+        >
+          <Text style={{ color: onglet === id ? theme.surAccent : theme.texte, fontWeight: '600' }}>{titre}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
+export function ClaudeOffice({ theme, onRetour, contexte }: PropsRacineApp) {
   const pont = pontClaudeOffice();
+  const [onglet, setOnglet] = useState<'bureau' | 'historique'>('bureau');
   return (
     <ScrollView style={{ flex: 1, backgroundColor: theme.fond }} contentContainerStyle={styles.page}>
       <RetourHub theme={theme} onRetour={onRetour} titre="Claude Office" />
@@ -196,7 +218,10 @@ export function ClaudeOffice({ theme, onRetour }: PropsRacineApp) {
       <Text style={[styles.texte, { color: theme.attenue }, police(theme.policeTexte)]}>
         Un bureau en pixel art où l’on voit les agents de Claude Code arriver, travailler et repartir, avec le fil de discussion du bureau.
       </Text>
-      {pont ? (
+      <Onglets theme={theme} onglet={onglet} onChange={setOnglet} />
+      {onglet === 'historique' ? (
+        <Historique theme={theme} contexte={contexte} office={pont} />
+      ) : pont ? (
         <SurLePc theme={theme} pont={pont} />
       ) : (
         <Carte theme={theme} titre="Sur le PC seulement" testID="claude-office-site">
@@ -206,7 +231,7 @@ export function ClaudeOffice({ theme, onRetour }: PropsRacineApp) {
           <Code theme={theme} testID="claude-office-commande-site">{COMMANDE_HOOKS}</Code>
         </Carte>
       )}
-      <Installation theme={theme} />
+      {onglet === 'bureau' ? <Installation theme={theme} /> : null}
       <Text style={[styles.credit, { color: theme.attenue }]}>D’après Claude Office, © 2026 W17ANT, licence MIT.</Text>
     </ScrollView>
   );
@@ -226,4 +251,6 @@ const styles = StyleSheet.create({
   boutons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   code: { fontFamily: 'monospace', fontSize: 13, borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, padding: 10 },
   credit: { fontSize: 12, marginTop: 6 },
+  onglets: { flexDirection: 'row', gap: 8 },
+  onglet: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 8 },
 });
