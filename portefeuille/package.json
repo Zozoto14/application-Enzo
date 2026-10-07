@@ -11,7 +11,7 @@
     "cles-maj": "node scripts/cles-maj.mjs",
     "publier-maj": "node scripts/publier-maj.mjs",
     "preparer-mac": "node scripts/preparer-mac.mjs",
-    "verifier": "npx tsc --noEmit && npx tsc --noEmit -p bureau/tsconfig.json && npx jest --silent && npx eslint src App.tsx --ext .ts,.tsx",
+    "verifier": "npx tsc --noEmit && npx tsc --noEmit -p bureau/tsconfig.json && npx jest --silent && npx eslint src App.tsx --ext .ts,.tsx && npx eslint -c .eslintrc.js --resolve-plugins-relative-to . ../hub/src --ext .ts,.tsx",
     "bureau": "vite",
     "bureau:build": "vite build",
     "bureau:app": "cross-env-shell APPLIBOURSE_DEV=http://localhost:5177 electron .",
