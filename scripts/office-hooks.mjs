@@ -9,6 +9,10 @@
  *   3. une sauvegarde horodatée, puis l'écriture.
  * Relancer ne change rien si tout est déjà en place.
  *
+ * Installe aussi le hook d'HISTORIQUE (journal local de chaque requête,
+ * même AppDashboard et Claude Office fermés : docs/claude-office-historique.md),
+ * dans la même écriture, avec la même sauvegarde.
+ *
  * Usage (depuis le dossier du projet) :
  *   npm run office:hooks -- --dossier "C:\chemin\vers\Claude Office"
  *   npm run office:hooks -- --a-blanc        aperçu seul (alias --dry-run)
@@ -16,6 +20,8 @@
  *   npm run office:hooks -- --gemini         Gemini CLI au lieu de Claude Code
  *   npm run office:hooks -- --settings <fichier>  autre fichier de réglages
  *   npm run office:hooks -- --oui            sans question (déconseillé)
+ *   npm run office:hooks -- --historique-seul   seulement le hook d'historique
+ *   npm run office:hooks -- --sans-historique   seulement les hooks de Claude Office
  *
  * Le dossier peut aussi venir de CLAUDE_OFFICE_DIR ; à défaut, il est cherché
  * à côté du projet (« Claude Office », « claude-office »…).
@@ -24,18 +30,20 @@
 import { createInterface } from 'node:readline/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { appliquerHooks, decrirePlan, planifierHooks, trouverDossier } from '../bureau/electron/claudeOffice.mjs';
+import { appliquerHooks, decrirePlan, enchainerPlans, fichierReglages, planifierHistorique, planifierHooks, trouverDossier } from '../bureau/electron/claudeOffice.mjs';
 
 const racineProjet = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 export function lireArguments(argv) {
-  const options = { aBlanc: false, desinstaller: false, oui: false, cible: 'claude', dossier: undefined, fichier: undefined };
+  const options = { aBlanc: false, desinstaller: false, oui: false, cible: 'claude', dossier: undefined, fichier: undefined, historique: true, office: true };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--a-blanc' || a === '--dry-run') options.aBlanc = true;
     else if (a === '--desinstaller' || a === '--uninstall') options.desinstaller = true;
     else if (a === '--oui' || a === '--yes') options.oui = true;
     else if (a === '--gemini') options.cible = 'gemini';
+    else if (a === '--historique-seul') options.office = false;
+    else if (a === '--sans-historique') options.historique = false;
     else if (a === '--dossier') options.dossier = argv[++i];
     else if (a.startsWith('--dossier=')) options.dossier = a.slice('--dossier='.length);
     else if (a === '--settings') options.fichier = argv[++i];
@@ -48,15 +56,29 @@ export function lireArguments(argv) {
 async function principal() {
   const options = lireArguments(process.argv.slice(2));
   if (options.aide) {
-    console.log('npm run office:hooks -- [--dossier "<Claude Office>"] [--a-blanc] [--desinstaller] [--gemini] [--settings <fichier>] [--oui]');
+    console.log('npm run office:hooks -- [--dossier "<Claude Office>"] [--a-blanc] [--desinstaller] [--historique-seul | --sans-historique] [--gemini] [--settings <fichier>] [--oui]');
     return 0;
   }
-  const dossier = trouverDossier({ argument: options.dossier, racineProjet });
-  if (options.dossier && !dossier) {
+  if (!options.office && !options.historique) throw new Error('--historique-seul et --sans-historique ensemble : rien à faire.');
+  // Le journal d'historique est propre à Claude Code : pas pour Gemini CLI.
+  const historique = options.historique && options.cible === 'claude';
+  const dossier = options.office ? trouverDossier({ argument: options.dossier, racineProjet }) : undefined;
+  if (options.office && options.dossier && !dossier) {
     throw new Error(`Claude Office introuvable dans « ${options.dossier} » (il faut hooks/agent-tracker.mjs).`);
   }
   if (dossier) console.log(`Claude Office : ${dossier}`);
-  const plan = planifierHooks({ dossier, cible: options.cible, desinstaller: options.desinstaller, fichier: options.fichier });
+  // Sans dossier de Claude Office, on installe quand même l'historique (il n'en dépend pas).
+  const office = options.office && (dossier || options.desinstaller || !historique);
+  if (options.office && !office) console.log('Claude Office introuvable : seuls les hooks d’historique sont concernés (--dossier "<chemin>" pour l’ajouter).');
+  const fichier = options.fichier ?? fichierReglages(options.cible);
+  const fabriques = [];
+  if (office) {
+    fabriques.push(lire => ({ ...planifierHooks({ dossier, cible: options.cible, desinstaller: options.desinstaller, fichier, lire }), titre: 'Claude Office (bureau des agents)' }));
+  }
+  if (historique) {
+    fabriques.push(lire => planifierHistorique({ racineProjet, desinstaller: options.desinstaller, fichier, lire }));
+  }
+  const plan = fabriques.length === 1 ? fabriques[0](undefined) : enchainerPlans(fichier, fabriques);
   console.log(decrirePlan(plan));
   if (!plan.change) return 0;
   if (options.aBlanc) {

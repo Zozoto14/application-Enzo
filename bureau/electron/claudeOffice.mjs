@@ -36,6 +36,7 @@
 import { existsSync, readFileSync, renameSync, writeFileSync, copyFileSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { EVENEMENTS_HISTORIQUE } from './officeHistorique.mjs';
 
 /** Adresse du serveur de Claude Office par défaut (son `server/index.js`). */
 export const URL_DEFAUT = 'http://127.0.0.1:3334';
@@ -116,14 +117,16 @@ export function lireJson(texte, fichier = 'settings.json') {
  * Fusion pure : rend une copie des réglages avec (ou sans) le hook de Claude
  * Office sur chaque événement, et la liste des changements.
  */
-export function fusionnerHooks(reglages, { commande, cible = 'claude', desinstaller = false }) {
+export function fusionnerHooks(reglages, { commande, cible = 'claude', desinstaller = false, evenements = EVENEMENTS[cible], estNotre = estCommandeOffice }) {
   const json = structuredClone(reglages);
   const ajouts = [];
   const retraits = [];
   const hooks = json.hooks && typeof json.hooks === 'object' && !Array.isArray(json.hooks) ? json.hooks : {};
-  for (const evenement of EVENEMENTS[cible]) {
+  // À la désinstallation, on retire aussi d'un événement qui n'est plus dans la liste.
+  const tous = desinstaller ? [...new Set([...evenements, ...Object.keys(hooks)])] : evenements;
+  for (const evenement of tous) {
     const groupes = Array.isArray(hooks[evenement]) ? hooks[evenement] : [];
-    const office = groupes.flatMap(g => (Array.isArray(g?.hooks) ? g.hooks : []).filter(h => estCommandeOffice(h?.command)));
+    const office = groupes.flatMap(g => (Array.isArray(g?.hooks) ? g.hooks : []).filter(h => estNotre(h?.command)));
     const dejaBon =
       !desinstaller &&
       office.length === 1 &&
@@ -136,7 +139,7 @@ export function fusionnerHooks(reglages, { commande, cible = 'claude', desinstal
       retraits.push({ evenement, commande: String(h.command) });
     }
     const restants = groupes
-      .map(g => (g && Array.isArray(g.hooks) ? { ...g, hooks: g.hooks.filter(h => !estCommandeOffice(h?.command)) } : g))
+      .map(g => (g && Array.isArray(g.hooks) ? { ...g, hooks: g.hooks.filter(h => !estNotre(h?.command)) } : g))
       .filter(g => !(g && Array.isArray(g.hooks) && g.hooks.length === 0));
     if (!desinstaller) {
       restants.push({ matcher: '*', hooks: [{ type: 'command', command: commande }] });
@@ -144,7 +147,7 @@ export function fusionnerHooks(reglages, { commande, cible = 'claude', desinstal
     }
     if (restants.length) {
       hooks[evenement] = restants;
-    } else {
+    } else if (evenement in hooks) {
       delete hooks[evenement];
     }
   }
@@ -199,14 +202,17 @@ export function decrirePlan(plan) {
     lignes.push(plan.desinstaller ? 'Aucun hook Claude Office à retirer : rien à faire.' : 'Hooks déjà installés à l’identique : rien à faire.');
     return lignes.join('\n');
   }
-  if (plan.commande) {
-    lignes.push(`Commande lancée par Claude Code à chaque événement : ${plan.commande}`);
-  }
-  for (const r of plan.retraits) {
-    lignes.push(`  - ${r.evenement} : retire ${r.commande}`);
-  }
-  for (const a of plan.ajouts) {
-    lignes.push(`  + ${a.evenement} : ajoute (matcher "*")`);
+  for (const partie of plan.parties ?? [plan]) {
+    if (plan.parties) lignes.push(`[${partie.titre}]`);
+    if (partie.commande) {
+      lignes.push(`Commande lancée par Claude Code à chaque événement : ${partie.commande}`);
+    }
+    for (const r of partie.retraits) {
+      lignes.push(`  - ${r.evenement} : retire ${r.commande}`);
+    }
+    for (const a of partie.ajouts) {
+      lignes.push(`  + ${a.evenement} : ajoute (matcher "*")`);
+    }
   }
   if (plan.cible === 'gemini' && !plan.desinstaller) {
     lignes.push('  + hooksConfig.enabled = true');
@@ -236,9 +242,11 @@ export function appliquerHooks(plan, { maintenant = new Date() } = {}) {
     sauvegarde = `${plan.fichier}.claude-office-${horodatage(maintenant)}.bak`;
     copyFileSync(plan.fichier, sauvegarde);
   }
-  const provisoire = `${plan.fichier}.claude-office-nouveau`;
-  writeFileSync(provisoire, plan.apresTexte);
-  renameSync(provisoire, plan.fichier);
+  if (plan.apresTexte !== plan.avantTexte) {
+    const provisoire = `${plan.fichier}.claude-office-nouveau`;
+    writeFileSync(provisoire, plan.apresTexte);
+    renameSync(provisoire, plan.fichier);
+  }
   return { ecrit: true, sauvegarde };
 }
 
@@ -302,4 +310,64 @@ export function lireReglagesOffice(texte) {
   } catch {
     return { dossier: undefined, url: URL_DEFAUT };
   }
+}
+
+// ------------------------------------------------------------ hooks d'historique
+
+/** Script du hook d'historique local, relatif au dossier d'AppDashboard. */
+export const SCRIPT_HISTORIQUE = join('scripts', 'office-historique-hook.mjs');
+export { EVENEMENTS_HISTORIQUE };
+export const estCommandeHistorique = commande => /office-historique-hook\.mjs\b/.test(String(commande ?? ''));
+export const commandeHistorique = racineProjet => `node "${barres(resolve(racineProjet, SCRIPT_HISTORIQUE))}"`;
+
+/** Plan d'un hook (autre que Claude Office) sur des réglages déjà lus. */
+function planSur({ fichier, avantTexte, commande, desinstaller, evenements, estNotre, titre }) {
+  const avant = lireJson(avantTexte, fichier);
+  const { json, ajouts, retraits } = fusionnerHooks(avant, { commande, desinstaller, evenements, estNotre });
+  const change = JSON.stringify(json) !== JSON.stringify(avant);
+  return { titre, cible: 'claude', desinstaller, fichier, existe: avantTexte !== undefined && avantTexte !== null, commande: desinstaller ? '' : commande, ajouts, retraits, change, avantTexte: avantTexte ?? null, apresTexte: change ? `${JSON.stringify(json, null, 2)}\n` : avantTexte ?? `${JSON.stringify(json, null, 2)}\n` };
+}
+
+const lireSiExiste = f => (existsSync(f) ? readFileSync(f, 'utf8') : undefined);
+
+/** Hook d'historique local (journal sur ce PC), dans les réglages de Claude Code de l'utilisateur. */
+export function planifierHistorique({ racineProjet, desinstaller = false, fichier, lire = lireSiExiste }) {
+  const script = racineProjet ? resolve(racineProjet, SCRIPT_HISTORIQUE) : undefined;
+  if (!desinstaller && !(script && existsSync(script))) {
+    throw new Error('Script du hook d’historique introuvable (scripts/office-historique-hook.mjs) : lancez depuis le dossier d’AppDashboard.');
+  }
+  const chemin = fichier ?? fichierReglages('claude');
+  return planSur({
+    fichier: chemin, avantTexte: lire(chemin), commande: script ? commandeHistorique(racineProjet) : '', desinstaller,
+    evenements: EVENEMENTS_HISTORIQUE, estNotre: estCommandeHistorique, titre: 'Historique (journal local)',
+  });
+}
+
+/**
+ * Plusieurs plans sur le MÊME fichier, appliqués l'un après l'autre : une
+ * seule sauvegarde, une seule écriture. `fabriques` reçoit le texte courant.
+ */
+export function enchainerPlans(fichier, fabriques, { lire = lireSiExiste } = {}) {
+  const avantTexte = lire(fichier);
+  let courant = avantTexte;
+  const parties = [];
+  for (const fabrique of fabriques) {
+    const plan = fabrique(() => courant);
+    parties.push(plan);
+    if (plan.change) courant = plan.apresTexte;
+  }
+  const change = parties.some(p => p.change);
+  return {
+    cible: 'claude',
+    desinstaller: parties.every(p => p.desinstaller),
+    fichier,
+    existe: avantTexte !== undefined,
+    commande: parties.map(p => p.commande).filter(Boolean).join(' ; '),
+    ajouts: parties.flatMap(p => p.ajouts),
+    retraits: parties.flatMap(p => p.retraits),
+    parties: parties.filter(p => p.change),
+    change,
+    avantTexte: avantTexte ?? null,
+    apresTexte: courant ?? '{}\n',
+  };
 }

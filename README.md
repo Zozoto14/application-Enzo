@@ -32,7 +32,7 @@ simplement jamais tourné.
 | [`src/ui`](src/ui) | Écrans et modèles de vue | [README](src/ui/README.md) |
 | `src/hub` | Hub, registre des apps, pages Applications / Administration | [Pages et apps](docs/hub/pages-et-apps.md) |
 | `src/app` | Assemblage et navigation | |
-| [`src/claudeOffice`](src/claudeOffice) | App du hub « Claude Office » (bureau des agents Claude Code, PC) : `npm run office:hooks` | [doc](docs/claude-office.md) |
+| [`src/claudeOffice`](src/claudeOffice) | App du hub « Claude Office » (bureau des agents Claude Code, PC) : `npm run office:hooks` | [doc](docs/claude-office.md), [historique](docs/claude-office-historique.md) |
 
 ## Les décisions qui engagent le reste
 

@@ -100,7 +100,9 @@ import { useSauvegardes } from './sauvegardesApp';
 import { nomParDefaut, useSynchro } from './synchroApp';
 import { decoderLiaison, encoderLiaison } from '../sync/relais/liaison';
 import { definirLiaisonEnAttente, liaisonEnAttente } from '../sync/relais/actif';
-import { mesurerEcartHorloge, recupererCoffre } from '../sync/relais/synchroniser';
+import { lireConfigRelais, mesurerEcartHorloge, recupererCoffre } from '../sync/relais/synchroniser';
+import { creerServiceHistorique } from '../claudeOffice/synchroHistorique';
+import { useSynchroHistoriqueOffice } from '../claudeOffice/synchroFond';
 import { formaterDiagnostic, lireEnvironnement, messageHorloge } from '../diagnostic/deverrouillage';
 import type { Coffre } from '../securite/coffre';
 import { CarteSynchro } from '../ui/ecrans/CarteSynchro';
@@ -2046,7 +2048,22 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [hubAffiche, baseProfil, appHub, versionSynchro],
   );
-  const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin, baseProfil, tsuzuku: resumeTsuzuku, enregistrerFichier: enregistrerFichierHote };
+  // Claude Office : copie chiffrée de l'historique sur le relais, pour le compte principal relié (jeton maître).
+  const historiqueOffice = useMemo(
+    () => {
+      if (!deverrouille || !estAdmin) return undefined;
+      try {
+        return creerServiceHistorique(lireConfigRelais(session.base()));
+      } catch {
+        return undefined;
+      }
+    },
+    // Relu après une synchro : la liaison peut avoir été ajoutée ou retirée.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [deverrouille, estAdmin, session, versionSynchro],
+  );
+  useSynchroHistoriqueOffice({ service: historiqueOffice, base: deverrouille ? baseProfil : undefined });
+  const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin, baseProfil, tsuzuku: resumeTsuzuku, enregistrerFichier: enregistrerFichierHote, historiqueOffice };
   const themeDuHub = themeHub(themeAffiche);
   const appOuverte = surUneApp ? REGISTRE.find(app => app.id === appHub) : undefined;
   // --- Devblog « Quoi de neuf » : une fois par profil et par version -----------
