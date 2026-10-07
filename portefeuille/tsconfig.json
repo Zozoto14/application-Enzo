@@ -1,8 +1,21 @@
 {
   "extends": "@react-native/typescript-config",
+  "compilerOptions": {
+    // Le hub vit hors du portefeuille (../hub/src) : alias `@hub`, et ses
+    // imports de bibliotheques se resolvent dans node_modules du portefeuille.
+    "paths": {
+      "@hub": ["../hub/src/index.ts"],
+      "@hub/*": ["../hub/src/*"],
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"],
+      "react-native": ["./node_modules/react-native/types_generated/index.d.ts"]
+    }
+  },
   "include": [
     "**/*.ts",
-    "**/*.tsx"
+    "**/*.tsx",
+    "../hub/src/**/*.ts",
+    "../hub/src/**/*.tsx"
   ],
   "exclude": [
     "**/node_modules",

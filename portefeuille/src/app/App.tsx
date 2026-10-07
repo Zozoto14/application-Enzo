@@ -104,13 +104,21 @@ import { recupererCoffre } from '../sync/relais/synchroniser';
 import type { Coffre } from '../securite/coffre';
 import { CarteSynchro } from '../ui/ecrans/CarteSynchro';
 import { CarteProfils, type ControleProfils } from '../ui/ecrans/CarteProfils';
-import { Hub } from '../hub/Hub';
-import { appsVisibles, peutOuvrir } from '../hub/permissions';
-import { chargerPrefs, enregistrerPrefs, CLE_THEME, type PrefsHub } from '../hub/personnalisation';
-import { ID_PORTEFEUILLE, REGISTRE } from '../hub/registre';
-import { THEME_HUB_DEFAUT, themeHub, type IdThemeHub } from '../hub/themes';
-import type { ContexteHub, ResumePortefeuille } from '../hub/types';
-import { ecouterTouche } from '../hub/web';
+import {
+  Hub,
+  appsVisibles,
+  chargerPrefs,
+  ecouterTouche,
+  enregistrerPrefs,
+  peutOuvrir,
+  themeHub,
+  CLE_THEME,
+  THEME_HUB_DEFAUT,
+  type ContexteHub,
+  type IdThemeHub,
+  type PrefsHub,
+} from '@hub';
+import { ID_PORTEFEUILLE, REGISTRE, type ResumePortefeuille } from './registreHub';
 import { dividendesParTitre, lignesCibles, lignesVendables } from './calculs';
 import { exporterExcel } from '../rapport/exportExcel';
 import { carnetDepuisJson, construireCarnet } from '../ui/vues/carnet';
@@ -1836,7 +1844,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             : undefined,
         }
       : undefined;
-  const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub };
+  const contexteHub: ContexteHub = { profil: profils?.actuel, profils, donnees: { [ID_PORTEFEUILLE]: resumeHub } };
   const themeDuHub = themeHub(themeHubId);
   const appOuverte = surUneApp ? REGISTRE.find(app => app.id === appHub) : undefined;
   const ouvrirApp = (id: string) => {

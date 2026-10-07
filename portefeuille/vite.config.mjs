@@ -16,6 +16,9 @@ import react from '@vitejs/plugin-react';
 
 const ici = chemin => fileURLToPath(new URL(chemin, import.meta.url));
 
+// Le hub vit hors du portefeuille (../hub/src), importe par l'alias `@hub`.
+const HUB = ici('../hub/src');
+
 export default defineConfig({
   root: 'bureau',
   // Chemins relatifs : l'application livree charge ses fichiers depuis le
@@ -29,6 +32,8 @@ export default defineConfig({
   },
   resolve: {
     alias: [
+      { find: /^@hub$/, replacement: `${HUB}/index.ts` },
+      { find: /^@hub\//, replacement: `${HUB}/` },
       // Les imports profonds d'abord : certaines bibliotheques declarent
       // leurs composants natifs par ces utilitaires, y compris dans le code
       // charge par un navigateur. Il n'y a rien de natif a enregistrer ici.
@@ -51,7 +56,15 @@ export default defineConfig({
       // une correspondance par prefixe casserait les imports profonds.
       { find: /^react-native$/, replacement: ici('./node_modules/react-native-web') },
     ],
+    // Le hub n'a pas de node_modules : ses imports de react (et de
+    // react-dom, via react-native-web) se resolvent depuis le portefeuille,
+    // en un seul exemplaire.
+    dedupe: ['react', 'react-dom'],
     extensions: ['.web.tsx', '.web.ts', '.tsx', '.ts', '.jsx', '.js', '.json'],
+  },
+  server: {
+    // Autorise le serveur de developpement a lire ../hub en plus du portefeuille.
+    fs: { allow: [ici('.'), ici('../hub')] },
   },
   optimizeDeps: {
     esbuildOptions: { resolveExtensions: ['.web.tsx', '.web.ts', '.tsx', '.ts', '.js'] },

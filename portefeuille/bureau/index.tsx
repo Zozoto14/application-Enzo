@@ -46,7 +46,8 @@ import {
   supprimerProfil,
   type Profil,
 } from '../src/profils/profils';
-import { creerAccesAmi, type IdentifiantsAmi } from '../src/profils/identifiants';
+import { creerAccesAmi, type IdentifiantsAmi } from '@hub';
+import { aleatoireParDefaut } from '../src/securite/aleatoire';
 import { installerPontWeb } from './web';
 
 /**
@@ -282,7 +283,7 @@ function Racine() {
         profil: id,
         surErreur: erreur => console.error('Enregistrement impossible', erreur),
       });
-      const identifiants = creerAccesAmi(ami.session, nom);
+      const identifiants = creerAccesAmi(ami.session, nom, aleatoireParDefaut);
       await Promise.all(ecritures);
       return identifiants;
     } catch (erreur) {

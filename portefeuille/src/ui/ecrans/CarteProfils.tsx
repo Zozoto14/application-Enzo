@@ -9,26 +9,21 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON } from '../theme';
 import type { Profil } from '../../profils/profils';
-import type { IdentifiantsAmi } from '../../profils/identifiants';
+import type { ControleProfilsHub } from '@hub';
 
-export interface ControleProfils {
+/**
+ * Primitives de profils du portefeuille. Elles couvrent le contrat que le hub
+ * demande (`ControleProfilsHub` : création de compte, autorisations,
+ * activation... absentes là où la plateforme ne sait pas créer le coffre
+ * d'un autre profil) et y ajoutent ce que la carte Profils utilise.
+ */
+export interface ControleProfils extends ControleProfilsHub {
   actuel: Profil;
   tous: readonly Profil[];
   /** Revenir à « Qui utilise AppliBourse ? ». */
   onChanger(): void;
   onAjouter(nom: string): Promise<void>;
-  onSupprimer(id: string): Promise<void>;
   onRenommer(id: string, nom: string): Promise<void>;
-  /**
-   * Administration (app du hub). Absentes là où la plateforme ne sait pas
-   * créer le coffre d'un autre profil.
-   */
-  /** Crée le compte d'un ami et rend ses identifiants, à montrer une fois. */
-  onCreerCompte?(nom: string, apps: readonly string[]): Promise<IdentifiantsAmi>;
-  /** Nouveau coffre pour l'ami : l'ancien, et le portefeuille qu'il scelle, sont effacés. */
-  onRegenerer?(id: string): Promise<IdentifiantsAmi>;
-  onAutoriser?(id: string, apps: readonly string[]): Promise<void>;
-  onActiver?(id: string, actif: boolean): Promise<void>;
 }
 
 export function CarteProfils({ controle }: { controle: ControleProfils }) {

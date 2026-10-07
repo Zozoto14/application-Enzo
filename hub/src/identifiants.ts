@@ -2,7 +2,8 @@
  * Identifiants d'un ami, générés par l'administrateur.
  *
  * On ne réinvente rien : le compte d'un ami est un coffre ordinaire, créé par
- * `Session.initialiser` exactement comme au premier lancement — même
+ * le `initialiser` du coffre de l'hôte (dans le portefeuille :
+ * `Session.initialiser`) exactement comme au premier lancement — même
  * Argon2id, même secret TOTP scellé par la clé maîtresse, mêmes codes de
  * récupération. La seule différence est que le mot de passe est tiré au
  * hasard au lieu d'être saisi, puis montré **une seule fois** à
@@ -12,14 +13,23 @@
  * pas en mémoire dans la session de l'administrateur.
  */
 
-import { aleatoireParDefaut, type SourceAleatoire } from '../securite/aleatoire';
-import type { Session } from '../session/session';
+import type { IdentifiantsAmi } from './types';
 
-export interface IdentifiantsAmi {
-  motDePasse: string;
-  codesRecuperation: string[];
-  secretTotp: string;
-  uriTotp: string;
+/** Source d'octets aléatoires cryptographiques, fournie par l'hôte. */
+export type SourceAleatoire = (octets: number) => Uint8Array;
+
+/**
+ * Coffre vierge d'un profil, tel que l'hôte le fournit. La `Session` du
+ * portefeuille respecte ce contrat sans adaptation.
+ */
+export interface CoffreInitialisable {
+  statut(): string;
+  initialiser(options: { motDePasse: string; compte: string }): {
+    codesRecuperation: string[];
+    secretTotp: string;
+    uriTotp: string;
+  };
+  verrouiller(): void;
 }
 
 /** Sans caractères ambigus (0/O, 1/l/I) : le mot de passe se recopie à la main. */
@@ -32,7 +42,7 @@ const TAILLE_GROUPE = 5;
  * 116 bits d'entropie — bien au-delà du minimum de 12 caractères exigé.
  * Tirage par rejet : aucun caractère n'est favorisé par le modulo.
  */
-export function genererMotDePasse(alea: SourceAleatoire = aleatoireParDefaut): string {
+export function genererMotDePasse(alea: SourceAleatoire): string {
   const limite = 256 - (256 % ALPHABET.length);
   const caracteres: string[] = [];
   while (caracteres.length < GROUPES * TAILLE_GROUPE) {
@@ -53,11 +63,7 @@ export function genererMotDePasse(alea: SourceAleatoire = aleatoireParDefaut): s
  * Crée le coffre d'un ami dans une session vierge (ses propres fichiers) et
  * rend ses identifiants. La session est verrouillée à l'issue.
  */
-export function creerAccesAmi(
-  session: Session,
-  compte: string,
-  alea: SourceAleatoire = aleatoireParDefaut,
-): IdentifiantsAmi {
+export function creerAccesAmi(session: CoffreInitialisable, compte: string, alea: SourceAleatoire): IdentifiantsAmi {
   if (session.statut() !== 'non-initialise') {
     throw new Error('Ce profil a déjà un coffre : effacez-le avant d’en créer un nouveau.');
   }

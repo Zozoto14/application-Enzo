@@ -12,6 +12,8 @@
  * lisible avant tout déverrouillage, pour qu'on puisse choisir qui ouvre.
  */
 
+import { migrerId } from '@hub/personnalisation';
+
 export const ID_PRINCIPAL = 'principal';
 
 export interface Profil {
@@ -21,7 +23,7 @@ export interface Profil {
   creeLe: string;
   /**
    * Apps du hub ouvertes à ce profil (identifiants du registre, voir
-   * `src/hub/registre.tsx`). Sans objet pour l'administrateur, qui voit tout.
+   * `src/app/registreHub.ts` et `hub/src/registre.ts`). Sans objet pour l'administrateur, qui voit tout.
    */
   apps?: string[];
   /** Faux : désactivé par l'administrateur, le profil ne s'ouvre plus. */
@@ -47,8 +49,8 @@ export function nettoyerApps(apps: unknown): string[] {
     ...new Set(
       apps
         .filter((app): app is string => typeof app === 'string' && MOTIF_APP.test(app))
-        // Ancien identifiant (avant le renommage en « portefeuille »).
-        .map(app => (app === 'portfolio' ? 'portefeuille' : app)),
+        // Anciens identifiants (ex. « portfolio » -> « portefeuille »), table du hub.
+        .map(migrerId),
     ),
   ];
 }

@@ -2,28 +2,9 @@
  * Informations en direct des tuiles, en données pures.
  */
 
-import type { Profil } from '../profils/profils';
-import type { InfoLive, ResumePortefeuille } from './types';
+import type { InfoLive, ProfilHub } from './types';
 
-export function infoPortefeuille(resume: ResumePortefeuille | undefined): InfoLive | undefined {
-  if (!resume) {
-    return undefined;
-  }
-  if (resume.sansCompte) {
-    return { sousTitre: 'Créez votre premier compte titre pour commencer.', indicateurs: [] };
-  }
-  return {
-    sousTitre: resume.variation ? `Dernière séance : ${resume.variation.date}` : undefined,
-    indicateurs: [
-      { libelle: 'Valeur', valeur: resume.valeur },
-      resume.variation
-        ? { libelle: 'Aujourd’hui', valeur: resume.variation.pourcentage, tendance: resume.variation.tendance }
-        : { libelle: 'Aujourd’hui', valeur: '—' },
-    ],
-  };
-}
-
-export function infoAdministration(profils: readonly Profil[] | undefined): InfoLive | undefined {
+export function infoAdministration(profils: readonly ProfilHub[] | undefined): InfoLive | undefined {
   if (!profils) {
     return undefined;
   }

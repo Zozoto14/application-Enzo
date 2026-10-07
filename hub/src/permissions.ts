@@ -8,10 +8,9 @@
  * est lisible sans déverrouillage, a été retouchée pour la lui donner.
  */
 
-import type { Profil } from '../profils/profils';
-import type { AppHub, ContexteHub } from './types';
+import type { AppHub, ContexteHub, ProfilHub } from './types';
 
-type ProfilAcces = Pick<Profil, 'admin' | 'apps'>;
+type ProfilAcces = Pick<ProfilHub, 'admin' | 'apps'>;
 
 export function peutOuvrir(app: Pick<AppHub, 'id' | 'adminSeulement'>, profil: ProfilAcces | undefined): boolean {
   if (!profil || profil.admin) {
@@ -34,7 +33,7 @@ export function appsAttribuables(registre: readonly AppHub[]): AppHub[] {
 }
 
 /** Nombre d'amis actifs qui ont accès à une app. */
-export function nombreUtilisateurs(app: AppHub, profils: readonly Profil[]): number {
+export function nombreUtilisateurs(app: AppHub, profils: readonly ProfilHub[]): number {
   return profils.filter(profil => profil.actif !== false && peutOuvrir(app, profil)).length;
 }
 

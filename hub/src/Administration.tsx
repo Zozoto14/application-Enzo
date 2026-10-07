@@ -14,13 +14,10 @@
 
 import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View, useWindowDimensions } from 'react-native';
-import { QrCode } from '../ui/ecrans/CarteSynchro';
-import type { IdentifiantsAmi } from '../profils/identifiants';
-import type { Profil } from '../profils/profils';
 import { appsAttribuables, basculerApp, nombreUtilisateurs, peutOuvrir } from './permissions';
 import { BoutonHub, RetourHub } from './Hub';
 import { police, teinteTransparente, type ThemeHub } from './themes';
-import type { AppHub, PropsRacineApp } from './types';
+import type { AppHub, ComposantQrCode, IdentifiantsAmi, ProfilHub, PropsRacineApp } from './types';
 
 type Onglet = 'utilisateurs' | 'apps';
 type Confirmation = { genre: 'regenerer' | 'supprimer'; id: string } | undefined;
@@ -38,7 +35,12 @@ function message(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : String(erreur);
 }
 
-export function Administration({ contexte, theme, registre, onRetour }: PropsRacineApp) {
+export interface PropsAdministration extends PropsRacineApp {
+  /** QR code fourni par l'hôte (URI TOTP de l'ami). */
+  QrCode: ComposantQrCode;
+}
+
+export function Administration({ contexte, theme, registre, onRetour, QrCode }: PropsAdministration) {
   const controle = contexte.profils;
   const { width } = useWindowDimensions();
   const [onglet, setOnglet] = useState<Onglet>('utilisateurs');
@@ -85,14 +87,14 @@ export function Administration({ contexte, theme, registre, onRetour }: PropsRac
       .finally(() => setEnCours(undefined));
   };
 
-  const pilule = (profil: Profil) =>
+  const pilule = (profil: ProfilHub) =>
     profil.admin
       ? { texte: 'admin', couleur: accent }
       : profil.actif === false
         ? { texte: 'désactivé', couleur: theme.critique }
         : { texte: 'actif', couleur: theme.ok };
 
-  const nomsApps = (profil: Profil) =>
+  const nomsApps = (profil: ProfilHub) =>
     profil.admin
       ? 'Toutes'
       : registre.filter(app => peutOuvrir(app, profil)).map(app => app.nom).join(', ') || 'Aucune';
@@ -148,7 +150,7 @@ export function Administration({ contexte, theme, registre, onRetour }: PropsRac
   );
 
   const panneauDetail = identifiants ? (
-    <PanneauIdentifiants theme={theme} nom={identifiants.nom} valeurs={identifiants.valeurs} onTermine={() => setIdentifiants(undefined)} />
+    <PanneauIdentifiants theme={theme} QrCode={QrCode} nom={identifiants.nom} valeurs={identifiants.valeurs} onTermine={() => setIdentifiants(undefined)} />
   ) : creation ? (
     <FormulaireCreation
       theme={theme}
@@ -438,11 +440,13 @@ function FormulaireCreation({
 
 function PanneauIdentifiants({
   theme,
+  QrCode,
   nom,
   valeurs,
   onTermine,
 }: {
   theme: ThemeHub;
+  QrCode: ComposantQrCode;
   nom: string;
   valeurs: IdentifiantsAmi;
   onTermine(): void;

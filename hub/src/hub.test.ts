@@ -1,25 +1,39 @@
-import { nettoyerApps, type Profil } from '../profils/profils';
+import { creerAccesAmi, genererMotDePasse, type CoffreInitialisable } from './identifiants';
 import { appsAttribuables, appsVisibles, basculerApp, nombreUtilisateurs, peutOuvrir } from './permissions';
 import {
   appliquerPrefs, basculerEpinglee, basculerMasquee, chargerPrefs, definirDensite, definirDisposition, definirTaille,
-  deplacer, deplacerVers, empan, enregistrerPrefs, ecrirePrefs, lirePrefs, reinitialiser, sontParDefaut, CLE_PREFS,
+  deplacer, deplacerVers, empan, enregistrerPrefs, ecrirePrefs, lirePrefs, migrerId, reinitialiser, sontParDefaut, CLE_PREFS,
 } from './personnalisation';
-import { REGISTRE, ID_ADMINISTRATION, ID_PORTEFEUILLE } from './registre';
+import { appAdministration, creerRegistre, ID_ADMINISTRATION } from './registre';
 import { THEMES_HUB, THEME_HUB_DEFAUT, themeHub } from './themes';
-import type { AppHub, ContexteHub } from './types';
+import type { AppHub, ContexteHub, ProfilHub } from './types';
 
-const admin: Profil = { id: 'principal', nom: 'Moi', admin: true, creeLe: '' };
-const ami = (apps: string[]): Profil => ({ id: 'abcdef1234', nom: 'Lucas', admin: false, creeLe: '', apps, actif: true });
+// Le hub ne connaît aucune app de l'hôte : une app factice tient lieu de portefeuille.
+const ID_PORTEFEUILLE = 'portefeuille';
+const admin: ProfilHub = { id: 'principal', nom: 'Moi', admin: true, creeLe: '' };
+const ami = (apps: string[]): ProfilHub => ({ id: 'abcdef1234', nom: 'Lucas', admin: false, creeLe: '', apps, actif: true });
 const factice = (id: string, extra: Partial<AppHub> = {}): AppHub => ({ id, nom: id, categorie: 'x', description: '', icone: '*', teinte: 'quatre', ...extra });
 const controle = { onCreerCompte: () => undefined } as unknown as ContexteHub['profils'];
+const QrCode = () => null;
+const REGISTRE = creerRegistre([factice(ID_PORTEFEUILLE, { teinte: 'portefeuille' }), appAdministration({ QrCode })]);
 
 describe('registre', () => {
-  it('a des identifiants uniques et valides, avec le portefeuille et l’administration', () => {
+  it('a des identifiants uniques et valides, avec l’app de l’hôte et l’administration', () => {
     const ids = REGISTRE.map(a => a.id);
-    expect(new Set(ids).size).toBe(ids.length);
-    ids.forEach(id => expect(id).toMatch(/^[a-z0-9-]{2,32}$/));
-    expect(ids).toEqual(expect.arrayContaining([ID_PORTEFEUILLE, ID_ADMINISTRATION]));
+    expect(ids).toEqual([ID_PORTEFEUILLE, ID_ADMINISTRATION]);
     expect(REGISTRE.find(a => a.id === ID_ADMINISTRATION)?.adminSeulement).toBe(true);
+    expect(REGISTRE.find(a => a.id === ID_ADMINISTRATION)?.Racine).toBeDefined();
+  });
+
+  it('refuse un identifiant invalide ou en double', () => {
+    expect(() => creerRegistre([factice('A B')])).toThrow(/invalide/);
+    expect(() => creerRegistre([factice('aa'), factice('aa')])).toThrow(/double/);
+  });
+
+  it('l’administration résume les profils', () => {
+    const app = REGISTRE[1];
+    const tous = [admin, ami([]), { ...ami([]), id: 'zzzzzz9999', actif: false }];
+    expect(app.info?.({ profils: { ...controle!, tous, actuel: admin } })?.indicateurs.map(i => i.valeur)).toEqual(['3', '1']);
   });
 });
 
@@ -126,6 +140,39 @@ describe('migration des anciens identifiants', () => {
     expect(p.ordre).toEqual(['portefeuille', 'administration']);
     expect(p.tailles).toEqual({ portefeuille: 'grande' });
     expect(p.masquees).toEqual(['portefeuille']);
-    expect(nettoyerApps(['portfolio', 'portefeuille'])).toEqual(['portefeuille']);
+    expect(migrerId('portfolio')).toBe('portefeuille');
+    expect(migrerId('autre')).toBe('autre');
+  });
+});
+
+describe('identifiants d’un ami', () => {
+  let graine = 1;
+  const alea = (n: number) => Uint8Array.from({ length: n }, () => (graine = (graine * 1103515245 + 12345) % 2 ** 31) % 256);
+
+  it('génère un mot de passe de 4 groupes, sans caractère ambigu, différent à chaque tirage', () => {
+    const a = genererMotDePasse(alea);
+    expect(a).toMatch(/^[a-km-zA-HJ-NP-Z2-9]{5}(-[a-km-zA-HJ-NP-Z2-9]{5}){3}$/);
+    expect(genererMotDePasse(alea)).not.toBe(a);
+  });
+
+  it('initialise un coffre vierge fourni par l’hôte, puis le verrouille', () => {
+    const journal: string[] = [];
+    let statut = 'non-initialise';
+    const coffre: CoffreInitialisable = {
+      statut: () => statut,
+      initialiser: ({ motDePasse, compte }) => {
+        journal.push(`init ${compte} ${motDePasse.length}`);
+        statut = 'deverrouille';
+        return { codesRecuperation: ['c1'], secretTotp: 'S', uriTotp: `otpauth://totp/${compte}` };
+      },
+      verrouiller: () => {
+        journal.push('verrou');
+        statut = 'verrouille';
+      },
+    };
+    const acces = creerAccesAmi(coffre, 'Lucas', alea);
+    expect(acces).toMatchObject({ codesRecuperation: ['c1'], secretTotp: 'S', uriTotp: 'otpauth://totp/Lucas' });
+    expect(journal).toEqual(['init Lucas 23', 'verrou']);
+    expect(() => creerAccesAmi(coffre, 'Lucas', alea)).toThrow(/déjà un coffre/);
   });
 });
