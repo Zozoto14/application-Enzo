@@ -33,6 +33,7 @@ import { activiteAgent, HAUTEUR_SCENE, iso, LARGEUR_SCENE, LIBELLES_ACTIVITE, RE
 import type { CommandesRelecture, PropsPlateau } from './plateauTypes';
 import { SceneOpenSpace } from './SceneOpenSpace.web';
 import type { CiblesScene, PositionPerso } from './sceneTypes';
+import { compterParParent, sousAgentsVisibles, type SousAgent } from './sousAgentsScene';
 import { ORDRE_ZONES, ZONES, type Zone } from './zones';
 
 /** Teinte d'état assez contrastée pour du texte sur la surface du thème. */
@@ -51,11 +52,35 @@ export const libelleCible = (a: Agent, maintenant: number): string =>
 
 // ------------------------------------------------------------------ cartes
 
-export type Apercu = { genre: 'agent'; cle: string; epingle: boolean } | { genre: 'zone'; zone: Zone; point: Point; epingle: boolean };
+export type Apercu = { genre: 'agent'; cle: string; epingle: boolean } | { genre: 'sous'; id: string; epingle: boolean } | { genre: 'zone'; zone: Zone; point: Point; epingle: boolean };
+
+/** Clé (positions, survol, aria-describedby) d'un aperçu de personnage : l'agent, ou « sa:<id> » pour un sous-agent. */
+const clePerso = (a: Apercu | undefined): string | undefined => (a?.genre === 'agent' ? a.cle : a?.genre === 'sous' ? `sa:${a.id}` : undefined);
+
+/** Carte d'un sous-agent : de qui il dépend, ce qu'il fait, son type, depuis quand. */
+export function CarteSousAgent({ sa, parent, maintenant, idDescription, onDetail }: { sa: SousAgent; parent?: Agent; maintenant: number; idDescription: string; onDetail(): void }) {
+  const fini = sa.etat !== 'en-cours';
+  return (
+    <>
+      <div className="co-carte-tete">
+        <span className="co-point" style={{ background: TEINTES_ACTIVITE.agent }} aria-hidden="true" />
+        <strong className="co-carte-titre">{`Sous-agent de ${parent?.projet ?? 'Projet inconnu'}`}</strong>
+      </div>
+      <div id={idDescription} className="co-carte-corps">
+        <div className="co-carte-demande">{sa.description ? `« ${resumerTexte(sa.description, 110)} »` : 'Tâche déléguée'}</div>
+        <div className="co-attenue">{[sa.type ?? 'sous-agent', sa.modele].filter(Boolean).join(' · ')}</div>
+        <div data-testid="scene-carte-sous-etat">{fini ? `${sa.etat === 'echec' ? 'Échec' : 'Terminé'} ${sa.fin ? ilYA(sa.fin, maintenant) : ''} : il rend son travail` : (ilYA(sa.debut, maintenant) === 'à l’instant' ? 'Vient de démarrer' : `En cours depuis ${ilYA(sa.debut, maintenant).replace('il y a ', '')}`)}</div>
+      </div>
+      <div className="co-carte-actions">
+        <button type="button" className="co-btn co-btn-plein" onClick={onDetail} data-testid="scene-carte-detail">Détail du parent</button>
+      </div>
+    </>
+  );
+}
 
 /** Carte d'aperçu d'un agent : projet, état, depuis quand, dernière demande, outil en cours. */
-export function CarteAgent({ a, maintenant, theme, idDescription, suivi, onDetail, onSuivre }: {
-  a: Agent; maintenant: number; theme: ThemeHub; idDescription: string; suivi: boolean; onDetail(): void; onSuivre(): void;
+export function CarteAgent({ a, maintenant, theme, idDescription, suivi, onDetail, onSuivre, sousAgentsEnCours = 0 }: {
+  a: Agent; maintenant: number; theme: ThemeHub; idDescription: string; suivi: boolean; onDetail(): void; onSuivre(): void; sousAgentsEnCours?: number;
 }) {
   const teinte = teinteAgent(a);
   const demande = resumerTexte(a.demande, 120);
@@ -73,6 +98,7 @@ export function CarteAgent({ a, maintenant, theme, idDescription, suivi, onDetai
         {a.etat === 'attend' && a.attente ? <div className="co-alerte">{a.attente}</div> : null}
         {a.salle && a.fin !== undefined ? <div>{`Terminé ${ilYA(a.fin, maintenant)}`}</div> : null}
         {outil ? <div>{`Outil : ${outil}`}</div> : null}
+        {sousAgentsEnCours ? <div data-testid="scene-carte-sous-agents">{`✦ ${sousAgentsEnCours} sous-agent${sousAgentsEnCours > 1 ? 's' : ''} en cours`}</div> : null}
         {demande ? <div className="co-carte-demande">{`« ${demande} »`}</div> : <div className="co-attenue">Pas encore de demande</div>}
       </div>
       <div className="co-carte-actions">
@@ -248,7 +274,7 @@ type DocPleinEcran = Document & { webkitFullscreenElement?: Element | null; webk
 type ElPleinEcran = HTMLElement & { webkitRequestFullscreen?: () => Promise<void> };
 
 export function PlateauScene({
-  agents, theme, reduit, demo, charge, maintenant, estompes, choisi, onDetail, largeur, relecture, onRelecture, cleScene, horloge, attendent, initial,
+  agents, theme, reduit, demo, charge, maintenant, estompes, choisi, onDetail, largeur, relecture, onRelecture, cleScene, horloge, attendent, initial, sousAgents,
 }: PropsPlateau) {
   const plateau = useRef<HTMLDivElement>(null);
   const vue = useRef<HTMLDivElement>(null);
@@ -265,7 +291,7 @@ export function PlateauScene({
   const [ambiance, setAmbiance] = useState(Boolean(initial?.ambiance));
   const [interface_, setInterface] = useState(true);
   const [apercu, setApercu] = useState<Apercu | undefined>(() =>
-    initial?.apercu ? { genre: 'agent', cle: initial.apercu, epingle: true } : initial?.zone ? { genre: 'zone', zone: initial.zone, point: { x: 200, y: 200 }, epingle: true } : undefined);
+    initial?.apercu ? { genre: 'agent', cle: initial.apercu, epingle: true } : initial?.sousAgent ? { genre: 'sous', id: initial.sousAgent, epingle: true } : initial?.zone ? { genre: 'zone', zone: initial.zone, point: { x: 200, y: 200 }, epingle: true } : undefined);
   const [suivi, setSuivi] = useState<string | undefined>(initial?.suivi);
   const [miniCarte, setMiniCarte] = useState(() => initial?.minicarte ?? (lireMemoire(CLE_MINICARTE) ? lireMemoire(CLE_MINICARTE) === '1' : (typeof window !== 'undefined' ? window.innerWidth : largeur) >= 700));
   const [dispo, setDispo] = useState(560);
@@ -287,7 +313,10 @@ export function PlateauScene({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     if (!fenetre || !plateau.current || immersif) return;
-    const haut = plateau.current.getBoundingClientRect().top + fenetre.scrollY;
+    // Position dans la page, quel que soit le défilement (la page du hub défile dans son propre conteneur).
+    let defile = fenetre.scrollY;
+    for (let el = plateau.current.parentElement; el; el = el.parentElement) defile += el.scrollTop;
+    const haut = plateau.current.getBoundingClientRect().top + defile;
     const d = Math.max(300, Math.round(fenetre.innerHeight - Math.min(haut, fenetre.innerHeight * 0.45) - 14));
     if (Math.abs(d - dispo) > 4) setDispo(d);
   });
@@ -305,12 +334,12 @@ export function PlateauScene({
     if (!el || !a) return;
     const c = cadre.current;
     let ancre: { x: number; y: number; l: number; h: number };
-    if (a.genre === 'agent') {
-      const p = positions.current.get(a.cle);
+    if (a.genre !== 'zone') {
+      const p = positions.current.get(clePerso(a)!);
       if (!p) return;
       const bas = versEcran(cam.current, c, { x: p.x, y: p.y });
       const haut = versEcran(cam.current, c, { x: p.x, y: p.haut });
-      const demi = Math.max(14, 22 * cam.current.s);
+      const demi = Math.max(14, (a.genre === 'sous' ? 14 : 22) * cam.current.s);
       ancre = { x: bas.x - demi, y: haut.y, l: demi * 2, h: bas.y - haut.y };
     } else ancre = { x: a.point.x - 6, y: a.point.y - 6, l: 12, h: 12 };
     const pos = placerCarte(ancre, { l: el.offsetWidth, h: el.offsetHeight }, c);
@@ -484,15 +513,28 @@ export function PlateauScene({
       const r = el.getBoundingClientRect();
       const avant = cam.current;
       const apres = zoomerEn(avant, facteurMolette(e.deltaY * (e.ctrlKey ? 3 : 1), e.deltaMode), { x: e.clientX - r.left, y: e.clientY - r.top }, cadre.current);
-      if (Math.abs(apres.s - avant.s) < 1e-6) return;
+      // Aux limites : en dézoomant, la page défile normalement ; en zoomant au maximum, rien ne bouge.
+      if (Math.abs(apres.s - avant.s) < 1e-6) {
+        if (e.deltaY < 0) e.preventDefault();
+        return;
+      }
       e.preventDefault();
       arreter();
       touchee.current = true;
       if (suiviRef.current) setSuivi(undefined);
       appliquer(apres);
     };
+    // Au doigt, tout passe par les événements de pointeur : pas de « clic fantôme » après le toucher (il fermerait
+    // aussitôt le panneau Détail qui vient de s'ouvrir dessous).
+    const surFinToucher = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+    };
     el.addEventListener('wheel', surMolette, { passive: false });
-    return () => el.removeEventListener('wheel', surMolette);
+    el.addEventListener('touchend', surFinToucher, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', surMolette);
+      el.removeEventListener('touchend', surFinToucher);
+    };
   }, [appliquer, arreter]);
 
   // ----- pointeurs : glisser, pincer, toucher, survol
@@ -504,11 +546,12 @@ export function PlateauScene({
     const r = vue.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
-  const cibleDe = (el: EventTarget | null): { agent?: string; zone?: Zone } => {
-    const n = el instanceof Element ? el.closest('[data-co-agent],[data-co-zone]') : null;
+  const cibleDe = (el: EventTarget | null): { agent?: string; sous?: string; zone?: Zone } => {
+    const n = el instanceof Element ? el.closest('[data-co-agent],[data-co-sous],[data-co-zone]') : null;
     if (!n) return {};
     const agent = n.getAttribute('data-co-agent');
-    return agent ? { agent } : { zone: n.getAttribute('data-co-zone') as Zone };
+    const sous = n.getAttribute('data-co-sous');
+    return agent ? { agent } : sous ? { sous } : { zone: n.getAttribute('data-co-zone') as Zone };
   };
   const planifier = (f: () => void, ms: number) => {
     clearTimeout(minuterieSurvol.current);
@@ -517,9 +560,12 @@ export function PlateauScene({
   useEffect(() => () => clearTimeout(minuterieSurvol.current), []);
 
   const survoler = (e: React.PointerEvent) => {
-    const { agent, zone } = cibleDe(e.target);
+    const { agent, sous, zone } = cibleDe(e.target);
     const a = apercuRef.current;
-    if (agent) {
+    if (sous) {
+      if (a?.genre === 'sous' && a.id === sous) return clearTimeout(minuterieSurvol.current);
+      planifier(() => setApercu({ genre: 'sous', id: sous, epingle: false }), a ? 60 : 140);
+    } else if (agent) {
       if (a?.genre === 'agent' && a.cle === agent) return clearTimeout(minuterieSurvol.current);
       planifier(() => setApercu({ genre: 'agent', cle: agent, epingle: false }), a ? 60 : 140);
     } else if (zone) {
@@ -620,12 +666,22 @@ export function PlateauScene({
       montrerInterface();
       return;
     }
-    const { agent, zone } = cibleDe(el);
+    const { agent, sous, zone } = cibleDe(el);
     const maintenantMs = performance.now();
     const precedent = dernierTap.current;
     const double = precedent && maintenantMs - precedent.t < 340 && Math.hypot(p.x - precedent.p.x, p.y - precedent.p.y) < 30;
     dernierTap.current = { t: maintenantMs, p, zone };
     const souris = type === 'mouse';
+    if (sous) {
+      dernierTap.current = undefined;
+      const a = apercuRef.current;
+      const parent = sousAgents?.find(x => x.id === sous)?.parent;
+      if ((souris || (a?.genre === 'sous' && a.id === sous)) && parent) {
+        setApercu(undefined);
+        onDetail(parent);
+      } else setApercu({ genre: 'sous', id: sous, epingle: true });
+      return;
+    }
     if (agent) {
       dernierTap.current = undefined;
       const a = apercuRef.current;
@@ -765,13 +821,13 @@ export function PlateauScene({
   // ----- cibles accessibles (boutons au-dessus des personnages)
   const cibles = useMemo<CiblesScene>(() => ({
     libelle: a => libelleCible(a, maintenant),
-    decrit: apercu?.genre === 'agent' ? { cle: apercu.cle, id: idDescription } : undefined,
+    decrit: clePerso(apercu) ? { cle: clePerso(apercu)!, id: idDescription } : undefined,
     onFocus: cle => {
       if (!cle) {
-        if (apercuRef.current?.genre === 'agent' && apercuRef.current.epingle) setApercu(undefined);
+        if (apercuRef.current?.genre !== 'zone' && apercuRef.current?.epingle) setApercu(undefined);
         return;
       }
-      setApercu({ genre: 'agent', cle, epingle: true });
+      setApercu(cle.startsWith('sa:') ? { genre: 'sous', id: cle.slice(3), epingle: true } : { genre: 'agent', cle, epingle: true });
       // Agent hors de la vue : on l'y amène.
       const p = positions.current.get(cle);
       const c = cadre.current;
@@ -782,14 +838,21 @@ export function PlateauScene({
     },
     onActiver: cle => {
       setApercu(undefined);
-      onDetail(cle);
+      const parent = cle.startsWith('sa:') ? sousAgents?.find(x => x.id === cle.slice(3))?.parent : cle;
+      if (parent) onDetail(parent);
     },
-  }), [maintenant, apercu, idDescription, onDetail, animerVers]);
+  }), [maintenant, apercu, idDescription, onDetail, animerVers, sousAgents]);
+  // Sous-agents dessinés à l'instant affiché (au plus quelques-uns, le reste compté) et compteur par parent.
+  const clesAgents = agents.map(a => a.cle).join('|');
+  const minis = useMemo(() => sousAgentsVisibles(sousAgents ?? [], new Set(agents.map(a => a.cle)), maintenant), [sousAgents, clesAgents, maintenant]); // eslint-disable-line react-hooks/exhaustive-deps
+  const parParent = useMemo(() => compterParParent((sousAgents ?? []).filter(s => s.debut <= maintenant)), [sousAgents, maintenant]);
+  const sousApercu = apercu?.genre === 'sous' ? (sousAgents ?? []).find(x => x.id === apercu.id) : undefined;
 
   const agentApercu = apercu?.genre === 'agent' ? agents.find(a => a.cle === apercu.cle) : undefined;
   useEffect(() => {
     if (apercu?.genre === 'agent' && !agentApercu && charge !== false && agents.length) setApercu(undefined);
-  }, [apercu, agentApercu, agents.length, charge]);
+    if (apercu?.genre === 'sous' && !minis.visibles.some(m => m.id === apercu.id)) setApercu(undefined);
+  }, [apercu, agentApercu, agents.length, charge, minis]);
   const agentSuivi = suivi ? agents.find(a => a.cle === suivi) : undefined;
   const allerMiniCarte = (p: Point, fin: boolean) => {
     touchee.current = true;
@@ -867,7 +930,10 @@ export function PlateauScene({
           refSvg={svg}
           refCalque={calque}
           positions={positions}
-          survole={agentApercu?.cle}
+          survole={agentApercu?.cle ?? (sousApercu ? `sa:${sousApercu.id}` : undefined)}
+          sousAgents={minis.visibles}
+          sousAgentsEnPlus={minis.enPlus}
+          sousAgentsParParent={parParent}
           zoneSurvolee={apercu?.genre === 'zone' ? apercu.zone : undefined}
           cibles={ambiance ? undefined : cibles}
         />
@@ -922,8 +988,8 @@ export function PlateauScene({
           id={idCarte}
           className="co-carte"
           role="group"
-          aria-label={apercu.genre === 'agent' ? 'Aperçu de l’agent' : 'Aperçu de la zone'}
-          data-testid={apercu.genre === 'agent' ? 'scene-carte' : 'scene-carte-zone'}
+          aria-label={apercu.genre === 'agent' ? 'Aperçu de l’agent' : apercu.genre === 'sous' ? 'Aperçu du sous-agent' : 'Aperçu de la zone'}
+          data-testid={apercu.genre === 'agent' ? 'scene-carte' : apercu.genre === 'sous' ? 'scene-carte-sous' : 'scene-carte-zone'}
           style={{ left: -9999, top: 0 }}
           onPointerEnter={() => clearTimeout(minuterieSurvol.current)}
           onPointerLeave={e => {
@@ -937,6 +1003,7 @@ export function PlateauScene({
               theme={theme}
               idDescription={idDescription}
               suivi={suivi === agentApercu.cle}
+              sousAgentsEnCours={parParent.get(agentApercu.cle)}
               onDetail={() => {
                 setApercu(undefined);
                 onDetail(agentApercu.cle);
@@ -944,6 +1011,17 @@ export function PlateauScene({
               onSuivre={() => {
                 touchee.current = true;
                 setSuivi(s => (s === agentApercu.cle ? undefined : agentApercu.cle));
+              }}
+            />
+          ) : apercu.genre === 'sous' && sousApercu ? (
+            <CarteSousAgent
+              sa={sousApercu}
+              parent={agents.find(a => a.cle === sousApercu.parent)}
+              maintenant={maintenant}
+              idDescription={idDescription}
+              onDetail={() => {
+                setApercu(undefined);
+                onDetail(sousApercu.parent);
               }}
             />
           ) : apercu.genre === 'zone' ? (

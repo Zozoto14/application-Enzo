@@ -40,6 +40,7 @@ export function MiseEnRoute({ theme, etapes, onAction, occupe }: { theme: ThemeH
         accessibilityRole="button"
         accessibilityLabel={`${titre}. Afficher le détail`}
         accessibilityState={{ expanded: false }}
+        aria-expanded={false}
         onPress={() => changer(false)}
         style={[styles.reduite, { borderColor: pret ? theme.ligne : couleur, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen }]}
         testID="mise-en-route-reduite"
@@ -60,6 +61,7 @@ export function MiseEnRoute({ theme, etapes, onAction, occupe }: { theme: ThemeH
           accessibilityRole="button"
           accessibilityLabel="Réduire la mise en route"
           accessibilityState={{ expanded: true }}
+          aria-expanded
           onPress={() => changer(true)}
           style={({ pressed }) => [styles.reduire, { borderColor: theme.ligne, opacity: pressed ? 0.7 : 1 }]}
           testID="mise-en-route-reduire"

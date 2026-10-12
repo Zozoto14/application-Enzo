@@ -28,6 +28,7 @@ import {
 } from './logiqueScene';
 import { ORDRE_ZONES, ZONES, type Zone } from './zones';
 import type { PropsScene } from './sceneTypes';
+import { placerSousAgents, SORTIE_REUNION } from './sousAgentsScene';
 
 // ------------------------------------------------------------------ palette
 
@@ -425,12 +426,12 @@ function Fond({ pal, maintenant }: { pal: Palette; maintenant: number }) {
 const PremierPlan = React.memo(function PremierPlan({ pal }: { pal: Palette }) {
   const lampes: Array<[number, number]> = [...ILOTS_ATELIER.map(x0 => [x0 + LARGEUR_BUREAU, 7.75] as [number, number]), [2.3, 2.2], [8.75, 2.6], [17.9, 2.2], [17.5, 7.9], [9.7, 12.0]];
   return (
-    <g>
+    <g pointerEvents="none">
       <Plante x={19.55} y={13.6} pal={pal} taille={1.2} />
       {lampes.map(([x, y]) => {
         const p = iso(x, y, 5.1);
         return (
-          <g key={`${x}-${y}`}>
+          <g key={`${x}-${y}`} opacity={0.82}>
             <line x1={p.x} y1={0} x2={p.x} y2={p.y - 6} stroke={pal.nuit ? '#8A8FA3' : '#7D7466'} strokeWidth={1.2} />
             {pal.nuit ? <ellipse cx={p.x} cy={p.y + 6} rx={30} ry={14} fill="url(#co-flaque)" /> : null}
             <path d={`M${p.x - 16},${p.y + 4} Q${p.x},${p.y - 14} ${p.x + 16},${p.y + 4} Z`} fill={pal.nuit ? '#2C3046' : '#2F3442'} />
@@ -1189,8 +1190,13 @@ const CSS = `
 .co-gele *{animation-play-state:paused!important}
 @media (prefers-reduced-motion:reduce){.co-scene *{animation:none!important}}
 .co-scene .co-fondu.co-fondu{animation:co-fondu .45s ease-out both!important}
-.co-cible{position:absolute;margin:0;padding:0;border:0;background:transparent;cursor:pointer;border-radius:18px;pointer-events:auto;transform:translate(-50%,-92%);width:max(60px,calc(44px * var(--co-inv,1)));height:max(110px,calc(44px * var(--co-inv,1)));-webkit-tap-highlight-color:transparent;touch-action:none}
+.co-cible{position:absolute;margin:0;padding:0;border:0;background:transparent;cursor:pointer;border-radius:18px;pointer-events:auto;transform:translate(-50%,-92%);width:max(60px,calc(48px * var(--co-inv,1)));height:max(110px,calc(48px * var(--co-inv,1)));-webkit-tap-highlight-color:transparent;touch-action:none}
 .co-cible:focus{outline:none}
+.co-cible-mini{width:max(48px,calc(48px * var(--co-inv,1)));height:max(70px,calc(48px * var(--co-inv,1)));transition:left 2.6s ease-in-out,top 2.6s ease-in-out}
+.co-mini{transition:transform 2.6s ease-in-out,opacity .9s ease}
+.co-mini-rendu{opacity:0;transition:transform 1.8s ease-in,opacity .9s ease-in 2.2s}
+.co-fixe .co-mini,.co-fixe .co-cible-mini{transition:opacity .45s ease}
+@media (prefers-reduced-motion:reduce){.co-mini,.co-cible-mini{transition:opacity .45s ease!important}}
 .co-cible:focus-visible{outline:calc(3px * var(--co-inv,1)) solid var(--co-accent,#5B8CFF);outline-offset:calc(2px * var(--co-inv,1))}
 `;
 
@@ -1204,6 +1210,8 @@ interface Element {
 
 /** Taille des personnages par rapport au décor. */
 const K_PERSO = 1.5;
+/** Taille des mini-personnages (sous-agents). */
+const K_MINI = 0.9;
 const transformPerso = (x: number, y: number, miroir: boolean) => `translate(${r1(x)} ${r1(y)}) scale(${miroir ? -K_PERSO : K_PERSO} ${K_PERSO})`;
 /** Haut de la tête au-dessus des pieds (repère de la scène), selon la pose. */
 const hautTete = (mode: ModePose) => (mode === 'fete' ? 74 : mode === 'assis' ? 62 : 70) * K_PERSO;
@@ -1218,7 +1226,7 @@ const polygoneZone = (z: Zone) => {
 
 export function SceneOpenSpace({
   agents, theme, reduit, largeur, choisi, onChoisir, demo, texteAgrandi, maintenant, horloge, charge = true, estompes,
-  remplir, refSvg, refCalque, positions, survole, zoneSurvolee, cibles,
+  remplir, refSvg, refCalque, positions, survole, zoneSurvolee, cibles, sousAgents, sousAgentsEnPlus = 0, sousAgentsParParent,
 }: PropsScene) {
   const pal = useMemo(() => palette(theme.sombre), [theme.sombre]);
   const temps = horloge ?? maintenantSecondes;
@@ -1226,6 +1234,8 @@ export function SceneOpenSpace({
   const [, rafraichir] = useReducer((n: number) => n + 1, 0);
   const refsPersos = useRef(new Map<string, SVGGElement>());
   const refsCibles = useRef(new Map<string, HTMLButtonElement>());
+  const minisVus = useRef(new Set<string>());
+  const minisApparus = useRef(new Map<string, number>());
   const racine = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(true);
   const signature = signatureAgents(agents);
@@ -1396,6 +1406,51 @@ export function SceneOpenSpace({
       ),
     });
   }
+  // Sous-agents : petits personnages (mini-version du parent) qui sortent de la Salle de réunion, vont travailler,
+  // puis reviennent rendre leur travail au parent et disparaissent (transitions CSS ; aucune boucle de plus).
+  const posesParCle = new Map(liste.map(p => [p.cle, p] as const));
+  const placesMinis = placerSousAgents(sousAgents ?? [], cle => posesParCle.get(cle));
+  const minisAAnimer: string[] = [];
+  const minis: Array<{ id: string; q: { x: number; y: number }; parent: string }> = [];
+  for (const sa of sousAgents ?? []) {
+    const parent = parCle.get(sa.parent);
+    const cible = placesMinis.get(sa.id);
+    if (!parent || !cible) continue;
+    const nouveau = !minisVus.current.has(sa.id);
+    if (nouveau && !reduit) minisAAnimer.push(sa.id);
+    const depart = nouveau && !reduit ? SORTIE_REUNION : cible;
+    const q = iso(depart.x, depart.y);
+    const qCible = iso(cible.x, cible.y);
+    const apparu = minisApparus.current.get(sa.id) ?? t;
+    if (!minisApparus.current.has(sa.id)) minisApparus.current.set(sa.id, t);
+    const enMarche = !reduit && (t - apparu < 2.7 || sa.phase === 'rendu');
+    const ap = apparence(parent);
+    minis.push({ id: sa.id, q: qCible, parent: sa.parent });
+    positionsRendu.set(`sa:${sa.id}`, { x: qCible.x, y: qCible.y, haut: qCible.y - 70 * K_MINI });
+    elements.push({
+      cle: `mini-${sa.id}`,
+      profondeur: cible.x + cible.y + 0.002,
+      rendu: (
+        <g
+          key={`mini-${sa.id}`}
+          className={`co-mini${sa.phase === 'rendu' ? ' co-mini-rendu' : ''}`}
+          style={{ transform: `translate(${r1(q.x)}px, ${r1(q.y)}px)` }}
+          data-sous={sa.id}
+          data-parent={sa.parent}
+          data-phase={sa.phase}
+        >
+          <g transform={`scale(${K_MINI})`} opacity={estompes?.has(sa.parent) ? 0.3 : 1}>
+            {survole === sa.parent || survole === `sa:${sa.id}` ? <ellipse cx={0} cy={0} rx={20} ry={8} fill={ap.haut} opacity={0.35} /> : null}
+            <Personnage ap={ap} vue="face" mode={enMarche ? 'marche' : 'debout'} activite={sa.phase === 'rendu' ? 'fini' : 'agent'} carton={false} jambes="debout" />
+            <g transform="translate(13 -66)">
+              <circle r={8.5} fill={ap.haut} stroke="#FFFFFF" strokeWidth={1.6} />
+              <text y={3.6} textAnchor="middle" fontSize={10} fontWeight={800} fill="#FFFFFF">{(sa.type ?? 'S').replace(/^general-purpose$/i, 'G').slice(0, 1).toUpperCase()}</text>
+            </g>
+          </g>
+        </g>
+      ),
+    });
+  }
   elements.sort((a, b) => a.profondeur - b.profondeur || (a.cle < b.cle ? -1 : 1));
 
   // Pastilles d'état (petites) et repère de l'agent choisi, toujours au-dessus ; les textes viennent au survol.
@@ -1415,7 +1470,32 @@ export function SceneOpenSpace({
     }
     if (p.mode === 'marche' || estompes?.has(p.cle)) continue;
     badges.push(<Badge key={p.cle} x={q.x + (p.miroir ? -1 : 1) * 17 * K_PERSO} y={haut + 10} activite={p.mode === 'fete' ? 'fini' : activiteAgent(agent)} pal={pal} fige={agent.fige} />);
+    const nSous = sousAgentsParParent?.get(p.cle);
+    if (nSous) {
+      badges.push(
+        <g key={`sous-${p.cle}`} transform={`translate(${r1(q.x + (p.miroir ? -1 : 1) * 17 * K_PERSO)} ${r1(haut + 30)})`} pointerEvents="none" data-testid="scene-compteur-sous-agents" data-nombre={nSous}>
+          <rect x={-13} y={-8} width={26} height={15} rx={7.5} fill={TEINTES_ACTIVITE.agent} />
+          <text y={3.8} textAnchor="middle" fontSize={10.5} fontWeight={800} fill="#FFFFFF">{`⑂${nSous}`}</text>
+        </g>,
+      );
+    }
   }
+  // Nouveaux sous-agents : dessinés d'abord à la sortie de la réunion, puis (image suivante) envoyés à leur place.
+  useEffect(() => {
+    if (!minisAAnimer.length) return undefined;
+    const id = requestAnimationFrame(() => requestAnimationFrame(() => {
+      for (const m of minisAAnimer) minisVus.current.add(m);
+      rafraichir();
+    }));
+    return () => cancelAnimationFrame(id);
+  });
+  if (reduit) for (const m of minis) minisVus.current.add(m.id);
+  // Lien avec le parent (pointillé de sa couleur) au survol de l'un ou de l'autre.
+  const liens = minis.filter(m => survole === m.parent || survole === `sa:${m.id}`).map(m => {
+    const pp = positionsRendu.get(m.parent);
+    const parent = parCle.get(m.parent);
+    return pp && parent ? <line key={`lien-${m.id}`} x1={r1(m.q.x)} y1={r1(m.q.y - 30)} x2={r1(pp.x)} y2={r1(pp.y - 40)} stroke={apparence(parent).haut} strokeWidth={3} strokeDasharray="6 6" strokeLinecap="round" opacity={0.85} data-testid="scene-lien-sous-agent" /> : null;
+  });
   const attente = enAttente(etat.current);
   const porte = iso((PORTE.x0 + PORTE.x1) / 2, 0, 2.6);
   const hauteur = Math.round((largeur * HAUTEUR_SCENE) / LARGEUR_SCENE);
@@ -1458,7 +1538,14 @@ export function SceneOpenSpace({
             <text y={2} textAnchor="middle" fontSize={13} fontWeight={700} fill={pal.badgeTexte}>{`${attente} à l’entrée`}</text>
           </g>
         ) : null}
+        <g pointerEvents="none">{liens}</g>
         <g>{badges}</g>
+        {sousAgentsEnPlus ? (
+          <g transform={`translate(${r1(iso(SORTIE_REUNION.x, SORTIE_REUNION.y).x)} ${r1(iso(SORTIE_REUNION.x, SORTIE_REUNION.y).y + 22)})`} pointerEvents="none" data-testid="scene-sous-agents-en-plus">
+            <rect x={-46} y={-13} width={92} height={24} rx={12} fill={pal.badge} stroke={TEINTES_ACTIVITE.agent} strokeWidth={1.5} />
+            <text y={4} textAnchor="middle" fontSize={13} fontWeight={700} fill={pal.badgeTexte}>{`+${sousAgentsEnPlus} sous-ag.`}</text>
+          </g>
+        ) : null}
         {repere}
         {demo ? (
           <g transform="translate(26 14)" data-testid="scene-demo" pointerEvents="none">
@@ -1474,6 +1561,27 @@ export function SceneOpenSpace({
           style={{ position: 'absolute', left: 0, top: 0, width: LARGEUR_SCENE, height: HAUTEUR_SCENE, transformOrigin: '0 0', pointerEvents: 'none', ['--co-accent' as string]: theme.accent }}
           data-testid="scene-cibles"
         >
+          {minis.map(m => {
+            const sa = sousAgents?.find(x => x.id === m.id);
+            const parent = parCle.get(m.parent);
+            if (!sa || !parent) return null;
+            const depart = minisVus.current.has(m.id) || reduit ? m.q : iso(SORTIE_REUNION.x, SORTIE_REUNION.y);
+            return (
+              <button
+                key={`sa-${m.id}`}
+                type="button"
+                className="co-cible co-cible-mini"
+                style={{ left: r1(depart.x), top: r1(depart.y) }}
+                data-co-sous={m.id}
+                data-testid={`scene-cible-sous-${m.id}`}
+                aria-label={`Sous-agent de ${parent.projet ?? 'Projet inconnu'} : ${sa.description ?? 'tâche déléguée'}${sa.type ? ` (${sa.type})` : ''}${sa.phase === 'rendu' ? ', terminé' : ', en cours'}. Entrée : détail du parent`}
+                aria-describedby={cibles.decrit?.cle === `sa:${m.id}` ? cibles.decrit.id : undefined}
+                onFocus={() => cibles.onFocus(`sa:${m.id}`)}
+                onBlur={() => cibles.onFocus(undefined)}
+                onClick={e => { if (e.detail === 0) cibles.onActiver(`sa:${m.id}`); }}
+              />
+            );
+          })}
           {liste.map(p => {
             const agent = parCle.get(p.cle);
             if (!agent) return null;

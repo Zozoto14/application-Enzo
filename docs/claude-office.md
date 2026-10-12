@@ -50,15 +50,68 @@ couleur du projet). Il **arrive par la porte**, puis **marche jusqu'à la zone d
   personne ne marche) ; changements de zone en attente réexaminés chaque seconde ; le reste en animations CSS. Tout se
   **gèle hors de l'écran ou onglet masqué**. « Réduire les animations » : personne ne marche, simple **fondu** quand un
   agent change de zone.
-- **Accessibilité** : la scène est décorative (`aria-hidden`) ; la **liste des agents** (bouton par agent : projet,
-  zone, état, dernière demande) porte la même information et ouvre le détail.
-- **Téléphone** : vue rapprochée qui se fait glisser (textes de la scène agrandis) ou « Vue d'ensemble ». iPad et PC :
-  scène entière. Partout dans l'écran : **cibles ≥ 44 px, textes ≥ 15 px** hors scène.
+- **Accessibilité** : le dessin est décoratif (`aria-hidden`), mais chaque personnage (et sous-agent) a au-dessus de
+  lui un **bouton transparent ≥ 44 px** (Tab, libellé « projet, zone : ce qu'il fait ») dont le focus montre la carte
+  (`aria-describedby`) et qu'Entrée ouvre ; la **liste des agents** sous la scène porte la même information.
+- **Taille** : voir « La scène v4 » ci-dessous (plein cadre, zoom). Partout dans l'écran : **cibles ≥ 44 px, textes
+  ≥ 15 px** hors scène.
 - **Mode « démo »** (« Voir la démo », partagé par les trois onglets) : cinq sessions fictives font le tour des
   zones, une sur deux attend une autorisation au guichet, des visiteurs finissent leur session (deux en salle d'attente
   dès le début), une session est en détente ; 30 jours d'historique fictif pour les statistiques et l'historique
   (lecture seule). Pastille et bandeau « DÉMO » ; rien de réel n'est lu ni déposé.
 - **Hors du web** (application native) : `SceneOpenSpace.tsx`, une case par zone avec ses personnages.
+
+### La scène v4 : plus grande, moins de texte, détails au survol
+
+`PlateauScene.web.tsx` (caméra, cartes, plein écran, relecture, mini-carte ; logique pure : `logiqueCamera.ts`,
+`logiqueRelecture.ts`, `sousAgentsScene.ts`, tests `sceneV4.test.tsx`, e2e `scripts/e2e-claude-office-v4-scene.mjs`).
+
+- **Plein cadre** : la scène prend toute la largeur et la hauteur disponible (PC : tout l'open space d'un coup ;
+  iPhone et iPad portrait : vue rapprochée lisible, échelle ≥ 0,78 sur iPhone). Au-dessus, **une seule barre** :
+  fraîcheur, « ✋ N attendent ta réponse », « ✓ N terminés à voir », filtre actif, Scène / Liste, « ? », Démo et
+  **Options ▾** (résumé du jour, compteurs, recherche dans l'historique, filtres par projet, légende des zones, aide
+  des gestes). Sur l'onglet Bureau, la présentation de l'app disparaît et la page s'élargit (1680 px au plus).
+- **Caméra** : molette (autour du pointeur ; dézoomée au maximum, la page défile normalement), glisser avec une
+  inertie légère, pincer au doigt, **+ / − / Recentrer** (clavier : + − 0 et flèches quand la scène a le focus),
+  **double-clic / double-tap sur une zone** pour la cadrer, **mini-carte** repliable (cadre de vue, toucher pour s'y
+  rendre ; repliée par défaut sur téléphone, choix mémorisé sur l'appareil). Bornes : de la vue d'ensemble à 5×,
+  jamais perdue hors de l'open space. Le dessin reste net (la caméra règle le `viewBox` du SVG, sans nouveau rendu).
+- **Moins d'infos partout** : plus de bulle tournante ni de compteur sur chaque enseigne ; par défaut, personnages,
+  petites pastilles d'état et noms de zone discrets (compteur seulement au guichet et en salle d'attente).
+  **Survol** (souris) ou **focus** (clavier) d'un agent : carte (projet, état, zone, depuis quand, demande en cours ou
+  autorisation attendue, outil, sous-agents en cours) avec « Voir le détail » et « Suivre cet agent » ; d'une zone :
+  nom, nombre d'agents, à quoi elle sert (au guichet et en salle d'attente : **qui attend**). La carte ne sort jamais
+  de l'écran (`placerCarte`). **Au toucher** : premier tap = aperçu, second tap (ou bouton) = panneau Détail, tap
+  ailleurs = ferme ; clic souris = détail directement. **Échap** ferme la carte, puis le plein écran (et une feuille
+  ouverte se ferme sans fermer l'app).
+- **Plein écran** (⛶) : API Fullscreen quand elle existe, et dans tous les cas un mode **immersif** qui recouvre
+  l'en-tête du hub (iPhone compris) ; le détail s'ouvre par-dessus ; « ✋ N attendent » y reste visible.
+  **Écran d'ambiance** (◐) : plein écran sans aucune interface (2e écran, tablette posée), vue d'ensemble, rafraîchi
+  seul, écran maintenu allumé quand le navigateur le permet (Wake Lock) ; bouger ou toucher montre « Quitter ».
+- **Suivre cet agent** : la caméra le garde au centre (même quand il marche), jusqu'à « Arrêter » ou un glisser.
+- **Relecture de la journée** (⏱) : curseur temporel en bas (lecture / pause, ×10 / ×60, barres d'activité, heure,
+  « Direct »). À chaque instant t, le bureau est **reconstruit** à partir de ce qui est déjà en mémoire (journal du PC
+  ou copie chiffrée) : seuls les événements d'avant t comptent, l'état est calculé à t (`bureauA`) ; rien n'est relu
+  ni déposé en plus. Sauter dans le temps replace tout le monde d'un coup ; en lecture, ils marchent.
+- **Sous-agents** : chaque sous-agent est un **petit personnage** (mini-version du parent, même couleur et accessoire,
+  pastille de son type) qui sort de la Salle de réunion, va dans la zone de son activité (Explore → Bibliothèque,
+  Plan → Réunion, tests → Machines…, sinon près du parent), puis **rend son travail** au parent et disparaît. Au
+  survol : « Sous-agent de <projet> », description, type, depuis quand, lien pointillé vers le parent ; compteur
+  discret « ⑂ N » sur le parent ; section « Sous-agents » dans le détail ; indentés sous le parent dans les listes.
+  Six au plus à la fois (le reste : « +N »). Contrat : `SousAgent` de `sousAgentsScene.ts` ({id, parent, description,
+  type, modèle, début, fin, état en cours/terminé/échec, durée}), le même que le module de données
+  `sousAgents(evenements)` ; en attendant, ils sont déduits des outils Task / Agent de l'historique (notés à leur fin
+  avec leur durée : visibles en relecture, et en direct pendant leur « rendu ») et la démo en fait tourner deux ou
+  trois en parallèle.
+- **Graphisme** (toujours SVG/CSS, sans image) : sol de chaque zone en dégradé, lumière d'ambiance (soleil par les
+  fenêtres et poussière dans les rayons le jour, bleu nuit et lampes la nuit), ciel qui défile lentement (nuages,
+  soleil, lune, étoiles), ombres portées douces sous le mobilier, cloison vitrée de la salle des machines,
+  personnages ombrés (respiration, regard, marche aux jambes qui balancent, décalages propres à chacun), lampes
+  suspendues adoucies. « Réduire les animations » : rien ne bouge, pas d'inertie ni de transition de caméra.
+- **Mise en route réductible** : bouton « Réduire ▴ » (aria-expanded) même avec une ligne rouge ; réduite, une ligne
+  « Mise en route · N points à régler » avec sa pastille, qui se rouvre d'un toucher. Mémorisé sur l'appareil
+  (`localStorage`) ; elle ne se rouvre seule que si un **nouveau** point passe au rouge (« Aucun événement reçu »
+  toujours rouge quand on travaille depuis des sessions cloud ne l'encombre plus).
 
 ### Autour de la scène
 
@@ -68,16 +121,17 @@ couleur du projet). Il **arrive par la porte**, puis **marche jusqu'à la zone d
   présence, dernier événement. Chaque ligne non verte a **une** action : bouton (installer/mettre à jour le hook,
   activer la copie, activer la présence, réessayer, voir la démo) et/ou commande à copier (`npm run office:hooks`).
   Tout est vert : une seule ligne « tout est prêt ».
-- **Aujourd'hui** : sessions, demandes, temps actif (écarts de moins de 5 min entre deux événements d'une session),
-  dernier projet, en une ligne.
+- **Aujourd'hui** (dans « Options ») : sessions, demandes, temps actif (écarts de moins de 5 min entre deux
+  événements d'une session), dernier projet, en une ligne.
 - Pastilles **« N attendent ta réponse »** et **« N terminés à voir »** (ouvrent le détail du premier) ; bascule
   **Scène / Liste** mémorisée sur l'appareil (Liste : cartes groupées par zone, « Attend ta réponse » et « Terminés
   récemment » d'abord) ; **« ? »** : comment lire le bureau (zones, pastilles, « En direct » contre « Copie chiffrée · il
-  y a X min », figé/grisé) ; légende des zones en boutons (explication au toucher ou au clavier).
-- **Recherche** dans l'historique depuis le Bureau, **filtre par projet** (« Mettre en avant » estompe les autres,
+  y a X min », figé/grisé) ; légende des zones en boutons dans « Options » (explication au toucher ou au clavier).
+- **Recherche** dans l'historique depuis le Bureau et **filtre par projet** (dans « Options » ; le filtre actif reste
+  rappelé dans la barre, retiré d'un toucher) (« Mettre en avant » estompe les autres,
   « Masquer » les retire de la scène et de la liste).
 - **Détail d'un agent** (toucher un personnage ou une carte, `DetailAgent.tsx`) : projet, zone, depuis quand, ce qu'il
-  attend ou ce qu'il a fini, compteurs (demandes, outils, temps d'outils, échecs, attentes) et **chronologie** de la
+  attend ou ce qu'il a fini, compteurs (demandes, outils, temps d'outils, échecs, attentes), **sous-agents** et **chronologie** de la
   session (demandes, outils avec leur durée, réflexions de plus de 15 s, attentes, fin) ; « Marquer comme vu »,
   « Voir dans l'Historique » (filtré sur la session).
 - **Statistiques** (onglet, `Statistiques.tsx`, `logiqueStats.ts`) : requêtes par jour (7 ou 30 j), carte de chaleur
@@ -99,7 +153,8 @@ couleur du projet). Il **arrive par la porte**, puis **marche jusqu'à la zone d
 
 Logique pure et testée : `logiqueBureau.ts` (états, salle d'attente, récapitulatif), `zones.ts`, `logiqueScene.ts`.
 
-Poids : la v3 ajoute environ 58 Ko minifiés (17 Ko compressés) au bundle du site, sans image ni dépendance.
+Poids : la v3 ajoute environ 58 Ko minifiés (17 Ko compressés) au bundle du site, sans image ni dépendance ; la
+scène v4 environ 55 Ko minifiés de plus.
 
 ### Le hook v3 (à réinstaller une fois)
 

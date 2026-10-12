@@ -213,7 +213,7 @@ describe('plateau : rendu', () => {
     expect(h).not.toContain('Ajoute un export');
     expect(h).toContain('class="co-cible"');
     expect(h).toContain('aria-label="budget, Attend ta réponse');
-    expect(h).toContain('max(60px,calc(44px * var(--co-inv,1)))');
+    expect(h).toContain('max(60px,calc(48px * var(--co-inv,1)))');
     for (const id of ['scene-zoom-plus', 'scene-zoom-moins', 'scene-recentrer', 'scene-plein-ecran', 'scene-ambiance', 'scene-minicarte-basculer', 'scene-relecture-ouvrir']) expect(h).toContain(`data-testid="${id}"`);
     expect(h).toContain('data-co-zone="guichet"');
     expect(h).toContain('prefers-reduced-motion');
@@ -330,5 +330,92 @@ describe('bandeau « Mise en route » réductible', () => {
     } finally {
       delete (globalThis as { localStorage?: unknown }).localStorage;
     }
+  });
+});
+
+// ------------------------------------------------------------------ sous-agents
+
+describe('sous-agents dans la scène', () => {
+  const {
+    compterParParent, deduireSousAgents, DUREE_RENDU_MS, MAX_MINIS, placerSousAgents, sousAgentsDemo, sousAgentsVisibles, zoneSousAgent,
+  } = require('./sousAgentsScene') as typeof import('./sousAgentsScene');
+  const historique = (): EntreeHistorique[] => [
+    ev(0, { type: 'demande', texte: 'Audit' }),
+    ev(60, { type: 'outil', outil: 'Task', resume: 'Explore : cherche les usages', duree: 40_000 }),
+    ev(70, { type: 'outil', outil: 'Agent', resume: 'Vérifie les tests', duree: 50_000, echec: true }),
+    ev(80, { type: 'outil', outil: 'Read', resume: 'a.ts', duree: 100 }),
+  ];
+
+  it('déduits de l’historique (Task / Agent avec durée) : en cours pendant la relecture, puis terminés ou en échec', () => {
+    const a30 = deduireSousAgents(historique(), T0 + 30_000);
+    expect(a30.map(s => [s.etat, s.debut])).toEqual([['en-cours', T0 + 20_000], ['en-cours', T0 + 20_000]]);
+    expect(a30[0].parent).toBe('aaaaaaaaaaaa|sess-a');
+    expect(a30[0].description).toBe('Explore : cherche les usages');
+    const a90 = deduireSousAgents(historique(), T0 + 90_000);
+    expect(a90.map(s => s.etat)).toEqual(['termine', 'echec']);
+    expect(a90[0].fin).toBe(T0 + 60_000);
+    expect(deduireSousAgents(historique(), T0 + 10_000)).toHaveLength(0);
+    expect(compterParParent(a30).get('aaaaaaaaaaaa|sess-a')).toBe(2);
+    expect(compterParParent(a90).size).toBe(0);
+  });
+
+  it('visibles : en cours, puis « rendu » quelques secondes, puis disparus ; parents absents ignorés ; au-delà de 6, « +N »', () => {
+    const parents = new Set(['aaaaaaaaaaaa|sess-a']);
+    const liste = deduireSousAgents(historique(), T0 + 61_000);
+    const v = sousAgentsVisibles(liste, parents, T0 + 61_000);
+    expect(v.visibles.map(s => s.phase).sort()).toEqual(['rendu', 'travaille']);
+    expect(sousAgentsVisibles(deduireSousAgents(historique(), T0 + 200_000), parents, T0 + 200_000).visibles).toHaveLength(0);
+    expect(sousAgentsVisibles(liste, new Set(), T0 + 61_000).visibles).toHaveLength(0);
+    const beaucoup = Array.from({ length: 9 }, (_, k) => ({ id: `s${k}`, parent: 'p', debut: T0 + k, etat: 'en-cours' as const }));
+    const r = sousAgentsVisibles(beaucoup, new Set(['p']), T0 + 100);
+    expect(r.visibles).toHaveLength(MAX_MINIS);
+    expect(r.enPlus).toBe(3);
+    expect(DUREE_RENDU_MS).toBeGreaterThan(2000);
+  });
+
+  it('placés sans collision : zone de leur activité, sinon près du parent ; rendu = au parent', () => {
+    expect(zoneSousAgent({ type: 'Explore' })).toBe('bibliotheque');
+    expect(zoneSousAgent({ type: 'Plan' })).toBe('reunion');
+    expect(zoneSousAgent({ type: 'general-purpose', description: 'Lance les tests' })).toBe('machines');
+    expect(zoneSousAgent({ type: 'general-purpose' })).toBeUndefined();
+    const vis = Array.from({ length: 6 }, (_, k) => ({ id: `s${k}`, parent: k % 2 ? 'p1' : 'p2', debut: T0 + k, etat: 'en-cours' as const, phase: 'travaille' as const, type: k < 3 ? 'Explore' : 'general-purpose' }));
+    const pos = placerSousAgents(vis, cle => (cle === 'p1' ? { x: 8, y: 7 } : { x: 3, y: 12 }));
+    const pts = [...pos.values()];
+    for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) expect(Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y)).toBeGreaterThan(0.5);
+    const rendu = placerSousAgents([{ ...vis[3], phase: 'rendu' }], () => ({ x: 8, y: 7 }));
+    expect(Math.hypot(rendu.get('s3')!.x - 8, rendu.get('s3')!.y - 7)).toBeLessThan(0.6);
+  });
+
+  it('démo : deux ou trois sous-agents en parallèle, rattachés à des sessions de la démo', () => {
+    const { entreesDemo } = require('./logiqueScene') as typeof import('./logiqueScene');
+    let max = 0;
+    for (let s = 20; s <= 300; s += 5) {
+      const agents = deduireBureau(entreesDemo(T0, T0 + s * 1000), { maintenant: T0 + s * 1000 }).agents;
+      const sa = sousAgentsDemo(T0, T0 + s * 1000, agents);
+      const cles = new Set(agents.map(a => a.cle));
+      expect(sa.every(x => cles.has(x.parent))).toBe(true);
+      max = Math.max(max, sa.filter(x => x.etat === 'en-cours').length);
+    }
+    expect(max).toBeGreaterThanOrEqual(2);
+    expect(max).toBeLessThanOrEqual(3);
+  });
+
+  it('rendu : mini-personnage avec sa cible accessible, compteur sur le parent, carte « Sous-agent de … »', () => {
+    const { renderToStaticMarkup } = require('react-dom/server') as { renderToStaticMarkup(e: React.ReactElement): string };
+    const { PlateauScene } = require('./PlateauScene.web') as { PlateauScene: (p: PropsPlateau) => React.ReactElement };
+    const t = T0 + 30_000;
+    const agents = bureauA(trierEntrees(historique()), t).agents;
+    const sousAgents = deduireSousAgents(historique(), t);
+    const props: PropsPlateau = { agents, theme: themeHub('ivoire'), reduit: true, maintenant: t, onDetail: () => undefined, largeur: 1000, horloge: () => 0, sousAgents };
+    const h = renderToStaticMarkup(<PlateauScene {...props} />);
+    expect(h.match(/data-sous="/g)).toHaveLength(2);
+    expect(h).toContain('aria-label="Sous-agent de budget : Explore : cherche les usages (Task), en cours');
+    expect(h).toContain('data-testid="scene-compteur-sous-agents" data-nombre="2"');
+    const carte = renderToStaticMarkup(<PlateauScene {...props} initial={{ sousAgent: sousAgents[0].id }} />);
+    expect(carte).toContain('data-testid="scene-carte-sous"');
+    expect(carte).toContain('Sous-agent de budget');
+    expect(carte).toContain('« Explore : cherche les usages »');
+    expect(carte).toContain('Vient de démarrer');
+    expect(carte).toContain('data-testid="scene-lien-sous-agent"');
   });
 });

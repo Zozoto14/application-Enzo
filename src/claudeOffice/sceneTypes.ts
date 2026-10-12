@@ -7,6 +7,7 @@
 import type React from 'react';
 import type { ThemeHub } from '../hub/themes';
 import type { Agent } from './logiqueBureau';
+import type { SousAgentVisible } from './sousAgentsScene';
 import type { Zone } from './zones';
 
 export interface PropsScene {
@@ -49,6 +50,10 @@ export interface PropsScene {
   zoneSurvolee?: Zone;
   /** Cibles accessibles (boutons ≥ 44 px au-dessus des personnages, zones au sol) : le plateau gère toucher et survol. */
   cibles?: CiblesScene;
+  /** Sous-agents à dessiner (petits personnages), ceux qui ne tiennent pas (« +N »), et le compteur par parent. */
+  sousAgents?: readonly SousAgentVisible[];
+  sousAgentsEnPlus?: number;
+  sousAgentsParParent?: ReadonlyMap<string, number>;
 }
 
 export interface PositionPerso {

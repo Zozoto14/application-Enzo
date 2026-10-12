@@ -33,6 +33,7 @@ import { LIBELLE_HOOK_HISTORIQUE, type EtatClaudeOffice, type PontClaudeOffice }
 import { DELAIS_SALLE, delaiSalleMs, ecrirePrefsOffice, lirePrefsOffice, type DelaiSalle, type PrefsOffice } from './prefsOffice';
 import { avancerRelecture, bureauA, demarrerRelecture, densite, PAS_RELECTURE_MS, trierEntrees, type Relecture } from './logiqueRelecture';
 import { PlateauScene } from './PlateauScene';
+import { deduireSousAgents, sousAgentsDemo } from './sousAgentsScene';
 import type { CommandesRelecture } from './plateauTypes';
 import {
   DELAI_MIN_PRESENCE_MS, MAX_PRESENCES_JOUR, ecrireEtatPresence, ecrireEtatSynchro, lireEtatPresence, lireEtatSynchro, type EtatPresence, type EtatSynchroHistorique,
@@ -92,12 +93,14 @@ export interface PropsBureauVisuel {
   onVoirHistorique?(f: FiltreHistorique): void;
   /** Bloc affiché en tête (check-list de mise en route). */
   entete?: React.ReactNode;
+  /** Démo : son début (ms), pour ses sous-agents fictifs. */
+  debutDemo?: number;
 }
 
 type ModeFiltre = 'avant' | 'masque';
 
 /** Le dessin du bureau (sans chargement) : barre d'outils, scène ou liste, détail. */
-export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vide, demo, onDemo, prefs: prefsDonnees, onPrefs, onVoirHistorique, entete }: PropsBureauVisuel) {
+export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vide, demo, onDemo, prefs: prefsDonnees, onPrefs, onVoirHistorique, entete, debutDemo }: PropsBureauVisuel) {
   const mobile = useMobile();
   const fenetre = useWindowDimensions();
   const reduit = useMouvementReduit(mouvementReduit);
@@ -143,6 +146,12 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
   const densiteJour = useMemo(() => (relecture ? densite(triees, relecture.debut, relecture.fin) : []), [triees, relecture?.debut, relecture?.fin]); // eslint-disable-line react-hooks/exhaustive-deps
   const agentsScene = bureauRejoue ? masquer(bureauRejoue.agents) : agentsVus;
   const instant = relecture?.t ?? maintenant;
+  // Sous-agents (contrat du module de données : docs/claude-office.md) : déduits de l'historique (outils Task / Agent),
+  // ou fictifs en démo. À l'intégration, `deduireSousAgents` cède la place au module `sousAgents(evenements)`.
+  const sousAgents = useMemo(
+    () => (demo && debutDemo !== undefined ? sousAgentsDemo(debutDemo, instant, agentsScene) : deduireSousAgents(activite.entrees, instant)),
+    [demo, debutDemo, instant, agentsScene.map(a => a.cle).join('|'), activite.entrees], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const commandesRelecture: CommandesRelecture | undefined = relecture ? {
     r: relecture,
     densite: densiteJour,
@@ -193,7 +202,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
     </View>
   );
 
-  const carteAgent = (a: Agent, riche: boolean) => {
+  const carteAgent = (a: Agent, riche: boolean, dansGroupe = false) => {
     const activiteA = activiteAgent(a);
     const teinte = a.fige ? theme.attenue : teinteLisible(a.etat === 'attend' ? TEINTES_ACTIVITE.attend : a.salle ? ZONES.salle.teinte : TEINTES_ACTIVITE[activiteA], theme.sombre);
     const ap = apparence(a);
@@ -208,7 +217,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
         accessibilityLabel={`${a.projet ?? 'Projet inconnu'}${a.appareil ? `, ${a.appareil}` : ''}, ${ZONES[a.zone].nom} : ${phraseAgent(a, maintenant)}. ${a.salle ? 'Terminé, à voir. ' : ''}Dernière demande : ${a.demande ?? 'aucune'}. Ouvrir le détail`}
         accessibilityState={{ selected: selectionne }}
         testID={`bureau-agent-${a.session.slice(0, 12)}`}
-        style={[styles.agent, { borderColor: selectionne ? theme.accent : a.etat === 'attend' ? TEINTES_ACTIVITE.attend : theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen, width: mobile ? '100%' : undefined, opacity: estompes?.has(a.cle) ? 0.45 : 1 }]}
+        style={[styles.agent, { borderColor: selectionne ? theme.accent : a.etat === 'attend' ? TEINTES_ACTIVITE.attend : theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen, width: mobile ? '100%' : undefined, opacity: estompes?.has(a.cle) ? 0.45 : 1 }, dansGroupe ? styles.agentDansGroupe : null]}
       >
         <View style={[styles.avatar, { backgroundColor: ap.haut, borderColor: teinte }]} aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           <View style={[styles.avatarTete, { backgroundColor: ap.peau, borderTopColor: ap.cheveux }]} />
@@ -228,6 +237,25 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
           {riche ? <Text style={attenue}>{`${a.demandes} demande(s) · ${a.outils} outil(s)${a.echecs ? ` · ${a.echecs} échec(s)` : ''} · depuis ${ilYA(a.debut, maintenant).replace('il y a ', '')}`}</Text> : null}
         </View>
       </Pressable>
+    );
+  };
+  /** Une carte d'agent suivie de ses sous-agents (indentés), dans les listes. */
+  const carteAvecSous = (a: Agent, riche: boolean) => {
+    const sous = sousAgents.filter(s => s.parent === a.cle && (s.etat === 'en-cours' || (s.fin !== undefined && instant - s.fin < 30 * 60_000))).sort((x, y) => y.debut - x.debut).slice(0, 4);
+    if (!sous.length) return carteAgent(a, riche);
+    return (
+      <View key={a.cle} style={[styles.groupeAgent, { width: mobile ? '100%' : undefined }]}>
+        {carteAgent(a, riche, true)}
+        <View style={styles.sousListe} testID={`bureau-sous-agents-${a.session.slice(0, 12)}`}>
+          {sous.map(sa => (
+            <View key={sa.id} style={[styles.sousAgent, { borderColor: theme.ligne, backgroundColor: theme.surface }]} accessibilityLabel={`Sous-agent ${sa.type ?? ''} : ${sa.description ?? 'tâche déléguée'}, ${sa.etat === 'en-cours' ? 'en cours' : 'terminé'}`}>
+              <Text style={{ color: teinteLisible(TEINTES_ACTIVITE.agent, theme.sombre), fontSize: TAILLE, fontWeight: '700' }}>✦</Text>
+              <Text style={[texte, { flex: 1 }]} numberOfLines={1}>{sa.description ?? 'Tâche déléguée'}</Text>
+              <Text style={attenue}>{sa.etat === 'en-cours' ? `${sa.type ?? 'sous-agent'} · en cours` : `${sa.type ?? 'sous-agent'} · fini`}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
     );
   };
 
@@ -337,6 +365,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
           accessibilityRole="button"
           accessibilityLabel="Options du bureau : résumé du jour, compteurs, recherche, filtres par projet, légende"
           accessibilityState={{ expanded: options }}
+          aria-expanded={options}
           onPress={() => setOptions(o => !o)}
           style={[styles.options, { borderColor: options ? theme.accent : theme.ligne, backgroundColor: options ? theme.accent : theme.surface }]}
           testID="bureau-options"
@@ -371,6 +400,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
             } : undefined}
             cleScene={`${demo ? 'demo' : 'reel'}-${relecture ? 'r' : 'd'}${saut}`}
             attendent={attendent}
+            sousAgents={sousAgents}
           />
         </View>
       ) : null}
@@ -398,7 +428,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
           <Text style={[styles.titreListe, { color: theme.texte }]} accessibilityRole="header">
             {demo ? `Agents de la démo (${agentsVus.length})` : `Agents (${agentsVus.length})`}
           </Text>
-          <View style={styles.liste} testID="bureau-postes">{agentsVus.map(a => carteAgent(a, false))}</View>
+          <View style={styles.liste} testID="bureau-postes">{agentsVus.map(a => carteAvecSous(a, false))}</View>
         </View>
       ) : null}
       {agentsVus.length && prefs.vue === 'liste' ? (
@@ -411,7 +441,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
                   {g.z === 'salle' ? 'Terminés récemment' : ZONES[g.z].nom} ({g.agents.length})
                 </Text>
               </View>
-              <View style={styles.liste}>{g.agents.map(a => carteAgent(a, true))}</View>
+              <View style={styles.liste}>{g.agents.map(a => carteAvecSous(a, true))}</View>
             </View>
           ))}
         </View>
@@ -426,6 +456,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
         onFermer={() => setChoisi(undefined)}
         onVoirHistorique={onVoirHistorique ? s => { setChoisi(undefined); onVoirHistorique({ session: s }); } : undefined}
         onMarquerVu={marquerVu}
+        sousAgents={sousAgents}
       />
     </View>
   );
@@ -587,6 +618,7 @@ export function OngletBureau({ theme, contexte, office, mouvementReduit, horloge
         prefs={prefs}
         onPrefs={changerPrefs}
         onVoirHistorique={onVoirHistorique}
+        debutDemo={debutDemo}
         entete={debutDemo === undefined ? <MiseEnRoute theme={theme} etapes={etapes} onAction={agir} occupe={occupe} /> : null}
       />
       {activite.erreur ? <Text style={[attenue, { color: theme.critique }]} testID="bureau-erreur">{activite.erreur}</Text> : null}
@@ -674,6 +706,10 @@ const styles = StyleSheet.create({
   titreListe: { fontSize: 17, fontWeight: '700' },
   titreGroupe: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   liste: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  agentDansGroupe: { flexBasis: 'auto', flexGrow: 0, width: '100%' },
+  groupeAgent: { flexGrow: 1, flexBasis: 300, maxWidth: '100%', gap: 4 },
+  sousListe: { gap: 4, paddingLeft: 28 },
+  sousAgent: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 10, minHeight: 40 },
   agent: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 2, padding: 10, minHeight: 64, flexGrow: 1, flexBasis: 300, maxWidth: '100%' },
   avatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 3, alignItems: 'center', justifyContent: 'flex-end' },
   avatarTete: { width: 20, height: 20, borderRadius: 10, borderTopWidth: 6, marginBottom: 7 },

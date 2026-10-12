@@ -103,6 +103,10 @@ try {
     verifier(m.petitsTextes.length === 0, `${quoi} : textes ≥ 15 px ${JSON.stringify(m.petitsTextes)}`);
   };
   const plateau = () => page.getByTestId('bureau-plateau');
+  const remonter = () => page.evaluate(() => {
+    for (let el = document.querySelector('[data-testid="bureau-plateau"]'); el; el = el.parentElement) if (el.scrollTop) el.scrollTop = 0;
+    window.scrollTo(0, 0);
+  }).then(() => pause(300));
   const zoom = async () => Number(await plateau().getAttribute('data-zoom'));
   const centre = async () => (await plateau().getAttribute('data-centre')).split(',').map(Number);
   const cadreVue = () => page.getByTestId('bureau-scene-defilement').boundingBox();
@@ -122,17 +126,31 @@ try {
     }
     return undefined;
   }, zone);
+  /** Un point du plateau hors de tout personnage et de toute zone (pour « toucher ailleurs »). */
+  const pointVide = () => page.evaluate(() => {
+    const v = document.querySelector('[data-testid="bureau-scene-defilement"]').getBoundingClientRect();
+    for (let fy = 0.15; fy < 0.9; fy += 0.05) {
+      for (let fx = 0.3; fx < 0.95; fx += 0.05) {
+        const x = v.left + v.width * fx;
+        const y = v.top + v.height * fy;
+        const el = document.elementFromPoint(x, y);
+        if (el && el.closest('[data-testid="bureau-scene-defilement"]') && !el.closest('[data-co-agent],[data-co-sous],[data-co-zone],button')) return { x, y };
+      }
+    }
+    return undefined;
+  });
   /** Première cible de personnage visible dans le cadre (installé, pas en train de marcher). */
   const cibleVisible = async () => {
     const v = await cadreVue();
-    const toutes = page.locator('[data-testid^="scene-cible-"]');
-    for (let i = 0; i < (await toutes.count()); i++) {
-      const b = await toutes.nth(i).boundingBox();
-      const cle = await toutes.nth(i).getAttribute('data-co-agent');
+    // Repérée par sa clé (stable), pas par son rang : des sous-agents vont et viennent entre deux touchers.
+    const cles = await page.locator('[data-co-agent]').evaluateAll(els => els.map(e => e.getAttribute('data-co-agent')));
+    for (const cle of cles) {
+      const cible = page.locator(`[data-co-agent="${cle}"]`);
+      const b = await cible.boundingBox();
       const mode = await page.locator(`g[data-cle="${cle}"]`).first().getAttribute('data-mode').catch(() => 'marche');
-      if (b && mode !== 'marche' && b.x > v.x + 50 && b.x + b.width < v.x + v.width - 50 && b.y > v.y + 50 && b.y + b.height < v.y + v.height - 60) return toutes.nth(i);
+      if (b && mode !== 'marche' && b.x > v.x + 50 && b.x + b.width < v.x + v.width - 50 && b.y > v.y + 50 && b.y + b.height < v.y + v.height - 60) return cible;
     }
-    return toutes.first();
+    return page.locator(`[data-co-agent="${cles[0]}"]`);
   };
 
   // 1. Mise en route (site sans copie) : réductible à la main malgré la ligne rouge, mémorisée, une ligne compacte.
@@ -142,7 +160,7 @@ try {
   await page.getByTestId('mise-en-route-reduire').click();
   await page.getByTestId('mise-en-route-reduite').waitFor();
   const ligne = await page.getByTestId('mise-en-route-reduite').innerText();
-  verifier(/Mise en route · \d+ points? à régler/.test(ligne) && (await page.getByTestId('mise-en-route-reduite').getAttribute('aria-expanded')) === 'false', `mise en route réduite en une ligne (« ${ligne.replace(/\s+/g, ' ')} »)`);
+  verifier(/Mise en route · \d+ points? à régler/.test(ligne) && (await page.getByTestId('mise-en-route-reduite').getAttribute('aria-expanded')) === 'false', `mise en route réduite en une ligne, aria-expanded (« ${ligne.replace(/\s+/g, ' ')} »)`);
   verifier(((await plateau().boundingBox())?.y ?? 0) < hautAvant - 100, 'mise en route réduite : la scène remonte');
   await page.reload();
   await deverrouiller(page, MDP, secret).catch(() => undefined);
@@ -224,10 +242,12 @@ try {
   await pause(900);
   const c1 = await centre();
   verifier(c1[0] < c0[0] - 20, `glisser : la vue se déplace (${c0} → ${c1}), avec inertie bornée`);
-  for (let i = 0; i < 60; i++) await page.mouse.wheel(0, 240);
+  for (let i = 0; i < 12; i++) await page.mouse.wheel(0, 240);
   await pause(300);
   const zMin = await zoom();
-  verifier(Math.abs(zMin - z0) < 0.02 || zMin <= z0, `molette : retour à la vue d’ensemble, pas en deçà (${zMin})`);
+  verifier(Math.abs(zMin - z0) < 0.02, `molette : retour à la vue d’ensemble, pas en deçà (${zMin})`);
+  // Au-delà, la page défile (normal) : on remonte.
+  await remonter();
   await page.getByTestId('scene-recentrer').click();
   await pause(500);
   const pa = await pointZone('atelier');
@@ -316,6 +336,42 @@ try {
   await pause(600);
   verifier((await plateau().getAttribute('data-mode')) === 'normal', 'écran d’ambiance quitté (Échap)');
 
+  // Sous-agents (démo) : un petit personnage sort de la réunion, travaille, rend son travail au parent et disparaît.
+  await remonter();
+  await page.getByTestId('scene-recentrer').click();
+  let idSous;
+  for (let i = 0; i < 50 && !idSous; i++) {
+    idSous = await page.locator('[data-sous][data-phase="travaille"]').first().getAttribute('data-sous', { timeout: 500 }).catch(() => undefined);
+    if (!idSous) await pause(1000);
+  }
+  verifier(Boolean(idSous), `sous-agent : un mini-personnage apparaît (${idSous})`);
+  verifier((await page.getByTestId('scene-compteur-sous-agents').count()) >= 1, 'sous-agent : compteur discret sur le parent');
+  const cibleSous = page.locator(`[data-co-sous="${idSous}"]`);
+  await pause(2800); // le temps qu'il arrive à sa place
+  await cibleSous.hover().catch(() => undefined);
+  await page.getByTestId('scene-carte-sous').waitFor({ timeout: 3000 }).catch(() => undefined);
+  verifier(/Sous-agent de .+/.test(await page.getByTestId('scene-carte-sous').innerText().catch(() => '')) && (await page.getByTestId('scene-lien-sous-agent').count()) === 1, 'survol d’un sous-agent : carte « Sous-agent de … » et lien pointillé vers le parent');
+  await prendre('v4-pc-sous-agent', false);
+  await cibleSous.click().catch(() => undefined);
+  await page.getByTestId('bureau-detail').waitFor({ timeout: 5000 }).catch(() => undefined);
+  verifier((await page.getByTestId('bureau-detail-sous-agents').count()) === 1, 'détail du parent : section « Sous-agents »');
+  await page.getByTestId('bureau-detail-fermer').click().catch(() => undefined);
+  await page.mouse.move(1, 1);
+  let vuRendu = false;
+  let parti = false;
+  for (let i = 0; i < 60 && !parti; i++) {
+    const phase = await page.locator(`[data-sous="${idSous}"]`).getAttribute('data-phase', { timeout: 300 }).catch(() => undefined);
+    if (phase === 'rendu') vuRendu = true;
+    if (!phase) parti = true;
+    else await pause(1000);
+  }
+  verifier(vuRendu && parti, `sous-agent : à sa fin, il rend son travail au parent puis disparaît (rendu vu : ${vuRendu})`);
+  await page.getByTestId('bureau-vue-liste').click();
+  await page.locator('[data-testid^="bureau-sous-agents-"]').first().waitFor({ timeout: 40_000 }).catch(() => undefined);
+  verifier((await page.locator('[data-testid^="bureau-sous-agents-"]').count()) >= 1, 'vue Liste : sous-agents indentés sous leur parent');
+  await page.getByTestId('bureau-vue-scene').click();
+  await pause(800);
+
   // 3. iPad et iPhone, au toucher : premier tap = aperçu, second = détail ; tap ailleurs = ferme.
   for (const [l, h, nom] of [[1024, 768, 'iPad paysage'], [820, 1180, 'iPad portrait'], [390, 844, 'iPhone']]) {
     await page.setViewportSize({ width: l, height: h });
@@ -345,7 +401,7 @@ try {
     await pause(400);
     await (await cibleVisible()).tap();
     await pause(300);
-    const pzt = await pointZone('detente') ?? await pointZone('atelier');
+    const pzt = await pointVide();
     if (pzt) await page.touchscreen.tap(pzt.x, pzt.y);
     await pause(400);
     verifier((await page.getByTestId('scene-carte').count()) === 0, `${nom} : tap ailleurs = la carte se ferme`);
