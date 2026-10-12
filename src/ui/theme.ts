@@ -220,32 +220,61 @@ export function definirTheme(id: IdThemeHub | string | undefined): void {
   themeActif = retenu;
   profilDuTheme = profilCourant();
   const theme = themeHub(retenu);
-  const palette = palettePour();
-  const doc = (globalThis as {
-    document?: {
-      documentElement: { style: { setProperty(n: string, v: string): void; removeProperty(n: string): void } };
-      body?: { style: { backgroundColor: string; colorScheme: string } };
-    };
-  }).document;
-  if (doc) {
-    if (doc.body) {
-      doc.body.style.backgroundColor = theme.fond;
-      doc.body.style.colorScheme = theme.sombre ? 'dark' : 'light';
-    }
-    // Barre de titre de Windows assortie au thème, quand le pont le permet.
-    (globalThis as { applibourse?: { systeme?: { theme?(sombre: boolean): unknown } } }).applibourse?.systeme?.theme?.(theme.sombre);
-    const style = doc.documentElement.style;
-    const poser = (nom: string, police?: string) =>
-      police ? style.setProperty(nom, `"${police}", system-ui, sans-serif`) : style.removeProperty(nom);
-    poser('--police-texte', palette.policeTexte);
-    poser('--police-titre', palette.policeTitre);
-  }
+  appliquerAuDocument(theme);
   try {
     const stockage = stockageLocal();
     stockage?.setItem(cleLocale(CLE_CACHE_THEME), retenu);
     stockage?.setItem(CLE_CACHE_FOND, theme.fond);
   } catch {
     // Stockage indisponible : le thème sera relu de la base au déverrouillage.
+  }
+}
+
+/** Thème dont le document (web) porte déjà le fond, les polices et la couleur de barre. */
+let themeDuDocument: IdThemeHub | undefined;
+
+interface DocumentTheme {
+  documentElement: { style: { setProperty(n: string, v: string): void; removeProperty(n: string): void } };
+  body?: { style: { backgroundColor: string; colorScheme: string } };
+  querySelectorAll?(selecteur: string): ArrayLike<{ setAttribute(n: string, v: string): void }>;
+}
+
+/**
+ * Pose le thème sur le document (site et bureau) : fond, schéma de couleurs, polices (variables CSS
+ * lues par index.html) et couleur de la barre du navigateur (`theme-color` : barre d'état de l'app
+ * ajoutée à l'écran d'accueil, barre d'outils de Safari). Sans document (app native), ne fait rien.
+ */
+function appliquerAuDocument(theme: ThemeHub): void {
+  themeDuDocument = theme.id;
+  const doc = (globalThis as { document?: DocumentTheme }).document;
+  if (!doc) {
+    return;
+  }
+  if (doc.body) {
+    doc.body.style.backgroundColor = theme.fond;
+    doc.body.style.colorScheme = theme.sombre ? 'dark' : 'light';
+  }
+  for (const meta of Array.from(doc.querySelectorAll?.('meta[name="theme-color"]') ?? [])) {
+    meta.setAttribute('content', theme.fond);
+  }
+  // Barre de titre de Windows assortie au thème, quand le pont le permet.
+  (globalThis as { applibourse?: { systeme?: { theme?(sombre: boolean): unknown } } }).applibourse?.systeme?.theme?.(theme.sombre);
+  const style = doc.documentElement.style;
+  // La liste complète du thème : si sa première police n'est pas embarquée (« Sora »), le texte
+  // retombe sur la suivante (Manrope), pas sur la police du système.
+  const poser = (nom: string, police?: string) => (police ? style.setProperty(nom, police) : style.removeProperty(nom));
+  poser('--police-texte', theme.policeTexte);
+  poser('--police-titre', theme.policeTitre ?? theme.policeTexte);
+}
+
+/**
+ * Garantit que le document porte le thème affiché. Tant que l'utilisateur garde le thème par
+ * défaut, `definirTheme` n'est jamais appelé : sans ceci, ni les polices du thème ni la couleur de
+ * barre ne seraient posées (tout le site en police du système). Ne refait rien si c'est déjà fait.
+ */
+export function assurerThemeDocument(id: IdThemeHub = themeCourant()): void {
+  if (themeDuDocument !== id) {
+    appliquerAuDocument(themeHub(id));
   }
 }
 

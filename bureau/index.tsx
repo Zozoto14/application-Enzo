@@ -25,7 +25,7 @@ import initSqlJs from 'sql.js';
 import urlWasm from 'sql.js/dist/sql-wasm.wasm?url';
 import { App } from '../src/app/App';
 import { Bouton, Titre } from '../src/ui/composants';
-import { ESPACEMENT, palettePour } from '../src/ui/theme';
+import { ESPACEMENT, assurerThemeDocument, palettePour } from '../src/ui/theme';
 import { useFondDocument } from './Bureau';
 import { BandeauMiseAJour } from './MiseAJour';
 import { ouvrirSessionBureau, type SessionBureau } from './session';
@@ -374,6 +374,8 @@ function Racine() {
   const sombre = useColorScheme() === 'dark';
   const palette = palettePour(sombre);
   useFondDocument(sombre);
+  // Accueil du site, création du coffre, connexion : déjà aux polices et à la couleur du thème.
+  assurerThemeDocument();
 
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const fabriqueRef = useRef<unknown>(undefined);

@@ -14,6 +14,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { BoutonHub } from '../hub/Hub';
 import { police, type ThemeHub } from '../hub/themes';
+import { useMobile } from '../ui/mobile/useMobile';
 import type { ContexteHub } from '../hub/types';
 import {
   LIBELLES_TYPES, compter, exporterCsv, exporterJson, filtrer, fusionner, grouper, heure, libelleJour, nomExport, texteComplet, titreEntree,
@@ -33,15 +34,16 @@ interface Distant {
 }
 
 function Puce({ theme, titre, actif, onPress, testID }: { theme: ThemeHub; titre: string; actif: boolean; onPress(): void; testID?: string }) {
+  const sm = useMobile() ? stylesMobile : AUCUN;
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
       accessibilityState={{ selected: actif }}
       onPress={onPress}
-      style={[styles.puce, { borderColor: actif ? theme.accent : theme.ligne, backgroundColor: actif ? theme.accent : 'transparent' }]}
+      style={[styles.puce, sm.puce, { borderColor: actif ? theme.accent : theme.ligne, backgroundColor: actif ? theme.accent : 'transparent' }]}
     >
-      <Text style={{ color: actif ? theme.surAccent : theme.texte, fontSize: 13 }}>{titre}</Text>
+      <Text style={[{ color: actif ? theme.surAccent : theme.texte, fontSize: 13 }, sm.texte]}>{titre}</Text>
     </Pressable>
   );
 }
@@ -49,10 +51,11 @@ function Puce({ theme, titre, actif, onPress, testID }: { theme: ThemeHub; titre
 function RangeePuces({ theme, libelle, valeurs, choisie, onChoix, testID, libelles }: {
   theme: ThemeHub; libelle: string; valeurs: string[]; choisie?: string; onChoix(v?: string): void; testID: string; libelles?: Record<string, string>;
 }) {
+  const sm = useMobile() ? stylesMobile : AUCUN;
   if (valeurs.length === 0) return null;
   return (
     <View style={styles.rangee}>
-      <Text style={[styles.libelle, { color: theme.attenue }]}>{libelle}</Text>
+      <Text style={[styles.libelle, sm.texte, { color: theme.attenue }]}>{libelle}</Text>
       <Puce theme={theme} titre="Tous" actif={!choisie} onPress={() => onChoix(undefined)} testID={`${testID}-tous`} />
       {valeurs.slice(0, 15).map(v => (
         <Puce key={v} theme={theme} titre={libelles?.[v] ?? v} actif={choisie === v} onPress={() => onChoix(choisie === v ? undefined : v)} testID={`${testID}-${v}`} />
@@ -64,11 +67,12 @@ function RangeePuces({ theme, libelle, valeurs, choisie, onChoix, testID, libell
 function Interrupteur({ theme, libelle, aide, valeur, onChange, testID, desactive }: {
   theme: ThemeHub; libelle: string; aide?: string; valeur: boolean; onChange(v: boolean): void; testID: string; desactive?: boolean;
 }) {
+  const sm = useMobile() ? stylesMobile : AUCUN;
   return (
     <View style={styles.interrupteur}>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: theme.texte, fontSize: 14 }}>{libelle}</Text>
-        {aide ? <Text style={{ color: theme.attenue, fontSize: 12, marginTop: 2 }}>{aide}</Text> : null}
+        <Text style={[{ color: theme.texte, fontSize: 14 }, sm.texte]}>{libelle}</Text>
+        {aide ? <Text style={[{ color: theme.attenue, fontSize: 12, marginTop: 2 }, sm.texte]}>{aide}</Text> : null}
       </View>
       <Switch testID={testID} value={valeur} onValueChange={onChange} disabled={desactive} />
     </View>
@@ -77,6 +81,7 @@ function Interrupteur({ theme, libelle, aide, valeur, onChange, testID, desactiv
 
 export function Historique({ theme, contexte, office }: { theme: ThemeHub; contexte: ContexteHub; office?: PontClaudeOffice }) {
   const pont: PontHistorique | undefined = office?.historique;
+  const mobile = useMobile();
   const [etatHook, setEtatHook] = useState<EtatClaudeOffice['historique']>();
   const service = contexte.historiqueOffice;
   const base = contexte.baseProfil;
@@ -237,27 +242,29 @@ export function Historique({ theme, contexte, office }: { theme: ThemeHub; conte
 
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const attenue = { color: theme.attenue };
+  // Téléphone : textes ≥ 15 px, champs ≥ 16 px (sinon Safari zoome au focus), cibles ≥ 44 px.
+  const sm = mobile ? stylesMobile : AUCUN;
   const periodeOk = !!filtres.du && !!filtres.au;
 
   return (
     <View style={styles.colonne} testID="historique">
       <View style={[styles.avertissement, { borderColor: theme.alerte, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen }]} testID="historique-avertissement">
-        <Text style={[styles.texte, texte]}>
+        <Text style={[styles.texte, sm.texte, texte]}>
           Cet historique contient ce que vous écrivez à Claude (demandes, noms de fichiers, débuts de commandes) : traitez-le comme un document personnel. Les secrets reconnus (clés d’API, jetons, mots de passe) sont masqués avant l’écriture, mais pas forcément tous.
         </Text>
-        <Text style={[styles.petit, attenue]}>
+        <Text style={[styles.petit, sm.texte, attenue]}>
           Seul un appareil où Claude Code a le hook d’historique enregistre — même si AppDashboard et Claude Office sont fermés. Un PC éteint, ou un appareil sans le hook, n’enregistre rien.
         </Text>
       </View>
 
       {pont ? null : (
-        <Text style={[styles.texte, attenue]} testID="historique-hors-pc">
+        <Text style={[styles.texte, sm.texte, attenue]} testID="historique-hors-pc">
           {service
             ? 'Ici, on lit la copie chiffrée que les PC équipés déposent sur le relais (si leur synchro est activée).'
             : 'Le journal est sur le PC : ouvrez Claude Office sur le PC. Pour le lire ici, activez sa synchro sur le PC (compte principal relié au relais).'}
         </Text>
       )}
-      {local && !local.ok ? <Text style={[styles.texte, { color: theme.critique }]}>Journal illisible : {local.erreur}</Text> : null}
+      {local && !local.ok ? <Text style={[styles.texte, sm.texte, { color: theme.critique }]}>Journal illisible : {local.erreur}</Text> : null}
 
       <View style={styles.compteurs} testID="historique-compteurs">
         {[
@@ -270,11 +277,11 @@ export function Historique({ theme, contexte, office }: { theme: ThemeHub; conte
         ].map(([l, v]) => (
           <View key={l} style={[styles.compteur, { borderColor: theme.ligne, borderRadius: theme.rayonMoyen }]}>
             <Text style={[styles.nombre, { color: theme.texte }, police(theme.policeChiffres)]} testID={`historique-compte-${String(l).toLowerCase()}`}>{v}</Text>
-            <Text style={[styles.petit, attenue]}>{l}</Text>
+            <Text style={[styles.petit, sm.texte, attenue]}>{l}</Text>
           </View>
         ))}
       </View>
-      {local?.ignorees ? <Text style={[styles.petit, attenue]}>{local.ignorees} ligne(s) illisible(s) ignorée(s) (coupure pendant une écriture).</Text> : null}
+      {local?.ignorees ? <Text style={[styles.petit, sm.texte, attenue]}>{local.ignorees} ligne(s) illisible(s) ignorée(s) (coupure pendant une écriture).</Text> : null}
 
       <TextInput
         testID="historique-recherche"
@@ -282,16 +289,19 @@ export function Historique({ theme, contexte, office }: { theme: ThemeHub; conte
         placeholderTextColor={theme.attenue}
         value={filtres.recherche ?? ''}
         onChangeText={t => changerFiltre('recherche', t)}
-        style={[styles.champ, { color: theme.texte, borderColor: theme.ligne, backgroundColor: theme.fond }]}
+        accessibilityLabel="Rechercher dans l’historique"
+        inputMode="search"
+        enterKeyHint="search"
+        style={[styles.champ, sm.champ, { color: theme.texte, borderColor: theme.ligne, backgroundColor: theme.fond }]}
       />
       <RangeePuces theme={theme} libelle="Type" valeurs={Object.keys(LIBELLES_TYPES)} libelles={LIBELLES_TYPES} choisie={filtres.type} onChoix={v => changerFiltre('type', v)} testID="filtre-type" />
       <RangeePuces theme={theme} libelle="Projet" valeurs={options.projets} choisie={filtres.projet} onChoix={v => changerFiltre('projet', v)} testID="filtre-projet" />
       <RangeePuces theme={theme} libelle="Appareil" valeurs={options.appareils} choisie={filtres.appareil} onChoix={v => changerFiltre('appareil', v)} testID="filtre-appareil" />
       <RangeePuces theme={theme} libelle="Outil" valeurs={options.outils} choisie={filtres.outil} onChoix={v => changerFiltre('outil', v)} testID="filtre-outil" />
       <View style={styles.rangee}>
-        <Text style={[styles.libelle, attenue]}>Période</Text>
-        <TextInput testID="filtre-du" placeholder="du AAAA-MM-JJ" placeholderTextColor={theme.attenue} value={filtres.du ?? ''} onChangeText={t => changerFiltre('du', t)} style={[styles.date, { color: theme.texte, borderColor: theme.ligne }]} />
-        <TextInput testID="filtre-au" placeholder="au AAAA-MM-JJ" placeholderTextColor={theme.attenue} value={filtres.au ?? ''} onChangeText={t => changerFiltre('au', t)} style={[styles.date, { color: theme.texte, borderColor: theme.ligne }]} />
+        <Text style={[styles.libelle, sm.texte, attenue]}>Période</Text>
+        <TextInput testID="filtre-du" placeholder="du AAAA-MM-JJ" placeholderTextColor={theme.attenue} value={filtres.du ?? ''} onChangeText={t => changerFiltre('du', t)} accessibilityLabel="Période : du (AAAA-MM-JJ)" enterKeyHint="next" style={[styles.date, sm.champ, { color: theme.texte, borderColor: theme.ligne }]} />
+        <TextInput testID="filtre-au" placeholder="au AAAA-MM-JJ" placeholderTextColor={theme.attenue} value={filtres.au ?? ''} onChangeText={t => changerFiltre('au', t)} accessibilityLabel="Période : au (AAAA-MM-JJ)" enterKeyHint="done" style={[styles.date, sm.champ, { color: theme.texte, borderColor: theme.ligne }]} />
       </View>
 
       <View style={styles.boutons}>
@@ -307,7 +317,7 @@ export function Historique({ theme, contexte, office }: { theme: ThemeHub; conte
           <BoutonHub theme={theme} titre="Actualiser" desactive={occupe} onPress={() => void agir(async () => (await lireDistant(), undefined))} testID="historique-actualiser-relais" />
         ) : null}
       </View>
-      {message ? <Text testID="historique-message" style={[styles.texte, texte]}>{message}</Text> : null}
+      {message ? <Text testID="historique-message" style={[styles.texte, sm.texte, texte]}>{message}</Text> : null}
 
       {choisie ? (
         <View testID="historique-detail" style={[styles.carte, { backgroundColor: theme.surface, borderColor: theme.accent, borderRadius: theme.rayonMoyen }]}>
@@ -324,7 +334,7 @@ export function Historique({ theme, contexte, office }: { theme: ThemeHub; conte
       ) : null}
 
       {filtrees.length === 0 ? (
-        <Text style={[styles.texte, attenue]} testID="historique-vide">
+        <Text style={[styles.texte, sm.texte, attenue]} testID="historique-vide">
           {toutes.length === 0 ? (pont ? 'Aucune requête enregistrée pour l’instant. Installez le hook d’historique ci-dessous, puis redémarrez Claude Code.' : 'Aucune entrée à afficher.') : 'Aucune entrée ne correspond à ces filtres.'}
         </Text>
       ) : null}
@@ -333,14 +343,14 @@ export function Historique({ theme, contexte, office }: { theme: ThemeHub; conte
           <Text style={[styles.jour, { color: theme.texte }, police(theme.policeTitre)]}>{libelleJour(g.jour)}</Text>
           {g.sessions.map(s => (
             <View key={`${s.appareil}|${s.session}`} style={[styles.carte, { backgroundColor: theme.surface, borderColor: theme.ligne, borderRadius: theme.rayonMoyen }]}>
-              <Text style={[styles.petit, attenue]}>
+              <Text style={[styles.petit, sm.texte, attenue]}>
                 {s.projet ?? 'Projet inconnu'} · {s.appareil ?? 'appareil ?'} · session {s.session.slice(0, 8)}
               </Text>
               {s.entrees.map(e => (
-                <Pressable key={e.id} onPress={() => setSelection(e.id)} testID={`historique-entree-${e.id}`} style={styles.entree}>
-                  <Text style={[styles.heure, attenue]}>{heure(e.ts)}</Text>
-                  <Text style={[styles.type, { color: e.type === 'demande' ? theme.accent : e.echec ? theme.critique : theme.attenue }]}>{e.type === 'demande' ? '›' : e.type === 'outil' ? '⚙' : '·'}</Text>
-                  <Text numberOfLines={2} style={[styles.texteEntree, { color: e.type === 'demande' ? theme.texte : theme.attenue }]}>{titreEntree(e)}</Text>
+                <Pressable key={e.id} onPress={() => setSelection(e.id)} testID={`historique-entree-${e.id}`} style={[styles.entree, sm.entree]}>
+                  <Text style={[styles.heure, sm.texte, attenue]}>{heure(e.ts)}</Text>
+                  <Text style={[styles.type, sm.texte, { color: e.type === 'demande' ? theme.accent : e.echec ? theme.critique : theme.attenue }]}>{e.type === 'demande' ? '›' : e.type === 'outil' ? '⚙' : '·'}</Text>
+                  <Text numberOfLines={2} style={[styles.texteEntree, sm.texte, { color: e.type === 'demande' ? theme.texte : theme.attenue }]}>{titreEntree(e)}</Text>
                 </Pressable>
               ))}
             </View>
@@ -354,11 +364,11 @@ export function Historique({ theme, contexte, office }: { theme: ThemeHub; conte
       {pont ? (
         <View style={[styles.carte, { backgroundColor: theme.surface, borderColor: theme.ligne, borderRadius: theme.rayonMoyen }]} testID="historique-reglages">
           <Text style={[styles.titreCarte, texte]}>Enregistrement sur ce PC</Text>
-          {local?.dossier ? <Text selectable style={[styles.petit, attenue]}>Journal : {local.dossier}</Text> : null}
+          {local?.dossier ? <Text selectable style={[styles.petit, sm.texte, attenue]}>Journal : {local.dossier}</Text> : null}
           <Interrupteur theme={theme} libelle="Enregistrer les requêtes" valeur={reglages?.actif ?? true} desactive={occupe || !reglages} onChange={v => changerReglage({ actif: v })} testID="reglage-actif" />
           <Interrupteur theme={theme} libelle="Enregistrer aussi le contenu des outils" aide="Désactivé par défaut : seuls la demande et un résumé court (outil, fichier, début de commande) sont gardés, jamais les sorties brutes." valeur={reglages?.enregistrerSorties ?? false} desactive={occupe || !reglages} onChange={v => changerReglage({ enregistrerSorties: v })} testID="reglage-sorties" />
           <Interrupteur theme={theme} libelle="Masquer les secrets reconnus" aide="Clés d’API, jetons, mots de passe repérés par motifs, remplacés avant l’écriture." valeur={reglages?.masquerSecrets ?? true} desactive={occupe || !reglages} onChange={v => changerReglage({ masquerSecrets: v })} testID="reglage-secrets" />
-          <Text style={[styles.texte, texte]} testID="historique-hook-etat">Hook d’historique : {etatHook ? LIBELLE_HOOK_HISTORIQUE[etatHook] : '…'}</Text>
+          <Text style={[styles.texte, sm.texte, texte]} testID="historique-hook-etat">Hook d’historique : {etatHook ? LIBELLE_HOOK_HISTORIQUE[etatHook] : '…'}</Text>
           <View style={styles.boutons}>
             <BoutonHub theme={theme} titre="Voir ce qui sera modifié" desactive={occupe} onPress={() => agir(async () => {
               const r = await pont.apercuHooks(false);
@@ -391,23 +401,32 @@ export function Historique({ theme, contexte, office }: { theme: ThemeHub; conte
       {service ? (
         <View style={[styles.carte, { backgroundColor: theme.surface, borderColor: theme.ligne, borderRadius: theme.rayonMoyen }]} testID="historique-synchro">
           <Text style={[styles.titreCarte, texte]}>Copie chiffrée sur le relais</Text>
-          <Text style={[styles.petit, attenue]}>
+          <Text style={[styles.petit, sm.texte, attenue]}>
             Pour consulter l’historique depuis le site, le téléphone ou un autre PC, même ce PC éteint. Chiffrée avec la clé de synchronisation (le relais ne voit que du bruit), réservée au compte principal ; déposée au plus toutes les 15 minutes, en une seule copie par appareil.
           </Text>
           {pont ? (
             <Interrupteur theme={theme} libelle="Déposer la copie de ce PC" valeur={synchro.active} onChange={basculerSynchro} testID="historique-synchro-active" />
           ) : null}
-          <Text style={[styles.petit, attenue]} testID="historique-synchro-derniere">
+          <Text style={[styles.petit, sm.texte, attenue]} testID="historique-synchro-derniere">
             {pont ? `Dernier dépôt : ${synchro.derniere ? new Date(synchro.derniere).toLocaleString('fr-FR') : 'jamais'}${synchro.erreur ? ` · erreur : ${synchro.erreur}` : ''}` : ''}
             {distant ? `${pont ? '\n' : ''}Copies lues sur le relais : ${distant.copies.length ? distant.copies.map(c => `${c.appareil ?? c.objet} (${c.entrees}, ${new Date(c.date).toLocaleString('fr-FR')})`).join(' ; ') : 'aucune'}` : ''}
           </Text>
-          {distant?.erreurs.length ? <Text style={[styles.petit, { color: theme.critique }]}>{distant.erreurs.join('\n')}</Text> : null}
+          {distant?.erreurs.length ? <Text style={[styles.petit, sm.texte, { color: theme.critique }]}>{distant.erreurs.join('\n')}</Text> : null}
           {pont ? <BoutonHub theme={theme} titre="Synchroniser maintenant" desactive={occupe || !synchro.active} onPress={synchroniserMaintenant} testID="historique-synchroniser" /> : null}
         </View>
       ) : null}
     </View>
   );
 }
+
+const AUCUN: Partial<Record<keyof typeof stylesMobileBrut, undefined>> = {};
+const stylesMobileBrut = {
+  texte: { fontSize: 15, lineHeight: 21 },
+  champ: { fontSize: 17, minHeight: 48 },
+  puce: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 14 },
+  entree: { minHeight: 44, paddingVertical: 8 },
+} as const;
+const stylesMobile = StyleSheet.create(stylesMobileBrut);
 
 const styles = StyleSheet.create({
   colonne: { gap: 10 },

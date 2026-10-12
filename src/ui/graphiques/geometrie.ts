@@ -63,10 +63,13 @@ export function graduations(
   let bas = Math.min(min, max);
   let haut = Math.max(min, max);
   if (bas === haut) {
-    // Série plate : on ouvre une fenêtre autour de la valeur.
-    const marge = bas === 0 ? 1 : Math.abs(bas) * 0.1;
-    bas -= marge;
-    haut += marge;
+    // Série plate (tout à zéro, par exemple) : une fenêtre autour de la valeur et un seul trait,
+    // sur la valeur. Des traits à ±0,5 s'afficheraient « 1 €, 1 €, 0 €, −1 €, −1 € » une fois
+    // arrondis à l'euro.
+    // `+ 0` : un −0 (barres négatives absentes) s'afficherait « −0 € ».
+    const valeur = bas + 0;
+    const marge = valeur === 0 ? 1 : Math.abs(valeur) * 0.1;
+    return { valeurs: [valeur], domaine: [valeur - marge, valeur + marge] };
   }
 
   const pas = pasLisible((haut - bas) / Math.max(1, cible));

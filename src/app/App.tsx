@@ -226,7 +226,7 @@ import {
   type SecretsInitiaux,
 } from '../ui/ecrans/PremierLancement';
 import { cleLocale } from '../profils/espace';
-import { ESPACEMENT, definirTheme, palettePour, stylesPartages, themeCourant } from '../ui/theme';
+import { ESPACEMENT, assurerThemeDocument, definirTheme, palettePour, stylesPartages, themeCourant } from '../ui/theme';
 import { Bouton, Carte } from '../ui/composants';
 import { formaterMontant } from '../ui/format';
 
@@ -1489,6 +1489,10 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const themeAffiche: IdThemeHub = deverrouille ? themeHubId : themeCourant();
   if (themeAffiche !== themeCourant()) {
     definirTheme(themeAffiche);
+  } else {
+    // Thème par défaut jamais choisi, ou relu du cache d'un autre compte : le document (web) doit
+    // quand même le porter (polices, couleur de barre).
+    assurerThemeDocument(themeAffiche);
   }
 
   // Mode discret : lu avant de construire les vues, qui formatent les montants.

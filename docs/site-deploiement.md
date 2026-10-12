@@ -52,3 +52,15 @@ renouvelle que par `npm run relais:site` sur le PC.
 Ce workflow ne publie que le site. Le relais Cloudflare (Worker) se met à jour à part, à la main :
 GitHub › Actions › « Relais (Cloudflare Worker) » › Run workflow, ou `npm run relais:deployer` sur
 le PC. Mode d'emploi : `docs/relais-deploiement-github.md`.
+
+## Rendu et cache
+
+- `bureau/public/_headers` (copié dans le site à la construction) : les fichiers
+  de `assets/`, dont le nom porte une empreinte, sont gardés un an par le
+  navigateur ; `index.html`, le manifeste et `/maj` sont revalidés à chaque
+  visite, donc une nouvelle version est vue au chargement suivant.
+- Couleur de la barre du navigateur (`theme-color`) et polices : celles du thème
+  affiché, posées dès l'écran d'accueil, même sans thème jamais choisi.
+- Contrôle : `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-rendu-site.mjs`
+  (après `npx vite build`), sur PC, iPad et iPhone. Captures avant/après :
+  `docs/captures-rendu-site/`.
