@@ -16,7 +16,7 @@ import { Avis, Bouton } from './ui';
 
 const SANDBOX = 'allow-scripts allow-same-origin allow-presentation allow-forms';
 
-function VideoWeb({ lecteur, titre, onFin }: { lecteur: Lecteur; titre: string; onFin?(): void }) {
+function VideoWeb({ lecteur, titre, onFin, debut, onPosition }: { lecteur: Lecteur; titre: string; onFin?(): void; debut?: number; onPosition?(s: number): void }) {
   const ref = useRef<HTMLVideoElement | null>(null);
   const [erreur, setErreur] = useState<string | undefined>();
   useEffect(() => {
@@ -62,6 +62,11 @@ function VideoWeb({ lecteur, titre, onFin }: { lecteur: Lecteur; titre: string; 
         'aria-label': `Lecteur vidéo : ${titre}`,
         'data-testid': 'lecteur-video',
         onEnded: onFin,
+        // Changement de langue : reprise à la même position (si la vidéo le permet).
+        onLoadedMetadata: (e: { currentTarget: HTMLVideoElement }) => {
+          if (debut && debut > 0 && Number.isFinite(e.currentTarget.duration) && debut < e.currentTarget.duration) e.currentTarget.currentTime = debut;
+        },
+        onTimeUpdate: (e: { currentTarget: HTMLVideoElement }) => onPosition?.(e.currentTarget.currentTime),
         onError: () => setErreur('La vidéo ne peut pas être lue depuis cette adresse.'),
         style: { width: '100%', aspectRatio: '16 / 9', background: '#000', borderRadius: 4 },
       })}
@@ -70,7 +75,7 @@ function VideoWeb({ lecteur, titre, onFin }: { lecteur: Lecteur; titre: string; 
   );
 }
 
-export function LecteurMedia({ lecteur, titre, onFin }: PropsMedia) {
+export function LecteurMedia({ lecteur, titre, onFin, debut, onPosition }: PropsMedia) {
   const { s } = useTsuzuku();
   const [pret, setPret] = useState(lecteur.kind !== 'iframe');
   useEffect(() => {
@@ -106,5 +111,5 @@ export function LecteurMedia({ lecteur, titre, onFin }: PropsMedia) {
       </View>
     );
   }
-  return <VideoWeb lecteur={lecteur} titre={titre} onFin={onFin} />;
+  return <VideoWeb lecteur={lecteur} titre={titre} onFin={onFin} debut={debut} onPosition={onPosition} />;
 }

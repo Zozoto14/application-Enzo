@@ -41,6 +41,32 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.21',
+    date: '2026-10-21',
+    titre: 'Tsuzuku : VF ou VOSTFR, au choix',
+    resume:
+      'Quand vous ouvrez un épisode, un bouton « VF | VOSTFR » permet de changer de langue : l’épisode se recharge au même numéro dans l’autre version. Tsuzuku retient votre choix pour chaque série.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'tsuzuku-vf-vostfr',
+        emoji: '🗣️',
+        titre: 'Un bouton VF | VOSTFR',
+        texte:
+          'Dans le lecteur et au-dessus de la liste d’épisodes : choisissez VF ou VOSTFR. Si une langue n’existe pas sur vos sources, le bouton est grisé et dit pourquoi ; si la source ne précise pas la langue, Tsuzuku affiche « Langue inconnue » plutôt que de deviner.',
+        essayer: { genre: 'app', app: 'tsuzuku' },
+      },
+      {
+        id: 'tsuzuku-langue-par-serie',
+        emoji: '📌',
+        titre: 'Votre langue, série par série',
+        texte:
+          'Le choix est retenu pour chaque série (sur cet appareil). Langue par défaut dans Paramètres › Tsuzuku : VF, VOSTFR, ou « au choix à chaque fois ». Un épisode vu en VF compte comme vu : la progression est commune aux deux langues.',
+        essayer: { genre: 'parametres' },
+      },
+    ],
+  },
+  {
     version: '2026.10.20',
     date: '2026-10-20',
     titre: 'Claude Office devient un vrai open space',

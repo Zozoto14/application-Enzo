@@ -4,10 +4,11 @@
  * l'ancien scrapers/provider.js.
  */
 
+import { langueDAdresse, langueDeTexte } from './langues';
 import { normaliserTexte } from './outils';
 
 /** Marqueurs de langue, ecartes de la comparaison (traites par la preference VF/VOSTFR). */
-const BRUIT = new Set(['vf', 'vostfr', 'vo', 'vosta', 'fr']);
+const BRUIT = new Set(['vf', 'vff', 'vfq', 'vostfr', 'vost', 'vostf', 'vo', 'vosta', 'fr', 'dub', 'dubbed', 'subbed']);
 
 const MARQUEURS_SAISON = /\b(?:saison|season|cour|partie|part)\s*\d+\b|\b\d+(?:st|nd|rd|th|e|eme|ème)\s+(?:season|saison)\b|\bs\d{1,2}\b(?!\s*e\d)/gi;
 
@@ -50,15 +51,9 @@ export const SCORE_MINIMAL = 600;
 export type LangueDetectee = 'vf' | 'vostfr' | null;
 export type PreferenceLangue = 'vf' | 'vostfr' | 'indifferent';
 
+/** Langue d'un texte (titre, adresse) : voir `langues.ts` (« (VF) », « VOSTFR », « Dub », « Sub »…). */
 export function detecterLangue(texte: unknown): LangueDetectee {
-  const norm = ` ${String(texte ?? '').toLowerCase().replace(/[^a-z]+/g, ' ')} `;
-  if (/ vf /.test(norm)) {
-    return 'vf';
-  }
-  if (/ (vostfr|vosta|vo) /.test(norm)) {
-    return 'vostfr';
-  }
-  return null;
+  return langueDeTexte(texte)?.langue ?? null;
 }
 
 /** Mots sans valeur pour reconnaître une oeuvre (format, genre de fiche). */
@@ -87,6 +82,19 @@ const motsEtFormat = (valeur: unknown): { mots: string[]; format: boolean } => {
   return { mots: liste.length > 1 && ARTICLES.has(liste[0]) ? liste.slice(1) : liste, format };
 };
 const mots = (valeur: unknown): string[] => motsEtFormat(valeur).mots;
+
+/**
+ * Clé d'une SÉRIE, sans marqueur de langue ni d'épisode : « Titre » et
+ * « Titre (VF) » ont la même ; « Titre Saison 2 » non (autre saison).
+ */
+export function cleSerie(titre: unknown): string {
+  const nu = sansEpisode(titre);
+  const { mots: m, format } = motsEtFormat(nu);
+  return `${m.join(' ')}${format ? ' #format' : ''}`;
+}
+
+/** Le titre désigne un ÉPISODE (« Titre Épisode 12 VOSTFR »), pas la page de la série. */
+export const estTitreDEpisode = (titre: unknown): boolean => normaliserTexte(sansEpisode(titre)) !== normaliserTexte(titre);
 
 /**
  * Pénalité de format : le résultat est un film/OAV et l'oeuvre cherchée non
@@ -284,7 +292,7 @@ export function classerResultats<T extends ResultatBrut>(
   const cibles = ((Array.isArray(titres) ? titres : [titres]) as (string | null | undefined)[]).filter(Boolean) as string[];
   return resultats
     .map(r => {
-      const language = detecterLangue(r.title) || detecterLangue(r.url);
+      const language = (langueDeTexte(r.title) ?? langueDAdresse(r.url))?.langue ?? null;
       const baseScore = scoreTitre(r.title, cibles);
       let score = baseScore;
       // La preference ne sert qu'a departager deux titres equivalents : elle

@@ -20,6 +20,7 @@
 
 import type { Element } from 'domhandler';
 import { analyserAdresse, hoteDeSite } from './adresse';
+import { langueDEpisode, type LangueVersion } from './langues';
 import { texteCompact, type Noeud, type Page } from './lecteurPage';
 import { absolue } from './sources';
 
@@ -401,6 +402,9 @@ export interface EpisodeGenerique {
   title: string | null;
   url: string;
   saison: number | null;
+  /** Langue lue (texte, adresse, onglet ou attribut du bloc), avec son indice. */
+  langue?: LangueVersion | null;
+  indiceLangue?: string;
 }
 
 /** Texte comparé : sans accents (« Épisode », y compris décomposé en NFD), en minuscules. */
@@ -507,7 +511,7 @@ export function numeroEtSaison(texte: string, href: string, o: OptionsNumero = {
 export function episodesGeneriques(page: Page, base: string, site: string, serie: string): EpisodeGenerique[] {
   const sortie: EpisodeGenerique[] = [];
   const vus = new Set<string>();
-  const pousser = (href: string | null, texte: string) => {
+  const pousser = (href: string | null, texte: string, el: Noeud) => {
     const url = absolue(href, base);
     if (!url || vus.has(url) || url.split('#')[0] === serie.split('#')[0] || !(meme(url, site) || meme(url, base))) {
       return;
@@ -517,7 +521,8 @@ export function episodesGeneriques(page: Page, base: string, site: string, serie
       return;
     }
     vus.add(url);
-    sortie.push({ number: n.number, saison: n.saison, title: texte && !/^\d+$/.test(texte) ? texte.slice(0, 120) : null, url });
+    const l = langueDEpisode(texte, url, page, el);
+    sortie.push({ number: n.number, saison: n.saison, title: texte && !/^\d+$/.test(texte) ? texte.slice(0, 120) : null, url, langue: l?.langue ?? null, indiceLangue: l?.indice });
   };
   for (const a of page.tous('a[href]')) {
     if (sortie.length >= 2000) {
@@ -527,15 +532,15 @@ export function episodesGeneriques(page: Page, base: string, site: string, serie
     if (dansZoneIgnoree(a, false)) {
       continue;
     }
-    pousser(page.attr(a, 'href'), texteCompact(page, a) || page.attr(a, 'title') || '');
+    pousser(page.attr(a, 'href'), texteCompact(page, a) || page.attr(a, 'title') || '', a);
   }
   for (const o of page.tous('option[value]')) {
-    pousser(page.attr(o, 'value'), texteCompact(page, o));
+    pousser(page.attr(o, 'value'), texteCompact(page, o), o);
   }
   for (const el of page.tous('[data-episode], [data-ep], [data-episode-url], [data-href], [data-url]')) {
     const href = page.attr(el, 'data-episode-url') || page.attr(el, 'data-href') || page.attr(el, 'data-url');
     const num = page.attr(el, 'data-episode') || page.attr(el, 'data-ep');
-    pousser(href, num ? `Épisode ${num}` : texteCompact(page, el));
+    pousser(href, num ? `Épisode ${num}` : texteCompact(page, el), el);
   }
   return sortie;
 }

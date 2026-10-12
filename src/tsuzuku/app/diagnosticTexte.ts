@@ -14,7 +14,10 @@
  */
 
 import { SCORE_MINIMAL } from '../moteur/appariement';
-import type { DetailEpisodes, DiagnosticSource, RequeteDiagnostic, StatutSource } from '../moteur/resolution';
+import { LANGUES_VERSION, LIBELLE_LANGUE_VERSION, type LangueVersion } from '../moteur/langues';
+import type { DetailEpisodes, DiagnosticSource, LanguesDiagnostic, RequeteDiagnostic, StatutSource } from '../moteur/resolution';
+
+const LL = (l: LangueVersion | null | undefined) => (l ? LIBELLE_LANGUE_VERSION[l] : 'langue ?');
 
 export const LIBELLE_STATUT_SOURCE: Record<StatutSource, string> = {
   ok: 'trouvé',
@@ -116,11 +119,30 @@ function lignesEpisodes(d: DetailEpisodes): string[] {
   if (d.numeros?.length) {
     l.push(`  · épisodes trouvés : ${plagesNumeros(d.numeros)} (${d.numeros.length})${d.numerotation && NUMEROTATION[d.numerotation] ? ` — ${NUMEROTATION[d.numerotation]}` : ''}`);
   }
+  if (d.langues) {
+    const g = d.langues;
+    l.push(
+      `  · langue des blocs : ${g.vf} VF, ${g.vostfr} VOSTFR, ${g.inconnue} sans marqueur${g.separees ? ' — la page propose les deux langues (listes séparées)' : g.page ? ` — page en ${LL(g.page.langue)}` : ''}${g.presumee ? ` ; blocs sans marqueur présumés ${LL(g.presumee)}` : ''}`,
+    );
+  }
   for (const x of (d.lus ?? []).slice(0, LUS_AFFICHES)) {
     const adresse = masquerAdresse(x.url);
-    l.push(`    – n° ${x.numero ?? '?'} ← « ${masquerTexte(x.texte.slice(0, 60)) || '(sans texte)'} » — ${adresse.length > 100 ? `${adresse.slice(0, 99)}…` : adresse}`);
+    l.push(`    – n° ${x.numero ?? '?'}${x.langue ? ` [${LL(x.langue)}]` : ''} ← « ${masquerTexte(x.texte.slice(0, 60)) || '(sans texte)'} » — ${adresse.length > 100 ? `${adresse.slice(0, 99)}…` : adresse}`);
   }
   if ((d.lus?.length ?? 0) > LUS_AFFICHES) l.push(`    – … (${(d.lus?.length ?? 0) - LUS_AFFICHES} autre(s))`);
+  return l;
+}
+
+/** Langues d'une série sur une source : celle lue, les autres versions, et pourquoi une langue manque. */
+export function lignesLangues(g: LanguesDiagnostic): string[] {
+  const l = [`  · langue : ${g.courante ? `${LL(g.courante)} pour les épisodes lus` : 'inconnue (la source ne la distingue pas)'}`];
+  for (const v of g.variantes) {
+    const etat = v.aChercher ? 'recherche dédiée, à la demande' : v.echec ? `échec : ${masquerTexte(v.echec)}` : v.episodes !== undefined ? `${v.episodes} épisode(s)` : 'page lue à la demande';
+    l.push(`    – ${LL(v.langue)}${v.presumee ? ' (présumée)' : ''} : ${v.title ? `« ${v.title} » ` : ''}${v.url ? `${masquerAdresse(v.url)} ` : ''}— ${masquerTexte(v.indice)} — ${etat}`);
+  }
+  for (const x of LANGUES_VERSION) {
+    if (g.absentes[x]) l.push(`    – ${LL(x)} indisponible : ${masquerTexte(g.absentes[x])}`);
+  }
   return l;
 }
 
@@ -128,10 +150,11 @@ function lignesEpisodes(d: DetailEpisodes): string[] {
 export function lignesSource(x: DiagnosticSource): string[] {
   const l = [`Source « ${x.source} » : ${LIBELLE_STATUT_SOURCE[x.statut]}${x.statut === 'ok' || x.statut === 'aucun-episode' ? ` (${x.episodes} épisode(s))` : ''}`];
   for (const r of x.requetes) l.push(ligneRequete(r));
-  if (x.meilleurs?.length) l.push(`  · meilleurs candidats : ${x.meilleurs.map(m => `« ${m.title} » (${m.score})`).join(', ')} — minimum ${SCORE_MINIMAL}`);
+  if (x.meilleurs?.length) l.push(`  · meilleurs candidats : ${x.meilleurs.map(m => `« ${m.title} » (${m.score}${m.langue !== undefined ? `, ${m.langue ? LL(m.langue) : 'langue non marquée'}` : ''})`).join(', ')} — minimum ${SCORE_MINIMAL}`);
   if (x.serie) l.push(`  · retenu : « ${x.serie.title} » (ressemblance ${x.serie.score}) — ${masquerAdresse(x.serie.url)}`);
   if (x.refuse) l.push(`  · écarté : « ${x.refuse.title} » (ressemblance ${x.refuse.score}, minimum ${SCORE_MINIMAL})`);
   if (x.lectureEpisodes) l.push(...lignesEpisodes(x.lectureEpisodes));
+  if (x.langues) l.push(...lignesLangues(x.langues));
   if (x.raison && !x.requetes.some(r => r.erreur === x.raison)) l.push(`  · raison : ${masquerTexte(x.raison)}`);
   if (x.erreur && !x.requetes.some(r => r.erreur === x.erreur) && x.erreur !== x.raison) l.push(`  · ${masquerTexte(x.erreur)}`);
   return l;

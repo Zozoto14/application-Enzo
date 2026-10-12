@@ -15,7 +15,9 @@ import type { DefinitionSource } from '../moteur/sources';
 import { copier } from './AssistantSource';
 import { useCharger, useTsuzuku } from './contexte';
 import { lignesDiagnostic, texteDiagnostic } from './diagnosticTexte';
-import { enregistrerTitrePerso, episodesDisponibles, lireTitresPerso, type DiagnosticLecture } from './resoudre';
+import { enregistrerTitrePerso, episodesDisponibles, lireTitresPerso, type DiagnosticLecture, type Disponibilite } from './resoudre';
+import { LIBELLE_LANGUE_VERSION } from '../moteur/langues';
+import { langueVoulue } from './langues';
 import { Avis, Bouton, Champ, styleAttenue, styleTexte } from './ui';
 
 export { LIBELLE_STATUT_SOURCE, lignesDiagnostic, texteDiagnostic } from './diagnosticTexte';
@@ -184,6 +186,15 @@ function TesterSurCeTitre({ titres, id }: { titres: readonly string[]; id: strin
   );
 }
 
+/** « · VOSTFR (VF aussi) », « · langue inconnue » : ce que la source dit des langues. */
+function resumeLangues(d: Disponibilite): string {
+  const l = d.resultat?.langues;
+  if (!l) return '';
+  if (!l.courante) return ' · langue inconnue (la source ne la précise pas)';
+  const autre = l.courante === 'vf' ? 'vostfr' : 'vf';
+  return ` · ${LIBELLE_LANGUE_VERSION[l.courante]}${l.variantes[autre] ? ` (${LIBELLE_LANGUE_VERSION[autre]} aussi)` : ''}`;
+}
+
 /**
  * Fiche d'un animé : « Sur vos sources » — la recherche que fera le lecteur,
  * lancée dès l'ouverture de la fiche (résultat gardé 10 min pour le lecteur).
@@ -192,7 +203,7 @@ export function DisponibiliteSources({ id, titres, oeuvre }: { id: string; titre
   const { s, theme, version } = useTsuzuku();
   const [essai, setEssai] = useState(0);
   const etat = useCharger(async () => {
-    const d = await episodesDisponibles(s, { id, titres, forcer: essai > 0 });
+    const d = await episodesDisponibles(s, { id, titres, forcer: essai > 0, langue: (await langueVoulue(s, `anime:${id}`)).langue });
     return { d, perso: (await lireTitresPerso(s))[`anime:${id}`] };
   }, [s, id, titres.join('|'), essai, version]);
   const d = etat.donnees?.d;
@@ -218,7 +229,7 @@ export function DisponibiliteSources({ id, titres, oeuvre }: { id: string; titre
           <Avis
             genre="ok"
             testID="fiche-sources-ok"
-            texte={`« ${d.resultat?.serie?.title ?? titres[0]} » trouvé sur « ${d.resultat?.source?.name ?? 'la source'} » : ${d.episodes.length} épisode(s) (n° ${d.episodes[0].number} à ${d.episodes[d.episodes.length - 1].number}).`}
+            texte={`« ${d.resultat?.serie?.title ?? titres[0]} » trouvé sur « ${d.resultat?.source?.name ?? 'la source'} » : ${d.episodes.length} épisode(s) (n° ${d.episodes[0].number} à ${d.episodes[d.episodes.length - 1].number})${resumeLangues(d)}.`}
           />
           <Bouton titre={etat.enCours ? 'Recherche…' : 'Rechercher à nouveau'} desactive={etat.enCours} onPress={relancer} testID="fiche-sources-reessayer" />
         </View>

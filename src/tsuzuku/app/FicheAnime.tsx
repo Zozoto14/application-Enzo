@@ -8,11 +8,47 @@ import { useCharger, useTsuzuku } from './contexte';
 import { BandeauFiche, BlocBibliotheque, BlocVuAilleurs, LiensLegaux, type FicheMin } from './FicheCommune';
 import { CarteSansSource, LienGererSources } from './EtatSources';
 import { DisponibiliteSources } from './DiagnosticSources';
-import { titresPourSources } from './resoudre';
+import { episodesDisponibles, etatLangues, titresPourSources } from './resoudre';
+import { choisirLangue, langueVoulue } from './langues';
+import { SelecteurLangue } from './SelecteurLangue';
+import { LIBELLE_LANGUE_VERSION } from '../moteur/langues';
+import { sourcesActives } from '../moteur/sources';
 import { LienAnime, prochainEpisode } from './LienAnime';
 import { Bouton, Etat, LIBELLE_STATUT, TitreSection, styleAttenue, styleTexte } from './ui';
 
 const PAR_PAGE = 30;
+
+/**
+ * « VF | VOSTFR » au-dessus de la liste d'épisodes : la recherche de la fiche
+ * (même résultat, aucune requête de plus), la langue retenue pour la série ;
+ * les épisodes s'ouvrent dans cette langue. Rien sans source ni résultat.
+ */
+function LangueFiche({ id, titres }: { id: string; titres: readonly string[] }) {
+  const { s, theme, version, changee } = useTsuzuku();
+  const etat = useCharger(async () => {
+    if (!s.lectureSources) return null;
+    const voulue = await langueVoulue(s, `anime:${id}`);
+    const d = await episodesDisponibles(s, { id, titres, langue: voulue.langue });
+    const autres = d.resultat?.source ? sourcesActives(await s.sources()).filter(x => x.id !== d.resultat!.source!.id).length : 0;
+    return { d, voulue, langues: etatLangues(d, undefined, autres) };
+  }, [s, id, titres.join('|'), version]);
+  const e = etat.donnees;
+  if (!e?.langues) return null;
+  const valeur = e.voulue.langue && e.langues.options[e.voulue.langue].etat !== 'absente' ? e.voulue.langue : e.langues.courante;
+  return (
+    <View style={{ gap: 6 }} testID="fiche-langue">
+      <SelecteurLangue
+        testID="fiche-langue-choix"
+        etat={e.langues}
+        valeur={valeur}
+        enCours={etat.enCours}
+        onChoisir={l => void choisirLangue(s, `anime:${id}`, l).then(changee)}
+        note={e.langues.inconnue ? undefined : `Les épisodes s’ouvrent en ${valeur ? LIBELLE_LANGUE_VERSION[valeur] : 'VF ou VOSTFR'}${e.voulue.auChoix ? ' (au choix à chaque fois)' : e.voulue.origine === 'serie' ? ' (retenu pour cette série)' : ''}. Vu / reprendre : communs aux deux langues.`}
+      />
+      {etat.erreur ? <Text style={styleAttenue(theme, 15)}>{etat.erreur}</Text> : null}
+    </View>
+  );
+}
 
 export function FicheAnimeEcran({ id }: { id: string }) {
   const { s, theme, aller, retour, version } = useTsuzuku();
@@ -65,6 +101,7 @@ export function FicheAnimeEcran({ id }: { id: string }) {
             <LiensLegaux liens={f.streamingLinks} />
             <View style={{ gap: 8 }} testID="fiche-episodes">
               <TitreSection>Épisodes</TitreSection>
+              <LangueFiche id={id} titres={titresPourSources(f)} />
               <Etat enCours={eps.enCours && !eps.donnees} erreur={eps.erreur} onRecharger={eps.recharger} vide={!listeEps.length && !eps.enCours ? 'Aucune liste d’épisodes : utilisez « Lire l’épisode » ou un lien manuel.' : undefined}>
                 <View style={{ borderWidth: 1, borderColor: theme.ligne, borderRadius: Math.max(theme.rayonMoyen, 8), overflow: 'hidden', backgroundColor: theme.surface }}>
                   {listeEps.slice(0, visibles).map((ep, i) => {
