@@ -181,13 +181,14 @@ function sousAgentsSession(cleSession: string, liste: readonly EntreeHistorique[
       else if ((finSession && t(finSession) >= a.debut) || reference - dernier > EXPIRATION_SOUS_AGENT_MS) etat = 'expire';
       else etat = 'en-cours';
       const bout = a.fin ?? (etat === 'en-cours' ? reference : dernier);
-      const { parOutil, finLancement: _f, arrete: _a, lance: _l, echecLancement: _e, ...reste } = a;
+      const reste: Partial<Interne> = { ...a };
+      for (const k of ['parOutil', 'finLancement', 'arrete', 'lance', 'echecLancement'] as const) delete reste[k];
       return {
         ...reste,
         etat,
         dernier,
         dureeMs: Math.max(0, bout - a.debut),
-        outils: [...parOutil].map(([nom, n]) => ({ nom, n })).sort((x, y) => y.n - x.n || x.nom.localeCompare(y.nom)),
+        outils: [...a.parOutil].map(([nom, n]) => ({ nom, n })).sort((x, y) => y.n - x.n || x.nom.localeCompare(y.nom)),
         profondeur: profondeur(a),
       } as SousAgent;
     })
