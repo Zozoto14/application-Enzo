@@ -6,6 +6,7 @@ export * from './garde';
 export * from './reseau';
 export * from './lecteurPage';
 export * from './appariement';
+export * from './langues';
 export * from './sources';
 export * from './resolution';
 export * from './catalogue';

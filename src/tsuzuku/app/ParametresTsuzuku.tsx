@@ -12,7 +12,7 @@ import { LANGUES, type Langue } from '../moteur/sources';
 import { CLES, type BasePrefs } from '../plateforme/stockage';
 import { ecrireReglages, lireReglages, type ReglagesTsuzuku } from './reglages';
 
-const LIBELLE_LANGUE: Record<Langue, string> = { vf: 'VF', vostfr: 'VOSTFR', indifferent: 'Peu importe' };
+const LIBELLE_LANGUE: Record<Langue, string> = { vf: 'VF', vostfr: 'VOSTFR', indifferent: 'Au choix à chaque fois' };
 
 function useReglages(base: BasePrefs) {
   const [r, setR] = useState<ReglagesTsuzuku>(() => lireReglages(base.lire(CLES.reglages)));
@@ -61,8 +61,13 @@ export function ReglageLectureTsuzuku({ theme, base }: { theme: ThemeHub; base: 
   return (
     <View style={{ gap: 14 }}>
       <View style={{ gap: 6 }}>
-        <Text style={texte(theme)}>Doublage préféré</Text>
-        <Segments theme={theme} libelle="Doublage préféré" valeur={r.langue} options={LANGUES.map(l => [l, LIBELLE_LANGUE[l]] as const)} onChoisir={langue => maj({ langue })} testID="tsuzuku-langue" />
+        <Text style={texte(theme)}>Langue par défaut (VF ou VOSTFR)</Text>
+        <Segments theme={theme} libelle="Langue par défaut" valeur={r.langue} options={LANGUES.map(l => [l, LIBELLE_LANGUE[l]] as const)} onChoisir={langue => maj({ langue })} testID="tsuzuku-langue" />
+        <Text style={{ ...texte(theme), color: theme.attenue, fontSize: 13 }} testID="tsuzuku-langue-aide">
+          {r.langue === 'indifferent'
+            ? 'Le bouton « VF | VOSTFR » du lecteur choisit pour la séance ; rien n’est retenu par série.'
+            : `Les séries s’ouvrent en ${LIBELLE_LANGUE[r.langue]} quand vos sources la proposent ; un choix fait dans le lecteur est retenu pour la série, sur cet appareil.`}
+        </Text>
       </View>
       <View style={{ gap: 6 }}>
         <Text style={texte(theme)}>Épisode suivant automatique</Text>

@@ -8,7 +8,10 @@ import { classerMedia } from '../moteur/garde';
 import { messageDe } from '../moteur/erreurs';
 import { variantesDeRecherche } from '../moteur/appariement';
 import {
+  episodesEnLangue,
+  episodesSur,
   lecteursPourPage,
+  resumerLangues,
   trouverEpisodes,
   trouverFilm,
   trouverLecteurs,
@@ -17,11 +20,13 @@ import {
   type Lecteur,
   type ResultatEpisodes,
 } from '../moteur/resolution';
-import type { DefinitionSource } from '../moteur/sources';
+import { sourcesActives, type DefinitionSource } from '../moteur/sources';
+import { autreLangue, LANGUES_VERSION, LIBELLE_LANGUE_VERSION, type LangueVersion } from '../moteur/langues';
 import type { CibleTest } from '../moteur/assistant';
 import { CLES } from '../plateforme/stockage';
 import { MESSAGE_SITE } from '../plateforme/reseauWeb';
 import type { ServicesTsuzuku } from './services';
+import { plagesNumeros } from './diagnosticTexte';
 
 /** Pourquoi rien n'est lisible : chaque cas a son message et son action. */
 export type RaisonEchec =
@@ -50,7 +55,44 @@ export interface Lecture {
   /** Pourquoi rien n'est lisible, ou ce qu'il faut savoir (page seule, site refusant l'iframe…). */
   message?: string;
   diagnostic?: DiagnosticLecture;
+  /** Langue de l'épisode joué (null : la source ne la distingue pas). */
+  langue?: LangueVersion | null;
+  /** Langues proposées pour CET épisode (sources seulement). */
+  langues?: EtatLangues;
+  /** La langue demandée n'est pas disponible : ce qui est joué à la place, et pourquoi. */
+  avisLangue?: string;
 }
+
+/** Une langue dans le sélecteur : disponible, non disponible (et pourquoi), ou à vérifier sur les autres sources. */
+export interface OptionLangue {
+  etat: 'disponible' | 'absente' | 'a-verifier';
+  /** Pourquoi la langue manque (affiché et lu par le lecteur d'écran). */
+  raison?: string;
+  /** D'où vient la langue (« « (VF) » dans le titre », « onglet « VF » »…). */
+  indice?: string;
+  presumee?: boolean;
+  /** Source qui la fournit (une autre que celle de la fiche, le cas échéant). */
+  source?: string;
+}
+
+export interface EtatLangues {
+  /** Langue des épisodes affichés ; null : inconnue. */
+  courante: LangueVersion | null;
+  /** La source ne distingue pas la langue : pas de sélecteur, « Langue inconnue ». */
+  inconnue: boolean;
+  options: Record<LangueVersion, OptionLangue>;
+}
+
+/** Une langue trouvée sur une AUTRE source que celle de la fiche (à la demande). */
+interface Ailleurs {
+  episodes: EpisodeSource[];
+  source?: DefinitionSource;
+  raison?: string;
+}
+const ailleursDe = new WeakMap<ResultatEpisodes, Partial<Record<LangueVersion, Ailleurs>>>();
+/** Autres sources consultées au plus pour une langue absente de la source de la fiche. */
+export const AUTRES_SOURCES_MAX = 2;
+const L = (l: LangueVersion) => LIBELLE_LANGUE_VERSION[l];
 
 const AUCUNE_SOURCE = 'Aucune source ne fournit ce titre. Ajoutez un lien direct, ou demandez à l’administrateur de brancher une source.';
 /** Des sources existent, mais aucune n'est activée (pour ce profil). */
@@ -118,8 +160,19 @@ export function messageEchec(d: DiagnosticLecture, numero?: number): string {
     }
     case 'aucun-episode':
       return `« ${premier?.serie?.title ?? 'La série'} » trouvé sur « ${premier?.source ?? 'la source'} », mais aucun épisode n’a été lu sur sa page${premier?.raison ? ` : ${premier.raison}` : ' (sélecteur d’épisode à revoir)'}.`;
-    case 'episode-absent':
-      return `« ${premier?.serie?.title ?? 'La série'} » trouvé sur « ${premier?.source ?? 'la source'} » (${premier?.episodes ?? 0} épisode(s)), mais pas l’épisode ${numero ?? ''}.`.replace(' .', '.');
+    case 'episode-absent': {
+      const nom = `« ${premier?.serie?.title ?? 'La série'} » trouvé sur « ${premier?.source ?? 'la source'} »`;
+      const nums = premier?.lectureEpisodes?.numeros ?? [];
+      if (!nums.length || numero == null) {
+        return `${nom} (${premier?.episodes ?? 0} épisode(s)), mais pas l’épisode ${numero ?? ''}.`.replace(' .', '.');
+      }
+      const plages = plagesNumeros(nums);
+      if (numero > Math.max(...nums)) {
+        // Le catalogue annonce souvent plus d'épisodes que le site n'en a mis en ligne : ce n'est pas une panne.
+        return `${nom} : la source n’a que ${nums.length === 1 ? 'l’épisode' : 'les épisodes'} ${plages}. L’épisode ${numero} n’y est pas (encore) en ligne.`;
+      }
+      return `${nom} : épisodes trouvés ${plages} (${nums.length}), mais pas l’épisode ${numero}. Ouvrez « Détail du diagnostic » pour voir le numéro lu sur chaque lien (liste incomplète sur la page de la série, ou numérotation propre au site).`;
+    }
     case 'aucun-lecteur':
       return 'La page de l’épisode ne contient aucun lecteur reconnu.';
   }
@@ -148,6 +201,8 @@ export interface Disponibilite {
 
 const DUREE_CACHE_MS = 10 * 60_000;
 const caches = new WeakMap<object, Map<string, { quand: number; r: ResultatEpisodes }>>();
+/** Recherches en cours (la fiche et son sélecteur de langue demandent la même) : une seule part. */
+const enVol = new WeakMap<object, Map<string, Promise<ResultatEpisodes>>>();
 /** Toute la définition des sources activées : une source modifiée (adresse, miroir, sélecteur) n'est jamais servie par le cache. */
 const signature = (sources: readonly DefinitionSource[]) => JSON.stringify(sources.filter(x => x.enabled).map(({ createdAt: _c, ...x }) => x));
 
@@ -159,7 +214,7 @@ const signature = (sources: readonly DefinitionSource[]) => JSON.stringify(sourc
  */
 export async function episodesDisponibles(
   s: ServicesTsuzuku,
-  o: { id: string | number; titres: readonly string[]; forcer?: boolean },
+  o: { id: string | number; titres: readonly string[]; forcer?: boolean; langue?: LangueVersion | null },
 ): Promise<Disponibilite> {
   const perso = (await lireTitresPerso(s))[`anime:${o.id}`];
   const titres = avecPerso(o.titres, perso);
@@ -171,8 +226,10 @@ export async function episodesDisponibles(
   };
   if (!sources.some(x => x.enabled)) return vide('aucune-source');
   if (!s.lectureSources) return vide('site');
-  const langue = (await s.reglages()).langue;
-  const cle = `${o.id}|${titres.join('|')}|${langue}|${signature(sources)}`;
+  // La langue voulue oriente la PREMIÈRE recherche (la page lue d'abord) ; elle n'entre pas dans la clé :
+  // changer de langue réutilise le résultat et ne lit que la page de l'autre langue.
+  const langue = o.langue ?? (await s.reglages()).langue;
+  const cle = `${o.id}|${titres.join('|')}|${signature(sources)}`;
   const cache = caches.get(s) ?? new Map<string, { quand: number; r: ResultatEpisodes }>();
   caches.set(s, cache);
   const memo = cache.get(cle);
@@ -180,12 +237,94 @@ export async function episodesDisponibles(
   if (memo && !o.forcer && Date.now() - memo.quand < DUREE_CACHE_MS) {
     r = memo.r;
   } else {
-    r = await trouverEpisodes(s.ctx, sources, { titres, langue });
+    const vols = enVol.get(s) ?? new Map<string, Promise<ResultatEpisodes>>();
+    enVol.set(s, vols);
+    const deja = o.forcer ? undefined : vols.get(cle);
+    const promesse = deja ?? trouverEpisodes(s.ctx, sources, { titres, langue });
+    if (!deja) vols.set(cle, promesse);
+    try {
+      r = await promesse;
+    } finally {
+      if (vols.get(cle) === promesse) vols.delete(cle);
+    }
     if (r.episodes.length) cache.set(cle, { quand: Date.now(), r });
     else cache.delete(cle);
   }
-  const diagnostic: DiagnosticLecture = { raison: r.episodes.length ? 'aucune-source' : raisonDe(r.diagnostics), titres: variantesDeRecherche(titres), sources: r.diagnostics };
+  // Langues relues à chaque appel : une page lue à la demande (autre langue) figure dans le diagnostic.
+  const sourcesDiag = r.langues ? r.diagnostics.map(x => (x.sourceId === r.source?.id && x.langues ? { ...x, langues: resumerLangues(r.langues!) } : x)) : r.diagnostics;
+  const diagnostic: DiagnosticLecture = { raison: r.episodes.length ? 'aucune-source' : raisonDe(r.diagnostics), titres: variantesDeRecherche(titres), sources: sourcesDiag };
   return { episodes: r.episodes, resultat: r, diagnostic, message: r.episodes.length ? undefined : messageEchec(diagnostic) };
+}
+
+/**
+ * Épisodes d'une série dans une langue : la source de la fiche d'abord (ce
+ * qu'elle a déjà lu, sinon UNE page de plus), puis, à la demande seulement,
+ * vos autres sources activées (deux au plus). Le résultat est gardé avec celui
+ * de la fiche : changer de langue une seconde fois ne relance rien.
+ */
+export async function episodesDansLangue(
+  s: ServicesTsuzuku,
+  d: Disponibilite,
+  langue: LangueVersion,
+  titres: readonly string[],
+  o: { autresSources?: boolean } = {},
+): Promise<{ episodes: EpisodeSource[]; source?: DefinitionSource; raison?: string }> {
+  const r = d.resultat;
+  if (!r?.source || !r.langues) return { episodes: [], raison: 'la source ne distingue pas la langue' };
+  if (r.langues.courante === langue) return { episodes: d.episodes, source: r.source };
+  const ici = await episodesEnLangue(s.ctx, r.source, r.langues, langue, { titres });
+  if (ici.episodes.length) return { episodes: ici.episodes, source: r.source };
+  const memo = ailleursDe.get(r) ?? {};
+  ailleursDe.set(r, memo);
+  if (memo[langue]) return memo[langue]!;
+  const autres = sourcesActives(await s.sources()).filter(x => x.id !== r.source!.id).slice(0, AUTRES_SOURCES_MAX);
+  if (!o.autresSources || !autres.length) return { episodes: [], raison: ici.raison };
+  for (const src of autres) {
+    try {
+      const res = await episodesSur(s.ctx, src, { titres, langue });
+      if (!res.episodes.length || !res.langues) continue;
+      const eps = res.langues.courante === langue ? res.episodes : (await episodesEnLangue(s.ctx, src, res.langues, langue, { titres })).episodes;
+      if (eps.length) {
+        memo[langue] = { episodes: eps, source: src };
+        return memo[langue]!;
+      }
+    } catch {
+      // Source en erreur : la suivante.
+    }
+  }
+  memo[langue] = { episodes: [], raison: `${ici.raison ?? `pas de ${L(langue)} sur « ${r.source.name} »`} ; ni ${autres.map(x => `« ${x.name} »`).join(', ni ')} n’ont ce titre en ${L(langue)}` };
+  return memo[langue]!;
+}
+
+/** État du sélecteur VF | VOSTFR pour une fiche (sans numéro) ou un épisode (avec numéro). */
+export function etatLangues(d: Disponibilite, numero?: number, autresSources = 0): EtatLangues | undefined {
+  const r = d.resultat;
+  const langues = r?.langues;
+  if (!r || !langues || !d.episodes.length) return undefined;
+  const memo = ailleursDe.get(r) ?? {};
+  const options = {} as Record<LangueVersion, OptionLangue>;
+  for (const l of LANGUES_VERSION) {
+    const v = langues.variantes[l];
+    const autre = memo[l];
+    if (v && v.episodes) {
+      if (!v.episodes.length) {
+        options[l] = autre?.episodes.length ? { etat: 'disponible', source: autre.source?.name } : { etat: 'absente', raison: autre?.raison ?? v.echec ?? `aucun épisode ${L(l)} lu` };
+      } else if (numero != null && !v.episodes.some(e => e.number === numero)) {
+        options[l] = { etat: 'absente', raison: `l’épisode ${numero} n’est pas en ${L(l)} sur « ${r.source?.name ?? 'la source'} » (${L(l)} : épisodes ${plagesNumeros(v.episodes.map(e => e.number))})`, indice: v.indice };
+      } else {
+        options[l] = { etat: 'disponible', indice: v.indice, presumee: v.presumee };
+      }
+    } else if (v) {
+      options[l] = { etat: 'disponible', indice: v.indice, presumee: v.presumee };
+    } else if (autre) {
+      options[l] = autre.episodes.length && (numero == null || autre.episodes.some(e => e.number === numero)) ? { etat: 'disponible', source: autre.source?.name } : { etat: 'absente', raison: autre.raison ?? `l’épisode ${numero} n’est pas en ${L(l)} sur vos sources` };
+    } else if (langues.courante && autresSources > 0) {
+      options[l] = { etat: 'a-verifier', raison: `pas sur « ${r.source?.name ?? 'la source'} » ; vos autres sources seront consultées si vous choisissez ${L(l)}` };
+    } else {
+      options[l] = { etat: 'absente', raison: langues.absentes[l] ?? `${L(l)} non trouvée` };
+    }
+  }
+  return { courante: langues.courante, inconnue: !langues.courante && !LANGUES_VERSION.some(l => options[l].etat === 'disponible'), options };
 }
 
 /** Lien manuel → lecteurs. Sur le site (pas de lecture de pages) : le lien est affiché tel quel. */
@@ -204,7 +343,7 @@ async function depuisLien(s: ServicesTsuzuku, url: string, label: string, kind: 
 
 export async function lireAnime(
   s: ServicesTsuzuku,
-  o: { id: string | number; titres: readonly string[]; numero: number; forcer?: boolean },
+  o: { id: string | number; titres: readonly string[]; numero: number; forcer?: boolean; langue?: LangueVersion | null },
 ): Promise<Lecture> {
   const db = await s.depot.lire();
   const adresse = adresseEpisode(lireAssociation(db.manualSources, o.id), o.numero);
@@ -216,15 +355,44 @@ export async function lireAnime(
     if (!d.episodes.length) {
       return { lecteurs: [], origine: 'aucune', message: d.message, diagnostic: d.diagnostic };
     }
-    const ep: EpisodeSource | undefined = d.episodes.find(e => e.number === o.numero);
+    const langues = d.resultat?.langues;
+    const autres = d.resultat?.source ? sourcesActives(await s.sources()).filter(x => x.id !== d.resultat!.source!.id).length : 0;
+    let episodes = d.episodes;
+    let joue: LangueVersion | null = langues?.courante ?? null;
+    let avisLangue: string | undefined;
+    if (o.langue && langues?.courante) {
+      const r = await episodesDansLangue(s, d, o.langue, o.titres, { autresSources: true });
+      if (r.episodes.some(e => e.number === o.numero)) {
+        episodes = r.episodes;
+        joue = o.langue;
+      } else {
+        // Pas dans la langue voulue : l'autre langue au même numéro, en le disant.
+        const autre = autreLangue(o.langue);
+        const r2 = await episodesDansLangue(s, d, autre, o.titres);
+        if (r2.episodes.some(e => e.number === o.numero)) {
+          episodes = r2.episodes;
+          joue = autre;
+          avisLangue = `${L(o.langue)} non disponible sur vos sources pour l’épisode ${o.numero}${r.raison ? ` (${r.raison})` : r.episodes.length ? ` (${L(o.langue)} : épisodes ${plagesNumeros(r.episodes.map(e => e.number))})` : ''} : lecture en ${L(autre)}.`;
+        } else if (r.episodes.length) {
+          episodes = r.episodes;
+          joue = o.langue;
+        }
+      }
+    }
+    const ep: EpisodeSource | undefined = episodes.find(e => e.number === o.numero);
     if (!ep) {
       const diagnostic: DiagnosticLecture = { ...d.diagnostic, raison: 'episode-absent' };
-      return { lecteurs: [], origine: 'aucune', message: messageEchec(diagnostic, o.numero), diagnostic };
+      return { lecteurs: [], origine: 'aucune', message: messageEchec(diagnostic, o.numero), diagnostic, langue: joue, langues: etatLangues(d, o.numero, autres), avisLangue };
     }
-    const lecteurs = await trouverLecteurs(s.ctx, await s.sources(), ep.url);
-    if (lecteurs.length) return { lecteurs, origine: 'source' };
+    // En parallèle (borné) : la page de l'AUTRE langue sur la même source, pour griser le bouton si l'épisode n'y est pas.
+    const autre = joue ? langues?.variantes[autreLangue(joue)] : undefined;
+    const verification = autre && !autre.episodes && !autre.aChercher && d.resultat?.source ? episodesEnLangue(s.ctx, d.resultat.source, langues!, autre.langue, { titres: o.titres }).catch(() => undefined) : Promise.resolve(undefined);
+    const [lecteurs] = await Promise.all([trouverLecteurs(s.ctx, await s.sources(), ep.url), verification]);
+    const etat = etatLangues(d, o.numero, autres);
+    if (etat && joue) etat.courante = joue;
+    if (lecteurs.length) return { lecteurs, origine: 'source', langue: joue, langues: etat, avisLangue };
     const diagnostic: DiagnosticLecture = { ...d.diagnostic, raison: 'aucun-lecteur' };
-    return { lecteurs, origine: 'aucune', message: messageEchec(diagnostic), diagnostic };
+    return { lecteurs, origine: 'aucune', message: messageEchec(diagnostic), diagnostic, langue: joue, langues: etat, avisLangue };
   } catch (erreur) {
     return { lecteurs: [], origine: 'aucune', message: messageDe(erreur), diagnostic: { raison: 'erreur', titres: [...o.titres], sources: [] } };
   }

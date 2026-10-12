@@ -73,6 +73,29 @@ export function choisir(page: Page, element: Noeud, selecteur: string | undefine
   return page.texte(cible).trim() || null;
 }
 
+/**
+ * Texte d'un élément où chaque balise sépare les mots : sur une page minifiée,
+ * « <a>Épisode 1</a><span>12/03/2025</span> » donne « Épisode 1 12/03/2025 »
+ * et non « Épisode 112/03/2025 » (qui se lisait épisode 112). Sert à lire des
+ * numéros ; espaces compactés.
+ */
+export function texteSepare(element: AnyNode): string {
+  const morceaux: string[] = [];
+  const parcourir = (n: AnyNode) => {
+    if (n.type === 'text') {
+      morceaux.push((n as unknown as { data: string }).data);
+    } else if ('children' in n && Array.isArray((n as { children?: AnyNode[] }).children) && n.type !== 'script' && n.type !== 'style') {
+      morceaux.push(' ');
+      for (const c of (n as { children: AnyNode[] }).children) {
+        parcourir(c);
+      }
+      morceaux.push(' ');
+    }
+  };
+  parcourir(element);
+  return morceaux.join('').replace(/\s+/g, ' ').trim();
+}
+
 /** Texte d'un element, espaces compactes. */
 export function texteCompact(page: Page, element: AnyNode): string {
   return page.texte(element).replace(/\s+/g, ' ').trim();

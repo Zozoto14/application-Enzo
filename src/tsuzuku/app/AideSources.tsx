@@ -34,20 +34,24 @@ export const SECTIONS_AIDE_CONFIGURATION: ReadonlyArray<{ titre: string; texte: 
   },
   {
     titre: '5. Épisodes : sélecteurs, pages et saisons',
-    texte: 'episodes.item désigne UN épisode. Sans sélecteur (ou s’il ne trouve rien), l’app repère les liens « Épisode N », « EP N », « E01 », « S2E03 », « 第N話 » ou finissant par un numéro, y compris dans les blocs masqués et les menus. Une liste paginée est suivie (rel=next, « Suivant », ou episodes.next) ; si la page mêle plusieurs saisons, celle de la fiche est gardée.',
+    texte: 'episodes.item désigne UN épisode. Sans sélecteur (ou s’il ne trouve rien), l’app repère les liens « Épisode N », « EP N », « E01 », « S2E03 », « 第N話 » ou finissant par un numéro, y compris dans les blocs masqués et les menus. Une liste paginée est suivie (rel=next, « Suivant », ou episodes.next) ; si la page mêle plusieurs saisons, celle de la fiche est gardée. Numéro : episodes.number (facultatif) désigne l’élément qui le porte ; l’app y lit « Épisode 03 », « Ep. 1 VF », « S1 E2 » ou le dernier nombre (« Titre 2 - 03 VOSTFR » → 3), en ignorant dates, années, durées, saison et titre de la série. Sans numéro lisible, la liste est numérotée par son ordre (du plus récent au plus ancien). Le diagnostic montre, pour chaque lien, le numéro lu et son texte : un épisode « absent » s’y vérifie d’un coup d’oeil.',
     exemple: '"episodes": { "item": "ul.episodes li", "number": ".num", "link": "a", "next": "a.page-suivante" }',
   },
   {
-    titre: '6. Liens manuels : {n}',
+    titre: '6. VF et VOSTFR',
+    texte: 'Tsuzuku lit la langue de chaque fiche et de chaque épisode : « (VF) », « VOSTFR », « Dub », « Sub » dans le titre ou le lien, -vf / -vostfr dans l’adresse, onglets ou sections « VF » / « VOSTFR », attributs data-lang. Deux fiches « Titre » et « Titre (VF) » deviennent les deux langues d’une même série (la fiche sans marqueur est alors présumée VOSTFR, et affichée comme telle). Si le site sépare les langues par deux recherches, renseignez search.pathVf / search.pathVostfr ; s’il n’en propose qu’une, réglez la langue de la source (« language »). Si rien n’indique la langue, le lecteur affiche « Langue inconnue » plutôt que de deviner.',
+    exemple: '"language": "vostfr",  "search": { "path": "/recherche?q={query}", "pathVf": "/vf/recherche?q={query}", … }',
+  },  {
+    titre: '7. Liens manuels : {n}',
     texte: 'Pour un seul titre, le lien manuel de la fiche accepte {n} (numéro d’épisode) : collez l’adresse de l’épisode 1 en remplaçant le numéro par {n}.',
     exemple: 'https://mediatheque-exemple.fr/serie/voyage/episode-{n}',
   },
   {
-    titre: '7. Ce qui ne dépend pas de l’app',
+    titre: '8. Ce qui ne dépend pas de l’app',
     texte: 'Protection anti-robot (« Just a moment… », captcha, 403/503) : Tsuzuku ne la contourne pas et l’affiche comme telle. Miroirs : si le site change d’adresse, mettez à jour baseUrl (les redirections et les « meta refresh » sont suivis). Page construite en JavaScript sans API accessible : la source ne peut pas être lue.',
   },
   {
-    titre: '8. Ça ne trouve toujours pas ?',
+    titre: '9. Ça ne trouve toujours pas ?',
     texte: 'Sur la fiche : « Tester une source sur ce titre », puis « Détail du diagnostic » › « Copier le diagnostic ». Le texte copié dit, pour chaque requête : adresse, statut HTTP, type de contenu, taille, page JavaScript / anti-robot / JSON, candidats trouvés et leurs scores. Il ne contient ni clé d’API ni secret.',
   },
 ];

@@ -29,7 +29,8 @@ Vite et Jest. Point d'entree : `index.ts`.
 | `reseau` | Interface `Reseau` **injectee** + `creerClient` : garde a chaque appel ET a chaque redirection (suivies par le moteur), delai, taille maximale, GET texte/JSON, POST JSON. `reseauDepuisFetch` adapte un `fetch` standard |
 | `lecteurPage` | `htmlparser2` + `css-select` : selecteurs CSS sur du HTML tolerant, suggestions de selecteurs, detection de page rendue en JS (point de montage vide, un seul script suffit) |
 | `extraction` | Extraction GENERIQUE quand les selecteurs ne trouvent rien : chemins JSON, listes JSON reperees seules, HTML dans du JSON (AJAX), JSON-LD, cartes `<article>`, liens titres, `og:title`/`h1` d'une page `{slug}`, episodes « Episode N / EP N / E01 / S2E03 / 第N話 / numero en fin d'adresse » (blocs masques, `<option>`, `data-*`), pagination, saisons, `<base href>`, `<meta refresh>` |
-| `appariement` | Scores de titres, VF/VOSTFR, variantes de recherche (« Saison 2 » retire), seuil de fiabilite |
+| `appariement` | Scores de titres, VF/VOSTFR, variantes de recherche (« Saison 2 » retire), seuil de fiabilite, cle de serie hors langue (`cleSerie`) |
+| `langues` | Langue (VF / VOSTFR) d'un titre, d'une adresse, d'un bloc de page (onglets, `data-lang`, sections, `<optgroup>`) ou d'un objet JSON, avec son indice |
 | `sources` | Definitions de sources par selecteurs CSS (`search`, `episodes`, `player`, `movies.search/player`), langue `vf`/`vostfr`/`indifferent`, gestion de liste, import des anciens `sources.json` |
 | `resolution` | Titre -> episodes -> lecteurs (iframe ou fichier direct mp4/m3u8/webm) ; films ; page collee a la main ; diagnostic |
 | `catalogue` | Animes : Jikan (file serialisee, cache, 429) puis AniList en repli (disjoncteur 60 s). Films : TMDB (cle optionnelle, v3 ou Bearer) avec repli Jikan |
@@ -188,7 +189,8 @@ Meme mot de passe, memes profils, memes permissions que le hub ; aucun serveur.
 | `app/LienAnime`, `LienFilm` | Liens manuels : episode + suivants (motif `{n}`) ; film : lien direct |
 | `app/LecteurMedia.web.tsx` / `LecteurMedia.tsx` | Site et PC : iframe `sandbox`, `<video>`, HLS (hls.js charge a la demande). iPhone : « Ouvrir dans Safari » en attendant la WebView (P4) |
 | `app/services.ts`, `resoudre.ts` | Assemblage du moteur par profil ; lien manuel puis sources -> lecteurs |
-| `app/reglages.ts`, `ParametresTsuzuku.tsx` | Reglages de confort (Parametres > Tsuzuku, tous) : VF/VOSTFR, episode suivant auto, masquer les deja vus |
+| `app/reglages.ts`, `ParametresTsuzuku.tsx` | Reglages de confort (Parametres > Tsuzuku, tous) : langue par defaut (VF, VOSTFR, au choix a chaque fois), episode suivant auto, masquer les deja vus |
+| `app/langues.ts`, `SelecteurLangue.tsx` | Langue retenue par serie (ou pour la seance) ; selecteur « VF \| VOSTFR » de la fiche et du lecteur (voir « VF ou VOSTFR ») |
 | `app/resume.ts` | Information en direct de la tuile : « Reprendre <titre> · Ep. N » ou « N a voir » |
 | `plateforme/reseau*.ts` | Adaptateurs `Reseau` (voir ci-dessous) |
 | `plateforme/stockage.ts` | `Stockage` = base chiffree du profil courant |
@@ -332,6 +334,53 @@ sources dont vous avez le droit d'utiliser le contenu. »
 - Le cache de la fiche (10 min, resultats trouves seulement) depend de TOUTE
   la definition des sources activees : une source modifiee n'est jamais servie
   par un ancien resultat.
+
+### VF ou VOSTFR (`moteur/langues.ts`, `app/langues.ts`, `app/SelecteurLangue.tsx`)
+
+Sur les sites, une meme serie existe souvent en deux fiches (« Titre » et « Titre (VF) »), ou une page
+de serie propose les episodes par langue (onglets, sections), ou les adresses portent `-vf` / `-vostfr`.
+
+- **Detection** (`langues.ts`), toujours avec un INDICE : titre (« (VF) », « VF », « VFF », « Dub »,
+  « Doublé », « Version française », « French » seul ; « VOSTFR », « VOST », « VO », « Sub »,
+  « Sous-titré »), adresse (chemin et requete seulement, jamais le nom du site), bloc de la page
+  (`data-lang` / `data-langue` / `data-version`, `id`/`class` `vf`, `vostfr`, `tab-vf`… mais pas
+  « sub-menu », titre de section juste avant la liste, `<optgroup label>`), objet JSON (`lang`,
+  `version`, titre). « VF / VOSTFR » ensemble : inconnue.
+- **Regroupement** (`variantesDeLangue`) : fiches de la MEME serie (meme `cleSerie` hors langue et
+  episode, ressemblance >= seuil ; ni autre saison, ni film, ni resultat « Episode 12 »), la meilleure
+  par langue. Une fiche SANS marqueur a cote d'une fiche marquee d'une seule langue est **presumee**
+  de l'autre (« Titre » + « Titre (VF) » : « Titre » = VOSTFR), et dite presumee ; aucune marque : la
+  langue declaree par la source (`language`), sinon rien.
+- **Page de serie** (`lireEpisodesDetail`) : VF ET VOSTFR sur la meme page → deux listes numerotees
+  separement (`parLangue`) ; blocs muets a cote de blocs « VF » aux memes numeros → presumes VOSTFR ;
+  page entierement marquee → page dans cette langue ; sinon inconnue.
+- **Sans requete inutile** : la premiere recherche suit la langue voulue ; l'autre langue est une page
+  de plus, lue a la demande ou en parallele de l'episode (pour griser le bouton si l'episode y manque),
+  donc 2 pages de serie au plus, gardees avec le resultat (10 min). Recherche dediee (`search.pathVf` /
+  `pathVostfr`) : lancee seulement si on choisit cette langue. Langue absente de la source de la fiche
+  et autres sources activees : « chercher sur vos autres sources », 2 sources au plus, au clic.
+- **Ecrans** : selecteur segmente « VF | VOSTFR » dans le lecteur (au-dessus de la video) et au-dessus
+  de la liste d'episodes de la fiche ; cibles de 48 px, textes de 15-16 px, groupe radio
+  (`aria-checked`), Entree / espace / fleches au clavier, couleurs du theme (clair et sombre).
+  Langue indisponible : grisee, « non disponible sur vos sources » et sa raison. Changer de langue
+  recharge l'episode au meme numero ; une video directe reprend a la meme position (un iframe d'un
+  autre site ne le permet pas : c'est dit). Episode absent dans la langue voulue : lu dans l'autre,
+  avec un avis. Source qui ne distingue pas la langue : « Langue inconnue », pas de selecteur.
+- **Preference** : Parametres › Tsuzuku › Langue par defaut (VF, VOSTFR, « au choix a chaque fois »).
+  Un choix fait sur la fiche ou dans le lecteur est retenu pour la serie (`tsuzuku.langues`, base du
+  profil) ; en « au choix a chaque fois », il ne vaut que pour la seance. Il n'existe pas d'entite
+  synchronisee pour les reglages de confort de Tsuzuku : la preference reste **locale a l'appareil**
+  (aucune ecriture de plus sur le relais).
+- **Progression** commune : la bibliotheque ne connait que le numero ; un episode vu en VF est vu.
+- **Diagnostic** : langue de chaque candidat (« (1000, VF) », « langue non marquee »), des blocs lus
+  (« n° 1 [VF] »), versions trouvees (fiche, indice, presumee, episodes lus) et raison de chaque
+  langue indisponible.
+- **Limites** : une source qui ne marque la langue nulle part (ni titre, ni adresse, ni bloc) reste
+  « Langue inconnue » ; la presomption « fiche muette = l'autre langue » peut se tromper sur un site
+  qui ne marque que la VOSTFR et range la VF sans marqueur (elle est alors affichee « presumee ») ;
+  pas de rendu JavaScript (onglets construits en JS sans API JSON : illisibles).
+- Tests : `moteur/langues.test.ts`, `moteur/languesSeries.test.ts`, `app/langues.test.tsx` ; E2E
+  `scripts/e2e-tsuzuku-langues.mjs` (captures `docs/captures-tsuzuku-langues/`).
 
 ### Reste a faire
 

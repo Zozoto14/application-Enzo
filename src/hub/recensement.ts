@@ -311,7 +311,7 @@ export const REGLAGES: readonly Reglage[] = [
     id: 'tsuzuku-lecture',
     section: 'tsuzuku',
     titre: 'Lecture et catalogue',
-    description: 'Doublage préféré (VF ou VOSTFR), épisode suivant automatique, masquer les titres déjà vus.',
+    description: 'Langue par défaut (VF, VOSTFR ou au choix à chaque fois), épisode suivant automatique, masquer les titres déjà vus.',
     mots: ['tsuzuku', 'anime', 'animes', 'vf', 'vostfr', 'doublage', 'langue', 'episode', 'suivant', 'automatique', 'deja vus', 'masquer', 'streaming'],
     ancienEmplacement: ['Tsuzuku › Réglages (lecture)'],
   },

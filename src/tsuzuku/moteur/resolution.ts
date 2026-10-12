@@ -9,6 +9,8 @@
 
 import {
   classerResultats,
+  cleSerie,
+  estTitreDEpisode,
   numeroDepuisAdresse,
   saisonDe,
   SCORE_MINIMAL,
@@ -22,7 +24,7 @@ import {
 } from './appariement';
 import { echec, ErreurMoteur, messageDe, type CodeErreur } from './erreurs';
 import { classerMedia, type TypeMedia, urlPubliqueSure } from './garde';
-import { choisir, lirePage, sembleRenduEnJs, suggererSelecteurs, texteCompact, texteVisible, type Noeud, type Page } from './lecteurPage';
+import { choisir, lirePage, sembleRenduEnJs, suggererSelecteurs, texteCompact, texteSepare, texteVisible, type Noeud, type Page } from './lecteurPage';
 import { detecterBlocage, messageBlocage, type ClientSur, type ReponseTexte } from './reseau';
 import {
   analyserJson,
@@ -61,6 +63,16 @@ import {
 } from './sources';
 import { journalMuet, type Journal } from './outils';
 import { analyserAdresse } from './adresse';
+import {
+  autreLangue,
+  LANGUES_VERSION,
+  LIBELLE_LANGUE_VERSION,
+  langueDeCandidat,
+  langueDEpisode,
+  langueDObjetJson,
+  type LangueLue,
+  type LangueVersion,
+} from './langues';
 
 export interface Lecteur {
   label: string;
@@ -72,6 +84,8 @@ export interface EpisodeSource {
   number: number;
   title: string | null;
   url: string;
+  /** Langue de l'épisode quand la page la distingue (VF / VOSTFR). */
+  langue?: LangueVersion | null;
 }
 
 export interface ContexteResolution {
@@ -283,19 +297,35 @@ export async function chercherSur(
 // Episodes
 // ---------------------------------------------------------------------------
 
-function numeroEpisode(page: Page, el: Noeud, src: DefinitionSource, href: string | null): number | null {
-  const brut = choisir(page, el, src.episodes.number);
-  const depuisSelecteur = brut ? Number.parseInt(brut.replace(/\D+/g, ''), 10) : NaN;
-  if (Number.isFinite(depuisSelecteur)) {
-    return depuisSelecteur;
+/** Au-delà, un « numéro » est un nombre mal lu (dates ou chiffres collés), pas un épisode. */
+const NUMERO_MAX = 5000;
+const plausible = (n: number | null | undefined): number | null => (n != null && Number.isFinite(n) && n >= 0 && n <= NUMERO_MAX ? n : null);
+
+/**
+ * Numéro d'un bloc d'épisode : sélecteur `number` (le numéro DANS son texte :
+ * « Épisode 03 », « S1 E2 », « 03 » — jamais tous les chiffres collés, qui
+ * faisaient de « Saison 1 - Épisode 1 » l'épisode 11), sinon texte du bloc,
+ * attribut title, puis adresse.
+ */
+function numeroEpisode(page: Page, el: Noeud, src: DefinitionSource, href: string | null, titres: readonly string[], lien: Noeud | null): number | null {
+  const cibleNumero = src.episodes.number ? page.premier(el, src.episodes.number) : null;
+  const brut = cibleNumero ? texteSepare(cibleNumero) : null;
+  if (brut) {
+    const lu = plausible(numeroEtSaison(brut, '', { libre: true, titres })?.number);
+    if (lu != null) {
+      return lu;
+    }
   }
-  const texte = texteCompact(page, el);
-  const depuisTexte = /(?:episode|episodes|épisode|ep\.?|chapitre)\s*#?\s*(\d{1,4})/i.exec(texte);
-  if (depuisTexte) {
-    return Number(depuisTexte[1]);
-  }
-  const generique = numeroEtSaison(texte, href ?? '');
-  return generique ? generique.number : numeroDepuisAdresse(href);
+  const texteLien = lien && lien !== el ? texteSepare(lien) : '';
+  const texte = texteSepare(el);
+  const titre = (lien && page.attr(lien, 'title')) || '';
+  // Le texte du LIEN d'abord (« Épisode 1 ») : le bloc porte aussi dates et mentions.
+  const generique =
+    (texteLien ? numeroEtSaison(texteLien, href ?? '') : null) ??
+    numeroEtSaison(texte, href ?? '') ??
+    (titre ? numeroEtSaison(titre, '') : null) ??
+    numeroEtSaison(texteLien || texte, '', { libre: true, titres });
+  return plausible(generique?.number) ?? plausible(numeroDepuisAdresse(href));
 }
 
 /** Les menus de navigation sont souvent des <li> : l'accueil ne doit pas devenir « l'episode 1 ». */
@@ -336,12 +366,31 @@ export interface DetailEpisodes {
   renduJs?: boolean;
   /** Saison gardée quand la page en mêle plusieurs. */
   saison?: number | null;
+  /** Numéros finalement retenus, triés (« épisodes trouvés : 1–3 »). */
+  numeros?: number[];
+  /**
+   * Comment les numéros ont été obtenus : lus dans le texte/l'adresse, déduits
+   * de l'ordre de la liste (aucun lisible), ou les deux (trous comblés).
+   */
+  numerotation?: 'lue' | 'ordre' | 'mixte';
+  /** Blocs lus (20 au plus) : numéro lu, langue lue, texte et adresse d'origine, pour voir un écart. */
+  lus?: Array<{ numero: number | null; texte: string; url: string; langue?: LangueVersion | null }>;
+  /**
+   * Langues lues sur la page : nombre de blocs marqués VF, VOSTFR, sans
+   * marqueur ; `separees` : la page propose les deux (listes séparées) ;
+   * `presumee` : langue déduite des blocs SANS marqueur (à côté de blocs
+   * marqués de l'autre langue) ; `page` : la page entière est dans une langue.
+   */
+  langues?: { vf: number; vostfr: number; inconnue: number; separees: boolean; presumee?: LangueVersion; page?: LangueLue | null };
 }
 
-type Collecte = { number: number | null; title: string | null; url: string; saison: number | null };
+type Collecte = { number: number | null; title: string | null; url: string; saison: number | null; texte?: string; langue: LangueVersion | null; indiceLangue?: string };
+
+/** Blocs gardés dans le diagnostic. */
+const LUS_MAX = 20;
 
 /** Épisodes d'UNE page : JSON (chemins), sélecteurs CSS, puis repérage générique. */
-function episodesDePage(src: DefinitionSource, lue: PageLue, urlSerie: string): { collectes: Collecte[]; extraction: DetailEpisodes['extraction']; blocs: number } {
+function episodesDePage(src: DefinitionSource, lue: PageLue, urlSerie: string, titres: readonly string[]): { collectes: Collecte[]; extraction: DetailEpisodes['extraction']; blocs: number } {
   const ep = src.episodes;
   const json = estReponseJson(lue.rep.typeContenu, lue.html) ? analyserJson(lue.html) : undefined;
   if (json !== undefined) {
@@ -351,8 +400,10 @@ function episodesDePage(src: DefinitionSource, lue: PageLue, urlSerie: string): 
       .map(o => {
         const url = lienJson(o, ep.link, ep.linkFormat, lue.url);
         const brut = texteJson(valeurJson(o, ep.number || 'number')) ?? texteJson(o.episode) ?? texteJson(o.ep);
-        const n = brut ? Number.parseInt(brut.replace(/\D+/g, ''), 10) : NaN;
-        const c: Collecte | null = url ? { number: Number.isFinite(n) ? n : numeroDepuisAdresse(url), title: texteJson(valeurJson(o, ep.title || 'title')), url, saison: null } : null;
+        const n = brut ? plausible(numeroEtSaison(brut, '', { libre: true })?.number) : null;
+        const titre = texteJson(valeurJson(o, ep.title || 'title'));
+        const l = langueDObjetJson(o, url);
+        const c: Collecte | null = url ? { number: n ?? plausible(numeroDepuisAdresse(url)), title: titre, url, saison: null, texte: brut ?? titre ?? '', langue: l?.langue ?? null, indiceLangue: l?.indice } : null;
         return c;
       })
       .filter((x): x is Collecte => x !== null);
@@ -368,14 +419,16 @@ function episodesDePage(src: DefinitionSource, lue: PageLue, urlSerie: string): 
     if (!abs || estLienDeNavigation(abs, src.baseUrl, urlSerie)) {
       continue;
     }
-    const saison = numeroEtSaison(texteCompact(page, el), abs)?.saison ?? null;
-    collectes.push({ number: numeroEpisode(page, el, src, abs), title: choisir(page, el, ep.title), url: abs, saison });
+    const texte = texteSepare(el);
+    const saison = numeroEtSaison(texte, abs)?.saison ?? null;
+    const l = langueDEpisode(texte, abs, page, el);
+    collectes.push({ number: numeroEpisode(page, el, src, abs, titres, lien), title: choisir(page, el, ep.title), url: abs, saison, texte, langue: l?.langue ?? null, indiceLangue: l?.indice });
   }
   if (collectes.length) {
     return { collectes, extraction: 'selecteurs', blocs: blocs.length };
   }
   const generiques = episodesGeneriques(page, base, src.baseUrl, urlSerie).filter(e => !estLienDeNavigation(e.url, src.baseUrl, urlSerie));
-  return { collectes: generiques, extraction: generiques.length ? 'generique' : 'aucune', blocs: blocs.length };
+  return { collectes: generiques.map(g => ({ ...g, texte: g.title ?? '', langue: g.langue ?? null })), extraction: generiques.length ? 'generique' : 'aucune', blocs: blocs.length };
 }
 
 /**
@@ -385,12 +438,75 @@ function episodesDePage(src: DefinitionSource, lue: PageLue, urlSerie: string): 
  * (rel=next, « Suivant », `episodes.next`) et garde la saison voulue quand la
  * page en mêle plusieurs.
  */
+export interface LectureEpisodes {
+  episodes: EpisodeSource[];
+  detail: DetailEpisodes;
+  /** La page propose les deux langues : les épisodes de chacune (numérotés séparément). */
+  parLangue?: Partial<Record<LangueVersion, EpisodeSource[]>>;
+  /** Langue des épisodes rendus (`episodes`) quand la page la dit ; null sinon. */
+  langue: LangueLue | null;
+}
+
+/** Une liste (une langue) : saison gardée, numéros complétés par l'ordre, doublons de numéro retirés. */
+function numeroterListe(liste: Collecte[], saison: number | null | undefined) {
+  const saisons = filtrerSaison(liste, saison ?? null);
+  const { numeros, numerotation } = numeroterParOrdre(saisons.map(e => e.number));
+  const numerotes: EpisodeSource[] = [];
+  saisons.forEach((e, i) => {
+    const n = numeros[i];
+    if (n != null) numerotes.push({ number: n, title: e.title, url: e.url, langue: e.langue });
+  });
+  // Un même numéro deux fois (doublon de liste) : le premier est gardé.
+  const vus = new Set<number>();
+  const episodes = numerotes.sort((x, y) => x.number - y.number).filter(e => !vus.has(e.number) && Boolean(vus.add(e.number)));
+  return {
+    episodes,
+    saisonGardee: saisons.length !== liste.length ? saisons[0]?.saison ?? null : undefined,
+    numerotation: saisons.length ? numerotation : undefined,
+    lus: saisons.length ? saisons.slice(0, LUS_MAX).map(e => ({ numero: e.number, texte: (e.texte || e.title || '').slice(0, 80), url: e.url, ...(e.langue ? { langue: e.langue } : {}) })) : undefined,
+  };
+}
+
+/**
+ * Langues des blocs d'une page : deux listes quand la page propose VF ET
+ * VOSTFR (onglets, sections, marqueurs) ; des blocs sans marqueur à côté de
+ * blocs marqués d'UNE langue, aux mêmes numéros, sont présumés de l'autre
+ * (« Épisode 1 », « Épisode 1 VF ») ; sinon une seule liste.
+ */
+function grouperParLangue(toutes: Collecte[]): { groupes: Partial<Record<LangueVersion, Collecte[]>> | null; presumee?: LangueVersion; comptes: { vf: number; vostfr: number; inconnue: number } } {
+  const comptes = { vf: 0, vostfr: 0, inconnue: 0 };
+  for (const c of toutes) comptes[c.langue ?? 'inconnue'] += 1;
+  if (comptes.vf && comptes.vostfr) {
+    return { groupes: { vf: toutes.filter(c => c.langue === 'vf'), vostfr: toutes.filter(c => c.langue === 'vostfr') }, comptes };
+  }
+  const marquee: LangueVersion | null = comptes.vf ? 'vf' : comptes.vostfr ? 'vostfr' : null;
+  if (marquee && comptes.inconnue) {
+    const m = toutes.filter(c => c.langue === marquee);
+    const i = toutes.filter(c => !c.langue);
+    const nums = new Set(i.map(c => c.number).filter(n => n != null));
+    if (m.some(c => c.number != null && nums.has(c.number))) {
+      const presumee = autreLangue(marquee);
+      const indice = `présumée : bloc sans marqueur, à côté de blocs « ${LIBELLE_LANGUE_VERSION[marquee]} » aux mêmes numéros`;
+      return { groupes: { [marquee]: m, [presumee]: i.map(c => ({ ...c, langue: presumee, indiceLangue: indice })) }, presumee, comptes };
+    }
+  }
+  return { groupes: null, comptes };
+}
+
+/**
+ * Lit la liste d'episodes d'une page de serie, triee par numero : sélecteurs
+ * configurés, API JSON, sinon repérage générique (« Épisode N », « EP N »,
+ * « E01 », « S2E03 », « 第N話 », numéro en fin d'adresse). Suit la pagination
+ * (rel=next, « Suivant », `episodes.next`) et garde la saison voulue quand la
+ * page en mêle plusieurs. Une page qui propose VF ET VOSTFR rend les deux
+ * listes (`parLangue`) ; `episodes` est celle de la langue voulue.
+ */
 export async function lireEpisodesDetail(
   ctx: ContexteResolution,
   src: DefinitionSource,
   urlSerie: string,
-  o: { saison?: number | null } = {},
-): Promise<{ episodes: EpisodeSource[]; detail: DetailEpisodes }> {
+  o: { saison?: number | null; titres?: readonly string[]; langue?: PreferenceLangue | null } = {},
+): Promise<LectureEpisodes> {
   const detail: DetailEpisodes = { pages: 0, extraction: 'aucune', blocs: 0 };
   const toutes: Collecte[] = [];
   const pagesVues = new Set<string>();
@@ -407,7 +523,7 @@ export async function lireEpisodesDetail(
       break;
     }
     detail.pages += 1;
-    const r = episodesDePage(src, lue, urlSerie);
+    const r = episodesDePage(src, lue, urlSerie, o.titres ?? []);
     if (detail.pages === 1) {
       detail.extraction = r.extraction;
       detail.blocs = r.blocs;
@@ -420,22 +536,81 @@ export async function lireEpisodesDetail(
     toutes.push(...nouveaux);
     adresse = r.extraction === 'json' ? null : lienSuivant(lue.page, lue.base, src.episodes.next || undefined);
   }
-  const saisons = filtrerSaison(toutes, o.saison ?? null);
-  if (saisons.length !== toutes.length) {
-    detail.saison = saisons[0]?.saison ?? null;
+  const { groupes, presumee, comptes } = grouperParLangue(toutes);
+  const appliquer = (n: ReturnType<typeof numeroterListe>) => {
+    if (n.saisonGardee !== undefined) detail.saison = n.saisonGardee;
+    if (n.numerotation) detail.numerotation = n.numerotation;
+    if (n.lus) detail.lus = n.lus;
+    detail.numeros = n.episodes.map(e => e.number);
+  };
+  if (groupes) {
+    const parLangue: Partial<Record<LangueVersion, EpisodeSource[]>> = {};
+    const lectures: Partial<Record<LangueVersion, ReturnType<typeof numeroterListe>>> = {};
+    for (const l of LANGUES_VERSION) {
+      if (groupes[l]?.length) {
+        lectures[l] = numeroterListe(groupes[l]!, o.saison);
+        parLangue[l] = lectures[l]!.episodes;
+      }
+    }
+    // Langue rendue : celle voulue, sinon celle du premier bloc de la page.
+    const premiere = toutes.find(c => c.langue)?.langue ?? 'vostfr';
+    const voulue: LangueVersion = o.langue === 'vf' || o.langue === 'vostfr' ? o.langue : premiere;
+    const courante: LangueVersion = parLangue[voulue]?.length ? voulue : autreLangue(voulue);
+    appliquer(lectures[courante]!);
+    const indice = groupes[courante]?.find(c => c.indiceLangue)?.indiceLangue ?? 'blocs de la page';
+    detail.langues = { ...comptes, separees: true, presumee, page: null };
+    return { episodes: parLangue[courante] ?? [], detail, parLangue, langue: { langue: courante, indice } };
   }
-  // Dernier recours : aucun numero lisible -> numerotation inverse (liste du plus recent au plus ancien).
-  const numerotes: EpisodeSource[] = saisons.every(e => e.number == null)
-    ? saisons.map((e, i) => ({ number: saisons.length - i, title: e.title, url: e.url }))
-    : saisons.filter(e => e.number != null).map(e => ({ number: e.number as number, title: e.title, url: e.url }));
-  // Un même numéro deux fois (VF et VOSTFR, doublon de liste) : le premier est gardé.
-  const vus = new Set<number>();
-  const episodes = numerotes.sort((x, y) => x.number - y.number).filter(e => !vus.has(e.number) && Boolean(vus.add(e.number)));
-  return { episodes, detail };
+  const n = numeroterListe(toutes, o.saison);
+  appliquer(n);
+  // Une seule langue marquée, et au moins autant de blocs marqués que de blocs muets : la page est dans cette langue.
+  const marquee: LangueVersion | null = comptes.vf ? 'vf' : comptes.vostfr ? 'vostfr' : null;
+  const page: LangueLue | null =
+    marquee && comptes[marquee] >= comptes.inconnue ? { langue: marquee, indice: `épisodes marqués « ${LIBELLE_LANGUE_VERSION[marquee]} » (${toutes.find(c => c.langue)?.indiceLangue ?? 'page'})` } : null;
+  if (comptes.vf || comptes.vostfr) {
+    detail.langues = { ...comptes, separees: false, page };
+  }
+  return { episodes: page ? n.episodes.map(e => ({ ...e, langue: page.langue })) : n.episodes, detail, langue: page };
+}
+
+/**
+ * Numéros manquants déduits de l'ORDRE de la liste. Aucun numéro lisible : la
+ * liste est supposée aller du plus récent au plus ancien (cas le plus courant),
+ * donc numérotée N…1. Quelques trous : sens de la liste (croissant ou
+ * décroissant) lu sur les numéros connus, puis chaque trou reçoit le numéro de
+ * son plus proche voisin connu, décalé de la distance (s'il est libre et > 0).
+ */
+export function numeroterParOrdre(lus: ReadonlyArray<number | null>): { numeros: Array<number | null>; numerotation: 'lue' | 'ordre' | 'mixte' } {
+  const connus = lus.map((n, i) => [n, i] as const).filter((x): x is readonly [number, number] => x[0] != null);
+  if (!connus.length) {
+    return { numeros: lus.map((_, i) => lus.length - i), numerotation: 'ordre' };
+  }
+  if (connus.length === lus.length) {
+    return { numeros: [...lus], numerotation: 'lue' };
+  }
+  let montees = 0;
+  let descentes = 0;
+  for (let k = 1; k < connus.length; k += 1) {
+    if (connus[k][0] > connus[k - 1][0]) montees += 1;
+    else if (connus[k][0] < connus[k - 1][0]) descentes += 1;
+  }
+  const sens = descentes > montees ? -1 : 1;
+  const pris = new Set(connus.map(x => x[0]));
+  const numeros = [...lus];
+  numeros.forEach((n, i) => {
+    if (n != null) return;
+    const voisin = [...connus].sort((a, b) => Math.abs(a[1] - i) - Math.abs(b[1] - i))[0];
+    const deduit = voisin[0] + (i - voisin[1]) * sens;
+    if (deduit > 0 && !pris.has(deduit)) {
+      numeros[i] = deduit;
+      pris.add(deduit);
+    }
+  });
+  return { numeros, numerotation: 'mixte' };
 }
 
 /** Lit la liste d'episodes d'une page de serie, triee par numero. */
-export async function lireEpisodes(ctx: ContexteResolution, src: DefinitionSource, urlSerie: string, o: { saison?: number | null } = {}): Promise<EpisodeSource[]> {
+export async function lireEpisodes(ctx: ContexteResolution, src: DefinitionSource, urlSerie: string, o: { saison?: number | null; titres?: readonly string[] } = {}): Promise<EpisodeSource[]> {
   return (await lireEpisodesDetail(ctx, src, urlSerie, o)).episodes;
 }
 
@@ -462,7 +637,53 @@ export interface CandidatCompare {
   title: string;
   url: string;
   score: number;
+  /** Langue lue sur le candidat (titre ou adresse), null : non marquée. */
+  langue?: LangueVersion | null;
 }
+
+/** Une version (langue) d'une série sur une source. */
+export interface VarianteLangue {
+  langue: LangueVersion;
+  /** Page de la série dans cette langue (vide tant que `aChercher`). */
+  url: string;
+  title: string;
+  /** Pourquoi cette langue : « « (VF) » dans le titre », « onglet « VF » »… */
+  indice: string;
+  /** Langue déduite (fiche sans marqueur à côté d'une fiche marquée), pas lue. */
+  presumee?: boolean;
+  /** Épisodes déjà lus ; absent : la page se lit à la demande. */
+  episodes?: EpisodeSource[];
+  detail?: DetailEpisodes;
+  /** La source a une recherche dédiée à cette langue (search.pathVf / pathVostfr) : à lancer à la demande. */
+  aChercher?: boolean;
+  /** Lecture à la demande déjà tentée sans succès : pourquoi. */
+  echec?: string;
+}
+
+/** Langues d'une série sur une source : celle des épisodes rendus, les autres, et pourquoi une manque. */
+export interface LanguesSerie {
+  /** Langue des épisodes rendus ; null : la source ne la distingue pas. */
+  courante: LangueVersion | null;
+  variantes: Partial<Record<LangueVersion, VarianteLangue>>;
+  /** Pourquoi une langue est indisponible, en clair. */
+  absentes: Partial<Record<LangueVersion, string>>;
+}
+
+/** Résumé sérialisable (diagnostic) : sans les listes d'épisodes. */
+export interface LanguesDiagnostic {
+  courante: LangueVersion | null;
+  variantes: Array<{ langue: LangueVersion; title: string; url: string; indice: string; presumee?: boolean; episodes?: number; aChercher?: boolean; echec?: string }>;
+  absentes: Partial<Record<LangueVersion, string>>;
+}
+
+export const resumerLangues = (l: LanguesSerie): LanguesDiagnostic => ({
+  courante: l.courante,
+  variantes: LANGUES_VERSION.filter(x => l.variantes[x]).map(x => {
+    const v = l.variantes[x]!;
+    return { langue: x, title: v.title, url: v.url, indice: v.indice, ...(v.presumee ? { presumee: true } : {}), ...(v.episodes ? { episodes: v.episodes.length } : {}), ...(v.aChercher ? { aChercher: true } : {}), ...(v.echec ? { echec: v.echec } : {}) };
+  }),
+  absentes: { ...l.absentes },
+});
 
 export interface DiagnosticSource {
   source: string;
@@ -481,6 +702,8 @@ export interface DiagnosticSource {
   raison?: string;
   /** Lecture de la page de la série. */
   lectureEpisodes?: DetailEpisodes;
+  /** Langues trouvées (VF / VOSTFR) et pourquoi une manque. */
+  langues?: LanguesDiagnostic;
 }
 
 export interface ResultatEpisodes {
@@ -491,6 +714,8 @@ export interface ResultatEpisodes {
   refuse: ResultatClasse | null;
   /** Une entrée par source essayée, dans l'ordre. */
   diagnostics: DiagnosticSource[];
+  /** Langues de la série sur la source retenue (VF / VOSTFR), variantes à lire à la demande. */
+  langues?: LanguesSerie;
 }
 
 export interface RechercheSerie {
@@ -502,6 +727,46 @@ export interface RechercheSerie {
   /** Code de cette erreur (anti-robot, cookies, garde, délai…). */
   code?: string;
   meilleurs: CandidatCompare[];
+  /** Fiches de la MÊME série par langue (« Titre » et « Titre (VF) »). */
+  langues: VariantesRecherche;
+}
+
+/** Candidats d'une même série, un par langue. */
+export interface VariantesRecherche {
+  variantes: Partial<Record<LangueVersion, VarianteLangue>>;
+}
+
+/**
+ * Regroupe les candidats de la MÊME série (même titre hors marqueur de langue
+ * et d'épisode, ressemblance suffisante) et garde le meilleur par langue.
+ * Une fiche SANS marqueur à côté d'une fiche marquée d'une seule langue est
+ * présumée de l'autre (« Titre » + « Titre (VF) » : « Titre » = VOSTFR), et
+ * dite présumée. Aucun marqueur : la langue déclarée par la source, sinon rien.
+ */
+export function variantesDeLangue(classes: readonly ResultatClasse[], serie: ResultatClasse | null, langueSource?: Langue | null): VariantesRecherche {
+  const variantes: Partial<Record<LangueVersion, VarianteLangue>> = {};
+  if (!serie) {
+    return { variantes };
+  }
+  const cle = cleSerie(serie.title);
+  const groupe = [serie, ...classes.filter(c => c.url !== serie.url && c.baseScore >= SCORE_MINIMAL && !estTitreDEpisode(c.title) && cleSerie(c.title) === cle)];
+  const muets: ResultatClasse[] = [];
+  for (const c of groupe) {
+    const l = langueDeCandidat(c);
+    if (!l) {
+      muets.push(c);
+    } else if (!variantes[l.langue]) {
+      variantes[l.langue] = { langue: l.langue, url: c.url, title: c.title, indice: l.indice };
+    }
+  }
+  const marquees = LANGUES_VERSION.filter(l => variantes[l]);
+  if (marquees.length === 1 && muets.length) {
+    const autre = autreLangue(marquees[0]);
+    variantes[autre] = { langue: autre, url: muets[0].url, title: muets[0].title, indice: `présumée : fiche sans marqueur, à côté de « ${variantes[marquees[0]]!.title} »`, presumee: true };
+  } else if (!marquees.length && (langueSource === 'vf' || langueSource === 'vostfr')) {
+    variantes[langueSource] = { langue: langueSource, url: serie.url, title: serie.title, indice: `langue déclarée par la source (${LIBELLE_LANGUE_VERSION[langueSource]})` };
+  }
+  return { variantes };
 }
 
 const resume = (r: ResultatClasse | null) => (r ? { title: r.title, url: r.url, score: r.baseScore } : null);
@@ -585,6 +850,8 @@ export async function chercherOeuvre(
   }
   const { classes, choisi } = meilleurDe();
   const serie = choisi && choisi.baseScore >= SCORE_MINIMAL ? choisi : null;
+  // Une recherche dédiée à une langue (search.pathVf) donne des fiches de cette langue, même sans marqueur.
+  const dediee = (preference === 'vf' && src.search.pathVf) || (preference === 'vostfr' && src.search.pathVostfr) ? (preference as LangueVersion) : null;
   const toutesEnErreur = requetes.length > 0 && requetes.every(r => r.erreur);
   return {
     serie,
@@ -592,7 +859,8 @@ export async function chercherOeuvre(
     requetes,
     erreur: toutesEnErreur || (code && ERREURS_DEFINITIVES.has(code) && !vus.size) ? erreur : undefined,
     code: toutesEnErreur || (code && ERREURS_DEFINITIVES.has(code) && !vus.size) ? code : undefined,
-    meilleurs: classes.slice(0, 3).map(c => ({ title: c.title, url: c.url, score: c.baseScore })),
+    meilleurs: classes.slice(0, 3).map(c => ({ title: c.title, url: c.url, score: c.baseScore, langue: langueDeCandidat(c)?.langue ?? null })),
+    langues: variantesDeLangue(classes, serie, dediee ?? src.language),
   };
 }
 
@@ -623,6 +891,119 @@ export function raisonRecherche(r: Pick<RechercheSerie, 'requetes' | 'refuse' | 
   return 'Aucun résultat sur la page de recherche (ni par les sélecteurs, ni par le repérage automatique) : le site ne connaît peut-être pas ce titre, ou la page de recherche n’est pas la bonne.';
 }
 
+const L = (l: LangueVersion) => LIBELLE_LANGUE_VERSION[l];
+
+/**
+ * Langues d'une série sur une source, d'après la page lue et les fiches de la
+ * recherche : la page mêle les deux (listes séparées), ou elle est d'UNE
+ * langue (marqueurs des épisodes, fiche retenue, langue déclarée) et l'autre
+ * est une autre fiche (lue à la demande), une recherche dédiée, ou absente.
+ */
+export function composerLangues(
+  src: DefinitionSource,
+  pageUrl: string,
+  serie: ResultatClasse | null,
+  trouvees: VariantesRecherche,
+  lecture: LectureEpisodes,
+): LanguesSerie {
+  const variantes: Partial<Record<LangueVersion, VarianteLangue>> = {};
+  const titre = serie?.title ?? '';
+  let courante: LangueVersion | null = null;
+  if (lecture.parLangue) {
+    courante = lecture.langue?.langue ?? null;
+    const presumee = lecture.detail.langues?.presumee;
+    for (const l of LANGUES_VERSION) {
+      const eps = lecture.parLangue[l];
+      if (eps?.length) {
+        variantes[l] = {
+          langue: l,
+          url: pageUrl,
+          title: titre,
+          indice: presumee === l ? `même page : épisodes sans marqueur, à côté des épisodes « ${L(autreLangue(l))} » (présumés ${L(l)})` : 'même page : épisodes VF et VOSTFR séparés',
+          presumee: presumee === l || undefined,
+          episodes: eps,
+          detail: l === courante ? lecture.detail : undefined,
+        };
+      }
+    }
+  } else {
+    const fiche = LANGUES_VERSION.map(l => trouvees.variantes[l]).find(v => v && v.url === pageUrl);
+    const declaree = src.language === 'vf' || src.language === 'vostfr' ? src.language : null;
+    // La page et la fiche s'accordent : l'indice de la fiche (« (VF) » dans le titre) est le plus parlant.
+    const lue: LangueLue | null = (fiche && lecture.langue?.langue === fiche.langue && !fiche.presumee ? { langue: fiche.langue, indice: fiche.indice } : null) ?? lecture.langue ?? (fiche ? { langue: fiche.langue, indice: fiche.indice } : declaree ? { langue: declaree, indice: `langue déclarée par la source (${L(declaree)})` } : null);
+    if (lue) {
+      courante = lue.langue;
+      variantes[lue.langue] = { langue: lue.langue, url: pageUrl, title: titre, indice: lue.indice, presumee: (!lecture.langue && fiche?.presumee) || undefined, episodes: lecture.episodes, detail: lecture.detail };
+      const autre = autreLangue(lue.langue);
+      const ailleurs = trouvees.variantes[autre];
+      if (ailleurs && ailleurs.url !== pageUrl) {
+        variantes[autre] = { ...ailleurs };
+      } else if ((autre === 'vf' && src.search.pathVf) || (autre === 'vostfr' && src.search.pathVostfr)) {
+        variantes[autre] = { langue: autre, url: '', title: '', indice: `recherche dédiée de la source (search.${autre === 'vf' ? 'pathVf' : 'pathVostfr'}), lancée à la demande`, aChercher: true };
+      }
+    }
+  }
+  const absentes: Partial<Record<LangueVersion, string>> = {};
+  for (const l of LANGUES_VERSION) {
+    if (variantes[l]) continue;
+    if (!courante) {
+      absentes[l] = `la source « ${src.name} » ne distingue pas la langue : ni le titre de la fiche, ni son adresse, ni les blocs de la page n’indiquent VF ou VOSTFR`;
+    } else if ((src.language === 'vf' || src.language === 'vostfr') && src.language !== l) {
+      absentes[l] = `la source « ${src.name} » est réglée sur ${L(src.language)} seulement, et aucune fiche « ${L(l)} » n’a été trouvée`;
+    } else {
+      absentes[l] = `aucune fiche « ${L(l)} » de ce titre parmi les résultats de « ${src.name} », et la page de la série ne propose que la ${L(courante)}`;
+    }
+  }
+  return { courante, variantes, absentes };
+}
+
+/**
+ * Épisodes d'une série dans une langue, sur la source qui l'a trouvée. Ce qui
+ * est déjà lu sert tel quel ; sinon UNE page de série de plus (ou la
+ * recherche dédiée à cette langue puis sa page) ; le résultat est gardé dans
+ * `langues` (pas de seconde requête). Jamais d'exception : `raison` sinon.
+ */
+export async function episodesEnLangue(
+  ctx: ContexteResolution,
+  src: DefinitionSource,
+  langues: LanguesSerie,
+  langue: LangueVersion,
+  o: { titres: readonly string[]; saison?: number | null },
+): Promise<{ episodes: EpisodeSource[]; variante?: VarianteLangue; raison?: string }> {
+  const v = langues.variantes[langue];
+  if (!v) {
+    return { episodes: [], raison: langues.absentes[langue] ?? `${L(langue)} non trouvée sur « ${src.name} »` };
+  }
+  if (v.episodes) {
+    return v.episodes.length ? { episodes: v.episodes, variante: v } : { episodes: [], variante: v, raison: v.echec ?? `aucun épisode ${L(langue)} lu sur « ${src.name} »` };
+  }
+  try {
+    if (v.aChercher) {
+      const r = await chercherOeuvre(ctx, src, { titres: o.titres, langue });
+      const trouvee = r.langues.variantes[langue] ?? (r.serie && !langueDeCandidat(r.serie) ? { langue, url: r.serie.url, title: r.serie.title, indice: v.indice } : null);
+      if (!trouvee) {
+        v.episodes = [];
+        v.echec = `la recherche ${L(langue)} de « ${src.name} » ne trouve pas ce titre${r.erreur ? ` (${r.erreur})` : ''}`;
+        return { episodes: [], variante: v, raison: v.echec };
+      }
+      Object.assign(v, { url: trouvee.url, title: trouvee.title, aChercher: false });
+    }
+    const lecture = await lireEpisodesDetail(ctx, src, v.url, { saison: o.saison ?? saisonDe(o.titres[0] ?? '') ?? saisonDe(v.title), titres: [...o.titres, v.title], langue });
+    const contraire = !lecture.parLangue && lecture.langue && lecture.langue.langue !== langue;
+    v.episodes = lecture.parLangue ? lecture.parLangue[langue] ?? [] : contraire ? [] : lecture.episodes.map(e => ({ ...e, langue }));
+    v.detail = lecture.detail;
+    if (!v.episodes.length) {
+      v.echec = contraire ? `la page « ${v.title} » s’annonce ${L(lecture.langue!.langue)} (${lecture.langue!.indice})` : `aucun épisode lu sur la page ${L(langue)} « ${v.title} »`;
+      return { episodes: [], variante: v, raison: v.echec };
+    }
+    return { episodes: v.episodes, variante: v };
+  } catch (err) {
+    journalDe(ctx)(`[source:${src.name}] ${L(langue)} : ${messageDe(err)}`);
+    // Erreur passagère (réseau) : rien n'est retenu, une nouvelle demande relira la page.
+    return { episodes: [], variante: v, raison: `page ${L(langue)} illisible : ${messageDe(err)}` };
+  }
+}
+
 /** Cherche la serie sur UNE source puis lit ses episodes. */
 export async function episodesSur(ctx: ContexteResolution, src: DefinitionSource, o: OptionsEpisodes): Promise<ResultatEpisodes> {
   const diag: DiagnosticSource = { source: src.name, sourceId: src.id, statut: 'ok', requetes: [], serie: null, refuse: null, episodes: 0 };
@@ -637,8 +1018,10 @@ export async function episodesSur(ctx: ContexteResolution, src: DefinitionSource
   }
   let serie: ResultatClasse | null = null;
   let pageUrl = o.url ?? null;
+  let trouvees: VariantesRecherche = { variantes: {} };
   if (!pageUrl) {
     const r = await chercherOeuvre(ctx, src, o);
+    trouvees = r.langues;
     diag.requetes = r.requetes;
     diag.refuse = resume(r.refuse);
     diag.meilleurs = r.meilleurs;
@@ -654,16 +1037,20 @@ export async function episodesSur(ctx: ContexteResolution, src: DefinitionSource
   }
   try {
     const voulue = saisonDe(o.titres[0] ?? '') ?? saisonDe(serie?.title ?? '');
-    const { episodes, detail } = await lireEpisodesDetail(ctx, src, pageUrl, { saison: voulue });
+    const titresSerie = [...o.titres, ...(serie?.title ? [serie.title] : [])];
+    const lecture = await lireEpisodesDetail(ctx, src, pageUrl, { saison: voulue, titres: titresSerie, langue: o.langue ?? src.language });
+    const { episodes, detail } = lecture;
+    const langues = composerLangues(src, pageUrl, serie, trouvees, lecture);
     diag.episodes = episodes.length;
     diag.lectureEpisodes = detail;
+    diag.langues = resumerLangues(langues);
     diag.statut = episodes.length ? 'ok' : 'aucun-episode';
     if (!episodes.length) {
       diag.raison = detail.renduJs
         ? 'La page de la série est construite en JavaScript : la liste des épisodes n’est pas dans le HTML (API JSON à configurer dans episodes.type).'
         : `Aucun épisode lu sur ${pageUrl} (${detail.blocs} bloc(s) pour « ${src.episodes.item || '(aucun sélecteur)'} », repérage automatique sans résultat).`;
     }
-    return { episodes, source: src, serie, refuse: null, diagnostics: [diag] };
+    return { episodes, source: src, serie, refuse: null, diagnostics: [diag], langues };
   } catch (err) {
     diag.statut = err instanceof ErreurMoteur && (err.code === 'anti-robot' || err.code === 'cookies') ? 'bloquee' : 'erreur';
     diag.erreur = `Page de la série illisible (${pageUrl}) : ${messageDe(err)}`;

@@ -12,6 +12,9 @@ import { LecteurMedia } from './LecteurMedia';
 import { LienGererSources } from './EtatSources';
 import { enregistrerTitrePerso, lireAnime, lireFilm, lireTitresPerso, titresPourSources, type Lecture } from './resoudre';
 import { PanneauEchec } from './DiagnosticSources';
+import { choisirLangue, langueVoulue, type OrigineLangue } from './langues';
+import { SelecteurLangue } from './SelecteurLangue';
+import { LIBELLE_LANGUE_VERSION, type LangueVersion } from '../moteur/langues';
 import { Avis, Bouton, Etat, Puce, Titre, styleAttenue } from './ui';
 
 interface Meta {
@@ -45,12 +48,35 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
   const [choix, setChoix] = useState(0);
   // « Réessayer » et « Chercher avec un autre titre » relancent la recherche (sans le cache).
   const [essai, setEssai] = useState(0);
-  const charge = useCharger<{ meta: Meta; lecture: Lecture; suivantAuto: boolean; perso?: string }>(async () => {
+  // Langue choisie dans CE lecteur (VF / VOSTFR) ; sinon celle de la série, de la séance ou des réglages.
+  const [langueChoisie, setLangueChoisie] = useState<LangueVersion | null>(null);
+  const [origine, setOrigine] = useState<OrigineLangue | null>(null);
+  // Position de la vidéo directe au moment de changer de langue (reprise au même endroit).
+  const position = useRef(0);
+  const [debut, setDebut] = useState<number | undefined>();
+  const [bascule, setBascule] = useState(false);
+  const charge = useCharger<{ meta: Meta; lecture: Lecture; suivantAuto: boolean; perso?: string; origine: OrigineLangue; auChoix: boolean }>(async () => {
     const meta = await chargerMeta(s, kind, id);
-    const lecture = kind === 'anime' ? await lireAnime(s, { id, titres: meta.titres, numero: n, forcer: essai > 0 }) : await lireFilm(s, { id, titres: meta.titres, annee: meta.annee });
-    return { meta, lecture, suivantAuto: (await s.reglages()).suivantAuto, perso: (await lireTitresPerso(s))[`${kind}:${id}`] };
-  }, [s, kind, id, n, essai]);
-  useEffect(() => setChoix(0), [id, n]);
+    const voulue = await langueVoulue(s, `${kind}:${id}`);
+    const langue = langueChoisie ?? voulue.langue;
+    const lecture = kind === 'anime' ? await lireAnime(s, { id, titres: meta.titres, numero: n, forcer: essai > 0, langue }) : await lireFilm(s, { id, titres: meta.titres, annee: meta.annee });
+    return { meta, lecture, suivantAuto: (await s.reglages()).suivantAuto, perso: (await lireTitresPerso(s))[`${kind}:${id}`], origine: langueChoisie ? origine ?? voulue.origine : voulue.origine, auChoix: voulue.auChoix };
+  }, [s, kind, id, n, essai, langueChoisie]);
+  useEffect(() => setChoix(0), [id, n, langueChoisie]);
+  // Autre épisode : la position ne se reporte pas.
+  useEffect(() => {
+    setDebut(undefined);
+    setBascule(false);
+    position.current = 0;
+  }, [id, n]);
+  const changerLangue = (l: LangueVersion) => {
+    setDebut(position.current > 5 ? position.current : undefined);
+    setBascule(true);
+    void choisirLangue(s, `${kind}:${id}`, l).then(o => {
+      setOrigine(o);
+      setLangueChoisie(l);
+    });
+  };
   const { meta, lecture, suivantAuto } = charge.donnees ?? {};
   const lecteurs: Lecteur[] = lecture?.lecteurs ?? [];
   const courant = lecteurs[Math.min(choix, Math.max(0, lecteurs.length - 1))];
@@ -120,7 +146,31 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
                 ))}
               </View>
             ) : null}
-            {courant ? <LecteurMedia key={courant.url} lecteur={courant} titre={meta.titre} onFin={fin} /> : null}
+            {kind === 'anime' && lecture.langues ? (
+              <SelecteurLangue
+                testID="lecteur-langue"
+                etat={lecture.langues}
+                valeur={lecture.langue ?? null}
+                enCours={charge.enCours}
+                onChoisir={changerLangue}
+                note={
+                  lecture.langues.inconnue
+                    ? undefined
+                    : charge.donnees?.auChoix
+                      ? 'Au choix à chaque fois (Paramètres › Tsuzuku) : ce choix vaut pour cette séance.'
+                      : charge.donnees?.origine === 'serie'
+                        ? `${lecture.langue ? LIBELLE_LANGUE_VERSION[lecture.langue] : 'Langue'} retenue pour cette série (sur cet appareil). Vu / reprendre restent communs aux deux langues.`
+                        : 'Langue par défaut : Paramètres › Tsuzuku. Vu / reprendre restent communs aux deux langues.'
+                }
+              />
+            ) : null}
+            {lecture.avisLangue ? <Avis genre="alerte" texte={lecture.avisLangue} testID="lecteur-langue-avis" /> : null}
+            {courant ? <LecteurMedia key={`${courant.url}|${lecture.langue ?? ''}`} lecteur={courant} titre={meta.titre} onFin={fin} debut={debut} onPosition={t => (position.current = t)} /> : null}
+            {bascule && courant && courant.kind === 'iframe' ? (
+              <Text style={styleAttenue(theme, 15)} testID="lecteur-langue-position">
+                Lecteur intégré d’un autre site : la position ne peut pas être reprise, l’épisode repart du début.
+              </Text>
+            ) : null}
             {lecture.message ? <Avis genre={courant ? 'alerte' : 'info'} texte={lecture.message} testID="lecteur-message" /> : null}
             {!courant && lecture.diagnostic ? (
               <PanneauEchec
