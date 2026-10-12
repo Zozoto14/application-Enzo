@@ -39,7 +39,7 @@ import { avancerRelecture, bureauA, demarrerRelecture, densite, PAS_RELECTURE_MS
 import { PlateauScene } from './PlateauScene';
 import { sousAgentsDemo, sousAgentsDepuisHistorique } from './sousAgentsScene';
 import type { CommandesRelecture } from './plateauTypes';
-import { useNavigationAgents } from './raccourcis';
+import { ecouterOffice, useNavigationAgents } from './raccourcis';
 import {
   DELAI_MIN_PRESENCE_MS, MAX_PRESENCES_JOUR, ecrireEtatPresence, ecrireEtatSynchro, lireEtatPresence, lireEtatSynchro, type EtatPresence, type EtatSynchroHistorique,
 } from './synchroHistorique';
@@ -178,7 +178,18 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
 
   const detail = agentsScene.find(a => a.cle === choisi) ?? bureau.agents.find(a => a.cle === choisi);
   // Scène web : J/K suivent l'agent suivant / précédent DANS la scène (PlateauScene.web) ; ailleurs (liste, natif), ils ouvrent son détail.
-  useNavigationAgents(prefs.vue === 'scene' && Platform.OS === 'web' ? [] : agentsScene.map(a => a.cle), choisi, setChoisi); // v4 : touches J/K (agent suivant/précédent) et Échap (ferme le détail), raccourcis.ts
+  useNavigationAgents(prefs.vue === 'scene' && Platform.OS === 'web' ? [] : agentsScene.map(a => a.cle), choisi, setChoisi);
+  // Touche « / » : la recherche est rangée dans « Options » ; on l'ouvre et on y place le curseur.
+  const champRecherche = useRef<React.ComponentRef<typeof TextInput>>(null);
+  const peutChercher = Boolean(onVoirHistorique);
+  useEffect(() => {
+    if (!peutChercher) return undefined;
+    return ecouterOffice('recherche', () => {
+      setOptions(true);
+      setTimeout(() => champRecherche.current?.focus(), 60);
+      return true;
+    });
+  }, [peutChercher]); // v4 : touches J/K (agent suivant/précédent) et Échap (ferme le détail), raccourcis.ts
   const enDirect = activite.source.genre === 'local' && !demo;
   const fraicheurComplete = demo ? 'Démo · sessions fictives, aucune activité réelle' : libelleFraicheur(activite.source, maintenant);
   // Dans la barre d'outils : la version courte (la complète est lue par les lecteurs d'écran).
@@ -282,6 +293,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
       {onVoirHistorique ? (
         <View style={styles.recherche}>
           <TextInput
+            ref={champRecherche}
             value={recherche}
             onChangeText={setRecherche}
             placeholder="Rechercher dans l’historique…"

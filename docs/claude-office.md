@@ -185,8 +185,8 @@ pas modifié.
 - **Notes** (`NoteSession.tsx`) : une note libre par session (500 caractères), dans le **Détail d'un agent** et sur
   chaque session de l'**Historique** ; section « Notes » : toutes les notes, recherche sans accents ni casse.
 - **Raccourcis clavier** (`raccourcis.ts`, PC et iPad avec clavier, web) : `?` aide (aussi « Raccourcis clavier »
-  en bas de l'onglet Suivi), `B`/`H`/`S` onglets, `/` recherche (Bureau, Historique ou Notes ; sinon ouvre
-  l'Historique), `F` plein écran de la scène (bascule), `Échap` ferme l'aide ou le détail **sans quitter l'app**,
+  en bas de l'onglet Suivi), `B`/`H`/`S` onglets, `/` recherche (sur le Bureau, ouvre « Options » et place le curseur dans sa recherche ; Historique ou Notes ;
+  sinon ouvre l'Historique), `F` plein écran de la scène (bascule), `Échap` ferme l'aide ou le détail **sans quitter l'app**,
   `J`/`K` agent suivant/précédent (dans la scène : la caméra le suit ; en vue Liste : ouvre son détail). Jamais pendant la saisie (champ, zone de texte, contenu
   éditable) ni avec Ctrl, Cmd ou Alt.
 - **Démo** : en plus des sessions du bureau, trois sessions fictives (`demoSuivi.ts`) déclenchent les quatre alertes

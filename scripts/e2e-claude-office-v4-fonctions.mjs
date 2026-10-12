@@ -187,6 +187,9 @@ try {
   await page.keyboard.type('bhs');
   verifier((await page.getByTestId('bureau-recherche').inputValue()) === 'bhs' && (await page.getByTestId('bureau-visuel').count()) === 1, 'saisie : B, H, S tapés dans le champ, aucun raccourci déclenché');
   await page.getByTestId('bureau-recherche').fill('');
+  await page.getByTestId('bureau-options').click();
+  // Vue Liste : J / K ouvrent le détail (dans la scène, ils font suivre l'agent : e2e-claude-office-v4-scene).
+  await page.getByTestId('bureau-vue-liste').click();
   await page.mouse.click(5, 300);
   await page.keyboard.press('j');
   verifier(await attendre(async () => page.getByTestId('bureau-detail').isVisible(), 5000), 'J : détail du premier agent');
@@ -199,7 +202,7 @@ try {
   await pause(500);
   verifier((await page.getByTestId('bureau-detail').innerText()).split('\n')[0] === premier.split('\n')[0], 'K : agent précédent');
   await page.keyboard.press('f');
-  verifier((await page.getByTestId('bureau-detail').count()) === 1 && erreurs.length === 0, 'F : sans plein écran branché, rien ne se passe (aucune erreur)');
+  verifier((await page.getByTestId('bureau-detail').count()) === 1 && erreurs.length === 0, 'F en vue Liste : pas de scène, rien ne se passe (aucune erreur)');
 
   // 3. Note de session depuis le détail ; visible dans l'Historique ; recherche des notes.
   const idNote = await page.locator('[data-testid^="note-modifier-"]').first().getAttribute('data-testid');
@@ -212,6 +215,7 @@ try {
   await prendre('42-detail-note-pc');
   await page.keyboard.press('Escape');
   verifier(await attendre(async () => (await page.getByTestId('bureau-detail').count()) === 0, 5000) && (await page.getByTestId('bureau').count()) === 1, 'Échap : le détail se ferme, on reste dans Claude Office');
+  await page.getByTestId('bureau-vue-scene').click();
   await page.getByTestId('claude-office-onglet-historique').click();
   verifier(await attendre(async () => /À vérifier : export CSV/.test(await page.getByTestId(`note-texte-${sessionNote}`).first().innerText()), 10_000), 'note visible dans l’Historique');
   await page.getByTestId('claude-office-onglet-suivi').click();
