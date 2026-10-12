@@ -64,7 +64,9 @@ couleur du projet). Il **arrive par la porte**, puis **marche jusqu'à la zone d
 ### La scène v4 : plus grande, moins de texte, détails au survol
 
 `PlateauScene.web.tsx` (caméra, cartes, plein écran, relecture, mini-carte ; logique pure : `logiqueCamera.ts`,
-`logiqueRelecture.ts`, `sousAgentsScene.ts`, tests `sceneV4.test.tsx`, e2e `scripts/e2e-claude-office-v4-scene.mjs`).
+`logiqueRelecture.ts`, `sousAgentsScene.ts`, tests `sceneV4.test.tsx`, e2e `scripts/e2e-claude-office-v4-scene.mjs` ;
+captures `docs/captures-claude-office/v4-*.jpg`, avant/après : `v4-avant-pc-sombre.jpg` / `v4-pc-sombre.jpg`,
+`v4-avant-iphone-clair.jpg` / `v4-iphone-clair.jpg`).
 
 - **Plein cadre** : la scène prend toute la largeur et la hauteur disponible (PC : tout l'open space d'un coup ;
   iPhone et iPad portrait : vue rapprochée lisible, échelle ≥ 0,78 sur iPhone). Au-dessus, **une seule barre** :

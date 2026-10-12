@@ -43,7 +43,10 @@ try {
   await page.getByTestId('hub').waitFor({ timeout: 60_000 }).catch(() => deverrouiller(page, MDP, secret));
   await page.getByText(/Fermer|Terminé|Compris|Plus tard/).first().click({ timeout: 3000 }).catch(() => undefined);
 
+  // Quelques captures gardées dans docs/ (les autres étapes sont vérifiées sans image) ; CAPTURES_TOUTES=1 : toutes.
+  const GARDEES = new Set(['v4-pc-sombre', 'v4-pc-survol', 'v4-pc-sous-agent', 'v4-pc-plein-ecran', 'v4-ipad-paysage-clair', 'v4-iphone-sombre', 'v4-iphone-clair']);
   const prendre = async (nom, souris = true) => {
+    if (!GARDEES.has(nom) && !process.env.CAPTURES_TOUTES) return;
     await pause(700);
     if (souris) await page.mouse.move(1, 1);
     await page.screenshot({ path: join(CAPTURES, `${nom}.jpg`), type: 'jpeg', quality: 60 });
