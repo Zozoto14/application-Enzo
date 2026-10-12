@@ -111,7 +111,8 @@ export function vueInitiale(c: Taille, centre?: Point): Camera {
   const max = couvrir(c);
   const lisible = c.l < 600 ? ECHELLE_LISIBLE_TELEPHONE : ECHELLE_LISIBLE;
   const videVertical = SCENE.h * min < c.h * 0.85;
-  const s = Math.min(max, Math.max(min, lisible, videVertical ? min * 1.3 : 0));
+  // Téléphone : jamais sous l'échelle lisible, quitte à faire glisser aussi de haut en bas.
+  const s = Math.max(Math.min(max, Math.max(min, lisible, videVertical ? min * 1.3 : 0)), c.l < 600 ? lisible : 0);
   return borner({ s, cx: centre?.x ?? SCENE.l / 2, cy: centre?.y ?? SCENE.h / 2 }, c);
 }
 

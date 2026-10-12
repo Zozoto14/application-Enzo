@@ -466,6 +466,24 @@ export function PlateauScene({
     if (!touchee.current) appliquer(vueDepart());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [charge, cleScene, ambiance, immersif]);
+  // Le cadre ne défile jamais (un focus clavier sur un personnage hors de la vue le ferait glisser de travers) :
+  // c'est la caméra qui va le chercher.
+  useEffect(() => {
+    const racine = plateau.current;
+    if (!racine) return undefined;
+    const cadres = [racine, vue.current, racine.parentElement].filter((x): x is HTMLElement => Boolean(x));
+    const surDefile = (e: Event) => {
+      const el = e.target as HTMLElement;
+      if (cadres.includes(el) && (el.scrollLeft || el.scrollTop)) {
+        el.scrollLeft = 0;
+        el.scrollTop = 0;
+      }
+    };
+    for (const c of cadres) c.addEventListener('scroll', surDefile, true);
+    return () => {
+      for (const c of cadres) c.removeEventListener('scroll', surDefile, true);
+    };
+  }, [immersif]);
   useEffect(() => {
     const el = vue.current;
     if (!el || typeof ResizeObserver === 'undefined') return undefined;

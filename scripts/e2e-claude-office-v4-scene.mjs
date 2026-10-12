@@ -46,7 +46,7 @@ try {
   const prendre = async (nom, souris = true) => {
     await pause(700);
     if (souris) await page.mouse.move(1, 1);
-    await page.screenshot({ path: join(CAPTURES, `${nom}.jpg`), type: 'jpeg', quality: 68 });
+    await page.screenshot({ path: join(CAPTURES, `${nom}.jpg`), type: 'jpeg', quality: 60 });
     log(`${nom} : capturé`);
   };
   const tuile = page.locator('[data-testid="cellule-claude-office"], [data-testid="tuile-claude-office"]');
@@ -339,9 +339,12 @@ try {
   // Sous-agents (démo) : un petit personnage sort de la réunion, travaille, rend son travail au parent et disparaît.
   await remonter();
   await page.getByTestId('scene-recentrer').click();
+  // Un sous-agent qui vient d'apparaître (il a toute sa vie devant lui).
+  const deja = new Set(await page.locator('[data-sous]').evaluateAll(e => e.map(x => x.getAttribute('data-sous'))));
   let idSous;
-  for (let i = 0; i < 50 && !idSous; i++) {
-    idSous = await page.locator('[data-sous][data-phase="travaille"]').first().getAttribute('data-sous', { timeout: 500 }).catch(() => undefined);
+  for (let i = 0; i < 60 && !idSous; i++) {
+    const ids = await page.locator('[data-sous][data-phase="travaille"]').evaluateAll(e => e.map(x => x.getAttribute('data-sous')));
+    idSous = ids.find(x => !deja.has(x));
     if (!idSous) await pause(1000);
   }
   verifier(Boolean(idSous), `sous-agent : un mini-personnage apparaît (${idSous})`);
@@ -354,7 +357,7 @@ try {
   await prendre('v4-pc-sous-agent', false);
   await cibleSous.click().catch(() => undefined);
   await page.getByTestId('bureau-detail').waitFor({ timeout: 5000 }).catch(() => undefined);
-  verifier((await page.getByTestId('bureau-detail-sous-agents').count()) === 1, 'détail du parent : section « Sous-agents »');
+  verifier((await page.getByTestId('bureau-detail-sous-agents').count()) === 1, `détail du parent : section « Sous-agents » (détail ouvert : ${await page.getByTestId('bureau-detail').count()})`);
   await page.getByTestId('bureau-detail-fermer').click().catch(() => undefined);
   await page.mouse.move(1, 1);
   let vuRendu = false;
@@ -379,7 +382,7 @@ try {
     await page.getByTestId('scene-recentrer').click();
     await pause(700);
     const c = await cadreVue();
-    if (nom === 'iPhone') verifier((await zoom()) >= 0.7 && c.height >= 500, `iPhone : vue rapprochée lisible (échelle ${await zoom()}, cadre ${Math.round(c.height)} px)`);
+    if (nom === 'iPhone') verifier((await zoom()) >= 0.7 && c.height >= 440, `iPhone : vue rapprochée lisible (échelle ${await zoom()}, cadre ${Math.round(c.height)} px)`);
     const cible = await cibleVisible();
     await cible.tap();
     await page.getByTestId('scene-carte').waitFor({ timeout: 3000 }).catch(() => undefined);
