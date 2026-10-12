@@ -89,8 +89,39 @@ export function ligneRequete(r: RequeteDiagnostic): string {
   return `  · « ${r.requete} » → ${resultat}${vu.length ? ` [${vu.join(' · ')}]` : ''}${r.url ? ` — ${r.methode === 'POST' ? 'POST ' : ''}${masquerAdresse(r.url)}` : ''}`;
 }
 
-function ligneEpisodes(d: DetailEpisodes): string {
-  return `  · page de la série : ${d.pages} page(s) lue(s), extraction ${EXTRACTION[d.extraction] ?? d.extraction} (${d.blocs} bloc(s) pour le sélecteur)${d.renduJs ? ', page construite en JavaScript' : ''}${d.saison ? `, saison ${d.saison} gardée` : ''}`;
+/** Numéros en plages lisibles : [1, 2, 3, 5, 7, 8] → « 1–3, 5, 7–8 ». */
+export function plagesNumeros(numeros: readonly number[]): string {
+  const tries = [...new Set(numeros)].sort((a, b) => a - b);
+  const plages: string[] = [];
+  for (let i = 0; i < tries.length; i += 1) {
+    let j = i;
+    while (j + 1 < tries.length && tries[j + 1] === tries[j] + 1) j += 1;
+    plages.push(j > i ? `${tries[i]}–${tries[j]}` : String(tries[i]));
+    i = j;
+  }
+  return plages.length > 12 ? `${plages.slice(0, 12).join(', ')}, …` : plages.join(', ');
+}
+
+/** Liens d'épisodes affichés au plus dans le diagnostic. */
+const LUS_AFFICHES = 12;
+const NUMEROTATION: Record<string, string> = {
+  ordre: 'aucun numéro lisible : numérotés par leur ordre dans la liste (du plus récent au plus ancien)',
+  mixte: 'numéros manquants déduits de l’ordre de la liste',
+};
+
+function lignesEpisodes(d: DetailEpisodes): string[] {
+  const l = [
+    `  · page de la série : ${d.pages} page(s) lue(s), extraction ${EXTRACTION[d.extraction] ?? d.extraction} (${d.blocs} bloc(s) pour le sélecteur)${d.renduJs ? ', page construite en JavaScript' : ''}${d.saison ? `, saison ${d.saison} gardée` : ''}`,
+  ];
+  if (d.numeros?.length) {
+    l.push(`  · épisodes trouvés : ${plagesNumeros(d.numeros)} (${d.numeros.length})${d.numerotation && NUMEROTATION[d.numerotation] ? ` — ${NUMEROTATION[d.numerotation]}` : ''}`);
+  }
+  for (const x of (d.lus ?? []).slice(0, LUS_AFFICHES)) {
+    const adresse = masquerAdresse(x.url);
+    l.push(`    – n° ${x.numero ?? '?'} ← « ${masquerTexte(x.texte.slice(0, 60)) || '(sans texte)'} » — ${adresse.length > 100 ? `${adresse.slice(0, 99)}…` : adresse}`);
+  }
+  if ((d.lus?.length ?? 0) > LUS_AFFICHES) l.push(`    – … (${(d.lus?.length ?? 0) - LUS_AFFICHES} autre(s))`);
+  return l;
 }
 
 /** Lignes d'une source. */
@@ -100,7 +131,7 @@ export function lignesSource(x: DiagnosticSource): string[] {
   if (x.meilleurs?.length) l.push(`  · meilleurs candidats : ${x.meilleurs.map(m => `« ${m.title} » (${m.score})`).join(', ')} — minimum ${SCORE_MINIMAL}`);
   if (x.serie) l.push(`  · retenu : « ${x.serie.title} » (ressemblance ${x.serie.score}) — ${masquerAdresse(x.serie.url)}`);
   if (x.refuse) l.push(`  · écarté : « ${x.refuse.title} » (ressemblance ${x.refuse.score}, minimum ${SCORE_MINIMAL})`);
-  if (x.lectureEpisodes) l.push(ligneEpisodes(x.lectureEpisodes));
+  if (x.lectureEpisodes) l.push(...lignesEpisodes(x.lectureEpisodes));
   if (x.raison && !x.requetes.some(r => r.erreur === x.raison)) l.push(`  · raison : ${masquerTexte(x.raison)}`);
   if (x.erreur && !x.requetes.some(r => r.erreur === x.erreur) && x.erreur !== x.raison) l.push(`  · ${masquerTexte(x.erreur)}`);
   return l;

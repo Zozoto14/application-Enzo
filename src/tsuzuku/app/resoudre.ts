@@ -22,6 +22,7 @@ import type { CibleTest } from '../moteur/assistant';
 import { CLES } from '../plateforme/stockage';
 import { MESSAGE_SITE } from '../plateforme/reseauWeb';
 import type { ServicesTsuzuku } from './services';
+import { plagesNumeros } from './diagnosticTexte';
 
 /** Pourquoi rien n'est lisible : chaque cas a son message et son action. */
 export type RaisonEchec =
@@ -118,8 +119,19 @@ export function messageEchec(d: DiagnosticLecture, numero?: number): string {
     }
     case 'aucun-episode':
       return `« ${premier?.serie?.title ?? 'La série'} » trouvé sur « ${premier?.source ?? 'la source'} », mais aucun épisode n’a été lu sur sa page${premier?.raison ? ` : ${premier.raison}` : ' (sélecteur d’épisode à revoir)'}.`;
-    case 'episode-absent':
-      return `« ${premier?.serie?.title ?? 'La série'} » trouvé sur « ${premier?.source ?? 'la source'} » (${premier?.episodes ?? 0} épisode(s)), mais pas l’épisode ${numero ?? ''}.`.replace(' .', '.');
+    case 'episode-absent': {
+      const nom = `« ${premier?.serie?.title ?? 'La série'} » trouvé sur « ${premier?.source ?? 'la source'} »`;
+      const nums = premier?.lectureEpisodes?.numeros ?? [];
+      if (!nums.length || numero == null) {
+        return `${nom} (${premier?.episodes ?? 0} épisode(s)), mais pas l’épisode ${numero ?? ''}.`.replace(' .', '.');
+      }
+      const plages = plagesNumeros(nums);
+      if (numero > Math.max(...nums)) {
+        // Le catalogue annonce souvent plus d'épisodes que le site n'en a mis en ligne : ce n'est pas une panne.
+        return `${nom} : la source n’a que ${nums.length === 1 ? 'l’épisode' : 'les épisodes'} ${plages}. L’épisode ${numero} n’y est pas (encore) en ligne.`;
+      }
+      return `${nom} : épisodes trouvés ${plages} (${nums.length}), mais pas l’épisode ${numero}. Ouvrez « Détail du diagnostic » pour voir le numéro lu sur chaque lien (liste incomplète sur la page de la série, ou numérotation propre au site).`;
+    }
     case 'aucun-lecteur':
       return 'La page de l’épisode ne contient aucun lecteur reconnu.';
   }

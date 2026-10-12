@@ -22,7 +22,7 @@ import {
 } from './appariement';
 import { echec, ErreurMoteur, messageDe, type CodeErreur } from './erreurs';
 import { classerMedia, type TypeMedia, urlPubliqueSure } from './garde';
-import { choisir, lirePage, sembleRenduEnJs, suggererSelecteurs, texteCompact, texteVisible, type Noeud, type Page } from './lecteurPage';
+import { choisir, lirePage, sembleRenduEnJs, suggererSelecteurs, texteCompact, texteSepare, texteVisible, type Noeud, type Page } from './lecteurPage';
 import { detecterBlocage, messageBlocage, type ClientSur, type ReponseTexte } from './reseau';
 import {
   analyserJson,
@@ -283,19 +283,35 @@ export async function chercherSur(
 // Episodes
 // ---------------------------------------------------------------------------
 
-function numeroEpisode(page: Page, el: Noeud, src: DefinitionSource, href: string | null): number | null {
-  const brut = choisir(page, el, src.episodes.number);
-  const depuisSelecteur = brut ? Number.parseInt(brut.replace(/\D+/g, ''), 10) : NaN;
-  if (Number.isFinite(depuisSelecteur)) {
-    return depuisSelecteur;
+/** Au-delà, un « numéro » est un nombre mal lu (dates ou chiffres collés), pas un épisode. */
+const NUMERO_MAX = 5000;
+const plausible = (n: number | null | undefined): number | null => (n != null && Number.isFinite(n) && n >= 0 && n <= NUMERO_MAX ? n : null);
+
+/**
+ * Numéro d'un bloc d'épisode : sélecteur `number` (le numéro DANS son texte :
+ * « Épisode 03 », « S1 E2 », « 03 » — jamais tous les chiffres collés, qui
+ * faisaient de « Saison 1 - Épisode 1 » l'épisode 11), sinon texte du bloc,
+ * attribut title, puis adresse.
+ */
+function numeroEpisode(page: Page, el: Noeud, src: DefinitionSource, href: string | null, titres: readonly string[], lien: Noeud | null): number | null {
+  const cibleNumero = src.episodes.number ? page.premier(el, src.episodes.number) : null;
+  const brut = cibleNumero ? texteSepare(cibleNumero) : null;
+  if (brut) {
+    const lu = plausible(numeroEtSaison(brut, '', { libre: true, titres })?.number);
+    if (lu != null) {
+      return lu;
+    }
   }
-  const texte = texteCompact(page, el);
-  const depuisTexte = /(?:episode|episodes|épisode|ep\.?|chapitre)\s*#?\s*(\d{1,4})/i.exec(texte);
-  if (depuisTexte) {
-    return Number(depuisTexte[1]);
-  }
-  const generique = numeroEtSaison(texte, href ?? '');
-  return generique ? generique.number : numeroDepuisAdresse(href);
+  const texteLien = lien && lien !== el ? texteSepare(lien) : '';
+  const texte = texteSepare(el);
+  const titre = (lien && page.attr(lien, 'title')) || '';
+  // Le texte du LIEN d'abord (« Épisode 1 ») : le bloc porte aussi dates et mentions.
+  const generique =
+    (texteLien ? numeroEtSaison(texteLien, href ?? '') : null) ??
+    numeroEtSaison(texte, href ?? '') ??
+    (titre ? numeroEtSaison(titre, '') : null) ??
+    numeroEtSaison(texteLien || texte, '', { libre: true, titres });
+  return plausible(generique?.number) ?? plausible(numeroDepuisAdresse(href));
 }
 
 /** Les menus de navigation sont souvent des <li> : l'accueil ne doit pas devenir « l'episode 1 ». */
@@ -336,12 +352,24 @@ export interface DetailEpisodes {
   renduJs?: boolean;
   /** Saison gardée quand la page en mêle plusieurs. */
   saison?: number | null;
+  /** Numéros finalement retenus, triés (« épisodes trouvés : 1–3 »). */
+  numeros?: number[];
+  /**
+   * Comment les numéros ont été obtenus : lus dans le texte/l'adresse, déduits
+   * de l'ordre de la liste (aucun lisible), ou les deux (trous comblés).
+   */
+  numerotation?: 'lue' | 'ordre' | 'mixte';
+  /** Blocs lus (20 au plus) : numéro lu, texte et adresse d'origine, pour voir un écart. */
+  lus?: Array<{ numero: number | null; texte: string; url: string }>;
 }
 
-type Collecte = { number: number | null; title: string | null; url: string; saison: number | null };
+type Collecte = { number: number | null; title: string | null; url: string; saison: number | null; texte?: string };
+
+/** Blocs gardés dans le diagnostic. */
+const LUS_MAX = 20;
 
 /** Épisodes d'UNE page : JSON (chemins), sélecteurs CSS, puis repérage générique. */
-function episodesDePage(src: DefinitionSource, lue: PageLue, urlSerie: string): { collectes: Collecte[]; extraction: DetailEpisodes['extraction']; blocs: number } {
+function episodesDePage(src: DefinitionSource, lue: PageLue, urlSerie: string, titres: readonly string[]): { collectes: Collecte[]; extraction: DetailEpisodes['extraction']; blocs: number } {
   const ep = src.episodes;
   const json = estReponseJson(lue.rep.typeContenu, lue.html) ? analyserJson(lue.html) : undefined;
   if (json !== undefined) {
@@ -351,8 +379,9 @@ function episodesDePage(src: DefinitionSource, lue: PageLue, urlSerie: string): 
       .map(o => {
         const url = lienJson(o, ep.link, ep.linkFormat, lue.url);
         const brut = texteJson(valeurJson(o, ep.number || 'number')) ?? texteJson(o.episode) ?? texteJson(o.ep);
-        const n = brut ? Number.parseInt(brut.replace(/\D+/g, ''), 10) : NaN;
-        const c: Collecte | null = url ? { number: Number.isFinite(n) ? n : numeroDepuisAdresse(url), title: texteJson(valeurJson(o, ep.title || 'title')), url, saison: null } : null;
+        const n = brut ? plausible(numeroEtSaison(brut, '', { libre: true })?.number) : null;
+        const titre = texteJson(valeurJson(o, ep.title || 'title'));
+        const c: Collecte | null = url ? { number: n ?? plausible(numeroDepuisAdresse(url)), title: titre, url, saison: null, texte: brut ?? titre ?? '' } : null;
         return c;
       })
       .filter((x): x is Collecte => x !== null);
@@ -368,14 +397,15 @@ function episodesDePage(src: DefinitionSource, lue: PageLue, urlSerie: string): 
     if (!abs || estLienDeNavigation(abs, src.baseUrl, urlSerie)) {
       continue;
     }
-    const saison = numeroEtSaison(texteCompact(page, el), abs)?.saison ?? null;
-    collectes.push({ number: numeroEpisode(page, el, src, abs), title: choisir(page, el, ep.title), url: abs, saison });
+    const texte = texteSepare(el);
+    const saison = numeroEtSaison(texte, abs)?.saison ?? null;
+    collectes.push({ number: numeroEpisode(page, el, src, abs, titres, lien), title: choisir(page, el, ep.title), url: abs, saison, texte });
   }
   if (collectes.length) {
     return { collectes, extraction: 'selecteurs', blocs: blocs.length };
   }
   const generiques = episodesGeneriques(page, base, src.baseUrl, urlSerie).filter(e => !estLienDeNavigation(e.url, src.baseUrl, urlSerie));
-  return { collectes: generiques, extraction: generiques.length ? 'generique' : 'aucune', blocs: blocs.length };
+  return { collectes: generiques.map(g => ({ ...g, texte: g.title ?? '' })), extraction: generiques.length ? 'generique' : 'aucune', blocs: blocs.length };
 }
 
 /**
@@ -389,7 +419,7 @@ export async function lireEpisodesDetail(
   ctx: ContexteResolution,
   src: DefinitionSource,
   urlSerie: string,
-  o: { saison?: number | null } = {},
+  o: { saison?: number | null; titres?: readonly string[] } = {},
 ): Promise<{ episodes: EpisodeSource[]; detail: DetailEpisodes }> {
   const detail: DetailEpisodes = { pages: 0, extraction: 'aucune', blocs: 0 };
   const toutes: Collecte[] = [];
@@ -407,7 +437,7 @@ export async function lireEpisodesDetail(
       break;
     }
     detail.pages += 1;
-    const r = episodesDePage(src, lue, urlSerie);
+    const r = episodesDePage(src, lue, urlSerie, o.titres ?? []);
     if (detail.pages === 1) {
       detail.extraction = r.extraction;
       detail.blocs = r.blocs;
@@ -424,18 +454,59 @@ export async function lireEpisodesDetail(
   if (saisons.length !== toutes.length) {
     detail.saison = saisons[0]?.saison ?? null;
   }
-  // Dernier recours : aucun numero lisible -> numerotation inverse (liste du plus recent au plus ancien).
-  const numerotes: EpisodeSource[] = saisons.every(e => e.number == null)
-    ? saisons.map((e, i) => ({ number: saisons.length - i, title: e.title, url: e.url }))
-    : saisons.filter(e => e.number != null).map(e => ({ number: e.number as number, title: e.title, url: e.url }));
+  const { numeros, numerotation } = numeroterParOrdre(saisons.map(e => e.number));
+  if (saisons.length) {
+    detail.numerotation = numerotation;
+    detail.lus = saisons.slice(0, LUS_MAX).map(e => ({ numero: e.number, texte: (e.texte || e.title || '').slice(0, 80), url: e.url }));
+  }
+  const numerotes: EpisodeSource[] = saisons
+    .map((e, i) => ({ number: numeros[i], title: e.title, url: e.url }))
+    .filter((e): e is EpisodeSource => e.number != null);
   // Un même numéro deux fois (VF et VOSTFR, doublon de liste) : le premier est gardé.
   const vus = new Set<number>();
   const episodes = numerotes.sort((x, y) => x.number - y.number).filter(e => !vus.has(e.number) && Boolean(vus.add(e.number)));
+  detail.numeros = episodes.map(e => e.number);
   return { episodes, detail };
 }
 
+/**
+ * Numéros manquants déduits de l'ORDRE de la liste. Aucun numéro lisible : la
+ * liste est supposée aller du plus récent au plus ancien (cas le plus courant),
+ * donc numérotée N…1. Quelques trous : sens de la liste (croissant ou
+ * décroissant) lu sur les numéros connus, puis chaque trou reçoit le numéro de
+ * son plus proche voisin connu, décalé de la distance (s'il est libre et > 0).
+ */
+export function numeroterParOrdre(lus: ReadonlyArray<number | null>): { numeros: Array<number | null>; numerotation: 'lue' | 'ordre' | 'mixte' } {
+  const connus = lus.map((n, i) => [n, i] as const).filter((x): x is readonly [number, number] => x[0] != null);
+  if (!connus.length) {
+    return { numeros: lus.map((_, i) => lus.length - i), numerotation: 'ordre' };
+  }
+  if (connus.length === lus.length) {
+    return { numeros: [...lus], numerotation: 'lue' };
+  }
+  let montees = 0;
+  let descentes = 0;
+  for (let k = 1; k < connus.length; k += 1) {
+    if (connus[k][0] > connus[k - 1][0]) montees += 1;
+    else if (connus[k][0] < connus[k - 1][0]) descentes += 1;
+  }
+  const sens = descentes > montees ? -1 : 1;
+  const pris = new Set(connus.map(x => x[0]));
+  const numeros = [...lus];
+  numeros.forEach((n, i) => {
+    if (n != null) return;
+    const voisin = [...connus].sort((a, b) => Math.abs(a[1] - i) - Math.abs(b[1] - i))[0];
+    const deduit = voisin[0] + (i - voisin[1]) * sens;
+    if (deduit > 0 && !pris.has(deduit)) {
+      numeros[i] = deduit;
+      pris.add(deduit);
+    }
+  });
+  return { numeros, numerotation: 'mixte' };
+}
+
 /** Lit la liste d'episodes d'une page de serie, triee par numero. */
-export async function lireEpisodes(ctx: ContexteResolution, src: DefinitionSource, urlSerie: string, o: { saison?: number | null } = {}): Promise<EpisodeSource[]> {
+export async function lireEpisodes(ctx: ContexteResolution, src: DefinitionSource, urlSerie: string, o: { saison?: number | null; titres?: readonly string[] } = {}): Promise<EpisodeSource[]> {
   return (await lireEpisodesDetail(ctx, src, urlSerie, o)).episodes;
 }
 
@@ -654,7 +725,8 @@ export async function episodesSur(ctx: ContexteResolution, src: DefinitionSource
   }
   try {
     const voulue = saisonDe(o.titres[0] ?? '') ?? saisonDe(serie?.title ?? '');
-    const { episodes, detail } = await lireEpisodesDetail(ctx, src, pageUrl, { saison: voulue });
+    const titresSerie = [...o.titres, ...(serie?.title ? [serie.title] : [])];
+    const { episodes, detail } = await lireEpisodesDetail(ctx, src, pageUrl, { saison: voulue, titres: titresSerie });
     diag.episodes = episodes.length;
     diag.lectureEpisodes = detail;
     diag.statut = episodes.length ? 'ok' : 'aucun-episode';

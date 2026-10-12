@@ -10,6 +10,7 @@ import { APP_TSUZUKU, ID_TSUZUKU } from '../registre';
 import { lireReglages, REGLAGES_DEFAUT } from './reglages';
 import { prochainEpisode } from './LienAnime';
 import { lireAnime, lireFilm } from './resoudre';
+import { plagesNumeros, texteDiagnostic } from './diagnosticTexte';
 import { infoTsuzuku, resumerBibliotheque } from './resume';
 import { creerServices } from './services';
 
@@ -187,6 +188,42 @@ describe('du lien au lecteur', () => {
     expect(l.lecteurs[0].url).toBe('https://lecteur-exemple.fr/e/frieren-2');
   });
 
+  describe('épisode absent : message explicite et numéros visibles', () => {
+    /** Page de série minifiée, du plus récent au plus ancien (date collée au lien). */
+    const serie = (numeros: number[]) =>
+      html(`<ul>${numeros.map(n => `<li class="ep"><a href="/ep/${n}">Episode ${n}</a><span class="date">${10 + n}/03/2025</span></li>`).join('')}</ul>`);
+    const avecSerie = async (numeros: number[]) => {
+      const reseau = fauxReseau({
+        'https://mediatheque-exemple.fr/recherche?q=Frieren': html('<ul><li class="res"><a href="/serie/frieren">Frieren</a></li></ul>'),
+        'https://mediatheque-exemple.fr/serie/frieren': serie(numeros),
+        'https://mediatheque-exemple.fr/ep/1': html('<iframe src="https://lecteur-exemple.fr/e/frieren-1"></iframe>'),
+      });
+      const s = service(reseau);
+      await s.enregistrerSources(importerSources([{ ...SOURCE, episodes: { item: 'li.ep', link: 'a' } }]).sources);
+      return s;
+    };
+
+    it('3 épisodes en ligne (le catalogue en annonce 12) : l’épisode 1 est lu', async () => {
+      const l = await lireAnime(await avecSerie([3, 2, 1]), { ...fiche, numero: 1 });
+      expect(l.origine).toBe('source');
+      expect(l.lecteurs[0].url).toBe('https://lecteur-exemple.fr/e/frieren-1');
+    });
+
+    it('épisode au-delà de ce que le site a mis en ligne : « la source n’a que les épisodes 1–3 »', async () => {
+      const l = await lireAnime(await avecSerie([3, 2, 1]), { ...fiche, numero: 5 });
+      expect(l.diagnostic?.raison).toBe('episode-absent');
+      expect(l.message).toBe('« Frieren » trouvé sur « Médiathèque » : la source n’a que les épisodes 1–3. L’épisode 5 n’y est pas (encore) en ligne.');
+    });
+
+    it('épisode manquant au milieu ou avant : numéros trouvés et diagnostic lien par lien', async () => {
+      const l = await lireAnime(await avecSerie([12, 11, 10]), { ...fiche, numero: 1 });
+      expect(l.message).toMatch(/^« Frieren » trouvé sur « Médiathèque » : épisodes trouvés 10–12 \(3\), mais pas l’épisode 1\./);
+      const texte = texteDiagnostic(l.diagnostic!, { quand: 'x' });
+      expect(texte).toContain('  · épisodes trouvés : 10–12 (3)');
+      expect(texte).toContain('    – n° 12 ← « Episode 12 22/03/2025 » — https://mediatheque-exemple.fr/ep/12');
+    });
+  });
+
   it('un lecteur visant le réseau local est écarté', async () => {
     const reseau = fauxReseau({ 'https://exemple.fr/ep-1': html('<iframe src="http://192.168.1.5/e"></iframe><video src="https://cdn-exemple.fr/v.mp4"></video>') });
     const s = service(reseau);
@@ -218,5 +255,13 @@ describe('épisode suivant', () => {
     expect(prochainEpisode(db(4), '1', 12)).toBe(5);
     expect(prochainEpisode(db(12), '1', 12)).toBe(1);
     expect(prochainEpisode(db(1000), '1', null)).toBe(1001);
+  });
+});
+
+describe('plages de numéros', () => {
+  it('regroupe les numéros consécutifs', () => {
+    expect(plagesNumeros([3, 1, 2, 5, 8, 7, 7])).toBe('1–3, 5, 7–8');
+    expect(plagesNumeros([4])).toBe('4');
+    expect(plagesNumeros([])).toBe('');
   });
 });

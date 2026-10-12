@@ -403,10 +403,21 @@ export interface EpisodeGenerique {
   saison: number | null;
 }
 
+/** Texte comparé : sans accents (« Épisode », y compris décomposé en NFD), en minuscules. */
+function sansAccents(t: string): string {
+  let x = String(t ?? '');
+  try {
+    x = x.normalize('NFD');
+  } catch {
+    // Pas de normalize : les accents restent.
+  }
+  return x.replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
 const NUM_TEXTE: ReadonlyArray<RegExp> = [
-  /\bs(\d{1,2})\s*[-.]?\s*e(?:p)?\s*(\d{1,4})\b/i,
-  /(?:épisode|episode|episodio|ep|eps)\.?\s*#?\s*(\d{1,4})\b/i,
-  /\be(\d{1,4})\b/i,
+  /\bs(\d{1,2})\s*[-.:]?\s*e(?:p(?:isode)?)?\.?\s*(\d{1,4})(?!\d)/,
+  /\b(?:episodes?|episodio|eps?|chapitres?|chapters?)(?![a-z])\.?\s*(?:n[°o]\.?\s*)?[#:\-–]?\s*(\d{1,4})(?!\d)/,
+  /\be(\d{1,4})\b/,
   /第\s*(\d{1,4})\s*[話话集]/,
 ];
 const NUM_ADRESSE: ReadonlyArray<RegExp> = [
@@ -414,12 +425,55 @@ const NUM_ADRESSE: ReadonlyArray<RegExp> = [
   /(?:episode|episodes|episodio|ep)[-_/]?(\d{1,4})(?:[-_/.]|$)/i,
 ];
 
+const MOIS = '(?:janv|fevr?|mars|avr|mai|juin|juil|aout|sept?|oct|nov|dec|jan|feb|mar|apr|may|jun|jul|aug)[a-z]*\\.?';
+/**
+ * Nombres qui ne sont PAS un numéro d'épisode : dates, années, durées, âges
+ * relatifs (« il y a 3 jours »), qualités (720p), tailles, saisons et parties.
+ */
+const PAS_UN_NUMERO: ReadonlyArray<RegExp> = [
+  /\b\d{1,4}[/.-]\d{1,2}[/.-]\d{1,4}\b/g,
+  new RegExp(`\\b\\d{1,2}(?:er)?\\s+${MOIS}\\s+\\d{2,4}\\b`, 'g'),
+  new RegExp(`\\b${MOIS}\\s+\\d{1,2},?\\s+\\d{4}\\b`, 'g'),
+  /\b(?:19|20)\d{2}\b/g,
+  /\b\d+\s*(?:min(?:ute)?s?|h|heures?|hours?|jours?|days?|semaines?|weeks?|mois|months?|ans?|years?|sec(?:onde)?s?)\b/g,
+  /\b\d+\s*(?:p|k|ko|mo|go|kb|mb|gb|fps)\b/g,
+  /\b(?:saison|season|part|partie|cour|vol(?:ume)?|tome)\.?\s*\d+/g,
+  /\b\d+(?:st|nd|rd|th|e|eme|ere)\s+(?:season|saison|part|partie)\b/g,
+];
+
+/** Le texte, sans les nombres qui ne sont pas un numéro (ni les titres de la série). */
+function texteSansBruit(t: string, titres: readonly string[]): string {
+  let x = ` ${t} `;
+  for (const titre of titres) {
+    const n = sansAccents(titre).replace(/[^a-z0-9]+/g, ' ').trim();
+    if (n.length >= 3) {
+      x = x.replace(new RegExp(n.split(' ').map(m => m.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[^a-z0-9]+'), 'g'), ' ');
+    }
+  }
+  for (const motif of PAS_UN_NUMERO) {
+    x = x.replace(motif, ' ');
+  }
+  return x;
+}
+
+export interface OptionsNumero {
+  /**
+   * Le bloc EST un épisode (sélecteur de la source) : à défaut de « Épisode N »,
+   * le DERNIER nombre restant du texte (hors dates, années, durées, saison,
+   * titre de la série) est son numéro (« Titre 2 - 03 VOSTFR » → 3).
+   */
+  libre?: boolean;
+  /** Titres de la série, retirés du texte avant de chercher un nombre libre. */
+  titres?: readonly string[];
+}
+
 /** Numéro (et saison) d'épisode lisible dans un texte ou une adresse ; null sinon. */
-export function numeroEtSaison(texte: string, href: string): { number: number; saison: number | null } | null {
-  const saisonTexte = /\b(?:saison|season)\s*(\d{1,2})\b/i.exec(texte) ?? /(?:saison|season)[-_]?(\d{1,2})(?:\D|$)/i.exec(href);
+export function numeroEtSaison(texte: string, href: string, o: OptionsNumero = {}): { number: number; saison: number | null } | null {
+  const t = sansAccents(texte);
+  const saisonTexte = /\b(?:saison|season)\s*(\d{1,2})\b/.exec(t) ?? /(?:saison|season)[-_]?(\d{1,2})(?:\D|$)/i.exec(href);
   const saison = saisonTexte ? Number(saisonTexte[1]) : null;
   for (const motif of NUM_TEXTE) {
-    const m = motif.exec(texte);
+    const m = motif.exec(t);
     if (m) {
       return m.length > 2 && m[2] ? { number: Number(m[2]), saison: Number(m[1]) } : { number: Number(m[1]), saison };
     }
@@ -431,10 +485,16 @@ export function numeroEtSaison(texte: string, href: string): { number: number; s
       return m.length > 2 && m[2] ? { number: Number(m[2]), saison: Number(m[1]) } : { number: Number(m[1]), saison };
     }
   }
-  // Lien dont le texte n'est qu'un numéro (« 12 ») et dont l'adresse finit par ce numéro.
-  const seul = /^\d{1,4}$/.exec(texte.trim());
-  if (seul && new RegExp(`(?:^|\\D)${seul[0]}/?$`).test(chemin)) {
-    return { number: Number(seul[0]), saison };
+  // Lien dont le texte n'est qu'un numéro (« 12 », « 03 ») et dont l'adresse finit par ce numéro.
+  const seul = /^0*(\d{1,4})$/.exec(t.trim());
+  if (seul && (o.libre || new RegExp(`(?:^|\\D)0*${seul[1]}/?$`).test(chemin))) {
+    return { number: Number(seul[1]), saison };
+  }
+  if (o.libre) {
+    const nombres = (texteSansBruit(t, o.titres ?? []).match(/\d+/g) ?? []).filter(n => n.length <= 4);
+    if (nombres.length) {
+      return { number: Number(nombres[nombres.length - 1]), saison };
+    }
   }
   return null;
 }

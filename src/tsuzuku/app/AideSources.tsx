@@ -34,7 +34,7 @@ export const SECTIONS_AIDE_CONFIGURATION: ReadonlyArray<{ titre: string; texte: 
   },
   {
     titre: '5. Épisodes : sélecteurs, pages et saisons',
-    texte: 'episodes.item désigne UN épisode. Sans sélecteur (ou s’il ne trouve rien), l’app repère les liens « Épisode N », « EP N », « E01 », « S2E03 », « 第N話 » ou finissant par un numéro, y compris dans les blocs masqués et les menus. Une liste paginée est suivie (rel=next, « Suivant », ou episodes.next) ; si la page mêle plusieurs saisons, celle de la fiche est gardée.',
+    texte: 'episodes.item désigne UN épisode. Sans sélecteur (ou s’il ne trouve rien), l’app repère les liens « Épisode N », « EP N », « E01 », « S2E03 », « 第N話 » ou finissant par un numéro, y compris dans les blocs masqués et les menus. Une liste paginée est suivie (rel=next, « Suivant », ou episodes.next) ; si la page mêle plusieurs saisons, celle de la fiche est gardée. Numéro : episodes.number (facultatif) désigne l’élément qui le porte ; l’app y lit « Épisode 03 », « Ep. 1 VF », « S1 E2 » ou le dernier nombre (« Titre 2 - 03 VOSTFR » → 3), en ignorant dates, années, durées, saison et titre de la série. Sans numéro lisible, la liste est numérotée par son ordre (du plus récent au plus ancien). Le diagnostic montre, pour chaque lien, le numéro lu et son texte : un épisode « absent » s’y vérifie d’un coup d’oeil.',
     exemple: '"episodes": { "item": "ul.episodes li", "number": ".num", "link": "a", "next": "a.page-suivante" }',
   },
   {
