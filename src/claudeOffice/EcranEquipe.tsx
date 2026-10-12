@@ -23,6 +23,8 @@ interface Cible {
   projet?: string;
   session?: string;
   titre: string;
+  /** Nom affiché dans la liste (sinon le titre). */
+  nom?: string;
 }
 
 const idTest = (t: string) => t.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40);
@@ -116,7 +118,7 @@ export function EcranEquipe({ theme, projets, agents }: { theme: ThemeHub; proje
     <View key={`${c.genre}-${c.cle}`} style={[styles.ligne, { borderColor: theme.ligne }]} testID={`equipe-${c.genre === 'projets' ? 'projet' : 'session'}-${idTest(c.cle)}`}>
       <AvatarAgent apparence={{ ...base, haut: ap.couleur }} accessoire={ap.accessoire} favori={ap.favori} />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ color: theme.texte, fontSize: TAILLE + 1, fontWeight: '700' }} numberOfLines={1}>{masquerAffichage(ap.surnom ?? c.titre)}</Text>
+        <Text style={{ color: theme.texte, fontSize: TAILLE + 1, fontWeight: '700' }} numberOfLines={1}>{masquerAffichage(ap.surnom ?? c.nom ?? c.titre)}</Text>
         <Text style={a} numberOfLines={1}>{sousTitre}</Text>
       </View>
       {c.genre === 'projets' ? (
@@ -140,7 +142,7 @@ export function EcranEquipe({ theme, projets, agents }: { theme: ThemeHub; proje
         {liste.length === 0 ? <Text style={a} testID="equipe-vide">Aucun projet vu pour l’instant : ils apparaissent ici dès la première session de Claude Code.</Text> : null}
         {liste.map(p => {
           const ap = apparenceDepuis(e, p, undefined);
-          return ligne({ genre: 'projets', cle: p, projet: p, titre: p }, ap, ap.surnom ? masquerAffichage(p) : ap.personnalise ? 'Personnalisé' : 'Apparence par défaut', apparence({ cle: p, session: p, projet: p }));
+          return ligne({ genre: 'projets', cle: p, projet: p, titre: p }, ap, ap.surnom ? masquerAffichage(p) : ap.personnalise ? 'Personnalisé' : 'Par défaut', apparence({ cle: p, session: p, projet: p }));
         })}
       </Carte>
       {agents.length ? (
@@ -149,9 +151,9 @@ export function EcranEquipe({ theme, projets, agents }: { theme: ThemeHub; proje
           {agents.map(ag => {
             const ap = apparenceDepuis(e, ag.projet, ag.session);
             return ligne(
-              { genre: 'sessions', cle: ag.session, projet: ag.projet, session: ag.session, titre: `${ag.projet ?? 'Projet inconnu'} · ${ag.session.slice(0, 8)}` },
+              { genre: 'sessions', cle: ag.session, projet: ag.projet, session: ag.session, titre: `${ag.projet ?? 'Projet inconnu'} · ${ag.session.slice(0, 8)}`, nom: ag.projet ?? 'Projet inconnu' },
               ap,
-              `${masquerAffichage(ag.projet ?? 'Projet inconnu')} · session ${ag.session.slice(0, 8)}`,
+              `${ap.surnom ? `${masquerAffichage(ag.projet ?? 'Projet inconnu')} · ` : ''}session ${ag.session.slice(0, 8)}${ag.appareil ? ` · ${masquerAffichage(ag.appareil)}` : ''}`,
               apparence(ag),
             );
           })}

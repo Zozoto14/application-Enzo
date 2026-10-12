@@ -29,7 +29,7 @@ export const PERSONNALISATION_DANS_LA_SCENE = true;
 export const CATALOGUE_ACCESSOIRES = [
   { id: 'aucun', nom: 'Aucun' },
   { id: 'lunettes', nom: 'Lunettes' },
-  { id: 'casque', nom: 'Casque audio' },
+  { id: 'casque', nom: 'Casque' },
   { id: 'bonnet', nom: 'Bonnet' },
   { id: 'noeud', nom: 'Nœud' },
   { id: 'echarpe', nom: 'Écharpe' },
