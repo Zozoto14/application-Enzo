@@ -41,6 +41,43 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.21',
+    date: '2026-10-21',
+    titre: 'Claude Office : des zones, une salle d’attente et « attend ta réponse »',
+    resume:
+      'L’open space de Claude Office passe en zones à thème : chaque agent marche jusqu’à celle de ce qu’il fait, lève la main quand Claude attend ta réponse et passe en salle d’attente quand il a fini.',
+    illustration: 'administration',
+    fonctionnalites: [
+      {
+        id: 'claude-office-zones',
+        emoji: '🗺️',
+        titre: 'Des zones à thème',
+        texte:
+          'Atelier code, Salle des machines, Bibliothèque, Café web, Réunion, Réflexion, Accueil, Détente : chaque agent rejoint la zone de son activité, sans aller-retour à chaque outil. « ? » explique tout.',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+      {
+        id: 'claude-office-attente',
+        emoji: '✋',
+        titre: 'Attend ta réponse, terminé à voir',
+        texte:
+          'Une autorisation ou une question en attente : il lève la main au guichet (notification possible sur le PC). Une tâche finie : salle d’attente, avec ce qu’il a fait. Pense à mettre à jour le hook sur le PC (Mise en route).',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+      {
+        id: 'claude-office-detail-stats',
+        emoji: '📊',
+        titre: 'Mise en route, détail, statistiques',
+        texte:
+          'Une check-list dit ce qui manque et comment le régler ; toucher un agent montre la chronologie de sa session ; un onglet Statistiques ; vue Liste, filtres par projet, démo enrichie.',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.20',
     date: '2026-10-20',
     titre: 'Claude Office devient un vrai open space',

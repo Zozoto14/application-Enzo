@@ -58,12 +58,12 @@ export function etapesMiseEnRoute(o: EntreeMiseEnRoute): Etape[] {
     if (o.derniereActivite === undefined) {
       return {
         id: 'evenement', niveau: o.surPc ? 'erreur' : 'attention', titre: 'Aucun événement reçu',
-        detail: o.surPc ? 'Lance (ou redémarre) Claude Code sur ce PC : chaque session y apparaîtra en quelques secondes.' : 'Rien dans les copies reçues : Claude Code n’a pas encore travaillé sur le PC équipé.',
+        detail: o.surPc ? 'Lance (ou redémarre) Claude Code sur ce PC.' : 'Claude Code n’a pas encore travaillé sur le PC équipé.',
         action: { genre: 'demo', titre: 'Voir la démo' },
       };
     }
     const ancien = m - o.derniereActivite > EVENEMENT_ANCIEN_MS;
-    return { id: 'evenement', niveau: ancien ? 'attention' : 'ok', titre: `Dernier événement reçu ${ilYA(o.derniereActivite, m)}`, ...(ancien ? { detail: 'Rien depuis plus d’un jour : Claude Code n’a pas servi, ou le hook ne note plus rien.' } : {}) };
+    return { id: 'evenement', niveau: ancien ? 'attention' : 'ok', titre: `Dernier événement reçu ${ilYA(o.derniereActivite, m)}`, ...(ancien ? { detail: 'Rien depuis plus d’un jour.' } : {}) };
   };
 
   if (o.surPc) {
@@ -72,24 +72,24 @@ export function etapesMiseEnRoute(o: EntreeMiseEnRoute): Etape[] {
     else if (o.hook === 'incomplet') {
       etapes.push({
         id: 'hook', niveau: 'attention', titre: 'Hook à mettre à jour',
-        detail: 'Il fonctionne, mais sans « attend ta réponse » ni la durée des outils. Mets-le à jour, puis redémarre Claude Code.',
+        detail: 'Il manque « attend ta réponse » et la durée des outils. Mets-le à jour, puis redémarre Claude Code.',
         action: { genre: 'installer-hook', titre: 'Mettre à jour le hook…' }, commande: COMMANDE_HOOKS,
       });
     } else if (o.hook === 'absents') {
       etapes.push({
         id: 'hook', niveau: 'erreur', titre: 'Hook pas installé sur ce PC',
-        detail: 'Sans lui, Claude Code ne note rien. Installe-le (aperçu et confirmation), puis redémarre Claude Code.',
+        detail: 'Sans lui, rien n’est noté. Installe-le, puis redémarre Claude Code.',
         action: { genre: 'installer-hook', titre: 'Installer le hook…' }, commande: COMMANDE_HOOKS,
       });
     } else if (o.hook === 'illisibles') {
-      etapes.push({ id: 'hook', niveau: 'erreur', titre: 'Réglages de Claude Code illisibles', detail: 'Le fichier settings.json de Claude Code n’est pas du JSON valide : corrige-le, puis réessaie.', action: { genre: 'reessayer', titre: 'Réessayer' } });
+      etapes.push({ id: 'hook', niveau: 'erreur', titre: 'Réglages de Claude Code illisibles', detail: 'settings.json n’est pas du JSON valide : corrige-le.', action: { genre: 'reessayer', titre: 'Réessayer' } });
     } else etapes.push({ id: 'hook', niveau: 'info', titre: 'Vérification du hook…' });
     etapes.push(evenement());
     // 3. Copie chiffrée (pour voir le bureau sur le site et le téléphone).
     if (!o.relais) {
-      etapes.push({ id: 'copie', niveau: 'info', titre: 'Copie chiffrée indisponible', detail: 'Pour voir ce bureau sur le site et le téléphone : relie le compte principal au relais (Paramètres › Synchronisation).' });
+      etapes.push({ id: 'copie', niveau: 'info', titre: 'Copie chiffrée indisponible', detail: 'Relie le compte principal au relais (Paramètres › Synchronisation).' });
     } else if (!o.copie?.active) {
-      etapes.push({ id: 'copie', niveau: 'attention', titre: 'Copie chiffrée désactivée', detail: 'Le site et le téléphone ne voient rien de ce PC tant qu’elle est coupée.', action: { genre: 'activer-copie', titre: 'Activer la copie' } });
+      etapes.push({ id: 'copie', niveau: 'attention', titre: 'Copie chiffrée désactivée', detail: 'Le site et le téléphone ne voient rien de ce PC.', action: { genre: 'activer-copie', titre: 'Activer la copie' } });
     } else if (o.copie.erreur) {
       etapes.push({ id: 'copie', niveau: 'erreur', titre: 'Dernier dépôt en échec', detail: o.copie.erreur, action: { genre: 'reessayer', titre: 'Réessayer' } });
     } else {
@@ -99,14 +99,14 @@ export function etapesMiseEnRoute(o: EntreeMiseEnRoute): Etape[] {
     if (o.relais && o.copie?.active) {
       etapes.push(o.presence?.active
         ? { id: 'presence', niveau: 'ok', titre: `Présence rapide activée${o.presence.derniere ? ` · ${age(o.presence.derniere, m)}` : ''}` }
-        : { id: 'presence', niveau: 'info', titre: 'Présence rapide désactivée (facultatif)', detail: 'Activée, le bureau à distance a 5 min de retard au plus au lieu de 15.', action: { genre: 'activer-presence', titre: 'Activer' } });
+        : { id: 'presence', niveau: 'info', titre: 'Présence rapide désactivée (facultatif)', detail: 'Retard à distance : 5 min au lieu de 15.', action: { genre: 'activer-presence', titre: 'Activer' } });
     }
     return etapes;
   }
 
   // Ailleurs (site, téléphone) : tout vient de la copie chiffrée du relais.
   if (!o.relais) {
-    etapes.push({ id: 'relais', niveau: 'erreur', titre: 'Compte principal non relié', detail: 'Le bureau lit la copie chiffrée que le PC dépose sur le relais : connecte-toi avec le compte principal relié au relais.' });
+    etapes.push({ id: 'relais', niveau: 'erreur', titre: 'Compte principal non relié', detail: 'Connecte-toi avec le compte principal relié au relais.' });
     return etapes;
   }
   const depots = o.depots ?? [];
@@ -118,7 +118,7 @@ export function etapesMiseEnRoute(o: EntreeMiseEnRoute): Etape[] {
   else if (!depots.length) {
     etapes.push({
       id: 'copie', niveau: 'erreur', titre: 'Aucune copie reçue du PC',
-      detail: 'Sur le PC où tourne Claude Code : installe le hook (commande ci-dessous, dans le dossier d’AppDashboard), puis dans Claude Office › Bureau active « Déposer la copie chiffrée ». Rien à installer ici.',
+      detail: 'Sur le PC de Claude Code : installe le hook (commande ci-dessous), puis active « Déposer la copie chiffrée » (Claude Office › Bureau). Rien à installer ici.',
       commande: COMMANDE_HOOKS,
     });
   } else {
@@ -126,7 +126,7 @@ export function etapesMiseEnRoute(o: EntreeMiseEnRoute): Etape[] {
     const ancienne = m - Date.parse(date) > COPIE_ANCIENNE_MS;
     etapes.push({
       id: 'copie', niveau: ancienne ? 'attention' : 'ok', titre: `Copie chiffrée reçue ${age(date, m)}`,
-      ...(ancienne ? { detail: 'Elle date un peu : le PC est peut-être éteint, ou l’app de bureau fermée. L’état affiché est celui de ce moment-là.' } : {}),
+      ...(ancienne ? { detail: 'Le PC est peut-être éteint ou l’app fermée : état de ce moment-là.' } : {}),
     });
     const parAppareil = new Map<string, string>();
     for (const d of depots) {
@@ -138,7 +138,7 @@ export function etapesMiseEnRoute(o: EntreeMiseEnRoute): Etape[] {
   if (o.lu && depots.length) {
     etapes.push(presences.length
       ? { id: 'presence', niveau: 'ok', titre: `Présence rapide reçue ${age(plusRecent(presences), m)}` }
-      : { id: 'presence', niveau: 'info', titre: 'Présence rapide non activée sur le PC (facultatif)', detail: 'Sur le PC, Claude Office › Bureau › « Présence rapide » : 5 min de retard au plus au lieu de 15.' });
+      : { id: 'presence', niveau: 'info', titre: 'Présence rapide non activée sur le PC (facultatif)', detail: 'Sur le PC : « Présence rapide » (5 min de retard au lieu de 15).' });
     etapes.push(evenement());
   }
   return etapes;

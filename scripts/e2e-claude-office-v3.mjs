@@ -212,7 +212,6 @@ try {
   verifier(await attendreZone(cleHub, 'guichet', 20_000), 'autorisation demandée : l’agent est au guichet « Attend ta réponse »');
   verifier((await page.locator('[data-testid="scene-attend"]').count()) >= 1 && /attend ta réponse/.test(await page.getByTestId('bureau-pastille-attend').innerText()), 'main levée : pastille « ! » et « 1 attend ta réponse »');
   verifier((await page.evaluate(() => window.__notifs)).some(n => /Claude attend ta réponse \| hub/.test(n)), 'PC : notification système envoyée (réglage activé)');
-  await prendre('21-zones-pc-sombre');
 
   // 4. Il écrit : après le séjour minimal, il passe à l'Atelier code.
   const t0 = Date.now();
@@ -244,7 +243,6 @@ try {
   await page.getByTestId('bureau-detail-historique').click();
   await page.getByTestId('historique-filtre-session').waitFor();
   verifier((await page.getByTestId('historique-compte-sessions').innerText()).trim() === '1', 'historique filtré sur la session');
-  await prendre('24-historique-filtre-pc');
   await page.getByTestId('claude-office-onglet-stats').click();
   await page.getByTestId('stats-kpi-demandes').waitFor();
   verifier(Number(await page.getByTestId('stats-kpi-demandes').innerText()) === 2, 'statistiques : demandes comptées depuis le journal');
@@ -280,7 +278,6 @@ try {
     await controler(`${nom}, démo en liste (sombre)`);
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  await prendre('26-liste-telephone-sombre');
   await page.getByTestId('bureau-vue-scene').click();
   await pause(9000);
   await controler('iPhone, démo en scène (sombre)');
@@ -293,7 +290,6 @@ try {
   await page.getByTestId('claude-office-onglet-stats').click();
   await page.getByTestId('stats-demo').waitFor();
   await controler('iPhone, statistiques (démo)');
-  await prendre('29-stats-telephone-sombre');
   await page.getByTestId('claude-office-onglet-historique').click();
   await page.getByTestId('historique-demo').waitFor();
   await controler('iPhone, historique (démo)');
@@ -313,7 +309,7 @@ try {
     await page.setViewportSize({ width: l, height: h });
     await pause(1200);
     await controler(`${nom}, démo en scène (clair)`);
-    await prendre(`30-scene-${nom.replace(/\s+/g, '-').toLowerCase()}-clair`);
+    if (nom === 'iPad portrait') await prendre('30-scene-ipad-portrait-clair');
   }
   await page.getByTestId('claude-office-onglet-stats').click();
   await page.setViewportSize({ width: 820, height: 1180 });

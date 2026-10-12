@@ -152,11 +152,7 @@ export function Statistiques({ theme, contexte, office, debutDemo, horloge }: { 
         <Carte theme={theme} testID="stats-vide">
           <Text style={texte}>Aucune activité sur les {s.jours} derniers jours.</Text>
           <Text style={attenue}>
-            {office?.historique
-              ? 'Les statistiques viennent du journal de ce PC : installe le hook d’historique (onglet Bureau › Mise en route), puis utilise Claude Code.'
-              : contexte.historiqueOffice
-                ? 'Elles viennent de la copie chiffrée du PC : active-la sur le PC (Claude Office › Bureau › « Déposer la copie chiffrée »).'
-                : 'Elles viennent de la copie chiffrée du PC, réservée au compte principal relié au relais.'}
+            {office?.historique ? 'Elles viennent du journal de ce PC : voir Bureau › Mise en route.' : 'Elles viennent de la copie chiffrée du PC : voir Bureau › Mise en route.'}
           </Text>
         </Carte>
       ) : (
@@ -200,15 +196,13 @@ export function Statistiques({ theme, contexte, office, debutDemo, horloge }: { 
                 {[0, 6, 12, 18].map(h => <Text key={h} style={[attenue, { flex: 6 }]}>{h} h</Text>)}
               </View>
             </View>
-            {s.maxChaleur ? <Text style={attenue}>Moment le plus actif : {JOURS_LONGS[caseMax.j]} vers {caseMax.h} h. Plus la case est foncée, plus il y a eu de demandes et d’outils.</Text> : null}
+            {s.maxChaleur ? <Text style={attenue}>Moment le plus actif : {JOURS_LONGS[caseMax.j]} vers {caseMax.h} h.</Text> : null}
           </Carte>
           <Carte theme={theme} titre="Outils les plus utilisés" testID="stats-outils">
             <Classement theme={theme} couleur="#E07A3A" testID="stats-outils-liste" lignes={s.outils.map(o => ({ nom: o.nom, valeur: o.n, ...(o.dureeMoyMs !== undefined ? { note: `${dureeCourte(o.dureeMoyMs)} en moyenne` } : {}) }))} />
-            {s.outils.length && s.outils.every(o => o.dureeMoyMs === undefined) ? <Text style={attenue}>Durées inconnues : le hook (à mettre à jour) ne les note pas encore.</Text> : null}
           </Carte>
           <Carte theme={theme} titre="Projets les plus actifs" testID="stats-projets">
             <Classement theme={theme} couleur="#3FB37F" testID="stats-projets-liste" lignes={s.projets.map(p => ({ nom: p.nom, valeur: p.demandes, note: `${p.sessions} session${p.sessions > 1 ? 's' : ''}` }))} />
-            <Text style={attenue}>Nombre de demandes par projet (dossier où tourne Claude Code).</Text>
           </Carte>
         </>
       )}
