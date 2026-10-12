@@ -128,8 +128,8 @@ le reste des la saisie et a chaque requete.
   Pas de cookies : un site qui redirige en boucle en posant des cookies est
   signale (code `cookies`).
 - Dans un **navigateur**, `fetch` est soumis au CORS et ne voit pas les
-  redirections (`redirect: 'manual'` est opaque) : il faut un relais (ou une
-  `Reseau` sur mesure). Electron (processus principal) et React Native n'ont
+  redirections (`redirect: 'manual'` est opaque) : il faut un relais (le site
+  utilise la route `/tsuzuku/requete` du relais, Fondateur seulement). Electron (processus principal) et React Native n'ont
   pas cette contrainte.
 - Sans `resoudre` (DNS), un nom public pointant vers une IP privee n'est pas
   detecte (rebinding) ; a fournir sous Electron.
@@ -199,13 +199,51 @@ Meme mot de passe, memes profils, memes permissions que le hub ; aucun serveur.
 | Plateforme | Adaptateur | Ce qu'il fait |
 | --- | --- | --- |
 | PC (Electron) | `reseauElectron` -> IPC `tsuzuku:requete` | Le processus principal refait la garde (http(s), ports 80/443/8080/8443, hote public, DNS verifie A LA CONNEXION via `lookup`), ne suit AUCUNE redirection (le moteur re-verifie chaque saut), n'envoie et ne garde AUCUN cookie (presence d'un Set-Cookie seulement signalee : `x-tsuzuku-cookie`), borne delai (30 s) et taille (16 Mo, decompresse compris), ne transmet que quelques en-tetes (dont Referer, Origin, X-Requested-With), decompresse (gzip/deflate/br) et DECODE le corps selon son jeu de caracteres (en-tete, `<meta charset>`, repli UTF-8 : ISO-8859-1/windows-1252 gardent leurs accents) |
-| Site (navigateur) | `reseauWeb` | CORS : seuls Jikan, AniList, TMDB. Toute autre adresse est refusee : « Lecture des sources disponible sur l'app PC/iPhone ; sur le site, bientot. » Catalogue, bibliotheque et liens manuels directs restent disponibles |
+| Site (navigateur) | `reseauSite` (`reseauRelais.ts`) | Jikan, AniList, TMDB en direct (CORS permis). Toute autre adresse passe par la route `POST /tsuzuku/requete` du relais (`relais/tsuzuku.mjs`), pour le SEUL compte Fondateur relie au relais (jeton maitre de la liaison, aucun nouveau secret ; transport `applibourse.tsuzukuRelais` pose par `bureau/web.ts`). Le relais refait la garde (voir « Site web : lecture par le relais »), rend les 3xx que le moteur suit et re-verifie. Sinon : refus clair (`MESSAGE_SITE` : relier le compte Fondateur au relais, ou app PC/iPhone). Catalogue, bibliotheque et liens manuels directs restent disponibles |
 | iPhone/iPad | `reseauNatif` (`fetch` natif) | Le `fetch` de React Native suit lui-meme les redirections : l'adresse FINALE est re-verifiee apres coup et la reponse jetee si elle est privee (un saut intermediaire n'est pas empechable) |
 
 Lecteurs (iframe) sur PC : la fenetre declare le site (`tsuzuku:lecteur`) ; le
 processus principal n'accepte un sous-cadre que pour un hote declare et public
 (`onBeforeRequest` + `will-frame-navigate`). L'iframe est en `sandbox` (pas de
 navigation du parent, pas de fenetre).
+
+### Site web : lecture par le relais (`POST /tsuzuku/requete`)
+
+Le navigateur ne peut pas lire une page d'un autre site (CORS). Pour le compte Fondateur dont le site
+est relie au relais avec le code du PC (jeton MAITRE), le moteur passe par le relais Cloudflare :
+
+- `choisirReseau` (site) : `lectureSources` et `viaRelais` sont relus a chaque fois (la liaison peut
+  arriver apres l'ouverture) ; `creerServices` ne les garde vrais que pour le rang **Fondateur**.
+  Ami, Gestionnaire, Administrateur (jeton de profil) : message du site, aucun appel a la route ;
+  le relais leur repond de toute facon 403.
+- Fiche « Sur vos sources » : « Site web : lecture via le relais » ; diagnostic copie :
+  « Plateforme : site web (navigateur), via le relais ».
+- Erreurs du relais traduites (`erreurRelais`) : 404 → « mettez a jour le relais (GitHub › Actions ›
+  « Deployer le relais », ou `npm run relais:deployer`) » ; 401 → relier de nouveau ; 403 → reserve au
+  Fondateur relie (ou origine du site absente d'`ORIGINES_SITE`) ; 429 → trop de requetes, patienter ;
+  injoignable → verifier la connexion / le deploiement.
+
+Ce que la route refuse (tests : `relais/tsuzuku.test.mjs`) : tout jeton qui n'est pas le jeton maitre
+(403) ; autre origine de navigateur que `ORIGINES_SITE` (CORS et 403) ; autre schema que http(s),
+identifiants dans l'adresse, ports hors 80/443/8080/8443 ; toute IP ecrite en dur (privee, boucle
+locale, lien local, metadonnees cloud, IPv4 mappee, notations decimale/octale/hexa) ; `localhost`,
+`.local`, `.internal`, `.lan`, `.test`, `.arpa`, nom sans point, le relais lui-meme ; un nom qui RESOUT
+(DNS sur HTTPS) vers une adresse non publique ; un corps de requete > 96 Kio (corps sortant > 64 Kio) ;
+plus de 60 requetes par minute (compteur memoire du Worker, rien dans KV, 429 + Retry-After).
+Elle ne suit aucune redirection, n'envoie que Accept, Accept-Language, Content-Type, Referer,
+User-Agent et X-Requested-With (`XMLHttpRequest`), ne rend aucun Set-Cookie (signale par
+`x-tsuzuku-cookie`), coupe a 15 s (504) et tronque la reponse a 2 Mo (`tronque: true`). Le Worker decode
+le texte (en-tete, `<meta charset>`, ISO-8859-1 → windows-1252) ; un binaire revient en `bodyBase64`.
+Journal : hote, statut, duree (ni adresse complete, ni corps). Reponses `Cache-Control: no-store`.
+
+Limites honnetes : un Worker ne choisit pas l'IP de connexion, la verification DNS precede l'appel
+(« DNS rebinding » possible entre les deux ; le reseau de Cloudflare n'atteint ni le reseau local de
+l'utilisateur ni ses propres adresses internes) ; pas de rendu JavaScript (une SPA sans API JSON reste
+illisible) ; les protections anti-robot visent souvent les adresses de Cloudflare elles-memes : un site
+lisible depuis le PC peut repondre « Just a moment… » au relais (affiche comme tel, jamais contourne).
+Offre gratuite des Workers : ~10 ms de calcul par requete (l'attente reseau ne compte pas) ; une tres
+grosse page (proche de 2 Mo) peut depasser ce budget et revenir en erreur « injoignable ».
+Deploiement sans PC : `docs/relais-deploiement-github.md`. E2E : `scripts/e2e-tsuzuku-site-relais.mjs`.
 
 ### Stockage et isolation
 
@@ -300,6 +338,5 @@ sources dont vous avez le droit d'utiliser le contenu. »
 - **P3** : synchro de la bibliotheque et des liens manuels entre appareils d'un meme compte.
 - **P4** : WebView native (lecteur integre sur iPhone/iPad).
 - **P5/P6** : voir le plan du hub.
-- Site : lecture des sources par un relais (les pages tierces y sont bloquees par le CORS). La
-  passerelle actuelle du relais (`relais/worker.mjs`, `/medias/page`) ne sert que des hotes
-  autorises : lire une source depuis le site demanderait une MODIFICATION du relais (non faite).
+- Site : la lecture des sources est ouverte au Fondateur relie au relais (ci-dessous) ; pas aux
+  autres rangs (le relais ne connait que le jeton maitre comme Fondateur).

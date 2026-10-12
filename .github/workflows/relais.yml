@@ -1,0 +1,124 @@
+# Relais Cloudflare (Worker) : redéploiement À LA MAIN depuis l'onglet Actions
+# (téléphone compris), sans le PC. Mode d'emploi et secrets à créer :
+# docs/relais-deploiement-github.md.
+#
+# - Jamais déclenché par un push : `workflow_dispatch` seulement.
+# - Jamais depuis une autre branche que main : le job est réservé à main.
+# - Ne touche JAMAIS au secret `JETON` (ni à DISCORD_WEBHOOK_URL) : ils sont déjà
+#   sur le Worker, et `wrangler deploy` les conserve.
+
+name: Relais (Cloudflare Worker)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: relais-worker
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deployer:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # Identifiant de la boîte KV : secret OU variable (ce n'est pas un secret au sens strict).
+      RELAIS_KV_ID: ${{ secrets.RELAIS_KV_ID || vars.RELAIS_KV_ID }}
+      # Facultatif : adresse du relais (https://applibourse-relais.<vous>.workers.dev) pour le test de santé.
+      RELAIS_URL: ${{ vars.RELAIS_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vérifier les secrets Cloudflare
+        run: |
+          manque=0
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Secret CLOUDFLARE_API_TOKEN absent : GitHub > Settings > Secrets and variables > Actions > New repository secret. Le jeton Cloudflare doit avoir la permission Account > Workers Scripts > Edit (voir docs/relais-deploiement-github.md)."
+            manque=1
+          fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Secret CLOUDFLARE_ACCOUNT_ID absent : GitHub > Settings > Secrets and variables > Actions > New repository secret (identifiant du compte, visible sur dash.cloudflare.com > Workers & Pages, colonne de droite)."
+            manque=1
+          fi
+          if [ -n "$RELAIS_KV_ID" ] && ! printf '%s' "$RELAIS_KV_ID" | grep -Eq '^[0-9a-f]{32}$'; then
+            echo "::error::RELAIS_KV_ID n'a pas la forme d'un identifiant de boîte KV (32 caractères hexadécimaux). Il est dans relais/relais-local.json (champ kv) sur le PC, ou sur dash.cloudflare.com > Storage & Databases > KV > applibourse-boite."
+            manque=1
+          fi
+          exit $manque
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Tests du relais (sécurité de la route Tsuzuku comprise)
+        run: node --test relais/*.test.mjs
+
+      - name: Identifiant de la boîte KV
+        run: |
+          if [ -z "$RELAIS_KV_ID" ]; then
+            echo "RELAIS_KV_ID absent : recherche de la boîte applibourse-boite dans le compte (demande la permission Workers KV Storage)."
+            if ! npx --yes wrangler@4 kv namespace list > kv.json 2> kv.err; then
+              echo "::error::Impossible de lister les boîtes KV. Créez la variable RELAIS_KV_ID (GitHub > Settings > Secrets and variables > Actions > Variables) avec l'identifiant de la boîte applibourse-boite (relais/relais-local.json sur le PC, champ kv), ou ajoutez au jeton Cloudflare la permission Account > Workers KV Storage > Edit."
+              exit 1
+            fi
+            RELAIS_KV_ID=$(node -e "const l=JSON.parse(require('fs').readFileSync('kv.json','utf8').replace(/^[^\[]*/,''));const b=l.find(x=>x.title==='applibourse-boite'||/applibourse-boite$/.test(x.title));process.stdout.write(b?b.id:'')")
+            if [ -z "$RELAIS_KV_ID" ]; then
+              echo "::error::Aucune boîte KV applibourse-boite dans ce compte Cloudflare : le relais n'a jamais été installé ? Lancez une fois npm run relais:deployer sur le PC, ou créez la variable RELAIS_KV_ID."
+              exit 1
+            fi
+          fi
+          echo "::add-mask::$RELAIS_KV_ID"
+          echo "RELAIS_KV_ID=$RELAIS_KV_ID" >> "$GITHUB_ENV"
+
+      # wrangler.local.toml (PC) n'est pas versionné : on fabrique la même chose depuis le modèle versionné.
+      - name: Configuration temporaire depuis relais/wrangler.toml
+        run: |
+          grep -q 'A_REMPLIR_PAR_LE_SCRIPT' relais/wrangler.toml || { echo "::error::relais/wrangler.toml : marqueur A_REMPLIR_PAR_LE_SCRIPT introuvable."; exit 1; }
+          sed "s/A_REMPLIR_PAR_LE_SCRIPT/$RELAIS_KV_ID/" relais/wrangler.toml > relais/wrangler.ci.toml
+          if grep -Eiq 'JETON|DISCORD_WEBHOOK' <(grep -v '^#' relais/wrangler.ci.toml); then
+            echo "::error::La configuration ne doit contenir aucun secret."
+            exit 1
+          fi
+
+      - name: Déployer le relais
+        run: |
+          npx --yes wrangler@4 deploy --config relais/wrangler.ci.toml 2>&1 | tee deploiement.log
+          test "${PIPESTATUS[0]}" -eq 0
+          adresse=$(grep -Eo 'https://[a-z0-9.-]+\.workers\.dev' deploiement.log | head -n1 || true)
+          if [ -n "$adresse" ] && [ -z "$RELAIS_URL" ]; then
+            echo "RELAIS_URL=$adresse" >> "$GITHUB_ENV"
+          fi
+
+      - name: Test de santé
+        run: |
+          if [ -z "$RELAIS_URL" ]; then
+            echo "::warning::Adresse du relais inconnue (ajoutez la variable RELAIS_URL) : test de santé sauté."
+            exit 0
+          fi
+          RELAIS_URL="${RELAIS_URL%/}"
+          origine=$(node -p "require('./src/config/site.json').site")
+          sleep 5
+          # Sans jeton : le relais répond (401 attendu) — preuve qu'il tourne, sans exposer JETON.
+          sante=$(curl -s -o sante.json -w '%{http_code}' --retry 3 --retry-all-errors "$RELAIS_URL/sante" || true)
+          echo "GET /sante (sans jeton) : HTTP $sante $(cat sante.json 2>/dev/null)"
+          if [ "$sante" != "401" ]; then
+            echo "::error::Le relais ne répond pas comme attendu sur /sante (HTTP $sante)."
+            exit 1
+          fi
+          # Nouvelle route : le préliminaire CORS du site doit être accepté (204 + origine du site).
+          cors=$(curl -s -D cors.txt -o /dev/null -w '%{http_code}' -X OPTIONS -H "Origin: $origine" -H 'Access-Control-Request-Method: POST' "$RELAIS_URL/tsuzuku/requete" || true)
+          echo "OPTIONS /tsuzuku/requete (origine $origine) : HTTP $cors"
+          if [ "$cors" != "204" ] || ! grep -qi "access-control-allow-origin: $origine" cors.txt; then
+            echo "::error::La route /tsuzuku/requete ne répond pas au site (HTTP $cors) : vérifiez ORIGINES_SITE dans relais/wrangler.toml."
+            exit 1
+          fi
+          echo "Relais à jour : $RELAIS_URL (lecture des sources de Tsuzuku disponible pour le site)."
+
+      - name: Nettoyer
+        if: always()
+        run: rm -f relais/wrangler.ci.toml kv.json kv.err deploiement.log sante.json cors.txt

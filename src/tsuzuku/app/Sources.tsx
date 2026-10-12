@@ -294,7 +294,16 @@ export function Sources({ comptes = [], partageActif = true, onCles, ajoutInitia
       {aideConfig ? <AideConfiguration onFermer={() => setAideConfig(false)} /> : null}
       {/* Rappel visible en permanence ; l'assistant ouvert porte le sien (pas de doublon). */}
       {vue !== 'assistant' && vue !== 'json' ? <Avis genre="alerte" texte={RAPPEL_DROITS} testID="sources-rappel" /> : null}
-      {!s.lectureSources ? <Avis texte="Sur le site web, les pages des sources ne peuvent pas être lues (CORS) : test et lecture sur l’app PC/iPhone. Vous pouvez néanmoins préparer, importer et partager vos sources ici." /> : null}
+      {!s.lectureSources ? (
+        <Avis
+          texte="Sur le site web, le navigateur ne peut pas lire les pages des sources (CORS) : elles passent par le relais, pour le seul compte Fondateur relié au relais (Paramètres › Synchronisation, code de liaison du PC). Sinon, test et lecture sur l’app PC/iPhone. Vous pouvez néanmoins préparer, importer et partager vos sources ici."
+          testID="sources-site"
+        />
+      ) : s.viaRelais ? (
+        <Text style={styleAttenue(theme, 13)} testID="sources-via-relais">
+          Site web : les pages des sources sont lues via le relais (jeton du compte Fondateur, sans cookie, limite de requêtes par minute).
+        </Text>
+      ) : null}
       {!partageActif ? <Avis texte="Le partage des sources est publié par le compte historique (Fondateur d’origine) : les sources ajoutées ici ne servent qu’à vous." testID="sources-partage-historique" /> : null}
 
       {vue === 'liste' ? (

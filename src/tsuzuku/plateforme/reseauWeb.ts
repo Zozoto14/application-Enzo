@@ -1,9 +1,11 @@
 /**
- * `Reseau` du site (navigateur) : le CORS interdit de lire les pages d'un
- * site tiers, et un navigateur ne voit pas les redirections. On n'y joint donc
- * QUE les catalogues qui autorisent le CORS (Jikan, AniList, TMDB) ; toute autre
- * adresse (une source, un lien manuel à analyser) est refusée avec un message
- * clair. Un lien direct (mp4, m3u8, iframe) reste lisible : il est affiché, pas lu.
+ * `Reseau` direct du site (navigateur) : le CORS interdit de lire les pages
+ * d'un site tiers, et un navigateur ne voit pas les redirections. On n'y joint
+ * donc directement QUE les catalogues qui autorisent le CORS (Jikan, AniList,
+ * TMDB) ; toute autre adresse (une source, un lien manuel à analyser) passe par
+ * le relais pour le compte Fondateur relié (`reseauRelais.ts`), ou est refusée
+ * avec un message clair. Un lien direct (mp4, m3u8, iframe) reste lisible : il
+ * est affiché, pas lu.
  */
 
 import { echec } from '../moteur/erreurs';
@@ -12,7 +14,8 @@ import { reseauDepuisFetch, type FonctionFetch, type Reseau } from '../moteur/re
 
 export const HOTES_CATALOGUE: readonly string[] = ['api.jikan.moe', 'graphql.anilist.co', 'api.themoviedb.org'];
 
-export const MESSAGE_SITE = 'Lecture des sources disponible sur l’app PC/iPhone ; sur le site, bientôt.';
+export const MESSAGE_SITE =
+  'Sur le site, les sources se lisent par le relais, pour le seul compte Fondateur relié au relais (Paramètres › Synchronisation, code de liaison du PC). Sinon : lecture des sources sur l’app PC/iPhone, ou collez un lien direct.';
 
 export function hoteDeCatalogue(url: string): boolean {
   const a = analyserAdresse(url);

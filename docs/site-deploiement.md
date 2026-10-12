@@ -46,3 +46,9 @@ site et le publie. Il ne publie **jamais** une autre branche que `main`.
 Le paquet de mise à jour de l'app iPhone (`/maj`, signé sur le PC) est repris
 tel qu'il est en ligne : la publication automatique ne l'efface pas. Il ne se
 renouvelle que par `npm run relais:site` sur le PC.
+
+## Et le relais ?
+
+Ce workflow ne publie que le site. Le relais Cloudflare (Worker) se met à jour à part, à la main :
+GitHub › Actions › « Relais (Cloudflare Worker) » › Run workflow, ou `npm run relais:deployer` sur
+le PC. Mode d'emploi : `docs/relais-deploiement-github.md`.

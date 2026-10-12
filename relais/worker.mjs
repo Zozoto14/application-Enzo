@@ -17,6 +17,10 @@
  * et docs/synchro-relais.md). Sans jeton valable, personne ne peut remplir la
  * boîte ni se servir du relais comme d'un proxy.
  *
+ * Une route `POST /tsuzuku/requete` lit les pages des sources de Tsuzuku pour
+ * le site web, avec le jeton MAÎTRE seulement (voir tsuzuku.mjs et
+ * src/tsuzuku/README.md) ; son CORS est restreint aux origines du site.
+ *
  * Une troisième route, `POST /support`, relaie un ticket d'assistance vers un
  * salon Discord (voir « Support » plus bas et docs/support-discord.md). L'adresse
  * du webhook est un SECRET du Worker (`DISCORD_WEBHOOK_URL`) : elle ne figure ni
@@ -29,8 +33,9 @@ import {
   yahooJson,
   yahooScreener,
 } from '../bureau/electron/reseau.mjs';
+import { CHEMIN_TSUZUKU, routeTsuzuku } from './tsuzuku.mjs';
 
-export const VERSION_RELAIS = 4;
+export const VERSION_RELAIS = 5;
 /** Une enveloppe chiffrée : quelques centaines de Kio en pratique. */
 const TAILLE_MAX_ENVELOPPE = 20 * 1024 * 1024;
 const IDENTIFIANT_APPAREIL = /^[a-z0-9]{4,32}$/;
@@ -635,6 +640,10 @@ async function passerelle(requete, chemin) {
 
 export default {
   async fetch(requete, env) {
+    // Lecture des sources de Tsuzuku (site web) : CORS, jeton et règles à part, préliminaire compris.
+    if (new URL(requete.url).pathname === CHEMIN_TSUZUKU) {
+      return routeTsuzuku(requete, env, () => porteeDuJeton((requete.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, ''), env.JETON));
+    }
     if (requete.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: ENTETES_CORS });
     }

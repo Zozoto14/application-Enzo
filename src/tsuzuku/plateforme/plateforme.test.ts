@@ -100,9 +100,11 @@ describe('adaptateur du site (navigateur)', () => {
     expect(fn).not.toHaveBeenCalled();
   });
 
-  it('le message annoncé mentionne l’app PC/iPhone', () => {
+  it('le message annoncé dit quoi faire : relier le compte Fondateur au relais, sinon l’app PC/iPhone', () => {
     expect(MESSAGE_SITE).toMatch(/app PC\/iPhone/);
-    expect(MESSAGE_SITE).toMatch(/bientôt/);
+    expect(MESSAGE_SITE).toMatch(/relais/);
+    expect(MESSAGE_SITE).toMatch(/Fondateur/);
+    expect(MESSAGE_SITE).not.toMatch(/bientôt/);
   });
 });
 

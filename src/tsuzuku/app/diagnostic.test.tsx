@@ -144,6 +144,20 @@ describe('fiche : « Tester une source sur ce titre » et « Copier le diagnosti
     expect(screen.getByTestId('fiche-test-src-a-lecteur-ok')).toBeTruthy();
   });
 
+  it('site relié au relais (Fondateur) : « via le relais » dans la fiche et le diagnostic copié', async () => {
+    const { s: pc } = await services({ bloque: true });
+    const site = creerServices({ choix: { plateforme: 'site', reseau: fauxReseau(routes({ bloque: true }), { resoudre: async () => ['93.184.216.34'] }), lectureSources: true, viaRelais: true }, stockage: pc.stockage, rang: 'fondateur', catalogue: { attendre: attenteNulle } });
+    expect(site.viaRelais).toBe(true);
+    await render(<TsuzukuEcrans contexte={{ profil: admin }} theme={theme} registre={REGISTRE} onRetour={() => undefined} onParametres={() => undefined} services={site} />);
+    await fireEvent.press(await screen.findByTestId('carte-anime-1'));
+    expect(await screen.findByTestId('fiche-sources-via-relais')).toHaveTextContent(/via le relais/);
+    await screen.findByTestId('fiche-sources-echec-message');
+    await fireEvent.press(screen.getByTestId('fiche-sources-echec-detail-bouton'));
+    expect(screen.getByTestId('fiche-sources-echec-via-relais')).toHaveTextContent(/site web \(navigateur\), via le relais/);
+    await fireEvent.press(screen.getByTestId('fiche-sources-echec-copier'));
+    expect(screen.getByTestId('fiche-sources-echec-texte').props.value).toContain('Plateforme : site web (navigateur), via le relais');
+  });
+
   it('un ami ne voit pas le test des sources', async () => {
     const { s } = await services();
     const ami = creerServices({ choix: { plateforme: 'pc', reseau: fauxReseau(routes()), lectureSources: true }, stockage: s.stockage, rang: 'ami', catalogue: { attendre: attenteNulle } });

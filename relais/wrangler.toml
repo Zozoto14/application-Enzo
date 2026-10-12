@@ -8,3 +8,10 @@ compatibility_date = "2026-09-01"
 [[kv_namespaces]]
 binding = "BOITE"
 id = "A_REMPLIR_PAR_LE_SCRIPT"
+
+# Origines (séparées par des virgules) dont le navigateur peut appeler la
+# lecture des sources de Tsuzuku (`/tsuzuku/requete`). Ce n'est pas un secret :
+# la même adresse que src/config/site.json. Facultatif : LIMITE_TSUZUKU_MINUTE
+# (60 requêtes par minute par défaut).
+[vars]
+ORIGINES_SITE = "https://applibourse-ef0ddb.pages.dev"

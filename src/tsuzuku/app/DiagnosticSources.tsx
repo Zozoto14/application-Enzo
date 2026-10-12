@@ -21,15 +21,23 @@ import { Avis, Bouton, Champ, styleAttenue, styleTexte } from './ui';
 export { LIBELLE_STATUT_SOURCE, lignesDiagnostic, texteDiagnostic } from './diagnosticTexte';
 
 const LIBELLE_PLATEFORME = { pc: 'app PC', site: 'site web (navigateur)', mobile: 'iPhone/iPad' } as const;
+/** Libellé de la plateforme dans le diagnostic (« via le relais » quand le site lit par le relais). */
+export const libellePlateforme = (s: { plateforme: keyof typeof LIBELLE_PLATEFORME; viaRelais?: boolean }): string =>
+  `${LIBELLE_PLATEFORME[s.plateforme] ?? s.plateforme}${s.viaRelais ? ', via le relais' : ''}`;
 
 /** Détail du diagnostic : lignes lisibles, « Copier le diagnostic » et le texte complet à sélectionner. */
 function DetailDiagnostic({ diagnostic, message, oeuvre, testID }: { diagnostic: DiagnosticLecture; message?: string; oeuvre?: string; testID: string }) {
   const { s, theme } = useTsuzuku();
   const [copie, setCopie] = useState<string | undefined>();
   const [texte, setTexte] = useState<string | undefined>();
-  const complet = () => texteDiagnostic(diagnostic, { oeuvre, message, plateforme: LIBELLE_PLATEFORME[s.plateforme] ?? s.plateforme });
+  const complet = () => texteDiagnostic(diagnostic, { oeuvre, message, plateforme: libellePlateforme(s) });
   return (
     <View style={{ gap: 6 }} testID={`${testID}-detail`}>
+      {s.viaRelais ? (
+        <Text selectable style={styleAttenue(theme, 12)} testID={`${testID}-via-relais`}>
+          Plateforme : {libellePlateforme(s)} (pages lues par le relais Cloudflare, sans cookie)
+        </Text>
+      ) : null}
       {lignesDiagnostic(diagnostic).map((l, i) => (
         <Text key={i} selectable style={l.startsWith('  ') ? styleAttenue(theme, 12) : styleTexte(theme, 13)}>
           {l}
@@ -194,6 +202,11 @@ export function DisponibiliteSources({ id, titres, oeuvre }: { id: string; titre
   return (
     <View style={{ gap: 8 }} testID="fiche-sources">
       <Text style={styleTexte(theme, 15)}>Sur vos sources</Text>
+      {s.viaRelais ? (
+        <Text style={styleAttenue(theme, 12)} testID="fiche-sources-via-relais">
+          Site web : lecture via le relais
+        </Text>
+      ) : null}
       {etat.enCours && !d ? (
         <Text style={styleAttenue(theme, 13)} testID="fiche-sources-recherche">
           Recherche sur vos sources…

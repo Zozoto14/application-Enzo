@@ -44,8 +44,13 @@ import { ecrireReglages, lireReglages, type ReglagesTsuzuku } from './reglages';
 
 export interface ServicesTsuzuku {
   plateforme: ChoixReseau['plateforme'];
-  /** Faux sur le site : pas de lecture de pages tierces (CORS). */
-  lectureSources: boolean;
+  /**
+   * Faux sur le site (CORS), sauf pour le compte Fondateur relié au relais : les
+   * pages passent alors par la route `/tsuzuku/requete` du relais.
+   */
+  readonly lectureSources: boolean;
+  /** Site : lecture des sources par le relais (diagnostic « via le relais »). */
+  readonly viaRelais: boolean;
   /** Rang du profil (Fondateur, Administrateur, Gestionnaire, Ami). */
   rang: Rang;
   /** Rang habilité à gérer les sources, les clés d'API et les options avancées (Fondateur). */
@@ -83,7 +88,7 @@ export interface ServicesTsuzuku {
 }
 
 export interface OptionsServices {
-  choix: Pick<ChoixReseau, 'plateforme' | 'reseau' | 'lectureSources' | 'pont'>;
+  choix: Pick<ChoixReseau, 'plateforme' | 'reseau' | 'lectureSources' | 'pont' | 'viaRelais'>;
   stockage: Stockage;
   /** Rang du profil ouvert. */
   rang?: Rang;
@@ -107,9 +112,16 @@ export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: anci
   const propres = async () => (habilite ? lireListeSources(await stockage.lire(CLES.sources)) : []);
   const recues = async () => lireRecues(await stockage.lire(CLES.sourcesRecues));
   const choixPerso = async () => lireChoix(await stockage.lire(CLES.choixSources));
+  // Site : le relais ne sert que le jeton maître (Fondateur historique) ; un autre rang garde le message du site.
+  const lecture = () => (choix.plateforme === 'site' ? Boolean(choix.lectureSources) && rang === 'fondateur' : choix.lectureSources);
   return {
     plateforme: choix.plateforme,
-    lectureSources: choix.lectureSources,
+    get lectureSources() {
+      return lecture();
+    },
+    get viaRelais() {
+      return choix.plateforme === 'site' && lecture();
+    },
     rang,
     estAdmin: habilite,
     stockage,

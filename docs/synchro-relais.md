@@ -164,6 +164,24 @@ redéployés. Tests : `relais/worker.test.mjs` (« course sur l'index… »).
   rétrogradation retire la délégation au tour suivant : l'accès cesse aussitôt (403). Redéployer le
   relais pour les rangs.
 
+## Lecture des sources de Tsuzuku pour le site (version 5 du relais)
+
+- `POST /tsuzuku/requete` (`relais/tsuzuku.mjs`) : **jeton maître seulement** (compte Fondateur historique,
+  celui du code de liaison du PC). Tout jeton de profil — Ami, Gestionnaire, Administrateur, autre Fondateur —
+  reçoit 403 : le relais ne connaît pas d'autre liste de Fondateurs (`/rangs` ne porte que des délégations).
+- CORS **restreint** aux origines `ORIGINES_SITE` (variable non secrète de `relais/wrangler.toml`, la même
+  adresse que `src/config/site.json`) ; préliminaire `OPTIONS` propre à cette route ; les autres routes gardent
+  leur CORS (`*`) et leur comportement. Rien n'est écrit dans KV (débit compté en mémoire du Worker).
+- Règles de sécurité, limites et erreurs : `src/tsuzuku/README.md` (« Site web : lecture par le relais »).
+- Redéploiement nécessaire (sans PC : `docs/relais-deploiement-github.md` ; sur le PC : `npm run relais:deployer`).
+  Tant qu'il n'est pas fait, la route répond 404 et le site affiche « mettez à jour le relais ».
+
+**Passerelle Yahoo / médias (`/yahoo/*`, `/medias/*`) : inchangée.** Tout jeton valable (maître ou de profil)
+peut s'en servir, et c'est voulu : un ami ouvre son portefeuille (cours) et les actualités sur le site, qui
+passent par là. Elle reste bornée aux listes fermées d'hôtes de `bureau/electron/reseau.mjs` (Yahoo Finance,
+flux et pages des médias connus) : ce n'est pas un proxy ouvert. La restreindre au jeton maître casserait les
+comptes d'amis existants ; elle n'est donc pas modifiée.
+
 ## Ce qui est publié, et qui peut le lire
 
 | Objet | Contenu | Chiffrement | Lisible par |

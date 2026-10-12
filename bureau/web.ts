@@ -7,6 +7,11 @@
  *  - joindre Yahoo Finance et les médias, ce que le navigateur interdit
  *    d'une origine à l'autre. Les mêmes fonctions que le pont d'Electron
  *    (`yahoo`, `medias`) sont posées ici, et passent par le relais ;
+ *  - lire les pages des SOURCES de Tsuzuku (`tsuzukuRelais`) : route
+ *    `/tsuzuku/requete` du relais, réservée au jeton maître (compte Fondateur
+ *    relié). Le jeton est celui de la liaison déjà en place : aucun nouveau
+ *    secret. Clé distincte du pont du PC (`tsuzuku`) : le site n'est jamais
+ *    pris pour l'app PC ;
  *  - savoir quel relais utiliser. Le QR code affiché par le PC ouvre le site
  *    avec `#liaison=AB1.…` : le code est gardé, et Paramètres ›
  *    Synchronisation le propose sans rien recopier.
@@ -17,6 +22,8 @@
 
 import { decoderLiaison, type Liaison } from '../src/sync/relais/liaison';
 import { relaisActif } from '../src/sync/relais/actif';
+import { estMaitre } from '../src/sync/relais/portees';
+import type { DemandeRelais, TransportRelais } from '../src/tsuzuku/plateforme/reseauRelais';
 
 const CLE_LIAISON = 'applibourse.liaison';
 
@@ -69,6 +76,46 @@ async function viaRelais(chemin: string, corps: unknown): Promise<Response> {
   return reponse;
 }
 
+/** Relais de la lecture des sources : celui du compte ouvert, et seulement avec le jeton maître. */
+function relaisFondateur() {
+  const relais = relaisActif() ?? liaisonDuSite();
+  return relais && estMaitre(relais) ? relais : undefined;
+}
+
+/** Transport de Tsuzuku vers `POST /tsuzuku/requete` (un saut ; le moteur suit et revérifie les redirections). */
+export function transportTsuzuku(fetchFn: typeof fetch = (...a) => globalThis.fetch(...a)): TransportRelais {
+  return {
+    disponible: () => Boolean(relaisFondateur()),
+    async envoyer(demande: DemandeRelais, delaiMs: number) {
+      const relais = relaisFondateur();
+      if (!relais) {
+        return { statut: 403, json: { erreur: 'Site non relié avec le jeton du Fondateur.', code: 'interdit' } };
+      }
+      const controleur = new AbortController();
+      const minuteur = setTimeout(() => controleur.abort(), Math.min(60_000, Math.max(1000, delaiMs) + 3000));
+      try {
+        const reponse = await fetchFn(`${relais.relais}/tsuzuku/requete`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${relais.jeton}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(demande),
+          credentials: 'omit',
+          cache: 'no-store',
+          signal: controleur.signal,
+        });
+        let json: unknown = null;
+        try {
+          json = await reponse.json();
+        } catch {
+          // Pas de JSON (ancienne version du relais, page d'erreur) : le statut suffit.
+        }
+        return { statut: reponse.status, json };
+      } finally {
+        clearTimeout(minuteur);
+      }
+    },
+  };
+}
+
 export function installerPontWeb(): void {
   const global = globalThis as { applibourse?: Record<string, unknown>; fetch: typeof fetch };
   if (global.applibourse) {
@@ -86,6 +133,7 @@ export function installerPontWeb(): void {
     relais: {
       config: async () => liaisonDuSite(),
     },
+    tsuzukuRelais: transportTsuzuku(),
   };
 
   // Les cours passent par `fetch` directement : même détour pour Yahoo.

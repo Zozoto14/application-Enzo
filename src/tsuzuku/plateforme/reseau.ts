@@ -4,15 +4,21 @@ import { Platform } from 'react-native';
 import type { Reseau } from '../moteur/reseau';
 import { pontElectron, reseauElectron, type PontTsuzuku } from './reseauElectron';
 import { reseauNatif } from './reseauNatif';
-import { reseauWeb } from './reseauWeb';
+import { reseauSite, transportRelais } from './reseauRelais';
 
 export type Plateforme = 'pc' | 'site' | 'mobile';
 
 export interface ChoixReseau {
   plateforme: Plateforme;
   reseau: Reseau;
-  /** Faux sur le site : les pages de sources ne peuvent pas y être lues. */
+  /**
+   * Faux sur le site, sauf s'il est relié au relais avec le jeton du compte
+   * Fondateur (la route `/tsuzuku/requete` lit alors les pages). Lu à chaque
+   * fois : la liaison peut arriver après l'ouverture de l'app.
+   */
   lectureSources: boolean;
+  /** Site : les pages des sources passent par le relais. */
+  viaRelais?: boolean;
   pont?: PontTsuzuku;
 }
 
@@ -22,7 +28,18 @@ export function choisirReseau(source: unknown = globalThis, os: string = Platfor
     return { plateforme: 'pc', reseau: reseauElectron(pont), lectureSources: true, pont };
   }
   if (os === 'web') {
-    return { plateforme: 'site', reseau: reseauWeb(), lectureSources: false };
+    const transport = transportRelais(source);
+    const relie = () => Boolean(transport?.disponible());
+    return {
+      plateforme: 'site',
+      reseau: reseauSite(transport),
+      get lectureSources() {
+        return relie();
+      },
+      get viaRelais() {
+        return relie();
+      },
+    };
   }
   return { plateforme: 'mobile', reseau: reseauNatif(), lectureSources: true };
 }

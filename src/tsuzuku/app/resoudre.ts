@@ -56,7 +56,7 @@ const AUCUNE_SOURCE = 'Aucune source ne fournit ce titre. Ajoutez un lien direct
 /** Des sources existent, mais aucune n'est activée (pour ce profil). */
 const toutesDesactivees = (n: number) => `Vos ${n} source(s) sont désactivées : activez-en une (page Sources, ou Paramètres › Tsuzuku pour une source partagée avec vous).`;
 
-export const MESSAGE_SITE_SOURCES = `${MESSAGE_SITE} Le navigateur ne peut pas lire les pages de vos sources (CORS) : ouvrez la fiche dans l’app PC ou iPhone, ou collez un lien direct.`;
+export const MESSAGE_SITE_SOURCES = `Le navigateur ne peut pas lire lui-même les pages de vos sources (CORS). ${MESSAGE_SITE}`;
 
 /** Titres d'une fiche à chercher sur les sources (titre affiché, original, alternatifs, japonais), sans doublon. */
 export function titresPourSources(f: { title?: string | null; titleOriginal?: string | null; titresAlternatifs?: readonly string[] | null; titleJapanese?: string | null; originalTitle?: string | null }): string[] {
