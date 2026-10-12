@@ -41,6 +41,43 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.19',
+    date: '2026-10-19',
+    titre: 'Claude Office devient un vrai open space',
+    resume:
+      'L’onglet Bureau de Claude Office est redessiné en open space vu en 3D isométrique : îlots de bureaux, salle de réunion vitrée, cuisine et machine à café, coin salon, de jour en thème clair et de nuit en thème sombre. Chaque session de Claude Code y a son personnage.',
+    illustration: 'administration',
+    fonctionnalites: [
+      {
+        id: 'claude-office-open-space',
+        emoji: '🏢',
+        titre: 'Un open space vivant',
+        texte:
+          'Chaque agent arrive par la porte, rejoint son poste, tape, ouvre un terminal, cherche, lit, consulte le web, réfléchit (bulle de pensée), prend un café, fête la fin de sa session puis repart avec son carton. Son écran et son badge montrent l’outil en cours, la bulle sa dernière demande (secrets masqués).',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+      {
+        id: 'claude-office-demo',
+        emoji: '🎬',
+        titre: 'Mode démo',
+        texte:
+          '« Voir la démo » remplit l’open space de sessions fictives animées, clairement étiquetées « Démo », pour voir la scène même sans activité. Rien de réel n’est lu ni déposé ; « Quitter la démo » revient à vos agents.',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+      {
+        id: 'claude-office-open-space-accessible',
+        emoji: '♿',
+        titre: 'Léger, lisible, accessible',
+        texte:
+          'Aucune image : tout est dessiné à la volée (environ 18 Ko compressés). Les animations s’arrêtent hors de l’écran et respectent « réduire les animations » (scène fixe mais expressive). Sous la scène, la liste des agents (état, projet, dernière demande) se parcourt au clavier ; sur téléphone, la scène se fait glisser ou s’affiche en entier.',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.18',
     date: '2026-10-18',
     titre: 'Claude Office : le bureau des agents, partout',

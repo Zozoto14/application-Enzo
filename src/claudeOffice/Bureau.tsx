@@ -1,9 +1,13 @@
 /**
- * Claude Office, onglet « Bureau » : le bureau des agents dessiné DANS le hub
- * (vues React Native, aucun sprite ni serveur), sur le PC, le site et le
- * téléphone. Un personnage par session de Claude Code, animé selon l'état
- * déduit des derniers événements (écrit / outil / réfléchit / inactif /
- * terminé), avec la dernière demande résumée dans sa bulle.
+ * Claude Office, onglet « Bureau » : un open space dessiné DANS le hub
+ * (SVG isométrique sur le web et le PC, vues simplifiées en natif ; aucun
+ * sprite ni serveur), sur le PC, le site et le téléphone. Un personnage par
+ * session de Claude Code, qui arrive à son poste, tape, utilise ses outils,
+ * réfléchit, boit un café, fête la fin de session et repart, selon l'état
+ * déduit des derniers événements ; bulle avec la dernière demande résumée.
+ * Sous la scène, la liste des agents (état, projet, dernière demande) porte
+ * la même information pour le clavier et les lecteurs d'écran. Mode « démo »
+ * (sessions fictives) activable depuis l'écran.
  *
  * Sur le PC : journal local relu toutes les 2 s (« en direct »). Ailleurs :
  * copie chiffrée du relais, avec son âge (« à jour il y a X min ») et l'état
@@ -13,21 +17,21 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Platform, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Switch, Text, useWindowDimensions, View } from 'react-native';
 import { BoutonHub } from '../hub/Hub';
 import { police, type ThemeHub } from '../hub/themes';
 import type { ContexteHub } from '../hub/types';
 import { useMobile } from '../ui/mobile/useMobile';
 import { useActiviteBureau, type ActiviteBureau } from './activiteBureau';
 import {
-  LIBELLES_ETAT, compterBureau, couleurAgent, deduireBureau, estActif, ilYA, libelleFraicheur, phraseAgent, resumerTexte, type Agent, type EtatAgent,
+  LIBELLES_ETAT, compterBureau, couleurAgent, deduireBureau, ilYA, libelleFraicheur, phraseAgent, resumerTexte,
 } from './logiqueBureau';
+import { ICONES_ACTIVITE, LIBELLES_ACTIVITE, TEINTES_ACTIVITE, activiteAgent, apparence, entreesDemo, type Activite } from './logiqueScene';
+import { SceneOpenSpace } from './SceneOpenSpace';
 import { LIBELLE_HOOK_HISTORIQUE, type EtatClaudeOffice, type PontClaudeOffice } from './pont';
 import {
   DELAI_MIN_PRESENCE_MS, MAX_PRESENCES_JOUR, ecrireEtatPresence, ecrireEtatSynchro, lireEtatPresence, lireEtatSynchro, type EtatPresence, type EtatSynchroHistorique,
 } from './synchroHistorique';
-
-const NATIF = Platform.OS !== 'web';
 
 /** Préférence « réduire les animations » du système (web : prefers-reduced-motion). */
 export function useMouvementReduit(force?: boolean): boolean {
@@ -50,159 +54,18 @@ export function useMouvementReduit(force?: boolean): boolean {
   return reduit;
 }
 
-/** Boucle d'animation 0 → 1 → 0, arrêtée si `actif` est faux. */
-function useBoucle(actif: boolean, duree: number, aller = true): Animated.Value {
-  const valeur = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    if (!actif) {
-      valeur.setValue(0);
-      return undefined;
-    }
-    const sequence = aller
-      ? Animated.sequence([
-        Animated.timing(valeur, { toValue: 1, duration: duree / 2, easing: Easing.inOut(Easing.quad), useNativeDriver: NATIF }),
-        Animated.timing(valeur, { toValue: 0, duration: duree / 2, easing: Easing.inOut(Easing.quad), useNativeDriver: NATIF }),
-      ])
-      : Animated.timing(valeur, { toValue: 1, duration: duree, easing: Easing.linear, useNativeDriver: NATIF });
-    const boucle = Animated.loop(sequence);
-    boucle.start();
-    return () => boucle.stop();
-  }, [actif, duree, aller, valeur]);
-  return valeur;
+/** Teinte d'activité assez contrastée pour du texte (≥ 4,5:1) : assombrie en thème clair, éclaircie en sombre. */
+export function teinteLisible(hex: string, sombre: boolean): string {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const canal = (v: number) => Math.round(sombre ? v + (255 - v) * 0.3 : v * 0.6);
+  return `#${[(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => canal(v).toString(16).padStart(2, '0')).join('')}`;
 }
 
-interface Couleurs {
-  sol: string;
-  mur: string;
-  plinthe: string;
-  bureau: string;
-  bureauOmbre: string;
-  ecran: string;
-  ecranAllume: string;
-  code: string;
-  peau: string;
-  cheveux: string;
-  chaise: string;
-  bulle: string;
-  bulleTexte: string;
-}
+/** Légende de la scène : gadgets et états. */
+const LEGENDE: readonly Activite[] = ['code', 'terminal', 'recherche', 'lecture', 'web', 'agent', 'pense', 'pause', 'fini'];
 
-function couleursScene(theme: ThemeHub): Couleurs {
-  return theme.sombre
-    ? {
-      sol: '#1E2433', mur: '#262E40', plinthe: '#151A26', bureau: '#8A6A48', bureauOmbre: '#5E4732', ecran: '#0D1018', ecranAllume: '#16243A',
-      code: '#6FE3A5', peau: '#E8B996', cheveux: '#3B2A20', chaise: '#3A4258', bulle: '#F4F6FA', bulleTexte: '#151A26',
-    }
-    : {
-      sol: '#E9E3D6', mur: '#F6F1E6', plinthe: '#CFC6B4', bureau: '#B98A5A', bureauOmbre: '#8C6640', ecran: '#2A2F3A', ecranAllume: '#1E3352',
-      code: '#7CF0B4', peau: '#E7B48F', cheveux: '#4A3426', chaise: '#7D8597', bulle: '#FFFFFF', bulleTexte: '#1A1D24',
-    };
-}
-
-const ICONES_ETAT: Record<EtatAgent, string> = { ecrit: '</>', outil: '⚙', reflechit: '…', inactif: 'z', termine: '✓' };
-
-/** Un poste de travail : bureau, écran, chaise et personnage, animés selon l'état. */
-function Poste({ agent, theme, couleurs, anime, maintenant, selectionne, onPress, largeur, mobile }: {
-  agent: Agent; theme: ThemeHub; couleurs: Couleurs; anime: boolean; maintenant: number; selectionne: boolean; onPress(): void; largeur: number; mobile: boolean;
-}) {
-  const vivant = anime && !agent.fige;
-  const etat = agent.etat;
-  const frappe = useBoucle(vivant && etat === 'ecrit', 360);
-  const rotation = useBoucle(vivant && etat === 'outil', 1600, false);
-  const pensee = useBoucle(vivant && etat === 'reflechit', 1400);
-  const sommeil = useBoucle(vivant && etat === 'inactif', 2600);
-  const teinte = couleurAgent(agent.projet ?? agent.cle);
-  const present = etat !== 'termine';
-  const texteBulle = agent.demande ?? (etat === 'termine' ? 'Session terminée' : 'Pas encore de demande');
-  const taille = mobile ? 15 : 14;
-  const libelleAcces = `${agent.projet ?? 'Projet inconnu'}${agent.appareil ? `, ${agent.appareil}` : ''} : ${phraseAgent(agent, maintenant)}. Dernière demande : ${agent.demande ?? 'aucune'}`;
-  const bras = frappe.interpolate({ inputRange: [0, 1], outputRange: [0, -3] });
-  const tourne = rotation.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const opacitePensee = pensee.interpolate({ inputRange: [0, 1], outputRange: [0.35, 1] });
-  const montee = sommeil.interpolate({ inputRange: [0, 1], outputRange: [0, -8] });
-
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={libelleAcces}
-      accessibilityState={{ selected: selectionne }}
-      testID={`bureau-agent-${agent.session.slice(0, 12)}`}
-      style={[styles.poste, { width: largeur, borderColor: selectionne ? theme.accent : 'transparent' }]}
-    >
-      {/* Bulle : dernière demande résumée. */}
-      <View style={[styles.bulle, { backgroundColor: couleurs.bulle, borderColor: teinte }]}>
-        <Text numberOfLines={3} style={{ color: couleurs.bulleTexte, fontSize: taille, lineHeight: taille + 5 }} testID="bureau-bulle">
-          {texteBulle}
-        </Text>
-        <View style={[styles.queueBulle, { borderTopColor: teinte }]} />
-      </View>
-
-      {/* Scène : icône d'état, personnage, bureau, écran. */}
-      <View style={styles.scene} aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-        <View style={styles.iconeEtat}>
-          {etat === 'outil' ? (
-            <Animated.Text style={[styles.icone, { color: teinte, transform: [{ rotate: tourne }] }]}>{ICONES_ETAT.outil}</Animated.Text>
-          ) : etat === 'reflechit' ? (
-            <Animated.Text style={[styles.icone, { color: theme.attenue, opacity: opacitePensee }]}>{ICONES_ETAT.reflechit}</Animated.Text>
-          ) : etat === 'inactif' ? (
-            <Animated.Text style={[styles.icone, { color: theme.attenue, transform: [{ translateY: montee }] }]}>z<Text style={{ fontSize: 12 }}>z</Text></Animated.Text>
-          ) : (
-            <Text style={[styles.icone, { color: etat === 'termine' ? theme.ok : teinte }]}>{ICONES_ETAT[etat]}</Text>
-          )}
-        </View>
-        {/* Chaise (derrière). */}
-        <View style={[styles.dossier, { backgroundColor: couleurs.chaise }]} />
-        {present ? (
-          <View style={[styles.personnage, agent.fige ? { opacity: 0.55 } : null]}>
-            <View style={[styles.cheveux, { backgroundColor: couleurs.cheveux }]} />
-            <View style={[styles.tete, { backgroundColor: couleurs.peau }]}>
-              <View style={[styles.oeil, { left: 5, backgroundColor: couleurs.cheveux, height: etat === 'inactif' ? 1 : 3 }]} />
-              <View style={[styles.oeil, { right: 5, backgroundColor: couleurs.cheveux, height: etat === 'inactif' ? 1 : 3 }]} />
-            </View>
-            <View style={[styles.corps, { backgroundColor: teinte }]} />
-            <Animated.View style={[styles.bras, { backgroundColor: teinte, transform: [{ translateY: bras }] }]} />
-          </View>
-        ) : null}
-        {/* Bureau et écran. */}
-        <View style={[styles.ecran, { backgroundColor: estActif(etat) && !agent.fige ? couleurs.ecranAllume : couleurs.ecran }]}>
-          {etat === 'ecrit' ? (
-            <>
-              <View style={[styles.ligneCode, { width: 22, backgroundColor: couleurs.code }]} />
-              <View style={[styles.ligneCode, { width: 14, marginLeft: 4, backgroundColor: couleurs.code }]} />
-              <View style={[styles.ligneCode, { width: 18, backgroundColor: couleurs.code }]} />
-            </>
-          ) : etat === 'outil' ? (
-            <View style={[styles.ligneCode, { width: 26, backgroundColor: teinte }]} />
-          ) : null}
-        </View>
-        <View style={[styles.pied, { backgroundColor: couleurs.ecran }]} />
-        <View style={[styles.plateau, { backgroundColor: couleurs.bureau, borderBottomColor: couleurs.bureauOmbre }]} />
-        {etat === 'inactif' && present ? <View style={[styles.tasse, { borderColor: theme.attenue }]} /> : null}
-      </View>
-
-      {/* Étiquette lisible. */}
-      <Text numberOfLines={1} style={[styles.nomPoste, { color: theme.texte, fontSize: taille }]}>
-        {agent.projet ?? 'Projet inconnu'}
-      </Text>
-      <Text numberOfLines={2} style={{ color: estActif(agent.etat) && !agent.fige ? teinte : theme.attenue, fontSize: taille, textAlign: 'center', lineHeight: taille + 4 }} testID="bureau-etat-agent">
-        {agent.fige ? `${LIBELLES_ETAT[etat]} (figé)` : LIBELLES_ETAT[etat]}
-      </Text>
-    </Pressable>
-  );
-}
-
-/** Bureau vide : un poste sans personne. */
-function BureauVide({ couleurs }: { couleurs: Couleurs }) {
-  return (
-    <View style={[styles.scene, { alignSelf: 'center' }]} aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-      <View style={[styles.dossier, { backgroundColor: couleurs.chaise }]} />
-      <View style={[styles.ecran, { backgroundColor: couleurs.ecran }]} />
-      <View style={[styles.pied, { backgroundColor: couleurs.ecran }]} />
-      <View style={[styles.plateau, { backgroundColor: couleurs.bureau, borderBottomColor: couleurs.bureauOmbre }]} />
-    </View>
-  );
-}
+/** Largeur de la scène en vue rapprochée (téléphone) : assez pour lire les personnages. */
+const LARGEUR_RAPPROCHEE = 780;
 
 export interface PropsBureauVisuel {
   theme: ThemeHub;
@@ -212,14 +75,21 @@ export interface PropsBureauVisuel {
   mouvementReduit?: boolean;
   /** Message de l'état vide, propre à la plateforme. */
   vide?: React.ReactNode;
+  /** Sessions fictives affichées (mode « démo »). */
+  demo?: boolean;
+  /** Activer ou couper la démo ; absent : pas de bouton. */
+  onDemo?(active: boolean): void;
 }
 
-/** Le dessin du bureau (sans chargement) : agents, compteurs, fraîcheur. */
-export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vide }: PropsBureauVisuel) {
+/** Le dessin du bureau (sans chargement) : open space, compteurs, fraîcheur, liste des agents. */
+export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vide, demo, onDemo }: PropsBureauVisuel) {
   const mobile = useMobile();
+  const fenetre = useWindowDimensions();
   const reduit = useMouvementReduit(mouvementReduit);
-  const couleurs = couleursScene(theme);
   const [choisi, setChoisi] = useState<string>();
+  const [dispo, setDispo] = useState<number>();
+  const [rapproche, setRapproche] = useState(true);
+  const defilement = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const bureau = useMemo(
     () => deduireBureau(activite.entrees, { maintenant, references: activite.references }),
     [activite.entrees, activite.references, maintenant],
@@ -227,75 +97,191 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
   const compteurs = useMemo(() => compterBureau(bureau, activite.entrees, maintenant), [bureau, activite.entrees, maintenant]);
   const detail = bureau.agents.find(a => a.cle === choisi);
   const taille = mobile ? 15 : 14;
-  const enDirect = activite.source.genre === 'local';
-  const largeurPoste = mobile ? 158 : 184;
-  const fraicheur = libelleFraicheur(activite.source, maintenant);
+  const enDirect = activite.source.genre === 'local' && !demo;
+  const fraicheur = demo ? 'Démo · sessions fictives, aucune activité réelle' : libelleFraicheur(activite.source, maintenant);
+  const largeurDispo = Math.max(280, Math.floor(dispo ?? Math.min(fenetre.width - 32, 1000)));
+  const vueRapprochee = mobile && rapproche && largeurDispo < LARGEUR_RAPPROCHEE;
+  const largeurScene = vueRapprochee ? LARGEUR_RAPPROCHEE : largeurDispo;
+  const choisir = (cle: string) => setChoisi(c => (c === cle ? undefined : cle));
+  const couleurPastille = demo ? '#E0803A' : enDirect ? theme.ok : theme.ligne;
+
+  // Vue rapprochée : on part centré sur les îlots (une fois la vue mise en page).
+  const centrer = () => {
+    const x = Math.max(0, LARGEUR_RAPPROCHEE * 0.56 - largeurDispo / 2);
+    const faire = () => defilement.current?.scrollTo?.({ x, animated: false });
+    faire();
+    if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(faire);
+  };
+
+  const compteursVue = (
+    <View style={styles.compteurs} testID="bureau-compteurs">
+      {([
+        ['actifs', 'Au travail', compteurs.actifs, TEINTES_ACTIVITE.code],
+        ['inactifs', 'Inactifs', compteurs.inactifs, TEINTES_ACTIVITE.pause],
+        ['termines', 'Terminés', compteurs.termines, TEINTES_ACTIVITE.fini],
+        ['demandes', 'Demandes du jour', compteurs.demandesDuJour, TEINTES_ACTIVITE.web],
+        ['outils', 'Outils du jour', compteurs.outilsDuJour, TEINTES_ACTIVITE.outil],
+      ] as const).map(([id, libelle, valeur, teinte]) => (
+        <View key={id} style={[styles.compteur, { borderColor: theme.ligne, borderRadius: theme.rayonMoyen, backgroundColor: theme.surface }]}>
+          <View style={[styles.filet, { backgroundColor: teinte }]} />
+          <Text style={[styles.nombre, { color: theme.texte }, police(theme.policeChiffres)]} testID={`bureau-compte-${id}`}>{valeur}</Text>
+          <Text style={{ color: theme.attenue, fontSize: taille }}>{libelle}</Text>
+        </View>
+      ))}
+    </View>
+  );
+
+  const scene = (
+    <SceneOpenSpace
+      key={demo ? 'demo' : 'reel'}
+      agents={bureau.agents}
+      charge={activite.lu}
+      theme={theme}
+      reduit={reduit}
+      largeur={largeurScene}
+      choisi={choisi}
+      onChoisir={choisir}
+      demo={demo}
+      texteAgrandi={vueRapprochee}
+      maintenant={maintenant}
+    />
+  );
 
   return (
     <View style={styles.colonne} testID="bureau-visuel" accessibilityLabel={`Bureau de Claude Office : ${compteurs.actifs} agent(s) au travail`}>
       <View style={styles.entete}>
-        <View style={[styles.pastille, { borderColor: enDirect ? theme.ok : theme.ligne, backgroundColor: theme.surface }]} testID="bureau-fraicheur">
-          <Text style={{ color: enDirect ? theme.ok : theme.attenue, fontSize: taille, fontWeight: '600' }}>{enDirect ? '● ' : '◷ '}{fraicheur}</Text>
+        <View style={[styles.pastille, { borderColor: couleurPastille, backgroundColor: theme.surface }]} testID="bureau-fraicheur">
+          <Text style={{ color: demo ? (theme.sombre ? '#F4A261' : '#9A4A12') : enDirect ? theme.ok : theme.attenue, fontSize: taille, fontWeight: '600' }}>
+            {demo ? '◆ ' : enDirect ? '● ' : '◷ '}{fraicheur}
+          </Text>
         </View>
-        <Text style={{ color: theme.attenue, fontSize: taille }} testID="bureau-mouvement">{reduit ? 'Animations réduites' : ''}</Text>
+        <View style={styles.enteteDroite}>
+          <Text style={{ color: theme.attenue, fontSize: taille }} testID="bureau-mouvement">{reduit ? 'Animations réduites' : ''}</Text>
+          {onDemo ? (
+            <BoutonHub
+              theme={theme}
+              variante={demo ? 'plein' : 'normal'}
+              couleur={demo ? '#B85C1E' : undefined}
+              titre={demo ? 'Quitter la démo' : 'Voir la démo'}
+              libelle={demo ? 'Quitter la démo et revenir à l’activité réelle' : 'Voir la démo : sessions fictives animées'}
+              onPress={() => {
+                setChoisi(undefined);
+                onDemo(!demo);
+              }}
+              testID="bureau-demo"
+            />
+          ) : null}
+        </View>
       </View>
 
-      <View style={styles.compteurs} testID="bureau-compteurs">
-        {([
-          ['actifs', 'Au travail', compteurs.actifs],
-          ['inactifs', 'Inactifs', compteurs.inactifs],
-          ['termines', 'Terminés', compteurs.termines],
-          ['demandes', 'Demandes du jour', compteurs.demandesDuJour],
-          ['outils', 'Outils du jour', compteurs.outilsDuJour],
-        ] as const).map(([id, libelle, valeur]) => (
-          <View key={id} style={[styles.compteur, { borderColor: theme.ligne, borderRadius: theme.rayonMoyen, backgroundColor: theme.surface }]}>
-            <Text style={[styles.nombre, { color: theme.texte }, police(theme.policeChiffres)]} testID={`bureau-compte-${id}`}>{valeur}</Text>
-            <Text style={{ color: theme.attenue, fontSize: taille }}>{libelle}</Text>
+      {mobile ? null : compteursVue}
+      <View
+        style={[styles.piece, { borderColor: theme.ligne, borderRadius: theme.rayonGrand, backgroundColor: theme.sombre ? '#121522' : '#EEF3F8' }]}
+        testID={reduit ? 'bureau-piece-fixe' : 'bureau-piece-animee'}
+        onLayout={e => setDispo(e.nativeEvent.layout.width)}
+      >
+        {vueRapprochee ? (
+          <ScrollView
+            ref={defilement}
+            horizontal
+            showsHorizontalScrollIndicator
+            testID="bureau-scene-defilement"
+            style={styles.defilement}
+            onLayout={centrer}
+            aria-hidden
+            importantForAccessibility="no-hide-descendants"
+            accessibilityElementsHidden
+          >
+            {scene}
+          </ScrollView>
+        ) : scene}
+        {mobile && largeurDispo < LARGEUR_RAPPROCHEE ? (
+          <View style={styles.barreScene}>
+            <Text style={{ color: theme.attenue, fontSize: taille, flex: 1 }}>{vueRapprochee ? 'Faites glisser pour parcourir l’open space.' : 'Vue d’ensemble de l’open space.'}</Text>
+            <BoutonHub theme={theme} titre={vueRapprochee ? 'Vue d’ensemble' : 'Vue rapprochée'} onPress={() => setRapproche(v => !v)} testID="bureau-zoom" />
+          </View>
+        ) : null}
+      </View>
+
+      {mobile ? compteursVue : null}
+
+      {bureau.agents.length === 0 ? (
+        <View style={[styles.vide, { borderColor: theme.ligne, borderRadius: theme.rayonMoyen, backgroundColor: theme.surface }]} testID="bureau-vide">
+          {activite.lu ? vide : <Text style={{ color: theme.attenue, fontSize: taille }}>Lecture de l’activité…</Text>}
+          {activite.lu && bureau.derniereActivite ? (
+            <Text style={{ color: theme.attenue, fontSize: taille }} testID="bureau-derniere-activite">
+              Dernière activité connue : {ilYA(bureau.derniereActivite, maintenant)}.
+            </Text>
+          ) : null}
+          {activite.lu && onDemo && !demo ? (
+            <Text style={{ color: theme.attenue, fontSize: taille }}>Pour voir l’open space s’animer sans activité réelle : « Voir la démo ».</Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      <View style={styles.legende} testID="bureau-legende" accessibilityLabel="Légende des gadgets de l’open space">
+        {LEGENDE.map(a => (
+          <View key={a} style={styles.puce}>
+            <View style={[styles.rond, { borderColor: TEINTES_ACTIVITE[a], backgroundColor: theme.surface }]}>
+              <Text style={{ color: TEINTES_ACTIVITE[a], fontSize: 11, fontWeight: '800' }} aria-hidden>{ICONES_ACTIVITE[a]}</Text>
+            </View>
+            <Text style={{ color: theme.attenue, fontSize: taille }}>{LIBELLES_ACTIVITE[a]}</Text>
           </View>
         ))}
       </View>
 
-      <View style={[styles.piece, { backgroundColor: couleurs.sol, borderColor: theme.ligne, borderRadius: theme.rayonMoyen }]} testID={reduit ? 'bureau-piece-fixe' : 'bureau-piece-animee'}>
-        <View style={[styles.mur, { backgroundColor: couleurs.mur, borderBottomColor: couleurs.plinthe }]}>
-          <View style={[styles.fenetre, { borderColor: couleurs.plinthe, backgroundColor: theme.sombre ? '#22324F' : '#CFE6F7' }]} />
-          <View style={[styles.plante, { backgroundColor: '#4E9A6A' }]} />
-        </View>
-        {bureau.agents.length === 0 ? (
-          <View style={styles.vide} testID="bureau-vide">
-            {activite.lu ? <BureauVide couleurs={couleurs} /> : null}
-            <View style={styles.texteVide}>
-              {activite.lu ? vide : <Text style={{ color: theme.attenue, fontSize: taille }}>Lecture de l’activité…</Text>}
-              {activite.lu && bureau.derniereActivite ? (
-                <Text style={{ color: theme.attenue, fontSize: taille }} testID="bureau-derniere-activite">
-                  Dernière activité connue : {ilYA(bureau.derniereActivite, maintenant)}.
-                </Text>
-              ) : null}
-            </View>
-          </View>
-        ) : (
-          <View style={styles.postes} testID="bureau-postes">
-            {bureau.agents.map(a => (
-              <Poste
-                key={a.cle}
-                agent={a}
-                theme={theme}
-                couleurs={couleurs}
-                anime={!reduit}
-                maintenant={maintenant}
-                selectionne={a.cle === choisi}
-                onPress={() => setChoisi(c => (c === a.cle ? undefined : a.cle))}
-                largeur={largeurPoste}
-                mobile={mobile}
-              />
-            ))}
-          </View>
-        )}
-        {bureau.enPlus || bureau.expirees ? (
-          <Text style={{ color: theme.attenue, fontSize: taille, padding: 10 }} testID="bureau-en-plus">
-            {[bureau.enPlus ? `+${bureau.enPlus} autre(s) agent(s) non dessiné(s)` : '', bureau.expirees ? `${bureau.expirees} session(s) sans activité depuis plus de 3 h, rangée(s)` : ''].filter(Boolean).join(' · ')}
+      {bureau.enPlus || bureau.expirees ? (
+        <Text style={{ color: theme.attenue, fontSize: taille }} testID="bureau-en-plus">
+          {[bureau.enPlus ? `+${bureau.enPlus} autre(s) agent(s) non dessiné(s)` : '', bureau.expirees ? `${bureau.expirees} session(s) sans activité depuis plus de 3 h, rangée(s)` : ''].filter(Boolean).join(' · ')}
+        </Text>
+      ) : null}
+
+      {bureau.agents.length ? (
+        <View style={styles.colonne}>
+          <Text style={[styles.titreListe, { color: theme.texte }]} accessibilityRole="header">
+            {demo ? `Agents de la démo (${bureau.agents.length})` : `Agents (${bureau.agents.length})`}
           </Text>
-        ) : null}
-      </View>
+          <View style={styles.liste} testID="bureau-postes">
+            {bureau.agents.map(a => {
+              const activiteA = activiteAgent(a);
+              const teinte = a.fige ? theme.attenue : teinteLisible(TEINTES_ACTIVITE[activiteA], theme.sombre);
+              const ap = apparence(a);
+              const selectionne = a.cle === choisi;
+              return (
+                <Pressable
+                  key={a.cle}
+                  onPress={() => choisir(a.cle)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${a.projet ?? 'Projet inconnu'}${a.appareil ? `, ${a.appareil}` : ''} : ${phraseAgent(a, maintenant)}. Dernière demande : ${a.demande ?? 'aucune'}`}
+                  accessibilityState={{ selected: selectionne }}
+                  testID={`bureau-agent-${a.session.slice(0, 12)}`}
+                  style={[styles.agent, { borderColor: selectionne ? theme.accent : theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen, width: mobile ? '100%' : undefined }]}
+                >
+                  <View style={[styles.avatar, { backgroundColor: ap.haut, borderColor: teinte }]} aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+                    <View style={[styles.avatarTete, { backgroundColor: ap.peau, borderTopColor: ap.cheveux }]} />
+                  </View>
+                  <View style={styles.agentTexte}>
+                    <Text numberOfLines={1} style={{ color: theme.texte, fontSize: taille + 1, fontWeight: '700' }}>
+                      {a.projet ?? 'Projet inconnu'}{a.appareil ? <Text style={{ color: theme.attenue, fontWeight: '400', fontSize: taille }}>{` · ${a.appareil}`}</Text> : null}
+                    </Text>
+                    <View style={styles.ligneEtat}>
+                      <Text style={{ color: teinte, fontSize: taille, fontWeight: '700' }} testID="bureau-etat-agent">
+                        {a.fige ? `${LIBELLES_ETAT[a.etat]} (figé)` : LIBELLES_ETAT[a.etat]}
+                      </Text>
+                      <Text style={{ color: theme.attenue, fontSize: taille }}>
+                        {`${a.etat === 'outil' ? ` · ${LIBELLES_ACTIVITE[activiteA]}` : ''} · ${ilYA(a.dernier, maintenant)}`}
+                      </Text>
+                    </View>
+                    <Text numberOfLines={2} style={{ color: theme.texte, fontSize: taille, lineHeight: taille + 5 }} testID="bureau-bulle">
+                      {a.demande ?? (a.etat === 'termine' ? 'Session terminée' : 'Pas encore de demande')}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
 
       {detail ? (
         <View style={[styles.carte, { backgroundColor: theme.surface, borderColor: couleurAgent(detail.projet ?? detail.cle), borderRadius: theme.rayonMoyen }]} testID="bureau-detail">
@@ -351,11 +337,22 @@ export function OngletBureau({ theme, contexte, office, mouvementReduit, horloge
   const base = contexte.baseProfil;
   const activite = useActiviteBureau({ pont, service, base });
   const [maintenant, setMaintenant] = useState(() => (horloge ?? Date.now)());
-  // L'âge des états change sans nouvel événement : on recalcule toutes les 5 s.
+  // Démo : sessions fictives (date de début), rien de réel n'est lu ni écrit.
+  const [debutDemo, setDebutDemo] = useState<number>();
+  // L'âge des états change sans nouvel événement : on recalcule toutes les 5 s (chaque seconde en démo).
   useEffect(() => {
-    const t = setInterval(() => setMaintenant((horloge ?? Date.now)()), 5_000);
+    const t = setInterval(() => setMaintenant((horloge ?? Date.now)()), debutDemo !== undefined ? 1_000 : 5_000);
     return () => clearInterval(t);
-  }, [horloge]);
+  }, [horloge, debutDemo]);
+  const activiteDemo = useMemo(
+    () => (debutDemo === undefined ? undefined : { entrees: entreesDemo(debutDemo, maintenant), references: {}, source: { genre: 'local' as const }, lu: true }),
+    [debutDemo, maintenant],
+  );
+  const basculerDemo = (active: boolean) => {
+    const t = (horloge ?? Date.now)();
+    setMaintenant(t);
+    setDebutDemo(active ? t : undefined);
+  };
   const [synchro, setSynchro] = useState<EtatSynchroHistorique>(() => lireEtatSynchro(base));
   const [presence, setPresence] = useState<EtatPresence>(() => lireEtatPresence(base));
   const [etatHook, setEtatHook] = useState<EtatClaudeOffice['historique']>();
@@ -434,7 +431,15 @@ export function OngletBureau({ theme, contexte, office, mouvementReduit, horloge
 
   return (
     <View style={styles.colonne} testID="bureau">
-      <BureauVisuel theme={theme} activite={activite} maintenant={maintenant} mouvementReduit={mouvementReduit} vide={vide} />
+      <BureauVisuel
+        theme={theme}
+        activite={activiteDemo ?? activite}
+        maintenant={maintenant}
+        mouvementReduit={mouvementReduit}
+        vide={vide}
+        demo={activiteDemo !== undefined}
+        onDemo={basculerDemo}
+      />
       {activite.erreur ? <Text style={[attenue, { color: theme.critique }]} testID="bureau-erreur">{activite.erreur}</Text> : null}
       {message ? <Text style={texte} testID="bureau-message">{message}</Text> : null}
 
@@ -491,39 +496,26 @@ export function OngletBureau({ theme, contexte, office, mouvementReduit, horloge
 const styles = StyleSheet.create({
   colonne: { gap: 12 },
   entete: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  enteteDroite: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 },
   pastille: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, flexShrink: 1 },
   compteurs: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  compteur: { borderWidth: StyleSheet.hairlineWidth, paddingVertical: 6, paddingHorizontal: 10, minWidth: 96, flexGrow: 1 },
-  nombre: { fontSize: 20, fontWeight: '700' },
-  piece: { borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
-  mur: { height: 44, borderBottomWidth: 4, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: 18 },
-  fenetre: { width: 70, height: 30, borderWidth: 3, borderBottomWidth: 0, marginBottom: 0 },
-  plante: { width: 16, height: 22, borderTopLeftRadius: 8, borderTopRightRadius: 8 },
-  postes: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, padding: 10 },
-  poste: { alignItems: 'center', paddingVertical: 8, paddingHorizontal: 6, borderWidth: 2, borderRadius: 10, minHeight: 44, gap: 4 },
-  bulle: { borderWidth: 2, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 6, alignSelf: 'stretch', minHeight: 48 },
-  queueBulle: {
-    position: 'absolute', bottom: -9, left: '50%', marginLeft: -7, width: 0, height: 0,
-    borderLeftWidth: 7, borderRightWidth: 7, borderTopWidth: 8, borderLeftColor: 'transparent', borderRightColor: 'transparent',
-  },
-  scene: { width: 120, height: 104, marginTop: 6 },
-  iconeEtat: { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center', height: 24 },
-  icone: { fontSize: 18, fontWeight: '700' },
-  dossier: { position: 'absolute', left: 42, top: 34, width: 36, height: 34, borderRadius: 6 },
-  personnage: { position: 'absolute', left: 44, top: 22, width: 32, alignItems: 'center' },
-  cheveux: { width: 24, height: 7, borderTopLeftRadius: 6, borderTopRightRadius: 6 },
-  tete: { width: 22, height: 18, borderBottomLeftRadius: 4, borderBottomRightRadius: 4 },
-  oeil: { position: 'absolute', top: 6, width: 3 },
-  corps: { width: 30, height: 22, borderTopLeftRadius: 8, borderTopRightRadius: 8, marginTop: 1 },
-  bras: { position: 'absolute', top: 46, width: 38, height: 6, borderRadius: 3 },
-  ecran: { position: 'absolute', left: 74, top: 44, width: 36, height: 26, borderRadius: 3, padding: 4, gap: 3 },
-  ligneCode: { height: 3, borderRadius: 1 },
-  pied: { position: 'absolute', left: 89, top: 70, width: 6, height: 6 },
-  plateau: { position: 'absolute', left: 8, right: 8, top: 76, height: 12, borderBottomWidth: 6, borderRadius: 2 },
-  tasse: { position: 'absolute', left: 22, top: 66, width: 9, height: 10, borderWidth: 2, borderTopWidth: 0, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
-  nomPoste: { fontWeight: '700', maxWidth: '100%' },
-  vide: { padding: 16, gap: 12, alignItems: 'stretch' },
-  texteVide: { gap: 8 },
+  compteur: { borderWidth: StyleSheet.hairlineWidth, paddingVertical: 8, paddingHorizontal: 12, paddingLeft: 16, minWidth: 104, flexGrow: 1, overflow: 'hidden' },
+  filet: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
+  nombre: { fontSize: 22, fontWeight: '700' },
+  piece: { borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden', alignItems: 'center' },
+  defilement: { alignSelf: 'stretch', width: '100%' },
+  barreScene: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingBottom: 10, alignSelf: 'stretch' },
+  legende: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 14, rowGap: 6 },
+  puce: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  rond: { width: 24, height: 24, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  titreListe: { fontSize: 17, fontWeight: '700' },
+  liste: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  agent: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 2, padding: 10, minHeight: 64, flexGrow: 1, flexBasis: 300, maxWidth: '100%' },
+  avatar: { width: 40, height: 40, borderRadius: 20, borderWidth: 3, alignItems: 'center', justifyContent: 'flex-end', overflow: 'hidden' },
+  avatarTete: { width: 20, height: 20, borderRadius: 10, borderTopWidth: 6, marginBottom: 6 },
+  agentTexte: { flex: 1, gap: 2, minWidth: 0 },
+  ligneEtat: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center' },
+  vide: { borderWidth: StyleSheet.hairlineWidth, padding: 14, gap: 10 },
   carte: { borderWidth: StyleSheet.hairlineWidth, padding: 14, gap: 8 },
   titreCarte: { fontSize: 16, fontWeight: '700' },
   avertissement: { borderWidth: 1, padding: 12, gap: 6 },

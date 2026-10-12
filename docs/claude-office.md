@@ -8,11 +8,39 @@ pauses café, fil de discussion). Source : [W17ANT/agent-office](https://github.
 
 ## Ce qui s'affiche où (onglet « Bureau », par défaut)
 
-Le bureau des agents est **dessiné dans le hub** (`src/claudeOffice/Bureau.tsx`) : PC (Electron), site et
-téléphone/PWA, sans serveur Claude Office à lancer, sans fenêtre à part et **sans rien installer sur l'appareil où
-l'on regarde**. Un personnage par session de Claude Code, à son poste, animé selon l'état déduit des derniers
-événements ; bulle avec la dernière demande résumée (secrets masqués) ; compteurs (au travail, inactifs, terminés,
-demandes et outils du jour) ; détail au toucher ; thèmes clair et sombre ; « réduire les animations » respecté.
+Le bureau des agents est **dessiné dans le hub** : PC (Electron), site et téléphone/PWA, sans serveur Claude Office à
+lancer, sans fenêtre à part et **sans rien installer sur l'appareil où l'on regarde**. C'est un **open space vu en
+isométrique** (`src/claudeOffice/SceneOpenSpace.web.tsx`, SVG + CSS, aucune image ni dépendance) : trois îlots de
+quatre postes (écrans allumés, cloisons, objets personnels, voyants), salle de réunion vitrée, tableau blanc, pendule à
+l'heure réelle, imprimante, cuisine et machine à café fumante, coin salon, plantes, suspensions ; **jour** en thème
+clair (soleil par les fenêtres), **nuit** en thème sombre (ville allumée, flaques de lumière chaude, écrans qui
+éclairent les bureaux).
+
+Un personnage par session de Claude Code (peau, coiffure et accessoire tirés de l'identifiant de session, haut à la
+couleur du projet), à un poste attribué de façon **déterministe** (hachage de l'identifiant, puis poste libre
+suivant ; stable tant que l'agent est là). Il **arrive par la porte** et marche jusqu'à son poste, puis selon son état :
+tape (particules de code, lignes qui s'écrivent), utilise un outil (écran et badge propres : terminal, recherche,
+lecture, web, sous-agent), réfléchit (bulle de pensée), est inactif (café fumant, s'étire), **fête** la fin de session,
+range ses affaires et **repart avec son carton** (le poste garde une coche tant que la session est listée). Arrivées et
+départs suivent des voies séparées et sont **planifiés sans collision** (un trajet ne part que s'il reste à 0,55 dalle
+au moins de tout autre marcheur : file à l'entrée, attente assise pour un départ). Les agents déjà au travail à
+l'ouverture sont assis d'emblée. Bulle (agent choisi, sinon une à tour de rôle) avec la dernière demande résumée,
+secrets masqués ; compteurs, légende des gadgets.
+
+- **Animation** : seuls les marcheurs bougent image par image (`requestAnimationFrame` bridé à ~30 i/s, arrêté dès que
+  personne ne marche) ; le reste est en animations CSS. Tout se **gèle hors de l'écran ou onglet masqué**
+  (IntersectionObserver, `visibilitychange`). « Réduire les animations » : scène fixe mais expressive (poses, écrans,
+  badges). Aucun filtre SVG ; ~52 Ko minifiés, **~18 Ko compressés** ajoutés au bundle.
+- **Accessibilité** : la scène est décorative (`aria-hidden`) ; sous elle, la **liste des agents** (bouton par agent :
+  projet, appareil, état, dernière demande ; navigation clavier) porte la même information, et le détail s'ouvre au
+  toucher ou au clic (dans la scène aussi).
+- **Téléphone** : vue rapprochée qui se fait glisser (centrée sur les îlots, textes de la scène agrandis) ou « Vue
+  d'ensemble » ; scène avant les compteurs ; cibles ≥ 44 px et textes ≥ 15 px hors scène. iPad et PC : scène entière.
+- **Mode « démo »** (« Voir la démo ») : sessions fictives scénarisées (`entreesDemo`, `logiqueScene.ts`) qui
+  arrivent, travaillent, font une pause, terminent et repartent ; pastille « Démo · sessions fictives » et bandeau
+  « DÉMO » dans la scène ; rien de réel n'est lu ni déposé ; « Quitter la démo » revient à l'activité réelle.
+- **Hors du web** (application native) : `SceneOpenSpace.tsx`, mêmes postes et couleurs en vues simplifiées, sans
+  marche.
 
 | États | Déduit de (dernier événement de la session) |
 | --- | --- |
@@ -68,7 +96,10 @@ que les petites présences, jamais les copies d'historique.
 | --- | --- |
 | `src/claudeOffice/registre.ts` | Entrée du registre (`src/hub/registre.tsx`) : tuile « Claude Office », catégorie Admin, page « Administration » du hub (`page: 'administration'`) |
 | `src/claudeOffice/Racine.tsx` | Écran : onglets Bureau / Historique ; sur le PC, options avancées (serveur, fenêtre à part, hooks) |
-| `src/claudeOffice/Bureau.tsx` | Onglet « Bureau » : visuel natif, état vide, copie chiffrée et présence rapide (PC) |
+| `src/claudeOffice/Bureau.tsx` | Onglet « Bureau » : en-tête, compteurs, scène, légende, liste des agents, démo, état vide, copie chiffrée et présence rapide (PC) |
+| `src/claudeOffice/SceneOpenSpace.web.tsx` | L'open space en SVG isométrique (web, site, PC) : décor jour/nuit, postes, personnages, bulles, animations |
+| `src/claudeOffice/SceneOpenSpace.tsx` | Même scène en vues simplifiées, hors du web (application native) |
+| `src/claudeOffice/logiqueScene.ts` | Plan, affectation des postes, trajets sans collision, phases (arrive, assis, fête, repart), apparence, gadgets, démo |
 | `src/claudeOffice/logiqueBureau.ts` | Déduction de l'état des agents, tri, expiration, compteurs, masquage d'appoint, libellés |
 | `src/claudeOffice/activiteBureau.ts` | D'où vient l'activité : journal local (PC) ou dépôts du relais (ailleurs) |
 | `src/claudeOffice/resumeHub.ts` | Résumé pour la tuile (`info` du registre, `contexte.claudeOffice`) |
@@ -80,7 +111,10 @@ que les petites présences, jamais les copies d'historique.
 
 Rien de Node/Electron n'entre dans le bundle web : `src/claudeOffice` n'appelle que le pont, absent sur le site.
 Tests : `src/claudeOffice/bureau.test.tsx` (déduction, rendu, pont et copie simulés, présence, droits, aucun accès
-réseau) ; e2e : `scripts/e2e-claude-office-bureau.mjs` (PC, site, téléphone 390×844, captures `docs/captures-claude-office/6…12`).
+réseau) et `src/claudeOffice/scene.test.tsx` (affectation déterministe des postes, trajets sans collision, transitions
+d'état, apparence, gadgets, démo, rendu SVG : états, vide, démo, réduit, thèmes jour et nuit) ; e2e :
+`scripts/e2e-claude-office-bureau.mjs` (PC, site, iPad 820×1180, téléphone 390×844 ; démo, thèmes, animations gelées
+onglet masqué ; captures JPEG `docs/captures-claude-office/6…18`).
 
 ## Droits
 

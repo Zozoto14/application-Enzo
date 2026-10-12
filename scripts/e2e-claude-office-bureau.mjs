@@ -2,9 +2,11 @@
  * Bureau natif de Claude Office (onglet « Bureau ») : un vrai journal d'essai est écrit par le hook
  * (scripts/office-historique-hook.mjs, dossier temporaire), servi à l'écran par un faux pont du PC ; la copie
  * chiffrée est déposée sur un faux relais local (le vrai relais/worker.mjs, KV en mémoire), puis relue par le
- * site, en fenêtre de PC (1280×800) puis de téléphone (390×844). Vérifie : agents et états, « en direct » sur le
- * PC, âge du dépôt ailleurs, secrets masqués, rien d'installé sans clic, aucun accès réseau hors du relais, pas de
- * débordement, cibles ≥ 44 px et textes ≥ 15 px sur téléphone, animations coupées si réduites. Captures relues.
+ * site, en fenêtre de PC (1280×800), d'iPad (820×1180) puis de téléphone (390×844). Vérifie : agents et états,
+ * open space dessiné (un personnage par session, animations gelées onglet masqué), « en direct » sur le PC, âge du
+ * dépôt ailleurs, secrets masqués, mode « démo » étiqueté et réversible, thèmes nuit et jour, rien d'installé sans
+ * clic, aucun accès réseau hors du relais, pas de débordement, cibles ≥ 44 px et textes ≥ 15 px sur téléphone (vue
+ * rapprochée défilante comprise), animations coupées si réduites. Captures (JPEG légers) relues.
  *
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-claude-office-bureau.mjs
@@ -87,9 +89,54 @@ try {
   const prendre = async (nom, pleinePage = false) => {
     await pause(1200);
     await page.mouse.move(1, 1);
-    await page.screenshot({ path: join(CAPTURES, `${nom}.png`), fullPage: pleinePage });
+    await page.screenshot({ path: join(CAPTURES, `${nom}.jpg`), fullPage: pleinePage, type: 'jpeg', quality: 78 });
     log(`${nom} : capturé`);
   };
+  // Personnages dessinés dans l'open space (une session = un personnage).
+  const personnages = () => page.locator('[data-testid^="scene-"] g[class^="co-m-"]').count();
+  const changerTheme = async theme => {
+    await page.getByTestId('retour-hub').first().click();
+    await page.getByTestId('hub-parametres-ouvrir').click();
+    await page.getByTestId(`parametres-theme-${theme}`).click();
+    await page.getByTestId('hub-parametres-fermer').click();
+  };
+  /** Mesures « téléphone » : débordement, cibles, tailles de texte (hors scène décorative). */
+  const mesurerTelephone = () => page.evaluate(() => {
+    const zone = document.querySelector('[data-testid="bureau"]');
+    const onglets = [...document.querySelectorAll('[data-testid^="claude-office-onglet-"]')];
+    const visible = el => {
+      const s = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 0 && r.height > 0 && !el.closest('[aria-hidden="true"]');
+    };
+    const petites = [];
+    for (const el of [...zone.querySelectorAll('button, [role=button], [role=switch], [role=tab], a[href], input')].concat(onglets)) {
+      if (!visible(el)) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 44 || r.height < 44) petites.push(`${el.getAttribute('data-testid') ?? el.textContent.trim().slice(0, 30)} (${Math.round(r.width)}×${Math.round(r.height)})`);
+    }
+    const petitsTextes = [];
+    const marcheur = document.createTreeWalker(zone, NodeFilter.SHOW_TEXT);
+    for (let n = marcheur.nextNode(); n; n = marcheur.nextNode()) {
+      const t = n.textContent.trim();
+      if (!t || !n.parentElement || !visible(n.parentElement)) continue;
+      const taille = Number.parseFloat(getComputedStyle(n.parentElement).fontSize);
+      if (taille < 15) petitsTextes.push(`${t.slice(0, 30)} (${taille}px)`);
+    }
+    const deborde = [];
+    for (const el of zone.querySelectorAll('*')) {
+      if (!visible(el)) continue;
+      const r = el.getBoundingClientRect();
+      if (r.right > window.innerWidth + 1 || r.left < -1) deborde.push(el.getAttribute('data-testid') ?? el.tagName);
+    }
+    const defilement = document.querySelector('[data-testid="bureau-scene-defilement"]');
+    const cadreScene = defilement?.getBoundingClientRect();
+    return {
+      debordementPage: Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+      deborde: deborde.slice(0, 5), petites, petitsTextes: petitsTextes.slice(0, 8),
+      sceneDansLEcran: !cadreScene || (cadreScene.left >= -1 && cadreScene.right <= window.innerWidth + 1),
+    };
+  });
   const tuile = page.locator('[data-testid="cellule-claude-office"], [data-testid="tuile-claude-office"]');
   const ouvrirTuile = async () => {
     await allerPageAdministration(page);
@@ -139,6 +186,15 @@ try {
   verifier(bulles.includes('Ajoute un export CSV') && !bulles.includes('ghp_abcdef') && bulles.includes('[secret masqué]'), 'PC : bulles résumées, secret masqué');
   verifier((await page.evaluate(() => window.__appels.activite)) >= 2, 'PC : journal relu par le canal d’activité (toutes les 2 s)');
   verifier((await page.getByTestId('claude-office-serveur').count()) === 0, 'PC : vrai Claude Office replié en option avancée');
+  verifier((await page.getByTestId('scene-animee').count()) === 1 && (await personnages()) === 4, `PC : open space animé, un personnage par session (${await personnages()})`);
+  // Onglet masqué : animations gelées (classe co-gele), reprises au retour.
+  const classeScene = () => page.locator('[data-testid="scene-animee"] svg').first().getAttribute('class');
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { value: true, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); });
+  await pause(300);
+  const gelee = /co-gele/.test((await classeScene()) ?? '');
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { value: false, configurable: true }); document.dispatchEvent(new Event('visibilitychange')); });
+  await pause(300);
+  verifier(gelee && !/co-gele/.test((await classeScene()) ?? ''), 'PC : animations gelées quand l’onglet est masqué, reprises ensuite');
   await prendre('7-bureau-pc');
   await page.getByTestId('bureau-agent-sess-tsu').click();
   await page.getByTestId('bureau-detail').waitFor();
@@ -174,7 +230,34 @@ try {
   verifier(!/En direct/.test(await page.getByTestId('bureau').innerText()), 'site : aucun faux « en direct »');
   verifier((await page.getByTestId('bureau-etat-agent').count()) === 4, 'site : quatre agents relus de la copie');
   verifier(!(await page.getByTestId('bureau').innerText()).includes('ghp_abcdef'), 'site : secret masqué');
+  verifier((await personnages()) === 4, 'site : quatre personnages dans l’open space');
   await prendre('9-bureau-site-copie');
+
+  // 4 bis. Mode démo (nuit puis jour), clairement étiqueté et réversible ; iPad en mode jour.
+  await page.getByTestId('bureau-demo').click();
+  await pause(7000);
+  verifier(/Démo · sessions fictives/.test(await page.getByTestId('bureau-fraicheur').innerText()) && (await page.getByTestId('scene-demo').count()) === 1, 'démo : étiquetée « Démo » (pastille et scène)');
+  verifier((await personnages()) >= 3, `démo : des personnages arrivent (${await personnages()})`);
+  await prendre('13-bureau-demo-nuit');
+  await pause(9000);
+  verifier((await page.getByTestId('bureau-etat-agent').count()) >= 5, 'démo : cinq sessions fictives au moins');
+  await prendre('14-bureau-demo-nuit-suite');
+  await page.getByTestId('bureau-demo').click();
+  verifier(/Copie chiffrée/.test(await page.getByTestId('bureau-fraicheur').innerText()) && (await page.getByTestId('scene-demo').count()) === 0, 'démo : quittée, retour à la copie chiffrée');
+  await changerTheme('ivoire');
+  await ouvrirTuile();
+  await page.getByTestId('bureau-postes').waitFor({ timeout: 30_000 });
+  await prendre('15-bureau-pc-jour');
+  await page.getByTestId('bureau-demo').click();
+  await pause(12_000);
+  await prendre('16-bureau-demo-jour');
+  await page.setViewportSize({ width: 820, height: 1180 });
+  await pause(1500);
+  const mesureIpad = await mesurerTelephone();
+  verifier(mesureIpad.debordementPage === 0 && mesureIpad.deborde.length === 0, `iPad : aucun débordement ${JSON.stringify(mesureIpad.deborde)}`);
+  await prendre('17-bureau-ipad-demo-jour');
+  await page.getByTestId('bureau-demo').click();
+  await page.setViewportSize({ width: 1280, height: 800 });
 
   // 5. Téléphone (390×844), animations réduites : pas de débordement, cibles ≥ 44 px, textes ≥ 15 px.
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -186,41 +269,25 @@ try {
   await page.getByTestId('bureau-postes').waitFor({ timeout: 30_000 });
   await pause(1500);
   verifier((await page.getByTestId('bureau-piece-fixe').count()) === 1, 'téléphone : animations coupées (prefers-reduced-motion)');
-  const mesure = await page.evaluate(() => {
-    const zone = document.querySelector('[data-testid="bureau"]');
-    const onglets = [...document.querySelectorAll('[data-testid^="claude-office-onglet-"]')];
-    const visible = el => {
-      const s = getComputedStyle(el);
-      const r = el.getBoundingClientRect();
-      return s.display !== 'none' && s.visibility !== 'hidden' && r.width > 0 && r.height > 0 && !el.closest('[aria-hidden="true"]');
-    };
-    const petites = [];
-    for (const el of [...zone.querySelectorAll('button, [role=button], [role=switch], [role=tab], a[href], input')].concat(onglets)) {
-      if (!visible(el)) continue;
-      const r = el.getBoundingClientRect();
-      if (r.width < 44 || r.height < 44) petites.push(`${el.getAttribute('data-testid') ?? el.textContent.trim().slice(0, 30)} (${Math.round(r.width)}×${Math.round(r.height)})`);
-    }
-    const petitsTextes = [];
-    const marcheur = document.createTreeWalker(zone, NodeFilter.SHOW_TEXT);
-    for (let n = marcheur.nextNode(); n; n = marcheur.nextNode()) {
-      const t = n.textContent.trim();
-      if (!t || !n.parentElement || !visible(n.parentElement)) continue;
-      const taille = Number.parseFloat(getComputedStyle(n.parentElement).fontSize);
-      if (taille < 15) petitsTextes.push(`${t.slice(0, 30)} (${taille}px)`);
-    }
-    const deborde = [];
-    for (const el of zone.querySelectorAll('*')) {
-      if (!visible(el)) continue;
-      const r = el.getBoundingClientRect();
-      if (r.right > window.innerWidth + 1 || r.left < -1) deborde.push(el.getAttribute('data-testid') ?? el.tagName);
-    }
-    return { debordementPage: Math.max(0, document.documentElement.scrollWidth - window.innerWidth), deborde: deborde.slice(0, 5), petites, petitsTextes: petitsTextes.slice(0, 8) };
-  });
+  const mesure = await mesurerTelephone();
   verifier(mesure.debordementPage === 0 && mesure.deborde.length === 0, `téléphone : aucun débordement ${JSON.stringify(mesure.deborde)}`);
   verifier(mesure.petites.length === 0, `téléphone : cibles ≥ 44 px ${JSON.stringify(mesure.petites)}`);
   verifier(mesure.petitsTextes.length === 0, `téléphone : textes ≥ 15 px ${JSON.stringify(mesure.petitsTextes)}`);
+  verifier(mesure.sceneDansLEcran && (await page.getByTestId('bureau-scene-defilement').count()) === 1, 'téléphone : vue rapprochée, la scène défile dans son cadre');
   await prendre('10-bureau-telephone');
   await prendre('11-bureau-telephone-page', true);
+  // Vue d'ensemble, puis démo animée sur téléphone : mêmes contrôles.
+  await page.getByTestId('bureau-zoom').click();
+  verifier((await page.getByTestId('bureau-scene-defilement').count()) === 0, 'téléphone : « Vue d’ensemble » montre toute la scène');
+  await page.getByTestId('bureau-zoom').click();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.getByTestId('bureau-demo').click();
+  await pause(9000);
+  const mesureDemo = await mesurerTelephone();
+  verifier(mesureDemo.debordementPage === 0 && mesureDemo.deborde.length === 0 && mesureDemo.petites.length === 0 && mesureDemo.petitsTextes.length === 0,
+    `téléphone (démo animée) : ni débordement, ni petite cible, ni petit texte ${JSON.stringify(mesureDemo)}`);
+  await prendre('18-bureau-telephone-demo');
+  await page.getByTestId('bureau-demo').click();
   surveiller = false;
   verifier(horsPrevu.length === 0, `aucun accès réseau hors du site et du relais local ${JSON.stringify(horsPrevu.slice(0, 5))}`);
 } finally {
