@@ -14,6 +14,7 @@ import type { ContexteHub } from '../hub/types';
 import { dureeCourte, fusionner, libelleJour, type EntreeHistorique } from './logiqueHistorique';
 import { calculerStatistiques, historiqueDemo } from './logiqueStats';
 import { entreesDemo } from './logiqueScene';
+import { entreesDemoSousAgents, statsSousAgents } from './logiqueSousAgents';
 import type { PontClaudeOffice } from './pont';
 import { lireEtatSynchro } from './synchroHistorique';
 import { Bouton, Carte, Segments, TAILLE } from './uiOffice';
@@ -115,10 +116,11 @@ export function Statistiques({ theme, contexte, office, debutDemo, horloge }: { 
   const maintenant = (horloge ?? Date.now)();
   const minute = Math.floor(maintenant / 60_000);
   const entrees = useMemo(
-    () => (demo ? fusionner(historiqueDemo(maintenant), entreesDemo(debutDemo!, maintenant)) : reel.entrees),
+    () => (demo ? fusionner(historiqueDemo(maintenant), entreesDemo(debutDemo!, maintenant), entreesDemoSousAgents(debutDemo!, maintenant)) : reel.entrees),
     [demo, debutDemo, reel.entrees, minute], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const s = useMemo(() => calculerStatistiques(entrees, maintenant, jours === '7' ? 7 : 30), [entrees, jours, minute]); // eslint-disable-line react-hooks/exhaustive-deps
+  const sa = useMemo(() => statsSousAgents(entrees, maintenant, jours === '7' ? 7 : 30), [entrees, jours, minute]); // eslint-disable-line react-hooks/exhaustive-deps
   const accent = theme.accent.startsWith('#') ? theme.accent : '#5B8CFF';
   const attenue = { color: theme.attenue, fontSize: TAILLE, lineHeight: 22 };
   const texte = { color: theme.texte, fontSize: TAILLE, lineHeight: 22, ...police(theme.policeTexte) };
@@ -204,6 +206,16 @@ export function Statistiques({ theme, contexte, office, debutDemo, horloge }: { 
           <Carte theme={theme} titre="Projets les plus actifs" testID="stats-projets">
             <Classement theme={theme} couleur="#3FB37F" testID="stats-projets-liste" lignes={s.projets.map(p => ({ nom: p.nom, valeur: p.demandes, note: `${p.sessions} session${p.sessions > 1 ? 's' : ''}` }))} />
           </Carte>
+          {/* v4 : sous-agents (logiqueSousAgents.ts). */}
+          {sa.total ? (
+            <Carte theme={theme} titre="Sous-agents" testID="stats-sous-agents">
+              <Text style={texte} testID="stats-sous-agents-resume">
+                {sa.total} sous-agent{sa.total > 1 ? 's' : ''} dans {sa.sessions} session{sa.sessions > 1 ? 's' : ''} · jusqu’à {sa.maxParSession} pour une session · jusqu’à {sa.maxParalleles} en parallèle{sa.echecs ? ` · ${sa.echecs} en échec` : ''}{sa.dureeMoyenneMs ? ` · ${dureeCourte(sa.dureeMoyenneMs)} en moyenne` : ''}
+              </Text>
+              <Barres theme={theme} valeurs={sa.parJour.map(j => j.n)} libelles={sa.parJour.map(j => libelleCourt(j.jour))} couleur="#C05BD8" hauteur={80} testID="stats-sous-agents-barres" resume={`Sous-agents par jour sur ${sa.parJour.length} jours : ${sa.total} au total.`} />
+              <Classement theme={theme} couleur="#C05BD8" testID="stats-sous-agents-types" lignes={sa.types.slice(0, 6).map(x => ({ nom: x.nom, valeur: x.n }))} />
+            </Carte>
+          ) : null}
         </>
       )}
     </View>

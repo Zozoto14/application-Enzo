@@ -15,6 +15,7 @@ import { brancherMagasinSuivi } from './equipe';
 import { libellePastille } from './logiqueAlertes';
 import { fusionner, type EntreeHistorique } from './logiqueHistorique';
 import { entreesDemo } from './logiqueScene';
+import { entreesDemoSousAgents } from './logiqueSousAgents';
 import type { PontClaudeOffice } from './pont';
 import { emettreOffice, useRaccourcisOffice, type ActionRaccourci } from './raccourcis';
 
@@ -63,7 +64,7 @@ export function useSuiviOffice({ contexte, office, debutDemo, changerOnglet }: {
     pont: pontLeger, service: pont && !pontLeger ? undefined : contexte.historiqueOffice, base, actif: !demo, intervallePc: INTERVALLE_ALERTES_PC_MS, intervalleRelais: INTERVALLE_ALERTES_RELAIS_MS,
   });
   const entrees = useMemo(
-    () => (demo ? fusionner(entreesDemo(debutDemo!, maintenant), entreesDemoSuivi(debutDemo!)) : activite.entrees),
+    () => (demo ? fusionner(entreesDemo(debutDemo!, maintenant), entreesDemoSuivi(debutDemo!), entreesDemoSousAgents(debutDemo!, maintenant)) : activite.entrees),
     [demo, debutDemo, maintenant, activite.entrees],
   );
   const alertes = useAlertesOffice({

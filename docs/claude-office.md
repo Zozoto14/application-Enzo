@@ -126,6 +126,52 @@ pas modifié.
 - **Démo** : en plus des sessions du bureau, trois sessions fictives (`demoSuivi.ts`) déclenchent les quatre alertes
   (pastille « Suivi · 4 ») ; équipe (Bob, Félix…) et notes fictives ; rien n'est écrit.
 
+### Sous-agents (v4, données ; le rendu est celui de la scène)
+
+**Ce que Claude Code fournit** (doc officielle des hooks, code.claude.com/docs/en/hooks, lue le 12/10/2026) :
+`SubagentStart` (`agent_id`, `agent_type`) et `SubagentStop` (`agent_id`, `agent_type`, `agent_transcript_path`,
+`last_assistant_message`) ; les événements d'outils lancés **dans** un sous-agent portent `agent_id` et `agent_type` ;
+l'outil qui lance un sous-agent s'appelle `Agent` (anciennement `Task`), `tool_input` = `description`, `prompt`,
+`subagent_type`, `model` (facultatif) — `run_in_background` n'est pas dans la table de la doc (les sous-agents tournent
+en arrière-plan par défaut : réponse `status: "async_launched"`). **Incertain** : aucun champ documenté ne relie
+l'appel `Agent` (tool_use_id) à l'`agent_id` du `SubagentStart` ; on lit `tool_response.agentId` s'il existe, sinon on
+apparie par type et par date (± 60 s). Le parent d'un sous-agent imbriqué n'est connu que par le lancement fait dans
+ce parent (au premier plan, il n'arrive qu'à la fin).
+
+**Hook v4** (`bureau/electron/officeHistorique.mjs`) : écoute en plus `SubagentStart` (type `debut-sous-agent`) et
+`PostToolUseFailure` (outil `echec: true`, durée `duration_ms`) ; garde `agent`/`agentType` (le sous-agent lui-même
+sur début et fin, sinon celui où l'événement a eu lieu) et, sur l'outil Agent/Task, `resume` = description courte,
+`sousAgentType`, `modele`, `arrierePlan`, `agentLance` ; **jamais le prompt** ni le dernier message, sauf avec
+« Enregistrer aussi le contenu des outils ». Secrets masqués comme le reste. Un hook installé avant est « à mettre à
+jour » : **relancer `npm run office:hooks`** (n'ajoute que ces deux événements), puis redémarrer Claude Code. Sans
+mise à jour, les sous-agents restent visibles d'après l'outil Task/Agent et `SubagentStop` (moins précis).
+
+**Contrat** — `src/claudeOffice/logiqueSousAgents.ts` :
+
+```ts
+sousAgents(entrees, { maintenant, references? }): Record<string /* Agent.cle = "appareil|session" */, SousAgent[]>
+interface SousAgent {
+  id: string;            // agent_id (ou « lance-… », « fin-… », « debut-… » fabriqué)
+  cleSession: string; session: string;
+  parent: string;        // id de session (1er niveau) ou id du sous-agent parent
+  profondeur: number;    // 1, 2…
+  description?: string; type?: string; modele?: string; arrierePlan?: boolean;
+  debut: number; debutInconnu?: boolean; fin?: number;            // ms
+  etat: 'en-cours' | 'termine' | 'echec' | 'expire';             // expire : sans nouvelles 30 min, ou session fermée
+  dureeMs: number; outils: Array<{ nom: string; n: number }>; nbOutils: number; echecs: number; dernier: number;
+}
+sousAgentsEnCours(liste)                  // ceux qui tournent (petits personnages autour de l'agent)
+statsSousAgents(entrees, maintenant, jours) // total, parJour, sessions, maxParSession, maxParalleles, types, echecs, dureeMoyenneMs
+entreesDemoSousAgents(debut, maintenant)  // démo : session « refonte », 3 sous-agents parallèles + 1 imbriqué, un échec (cycle 90 s)
+```
+
+Exemple : `sousAgents(entrees, { maintenant: Date.now() })['52e6f6322d1d|sess-1']` →
+`[{ id: 'agent-a1', parent: 'sess-1', profondeur: 1, description: 'Trouver les API', type: 'Explore', modele: 'haiku',
+arrierePlan: true, etat: 'en-cours', dureeMs: 18000, outils: [{ nom: 'Read', n: 2 }], … }]`. Pour la démo du bureau,
+fusionner `entreesDemoSousAgents(debutDemo, maintenant)` aux entrées de `entreesDemo` (non branché ici : c'est la
+scène). Statistiques : carte « Sous-agents » (par jour, types, parallèles, échecs) ; récap : « N sous-agents (types),
+jusqu'à K en parallèle » ; chronologie du détail : « Sous-agent lancé / terminé (type) ».
+
 **Points d'intégration avec la scène** (une ligne chacun, marqués « v4 ») : `Racine.tsx` (`useSuiviOffice`, onglet,
 aide) ; `Bureau.tsx` (`useNavigationAgents(...)` : J/K, Échap sur le détail) ; `SceneOpenSpace.web.tsx` (import de
 `apparencePersonnalisee as apparence`) ; `DetailAgent.tsx` et `Historique.tsx` (`<NoteSession …/>`) ;
@@ -244,6 +290,7 @@ que les petites présences, jamais les copies d'historique.
 | `src/claudeOffice/logiqueAlertes.ts`, `alertesOffice.ts` | Règles d'alertes, anti-répétition, journal ; exécution, notification, pastille |
 | `src/claudeOffice/logiqueRecap.ts` | Récap du jour et de la semaine, exports texte/Markdown/JSON |
 | `src/claudeOffice/equipe.ts`, `EcranEquipe.tsx`, `AvatarAgent(.web).tsx`, `NoteSession.tsx` | Personnalisation des agents, `apparenceAgent`, notes de session |
+| `src/claudeOffice/logiqueSousAgents.ts` | Sous-agents par session (contrat pour la scène), statistiques, démo |
 | `src/claudeOffice/raccourcis.ts`, `demoSuivi.ts` | Raccourcis clavier et bus d'événements avec la scène ; compléments de la démo |
 
 Rien de Node/Electron n'entre dans le bundle web : `src/claudeOffice` n'appelle que le pont, absent sur le site.
@@ -259,7 +306,9 @@ mise en route, détail, « vu », historique filtré, statistiques, Liste mémor
 1024×768, PC, clair et sombre : débordement, cibles 44 px, textes 15 px ; captures `20…31`). v4 :
 `src/claudeOffice/fonctionsV4.test.tsx` (apparence par projet et session, règles d'alertes, seuils, anti-répétition,
 relais, récap et exports masqués, raccourcis inactifs en saisie, notes ; rendu Suivi, Équipe, Alertes, Récap, aide des
-raccourcis, clair et sombre ; pastille ; droits) et `scripts/e2e-claude-office-v4-fonctions.mjs` (PC : alerte,
+raccourcis, clair et sombre ; pastille ; droits), `src/claudeOffice/sousAgents.test.tsx` (appariement, parallèles,
+imbriqués, ancien hook, début sans fin, fin sans début, relais, statistiques, récap, démo) et
+`scripts/e2e-claude-office-v4-fonctions.mjs` (PC : alerte,
 pastille, notification, raccourcis, note, équipe, récap copié ; site en démo sur iPhone 390×844, iPad, PC, clair et
 sombre ; captures `40…47`).
 

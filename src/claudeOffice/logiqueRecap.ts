@@ -9,6 +9,7 @@
 import { cleAppareil, masquerAffichage, resumerTexte } from './logiqueBureau';
 import { dureeCourte, fusionner, type EntreeHistorique } from './logiqueHistorique';
 import { PAUSE_MAX_ACTIF_MS } from './logiqueStats';
+import { statsSousAgents } from './logiqueSousAgents';
 
 export type PeriodeRecap = 'jour' | 'semaine';
 
@@ -36,6 +37,8 @@ export interface Recap {
   plusLongues: SessionRecap[];
   erreurs: { total: number; sessions: Array<{ projet: string; session: string; n: number }> };
   attentes: { total: number; plusLongueMs?: number; projet?: string };
+  /** Sous-agents lancés sur la période (hook v4, ou outil Agent/Task des hooks plus anciens). */
+  sousAgents: { total: number; maxParalleles: number; types: Array<{ nom: string; n: number }> };
 }
 
 const debutJour = (ms: number) => {
@@ -112,6 +115,10 @@ export function calculerRecap(entrees: readonly EntreeHistorique[], maintenant: 
     plusLongues: sessions.filter(s => s.dureeMs > 0).sort((a, b) => b.dureeMs - a.dureeMs).slice(0, 3),
     erreurs: { total: erreurs, sessions: erreursSessions.sort((a, b) => b.n - a.n).slice(0, 3) },
     attentes: { total: attentes, ...(plusLongueAttente ? { plusLongueMs: plusLongueAttente.ms, projet: plusLongueAttente.projet } : {}) },
+    sousAgents: (() => {
+      const sa = statsSousAgents(liste, maintenant, periode === 'jour' ? 1 : 7);
+      return { total: sa.total, maxParalleles: sa.maxParalleles, types: sa.types.slice(0, 4).map(x => ({ nom: masquerAffichage(x.nom), n: x.n })) };
+    })(),
   };
 }
 
@@ -130,6 +137,7 @@ export function faitsMarquants(r: Recap): string[] {
     `${i === 0 ? 'Session la plus longue' : `${i + 1}e plus longue`} : ${s.projet}, ${duree(s.dureeMs)} (${pluriel(s.demandes, 'demande')})${s.derniereDemande ? ` — « ${s.derniereDemande} »` : ''}`);
   if (r.erreurs.total) f.push(`${pluriel(r.erreurs.total, 'erreur')} d’outil${r.erreurs.sessions.length ? ` (surtout ${r.erreurs.sessions.map(s => `${s.projet} : ${s.n}`).join(', ')})` : ''}`);
   else if (r.outils) f.push('Aucune erreur d’outil');
+  if (r.sousAgents.total) f.push(`${pluriel(r.sousAgents.total, 'sous-agent')} (${r.sousAgents.types.map(x => `${x.nom} ×${x.n}`).join(', ')})${r.sousAgents.maxParalleles > 1 ? `, jusqu’à ${r.sousAgents.maxParalleles} en parallèle` : ''}`);
   if (r.attentes.total) f.push(`${pluriel(r.attentes.total, 'attente')} de ta réponse${r.attentes.plusLongueMs !== undefined ? ` (la plus longue : ${duree(r.attentes.plusLongueMs)}${r.attentes.projet ? `, ${r.attentes.projet}` : ''})` : ''}`);
   return f;
 }

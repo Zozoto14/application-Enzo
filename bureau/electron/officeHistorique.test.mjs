@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   ajouterEntree, analyserLignes, construireEntree, creerLecteur, dossierHistorique, ecrireReglages, enregistrerEvenement, fichierCourant,
-  importerJournal, lireJournal, lireReglages, masquerSecrets, supprimerEntrees, compterSuppression, DEBUT_ENTREE,
+  importerJournal, lireJournal, lireReglages, masquerSecrets, supprimerEntrees, compterSuppression, DEBUT_ENTREE, EVENEMENTS_V4, normaliserReglages,
 } from './officeHistorique.mjs';
 import { appliquerHooks, enchainerPlans, etatHookHistorique, planifierHistorique, planifierHooks } from './claudeOffice.mjs';
 
@@ -279,7 +279,7 @@ test('hook d’historique dans settings.json : aperçu, sauvegarde, idempotent, 
     writeFileSync(reglages, JSON.stringify({ hooks: { PreToolUse: [tiers] } }));
     const plan = planifierHistorique({ racineProjet, fichier: reglages });
     assert.equal(plan.change, true);
-    assert.deepEqual(plan.ajouts.map(a => a.evenement), ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'SessionStart', 'SessionEnd', 'Stop', 'SubagentStop', 'Notification', 'PermissionRequest']);
+    assert.deepEqual(plan.ajouts.map(a => a.evenement), ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'SessionStart', 'SessionEnd', 'Stop', 'SubagentStop', 'Notification', 'PermissionRequest', 'SubagentStart', 'PostToolUseFailure']);
     assert.match(plan.commande, /^node ".*\/scripts\/office-historique-hook\.mjs"$/);
     const { sauvegarde } = appliquerHooks(plan);
     assert.ok(sauvegarde && existsSync(sauvegarde));
@@ -482,11 +482,71 @@ test('v3 : état du hook — installé, à mettre à jour (installé avant la v3
     assert.equal(etatHookHistorique({ racineProjet, fichier: reglages }), 'incomplet');
     // La mise à jour n'ajoute que ce qui manque (idempotente ensuite).
     const plan = planifierHistorique({ racineProjet, fichier: reglages });
-    assert.deepEqual(plan.ajouts.map(a => a.evenement), ['PreToolUse', 'Notification', 'PermissionRequest']);
+    assert.deepEqual(plan.ajouts.map(a => a.evenement), ['PreToolUse', 'Notification', 'PermissionRequest', 'SubagentStart', 'PostToolUseFailure']);
     appliquerHooks(plan);
     assert.equal(etatHookHistorique({ racineProjet, fichier: reglages }), 'installes');
+    // Installation v3 (neuf événements) : « à mettre à jour » pour la v4, seuls SubagentStart et PostToolUseFailure s'ajoutent.
+    const v3 = [...anciens, 'PreToolUse', 'Notification', 'PermissionRequest'];
+    writeFileSync(reglages, JSON.stringify({ hooks: Object.fromEntries(v3.map(e => [e, [{ matcher: '*', hooks: [{ type: 'command', command: commande }] }]])) }));
+    assert.equal(etatHookHistorique({ racineProjet, fichier: reglages }), 'incomplet');
+    assert.deepEqual(planifierHistorique({ racineProjet, fichier: reglages }).ajouts.map(a => a.evenement), EVENEMENTS_V4);
     writeFileSync(reglages, '{ pas du json');
     assert.throws(() => etatHookHistorique({ racineProjet, fichier: reglages }));
+  } finally {
+    b.nettoyer();
+  }
+});
+
+test('v4 : sous-agents (SubagentStart/Stop, outil Agent) et échecs d’outils (PostToolUseFailure), secrets masqués, sans prompt', () => {
+  const reglages = normaliserReglages({ appareilId: 'aaaaaaaaaaaa' });
+  const base = { session_id: 'sess-1', cwd: '/home/moi/projets/budget' };
+  const debut = construireEntree({ ...base, hook_event_name: 'SubagentStart', agent_id: 'agent-abc123', agent_type: 'Explore' }, { reglages });
+  assert.equal(debut.type, 'debut-sous-agent');
+  assert.equal(debut.agent, 'agent-abc123');
+  assert.equal(debut.agentType, 'Explore');
+  const fin = construireEntree({ ...base, hook_event_name: 'SubagentStop', agent_id: 'agent-abc123', agent_type: 'Explore', agent_transcript_path: '/x', last_assistant_message: 'Fini, clé sk-ant-abcdefghijklmnopqrstu' }, { reglages });
+  assert.equal(fin.type, 'fin-sous-agent');
+  assert.equal(fin.agent, 'agent-abc123');
+  assert.equal(fin.sortie, undefined);
+  // Outil lancé DANS le sous-agent : rattaché par agent_id.
+  const dedans = construireEntree({ ...base, hook_event_name: 'PostToolUse', agent_id: 'agent-abc123', agent_type: 'Explore', tool_name: 'Grep', tool_input: { pattern: 'x' }, tool_response: {} }, { reglages });
+  assert.equal(dedans.agent, 'agent-abc123');
+  // Lancement : description courte, type, modèle, arrière-plan ; le prompt complet n'est pas gardé.
+  const lance = construireEntree({ ...base, hook_event_name: 'PostToolUse', tool_name: 'Agent', tool_input: { description: 'Trouver les API (token=abcdef123456)', prompt: 'PROMPT COMPLET SECRET', subagent_type: 'Explore', model: 'sonnet' }, tool_response: { status: 'async_launched', agentId: 'agent-abc123' } }, { reglages });
+  assert.equal(lance.outil, 'Agent');
+  assert.match(lance.resume, /^Trouver les API \(token=\[secret masqué\]/);
+  assert.ok(!lance.resume.includes('abcdef123456'));
+  assert.equal(lance.sousAgentType, 'Explore');
+  assert.equal(lance.modele, 'sonnet');
+  assert.equal(lance.arrierePlan, true);
+  assert.equal(lance.agentLance, 'agent-abc123');
+  assert.ok(!JSON.stringify(lance).includes('PROMPT COMPLET'));
+  const premierPlan = construireEntree({ ...base, hook_event_name: 'PostToolUse', tool_name: 'Task', tool_input: { description: 'Revue', subagent_type: 'general-purpose', run_in_background: false }, tool_response: {} }, { reglages });
+  assert.equal(premierPlan.arrierePlan, false);
+  // Échec d'outil : noté comme outil en échec.
+  const echec = construireEntree({ ...base, hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_input: { command: 'npm test' }, error: 'Exit code 1', duration_ms: 4187 }, { reglages });
+  assert.equal(echec.type, 'outil');
+  assert.equal(echec.echec, true);
+  assert.equal(echec.sortie, undefined);
+  assert.deepEqual(EVENEMENTS_V4, ['SubagentStart', 'PostToolUseFailure']);
+});
+
+test('v4 : le vrai hook note SubagentStart et PostToolUseFailure (avec sa durée)', () => {
+  const b = bac();
+  try {
+    const env = { ...process.env, OFFICE_HISTORIQUE_DIR: b.racine };
+    for (const e of [
+      { session_id: 's', cwd: '/p/budget', hook_event_name: 'SubagentStart', agent_id: 'a1', agent_type: 'Explore' },
+      { session_id: 's', cwd: '/p/budget', hook_event_name: 'PostToolUseFailure', tool_name: 'Bash', tool_input: { command: 'npm test' }, tool_use_id: 't1', error: 'x', duration_ms: 1500 },
+    ]) {
+      const r = spawnSync(process.execPath, [HOOK], { input: JSON.stringify(e), env, encoding: 'utf8' });
+      assert.equal(r.status, 0);
+      assert.equal(r.stdout, '');
+    }
+    const lues = lireJournal(b.racine).entrees;
+    assert.deepEqual(lues.map(e => e.type), ['debut-sous-agent', 'outil']);
+    assert.equal(lues[1].duree, 1500);
+    assert.equal(lues[1].echec, true);
   } finally {
     b.nettoyer();
   }

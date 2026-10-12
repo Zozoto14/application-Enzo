@@ -72,7 +72,7 @@ export function etapesMiseEnRoute(o: EntreeMiseEnRoute): Etape[] {
     else if (o.hook === 'incomplet') {
       etapes.push({
         id: 'hook', niveau: 'attention', titre: 'Hook à mettre à jour',
-        detail: 'Il manque « attend ta réponse » et la durée des outils. Mets-le à jour, puis redémarre Claude Code.',
+        detail: 'Il lui manque des événements récents (« attend ta réponse », durée des outils, sous-agents, échecs d’outils). Mets-le à jour, puis redémarre Claude Code.',
         action: { genre: 'installer-hook', titre: 'Mettre à jour le hook…' }, commande: COMMANDE_HOOKS,
       });
     } else if (o.hook === 'absents') {

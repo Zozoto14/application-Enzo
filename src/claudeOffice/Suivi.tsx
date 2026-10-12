@@ -21,6 +21,7 @@ import { DEFINITIONS, REGLES, libellePastille, type RegleAlerte } from './logiqu
 import { fusionner, type EntreeHistorique } from './logiqueHistorique';
 import { calculerRecap, exporterRecapJson, exporterRecapMarkdown, exporterRecapTexte, faitsMarquants, phraseRecap, titreRecap, type PeriodeRecap } from './logiqueRecap';
 import { entreesDemo } from './logiqueScene';
+import { entreesDemoSousAgents } from './logiqueSousAgents';
 import { historiqueDemo } from './logiqueStats';
 import type { FiltreHistorique } from './Bureau';
 import { NoteSession } from './NoteSession';
@@ -223,11 +224,11 @@ export function Suivi({ theme, contexte, office, debutDemo, alertes, maintenant,
   const reel = useHistoriqueComplet(office, contexte, !demo);
   const minute = Math.floor(maintenant / 60_000);
   const entrees = useMemo(
-    () => (demo ? fusionner(historiqueDemo(maintenant), entreesDemo(debutDemo!, maintenant), entreesDemoSuivi(debutDemo!)) : fusionner(reel.entrees, activite.entrees)),
+    () => (demo ? fusionner(historiqueDemo(maintenant), entreesDemo(debutDemo!, maintenant), entreesDemoSuivi(debutDemo!), entreesDemoSousAgents(debutDemo!, maintenant)) : fusionner(reel.entrees, activite.entrees)),
     [demo, debutDemo, reel.entrees, activite.entrees, minute], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const agents = useMemo(
-    () => deduireBureau(demo ? fusionner(entreesDemo(debutDemo!, maintenant), entreesDemoSuivi(debutDemo!)) : activite.entrees, { maintenant, references: demo ? {} : activite.references }).agents,
+    () => deduireBureau(demo ? fusionner(entreesDemo(debutDemo!, maintenant), entreesDemoSuivi(debutDemo!), entreesDemoSousAgents(debutDemo!, maintenant)) : activite.entrees, { maintenant, references: demo ? {} : activite.references }).agents,
     [demo, debutDemo, activite, minute], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const projets = useMemo(() => {

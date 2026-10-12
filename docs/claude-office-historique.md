@@ -59,13 +59,15 @@ Une ligne JSON par événement, commençant toujours par `{"v":1,"id":"` :
 ```
 
 `type` : `demande`, `outil` (`outil`, `resume` court, `echec`, `duree` en ms quand le début a été vu), `debut-session`,
-`fin-session`, `fin-reponse`, `fin-sous-agent`, `attente` (`motif` `permission` ou `question`, `outil`, `resume` : le
-message, masqué). Avec « Enregistrer aussi le contenu des outils », `entree`/`sortie` (2 000 caractères au plus).
+`fin-session`, `fin-reponse`, `debut-sous-agent`, `fin-sous-agent`, `attente` (`motif` `permission` ou `question`,
+`outil`, `resume` : le message, masqué). v4 : `agent`/`agentType` (sous-agent), et sur l'outil Agent/Task
+`sousAgentType`, `modele`, `arrierePlan`, `agentLance` (voir [`claude-office.md`](claude-office.md), « Sous-agents »). Avec « Enregistrer aussi le contenu des outils », `entree`/`sortie` (2 000 caractères au plus).
 
 Événements écoutés : UserPromptSubmit, PreToolUse (aucune ligne : repère `en-cours/<empreinte>` pour la durée, effacé
 à la fin de l'outil, orphelins effacés après un jour), PostToolUse, SessionStart, SessionEnd, Stop, SubagentStop,
-Notification et PermissionRequest (les rappels d'inactivité et messages techniques ne sont pas notés). Un hook installé
-avant la v3 est « à mettre à jour » : relancer `npm run office:hooks` n'ajoute que les événements manquants.
+Notification et PermissionRequest (les rappels d'inactivité et messages techniques ne sont pas notés), et depuis la v4
+SubagentStart et PostToolUseFailure. Un hook installé avant est « à mettre à jour » : relancer `npm run office:hooks`
+n'ajoute que les événements manquants.
 
 Réglages : `~/.agent-office/historique/reglages.json` (`actif`, `enregistrerSorties`, `masquerSecrets`, `maxFichierMo`,
 `maxTotalMo`, `appareil`, `appareilId`), modifiables dans l'écran. `OFFICE_HISTORIQUE_DIR` change le dossier.
