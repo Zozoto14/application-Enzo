@@ -9,7 +9,7 @@
  * session, compteurs, export JSON/CSV.
  */
 
-export type TypeEntree = 'demande' | 'outil' | 'debut-session' | 'fin-session' | 'fin-reponse' | 'fin-sous-agent';
+export type TypeEntree = 'demande' | 'outil' | 'debut-session' | 'fin-session' | 'fin-reponse' | 'fin-sous-agent' | 'attente';
 
 export interface EntreeHistorique {
   v: 1;
@@ -32,6 +32,10 @@ export interface EntreeHistorique {
   entree?: string;
   sortie?: string;
   echec?: boolean;
+  /** Durée de l'outil (ms), quand le hook a vu son début (PreToolUse). */
+  duree?: number;
+  /** Attente : `permission` (autorisation d'un outil) ou `question`. */
+  motif?: string;
   importe?: boolean;
   tronque?: boolean;
 }
@@ -43,6 +47,7 @@ export const LIBELLES_TYPES: Record<string, string> = {
   'fin-session': 'Fin de session',
   'fin-reponse': 'Fin de réponse',
   'fin-sous-agent': 'Fin de sous-agent',
+  attente: 'Attend ta réponse',
 };
 
 /** Entrée de forme valide (tout ce qui vient d'un fichier ou du relais passe par là). */
@@ -72,6 +77,8 @@ export interface Filtres {
   appareil?: string;
   outil?: string;
   type?: string;
+  /** Une seule session (identifiant). */
+  session?: string;
   /** Bornes de période (incluses), ISO ou AAAA-MM-JJ. */
   du?: string;
   au?: string;
@@ -97,6 +104,7 @@ export function filtrer(entrees: readonly EntreeHistorique[], f: Filtres): Entre
     if (f.appareil && e.appareil !== f.appareil) return false;
     if (f.outil && e.outil !== f.outil) return false;
     if (f.type && e.type !== f.type) return false;
+    if (f.session && e.session !== f.session) return false;
     const t = Date.parse(e.ts);
     if (du !== undefined && !Number.isNaN(du) && t < du) return false;
     if (au !== undefined && !Number.isNaN(au) && t > au) return false;
@@ -195,10 +203,23 @@ export function titreEntree(e: EntreeHistorique): string {
     case 'demande':
       return coupe((e.texte ?? '').replace(/\s+/g, ' ').trim() || '(demande vide)');
     case 'outil':
-      return coupe(`${e.outil ?? 'Outil'}${e.resume ? ` · ${e.resume}` : ''}`);
+      return coupe(`${e.outil ?? 'Outil'}${e.resume ? ` · ${e.resume}` : ''}${typeof e.duree === 'number' ? ` (${dureeCourte(e.duree)})` : ''}`);
+    case 'attente':
+      return coupe(`Attend ta réponse${e.resume ? ` : ${e.resume}` : ''}`);
     default:
       return `${LIBELLES_TYPES[e.type] ?? e.type}${e.resume ? ` (${e.resume})` : ''}`;
   }
+}
+
+/** « 850 ms », « 12 s », « 3 min 05 s », « 1 h 20 ». */
+export function dureeCourte(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s} s`;
+  const min = Math.floor(s / 60);
+  if (min < 60) return `${min} min${s % 60 ? ` ${String(s % 60).padStart(2, '0')} s` : ''}`;
+  const h = Math.floor(min / 60);
+  return `${h} h${min % 60 ? ` ${String(min % 60).padStart(2, '0')}` : ''}`;
 }
 
 /** Texte complet d'une entrée, pour « Copier ». */
@@ -210,6 +231,7 @@ export function texteComplet(e: EntreeHistorique): string {
     e.session ? `Session : ${e.session}` : '',
     e.outil ? `Outil : ${e.outil}` : '',
     e.resume ? `Résumé : ${e.resume}` : '',
+    typeof e.duree === 'number' ? `Durée : ${dureeCourte(e.duree)}` : '',
     e.texte ? `\n${e.texte}` : '',
     e.entree ? `\nEntrée :\n${e.entree}` : '',
     e.sortie ? `\nSortie :\n${e.sortie}` : '',
@@ -219,7 +241,7 @@ export function texteComplet(e: EntreeHistorique): string {
 
 // ---------------------------------------------------------------- export
 
-export const COLONNES_CSV = ['id', 'ts', 'type', 'appareil', 'projet', 'dossier', 'session', 'outil', 'resume', 'texte', 'entree', 'sortie', 'echec'] as const;
+export const COLONNES_CSV = ['id', 'ts', 'type', 'appareil', 'projet', 'dossier', 'session', 'outil', 'resume', 'texte', 'entree', 'sortie', 'echec', 'duree'] as const;
 
 /** Une cellule CSV : guillemets doublés ; une formule (=, +, -, @) est neutralisée pour les tableurs. */
 export function celluleCsv(valeur: unknown): string {

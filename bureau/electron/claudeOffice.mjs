@@ -344,6 +344,20 @@ export function planifierHistorique({ racineProjet, desinstaller = false, fichie
 }
 
 /**
+ * État du hook d'historique : `installes` (à jour), `incomplet` (installé avant la v3 du bureau : il
+ * manque des événements — durée des outils, « attend ta réponse » ; relancer l'installation le met à
+ * jour), `absents`. Lève si les réglages sont illisibles.
+ */
+export function etatHookHistorique({ racineProjet, fichier, lire = lireSiExiste }) {
+  const plan = planifierHistorique({ racineProjet, fichier, lire });
+  if (!plan.change) return 'installes';
+  const hooks = lireJson(plan.avantTexte ?? undefined, plan.fichier).hooks;
+  const present = hooks && typeof hooks === 'object' && Object.values(hooks).some(groupes =>
+    Array.isArray(groupes) && groupes.some(g => Array.isArray(g?.hooks) && g.hooks.some(h => estCommandeHistorique(h?.command))));
+  return present ? 'incomplet' : 'absents';
+}
+
+/**
  * Plusieurs plans sur le MÊME fichier, appliqués l'un après l'autre : une
  * seule sauvegarde, une seule écriture. `fabriques` reçoit le texte courant.
  */

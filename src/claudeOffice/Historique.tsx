@@ -11,10 +11,8 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
-import { BoutonHub } from '../hub/Hub';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { police, type ThemeHub } from '../hub/themes';
-import { useMobile } from '../ui/mobile/useMobile';
 import type { ContexteHub } from '../hub/types';
 import {
   LIBELLES_TYPES, compter, exporterCsv, exporterJson, filtrer, fusionner, grouper, heure, libelleJour, nomExport, texteComplet, titreEntree,
@@ -22,6 +20,10 @@ import {
 } from './logiqueHistorique';
 import { LIBELLE_HOOK_HISTORIQUE, type CritereSuppression, type EtatClaudeOffice, type LectureHistorique, type PlanHooks, type PontClaudeOffice, type PontHistorique } from './pont';
 import { ecrireEtatSynchro, lireEtatSynchro, synchroniserSiDu, type CopieAppareil, type EtatSynchroHistorique } from './synchroHistorique';
+import type { FiltreHistorique } from './Bureau';
+import { entreesDemo } from './logiqueScene';
+import { historiqueDemo } from './logiqueStats';
+import { Bouton as BoutonHub, Interrupteur, Puce as PuceOffice } from './uiOffice';
 
 export const INTERVALLE_LECTURE_MS = 5_000;
 const PAR_PAGE = 150;
@@ -33,61 +35,37 @@ interface Distant {
   le: string;
 }
 
-function Puce({ theme, titre, actif, onPress, testID }: { theme: ThemeHub; titre: string; actif: boolean; onPress(): void; testID?: string }) {
-  const sm = useMobile() ? stylesMobile : AUCUN;
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityState={{ selected: actif }}
-      onPress={onPress}
-      style={[styles.puce, sm.puce, { borderColor: actif ? theme.accent : theme.ligne, backgroundColor: actif ? theme.accent : 'transparent' }]}
-    >
-      <Text style={[{ color: actif ? theme.surAccent : theme.texte, fontSize: 13 }, sm.texte]}>{titre}</Text>
-    </Pressable>
-  );
-}
-
 function RangeePuces({ theme, libelle, valeurs, choisie, onChoix, testID, libelles }: {
   theme: ThemeHub; libelle: string; valeurs: string[]; choisie?: string; onChoix(v?: string): void; testID: string; libelles?: Record<string, string>;
 }) {
-  const sm = useMobile() ? stylesMobile : AUCUN;
+  const sm = stylesMobile;
   if (valeurs.length === 0) return null;
   return (
     <View style={styles.rangee}>
       <Text style={[styles.libelle, sm.texte, { color: theme.attenue }]}>{libelle}</Text>
-      <Puce theme={theme} titre="Tous" actif={!choisie} onPress={() => onChoix(undefined)} testID={`${testID}-tous`} />
+      <PuceOffice theme={theme} titre="Tous" actif={!choisie} onPress={() => onChoix(undefined)} testID={`${testID}-tous`} />
       {valeurs.slice(0, 15).map(v => (
-        <Puce key={v} theme={theme} titre={libelles?.[v] ?? v} actif={choisie === v} onPress={() => onChoix(choisie === v ? undefined : v)} testID={`${testID}-${v}`} />
+        <PuceOffice key={v} theme={theme} titre={libelles?.[v] ?? v} actif={choisie === v} onPress={() => onChoix(choisie === v ? undefined : v)} testID={`${testID}-${v}`} />
       ))}
     </View>
   );
 }
 
-function Interrupteur({ theme, libelle, aide, valeur, onChange, testID, desactive }: {
-  theme: ThemeHub; libelle: string; aide?: string; valeur: boolean; onChange(v: boolean): void; testID: string; desactive?: boolean;
+export function Historique({ theme, contexte, office, filtreInitial, debutDemo }: {
+  theme: ThemeHub; contexte: ContexteHub; office?: PontClaudeOffice;
+  /** Ouvert depuis le Bureau : recherche ou session déjà choisie. */
+  filtreInitial?: FiltreHistorique;
+  /** Démo de l'écran : historique fictif, en lecture seule. */
+  debutDemo?: number;
 }) {
-  const sm = useMobile() ? stylesMobile : AUCUN;
-  return (
-    <View style={styles.interrupteur}>
-      <View style={{ flex: 1 }}>
-        <Text style={[{ color: theme.texte, fontSize: 14 }, sm.texte]}>{libelle}</Text>
-        {aide ? <Text style={[{ color: theme.attenue, fontSize: 12, marginTop: 2 }, sm.texte]}>{aide}</Text> : null}
-      </View>
-      <Switch testID={testID} value={valeur} onValueChange={onChange} disabled={desactive} />
-    </View>
-  );
-}
-
-export function Historique({ theme, contexte, office }: { theme: ThemeHub; contexte: ContexteHub; office?: PontClaudeOffice }) {
-  const pont: PontHistorique | undefined = office?.historique;
-  const mobile = useMobile();
+  const demo = debutDemo !== undefined;
+  const pont: PontHistorique | undefined = demo ? undefined : office?.historique;
   const [etatHook, setEtatHook] = useState<EtatClaudeOffice['historique']>();
-  const service = contexte.historiqueOffice;
+  const service = demo ? undefined : contexte.historiqueOffice;
   const base = contexte.baseProfil;
   const [local, setLocal] = useState<LectureHistorique>();
   const [distant, setDistant] = useState<Distant>();
-  const [filtres, setFiltres] = useState<Filtres>({});
+  const [filtres, setFiltres] = useState<Filtres>(() => ({ ...(filtreInitial?.recherche ? { recherche: filtreInitial.recherche } : {}), ...(filtreInitial?.session ? { session: filtreInitial.session } : {}) }));
   const [affiches, setAffiches] = useState(PAR_PAGE);
   const [selection, setSelection] = useState<string>();
   const [confirmer, setConfirmer] = useState<string>();
@@ -153,7 +131,11 @@ export function Historique({ theme, contexte, office }: { theme: ThemeHub; conte
     });
   }, [pont, service, base, local, synchro.active]);
 
-  const toutes = useMemo(() => fusionner(local?.entrees, distant?.entrees), [local, distant]);
+  const minuteDemo = demo ? Math.floor(Date.now() / 60_000) : 0;
+  const toutes = useMemo(
+    () => (demo ? fusionner(historiqueDemo(Date.now()), entreesDemo(debutDemo!, Date.now())) : fusionner(local?.entrees, distant?.entrees)),
+    [demo, debutDemo, local, distant, minuteDemo], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const filtrees = useMemo(() => filtrer(toutes, filtres), [toutes, filtres]);
   const options = useMemo(() => valeursFiltres(toutes), [toutes]);
   const compteurs = useMemo(() => compter(filtrees), [filtrees]);
@@ -242,8 +224,8 @@ export function Historique({ theme, contexte, office }: { theme: ThemeHub; conte
 
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const attenue = { color: theme.attenue };
-  // Téléphone : textes ≥ 15 px, champs ≥ 16 px (sinon Safari zoome au focus), cibles ≥ 44 px.
-  const sm = mobile ? stylesMobile : AUCUN;
+  // Partout (site sur iPad et iPhone d'abord) : textes ≥ 15 px, champs ≥ 16 px (sinon Safari zoome au focus), cibles ≥ 44 px.
+  const sm = stylesMobile;
   const periodeOk = !!filtres.du && !!filtres.au;
 
   return (
@@ -257,7 +239,14 @@ export function Historique({ theme, contexte, office }: { theme: ThemeHub; conte
         </Text>
       </View>
 
-      {pont ? null : (
+      {demo ? <Text style={[styles.texte, sm.texte, { color: theme.sombre ? '#F4A261' : '#9A4A12', fontWeight: '700' }]} testID="historique-demo">◆ Démo : historique fictif, en lecture seule</Text> : null}
+      {filtres.session ? (
+        <View style={styles.rangee}>
+          <PuceOffice theme={theme} titre={`Session ${filtres.session.slice(0, 8)} ✕`} libelle="Retirer le filtre de session" actif onPress={() => changerFiltre('session', undefined)} testID="historique-filtre-session" />
+          <Text style={[styles.texte, sm.texte, attenue]}>Seulement cette session (ouverte depuis le Bureau).</Text>
+        </View>
+      ) : null}
+      {pont || demo ? null : (
         <Text style={[styles.texte, sm.texte, attenue]} testID="historique-hors-pc">
           {service
             ? 'Ici, on lit la copie chiffrée que les PC équipés déposent sur le relais (si leur synchro est activée).'
@@ -419,11 +408,9 @@ export function Historique({ theme, contexte, office }: { theme: ThemeHub; conte
   );
 }
 
-const AUCUN: Partial<Record<keyof typeof stylesMobileBrut, undefined>> = {};
 const stylesMobileBrut = {
   texte: { fontSize: 15, lineHeight: 21 },
   champ: { fontSize: 17, minHeight: 48 },
-  puce: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 14 },
   entree: { minHeight: 44, paddingVertical: 8 },
 } as const;
 const stylesMobile = StyleSheet.create(stylesMobileBrut);
@@ -437,18 +424,17 @@ const styles = StyleSheet.create({
   compteur: { borderWidth: StyleSheet.hairlineWidth, paddingVertical: 6, paddingHorizontal: 10, minWidth: 84 },
   nombre: { fontSize: 18, fontWeight: '700' },
   champ: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14 },
-  date: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, fontSize: 13, width: 130 },
+  date: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, fontSize: 16, width: 160, minHeight: 44 },
   rangee: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
   libelle: { fontSize: 13, minWidth: 64 },
   puce: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   boutons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   carte: { borderWidth: StyleSheet.hairlineWidth, padding: 12, gap: 6 },
-  titreCarte: { fontSize: 15, fontWeight: '700' },
-  jour: { fontSize: 15, fontWeight: '700', marginTop: 6, textTransform: 'capitalize' },
+  titreCarte: { fontSize: 17, fontWeight: '700' },
+  jour: { fontSize: 17, fontWeight: '700', marginTop: 6, textTransform: 'capitalize' },
   entree: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', paddingVertical: 3 },
-  heure: { fontSize: 12, width: 64, fontVariant: ['tabular-nums'] },
+  heure: { fontSize: 15, width: 76, fontVariant: ['tabular-nums'] },
   type: { fontSize: 13, width: 14, textAlign: 'center' },
   texteEntree: { fontSize: 13, flex: 1, lineHeight: 18 },
-  code: { fontFamily: 'monospace', fontSize: 12, borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, padding: 10 },
-  interrupteur: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  code: { fontFamily: 'monospace', fontSize: 15, borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, padding: 10 },
 });

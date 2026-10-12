@@ -60,7 +60,7 @@ describe('historique : logique pure', () => {
     expect(json.entrees).toHaveLength(5);
     const csv = exporterCsv([entree('z', '2026-10-07T08:00:00Z', { texte: '=HYPERLINK("x"); "cité"\nligne 2' })]);
     const lignes = csv.replace(/^﻿/, '').split('\r\n');
-    expect(lignes[0]).toBe('id;ts;type;appareil;projet;dossier;session;outil;resume;texte;entree;sortie;echec');
+    expect(lignes[0]).toBe('id;ts;type;appareil;projet;dossier;session;outil;resume;texte;entree;sortie;echec;duree');
     expect(csv).toContain('"\'=HYPERLINK(""x""); ""cité""\nligne 2"');
     expect(celluleCsv('-2+3')).toBe("'-2+3");
     expect(celluleCsv(undefined)).toBe('');
@@ -246,7 +246,7 @@ describe('écran Historique', () => {
     expect(nom).toMatch(/^historique-claude-\d{4}-\d{2}-\d{2}\.csv$/);
     expect(type).toBe('text/csv');
     expect(contenu.split('\r\n').filter(Boolean)).toHaveLength(3);
-    await fireEvent(screen.getByTestId('reglage-sorties'), 'valueChange', true);
+    await fireEvent.press(screen.getByTestId('reglage-sorties'));
     expect(historique.reglages).toHaveBeenCalledWith({ enregistrerSorties: true });
   });
 

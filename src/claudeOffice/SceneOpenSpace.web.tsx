@@ -1,24 +1,33 @@
 /**
- * Claude Office, onglet « Bureau » : l'open space dessiné en SVG isométrique
- * (web, site, PC). Aucune image ni dépendance : polygones, dégradés et
- * animations CSS légères.
+ * Claude Office, onglet « Bureau » : l'open space en ZONES THÉMATIQUES,
+ * dessiné en SVG isométrique (web, site, PC). Aucune image ni dépendance :
+ * polygones, dégradés et animations CSS légères.
  *
- * - Fond fixe (sol en parquet, moquette, murs, fenêtres, salle de réunion
- *   vitrée, cuisine et machine à café, imprimante, tableau blanc, coin salon,
- *   plantes) dessiné une fois ; jour en thème clair, nuit en thème sombre
- *   (plafonniers chauds, écrans qui éclairent, ville allumée).
- * - Postes, chaises et personnages triés par profondeur ; seuls les marcheurs
- *   bougent image par image (requestAnimationFrame bridé à ~30 i/s, arrêté
- *   hors écran, onglet masqué ou quand personne ne marche). Le reste (frappe,
- *   café, pensées, écrans) : animations CSS, gelées hors écran.
- * - « Réduire les animations » : scène fixe mais expressive (poses, gadgets).
- * La scène est décorative pour les lecteurs d'écran : la liste des agents,
- * sous la scène, porte la même information (Bureau.tsx).
+ * - Dix zones (zones.ts) au sol teinté, mobilier propre et enseigne avec le
+ *   nombre d'agents présents : Atelier code (bureaux et écrans), Salle des
+ *   machines (baies, voyants), Bibliothèque (étagères, tables de lecture),
+ *   Café web (comptoir, globe), Salle de réunion vitrée (table, tableau
+ *   blanc), Coin réflexion (poufs, plantes), Accueil (porte, banque),
+ *   Détente (fauteuils, machine à café), « Attend ta réponse » (guichet,
+ *   sonnette) et Salle d'attente (banquettes).
+ * - Chaque agent marche jusqu'à la zone de son activité (logiqueScene.ts) ;
+ *   seuls les marcheurs bougent image par image (requestAnimationFrame bridé
+ *   à ~30 i/s, arrêté hors écran, onglet masqué ou quand personne ne marche).
+ *   Le reste : animations CSS, gelées hors écran.
+ * - « Réduire les animations » : personne ne marche, un simple fondu quand un
+ *   agent change de zone ; poses et gadgets restent expressifs.
+ * La scène est décorative pour les lecteurs d'écran : la liste des agents
+ * (Bureau.tsx) porte la même information.
  */
 
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { activiteAgent, apparence, avancer, creerScene, enAttente, HAUTEUR_MURS, HAUTEUR_SCENE, ILOTS_X, ISO, iso, LARGEUR_PIECE, LARGEUR_SCENE, PORTE, POSTES, PROFONDEUR_PIECE, poses, reconcilier, signatureAgents, hacher, type Activite, type Apparence, type Poste, ICONES_ACTIVITE, TEINTES_ACTIVITE } from './logiqueScene';
-import { resumerTexte } from './logiqueBureau';
+import {
+  activiteAgent, apparence, avancer, comptesZones, creerScene, DEHORS, enAttente, HAUTEUR_MURS, HAUTEUR_SCENE, ILOTS_ATELIER, ISO, iso, LARGEUR_BUREAU,
+  LARGEUR_PIECE, LARGEUR_SCENE, PLACES, PORTE, PROFONDEUR_PIECE, RECTS_ZONES, poses, prochaineEcheance, reconcilier, signatureAgents, hacher,
+  type Activite, type Apparence, type ModePose, type Place, ICONES_ACTIVITE, TEINTES_ACTIVITE, Y_BUREAU_FOND,
+} from './logiqueScene';
+import { ilYA, resumerTexte } from './logiqueBureau';
+import { ORDRE_ZONES, ZONES, type Zone } from './zones';
 import type { PropsScene } from './sceneTypes';
 
 // ------------------------------------------------------------------ palette
@@ -105,8 +114,6 @@ function Plante({ x, y, pal, taille = 1, classe }: { x: number; y: number; pal: 
   );
 }
 
-// ------------------------------------------------------------------ fond fixe
-
 function Fenetre({ y0, y1, pal, i }: { y0: number; y1: number; pal: Palette; i: number }) {
   const z0 = 0.95;
   const z1 = 2.55;
@@ -151,6 +158,43 @@ function Fenetre({ y0, y1, pal, i }: { y0: number; y1: number; pal: Palette; i: 
   );
 }
 
+// ------------------------------------------------------------------ fond fixe
+
+/** Les zones au sol : teinte légère et liseré de leur couleur, sol propre à chacune. */
+function SolsZones({ pal }: { pal: Palette }) {
+  const n = pal.nuit;
+  return (
+    <g>
+      {ORDRE_ZONES.map(z => {
+        const r = RECTS_ZONES[z];
+        const w = r.x1 - r.x0;
+        const d = r.y1 - r.y0;
+        const remplissage =
+          z === 'atelier' ? 'url(#co-moquette)'
+          : z === 'machines' ? 'url(#co-technique)'
+          : z === 'cafe' ? 'url(#co-carreaux)'
+          : z === 'reunion' ? pal.salle
+          : ZONES[z].teinte;
+        const motif = z === 'atelier' || z === 'machines' || z === 'cafe' || z === 'reunion';
+        return (
+          <g key={z}>
+            <rect x={r.x0 + 0.08} y={r.y0 + 0.08} width={w - 0.16} height={d - 0.16} rx={0.25} fill={remplissage} opacity={motif ? 1 : n ? 0.2 : 0.13} />
+            <rect x={r.x0 + 0.1} y={r.y0 + 0.1} width={w - 0.2} height={d - 0.2} rx={0.25} fill="none" stroke={ZONES[z].teinte} strokeWidth={0.045} opacity={n ? 0.75 : 0.6} strokeDasharray={z === 'guichet' ? '0.25 0.15' : undefined} />
+          </g>
+        );
+      })}
+      {/* Tapis : bibliothèque, réflexion (rond), salle d'attente, détente ; paillasson de l'accueil. */}
+      <rect x={7.6} y={1.6} width={2.4} height={1.6} rx={0.2} fill={n ? '#5C3B4A' : '#C98A7A'} opacity={0.75} />
+      <ellipse cx={2.0} cy={7.8} rx={1.75} ry={1.75} fill={n ? '#3E6B52' : '#9CCBA8'} opacity={0.8} />
+      <rect x={1.6} y={11.5} width={1.6} height={2.1} rx={0.3} fill={n ? '#2F5E57' : '#8FC9BE'} opacity={0.75} />
+      <rect x={14.4} y={11.6} width={4.0} height={1.4} rx={0.3} fill={pal.tapis} opacity={0.75} />
+      <rect x={13.75} y={0.1} width={1.3} height={0.9} rx={0.08} fill={n ? '#4A3A2E' : '#A4805A'} />
+      {/* File du guichet : marquage au sol. */}
+      {[7.6, 9.0, 10.4, 11.8].map(x => <rect key={x} x={x - 0.45} y={12.65} width={0.9} height={0.06} fill="#F2C14E" opacity={0.85} />)}
+    </g>
+  );
+}
+
 function Fond({ pal, maintenant }: { pal: Palette; maintenant: number }) {
   const W = LARGEUR_PIECE;
   const D = PROFONDEUR_PIECE;
@@ -159,6 +203,7 @@ function Fond({ pal, maintenant }: { pal: Palette; maintenant: number }) {
   const heure = new Date(maintenant);
   const angleH = ((heure.getHours() % 12) + heure.getMinutes() / 60) * 30;
   const angleM = heure.getMinutes() * 6;
+  const COULEURS_LIVRES = ['#C0504D', '#4F81BD', '#9BBB59', '#F79646', '#8064A2', '#4BACC6', '#D9A441', '#6B4226'];
   return (
     <g>
       <defs>
@@ -173,6 +218,10 @@ function Fond({ pal, maintenant }: { pal: Palette; maintenant: number }) {
         <radialGradient id="co-halo">
           <stop offset="0" stopColor={pal.halo} stopOpacity={0.55} />
           <stop offset="1" stopColor={pal.halo} stopOpacity={0} />
+        </radialGradient>
+        <radialGradient id="co-alerte">
+          <stop offset="0" stopColor="#FF6B6B" stopOpacity={0.55} />
+          <stop offset="1" stopColor="#FF6B6B" stopOpacity={0} />
         </radialGradient>
         <radialGradient id="co-ombre-socle">
           <stop offset="0" stopColor={pal.ombre} stopOpacity={n ? 0.5 : 0.22} />
@@ -194,6 +243,11 @@ function Fond({ pal, maintenant }: { pal: Palette; maintenant: number }) {
           <rect width={1} height={1} fill={pal.moquette} />
           <rect width={0.5} height={1} fill={pal.moquetteMotif} />
         </pattern>
+        <pattern id="co-technique" patternUnits="userSpaceOnUse" width={0.6} height={0.6}>
+          <rect width={0.6} height={0.6} fill={n ? '#3A4150' : '#C9CED6'} />
+          <rect width={0.6} height={0.6} fill="none" stroke={n ? '#2A303C' : '#AEB4BE'} strokeWidth={0.03} />
+          <circle cx={0.3} cy={0.3} r={0.04} fill={n ? '#556074' : '#9AA2AE'} />
+        </pattern>
       </defs>
 
       {/* Ombre portée et socle de la maquette. */}
@@ -201,25 +255,17 @@ function Fond({ pal, maintenant }: { pal: Palette; maintenant: number }) {
       <polygon points={pts([[0, D, 0], [W, D, 0], [W, D, -0.45], [0, D, -0.45]])} fill={pal.socleG} />
       <polygon points={pts([[W, 0, 0], [W, D, 0], [W, D, -0.45], [W, 0, -0.45]])} fill={pal.socleD} />
 
-      {/* Sol : parquet, zones de moquette, carrelage de la cuisine, tapis du salon. */}
+      {/* Sol : parquet, puis le sol de chaque zone ; lumière du jour ou flaques des plafonniers. */}
       <g transform={sol()}>
         <rect width={W} height={D} fill="url(#co-lames)" />
-        <rect x={4.1} y={5.75} width={15.6} height={4.3} rx={0.3} fill="url(#co-moquette)" />
-        <rect x={0} y={0} width={4.2} height={4.4} fill={pal.salle} />
-        <rect x={15.35} y={0} width={4.65} height={3.6} fill="url(#co-carreaux)" />
-        <rect x={0.55} y={9.9} width={3.6} height={3.6} rx={0.5} fill={pal.tapisBord} />
-        <rect x={0.75} y={10.1} width={3.2} height={3.2} rx={0.4} fill={pal.tapis} />
-        {/* Lumière : soleil par les fenêtres (jour) ou flaques des plafonniers (nuit). */}
+        <SolsZones pal={pal} />
         {n ? (
           <g>
-            {ILOTS_X.map(x0 => <circle key={x0} cx={x0 + 2} cy={7.75} r={3.1} fill="url(#co-flaque)" />)}
-            <circle cx={2.1} cy={2.2} r={2.4} fill="url(#co-flaque)" />
-            <circle cx={17.6} cy={2.2} r={2.2} fill="url(#co-flaque)" />
-            <circle cx={1.1} cy={10.4} r={2.2} fill="url(#co-flaque)" />
+            {[[7.4, 7.75], [11.4, 7.75], [8.8, 2.2], [2.1, 2.2], [17.8, 2.2], [17.6, 9.0], [9.7, 12.4], [2.6, 12.4], [16.6, 12.4], [2.0, 7.8]].map(([x, y]) => <circle key={`${x}-${y}`} cx={x} cy={y} r={2.4} fill="url(#co-flaque)" />)}
           </g>
         ) : (
           <g fill="#FFF6D8" opacity={0.32}>
-            {[[5.0, 7.4], [7.9, 10.3], [10.8, 13.2]].map(([a, b]) => (
+            {[[5.9, 8.1], [11.3, 13.5]].map(([a, b]) => (
               <polygon key={a} points={`0,${a} 0,${b} 3.4,${b + 1.4} 3.4,${a + 1.4}`} />
             ))}
           </g>
@@ -233,127 +279,99 @@ function Fond({ pal, maintenant }: { pal: Palette; maintenant: number }) {
       <polygon points={pts([[0, 0, H], [W, 0, H], [W, -0.25, H], [-0.25, -0.25, H]])} fill={pal.murHaut} />
       <g transform={planX(0)}>
         <rect x={0} y={0} width={D} height={0.14} fill={pal.plinthe} />
-        <Fenetre y0={5.0} y1={7.4} pal={pal} i={0} />
-        <Fenetre y0={7.9} y1={10.3} pal={pal} i={1} />
-        <Fenetre y0={10.8} y1={13.2} pal={pal} i={2} />
-        {/* Écran de la salle de réunion (mur de gauche). */}
+        <Fenetre y0={5.9} y1={8.1} pal={pal} i={0} />
+        <Fenetre y0={8.6} y1={10.3} pal={pal} i={1} />
+        <Fenetre y0={11.3} y1={13.5} pal={pal} i={2} />
+        {/* Écran de la salle de réunion (mur de gauche) : avancement des sous-agents. */}
         <rect x={0.9} y={1.15} width={2.6} height={1.15} rx={0.04} fill={pal.cadre} />
         <rect x={0.98} y={1.22} width={2.44} height={1.01} fill={n ? '#1C3A5E' : '#2F6DB3'} />
         {[0.3, 0.55, 0.42, 0.75, 0.62].map((h, k) => <rect key={k} x={1.2 + k * 0.42} y={1.35} width={0.22} height={h} fill={TEINTES_ACTIVITE[(['code', 'terminal', 'recherche', 'web', 'agent'] as const)[k]]} opacity={0.9} />)}
       </g>
       <g transform={planY(0)}>
         <rect x={0} y={0} width={W} height={0.14} fill={pal.plinthe} />
-        {/* Tableau blanc avec gribouillis et post-it. */}
-        <rect x={5.3} y={0.95} width={4.2} height={1.45} rx={0.04} fill={pal.metal} />
-        <rect x={5.37} y={1.02} width={4.06} height={1.31} fill={n ? '#D9DCE3' : '#FFFFFF'} />
-        <polyline points="5.6,2.0 6.1,2.15 6.5,1.85 7.0,2.1 7.4,1.9" fill="none" stroke="#2E8FE0" strokeWidth={0.035} />
-        <polyline points="5.6,1.6 6.2,1.6 6.2,1.3 6.9,1.3" fill="none" stroke="#D9566B" strokeWidth={0.035} />
-        <rect x={7.6} y={1.25} width={0.55} height={0.4} fill="none" stroke="#3FB37F" strokeWidth={0.03} />
-        <rect x={8.4} y={1.95} width={0.3} height={0.28} fill="#F7D35C" />
-        <rect x={8.8} y={1.9} width={0.3} height={0.28} fill="#F59BB5" />
-        <rect x={8.6} y={1.5} width={0.3} height={0.28} fill="#9FD8F5" />
-        <rect x={5.4} y={0.9} width={4.0} height={0.06} fill={pal.metalD} />
-        {/* Pendule (heure réelle). */}
-        <circle cx={10.9} cy={2.15} r={0.32} fill={pal.cadre} />
-        <circle cx={10.9} cy={2.15} r={0.27} fill={n ? '#E9E4D6' : '#FFFFFF'} />
-        <line x1={10.9} y1={2.15} x2={10.9 + 0.15 * Math.sin((angleH * Math.PI) / 180)} y2={2.15 + 0.15 * Math.cos((angleH * Math.PI) / 180)} stroke={pal.cadre} strokeWidth={0.045} strokeLinecap="round" />
-        <line x1={10.9} y1={2.15} x2={10.9 + 0.22 * Math.sin((angleM * Math.PI) / 180)} y2={2.15 + 0.22 * Math.cos((angleM * Math.PI) / 180)} stroke={pal.cadre} strokeWidth={0.03} strokeLinecap="round" />
-        {/* Affiche abstraite. */}
-        <rect x={11.7} y={1.2} width={1.3} height={1.2} fill={pal.cadre} />
-        <rect x={11.76} y={1.26} width={1.18} height={1.08} fill={n ? '#2C3354' : '#F4E9DA'} />
-        <circle cx={12.15} cy={1.95} r={0.25} fill="#E0803A" />
-        <rect x={12.3} y={1.4} width={0.5} height={0.45} fill="#5B8CFF" opacity={0.9} />
-        {/* Porte ouverte et panneau de sortie. */}
+        {/* Réunion : tableau blanc avec gribouillis et post-it. */}
+        <rect x={0.5} y={0.95} width={3.2} height={1.45} rx={0.04} fill={pal.metal} />
+        <rect x={0.57} y={1.02} width={3.06} height={1.31} fill={n ? '#D9DCE3' : '#FFFFFF'} />
+        <polyline points="0.8,2.0 1.3,2.15 1.7,1.85 2.2,2.1 2.6,1.9" fill="none" stroke="#2E8FE0" strokeWidth={0.035} />
+        <polyline points="0.8,1.5 1.4,1.5 1.4,1.25 2.0,1.25" fill="none" stroke="#D9566B" strokeWidth={0.035} />
+        <rect x={2.8} y={1.95} width={0.3} height={0.28} fill="#F7D35C" />
+        <rect x={3.2} y={1.9} width={0.3} height={0.28} fill="#F59BB5" />
+        <rect x={3.0} y={1.5} width={0.3} height={0.28} fill="#9FD8F5" />
+        {/* Porte ouverte, panneau de sortie, pendule au-dessus (heure réelle). */}
         <rect x={PORTE.x0 - 0.06} y={0} width={PORTE.x1 - PORTE.x0 + 0.12} height={2.32} fill={pal.plinthe} />
         <rect x={PORTE.x0} y={0} width={PORTE.x1 - PORTE.x0} height={2.25} fill={n ? '#0B0D16' : '#4A4F5C'} />
         <rect x={PORTE.x0 + 0.1} y={0} width={PORTE.x1 - PORTE.x0 - 0.2} height={2.15} fill={n ? '#141A2E' : '#6C7486'} opacity={0.7} />
-        <rect x={(PORTE.x0 + PORTE.x1) / 2 - 0.25} y={2.42} width={0.5} height={0.18} rx={0.03} fill="#2FBF71" className="co-sortie" />
-        {/* Placards hauts de la cuisine et crédence. */}
-        <rect x={15.6} y={0.9} width={3.6} height={0.5} fill={n ? '#3B4258' : '#DCE6EE'} />
-        <rect x={15.6} y={1.75} width={3.6} height={0.8} fill={pal.blancD} />
-        {[0, 1, 2, 3].map(k => <rect key={k} x={15.65 + k * 0.9} y={1.8} width={0.82} height={0.7} fill={pal.blanc} />)}
-        {n ? <rect x={15.6} y={1.68} width={3.6} height={0.07} fill={pal.lumiere} opacity={0.9} /> : null}
+        <rect x={(PORTE.x0 + PORTE.x1) / 2 - 0.25} y={2.38} width={0.5} height={0.16} rx={0.03} fill="#2FBF71" className="co-sortie" />
+        <circle cx={12.4} cy={2.15} r={0.32} fill={pal.cadre} />
+        <circle cx={12.4} cy={2.15} r={0.27} fill={n ? '#E9E4D6' : '#FFFFFF'} />
+        <line x1={12.4} y1={2.15} x2={12.4 + 0.15 * Math.sin((angleH * Math.PI) / 180)} y2={2.15 + 0.15 * Math.cos((angleH * Math.PI) / 180)} stroke={pal.cadre} strokeWidth={0.045} strokeLinecap="round" />
+        <line x1={12.4} y1={2.15} x2={12.4 + 0.22 * Math.sin((angleM * Math.PI) / 180)} y2={2.15 + 0.22 * Math.cos((angleM * Math.PI) / 180)} stroke={pal.cadre} strokeWidth={0.03} strokeLinecap="round" />
+        {/* Café web : ardoise au-dessus du comptoir (globe), placards. */}
+        <rect x={16.8} y={1.55} width={2.2} height={0.95} rx={0.05} fill={n ? '#1F2A22' : '#2E3B32'} />
+        <circle cx={17.35} cy={2.02} r={0.28} fill="none" stroke="#9CC7FF" strokeWidth={0.04} />
+        <ellipse cx={17.35} cy={2.02} rx={0.12} ry={0.28} fill="none" stroke="#9CC7FF" strokeWidth={0.03} />
+        <line x1={17.07} y1={2.02} x2={17.63} y2={2.02} stroke="#9CC7FF" strokeWidth={0.03} />
+        {[0, 1, 2].map(k => <rect key={k} x={17.85} y={1.75 + k * 0.22} width={0.9 - k * 0.2} height={0.07} fill="#E8E2C8" opacity={0.8} />)}
+        {n ? <rect x={16.6} y={1.42} width={2.6} height={0.06} fill={pal.lumiere} opacity={0.9} /> : null}
       </g>
 
-      {/* Salle de réunion : table, chaises, plante, puis parois vitrées. */}
-      <Plante x={0.5} y={0.5} pal={pal} taille={0.9} />
-      {[[1.2, 1.05], [2.2, 1.05], [3.0, 1.05]].map(([x, y]) => <Boite key={`c${x}`} x={x} y={y} w={0.42} d={0.36} h={0.45} dessus={pal.assise} gauche={pal.chaise} droite={pal.chaise} />)}
-      <Boite x={1.0} y={1.45} w={2.6} d={1.5} h={0.72} dessus={pal.bois} gauche={pal.boisG} droite={pal.boisD} />
-      {[[1.2, 3.05], [2.2, 3.05], [3.0, 3.05]].map(([x, y]) => <Boite key={`d${x}`} x={x} y={y} w={0.42} d={0.36} h={0.45} dessus={pal.assise} gauche={pal.chaise} droite={pal.chaise} />)}
-      <Boite x={1.6} y={1.8} z={0.72} w={0.5} d={0.35} h={0.03} dessus="#FFFFFF" gauche="#DDD" droite="#CCC" />
-      <g opacity={n ? 0.5 : 0.62}>
-        <polygon points={pts([[4.2, 0, 0], [4.2, 4.4, 0], [4.2, 4.4, 2.6], [4.2, 0, 2.6]])} fill={pal.vitre} opacity={0.32} />
-        <polygon points={pts([[0, 4.4, 0], [4.2, 4.4, 0], [4.2, 4.4, 2.6], [0, 4.4, 2.6]])} fill={pal.vitre} opacity={0.32} />
-        <polygon points={pts([[0, 4.4, 1.05], [4.2, 4.4, 1.05], [4.2, 4.4, 1.3], [0, 4.4, 1.3]])} fill={pal.vitreBord} opacity={0.55} />
-        <polygon points={pts([[4.2, 0, 1.05], [4.2, 4.4, 1.05], [4.2, 4.4, 1.3], [4.2, 0, 1.3]])} fill={pal.vitreBord} opacity={0.55} />
-        <polyline points={pts([[0, 4.4, 2.6], [4.2, 4.4, 2.6], [4.2, 0, 2.6]])} fill="none" stroke={pal.vitreBord} strokeWidth={2} />
-        <polyline points={pts([[4.2, 4.4, 0], [4.2, 4.4, 2.6]])} fill="none" stroke={pal.vitreBord} strokeWidth={2} />
-        <polyline points={pts([[2.1, 4.4, 0], [2.1, 4.4, 2.6]])} fill="none" stroke={pal.vitreBord} strokeWidth={1.2} />
-        <polyline points={pts([[4.2, 2.2, 0], [4.2, 2.2, 2.6]])} fill="none" stroke={pal.vitreBord} strokeWidth={1.2} />
-      </g>
-      <g transform={planY(4.4)}>
-        <rect x={0.7} y={1.12} width={1.0} height={0.12} rx={0.02} fill={n ? '#C8D2EA' : '#5B6478'} opacity={0.8} />
-      </g>
+      {/* Bibliothèque : étagères pleines contre le mur du fond. */}
+      {[5.0, 6.95, 8.9, 10.85].map((x0, k) => (
+        <g key={x0}>
+          <Boite x={x0} y={0.05} w={1.85} d={0.45} h={2.3} dessus={pal.bois} gauche={pal.boisG} droite={pal.boisD} />
+          <g transform={planY(0.5)}>
+            {[0.12, 0.68, 1.24, 1.8].map((z, r) => (
+              <g key={z}>
+                <rect x={x0 + 0.05} y={z - 0.04} width={1.75} height={0.04} fill={pal.boisD} />
+                {Array.from({ length: 9 }, (_, b) => {
+                  const h = hacher(`livre${k}-${r}-${b}`);
+                  const larg = 0.12 + (h % 5) * 0.015;
+                  return <rect key={b} x={x0 + 0.1 + b * 0.185} y={z} width={larg} height={0.34 + ((h >>> 3) % 4) * 0.035} fill={COULEURS_LIVRES[h % COULEURS_LIVRES.length]} opacity={n ? 0.75 : 0.95} />;
+                })}
+              </g>
+            ))}
+          </g>
+        </g>
+      ))}
 
-      {/* Imprimante et plante près du mur du fond. */}
-      <Boite x={10.95} y={0.2} w={1.05} d={0.8} h={0.85} dessus={pal.metal} gauche={pal.metalG} droite={pal.metalD} />
-      <Boite x={11.1} y={0.3} z={0.85} w={0.75} d={0.55} h={0.12} dessus={pal.blancG} gauche={pal.blancD} droite={pal.blancD} />
-      <Boite x={11.2} y={0.4} z={0.97} w={0.5} d={0.38} h={0.03} dessus="#FFFFFF" gauche="#EEE" droite="#DDD" />
-      <circle cx={iso(12, 0.85, 0.7).x} cy={iso(12, 0.85, 0.7).y} r={2.2} fill="#2FBF71" className="co-led-actif" />
-      <Plante x={12.75} y={0.55} pal={pal} taille={1.05} />
-
-      {/* Cuisine : comptoir, machine à café fumante, frigo, mange-debout. */}
-      <Boite x={15.6} y={0.05} w={3.6} d={0.9} h={0.9} dessus={pal.bois} gauche={pal.blancG} droite={pal.blancD} />
-      <Boite x={16.0} y={0.2} z={0.9} w={0.55} d={0.5} h={0.6} dessus="#3A3F4A" gauche="#2A2E37" droite="#22262E" />
-      <circle cx={iso(16.55, 0.62, 1.32).x} cy={iso(16.55, 0.62, 1.32).y} r={1.8} fill="#E5484D" />
+      {/* Café web : comptoir, machine à café fumante, ordinateurs portables, frigo. */}
+      <Boite x={16.6} y={0.05} w={2.6} d={0.85} h={0.95} dessus={pal.bois} gauche={pal.blancG} droite={pal.blancD} />
+      <Boite x={16.75} y={0.15} z={0.95} w={0.5} d={0.45} h={0.55} dessus="#3A3F4A" gauche="#2A2E37" droite="#22262E" />
       <g className="co-vapeur-cafe">
         {[0, 1, 2].map(k => {
-          const p = iso(16.3, 0.85, 1.05);
+          const p = iso(17.0, 0.6, 1.1);
           return <ellipse key={k} cx={p.x - 2 + k * 2} cy={p.y - 8} rx={2} ry={3.5} fill="#FFFFFF" opacity={0.5} className={`co-vapeur co-v${k}`} />;
         })}
       </g>
-      <Boite x={17.1} y={0.35} z={0.9} w={0.18} d={0.18} h={0.16} dessus="#FFFFFF" gauche="#E36F51" droite="#C95A3F" />
-      <Boite x={17.5} y={0.35} z={0.9} w={0.18} d={0.18} h={0.16} dessus="#FFFFFF" gauche="#4C9BE8" droite="#3B82C9" />
-      <Boite x={18.1} y={0.25} z={0.9} w={0.7} d={0.45} h={0.05} dessus={pal.metal} gauche={pal.metalG} droite={pal.metalD} />
+      {[17.55, 18.45].map(x => (
+        <g key={x}>
+          <Boite x={x} y={0.45} z={0.95} w={0.5} d={0.32} h={0.02} dessus="#C9CED6" gauche="#AEB4BE" droite="#9AA2AE" />
+          <g transform={planY(0.45)}><rect x={x + 0.04} y={0.97} width={0.42} height={0.3} fill="#9CC7FF" /><rect x={x + 0.04} y={1.2} width={0.42} height={0.07} fill="#DCE4EE" /></g>
+        </g>
+      ))}
       <Boite x={19.25} y={0.05} w={0.7} d={0.85} h={1.95} dessus={pal.blancG} gauche={pal.blanc} droite={pal.blancD} />
-      <Boite x={17.15} y={2.1} w={1.0} d={1.0} h={1.0} dessus={pal.bois} gauche={pal.boisG} droite={pal.boisD} />
-      <Boite x={16.6} y={2.4} w={0.36} d={0.36} h={0.7} dessus={pal.assise} gauche={pal.chaise} droite={pal.chaise} />
-      <Boite x={17.45} y={3.25} w={0.36} d={0.36} h={0.7} dessus={pal.assise} gauche={pal.chaise} droite={pal.chaise} />
-      <Boite x={17.45} y={2.45} z={1.0} w={0.3} d={0.3} h={0.12} dessus="#F2C14E" gauche="#D9A441" droite="#C08E33" />
 
-      {/* Coin salon : lampadaire, canapé, table basse, fauteuil. */}
-      <Boite x={0.15} y={10.3} w={0.35} d={3.0} h={0.95} dessus={pal.canapeG} gauche={pal.canapeG} droite={pal.canapeD} />
-      <Boite x={0.15} y={10.3} w={1.0} d={0.28} h={0.62} dessus={pal.canape} gauche={pal.canapeG} droite={pal.canapeD} />
-      <Boite x={0.5} y={10.58} w={0.65} d={2.44} h={0.42} dessus={pal.canape} gauche={pal.canapeG} droite={pal.canapeD} />
-      <Boite x={0.55} y={11.0} z={0.42} w={0.22} d={0.5} h={0.3} dessus="#F2C14E" gauche="#D9A441" droite="#C08E33" />
-      <Boite x={0.55} y={12.2} z={0.42} w={0.22} d={0.5} h={0.3} dessus="#E36F51" gauche="#C95A3F" droite="#B14D35" />
-      <Boite x={0.15} y={13.02} w={1.0} d={0.28} h={0.62} dessus={pal.canape} gauche={pal.canapeG} droite={pal.canapeD} />
-      <Boite x={1.9} y={11.2} w={1.0} d={1.0} h={0.36} dessus={pal.bois} gauche={pal.boisG} droite={pal.boisD} />
-      <Boite x={2.15} y={11.45} z={0.36} w={0.35} d={0.25} h={0.08} dessus="#5B8CFF" gauche="#4A73D6" droite="#3F63BA" />
-      <Boite x={3.2} y={11.0} w={0.8} d={0.85} h={0.4} dessus="#D9A441" gauche="#C08E33" droite="#A87A2B" />
-      <Boite x={3.75} y={11.0} w={0.25} d={0.85} h={0.85} dessus="#C08E33" gauche="#C08E33" droite="#A87A2B" />
-      <g>
-        <line x1={iso(0.5, 9.75).x} y1={iso(0.5, 9.75).y} x2={iso(0.5, 9.75, 1.7).x} y2={iso(0.5, 9.75, 1.7).y} stroke={pal.metalD} strokeWidth={2} />
-        <ellipse cx={iso(0.5, 9.75).x} cy={iso(0.5, 9.75).y} rx={7} ry={3} fill={pal.metalD} />
-        <path d={`M${iso(0.5, 9.75, 1.7).x - 9},${iso(0.5, 9.75, 1.7).y + 2} L${iso(0.5, 9.75, 1.7).x + 9},${iso(0.5, 9.75, 1.7).y + 2} L${iso(0.5, 9.75, 1.7).x + 6},${iso(0.5, 9.75, 1.7).y - 12} L${iso(0.5, 9.75, 1.7).x - 6},${iso(0.5, 9.75, 1.7).y - 12} Z`} fill={n ? '#FFD58A' : '#F1E7D3'} />
-        {n ? <circle cx={iso(0.5, 9.75, 1.6).x} cy={iso(0.5, 9.75, 1.6).y + 8} r={26} fill="url(#co-flaque)" /> : null}
-      </g>
+      {/* Salle d'attente : banquette le long du mur, fontaine à eau. */}
+      <Boite x={0.15} y={11.3} w={0.35} d={2.45} h={0.95} dessus={pal.canapeG} gauche={pal.canapeG} droite={pal.canapeD} />
+      <Boite x={0.15} y={11.05} w={1.0} d={0.25} h={0.62} dessus={pal.canape} gauche={pal.canapeG} droite={pal.canapeD} />
+      <Boite x={0.5} y={11.3} w={0.65} d={2.45} h={0.42} dessus={pal.canape} gauche={pal.canapeG} droite={pal.canapeD} />
+      <Boite x={0.15} y={13.75} w={1.0} d={0.25} h={0.62} dessus={pal.canape} gauche={pal.canapeG} droite={pal.canapeD} />
+      <Plante x={0.5} y={10.6} pal={pal} taille={0.9} />
 
       {/* Plantes le long des murs. */}
-      <Plante x={4.55} y={4.95} pal={pal} taille={1.2} />
-      <Plante x={0.45} y={4.75} pal={pal} taille={1.1} />
-      <Plante x={0.6} y={13.55} pal={pal} taille={1.15} />
-      <Plante x={19.45} y={4.2} pal={pal} taille={1.0} />
+      <Plante x={4.55} y={0.45} pal={pal} taille={1.0} />
+      <Plante x={0.45} y={5.25} pal={pal} taille={1.1} />
+      <Plante x={12.75} y={0.55} pal={pal} taille={0.9} />
     </g>
   );
 }
 
-/** Premier plan : plante d'angle et suspensions au-dessus des îlots. */
+/** Premier plan : suspensions au-dessus des zones et plante d'angle. */
 const PremierPlan = React.memo(function PremierPlan({ pal }: { pal: Palette }) {
-  const lampes: Array<[number, number]> = [...ILOTS_X.map(x0 => [x0 + 2, 7.75] as [number, number]), [2.1, 2.2], [17.6, 2.4]];
+  const lampes: Array<[number, number]> = [...ILOTS_ATELIER.map(x0 => [x0 + LARGEUR_BUREAU, 7.75] as [number, number]), [2.3, 2.2], [8.75, 2.6], [17.9, 2.2], [17.5, 7.9], [9.7, 12.0]];
   return (
     <g>
-      <Plante x={19.35} y={13.3} pal={pal} taille={1.35} />
+      <Plante x={19.55} y={13.6} pal={pal} taille={1.2} />
       {lampes.map(([x, y]) => {
         const p = iso(x, y, 5.1);
         return (
@@ -369,7 +387,7 @@ const PremierPlan = React.memo(function PremierPlan({ pal }: { pal: Palette }) {
   );
 });
 
-// ------------------------------------------------------------------ postes
+// ------------------------------------------------------------------ écrans
 
 function Ecran({ x0, x1, z0, z1, activite, fige, cle }: { x0: number; x1: number; z0: number; z1: number; activite: Activite | 'vide'; fige: boolean; cle: string }) {
   const w = x1 - x0;
@@ -467,6 +485,14 @@ function Ecran({ x0, x1, z0, z1, activite, fige, cle }: { x0: number; x1: number
           <polyline points={`${x0 + w / 2 - 0.13},${z0 + h / 2} ${x0 + w / 2 - 0.03},${z0 + h / 2 - 0.1} ${x0 + w / 2 + 0.16},${z0 + h / 2 + 0.14}`} fill="none" stroke="#3BE38B" strokeWidth={0.05} strokeLinecap="round" />
         </g>
       );
+    case 'attend':
+      return (
+        <g>
+          <rect x={x0} y={z0} width={w} height={h} fill="#3A1216" />
+          <rect x={x0 + w / 2 - 0.03} y={z0 + h * 0.4} width={0.06} height={h * 0.38} fill="#FF6B6B" className="co-curseur" />
+          <rect x={x0 + w / 2 - 0.03} y={z0 + h * 0.2} width={0.06} height={0.06} fill="#FF6B6B" className="co-curseur" />
+        </g>
+      );
     default:
       return (
         <g>
@@ -480,37 +506,40 @@ function Ecran({ x0, x1, z0, z1, activite, fige, cle }: { x0: number; x1: number
   }
 }
 
+// ------------------------------------------------------------------ postes (bureaux à écran)
+
 const OBJETS_BUREAU = ['tasse', 'plante', 'papiers', 'cadre', 'lampe', 'rien'] as const;
 
-const PosteDessin = React.memo(function PosteDessin({ poste, pal, activite, fige, occupe }: { poste: Poste; pal: Palette; activite: Activite | 'vide'; fige: boolean; occupe: boolean }) {
-  const { x, y, w, d } = poste.bureau;
-  const xc = poste.siege.x;
-  const fond = poste.rangee === 0;
+/** Bureau d'une place « bureau » : devant elle, dans la direction de son regard. */
+export function bureauDe(p: Place): { x: number; y: number; w: number; d: number } {
+  return p.regard.y > 0 ? { x: p.pos.x - LARGEUR_BUREAU / 2, y: p.pos.y + 0.6, w: LARGEUR_BUREAU, d: 1 } : { x: p.pos.x - LARGEUR_BUREAU / 2, y: p.pos.y - 1.6, w: LARGEUR_BUREAU, d: 1 };
+}
+
+const PosteDessin = React.memo(function PosteDessin({ place, pal, activite, fige, occupe }: { place: Place; pal: Palette; activite: Activite | 'vide'; fige: boolean; occupe: boolean }) {
+  const { x, y, w, d } = bureauDe(place);
+  const xc = place.pos.x;
+  const fond = place.regard.y > 0;
   const allume = activite !== 'vide' && activite !== 'fini' && !fige;
   const teinte = activite === 'vide' ? '#8E95A8' : TEINTES_ACTIVITE[activite];
-  const objet = OBJETS_BUREAU[hacher(`poste${poste.index}`) % OBJETS_BUREAU.length];
+  const objet = place.zone === 'machines' ? 'rien' : OBJETS_BUREAU[hacher(`poste${place.index}`) % OBJETS_BUREAU.length];
   const coin = iso(fond ? x + 0.35 : x + w - 0.35, fond ? y + 0.35 : y + 0.65, 0.75);
   const clavierY = fond ? y + 0.15 : y + d - 0.38;
   const yEcran = fond ? y + d - 0.22 : y + 0.22;
   const led = iso(x + w - 0.08, y + d - 0.02, 0.6);
   return (
     <g>
-      {/* Pieds et plateau. */}
       <Boite x={x + 0.08} y={y + 0.1} w={0.07} d={d - 0.2} h={0.69} dessus={pal.pied} gauche={pal.pied} droite={pal.metalD} />
       <Boite x={x + w - 0.15} y={y + 0.1} w={0.07} d={d - 0.2} h={0.69} dessus={pal.pied} gauche={pal.pied} droite={pal.metalD} />
       <Boite x={x + 0.02} y={y} z={0.69} w={w - 0.04} d={d} h={0.06} dessus={pal.bureau} gauche={pal.bureauG} droite={pal.bureauD} />
-      {/* Halo de l'écran sur le plateau (plus visible la nuit). */}
       {allume ? (
         <g transform={sol(0.76)}>
-          <ellipse cx={xc} cy={fond ? y + 0.5 : y + 0.5} rx={0.9} ry={0.5} fill="url(#co-halo)" opacity={pal.nuit ? 0.9 : 0.35} />
+          <ellipse cx={xc} cy={y + 0.5} rx={0.9} ry={0.5} fill="url(#co-halo)" opacity={pal.nuit ? 0.9 : 0.35} />
         </g>
       ) : null}
-      {/* Clavier et souris. */}
       <g transform={sol(0.76)}>
         <rect x={xc - 0.36} y={clavierY} width={0.62} height={0.2} rx={0.03} fill={pal.nuit ? '#4A5064' : '#D5D9E0'} />
         <rect x={xc + 0.36} y={clavierY + 0.03} width={0.1} height={0.14} rx={0.05} fill={pal.nuit ? '#4A5064' : '#D5D9E0'} />
       </g>
-      {/* Écran : de dos pour la rangée du fond (liseré coloré), de face pour celle de devant. */}
       <Boite x={xc - 0.14} y={yEcran - 0.1} z={0.75} w={0.28} d={0.2} h={0.02} dessus={pal.cadre} gauche={pal.cadre} droite={pal.cadre} />
       <g transform={planY(yEcran)}>
         <rect x={xc - 0.04} y={0.75} width={0.08} height={0.22} fill={pal.cadre} />
@@ -523,18 +552,16 @@ const PosteDessin = React.memo(function PosteDessin({ poste, pal, activite, fige
         ) : (
           <g>
             <rect x={xc - 0.64} y={0.9} width={1.28} height={0.7} rx={0.03} fill={pal.cadre} />
-            <Ecran x0={xc - 0.58} x1={xc + 0.58} z0={0.95} z1={1.55} activite={activite} fige={fige} cle={`e${poste.index}`} />
+            <Ecran x0={xc - 0.58} x1={xc + 0.58} z0={0.95} z1={1.55} activite={activite} fige={fige} cle={`e${place.index}`} />
           </g>
         )}
       </g>
-      {/* Cloison acoustique entre les deux rangées. */}
       {fond ? (
         <g>
           <polygon points={pts([[x, y + d, 0.75], [x + w, y + d, 0.75], [x + w, y + d, 1.12], [x, y + d, 1.12]])} fill={pal.cloison} />
           <polygon points={pts([[x, y + d, 1.12], [x + w, y + d, 1.12], [x + w, y + d + 0.04, 1.12], [x, y + d + 0.04, 1.12]])} fill={pal.cloisonD} />
         </g>
       ) : null}
-      {/* Petit objet personnel. */}
       {objet === 'tasse' ? (
         <g transform={`translate(${r1(coin.x)} ${r1(coin.y)})`}>
           <rect x={-3.5} y={-8} width={7} height={8} rx={1.5} fill="#FFFFFF" />
@@ -566,26 +593,182 @@ const PosteDessin = React.memo(function PosteDessin({ poste, pal, activite, fige
           {pal.nuit && occupe ? <circle cx={5} cy={-6} r={10} fill="url(#co-flaque)" /> : null}
         </g>
       ) : null}
-      {/* Voyant d'état sur le chant du bureau. */}
       <circle cx={led.x} cy={led.y} r={2.3} fill={occupe ? teinte : pal.nuit ? '#3A3F4C' : '#C9CDD5'} className={allume ? 'co-led-actif' : undefined} />
     </g>
   );
 });
 
-const Chaise = React.memo(function Chaise({ poste, pal }: { poste: Poste; pal: Palette }) {
-  const fond = poste.rangee === 0;
-  const p = iso(poste.siege.x, poste.siege.y + (fond ? -0.28 : 0.28));
-  return (
-    <g transform={`translate(${r1(p.x)} ${r1(p.y)})`}>
-      <ellipse cx={0} cy={0} rx={11} ry={4.5} fill={pal.ombre} opacity={0.16} />
-      <path d="M-9,0 L9,0 M0,-4 L0,4 M-6,-3 L6,3 M-6,3 L6,-3" stroke={pal.chaise} strokeWidth={1.6} strokeLinecap="round" />
-      <rect x={-1.6} y={-13} width={3.2} height={13} fill={pal.metalD} />
-      <ellipse cx={0} cy={-14} rx={12} ry={5} fill={pal.assise} />
-      <rect x={-11} y={fond ? -38 : -34} width={22} height={fond ? 22 : 19} rx={5} fill={pal.chaise} />
-      <rect x={-9} y={fond ? -36 : -32} width={18} height={4} rx={2} fill={pal.assise} opacity={0.6} />
-    </g>
-  );
+/** Le siège d'une place (rien pour une place debout ou la banquette du mur). */
+const Siege = React.memo(function Siege({ place, pal }: { place: Place; pal: Palette }) {
+  const { pos, regard, genre } = place;
+  const dos = { x: pos.x - regard.x * 0.28, y: pos.y - regard.y * 0.28 };
+  if (genre === 'bureau' || genre === 'chaise') {
+    const p = iso(dos.x, dos.y);
+    const haut = regard.y > 0 || regard.x > 0;
+    return (
+      <g transform={`translate(${r1(p.x)} ${r1(p.y)})`}>
+        <ellipse cx={0} cy={0} rx={11} ry={4.5} fill={pal.ombre} opacity={0.16} />
+        <path d="M-9,0 L9,0 M0,-4 L0,4 M-6,-3 L6,3 M-6,3 L6,-3" stroke={pal.chaise} strokeWidth={1.6} strokeLinecap="round" />
+        <rect x={-1.6} y={-13} width={3.2} height={13} fill={pal.metalD} />
+        <ellipse cx={0} cy={-14} rx={12} ry={5} fill={pal.assise} />
+        <rect x={-11} y={haut ? -38 : -34} width={22} height={haut ? 22 : 19} rx={5} fill={pal.chaise} />
+        <rect x={-9} y={haut ? -36 : -32} width={18} height={4} rx={2} fill={pal.assise} opacity={0.6} />
+      </g>
+    );
+  }
+  if (genre === 'tabouret') {
+    const p = iso(pos.x, pos.y);
+    return (
+      <g transform={`translate(${r1(p.x)} ${r1(p.y)})`}>
+        <ellipse cx={0} cy={0} rx={9} ry={3.5} fill={pal.ombre} opacity={0.16} />
+        <rect x={-1.5} y={-22} width={3} height={22} fill={pal.metalD} />
+        <ellipse cx={0} cy={-23} rx={10} ry={4} fill={pal.bois} />
+      </g>
+    );
+  }
+  if (genre === 'pouf') {
+    const p = iso(pos.x, pos.y);
+    const c = ['#E9A97D', '#9CCBA8', '#B9A3E3', '#F2C14E'][place.index % 4];
+    return (
+      <g transform={`translate(${r1(p.x)} ${r1(p.y)})`}>
+        <ellipse cx={0} cy={0} rx={15} ry={6.5} fill={pal.ombre} opacity={0.16} />
+        <path d="M-14,-2 L-14,-11 Q0,-17 14,-11 L14,-2 Q0,4 -14,-2 Z" fill={fonce(c, pal.nuit ? 0.6 : 0.85)} />
+        <ellipse cx={0} cy={-11} rx={14} ry={5.5} fill={pal.nuit ? fonce(c, 0.75) : c} />
+      </g>
+    );
+  }
+  if (genre === 'fauteuil') {
+    const bx = regard.x > 0 ? pos.x - 0.46 : regard.x < 0 ? pos.x + 0.3 : pos.x - 0.38;
+    const by = regard.y > 0 ? pos.y - 0.46 : regard.y < 0 ? pos.y + 0.3 : pos.y - 0.38;
+    const lateral = regard.x !== 0;
+    return (
+      <g>
+        <Boite x={pos.x - 0.38} y={pos.y - 0.38} w={0.76} d={0.76} h={0.4} dessus={pal.canape} gauche={pal.canapeG} droite={pal.canapeD} />
+        <Boite x={bx} y={by} w={lateral ? 0.16 : 0.76} d={lateral ? 0.76 : 0.16} h={0.85} dessus={pal.canapeG} gauche={pal.canapeG} droite={pal.canapeD} />
+      </g>
+    );
+  }
+  return null;
 });
+
+interface Meuble {
+  cle: string;
+  profondeur: number;
+  rendu: React.ReactNode;
+}
+
+/** Mobilier qui se trie avec les personnages (on passe devant ou derrière). */
+function meublesTries(pal: Palette, guichetActif: boolean, machinesActives: boolean): Meuble[] {
+  const m: Meuble[] = [];
+  const boite = (cle: string, b: { x: number; y: number; z?: number; w: number; d: number; h: number }, couleurs: [string, string, string], extra?: React.ReactNode) => m.push({
+    cle,
+    profondeur: b.x + b.w / 2 + b.y + b.d / 2,
+    rendu: <g key={cle}><Boite {...b} dessus={couleurs[0]} gauche={couleurs[1]} droite={couleurs[2]} />{extra}</g>,
+  });
+  const bois: [string, string, string] = [pal.bois, pal.boisG, pal.boisD];
+  const metal: [string, string, string] = [pal.metal, pal.metalG, pal.metalD];
+  // Réunion : table et parois vitrées (devant ceux qui sont dedans).
+  boite('table-reunion', { x: 1.0, y: 1.45, w: 2.6, d: 1.5, h: 0.72 }, bois, <Boite x={1.6} y={1.8} z={0.72} w={0.5} d={0.35} h={0.03} dessus="#FFFFFF" gauche="#DDD" droite="#CCC" />);
+  m.push({
+    cle: 'vitres-reunion', profondeur: 6.55, rendu: (
+      <g key="vitres-reunion" opacity={pal.nuit ? 0.5 : 0.62} pointerEvents="none">
+        <polygon points={pts([[4.2, 0, 0], [4.2, 4.4, 0], [4.2, 4.4, 2.6], [4.2, 0, 2.6]])} fill={pal.vitre} opacity={0.32} />
+        <polygon points={pts([[0, 4.4, 0], [3.45, 4.4, 0], [3.45, 4.4, 2.6], [0, 4.4, 2.6]])} fill={pal.vitre} opacity={0.32} />
+        <polygon points={pts([[0, 4.4, 1.05], [3.45, 4.4, 1.05], [3.45, 4.4, 1.3], [0, 4.4, 1.3]])} fill={pal.vitreBord} opacity={0.55} />
+        <polygon points={pts([[4.2, 0, 1.05], [4.2, 4.4, 1.05], [4.2, 4.4, 1.3], [4.2, 0, 1.3]])} fill={pal.vitreBord} opacity={0.55} />
+        <polyline points={pts([[0, 4.4, 2.6], [4.2, 4.4, 2.6], [4.2, 0, 2.6]])} fill="none" stroke={pal.vitreBord} strokeWidth={2} />
+        <polyline points={pts([[3.45, 4.4, 0], [3.45, 4.4, 2.6]])} fill="none" stroke={pal.vitreBord} strokeWidth={2} />
+        <polyline points={pts([[4.2, 4.4, 0], [4.2, 4.4, 2.6]])} fill="none" stroke={pal.vitreBord} strokeWidth={2} />
+        <polyline points={pts([[4.2, 2.2, 0], [4.2, 2.2, 2.6]])} fill="none" stroke={pal.vitreBord} strokeWidth={1.2} />
+      </g>
+    ),
+  });
+  // Bibliothèque : deux tables de lecture avec livres ouverts.
+  for (const x of [5.8, 9.8]) {
+    boite(`table-lecture-${x}`, { x, y: 2.0, w: 1.8, d: 0.8, h: 0.72 }, bois, (
+      <g transform={sol(0.73)}>
+        <rect x={x + 0.25} y={2.25} width={0.42} height={0.3} fill="#FFFFFF" /><rect x={x + 0.46} y={2.25} width={0.01} height={0.3} fill="#9AA6B5" />
+        <rect x={x + 1.1} y={2.3} width={0.38} height={0.26} fill="#C0504D" />
+      </g>
+    ));
+  }
+  // Accueil : banque d'accueil, plante.
+  boite('banque-accueil', { x: 15.75, y: 0.9, w: 0.45, d: 2.2, h: 1.0 }, [pal.blanc, pal.blancG, ZONES.accueil.teinte]);
+  // Café web : mange-debout, globe sur pied.
+  boite('mange-debout', { x: 19.0, y: 2.6, w: 0.8, d: 0.7, h: 1.05 }, bois, <Boite x={19.15} y={2.75} z={1.05} w={0.45} d={0.3} h={0.02} dessus="#C9CED6" gauche="#AEB4BE" droite="#9AA2AE" />);
+  {
+    const p = iso(16.75, 3.25);
+    m.push({
+      cle: 'globe', profondeur: 16.75 + 3.25, rendu: (
+        <g key="globe" transform={`translate(${r1(p.x)} ${r1(p.y)})`}>
+          <ellipse cx={0} cy={0} rx={8} ry={3} fill={pal.metalD} />
+          <rect x={-1} y={-30} width={2} height={30} fill={pal.metalD} />
+          <g className="co-globe-salle"><circle cx={0} cy={-40} r={11} fill="#2E8FE0" /><ellipse cx={0} cy={-40} rx={5} ry={11} fill="none" stroke="#BFE0FF" strokeWidth={1.2} className="co-meridien" /><path d="M-8,-44 q4,-3 8,0 q3,3 7,1" fill="none" stroke="#7CD6A0" strokeWidth={2.2} /></g>
+        </g>
+      ),
+    });
+  }
+  // Salle des machines : baies serveurs (par tranches, pour passer derrière proprement).
+  for (let k = 0; k < 5; k++) {
+    const x = 15.6 + k * 0.82;
+    boite(`baie-${k}`, { x, y: 5.75, w: 0.78, d: 0.6, h: 2.0 }, ['#3A4150', '#2A303C', '#232833'], (
+      <g transform={planY(6.35)}>
+        {[0.3, 0.65, 1.0, 1.35, 1.7].map((z, r) => (
+          <g key={z}>
+            <rect x={x + 0.06} y={z} width={0.66} height={0.26} fill="#1B1F28" />
+            {[0, 1, 2].map(j => <circle key={j} cx={x + 0.14 + j * 0.09} cy={z + 0.13} r={0.025} fill={(k + r + j) % 3 === 0 ? '#F2C14E' : '#3BE38B'} className={machinesActives && (k + r + j) % 2 === 0 ? `co-led-actif co-l${(k + r + j) % 3}` : undefined} />)}
+          </g>
+        ))}
+      </g>
+    ));
+  }
+  // Salle d'attente : banquette face au mur (dossier devant ceux qui y sont assis), table basse, fontaine.
+  boite('banquette-assise', { x: 3.25, y: 11.65, w: 0.5, d: 1.85, h: 0.42 }, [pal.canape, pal.canapeG, pal.canapeD]);
+  boite('banquette-dossier', { x: 3.75, y: 11.65, w: 0.16, d: 1.85, h: 0.85 }, [pal.canapeG, pal.canapeG, pal.canapeD]);
+  boite('table-attente', { x: 2.05, y: 11.95, w: 0.4, d: 0.9, h: 0.35 }, bois, <Boite x={2.12} y={12.1} z={0.35} w={0.26} d={0.3} h={0.04} dessus="#F2C14E" gauche="#D9A441" droite="#C08E33" />);
+  boite('fontaine', { x: 5.15, y: 11.25, w: 0.42, d: 0.42, h: 0.95 }, [pal.blanc, pal.blancG, pal.blancD], <Boite x={5.2} y={11.3} z={0.95} w={0.32} d={0.32} h={0.4} dessus="#BFE3FF" gauche="#9CC7FF" droite="#86B5EF" />);
+  // Guichet « Attend ta réponse » : comptoir par tranches, sonnette, gyrophare.
+  for (let k = 0; k < 6; k++) {
+    const x = 6.8 + k * 0.97;
+    boite(`guichet-${k}`, { x, y: 12.9, w: 0.95, d: 0.6, h: 1.05 }, [pal.blanc, pal.blancG, fonce(ZONES.guichet.teinte, pal.nuit ? 0.7 : 0.95)], k === 3 ? (
+      (() => {
+        const s = iso(x + 0.45, 13.15, 1.05);
+        return <g transform={`translate(${r1(s.x)} ${r1(s.y)})`}><ellipse cx={0} cy={0} rx={6} ry={2.4} fill="#7A5A1E" /><path d="M-5,-1 Q0,-10 5,-1 Z" fill="#F2C14E" /><circle cx={0} cy={-8} r={1.4} fill="#7A5A1E" /></g>;
+      })()
+    ) : null);
+  }
+  {
+    const g = iso(12.45, 13.2, 1.05);
+    m.push({
+      cle: 'gyrophare', profondeur: 12.45 + 13.25, rendu: (
+        <g key="gyrophare" transform={`translate(${r1(g.x)} ${r1(g.y)})`}>
+          <rect x={-1.2} y={-26} width={2.4} height={26} fill={pal.metalD} />
+          {guichetActif ? <circle cx={0} cy={-31} r={22} fill="url(#co-alerte)" className="co-gyro" /> : null}
+          <path d="M-6,-26 L-5,-35 Q0,-39 5,-35 L6,-26 Z" fill={guichetActif ? '#FF4D4F' : '#8E5A5A'} className={guichetActif ? 'co-gyro' : undefined} />
+        </g>
+      ),
+    });
+  }
+  // Détente : table basse, machine à café fumante.
+  boite('table-detente', { x: 15.55, y: 11.95, w: 0.65, d: 0.55, h: 0.35 }, bois);
+  boite('comptoir-cafe', { x: 19.1, y: 11.4, w: 0.8, d: 1.9, h: 1.0 }, bois, (
+    <g>
+      <Boite x={19.25} y={11.9} z={1.0} w={0.5} d={0.45} h={0.55} dessus="#3A3F4A" gauche="#2A2E37" droite="#22262E" />
+      <g className="co-vapeur-cafe">{[0, 1].map(k => { const p = iso(19.2, 12.15, 1.2); return <ellipse key={k} cx={p.x - 1 + k * 3} cy={p.y - 6} rx={2} ry={3.5} fill="#FFFFFF" opacity={0.5} className={`co-vapeur co-v${k}`} />; })}</g>
+    </g>
+  ));
+  // Plantes libres.
+  for (const [x, y, k] of [[0.7, 9.4, 1.0], [3.7, 5.95, 0.9], [13.25, 9.4, 0.9], [5.6, 13.6, 0.95], [13.6, 13.55, 1.0], [12.7, 11.4, 0.85]] as const) {
+    m.push({ cle: `plante-${x}-${y}`, profondeur: x + y, rendu: <Plante key={`plante-${x}-${y}`} x={x} y={y} pal={pal} taille={k} /> });
+  }
+  // Sièges des places.
+  for (const p of PLACES) {
+    if (p.genre === 'debout' || (p.genre === 'canape' && p.zone === 'salle')) continue;
+    const dos = { x: p.pos.x - p.regard.x * 0.28, y: p.pos.y - p.regard.y * 0.28 };
+    m.push({ cle: `siege-${p.index}`, profondeur: p.genre === 'pouf' || p.genre === 'tabouret' ? p.pos.x + p.pos.y - 0.01 : dos.x + dos.y, rendu: <Siege key={`siege-${p.index}`} place={p} pal={pal} /> });
+  }
+  return m;
+}
 
 // ------------------------------------------------------------------ personnages
 
@@ -672,35 +855,41 @@ function Accessoire({ ap, vue }: { ap: Apparence; vue: 'face' | 'dos' }) {
   }
 }
 
-type ModePerso = 'assis' | 'marche' | 'range' | 'fete';
+type Jambes = 'cachees' | 'assises' | 'debout';
 
 /** Un personnage (pieds en 0,0 ; regarde vers la droite-bas en vue de face, la droite-haut de dos). */
-const Personnage = React.memo(function Personnage({ ap, vue, mode, activite, carton }: { ap: Apparence; vue: 'face' | 'dos'; mode: ModePerso; activite: Activite; carton: boolean }) {
+const Personnage = React.memo(function Personnage({ ap, vue, mode, activite, carton, jambes }: { ap: Apparence; vue: 'face' | 'dos'; mode: ModePose; activite: Activite; carton: boolean; jambes: Jambes }) {
   const manche = fonce(ap.haut, 0.85);
-  const assis = mode !== 'marche';
-  // Bras : épaule → main, selon la pose.
-  const pose = mode === 'fete' ? 'fete' : carton || mode === 'range' ? 'carton' : mode === 'marche' ? 'marche' : activite === 'pense' ? 'pense' : activite === 'pause' ? 'pause' : 'clavier';
+  const pose = mode === 'fete' ? 'fete' : carton || mode === 'range' ? 'carton' : mode === 'marche' ? 'marche' : activite === 'attend' ? 'main' : activite === 'pense' ? 'pense' : activite === 'pause' ? 'pause' : activite === 'fini' ? 'repos' : jambes === 'cachees' ? 'clavier' : 'repos';
   const brasG = pose === 'fete' ? 'M-9,-31 L-13,-40 L-14,-48' : pose === 'carton' ? 'M-9,-31 L-11,-24 L-8,-21' : pose === 'clavier' ? 'M-9,-31 L-11,-23 L-6,-19' : 'M-9,-31 L-11,-24 L-11,-17';
-  const brasD = pose === 'fete' ? 'M9,-31 L13,-40 L14,-48' : pose === 'carton' ? 'M9,-31 L11,-24 L8,-21' : pose === 'pense' ? 'M9,-31 L12,-24 L7,-35' : pose === 'pause' ? 'M9,-31 L11,-24 L6,-27' : pose === 'clavier' ? 'M9,-31 L11,-23 L6,-19' : 'M9,-31 L11,-24 L11,-17';
+  const brasD = pose === 'fete' ? 'M9,-31 L13,-40 L14,-48'
+    : pose === 'main' ? 'M9,-31 L13,-42 L14,-55'
+      : pose === 'carton' ? 'M9,-31 L11,-24 L8,-21'
+        : pose === 'pense' ? 'M9,-31 L12,-24 L7,-35'
+          : pose === 'pause' ? 'M9,-31 L11,-24 L6,-27'
+            : pose === 'clavier' ? 'M9,-31 L11,-23 L6,-19' : 'M9,-31 L11,-24 L11,-17';
   const fin = (d: string) => d.split(' ').pop()!.replace('L', '').split(',').map(Number) as [number, number];
   const [hgx, hgy] = fin(brasG);
   const [hdx, hdy] = fin(brasD);
-  const classeMode = `co-m-${mode} co-a-${activite}`;
   return (
-    <g className={classeMode}>
+    <g className={`co-m-${mode} co-a-${activite} co-p-${pose}`}>
       <ellipse cx={0} cy={0} rx={11} ry={4.2} fill="#000" opacity={0.16} />
-      {!assis ? (
+      {jambes === 'debout' || mode === 'marche' ? (
         <g>
           <g className="co-jg"><rect x={-7} y={-16} width={6} height={16} rx={2.5} fill={ap.pantalon} /><ellipse cx={-4} cy={-0.5} rx={4} ry={2} fill="#2A2A30" /></g>
           <g className="co-jd"><rect x={1} y={-16} width={6} height={16} rx={2.5} fill={ap.pantalon} /><ellipse cx={4} cy={-0.5} rx={4} ry={2} fill="#2A2A30" /></g>
         </g>
+      ) : jambes === 'assises' ? (
+        <g>
+          <rect x={-8} y={-16} width={7} height={13} rx={3} fill={ap.pantalon} transform={vue === 'face' ? 'skewY(18)' : 'skewY(-18)'} />
+          <rect x={1} y={-16} width={7} height={13} rx={3} fill={ap.pantalon} transform={vue === 'face' ? 'skewY(18)' : 'skewY(-18)'} />
+          <ellipse cx={-4} cy={vue === 'face' ? -2 : -6} rx={4} ry={2} fill="#2A2A30" />
+          <ellipse cx={5} cy={vue === 'face' ? 1 : -9} rx={4} ry={2} fill="#2A2A30" />
+        </g>
       ) : null}
       <g className="co-corps">
-        {vue === 'dos' && ap.coupe === 'longue' ? null : null}
-        {/* Buste. */}
         <path d="M-10,-14 L-10,-28 Q-10,-34 -4,-34 L4,-34 Q10,-34 10,-28 L10,-14 Q0,-11 -10,-14 Z" fill={ap.haut} />
         {vue === 'face' ? <path d="M-3,-34 L0,-30 L3,-34 Z" fill="#FFFFFF" opacity={0.85} /> : <rect x={-4} y={-34.5} width={8} height={3} rx={1.5} fill={manche} />}
-        {/* Bras. */}
         <g className="co-bg">
           <path d={brasG} fill="none" stroke={manche} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />
           <circle cx={hgx} cy={hgy} r={2.6} fill={ap.peau} />
@@ -715,7 +904,7 @@ const Personnage = React.memo(function Personnage({ ap, vue, mode, activite, car
         ) : null}
         <g className={pose === 'pause' ? 'co-bd co-tasse-main' : 'co-bd'}>
           <path d={brasD} fill="none" stroke={manche} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx={hdx} cy={hdy} r={2.6} fill={ap.peau} />
+          <circle cx={hdx} cy={hdy} r={pose === 'main' ? 3.4 : 2.6} fill={ap.peau} />
           {pose === 'pause' ? (
             <g>
               <rect x={hdx - 1} y={hdy - 7} width={7} height={8} rx={1.5} fill="#FFFFFF" />
@@ -727,7 +916,6 @@ const Personnage = React.memo(function Personnage({ ap, vue, mode, activite, car
             </g>
           ) : null}
         </g>
-        {/* Tête. */}
         <g className="co-tete">
           {ap.coupe === 'longue' && vue === 'dos' ? <path d="M-12,-45 L-12,-29 Q0,-26 12,-29 L12,-45 Z" fill={ap.cheveux} /> : null}
           <rect x={-3} y={-36} width={6} height={4} fill={fonce(ap.peau, 0.9)} />
@@ -742,7 +930,7 @@ const Personnage = React.memo(function Personnage({ ap, vue, mode, activite, car
               </g>
               <ellipse cx={0.5} cy={-38.8} rx={2} ry={1.1} fill="#F08C8C" opacity={0.45} />
               <ellipse cx={10} cy={-38.8} rx={1.6} ry={1.1} fill="#F08C8C" opacity={0.45} />
-              {mode === 'fete' ? <path d="M3.5,-38.5 q2.2,3 4.4,0 Z" fill="#7A2E2E" /> : <path d="M3.8,-38 q1.8,1.6 3.6,0" fill="none" stroke="#7A3B3B" strokeWidth={1} strokeLinecap="round" />}
+              {mode === 'fete' || activite === 'fini' ? <path d="M3.5,-38.5 q2.2,3 4.4,0 Z" fill="#7A2E2E" /> : activite === 'attend' ? <ellipse cx={5.6} cy={-37.6} rx={1.4} ry={1.6} fill="#7A2E2E" /> : <path d="M3.8,-38 q1.8,1.6 3.6,0" fill="none" stroke="#7A3B3B" strokeWidth={1} strokeLinecap="round" />}
             </g>
           ) : (
             <g>
@@ -767,9 +955,12 @@ const Personnage = React.memo(function Personnage({ ap, vue, mode, activite, car
       ) : null}
     </g>
   );
-}, (a, b) => a.vue === b.vue && a.mode === b.mode && a.activite === b.activite && a.carton === b.carton && JSON.stringify(a.ap) === JSON.stringify(b.ap));
+}, (a, b) => a.vue === b.vue && a.mode === b.mode && a.activite === b.activite && a.carton === b.carton && a.jambes === b.jambes && JSON.stringify(a.ap) === JSON.stringify(b.ap));
 
-// ------------------------------------------------------------------ bulles et badges
+// ------------------------------------------------------------------ bulles, badges, enseignes
+
+/** Largeur approximative d'un texte (police système), pour dimensionner bulles et enseignes. */
+const largeurTexte = (texte: string, taille: number, gras = false) => texte.length * taille * (gras ? 0.6 : 0.54);
 
 function couperLignes(texte: string, max: number, nb: number): string[] {
   const mots = texte.split(' ');
@@ -792,30 +983,32 @@ function couperLignes(texte: string, max: number, nb: number): string[] {
   return lignes.slice(0, nb);
 }
 
-function Bulle({ x, y, titre, texte, couleur, pal, grand }: { x: number; y: number; titre: string; texte: string; couleur: string; pal: Palette; grand: boolean }) {
-  const taille = grand ? 20 : 14;
-  const max = grand ? 22 : 30;
-  const lignes = couperLignes(texte, max, 3);
-  const largeur = Math.max(titre.length * taille * 0.6, ...lignes.map(l => l.length * taille * 0.53)) + 22;
-  const hauteur = (lignes.length + 1) * (taille + 4) + 14;
+function Bulle({ x, y, titre, texte, couleur, pal, grand, alerte }: { x: number; y: number; titre: string; texte: string; couleur: string; pal: Palette; grand: boolean; alerte?: boolean }) {
+  const taille = grand ? 21 : 19;
+  const max = grand ? 22 : 26;
+  const lignes = couperLignes(texte.replace(/\n/g, ' · '), max, 3);
+  const titreCourt = titre.length > max + 4 ? `${titre.slice(0, max + 3)}…` : titre;
+  const largeur = Math.max(largeurTexte(titreCourt, taille, true), ...lignes.map(l => largeurTexte(l, taille))) + 26;
+  const hauteur = (lignes.length + 1) * (taille + 5) + 14;
   const gauche = Math.max(8, Math.min(LARGEUR_SCENE - largeur - 8, x - largeur / 2));
   const haut = Math.max(6, y - hauteur - 12);
-  const queueX = Math.max(gauche + 12, Math.min(gauche + largeur - 12, x));
+  const queueX = Math.max(gauche + 14, Math.min(gauche + largeur - 14, x));
   return (
-    <g className="co-bulle" pointerEvents="none">
-      <rect x={gauche + 2} y={haut + 3} width={largeur} height={hauteur} rx={12} fill="#000" opacity={0.12} />
-      <path d={`M${queueX - 8},${haut + hauteur - 1} L${queueX},${haut + hauteur + 10} L${queueX + 8},${haut + hauteur - 1} Z`} fill={pal.bulle} />
-      <rect x={gauche} y={haut} width={largeur} height={hauteur} rx={12} fill={pal.bulle} stroke={couleur} strokeWidth={2} />
-      <text x={gauche + 11} y={haut + 8 + taille} fontSize={taille} fontWeight={700} fill={couleur}>{titre}</text>
+    <g className="co-bulle" pointerEvents="none" data-testid="scene-bulle">
+      <rect x={gauche + 2} y={haut + 3} width={largeur} height={hauteur} rx={12} fill="#000" opacity={0.14} />
+      <path d={`M${queueX - 8},${haut + hauteur - 1} L${queueX},${haut + hauteur + 10} L${queueX + 8},${haut + hauteur - 1} Z`} fill={pal.bulle} stroke={couleur} strokeWidth={2} />
+      <rect x={gauche} y={haut} width={largeur} height={hauteur} rx={12} fill={pal.bulle} stroke={couleur} strokeWidth={alerte ? 3 : 2} />
+      <rect x={queueX - 7} y={haut + hauteur - 3} width={14} height={4} fill={pal.bulle} />
+      <text x={gauche + 13} y={haut + 8 + taille} fontSize={taille} fontWeight={700} fill={fonce(couleur, pal.nuit ? 0.75 : 0.7)}>{titreCourt}</text>
       {lignes.map((l, k) => (
-        <text key={k} x={gauche + 11} y={haut + 8 + taille + (k + 1) * (taille + 4)} fontSize={taille} fill={pal.bulleTexte}>{l}</text>
+        <text key={k} x={gauche + 13} y={haut + 8 + taille + (k + 1) * (taille + 5)} fontSize={taille} fill={pal.bulleTexte}>{l}</text>
       ))}
     </g>
   );
 }
 
 function Badge({ x, y, activite, pal, fige, grand }: { x: number; y: number; activite: Activite; pal: Palette; fige: boolean; grand: boolean }) {
-  const k = grand ? 1.3 : 1;
+  const k = grand ? 1.35 : 1.05;
   const c = fige ? '#8E95A8' : TEINTES_ACTIVITE[activite];
   if (activite === 'pense' && !fige) {
     return (
@@ -827,6 +1020,15 @@ function Badge({ x, y, activite, pal, fige, grand }: { x: number; y: number; act
       </g>
     );
   }
+  if (activite === 'attend' && !fige) {
+    return (
+      <g transform={`translate(${r1(x)} ${r1(y)}) scale(${k * 1.2})`} pointerEvents="none" data-testid="scene-attend">
+        <circle r={15} fill="#E5484D" opacity={0.25} className="co-pulse" />
+        <circle r={11} fill="#E5484D" stroke="#FFFFFF" strokeWidth={2} />
+        <text y={5} textAnchor="middle" fontSize={15} fontWeight={900} fill="#FFFFFF">!</text>
+      </g>
+    );
+  }
   return (
     <g transform={`translate(${r1(x)} ${r1(y)}) scale(${k})`} pointerEvents="none">
       <circle r={10.5} fill={pal.badge} stroke={c} strokeWidth={2.2} />
@@ -835,26 +1037,57 @@ function Badge({ x, y, activite, pal, fige, grand }: { x: number; y: number; act
   );
 }
 
+/** Où poser l'enseigne de chaque zone (écran) : au mur pour celles du fond, au sol devant les autres. */
+function ancreEnseigne(z: Zone): { x: number; y: number } {
+  const r = RECTS_ZONES[z];
+  const cx = (r.x0 + r.x1) / 2;
+  if (r.y0 === 0) return iso(z === 'accueil' ? 13.2 : cx, 0, 2.78);
+  if (z === 'reflexion') return iso(0, (r.y0 + r.y1) / 2, 2.78);
+  if (r.y1 >= PROFONDEUR_PIECE) { const p = iso(cx, PROFONDEUR_PIECE, -0.45); return { x: p.x, y: p.y + 22 }; }
+  return iso(cx, r.y1 + 0.2);
+}
+
+function Enseigne({ zone, nombre, sansPlace, pal, grand }: { zone: Zone; nombre: number; sansPlace: number; pal: Palette; grand: boolean }) {
+  const info = ZONES[zone];
+  const taille = grand ? 19 : 17;
+  const urgent = zone === 'guichet' && nombre > 0;
+  const texte = `${info.nom}${nombre ? ` · ${nombre}` : ''}${sansPlace ? ` (+${sansPlace} sans place)` : ''}`;
+  const largeur = largeurTexte(texte, taille, true) + taille * 2.2;
+  const hauteur = taille + 12;
+  const a = ancreEnseigne(zone);
+  const fond = urgent ? info.teinte : pal.badge;
+  return (
+    <g transform={`translate(${r1(a.x - largeur / 2)} ${r1(a.y - hauteur / 2)})`} pointerEvents="none" data-testid={`scene-zone-${zone}`} data-nombre={nombre} className={urgent ? 'co-enseigne-urgente' : undefined}>
+      <rect width={largeur} height={hauteur} rx={hauteur / 2} fill={fond} stroke={info.teinte} strokeWidth={2} opacity={0.96} />
+      <circle cx={hauteur / 2} cy={hauteur / 2} r={hauteur / 2 - 4} fill={urgent ? '#FFFFFF' : info.teinte} />
+      <text x={hauteur / 2} y={hauteur / 2 + taille * 0.34} textAnchor="middle" fontSize={taille * 0.8} fontWeight={800} fill={urgent ? info.teinte : '#FFFFFF'} fontFamily="ui-monospace, Menlo, monospace">{info.icone.slice(0, 2)}</text>
+      <text x={hauteur - 2} y={hauteur / 2 + taille * 0.36} fontSize={taille} fontWeight={700} fill={urgent ? '#FFFFFF' : pal.badgeTexte}>{texte}</text>
+    </g>
+  );
+}
+
 // ------------------------------------------------------------------ feuille de style
 
 const CSS = `
 .co-scene{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-.co-yeux,.co-tete,.co-bg,.co-bd,.co-ligne,.co-meridien,.co-progres,.co-engrenage,.co-feuillage,.co-confetti,.co-vapeur{transform-box:fill-box}
+.co-yeux,.co-tete,.co-bg,.co-bd,.co-ligne,.co-meridien,.co-progres,.co-engrenage,.co-feuillage,.co-confetti,.co-vapeur,.co-pulse,.co-repere{transform-box:fill-box}
 .co-clic{cursor:pointer}
 @keyframes co-tape{from{transform:translateY(0)}to{transform:translateY(-2px)}}
-.co-m-assis.co-a-code .co-bg{animation:co-tape .2s ease-in-out infinite alternate}
-.co-m-assis.co-a-code .co-bd{animation:co-tape .2s ease-in-out .1s infinite alternate}
+.co-p-clavier.co-a-code .co-bg{animation:co-tape .2s ease-in-out infinite alternate}
+.co-p-clavier.co-a-code .co-bd{animation:co-tape .2s ease-in-out .1s infinite alternate}
 @keyframes co-souris{0%,100%{transform:translate(0,0)}35%{transform:translate(1.5px,-1px)}70%{transform:translate(-1px,1px)}}
-.co-m-assis.co-a-terminal .co-bd,.co-m-assis.co-a-recherche .co-bd,.co-m-assis.co-a-lecture .co-bd,.co-m-assis.co-a-web .co-bd,.co-m-assis.co-a-agent .co-bd,.co-m-assis.co-a-outil .co-bd{animation:co-souris 1.4s ease-in-out infinite}
-.co-m-assis.co-a-terminal .co-bg{animation:co-tape .3s ease-in-out infinite alternate}
+.co-p-clavier .co-bd,.co-p-repos.co-a-lecture .co-bd,.co-p-repos.co-a-web .co-bd,.co-p-repos.co-a-recherche .co-bd{animation:co-souris 1.4s ease-in-out infinite}
+.co-p-clavier.co-a-terminal .co-bg{animation:co-tape .3s ease-in-out infinite alternate}
+@keyframes co-salut{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(10deg)}}
+.co-p-main .co-bd{transform-origin:20% 95%;animation:co-salut .9s ease-in-out infinite}
 @keyframes co-cligne{0%,93%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
 .co-yeux{transform-origin:center;animation:co-cligne 4.6s infinite}
 @keyframes co-penche{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(3deg)}}
 .co-a-pense .co-tete{transform-origin:50% 100%;animation:co-penche 3.4s ease-in-out infinite}
 @keyframes co-boit{0%,62%,100%{transform:translate(0,0)}70%,86%{transform:translate(-2px,-7px)}}
-.co-m-assis.co-a-pause .co-tasse-main{animation:co-boit 6.5s ease-in-out infinite}
+.co-p-pause .co-tasse-main{animation:co-boit 6.5s ease-in-out infinite}
 @keyframes co-etire{0%,80%,100%{transform:rotate(0)}85%,94%{transform:rotate(150deg)}}
-.co-m-assis.co-a-pause .co-bg{transform-origin:85% 5%;animation:co-etire 12s ease-in-out infinite}
+.co-p-pause .co-bg{transform-origin:85% 5%;animation:co-etire 12s ease-in-out infinite}
 @keyframes co-saut{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 .co-m-fete .co-corps{animation:co-saut .45s ease-in-out infinite}
 @keyframes co-pas{from{transform:translateY(0)}to{transform:translateY(-3px)}}
@@ -872,8 +1105,11 @@ const CSS = `
 .co-vapeur{animation:co-vap 2.2s ease-out infinite}
 .co-v1{animation-delay:.7s}.co-v2{animation-delay:1.4s}
 @keyframes co-clignote{0%,100%{opacity:1}50%{opacity:.3}}
-.co-led-actif{animation:co-clignote 1.3s ease-in-out infinite}
+.co-led-actif{animation:co-clignote 1.3s ease-in-out infinite}.co-l1{animation-delay:.4s}.co-l2{animation-delay:.8s}
 .co-curseur{animation:co-clignote .9s steps(2,start) infinite}
+.co-gyro{animation:co-clignote .8s ease-in-out infinite}
+@keyframes co-pulse{0%{transform:scale(.8);opacity:.6}100%{transform:scale(1.6);opacity:0}}
+.co-pulse{transform-origin:center;animation:co-pulse 1.4s ease-out infinite}
 @keyframes co-point{0%,100%{opacity:.25}40%{opacity:1}}
 .co-point{animation:co-point 1.2s infinite}.co-p1{animation-delay:.2s}.co-p2{animation-delay:.4s}
 @keyframes co-ecrire{0%{transform:scaleX(.05)}55%,100%{transform:scaleX(1)}}
@@ -898,13 +1134,18 @@ const CSS = `
 .co-nuages{animation:co-nuages 14s ease-in-out infinite alternate}
 @keyframes co-etoile{0%,100%{opacity:.9}50%{opacity:.25}}
 .co-etoile{animation:co-etoile 3s ease-in-out infinite}.co-e1{animation-delay:1s}.co-e2{animation-delay:2s}
-@keyframes co-anneau{0%,100%{opacity:.9}50%{opacity:.4}}
+@keyframes co-anneau{0%,100%{opacity:.95}50%{opacity:.45}}
 .co-anneau{animation:co-anneau 1.6s ease-in-out infinite}
+@keyframes co-repere{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+.co-repere{animation:co-repere 1.2s ease-in-out infinite}
 @keyframes co-feuillage{from{transform:rotate(-1.5deg)}to{transform:rotate(1.5deg)}}
 .co-feuillage{transform-origin:50% 100%;animation:co-feuillage 5s ease-in-out infinite alternate}
+@keyframes co-fondu{from{opacity:0}to{opacity:1}}
+.co-perso{transition:opacity .35s ease}
 .co-fixe *{animation:none!important}
 .co-gele *{animation-play-state:paused!important}
 @media (prefers-reduced-motion:reduce){.co-scene *{animation:none!important}}
+.co-scene .co-fondu.co-fondu{animation:co-fondu .45s ease-out both!important}
 `;
 
 // ------------------------------------------------------------------ scène
@@ -921,7 +1162,7 @@ const transformPerso = (x: number, y: number, miroir: boolean) => `translate(${r
 
 const maintenantSecondes = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
 
-export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChoisir, demo, texteAgrandi, maintenant, horloge, charge = true }: PropsScene) {
+export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChoisir, demo, texteAgrandi, maintenant, horloge, charge = true, estompes }: PropsScene) {
   const pal = useMemo(() => palette(theme.sombre), [theme.sombre]);
   const temps = horloge ?? maintenantSecondes;
   const etat = useRef(creerScene());
@@ -933,8 +1174,8 @@ export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChois
   const signature = signatureAgents(agents);
   const parCle = useMemo(() => new Map(agents.map(a => [a.cle, a])), [agents]);
 
-  // Réconciliation à chaque changement de la liste (ou du réglage d'animation),
-  // pendant le rendu : idempotente, gardée par la signature.
+  // Réconciliation à chaque changement de la liste (ou du réglage d'animation), pendant le rendu :
+  // idempotente, gardée par la signature.
   const derniere = useRef<string>(undefined);
   const cleReconciliation = `${signature}#${reduit}`;
   if (charge && derniere.current !== cleReconciliation) {
@@ -960,7 +1201,7 @@ export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChois
 
   // Boucle d'animation : seulement s'il y a des marcheurs ou des phases en cours.
   const ordre = useRef('');
-  const bouge = [...etat.current.occupants.values()].some(o => o.phase === 'attente' || o.phase === 'arrivee' || o.phase === 'depart' || o.phase === 'fete');
+  const bouge = [...etat.current.occupants.values()].some(o => o.phase === 'attente' || o.phase === 'marche' || o.phase === 'depart' || o.phase === 'fete');
   useEffect(() => {
     if (reduit || !visible || !bouge || typeof requestAnimationFrame === 'undefined') return undefined;
     let id = 0;
@@ -991,6 +1232,19 @@ export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChois
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduit, visible, bouge]);
 
+  // Changements de zone en attente (séjour minimal) : réexamen à l'échéance, même sans nouvel événement.
+  const echeance = prochaineEcheance(etat.current);
+  useEffect(() => {
+    if (!visible || echeance === undefined || bouge) return undefined;
+    const delai = Math.max(1, echeance - temps()) * 1000;
+    const minuterie = setTimeout(() => {
+      avancer(etat.current, temps(), !reduit);
+      rafraichir();
+    }, Math.min(Math.max(delai, 2_000), 30_000));
+    return () => clearTimeout(minuterie);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [echeance, visible, bouge, reduit]);
+
   // Bulle « vedette » qui passe d'un agent à l'autre quand aucun n'est choisi.
   useEffect(() => {
     if (reduit || !visible || choisi) return undefined;
@@ -1001,56 +1255,70 @@ export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChois
   const t = temps();
   const liste = poses(etat.current, t);
   const occupants = etat.current.occupants;
-  const parPoste = new Map([...occupants.values()].map(o => [o.poste, o]));
-  const assisAvecDemande = liste.filter(p => p.mode !== 'marche' && parCle.get(p.cle)?.demande);
-  const cleBulle = choisi ?? (assisAvecDemande.length ? assisAvecDemande[vedette % assisAvecDemande.length].cle : undefined);
+  const comptes = comptesZones(etat.current);
+  const grand = Boolean(texteAgrandi);
+  // Ceux qui attendent ta réponse passent d'abord ; sinon chacun son tour.
+  const installes = liste.filter(p => p.mode !== 'marche' && parCle.get(p.cle));
+  const attendent = installes.filter(p => parCle.get(p.cle)?.etat === 'attend');
+  const candidats = attendent.length ? attendent : installes.filter(p => parCle.get(p.cle)?.demande || parCle.get(p.cle)?.salle);
+  const cleBulle = choisi ?? (candidats.length ? candidats[vedette % candidats.length].cle : undefined);
   const fond = useMemo(() => <Fond pal={pal} maintenant={maintenant} />, [pal, Math.floor(maintenant / 60_000)]); // eslint-disable-line react-hooks/exhaustive-deps
+  const guichetActif = comptes.presents.guichet > 0;
+  const machinesActives = comptes.presents.machines > 0;
+  const meubles = useMemo(() => meublesTries(pal, guichetActif, machinesActives), [pal, guichetActif, machinesActives]);
   const choisir = useCallback((cle: string) => (e: React.MouseEvent) => { e.stopPropagation(); onChoisir(cle); }, [onChoisir]);
 
-  const elements: Element[] = [];
-  for (const poste of POSTES) {
-    const occ = parPoste.get(poste.index);
-    const agent = occ ? parCle.get(occ.cle) : undefined;
-    const assis = occ && (occ.phase === 'assis' || occ.phase === 'fete' || (occ.phase === 'depart' && occ.trajet && t < occ.trajet.debut));
-    const activite: Activite | 'vide' = !occ || !agent ? 'vide' : occ.phase === 'parti' ? 'fini' : assis ? activiteAgent(agent) : 'vide';
+  const elements: Element[] = [...meubles];
+  // Bureaux à écran (atelier, consoles des machines) : l'écran montre l'activité de qui y est installé.
+  const installeA = new Map<number, string>();
+  for (const p of liste) if (p.mode !== 'marche') installeA.set(p.place, p.cle);
+  for (const place of PLACES) {
+    if (place.genre !== 'bureau') continue;
+    const cle = installeA.get(place.index);
+    const agent = cle ? parCle.get(cle) : undefined;
+    const b = bureauDe(place);
     elements.push({
-      cle: `poste-${poste.index}`,
-      profondeur: poste.bureau.x + poste.bureau.w / 2 + poste.bureau.y + poste.bureau.d / 2,
+      cle: `poste-${place.index}`,
+      profondeur: b.x + b.w / 2 + b.y + b.d / 2,
       rendu: (
-        <g key={`poste-${poste.index}`} onClick={occ ? choisir(occ.cle) : undefined} className={occ ? 'co-clic' : undefined}>
-          <PosteDessin poste={poste} pal={pal} activite={activite} fige={Boolean(agent?.fige)} occupe={Boolean(assis)} />
+        <g key={`poste-${place.index}`} onClick={cle ? choisir(cle) : undefined} className={cle ? 'co-clic' : undefined}>
+          <PosteDessin place={place} pal={pal} activite={agent ? activiteAgent(agent) : 'vide'} fige={Boolean(agent?.fige)} occupe={Boolean(agent)} />
         </g>
       ),
     });
-    elements.push({
-      cle: `chaise-${poste.index}`,
-      profondeur: poste.siege.x + poste.siege.y + (poste.rangee === 0 ? -0.28 : 0.28),
-      rendu: <Chaise key={`chaise-${poste.index}`} poste={poste} pal={pal} />,
-    });
   }
+  const DEBOUT: ReadonlySet<ModePose> = new Set(['debout', 'marche', 'fete']);
   for (const p of liste) {
     const agent = parCle.get(p.cle);
     const occ = occupants.get(p.cle);
     if (!agent || !occ) continue;
+    const place = PLACES[p.place];
     const ap0 = apparence(agent);
     const ap = agent.fige ? griser(ap0) : ap0;
     const activite = activiteAgent(agent);
     const q = iso(p.x, p.y);
-    const carton = occ.fini && (p.mode === 'marche' || p.mode === 'range') && occ.phase === 'depart';
+    const carton = occ.partir && (p.mode === 'marche' || p.mode === 'range') && occ.phase === 'depart';
+    const jambes: Jambes = DEBOUT.has(p.mode) || (p.mode === 'range' && place.genre === 'debout') ? 'debout' : place.genre === 'bureau' || place.genre === 'chaise' || place.genre === 'tabouret' ? 'cachees' : 'assises';
+    const estompe = estompes?.has(p.cle);
+    const fondu = occ.teleporte !== undefined && t - occ.teleporte < 0.6;
     elements.push({
       cle: `perso-${p.cle}`,
-      profondeur: p.x + p.y,
+      profondeur: p.x + p.y + 0.001,
       rendu: (
         <g
-          key={`perso-${p.cle}`}
+          key={`perso-${p.cle}-${p.mode === 'marche' ? 'm' : p.place}`}
           ref={el => { if (el) refsPersos.current.set(p.cle, el); else refsPersos.current.delete(p.cle); }}
           transform={transformPerso(q.x, q.y, p.miroir)}
-          opacity={agent.fige ? 0.7 : r1(p.opacite)}
+          opacity={estompe ? 0.22 : agent.fige ? 0.7 : r1(p.opacite)}
           onClick={choisir(p.cle)}
-          className="co-clic"
+          className={`co-clic co-perso${fondu ? ' co-fondu' : ''}`}
+          data-cle={p.cle}
+          data-zone={p.zone}
+          data-mode={p.mode}
         >
-          {p.cle === choisi ? <ellipse cx={0} cy={0} rx={17} ry={7} fill="none" stroke={theme.accent} strokeWidth={2.5} className="co-anneau" /> : null}
-          <Personnage ap={ap} vue={p.vue} mode={agent.fige ? 'assis' : p.mode} activite={agent.fige ? 'pause' : activite} carton={carton} />
+          {p.cle === choisi ? <ellipse cx={0} cy={0} rx={18} ry={7.5} fill={theme.accent} opacity={0.25} /> : null}
+          {p.cle === choisi ? <ellipse cx={0} cy={0} rx={18} ry={7.5} fill="none" stroke={theme.accent} strokeWidth={2.8} className="co-anneau" /> : null}
+          <Personnage ap={ap} vue={p.vue} mode={agent.fige && p.mode !== 'marche' ? (jambes === 'debout' ? 'debout' : 'assis') : p.mode} activite={agent.fige ? 'pause' : activite} carton={carton} jambes={jambes} />
           {p.mode === 'assis' && activite === 'code' && !agent.fige ? (
             <g>
               {['{', ';', '}'].map((c, k) => (
@@ -1064,42 +1332,39 @@ export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChois
   }
   elements.sort((a, b) => a.profondeur - b.profondeur || (a.cle < b.cle ? -1 : 1));
 
-  // Badges (état de chacun) et bulle de la dernière demande, toujours au-dessus.
+  // Badges (état de chacun), repère de l'agent choisi et bulle, toujours au-dessus.
   const badges: React.ReactNode[] = [];
   let bulle: React.ReactNode = null;
-  const grand = Boolean(texteAgrandi);
+  let repere: React.ReactNode = null;
   for (const p of liste) {
     const agent = parCle.get(p.cle);
-    if (!agent || p.mode === 'marche') continue;
+    if (!agent) continue;
     const q = iso(p.x, p.y);
-    const haut = q.y - (p.mode === 'fete' ? 74 : 64) * K_PERSO;
+    const haut = q.y - (p.mode === 'fete' ? 74 : p.mode === 'assis' ? 62 : 70) * K_PERSO;
+    if (p.cle === choisi) {
+      repere = (
+        <g transform={`translate(${r1(q.x)} ${r1(haut - (grand ? 30 : 22))})`} pointerEvents="none" data-testid="scene-repere">
+          <g className="co-repere"><path d="M-9,-8 L9,-8 L0,4 Z" fill={theme.accent} stroke="#FFFFFF" strokeWidth={1.5} /></g>
+        </g>
+      );
+    }
+    if (p.mode === 'marche' || estompes?.has(p.cle)) continue;
     badges.push(<Badge key={p.cle} x={q.x + (p.miroir ? -1 : 1) * 19 * K_PERSO} y={haut + 8} activite={p.mode === 'fete' ? 'fini' : activiteAgent(agent)} pal={pal} fige={agent.fige} grand={grand} />);
     if (p.cle === cleBulle) {
+      const salle = agent.salle && agent.fin !== undefined;
+      const attend = agent.etat === 'attend';
       bulle = (
         <Bulle
           x={q.x}
-          y={haut - (grand ? 12 : 6)}
-          titre={`${agent.projet ?? 'Projet inconnu'}${agent.fige ? ' · figé' : ''}`}
-          texte={agent.demande ?? 'Pas encore de demande'}
-          couleur={apparence(agent).haut}
+          y={haut - (grand ? 14 : 8)}
+          titre={attend ? `${agent.projet ?? 'Projet'} · attend ta réponse` : salle ? `${agent.projet ?? 'Projet'} · terminé ${ilYA(agent.fin!, maintenant)}` : `${agent.projet ?? 'Projet inconnu'}${agent.fige ? ' · figé' : ''}`}
+          texte={attend ? agent.attente ?? 'Claude attend ta réponse' : salle ? resumerTexte(agent.recap ?? agent.demande, 160) ?? 'Tâche terminée' : agent.demande ?? 'Pas encore de demande'}
+          couleur={attend ? '#E5484D' : salle ? ZONES.salle.teinte : apparence(agent).haut}
           pal={pal}
           grand={grand}
+          alerte={attend}
         />
       );
-    }
-  }
-  // Postes d'agents terminés et partis : coche sur le bureau, bulle si on les choisit.
-  for (const occ of occupants.values()) {
-    if (occ.phase !== 'parti') continue;
-    const q = iso(POSTES[occ.poste].siege.x, POSTES[occ.poste].siege.y);
-    badges.push(<Badge key={`fini-${occ.cle}`} x={q.x} y={q.y - 46} activite="fini" pal={pal} fige={Boolean(parCle.get(occ.cle)?.fige)} grand={grand} />);
-  }
-  if (!bulle && choisi) {
-    const occ = occupants.get(choisi);
-    const agent = parCle.get(choisi);
-    if (occ && agent && occ.phase === 'parti') {
-      const q = iso(POSTES[occ.poste].siege.x, POSTES[occ.poste].siege.y);
-      bulle = <Bulle x={q.x} y={q.y - 40} titre={`${agent.projet ?? 'Projet inconnu'} · terminé`} texte={resumerTexte(agent.demande, 120) ?? 'Session terminée'} couleur={apparence(agent).haut} pal={pal} grand={grand} />;
     }
   }
   const attente = enAttente(etat.current);
@@ -1125,16 +1390,18 @@ export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChois
         {fond}
         <g>{elements.map(e => e.rendu)}</g>
         <PremierPlan pal={pal} />
+        <g>{ORDRE_ZONES.map(z => <Enseigne key={z} zone={z} nombre={comptes.presents[z]} sansPlace={comptes.sansPlace[z]} pal={pal} grand={grand} />)}</g>
         {attente ? (
-          <g transform={`translate(${r1(porte.x)} ${r1(porte.y - 8)})`} data-testid="scene-file-attente">
-            <rect x={-38} y={-14} width={76} height={20} rx={10} fill={pal.badge} stroke={TEINTES_ACTIVITE.pense} strokeWidth={1.5} />
-            <text y={1} textAnchor="middle" fontSize={11} fontWeight={700} fill={pal.badgeTexte}>{`${attente} à l’entrée`}</text>
+          <g transform={`translate(${r1(porte.x)} ${r1(porte.y - 30)})`} data-testid="scene-file-attente">
+            <rect x={-44} y={-14} width={88} height={22} rx={11} fill={pal.badge} stroke={TEINTES_ACTIVITE.pense} strokeWidth={1.5} />
+            <text y={2} textAnchor="middle" fontSize={13} fontWeight={700} fill={pal.badgeTexte}>{`${attente} à l’entrée`}</text>
           </g>
         ) : null}
         <g>{badges}</g>
+        {repere}
         {bulle}
         {demo ? (
-          <g transform="translate(700 14)" data-testid="scene-demo">
+          <g transform={`translate(${LARGEUR_SCENE - 180} 14)`} data-testid="scene-demo">
             <rect width={156} height={34} rx={17} fill="#E0803A" />
             <text x={78} y={23} textAnchor="middle" fontSize={16} fontWeight={800} fill="#FFFFFF" letterSpacing={1}>DÉMO</text>
           </g>

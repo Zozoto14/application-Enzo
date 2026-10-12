@@ -29,6 +29,8 @@ export interface PropsScene {
   texteAgrandi?: boolean;
   /** Horloge réelle (ms), pour la pendule murale. */
   maintenant: number;
+  /** Agents estompés (filtre par projet : « mettre en avant » un autre projet). */
+  estompes?: ReadonlySet<string>;
   /** Horloge de l'animation en secondes (tests) ; sinon performance.now(). */
   horloge?: () => number;
 }

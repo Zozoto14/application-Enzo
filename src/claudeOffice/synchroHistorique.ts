@@ -231,7 +231,9 @@ export function selectionnerPresence(entrees: readonly EntreeHistorique[], appar
   return recentes.slice(-MAX_ENTREES_PRESENCE).map(e => {
     const reste: EntreeHistorique = { ...e };
     delete reste.entree;
-    delete reste.sortie;
+    // La réponse résumée d'une fin de réponse sert à la salle d'attente (si « contenu des outils » est activé).
+    if (reste.type === 'fin-reponse' && reste.sortie) reste.sortie = reste.sortie.slice(0, 300);
+    else delete reste.sortie;
     delete reste.importe;
     return reste.texte && reste.texte.length > 500 ? { ...reste, texte: `${reste.texte.slice(0, 499)}…` } : reste;
   });

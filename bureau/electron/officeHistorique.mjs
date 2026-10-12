@@ -29,7 +29,7 @@
  * processus principal (lecture, suppression, import) et par les tests.
  */
 
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import {
   closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync,
   writeFileSync, writeSync, chmodSync,
@@ -58,7 +58,13 @@ export const REGLAGES_DEFAUT = Object.freeze({
 export const LIMITES = Object.freeze({ texte: 20_000, resume: 300, contenu: 2_000, entree: 64 * 1024 });
 
 /** Événements enregistrés par le hook d'historique (Claude Code). */
-export const EVENEMENTS_HISTORIQUE = ['UserPromptSubmit', 'PostToolUse', 'SessionStart', 'SessionEnd', 'Stop', 'SubagentStop'];
+export const EVENEMENTS_HISTORIQUE = ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'SessionStart', 'SessionEnd', 'Stop', 'SubagentStop', 'Notification', 'PermissionRequest'];
+
+/**
+ * Événements apparus avec la v3 du bureau (durée des outils, « attend ta réponse ») : un hook installé
+ * avant eux est « à mettre à jour » (il marche, sans ces informations).
+ */
+export const EVENEMENTS_V3 = ['PreToolUse', 'Notification', 'PermissionRequest'];
 
 export const TYPES = {
   UserPromptSubmit: 'demande',
@@ -70,7 +76,25 @@ export const TYPES = {
   Stop: 'fin-reponse',
   AfterAgent: 'fin-reponse',
   SubagentStop: 'fin-sous-agent',
+  Notification: 'attente',
+  PermissionRequest: 'attente',
 };
+
+/**
+ * Motif d'une attente : `permission` (Claude demande l'autorisation d'utiliser un outil) ou `question`
+ * (Claude pose une question). Les rappels « Claude attend votre saisie » (après une fin de réponse) et les
+ * messages techniques (connexion réussie…) ne sont pas des attentes : rien n'est noté.
+ */
+export function motifAttente(d) {
+  if (d.hook_event_name === 'PermissionRequest') return 'permission';
+  const genre = typeof d.notification_type === 'string' ? d.notification_type : '';
+  if (/permission/i.test(genre)) return 'permission';
+  if (/elicitation|question/i.test(genre)) return 'question';
+  if (genre) return undefined;
+  const message = typeof d.message === 'string' ? d.message : '';
+  if (/permission/i.test(message)) return 'permission';
+  return undefined;
+}
 
 // ----------------------------------------------------------------- chemins
 
@@ -264,6 +288,13 @@ export function construireEntree(charge, { reglages, source = 'claude', maintena
       entree.entree = couper(propre(enTexte(d.tool_input)), LIMITES.contenu);
       entree.sortie = couper(propre(enTexte(reponse)), LIMITES.contenu);
     }
+  } else if (type === 'attente') {
+    const motif = motifAttente(d);
+    if (!motif) return undefined;
+    entree.motif = motif;
+    if (d.tool_name) entree.outil = String(d.tool_name).slice(0, 100);
+    const message = typeof d.message === 'string' ? d.message : d.tool_name ? `Autoriser ${d.tool_name}${resumerOutil(d.tool_name, d.tool_input) ? ` (${resumerOutil(d.tool_name, d.tool_input)})` : ''} ?` : undefined;
+    entree.resume = couper(propre(message?.replace(/\s+/g, ' ').trim()), 200);
   } else if (type === 'debut-session' || type === 'fin-session') {
     const raison = d.source ?? d.reason;
     entree.resume = typeof raison === 'string' ? raison.slice(0, 60) : undefined;
@@ -370,10 +401,76 @@ export function enregistrerEvenement(charge, { env = process.env, maison = homed
   const dossier = dossierHistorique(env, maison);
   const reglages = lireReglages(dossier);
   if (!reglages.actif) return undefined;
+  const d = charge && typeof charge === 'object' ? charge : {};
+  // Début d'un outil : aucune ligne au journal, seulement un repère pour mesurer sa durée à la fin.
+  if (d.hook_event_name === 'PreToolUse') {
+    noterDebutOutil(dossier, d, maintenant);
+    return undefined;
+  }
   const entree = construireEntree(charge, { reglages, source, maintenant });
   if (!entree) return undefined;
+  if (entree.type === 'outil') {
+    const duree = dureeOutil(dossier, d, maintenant);
+    if (duree !== undefined) entree.duree = duree;
+  }
   ajouterEntree(dossier, entree, { reglages, maintenant });
   return entree;
+}
+
+// ---------------------------------------------------------------- durée des outils
+//
+// PreToolUse dépose un petit repère `en-cours/<empreinte>` (la date de début), PostToolUse le relit
+// et l'efface : la durée de l'outil est notée sur la ligne de fin, sans ligne de plus au journal.
+// Repères orphelins (outil refusé, Claude Code arrêté) effacés après un jour.
+
+export const DOSSIER_EN_COURS = 'en-cours';
+const DUREE_MAX_OUTIL_MS = 24 * 3_600_000;
+
+function repereOutil(dossier, d) {
+  const session = typeof d.session_id === 'string' ? d.session_id : '';
+  const cle = typeof d.tool_use_id === 'string' && d.tool_use_id ? d.tool_use_id : `${d.tool_name ?? ''}`;
+  if (!session && !cle) return undefined;
+  return join(dossier, DOSSIER_EN_COURS, createHash('sha256').update(`${session}|${cle}`).digest('hex').slice(0, 24));
+}
+
+export function noterDebutOutil(dossier, d, maintenant = new Date()) {
+  const fichier = repereOutil(dossier, d);
+  if (!fichier) return;
+  try {
+    creerDossier(join(dossier, DOSSIER_EN_COURS));
+    writeFileSync(fichier, String(maintenant.getTime()), { mode: 0o600 });
+    // De temps en temps, ménage des repères orphelins.
+    if (Math.random() < 0.02) {
+      for (const nom of readdirSync(join(dossier, DOSSIER_EN_COURS))) {
+        const chemin = join(dossier, DOSSIER_EN_COURS, nom);
+        if (maintenant.getTime() - tailleOuDate(chemin) > DUREE_MAX_OUTIL_MS) rmSync(chemin, { force: true });
+      }
+    }
+  } catch {
+    // Sans repère, pas de durée : rien de grave.
+  }
+}
+
+function tailleOuDate(chemin) {
+  try {
+    return statSync(chemin).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+/** Durée (ms) depuis le repère de début de cet outil, effacé au passage ; rien sans repère. */
+export function dureeOutil(dossier, d, maintenant = new Date()) {
+  const fichier = repereOutil(dossier, d);
+  if (!fichier) return undefined;
+  try {
+    const debut = Number(readFileSync(fichier, 'utf8'));
+    rmSync(fichier, { force: true });
+    const duree = maintenant.getTime() - debut;
+    return Number.isFinite(duree) && duree >= 0 && duree <= DUREE_MAX_OUTIL_MS ? duree : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // ---------------------------------------------------------------- lecture

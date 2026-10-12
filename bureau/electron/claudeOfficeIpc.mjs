@@ -19,7 +19,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 import {
-  adresseLocale, appliquerHooks, decrirePlan, dossierValide, lireReglagesOffice, planifierHistorique, planifierHooks, sonderServeur, trouverDossier,
+  adresseLocale, appliquerHooks, decrirePlan, dossierValide, etatHookHistorique, lireReglagesOffice, planifierHistorique, planifierHooks, sonderServeur, trouverDossier,
 } from './claudeOffice.mjs';
 import {
   compterSuppression, creerLecteur, dossierHistorique as dossierParDefaut, ecrireReglages, importerJournal, lireReglages, supprimerEntrees,
@@ -63,7 +63,7 @@ export function brancherClaudeOffice({ ipcMain, dialog, BrowserWindow, shell, fi
     }
     let historique;
     try {
-      historique = planifierHistorique({ racineProjet: await racineProjet() }).change ? 'absents' : 'installes';
+      historique = etatHookHistorique({ racineProjet: await racineProjet() });
     } catch {
       historique = 'illisibles';
     }
@@ -118,8 +118,9 @@ export function brancherClaudeOffice({ ipcMain, dialog, BrowserWindow, shell, fi
       while (debut > 0 && Date.parse(entrees[debut - 1].ts) >= depuis) debut--;
       const recentes = entrees.slice(Math.max(debut, entrees.length - MAX_ENTREES_ACTIVITE)).filter(e => !e.importe);
       const reglages = lireReglages(dossier);
-      // Jamais le contenu des outils ici : le bureau n'en a pas besoin.
-      const legeres = recentes.map(({ entree: _entree, sortie: _sortie, ...reste }) => reste);
+      // Jamais le contenu des outils ici : le bureau n'en a pas besoin. Seule exception, la réponse d'une fin de
+      // réponse (enregistrée seulement si « contenu des outils » est activé), résumée, pour la salle d'attente.
+      const legeres = recentes.map(({ entree: _entree, sortie, ...reste }) => (reste.type === 'fin-reponse' && typeof sortie === 'string' ? { ...reste, sortie: sortie.slice(0, 300) } : reste));
       return { ok: true, signature, entrees: legeres, appareilId: reglages.appareilId, appareil: reglages.appareil ?? null };
     } catch (erreur) {
       return { ok: false, erreur: erreur.message };

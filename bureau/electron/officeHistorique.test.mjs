@@ -9,7 +9,7 @@ import {
   ajouterEntree, analyserLignes, construireEntree, creerLecteur, dossierHistorique, ecrireReglages, enregistrerEvenement, fichierCourant,
   importerJournal, lireJournal, lireReglages, masquerSecrets, supprimerEntrees, compterSuppression, DEBUT_ENTREE,
 } from './officeHistorique.mjs';
-import { appliquerHooks, enchainerPlans, planifierHistorique, planifierHooks } from './claudeOffice.mjs';
+import { appliquerHooks, enchainerPlans, etatHookHistorique, planifierHistorique, planifierHooks } from './claudeOffice.mjs';
 
 const ici = dirname(fileURLToPath(import.meta.url));
 const racineProjet = join(ici, '..', '..');
@@ -279,7 +279,7 @@ test('hook d’historique dans settings.json : aperçu, sauvegarde, idempotent, 
     writeFileSync(reglages, JSON.stringify({ hooks: { PreToolUse: [tiers] } }));
     const plan = planifierHistorique({ racineProjet, fichier: reglages });
     assert.equal(plan.change, true);
-    assert.deepEqual(plan.ajouts.map(a => a.evenement), ['UserPromptSubmit', 'PostToolUse', 'SessionStart', 'SessionEnd', 'Stop', 'SubagentStop']);
+    assert.deepEqual(plan.ajouts.map(a => a.evenement), ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'SessionStart', 'SessionEnd', 'Stop', 'SubagentStop', 'Notification', 'PermissionRequest']);
     assert.match(plan.commande, /^node ".*\/scripts\/office-historique-hook\.mjs"$/);
     const { sauvegarde } = appliquerHooks(plan);
     assert.ok(sauvegarde && existsSync(sauvegarde));
@@ -297,6 +297,7 @@ test('hook d’historique dans settings.json : aperçu, sauvegarde, idempotent, 
     const json = JSON.parse(readFileSync(reglages, 'utf8'));
     assert.equal(json.hooks.UserPromptSubmit.length, 2);
     assert.deepEqual(json.hooks.PreToolUse[0], tiers);
+    assert.equal(json.hooks.PreToolUse.length, 3);
     // Retirer l'historique laisse Claude Office et le hook tiers.
     appliquerHooks(planifierHistorique({ racineProjet, fichier: reglages, desinstaller: true }));
     const apres = JSON.parse(readFileSync(reglages, 'utf8'));
@@ -429,4 +430,64 @@ test('pont du PC, onglet Bureau : activité récente, sans contenu d’outil, ri
 test('préchargement : le canal d’activité est en lecture seule et ne transmet qu’un texte court', () => {
   const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'prechargement.cjs'), 'utf8');
   assert.match(source, /activite: connu => ipcRenderer\.invoke\('claude-office:historique-activite', typeof connu === 'string' \? connu\.slice\(0, 200\) : ''\)/);
+});
+
+test('v3 : « attend ta réponse » (autorisation, question) noté, rappels d’inactivité ignorés ; durée des outils sans ligne de plus', () => {
+  const b = bac();
+  try {
+    const env = { OFFICE_HISTORIQUE_DIR: b.dossier };
+    const base = { session_id: 'sess-1', cwd: '/home/moi/projets/budget' };
+    const t = s => new Date(Date.parse('2026-10-07T09:00:00Z') + s * 1000);
+    // Début d'un outil : rien au journal, un repère ; à la fin : la durée.
+    assert.equal(enregistrerEvenement({ ...base, hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_use_id: 'toolu_1', tool_input: { command: 'npm test' } }, { env, maintenant: t(0) }), undefined);
+    assert.equal(lireJournal(b.dossier).entrees.length, 0);
+    const fin = enregistrerEvenement({ ...base, hook_event_name: 'PostToolUse', tool_name: 'Bash', tool_use_id: 'toolu_1', tool_input: { command: 'npm test' }, tool_response: {} }, { env, maintenant: t(7.5) });
+    assert.equal(fin.duree, 7_500);
+    assert.equal(readdirSync(join(b.dossier, 'en-cours')).length, 0);
+    // Sans repère (hook installé en cours de route) : pas de durée, aucune erreur.
+    assert.equal(enregistrerEvenement({ ...base, hook_event_name: 'PostToolUse', tool_name: 'Read', tool_use_id: 'toolu_2', tool_input: { file_path: '/a.ts' } }, { env, maintenant: t(9) }).duree, undefined);
+    // Autorisation demandée (PermissionRequest, Notification « permission_prompt ») : attente notée, secret masqué.
+    const perm = enregistrerEvenement({ ...base, hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'curl -H "Authorization: Bearer abcdefghijklmnopqrstuv" x' } }, { env, maintenant: t(10) });
+    assert.equal(perm.type, 'attente');
+    assert.equal(perm.motif, 'permission');
+    assert.equal(perm.outil, 'Bash');
+    assert.doesNotMatch(perm.resume, /abcdefghijklmnop/);
+    const notif = enregistrerEvenement({ ...base, hook_event_name: 'Notification', notification_type: 'permission_prompt', message: 'Claude needs your permission to use Bash' }, { env, maintenant: t(11) });
+    assert.equal(notif.motif, 'permission');
+    assert.equal(enregistrerEvenement({ ...base, hook_event_name: 'Notification', notification_type: 'elicitation_dialog', message: 'Quelle base ?' }, { env, maintenant: t(12) }).motif, 'question');
+    // Ancien Claude Code sans `notification_type` : reconnu au message.
+    assert.equal(enregistrerEvenement({ ...base, hook_event_name: 'Notification', message: 'Claude needs your permission to use Edit' }, { env, maintenant: t(13) }).motif, 'permission');
+    // « Claude attend votre saisie » (inactif) et messages techniques : rien.
+    assert.equal(enregistrerEvenement({ ...base, hook_event_name: 'Notification', notification_type: 'idle_prompt', message: 'Claude is waiting for your input' }, { env, maintenant: t(14) }), undefined);
+    assert.equal(enregistrerEvenement({ ...base, hook_event_name: 'Notification', message: 'Claude is waiting for your input' }, { env, maintenant: t(15) }), undefined);
+    assert.equal(lireJournal(b.dossier).entrees.length, 6);
+    // Le vrai script du hook : rien sur la sortie standard (une décision d'autorisation serait lue par Claude Code).
+    const r = spawnSync(process.execPath, [HOOK], { input: JSON.stringify({ ...base, hook_event_name: 'PermissionRequest', tool_name: 'Bash' }), env: { ...process.env, ...env }, encoding: 'utf8' });
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, '');
+  } finally {
+    b.nettoyer();
+  }
+});
+
+test('v3 : état du hook — installé, à mettre à jour (installé avant la v3), absent', () => {
+  const b = bac();
+  try {
+    const reglages = join(b.racine, 'settings.json');
+    assert.equal(etatHookHistorique({ racineProjet, fichier: reglages }), 'absents');
+    // Ancienne installation : six événements seulement.
+    const commande = planifierHistorique({ racineProjet, fichier: reglages }).commande;
+    const anciens = ['UserPromptSubmit', 'PostToolUse', 'SessionStart', 'SessionEnd', 'Stop', 'SubagentStop'];
+    writeFileSync(reglages, JSON.stringify({ hooks: Object.fromEntries(anciens.map(e => [e, [{ matcher: '*', hooks: [{ type: 'command', command: commande }] }]])) }));
+    assert.equal(etatHookHistorique({ racineProjet, fichier: reglages }), 'incomplet');
+    // La mise à jour n'ajoute que ce qui manque (idempotente ensuite).
+    const plan = planifierHistorique({ racineProjet, fichier: reglages });
+    assert.deepEqual(plan.ajouts.map(a => a.evenement), ['PreToolUse', 'Notification', 'PermissionRequest']);
+    appliquerHooks(plan);
+    assert.equal(etatHookHistorique({ racineProjet, fichier: reglages }), 'installes');
+    writeFileSync(reglages, '{ pas du json');
+    assert.throws(() => etatHookHistorique({ racineProjet, fichier: reglages }));
+  } finally {
+    b.nettoyer();
+  }
 });

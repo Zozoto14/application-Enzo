@@ -10,14 +10,15 @@
  * docs/claude-office.md.
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { BoutonHub, RetourHub } from '../hub/Hub';
 import { police, type ThemeHub } from '../hub/themes';
 import type { PropsRacineApp } from '../hub/types';
 import { useMobile } from '../ui/mobile/useMobile';
-import { OngletBureau } from './Bureau';
+import { OngletBureau, type FiltreHistorique } from './Bureau';
 import { Historique } from './Historique';
+import { Statistiques } from './Statistiques';
 import {
   COMMANDE_APERCU, COMMANDE_DOSSIER, COMMANDE_HOOKS, LIBELLE_HOOKS, libelleServeur, pontClaudeOffice,
   type EtatClaudeOffice, type PlanHooks, type PontClaudeOffice,
@@ -191,12 +192,13 @@ function SurLePc({ theme, pont }: { theme: ThemeHub; pont: PontClaudeOffice }) {
   );
 }
 
-/** Onglets de l'écran : le bureau des agents (visuel natif) et l'historique des requêtes. */
-function Onglets({ theme, onglet, onChange }: { theme: ThemeHub; onglet: 'bureau' | 'historique'; onChange(o: 'bureau' | 'historique'): void }) {
-  const mobile = useMobile();
+type Onglet = 'bureau' | 'historique' | 'stats';
+
+/** Onglets de l'écran : le bureau des agents, l'historique des requêtes, les statistiques. */
+function Onglets({ theme, onglet, onChange }: { theme: ThemeHub; onglet: Onglet; onChange(o: Onglet): void }) {
   return (
     <View style={styles.onglets} accessibilityRole="tablist">
-      {([['bureau', 'Bureau'], ['historique', 'Historique']] as const).map(([id, titre]) => (
+      {([['bureau', 'Bureau'], ['historique', 'Historique'], ['stats', 'Statistiques']] as const).map(([id, titre]) => (
         <Pressable
           key={id}
           accessibilityRole="tab"
@@ -205,7 +207,7 @@ function Onglets({ theme, onglet, onChange }: { theme: ThemeHub; onglet: 'bureau
           testID={`claude-office-onglet-${id}`}
           style={[styles.onglet, { borderColor: onglet === id ? theme.accent : theme.ligne, backgroundColor: onglet === id ? theme.accent : theme.surface }]}
         >
-          <Text style={{ color: onglet === id ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: mobile ? 16 : 15 }}>{titre}</Text>
+          <Text numberOfLines={1} style={{ color: onglet === id ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: 16 }}>{titre}</Text>
         </Pressable>
       ))}
     </View>
@@ -239,30 +241,45 @@ function Avance({ theme, pont }: { theme: ThemeHub; pont: PontClaudeOffice }) {
 export function ClaudeOffice({ theme, onRetour, contexte }: PropsRacineApp) {
   const pont = pontClaudeOffice();
   const mobile = useMobile();
-  const [onglet, setOnglet] = useState<'bureau' | 'historique'>('bureau');
+  const [onglet, setOnglet] = useState<Onglet>('bureau');
+  const [filtreHistorique, setFiltreHistorique] = useState<FiltreHistorique>();
+  // Démo partagée par les trois onglets (sessions fictives, historique fictif) : rien de réel n'est lu ni écrit.
+  const [debutDemo, setDebutDemo] = useState<number>();
+  const defilement = useRef<React.ComponentRef<typeof ScrollView>>(null);
+  const changerOnglet = (o: Onglet) => {
+    setOnglet(o);
+    if (o !== 'historique') setFiltreHistorique(undefined);
+  };
+  const voirHistorique = (f: FiltreHistorique) => {
+    setFiltreHistorique({ ...f });
+    setOnglet('historique');
+    defilement.current?.scrollTo?.({ y: 0, animated: false });
+  };
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: theme.fond }} contentContainerStyle={[styles.page, mobile ? styles.pageMobile : null]}>
+    <ScrollView ref={defilement} style={{ flex: 1, backgroundColor: theme.fond }} contentContainerStyle={[styles.page, mobile ? styles.pageMobile : null]}>
       <RetourHub theme={theme} onRetour={onRetour} titre="Claude Office" />
       <Text style={[styles.titre, { color: theme.texte, fontWeight: theme.poidsTitre }, police(theme.policeTitre)]}>Claude Office</Text>
-      <Text style={[styles.texte, mobile ? styles.texteMobile : null, { color: theme.attenue }, police(theme.policeTexte)]}>
-        Le bureau des agents de Claude Code : un personnage par session, qui écrit, utilise un outil, réfléchit ou attend — ici même, sur le PC, le site ou le téléphone.
+      <Text style={[styles.texte, styles.texteMobile, { color: theme.attenue }, police(theme.policeTexte)]}>
+        Le bureau des agents de Claude Code : un personnage par session, qui va dans la zone de ce qu’il fait (code, commandes, lecture, web…), lève la main quand Claude attend ta réponse et passe en salle d’attente quand il a fini — ici même, sur le PC, le site ou le téléphone.
       </Text>
-      <Onglets theme={theme} onglet={onglet} onChange={setOnglet} />
+      <Onglets theme={theme} onglet={onglet} onChange={changerOnglet} />
       {onglet === 'historique' ? (
-        <Historique theme={theme} contexte={contexte} office={pont} />
+        <Historique key={JSON.stringify(filtreHistorique ?? {})} theme={theme} contexte={contexte} office={pont} filtreInitial={filtreHistorique} debutDemo={debutDemo} />
+      ) : onglet === 'stats' ? (
+        <Statistiques theme={theme} contexte={contexte} office={pont} debutDemo={debutDemo} />
       ) : (
         <>
-          <OngletBureau theme={theme} contexte={contexte} office={pont} />
+          <OngletBureau theme={theme} contexte={contexte} office={pont} debutDemo={debutDemo} onDemo={a => setDebutDemo(a ? Date.now() : undefined)} onVoirHistorique={voirHistorique} />
           {pont ? <Avance theme={theme} pont={pont} /> : null}
         </>
       )}
-      <Text style={[styles.credit, mobile ? styles.texteMobile : null, { color: theme.attenue }]}>D’après Claude Office, © 2026 W17ANT, licence MIT.</Text>
+      <Text style={[styles.credit, styles.texteMobile, { color: theme.attenue }]}>D’après Claude Office, © 2026 W17ANT, licence MIT.</Text>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  page: { padding: 20, gap: 14, maxWidth: 860, width: '100%', alignSelf: 'center' },
+  page: { padding: 20, gap: 14, maxWidth: 980, width: '100%', alignSelf: 'center' },
   pageMobile: { padding: 16 },
   texteMobile: { fontSize: 15, lineHeight: 21 },
   titre: { fontSize: 26 },
@@ -276,7 +293,7 @@ const styles = StyleSheet.create({
   champ: { flex: 1, minWidth: 200, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 14 },
   boutons: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   code: { fontFamily: 'monospace', fontSize: 13, borderWidth: StyleSheet.hairlineWidth, borderRadius: 6, padding: 10 },
-  credit: { fontSize: 12, marginTop: 6 },
-  onglets: { flexDirection: 'row', gap: 8 },
-  onglet: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 18, minHeight: 44, minWidth: 44, justifyContent: 'center' },
+  credit: { fontSize: 15, marginTop: 6 },
+  onglets: { flexDirection: 'row', gap: 6 },
+  onglet: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'center', flexGrow: 1, flexShrink: 1, maxWidth: 200 },
 });

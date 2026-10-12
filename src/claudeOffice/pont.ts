@@ -21,7 +21,7 @@ export interface EtatClaudeOffice {
   dossier: string | null;
   hooks: 'absents' | 'installes' | 'illisibles' | 'inconnus';
   /** Hook d'historique (journal local) dans les réglages de Claude Code. */
-  historique?: 'absents' | 'installes' | 'illisibles';
+  historique?: 'absents' | 'installes' | 'incomplet' | 'illisibles';
   serveur: EtatServeurOffice;
 }
 
@@ -145,5 +145,6 @@ export const LIBELLE_HOOKS: Record<EtatClaudeOffice['hooks'], string> = {
 export const LIBELLE_HOOK_HISTORIQUE: Record<NonNullable<EtatClaudeOffice['historique']>, string> = {
   installes: 'Installé : chaque requête de Claude Code sur ce PC est enregistrée',
   absents: 'Pas encore installé : rien n’est enregistré',
+  incomplet: 'Installé, à mettre à jour : il manque « attend ta réponse » et la durée des outils',
   illisibles: 'Réglages de Claude Code illisibles (JSON invalide ?)',
 };

@@ -102,7 +102,7 @@ describe('bureau : déduction de l’état des agents', () => {
   it('compteurs du jour, âge et libellés de fraîcheur, masquage d’appoint', () => {
     const entrees = journal();
     const b = deduireBureau(entrees, { maintenant: T0 });
-    expect(compterBureau(b, entrees, T0)).toEqual({ actifs: 3, inactifs: 1, termines: 0, demandesDuJour: 4, outilsDuJour: 2 });
+    expect(compterBureau(b, entrees, T0)).toEqual({ attendent: 0, aVoir: 0, actifs: 3, inactifs: 1, termines: 0, demandesDuJour: 4, outilsDuJour: 2 });
     expect(ilYA(T0 - 10_000, T0)).toBe('à l’instant');
     expect(ilYA(T0 - 7 * 60_000, T0)).toBe('il y a 7 min');
     expect(ilYA(T0 - 3 * 3_600_000, T0)).toBe('il y a 3 h');
@@ -279,7 +279,10 @@ describe('bureau : rendu', () => {
     await act(async () => undefined);
     expect(screen.getByTestId('bureau-vide-texte').props.children).toMatch(/hook d’historique n’est pas encore installé/);
     expect(installerHooks).not.toHaveBeenCalled();
-    await fireEvent.press(screen.getByTestId('bureau-installer-hook'));
+    // La check-list « Mise en route » propose l'installation (bouton) et la commande à copier.
+    expect(screen.getByTestId('mise-en-route-hook-niveau-erreur')).toBeTruthy();
+    expect(screen.getByTestId('mise-en-route-commande-hook')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('mise-en-route-action-hook'));
     expect(installerHooks).toHaveBeenCalledWith(false);
     expect(screen.getByTestId('bureau-message').props.children).toMatch(/Annulé/);
   });
@@ -295,7 +298,7 @@ describe('bureau : rendu', () => {
     expect(screen.getByText('◷ Copie chiffrée · à jour il y a 4 min')).toBeTruthy();
     // État au moment du dépôt (outil 15 s avant) : affiché, avec son âge, pas comme du direct.
     expect(screen.getByTestId('bureau-etat-agent').props.children).toBe('Utilise un outil');
-    expect(screen.getByTestId('bureau-delai').props.children).toMatch(/pas de direct/);
+    expect(screen.getByTestId('mise-en-route-reduite')).toBeTruthy();
     expect(screen.queryByText(/En direct/)).toBeNull();
     expect(screen.queryByTestId('bureau-partage')).toBeNull();
     // Relu chaque minute (index seulement : le dépôt inchangé n'est pas relu).

@@ -10,8 +10,9 @@
  */
 
 import { fusionner, type EntreeHistorique } from './logiqueHistorique';
+import { zoneVoulue, type Zone } from './zones';
 
-export type EtatAgent = 'ecrit' | 'outil' | 'reflechit' | 'inactif' | 'termine';
+export type EtatAgent = 'attend' | 'ecrit' | 'outil' | 'reflechit' | 'inactif' | 'termine';
 
 /** Un outil vu il y a moins de ce délai : l'agent est encore « sur » cet outil. */
 export const OUTIL_RECENT_MS = 60_000;
@@ -27,6 +28,7 @@ export const MAX_AGENTS_AFFICHES = 12;
 const OUTILS_ECRITURE = /^(write|write_file|edit|multiedit|replace|notebookedit|str_replace_editor|apply_patch)$/i;
 
 export const LIBELLES_ETAT: Record<EtatAgent, string> = {
+  attend: 'Attend ta réponse',
   ecrit: 'Écrit du code',
   outil: 'Utilise un outil',
   reflechit: 'Réfléchit',
@@ -34,7 +36,10 @@ export const LIBELLES_ETAT: Record<EtatAgent, string> = {
   termine: 'Terminé',
 };
 
-const ORDRE_ETAT: Record<EtatAgent, number> = { ecrit: 0, outil: 1, reflechit: 2, inactif: 3, termine: 4 };
+const ORDRE_ETAT: Record<EtatAgent, number> = { attend: -1, ecrit: 0, outil: 1, reflechit: 2, inactif: 3, termine: 4 };
+
+/** Salle d'attente : délai par défaut avant qu'un agent qui a fini ne reparte (réglable). */
+export const DELAI_SALLE_DEFAUT_MS = 5 * 60_000;
 
 export interface Agent {
   /** Clé stable : appareil + session. */
@@ -64,6 +69,18 @@ export interface Agent {
   fige: boolean;
   /** Date (ms) à laquelle l'état a été calculé : maintenant (PC) ou date du dépôt (relais). */
   reference: number;
+  /** « Attend ta réponse » : ce que Claude demande (autorisation, question), secrets masqués. */
+  attente?: string;
+  /** Zone thématique de l'open space où il doit être (selon son activité). */
+  zone: Zone;
+  /** Fin de tâche (fin de réponse ou de session) en dernier événement : horodatage réel (ms). */
+  fin?: number;
+  /** Identifiant de cette fin (« vu » mémorisé sur l'appareil). */
+  cleFin?: string;
+  /** En salle d'attente : il vient de finir, pas encore vu, délai pas écoulé. */
+  salle: boolean;
+  /** Ce qu'il a fini (dernière demande, réponse ou outils et fichiers), secrets masqués. */
+  recap?: string;
 }
 
 export interface Bureau {
@@ -77,6 +94,10 @@ export interface Bureau {
 }
 
 export interface CompteursBureau {
+  /** « Attend ta réponse ». */
+  attendent: number;
+  /** En salle d'attente : terminés à voir. */
+  aVoir: number;
   actifs: number;
   inactifs: number;
   termines: number;
@@ -136,6 +157,7 @@ export const cleAppareil = (e: Pick<EntreeHistorique, 'appareilId' | 'appareil'>
 export function etatDepuis(dernier: EntreeHistorique, reference: number): EtatAgent {
   const age = Math.max(0, reference - Date.parse(dernier.ts));
   if (dernier.type === 'fin-session') return 'termine';
+  if (dernier.type === 'attente') return 'attend';
   if (dernier.type === 'fin-reponse') return 'inactif';
   if (age > INACTIF_MS) return 'inactif';
   if (dernier.type === 'outil') {
@@ -158,6 +180,11 @@ export interface OptionsBureau {
   references?: Readonly<Record<string, number>>;
   /** Au-delà de cet âge (horloge réelle), un état venu du relais est figé. */
   figerApresMs?: number;
+  /**
+   * Salle d'attente : délai (ms) depuis la fin RÉELLE de la tâche (horodatage de l'événement, pas
+   * l'heure d'affichage), `null` = jusqu'à ce qu'il soit vu ; et les fins déjà vues sur cet appareil.
+   */
+  salle?: { delaiMs: number | null; vus?: ReadonlySet<string> };
 }
 
 /** Les agents du bureau, triés : ceux qui travaillent d'abord, puis par activité récente. */
@@ -184,7 +211,13 @@ export function deduireBureau(entrees: readonly EntreeHistorique[], o: OptionsBu
       continue;
     }
     const etat = etatDepuis(dernier, reference);
-    if (etat === 'termine' && o.maintenant - tDernier > TERMINE_VISIBLE_MS) continue;
+    const finie = dernier.type === 'fin-reponse' || dernier.type === 'fin-session';
+    const cleFin = finie ? `${cle}@${dernier.ts}` : undefined;
+    const delai = o.salle ? o.salle.delaiMs : DELAI_SALLE_DEFAUT_MS;
+    // Délai compté depuis l'horodatage réel de la fin (même pour une copie du relais) ; « jusqu'à vu » borné par l'expiration.
+    const salle = finie && !(cleFin && o.salle?.vus?.has(cleFin)) && (delai === null || o.maintenant - tDernier < delai);
+    if (etat === 'termine' && !salle && o.maintenant - tDernier > TERMINE_VISIBLE_MS) continue;
+    const attente = dernier.type === 'attente' ? resumerTexte(dernier.resume ?? (dernier.outil ? `Autoriser ${dernier.outil} ?` : 'Claude attend ta réponse'), 140) : undefined;
     const demande = [...liste].reverse().find(e => e.type === 'demande' && e.texte);
     const outil = [...liste].reverse().find(e => e.type === 'outil');
     const avecProjet = [...liste].reverse().find(e => e.projet);
@@ -207,6 +240,10 @@ export function deduireBureau(entrees: readonly EntreeHistorique[], o: OptionsBu
       echecs: liste.filter(e => e.echec).length,
       fige: refAppareil !== undefined && o.maintenant - reference > figerApres,
       reference,
+      ...(attente ? { attente } : {}),
+      zone: zoneVoulue(liste, etat, salle),
+      ...(finie ? { fin: tDernier, cleFin, recap: recapFin(liste) } : {}),
+      salle,
     });
   }
   agents.sort((a, b) => ORDRE_ETAT[a.etat] - ORDRE_ETAT[b.etat] || b.dernier - a.dernier || (a.cle < b.cle ? -1 : 1));
@@ -219,6 +256,34 @@ export function deduireBureau(entrees: readonly EntreeHistorique[], o: OptionsBu
 }
 
 export const estActif = (etat: EtatAgent): boolean => etat === 'ecrit' || etat === 'outil' || etat === 'reflechit';
+
+/**
+ * Ce qu'une session a fini depuis sa dernière demande : la demande, puis la réponse résumée si elle
+ * est dans l'historique (« contenu des outils » enregistré), sinon les outils utilisés et les fichiers
+ * touchés. Secrets masqués.
+ */
+export function recapFin(liste: readonly EntreeHistorique[]): string | undefined {
+  let debut = liste.length - 1;
+  while (debut > 0 && liste[debut].type !== 'demande') debut--;
+  const tranche = liste.slice(Math.max(0, debut));
+  const demande = tranche.find(e => e.type === 'demande' && e.texte);
+  const reponse = [...tranche].reverse().find(e => e.type === 'fin-reponse' && e.sortie);
+  const morceaux: string[] = [];
+  if (demande) morceaux.push(`Demande : ${resumerTexte(demande.texte, 140)}`);
+  if (reponse) morceaux.push(`Réponse : ${resumerTexte(reponse.sortie, 220)}`);
+  else {
+    const parOutil = new Map<string, number>();
+    const fichiers = new Set<string>();
+    for (const e of tranche) {
+      if (e.type !== 'outil' || !e.outil) continue;
+      parOutil.set(e.outil, (parOutil.get(e.outil) ?? 0) + 1);
+      if (/^(write|edit|multiedit|notebookedit|write_file|replace)$/i.test(e.outil) && e.resume) fichiers.add(resumerTexte(e.resume, 40) ?? '');
+    }
+    if (parOutil.size) morceaux.push(`Outils : ${[...parOutil].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n, k]) => (k > 1 ? `${n} ×${k}` : n)).join(', ')}`);
+    if (fichiers.size) morceaux.push(`Fichiers modifiés : ${[...fichiers].slice(0, 4).join(', ')}${fichiers.size > 4 ? '…' : ''}`);
+  }
+  return morceaux.length ? morceaux.join('\n') : undefined;
+}
 
 export function compterBureau(bureau: Bureau, entrees: readonly EntreeHistorique[], maintenant: number): CompteursBureau {
   const debutJour = new Date(maintenant);
@@ -233,6 +298,8 @@ export function compterBureau(bureau: Bureau, entrees: readonly EntreeHistorique
   }
   const tous = bureau.agents;
   return {
+    attendent: tous.filter(a => a.etat === 'attend').length,
+    aVoir: tous.filter(a => a.salle).length,
     actifs: tous.filter(a => estActif(a.etat)).length,
     inactifs: tous.filter(a => a.etat === 'inactif').length,
     termines: tous.filter(a => a.etat === 'termine').length,
@@ -257,7 +324,8 @@ export function ilYA(ms: number, maintenant: number): string {
 /** Phrase d'état d'un agent, honnête sur la date (« dernier état connu » s'il est figé). */
 export function phraseAgent(a: Agent, maintenant: number): string {
   const quoi =
-    a.etat === 'ecrit' ? `Écrit${a.resumeOutil ? ` dans ${a.resumeOutil}` : ' du code'}`
+    a.etat === 'attend' ? `Attend ta réponse${a.attente ? ` : ${a.attente}` : ''}`
+    : a.etat === 'ecrit' ? `Écrit${a.resumeOutil ? ` dans ${a.resumeOutil}` : ' du code'}`
     : a.etat === 'outil' ? `${a.outil ?? 'Outil'}${a.resumeOutil ? ` · ${a.resumeOutil}` : ''}`
     : a.etat === 'reflechit' ? 'Réfléchit'
     : a.etat === 'termine' ? 'Session terminée'
