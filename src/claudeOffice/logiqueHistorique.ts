@@ -9,7 +9,7 @@
  * session, compteurs, export JSON/CSV.
  */
 
-export type TypeEntree = 'demande' | 'outil' | 'debut-session' | 'fin-session' | 'fin-reponse' | 'fin-sous-agent' | 'attente';
+export type TypeEntree = 'demande' | 'outil' | 'debut-session' | 'fin-session' | 'fin-reponse' | 'debut-sous-agent' | 'fin-sous-agent' | 'attente';
 
 export interface EntreeHistorique {
   v: 1;
@@ -38,6 +38,17 @@ export interface EntreeHistorique {
   motif?: string;
   importe?: boolean;
   tronque?: boolean;
+  /**
+   * Sous-agents (hook v4). Sur `debut-sous-agent`/`fin-sous-agent` : le sous-agent lui-même (agent_id,
+   * agent_type) ; sur les autres entrées : le sous-agent dans lequel l'événement a eu lieu (absent : agent principal).
+   */
+  agent?: string;
+  agentType?: string;
+  /** Outil Agent (ex-Task) : type demandé, modèle, arrière-plan, identifiant du sous-agent lancé s'il est connu. */
+  sousAgentType?: string;
+  modele?: string;
+  arrierePlan?: boolean;
+  agentLance?: string;
 }
 
 export const LIBELLES_TYPES: Record<string, string> = {
@@ -46,6 +57,7 @@ export const LIBELLES_TYPES: Record<string, string> = {
   'debut-session': 'Début de session',
   'fin-session': 'Fin de session',
   'fin-reponse': 'Fin de réponse',
+  'debut-sous-agent': 'Début de sous-agent',
   'fin-sous-agent': 'Fin de sous-agent',
   attente: 'Attend ta réponse',
 };

@@ -14,6 +14,7 @@ import { couleurAgent, ilYA, LIBELLES_ETAT, phraseAgent, type Agent } from './lo
 import { dureeCourte, heure, type EntreeHistorique } from './logiqueHistorique';
 import { chronologieSession, type GenreEtape } from './logiqueStats';
 import { TEINTES_ACTIVITE } from './logiqueScene';
+import { NoteSession } from './NoteSession';
 import type { SousAgent } from './sousAgentsScene';
 import { Bouton, TAILLE } from './uiOffice';
 import { ZONES } from './zones';
@@ -68,6 +69,7 @@ export function DetailAgent({ theme, agent, entrees, maintenant, onFermer, onVoi
           <Text selectable style={t}>{agent.recap}</Text>
         </View>
       ) : null}
+      <NoteSession theme={theme} session={agent.session} projet={agent.projet} />
       <View style={styles.compteurs}>
         {compteurs.map(([l, v]) => (
           <View key={l} style={[styles.compteur, { borderColor: theme.ligne }]}>

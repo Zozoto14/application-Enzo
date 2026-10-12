@@ -19,6 +19,9 @@ import { useMobile } from '../ui/mobile/useMobile';
 import { OngletBureau, type FiltreHistorique } from './Bureau';
 import { Historique } from './Historique';
 import { Statistiques } from './Statistiques';
+// v4 (fonctionnalités) : onglet Suivi, alertes, raccourcis clavier, équipe et notes — voir useSuiviOffice.
+import { AideRaccourcis, Suivi } from './Suivi';
+import { useSuiviOffice } from './suiviOffice';
 import {
   COMMANDE_APERCU, COMMANDE_DOSSIER, COMMANDE_HOOKS, LIBELLE_HOOKS, libelleServeur, pontClaudeOffice,
   type EtatClaudeOffice, type PlanHooks, type PontClaudeOffice,
@@ -192,13 +195,14 @@ function SurLePc({ theme, pont }: { theme: ThemeHub; pont: PontClaudeOffice }) {
   );
 }
 
-type Onglet = 'bureau' | 'historique' | 'stats';
+type Onglet = 'bureau' | 'historique' | 'stats' | 'suivi';
 
-/** Onglets de l'écran : le bureau des agents, l'historique des requêtes, les statistiques. */
-function Onglets({ theme, onglet, onChange }: { theme: ThemeHub; onglet: Onglet; onChange(o: Onglet): void }) {
+/** Onglets de l'écran : le bureau des agents, l'historique des requêtes, les statistiques, le suivi (pastille : alertes non lues). */
+function Onglets({ theme, onglet, onChange, pastille }: { theme: ThemeHub; onglet: Onglet; onChange(o: Onglet): void; pastille?: string }) {
+  const mobile = useMobile();
   return (
     <View style={styles.onglets} accessibilityRole="tablist">
-      {([['bureau', 'Bureau'], ['historique', 'Historique'], ['stats', 'Statistiques']] as const).map(([id, titre]) => (
+      {([['bureau', 'Bureau'], ['historique', 'Historique'], ['stats', mobile ? 'Stats' : 'Statistiques'], ['suivi', pastille ? `Suivi · ${pastille}` : 'Suivi']] as const).map(([id, titre]) => (
         <Pressable
           key={id}
           accessibilityRole="tab"
@@ -255,6 +259,7 @@ export function ClaudeOffice({ theme, onRetour, contexte }: PropsRacineApp) {
     setOnglet('historique');
     defilement.current?.scrollTo?.({ y: 0, animated: false });
   };
+  const suivi = useSuiviOffice({ contexte, office: pont, debutDemo, changerOnglet });
   return (
     <ScrollView ref={defilement} style={{ flex: 1, backgroundColor: theme.fond }} contentContainerStyle={[styles.page, onglet === 'bureau' ? styles.pageLarge : null, mobile ? styles.pageMobile : null]}>
       <RetourHub theme={theme} onRetour={onRetour} titre="Claude Office" />
@@ -272,12 +277,14 @@ export function ClaudeOffice({ theme, onRetour, contexte }: PropsRacineApp) {
       {onglet === 'bureau' && !mobile ? (
         <View style={styles.ligneTitre}>
           <Text style={[styles.titre, { color: theme.texte, fontWeight: theme.poidsTitre }, police(theme.policeTitre)]}>Claude Office</Text>
-          <View style={styles.ongletsLigne}><Onglets theme={theme} onglet={onglet} onChange={changerOnglet} /></View>
+          <View style={styles.ongletsLigne}><Onglets theme={theme} onglet={onglet} onChange={changerOnglet} pastille={suivi.pastille} /></View>
         </View>
       ) : (
-        <Onglets theme={theme} onglet={onglet} onChange={changerOnglet} />
+        <Onglets theme={theme} onglet={onglet} onChange={changerOnglet} pastille={suivi.pastille} />
       )}
-      {onglet === 'historique' ? (
+      {onglet === 'suivi' ? (
+        <Suivi theme={theme} contexte={contexte} office={pont} debutDemo={debutDemo} alertes={suivi.alertes} maintenant={suivi.maintenant} activite={suivi.activite} onVoirHistorique={voirHistorique} onAideRaccourcis={suivi.ouvrirAide} />
+      ) : onglet === 'historique' ? (
         <Historique key={JSON.stringify(filtreHistorique ?? {})} theme={theme} contexte={contexte} office={pont} filtreInitial={filtreHistorique} debutDemo={debutDemo} />
       ) : onglet === 'stats' ? (
         <Statistiques theme={theme} contexte={contexte} office={pont} debutDemo={debutDemo} />
@@ -287,6 +294,7 @@ export function ClaudeOffice({ theme, onRetour, contexte }: PropsRacineApp) {
           {pont ? <Avance theme={theme} pont={pont} /> : null}
         </>
       )}
+      <AideRaccourcis theme={theme} visible={suivi.aide} onFermer={suivi.fermerAide} />
       <Text style={[styles.credit, styles.texteMobile, { color: theme.attenue }]}>D’après Claude Office, © 2026 W17ANT, licence MIT.</Text>
     </ScrollView>
   );

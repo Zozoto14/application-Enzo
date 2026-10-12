@@ -23,6 +23,7 @@ import { ecrireEtatSynchro, lireEtatSynchro, synchroniserSiDu, type CopieApparei
 import type { FiltreHistorique } from './Bureau';
 import { entreesDemo } from './logiqueScene';
 import { historiqueDemo } from './logiqueStats';
+import { NoteSession } from './NoteSession';
 import { Bouton as BoutonHub, Interrupteur, Puce as PuceOffice } from './uiOffice';
 
 export const INTERVALLE_LECTURE_MS = 5_000;
@@ -335,6 +336,7 @@ export function Historique({ theme, contexte, office, filtreInitial, debutDemo }
               <Text style={[styles.petit, sm.texte, attenue]}>
                 {s.projet ?? 'Projet inconnu'} · {s.appareil ?? 'appareil ?'} · session {s.session.slice(0, 8)}
               </Text>
+              <NoteSession theme={theme} session={s.session} projet={s.projet} compact />
               {s.entrees.map(e => (
                 <Pressable key={e.id} onPress={() => setSelection(e.id)} testID={`historique-entree-${e.id}`} style={[styles.entree, sm.entree]}>
                   <Text style={[styles.heure, sm.texte, attenue]}>{heure(e.ts)}</Text>

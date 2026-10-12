@@ -242,8 +242,11 @@ export function chronologieSession(entrees: readonly EntreeHistorique[], cle: st
       case 'fin-reponse':
         etapes.push({ id: e.id, ts: t, genre: 'reponse', titre: 'Réponse terminée', ...(e.sortie ? { detail: resumerTexte(e.sortie, 220) } : {}) });
         break;
+      case 'debut-sous-agent':
+        etapes.push({ id: e.id, ts: t, genre: 'sous-agent', titre: `Sous-agent lancé${e.agentType ? ` (${resumerTexte(e.agentType, 40)})` : ''}` });
+        break;
       case 'fin-sous-agent':
-        etapes.push({ id: e.id, ts: t, genre: 'sous-agent', titre: 'Sous-agent terminé' });
+        etapes.push({ id: e.id, ts: t, genre: 'sous-agent', titre: `Sous-agent terminé${e.agentType ? ` (${resumerTexte(e.agentType, 40)})` : ''}` });
         break;
       case 'fin-session':
         etapes.push({ id: e.id, ts: t, genre: 'fin', titre: 'Session fermée', ...(e.resume ? { detail: e.resume } : {}) });

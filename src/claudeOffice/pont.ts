@@ -145,6 +145,6 @@ export const LIBELLE_HOOKS: Record<EtatClaudeOffice['hooks'], string> = {
 export const LIBELLE_HOOK_HISTORIQUE: Record<NonNullable<EtatClaudeOffice['historique']>, string> = {
   installes: 'Installé : chaque requête de Claude Code sur ce PC est enregistrée',
   absents: 'Pas encore installé : rien n’est enregistré',
-  incomplet: 'Installé, à mettre à jour : il manque « attend ta réponse » et la durée des outils',
+  incomplet: 'Installé, à mettre à jour : il manque des événements récents (attente, durée des outils, sous-agents, échecs)',
   illisibles: 'Réglages de Claude Code illisibles (JSON invalide ?)',
 };

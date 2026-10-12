@@ -144,6 +144,97 @@ captures `docs/captures-claude-office/v4-*.jpg`, avant/après : `v4-avant-pc-som
   le PC, « Me prévenir quand Claude attend ma réponse » (**désactivé par défaut**) : notification de Windows par le
   mécanisme existant (`window.applibourse.systeme.notifier`), une fois par attente.
 
+### Onglet « Suivi » (v4) : récap, alertes, équipe, notes, raccourcis
+
+Quatrième onglet, une section à la fois (`Suivi.tsx`), pour ne rien ajouter sur le Bureau. La pastille
+**« Suivi · N »** compte les alertes non lues (aussi un indicateur « Alertes » sur la tuile du hub). Tout est calculé
+et rangé **sur l'appareil** (base du profil, clés `claude-office.*`) : **aucune écriture KV de plus**, le Worker n'est
+pas modifié.
+
+- **Récap** (`logiqueRecap.ts`) : aujourd'hui ou 7 derniers jours — sessions, demandes, outils, temps actif (même règle
+  que « Aujourd'hui »), projets, outils les plus utilisés, faits marquants (3 sessions les plus longues avec leur
+  dernière demande, erreurs d'outil, attentes et la plus longue). « Copier le récap » (texte), Markdown, JSON (et
+  « Enregistrer (.md)… » quand l'hôte sait enregistrer un fichier) ; sans presse-papiers, le texte s'affiche à
+  sélectionner. Secrets reconnus masqués, aucun contenu d'outil.
+- **Alertes** (`logiqueAlertes.ts` pur, `alertesOffice.ts`) : « un agent attend ta réponse depuis plus de X min »
+  (5 par défaut), « session active depuis plus de X h » (2), « N erreurs d'outil d'affilée » (3), « un agent a fini »
+  (tâche d'au moins X min, 5 ; « Toutes » possible). Par règle : activée, seuil, pastille, et sur le PC
+  « Notification de Windows » (désactivée par défaut, `window.applibourse.systeme.notifier`, 3 au plus par passage).
+  **Anti-répétition** : une alerte par occurrence (session + événement déclencheur), au plus une par règle et par
+  session toutes les 10 min, et seuls les faits récents comptent (rouvrir l'écran ne rejoue pas l'historique). Sur une
+  copie du relais, l'état est jugé **à la date du dépôt**. Journal consultable (200 au plus, « Voir la session »,
+  « Vider le journal ») ; l'ouvrir marque tout comme lu. Évaluées tant que l'écran est ouvert (lecture légère :
+  canal d'activité du PC toutes les 5 s, relais toutes les 2 min, index seulement si rien ne change) et sur le hub
+  (mêmes présences que la tuile) ; journal et anti-répétition communs.
+- **Équipe** (`equipe.ts`, `EcranEquipe.tsx`, `AvatarAgent.web.tsx`) : par projet — ou pour une session en cours, qui
+  l'emporte — surnom (24 caractères), couleur (12), accessoire d'un petit catalogue SVG (aucun, lunettes, casque,
+  bonnet, nœud, écharpe, couronne, casquette, fleur), ★ favori (en tête des listes). Pour la scène :
+  `apparenceAgent(projet, session)` → `{ surnom?, couleur, accessoire?, favori, personnalise }`, et
+  `apparencePersonnalisee(agent)`, remplaçant direct de `apparence(agent)` (drapeau `PERSONNALISATION_DANS_LA_SCENE`,
+  vrai) ; `useMagasinSuivi()` redessine un composant quand l'équipe ou les notes changent.
+- **Notes** (`NoteSession.tsx`) : une note libre par session (500 caractères), dans le **Détail d'un agent** et sur
+  chaque session de l'**Historique** ; section « Notes » : toutes les notes, recherche sans accents ni casse.
+- **Raccourcis clavier** (`raccourcis.ts`, PC et iPad avec clavier, web) : `?` aide (aussi « Raccourcis clavier »
+  en bas de l'onglet Suivi), `B`/`H`/`S` onglets, `/` recherche (Bureau, Historique ou Notes ; sinon ouvre
+  l'Historique), `F` plein écran (délégué à la scène), `Échap` ferme l'aide ou le détail **sans quitter l'app**,
+  `J`/`K` agent suivant/précédent (ouvre son détail). Jamais pendant la saisie (champ, zone de texte, contenu
+  éditable) ni avec Ctrl, Cmd ou Alt.
+- **Démo** : en plus des sessions du bureau, trois sessions fictives (`demoSuivi.ts`) déclenchent les quatre alertes
+  (pastille « Suivi · 4 ») ; équipe (Bob, Félix…) et notes fictives ; rien n'est écrit.
+
+### Sous-agents (v4, données ; le rendu est celui de la scène)
+
+**Ce que Claude Code fournit** (doc officielle des hooks, code.claude.com/docs/en/hooks, lue le 12/10/2026) :
+`SubagentStart` (`agent_id`, `agent_type`) et `SubagentStop` (`agent_id`, `agent_type`, `agent_transcript_path`,
+`last_assistant_message`) ; les événements d'outils lancés **dans** un sous-agent portent `agent_id` et `agent_type` ;
+l'outil qui lance un sous-agent s'appelle `Agent` (anciennement `Task`), `tool_input` = `description`, `prompt`,
+`subagent_type`, `model` (facultatif) — `run_in_background` n'est pas dans la table de la doc (les sous-agents tournent
+en arrière-plan par défaut : réponse `status: "async_launched"`). **Incertain** : aucun champ documenté ne relie
+l'appel `Agent` (tool_use_id) à l'`agent_id` du `SubagentStart` ; on lit `tool_response.agentId` s'il existe, sinon on
+apparie par type et par date (± 60 s). Le parent d'un sous-agent imbriqué n'est connu que par le lancement fait dans
+ce parent (au premier plan, il n'arrive qu'à la fin).
+
+**Hook v4** (`bureau/electron/officeHistorique.mjs`) : écoute en plus `SubagentStart` (type `debut-sous-agent`) et
+`PostToolUseFailure` (outil `echec: true`, durée `duration_ms`) ; garde `agent`/`agentType` (le sous-agent lui-même
+sur début et fin, sinon celui où l'événement a eu lieu) et, sur l'outil Agent/Task, `resume` = description courte,
+`sousAgentType`, `modele`, `arrierePlan`, `agentLance` ; **jamais le prompt** ni le dernier message, sauf avec
+« Enregistrer aussi le contenu des outils ». Secrets masqués comme le reste. Un hook installé avant est « à mettre à
+jour » : **relancer `npm run office:hooks`** (n'ajoute que ces deux événements), puis redémarrer Claude Code. Sans
+mise à jour, les sous-agents restent visibles d'après l'outil Task/Agent et `SubagentStop` (moins précis).
+
+**Contrat** — `src/claudeOffice/logiqueSousAgents.ts` :
+
+```ts
+sousAgents(entrees, { maintenant, references? }): Record<string /* Agent.cle = "appareil|session" */, SousAgent[]>
+interface SousAgent {
+  id: string;            // agent_id (ou « lance-… », « fin-… », « debut-… » fabriqué)
+  cleSession: string; session: string;
+  parent: string;        // id de session (1er niveau) ou id du sous-agent parent
+  profondeur: number;    // 1, 2…
+  description?: string; type?: string; modele?: string; arrierePlan?: boolean;
+  debut: number; debutInconnu?: boolean; fin?: number;            // ms
+  etat: 'en-cours' | 'termine' | 'echec' | 'expire';             // expire : sans nouvelles 30 min, ou session fermée
+  dureeMs: number; outils: Array<{ nom: string; n: number }>; nbOutils: number; echecs: number; dernier: number;
+}
+sousAgentsEnCours(liste)                  // ceux qui tournent (petits personnages autour de l'agent)
+statsSousAgents(entrees, maintenant, jours) // total, parJour, sessions, maxParSession, maxParalleles, types, echecs, dureeMoyenneMs
+entreesDemoSousAgents(debut, maintenant)  // démo : session « refonte », 3 sous-agents parallèles + 1 imbriqué, un échec (cycle 90 s)
+```
+
+Exemple : `sousAgents(entrees, { maintenant: Date.now() })['52e6f6322d1d|sess-1']` →
+`[{ id: 'agent-a1', parent: 'sess-1', profondeur: 1, description: 'Trouver les API', type: 'Explore', modele: 'haiku',
+arrierePlan: true, etat: 'en-cours', dureeMs: 18000, outils: [{ nom: 'Read', n: 2 }], … }]`. Pour la démo du bureau,
+fusionner `entreesDemoSousAgents(debutDemo, maintenant)` aux entrées de `entreesDemo` (non branché ici : c'est la
+scène). Statistiques : carte « Sous-agents » (par jour, types, parallèles, échecs) ; récap : « N sous-agents (types),
+jusqu'à K en parallèle » ; chronologie du détail : « Sous-agent lancé / terminé (type) ».
+
+**Points d'intégration avec la scène** (une ligne chacun, marqués « v4 ») : `Racine.tsx` (`useSuiviOffice`, onglet,
+aide) ; `Bureau.tsx` (`useNavigationAgents(...)` : J/K, Échap sur le détail) ; `SceneOpenSpace.web.tsx` (import de
+`apparencePersonnalisee as apparence`) ; `DetailAgent.tsx` et `Historique.tsx` (`<NoteSession …/>`) ;
+`resumeHub.ts` (pastille de la tuile). Plein écran : la scène écoute
+`useEffect(() => ecouterOffice('plein-ecran', () => { basculer(); return true; }), [])` (sans écouteur, `F` ne fait
+rien). Poids : environ 42 Ko minifiés (14 Ko compressés) de plus au bundle du site.
+
 | États (liste) | Déduit de (dernier événement de la session) |
 | --- | --- |
 | Attend ta réponse | demande d'autorisation ou question (Notification « permission »/« question », PermissionRequest) |
@@ -191,6 +282,15 @@ que les petites présences, jamais les copies d'historique.
   (désactivé par défaut, par discrétion) ; sinon outils et fichiers.
 - **Durée des sessions exacte** : le journal ne voit que les événements ; la durée est celle entre le premier et le
   dernier, le temps actif ignore les pauses de plus de 5 min.
+- **Équipe, notes et alertes partagées entre appareils** (v4) : volontairement locales. Aucune entité chiffrée
+  existante ne s'y prête sans en changer le format (`prefs:hub` écarte les clés inconnues) ; en ajouter une
+  demanderait une nouvelle entité de synchro. Personnaliser sur le PC ne change donc pas le téléphone.
+- **Alertes quand l'écran et le hub sont fermés** (v4) : comme la notification v3, elles ne sont évaluées que dans
+  l'application ouverte (écran Claude Office ou hub) ; ailleurs, il faudrait un service de notifications push.
+- **Notification « attend ta réponse » v3 et alerte v4** : les deux réglages coexistent (la v3 prévient dès l'attente,
+  la v4 au-delà du seuil) ; les fusionner changerait un réglage existant, laissé à l'intégration finale.
+- **Plein écran par `F`** : délégué à la scène (`ecouterOffice('plein-ecran', …)`), branché par l'intégration finale.
+- **Surnom dans les bulles de la scène** : `apparenceAgent` le fournit ; l'afficher dans la scène relève de la scène.
 
 ## Limites (honnêtes)
 
@@ -243,6 +343,12 @@ que les petites présences, jamais les copies d'historique.
 | `bureau/electron/claudeOfficeIpc.mjs` | Canaux `claude-office:*` du processus principal (confirmation native) |
 | `scripts/office-hooks.mjs` | `npm run office:hooks` (hooks de Claude Office + hook d'historique) |
 | `src/claudeOffice/Historique.tsx`, `bureau/electron/officeHistorique.mjs` | Onglet « Historique » et journal local : voir [`claude-office-historique.md`](claude-office-historique.md) |
+| `src/claudeOffice/Suivi.tsx`, `suiviOffice.ts` | Onglet « Suivi » (récap, alertes, notes, aide des raccourcis) ; ce que l'écran branche en une ligne |
+| `src/claudeOffice/logiqueAlertes.ts`, `alertesOffice.ts` | Règles d'alertes, anti-répétition, journal ; exécution, notification, pastille |
+| `src/claudeOffice/logiqueRecap.ts` | Récap du jour et de la semaine, exports texte/Markdown/JSON |
+| `src/claudeOffice/equipe.ts`, `EcranEquipe.tsx`, `AvatarAgent(.web).tsx`, `NoteSession.tsx` | Personnalisation des agents, `apparenceAgent`, notes de session |
+| `src/claudeOffice/logiqueSousAgents.ts` | Sous-agents par session (contrat pour la scène), statistiques, démo |
+| `src/claudeOffice/raccourcis.ts`, `demoSuivi.ts` | Raccourcis clavier et bus d'événements avec la scène ; compléments de la démo |
 
 Rien de Node/Electron n'entre dans le bundle web : `src/claudeOffice` n'appelle que le pont, absent sur le site.
 Tests : `src/claudeOffice/bureau.test.tsx` (déduction, rendu, pont et copie simulés, présence, droits, aucun accès
@@ -254,7 +360,14 @@ aide, notification, statistiques, démo partagée, historique filtré) ; Node : 
 (attentes, durée des outils, état « à mettre à jour »). E2e : `scripts/e2e-claude-office-bureau.mjs` (captures
 `6…18`) et `scripts/e2e-claude-office-v3.mjs` (vrai hook ; Bibliothèque → Atelier → Salle d'attente, guichet,
 mise en route, détail, « vu », historique filtré, statistiques, Liste mémorisée ; iPhone 390×844, iPad 820×1180 et
-1024×768, PC, clair et sombre : débordement, cibles 44 px, textes 15 px ; captures `20…31`).
+1024×768, PC, clair et sombre : débordement, cibles 44 px, textes 15 px ; captures `20…31`). v4 :
+`src/claudeOffice/fonctionsV4.test.tsx` (apparence par projet et session, règles d'alertes, seuils, anti-répétition,
+relais, récap et exports masqués, raccourcis inactifs en saisie, notes ; rendu Suivi, Équipe, Alertes, Récap, aide des
+raccourcis, clair et sombre ; pastille ; droits), `src/claudeOffice/sousAgents.test.tsx` (appariement, parallèles,
+imbriqués, ancien hook, début sans fin, fin sans début, relais, statistiques, récap, démo) et
+`scripts/e2e-claude-office-v4-fonctions.mjs` (PC : alerte,
+pastille, notification, raccourcis, note, équipe, récap copié ; site en démo sur iPhone 390×844, iPad, PC, clair et
+sombre ; captures `40…47`).
 
 ## Droits
 
@@ -264,7 +377,8 @@ voient ni la tuile ni l'écran (tests : `src/claudeOffice/claudeOffice.test.tsx`
 
 ## Réglages et synchro
 
-Les réglages du bureau (vue Scène/Liste, délai de la salle d'attente, fins « vues », notification) sont **propres à
+Les réglages du bureau (vue Scène/Liste, délai de la salle d'attente, fins « vues », notification) — et en v4
+l'équipe, les notes, les réglages et le journal des alertes — sont **propres à
 l'appareil** (préférences du profil ouvert, jamais envoyées). Les réglages du vrai Claude Office (dossier, adresse du serveur) sont **propres au PC** : gardés par le processus
 principal dans `claude-office.json` des données de l'application. Ils ne sont pas synchronisés (un chemin et une
 adresse 127.0.0.1 n'ont pas de sens sur un autre appareil) : **rien ne part sur le relais**. Les données de Claude

@@ -22,10 +22,12 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
-  activiteAgent, apparence, avancer, comptesZones, creerScene, enAttente, HAUTEUR_MURS, HAUTEUR_SCENE, ILOTS_ATELIER, ISO, iso, LARGEUR_BUREAU,
+  activiteAgent, avancer, comptesZones, creerScene, enAttente, HAUTEUR_MURS, HAUTEUR_SCENE, ILOTS_ATELIER, ISO, iso, LARGEUR_BUREAU,
   LARGEUR_PIECE, LARGEUR_SCENE, PLACES, PORTE, PROFONDEUR_PIECE, RECTS_ZONES, poses, prochaineEcheance, reconcilier, signatureAgents, hacher,
   type Activite, type Apparence, type ModePose, type Place, ICONES_ACTIVITE, TEINTES_ACTIVITE,
 } from './logiqueScene';
+// v4 : apparence personnalisée par l'écran « Équipe » (surnom, couleur, accessoire : equipe.ts).
+import { apparencePersonnalisee as apparence } from './equipe';
 import { ORDRE_ZONES, ZONES, type Zone } from './zones';
 import type { PropsScene } from './sceneTypes';
 import { placerSousAgents, SORTIE_REUNION } from './sousAgentsScene';

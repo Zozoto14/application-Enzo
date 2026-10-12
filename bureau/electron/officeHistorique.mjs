@@ -58,23 +58,30 @@ export const REGLAGES_DEFAUT = Object.freeze({
 export const LIMITES = Object.freeze({ texte: 20_000, resume: 300, contenu: 2_000, entree: 64 * 1024 });
 
 /** Événements enregistrés par le hook d'historique (Claude Code). */
-export const EVENEMENTS_HISTORIQUE = ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'SessionStart', 'SessionEnd', 'Stop', 'SubagentStop', 'Notification', 'PermissionRequest'];
+export const EVENEMENTS_HISTORIQUE = [
+  'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'SessionStart', 'SessionEnd', 'Stop', 'SubagentStop', 'Notification', 'PermissionRequest',
+  'SubagentStart', 'PostToolUseFailure',
+];
 
 /**
  * Événements apparus avec la v3 du bureau (durée des outils, « attend ta réponse ») : un hook installé
  * avant eux est « à mettre à jour » (il marche, sans ces informations).
  */
 export const EVENEMENTS_V3 = ['PreToolUse', 'Notification', 'PermissionRequest'];
+/** Événements apparus avec la v4 (sous-agents, échecs d'outils) : un hook plus ancien est aussi « à mettre à jour ». */
+export const EVENEMENTS_V4 = ['SubagentStart', 'PostToolUseFailure'];
 
 export const TYPES = {
   UserPromptSubmit: 'demande',
   BeforeAgent: 'demande',
   PostToolUse: 'outil',
+  PostToolUseFailure: 'outil',
   AfterTool: 'outil',
   SessionStart: 'debut-session',
   SessionEnd: 'fin-session',
   Stop: 'fin-reponse',
   AfterAgent: 'fin-reponse',
+  SubagentStart: 'debut-sous-agent',
   SubagentStop: 'fin-sous-agent',
   Notification: 'attente',
   PermissionRequest: 'attente',
@@ -274,6 +281,10 @@ export function construireEntree(charge, { reglages, source = 'claude', maintena
     session: typeof d.session_id === 'string' ? d.session_id.slice(0, 100) : undefined,
     dossier: typeof d.cwd === 'string' ? d.cwd.slice(0, 500) : undefined,
     projet: typeof d.cwd === 'string' ? nomFichier(d.cwd) || undefined : undefined,
+    // Sous-agents (v4) : sur SubagentStart/SubagentStop, le sous-agent lui-même ; sur les autres événements
+    // (outils lancés DANS un sous-agent), le sous-agent où ils ont tourné.
+    agent: typeof d.agent_id === 'string' && d.agent_id ? d.agent_id.slice(0, 100) : undefined,
+    agentType: typeof d.agent_type === 'string' && d.agent_type ? propre(d.agent_type.slice(0, 60)) : undefined,
   };
   if (type === 'demande') {
     entree.texte = couper(propre(enTexte(d.prompt)), LIMITES.texte);
@@ -281,12 +292,22 @@ export function construireEntree(charge, { reglages, source = 'claude', maintena
     entree.outil = String(d.tool_name ?? '').slice(0, 100) || undefined;
     entree.resume = couper(propre(resumerOutil(d.tool_name, d.tool_input)), LIMITES.resume);
     const reponse = d.tool_response;
-    if (reponse && typeof reponse === 'object' && (reponse.is_error === true || reponse.success === false || reponse.interrupted === true)) {
+    if (d.hook_event_name === 'PostToolUseFailure' || (reponse && typeof reponse === 'object' && (reponse.is_error === true || reponse.success === false || reponse.interrupted === true))) {
       entree.echec = true;
+    }
+    // Lancement d'un sous-agent (outil Agent, ex-Task) : type, modèle, arrière-plan ; jamais le prompt (sauf contenu des outils).
+    if (/^(agent|task)$/i.test(String(d.tool_name ?? ''))) {
+      const ti = d.tool_input && typeof d.tool_input === 'object' ? d.tool_input : {};
+      if (typeof ti.subagent_type === 'string' && ti.subagent_type) entree.sousAgentType = propre(ti.subagent_type.slice(0, 60));
+      if (typeof ti.model === 'string' && ti.model) entree.modele = propre(ti.model.slice(0, 60));
+      const fond = typeof ti.run_in_background === 'boolean' ? ti.run_in_background : reponse && typeof reponse === 'object' && typeof reponse.status === 'string' ? /async|background/i.test(reponse.status) : undefined;
+      if (fond !== undefined) entree.arrierePlan = fond;
+      const lance = reponse && typeof reponse === 'object' ? reponse.agentId ?? reponse.agent_id : undefined;
+      if (typeof lance === 'string' && lance) entree.agentLance = lance.slice(0, 100);
     }
     if (r.enregistrerSorties) {
       entree.entree = couper(propre(enTexte(d.tool_input)), LIMITES.contenu);
-      entree.sortie = couper(propre(enTexte(reponse)), LIMITES.contenu);
+      entree.sortie = couper(propre(enTexte(reponse ?? d.error)), LIMITES.contenu);
     }
   } else if (type === 'attente') {
     const motif = motifAttente(d);
@@ -410,7 +431,7 @@ export function enregistrerEvenement(charge, { env = process.env, maison = homed
   const entree = construireEntree(charge, { reglages, source, maintenant });
   if (!entree) return undefined;
   if (entree.type === 'outil') {
-    const duree = dureeOutil(dossier, d, maintenant);
+    const duree = dureeOutil(dossier, d, maintenant) ?? (typeof d.duration_ms === 'number' && d.duration_ms >= 0 ? Math.round(d.duration_ms) : undefined);
     if (duree !== undefined) entree.duree = duree;
   }
   ajouterEntree(dossier, entree, { reglages, maintenant });

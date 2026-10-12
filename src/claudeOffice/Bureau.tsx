@@ -35,6 +35,7 @@ import { avancerRelecture, bureauA, demarrerRelecture, densite, PAS_RELECTURE_MS
 import { PlateauScene } from './PlateauScene';
 import { deduireSousAgents, sousAgentsDemo } from './sousAgentsScene';
 import type { CommandesRelecture } from './plateauTypes';
+import { useNavigationAgents } from './raccourcis';
 import {
   DELAI_MIN_PRESENCE_MS, MAX_PRESENCES_JOUR, ecrireEtatPresence, ecrireEtatSynchro, lireEtatPresence, lireEtatSynchro, type EtatPresence, type EtatSynchroHistorique,
 } from './synchroHistorique';
@@ -168,6 +169,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
   } : undefined;
 
   const detail = agentsScene.find(a => a.cle === choisi) ?? bureau.agents.find(a => a.cle === choisi);
+  useNavigationAgents(agentsScene.map(a => a.cle), choisi, setChoisi); // v4 : touches J/K (agent suivant/précédent) et Échap (ferme le détail), raccourcis.ts
   const enDirect = activite.source.genre === 'local' && !demo;
   const fraicheurComplete = demo ? 'Démo · sessions fictives, aucune activité réelle' : libelleFraicheur(activite.source, maintenant);
   // Dans la barre d'outils : la version courte (la complète est lue par les lecteurs d'écran).

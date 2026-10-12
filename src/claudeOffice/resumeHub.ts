@@ -10,6 +10,8 @@ import { useMemo } from 'react';
 import type { InfoLive } from '../hub/types';
 import type { BasePrefs } from '../tsuzuku/plateforme/stockage';
 import { useActiviteBureau } from './activiteBureau';
+import { useAlertesOffice } from './alertesOffice';
+import { libellePastille } from './logiqueAlertes';
 import { compterBureau, deduireBureau, ilYA, type SourceBureau } from './logiqueBureau';
 import { pontClaudeOffice } from './pont';
 import type { ServiceHistoriqueRelais } from './synchroHistorique';
@@ -20,6 +22,8 @@ export interface ResumeClaudeOffice {
   termines: number;
   source: SourceBureau;
   derniereActivite?: number;
+  /** v4 : alertes non lues rangées sur l'appareil (pastille de la tuile). */
+  alertes?: number;
   /** Horloge du calcul (ms). */
   le: number;
 }
@@ -38,6 +42,8 @@ export function useResumeClaudeOffice({ actif, service, base }: { actif: boolean
     intervallePc: INTERVALLE_TUILE_PC_MS,
     intervalleRelais: INTERVALLE_TUILE_RELAIS_MS,
   });
+  // v4 : les alertes sont aussi évaluées sur le hub (même journal que l'écran, anti-répétition commune).
+  const alertes = useAlertesOffice({ base, entrees: activite.entrees, references: activite.references, maintenant: Date.now(), lu: activite.lu, surPc: Boolean(pont), actif });
   return useMemo(() => {
     if (!actif || !activite.lu || activite.source.genre === 'aucune') return undefined;
     const le = Date.now();
@@ -49,9 +55,10 @@ export function useResumeClaudeOffice({ actif, service, base }: { actif: boolean
       termines: c.termines,
       source: activite.source,
       ...(bureau.derniereActivite !== undefined ? { derniereActivite: bureau.derniereActivite } : {}),
+      ...(alertes.nonLues ? { alertes: alertes.nonLues } : {}),
       le,
     };
-  }, [actif, activite.lu, activite.entrees, activite.references, activite.source]);
+  }, [actif, activite.lu, activite.entrees, activite.references, activite.source, alertes.nonLues]);
 }
 
 /** Information en direct de la tuile (données pures). */
@@ -68,6 +75,7 @@ export function infoClaudeOffice(resume: ResumeClaudeOffice | undefined): InfoLi
     indicateurs: [
       { libelle: 'Au travail', valeur: String(resume.actifs) },
       { libelle: 'Inactifs', valeur: String(resume.inactifs) },
+      ...(resume.alertes ? [{ libelle: 'Alertes', valeur: libellePastille(resume.alertes) }] : []),
     ],
   };
 }
