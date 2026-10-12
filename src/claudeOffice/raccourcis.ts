@@ -10,10 +10,9 @@
  * éditable) ni avec Ctrl, Cmd ou Alt (raccourcis du navigateur). Web seulement.
  *
  * INTÉGRATION avec la scène (fichiers de l'autre chantier) — un seul point chacun :
- *  - plein écran : `useEffect(() => ecouterOffice('plein-ecran', () => { basculer(); return true; }), [])`
- *    (sans écouteur : la touche F ne fait rien) ;
+ *  - plein écran, J / K dans la scène : écouteurs de PlateauScene.web.tsx (branchés) ;
  *  - J/K et Échap sur le détail : `useNavigationAgents(cles, choisi, setChoisi)` dans `BureauVisuel`
- *    (déjà branché, Bureau.tsx).
+ *    (Bureau.tsx, hors scène web).
  */
 
 import { useEffect, useRef } from 'react';
@@ -27,10 +26,10 @@ export const RACCOURCIS: ReadonlyArray<{ touches: readonly string[]; action: Act
   { touches: ['B'], action: 'onglet-bureau', description: 'Onglet Bureau' },
   { touches: ['H'], action: 'onglet-historique', description: 'Onglet Historique' },
   { touches: ['S'], action: 'onglet-stats', description: 'Onglet Statistiques' },
-  { touches: ['/'], action: 'recherche', description: 'Rechercher (historique, notes)' },
-  { touches: ['F'], action: 'plein-ecran', description: 'Plein écran du bureau (si disponible)' },
+  { touches: ['/'], action: 'recherche', description: 'Rechercher (bureau, historique, notes)' },
+  { touches: ['F'], action: 'plein-ecran', description: 'Plein écran de la scène (bascule)' },
   { touches: ['Échap'], action: 'fermer', description: 'Fermer le panneau ouvert' },
-  { touches: ['J'], action: 'agent-suivant', description: 'Agent suivant (ouvre son détail)' },
+  { touches: ['J'], action: 'agent-suivant', description: 'Agent suivant (la scène le suit ; en liste, son détail)' },
   { touches: ['K'], action: 'agent-precedent', description: 'Agent précédent' },
 ];
 
