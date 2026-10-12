@@ -125,7 +125,8 @@ try {
     }
     const deborde = [];
     for (const el of zone.querySelectorAll('*')) {
-      if (!visible(el)) continue;
+      // Rangée des projets : elle défile horizontalement sur téléphone (comme la scène rapprochée).
+      if (!visible(el) || el.closest('[data-testid="bureau-filtres"]')) continue;
       const r = el.getBoundingClientRect();
       if (r.right > window.innerWidth + 1 || r.left < -1) deborde.push(el.getAttribute('data-testid') ?? el.tagName);
     }
@@ -180,7 +181,7 @@ try {
   await page.getByTestId('bureau-postes').waitFor();
   await pause(2500);
   const etats = await page.getByTestId('bureau-etat-agent').allInnerTexts();
-  verifier(JSON.stringify(etats) === JSON.stringify(['Écrit du code', 'Utilise un outil', 'Réfléchit', 'Inactif']), `PC : quatre agents dans le bon ordre (${etats.join(', ')})`);
+  verifier(JSON.stringify(etats.slice(0, 3)) === JSON.stringify(['Écrit du code', 'Utilise un outil', 'Réfléchit']) && /^Terminé .* à voir$/.test(etats[3]), `PC : quatre agents dans le bon ordre, le dernier (fin de réponse) en salle d’attente (${etats.join(', ')})`);
   verifier(/En direct/.test(await page.getByTestId('bureau-fraicheur').innerText()), 'PC : « en direct » (journal local)');
   const bulles = (await page.getByTestId('bureau-bulle').allInnerTexts()).join(' | ');
   verifier(bulles.includes('Ajoute un export CSV') && !bulles.includes('ghp_abcdef') && bulles.includes('[secret masqué]'), 'PC : bulles résumées, secret masqué');
@@ -199,6 +200,7 @@ try {
   await page.getByTestId('bureau-agent-sess-tsu').click();
   await page.getByTestId('bureau-detail').waitFor();
   await prendre('8-bureau-pc-detail', true);
+  await page.getByTestId('bureau-detail-fermer').click();
   // Copie chiffrée activée depuis le bureau, puis dépôt immédiat (« Synchroniser maintenant » de l'Historique).
   await page.getByTestId('bureau-copie-active').click();
   await page.getByTestId('bureau-message').waitFor();

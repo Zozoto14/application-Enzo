@@ -39,7 +39,7 @@ export function DetailAgent({ theme, agent, entrees, maintenant, onFermer, onVoi
       theme={theme}
       visible
       titre={`${agent.projet ?? 'Projet inconnu'}${agent.appareil ? ` · ${agent.appareil}` : ''}`}
-      description={`${ZONES[agent.zone].nom} · ${phraseAgent(agent, maintenant)}`}
+      description={`${ZONES[agent.zone].nom} · ${agent.salle && agent.fin ? `terminé ${ilYA(agent.fin, maintenant)}, à voir` : phraseAgent(agent, maintenant)}`}
       onFermer={onFermer}
       testID="bureau-detail"
       pied={(

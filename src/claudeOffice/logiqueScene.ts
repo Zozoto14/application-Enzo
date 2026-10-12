@@ -456,9 +456,12 @@ export const creerScene = (): EtatScene => ({ occupants: new Map(), trajets: [],
 const zoneDe = (o: Occupant): Zone => PLACES[o.place].zone;
 const placesPrises = (s: EtatScene) => new Set([...s.occupants.values()].filter(o => o.phase !== 'parti').map(o => o.place));
 
-/** Changer de zone maintenant ? Vers une zone prioritaire, toujours ; sinon après le séjour minimal. */
-export const changementDu = (o: Pick<Occupant, 'voulue' | 'depuisZone'>, t: number): boolean =>
-  ZONES_PRIORITAIRES.has(o.voulue) || t - o.depuisZone >= SEJOUR_MIN;
+/**
+ * Changer de zone maintenant ? Vers ou depuis une zone prioritaire (guichet, salle d'attente : tu as répondu,
+ * ou tu as vu ce qu'il a fini), toujours ; sinon après le séjour minimal.
+ */
+export const changementDu = (o: Pick<Occupant, 'voulue' | 'depuisZone'>, t: number, actuelle?: Zone): boolean =>
+  ZONES_PRIORITAIRES.has(o.voulue) || (actuelle !== undefined && ZONES_PRIORITAIRES.has(actuelle)) || t - o.depuisZone >= SEJOUR_MIN;
 
 function marcher(s: EtatScene, o: Occupant, de: Place | 'porte', place: number, t: number, anime: boolean): void {
   o.place = place;
@@ -491,7 +494,7 @@ function decider(s: EtatScene, o: Occupant, t: number, anime: boolean): boolean 
     } else partirVersPorte(s, o, t, anime);
     return true;
   }
-  if (o.voulue === zoneDe(o) || !changementDu(o, t)) return false;
+  if (o.voulue === zoneDe(o) || !changementDu(o, t, zoneDe(o))) return false;
   const libre = choisirPlace(o.cle, o.voulue, placesPrises(s));
   if (libre === undefined) return false; // zone pleine : il reste où il est, compté « en attente de place »
   if (o.voulue === 'salle' && anime && !o.feteFaite) {
@@ -592,7 +595,7 @@ export function reconcilier(s: EtatScene, agents: readonly AgentScene[], t: numb
     for (const occ of s.occupants.values()) {
       if (occ.phase === 'assis' && occ.voulue !== zoneDe(occ) && !occ.partir && !occ.sortie) {
         const libre = choisirPlace(occ.cle, occ.voulue, placesPrises(s));
-        if (libre !== undefined && (s.pret ? changementDu(occ, t) : true)) marcher(s, occ, PLACES[occ.place], libre, t, false);
+        if (libre !== undefined && (s.pret ? changementDu(occ, t, zoneDe(occ)) : true)) marcher(s, occ, PLACES[occ.place], libre, t, false);
       }
       if (occ.partir && occ.phase === 'assis' && !s.pret) Object.assign(occ, { phase: 'parti' });
     }
@@ -607,7 +610,7 @@ export function prochaineEcheance(s: EtatScene): number | undefined {
   const garder = (v: number) => { min = min === undefined ? v : Math.min(min, v); };
   for (const o of s.occupants.values()) {
     if (o.phase === 'fete') garder(o.depuis + DUREE_FETE);
-    if (o.phase === 'assis' && (o.voulue !== zoneDe(o) || o.partir || o.sortie)) garder(ZONES_PRIORITAIRES.has(o.voulue) ? o.depuis : o.depuisZone + SEJOUR_MIN);
+    if (o.phase === 'assis' && (o.voulue !== zoneDe(o) || o.partir || o.sortie)) garder(o.partir || o.sortie || changementDu(o, -Infinity, zoneDe(o)) ? o.depuis : o.depuisZone + SEJOUR_MIN);
   }
   return min;
 }
@@ -753,8 +756,8 @@ const SCRIPT_DEMO: readonly LigneDemo[] = [
   [74, 'outil', 'Task', 'Vérifier les cas limites', 21_000],
   [79, 'outil', 'TodoWrite', '3 tâche(s)', 40],
   [86, 'attente', 'Bash', 'Autoriser Bash (git push) ?'],
-  [93, 'outil', 'Bash', 'git push', 2_600],
-  [100, 'fin-reponse'],
+  [98, 'outil', 'Bash', 'git push', 2_600],
+  [104, 'fin-reponse'],
 ];
 export const CYCLE_DEMO = 128;
 const PERIODE_VISITEUR = 75;
@@ -780,7 +783,7 @@ export function entreesDemo(debut: number, maintenant: number): EntreeHistorique
     const session = `demo-${projet}`;
     const arrivee = 1 + r * 2.2;
     ev(session, projet, arrivee - 40, 'debut-session');
-    const decalage = arrivee - r * 26;
+    const decalage = arrivee - r * 26 + 8;
     const cycleCourant = Math.max(0, Math.floor((ecoule - decalage) / CYCLE_DEMO));
     for (let c = Math.max(0, cycleCourant - 1); c <= cycleCourant; c++) {
       for (const [s, type, outil, resume, duree] of SCRIPT_DEMO) {

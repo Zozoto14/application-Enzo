@@ -260,7 +260,9 @@ export function ClaudeOffice({ theme, onRetour, contexte }: PropsRacineApp) {
       <RetourHub theme={theme} onRetour={onRetour} titre="Claude Office" />
       <Text style={[styles.titre, { color: theme.texte, fontWeight: theme.poidsTitre }, police(theme.policeTitre)]}>Claude Office</Text>
       <Text style={[styles.texte, styles.texteMobile, { color: theme.attenue }, police(theme.policeTexte)]}>
-        Le bureau des agents de Claude Code : un personnage par session, qui va dans la zone de ce qu’il fait (code, commandes, lecture, web…), lève la main quand Claude attend ta réponse et passe en salle d’attente quand il a fini — ici même, sur le PC, le site ou le téléphone.
+        {mobile
+          ? 'Un personnage par session de Claude Code, dans la zone de ce qu’il fait.'
+          : 'Le bureau des agents de Claude Code : un personnage par session, qui va dans la zone de ce qu’il fait (code, commandes, lecture, web…), lève la main quand Claude attend ta réponse et passe en salle d’attente quand il a fini — ici même, sur le PC, le site ou le téléphone.'}
       </Text>
       <Onglets theme={theme} onglet={onglet} onChange={changerOnglet} />
       {onglet === 'historique' ? (

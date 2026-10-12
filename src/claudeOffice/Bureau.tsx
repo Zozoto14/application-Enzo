@@ -130,7 +130,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
   );
   const detail = bureau.agents.find(a => a.cle === choisi);
   const enDirect = activite.source.genre === 'local' && !demo;
-  const fraicheur = demo ? 'Démo · sessions fictives, aucune activité réelle' : libelleFraicheur(activite.source, maintenant);
+  const fraicheur = demo ? (mobile ? 'Démo · sessions fictives' : 'Démo · sessions fictives, aucune activité réelle') : libelleFraicheur(activite.source, maintenant);
   const largeurDispo = Math.max(280, Math.floor(dispo ?? Math.min(fenetre.width - 32, 1000)));
   const vueRapprochee = mobile && rapproche && largeurDispo < LARGEUR_RAPPROCHEE;
   const largeurScene = vueRapprochee ? LARGEUR_RAPPROCHEE : largeurDispo;
@@ -162,7 +162,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
         ['inactifs', 'Inactifs', compteurs.inactifs, TEINTES_ACTIVITE.pause],
         ['termines', 'Sessions fermées', compteurs.termines, TEINTES_ACTIVITE.fini],
       ] as const).map(([id, libelle, valeur, teinte]) => (
-        <View key={id} style={[styles.compteur, { borderColor: theme.ligne, borderRadius: theme.rayonMoyen, backgroundColor: theme.surface }]} accessibilityLabel={`${libelle} : ${valeur}`}>
+        <View key={id} style={[styles.compteur, mobile ? styles.compteurMobile : null, { borderColor: theme.ligne, borderRadius: theme.rayonMoyen, backgroundColor: theme.surface }]} accessibilityLabel={`${libelle} : ${valeur}`}>
           <View style={[styles.filet, { backgroundColor: teinte }]} />
           <Text style={[styles.nombre, { color: theme.texte }, police(theme.policeChiffres)]} testID={`bureau-compte-${id}`}>{valeur}</Text>
           <Text style={attenue} numberOfLines={2}>{libelle}</Text>
@@ -268,7 +268,6 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
         {reduit ? <Text style={attenue} testID="bureau-mouvement">Animations réduites</Text> : null}
       </View>
 
-      {mobile ? null : compteursVue}
 
       {prefs.vue === 'scene' ? (
         <View
@@ -301,7 +300,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
         </View>
       ) : null}
 
-      {mobile ? compteursVue : null}
+      {compteursVue}
       {onVoirHistorique ? (
         <View style={styles.recherche}>
           <TextInput
@@ -643,6 +642,7 @@ const styles = StyleSheet.create({
   compteurs: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   compteur: { borderWidth: StyleSheet.hairlineWidth, paddingVertical: 8, paddingHorizontal: 12, paddingLeft: 16, minWidth: 120, flexGrow: 1, flexBasis: 120, overflow: 'hidden' },
   filet: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
+  compteurMobile: { minWidth: 100, flexBasis: 100, paddingHorizontal: 10, paddingLeft: 14 },
   nombre: { fontSize: 22, fontWeight: '700' },
   piece: { borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden', alignItems: 'center' },
   defilement: { alignSelf: 'stretch', width: '100%' },

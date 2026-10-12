@@ -22,9 +22,9 @@
 
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
-  activiteAgent, apparence, avancer, comptesZones, creerScene, DEHORS, enAttente, HAUTEUR_MURS, HAUTEUR_SCENE, ILOTS_ATELIER, ISO, iso, LARGEUR_BUREAU,
+  activiteAgent, apparence, avancer, comptesZones, creerScene, enAttente, HAUTEUR_MURS, HAUTEUR_SCENE, ILOTS_ATELIER, ISO, iso, LARGEUR_BUREAU,
   LARGEUR_PIECE, LARGEUR_SCENE, PLACES, PORTE, PROFONDEUR_PIECE, RECTS_ZONES, poses, prochaineEcheance, reconcilier, signatureAgents, hacher,
-  type Activite, type Apparence, type ModePose, type Place, ICONES_ACTIVITE, TEINTES_ACTIVITE, Y_BUREAU_FOND,
+  type Activite, type Apparence, type ModePose, type Place, ICONES_ACTIVITE, TEINTES_ACTIVITE,
 } from './logiqueScene';
 import { ilYA, resumerTexte } from './logiqueBureau';
 import { ORDRE_ZONES, ZONES, type Zone } from './zones';
@@ -666,7 +666,6 @@ function meublesTries(pal: Palette, guichetActif: boolean, machinesActives: bool
     rendu: <g key={cle}><Boite {...b} dessus={couleurs[0]} gauche={couleurs[1]} droite={couleurs[2]} />{extra}</g>,
   });
   const bois: [string, string, string] = [pal.bois, pal.boisG, pal.boisD];
-  const metal: [string, string, string] = [pal.metal, pal.metalG, pal.metalD];
   // Réunion : table et parois vitrées (devant ceux qui sont dedans).
   boite('table-reunion', { x: 1.0, y: 1.45, w: 2.6, d: 1.5, h: 0.72 }, bois, <Boite x={1.6} y={1.8} z={0.72} w={0.5} d={0.35} h={0.03} dessus="#FFFFFF" gauche="#DDD" droite="#CCC" />);
   m.push({
@@ -730,15 +729,15 @@ function meublesTries(pal: Palette, guichetActif: boolean, machinesActives: bool
   // Guichet « Attend ta réponse » : comptoir par tranches, sonnette, gyrophare.
   for (let k = 0; k < 6; k++) {
     const x = 6.8 + k * 0.97;
-    boite(`guichet-${k}`, { x, y: 12.9, w: 0.95, d: 0.6, h: 1.05 }, [pal.blanc, pal.blancG, fonce(ZONES.guichet.teinte, pal.nuit ? 0.7 : 0.95)], k === 3 ? (
+    boite(`guichet-${k}`, { x, y: 12.9, w: 0.95, d: 0.6, h: 0.72 }, [pal.blanc, pal.blancG, fonce(ZONES.guichet.teinte, pal.nuit ? 0.7 : 0.95)], k === 3 ? (
       (() => {
-        const s = iso(x + 0.45, 13.15, 1.05);
+        const s = iso(x + 0.45, 13.15, 0.72);
         return <g transform={`translate(${r1(s.x)} ${r1(s.y)})`}><ellipse cx={0} cy={0} rx={6} ry={2.4} fill="#7A5A1E" /><path d="M-5,-1 Q0,-10 5,-1 Z" fill="#F2C14E" /><circle cx={0} cy={-8} r={1.4} fill="#7A5A1E" /></g>;
       })()
     ) : null);
   }
   {
-    const g = iso(12.45, 13.2, 1.05);
+    const g = iso(12.45, 13.2, 0.72);
     m.push({
       cle: 'gyrophare', profondeur: 12.45 + 13.25, rendu: (
         <g key="gyrophare" transform={`translate(${r1(g.x)} ${r1(g.y)})`}>
@@ -1115,18 +1114,12 @@ const CSS = `
 @keyframes co-ecrire{0%{transform:scaleX(.05)}55%,100%{transform:scaleX(1)}}
 .co-ligne{transform-origin:0 50%;animation:co-ecrire 2.6s steps(8) infinite}
 .co-ligne.co-d1{animation-delay:.35s}.co-ligne.co-d2{animation-delay:.7s}.co-ligne.co-d3{animation-delay:1.05s}
-@keyframes co-defile{from{transform:translateY(0)}to{transform:translateY(.09px)}}
-.co-defile{animation:co-defile .5s steps(2) infinite}
-@keyframes co-loupe{0%,100%{transform:translate(0,0)}50%{transform:translate(-.35px,.12px)}}
-.co-loupe{animation:co-loupe 2.4s ease-in-out infinite}
 @keyframes co-meridien{0%{transform:scaleX(1)}50%{transform:scaleX(.1)}100%{transform:scaleX(1)}}
 .co-meridien{transform-origin:center;animation:co-meridien 2s linear infinite}
 @keyframes co-progres{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 .co-progres{transform-origin:0 50%;animation:co-progres 3s ease-in-out infinite}
 @keyframes co-tourne{to{transform:rotate(360deg)}}
 .co-engrenage{transform-origin:center;animation:co-tourne 3s linear infinite}
-@keyframes co-veille{0%,100%{transform:translate(-.25px,.05px)}50%{transform:translate(.25px,-.08px)}}
-.co-veille{animation:co-veille 5s ease-in-out infinite}
 @keyframes co-confetti{0%{transform:translate(0,0) rotate(0);opacity:1}100%{transform:translate(4px,30px) rotate(300deg);opacity:0}}
 .co-confetti{animation:co-confetti 1.1s ease-in infinite}
 .co-c1{animation-delay:.25s}.co-c2{animation-delay:.5s}.co-c3{animation-delay:.75s}
@@ -1232,18 +1225,18 @@ export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChois
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduit, visible, bouge]);
 
-  // Changements de zone en attente (séjour minimal) : réexamen à l'échéance, même sans nouvel événement.
-  const echeance = prochaineEcheance(etat.current);
+  // Changements de zone en attente (séjour minimal, place libérée) : réexamen régulier, même sans nouvel
+  // événement ; la boucle d'animation s'en charge quand quelqu'un marche. Rien hors de l'écran.
   useEffect(() => {
-    if (!visible || echeance === undefined || bouge) return undefined;
-    const delai = Math.max(1, echeance - temps()) * 1000;
-    const minuterie = setTimeout(() => {
-      avancer(etat.current, temps(), !reduit);
-      rafraichir();
-    }, Math.min(Math.max(delai, 2_000), 30_000));
-    return () => clearTimeout(minuterie);
+    if (!visible) return undefined;
+    const minuterie = setInterval(() => {
+      const enMouvement = [...etat.current.occupants.values()].some(o => o.phase !== 'assis' && o.phase !== 'parti');
+      if (enMouvement && !reduit) return;
+      if (prochaineEcheance(etat.current) !== undefined && avancer(etat.current, temps(), !reduit)) rafraichir();
+    }, 1_000);
+    return () => clearInterval(minuterie);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [echeance, visible, bouge, reduit]);
+  }, [visible, reduit]);
 
   // Bulle « vedette » qui passe d'un agent à l'autre quand aucun n'est choisi.
   useEffect(() => {

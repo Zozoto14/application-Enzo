@@ -69,7 +69,7 @@ export function Aide({ theme, visible, onFermer }: { theme: ThemeHub; visible: b
   const titre = { color: theme.texte, fontSize: 17, fontWeight: '700' as const, marginTop: 6 };
   return (
     <FeuilleBasse theme={theme} visible={visible} titre="Comment lire le bureau" onFermer={onFermer} testID="bureau-aide">
-      <Text style={t}>Chaque personnage est une session de Claude Code. Il va dans la zone de ce qu’il fait en ce moment, en marchant (un simple fondu si les animations sont réduites). Il reste au moins une douzaine de secondes dans une zone, pour ne pas faire d’aller-retour à chaque outil.</Text>
+      <Text style={t}>Un personnage = une session de Claude Code. Il marche jusqu’à la zone de ce qu’il fait (fondu si les animations sont réduites) et y reste au moins 12 s.</Text>
       <Text style={titre} accessibilityRole="header">Les zones</Text>
       {ORDRE_ZONES.map(z => (
         <View key={z} style={styles.ligne}>
@@ -89,12 +89,12 @@ export function Aide({ theme, visible, onFermer }: { theme: ThemeHub; visible: b
           </View>
         ))}
       </View>
-      <Text style={t}><Text style={{ fontWeight: '700', color: TEINTES_ACTIVITE.attend }}>Main levée et « ! » rouge</Text> : Claude attend ta réponse (une autorisation ou une question). Va dans Claude Code pour répondre ; le personnage repart travailler dès que c’est fait.</Text>
-      <Text style={t}><Text style={{ fontWeight: '700', color: ZONES.salle.teinte }}>Salle d’attente</Text> : il vient de finir une tâche. Touche-le pour voir ce qu’il a fait, puis « Marquer comme vu » ; sinon il repart tout seul après le délai choisi (réglages du bureau).</Text>
+      <Text style={t}><Text style={{ fontWeight: '700', color: TEINTES_ACTIVITE.attend }}>Main levée et « ! » rouge</Text> : Claude attend ta réponse (autorisation ou question) : réponds dans Claude Code.</Text>
+      <Text style={t}><Text style={{ fontWeight: '700', color: ZONES.salle.teinte }}>Salle d’attente</Text> : tâche finie. Touche-le pour voir ce qu’il a fait, puis « Marquer comme vu » ; sinon il repart après le délai choisi.</Text>
       <Text style={titre} accessibilityRole="header">D’où viennent les informations</Text>
-      <Text style={t}><Text style={{ fontWeight: '700' }}>● En direct</Text> : sur le PC où tourne Claude Code, le journal est relu toutes les 2 secondes.</Text>
-      <Text style={t}><Text style={{ fontWeight: '700' }}>◷ Copie chiffrée · il y a X min</Text> : sur le site, le téléphone ou un autre PC, on relit la copie que le PC dépose (toutes les 15 min, ou 5 min avec la présence rapide). Ce n’est pas du direct : le bureau montre l’état au moment du dépôt.</Text>
-      <Text style={t}><Text style={{ fontWeight: '700' }}>Gris et « figé »</Text> : la copie a plus de 10 minutes. Le personnage montre son dernier état connu, pas ce qu’il fait maintenant.</Text>
+      <Text style={t}><Text style={{ fontWeight: '700' }}>● En direct</Text> : sur le PC de Claude Code, relu toutes les 2 s.</Text>
+      <Text style={t}><Text style={{ fontWeight: '700' }}>◷ Copie chiffrée · il y a X min</Text> : ailleurs, la copie déposée par le PC (15 min, ou 5 avec la présence rapide) : l’état au moment du dépôt, pas du direct.</Text>
+      <Text style={t}><Text style={{ fontWeight: '700' }}>Gris et « figé »</Text> : copie de plus de 10 min : dernier état connu.</Text>
       <Text style={a}>Les bulles montrent ce que tu écris à Claude ; les secrets reconnus sont masqués, pas forcément tous.</Text>
     </FeuilleBasse>
   );
