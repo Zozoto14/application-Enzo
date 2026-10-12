@@ -46,3 +46,15 @@ site et le publie. Il ne publie **jamais** une autre branche que `main`.
 Le paquet de mise à jour de l'app iPhone (`/maj`, signé sur le PC) est repris
 tel qu'il est en ligne : la publication automatique ne l'efface pas. Il ne se
 renouvelle que par `npm run relais:site` sur le PC.
+
+## Rendu et cache
+
+- `bureau/public/_headers` (copié dans le site à la construction) : les fichiers
+  de `assets/`, dont le nom porte une empreinte, sont gardés un an par le
+  navigateur ; `index.html`, le manifeste et `/maj` sont revalidés à chaque
+  visite, donc une nouvelle version est vue au chargement suivant.
+- Couleur de la barre du navigateur (`theme-color`) et polices : celles du thème
+  affiché, posées dès l'écran d'accueil, même sans thème jamais choisi.
+- Contrôle : `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-rendu-site.mjs`
+  (après `npx vite build`), sur PC, iPad et iPhone. Captures avant/après :
+  `docs/captures-rendu-site/`.

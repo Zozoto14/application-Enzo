@@ -102,6 +102,13 @@ export function accrochePageVide(page: CategorieApp, pages: readonly CategorieAp
 type EtatPresse = { pressed: boolean; hovered?: boolean; focused?: boolean };
 
 const SUR_LE_WEB = surLeWeb();
+/**
+ * Rappel « Échap » : seulement là où un clavier est probable (souris ou pavé tactile). Sur une
+ * tablette ou un téléphone (pointeur tactile seul), la touche n'existe pas : on ne l'annonce pas.
+ */
+const CLAVIER_PROBABLE =
+  SUR_LE_WEB &&
+  !(globalThis as { matchMedia?: (requete: string) => { matches: boolean } }).matchMedia?.('(hover: none) and (pointer: coarse)').matches;
 
 function colonnesPour(largeur: number): number {
   return largeur >= 1100 ? 4 : largeur >= 820 ? 3 : largeur >= 560 ? 2 : 1;
@@ -324,7 +331,7 @@ function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPref
             </Text>
           ) : null}
 
-          {SUR_LE_WEB ? (
+          {CLAVIER_PROBABLE ? (
             <Text style={[texte, styles.pied, { color: theme.attenue }]}>
               Appuyez sur Échap pour revenir au Hub depuis n’importe quelle app.
             </Text>
@@ -1057,7 +1064,7 @@ export function RetourHub({ theme, onRetour, titre }: { theme: ThemeHub; onRetou
     <View style={styles.retour}>
       <View style={styles.retourGauche}>
         <BoutonHub theme={theme} titre="← Hub" onPress={onRetour} testID="retour-hub" />
-        {SUR_LE_WEB ? <Text style={[styles.echap, { color: theme.attenue }]}>ÉCHAP POUR FERMER</Text> : null}
+        {CLAVIER_PROBABLE ? <Text style={[styles.echap, { color: theme.attenue }]}>ÉCHAP POUR FERMER</Text> : null}
       </View>
       {barre}
     </View>
@@ -1096,7 +1103,7 @@ const styles = StyleSheet.create({
   ouvrir: { marginTop: 16, fontSize: 13, fontWeight: '600' },
   nouvelle: { alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24, borderStyle: 'dashed' },
   plus: { width: 64, height: 64, borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
-  pied: { marginTop: 48, fontSize: 12, textAlign: 'center', opacity: 0.7 },
+  pied: { marginTop: 48, fontSize: 12, textAlign: 'center' },
   selecteur: { position: 'relative' },
   boutonTheme: { flexDirection: 'row', alignItems: 'center', gap: 10, height: 40, paddingLeft: 8, paddingRight: 12, borderWidth: 1 },
   pastille: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 5, paddingHorizontal: 6, borderWidth: 1, borderRadius: 8 },

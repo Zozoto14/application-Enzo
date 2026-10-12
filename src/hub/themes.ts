@@ -90,7 +90,8 @@ const IVOIRE: ThemeHub = {
   texte: '#1C1B18',
   attenue: '#6B665C',
   ligne: '#E4DED2',
-  accent: '#C2562F',
+  // Assez foncé pour un texte sur le fond (≥ 4,5:1, WCAG AA) : liens, onglet actif, « ‹ Accueil ».
+  accent: '#B44F2B',
   surAccent: '#FFFFFF',
   teintes: { anime: '#C2562F', portefeuille: '#2E5E4E', admin: '#3A5BA0', quatre: '#8A5A9E' },
   ...CLAIR,
@@ -142,7 +143,7 @@ export const THEMES_HUB: readonly ThemeHub[] = [
     texte: '#18211C',
     attenue: '#5C6B61',
     ligne: '#D5DDD2',
-    accent: '#2E7D5B',
+    accent: '#2C7857',
     surAccent: '#FFFFFF',
     teintes: { anime: '#2E7D5B', portefeuille: '#E3824A', admin: '#4C6FD8', quatre: '#B85C9E' },
     fondsTuiles: { anime: '#DCEBDF', portefeuille: '#FBE6D6', admin: '#E2E8FA', nouveau: '#FFFFFF' },

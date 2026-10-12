@@ -1,0 +1,6 @@
+# En-têtes du site de secours (Cloudflare Pages ; sans effet dans l'application de bureau).
+# Les fichiers de assets/ portent une empreinte dans leur nom : ils ne changent jamais, le navigateur
+# les garde un an sans redemander. index.html, le manifeste et /maj gardent le réglage par défaut
+# (revalidés à chaque visite) : une mise à jour du site est vue au chargement suivant.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

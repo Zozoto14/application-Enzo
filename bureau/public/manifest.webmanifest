@@ -3,8 +3,8 @@
   "short_name": "AppDashboard",
   "description": "Votre portefeuille, version de secours.",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#0B0F17",
+  "theme_color": "#0B0F17",
   "lang": "fr",
   "icons": [
     { "src": "icone-192.png", "sizes": "256x256", "type": "image/png" },

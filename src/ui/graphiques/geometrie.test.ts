@@ -44,6 +44,17 @@ describe('graduations', () => {
     expect(domaine[0]).toBeLessThan(100);
     expect(domaine[1]).toBeGreaterThan(100);
   });
+
+  it('ne gradue une série plate qu’une fois, sur sa valeur (pas de « 1 €, 1 €, 0 €, −1 €, −1 € »)', () => {
+    expect(graduations(0, 0)).toEqual({ valeurs: [0], domaine: [-1, 1] });
+    // Barres sans partie négative : −0 entre dans le minimum, il ne doit pas s'afficher « −0 € ».
+    expect(Object.is(graduations(-0, 0).valeurs[0], 0)).toBe(true);
+    expect(Object.is(graduations(-0, -0).valeurs[0], 0)).toBe(true);
+    const { valeurs, domaine } = graduations(3, 3);
+    expect(valeurs).toEqual([3]);
+    expect(domaine[0]).toBeLessThan(3);
+    expect(domaine[1]).toBeGreaterThan(3);
+  });
 });
 
 describe('tracés', () => {
