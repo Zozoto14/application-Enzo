@@ -28,7 +28,7 @@ interface Donnees {
 }
 
 /** Tout l'historique lisible ici : journal du PC (et copies des autres PC si la copie est active), ou copies du relais. */
-function useHistoriqueComplet(office: PontClaudeOffice | undefined, contexte: ContexteHub, actif: boolean): Donnees & { relire(): void } {
+export function useHistoriqueComplet(office: PontClaudeOffice | undefined, contexte: ContexteHub, actif: boolean): Donnees & { relire(): void } {
   const pont = office?.historique;
   const service = contexte.historiqueOffice;
   const [d, setD] = useState<Donnees>({ entrees: [], lu: false });

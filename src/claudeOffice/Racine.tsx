@@ -19,6 +19,9 @@ import { useMobile } from '../ui/mobile/useMobile';
 import { OngletBureau, type FiltreHistorique } from './Bureau';
 import { Historique } from './Historique';
 import { Statistiques } from './Statistiques';
+// v4 (fonctionnalités) : onglet Suivi, alertes, raccourcis clavier, équipe et notes — voir useSuiviOffice.
+import { AideRaccourcis, Suivi } from './Suivi';
+import { useSuiviOffice } from './suiviOffice';
 import {
   COMMANDE_APERCU, COMMANDE_DOSSIER, COMMANDE_HOOKS, LIBELLE_HOOKS, libelleServeur, pontClaudeOffice,
   type EtatClaudeOffice, type PlanHooks, type PontClaudeOffice,
@@ -192,13 +195,14 @@ function SurLePc({ theme, pont }: { theme: ThemeHub; pont: PontClaudeOffice }) {
   );
 }
 
-type Onglet = 'bureau' | 'historique' | 'stats';
+type Onglet = 'bureau' | 'historique' | 'stats' | 'suivi';
 
-/** Onglets de l'écran : le bureau des agents, l'historique des requêtes, les statistiques. */
-function Onglets({ theme, onglet, onChange }: { theme: ThemeHub; onglet: Onglet; onChange(o: Onglet): void }) {
+/** Onglets de l'écran : le bureau des agents, l'historique des requêtes, les statistiques, le suivi (pastille : alertes non lues). */
+function Onglets({ theme, onglet, onChange, pastille }: { theme: ThemeHub; onglet: Onglet; onChange(o: Onglet): void; pastille?: string }) {
+  const mobile = useMobile();
   return (
     <View style={styles.onglets} accessibilityRole="tablist">
-      {([['bureau', 'Bureau'], ['historique', 'Historique'], ['stats', 'Statistiques']] as const).map(([id, titre]) => (
+      {([['bureau', 'Bureau'], ['historique', 'Historique'], ['stats', mobile ? 'Stats' : 'Statistiques'], ['suivi', pastille ? `Suivi · ${pastille}` : 'Suivi']] as const).map(([id, titre]) => (
         <Pressable
           key={id}
           accessibilityRole="tab"
@@ -255,6 +259,7 @@ export function ClaudeOffice({ theme, onRetour, contexte }: PropsRacineApp) {
     setOnglet('historique');
     defilement.current?.scrollTo?.({ y: 0, animated: false });
   };
+  const suivi = useSuiviOffice({ contexte, office: pont, debutDemo, changerOnglet });
   return (
     <ScrollView ref={defilement} style={{ flex: 1, backgroundColor: theme.fond }} contentContainerStyle={[styles.page, mobile ? styles.pageMobile : null]}>
       <RetourHub theme={theme} onRetour={onRetour} titre="Claude Office" />
@@ -264,8 +269,10 @@ export function ClaudeOffice({ theme, onRetour, contexte }: PropsRacineApp) {
           ? 'Un personnage par session de Claude Code, dans la zone de ce qu’il fait.'
           : 'Le bureau des agents de Claude Code : un personnage par session, qui va dans la zone de ce qu’il fait (code, commandes, lecture, web…), lève la main quand Claude attend ta réponse et passe en salle d’attente quand il a fini — ici même, sur le PC, le site ou le téléphone.'}
       </Text>
-      <Onglets theme={theme} onglet={onglet} onChange={changerOnglet} />
-      {onglet === 'historique' ? (
+      <Onglets theme={theme} onglet={onglet} onChange={changerOnglet} pastille={suivi.pastille} />
+      {onglet === 'suivi' ? (
+        <Suivi theme={theme} contexte={contexte} office={pont} debutDemo={debutDemo} alertes={suivi.alertes} maintenant={suivi.maintenant} activite={suivi.activite} onVoirHistorique={voirHistorique} onAideRaccourcis={suivi.ouvrirAide} />
+      ) : onglet === 'historique' ? (
         <Historique key={JSON.stringify(filtreHistorique ?? {})} theme={theme} contexte={contexte} office={pont} filtreInitial={filtreHistorique} debutDemo={debutDemo} />
       ) : onglet === 'stats' ? (
         <Statistiques theme={theme} contexte={contexte} office={pont} debutDemo={debutDemo} />
@@ -275,6 +282,7 @@ export function ClaudeOffice({ theme, onRetour, contexte }: PropsRacineApp) {
           {pont ? <Avance theme={theme} pont={pont} /> : null}
         </>
       )}
+      <AideRaccourcis theme={theme} visible={suivi.aide} onFermer={suivi.fermerAide} />
       <Text style={[styles.credit, styles.texteMobile, { color: theme.attenue }]}>D’après Claude Office, © 2026 W17ANT, licence MIT.</Text>
     </ScrollView>
   );

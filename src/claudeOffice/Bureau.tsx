@@ -32,6 +32,7 @@ import { Aide, MiseEnRoute } from './MiseEnRoute';
 import { LIBELLE_HOOK_HISTORIQUE, type EtatClaudeOffice, type PontClaudeOffice } from './pont';
 import { DELAIS_SALLE, delaiSalleMs, ecrirePrefsOffice, lirePrefsOffice, type DelaiSalle, type PrefsOffice } from './prefsOffice';
 import { SceneOpenSpace } from './SceneOpenSpace';
+import { useNavigationAgents } from './raccourcis';
 import {
   DELAI_MIN_PRESENCE_MS, MAX_PRESENCES_JOUR, ecrireEtatPresence, ecrireEtatSynchro, lireEtatPresence, lireEtatSynchro, type EtatPresence, type EtatSynchroHistorique,
 } from './synchroHistorique';
@@ -129,6 +130,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
     [bureau.agents, filtreActif?.mode, filtreActif?.projet], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const detail = bureau.agents.find(a => a.cle === choisi);
+  useNavigationAgents(agentsVus.map(a => a.cle), choisi, setChoisi); // v4 : touches J/K (agent suivant/précédent) et Échap (ferme le détail), raccourcis.ts
   const enDirect = activite.source.genre === 'local' && !demo;
   const fraicheur = demo ? (mobile ? 'Démo · sessions fictives' : 'Démo · sessions fictives, aucune activité réelle') : libelleFraicheur(activite.source, maintenant);
   const largeurDispo = Math.max(280, Math.floor(dispo ?? Math.min(fenetre.width - 32, 1000)));
