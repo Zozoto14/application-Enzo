@@ -236,6 +236,7 @@ describe('rendu : bureau v3', () => {
   it('pastilles « attend ta réponse » et « terminés à voir », détail (chronologie), « Marquer comme vu », « Voir dans l’Historique »', async () => {
     const onVoir = jest.fn();
     await render(<BureauVisuel theme={theme} activite={{ entrees: journal(), references: {}, source: { genre: 'local' }, lu: true }} maintenant={T0} mouvementReduit onVoirHistorique={onVoir} />);
+    await fireEvent.press(screen.getByTestId('bureau-options'));
     expect(screen.getByTestId('bureau-aujourdhui').props.children).toMatch(/^Aujourd’hui : 3 sessions · 3 demandes/);
     expect(screen.getByTestId('bureau-compte-attendent').props.children).toBe(1);
     expect(screen.getByTestId('bureau-compte-a-voir').props.children).toBe(1);
@@ -271,7 +272,10 @@ describe('rendu : bureau v3', () => {
     expect(screen.getByTestId('bureau-groupe-bibliotheque')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('bureau-vue-scene'));
     expect(onPrefs).toHaveBeenCalledWith({ ...prefs, vue: 'scene' });
+    await fireEvent.press(screen.getByTestId('bureau-options'));
     await fireEvent.press(screen.getByTestId('bureau-filtre-hub'));
+    // Filtre actif : rappelé dans la barre d'outils (et retiré d'un geste).
+    expect(screen.getByTestId('bureau-filtre-actif')).toBeTruthy();
     expect(StyleSheet.flatten(screen.getByTestId('bureau-agent-sess-lit').props.style).opacity).toBe(0.45);
     await fireEvent.press(screen.getByTestId('bureau-filtre-mode-masque'));
     expect(screen.queryByTestId('bureau-agent-sess-attend')).toBeNull();

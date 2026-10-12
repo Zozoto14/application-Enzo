@@ -146,3 +146,51 @@ export function etapesMiseEnRoute(o: EntreeMiseEnRoute): Etape[] {
 
 /** Tout est en ordre : la check-list se réduit à une ligne. */
 export const toutEstPret = (etapes: readonly Etape[]): boolean => etapes.every(e => e.niveau === 'ok' || e.niveau === 'info');
+
+// ------------------------------------------------------------------ bandeau réductible
+
+/** Les points à régler (rouge ou orange) : ceux qui empêchent « tout est prêt ». */
+export const pointsARegler = (etapes: readonly Etape[]): string[] => etapes.filter(e => e.niveau === 'erreur' || e.niveau === 'attention').map(e => e.id);
+
+/** Mémoire du bandeau sur l'appareil : réduit à la main, et les points à régler connus à ce moment-là. */
+export interface MemoireMiseEnRoute {
+  reduit: boolean;
+  points: string[];
+}
+
+export const CLE_MEMOIRE_MISE_EN_ROUTE = 'claude-office-mise-en-route';
+
+/**
+ * Le bandeau est-il réduit ? Tout est prêt : réduit (sauf s'il a été rouvert).
+ * Sinon : réduit seulement si on l'a réduit à la main ET qu'aucun NOUVEAU point
+ * n'est passé au rouge depuis (un point déjà connu, toujours rouge — par
+ * exemple « Aucun événement reçu » quand on travaille depuis des sessions
+ * cloud — ne le rouvre pas à chaque chargement).
+ */
+export function bandeauReduit(etapes: readonly Etape[], memoire: MemoireMiseEnRoute | undefined): boolean {
+  if (toutEstPret(etapes)) return memoire?.reduit !== false;
+  if (!memoire?.reduit) return false;
+  return pointsARegler(etapes).every(p => memoire.points.includes(p));
+}
+
+type Stockage = { getItem(c: string): string | null; setItem(c: string, v: string): void };
+const stockage = (): Stockage | undefined => (globalThis as { localStorage?: Stockage }).localStorage;
+
+export function lireMemoireMiseEnRoute(): MemoireMiseEnRoute | undefined {
+  try {
+    const brut = stockage()?.getItem(CLE_MEMOIRE_MISE_EN_ROUTE);
+    if (!brut) return undefined;
+    const m = JSON.parse(brut) as Partial<MemoireMiseEnRoute>;
+    return { reduit: Boolean(m.reduit), points: Array.isArray(m.points) ? m.points.filter((p): p is string => typeof p === 'string').slice(0, 20) : [] };
+  } catch {
+    return undefined;
+  }
+}
+
+export function ecrireMemoireMiseEnRoute(m: MemoireMiseEnRoute): void {
+  try {
+    stockage()?.setItem(CLE_MEMOIRE_MISE_EN_ROUTE, JSON.stringify(m));
+  } catch {
+    // stockage indisponible : le bandeau reste réductible le temps de la visite
+  }
+}

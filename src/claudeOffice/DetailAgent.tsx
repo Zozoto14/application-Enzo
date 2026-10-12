@@ -14,6 +14,7 @@ import { couleurAgent, ilYA, LIBELLES_ETAT, phraseAgent, type Agent } from './lo
 import { dureeCourte, heure, type EntreeHistorique } from './logiqueHistorique';
 import { chronologieSession, type GenreEtape } from './logiqueStats';
 import { TEINTES_ACTIVITE } from './logiqueScene';
+import type { SousAgent } from './sousAgentsScene';
 import { Bouton, TAILLE } from './uiOffice';
 import { ZONES } from './zones';
 
@@ -22,9 +23,11 @@ const ICONES: Record<GenreEtape, [string, string]> = {
   attente: ['!', TEINTES_ACTIVITE.attend], reponse: ['✓', TEINTES_ACTIVITE.fini], 'sous-agent': ['✦', TEINTES_ACTIVITE.agent], fin: ['■', ZONES.salle.teinte],
 };
 
-export function DetailAgent({ theme, agent, entrees, maintenant, onFermer, onVoirHistorique, onMarquerVu }: {
+export function DetailAgent({ theme, agent, entrees, maintenant, onFermer, onVoirHistorique, onMarquerVu, sousAgents }: {
   theme: ThemeHub; agent?: Agent; entrees: readonly EntreeHistorique[]; maintenant: number; onFermer(): void;
   onVoirHistorique?(session: string): void; onMarquerVu?(cleFin: string): void;
+  /** Sous-agents de toutes les sessions (ceux de cet agent sont listés, avec leur chronologie). */
+  sousAgents?: readonly SousAgent[];
 }) {
   const chrono = useMemo(() => (agent ? chronologieSession(entrees, agent.cle) : undefined), [agent, entrees]);
   if (!agent || !chrono) return null;
@@ -73,6 +76,7 @@ export function DetailAgent({ theme, agent, entrees, maintenant, onFermer, onVoi
           </View>
         ))}
       </View>
+      <SectionSousAgents theme={theme} liste={(sousAgents ?? []).filter(s => s.parent === agent.cle)} maintenant={maintenant} />
       <Text style={[t, { fontWeight: '700' }]} accessibilityRole="header">Chronologie de la session</Text>
       {chrono.masquees ? <Text style={a}>{chrono.masquees} étape(s) plus ancienne(s) : voir l’Historique.</Text> : null}
       {chrono.etapes.length === 0 ? <Text style={a}>Aucun événement de cette session dans les données lues ici.</Text> : null}
@@ -97,6 +101,38 @@ export function DetailAgent({ theme, agent, entrees, maintenant, onFermer, onVoi
       </View>
       <View style={[styles.filet, { backgroundColor: couleurAgent(agent.projet ?? agent.cle) }]} />
     </FeuilleBasse>
+  );
+}
+
+const LIBELLES_SOUS_AGENT: Record<SousAgent['etat'], string> = { 'en-cours': 'en cours', termine: 'terminé', echec: 'échec' };
+
+/** « Sous-agents » : chacun avec son type, sa description, son état et sa durée, du plus récent au plus ancien. */
+function SectionSousAgents({ theme, liste, maintenant }: { theme: ThemeHub; liste: readonly SousAgent[]; maintenant: number }) {
+  if (!liste.length) return null;
+  const a = { color: theme.attenue, fontSize: TAILLE, lineHeight: 22 };
+  const tries = [...liste].sort((x, y) => y.debut - x.debut);
+  const enCours = liste.filter(s => s.etat === 'en-cours').length;
+  return (
+    <View style={{ gap: 4 }} testID="bureau-detail-sous-agents">
+      <Text style={{ color: theme.texte, fontSize: TAILLE, fontWeight: '700' }} accessibilityRole="header">
+        {`Sous-agents (${liste.length}${enCours ? `, dont ${enCours} en cours` : ''})`}
+      </Text>
+      {tries.slice(0, 12).map(s => (
+        <View key={s.id} style={styles.etape} accessibilityLabel={`Sous-agent ${s.type ?? ''} : ${s.description ?? 'tâche déléguée'}, ${LIBELLES_SOUS_AGENT[s.etat]}`}>
+          <Text style={[a, styles.heure]}>{new Date(s.debut).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</Text>
+          <View style={[styles.icone, { backgroundColor: s.etat === 'echec' ? theme.critique : TEINTES_ACTIVITE.agent }]} aria-hidden><Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '800' }}>✦</Text></View>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ color: theme.texte, fontSize: TAILLE, fontWeight: '600' }}>
+              {s.description ?? 'Tâche déléguée'}
+              <Text style={a}>{` · ${s.type ?? 'sous-agent'}${s.modele ? ` · ${s.modele}` : ''}`}</Text>
+            </Text>
+            <Text style={[a, s.etat === 'echec' ? { color: theme.critique } : null]}>
+              {s.etat === 'en-cours' ? (ilYA(s.debut, maintenant) === 'à l’instant' ? 'Vient de démarrer' : `En cours depuis ${ilYA(s.debut, maintenant).replace('il y a ', '')}`) : `${LIBELLES_SOUS_AGENT[s.etat]}${s.duree ? ` en ${dureeCourte(s.duree)}` : ''}${s.fin ? ` · ${ilYA(s.fin, maintenant)}` : ''}`}
+            </Text>
+          </View>
+        </View>
+      ))}
+    </View>
   );
 }
 

@@ -8,7 +8,9 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { ThemeHub } from '../hub/themes';
 import { FeuilleBasse } from '../ui/mobile/FeuilleBasse';
-import { toutEstPret, type Etape, type GenreAction, type Niveau } from './logiqueMiseEnRoute';
+import {
+  bandeauReduit, ecrireMemoireMiseEnRoute, lireMemoireMiseEnRoute, pointsARegler, toutEstPret, type Etape, type GenreAction, type MemoireMiseEnRoute, type Niveau,
+} from './logiqueMiseEnRoute';
 import { ICONES_ACTIVITE, LIBELLES_ACTIVITE, TEINTES_ACTIVITE, type Activite } from './logiqueScene';
 import { Bouton, Carte, Commande, TAILLE } from './uiOffice';
 import { CORRESPONDANCE_OUTILS, ORDRE_ZONES, ZONES } from './zones';
@@ -21,23 +23,52 @@ export function couleurNiveau(theme: ThemeHub, n: Niveau): string {
 
 export function MiseEnRoute({ theme, etapes, onAction, occupe }: { theme: ThemeHub; etapes: readonly Etape[]; onAction(g: GenreAction): void; occupe?: boolean }) {
   const pret = toutEstPret(etapes);
-  const [ouvert, setOuvert] = useState(false);
-  if (pret && !ouvert) {
+  const [memoire, setMemoire] = useState<MemoireMiseEnRoute | undefined>(lireMemoireMiseEnRoute);
+  const reduit = bandeauReduit(etapes, memoire);
+  const points = pointsARegler(etapes);
+  const changer = (r: boolean) => {
+    const m = { reduit: r, points };
+    setMemoire(m);
+    ecrireMemoireMiseEnRoute(m);
+  };
+  if (reduit) {
+    const rouge = etapes.some(e => e.niveau === 'erreur');
+    const couleur = pret ? theme.ok : rouge ? theme.critique : theme.alerte;
+    const titre = pret ? '✓ Mise en route : tout est prêt' : `Mise en route · ${points.length} point${points.length > 1 ? 's' : ''} à régler`;
     return (
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Mise en route : tout est prêt. Afficher le détail"
-        onPress={() => setOuvert(true)}
-        style={[styles.reduite, { borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen }]}
+        accessibilityLabel={`${titre}. Afficher le détail`}
+        accessibilityState={{ expanded: false }}
+        aria-expanded={false}
+        onPress={() => changer(false)}
+        style={[styles.reduite, { borderColor: pret ? theme.ligne : couleur, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen }]}
         testID="mise-en-route-reduite"
       >
-        <Text style={{ color: theme.ok, fontSize: TAILLE, fontWeight: '700' }}>✓ Mise en route : tout est prêt</Text>
-        <Text style={{ color: theme.accent, fontSize: TAILLE }}>Détails</Text>
+        <View style={styles.ligneReduite}>
+          {pret ? null : <View style={[styles.rondNiveau, { backgroundColor: couleur }]} aria-hidden testID={`mise-en-route-reduite-${rouge ? 'rouge' : 'orange'}`} />}
+          <Text style={{ color: pret ? theme.ok : theme.texte, fontSize: TAILLE, fontWeight: '700', flexShrink: 1 }}>{titre}</Text>
+        </View>
+        <Text style={{ color: theme.accent, fontSize: TAILLE, fontWeight: '600' }}>Afficher ▾</Text>
       </Pressable>
     );
   }
   return (
-    <Carte theme={theme} titre="Mise en route" testID="mise-en-route" bordure={pret ? undefined : theme.alerte}>
+    <Carte theme={theme} testID="mise-en-route" bordure={pret ? undefined : theme.alerte}>
+      <View style={styles.entete}>
+        <Text accessibilityRole="header" style={{ color: theme.texte, fontSize: 17, fontWeight: '700', flex: 1 }}>Mise en route</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Réduire la mise en route"
+          accessibilityState={{ expanded: true }}
+          aria-expanded
+          onPress={() => changer(true)}
+          style={({ pressed }) => [styles.reduire, { borderColor: theme.ligne, opacity: pressed ? 0.7 : 1 }]}
+          testID="mise-en-route-reduire"
+        >
+          <Text style={{ color: theme.accent, fontSize: TAILLE, fontWeight: '600' }}>Réduire ▴</Text>
+        </Pressable>
+      </View>
       {etapes.map(e => (
         <View key={e.id} style={styles.ligne} testID={`mise-en-route-${e.id}`} accessibilityLabel={`${e.titre}${e.detail ? `. ${e.detail}` : ''}`}>
           <View style={[styles.pastille, { backgroundColor: couleurNiveau(theme, e.niveau) }]} aria-hidden>
@@ -55,7 +86,6 @@ export function MiseEnRoute({ theme, etapes, onAction, occupe }: { theme: ThemeH
           </View>
         </View>
       ))}
-      {pret ? <Bouton theme={theme} variante="discret" titre="Réduire" onPress={() => setOuvert(false)} testID="mise-en-route-reduire" /> : null}
     </Carte>
   );
 }
@@ -102,6 +132,10 @@ export function Aide({ theme, visible, onFermer }: { theme: ThemeHub; visible: b
 
 const styles = StyleSheet.create({
   reduite: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: 14, minHeight: 48 },
+  ligneReduite: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  rondNiveau: { width: 14, height: 14, borderRadius: 7 },
+  entete: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  reduire: { minHeight: 44, minWidth: 44, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, justifyContent: 'center' },
   ligne: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   pastille: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   texte: { flex: 1, gap: 4, minWidth: 0 },

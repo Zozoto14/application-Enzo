@@ -222,7 +222,7 @@ try {
   await servir(ecrire([{ ...s, hook_event_name: 'Stop' }]));
   verifier(await attendreZone(cleBudget, 'salle', 30_000), 'fin de réponse : l’agent va en Salle d’attente');
   verifier(/1 terminé à voir/.test(await page.getByTestId('bureau-pastille-a-voir').innerText()), 'pastille « 1 terminé à voir »');
-  verifier(/Salle d’attente · 1/.test(await page.getByTestId('scene-zone-salle').textContent()), 'enseigne de la salle d’attente : 1 présent');
+  verifier((await page.getByTestId('scene-zone-salle').getAttribute('data-nombre')) === '1' && /Salle d’attente/.test(await page.getByTestId('scene-zone-salle').textContent()), 'enseigne de la salle d’attente : 1 présent');
   await prendre('22-salle-attente-pc');
   await page.getByTestId('bureau-pastille-a-voir').click();
   await page.getByTestId('bureau-detail').waitFor();

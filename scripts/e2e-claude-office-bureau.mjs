@@ -125,8 +125,8 @@ try {
     }
     const deborde = [];
     for (const el of zone.querySelectorAll('*')) {
-      // Rangée des projets : elle défile horizontalement sur téléphone (comme la scène rapprochée).
-      if (!visible(el) || el.closest('[data-testid="bureau-filtres"]')) continue;
+      // Rangée des projets, et contenu de la scène (zoomée, coupée par son cadre) : hors mesure.
+      if (!visible(el) || el.closest('[data-testid="bureau-filtres"], [data-testid="bureau-scene-defilement"]')) continue;
       const r = el.getBoundingClientRect();
       if (r.right > window.innerWidth + 1 || r.left < -1) deborde.push(el.getAttribute('data-testid') ?? el.tagName);
     }
@@ -275,13 +275,15 @@ try {
   verifier(mesure.debordementPage === 0 && mesure.deborde.length === 0, `téléphone : aucun débordement ${JSON.stringify(mesure.deborde)}`);
   verifier(mesure.petites.length === 0, `téléphone : cibles ≥ 44 px ${JSON.stringify(mesure.petites)}`);
   verifier(mesure.petitsTextes.length === 0, `téléphone : textes ≥ 15 px ${JSON.stringify(mesure.petitsTextes)}`);
-  verifier(mesure.sceneDansLEcran && (await page.getByTestId('bureau-scene-defilement').count()) === 1, 'téléphone : vue rapprochée, la scène défile dans son cadre');
+  const echelle = Number(await page.getByTestId('bureau-plateau').getAttribute('data-zoom'));
+  verifier(mesure.sceneDansLEcran && echelle >= 0.7, `téléphone : vue rapprochée lisible dans son cadre (échelle ${echelle}), qu’on fait glisser`);
   await prendre('10-bureau-telephone');
   await prendre('11-bureau-telephone-page', true);
-  // Vue d'ensemble, puis démo animée sur téléphone : mêmes contrôles.
-  await page.getByTestId('bureau-zoom').click();
-  verifier((await page.getByTestId('bureau-scene-defilement').count()) === 0, 'téléphone : « Vue d’ensemble » montre toute la scène');
-  await page.getByTestId('bureau-zoom').click();
+  // Vue d'ensemble (dézoom au maximum), puis démo animée sur téléphone : mêmes contrôles.
+  for (let i = 0; i < 4; i++) await page.getByTestId('scene-zoom-moins').click();
+  await pause(400);
+  verifier(Number(await page.getByTestId('bureau-plateau').getAttribute('data-zoom')) < echelle, 'téléphone : « − » jusqu’à la vue d’ensemble de toute la scène');
+  await page.getByTestId('scene-recentrer').click();
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.getByTestId('bureau-demo').click();
   await pause(9000);

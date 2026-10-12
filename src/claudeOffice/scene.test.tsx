@@ -280,7 +280,7 @@ describe('scène : rendu SVG', () => {
     expect(nuit).toContain('data-testid="scene-fixe"');
     expect(nuit).toContain('aria-hidden="true"');
     expect(nuit).toContain('class="co-scene co-fixe"');
-    expect(nuit).toContain('budget');
+    expect(nuit).toContain('data-cle="aaaa|sess-a"');
     expect(nuit).not.toContain('ghp_abcdef');
     expect(nuit).toContain('#2B3150'); // murs de nuit
     expect(nuit).toMatch(/class="co-m-(assis|debout) co-a-terminal/);
@@ -305,15 +305,17 @@ describe('scène : rendu SVG', () => {
     expect(h).toContain('co-p-main');
     expect(h).toContain('data-zone="guichet"');
     expect(h).toContain('co-gyro');
-    expect(h).toContain('attend ta réponse');
-    expect(h).toContain('Autoriser Bash');
+    // Plus de bulle permanente : le texte vient au survol (carte du plateau).
+    expect(h).not.toContain('Autoriser Bash');
+    expect(h).toContain('data-testid="scene-zone-guichet" data-nombre="1"');
     // Estompés (filtre par projet) : presque transparents.
     expect(html(props({ estompes: new Set(['aaaa|sess-b']) }))).toContain('opacity="0.22"');
     const vide = html(props({ agents: [], demo: true }));
     expect(vide).toContain('scene-demo');
     expect(vide).toContain('DÉMO');
     expect(vide).not.toContain('class="co-m-');
-    expect(html(props({ choisi: 'aaaa|sess-b' }))).toContain('Pourquoi ?');
+    expect(html(props({ choisi: 'aaaa|sess-b' }))).toContain('data-testid="scene-repere"');
+    expect(html(props({ choisi: 'aaaa|sess-b' }))).not.toContain('Pourquoi ?');
     const fige = deduireBureau(journal(), { maintenant: T0 + 30 * 60_000, references: { aaaa: T0 } }).agents;
     expect(fige.every(a => a.fige)).toBe(true);
     expect(html(props({ agents: fige }))).toContain('opacity="0.7"');

@@ -18,7 +18,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { police, type ThemeHub } from '../hub/themes';
 import type { ContexteHub } from '../hub/types';
 import { useMobile } from '../ui/mobile/useMobile';
@@ -31,7 +31,10 @@ import { phraseAujourdhui, resumeAujourdhui } from './logiqueStats';
 import { Aide, MiseEnRoute } from './MiseEnRoute';
 import { LIBELLE_HOOK_HISTORIQUE, type EtatClaudeOffice, type PontClaudeOffice } from './pont';
 import { DELAIS_SALLE, delaiSalleMs, ecrirePrefsOffice, lirePrefsOffice, type DelaiSalle, type PrefsOffice } from './prefsOffice';
-import { SceneOpenSpace } from './SceneOpenSpace';
+import { avancerRelecture, bureauA, demarrerRelecture, densite, PAS_RELECTURE_MS, trierEntrees, type Relecture } from './logiqueRelecture';
+import { PlateauScene } from './PlateauScene';
+import { deduireSousAgents, sousAgentsDemo } from './sousAgentsScene';
+import type { CommandesRelecture } from './plateauTypes';
 import {
   DELAI_MIN_PRESENCE_MS, MAX_PRESENCES_JOUR, ecrireEtatPresence, ecrireEtatSynchro, lireEtatPresence, lireEtatSynchro, type EtatPresence, type EtatSynchroHistorique,
 } from './synchroHistorique';
@@ -66,9 +69,6 @@ export function teinteLisible(hex: string, sombre: boolean): string {
   return `#${[(n >> 16) & 255, (n >> 8) & 255, n & 255].map(v => canal(v).toString(16).padStart(2, '0')).join('')}`;
 }
 
-/** Largeur de la scène en vue rapprochée (téléphone) : assez pour lire les personnages. */
-const LARGEUR_RAPPROCHEE = 820;
-
 export interface FiltreHistorique {
   session?: string;
   recherche?: string;
@@ -93,12 +93,14 @@ export interface PropsBureauVisuel {
   onVoirHistorique?(f: FiltreHistorique): void;
   /** Bloc affiché en tête (check-list de mise en route). */
   entete?: React.ReactNode;
+  /** Démo : son début (ms), pour ses sous-agents fictifs. */
+  debutDemo?: number;
 }
 
 type ModeFiltre = 'avant' | 'masque';
 
 /** Le dessin du bureau (sans chargement) : barre d'outils, scène ou liste, détail. */
-export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vide, demo, onDemo, prefs: prefsDonnees, onPrefs, onVoirHistorique, entete }: PropsBureauVisuel) {
+export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vide, demo, onDemo, prefs: prefsDonnees, onPrefs, onVoirHistorique, entete, debutDemo }: PropsBureauVisuel) {
   const mobile = useMobile();
   const fenetre = useWindowDimensions();
   const reduit = useMouvementReduit(mouvementReduit);
@@ -107,33 +109,70 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
   const changerPrefs = (p: PrefsOffice) => (onPrefs ? onPrefs(p) : setPrefsLocales(p));
   const [choisi, setChoisi] = useState<string>();
   const [dispo, setDispo] = useState<number>();
-  const [rapproche, setRapproche] = useState(true);
+  const [options, setOptions] = useState(false);
   const [aide, setAide] = useState(false);
   const [zoneExpliquee, setZoneExpliquee] = useState<string>();
   const [filtre, setFiltre] = useState<{ projet: string; mode: ModeFiltre }>();
   const [recherche, setRecherche] = useState('');
-  const defilement = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const vus = useMemo(() => new Set(prefs.vus), [prefs.vus]);
+  const salle = useMemo(() => ({ delaiMs: delaiSalleMs(prefs.delaiSalle), vus }), [prefs.delaiSalle, vus]);
   const bureau = useMemo(
-    () => deduireBureau(activite.entrees, { maintenant, references: activite.references, salle: { delaiMs: delaiSalleMs(prefs.delaiSalle), vus } }),
-    [activite.entrees, activite.references, maintenant, prefs.delaiSalle, vus],
+    () => deduireBureau(activite.entrees, { maintenant, references: activite.references, salle }),
+    [activite.entrees, activite.references, maintenant, salle],
   );
   const compteurs = useMemo(() => compterBureau(bureau, activite.entrees, maintenant), [bureau, activite.entrees, maintenant]);
   const aujourdhui = useMemo(() => phraseAujourdhui(resumeAujourdhui(activite.entrees, maintenant)), [activite.entrees, maintenant]);
   const projets = useMemo(() => [...new Set(bureau.agents.map(a => a.projet ?? 'Projet inconnu'))].sort((a, b) => a.localeCompare(b, 'fr')), [bureau.agents]);
   const filtreActif = filtre && projets.includes(filtre.projet) ? filtre : undefined;
   const projetDe = (a: Agent) => a.projet ?? 'Projet inconnu';
-  const agentsVus = filtreActif?.mode === 'masque' ? bureau.agents.filter(a => projetDe(a) !== filtreActif.projet) : bureau.agents;
+  const masquer = (liste: readonly Agent[]) => (filtreActif?.mode === 'masque' ? liste.filter(a => projetDe(a) !== filtreActif.projet) : [...liste]);
+  const agentsVus = masquer(bureau.agents);
   const estompes = useMemo(
     () => (filtreActif?.mode === 'avant' ? new Set(bureau.agents.filter(a => projetDe(a) !== filtreActif.projet).map(a => a.cle)) : undefined),
     [bureau.agents, filtreActif?.mode, filtreActif?.projet], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  const detail = bureau.agents.find(a => a.cle === choisi);
+
+  // Relecture de la journée (web) : le bureau reconstruit à l'instant rejoué, depuis ce qui est déjà en mémoire.
+  const [relecture, setRelecture] = useState<Relecture>();
+  const [saut, setSaut] = useState(0);
+  const triees = useMemo(() => (relecture ? trierEntrees(activite.entrees) : []), [relecture !== undefined, activite.entrees]); // eslint-disable-line react-hooks/exhaustive-deps
+  const enLecture = relecture?.lecture;
+  useEffect(() => {
+    if (!enLecture) return undefined;
+    const t = setInterval(() => setRelecture(r => (r ? avancerRelecture(r, PAS_RELECTURE_MS) : r)), PAS_RELECTURE_MS);
+    return () => clearInterval(t);
+  }, [enLecture]);
+  const bureauRejoue = useMemo(() => (relecture ? bureauA(triees, relecture.t, { salle }) : undefined), [triees, relecture?.t, salle]); // eslint-disable-line react-hooks/exhaustive-deps
+  const densiteJour = useMemo(() => (relecture ? densite(triees, relecture.debut, relecture.fin) : []), [triees, relecture?.debut, relecture?.fin]); // eslint-disable-line react-hooks/exhaustive-deps
+  const agentsScene = bureauRejoue ? masquer(bureauRejoue.agents) : agentsVus;
+  const instant = relecture?.t ?? maintenant;
+  // Sous-agents (contrat du module de données : docs/claude-office.md) : déduits de l'historique (outils Task / Agent),
+  // ou fictifs en démo. À l'intégration, `deduireSousAgents` cède la place au module `sousAgents(evenements)`.
+  const sousAgents = useMemo(
+    () => (demo && debutDemo !== undefined ? sousAgentsDemo(debutDemo, instant, agentsScene) : deduireSousAgents(activite.entrees, instant)),
+    [demo, debutDemo, instant, agentsScene.map(a => a.cle).join('|'), activite.entrees], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const commandesRelecture: CommandesRelecture | undefined = relecture ? {
+    r: relecture,
+    densite: densiteJour,
+    onLecture: lecture => setRelecture(r => (r ? { ...r, lecture: lecture && r.t < r.fin, t: lecture && r.t >= r.fin ? r.debut : r.t } : r)),
+    onVitesse: vitesse => setRelecture(r => (r ? { ...r, vitesse } : r)),
+    onAller: t => {
+      setRelecture(r => (r ? { ...r, t: Math.max(r.debut, Math.min(r.fin, t)) } : r));
+      setSaut(n => n + 1);
+    },
+    onQuitter: () => {
+      setRelecture(undefined);
+      setSaut(n => n + 1);
+    },
+  } : undefined;
+
+  const detail = agentsScene.find(a => a.cle === choisi) ?? bureau.agents.find(a => a.cle === choisi);
   const enDirect = activite.source.genre === 'local' && !demo;
-  const fraicheur = demo ? (mobile ? 'Démo · sessions fictives' : 'Démo · sessions fictives, aucune activité réelle') : libelleFraicheur(activite.source, maintenant);
-  const largeurDispo = Math.max(280, Math.floor(dispo ?? Math.min(fenetre.width - 32, 1000)));
-  const vueRapprochee = mobile && rapproche && largeurDispo < LARGEUR_RAPPROCHEE;
-  const largeurScene = vueRapprochee ? LARGEUR_RAPPROCHEE : largeurDispo;
+  const fraicheurComplete = demo ? 'Démo · sessions fictives, aucune activité réelle' : libelleFraicheur(activite.source, maintenant);
+  // Dans la barre d'outils : la version courte (la complète est lue par les lecteurs d'écran).
+  const fraicheur = demo ? 'Démo · sessions fictives' : fraicheurComplete.replace(/ \(relu toutes les 2 s\)$/, '');
+  const largeurDispo = Math.max(280, Math.floor(dispo ?? Math.min(fenetre.width - 32, 1400)));
   const choisir = (cle: string) => setChoisi(c => (c === cle ? undefined : cle));
   const couleurPastille = demo ? '#E0803A' : enDirect ? theme.ok : theme.ligne;
   const attendent = bureau.agents.filter(a => a.etat === 'attend');
@@ -145,14 +184,6 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
   const texte = { color: theme.texte, fontSize: TAILLE, lineHeight: 22, ...police(theme.policeTexte) };
   const attenue = { color: theme.attenue, fontSize: TAILLE, lineHeight: 22 };
 
-  // Vue rapprochée : on part centré sur l'atelier et le guichet (une fois la vue mise en page).
-  const centrer = () => {
-    const x = Math.max(0, LARGEUR_RAPPROCHEE * 0.42 - largeurDispo / 2);
-    const faire = () => defilement.current?.scrollTo?.({ x, animated: false });
-    faire();
-    if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(faire);
-  };
-
   const compteursVue = (
     <View style={styles.compteurs} testID="bureau-compteurs">
       {([
@@ -162,7 +193,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
         ['inactifs', 'Inactifs', compteurs.inactifs, TEINTES_ACTIVITE.pause],
         ['termines', 'Sessions fermées', compteurs.termines, TEINTES_ACTIVITE.fini],
       ] as const).map(([id, libelle, valeur, teinte]) => (
-        <View key={id} style={[styles.compteur, mobile ? styles.compteurMobile : null, { borderColor: theme.ligne, borderRadius: theme.rayonMoyen, backgroundColor: theme.surface }]} accessibilityLabel={`${libelle} : ${valeur}`}>
+        <View key={id} style={[styles.compteur, mobile ? styles.compteurMobile : null, { borderColor: theme.ligne, borderRadius: theme.rayonMoyen, backgroundColor: theme.fond }]} accessibilityLabel={`${libelle} : ${valeur}`}>
           <View style={[styles.filet, { backgroundColor: teinte }]} />
           <Text style={[styles.nombre, { color: theme.texte }, police(theme.policeChiffres)]} testID={`bureau-compte-${id}`}>{valeur}</Text>
           <Text style={attenue} numberOfLines={2}>{libelle}</Text>
@@ -171,24 +202,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
     </View>
   );
 
-  const scene = (
-    <SceneOpenSpace
-      key={demo ? 'demo' : 'reel'}
-      agents={agentsVus}
-      charge={activite.lu}
-      theme={theme}
-      reduit={reduit}
-      largeur={largeurScene}
-      choisi={choisi}
-      onChoisir={choisir}
-      demo={demo}
-      texteAgrandi={vueRapprochee}
-      maintenant={maintenant}
-      estompes={estompes}
-    />
-  );
-
-  const carteAgent = (a: Agent, riche: boolean) => {
+  const carteAgent = (a: Agent, riche: boolean, dansGroupe = false) => {
     const activiteA = activiteAgent(a);
     const teinte = a.fige ? theme.attenue : teinteLisible(a.etat === 'attend' ? TEINTES_ACTIVITE.attend : a.salle ? ZONES.salle.teinte : TEINTES_ACTIVITE[activiteA], theme.sombre);
     const ap = apparence(a);
@@ -203,7 +217,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
         accessibilityLabel={`${a.projet ?? 'Projet inconnu'}${a.appareil ? `, ${a.appareil}` : ''}, ${ZONES[a.zone].nom} : ${phraseAgent(a, maintenant)}. ${a.salle ? 'Terminé, à voir. ' : ''}Dernière demande : ${a.demande ?? 'aucune'}. Ouvrir le détail`}
         accessibilityState={{ selected: selectionne }}
         testID={`bureau-agent-${a.session.slice(0, 12)}`}
-        style={[styles.agent, { borderColor: selectionne ? theme.accent : a.etat === 'attend' ? TEINTES_ACTIVITE.attend : theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen, width: mobile ? '100%' : undefined, opacity: estompes?.has(a.cle) ? 0.45 : 1 }]}
+        style={[styles.agent, { borderColor: selectionne ? theme.accent : a.etat === 'attend' ? TEINTES_ACTIVITE.attend : theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen, width: mobile ? '100%' : undefined, opacity: estompes?.has(a.cle) ? 0.45 : 1 }, dansGroupe ? styles.agentDansGroupe : null]}
       >
         <View style={[styles.avatar, { backgroundColor: ap.haut, borderColor: teinte }]} aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
           <View style={[styles.avatarTete, { backgroundColor: ap.peau, borderTopColor: ap.cheveux }]} />
@@ -225,81 +239,33 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
       </Pressable>
     );
   };
+  /** Une carte d'agent suivie de ses sous-agents (indentés), dans les listes. */
+  const carteAvecSous = (a: Agent, riche: boolean) => {
+    const sous = sousAgents.filter(s => s.parent === a.cle && (s.etat === 'en-cours' || (s.fin !== undefined && instant - s.fin < 30 * 60_000))).sort((x, y) => y.debut - x.debut).slice(0, 4);
+    if (!sous.length) return carteAgent(a, riche);
+    return (
+      <View key={a.cle} style={[styles.groupeAgent, { width: mobile ? '100%' : undefined }]}>
+        {carteAgent(a, riche, true)}
+        <View style={styles.sousListe} testID={`bureau-sous-agents-${a.session.slice(0, 12)}`}>
+          {sous.map(sa => (
+            <View key={sa.id} style={[styles.sousAgent, { borderColor: theme.ligne, backgroundColor: theme.surface }]} accessibilityLabel={`Sous-agent ${sa.type ?? ''} : ${sa.description ?? 'tâche déléguée'}, ${sa.etat === 'en-cours' ? 'en cours' : 'terminé'}`}>
+              <Text style={{ color: teinteLisible(TEINTES_ACTIVITE.agent, theme.sombre), fontSize: TAILLE, fontWeight: '700' }}>✦</Text>
+              <Text style={[texte, { flex: 1 }]} numberOfLines={1}>{sa.description ?? 'Tâche déléguée'}</Text>
+              <Text style={attenue}>{sa.etat === 'en-cours' ? `${sa.type ?? 'sous-agent'} · en cours` : `${sa.type ?? 'sous-agent'} · fini`}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
 
   // Vue Liste : par zone, « attend ta réponse » puis « terminés récemment » d'abord.
   const groupes = ORDRE_ZONES.map(z => ({ z, agents: agentsVus.filter(a => a.zone === z) })).filter(g => g.agents.length);
 
-  return (
-    <View style={styles.colonne} testID="bureau-visuel" accessibilityLabel={`Bureau de Claude Office : ${compteurs.actifs} agent(s) au travail`}>
-      {entete}
+  // Menu « Options » : tout ce qui encombrait l'écran (résumé du jour, compteurs, recherche, filtres, légende).
+  const panneauOptions = options ? (
+    <Carte theme={theme} testID="bureau-options-panneau" style={{ gap: 12 }}>
       <Text style={[texte, { fontWeight: '600' }]} testID="bureau-aujourdhui">{demo ? `${aujourdhui} (démo)` : aujourdhui}</Text>
-
-      <View style={styles.entete}>
-        <View style={[styles.pastille, { borderColor: couleurPastille, backgroundColor: theme.surface }]} testID="bureau-fraicheur">
-          <Text style={{ color: demo ? (theme.sombre ? '#F4A261' : '#9A4A12') : enDirect ? theme.ok : theme.attenue, fontSize: TAILLE, fontWeight: '600' }}>
-            {demo ? '◆ ' : enDirect ? '● ' : '◷ '}{fraicheur}
-          </Text>
-        </View>
-        {attendent.length ? (
-          <Bouton theme={theme} variante="plein" couleur={teinteLisible(TEINTES_ACTIVITE.attend, false)} titre={`✋ ${attendent.length} attend${attendent.length > 1 ? 'ent' : ''} ta réponse`} onPress={() => setChoisi(attendent[0].cle)} testID="bureau-pastille-attend" />
-        ) : null}
-        {aVoir.length ? (
-          <Bouton theme={theme} variante="plein" couleur={teinteLisible(ZONES.salle.teinte, false)} titre={`✓ ${aVoir.length} terminé${aVoir.length > 1 ? 's' : ''} à voir`} onPress={() => setChoisi(aVoir[0].cle)} testID="bureau-pastille-a-voir" />
-        ) : null}
-      </View>
-
-      <View style={styles.outils}>
-        <Segments theme={theme} libelle="Affichage du bureau" valeurs={[['scene', 'Scène'], ['liste', 'Liste']] as const} valeur={prefs.vue} onChange={v => changerPrefs({ ...prefs, vue: v })} testID="bureau-vue" />
-        <Bouton theme={theme} titre="?" libelle="Aide : comment lire le bureau" onPress={() => setAide(true)} testID="bureau-aide-ouvrir" />
-        {onDemo ? (
-          <Bouton
-            theme={theme}
-            variante={demo ? 'plein' : 'normal'}
-            couleur={demo ? '#B85C1E' : undefined}
-            titre={demo ? 'Quitter la démo' : 'Voir la démo'}
-            libelle={demo ? 'Quitter la démo et revenir à l’activité réelle' : 'Voir la démo : sessions fictives animées'}
-            onPress={() => {
-              setChoisi(undefined);
-              onDemo(!demo);
-            }}
-            testID="bureau-demo"
-          />
-        ) : null}
-        {reduit ? <Text style={attenue} testID="bureau-mouvement">Animations réduites</Text> : null}
-      </View>
-
-
-      {prefs.vue === 'scene' ? (
-        <View
-          style={[styles.piece, { borderColor: theme.ligne, borderRadius: theme.rayonGrand, backgroundColor: theme.sombre ? '#121522' : '#EEF3F8' }]}
-          testID={reduit ? 'bureau-piece-fixe' : 'bureau-piece-animee'}
-          onLayout={e => setDispo(e.nativeEvent.layout.width)}
-        >
-          {vueRapprochee ? (
-            <ScrollView
-              ref={defilement}
-              horizontal
-              showsHorizontalScrollIndicator
-              testID="bureau-scene-defilement"
-              style={styles.defilement}
-              onLayout={centrer}
-              onContentSizeChange={centrer}
-              aria-hidden
-              importantForAccessibility="no-hide-descendants"
-              accessibilityElementsHidden
-            >
-              {scene}
-            </ScrollView>
-          ) : scene}
-          {mobile && largeurDispo < LARGEUR_RAPPROCHEE ? (
-            <View style={styles.barreScene}>
-              <Text style={[attenue, { flex: 1 }]}>{vueRapprochee ? 'Fais glisser pour parcourir les zones.' : 'Vue d’ensemble de l’open space.'}</Text>
-              <Bouton theme={theme} titre={vueRapprochee ? 'Vue d’ensemble' : 'Vue rapprochée'} onPress={() => setRapproche(v => !v)} testID="bureau-zoom" />
-            </View>
-          ) : null}
-        </View>
-      ) : null}
-
       {compteursVue}
       {onVoirHistorique ? (
         <View style={styles.recherche}>
@@ -318,9 +284,8 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
           <Bouton theme={theme} titre="Chercher" onPress={() => onVoirHistorique({ recherche: recherche.trim() })} testID="bureau-recherche-ok" />
         </View>
       ) : null}
-
       {projets.length > 1 ? (
-        <ScrollView horizontal={mobile} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtres} style={mobile ? { flexGrow: 0 } : undefined} testID="bureau-filtres">
+        <View style={styles.filtres} testID="bureau-filtres">
           <Text style={attenue}>Projets :</Text>
           <Puce theme={theme} titre="Tous" actif={!filtreActif} onPress={() => setFiltre(undefined)} testID="bureau-filtre-tous" />
           {projets.map(p => (
@@ -329,22 +294,8 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
           {filtreActif ? (
             <Segments theme={theme} libelle="Effet du filtre" valeurs={[['avant', 'Mettre en avant'], ['masque', 'Masquer']] as const} valeur={filtreActif.mode} onChange={m => setFiltre({ projet: filtreActif.projet, mode: m })} testID="bureau-filtre-mode" />
           ) : null}
-        </ScrollView>
-      ) : null}
-
-
-      {bureau.agents.length === 0 ? (
-        <View style={[styles.vide, { borderColor: theme.ligne, borderRadius: theme.rayonMoyen, backgroundColor: theme.surface }]} testID="bureau-vide">
-          {activite.lu ? vide : <Text style={attenue}>Lecture de l’activité…</Text>}
-          {activite.lu && bureau.derniereActivite ? (
-            <Text style={attenue} testID="bureau-derniere-activite">Dernière activité connue : {ilYA(bureau.derniereActivite, maintenant)}.</Text>
-          ) : null}
-          {activite.lu && onDemo && !demo ? (
-            <Bouton theme={theme} titre="Voir la démo (sessions fictives)" onPress={() => onDemo(true)} testID="bureau-vide-demo" />
-          ) : null}
         </View>
       ) : null}
-
       {prefs.vue === 'scene' ? (
         <View style={styles.legende} testID="bureau-legende" accessibilityLabel="Légende des zones de l’open space">
           {ORDRE_ZONES.map(z => (
@@ -364,6 +315,107 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
           {zoneExpliquee ? <Text style={[attenue, { width: '100%' }]} testID="bureau-legende-explication">{ZONES[zoneExpliquee as keyof typeof ZONES].nom} : {ZONES[zoneExpliquee as keyof typeof ZONES].role}.</Text> : null}
         </View>
       ) : null}
+      <Text style={attenue}>
+        {Platform.OS === 'web'
+          ? 'Dans la scène : survole (ou touche) un agent ou une zone pour le détail ; molette, pincer ou + / − pour zoomer ; double-tap sur une zone pour la cadrer ; ⏱ relecture de la journée, ▣ mini-carte, ◐ écran d’ambiance, ⛶ plein écran.'
+          : 'Touche un agent pour son détail.'}
+      </Text>
+      {reduit ? <Text style={attenue} testID="bureau-mouvement">Animations réduites</Text> : null}
+    </Carte>
+  ) : null;
+
+  return (
+    <View style={styles.colonne} testID="bureau-visuel" accessibilityLabel={`Bureau de Claude Office : ${compteurs.actifs} agent(s) au travail`}>
+      {entete}
+
+      <View style={styles.barre} testID="bureau-barre">
+        <View style={[styles.pastille, { borderColor: couleurPastille, backgroundColor: theme.surface }]} testID="bureau-fraicheur" accessibilityLabel={fraicheurComplete}>
+          <Text numberOfLines={1} style={{ color: demo ? (theme.sombre ? '#F4A261' : '#9A4A12') : enDirect ? theme.ok : theme.attenue, fontSize: TAILLE, fontWeight: '600' }}>
+            {demo ? '◆ ' : enDirect ? '● ' : '◷ '}{fraicheur}
+          </Text>
+        </View>
+        {attendent.length ? (
+          <Bouton theme={theme} variante="plein" couleur={teinteLisible(TEINTES_ACTIVITE.attend, false)} titre={`✋ ${attendent.length} attend${attendent.length > 1 ? 'ent' : ''} ta réponse`} onPress={() => setChoisi(attendent[0].cle)} testID="bureau-pastille-attend" />
+        ) : null}
+        {aVoir.length ? (
+          <Bouton theme={theme} variante="plein" couleur={teinteLisible(ZONES.salle.teinte, false)} titre={`✓ ${aVoir.length} terminé${aVoir.length > 1 ? 's' : ''} à voir`} onPress={() => setChoisi(aVoir[0].cle)} testID="bureau-pastille-a-voir" />
+        ) : null}
+        {filtreActif ? (
+          <Puce theme={theme} titre={`${filtreActif.mode === 'masque' ? 'Masqué' : 'En avant'} : ${filtreActif.projet} ✕`} actif onPress={() => setFiltre(undefined)} libelle={`Retirer le filtre sur le projet ${filtreActif.projet}`} testID="bureau-filtre-actif" />
+        ) : null}
+        <View style={styles.espace} />
+        <Segments theme={theme} libelle="Affichage du bureau" valeurs={[['scene', 'Scène'], ['liste', 'Liste']] as const} valeur={prefs.vue} onChange={v => changerPrefs({ ...prefs, vue: v })} testID="bureau-vue" />
+        <Bouton theme={theme} titre="?" libelle="Aide : comment lire le bureau" onPress={() => setAide(true)} testID="bureau-aide-ouvrir" />
+        {onDemo ? (
+          <Bouton
+            theme={theme}
+            variante={demo ? 'plein' : 'normal'}
+            couleur={demo ? '#B85C1E' : undefined}
+            titre={demo ? 'Quitter la démo' : 'Démo'}
+            libelle={demo ? 'Quitter la démo et revenir à l’activité réelle' : 'Voir la démo : sessions fictives animées'}
+            onPress={() => {
+              setChoisi(undefined);
+              setRelecture(undefined);
+              onDemo(!demo);
+            }}
+            testID="bureau-demo"
+          />
+        ) : null}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Options du bureau : résumé du jour, compteurs, recherche, filtres par projet, légende"
+          accessibilityState={{ expanded: options }}
+          aria-expanded={options}
+          onPress={() => setOptions(o => !o)}
+          style={[styles.options, { borderColor: options ? theme.accent : theme.ligne, backgroundColor: options ? theme.accent : theme.surface }]}
+          testID="bureau-options"
+        >
+          <Text style={{ color: options ? theme.surAccent : theme.texte, fontSize: TAILLE, fontWeight: '600' }}>{options ? 'Options ▴' : 'Options ▾'}</Text>
+        </Pressable>
+      </View>
+      {panneauOptions}
+
+      {prefs.vue === 'scene' ? (
+        <View
+          style={[styles.piece, Platform.OS === 'web' ? null : { borderColor: theme.ligne, borderRadius: theme.rayonGrand, borderWidth: StyleSheet.hairlineWidth, backgroundColor: theme.sombre ? '#121522' : '#EEF3F8' }]}
+          testID={reduit ? 'bureau-piece-fixe' : 'bureau-piece-animee'}
+          onLayout={e => setDispo(e.nativeEvent.layout.width)}
+        >
+          <PlateauScene
+            agents={agentsScene}
+            theme={theme}
+            reduit={reduit}
+            demo={demo}
+            charge={activite.lu}
+            maintenant={instant}
+            estompes={estompes}
+            choisi={choisi}
+            onDetail={cle => setChoisi(cle)}
+            largeur={largeurDispo}
+            relecture={commandesRelecture}
+            onRelecture={Platform.OS === 'web' && bureau.derniereActivite !== undefined ? () => {
+              setChoisi(undefined);
+              setRelecture(demarrerRelecture(activite.entrees, maintenant));
+              setSaut(n => n + 1);
+            } : undefined}
+            cleScene={`${demo ? 'demo' : 'reel'}-${relecture ? 'r' : 'd'}${saut}`}
+            attendent={attendent}
+            sousAgents={sousAgents}
+          />
+        </View>
+      ) : null}
+
+      {bureau.agents.length === 0 && !relecture ? (
+        <View style={[styles.vide, { borderColor: theme.ligne, borderRadius: theme.rayonMoyen, backgroundColor: theme.surface }]} testID="bureau-vide">
+          {activite.lu ? vide : <Text style={attenue}>Lecture de l’activité…</Text>}
+          {activite.lu && bureau.derniereActivite ? (
+            <Text style={attenue} testID="bureau-derniere-activite">Dernière activité connue : {ilYA(bureau.derniereActivite, maintenant)}.</Text>
+          ) : null}
+          {activite.lu && onDemo && !demo ? (
+            <Bouton theme={theme} titre="Voir la démo (sessions fictives)" onPress={() => onDemo(true)} testID="bureau-vide-demo" />
+          ) : null}
+        </View>
+      ) : null}
 
       {bureau.enPlus || bureau.expirees ? (
         <Text style={attenue} testID="bureau-en-plus">
@@ -376,7 +428,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
           <Text style={[styles.titreListe, { color: theme.texte }]} accessibilityRole="header">
             {demo ? `Agents de la démo (${agentsVus.length})` : `Agents (${agentsVus.length})`}
           </Text>
-          <View style={styles.liste} testID="bureau-postes">{agentsVus.map(a => carteAgent(a, false))}</View>
+          <View style={styles.liste} testID="bureau-postes">{agentsVus.map(a => carteAvecSous(a, false))}</View>
         </View>
       ) : null}
       {agentsVus.length && prefs.vue === 'liste' ? (
@@ -389,7 +441,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
                   {g.z === 'salle' ? 'Terminés récemment' : ZONES[g.z].nom} ({g.agents.length})
                 </Text>
               </View>
-              <View style={styles.liste}>{g.agents.map(a => carteAgent(a, true))}</View>
+              <View style={styles.liste}>{g.agents.map(a => carteAvecSous(a, true))}</View>
             </View>
           ))}
         </View>
@@ -400,10 +452,11 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
         theme={theme}
         agent={detail}
         entrees={activite.entrees}
-        maintenant={maintenant}
+        maintenant={instant}
         onFermer={() => setChoisi(undefined)}
         onVoirHistorique={onVoirHistorique ? s => { setChoisi(undefined); onVoirHistorique({ session: s }); } : undefined}
         onMarquerVu={marquerVu}
+        sousAgents={sousAgents}
       />
     </View>
   );
@@ -565,6 +618,7 @@ export function OngletBureau({ theme, contexte, office, mouvementReduit, horloge
         prefs={prefs}
         onPrefs={changerPrefs}
         onVoirHistorique={onVoirHistorique}
+        debutDemo={debutDemo}
         entete={debutDemo === undefined ? <MiseEnRoute theme={theme} etapes={etapes} onAction={agir} occupe={occupe} /> : null}
       />
       {activite.erreur ? <Text style={[attenue, { color: theme.critique }]} testID="bureau-erreur">{activite.erreur}</Text> : null}
@@ -633,9 +687,10 @@ export function OngletBureau({ theme, contexte, office, mouvementReduit, horloge
 
 const styles = StyleSheet.create({
   colonne: { gap: 12 },
-  entete: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
-  outils: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
-  pastille: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, flexShrink: 1, minHeight: 44, justifyContent: 'center' },
+  barre: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  espace: { flexGrow: 1, flexShrink: 1, minWidth: 0 },
+  options: { minHeight: 44, minWidth: 44, paddingHorizontal: 14, borderWidth: 1, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  pastille: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8, flexShrink: 1, minHeight: 44, justifyContent: 'center', maxWidth: '100%' },
   recherche: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   champ: { flex: 1, minWidth: 0, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, minHeight: 44, fontSize: 16 },
   filtres: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
@@ -644,15 +699,17 @@ const styles = StyleSheet.create({
   filet: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   compteurMobile: { minWidth: 100, flexBasis: 100, paddingHorizontal: 10, paddingLeft: 14 },
   nombre: { fontSize: 22, fontWeight: '700' },
-  piece: { borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden', alignItems: 'center' },
-  defilement: { alignSelf: 'stretch', width: '100%' },
-  barreScene: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingBottom: 10, alignSelf: 'stretch' },
+  piece: { overflow: 'hidden', alignItems: 'stretch' },
   legende: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   puceZone: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, minHeight: 44 },
   rond: { width: 12, height: 12, borderRadius: 6 },
   titreListe: { fontSize: 17, fontWeight: '700' },
   titreGroupe: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   liste: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  agentDansGroupe: { flexBasis: 'auto', flexGrow: 0, width: '100%' },
+  groupeAgent: { flexGrow: 1, flexBasis: 300, maxWidth: '100%', gap: 4 },
+  sousListe: { gap: 4, paddingLeft: 28 },
+  sousAgent: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 10, minHeight: 40 },
   agent: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 2, padding: 10, minHeight: 64, flexGrow: 1, flexBasis: 300, maxWidth: '100%' },
   avatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 3, alignItems: 'center', justifyContent: 'flex-end' },
   avatarTete: { width: 20, height: 20, borderRadius: 10, borderTopWidth: 6, marginBottom: 7 },
