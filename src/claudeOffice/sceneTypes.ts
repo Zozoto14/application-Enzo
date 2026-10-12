@@ -4,8 +4,10 @@
  * simplifiées ailleurs (`SceneOpenSpace.tsx`).
  */
 
+import type React from 'react';
 import type { ThemeHub } from '../hub/themes';
 import type { Agent } from './logiqueBureau';
+import type { Zone } from './zones';
 
 export interface PropsScene {
   agents: readonly Agent[];
@@ -33,6 +35,36 @@ export interface PropsScene {
   estompes?: ReadonlySet<string>;
   /** Horloge de l'animation en secondes (tests) ; sinon performance.now(). */
   horloge?: () => number;
+  /**
+   * Plateau v4 (web) : la scène remplit son cadre, la caméra (viewBox du SVG,
+   * transformée du calque) est réglée de l'extérieur, sans nouveau rendu.
+   */
+  remplir?: boolean;
+  refSvg?: React.Ref<SVGSVGElement>;
+  refCalque?: React.Ref<HTMLDivElement>;
+  /** Positions (repère de la scène) de chaque personnage : pieds et haut de la tête, tenues à jour. */
+  positions?: React.MutableRefObject<Map<string, PositionPerso>>;
+  /** Agent survolé (anneau léger au sol) et zone survolée (sol souligné). */
+  survole?: string;
+  zoneSurvolee?: Zone;
+  /** Cibles accessibles (boutons ≥ 44 px au-dessus des personnages, zones au sol) : le plateau gère toucher et survol. */
+  cibles?: CiblesScene;
+}
+
+export interface PositionPerso {
+  x: number;
+  y: number;
+  haut: number;
+}
+
+export interface CiblesScene {
+  /** Libellé lu par les lecteurs d'écran pour un agent. */
+  libelle(a: Agent): string;
+  /** Identifiant de la description (carte) de l'agent en aperçu, pour aria-describedby. */
+  decrit?: { cle: string; id: string };
+  onFocus(cle: string | undefined): void;
+  /** Activation au clavier (Entrée, Espace). */
+  onActiver(cle: string): void;
 }
 
 /** Proportions de la scène (largeur / hauteur), pour réserver sa place. */

@@ -256,15 +256,27 @@ export function ClaudeOffice({ theme, onRetour, contexte }: PropsRacineApp) {
     defilement.current?.scrollTo?.({ y: 0, animated: false });
   };
   return (
-    <ScrollView ref={defilement} style={{ flex: 1, backgroundColor: theme.fond }} contentContainerStyle={[styles.page, mobile ? styles.pageMobile : null]}>
+    <ScrollView ref={defilement} style={{ flex: 1, backgroundColor: theme.fond }} contentContainerStyle={[styles.page, onglet === 'bureau' ? styles.pageLarge : null, mobile ? styles.pageMobile : null]}>
       <RetourHub theme={theme} onRetour={onRetour} titre="Claude Office" />
-      <Text style={[styles.titre, { color: theme.texte, fontWeight: theme.poidsTitre }, police(theme.policeTitre)]}>Claude Office</Text>
-      <Text style={[styles.texte, styles.texteMobile, { color: theme.attenue }, police(theme.policeTexte)]}>
-        {mobile
-          ? 'Un personnage par session de Claude Code, dans la zone de ce qu’il fait.'
-          : 'Le bureau des agents de Claude Code : un personnage par session, qui va dans la zone de ce qu’il fait (code, commandes, lecture, web…), lève la main quand Claude attend ta réponse et passe en salle d’attente quand il a fini — ici même, sur le PC, le site ou le téléphone.'}
-      </Text>
-      <Onglets theme={theme} onglet={onglet} onChange={changerOnglet} />
+      {/* Onglet Bureau : la scène passe d'abord (titre seul, sans la présentation ; sur téléphone, le titre est déjà dans la barre du hub). */}
+      {onglet === 'bureau' ? null : (
+        <Text style={[styles.titre, { color: theme.texte, fontWeight: theme.poidsTitre }, police(theme.policeTitre)]}>Claude Office</Text>
+      )}
+      {onglet === 'bureau' ? null : (
+        <Text style={[styles.texte, styles.texteMobile, { color: theme.attenue }, police(theme.policeTexte)]}>
+          {mobile
+            ? 'Un personnage par session de Claude Code, dans la zone de ce qu’il fait.'
+            : 'Le bureau des agents de Claude Code : un personnage par session, qui va dans la zone de ce qu’il fait (code, commandes, lecture, web…), lève la main quand Claude attend ta réponse et passe en salle d’attente quand il a fini — ici même, sur le PC, le site ou le téléphone.'}
+        </Text>
+      )}
+      {onglet === 'bureau' && !mobile ? (
+        <View style={styles.ligneTitre}>
+          <Text style={[styles.titre, { color: theme.texte, fontWeight: theme.poidsTitre }, police(theme.policeTitre)]}>Claude Office</Text>
+          <View style={styles.ongletsLigne}><Onglets theme={theme} onglet={onglet} onChange={changerOnglet} /></View>
+        </View>
+      ) : (
+        <Onglets theme={theme} onglet={onglet} onChange={changerOnglet} />
+      )}
       {onglet === 'historique' ? (
         <Historique key={JSON.stringify(filtreHistorique ?? {})} theme={theme} contexte={contexte} office={pont} filtreInitial={filtreHistorique} debutDemo={debutDemo} />
       ) : onglet === 'stats' ? (
@@ -282,6 +294,9 @@ export function ClaudeOffice({ theme, onRetour, contexte }: PropsRacineApp) {
 
 const styles = StyleSheet.create({
   page: { padding: 20, gap: 14, maxWidth: 980, width: '100%', alignSelf: 'center' },
+  pageLarge: { maxWidth: 1680 },
+  ligneTitre: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 20, rowGap: 10 },
+  ongletsLigne: { flexGrow: 1, flexShrink: 1, minWidth: 300, maxWidth: 640 },
   pageMobile: { padding: 16 },
   texteMobile: { fontSize: 15, lineHeight: 21 },
   titre: { fontSize: 26 },

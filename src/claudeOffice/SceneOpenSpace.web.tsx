@@ -20,13 +20,12 @@
  * (Bureau.tsx) porte la même information.
  */
 
-import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import {
   activiteAgent, apparence, avancer, comptesZones, creerScene, enAttente, HAUTEUR_MURS, HAUTEUR_SCENE, ILOTS_ATELIER, ISO, iso, LARGEUR_BUREAU,
   LARGEUR_PIECE, LARGEUR_SCENE, PLACES, PORTE, PROFONDEUR_PIECE, RECTS_ZONES, poses, prochaineEcheance, reconcilier, signatureAgents, hacher,
   type Activite, type Apparence, type ModePose, type Place, ICONES_ACTIVITE, TEINTES_ACTIVITE,
 } from './logiqueScene';
-import { ilYA, resumerTexte } from './logiqueBureau';
 import { ORDRE_ZONES, ZONES, type Zone } from './zones';
 import type { PropsScene } from './sceneTypes';
 
@@ -95,6 +94,17 @@ function Boite({ x, y, z = 0, w, d, h, dessus, gauche, droite, classe }: {
   );
 }
 
+/** Ombre portée douce au sol (lumière venant du fond à gauche). */
+function OmbreSol({ x, y, w, d, h, pal }: { x: number; y: number; w: number; d: number; h: number; pal: Palette }) {
+  const o = Math.min(0.55, h * 0.3);
+  return (
+    <g transform={sol()} pointerEvents="none">
+      <rect x={x + o * 0.6} y={y + o} width={w} height={d} rx={0.12} fill={pal.ombre} opacity={pal.nuit ? 0.26 : 0.12} />
+      <rect x={x + o * 0.3} y={y + o * 0.5} width={w} height={d} rx={0.08} fill={pal.ombre} opacity={pal.nuit ? 0.18 : 0.08} />
+    </g>
+  );
+}
+
 function Plante({ x, y, pal, taille = 1, classe }: { x: number; y: number; pal: Palette; taille?: number; classe?: string }) {
   const p = iso(x, y);
   const k = taille;
@@ -125,23 +135,43 @@ function Fenetre({ y0, y1, pal, i }: { y0: number; y1: number; pal: Palette; i: 
     const w = largeur / 6;
     return { x: y0 + k * w, w: w * 0.92, h };
   });
+  const clip = `co-fen-${i}`;
   return (
     <g>
+      <clipPath id={clip}><rect x={y0} y={z0} width={largeur} height={z1 - z0} /></clipPath>
       <rect x={y0 - 0.08} y={z0 - 0.08} width={largeur + 0.16} height={z1 - z0 + 0.16} fill={pal.murHaut} />
       <rect x={y0} y={z0} width={largeur} height={z1 - z0} fill={`url(#${id})`} />
-      {pal.nuit ? (
-        <g>
-          {[0.2, 0.5, 0.75, 0.33, 0.9].map((f, k) => (
-            <circle key={k} cx={y0 + largeur * f} cy={z1 - 0.15 - (k % 3) * 0.17} r={0.025} fill="#FFFFFF" className={`co-etoile co-e${k % 3}`} />
-          ))}
-          {i === 1 ? <circle cx={y0 + largeur * 0.72} cy={z1 - 0.32} r={0.13} fill="#F4F1DE" /> : null}
-        </g>
-      ) : (
-        <g className="co-nuages">
-          <ellipse cx={y0 + largeur * 0.3} cy={z1 - 0.35} rx={0.32} ry={0.08} fill="#FFFFFF" opacity={0.85} />
-          <ellipse cx={y0 + largeur * 0.72} cy={z1 - 0.55} rx={0.25} ry={0.06} fill="#FFFFFF" opacity={0.7} />
-        </g>
-      )}
+      <g clipPath={`url(#${clip})`}>
+        {pal.nuit ? (
+          <g>
+            {[0.2, 0.5, 0.75, 0.33, 0.9, 0.62].map((f, k) => (
+              <circle key={k} cx={y0 + largeur * f} cy={z1 - 0.15 - (k % 3) * 0.17} r={0.025} fill="#FFFFFF" className={`co-etoile co-e${k % 3}`} />
+            ))}
+            {i === 1 ? (
+              <g>
+                <circle cx={y0 + largeur * 0.72} cy={z1 - 0.32} r={0.3} fill="#F4F1DE" opacity={0.12} />
+                <circle cx={y0 + largeur * 0.72} cy={z1 - 0.32} r={0.13} fill="#F4F1DE" />
+                <circle cx={y0 + largeur * 0.72 + 0.05} cy={z1 - 0.3} r={0.1} fill={pal.ciel1} opacity={0.55} />
+              </g>
+            ) : null}
+            <g className="co-nuages-defile"><ellipse cx={y0 + largeur * 0.4} cy={z1 - 0.5} rx={0.45} ry={0.06} fill="#3A4170" opacity={0.6} /></g>
+          </g>
+        ) : (
+          <g>
+            {i === 0 ? (
+              <g className="co-soleil">
+                <circle cx={y0 + largeur * 0.78} cy={z1 - 0.3} r={0.32} fill="#FFF3B0" opacity={0.35} />
+                <circle cx={y0 + largeur * 0.78} cy={z1 - 0.3} r={0.15} fill="#FFE37A" />
+              </g>
+            ) : null}
+            <g className={`co-nuages-defile co-n${i}`}>
+              <ellipse cx={y0 + largeur * 0.3} cy={z1 - 0.35} rx={0.32} ry={0.08} fill="#FFFFFF" opacity={0.9} />
+              <ellipse cx={y0 + largeur * 0.36} cy={z1 - 0.29} rx={0.2} ry={0.07} fill="#FFFFFF" opacity={0.9} />
+              <ellipse cx={y0 + largeur * 0.72} cy={z1 - 0.55} rx={0.25} ry={0.06} fill="#FFFFFF" opacity={0.75} />
+            </g>
+          </g>
+        )}
+      </g>
       {immeubles.map((b, k) => (
         <g key={k}>
           <rect x={b.x} y={z0} width={b.w} height={b.h} fill={pal.ville} />
@@ -174,11 +204,11 @@ function SolsZones({ pal }: { pal: Palette }) {
           : z === 'machines' ? 'url(#co-technique)'
           : z === 'cafe' ? 'url(#co-carreaux)'
           : z === 'reunion' ? pal.salle
-          : ZONES[z].teinte;
-        const motif = z === 'atelier' || z === 'machines' || z === 'cafe' || z === 'reunion';
+          : `url(#co-zg-${z})`;
         return (
           <g key={z}>
-            <rect x={r.x0 + 0.08} y={r.y0 + 0.08} width={w - 0.16} height={d - 0.16} rx={0.25} fill={remplissage} opacity={motif ? 1 : n ? 0.2 : 0.13} />
+            <rect x={r.x0 + 0.08} y={r.y0 + 0.08} width={w - 0.16} height={d - 0.16} rx={0.25} fill={remplissage} />
+            <rect x={r.x0 + 0.08} y={r.y0 + 0.08} width={w - 0.16} height={d - 0.16} rx={0.25} fill={`url(#co-zl-${n ? 'n' : 'j'})`} />
             <rect x={r.x0 + 0.1} y={r.y0 + 0.1} width={w - 0.2} height={d - 0.2} rx={0.25} fill="none" stroke={ZONES[z].teinte} strokeWidth={0.045} opacity={n ? 0.75 : 0.6} strokeDasharray={z === 'guichet' ? '0.25 0.15' : undefined} />
           </g>
         );
@@ -227,6 +257,21 @@ function Fond({ pal, maintenant }: { pal: Palette; maintenant: number }) {
           <stop offset="0" stopColor={pal.ombre} stopOpacity={n ? 0.5 : 0.22} />
           <stop offset="1" stopColor={pal.ombre} stopOpacity={0} />
         </radialGradient>
+        {ORDRE_ZONES.map(z => (
+          <radialGradient key={z} id={`co-zg-${z}`} cx="0.35" cy="0.3" r="0.9">
+            <stop offset="0" stopColor={ZONES[z].teinte} stopOpacity={n ? 0.34 : 0.26} />
+            <stop offset="1" stopColor={ZONES[z].teinte} stopOpacity={n ? 0.1 : 0.07} />
+          </radialGradient>
+        ))}
+        <linearGradient id={`co-zl-${n ? 'n' : 'j'}`} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#FFFFFF" stopOpacity={n ? 0.05 : 0.18} />
+          <stop offset="1" stopColor="#000000" stopOpacity={n ? 0.18 : 0.06} />
+        </linearGradient>
+        <linearGradient id="co-ambiance" x1="0" y1="0" x2="1" y2="0.4">
+          <stop offset="0" stopColor={n ? '#6F86FF' : '#FFE6A6'} stopOpacity={n ? 0.1 : 0.3} />
+          <stop offset="0.55" stopColor={n ? '#6F86FF' : '#FFE6A6'} stopOpacity={0} />
+          <stop offset="1" stopColor={n ? '#03050F' : '#7A5A2A'} stopOpacity={n ? 0.32 : 0.08} />
+        </linearGradient>
         <pattern id="co-lames" patternUnits="userSpaceOnUse" width={2.4} height={0.5}>
           <rect width={2.4} height={0.5} fill={pal.sol} />
           <rect width={1.2} height={0.24} fill={pal.lame} />
@@ -264,13 +309,22 @@ function Fond({ pal, maintenant }: { pal: Palette; maintenant: number }) {
             {[[7.4, 7.75], [11.4, 7.75], [8.8, 2.2], [2.1, 2.2], [17.8, 2.2], [17.6, 9.0], [9.7, 12.4], [2.6, 12.4], [16.6, 12.4], [2.0, 7.8]].map(([x, y]) => <circle key={`${x}-${y}`} cx={x} cy={y} r={2.4} fill="url(#co-flaque)" />)}
           </g>
         ) : (
-          <g fill="#FFF6D8" opacity={0.32}>
-            {[[5.9, 8.1], [11.3, 13.5]].map(([a, b]) => (
+          <g fill="#FFF6D8" className="co-rayons">
+            {[[5.9, 8.1], [8.6, 10.3], [11.3, 13.5]].map(([a, b]) => (
               <polygon key={a} points={`0,${a} 0,${b} 3.4,${b + 1.4} 3.4,${a + 1.4}`} />
             ))}
           </g>
         )}
+        <rect width={W} height={D} fill="url(#co-ambiance)" />
       </g>
+      {n ? null : (
+        <g fill="#FFFFFF" opacity={0.75}>
+          {[[1.2, 7.2, 0.9], [2.2, 8.4, 1.3], [1.6, 12.4, 0.7], [2.8, 12.9, 1.1]].map(([x, y, z], k) => {
+            const p = iso(x, y, z);
+            return <circle key={k} cx={r1(p.x)} cy={r1(p.y)} r={1.3} className={`co-poussiere co-e${k % 3}`} />;
+          })}
+        </g>
+      )}
 
       {/* Murs. */}
       <polygon points={pts([[0, 0, 0], [0, D, 0], [0, D, H], [0, 0, H]])} fill={pal.murG} />
@@ -318,6 +372,7 @@ function Fond({ pal, maintenant }: { pal: Palette; maintenant: number }) {
       {/* Bibliothèque : étagères pleines contre le mur du fond. */}
       {[5.0, 6.95, 8.9, 10.85].map((x0, k) => (
         <g key={x0}>
+          <OmbreSol x={x0} y={0.05} w={1.85} d={0.45} h={2.3} pal={pal} />
           <Boite x={x0} y={0.05} w={1.85} d={0.45} h={2.3} dessus={pal.bois} gauche={pal.boisG} droite={pal.boisD} />
           <g transform={planY(0.5)}>
             {[0.12, 0.68, 1.24, 1.8].map((z, r) => (
@@ -528,6 +583,7 @@ const PosteDessin = React.memo(function PosteDessin({ place, pal, activite, fige
   const led = iso(x + w - 0.08, y + d - 0.02, 0.6);
   return (
     <g>
+      <OmbreSol x={x} y={y} w={w} d={d} h={0.75} pal={pal} />
       <Boite x={x + 0.08} y={y + 0.1} w={0.07} d={d - 0.2} h={0.69} dessus={pal.pied} gauche={pal.pied} droite={pal.metalD} />
       <Boite x={x + w - 0.15} y={y + 0.1} w={0.07} d={d - 0.2} h={0.69} dessus={pal.pied} gauche={pal.pied} droite={pal.metalD} />
       <Boite x={x + 0.02} y={y} z={0.69} w={w - 0.04} d={d} h={0.06} dessus={pal.bureau} gauche={pal.bureauG} droite={pal.bureauD} />
@@ -663,7 +719,13 @@ function meublesTries(pal: Palette, guichetActif: boolean, machinesActives: bool
   const boite = (cle: string, b: { x: number; y: number; z?: number; w: number; d: number; h: number }, couleurs: [string, string, string], extra?: React.ReactNode) => m.push({
     cle,
     profondeur: b.x + b.w / 2 + b.y + b.d / 2,
-    rendu: <g key={cle}><Boite {...b} dessus={couleurs[0]} gauche={couleurs[1]} droite={couleurs[2]} />{extra}</g>,
+    rendu: (
+      <g key={cle}>
+        {b.z ? null : <OmbreSol x={b.x} y={b.y} w={b.w} d={b.d} h={b.h} pal={pal} />}
+        <Boite {...b} dessus={couleurs[0]} gauche={couleurs[1]} droite={couleurs[2]} />
+        {extra}
+      </g>
+    ),
   });
   const bois: [string, string, string] = [pal.bois, pal.boisG, pal.boisD];
   // Réunion : table et parois vitrées (devant ceux qui sont dedans).
@@ -679,6 +741,18 @@ function meublesTries(pal: Palette, guichetActif: boolean, machinesActives: bool
         <polyline points={pts([[3.45, 4.4, 0], [3.45, 4.4, 2.6]])} fill="none" stroke={pal.vitreBord} strokeWidth={2} />
         <polyline points={pts([[4.2, 4.4, 0], [4.2, 4.4, 2.6]])} fill="none" stroke={pal.vitreBord} strokeWidth={2} />
         <polyline points={pts([[4.2, 2.2, 0], [4.2, 2.2, 2.6]])} fill="none" stroke={pal.vitreBord} strokeWidth={1.2} />
+      </g>
+    ),
+  });
+  // Salle des machines : cloison vitrée basse côté couloir (devant ceux du couloir, derrière ceux de la salle).
+  m.push({
+    cle: 'vitres-machines', profondeur: 15.2 + 9.6, rendu: (
+      <g key="vitres-machines" pointerEvents="none">
+        <polygon points={pts([[15.2, 6.4, 0], [15.2, 9.6, 0], [15.2, 9.6, 1.35], [15.2, 6.4, 1.35]])} fill={pal.vitre} opacity={pal.nuit ? 0.14 : 0.22} />
+        <polygon points={pts([[15.2, 6.4, 1.2], [15.2, 9.6, 1.2], [15.2, 9.6, 1.35], [15.2, 6.4, 1.35]])} fill={pal.vitreBord} opacity={0.6} />
+        <polyline points={pts([[15.2, 6.4, 0], [15.2, 6.4, 1.35]])} fill="none" stroke={pal.vitreBord} strokeWidth={1.6} opacity={0.8} />
+        <polyline points={pts([[15.2, 9.6, 0], [15.2, 9.6, 1.35]])} fill="none" stroke={pal.vitreBord} strokeWidth={1.6} opacity={0.8} />
+        <polyline points={pts([[15.2, 7.0, 0.25], [15.2, 7.6, 1.0]])} fill="none" stroke="#FFFFFF" strokeWidth={1.2} opacity={0.35} />
       </g>
     ),
   });
@@ -887,7 +961,12 @@ const Personnage = React.memo(function Personnage({ ap, vue, mode, activite, car
         </g>
       ) : null}
       <g className="co-corps">
-        <path d="M-10,-14 L-10,-28 Q-10,-34 -4,-34 L4,-34 Q10,-34 10,-28 L10,-14 Q0,-11 -10,-14 Z" fill={ap.haut} />
+        <g className="co-souffle">
+          <path d="M-10,-14 L-10,-28 Q-10,-34 -4,-34 L4,-34 Q10,-34 10,-28 L10,-14 Q0,-11 -10,-14 Z" fill={ap.haut} />
+          <path d="M3,-33.6 Q10,-33.5 10,-28 L10,-14 Q6.5,-12.6 3.5,-12.4 Z" fill="#000" opacity={0.13} />
+          <path d="M-9,-27 Q-9,-32 -5,-33" fill="none" stroke="#FFF" strokeWidth={1.4} strokeLinecap="round" opacity={0.22} />
+          <rect x={-10} y={-16.5} width={20} height={2.2} rx={1} fill={fonce(ap.pantalon, 0.8)} opacity={0.9} />
+        </g>
         {vue === 'face' ? <path d="M-3,-34 L0,-30 L3,-34 Z" fill="#FFFFFF" opacity={0.85} /> : <rect x={-4} y={-34.5} width={8} height={3} rx={1.5} fill={manche} />}
         <g className="co-bg">
           <path d={brasG} fill="none" stroke={manche} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round" />
@@ -923,6 +1002,7 @@ const Personnage = React.memo(function Personnage({ ap, vue, mode, activite, car
             <g>
               <circle cx={-6.5} cy={-43} r={2.2} fill={fonce(ap.peau, 0.9)} />
               <CheveuxFace ap={ap} />
+              {ap.accessoire === 'bonnet' ? null : <ellipse cx={-1} cy={-52.5} rx={5} ry={1.5} fill="#FFFFFF" opacity={0.2} transform="rotate(-12 -1 -52.5)" />}
               <g className="co-yeux">
                 <ellipse cx={2.4} cy={-42.5} rx={1.3} ry={1.8} fill="#1F2330" />
                 <ellipse cx={8.2} cy={-42.5} rx={1.3} ry={1.8} fill="#1F2330" />
@@ -956,58 +1036,10 @@ const Personnage = React.memo(function Personnage({ ap, vue, mode, activite, car
   );
 }, (a, b) => a.vue === b.vue && a.mode === b.mode && a.activite === b.activite && a.carton === b.carton && a.jambes === b.jambes && JSON.stringify(a.ap) === JSON.stringify(b.ap));
 
-// ------------------------------------------------------------------ bulles, badges, enseignes
+// ------------------------------------------------------------------ pastilles d'état, noms de zone
 
-/** Largeur approximative d'un texte (police système), pour dimensionner bulles et enseignes. */
-const largeurTexte = (texte: string, taille: number, gras = false) => texte.length * taille * (gras ? 0.6 : 0.54);
-
-function couperLignes(texte: string, max: number, nb: number): string[] {
-  const mots = texte.split(' ');
-  const lignes: string[] = [];
-  let ligne = '';
-  for (const mot of mots) {
-    const essai = ligne ? `${ligne} ${mot}` : mot;
-    if (essai.length <= max) ligne = essai;
-    else {
-      if (ligne) lignes.push(ligne);
-      ligne = mot.length > max ? `${mot.slice(0, max - 1)}…` : mot;
-    }
-    if (lignes.length === nb) break;
-  }
-  if (lignes.length < nb && ligne) lignes.push(ligne);
-  if (lignes.length === nb && lignes.join(' ').length < texte.length) {
-    const derniere = lignes[nb - 1];
-    lignes[nb - 1] = `${derniere.slice(0, Math.max(0, max - 1)).trimEnd()}…`;
-  }
-  return lignes.slice(0, nb);
-}
-
-function Bulle({ x, y, titre, texte, couleur, pal, grand, alerte }: { x: number; y: number; titre: string; texte: string; couleur: string; pal: Palette; grand: boolean; alerte?: boolean }) {
-  const taille = grand ? 21 : 19;
-  const max = grand ? 22 : 26;
-  const lignes = couperLignes(texte.replace(/\n/g, ' · '), max, 3);
-  const titreCourt = titre.length > max + 4 ? `${titre.slice(0, max + 3)}…` : titre;
-  const largeur = Math.max(largeurTexte(titreCourt, taille, true), ...lignes.map(l => largeurTexte(l, taille))) + 26;
-  const hauteur = (lignes.length + 1) * (taille + 5) + 14;
-  const gauche = Math.max(8, Math.min(LARGEUR_SCENE - largeur - 8, x - largeur / 2));
-  const haut = Math.max(6, y - hauteur - 12);
-  const queueX = Math.max(gauche + 14, Math.min(gauche + largeur - 14, x));
-  return (
-    <g className="co-bulle" pointerEvents="none" data-testid="scene-bulle">
-      <rect x={gauche + 2} y={haut + 3} width={largeur} height={hauteur} rx={12} fill="#000" opacity={0.14} />
-      <path d={`M${queueX - 8},${haut + hauteur - 1} L${queueX},${haut + hauteur + 10} L${queueX + 8},${haut + hauteur - 1} Z`} fill={pal.bulle} stroke={couleur} strokeWidth={2} />
-      <rect x={gauche} y={haut} width={largeur} height={hauteur} rx={12} fill={pal.bulle} stroke={couleur} strokeWidth={alerte ? 3 : 2} />
-      <rect x={queueX - 7} y={haut + hauteur - 3} width={14} height={4} fill={pal.bulle} />
-      <text x={gauche + 13} y={haut + 8 + taille} fontSize={taille} fontWeight={700} fill={fonce(couleur, pal.nuit ? 0.75 : 0.7)}>{titreCourt}</text>
-      {lignes.map((l, k) => (
-        <text key={k} x={gauche + 13} y={haut + 8 + taille + (k + 1) * (taille + 5)} fontSize={taille} fill={pal.bulleTexte}>{l}</text>
-      ))}
-    </g>
-  );
-}
-
-function Badge({ x, y, activite, pal, fige, grand }: { x: number; y: number; activite: Activite; pal: Palette; fige: boolean; grand: boolean }) {
-  const k = grand ? 1.35 : 1.05;
+function Badge({ x, y, activite, pal, fige }: { x: number; y: number; activite: Activite; pal: Palette; fige: boolean }) {
+  const k = 0.9;
   const c = fige ? '#8E95A8' : TEINTES_ACTIVITE[activite];
   if (activite === 'pense' && !fige) {
     return (
@@ -1021,7 +1053,7 @@ function Badge({ x, y, activite, pal, fige, grand }: { x: number; y: number; act
   }
   if (activite === 'attend' && !fige) {
     return (
-      <g transform={`translate(${r1(x)} ${r1(y)}) scale(${k * 1.2})`} pointerEvents="none" data-testid="scene-attend">
+      <g transform={`translate(${r1(x)} ${r1(y)}) scale(${k * 1.25})`} pointerEvents="none" data-testid="scene-attend">
         <circle r={15} fill="#E5484D" opacity={0.25} className="co-pulse" />
         <circle r={11} fill="#E5484D" stroke="#FFFFFF" strokeWidth={2} />
         <text y={5} textAnchor="middle" fontSize={15} fontWeight={900} fill="#FFFFFF">!</text>
@@ -1036,40 +1068,48 @@ function Badge({ x, y, activite, pal, fige, grand }: { x: number; y: number; act
   );
 }
 
-/** Où poser l'enseigne de chaque zone (écran) : au mur pour celles du fond, au sol devant les autres. */
+/** Où poser le nom de chaque zone (écran) : au mur pour celles du fond, au sol devant les autres. */
 function ancreEnseigne(z: Zone): { x: number; y: number } {
   const r = RECTS_ZONES[z];
   const cx = (r.x0 + r.x1) / 2;
   if (r.y0 === 0) return iso(z === 'accueil' ? 13.2 : cx, 0, 2.78);
   if (z === 'reflexion') return iso(0, (r.y0 + r.y1) / 2, 2.78);
-  if (r.y1 >= PROFONDEUR_PIECE) { const p = iso(cx, PROFONDEUR_PIECE, -0.45); return { x: p.x, y: p.y + 22 }; }
+  if (r.y1 >= PROFONDEUR_PIECE) { const p = iso(cx, PROFONDEUR_PIECE, -0.45); return { x: p.x, y: p.y + 20 }; }
   return iso(cx, r.y1 + 0.2);
 }
 
+/**
+ * Nom discret d'une zone (le détail vient au survol). Seuls le guichet et la
+ * salle d'attente portent un compteur, quand quelqu'un y est.
+ */
 function Enseigne({ zone, nombre, sansPlace, pal, grand }: { zone: Zone; nombre: number; sansPlace: number; pal: Palette; grand: boolean }) {
   const info = ZONES[zone];
-  const taille = grand ? 19 : 17;
-  const urgent = zone === 'guichet' && nombre > 0;
-  const texte = `${info.nom}${nombre ? ` · ${nombre}` : ''}${sansPlace ? ` (+${sansPlace} sans place)` : ''}`;
-  const largeur = largeurTexte(texte, taille, true) + taille * 2.2;
-  const hauteur = taille + 12;
+  const taille = grand ? 17 : 15;
+  const compteur = (zone === 'guichet' || zone === 'salle') && nombre > 0;
+  const largeur = largeurTexte(info.nom, taille, true);
   const a = ancreEnseigne(zone);
-  const fond = urgent ? info.teinte : pal.badge;
   return (
-    <g transform={`translate(${r1(a.x - largeur / 2)} ${r1(a.y - hauteur / 2)})`} pointerEvents="none" data-testid={`scene-zone-${zone}`} data-nombre={nombre} className={urgent ? 'co-enseigne-urgente' : undefined}>
-      <rect width={largeur} height={hauteur} rx={hauteur / 2} fill={fond} stroke={info.teinte} strokeWidth={2} opacity={0.96} />
-      <circle cx={hauteur / 2} cy={hauteur / 2} r={hauteur / 2 - 4} fill={urgent ? '#FFFFFF' : info.teinte} />
-      <text x={hauteur / 2} y={hauteur / 2 + taille * 0.34} textAnchor="middle" fontSize={taille * 0.8} fontWeight={800} fill={urgent ? info.teinte : '#FFFFFF'} fontFamily="ui-monospace, Menlo, monospace">{info.icone.slice(0, 2)}</text>
-      <text x={hauteur - 2} y={hauteur / 2 + taille * 0.36} fontSize={taille} fontWeight={700} fill={urgent ? '#FFFFFF' : pal.badgeTexte}>{texte}</text>
+    <g transform={`translate(${r1(a.x)} ${r1(a.y)})`} pointerEvents="none" data-testid={`scene-zone-${zone}`} data-nombre={nombre} className={compteur && zone === 'guichet' ? 'co-enseigne-urgente' : undefined}>
+      <circle cx={r1(-largeur / 2 - 9)} cy={-taille * 0.32} r={4} fill={info.teinte} />
+      <text textAnchor="middle" fontSize={taille} fontWeight={700} fill={pal.badgeTexte} opacity={0.82} stroke={pal.nuit ? '#10131F' : '#FFFFFF'} strokeOpacity={0.7} strokeWidth={4} paintOrder="stroke" strokeLinejoin="round">{info.nom}</text>
+      {compteur ? (
+        <g transform={`translate(${r1(largeur / 2 + 16)} ${r1(-taille * 0.32)})`}>
+          <circle r={12} fill={info.teinte} stroke="#FFFFFF" strokeWidth={2} />
+          <text y={5} textAnchor="middle" fontSize={14} fontWeight={800} fill="#FFFFFF">{nombre}</text>
+        </g>
+      ) : null}
+      {sansPlace ? <text y={taille + 2} textAnchor="middle" fontSize={13} fontWeight={600} fill={pal.badgeTexte} opacity={0.75}>{`+${sansPlace} sans place`}</text> : null}
     </g>
   );
 }
+
+const largeurTexte = (texte: string, taille: number, gras = false) => texte.length * taille * (gras ? 0.6 : 0.54);
 
 // ------------------------------------------------------------------ feuille de style
 
 const CSS = `
 .co-scene{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-.co-yeux,.co-tete,.co-bg,.co-bd,.co-ligne,.co-meridien,.co-progres,.co-engrenage,.co-feuillage,.co-confetti,.co-vapeur,.co-pulse,.co-repere{transform-box:fill-box}
+.co-yeux,.co-tete,.co-bg,.co-bd,.co-jg,.co-jd,.co-souffle,.co-ligne,.co-meridien,.co-progres,.co-engrenage,.co-feuillage,.co-confetti,.co-vapeur,.co-pulse,.co-repere,.co-poussiere{transform-box:fill-box}
 .co-clic{cursor:pointer}
 @keyframes co-tape{from{transform:translateY(0)}to{transform:translateY(-2px)}}
 .co-p-clavier.co-a-code .co-bg{animation:co-tape .2s ease-in-out infinite alternate}
@@ -1080,23 +1120,27 @@ const CSS = `
 @keyframes co-salut{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(10deg)}}
 .co-p-main .co-bd{transform-origin:20% 95%;animation:co-salut .9s ease-in-out infinite}
 @keyframes co-cligne{0%,93%,100%{transform:scaleY(1)}95%{transform:scaleY(.1)}}
-.co-yeux{transform-origin:center;animation:co-cligne 4.6s infinite}
+.co-yeux{transform-origin:center;animation:co-cligne 4.6s infinite;animation-delay:var(--co-d,0s)}
+@keyframes co-souffle{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.03)}}
+.co-m-assis .co-souffle,.co-m-debout .co-souffle{transform-origin:50% 100%;animation:co-souffle 3.8s ease-in-out infinite;animation-delay:var(--co-d,0s)}
+@keyframes co-regard{0%,84%,100%{transform:rotate(0)}88%,95%{transform:rotate(5deg)}}
+.co-m-debout .co-tete,.co-p-repos .co-tete,.co-p-clavier .co-tete{transform-origin:50% 100%;animation:co-regard 9s ease-in-out infinite;animation-delay:var(--co-d,0s)}
 @keyframes co-penche{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(3deg)}}
 .co-a-pense .co-tete{transform-origin:50% 100%;animation:co-penche 3.4s ease-in-out infinite}
 @keyframes co-boit{0%,62%,100%{transform:translate(0,0)}70%,86%{transform:translate(-2px,-7px)}}
-.co-p-pause .co-tasse-main{animation:co-boit 6.5s ease-in-out infinite}
+.co-p-pause .co-tasse-main{animation:co-boit 6.5s ease-in-out infinite;animation-delay:var(--co-d,0s)}
 @keyframes co-etire{0%,80%,100%{transform:rotate(0)}85%,94%{transform:rotate(150deg)}}
-.co-p-pause .co-bg{transform-origin:85% 5%;animation:co-etire 12s ease-in-out infinite}
+.co-p-pause .co-bg{transform-origin:85% 5%;animation:co-etire 12s ease-in-out infinite;animation-delay:var(--co-d,0s)}
 @keyframes co-saut{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 .co-m-fete .co-corps{animation:co-saut .45s ease-in-out infinite}
-@keyframes co-pas{from{transform:translateY(0)}to{transform:translateY(-3px)}}
-.co-m-marche .co-jg{animation:co-pas .26s ease-in-out infinite alternate}
-.co-m-marche .co-jd{animation:co-pas .26s ease-in-out .26s infinite alternate}
-@keyframes co-rebond{from{transform:translateY(0)}to{transform:translateY(-1.5px)}}
-.co-m-marche .co-corps{animation:co-rebond .26s ease-in-out infinite alternate}
-@keyframes co-balance{from{transform:rotate(-14deg)}to{transform:rotate(14deg)}}
-.co-m-marche .co-bg{transform-origin:50% 0;animation:co-balance .52s ease-in-out infinite alternate}
-.co-m-marche .co-bd{transform-origin:50% 0;animation:co-balance .52s ease-in-out .26s infinite alternate-reverse}
+@keyframes co-jambe{from{transform:rotate(-17deg)}to{transform:rotate(17deg)}}
+.co-m-marche .co-jg{transform-origin:50% 0;animation:co-jambe .3s ease-in-out infinite alternate}
+.co-m-marche .co-jd{transform-origin:50% 0;animation:co-jambe .3s ease-in-out infinite alternate-reverse}
+@keyframes co-rebond{from{transform:translateY(0)}to{transform:translateY(-2px)}}
+.co-m-marche .co-corps{animation:co-rebond .3s ease-in-out infinite alternate}
+@keyframes co-balance{from{transform:rotate(-16deg)}to{transform:rotate(16deg)}}
+.co-m-marche .co-bg{transform-origin:50% 0;animation:co-balance .6s ease-in-out infinite alternate-reverse}
+.co-m-marche .co-bd{transform-origin:50% 0;animation:co-balance .6s ease-in-out infinite alternate}
 @keyframes co-monte{0%{transform:translateY(0);opacity:0}20%{opacity:1}100%{transform:translateY(-18px);opacity:0}}
 .co-particule{animation:co-monte 1.3s linear infinite}
 .co-particule.co-d1{animation-delay:.45s}.co-particule.co-d2{animation-delay:.9s}
@@ -1123,8 +1167,14 @@ const CSS = `
 @keyframes co-confetti{0%{transform:translate(0,0) rotate(0);opacity:1}100%{transform:translate(4px,30px) rotate(300deg);opacity:0}}
 .co-confetti{animation:co-confetti 1.1s ease-in infinite}
 .co-c1{animation-delay:.25s}.co-c2{animation-delay:.5s}.co-c3{animation-delay:.75s}
-@keyframes co-nuages{from{transform:translateX(-.4px)}to{transform:translateX(.4px)}}
-.co-nuages{animation:co-nuages 14s ease-in-out infinite alternate}
+@keyframes co-nuages{from{transform:translateX(-1.3px)}to{transform:translateX(1.3px)}}
+.co-nuages-defile{animation:co-nuages 38s ease-in-out infinite alternate}.co-n1{animation-delay:-13s}.co-n2{animation-delay:-26s}
+@keyframes co-soleil{from{opacity:.85}to{opacity:1}}
+.co-soleil{animation:co-soleil 6s ease-in-out infinite alternate}
+@keyframes co-rayons{from{opacity:.2}to{opacity:.36}}
+.co-rayons{opacity:.3;animation:co-rayons 11s ease-in-out infinite alternate}
+@keyframes co-poussiere{0%,100%{transform:translate(0,0);opacity:.15}50%{transform:translate(3px,-8px);opacity:.8}}
+.co-poussiere{animation:co-poussiere 7s ease-in-out infinite}
 @keyframes co-etoile{0%,100%{opacity:.9}50%{opacity:.25}}
 .co-etoile{animation:co-etoile 3s ease-in-out infinite}.co-e1{animation-delay:1s}.co-e2{animation-delay:2s}
 @keyframes co-anneau{0%,100%{opacity:.95}50%{opacity:.45}}
@@ -1139,6 +1189,9 @@ const CSS = `
 .co-gele *{animation-play-state:paused!important}
 @media (prefers-reduced-motion:reduce){.co-scene *{animation:none!important}}
 .co-scene .co-fondu.co-fondu{animation:co-fondu .45s ease-out both!important}
+.co-cible{position:absolute;margin:0;padding:0;border:0;background:transparent;cursor:pointer;border-radius:18px;pointer-events:auto;transform:translate(-50%,-92%);width:max(60px,calc(44px * var(--co-inv,1)));height:max(110px,calc(44px * var(--co-inv,1)));-webkit-tap-highlight-color:transparent;touch-action:none}
+.co-cible:focus{outline:none}
+.co-cible:focus-visible{outline:calc(3px * var(--co-inv,1)) solid var(--co-accent,#5B8CFF);outline-offset:calc(2px * var(--co-inv,1))}
 `;
 
 // ------------------------------------------------------------------ scène
@@ -1152,18 +1205,29 @@ interface Element {
 /** Taille des personnages par rapport au décor. */
 const K_PERSO = 1.5;
 const transformPerso = (x: number, y: number, miroir: boolean) => `translate(${r1(x)} ${r1(y)}) scale(${miroir ? -K_PERSO : K_PERSO} ${K_PERSO})`;
+/** Haut de la tête au-dessus des pieds (repère de la scène), selon la pose. */
+const hautTete = (mode: ModePose) => (mode === 'fete' ? 74 : mode === 'assis' ? 62 : 70) * K_PERSO;
 
 const maintenantSecondes = () => (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
 
-export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChoisir, demo, texteAgrandi, maintenant, horloge, charge = true, estompes }: PropsScene) {
+/** Polygone (écran) du sol d'une zone : cible du survol et du double-tap. */
+const polygoneZone = (z: Zone) => {
+  const r = RECTS_ZONES[z];
+  return pts([[r.x0, r.y0], [r.x1, r.y0], [r.x1, r.y1], [r.x0, r.y1]]);
+};
+
+export function SceneOpenSpace({
+  agents, theme, reduit, largeur, choisi, onChoisir, demo, texteAgrandi, maintenant, horloge, charge = true, estompes,
+  remplir, refSvg, refCalque, positions, survole, zoneSurvolee, cibles,
+}: PropsScene) {
   const pal = useMemo(() => palette(theme.sombre), [theme.sombre]);
   const temps = horloge ?? maintenantSecondes;
   const etat = useRef(creerScene());
   const [, rafraichir] = useReducer((n: number) => n + 1, 0);
   const refsPersos = useRef(new Map<string, SVGGElement>());
+  const refsCibles = useRef(new Map<string, HTMLButtonElement>());
   const racine = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(true);
-  const [vedette, setVedette] = useState(0);
   const signature = signatureAgents(agents);
   const parCle = useMemo(() => new Map(agents.map(a => [a.cle, a])), [agents]);
 
@@ -1207,11 +1271,19 @@ export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChois
       let change = avancer(etat.current, t);
       const liste = poses(etat.current, t);
       for (const p of liste) {
-        const el = refsPersos.current.get(p.cle);
-        if (!el || p.mode !== 'marche') continue;
+        if (p.mode !== 'marche') continue;
         const q = iso(p.x, p.y);
-        el.setAttribute('transform', transformPerso(q.x, q.y, p.miroir));
-        el.setAttribute('opacity', String(r1(p.opacite)));
+        const el = refsPersos.current.get(p.cle);
+        if (el) {
+          el.setAttribute('transform', transformPerso(q.x, q.y, p.miroir));
+          el.setAttribute('opacity', String(r1(p.opacite)));
+        }
+        const bouton = refsCibles.current.get(p.cle);
+        if (bouton) {
+          bouton.style.left = `${r1(q.x)}px`;
+          bouton.style.top = `${r1(q.y)}px`;
+        }
+        positions?.current.set(p.cle, { x: q.x, y: q.y, haut: q.y - hautTete('marche') });
       }
       const sig = liste.map(p => `${p.cle}:${p.mode}:${p.vue}:${p.miroir}:${Math.round((p.x + p.y) * 2)}`).join('|');
       if (sig !== ordre.current) {
@@ -1238,28 +1310,27 @@ export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChois
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, reduit]);
 
-  // Bulle « vedette » qui passe d'un agent à l'autre quand aucun n'est choisi.
-  useEffect(() => {
-    if (reduit || !visible || choisi) return undefined;
-    const t = setInterval(() => setVedette(v => v + 1), 5200);
-    return () => clearInterval(t);
-  }, [reduit, visible, choisi]);
-
   const t = temps();
   const liste = poses(etat.current, t);
   const occupants = etat.current.occupants;
   const comptes = comptesZones(etat.current);
   const grand = Boolean(texteAgrandi);
-  // Ceux qui attendent ta réponse passent d'abord ; sinon chacun son tour.
-  const installes = liste.filter(p => p.mode !== 'marche' && parCle.get(p.cle));
-  const attendent = installes.filter(p => parCle.get(p.cle)?.etat === 'attend');
-  const candidats = attendent.length ? attendent : installes.filter(p => parCle.get(p.cle)?.demande || parCle.get(p.cle)?.salle);
-  const cleBulle = choisi ?? (candidats.length ? candidats[vedette % candidats.length].cle : undefined);
   const fond = useMemo(() => <Fond pal={pal} maintenant={maintenant} />, [pal, Math.floor(maintenant / 60_000)]); // eslint-disable-line react-hooks/exhaustive-deps
   const guichetActif = comptes.presents.guichet > 0;
   const machinesActives = comptes.presents.machines > 0;
   const meubles = useMemo(() => meublesTries(pal, guichetActif, machinesActives), [pal, guichetActif, machinesActives]);
   const choisir = useCallback((cle: string) => (e: React.MouseEvent) => { e.stopPropagation(); onChoisir(cle); }, [onChoisir]);
+
+  // Positions des personnages (repère de la scène) : suivi caméra, cartes de survol, mini-carte.
+  const positionsRendu = new Map<string, { x: number; y: number; haut: number }>();
+  for (const p of liste) {
+    const q = iso(p.x, p.y);
+    positionsRendu.set(p.cle, { x: q.x, y: q.y, haut: q.y - hautTete(p.mode) });
+  }
+  useLayoutEffect(() => {
+    if (!positions) return;
+    positions.current = positionsRendu;
+  });
 
   const elements: Element[] = [...meubles];
   // Bureaux à écran (atelier, consoles des machines) : l'écran montre l'activité de qui y est installé.
@@ -1274,7 +1345,7 @@ export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChois
       cle: `poste-${place.index}`,
       profondeur: b.x + b.w / 2 + b.y + b.d / 2,
       rendu: (
-        <g key={`poste-${place.index}`} onClick={cle ? choisir(cle) : undefined} className={cle ? 'co-clic' : undefined}>
+        <g key={`poste-${place.index}`} onClick={cle && !cibles ? choisir(cle) : undefined} className={cle && !cibles ? 'co-clic' : undefined}>
           <PosteDessin place={place} pal={pal} activite={agent ? activiteAgent(agent) : 'vide'} fige={Boolean(agent?.fige)} occupe={Boolean(agent)} />
         </g>
       ),
@@ -1294,6 +1365,7 @@ export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChois
     const jambes: Jambes = DEBOUT.has(p.mode) || (p.mode === 'range' && place.genre === 'debout') ? 'debout' : place.genre === 'bureau' || place.genre === 'chaise' || place.genre === 'tabouret' ? 'cachees' : 'assises';
     const estompe = estompes?.has(p.cle);
     const fondu = occ.teleporte !== undefined && t - occ.teleporte < 0.6;
+    const enAvant = p.cle === choisi || p.cle === survole;
     elements.push({
       cle: `perso-${p.cle}`,
       profondeur: p.x + p.y + 0.001,
@@ -1303,14 +1375,15 @@ export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChois
           ref={el => { if (el) refsPersos.current.set(p.cle, el); else refsPersos.current.delete(p.cle); }}
           transform={transformPerso(q.x, q.y, p.miroir)}
           opacity={estompe ? 0.22 : agent.fige ? 0.7 : r1(p.opacite)}
-          onClick={choisir(p.cle)}
+          onClick={cibles ? undefined : choisir(p.cle)}
           className={`co-clic co-perso${fondu ? ' co-fondu' : ''}`}
+          style={{ ['--co-d' as string]: `-${(hacher(p.cle) % 90) / 10}s` }}
           data-cle={p.cle}
           data-zone={p.zone}
           data-mode={p.mode}
         >
-          {p.cle === choisi ? <ellipse cx={0} cy={0} rx={18} ry={7.5} fill={theme.accent} opacity={0.25} /> : null}
-          {p.cle === choisi ? <ellipse cx={0} cy={0} rx={18} ry={7.5} fill="none" stroke={theme.accent} strokeWidth={2.8} className="co-anneau" /> : null}
+          {enAvant ? <ellipse cx={0} cy={0} rx={18} ry={7.5} fill={theme.accent} opacity={p.cle === choisi ? 0.25 : 0.16} /> : null}
+          {enAvant ? <ellipse cx={0} cy={0} rx={18} ry={7.5} fill="none" stroke={theme.accent} strokeWidth={p.cle === choisi ? 2.8 : 1.8} className={p.cle === choisi ? 'co-anneau' : undefined} /> : null}
           <Personnage ap={ap} vue={p.vue} mode={agent.fige && p.mode !== 'marche' ? (jambes === 'debout' ? 'debout' : 'assis') : p.mode} activite={agent.fige ? 'pause' : activite} carton={carton} jambes={jambes} />
           {p.mode === 'assis' && activite === 'code' && !agent.fige ? (
             <g>
@@ -1325,81 +1398,106 @@ export function SceneOpenSpace({ agents, theme, reduit, largeur, choisi, onChois
   }
   elements.sort((a, b) => a.profondeur - b.profondeur || (a.cle < b.cle ? -1 : 1));
 
-  // Badges (état de chacun), repère de l'agent choisi et bulle, toujours au-dessus.
+  // Pastilles d'état (petites) et repère de l'agent choisi, toujours au-dessus ; les textes viennent au survol.
   const badges: React.ReactNode[] = [];
-  let bulle: React.ReactNode = null;
   let repere: React.ReactNode = null;
   for (const p of liste) {
     const agent = parCle.get(p.cle);
     if (!agent) continue;
     const q = iso(p.x, p.y);
-    const haut = q.y - (p.mode === 'fete' ? 74 : p.mode === 'assis' ? 62 : 70) * K_PERSO;
+    const haut = q.y - hautTete(p.mode);
     if (p.cle === choisi) {
       repere = (
-        <g transform={`translate(${r1(q.x)} ${r1(haut - (grand ? 30 : 22))})`} pointerEvents="none" data-testid="scene-repere">
+        <g transform={`translate(${r1(q.x)} ${r1(haut - 22)})`} pointerEvents="none" data-testid="scene-repere">
           <g className="co-repere"><path d="M-9,-8 L9,-8 L0,4 Z" fill={theme.accent} stroke="#FFFFFF" strokeWidth={1.5} /></g>
         </g>
       );
     }
     if (p.mode === 'marche' || estompes?.has(p.cle)) continue;
-    badges.push(<Badge key={p.cle} x={q.x + (p.miroir ? -1 : 1) * 19 * K_PERSO} y={haut + 8} activite={p.mode === 'fete' ? 'fini' : activiteAgent(agent)} pal={pal} fige={agent.fige} grand={grand} />);
-    if (p.cle === cleBulle) {
-      const salle = agent.salle && agent.fin !== undefined;
-      const attend = agent.etat === 'attend';
-      bulle = (
-        <Bulle
-          x={q.x}
-          y={haut - (grand ? 14 : 8)}
-          titre={attend ? `${agent.projet ?? 'Projet'} · attend ta réponse` : salle ? `${agent.projet ?? 'Projet'} · terminé ${ilYA(agent.fin!, maintenant)}` : `${agent.projet ?? 'Projet inconnu'}${agent.fige ? ' · figé' : ''}`}
-          texte={attend ? agent.attente ?? 'Claude attend ta réponse' : salle ? resumerTexte(agent.recap ?? agent.demande, 160) ?? 'Tâche terminée' : agent.demande ?? 'Pas encore de demande'}
-          couleur={attend ? '#E5484D' : salle ? ZONES.salle.teinte : apparence(agent).haut}
-          pal={pal}
-          grand={grand}
-          alerte={attend}
-        />
-      );
-    }
+    badges.push(<Badge key={p.cle} x={q.x + (p.miroir ? -1 : 1) * 17 * K_PERSO} y={haut + 10} activite={p.mode === 'fete' ? 'fini' : activiteAgent(agent)} pal={pal} fige={agent.fige} />);
   }
   const attente = enAttente(etat.current);
   const porte = iso((PORTE.x0 + PORTE.x1) / 2, 0, 2.6);
   const hauteur = Math.round((largeur * HAUTEUR_SCENE) / LARGEUR_SCENE);
+  const rz = zoneSurvolee ? RECTS_ZONES[zoneSurvolee] : undefined;
 
   return (
     <div
       ref={racine}
-      style={{ width: largeur, height: hauteur, position: 'relative' }}
+      style={remplir ? { position: 'absolute', inset: 0 } : { width: largeur, height: hauteur, position: 'relative' }}
       data-testid={reduit ? 'scene-fixe' : 'scene-animee'}
-      aria-hidden="true"
     >
       <svg
+        ref={refSvg}
         className={`co-scene${reduit ? ' co-fixe' : ''}${visible ? '' : ' co-gele'}`}
-        width={largeur}
-        height={hauteur}
+        width={remplir ? '100%' : largeur}
+        height={remplir ? '100%' : hauteur}
         viewBox={`0 0 ${LARGEUR_SCENE} ${HAUTEUR_SCENE}`}
         style={{ display: 'block' }}
         focusable="false"
+        aria-hidden="true"
       >
         <style dangerouslySetInnerHTML={{ __html: CSS }} />
         {fond}
+        {rz && zoneSurvolee ? (
+          <g transform={sol()} pointerEvents="none" data-testid="scene-zone-survolee">
+            <rect x={rz.x0 + 0.1} y={rz.y0 + 0.1} width={rz.x1 - rz.x0 - 0.2} height={rz.y1 - rz.y0 - 0.2} rx={0.25} fill={ZONES[zoneSurvolee].teinte} opacity={0.16} stroke={ZONES[zoneSurvolee].teinte} strokeWidth={0.09} />
+          </g>
+        ) : null}
         <g>{elements.map(e => e.rendu)}</g>
         <PremierPlan pal={pal} />
         <g>{ORDRE_ZONES.map(z => <Enseigne key={z} zone={z} nombre={comptes.presents[z]} sansPlace={comptes.sansPlace[z]} pal={pal} grand={grand} />)}</g>
+        {cibles ? (
+          <g data-testid="scene-zones-cibles">
+            {ORDRE_ZONES.map(z => <polygon key={z} points={polygoneZone(z)} fill="transparent" pointerEvents="all" data-co-zone={z} />)}
+          </g>
+        ) : null}
         {attente ? (
-          <g transform={`translate(${r1(porte.x)} ${r1(porte.y - 30)})`} data-testid="scene-file-attente">
+          <g transform={`translate(${r1(porte.x)} ${r1(porte.y - 30)})`} data-testid="scene-file-attente" pointerEvents="none">
             <rect x={-44} y={-14} width={88} height={22} rx={11} fill={pal.badge} stroke={TEINTES_ACTIVITE.pense} strokeWidth={1.5} />
             <text y={2} textAnchor="middle" fontSize={13} fontWeight={700} fill={pal.badgeTexte}>{`${attente} à l’entrée`}</text>
           </g>
         ) : null}
         <g>{badges}</g>
         {repere}
-        {bulle}
         {demo ? (
-          <g transform={`translate(${LARGEUR_SCENE - 180} 14)`} data-testid="scene-demo">
-            <rect width={156} height={34} rx={17} fill="#E0803A" />
-            <text x={78} y={23} textAnchor="middle" fontSize={16} fontWeight={800} fill="#FFFFFF" letterSpacing={1}>DÉMO</text>
+          <g transform="translate(26 14)" data-testid="scene-demo" pointerEvents="none">
+            <rect width={124} height={28} rx={14} fill="#E0803A" opacity={0.92} />
+            <text x={62} y={19} textAnchor="middle" fontSize={14} fontWeight={800} fill="#FFFFFF" letterSpacing={1}>DÉMO</text>
           </g>
         ) : null}
       </svg>
+      {cibles ? (
+        <div
+          ref={refCalque}
+          className="co-calque"
+          style={{ position: 'absolute', left: 0, top: 0, width: LARGEUR_SCENE, height: HAUTEUR_SCENE, transformOrigin: '0 0', pointerEvents: 'none', ['--co-accent' as string]: theme.accent }}
+          data-testid="scene-cibles"
+        >
+          {liste.map(p => {
+            const agent = parCle.get(p.cle);
+            if (!agent) return null;
+            const q = iso(p.x, p.y);
+            const decrit = cibles.decrit?.cle === p.cle ? cibles.decrit.id : undefined;
+            return (
+              <button
+                key={p.cle}
+                type="button"
+                ref={el => { if (el) refsCibles.current.set(p.cle, el); else refsCibles.current.delete(p.cle); }}
+                className="co-cible"
+                style={{ left: r1(q.x), top: r1(q.y) }}
+                data-co-agent={p.cle}
+                data-testid={`scene-cible-${agent.session.slice(0, 12)}`}
+                aria-label={cibles.libelle(agent)}
+                aria-describedby={decrit}
+                onFocus={() => cibles.onFocus(p.cle)}
+                onBlur={() => cibles.onFocus(undefined)}
+                onClick={e => { if (e.detail === 0) cibles.onActiver(p.cle); }}
+              />
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -205,6 +205,9 @@ describe('bureau : rendu', () => {
     await render(<BureauVisuel theme={theme} activite={{ entrees: journal(), references: {}, source: { genre: 'local' }, lu: true }} maintenant={T0} mouvementReduit />);
     expect(screen.getByTestId('bureau-fraicheur')).toBeTruthy();
     expect(screen.getByText(/En direct · journal de ce PC/)).toBeTruthy();
+    // Compteurs, résumé et réglages d'affichage : repliés dans « Options ».
+    expect(screen.queryByTestId('bureau-compteurs')).toBeNull();
+    await fireEvent.press(screen.getByTestId('bureau-options'));
     expect(screen.getByTestId('bureau-compte-actifs').props.children).toBe(3);
     expect(screen.getAllByTestId('bureau-etat-agent').map(t => t.props.children)).toEqual(['Écrit du code', 'Utilise un outil', 'Réfléchit', 'Inactif']);
     const bulles = screen.getAllByTestId('bureau-bulle').map(t => t.props.children);
