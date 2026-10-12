@@ -2,20 +2,23 @@
  * Claude Office (v4) : les SOUS-AGENTS dans la scène — logique pure, testée
  * dans sceneV4.test.tsx.
  *
- * Contrat (le même que le module de données `sousAgents(evenements)` de
- * l'intégration, docs/claude-office.md) : par session, une liste de
- * sous-agents {id, parent, description, type, modèle, début, fin, état,
- * durée}. En attendant le module complet, on les DÉDUIT de l'historique :
- * chaque outil « Task » / « Agent » noté à sa fin avec sa durée a tourné de
- * (fin − durée) à fin ; la démo en fournit d'autres, en parallèle.
+ * Contrat : par session, une liste de sous-agents {id, parent, description,
+ * type, modèle, début, fin, état, durée}. Source : le module de données
+ * `sousAgents(entrees)` (logiqueSousAgents.ts), adapté ici par
+ * `sousAgentsDepuisHistorique` : dès qu'un SubagentStart (`debut-sous-agent`)
+ * arrive, le mini-personnage apparaît EN DIRECT, sans attendre la fin de
+ * l'outil Agent. Repli (hook d'avant la v4, sans SubagentStart) : on les
+ * DÉDUIT des outils « Task » / « Agent » notés à leur fin avec leur durée
+ * (`deduireSousAgents`) ; la démo en fournit d'autres, en parallèle.
  *
  * Rendu : un petit personnage (mini-version du parent) sort de la Salle de
  * réunion, va dans la zone de son activité (ou reste près du parent), puis
  * revient « rendre » son travail au parent et disparaît.
  */
 
-import type { Agent } from './logiqueBureau';
+import { cleAppareil, type Agent } from './logiqueBureau';
 import type { EntreeHistorique } from './logiqueHistorique';
+import { sousAgents as sousAgentsDonnees, type SousAgent as SousAgentDonnees } from './logiqueSousAgents';
 import { RECTS_ZONES, type Point } from './logiqueScene';
 import type { Zone } from './zones';
 
@@ -36,6 +39,8 @@ export interface SousAgent {
   etat: EtatSousAgent;
   /** Durée (ms), quand elle est connue. */
   duree?: number;
+  /** 1 : lancé par l'agent principal ; 2 : par un sous-agent… (module de données). */
+  profondeur?: number;
 }
 
 /** Temps de l'animation « rendu au parent » après la fin (ms) : ensuite, il disparaît. */
@@ -43,7 +48,7 @@ export const DUREE_RENDU_MS = 4_000;
 /** Au-delà, les mini-personnages sont regroupés en « +N » (performances, lisibilité). */
 export const MAX_MINIS = 6;
 
-const cleAppareil = (e: EntreeHistorique) => e.appareilId ?? e.appareil ?? 'appareil';
+// Même clé que `Agent.cle` (logiqueBureau.ts).
 
 /**
  * Sous-agents déduits de l'historique : un outil Task / Agent terminé à `ts`
@@ -71,6 +76,47 @@ export function deduireSousAgents(entrees: readonly EntreeHistorique[], t: numbe
       ...(duree ? { duree } : {}),
     });
   }
+  return res;
+}
+
+/** Un sous-agent du module de données, au format de la scène (« sans nouvelles » : compté comme terminé). */
+export function versSousAgentScene(s: SousAgentDonnees): SousAgent {
+  const fin = s.fin ?? (s.etat === 'expire' ? s.dernier : undefined);
+  return {
+    id: s.id,
+    parent: s.cleSession,
+    ...(s.description ? { description: s.description } : {}),
+    ...(s.type ? { type: s.type } : {}),
+    ...(s.modele ? { modele: s.modele } : {}),
+    debut: s.debut,
+    ...(fin !== undefined ? { fin } : {}),
+    etat: s.etat === 'expire' ? 'termine' : s.etat,
+    duree: s.dureeMs,
+    profondeur: s.profondeur,
+  };
+}
+
+const cleSession = (e: EntreeHistorique) => `${cleAppareil(e)}|${e.session ?? 'sans-session'}`;
+const evenementSousAgent = (e: EntreeHistorique) => e.type === 'debut-sous-agent' || e.type === 'fin-sous-agent' || Boolean(e.agent);
+
+/**
+ * Sous-agents de la scène à l'instant `t` (en direct ou en relecture) :
+ *  - sessions dont le hook note les sous-agents (SubagentStart / SubagentStop, outils
+ *    attribués) : le module de données, sur les événements connus à `t` — un sous-agent
+ *    est donc visible dès son lancement ;
+ *  - autres sessions (ancien hook) : repli sur la déduction Task / Agent.
+ */
+export function sousAgentsDepuisHistorique(entrees: readonly EntreeHistorique[], t: number, references?: Record<string, number>): SousAgent[] {
+  const suivies = new Set<string>();
+  for (const e of entrees) if (evenementSousAgent(e)) suivies.add(cleSession(e));
+  const res: SousAgent[] = [];
+  if (suivies.size) {
+    const connues = entrees.filter(e => suivies.has(cleSession(e)) && Date.parse(e.ts) <= t);
+    for (const liste of Object.values(sousAgentsDonnees(connues, { maintenant: t, ...(references ? { references } : {}) }))) {
+      for (const s of liste) res.push(versSousAgentScene(s));
+    }
+  }
+  for (const s of deduireSousAgents(entrees, t)) if (!suivies.has(s.parent)) res.push(s);
   return res;
 }
 

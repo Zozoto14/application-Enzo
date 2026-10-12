@@ -115,20 +115,32 @@ try {
   const cadreVue = () => page.getByTestId('bureau-scene-defilement').boundingBox();
   const dansLEcran = r => r && r.x >= -1 && r.y >= -1 && r.x + r.width <= page.viewportSize().width + 1 && r.y + r.height <= page.viewportSize().height + 1;
   /** Un point de la zone qui n'est couvert par aucun personnage (pour survoler ou toucher la zone elle-même). */
-  const pointZone = zone => page.evaluate(z => {
+  const pointZone = (zone, strict = false) => page.evaluate(([z, strict]) => {
     const poly = document.querySelector(`[data-co-zone="${z}"]`);
     const r = poly.getBoundingClientRect();
     const v = document.querySelector('[data-testid="bureau-scene-defilement"]').getBoundingClientRect();
+    // Loin de tout personnage (ils marchent : un double-tap ne doit pas tomber sur l'un d'eux entre les deux touchers).
+    const persos = [...document.querySelectorAll('[data-co-agent],[data-co-sous]')].map(e => e.getBoundingClientRect());
+    const libre = (x, y) => persos.every(p => x < p.left - 45 || x > p.right + 45 || y < p.top - 45 || y > p.bottom + 45);
     for (let fy = 0.5; fy > 0.1; fy -= 0.05) {
       for (let fx = 0.5; fx > 0.1; fx -= 0.05) {
         for (const [x, y] of [[r.x + r.width * fx, r.y + r.height * fy], [r.x + r.width * (1 - fx), r.y + r.height * (1 - fy)]]) {
           if (x < v.left + 60 || x > v.right - 60 || y < v.top + 60 || y > v.bottom - 70) continue;
-          if (document.elementFromPoint(x, y)?.getAttribute('data-co-zone') === z) return { x, y };
+          if (document.elementFromPoint(x, y)?.getAttribute('data-co-zone') === z && libre(x, y)) return { x, y };
         }
       }
     }
+    // Repli : sans marge autour des personnages.
+    if (strict) return undefined;
+    for (let fy = 0.5; fy > 0.1; fy -= 0.05) {
+      for (let fx = 0.5; fx > 0.1; fx -= 0.05) {
+        const [x, y] = [r.x + r.width * fx, r.y + r.height * fy];
+        if (x < v.left + 60 || x > v.right - 60 || y < v.top + 60 || y > v.bottom - 70) continue;
+        if (document.elementFromPoint(x, y)?.getAttribute('data-co-zone') === z) return { x, y };
+      }
+    }
     return undefined;
-  }, zone);
+  }, [zone, strict]);
   /** Un point du plateau hors de tout personnage et de toute zone (pour « toucher ailleurs »). */
   const pointVide = () => page.evaluate(() => {
     const v = document.querySelector('[data-testid="bureau-scene-defilement"]').getBoundingClientRect();
@@ -195,6 +207,21 @@ try {
   verifier(Boolean(decrit) && (await page.locator(`[id="${decrit}"]`).count()) === 1, 'carte décrite pour les lecteurs d’écran (aria-describedby)');
   await controler('PC, carte de survol', ['bureau-plateau']);
   await prendre('v4-pc-survol', false);
+  // Intégration : le surnom donné dans l'Équipe (démo : « facturation » = Félix) s'affiche au survol.
+  await page.mouse.move(1, 1);
+  await pause(400);
+  const cleFelix = (await page.locator('[data-co-agent]').evaluateAll(els => els.map(e => e.getAttribute('data-co-agent')))).find(c => c.endsWith('|demo-facturation'));
+  if (cleFelix) {
+    await page.locator(`[data-co-agent="${cleFelix}"]`).hover().catch(() => undefined);
+    await page.getByTestId('scene-carte-surnom').waitFor({ timeout: 3000 }).catch(() => undefined);
+  }
+  const surnomVu = await page.getByTestId('scene-carte-surnom').innerText().catch(() => '');
+  const libelleFelix = cleFelix ? await page.locator(`[data-co-agent="${cleFelix}"]`).getAttribute('aria-label') : '';
+  verifier(surnomVu === 'Félix' && /^Félix \(facturation\)/.test(libelleFelix ?? ''), `Équipe : surnom affiché au survol et dans la cible accessible (« ${surnomVu} », « ${(libelleFelix ?? '').slice(0, 40)} »)`);
+  // Cohérence avec l'onglet Suivi : l'agent qui attend (pastille de la barre) est celui de l'alerte de la démo.
+  verifier((await page.getByTestId('bureau-pastille-attend').count()) === 1 && /Félix|facturation/.test(await page.locator(`[data-co-agent="${cleFelix}"]`).getAttribute('aria-label').catch(() => '')) && /Attend ta réponse/.test(libelleFelix ?? ''), 'pastille « attend ta réponse » : l’agent de l’alerte de démo (facturation) est bien au guichet');
+  await page.mouse.move(1, 1);
+  await pause(400);
   // Survol d'une zone : nom, nombre, rôle.
   await page.mouse.move(1, 1);
   await pause(400);
@@ -339,6 +366,40 @@ try {
   await pause(600);
   verifier((await plateau().getAttribute('data-mode')) === 'normal', 'écran d’ambiance quitté (Échap)');
 
+  // Raccourcis branchés sur la scène : F bascule le plein écran ; J / K suivent l'agent suivant / précédent.
+  await page.mouse.move(1, 1);
+  await page.locator('body').click({ position: { x: 2, y: 2 } }).catch(() => undefined);
+  await page.keyboard.press('f');
+  await pause(900);
+  const modeF = await plateau().getAttribute('data-mode');
+  await page.keyboard.press('f');
+  await pause(900);
+  verifier(modeF === 'immersif' && (await plateau().getAttribute('data-mode')) === 'normal', `touche F : plein écran puis retour (${modeF})`);
+  await page.keyboard.press('j');
+  await pause(1500);
+  const suiviJ = await page.getByTestId('scene-suivi').innerText().catch(() => '');
+  await page.keyboard.press('j');
+  await pause(1200);
+  const suiviJ2 = await page.getByTestId('scene-suivi').innerText().catch(() => '');
+  await page.keyboard.press('k');
+  await pause(1200);
+  const suiviK = await page.getByTestId('scene-suivi').innerText().catch(() => '');
+  verifier(Boolean(suiviJ) && suiviJ2 !== suiviJ && suiviK === suiviJ && (await page.getByTestId('scene-carte').count()) === 1 && (await page.getByTestId('bureau-detail').count()) === 0, `touches J / K : la caméra suit l’agent suivant puis le précédent (« ${suiviJ} » → « ${suiviJ2} » → « ${suiviK} »)`);
+  await page.getByTestId('scene-suivi').click().catch(() => undefined);
+  await page.keyboard.press('Escape');
+  await page.getByTestId('scene-recentrer').click();
+  await pause(500);
+
+  // Intégration : un sous-agent est dessiné DÈS son SubagentStart (module de données), sans attendre la fin de
+  // l'outil Agent. Démo « refonte » : le sous-agent « c » démarre à +3 s et son outil Agent n'est noté qu'à +44 s.
+  let vuDesLeDebut;
+  for (let i = 0; i < 100 && !vuDesLeDebut; i++) {
+    vuDesLeDebut = (await page.locator('[data-sous][data-phase="travaille"]').evaluateAll(e => e.map(x => x.getAttribute('data-sous')))).find(x => /^demo-agent-\d+-c$/.test(x));
+    if (!vuDesLeDebut) await pause(1000);
+  }
+  const parentRefonte = vuDesLeDebut ? await page.locator(`[data-sous="${vuDesLeDebut}"]`).getAttribute('data-parent') : '';
+  verifier(Boolean(vuDesLeDebut) && /\|demo-refonte$/.test(parentRefonte ?? ''), `sous-agent visible dès SubagentStart, avant la fin de son outil Agent (${vuDesLeDebut}, parent ${parentRefonte})`);
+
   // Sous-agents (démo) : un petit personnage sort de la réunion, travaille, rend son travail au parent et disparaît.
   await remonter();
   await page.getByTestId('scene-recentrer').click();
@@ -415,14 +476,20 @@ try {
     await page.getByTestId('scene-recentrer').tap();
     await pause(500);
     const zr = await zoom();
-    const pd = await pointZone('atelier') ?? await pointZone('reflexion');
+    // Un point de zone loin des personnages (la démo en compte beaucoup) : d'abord sans repli, zone par zone.
+    let pd;
+    let zd;
+    for (const z of ['atelier', 'reflexion', 'cafe', 'bibliotheque', 'detente']) if (!pd && (pd = await pointZone(z, true))) zd = z;
+    if (!pd) pd = await pointZone((zd = 'atelier'));
+    let sousLeDoigt = '';
     if (pd) {
       await page.touchscreen.tap(pd.x, pd.y);
       await pause(90);
+      sousLeDoigt = await page.evaluate(([x, y]) => { const e = document.elementFromPoint(x, y); return e?.getAttribute('data-co-zone') ?? e?.getAttribute('data-testid') ?? e?.closest('[data-testid]')?.getAttribute('data-testid') ?? e?.tagName; }, [pd.x, pd.y]);
       await page.touchscreen.tap(pd.x, pd.y);
     }
     await pause(700);
-    verifier(Boolean(pd) && (await zoom()) > zr * 1.1, `${nom} : double-tap sur une zone = zoom dessus (${zr} → ${await zoom()})`);
+    verifier(Boolean(pd) && (await zoom()) > zr * 1.1, `${nom} : double-tap sur une zone = zoom dessus (${zd}, ${zr} → ${await zoom()}, sous le doigt : ${sousLeDoigt})`);
     await page.getByTestId('scene-recentrer').tap();
     await pause(500);
     await controler(`${nom}, démo en scène (sombre)`);

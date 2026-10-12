@@ -101,10 +101,20 @@ captures `docs/captures-claude-office/v4-*.jpg`, avant/après : `v4-avant-pc-som
   survol : « Sous-agent de <projet> », description, type, depuis quand, lien pointillé vers le parent ; compteur
   discret « ⑂ N » sur le parent ; section « Sous-agents » dans le détail ; indentés sous le parent dans les listes.
   Six au plus à la fois (le reste : « +N »). Contrat : `SousAgent` de `sousAgentsScene.ts` ({id, parent, description,
-  type, modèle, début, fin, état en cours/terminé/échec, durée}), le même que le module de données
-  `sousAgents(evenements)` ; en attendant, ils sont déduits des outils Task / Agent de l'historique (notés à leur fin
-  avec leur durée : visibles en relecture, et en direct pendant leur « rendu ») et la démo en fait tourner deux ou
-  trois en parallèle.
+  type, modèle, début, fin, état en cours/terminé/échec, durée, profondeur}), alimenté par le **module de données**
+  `sousAgents(entrees)` de `logiqueSousAgents.ts` via `sousAgentsDepuisHistorique(entrees, t, references)` : avec le
+  hook v4, un sous-agent apparaît **en direct dès son `SubagentStart`** (sans attendre la fin de l'outil Agent) et
+  repart à son `SubagentStop` ; « sans nouvelles » (30 min, ou session fermée) = plus dessiné. **Repli** pour une
+  session sans aucun événement de sous-agent (hook d'avant la v4) : déduits des outils Task / Agent notés à leur fin
+  avec leur durée (visibles en relecture, et en direct pendant leur « rendu »). La démo fusionne la session
+  « refonte » (`entreesDemoSousAgents` : trois sous-agents en parallèle + un imbriqué) et en fait tourner d'autres
+  sur deux ou trois sessions fictives.
+- **Équipe dans la scène et la liste** : la couleur du haut et l'accessoire choisis dans l'écran Équipe habillent le
+  personnage (et ses mini-sous-agents) ; le **surnom** s'affiche au survol (« Bérénice » au-dessus du projet), dans la
+  cible accessible (« Bérénice (budget), … »), la pastille « ◎ Suivi », la carte d'un sous-agent, le titre du Détail
+  et les cartes de la vue Liste. Changer l'équipe redessine aussitôt (`useMagasinSuivi`).
+- **Clavier** (raccourcis de l'onglet Suivi) : `F` bascule le plein écran de la scène ; `J` / `K` font **suivre**
+  l'agent suivant / précédent (caméra centrée + carte épinglée) ; en vue Liste (ou en natif), ils ouvrent son détail.
 - **Graphisme** (toujours SVG/CSS, sans image) : sol de chaque zone en dégradé, lumière d'ambiance (soleil par les
   fenêtres et poussière dans les rayons le jour, bleu nuit et lampes la nuit), ciel qui défile lentement (nuages,
   soleil, lune, étoiles), ombres portées douces sous le mobilier, cloison vitrée de la salle des machines,
@@ -176,11 +186,15 @@ pas modifié.
   chaque session de l'**Historique** ; section « Notes » : toutes les notes, recherche sans accents ni casse.
 - **Raccourcis clavier** (`raccourcis.ts`, PC et iPad avec clavier, web) : `?` aide (aussi « Raccourcis clavier »
   en bas de l'onglet Suivi), `B`/`H`/`S` onglets, `/` recherche (Bureau, Historique ou Notes ; sinon ouvre
-  l'Historique), `F` plein écran (délégué à la scène), `Échap` ferme l'aide ou le détail **sans quitter l'app**,
-  `J`/`K` agent suivant/précédent (ouvre son détail). Jamais pendant la saisie (champ, zone de texte, contenu
+  l'Historique), `F` plein écran de la scène (bascule), `Échap` ferme l'aide ou le détail **sans quitter l'app**,
+  `J`/`K` agent suivant/précédent (dans la scène : la caméra le suit ; en vue Liste : ouvre son détail). Jamais pendant la saisie (champ, zone de texte, contenu
   éditable) ni avec Ctrl, Cmd ou Alt.
 - **Démo** : en plus des sessions du bureau, trois sessions fictives (`demoSuivi.ts`) déclenchent les quatre alertes
-  (pastille « Suivi · 4 ») ; équipe (Bob, Félix…) et notes fictives ; rien n'est écrit.
+  (pastille « Suivi · 4 ») ; équipe (Bob, Félix…) et notes fictives ; rien n'est écrit. Le Bureau de la démo montre
+  **les mêmes sessions** que les alertes (« facturation » au guichet : la pastille « ✋ attend ta réponse » de la
+  barre et l'alerte « attend ta réponse » parlent du même agent ; « carnet » qui « a fini » est en salle d'attente).
+- **Place dans l'écran** : « Suivi » est le quatrième onglet de la ligne de titre épurée (à côté de Bureau,
+  Historique, Statistiques), avec sa pastille d'alertes non lues ; rien n'est ajouté à la barre du Bureau.
 
 ### Sous-agents (v4, données ; le rendu est celui de la scène)
 
@@ -224,16 +238,15 @@ entreesDemoSousAgents(debut, maintenant)  // démo : session « refonte », 3 so
 Exemple : `sousAgents(entrees, { maintenant: Date.now() })['52e6f6322d1d|sess-1']` →
 `[{ id: 'agent-a1', parent: 'sess-1', profondeur: 1, description: 'Trouver les API', type: 'Explore', modele: 'haiku',
 arrierePlan: true, etat: 'en-cours', dureeMs: 18000, outils: [{ nom: 'Read', n: 2 }], … }]`. Pour la démo du bureau,
-fusionner `entreesDemoSousAgents(debutDemo, maintenant)` aux entrées de `entreesDemo` (non branché ici : c'est la
-scène). Statistiques : carte « Sous-agents » (par jour, types, parallèles, échecs) ; récap : « N sous-agents (types),
+les entrées de `entreesDemo` sont fusionnées avec `entreesDemoSuivi` et `entreesDemoSousAgents(debutDemo, maintenant)`
+(Bureau.tsx). Statistiques : carte « Sous-agents » (par jour, types, parallèles, échecs) ; récap : « N sous-agents (types),
 jusqu'à K en parallèle » ; chronologie du détail : « Sous-agent lancé / terminé (type) ».
 
-**Points d'intégration avec la scène** (une ligne chacun, marqués « v4 ») : `Racine.tsx` (`useSuiviOffice`, onglet,
-aide) ; `Bureau.tsx` (`useNavigationAgents(...)` : J/K, Échap sur le détail) ; `SceneOpenSpace.web.tsx` (import de
-`apparencePersonnalisee as apparence`) ; `DetailAgent.tsx` et `Historique.tsx` (`<NoteSession …/>`) ;
-`resumeHub.ts` (pastille de la tuile). Plein écran : la scène écoute
-`useEffect(() => ecouterOffice('plein-ecran', () => { basculer(); return true; }), [])` (sans écouteur, `F` ne fait
-rien). Poids : environ 42 Ko minifiés (14 Ko compressés) de plus au bundle du site.
+**Points d'intégration avec la scène** (faits) : `Racine.tsx` (`useSuiviOffice`, onglet Suivi dans la ligne de titre,
+aide) ; `Bureau.tsx` (`sousAgentsDepuisHistorique`, démo commune, `useNavigationAgents(...)` hors scène web, Équipe
+dans la vue Liste) ; `PlateauScene.web.tsx` (écouteurs `plein-ecran`, `agent-suivant`, `agent-precedent`, surnom
+au survol) ; `SceneOpenSpace.web.tsx` (`apparencePersonnalisee as apparence`) ; `DetailAgent.tsx` (titre avec
+surnom) et `Historique.tsx` (`<NoteSession …/>`) ; `resumeHub.ts` (pastille de la tuile). Poids : environ 42 Ko minifiés (14 Ko compressés) de plus au bundle du site.
 
 | États (liste) | Déduit de (dernier événement de la session) |
 | --- | --- |
@@ -289,8 +302,8 @@ que les petites présences, jamais les copies d'historique.
   l'application ouverte (écran Claude Office ou hub) ; ailleurs, il faudrait un service de notifications push.
 - **Notification « attend ta réponse » v3 et alerte v4** : les deux réglages coexistent (la v3 prévient dès l'attente,
   la v4 au-delà du seuil) ; les fusionner changerait un réglage existant, laissé à l'intégration finale.
-- **Plein écran par `F`** : délégué à la scène (`ecouterOffice('plein-ecran', …)`), branché par l'intégration finale.
-- **Surnom dans les bulles de la scène** : `apparenceAgent` le fournit ; l'afficher dans la scène relève de la scène.
+- **Surnom en permanence au-dessus des personnages** : volontairement non (la scène v4 garde peu de texte) ; il
+  apparaît au survol, au focus et dans les listes.
 
 ## Limites (honnêtes)
 

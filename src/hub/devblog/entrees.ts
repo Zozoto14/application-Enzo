@@ -41,6 +41,43 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.23',
+    date: '2026-10-23',
+    titre: 'Claude Office v4 : la scène en grand, les sous-agents et le suivi',
+    resume:
+      'L’open space prend tout l’écran (zoom, plein écran, écran d’ambiance), les sous-agents apparaissent dès leur lancement, et un onglet Suivi rassemble récap, alertes, équipe et notes.',
+    illustration: 'administration',
+    fonctionnalites: [
+      {
+        id: 'claude-office-v4-scene',
+        emoji: '🔭',
+        titre: 'La scène en plein cadre',
+        texte:
+          'Zoom, glisser, plein écran (touche F) et écran d’ambiance ; le détail au survol ou au toucher, « Suivre cet agent » (J / K), mini-carte et relecture de la journée.',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+      {
+        id: 'claude-office-v4-sous-agents',
+        emoji: '🧑‍🤝‍🧑',
+        titre: 'Les sous-agents, en direct',
+        texte:
+          'Chaque sous-agent devient un petit personnage dès son lancement, va travailler puis rend son travail au parent ; statistiques et récap les comptent. Mets à jour le hook sur le PC (Mise en route).',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+      {
+        id: 'claude-office-v4-suivi',
+        emoji: '🔔',
+        titre: 'Onglet Suivi : récap, alertes, équipe',
+        texte:
+          'Récap du jour ou de la semaine (export), alertes réglables (attend ta réponse, a fini…), surnom, couleur et accessoire de chaque agent, notes de session et raccourcis clavier (?).',
+        essayer: { genre: 'app', app: 'claude-office' },
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.22',
     date: '2026-10-22',
     titre: 'Claude Office : des zones, une salle d’attente et « attend ta réponse »',

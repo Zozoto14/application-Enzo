@@ -14,6 +14,7 @@ import { couleurAgent, ilYA, LIBELLES_ETAT, phraseAgent, type Agent } from './lo
 import { dureeCourte, heure, type EntreeHistorique } from './logiqueHistorique';
 import { chronologieSession, type GenreEtape } from './logiqueStats';
 import { TEINTES_ACTIVITE } from './logiqueScene';
+import { nomAgent } from './equipe';
 import { NoteSession } from './NoteSession';
 import type { SousAgent } from './sousAgentsScene';
 import { Bouton, TAILLE } from './uiOffice';
@@ -42,7 +43,7 @@ export function DetailAgent({ theme, agent, entrees, maintenant, onFermer, onVoi
     <FeuilleBasse
       theme={theme}
       visible
-      titre={`${agent.projet ?? 'Projet inconnu'}${agent.appareil ? ` · ${agent.appareil}` : ''}`}
+      titre={`${nomAgent(agent.projet, agent.session)}${agent.appareil ? ` · ${agent.appareil}` : ''}`}
       description={`${ZONES[agent.zone].nom} · ${agent.salle && agent.fin ? `terminé ${ilYA(agent.fin, maintenant)}, à voir` : phraseAgent(agent, maintenant)}`}
       onFermer={onFermer}
       testID="bureau-detail"

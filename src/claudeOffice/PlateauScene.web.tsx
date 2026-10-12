@@ -34,6 +34,8 @@ import type { CommandesRelecture, PropsPlateau } from './plateauTypes';
 import { SceneOpenSpace } from './SceneOpenSpace.web';
 import type { CiblesScene, PositionPerso } from './sceneTypes';
 import { compterParParent, sousAgentsVisibles, type SousAgent } from './sousAgentsScene';
+import { apparenceAgent } from './equipe';
+import { agentVoisin, ecouterOffice } from './raccourcis';
 import { ORDRE_ZONES, ZONES, type Zone } from './zones';
 
 /** Teinte d'état assez contrastée pour du texte sur la surface du thème. */
@@ -47,8 +49,15 @@ export const teinteAgent = (a: Agent): string => (a.fige ? '#8E95A8' : a.etat ==
 
 export const libelleEtat = (a: Agent): string => (a.salle ? 'Terminé · à voir' : a.fige ? `${LIBELLES_ETAT[a.etat]} (figé)` : a.etat === 'outil' ? LIBELLES_ACTIVITE[activiteAgent(a)] : LIBELLES_ETAT[a.etat]);
 
+/** Nom d'un agent dans la scène : « Surnom (projet) » si l'Équipe lui en a donné un, sinon le projet. */
+export const nomScene = (a: Pick<Agent, 'projet' | 'session'> | undefined): string => {
+  const projet = a?.projet ?? 'Projet inconnu';
+  const surnom = a ? apparenceAgent(a.projet, a.session).surnom : undefined;
+  return surnom ? `${surnom} (${projet})` : projet;
+};
+
 export const libelleCible = (a: Agent, maintenant: number): string =>
-  `${a.projet ?? 'Projet inconnu'}, ${ZONES[a.zone].nom} : ${phraseAgent(a, maintenant)}. Entrée : ouvrir le détail`;
+  `${nomScene(a)}, ${ZONES[a.zone].nom} : ${phraseAgent(a, maintenant)}. Entrée : ouvrir le détail`;
 
 // ------------------------------------------------------------------ cartes
 
@@ -64,7 +73,7 @@ export function CarteSousAgent({ sa, parent, maintenant, idDescription, onDetail
     <>
       <div className="co-carte-tete">
         <span className="co-point" style={{ background: TEINTES_ACTIVITE.agent }} aria-hidden="true" />
-        <strong className="co-carte-titre">{`Sous-agent de ${parent?.projet ?? 'Projet inconnu'}`}</strong>
+        <strong className="co-carte-titre">{`Sous-agent de ${nomScene(parent)}`}</strong>
       </div>
       <div id={idDescription} className="co-carte-corps">
         <div className="co-carte-demande">{sa.description ? `« ${resumerTexte(sa.description, 110)} »` : 'Tâche déléguée'}</div>
@@ -83,13 +92,15 @@ export function CarteAgent({ a, maintenant, theme, idDescription, suivi, onDetai
   a: Agent; maintenant: number; theme: ThemeHub; idDescription: string; suivi: boolean; onDetail(): void; onSuivre(): void; sousAgentsEnCours?: number;
 }) {
   const teinte = teinteAgent(a);
+  const surnom = apparenceAgent(a.projet, a.session).surnom;
   const demande = resumerTexte(a.demande, 120);
   const outil = a.outil && (a.etat === 'outil' || a.etat === 'ecrit') ? `${a.outil}${a.resumeOutil ? ` · ${resumerTexte(a.resumeOutil, 60)}` : ''}` : undefined;
   return (
     <>
       <div className="co-carte-tete">
         <span className="co-point" style={{ background: teinte }} aria-hidden="true" />
-        <strong className="co-carte-titre">{a.projet ?? 'Projet inconnu'}</strong>
+        {surnom ? <strong className="co-carte-titre" data-testid="scene-carte-surnom">{surnom}</strong> : null}
+        <strong className={surnom ? 'co-attenue' : 'co-carte-titre'}>{a.projet ?? 'Projet inconnu'}</strong>
         {a.appareil ? <span className="co-attenue">{a.appareil}</span> : null}
       </div>
       <div id={idDescription} className="co-carte-corps">
@@ -882,6 +893,33 @@ export function PlateauScene({
       appliquer(camera);
     }
   };
+  // Raccourcis de l'écran (raccourcis.ts) : F bascule le plein écran ; J / K suivent l'agent suivant / précédent
+  // (caméra + aperçu épinglé) ; Bureau.tsx laisse alors J / K à la scène.
+  const raccourcis = useRef({ agents, immersif, entrerPleinEcran, quitterPleinEcran });
+  raccourcis.current = { agents, immersif, entrerPleinEcran, quitterPleinEcran };
+  useEffect(() => {
+    const suivre = (sens: 1 | -1) => () => {
+      const cles = raccourcis.current.agents.map(a => a.cle);
+      const courant = suiviRef.current ?? (apercuRef.current?.genre === 'agent' ? apercuRef.current.cle : undefined);
+      const cle = agentVoisin(cles, courant, sens);
+      if (cle === undefined) return false;
+      touchee.current = true;
+      setSuivi(cle);
+      setApercu({ genre: 'agent', cle, epingle: true });
+      return true;
+    };
+    const retirer = [
+      ecouterOffice('plein-ecran', () => {
+        const r = raccourcis.current;
+        if (r.immersif) r.quitterPleinEcran();
+        else r.entrerPleinEcran(false);
+        return true;
+      }),
+      ecouterOffice('agent-suivant', suivre(1)),
+      ecouterOffice('agent-precedent', suivre(-1)),
+    ];
+    return () => retirer.forEach(f => f());
+  }, []);
   const basculerMiniCarte = () => {
     setMiniCarte(m => {
       ecrireMemoire(CLE_MINICARTE, m ? '0' : '1');
@@ -962,7 +1000,7 @@ export function PlateauScene({
           <div className="co-ctl co-hg">
             {relecture ? <span className="co-puce" data-testid="scene-puce-relecture">{`⏱ Relecture · ${heureRelecture(relecture.r.t)}`}</span> : null}
             {agentSuivi ? (
-              <button type="button" className="co-btn" onClick={() => setSuivi(undefined)} data-testid="scene-suivi">{`◎ Suivi : ${agentSuivi.projet ?? 'agent'} · Arrêter`}</button>
+              <button type="button" className="co-btn" onClick={() => setSuivi(undefined)} data-testid="scene-suivi">{`◎ Suivi : ${nomScene(agentSuivi)} · Arrêter`}</button>
             ) : null}
             {immersif && !ambiance && attendent?.length ? (
               <button type="button" className="co-btn co-btn-plein" style={{ background: lisible(TEINTES_ACTIVITE.attend, false), borderColor: 'transparent', color: '#FFFFFF' }} onClick={() => setApercu({ genre: 'agent', cle: attendent[0].cle, epingle: true })} data-testid="scene-puce-attend">

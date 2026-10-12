@@ -26,14 +26,18 @@ import { useActiviteBureau, type ActiviteBureau } from './activiteBureau';
 import { DetailAgent } from './DetailAgent';
 import { LIBELLES_ETAT, compterBureau, deduireBureau, ilYA, libelleFraicheur, phraseAgent, type Agent } from './logiqueBureau';
 import { etapesMiseEnRoute, type GenreAction } from './logiqueMiseEnRoute';
-import { activiteAgent, apparence, entreesDemo, LIBELLES_ACTIVITE, TEINTES_ACTIVITE } from './logiqueScene';
+import { activiteAgent, entreesDemo, LIBELLES_ACTIVITE, TEINTES_ACTIVITE } from './logiqueScene';
+import { entreesDemoSousAgents } from './logiqueSousAgents';
+import { entreesDemoSuivi } from './demoSuivi';
+import { apparenceAgent, apparencePersonnalisee, useMagasinSuivi } from './equipe';
+import { fusionner } from './logiqueHistorique';
 import { phraseAujourdhui, resumeAujourdhui } from './logiqueStats';
 import { Aide, MiseEnRoute } from './MiseEnRoute';
 import { LIBELLE_HOOK_HISTORIQUE, type EtatClaudeOffice, type PontClaudeOffice } from './pont';
 import { DELAIS_SALLE, delaiSalleMs, ecrirePrefsOffice, lirePrefsOffice, type DelaiSalle, type PrefsOffice } from './prefsOffice';
 import { avancerRelecture, bureauA, demarrerRelecture, densite, PAS_RELECTURE_MS, trierEntrees, type Relecture } from './logiqueRelecture';
 import { PlateauScene } from './PlateauScene';
-import { deduireSousAgents, sousAgentsDemo } from './sousAgentsScene';
+import { sousAgentsDemo, sousAgentsDepuisHistorique } from './sousAgentsScene';
 import type { CommandesRelecture } from './plateauTypes';
 import { useNavigationAgents } from './raccourcis';
 import {
@@ -109,6 +113,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
   const prefs = prefsDonnees ?? prefsLocales;
   const changerPrefs = (p: PrefsOffice) => (onPrefs ? onPrefs(p) : setPrefsLocales(p));
   const [choisi, setChoisi] = useState<string>();
+  useMagasinSuivi(); // Équipe (surnom, couleur, accessoire) : la scène et la liste se redessinent quand elle change.
   const [dispo, setDispo] = useState<number>();
   const [options, setOptions] = useState(false);
   const [aide, setAide] = useState(false);
@@ -147,12 +152,15 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
   const densiteJour = useMemo(() => (relecture ? densite(triees, relecture.debut, relecture.fin) : []), [triees, relecture?.debut, relecture?.fin]); // eslint-disable-line react-hooks/exhaustive-deps
   const agentsScene = bureauRejoue ? masquer(bureauRejoue.agents) : agentsVus;
   const instant = relecture?.t ?? maintenant;
-  // Sous-agents (contrat du module de données : docs/claude-office.md) : déduits de l'historique (outils Task / Agent),
-  // ou fictifs en démo. À l'intégration, `deduireSousAgents` cède la place au module `sousAgents(evenements)`.
-  const sousAgents = useMemo(
-    () => (demo && debutDemo !== undefined ? sousAgentsDemo(debutDemo, instant, agentsScene) : deduireSousAgents(activite.entrees, instant)),
-    [demo, debutDemo, instant, agentsScene.map(a => a.cle).join('|'), activite.entrees], // eslint-disable-line react-hooks/exhaustive-deps
-  );
+  // Sous-agents : module de données (logiqueSousAgents.ts) via `sousAgentsDepuisHistorique` — visibles dès leur
+  // SubagentStart, repli sur la déduction Task / Agent pour un ancien hook ; en démo, en plus, des sous-agents
+  // fictifs pour les sessions qui n'en lancent pas d'elles-mêmes.
+  const sousAgents = useMemo(() => {
+    const reels = sousAgentsDepuisHistorique(activite.entrees, instant, relecture ? undefined : activite.references);
+    if (!demo || debutDemo === undefined) return reels;
+    const avecReels = new Set(reels.map(s => s.parent));
+    return [...reels, ...sousAgentsDemo(debutDemo, instant, agentsScene.filter(a => !avecReels.has(a.cle)))];
+  }, [demo, debutDemo, instant, agentsScene.map(a => a.cle).join('|'), activite.entrees, activite.references, relecture !== undefined]); // eslint-disable-line react-hooks/exhaustive-deps
   const commandesRelecture: CommandesRelecture | undefined = relecture ? {
     r: relecture,
     densite: densiteJour,
@@ -169,7 +177,8 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
   } : undefined;
 
   const detail = agentsScene.find(a => a.cle === choisi) ?? bureau.agents.find(a => a.cle === choisi);
-  useNavigationAgents(agentsScene.map(a => a.cle), choisi, setChoisi); // v4 : touches J/K (agent suivant/précédent) et Échap (ferme le détail), raccourcis.ts
+  // Scène web : J/K suivent l'agent suivant / précédent DANS la scène (PlateauScene.web) ; ailleurs (liste, natif), ils ouvrent son détail.
+  useNavigationAgents(prefs.vue === 'scene' && Platform.OS === 'web' ? [] : agentsScene.map(a => a.cle), choisi, setChoisi); // v4 : touches J/K (agent suivant/précédent) et Échap (ferme le détail), raccourcis.ts
   const enDirect = activite.source.genre === 'local' && !demo;
   const fraicheurComplete = demo ? 'Démo · sessions fictives, aucune activité réelle' : libelleFraicheur(activite.source, maintenant);
   // Dans la barre d'outils : la version courte (la complète est lue par les lecteurs d'écran).
@@ -207,7 +216,8 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
   const carteAgent = (a: Agent, riche: boolean, dansGroupe = false) => {
     const activiteA = activiteAgent(a);
     const teinte = a.fige ? theme.attenue : teinteLisible(a.etat === 'attend' ? TEINTES_ACTIVITE.attend : a.salle ? ZONES.salle.teinte : TEINTES_ACTIVITE[activiteA], theme.sombre);
-    const ap = apparence(a);
+    const ap = apparencePersonnalisee(a);
+    const surnom = apparenceAgent(a.projet, a.session).surnom;
     const selectionne = a.cle === choisi;
     const etat = a.salle ? `Terminé ${a.fin ? ilYA(a.fin, maintenant) : ''} · à voir` : a.fige ? `${LIBELLES_ETAT[a.etat]} (figé)` : LIBELLES_ETAT[a.etat];
     const ligne = a.etat === 'attend' ? a.attente : a.salle ? a.recap?.split('\n')[riche ? 1 : 0] ?? a.demande : a.demande;
@@ -216,7 +226,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
         key={a.cle}
         onPress={() => choisir(a.cle)}
         accessibilityRole="button"
-        accessibilityLabel={`${a.projet ?? 'Projet inconnu'}${a.appareil ? `, ${a.appareil}` : ''}, ${ZONES[a.zone].nom} : ${phraseAgent(a, maintenant)}. ${a.salle ? 'Terminé, à voir. ' : ''}Dernière demande : ${a.demande ?? 'aucune'}. Ouvrir le détail`}
+        accessibilityLabel={`${surnom ? `${surnom}, ` : ''}${a.projet ?? 'Projet inconnu'}${a.appareil ? `, ${a.appareil}` : ''}, ${ZONES[a.zone].nom} : ${phraseAgent(a, maintenant)}. ${a.salle ? 'Terminé, à voir. ' : ''}Dernière demande : ${a.demande ?? 'aucune'}. Ouvrir le détail`}
         accessibilityState={{ selected: selectionne }}
         testID={`bureau-agent-${a.session.slice(0, 12)}`}
         style={[styles.agent, { borderColor: selectionne ? theme.accent : a.etat === 'attend' ? TEINTES_ACTIVITE.attend : theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen, width: mobile ? '100%' : undefined, opacity: estompes?.has(a.cle) ? 0.45 : 1 }, dansGroupe ? styles.agentDansGroupe : null]}
@@ -227,7 +237,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
         </View>
         <View style={styles.agentTexte}>
           <Text numberOfLines={1} style={{ color: theme.texte, fontSize: TAILLE + 1, fontWeight: '700' }}>
-            {a.projet ?? 'Projet inconnu'}{a.appareil ? <Text style={{ color: theme.attenue, fontWeight: '400', fontSize: TAILLE }}>{` · ${a.appareil}`}</Text> : null}
+            {surnom ? <Text testID="bureau-surnom">{`${surnom} · `}</Text> : null}{a.projet ?? 'Projet inconnu'}{a.appareil ? <Text style={{ color: theme.attenue, fontWeight: '400', fontSize: TAILLE }}>{` · ${a.appareil}`}</Text> : null}
           </Text>
           <View style={styles.ligneEtat}>
             <Text style={{ color: teinte, fontSize: TAILLE, fontWeight: '700' }} testID="bureau-etat-agent">{etat}</Text>
@@ -484,7 +494,10 @@ export function OngletBureau({ theme, contexte, office, mouvementReduit, horloge
     return () => clearInterval(t);
   }, [horloge, debutDemo]);
   const activiteDemo = useMemo(
-    () => (debutDemo === undefined ? undefined : { entrees: entreesDemo(debutDemo, maintenant), references: {}, source: { genre: 'local' as const }, lu: true }),
+    // Mêmes sessions fictives que l'onglet Suivi (alertes) : la pastille « attend ta réponse » et l'alerte parlent des mêmes agents.
+    () => (debutDemo === undefined ? undefined : {
+      entrees: fusionner(entreesDemo(debutDemo, maintenant), entreesDemoSuivi(debutDemo), entreesDemoSousAgents(debutDemo, maintenant)), references: {}, source: { genre: 'local' as const }, lu: true,
+    }),
     [debutDemo, maintenant],
   );
   const basculerDemo = (active: boolean) => {

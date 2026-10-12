@@ -400,6 +400,51 @@ describe('sous-agents dans la scène', () => {
     expect(max).toBeLessThanOrEqual(3);
   });
 
+  it('intégration : module de données — visible dès SubagentStart (en direct), fin par SubagentStop ; repli Task / Agent pour un ancien hook', () => {
+    const { sousAgentsDepuisHistorique } = require('./sousAgentsScene') as typeof import('./sousAgentsScene');
+    const direct = [
+      ev(0, { type: 'demande', texte: 'Audit' }),
+      ev(5, { type: 'debut-sous-agent', agent: 'ag-1', agentType: 'Explore' }),
+      ev(8, { type: 'outil', outil: 'Grep', resume: 'export', agent: 'ag-1', agentType: 'Explore', duree: 300 }),
+    ];
+    // Lancé il y a une seconde, l'outil Agent n'est pas encore noté : déjà là, en cours.
+    const a6 = sousAgentsDepuisHistorique(direct, T0 + 6_000);
+    expect(a6).toEqual([expect.objectContaining({ id: 'ag-1', parent: 'aaaaaaaaaaaa|sess-a', type: 'Explore', etat: 'en-cours', debut: T0 + 5_000 })]);
+    expect(sousAgentsVisibles(a6, new Set(['aaaaaaaaaaaa|sess-a']), T0 + 6_000).visibles).toHaveLength(1);
+    // Avant son début (relecture) : absent.
+    expect(sousAgentsDepuisHistorique(direct, T0 + 4_000)).toHaveLength(0);
+    const fini = [...direct, ev(20, { type: 'fin-sous-agent', agent: 'ag-1', agentType: 'Explore' }), ev(21, { type: 'outil', outil: 'Agent', resume: 'Cherche les usages', sousAgentType: 'Explore', agentLance: 'ag-1', duree: 16_000 })];
+    const a30 = sousAgentsDepuisHistorique(fini, T0 + 30_000);
+    expect(a30).toEqual([expect.objectContaining({ id: 'ag-1', etat: 'termine', fin: T0 + 20_000, description: 'Cherche les usages' })]);
+    // Ancien hook (aucun SubagentStart) : la déduction Task / Agent prend le relais, relecture comprise.
+    expect(sousAgentsDepuisHistorique(historique(), T0 + 30_000).map(s => s.etat)).toEqual(['en-cours', 'en-cours']);
+    // Copie du relais : un sous-agent sans nouvelles depuis longtemps n'est plus dessiné.
+    const vieux = sousAgentsDepuisHistorique(direct, T0 + 3 * 3_600_000);
+    expect(vieux[0].etat).toBe('termine');
+    expect(sousAgentsVisibles(vieux, new Set(['aaaaaaaaaaaa|sess-a']), T0 + 3 * 3_600_000).visibles).toHaveLength(0);
+  });
+
+  it('Équipe : surnom au survol (carte), dans la cible accessible et la pastille de suivi', () => {
+    const { renderToStaticMarkup } = require('react-dom/server') as { renderToStaticMarkup(e: React.ReactElement): string };
+    const { PlateauScene } = require('./PlateauScene.web') as { PlateauScene: (p: PropsPlateau) => React.ReactElement };
+    const equipe = require('./equipe') as typeof import('./equipe');
+    equipe.reinitialiserMagasinSuivi();
+    equipe.brancherMagasinSuivi(undefined, { equipe: { projets: { budget: { surnom: 'Bérénice', couleur: '#E94F9B', accessoire: 'couronne' } }, sessions: {} }, notes: {} });
+    try {
+      const t = T0 + 30_000;
+      const agents = bureauA(trierEntrees(historique()), t).agents;
+      const props: PropsPlateau = { agents, theme: themeHub('ivoire'), reduit: true, maintenant: t, onDetail: () => undefined, largeur: 1000, horloge: () => 0 };
+      const h = renderToStaticMarkup(<PlateauScene {...props} initial={{ apercu: agents[0].cle, suivi: agents[0].cle }} />);
+      expect(h).toContain('data-testid="scene-carte-surnom">Bérénice<');
+      expect(h).toContain('aria-label="Bérénice (budget), ');
+      expect(h).toContain('◎ Suivi : Bérénice (budget)');
+      // Couleur du haut choisie dans l'Équipe.
+      expect(h).toContain('#E94F9B');
+    } finally {
+      equipe.reinitialiserMagasinSuivi();
+    }
+  });
+
   it('rendu : mini-personnage avec sa cible accessible, compteur sur le parent, carte « Sous-agent de … »', () => {
     const { renderToStaticMarkup } = require('react-dom/server') as { renderToStaticMarkup(e: React.ReactElement): string };
     const { PlateauScene } = require('./PlateauScene.web') as { PlateauScene: (p: PropsPlateau) => React.ReactElement };
