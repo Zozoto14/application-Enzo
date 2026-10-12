@@ -61,6 +61,8 @@ export interface OptionsAppel {
   tailleMax?: number;
   agentUtilisateur?: string;
   entetes?: Record<string, string>;
+  /** En-tête Referer (page « d'où l'on vient ») : certains sites refusent une requête sans. */
+  referer?: string;
 }
 
 export interface ReponseTexte {
@@ -83,7 +85,12 @@ export interface ClientSur {
   json<T = unknown>(url: string, options?: OptionsAppel): Promise<T>;
   /** POST JSON (sans redirection) ; renvoie le JSON de la reponse. */
   envoyerJson<T = unknown>(url: string, corps: unknown, options?: OptionsAppel): Promise<{ statut: number; donnees: T }>;
+  /** POST d'un formulaire encodé (point d'entrée AJAX d'un site) ; réponse brute, statut non jugé. */
+  envoyerFormulaire(url: string, corps: string, options?: OptionsAppel): Promise<ReponseTexte>;
 }
+
+/** Ce qu'un navigateur annonce accepter pour une page : sans cet en-tête, des pare-feu applicatifs répondent 403. */
+export const ACCEPT_HTML = 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7';
 
 export const AGENT_PAR_DEFAUT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36';
@@ -123,11 +130,14 @@ export function creerClient(reseau: Reseau, options: OptionsClient = {}): Client
     const debut = Date.now();
     const delaiMs = appel.delaiMs ?? options.delaiMs ?? DELAI_PAR_DEFAUT;
     const tailleMax = appel.tailleMax ?? options.tailleMax ?? TAILLE_PAR_DEFAUT;
-    const entetes = {
+    const entetes: Record<string, string> = {
       'user-agent': appel.agentUtilisateur || options.agentUtilisateur || AGENT_PAR_DEFAUT,
+      accept: ACCEPT_HTML,
       'accept-language': 'fr-FR,fr;q=0.9,en;q=0.8',
+      ...(appel.referer ? { referer: appel.referer } : {}),
       ...minuscules(appel.entetes),
     };
+    let cookiesDemandes = 0;
 
     let courante = await verifierUrlPublique(url, garde);
     for (let saut = 0; saut <= redirectionsMax; saut += 1) {
@@ -142,6 +152,10 @@ export function creerClient(reseau: Reseau, options: OptionsClient = {}): Client
       }
       const recus = minuscules(rep.entetes);
       const location = recus.location;
+      // Le transport ne garde aucun cookie ; il signale seulement qu'un site en pose (`x-tsuzuku-cookie`).
+      if (recus['set-cookie'] || recus['x-tsuzuku-cookie']) {
+        cookiesDemandes += 1;
+      }
       if (rep.statut >= 300 && rep.statut < 400 && location) {
         if (methode !== 'GET') {
           throw echec('Redirection refusee pour un envoi', 'redirections', 502);
@@ -169,10 +183,17 @@ export function creerClient(reseau: Reseau, options: OptionsClient = {}): Client
         ms: Date.now() - debut,
       };
     }
+    if (cookiesDemandes) {
+      throw echec('Le site redirige en boucle en posant des cookies : il exige des cookies (connexion, consentement ou protection anti-robot), que Tsuzuku n’envoie pas.', 'cookies', 502);
+    }
     throw echec('Trop de redirections', 'redirections', 502);
   }
 
   const verifierStatut = (r: ReponseTexte) => {
+    const blocage = detecterBlocage(r);
+    if (blocage) {
+      throw echec(messageBlocage(blocage), 'anti-robot', r.statut >= 400 ? r.statut : 403);
+    }
     if (r.statut >= 400) {
       throw echec(`Le site a repondu ${r.statut}`, r.statut === 404 ? 'introuvable' : 'service', r.statut === 404 ? 404 : 502);
     }
@@ -201,7 +222,65 @@ export function creerClient(reseau: Reseau, options: OptionsClient = {}): Client
       );
       return { statut: r.statut, donnees: lireJson<T>(r) };
     },
+    envoyerFormulaire: (url, corps, appel = {}) =>
+      appeler(
+        url,
+        'POST',
+        { ...appel, entetes: { 'content-type': 'application/x-www-form-urlencoded; charset=UTF-8', 'x-requested-with': 'XMLHttpRequest', ...appel.entetes } },
+        corps,
+      ),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Protections anti-robot
+// ---------------------------------------------------------------------------
+
+export interface Blocage {
+  /** Ce qui a été reconnu (pour le diagnostic). */
+  indice: string;
+}
+
+/** Marqueurs des pages de vérification (pare-feu, captcha, « vérification du navigateur »). Génériques, aucun site nommé. */
+const MARQUEURS_BLOCAGE: ReadonlyArray<readonly [RegExp, string]> = [
+  [/<title>\s*just a moment/i, 'page « Just a moment… » (vérification du navigateur)'],
+  [/cf[-_]chl|challenge-platform|cf-browser-verification|__cf_bm|cf-turnstile/i, 'défi de vérification du navigateur'],
+  [/<title>\s*attention required/i, 'page « Attention required »'],
+  [/checking (?:if the site connection is secure|your browser)|vérification (?:de votre navigateur|que vous êtes humain)|verify you are human|are you a robot|êtes-vous un robot/i, 'vérification « êtes-vous humain ? »'],
+  [/g-recaptcha|h-captcha|hcaptcha\.com|recaptcha\/api|captcha-delivery|px-captcha|class=["'][^"']*captcha/i, 'captcha'],
+  [/ddos[- ]protection|ddos-guard|_incapsula_resource|access denied.{0,80}(?:bot|automated)|request unsuccessful\. incapsula/i, 'protection anti-DDoS'],
+  [/enable javascript and cookies to continue|please enable cookies|activez (?:le )?javascript et les cookies/i, 'page « activez JavaScript et les cookies »'],
+];
+
+/**
+ * Page de protection anti-robot plutôt que le contenu demandé : en-tête
+ * `cf-mitigated`, ou statut 403/429/503 (parfois 200) avec une page de
+ * vérification reconnaissable. `null` sinon.
+ */
+export function detecterBlocage(r: Pick<ReponseTexte, 'statut' | 'entetes' | 'corps'>): Blocage | null {
+  const entetes = r.entetes || {};
+  if (/challenge/i.test(entetes['cf-mitigated'] ?? '')) {
+    return { indice: 'en-tête de défi (cf-mitigated)' };
+  }
+  const debut = String(r.corps ?? '').slice(0, 60_000);
+  // Une vraie page de contenu (longue) qui contient un captcha de commentaire n'est pas un blocage.
+  const court = debut.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().length < 3000;
+  for (const [motif, indice] of MARQUEURS_BLOCAGE) {
+    if (motif.test(debut) && (r.statut >= 400 || court)) {
+      return { indice };
+    }
+  }
+  if ((r.statut === 403 || r.statut === 503 || r.statut === 429) && /cloudflare|ddos|akamai|sucuri|imperva|incapsula|captcha/i.test(`${entetes.server ?? ''} ${debut.slice(0, 3000)}`)) {
+    return { indice: `réponse ${r.statut} d'un pare-feu (${(entetes.server || 'protection').slice(0, 40)})` };
+  }
+  if (r.statut === 429) {
+    return { indice: 'trop de requêtes (429)' };
+  }
+  return null;
+}
+
+export function messageBlocage(b: Blocage): string {
+  return `Le site bloque les requêtes automatiques (${b.indice}) : Tsuzuku ne contourne pas ces protections. Ouvrez le site dans votre navigateur pour vérifier qu’il fonctionne, réessayez plus tard, ou utilisez un lien direct vers la page de l’épisode.`;
 }
 
 // ---------------------------------------------------------------------------

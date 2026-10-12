@@ -22,9 +22,9 @@ import { echec, messageDe } from './erreurs';
 import { lirePage, sembleRenduEnJs, texteCompact, type Page } from './lecteurPage';
 import type { ClientSur } from './reseau';
 import { verifierUrlPubliqueSync } from './garde';
-import { SCORE_MINIMAL, type PreferenceLangue } from './appariement';
-import { chercherOeuvre, diagnostiquerRecherche, parAnnee, lecteursSur, lireEpisodes, type ContexteResolution, type RequeteDiagnostic } from './resolution';
-import { normaliserSource, supporteAnimes, supporteFilms, vueFilm, type DefinitionSource, type OptionsNormalisation } from './sources';
+import { saisonDe, SCORE_MINIMAL, type PreferenceLangue } from './appariement';
+import { chercherOeuvre, diagnostiquerRecherche, parAnnee, lecteursSur, lireEpisodes, raisonRecherche, type ContexteResolution, type RequeteDiagnostic } from './resolution';
+import { contientRequete, normaliserSource, supporteAnimes, supporteFilms, vueFilm, type DefinitionSource, type OptionsNormalisation } from './sources';
 
 /** Taille maximale d'une page analysée (plus petite que celle d'une lecture). */
 export const TAILLE_MAX_ANALYSE = 2 * 1024 * 1024;
@@ -163,7 +163,12 @@ export const FORMAT_SOURCE = `{
   "language": "vf | vostfr | indifferent (doublage principal du site)",
   "timeout": 15000,
   "search": {                      // ANIMÉS · page de résultats de recherche
-    "path": "/chemin?q={query}",   // {query} = titre recherché (encodé) ; OBLIGATOIRE pour les animés
+    "path": "/chemin?q={query}",   // {query} (ou {q}) = titre recherché (encodé) ; {slug} = « titre-en-minuscules » (adresse directe de l'oeuvre, sans page de résultats)
+    "type": "html",                // « html » (sélecteurs CSS) ou « json » (API : item/title/link sont des chemins JSON, ex. "data.results", "title.rendered")
+    "method": "GET",               // « GET » ou « POST » (formulaire, ex. point d'entrée AJAX)
+    "body": "",                    // corps du POST : « action=recherche&s={query} »
+    "linkFormat": "",              // si l'API donne un slug/id : « /anime/{value} »
+    "htmlPath": "",                // JSON contenant du HTML : chemin du fragment (les sélecteurs CSS s'y appliquent)
     "pathVf": "",                  // facultatif : chemin distinct pour la VF
     "pathVostfr": "",              // facultatif : chemin distinct pour la VOSTFR
     "item": "sélecteur CSS d'UN résultat",
@@ -177,7 +182,10 @@ export const FORMAT_SOURCE = `{
     "item": "sélecteur d'UN épisode",
     "number": "sélecteur du numéro, relatif à item",
     "title": "sélecteur du titre de l'épisode (facultatif)",
-    "link": "sélecteur du lien vers la page de l'épisode (défaut « a »)"
+    "link": "sélecteur du lien vers la page de l'épisode (défaut « a »)",
+    "type": "html",                // « json » si la page de la série est une API
+    "linkFormat": "",
+    "next": ""                     // lien « page suivante » d'une liste paginée (facultatif : rel=next et « Suivant » sont reconnus)
   },
   "player": {                      // ANIMÉS · page d'un épisode : lecteurs
     "iframe": "sélecteur des <iframe> du lecteur",
@@ -195,7 +203,7 @@ export const FORMAT_SOURCE = `{
 
 function lignesResume(r: ResumeStructure): string[] {
   const l: string[] = [`Adresse analysée : ${r.url}`, `Titre de la page : ${r.titre || '(aucun)'}`, `Taille : ${r.octets} caractères ; ${r.images} image(s).`];
-  if (r.renduJs) l.push('ATTENTION : la page semble construite en JavaScript (corps presque vide) ; les sélecteurs risquent de ne rien trouver.');
+  if (r.renduJs) l.push('ATTENTION : la page semble construite en JavaScript (corps presque vide) ; les sélecteurs risquent de ne rien trouver. Cherche l’API JSON ou le point AJAX qui fournit les résultats (onglet Réseau du navigateur) et utilise "type": "json".');
   l.push('Éléments récurrents (balise.classe × nombre — exemple de texte) :');
   l.push(...(r.recurrents.length ? r.recurrents.map(x => `  - ${x.selecteur} × ${x.nombre} — « ${x.exemple} »`) : ['  (aucun)']));
   l.push('Formulaires :');
@@ -243,7 +251,7 @@ const REGLES_QUALITE = [
   'Règles de qualité :',
   '1. Sélecteurs CSS ROBUSTES : classes ou attributs stables et parlants ; évite les classes générées (suites aléatoires), les :nth-child et les chemins trop longs.',
   '2. title, link, image, number et year sont RELATIFS à item ; « & » désigne item lui-même.',
-  '3. Les chemins de recherche commencent par « / » et contiennent {query} ; déduis-les du formulaire de recherche (action + nom du champ).',
+  '3. Les chemins de recherche commencent par « / » et contiennent {query} ; déduis-les du formulaire de recherche (action + nom du champ). Si les résultats sont chargés en JavaScript (page vide, appel AJAX/API), donne plutôt l’adresse de l’API JSON avec "type": "json" et des chemins JSON. Si le site n’a pas de recherche mais des adresses prévisibles (/anime/titre-en-minuscules), utilise {slug}.',
   '4. Vérifie chaque sélecteur sur AU MOINS 2 exemples (deux résultats, deux épisodes, deux lecteurs…) avant de répondre.',
   '5. N’invente rien : une partie que tu ne vois pas (page d’épisode, lecteur, films) reste vide ("").',
   '6. language : « vf », « vostfr » ou « indifferent » selon le doublage principal du site (VF = version française, VOSTFR = version originale sous-titrée).',
@@ -388,9 +396,14 @@ const CHAMPS_SELECTEURS: ReadonlyArray<readonly [string, (s: DefinitionSource) =
 export function erreursSelecteurs(source: DefinitionSource): string[] {
   const page = lirePage('<p></p>');
   const erreurs: string[] = [];
+  // Sections JSON : item/title/link sont des chemins JSON, pas des sélecteurs CSS (sauf fragment HTML).
+  const json = (nom: string) =>
+    (nom.startsWith('search.') && source.search.type === 'json' && !source.search.htmlPath) ||
+    (nom.startsWith('movies.search.') && source.movies.search.type === 'json' && !source.movies.search.htmlPath) ||
+    (nom.startsWith('episodes.') && source.episodes.type === 'json');
   for (const [nom, lire] of CHAMPS_SELECTEURS) {
     const sel = lire(source);
-    if (!sel || sel === '&') continue;
+    if (!sel || sel === '&' || json(nom)) continue;
     try {
       page.tous(sel);
     } catch {
@@ -478,11 +491,22 @@ export function validerSourceJson(texte: string, analysee?: string, options: Opt
     ['search.pathVostfr', source.search.pathVostfr],
     ['movies.search.path', source.movies.search.path],
   ] as const) {
-    if (chemin && !chemin.includes('{query}')) erreurs.push(`${nom} doit contenir {query} (le titre recherché).`);
+    if (chemin && !contientRequete(chemin)) erreurs.push(`${nom} doit contenir {query} (le titre recherché) ou {slug} (adresse directe de l’oeuvre).`);
+  }
+  if (source.episodes.next) {
+    try {
+      lirePage('<p></p>').tous(source.episodes.next);
+    } catch {
+      erreurs.push(`Sélecteur CSS invalide pour episodes.next : « ${source.episodes.next} ».`);
+    }
+  }
+  for (const [nom, sec] of [['search', source.search], ['movies.search', source.movies.search]] as const) {
+    if (sec.method === 'POST' && !sec.body) avertissements.push(`${nom} : méthode POST sans corps (body) ; le titre n’est peut-être pas envoyé.`);
+    if (sec.body && !contientRequete(sec.body) && !contientRequete(sec.path)) erreurs.push(`${nom}.body doit contenir {query} (le titre recherché).`);
   }
   const animes = supporteAnimes(source);
   const films = supporteFilms(source);
-  if (!animes && !films) erreurs.push('Aucune partie utilisable : il faut au moins search.path + search.item (animés) ou movies.search.path + movies.search.item (films).');
+  if (!animes && !films) erreurs.push('Aucune partie utilisable : il faut au moins search.path + search.item (animés) ou movies.search.path + movies.search.item (films) ; search.item peut rester vide pour une API JSON (type « json ») ou un chemin {slug}.');
   if (animes && !source.episodes.item) avertissements.push('Animés : pas de sélecteur d’épisode (episodes.item) ; la liste des épisodes sera vide.');
   if (animes && !source.player.iframe && !source.player.options) avertissements.push('Animés : pas de lecteur (player.iframe ou player.options).');
   if (films && !source.movies.player.iframe && !source.movies.player.options) avertissements.push('Films : pas de lecteur (movies.player.iframe ou movies.player.options).');
@@ -527,28 +551,38 @@ export interface CibleTest {
 
 /** Résumé lisible des recherches lancées (diagnostic). */
 export function resumeRequetes(requetes: readonly RequeteDiagnostic[]): string {
-  return requetes.map(r => `« ${r.requete} » → ${r.erreur ? `erreur (${r.erreur})` : `${r.resultats} résultat(s)`}`).join(' ; ');
+  return requetes
+    .map(r => `« ${r.requete} » → ${r.erreur ? `erreur (${r.erreur})` : `${r.resultats} résultat(s)${r.extraction === 'generique' ? ' (repérage automatique)' : ''}${r.statut && r.statut !== 200 ? ` [HTTP ${r.statut}]` : ''}${r.renduJs ? ' [page construite en JavaScript]' : ''}`}`)
+    .join(' ; ');
 }
 
 /** Étape « recherche » : MÊME code que la fiche (`chercherOeuvre`), donc même titre, même seuil, même choix. */
 async function etapeRecherche(ctx: ContexteResolution, src: DefinitionSource, cible: CibleTest, film: boolean): Promise<{ etape: Omit<EtapeTest, 'cle' | 'nom'>; url?: string }> {
   const r = await chercherOeuvre(ctx, src, film ? { titres: cible.titres, langue: 'indifferent', choisir: parAnnee(cible.annee) } : { titres: cible.titres, langue: cible.langue });
   const requetes = resumeRequetes(r.requetes);
+  const auto = r.requetes.some(q => q.extraction === 'generique')
+    ? [`Le sélecteur de résultat « ${src.search.item || '(vide)'} » ne trouve rien sur la page : les résultats viennent du repérage automatique. Corrigez search.item pour plus de fiabilité.`]
+    : [];
   if (r.serie) {
-    return { etape: { ok: true, detail: `Recherches : ${requetes}. Retenu : « ${r.serie.title} » (ressemblance ${r.serie.baseScore}) → ${r.serie.url}`, pistes: [] }, url: r.serie.url };
+    return { etape: { ok: true, detail: `Recherches : ${requetes}. Retenu : « ${r.serie.title} » (ressemblance ${r.serie.baseScore}) → ${r.serie.url}`, pistes: auto }, url: r.serie.url };
   }
   if (r.refuse) {
     return {
       etape: {
         ok: false,
         detail: `Recherches : ${requetes}. Aucun résultat assez proche du titre : le meilleur, « ${r.refuse.title} » (ressemblance ${r.refuse.baseScore}, minimum ${SCORE_MINIMAL}), ne serait pas choisi par la fiche.`,
-        pistes: ['Essayez le titre tel que le site l’écrit, ou « Tester avec un titre du catalogue ».'],
+        pistes: ['Essayez le titre tel que le site l’écrit, ou « Tester avec un titre du catalogue ».', ...auto],
       },
     };
   }
-  // Rien de lisible : le diagnostic des sélecteurs dit pourquoi (page vide, sélecteur, rendu JavaScript).
+  if (r.erreur) {
+    return { etape: { ok: false, detail: `Recherches : ${requetes || 'aucune'}. ${r.erreur}`, pistes: [] } };
+  }
+  // Rien de lisible : le diagnostic des sélecteurs dit pourquoi (page vide, sélecteur, rendu JavaScript, JSON).
   const diag = await diagnostiquerRecherche(ctx, src, cible.titres[0] ?? '');
-  return { etape: { ok: false, detail: `Recherches : ${requetes || 'aucune'}. ${r.erreur ?? diag.detail}`, pistes: diag.pistes } };
+  const raison = raisonRecherche(r);
+  const pistes = [...(diag.ok ? [] : [raison]), ...diag.pistes.filter(p => !(/JavaScript/.test(p) && /JavaScript/.test(raison)))];
+  return { etape: { ok: false, detail: `Recherches : ${requetes || 'aucune'}. ${diag.ok ? raison : diag.detail}`, pistes } };
 }
 
 /**
@@ -585,12 +619,11 @@ export async function testerSourcePasAPas(ctx: ContexteResolution, src: Definiti
     } else {
       const page = serie;
       const okEpisodes = await jouer('episodes', 'Animés · épisodes', async () => {
-        if (!src.episodes.item) return { ok: false, detail: 'Pas de sélecteur d’épisode (episodes.item).', pistes: [] };
-        const eps = await lireEpisodes(ctx, src, page);
+        const eps = await lireEpisodes(ctx, src, page, { saison: saisonDe(c.titres[0] ?? '') });
         episode = eps[0]?.url;
         return eps.length
           ? { ok: true, detail: `${eps.length} épisode(s) lu(s) (n° ${eps[0].number} à ${eps[eps.length - 1].number}).`, pistes: [] }
-          : { ok: false, detail: `Aucun épisode trouvé sur ${page} avec « ${src.episodes.item} ».`, pistes: [] };
+          : { ok: false, detail: `Aucun épisode trouvé sur ${page} avec « ${src.episodes.item || '(aucun sélecteur)'} » (ni par le repérage automatique « Épisode N »).`, pistes: [] };
       });
       if (!okEpisodes || !episode) sauter('lecteur', 'Animés · lecteur');
       else {

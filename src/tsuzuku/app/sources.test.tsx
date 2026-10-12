@@ -265,7 +265,8 @@ describe('Page Sources : ajout, assistant en 4 étapes, aide, partage', () => {
     await texte('assistant-json', JSON.stringify({ ...JSON_IA, search: { ...JSON_IA.search, item: 'div.introuvable' } }));
     await fireEvent.press(screen.getByTestId('assistant-verifier'));
     await fireEvent.press(await screen.findByTestId('assistant-suivant'));
-    await texte('assistant-titre-test', 'Le voyage');
+    // Sélecteur faux ET titre absent du site : même le repérage automatique ne trouve rien.
+    await texte('assistant-titre-test', 'Titre absent du site');
     await fireEvent.press(screen.getByTestId('assistant-tester'));
     expect(await screen.findByTestId('assistant-test-recherche-ko')).toBeTruthy();
     expect(screen.getByTestId('assistant-test-episodes-saute')).toBeTruthy();

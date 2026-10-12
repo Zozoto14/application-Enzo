@@ -19,8 +19,17 @@ import { genererIdentifiant, horlogeSysteme, instantDe, type Horloge } from './o
 export type Langue = 'vf' | 'vostfr' | 'indifferent';
 export const LANGUES: readonly Langue[] = ['vf', 'vostfr', 'indifferent'];
 
+/** Lecture d'une réponse : page HTML (sélecteurs CSS) ou API JSON (chemins JSON). */
+export type TypeReponse = 'html' | 'json';
+export const TYPES_REPONSE: readonly TypeReponse[] = ['html', 'json'];
+
 export interface SectionRecherche {
-  /** Chemin de recherche ; `{query}` est remplace par le titre (encode). */
+  /**
+   * Chemin de recherche. Variables : `{query}` (alias `{q}`, `{search}`) =
+   * titre encodé ; `{slug}` = titre en minuscules-sans-accents-avec-tirets
+   * (« frieren-beyond-journeys-end ») : le chemin désigne alors DIRECTEMENT la
+   * page de l'oeuvre (`/anime/{slug}`), sans page de résultats.
+   */
   path: string;
   /** Chemin distinct pour la VF, si le site separe ses recherches. */
   pathVf: string;
@@ -36,6 +45,21 @@ export interface SectionRecherche {
   imageAttr: string;
   /** Annee (films), relatif a `item`. */
   year: string;
+  /**
+   * `html` (défaut) : `item`/`title`/`link`… sont des sélecteurs CSS.
+   * `json` : réponse d'API ; `item` est le CHEMIN JSON de la liste
+   * (« data.results », vide = racine), `title`/`link`/`image`/`year` des
+   * chemins relatifs à un élément (« title.rendered », « slug »).
+   */
+  type: TypeReponse;
+  /** `GET` (défaut) ou `POST` (formulaire, ex. point d'entrée AJAX). */
+  method: 'GET' | 'POST';
+  /** Corps du POST (encodé formulaire), mêmes variables que `path` : « action=recherche&s={query} ». */
+  body: string;
+  /** Fabrique le lien quand l'API donne un identifiant ou un slug : « /anime/{value} ». */
+  linkFormat: string;
+  /** JSON : chemin d'un fragment HTML dans la réponse (« data.html ») ; les sélecteurs CSS s'y appliquent. */
+  htmlPath: string;
 }
 
 export interface SectionEpisodes {
@@ -43,6 +67,12 @@ export interface SectionEpisodes {
   number: string;
   title: string;
   link: string;
+  /** `json` : la page de la série est une API ; `item` = chemin JSON de la liste. */
+  type: TypeReponse;
+  /** Lien d'épisode fabriqué depuis une valeur JSON : « /episode/{value} ». */
+  linkFormat: string;
+  /** Sélecteur du lien « page suivante » d'une liste paginée (défaut : rel=next, .pagination). */
+  next: string;
 }
 
 export interface SectionLecteur {
@@ -87,6 +117,8 @@ const sous = (o: unknown, cle: string): Brut => {
   return v && typeof v === 'object' ? (v as Record<string, unknown>) : undefined;
 };
 
+const typeReponse = (e: Brut, x: Brut): TypeReponse => (champ(e, x, 'type', 'html').toLowerCase() === 'json' ? 'json' : 'html');
+
 function recherche(e: Brut, x: Brut): SectionRecherche {
   return {
     path: champ(e, x, 'path'),
@@ -98,6 +130,11 @@ function recherche(e: Brut, x: Brut): SectionRecherche {
     image: champ(e, x, 'image'),
     imageAttr: champ(e, x, 'imageAttr', 'src'),
     year: champ(e, x, 'year'),
+    type: typeReponse(e, x),
+    method: champ(e, x, 'method', 'GET').toUpperCase() === 'POST' ? 'POST' : 'GET',
+    body: champ(e, x, 'body'),
+    linkFormat: champ(e, x, 'linkFormat'),
+    htmlPath: champ(e, x, 'htmlPath'),
   };
 }
 
@@ -144,6 +181,9 @@ export function normaliserSource(
       number: champ(sous(e, 'episodes'), sous(x, 'episodes'), 'number'),
       title: champ(sous(e, 'episodes'), sous(x, 'episodes'), 'title'),
       link: champ(sous(e, 'episodes'), sous(x, 'episodes'), 'link', 'a'),
+      type: typeReponse(sous(e, 'episodes'), sous(x, 'episodes')),
+      linkFormat: champ(sous(e, 'episodes'), sous(x, 'episodes'), 'linkFormat'),
+      next: champ(sous(e, 'episodes'), sous(x, 'episodes'), 'next'),
     },
     player: lecteur(sous(e, 'player'), sous(x, 'player')),
     movies: {
@@ -161,12 +201,17 @@ export function normaliserSource(
 
 /** Une source ne sert aux films que si sa section films est renseignee. */
 export function supporteFilms(src: DefinitionSource | null | undefined): boolean {
-  return Boolean(src?.movies?.search?.path && src?.movies?.search?.item);
+  return rechercheUtilisable(src?.movies?.search);
 }
 
 /** Une source ne sert aux animes que si sa recherche est renseignee. */
 export function supporteAnimes(src: DefinitionSource | null | undefined): boolean {
-  return Boolean(src?.search?.path && src?.search?.item);
+  return rechercheUtilisable(src?.search);
+}
+
+/** Chemin + sélecteur de résultat ; une API JSON (liste à la racine) ou un chemin `{slug}` n'en demandent pas. */
+function rechercheUtilisable(s: SectionRecherche | null | undefined): boolean {
+  return Boolean(s?.path && (s.item || s.type === 'json' || cheminParSlug(s.path)));
 }
 
 /** Vue « film » : les selecteurs films a la place des animes, sans episodes. */
@@ -175,7 +220,7 @@ export function vueFilm(src: DefinitionSource): DefinitionSource {
     ...src,
     search: src.movies.search,
     player: src.movies.player,
-    episodes: { item: '', number: '', title: '', link: 'a' },
+    episodes: { item: '', number: '', title: '', link: 'a', type: 'html', linkFormat: '', next: '' },
   };
 }
 
@@ -188,11 +233,55 @@ export function remplirGabarit(gabarit: string, variables: Record<string, string
   return String(gabarit || '').replace(/\{(\w+)\}/g, (_, k: string) => encodeURIComponent(String(variables[k] ?? '')));
 }
 
-/** Adresse de recherche pour une requete et une langue. */
-export function adresseDeRecherche(src: DefinitionSource, requete: string, langue: Langue | null = null): string | null {
+/** Variables reconnues dans un chemin de recherche (le titre cherché). */
+export const VARIABLES_REQUETE = ['{query}', '{q}', '{search}', '{slug}'] as const;
+
+/** Le chemin contient-il le titre cherché ? */
+export function contientRequete(chemin: string): boolean {
+  return VARIABLES_REQUETE.some(v => chemin.includes(v));
+}
+
+/** Le chemin désigne directement la page de l'oeuvre (`{slug}`), sans page de résultats. */
+export function cheminParSlug(chemin: string): boolean {
+  return chemin.includes('{slug}') && !/\{(?:query|q|search)\}/.test(chemin);
+}
+
+/** « Frieren: Beyond Journey's End » -> « frieren-beyond-journeys-end ». */
+export function slugDe(titre: string): string {
+  let t = String(titre ?? '');
+  try {
+    t = t.normalize('NFD');
+  } catch {
+    // Pas de normalize : les accents restent (ils seront retirés ci-dessous).
+  }
+  return t
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/['’`´]/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/** Variables d'un gabarit pour une requête : `{query}`/`{q}`/`{search}` = titre, `{slug}` = slug. */
+export function variablesRequete(requete: string, slug?: string): Record<string, string> {
+  return { query: requete, q: requete, search: requete, slug: slug ?? slugDe(requete) };
+}
+
+/** Chemin de recherche choisi pour une langue. */
+export function cheminDeRecherche(src: DefinitionSource, langue: Langue | null = null): string {
   const s = src.search;
-  const chemin = langue === 'vf' && s.pathVf ? s.pathVf : langue === 'vostfr' && s.pathVostfr ? s.pathVostfr : s.path;
-  return resoudreAdresse(remplirGabarit(chemin, { query: requete }), src.baseUrl);
+  return langue === 'vf' && s.pathVf ? s.pathVf : langue === 'vostfr' && s.pathVostfr ? s.pathVostfr : s.path;
+}
+
+/** Adresse de recherche pour une requete et une langue (`slug` : slug imposé, variantes). */
+export function adresseDeRecherche(src: DefinitionSource, requete: string, langue: Langue | null = null, slug?: string): string | null {
+  return resoudreAdresse(remplirGabarit(cheminDeRecherche(src, langue), variablesRequete(requete, slug)), src.baseUrl);
+}
+
+/** Corps encodé d'une recherche en POST (mêmes variables que le chemin). */
+export function corpsDeRecherche(src: DefinitionSource, requete: string, slug?: string): string {
+  return remplirGabarit(src.search.body, variablesRequete(requete, slug));
 }
 
 /** Source activee dont le domaine correspond a l'adresse. */

@@ -28,6 +28,8 @@ export type RaisonEchec =
   | 'aucune-source'
   | 'site'
   | 'erreur'
+  | 'bloquee'
+  | 'non-configuree'
   | 'titre-introuvable'
   | 'aucun-resultat'
   | 'aucun-episode'
@@ -51,6 +53,9 @@ export interface Lecture {
 }
 
 const AUCUNE_SOURCE = 'Aucune source ne fournit ce titre. Ajoutez un lien direct, ou demandez à l’administrateur de brancher une source.';
+/** Des sources existent, mais aucune n'est activée (pour ce profil). */
+const toutesDesactivees = (n: number) => `Vos ${n} source(s) sont désactivées : activez-en une (page Sources, ou Paramètres › Tsuzuku pour une source partagée avec vous).`;
+
 export const MESSAGE_SITE_SOURCES = `${MESSAGE_SITE} Le navigateur ne peut pas lire les pages de vos sources (CORS) : ouvrez la fiche dans l’app PC ou iPhone, ou collez un lien direct.`;
 
 /** Titres d'une fiche à chercher sur les sources (titre affiché, original, alternatifs, japonais), sans doublon. */
@@ -97,14 +102,22 @@ export function messageEchec(d: DiagnosticLecture, numero?: number): string {
       const enErreur = d.sources.filter(x => x.statut === 'erreur');
       return `Source en erreur : ${enErreur.map(x => `« ${x.source} » (${x.erreur ?? 'erreur inconnue'})`).join(', ')}. Vérifiez la connexion, puis « Réessayer ».`;
     }
+    case 'bloquee': {
+      const bloquees = d.sources.filter(x => x.statut === 'bloquee');
+      return `Le site bloque les requêtes automatiques : ${bloquees.map(x => `« ${x.source} »`).join(', ')} (protection anti-robot, captcha ou cookies exigés). Ce n’est pas « aucun résultat » : Tsuzuku ne contourne pas ces protections. Vérifiez le site dans votre navigateur, réessayez plus tard, ou collez un lien direct vers l’épisode.`;
+    }
+    case 'non-configuree':
+      return `Vos sources activées ne sont pas configurées pour les animés (${d.sources.map(x => `« ${x.source} »${x.raison ? ` : ${x.raison}` : ''}`).join(', ')}). Complétez la section « Animés · recherche » de la source.`;
     case 'titre-introuvable': {
       const refuse = d.sources.find(x => x.refuse)?.refuse;
-      return `${refuse ? `« ${refuse.title} » ressemble trop peu au titre : rien n’a été lu. ` : ''}Essayez « Chercher avec un autre titre » (le titre tel que le site l’écrit).`;
+      return `${refuse ? `« ${refuse.title} » ressemble trop peu au titre (ressemblance ${refuse.score}, minimum 600) : rien n’a été lu. ` : ''}Essayez « Chercher avec un autre titre » (le titre tel que le site l’écrit).`;
     }
-    case 'aucun-resultat':
-      return `Titre non trouvé sur vos sources (${requetes.length} recherche(s), aucun résultat). Essayez « Chercher avec un autre titre ».`;
+    case 'aucun-resultat': {
+      const raison = d.sources.find(x => x.statut === 'aucun-resultat' && x.raison)?.raison;
+      return `Titre non trouvé sur vos sources (${requetes.length} recherche(s), aucun résultat retenu).${raison ? ` ${raison}` : ''} Essayez « Chercher avec un autre titre », ou ouvrez « Détail du diagnostic ».`;
+    }
     case 'aucun-episode':
-      return `« ${premier?.serie?.title ?? 'La série'} » trouvé sur « ${premier?.source ?? 'la source'} », mais aucun épisode n’a été lu sur sa page (sélecteur d’épisode à revoir).`;
+      return `« ${premier?.serie?.title ?? 'La série'} » trouvé sur « ${premier?.source ?? 'la source'} », mais aucun épisode n’a été lu sur sa page${premier?.raison ? ` : ${premier.raison}` : ' (sélecteur d’épisode à revoir)'}.`;
     case 'episode-absent':
       return `« ${premier?.serie?.title ?? 'La série'} » trouvé sur « ${premier?.source ?? 'la source'} » (${premier?.episodes ?? 0} épisode(s)), mais pas l’épisode ${numero ?? ''}.`.replace(' .', '.');
     case 'aucun-lecteur':
@@ -117,8 +130,11 @@ function raisonDe(diags: readonly DiagnosticSource[]): RaisonEchec {
   const statuts = new Set(diags.map(d => d.statut));
   if (statuts.has('aucun-episode')) return 'aucun-episode';
   if (statuts.has('titre-introuvable')) return 'titre-introuvable';
+  if (statuts.has('bloquee')) return 'bloquee';
   if (statuts.has('erreur')) return 'erreur';
   if (statuts.has('aucun-resultat')) return 'aucun-resultat';
+  // Des sources activées, mais aucune ne cherche des animés : le dire (avant : rien n'était affiché).
+  if (statuts.has('non-configuree')) return 'non-configuree';
   return 'aucune-source';
 }
 
@@ -132,7 +148,8 @@ export interface Disponibilite {
 
 const DUREE_CACHE_MS = 10 * 60_000;
 const caches = new WeakMap<object, Map<string, { quand: number; r: ResultatEpisodes }>>();
-const signature = (sources: readonly DefinitionSource[]) => sources.filter(x => x.enabled).map(x => `${x.id}:${x.search.path}:${x.search.item}:${x.episodes.item}`).join('|');
+/** Toute la définition des sources activées : une source modifiée (adresse, miroir, sélecteur) n'est jamais servie par le cache. */
+const signature = (sources: readonly DefinitionSource[]) => JSON.stringify(sources.filter(x => x.enabled).map(({ createdAt: _c, ...x }) => x));
 
 /**
  * Épisodes d'un animé sur les sources de l'utilisateur : la fiche (« Sur vos
@@ -149,7 +166,7 @@ export async function episodesDisponibles(
   const sources = await s.sources();
   const vide = (raison: RaisonEchec): Disponibilite => {
     const diagnostic = { raison, titres: variantesDeRecherche(titres), sources: [] };
-    const message = raison === 'aucune-source' && !s.lectureSources ? `${AUCUNE_SOURCE} ${MESSAGE_SITE}` : messageEchec(diagnostic);
+    const message = raison === 'aucune-source' && !s.lectureSources ? `${AUCUNE_SOURCE} ${MESSAGE_SITE}` : raison === 'aucune-source' && sources.length ? toutesDesactivees(sources.length) : messageEchec(diagnostic);
     return { episodes: [], resultat: null, diagnostic, message };
   };
   if (!sources.some(x => x.enabled)) return vide('aucune-source');
@@ -226,7 +243,7 @@ export async function lireFilm(
   const sources = await s.sources();
   const vide = (raison: RaisonEchec): Lecture => {
     const diagnostic = { raison, titres: variantesDeRecherche(titres), sources: [] };
-    const message = raison === 'aucune-source' && !s.lectureSources ? `${AUCUNE_SOURCE} ${MESSAGE_SITE}` : messageEchec(diagnostic);
+    const message = raison === 'aucune-source' && !s.lectureSources ? `${AUCUNE_SOURCE} ${MESSAGE_SITE}` : raison === 'aucune-source' && sources.length ? toutesDesactivees(sources.length) : messageEchec(diagnostic);
     return { lecteurs: [], origine: 'aucune', message, diagnostic };
   };
   if (!sources.some(x => x.enabled)) return vide('aucune-source');

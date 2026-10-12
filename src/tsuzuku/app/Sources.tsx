@@ -23,6 +23,7 @@ import { police, teinteTransparente } from '../../hub/themes';
 import { RAPPEL_DROITS, testReussi, testerSourcePasAPas, type EtapeTest } from '../moteur/assistant';
 import { messageDe } from '../moteur/erreurs';
 import { LANGUES, ajouterSource, modifierSource, supprimerSource, type DefinitionSource } from '../moteur/sources';
+import { AideConfiguration } from './AideSources';
 import { AssistantSource, ChoixPartage, LIBELLE_LANGUE, typeDe, type CompteTsuzuku, type SourceAssistant } from './AssistantSource';
 import { useCharger, useTsuzuku } from './contexte';
 import { exporterSources, importerExportSources, partageDe, quiRecoitQuoi, type Partages, type TestsSources } from './gestion';
@@ -35,15 +36,20 @@ type Brouillon = Record<string, unknown>;
 const GROUPES: ReadonlyArray<{ titre: string; aide?: string; champs: ReadonlyArray<readonly [string, string, string?]> }> = [
   {
     titre: 'Animés · recherche',
-    aide: '{query} est remplacé par le titre. Un sélecteur vide désactive la partie.',
+    aide: '{query} (ou {q}) est remplacé par le titre ; {slug} ouvre directement la page de l’oeuvre. Type « json » : item, titre et lien sont des chemins JSON. Voir « Comment bien configurer une source ».',
     champs: [
       ['search.path', 'Chemin de recherche', '/recherche?q={query}'],
       ['search.pathVf', 'Chemin VF (facultatif)'],
       ['search.pathVostfr', 'Chemin VOSTFR (facultatif)'],
-      ['search.item', 'Sélecteur d’un résultat', 'ul.resultats li'],
+      ['search.item', 'Sélecteur d’un résultat (ou chemin JSON de la liste)', 'ul.resultats li'],
       ['search.title', 'Titre (relatif au résultat)', 'a.titre'],
       ['search.link', 'Lien (relatif au résultat)', 'a'],
       ['search.image', 'Image (relatif au résultat, facultatif)', 'img'],
+      ['search.type', 'Type de réponse : html ou json (facultatif)', 'html'],
+      ['search.method', 'Méthode : GET ou POST (facultatif)', 'GET'],
+      ['search.body', 'Corps du POST (facultatif)', 'action=recherche&s={query}'],
+      ['search.linkFormat', 'Lien fabriqué depuis un identifiant (facultatif)', '/anime/{value}'],
+      ['search.htmlPath', 'JSON : chemin du fragment HTML (facultatif)', 'data.html'],
     ],
   },
   {
@@ -53,6 +59,9 @@ const GROUPES: ReadonlyArray<{ titre: string; aide?: string; champs: ReadonlyArr
       ['episodes.number', 'Numéro', '.num'],
       ['episodes.title', 'Titre', '.nom'],
       ['episodes.link', 'Lien', 'a'],
+      ['episodes.next', 'Lien « page suivante » (facultatif)', 'a.suivant'],
+      ['episodes.type', 'Type : html ou json (facultatif)', 'html'],
+      ['episodes.linkFormat', 'Lien fabriqué depuis un identifiant (facultatif)', '/episode/{value}'],
     ],
   },
   {
@@ -111,6 +120,7 @@ function Aide({ onFermer }: { onFermer(): void }) {
       {bloc('Qu’est-ce qu’une source ?', 'Un site que vous avez le droit d’utiliser (votre médiathèque, un service dont vous détenez les droits, un site de diffusion libre), décrit par des sélecteurs CSS : où chercher un titre, où trouver la liste des épisodes, où est le lecteur. Tsuzuku n’en fournit aucune.')}
       {bloc('Comment marche l’assistant ?', '1. Collez l’adresse d’une page du site. 2. L’app l’analyse et prépare un prompt : copiez-le dans l’IA de votre choix. 3. Collez sa réponse (un JSON) : elle est vérifiée, et « Réparer avec l’IA » prépare un prompt de correction si besoin. 4. Testez, puis enregistrez.')}
       {bloc('Que mettre dans le prompt ?', 'Rien à écrire : il est généré, avec tout le format de source, un exemple et l’extrait de la page. Donnez de préférence l’adresse d’une page de résultats de recherche ; sur le site web, collez le code HTML de la page ou demandez à l’IA d’analyser le site elle-même.')}
+      {bloc('Ça ne trouve pas l’animé ?', 'Lisez « Comment bien configurer une source » ci-dessous (recherche, {slug}, API JSON, pages JavaScript, anti-robot), puis, sur la fiche, « Tester une source sur ce titre » et « Copier le diagnostic ».')}
       {bloc('Comment tester ?', 'Indiquez un titre présent sur le site : l’app le cherche, ouvre le premier résultat, lit ses épisodes et cherche un lecteur. Chaque étape affiche OK ou KO ; le dernier résultat reste affiché dans la liste.')}
       <Text style={[styleTexte(theme, 13), { fontWeight: '700' }]}>{RAPPEL_DROITS}</Text>
       <Bouton titre="Fermer l’aide" onPress={onFermer} testID="sources-aide-fermer" style={{ alignSelf: 'flex-start' }} />
@@ -159,6 +169,7 @@ export function Sources({ comptes = [], partageActif = true, onCles, ajoutInitia
   const [vue, setVue] = useState<Vue>(ajoutInitial ?? 'liste');
   const [edition, setEdition] = useState<{ id?: string; brouillon: Brouillon } | undefined>();
   const [aide, setAide] = useState(false);
+  const [aideConfig, setAideConfig] = useState(false);
   const [erreur, setErreur] = useState<string | undefined>();
   const [avis, setAvis] = useState<string | undefined>();
   const [titreTest, setTitreTest] = useState('');
@@ -279,6 +290,8 @@ export function Sources({ comptes = [], partageActif = true, onCles, ajoutInitia
         </Pressable>
       </View>
       {aide ? <Aide onFermer={() => setAide(false)} /> : null}
+      <Bouton titre={aideConfig ? 'Masquer : comment bien configurer une source' : 'Comment bien configurer une source'} onPress={() => setAideConfig(v => !v)} testID="sources-aide-config-ouvrir" style={{ alignSelf: 'flex-start' }} />
+      {aideConfig ? <AideConfiguration onFermer={() => setAideConfig(false)} /> : null}
       {/* Rappel visible en permanence ; l'assistant ouvert porte le sien (pas de doublon). */}
       {vue !== 'assistant' && vue !== 'json' ? <Avis genre="alerte" texte={RAPPEL_DROITS} testID="sources-rappel" /> : null}
       {!s.lectureSources ? <Avis texte="Sur le site web, les pages des sources ne peuvent pas être lues (CORS) : test et lecture sur l’app PC/iPhone. Vous pouvez néanmoins préparer, importer et partager vos sources ici." /> : null}

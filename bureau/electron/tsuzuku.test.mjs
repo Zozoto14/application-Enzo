@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import http from 'node:http';
+import zlib from 'node:zlib';
 import {
-  creerListeLecteurs, ipEstPrivee, lookupPublic, requeteTsuzuku, validerRequete, verifierAdresse,
+  creerListeLecteurs, decoderCorps, decompresser, ipEstPrivee, jeuDeCaracteres, lookupPublic, requeteTsuzuku, validerRequete, verifierAdresse,
 } from './tsuzuku.mjs';
 
 const refuse = (url, motif) => assert.throws(() => verifierAdresse(url), motif ?? /.*/, url);
@@ -49,6 +51,8 @@ test('valide la forme de la requête : méthode, bornes, en-têtes sans cookie',
   assert.equal(v.delaiMs, 30000);
   assert.equal(v.tailleMax, 16 * 1024 * 1024);
   assert.deepEqual(v.entetes, { 'user-agent': 'ua', authorization: 'Bearer z' });
+  const ajax = validerRequete({ url: 'https://exemple.fr/', methode: 'POST', corps: 's=x', entetes: { 'X-Requested-With': 'XMLHttpRequest', Origin: 'https://exemple.fr', Referer: 'https://exemple.fr/' } });
+  assert.deepEqual(ajax.entetes, { 'x-requested-with': 'XMLHttpRequest', origin: 'https://exemple.fr', referer: 'https://exemple.fr/' });
   assert.throws(() => validerRequete({ url: 'https://exemple.fr/', methode: 'POST', corps: 'x'.repeat(70_000) }));
 });
 
@@ -79,7 +83,7 @@ test('n’ouvre jamais une adresse refusée (le réseau n’est même pas sollic
   assert.equal(vus.length, 0);
 });
 
-test('rend le texte, retire les cookies, force identity et n’envoie pas de cookie', async () => {
+test('rend le texte, retire les cookies (présence seulement signalée), accepte la compression et n’envoie pas de cookie', async () => {
   const { requeter, vus } = fauxReseau({
     statut: 200,
     entetes: { 'Content-Type': 'application/json', 'set-cookie': ['a=1'] },
@@ -90,8 +94,10 @@ test('rend le texte, retire les cookies, force identity et n’envoie pas de coo
   assert.equal(r.corps, '{"a":1}');
   assert.equal(r.entetes['content-type'], 'application/json');
   assert.equal('set-cookie' in r.entetes, false);
+  assert.equal(r.entetes['x-tsuzuku-cookie'], '1', 'présence signalée, jamais la valeur');
+  assert.equal(JSON.stringify(r.entetes).includes('a=1'), false);
   assert.equal('cookie' in vus[0].options.headers, false);
-  assert.equal(vus[0].options.headers['accept-encoding'], 'identity');
+  assert.equal(vus[0].options.headers['accept-encoding'], 'gzip, deflate, br');
   assert.equal(vus[0].options.agent, false);
   assert.equal(typeof vus[0].options.lookup, 'function');
 });
@@ -139,4 +145,50 @@ test('les lecteurs autorisés : seuls les hôtes publics déclarés passent, et 
   liste.autoriser('https://a-exemple.fr/'); liste.autoriser('https://b-exemple.fr/'); liste.autoriser('https://c-exemple.fr/');
   assert.equal(liste.sousCadreAutorise('https://a-exemple.fr/'), false, 'le plus ancien est évincé');
   assert.equal(liste.sousCadreAutorise('https://c-exemple.fr/'), true);
+});
+
+// ------------------------------------------------------------------ Corps réels : jeu de caractères et compression
+
+test('jeu de caractères : en-tête, <meta charset>, repli UTF-8', () => {
+  const latin = Buffer.from('<p>Épisode à voir</p>', 'latin1');
+  assert.equal(jeuDeCaracteres('text/html; charset=ISO-8859-1', latin), 'windows-1252');
+  assert.equal(decoderCorps(latin, 'text/html; charset=ISO-8859-1'), '<p>Épisode à voir</p>');
+  const meta = Buffer.concat([Buffer.from('<html><head><meta charset="windows-1252"></head><body>'), Buffer.from('Fée’', 'latin1').subarray(0, 3), Buffer.from([0x92]), Buffer.from('</body>')]);
+  assert.match(decoderCorps(meta, 'text/html'), /Fée’/);
+  assert.equal(decoderCorps(Buffer.from('Épisode', 'utf8'), 'text/html'), 'Épisode');
+  assert.equal(decoderCorps(Buffer.from('abc'), 'text/html; charset=inconnu-42'), 'abc');
+});
+
+test('décompression gzip / deflate / br, et bombe refusée', () => {
+  const texte = 'Résultats '.repeat(50);
+  assert.equal(decompresser(zlib.gzipSync(texte), 'gzip').toString(), texte);
+  assert.equal(decompresser(zlib.deflateSync(texte), 'deflate').toString(), texte);
+  assert.equal(decompresser(zlib.deflateRawSync(texte), 'deflate').toString(), texte);
+  assert.equal(decompresser(zlib.brotliCompressSync(texte), 'br').toString(), texte);
+  assert.equal(decompresser(Buffer.from('pas compressé'), 'gzip').toString(), 'pas compressé');
+  const bombe = zlib.gzipSync(Buffer.alloc(5 * 1024 * 1024));
+  assert.throws(() => decompresser(bombe, 'gzip', 1024 * 1024), /volumineuse/);
+});
+
+test('serveur réel (local) : page ISO-8859-1 compressée lue avec ses accents, cookie signalé', async () => {
+  const serveur = http.createServer((req, res) => {
+    const corps = zlib.gzipSync(Buffer.from('<html><body><h1>Les Chroniques de l’été</h1><a href="/serie/ete">Été éternel</a></body></html>'.replace('’', "'"), 'latin1'));
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=iso-8859-1', 'Content-Encoding': 'gzip', 'Set-Cookie': 'session=secret' });
+    res.end(corps);
+  });
+  await new Promise(ok => serveur.listen(0, '127.0.0.1', ok));
+  const { port } = serveur.address();
+  // La garde refuse 127.0.0.1 : seul le transport est détourné vers le serveur local (comme les e2e).
+  const requeter = (url, options, rappel) => http.request({ host: '127.0.0.1', port, path: url.pathname + url.search, method: options.method, headers: { ...options.headers, host: url.hostname } }, rappel);
+  try {
+    const r = await requeteTsuzuku({ url: 'https://mediatheque-exemple.fr/recherche?q=ete', methode: 'GET' }, { requeter });
+    assert.equal(r.statut, 200);
+    assert.match(r.corps, /Les Chroniques de l'été/);
+    assert.match(r.corps, /Été éternel/);
+    assert.equal(r.entetes['content-encoding'], undefined);
+    assert.equal(r.entetes['x-tsuzuku-cookie'], '1');
+    assert.equal(JSON.stringify(r).includes('secret'), false);
+  } finally {
+    serveur.close();
+  }
 });

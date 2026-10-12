@@ -19,12 +19,19 @@
  *  - les redirections ne sont PAS suivies : la réponse 3xx est rendue au moteur,
  *    qui re-vérifie chaque saut en repassant par ici ;
  *  - aucun cookie (ni envoyé, ni gardé), délai et taille de réponse bornés ;
- *  - seuls quelques en-têtes sont transmis.
+ *    la présence d'un Set-Cookie est seulement SIGNALÉE (`x-tsuzuku-cookie: 1`,
+ *    sans la valeur) pour que le moteur explique une boucle de redirections ;
+ *  - seuls quelques en-têtes sont transmis ;
+ *  - le corps est décompressé (gzip, deflate, br : certains serveurs ignorent
+ *    `accept-encoding: identity`) puis DÉCODÉ selon son jeu de caractères
+ *    (en-tête `charset`, sinon `<meta charset>`, sinon UTF-8) : une page en
+ *    ISO-8859-1 / windows-1252 garde ses accents.
  *
  * Aucune dépendance à Electron : testable seule (`tsuzuku.test.mjs`).
  */
 
 import dns from 'node:dns';
+import zlib from 'node:zlib';
 import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
@@ -34,7 +41,7 @@ export const LONGUEUR_MAX_URL = 2048;
 export const DELAI_MAX_MS = 30_000;
 export const TAILLE_MAX_OCTETS = 16 * 1024 * 1024;
 export const CORPS_MAX_OCTETS = 64 * 1024;
-const ENTETES_PERMIS = new Set(['accept', 'accept-language', 'content-type', 'user-agent', 'authorization', 'referer']);
+const ENTETES_PERMIS = new Set(['accept', 'accept-language', 'content-type', 'user-agent', 'authorization', 'referer', 'origin', 'x-requested-with']);
 const SUFFIXES_LOCAUX = ['.local', '.localdomain', '.lan', '.internal', '.intranet', '.home', '.corp', '.private', '.localhost'];
 
 // ------------------------------------------------------------------ IP privées
@@ -145,6 +152,61 @@ export function verifierAdresse(brut) {
   return { url, hote, port, https: url.protocol === 'https:' };
 }
 
+// ------------------------------------------------------------------ Corps : compression et jeu de caractères
+
+/**
+ * Décompresse selon `content-encoding` (taille décompressée bornée : pas de
+ * « bombe » gzip) ; un corps non compressé est rendu tel quel. Lève si la
+ * taille décompressée dépasse `max`.
+ */
+export function decompresser(tampon, encodage, max = TAILLE_MAX_OCTETS) {
+  const e = String(encodage ?? '').toLowerCase().trim();
+  const options = { maxOutputLength: max + 1 };
+  const borne = sortie => {
+    if (sortie.length > max) throw new Error(`Réponse trop volumineuse une fois décompressée (> ${max} octets).`);
+    return sortie;
+  };
+  const essayer = fn => {
+    try {
+      return borne(fn());
+    } catch (erreur) {
+      if (/trop volumineuse|Cannot create a Buffer larger|maxOutputLength|ERR_BUFFER_TOO_LARGE/i.test(`${erreur?.message} ${erreur?.code}`)) {
+        throw new Error(`Réponse trop volumineuse une fois décompressée (> ${max} octets).`);
+      }
+      return null; // Annoncé compressé mais ne l'est pas : on garde les octets reçus.
+    }
+  };
+  let sortie = null;
+  if (e === 'gzip' || e === 'x-gzip') sortie = essayer(() => zlib.gunzipSync(tampon, { ...options, finishFlush: zlib.constants.Z_SYNC_FLUSH }));
+  else if (e === 'deflate') sortie = essayer(() => zlib.inflateSync(tampon, options)) ?? essayer(() => zlib.inflateRawSync(tampon, options));
+  else if (e === 'br') sortie = essayer(() => zlib.brotliDecompressSync(tampon, options));
+  return sortie ?? tampon;
+}
+
+const ALIAS_CHARSET = { latin1: 'windows-1252', 'iso-8859-1': 'windows-1252', 'iso8859-1': 'windows-1252', 'us-ascii': 'windows-1252', ascii: 'windows-1252', utf8: 'utf-8' };
+
+/** Jeu de caractères : en-tête Content-Type, sinon <meta charset> / http-equiv dans le début du document, sinon UTF-8. */
+export function jeuDeCaracteres(typeContenu, tampon) {
+  const entete = /charset\s*=\s*["']?([\w.:-]+)/i.exec(String(typeContenu ?? ''));
+  let nom = entete?.[1];
+  if (!nom) {
+    const debut = tampon.subarray(0, 4096).toString('latin1');
+    nom = /<meta[^>]+charset\s*=\s*["']?([\w.:-]+)/i.exec(debut)?.[1] ?? /<\?xml[^>]+encoding\s*=\s*["']([\w.:-]+)/i.exec(debut)?.[1];
+  }
+  const n = String(nom ?? 'utf-8').toLowerCase();
+  return ALIAS_CHARSET[n] ?? n;
+}
+
+/** Décode les octets reçus en texte selon leur jeu de caractères (repli UTF-8). */
+export function decoderCorps(tampon, typeContenu) {
+  const nom = jeuDeCaracteres(typeContenu, tampon);
+  try {
+    return new TextDecoder(nom).decode(tampon);
+  } catch {
+    return tampon.toString('utf8');
+  }
+}
+
 // ------------------------------------------------------------------ Requête
 
 /** `lookup` de socket : refuse tout nom qui résout vers une IP non publique, et impose l'IP vérifiée. */
@@ -210,7 +272,8 @@ export async function requeteTsuzuku(brute, deps = {}) {
     const options = {
       method: r.methode,
       headers: {
-        'accept-encoding': 'identity',
+        // Comme un navigateur (certains pare-feu se méfient de « identity ») ; décompressé ci-dessous.
+        'accept-encoding': 'gzip, deflate, br',
         ...r.entetes,
         ...(r.corps !== undefined ? { 'content-length': String(Buffer.byteLength(r.corps)) } : {}),
       },
@@ -221,7 +284,11 @@ export async function requeteTsuzuku(brute, deps = {}) {
     const req = requeter(adresse.url, options, reponse => {
       const entetes = {};
       for (const [nom, valeur] of Object.entries(reponse.headers)) {
-        if (nom === 'set-cookie') continue; // aucun cookie n'est gardé
+        if (nom === 'set-cookie') {
+          // Aucun cookie n'est gardé ni rendu : seule sa présence est signalée au moteur.
+          entetes['x-tsuzuku-cookie'] = '1';
+          continue;
+        }
         entetes[nom.toLowerCase()] = Array.isArray(valeur) ? valeur.join(', ') : String(valeur ?? '');
       }
       const statut = reponse.statusCode ?? 0;
@@ -244,7 +311,18 @@ export async function requeteTsuzuku(brute, deps = {}) {
         }
         morceaux.push(morceau);
       });
-      reponse.on('end', () => terminer(resoudre, { statut, entetes, corps: Buffer.concat(morceaux).toString('utf8') }));
+      reponse.on('end', () => {
+        let brut;
+        try {
+          brut = decompresser(Buffer.concat(morceaux), entetes['content-encoding'], r.tailleMax);
+        } catch (erreur) {
+          return terminer(rejeter, erreur);
+        }
+        // Le corps rendu est du texte décodé : l'en-tête de compression ne le décrit plus.
+        delete entetes['content-encoding'];
+        delete entetes['content-length'];
+        terminer(resoudre, { statut, entetes, corps: decoderCorps(brut, entetes['content-type']) });
+      });
       reponse.on('error', erreur => terminer(rejeter, erreur));
     });
     const minuteur = setTimeout(() => {

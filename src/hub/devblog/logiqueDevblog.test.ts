@@ -97,39 +97,43 @@ describe('devblog', () => {
     // Déverrouillage : tout concerne aussi les amis, sauf le coffre publié par le PC.
     expect(ENTREES.find(e => e.version === '2026.10.11')!.titre).toBe('Déverrouillage : diagnostic et messages plus clairs');
     expect(ENTREES.find(e => e.version === '2026.10.11')!.fonctionnalites.filter(f => f.adminSeulement).map(f => f.id)).toEqual(['deverrouillage-coffre-pc']);
-    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES.slice(6)).genre).toBe('afficher');
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES.slice(7)).genre).toBe('afficher');
     // Pages du hub et app Abonnements : réservées à l'administration ; un ami n'a rien de vide.
-    expect(ENTREES[5].titre).toBe('Deux pages dans le hub, et une app Abonnements');
-    expect(ENTREES[5].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
-    expect(ENTREES[5].fonctionnalites.find(f => f.id === 'app-abonnements')?.essayer).toEqual({ genre: 'app', app: 'abonnements' });
-    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES.slice(5)).genre).toBe('rien');
+    expect(ENTREES[6].titre).toBe('Deux pages dans le hub, et une app Abonnements');
+    expect(ENTREES[6].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
+    expect(ENTREES[6].fonctionnalites.find(f => f.id === 'app-abonnements')?.essayer).toEqual({ genre: 'app', app: 'abonnements' });
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES.slice(6)).genre).toBe('rien');
     // Prospects : réservée au Fondateur ; un ami n'en voit rien.
-    expect(ENTREES[4].titre).toBe('Nouvelle app : Prospects');
-    expect(ENTREES[4].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
-    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES.slice(4)).genre).not.toBe('afficher');
+    expect(ENTREES[5].titre).toBe('Nouvelle app : Prospects');
+    expect(ENTREES[5].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES.slice(5)).genre).not.toBe('afficher');
     // Claude Office : réservée au Fondateur, un ami n'en voit rien.
-    expect(ENTREES[3].titre).toBe('Claude Office arrive dans le hub');
-    expect(ENTREES[3].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
-    expect(decider(undefined, { profilNeuf: false, admin: false }, [ENTREES[3]]).genre).toBe('rien');
+    expect(ENTREES[4].titre).toBe('Claude Office arrive dans le hub');
+    expect(ENTREES[4].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
+    expect(decider(undefined, { profilNeuf: false, admin: false }, [ENTREES[4]]).genre).toBe('rien');
     // Tsuzuku : la fiche trouve les épisodes (tous), sources synchronisées (administration).
-    expect(ENTREES[2].version).toBe('2026.10.16');
-    expect(ENTREES[2].fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['tsuzuku-fiche-sources']);
-    expect(decider(undefined, { profilNeuf: false, admin: false }, [ENTREES[2]]).genre).toBe('afficher');
+    expect(ENTREES[3].version).toBe('2026.10.16');
+    expect(ENTREES[3].fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['tsuzuku-fiche-sources']);
+    expect(decider(undefined, { profilNeuf: false, admin: false }, [ENTREES[3]]).genre).toBe('afficher');
     // Historique de Claude Office : réservé au Fondateur, un ami n'en voit rien.
-    expect(ENTREES[1].version).toBe('2026.10.17');
-    expect(ENTREES[1].titre).toBe('Claude Office garde l’historique de vos requêtes');
+    expect(ENTREES[2].version).toBe('2026.10.17');
+    expect(ENTREES[2].titre).toBe('Claude Office garde l’historique de vos requêtes');
+    expect(ENTREES[2].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
+    expect(decider(undefined, { profilNeuf: false, admin: false }, [ENTREES[2]]).genre).toBe('rien');
+    // Bureau natif de Claude Office (dernière entrée) : réservé au Fondateur, un ami n'en voit rien.
+    expect(ENTREES[1].version).toBe('2026.10.18');
+    expect(ENTREES[1].titre).toBe('Claude Office : le bureau des agents, partout');
     expect(ENTREES[1].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
     expect(decider(undefined, { profilNeuf: false, admin: false }, [ENTREES[1]]).genre).toBe('rien');
-    // Bureau natif de Claude Office (dernière entrée) : réservé au Fondateur, un ami n'en voit rien.
-    expect(ENTREES[0].version).toBe('2026.10.18');
-    expect(ENTREES[0].titre).toBe('Claude Office : le bureau des agents, partout');
-    expect(ENTREES[0].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
-    expect(decider(undefined, { profilNeuf: false, admin: false }, [ENTREES[0]]).genre).toBe('rien');
+    // 2026.10.19 : Tsuzuku, sources des vrais sites ; le diagnostic détaillé et le test sur la fiche sont réservés à l'administration.
+    expect(ENTREES[0].version).toBe('2026.10.19');
+    expect(ENTREES[0].fonctionnalites.filter(f => !f.adminSeulement).map(f => f.id)).toEqual(['tsuzuku-sources-reel-lecture']);
+    expect(decider(undefined, { profilNeuf: false, admin: false }, [ENTREES[0]]).genre).toBe('afficher');
     expect(decider(undefined, { profilNeuf: false, admin: true }, ENTREES).genre).toBe('afficher');
-    // Seule la dernière entrée s'affiche d'elle-même : réservée au Fondateur, un ami n'a rien de vide
-    // (la nouveauté Tsuzuku reste lisible dans Paramètres › Nouveautés).
-    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('rien');
-    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.18', '2026.10.17', '2026.10.16', '2026.10.15', '2026.10.14', '2026.10.13', '2026.10.12', '2026.10.11', '2026.10.10', '2026.10.09', '2026.10.08', '2026.10.07', '2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
+    // Seule la dernière entrée s'affiche d'elle-même : sa nouveauté Tsuzuku (lecture des sources) concerne aussi un ami.
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES).genre).toBe('afficher');
+    expect(decider(undefined, { profilNeuf: false, admin: false }, ENTREES.slice(1)).genre).toBe('rien');
+    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.19', '2026.10.18', '2026.10.17', '2026.10.16', '2026.10.15', '2026.10.14', '2026.10.13', '2026.10.12', '2026.10.11', '2026.10.10', '2026.10.09', '2026.10.08', '2026.10.07', '2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
   });
 
   it('marquer lu est idempotent et tolère un état corrompu', () => {

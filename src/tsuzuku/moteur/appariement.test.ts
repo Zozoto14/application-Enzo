@@ -88,3 +88,65 @@ describe('titre du catalogue contre titre du site (bogue : test OK, fiche KO)', 
     expect(scoreTitre('La Rivière', ['Rivière'])).toBe(1000);
   });
 });
+
+describe('titres réalistes : catalogue (Jikan/AniList) contre titres des sites', () => {
+  const FRIEREN = ["Frieren: Beyond Journey's End", 'Sousou no Frieren', '葬送のフリーレン'];
+  const REZERO = ['Re:ZERO -Starting Life in Another World- Season 2', 'Re:Zero kara Hajimeru Isekai Seikatsu 2nd Season'];
+  const acceptes: Array<[string, readonly string[]]> = [
+    // Le site liste des ÉPISODES dans sa recherche (-200 et 340 avant le correctif).
+    ['Frieren Episode 12 VOSTFR', FRIEREN],
+    ['Sousou no Frieren - Épisode 12', FRIEREN],
+    ['Sousou no Frieren EP 03 VF', FRIEREN],
+    ['Frieren S01E05', FRIEREN],
+    ['Sousou no Frieren 第5話', FRIEREN],
+    // Apostrophe retirée par le site (30 avant le correctif).
+    ['Frieren Beyond Journeys End', FRIEREN],
+    ['Frieren : Beyond Journey’s End', FRIEREN],
+    // « Re:Zero » n'est pas un sous-titre (-50 avant le correctif : « Re » seul servait de base).
+    ['Re:Zero Saison 2', REZERO],
+    ['Re:Zero kara Hajimeru Isekai Seikatsu Saison 2', REZERO],
+    // Saison abrégée « S2 » (0 et 30 avant le correctif).
+    ['Vinland Saga S2', ['Vinland Saga Season 2']],
+    ['One Punch Man S2 VF', ['One Punch Man Season 2']],
+    // Film : « (Film) » contre « : The Movie » (30 avant le correctif).
+    ['Jujutsu Kaisen 0 (Film)', ['Jujutsu Kaisen 0: The Movie']],
+    ['Jujutsu Kaisen 0', ['Jujutsu Kaisen 0: The Movie']],
+    // Romains, langue en fin de titre, « (TV) », année.
+    ['Overlord IV VF', ['Overlord IV']],
+    ['Overlord Saison 4', ['Overlord IV']],
+    ['Mob Psycho 100 Saison 3', ['Mob Psycho 100 III']],
+    ['Mushoku Tensei II', ['Mushoku Tensei: Jobless Reincarnation Season 2']],
+    ['Shingeki no Kyojin Saison 3 Partie 2', ['Attack on Titan Season 3 Part 2', 'Shingeki no Kyojin Season 3 Part 2']],
+    ['Sword Art Online : Alicization VF', ['Sword Art Online: Alicization']],
+    ['Demon Slayer (TV)', ['Demon Slayer: Kimetsu no Yaiba']],
+    ['Hunter X Hunter', ['Hunter x Hunter (2011)']],
+    ['Oshi no Ko', ['[Oshi no Ko]']],
+    ['Steins;Gate 0', ['Steins;Gate 0']],
+  ];
+  it.each(acceptes)('« %s » est reconnu', (site, catalogue) => {
+    expect(scoreTitre(site, catalogue)).toBeGreaterThanOrEqual(SCORE_MINIMAL);
+  });
+  const refuses: Array<[string, readonly string[]]> = [
+    ['Frieren Saison 2 Episode 3', FRIEREN],
+    ['Chainsaw Man – OAV', ['Chainsaw Man']],
+    ['Demon Slayer Film', ['Demon Slayer']],
+    ['Re:Zero Saison 3', REZERO],
+    ['Vinland Saga S1', ['Vinland Saga Season 2']],
+    ['One Piece Heroines', ['One Piece']],
+  ];
+  it.each(refuses)('« %s » reste écarté (autre saison, film/OAV, autre oeuvre)', (site, catalogue) => {
+    expect(scoreTitre(site, catalogue)).toBeLessThan(SCORE_MINIMAL);
+  });
+  it('la série exacte passe devant le film ou l’épisode', () => {
+    const c = classerResultats([{ title: 'Demon Slayer Film', url: 'a' }, { title: 'Demon Slayer Episode 4', url: 'b' }, { title: 'Demon Slayer', url: 'c' }], ['Demon Slayer']);
+    expect(c[0].url).toBe('c');
+  });
+  it('titre de base et saison : « Re:Zero » gardé, « S2 » compris', () => {
+    expect(titreDeBase('Re:ZERO -Starting Life in Another World- Season 2')).toBe('Re:ZERO');
+    expect(titreDeBase('Overlord IV VF')).toBe('Overlord');
+    expect(saisonDe('Vinland Saga S2')).toBe(2);
+    expect(saisonDe('Frieren S01E05')).toBe(1);
+    expect(saisonDe('Shangri-La Frontier')).toBeNull();
+    expect(variantesDeRecherche(REZERO)).toContain('Re:ZERO');
+  });
+});

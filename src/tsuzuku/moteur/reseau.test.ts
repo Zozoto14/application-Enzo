@@ -1,4 +1,4 @@
-import { creerClient, reseauDepuisFetch, type FonctionFetch } from './reseau';
+import { ACCEPT_HTML, creerClient, detecterBlocage, reseauDepuisFetch, type FonctionFetch } from './reseau';
 import { fauxReseau, json } from './outilsTest';
 
 describe('client reseau sur', () => {
@@ -105,5 +105,45 @@ describe('reseauDepuisFetch', () => {
     await expect(opaque.requete({ url: 'https://a.exemple.fr/', methode: 'GET', entetes: {}, delaiMs: 1000, tailleMax: 100 })).rejects.toMatchObject({ code: 'redirections' });
     const gros = reseauDepuisFetch((async () => rep(200, 'x', { 'content-length': '5000' })) as unknown as FonctionFetch, { creerControleur: () => ({ signal: 0, abort() {} }) });
     await expect(gros.requete({ url: 'https://a.exemple.fr/', methode: 'GET', entetes: {}, delaiMs: 1000, tailleMax: 100 })).rejects.toMatchObject({ code: 'taille' });
+  });
+});
+
+describe('en-têtes de navigateur, anti-robot, cookies, formulaires', () => {
+  it('envoie Accept (HTML) et le Referer demandé : sans eux, des pare-feu répondent 403', async () => {
+    const r = fauxReseau({ 'https://a.exemple.fr/': req => (req.entetes.accept?.includes('text/html') && req.entetes.referer ? { corps: 'ok' } : { statut: 403, corps: 'Forbidden' }) });
+    const rep = await creerClient(r).texte('https://a.exemple.fr/', { referer: 'https://a.exemple.fr/' });
+    expect(rep.corps).toBe('ok');
+    expect(r.appels[0].entetes.accept).toBe(ACCEPT_HTML);
+    expect(r.appels[0].entetes['accept-language']).toMatch(/^fr/);
+  });
+
+  it.each([
+    [{ statut: 503, entetes: { server: 'cloudflare' }, corps: '<html><head><title>Just a moment...</title></head><body>Checking your browser</body></html>' }, /Just a moment/],
+    [{ statut: 403, entetes: { 'cf-mitigated': 'challenge' }, corps: '' }, /cf-mitigated/],
+    [{ statut: 200, entetes: {}, corps: '<html><body><div class="g-recaptcha"></div>Vérification</body></html>' }, /captcha/],
+    [{ statut: 403, entetes: { server: 'cloudflare' }, corps: '<html><body>Forbidden</body></html>' }, /pare-feu/],
+    [{ statut: 429, entetes: {}, corps: 'Too Many Requests' }, /429/],
+  ])('reconnaît une protection anti-robot (%#) et le dit au lieu de « aucun résultat »', async (rep, motif) => {
+    expect(detecterBlocage({ statut: rep.statut, entetes: rep.entetes as Record<string, string>, corps: rep.corps })?.indice).toMatch(motif);
+    const r = fauxReseau({ 'https://a.exemple.fr/': rep });
+    await expect(creerClient(r).texte('https://a.exemple.fr/')).rejects.toMatchObject({ code: 'anti-robot', message: expect.stringMatching(/bloque les requêtes automatiques/) });
+  });
+
+  it('une vraie page qui mentionne un captcha (commentaires) n’est pas un blocage', () => {
+    const corps = `<html><body>${'<p>Un long article lisible. </p>'.repeat(300)}<div class="g-recaptcha"></div></body></html>`;
+    expect(detecterBlocage({ statut: 200, entetes: {}, corps })).toBeNull();
+    expect(detecterBlocage({ statut: 404, entetes: {}, corps: 'introuvable' })).toBeNull();
+  });
+
+  it('redirections en boucle avec cookie : « le site exige des cookies »', async () => {
+    const r = fauxReseau({ 'https://a.exemple.fr/': { statut: 302, entetes: { location: '/', 'x-tsuzuku-cookie': '1' } } });
+    await expect(creerClient(r).texte('https://a.exemple.fr/')).rejects.toMatchObject({ code: 'cookies', message: expect.stringMatching(/exige des cookies/) });
+    expect(r.appels.every(a => !('cookie' in a.entetes))).toBe(true);
+  });
+
+  it('formulaire POST (point AJAX) : encodé, X-Requested-With, sans suivre de redirection', async () => {
+    const r = fauxReseau({ 'https://a.exemple.fr/ajax': req => ({ corps: `${req.methode} ${req.corps} ${req.entetes['content-type']} ${req.entetes['x-requested-with']}` }) });
+    const rep = await creerClient(r).envoyerFormulaire('https://a.exemple.fr/ajax', 'action=recherche&s=voyage');
+    expect(rep.corps).toBe('POST action=recherche&s=voyage application/x-www-form-urlencoded; charset=UTF-8 XMLHttpRequest');
   });
 });

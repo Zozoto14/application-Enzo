@@ -126,6 +126,7 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
               <PanneauEchec
                 testID="lecteur-diagnostic"
                 diagnostic={lecture.diagnostic}
+                oeuvre={meta.titre}
                 titrePerso={charge.donnees?.perso}
                 enCours={charge.enCours}
                 onReessayer={() => setEssai(v => v + 1)}

@@ -41,6 +41,33 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.19',
+    date: '2026-10-19',
+    titre: 'Tsuzuku : vos sources trouvent mieux les animés, et disent pourquoi',
+    resume:
+      'Quand une source ne trouve pas un animé, Tsuzuku en donne maintenant la vraie raison (site qui bloque les robots, page construite en JavaScript, adresse à revoir…) et lit beaucoup plus de sites : API JSON, recherche en POST, adresses directes {slug}, cartes d’articles, épisodes paginés ou par saisons, pages en ISO-8859-1.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'tsuzuku-sources-reel-lecture',
+        emoji: '🔎',
+        titre: 'Des sources lues comme un humain les lirait',
+        texte:
+          'Si les sélecteurs ne trouvent rien, Tsuzuku repère seul les résultats (cartes, liens titrés, données structurées) et les épisodes (« Épisode 12 », « EP 3 », « S2E03 »…), suit les pages suivantes et garde la bonne saison. Les titres « Épisode N », « S2 », « Re:Zero », les apostrophes et les films sont mieux reconnus.',
+        essayer: { genre: 'app', app: 'tsuzuku' },
+      },
+      {
+        id: 'tsuzuku-sources-reel-diagnostic',
+        emoji: '🩺',
+        titre: 'Diagnostic détaillé à copier, et test sur le titre de la fiche',
+        texte:
+          'Sur la fiche, « Détail du diagnostic » montre chaque requête (statut, type, taille, page JavaScript, anti-robot, candidats et scores) et « Copier le diagnostic » le donne en texte, sans clé ni secret. « Tester une source sur ce titre » rejoue la recherche pas à pas. Nouvelle aide : « Comment bien configurer une source ».',
+        essayer: { genre: 'app', app: 'tsuzuku' },
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.18',
     date: '2026-10-18',
     titre: 'Claude Office : le bureau des agents, partout',

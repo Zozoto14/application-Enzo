@@ -104,9 +104,46 @@ export function suggererSelecteurs(page: Page): string[] {
     .map(([s, n]) => `${s} (${n}x)`);
 }
 
-/** Corps quasi vide mais beaucoup de scripts : contenu construit en JavaScript. */
+/** Points de montage d'application (SPA) : vides dans le HTML brut, remplis par JavaScript. */
+const MONTAGES = '#app, #root, #__next, #__nuxt, #svelte, [data-reactroot], [ng-app], app-root, [data-server-rendered]';
+
+/**
+ * Contenu construit en JavaScript (application à page unique, résultats
+ * chargés en AJAX) : corps quasi vide avec des scripts, ou point de montage
+ * d'application vide. Le HTML brut ne contient alors aucun résultat.
+ */
 export function sembleRenduEnJs(page: Page): boolean {
-  const corps = page.tous('body');
-  const texte = corps.length ? texteCompact(page, corps[0]) : '';
-  return texte.length < 800 && page.tous('script').length > 3;
+  const corps = page.tous('body')[0] ?? page.racine;
+  const texte = texteVisible(corps);
+  const scripts = page.tous('script').length;
+  if (texte.length < 800 && scripts > 3) {
+    return true;
+  }
+  const montage = page.tous(MONTAGES)[0];
+  if (montage && scripts >= 1 && texteVisible(montage).length < 200 && page.dans(montage, 'a[href]').length < 3) {
+    return true;
+  }
+  // « Activez JavaScript » sans autre contenu lisible.
+  const bruit = page.tous('noscript').map(n => texteCompact(page, n)).join(' ');
+  return scripts >= 1 && /javascript/i.test(bruit) && texte.length < 300 && page.dans(corps as Noeud, 'a[href]').length < 5;
+}
+
+/** Texte lisible d'un élément, sans scripts, styles, modèles ni <noscript>. */
+export function texteVisible(el: AnyNode): string {
+  const morceaux: string[] = [];
+  const parcourir = (n: AnyNode) => {
+    if (n.type === 'text') {
+      morceaux.push((n as unknown as { data: string }).data);
+      return;
+    }
+    const nom = ((n as Element).name || '').toLowerCase();
+    if (['script', 'style', 'template', 'noscript'].includes(nom)) {
+      return;
+    }
+    for (const c of ((n as Element).children ?? []) as AnyNode[]) {
+      parcourir(c);
+    }
+  };
+  parcourir(el);
+  return morceaux.join(' ').replace(/\s+/g, ' ').trim();
 }

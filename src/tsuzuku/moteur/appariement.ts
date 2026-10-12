@@ -9,7 +9,40 @@ import { normaliserTexte } from './outils';
 /** Marqueurs de langue, ecartes de la comparaison (traites par la preference VF/VOSTFR). */
 const BRUIT = new Set(['vf', 'vostfr', 'vo', 'vosta', 'fr']);
 
-const MARQUEURS_SAISON = /\b(?:saison|season|cour|partie|part)\s*\d+\b|\b\d+(?:st|nd|rd|th|e|eme|ème)\s+(?:season|saison)\b/gi;
+const MARQUEURS_SAISON = /\b(?:saison|season|cour|partie|part)\s*\d+\b|\b\d+(?:st|nd|rd|th|e|eme|ème)\s+(?:season|saison)\b|\bs\d{1,2}\b(?!\s*e\d)/gi;
+
+/**
+ * Séparateur de sous-titre : « : » SUIVI d'une espace, « - » / « – » entourés
+ * d'espaces (« Re:Zero » ou « Shangri-La » ne sont pas coupés).
+ */
+const SEPARATEUR_SOUS_TITRE = /\s*:\s+|\s+[-–—]+\s*|\s*[–—]+\s+/;
+const avantSousTitre = (t: string) => t.split(SEPARATEUR_SOUS_TITRE)[0];
+
+/**
+ * Marqueurs d'ÉPISODE dans un titre de résultat (« Titre Épisode 12 VOSTFR »,
+ * « Titre - EP 03 », « Titre E05 », « Titre 第3話 ») : beaucoup de sites listent
+ * des épisodes dans leur recherche. Ils sont retirés AVANT la comparaison.
+ */
+const MARQUEURS_EPISODE = /(?:\b(?:episode|épisode|ep|eps|episodio)\.?\s*#?\s*\d{1,4}(?:\s*(?:-|à|a|to)\s*\d{1,4})?\b|\bs\d{1,2}\s*e\d{1,4}\b|\be\d{2,4}\b|第\s*\d{1,4}\s*[話话集])/gi;
+
+/** Titre sans marqueur d'épisode (garde la saison). */
+export function sansEpisode(titre: unknown): string {
+  let t = String(titre ?? '');
+  try {
+    // « Épisode » : \b ne voit pas le « É » ; les accents sont retirés (la comparaison les ignore de toute façon).
+    t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  } catch {
+    // Pas de normalize : « episode » sans accent reste reconnu.
+  }
+  return t
+    .replace(/\bs(\d{1,2})\s*e\d{1,4}\b/gi, ' saison $1 ')
+    .replace(MARQUEURS_EPISODE, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Mots de FORMAT : un film / OAV n'est pas la série, mais un site les omet souvent. */
+const FORMATS = new Set(['film', 'movie', 'films', 'movies', 'oav', 'ova', 'ona', 'special', 'specials', 'gekijouban', 'gekijoban']);
 
 /** En dessous, le titre trouve n'est ni identique ni un prefixe : correspondance non fiable. */
 export const SCORE_MINIMAL = 600;
@@ -36,12 +69,34 @@ const ANNEE = /^(19[5-9]\d|20[0-4]\d)$/;
 /** Article en tête (« La Rivière » = « Rivière »), comme le font souvent les sites. */
 const ARTICLES = new Set(['le', 'la', 'les', 'l', 'the']);
 
-const mots = (valeur: unknown): string[] => {
-  const liste = normaliserTexte(valeur)
-    .split(' ')
-    .filter(t => t && !BRUIT.has(t) && !NEUTRES.has(t) && !ANNEE.test(t));
-  return liste.length > 1 && ARTICLES.has(liste[0]) ? liste.slice(1) : liste;
+/** « Journey's » = « Journeys » (l'apostrophe disparaît souvent sur les sites) ; « L'Attaque » garde son article. */
+const sansApostrophe = (valeur: unknown) => String(valeur ?? '').replace(/([A-Za-z0-9])['’`´](?=[A-Za-z]{1,2}\b)/g, '$1');
+
+/** Mots comparés : sans langue, sans format (film/OAV), sans année ni article en tête. */
+const motsEtFormat = (valeur: unknown): { mots: string[]; format: boolean } => {
+  let format = false;
+  const tous = normaliserTexte(sansApostrophe(valeur)).split(' ');
+  // « The Movie » : un seul marqueur de format.
+  const liste = tous.filter((t, i) => {
+    if (FORMATS.has(t) || (t === 'the' && FORMATS.has(tous[i + 1] ?? ''))) {
+      format = true;
+      return false;
+    }
+    return t && !BRUIT.has(t) && !NEUTRES.has(t) && !ANNEE.test(t);
+  });
+  return { mots: liste.length > 1 && ARTICLES.has(liste[0]) ? liste.slice(1) : liste, format };
 };
+const mots = (valeur: unknown): string[] => motsEtFormat(valeur).mots;
+
+/**
+ * Pénalité de format : le résultat est un film/OAV et l'oeuvre cherchée non
+ * (autre oeuvre : forte), ou l'inverse (le site a omis « film » : faible).
+ */
+function penaliteFormat(candidat: unknown, cible: unknown): number {
+  const c = motsEtFormat(candidat).format;
+  const t = motsEtFormat(cible).format;
+  return c === t ? 0 : c ? 450 : 100;
+}
 
 /** Score « texte contre texte » (titres complets ou titres de base). */
 function scorePaire(candidat: unknown, cible: unknown): number {
@@ -64,7 +119,7 @@ function scorePaire(candidat: unknown, cible: unknown): number {
     }
     score = 300 * (communs / tt.length);
   }
-  return score - tc.filter(t => !tt.includes(t)).length * 150;
+  return score - tc.filter(t => !tt.includes(t)).length * 150 - penaliteFormat(candidat, cible);
 }
 
 const ROMAINS: Record<string, number> = { ii: 2, iii: 3, iv: 4, v: 5, vi: 6 };
@@ -79,17 +134,24 @@ export function saisonDe(titre: unknown): number | null {
   if (explicite) {
     return Number(explicite[1]);
   }
-  const romain = /\s(ii|iii|iv|v|vi)\s*$/i.exec(t.split(/[:–—]/)[0].trim());
+  const court = /\bs(\d{1,2})\b(?!\s*e\d)/i.exec(t) ?? /\bs(\d{1,2})\s*e\d{1,4}\b/i.exec(t);
+  if (court) {
+    return Number(court[1]);
+  }
+  const tete = avantSousTitre(t).replace(/\(\s*(?:19|20)\d\d\s*\)/g, ' ').replace(/\b(?:vf|vostfr|vosta)\b/gi, ' ').trim();
+  const romain = /\s(ii|iii|iv|v|vi)\s*$/i.exec(tete);
   if (romain) {
     return ROMAINS[romain[1].toLowerCase()];
   }
-  const nombre = /\s(\d{1,2})\s*$/.exec(t.split(/[:–—]/)[0].trim());
+  const nombre = /\s(\d{1,2})\s*$/.exec(tete);
   return nombre ? Number(nombre[1]) : null;
 }
 
 /** Titre sans marqueur de saison ni année, sous-titre GARDÉ (« Naruto: Shippuden » reste lui-même). */
+const LANGUES_TITRE = /[([]?\b(?:vf|vostfr|vosta)\b[)\]]?/gi;
+
 function sansSaison(titre: unknown): string {
-  let t = String(titre ?? '').replace(MARQUEURS_SAISON, ' ');
+  let t = String(titre ?? '').replace(LANGUES_TITRE, ' ').replace(MARQUEURS_SAISON, ' ');
   t = t.replace(/\(\s*(?:19|20)\d\d\s*\)/g, ' ');
   t = t.replace(/\s+\b(?:i{1,3}|iv|v|vi)\b\s*$/i, ' ');
   t = t.replace(/\s+\d+\s*$/, ' ');
@@ -114,15 +176,16 @@ function scoreBase(candidat: string, cible: string): number {
   }
   const sc = saisonDe(candidat);
   const st = saisonDe(cible);
+  const format = penaliteFormat(candidat, cible);
   if (sc === st) {
-    return 950;
+    return 950 - format;
   }
   if ((sc ?? 1) === (st ?? 1)) {
-    return 920;
+    return 920 - format;
   }
   // La page du site regroupe peut-être toutes les saisons : acceptable, mais derrière une saison exacte.
   if (sc === null) {
-    return 620;
+    return 620 - format;
   }
   return 400;
 }
@@ -135,19 +198,23 @@ function scoreBase(candidat: string, cible: string): number {
  */
 export function scoreTitre(candidat: string, cibles: readonly string[]): number {
   let meilleur = -Infinity;
+  // Un résultat « Titre Épisode 12 » désigne la série « Titre » (page d'épisode qui liste les autres).
+  const nu = sansEpisode(candidat) || candidat;
+  // À ressemblance égale, la page de la série passe devant celle d'un de ses épisodes.
+  const episode = normaliserTexte(nu) !== normaliserTexte(candidat) ? 10 : 0;
   for (const cible of cibles) {
     if (!cible) {
       continue;
     }
-    meilleur = Math.max(meilleur, scorePaire(candidat, cible), scoreBase(candidat, cible));
+    meilleur = Math.max(meilleur, scorePaire(nu, cible), scoreBase(nu, cible));
   }
-  return meilleur;
+  return meilleur - episode;
 }
 
 /** « Mushoku Tensei: Jobless Reincarnation Season 2 Part 2 » -> « Mushoku Tensei ». */
 export function titreDeBase(titre: unknown): string {
-  let t = String(titre ?? '').replace(MARQUEURS_SAISON, ' ');
-  t = t.split(/[:–—]/)[0];
+  let t = String(titre ?? '').replace(LANGUES_TITRE, ' ').replace(MARQUEURS_SAISON, ' ');
+  t = avantSousTitre(t);
   t = t.replace(/\(\s*(?:19|20)\d\d\s*\)/g, ' ');
   t = t.replace(/\s+\b(?:i{1,3}|iv|v|vi)\b\s*$/i, ' ');
   t = t.replace(/\s+\d+\s*$/, ' ');

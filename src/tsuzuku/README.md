@@ -27,7 +27,8 @@ Vite et Jest. Point d'entree : `index.ts`.
 | `adresse` | Analyse d'URL maison alignee sur WHATWG (l'`URL` de React Native est incomplet) : IPv4 decimal/octal/hexa, IPv6, `..`, `\`, ports |
 | `garde` | Anti-SSRF : http(s) seulement, pas d'identifiants, hote public (ni localhost, ni prive, ni lien local/metadonnees cloud, ni `.local`/`.lan`/`.internal`, ni nom sans point), ports 80/443/8080/8443, DNS optionnel, nature du media (`hls`/`video`/`iframe`) |
 | `reseau` | Interface `Reseau` **injectee** + `creerClient` : garde a chaque appel ET a chaque redirection (suivies par le moteur), delai, taille maximale, GET texte/JSON, POST JSON. `reseauDepuisFetch` adapte un `fetch` standard |
-| `lecteurPage` | `htmlparser2` + `css-select` : selecteurs CSS sur du HTML tolerant, suggestions de selecteurs, detection de page rendue en JS |
+| `lecteurPage` | `htmlparser2` + `css-select` : selecteurs CSS sur du HTML tolerant, suggestions de selecteurs, detection de page rendue en JS (point de montage vide, un seul script suffit) |
+| `extraction` | Extraction GENERIQUE quand les selecteurs ne trouvent rien : chemins JSON, listes JSON reperees seules, HTML dans du JSON (AJAX), JSON-LD, cartes `<article>`, liens titres, `og:title`/`h1` d'une page `{slug}`, episodes « Episode N / EP N / E01 / S2E03 / 第N話 / numero en fin d'adresse » (blocs masques, `<option>`, `data-*`), pagination, saisons, `<base href>`, `<meta refresh>` |
 | `appariement` | Scores de titres, VF/VOSTFR, variantes de recherche (« Saison 2 » retire), seuil de fiabilite |
 | `sources` | Definitions de sources par selecteurs CSS (`search`, `episodes`, `player`, `movies.search/player`), langue `vf`/`vostfr`/`indifferent`, gestion de liste, import des anciens `sources.json` |
 | `resolution` | Titre -> episodes -> lecteurs (iframe ou fichier direct mp4/m3u8/webm) ; films ; page collee a la main ; diagnostic |
@@ -81,8 +82,25 @@ const { liste } = ajouterSource([], {
 });
 ```
 
-`{query}` est remplace par le titre encode. Un selecteur vide desactive la
-partie correspondante (pas de `movies.search.path` : source sans films).
+`{query}` (alias `{q}`, `{search}`) est remplace par le titre encode ;
+`{slug}` (« frieren-beyond-journeys-end ») fait du chemin l'adresse DIRECTE de
+l'oeuvre (variantes `-2`, `-saison-2`, `-season-2`, `-vostfr`, `-vf` essayees,
+404 = pas de resultat). Un selecteur vide desactive la partie correspondante
+(pas de `movies.search.path` : source sans films).
+
+Champs facultatifs de `search` (et `movies.search`) : `type` (`html` defaut,
+ou `json` : `item`/`title`/`link`/`image`/`year` sont des chemins JSON comme
+`data.resultats`, `title.rendered`), `method` (`GET`/`POST`), `body` (corps
+encode du POST, memes variables), `linkFormat` (`/anime/{value}` quand l'API
+donne un slug ou un id), `htmlPath` (fragment HTML dans un JSON). De
+`episodes` : `type`, `linkFormat`, `next` (lien « page suivante »).
+
+Si les selecteurs ne trouvent rien, `extraction.ts` prend le relais (voir le
+tableau) ; le choix final passe TOUJOURS par l'appariement et son seuil.
+`chercherSurDetail` rend ce que chaque requete a vu (statut HTTP, type,
+taille, duree, redirection, page JavaScript, anti-robot, JSON, mode
+d'extraction, candidats) ; `chercherOeuvre` s'arrete des la premiere erreur
+valable pour toutes les variantes (anti-robot, cookies exiges, garde).
 `diagnostiquerRecherche` aide a regler les selecteurs (blocs trouves,
 pistes, page rendue en JS). `baseUrl` doit etre publique : la garde refuse
 le reste des la saisie et a chaque requete.
@@ -102,8 +120,13 @@ le reste des la saisie et a chaque requete.
 ## Limites
 
 - Pas de rendu JavaScript : une page dont le contenu est construit cote
-  client n'est pas lisible (le moteur le signale). Pas de contournement de
-  protections anti-robot, pas de cookies.
+  client n'est pas lisible (le moteur le signale : « page construite en
+  JavaScript ») ; il faut alors decrire l'API JSON du site (`type: json`).
+  Pas de contournement de protections anti-robot (« Just a moment », captcha,
+  403/503 de pare-feu, 429) : elles sont reconnues (`detecterBlocage`, code
+  `anti-robot`) et affichees comme telles, jamais comme « aucun resultat ».
+  Pas de cookies : un site qui redirige en boucle en posant des cookies est
+  signale (code `cookies`).
 - Dans un **navigateur**, `fetch` est soumis au CORS et ne voit pas les
   redirections (`redirect: 'manual'` est opaque) : il faut un relais (ou une
   `Reseau` sur mesure). Electron (processus principal) et React Native n'ont
@@ -137,6 +160,13 @@ reel. Couvre l'anti-SSRF (IP decimales/octales/hexa/IPv6, ports, DNS,
 redirections), les motifs `{n}`, la migration des anciennes bibliotheques, le
 « vu ailleurs », VF/VOSTFR, les replis Jikan/AniList/TMDB.
 
+`moteur/sitesSimules.test.ts` joue le moteur contre un VRAI serveur HTTP local
+qui simule les comportements des sites (page JavaScript + API JSON, POST
+AJAX, cartes d'articles, anti-robot, miroir + `<base href>`, ISO-8859-1, slug,
+episodes pagines, onglets de saisons) ; `scripts/e2e-tsuzuku-sources-reel.mjs`
+fait de meme dans le navigateur avec le vrai module du PC (decodage,
+decompression, POST). Captures : `docs/captures-tsuzuku-sources-reel/`.
+
 ## Phase 2 : Tsuzuku, app du hub
 
 Meme mot de passe, memes profils, memes permissions que le hub ; aucun serveur.
@@ -168,7 +198,7 @@ Meme mot de passe, memes profils, memes permissions que le hub ; aucun serveur.
 
 | Plateforme | Adaptateur | Ce qu'il fait |
 | --- | --- | --- |
-| PC (Electron) | `reseauElectron` -> IPC `tsuzuku:requete` | Le processus principal refait la garde (http(s), ports 80/443/8080/8443, hote public, DNS verifie A LA CONNEXION via `lookup`), ne suit AUCUNE redirection (le moteur re-verifie chaque saut), n'envoie et ne garde AUCUN cookie, borne delai (30 s) et taille (16 Mo), ne transmet que quelques en-tetes |
+| PC (Electron) | `reseauElectron` -> IPC `tsuzuku:requete` | Le processus principal refait la garde (http(s), ports 80/443/8080/8443, hote public, DNS verifie A LA CONNEXION via `lookup`), ne suit AUCUNE redirection (le moteur re-verifie chaque saut), n'envoie et ne garde AUCUN cookie (presence d'un Set-Cookie seulement signalee : `x-tsuzuku-cookie`), borne delai (30 s) et taille (16 Mo, decompresse compris), ne transmet que quelques en-tetes (dont Referer, Origin, X-Requested-With), decompresse (gzip/deflate/br) et DECODE le corps selon son jeu de caracteres (en-tete, `<meta charset>`, repli UTF-8 : ISO-8859-1/windows-1252 gardent leurs accents) |
 | Site (navigateur) | `reseauWeb` | CORS : seuls Jikan, AniList, TMDB. Toute autre adresse est refusee : « Lecture des sources disponible sur l'app PC/iPhone ; sur le site, bientot. » Catalogue, bibliotheque et liens manuels directs restent disponibles |
 | iPhone/iPad | `reseauNatif` (`fetch` natif) | Le `fetch` de React Native suit lui-meme les redirections : l'adresse FINALE est re-verifiee apres coup et la reponse jetee si elle est privee (un saut intermediaire n'est pas empechable) |
 
@@ -246,9 +276,30 @@ Import/export : `exporterSources` (definitions seules : ni cle d'API, ni partage
 `importerExportSources` (schema + selecteurs, doublons ignores). Rappel affiche : « N'ajoutez que des
 sources dont vous avez le droit d'utiliser le contenu. »
 
+### « Ca ne trouve pas l'anime » : diagnostic
+
+- Fiche › « Sur vos sources » › « Detail du diagnostic » : par source et par
+  requete, adresse appelee (secrets masques), methode, statut HTTP, type de
+  contenu, taille, duree, redirection, page JavaScript / anti-robot / JSON,
+  mode d'extraction, nombre de candidats, meilleurs candidats et leur score,
+  raison du rejet, lecture des episodes (pages, saison). « Copier le
+  diagnostic » (`app/diagnosticTexte.ts`) : meme contenu en texte, sans cle
+  d'API ni secret (parametres `key`, `token`, `sig`, `session`… masques).
+- « Tester une source sur ce titre » (Fondateurs) : le test pas a pas de
+  l'assistant, avec les titres de la fiche et la preference VF/VOSTFR.
+- Raisons distinctes : `bloquee` (anti-robot), `non-configuree` (sources
+  activees sans recherche d'animes), sources toutes desactivees.
+- Aide « Comment bien configurer une source » (page Sources,
+  `app/AideSources.tsx`).
+- Le cache de la fiche (10 min, resultats trouves seulement) depend de TOUTE
+  la definition des sources activees : une source modifiee n'est jamais servie
+  par un ancien resultat.
+
 ### Reste a faire
 
 - **P3** : synchro de la bibliotheque et des liens manuels entre appareils d'un meme compte.
 - **P4** : WebView native (lecteur integre sur iPhone/iPad).
 - **P5/P6** : voir le plan du hub.
-- Site : lecture des sources par un relais (les pages tierces y sont bloquees par le CORS).
+- Site : lecture des sources par un relais (les pages tierces y sont bloquees par le CORS). La
+  passerelle actuelle du relais (`relais/worker.mjs`, `/medias/page`) ne sert que des hotes
+  autorises : lire une source depuis le site demanderait une MODIFICATION du relais (non faite).

@@ -17,7 +17,11 @@ export type CodeErreur =
   | 'introuvable'
   | 'service'
   | 'configuration'
-  | 'selecteur';
+  | 'selecteur'
+  /** Le site bloque les requêtes automatiques (anti-robot, captcha, 403/503 de protection). */
+  | 'anti-robot'
+  /** Le site exige des cookies (redirections en boucle avec Set-Cookie). */
+  | 'cookies';
 
 export class ErreurMoteur extends Error {
   readonly statut: number;
