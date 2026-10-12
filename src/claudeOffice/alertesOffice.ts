@@ -59,9 +59,10 @@ export interface AlertesOffice {
   vider(): void;
 }
 
-/** Démo : journal partagé en mémoire (survit aux changements d'onglet, oublié en quittant l'écran). */
-let memoireDemo: { journal: Alerte[]; etat: EtatAlertes } = { journal: [], etat: ETAT_VIDE };
-export const oublierDemoAlertes = (): void => void (memoireDemo = { journal: [], etat: ETAT_VIDE });
+/** Démo : journal en mémoire, propre à UNE démo (date de début) ; une nouvelle démo repart de zéro. */
+let memoireDemo: { debut?: number; journal: Alerte[]; etat: EtatAlertes } = { journal: [], etat: ETAT_VIDE };
+const lireDemo = (debut: number | undefined) =>
+  memoireDemo.debut === debut ? memoireDemo : (memoireDemo = { debut, journal: [], etat: ETAT_VIDE });
 
 /**
  * Évalue les alertes sur `entrees` (activité lue par l'écran ou par la tuile).
@@ -73,13 +74,15 @@ export function useAlertesOffice(o: {
   references?: Record<string, number>;
   maintenant: number;
   lu: boolean;
-  demo?: boolean;
+  /** Démo en cours : sa date de début (journal en mémoire, rien n'est écrit). */
+  debutDemo?: number;
   surPc?: boolean;
   actif?: boolean;
 }): AlertesOffice {
-  const { base, entrees, references, maintenant, lu, demo = false, surPc = false, actif = true } = o;
+  const { base, entrees, references, maintenant, lu, debutDemo, surPc = false, actif = true } = o;
+  const demo = debutDemo !== undefined;
   const [reglages, setReglages] = useState<ReglagesAlertes>(() => lireReglagesStockes(base));
-  const [donnees, setDonnees] = useState(() => (demo ? memoireDemo : lireJournalStocke(base)));
+  const [donnees, setDonnees] = useState(() => (demo ? lireDemo(debutDemo) : lireJournalStocke(base)));
   const courant = useRef(donnees);
   courant.current = donnees;
 
@@ -87,22 +90,22 @@ export function useAlertesOffice(o: {
   useEffect(() => {
     if (!actif) return;
     setReglages(lireReglagesStockes(base));
-    setDonnees(demo ? memoireDemo : lireJournalStocke(base));
-  }, [base, demo, actif]);
+    setDonnees(demo ? lireDemo(debutDemo) : lireJournalStocke(base));
+  }, [base, debutDemo, actif]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const enregistrer = useCallback((d: { journal: Alerte[]; etat: EtatAlertes }) => {
     setDonnees(d);
     courant.current = d;
-    if (demo) memoireDemo = d;
+    if (demo) memoireDemo = { debut: debutDemo, ...d };
     else ecrire(base, CLE_JOURNAL_ALERTES, d);
-  }, [base, demo]);
+  }, [base, demo, debutDemo]);
 
   // Évaluation : à chaque nouvelle lecture ou tic d'horloge (le délai d'une attente s'écoule sans événement).
   const minute = Math.floor(maintenant / 15_000);
   useEffect(() => {
     if (!actif || !lu) return;
     // Hors démo, l'état peut avoir été écrit ailleurs (tuile du hub) : relu avant d'évaluer.
-    const d = demo ? courant.current : lireJournalStocke(base);
+    const d = demo ? lireDemo(debutDemo) : lireJournalStocke(base);
     const r = evaluerAlertes(entrees, { maintenant, reglages, etat: d.etat, ...(references ? { references } : {}), demo });
     if (!r.nouvelles.length && JSON.stringify(r.etat) === JSON.stringify(d.etat)) return;
     enregistrer({ journal: ajouterAuJournal(d.journal, r.nouvelles), etat: r.etat });
@@ -112,7 +115,7 @@ export function useAlertesOffice(o: {
         void notifier(a.titre, a.detail, '').catch(() => undefined);
       }
     }
-  }, [actif, lu, entrees, references, minute, reglages, demo, surPc, base]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [actif, lu, entrees, references, minute, reglages, debutDemo, surPc, base]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const changerReglages = useCallback((r: ReglagesAlertes) => {
     setReglages(r);

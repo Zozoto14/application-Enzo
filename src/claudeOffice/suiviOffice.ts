@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ContexteHub } from '../hub/types';
 import { useActiviteBureau } from './activiteBureau';
-import { oublierDemoAlertes, useAlertesOffice, type AlertesOffice } from './alertesOffice';
+import { useAlertesOffice, type AlertesOffice } from './alertesOffice';
 import { entreesDemoSuivi, equipeDemo, notesDemo } from './demoSuivi';
 import { brancherMagasinSuivi } from './equipe';
 import { libellePastille } from './logiqueAlertes';
@@ -67,13 +67,12 @@ export function useSuiviOffice({ contexte, office, debutDemo, changerOnglet }: {
     [demo, debutDemo, maintenant, activite.entrees],
   );
   const alertes = useAlertesOffice({
-    base, entrees, references: demo ? undefined : activite.references, maintenant, lu: demo || activite.lu, demo, surPc: Boolean(pont),
+    base, entrees, references: demo ? undefined : activite.references, maintenant, lu: demo || activite.lu, debutDemo, surPc: Boolean(pont),
   });
 
   // Équipe et notes : base du profil, ou données fictives pendant la démo.
   useEffect(() => {
     brancherMagasinSuivi(base, demo ? { equipe: equipeDemo(), notes: notesDemo(Date.now()) } : undefined);
-    if (!demo) oublierDemoAlertes();
   }, [base, demo]);
 
   const [aide, setAide] = useState(false);
