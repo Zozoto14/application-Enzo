@@ -27,7 +27,6 @@ import {
   sousTaches,
   statutDe,
   supprimerCommentaire,
-  supprimerTache,
   vivant,
   type Tache,
 } from '../modele';
@@ -94,7 +93,7 @@ function TexteAvecLiens({ a, texte }: { a: Actions; texte: string }) {
   );
 }
 
-export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe, onErreur, onAvis }: PropsDetail) {
+export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe, onErreur }: PropsDetail) {
   const theme = a.theme;
   const d = a.etat.donnees;
   const t = d.taches[id];
@@ -392,7 +391,7 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
           <View style={[styles.section, { borderTopWidth: StyleSheet.hairlineWidth, borderColor: theme.ligne, paddingTop: 14 }]}>
             {confirmer ? (
               <View style={{ gap: 8 }}>
-                <Text style={texteDe(theme)}>Supprimer « {t.titre} »{st.length ? ` et ses ${st.length} sous-tâche(s)` : ''} ?</Text>
+                <Text style={texteDe(theme)}>Supprimer « {t.titre} »{st.length ? ` et ses ${st.length} sous-tâche(s)` : ''} ? Elle ira à la corbeille (30 jours) : « Annuler » pendant 10 s.</Text>
                 <View style={styles.rangee}>
                   <Bouton
                     theme={theme}
@@ -400,9 +399,8 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
                     titre="Supprimer"
                     onPress={() =>
                       essayer(() => {
-                        a.etat.maj((x, ctx) => supprimerTache(x, t.id, ctx));
-                        onAvis('Tâche supprimée.');
                         onFermer();
+                        a.supprimer('tache', t.id);
                       })
                     }
                     testID="detail-supprimer-confirmer"

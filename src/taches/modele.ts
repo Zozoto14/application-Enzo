@@ -35,6 +35,15 @@ export interface Entite {
   h: Horodatages;
   /** Pierre tombale : l'entité est supprimée (datée par `h.supprime`). */
   supprime?: boolean;
+  /**
+   * Lot de suppression : identifiant de l'élément supprimé par l'utilisateur
+   * (l'espace, le projet, la liste ou la tâche). Tout ce qui a été supprimé
+   * avec lui porte le même lot : la corbeille le restaure d'un bloc, sans
+   * ressusciter ce qui avait été supprimé avant, à part.
+   */
+  lot?: string;
+  /** Supprimé définitivement (sorti de la corbeille) : la pierre tombale reste pour la synchronisation. */
+  efface?: boolean;
 }
 
 export interface Espace extends Entite {
@@ -308,7 +317,7 @@ function lireStatuts(v: unknown): Statut[] {
 
 function base(o: Record<string, unknown>): Entite | undefined {
   if (!idValide(o.id)) return undefined;
-  return { id: o.id, h: lireH(o.h), ...(o.supprime === true ? { supprime: true } : {}) };
+  return { id: o.id, h: lireH(o.h), ...(o.supprime === true ? { supprime: true } : {}), ...(idValide(o.lot) ? { lot: o.lot } : {}), ...(o.efface === true ? { efface: true } : {}) };
 }
 
 export function lireEspace(v: unknown): Espace | undefined {
@@ -610,16 +619,21 @@ export function modifierListe(d: DonneesTaches, id: string, c: Partial<Pick<List
   return { ...d, listes: { ...d.listes, [id]: changerChamps(l, c.nom !== undefined ? { ...c, nom: nomPropre(c.nom, l.nom) } : c, ctx) } };
 }
 
-/** Pierre tombale d'un projet, de ses listes et de ses tâches. */
-export function supprimerProjet(d: DonneesTaches, id: string, ctx: Contexte): DonneesTaches {
+/**
+ * Pierre tombale d'un projet, de ses listes et de ses tâches, toutes du même
+ * lot (le projet, ou l'espace supprimé avec lui) : la corbeille les rend
+ * ensemble, sans ce qui avait été supprimé avant.
+ */
+export function supprimerProjet(d: DonneesTaches, id: string, ctx: Contexte, lot: string = id): DonneesTaches {
   if (ctx.auteur !== 'fondateur') throw new ErreurTaches('Seul le Fondateur supprime un projet.');
   const p = d.projets[id];
   if (!vivant(p)) return d;
+  const tombe = { supprime: true, lot };
   const listes = { ...d.listes };
-  for (const l of Object.values(d.listes)) if (l.projetId === id && !l.supprime) listes[l.id] = changerChamps(l, { supprime: true }, ctx);
+  for (const l of Object.values(d.listes)) if (l.projetId === id && !l.supprime) listes[l.id] = changerChamps(l, tombe, ctx);
   const taches = { ...d.taches };
-  for (const t of Object.values(d.taches)) if (t.projetId === id && !t.supprime) taches[t.id] = changerChamps(t, { supprime: true }, ctx);
-  return { ...d, projets: { ...d.projets, [id]: changerChamps(p, { supprime: true }, ctx) }, listes, taches };
+  for (const t of Object.values(d.taches)) if (t.projetId === id && !t.supprime) taches[t.id] = changerChamps(t, tombe, ctx);
+  return { ...d, projets: { ...d.projets, [id]: changerChamps(p, tombe, ctx) }, listes, taches };
 }
 
 export function supprimerEspace(d: DonneesTaches, id: string, ctx: Contexte): DonneesTaches {
@@ -627,18 +641,19 @@ export function supprimerEspace(d: DonneesTaches, id: string, ctx: Contexte): Do
   const e = d.espaces[id];
   if (!vivant(e)) return d;
   let suivant = d;
-  for (const p of projetsDe(d, id)) suivant = supprimerProjet(suivant, p.id, ctx);
-  return { ...suivant, espaces: { ...suivant.espaces, [id]: changerChamps(e, { supprime: true }, ctx) } };
+  for (const p of projetsDe(d, id)) suivant = supprimerProjet(suivant, p.id, ctx, id);
+  return { ...suivant, espaces: { ...suivant.espaces, [id]: changerChamps(e, { supprime: true, lot: id }, ctx) } };
 }
 
 export function supprimerListe(d: DonneesTaches, id: string, ctx: Contexte): DonneesTaches {
   if (ctx.auteur !== 'fondateur') throw new ErreurTaches('Seul le Fondateur supprime une liste.');
   const l = d.listes[id];
   if (!vivant(l)) return d;
-  if (listesDe(d, l.projetId).length <= 1) throw new ErreurTaches('Un projet garde au moins une liste.');
+  if (listesDe(d, l.projetId).length <= 1) throw new ErreurTaches('Un projet garde au moins une liste : déplacez ses tâches ou supprimez le projet.');
+  const tombe = { supprime: true, lot: id };
   const taches = { ...d.taches };
-  for (const t of Object.values(d.taches)) if (t.listeId === id && !t.supprime) taches[t.id] = changerChamps(t, { supprime: true }, ctx);
-  return { ...d, listes: { ...d.listes, [id]: changerChamps(l, { supprime: true }, ctx) }, taches };
+  for (const t of Object.values(d.taches)) if (t.listeId === id && !t.supprime) taches[t.id] = changerChamps(t, tombe, ctx);
+  return { ...d, listes: { ...d.listes, [id]: changerChamps(l, tombe, ctx) }, taches };
 }
 
 /**
@@ -685,7 +700,7 @@ export interface SaisieTache {
   pourAujourdhui?: string;
 }
 
-function evenement(ctx: Contexte, texteEvt: string, avant?: string, id?: string): EvenementHistorique {
+export function evenement(ctx: Contexte, texteEvt: string, avant?: string, id?: string): EvenementHistorique {
   const date = new Date(ctx.maintenant).toISOString();
   return { id: id ?? nouvelId('h', ctx.maintenant, ctx.alea), date, auteur: ctx.auteur, texte: texteEvt.slice(0, 200), ...(avant !== undefined ? { avant: avant.slice(0, BORNES.avant) } : {}) };
 }
@@ -776,7 +791,7 @@ function decrire(d: DonneesTaches, t: Tache, cle: string, valeur: unknown, noms:
   }
 }
 
-export function modifierTache(d: DonneesTaches, id: string, c: ChangementTache & { supprime?: boolean; termineLe?: string; suivante?: string }, ctx: Contexte, noms: Partial<Record<Auteur, string>> = {}): DonneesTaches {
+export function modifierTache(d: DonneesTaches, id: string, c: ChangementTache & { supprime?: boolean; lot?: string; termineLe?: string; suivante?: string }, ctx: Contexte, noms: Partial<Record<Auteur, string>> = {}): DonneesTaches {
   const t = d.taches[id];
   if (!t) throw new ErreurTaches('Tâche introuvable.');
   const propre: Record<string, unknown> = { ...c };
@@ -818,9 +833,14 @@ export function modifierTache(d: DonneesTaches, id: string, c: ChangementTache &
   let taches = { ...d.taches, [id]: finale };
   // Suppression : les sous-tâches suivent ; déplacement : elles suivent aussi.
   for (const st of Object.values(d.taches)) {
-    if (st.parentId !== id || st.supprime) continue;
+    if (st.parentId !== id) continue;
+    if (st.supprime) {
+      // Restauration : les sous-tâches supprimées avec elle reviennent avec elle.
+      if (c.supprime === false && !st.efface && st.lot === (t.lot ?? id)) taches = { ...taches, [st.id]: changerChamps(st, { supprime: false, lot: undefined }, ctx) };
+      continue;
+    }
     const cs: Partial<Tache> = {};
-    if (c.supprime === true) cs.supprime = true;
+    if (c.supprime === true) Object.assign(cs, { supprime: true, lot: c.lot ?? id });
     if (finale.listeId !== st.listeId) Object.assign(cs, { listeId: finale.listeId, projetId: finale.projetId });
     if (finale.projetId !== st.projetId && !statutsDe(d, finale.projetId).some(s => s.id === st.statut)) cs.statut = statutsDe(d, finale.projetId)[0].id;
     if (Object.keys(cs).length) taches = { ...taches, [st.id]: changerChamps(st, cs, ctx) };
@@ -828,8 +848,8 @@ export function modifierTache(d: DonneesTaches, id: string, c: ChangementTache &
   return { ...d, taches };
 }
 
-export const supprimerTache = (d: DonneesTaches, id: string, ctx: Contexte) => modifierTache(d, id, { supprime: true }, ctx);
-export const restaurerTache = (d: DonneesTaches, id: string, ctx: Contexte) => modifierTache(d, id, { supprime: false }, ctx);
+export const supprimerTache = (d: DonneesTaches, id: string, ctx: Contexte, lot: string = id) => modifierTache(d, id, { supprime: true, lot }, ctx);
+export const restaurerTache = (d: DonneesTaches, id: string, ctx: Contexte) => modifierTache(d, id, { supprime: false, lot: undefined }, ctx);
 
 // ------------------------------------------------------------------ Checklist, commentaires
 

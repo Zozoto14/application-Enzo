@@ -42,6 +42,19 @@ App du hub « façon ClickUp » pour le Fondateur et **un** ami. Tuile sur la pa
   qui lui sont assignées.
 - **Raccourcis** (hors champ) : N nouvelle tâche, / recherche, 1-4 les vues, Échap ferme la fenêtre, puis le détail,
   puis l'app (écoute en capture : le hub ne se ferme pas sous une fenêtre ouverte).
+- **Suppression et corbeille** (`src/taches/corbeille.ts`, `ui/Suppression.tsx`) : espaces, projets, listes et
+  tâches se suppriment depuis le menu **⋯** (barre latérale : espace, projet, liste ; en-tête de la vue : projet,
+  liste affichée, espace), par **appui long** (doigt ou souris) sur une ligne de la barre latérale, ou par la touche
+  **Suppr** (élément de la barre latérale qui a le focus, sinon la tâche ouverte, sinon la liste / le projet affiché).
+  La confirmation dit ce qui part (« 2 projets, 42 tâches »), prévient si un projet partagé disparaîtra aussi chez
+  l'ami, et propose de **déplacer le contenu d'abord** (projets vers un autre espace ; listes et tâches vers un autre
+  projet, statuts équivalents : même identifiant, sinon même nom, sinon le premier ; tâches vers une autre liste).
+  Puis un avis **« … supprimé — Annuler »** pendant 10 s (annule aussi le déplacement), et la **Corbeille** (en bas
+  de la barre latérale) : 30 jours, « Restaurer » (tout ce qui est parti ensemble revient ; ce qui avait été supprimé
+  avant, à part, reste à la corbeille ; une tâche dont la liste est à la corbeille attend que sa liste revienne ; un
+  projet dont l'espace a été effacé revient dans un autre espace), « Supprimer définitivement », « Vider la
+  corbeille ». Au-delà de 30 jours, l'élément s'efface à l'ouverture de l'app. Supprimer le **dernier espace** le
+  remplace par un espace « Personnel » vide (retiré si l'on annule). Un projet garde au moins une liste.
 - **États vides** pédagogiques ; **données d'exemple** facultatives (« Découvrir avec un exemple », retirées d'un
   geste dans ⚙︎).
 - Interface aux 8 thèmes du hub (clair et sombre), PC 1440 × 900, iPad 1024 × 768 et 820 × 1180, iPhone 390 × 844
@@ -52,7 +65,7 @@ App du hub « façon ClickUp » pour le Fondateur et **un** ami. Tuile sur la pa
 | Compte | Tuile | Voit | Modifie | Gère (listes, statuts, partage, suppression du projet) |
 | --- | --- | --- | --- | --- |
 | Fondateur (compte historique) | oui | tout | tout | oui |
-| L'ami choisi | oui, dès que le dépôt scellé pour lui est arrivé | les projets partagés | ceux partagés **en écriture** (tâches, checklist, commentaires, suppression d'une tâche) | non — jamais de suppression de projet |
+| L'ami choisi | oui, dès que le dépôt scellé pour lui est arrivé | les projets partagés | ceux partagés **en écriture** (tâches, checklist, commentaires, suppression et restauration d'une tâche) | non — jamais de suppression d'espace, de projet ou de liste, ni d'effacement définitif |
 | Tout autre compte (autre ami, gestionnaire, administrateur, autre Fondateur) | non | rien | rien | non |
 
 `src/taches/acces.ts` : `roleTaches` exige, pour l'ami, l'accès `taches` (donné par le choix du Fondateur, par
@@ -69,7 +82,12 @@ Données dans la base chiffrée du profil (`contexte.baseProfil`) : `taches.donn
 l'horodatage de chacun de ses champs (`ISO|f` ou `ISO|a`, toujours croissant même si l'horloge recule) ; deux
 copies se réunissent champ par champ, le plus récent gagne, à égalité l'ordre canonique départage. Checklist et
 commentaires : élément par élément ; historique : union bornée. Suppression = champ `supprime` daté (**pierre
-tombale**), qui voyage et qu'une restauration plus récente défait. La fusion est commutative, associative et
+tombale**), qui voyage et qu'une restauration plus récente défait. Chaque pierre tombale porte un **lot** (champ
+`lot` : l'identifiant de l'élément que l'utilisateur a supprimé) : la corbeille restaure le lot entier, sans ce qui
+avait été supprimé avant (les suppressions de la V1, sans lot, se regroupent par instant de suppression).
+« Supprimer définitivement » vide le contenu des tâches et pose `efface` : la pierre tombale reste, sinon un autre
+appareil ferait revenir l'élément à la fusion. Un projet partagé mis à la corbeille part chez l'ami comme pierre
+tombale seule (ni listes ni tâches) : il disparaît chez lui, et revient s'il est restauré. La fusion est commutative, associative et
 idempotente (testé). Deux modifications de champs différents (Fondateur et ami) sont gardées toutes les deux ; deux
 modifications du même champ : la plus récente gagne, l'autre reste lisible dans l'historique — rien n'est perdu.
 
@@ -102,6 +120,10 @@ au premier plan. Un dépôt coûte 2 écritures (valeur + index). Usage typique 
 - Un appareil du Fondateur d'une version antérieure ignore l'objet `taches` (pas de perte, il ne le voit simplement pas).
 - La sous-tâche d'une tâche récurrente n'est pas recopiée dans l'occurrence suivante.
 - Le titre « modifiable en place » s'ouvre au double-clic / F2 (le simple clic ouvre le détail).
+- Un appareil d'une version antérieure à la corbeille lit les pierres tombales mais ignore le lot : s'il republie
+  avant d'être mis à jour, une restauration peut ne rendre que l'élément choisi (son contenu reste dans la corbeille).
+- L'ami n'a pas de corbeille pour ce que le Fondateur supprime : il ne voit que ses tâches supprimées dans les projets
+  en écriture (qu'il peut restaurer).
 
 ## Feuille de route
 
@@ -122,6 +144,12 @@ avancées (tableau à colonnes libres, champs personnalisés).
   fusion (champs, pierres tombales, conflits), droits Fondateur / ami / autres, rappels (anti-répétition,
   notification, pastille), synchronisation par un relais en mémoire qui applique les portées (rien en clair, l'ami ne
   lit que son espace et n'écrit pas l'objet du Fondateur, conflit fusionné, retrait, budget de 30 s).
-- `src/taches/RacineTaches.test.tsx` : rendu des vues, du détail, de la garde, dans les 8 thèmes et sur téléphone.
+- `src/taches/corbeille.test.ts` : bilan (« 2 projets, 4 tâches »), cascade par lot, annuler, déplacer (espace,
+  projet avec statuts équivalents, liste), dernier espace, restauration (lots, V1, obstacles), effacement et 30 jours,
+  droits (Fondateur / ami), pierres tombales vues par un autre appareil et par l'ami (disparition, retour), ami qui
+  tente de faire passer une suppression de projet.
+- `src/taches/RacineTaches.test.tsx` : rendu des vues, du détail, de la garde, dans les 8 thèmes et sur téléphone ;
+  suppression d'un espace (menu ⋯, bilan, Annuler, déplacer, corbeille) et d'un projet (⋯ de la vue, restaurer,
+  supprimer définitivement).
 - Bout en bout : `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-taches.mjs` (après `npx vite build`),
   captures JPEG dans `docs/captures-taches/`.

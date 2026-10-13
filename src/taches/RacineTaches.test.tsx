@@ -43,6 +43,11 @@ async function monter(contexte: ContexteHub, mode: 'large' | 'telephone' = 'larg
 const toucher = async (id: string) => {
   await fireEvent.press(screen.getByTestId(id));
 };
+/** Barre latérale (en feuille quand l'écran est étroit). */
+const nav = async (id: string) => {
+  if (!screen.queryByTestId(id)) await toucher('taches-navigation');
+  await toucher(id);
+};
 
 function avecDemo(): { b: ReturnType<typeof base>; projetId: string } {
   const r = ajouterDemo(donneesVides(), { maintenant: T, auteur: 'fondateur' }, AUJ);
@@ -122,7 +127,9 @@ describe('Tâches : écran', () => {
     expect(screen.getByText('À lire')).toBeTruthy();
     expect(screen.queryByTestId('ajout-rapide')).toBeTruthy(); // un projet en écriture existe
     expect(screen.queryByTestId('taches-projet-reglages')).toBeNull();
-    expect(screen.queryByTestId(`nav-projet-reglages-${p1.projet.id}`)).toBeNull();
+    expect(screen.queryByTestId(`nav-projet-menu-${p1.projet.id}`)).toBeNull();
+    expect(screen.queryByTestId(`nav-espace-menu-${e.espace.id}`)).toBeNull();
+    expect(screen.queryByTestId("taches-menu")).toBeNull();
     const lecture = Object.values(copie.donnees.taches).find(t => t.titre === 'À lire')!;
     await toucher(`tache-titre-${lecture.id}`);
     expect(screen.getByTestId('detail-lecture-seule')).toBeTruthy();
@@ -148,6 +155,65 @@ describe('Tâches : écran', () => {
         await r.unmount();
       }
     }
+  });
+
+  it('supprimer un espace : menu ⋯, ce qui part, déplacer, Annuler, corbeille, restaurer', async () => {
+    const { b } = avecDemo();
+    const ctx = { maintenant: T, auteur: 'fondateur' as const };
+    let d = lireDonnees(b.m.get(CLES_TACHES.donnees));
+    const perso = creerEspace(d, 'Perso', ctx);
+    d = creerProjet(perso.donnees, perso.espace.id, 'Courses', ctx).donnees;
+    b.m.set(CLES_TACHES.donnees, JSON.stringify(d));
+    const exemple = d.reglages.demo!;
+    const nb = tachesVivantes(d).length;
+    await monter(ctxF(b));
+    // Menu « ⋯ » de l'espace, puis confirmation qui dit ce qui part.
+    await nav(`nav-espace-menu-${exemple}`);
+    await toucher('menu-supprimer-espace');
+    expect(screen.getByTestId('suppression-bilan')).toHaveTextContent(new RegExp(`^Contenu : 1 projet, ${nb} tâches\\.`));
+    await toucher('suppression-confirmer');
+    expect(tachesVivantes(lireDonnees(b.m.get(CLES_TACHES.donnees)))).toHaveLength(0);
+    expect(screen.getByTestId('taches-annulable')).toHaveTextContent(new RegExp(`^Espace « Exemple » supprimé \\(1 projet, ${nb} tâches\\)\\.`));
+    await toucher('taches-annuler');
+    expect(tachesVivantes(lireDonnees(b.m.get(CLES_TACHES.donnees)))).toHaveLength(nb);
+    // Cette fois en déplaçant le contenu vers « Perso ».
+    await nav(`nav-espace-menu-${exemple}`);
+    await toucher('menu-supprimer-espace');
+    await toucher('suppression-mode-deplacer');
+    await toucher(`suppression-cible-${perso.espace.id}`);
+    await toucher('suppression-confirmer');
+    const apres = lireDonnees(b.m.get(CLES_TACHES.donnees));
+    expect(tachesVivantes(apres)).toHaveLength(nb);
+    expect(Object.values(apres.projets).filter(p => !p.supprime).every(p => p.espaceId === perso.espace.id)).toBe(true);
+    expect(apres.espaces[exemple].supprime).toBe(true);
+    // Corbeille : l'espace (vide) se restaure.
+    await nav('nav-corbeille');
+    expect(screen.getByTestId(`corbeille-${exemple}`)).toHaveTextContent(/Espace « Exemple »/);
+    await toucher(`corbeille-restaurer-${exemple}`);
+    expect(lireDonnees(b.m.get(CLES_TACHES.donnees)).espaces[exemple].supprime).toBeFalsy();
+  });
+
+  it('supprimer un projet depuis la vue (⋯), puis le restaurer depuis la corbeille ; supprimer définitivement', async () => {
+    const { b, projetId } = avecDemo();
+    await monter(ctxF(b));
+    expect(screen.getByTestId('taches-projet-reglages')).toBeTruthy();
+    await toucher('taches-menu');
+    await toucher('menu-supprimer-projet');
+    expect(screen.getByTestId('suppression-bilan')).toHaveTextContent(/2 listes, 8 tâches/);
+    await toucher('suppression-confirmer');
+    expect(lireDonnees(b.m.get(CLES_TACHES.donnees)).projets[projetId].supprime).toBe(true);
+    await nav('nav-corbeille');
+    await toucher(`corbeille-restaurer-${projetId}`);
+    expect(tachesVivantes(lireDonnees(b.m.get(CLES_TACHES.donnees)), projetId)).toHaveLength(8);
+    await nav(`nav-projet-${projetId}`);
+    await toucher('taches-menu');
+    await toucher('menu-supprimer-projet');
+    await toucher('suppression-confirmer');
+    await nav('nav-corbeille');
+    await toucher(`corbeille-effacer-${projetId}`);
+    await toucher(`corbeille-effacer-oui-${projetId}`);
+    expect(lireDonnees(b.m.get(CLES_TACHES.donnees)).projets[projetId].efface).toBe(true);
+    expect(screen.getByTestId('corbeille-vide')).toBeTruthy();
   });
 
   it('se relit quand la synchronisation change la base', async () => {

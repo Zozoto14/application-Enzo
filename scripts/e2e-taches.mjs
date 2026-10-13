@@ -18,6 +18,10 @@
  *  - Hugo (troisième compte) ne voit pas la tuile.
  *  - iPhone (390 × 844) : vues et détail plein écran ; mesures (débordement,
  *    cibles de 44 px, textes de 15 px). Thèmes clair et sombre.
+ *  - Suppression (PC) : un espace supprimé en déplaçant son contenu, « Annuler »,
+ *    à nouveau supprimé, restauré depuis la corbeille ; touche Suppr et appui
+ *    long ; un projet partagé supprimé disparaît chez Léa (iPad) puis revient
+ *    restauré ; menu, confirmation et corbeille mesurés sur iPhone.
  *
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-taches.mjs
@@ -119,7 +123,7 @@ const verifier = (ok, message) => {
   if (!ok) echecs++;
 };
 /** Captures gardées dans le dépôt (les autres seulement avec CAPTURES_TOUTES=1). */
-const GARDEES = new Set(['01-pc-bienvenue', '03-pc-ajout-rapide', '04-pc-liste', '05-pc-kanban', '06-pc-calendrier-mois', '08-pc-detail', '09-pc-hub-tuile', '10-ipad-lea-liste', '12-ipad-lea-kanban', '15-pc-kanban-clair', '17-iphone-liste', '18-iphone-detail', '20-pc-journee-clair', '21-iphone-calendrier-clair']);
+const GARDEES = new Set(['22-pc-suppression-espace', '23-pc-corbeille', '25-iphone-suppression', '01-pc-bienvenue', '03-pc-ajout-rapide', '04-pc-liste', '05-pc-kanban', '06-pc-calendrier-mois', '08-pc-detail', '09-pc-hub-tuile', '10-ipad-lea-liste', '12-ipad-lea-kanban', '15-pc-kanban-clair', '17-iphone-liste', '18-iphone-detail', '20-pc-journee-clair', '21-iphone-calendrier-clair']);
 const capture = (page, nom) => (GARDEES.has(nom) || process.env.CAPTURES_TOUTES ? page.screenshot({ path: join(CAPTURES, `${nom}.jpg`), type: 'jpeg', quality: 55 }) : Promise.resolve());
 const attendre = async (condition, delai = 90_000, pas = 1000) => {
   const debut = Date.now();
@@ -507,7 +511,7 @@ try {
   await ipad.getByTestId(`nav-projet-${idSite}`).click();
   const vueLea = await texteDe(ipad, 'app-taches');
   verifier(/Site web/.test(vueLea) && /Appeler Paul/.test(vueLea) && !/Perso/.test(vueLea) && !/Acheter du pain/.test(vueLea), 'Léa voit « Site web », pas « Perso »');
-  verifier((await ipad.getByTestId('taches-projet-reglages').count()) === 0 && (await ipad.locator('[data-testid^="nav-projet-reglages-"]').count()) === 0 && (await ipad.getByTestId('projet-supprimer').count()) === 0, 'Léa ne peut ni gérer ni supprimer le projet');
+  verifier((await ipad.getByTestId('taches-projet-reglages').count()) === 0 && (await ipad.locator('[data-testid^="nav-projet-menu-"], [data-testid^="nav-espace-menu-"]').count()) === 0 && (await ipad.getByTestId('projet-supprimer').count()) === 0, 'Léa ne peut ni gérer ni supprimer le projet');
   await capture(ipad, '10-ipad-lea-liste');
   // Modification : statut et commentaire.
   await ipad.getByTestId(`tache-titre-${idPaul}`).click();
@@ -635,6 +639,127 @@ try {
   const mc = await mesurer(pc);
   verifier(mc.debordementPage === 0 && mc.petitesCibles === 0 && mc.petitsTextes === 0, `iPhone (thème clair) calendrier : mesures (${[...mc.exemplesCibles, ...mc.exemplesPetits, ...mc.deborde].slice(0, 4).join(' ; ')})`);
   await capture(pc, '21-iphone-calendrier-clair');
+
+  // ================================================================ Suppression : espaces, projets, corbeille
+  log('PC : supprimer un espace (déplacer le contenu, Annuler, corbeille), un projet partagé');
+  await pc.setViewportSize({ width: 1440, height: 900 });
+  await pause(600);
+  await pc.getByTestId('nav-nouvel-espace').click();
+  await pc.getByTestId('nouvel-espace-nom').fill('Archives');
+  await pc.getByTestId('nouvel-espace-creer').click();
+  const idPremier = await idProjet(pc, 'Premier projet');
+  const idArchives = (await pc.locator('[data-testid^="nav-espace-menu-"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid').replace('nav-espace-menu-', '')))).find(x => x !== idEspace);
+  await pc.getByTestId(`nav-projet-${idPremier}`).click();
+  await ajoutRapide(pc, 'Classer les factures');
+  await pc.getByTestId(`nav-espace-menu-${idArchives}`).click();
+  await pc.getByTestId('menu-supprimer-espace').click();
+  const bilanEspace = await texteDe(pc, 'suppression-bilan');
+  verifier(/1 projet, 1 tâche/.test(bilanEspace), `confirmation : ce qui part est dit (« ${bilanEspace.slice(0, 60)} »)`);
+  await pc.getByTestId('suppression-mode-deplacer').click();
+  await pc.getByTestId(`suppression-cible-${idEspace}`).click();
+  await pause(700);
+  await capture(pc, '22-pc-suppression-espace');
+  await pc.getByTestId('suppression-confirmer').click();
+  verifier(await visible(pc, 'taches-annulable', 5000), 'avis « Espace supprimé — Annuler »');
+  verifier((await pc.getByTestId(`nav-espace-${idArchives}`).count()) === 0, 'l’espace « Archives » a disparu de la barre latérale');
+  await pc.getByTestId('taches-annuler').click();
+  verifier(await attendre(async () => (await pc.getByTestId(`nav-espace-${idArchives}`).count()) === 1, 5000, 300), '« Annuler » : l’espace revient');
+  const sousArchives = await pc.evaluate(([e, p]) => {
+    const tous = [...document.querySelectorAll('[data-testid^="nav-espace-"], [data-testid^="nav-projet-"]')].map(x => x.getAttribute('data-testid'));
+    return tous.indexOf(`nav-projet-${p}`) > tous.indexOf(`nav-espace-${e}`);
+  }, [idArchives, idPremier]);
+  verifier(sousArchives, '« Annuler » : le projet est revenu dans « Archives »');
+  // Touche Suppr sur l'espace (focus clavier), puis confirmation avec déplacement.
+  await pc.getByTestId(`nav-espace-${idArchives}`).focus();
+  await pc.keyboard.press('Delete');
+  verifier(await visible(pc, 'dialogue-suppression', 5000), 'touche Suppr : confirmation de suppression de l’espace');
+  await pc.getByTestId('suppression-mode-deplacer').click();
+  await pc.getByTestId(`suppression-cible-${idEspace}`).click();
+  await pc.getByTestId('suppression-confirmer').click();
+  await pause(11_000);
+  verifier((await pc.getByTestId('taches-annulable').count()) === 0, '« Annuler » disparaît après 10 s');
+  verifier((await pc.getByTestId(`nav-projet-${idPremier}`).count()) === 1 && (await pc.getByTestId(`nav-espace-${idArchives}`).count()) === 0, 'contenu déplacé dans « Travail », espace supprimé');
+  await pc.getByTestId('nav-corbeille').click();
+  verifier(await visible(pc, `corbeille-${idArchives}`, 5000), 'corbeille : l’espace y est, avec son délai');
+  verifier(/encore 30 j/.test(await texteDe(pc, `corbeille-${idArchives}`)), 'corbeille : « encore 30 j »');
+  await pause(700);
+  await capture(pc, '23-pc-corbeille');
+  await pc.getByTestId(`corbeille-restaurer-${idArchives}`).click();
+  verifier(await attendre(async () => (await pc.getByTestId(`nav-espace-${idArchives}`).count()) === 1, 5000, 300), 'restauré depuis la corbeille');
+  await pc.keyboard.press('Escape');
+  // Appui long (souris) sur un projet : menu.
+  const boite = await pc.getByTestId(`nav-projet-${idPremier}`).boundingBox();
+  await pc.mouse.move(boite.x + 40, boite.y + boite.height / 2);
+  await pc.mouse.down();
+  await pause(900);
+  await pc.mouse.up();
+  verifier(await visible(pc, 'menu-supprimer-projet', 5000), 'appui long sur un projet : menu (réglages, supprimer)');
+  await pc.keyboard.press('Escape');
+
+  // Projet partagé supprimé : il disparaît chez Léa, revient s'il est restauré.
+  await pc.getByTestId(`nav-nouveau-projet-${idEspace}`).click();
+  await pc.getByTestId('nouveau-projet-nom').fill('Éphémère');
+  await pc.getByTestId('nouveau-projet-creer').click();
+  const idEphemere = await idProjet(pc, 'Éphémère');
+  await ajoutRapide(pc, 'Tâche éphémère');
+  await pc.getByTestId('taches-reglages').click();
+  await pc.getByTestId(`partage-${idEphemere}-ecriture`).click();
+  await pc.keyboard.press('Escape');
+  const voitLea = async present =>
+    attendre(async () => {
+      await relancer(pc);
+      await pause(1500);
+      await relancer(ipad);
+      await pause(1500);
+      const n = await ipad.getByTestId(`nav-projet-${idEphemere}`).count();
+      if (!n && (await ipad.getByTestId('taches-navigation').count())) {
+        await ipad.getByTestId('taches-navigation').click().catch(() => undefined);
+        await pause(400);
+        const m = await ipad.getByTestId(`nav-projet-${idEphemere}`).count();
+        await ipad.keyboard.press('Escape').catch(() => undefined);
+        return present ? m > 0 : m === 0;
+      }
+      return present ? n > 0 : n === 0;
+    }, 180_000, 5000);
+  verifier(await voitLea(true), 'Léa (iPad) voit le projet partagé « Éphémère »');
+  await pc.getByTestId(`nav-projet-menu-${idEphemere}`).click();
+  await pc.getByTestId('menu-supprimer-projet').click();
+  verifier(/disparaîtra aussi chez Léa/.test(await texteDe(pc, 'suppression-partage')), 'confirmation : « il disparaîtra aussi chez Léa »');
+  await pc.getByTestId('suppression-confirmer').click();
+  verifier(await voitLea(false), 'projet partagé supprimé : il disparaît chez Léa');
+  verifier(!/Tâche éphémère/.test(await ipad.locator('body').innerText()), 'chez Léa : plus aucune trace de ses tâches');
+  await pc.getByTestId('nav-corbeille').click();
+  await pc.getByTestId(`corbeille-restaurer-${idEphemere}`).click();
+  await pc.keyboard.press('Escape');
+  verifier(await voitLea(true), 'restauré : le projet revient chez Léa');
+
+  // iPhone : menu, confirmation et corbeille mesurés.
+  await pc.setViewportSize({ width: 390, height: 844 });
+  await pause(800);
+  await pc.getByTestId('taches-navigation').click();
+  await pc.getByTestId(`nav-projet-menu-${idPremier}`).click();
+  await pc.getByTestId('dialogue-menu').first().waitFor({ timeout: 10_000 });
+  await pause(400);
+  const mMenu = await mesurer(pc);
+  verifier(mMenu.petitesCibles === 0 && mMenu.petitsTextes === 0 && mMenu.debordementPage === 0, `iPhone menu ⋯ : mesures (${[...mMenu.exemplesCibles, ...mMenu.exemplesPetits, ...mMenu.deborde].slice(0, 4).join(' ; ')})`);
+  await pc.getByTestId('menu-supprimer-projet').click();
+  await pc.getByTestId('suppression-mode-deplacer').click();
+  await pause(400);
+  const mSup = await mesurer(pc);
+  verifier(mSup.petitesCibles === 0 && mSup.petitsTextes === 0 && mSup.debordementPage === 0, `iPhone confirmation : mesures (${[...mSup.exemplesCibles, ...mSup.exemplesPetits, ...mSup.deborde].slice(0, 4).join(' ; ')})`);
+  await pause(700);
+  await capture(pc, '25-iphone-suppression');
+  await pc.getByTestId('suppression-annuler').click();
+  await pause(400);
+  if (!(await pc.getByTestId('nav-corbeille').count())) await pc.getByTestId('taches-navigation').click();
+  await pc.getByTestId('nav-corbeille').click();
+  await pc.getByTestId('dialogue-corbeille').first().waitFor({ timeout: 10_000 });
+  await pause(400);
+  const mCorb = await mesurer(pc);
+  verifier(mCorb.petitesCibles === 0 && mCorb.petitsTextes === 0 && mCorb.debordementPage === 0, `iPhone corbeille : mesures (${[...mCorb.exemplesCibles, ...mCorb.exemplesPetits, ...mCorb.deborde].slice(0, 4).join(' ; ')})`);
+  await capture(pc, '26-iphone-corbeille');
+  await pc.keyboard.press('Escape');
+  await pc.setViewportSize({ width: 1440, height: 900 });
   verifier(erreursPage.length === 0, `aucune erreur JavaScript (${erreursPage.slice(0, 2).join(' | ')})`);
 } catch (erreur) {
   echecs++;

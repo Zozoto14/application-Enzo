@@ -6,6 +6,7 @@
 
 import type { ThemeHub } from '../../hub/themes';
 import type { Droits } from '../acces';
+import type { Genre } from '../corbeille';
 import type { ChangementTache, Tache } from '../modele';
 import type { EtatApp } from './etat';
 
@@ -26,4 +27,8 @@ export interface Actions {
   versColonne(t: Tache, colonne: string): void;
   /** Ajoute à « Ma journée » (ou l'en retire). */
   basculerJournee(t: Tache): void;
+  /** Ouvre la confirmation de suppression (ce qui part, déplacer le contenu). */
+  demanderSuppression(genre: Genre, id: string): void;
+  /** Supprime vers la corbeille et propose « Annuler » pendant 10 s. */
+  supprimer(genre: Genre, id: string, deplacerVers?: string): void;
 }

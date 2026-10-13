@@ -15,6 +15,7 @@ import { teinteTransparente } from '../../hub/themes';
 import type { PropsRacineApp } from '../../hub/types';
 import { useMobile } from '../../ui/mobile';
 import { droitsProjet, roleTaches } from '../acces';
+import { annulerSuppression, effacerElement, elementsCorbeille, purgerCorbeille, restaurerElement, supprimerElement, viderCorbeille, type Genre, type ResultatSuppression } from '../corbeille';
 import { lireAjoutRapide } from '../ajoutRapide';
 import { jourLisible, sansAccents } from '../dates';
 import { ajouterDemo, retirerDemo } from '../demo';
@@ -47,6 +48,8 @@ import { CLES_TACHES } from '../partage';
 import { rouvrirTache, terminerTache } from '../recurrence';
 import type { Actions } from './actions';
 import { attenueDe, Bouton, Champ, couleurPriorite, Dialogue, EtatVide, Puce, T, texteDe, titreDe } from './atomes';
+import { AvisAnnulable, DialogueCorbeille, DialogueMenu, DialogueSuppression, type ElementMenu } from './Suppression';
+import type { ElementCorbeille } from '../corbeille';
 import { DetailTache } from './Detail';
 import { DialogueChoix, DialogueEcheance, DialogueFiltres, DialogueNom, DialogueProjet, DialogueRappels, DialogueRappelsRecus, DialogueRecurrence, DialogueReglages } from './Dialogues';
 import { useEtatTaches } from './etat';
@@ -63,7 +66,14 @@ type Fenetre =
   | { g: 'espace' }
   | { g: 'nouveau-projet'; espaceId: string }
   | { g: 'rappels-recus' }
-  | { g: 'navigation' };
+  | { g: 'navigation' }
+  | { g: 'menu'; genre: 'espace' | 'projet' | 'liste'; id: string }
+  | { g: 'menu-vue' }
+  | { g: 'supprimer'; genre: Genre; id: string }
+  | { g: 'corbeille' };
+
+/** Durée pendant laquelle « Annuler » reste proposé après une suppression. */
+export const DELAI_ANNULER_MS = 10_000;
 
 const VUES: ReadonlyArray<[TypeVue, string, string]> = [
   ['liste', 'Liste', '☰'],
@@ -135,6 +145,7 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
   const [ouverte, setOuverte] = useState<string | undefined>();
   const [fenetre, setFenetre] = useState<Fenetre | undefined>();
   const [avis, setAvis] = useState<{ texte: string; genre: 'ok' | 'erreur' } | undefined>();
+  const [annulable, setAnnulable] = useState<ResultatSuppression | undefined>();
   const [rapide, setRapide] = useState('');
   const [rapideActif, setRapideActif] = useState(false);
   const [dernierProjet, setDernierProjet] = useState(affichageInitial.dernierProjet);
@@ -154,6 +165,24 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
     const t = setTimeout(() => setAvis(undefined), avis.genre === 'erreur' ? 6000 : 3500);
     return () => clearTimeout(t);
   }, [avis]);
+
+  // « Annuler » : 10 s.
+  useEffect(() => {
+    if (!annulable) return undefined;
+    const t = setTimeout(() => setAnnulable(undefined), DELAI_ANNULER_MS);
+    return () => clearTimeout(t);
+  }, [annulable]);
+
+  // Corbeille : ce qui y est depuis plus de 30 jours s'efface (Fondateur ; rien n'est écrit s'il n'y a rien).
+  useEffect(() => {
+    if (role !== 'fondateur') return;
+    try {
+      etat.maj((x, ctx) => purgerCorbeille(x, ctx));
+    } catch {
+      // Sans conséquence : réessayé à la prochaine ouverture.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role]);
 
   // Sélection devenue invalide (projet supprimé, plus partagé) : retour à Ma journée.
   const projetSel = selection.g === 'projet' ? d.projets[selection.id] : undefined;
@@ -225,6 +254,52 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
         else etat.maj((x, ctx) => modifierTache(x, t.id, { statut: cible.id }, ctx, noms));
       }),
     basculerJournee: t => essayer(() => etat.maj((x, ctx) => modifierTache(x, t.id, { pourAujourdhui: t.pourAujourdhui === etat.aujourdhui ? undefined : etat.aujourdhui }, ctx, noms))),
+    demanderSuppression: (genre, id) => {
+      if (genre === 'tache' ? !d.taches[id] || !droits(d.taches[id].projetId).modifier : role !== 'fondateur') return;
+      setFenetre({ g: 'supprimer', genre, id });
+    },
+    supprimer: (genre, id, deplacerVers) =>
+      essayer(() => {
+        let r: ResultatSuppression | undefined;
+        etat.maj((x, ctx) => {
+          r = supprimerElement(x, genre, id, ctx, deplacerVers ? { deplacerVers } : {});
+          return r.donnees;
+        });
+        if (!r) return;
+        if (genre === 'tache' && ouverte === id) setOuverte(undefined);
+        setAvis(undefined);
+        setAnnulable(r);
+      }),
+  };
+  const annuler = () =>
+    essayer(() => {
+      const r = annulable;
+      if (!r) return;
+      setAnnulable(undefined);
+      etat.maj((x, ctx) => annulerSuppression(x, r, ctx));
+      setAvis({ texte: 'Suppression annulée.', genre: 'ok' });
+    });
+  const nbCorbeille = elementsCorbeille(d, etat.maintenant(), role).length;
+
+  // Menus « ⋯ » (barre latérale, appui long, en-tête de la vue).
+  const elementsMenu = (genre: 'espace' | 'projet' | 'liste', id: string): ElementMenu[] => {
+    if (role !== 'fondateur') return [];
+    if (genre === 'espace') {
+      const e = d.espaces[id];
+      return [
+        { texte: '＋ Nouveau projet', testID: 'menu-nouveau-projet', action: () => setFenetre({ g: 'nouveau-projet', espaceId: id }) },
+        { texte: `Supprimer l’espace « ${e?.nom ?? ''} »…`, danger: true, testID: 'menu-supprimer-espace', action: () => actions.demanderSuppression('espace', id) },
+      ];
+    }
+    if (genre === 'projet') {
+      const p = d.projets[id];
+      return [
+        { texte: '⚙︎ Réglages du projet (nom, statuts, listes, partage)', testID: 'menu-reglages-projet', action: () => setFenetre({ g: 'projet', id }) },
+        { texte: `Supprimer le projet « ${p?.nom ?? ''} »…`, danger: true, testID: 'menu-supprimer-projet', action: () => actions.demanderSuppression('projet', id) },
+      ];
+    }
+    const l = d.listes[id];
+    return [{ texte: `Supprimer la liste « ${l?.nom ?? ''} »…`, danger: true, testID: 'menu-supprimer-liste', action: () => actions.demanderSuppression('liste', id) }];
   };
 
   // --- Ajout rapide
@@ -270,8 +345,19 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
     });
 
   // --- Clavier : N, /, 1-4, Échap (en capture : avant le hub et les feuilles)
-  const etatClavier = useRef({ fenetre, ouverte });
-  etatClavier.current = { fenetre, ouverte };
+  const etatClavier = useRef({ fenetre, ouverte, selection, suppr: (_: string | undefined) => undefined as void });
+  etatClavier.current = {
+    fenetre,
+    ouverte,
+    selection,
+    // Suppr : l'élément de la barre latérale qui a le focus, sinon la tâche ouverte, sinon la liste / le projet affiché.
+    suppr: (focus: string | undefined) => {
+      const m = focus?.match(/^nav-(espace|projet|liste)-([a-z0-9-]+)$/);
+      if (m && !/^(nouveau|reglages|menu)/.test(m[2])) actions.demanderSuppression(m[1] as Genre, m[2]);
+      else if (ouverte) actions.demanderSuppression('tache', ouverte);
+      else if (selection.g === 'projet') actions.demanderSuppression(selection.liste ? 'liste' : 'projet', selection.liste ?? selection.id);
+    },
+  };
   useEffect(() => {
     const doc = (globalThis as { document?: { addEventListener(t: string, f: (e: never) => void, c: boolean): void; removeEventListener(t: string, f: (e: never) => void, c: boolean): void; activeElement?: unknown } }).document;
     if (!doc) return undefined;
@@ -298,6 +384,12 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
         return;
       }
       if (champ || e.ctrlKey || e.metaKey || e.altKey || etatClavier.current.fenetre) return;
+      if (e.key === 'Delete') {
+        arreter();
+        const actif = (doc.activeElement as { closest?(s: string): { getAttribute(n: string): string | null } | null } | undefined)?.closest?.('[data-testid]');
+        etatClavier.current.suppr(actif?.getAttribute('data-testid') ?? undefined);
+        return;
+      }
       if (e.key === 'n' || e.key === 'N') {
         arreter();
         champRapide.current?.focus();
@@ -406,7 +498,9 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
       onChoisir={choisirSelection}
       onNouvelEspace={() => setFenetre({ g: 'espace' })}
       onNouveauProjet={espaceId => setFenetre({ g: 'nouveau-projet', espaceId })}
-      onProjet={id => setFenetre({ g: 'projet', id })}
+      onMenu={(genre, id) => setFenetre({ g: 'menu', genre, id })}
+      onCorbeille={() => setFenetre({ g: 'corbeille' })}
+      nbCorbeille={nbCorbeille}
       onSupprimerVue={id => essayer(() => etat.maj((x, ctx) => supprimerVue(x, id, ctx)))}
     />
   );
@@ -485,6 +579,7 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
   const outils = (
     <View style={styles.rangee}>
       {selection.g === 'projet' && role === 'fondateur' && projetSel ? <Bouton theme={theme} compact={!mobile} titre="⚙︎ Projet" onPress={() => setFenetre({ g: 'projet', id: projetSel.id })} testID="taches-projet-reglages" /> : null}
+      {selection.g === 'projet' && role === 'fondateur' && projetSel ? <Bouton theme={theme} compact={!mobile} titre="⋯" libelle="Plus d’actions : supprimer le projet, la liste, l’espace" onPress={() => setFenetre({ g: 'menu-vue' })} testID="taches-menu" /> : null}
       <Bouton theme={theme} compact={!mobile} titre={nbFiltres ? `Filtres · ${nbFiltres}` : 'Filtres'} onPress={() => setFenetre({ g: 'filtres' })} testID="taches-filtres" />
       <Bouton theme={theme} compact={!mobile} titre={etat.rappels.length ? `🔔 ${etat.rappels.length}` : '🔔'} libelle={`Rappels : ${etat.rappels.length} non lu(s)`} onPress={() => setFenetre({ g: 'rappels-recus' })} testID="taches-rappels" />
       <Bouton theme={theme} compact={!mobile} titre={role === 'fondateur' ? '👥 Partage' : '👥 Partagés'} libelle={role === 'fondateur' ? 'Réglages de Tâches : ami, partage, exemple' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
@@ -504,13 +599,14 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
     />
   ) : null;
 
-  const avisVue = avis ? (
+  const annulableVue = annulable ? <AvisAnnulable a={actions} texte={annulable.texte} onAnnuler={annuler} bas={mobile ? 96 : 24} /> : null;
+  const avisVue = annulableVue ?? (avis ? (
     <View pointerEvents="none" style={[styles.avis, mobile && { bottom: 96 }]}>
       <Text testID="taches-avis" accessibilityLiveRegion="polite" style={[texteDe(theme), styles.avisTexte, { backgroundColor: avis.genre === 'erreur' ? theme.critique : theme.texte, color: theme.fond, borderRadius: Math.min(theme.rayonMoyen, 10) }]}>
         {avis.texte}
       </Text>
     </View>
-  ) : null;
+  ) : null);
 
   const fenetres = (
     <Fenetres
@@ -547,6 +643,36 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
       }}
       onErreur={signaler}
       onAvis={texte => setAvis({ texte, genre: 'ok' })}
+      menu={elementsMenu}
+      menuVue={() => {
+        const p = projetSel;
+        if (!p) return [];
+        const l = listeId ? d.listes[listeId] : undefined;
+        const e = d.espaces[p.espaceId];
+        return [
+          ...elementsMenu('projet', p.id),
+          ...(l ? elementsMenu('liste', l.id) : []),
+          ...(e ? [{ texte: `Supprimer l’espace « ${e.nom} »…`, danger: true, testID: 'menu-supprimer-espace', action: () => actions.demanderSuppression('espace', e.id) }] : []),
+        ];
+      }}
+      onCorbeilleRestaurer={el =>
+        essayer(() => {
+          etat.maj((x, ctx) => restaurerElement(x, el.genre, el.id, ctx));
+          setAvis({ texte: `« ${el.nom} » restauré${el.genre === 'liste' || el.genre === 'tache' ? 'e' : ''}.`, genre: 'ok' });
+        })
+      }
+      onCorbeilleEffacer={el =>
+        essayer(() => {
+          etat.maj((x, ctx) => effacerElement(x, el.genre, el.id, ctx));
+          setAvis({ texte: `« ${el.nom} » supprimé${el.genre === 'liste' || el.genre === 'tache' ? 'e' : ''} définitivement.`, genre: 'ok' });
+        })
+      }
+      onCorbeilleVider={() =>
+        essayer(() => {
+          etat.maj((x, ctx) => viderCorbeille(x, ctx));
+          setAvis({ texte: 'Corbeille vidée.', genre: 'ok' });
+        })
+      }
     />
   );
 
@@ -583,7 +709,7 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
             <View style={[styles.rangee, { flexWrap: 'nowrap' }]}>
               <View style={{ flex: 1 }}>{recherche}</View>
               <Bouton theme={theme} titre={nbFiltres ? `Filtres · ${nbFiltres}` : 'Filtres'} onPress={() => setFenetre({ g: 'filtres' })} testID="taches-filtres" />
-              {selection.g === 'projet' && role === 'fondateur' && projetSel ? <Bouton theme={theme} titre="⚙︎" libelle="Réglages du projet" onPress={() => setFenetre({ g: 'projet', id: projetSel.id })} testID="taches-projet-reglages" /> : null}
+              {selection.g === 'projet' && role === 'fondateur' && projetSel ? <Bouton theme={theme} titre="⋯" libelle="Réglages et suppression du projet" onPress={() => setFenetre({ g: 'menu-vue' })} testID="taches-menu" /> : null}
             </View>
           </View>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 140, gap: 12 }} keyboardShouldPersistTaps="handled">
@@ -647,11 +773,11 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
 
 // ------------------------------------------------------------------ Navigation (barre latérale)
 
-function LigneNav({ a, texte, actif, onPress, testID, couleur, gauche, droite, niveau = 0, compte }: { a: Actions; texte: string; actif: boolean; onPress(): void; testID: string; couleur?: string; gauche?: string; droite?: React.ReactNode; niveau?: number; compte?: number }) {
+function LigneNav({ a, texte, actif, onPress, onLongPress, testID, couleur, gauche, droite, niveau = 0, compte }: { a: Actions; texte: string; actif: boolean; onPress(): void; onLongPress?(): void; testID: string; couleur?: string; gauche?: string; droite?: React.ReactNode; niveau?: number; compte?: number }) {
   const theme = a.theme;
   return (
     <View style={[styles.ligneNav, { paddingLeft: 6 + niveau * 16, backgroundColor: actif ? teinteTransparente(theme.accent, 0.16) : 'transparent', borderRadius: Math.min(theme.rayonMoyen, 10) }]}>
-      <Pressable testID={testID} accessibilityRole="button" accessibilityState={{ selected: actif }} onPress={onPress} style={styles.ligneNavBouton}>
+      <Pressable testID={testID} accessibilityRole="button" accessibilityState={{ selected: actif }} accessibilityHint={onLongPress ? 'Appui long ou touche Suppr : actions' : undefined} onPress={onPress} onLongPress={onLongPress} delayLongPress={550} style={styles.ligneNavBouton}>
         {couleur ? <View style={[styles.point, { backgroundColor: couleur }]} /> : gauche ? <Text style={{ color: actif ? theme.accent : theme.attenue, fontSize: 16, width: 18, textAlign: 'center' }}>{gauche}</Text> : null}
         <Text numberOfLines={1} style={[texteDe(theme), { flex: 1, fontWeight: actif ? '700' : '500', color: actif ? theme.texte : theme.texte }]}>
           {texte}
@@ -669,7 +795,9 @@ function Navigation({
   onChoisir,
   onNouvelEspace,
   onNouveauProjet,
-  onProjet,
+  onMenu,
+  onCorbeille,
+  nbCorbeille,
   onSupprimerVue,
 }: {
   a: Actions;
@@ -677,7 +805,9 @@ function Navigation({
   onChoisir(s: Selection): void;
   onNouvelEspace(): void;
   onNouveauProjet(espaceId: string): void;
-  onProjet(id: string): void;
+  onMenu(genre: 'espace' | 'projet' | 'liste', id: string): void;
+  onCorbeille(): void;
+  nbCorbeille: number;
   onSupprimerVue(id: string): void;
 }) {
   const theme = a.theme;
@@ -708,12 +838,24 @@ function Navigation({
         return (
           <View key={e.id} style={{ gap: 2 }}>
             <View style={styles.espace}>
-              <View style={[styles.carreEspace, { backgroundColor: e.couleur, borderRadius: 5 }]}>
-                <Text style={{ color: theme.surAccent, fontSize: 15, fontWeight: '800' }}>{e.nom[0]?.toUpperCase()}</Text>
-              </View>
-              <Text numberOfLines={1} style={[texteDe(theme), { flex: 1, fontWeight: '700' }]} testID={`nav-espace-${e.id}`}>
-                {e.nom}
-              </Text>
+              <Pressable
+                testID={`nav-espace-${e.id}`}
+                accessibilityRole="button"
+                accessibilityLabel={`Espace ${e.nom}`}
+                accessibilityHint={fondateur ? 'Appui long ou touche Suppr : actions de l’espace' : undefined}
+                disabled={!fondateur}
+                onPress={fondateur ? () => onMenu('espace', e.id) : undefined}
+                onLongPress={fondateur ? () => onMenu('espace', e.id) : undefined}
+                delayLongPress={550}
+                style={styles.espaceBouton}>
+                <View style={[styles.carreEspace, { backgroundColor: e.couleur, borderRadius: 5 }]}>
+                  <Text style={{ color: theme.surAccent, fontSize: 15, fontWeight: '800' }}>{e.nom[0]?.toUpperCase()}</Text>
+                </View>
+                <Text numberOfLines={1} style={[texteDe(theme), { flex: 1, fontWeight: '700' }]}>
+                  {e.nom}
+                </Text>
+              </Pressable>
+              {fondateur ? petitBouton('⋯', `Actions de l’espace ${e.nom} (supprimer…)`, () => onMenu('espace', e.id), `nav-espace-menu-${e.id}`) : null}
               {fondateur ? petitBouton('＋', `Nouveau projet dans ${e.nom}`, () => onNouveauProjet(e.id), `nav-nouveau-projet-${e.id}`) : null}
             </View>
             {projets.map(p => {
@@ -727,13 +869,25 @@ function Navigation({
                     couleur={p.couleur}
                     actif={actif && !selection.liste}
                     onPress={() => onChoisir({ g: 'projet', id: p.id })}
+                    onLongPress={fondateur ? () => onMenu('projet', p.id) : undefined}
                     testID={`nav-projet-${p.id}`}
                     compte={tachesVivantes(d, p.id).filter(t => !t.parentId && !statutsDe(d, p.id).find(s => s.id === t.statut)?.ferme).length}
-                    droite={fondateur ? petitBouton('⋯', `Réglages du projet ${p.nom}`, () => onProjet(p.id), `nav-projet-reglages-${p.id}`) : undefined}
+                    droite={fondateur ? petitBouton('⋯', `Actions du projet ${p.nom} (réglages, supprimer…)`, () => onMenu('projet', p.id), `nav-projet-menu-${p.id}`) : undefined}
                   />
                   {actif && listesDe(d, p.id).length > 1
                     ? listesDe(d, p.id).map(l => (
-                        <LigneNav key={l.id} a={a} niveau={2} gauche="·" texte={l.nom} actif={selection.g === 'projet' && selection.liste === l.id} onPress={() => onChoisir({ g: 'projet', id: p.id, liste: l.id })} testID={`nav-liste-${l.id}`} />
+                        <LigneNav
+                          key={l.id}
+                          a={a}
+                          niveau={2}
+                          gauche="·"
+                          texte={l.nom}
+                          actif={selection.g === 'projet' && selection.liste === l.id}
+                          onPress={() => onChoisir({ g: 'projet', id: p.id, liste: l.id })}
+                          onLongPress={fondateur ? () => onMenu('liste', l.id) : undefined}
+                          testID={`nav-liste-${l.id}`}
+                          droite={fondateur ? petitBouton('⋯', `Actions de la liste ${l.nom} (supprimer…)`, () => onMenu('liste', l.id), `nav-liste-menu-${l.id}`) : undefined}
+                        />
                       ))
                     : null}
                 </View>
@@ -743,6 +897,11 @@ function Navigation({
         );
       })}
       {fondateur && espacesVivants(d).length === 0 ? <Text style={[attenueDe(theme), { padding: 8 }]}>Aucun espace : créez-en un avec ＋.</Text> : null}
+      {fondateur || nbCorbeille > 0 ? (
+        <View style={{ marginTop: 12 }}>
+          <LigneNav a={a} texte="Corbeille" gauche="🗑" actif={false} onPress={onCorbeille} testID="nav-corbeille" compte={nbCorbeille} />
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -765,6 +924,11 @@ function Fenetres({
   onOuvrir,
   onErreur,
   onAvis,
+  menu,
+  menuVue,
+  onCorbeilleRestaurer,
+  onCorbeilleEffacer,
+  onCorbeilleVider,
 }: {
   a: Actions;
   fenetre?: Fenetre;
@@ -781,6 +945,11 @@ function Fenetres({
   onOuvrir(id: string): void;
   onErreur(e: unknown): void;
   onAvis(t: string): void;
+  menu(genre: 'espace' | 'projet' | 'liste', id: string): ElementMenu[];
+  menuVue(): ElementMenu[];
+  onCorbeilleRestaurer(e: ElementCorbeille): void;
+  onCorbeilleEffacer(e: ElementCorbeille): void;
+  onCorbeilleVider(): void;
 }) {
   if (!fenetre) return null;
   const d = a.etat.donnees;
@@ -893,13 +1062,22 @@ function Fenetres({
           projetId={fenetre.id}
           onFermer={onFermer}
           onErreur={onErreur}
-          onSupprime={() => {
-            onAvis('Projet supprimé.');
-            onSelection({ g: 'journee' });
+          onSupprimer={() => {
             onFermer();
+            a.demanderSuppression('projet', fenetre.id);
           }}
         />
       );
+    case 'menu': {
+      const e = fenetre.genre === 'espace' ? d.espaces[fenetre.id] : fenetre.genre === 'projet' ? d.projets[fenetre.id] : d.listes[fenetre.id];
+      return <DialogueMenu a={a} titre={`${fenetre.genre === 'espace' ? 'Espace' : fenetre.genre === 'projet' ? 'Projet' : 'Liste'} « ${e?.nom ?? ''} »`} elements={menu(fenetre.genre, fenetre.id)} onFermer={onFermer} testID="dialogue-menu" />;
+    }
+    case 'menu-vue':
+      return <DialogueMenu a={a} titre="Actions" elements={menuVue()} onFermer={onFermer} testID="dialogue-menu" />;
+    case 'supprimer':
+      return <DialogueSuppression a={a} genre={fenetre.genre} id={fenetre.id} onFermer={onFermer} onConfirmer={vers => a.supprimer(fenetre.genre, fenetre.id, vers)} />;
+    case 'corbeille':
+      return <DialogueCorbeille a={a} onFermer={onFermer} onRestaurer={onCorbeilleRestaurer} onEffacer={onCorbeilleEffacer} onVider={onCorbeilleVider} />;
     case 'espace':
       return (
         <DialogueNom
@@ -995,7 +1173,8 @@ const styles = StyleSheet.create({
   ligneNavBouton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingRight: 8 },
   point: { width: 10, height: 10, borderRadius: 5, marginLeft: 4 },
   intertitre: { fontWeight: '700', letterSpacing: 0.6, marginTop: 12, marginBottom: 4, paddingLeft: 6 },
-  espace: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 40, paddingLeft: 6, marginTop: 6 },
+  espace: { flexDirection: 'row', alignItems: 'center', gap: 2, minHeight: 44, paddingLeft: 6, marginTop: 6 },
+  espaceBouton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
   carreEspace: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
   petitBouton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 });

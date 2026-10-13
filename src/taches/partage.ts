@@ -116,7 +116,8 @@ export interface DocumentPourAmi {
 /**
  * Projets partagés (vivants, en lecture ou écriture), leurs listes et leurs
  * tâches — pierres tombales comprises, pour que l'ami retire ce qui a été
- * supprimé. Rien d'autre : ni les autres projets, ni les vues, ni les réglages.
+ * supprimé (un projet partagé mis à la corbeille part comme pierre tombale
+ * seule). Rien d'autre : ni les autres projets, ni les vues, ni les réglages.
  */
 export function projectionPourAmi(d: DonneesTaches): DonneesTaches {
   const projets = Object.fromEntries(Object.values(d.projets).filter(p => vivant(p) && p.partage !== 'aucun').map(p => [p.id, p]));
@@ -126,10 +127,13 @@ export function projectionPourAmi(d: DonneesTaches): DonneesTaches {
       .filter(vivant)
       .map(e => [e.id, e]),
   );
+  // Pierres tombales des projets partagés supprimés (corbeille) : l'ami les voit disparaître, et revenir
+  // si le Fondateur les restaure. Ni leurs listes ni leurs tâches ne partent.
+  const tombes = Object.fromEntries(Object.values(d.projets).filter(p => p.supprime && !p.efface && p.partage !== 'aucun').map(p => [p.id, p]));
   return {
     v: 1,
     espaces,
-    projets,
+    projets: { ...tombes, ...projets },
     listes: Object.fromEntries(Object.values(d.listes).filter(l => projets[l.projetId]).map(l => [l.id, l])),
     taches: Object.fromEntries(Object.values(d.taches).filter(t => projets[t.projetId]).map(t => [t.id, t])),
     vues: {},

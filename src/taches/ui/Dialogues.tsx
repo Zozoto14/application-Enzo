@@ -25,8 +25,6 @@ import {
   projetsDe,
   RAPPELS_PROPOSES,
   statutsDe,
-  supprimerListe,
-  supprimerProjet,
   tachesVivantes,
   vivant,
   type Echeance,
@@ -447,7 +445,7 @@ export function DialogueReglages({ a, amis, onFermer, onDemo, onRetirerDemo, onE
 
 // ------------------------------------------------------------------ Réglages d'un projet
 
-export function DialogueProjet({ a, projetId, onFermer, onSupprime, onErreur }: { a: Actions; projetId: string; onFermer: Fermer; onSupprime(): void; onErreur(e: unknown): void }) {
+export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur }: { a: Actions; projetId: string; onFermer: Fermer; onSupprimer(): void; onErreur(e: unknown): void }) {
   const theme = a.theme;
   const d = a.etat.donnees;
   const p = d.projets[projetId];
@@ -455,7 +453,6 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprime, onErreur }: 
   const [statuts, setStatuts] = useState<Statut[]>(() => statutsDe(d, projetId).map(s => ({ ...s })));
   const [nouveau, setNouveau] = useState('');
   const [nouvelleListe, setNouvelleListe] = useState('');
-  const [confirmer, setConfirmer] = useState(false);
   if (!vivant(p)) return null;
   const essayer = (f: () => void) => {
     try {
@@ -537,7 +534,19 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprime, onErreur }: 
       {listesDe(d, projetId).map(l => (
         <View key={l.id} style={styles.ligneProjet}>
           <Champ theme={theme} mobile={a.mobile} defaultValue={l.nom} onEndEditing={e => essayer(() => a.etat.maj((x, ctx) => modifierListe(x, l.id, { nom: e.nativeEvent.text }, ctx)))} style={{ flex: 1 }} accessibilityLabel={`Nom de la liste ${l.nom}`} />
-          <Bouton theme={theme} compact variante="discret" titre="✕" libelle={`Supprimer la liste ${l.nom}`} desactive={listesDe(d, projetId).length <= 1} onPress={() => essayer(() => a.etat.maj((x, ctx) => supprimerListe(x, l.id, ctx)))} />
+          <Bouton
+            theme={theme}
+            compact
+            variante="discret"
+            titre="✕"
+            libelle={listesDe(d, projetId).length <= 1 ? 'Un projet garde au moins une liste' : `Supprimer la liste ${l.nom}`}
+            desactive={listesDe(d, projetId).length <= 1}
+            onPress={() => {
+              onFermer();
+              a.demanderSuppression('liste', l.id);
+            }}
+            testID={`projet-liste-supprimer-${l.id}`}
+          />
         </View>
       ))}
       <View style={[styles.rangee, { flexWrap: 'nowrap' }]}>
@@ -566,28 +575,10 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprime, onErreur }: 
         <Text style={attenueDe(theme)}>Choisissez d’abord un ami dans les réglages de Tâches (⚙︎).</Text>
       )}
       <View style={[styles.zoneDanger, { borderColor: teinteTransparente(theme.critique, 0.5), borderRadius: 10 }]}>
-        {confirmer ? (
-          <>
-            <Text style={texteDe(theme)}>Supprimer le projet et ses {nbTaches} tâche(s) ? {p.partage !== 'aucun' ? 'Il disparaîtra aussi chez votre ami.' : ''}</Text>
-            <View style={styles.rangee}>
-              <Bouton
-                theme={theme}
-                variante="danger"
-                titre="Supprimer définitivement"
-                onPress={() =>
-                  essayer(() => {
-                    a.etat.maj((x, ctx) => supprimerProjet(x, projetId, ctx));
-                    onSupprime();
-                  })
-                }
-                testID="projet-supprimer-confirmer"
-              />
-              <Bouton theme={theme} titre="Annuler" onPress={() => setConfirmer(false)} />
-            </View>
-          </>
-        ) : (
-          <Bouton theme={theme} variante="danger" titre="Supprimer le projet" onPress={() => setConfirmer(true)} testID="projet-supprimer" style={{ alignSelf: 'flex-start' }} />
-        )}
+        <Text style={attenueDe(theme)}>
+          {nbTaches} tâche{nbTaches > 1 ? 's' : ''}. La suppression passe par la corbeille (30 jours){p.partage !== 'aucun' ? ' ; le projet disparaîtra aussi chez votre ami' : ''}. Vous pourrez d’abord déplacer son contenu.
+        </Text>
+        <Bouton theme={theme} variante="danger" titre="Supprimer le projet…" onPress={onSupprimer} testID="projet-supprimer" style={{ alignSelf: 'flex-start' }} />
       </View>
     </Dialogue>
   );
