@@ -118,7 +118,9 @@ const verifier = (ok, message) => {
   console.log(ok ? '  OK   ' : '  ECHEC', message);
   if (!ok) echecs++;
 };
-const capture = (page, nom) => page.screenshot({ path: join(CAPTURES, `${nom}.jpg`), type: 'jpeg', quality: 55 });
+/** Captures gardées dans le dépôt (les autres seulement avec CAPTURES_TOUTES=1). */
+const GARDEES = new Set(['01-pc-bienvenue', '03-pc-ajout-rapide', '04-pc-liste', '05-pc-kanban', '06-pc-calendrier-mois', '08-pc-detail', '09-pc-hub-tuile', '10-ipad-lea-liste', '12-ipad-lea-kanban', '15-pc-kanban-clair', '17-iphone-liste', '18-iphone-detail', '20-pc-journee-clair', '21-iphone-calendrier-clair']);
+const capture = (page, nom) => (GARDEES.has(nom) || process.env.CAPTURES_TOUTES ? page.screenshot({ path: join(CAPTURES, `${nom}.jpg`), type: 'jpeg', quality: 55 }) : Promise.resolve());
 const attendre = async (condition, delai = 90_000, pas = 1000) => {
   const debut = Date.now();
   while (Date.now() - debut < delai) {
