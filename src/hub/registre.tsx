@@ -18,6 +18,7 @@ import { APP_TSUZUKU } from '../tsuzuku/registre';
 import { APP_ABONNEMENTS } from './abonnements/registre';
 import { APP_PROSPECTS } from '../prospects/registre';
 import { APP_CLAUDE_OFFICE } from '../claudeOffice/registre';
+import { APP_TACHES } from '../taches/registre';
 import type { AppHub } from './types';
 
 export const ID_PORTEFEUILLE = 'portefeuille';
@@ -36,6 +37,7 @@ export const REGISTRE: readonly AppHub[] = [
     // Pas de Racine : l'arbre du portefeuille est celui d'App, déjà monté.
   },
   APP_TSUZUKU,
+  APP_TACHES,
   {
     id: ID_ADMINISTRATION,
     nom: 'Administration',

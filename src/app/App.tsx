@@ -150,6 +150,7 @@ import { appsVisibles, etatTuile, peutOuvrir } from '../hub/permissions';
 import { niveauProfil } from '../hub/admin/comptes';
 import { chargerPrefs, enregistrerPrefs, reinitialiser, CLE_THEME, type PrefsHub } from '../hub/personnalisation';
 import { Devblog } from '../hub/devblog/Devblog';
+import { useRappelsTaches } from '../taches/resume';
 import { CLE_DEVBLOG, lireEtat as lireEtatDevblog, decider as deciderDevblog, etapesVisite as etapesDevblog, marquerLues as marquerDevblogLu } from '../hub/devblog/logiqueDevblog';
 import type { CibleEssai, EntreeDevblog } from '../hub/devblog/entrees';
 import { ID_PORTEFEUILLE, REGISTRE } from '../hub/registre';
@@ -2076,6 +2077,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     base: deverrouille ? baseProfil : undefined,
   });
   const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin, baseProfil, tsuzuku: resumeTsuzuku, enregistrerFichier: enregistrerFichierHote, historiqueOffice, claudeOffice: resumeClaudeOffice };
+  // Tâches : rappels évalués toutes les 30 s tant que le compte est ouvert (notification sur le PC, pastille de la tuile).
+  useRappelsTaches(contexteHub, deverrouille);
   const themeDuHub = themeHub(themeAffiche);
   const appOuverte = surUneApp ? REGISTRE.find(app => app.id === appHub) : undefined;
   // --- Devblog « Quoi de neuf » : une fois par profil et par version -----------
@@ -2110,7 +2113,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       // compte ami créé par l'administrateur (portefeuille encore vide).
       const premiereOuvertureAmi =
         !estAdmin && stockagePrefs.lire('compte.connexions') === '1' && nombreComptes === 0 && nombreOperations === 0;
-      const decision = deciderDevblog(stockagePrefs.lire(CLE_DEVBLOG), { profilNeuf: coffreCreeIci.current || premiereOuvertureAmi, admin: estAdmin, gestionnaire: estGestionnaire });
+      const decision = deciderDevblog(stockagePrefs.lire(CLE_DEVBLOG), { profilNeuf: coffreCreeIci.current || premiereOuvertureAmi, admin: estAdmin, gestionnaire: estGestionnaire, apps: profils?.actuel?.apps ?? [] });
       if (decision.genre === 'marquer') {
         stockagePrefs.ecrire(CLE_DEVBLOG, decision.valeur);
       } else if (decision.genre === 'afficher') {
@@ -3261,12 +3264,13 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           theme={themeDuHub}
           admin={estAdmin}
           gestionnaire={estGestionnaire}
+          apps={profils?.actuel?.apps ?? []}
           entree={devblog.entree}
           onFermer={fermerDevblog}
           onEssayer={essayer}
           onVisite={entree => {
             fermerDevblog();
-            setEtapesVisite(etapesDevblog(entree, estAdmin, estGestionnaire));
+            setEtapesVisite(etapesDevblog(entree, estAdmin, estGestionnaire, profils?.actuel?.apps ?? []));
           }}
           disponible={cible => cible.genre !== 'app' || appsVisibles(REGISTRE, contexteHub).some(app => app.id === cible.app)}
         />

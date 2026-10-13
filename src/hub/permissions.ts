@@ -87,7 +87,7 @@ export function etatTuile(app: AppHub, contexte: ContexteHub): EtatTuile {
 
 /** Apps qu'un administrateur peut ouvrir à un ami (cases de l'Administration). */
 export function appsAttribuables(registre: readonly AppHub[]): AppHub[] {
-  return registre.filter(app => !app.adminSeulement);
+  return registre.filter(app => !app.adminSeulement && !app.attribueeParApp);
 }
 
 /** Nombre d'amis actifs qui ont accès à une app. */

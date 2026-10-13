@@ -126,6 +126,12 @@ export interface AppHub {
   /** Réservée à l'administrateur : jamais proposée dans les autorisations d'un ami. */
   adminSeulement?: boolean;
   /**
+   * L'app choisit elle-même à qui elle s'ouvre (ex. Tâches : le Fondateur
+   * désigne UN ami dans ses réglages) : pas de case dans l'Administration.
+   * L'accès reste celui d'une app publique (liste `apps` du profil).
+   */
+  attribueeParApp?: boolean;
+  /**
    * Avec `adminSeulement` : l'app s'ouvre aussi aux gestionnaires (rôle
    * limité, voir `admin/roles.ts`) ; elle s'adapte alors à leurs droits.
    */

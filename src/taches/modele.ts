@@ -1,0 +1,917 @@
+/**
+ * Tâches (V1) : modèle Espaces > Projets > Listes > Tâches, sous-tâches (un
+ * niveau), checklists, statuts propres à chaque projet, priorité, échéance,
+ * étiquettes, personne assignée (le Fondateur ou l'ami), commentaires,
+ * historique, récurrence, rappels, « pour aujourd'hui ».
+ *
+ * Fusion par CHAMP : chaque entité porte `h`, l'horodatage de chacun de ses
+ * champs (« ISO|auteur ») ; deux copies se réunissent champ par champ, le plus
+ * récent l'emporte (`fusion.ts`). Une suppression est un champ comme un autre
+ * (`supprime`, pierre tombale datée) : elle voyage et peut être annulée.
+ * L'historique garde l'ancienne valeur du titre et de la description : une
+ * modification écrasée par une autre plus récente reste lisible.
+ *
+ * Tout est pur : horloge, auteur et tirage aléatoire sont passés en paramètre.
+ */
+
+import { jourValide, heureValide, sansAccents } from './dates';
+
+// ------------------------------------------------------------------ Types
+
+export type Auteur = 'fondateur' | 'ami';
+export type Priorite = 'urgente' | 'haute' | 'normale' | 'basse';
+export type ModePartage = 'aucun' | 'lecture' | 'ecriture';
+
+export const PRIORITES: readonly Priorite[] = ['urgente', 'haute', 'normale', 'basse'];
+export const LIBELLES_PRIORITE: Record<Priorite, string> = { urgente: 'Urgente', haute: 'Haute', normale: 'Normale', basse: 'Basse' };
+export const RANG_PRIORITE: Record<Priorite, number> = { urgente: 0, haute: 1, normale: 2, basse: 3 };
+export const LIBELLES_PARTAGE: Record<ModePartage, string> = { aucun: 'Non partagé', lecture: 'Lecture seule', ecriture: 'Lecture et écriture' };
+
+/** Horodatages par champ : « 2026-10-13T09:00:00.000Z|f » (f : Fondateur, a : ami). */
+export type Horodatages = Record<string, string>;
+
+export interface Entite {
+  id: string;
+  h: Horodatages;
+  /** Pierre tombale : l'entité est supprimée (datée par `h.supprime`). */
+  supprime?: boolean;
+}
+
+export interface Espace extends Entite {
+  nom: string;
+  couleur: string;
+  ordre: number;
+}
+
+export interface Statut {
+  id: string;
+  nom: string;
+  couleur: string;
+  /** Statut « terminé » : la tâche est faite (récurrence, Ma journée, filtres). */
+  ferme: boolean;
+}
+
+export interface Projet extends Entite {
+  espaceId: string;
+  nom: string;
+  couleur: string;
+  statuts: Statut[];
+  ordre: number;
+  /** Partage avec l'ami choisi (V1 : un seul ami). */
+  partage: ModePartage;
+}
+
+export interface Liste extends Entite {
+  projetId: string;
+  nom: string;
+  ordre: number;
+}
+
+export interface Echeance {
+  jour: string;
+  heure?: string;
+}
+
+export type Recurrence =
+  | { type: 'quotidienne'; intervalle: number }
+  /** Jours ISO : 1 = lundi … 7 = dimanche. */
+  | { type: 'hebdo'; jours: number[] }
+  | { type: 'mensuelle'; jour: number }
+  | { type: 'annuelle'; mois: number; jour: number };
+
+export interface ElementChecklist {
+  id: string;
+  texte: string;
+  fait: boolean;
+  ordre: number;
+  /** Horodatage de la dernière modification de l'élément (fusion élément par élément). */
+  h: string;
+  supprime?: boolean;
+}
+
+export interface Commentaire {
+  id: string;
+  auteur: Auteur;
+  texte: string;
+  date: string;
+  h: string;
+  supprime?: boolean;
+}
+
+export interface EvenementHistorique {
+  id: string;
+  date: string;
+  auteur: Auteur;
+  texte: string;
+  /** Ancienne valeur d'un texte (titre, description) : rien n'est perdu. */
+  avant?: string;
+}
+
+export interface Tache extends Entite {
+  projetId: string;
+  listeId: string;
+  /** Tâche parente (sous-tâche, un seul niveau). */
+  parentId?: string;
+  titre: string;
+  description: string;
+  statut: string;
+  priorite: Priorite;
+  echeance?: Echeance;
+  etiquettes: string[];
+  assigne?: Auteur;
+  recurrence?: Recurrence;
+  /** Rappels : minutes avant l'échéance (0 = à l'échéance). */
+  rappels: number[];
+  /** Choisie pour ce jour-là (« Ma journée »). */
+  pourAujourdhui?: string;
+  ordre: number;
+  creeLe: string;
+  creePar: Auteur;
+  termineLe?: string;
+  /** Tâche suivante déjà créée par la récurrence (évite un doublon). */
+  suivante?: string;
+  checklist: Record<string, ElementChecklist>;
+  commentaires: Record<string, Commentaire>;
+  historique: EvenementHistorique[];
+}
+
+export type TypeVue = 'liste' | 'kanban' | 'calendrier' | 'journee';
+export type Tri = 'manuel' | 'echeance' | 'priorite' | 'titre' | 'creation' | 'statut';
+export type Groupe = 'statut' | 'priorite' | 'echeance' | 'aucun';
+export type FiltreEcheance = 'toutes' | 'retard' | 'aujourdhui' | 'semaine' | 'sans';
+
+export interface Filtres {
+  recherche: string;
+  statuts: string[];
+  priorites: Priorite[];
+  etiquettes: string[];
+  assigne: 'tous' | Auteur | 'personne';
+  echeance: FiltreEcheance;
+  terminees: boolean;
+}
+
+export const FILTRES_DEFAUT: Filtres = { recherche: '', statuts: [], priorites: [], etiquettes: [], assigne: 'tous', echeance: 'toutes', terminees: true };
+
+export interface VueEnregistree extends Entite {
+  nom: string;
+  vue: TypeVue;
+  /** Projet visé (absent : tous les projets). */
+  projetId?: string;
+  filtres: Filtres;
+  tri: Tri;
+  groupe: Groupe;
+}
+
+export interface Reglages extends Entite {
+  /** Ami choisi (un seul en V1) : identifiant de son compte et prénom affiché. */
+  ami?: string;
+  amiNom?: string;
+  /** Clé de partage (32 octets, hexadécimal) : remise à l'ami dans le dépôt scellé pour lui. */
+  cle?: string;
+  /** Espace des données d'exemple (retirées d'un geste). */
+  demo?: string;
+}
+
+export interface DonneesTaches {
+  v: 1;
+  espaces: Record<string, Espace>;
+  projets: Record<string, Projet>;
+  listes: Record<string, Liste>;
+  taches: Record<string, Tache>;
+  vues: Record<string, VueEnregistree>;
+  reglages: Reglages;
+}
+
+/** Qui agit, quand : horodatages et historique. */
+export interface Contexte {
+  maintenant: number;
+  auteur: Auteur;
+  alea?: () => number;
+}
+
+export class ErreurTaches extends Error {}
+
+// ------------------------------------------------------------------ Constantes
+
+export const COULEURS = ['#5B8CFF', '#3FD49B', '#B78CFF', '#F0A04B', '#FF6B8A', '#2EC4D6', '#E8C547', '#8A94A7'] as const;
+
+export const STATUTS_DEFAUT: readonly Statut[] = [
+  { id: 'a-faire', nom: 'À faire', couleur: '#8A94A7', ferme: false },
+  { id: 'en-cours', nom: 'En cours', couleur: '#5B8CFF', ferme: false },
+  { id: 'en-revue', nom: 'En revue', couleur: '#F0A04B', ferme: false },
+  { id: 'fait', nom: 'Fait', couleur: '#3FD49B', ferme: true },
+];
+
+export const BORNES = {
+  titre: 300,
+  description: 10_000,
+  nom: 80,
+  etiquette: 32,
+  etiquettes: 12,
+  commentaire: 4000,
+  checklist: 100,
+  statuts: 12,
+  rappels: 5,
+  historique: 100,
+  avant: 400,
+} as const;
+
+export const CODE_AUTEUR: Record<Auteur, string> = { fondateur: 'f', ami: 'a' };
+export const RAPPELS_PROPOSES: readonly number[] = [0, 10, 30, 60, 120, 1440, 2880];
+
+// ------------------------------------------------------------------ Outils
+
+export function nouvelId(prefixe: string, maintenant: number, alea: () => number = Math.random): string {
+  return `${prefixe}${maintenant.toString(36)}${Math.floor(alea() * 36 ** 6).toString(36).padStart(6, '0')}`;
+}
+
+const MOTIF_ID = /^[a-z0-9-]{2,48}$/;
+export const idValide = (id: unknown): id is string => typeof id === 'string' && MOTIF_ID.test(id);
+const MOTIF_H = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[fa]$/;
+export const hValide = (h: unknown): h is string => typeof h === 'string' && MOTIF_H.test(h);
+const MOTIF_COULEUR = /^#[0-9A-Fa-f]{6}$/;
+
+/**
+ * Horodatage d'un champ : l'instant présent, toujours postérieur au
+ * précédent (une horloge en retard ne fait pas perdre une modification).
+ */
+export function horodatage(ms: number, auteur: Auteur, precedent?: string): string {
+  let instant = ms;
+  if (precedent) {
+    const avant = Date.parse(precedent.split('|')[0]);
+    if (Number.isFinite(avant) && avant >= instant) instant = avant + 1;
+  }
+  return `${new Date(instant).toISOString()}|${CODE_AUTEUR[auteur]}`;
+}
+
+export const auteurDeH = (h: string | undefined): Auteur | undefined => (h?.endsWith('|a') ? 'ami' : h?.endsWith('|f') ? 'fondateur' : undefined);
+
+const texte = (v: unknown, max: number, defaut = ''): string => (typeof v === 'string' ? v.slice(0, max) : defaut);
+const nombre = (v: unknown, defaut = 0): number => (typeof v === 'number' && Number.isFinite(v) ? v : defaut);
+const dict = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+const couleur = (v: unknown, defaut: string) => (typeof v === 'string' && MOTIF_COULEUR.test(v) ? v : defaut);
+
+function lireH(v: unknown): Horodatages {
+  const r: Horodatages = {};
+  for (const [cle, h] of Object.entries(dict(v))) if (/^[a-zA-Z]{1,24}$/.test(cle) && hValide(h)) r[cle] = h;
+  return r;
+}
+
+export function normaliserEtiquette(e: string): string {
+  return e.trim().replace(/^#/, '').replace(/\s+/g, '-').slice(0, BORNES.etiquette);
+}
+
+// ------------------------------------------------------------------ Lecture (données non sûres)
+
+export function lireRecurrence(v: unknown): Recurrence | undefined {
+  const o = dict(v);
+  switch (o.type) {
+    case 'quotidienne':
+      return { type: 'quotidienne', intervalle: Math.min(365, Math.max(1, Math.round(nombre(o.intervalle, 1)))) };
+    case 'hebdo': {
+      const jours = [...new Set((Array.isArray(o.jours) ? o.jours : []).filter((j): j is number => Number.isInteger(j) && j >= 1 && j <= 7))].sort();
+      return jours.length ? { type: 'hebdo', jours } : undefined;
+    }
+    case 'mensuelle':
+      return { type: 'mensuelle', jour: Math.min(31, Math.max(1, Math.round(nombre(o.jour, 1)))) };
+    case 'annuelle':
+      return { type: 'annuelle', mois: Math.min(12, Math.max(1, Math.round(nombre(o.mois, 1)))), jour: Math.min(31, Math.max(1, Math.round(nombre(o.jour, 1)))) };
+    default:
+      return undefined;
+  }
+}
+
+function lireEcheance(v: unknown): Echeance | undefined {
+  const o = dict(v);
+  if (!jourValide(o.jour)) return undefined;
+  return { jour: o.jour, ...(heureValide(o.heure) ? { heure: o.heure } : {}) };
+}
+
+const lireAuteur = (v: unknown): Auteur | undefined => (v === 'fondateur' || v === 'ami' ? v : undefined);
+
+function lireStatuts(v: unknown): Statut[] {
+  const vus = new Set<string>();
+  const r: Statut[] = [];
+  for (const s of Array.isArray(v) ? v : []) {
+    const o = dict(s);
+    if (!idValide(o.id) || vus.has(o.id)) continue;
+    vus.add(o.id);
+    r.push({ id: o.id, nom: texte(o.nom, BORNES.nom, 'Statut') || 'Statut', couleur: couleur(o.couleur, '#8A94A7'), ferme: o.ferme === true });
+    if (r.length >= BORNES.statuts) break;
+  }
+  return r.length ? r : STATUTS_DEFAUT.map(s => ({ ...s }));
+}
+
+function base(o: Record<string, unknown>): Entite | undefined {
+  if (!idValide(o.id)) return undefined;
+  return { id: o.id, h: lireH(o.h), ...(o.supprime === true ? { supprime: true } : {}) };
+}
+
+export function lireEspace(v: unknown): Espace | undefined {
+  const o = dict(v);
+  const b = base(o);
+  return b && { ...b, nom: texte(o.nom, BORNES.nom, 'Espace') || 'Espace', couleur: couleur(o.couleur, COULEURS[0]), ordre: nombre(o.ordre) };
+}
+
+export function lireProjet(v: unknown): Projet | undefined {
+  const o = dict(v);
+  const b = base(o);
+  if (!b || !idValide(o.espaceId)) return undefined;
+  const partage: ModePartage = o.partage === 'lecture' || o.partage === 'ecriture' ? o.partage : 'aucun';
+  return { ...b, espaceId: o.espaceId, nom: texte(o.nom, BORNES.nom, 'Projet') || 'Projet', couleur: couleur(o.couleur, COULEURS[0]), statuts: lireStatuts(o.statuts), ordre: nombre(o.ordre), partage };
+}
+
+export function lireListe(v: unknown): Liste | undefined {
+  const o = dict(v);
+  const b = base(o);
+  if (!b || !idValide(o.projetId)) return undefined;
+  return { ...b, projetId: o.projetId, nom: texte(o.nom, BORNES.nom, 'Liste') || 'Liste', ordre: nombre(o.ordre) };
+}
+
+function lireChecklist(v: unknown): Record<string, ElementChecklist> {
+  const r: Record<string, ElementChecklist> = {};
+  for (const [id, e] of Object.entries(dict(v)).slice(0, BORNES.checklist * 2)) {
+    const o = dict(e);
+    if (!idValide(id) || !hValide(o.h)) continue;
+    r[id] = { id, texte: texte(o.texte, BORNES.titre), fait: o.fait === true, ordre: nombre(o.ordre), h: o.h, ...(o.supprime === true ? { supprime: true } : {}) };
+  }
+  return r;
+}
+
+function lireCommentaires(v: unknown): Record<string, Commentaire> {
+  const r: Record<string, Commentaire> = {};
+  for (const [id, e] of Object.entries(dict(v)).slice(0, 500)) {
+    const o = dict(e);
+    const auteur = lireAuteur(o.auteur);
+    if (!idValide(id) || !hValide(o.h) || !auteur || typeof o.date !== 'string') continue;
+    r[id] = { id, auteur, texte: texte(o.texte, BORNES.commentaire), date: o.date.slice(0, 30), h: o.h, ...(o.supprime === true ? { supprime: true } : {}) };
+  }
+  return r;
+}
+
+function lireHistorique(v: unknown): EvenementHistorique[] {
+  const r: EvenementHistorique[] = [];
+  for (const e of (Array.isArray(v) ? v : []).slice(-BORNES.historique * 2)) {
+    const o = dict(e);
+    const auteur = lireAuteur(o.auteur);
+    if (typeof o.id !== 'string' || o.id.length > 64 || typeof o.date !== 'string' || !auteur) continue;
+    r.push({ id: o.id, date: o.date.slice(0, 30), auteur, texte: texte(o.texte, 200), ...(typeof o.avant === 'string' ? { avant: o.avant.slice(0, BORNES.avant) } : {}) });
+  }
+  return borneHistorique(r);
+}
+
+export function borneHistorique(h: EvenementHistorique[]): EvenementHistorique[] {
+  const uniques = new Map<string, EvenementHistorique>();
+  for (const e of h) if (!uniques.has(e.id)) uniques.set(e.id, e);
+  return [...uniques.values()].sort((a, b) => (a.date === b.date ? (a.id < b.id ? -1 : 1) : a.date < b.date ? -1 : 1)).slice(-BORNES.historique);
+}
+
+export function lireTache(v: unknown): Tache | undefined {
+  const o = dict(v);
+  const b = base(o);
+  if (!b || !idValide(o.projetId) || !idValide(o.listeId)) return undefined;
+  const priorite: Priorite = PRIORITES.includes(o.priorite as Priorite) ? (o.priorite as Priorite) : 'normale';
+  const echeance = lireEcheance(o.echeance);
+  const recurrence = lireRecurrence(o.recurrence);
+  const assigne = lireAuteur(o.assigne);
+  const etiquettes = [...new Set((Array.isArray(o.etiquettes) ? o.etiquettes : []).filter((e): e is string => typeof e === 'string').map(normaliserEtiquette).filter(Boolean))].slice(0, BORNES.etiquettes);
+  const rappels = [...new Set((Array.isArray(o.rappels) ? o.rappels : []).filter((m): m is number => Number.isInteger(m) && m >= 0 && m <= 60 * 24 * 30))].sort((a, b) => a - b).slice(0, BORNES.rappels);
+  return {
+    ...b,
+    projetId: o.projetId,
+    listeId: o.listeId,
+    ...(idValide(o.parentId) ? { parentId: o.parentId } : {}),
+    titre: texte(o.titre, BORNES.titre),
+    description: texte(o.description, BORNES.description),
+    statut: idValide(o.statut) ? o.statut : STATUTS_DEFAUT[0].id,
+    priorite,
+    ...(echeance ? { echeance } : {}),
+    etiquettes,
+    ...(assigne ? { assigne } : {}),
+    ...(recurrence ? { recurrence } : {}),
+    rappels,
+    ...(jourValide(o.pourAujourdhui) ? { pourAujourdhui: o.pourAujourdhui } : {}),
+    ordre: nombre(o.ordre),
+    creeLe: typeof o.creeLe === 'string' ? o.creeLe.slice(0, 30) : new Date(0).toISOString(),
+    creePar: lireAuteur(o.creePar) ?? 'fondateur',
+    ...(typeof o.termineLe === 'string' ? { termineLe: o.termineLe.slice(0, 30) } : {}),
+    ...(idValide(o.suivante) ? { suivante: o.suivante } : {}),
+    checklist: lireChecklist(o.checklist),
+    commentaires: lireCommentaires(o.commentaires),
+    historique: lireHistorique(o.historique),
+  };
+}
+
+const MOTIF_FILTRE = /^[a-z0-9-]{1,48}$/;
+
+export function lireFiltres(v: unknown): Filtres {
+  const o = dict(v);
+  const liste = (x: unknown) => (Array.isArray(x) ? x.filter((s): s is string => typeof s === 'string' && s.length <= 48) : []);
+  const echeances: FiltreEcheance[] = ['toutes', 'retard', 'aujourdhui', 'semaine', 'sans'];
+  return {
+    recherche: texte(o.recherche, 120),
+    statuts: liste(o.statuts).filter(s => MOTIF_FILTRE.test(s)),
+    priorites: liste(o.priorites).filter((p): p is Priorite => PRIORITES.includes(p as Priorite)),
+    etiquettes: liste(o.etiquettes),
+    assigne: o.assigne === 'fondateur' || o.assigne === 'ami' || o.assigne === 'personne' ? o.assigne : 'tous',
+    echeance: echeances.includes(o.echeance as FiltreEcheance) ? (o.echeance as FiltreEcheance) : 'toutes',
+    terminees: o.terminees !== false,
+  };
+}
+
+export function lireVue(v: unknown): VueEnregistree | undefined {
+  const o = dict(v);
+  const b = base(o);
+  if (!b) return undefined;
+  const vues: TypeVue[] = ['liste', 'kanban', 'calendrier', 'journee'];
+  const tris: Tri[] = ['manuel', 'echeance', 'priorite', 'titre', 'creation', 'statut'];
+  const groupes: Groupe[] = ['statut', 'priorite', 'echeance', 'aucun'];
+  return {
+    ...b,
+    nom: texte(o.nom, BORNES.nom, 'Vue') || 'Vue',
+    vue: vues.includes(o.vue as TypeVue) ? (o.vue as TypeVue) : 'liste',
+    ...(idValide(o.projetId) ? { projetId: o.projetId } : {}),
+    filtres: lireFiltres(o.filtres),
+    tri: tris.includes(o.tri as Tri) ? (o.tri as Tri) : 'manuel',
+    groupe: groupes.includes(o.groupe as Groupe) ? (o.groupe as Groupe) : 'statut',
+  };
+}
+
+export function lireReglages(v: unknown): Reglages {
+  const o = dict(v);
+  return {
+    id: 'reglages',
+    h: lireH(o.h),
+    ...(typeof o.ami === 'string' && /^[a-z0-9]{6,16}$/.test(o.ami) ? { ami: o.ami } : {}),
+    ...(typeof o.amiNom === 'string' ? { amiNom: o.amiNom.slice(0, 40) } : {}),
+    ...(typeof o.cle === 'string' && /^[0-9a-f]{64}$/.test(o.cle) ? { cle: o.cle } : {}),
+    ...(idValide(o.demo) ? { demo: o.demo } : {}),
+  };
+}
+
+function lireDict<T extends Entite>(v: unknown, lire: (x: unknown) => T | undefined, max: number): Record<string, T> {
+  const r: Record<string, T> = {};
+  for (const e of Object.values(dict(v)).slice(0, max)) {
+    const lu = lire(e);
+    if (lu) r[lu.id] = lu;
+  }
+  return r;
+}
+
+export const donneesVides = (): DonneesTaches => ({ v: 1, espaces: {}, projets: {}, listes: {}, taches: {}, vues: {}, reglages: { id: 'reglages', h: {} } });
+
+/** Lit des données de tâches (texte JSON ou objet), en écartant tout ce qui est invalide. */
+export function lireDonnees(brut: unknown): DonneesTaches {
+  let o: Record<string, unknown>;
+  try {
+    o = dict(typeof brut === 'string' ? JSON.parse(brut) : brut);
+  } catch {
+    return donneesVides();
+  }
+  return {
+    v: 1,
+    espaces: lireDict(o.espaces, lireEspace, 200),
+    projets: lireDict(o.projets, lireProjet, 1000),
+    listes: lireDict(o.listes, lireListe, 3000),
+    taches: lireDict(o.taches, lireTache, 20_000),
+    vues: lireDict(o.vues, lireVue, 100),
+    reglages: lireReglages(o.reglages),
+  };
+}
+
+export const ecrireDonnees = (d: DonneesTaches): string => JSON.stringify(d);
+
+// ------------------------------------------------------------------ Modification d'une entité
+
+/** Change des champs d'une entité en datant chacun (rien n'est daté s'il ne change pas). */
+export function changerChamps<T extends Entite>(e: T, changement: Readonly<Record<string, unknown>>, ctx: Contexte): T {
+  const suivant = { ...e, h: { ...e.h } } as unknown as Record<string, unknown> & { h: Horodatages };
+  let change = false;
+  for (const [cle, valeur] of Object.entries(changement)) {
+    if (cle === 'id' || cle === 'h') continue;
+    if (JSON.stringify((e as Record<string, unknown>)[cle]) === JSON.stringify(valeur)) continue;
+    if (valeur === undefined) delete suivant[cle];
+    else suivant[cle] = valeur;
+    suivant.h[cle] = horodatage(ctx.maintenant, ctx.auteur, e.h[cle]);
+    change = true;
+  }
+  return change ? (suivant as unknown as T) : e;
+}
+
+function nouvelleEntite(prefixe: string, ctx: Contexte): Entite {
+  return { id: nouvelId(prefixe, ctx.maintenant, ctx.alea), h: {} };
+}
+
+/** Horodate tous les champs d'une entité neuve. */
+function dater<T extends Entite>(e: T, ctx: Contexte): T {
+  const h: Horodatages = {};
+  const hh = horodatage(ctx.maintenant, ctx.auteur);
+  for (const cle of Object.keys(e)) if (cle !== 'id' && cle !== 'h' && cle !== 'checklist' && cle !== 'commentaires' && cle !== 'historique') h[cle] = hh;
+  return { ...e, h };
+}
+
+const nomPropre = (nom: string, defaut: string) => nom.trim().slice(0, BORNES.nom) || defaut;
+
+// ------------------------------------------------------------------ Lecture des vivants
+
+export const vivant = <T extends Entite>(e: T | undefined): e is T => Boolean(e && !e.supprime);
+const parOrdre = <T extends { ordre: number; nom?: string; id: string }>(a: T, b: T) => a.ordre - b.ordre || a.id.localeCompare(b.id);
+
+export function espacesVivants(d: DonneesTaches): Espace[] {
+  return Object.values(d.espaces).filter(vivant).sort(parOrdre);
+}
+export function projetsDe(d: DonneesTaches, espaceId?: string): Projet[] {
+  return Object.values(d.projets)
+    .filter(p => vivant(p) && (espaceId === undefined || p.espaceId === espaceId) && (espaceId !== undefined || vivant(d.espaces[p.espaceId]) || !d.espaces[p.espaceId]))
+    .sort(parOrdre);
+}
+export function listesDe(d: DonneesTaches, projetId: string): Liste[] {
+  return Object.values(d.listes).filter(l => vivant(l) && l.projetId === projetId).sort(parOrdre);
+}
+/** Tâches vivantes d'un projet vivant (ou de tous), sous-tâches comprises. */
+export function tachesVivantes(d: DonneesTaches, projetId?: string): Tache[] {
+  return Object.values(d.taches).filter(t => {
+    if (!vivant(t) || (projetId !== undefined && t.projetId !== projetId)) return false;
+    const p = d.projets[t.projetId];
+    const l = d.listes[t.listeId];
+    if (!vivant(p) || !vivant(l)) return false;
+    if (t.parentId && !vivant(d.taches[t.parentId])) return false;
+    return true;
+  });
+}
+export const sousTaches = (d: DonneesTaches, id: string): Tache[] =>
+  Object.values(d.taches)
+    .filter(t => vivant(t) && t.parentId === id)
+    .sort((a, b) => a.ordre - b.ordre || a.creeLe.localeCompare(b.creeLe));
+
+export function statutsDe(d: DonneesTaches, projetId: string): Statut[] {
+  return d.projets[projetId]?.statuts ?? STATUTS_DEFAUT.map(s => ({ ...s }));
+}
+export function statutDe(d: DonneesTaches, t: Pick<Tache, 'projetId' | 'statut'>): Statut {
+  const statuts = statutsDe(d, t.projetId);
+  return statuts.find(s => s.id === t.statut) ?? statuts[0];
+}
+export const estTerminee = (d: DonneesTaches, t: Pick<Tache, 'projetId' | 'statut'>): boolean => statutDe(d, t).ferme;
+
+export function etiquettesUtilisees(taches: readonly Tache[]): string[] {
+  return [...new Set(taches.flatMap(t => t.etiquettes))].sort((a, b) => sansAccents(a).localeCompare(sansAccents(b)));
+}
+
+// ------------------------------------------------------------------ Espaces, projets, listes
+
+export function creerEspace(d: DonneesTaches, nom: string, ctx: Contexte, couleurChoisie?: string): { donnees: DonneesTaches; espace: Espace } {
+  const ordre = Math.max(0, ...Object.values(d.espaces).map(e => e.ordre)) + 1;
+  const espace = dater<Espace>({ ...nouvelleEntite('e', ctx), nom: nomPropre(nom, 'Espace'), couleur: couleurChoisie ?? COULEURS[Object.keys(d.espaces).length % COULEURS.length], ordre }, ctx);
+  return { donnees: { ...d, espaces: { ...d.espaces, [espace.id]: espace } }, espace };
+}
+
+export function creerProjet(d: DonneesTaches, espaceId: string, nom: string, ctx: Contexte): { donnees: DonneesTaches; projet: Projet; liste: Liste } {
+  if (!vivant(d.espaces[espaceId])) throw new ErreurTaches('Espace introuvable.');
+  const ordre = Math.max(0, ...Object.values(d.projets).map(p => p.ordre)) + 1;
+  const projet = dater<Projet>({
+    ...nouvelleEntite('p', ctx),
+    espaceId,
+    nom: nomPropre(nom, 'Projet'),
+    couleur: d.espaces[espaceId].couleur,
+    statuts: STATUTS_DEFAUT.map(s => ({ ...s })),
+    ordre,
+    partage: 'aucun',
+  }, ctx);
+  const liste = dater<Liste>({ ...nouvelleEntite('l', ctx), projetId: projet.id, nom: 'Liste', ordre: 1 }, ctx);
+  return { donnees: { ...d, projets: { ...d.projets, [projet.id]: projet }, listes: { ...d.listes, [liste.id]: liste } }, projet, liste };
+}
+
+export function creerListe(d: DonneesTaches, projetId: string, nom: string, ctx: Contexte): { donnees: DonneesTaches; liste: Liste } {
+  if (!vivant(d.projets[projetId])) throw new ErreurTaches('Projet introuvable.');
+  const ordre = Math.max(0, ...listesDe(d, projetId).map(l => l.ordre)) + 1;
+  const liste = dater<Liste>({ ...nouvelleEntite('l', ctx), projetId, nom: nomPropre(nom, 'Liste'), ordre }, ctx);
+  return { donnees: { ...d, listes: { ...d.listes, [liste.id]: liste } }, liste };
+}
+
+export function modifierEspace(d: DonneesTaches, id: string, c: Partial<Pick<Espace, 'nom' | 'couleur' | 'ordre'>>, ctx: Contexte): DonneesTaches {
+  const e = d.espaces[id];
+  if (!vivant(e)) throw new ErreurTaches('Espace introuvable.');
+  return { ...d, espaces: { ...d.espaces, [id]: changerChamps(e, c.nom !== undefined ? { ...c, nom: nomPropre(c.nom, e.nom) } : c, ctx) } };
+}
+
+export function modifierProjet(d: DonneesTaches, id: string, c: Partial<Pick<Projet, 'nom' | 'couleur' | 'ordre' | 'partage' | 'espaceId'>>, ctx: Contexte): DonneesTaches {
+  const p = d.projets[id];
+  if (!vivant(p)) throw new ErreurTaches('Projet introuvable.');
+  return { ...d, projets: { ...d.projets, [id]: changerChamps(p, c.nom !== undefined ? { ...c, nom: nomPropre(c.nom, p.nom) } : c, ctx) } };
+}
+
+export function modifierListe(d: DonneesTaches, id: string, c: Partial<Pick<Liste, 'nom' | 'ordre'>>, ctx: Contexte): DonneesTaches {
+  const l = d.listes[id];
+  if (!vivant(l)) throw new ErreurTaches('Liste introuvable.');
+  return { ...d, listes: { ...d.listes, [id]: changerChamps(l, c.nom !== undefined ? { ...c, nom: nomPropre(c.nom, l.nom) } : c, ctx) } };
+}
+
+/** Pierre tombale d'un projet, de ses listes et de ses tâches. */
+export function supprimerProjet(d: DonneesTaches, id: string, ctx: Contexte): DonneesTaches {
+  if (ctx.auteur !== 'fondateur') throw new ErreurTaches('Seul le Fondateur supprime un projet.');
+  const p = d.projets[id];
+  if (!vivant(p)) return d;
+  const listes = { ...d.listes };
+  for (const l of Object.values(d.listes)) if (l.projetId === id && !l.supprime) listes[l.id] = changerChamps(l, { supprime: true }, ctx);
+  const taches = { ...d.taches };
+  for (const t of Object.values(d.taches)) if (t.projetId === id && !t.supprime) taches[t.id] = changerChamps(t, { supprime: true }, ctx);
+  return { ...d, projets: { ...d.projets, [id]: changerChamps(p, { supprime: true }, ctx) }, listes, taches };
+}
+
+export function supprimerEspace(d: DonneesTaches, id: string, ctx: Contexte): DonneesTaches {
+  if (ctx.auteur !== 'fondateur') throw new ErreurTaches('Seul le Fondateur supprime un espace.');
+  const e = d.espaces[id];
+  if (!vivant(e)) return d;
+  let suivant = d;
+  for (const p of projetsDe(d, id)) suivant = supprimerProjet(suivant, p.id, ctx);
+  return { ...suivant, espaces: { ...suivant.espaces, [id]: changerChamps(e, { supprime: true }, ctx) } };
+}
+
+export function supprimerListe(d: DonneesTaches, id: string, ctx: Contexte): DonneesTaches {
+  if (ctx.auteur !== 'fondateur') throw new ErreurTaches('Seul le Fondateur supprime une liste.');
+  const l = d.listes[id];
+  if (!vivant(l)) return d;
+  if (listesDe(d, l.projetId).length <= 1) throw new ErreurTaches('Un projet garde au moins une liste.');
+  const taches = { ...d.taches };
+  for (const t of Object.values(d.taches)) if (t.listeId === id && !t.supprime) taches[t.id] = changerChamps(t, { supprime: true }, ctx);
+  return { ...d, listes: { ...d.listes, [id]: changerChamps(l, { supprime: true }, ctx) }, taches };
+}
+
+/**
+ * Remplace les statuts d'un projet. Une tâche dont le statut disparaît prend
+ * le statut indiqué par `remplacement` (sinon le premier).
+ */
+export function changerStatuts(d: DonneesTaches, projetId: string, statuts: readonly Statut[], ctx: Contexte, remplacement: Record<string, string> = {}): DonneesTaches {
+  const p = d.projets[projetId];
+  if (!vivant(p)) throw new ErreurTaches('Projet introuvable.');
+  const propres = lireStatuts(statuts.map(s => ({ ...s, nom: s.nom.trim() || 'Statut' })));
+  if (!propres.some(s => s.ferme)) throw new ErreurTaches('Gardez au moins un statut « terminé ».');
+  if (!propres.some(s => !s.ferme)) throw new ErreurTaches('Gardez au moins un statut ouvert.');
+  const ids = new Set(propres.map(s => s.id));
+  let suivant: DonneesTaches = { ...d, projets: { ...d.projets, [projetId]: changerChamps(p, { statuts: propres }, ctx) } };
+  for (const t of Object.values(d.taches)) {
+    if (t.projetId !== projetId || t.supprime || ids.has(t.statut)) continue;
+    const cible = remplacement[t.statut] && ids.has(remplacement[t.statut]) ? remplacement[t.statut] : propres[0].id;
+    suivant = modifierTache(suivant, t.id, { statut: cible }, ctx);
+  }
+  return suivant;
+}
+
+export function nouveauStatut(nom: string, statuts: readonly Statut[], alea: () => number = Math.random): Statut {
+  const base = sansAccents(nom).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || 'statut';
+  let id = base.length >= 2 ? base : `s-${base}`;
+  while (statuts.some(s => s.id === id)) id = `${base}-${Math.floor(alea() * 1000)}`;
+  return { id, nom: nom.trim().slice(0, BORNES.nom) || 'Statut', couleur: COULEURS[statuts.length % COULEURS.length], ferme: false };
+}
+
+// ------------------------------------------------------------------ Tâches
+
+export interface SaisieTache {
+  titre: string;
+  listeId: string;
+  parentId?: string;
+  description?: string;
+  statut?: string;
+  priorite?: Priorite;
+  echeance?: Echeance;
+  etiquettes?: string[];
+  assigne?: Auteur;
+  recurrence?: Recurrence;
+  rappels?: number[];
+  pourAujourdhui?: string;
+}
+
+function evenement(ctx: Contexte, texteEvt: string, avant?: string, id?: string): EvenementHistorique {
+  const date = new Date(ctx.maintenant).toISOString();
+  return { id: id ?? nouvelId('h', ctx.maintenant, ctx.alea), date, auteur: ctx.auteur, texte: texteEvt.slice(0, 200), ...(avant !== undefined ? { avant: avant.slice(0, BORNES.avant) } : {}) };
+}
+
+export function creerTache(d: DonneesTaches, s: SaisieTache, ctx: Contexte, id?: string): { donnees: DonneesTaches; tache: Tache } {
+  const liste = d.listes[s.listeId];
+  if (!vivant(liste) || !vivant(d.projets[liste.projetId])) throw new ErreurTaches('Liste introuvable.');
+  const titre = s.titre.trim().slice(0, BORNES.titre);
+  if (!titre) throw new ErreurTaches('Donnez un titre à la tâche.');
+  let parentId = s.parentId;
+  if (parentId) {
+    const parent = d.taches[parentId];
+    if (!vivant(parent)) throw new ErreurTaches('Tâche parente introuvable.');
+    // Un seul niveau : la sous-tâche d'une sous-tâche est rattachée à la tâche principale.
+    if (parent.parentId) parentId = parent.parentId;
+  }
+  const statuts = statutsDe(d, liste.projetId);
+  const statut = s.statut && statuts.some(st => st.id === s.statut) ? s.statut : statuts[0].id;
+  const ordre = Math.max(0, ...Object.values(d.taches).filter(t => t.listeId === s.listeId).map(t => t.ordre)) + 1;
+  const tache = dater<Tache>({
+    id: id ?? nouvelId('t', ctx.maintenant, ctx.alea),
+    h: {},
+    projetId: liste.projetId,
+    listeId: liste.id,
+    ...(parentId ? { parentId } : {}),
+    titre,
+    description: (s.description ?? '').slice(0, BORNES.description),
+    statut,
+    priorite: s.priorite ?? 'normale',
+    ...(s.echeance ? { echeance: s.echeance } : {}),
+    etiquettes: [...new Set((s.etiquettes ?? []).map(normaliserEtiquette).filter(Boolean))].slice(0, BORNES.etiquettes),
+    ...(s.assigne ? { assigne: s.assigne } : {}),
+    ...(s.recurrence ? { recurrence: s.recurrence } : {}),
+    rappels: [...new Set(s.rappels ?? [])].sort((a, b) => a - b).slice(0, BORNES.rappels),
+    ...(s.pourAujourdhui ? { pourAujourdhui: s.pourAujourdhui } : {}),
+    ordre,
+    creeLe: new Date(ctx.maintenant).toISOString(),
+    creePar: ctx.auteur,
+    checklist: {},
+    commentaires: {},
+    // Identifiant imposé (récurrence) : même événement de création des deux côtés.
+    historique: [evenement(ctx, parentId ? 'Sous-tâche créée' : 'Tâche créée', undefined, id ? `h${id}`.slice(0, 48) : undefined)],
+  }, ctx);
+  return { donnees: { ...d, taches: { ...d.taches, [tache.id]: tache } }, tache };
+}
+
+export type ChangementTache = Partial<Pick<Tache, 'titre' | 'description' | 'statut' | 'priorite' | 'echeance' | 'etiquettes' | 'assigne' | 'recurrence' | 'rappels' | 'pourAujourdhui' | 'ordre' | 'listeId' | 'projetId' | 'parentId'>>;
+
+const ou = (v: string | undefined) => v || '—';
+
+/** Texte de l'historique pour un champ changé. */
+function decrire(d: DonneesTaches, t: Tache, cle: string, valeur: unknown, noms: Partial<Record<Auteur, string>>): { texte: string; avant?: string } | undefined {
+  switch (cle) {
+    case 'titre':
+      return { texte: 'Titre modifié', avant: t.titre };
+    case 'description':
+      return { texte: 'Description modifiée', avant: t.description };
+    case 'statut': {
+      const st = statutsDe(d, t.projetId);
+      return { texte: `Statut : ${ou(st.find(s => s.id === t.statut)?.nom)} → ${ou(st.find(s => s.id === valeur)?.nom)}` };
+    }
+    case 'priorite':
+      return { texte: `Priorité : ${LIBELLES_PRIORITE[t.priorite]} → ${LIBELLES_PRIORITE[valeur as Priorite]}` };
+    case 'echeance': {
+      const e = valeur as Echeance | undefined;
+      const lib = (x?: Echeance) => (x ? `${x.jour.split('-').reverse().join('/')}${x.heure ? ` ${x.heure}` : ''}` : '—');
+      return { texte: `Échéance : ${lib(t.echeance)} → ${lib(e)}` };
+    }
+    case 'assigne':
+      return { texte: valeur ? `Assignée à ${noms[valeur as Auteur] ?? (valeur === 'ami' ? 'l’ami' : 'le Fondateur')}` : 'Plus assignée' };
+    case 'etiquettes': {
+      const avant = new Set(t.etiquettes);
+      const apres = new Set(valeur as string[]);
+      const plus = [...apres].filter(e => !avant.has(e)).map(e => `+${e}`);
+      const moins = [...avant].filter(e => !apres.has(e)).map(e => `−${e}`);
+      return { texte: `Étiquettes : ${[...plus, ...moins].join(' ') || 'réordonnées'}` };
+    }
+    case 'recurrence':
+      return { texte: valeur ? 'Récurrence modifiée' : 'Récurrence retirée' };
+    case 'rappels':
+      return { texte: 'Rappels modifiés' };
+    case 'listeId':
+      return { texte: `Déplacée vers la liste « ${ou(d.listes[valeur as string]?.nom)} »` };
+    case 'supprime':
+      return { texte: valeur ? 'Tâche supprimée' : 'Tâche restaurée' };
+    default:
+      return undefined;
+  }
+}
+
+export function modifierTache(d: DonneesTaches, id: string, c: ChangementTache & { supprime?: boolean; termineLe?: string; suivante?: string }, ctx: Contexte, noms: Partial<Record<Auteur, string>> = {}): DonneesTaches {
+  const t = d.taches[id];
+  if (!t) throw new ErreurTaches('Tâche introuvable.');
+  const propre: Record<string, unknown> = { ...c };
+  if (c.titre !== undefined) {
+    propre.titre = c.titre.trim().slice(0, BORNES.titre);
+    if (!propre.titre) throw new ErreurTaches('Le titre ne peut pas être vide.');
+  }
+  if (c.description !== undefined) propre.description = c.description.slice(0, BORNES.description);
+  if (c.etiquettes) propre.etiquettes = [...new Set(c.etiquettes.map(normaliserEtiquette).filter(Boolean))].slice(0, BORNES.etiquettes);
+  if (c.rappels) propre.rappels = [...new Set(c.rappels)].sort((a, b) => a - b).slice(0, BORNES.rappels);
+  if (c.listeId !== undefined && c.listeId !== t.listeId) {
+    const l = d.listes[c.listeId];
+    if (!vivant(l)) throw new ErreurTaches('Liste introuvable.');
+    propre.projetId = l.projetId;
+    if (l.projetId !== t.projetId) {
+      // Changement de projet : statut équivalent (même identifiant) ou le premier.
+      const statuts = statutsDe(d, l.projetId);
+      if (!statuts.some(s => s.id === (propre.statut ?? t.statut))) propre.statut = statuts[0].id;
+    }
+  }
+  if (propre.statut !== undefined && !statutsDe(d, (propre.projetId as string) ?? t.projetId).some(s => s.id === propre.statut)) {
+    throw new ErreurTaches('Statut inconnu pour ce projet.');
+  }
+  const suivant = changerChamps(t, propre as Partial<Tache>, ctx);
+  if (suivant === t) return d;
+  // Terminée / rouverte : date de fin.
+  const fermeAvant = estTerminee(d, t);
+  const fermeApres = estTerminee(d, suivant);
+  let finale = suivant;
+  if (fermeApres && !fermeAvant && c.termineLe === undefined) finale = changerChamps(finale, { termineLe: new Date(ctx.maintenant).toISOString() }, ctx);
+  if (!fermeApres && fermeAvant) finale = changerChamps(finale, { termineLe: undefined }, ctx);
+  const evts: EvenementHistorique[] = [];
+  for (const cle of Object.keys(propre)) {
+    if (JSON.stringify((t as unknown as Record<string, unknown>)[cle]) === JSON.stringify(propre[cle])) continue;
+    const desc = decrire(d, t, cle, propre[cle], noms);
+    if (desc) evts.push(evenement(ctx, desc.texte, desc.avant));
+  }
+  if (evts.length) finale = { ...finale, historique: borneHistorique([...finale.historique, ...evts]) };
+  let taches = { ...d.taches, [id]: finale };
+  // Suppression : les sous-tâches suivent ; déplacement : elles suivent aussi.
+  for (const st of Object.values(d.taches)) {
+    if (st.parentId !== id || st.supprime) continue;
+    const cs: Partial<Tache> = {};
+    if (c.supprime === true) cs.supprime = true;
+    if (finale.listeId !== st.listeId) Object.assign(cs, { listeId: finale.listeId, projetId: finale.projetId });
+    if (finale.projetId !== st.projetId && !statutsDe(d, finale.projetId).some(s => s.id === st.statut)) cs.statut = statutsDe(d, finale.projetId)[0].id;
+    if (Object.keys(cs).length) taches = { ...taches, [st.id]: changerChamps(st, cs, ctx) };
+  }
+  return { ...d, taches };
+}
+
+export const supprimerTache = (d: DonneesTaches, id: string, ctx: Contexte) => modifierTache(d, id, { supprime: true }, ctx);
+export const restaurerTache = (d: DonneesTaches, id: string, ctx: Contexte) => modifierTache(d, id, { supprime: false }, ctx);
+
+// ------------------------------------------------------------------ Checklist, commentaires
+
+function avecTache(d: DonneesTaches, id: string, changer: (t: Tache) => Tache): DonneesTaches {
+  const t = d.taches[id];
+  if (!vivant(t)) throw new ErreurTaches('Tâche introuvable.');
+  return { ...d, taches: { ...d.taches, [id]: changer(t) } };
+}
+
+export function ajouterElement(d: DonneesTaches, tacheId: string, texteEl: string, ctx: Contexte): DonneesTaches {
+  const t = texteEl.trim().slice(0, BORNES.titre);
+  if (!t) throw new ErreurTaches('Élément vide.');
+  return avecTache(d, tacheId, tache => {
+    const vivants = Object.values(tache.checklist).filter(e => !e.supprime);
+    if (vivants.length >= BORNES.checklist) throw new ErreurTaches('Checklist pleine (100 éléments).');
+    const id = nouvelId('c', ctx.maintenant, ctx.alea);
+    const ordre = Math.max(0, ...vivants.map(e => e.ordre)) + 1;
+    return { ...tache, checklist: { ...tache.checklist, [id]: { id, texte: t, fait: false, ordre, h: horodatage(ctx.maintenant, ctx.auteur) } } };
+  });
+}
+
+export function changerElement(d: DonneesTaches, tacheId: string, id: string, c: Partial<Pick<ElementChecklist, 'texte' | 'fait' | 'supprime'>>, ctx: Contexte): DonneesTaches {
+  return avecTache(d, tacheId, tache => {
+    const e = tache.checklist[id];
+    if (!e) throw new ErreurTaches('Élément introuvable.');
+    return { ...tache, checklist: { ...tache.checklist, [id]: { ...e, ...c, ...(c.texte !== undefined ? { texte: c.texte.slice(0, BORNES.titre) } : {}), h: horodatage(ctx.maintenant, ctx.auteur, e.h) } } };
+  });
+}
+
+export const elementsChecklist = (t: Tache): ElementChecklist[] => Object.values(t.checklist).filter(e => !e.supprime).sort((a, b) => a.ordre - b.ordre || a.id.localeCompare(b.id));
+
+export function ajouterCommentaire(d: DonneesTaches, tacheId: string, texteC: string, ctx: Contexte): DonneesTaches {
+  const t = texteC.trim().slice(0, BORNES.commentaire);
+  if (!t) throw new ErreurTaches('Commentaire vide.');
+  return avecTache(d, tacheId, tache => {
+    const id = nouvelId('m', ctx.maintenant, ctx.alea);
+    const date = new Date(ctx.maintenant).toISOString();
+    return { ...tache, commentaires: { ...tache.commentaires, [id]: { id, auteur: ctx.auteur, texte: t, date, h: horodatage(ctx.maintenant, ctx.auteur) } } };
+  });
+}
+
+export function supprimerCommentaire(d: DonneesTaches, tacheId: string, id: string, ctx: Contexte): DonneesTaches {
+  return avecTache(d, tacheId, tache => {
+    const c = tache.commentaires[id];
+    if (!c) throw new ErreurTaches('Commentaire introuvable.');
+    if (c.auteur !== ctx.auteur && ctx.auteur !== 'fondateur') throw new ErreurTaches('Vous ne pouvez supprimer que vos commentaires.');
+    return { ...tache, commentaires: { ...tache.commentaires, [id]: { ...c, supprime: true, h: horodatage(ctx.maintenant, ctx.auteur, c.h) } } };
+  });
+}
+
+export const commentairesDe = (t: Tache): Commentaire[] => Object.values(t.commentaires).filter(c => !c.supprime).sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+
+// ------------------------------------------------------------------ Vues enregistrées, réglages
+
+export function enregistrerVue(d: DonneesTaches, v: Omit<VueEnregistree, 'id' | 'h'>, ctx: Contexte, id?: string): { donnees: DonneesTaches; vue: VueEnregistree } {
+  const existante = id ? d.vues[id] : undefined;
+  const propre = { ...v, nom: nomPropre(v.nom, 'Vue') };
+  const vue = existante ? changerChamps(existante, propre, ctx) : dater<VueEnregistree>({ ...nouvelleEntite('v', ctx), ...propre }, ctx);
+  return { donnees: { ...d, vues: { ...d.vues, [vue.id]: vue } }, vue };
+}
+
+export function supprimerVue(d: DonneesTaches, id: string, ctx: Contexte): DonneesTaches {
+  const v = d.vues[id];
+  if (!vivant(v)) return d;
+  return { ...d, vues: { ...d.vues, [id]: changerChamps(v, { supprime: true }, ctx) } };
+}
+
+export function changerReglages(d: DonneesTaches, c: Partial<Omit<Reglages, 'id' | 'h'>>, ctx: Contexte): DonneesTaches {
+  return { ...d, reglages: changerChamps(d.reglages, c, ctx) };
+}
+
+// ------------------------------------------------------------------ Liens dans la description
+
+const MOTIF_LIEN = /\bhttps?:\/\/[^\s<>"')\]]+/gi;
+
+/** Découpe un texte en morceaux et liens (http/https seulement). */
+export function decouperLiens(t: string): Array<{ texte: string; lien?: string }> {
+  const r: Array<{ texte: string; lien?: string }> = [];
+  let dernier = 0;
+  for (const m of t.matchAll(MOTIF_LIEN)) {
+    const debut = m.index ?? 0;
+    if (debut > dernier) r.push({ texte: t.slice(dernier, debut) });
+    const lien = m[0].replace(/[.,;:!?]+$/, '');
+    r.push({ texte: lien, lien });
+    dernier = debut + lien.length;
+  }
+  if (dernier < t.length) r.push({ texte: t.slice(dernier) });
+  return r;
+}

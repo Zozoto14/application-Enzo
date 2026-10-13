@@ -21,6 +21,8 @@ export interface DevblogProps {
   admin: boolean;
   /** Compte gestionnaire : voit aussi « Tu es gestionnaire ». */
   gestionnaire?: boolean;
+  /** Apps ouvertes au compte (nouveautés propres à une app). */
+  apps?: readonly string[];
   /** Entrée à présenter ; absente : historique de toutes les versions. */
   entree?: EntreeDevblog;
   onFermer(): void;
@@ -31,7 +33,7 @@ export interface DevblogProps {
   disponible(cible: CibleEssai): boolean;
 }
 
-export function Devblog({ theme, admin, gestionnaire, entree, onFermer, onEssayer, onVisite, disponible }: DevblogProps) {
+export function Devblog({ theme, admin, gestionnaire, apps = [], entree, onFermer, onEssayer, onVisite, disponible }: DevblogProps) {
   const { width, height } = useWindowDimensions();
   const [ouverte, setOuverte] = useState<string | undefined>(entree?.version ?? ENTREES[0]?.version);
   useEffect(() => ecouterTouche('Escape', onFermer), [onFermer]);
@@ -66,7 +68,7 @@ export function Devblog({ theme, admin, gestionnaire, entree, onFermer, onEssaye
           ) : null}
           {liste.map(e => {
             const deplie = Boolean(entree) || ouverte === e.version;
-            const fonctions = fonctionnalitesPour(e, admin, gestionnaire);
+            const fonctions = fonctionnalitesPour(e, admin, gestionnaire, apps);
             return (
               <View key={e.version} style={{ gap: 14 }} testID={`devblog-entree-${e.version}`}>
                 {entree ? null : (

@@ -87,7 +87,8 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
   const [creation, setCreation] = useState(false);
   const [identifiants, setIdentifiants] = useState<{ nom: string; valeurs: IdentifiantsAmi } | undefined>();
   const gestionnaire = outils.role === 'gestionnaire';
-  const attribuables = registre.filter(a => !a.adminSeulement);
+  // Une app qui choisit elle-même à qui elle s'ouvre (Tâches) n'a pas de case ici.
+  const attribuables = registre.filter(a => !a.adminSeulement && !a.attribueeParApp);
   const liste = filtrerComptes(tous, { recherche, statut, app: app === 'toutes' ? undefined : app, tri, role: roleFiltre }, registre, maintenant);
   // Seuls les comptes de rang strictement inférieur se sélectionnent (actions groupées).
   const actionnable = (p: Profil) => autorise(outils.acteur, 'etat-ami', p).ok;
@@ -595,7 +596,9 @@ function Fiche({
         options={MODELES.map(m => [m.id, m.nom] as const)}
         onChoisir={id => {
           if (id !== 'personnalise') {
-            changerNiveaux(niveauxDuModele(apps, id), `Modèle « ${MODELES.find(m => m.id === id)?.nom} » appliqué`);
+            // L'accès donné par une app elle-même (Tâches) n'est pas touché par un modèle.
+            const gardes = Object.fromEntries(registre.filter(a => a.attribueeParApp).map(a => [a.id, niveaux[a.id] ?? 'aucun']));
+            changerNiveaux({ ...gardes, ...niveauxDuModele(apps, id) }, `Modèle « ${MODELES.find(m => m.id === id)?.nom} » appliqué`);
           }
         }}
         testID="admin-fiche-modele"

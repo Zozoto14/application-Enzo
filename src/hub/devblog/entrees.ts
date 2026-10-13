@@ -27,6 +27,8 @@ export interface Fonctionnalite {
   adminSeulement?: boolean;
   /** Réservée aux gestionnaires (« tu es gestionnaire ») : ni l'administrateur ni un simple ami ne la voient. */
   gestionnaireSeulement?: boolean;
+  /** Visible de l'administrateur et des seuls comptes qui ont cette app (ex. l'ami à qui Tâches est ouverte). */
+  app?: string;
 }
 
 export interface EntreeDevblog {

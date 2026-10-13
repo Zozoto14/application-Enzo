@@ -58,6 +58,13 @@ import {
   type SuiviReception,
 } from '../src/tsuzuku/plateforme/partage';
 import { lireProjection, projectionPour, type ProjectionAbo } from '../src/hub/abonnements/abonnements';
+import {
+  OBJET_TACHES,
+  recevoirTachesAmi,
+  synchroniserTachesFondateur,
+  type EtatTachesFondateur,
+  type SuiviTachesAmi,
+} from '../src/taches/partage';
 
 type Fetch = typeof fetch;
 
@@ -95,6 +102,10 @@ export const CLES_MEMOIRE = {
   abonnements: 'applibourse.synchro.abonnements',
   /** Côté ami : préfixe de la ligne d'abonnement reçue (suivie du compte). */
   abonnementRecu: 'applibourse.abonnement.',
+  /** Tâches : dépôts du Fondateur (le sien, celui de l'ami), empreintes et dates. */
+  taches: 'applibourse.synchro.taches',
+  /** Tâches : côté ami, dépôt reçu et envoi déjà déposé, par compte ouvert ici. */
+  tachesRecu: 'applibourse.synchro.taches.recu',
 } as const;
 
 // ------------------------------------------------------------ Mémoire
@@ -172,7 +183,7 @@ export function liaisonPourCompte(memoire: Memoire, id: string, pontMaitre?: Lia
 
 /** Oublie tout le suivi de synchronisation des comptes (remplacement des données du navigateur). */
 export function oublierSuivi(memoire: Memoire): void {
-  for (const cle of [CLES_MEMOIRE.annuaire, CLES_MEMOIRE.admin, CLES_MEMOIRE.fichiers, CLES_MEMOIRE.comptes, CLES_MEMOIRE.coffreRelie, CLES_MEMOIRE.tsuzuku, CLES_MEMOIRE.tsuzukuRecu, CLES_MEMOIRE.abonnements]) {
+  for (const cle of [CLES_MEMOIRE.annuaire, CLES_MEMOIRE.admin, CLES_MEMOIRE.fichiers, CLES_MEMOIRE.comptes, CLES_MEMOIRE.coffreRelie, CLES_MEMOIRE.tsuzuku, CLES_MEMOIRE.tsuzukuRecu, CLES_MEMOIRE.abonnements, CLES_MEMOIRE.taches, CLES_MEMOIRE.tachesRecu]) {
     try {
       memoire.removeItem(cle);
     } catch {
@@ -232,6 +243,8 @@ export interface BilanComptes {
   erreurs: string[];
   /** Tsuzuku : la copie des sources partagées de ce compte a changé. */
   tsuzukuChange?: boolean;
+  /** Tâches : les données (Fondateur) ou la copie partagée (ami) d'ici ont changé. */
+  tachesChange?: boolean;
 }
 
 const bilanVide = (): BilanComptes => ({ annuaireChange: false, donneesChangent: false, fichiersRecus: 0, depots: 0, erreurs: [] });
@@ -303,6 +316,8 @@ export interface OptionsSynchroAdmin extends Omit<OptionsAnnuaireAdmin, 'objets'
   effacerFichiers(id: string): Promise<void>;
   /** Tsuzuku : base du compte historique (ses sources et leurs partages), pour publier les sources partagées. */
   tsuzuku?: { base: Pick<BasePrefs, 'lire'> };
+  /** Tâches : base du Fondateur (ses données), sa clé de synchronisation et son prénom affiché chez l'ami. */
+  taches?: { base: Pick<BasePrefs, 'lire' | 'ecrire'>; cleSynchro: string; nomFondateur?: string };
 }
 
 /**
@@ -337,6 +352,8 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
   // 1. Ce que les amis ont renvoyé depuis leurs appareils (avant la fusion : cela part avec elle).
   let local = await o.lire();
   const listes = new Map<string, Record<string, { date: string }>>();
+  // Tâches : champ `taches` (scellé par la clé de partage) des retours lus à ce tour.
+  const retoursTaches: Record<string, unknown> = {};
   if (!local.heritage && !local.restreint) {
     let modifie = local;
     for (const compte of local.comptes) {
@@ -348,6 +365,8 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
           const recu = await lireDocument(espaces, compte.id, 'compte');
           let journalVus = suivis[compte.id]?.journalVus ?? [];
           if (recu && recu.brut && typeof recu.brut === 'object') {
+            const champTaches = (recu.brut as { taches?: unknown }).taches;
+            if (champTaches !== undefined) retoursTaches[compte.id] = champTaches;
             const retour = { ...(recu.brut as RetourAmi) };
             // Actions d'un titulaire : chacune n'est reprise qu'une fois (son retour les garde toutes).
             if (Array.isArray(retour.journal)) {
@@ -420,7 +439,7 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
   for (const id of Object.keys(suivis)) {
     if (presents.has(id)) continue;
     try {
-      for (const nom of ['annuaire', 'coffre', 'portefeuille', 'compte', 'abonnement', ...OBJETS_TSUZUKU]) {
+      for (const nom of ['annuaire', 'coffre', 'portefeuille', 'compte', 'abonnement', OBJET_TACHES, ...OBJETS_TSUZUKU]) {
         await espaces.supprimer(id, nom);
       }
       delete suivis[id];
@@ -447,6 +466,30 @@ export async function synchroniserComptesAdmin(o: OptionsSynchroAdmin): Promise<
       });
       ecrireJson(o.memoire, CLES_MEMOIRE.tsuzuku, resultat.etat);
       bilan.depots += resultat.depots;
+      bilan.erreurs.push(...resultat.erreurs);
+    } catch (erreur) {
+      bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
+    }
+  }
+
+  // 3 quater. Tâches : ses appareils (objet `taches` scellé par sa clé), et l'ami choisi (projets partagés).
+  if (o.taches) {
+    try {
+      const resultat = await synchroniserTachesFondateur({
+        espaces,
+        base: o.taches.base,
+        cleSynchro: o.taches.cleSynchro,
+        etat: lireJson<EtatTachesFondateur>(o.memoire, CLES_MEMOIRE.taches, {}),
+        objetsAdmin,
+        objetsCompte: async id => objetsParCompte.get(id) ?? (await espaces.lister(id)),
+        comptes: presents,
+        retours: retoursTaches,
+        ...(o.taches.nomFondateur ? { nomFondateur: o.taches.nomFondateur } : {}),
+        maintenant: horloge().toISOString(),
+      });
+      ecrireJson(o.memoire, CLES_MEMOIRE.taches, resultat.etat);
+      bilan.depots += resultat.depots;
+      if (resultat.change) bilan.tachesChange = true;
       bilan.erreurs.push(...resultat.erreurs);
     } catch (erreur) {
       bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
@@ -565,6 +608,8 @@ export interface OptionsSynchroAmi {
   requete?: Fetch;
   /** Tsuzuku : base chiffrée du compte ouvert, où ranger les sources qui lui sont partagées. */
   tsuzuku?: { base: BasePrefs };
+  /** Tâches : base chiffrée du compte ouvert (copie des projets partagés avec lui). */
+  taches?: { base: BasePrefs };
 }
 
 /**
@@ -585,6 +630,25 @@ export async function synchroniserCompteAmi(o: OptionsSynchroAmi): Promise<Bilan
   const objets = await espaces.lister(o.id);
 
   let local = await o.lire();
+  // Tâches : projets partagés reçus ; ce que l'ami a modifié part dans son retour `compte`.
+  const suivisTaches = lireJson<Record<string, SuiviTachesAmi>>(o.memoire, CLES_MEMOIRE.tachesRecu, {});
+  let suiviTaches: SuiviTachesAmi = suivisTaches[o.id] ?? {};
+  let envoiTaches: Awaited<ReturnType<typeof recevoirTachesAmi>>['envoi'];
+  if (o.taches) {
+    try {
+      const r = await recevoirTachesAmi({ espaces, id: o.id, base: o.taches.base, objets, suivi: suiviTaches, maintenant: horloge().toISOString() });
+      suiviTaches = r.suivi;
+      envoiTaches = r.envoi?.permis ? r.envoi : undefined;
+      if (r.change) bilan.tachesChange = true;
+    } catch (erreur) {
+      bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
+    }
+  }
+  const noterEnvoiTaches = () => {
+    if (!envoiTaches) return;
+    suiviTaches = { ...suiviTaches, envoye: envoiTaches.h, envoiLe: horloge().toISOString() };
+    envoiTaches = undefined;
+  };
   // La projection ne remplace que l'annuaire RESTREINT d'un navigateur d'ami (jamais celui du PC).
   if (local.restreint || local.comptes.length === 0) {
     const date = objets.annuaire?.date;
@@ -602,13 +666,37 @@ export async function synchroniserCompteAmi(o: OptionsSynchroAmi): Promise<Bilan
       suivi.projectionLue = date;
     }
     const retour = retourAmi(local, o.id);
-    const h = retour ? empreinte(retour) : undefined;
+    // L'envoi des tâches voyage dans le même objet : son empreinte (en clair, jamais l'enveloppe) compte.
+    const hTaches = envoiTaches?.h ?? suiviTaches.envoye;
+    const h = retour ? empreinte(hTaches ? [retour, hTaches] : retour) : undefined;
     if (retour && h !== suivi.retour) {
-      await espaces.deposer(o.id, 'compte', JSON.stringify(retour), horloge().toISOString());
+      const date = horloge().toISOString();
+      // Un retour réécrit sans nouvel envoi garde le dernier envoi déposé (relu sur le relais).
+      let champ: unknown = envoiTaches ? envoiTaches.sceller(date) : undefined;
+      if (!champ && suiviTaches.envoye) {
+        const precedent = await lireDocument(espaces, o.id, 'compte').catch(() => undefined);
+        champ = (precedent?.brut as { taches?: unknown } | undefined)?.taches;
+      }
+      await espaces.deposer(o.id, 'compte', JSON.stringify(champ ? { ...retour, taches: champ } : retour), date);
       suivi.retour = h;
+      noterEnvoiTaches();
       bilan.depots++;
     }
   }
+  // Envoi des tâches seul (compte ouvert sur le PC du Fondateur, ou retour inchangé) : le retour existant est gardé.
+  if (envoiTaches) {
+    try {
+      const date = horloge().toISOString();
+      const precedent = await lireDocument(espaces, o.id, 'compte').catch(() => undefined);
+      const brut = precedent?.brut && typeof precedent.brut === 'object' ? (precedent.brut as Record<string, unknown>) : {};
+      await espaces.deposer(o.id, 'compte', JSON.stringify({ ...brut, taches: envoiTaches.sceller(date) }), date);
+      noterEnvoiTaches();
+      bilan.depots++;
+    } catch (erreur) {
+      bilan.erreurs.push(erreur instanceof Error ? erreur.message : String(erreur));
+    }
+  }
+  if (o.taches) ecrireJson(o.memoire, CLES_MEMOIRE.tachesRecu, { ...suivisTaches, [o.id]: suiviTaches });
 
   // Tsuzuku : sa clé de réception part, ses sources partagées arrivent (lecture seule).
   if (o.tsuzuku) {

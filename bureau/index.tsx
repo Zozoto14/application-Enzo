@@ -704,6 +704,8 @@ function Racine() {
             donnees: { lire: () => depot.lire(CLE_DONNEES), ecrire: valeur => depot.ecrire(CLE_DONNEES, valeur), cleSynchro: session.session.cleDerivee('synchro') },
             // Tsuzuku : les sources partagées par le compte historique partent vers chaque bénéficiaire.
             tsuzuku: { base: { lire: cle => depot.lire(cle) } },
+            // Tâches : ses appareils et l'ami choisi (projets partagés, scellés pour lui).
+            taches: { base: { lire: cle => depot.lire(cle), ecrire: (cle, valeur) => depot.ecrire(cle, valeur) }, cleSynchro: session.session.cleDerivee('synchro'), nomFondateur: profil.nom },
           });
           if (bilan.annuaireChange && annuaireRef.current) {
             const cles = clesAdminDe(session);
@@ -714,7 +716,7 @@ function Racine() {
               effacer(cles);
             }
           }
-          if (bilan.annuaireChange || bilan.donneesChangent) {
+          if (bilan.annuaireChange || bilan.donneesChangent || bilan.tachesChange) {
             setVersionComptes(v => v + 1);
           }
           if (bilan.erreurs.length > 0) {
@@ -736,8 +738,10 @@ function Racine() {
             ecrire: ecrireAnnuaireDisque,
             // Tsuzuku : ses sources partagées arrivent dans SA base (lecture seule).
             tsuzuku: { base: { lire: cle => baseAmi.lire(cle), ecrire: (cle, valeur) => baseAmi.ecrire(cle, valeur) } },
+            // Tâches : projets partagés avec lui (copie dans SA base), ses modifications repartent.
+            taches: { base: { lire: cle => baseAmi.lire(cle), ecrire: (cle, valeur) => baseAmi.ecrire(cle, valeur) } },
           });
-          if (bilan.abonnementChange) {
+          if (bilan.abonnementChange || bilan.tachesChange) {
             setVersionComptes(v => v + 1);
           }
           if (bilan.annuaireChange && annuaireRef.current) {
