@@ -29,6 +29,8 @@ export interface Fonctionnalite {
   gestionnaireSeulement?: boolean;
   /** Visible de l'administrateur et des seuls comptes qui ont cette app (ex. l'ami à qui Tâches est ouverte). */
   app?: string;
+  /** Avec `app` : réservée aux comptes non administrateurs qui ont l'app (l'administrateur ne la voit pas). */
+  amiSeulement?: boolean;
 }
 
 export interface EntreeDevblog {
@@ -42,6 +44,43 @@ export interface EntreeDevblog {
 }
 
 export const ENTREES: readonly EntreeDevblog[] = [
+  {
+    version: '2026.10.24',
+    date: '2026-10-24',
+    titre: 'Nouvelle app : Tâches',
+    resume:
+      'Espaces, projets, listes et tâches, en liste, en Kanban, au calendrier et dans « Ma journée » ; ajout rapide en une ligne, rappels, et partage d’un projet avec un ami, chiffré de bout en bout.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'taches-v1',
+        emoji: '☑️',
+        titre: 'Tâches, façon ClickUp',
+        texte:
+          'Écris « Appeler Paul demain #prospects !haute » : date, étiquette et priorité sont comprises. Glisse les cartes du Kanban ou les tâches du calendrier (souris ou doigt), raccourcis N, /, 1-4.',
+        essayer: { genre: 'app', app: 'taches' },
+        app: 'taches',
+      },
+      {
+        id: 'taches-partage',
+        emoji: '👥',
+        titre: 'Partage avec un ami',
+        texte:
+          'Dans ⚙︎ de Tâches, choisis un ami et partage tes projets un par un, en lecture ou en écriture. Il ne voit que ceux-là ; tout reste chiffré sur le relais.',
+        essayer: { genre: 'app', app: 'taches' },
+        adminSeulement: true,
+      },
+      {
+        id: 'taches-partage-ami',
+        emoji: '👥',
+        titre: 'Des projets partagés avec toi',
+        texte: 'Le Fondateur t’a ouvert Tâches : tu vois les projets qu’il te partage, et tu peux les modifier quand il te les partage en écriture.',
+        essayer: { genre: 'app', app: 'taches' },
+        app: 'taches',
+        amiSeulement: true,
+      },
+    ],
+  },
   {
     version: '2026.10.23',
     date: '2026-10-23',

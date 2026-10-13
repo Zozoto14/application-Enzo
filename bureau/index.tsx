@@ -705,7 +705,7 @@ function Racine() {
             // Tsuzuku : les sources partagées par le compte historique partent vers chaque bénéficiaire.
             tsuzuku: { base: { lire: cle => depot.lire(cle) } },
             // Tâches : ses appareils et l'ami choisi (projets partagés, scellés pour lui).
-            taches: { base: { lire: cle => depot.lire(cle), ecrire: (cle, valeur) => depot.ecrire(cle, valeur) }, cleSynchro: session.session.cleDerivee('synchro'), nomFondateur: profil.nom },
+            taches: { base: { lire: cle => depot.lire(cle), ecrire: (cle, valeur) => depot.ecrire(cle, valeur) }, cleSynchro: session.session.cleDerivee('synchro'), nomFondateur: profil.nom && profil.nom !== 'Moi' ? profil.nom : undefined },
           });
           if (bilan.annuaireChange && annuaireRef.current) {
             const cles = clesAdminDe(session);

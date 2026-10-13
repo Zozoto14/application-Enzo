@@ -13,6 +13,7 @@ rien d'autre à modifier. Champs qui décident **où** et **pour qui** :
 | `rangs` | Avec `adminSeulement` : rangs qui l'ouvrent (ex. `['fondateur']`). Le compte historique voit tout. |
 | `gestionnaire` | Avec `adminSeulement` et sans `rangs` : ouverte aux rangs d'administration (l'Administration, limitée pour un Gestionnaire). |
 | `disponible` | Faux quand la plateforme ne peut pas la faire tourner. |
+| `attribueeParApp` | L'app choisit elle-même à qui elle s'ouvre (Tâches : le Fondateur désigne un ami dans ses réglages) : pas de case dans l'Administration, un modèle d'accès ne la retire pas. |
 
 Exemple (une future app « Prospects ») :
 

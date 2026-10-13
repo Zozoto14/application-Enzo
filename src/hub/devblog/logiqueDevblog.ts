@@ -42,7 +42,10 @@ export function marquerLues(brut: string | undefined | null, versions: readonly 
 /** Fonctionnalités d'une entrée visibles pour ce profil. */
 export function fonctionnalitesPour(entree: EntreeDevblog, admin: boolean, gestionnaire = false, apps: readonly string[] = []): Fonctionnalite[] {
   return entree.fonctionnalites.filter(
-    f => (f.adminSeulement ? admin : true) && (f.gestionnaireSeulement ? gestionnaire && !admin : true) && (f.app ? admin || apps.includes(f.app) : true),
+    f =>
+      (f.adminSeulement ? admin : true) &&
+      (f.gestionnaireSeulement ? gestionnaire && !admin : true) &&
+      (f.app ? (f.amiSeulement ? !admin && apps.includes(f.app) : admin || apps.includes(f.app)) : true),
   );
 }
 

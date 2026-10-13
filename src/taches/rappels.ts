@@ -8,8 +8,8 @@
  * clé (le rappel repartira pour la nouvelle date). Un rappel manqué de plus de
  * 24 h (appareil éteint) est abandonné plutôt qu'envoyé en retard.
  *
- * Seules les tâches ouvertes, assignées à la personne de l'appareil ou à
- * personne, rappellent.
+ * Seules les tâches ouvertes rappellent : chez le Fondateur, les siennes et
+ * celles de personne ; chez l'ami, celles qui lui sont assignées.
  */
 
 import { heureValide, instantDe } from './dates';
@@ -73,7 +73,8 @@ export function evaluerRappels(d: DonneesTaches, etat: EtatRappels, maintenant: 
   const nouvelles: AlerteRappel[] = [];
   for (const t of tachesVivantes(d)) {
     if (!t.echeance || !t.rappels.length || estTerminee(d, t)) continue;
-    if (t.assigne && t.assigne !== qui) continue;
+    // Le Fondateur : ses tâches et celles de personne ; l'ami : seulement celles qui lui sont assignées.
+    if (qui === 'ami' ? t.assigne !== 'ami' : t.assigne === 'ami') continue;
     const echeance = instantDe(t.echeance.jour, t.echeance.heure);
     for (const m of t.rappels) {
       const declenche = echeance - m * 60_000;

@@ -147,7 +147,8 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
   const st = sousTaches(d, t.id);
   const cl = elementsChecklist(t);
   const commentaires = commentairesDe(t);
-  const ech = t.echeance ? `${jourLisible(t.echeance.jour, a.etat.aujourdhui, true)}${t.echeance.heure ? ` à ${t.echeance.heure.replace(':', ' h ')}` : ''}` : 'Aucune';
+  const echBrut = t.echeance ? `${jourLisible(t.echeance.jour, a.etat.aujourdhui, true)}${t.echeance.heure ? ` à ${t.echeance.heure.replace(':', ' h ')}` : ''}` : 'Aucune';
+  const ech = echBrut.charAt(0).toUpperCase() + echBrut.slice(1);
   const choisie = t.pourAujourdhui === a.etat.aujourdhui;
   return (
     <View style={[styles.racine, { backgroundColor: theme.surface }]} testID="detail-tache">
@@ -160,7 +161,7 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
       </View>
       <ScrollView contentContainerStyle={styles.corps} keyboardShouldPersistTaps="handled">
         {parent ? (
-          <Pressable accessibilityRole="link" onPress={() => a.ouvrir(parent.id)} style={{ minHeight: 32, justifyContent: 'center' }}>
+          <Pressable accessibilityRole="link" onPress={() => a.ouvrir(parent.id)} style={{ minHeight: 44, justifyContent: 'center' }}>
             <Text style={[attenueDe(theme), { color: theme.accent }]}>↑ {parent.titre}</Text>
           </Pressable>
         ) : null}
@@ -187,7 +188,7 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
             <PastillePriorite theme={theme} priorite={t.priorite} />
           </Propriete>
           <Propriete a={a} libelle="Échéance" onPress={m ? () => a.menuEcheance(t) : undefined} testID="detail-echeance">
-            <Text style={[texteDe(theme), { textTransform: 'capitalize' }]}>{ech}</Text>
+            <Text style={texteDe(theme)}>{ech}</Text>
           </Propriete>
           <Propriete a={a} libelle="Pour" onPress={m ? () => a.menuAssigne(t) : undefined} testID="detail-assigne">
             {t.assigne ? (
@@ -257,7 +258,7 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
             {st.map(s => (
               <View key={s.id} style={styles.rangee}>
                 <CaseRonde theme={theme} coche={estTerminee(d, s)} desactive={!m} onPress={() => a.basculer(s.id)} libelle={`Terminer « ${s.titre} »`} testID={`sous-tache-case-${s.id}`} />
-                <Pressable accessibilityRole="button" onPress={() => a.ouvrir(s.id)} style={{ flex: 1, minHeight: 36, justifyContent: 'center' }} testID={`sous-tache-${s.id}`}>
+                <Pressable accessibilityRole="button" onPress={() => a.ouvrir(s.id)} style={{ flex: 1, minHeight: 44, justifyContent: 'center' }} testID={`sous-tache-${s.id}`}>
                   <Text style={[texteDe(theme), { textDecorationLine: estTerminee(d, s) ? 'line-through' : 'none' }]}>{s.titre}</Text>
                 </Pressable>
               </View>
@@ -355,7 +356,7 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
         </View>
 
         <View style={styles.section}>
-          <Pressable accessibilityRole="button" accessibilityState={{ expanded: historique }} onPress={() => setHistorique(h => !h)} style={{ minHeight: 36, justifyContent: 'center' }} testID="detail-historique">
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: historique }} onPress={() => setHistorique(h => !h)} style={{ minHeight: 44, justifyContent: 'center' }} testID="detail-historique">
             <Libelle theme={theme}>{`${historique ? '▾' : '▸'} HISTORIQUE · ${t.historique.length}`}</Libelle>
           </Pressable>
           {historique
@@ -415,7 +416,7 @@ const styles = StyleSheet.create({
   ligneTitre: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   champTitre: { flex: 1, minHeight: 44, paddingVertical: 4 },
   propriete: { flexDirection: 'row', alignItems: 'center', minHeight: 44 },
-  valeur: { flex: 1, minHeight: 40, justifyContent: 'center', paddingHorizontal: 8 },
+  valeur: { flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'flex-start', paddingHorizontal: 8 },
   section: { gap: 8 },
   rangee: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   apercu: { borderWidth: StyleSheet.hairlineWidth, padding: 10 },

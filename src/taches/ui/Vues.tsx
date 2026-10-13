@@ -97,7 +97,7 @@ function TitreEnPlace({ a, t, modifiable, ferme }: { a: Actions; t: Tache; modif
 
 const COLONNES = { statut: 132, priorite: 112, echeance: 150, assigne: 56, etiquettes: 170 } as const;
 
-function LigneTache({ a, t, compacte }: { a: Actions; t: Tache; compacte: boolean }) {
+function LigneTache({ a, t, compacte, etiquettes = true, avecProjet = true }: { a: Actions; t: Tache; compacte: boolean; etiquettes?: boolean; avecProjet?: boolean }) {
   const theme = a.theme;
   const d = a.etat.donnees;
   const droits = a.droits(t.projetId);
@@ -130,11 +130,11 @@ function LigneTache({ a, t, compacte }: { a: Actions; t: Tache; compacte: boolea
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <TitreEnPlace a={a} t={t} modifiable={droits.modifier} ferme={ferme} />
         <View style={styles.meta}>
-          {projet && a.etat.donnees ? <Text style={attenueDe(theme)} numberOfLines={1}>{projet.nom}</Text> : null}
+          {projet && avecProjet ? <Text style={attenueDe(theme)} numberOfLines={1}>{projet.nom}</Text> : null}
           <Compteurs a={a} t={t} />
         </View>
       </View>
-      <View style={{ width: COLONNES.statut }}>
+      <View style={{ width: COLONNES.statut, alignItems: 'flex-start' }}>
         <Puce theme={theme} texte={statut.nom} couleur={statut.couleur} onPress={droits.modifier ? () => a.menuStatut(t) : undefined} testID={`statut-${t.id}`} libelle={`Statut : ${statut.nom}`} />
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel={`Priorité : ${LIBELLES_PRIORITE[t.priorite]}`} disabled={!droits.modifier} onPress={() => a.menuPriorite(t)} testID={`priorite-${t.id}`} style={[styles.cellule, { width: COLONNES.priorite }]}>
@@ -148,24 +148,28 @@ function LigneTache({ a, t, compacte }: { a: Actions; t: Tache; compacte: boolea
       <Pressable accessibilityRole="button" accessibilityLabel={`Assignée : ${t.assigne ? a.etat.noms[t.assigne] : 'personne'}`} disabled={!droits.modifier} onPress={() => a.menuAssigne(t)} testID={`assigne-${t.id}`} style={[styles.cellule, { width: COLONNES.assigne }]}>
         {t.assigne ? <Avatar theme={theme} nom={a.etat.noms[t.assigne]} couleur={couleurAuteur(a, t.assigne)} /> : <Text style={attenueDe(theme)}>—</Text>}
       </Pressable>
-      <View style={[styles.cellule, { width: COLONNES.etiquettes, flexDirection: 'row', gap: 4, overflow: 'hidden' }]}>
-        {t.etiquettes.slice(0, 2).map(e => (
-          <Puce key={e} theme={theme} texte={`#${e}`} couleur={theme.teintes.anime} />
-        ))}
-        {t.etiquettes.length > 2 ? <Text style={attenueDe(theme)}>+{t.etiquettes.length - 2}</Text> : null}
-      </View>
+      {etiquettes ? (
+        <View style={[styles.cellule, { width: COLONNES.etiquettes, flexDirection: 'row', alignItems: 'center', gap: 4, overflow: 'hidden' }]}>
+          {t.etiquettes.slice(0, 2).map(e => (
+            <Puce key={e} theme={theme} texte={`#${e}`} couleur={theme.teintes.anime} />
+          ))}
+          {t.etiquettes.length > 2 ? <Text style={attenueDe(theme)}>+{t.etiquettes.length - 2}</Text> : null}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 export function VueListe({ a, taches, groupe, projetId }: { a: Actions; taches: readonly Tache[]; groupe: Groupe; projetId?: string }) {
   const theme = a.theme;
-  const { width } = useWindowDimensions();
-  const compacte = a.mobile || width < 980;
+  // La largeur réellement disponible (barre latérale et détail ouverts) décide du tableau ou des cartes.
+  const [largeur, setLargeur] = useState(0);
+  const compacte = a.mobile || (largeur > 0 && largeur < 720);
+  const avecEtiquettes = largeur >= 940;
   const groupes = grouper(a.etat.donnees, taches, groupe, a.etat.aujourdhui, projetId);
   const [replies, setReplies] = useState<Record<string, boolean>>({});
   return (
-    <View testID="vue-liste" style={{ gap: 14 }}>
+    <View testID="vue-liste" style={{ gap: 14 }} onLayout={e => setLargeur(Math.round(e.nativeEvent.layout.width))}>
       {!compacte ? (
         <View style={[styles.ligne, styles.entete, { borderColor: theme.ligne }]}>
           <View style={{ width: 30 }} />
@@ -174,13 +178,13 @@ export function VueListe({ a, taches, groupe, projetId }: { a: Actions; taches: 
           <Text style={[attenueDe(theme), styles.colonneTitre, { width: COLONNES.priorite }]}>Priorité</Text>
           <Text style={[attenueDe(theme), styles.colonneTitre, { width: COLONNES.echeance }]}>Échéance</Text>
           <Text style={[attenueDe(theme), styles.colonneTitre, { width: COLONNES.assigne }]}>Pour</Text>
-          <Text style={[attenueDe(theme), styles.colonneTitre, { width: COLONNES.etiquettes }]}>Étiquettes</Text>
+          {avecEtiquettes ? <Text style={[attenueDe(theme), styles.colonneTitre, { width: COLONNES.etiquettes }]}>Étiquettes</Text> : null}
         </View>
       ) : null}
       {groupes.map(g => (
         <View key={g.cle} style={{ gap: compacte ? 8 : 0 }} testID={`groupe-${g.cle}`}>
           {groupe !== 'aucun' ? (
-            <Pressable accessibilityRole="button" accessibilityState={{ expanded: !replies[g.cle] }} onPress={() => setReplies(r => ({ ...r, [g.cle]: !r[g.cle] }))} style={styles.groupeTete}>
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: !replies[g.cle] }} onPress={() => setReplies(r => ({ ...r, [g.cle]: !r[g.cle] }))} style={[styles.groupeTete, { minHeight: 44 }]}>
               <Text style={[attenueDe(theme), { width: 14 }]}>{replies[g.cle] ? '▸' : '▾'}</Text>
               {g.couleur ? <View style={[styles.point, { backgroundColor: g.couleur }]} /> : null}
               <Text style={[titreDe(theme, 16)]}>{g.titre}</Text>
@@ -190,7 +194,7 @@ export function VueListe({ a, taches, groupe, projetId }: { a: Actions; taches: 
           {replies[g.cle] ? null : g.taches.length === 0 ? (
             <Text style={[attenueDe(theme), { paddingVertical: 8, paddingLeft: 36 }]}>Aucune tâche.</Text>
           ) : (
-            g.taches.map(t => <LigneTache key={t.id} a={a} t={t} compacte={compacte} />)
+            g.taches.map(t => <LigneTache key={t.id} a={a} t={t} compacte={compacte} etiquettes={avecEtiquettes} avecProjet={!projetId} />)
           )}
         </View>
       ))}
@@ -244,10 +248,9 @@ function CarteKanban({ a, t, colonnes, iColonne }: { a: Actions; t: Tache; colon
         </View>
       </Pressable>
       {a.mobile && droits.modifier ? (
-        <View style={[styles.meta, { justifyContent: 'space-between' }]}>
-          <Bouton theme={theme} compact titre="‹" libelle="Colonne précédente" desactive={iColonne === 0} onPress={() => colonnes[iColonne - 1] && a.versColonne(t, colonnes[iColonne - 1].cle)} testID={`carte-gauche-${t.id}`} />
-          <Bouton theme={theme} compact titre="Statut…" onPress={() => a.menuStatut(t)} testID={`carte-statut-${t.id}`} />
-          <Bouton theme={theme} compact titre="›" libelle="Colonne suivante" desactive={iColonne >= colonnes.length - 1} onPress={() => colonnes[iColonne + 1] && a.versColonne(t, colonnes[iColonne + 1].cle)} testID={`carte-droite-${t.id}`} />
+        <View style={[styles.meta, { justifyContent: 'space-between', marginBottom: -6 }]}>
+          <Bouton theme={theme} variante="discret" titre={iColonne > 0 ? `‹ ${colonnes[iColonne - 1].titre}` : ' '} libelle="Colonne précédente" desactive={iColonne === 0} onPress={() => colonnes[iColonne - 1] && a.versColonne(t, colonnes[iColonne - 1].cle)} testID={`carte-gauche-${t.id}`} style={{ paddingHorizontal: 4, flexShrink: 1 }} />
+          <Bouton theme={theme} variante="discret" titre={iColonne < colonnes.length - 1 ? `${colonnes[iColonne + 1].titre} ›` : ' '} libelle="Colonne suivante" desactive={iColonne >= colonnes.length - 1} onPress={() => colonnes[iColonne + 1] && a.versColonne(t, colonnes[iColonne + 1].cle)} testID={`carte-droite-${t.id}`} style={{ paddingHorizontal: 4, flexShrink: 1 }} />
         </View>
       ) : null}
     </View>
@@ -316,7 +319,7 @@ function PuceCalendrier({ a, t }: { a: Actions; t: Tache }) {
         accessibilityLabel={`${t.titre}${droits.modifier ? '. Maj + flèches pour changer de jour.' : ''}`}
         onPress={() => a.ouvrir(t.id)}
         {...({ onKeyDown: surTouche } as object)}
-        style={{ minHeight: 26, justifyContent: 'center' }}>
+        style={{ minHeight: a.mobile ? 44 : 26, justifyContent: 'center' }}>
         <Text numberOfLines={1} style={[texteDe(theme, T.petit), { textDecorationLine: ferme ? 'line-through' : 'none', color: ferme ? theme.attenue : theme.texte }]}>
           {t.echeance?.heure ? `${t.echeance.heure} ` : ''}
           {t.titre}
@@ -344,7 +347,7 @@ function CaseJour({ a, jour, taches, moisCourant, hauteur, max, onChoisir, chois
           backgroundColor: zone.survolee ? teinteTransparente(theme.accent, 0.16) : choisi ? teinteTransparente(theme.accent, 0.08) : moisCourant ? 'transparent' : teinteTransparente(theme.sombre ? '#FFFFFF' : '#000000', 0.03),
         },
       ]}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`${jourLisible(jour, a.etat.aujourdhui, true)} : ${taches.length} tâche(s)`} onPress={onChoisir} style={styles.numeroJour} disabled={!onChoisir}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${jourLisible(jour, a.etat.aujourdhui, true)} : ${taches.length} tâche(s)`} onPress={onChoisir} style={[styles.numeroJour, a.mobile && { minHeight: 44, justifyContent: 'center' }]} disabled={!onChoisir}>
         <Text style={[texteDe(theme, T.petit), { fontWeight: auj ? '800' : '500', color: auj ? theme.surAccent : moisCourant ? theme.texte : theme.attenue, backgroundColor: auj ? theme.accent : 'transparent', paddingHorizontal: 6, borderRadius: 10, overflow: 'hidden' }]}>
           {Number(jour.slice(8, 10))}
         </Text>
@@ -352,7 +355,7 @@ function CaseJour({ a, jour, taches, moisCourant, hauteur, max, onChoisir, chois
       </Pressable>
       {a.mobile ? null : visibles.map(t => <PuceCalendrier key={t.id} a={a} t={t} />)}
       {!a.mobile && taches.length > max && !tout ? (
-        <Pressable accessibilityRole="button" onPress={() => setTout(true)} style={{ minHeight: 24 }}>
+        <Pressable accessibilityRole="button" onPress={() => setTout(true)} style={{ minHeight: 26, justifyContent: 'center' }}>
           <Text style={attenueDe(theme)}>+{taches.length - max} autres</Text>
         </Pressable>
       ) : null}
@@ -381,21 +384,23 @@ export function VueCalendrier({ a, taches, mode, onMode, jour, onJour }: { a: Ac
   const parJour = useMemo(() => tachesParJour(taches, jours), [taches, jours.join()]); // eslint-disable-line react-hooks/exhaustive-deps
   const sansDate = taches.filter(t => !t.echeance && !estTerminee(a.etat.donnees, t));
   const moisCourant = jour.slice(0, 7);
-  const titre = mode === 'mois' ? `${MOIS[Number(jour.slice(5, 7)) - 1]} ${jour.slice(0, 4)}` : `Semaine du ${jourLisible(debutSemaine(jour), a.etat.aujourdhui, true)}`;
+  const lundi = debutSemaine(jour);
+  const titre = mode === 'mois' ? `${MOIS[Number(jour.slice(5, 7)) - 1]} ${jour.slice(0, 4)}` : `Semaine du ${Number(lundi.slice(8, 10))} ${MOIS[Number(lundi.slice(5, 7)) - 1]}`;
   const avecColonne = !a.mobile && width >= 1180;
   const aller = (n: number) => onJour(mode === 'mois' ? ajouterMois(`${jour.slice(0, 8)}01`, n) : ajouterJours(jour, 7 * n));
   return (
     <View testID="vue-calendrier" style={{ gap: 12 }}>
       <View style={[styles.meta, { justifyContent: 'space-between' }]}>
-        <View style={styles.meta}>
+        <View style={[styles.meta, a.mobile && { flexWrap: 'nowrap', width: '100%' }]}>
           <Bouton theme={theme} compact={!a.mobile} titre="‹" libelle={mode === 'mois' ? 'Mois précédent' : 'Semaine précédente'} onPress={() => aller(-1)} testID="cal-precedent" />
-          <Text style={[titreDe(theme, 19), { minWidth: 160, textAlign: 'center', textTransform: 'capitalize' }]} testID="cal-titre">
-            {titre}
+          <Text numberOfLines={1} style={[titreDe(theme, a.mobile ? 17 : 19), a.mobile ? { flex: 1 } : { minWidth: 160 }, { textAlign: 'center' }]} testID="cal-titre">
+            {titre.charAt(0).toUpperCase() + titre.slice(1)}
           </Text>
           <Bouton theme={theme} compact={!a.mobile} titre="›" libelle={mode === 'mois' ? 'Mois suivant' : 'Semaine suivante'} onPress={() => aller(1)} testID="cal-suivant" />
-          <Bouton theme={theme} compact={!a.mobile} titre="Aujourd’hui" onPress={() => onJour(a.etat.aujourdhui)} testID="cal-aujourdhui" />
+          {a.mobile ? null : <Bouton theme={theme} compact titre="Aujourd’hui" onPress={() => onJour(a.etat.aujourdhui)} testID="cal-aujourdhui" />}
         </View>
         <View style={styles.meta}>
+          {a.mobile ? <Bouton theme={theme} titre="Aujourd’hui" onPress={() => onJour(a.etat.aujourdhui)} testID="cal-aujourdhui" /> : null}
           <Puce theme={theme} grand={a.mobile} texte="Mois" actif={mode === 'mois'} couleur={theme.accent} onPress={() => onMode('mois')} testID="cal-mode-mois" />
           <Puce theme={theme} grand={a.mobile} texte="Semaine" actif={mode === 'semaine'} couleur={theme.accent} onPress={() => onMode('semaine')} testID="cal-mode-semaine" />
         </View>

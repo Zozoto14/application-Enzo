@@ -325,6 +325,10 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
     }
   };
   const choisirSelection = (s: Selection) => {
+    // En quittant une vue enregistrée, ses filtres ne suivent pas.
+    if (selection.g === 'vue' && s.g !== 'vue') {
+      setFiltres(FILTRES_DEFAUT);
+    }
     setSelection(s);
     if (s.g === 'vue') {
       const v = d.vues[s.id];
@@ -460,12 +464,12 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
         return (
           <Pressable
             key={v}
-            testID={`vue-${v}`}
+            testID={`onglet-${v}`}
             accessibilityRole="tab"
             accessibilityState={{ selected: actif }}
             accessibilityLabel={`${libelle} (touche ${i + 1})`}
             onPress={() => choisirVue(v)}
-            style={[styles.onglet, mobile && { flex: 1, paddingHorizontal: 4 }, { backgroundColor: actif ? theme.accent : 'transparent', borderRadius: Math.min(theme.rayonMoyen, 9) }]}>
+            style={[styles.onglet, mobile && { flex: 1, paddingHorizontal: 4, minHeight: 44 }, { backgroundColor: actif ? theme.accent : 'transparent', borderRadius: Math.min(theme.rayonMoyen, 9) }]}>
             <Text numberOfLines={1} style={{ color: actif ? theme.surAccent : theme.texte, fontSize: 15, fontWeight: '600' }}>
               {mobile ? (v === 'journee' ? '☀︎ Jour' : v === 'calendrier' ? '▦ Agenda' : `${icone} ${libelle}`) : `${icone}  ${libelle}`}
             </Text>
@@ -480,7 +484,7 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
       {selection.g === 'projet' && role === 'fondateur' && projetSel ? <Bouton theme={theme} compact={!mobile} titre="⚙︎ Projet" onPress={() => setFenetre({ g: 'projet', id: projetSel.id })} testID="taches-projet-reglages" /> : null}
       <Bouton theme={theme} compact={!mobile} titre={nbFiltres ? `Filtres · ${nbFiltres}` : 'Filtres'} onPress={() => setFenetre({ g: 'filtres' })} testID="taches-filtres" />
       <Bouton theme={theme} compact={!mobile} titre={etat.rappels.length ? `🔔 ${etat.rappels.length}` : '🔔'} libelle={`Rappels : ${etat.rappels.length} non lu(s)`} onPress={() => setFenetre({ g: 'rappels-recus' })} testID="taches-rappels" />
-      <Bouton theme={theme} compact={!mobile} titre="⚙︎" libelle={role === 'fondateur' ? 'Réglages de Tâches (ami, partage, exemple)' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
+      <Bouton theme={theme} compact={!mobile} titre={role === 'fondateur' ? '👥 Partage' : '👥 Partagés'} libelle={role === 'fondateur' ? 'Réglages de Tâches : ami, partage, exemple' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
     </View>
   );
 
@@ -544,6 +548,18 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
   );
 
   // ================================================================== Téléphone
+  if (mobile && detail) {
+    // Téléphone : le détail est une page plein écran (le reste n'est pas monté dessous).
+    return (
+      <ContexteZones.Provider value={registre}>
+        <View style={[styles.racine, { backgroundColor: theme.surface }]} testID="app-taches">
+          {detail}
+          {avisVue}
+          {fenetres}
+        </View>
+      </ContexteZones.Provider>
+    );
+  }
   if (mobile) {
     return (
       <ContexteZones.Provider value={registre}>
@@ -557,7 +573,7 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
               {titreSelection}
             </Text>
             <Bouton theme={theme} titre={etat.rappels.length ? `🔔 ${etat.rappels.length}` : '🔔'} libelle={`Rappels : ${etat.rappels.length} non lu(s)`} onPress={() => setFenetre({ g: 'rappels-recus' })} testID="taches-rappels" />
-            <Bouton theme={theme} titre="⚙︎" libelle="Réglages de Tâches" onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
+            <Bouton theme={theme} titre="👥" libelle={role === 'fondateur' ? 'Réglages de Tâches : ami, partage, exemple' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
           </View>
           <View style={{ paddingHorizontal: 16, gap: 10 }}>
             {ongletsVues}
@@ -571,7 +587,6 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
             {contenu}
           </ScrollView>
           {barreRapide ? <View style={[styles.piedMobile, { backgroundColor: theme.fond, borderColor: theme.ligne }]}>{barreRapide}</View> : null}
-          {detail ? <View style={[StyleSheet.absoluteFill, { backgroundColor: theme.surface }]}>{detail}</View> : null}
           {avisVue}
           {fenetres}
         </View>
@@ -973,11 +988,11 @@ const styles = StyleSheet.create({
   piedMobile: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 12, paddingBottom: 16, borderTopWidth: StyleSheet.hairlineWidth },
   avis: { position: 'absolute', left: 0, right: 0, bottom: 24, alignItems: 'center', paddingHorizontal: 16 },
   avisTexte: { paddingHorizontal: 16, paddingVertical: 10, overflow: 'hidden', maxWidth: 560 },
-  ligneNav: { flexDirection: 'row', alignItems: 'center', minHeight: 40 },
-  ligneNavBouton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 40, paddingRight: 8 },
+  ligneNav: { flexDirection: 'row', alignItems: 'center', minHeight: 44 },
+  ligneNavBouton: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44, paddingRight: 8 },
   point: { width: 10, height: 10, borderRadius: 5, marginLeft: 4 },
   intertitre: { fontWeight: '700', letterSpacing: 0.6, marginTop: 12, marginBottom: 4, paddingLeft: 6 },
   espace: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 40, paddingLeft: 6, marginTop: 6 },
   carreEspace: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
-  petitBouton: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  petitBouton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 });

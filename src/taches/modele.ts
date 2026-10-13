@@ -221,8 +221,12 @@ export const RAPPELS_PROPOSES: readonly number[] = [0, 10, 30, 60, 120, 1440, 28
 
 // ------------------------------------------------------------------ Outils
 
+let compteurIds = 0;
+
+/** Identifiant neuf : instant, tirage, et un compteur (plusieurs créations dans le même geste). */
 export function nouvelId(prefixe: string, maintenant: number, alea: () => number = Math.random): string {
-  return `${prefixe}${maintenant.toString(36)}${Math.floor(alea() * 36 ** 6).toString(36).padStart(6, '0')}`;
+  compteurIds = (compteurIds + 1) % 1296;
+  return `${prefixe}${maintenant.toString(36)}${Math.floor(alea() * 36 ** 6).toString(36).padStart(6, '0')}${compteurIds.toString(36).padStart(2, '0')}`;
 }
 
 const MOTIF_ID = /^[a-z0-9-]{2,48}$/;
