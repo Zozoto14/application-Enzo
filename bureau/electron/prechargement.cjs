@@ -35,7 +35,7 @@ contextBridge.exposeInMainWorld('applibourse', {
   },
 
   systeme: {
-    notifier: (titre, corps, destination) => ipcRenderer.invoke('systeme:notifier', titre, corps, destination),
+    notifier: (titre, corps, destination, options) => ipcRenderer.invoke('systeme:notifier', titre, corps, destination, options && typeof options === 'object' ? { silencieux: options.silencieux === true } : undefined),
     /** Appelé avec la destination quand on clique sur une notification ; rend de quoi se désabonner. */
     surNotificationOuverte: rappel => {
       const ecouteur = (_evenement, destination) => rappel(String(destination));

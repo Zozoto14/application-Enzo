@@ -151,6 +151,7 @@ import { niveauProfil } from '../hub/admin/comptes';
 import { chargerPrefs, enregistrerPrefs, reinitialiser, CLE_THEME, type PrefsHub } from '../hub/personnalisation';
 import { Devblog } from '../hub/devblog/Devblog';
 import { useRappelsTaches } from '../taches/resume';
+import { useLiensOffice } from '../taches/integrations/officeHook';
 import { CLE_DEVBLOG, lireEtat as lireEtatDevblog, decider as deciderDevblog, etapesVisite as etapesDevblog, marquerLues as marquerDevblogLu } from '../hub/devblog/logiqueDevblog';
 import type { CibleEssai, EntreeDevblog } from '../hub/devblog/entrees';
 import { ID_PORTEFEUILLE, REGISTRE } from '../hub/registre';
@@ -1996,6 +1997,22 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     }
     return ecouterTouche('Escape', () => setAppHub(undefined), { ignorerChamps: true });
   }, [hubAffiche, appHub, parametres]);
+  // Lien « Portefeuille » de l'app Tâches : versement mensuel et dividendes attendus (données simples).
+  function rappelsPourTaches(): ResumePortefeuille['rappelsTaches'] {
+    try {
+      const reglage = session ? reglageVersementDepuisJson(new DepotParametres(session.base()).lire(PARAMETRES.versementMensuel)) : undefined;
+      // Le calendrier dit « vers le 15 oct. » dans le mois « 2026-10 » : on en refait un jour AAAA-MM-JJ.
+      const dividendes = (onglets?.dividendes.calendrier.mois ?? []).slice(0, 2).flatMap(m =>
+        m.lignes.flatMap(l => {
+          const jour = /(\d{1,2})/.exec(l.date)?.[1];
+          return jour ? [{ nom: l.nom, date: `${m.cle}-${jour.padStart(2, '0')}`, montant: l.montant }] : [];
+        }),
+      );
+      return { ...(reglage ? { versement: { actif: reglage.actif, jour: reglage.jour, montant: reglage.montant } } : {}), dividendes };
+    } catch {
+      return undefined;
+    }
+  }
   const resumeHub: ResumePortefeuille | undefined =
     hubAffiche && onglets
       ? {
@@ -2009,6 +2026,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
                 date: onglets.resume.variationSeance.date,
               }
             : undefined,
+          rappelsTaches: rappelsPourTaches(),
         }
       : undefined;
   // Enregistrement d'un fichier : boîte « Enregistrer sous » du PC, sinon téléchargement du navigateur.
@@ -2079,6 +2097,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin, baseProfil, tsuzuku: resumeTsuzuku, enregistrerFichier: enregistrerFichierHote, historiqueOffice, claudeOffice: resumeClaudeOffice };
   // Tâches : rappels évalués toutes les 30 s tant que le compte est ouvert (notification sur le PC, pastille de la tuile).
   useRappelsTaches(contexteHub, deverrouille);
+  useLiensOffice(contexteHub, deverrouille);
   const themeDuHub = themeHub(themeAffiche);
   const appOuverte = surUneApp ? REGISTRE.find(app => app.id === appHub) : undefined;
   // --- Devblog « Quoi de neuf » : une fois par profil et par version -----------

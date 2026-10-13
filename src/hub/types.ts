@@ -34,6 +34,15 @@ export interface ResumePortefeuille {
   /** Variation de la dernière séance, si l'historique la permet. */
   variation?: { pourcentage: string; montant: string; tendance: Tendance; date: string };
   sansCompte: boolean;
+  /**
+   * Pour l'app Tâches (lien « Portefeuille », Fondateur) : rappel de versement
+   * mensuel et dividendes attendus. Données simples, sans dépendance au module
+   * du portefeuille.
+   */
+  rappelsTaches?: {
+    versement?: { actif: boolean; jour: number; montant: number };
+    dividendes: ReadonlyArray<{ nom: string; date: string; montant?: string }>;
+  };
 }
 
 /** Ce que le hub sait au moment d'afficher les tuiles. */

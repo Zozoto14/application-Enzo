@@ -25,11 +25,22 @@ const ICONES: Record<GenreEtape, [string, string]> = {
   attente: ['!', TEINTES_ACTIVITE.attend], reponse: ['✓', TEINTES_ACTIVITE.fini], 'sous-agent': ['✦', TEINTES_ACTIVITE.agent], fin: ['■', ZONES.salle.teinte],
 };
 
-export function DetailAgent({ theme, agent, entrees, maintenant, onFermer, onVoirHistorique, onMarquerVu, sousAgents }: {
+/** Ce qu'une autre app (Tâches) reçoit pour agir sur l'agent ou l'un de ses sous-agents. */
+export interface CibleAgent {
+  session: string;
+  cle: string;
+  projet?: string;
+  libelle?: string;
+  sousAgent?: string;
+}
+
+export function DetailAgent({ theme, agent, entrees, maintenant, onFermer, onVoirHistorique, onMarquerVu, sousAgents, actionAgent }: {
   theme: ThemeHub; agent?: Agent; entrees: readonly EntreeHistorique[]; maintenant: number; onFermer(): void;
   onVoirHistorique?(session: string): void; onMarquerVu?(cleFin: string): void;
   /** Sous-agents de toutes les sessions (ceux de cet agent sont listés, avec leur chronologie). */
   sousAgents?: readonly SousAgent[];
+  /** Bouton fourni par une autre app (Tâches : « ＋ Tâche »), pour l'agent et pour chaque sous-agent. */
+  actionAgent?(cible: CibleAgent): React.ReactNode;
 }) {
   const chrono = useMemo(() => (agent ? chronologieSession(entrees, agent.cle) : undefined), [agent, entrees]);
   if (!agent || !chrono) return null;
@@ -51,6 +62,7 @@ export function DetailAgent({ theme, agent, entrees, maintenant, onFermer, onVoi
         <View style={styles.boutons}>
           {agent.salle && agent.cleFin && onMarquerVu ? <Bouton theme={theme} variante="plein" couleur={ZONES.salle.teinte} titre="Marquer comme vu" onPress={() => onMarquerVu(agent.cleFin!)} testID="bureau-detail-vu" /> : null}
           {onVoirHistorique ? <Bouton theme={theme} titre="Voir dans l’Historique" onPress={() => onVoirHistorique(agent.session)} testID="bureau-detail-historique" /> : null}
+          {actionAgent?.({ session: agent.session, cle: agent.cle, ...(agent.projet ? { projet: agent.projet } : {}), ...(agent.demande ? { libelle: agent.demande } : {}) })}
         </View>
       )}
     >
@@ -79,7 +91,12 @@ export function DetailAgent({ theme, agent, entrees, maintenant, onFermer, onVoi
           </View>
         ))}
       </View>
-      <SectionSousAgents theme={theme} liste={(sousAgents ?? []).filter(s => s.parent === agent.cle)} maintenant={maintenant} />
+      <SectionSousAgents
+        theme={theme}
+        liste={(sousAgents ?? []).filter(s => s.parent === agent.cle)}
+        maintenant={maintenant}
+        action={actionAgent ? s => actionAgent({ session: agent.session, cle: agent.cle, sousAgent: s.id, ...(agent.projet ? { projet: agent.projet } : {}), ...(s.description ? { libelle: s.description } : {}) }) : undefined}
+      />
       <Text style={[t, { fontWeight: '700' }]} accessibilityRole="header">Chronologie de la session</Text>
       {chrono.masquees ? <Text style={a}>{chrono.masquees} étape(s) plus ancienne(s) : voir l’Historique.</Text> : null}
       {chrono.etapes.length === 0 ? <Text style={a}>Aucun événement de cette session dans les données lues ici.</Text> : null}
@@ -110,7 +127,7 @@ export function DetailAgent({ theme, agent, entrees, maintenant, onFermer, onVoi
 const LIBELLES_SOUS_AGENT: Record<SousAgent['etat'], string> = { 'en-cours': 'en cours', termine: 'terminé', echec: 'échec' };
 
 /** « Sous-agents » : chacun avec son type, sa description, son état et sa durée, du plus récent au plus ancien. */
-function SectionSousAgents({ theme, liste, maintenant }: { theme: ThemeHub; liste: readonly SousAgent[]; maintenant: number }) {
+function SectionSousAgents({ theme, liste, maintenant, action }: { theme: ThemeHub; liste: readonly SousAgent[]; maintenant: number; action?(s: SousAgent): React.ReactNode }) {
   if (!liste.length) return null;
   const a = { color: theme.attenue, fontSize: TAILLE, lineHeight: 22 };
   const tries = [...liste].sort((x, y) => y.debut - x.debut);
@@ -133,6 +150,7 @@ function SectionSousAgents({ theme, liste, maintenant }: { theme: ThemeHub; list
               {s.etat === 'en-cours' ? (ilYA(s.debut, maintenant) === 'à l’instant' ? 'Vient de démarrer' : `En cours depuis ${ilYA(s.debut, maintenant).replace('il y a ', '')}`) : `${LIBELLES_SOUS_AGENT[s.etat]}${s.duree ? ` en ${dureeCourte(s.duree)}` : ''}${s.fin ? ` · ${ilYA(s.fin, maintenant)}` : ''}`}
             </Text>
           </View>
+          {action?.(s)}
         </View>
       ))}
     </View>

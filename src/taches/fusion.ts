@@ -7,7 +7,7 @@
  *  - une suppression est le champ `supprime` (pierre tombale datée) : plus
  *    récente qu'une modification, elle gagne ; une restauration plus récente
  *    la défait ;
- *  - checklist et commentaires : élément par élément ; historique : union
+ *  - checklist, commentaires et temps passé : élément par élément ; historique : union
  *    (identifiants), bornée aux 100 derniers événements.
  *
  * La fusion est commutative, associative et idempotente : quel que soit
@@ -22,6 +22,7 @@ import {
   type Commentaire,
   type DonneesTaches,
   type ElementChecklist,
+  type EntreeTemps,
   type Entite,
   type Horodatages,
   type Tache,
@@ -43,7 +44,7 @@ function canonique(v: unknown): unknown {
 /** Forme canonique en texte (clés triées) : sert aux égalités et aux départages. */
 export const texteCanonique = (v: unknown): string => JSON.stringify(canonique(v)) ?? '~';
 
-const SPECIAUX = new Set(['id', 'h', 'checklist', 'commentaires', 'historique']);
+const SPECIAUX = new Set(['id', 'h', 'checklist', 'commentaires', 'historique', 'temps']);
 
 /** Fusion champ par champ de deux versions d'une même entité. */
 export function fusionnerEntite<T extends Entite>(a: T, b: T): T {
@@ -90,6 +91,7 @@ export function fusionnerTache(a: Tache, b: Tache): Tache {
     ...base,
     checklist: fusionnerElements<ElementChecklist>(a.checklist ?? {}, b.checklist ?? {}),
     commentaires: fusionnerElements<Commentaire>(a.commentaires ?? {}, b.commentaires ?? {}),
+    temps: fusionnerElements<EntreeTemps>(a.temps ?? {}, b.temps ?? {}),
     historique: borneHistorique([...(a.historique ?? []), ...(b.historique ?? [])]),
   };
 }

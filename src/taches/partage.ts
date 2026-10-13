@@ -36,10 +36,11 @@ import { publieParAdmin, type Espaces } from '../sync/relais/espaces';
 import { empreinte } from '../sync/relais/fusionLww';
 import { lireDocumentCle, OBJET_CLE, paireDe } from '../tsuzuku/plateforme/partage';
 import type { BasePrefs } from '../tsuzuku/plateforme/stockage';
-import { fusionnerDonnees, fusionnerTache, memesDonnees } from './fusion';
+import { fusionnerDonnees, fusionnerEntite, fusionnerTache, memesDonnees } from './fusion';
 import {
   donneesVides,
   ecrireDonnees,
+  hValide,
   lireDonnees,
   lireTache,
   vivant,
@@ -57,6 +58,8 @@ export const CLES_TACHES = {
   rappels: 'taches.rappels',
   /** Préférences d'affichage (vue, projet ouvert…) de l'appareil. */
   affichage: 'taches.affichage',
+  /** Identifiant de l'appareil (« un appareil seulement » pour les notifications du système). */
+  appareil: 'taches.appareil',
 } as const;
 
 export const OBJET_TACHES = 'taches';
@@ -120,7 +123,8 @@ export interface DocumentPourAmi {
  * seule). Rien d'autre : ni les autres projets, ni les vues, ni les réglages.
  */
 export function projectionPourAmi(d: DonneesTaches): DonneesTaches {
-  const projets = Object.fromEntries(Object.values(d.projets).filter(p => vivant(p) && p.partage !== 'aucun').map(p => [p.id, p]));
+  // Les projets tenus par une autre app (Prospects, Abonnements…) ne partent jamais, ni les tâches qu'elles ont créées.
+  const projets = Object.fromEntries(Object.values(d.projets).filter(p => vivant(p) && p.partage !== 'aucun' && !p.auto).map(p => [p.id, p]));
   const espaces = Object.fromEntries(
     Object.values(projets)
       .map(p => d.espaces[p.espaceId])
@@ -135,9 +139,21 @@ export function projectionPourAmi(d: DonneesTaches): DonneesTaches {
     espaces,
     projets: { ...tombes, ...projets },
     listes: Object.fromEntries(Object.values(d.listes).filter(l => projets[l.projetId]).map(l => [l.id, l])),
-    taches: Object.fromEntries(Object.values(d.taches).filter(t => projets[t.projetId]).map(t => [t.id, t])),
+    taches: Object.fromEntries(
+      Object.values(d.taches)
+        .filter(t => projets[t.projetId] && !t.source)
+        .map(t => {
+          // Les sessions de Claude Code liées restent chez le Fondateur.
+          if (!t.liensOffice) return [t.id, t];
+          const sans: Tache = { ...t, h: { ...t.h } };
+          delete sans.liensOffice;
+          delete sans.h.liensOffice;
+          return [t.id, sans];
+        }),
+    ),
     vues: {},
-    reglages: { id: 'reglages', h: {} },
+    // Seuls les réglages de notification de l'ami lui reviennent (ceux qu'il a envoyés).
+    reglages: { id: 'reglages', h: d.reglages.h.notifA ? { notifA: d.reglages.h.notifA } : {}, ...(d.reglages.notifA ? { notifA: d.reglages.notifA } : {}) },
   };
 }
 
@@ -158,12 +174,14 @@ export function appliquerReception(copie: CopieAmi, doc: DocumentPourAmi): Copie
     else if (b) taches[id] = b;
     else if (a && modeProjet(recu, a.projetId) === 'ecriture' && vivant(recu.listes[a.listeId]) && recu.listes[a.listeId].projetId === a.projetId) taches[id] = a;
   }
+  // Réglages : les siens (notifications), le plus récent gagne.
+  const reglages = fusionnerEntite({ id: 'reglages', h: copie.donnees.reglages.h.notifA ? { notifA: copie.donnees.reglages.h.notifA } : {}, ...(copie.donnees.reglages.notifA ? { notifA: copie.donnees.reglages.notifA } : {}) }, recu.reglages);
   return {
     v: 1,
     ...(doc.fondateur ? { fondateur: doc.fondateur } : {}),
     ...(doc.amiNom ? { ami: doc.amiNom } : {}),
     cle: doc.cle,
-    donnees: { ...recu, taches },
+    donnees: { ...recu, taches, reglages },
     ...(copie.recuLe ? { recuLe: copie.recuLe } : {}),
   };
 }
@@ -173,6 +191,8 @@ export function appliquerReception(copie: CopieAmi, doc: DocumentPourAmi): Copie
 export interface EnvoiAmi {
   v: 1;
   taches: Record<string, Tache>;
+  /** Ses réglages de notification (et leur horodatage), pour ses autres appareils. */
+  notif?: { valeur: unknown; h: string };
 }
 
 /** Une tâche porte-t-elle une trace de l'ami (champ, élément, commentaire, historique) ? */
@@ -181,6 +201,7 @@ function toucheeParAmi(t: Tache): boolean {
     Object.values(t.h).some(h => h.endsWith('|a')) ||
     Object.values(t.checklist).some(e => e.h.endsWith('|a')) ||
     Object.values(t.commentaires).some(c => c.h.endsWith('|a')) ||
+    Object.values(t.temps ?? {}).some(e => e.h.endsWith('|a')) ||
     t.historique.some(e => e.auteur === 'ami')
   );
 }
@@ -191,7 +212,8 @@ export function envoiDeLAmi(copie: CopieAmi): EnvoiAmi {
   for (const t of Object.values(copie.donnees.taches)) {
     if (modeProjet(copie.donnees, t.projetId) === 'ecriture' && toucheeParAmi(t)) taches[t.id] = t;
   }
-  return { v: 1, taches };
+  const r = copie.donnees.reglages;
+  return { v: 1, taches, ...(r.notifA && r.h.notifA?.endsWith('|a') ? { notif: { valeur: r.notifA, h: r.h.notifA } } : {}) };
 }
 
 export interface BilanEnvoi {
@@ -232,7 +254,23 @@ export function appliquerEnvoiAmi(d: DonneesTaches, envoi: unknown): BilanEnvoi 
       refusees++;
       continue;
     }
-    const fusion = existante ? fusionnerTache(existante, t) : t;
+    let fusion = existante ? fusionnerTache(existante, t) : t;
+    // Champs du Fondateur seul : l'ami ne les pose ni ne les change (source d'une autre app, sessions liées, son minuteur).
+    const garder = (x: Tache): Tache => {
+      const y = { ...x, h: { ...x.h } } as Tache & Record<string, unknown>;
+      for (const c of ['source', 'liensOffice', 'chronoF'] as const) {
+        const v = existante?.[c];
+        if (v === undefined) {
+          delete y[c];
+          delete y.h[c];
+        } else {
+          (y as Record<string, unknown>)[c] = v;
+          if (existante?.h[c]) y.h[c] = existante.h[c];
+        }
+      }
+      return y;
+    };
+    fusion = garder(fusion);
     if (!placeAutorisee(d, fusion)) {
       refusees++;
       continue;
@@ -240,7 +278,14 @@ export function appliquerEnvoiAmi(d: DonneesTaches, envoi: unknown): BilanEnvoi 
     taches[t.id] = fusion;
     acceptees++;
   }
-  return { donnees: acceptees ? { ...d, taches } : d, acceptees, refusees };
+  // Réglages de notification de l'ami : gardés pour ses autres appareils (le plus récent gagne).
+  const notif = envoi && typeof envoi === 'object' ? (envoi as { notif?: { valeur?: unknown; h?: unknown } }).notif : undefined;
+  let reglages = d.reglages;
+  if (notif && hValide(notif.h) && notif.h.endsWith('|a') && notif.valeur && typeof notif.valeur === 'object' && JSON.stringify(notif.valeur).length < 8000 && notif.h > (d.reglages.h.notifA ?? '')) {
+    reglages = { ...d.reglages, notifA: notif.valeur, h: { ...d.reglages.h, notifA: notif.h } };
+  }
+  const change = acceptees > 0 || reglages !== d.reglages;
+  return { donnees: change ? { ...d, taches, reglages } : d, acceptees, refusees };
 }
 
 // ------------------------------------------------------------------ Scellement
@@ -475,7 +520,7 @@ export async function recevoirTachesAmi(o: {
     change = true;
   }
   const envoi = envoiDeLAmi(copie);
-  if (!copie.cle || Object.keys(envoi.taches).length === 0) return { suivi, change };
+  if (!copie.cle || (Object.keys(envoi.taches).length === 0 && !envoi.notif)) return { suivi, change };
   const cle = copie.cle;
   const h = empreinte(envoi);
   if (h === suivi.envoye) return { suivi, change };

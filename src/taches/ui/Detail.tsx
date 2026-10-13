@@ -34,6 +34,7 @@ import { jourLisible } from '../dates';
 import type { Actions } from './actions';
 import { attenueDe, Avatar, Bouton, CaseRonde, Champ, Libelle, PastillePriorite, Puce, T, texteDe, titreDe } from './atomes';
 import { couleurAuteur } from './Vues';
+import { SectionLiens, SectionTemps } from './SuiviTemps';
 
 export interface PropsDetail {
   a: Actions;
@@ -44,6 +45,10 @@ export interface PropsDetail {
   onListe(t: Tache): void;
   onErreur(e: unknown): void;
   onAvis(texte: string): void;
+  onSaisirTemps(t: Tache): void;
+  /** Ouvre l'Historique de Claude Office filtré sur la session (absent : pas de lien cliquable). */
+  onOuvrirSession?(session: string): void;
+  onOuvrirApp?(id: string): void;
 }
 
 function Propriete({ a, libelle, children, onPress, testID, desactive }: { a: Actions; libelle: string; children: React.ReactNode; onPress?(): void; testID?: string; desactive?: boolean }) {
@@ -93,7 +98,7 @@ function TexteAvecLiens({ a, texte }: { a: Actions; texte: string }) {
   );
 }
 
-export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe, onErreur }: PropsDetail) {
+export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe, onErreur, onSaisirTemps, onOuvrirSession, onOuvrirApp }: PropsDetail) {
   const theme = a.theme;
   const d = a.etat.donnees;
   const t = d.taches[id];
@@ -226,6 +231,9 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
             <Text style={texteDe(theme)}>{liste?.nom}</Text>
           </Propriete>
         </View>
+
+        <SectionTemps a={a} t={t} onSaisir={() => onSaisirTemps(t)} onErreur={onErreur} />
+        <SectionLiens a={a} t={t} onOuvrirSession={s => onOuvrirSession?.(s)} onOuvrirApp={onOuvrirApp} />
 
         <View style={styles.section}>
           <Libelle theme={theme}>ÉTIQUETTES</Libelle>

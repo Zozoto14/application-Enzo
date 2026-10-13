@@ -23,7 +23,8 @@ import { police, type ThemeHub } from '../hub/themes';
 import type { ContexteHub } from '../hub/types';
 import { useMobile } from '../ui/mobile/useMobile';
 import { useActiviteBureau, type ActiviteBureau } from './activiteBureau';
-import { DetailAgent } from './DetailAgent';
+import { DetailAgent, type CibleAgent } from './DetailAgent';
+import { actionTacheOffice } from '../taches/integrations/BoutonTacheOffice';
 import { LIBELLES_ETAT, compterBureau, deduireBureau, ilYA, libelleFraicheur, phraseAgent, type Agent } from './logiqueBureau';
 import { etapesMiseEnRoute, type GenreAction } from './logiqueMiseEnRoute';
 import { activiteAgent, entreesDemo, LIBELLES_ACTIVITE, TEINTES_ACTIVITE } from './logiqueScene';
@@ -100,12 +101,14 @@ export interface PropsBureauVisuel {
   entete?: React.ReactNode;
   /** Démo : son début (ms), pour ses sous-agents fictifs. */
   debutDemo?: number;
+  /** Bouton d'une autre app dans le Détail (Tâches : « ＋ Tâche »). */
+  actionAgent?(cible: CibleAgent): React.ReactNode;
 }
 
 type ModeFiltre = 'avant' | 'masque';
 
 /** Le dessin du bureau (sans chargement) : barre d'outils, scène ou liste, détail. */
-export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vide, demo, onDemo, prefs: prefsDonnees, onPrefs, onVoirHistorique, entete, debutDemo }: PropsBureauVisuel) {
+export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vide, demo, onDemo, prefs: prefsDonnees, onPrefs, onVoirHistorique, entete, debutDemo, actionAgent }: PropsBureauVisuel) {
   const mobile = useMobile();
   const fenetre = useWindowDimensions();
   const reduit = useMouvementReduit(mouvementReduit);
@@ -481,6 +484,7 @@ export function BureauVisuel({ theme, activite, maintenant, mouvementReduit, vid
         onVoirHistorique={onVoirHistorique ? s => { setChoisi(undefined); onVoirHistorique({ session: s }); } : undefined}
         onMarquerVu={marquerVu}
         sousAgents={sousAgents}
+        actionAgent={demo ? undefined : actionAgent}
       />
     </View>
   );
@@ -647,6 +651,7 @@ export function OngletBureau({ theme, contexte, office, mouvementReduit, horloge
         onVoirHistorique={onVoirHistorique}
         debutDemo={debutDemo}
         entete={debutDemo === undefined ? <MiseEnRoute theme={theme} etapes={etapes} onAction={agir} occupe={occupe} /> : null}
+        actionAgent={actionTacheOffice(contexte, theme)}
       />
       {activite.erreur ? <Text style={[attenue, { color: theme.critique }]} testID="bureau-erreur">{activite.erreur}</Text> : null}
       {message ? <Text style={texte} testID="bureau-message" accessibilityLiveRegion="polite">{message}</Text> : null}

@@ -26,12 +26,18 @@ export interface AlerteRappel {
   texte: string;
   /** Instant du déclenchement (ISO). */
   date: string;
+  /** Genre de notification (V2) : échéance, rappel, retard, ami… */
+  type?: string;
 }
 
 export interface EtatRappels {
   /** Clé → date du déclenchement : jamais deux fois. */
   vus: Record<string, string>;
   nonLus: AlerteRappel[];
+  /** Dernière évaluation (ISO) : absente au premier passage sur l'appareil (rien n'est rattrapé). */
+  depuis?: string;
+  /** Par tâche partagée : dernière trace de l'autre déjà vue (horodatage). */
+  autres?: Record<string, string>;
 }
 
 export const etatRappelsVide = (): EtatRappels => ({ vus: {}, nonLus: [] });
@@ -44,7 +50,9 @@ export function lireEtatRappels(brut: string | null | undefined): EtatRappels {
     const nonLus = (Array.isArray(o.nonLus) ? o.nonLus : [])
       .filter((a): a is AlerteRappel => Boolean(a) && typeof a.cle === 'string' && typeof a.tacheId === 'string' && typeof a.titre === 'string' && typeof a.texte === 'string' && typeof a.date === 'string')
       .slice(-MAX_NON_LUS);
-    return { vus, nonLus };
+    const autres: Record<string, string> = {};
+    for (const [c, h] of Object.entries(o.autres && typeof o.autres === 'object' ? o.autres : {})) if (typeof h === 'string' && c.length <= 48 && h.length <= 40) autres[c] = h;
+    return { vus, nonLus, ...(typeof o.depuis === 'string' ? { depuis: o.depuis } : {}), ...(Object.keys(autres).length ? { autres } : {}) };
   } catch {
     return etatRappelsVide();
   }

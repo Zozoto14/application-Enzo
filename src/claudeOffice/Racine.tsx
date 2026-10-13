@@ -22,6 +22,7 @@ import { Statistiques } from './Statistiques';
 // v4 (fonctionnalités) : onglet Suivi, alertes, raccourcis clavier, équipe et notes — voir useSuiviOffice.
 import { AideRaccourcis, Suivi } from './Suivi';
 import { useSuiviOffice } from './suiviOffice';
+import { prendreDemandeHistorique } from '../taches/integrations/office';
 import {
   COMMANDE_APERCU, COMMANDE_DOSSIER, COMMANDE_HOOKS, LIBELLE_HOOKS, libelleServeur, pontClaudeOffice,
   type EtatClaudeOffice, type PlanHooks, type PontClaudeOffice,
@@ -260,6 +261,13 @@ export function ClaudeOffice({ theme, onRetour, contexte }: PropsRacineApp) {
     defilement.current?.scrollTo?.({ y: 0, animated: false });
   };
   const suivi = useSuiviOffice({ contexte, office: pont, debutDemo, changerOnglet });
+  // Ouverture demandée par Tâches (« session liée ») : l'Historique filtré sur cette session.
+  useEffect(() => {
+    const session = prendreDemandeHistorique(contexte.baseProfil, Date.now());
+    if (session) voirHistorique({ session });
+    // Une seule fois, à l'ouverture.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <ScrollView ref={defilement} style={{ flex: 1, backgroundColor: theme.fond }} contentContainerStyle={[styles.page, onglet === 'bureau' ? styles.pageLarge : null, mobile ? styles.pageMobile : null]}>
       <RetourHub theme={theme} onRetour={onRetour} titre="Claude Office" />

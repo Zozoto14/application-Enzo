@@ -38,6 +38,7 @@ import {
   type Tri,
 } from '../modele';
 import { libelleDelai, type AlerteRappel } from '../rappels';
+import { prefsDe } from '../notifications';
 import type { Actions } from './actions';
 import { attenueDe, Bouton, Champ, Dialogue, Libelle, Options, Puce, texteDe } from './atomes';
 
@@ -54,7 +55,9 @@ export function DialogueEcheance({ a, t, onFermer }: { a: Actions; t: Tache; onF
   const heureLue = heure.trim() ? lireHeure(heure) : undefined;
   const heureErreur = heure.trim() !== '' && !heureLue;
   const enregistrer = (e: Echeance | undefined) => {
-    a.changer(t.id, { echeance: e });
+    // Première échéance d'une tâche sans rappel : le rappel par défaut des réglages de notifications.
+    const delai = prefsDe(a.etat.donnees, a.etat.role).delaiDefaut;
+    a.changer(t.id, { echeance: e, ...(e && !t.echeance && t.rappels.length === 0 && delai >= 0 ? { rappels: [delai] } : {}) });
     onFermer();
   };
   const rapide: Array<[string, string]> = [
@@ -366,15 +369,23 @@ export function DialogueFiltres({
 
 // ------------------------------------------------------------------ Réglages de l'app
 
-export function DialogueReglages({ a, amis, onFermer, onDemo, onRetirerDemo, onErreur }: { a: Actions; amis: ReadonlyArray<{ id: string; nom: string }>; onFermer: Fermer; onDemo(): void; onRetirerDemo(): void; onErreur(e: unknown): void }) {
+export function DialogueReglages({ a, amis, onFermer, onDemo, onRetirerDemo, onErreur, onNotifications, onLiens, onReleve }: { a: Actions; amis: ReadonlyArray<{ id: string; nom: string }>; onFermer: Fermer; onDemo(): void; onRetirerDemo(): void; onErreur(e: unknown): void; onNotifications(): void; onLiens(): void; onReleve(): void }) {
   const theme = a.theme;
   const d = a.etat.donnees;
   const profils = amis;
   const [enCours, setEnCours] = useState(false);
+  const raccourcis = (
+    <View style={styles.rangee}>
+      <Bouton theme={theme} titre="🔔 Notifications…" onPress={onNotifications} testID="reglages-notifications" />
+      {a.etat.role === 'fondateur' ? <Bouton theme={theme} titre="🔗 Liens avec les autres apps…" onPress={onLiens} testID="reglages-liens" /> : null}
+      <Bouton theme={theme} titre="⏱ Relevé du temps…" onPress={onReleve} testID="reglages-releve" />
+    </View>
+  );
   if (a.etat.role === 'ami') {
     const projets = projetsDe(d);
     return (
       <Dialogue theme={theme} mobile={a.mobile} visible titre="Projets partagés avec vous" onFermer={onFermer} testID="dialogue-reglages">
+        {raccourcis}
         <Text style={texteDe(theme)}>
           {a.etat.parFondateur.charAt(0).toUpperCase() + a.etat.parFondateur.slice(1)} partage {projets.length} projet{projets.length > 1 ? 's' : ''} avec vous. Tout reste chiffré de bout en bout : le relais ne voit que des données illisibles.
         </Text>
@@ -398,6 +409,7 @@ export function DialogueReglages({ a, amis, onFermer, onDemo, onRetirerDemo, onE
   };
   return (
     <Dialogue theme={theme} mobile={a.mobile} visible large titre="Réglages de Tâches" onFermer={onFermer} testID="dialogue-reglages">
+      {raccourcis}
       <Libelle theme={theme}>PARTAGE AVEC UN AMI (UN SEUL POUR L’INSTANT)</Libelle>
       <Text style={attenueDe(theme)}>
         L’ami choisi voit seulement les projets que vous lui partagez, en lecture ou en écriture. Il ne peut pas supprimer de projet. Tout est chiffré de bout en bout.
@@ -417,7 +429,7 @@ export function DialogueReglages({ a, amis, onFermer, onDemo, onRetirerDemo, onE
         <>
           <Libelle theme={theme}>{`PROJETS PARTAGÉS AVEC ${(d.reglages.amiNom ?? 'l’ami').toUpperCase()}`}</Libelle>
           {projetsDe(d).length === 0 ? <Text style={attenueDe(theme)}>Aucun projet.</Text> : null}
-          {projetsDe(d).map(p => (
+          {projetsDe(d).filter(p => !p.auto).map(p => (
             <View key={p.id} style={[styles.ligneProjet, { flexWrap: 'wrap' }]}>
               <View style={[styles.point, { backgroundColor: p.couleur }]} />
               <Text style={[texteDe(theme), { flex: 1, minWidth: 120 }]}>{p.nom}</Text>
@@ -565,7 +577,9 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur }:
         />
       </View>
       <Libelle theme={theme}>PARTAGE</Libelle>
-      {a.etat.donnees.reglages.ami ? (
+      {p.auto ? (
+        <Text style={attenueDe(theme)}>Projet tenu par une autre app : il ne se partage pas (rien de ces apps n’est montré à votre ami).</Text>
+      ) : a.etat.donnees.reglages.ami ? (
         <View style={styles.rangee}>
           {(['aucun', 'lecture', 'ecriture'] as ModePartage[]).map(m => (
             <Puce key={m} theme={theme} grand={a.mobile} texte={LIBELLES_PARTAGE[m]} couleur={m === 'ecriture' ? theme.ok : m === 'lecture' ? theme.alerte : theme.attenue} actif={p.partage === m} onPress={() => a.etat.maj((x, ctx) => modifierProjet(x, projetId, { partage: m }, ctx))} testID={`projet-partage-${m}`} />
@@ -602,6 +616,8 @@ export function DialogueNom({ a, titre, description, placeholder, onValider, onF
 
 // ------------------------------------------------------------------ Rappels non lus
 
+const ICONES_NOTIF: Record<string, string> = { retard: '⏰', assignee: '👤', ami: '💬', office: '🤖', recap: '☀︎', test: '✅' };
+
 export function DialogueRappelsRecus({ a, rappels, onOuvrir, onToutLu, onFermer }: { a: Actions; rappels: readonly AlerteRappel[]; onOuvrir(id: string): void; onToutLu(): void; onFermer: Fermer }) {
   const theme = a.theme;
   return (
@@ -609,14 +625,14 @@ export function DialogueRappelsRecus({ a, rappels, onOuvrir, onToutLu, onFermer 
       theme={theme}
       mobile={a.mobile}
       visible
-      titre="Rappels"
+      titre="Rappels et notifications"
       onFermer={onFermer}
       testID="dialogue-rappels-recus"
       pied={rappels.length ? <Bouton theme={theme} titre="Tout marquer comme lu" variante="plein" onPress={onToutLu} testID="rappels-tout-lu" /> : undefined}>
       {rappels.length === 0 ? <Text style={attenueDe(theme)}>Aucun rappel en attente.</Text> : null}
       {[...rappels].reverse().map(r => (
-        <Pressable key={r.cle} accessibilityRole="button" onPress={() => onOuvrir(r.tacheId)} style={[styles.ligneProjet, { borderColor: theme.ligne, borderWidth: 1, borderRadius: 10, padding: 10 }]} testID={`rappel-recu-${r.tacheId}`}>
-          <Text style={{ fontSize: 18 }}>🔔</Text>
+        <Pressable key={r.cle} accessibilityRole="button" disabled={!r.tacheId || !a.etat.donnees.taches[r.tacheId]} onPress={() => onOuvrir(r.tacheId)} style={[styles.ligneProjet, { borderColor: theme.ligne, borderWidth: 1, borderRadius: 10, padding: 10 }]} testID={`rappel-recu-${r.tacheId || r.type || 'info'}`}>
+          <Text style={{ fontSize: 18 }}>{ICONES_NOTIF[r.type ?? ''] ?? '🔔'}</Text>
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={[texteDe(theme), { fontWeight: '700' }]}>{r.titre}</Text>
             <Text style={attenueDe(theme)}>

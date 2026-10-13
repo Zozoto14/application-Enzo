@@ -31,6 +31,8 @@ export interface EtatApp {
   rappelsLus(): void;
   /** Fondateur : choisit l'ami (un seul) et lui ouvre l'app ; `undefined` retire le partage. */
   choisirAmi(id: string | undefined, nom?: string): Promise<void>;
+  /** Relit la base (après une écriture faite hors de l'écran : liens, notification de test). */
+  relire(): void;
 }
 
 const enOctetsHex = (o: Uint8Array) => [...o].map(b => b.toString(16).padStart(2, '0')).join('');
@@ -125,5 +127,5 @@ export function useEtatTaches(contexte: ContexteHub): EtatApp {
   );
 
   const parFondateur = noms.fondateur === 'Fondateur' ? 'le Fondateur' : noms.fondateur;
-  return { role, donnees, copie, noms, parFondateur, aujourdhui: jourDe(maintenant()), maintenant, maj, rappels, rappelsLus, choisirAmi };
+  return { role, donnees, copie, noms, parFondateur, aujourdhui: jourDe(maintenant()), maintenant, maj, rappels, rappelsLus, choisirAmi, relire };
 }

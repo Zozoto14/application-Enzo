@@ -45,6 +45,51 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.25',
+    date: '2026-10-25',
+    titre: 'Tâches V2 : temps, notifications, liens',
+    resume:
+      'Un minuteur sur chaque tâche et un relevé de la semaine, des notifications réglables à ta façon (heures calmes, sourdine, un seul appareil), la corbeille, et des liens avec tes autres apps.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'taches-temps',
+        emoji: '⏱',
+        titre: 'Suivi du temps',
+        texte:
+          'Dans le détail d’une tâche : ▶ démarre le minuteur (un seul à la fois, il te suit d’un appareil à l’autre), ou saisis « 1h30 ». Estimation contre réel, relevé de la semaine par projet ou étiquette, export CSV (bouton ⏱).',
+        essayer: { genre: 'app', app: 'taches' },
+        app: 'taches',
+      },
+      {
+        id: 'taches-notifications',
+        emoji: '🔔',
+        titre: 'Tes notifications, tes réglages',
+        texte:
+          'Dans 👥 › Notifications : par type (échéance, retard, tâche assignée, modification de l’autre…), système ou pastille, heures calmes, projets en sourdine, un seul appareil, et « Tester une notification ».',
+        essayer: { genre: 'app', app: 'taches' },
+        app: 'taches',
+      },
+      {
+        id: 'taches-liens',
+        emoji: '🔗',
+        titre: 'Liens avec tes autres apps',
+        texte:
+          'Crée une tâche depuis un agent de Claude Office (elle passe « En revue » quand il a fini) ; les relances de Prospects, les échéances d’Abonnements, le versement mensuel et les dividendes du portefeuille deviennent des tâches — à activer un par un, jamais montré à ton ami.',
+        essayer: { genre: 'app', app: 'taches' },
+        adminSeulement: true,
+      },
+      {
+        id: 'taches-corbeille',
+        emoji: '🗑',
+        titre: 'Supprimer sans crainte',
+        texte: 'Espaces, projets et listes se suppriment par le menu ⋯ (ou l’appui long, ou Suppr) : déplace d’abord leur contenu si tu veux, « Annuler » 10 s, puis 30 jours dans la corbeille.',
+        essayer: { genre: 'app', app: 'taches' },
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.24',
     date: '2026-10-24',
     titre: 'Nouvelle app : Tâches',

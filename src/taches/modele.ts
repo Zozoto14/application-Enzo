@@ -60,6 +60,10 @@ export interface Statut {
   ferme: boolean;
 }
 
+/** Apps du hub reliées à Tâches (V2, `integrations/`). */
+export type AppLiee = 'prospects' | 'abonnements' | 'portefeuille' | 'office';
+export const APPS_LIEES: readonly AppLiee[] = ['prospects', 'abonnements', 'portefeuille', 'office'];
+
 export interface Projet extends Entite {
   espaceId: string;
   nom: string;
@@ -68,6 +72,8 @@ export interface Projet extends Entite {
   ordre: number;
   /** Partage avec l'ami choisi (V1 : un seul ami). */
   partage: ModePartage;
+  /** Projet tenu par une app reliée (« Prospects »…) : jamais partagé. */
+  auto?: AppLiee;
 }
 
 export interface Liste extends Entite {
@@ -107,6 +113,35 @@ export interface Commentaire {
   supprime?: boolean;
 }
 
+/** Temps passé sur une tâche (minuteur arrêté ou saisie manuelle). */
+export interface EntreeTemps {
+  id: string;
+  auteur: Auteur;
+  /** Jour où le temps a été passé (AAAA-MM-JJ). */
+  jour: string;
+  minutes: number;
+  /** Début du minuteur (ISO), absent pour une saisie manuelle. */
+  debut?: string;
+  note?: string;
+  h: string;
+  supprime?: boolean;
+}
+
+/** Session (ou sous-agent) de Claude Code liée à une tâche (Claude Office). */
+export interface LienOffice {
+  session: string;
+  /** Clé de l'agent (appareil + session), pour retrouver ses sous-agents. */
+  cle?: string;
+  sousAgent?: string;
+  /** Projet (dossier) de la session, et ce que fait le sous-agent. */
+  projet?: string;
+  libelle?: string;
+  /** Lien posé à cet instant (ISO) : seule une fin postérieure fait passer la tâche « En revue ». */
+  depuis: string;
+  /** Dernière fin déjà prise en compte (ms). */
+  finVue?: number;
+}
+
 export interface EvenementHistorique {
   id: string;
   date: string;
@@ -139,6 +174,16 @@ export interface Tache extends Entite {
   termineLe?: string;
   /** Tâche suivante déjà créée par la récurrence (évite un doublon). */
   suivante?: string;
+  /** Créée par une app reliée : app et identifiant stable de l'élément source (pas de doublon). */
+  source?: { app: AppLiee; cle: string };
+  /** Sessions de Claude Code liées (Fondateur seulement ; jamais envoyées à l'ami). */
+  liensOffice?: LienOffice[];
+  /** Estimation (minutes). */
+  estimation?: number;
+  /** Minuteur en cours : début (ISO) pour le Fondateur (F) et pour l'ami (A). */
+  chronoF?: string;
+  chronoA?: string;
+  temps: Record<string, EntreeTemps>;
   checklist: Record<string, ElementChecklist>;
   commentaires: Record<string, Commentaire>;
   historique: EvenementHistorique[];
@@ -179,6 +224,11 @@ export interface Reglages extends Entite {
   cle?: string;
   /** Espace des données d'exemple (retirées d'un geste). */
   demo?: string;
+  /** Liens avec les autres apps (Fondateur) : activés un par un. */
+  liens?: Partial<Record<AppLiee, boolean>>;
+  /** Réglages des notifications du Fondateur (F) et de l'ami (A) : chacun les siens, synchronisés entre ses appareils. */
+  notifF?: unknown;
+  notifA?: unknown;
 }
 
 export interface DonneesTaches {
@@ -331,7 +381,8 @@ export function lireProjet(v: unknown): Projet | undefined {
   const b = base(o);
   if (!b || !idValide(o.espaceId)) return undefined;
   const partage: ModePartage = o.partage === 'lecture' || o.partage === 'ecriture' ? o.partage : 'aucun';
-  return { ...b, espaceId: o.espaceId, nom: texte(o.nom, BORNES.nom, 'Projet') || 'Projet', couleur: couleur(o.couleur, COULEURS[0]), statuts: lireStatuts(o.statuts), ordre: nombre(o.ordre), partage };
+  const auto = APPS_LIEES.includes(o.auto as AppLiee) ? (o.auto as AppLiee) : undefined;
+  return { ...b, espaceId: o.espaceId, nom: texte(o.nom, BORNES.nom, 'Projet') || 'Projet', couleur: couleur(o.couleur, COULEURS[0]), statuts: lireStatuts(o.statuts), ordre: nombre(o.ordre), partage: auto ? 'aucun' : partage, ...(auto ? { auto } : {}) };
 }
 
 export function lireListe(v: unknown): Liste | undefined {
@@ -349,6 +400,56 @@ function lireChecklist(v: unknown): Record<string, ElementChecklist> {
     r[id] = { id, texte: texte(o.texte, BORNES.titre), fait: o.fait === true, ordre: nombre(o.ordre), h: o.h, ...(o.supprime === true ? { supprime: true } : {}) };
   }
   return r;
+}
+
+const MOTIF_SESSION = /^[A-Za-z0-9_.:-]{1,80}$/;
+
+export function lireTemps(v: unknown): Record<string, EntreeTemps> {
+  const r: Record<string, EntreeTemps> = {};
+  for (const [id, e] of Object.entries(dict(v)).slice(0, 2000)) {
+    const o = dict(e);
+    const auteur = lireAuteur(o.auteur);
+    if (!idValide(id) || !hValide(o.h) || !auteur || !jourValide(o.jour)) continue;
+    const minutes = Math.round(nombre(o.minutes));
+    if (minutes < 0 || minutes > 24 * 60) continue;
+    r[id] = {
+      id,
+      auteur,
+      jour: o.jour,
+      minutes,
+      ...(typeof o.debut === 'string' && !Number.isNaN(Date.parse(o.debut)) ? { debut: o.debut.slice(0, 30) } : {}),
+      ...(typeof o.note === 'string' && o.note ? { note: o.note.slice(0, 200) } : {}),
+      h: o.h,
+      ...(o.supprime === true ? { supprime: true } : {}),
+    };
+  }
+  return r;
+}
+
+function lireLiensOffice(v: unknown): LienOffice[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const r: LienOffice[] = [];
+  for (const x of v.slice(0, 20)) {
+    const o = dict(x);
+    if (typeof o.session !== 'string' || !MOTIF_SESSION.test(o.session) || typeof o.depuis !== 'string' || Number.isNaN(Date.parse(o.depuis))) continue;
+    r.push({
+      session: o.session,
+      ...(typeof o.cle === 'string' && o.cle.length <= 160 ? { cle: o.cle } : {}),
+      ...(typeof o.sousAgent === 'string' && MOTIF_SESSION.test(o.sousAgent) ? { sousAgent: o.sousAgent } : {}),
+      ...(typeof o.projet === 'string' ? { projet: o.projet.slice(0, 80) } : {}),
+      ...(typeof o.libelle === 'string' ? { libelle: o.libelle.slice(0, 160) } : {}),
+      depuis: o.depuis.slice(0, 30),
+      ...(typeof o.finVue === 'number' && Number.isFinite(o.finVue) ? { finVue: o.finVue } : {}),
+    });
+  }
+  return r.length ? r : undefined;
+}
+
+const instantValide = (v: unknown): v is string => typeof v === 'string' && v.length <= 30 && !Number.isNaN(Date.parse(v));
+
+function lireSource(v: unknown): { source: { app: AppLiee; cle: string } } | Record<string, never> {
+  const src = dict(v);
+  return APPS_LIEES.includes(src.app as AppLiee) && typeof src.cle === 'string' && src.cle.length > 0 && src.cle.length <= 160 ? { source: { app: src.app as AppLiee, cle: src.cle } } : {};
 }
 
 function lireCommentaires(v: unknown): Record<string, Commentaire> {
@@ -409,6 +510,12 @@ export function lireTache(v: unknown): Tache | undefined {
     creePar: lireAuteur(o.creePar) ?? 'fondateur',
     ...(typeof o.termineLe === 'string' ? { termineLe: o.termineLe.slice(0, 30) } : {}),
     ...(idValide(o.suivante) ? { suivante: o.suivante } : {}),
+    ...lireSource(o.source),
+    ...((l => (l ? { liensOffice: l } : {}))(lireLiensOffice(o.liensOffice))),
+    ...(typeof o.estimation === 'number' && Number.isFinite(o.estimation) && o.estimation > 0 ? { estimation: Math.min(100_000, Math.round(o.estimation)) } : {}),
+    ...(instantValide(o.chronoF) ? { chronoF: o.chronoF } : {}),
+    ...(instantValide(o.chronoA) ? { chronoA: o.chronoA } : {}),
+    temps: lireTemps(o.temps),
     checklist: lireChecklist(o.checklist),
     commentaires: lireCommentaires(o.commentaires),
     historique: lireHistorique(o.historique),
@@ -459,6 +566,12 @@ export function lireReglages(v: unknown): Reglages {
     ...(typeof o.amiNom === 'string' ? { amiNom: o.amiNom.slice(0, 40) } : {}),
     ...(typeof o.cle === 'string' && /^[0-9a-f]{64}$/.test(o.cle) ? { cle: o.cle } : {}),
     ...(idValide(o.demo) ? { demo: o.demo } : {}),
+    ...((l => {
+      const liens = Object.fromEntries(APPS_LIEES.filter(a => typeof l[a] === 'boolean').map(a => [a, l[a] as boolean]));
+      return Object.keys(liens).length ? { liens } : {};
+    })(dict(o.liens))),
+    ...(o.notifF && typeof o.notifF === 'object' ? { notifF: o.notifF } : {}),
+    ...(o.notifA && typeof o.notifA === 'object' ? { notifA: o.notifA } : {}),
   };
 }
 
@@ -519,7 +632,7 @@ function nouvelleEntite(prefixe: string, ctx: Contexte): Entite {
 function dater<T extends Entite>(e: T, ctx: Contexte): T {
   const h: Horodatages = {};
   const hh = horodatage(ctx.maintenant, ctx.auteur);
-  for (const cle of Object.keys(e)) if (cle !== 'id' && cle !== 'h' && cle !== 'checklist' && cle !== 'commentaires' && cle !== 'historique') h[cle] = hh;
+  for (const cle of Object.keys(e)) if (cle !== 'id' && cle !== 'h' && cle !== 'checklist' && cle !== 'commentaires' && cle !== 'historique' && cle !== 'temps') h[cle] = hh;
   return { ...e, h };
 }
 
@@ -610,6 +723,7 @@ export function modifierEspace(d: DonneesTaches, id: string, c: Partial<Pick<Esp
 export function modifierProjet(d: DonneesTaches, id: string, c: Partial<Pick<Projet, 'nom' | 'couleur' | 'ordre' | 'partage' | 'espaceId'>>, ctx: Contexte): DonneesTaches {
   const p = d.projets[id];
   if (!vivant(p)) throw new ErreurTaches('Projet introuvable.');
+  if (p.auto && c.partage && c.partage !== 'aucun') throw new ErreurTaches('Ce projet est tenu par une autre app : il ne se partage pas.');
   return { ...d, projets: { ...d.projets, [id]: changerChamps(p, c.nom !== undefined ? { ...c, nom: nomPropre(c.nom, p.nom) } : c, ctx) } };
 }
 
@@ -698,6 +812,9 @@ export interface SaisieTache {
   recurrence?: Recurrence;
   rappels?: number[];
   pourAujourdhui?: string;
+  estimation?: number;
+  source?: { app: AppLiee; cle: string };
+  liensOffice?: LienOffice[];
 }
 
 export function evenement(ctx: Contexte, texteEvt: string, avant?: string, id?: string): EvenementHistorique {
@@ -736,9 +853,13 @@ export function creerTache(d: DonneesTaches, s: SaisieTache, ctx: Contexte, id?:
     ...(s.recurrence ? { recurrence: s.recurrence } : {}),
     rappels: [...new Set(s.rappels ?? [])].sort((a, b) => a - b).slice(0, BORNES.rappels),
     ...(s.pourAujourdhui ? { pourAujourdhui: s.pourAujourdhui } : {}),
+    ...(s.estimation ? { estimation: s.estimation } : {}),
+    ...(s.source ? { source: s.source } : {}),
+    ...(s.liensOffice?.length ? { liensOffice: s.liensOffice } : {}),
     ordre,
     creeLe: new Date(ctx.maintenant).toISOString(),
     creePar: ctx.auteur,
+    temps: {},
     checklist: {},
     commentaires: {},
     // Identifiant imposé (récurrence) : même événement de création des deux côtés.
@@ -747,7 +868,7 @@ export function creerTache(d: DonneesTaches, s: SaisieTache, ctx: Contexte, id?:
   return { donnees: { ...d, taches: { ...d.taches, [tache.id]: tache } }, tache };
 }
 
-export type ChangementTache = Partial<Pick<Tache, 'titre' | 'description' | 'statut' | 'priorite' | 'echeance' | 'etiquettes' | 'assigne' | 'recurrence' | 'rappels' | 'pourAujourdhui' | 'ordre' | 'listeId' | 'projetId' | 'parentId'>>;
+export type ChangementTache = Partial<Pick<Tache, 'titre' | 'description' | 'statut' | 'priorite' | 'echeance' | 'etiquettes' | 'assigne' | 'recurrence' | 'rappels' | 'pourAujourdhui' | 'ordre' | 'listeId' | 'projetId' | 'parentId' | 'estimation' | 'liensOffice'>>;
 
 const ou = (v: string | undefined) => v || '—';
 
@@ -786,6 +907,8 @@ function decrire(d: DonneesTaches, t: Tache, cle: string, valeur: unknown, noms:
       return { texte: `Déplacée vers la liste « ${ou(d.listes[valeur as string]?.nom)} »` };
     case 'supprime':
       return { texte: valeur ? 'Tâche supprimée' : 'Tâche restaurée' };
+    case 'estimation':
+      return { texte: valeur ? `Estimation : ${valeur} min` : 'Estimation retirée' };
     default:
       return undefined;
   }

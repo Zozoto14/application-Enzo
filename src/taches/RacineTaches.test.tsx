@@ -216,6 +216,40 @@ describe('Tâches : écran', () => {
     expect(screen.getByTestId('corbeille-vide')).toBeTruthy();
   });
 
+  it('V2 : minuteur, saisie de temps, relevé ; réglages des notifications et des liens', async () => {
+    const { b } = avecDemo();
+    await monter(ctxF(b));
+    const t = tachesVivantes(lireDonnees(b.m.get(CLES_TACHES.donnees))).find(x => x.titre === 'Choisir les photos')!;
+    await toucher(`tache-titre-${t.id}`);
+    await toucher('detail-minuteur');
+    expect(lireDonnees(b.m.get(CLES_TACHES.donnees)).taches[t.id].chronoF).toBeDefined();
+    expect(screen.getByTestId('taches-minuteur')).toHaveTextContent(/Choisir les photos/);
+    await toucher('taches-minuteur-arreter');
+    expect(lireDonnees(b.m.get(CLES_TACHES.donnees)).taches[t.id].chronoF).toBeUndefined();
+    expect(screen.queryByTestId('taches-minuteur')).toBeNull();
+    await toucher('detail-temps-saisir');
+    await fireEvent.changeText(screen.getByTestId('temps-duree'), '1h30');
+    await toucher('temps-valider');
+    expect(Object.values(lireDonnees(b.m.get(CLES_TACHES.donnees)).taches[t.id].temps).map(e => e.minutes)).toEqual([90]);
+    expect(screen.getByTestId('detail-temps')).toHaveTextContent(/1 h 30/);
+    await toucher('detail-fermer');
+    await toucher('taches-reglages');
+    await toucher('reglages-releve');
+    expect(screen.getByTestId('releve-tableau')).toHaveTextContent(/Lancement du site.*1 h 30/);
+    await toucher('dialogue-releve-fermer');
+    await toucher('taches-reglages');
+    await toucher('reglages-notifications');
+    await toucher('notif-rappel-aucun');
+    expect(JSON.stringify(lireDonnees(b.m.get(CLES_TACHES.donnees)).reglages.notifF)).toContain('"rappel":"aucun"');
+    await toucher('notif-calme');
+    expect(screen.getByTestId('notif-calme-debut')).toBeTruthy();
+    await toucher('dialogue-notifications-fermer');
+    await toucher('taches-reglages');
+    await toucher('reglages-liens');
+    await toucher('lien-portefeuille');
+    expect(lireDonnees(b.m.get(CLES_TACHES.donnees)).reglages.liens).toEqual({ portefeuille: true });
+  });
+
   it('se relit quand la synchronisation change la base', async () => {
     jest.useFakeTimers();
     const { b } = avecDemo();
@@ -242,7 +276,12 @@ describe('Tâches dans le hub', () => {
     expect(APP_TACHES.page).toBe('publique');
   });
   it('devblog : la nouveauté Tâches pour le Fondateur et l’ami concerné seulement', async () => {
-    const entree = ENTREES[0];
+    const v2 = ENTREES[0];
+    expect(v2.version).toBe('2026.10.25');
+    expect(fonctionnalitesPour(v2, true).map(f => f.id)).toEqual(['taches-temps', 'taches-notifications', 'taches-liens', 'taches-corbeille']);
+    expect(fonctionnalitesPour(v2, false, false, ['taches']).map(f => f.id)).toEqual(['taches-temps', 'taches-notifications']);
+    expect(fonctionnalitesPour(v2, false, false, ['tsuzuku'])).toEqual([]);
+    const entree = ENTREES[1];
     expect(entree.version).toBe('2026.10.24');
     expect(fonctionnalitesPour(entree, true).map(f => f.id)).toEqual(['taches-v1', 'taches-partage']);
     expect(fonctionnalitesPour(entree, false, false, ['taches']).map(f => f.id)).toEqual(['taches-v1', 'taches-partage-ami']);

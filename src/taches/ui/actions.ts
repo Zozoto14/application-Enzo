@@ -31,4 +31,6 @@ export interface Actions {
   demanderSuppression(genre: Genre, id: string): void;
   /** Supprime vers la corbeille et propose « Annuler » pendant 10 s. */
   supprimer(genre: Genre, id: string, deplacerVers?: string): void;
+  /** Démarre le minuteur sur la tâche (celui qui tournait ailleurs s'arrête), ou l'arrête. */
+  minuteur(t: Tache): void;
 }

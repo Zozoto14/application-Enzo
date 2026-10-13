@@ -50,6 +50,14 @@ import type { Actions } from './actions';
 import { attenueDe, Bouton, Champ, couleurPriorite, Dialogue, EtatVide, Puce, T, texteDe, titreDe } from './atomes';
 import { AvisAnnulable, DialogueCorbeille, DialogueMenu, DialogueSuppression, type ElementMenu } from './Suppression';
 import type { ElementCorbeille } from '../corbeille';
+import { demanderHistorique } from '../integrations/office';
+import { noterRelanceFaite } from '../integrations/prospects';
+import { chargerDonnees, enregistrerDonnees } from '../../hub/admin/donnees';
+import { prefsDe } from '../notifications';
+import { appareilTaches, notificationSystemeDisponible, reinitialiserLiens, testerNotification, verifierRappels } from '../resume';
+import { arreterMinuteur, CHAMP_CHRONO, demarrerMinuteur, dureeLisible, minuteurActif } from '../temps';
+import { DialogueLiens, DialogueNotifications } from './ReglagesV2';
+import { DialogueReleve, DialogueTemps, PastilleMinuteur } from './SuiviTemps';
 import { DetailTache } from './Detail';
 import { DialogueChoix, DialogueEcheance, DialogueFiltres, DialogueNom, DialogueProjet, DialogueRappels, DialogueRappelsRecus, DialogueRecurrence, DialogueReglages } from './Dialogues';
 import { useEtatTaches } from './etat';
@@ -70,7 +78,11 @@ type Fenetre =
   | { g: 'menu'; genre: 'espace' | 'projet' | 'liste'; id: string }
   | { g: 'menu-vue' }
   | { g: 'supprimer'; genre: Genre; id: string }
-  | { g: 'corbeille' };
+  | { g: 'corbeille' }
+  | { g: 'notifications' }
+  | { g: 'liens' }
+  | { g: 'releve' }
+  | { g: 'temps'; t: Tache };
 
 /** Durée pendant laquelle « Annuler » reste proposé après une suppression. */
 export const DELAI_ANNULER_MS = 10_000;
@@ -125,7 +137,7 @@ export function Taches(props: PropsRacineApp) {
   return <AppTaches {...props} />;
 }
 
-function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
+function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
   const mobile = useMobile();
   const { width } = useWindowDimensions();
   const etat = useEtatTaches(contexte);
@@ -184,6 +196,15 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
+  // Liens avec les autres apps : une passe à l'ouverture (Fondateur), puis celle du hub (5 min).
+  useEffect(() => {
+    if (role !== 'fondateur') return;
+    reinitialiserLiens();
+    verifierRappels(contexte, Date.now());
+    // À l'ouverture seulement.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role]);
+
   // Sélection devenue invalide (projet supprimé, plus partagé) : retour à Ma journée.
   const projetSel = selection.g === 'projet' ? d.projets[selection.id] : undefined;
   const vueSel = selection.g === 'vue' ? d.vues[selection.id] : undefined;
@@ -230,13 +251,28 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
         if (!t) return;
         const ferme = statutsDe(d, t.projetId).find(s => s.id === t.statut)?.ferme;
         let suivante: string | undefined;
+        let temps = 0;
         etat.maj((x, ctx) => {
           if (ferme) return rouvrirTache(x, id, ctx, noms);
-          const r = terminerTache(x, id, ctx, etat.aujourdhui, noms);
+          // Terminée : son minuteur s'arrête (le temps est noté).
+          const arret = x.taches[id]?.[CHAMP_CHRONO[ctx.auteur]] ? arreterMinuteur(x, id, ctx) : { donnees: x, minutes: 0 };
+          temps = arret.minutes;
+          const r = terminerTache(arret.donnees, id, ctx, etat.aujourdhui, noms);
           suivante = r.suivante;
           return r.donnees;
         });
-        if (!ferme) setAvis({ texte: suivante ? `« ${t.titre} » terminée — prochaine occurrence créée.` : `« ${t.titre} » terminée.`, genre: 'ok' });
+        // Relance de Prospects cochée : le contact est noté dans Prospects.
+        let prospect = '';
+        if (!ferme && t.source?.app === 'prospects' && role === 'fondateur' && contexte.admin) {
+          try {
+            const admin = chargerDonnees(contexte.admin.stockage);
+            const carnet = noterRelanceFaite(admin.prospects, t, etat.aujourdhui, etat.maintenant());
+            if (carnet !== admin.prospects && enregistrerDonnees(contexte.admin.stockage, { ...admin, prospects: carnet })) prospect = ' Contact noté dans Prospects.';
+          } catch {
+            prospect = ' (Prospects n’a pas pu être mis à jour.)';
+          }
+        }
+        if (!ferme) setAvis({ texte: `${suivante ? `« ${t.titre} » terminée — prochaine occurrence créée.` : `« ${t.titre} » terminée.`}${temps ? ` ${dureeLisible(temps)} notées.` : ''}${prospect}`, genre: 'ok' });
       }),
     changer: (id, c) => essayer(() => etat.maj((x, ctx) => modifierTache(x, id, c, ctx, noms))),
     droits,
@@ -254,6 +290,27 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
         else etat.maj((x, ctx) => modifierTache(x, t.id, { statut: cible.id }, ctx, noms));
       }),
     basculerJournee: t => essayer(() => etat.maj((x, ctx) => modifierTache(x, t.id, { pourAujourdhui: t.pourAujourdhui === etat.aujourdhui ? undefined : etat.aujourdhui }, ctx, noms))),
+    minuteur: t =>
+      essayer(() => {
+        const enCours = t[CHAMP_CHRONO[role]];
+        if (enCours) {
+          let minutes = 0;
+          etat.maj((x, ctx) => {
+            const r = arreterMinuteur(x, t.id, ctx);
+            minutes = r.minutes;
+            return r.donnees;
+          });
+          setAvis({ texte: minutes ? `Minuteur arrêté : ${dureeLisible(minutes)} notées sur « ${t.titre} ».` : 'Minuteur arrêté (moins de 30 s : rien n’est noté).', genre: 'ok' });
+          return;
+        }
+        let arrete: { tache: Tache; minutes: number } | undefined;
+        etat.maj((x, ctx) => {
+          const r = demarrerMinuteur(x, t.id, ctx);
+          arrete = r.arrete;
+          return r.donnees;
+        });
+        setAvis({ texte: arrete ? `Minuteur sur « ${t.titre} » (celui de « ${arrete.tache.titre} » est arrêté${arrete.minutes ? ` : ${dureeLisible(arrete.minutes)} notées` : ''}).` : `Minuteur démarré sur « ${t.titre} ».`, genre: 'ok' });
+      }),
     demanderSuppression: (genre, id) => {
       if (genre === 'tache' ? !d.taches[id] || !droits(d.taches[id].projetId).modifier : role !== 'fondateur') return;
       setFenetre({ g: 'supprimer', genre, id });
@@ -330,6 +387,7 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
             ...(lu.priorite ? { priorite: lu.priorite } : {}),
             ...(lu.assigne ? { assigne: lu.assigne } : {}),
             ...(lu.recurrence ? { recurrence: lu.recurrence } : {}),
+            ...(lu.echeance && prefsDe(x, role).delaiDefaut >= 0 ? { rappels: [prefsDe(x, role).delaiDefaut] } : {}),
             ...(selection.g === 'journee' && !lu.echeance ? { pourAujourdhui: etat.aujourdhui } : {}),
           },
           ctx,
@@ -582,9 +640,17 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
       {selection.g === 'projet' && role === 'fondateur' && projetSel ? <Bouton theme={theme} compact={!mobile} titre="⋯" libelle="Plus d’actions : supprimer le projet, la liste, l’espace" onPress={() => setFenetre({ g: 'menu-vue' })} testID="taches-menu" /> : null}
       <Bouton theme={theme} compact={!mobile} titre={nbFiltres ? `Filtres · ${nbFiltres}` : 'Filtres'} onPress={() => setFenetre({ g: 'filtres' })} testID="taches-filtres" />
       <Bouton theme={theme} compact={!mobile} titre={etat.rappels.length ? `🔔 ${etat.rappels.length}` : '🔔'} libelle={`Rappels : ${etat.rappels.length} non lu(s)`} onPress={() => setFenetre({ g: 'rappels-recus' })} testID="taches-rappels" />
+      <Bouton theme={theme} compact={!mobile} titre="⏱" libelle="Relevé du temps (semaine, export CSV)" onPress={() => setFenetre({ g: 'releve' })} testID="taches-releve" />
       <Bouton theme={theme} compact={!mobile} titre={role === 'fondateur' ? '👥 Partage' : '👥 Partagés'} libelle={role === 'fondateur' ? 'Réglages de Tâches : ami, partage, exemple' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
     </View>
   );
+
+  const chrono = minuteurActif(d, role);
+  const pastilleMinuteur = chrono ? <PastilleMinuteur a={actions} t={chrono.tache} debut={chrono.debut} onOuvrir={() => setOuverte(chrono.tache.id)} /> : null;
+  const ouvrirSession = (session: string) => {
+    demanderHistorique(base, session, Date.now());
+    onOuvrirApp?.('claude-office');
+  };
 
   const detail = ouverte ? (
     <DetailTache
@@ -596,6 +662,9 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
       onListe={t => setFenetre({ g: 'liste', t })}
       onErreur={signaler}
       onAvis={texte => setAvis({ texte, genre: 'ok' })}
+      onSaisirTemps={t => setFenetre({ g: 'temps', t })}
+      onOuvrirSession={onOuvrirApp ? ouvrirSession : undefined}
+      onOuvrirApp={onOuvrirApp}
     />
   ) : null;
 
@@ -667,6 +736,8 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
           setAvis({ texte: `« ${el.nom} » supprimé${el.genre === 'liste' || el.genre === 'tache' ? 'e' : ''} définitivement.`, genre: 'ok' });
         })
       }
+      contexte={contexte}
+      onAller={setFenetre}
       onCorbeilleVider={() =>
         essayer(() => {
           etat.maj((x, ctx) => viderCorbeille(x, ctx));
@@ -705,6 +776,7 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
             <Bouton theme={theme} titre="👥" libelle={role === 'fondateur' ? 'Réglages de Tâches : ami, partage, exemple' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
           </View>
           <View style={{ paddingHorizontal: 16, gap: 10 }}>
+            {pastilleMinuteur}
             {ongletsVues}
             <View style={[styles.rangee, { flexWrap: 'nowrap' }]}>
               <View style={{ flex: 1 }}>{recherche}</View>
@@ -749,6 +821,7 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
               </View>
               {ongletsVues}
               {recherche}
+              {pastilleMinuteur}
               {outils}
             </View>
             <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.contenu} keyboardShouldPersistTaps="handled">
@@ -929,6 +1002,8 @@ function Fenetres({
   onCorbeilleRestaurer,
   onCorbeilleEffacer,
   onCorbeilleVider,
+  contexte,
+  onAller,
 }: {
   a: Actions;
   fenetre?: Fenetre;
@@ -950,6 +1025,8 @@ function Fenetres({
   onCorbeilleRestaurer(e: ElementCorbeille): void;
   onCorbeilleEffacer(e: ElementCorbeille): void;
   onCorbeilleVider(): void;
+  contexte: PropsRacineApp['contexte'];
+  onAller(f: Fenetre): void;
 }) {
   if (!fenetre) return null;
   const d = a.etat.donnees;
@@ -1031,6 +1108,9 @@ function Fenetres({
         <DialogueReglages
           a={a}
           amis={amis}
+          onNotifications={() => onAller({ g: 'notifications' })}
+          onLiens={() => onAller({ g: 'liens' })}
+          onReleve={() => onAller({ g: 'releve' })}
           onFermer={onFermer}
           onErreur={onErreur}
           onDemo={() =>
@@ -1076,6 +1156,53 @@ function Fenetres({
       return <DialogueMenu a={a} titre="Actions" elements={menuVue()} onFermer={onFermer} testID="dialogue-menu" />;
     case 'supprimer':
       return <DialogueSuppression a={a} genre={fenetre.genre} id={fenetre.id} onFermer={onFermer} onConfirmer={vers => a.supprimer(fenetre.genre, fenetre.id, vers)} />;
+    case 'notifications':
+      return (
+        <DialogueNotifications
+          a={a}
+          appareil={appareilTaches(contexte.baseProfil)}
+          systemeDisponible={notificationSystemeDisponible()}
+          onTester={() => {
+            const r = testerNotification(contexte, Date.now());
+            a.etat.relire();
+            onAvis(
+              `${r.systeme ? 'Notification du système envoyée' : 'Pas de notification du système ici (application du PC, ou navigateur autorisé) : la pastille 🔔 la montre'}.${r.calme ? ' Heures calmes en cours : les vraies notifications attendront.' : ''}${r.autreAppareil ? ' Un autre appareil est choisi pour les notifications du système.' : ''}`,
+            );
+          }}
+          onFermer={onFermer}
+        />
+      );
+    case 'liens':
+      return (
+        <DialogueLiens
+          a={a}
+          onFermer={onFermer}
+          onSynchroniser={() => {
+            reinitialiserLiens();
+            verifierRappels(contexte, Date.now());
+            a.etat.relire();
+            onAvis('Liens mis à jour.');
+          }}
+        />
+      );
+    case 'releve':
+      return (
+        <DialogueReleve
+          a={a}
+          onFermer={onFermer}
+          onOuvrir={onOuvrir}
+          onExporter={(nom, csv) => {
+            const enregistrer = contexte.enregistrerFichier;
+            if (!enregistrer) {
+              onErreur(new Error('Export indisponible sur cet appareil.'));
+              return;
+            }
+            void enregistrer(nom, csv, 'text/csv').then(ok => ok && onAvis(`Relevé exporté : ${nom}.`), onErreur);
+          }}
+        />
+      );
+    case 'temps':
+      return <DialogueTemps a={a} t={d.taches[fenetre.t.id] ?? fenetre.t} onFermer={onFermer} onErreur={onErreur} />;
     case 'corbeille':
       return <DialogueCorbeille a={a} onFermer={onFermer} onRestaurer={onCorbeilleRestaurer} onEffacer={onCorbeilleEffacer} onVider={onCorbeilleVider} />;
     case 'espace':

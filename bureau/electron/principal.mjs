@@ -189,7 +189,7 @@ function installerPasserelle() {
     return true;
   });
 
-  ipcMain.handle('systeme:notifier', async (_evenement, titre, corps, destination) => {
+  ipcMain.handle('systeme:notifier', async (_evenement, titre, corps, destination, options) => {
     if (!Notification.isSupported()) {
       return false;
     }
@@ -198,7 +198,8 @@ function installerPasserelle() {
       body: String(corps),
       // Le logo d'AppDashboard à côté du texte, plutôt qu'une notification anonyme.
       icon: join(ici, '..', 'icone', 'icone-256.png'),
-      silent: false,
+      // Tâches : « son » coupé dans ses réglages de notifications.
+      silent: Boolean(options && options.silencieux === true),
     });
     // Un clic sur la notification ramène la fenêtre au premier plan.
     // Le clic ouvre la fenêtre sur la bonne page : la destination est
