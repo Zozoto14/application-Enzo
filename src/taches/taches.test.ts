@@ -289,6 +289,11 @@ describe('filtres, tris, regroupements, Ma journée', () => {
       ['Fait', 1],
     ]);
   });
+  it('tous projets : colonnes par nom de statut, dans l’ordre des statuts', () => {
+    const x = modifierTache(d, ids.loin, { statut: 'en-revue' }, f());
+    const y = modifierTache(x, ids.demain, { statut: 'en-cours' }, f());
+    expect(grouper(y, trier(y, tachesVivantes(y), 'priorite'), 'statut', AUJ).map(g => g.titre)).toEqual(['À faire', 'En cours', 'En revue', 'Fait']);
+  });
   it('Ma journée : en retard, aujourd’hui, choisies, 7 jours ; chaque tâche une fois', () => {
     const j = maJournee(d, AUJ);
     expect([noms(j.retard), noms(j.aujourdhui), noms(j.choisies), noms(j.aVenir)]).toEqual([['retard'], ['auj'], ['sans'], ['demain']]);

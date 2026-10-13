@@ -136,6 +136,7 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
   const [fenetre, setFenetre] = useState<Fenetre | undefined>();
   const [avis, setAvis] = useState<{ texte: string; genre: 'ok' | 'erreur' } | undefined>();
   const [rapide, setRapide] = useState('');
+  const [rapideActif, setRapideActif] = useState(false);
   const [dernierProjet, setDernierProjet] = useState(affichageInitial.dernierProjet);
   const champRapide = useRef<Cible | null>(null);
   const champRecherche = useRef<Cible | null>(null);
@@ -377,7 +378,7 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
         />
       </EtatVide>
     ) : (
-      <EtatVide theme={theme} testID="taches-rien-partage" titre="Rien n’est partagé avec vous pour l’instant" texte={`Quand ${noms.fondateur} partagera un projet avec vous, il apparaîtra ici (la synchronisation peut prendre une ou deux minutes).`} />
+      <EtatVide theme={theme} testID="taches-rien-partage" titre="Rien n’est partagé avec vous pour l’instant" texte={`Quand ${etat.parFondateur === 'le Fondateur' ? 'le Fondateur' : noms.fondateur} partagera un projet avec vous, il apparaîtra ici (la synchronisation peut prendre une ou deux minutes).`} />
     )
   ) : vueEffective === 'journee' ? (
     <VueJournee a={actions} taches={filtrer(d, toutes, filtres, etat.aujourdhui)} qui={role} />
@@ -412,7 +413,7 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
 
   const barreRapide = (projetsModifiables.length > 0 || role === 'fondateur') && !aucunProjet ? (
     <View style={{ gap: 6 }}>
-      <View style={[styles.rapide, { borderColor: rapide ? theme.accent : theme.ligne, backgroundColor: theme.surface, borderRadius: Math.min(theme.rayonMoyen, 12) }]}>
+      <View style={[styles.rapide, { borderColor: rapide || rapideActif ? theme.accent : theme.ligne, backgroundColor: theme.surface, borderRadius: Math.min(theme.rayonMoyen, 12) }]}>
         <Text style={{ color: theme.accent, fontSize: 20, fontWeight: '700' }}>＋</Text>
         <TextInput
           ref={champRapide as never}
@@ -420,6 +421,8 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
           value={rapide}
           onChangeText={setRapide}
           onSubmitEditing={ajouter}
+          onFocus={() => setRapideActif(true)}
+          onBlur={() => setRapideActif(false)}
           blurOnSubmit={false}
           placeholder={mobile ? 'Nouvelle tâche…' : 'Ajouter une tâche (N) — ex. « Appeler Paul demain #prospects !haute @ami »'}
           placeholderTextColor={theme.attenue}
@@ -615,7 +618,7 @@ function AppTaches({ contexte, theme, onRetour }: PropsRacineApp) {
                 {projetSel && role === 'fondateur' && projetSel.partage !== 'aucun' && d.reglages.amiNom ? (
                   <Text style={attenueDe(theme)}>Partagé avec {d.reglages.amiNom} · {projetSel.partage === 'ecriture' ? 'écriture' : 'lecture seule'}</Text>
                 ) : projetSel && role === 'ami' ? (
-                  <Text style={attenueDe(theme)}>Partagé par {noms.fondateur} · {projetSel.partage === 'ecriture' ? 'vous pouvez modifier' : 'lecture seule'}</Text>
+                  <Text style={attenueDe(theme)}>Partagé par {etat.parFondateur} · {projetSel.partage === 'ecriture' ? 'vous pouvez modifier' : 'lecture seule'}</Text>
                 ) : null}
               </View>
               {ongletsVues}
@@ -696,7 +699,7 @@ function Navigation({
         <LigneNav key={v.id} a={a} texte={v.nom} gauche="★" actif={selection.g === 'vue' && selection.id === v.id} onPress={() => onChoisir({ g: 'vue', id: v.id })} testID={`nav-vue-${v.id}`} droite={fondateur ? petitBouton('✕', `Supprimer la vue ${v.nom}`, () => onSupprimerVue(v.id), `nav-vue-supprimer-${v.id}`) : undefined} />
       ))}
       <View style={[styles.rangee, { marginTop: 10, justifyContent: 'space-between', flexWrap: 'nowrap' }]}>
-        <Text style={[attenueDe(theme), styles.intertitre, { marginTop: 0 }]}>{fondateur ? 'ESPACES' : `PARTAGÉS PAR ${a.etat.noms.fondateur.toUpperCase()}`}</Text>
+        <Text style={[attenueDe(theme), styles.intertitre, { marginTop: 0 }]}>{fondateur ? 'ESPACES' : `PARTAGÉS PAR ${a.etat.parFondateur.toUpperCase()}`}</Text>
         {fondateur ? petitBouton('＋', 'Nouvel espace', onNouvelEspace, 'nav-nouvel-espace') : null}
       </View>
       {espacesVivants(d).map(e => {
@@ -984,7 +987,7 @@ const styles = StyleSheet.create({
   onglet: { minHeight: 38, paddingHorizontal: 12, justifyContent: 'center', alignItems: 'center' },
   rangee: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   rapide: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, paddingLeft: 14, paddingRight: 6, minHeight: 50 },
-  champRapide: { flex: 1, minHeight: 46, paddingVertical: 8 },
+  champRapide: { flex: 1, minHeight: 46, paddingVertical: 8, outlineStyle: 'none' } as object,
   piedMobile: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: 12, paddingBottom: 16, borderTopWidth: StyleSheet.hairlineWidth },
   avis: { position: 'absolute', left: 0, right: 0, bottom: 24, alignItems: 'center', paddingHorizontal: 16 },
   avisTexte: { paddingHorizontal: 16, paddingVertical: 10, overflow: 'hidden', maxWidth: 560 },

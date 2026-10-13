@@ -59,7 +59,8 @@ export function Bouton({
 }) {
   const plein = variante === 'plein';
   // Téléphone : jamais sous 44 px.
-  const serre = compact && !useMobile();
+  const mobile = useMobile();
+  const serre = compact && !mobile;
   const couleur = variante === 'danger' ? theme.critique : plein ? theme.surAccent : variante === 'discret' ? theme.attenue : theme.texte;
   return (
     <Pressable
@@ -320,7 +321,7 @@ export function EtatVide({ theme, titre, texte, children, testID }: { theme: The
 }
 
 const styles = StyleSheet.create({
-  bouton: { minHeight: 44, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  bouton: { minHeight: 44, minWidth: 44, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   boutonCompact: { minHeight: 36, paddingHorizontal: 12 },
   puce: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, minHeight: 26, borderWidth: 1, maxWidth: 220 },
   puceGrande: { minHeight: 44, paddingHorizontal: 14 },

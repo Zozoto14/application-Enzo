@@ -65,6 +65,20 @@ function Propriete({ a, libelle, children, onPress, testID, desactive }: { a: Ac
 }
 
 function TexteAvecLiens({ a, texte }: { a: Actions; texte: string }) {
+  if (a.mobile) {
+    // Téléphone : le texte, puis chaque lien en bouton (cible de 44 px).
+    const liens = decouperLiens(texte).filter(m => m.lien);
+    return (
+      <View style={{ gap: 4 }}>
+        <Text style={[texteDe(a.theme), { lineHeight: 22 }]} testID="detail-description-apercu">
+          {texte}
+        </Text>
+        {liens.map((m, i) => (
+          <Bouton key={i} theme={a.theme} variante="discret" titre={`↗ ${m.lien!.replace(/^https?:\/\//, '').slice(0, 40)}`} libelle={`Ouvrir ${m.lien}`} onPress={() => void Linking.openURL(m.lien!)} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} />
+        ))}
+      </View>
+    );
+  }
   return (
     <Text style={[texteDe(a.theme), { lineHeight: 22 }]} testID="detail-description-apercu">
       {decouperLiens(texte).map((m, i) =>

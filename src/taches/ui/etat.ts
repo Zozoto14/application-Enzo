@@ -21,6 +21,8 @@ export interface EtatApp {
   donnees: DonneesTaches;
   copie?: CopieAmi;
   noms: Record<Auteur, string>;
+  /** « par le Fondateur » / « par Enzo ». */
+  parFondateur: string;
   aujourdhui: string;
   maintenant(): number;
   /** Applique une modification ; rend les données enregistrées. */
@@ -122,5 +124,6 @@ export function useEtatTaches(contexte: ContexteHub): EtatApp {
     [base, maj, profils],
   );
 
-  return { role, donnees, copie, noms, aujourdhui: jourDe(maintenant()), maintenant, maj, rappels, rappelsLus, choisirAmi };
+  const parFondateur = noms.fondateur === 'Fondateur' ? 'le Fondateur' : noms.fondateur;
+  return { role, donnees, copie, noms, parFondateur, aujourdhui: jourDe(maintenant()), maintenant, maj, rappels, rappelsLus, choisirAmi };
 }

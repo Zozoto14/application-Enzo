@@ -2122,7 +2122,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     } catch {
       // Préférence illisible : pas de devblog cette fois, rien ne casse.
     }
-  }, [hub, deverrouille, tableau, profils?.sessionAdmin, etapesVisite, nombreComptes, nombreOperations, session, stockagePrefs, estAdmin, estGestionnaire, synchro.configure, synchro.premierTourFait, liaisonDuPc]);
+  }, [hub, deverrouille, tableau, profils?.sessionAdmin, profils?.actuel?.apps, etapesVisite, nombreComptes, nombreOperations, session, stockagePrefs, estAdmin, estGestionnaire, synchro.configure, synchro.premierTourFait, liaisonDuPc]);
   // Une autre appareil vient de rapporter que cette version a déjà été vue : plus de patch notes ici.
   useEffect(() => {
     const entree = devblog?.entree;

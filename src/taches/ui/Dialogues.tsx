@@ -378,7 +378,7 @@ export function DialogueReglages({ a, amis, onFermer, onDemo, onRetirerDemo, onE
     return (
       <Dialogue theme={theme} mobile={a.mobile} visible titre="Projets partagés avec vous" onFermer={onFermer} testID="dialogue-reglages">
         <Text style={texteDe(theme)}>
-          {a.etat.noms.fondateur} partage {projets.length} projet{projets.length > 1 ? 's' : ''} avec vous. Tout reste chiffré de bout en bout : le relais ne voit que des données illisibles.
+          {a.etat.parFondateur.charAt(0).toUpperCase() + a.etat.parFondateur.slice(1)} partage {projets.length} projet{projets.length > 1 ? 's' : ''} avec vous. Tout reste chiffré de bout en bout : le relais ne voit que des données illisibles.
         </Text>
         {projets.map(p => (
           <View key={p.id} style={styles.ligneProjet}>

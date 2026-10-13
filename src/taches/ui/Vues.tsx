@@ -16,7 +16,6 @@ import {
   LIBELLES_PRIORITE,
   sousTaches,
   statutDe,
-  statutsDe,
   type Groupe,
   type Tache,
 } from '../modele';
@@ -25,6 +24,8 @@ import { attenueDe, Avatar, Bouton, CaseRonde, couleurPriorite, EtatVide, Pastil
 import { useGlissable, useZoneDepot } from './glisser';
 
 // ------------------------------------------------------------------ Morceaux communs
+
+const majuscule = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
 export function couleurAuteur(a: Actions, qui: 'fondateur' | 'ami'): string {
   return qui === 'fondateur' ? a.theme.teintes.portefeuille : a.theme.teintes.admin;
@@ -220,14 +221,14 @@ function CarteKanban({ a, t, colonnes, iColonne }: { a: Actions; t: Tache; colon
     }
   };
   return (
-    <View ref={ref as never} testID={`carte-${t.id}`} style={[styles.carte, { backgroundColor: theme.surface, borderColor: glisse ? theme.accent : theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 12), borderLeftColor: couleurPriorite(t.priorite, theme) }]}>
+    <View ref={ref as never} testID={`carte-${t.id}`} style={[styles.carte, { backgroundColor: theme.surface, borderColor: glisse ? theme.accent : theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 12), borderLeftColor: t.priorite === 'normale' ? theme.ligne : couleurPriorite(t.priorite, theme) }]}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${t.titre}. Statut ${statutDe(a.etat.donnees, t).nom}.${droits.modifier ? ' Maj + flèche gauche ou droite pour changer de colonne.' : ''}`}
         onPress={() => a.ouvrir(t.id)}
         {...({ onKeyDown: surTouche } as object)}
         testID={`carte-ouvrir-${t.id}`}
-        style={{ gap: 8 }}>
+        style={{ gap: 8, minHeight: 44, justifyContent: 'center' }}>
         <Text numberOfLines={3} style={[texteDe(theme, T.corps), { fontWeight: '600', textDecorationLine: ferme ? 'line-through' : 'none' }]}>
           {t.titre}
         </Text>
@@ -249,8 +250,14 @@ function CarteKanban({ a, t, colonnes, iColonne }: { a: Actions; t: Tache; colon
       </Pressable>
       {a.mobile && droits.modifier ? (
         <View style={[styles.meta, { justifyContent: 'space-between', marginBottom: -6 }]}>
-          <Bouton theme={theme} variante="discret" titre={iColonne > 0 ? `‹ ${colonnes[iColonne - 1].titre}` : ' '} libelle="Colonne précédente" desactive={iColonne === 0} onPress={() => colonnes[iColonne - 1] && a.versColonne(t, colonnes[iColonne - 1].cle)} testID={`carte-gauche-${t.id}`} style={{ paddingHorizontal: 4, flexShrink: 1 }} />
-          <Bouton theme={theme} variante="discret" titre={iColonne < colonnes.length - 1 ? `${colonnes[iColonne + 1].titre} ›` : ' '} libelle="Colonne suivante" desactive={iColonne >= colonnes.length - 1} onPress={() => colonnes[iColonne + 1] && a.versColonne(t, colonnes[iColonne + 1].cle)} testID={`carte-droite-${t.id}`} style={{ paddingHorizontal: 4, flexShrink: 1 }} />
+          {iColonne > 0 ? (
+            <Bouton theme={theme} variante="discret" titre={`‹ ${colonnes[iColonne - 1].titre}`} libelle={`Vers « ${colonnes[iColonne - 1].titre} »`} onPress={() => a.versColonne(t, colonnes[iColonne - 1].cle)} testID={`carte-gauche-${t.id}`} style={{ paddingHorizontal: 6, flexShrink: 1 }} />
+          ) : (
+            <View />
+          )}
+          {iColonne < colonnes.length - 1 ? (
+            <Bouton theme={theme} variante="discret" titre={`${colonnes[iColonne + 1].titre} ›`} libelle={`Vers « ${colonnes[iColonne + 1].titre} »`} onPress={() => a.versColonne(t, colonnes[iColonne + 1].cle)} testID={`carte-droite-${t.id}`} style={{ paddingHorizontal: 6, flexShrink: 1 }} />
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -341,13 +348,14 @@ function CaseJour({ a, jour, taches, moisCourant, hauteur, max, onChoisir, chois
       testID={`jour-${jour}`}
       style={[
         styles.caseJour,
+        a.mobile && { padding: 0 },
         {
           minHeight: hauteur,
           borderColor: zone.survolee ? theme.accent : theme.ligne,
           backgroundColor: zone.survolee ? teinteTransparente(theme.accent, 0.16) : choisi ? teinteTransparente(theme.accent, 0.08) : moisCourant ? 'transparent' : teinteTransparente(theme.sombre ? '#FFFFFF' : '#000000', 0.03),
         },
       ]}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`${jourLisible(jour, a.etat.aujourdhui, true)} : ${taches.length} tâche(s)`} onPress={onChoisir} style={[styles.numeroJour, a.mobile && { minHeight: 44, justifyContent: 'center' }]} disabled={!onChoisir}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${jourLisible(jour, a.etat.aujourdhui, true)} : ${taches.length} tâche(s)`} onPress={onChoisir} style={[styles.numeroJour, a.mobile && { minHeight: 50, justifyContent: 'center', width: '100%' }]} disabled={!onChoisir}>
         <Text style={[texteDe(theme, T.petit), { fontWeight: auj ? '800' : '500', color: auj ? theme.surAccent : moisCourant ? theme.texte : theme.attenue, backgroundColor: auj ? theme.accent : 'transparent', paddingHorizontal: 6, borderRadius: 10, overflow: 'hidden' }]}>
           {Number(jour.slice(8, 10))}
         </Text>
@@ -411,7 +419,7 @@ export function VueCalendrier({ a, taches, mode, onMode, jour, onJour }: { a: Ac
             <View style={{ gap: 8 }}>
               {jours.map(j => (
                 <View key={j} style={[styles.jourSemaineMobile, { borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 12) }]}>
-                  <Text style={[titreDe(theme, 16), { textTransform: 'capitalize' }]}>{jourLisible(j, a.etat.aujourdhui, true)}</Text>
+                  <Text style={titreDe(theme, 16)}>{majuscule(jourLisible(j, a.etat.aujourdhui, true))}</Text>
                   {(parJour[j] ?? []).length === 0 ? <Text style={attenueDe(theme)}>Rien de prévu.</Text> : (parJour[j] ?? []).map(t => <PuceCalendrier key={t.id} a={a} t={t} />)}
                 </View>
               ))}
@@ -446,7 +454,7 @@ export function VueCalendrier({ a, taches, mode, onMode, jour, onJour }: { a: Ac
           )}
           {a.mobile && mode === 'mois' ? (
             <View style={{ gap: 8, marginTop: 12 }} testID="cal-jour-choisi">
-              <Text style={[titreDe(theme, 17), { textTransform: 'capitalize' }]}>{jourLisible(choisi, a.etat.aujourdhui, true)}</Text>
+              <Text style={titreDe(theme, 17)}>{majuscule(jourLisible(choisi, a.etat.aujourdhui, true))}</Text>
               {(tachesParJour(taches, [choisi])[choisi] ?? []).length === 0 ? (
                 <Text style={attenueDe(theme)}>Rien de prévu ce jour-là.</Text>
               ) : (
@@ -512,7 +520,7 @@ export function VueJournee({ a, taches, qui }: { a: Actions; taches: readonly Ta
   return (
     <View testID="vue-journee" style={{ gap: 18 }}>
       <View style={{ gap: 4 }}>
-        <Text style={[titreDe(theme, a.mobile ? 24 : T.grand), { textTransform: 'capitalize' }]}>{jourLisible(a.etat.aujourdhui, '0000-00-00', true)}</Text>
+        <Text style={titreDe(theme, a.mobile ? 24 : T.grand)}>{majuscule(jourLisible(a.etat.aujourdhui, '0000-00-00', true))}</Text>
         <Text style={attenueDe(theme)}>
           {j.retard.length + j.aujourdhui.length + j.choisies.length} tâche(s) pour aujourd’hui · {j.aVenir.length} cette semaine
         </Text>

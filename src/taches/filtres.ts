@@ -117,15 +117,18 @@ export function grouper(d: DonneesTaches, taches: readonly Tache[], groupe: Grou
   if (projetId) {
     return statutsDe(d, projetId).map(s => ({ cle: s.id, titre: s.nom, couleur: s.couleur, taches: taches.filter(t => t.statut === s.id) }));
   }
-  const groupes = new Map<string, GroupeTaches>();
+  // Tous projets : un groupe par nom de statut, dans l'ordre des statuts (le « terminé » en dernier).
+  const groupes = new Map<string, GroupeTaches & { rang: number }>();
   for (const t of taches) {
     const s = statutDe(d, t);
     const cle = s.ferme ? '~ferme' : sansAccents(s.nom);
-    const g = groupes.get(cle) ?? { cle, titre: s.nom, couleur: s.couleur, taches: [] };
+    const rang = s.ferme ? 1000 : statutsDe(d, t.projetId).findIndex(x => x.id === s.id);
+    const g = groupes.get(cle) ?? { cle, titre: s.nom, couleur: s.couleur, taches: [], rang };
+    g.rang = Math.min(g.rang, rang);
     g.taches.push(t);
     groupes.set(cle, g);
   }
-  return [...groupes.values()].sort((a, b) => (a.cle === '~ferme' ? 1 : b.cle === '~ferme' ? -1 : 0));
+  return [...groupes.values()].sort((a, b) => a.rang - b.rang || a.titre.localeCompare(b.titre)).map(({ rang: _rang, ...g }) => g);
 }
 
 // ------------------------------------------------------------------ Ma journée
