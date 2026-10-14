@@ -45,6 +45,37 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.27',
+    date: '2026-10-27',
+    titre: 'Plusieurs apps ouvertes en même temps',
+    resume:
+      'Vos apps s’ouvrent désormais en onglets, comme dans un navigateur : passez de l’une à l’autre sans rien perdre. Sur grand écran, affichez-en deux côte à côte ; sur le PC, ouvrez une app dans sa propre fenêtre.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'multi-onglets',
+        emoji: '🗂',
+        titre: 'Des onglets pour vos apps',
+        texte:
+          'Chaque app ouverte depuis le hub a son onglet en haut de l’écran ; elle garde son état (recherche, filtres, position) quand vous passez à une autre. Clic molette, Ctrl+clic ou appui long sur une tuile : nouvel onglet sans quitter le hub. Raccourcis : Ctrl+Tab, Ctrl+Maj+Tab, Ctrl+1 à 9, Ctrl+W. Vos onglets vous attendent au prochain démarrage.',
+      },
+      {
+        id: 'multi-cote-a-cote',
+        emoji: '◫',
+        titre: 'Deux apps côte à côte',
+        texte:
+          'Sur un écran large (PC, iPad à l’horizontale) : « ⋯ » sur un onglet, puis « Afficher à côté ». Glissez la séparation pour régler les largeurs ; ⇄ échange les côtés. Sur téléphone, le bouton ▤ de l’en-tête liste vos apps ouvertes.',
+      },
+      {
+        id: 'multi-fenetres',
+        emoji: '⧉',
+        titre: 'Une app dans sa propre fenêtre',
+        texte:
+          'Sur le PC : « Ouvrir dans une nouvelle fenêtre » (menu « ⋯ » d’un onglet), sans vous reconnecter. Sur le site : « Ouvrir dans un nouvel onglet du navigateur », un lien qui ouvre directement l’app après le déverrouillage. Vos droits restent les mêmes : un lien n’ouvre jamais une app qui ne vous est pas ouverte.',
+      },
+    ],
+  },
+  {
     version: '2026.10.25',
     date: '2026-10-25',
     titre: 'Tâches V2 : temps, journal, notifications, liens',

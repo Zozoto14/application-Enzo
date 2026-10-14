@@ -1954,7 +1954,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     if (nouvelles.length > 0) {
       setEtapesVisite(nouvelles);
     }
-  }, [deverrouille, nombreComptes, session]);
+  }, [deverrouille, nombreComptes, session, annexe]);
 
   // Clic sur une notification : la fenêtre s'ouvre sur la bonne page. Si
   // l'application est verrouillée, la page s'ouvre juste après le déverrouillage.
@@ -2239,7 +2239,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     } catch {
       // Préférence illisible : pas de devblog cette fois, rien ne casse.
     }
-  }, [hub, deverrouille, tableau, profils?.sessionAdmin, profils?.actuel?.apps, etapesVisite, nombreComptes, nombreOperations, session, stockagePrefs, estAdmin, estGestionnaire, synchro.configure, synchro.premierTourFait, liaisonDuPc]);
+  }, [hub, deverrouille, tableau, profils?.sessionAdmin, profils?.actuel?.apps, etapesVisite, nombreComptes, nombreOperations, session, stockagePrefs, estAdmin, estGestionnaire, synchro.configure, synchro.premierTourFait, liaisonDuPc, annexe]);
   // Une autre appareil vient de rapporter que cette version a déjà été vue : plus de patch notes ici.
   useEffect(() => {
     const entree = devblog?.entree;
