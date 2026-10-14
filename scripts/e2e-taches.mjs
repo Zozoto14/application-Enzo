@@ -319,11 +319,20 @@ try {
   verifier(Boolean(lea.id && hugo.id), `comptes créés (Léa ${lea.id}, Hugo ${hugo.id})`);
   await pc.getByTestId('admin-liste').getByText('Léa', { exact: true }).first().click();
   await pc.getByTestId('admin-detail').waitFor({ timeout: 20_000 });
-  verifier((await pc.locator(`[data-testid^="admin-niveau-${lea.id}-taches"]`).count()) === 0 && (await pc.locator(`[data-testid^="admin-niveau-${lea.id}-tsuzuku"]`).count()) > 0, 'Administration : Tâches n’est pas une case à cocher (l’app choisit son ami)');
+  // V3 : Tâches s'ouvre dans l'Administration comme les autres apps ; on la ferme à Léa et à Hugo (le modèle « Ami » l'ouvre) :
+  // c'est le Fondateur qui l'ouvrira à Léa en l'invitant depuis Tâches.
+  verifier((await pc.locator(`[data-testid^="admin-niveau-${lea.id}-taches"]`).count()) > 0, 'Administration : Tâches a son niveau d’accès, comme les autres apps');
+  await pc.getByTestId(`admin-niveau-${lea.id}-taches-aucun`).click();
+  await identiteSiDemandee(pc);
   await pc.getByTestId('admin-code-site-generer').click();
   await identiteSiDemandee(pc);
   await pc.getByTestId('admin-code-site').waitFor({ timeout: 20_000 });
   const codeLea = (await pc.getByTestId('admin-code-site').innerText()).trim();
+  await pc.getByTestId('admin-liste').getByText('Hugo', { exact: true }).first().click();
+  await pc.getByTestId('admin-detail').waitFor({ timeout: 20_000 });
+  await pc.getByTestId(`admin-niveau-${hugo.id}-taches-aucun`).click();
+  await identiteSiDemandee(pc);
+  await pause(1000);
   await quitterTaches(pc).catch(() => pc.getByTestId('retour-hub').first().click());
 
   // ================================================================ Léa (iPad, son propre navigateur) : première ouverture

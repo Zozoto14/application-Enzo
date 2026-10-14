@@ -628,6 +628,8 @@ try {
   }, 150_000, 4000);
   verifier(tuileLea, 'Léa voit la tuile Tâches');
   await ouvrirTaches(ipad);
+  // V3 : la tuile est là dès l'accès (modèle « Ami ») ; le projet arrive avec le dépôt suivant.
+  verifier(await attendre(async () => (await relancer(ipad), await pause(1500), (await ipad.getByTestId(`nav-projet-${idSite}`).count()) > 0), 180_000, 4000), 'Léa reçoit « Site web »');
   await ipad.getByTestId(`nav-projet-${idSite}`).click();
   const vueLea = await texteDe(ipad, 'app-taches');
   verifier(/Maquette/.test(vueLea) && !/Paul Relance|Prospects|Claude Office|Corrige le test|Applications/.test(vueLea), 'Léa : le projet partagé, rien des autres apps');
