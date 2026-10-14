@@ -15,7 +15,7 @@ import { rangDe } from '../../hub/admin/roles';
 import { RetourHub } from '../../hub/Hub';
 import { police } from '../../hub/themes';
 import type { PropsRacineApp } from '../../hub/types';
-import { stockageMemoire } from '../moteur/bibliotheque';
+import { stockageMemoire, type Stockage } from '../moteur/bibliotheque';
 import { choisirReseau, type ChoixReseau } from '../plateforme/reseau';
 import { CLES, stockageDepuisBase } from '../plateforme/stockage';
 import { Accueil } from './Accueil';
@@ -27,6 +27,7 @@ import { FicheFilmEcran } from './FicheFilm';
 import { ImportBibliotheque } from './Import';
 import { LecteurEcran } from './Lecteur';
 import { creerServices, type ServicesTsuzuku } from './services';
+import { creerCache, type CacheTsuzuku } from './cache';
 import { comptesPourPartage, lireAvances } from './gestion';
 import { PiedTsuzuku } from './PiedTsuzuku';
 import { LIBELLE_MODE, themeDuMode, type Mode } from './themeTsuzuku';
@@ -59,6 +60,23 @@ function avancesDe(base: { lire(cle: string): string | undefined | null }) {
   }
 }
 
+/**
+ * Cache de chaque base de profil, gardé d'une ouverture de l'app à l'autre
+ * (retour au hub puis Tsuzuku) : la seconde ouverture d'une fiche ne relit
+ * rien. Il est aussi rangé dans la base chiffrée du profil (rechargement).
+ */
+const cachesParBase = new WeakMap<object, Map<string, CacheTsuzuku>>();
+function cacheDe(base: object, idProfil: string, stockage: Stockage): CacheTsuzuku {
+  const parProfil = cachesParBase.get(base) ?? new Map<string, CacheTsuzuku>();
+  cachesParBase.set(base, parProfil);
+  let c = parProfil.get(idProfil);
+  if (!c) {
+    c = creerCache(stockage);
+    parProfil.set(idProfil, c);
+  }
+  return c;
+}
+
 /** Services du profil ouvert. Une instance par profil : rien n'est partagé d'un profil à l'autre. */
 export function useServices(contexte: PropsRacineApp['contexte'], choix?: ChoixReseau): ServicesTsuzuku {
   const base = contexte.baseProfil;
@@ -67,15 +85,18 @@ export function useServices(contexte: PropsRacineApp['contexte'], choix?: ChoixR
   const rang = rangDe(contexte.profil);
   const idProfil = contexte.profil?.id ?? 'principal';
   return useMemo(
-    () =>
-      creerServices({
+    () => {
+      const stockage = base ? stockageDepuisBase(base) : stockageMemoire();
+      return creerServices({
         choix: choix ?? choisirReseau(),
-        stockage: base ? stockageDepuisBase(base) : stockageMemoire(),
+        stockage,
+        cache: base ? cacheDe(base, idProfil, stockage) : undefined,
         rang,
         // Options avancées du moteur (Administration › Tsuzuku), lues dans la base du profil.
         avances: base ? avancesDe(base) : undefined,
         lireBase: base ? cle => base.lire(cle) : undefined,
-      }),
+      });
+    },
     // La base est propre au profil : un autre profil = de nouveaux services.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [base, idProfil, rang, choix],

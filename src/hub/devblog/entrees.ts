@@ -45,8 +45,8 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
-    version: '2026.10.26',
-    date: '2026-10-26',
+    version: '2026.10.27',
+    date: '2026-10-27',
     titre: 'Connexion des amis : une invitation, ton mot de passe',
     resume:
       'Plus de mot de passe à recopier ni de code à six chiffres : le Fondateur t’envoie un lien d’invitation, tu choisis TON mot de passe, et tu te connectes partout avec ton prénom.',
@@ -81,6 +81,41 @@ export const ENTREES: readonly EntreeDevblog[] = [
           'Administration › un compte : état clair (invité, actif, dernière connexion, appareils), « Copier le message d’invitation » (lien, QR code, code court), « Renvoyer une invitation », « Réinitialiser l’accès », « Révoquer l’accès ». Chiffré de bout en bout : le relais ne voit ni mot de passe ni clé.',
         essayer: { genre: 'app', app: 'administration' },
         adminSeulement: true,
+      },
+    ],
+  },
+  {
+    version: '2026.10.26',
+    date: '2026-10-26',
+    titre: 'Tsuzuku répond beaucoup plus vite',
+    resume:
+      'Les épisodes d’un animé s’affichent en quelques secondes au lieu d’une quinzaine, et une fiche déjà ouverte revient presque instantanément, même après avoir rechargé la page. Le changement VF/VOSTFR et l’épisode suivant sont préparés pendant que vous regardez.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'tsuzuku-rapide-sources',
+        emoji: '⚡',
+        titre: 'Vos sources cherchées en même temps',
+        texte:
+          'Tsuzuku interroge vos sources et les différents titres d’un animé en parallèle au lieu de l’un après l’autre. Le premier résultat s’affiche dès qu’il arrive ; votre source préférée garde la priorité, mais si elle est très lente, une autre prend le relais au bout d’une seconde.',
+        essayer: { genre: 'app', app: 'tsuzuku' },
+        app: 'tsuzuku',
+      },
+      {
+        id: 'tsuzuku-rapide-cache',
+        emoji: '💾',
+        titre: 'Une fiche déjà vue revient tout de suite',
+        texte:
+          'Les résultats sont gardés sur votre appareil, chiffrés avec votre profil : rouvrir une fiche ou l’accueil est quasi instantané, puis Tsuzuku vérifie en arrière-plan s’il y a du nouveau. « Rechercher à nouveau » repart toujours de zéro.',
+        app: 'tsuzuku',
+      },
+      {
+        id: 'tsuzuku-rapide-lecture',
+        emoji: '⏭',
+        titre: 'VF/VOSTFR et épisode suivant préparés',
+        texte:
+          'Pendant que vous regardez, Tsuzuku prépare le même épisode dans l’autre langue et l’épisode suivant : changer de langue ou passer à la suite ne fait plus attendre. Le temps de chaque étape (ou « depuis le cache ») est indiqué en petit sous le lecteur et dans le diagnostic.',
+        app: 'tsuzuku',
       },
     ],
   },

@@ -21,7 +21,9 @@ export type CodeErreur =
   /** Le site bloque les requêtes automatiques (anti-robot, captcha, 403/503 de protection). */
   | 'anti-robot'
   /** Le site exige des cookies (redirections en boucle avec Set-Cookie). */
-  | 'cookies';
+  | 'cookies'
+  /** Requête abandonnée : un autre résultat (autre variante, autre source) a suffi. */
+  | 'annule';
 
 export class ErreurMoteur extends Error {
   readonly statut: number;
