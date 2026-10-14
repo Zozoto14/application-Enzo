@@ -33,6 +33,7 @@ Vite et Jest. Point d'entree : `index.ts`.
 | `langues` | Langue (VF / VOSTFR) d'un titre, d'une adresse, d'un bloc de page (onglets, `data-lang`, sections, `<optgroup>`) ou d'un objet JSON, avec son indice |
 | `sources` | Definitions de sources par selecteurs CSS (`search`, `episodes`, `player`, `movies.search/player`), langue `vf`/`vostfr`/`indifferent`, gestion de liste, import des anciens `sources.json` |
 | `resolution` | Titre -> episodes -> lecteurs (iframe ou fichier direct mp4/m3u8/webm) ; films ; page collee a la main ; diagnostic |
+| `parallele` | Parallelisme borne et annulation : variantes du titre validees dans l'ordre (`courseOrdonnee`), sources en parallele avec priorite et delai de grace (`courseAvecPriorite`), client annulable |
 | `catalogue` | Animes : Jikan (file serialisee, cache, 429) puis AniList en repli (disjoncteur 60 s). Films : TMDB (cle optionnelle, v3 ou Bearer) avec repli Jikan |
 | `liensManuels` | Motif `{n}` (padding, decalage), extraction depuis une page de serie, corrections par episode, lien de film, mapping par titre |
 | `bibliotheque` | Statuts, « vu ailleurs », historique borne (200), deja vu, import/export JSON, migration des anciens `backend/data/libraries/{userId}.json`, `DepotBibliotheque` sur l'interface `Stockage` |
@@ -168,6 +169,13 @@ episodes pagines, onglets de saisons) ; `scripts/e2e-tsuzuku-sources-reel.mjs`
 fait de meme dans le navigateur avec le vrai module du PC (decodage,
 decompression, POST). Captures : `docs/captures-tsuzuku-sources-reel/`.
 
+Temps de reponse : `moteur/parallele.test.ts` (ordre de validation, bornes, annulation, priorite,
+delai de grace, resultat provisoire), `moteur/resolutionParallele.test.ts` (meme resultat que le
+sequentiel, une seule requete vers un site qui bloque), `app/cache.test.ts` (bornes, persistance,
+invalidation), `app/performance.test.ts` (seconde ouverture sans requete, perime servi puis
+rafraichi, prechargement), `app/affichageProgressif.test.tsx` ; E2E `scripts/e2e-tsuzuku-perf.mjs`
+(PC et site, seuils) et temps verifies dans `e2e-tsuzuku-sources-reel`, `-site-relais`, `-langues`.
+
 ## Phase 2 : Tsuzuku, app du hub
 
 Meme mot de passe, memes profils, memes permissions que le hub ; aucun serveur.
@@ -189,6 +197,7 @@ Meme mot de passe, memes profils, memes permissions que le hub ; aucun serveur.
 | `app/LienAnime`, `LienFilm` | Liens manuels : episode + suivants (motif `{n}`) ; film : lien direct |
 | `app/LecteurMedia.web.tsx` / `LecteurMedia.tsx` | Site et PC : iframe `sandbox`, `<video>`, HLS (hls.js charge a la demande). iPhone : « Ouvrir dans Safari » en attendant la WebView (P4) |
 | `app/services.ts`, `resoudre.ts` | Assemblage du moteur par profil ; lien manuel puis sources -> lecteurs |
+| `app/cache.ts` | Cache du profil (memoire + base chiffree, borne) : catalogue, episodes d'une fiche, lecteurs ; voir « Temps de reponse » |
 | `app/reglages.ts`, `ParametresTsuzuku.tsx` | Reglages de confort (Parametres > Tsuzuku, tous) : langue par defaut (VF, VOSTFR, au choix a chaque fois), episode suivant auto, masquer les deja vus |
 | `app/langues.ts`, `SelecteurLangue.tsx` | Langue retenue par serie (ou pour la seance) ; selecteur « VF \| VOSTFR » de la fiche et du lecteur (voir « VF ou VOSTFR ») |
 | `app/resume.ts` | Information en direct de la tuile : « Reprendre <titre> · Ep. N » ou « N a voir » |
