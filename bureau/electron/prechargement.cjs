@@ -124,6 +124,12 @@ contextBridge.exposeInMainWorld('applibourse', {
     },
   },
 
+  /** Tâches : aide de l'IA (API Claude) et état des PR GitHub, appelés par le processus principal. */
+  taches: {
+    ia: requete => ipcRenderer.invoke('taches:ia', requete),
+    github: requete => ipcRenderer.invoke('taches:github', requete),
+  },
+
   relais: {
     /** Relais installé par `npm run relais:deployer` sur ce PC, s'il existe. */
     config: () => ipcRenderer.invoke('relais:config'),

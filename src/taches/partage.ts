@@ -220,7 +220,12 @@ export function projectionPourMembre(d: DonneesTaches, compte: string): DonneesT
 }
 
 /** Compatibilité V1/V2 : la projection pour l'ami historique. */
-export const projectionPourAmi = (d: DonneesTaches): DonneesTaches => (d.reglages.ami ? projectionPourMembre(d, d.reglages.ami) : { ...donneesVides() });
+export function projectionPourAmi(d: DonneesTaches): DonneesTaches {
+  if (d.reglages.ami && d.reglages.cle) return projectionPourMembre(d, d.reglages.ami);
+  // Sans ami désigné : la projection des V1/V2 (selon le mode de partage de chaque projet).
+  const x = { ...d, reglages: { ...d.reglages, ami: 'amihistorique', cle: '0'.repeat(64) } };
+  return projectionPourMembre(x, 'amihistorique');
+}
 
 /** Document complet pour un membre (sans sa clé publique : scellé ensuite). */
 export function documentPourMembre(d: DonneesTaches, m: Membre, nomFondateur?: string): DocumentPourAmi {

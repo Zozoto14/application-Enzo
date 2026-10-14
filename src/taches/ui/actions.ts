@@ -9,6 +9,21 @@ import type { Droits } from '../acces';
 import type { Genre } from '../corbeille';
 import type { ChangementTache, Tache } from '../modele';
 import type { EtatApp } from './etat';
+import type { CacheGithub } from '../github';
+import type { Secrets } from '../ia';
+
+/** Ce que l'aide de l'IA peut traiter. */
+export type CibleIA = { genre: 'decouper'; tacheId: string } | { genre: 'resumer'; projetId: string; debriefing?: string } | { genre: 'planning' };
+
+/** IA et GitHub (V3, Fondateur) : réglages de l'appareil, état des PR, ouverture de l'aide. */
+export interface AidesV3 {
+  secrets: Secrets;
+  changerSecrets(s: Secrets): void;
+  github: CacheGithub;
+  /** Relit l'état des PR (au plus toutes les 5 min, sauf `force`). */
+  rafraichirGithub(force?: boolean): Promise<void>;
+  ouvrirIA(cible: CibleIA): void;
+}
 
 export interface Actions {
   theme: ThemeHub;
@@ -33,4 +48,6 @@ export interface Actions {
   supprimer(genre: Genre, id: string, deplacerVers?: string): void;
   /** Démarre le minuteur sur la tâche (celui qui tournait ailleurs s'arrête), ou l'arrête. */
   minuteur(t: Tache): void;
+  /** V3 : IA et GitHub (Fondateur seulement). */
+  aides?: AidesV3;
 }

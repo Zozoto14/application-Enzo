@@ -38,6 +38,8 @@ import {
   supprimerVue,
   tachesVivantes,
   vivant,
+  assignesDe,
+  LIBELLES_DROIT,
   type Auteur,
   type Filtres,
   type Groupe,
@@ -47,8 +49,17 @@ import {
 } from '../modele';
 import { CLES_TACHES } from '../partage';
 import { rouvrirTache, terminerTache } from '../recurrence';
-import type { Actions } from './actions';
-import { attenueDe, Bouton, Champ, couleurPriorite, Dialogue, EtatVide, Puce, T, texteDe, titreDe } from './atomes';
+import type { Actions, CibleIA } from './actions';
+import { useAidesV3 } from './aides';
+import { ajouterDependance, optionsDependance, personnesPour } from './DetailV3';
+import { VueGantt } from './Gantt';
+import { DialogueAides, DialogueIA } from './IA';
+import { DialogueMembres, PersonnesProjet } from './Membres';
+import { DialogueObjectif, VueObjectifs } from './Objectifs';
+import { VueTableau } from './TableauBord';
+import { membresDuProjet, projetPartage } from '../membres';
+import type { Profil } from '../../profils/profils';
+import { attenueDe, Bouton, Champ, couleurPriorite, Dialogue, EtatVide, Options, Puce, T, texteDe, titreDe } from './atomes';
 import { AvisAnnulable, DialogueCorbeille, DialogueMenu, DialogueSuppression, type ElementMenu } from './Suppression';
 import type { ElementCorbeille } from '../corbeille';
 import { demanderHistorique } from '../integrations/office';
@@ -67,7 +78,7 @@ import { useEtatTaches } from './etat';
 import { ContexteZones, RegistreZones } from './glisser';
 import { VueCalendrier, VueJournee, VueKanban, VueListe } from './Vues';
 
-type Selection = { g: 'journee' } | { g: 'tout' } | { g: 'projet'; id: string; liste?: string } | { g: 'vue'; id: string };
+type Selection = { g: 'journee' } | { g: 'tout' } | { g: 'objectifs' } | { g: 'projet'; id: string; liste?: string } | { g: 'vue'; id: string };
 
 type Fenetre =
   | { g: 'statut' | 'priorite' | 'assigne' | 'echeance' | 'recurrence' | 'rappels' | 'liste'; t: Tache }
@@ -88,7 +99,13 @@ type Fenetre =
   | { g: 'journal'; projetId?: string; tacheId?: string; onglet?: 'journal' | 'debrief' }
   | { g: 'espace-modifier'; id: string }
   | { g: 'liste-renommer'; id: string }
-  | { g: 'temps'; t: Tache };
+  | { g: 'temps'; t: Tache }
+  | { g: 'membres' }
+  | { g: 'aides' }
+  | { g: 'ia'; cible: CibleIA }
+  | { g: 'objectif'; id?: string }
+  | { g: 'dependance'; t: Tache }
+  | { g: 'menu-ia' };
 
 /** Durée pendant laquelle « Annuler » reste proposé après une suppression. */
 export const DELAI_ANNULER_MS = 10_000;
@@ -98,7 +115,10 @@ const VUES: ReadonlyArray<[TypeVue, string, string]> = [
   ['kanban', 'Kanban', '▥'],
   ['calendrier', 'Calendrier', '▦'],
   ['journee', 'Ma journée', '☀︎'],
+  ['gantt', 'Chronologie', '▤'],
+  ['tableau', 'Tableau de bord', '◔'],
 ];
+const COURTS: Record<TypeVue, string> = { liste: '☰ Liste', kanban: '▥ Kanban', calendrier: '▦ Agenda', journee: '☀︎ Jour', gantt: '▤ Gantt', tableau: '◔ Stats' };
 
 interface Affichage {
   ouverture?: Ouverture;
@@ -245,6 +265,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
   const projetId = selection.g === 'projet' ? selection.id : vueSel?.projetId;
   const listeId = selection.g === 'projet' ? selection.liste : undefined;
   const vueEffective: TypeVue = selection.g === 'journee' ? 'journee' : vue === 'journee' ? 'liste' : vue;
+  const objectifs = selection.g === 'objectifs' && role === 'fondateur';
   const toutes = useMemo(() => tachesVivantes(d, projetId).filter(t => !listeId || t.listeId === listeId), [d, projetId, listeId]);
   const visibles = useMemo(() => {
     const f = filtrer(d, toutes, filtres, etat.aujourdhui);
@@ -252,7 +273,10 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
     return trier(d, sansSous, tri);
   }, [d, toutes, filtres, etat.aujourdhui, vueEffective, tri]);
 
-  const droits = useCallback((pid: string) => droitsProjet(role, d, pid), [role, d]);
+  const droits = useCallback((pid: string) => droitsProjet(role, d, pid, etat.moi), [role, d, etat.moi]);
+  const ouvrirIA = useCallback((cible: CibleIA) => setFenetre({ g: 'ia', cible }), []);
+  const avisOk = useCallback((texte: string) => setAvis({ texte, genre: 'ok' }), []);
+  const aides = useAidesV3(base, etat, ouvrirIA, avisOk);
   const projetsModifiables = projetsDe(d).filter(p => droits(p.id).modifier);
 
   // --- Actions
@@ -307,6 +331,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
         else etat.maj((x, ctx) => modifierTache(x, t.id, { statut: cible.id }, ctx, noms));
       }),
     basculerJournee: t => essayer(() => etat.maj((x, ctx) => modifierTache(x, t.id, { pourAujourdhui: t.pourAujourdhui === etat.aujourdhui ? undefined : etat.aujourdhui }, ctx, noms))),
+    aides,
     minuteur: t =>
       essayer(() => {
         const enCours = chronoDe(t, etat.moi);
@@ -357,7 +382,15 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
 
   // Menus « ⋯ » (barre latérale, appui long, en-tête de la vue).
   const elementsMenu = (genre: 'espace' | 'projet' | 'liste', id: string): ElementMenu[] => {
-    if (role !== 'fondateur') return [];
+    if (role !== 'fondateur') {
+      // Membre admin d'un projet : ses paramètres (listes, statuts), et le journal.
+      return genre === 'projet' && droits(id).gerer
+        ? [
+            { texte: '⚙︎ Paramètres du projet (listes, statuts…)', testID: 'menu-reglages-projet', action: () => setFenetre({ g: 'projet', id }) },
+            { texte: '📓 Journal et débriefing', testID: 'menu-journal-projet', action: () => setFenetre({ g: 'journal', projetId: id }) },
+          ]
+        : [];
+    }
     if (genre === 'espace') {
       const e = d.espaces[id];
       return [
@@ -371,6 +404,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
       return [
         { texte: '⚙︎ Paramètres du projet (nom, icône, statuts, dates, partage…)', testID: 'menu-reglages-projet', action: () => setFenetre({ g: 'projet', id }) },
         { texte: '📓 Journal et débriefing', testID: 'menu-journal-projet', action: () => setFenetre({ g: 'journal', projetId: id }) },
+        ...(aides?.secrets.ia.actif ? [{ texte: '✨ Résumer le projet (IA)', testID: 'menu-ia-resumer', action: () => setFenetre({ g: 'ia', cible: { genre: 'resumer', projetId: id } }) }] : []),
         { texte: `Supprimer le projet « ${p?.nom ?? ''} »…`, danger: true, testID: 'menu-supprimer-projet', action: () => actions.demanderSuppression('projet', id) },
       ];
     }
@@ -387,7 +421,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
     const pid = projetId && droits(projetId).modifier ? projetId : dernierProjet && vivant(d.projets[dernierProjet]) && droits(dernierProjet).modifier ? dernierProjet : projetsModifiables[0]?.id;
     return pid ? listesDe(d, pid)[0]?.id : undefined;
   };
-  const lu = rapide.trim() ? lireAjoutRapide(rapide, { aujourdhui: etat.aujourdhui, auteur: role, noms, avecAmi: role === 'ami' || Boolean(d.reglages.ami) }) : undefined;
+  const lu = rapide.trim() ? lireAjoutRapide(rapide, { aujourdhui: etat.aujourdhui, auteur: etat.moi, noms, avecAmi: etat.moi === 'ami' || Boolean(d.reglages.ami) }) : undefined;
   const ajouter = () =>
     essayer(() => {
       if (!lu) return;
@@ -407,7 +441,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
             ...(lu.echeance ? { echeance: lu.echeance } : {}),
             etiquettes: lu.etiquettes,
             ...(lu.priorite ? { priorite: lu.priorite } : {}),
-            ...(lu.assigne ? { assigne: lu.assigne } : {}),
+            ...(lu.assignes?.length ? { assignes: lu.assignes } : {}),
             ...(lu.recurrence ? { recurrence: lu.recurrence } : {}),
             ...(lu.echeance && prefsDe(x, role).delaiDefaut >= 0 ? { rappels: [prefsDe(x, role).delaiDefaut] } : {}),
             ...(selection.g === 'journee' && !lu.echeance ? { pourAujourdhui: etat.aujourdhui } : {}),
@@ -476,13 +510,13 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
       } else if (e.key === '/') {
         arreter();
         champRecherche.current?.focus();
-      } else if (['1', '2', '3', '4'].includes(e.key)) {
+      } else if (['1', '2', '3', '4', '5', '6'].includes(e.key)) {
         arreter();
         const v = VUES[Number(e.key) - 1][0];
         if (v === 'journee') setSelection({ g: 'journee' });
         else {
           setVue(v);
-          setSelection(s => (s.g === 'journee' ? { g: 'tout' } : s));
+          setSelection(s => (s.g === 'journee' || s.g === 'objectifs' ? { g: 'tout' } : s));
         }
       }
     };
@@ -494,7 +528,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
     if (v === 'journee') setSelection({ g: 'journee' });
     else {
       setVue(v);
-      if (selection.g === 'journee') setSelection({ g: 'tout' });
+      if (selection.g === 'journee' || selection.g === 'objectifs') setSelection({ g: 'tout' });
     }
   };
   const choisirSelection = (s: Selection) => {
@@ -519,7 +553,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
 
   // --- Titre de la sélection
   const titreSelection =
-    selection.g === 'journee' ? 'Ma journée' : selection.g === 'tout' ? 'Toutes les tâches' : selection.g === 'vue' ? (vueSel?.nom ?? 'Vue') : `${projetSel?.nom ?? 'Projet'}${listeId ? ` › ${d.listes[listeId]?.nom ?? ''}` : ''}`;
+    selection.g === 'journee' ? 'Ma journée' : selection.g === 'objectifs' ? 'Objectifs' : selection.g === 'tout' ? 'Toutes les tâches' : selection.g === 'vue' ? (vueSel?.nom ?? 'Vue') : `${projetSel?.nom ?? 'Projet'}${listeId ? ` › ${d.listes[listeId]?.nom ?? ''}` : ''}`;
   const nbFiltres = filtresActifs(filtres) - (filtres.recherche.trim() ? 1 : 0);
   const aucunProjet = projetsDe(d).length === 0;
 
@@ -552,8 +586,14 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
     ) : (
       <EtatVide theme={theme} testID="taches-rien-partage" titre="Rien n’est partagé avec vous pour l’instant" texte={`Quand ${etat.parFondateur === 'le Fondateur' ? 'le Fondateur' : noms.fondateur} partagera un projet avec vous, il apparaîtra ici (la synchronisation peut prendre une ou deux minutes).`} />
     )
+  ) : objectifs ? (
+    <VueObjectifs a={actions} onModifier={id => setFenetre({ g: 'objectif', id })} onNouveau={() => setFenetre({ g: 'objectif' })} />
   ) : vueEffective === 'journee' ? (
-    <VueJournee a={actions} taches={filtrer(d, toutes, filtres, etat.aujourdhui)} qui={role} />
+    <VueJournee a={actions} taches={filtrer(d, toutes, filtres, etat.aujourdhui)} qui={etat.moi} />
+  ) : vueEffective === 'tableau' ? (
+    <VueTableau a={actions} projetId={projetId} />
+  ) : vueEffective === 'gantt' ? (
+    <VueGantt a={actions} taches={filtrer(d, toutes, filtres, etat.aujourdhui)} onAvis={avisOk} onErreur={signaler} />
   ) : visibles.length === 0 && vueEffective !== 'calendrier' && vueEffective !== 'kanban' ? (
     <EtatVide
       theme={theme}
@@ -610,7 +650,9 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
           <Text style={attenueDe(theme)}>Compris :</Text>
           {lu.echeance ? <Puce theme={theme} texte={`📅 ${jourLisible(lu.echeance.jour, etat.aujourdhui)}${lu.echeance.heure ? ` ${lu.echeance.heure}` : ''}`} couleur={theme.accent} /> : null}
           {lu.priorite ? <Puce theme={theme} texte={`⚑ ${LIBELLES_PRIORITE[lu.priorite]}`} couleur={couleurPriorite(lu.priorite, theme)} /> : null}
-          {lu.assigne ? <Puce theme={theme} texte={`@ ${noms[lu.assigne]}`} couleur={theme.teintes.admin} /> : null}
+          {(lu.assignes ?? []).map(x => (
+            <Puce key={x} theme={theme} texte={`@ ${noms[x] ?? 'Membre'}`} couleur={theme.teintes.admin} />
+          ))}
           {lu.etiquettes.map(e => (
             <Puce key={e} theme={theme} texte={`#${e}`} couleur={theme.teintes.anime} />
           ))}
@@ -634,10 +676,10 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
     />
   );
 
-  const ongletsVues = (
+  const ongletsBrut = (
     <View style={[styles.onglets, { borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 12) }]} accessibilityRole="tablist">
       {VUES.map(([v, libelle, icone], i) => {
-        const actif = vueEffective === v;
+        const actif = vueEffective === v && !objectifs;
         return (
           <Pressable
             key={v}
@@ -646,25 +688,34 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
             accessibilityState={{ selected: actif }}
             accessibilityLabel={`${libelle} (touche ${i + 1})`}
             onPress={() => choisirVue(v)}
-            style={[styles.onglet, mobile && { flex: 1, paddingHorizontal: 4, minHeight: 44 }, { backgroundColor: actif ? theme.accent : 'transparent', borderRadius: Math.min(theme.rayonMoyen, 9) }]}>
+            style={[styles.onglet, mobile && { paddingHorizontal: 10, minHeight: 44 }, { backgroundColor: actif ? theme.accent : 'transparent', borderRadius: Math.min(theme.rayonMoyen, 9) }]}>
             <Text numberOfLines={1} style={{ color: actif ? theme.surAccent : theme.texte, fontSize: 15, fontWeight: '600' }}>
-              {mobile ? (v === 'journee' ? '☀︎ Jour' : v === 'calendrier' ? '▦ Agenda' : `${icone} ${libelle}`) : `${icone}  ${libelle}`}
+              {mobile || width < 1360 ? COURTS[v] : `${icone}  ${libelle}`}
             </Text>
           </Pressable>
         );
       })}
     </View>
   );
+  // Six vues : sur téléphone, les onglets défilent à l'horizontale.
+  const ongletsVues = mobile ? (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} testID="onglets-defilement" contentContainerStyle={{ paddingRight: 8 }}>
+      {ongletsBrut}
+    </ScrollView>
+  ) : (
+    ongletsBrut
+  );
 
   const outils = (
     <View style={styles.rangee}>
-      {selection.g === 'projet' && role === 'fondateur' && projetSel ? <Bouton theme={theme} compact={!mobile} titre="⚙︎ Projet" onPress={() => setFenetre({ g: 'projet', id: projetSel.id })} testID="taches-projet-reglages" /> : null}
+      {selection.g === 'projet' && projetSel && droits(projetSel.id).gerer ? <Bouton theme={theme} compact={!mobile} titre="⚙︎ Projet" onPress={() => setFenetre({ g: 'projet', id: projetSel.id })} testID="taches-projet-reglages" /> : null}
       {selection.g === 'projet' && role === 'fondateur' && projetSel ? <Bouton theme={theme} compact={!mobile} titre="⋯" libelle="Plus d’actions : supprimer le projet, la liste, l’espace" onPress={() => setFenetre({ g: 'menu-vue' })} testID="taches-menu" /> : null}
       <Bouton theme={theme} compact={!mobile} titre={nbFiltres ? `Filtres · ${nbFiltres}` : 'Filtres'} onPress={() => setFenetre({ g: 'filtres' })} testID="taches-filtres" />
       <Bouton theme={theme} compact={!mobile} titre={etat.rappels.length ? `🔔 ${etat.rappels.length}` : '🔔'} libelle={`Rappels : ${etat.rappels.length} non lu(s)`} onPress={() => setFenetre({ g: 'rappels-recus' })} testID="taches-rappels" />
       <Bouton theme={theme} compact={!mobile} titre="⏱" libelle="Relevé du temps (semaine, export CSV)" onPress={() => setFenetre({ g: 'releve' })} testID="taches-releve" />
       <Bouton theme={theme} compact={!mobile} titre="📓" libelle="Journal du jour et débriefing" onPress={() => setFenetre({ g: 'journal', ...(projetId ? { projetId } : {}) })} testID="taches-journal" />
-      <Bouton theme={theme} compact={!mobile} titre={role === 'fondateur' ? '👥 Partage' : '👥 Partagés'} libelle={role === 'fondateur' ? 'Réglages de Tâches : ami, partage, exemple' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
+      {aides?.secrets.ia.actif ? <Bouton theme={theme} compact={!mobile} titre="✨" libelle="Aide de l’IA (planning de la semaine, résumé du projet)" onPress={() => setFenetre({ g: 'menu-ia' })} testID="taches-ia" /> : null}
+      <Bouton theme={theme} compact={!mobile} titre={role === 'fondateur' ? '👥 Partage' : '👥 Partagés'} libelle={role === 'fondateur' ? 'Réglages de Tâches : membres, partage, IA, exemple' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
     </View>
   );
 
@@ -687,6 +738,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
       onAvis={texte => setAvis({ texte, genre: 'ok' })}
       onSaisirTemps={t => setFenetre({ g: 'temps', t })}
       onJournal={t => setFenetre({ g: 'journal', projetId: t.projetId, tacheId: t.id })}
+      onDependance={t => setFenetre({ g: 'dependance', t })}
       onOuvrirSession={onOuvrirApp ? ouvrirSession : undefined}
       onOuvrirApp={onOuvrirApp}
     />
@@ -762,6 +814,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
       }
       contexte={contexte}
       onAller={setFenetre}
+      comptes={contexte.profils?.tous ?? []}
       onOuvertureChangee={o => {
         setOuverture(o);
         setAvis({ texte: `À l’ouverture : ${LIBELLES_OUVERTURE[o].replace(' (par défaut)', '').toLowerCase()}.`, genre: 'ok' });
@@ -802,6 +855,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
             </Text>
             <Bouton theme={theme} titre={etat.rappels.length ? `🔔 ${etat.rappels.length}` : '🔔'} libelle={`Rappels : ${etat.rappels.length} non lu(s)`} onPress={() => setFenetre({ g: 'rappels-recus' })} testID="taches-rappels" />
             <Bouton theme={theme} titre="📓" libelle="Journal du jour et débriefing" onPress={() => setFenetre({ g: 'journal', ...(projetId ? { projetId } : {}) })} testID="taches-journal" />
+            {aides?.secrets.ia.actif ? <Bouton theme={theme} titre="✨" libelle="Aide de l’IA" onPress={() => setFenetre({ g: 'menu-ia' })} testID="taches-ia" /> : null}
             <Bouton theme={theme} titre="👥" libelle={role === 'fondateur' ? 'Réglages de Tâches : ami, partage, exemple' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
           </View>
           <View style={{ paddingHorizontal: 16, gap: 10 }}>
@@ -842,10 +896,18 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
                 <Text numberOfLines={1} style={titreDe(theme, 22)} testID="taches-titre">
                   {titreSelection}
                 </Text>
-                {projetSel && role === 'fondateur' && projetSel.partage !== 'aucun' && d.reglages.amiNom ? (
-                  <Text style={attenueDe(theme)}>Partagé avec {d.reglages.amiNom} · {projetSel.partage === 'ecriture' ? 'écriture' : 'lecture seule'}</Text>
+                {projetSel && role === 'fondateur' && projetPartage(d, projetSel) ? (
+                  <View style={styles.rangee}>
+                    <PersonnesProjet a={actions} projetId={projetSel.id} taille={22} />
+                    <Text style={attenueDe(theme)} numberOfLines={1}>
+                      Partagé avec {membresDuProjet(d, projetSel.id).map(m => `${m.nom} (${LIBELLES_DROIT[m.droit].toLowerCase()})`).join(', ')}
+                    </Text>
+                  </View>
                 ) : projetSel && role === 'ami' ? (
-                  <Text style={attenueDe(theme)}>Partagé par {etat.parFondateur} · {projetSel.partage === 'ecriture' ? 'vous pouvez modifier' : 'lecture seule'}</Text>
+                  <View style={styles.rangee}>
+                    <PersonnesProjet a={actions} projetId={projetSel.id} taille={22} />
+                    <Text style={attenueDe(theme)}>Partagé par {etat.parFondateur} · {droits(projetSel.id).gerer ? 'admin du projet' : projetSel.partage === 'ecriture' ? 'vous pouvez modifier' : 'lecture seule'}</Text>
+                  </View>
                 ) : null}
               </View>
               {ongletsVues}
@@ -926,6 +988,7 @@ function Navigation({
     <ScrollView contentContainerStyle={{ padding: 10, gap: 2 }} testID="taches-navigation-liste">
       <LigneNav a={a} texte="Ma journée" gauche="☀︎" actif={selection.g === 'journee'} onPress={() => onChoisir({ g: 'journee' })} testID="nav-journee" compte={j} />
       <LigneNav a={a} texte="Toutes les tâches" gauche="▤" actif={selection.g === 'tout'} onPress={() => onChoisir({ g: 'tout' })} testID="nav-tout" />
+      {fondateur ? <LigneNav a={a} texte="Objectifs" gauche="◎" actif={selection.g === 'objectifs'} onPress={() => onChoisir({ g: 'objectifs' })} testID="nav-objectifs" compte={Object.values(d.objectifs ?? {}).filter(vivant).length || undefined} /> : null}
       {vues.length ? <Text style={[attenueDe(theme), styles.intertitre]}>VUES ENREGISTRÉES</Text> : null}
       {vues.map(v => (
         <LigneNav key={v.id} a={a} texte={v.nom} gauche="★" actif={selection.g === 'vue' && selection.id === v.id} onPress={() => onChoisir({ g: 'vue', id: v.id })} testID={`nav-vue-${v.id}`} droite={fondateur ? petitBouton('✕', `Supprimer la vue ${v.nom}`, () => onSupprimerVue(v.id), `nav-vue-supprimer-${v.id}`) : undefined} />
@@ -967,14 +1030,14 @@ function Navigation({
                   <LigneNav
                     a={a}
                     niveau={1}
-                    texte={`${p.icone ? `${p.icone} ` : ''}${p.nom}${p.partage !== 'aucun' && fondateur ? '  👥' : ''}${!fondateur && p.partage === 'lecture' ? '  👁' : ''}`}
+                    texte={`${p.icone ? `${p.icone} ` : ''}${p.nom}${fondateur && projetPartage(d, p) ? '  👥' : ''}${!fondateur && p.partage === 'lecture' ? '  👁' : ''}`}
                     couleur={p.couleur}
                     actif={actif && !selection.liste}
                     onPress={() => onChoisir({ g: 'projet', id: p.id })}
-                    onLongPress={fondateur ? () => onMenu('projet', p.id) : undefined}
+                    onLongPress={fondateur || a.droits(p.id).gerer ? () => onMenu('projet', p.id) : undefined}
                     testID={`nav-projet-${p.id}`}
                     compte={tachesVivantes(d, p.id).filter(t => !t.parentId && !statutsDe(d, p.id).find(s => s.id === t.statut)?.ferme).length}
-                    droite={fondateur ? petitBouton('⋯', `Actions du projet ${p.nom} (réglages, supprimer…)`, () => onMenu('projet', p.id), `nav-projet-menu-${p.id}`) : undefined}
+                    droite={fondateur || a.droits(p.id).gerer ? petitBouton('⋯', `Actions du projet ${p.nom} (réglages${fondateur ? ', supprimer…' : ''})`, () => onMenu('projet', p.id), `nav-projet-menu-${p.id}`) : undefined}
                   />
                   {actif && listesDe(d, p.id).length > 1
                     ? listesDe(d, p.id).map(l => (
@@ -1034,6 +1097,7 @@ function Fenetres({
   contexte,
   onAller,
   onOuvertureChangee,
+  comptes,
 }: {
   a: Actions;
   fenetre?: Fenetre;
@@ -1058,6 +1122,7 @@ function Fenetres({
   contexte: PropsRacineApp['contexte'];
   onAller(f: Fenetre): void;
   onOuvertureChangee(o: Ouverture): void;
+  comptes: readonly Profil[];
 }) {
   if (!fenetre) return null;
   const d = a.etat.donnees;
@@ -1108,10 +1173,21 @@ function Fenetres({
         />
       );
     case 'assigne': {
-      const options: Array<{ valeur: Auteur | 'personne'; texte: string }> = [{ valeur: 'personne', texte: 'Personne' }, { valeur: 'fondateur', texte: `${a.etat.noms.fondateur}${a.etat.role === 'fondateur' ? ' (moi)' : ''}` }];
-      if (a.etat.role === 'ami' || d.reglages.ami) options.push({ valeur: 'ami', texte: `${a.etat.noms.ami}${a.etat.role === 'ami' ? ' (moi)' : ''}` });
+      // Plusieurs personnes : chaque choix ajoute ou retire (les personnes du projet).
+      const t = d.taches[fenetre.t.id] ?? fenetre.t;
+      const choisis = assignesDe(t);
+      const options = [{ valeur: '~personne', texte: 'Personne' }, ...personnesPour(a, t.projetId).map(p => ({ valeur: p.code, texte: `${p.nom}${p.code === a.etat.moi ? ' (moi)' : ''}` }))];
       return (
-        <DialogueChoix a={a} titre="Pour qui ?" testID="choix-assigne" valeur={fenetre.t.assigne ?? 'personne'} options={options} onChoisir={v => a.changer(fenetre.t.id, { assigne: v === 'personne' ? undefined : v })} onFermer={onFermer} />
+        <Dialogue theme={theme} mobile={a.mobile} visible titre="Pour qui ?" description="Une ou plusieurs personnes du projet." onFermer={onFermer} testID="choix-assigne">
+          <Options
+            theme={theme}
+            multiple
+            valeur={choisis.length ? choisis : ['~personne']}
+            options={options}
+            onChoisir={v => a.changer(t.id, { assignes: v === '~personne' ? [] : choisis.includes(v) ? choisis.filter(x => x !== v) : [...choisis, v] })}
+            testID="choix-assigne"
+          />
+        </Dialogue>
       );
     }
     case 'liste':
@@ -1146,6 +1222,8 @@ function Fenetres({
             onOuvertureChangee(o);
           }}
           onNotifications={() => onAller({ g: 'notifications' })}
+          onMembres={() => onAller({ g: 'membres' })}
+          onAides={() => onAller({ g: 'aides' })}
           onLiens={() => onAller({ g: 'liens' })}
           onReleve={() => onAller({ g: 'releve' })}
           onFermer={onFermer}
@@ -1183,6 +1261,7 @@ function Fenetres({
             onFermer();
             a.demanderSuppression('projet', fenetre.id);
           }}
+          onMembres={() => onAller({ g: 'membres' })}
         />
       );
     case 'menu': {
@@ -1323,6 +1402,46 @@ function Fenetres({
           }
         />
       );
+    case 'membres':
+      return <DialogueMembres a={a} comptes={comptes} onFermer={onFermer} onErreur={onErreur} onAvis={onAvis} />;
+    case 'aides':
+      return a.aides ? <DialogueAides a={a} onFermer={onFermer} onAvis={onAvis} onErreur={onErreur} /> : null;
+    case 'ia':
+      return a.aides ? <DialogueIA a={a} cible={fenetre.cible} onFermer={onFermer} onAvis={onAvis} onErreur={onErreur} /> : null;
+    case 'menu-ia':
+      return (
+        <DialogueMenu
+          a={a}
+          titre="✨ Aide de l’IA"
+          elements={[
+            { texte: '🗓 Proposer un planning de la semaine', testID: 'menu-ia-planning', action: () => onAller({ g: 'ia', cible: { genre: 'planning' } }) },
+            ...(projetId ? [{ texte: '📝 Résumer ce projet', testID: 'menu-ia-resumer', action: () => onAller({ g: 'ia', cible: { genre: 'resumer', projetId } }) }] : []),
+            { texte: '⚙︎ Réglages de l’IA et de GitHub', testID: 'menu-ia-reglages', action: () => onAller({ g: 'aides' }) },
+          ]}
+          onFermer={onFermer}
+          testID="dialogue-menu-ia"
+        />
+      );
+    case 'objectif':
+      return <DialogueObjectif a={a} {...(fenetre.id ? { id: fenetre.id } : {})} onFermer={onFermer} onErreur={onErreur} onAvis={onAvis} />;
+    case 'dependance': {
+      const t = d.taches[fenetre.t.id] ?? fenetre.t;
+      return (
+        <DialogueChoix
+          a={a}
+          titre={`« ${t.titre} » dépend de…`}
+          testID="choix-dependance"
+          options={optionsDependance(a, t)}
+          onChoisir={v =>
+            essayer(() => {
+              const viole = ajouterDependance(a, t, v);
+              onAvis(viole ? 'Dépendance ajoutée — elle n’est pas respectée : « Décaler » dans le détail.' : 'Dépendance ajoutée.');
+            })
+          }
+          onFermer={onFermer}
+        />
+      );
+    }
     case 'rappels-recus':
       return (
         <DialogueRappelsRecus

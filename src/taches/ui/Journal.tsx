@@ -152,6 +152,7 @@ export function DialogueJournal({
       pied={
         onglet === 'debrief' && deb ? (
           <>
+            {a.aides?.secrets.ia.actif && a.etat.role === 'fondateur' ? <Bouton theme={theme} titre="✨ Résumer (IA)" onPress={() => a.aides!.ouvrirIA({ genre: 'resumer', projetId: deb.projetId, debriefing: debriefingTexte(deb, 'texte', a.etat.aujourdhui) })} testID="debrief-ia" /> : null}
             <Bouton theme={theme} titre="Copier en texte" onPress={() => copier('texte')} testID="debrief-copier-texte" />
             <Bouton theme={theme} titre="Copier (Markdown)" onPress={() => copier('markdown')} testID="debrief-copier" />
             {onExporter ? <Bouton theme={theme} variante="plein" titre="Exporter .md" onPress={() => onExporter(`debriefing-${deb.projet.replace(/[^\p{L}\p{N}]+/gu, '-')}-${du}.md`, debriefingTexte(deb, 'markdown', a.etat.aujourdhui))} testID="debrief-exporter" /> : null}

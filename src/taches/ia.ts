@@ -131,6 +131,17 @@ export function demandeDecouper(d: DonneesTaches, t: Tache): DemandeIA {
   };
 }
 
+/** Remplace les prénoms par « Personne 1 », « Personne 2 »… (le modèle n'a pas besoin de savoir qui). */
+export function anonymiser(texte: string, noms: readonly string[]): string {
+  let r = texte;
+  [...new Set(noms.filter(n => n && n.trim().length >= 2))]
+    .sort((x, y) => y.length - x.length)
+    .forEach((n, i) => {
+      r = r.split(n).join(`Personne ${i + 1}`);
+    });
+  return r;
+}
+
 export function demandeResumer(d: DonneesTaches, projetId: string, aujourdhui: string, debriefing?: string): DemandeIA {
   const p = d.projets[projetId];
   if (!p) throw new ErreurTaches('Projet introuvable.');

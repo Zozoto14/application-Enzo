@@ -28,6 +28,7 @@ import { MOTIF_PROFIL, changementPermis, extensionPermise, fichierAutorise, fich
 import { fluxMedia, pageArticle, yahooJson, yahooScreener } from './reseau.mjs';
 import { creerListeLecteurs, requeteTsuzuku } from './tsuzuku.mjs';
 import { brancherClaudeOffice } from './claudeOfficeIpc.mjs';
+import { appelerClaude, lireGithub } from './tachesReseau.mjs';
 import { readFile, writeFile, mkdir, rename, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -284,6 +285,11 @@ function installerPasserelle() {
     ecrire: ecrireAtomique,
     racineProjet: async () => (await lireVersionBuild())?.dossierSource ?? join(ici, '..', '..'),
   });
+
+  // Tâches (V3) : aide de l'IA (API Claude, clé du Fondateur passée à chaque appel, jamais gardée ici)
+  // et état des PR GitHub (liste fermée de chemins, lecture seule).
+  ipcMain.handle('taches:ia', async (_evenement, requete) => appelerClaude(requete));
+  ipcMain.handle('taches:github', async (_evenement, requete) => lireGithub(requete));
 
   ipcMain.handle('voix:liste', async () => VOIX_NATURELLES);
   ipcMain.handle('voix:synthetiser', async (_evenement, texte, voix, vitesse) =>
