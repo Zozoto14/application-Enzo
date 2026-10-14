@@ -78,6 +78,8 @@ export const CLES_TACHES = {
   secrets: 'taches.secrets',
   /** État des PR GitHub déjà lus (appareil). */
   github: 'taches.github',
+  /** Projets personnels d'un membre (sa base chiffrée ; il en est seul maître). */
+  perso: 'taches.perso',
 } as const;
 
 export const OBJET_TACHES = 'taches';
@@ -102,6 +104,8 @@ export interface CopieAmi {
   cle?: string;
   /** Clé de partage de chacun de mes projets (V3). */
   clesProjets?: Record<string, string>;
+  /** Le Fondateur me permet de créer mes propres projets. */
+  perso?: boolean;
   donnees: DonneesTaches;
   recuLe?: string;
 }
@@ -137,6 +141,7 @@ export function lireCopie(brut: string | null | undefined): CopieAmi {
       ...(membres ? { membres } : {}),
       ...(typeof o.cle === 'string' && HEX64.test(o.cle) ? { cle: o.cle } : {}),
       ...(cles ? { clesProjets: cles } : {}),
+      ...(o.perso === true ? { perso: true } : {}),
       donnees: lireDonnees(o.donnees),
       ...(typeof o.recuLe === 'string' ? { recuLe: o.recuLe } : {}),
     };
@@ -164,6 +169,7 @@ export interface DocumentPourAmi {
   moi?: Auteur;
   membres?: Record<string, string>;
   clesProjets?: Record<string, string>;
+  perso?: boolean;
 }
 
 /** Un projet tel qu'il part chez un membre : son droit dans `partage`, les droits des personnes du projet par code. */
@@ -248,6 +254,7 @@ export function documentPourMembre(d: DonneesTaches, m: Membre, nomFondateur?: s
     moi: m.code,
     membres,
     clesProjets,
+    ...(m.perso ? { perso: true } : {}),
   };
 }
 
@@ -316,6 +323,7 @@ export function appliquerReception(copie: CopieAmi, doc: DocumentPourAmi): Copie
     ...(doc.membres ? { membres: doc.membres } : {}),
     cle: doc.cle,
     ...(doc.clesProjets && Object.keys(doc.clesProjets).length ? { clesProjets: doc.clesProjets } : {}),
+    ...(doc.perso ? { perso: true } : {}),
     donnees: { ...recu, projets, listes, taches, reglages, journal: journalRecu(copie, recu, moi) },
     ...(copie.recuLe ? { recuLe: copie.recuLe } : {}),
   };
@@ -596,6 +604,7 @@ export function ouvrirPourAmi(privee: string, id: string, charge: string): Docum
     ...(typeof doc.moi === 'string' && CODE.test(doc.moi) && (doc.moi === 'ami' || doc.moi === id) ? { moi: doc.moi } : {}),
     ...(membres ? { membres } : {}),
     ...(cles ? { clesProjets: cles } : {}),
+    ...(doc.perso === true ? { perso: true } : {}),
   };
 }
 

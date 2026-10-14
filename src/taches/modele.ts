@@ -323,7 +323,9 @@ export interface MembreTaches {
   nom: string;
   cle: string;
   depuis: string;
-  rang?: 'ami' | 'gestionnaire';
+  rang?: 'ami' | 'gestionnaire' | 'administrateur';
+  /** Peut créer ses propres projets (dans sa base, à lui seul). */
+  perso?: boolean;
 }
 
 export interface DonneesTaches {
@@ -740,7 +742,8 @@ function lireMembres(v: unknown): Record<string, MembreTaches> {
       nom: texte(o.nom, 40, 'Membre') || 'Membre',
       cle: o.cle,
       depuis: typeof o.depuis === 'string' ? o.depuis.slice(0, 30) : new Date(0).toISOString(),
-      ...(o.rang === 'ami' || o.rang === 'gestionnaire' ? { rang: o.rang } : {}),
+      ...(o.rang === 'ami' || o.rang === 'gestionnaire' || o.rang === 'administrateur' ? { rang: o.rang } : {}),
+      ...(o.perso === true ? { perso: true } : {}),
     };
   }
   return r;

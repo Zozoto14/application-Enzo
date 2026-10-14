@@ -1,10 +1,10 @@
 /**
  * Entrée de Tâches dans le registre du hub (`src/hub/registre.tsx`).
  *
- * Identifiant `taches` : ne pas le changer. Page « Applications ». L'app
- * choisit elle-même à qui elle s'ouvre (`attribueeParApp`) : le Fondateur, et
- * l'ami qu'il désigne dans ses réglages ; l'Administration ne la propose pas
- * en case à cocher (un seul ami en V1).
+ * Identifiant `taches` : ne pas le changer. Page « Applications ». V3 :
+ * l'Administration l'ouvre ou la ferme à un profil comme les autres apps (amis,
+ * gestionnaires, administrateurs) ; l'invitation depuis Tâches fait la même
+ * chose. Accès et liste des membres ne font qu'un (`accorderAcces`).
  */
 
 import type { AppHub } from '../hub/types';
@@ -19,10 +19,9 @@ export const APP_TACHES: AppHub = {
   nom: 'Tâches',
   categorie: 'Organisation',
   page: 'publique',
-  description: 'Projets, listes et tâches : Kanban, calendrier, Ma journée, rappels, partage avec un ami.',
+  description: 'Projets, listes et tâches : Kanban, calendrier, chronologie, tableau de bord, objectifs, partage avec vos membres.',
   icone: '☑︎',
   teinte: 'quatre',
-  attribueeParApp: true,
   disponible: accesTaches,
   info: infoTaches,
   Racine: Taches,

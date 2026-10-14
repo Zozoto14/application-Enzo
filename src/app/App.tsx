@@ -151,6 +151,8 @@ import { niveauProfil } from '../hub/admin/comptes';
 import { chargerPrefs, enregistrerPrefs, reinitialiser, CLE_THEME, type PrefsHub } from '../hub/personnalisation';
 import { Devblog } from '../hub/devblog/Devblog';
 import { useRappelsTaches } from '../taches/resume';
+import { ReglagesTachesFondateur, ReglagesTachesPerso } from '../taches/ui/ParametresTaches';
+import { roleTaches } from '../taches/acces';
 import { useLiensOffice } from '../taches/integrations/officeHook';
 import { CLE_DEVBLOG, lireEtat as lireEtatDevblog, decider as deciderDevblog, etapesVisite as etapesDevblog, marquerLues as marquerDevblogLu } from '../hub/devblog/logiqueDevblog';
 import type { CibleEssai, EntreeDevblog } from '../hub/devblog/entrees';
@@ -2280,6 +2282,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   };
   const administrationVisible = appsVisibles(REGISTRE, contexteHub).some(app => app.id === 'administration');
   const tsuzukuVisible = appsVisibles(REGISTRE, contexteHub).some(app => app.id === 'tsuzuku');
+  // Tâches : SES réglages pour tout compte qui a l'app ; membres, liens, IA, GitHub pour le Fondateur.
+  const roleTachesHub = hub && contexteHub.baseProfil ? roleTaches(contexteHub) : undefined;
   const disponiblesParametres: IdReglage[] = [
     'theme',
     'langue',
@@ -2305,6 +2309,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     // Tsuzuku : le technique (sources, clés d'API) en Administration, rangs habilités seulement ; le confort pour tous.
     ...(hub && tsuzukuVisible && peutGererSources(rangDe(profils?.actuel)) ? (['admin-tsuzuku-sources', 'admin-tsuzuku-cles'] as const) : []),
     ...(hub && tsuzukuVisible ? (['tsuzuku-lecture', 'tsuzuku-sources-partagees'] as const) : []),
+    ...(roleTachesHub ? (['taches-perso'] as const) : []),
+    ...(roleTachesHub === 'fondateur' ? (['taches-fondateur'] as const) : []),
   ];
   const contenuNotifications = () => (
         <Notifications
@@ -2486,6 +2492,10 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         return <ReglageAvancesTsuzuku theme={themeDuHub} base={baseProfil} rang={rangDe(profils?.actuel)} />;
       case 'tsuzuku-sources-partagees':
         return <ReglageSourcesPartagees theme={themeDuHub} base={baseProfil} rang={rangDe(profils?.actuel)} />;
+      case 'taches-perso':
+        return <ReglagesTachesPerso contexte={contexteHub} theme={themeDuHub} onOuvrirTaches={depuisParametres(() => ouvrirApp('taches'))} />;
+      case 'taches-fondateur':
+        return <ReglagesTachesFondateur contexte={contexteHub} theme={themeDuHub} onOuvrirTaches={depuisParametres(() => ouvrirApp('taches'))} />;
       case 'tsuzuku-lecture':
         return <ReglageLectureTsuzuku theme={themeDuHub} base={baseProfil} />;
       case 'confidentialite':

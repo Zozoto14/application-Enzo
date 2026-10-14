@@ -13,7 +13,7 @@
  * marcherait pas sur la plateforme ou pour le rôle du compte.
  */
 
-export type IdSection = 'general' | 'synchro' | 'securite' | 'portefeuille' | 'administration' | 'tsuzuku' | 'nouveautes' | 'support' | 'apropos';
+export type IdSection = 'general' | 'synchro' | 'securite' | 'portefeuille' | 'administration' | 'tsuzuku' | 'taches' | 'nouveautes' | 'support' | 'apropos';
 
 export interface SectionParametres {
   id: IdSection;
@@ -30,6 +30,7 @@ export const SECTIONS: readonly SectionParametres[] = [
   { id: 'portefeuille', titre: 'Portefeuille', icone: '▦', description: 'Cours, alertes, podcast, affichage des montants.' },
   { id: 'administration', titre: 'Administration', icone: '🛡', description: 'Panneau, comptes, journal, verrouillage, Tsuzuku (sources, clés).' },
   { id: 'tsuzuku', titre: 'Tsuzuku', icone: '▶', description: 'Doublage, lecture, déjà vus, sources partagées avec vous.' },
+  { id: 'taches', titre: 'Tâches', icone: '☑︎', description: 'Vue d’ouverture, notifications, membres et partage, liens, IA, GitHub, corbeille.' },
   { id: 'nouveautes', titre: 'Nouveautés', icone: '✨', description: 'Historique des versions.' },
   { id: 'support', titre: 'Support', icone: '?', description: 'Écrire à l’équipe : bug, question, demande.' },
   { id: 'apropos', titre: 'À propos', icone: 'ⓘ', description: 'Version de l’application et mise à jour.' },
@@ -64,6 +65,8 @@ export type IdReglage =
   | 'admin-tsuzuku-cles'
   | 'tsuzuku-lecture'
   | 'tsuzuku-sources-partagees'
+  | 'taches-perso'
+  | 'taches-fondateur'
   | 'nouveautes'
   | 'verrou-auto'
   | 'support'
@@ -322,6 +325,23 @@ export const REGLAGES: readonly Reglage[] = [
     description: 'Les sources que l’administration vous partage : activez ou désactivez chacune, pour vous seul.',
     mots: ['tsuzuku', 'sources', 'partagees', 'partage', 'activer', 'desactiver'],
     ancienEmplacement: ['Tsuzuku › Sources (lecture seule)'],
+  },
+  // --- Tâches (les mêmes réglages que dans l'app : mêmes composants, même stockage)
+  {
+    id: 'taches-perso',
+    section: 'taches',
+    titre: 'Mes réglages de Tâches',
+    description: 'Vue d’ouverture de cet appareil, notifications (types, canal, heures calmes, sourdine, récap), relevé du temps.',
+    mots: ['taches', 'tache', 'notifications', 'rappels', 'ouverture', 'calendrier', 'semaine', 'heures calmes', 'mention', 'releve', 'temps'],
+    ancienEmplacement: ['Tâches › 👥 › Notifications', 'Tâches › 👥 › Vue d’ouverture'],
+  },
+  {
+    id: 'taches-fondateur',
+    section: 'taches',
+    titre: 'Tâches · Membres, liens, IA, GitHub, corbeille',
+    description: 'Inviter et retirer des membres, leurs droits projet par projet ; liens avec les autres apps ; aide de l’IA et GitHub (clé et jeton de cet appareil) ; corbeille.',
+    mots: ['taches', 'membres', 'partage', 'droits', 'inviter', 'retirer', 'liens', 'ia', 'claude', 'github', 'jeton', 'cle', 'corbeille'],
+    ancienEmplacement: ['Tâches › 👥 Partage'],
   },
   // --- Nouveautés
   {

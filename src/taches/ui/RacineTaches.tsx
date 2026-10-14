@@ -163,7 +163,7 @@ export function Taches(props: PropsRacineApp) {
   return <AppTaches {...props} />;
 }
 
-function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
+function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: PropsRacineApp) {
   const mobile = useMobile();
   const { width } = useWindowDimensions();
   const etat = useEtatTaches(contexte);
@@ -584,7 +584,9 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
         />
       </EtatVide>
     ) : (
-      <EtatVide theme={theme} testID="taches-rien-partage" titre="Rien n’est partagé avec vous pour l’instant" texte={`Quand ${etat.parFondateur === 'le Fondateur' ? 'le Fondateur' : noms.fondateur} partagera un projet avec vous, il apparaîtra ici (la synchronisation peut prendre une ou deux minutes).`} />
+      <EtatVide theme={theme} testID="taches-rien-partage" titre="Aucun projet partagé avec toi" texte={`Quand ${etat.parFondateur === 'le Fondateur' ? 'le Fondateur' : noms.fondateur} partagera un projet avec toi, il apparaîtra ici (la synchronisation peut prendre une ou deux minutes).${etat.persoPermis ? ' En attendant, tu peux créer tes propres projets : ils restent à toi seul.' : ''}`}>
+        {etat.persoPermis ? <Bouton theme={theme} variante="plein" titre="🔒 Créer mes propres projets" onPress={() => etat.changerSource('perso')} testID="taches-perso" /> : null}
+      </EtatVide>
     )
   ) : objectifs ? (
     <VueObjectifs a={actions} onModifier={id => setFenetre({ g: 'objectif', id })} onNouveau={() => setFenetre({ g: 'objectif' })} />
@@ -709,7 +711,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
   const outils = (
     <View style={styles.rangee}>
       {selection.g === 'projet' && projetSel && droits(projetSel.id).gerer ? <Bouton theme={theme} compact={!mobile} titre="⚙︎ Projet" onPress={() => setFenetre({ g: 'projet', id: projetSel.id })} testID="taches-projet-reglages" /> : null}
-      {selection.g === 'projet' && role === 'fondateur' && projetSel ? <Bouton theme={theme} compact={!mobile} titre="⋯" libelle="Plus d’actions : supprimer le projet, la liste, l’espace" onPress={() => setFenetre({ g: 'menu-vue' })} testID="taches-menu" /> : null}
+      {selection.g === 'projet' && projetSel && droits(projetSel.id).gerer ? <Bouton theme={theme} compact={!mobile} titre="⋯" libelle="Plus d’actions : supprimer le projet, la liste, l’espace" onPress={() => setFenetre({ g: 'menu-vue' })} testID="taches-menu" /> : null}
       <Bouton theme={theme} compact={!mobile} titre={nbFiltres ? `Filtres · ${nbFiltres}` : 'Filtres'} onPress={() => setFenetre({ g: 'filtres' })} testID="taches-filtres" />
       <Bouton theme={theme} compact={!mobile} titre={etat.rappels.length ? `🔔 ${etat.rappels.length}` : '🔔'} libelle={`Rappels : ${etat.rappels.length} non lu(s)`} onPress={() => setFenetre({ g: 'rappels-recus' })} testID="taches-rappels" />
       <Bouton theme={theme} compact={!mobile} titre="⏱" libelle="Relevé du temps (semaine, export CSV)" onPress={() => setFenetre({ g: 'releve' })} testID="taches-releve" />
@@ -797,7 +799,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
         return [
           ...elementsMenu('projet', p.id),
           ...(l ? elementsMenu('liste', l.id) : []),
-          ...(e ? [{ texte: `Supprimer l’espace « ${e.nom} »…`, danger: true, testID: 'menu-supprimer-espace', action: () => actions.demanderSuppression('espace', e.id) }] : []),
+          ...(e && role === 'fondateur' ? [{ texte: `Supprimer l’espace « ${e.nom} »…`, danger: true, testID: 'menu-supprimer-espace', action: () => actions.demanderSuppression('espace', e.id) }] : []),
         ];
       }}
       onCorbeilleRestaurer={el =>
@@ -815,6 +817,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
       contexte={contexte}
       onAller={setFenetre}
       comptes={contexte.profils?.tous ?? []}
+      {...(onParametres ? { onParametres: () => onParametres('taches') } : {})}
       onOuvertureChangee={o => {
         setOuverture(o);
         setAvis({ texte: `À l’ouverture : ${LIBELLES_OUVERTURE[o].replace(' (par défaut)', '').toLowerCase()}.`, genre: 'ok' });
@@ -864,7 +867,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
             <View style={[styles.rangee, { flexWrap: 'nowrap' }]}>
               <View style={{ flex: 1 }}>{recherche}</View>
               <Bouton theme={theme} titre={nbFiltres ? `Filtres · ${nbFiltres}` : 'Filtres'} onPress={() => setFenetre({ g: 'filtres' })} testID="taches-filtres" />
-              {selection.g === 'projet' && role === 'fondateur' && projetSel ? <Bouton theme={theme} titre="⋯" libelle="Réglages et suppression du projet" onPress={() => setFenetre({ g: 'menu-vue' })} testID="taches-menu" /> : null}
+              {selection.g === 'projet' && projetSel && droits(projetSel.id).gerer ? <Bouton theme={theme} titre="⋯" libelle="Réglages et suppression du projet" onPress={() => setFenetre({ g: 'menu-vue' })} testID="taches-menu" /> : null}
             </View>
           </View>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 140, gap: 12 }} keyboardShouldPersistTaps="handled">
@@ -986,6 +989,12 @@ function Navigation({
   );
   return (
     <ScrollView contentContainerStyle={{ padding: 10, gap: 2 }} testID="taches-navigation-liste">
+      {a.etat.persoPermis || a.etat.perso ? (
+        <View style={{ gap: 2, marginBottom: 8 }}>
+          <LigneNav a={a} texte="Partagés avec moi" gauche="👥" actif={!a.etat.perso} onPress={() => a.etat.changerSource('partage')} testID="nav-source-partage" />
+          <LigneNav a={a} texte="Mes projets (rien que pour moi)" gauche="🔒" actif={a.etat.perso} onPress={() => a.etat.changerSource('perso')} testID="nav-source-perso" />
+        </View>
+      ) : null}
       <LigneNav a={a} texte="Ma journée" gauche="☀︎" actif={selection.g === 'journee'} onPress={() => onChoisir({ g: 'journee' })} testID="nav-journee" compte={j} />
       <LigneNav a={a} texte="Toutes les tâches" gauche="▤" actif={selection.g === 'tout'} onPress={() => onChoisir({ g: 'tout' })} testID="nav-tout" />
       {fondateur ? <LigneNav a={a} texte="Objectifs" gauche="◎" actif={selection.g === 'objectifs'} onPress={() => onChoisir({ g: 'objectifs' })} testID="nav-objectifs" compte={Object.values(d.objectifs ?? {}).filter(vivant).length || undefined} /> : null}
@@ -1098,6 +1107,7 @@ function Fenetres({
   onAller,
   onOuvertureChangee,
   comptes,
+  onParametres,
 }: {
   a: Actions;
   fenetre?: Fenetre;
@@ -1123,6 +1133,7 @@ function Fenetres({
   onAller(f: Fenetre): void;
   onOuvertureChangee(o: Ouverture): void;
   comptes: readonly Profil[];
+  onParametres?(): void;
 }) {
   if (!fenetre) return null;
   const d = a.etat.donnees;
@@ -1224,6 +1235,7 @@ function Fenetres({
           onNotifications={() => onAller({ g: 'notifications' })}
           onMembres={() => onAller({ g: 'membres' })}
           onAides={() => onAller({ g: 'aides' })}
+          {...(onParametres ? { onParametres } : {})}
           onLiens={() => onAller({ g: 'liens' })}
           onReleve={() => onAller({ g: 'releve' })}
           onFermer={onFermer}

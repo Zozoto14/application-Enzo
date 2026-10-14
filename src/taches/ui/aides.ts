@@ -16,7 +16,8 @@ import type { EtatApp } from './etat';
 export const INTERVALLE_GITHUB_MS = 5 * 60_000;
 
 export function useAidesV3(base: BasePrefs, etat: EtatApp, ouvrirIA: (c: CibleIA) => void, onAvis: (t: string) => void): AidesV3 | undefined {
-  const fondateur = etat.role === 'fondateur';
+  // Le Fondateur seulement (pas un membre dans ses projets personnels).
+  const fondateur = etat.role === 'fondateur' && !etat.perso;
   const [secrets, setSecrets] = useState<Secrets>(() => lireSecrets(fondateur ? base.lire(CLES_TACHES.secrets) : undefined));
   const [github, setGithub] = useState<CacheGithub>(() => lireCache(base.lire(CLES_TACHES.github)));
   const courant = useRef({ etat, secrets, github, onAvis });

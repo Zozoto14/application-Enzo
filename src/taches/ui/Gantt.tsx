@@ -223,7 +223,7 @@ function BarreGantt({ a, h, b, e, onDeplacer, onEtirer, onDependance, violee, li
       {modifiable ? <View ref={gauche.ref as never} style={[styles.poignee, { left: 0, width: poignee, cursor: 'ew-resize' } as object]} accessibilityLabel="Étirer le début" testID={`gantt-debut-${t.id}`} /> : null}
       {modifiable ? <View ref={droite.ref as never} style={[styles.poignee, { right: 0, width: poignee, cursor: 'ew-resize' } as object]} accessibilityLabel="Étirer l’échéance" testID={`gantt-fin-${t.id}`} /> : null}
       {modifiable ? (
-        <View ref={lien.ref as never} style={[styles.pastilleLien, { right: -14, top: (h - 12) / 2 - 11, backgroundColor: theme.surface, borderColor: couleur, cursor: 'crosshair' } as object]} accessibilityLabel={`Glisser sur une autre tâche : elle dépendra de « ${t.titre} »`} testID={`gantt-lien-${t.id}`}>
+        <View ref={lien.ref as never} style={[styles.pastilleLien, { right: -26, top: (h - 12) / 2 - 11, backgroundColor: theme.surface, borderColor: couleur, cursor: 'crosshair' } as object]} accessibilityLabel={`Glisser sur une autre tâche : elle dépendra de « ${t.titre} »`} testID={`gantt-lien-${t.id}`}>
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: couleur }} />
         </View>
       ) : null}

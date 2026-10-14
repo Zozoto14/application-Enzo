@@ -33,7 +33,7 @@ import {
   type DemandeIA,
 } from './ia';
 import { completerMention, decouperMentions, suggestionsMention, trouverMentions } from './mentions';
-import { changerDroit, droitDe, initiales, inviterMembre, listeMembres, membresDuProjet, retirerMembre } from './membres';
+import { accorderAcces, changerDroit, changerPerso, droitDe, initiales, inviterMembre, listeMembres, membresDuProjet, retirerMembre } from './membres';
 import {
   ajouterCommentaire,
   assignesDe,
@@ -592,5 +592,58 @@ describe('GitHub (client simulé)', () => {
     const ap = appliquerEnvoiMembre(d, env, LEA);
     expect(ap.donnees.taches[s.t1].github).toEqual({ depot: 'zozoto14/tsuzuku', pr: 12, faiteSiFusion: true });
     expect(ap.donnees.taches[s.t1].priorite).toBe('haute');
+  });
+});
+
+// ------------------------------------------------------------------ Accès à l'app = membres (Administration)
+
+describe('accès par l’Administration et projets personnels', () => {
+  it('l’app ouverte à un profil en fait un membre ; fermée, il est retiré (clés tournées)', () => {
+    const s = scenario();
+    const profils = [
+      { id: 'principal', nom: 'Enzo', admin: true },
+      { id: LEA, nom: 'Léa', apps: ['taches'] },
+      { id: HUGO, nom: 'Hugo', apps: ['taches'], role: 'gestionnaire' },
+      { id: ZOE, nom: 'Zoé', apps: ['taches'] },
+      { id: 'gerant0004', nom: 'Gérant', apps: ['taches', 'tsuzuku'], role: 'administrateur' },
+      { id: 'sansapp005', nom: 'Sans', apps: ['tsuzuku'] },
+    ];
+    let d = accorderAcces(s.d, profils, f());
+    expect(listeMembres(d).map(m => [m.nom, m.rang])).toEqual([
+      ['Gérant', 'administrateur'],
+      ['Hugo', 'gestionnaire'],
+      ['Léa', 'ami'],
+      ['Zoé', 'ami'],
+    ]);
+    // Rien ne change au tour suivant (aucune écriture).
+    expect(accorderAcces(d, profils, f())).toBe(d);
+    // Sans projet partagé : un document vide (aucun projet), mais la clé arrive.
+    const docG = documentPourMembre(d, listeMembres(d).find(m => m.compte === 'gerant0004')!);
+    expect(Object.keys(docG.donnees.projets)).toEqual([]);
+    // Hugo perd l'accès (Administration) : retiré, la clé des projets qu'il voyait tourne.
+    const cleA = d.reglages.clesProjets![s.A].cle;
+    const profils2 = profils.map(p => (p.id === HUGO ? { ...p, apps: [] } : p));
+    d = accorderAcces(d, profils2, f());
+    expect(listeMembres(d).map(m => m.compte)).not.toContain(HUGO);
+    expect(droitDe(d, s.B, HUGO)).toBe('aucun');
+    expect(d.reglages.clesProjets![s.A].cle).not.toBe(cleA);
+    // Compte désactivé ou supprimé : retiré aussi.
+    d = accorderAcces(d, profils2.filter(p => p.id !== ZOE).map(p => (p.id === LEA ? { ...p, actif: false } : p)), f());
+    expect(listeMembres(d).map(m => m.compte)).toEqual(['gerant0004']);
+    // Liste vide (annuaire pas encore lu) : on ne touche à rien.
+    expect(accorderAcces(d, [], f())).toBe(d);
+  });
+
+  it('« peut créer ses propres projets » : le droit voyage dans son dépôt', () => {
+    const s = scenario();
+    let d = changerPerso(s.d, LEA, true, f());
+    const doc = documentPourMembre(d, listeMembres(d).find(m => m.compte === LEA)!);
+    expect(doc.perso).toBe(true);
+    const copie = appliquerReception(copieVide(), doc);
+    expect(lireCopie(JSON.stringify(copie)).perso).toBe(true);
+    d = changerPerso(d, LEA, false, f());
+    expect(documentPourMembre(d, listeMembres(d).find(m => m.compte === LEA)!).perso).toBeUndefined();
+    expect(() => changerPerso(s.d, 'inconnu01', true, f())).toThrow(ErreurTaches);
+    expect(() => changerPerso(s.d, LEA, true, par(LEA))).toThrow(ErreurTaches);
   });
 });

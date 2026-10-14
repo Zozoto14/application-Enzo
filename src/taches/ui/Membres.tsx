@@ -8,7 +8,7 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { rangDe } from '../../hub/admin/roles';
 import type { Profil } from '../../profils/profils';
-import { droitDe, listeMembres, membresDuProjet, type DroitOuAucun, type Membre } from '../membres';
+import { changerPerso, droitDe, listeMembres, membresDuProjet, type DroitOuAucun, type Membre } from '../membres';
 import { LIBELLES_DROIT, projetsDe, vivant, type Auteur, type Projet } from '../modele';
 import type { Actions } from './actions';
 import { attenueDe, Avatar, Bouton, Dialogue, Libelle, Puce, texteDe } from './atomes';
@@ -104,7 +104,8 @@ export function DialogueMembres({ a, comptes, onFermer, onErreur, onAvis }: { a:
   const [retrait, setRetrait] = useState<string | undefined>();
   const [enCours, setEnCours] = useState(false);
   const projets = projetsDe(d).filter(p => !p.auto);
-  const invitables = comptes.filter(p => !p.admin && p.actif !== false && ['ami', 'gestionnaire'].includes(rangDe(p)) && !membres.some(m => m.compte === p.id));
+  const invitables = comptes.filter(p => !p.admin && p.actif !== false && ['ami', 'gestionnaire', 'administrateur'].includes(rangDe(p)) && !membres.some(m => m.compte === p.id));
+  const rangDu = (p: Profil): 'ami' | 'gestionnaire' | 'administrateur' => (rangDe(p) === 'gestionnaire' || rangDe(p) === 'administrateur' ? (rangDe(p) as 'gestionnaire' | 'administrateur') : 'ami');
   const agir = (f: () => Promise<void>, avis: string) => {
     setEnCours(true);
     f()
@@ -126,13 +127,30 @@ export function DialogueMembres({ a, comptes, onFermer, onErreur, onAvis }: { a:
               <View style={{ flex: 1, minWidth: 140 }}>
                 <Text style={[texteDe(theme), { fontWeight: '700' }]}>{m.nom}</Text>
                 <Text style={attenueDe(theme)}>
-                  {m.rang === 'gestionnaire' ? 'Gestionnaire' : 'Ami'}
+                  {m.rang === 'gestionnaire' ? 'Gestionnaire' : m.rang === 'administrateur' ? 'Administrateur' : 'Ami'}
                   {m.historique ? ' · depuis la V1' : m.depuis ? ` · invité le ${new Date(m.depuis).toLocaleDateString('fr-FR')}` : ''} · {siens.length} projet{siens.length > 1 ? 's' : ''}
                 </Text>
               </View>
               <Bouton theme={theme} compact titre={deplie ? 'Replier' : 'Droits…'} onPress={() => setOuvert(deplie ? undefined : m.compte)} testID={`membre-droits-${m.compte}`} />
               <Bouton theme={theme} compact variante="danger" titre="Retirer…" onPress={() => setRetrait(m.compte)} testID={`membre-retirer-${m.compte}`} />
             </View>
+            {!m.historique ? (
+              <Puce
+                theme={theme}
+                grand={a.mobile}
+                texte={m.perso ? '✓ Peut créer ses propres projets' : 'Peut créer ses propres projets'}
+                couleur={theme.ok}
+                actif={Boolean(m.perso)}
+                onPress={() => {
+                  try {
+                    a.etat.maj((x, ctx) => changerPerso(x, m.compte, !m.perso, ctx));
+                  } catch (e) {
+                    onErreur(e);
+                  }
+                }}
+                testID={`membre-perso-${m.compte}`}
+              />
+            ) : null}
             {retrait === m.compte ? (
               <View style={{ gap: 8 }}>
                 <Text style={texteDe(theme)}>
@@ -171,9 +189,9 @@ export function DialogueMembres({ a, comptes, onFermer, onErreur, onAvis }: { a:
           <View key={p.id} style={styles.ligne} testID={`invitable-${p.id}`}>
             <Avatar theme={theme} nom={p.nom} couleur={couleurAuteur(a, p.id)} />
             <Text style={[texteDe(theme), { flex: 1 }]}>
-              {p.nom} <Text style={attenueDe(theme)}>· {rangDe(p) === 'gestionnaire' ? 'gestionnaire' : 'ami'}</Text>
+              {p.nom} <Text style={attenueDe(theme)}>· {rangDu(p)}</Text>
             </Text>
-            <Bouton theme={theme} compact titre="Inviter" desactive={enCours} onPress={() => agir(() => a.etat.inviter(p.id, p.nom, rangDe(p) === 'gestionnaire' ? 'gestionnaire' : 'ami'), `${p.nom} est invité : choisissez ses projets.`)} testID={`membre-inviter-${p.id}`} />
+            <Bouton theme={theme} compact titre="Inviter" desactive={enCours} onPress={() => agir(() => a.etat.inviter(p.id, p.nom, rangDu(p)), `${p.nom} est invité : choisissez ses projets.`)} testID={`membre-inviter-${p.id}`} />
           </View>
         ))
       )}

@@ -33,20 +33,38 @@ export interface EtatApp {
   rappels: AlerteRappel[];
   rappelsLus(): void;
   /** Fondateur : invite un compte (ami ou gestionnaire) et lui ouvre l'app. */
-  inviter(compte: string, nom: string, rang?: 'ami' | 'gestionnaire'): Promise<void>;
+  inviter(compte: string, nom: string, rang?: 'ami' | 'gestionnaire' | 'administrateur'): Promise<void>;
   /** Fondateur : retire un membre (droits, clés tournées, app fermée, dépôt effacé au tour suivant). */
   retirer(compte: string): Promise<void>;
   /** Fondateur : droit d'un membre sur un projet. */
   changerDroit(projetId: string, compte: string, droit: DroitOuAucun): void;
   /** Relit la base (après une écriture faite hors de l'écran : liens, notification de test). */
   relire(): void;
+  /** Membre : il regarde SES projets personnels (il en est le maître, comme un Fondateur sur ses données). */
+  perso: boolean;
+  /** Membre : le Fondateur lui permet des projets personnels. */
+  persoPermis: boolean;
+  /** Membre : projets partagés avec lui, ou ses projets personnels. */
+  changerSource(s: 'partage' | 'perso'): void;
 }
 
 
 export function useEtatTaches(contexte: ContexteHub): EtatApp {
-  const role = roleTaches(contexte) ?? 'fondateur';
+  const roleCompte = roleTaches(contexte) ?? 'fondateur';
   const base = contexte.baseProfil;
-  const cle = role === 'fondateur' ? CLES_TACHES.donnees : CLES_TACHES.copie;
+  const [source, setSource] = useState<'partage' | 'perso'>('partage');
+  const lirePermis = useCallback(() => {
+    try {
+      return roleCompte === 'ami' && Boolean(lireCopie(base?.lire(CLES_TACHES.copie)).perso);
+    } catch {
+      return false;
+    }
+  }, [roleCompte, base]);
+  const [persoPermis, setPersoPermis] = useState(lirePermis);
+  // Projets personnels : seulement si le Fondateur le permet (ceux déjà créés restent dans la base, cachés sinon).
+  const perso = roleCompte === 'ami' && source === 'perso' && persoPermis;
+  const role = perso ? 'fondateur' : roleCompte;
+  const cle = perso ? CLES_TACHES.perso : role === 'fondateur' ? CLES_TACHES.donnees : CLES_TACHES.copie;
   const lireBrut = useCallback(() => {
     try {
       return base?.lire(cle) ?? '';
@@ -61,7 +79,9 @@ export function useEtatTaches(contexte: ContexteHub): EtatApp {
     setBrut(p => (p === b ? p : b));
     const r = base?.lire(CLES_TACHES.rappels) ?? '';
     setBrutRappels(p => (p === r ? p : r));
-  }, [lireBrut, base]);
+    setPersoPermis(lirePermis());
+  }, [lireBrut, base, lirePermis]);
+  useEffect(() => setBrut(lireBrut()), [lireBrut]);
   const version = contexte.profils?.versionComptes ?? 0;
   useEffect(() => relire(), [relire, version]);
   useEffect(() => {
@@ -73,6 +93,7 @@ export function useEtatTaches(contexte: ContexteHub): EtatApp {
   const donnees = useMemo(() => (role === 'ami' ? copie!.donnees : lireDonnees(brut || undefined)), [role, brut, copie]);
   const maintenant = useCallback(() => contexte.maintenant ?? Date.now(), [contexte.maintenant]);
   const nomMoi = contexte.profil?.nom && contexte.profil.nom !== 'Moi' ? contexte.profil.nom : 'Moi';
+  const changerSource = useCallback((s: 'partage' | 'perso') => setSource(s), []);
   const moi: Auteur = role === 'fondateur' ? 'fondateur' : (copie?.moi ?? 'ami');
   const noms: Record<Auteur, string> =
     role === 'fondateur'
@@ -137,5 +158,5 @@ export function useEtatTaches(contexte: ContexteHub): EtatApp {
   );
 
   const parFondateur = noms.fondateur === 'Fondateur' ? 'le Fondateur' : noms.fondateur;
-  return { role, moi, donnees, copie, noms, parFondateur, aujourdhui: jourDe(maintenant()), maintenant, maj, rappels, rappelsLus, inviter, retirer, changerDroit: changerDroitMembre, relire };
+  return { perso, persoPermis, changerSource, role, moi, donnees, copie, noms, parFondateur, aujourdhui: jourDe(maintenant()), maintenant, maj, rappels, rappelsLus, inviter, retirer, changerDroit: changerDroitMembre, relire };
 }

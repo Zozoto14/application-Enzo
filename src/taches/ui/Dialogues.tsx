@@ -386,11 +386,14 @@ export function DialogueReglages({
   onOuverture,
   onMembres,
   onAides,
+  onParametres,
 }: {
   a: Actions;
   amis: ReadonlyArray<{ id: string; nom: string }>;
   onMembres(): void;
   onAides(): void;
+  /** Ouvre Paramètres › Tâches (les mêmes réglages, dans la page Paramètres du hub). */
+  onParametres?(): void;
   onFermer: Fermer;
   onDemo(): void;
   onRetirerDemo(): void;
@@ -406,8 +409,9 @@ export function DialogueReglages({
   const raccourcis = (
     <View style={styles.rangee}>
       <Bouton theme={theme} titre="🔔 Notifications…" onPress={onNotifications} testID="reglages-notifications" />
-      {a.etat.role === 'fondateur' ? <Bouton theme={theme} titre="🔗 Liens avec les autres apps…" onPress={onLiens} testID="reglages-liens" /> : null}
-      {a.etat.role === 'fondateur' ? <Bouton theme={theme} titre="✨ IA et GitHub…" onPress={onAides} testID="reglages-aides" /> : null}
+      {a.etat.role === 'fondateur' && !a.etat.perso ? <Bouton theme={theme} titre="🔗 Liens avec les autres apps…" onPress={onLiens} testID="reglages-liens" /> : null}
+      {a.etat.role === 'fondateur' && !a.etat.perso ? <Bouton theme={theme} titre="✨ IA et GitHub…" onPress={onAides} testID="reglages-aides" /> : null}
+      {onParametres ? <Bouton theme={theme} titre="⚙︎ Paramètres › Tâches" onPress={onParametres} testID="reglages-parametres-hub" /> : null}
       <Bouton theme={theme} titre="⏱ Relevé du temps…" onPress={onReleve} testID="reglages-releve" />
     </View>
   );
@@ -435,6 +439,10 @@ export function DialogueReglages({
     <Dialogue theme={theme} mobile={a.mobile} visible large titre="Réglages de Tâches" onFermer={onFermer} testID="dialogue-reglages">
       {raccourcis}
       {vueOuverture}
+      {a.etat.perso ? (
+        <Text style={attenueDe(theme)} testID="reglages-perso">Tes projets personnels : rangés dans ta base chiffrée, ils ne partent chez personne.</Text>
+      ) : (
+        <>
       <Libelle theme={theme}>{`MEMBRES ET PARTAGE · ${membres.length}`}</Libelle>
       <Text style={attenueDe(theme)}>
         Invitez des amis ou des gestionnaires du hub ; chacun ne voit que les projets que vous lui ouvrez, en lecture, en écriture ou comme admin du projet. Tout est chiffré de bout en bout.
@@ -447,6 +455,8 @@ export function DialogueReglages({
         </View>
       ) : null}
       <Bouton theme={theme} variante="plein" titre="👥 Gérer les membres et leurs droits…" onPress={onMembres} testID="reglages-membres" style={{ alignSelf: 'flex-start' }} />
+        </>
+      )}
       <Libelle theme={theme}>DONNÉES D’EXEMPLE</Libelle>
       <Text style={attenueDe(theme)}>Un espace « Exemple » avec un projet et quelques tâches, pour découvrir les vues. Retirez-le d’un geste.</Text>
       <View style={styles.rangee}>
@@ -644,7 +654,7 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur, o
           testID="liste-ajouter"
         />
       </View>
-      {fondateur ? (
+      {fondateur && !a.etat.perso ? (
         <>
           <Libelle theme={theme}>PARTAGE</Libelle>
           <PartageProjet a={a} projet={p} onErreur={onErreur} onMembres={onMembres ?? onFermer} />

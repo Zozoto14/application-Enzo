@@ -45,7 +45,9 @@ export interface Membre {
   nom: string;
   cle?: string;
   depuis?: string;
-  rang?: 'ami' | 'gestionnaire';
+  rang?: 'ami' | 'gestionnaire' | 'administrateur';
+  /** Peut créer ses propres projets. */
+  perso?: boolean;
   /** L'ami des V1/V2. */
   historique?: boolean;
 }
@@ -65,7 +67,7 @@ export function listeMembres(d: DonneesTaches): Membre[] {
   if (g.ami && g.cle) r.push({ compte: g.ami, code: 'ami', nom: g.amiNom ?? 'Ami', cle: g.cle, historique: true });
   for (const [compte, m] of Object.entries(g.membres ?? {})) {
     if (compte === g.ami) continue;
-    r.push({ compte, code: compte, nom: m.nom, cle: m.cle, depuis: m.depuis, ...(m.rang ? { rang: m.rang } : {}) });
+    r.push({ compte, code: compte, nom: m.nom, cle: m.cle, depuis: m.depuis, ...(m.rang ? { rang: m.rang } : {}), ...(m.perso ? { perso: true } : {}) });
   }
   return r.sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
 }
@@ -114,7 +116,7 @@ export function couleurMembre(code: Auteur): string {
 // ------------------------------------------------------------------ Invitations, droits, retrait
 
 /** Invite un compte (ami ou gestionnaire du hub) : il reçoit sa clé de membre ; aucun projet n'est encore partagé. */
-export function inviterMembre(d: DonneesTaches, compte: string, nom: string, ctx: Contexte & { aleaOctets: (n: number) => Uint8Array }, rang?: 'ami' | 'gestionnaire'): DonneesTaches {
+export function inviterMembre(d: DonneesTaches, compte: string, nom: string, ctx: Contexte & { aleaOctets: (n: number) => Uint8Array }, rang?: 'ami' | 'gestionnaire' | 'administrateur'): DonneesTaches {
   if (ctx.auteur !== 'fondateur') throw new ErreurTaches('Seul le Fondateur invite.');
   if (!idMembreValide(compte)) throw new ErreurTaches('Compte invalide.');
   if (compte === d.reglages.ami && d.reglages.cle) return d;
@@ -222,4 +224,46 @@ export function personnesDuProjet(d: DonneesTaches, projetId: string, noms: Reco
   }
   const vus = new Set<string>();
   return r.filter(x => (vus.has(x.code) ? false : (vus.add(x.code), true)));
+}
+
+/** Un profil du hub tel que le voit le Fondateur (annuaire). */
+export interface ProfilAcces {
+  id: string;
+  nom: string;
+  admin?: boolean;
+  actif?: boolean;
+  apps?: string[];
+  role?: string;
+}
+
+/**
+ * L'accès à l'app (`taches` dans les apps du profil, donné par l'Administration
+ * ou par une invitation) et la liste des membres ne font qu'un : un profil qui
+ * reçoit l'app devient membre (sans projet, il voit un état vide) ; un membre
+ * dont l'accès est fermé (ou le compte désactivé, ou supprimé) est retiré —
+ * droits enlevés, clés des projets tournées, dépôt effacé au tour suivant.
+ */
+export function accorderAcces(d: DonneesTaches, profils: readonly ProfilAcces[], ctx: Contexte & { aleaOctets: (n: number) => Uint8Array }): DonneesTaches {
+  if (ctx.auteur !== 'fondateur' || !profils.length) return d;
+  let x = d;
+  const parId = new Map(profils.map(p => [p.id, p]));
+  const autorise = (p: ProfilAcces | undefined) => Boolean(p && !p.admin && p.actif !== false && (p.apps ?? []).includes('taches') && idMembreValide(p.id));
+  for (const p of profils) {
+    if (!autorise(p) || membreDe(x, p.id)) continue;
+    x = inviterMembre(x, p.id, p.nom, ctx, p.role === 'gestionnaire' || p.role === 'administrateur' ? p.role : 'ami');
+  }
+  for (const m of listeMembres(x)) if (!autorise(parId.get(m.compte))) x = retirerMembre(x, m.compte, ctx);
+  return x;
+}
+
+/** Le membre peut-il créer ses propres projets (rangés dans SA base chiffrée, que lui seul ouvre) ? */
+export function changerPerso(d: DonneesTaches, compte: string, permis: boolean, ctx: Contexte): DonneesTaches {
+  if (ctx.auteur !== 'fondateur') throw new ErreurTaches('Seul le Fondateur règle ce droit.');
+  const m = d.reglages.membres?.[compte];
+  if (!m) throw new ErreurTaches('Invitez d’abord cette personne.');
+  if (Boolean(m.perso) === permis) return d;
+  const suivant: MembreTaches = { ...m };
+  if (permis) suivant.perso = true;
+  else delete suivant.perso;
+  return { ...d, reglages: changerChamps(d.reglages, { membres: { ...d.reglages.membres, [compte]: suivant } }, ctx) };
 }

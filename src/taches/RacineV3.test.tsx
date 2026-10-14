@@ -16,7 +16,8 @@ import type { BasePrefs } from '../tsuzuku/plateforme/stockage';
 import { ModeAffichageForce } from '../ui/mobile';
 import { ajouterDemo } from './demo';
 import { ajouterJours } from './dates';
-import { changerDroit, inviterMembre, listeMembres } from './membres';
+import { changerDroit, changerPerso, inviterMembre, listeMembres } from './membres';
+import { ReglagesTachesFondateur, ReglagesTachesPerso } from './ui/ParametresTaches';
 import { assignesDe, creerTache, lireDonnees, modifierTache, sousTaches, tachesVivantes, type DonneesTaches } from './modele';
 import { appliquerReception, CLES_TACHES, copieVide, documentPourMembre } from './partage';
 import { Taches } from './ui/RacineTaches';
@@ -156,6 +157,8 @@ describe('Tâches V3 : écran', () => {
 
   it('assignation à plusieurs, et mention notifiée', async () => {
     let { d, projetId } = donnees();
+    // L'accès à l'app et la liste des membres ne font qu'un : Léa a l'app.
+    comptes[1].apps = ['taches'];
     d = inviterMembre(d, lea.id, 'Léa', ctx(20));
     d = changerDroit(d, projetId, lea.id, 'ecriture', ctx(21));
     const b = avec(d, { selection: { g: 'projet', id: projetId }, vue: 'liste' });
@@ -236,5 +239,58 @@ describe('Tâches V3 : écran', () => {
     const r2 = await monter({ profil: { ...lea, apps: ['taches'] }, baseProfil: b2, maintenant: T });
     expect(screen.queryByTestId('taches-projet-reglages')).toBeNull();
     await r2.unmount();
+  });
+
+  it('membre sans projet : état vide clair ; s’il en a le droit, ses propres projets (à lui seul)', async () => {
+    let { d } = donnees();
+    d = inviterMembre(d, lea.id, 'Léa', ctx(40));
+    const doc = documentPourMembre(changerPerso(d, lea.id, true, ctx(41)), listeMembres(changerPerso(d, lea.id, true, ctx(41))).find(m => m.compte === lea.id)!, 'Enzo');
+    const copie = appliquerReception(copieVide(), doc);
+    const b = base({ [CLES_TACHES.copie]: JSON.stringify(copie) });
+    await monter({ profil: { ...lea, apps: ['taches'] }, baseProfil: b, maintenant: T });
+    expect(screen.getByTestId('taches-rien-partage')).toHaveTextContent(/Aucun projet partagé avec toi/);
+    await toucher('taches-perso');
+    await toucher('taches-creer-espace');
+    await fireEvent.changeText(screen.getByTestId('nouvel-espace-nom'), 'Perso');
+    await toucher('nouvel-espace-creer');
+    const perso = lireDonnees(b.m.get(CLES_TACHES.perso));
+    expect(Object.values(perso.espaces).map(e => e.nom)).toEqual(['Perso']);
+    expect(lireDonnees(JSON.parse(b.m.get(CLES_TACHES.copie)!).donnees).espaces).toEqual({});
+    // Ni membres, ni liens, ni IA dans ses projets personnels.
+    await toucher('taches-reglages');
+    expect(screen.getByTestId('reglages-perso')).toBeTruthy();
+    expect(screen.queryByTestId('reglages-membres')).toBeNull();
+    expect(screen.queryByTestId('reglages-aides')).toBeNull();
+  });
+
+  it('Paramètres › Tâches : les mêmes réglages (Fondateur : membres, IA… ; membre : les siens)', async () => {
+    const { d } = donnees();
+    const b = avec(d, {});
+    await render(
+      <ModeAffichageForce mode="large">
+        <ReglagesTachesPerso contexte={ctxF(b)} theme={themeHub('nuit')} onOuvrirTaches={() => undefined} />
+        <ReglagesTachesFondateur contexte={ctxF(b)} theme={themeHub('nuit')} onOuvrirTaches={() => undefined} />
+      </ModeAffichageForce>,
+    );
+    await toucher('parametres-taches-ouverture-journee');
+    expect(JSON.parse(b.m.get(CLES_TACHES.affichage)!).ouverture).toBe('journee');
+    await toucher('parametres-taches-membres');
+    expect(screen.getByTestId('dialogue-membres')).toBeTruthy();
+    await toucher('dialogue-membres-fermer');
+    await toucher('parametres-taches-aides');
+    await toucher('aides-ia-actif');
+    expect(JSON.parse(b.m.get(CLES_TACHES.secrets)!).ia.actif).toBe(true);
+    await toucher('dialogue-aides-fermer');
+    await toucher('parametres-taches-notifications');
+    expect(screen.getByTestId('dialogue-notifications')).toBeTruthy();
+    // Un membre : seulement ses réglages.
+    const copie = JSON.stringify({ ...copieVide(), cle: 'ab'.repeat(32) });
+    const bm = base({ [CLES_TACHES.copie]: copie });
+    const r = await render(
+      <ModeAffichageForce mode="large">
+        <ReglagesTachesFondateur contexte={{ profil: { ...lea, apps: ['taches'] }, baseProfil: bm, maintenant: T }} theme={themeHub('nuit')} onOuvrirTaches={() => undefined} />
+      </ModeAffichageForce>,
+    );
+    expect(r.queryByTestId('parametres-taches-fondateur')).toBeNull();
   });
 });

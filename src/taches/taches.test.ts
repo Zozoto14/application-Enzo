@@ -381,14 +381,14 @@ describe('partage Fondateur / ami (logique)', () => {
     expect(droitsProjet('ami', copie, s.prive)).toMatchObject({ voir: false, modifier: false });
     expect(droitsProjet(undefined, s.d, s.projet).voir).toBe(false);
   });
-  it('rôle : Fondateur (compte historique), l’ami désigné seulement, personne d’autre', () => {
+  it('rôle : Fondateur (compte historique), les profils qui ont l’app, personne d’autre', () => {
     const base = (copie?: string): BasePrefs => ({ lire: k => (k === CLES_TACHES.copie ? copie : undefined), ecrire: () => undefined });
     const admin = { stockage: { lire: () => undefined, ecrire: () => undefined }, verifierIdentite: () => undefined, etatCoffre: () => undefined };
     const avecCle = JSON.stringify({ ...copieVide(), cle: 'ab'.repeat(32) });
     expect(roleTaches({ admin, profil: { id: 'principal', nom: 'Moi', admin: true, creeLe: '' } })).toBe('fondateur');
     expect(roleTaches({ profil: { id: 'leaami01', nom: 'Léa', admin: false, creeLe: '', apps: ['taches'] }, baseProfil: base(avecCle) })).toBe('ami');
-    // Accès donné sans dépôt (Administration retouchée, ancien ami) : rien.
-    expect(roleTaches({ profil: { id: 'hugoami1', nom: 'Hugo', admin: false, creeLe: '', apps: ['taches'] }, baseProfil: base(undefined) })).toBeUndefined();
+    // V3 : l'accès donné par l'Administration ouvre l'app (sans dépôt : aucun projet, état vide).
+    expect(roleTaches({ profil: { id: 'hugoami1', nom: 'Hugo', admin: false, creeLe: '', apps: ['taches'] }, baseProfil: base(undefined) })).toBe('ami');
     expect(roleTaches({ profil: { id: 'hugoami1', nom: 'Hugo', admin: false, creeLe: '', apps: [] }, baseProfil: base(avecCle) })).toBeUndefined();
     // Un gestionnaire / administrateur sans l'accès ne voit rien, même avec les services d'administration.
     expect(roleTaches({ admin, profil: { id: 'gestion01', nom: 'G', admin: false, creeLe: '', role: 'gestionnaire' } })).toBeUndefined();

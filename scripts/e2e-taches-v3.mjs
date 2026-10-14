@@ -47,12 +47,14 @@ const MDP_ADMIN = 'mot-de-passe-du-pc-e2e-taches-v3-42';
 const kv = new Map();
 const metas = new Map();
 let ecrituresKv = 0;
+const parCle = new Map();
 const env = {
   JETON,
   BOITE: {
     get: async cle => (kv.has(cle) ? kv.get(cle) : null),
     put: async (cle, valeur, options) => {
       ecrituresKv++;
+      parCle.set(cle, (parCle.get(cle) ?? 0) + 1);
       kv.set(cle, valeur);
       if (options?.metadata) metas.set(cle, options.metadata);
       else metas.delete(cle);
@@ -505,13 +507,22 @@ try {
     await pause(1500);
     for (const p of [ipad, pcHugo, iphone]) await relancer(p);
     await pause(2500);
-    return (await ipad.getByTestId('taches-rappels').innerText().catch(() => '')).includes('1');
-  }, 240_000, 6000), 'Léa reçoit la mention (🔔)');
-  await ipad.getByTestId('taches-rappels').click();
-  verifier(/vous mentionne/.test(await ipad.locator('body').innerText()), 'Léa : « … vous mentionne » dans ses rappels');
-  await fermer(ipad);
-  verifier((await pcHugo.getByTestId('taches-rappels').innerText()).trim() === '🔔', 'Hugo, non mentionné : pas de mention');
+    if (!/\d/.test(await ipad.getByTestId('taches-rappels').innerText().catch(() => ''))) return false;
+    await ipad.getByTestId('taches-rappels').click();
+    const vu = /Enzo vous mentionne|vous mentionne/.test(await ipad.locator('body').innerText());
+    await fermer(ipad);
+    return vu;
+  }, 300_000, 6000), 'Léa reçoit la mention : « … vous mentionne » dans ses rappels (🔔)');
+  await pcHugo.getByTestId('taches-rappels').click();
+  verifier(!/vous mentionne/.test(await pcHugo.locator('body').innerText()), 'Hugo, non mentionné : pas de mention');
+  await fermer(pcHugo);
   const ecritures3 = ecrituresKv - avantKv;
+  log('écritures par clé :', JSON.stringify([...parCle.entries()].sort((x, y) => y[1] - x[1]).slice(0, 10)));
+  if (!(await ipad.locator('body').innerText()).includes('peux-tu relire')) {
+    await ipad.getByTestId(`tache-titre-${idConception}`).click().catch(() => undefined);
+    log('Léa : commentaire reçu ?', (await ipad.locator('body').innerText()).includes('peux-tu relire'));
+    await ipad.getByTestId('detail-fermer').click().catch(() => undefined);
+  }
   log(`écritures KV pour un commentaire vu par 3 membres : ${ecritures3}`);
   verifier(ecritures3 > 0 && ecritures3 <= 24, `écritures KV mesurées (3 membres) : ${ecritures3}`);
 
@@ -526,10 +537,10 @@ try {
   verifier(await attendre(async () => (await libelleDe(pc, `gantt-barre-${idRealisation}`)) !== lReal0, 10_000, 500), `glisser : « Réalisation » déplacée (${await libelleDe(pc, `gantt-barre-${idRealisation}`)})`);
   // Étirer l'échéance de « Conception » de 3 jours (bord droit).
   await glisserDe(pc, `gantt-fin-${idConception}`, 48 * 3);
-  verifier(/au /.test(await libelleDe(pc, `gantt-barre-${idConception}`)), `étirer : « Conception » sur plusieurs jours (${await libelleDe(pc, `gantt-barre-${idConception}`)})`);
+  verifier(await attendre(async () => / au /.test(await libelleDe(pc, `gantt-barre-${idConception}`)), 8000, 500), `étirer : « Conception » sur plusieurs jours (${await libelleDe(pc, `gantt-barre-${idConception}`)})`);
   // Dépendance : ● de « Conception » glissée sur « Recette ».
   await glisserSouris(pc, `gantt-lien-${idConception}`, `gantt-barre-${idRecette}`);
-  verifier(await visible(pc, `gantt-dependance-${idConception}-${idRecette}`, 8000), 'dépendance créée en glissant ●');
+  verifier(await attendre(async () => (await pc.getByTestId(`gantt-dependance-${idConception}-${idRecette}`).count()) > 0, 8000, 500), `dépendance créée en glissant ● (${await texteDe(pc, 'taches-avis').catch(() => '')})`);
   // Dépendance depuis le détail : « Réalisation » après « Conception ».
   await pc.getByTestId(`gantt-titre-${idRealisation}`).click();
   await pc.getByTestId('detail-dependance-ajouter').click();

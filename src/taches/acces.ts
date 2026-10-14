@@ -24,15 +24,17 @@ export const ID_TACHES = 'taches';
 export type RoleTaches = 'fondateur' | 'ami';
 
 /**
- * Rôle du compte ouvert. L'ami doit avoir l'accès `taches` (donné par le
- * Fondateur en le choisissant) ET avoir reçu le dépôt scellé pour lui (qui
- * porte la clé de partage) : un compte à qui l'accès aurait été donné
- * autrement, ou un ancien ami (dépôt retiré), ne voit rien.
+ * Rôle du compte ouvert. Un membre a l'accès `taches` (donné par le
+ * Fondateur dans l'Administration ou par une invitation dans Tâches) : il
+ * voit les projets que le dépôt scellé pour lui contient (aucun tant que rien
+ * n'est partagé). Accès fermé : plus de tuile, et le Fondateur le retire des
+ * membres (clés tournées, dépôt effacé).
  */
 export function roleTaches(contexte: Pick<ContexteHub, 'profil' | 'admin' | 'baseProfil'>): RoleTaches | undefined {
   const profil = contexte.profil;
   if (contexte.admin && rangDe(profil) === 'fondateur' && (!profil || profil.admin)) return 'fondateur';
-  if (profil && !profil.admin && profil.actif !== false && (profil.apps ?? []).includes(ID_TACHES) && amiDesigne(contexte.baseProfil)) return 'ami';
+  // V3 : l'accès à l'app (Administration, ou invitation depuis Tâches) suffit — sans projet partagé, un état vide.
+  if (profil && !profil.admin && profil.actif !== false && (profil.apps ?? []).includes(ID_TACHES)) return 'ami';
   return undefined;
 }
 
