@@ -587,14 +587,14 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur }:
       <Libelle theme={theme}>COULEUR</Libelle>
       <View style={styles.rangee}>
         {COULEURS.map(c => (
-          <Pressable key={c} accessibilityRole="radio" accessibilityState={{ selected: p.couleur === c }} accessibilityLabel={`Couleur ${c}`} onPress={() => a.etat.maj((x, ctx) => modifierProjet(x, projetId, { couleur: c }, ctx))} style={[styles.pastilleCouleur, { backgroundColor: c, borderColor: p.couleur === c ? theme.texte : 'transparent' }]} />
+          <Pressable key={c} accessibilityRole="radio" accessibilityState={{ selected: p.couleur === c }} accessibilityLabel={`Couleur ${c}`} onPress={() => a.etat.maj((x, ctx) => modifierProjet(x, projetId, { couleur: c }, ctx))} style={[styles.pastilleCouleur, a.mobile && styles.pastilleMobile, { backgroundColor: c, borderColor: p.couleur === c ? theme.texte : 'transparent' }]} />
         ))}
       </View>
       <Libelle theme={theme}>STATUTS</Libelle>
       <Text style={attenueDe(theme)}>Renommez, réordonnez, marquez le statut « terminé ». Retirer un statut : choisissez où vont ses tâches.</Text>
       {statuts.map((s, i) => (
         <View key={s.id} style={[styles.ligneProjet, { flexWrap: 'wrap' }]} testID={`statut-ligne-${s.id}`}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Changer la couleur" onPress={() => setStatuts(x => x.map(y => (y.id === s.id ? { ...y, couleur: COULEURS[(COULEURS.indexOf(y.couleur as (typeof COULEURS)[number]) + 1) % COULEURS.length] } : y)))} style={[styles.pastilleCouleur, { backgroundColor: s.couleur }]} />
+          <Pressable accessibilityRole="button" accessibilityLabel="Changer la couleur" onPress={() => setStatuts(x => x.map(y => (y.id === s.id ? { ...y, couleur: COULEURS[(COULEURS.indexOf(y.couleur as (typeof COULEURS)[number]) + 1) % COULEURS.length] } : y)))} style={[styles.pastilleCouleur, a.mobile && styles.pastilleMobile, { backgroundColor: s.couleur }]} />
           <Champ theme={theme} mobile={a.mobile} value={s.nom} onChangeText={v => setStatuts(x => x.map(y => (y.id === s.id ? { ...y, nom: v } : y)))} style={{ flex: 1, minWidth: 140 }} accessibilityLabel={`Nom du statut ${i + 1}`} testID={`statut-nom-${s.id}`} />
           <Puce theme={theme} grand={a.mobile} texte={s.ferme ? 'Terminé ✓' : 'Ouvert'} couleur={s.ferme ? theme.ok : theme.attenue} actif={s.ferme} onPress={() => setStatuts(x => x.map(y => (y.id === s.id ? { ...y, ferme: !y.ferme } : y)))} testID={`statut-ferme-${s.id}`} />
           <Bouton theme={theme} compact titre="↑" libelle="Monter" desactive={i === 0} onPress={() => deplacer(i, -1)} />
@@ -741,7 +741,7 @@ export function DialogueEspace({ a, id, onFermer, onErreur }: { a: Actions; id: 
       <Libelle theme={theme}>COULEUR</Libelle>
       <View style={styles.rangee}>
         {COULEURS.map(c => (
-          <Pressable key={c} accessibilityRole="radio" accessibilityState={{ selected: e.couleur === c }} accessibilityLabel={`Couleur ${c}`} onPress={() => a.etat.maj((x, ctx) => modifierEspace(x, id, { couleur: c }, ctx))} style={[styles.pastilleCouleur, { backgroundColor: c, borderColor: e.couleur === c ? theme.texte : 'transparent' }]} testID={`espace-couleur-${c.slice(1)}`} />
+          <Pressable key={c} accessibilityRole="radio" accessibilityState={{ selected: e.couleur === c }} accessibilityLabel={`Couleur ${c}`} onPress={() => a.etat.maj((x, ctx) => modifierEspace(x, id, { couleur: c }, ctx))} style={[styles.pastilleCouleur, a.mobile && styles.pastilleMobile, { backgroundColor: c, borderColor: e.couleur === c ? theme.texte : 'transparent' }]} testID={`espace-couleur-${c.slice(1)}`} />
         ))}
       </View>
     </Dialogue>
@@ -801,5 +801,6 @@ const styles = StyleSheet.create({
   ligneProjet: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
   point: { width: 12, height: 12, borderRadius: 6 },
   pastilleCouleur: { width: 30, height: 30, borderRadius: 15, borderWidth: 3 },
+  pastilleMobile: { width: 44, height: 44, borderRadius: 22 },
   zoneDanger: { borderWidth: 1, padding: 12, gap: 8, marginTop: 8 },
 });
