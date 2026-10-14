@@ -15,7 +15,7 @@ import type { DefinitionSource } from '../moteur/sources';
 import { copier } from './AssistantSource';
 import { useCharger, useTsuzuku } from './contexte';
 import { lignesDiagnostic, texteDiagnostic, texteMesure } from './diagnosticTexte';
-import { enregistrerTitrePerso, episodesDisponibles, lireTitresPerso, type DiagnosticLecture, type Disponibilite } from './resoudre';
+import { enregistrerTitrePerso, episodesDisponibles, lireTitresPerso, prechargerEpisode, type DiagnosticLecture, type Disponibilite } from './resoudre';
 import { LIBELLE_LANGUE_VERSION } from '../moteur/langues';
 import { langueVoulue } from './langues';
 import { Avis, Bouton, Champ, styleAttenue, styleTexte } from './ui';
@@ -214,20 +214,23 @@ function Ecoule({ actif }: { actif: boolean }) {
   return s >= 2 ? <>{` ${s} s`}</> : null;
 }
 
-export function DisponibiliteSources({ id, titres, oeuvre }: { id: string; titres: readonly string[]; oeuvre?: string }) {
+export function DisponibiliteSources({ id, titres, oeuvre, aPrecharger }: { id: string; titres: readonly string[]; oeuvre?: string; aPrecharger?: number }) {
   const { s, theme, version, changee } = useTsuzuku();
   const [essai, setEssai] = useState(0);
   // Affichage progressif : ce qu'une source moins prioritaire a déjà trouvé, pendant que les autres cherchent.
   const [provisoire, setProvisoire] = useState<{ cle: string; d: Disponibilite } | null>(null);
   const cleRecherche = `${id}|${titres.join('|')}|${essai}|${version}`;
   const etat = useCharger(async () => {
+    const langue = (await langueVoulue(s, `anime:${id}`)).langue;
     const d = await episodesDisponibles(s, {
       id,
       titres,
       forcer: essai > 0,
-      langue: (await langueVoulue(s, `anime:${id}`)).langue,
+      langue,
       surProvisoire: p => setProvisoire({ cle: cleRecherche, d: p }),
     });
+    // L'épisode que « ▶ Lire » ouvrira est préparé tout de suite (une page ; rien si la liste ne l'a pas).
+    if (aPrecharger && d.episodes.length) void prechargerEpisode(s, { id, titres, numero: aPrecharger, langue });
     return { d, perso: (await lireTitresPerso(s))[`anime:${id}`] };
   }, [s, id, titres.join('|'), essai, version]);
   const d = etat.donnees?.d;

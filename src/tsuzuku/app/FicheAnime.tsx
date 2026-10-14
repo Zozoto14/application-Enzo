@@ -95,7 +95,7 @@ export function FicheAnimeEcran({ id }: { id: string }) {
             <BlocBibliotheque fiche={min} entree={entree} />
             <BlocVuAilleurs fiche={min} entree={entree} />
             <CarteSansSource lieu="fiche" />
-            <DisponibiliteSources id={id} titres={titresPourSources(f)} oeuvre={f.title} />
+            <DisponibiliteSources id={id} titres={titresPourSources(f)} oeuvre={f.title} aPrecharger={suivant} />
             <LienAnime id={id} numeroCourant={suivant} catalogue={listeEps} />
             <LienGererSources testID="fiche-gerer-sources" />
             <LiensLegaux liens={f.streamingLinks} />
