@@ -199,6 +199,8 @@ une session ou le minuteur du Fondateur.
   l'a permis, le bouton « Mes projets personnels »).
 - **Fermer l'accès** : retrait de Tâches — clés des projets tournées, dépôt effacé au tour suivant, la tuile
   disparaît ; ce qui est écrit ensuite ne lui parvient plus (vérifié par `e2e-taches-v3`).
+  Un profil désactivé est retiré de même. Un profil absent de la liste (annuaire pas encore chargé, compte
+  supprimé) n'est jamais retiré automatiquement : un compte supprimé se retire dans 👥 › Membres (« Retirer… »).
 - **« Peut créer ses propres projets »** (case par membre, 👥 › Membres) : le membre a alors un espace « Mes projets
   personnels » (barre de navigation : Partagés / Personnels). Ces projets restent dans la **base chiffrée de son
   compte** (`taches.perso`) : ils ne sont ni déposés chez le Fondateur ni partagés ; il en est le seul maître (toutes

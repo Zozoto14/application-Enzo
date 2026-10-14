@@ -252,7 +252,12 @@ export function accorderAcces(d: DonneesTaches, profils: readonly ProfilAcces[],
     if (!autorise(p) || membreDe(x, p.id)) continue;
     x = inviterMembre(x, p.id, p.nom, ctx, p.role === 'gestionnaire' || p.role === 'administrateur' ? p.role : 'ami');
   }
-  for (const m of listeMembres(x)) if (!autorise(parId.get(m.compte))) x = retirerMembre(x, m.compte, ctx);
+  // Retiré seulement si son profil est là et n'a plus l'accès (ou est désactivé) : une liste de profils incomplète
+  // (pendant le chargement de l'annuaire) ne retire personne ; un compte supprimé se retire dans 👥 › Membres.
+  for (const m of listeMembres(x)) {
+    const p = parId.get(m.compte);
+    if (p && !autorise(p)) x = retirerMembre(x, m.compte, ctx);
+  }
   return x;
 }
 

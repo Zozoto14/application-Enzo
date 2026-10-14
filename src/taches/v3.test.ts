@@ -663,9 +663,10 @@ describe('accès par l’Administration et projets personnels', () => {
     expect(listeMembres(d).map(m => m.compte)).not.toContain(HUGO);
     expect(droitDe(d, s.B, HUGO)).toBe('aucun');
     expect(d.reglages.clesProjets![s.A].cle).not.toBe(cleA);
-    // Compte désactivé ou supprimé : retiré aussi.
+    // Compte désactivé : retiré aussi. Absent de la liste (annuaire en cours de chargement, ou compte supprimé) : gardé.
     d = accorderAcces(d, profils2.filter(p => p.id !== ZOE).map(p => (p.id === LEA ? { ...p, actif: false } : p)), f());
-    expect(listeMembres(d).map(m => m.compte)).toEqual(['gerant0004']);
+    expect(listeMembres(d).map(m => m.compte).sort()).toEqual(['gerant0004', ZOE].sort());
+    expect(accorderAcces(d, profils.slice(0, 1), f())).toBe(d);
     // Liste vide (annuaire pas encore lu) : on ne touche à rien.
     expect(accorderAcces(d, [], f())).toBe(d);
   });
