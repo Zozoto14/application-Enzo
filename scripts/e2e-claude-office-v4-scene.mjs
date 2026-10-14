@@ -112,6 +112,17 @@ try {
   }).then(() => pause(300));
   const zoom = async () => Number(await plateau().getAttribute('data-zoom'));
   const centre = async () => (await plateau().getAttribute('data-centre')).split(',').map(Number);
+  /** Attend que la caméra ne bouge plus (échelle et centre inchangés pendant 300 ms) : fin d'une transition, sans durée fixe. */
+  const cameraImmobile = async () => {
+    await page.evaluate(() => { window.__camera = undefined; });
+    await page.waitForFunction(() => {
+    const p = document.querySelector('[data-testid="bureau-plateau"]');
+    const etat = `${p.getAttribute('data-zoom')}|${p.getAttribute('data-centre')}`;
+    const w = window.__camera;
+    if (!w || w.etat !== etat) { window.__camera = { etat, depuis: performance.now() }; return false; }
+    return performance.now() - w.depuis >= 300;
+  }, undefined, { timeout: 8000, polling: 'raf' }).catch(() => undefined);
+  };
   const cadreVue = () => page.getByTestId('bureau-scene-defilement').boundingBox();
   const dansLEcran = r => r && r.x >= -1 && r.y >= -1 && r.x + r.width <= page.viewportSize().width + 1 && r.y + r.height <= page.viewportSize().height + 1;
   /**
@@ -163,7 +174,9 @@ try {
       const cible = page.locator(`[data-co-agent="${cle}"]`);
       const b = await cible.boundingBox();
       const mode = await page.locator(`g[data-cle="${cle}"]`).first().getAttribute('data-mode').catch(() => 'marche');
-      if (b && mode !== 'marche' && b.x > v.x + 50 && b.x + b.width < v.x + v.width - 50 && b.y > v.y + 50 && b.y + b.height < v.y + v.height - 60) return cible;
+      // Au-dessus de tout le reste en son centre : un personnage voisin ne doit pas intercepter le toucher.
+      const dessus = await cible.evaluate(e => { const r = e.getBoundingClientRect(); const t = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return t === e || e.contains(t); }).catch(() => false);
+      if (b && dessus && mode !== 'marche' && b.x > v.x + 50 && b.x + b.width < v.x + v.width - 50 && b.y > v.y + 50 && b.y + b.height < v.y + v.height - 60) return cible;
     }
     return page.locator(`[data-co-agent="${cles[0]}"]`);
   };
@@ -307,14 +320,17 @@ try {
 
   // Mini-carte : repliable, et on s'y déplace.
   if (!(await page.getByTestId('scene-minicarte').count())) await page.getByTestId('scene-minicarte-basculer').click();
+  await cameraImmobile();
+  const cx0 = (await centre())[0];
   const mini = await page.getByTestId('scene-minicarte').boundingBox();
   await page.mouse.click(mini.x + mini.width * 0.85, mini.y + mini.height * 0.5);
-  await pause(500);
+  await cameraImmobile();
   await page.getByTestId('scene-zoom-plus').click();
+  await cameraImmobile();
   await page.mouse.click(mini.x + mini.width * 0.85, mini.y + mini.height * 0.5);
   // Attente explicite de la caméra (la transition vers le point touché), pas d'une durée fixe.
-  await page.waitForFunction(() => Number(document.querySelector('[data-testid="bureau-plateau"]').getAttribute('data-centre').split(',')[0]) > 700, undefined, { timeout: 5000, polling: 'raf' }).catch(() => undefined);
-  verifier((await centre())[0] > 700, `mini-carte : un toucher y déplace la vue (${await centre()})`);
+  await page.waitForFunction(x0 => Number(document.querySelector('[data-testid="bureau-plateau"]').getAttribute('data-centre').split(',')[0]) > x0 + 60, cx0, { timeout: 5000, polling: 'raf' }).catch(() => undefined);
+  verifier((await centre())[0] > cx0 + 60, `mini-carte : un toucher à droite y déplace la vue vers la droite (${cx0} → ${await centre()})`);
   await page.getByTestId('scene-minicarte-basculer').click();
   verifier((await page.getByTestId('scene-minicarte').count()) === 0, 'mini-carte repliée');
   await page.getByTestId('scene-minicarte-basculer').click();
