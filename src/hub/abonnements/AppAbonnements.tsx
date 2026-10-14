@@ -25,6 +25,7 @@ import { apresVerification, doitVerrouiller, etatInitial, noterActivite, verroui
 import { police } from '../themes';
 import type { PropsRacineApp } from '../types';
 import { ecouterActivite } from '../web';
+import { useInfoOnglet } from '../multi/contexte';
 import { peutVoirAbonnements } from './actionsAbo';
 import { ReglagesAbonnements } from './ReglagesAbonnements';
 import { SuiviAbonnements, type OutilsAbo } from './Suivi';
@@ -87,18 +88,28 @@ export function AppAbonnements({ contexte, theme, onRetour }: PropsRacineApp) {
     [majDonnees, maintenant, horsHistorique, nomActeur],
   );
 
-  // Verrouillage sur inactivité : même délai que le panneau d'Administration.
-  const activite = useCallback(() => setVerrou(v => noterActivite(v, maintenant())), [maintenant]);
-  useEffect(() => ecouterActivite(activite), [activite]);
+  // Verrouillage sur inactivité : même délai que le panneau d'Administration. Dans un onglet, seule
+  // compte l'activité faite ici (masqué : rien n'est écouté ; côte à côte : pas celle de l'autre app).
+  const infoOnglet = useInfoOnglet();
+  const racine = useRef<unknown>(null);
+  const activite = useCallback(
+    () => setVerrou(v => (doitVerrouiller(v, maintenant(), donneesRef.current.reglages.verrouMinutes) ? verrouiller(v) : noterActivite(v, maintenant()))),
+    [maintenant],
+  );
+  useEffect(() => ecouterActivite(activite, infoOnglet.partage ? { dans: () => racine.current } : {}), [activite, infoOnglet.partage]);
   useEffect(() => {
-    const minuterie = setInterval(() => {
+    const controler = () => {
       if (doitVerrouiller(verrouRef.current, maintenant(), donneesRef.current.reglages.verrouMinutes)) {
         setVerrou(v => verrouiller(v));
         journaliser({ type: 'securite', action: `Abonnements verrouillés après ${donneesRef.current.reglages.verrouMinutes} min sans activité` });
       }
-    }, 5_000);
+    };
+    // Aussi au retour de l'onglet à l'écran : le délai a pu passer pendant qu'il était masqué.
+    controler();
+    const minuterie = setInterval(controler, 5_000);
     return () => clearInterval(minuterie);
   }, [maintenant, journaliser]);
+  const delaiPasse = !verrou.verrouille && doitVerrouiller(verrou, maintenant(), donnees.reglages.verrouMinutes);
 
   const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
 
@@ -148,7 +159,7 @@ export function AppAbonnements({ contexte, theme, onRetour }: PropsRacineApp) {
     },
   };
 
-  if (verrou.verrouille) {
+  if (verrou.verrouille || delaiPasse) {
     return (
       <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="abonnements-verrouille">
         <ScrollView contentContainerStyle={styles.page}>
@@ -179,7 +190,7 @@ export function AppAbonnements({ contexte, theme, onRetour }: PropsRacineApp) {
   }
 
   return (
-    <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="app-abonnements" onTouchStart={activite}>
+    <View ref={racine as React.Ref<never>} style={[styles.racine, { backgroundColor: theme.fond }]} testID="app-abonnements" onTouchStart={activite}>
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
         <RetourHub theme={theme} onRetour={onRetour} titre="Abonnements" />
         <Text style={[styleTitre(theme), styles.h1]} accessibilityRole="header">

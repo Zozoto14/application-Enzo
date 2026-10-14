@@ -98,6 +98,8 @@ import { Session, coffreValide } from '../src/session/session';
 import { stockageMemoire } from '../src/session/stockage-coffre';
 import { creerAccesAmi, type IdentifiantsAmi } from '../src/profils/identifiants';
 import { installerPontWeb } from './web';
+import { RacineAnnexe } from './annexe';
+import { rattacherAnnexe } from '../src/hub/multi/fenetres';
 import { LIBELLES_RANG, exiger, exigerRang, rangDe, type Rang } from '../src/hub/admin/roles';
 import { avecEvenement, chargerDonnees, enregistrerDonnees } from '../src/hub/admin/donnees';
 import { verifierModifications } from '../src/hub/admin/actions';
@@ -160,6 +162,10 @@ function relayerYahoo(): void {
     }
   };
 }
+
+// Fenêtre annexe (« Ouvrir dans une nouvelle fenêtre ») : elle se rattache à la fenêtre principale,
+// qui lui prête sa session ouverte. Rien d'autre ne démarre ici (ni préchargement, ni synchronisation).
+const contexteAnnexe = rattacherAnnexe();
 
 relayerYahoo();
 // Hors d'Electron (site de secours), Yahoo et les médias passent par le relais.
@@ -339,8 +345,10 @@ const prechargeur = new Prechargeur({
   surBilan: bilan => noterEtatDemarrage({ ...(bilan.reussi ? { le: new Date().toISOString() } : {}), recus: bilan.enAttente, aEnvoyer: bilan.aEnvoyer }),
 });
 definirPrechargeur(prechargeur);
-globalThis.addEventListener?.('online', () => prechargeur.enLigne());
-prechargeur.demarrer();
+if (!contexteAnnexe) {
+  globalThis.addEventListener?.('online', () => prechargeur.enLigne());
+  prechargeur.demarrer();
+}
 
 const CLE_COFFRE_VU = 'applibourse.diagnostic.coffreVu';
 
@@ -1548,7 +1556,5 @@ const styles = StyleSheet.create({
 });
 
 createRoot(document.getElementById('racine')!).render(
-  <SafeAreaProvider>
-    <Racine />
-  </SafeAreaProvider>,
+  <SafeAreaProvider>{contexteAnnexe ? <RacineAnnexe contexte={contexteAnnexe} /> : <Racine />}</SafeAreaProvider>,
 );

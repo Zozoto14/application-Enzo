@@ -46,6 +46,7 @@ import { useMobile } from '../ui/mobile/useMobile';
 import { HubMobile } from './HubMobile';
 import { BoutonIcone } from '../ui/mobile/EnTeteMobile';
 import { useNavigationMobile } from '../ui/mobile/NavigationMobile';
+import { SelecteurOngletsMobile } from './multi/BarreOngletsApps';
 import type { AppHub, CategorieApp, ContexteHub, InfoLive } from './types';
 
 export interface HubProps {
@@ -54,6 +55,13 @@ export interface HubProps {
   theme: ThemeHub;
   onTheme(id: IdThemeHub): void;
   onOuvrir(id: string): void;
+  /**
+   * « Ouvrir dans un nouvel onglet » sans quitter l'écran : clic molette, Ctrl+clic (⌘ sur Mac) ou appui
+   * long sur une tuile. Absent : ces gestes ouvrent l'app comme un clic.
+   */
+  onOuvrirOnglet?(id: string): void;
+  /** Apps déjà ouvertes dans un onglet : leur tuile le dit (la rouvrir retrouve l'app où on l'a laissée). */
+  ouvertes?: readonly string[];
   /** Personnalisation du profil ; absente : le hub ne se personnalise pas. */
   prefs?: PrefsHub;
   onPrefs?(prefs: PrefsHub): void;
@@ -127,7 +135,7 @@ export function Hub(props: HubProps) {
   return useMobile() ? <HubMobile {...props} /> : <HubBureau {...props} />;
 }
 
-function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPrefs, onVerrouiller, onChangerProfil, onParametres, onSupport, synchro, demande, heure, page: pageDemandee, onPage }: HubProps) {
+function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, onOuvrirOnglet, ouvertes, prefs, onPrefs, onVerrouiller, onChangerProfil, onParametres, onSupport, synchro, demande, heure, page: pageDemandee, onPage }: HubProps) {
   const { width } = useWindowDimensions();
   const [menuOuvert, setMenuOuvert] = useState(false);
   const maj = useMiseAJour();
@@ -300,6 +308,8 @@ function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, prefs, onPref
                 position={ids.indexOf(tuile.app.id)}
                 total={ids.length}
                 onOuvrir={() => onOuvrir(tuile.app.id)}
+                onOuvrirOnglet={() => (onOuvrirOnglet ?? onOuvrir)(tuile.app.id)}
+                ouverte={Boolean(ouvertes?.includes(tuile.app.id))}
                 onDeplacer={delta => {
                   const suivant = deplacer(courantes, ids, tuile.app.id, delta);
                   changer(suivant, suivant === courantes ? undefined : `${tuile.app.nom} déplacée.`);
@@ -451,6 +461,8 @@ function Cellule({
   position,
   total,
   onOuvrir,
+  onOuvrirOnglet,
+  ouverte,
   onDeplacer,
   onTaille,
   onEpingler,
@@ -468,6 +480,8 @@ function Cellule({
   position: number;
   total: number;
   onOuvrir(): void;
+  onOuvrirOnglet(): void;
+  ouverte: boolean;
   onDeplacer(delta: number): void;
   onTaille(taille: TailleTuile): void;
   onEpingler(): void;
@@ -592,7 +606,9 @@ function Cellule({
         compact={compact}
         epinglee={epinglee}
         edition={edition}
+        ouverte={ouverte}
         onPress={onOuvrir}
+        onOuvrirOnglet={onOuvrirOnglet}
       />
     </Animated.View>
   );
@@ -690,7 +706,9 @@ function Tuile({
   compact,
   epinglee,
   edition,
+  ouverte = false,
   onPress,
+  onOuvrirOnglet,
 }: {
   app: AppHub;
   etat?: EtatTuile;
@@ -701,9 +719,34 @@ function Tuile({
   compact: boolean;
   epinglee: boolean;
   edition: boolean;
+  ouverte?: boolean;
   onPress(): void;
+  onOuvrirOnglet?(): void;
 }) {
   const couleur = theme.teintes[app.teinte];
+  // Clic molette (web) : « ouvrir dans un nouvel onglet », comme un lien dans un navigateur.
+  const noeudTuile = useRef<unknown>(null);
+  const enOnglet = useRef(onOuvrirOnglet);
+  enOnglet.current = edition ? undefined : onOuvrirOnglet;
+  useEffect(() => {
+    const element = noeudTuile.current as { addEventListener?(t: string, f: (e: { button: number; preventDefault(): void }) => void): void; removeEventListener?(t: string, f: (e: { button: number; preventDefault(): void }) => void): void } | null;
+    if (!SUR_LE_WEB || !element?.addEventListener) return undefined;
+    const bas = (e: { button: number; preventDefault(): void }) => {
+      if (e.button === 1 && enOnglet.current) e.preventDefault();
+    };
+    const auxiliaire = (e: { button: number; preventDefault(): void }) => {
+      if (e.button === 1 && enOnglet.current) {
+        e.preventDefault();
+        enOnglet.current();
+      }
+    };
+    element.addEventListener('mousedown', bas);
+    element.addEventListener('auxclick', auxiliaire);
+    return () => {
+      element.removeEventListener?.('mousedown', bas);
+      element.removeEventListener?.('auxclick', auxiliaire);
+    };
+  }, []);
   const fond = theme.fondsTuiles?.[app.teinte] ?? theme.surface;
   const blocs = Boolean(theme.blocs);
   const hautTexte = blocs ? '#FFFFFF' : theme.texte;
@@ -783,6 +826,11 @@ function Tuile({
           LECTURE SEULE
         </Text>
       ) : null}
+      {ouverte && !edition ? (
+        <Text testID={`tuile-${app.id}-ouverte`} style={[styles.etiquette, { color: hautTexte, borderColor: blocs ? 'rgba(255,255,255,0.6)' : couleur, borderRadius: theme.rayonGrand ? 999 : 0 }]}>
+          ● OUVERTE
+        </Text>
+      ) : null}
       {epinglee ? <Text style={{ color: hautAttenue, fontSize: 12 }} accessibilityLabel="Épinglée">★</Text> : null}
       <Text
         style={[
@@ -806,8 +854,20 @@ function Tuile({
             : `${app.nom} : en maintenance. ${etatApp?.maintenance ?? ''}`
       }
       accessibilityState={{ disabled: edition || !ouvrable }}
+      accessibilityHint={onOuvrirOnglet && ouvrable && !edition ? 'Appui long, Ctrl+clic ou clic molette : ouvrir dans un nouvel onglet.' : undefined}
       disabled={edition || !ouvrable}
-      onPress={onPress}
+      ref={noeudTuile as React.Ref<never>}
+      onPress={(e: unknown) => {
+        // Ctrl+clic (⌘+clic sur Mac) : nouvel onglet, sans quitter le hub.
+        const touches = (e as { nativeEvent?: { ctrlKey?: boolean; metaKey?: boolean } } | undefined)?.nativeEvent;
+        if (onOuvrirOnglet && (touches?.ctrlKey || touches?.metaKey)) {
+          onOuvrirOnglet();
+        } else {
+          onPress();
+        }
+      }}
+      onLongPress={onOuvrirOnglet && !edition ? onOuvrirOnglet : undefined}
+      delayLongPress={550}
       style={(etat: EtatPresse) => [
         styles.tuile,
         TRANSITION_WEB,
@@ -1056,6 +1116,7 @@ export function RetourHub({ theme, onRetour, titre }: { theme: ThemeHub; onRetou
           {titre ?? ''}
         </Text>
         {nav?.synchro ? <IndicateurSynchro theme={theme} synchro={nav.synchro} condense onPress={() => nav.onParametres()} /> : null}
+        <SelecteurOngletsMobile theme={theme} />
         {nav ? <BoutonIcone theme={theme} titre="⚙︎" libelle="Paramètres" onPress={nav.onParametres} testID="app-parametres-ouvrir" /> : null}
       </View>
     );

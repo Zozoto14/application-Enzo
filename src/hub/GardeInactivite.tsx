@@ -48,16 +48,29 @@ export interface PropsGardeInactivite {
   presenceSecondes?: number;
   /** Cible des événements (document à défaut) : injectable pour les tests. */
   cible?: CibleEvenements;
+  /** Plusieurs fenêtres sur la même session (voir `multi/fenetres.ts`). */
+  fenetres?: RelaisFenetres;
   children?: React.ReactNode;
 }
 
-export function GardeInactivite({ theme, actif, delaiMinutes, onVerrouiller, horloge = Date.now, pasMs = 1000, presenceSecondes = DELAI_PRESENCE_SECONDES, cible, children }: PropsGardeInactivite) {
+/**
+ * Fenêtres annexes (application de bureau) : le verrouillage reste UNIQUE.
+ *  - fenêtre principale : l'activité et les lectures des annexes comptent ;
+ *  - annexe : rien n'y est mesuré, tout est transmis à la fenêtre principale.
+ */
+export interface RelaisFenetres {
+  ecouterActivite?(rappel: () => void): () => void;
+  lecturesExternes?(): number;
+  transmettre?: { activite(): void; lecture(enCours: boolean): void };
+}
+
+export function GardeInactivite({ theme, actif, delaiMinutes, onVerrouiller, horloge = Date.now, pasMs = 1000, presenceSecondes = DELAI_PRESENCE_SECONDES, cible, fenetres, children }: PropsGardeInactivite) {
   const etat = useRef(etatInitial(horloge()));
   const lectures = useRef(0);
   const [restantes, setRestantes] = useState<number | undefined>();
   // Les valeurs courantes sont lues par les écouteurs sans les réinscrire.
-  const courant = useRef({ actif, delaiMinutes, onVerrouiller, horloge, presenceSecondes });
-  courant.current = { actif, delaiMinutes, onVerrouiller, horloge, presenceSecondes };
+  const courant = useRef({ actif, delaiMinutes, onVerrouiller, horloge, presenceSecondes, fenetres });
+  courant.current = { actif, delaiMinutes, onVerrouiller, horloge, presenceSecondes, fenetres };
 
   const verifier = useCallback(() => {
     const c = courant.current;
@@ -65,7 +78,7 @@ export function GardeInactivite({ theme, actif, delaiMinutes, onVerrouiller, hor
       return;
     }
     const maintenant = c.horloge();
-    const { etat: suivant, decision } = evaluer(etat.current, maintenant, { delaiMinutes: c.delaiMinutes, lecture: lectures.current > 0, presenceSecondes: c.presenceSecondes });
+    const { etat: suivant, decision } = evaluer(etat.current, maintenant, { delaiMinutes: c.delaiMinutes, lecture: lectures.current + (c.fenetres?.lecturesExternes?.() ?? 0) > 0, presenceSecondes: c.presenceSecondes });
     etat.current = suivant;
     if (decision.action === 'verrouiller') {
       etat.current = etatInitial(maintenant);
@@ -114,6 +127,7 @@ export function GardeInactivite({ theme, actif, delaiMinutes, onVerrouiller, hor
       (nom === 'focus' ? fenetre : document)?.addEventListener(nom, activite, options);
     }
     document?.addEventListener('visibilitychange', verifier);
+    const retirerExterne = courant.current.fenetres?.ecouterActivite?.(activite);
     let abonnement: { remove(): void } | undefined;
     try {
       abonnement = AppState.addEventListener('change', etatApp => {
@@ -130,12 +144,48 @@ export function GardeInactivite({ theme, actif, delaiMinutes, onVerrouiller, hor
         (nom === 'focus' ? fenetre : document)?.removeEventListener(nom, activite, options);
       }
       document?.removeEventListener('visibilitychange', verifier);
+      retirerExterne?.();
       abonnement?.remove();
     };
   }, [actif, pasMs, cible, verifier, activite]);
 
+  // Annexe : chaque geste est transmis (au plus une fois par seconde) à la fenêtre principale, qui décide.
+  const transmettre = fenetres?.transmettre;
+  useEffect(() => {
+    const doc = (cible ?? (globalThis as { document?: CibleEvenements }).document) as CibleEvenements | undefined;
+    if (!transmettre || !doc || typeof doc.addEventListener !== 'function') {
+      return undefined;
+    }
+    let dernier = 0;
+    const geste = () => {
+      const maintenant = Date.now();
+      if (maintenant - dernier >= 1000) {
+        dernier = maintenant;
+        try {
+          transmettre.activite();
+        } catch {
+          // Fenêtre principale fermée : l'annexe va se fermer aussi.
+        }
+      }
+    };
+    const options = { capture: true, passive: true };
+    for (const nom of EVENEMENTS_ACTIVITE) {
+      if (nom !== 'focus') doc.addEventListener(nom, geste, options);
+    }
+    return () => {
+      for (const nom of EVENEMENTS_ACTIVITE) {
+        if (nom !== 'focus') doc.removeEventListener(nom, geste, options);
+      }
+    };
+  }, [transmettre, cible]);
+
   const declarerLecture = useCallback((enCours: boolean) => {
     lectures.current = Math.max(0, lectures.current + (enCours ? 1 : -1));
+    try {
+      courant.current.fenetres?.transmettre?.lecture(enCours);
+    } catch {
+      // Fenêtre principale fermée.
+    }
   }, []);
   const presence = useMemo<Presence>(() => ({ declarerLecture }), [declarerLecture]);
 

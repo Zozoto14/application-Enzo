@@ -95,19 +95,31 @@ export function telechargerWeb(nom: string, contenu: string, type: string): bool
 /**
  * Écoute toute activité de l'utilisateur (clavier, pointeur, défilement) sur
  * le web. Sans effet ailleurs : l'appelant complète par `onTouchStart`.
+ *
+ * `dans` : seule compte l'activité faite dans cet élément (deux apps côte à
+ * côte : l'activité de l'une ne garde pas l'autre ouverte).
  */
-export function ecouterActivite(rappel: () => void): () => void {
-  const doc = (globalThis as { document?: { addEventListener(t: string, r: () => void, o?: unknown): void; removeEventListener(t: string, r: () => void, o?: unknown): void } }).document;
+export function ecouterActivite(rappel: () => void, options: { dans?: () => unknown } = {}): () => void {
+  const doc = (globalThis as { document?: { addEventListener(t: string, r: (e: { target?: unknown }) => void, o?: unknown): void; removeEventListener(t: string, r: (e: { target?: unknown }) => void, o?: unknown): void } }).document;
   if (!doc) {
     return () => undefined;
   }
+  const ecouteur = (e: { target?: unknown }) => {
+    if (options.dans) {
+      const racine = options.dans() as { contains?(n: unknown): boolean } | null | undefined;
+      if (!racine?.contains || !racine.contains(e?.target)) {
+        return;
+      }
+    }
+    rappel();
+  };
   const types = ['keydown', 'pointerdown', 'wheel', 'touchstart'];
   for (const type of types) {
-    doc.addEventListener(type, rappel, { capture: true, passive: true });
+    doc.addEventListener(type, ecouteur, { capture: true, passive: true });
   }
   return () => {
     for (const type of types) {
-      doc.removeEventListener(type, rappel, { capture: true });
+      doc.removeEventListener(type, ecouteur, { capture: true });
     }
   };
 }

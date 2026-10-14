@@ -14,7 +14,7 @@
  */
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Linking, StatusBar, Text, View } from 'react-native';
+import { Linking, StatusBar, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 // SafeAreaView de react-native est deprecie ; celui de safe-area-context gere
 // en plus l'encoche et la barre de geste, et etait deja une dependance.
 import {
@@ -110,7 +110,35 @@ import type { Coffre } from '../securite/coffre';
 import { CarteSynchro } from '../ui/ecrans/CarteSynchro';
 import { CarteProfils, type ControleProfils } from '../ui/ecrans/CarteProfils';
 import { Hub } from '../hub/Hub';
-import { GardeInactivite } from '../hub/GardeInactivite';
+import { GardeInactivite, type RelaisFenetres } from '../hub/GardeInactivite';
+import { BarreOngletsApps, type Ailleurs } from '../hub/multi/BarreOngletsApps';
+import { InfoOngletContexte, OngletsHubContexte, type ControleOnglets, type InfoOnglet } from '../hub/multi/contexte';
+import { PanneauOnglet, stylePlacement, type Placement } from '../hub/multi/PanneauOnglet';
+import { Separation, LARGEUR_SEPARATION } from '../hub/multi/Separation';
+import {
+  CLE_ONGLETS,
+  LARGEUR_COTE_A_COTE,
+  MAX_ONGLETS,
+  ONGLETS_VIDES,
+  activer as activerOnglet,
+  affichage as affichageOnglets,
+  afficherACote,
+  echanger as echangerCotes,
+  fermer as fermerOnglet,
+  filtrer as filtrerOnglets,
+  ouvrir as ouvrirOnglet,
+  parRang,
+  quitterCote,
+  redimensionner,
+  restaurer as restaurerOnglets,
+  serialiser as serialiserOnglets,
+  voisin as ongletVoisin,
+  type EtatOnglets,
+} from '../hub/multi/onglets';
+import { actionOnglet, type ToucheOnglet } from '../hub/multi/raccourcis';
+import { adresseProfonde, decisionLienProfond, effacerLienProfond, fragmentCourant, lireLienProfond } from '../hub/multi/liensProfonds';
+import { fenetresDisponibles, hoteFenetres, ouvrirFenetreAnnexe, type ContexteAnnexe } from '../hub/multi/fenetres';
+import { categorieDe } from '../hub/pages';
 import { PageSupport } from '../hub/PageSupport';
 import { AcceptationJuridique, LiensJuridiques, PageJuridique } from '../hub/PageJuridique';
 import { LigneSynchroDemarrage } from '../hub/SynchroDemarrage';
@@ -162,7 +190,7 @@ import { rangDe } from '../hub/admin/roles';
 import { resumerBibliotheque } from '../tsuzuku/app/resume';
 import { CLES as CLES_TSUZUKU, type BasePrefs } from '../tsuzuku/plateforme/stockage';
 import { themeHub, type IdThemeHub } from '../hub/themes';
-import type { CategorieApp, ContexteHub, ResumePortefeuille, ServicesAdmin } from '../hub/types';
+import type { AppHub, CategorieApp, ContexteHub, ResumePortefeuille, ServicesAdmin } from '../hub/types';
 import { pagesVisibles } from '../hub/pages';
 import { ecouterTouche, octetsUtf8, rechargerApp, surLeWeb, telechargerWeb } from '../hub/web';
 import { dividendesParTitre, lignesCibles, lignesVendables } from './calculs';
@@ -250,6 +278,13 @@ export interface AppProps {
    * directement le portefeuille. Désactivé par défaut (tests, appareil).
    */
   hub?: boolean;
+  /**
+   * Fenêtre annexe de l'application de bureau (voir hub/multi/fenetres.ts) :
+   * une seule app, sur la session de la fenêtre principale. Ni synchro, ni
+   * notifications, ni sauvegardes automatiques ici : la fenêtre principale
+   * s'en charge.
+   */
+  annexe?: ContexteAnnexe;
 }
 
 type Ecran =
@@ -274,6 +309,19 @@ type Ecran =
   | 'podcast'
   | 'objectifs';
 
+
+/** Évènement clavier du DOM, sans les types du DOM (absents de `src`). */
+type KeyboardEventLike = ToucheOnglet & { defaultPrevented: boolean; preventDefault(): void; stopPropagation(): void };
+
+/** Onglet masqué : ni affiché, ni partagé. */
+const INFO_MASQUE: InfoOnglet = { affiche: false, partage: false };
+
+const stylesOnglets = StyleSheet.create({
+  scene: { flex: 1, position: 'relative', overflow: 'hidden' },
+  plein: { flex: 1 },
+  masque: { display: 'none' },
+  avis: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderLeftWidth: 4 },
+});
 
 /** Frais d'ETF saisis ; une saisie illisible est ignorée (le taux connu s'applique). */
 function fraisEtfSaisis(brut: string | undefined): Record<string, number> {
@@ -374,7 +422,7 @@ const ETAT_VIDE = {
 
 
 
-export function App({ session, genererId, aujourdhui, chargementAutomatique = false, profils, hub = false }: AppProps) {
+export function App({ session, genererId, aujourdhui, chargementAutomatique = false, profils, hub = false, annexe }: AppProps) {
   // Profil d'ami : ni synchronisation ni liaison, réservées à l'administrateur.
   const estAdmin = profils?.actuel.admin ?? true;
   // Gestionnaire : un ami à l'Administration limitée (jamais en session administrateur sur son compte).
@@ -491,7 +539,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // Chaque déverrouillage est noté dans la liste des profils (date, compteur) :
   // l'Administration s'en sert pour la dernière activité et les alertes.
   const connexionNotee = useRef(false);
-  const noterConnexionProfil = profils?.onConnexion;
+  const noterConnexionProfil = annexe ? undefined : profils?.onConnexion;
   useEffect(() => {
     if (!deverrouille) {
       connexionNotee.current = false;
@@ -613,10 +661,17 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const verrouiller = useCallback(() => {
     // Le podcast parle de votre argent : il se tait quand on verrouille.
     lecturePartagee().arreter();
+    if (annexe) {
+      // Fenêtre annexe : c'est la fenêtre principale qui verrouille (et ferme les annexes).
+      annexe.verrouiller();
+      return;
+    }
+    // Les fenêtres annexes se ferment AVANT que la base ne se ferme.
+    hoteFenetres().configurer(undefined);
     session.verrouiller();
     setEcran('tableau');
     rafraichir();
-  }, [session, rafraichir]);
+  }, [session, rafraichir, annexe]);
 
   const enregistrerCompte = useCallback(
     (compte: Compte) => {
@@ -810,7 +865,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     creerSauvegarde,
     fusionnerSauvegarde,
     restaurerSauvegarde,
-  } = useSauvegardes({ session, aujourdhui, deverrouille, rafraichir, onRestaure: allerAuTableau });
+  } = useSauvegardes({ session, aujourdhui, deverrouille: deverrouille && !annexe, rafraichir, onRestaure: allerAuTableau });
 
   const {
     synchro,
@@ -820,7 +875,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     delier: delierSynchro,
     oublier: oublierAppareilSynchro,
     synchroniserMaintenant,
-  } = useSynchro({ session, deverrouille: deverrouille && estAdmin, rafraichir, apresReception, admin: estAdmin });
+  } = useSynchro({ session, deverrouille: deverrouille && estAdmin && !annexe, rafraichir, apresReception, admin: estAdmin });
 
   // « Lier à mon compte » : ce nouvel appareil adopte le compte du PC.
   const [messageDeverrouillage, setMessageDeverrouillage] = useState<string | undefined>();
@@ -1426,7 +1481,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   ).applibourse?.fichiers?.enregistrerSous;
   const { journalNotifications, verifierNotificationsRef } = useNotificationsBureau({
     session,
-    deverrouille,
+    deverrouille: deverrouille && !annexe,
     aujourdhui,
     chargementAutomatique,
     pontNotifications,
@@ -1891,7 +1946,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // pour un tout nouveau portefeuille (rien à montrer encore).
   const nombreComptes = contenuComplet?.comptes.length ?? 0;
   useEffect(() => {
-    if (visiteDecidee.current || !deverrouille || nombreComptes === 0) {
+    if (visiteDecidee.current || !deverrouille || nombreComptes === 0 || annexe) {
       return;
     }
     visiteDecidee.current = true;
@@ -1908,8 +1963,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     const systeme = (
       globalThis as { applibourse?: { systeme?: { surNotificationOuverte?(rappel: (destination: string) => void): () => void } } }
     ).applibourse?.systeme;
-    return systeme?.surNotificationOuverte?.(setDestinationEnAttente);
-  }, []);
+    // Fenêtre annexe : les notifications s'ouvrent dans la fenêtre principale.
+    return annexe ? undefined : systeme?.surNotificationOuverte?.(setDestinationEnAttente);
+  }, [annexe]);
   const naviguerRef = useRef(naviguer);
   naviguerRef.current = naviguer;
   const ecransRef = useRef<ReadonlySet<string>>(new Set());
@@ -1928,8 +1984,33 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     }
   }, [destinationEnAttente, deverrouille, contenuComplet, tableau, ouvrirTitre, ouvrirSymbole]);
 
-  // --- Hub : quelle app est ouverte, thème et préférences du profil ------------
-  const [appHub, setAppHub] = useState<string | undefined>();
+  // --- Hub : apps ouvertes (onglets), thème et préférences du profil -----------
+  // Onglets d'apps (voir hub/multi/onglets.ts) : `appHub` est l'onglet affiché (à gauche en côte à côte),
+  // `undefined` sur le hub. Les apps des onglets restent montées : leur état survit au changement d'onglet.
+  const [ongletsApps, setOnglets] = useState<EtatOnglets>(() => (annexe ? { ouverts: [annexe.app], actif: annexe.app, ratio: 0.5 } : ONGLETS_VIDES));
+  const appHub = ongletsApps.actif;
+  const [annonceOnglets, setAnnonceOnglets] = useState<string | undefined>();
+  // Avis visible (lien profond refusé, fenêtre impossible) ; l'annonce, elle, est pour les lecteurs d'écran.
+  const [avisOnglets, setAvisOnglets] = useState<string | undefined>();
+  // Onglets déjà affichés depuis le déverrouillage : seuls eux sont montés (un onglet restauré ne coûte
+  // rien tant qu'on ne l'a pas ouvert).
+  const [montes, setMontes] = useState<ReadonlySet<string>>(() => new Set());
+  const setAppHub = useCallback(
+    (id: string | undefined) => {
+      if (annexe) {
+        // Fenêtre annexe : une seule app ; revenir au hub, c'est revenir à la fenêtre principale.
+        if (id === undefined) annexe.revenir();
+        return;
+      }
+      setOnglets(etat => {
+        if (id === undefined) return activerOnglet(etat, undefined);
+        const { etat: suivant, limite } = ouvrirOnglet(etat, id);
+        if (limite) setAnnonceOnglets(`${MAX_ONGLETS} apps ouvertes au plus : fermez un onglet pour en ouvrir une autre.`);
+        return suivant;
+      });
+    },
+    [annexe],
+  );
   // Page du hub (« Applications » ou « Administration ») : tenue ici pour qu'on y revienne en quittant une app.
   const [pageHub, setPageHub] = useState<CategorieApp>('publique');
   // Disposition et densité : dernières valeurs mémorisées sur l'appareil, pour que le hub s'affiche
@@ -1958,8 +2039,10 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // du portefeuille vers le thème unique (idempotent).
   useLayoutEffect(() => {
     if (!deverrouille) {
-      // Reverrouillé : au prochain déverrouillage, on repart du hub, sans rien garder du profil.
-      setAppHub(undefined);
+      // Reverrouillé : au prochain déverrouillage, on repart du hub, sans rien garder du profil (les apps
+      // des onglets sont démontées ; la liste des onglets reste, prête dans la barre).
+      setOnglets(etat => activerOnglet(etat, undefined));
+      setMontes(new Set());
       setParametres(undefined);
       if (hub) {
         setPrefsHub(prefsMemorisees());
@@ -1987,16 +2070,32 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [stockagePrefs],
   );
   const hubAffiche = hub && deverrouille && Boolean(contenuComplet && tableau);
+  // Côte à côte : écrans larges seulement (PC, iPad paysage) ; téléphone et écrans étroits : un onglet à la fois.
+  const { width: largeurFenetre } = useWindowDimensions();
+  const telephone = useMobile();
+  const coteACotePossible = hub && !annexe && !telephone && largeurFenetre >= LARGEUR_COTE_A_COTE;
+  const vueOnglets = affichageOnglets(ongletsApps, coteACotePossible);
+  const portefeuilleVisible = hubAffiche && portefeuillePermis && (vueOnglets.gauche === ID_PORTEFEUILLE || vueOnglets.droite === ID_PORTEFEUILLE);
   const surLeHub = hubAffiche && (appHub === undefined || (appHub === ID_PORTEFEUILLE && !portefeuillePermis));
-  const surUneApp = hubAffiche && !surLeHub && appHub !== ID_PORTEFEUILLE;
+  // Une (ou deux) app(s) du hub à l'écran, sans le portefeuille : pas de navigation du portefeuille.
+  const surUneApp = hubAffiche && !surLeHub && !portefeuilleVisible;
   // « Échap » ramène au hub depuis n'importe quelle app.
   useEffect(() => {
     // La page Paramètres, ouverte par-dessus une app, garde Échap pour elle : elle se ferme, l'app reste.
-    if (!hubAffiche || appHub === undefined || parametres) {
+    // Fenêtre annexe : Échap ne la ferme pas (« ← Hub » le fait).
+    if (!hubAffiche || appHub === undefined || parametres || annexe) {
       return undefined;
     }
-    return ecouterTouche('Escape', () => setAppHub(undefined), { ignorerChamps: true });
-  }, [hubAffiche, appHub, parametres]);
+    const page = REGISTRE.find(app => app.id === appHub);
+    return ecouterTouche(
+      'Escape',
+      () => {
+        if (page) setPageHub(categorieDe(page));
+        setAppHub(undefined);
+      },
+      { ignorerChamps: true },
+    );
+  }, [hubAffiche, appHub, parametres, annexe, setAppHub]);
   // Lien « Portefeuille » de l'app Tâches : versement mensuel et dividendes attendus (données simples).
   function rappelsPourTaches(): ResumePortefeuille['rappelsTaches'] {
     try {
@@ -2087,7 +2186,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [deverrouille, estAdmin, session, versionSynchro, synchro.configure],
   );
-  useSynchroHistoriqueOffice({ service: historiqueOffice, base: deverrouille ? baseProfil : undefined });
+  useSynchroHistoriqueOffice({ service: historiqueOffice, base: deverrouille && !annexe ? baseProfil : undefined });
   // Tuile Claude Office : état des agents, lu seulement sur le hub et pour qui voit la tuile (Fondateur).
   const resumeClaudeOffice = useResumeClaudeOffice({
     actif: Boolean(surLeHub && APP_CLAUDE_OFFICE.disponible?.({ profil: profils?.actuel })),
@@ -2096,17 +2195,16 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   });
   const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin, baseProfil, tsuzuku: resumeTsuzuku, enregistrerFichier: enregistrerFichierHote, historiqueOffice, claudeOffice: resumeClaudeOffice };
   // Tâches : rappels évalués toutes les 30 s tant que le compte est ouvert (notification sur le PC, pastille de la tuile).
-  useRappelsTaches(contexteHub, deverrouille);
-  useLiensOffice(contexteHub, deverrouille);
+  useRappelsTaches(contexteHub, deverrouille && !annexe);
+  useLiensOffice(contexteHub, deverrouille && !annexe);
   const themeDuHub = themeHub(themeAffiche);
-  const appOuverte = surUneApp ? REGISTRE.find(app => app.id === appHub) : undefined;
   // --- Devblog « Quoi de neuf » : une fois par profil et par version -----------
   const [devblog, setDevblog] = useState<{ entree?: EntreeDevblog } | undefined>();
   const [demandeHub, setDemandeHub] = useState<{ genre: 'parametres' | 'personnaliser'; n: number } | undefined>();
   const devblogDecide = useRef(false);
   const nombreOperations = contenuComplet?.transactions.length ?? 0;
   useEffect(() => {
-    if (!hub || !deverrouille || !tableau || profils?.sessionAdmin) {
+    if (!hub || !deverrouille || !tableau || profils?.sessionAdmin || annexe) {
       if (!deverrouille) {
         devblogDecide.current = false;
       }
@@ -2178,14 +2276,83 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     }
   };
 
-  const ouvrirApp = (id: string) => {
+  const ouvrirApp = (id: string, options: { arrierePlan?: boolean } = {}) => {
     const app = appsVisibles(REGISTRE, contexteHub).find(candidate => candidate.id === id);
     // Une app en maintenance ne s'ouvre pas pour un ami (sa tuile le dit).
-    if (app && etatTuile(app, contexteHub).ouvrable) {
-      setAppHub(app.id);
+    if (!app || !etatTuile(app, contexteHub).ouvrable || annexe) {
+      return;
     }
+    // Déjà ouverte dans une fenêtre à part (PC) : cette fenêtre passe au premier plan.
+    if (surLeWeb() && hoteFenetres().montrer(app.id)) {
+      return;
+    }
+    setParametres(undefined);
+    setSupportOuvert(false);
+    setOnglets(etat => {
+      const { etat: suivant, limite } = ouvrirOnglet(etat, app.id, options);
+      if (limite) {
+        setAnnonceOnglets(`${MAX_ONGLETS} apps ouvertes au plus : fermez un onglet pour ouvrir ${app.nom}.`);
+      } else if (options.arrierePlan && !etat.ouverts.includes(app.id)) {
+        setAnnonceOnglets(`${app.nom} ouverte dans un nouvel onglet.`);
+      }
+      return suivant;
+    });
   };
 
+  // --- Onglets : droits, mémoire de l'appareil, liens profonds, clavier, fenêtres --------------
+  // Une app que le profil ne peut plus ouvrir (droits, maintenance) perd son onglet.
+  const appsPermises = new Set(
+    appsVisibles(REGISTRE, contexteHub)
+      .filter(app => etatTuile(app, contexteHub).ouvrable && (app.Racine || app.id === ID_PORTEFEUILLE))
+      .map(app => app.id),
+  );
+  const signaturePermises = [...appsPermises].sort().join(',');
+  useEffect(() => {
+    if (!hubAffiche || annexe) return;
+    setOnglets(etat => filtrerOnglets(etat, id => appsPermises.has(id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seule la liste des apps permises compte.
+  }, [hubAffiche, annexe, signaturePermises]);
+  // Mémoire de l'appareil (jamais synchronisée), propre à chaque compte : la liste des onglets.
+  // Déclarée AVANT la restauration : au premier passage, rien n'est encore à écrire.
+  const ongletsRestaures = useRef(false);
+  useEffect(() => {
+    if (!hub || annexe || !hubAffiche || !ongletsRestaures.current) return;
+    try {
+      stockageLocalAppareil()?.setItem(cleLocale(CLE_ONGLETS), serialiserOnglets(ongletsApps));
+    } catch {
+      // Stockage plein ou interdit : les onglets ne seront pas restaurés, rien d'autre.
+    }
+  }, [hub, annexe, hubAffiche, ongletsApps]);
+  useEffect(() => {
+    if (!hub || annexe || !hubAffiche || ongletsRestaures.current) return;
+    ongletsRestaures.current = true;
+    let brut: string | null | undefined;
+    try {
+      brut = stockageLocalAppareil()?.getItem(cleLocale(CLE_ONGLETS));
+    } catch {
+      brut = undefined;
+    }
+    const restaures = restaurerOnglets(brut, id => appsPermises.has(id));
+    // Au redémarrage, on revient sur le hub : les onglets attendent dans la barre (rien ne s'ouvre seul).
+    setOnglets(etat => (etat.ouverts.length > 0 ? etat : restaures));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- une fois, au premier affichage du hub.
+  }, [hub, annexe, hubAffiche]);
+  // Liens profonds (`#/app/<id>`) : suivis après le déverrouillage, avec les MÊMES droits qu'une tuile.
+  const lienEnAttente = useRef<string | undefined>(annexe ? undefined : lireLienProfond(fragmentCourant()));
+  const [versionLien, setVersionLien] = useState(0);
+  useEffect(() => {
+    const g = globalThis as { addEventListener?(t: string, f: () => void): void; removeEventListener?(t: string, f: () => void): void };
+    if (annexe || !hub || !g.addEventListener) return undefined;
+    const surFragment = () => {
+      const id = lireLienProfond(fragmentCourant());
+      if (id) {
+        lienEnAttente.current = id;
+        setVersionLien(n => n + 1);
+      }
+    };
+    g.addEventListener('hashchange', surFragment);
+    return () => g.removeEventListener?.('hashchange', surFragment);
+  }, [annexe, hub]);
   // --- Paramètres : UNE page pour tout (voir src/hub/recensement.ts) ------------
   const maj = useMiseAJour();
   const synchroHub: SynchroHub | undefined =
@@ -2270,7 +2437,25 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const versionJuridiqueCourante = versionJuridique(profils?.juridique);
   const acceptations = deverrouille ? lireAcceptations(new DepotParametres(session.base()).lire(PARAMETRES.acceptationsJuridiques)) : [];
   void versionAcceptation;
-  const acceptationRequise = hub && deverrouille && !profils?.sessionAdmin && doitAccepter(acceptations, versionJuridiqueCourante);
+  const acceptationRequise = hub && deverrouille && !profils?.sessionAdmin && !annexe && doitAccepter(acceptations, versionJuridiqueCourante);
+  const ouvrirAppRef = useRef(ouvrirApp);
+  ouvrirAppRef.current = ouvrirApp;
+  const contexteHubRef = useRef(contexteHub);
+  contexteHubRef.current = contexteHub;
+  useEffect(() => {
+    const id = lienEnAttente.current;
+    if (!id || !hubAffiche || annexe || acceptationRequise) return;
+    lienEnAttente.current = undefined;
+    effacerLienProfond();
+    const decision = decisionLienProfond(id, REGISTRE, contexteHubRef.current);
+    if (decision.genre === 'ouvrir') {
+      setAvisOnglets(undefined);
+      ouvrirAppRef.current(id);
+    } else {
+      setAvisOnglets(decision.message);
+    }
+  }, [hubAffiche, annexe, versionLien, acceptationRequise]);
+
   const barreApp = <BarreApp theme={themeDuHub} synchro={synchroHub} onParametres={ouvrirParametres} onSupport={ouvrirSupport} />;
   const surParametres = Boolean(parametres) && deverrouille && Boolean(contenuComplet && tableau);
   const fermerParametres = useCallback(() => setParametres(undefined), []);
@@ -2593,6 +2778,203 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   // Coque du téléphone : actions de la barre basse du hub (Accueil · Support · Réglages · Compte).
   const mobile = useMobile();
+
+  // --- Onglets : ce qui est à l'écran -----------------------------------------
+  const surOverlay = Boolean(juridiqueOuvert) || acceptationRequise || (supportOuvert && deverrouille) || surParametres;
+  // Le hub, les pages par-dessus (Paramètres, Support…) et le portefeuille vivent dans la « vue principale » ;
+  // chaque autre app ouverte a son panneau, gardé monté tant que son onglet est ouvert.
+  const scene = useRef<React.ElementRef<typeof View>>(null);
+  const [largeurScene, setLargeurScene] = useState(0);
+  const partage = hubAffiche && !surOverlay && vueOnglets.droite !== undefined;
+  const marge = LARGEUR_SEPARATION / 2;
+  const placementGauche: Placement = partage ? { gauche: 0, largeur: vueOnglets.ratio, marge: { droite: marge } } : { gauche: 0, largeur: 1 };
+  const placementDroit: Placement = { gauche: vueOnglets.ratio, largeur: 1 - vueOnglets.ratio, marge: { gauche: marge } };
+  const placementDe = (id: string): Placement | undefined =>
+    !hubAffiche || surOverlay ? undefined : id === vueOnglets.gauche ? placementGauche : id === vueOnglets.droite ? placementDroit : undefined;
+  const principalAffiche = !hubAffiche || surOverlay || surLeHub || portefeuilleVisible;
+  const placementPrincipal: Placement | undefined = !principalAffiche
+    ? undefined
+    : partage && portefeuilleVisible && !surLeHub
+      ? vueOnglets.gauche === ID_PORTEFEUILLE
+        ? placementGauche
+        : placementDroit
+      : { gauche: 0, largeur: 1 };
+  const appsOnglets = ongletsApps.ouverts.map(id => REGISTRE.find(app => app.id === id)).filter((app): app is AppHub => Boolean(app));
+  const affichees = new Set([vueOnglets.gauche, vueOnglets.droite].filter((id): id is string => Boolean(id)));
+  useEffect(() => {
+    if (!hubAffiche || surOverlay) return;
+    const nouvelles = [...affichees].filter(id => !montes.has(id));
+    if (nouvelles.length > 0) setMontes(m => new Set([...m, ...nouvelles]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hubAffiche, surOverlay, vueOnglets.gauche, vueOnglets.droite]);
+  const montees = appsOnglets.filter(app => app.Racine && app.id !== ID_PORTEFEUILLE && (montes.has(app.id) || (affichees.has(app.id) && hubAffiche && !surOverlay)));
+  const changerOnglets = useCallback((changer: (etat: EtatOnglets) => EtatOnglets) => {
+    setParametres(undefined);
+    setSupportOuvert(false);
+    setOnglets(changer);
+  }, []);
+  const fermerApp = useCallback(
+    (id: string) => {
+      setOnglets(etat => fermerOnglet(etat, id));
+      setMontes(m => {
+        if (!m.has(id)) return m;
+        const suivant = new Set(m);
+        suivant.delete(id);
+        return suivant;
+      });
+    },
+    [],
+  );
+  const retourHub = (id: string) => {
+    const app = REGISTRE.find(candidate => candidate.id === id);
+    // Retour à la page d'origine : celle où vit la tuile de l'app (Applications ou Administration).
+    if (app) setPageHub(categorieDe(app));
+    setAppHub(undefined);
+  };
+  // « Ouvrir ailleurs » : une vraie fenêtre (app de bureau), ou un onglet du navigateur (site).
+  const pontBureau = (globalThis as { applibourse?: { bureau?: boolean } }).applibourse?.bureau === true;
+  const ailleurs: Ailleurs | undefined = annexe ? undefined : fenetresDisponibles() ? 'fenetre' : surLeWeb() && !pontBureau ? 'navigateur' : undefined;
+  const ouvrirAilleurs = (id: string) => {
+    const app = REGISTRE.find(candidate => candidate.id === id);
+    if (!app || !appsPermises.has(id)) return;
+    if (ailleurs === 'fenetre') {
+      if (ouvrirFenetreAnnexe(id, app.nom)) {
+        // L'app vit désormais dans sa fenêtre : pas deux fois la même app ouverte.
+        fermerApp(id);
+        setAvisOnglets(undefined);
+        setAnnonceOnglets(`${app.nom} ouverte dans une nouvelle fenêtre.`);
+      } else {
+        setAvisOnglets('La fenêtre n’a pas pu s’ouvrir : mettez à jour l’application PC (réinstallation) pour ouvrir des apps dans leur propre fenêtre.');
+      }
+    } else if (ailleurs === 'navigateur') {
+      const g = globalThis as { open?(url: string, cible: string, options: string): unknown; location?: { href?: string } };
+      if (g.open && g.location?.href) {
+        g.open(adresseProfonde(g.location.href, id), '_blank', 'noopener,noreferrer');
+        setAnnonceOnglets(`${app.nom} s’ouvre dans un nouvel onglet du navigateur, après le déverrouillage.`);
+      }
+    }
+  };
+  // Raccourcis : Ctrl+Tab, Ctrl+Maj+Tab, Ctrl+W, Ctrl+1…9 — jamais pendant la saisie.
+  const etatOngletsRef = useRef(ongletsApps);
+  etatOngletsRef.current = ongletsApps;
+  useEffect(() => {
+    const doc = (globalThis as { document?: { addEventListener(t: string, f: (e: KeyboardEventLike) => void, c?: boolean): void; removeEventListener(t: string, f: (e: KeyboardEventLike) => void, c?: boolean): void } }).document;
+    if (!hubAffiche || annexe || !doc) return undefined;
+    const surTouche = (e: KeyboardEventLike) => {
+      const action = actionOnglet(e);
+      const etat = etatOngletsRef.current;
+      if (!action || e.defaultPrevented || etat.ouverts.length === 0) return;
+      if (action.genre === 'fermer' && etat.actif === undefined) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (action.genre === 'fermer') {
+        fermerApp(etat.actif!);
+        return;
+      }
+      changerOnglets(courant => (action.genre === 'voisin' ? ongletVoisin(courant, action.sens) : parRang(courant, action.rang)));
+    };
+    doc.addEventListener('keydown', surTouche, true);
+    return () => doc.removeEventListener('keydown', surTouche, true);
+  }, [hubAffiche, annexe, fermerApp, changerOnglets]);
+  // Fenêtres annexes (app de bureau) : la fenêtre principale prête sa session ouverte, et relit ce qu'elles écrivent.
+  const profilsRef = useRef(profils);
+  profilsRef.current = profils;
+  const verrouillerRef = useRef(verrouiller);
+  verrouillerRef.current = verrouiller;
+  useEffect(() => {
+    if (annexe || !hub || !surLeWeb()) return undefined;
+    const hote = hoteFenetres();
+    if (!deverrouille) {
+      hote.configurer(undefined);
+      return undefined;
+    }
+    hote.configurer({ session, profils: () => profilsRef.current, verrouiller: () => verrouillerRef.current() });
+    const retirerEcriture = session.surEcriture?.(() => hote.ecritureLocale());
+    const retirerRelecture = hote.ecouterPrincipal(() => rafraichir());
+    return () => {
+      retirerEcriture?.();
+      retirerRelecture();
+    };
+  }, [annexe, hub, deverrouille, session, rafraichir]);
+  useEffect(
+    () => () => {
+      // Compte quitté (page rechargée, autre profil) : ses fenêtres se ferment avec lui.
+      if (!annexe && surLeWeb()) hoteFenetres().configurer(undefined);
+    },
+    [annexe],
+  );
+  // Annexe : relit ce que la fenêtre principale (ou une autre annexe) écrit.
+  useEffect(() => annexe?.ecouter(() => rafraichir()), [annexe, rafraichir]);
+  const relaisFenetres = useMemo<RelaisFenetres | undefined>(
+    () =>
+      annexe
+        ? { transmettre: { activite: () => annexe.activite(), lecture: enCours => annexe.lecture(enCours) } }
+        : hub && surLeWeb()
+          ? { ecouterActivite: rappel => hoteFenetres().ecouterActivite(rappel), lecturesExternes: () => hoteFenetres().lectures() }
+          : undefined,
+    [annexe, hub],
+  );
+  const controleOnglets = useMemo<ControleOnglets | undefined>(
+    () =>
+      hubAffiche && !annexe
+        ? { etat: ongletsApps, apps: appsOnglets, activer: id => changerOnglets(etat => activerOnglet(etat, id)), fermer: fermerApp }
+        : undefined,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hubAffiche, annexe, ongletsApps, appsOnglets.map(app => app.id).join(','), changerOnglets, fermerApp],
+  );
+  const barreOnglets =
+    hubAffiche && !annexe && !mobile && ongletsApps.ouverts.length > 0 ? (
+      <BarreOngletsApps
+        theme={themeDuHub}
+        etat={ongletsApps}
+        apps={appsOnglets}
+        surHub={surLeHub && !surOverlay}
+        partage={partage}
+        coteACotePossible={coteACotePossible}
+        ailleurs={ailleurs}
+        annonce={annonceOnglets}
+        onActiver={id => changerOnglets(etat => activerOnglet(etat, id))}
+        onFermer={fermerApp}
+        onACote={id => changerOnglets(etat => afficherACote(etat, id))}
+        onEchanger={() => changerOnglets(echangerCotes)}
+        onQuitterCote={cote => changerOnglets(etat => quitterCote(etat, cote))}
+        onAilleurs={ailleurs ? ouvrirAilleurs : undefined}
+      />
+    ) : null;
+  const avisBarre = avisOnglets ? (
+    <View style={[stylesOnglets.avis, { backgroundColor: themeDuHub.surface, borderColor: themeDuHub.alerte }]} testID="avis-onglets" accessibilityRole="alert">
+      <Text style={{ color: themeDuHub.texte, flex: 1, fontSize: 14 }}>{avisOnglets}</Text>
+      <Bouton titre="Compris" variante="discret" onPress={() => setAvisOnglets(undefined)} testID="avis-onglets-fermer" />
+    </View>
+  ) : null;
+  const infoGauche: InfoOnglet = { affiche: true, partage };
+  const panneaux = montees.map(app => {
+    const placement = placementDe(app.id);
+    const Racine = app.Racine!;
+    return (
+      <PanneauOnglet key={app.id} scene={scene} placement={placement} testID={`onglet-contenu-${app.id}`}>
+        <InfoOngletContexte.Provider value={placement ? infoGauche : INFO_MASQUE}>
+          <GardeErreur quoi={app.nom} onRevenir={() => fermerApp(app.id)}>
+            <BarreAppContexte.Provider value={barreApp}>
+              {/* Téléphone : l'app commence sous l'encoche. */}
+              <View style={[{ flex: 1, backgroundColor: themeDuHub.fond }, mobile ? margesSecurite(['haut']) : null]}>
+                <Racine
+                  contexte={contexteHub}
+                  theme={themeDuHub}
+                  registre={REGISTRE}
+                  onRetour={() => (annexe ? annexe.revenir() : retourHub(app.id))}
+                  niveau={niveauProfil(profils?.actuel, app)}
+                  onTheme={choisirTheme}
+                  onParametres={ouvrirParametres}
+                  onOuvrirApp={ouvrirApp}
+                />
+              </View>
+            </BarreAppContexte.Provider>
+          </GardeErreur>
+        </InfoOngletContexte.Provider>
+      </PanneauOnglet>
+    );
+  });
   const navigationMobile: NavigationMobile | undefined =
     hub && deverrouille
       ? {
@@ -2627,8 +3009,20 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       <SafeAreaView
         style={[stylesPartages.ecran, { backgroundColor: palettePour().fond }]}>
         <StatusBar barStyle={palettePour().sombre === false ? 'dark-content' : 'light-content'} />
-      <GardeInactivite theme={themeDuHub} actif={deverrouille} delaiMinutes={delaiVerrouEffectif} presenceSecondes={essaiVerrou.presenceSecondes} onVerrouiller={verrouillerAuto}>
-
+      <GardeInactivite theme={themeDuHub} actif={deverrouille && !annexe} delaiMinutes={delaiVerrouEffectif} presenceSecondes={essaiVerrou.presenceSecondes} onVerrouiller={verrouillerAuto} fenetres={relaisFenetres}>
+      <OngletsHubContexte.Provider value={controleOnglets}>
+      {barreOnglets}
+      {avisBarre}
+      <View ref={scene} style={stylesOnglets.scene} onLayout={e => setLargeurScene(e.nativeEvent.layout.width)} testID="onglets-scene">
+      <View
+        style={
+          !placementPrincipal
+            ? stylesOnglets.masque
+            : placementPrincipal.largeur < 1
+              ? stylePlacement(placementPrincipal)
+              : stylesOnglets.plein
+        }
+        testID={placementPrincipal ? 'vue-principale' : undefined}>
       <Coque
         destinations={deverrouille && contenuComplet && tableau && !surLeHub && !surUneApp && !surParametres ? destinations : []}
         enTete={barreApp}
@@ -2786,6 +3180,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           theme={themeDuHub}
           onTheme={choisirTheme}
           onOuvrir={ouvrirApp}
+          onOuvrirOnglet={id => ouvrirApp(id, { arrierePlan: true })}
+          ouvertes={ongletsApps.ouverts}
           prefs={prefsHub}
           onPrefs={suivant => {
             setPrefsHub(suivant);
@@ -2802,24 +3198,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onChangerProfil={profils && (profils.peutChanger ?? profils.tous.length > 1) ? profils.onChanger : undefined}
         />
         </GardeErreur>
-      ) : appOuverte?.Racine ? (
-        <GardeErreur quoi={appOuverte.nom} onRevenir={profils?.onChanger}>
-        <BarreAppContexte.Provider value={barreApp}>
-        {/* Téléphone : l'app commence sous l'encoche (son en-tête sera repris en phase B). */}
-        <View style={[{ flex: 1, backgroundColor: themeDuHub.fond }, mobile ? margesSecurite(['haut']) : null]}>
-        <appOuverte.Racine
-          contexte={contexteHub}
-          theme={themeDuHub}
-          registre={REGISTRE}
-          onRetour={() => setAppHub(undefined)}
-          niveau={niveauProfil(profils?.actuel, appOuverte)}
-          onTheme={choisirTheme}
-          onParametres={ouvrirParametres}
-          onOuvrirApp={ouvrirApp}
-        />
-        </View>
-        </BarreAppContexte.Provider>
-        </GardeErreur>
+      ) : hubAffiche && !portefeuilleVisible ? (
+        // Les apps du hub sont dans leurs onglets (panneaux ci-dessous), pas dans la vue principale.
+        null
       ) : ecran === 'compte' ? (
         <CreationCompte
           key={compteEdite ?? 'nouveau'}
@@ -3278,6 +3659,19 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       {!deverrouille && !juridiqueOuvert && !secrets ? <LigneSynchroDemarrage theme={themeDuHub} /> : null}
       {!deverrouille && !juridiqueOuvert && !secrets ? <LiensJuridiques theme={themeDuHub} onOuvrir={id => setJuridiqueOuvert({ id })} /> : null}
       </Coque>
+      </View>
+      {panneaux}
+      {partage ? (
+        <Separation
+          theme={themeDuHub}
+          ratio={vueOnglets.ratio}
+          largeurScene={largeurScene}
+          libelle={`Séparation entre ${appsOnglets.find(app => app.id === vueOnglets.gauche)?.nom ?? 'la gauche'} et ${appsOnglets.find(app => app.id === vueOnglets.droite)?.nom ?? 'la droite'}`}
+          onRatio={ratio => setOnglets(etat => redimensionner(etat, ratio, largeurScene))}
+        />
+      ) : null}
+      </View>
+      </OngletsHubContexte.Provider>
       {devblog && deverrouille ? (
         <Devblog
           theme={themeDuHub}

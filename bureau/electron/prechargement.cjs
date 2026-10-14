@@ -16,6 +16,13 @@ contextBridge.exposeInMainWorld('applibourse', {
   /** Vrai dans l'application installée, absent dans un simple navigateur. */
   bureau: true,
 
+  /**
+   * Fenêtres annexes (« Ouvrir dans une nouvelle fenêtre ») : ce moteur sait les ouvrir. Aucune
+   * fonction ici : l'interface ouvre la fenêtre elle-même (`window.open`), et le processus principal
+   * n'accepte que le nom réservé (voir electron/fenetresAnnexes.mjs).
+   */
+  fenetres: { version: 1 },
+
   /** Portée du compte ouvert : ses fichiers seulement (voir principal.mjs). */
   profil: {
     ouvrir: id => ipcRenderer.invoke('profil:ouvrir', id),

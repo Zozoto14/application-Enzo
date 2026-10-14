@@ -48,13 +48,14 @@ import { CONTROLE, ESPACE, GOUTTIERE, TEXTE, rayonCarte, rayonControle } from '.
 import { GroupeCellules } from '../ui/mobile/ListeCellules';
 import { BarreBasseHub } from '../ui/mobile/NavigationMobile';
 import { margesSecurite } from '../ui/mobile/ZoneSecurite';
+import { SelecteurOngletsMobile } from './multi/BarreOngletsApps';
 
 /** Colonnes de la grille du téléphone (pure, testée) : 2 dès 340 px, sinon 1. */
 export function colonnesMobile(largeur: number, disposition: 'grille' | 'liste'): number {
   return disposition === 'liste' || largeur < 340 ? 1 : 2;
 }
 
-export function HubMobile({ registre, contexte, theme, onOuvrir, prefs, onPrefs, onParametres, synchro, demande, heure, page: pageDemandee, onPage }: HubProps) {
+export function HubMobile({ registre, contexte, theme, onOuvrir, onOuvrirOnglet, ouvertes, prefs, onPrefs, onParametres, synchro, demande, heure, page: pageDemandee, onPage }: HubProps) {
   const { width } = useWindowDimensions();
   const [edition, setEdition] = useState(false);
   const [annonce, setAnnonce] = useState('');
@@ -109,6 +110,7 @@ export function HubMobile({ registre, contexte, theme, onOuvrir, prefs, onPrefs,
           </Text>
         </View>
         {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} condense onPress={() => onParametres?.('synchro')} /> : null}
+        {modifie ? null : <SelecteurOngletsMobile theme={theme} />}
         {personnalisable && !modifie ? (
           <BoutonIcone theme={theme} titre="✎" libelle="Personnaliser l’accueil" onPress={() => setEdition(true)} testID="hub-personnaliser" />
         ) : null}
@@ -167,7 +169,9 @@ export function HubMobile({ registre, contexte, theme, onOuvrir, prefs, onPrefs,
                   info={tuile.app.info?.(contexte)}
                   ligne={colonnes === 1}
                   compact={compact}
+                  ouverte={Boolean(ouvertes?.includes(tuile.app.id))}
                   onPress={() => onOuvrir(tuile.app.id)}
+                  onLongPress={onOuvrirOnglet ? () => onOuvrirOnglet(tuile.app.id) : undefined}
                 />
               </View>
             ))}
@@ -203,7 +207,9 @@ function TuileMobile({
   info,
   ligne,
   compact,
+  ouverte = false,
   onPress,
+  onLongPress,
 }: {
   tuile: TuilePrefs<AppHub>;
   theme: ThemeHub;
@@ -211,7 +217,11 @@ function TuileMobile({
   info?: InfoLive;
   ligne: boolean;
   compact: boolean;
+  /** Déjà ouverte dans un onglet. */
+  ouverte?: boolean;
   onPress(): void;
+  /** Appui long : ouvrir dans un nouvel onglet, sans quitter l'accueil. */
+  onLongPress?(): void;
 }) {
   const { app, taille, epinglee } = tuile;
   const couleur = theme.teintes[app.teinte];
@@ -252,8 +262,11 @@ function TuileMobile({
       accessibilityRole="button"
       accessibilityLabel={ouvrable ? `Ouvrir ${app.nom}${etat?.maintenance ? ` (en maintenance : ${etat.maintenance})` : ''}` : `${app.nom} : en maintenance. ${etat?.maintenance ?? ''}`}
       accessibilityState={{ disabled: !ouvrable }}
+      accessibilityHint={onLongPress && ouvrable ? (ouverte ? 'Déjà ouverte : elle reprend là où vous l’avez laissée.' : 'Appui long : ouvrir dans un nouvel onglet.') : undefined}
       disabled={!ouvrable}
       onPress={onPress}
+      onLongPress={ouvrable ? onLongPress : undefined}
+      delayLongPress={550}
       style={({ pressed }) => [
         styles.tuile,
         ligne ? styles.tuileLigne : { minHeight: compact ? 132 : 164 },

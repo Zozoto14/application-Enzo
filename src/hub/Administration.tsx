@@ -38,6 +38,7 @@ import { Utilisateurs } from './admin/ui/Utilisateurs';
 import { police, teinteTransparente, type ThemeHub } from './themes';
 import type { PropsRacineApp } from './types';
 import { ecouterActivite } from './web';
+import { useInfoOnglet } from './multi/contexte';
 
 /** Sections par rang : un gestionnaire n'a ni applications globales, ni sécurité, ni réglages ; un administrateur, pas les apps globales. */
 const SECTIONS_PAR_RANG: Record<Rang, readonly IdSection[]> = {
@@ -152,19 +153,30 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
     // eslint-disable-next-line react-hooks/exhaustive-deps -- seule la signature des compteurs compte.
   }, [signatureConnexions]);
 
-  // Verrouillage sur inactivité.
-  const activite = useCallback(() => setVerrou(v => noterActivite(v, maintenant())), [maintenant]);
-  useEffect(() => ecouterActivite(activite), [activite]);
+  // Verrouillage sur inactivité. Dans un onglet, seule compte l'activité faite ICI : masqué, l'onglet
+  // n'écoute rien (ses effets sont suspendus) ; côte à côte, l'activité de l'autre app ne compte pas.
+  const infoOnglet = useInfoOnglet();
+  const racine = useRef<unknown>(null);
+  const activite = useCallback(
+    () => setVerrou(v => (doitVerrouiller(v, maintenant(), donneesRef.current.reglages.verrouMinutes) ? verrouiller(v) : noterActivite(v, maintenant()))),
+    [maintenant],
+  );
+  useEffect(() => ecouterActivite(activite, infoOnglet.partage ? { dans: () => racine.current } : {}), [activite, infoOnglet.partage]);
   useEffect(() => {
-    const minuterie = setInterval(() => {
+    const controler = () => {
       if (doitVerrouiller(verrouRef.current, maintenant(), donneesRef.current.reglages.verrouMinutes)) {
         setVerrou(v => verrouiller(v));
         setDemande(undefined);
         journaliser({ type: 'securite', action: `Panneau verrouillé après ${donneesRef.current.reglages.verrouMinutes} min sans activité` });
       }
-    }, 5_000);
+    };
+    // Aussi au retour de l'onglet à l'écran : le délai a pu passer pendant qu'il était masqué.
+    controler();
+    const minuterie = setInterval(controler, 5_000);
     return () => clearInterval(minuterie);
   }, [maintenant, journaliser]);
+  // Délai passé (onglet resté masqué) : verrouillé dès la première image, sans rien montrer.
+  const delaiPasse = !verrou.verrouille && doitVerrouiller(verrou, maintenant(), donnees.reglages.verrouMinutes);
 
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
@@ -260,7 +272,7 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
       suite();
     });
 
-  if (verrou.verrouille) {
+  if (verrou.verrouille || delaiPasse) {
     return (
       <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="admin-verrouille">
         <ScrollView contentContainerStyle={styles.page}>
@@ -275,7 +287,7 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
   }
 
   return (
-    <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="app-administration" onTouchStart={activite}>
+    <View ref={racine as React.Ref<never>} style={[styles.racine, { backgroundColor: theme.fond }]} testID="app-administration" onTouchStart={activite}>
       <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
         <RetourHub theme={theme} onRetour={onRetour} titre="Administration" />
         <Text style={[styleTitre(theme), styles.h1]} accessibilityRole="header">

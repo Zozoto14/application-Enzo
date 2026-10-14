@@ -28,6 +28,7 @@ import { MOTIF_PROFIL, changementPermis, extensionPermise, fichierAutorise, fich
 import { fluxMedia, pageArticle, yahooJson, yahooScreener } from './reseau.mjs';
 import { creerListeLecteurs, requeteTsuzuku } from './tsuzuku.mjs';
 import { brancherClaudeOffice } from './claudeOfficeIpc.mjs';
+import { decisionOuverture, lireFonctionnalites, optionsAnnexe } from './fenetresAnnexes.mjs';
 import { readFile, writeFile, mkdir, rename, readdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -482,7 +483,7 @@ async function verifierEnFond(raison) {
   if (!disponible) {
     return;
   }
-  const fenetre = BrowserWindow.getAllWindows()[0];
+  const fenetre = principaleVivante();
   const visible = fenetre && fenetre.isVisible() && !fenetre.isMinimized();
   // Mise à jour suspendue par un fichier modifié sur ce PC : redémarrer n'y
   // changerait rien et recommencerait toutes les heures. Le bandeau le dit.
@@ -557,8 +558,21 @@ async function ecrireReglagesBureau(reglages) {
 
 let resterDansPlateau = true;
 
+/**
+ * La fenêtre principale. Les fenêtres annexes (« Ouvrir dans une nouvelle
+ * fenêtre », voir fenetresAnnexes.mjs) n'en sont jamais : l'icône, les
+ * notifications et une seconde instance ramènent toujours celle-ci.
+ */
+let fenetrePrincipale;
+/** Fenêtres annexes ouvertes. */
+const annexes = new Set();
+
+function principaleVivante() {
+  return fenetrePrincipale && !fenetrePrincipale.isDestroyed() ? fenetrePrincipale : undefined;
+}
+
 function montrerFenetre() {
-  const fenetre = BrowserWindow.getAllWindows()[0] ?? creerFenetre();
+  const fenetre = principaleVivante() ?? creerFenetre();
   if (fenetre.isMinimized()) fenetre.restore();
   fenetre.show();
   fenetre.focus();
@@ -594,6 +608,25 @@ function creerPlateau() {
 /** Sites de lecteur que la fenêtre peut afficher en sous-cadre (voir tsuzuku.mjs). */
 const lecteursTsuzuku = creerListeLecteurs();
 let filtreSousCadresPose = false;
+
+/** Mêmes gardes que la fenêtre principale : aucune navigation, aucun sous-cadre non déclaré, liens vers le système. */
+function protegerAnnexe(enfant) {
+  annexes.add(enfant);
+  enfant.on('closed', () => annexes.delete(enfant));
+  enfant.webContents.on('will-navigate', evenement => evenement.preventDefault());
+  enfant.webContents.on('will-frame-navigate', evenement => {
+    if (!evenement.isMainFrame && !lecteursTsuzuku.sousCadreAutorise(evenement.url)) {
+      evenement.preventDefault();
+    }
+  });
+  // Une annexe n'ouvre pas d'autre fenêtre : seulement des liens, vers le système.
+  enfant.webContents.setWindowOpenHandler(({ url }) => {
+    if (decisionOuverture({ url, frameName: '' }) === 'externe') {
+      void shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+}
 
 function creerFenetre() {
   const fenetre = new BrowserWindow({
@@ -665,14 +698,34 @@ function creerFenetre() {
       evenement.preventDefault();
     }
   });
-  fenetre.webContents.setWindowOpenHandler(({ url }) => {
+  fenetre.webContents.setWindowOpenHandler(({ url, frameName, features }) => {
+    const decision = decisionOuverture({ url, frameName }, annexes.size);
+    if (decision === 'annexe') {
+      // « Ouvrir dans une nouvelle fenêtre » : même préchargement, mêmes protections (voir fenetresAnnexes.mjs).
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: optionsAnnexe({
+          principales: { preload: join(ici, 'prechargement.cjs') },
+          icone: join(ici, '..', 'icone', 'icone-256.png'),
+          demande: lireFonctionnalites(features),
+        }),
+      };
+    }
     // Pages web vers le navigateur ; `mailto:` (bouton « Écrire » de Prospects) vers la messagerie.
-    if (/^https?:\/\//i.test(url) || /^mailto:[^\s]+$/i.test(url)) {
+    if (decision === 'externe') {
       void shell.openExternal(url);
     }
     return { action: 'deny' };
   });
+  fenetre.webContents.on('did-create-window', enfant => protegerAnnexe(enfant));
+  // Fenêtre principale fermée pour de bon (ou rechargée) : ses annexes, qui vivent de sa session, se ferment.
+  fenetre.on('closed', () => {
+    for (const annexe of [...annexes]) {
+      if (!annexe.isDestroyed()) annexe.close();
+    }
+  });
 
+  fenetrePrincipale = fenetre;
   if (DEV) {
     void fenetre.loadURL(DEV);
   } else {
