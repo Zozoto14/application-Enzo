@@ -362,6 +362,14 @@ try {
   await pg.getByTestId('episode-2').click();
   verifier(await pg.frameLocator('[data-testid="lecteur-iframe"]').getByText('Lecteur neutre (/embed/spa-2)').waitFor({ timeout: 20_000 }).then(() => true, () => false), 'l’épisode 2 se lit (page JavaScript contournée par son API, sans rendu JavaScript)');
   await pg.getByTestId('lecteur-retour').click();
+  // Seconde ouverture : quasi instantanée (cache du profil), aucune requête vers le site.
+  const avantFiche = appels.filter(a => a.includes('spa-exemple.fr')).length;
+  const debutFiche = Date.now();
+  await ouvrirFiche(pg, 1);
+  await pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 30_000 });
+  const reouverture = Date.now() - debutFiche;
+  verifier(reouverture < 2500 && appels.filter(a => a.includes('spa-exemple.fr')).length === avantFiche, `fiche rouverte en ${reouverture} ms, sans requête vers le site (cache)`);
+  verifier(/^Depuis le cache/.test(await pg.getByTestId('fiche-sources-mesure').innerText().catch(() => '')), '« Depuis le cache » affiché discrètement sous le résultat');
 
   // ============================================================ Téléphone 390 px
   log('Téléphone 390 × 844');

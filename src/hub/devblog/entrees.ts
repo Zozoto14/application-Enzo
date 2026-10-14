@@ -45,6 +45,41 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.26',
+    date: '2026-10-26',
+    titre: 'Tsuzuku répond beaucoup plus vite',
+    resume:
+      'Les épisodes d’un animé s’affichent en quelques secondes au lieu d’une quinzaine, et une fiche déjà ouverte revient presque instantanément, même après avoir rechargé la page. Le changement VF/VOSTFR et l’épisode suivant sont préparés pendant que vous regardez.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'tsuzuku-rapide-sources',
+        emoji: '⚡',
+        titre: 'Vos sources cherchées en même temps',
+        texte:
+          'Tsuzuku interroge vos sources et les différents titres d’un animé en parallèle au lieu de l’un après l’autre. Le premier résultat s’affiche dès qu’il arrive ; votre source préférée garde la priorité, mais si elle est très lente, une autre prend le relais au bout d’une seconde.',
+        essayer: { genre: 'app', app: 'tsuzuku' },
+        app: 'tsuzuku',
+      },
+      {
+        id: 'tsuzuku-rapide-cache',
+        emoji: '💾',
+        titre: 'Une fiche déjà vue revient tout de suite',
+        texte:
+          'Les résultats sont gardés sur votre appareil, chiffrés avec votre profil : rouvrir une fiche ou l’accueil est quasi instantané, puis Tsuzuku vérifie en arrière-plan s’il y a du nouveau. « Rechercher à nouveau » repart toujours de zéro.',
+        app: 'tsuzuku',
+      },
+      {
+        id: 'tsuzuku-rapide-lecture',
+        emoji: '⏭',
+        titre: 'VF/VOSTFR et épisode suivant préparés',
+        texte:
+          'Pendant que vous regardez, Tsuzuku prépare le même épisode dans l’autre langue et l’épisode suivant : changer de langue ou passer à la suite ne fait plus attendre. Le temps de chaque étape (ou « depuis le cache ») est indiqué en petit sous le lecteur et dans le diagnostic.',
+        app: 'tsuzuku',
+      },
+    ],
+  },
+  {
     version: '2026.10.25',
     date: '2026-10-25',
     titre: 'Tâches V2 : temps, journal, notifications, liens',

@@ -246,9 +246,16 @@ try {
   const m = await mesure(pg, 'lecteur-langue-vf');
   verifier(m.hauteur >= 44 && m.police >= 15, `PC : cible ${Math.round(m.hauteur)} px (≥ 44), texte ${m.police} px (≥ 15)`);
   verifier((await pg.getByTestId('lecteur-langue').getByRole('radiogroup').count()) === 1 || (await pg.locator('[role="radiogroup"][aria-label="Langue de l’épisode"]').count()) === 1, 'groupe radio « Langue de l’épisode » pour les lecteurs d’écran');
+  verifier(/épisodes \d,\d s · lecteur \d,\d s/.test(await pg.getByTestId('lecteur-mesure').innerText().catch(() => '')), 'temps de chaque étape affiché, discrètement, sous le lecteur');
   await capture(pg, '02-pc-lecteur-vostfr');
+  // La page de l'épisode dans l'autre langue est préparée pendant la lecture : la bascule est immédiate.
+  await pause(1500);
+  const debutBascule = Date.now();
   await pg.getByTestId('lecteur-langue-vf').click();
   verifier(await iframeDit(pg, 'Lecteur neutre (/embed/vf-1)'), 'bascule VF : même épisode (1), lecteur de la fiche « (VF) »');
+  const bascule = Date.now() - debutBascule;
+  verifier(bascule < 2000, `bascule VF/VOSTFR en ${bascule} ms (< 2 s : lecteur préchargé)`);
+  verifier(/Depuis le cache/.test(await pg.getByTestId('lecteur-mesure').innerText().catch(() => '')), 'bascule servie depuis le cache (« Depuis le cache » dans le temps affiché)');
   verifier((await coche(pg, 'lecteur-langue-vf')) === 'true' && /Épisode 1/.test(await pg.getByTestId('lecteur-titre').innerText()), 'VF cochée, toujours l’épisode 1');
   verifier(/VF retenue pour cette série/.test(await pg.getByTestId('lecteur-langue-note').innerText()), 'préférence retenue pour la série');
   verifier(pagesSerie().length === 2, `deux pages de série lues en tout (${pagesSerie().length})`);
@@ -275,8 +282,12 @@ try {
   // ============================================================ Téléphone 390 × 844
   log('Téléphone 390 × 844');
   await pg.setViewportSize({ width: 390, height: 844 });
+  const avantReouverture = pagesSerie().length;
+  const debutFiche = Date.now();
   await ouvrirFiche(pg, 1);
   await pg.getByTestId('fiche-langue-choix').waitFor({ timeout: 30_000 });
+  const reouverture = Date.now() - debutFiche;
+  verifier(reouverture < 2500 && pagesSerie().length === avantReouverture, `fiche rouverte en ${reouverture} ms, sans relire de page de série (cache)`);
   await voir(pg, 'fiche-langue-choix');
   verifier((await debordement(pg)) <= 0, 'téléphone : fiche sans défilement horizontal');
   await capture(pg, '05-tel-fiche-selecteur');

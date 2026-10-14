@@ -6,7 +6,7 @@
  * écarté). Partagé par la fiche (« Sur vos sources ») et le lecteur.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { teinteTransparente } from '../../hub/themes';
 import { testReussi, testerSourcePasAPas, type EtapeTest } from '../moteur/assistant';
@@ -14,8 +14,8 @@ import { messageDe } from '../moteur/erreurs';
 import type { DefinitionSource } from '../moteur/sources';
 import { copier } from './AssistantSource';
 import { useCharger, useTsuzuku } from './contexte';
-import { lignesDiagnostic, texteDiagnostic } from './diagnosticTexte';
-import { enregistrerTitrePerso, episodesDisponibles, lireTitresPerso, type DiagnosticLecture, type Disponibilite } from './resoudre';
+import { lignesDiagnostic, texteDiagnostic, texteMesure } from './diagnosticTexte';
+import { enregistrerTitrePerso, episodesDisponibles, lireTitresPerso, prechargerEpisode, type DiagnosticLecture, type Disponibilite } from './resoudre';
 import { LIBELLE_LANGUE_VERSION } from '../moteur/langues';
 import { langueVoulue } from './langues';
 import { Avis, Bouton, Champ, styleAttenue, styleTexte } from './ui';
@@ -199,14 +199,53 @@ function resumeLangues(d: Disponibilite): string {
  * Fiche d'un animé : « Sur vos sources » — la recherche que fera le lecteur,
  * lancée dès l'ouverture de la fiche (résultat gardé 10 min pour le lecteur).
  */
-export function DisponibiliteSources({ id, titres, oeuvre }: { id: string; titres: readonly string[]; oeuvre?: string }) {
-  const { s, theme, version } = useTsuzuku();
+/** « Recherche sur vos sources… 4 s » : le temps écoulé, compté à partir de 2 s (l'écran ne paraît pas figé). */
+function Ecoule({ actif }: { actif: boolean }) {
+  const [s, setS] = useState(0);
+  useEffect(() => {
+    if (!actif) {
+      setS(0);
+      return undefined;
+    }
+    const debut = Date.now();
+    const t = setInterval(() => setS(Math.floor((Date.now() - debut) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [actif]);
+  return s >= 2 ? <>{` ${s} s`}</> : null;
+}
+
+export function DisponibiliteSources({ id, titres, oeuvre, aPrecharger }: { id: string; titres: readonly string[]; oeuvre?: string; aPrecharger?: number }) {
+  const { s, theme, version, changee } = useTsuzuku();
   const [essai, setEssai] = useState(0);
+  // Affichage progressif : ce qu'une source moins prioritaire a déjà trouvé, pendant que les autres cherchent.
+  const [provisoire, setProvisoire] = useState<{ cle: string; d: Disponibilite } | null>(null);
+  const cleRecherche = `${id}|${titres.join('|')}|${essai}|${version}`;
   const etat = useCharger(async () => {
-    const d = await episodesDisponibles(s, { id, titres, forcer: essai > 0, langue: (await langueVoulue(s, `anime:${id}`)).langue });
+    const langue = (await langueVoulue(s, `anime:${id}`)).langue;
+    const d = await episodesDisponibles(s, {
+      id,
+      titres,
+      forcer: essai > 0,
+      langue,
+      surProvisoire: p => setProvisoire({ cle: cleRecherche, d: p }),
+    });
+    // L'épisode que « ▶ Lire » ouvrira est préparé tout de suite (une page ; rien si la liste ne l'a pas).
+    if (aPrecharger && d.episodes.length) void prechargerEpisode(s, { id, titres, numero: aPrecharger, langue });
     return { d, perso: (await lireTitresPerso(s))[`anime:${id}`] };
   }, [s, id, titres.join('|'), essai, version]);
   const d = etat.donnees?.d;
+  const enAttente = provisoire && provisoire.cle === cleRecherche && etat.enCours ? provisoire.d : null;
+  // Résultat périmé servi par le cache : quand la recherche fraîche change quelque chose, les écrans se relisent.
+  const rafraichissement = d?.rafraichissement;
+  useEffect(() => {
+    let actif = true;
+    void rafraichissement?.then(change => {
+      if (change && actif) changee();
+    });
+    return () => {
+      actif = false;
+    };
+  }, [rafraichissement, changee]);
   // Aucune source : la carte « Aucune source configurée » le dit déjà.
   if (d?.diagnostic.raison === 'aucune-source' && !d.episodes.length) return null;
   const relancer = () => setEssai(v => v + 1);
@@ -218,9 +257,16 @@ export function DisponibiliteSources({ id, titres, oeuvre }: { id: string; titre
           Site web : lecture via le relais
         </Text>
       ) : null}
-      {etat.enCours && !d ? (
-        <Text style={styleAttenue(theme, 13)} testID="fiche-sources-recherche">
+      {etat.enCours && !d && enAttente?.resultat ? (
+        <Avis
+          genre="info"
+          testID="fiche-sources-provisoire"
+          texte={`« ${enAttente.resultat.serie?.title ?? titres[0]} » trouvé sur « ${enAttente.resultat.source?.name ?? 'une source'} » : ${enAttente.episodes.length} épisode(s). Vos sources prioritaires cherchent encore (quelques secondes au plus)…`}
+        />
+      ) : etat.enCours && !d ? (
+        <Text style={styleAttenue(theme, 13)} testID="fiche-sources-recherche" accessibilityLiveRegion="polite">
           Recherche sur vos sources…
+          <Ecoule actif={etat.enCours && !d} />
         </Text>
       ) : etat.erreur ? (
         <PanneauEchec message={etat.erreur} enCours={etat.enCours} onReessayer={relancer} oeuvre={oeuvre ?? titres[0]} testID="fiche-sources-echec" />
@@ -232,6 +278,11 @@ export function DisponibiliteSources({ id, titres, oeuvre }: { id: string; titre
             texte={`« ${d.resultat?.serie?.title ?? titres[0]} » trouvé sur « ${d.resultat?.source?.name ?? 'la source'} » : ${d.episodes.length} épisode(s) (n° ${d.episodes[0].number} à ${d.episodes[d.episodes.length - 1].number})${resumeLangues(d)}.`}
           />
           <Bouton titre={etat.enCours ? 'Recherche…' : 'Rechercher à nouveau'} desactive={etat.enCours} onPress={relancer} testID="fiche-sources-reessayer" />
+          {d.mesure ? (
+            <Text style={styleAttenue(theme, 12)} testID="fiche-sources-mesure">
+              {texteMesure(d.mesure)}
+            </Text>
+          ) : null}
         </View>
       ) : d ? (
         <PanneauEchec
