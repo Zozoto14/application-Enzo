@@ -331,17 +331,19 @@ const jourCourt = (decalage = 0) => {
   return `${j}/${m}/${a}`;
 };
 async function relierAmi(pc, nom, ami, options) {
-  await allerPageAdministration(pc);
-  await tuileApp(pc, 'administration').first().click();
-  await pc.getByTestId('app-administration').waitFor({ timeout: 20_000 });
+  if (!(await pc.getByTestId('app-administration').count())) {
+    await allerPageAdministration(pc);
+    await tuileApp(pc, 'administration').first().click();
+    await pc.getByTestId('app-administration').waitFor({ timeout: 20_000 });
+  }
+  if (!(await pc.getByTestId('admin-liste').count())) await pc.getByTestId('admin-onglet-utilisateurs').click();
   await pc.getByTestId('admin-liste').getByText(nom, { exact: true }).first().click();
   await pc.getByTestId('admin-detail').waitFor({ timeout: 20_000 });
   await pc.getByTestId('admin-code-site-generer').click();
   await identiteSiDemandee(pc);
   await pc.getByTestId('admin-code-site').waitFor({ timeout: 20_000 });
   const code = (await pc.getByTestId('admin-code-site').innerText()).trim();
-  await pc.getByTestId('retour-hub').first().click().catch(() => undefined);
-  await pc.getByTestId('hub').waitFor({ timeout: 20_000 }).catch(() => undefined);
+  await pc.keyboard.press('Escape').catch(() => undefined);
   const page = await (await nouveauContexte(navigateur, options)).newPage();
   page.on('pageerror', e => {
     erreursPage.push(e.message);
@@ -414,10 +416,10 @@ try {
   const lea = await creerAmi(pc, 'Léa');
   const hugo = await creerAmi(pc, 'Hugo');
   const zoe = await creerAmi(pc, 'Zoé');
-  await pc.getByTestId('retour-hub').first().click().catch(() => undefined);
   const ipad = await relierAmi(pc, 'Léa', lea, optionsIpad);
   const pcHugo = await relierAmi(pc, 'Hugo', hugo, optionsPc);
   const iphone = await relierAmi(pc, 'Zoé', zoe, optionsIphone);
+  if (await pc.getByTestId('retour-hub').count()) await quitterTaches(pc);
 
   // ================================================================ Tâches : deux projets, trois membres, des droits
   log('PC : projets « Site web » et « Appli », trois membres et leurs droits');
@@ -671,7 +673,7 @@ try {
   verifier(erreursPage.length === 0, `aucune erreur JavaScript (${erreursPage.slice(0, 2).join(' | ')})`);
 } catch (erreur) {
   echecs++;
-  console.log('  ECHEC', erreur instanceof Error ? erreur.message.split('\n')[0] : erreur);
+  console.log('  ECHEC', erreur instanceof Error ? erreur.message.split('\n').slice(0, 3).join(' | ') : erreur);
   for (const [i, contexte] of navigateur.contexts().entries()) {
     for (const [j, page] of contexte.pages().entries()) {
       await page.screenshot({ path: join(CAPTURES, `echec-v3-${i}-${j}.png`) }).catch(() => undefined);

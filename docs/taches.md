@@ -1,7 +1,8 @@
-# Tâches (V1 + V2)
+# Tâches (V1 + V2 + V3)
 
-App du hub « façon ClickUp » pour le Fondateur et **un** ami. Tuile sur la page « Applications » (catégorie
-`page: 'publique'`), visible du Fondateur et du seul ami qu'il désigne ; invisible pour tout autre compte.
+App du hub « façon ClickUp » pour le Fondateur et les **membres** qu'il invite (amis et gestionnaires du hub ; un seul
+ami en V1/V2). Tuile sur la page « Applications » (catégorie `page: 'publique'`), visible du Fondateur et de ses
+membres ; invisible pour tout autre compte.
 
 ## Ce que fait la V1
 
@@ -162,26 +163,117 @@ une session ou le minuteur du Fondateur.
 - Passe des liens : à l'ouverture de Tâches, puis toutes les 5 min au plus avec le tour du hub ; n'écrit que s'il y
   a du nouveau (budget KV inchangé : la synchronisation garde ses 30 s minimum entre deux dépôts).
 
+## Ce que fait la V3
+
+### Partage à plusieurs (`src/taches/membres.ts`, `partage.ts`, `ui/Membres.tsx`)
+
+- **Membres** : 👥 › « Gérer les membres et leurs droits » — le Fondateur invite des comptes de rang **ami** ou
+  **gestionnaire** (30 au plus) ; l'invitation lui ouvre l'app (accès `taches`, comme en V2), il reçoit sa **clé de
+  membre** (32 octets, scelle ce qu'il renvoie). L'ami des V1/V2 reste membre, avec son code d'auteur historique
+  « ami » (ses traces passées restent les siennes) ; les membres V3 signent avec l'identifiant de leur compte.
+- **Droits par projet et par personne** (`projet.acces`) : *lecture* (voir), *écriture* (tâches, checklist,
+  commentaires, temps et son minuteur, journal, corbeille de ses tâches), *admin du projet* (en plus : nom, icône,
+  couleur, description, dates, étiquettes, statuts, listes — créer, renommer). Le partage, la suppression du projet ou
+  d'une liste et l'espace restent au Fondateur. Choix dans la fenêtre des membres (par personne) ou dans ⚙︎ Projet ›
+  Partage (par projet). L'en-tête du projet dit qui le voit et avec quel droit ; pastilles d'initiales (avatars) dans
+  la barre, les lignes, les cartes, le détail.
+- **Retrait d'accès** : retirer quelqu'un d'un projet, ou de Tâches (« Retirer… », confirmé), fait **tourner la clé
+  de partage** du projet ; son dépôt est réécrit sans le projet (ou effacé) au tour suivant : sa copie se vide, sa
+  tuile disparaît. Ses commentaires et son temps passés restent.
+- **Assignation à plusieurs** (`assignes` ; `assigne` garde la première personne pour les appareils plus anciens) :
+  « Pour qui ? » coche une ou plusieurs personnes du projet ; ajout rapide « @Léa @Hugo » ; filtre « Pour » par
+  personne ; rappels et notifications « assignée » à chacun.
+- **Mentions** (`src/taches/mentions.ts`) : « @ » dans un commentaire propose les personnes du projet (prénom, sans
+  accents ni casse) ; le commentaire garde les mentionnés ; chacun reçoit la notification « On me mentionne » selon
+  SES réglages (canal, heures calmes, sourdine…), jamais l'auteur lui-même.
+
+### Chronologie — Gantt (`src/taches/gantt.ts`, `ui/Gantt.tsx`)
+
+Onglet « Chronologie » (touche 5) : une barre par tâche de son **début** (champ « Début » du détail) à son
+échéance (un jour si une seule date) ; **jalons** en losange ; regroupement par projet, et par liste si le projet en a
+plusieurs ; **ligne « aujourd'hui »** ; échelles **jour / semaine / mois**. Glisser une barre la **déplace** (début
+et échéance), ses bords l'**étirent** (souris ; au doigt : appui long puis glisser, sinon le doigt fait défiler).
+**Dépendances « fin → début »** : glisser la pastille ● d'une barre sur une autre, ou « ＋ Dépend de… » dans le détail
+(une boucle est refusée) ; une dépendance **violée** (la suivante commence le jour où la précédente finit, ou avant)
+est en rouge, signalée dans la chronologie et le détail, et « **Décaler les suivantes** » les repousse en gardant
+leur durée, de proche en proche. Clavier : ← → déplace d'un jour, Maj + ← → change l'échéance, Entrée ouvre. Les
+tâches sans date sont listées dessous (« Planifier »). Sur iPhone : colonne des titres étroite, la chronologie défile
+seule à l'horizontale, barres et jalons d'au moins 44 × 44 px.
+
+### Tableau de bord (`src/taches/tableauBord.ts`, `ui/TableauBord.tsx`)
+
+Onglet « Tableau de bord » (touche 6), pour le projet choisi ou pour tout : avancement (% des tâches terminées, sans
+les sous-tâches), en retard, temps passé contre estimé (V2), tâches terminées par semaine (8 semaines), burndown
+(tâches restantes par jour, trait du rythme idéal jusqu'à la fin du projet ou la dernière échéance), répartition par
+statut, charge par personne (ouvertes et estimation restante), avancement de chaque projet (vue globale). Graphiques
+en vues (aucune dépendance), aux couleurs du thème ; chaque valeur est écrite, et « Voir les valeurs en tableau »
+donne tout en texte.
+
+### Objectifs (`src/taches/objectifs.ts`, `ui/Objectifs.tsx`)
+
+« Objectifs » dans la barre latérale (Fondateur) : nom, description, échéance ; progression **calculée** (tâches
+liées, et toutes les tâches des projets liés) ou **saisie** (pourcentage, ou cible chiffrée « 4 articles sur 10 ») ;
+état *en cours*, *à risque* (le temps écoulé dépasse l'avancement de plus de 25 points), *en retard*, *atteint*.
+Fusionnés entre les appareils du Fondateur ; ils ne partent pas chez les membres.
+
+### Aide de l'IA — facultative, désactivée par défaut (`src/taches/ia.ts`, `ui/IA.tsx`, `bureau/electron/tachesReseau.mjs`)
+
+Il n'existait aucun appel à un modèle dans l'app (le podcast est préparé à l'avance) : l'aide passe par l'**API
+Claude** (modèle par défaut `claude-sonnet-5-5`, réglable), avec la **clé du Fondateur** saisie dans 👥 › IA et
+GitHub, rangée dans la base chiffrée de CET appareil (`taches.secrets`) — jamais dans le dépôt, jamais synchronisée,
+jamais envoyée à un membre, jamais affichée en entier (« sk-ant-…a1b2 »).
+
+- **Découper une tâche** en sous-tâches (✨ dans le détail) ; **résumer un projet** (menu ⋯ du projet, ou ✨) ou
+  **un débriefing** (📓 › Débriefing › ✨, prénoms remplacés par « Personne 1… ») ; **proposer un planning de la
+  semaine** (✨ › Planning : répartit les tâches ouvertes qui me concernent sur les jours restants ; « Appliquer » pose
+  leur début).
+- **Minimum envoyé, montré avant l'envoi** : titres, statuts, échéances, priorités, estimations ; ni commentaires,
+  ni prénoms, ni identifiants (les tâches du planning sont « T1, T2… », retraduites sur l'appareil).
+- **Validation obligatoire** : la réponse (lue et bornée : rien d'inattendu ne passe) est un **aperçu modifiable** ;
+  rien n'est créé ni modifié sans « Appliquer ».
+- **Où part l'appel** : de l'**application du PC**, par le processus principal d'Electron (`taches:ia` :
+  `POST https://api.anthropic.com/v1/messages`, sortie structurée en JSON Schema, repli serveur
+  `fallbacks: "default"` sur les modèles qui l'acceptent, refus et réponse coupée rendus lisibles). Sur le **site**,
+  l'appel réel n'est pas proposé : il faudrait exposer la clé à la page, ou un relais modifié — seul le **mode
+  essai** (réponses simulées sur l'appareil, rien n'est envoyé) y fonctionne. Pas de SDK dans le processus
+  principal : l'application installée n'embarque aucun module de `node_modules` (« files » de `package.json`) ;
+  appel HTTP direct, sans dépendance.
+
+### GitHub — facultatif, désactivé par défaut (`src/taches/github.ts`, `ui/DetailV3.tsx`)
+
+Dans le détail d'une tâche (Fondateur, GitHub activé) : un **lien** vers un dépôt, une branche ou une PR
+(« proprio/depot#12 », « proprio/depot@branche », ou l'adresse github.com). L'**état** (PR ouverte, en brouillon,
+fusionnée, fermée ; CI réussie, en échec, en cours) est lu par l'API REST de GitHub avec un **jeton personnel en
+lecture** (« fine-grained » : Contents, Pull requests, Checks en lecture), rangé comme la clé de l'IA. Lecture à
+l'ouverture puis toutes les 5 min au plus tant que l'app est ouverte (↻ pour relire) ; l'état reste sur l'appareil
+(`taches.github`) : **le lire n'écrit rien sur le relais**. Option « Marquer Faite quand la PR est fusionnée » : la
+tâche passe au statut terminé (une écriture, une fois). L'API GitHub accepte les appels d'un navigateur (CORS) :
+le site lit directement, l'application du PC passe par son processus principal (`taches:github`, liste fermée de
+chemins en lecture). Un membre voit le lien mais ne le pose ni ne le change ; il ne reçoit jamais le jeton.
+
 ## Droits
 
-| Compte | Tuile | Voit | Modifie | Gère (listes, statuts, partage, suppression du projet) |
+| Compte | Tuile | Voit | Modifie | Gère |
 | --- | --- | --- | --- | --- |
-| Fondateur (compte historique) | oui | tout | tout | oui |
-| L'ami choisi | oui, dès que le dépôt scellé pour lui est arrivé | les projets partagés (jamais les projets ni les tâches des autres apps, ni les sessions de Claude Office liées) | ceux partagés **en écriture** (tâches, checklist, commentaires, temps passé et son minuteur, suppression et restauration d'une tâche) ; ses propres réglages de notifications | non — jamais de suppression d'espace, de projet ou de liste, ni d'effacement définitif, ni de lien avec les autres apps |
-| Tout autre compte (autre ami, gestionnaire, administrateur, autre Fondateur) | non | rien | rien | non |
+| Fondateur (compte historique) | oui | tout | tout | tout : membres, partage, suppression, objectifs, IA, GitHub, liens |
+| Membre (ami ou gestionnaire invité) | oui, dès que le dépôt scellé pour lui est arrivé | les projets où il a un droit (jamais les autres projets, les objectifs, les projets et tâches des autres apps, les sessions de Claude Office, les clés d'autrui) | là où il a *écriture* ou *admin* : tâches, checklist, commentaires (les siens), temps passé et SON minuteur, journal (ses entrées), suppression et restauration d'une tâche ; ses réglages de notifications | *admin du projet* : listes (créer, renommer), statuts et paramètres du projet — jamais le partage, ni la suppression d'un espace, d'un projet ou d'une liste, ni un lien GitHub ou avec une autre app |
+| Tout autre compte (non invité, administrateur, autre Fondateur, membre retiré) | non | rien | rien | non |
 
-`src/taches/acces.ts` : `roleTaches` exige, pour l'ami, l'accès `taches` (donné par le choix du Fondateur, par
-`onAutoriser`) **et** la copie reçue avec la clé de partage : un accès donné autrement (ou un ancien ami dont le dépôt
+`src/taches/acces.ts` : `roleTaches` exige, pour un membre, l'accès `taches` (donné par l'invitation du Fondateur,
+par `onAutoriser`) **et** la copie reçue avec sa clé de membre : un accès donné autrement (ou un ancien ami dont le dépôt
 est retiré) n'ouvre rien. L'Administration ne propose pas Tâches en case à cocher (`attribueeParApp` dans le
 registre) et un « modèle » d'accès ne retire pas cet accès.
 
 ## Stockage et synchronisation (aucun changement du relais)
 
 Données dans la base chiffrée du profil (`contexte.baseProfil`) : `taches.donnees` (Fondateur), `taches.copie`
-(ami), `taches.rappels` et `taches.affichage` (appareil, jamais synchronisés).
+(membre), `taches.rappels`, `taches.affichage`, `taches.github` (état des PR) et `taches.secrets` (clé de l'API
+Claude, jeton GitHub ; Fondateur) — ces quatre-là sur l'appareil seulement, jamais synchronisés, et hors des
+sauvegardes (qui ne gardent qu'une liste fermée de paramètres).
 
 **Fusion par champ** (`src/taches/fusion.ts`) : chaque entité (espace, projet, liste, tâche, vue, réglages) porte
-l'horodatage de chacun de ses champs (`ISO|f` ou `ISO|a`, toujours croissant même si l'horloge recule) ; deux
+l'horodatage de chacun de ses champs (`ISO|f`, `ISO|a` ou, en V3, `ISO|<identifiant du membre>`, toujours croissant
+même si l'horloge recule) ; deux
 copies se réunissent champ par champ, le plus récent gagne, à égalité l'ordre canonique départage. Checklist et
 commentaires : élément par élément ; historique : union bornée. Suppression = champ `supprime` daté (**pierre
 tombale**), qui voyage et qu'une restauration plus récente défait. Chaque pierre tombale porte un **lot** (champ
@@ -197,25 +289,38 @@ modifications du même champ : la plus récente gagne, l'autre reste lisible dan
 
 | Objet | Écrit par | Contenu | Chiffrement |
 | --- | --- | --- | --- |
-| `p/principal/boite/taches` | le Fondateur (jeton maître) | ses données entières (appareils du Fondateur) | `cleDerivee('synchro')`, comme `admin` |
-| `p/<ami>/boite/taches` | le Fondateur (jeton maître ; le relais refuse ce nom à un jeton de profil) | les seuls projets partagés (listes, tâches, pierres tombales), leur mode, les prénoms, la clé de partage `K` | ECIES X25519 + XChaCha20-Poly1305 pour la clé publique de réception de l'ami (`tsuzuku-cle`, la même que Tsuzuku), usage `taches|<id>` |
-| champ `taches` du retour `p/<ami>/boite/compte` | l'ami (objet qu'il écrit déjà) | les tâches qu'il a touchées dans les projets en écriture | XChaCha20-Poly1305 par `K` (32 octets aléatoires tirés au choix de l'ami) |
+| `p/principal/boite/taches` | le Fondateur (jeton maître) | ses données entières (appareils du Fondateur), membres, clés de membre et de projet comprises | `cleDerivee('synchro')`, comme `admin` |
+| `p/<membre>/boite/taches` (un par membre) | le Fondateur (jeton maître ; le relais refuse ce nom à un jeton de profil) | les SEULS projets où ce membre a un droit (listes, tâches, journal, pierres tombales ; son droit dans `partage`, les droits des personnes du projet par code), les prénoms de ces personnes, sa clé de membre, la clé de chacun de CES projets | ECIES X25519 + XChaCha20-Poly1305 pour la clé publique de réception du membre (`tsuzuku-cle`, la même que Tsuzuku), usage `taches|<id>` |
+| champ `taches` du retour `p/<membre>/boite/compte` | le membre (objet qu'il écrit déjà) | ce qu'il a fait, **un paquet par projet** (tâches touchées, journal, et — admin — le projet et ses listes) | chaque paquet : XChaCha20-Poly1305 par la clé du projet, lié au projet et à l'auteur (données associées `tp|<projet>|<code>`) ; le tout par sa clé de membre |
 
-Le Fondateur revérifie tout ce que l'ami renvoie (`appliquerEnvoiAmi`) : seulement des tâches, seulement dans un
-projet partagé **en écriture** avant comme après la fusion, dans une liste de ce projet ; jamais un projet, une liste,
-un statut, un partage ni une suppression de projet. L'ami croit seulement un dépôt estampillé `maitre` par le relais.
-Un changement d'ami (ou « Personne ») efface le dépôt de l'ancien : sa copie se vide, sa tuile disparaît.
+Le Fondateur revérifie tout ce qu'un membre renvoie (`appliquerEnvoiMembre`) : chaque paquet doit s'ouvrir avec la
+clé ACTUELLE du projet (ou la précédente, juste après une rotation, pour qui a encore un droit), le membre doit avoir
+*écriture* (ou *admin* pour le projet et ses listes) avant comme après la fusion, dans une liste de ce projet ;
+seulement ses commentaires, son temps et ses entrées de journal ; jamais un partage, une suppression de projet ou de
+liste, une source d'une autre app, une session liée, le minuteur d'un autre ni un lien GitHub. Un membre croit
+seulement un dépôt estampillé `maitre` par le relais. L'ami des V1/V2 sur un appareil pas encore à jour peut encore
+renvoyer au format à plat (et lui seul).
+
+**Retrait et rotation des clés.** Le relais isole déjà chaque espace (un membre ne lit que le sien) et rien de neuf
+n'est scellé pour un membre retiré : son dépôt est réécrit sans le projet, ou effacé. En plus, la clé du projet
+tourne : la nouvelle ne part que chez ceux qui restent ; ce que l'ancien membre scellerait encore avec l'ancienne est
+refusé — elle n'ouvre ni n'authentifie plus rien de nouveau.
 
 **Budget d'écritures KV** : rien n'est déposé sans changement (empreintes) ; jamais deux dépôts du même objet à moins
 de 30 s (les changements intermédiaires partent avec le suivant, testé) ; une frappe n'écrit rien (les textes sont
 enregistrés à la validation) ; le tour des comptes part ~5 s après la dernière écriture, toutes les 2 min et au retour
 au premier plan. Un dépôt coûte 2 écritures (valeur + index). Usage typique : quelques dizaines d'écritures par jour.
+V3 : un membre ne reçoit un nouveau dépôt que si SA projection a changé (une modification d'un projet privé n'écrit
+rien chez les membres) ; la clé de chaque projet partagé est créée une fois. Mesuré (`v3.test.ts`, relais en
+mémoire) : premier envoi à 3 membres = 3 dépôts ; puis une modification de Léa dans un projet vu par les 3 = 1
+retour + 4 dépôts (principal et les 3 membres) = 5 objets, soit 10 écritures KV ; un tour sans changement : 0.
+Mesuré de bout en bout (`e2e-taches-v3`) : MESURE_E2E.
 
-**Relais : inchangé** (`relais/worker.mjs` non modifié, pas de redéploiement).
+**Relais : inchangé** (`relais/worker.mjs` non modifié en V1, V2 et V3 : pas de redéploiement).
 
 ## Limites connues
 
-- Un seul ami. Les rappels ne sonnent que si l'application est ouverte (PC, site, app) ; pas de notification iOS
+- Les rappels ne sonnent que si l'application est ouverte (PC, site, app) ; pas de notification iOS
   programmée ; chaque appareil a son propre anti-répétition (deux appareils ouverts → deux notifications).
 - Côté ami, la clé de réception est celle de Tsuzuku : un ami sur plusieurs navigateurs reçoit les projets sur celui
   dont la clé a été déposée en dernier (même limite que les sources partagées de Tsuzuku).
@@ -235,6 +340,14 @@ au premier plan. Un dépôt coûte 2 écritures (valeur + index). Usage typique 
   et dividendes lus seulement quand le hub est affiché (résumé du portefeuille). Un projet auto-géré supprimé revient
   si son lien reste activé (désactivez le lien d'abord).
 
+- V3 : les objectifs sont au Fondateur (pas partagés). Un membre admin ne supprime pas de liste. Les mentions et
+  les assignations proposent les personnes du projet telles que le Fondateur les a publiées (un membre ajouté arrive
+  chez les autres au tour suivant). Un appareil d'une version antérieure à la V3 ignore les horodatages des membres
+  V3 (mettez tous les appareils à jour). L'IA réelle passe par l'application du PC (le site : mode essai seulement).
+  GitHub : 5 min au plus entre deux lectures, et seulement quand l'app est ouverte ; un jeton refusé (droits,
+  expiration) est signalé à la relecture. Une dépendance se viole « au jour près » (pas d'heures dans la
+  chronologie).
+
 ## Feuille de route
 
 **V2 — faite** : suppression des espaces / projets / listes avec corbeille ; liens avec Claude Office, Prospects,
@@ -242,14 +355,22 @@ Abonnements et Portefeuille ; suivi du temps (minuteur, saisie, estimations, rel
 notifications de chacun ; journal du jour et débriefing ; paramètres des projets (icône, description, dates,
 étiquettes, statuts avec réaffectation, historique) ; ouverture sur le calendrier de la semaine.
 
-**Reste de la V2 (reporté)** — Gantt (dépendances simples, glisser les barres) ; tableau de bord (tâches par statut /
-personne, en retard, faites cette semaine) ; pièces jointes chiffrées ; mentions dans les commentaires ; modèles de
-projets ; notifications iOS programmées pour les échéances.
+**V3 — faite** : partage à plusieurs (membres amis et gestionnaires, droits lecture / écriture / admin par projet et
+par personne, invitations, retrait avec rotation de la clé du projet, avatars, assignation à plusieurs, mentions
+notifiées) ; chronologie (Gantt : glisser, étirer, dépendances fin → début, décalage, jalons, clavier, iPhone) ;
+tableau de bord ; objectifs ; aide de l'IA (facultative) ; lien GitHub (facultatif).
 
-**V3** — objectifs (cibles chiffrées liées à des tâches) ; IA (découper une tâche, résumer un projet, proposer des
-échéances, ajout rapide en langage libre étendu) ; intégration GitHub (issues / PR liées, statut automatique) ; plus
-d'un ami (partage par personne, rôles, invitations) ; automatisations (si statut = Fait alors…) ; vues personnalisées
-avancées (tableau à colonnes libres, champs personnalisés).
+**Reporté** :
+- **Pièces jointes chiffrées** (reportées depuis la V2) : pas proprement faisables sans changer le relais. Un membre
+  n'écrit que ses objets propres (`compte`, `coffre`, `portefeuille`, `tsuzuku-cle`) : ses fichiers devraient voyager
+  dans son retour `compte` (réécrit à chaque envoi), et ceux du Fondateur être recopiés dans l'espace de CHAQUE membre
+  du projet (une écriture par fichier et par membre, et des dépôts lourds à chaque modification). Il faut un objet de
+  pièces jointes par projet, lisible des seuls membres du projet, côté relais : à faire avec une évolution du relais
+  (et son redéploiement).
+- Ajout rapide en langage libre par l'IA ; automatisations (si statut = Fait alors…) ; vues personnalisées avancées
+  (tableau à colonnes libres, champs personnalisés) ; modèles de projets ; notifications iOS programmées ; issues
+  GitHub (seulement dépôt, branche, PR) ; objectifs partagés avec les membres ; IA sur le site (demanderait un relais
+  qui garde la clé).
 
 ## Tests
 
@@ -273,5 +394,20 @@ avancées (tableau à colonnes libres, champs personnalisés).
   sous-agent, demande d'Historique, ami qui forge une source).
 - `src/taches/integrations/officeUi.test.tsx` : « ＋ Créer une tâche » dans le Détail d'un agent de Claude Office ;
   absent pour l'ami ou lien désactivé ; fins lues dans l'activité.
-- Bout en bout : `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-taches.mjs` et
-  `scripts/e2e-taches-v2.mjs` (après `npx vite build`), captures JPEG dans `docs/captures-taches/` (`v2-…` pour la V2).
+- `src/taches/v3.test.ts` : membres (invitations, droits par projet, projection de chacun, document sans clé
+  d'autrui), retours (écriture acceptée, lecture refusée même forgée, admin limité, auteurs vérifiés, format à plat
+  refusé à un membre V3), révocation (clé tournée, ancienne clé refusée, rejeu sur un autre projet refusé), ami des
+  V1/V2 (code « ami », format à plat), trois membres par le relais en mémoire (chiffré, chacun ses projets, dépôts
+  comptés, membre retiré : dépôt effacé, copie vide, nouvelle clé chez les autres), mentions (lecture, suggestions,
+  notification selon les réglages), assignation à plusieurs, chronologie (barres, échelle, déplacer, étirer,
+  violation, décaler, boucle), tableau de bord, objectifs, IA (client simulé : minimum envoyé, rien avant
+  « Appliquer », réponses bornées, anonymisation), GitHub (liens saisis, état, cache 5 min, « Faite » une fois, lien
+  refusé à un membre).
+- `src/taches/RacineV3.test.tsx` : chronologie, tableau de bord et objectifs dans les 8 thèmes (bureau, téléphone),
+  mouvement réduit, violation et « Décaler », clavier, membres (inviter, droits, retirer), assignation et mention, IA
+  et GitHub en mode essai, membre admin et membre en lecture.
+- `bureau/electron/tachesReseau.test.mjs` (`node --test`) : requête à l'API Claude (clé en en-tête, sortie
+  structurée, repli), erreurs lisibles, demandes invalides refusées sans envoi ; GitHub : liste fermée de chemins.
+- Bout en bout : `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-taches.mjs`, `scripts/e2e-taches-v2.mjs`
+  et `scripts/e2e-taches-v3.mjs` (après `npx vite build`), captures JPEG dans `docs/captures-taches/` (`v2-…`,
+  `v3-…`).
