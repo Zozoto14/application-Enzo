@@ -103,7 +103,7 @@ export function RacineAnnexe({ contexte }: { contexte: ContexteAnnexe }) {
   }, [contexte]);
 
   return (
-    <GardeErreur quoi="cette fenêtre" onRevenir={() => contexte.revenir()}>
+    <GardeErreur quoi="cette fenêtre">
       <App session={session} profils={profils} hub annexe={contexte} />
     </GardeErreur>
   );

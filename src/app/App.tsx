@@ -2954,7 +2954,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     return (
       <PanneauOnglet key={app.id} scene={scene} placement={placement} testID={`onglets-contenu-${app.id}`}>
         <InfoOngletContexte.Provider value={placement ? infoGauche : INFO_MASQUE}>
-          <GardeErreur quoi={app.nom} onRevenir={() => fermerApp(app.id)}>
+          <GardeErreur quoi={app.nom} onRevenir={annexe ? undefined : profils?.onChanger}>
             <BarreAppContexte.Provider value={barreApp}>
               {/* Téléphone : l'app commence sous l'encoche. */}
               <View style={[{ flex: 1, backgroundColor: themeDuHub.fond }, mobile ? margesSecurite(['haut']) : null]}>

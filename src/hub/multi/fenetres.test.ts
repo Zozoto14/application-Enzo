@@ -157,9 +157,9 @@ describe('page et place de l’annexe', () => {
 
 describe('session vue de l’annexe', () => {
   it('écritures signées par l’annexe, base jamais fermée d’ici, verrouillage par la principale', () => {
-    const executer = jest.fn();
+    const executer = jest.fn((_sql: string, _parametres?: readonly unknown[]) => undefined);
     const fermer = jest.fn();
-    const pilote = { executer, lire: jest.fn(() => [{ a: 1 }]), transaction: <T,>(action: () => T) => action(), fermer };
+    const pilote = { executer, lire: jest.fn((_sql: string) => [{ a: 1 }]), transaction: <T,>(action: () => T) => action(), fermer };
     class FausseSession {
       private interne = 'ouverte';
       base() {
@@ -173,17 +173,21 @@ describe('session vue de l’annexe', () => {
       }
     }
     const session = new FausseSession();
-    const ecrire = jest.fn(<T,>(action: () => T) => action());
+    let ecritures = 0;
+    const ecrire = <T,>(action: () => T): T => {
+      ecritures++;
+      return action();
+    };
     const verrouiller = jest.fn();
     const vue = sessionPourAnnexe(session, { ecrire, verrouiller });
     expect(vue.statut()).toBe('ouverte');
     vue.base().executer('UPDATE x SET y = 1');
-    expect(ecrire).toHaveBeenCalledTimes(1);
+    expect(ecritures).toBe(1);
     expect(executer).toHaveBeenCalledWith('UPDATE x SET y = 1', undefined);
     expect(vue.base().lire('SELECT 1')).toEqual([{ a: 1 }]);
-    expect(ecrire).toHaveBeenCalledTimes(1);
+    expect(ecritures).toBe(1);
     vue.base().transaction(() => 3);
-    expect(ecrire).toHaveBeenCalledTimes(2);
+    expect(ecritures).toBe(2);
     vue.base().fermer();
     expect(fermer).not.toHaveBeenCalled();
     vue.verrouiller();
