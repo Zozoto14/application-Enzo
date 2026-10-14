@@ -28,7 +28,9 @@ import {
   definirSecretTotp,
   deverrouillerParCodeRecuperation,
   deverrouillerParMotDePasse,
+  exempterTotp,
   lireSecretTotp,
+  totpExige,
   regenererCodesRecuperation,
   type Coffre,
 } from '../securite/coffre';
@@ -46,6 +48,7 @@ import {
 } from '../securite/politique';
 import { genererSecretTotp, uriOtpauth, verifierCodeTotp } from '../securite/totp';
 import { scellerPourAdmin } from '../securite/sequestre';
+import { formeCanonique } from '../profils/invitation';
 import type { StockageCoffre } from './stockage-coffre';
 
 /**
@@ -96,6 +99,17 @@ export class ErreurCoffreDifferent extends ErreurSession {
   }
 }
 
+/**
+ * Le mot de passe temporaire d'une invitation n'ouvre plus le coffre : il a
+ * déjà été remplacé (invitation utilisée), ou le Fondateur a réinitialisé l'accès.
+ */
+export class ErreurInvitationUtilisee extends ErreurSession {
+  constructor() {
+    super('Cette invitation a déjà été utilisée (ou remplacée) : connecte-toi avec ton prénom et ton mot de passe, ou demande un nouveau lien.');
+    this.name = 'ErreurInvitationUtilisee';
+  }
+}
+
 /** Seul message d'échec d'authentification : il ne dit jamais quel facteur est faux. */
 export const MESSAGE_ECHEC = 'Mot de passe ou code incorrect';
 
@@ -115,10 +129,16 @@ const INVISIBLES = /[\u200B-\u200D\u2060\uFEFF\u00AD]/g;
  * tentative comptée : la protection en ligne reste celle du limiteur, et une
  * attaque hors ligne n'y gagne rien.
  */
-export function variantesMotDePasse(saisi: string): string[] {
+export function variantesMotDePasse(saisi: string, canonique = false): string[] {
+  if (canonique) {
+    // Coffre scellé sous la forme canonique (mot de passe choisi par invitation) : une seule dérivation.
+    const forme = formeCanonique(saisi);
+    return forme.length > 0 ? [forme] : [];
+  }
   const nfc = saisi.normalize('NFC');
   const nettoye = nfc.replace(INVISIBLES, '').trim();
-  const formes = [saisi, nfc, nettoye].filter(forme => forme.length > 0);
+  // En dernier : guillemets typographiques et espaces insécables (copie depuis une messagerie).
+  const formes = [saisi, nfc, nettoye, formeCanonique(saisi)].filter(forme => forme.length > 0);
   return [...new Set(formes)];
 }
 
@@ -300,7 +320,7 @@ export class Session {
     }
 
     const secretTotp = lireSecretTotp(trouve.coffre, trouve.cle);
-    if (secretTotp && !verifierCodeTotp(secretTotp, normaliserCodeTotp(options.codeTotp), this.horloge())) {
+    if (secretTotp && totpExige(trouve.coffre, trouve.cle) && !verifierCodeTotp(secretTotp, normaliserCodeTotp(options.codeTotp), this.horloge())) {
       // Le mot de passe était bon : la clé a été reconstituée. Elle est effacée
       // sans avoir servi, plutôt que gardée « au cas où ».
       trouve.cle.fill(0);
@@ -343,7 +363,7 @@ export class Session {
       }
     }
     for (const candidat of candidats) {
-      for (const variante of variantes) {
+      for (const variante of candidat.canonique ? variantesMotDePasse(motDePasse, true) : variantes) {
         try {
           return { cle: deverrouillerParMotDePasse(candidat, variante), coffre: candidat };
         } catch (erreur) {
@@ -372,15 +392,20 @@ export class Session {
       throw new ErreurDeverrouillage(MESSAGE_ECHEC);
     }
     const secretTotp = lireSecretTotp(coffre, trouve.cle);
+    const exige = totpExige(coffre, trouve.cle);
     trouve.cle.fill(0);
-    if (secretTotp && !verifierCodeTotp(secretTotp, normaliserCodeTotp(options.codeTotp), this.horloge())) {
+    if (secretTotp && exige && !verifierCodeTotp(secretTotp, normaliserCodeTotp(options.codeTotp), this.horloge())) {
       this.enregistrerEchec();
       throw new ErreurDeverrouillage(MESSAGE_ECHEC);
     }
   }
 
-  /** État du coffre sans rien déchiffrer : TOTP enrôlé, codes de récupération restants. */
-  etatCoffre(): { totpActif: boolean; codesRecuperation: number } | undefined {
+  /**
+   * État du coffre sans rien déchiffrer : TOTP enrôlé, codes de récupération
+   * restants, et si l'écran doit demander le code à six chiffres (`codeDemande`,
+   * simple indication : l'exemption n'est crue qu'une fois la clé reconstituée).
+   */
+  etatCoffre(): { totpActif: boolean; codesRecuperation: number; codeDemande: boolean } | undefined {
     const coffre = this.deps.stockage.lire();
     if (!coffre) {
       return undefined;
@@ -388,7 +413,41 @@ export class Session {
     return {
       totpActif: Boolean(coffre.totp),
       codesRecuperation: coffre.enveloppes.filter(enveloppe => enveloppe.usage === 'recuperation').length,
+      codeDemande: Boolean(coffre.totp) && !coffre.sansTotp,
     };
+  }
+
+  /**
+   * Acceptation d'une invitation : le mot de passe TEMPORAIRE (porté par
+   * l'invitation) ouvre le coffre, puis le mot de passe CHOISI le remplace
+   * (forme canonique), et le code TOTP n'est plus demandé. Le temporaire
+   * cesse aussitôt de marcher : l'invitation ne sert qu'une fois. La session
+   * est ouverte à l'issue. Le coffre écrit est rendu (à publier sur le relais).
+   */
+  accepterInvitation(temporaire: string, choisi: string): Coffre {
+    const coffre = this.exigerCoffre();
+    this.exigerAbsenceDeTemporisation();
+    const nouveau = formeCanonique(choisi);
+    if (nouveau.length === 0) {
+      throw new ErreurSession('Choisissez un mot de passe.');
+    }
+    let cle: Uint8Array;
+    try {
+      cle = deverrouillerParMotDePasse(coffre, temporaire);
+    } catch (erreur) {
+      if (erreur instanceof ErreurDeverrouillage) {
+        throw new ErreurInvitationUtilisee();
+      }
+      throw erreur instanceof ErreurCalculCle ? erreur : new ErreurCalculCle(erreur);
+    }
+    const final = {
+      ...exempterTotp(changerMotDePasseCoffre(coffre, cle, nouveau, { kdf: this.deps.kdf, alea: this.alea }), cle, this.alea),
+      canonique: true,
+    };
+    this.deps.stockage.ecrire(final);
+    this.verrouiller();
+    this.ouvrir(cle);
+    return final;
   }
 
   /**
@@ -434,9 +493,9 @@ export class Session {
     const coffre = this.exigerCoffre();
     // On repart du mot de passe fourni plutôt que de la clé en mémoire :
     // changer de mot de passe doit exiger de connaître l'ancien.
-    const cleMaitresse = deverrouillerParMotDePasse(coffre, ancien);
+    const cleMaitresse = coffre.canonique ? deverrouillerParMotDePasse(coffre, formeCanonique(ancien)) : deverrouillerParMotDePasse(coffre, ancien);
     this.deps.stockage.ecrire(
-      changerMotDePasseCoffre(coffre, cleMaitresse, nouveau, {
+      changerMotDePasseCoffre(coffre, cleMaitresse, coffre.canonique ? formeCanonique(nouveau) : nouveau, {
         kdf: this.deps.kdf,
         alea: this.alea,
       }),
