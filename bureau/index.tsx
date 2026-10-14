@@ -1532,8 +1532,8 @@ function Racine() {
         exiger(profil, 'etat-ami', ami);
         const maitre = await liaisonMaitre();
         if (!maitre) throw new Error('Reliez d’abord cet appareil au relais (Paramètres › Synchronisation).');
+        // L'accès par identifiant est gardé : le relais répond « accès révoqué » (message précis) tant que dure la révocation.
         await revoquerCompte(maitre, id, revoque);
-        if (revoque) await supprimerAcces(maitre, empreinteIdentifiant(ami.nom)).catch(() => undefined);
       },
       etatConnexion: async (id: string) => {
         const maitre = await liaisonMaitre();

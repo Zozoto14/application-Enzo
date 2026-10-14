@@ -70,8 +70,8 @@ const relais = {
   ancien: false,
   /** Relais injoignable (connexion coupée). */
   horsLigne: false,
-  /** Compte dont la publication échoue (appareil du Fondateur « éteint » avant de publier). */
-  bloquer: undefined,
+  /** Comptes déjà publiés : tout AUTRE espace ne se publie pas (appareil du Fondateur « éteint » avant de publier). */
+  bloquerSauf: undefined,
   /** Adresse IP vue par le relais (anti-force brute par adresse). */
   ip: '198.51.100.1',
 };
@@ -97,7 +97,8 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
     res.end(JSON.stringify({ erreur: statut === 401 ? 'Jeton du relais manquant ou incorrect.' : 'Adresse inconnue.' }));
     return;
   }
-  if (relais.bloquer && req.method === 'PUT' && chemin.startsWith(`/p/${relais.bloquer}/boite/`)) {
+  const espacePublie = /^\/p\/([a-z0-9]+)\/boite\//.exec(chemin)?.[1];
+  if (relais.bloquerSauf && req.method === 'PUT' && espacePublie && espacePublie !== 'principal' && !relais.bloquerSauf.has(espacePublie)) {
     res.writeHead(503, { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' });
     res.end('{"erreur":"indisponible"}');
     return;
@@ -187,7 +188,8 @@ async function deverrouiller(page, motDePasse, secret, attendu = 'hub') {
 }
 
 async function confirmerIdentite(page, secret) {
-  await page.getByTestId('admin-identite-mdp').waitFor({ timeout: 20_000 });
+  // Identité vérifiée il y a peu : l'Administration ne la redemande pas.
+  if (!(await page.getByTestId('admin-identite-mdp').waitFor({ timeout: 8_000 }).then(() => true, () => false))) return;
   for (const decalage of [0, 1, -1]) {
     await page.getByTestId('admin-identite-mdp').fill(MDP_ADMIN);
     await page.getByTestId('admin-identite-code').fill(totp(secret, decalage));
@@ -402,16 +404,11 @@ try {
   // ================================================================ Profil pas encore publié
   log('Zoé : le PC « s’éteint » avant de publier son compte');
   await pc.getByTestId('admin-onglet-journal').click();
-  const idsAvant = new Set([...kv.keys()].map(c => /^p:([a-z0-9]+):/.exec(c)?.[1]).filter(Boolean));
-  relais.bloquer = 'zzz-inconnu';
-  // L'identifiant de Zoé n'est connu qu'à la création : on bloque toute publication d'un espace nouveau.
-  const bloquerNouveaux = setInterval(() => {
-    const nouveau = [...kv.keys()].map(c => /^inv-profil:([a-z0-9]+)/.exec(c)?.[1]).find(id => id && !idsAvant.has(id));
-    if (nouveau && relais.bloquer !== nouveau && !kv.has(`p:${nouveau}:coffre`)) relais.bloquer = nouveau;
-  }, 50);
+  const idsAvant = new Set([...kv.keys()].map(c => /^(?:p:|inv-profil:)([a-z0-9]+)/.exec(c)?.[1]).filter(Boolean));
+  // L'identifiant de Zoé n'est connu qu'à la création : aucun espace nouveau ne se publie.
+  relais.bloquerSauf = idsAvant;
   const zoe = await creerAmi(pc, 'Zoé');
-  clearInterval(bloquerNouveaux);
-  const idZoe = relais.bloquer;
+  const idZoe = [...kv.keys()].map(c => /^inv-profil:([a-z0-9]+)/.exec(c)?.[1]).find(id => id && !idsAvant.has(id));
   verifier(zoe.nonPublie || !kv.has(`p:${idZoe}:coffre`), 'Administration : « pas encore publié : gardez l’app ouverte »');
   await capture(pc, '10-pc-non-publie');
   await terminerIdentifiants(pc);
@@ -424,7 +421,7 @@ try {
   } else {
     verifier(false, 'le blocage de publication de Zoé n’a pas pris');
   }
-  relais.bloquer = undefined;
+  relais.bloquerSauf = undefined;
   await pc.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
   const publieZoe = await attendre(async () => {
     await pc.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
@@ -463,6 +460,11 @@ try {
   log('Léa a oublié son mot de passe : le Fondateur réinitialise son accès');
   await pc.getByTestId('admin-onglet-utilisateurs').click();
   await pc.getByText('Léa', { exact: true }).first().click();
+  // Le retour de Léa (connexion, appareils) arrive au tour suivant du PC.
+  await attendre(async () => {
+    await pc.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    return /Actif/.test(await texteDe(pc, 'admin-acces-etat', 2_000));
+  }, 120_000, 3000);
   const etatLea = await texteDe(pc, 'admin-acces-etat');
   verifier(/Actif · dernière connexion/.test(etatLea), `fiche : état clair (« ${etatLea} »)`);
   await pc.getByTestId('admin-invitation-envoyer').click();
