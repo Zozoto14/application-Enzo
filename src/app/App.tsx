@@ -2740,6 +2740,12 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             suggererAutreCoffre={echecsAuth >= 2 && Boolean(profils?.lier?.suggererAutreCoffre)}
             avisHorloge={avisHorloge}
             diagnostic={diagnosticDeverrouillage}
+            sansCode={session.etatCoffre()?.codeDemande === false}
+            aideOubli={
+              profils && !profils.actuel.admin && profils.actuel.id !== 'leurre'
+                ? 'Mot de passe oublié ? Demande à la personne qui t’a invité de « Réinitialiser ton accès » (Administration › ton compte) : tu recevras un nouveau lien pour choisir un nouveau mot de passe.'
+                : undefined
+            }
           />
         )
 ) : acceptationRequise ? (

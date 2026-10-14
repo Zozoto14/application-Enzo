@@ -15,12 +15,24 @@ import React, { useState } from 'react';
 import { View } from 'react-native';
 import { useMobile } from '../mobile/useMobile';
 import { EcranEntree } from './EcranEntree';
-import { Bouton, Champ, SousTitre, Titre, usePalette } from '../composants';
+import { Alerte, Bouton, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, stylesPartages } from '../theme';
 
-export function Connexion({ onContinuer, enCours }: { onContinuer(prenom: string): void; enCours?: boolean }) {
+export function Connexion({
+  onContinuer,
+  enCours,
+  erreur,
+  prenomInitial,
+}: {
+  onContinuer(prenom: string): void;
+  enCours?: boolean;
+  /** Identifiant inconnu sur ce navigateur relié à un seul compte (message précis). */
+  erreur?: string;
+  /** Dernier identifiant utilisé ici. */
+  prenomInitial?: string;
+}) {
   const palette = usePalette();
-  const [prenom, setPrenom] = useState('');
+  const [prenom, setPrenom] = useState(prenomInitial ?? '');
   const valider = () => {
     if (prenom.trim()) {
       onContinuer(prenom);
@@ -45,8 +57,9 @@ export function Connexion({ onContinuer, enCours }: { onContinuer(prenom: string
           value={prenom}
           onChangeText={setPrenom}
           onSubmitEditing={valider}
-          autoCapitalize="words"
+          autoCapitalize="none"
           autoCorrect={false}
+          spellCheck={false}
           // Téléphone : « username », pour que le gestionnaire de mots de passe associe prénom et coffre.
           autoComplete={mobile ? 'username' : 'off'}
           maxLength={30}
@@ -54,6 +67,11 @@ export function Connexion({ onContinuer, enCours }: { onContinuer(prenom: string
           enterKeyHint="go"
           testID="connexion-prenom"
         />
+        {erreur ? (
+          <View testID="connexion-prenom-erreur">
+            <Alerte message={erreur} />
+          </View>
+        ) : null}
         {mobile ? null : bouton}
       </View>
     </EcranEntree>

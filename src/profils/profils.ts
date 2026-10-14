@@ -79,6 +79,8 @@ export interface Profil {
   /** Dernière ouverture du profil sur cet appareil (ISO). */
   derniereConnexion?: string;
   connexions?: number;
+  /** Vue de l'administrateur : appareils où l'ami s'est connecté (nom lisible, dernière fois), relus de son suivi scellé. */
+  appareils?: Array<{ nom: string; vu: string }>;
   /** Compte antérieur au suivi des connexions : « jamais connecté » n'a pas de sens pour lui. */
   anterieur?: boolean;
   /** Entrée de l'administrateur seulement : politique globale des apps. */
