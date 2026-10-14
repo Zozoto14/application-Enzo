@@ -51,7 +51,7 @@ const nav = async (id: string) => {
 
 function avecDemo(): { b: ReturnType<typeof base>; projetId: string } {
   const r = ajouterDemo(donneesVides(), { maintenant: T, auteur: 'fondateur' }, AUJ);
-  const b = base({ [CLES_TACHES.donnees]: JSON.stringify(r.donnees), [CLES_TACHES.affichage]: JSON.stringify({ selection: { g: 'projet', id: r.projetId }, vue: 'liste' }) });
+  const b = base({ [CLES_TACHES.donnees]: JSON.stringify(r.donnees), [CLES_TACHES.affichage]: JSON.stringify({ ouverture: 'derniere', selection: { g: 'projet', id: r.projetId }, vue: 'liste' }) });
   return { b, projetId: r.projetId };
 }
 
@@ -68,12 +68,17 @@ describe('Tâches : écran', () => {
     expect(screen.getByTestId('taches-bienvenue')).toBeTruthy();
     await toucher('taches-demo');
     expect(tachesVivantes(lireDonnees(b.m.get(CLES_TACHES.donnees))).length).toBeGreaterThan(5);
+    // Vue d'ouverture par défaut : le calendrier de la semaine.
+    expect(screen.getByTestId('vue-calendrier')).toBeTruthy();
+    expect(screen.getByTestId('cal-titre')).toHaveTextContent(/Semaine du/);
+    await toucher('onglet-liste');
     expect(screen.getByTestId('vue-liste')).toBeTruthy();
     await toucher('onglet-kanban');
     expect(screen.getByTestId('vue-kanban')).toBeTruthy();
     expect(screen.getByTestId('colonne-en-cours')).toBeTruthy();
     await toucher('onglet-calendrier');
     expect(screen.getByTestId('vue-calendrier')).toBeTruthy();
+    await toucher('cal-mode-mois');
     await toucher('cal-mode-semaine');
     expect(screen.getByTestId('cal-titre')).toHaveTextContent(/Semaine du 12 octobre/);
     await toucher('onglet-journee');
@@ -120,7 +125,7 @@ describe('Tâches : écran', () => {
     d = creerTache(d, { titre: 'À lire', listeId: p2.liste.id }, ctx).donnees;
     d = creerTache(d, { titre: 'Secret', listeId: p3.liste.id }, ctx).donnees;
     const copie = appliquerReception(copieVide(), { v: 1, ami: lea.id, amiNom: 'Léa', fondateur: 'Enzo', cle: 'ab'.repeat(32), donnees: projectionPourAmi(d) });
-    const b = base({ [CLES_TACHES.copie]: JSON.stringify(copie), [CLES_TACHES.affichage]: JSON.stringify({ selection: { g: 'projet', id: p2.projet.id } }) });
+    const b = base({ [CLES_TACHES.copie]: JSON.stringify(copie), [CLES_TACHES.affichage]: JSON.stringify({ ouverture: 'derniere', selection: { g: 'projet', id: p2.projet.id } }) });
     await monter({ profil: lea, baseProfil: b, maintenant: T });
     expect(screen.queryByText('Privé')).toBeNull();
     expect(screen.queryByText('Secret')).toBeNull();
@@ -248,6 +253,31 @@ describe('Tâches : écran', () => {
     await toucher('reglages-liens');
     await toucher('lien-portefeuille');
     expect(lireDonnees(b.m.get(CLES_TACHES.donnees)).reglages.liens).toEqual({ portefeuille: true });
+  });
+
+  it('journal du jour : noter, proposition, débriefing ; paramètres du projet ; vue d’ouverture', async () => {
+    const { b, projetId } = avecDemo();
+    await monter(ctxF(b));
+    await toucher('taches-journal');
+    await fireEvent.changeText(screen.getByTestId('journal-champ'), 'Réunion avec le client');
+    await toucher('journal-ajouter');
+    const j = Object.values(lireDonnees(b.m.get(CLES_TACHES.donnees)).journal);
+    expect(j.map(e => [e.texte, e.projetId, e.jour])).toEqual([['Réunion avec le client', projetId, AUJ]]);
+    await toucher('journal-onglet-debrief');
+    expect(screen.getByTestId('debriefing')).toHaveTextContent(/Réunion avec le client/);
+    expect(screen.getByTestId('debrief-resume')).toHaveTextContent(/1 entrée/);
+    await toucher('dialogue-journal-fermer');
+    // Paramètres du projet.
+    await toucher('taches-projet-reglages');
+    await fireEvent.changeText(screen.getByTestId('projet-icone'), '🚀');
+    await fireEvent.changeText(screen.getByTestId('projet-description'), 'Refonte du site');
+    await fireEvent.changeText(screen.getByTestId('projet-fin'), '15/12/2026');
+    await toucher('projet-enregistrer');
+    expect(lireDonnees(b.m.get(CLES_TACHES.donnees)).projets[projetId]).toMatchObject({ icone: '🚀', description: 'Refonte du site', fin: '2026-12-15' });
+    // Vue d'ouverture : réglage de l'appareil.
+    await toucher('taches-reglages');
+    await toucher('reglages-ouverture-journee');
+    expect(JSON.parse(b.m.get(CLES_TACHES.affichage)!).ouverture).toBe('journee');
   });
 
   it('se relit quand la synchronisation change la base', async () => {

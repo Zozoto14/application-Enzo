@@ -11,6 +11,8 @@ import { donneesVides as adminVides, ecrireDonnees as ecrireAdmin, chargerDonnee
 import { enregistrerProspect, prospectsVides, saisieVide } from '../prospects/prospects';
 import type { BasePrefs } from '../tsuzuku/plateforme/stockage';
 import { fusionnerDonnees } from './fusion';
+import { ajouterEntree, debriefing, debriefingTexte, entrees, modifierEntree, propositions, supprimerEntree } from './journal';
+import { terminerTache } from './recurrence';
 import { abonnementsVoulus } from './integrations/abonnements';
 import { idListeAuto, idProjetAuto, idSource, lienActif, projetAuto, synchroniserSource } from './integrations/commun';
 import { synchroniserLiens } from './integrations/moteur';
@@ -19,6 +21,7 @@ import { portefeuilleVoulu } from './integrations/portefeuille';
 import { noterRelanceFaite, relancesVoulues } from './integrations/prospects';
 import {
   changerReglages,
+  changerStatuts,
   creerEspace,
   creerProjet,
   creerTache,
@@ -457,5 +460,122 @@ describe('liens : Claude Office', () => {
     expect(vivant(t)).toBe(true);
     expect(t.source).toBeUndefined();
     expect(t.liensOffice).toBeUndefined();
+  });
+});
+
+// ------------------------------------------------------------------ Journal du jour, débriefing
+
+
+describe('journal du jour et débriefing', () => {
+  it('entrées datées et signées, modifiables par leur auteur, fusionnées entrée par entrée', () => {
+    const m = monde();
+    const x = ajouterEntree(m.d, { projetId: m.site, jour: AUJ, texte: '  Appelé  le client ' }, f());
+    expect(x.entree).toMatchObject({ texte: 'Appelé le client', auteur: 'fondateur', jour: AUJ });
+    const y = ajouterEntree(m.d, { projetId: m.site, jour: AUJ, texte: 'Revu la maquette', tacheId: m.t1 }, f());
+    const z = fusionnerDonnees(x.donnees, y.donnees);
+    expect(entrees(z, m.site, AUJ).map(e => e.texte)).toEqual(['Appelé le client', 'Revu la maquette']);
+    const w = modifierEntree(z, x.entree.id, 'Appelé le client (OK)', f());
+    expect(entrees(fusionnerDonnees(w, z), m.site, AUJ)[0].texte).toBe('Appelé le client (OK)');
+    expect(entrees(supprimerEntree(w, x.entree.id, f()), m.site, AUJ)).toHaveLength(1);
+    expect(() => ajouterEntree(m.d, { projetId: m.site, jour: AUJ, texte: '  ' }, f())).toThrow('Écrivez');
+  });
+  it('propositions : tâches terminées et temps suivi du jour, sauf ce qui est déjà noté', () => {
+    const m = monde();
+    let d = ajouterTemps(m.d, m.t1, { jour: AUJ, minutes: 45 }, f());
+    d = terminerTache(d, m.t1, { ...f(), maintenant: new Date(2026, 9, 13, 15, 0).getTime() }, AUJ).donnees;
+    const p = propositions(d, m.site, AUJ, 'fondateur');
+    expect(p).toEqual([{ cle: `${m.t1}|${AUJ}`, tacheId: m.t1, texte: 'Terminé : Maquette', minutes: 45 }]);
+    d = ajouterEntree(d, { projetId: m.site, jour: AUJ, texte: 'Maquette livrée', tacheId: m.t1, minutes: 45 }, f()).donnees;
+    expect(propositions(d, m.site, AUJ, 'fondateur')).toEqual([]);
+    expect(propositions(d, m.site, AUJ, 'ami')).toEqual([]);
+  });
+  it('débriefing : résumé, par auteur et par tâche, ce qui reste ; Markdown et texte', () => {
+    const m = monde();
+    let d = ajouterTemps(m.d, m.t1, { jour: AUJ, minutes: 90 }, f());
+    d = terminerTache(d, m.t1, { ...f(), maintenant: new Date(2026, 9, 13, 15, 0).getTime() }, AUJ).donnees;
+    d = ajouterEntree(d, { projetId: m.site, jour: AUJ, texte: 'Maquette validée par le client', tacheId: m.t1 }, f()).donnees;
+    d = ajouterEntree(d, { projetId: m.site, jour: AUJ, texte: 'Réunion de lancement' }, f()).donnees;
+    const c = creerTache(d, { titre: 'Mettre en ligne', listeId: m.listeSite, echeance: { jour: '2026-10-12' } }, f());
+    d = c.donnees;
+    // L'ami (projet en écriture) note aussi.
+    const copie = copieAmi(d);
+    const ami = ajouterEntree(copie.donnees, { projetId: m.site, jour: AUJ, texte: 'Textes relus' }, a());
+    d = appliquerEnvoiAmi(d, envoiDeLAmi({ ...copie, donnees: ami.donnees })).donnees;
+    const b = debriefing(d, m.site, AUJ, AUJ, noms);
+    expect(b).toMatchObject({ projet: 'Site', minutes: 90, nbEntrees: 3 });
+    expect(b.terminees.map(t => t.titre)).toEqual(['Maquette']);
+    expect(b.parAuteur.map(x => [x.nom, x.groupes.map(g => g.tache?.titre ?? 'libre')])).toEqual([
+      ['Enzo', ['libre', 'Maquette']],
+      ['Léa', ['libre']],
+    ]);
+    expect(b.reste.retard.map(t => t.titre)).toEqual(['Mettre en ligne']);
+    const md = debriefingTexte(b, 'markdown');
+    expect(md).toContain('# Débriefing « Site » du 13/10/2026');
+    expect(md).toContain('**En bref** : 1 tâche terminée, 1 h 30 de travail suivi, 3 entrées au journal.');
+    expect(md).toContain('- **Maquette** ✓\n  - Maquette validée par le client');
+    expect(md).toContain('## Léa');
+    expect(md).toContain('- ⚠ En retard : Mettre en ligne (échéance 12/10/2026)');
+    expect(debriefingTexte(b, 'texte')).not.toContain('**');
+    // Semaine.
+    expect(debriefing(d, m.site, '2026-10-12', '2026-10-18', noms).nbEntrees).toBe(3);
+  });
+  it('partage : l’ami lit le journal des projets partagés, écrit dans ceux en écriture ; rien d’un projet non partagé', () => {
+    const m = monde();
+    let d = ajouterEntree(m.d, { projetId: m.site, jour: AUJ, texte: 'Visible' }, f()).donnees;
+    d = ajouterEntree(d, { projetId: m.blog, jour: AUJ, texte: 'Secret du blog' }, f()).donnees;
+    const copie = copieAmi(d);
+    expect(Object.values(copie.donnees.journal).map(e => e.texte)).toEqual(['Visible']);
+    expect(() => ajouterEntree(copie.donnees, { projetId: m.blog, jour: AUJ, texte: 'x' }, a())).toThrow();
+    // Une entrée forgée dans un projet non partagé, ou au nom du Fondateur : refusée.
+    const forge = { journal: { jpirate01: { id: 'jpirate01', projetId: m.blog, jour: AUJ, auteur: 'ami', texte: 'pirate', creeLe: '', h: '2026-10-13T10:00:00.000Z|a' }, jpirate02: { id: 'jpirate02', projetId: m.site, jour: AUJ, auteur: 'fondateur', texte: 'faux', creeLe: '', h: '2026-10-13T10:00:00.000Z|a' } } };
+    const r = appliquerEnvoiAmi(d, forge);
+    expect(r.donnees.journal.jpirate01).toBeUndefined();
+    expect(r.donnees.journal.jpirate02).toBeUndefined();
+    // Ses entrées non encore renvoyées survivent à une réception.
+    const sienne = ajouterEntree(copie.donnees, { projetId: m.site, jour: AUJ, texte: 'En attente' }, a());
+    const apres = appliquerReception({ ...copie, donnees: sienne.donnees }, { v: 1, ami: 'leaami01', cle: 'ab'.repeat(32), donnees: projectionPourAmi(d) });
+    expect(apres.donnees.journal[sienne.entree.id]).toBeDefined();
+  });
+  it('invite du soir « Note ce que tu as fait », une fois, pas si déjà noté', () => {
+    const m = monde();
+    const d = changerReglages(m.d, { notifF: { ...PREFS_DEFAUT, types: { ...PREFS_DEFAUT.types, journal: 'les-deux' }, heureJournal: '18:00' } }, f());
+    const soir = new Date(2026, 9, 13, 18, 5).getTime();
+    const r = evaluerNotifications(d, { ...etatRappelsVide(), depuis: new Date(T0).toISOString() }, soir, 'fondateur', { noms });
+    expect(r.pastille.map(p => p.titre)).toEqual(['Journal du jour']);
+    const note = ajouterEntree(d, { projetId: m.site, jour: AUJ, texte: 'Fait' }, f()).donnees;
+    expect(evaluerNotifications(note, { ...etatRappelsVide(), depuis: new Date(T0).toISOString() }, soir, 'fondateur', { noms }).pastille).toHaveLength(0);
+  });
+});
+
+describe('paramètres d’un projet', () => {
+  it('description, icône, étiquettes, dates, espace ; historique du projet (fusionné par union)', () => {
+    const m = monde();
+    const e2 = creerEspace(m.d, 'Perso', f());
+    let d = modifierProjet(e2.donnees, m.site, { nom: 'Site vitrine', icone: '🚀', description: 'Refonte', etiquettes: ['#design', 'client', 'design'], debut: '2026-10-01', fin: '2026-12-15' }, f());
+    expect(d.projets[m.site]).toMatchObject({ nom: 'Site vitrine', icone: '🚀', description: 'Refonte', etiquettes: ['design', 'client'], debut: '2026-10-01', fin: '2026-12-15' });
+    expect(d.projets[m.site].historique?.map(h => h.texte)).toEqual(['Partage : Lecture et écriture', 'Renommé : « Site » → « Site vitrine »', 'Icône : 🚀', 'Description modifiée', 'Étiquettes du projet : #design #client', 'Début : 01/10/2026', 'Fin : 15/12/2026']);
+    expect(() => modifierProjet(d, m.site, { debut: '2026-12-20', fin: '2026-12-01' }, f())).toThrow('avant son début');
+    const x = modifierProjet(d, m.site, { espaceId: e2.espace.id }, f());
+    const y = modifierProjet(d, m.site, { couleur: '#3FD49B' }, f());
+    const z = fusionnerDonnees(lireDonnees(ecrireDonnees(x)), lireDonnees(ecrireDonnees(y)));
+    expect(z.projets[m.site].espaceId).toBe(e2.espace.id);
+    expect(z.projets[m.site].historique?.slice(-2).map(h => h.texte).sort()).toEqual(['Couleur changée', 'Déplacé vers l’espace « Perso »']);
+    d = modifierProjet(d, m.site, { icone: '', description: '' }, f());
+    expect(d.projets[m.site].icone).toBeUndefined();
+  });
+  it('statut retiré : ses tâches vont au statut choisi', () => {
+    const m = monde();
+    let d = modifierTache(m.d, m.t1, { statut: 'en-revue' }, f());
+    const statuts = d.projets[m.site].statuts.filter(s => s.id !== 'en-revue');
+    d = changerStatuts(d, m.site, statuts, f(), { 'en-revue': 'en-cours' });
+    expect(d.taches[m.t1].statut).toBe('en-cours');
+    expect(d.projets[m.site].historique?.at(-1)?.texte).toBe('Statuts modifiés');
+  });
+  it('l’ami ne modifie pas un projet (structure : Fondateur seul)', () => {
+    const m = monde();
+    const copie = copieAmi(m.d);
+    const forge = { taches: {}, projets: { [m.site]: { ...m.d.projets[m.site], nom: 'Volé' } } };
+    expect(appliquerEnvoiAmi(m.d, forge).donnees.projets[m.site].nom).toBe('Site');
+    expect(projetsDe(copie.donnees).map(p => p.nom)).toEqual(['Site']);
   });
 });

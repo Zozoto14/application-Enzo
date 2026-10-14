@@ -30,6 +30,7 @@ import {
   FILTRES_DEFAUT,
   LIBELLES_PRIORITE,
   listesDe,
+  modifierListe,
   modifierTache,
   PRIORITES,
   projetsDe,
@@ -58,8 +59,10 @@ import { appareilTaches, notificationSystemeDisponible, reinitialiserLiens, test
 import { arreterMinuteur, CHAMP_CHRONO, demarrerMinuteur, dureeLisible, minuteurActif } from '../temps';
 import { DialogueLiens, DialogueNotifications } from './ReglagesV2';
 import { DialogueReleve, DialogueTemps, PastilleMinuteur } from './SuiviTemps';
+import { DialogueJournal } from './Journal';
+import { LIBELLES_OUVERTURE, type Ouverture } from './ouverture';
 import { DetailTache } from './Detail';
-import { DialogueChoix, DialogueEcheance, DialogueFiltres, DialogueNom, DialogueProjet, DialogueRappels, DialogueRappelsRecus, DialogueRecurrence, DialogueReglages } from './Dialogues';
+import { DialogueChoix, DialogueEcheance, DialogueEspace, DialogueFiltres, DialogueNom, DialogueProjet, DialogueRappels, DialogueRappelsRecus, DialogueRecurrence, DialogueReglages } from './Dialogues';
 import { useEtatTaches } from './etat';
 import { ContexteZones, RegistreZones } from './glisser';
 import { VueCalendrier, VueJournee, VueKanban, VueListe } from './Vues';
@@ -82,6 +85,9 @@ type Fenetre =
   | { g: 'notifications' }
   | { g: 'liens' }
   | { g: 'releve' }
+  | { g: 'journal'; projetId?: string; tacheId?: string; onglet?: 'journal' | 'debrief' }
+  | { g: 'espace-modifier'; id: string }
+  | { g: 'liste-renommer'; id: string }
   | { g: 'temps'; t: Tache };
 
 /** Durée pendant laquelle « Annuler » reste proposé après une suppression. */
@@ -95,6 +101,7 @@ const VUES: ReadonlyArray<[TypeVue, string, string]> = [
 ];
 
 interface Affichage {
+  ouverture?: Ouverture;
   selection?: Selection;
   vue?: TypeVue;
   tri?: Tri;
@@ -147,12 +154,22 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
   const registre = useMemo(() => new RegistreZones(), []);
   const affichageInitial = useMemo(() => lireAffichage(base.lire(CLES_TACHES.affichage)), [base]);
 
-  const [selection, setSelection] = useState<Selection>(affichageInitial.selection ?? { g: 'journee' });
-  const [vue, setVue] = useState<TypeVue>(affichageInitial.vue ?? 'liste');
+  // Ouverture : le calendrier de la semaine (ou la vue choisie dans les réglages ; « la dernière » seulement si demandé).
+  const [ouverture, setOuverture] = useState<Ouverture>(affichageInitial.ouverture ?? 'calendrier-semaine');
+  const depart: Affichage =
+    ouverture === 'derniere'
+      ? affichageInitial
+      : ouverture === 'journee'
+        ? { selection: { g: 'journee' }, vue: affichageInitial.vue }
+        : ouverture === 'liste'
+          ? { selection: { g: 'tout' }, vue: 'liste' }
+          : { selection: { g: 'tout' }, vue: 'calendrier', calendrier: 'semaine' };
+  const [selection, setSelection] = useState<Selection>(depart.selection ?? { g: 'journee' });
+  const [vue, setVue] = useState<TypeVue>(depart.vue ?? 'liste');
   const [filtres, setFiltres] = useState<Filtres>(FILTRES_DEFAUT);
   const [tri, setTri] = useState<Tri>(affichageInitial.tri ?? 'manuel');
   const [groupe, setGroupe] = useState<Groupe>(affichageInitial.groupe ?? 'statut');
-  const [modeCal, setModeCal] = useState<'mois' | 'semaine'>(affichageInitial.calendrier ?? 'mois');
+  const [modeCal, setModeCal] = useState<'mois' | 'semaine'>(depart.calendrier ?? affichageInitial.calendrier ?? 'mois');
   const [jourCal, setJourCal] = useState(etat.aujourdhui);
   const [ouverte, setOuverte] = useState<string | undefined>();
   const [fenetre, setFenetre] = useState<Fenetre | undefined>();
@@ -166,10 +183,10 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
 
   // Préférences d'affichage de l'appareil.
   useEffect(() => {
-    const valeur: Affichage = { selection, vue, tri, groupe, calendrier: modeCal, dernierProjet };
+    const valeur: Affichage = { ouverture, selection, vue, tri, groupe, calendrier: modeCal, dernierProjet };
     const texte = JSON.stringify(valeur);
     if (texte !== base.lire(CLES_TACHES.affichage)) base.ecrire(CLES_TACHES.affichage, texte);
-  }, [base, selection, vue, tri, groupe, modeCal, dernierProjet]);
+  }, [base, ouverture, selection, vue, tri, groupe, modeCal, dernierProjet]);
 
   // Avis éphémère.
   useEffect(() => {
@@ -345,18 +362,23 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
       const e = d.espaces[id];
       return [
         { texte: '＋ Nouveau projet', testID: 'menu-nouveau-projet', action: () => setFenetre({ g: 'nouveau-projet', espaceId: id }) },
+        { texte: '✎ Modifier l’espace (nom, couleur)', testID: 'menu-modifier-espace', action: () => setFenetre({ g: 'espace-modifier', id }) },
         { texte: `Supprimer l’espace « ${e?.nom ?? ''} »…`, danger: true, testID: 'menu-supprimer-espace', action: () => actions.demanderSuppression('espace', id) },
       ];
     }
     if (genre === 'projet') {
       const p = d.projets[id];
       return [
-        { texte: '⚙︎ Réglages du projet (nom, statuts, listes, partage)', testID: 'menu-reglages-projet', action: () => setFenetre({ g: 'projet', id }) },
+        { texte: '⚙︎ Paramètres du projet (nom, icône, statuts, dates, partage…)', testID: 'menu-reglages-projet', action: () => setFenetre({ g: 'projet', id }) },
+        { texte: '📓 Journal et débriefing', testID: 'menu-journal-projet', action: () => setFenetre({ g: 'journal', projetId: id }) },
         { texte: `Supprimer le projet « ${p?.nom ?? ''} »…`, danger: true, testID: 'menu-supprimer-projet', action: () => actions.demanderSuppression('projet', id) },
       ];
     }
     const l = d.listes[id];
-    return [{ texte: `Supprimer la liste « ${l?.nom ?? ''} »…`, danger: true, testID: 'menu-supprimer-liste', action: () => actions.demanderSuppression('liste', id) }];
+    return [
+      { texte: '✎ Renommer la liste', testID: 'menu-renommer-liste', action: () => setFenetre({ g: 'liste-renommer', id }) },
+      { texte: `Supprimer la liste « ${l?.nom ?? ''} »…`, danger: true, testID: 'menu-supprimer-liste', action: () => actions.demanderSuppression('liste', id) },
+    ];
   };
 
   // --- Ajout rapide
@@ -641,6 +663,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
       <Bouton theme={theme} compact={!mobile} titre={nbFiltres ? `Filtres · ${nbFiltres}` : 'Filtres'} onPress={() => setFenetre({ g: 'filtres' })} testID="taches-filtres" />
       <Bouton theme={theme} compact={!mobile} titre={etat.rappels.length ? `🔔 ${etat.rappels.length}` : '🔔'} libelle={`Rappels : ${etat.rappels.length} non lu(s)`} onPress={() => setFenetre({ g: 'rappels-recus' })} testID="taches-rappels" />
       <Bouton theme={theme} compact={!mobile} titre="⏱" libelle="Relevé du temps (semaine, export CSV)" onPress={() => setFenetre({ g: 'releve' })} testID="taches-releve" />
+      <Bouton theme={theme} compact={!mobile} titre="📓" libelle="Journal du jour et débriefing" onPress={() => setFenetre({ g: 'journal', ...(projetId ? { projetId } : {}) })} testID="taches-journal" />
       <Bouton theme={theme} compact={!mobile} titre={role === 'fondateur' ? '👥 Partage' : '👥 Partagés'} libelle={role === 'fondateur' ? 'Réglages de Tâches : ami, partage, exemple' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
     </View>
   );
@@ -663,6 +686,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
       onErreur={signaler}
       onAvis={texte => setAvis({ texte, genre: 'ok' })}
       onSaisirTemps={t => setFenetre({ g: 'temps', t })}
+      onJournal={t => setFenetre({ g: 'journal', projetId: t.projetId, tacheId: t.id })}
       onOuvrirSession={onOuvrirApp ? ouvrirSession : undefined}
       onOuvrirApp={onOuvrirApp}
     />
@@ -738,6 +762,10 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
       }
       contexte={contexte}
       onAller={setFenetre}
+      onOuvertureChangee={o => {
+        setOuverture(o);
+        setAvis({ texte: `À l’ouverture : ${LIBELLES_OUVERTURE[o].replace(' (par défaut)', '').toLowerCase()}.`, genre: 'ok' });
+      }}
       onCorbeilleVider={() =>
         essayer(() => {
           etat.maj((x, ctx) => viderCorbeille(x, ctx));
@@ -773,6 +801,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
               {titreSelection}
             </Text>
             <Bouton theme={theme} titre={etat.rappels.length ? `🔔 ${etat.rappels.length}` : '🔔'} libelle={`Rappels : ${etat.rappels.length} non lu(s)`} onPress={() => setFenetre({ g: 'rappels-recus' })} testID="taches-rappels" />
+            <Bouton theme={theme} titre="📓" libelle="Journal du jour et débriefing" onPress={() => setFenetre({ g: 'journal', ...(projetId ? { projetId } : {}) })} testID="taches-journal" />
             <Bouton theme={theme} titre="👥" libelle={role === 'fondateur' ? 'Réglages de Tâches : ami, partage, exemple' : 'Projets partagés avec moi'} onPress={() => setFenetre({ g: 'reglages' })} testID="taches-reglages" />
           </View>
           <View style={{ paddingHorizontal: 16, gap: 10 }}>
@@ -938,7 +967,7 @@ function Navigation({
                   <LigneNav
                     a={a}
                     niveau={1}
-                    texte={`${p.nom}${p.partage !== 'aucun' && fondateur ? '  👥' : ''}${!fondateur && p.partage === 'lecture' ? '  👁' : ''}`}
+                    texte={`${p.icone ? `${p.icone} ` : ''}${p.nom}${p.partage !== 'aucun' && fondateur ? '  👥' : ''}${!fondateur && p.partage === 'lecture' ? '  👁' : ''}`}
                     couleur={p.couleur}
                     actif={actif && !selection.liste}
                     onPress={() => onChoisir({ g: 'projet', id: p.id })}
@@ -1004,6 +1033,7 @@ function Fenetres({
   onCorbeilleVider,
   contexte,
   onAller,
+  onOuvertureChangee,
 }: {
   a: Actions;
   fenetre?: Fenetre;
@@ -1027,6 +1057,7 @@ function Fenetres({
   onCorbeilleVider(): void;
   contexte: PropsRacineApp['contexte'];
   onAller(f: Fenetre): void;
+  onOuvertureChangee(o: Ouverture): void;
 }) {
   if (!fenetre) return null;
   const d = a.etat.donnees;
@@ -1108,6 +1139,12 @@ function Fenetres({
         <DialogueReglages
           a={a}
           amis={amis}
+          ouverture={lireAffichage(contexte.baseProfil?.lire(CLES_TACHES.affichage)).ouverture ?? 'calendrier-semaine'}
+          onOuverture={o => {
+            const b = contexte.baseProfil;
+            if (b) b.ecrire(CLES_TACHES.affichage, JSON.stringify({ ...lireAffichage(b.lire(CLES_TACHES.affichage)), ouverture: o }));
+            onOuvertureChangee(o);
+          }}
           onNotifications={() => onAller({ g: 'notifications' })}
           onLiens={() => onAller({ g: 'liens' })}
           onReleve={() => onAller({ g: 'releve' })}
@@ -1201,6 +1238,41 @@ function Fenetres({
           }}
         />
       );
+    case 'journal':
+      return (
+        <DialogueJournal
+          a={a}
+          {...(fenetre.projetId ? { projetId: fenetre.projetId } : {})}
+          {...(fenetre.tacheId ? { tacheId: fenetre.tacheId } : {})}
+          {...(fenetre.onglet ? { ongletInitial: fenetre.onglet } : {})}
+          onFermer={onFermer}
+          onOuvrir={onOuvrir}
+          onErreur={onErreur}
+          onAvis={onAvis}
+          onExporter={
+            contexte.enregistrerFichier
+              ? (nom, contenu) => void contexte.enregistrerFichier!(nom, contenu, nom.endsWith('.md') ? 'text/markdown' : 'text/plain').then(ok => ok && onAvis(`Débriefing exporté : ${nom}.`), onErreur)
+              : undefined
+          }
+        />
+      );
+    case 'espace-modifier':
+      return <DialogueEspace a={a} id={fenetre.id} onFermer={onFermer} onErreur={onErreur} />;
+    case 'liste-renommer': {
+      const l = d.listes[fenetre.id];
+      return (
+        <DialogueNom
+          a={a}
+          titre="Renommer la liste"
+          placeholder="Nom de la liste"
+          initial={l?.nom}
+          bouton="Renommer"
+          testID="renommer-liste"
+          onFermer={onFermer}
+          onValider={nom => essayer(() => a.etat.maj((x, ctx) => modifierListe(x, fenetre.id, { nom }, ctx)))}
+        />
+      );
+    }
     case 'temps':
       return <DialogueTemps a={a} t={d.taches[fenetre.t.id] ?? fenetre.t} onFermer={onFermer} onErreur={onErreur} />;
     case 'corbeille':

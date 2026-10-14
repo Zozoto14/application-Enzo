@@ -46,6 +46,8 @@ export interface PropsDetail {
   onErreur(e: unknown): void;
   onAvis(texte: string): void;
   onSaisirTemps(t: Tache): void;
+  /** « Noter dans le journal » (journal du jour du projet, lié à la tâche). */
+  onJournal(t: Tache): void;
   /** Ouvre l'Historique de Claude Office filtré sur la session (absent : pas de lien cliquable). */
   onOuvrirSession?(session: string): void;
   onOuvrirApp?(id: string): void;
@@ -98,7 +100,7 @@ function TexteAvecLiens({ a, texte }: { a: Actions; texte: string }) {
   );
 }
 
-export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe, onErreur, onSaisirTemps, onOuvrirSession, onOuvrirApp }: PropsDetail) {
+export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe, onErreur, onSaisirTemps, onJournal, onOuvrirSession, onOuvrirApp }: PropsDetail) {
   const theme = a.theme;
   const d = a.etat.donnees;
   const t = d.taches[id];
@@ -233,6 +235,7 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
         </View>
 
         <SectionTemps a={a} t={t} onSaisir={() => onSaisirTemps(t)} onErreur={onErreur} />
+        {m && !d.projets[t.projetId]?.auto ? <Bouton theme={theme} titre="📓 Noter dans le journal du jour" onPress={() => onJournal(t)} testID="detail-journal" style={{ alignSelf: 'flex-start' }} /> : null}
         <SectionLiens a={a} t={t} onOuvrirSession={s => onOuvrirSession?.(s)} onOuvrirApp={onOuvrirApp} />
 
         <View style={styles.section}>

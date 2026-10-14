@@ -13,6 +13,8 @@ import { LIBELLES_GROUPE, LIBELLES_TRI } from '../filtres';
 import {
   changerStatuts,
   COULEURS,
+  espacesVivants,
+  modifierEspace,
   creerListe,
   etiquettesUtilisees,
   LIBELLES_PARTAGE,
@@ -38,6 +40,7 @@ import {
   type Tri,
 } from '../modele';
 import { libelleDelai, type AlerteRappel } from '../rappels';
+import { LIBELLES_OUVERTURE, type Ouverture } from './ouverture';
 import { prefsDe } from '../notifications';
 import type { Actions } from './actions';
 import { attenueDe, Bouton, Champ, Dialogue, Libelle, Options, Puce, texteDe } from './atomes';
@@ -369,7 +372,31 @@ export function DialogueFiltres({
 
 // ------------------------------------------------------------------ Réglages de l'app
 
-export function DialogueReglages({ a, amis, onFermer, onDemo, onRetirerDemo, onErreur, onNotifications, onLiens, onReleve }: { a: Actions; amis: ReadonlyArray<{ id: string; nom: string }>; onFermer: Fermer; onDemo(): void; onRetirerDemo(): void; onErreur(e: unknown): void; onNotifications(): void; onLiens(): void; onReleve(): void }) {
+export function DialogueReglages({
+  a,
+  amis,
+  onFermer,
+  onDemo,
+  onRetirerDemo,
+  onErreur,
+  onNotifications,
+  onLiens,
+  onReleve,
+  ouverture,
+  onOuverture,
+}: {
+  a: Actions;
+  amis: ReadonlyArray<{ id: string; nom: string }>;
+  onFermer: Fermer;
+  onDemo(): void;
+  onRetirerDemo(): void;
+  onErreur(e: unknown): void;
+  onNotifications(): void;
+  onLiens(): void;
+  onReleve(): void;
+  ouverture: Ouverture;
+  onOuverture(o: Ouverture): void;
+}) {
   const theme = a.theme;
   const d = a.etat.donnees;
   const profils = amis;
@@ -381,11 +408,18 @@ export function DialogueReglages({ a, amis, onFermer, onDemo, onRetirerDemo, onE
       <Bouton theme={theme} titre="⏱ Relevé du temps…" onPress={onReleve} testID="reglages-releve" />
     </View>
   );
+  const vueOuverture = (
+    <>
+      <Libelle theme={theme}>VUE D’OUVERTURE (CET APPAREIL)</Libelle>
+      <Options theme={theme} valeur={ouverture} onChoisir={onOuverture} options={(Object.keys(LIBELLES_OUVERTURE) as Ouverture[]).map(o => ({ valeur: o, texte: LIBELLES_OUVERTURE[o] }))} testID="reglages-ouverture" />
+    </>
+  );
   if (a.etat.role === 'ami') {
     const projets = projetsDe(d);
     return (
       <Dialogue theme={theme} mobile={a.mobile} visible titre="Projets partagés avec vous" onFermer={onFermer} testID="dialogue-reglages">
         {raccourcis}
+        {vueOuverture}
         <Text style={texteDe(theme)}>
           {a.etat.parFondateur.charAt(0).toUpperCase() + a.etat.parFondateur.slice(1)} partage {projets.length} projet{projets.length > 1 ? 's' : ''} avec vous. Tout reste chiffré de bout en bout : le relais ne voit que des données illisibles.
         </Text>
@@ -410,6 +444,7 @@ export function DialogueReglages({ a, amis, onFermer, onDemo, onRetirerDemo, onE
   return (
     <Dialogue theme={theme} mobile={a.mobile} visible large titre="Réglages de Tâches" onFermer={onFermer} testID="dialogue-reglages">
       {raccourcis}
+      {vueOuverture}
       <Libelle theme={theme}>PARTAGE AVEC UN AMI (UN SEUL POUR L’INSTANT)</Libelle>
       <Text style={attenueDe(theme)}>
         L’ami choisi voit seulement les projets que vous lui partagez, en lecture ou en écriture. Il ne peut pas supprimer de projet. Tout est chiffré de bout en bout.
@@ -462,6 +497,15 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur }:
   const d = a.etat.donnees;
   const p = d.projets[projetId];
   const [nom, setNom] = useState(p?.nom ?? '');
+  const [icone, setIcone] = useState(p?.icone ?? '');
+  const [description, setDescription] = useState(p?.description ?? '');
+  const [etiquettes, setEtiquettes] = useState((p?.etiquettes ?? []).join(', '));
+  const [debut, setDebut] = useState(p?.debut ? p.debut.split('-').reverse().join('/') : '');
+  const [fin, setFin] = useState(p?.fin ? p.fin.split('-').reverse().join('/') : '');
+  const [espaceId, setEspaceId] = useState(p?.espaceId ?? '');
+  const [historique, setHistorique] = useState(false);
+  /** Statut retiré → statut qui reçoit ses tâches. */
+  const [remplacement, setRemplacement] = useState<Record<string, string>>({});
   const [statuts, setStatuts] = useState<Statut[]>(() => statutsDe(d, projetId).map(s => ({ ...s })));
   const [nouveau, setNouveau] = useState('');
   const [nouvelleListe, setNouvelleListe] = useState('');
@@ -498,15 +542,48 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur }:
           variante="plein"
           onPress={() =>
             essayer(() => {
-              a.etat.maj((x, ctx) => changerStatuts(modifierProjet(x, projetId, { nom }, ctx), projetId, statuts, ctx));
+              const jourDebut = debut.trim() ? lireDateLibre(debut, a.etat.aujourdhui)?.jour : undefined;
+              const jourFin = fin.trim() ? lireDateLibre(fin, a.etat.aujourdhui)?.jour : undefined;
+              if ((debut.trim() && !jourDebut) || (fin.trim() && !jourFin)) throw new Error('Date du projet non comprise (ex. 01/11, 15 décembre).');
+              a.etat.maj((x, ctx) =>
+                changerStatuts(
+                  modifierProjet(x, projetId, { nom, icone, description, etiquettes: etiquettes.split(/[,\s]+/), debut: jourDebut, fin: jourFin, ...(espaceId && espaceId !== p.espaceId ? { espaceId } : {}) }, ctx),
+                  projetId,
+                  statuts,
+                  ctx,
+                  remplacement,
+                ),
+              );
               onFermer();
             })
           }
           testID="projet-enregistrer"
         />
       }>
-      <Libelle theme={theme}>NOM</Libelle>
-      <Champ theme={theme} mobile={a.mobile} value={nom} onChangeText={setNom} testID="projet-nom" accessibilityLabel="Nom du projet" />
+      <Libelle theme={theme}>NOM ET ICÔNE</Libelle>
+      <View style={[styles.rangee, { flexWrap: 'nowrap' }]}>
+        <Champ theme={theme} mobile={a.mobile} value={icone} onChangeText={v => setIcone(v.slice(0, 8))} placeholder="🚀" style={{ width: 64, textAlign: 'center' }} testID="projet-icone" accessibilityLabel="Icône du projet (un emoji)" />
+        <Champ theme={theme} mobile={a.mobile} value={nom} onChangeText={setNom} style={{ flex: 1 }} testID="projet-nom" accessibilityLabel="Nom du projet" />
+      </View>
+      <Libelle theme={theme}>DESCRIPTION</Libelle>
+      <Champ theme={theme} mobile={a.mobile} multiline value={description} onChangeText={setDescription} placeholder="But du projet, liens utiles…" testID="projet-description" accessibilityLabel="Description du projet" />
+      <Libelle theme={theme}>DATES (FACULTATIVES)</Libelle>
+      <View style={styles.rangee}>
+        <Champ theme={theme} mobile={a.mobile} value={debut} onChangeText={setDebut} placeholder="Début (ex. 01/11)" style={{ flex: 1, minWidth: 140 }} testID="projet-debut" accessibilityLabel="Début du projet" />
+        <Champ theme={theme} mobile={a.mobile} value={fin} onChangeText={setFin} placeholder="Fin (ex. 15/12)" style={{ flex: 1, minWidth: 140 }} testID="projet-fin" accessibilityLabel="Fin du projet" />
+      </View>
+      <Libelle theme={theme}>ÉTIQUETTES DU PROJET</Libelle>
+      <Champ theme={theme} mobile={a.mobile} value={etiquettes} onChangeText={setEtiquettes} placeholder="design, client, urgent" testID="projet-etiquettes" accessibilityLabel="Étiquettes du projet, séparées par des virgules" />
+      {espacesVivants(d).length > 1 ? (
+        <>
+          <Libelle theme={theme}>ESPACE</Libelle>
+          <View style={styles.rangee}>
+            {espacesVivants(d).map(e => (
+              <Puce key={e.id} theme={theme} grand={a.mobile} texte={e.nom} couleur={e.couleur} actif={espaceId === e.id} onPress={() => setEspaceId(e.id)} testID={`projet-espace-${e.id}`} />
+            ))}
+          </View>
+        </>
+      ) : null}
       <Libelle theme={theme}>COULEUR</Libelle>
       <View style={styles.rangee}>
         {COULEURS.map(c => (
@@ -514,7 +591,7 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur }:
         ))}
       </View>
       <Libelle theme={theme}>STATUTS</Libelle>
-      <Text style={attenueDe(theme)}>Renommez, réordonnez, marquez le statut « terminé ». Les tâches d’un statut retiré passent au premier.</Text>
+      <Text style={attenueDe(theme)}>Renommez, réordonnez, marquez le statut « terminé ». Retirer un statut : choisissez où vont ses tâches.</Text>
       {statuts.map((s, i) => (
         <View key={s.id} style={[styles.ligneProjet, { flexWrap: 'wrap' }]} testID={`statut-ligne-${s.id}`}>
           <Pressable accessibilityRole="button" accessibilityLabel="Changer la couleur" onPress={() => setStatuts(x => x.map(y => (y.id === s.id ? { ...y, couleur: COULEURS[(COULEURS.indexOf(y.couleur as (typeof COULEURS)[number]) + 1) % COULEURS.length] } : y)))} style={[styles.pastilleCouleur, { backgroundColor: s.couleur }]} />
@@ -525,6 +602,25 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur }:
           <Bouton theme={theme} compact variante="discret" titre="✕" libelle={`Retirer le statut ${s.nom}`} desactive={statuts.length <= 2} onPress={() => setStatuts(x => x.filter(y => y.id !== s.id))} testID={`statut-retirer-${s.id}`} />
         </View>
       ))}
+      {statutsDe(d, projetId)
+        .filter(s => !statuts.some(x => x.id === s.id))
+        .map(s => {
+          const n = tachesVivantes(d, projetId).filter(t => t.statut === s.id).length;
+          if (!n) return null;
+          const cible = remplacement[s.id] ?? statuts[0]?.id;
+          return (
+            <View key={`retire-${s.id}`} style={{ gap: 6 }} testID={`statut-reaffecter-${s.id}`}>
+              <Text style={texteDe(theme)}>
+                « {s.nom} » retiré : ses {n} tâche{n > 1 ? 's' : ''} passent à
+              </Text>
+              <View style={styles.rangee}>
+                {statuts.map(x => (
+                  <Puce key={x.id} theme={theme} grand={a.mobile} texte={x.nom} couleur={x.couleur} actif={cible === x.id} onPress={() => setRemplacement(r => ({ ...r, [s.id]: x.id }))} testID={`statut-reaffecter-${s.id}-${x.id}`} />
+                ))}
+              </View>
+            </View>
+          );
+        })}
       <View style={[styles.rangee, { flexWrap: 'nowrap' }]}>
         <Champ theme={theme} mobile={a.mobile} value={nouveau} onChangeText={setNouveau} placeholder="Nouveau statut" style={{ flex: 1 }} testID="statut-nouveau" accessibilityLabel="Nouveau statut" />
         <Bouton
@@ -588,6 +684,16 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur }:
       ) : (
         <Text style={attenueDe(theme)}>Choisissez d’abord un ami dans les réglages de Tâches (⚙︎).</Text>
       )}
+      <Pressable accessibilityRole="button" accessibilityState={{ expanded: historique }} onPress={() => setHistorique(h => !h)} style={{ minHeight: 44, justifyContent: 'center' }} testID="projet-historique">
+        <Libelle theme={theme}>{`${historique ? '▾' : '▸'} HISTORIQUE DU PROJET · ${p.historique?.length ?? 0}`}</Libelle>
+      </Pressable>
+      {historique
+        ? [...(p.historique ?? [])].reverse().map(e => (
+            <Text key={e.id} style={attenueDe(theme)}>
+              {new Date(e.date).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {a.etat.noms[e.auteur]} · {e.texte}
+            </Text>
+          ))
+        : null}
       <View style={[styles.zoneDanger, { borderColor: teinteTransparente(theme.critique, 0.5), borderRadius: 10 }]}>
         <Text style={attenueDe(theme)}>
           {nbTaches} tâche{nbTaches > 1 ? 's' : ''}. La suppression passe par la corbeille (30 jours){p.partage !== 'aucun' ? ' ; le projet disparaîtra aussi chez votre ami' : ''}. Vous pourrez d’abord déplacer son contenu.
@@ -598,17 +704,61 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur }:
   );
 }
 
+// ------------------------------------------------------------------ Modifier un espace
+
+export function DialogueEspace({ a, id, onFermer, onErreur }: { a: Actions; id: string; onFermer: Fermer; onErreur(e: unknown): void }) {
+  const theme = a.theme;
+  const e = a.etat.donnees.espaces[id];
+  const [nom, setNom] = useState(e?.nom ?? '');
+  if (!vivant(e)) return null;
+  return (
+    <Dialogue
+      theme={theme}
+      mobile={a.mobile}
+      visible
+      titre={`Espace « ${e.nom} »`}
+      onFermer={onFermer}
+      testID="dialogue-espace"
+      pied={
+        <Bouton
+          theme={theme}
+          variante="plein"
+          titre="Enregistrer"
+          desactive={!nom.trim()}
+          onPress={() => {
+            try {
+              a.etat.maj((x, ctx) => modifierEspace(x, id, { nom }, ctx));
+              onFermer();
+            } catch (err) {
+              onErreur(err);
+            }
+          }}
+          testID="espace-enregistrer"
+        />
+      }>
+      <Libelle theme={theme}>NOM</Libelle>
+      <Champ theme={theme} mobile={a.mobile} value={nom} onChangeText={setNom} testID="espace-nom" accessibilityLabel="Nom de l’espace" />
+      <Libelle theme={theme}>COULEUR</Libelle>
+      <View style={styles.rangee}>
+        {COULEURS.map(c => (
+          <Pressable key={c} accessibilityRole="radio" accessibilityState={{ selected: e.couleur === c }} accessibilityLabel={`Couleur ${c}`} onPress={() => a.etat.maj((x, ctx) => modifierEspace(x, id, { couleur: c }, ctx))} style={[styles.pastilleCouleur, { backgroundColor: c, borderColor: e.couleur === c ? theme.texte : 'transparent' }]} testID={`espace-couleur-${c.slice(1)}`} />
+        ))}
+      </View>
+    </Dialogue>
+  );
+}
+
 // ------------------------------------------------------------------ Création (espace, projet)
 
-export function DialogueNom({ a, titre, description, placeholder, onValider, onFermer, testID }: { a: Actions; titre: string; description?: string; placeholder: string; onValider(nom: string): void; onFermer: Fermer; testID: string }) {
-  const [nom, setNom] = useState('');
+export function DialogueNom({ a, titre, description, placeholder, onValider, onFermer, testID, initial, bouton = 'Créer' }: { a: Actions; titre: string; description?: string; placeholder: string; onValider(nom: string): void; onFermer: Fermer; testID: string; initial?: string; bouton?: string }) {
+  const [nom, setNom] = useState(initial ?? '');
   const valider = () => {
     if (!nom.trim()) return;
     onValider(nom);
     onFermer();
   };
   return (
-    <Dialogue theme={a.theme} mobile={a.mobile} visible titre={titre} description={description} onFermer={onFermer} testID={testID} pied={<Bouton theme={a.theme} titre="Créer" variante="plein" desactive={!nom.trim()} onPress={valider} testID={`${testID}-creer`} />}>
+    <Dialogue theme={a.theme} mobile={a.mobile} visible titre={titre} description={description} onFermer={onFermer} testID={testID} pied={<Bouton theme={a.theme} titre={bouton} variante="plein" desactive={!nom.trim()} onPress={valider} testID={`${testID}-creer`} />}>
       <Champ theme={a.theme} mobile={a.mobile} value={nom} onChangeText={setNom} onSubmitEditing={valider} placeholder={placeholder} autoFocus={!a.mobile} testID={`${testID}-nom`} accessibilityLabel={placeholder} />
     </Dialogue>
   );
