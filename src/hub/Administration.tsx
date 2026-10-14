@@ -104,6 +104,13 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
       setDonnees(donneesRef.current);
     }
   }, [services, versionComptes]);
+  // Onglet de retour à l'écran (ses effets reprennent) : relu, une autre app (Abonnements…) a pu écrire entre-temps.
+  useEffect(() => {
+    if (services) {
+      donneesRef.current = chargerDonnees(services.stockage);
+      setDonnees(donneesRef.current);
+    }
+  }, [services]);
   const majDonnees = useCallback(
     (changer: (d: DonneesAdmin) => DonneesAdmin) => {
       // Toujours à partir de ce qui est enregistré : une réception entre-temps n'est pas écrasée.

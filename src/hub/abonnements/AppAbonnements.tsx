@@ -68,6 +68,9 @@ export function AppAbonnements({ contexte, theme, onRetour }: PropsRacineApp) {
   useEffect(() => {
     if (versionComptes > 0) relire();
   }, [relire, versionComptes]);
+  // Onglet de retour à l'écran (ses effets reprennent) : relu, une autre app a pu écrire entre-temps.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => relire(), []);
 
   const majDonnees = useCallback(
     (changer: (d: DonneesAdmin) => DonneesAdmin) => {
