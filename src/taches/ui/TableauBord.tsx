@@ -107,7 +107,7 @@ export function VueTableau({ a, projetId }: { a: Actions; projetId?: string }) {
         <Carte a={a} titre="En retard" testID="tableau-retard">
           <Text style={[titreDe(theme, 34), { color: s.retard.length ? theme.critique : theme.texte }]}>{s.retard.length}</Text>
           {s.retard.slice(0, 4).map(t => (
-            <Pressable key={t.id} accessibilityRole="button" onPress={() => a.ouvrir(t.id)} style={{ minHeight: 32, justifyContent: 'center' }}>
+            <Pressable key={t.id} accessibilityRole="button" onPress={() => a.ouvrir(t.id)} style={{ minHeight: 44, justifyContent: 'center' }}>
               <Text numberOfLines={1} style={texteDe(theme)}>
                 ⚠ {t.titre} <Text style={attenueDe(theme)}>· {jourLisible(t.echeance!.jour, a.etat.aujourdhui)}</Text>
               </Text>

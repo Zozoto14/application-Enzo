@@ -25,6 +25,8 @@ import { attenueDe, Bouton, EtatVide, Libelle, Puce, texteDe } from './atomes';
 import { useGlissable, useZoneDepot } from './glisser';
 
 const HAUTEUR_LIGNE = 44;
+/** Téléphone : lignes plus hautes, barres d'au moins 44 × 44 px (cibles tactiles). */
+const HAUTEUR_LIGNE_MOBILE = 56;
 const HAUTEUR_TETE = 40;
 
 interface ElementDom {
@@ -161,7 +163,7 @@ function useTirer(o: { actif: boolean; pas: number; onFin(jours: number): void }
 
 const fr = (j: string) => j.split('-').reverse().join('/');
 
-function BarreGantt({ a, b, e, onDeplacer, onEtirer, onDependance, violee, libelleDeps }: { a: Actions; b: Barre; e: Echelle; onDeplacer(id: string, jours: number): void; onEtirer(id: string, cote: 'debut' | 'fin', jours: number): void; onDependance(de: string, vers: string): void; violee: boolean; libelleDeps: string }) {
+function BarreGantt({ a, h, b, e, onDeplacer, onEtirer, onDependance, violee, libelleDeps }: { a: Actions; h: number; b: Barre; e: Echelle; onDeplacer(id: string, jours: number): void; onEtirer(id: string, cote: 'debut' | 'fin', jours: number): void; onDependance(de: string, vers: string): void; violee: boolean; libelleDeps: string }) {
   const theme = a.theme;
   const t = b.tache;
   const modifiable = a.droits(t.projetId).modifier;
@@ -172,7 +174,7 @@ function BarreGantt({ a, b, e, onDeplacer, onEtirer, onDependance, violee, libel
   const zone = useZoneDepot(`gantt:${t.id}`);
   const lien = useGlissable({ actif: modifiable, onDeposer: z => z.startsWith('gantt:') && z !== `gantt:${t.id}` && onDependance(t.id, z.slice(6)) });
   const x = position(e, b.debut) + deplace.decalage + gauche.decalage;
-  const largeur = Math.max(e.largeurJour, (ecartJours(b.debut, b.fin) + 1) * e.largeurJour - gauche.decalage + droite.decalage);
+  const largeur = Math.max(a.mobile ? 44 : e.largeurJour, (ecartJours(b.debut, b.fin) + 1) * e.largeurJour - gauche.decalage + droite.decalage);
   const surTouche = (ev: { key: string; shiftKey?: boolean; preventDefault(): void }) => {
     if (!modifiable) return;
     if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') {
@@ -186,8 +188,8 @@ function BarreGantt({ a, b, e, onDeplacer, onEtirer, onDependance, violee, libel
   const poignee = a.mobile ? 16 : 10;
   if (b.jalon) {
     return (
-      <View ref={zone.ref as never} style={[styles.ligneTemps, { left: x, width: e.largeurJour }]} pointerEvents="box-none">
-        <Pressable ref={deplace.ref as never} accessibilityRole="button" accessibilityLabel={libelle} onPress={() => a.ouvrir(t.id)} {...({ onKeyDown: surTouche } as object)} testID={`gantt-barre-${t.id}`} style={[styles.jalonZone, { width: Math.max(e.largeurJour, 28) }]}>
+      <View ref={zone.ref as never} style={[styles.ligneTemps, { left: x, width: e.largeurJour, height: h }]} pointerEvents="box-none">
+        <Pressable ref={deplace.ref as never} accessibilityRole="button" accessibilityLabel={libelle} onPress={() => a.ouvrir(t.id)} {...({ onKeyDown: surTouche } as object)} testID={`gantt-barre-${t.id}`} style={[styles.jalonZone, { width: Math.max(e.largeurJour, a.mobile ? 44 : 28), height: h }]}>
           <View style={[styles.jalon, { backgroundColor: b.terminee ? theme.attenue : theme.teintes.quatre, borderColor: violee ? theme.critique : theme.surface }]} />
         </Pressable>
         <Text numberOfLines={1} style={[attenueDe(theme), styles.etiquetteJalon]}>
@@ -197,7 +199,7 @@ function BarreGantt({ a, b, e, onDeplacer, onEtirer, onDependance, violee, libel
     );
   }
   return (
-    <View ref={zone.ref as never} style={[styles.barreZone, { left: x, width: largeur }]}>
+    <View ref={zone.ref as never} style={[styles.barreZone, { left: x, width: largeur, height: h - 12 }]}>
       <Pressable
         ref={deplace.ref as never}
         accessibilityRole="button"
@@ -221,7 +223,7 @@ function BarreGantt({ a, b, e, onDeplacer, onEtirer, onDependance, violee, libel
       {modifiable ? <View ref={gauche.ref as never} style={[styles.poignee, { left: 0, width: poignee, cursor: 'ew-resize' } as object]} accessibilityLabel="Étirer le début" testID={`gantt-debut-${t.id}`} /> : null}
       {modifiable ? <View ref={droite.ref as never} style={[styles.poignee, { right: 0, width: poignee, cursor: 'ew-resize' } as object]} accessibilityLabel="Étirer l’échéance" testID={`gantt-fin-${t.id}`} /> : null}
       {modifiable ? (
-        <View ref={lien.ref as never} style={[styles.pastilleLien, { right: -14, backgroundColor: theme.surface, borderColor: couleur, cursor: 'crosshair' } as object]} accessibilityLabel={`Glisser sur une autre tâche : elle dépendra de « ${t.titre} »`} testID={`gantt-lien-${t.id}`}>
+        <View ref={lien.ref as never} style={[styles.pastilleLien, { right: -14, top: (h - 12) / 2 - 11, backgroundColor: theme.surface, borderColor: couleur, cursor: 'crosshair' } as object]} accessibilityLabel={`Glisser sur une autre tâche : elle dépendra de « ${t.titre} »`} testID={`gantt-lien-${t.id}`}>
           <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: couleur }} />
         </View>
       ) : null}
@@ -240,6 +242,7 @@ export function VueGantt({ a, taches, onAvis, onErreur }: { a: Actions; taches: 
   const liens = useMemo(() => calculerLiens(d, taches), [d, taches]);
   const violees = liens.filter(l => l.viole);
   const largeurTitres = a.mobile ? 128 : 240;
+  const h = a.mobile ? HAUTEUR_LIGNE_MOBILE : HAUTEUR_LIGNE;
   const largeurTemps = e.jours * e.largeurJour;
   // Ouvre sur aujourd'hui.
   useEffect(() => {
@@ -327,13 +330,13 @@ export function VueGantt({ a, taches, onAvis, onErreur }: { a: Actions; taches: 
           </View>
           {lignes.map(l =>
             l.groupe ? (
-              <View key={l.cle} style={[styles.ligneTitre, { height: HAUTEUR_LIGNE, backgroundColor: teinteTransparente(l.groupe.couleur ?? theme.accent, 0.1) }]}>
+              <View key={l.cle} style={[styles.ligneTitre, { height: h, backgroundColor: teinteTransparente(l.groupe.couleur ?? theme.accent, 0.1) }]}>
                 <Text numberOfLines={1} style={[texteDe(theme), { fontWeight: '700' }]}>
                   {l.groupe.titre}
                 </Text>
               </View>
             ) : (
-              <Pressable key={l.cle} accessibilityRole="button" accessibilityLabel={`Ouvrir ${l.barre!.tache.titre}`} onPress={() => a.ouvrir(l.barre!.tache.id)} style={[styles.ligneTitre, { height: HAUTEUR_LIGNE }]} testID={`gantt-titre-${l.cle}`}>
+              <Pressable key={l.cle} accessibilityRole="button" accessibilityLabel={`Ouvrir ${l.barre!.tache.titre}`} onPress={() => a.ouvrir(l.barre!.tache.id)} style={[styles.ligneTitre, { height: h }]} testID={`gantt-titre-${l.cle}`}>
                 <Text numberOfLines={1} style={[texteDe(theme), { textDecorationLine: l.barre!.terminee ? 'line-through' : 'none', color: l.barre!.terminee ? theme.attenue : theme.texte }]}>
                   {l.barre!.jalon ? '◆ ' : ''}
                   {l.barre!.tache.titre}
@@ -353,7 +356,7 @@ export function VueGantt({ a, taches, onAvis, onErreur }: { a: Actions; taches: 
                 </View>
               ))}
             </View>
-            <View style={{ height: lignes.length * HAUTEUR_LIGNE, width: largeurTemps }}>
+            <View style={{ height: lignes.length * h, width: largeurTemps }}>
               {/* Grille : un trait par repère fort, week-ends teintés en vue jour. */}
               {e.reperes
                 .filter(r => r.fort)
@@ -361,7 +364,7 @@ export function VueGantt({ a, taches, onAvis, onErreur }: { a: Actions; taches: 
                   <View key={`g-${r.jour}`} pointerEvents="none" style={[styles.trait, { left: position(e, r.jour), backgroundColor: theme.ligne }]} />
                 ))}
               {lignes.map((l, i) =>
-                l.groupe ? <View key={l.cle} pointerEvents="none" style={[styles.fondGroupe, { top: i * HAUTEUR_LIGNE, height: HAUTEUR_LIGNE, backgroundColor: teinteTransparente(l.groupe.couleur ?? theme.accent, 0.06) }]} /> : null,
+                l.groupe ? <View key={l.cle} pointerEvents="none" style={[styles.fondGroupe, { top: i * h, height: h, backgroundColor: teinteTransparente(l.groupe.couleur ?? theme.accent, 0.06) }]} /> : null,
               )}
               {/* Aujourd'hui. */}
               <View pointerEvents="none" style={[styles.aujourdhui, { left: xAujourdhui, backgroundColor: theme.critique }]} testID="gantt-ligne-aujourdhui" accessibilityLabel={`Aujourd’hui, ${jourLisible(a.etat.aujourdhui, a.etat.aujourdhui, true)}`} />
@@ -374,8 +377,8 @@ export function VueGantt({ a, taches, onAvis, onErreur }: { a: Actions; taches: 
                 if (i1 === undefined || i2 === undefined || !b1 || !b2) return null;
                 const x1 = position(e, b1.fin) + e.largeurJour;
                 const x2 = position(e, b2.debut);
-                const y1 = i1 * HAUTEUR_LIGNE + HAUTEUR_LIGNE / 2;
-                const y2 = i2 * HAUTEUR_LIGNE + HAUTEUR_LIGNE / 2;
+                const y1 = i1 * h + h / 2;
+                const y2 = i2 * h + h / 2;
                 const c = l.viole ? theme.critique : theme.attenue;
                 const xm = x1 + 6;
                 return (
@@ -389,8 +392,8 @@ export function VueGantt({ a, taches, onAvis, onErreur }: { a: Actions; taches: 
               })}
               {lignes.map((l, i) =>
                 l.barre ? (
-                  <View key={l.cle} style={[styles.rangeeTemps, { top: i * HAUTEUR_LIGNE, width: largeurTemps }]} pointerEvents="box-none">
-                    <BarreGantt a={a} b={l.barre} e={e} onDeplacer={onDeplacer} onEtirer={onEtirer} onDependance={onDependance} violee={liens.some(x => x.vers === l.cle && x.viole)} libelleDeps={libelleDeps(l.barre.tache)} />
+                  <View key={l.cle} style={[styles.rangeeTemps, { top: i * h, width: largeurTemps, height: h }]} pointerEvents="box-none">
+                    <BarreGantt a={a} h={h} b={l.barre} e={e} onDeplacer={onDeplacer} onEtirer={onEtirer} onDependance={onDependance} violee={liens.some(x => x.vers === l.cle && x.viole)} libelleDeps={libelleDeps(l.barre.tache)} />
                   </View>
                 ) : null,
               )}

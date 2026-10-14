@@ -302,10 +302,12 @@ export function PastillePriorite({ theme, priorite, compacte }: { theme: ThemeHu
   );
 }
 
-export function Avatar({ theme, nom, couleur, taille = 26 }: { theme: ThemeHub; nom: string; couleur: string; taille?: number }) {
+export function Avatar({ theme, nom, couleur, taille: demandee = 26 }: { theme: ThemeHub; nom: string; couleur: string; taille?: number }) {
+  // Initiales en 15 px : jamais moins de 28 px de diamètre.
+  const taille = Math.max(28, demandee);
   return (
     <View style={[styles.avatar, { width: taille, height: taille, borderRadius: taille / 2, backgroundColor: couleur }]} accessibilityLabel={nom}>
-      <Text style={{ color: theme.surAccent, fontSize: taille < 26 ? 11 : 13, fontWeight: '800', lineHeight: taille < 26 ? 14 : 16 }}>{initiales(nom)}</Text>
+      <Text style={{ color: theme.surAccent, fontSize: 15, fontWeight: '800', lineHeight: 18, letterSpacing: -0.5 }}>{initiales(nom)}</Text>
     </View>
   );
 }

@@ -44,6 +44,8 @@ export interface OptionsAjout {
   noms?: Partial<Record<Auteur, string>>;
   /** L'ami existe-t-il (sinon `@ami` reste dans le titre) ? */
   avecAmi?: boolean;
+  /** V3 : à qui « @ami » renvoie quand il n'y a pas d'ami des V1/V2 (le seul membre, ou soi-même chez un membre). */
+  amiParDefaut?: Auteur;
 }
 
 function lireRecurrenceEcrite(mots: string[], aujourdhui: string): { recurrence: Recurrence; debut: number; fin: number } | undefined {
@@ -120,6 +122,7 @@ export function lireAjoutRapide(ligne: string, o: OptionsAjout): AjoutLu {
       let a: Auteur | undefined;
       if (qui === 'moi') a = o.auteur;
       else if (qui === 'ami' && o.avecAmi !== false) a = 'ami';
+      else if (qui === 'ami' && o.amiParDefaut) a = o.amiParDefaut;
       else if (nomAmi && qui === nomAmi) a = 'ami';
       else if (nomFondateur && qui === nomFondateur) a = 'fondateur';
       else if (qui === 'fondateur') a = 'fondateur';

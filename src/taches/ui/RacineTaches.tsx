@@ -56,7 +56,7 @@ import { DialogueAides, DialogueIA } from './IA';
 import { DialogueMembres, PersonnesProjet } from './Membres';
 import { DialogueObjectif, VueObjectifs } from './Objectifs';
 import { VueTableau } from './TableauBord';
-import { membresDuProjet, projetPartage } from '../membres';
+import { listeMembres, membresDuProjet, projetPartage } from '../membres';
 import type { Profil } from '../../profils/profils';
 import { attenueDe, Bouton, Champ, couleurPriorite, Dialogue, EtatVide, Options, Puce, T, texteDe, titreDe } from './atomes';
 import { AvisAnnulable, DialogueCorbeille, DialogueMenu, DialogueSuppression, type ElementMenu } from './Suppression';
@@ -420,7 +420,8 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
     const pid = projetId && droits(projetId).modifier ? projetId : dernierProjet && vivant(d.projets[dernierProjet]) && droits(dernierProjet).modifier ? dernierProjet : projetsModifiables[0]?.id;
     return pid ? listesDe(d, pid)[0]?.id : undefined;
   };
-  const lu = rapide.trim() ? lireAjoutRapide(rapide, { aujourdhui: etat.aujourdhui, auteur: etat.moi, noms, avecAmi: etat.moi === 'ami' || Boolean(d.reglages.ami) }) : undefined;
+  const seulMembre = role === 'fondateur' ? (m => (m.length === 1 ? m[0].code : undefined))(listeMembres(d)) : etat.moi;
+  const lu = rapide.trim() ? lireAjoutRapide(rapide, { aujourdhui: etat.aujourdhui, auteur: etat.moi, noms, avecAmi: etat.moi === 'ami' || Boolean(d.reglages.ami), ...(seulMembre ? { amiParDefaut: seulMembre } : {}) }) : undefined;
   const ajouter = () =>
     essayer(() => {
       if (!lu) return;

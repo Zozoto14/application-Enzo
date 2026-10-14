@@ -196,6 +196,20 @@ async function creerAmi(page, nom) {
   const ligne = await page.locator('[data-testid^="admin-ligne-"]').filter({ hasText: nom }).first().getAttribute('data-testid');
   return { motDePasse, secret, id: ligne.replace('admin-ligne-', '') };
 }
+/** V3 : invite le compte s'il ne l'est pas, puis lui donne ce droit sur le projet (👥 › Membres). */
+async function partager(page, compte, projetId, droit) {
+  await page.getByTestId('taches-reglages').click();
+  await page.getByTestId('reglages-membres').click();
+  await page.getByTestId('dialogue-membres').first().waitFor({ timeout: 10_000 });
+  if (await page.getByTestId(`membre-inviter-${compte}`).count()) {
+    await page.getByTestId(`membre-inviter-${compte}`).click();
+    await page.getByTestId(`membre-${compte}`).waitFor({ timeout: 10_000 });
+  }
+  if (!(await page.getByTestId(`droit-${projetId}-${compte}-${droit}`).count())) await page.getByTestId(`membre-droits-${compte}`).click();
+  await page.getByTestId(`droit-${projetId}-${compte}-${droit}`).click();
+  await page.keyboard.press('Escape');
+}
+
 /** Ouvre Tâches ; elle s'ouvre sur le calendrier de la semaine, puis (par défaut) on passe en Liste. */
 async function ouvrirTaches(page, { liste = true } = {}) {
   await allerPageApplications(page);
@@ -353,11 +367,10 @@ try {
 
   // Choix de l'ami et partage projet par projet.
   log('PC : ami choisi (Léa), « Site web » partagé en écriture, « Perso » non');
+  await partager(pc, lea.id, idSite, 'ecriture');
   await pc.getByTestId('taches-reglages').click();
-  await pc.getByTestId(`reglages-ami-${lea.id}`).click();
-  await pc.getByTestId(`partage-${idSite}-ecriture`).waitFor({ timeout: 10_000 });
-  verifier((await pc.getByTestId(`reglages-ami-${hugo.id}`).count()) === 1, 'Hugo est proposé, non choisi (un seul ami)');
-  await pc.getByTestId(`partage-${idSite}-ecriture`).click();
+  await pc.getByTestId('reglages-membres').click();
+  verifier((await pc.getByTestId(`invitable-${hugo.id}`).count()) === 1 && (await pc.getByTestId(`membre-${hugo.id}`).count()) === 0, 'Hugo est proposé, non invité');
   await capture(pc, '02-pc-reglages-partage');
   await pc.keyboard.press('Escape');
 
@@ -551,9 +564,7 @@ try {
 
   // Partage en lecture seule : Léa ne modifie plus.
   log('PC : « Site web » en lecture seule');
-  await pc.getByTestId('taches-reglages').click();
-  await pc.getByTestId(`partage-${idSite}-lecture`).click();
-  await pc.keyboard.press('Escape');
+  await partager(pc, lea.id, idSite, 'lecture');
   const lecture = await attendre(async () => {
     await relancer(pc);
     await pause(1500);
@@ -573,9 +584,7 @@ try {
   const m0 = await mesurer(ipad);
   verifier(m0.debordementPage === 0, `iPad portrait : pas de débordement (${m0.deborde.slice(0, 3).join(' ; ')})`);
   // Retour en écriture pour la suite.
-  await pc.getByTestId('taches-reglages').click();
-  await pc.getByTestId(`partage-${idSite}-ecriture`).click();
-  await pc.keyboard.press('Escape');
+  await partager(pc, lea.id, idSite, 'ecriture');
 
   // ================================================================ Hugo : pas de tuile
   log('PC : Hugo (troisième compte) ne voit pas la tuile');
@@ -705,9 +714,7 @@ try {
   await pc.getByTestId('nouveau-projet-creer').click();
   const idEphemere = await idProjet(pc, 'Éphémère');
   await ajoutRapide(pc, 'Tâche éphémère');
-  await pc.getByTestId('taches-reglages').click();
-  await pc.getByTestId(`partage-${idEphemere}-ecriture`).click();
-  await pc.keyboard.press('Escape');
+  await partager(pc, lea.id, idEphemere, 'ecriture');
   const voitLea = async present =>
     attendre(async () => {
       await relancer(pc);
