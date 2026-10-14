@@ -502,7 +502,13 @@ try {
   await pc.getByTestId('rappels-enregistrer').click();
   const notifie = await attendre(async () => (await pc.evaluate(() => window.__notifications.length)) > 0, 70_000, 2000);
   verifier(notifie, 'notification système (pont du PC) envoyée à l’échéance');
-  verifier(await attendre(async () => /🔔 1/.test(await texteDe(pc, 'taches-rappels')), 10_000, 500), 'pastille 🔔 1 dans l’app');
+  const pastilleUn = await attendre(async () => /🔔 1/.test(await texteDe(pc, 'taches-rappels')), 10_000, 500);
+  if (!pastilleUn) {
+    await pc.getByTestId('taches-rappels').click();
+    log('rappels du Fondateur :', (await texteDe(pc, 'dialogue-rappels-recus')).replace(/\s+/g, ' ').slice(0, 500));
+    await pc.keyboard.press('Escape');
+  }
+  verifier(pastilleUn, `pastille 🔔 1 dans l’app (${await texteDe(pc, 'taches-rappels')})`);
   await pc.keyboard.press('Escape');
   await quitterTaches(pc);
   await allerPageApplications(pc);
