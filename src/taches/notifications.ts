@@ -23,21 +23,23 @@
 
 import { heureValide, instantDe, jourDe } from './dates';
 import { maJournee } from './filtres';
-import { estTerminee, tachesVivantes, type Auteur, type DonneesTaches, type Tache } from './modele';
+import { assignesDe, auteurDeH, estTerminee, pourQui, suffixeAuteur, tachesVivantes, type Auteur, type DonneesTaches, type Tache } from './modele';
+import { projetPartage } from './membres';
 import { modeProjet } from './partage';
 import { TOLERANCE_RAPPEL_MS, type AlerteRappel, type EtatRappels } from './rappels';
 
-export type TypeNotif = 'echeance' | 'rappel' | 'retard' | 'assignee' | 'ami' | 'office' | 'recap' | 'journal';
+export type TypeNotif = 'echeance' | 'rappel' | 'retard' | 'assignee' | 'mention' | 'ami' | 'office' | 'recap' | 'journal';
 export type Canal = 'les-deux' | 'systeme' | 'pastille' | 'aucun';
 
-export const TYPES_NOTIF: readonly TypeNotif[] = ['echeance', 'rappel', 'retard', 'assignee', 'ami', 'office', 'recap', 'journal'];
+export const TYPES_NOTIF: readonly TypeNotif[] = ['echeance', 'rappel', 'retard', 'assignee', 'mention', 'ami', 'office', 'recap', 'journal'];
 export const CANAUX: readonly Canal[] = ['les-deux', 'systeme', 'pastille', 'aucun'];
 export const LIBELLES_TYPE: Record<TypeNotif, string> = {
   echeance: 'Échéance atteinte',
   rappel: 'Rappel avant l’échéance',
   retard: 'Tâche en retard',
   assignee: 'Tâche qui m’est assignée',
-  ami: 'Modification ou commentaire sur un projet partagé',
+  mention: 'On me mentionne (@prénom) dans un commentaire',
+  ami: 'Modification ou commentaire d’un autre sur un projet partagé',
   office: 'Tâche liée à un agent Claude Office terminée',
   recap: 'Récap quotidien « Ma journée »',
   journal: 'Invite du soir « Note ce que tu as fait aujourd’hui »',
@@ -64,7 +66,7 @@ export interface PrefsNotif {
 
 export const PREFS_DEFAUT: PrefsNotif = {
   actif: true,
-  types: { echeance: 'les-deux', rappel: 'les-deux', retard: 'pastille', assignee: 'les-deux', ami: 'pastille', office: 'les-deux', recap: 'aucun', journal: 'aucun' },
+  types: { echeance: 'les-deux', rappel: 'les-deux', retard: 'pastille', assignee: 'les-deux', mention: 'les-deux', ami: 'pastille', office: 'les-deux', recap: 'aucun', journal: 'aucun' },
   delaiDefaut: -1,
   heureRecap: '08:30',
   heureJournal: '18:00',
@@ -97,6 +99,7 @@ export function lirePrefs(brut: unknown): PrefsNotif {
   };
 }
 
+/** Chez le Fondateur, ses réglages ; chez un membre, les siens (dans sa copie, toujours `notifA`). */
 export const champPrefs = (qui: Auteur): 'notifF' | 'notifA' => (qui === 'fondateur' ? 'notifF' : 'notifA');
 export const prefsDe = (d: DonneesTaches, qui: Auteur): PrefsNotif => lirePrefs(d.reglages[champPrefs(qui)]);
 
@@ -147,8 +150,6 @@ export interface ResultatNotif {
   calmees: number;
 }
 
-const autre = (qui: Auteur): Auteur => (qui === 'fondateur' ? 'ami' : 'fondateur');
-const codeDe = (qui: Auteur) => (qui === 'fondateur' ? '|f' : '|a');
 const instantH = (h: string) => Date.parse(h.split('|')[0]);
 
 function texteRappel(minutes: number, heureEch: string | undefined): string {
@@ -160,8 +161,10 @@ function texteRappel(minutes: number, heureEch: string | undefined): string {
   return j === 1 ? `Échéance demain${a}` : `Échéance dans ${j} jours${a}`;
 }
 
-/** Tâches qui concernent `qui` : le Fondateur, les siennes et celles de personne ; l'ami, les siennes. */
-const pourMoi = (t: Tache, qui: Auteur) => (qui === 'ami' ? t.assigne === 'ami' : t.assigne !== 'ami');
+/** Tâches qui concernent `qui` : le Fondateur, les siennes et celles de personne ; un membre, les siennes. */
+const pourMoi = (t: Tache, qui: Auteur) => pourQui(t, qui);
+/** Nom d'un auteur pour les textes. */
+const nomDe = (noms: Record<Auteur, string>, a: Auteur | undefined) => (a ? (noms[a] ?? (a === 'fondateur' ? 'Le Fondateur' : 'Un membre')) : 'Quelqu’un');
 
 /**
  * Ce qui s'est passé depuis la dernière évaluation (avant tout filtrage).
@@ -197,29 +200,39 @@ export function evenementsTaches(
         r.push({ type: 'retard', cle: `${t.id}|retard|${t.echeance.jour}T${t.echeance.heure ?? ''}`, tacheId: t.id, projetId: t.projetId, titre: t.titre, texte: 'En retard : l’échéance est passée', date: new Date(fin).toISOString() });
       }
     }
-    // Ce que l'autre a fait depuis la dernière fois (projets partagés seulement).
-    const partage = qui === 'ami' || modeProjet(d, t.projetId) !== 'aucun';
+    // Ce que les autres ont fait depuis la dernière fois (projets partagés seulement).
+    const p = d.projets[t.projetId];
+    const partage = qui !== 'fondateur' || Boolean(p && (projetPartage(d, p) || modeProjet(d, t.projetId) !== 'aucun'));
     if (!partage) continue;
-    const code = codeDe(autre(qui));
-    const traces = [...Object.values(t.h), ...Object.values(t.commentaires).map(c => c.h)].filter(h => h.endsWith(code)).sort();
+    const moi = suffixeAuteur(qui);
+    const dAutrui = (h: string) => !h.endsWith(moi) && Boolean(auteurDeH(h));
+    const traces = [...Object.values(t.h), ...Object.values(t.commentaires).map(c => c.h)].filter(dAutrui).sort();
     const derniere = traces.at(-1);
     if (derniere) autres[t.id] = derniere;
     if (suivi.premiere || !derniere) continue;
     // Tâche jamais vue : seules ses traces des 2 derniers jours comptent (pas de rattrapage d'archives).
     const vue = suivi.autres[t.id] ?? new Date(maintenant - 2 * 86_400_000).toISOString();
-    const recent = (h: string | undefined) => Boolean(h && h.endsWith(code) && h > vue && !Number.isNaN(instantH(h)));
-    if (t.assigne === qui && recent(t.h.assigne)) {
-      r.push({ type: 'assignee', cle: `${t.id}|assignee|${t.h.assigne}`, tacheId: t.id, projetId: t.projetId, titre: t.titre, texte: `${noms[autre(qui)]} vous a assigné cette tâche`, date: iso });
+    const recent = (h: string | undefined) => Boolean(h && dAutrui(h) && h > vue && !Number.isNaN(instantH(h)));
+    // Mention (« @prénom ») dans un commentaire d'un autre : son propre type de notification.
+    const mentions = Object.values(t.commentaires).filter(c => !c.supprime && c.auteur !== qui && c.mentions?.includes(qui) && recent(c.h)).sort((a, b) => a.h.localeCompare(b.h));
+    for (const c of mentions) {
+      r.push({ type: 'mention', cle: `${t.id}|mention|${c.h}`, tacheId: t.id, projetId: t.projetId, titre: t.titre, texte: `${nomDe(noms, c.auteur)} vous mentionne : « ${c.texte.slice(0, 80)} »`, date: iso });
+    }
+    const hAssign = [t.h.assignes, t.h.assigne].filter((h): h is string => Boolean(h)).sort().at(-1);
+    if (assignesDe(t).includes(qui) && recent(hAssign)) {
+      r.push({ type: 'assignee', cle: `${t.id}|assignee|${hAssign}`, tacheId: t.id, projetId: t.projetId, titre: t.titre, texte: `${nomDe(noms, auteurDeH(hAssign))} vous a assigné cette tâche`, date: iso });
       continue;
     }
-    const commentaire = Object.values(t.commentaires).filter(c => !c.supprime && c.auteur === autre(qui) && recent(c.h)).sort((a, b) => b.h.localeCompare(a.h))[0];
-    const champs = Object.entries(t.h).filter(([c, h]) => c !== 'assigne' && recent(h));
+    if (mentions.length) continue;
+    const commentaire = Object.values(t.commentaires).filter(c => !c.supprime && c.auteur !== qui && recent(c.h)).sort((a, b) => b.h.localeCompare(a.h))[0];
+    const champs = Object.entries(t.h).filter(([c, h]) => c !== 'assigne' && c !== 'assignes' && recent(h));
     if (commentaire) {
-      r.push({ type: 'ami', cle: `${t.id}|ami|${commentaire.h}`, tacheId: t.id, projetId: t.projetId, titre: t.titre, texte: `${noms[autre(qui)]} a commenté : « ${commentaire.texte.slice(0, 80)} »`, date: iso });
+      r.push({ type: 'ami', cle: `${t.id}|ami|${commentaire.h}`, tacheId: t.id, projetId: t.projetId, titre: t.titre, texte: `${nomDe(noms, commentaire.auteur)} a commenté : « ${commentaire.texte.slice(0, 80)} »`, date: iso });
     } else if (champs.length) {
       const dernier = champs.map(([, h]) => h).sort().at(-1)!;
-      const cree = champs.some(([c]) => c === 'titre') && t.creePar === autre(qui) && t.historique.length <= 2;
-      r.push({ type: 'ami', cle: `${t.id}|ami|${dernier}`, tacheId: t.id, projetId: t.projetId, titre: t.titre, texte: cree ? `${noms[autre(qui)]} a créé cette tâche` : `${noms[autre(qui)]} a modifié cette tâche`, date: iso });
+      const auteur = auteurDeH(dernier);
+      const cree = champs.some(([c]) => c === 'titre') && t.creePar === auteur && t.historique.length <= 2;
+      r.push({ type: 'ami', cle: `${t.id}|ami|${dernier}`, tacheId: t.id, projetId: t.projetId, titre: t.titre, texte: cree ? `${nomDe(noms, auteur)} a créé cette tâche` : `${nomDe(noms, auteur)} a modifié cette tâche`, date: iso });
     }
   }
   // Récap quotidien, à l'heure choisie (une fois par jour, pas plus de 12 h après).

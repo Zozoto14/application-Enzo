@@ -11,6 +11,7 @@
 
 import { ajouterJours, ajouterMois, jourSemaine, joursDansMois, JOURS_SEMAINE, MOIS } from './dates';
 import {
+  assignesDe,
   creerTache,
   elementsChecklist,
   horodatage,
@@ -112,7 +113,7 @@ export function terminerTache(d: DonneesTaches, id: string, ctx: Contexte, aujou
         priorite: t.priorite,
         echeance: { jour, ...(t.echeance?.heure ? { heure: t.echeance.heure } : {}) },
         etiquettes: t.etiquettes,
-        ...(t.assigne ? { assigne: t.assigne } : {}),
+        ...(assignesDe(t).length ? { assignes: assignesDe(t) } : {}),
         recurrence: t.recurrence,
         rappels: t.rappels,
       },

@@ -10,12 +10,15 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDime
 import { police, teinteTransparente } from '../../hub/themes';
 import { ajouterJours, ajouterMois, debutSemaine, JOURS_COURTS, jourLisible, MOIS } from '../dates';
 import { grilleMois, grilleSemaine, grouper, maJournee, tachesParJour, type GroupeTaches } from '../filtres';
+import { couleurMembre } from '../membres';
 import {
+  assignesDe,
   elementsChecklist,
   estTerminee,
   LIBELLES_PRIORITE,
   sousTaches,
   statutDe,
+  type Auteur,
   type Groupe,
   type Tache,
 } from '../modele';
@@ -27,8 +30,25 @@ import { useGlissable, useZoneDepot } from './glisser';
 
 const majuscule = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
-export function couleurAuteur(a: Actions, qui: 'fondateur' | 'ami'): string {
-  return qui === 'fondateur' ? a.theme.teintes.portefeuille : a.theme.teintes.admin;
+export function couleurAuteur(a: Pick<Actions, 'theme'>, qui: Auteur): string {
+  return qui === 'fondateur' ? a.theme.teintes.portefeuille : qui === 'ami' ? a.theme.teintes.admin : couleurMembre(qui);
+}
+
+/** Avatars (initiales) des personnes assignées : trois au plus, puis « +N ». */
+export function AvatarsTache({ a, t, taille = 24 }: { a: Actions; t: Tache; taille?: number }) {
+  const l = assignesDe(t);
+  if (!l.length) return null;
+  const noms = l.map(x => a.etat.noms[x] ?? 'Membre');
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center' }} accessibilityLabel={`Pour ${noms.join(', ')}`} testID={`avatars-${t.id}`}>
+      {l.slice(0, 3).map((x, i) => (
+        <View key={x} style={{ marginLeft: i ? -8 : 0, borderWidth: 2, borderColor: a.theme.surface, borderRadius: (taille + 4) / 2 }}>
+          <Avatar theme={a.theme} nom={a.etat.noms[x] ?? 'Membre'} couleur={couleurAuteur(a, x)} taille={taille} />
+        </View>
+      ))}
+      {l.length > 3 ? <Text style={[attenueDe(a.theme), { marginLeft: 4 }]}>+{l.length - 3}</Text> : null}
+    </View>
+  );
 }
 
 function libelleEcheance(a: Actions, t: Tache): { texte: string; couleur: string } | undefined {
@@ -96,7 +116,7 @@ function TitreEnPlace({ a, t, modifiable, ferme }: { a: Actions; t: Tache; modif
 
 // ------------------------------------------------------------------ Liste
 
-const COLONNES = { statut: 132, priorite: 112, echeance: 150, assigne: 56, etiquettes: 170 } as const;
+const COLONNES = { statut: 132, priorite: 112, echeance: 150, assigne: 72, etiquettes: 170 } as const;
 
 function LigneTache({ a, t, compacte, etiquettes = true, avecProjet = true }: { a: Actions; t: Tache; compacte: boolean; etiquettes?: boolean; avecProjet?: boolean }) {
   const theme = a.theme;
@@ -118,7 +138,7 @@ function LigneTache({ a, t, compacte, etiquettes = true, avecProjet = true }: { 
             <Puce theme={theme} texte={statut.nom} couleur={statut.couleur} />
             {t.priorite !== 'normale' ? <PastillePriorite theme={theme} priorite={t.priorite} /> : null}
             {ech ? <Text style={[attenueDe(theme), { color: ech.couleur }]}>{ech.texte}</Text> : null}
-            {t.assigne ? <Avatar theme={theme} nom={a.etat.noms[t.assigne]} couleur={couleurAuteur(a, t.assigne)} taille={24} /> : null}
+            <AvatarsTache a={a} t={t} taille={24} />
           </View>
           <Compteurs a={a} t={t} />
         </Pressable>
@@ -146,8 +166,8 @@ function LigneTache({ a, t, compacte, etiquettes = true, avecProjet = true }: { 
           {ech?.texte ?? '—'}
         </Text>
       </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Assignée : ${t.assigne ? a.etat.noms[t.assigne] : 'personne'}`} disabled={!droits.modifier} onPress={() => a.menuAssigne(t)} testID={`assigne-${t.id}`} style={[styles.cellule, { width: COLONNES.assigne }]}>
-        {t.assigne ? <Avatar theme={theme} nom={a.etat.noms[t.assigne]} couleur={couleurAuteur(a, t.assigne)} /> : <Text style={attenueDe(theme)}>—</Text>}
+      <Pressable accessibilityRole="button" accessibilityLabel={`Assignée : ${assignesDe(t).map(x => a.etat.noms[x] ?? 'Membre').join(', ') || 'personne'}`} disabled={!droits.modifier} onPress={() => a.menuAssigne(t)} testID={`assigne-${t.id}`} style={[styles.cellule, { width: COLONNES.assigne }]}>
+        {assignesDe(t).length ? <AvatarsTache a={a} t={t} taille={24} /> : <Text style={attenueDe(theme)}>—</Text>}
       </Pressable>
       {etiquettes ? (
         <View style={[styles.cellule, { width: COLONNES.etiquettes, flexDirection: 'row', alignItems: 'center', gap: 4, overflow: 'hidden' }]}>
@@ -245,7 +265,7 @@ function CarteKanban({ a, t, colonnes, iColonne }: { a: Actions; t: Tache; colon
             {ech ? <Text style={[attenueDe(theme), { color: ech.couleur }]}>{ech.texte}</Text> : null}
             <Compteurs a={a} t={t} />
           </View>
-          {t.assigne ? <Avatar theme={theme} nom={a.etat.noms[t.assigne]} couleur={couleurAuteur(a, t.assigne)} taille={24} /> : null}
+          <AvatarsTache a={a} t={t} taille={24} />
         </View>
       </Pressable>
       {a.mobile && droits.modifier ? (
@@ -490,7 +510,7 @@ function LigneJournee({ a, t }: { a: Actions; t: Tache }) {
           </Text>
           {ech ? <Text style={[attenueDe(theme), { color: ech.couleur }]}>{ech.texte}</Text> : null}
           {t.priorite !== 'normale' ? <PastillePriorite theme={theme} priorite={t.priorite} compacte /> : null}
-          {t.assigne ? <Avatar theme={theme} nom={a.etat.noms[t.assigne]} couleur={couleurAuteur(a, t.assigne)} taille={22} /> : null}
+          <AvatarsTache a={a} t={t} taille={22} />
         </View>
       </Pressable>
       {droits.modifier ? (
@@ -507,7 +527,7 @@ function LigneJournee({ a, t }: { a: Actions; t: Tache }) {
   );
 }
 
-export function VueJournee({ a, taches, qui }: { a: Actions; taches: readonly Tache[]; qui: 'fondateur' | 'ami' }) {
+export function VueJournee({ a, taches, qui }: { a: Actions; taches: readonly Tache[]; qui: Auteur }) {
   const theme = a.theme;
   const j = maJournee(a.etat.donnees, a.etat.aujourdhui, qui, taches);
   const sections: Array<[string, string, Tache[], string]> = [

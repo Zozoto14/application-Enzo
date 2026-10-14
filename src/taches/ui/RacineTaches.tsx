@@ -56,7 +56,7 @@ import { noterRelanceFaite } from '../integrations/prospects';
 import { chargerDonnees, enregistrerDonnees } from '../../hub/admin/donnees';
 import { prefsDe } from '../notifications';
 import { appareilTaches, notificationSystemeDisponible, reinitialiserLiens, testerNotification, verifierRappels } from '../resume';
-import { arreterMinuteur, CHAMP_CHRONO, demarrerMinuteur, dureeLisible, minuteurActif } from '../temps';
+import { arreterMinuteur, chronoDe, demarrerMinuteur, dureeLisible, minuteurActif } from '../temps';
 import { DialogueLiens, DialogueNotifications } from './ReglagesV2';
 import { DialogueReleve, DialogueTemps, PastilleMinuteur } from './SuiviTemps';
 import { DialogueJournal } from './Journal';
@@ -272,7 +272,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
         etat.maj((x, ctx) => {
           if (ferme) return rouvrirTache(x, id, ctx, noms);
           // Terminée : son minuteur s'arrête (le temps est noté).
-          const arret = x.taches[id]?.[CHAMP_CHRONO[ctx.auteur]] ? arreterMinuteur(x, id, ctx) : { donnees: x, minutes: 0 };
+          const arret = (x.taches[id] && chronoDe(x.taches[id], ctx.auteur)) ? arreterMinuteur(x, id, ctx) : { donnees: x, minutes: 0 };
           temps = arret.minutes;
           const r = terminerTache(arret.donnees, id, ctx, etat.aujourdhui, noms);
           suivante = r.suivante;
@@ -309,7 +309,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp }: PropsRacineApp) {
     basculerJournee: t => essayer(() => etat.maj((x, ctx) => modifierTache(x, t.id, { pourAujourdhui: t.pourAujourdhui === etat.aujourdhui ? undefined : etat.aujourdhui }, ctx, noms))),
     minuteur: t =>
       essayer(() => {
-        const enCours = t[CHAMP_CHRONO[role]];
+        const enCours = chronoDe(t, etat.moi);
         if (enCours) {
           let minutes = 0;
           etat.maj((x, ctx) => {

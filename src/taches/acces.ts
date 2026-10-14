@@ -14,12 +14,14 @@
 import { rangDe } from '../hub/admin/roles';
 import type { ContexteHub } from '../hub/types';
 import type { Auteur, DonneesTaches, ModePartage } from './modele';
+export type { Auteur };
 import { CLES_TACHES, lireCopie, modeProjet } from './partage';
 import type { BasePrefs } from '../tsuzuku/plateforme/stockage';
 
 export const ID_TACHES = 'taches';
 
-export type RoleTaches = Auteur;
+/** Rôle sur cet appareil : le Fondateur, ou un membre (« ami » : l'ami des V1/V2 comme les membres V3). */
+export type RoleTaches = 'fondateur' | 'ami';
 
 /**
  * Rôle du compte ouvert. L'ami doit avoir l'accès `taches` (donné par le
@@ -50,17 +52,20 @@ export interface Droits {
   voir: boolean;
   /** Créer, modifier, terminer, commenter des tâches. */
   modifier: boolean;
-  /** Listes, statuts, partage, renommage, suppression du projet. */
+  /** Listes, statuts, paramètres du projet (le Fondateur, ou un membre admin du projet). */
   gerer: boolean;
+  /** Partage du projet (le Fondateur seul). */
+  partager: boolean;
   supprimerProjet: boolean;
   mode: ModePartage | 'proprietaire';
 }
 
-export function droitsProjet(role: RoleTaches | undefined, d: DonneesTaches, projetId: string): Droits {
-  if (role === 'fondateur') return { voir: Boolean(d.projets[projetId]), modifier: true, gerer: true, supprimerProjet: true, mode: 'proprietaire' };
+export function droitsProjet(role: RoleTaches | undefined, d: DonneesTaches, projetId: string, moi: Auteur = 'ami'): Droits {
+  if (role === 'fondateur') return { voir: Boolean(d.projets[projetId]), modifier: true, gerer: true, partager: true, supprimerProjet: true, mode: 'proprietaire' };
   if (role === 'ami') {
     const mode = modeProjet(d, projetId);
-    return { voir: mode !== 'aucun', modifier: mode === 'ecriture', gerer: false, supprimerProjet: false, mode };
+    const admin = mode === 'ecriture' && d.projets[projetId]?.acces?.[moi] === 'admin';
+    return { voir: mode !== 'aucun', modifier: mode === 'ecriture', gerer: admin, partager: false, supprimerProjet: false, mode };
   }
-  return { voir: false, modifier: false, gerer: false, supprimerProjet: false, mode: 'aucun' };
+  return { voir: false, modifier: false, gerer: false, partager: false, supprimerProjet: false, mode: 'aucun' };
 }

@@ -129,6 +129,7 @@ export function fusionnerDonnees(a: DonneesTaches, b: DonneesTaches): DonneesTac
     vues: fusionnerCollection(a.vues, b.vues),
     reglages: fusionnerEntite(a.reglages, b.reglages),
     journal: fusionnerElements<EntreeJournal>(a.journal ?? {}, b.journal ?? {}),
+    objectifs: fusionnerCollection(a.objectifs ?? {}, b.objectifs ?? {}),
   };
 }
 

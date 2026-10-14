@@ -4,6 +4,7 @@
  * téléphone (et pour tout ce qu'on touche du doigt).
  */
 
+import { initiales } from '../membres';
 import React, { useEffect, useRef } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 import { ecouterTouche } from '../../hub/web';
@@ -304,7 +305,7 @@ export function PastillePriorite({ theme, priorite, compacte }: { theme: ThemeHu
 export function Avatar({ theme, nom, couleur, taille = 26 }: { theme: ThemeHub; nom: string; couleur: string; taille?: number }) {
   return (
     <View style={[styles.avatar, { width: taille, height: taille, borderRadius: taille / 2, backgroundColor: couleur }]} accessibilityLabel={nom}>
-      <Text style={{ color: theme.surAccent, fontSize: 15, fontWeight: '800', lineHeight: 18 }}>{(nom.trim()[0] ?? '?').toUpperCase()}</Text>
+      <Text style={{ color: theme.surAccent, fontSize: taille < 26 ? 11 : 13, fontWeight: '800', lineHeight: taille < 26 ? 14 : 16 }}>{initiales(nom)}</Text>
     </View>
   );
 }

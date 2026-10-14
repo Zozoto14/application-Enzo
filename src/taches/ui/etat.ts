@@ -12,12 +12,15 @@ import type { ContexteHub } from '../../hub/types';
 import { aleatoireParDefaut } from '../../securite/aleatoire';
 import { roleTaches, type RoleTaches } from '../acces';
 import { jourDe } from '../dates';
-import { changerReglages, ecrireDonnees, lireDonnees, type Auteur, type Contexte, type DonneesTaches } from '../modele';
+import { ecrireDonnees, lireDonnees, type Auteur, type Contexte, type DonneesTaches } from '../modele';
+import { changerDroit, inviterMembre, nomsMembres, retirerMembre, type DroitOuAucun } from '../membres';
 import { CLES_TACHES, lireCopie, type CopieAmi } from '../partage';
 import { lireEtatRappels, marquerRappelsLus, type AlerteRappel } from '../rappels';
 
 export interface EtatApp {
   role: RoleTaches;
+  /** Mon code d'auteur : « fondateur », « ami » (ami des V1/V2) ou mon identifiant de membre. */
+  moi: Auteur;
   donnees: DonneesTaches;
   copie?: CopieAmi;
   noms: Record<Auteur, string>;
@@ -29,13 +32,16 @@ export interface EtatApp {
   maj(changer: (d: DonneesTaches, ctx: Contexte) => DonneesTaches): DonneesTaches;
   rappels: AlerteRappel[];
   rappelsLus(): void;
-  /** Fondateur : choisit l'ami (un seul) et lui ouvre l'app ; `undefined` retire le partage. */
-  choisirAmi(id: string | undefined, nom?: string): Promise<void>;
+  /** Fondateur : invite un compte (ami ou gestionnaire) et lui ouvre l'app. */
+  inviter(compte: string, nom: string, rang?: 'ami' | 'gestionnaire'): Promise<void>;
+  /** Fondateur : retire un membre (droits, clés tournées, app fermée, dépôt effacé au tour suivant). */
+  retirer(compte: string): Promise<void>;
+  /** Fondateur : droit d'un membre sur un projet. */
+  changerDroit(projetId: string, compte: string, droit: DroitOuAucun): void;
   /** Relit la base (après une écriture faite hors de l'écran : liens, notification de test). */
   relire(): void;
 }
 
-const enOctetsHex = (o: Uint8Array) => [...o].map(b => b.toString(16).padStart(2, '0')).join('');
 
 export function useEtatTaches(contexte: ContexteHub): EtatApp {
   const role = roleTaches(contexte) ?? 'fondateur';
@@ -67,20 +73,21 @@ export function useEtatTaches(contexte: ContexteHub): EtatApp {
   const donnees = useMemo(() => (role === 'ami' ? copie!.donnees : lireDonnees(brut || undefined)), [role, brut, copie]);
   const maintenant = useCallback(() => contexte.maintenant ?? Date.now(), [contexte.maintenant]);
   const nomMoi = contexte.profil?.nom && contexte.profil.nom !== 'Moi' ? contexte.profil.nom : 'Moi';
+  const moi: Auteur = role === 'fondateur' ? 'fondateur' : (copie?.moi ?? 'ami');
   const noms: Record<Auteur, string> =
     role === 'fondateur'
-      ? { fondateur: nomMoi, ami: donnees.reglages.amiNom ?? 'Ami' }
-      : { fondateur: copie?.fondateur ?? 'Fondateur', ami: copie?.ami ?? nomMoi };
+      ? nomsMembres(donnees, nomMoi)
+      : { ami: 'Ami', ...(copie?.membres ?? {}), fondateur: copie?.fondateur ?? 'Fondateur', [moi]: copie?.ami ?? nomMoi };
 
-  const courant = useRef({ role, cle, base });
-  courant.current = { role, cle, base };
+  const courant = useRef({ role, cle, base, moi });
+  courant.current = { role, cle, base, moi };
   const maj = useCallback(
     (changer: (d: DonneesTaches, ctx: Contexte) => DonneesTaches): DonneesTaches => {
-      const { role: r, cle: c, base: b } = courant.current;
+      const { role: r, cle: c, base: b, moi: m } = courant.current;
       const enregistre = b?.lire(c) ?? '';
       const copieActuelle = r === 'ami' ? lireCopie(enregistre) : undefined;
       const actuelles = copieActuelle ? copieActuelle.donnees : lireDonnees(enregistre || undefined);
-      const suivantes = changer(actuelles, { maintenant: maintenant(), auteur: r });
+      const suivantes = changer(actuelles, { maintenant: maintenant(), auteur: r === 'fondateur' ? 'fondateur' : (copieActuelle?.moi ?? m) });
       if (suivantes === actuelles) return actuelles;
       const texte = copieActuelle ? JSON.stringify({ ...copieActuelle, donnees: suivantes }) : ecrireDonnees(suivantes);
       b?.ecrire(c, texte);
@@ -99,33 +106,36 @@ export function useEtatTaches(contexte: ContexteHub): EtatApp {
   }, [base]);
 
   const profils = contexte.profils;
-  const choisirAmi = useCallback(
-    async (id: string | undefined, nom?: string) => {
-      const avant = lireDonnees(base?.lire(CLES_TACHES.donnees) ?? undefined).reglages.ami;
-      maj((d, ctx) =>
-        changerReglages(
-          d,
-          id
-            ? { ami: id, amiNom: nom, cle: d.reglages.ami === id && d.reglages.cle ? d.reglages.cle : enOctetsHex(aleatoireParDefaut(32)) }
-            : { ami: undefined, amiNom: undefined, cle: undefined },
-          ctx,
-        ),
-      );
-      // L'app s'ouvre à l'ami choisi, et se ferme à l'ancien (accès `taches` de son compte).
-      if (profils?.onAutoriser) {
-        const tous = profils.tous ?? [];
-        for (const p of tous) {
-          if (p.admin) continue;
-          const apps = p.apps ?? [];
-          const doit = p.id === id;
-          if (doit && !apps.includes('taches')) await profils.onAutoriser(p.id, [...apps, 'taches']);
-          if (!doit && apps.includes('taches') && (p.id === avant || id !== undefined)) await profils.onAutoriser(p.id, apps.filter(a => a !== 'taches'));
-        }
-      }
+  const ouvrirApp = useCallback(
+    async (compte: string, ouvrir: boolean) => {
+      // L'app s'ouvre au membre invité, se ferme au membre retiré (accès `taches` de son compte).
+      const p = (profils?.tous ?? []).find(x => x.id === compte);
+      if (!p || p.admin || !profils?.onAutoriser) return;
+      const apps = p.apps ?? [];
+      if (ouvrir && !apps.includes('taches')) await profils.onAutoriser(p.id, [...apps, 'taches']);
+      if (!ouvrir && apps.includes('taches')) await profils.onAutoriser(p.id, apps.filter(a => a !== 'taches'));
     },
-    [base, maj, profils],
+    [profils],
+  );
+  const inviter = useCallback(
+    async (compte: string, nom: string, rang?: 'ami' | 'gestionnaire') => {
+      maj((d, ctx) => inviterMembre(d, compte, nom, { ...ctx, aleaOctets: aleatoireParDefaut }, rang));
+      await ouvrirApp(compte, true);
+    },
+    [maj, ouvrirApp],
+  );
+  const retirer = useCallback(
+    async (compte: string) => {
+      maj((d, ctx) => retirerMembre(d, compte, { ...ctx, aleaOctets: aleatoireParDefaut }));
+      await ouvrirApp(compte, false);
+    },
+    [maj, ouvrirApp],
+  );
+  const changerDroitMembre = useCallback(
+    (projetId: string, compte: string, droit: DroitOuAucun) => void maj((d, ctx) => changerDroit(d, projetId, compte, droit, { ...ctx, aleaOctets: aleatoireParDefaut })),
+    [maj],
   );
 
   const parFondateur = noms.fondateur === 'Fondateur' ? 'le Fondateur' : noms.fondateur;
-  return { role, donnees, copie, noms, parFondateur, aujourdhui: jourDe(maintenant()), maintenant, maj, rappels, rappelsLus, choisirAmi, relire };
+  return { role, moi, donnees, copie, noms, parFondateur, aujourdhui: jourDe(maintenant()), maintenant, maj, rappels, rappelsLus, inviter, retirer, changerDroit: changerDroitMembre, relire };
 }

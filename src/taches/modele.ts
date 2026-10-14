@@ -18,7 +18,19 @@ import { jourValide, heureValide, sansAccents } from './dates';
 
 // ------------------------------------------------------------------ Types
 
-export type Auteur = 'fondateur' | 'ami';
+/**
+ * Qui agit : « fondateur », « ami » (l'ami unique des V1/V2, gardé tel quel)
+ * ou, depuis la V3, l'identifiant du compte d'un membre (10 caractères
+ * a-z0-9). Le code d'horodatage est « f », « a » ou cet identifiant.
+ */
+// eslint-disable-next-line @typescript-eslint/ban-types
+export type Auteur = 'fondateur' | 'ami' | (string & {});
+/** Droit d'un membre sur un projet (V3). « admin » : écriture et gestion du projet (listes, statuts, paramètres). */
+export type DroitMembre = 'lecture' | 'ecriture' | 'admin';
+export const DROITS_MEMBRE: readonly DroitMembre[] = ['lecture', 'ecriture', 'admin'];
+export const LIBELLES_DROIT: Record<DroitMembre | 'aucun', string> = { aucun: 'Aucun accès', lecture: 'Lecture', ecriture: 'Écriture', admin: 'Admin du projet' };
+/** Identifiant d'un compte membre (jamais « fondateur » ni « ami », réservés). */
+export const idMembreValide = (v: unknown): v is string => typeof v === 'string' && /^[a-z0-9]{6,16}$/.test(v) && v !== 'fondateur';
 export type Priorite = 'urgente' | 'haute' | 'normale' | 'basse';
 export type ModePartage = 'aucun' | 'lecture' | 'ecriture';
 
@@ -27,7 +39,7 @@ export const LIBELLES_PRIORITE: Record<Priorite, string> = { urgente: 'Urgente',
 export const RANG_PRIORITE: Record<Priorite, number> = { urgente: 0, haute: 1, normale: 2, basse: 3 };
 export const LIBELLES_PARTAGE: Record<ModePartage, string> = { aucun: 'Non partagé', lecture: 'Lecture seule', ecriture: 'Lecture et écriture' };
 
-/** Horodatages par champ : « 2026-10-13T09:00:00.000Z|f » (f : Fondateur, a : ami). */
+/** Horodatages par champ : « 2026-10-13T09:00:00.000Z|f » (f : Fondateur, a : ami, sinon l'identifiant du membre). */
 export type Horodatages = Record<string, string>;
 
 export interface Entite {
@@ -82,6 +94,8 @@ export interface Projet extends Entite {
   fin?: string;
   /** Historique des modifications du projet (union à la fusion, 100 derniers). */
   historique?: EvenementHistorique[];
+  /** Droits des membres (V3), par identifiant de compte. L'ami des V1/V2 garde aussi `partage`. */
+  acces?: Record<string, DroitMembre>;
 }
 
 export interface Liste extends Entite {
@@ -119,6 +133,8 @@ export interface Commentaire {
   date: string;
   h: string;
   supprime?: boolean;
+  /** Personnes mentionnées (« @Léa ») : leurs codes (V3). */
+  mentions?: string[];
 }
 
 /** Temps passé sur une tâche (minuteur arrêté ou saisie manuelle). */
@@ -165,6 +181,35 @@ export interface EntreeJournal {
   supprime?: boolean;
 }
 
+export interface LienGithub {
+  depot: string;
+  branche?: string;
+  pr?: number;
+  /** Passer la tâche au statut « terminé » quand la PR est fusionnée. */
+  faiteSiFusion?: boolean;
+}
+
+/** Objectif (V3) : une cible datée, suivie par ses tâches et projets liés, ou saisie à la main. */
+export interface Objectif extends Entite {
+  titre: string;
+  description?: string;
+  /** Échéance (AAAA-MM-JJ). */
+  echeance?: string;
+  /** Mode de calcul de la progression. */
+  mode: 'taches' | 'manuel';
+  /** Tâches et projets liés (mode « taches »). */
+  taches: string[];
+  projets: string[];
+  /** Progression saisie (0-100, mode « manuel »). */
+  manuel?: number;
+  /** Cible chiffrée facultative (« 10 articles ») : valeur atteinte saisie à la main. */
+  cible?: number;
+  unite?: string;
+  atteint?: number;
+  couleur: string;
+  ordre: number;
+}
+
 export interface EvenementHistorique {
   id: string;
   date: string;
@@ -191,6 +236,16 @@ export interface Tache extends Entite {
   rappels: number[];
   /** Choisie pour ce jour-là (« Ma journée »). */
   pourAujourdhui?: string;
+  /** Personnes assignées (V3, plusieurs) ; `assigne` garde la première pour les appareils plus anciens. */
+  assignes?: Auteur[];
+  /** Début (AAAA-MM-JJ) pour la chronologie (Gantt). */
+  debut?: string;
+  /** Tâches qui doivent être finies avant celle-ci (« fin → début »). */
+  dependances?: string[];
+  /** Jalon : un point dans la chronologie (son échéance). */
+  jalon?: boolean;
+  /** Lien GitHub (V3, facultatif) : dépôt « propriétaire/nom », branche, numéro de PR. */
+  github?: LienGithub;
   ordre: number;
   creeLe: string;
   creePar: Auteur;
@@ -212,7 +267,7 @@ export interface Tache extends Entite {
   historique: EvenementHistorique[];
 }
 
-export type TypeVue = 'liste' | 'kanban' | 'calendrier' | 'journee';
+export type TypeVue = 'liste' | 'kanban' | 'calendrier' | 'journee' | 'gantt' | 'tableau';
 export type Tri = 'manuel' | 'echeance' | 'priorite' | 'titre' | 'creation' | 'statut';
 export type Groupe = 'statut' | 'priorite' | 'echeance' | 'aucun';
 export type FiltreEcheance = 'toutes' | 'retard' | 'aujourdhui' | 'semaine' | 'sans';
@@ -222,6 +277,7 @@ export interface Filtres {
   statuts: string[];
   priorites: Priorite[];
   etiquettes: string[];
+  /** « tous », « personne », ou le code d'une personne (« fondateur », « ami », identifiant d'un membre). */
   assigne: 'tous' | Auteur | 'personne';
   echeance: FiltreEcheance;
   terminees: boolean;
@@ -252,6 +308,23 @@ export interface Reglages extends Entite {
   /** Réglages des notifications du Fondateur (F) et de l'ami (A) : chacun les siens, synchronisés entre ses appareils. */
   notifF?: unknown;
   notifA?: unknown;
+  /**
+   * Membres (V3) invités par le Fondateur, par identifiant de compte : prénom,
+   * clé de membre (scelle ce qu'il renvoie), date d'invitation, rang du hub.
+   * L'ami des V1/V2 (`ami`, `amiNom`, `cle`) reste à part et compte comme membre.
+   */
+  membres?: Record<string, MembreTaches>;
+  /** Clé de partage de chaque projet partagé (V3), et la précédente après une rotation. */
+  clesProjets?: Record<string, { cle: string; avant?: string; le?: string }>;
+  /** Réglages de notification des membres (V3), avec leur horodatage. */
+  notifsMembres?: Record<string, { valeur: unknown; h: string }>;
+}
+
+export interface MembreTaches {
+  nom: string;
+  cle: string;
+  depuis: string;
+  rang?: 'ami' | 'gestionnaire';
 }
 
 export interface DonneesTaches {
@@ -264,6 +337,8 @@ export interface DonneesTaches {
   reglages: Reglages;
   /** Journal du jour des projets (V2), fusionné entrée par entrée. */
   journal: Record<string, EntreeJournal>;
+  /** Objectifs (V3). */
+  objectifs: Record<string, Objectif>;
 }
 
 /** Qui agit, quand : horodatages et historique. */
@@ -300,7 +375,11 @@ export const BORNES = {
   avant: 400,
 } as const;
 
-export const CODE_AUTEUR: Record<Auteur, string> = { fondateur: 'f', ami: 'a' };
+export const CODE_AUTEUR: Record<'fondateur' | 'ami', string> = { fondateur: 'f', ami: 'a' };
+/** Code d'horodatage d'un auteur : « f », « a » ou l'identifiant du membre. */
+export const codeAuteur = (a: Auteur): string => (a === 'fondateur' ? 'f' : a === 'ami' ? 'a' : a);
+/** Suffixe des horodatages de cet auteur (« |f »…). */
+export const suffixeAuteur = (a: Auteur): string => `|${codeAuteur(a)}`;
 export const RAPPELS_PROPOSES: readonly number[] = [0, 10, 30, 60, 120, 1440, 2880];
 
 // ------------------------------------------------------------------ Outils
@@ -315,7 +394,7 @@ export function nouvelId(prefixe: string, maintenant: number, alea: () => number
 
 const MOTIF_ID = /^[a-z0-9-]{2,48}$/;
 export const idValide = (id: unknown): id is string => typeof id === 'string' && MOTIF_ID.test(id);
-const MOTIF_H = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[fa]$/;
+const MOTIF_H = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|(?:f|a|[a-z0-9]{6,16})$/;
 export const hValide = (h: unknown): h is string => typeof h === 'string' && MOTIF_H.test(h);
 const MOTIF_COULEUR = /^#[0-9A-Fa-f]{6}$/;
 
@@ -329,10 +408,14 @@ export function horodatage(ms: number, auteur: Auteur, precedent?: string): stri
     const avant = Date.parse(precedent.split('|')[0]);
     if (Number.isFinite(avant) && avant >= instant) instant = avant + 1;
   }
-  return `${new Date(instant).toISOString()}|${CODE_AUTEUR[auteur]}`;
+  return `${new Date(instant).toISOString()}|${codeAuteur(auteur)}`;
 }
 
-export const auteurDeH = (h: string | undefined): Auteur | undefined => (h?.endsWith('|a') ? 'ami' : h?.endsWith('|f') ? 'fondateur' : undefined);
+export function auteurDeH(h: string | undefined): Auteur | undefined {
+  const code = h?.split('|')[1];
+  if (!code) return undefined;
+  return code === 'f' ? 'fondateur' : code === 'a' ? 'ami' : idMembreValide(code) ? code : undefined;
+}
 
 const texte = (v: unknown, max: number, defaut = ''): string => (typeof v === 'string' ? v.slice(0, max) : defaut);
 const nombre = (v: unknown, defaut = 0): number => (typeof v === 'number' && Number.isFinite(v) ? v : defaut);
@@ -341,7 +424,7 @@ const couleur = (v: unknown, defaut: string) => (typeof v === 'string' && MOTIF_
 
 function lireH(v: unknown): Horodatages {
   const r: Horodatages = {};
-  for (const [cle, h] of Object.entries(dict(v))) if (/^[a-zA-Z]{1,24}$/.test(cle) && hValide(h)) r[cle] = h;
+  for (const [cle, h] of Object.entries(dict(v))) if ((/^[a-zA-Z]{1,24}$/.test(cle) || MOTIF_CHAMP_CHRONO.test(cle)) && hValide(h)) r[cle] = h;
   return r;
 }
 
@@ -375,7 +458,27 @@ function lireEcheance(v: unknown): Echeance | undefined {
   return { jour: o.jour, ...(heureValide(o.heure) ? { heure: o.heure } : {}) };
 }
 
-const lireAuteur = (v: unknown): Auteur | undefined => (v === 'fondateur' || v === 'ami' ? v : undefined);
+export const lireAuteur = (v: unknown): Auteur | undefined => (v === 'fondateur' || v === 'ami' || idMembreValide(v) ? (v as Auteur) : undefined);
+/** Minuteur d'un membre V3 : champ `chrono_<identifiant>`. */
+export const MOTIF_CHAMP_CHRONO = /^chrono_[a-z0-9]{6,16}$/;
+const lireAuteurs = (v: unknown): Auteur[] => [...new Set((Array.isArray(v) ? v : []).map(lireAuteur).filter((a): a is Auteur => Boolean(a)))].slice(0, 20);
+const MOTIF_DEPOT_GITHUB = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/;
+export function lireLienGithub(v: unknown): LienGithub | undefined {
+  const o = dict(v);
+  if (typeof o.depot !== 'string' || !MOTIF_DEPOT_GITHUB.test(o.depot)) return undefined;
+  return {
+    depot: o.depot,
+    ...(typeof o.branche === 'string' && /^[A-Za-z0-9._/-]{1,200}$/.test(o.branche) ? { branche: o.branche } : {}),
+    ...(Number.isInteger(o.pr) && (o.pr as number) > 0 && (o.pr as number) < 1e7 ? { pr: o.pr as number } : {}),
+    ...(o.faiteSiFusion === true ? { faiteSiFusion: true } : {}),
+  };
+}
+const DROITS_VALIDES = new Set<string>(['lecture', 'ecriture', 'admin']);
+function lireAcces(v: unknown): Record<string, DroitMembre> | undefined {
+  const r: Record<string, DroitMembre> = {};
+  for (const [id, droit] of Object.entries(dict(v)).slice(0, 100)) if ((idMembreValide(id) || id === 'ami') && typeof droit === 'string' && DROITS_VALIDES.has(droit)) r[id] = droit as DroitMembre;
+  return Object.keys(r).length ? r : undefined;
+}
 
 function lireStatuts(v: unknown): Statut[] {
   const vus = new Set<string>();
@@ -424,6 +527,7 @@ export function lireProjet(v: unknown): Projet | undefined {
     ...(jourValide(o.debut) ? { debut: o.debut } : {}),
     ...(jourValide(o.fin) ? { fin: o.fin } : {}),
     ...(historique.length ? { historique } : {}),
+    ...((acces => (acces && !auto ? { acces } : {}))(lireAcces(o.acces))),
   };
 }
 
@@ -500,7 +604,8 @@ function lireCommentaires(v: unknown): Record<string, Commentaire> {
     const o = dict(e);
     const auteur = lireAuteur(o.auteur);
     if (!idValide(id) || !hValide(o.h) || !auteur || typeof o.date !== 'string') continue;
-    r[id] = { id, auteur, texte: texte(o.texte, BORNES.commentaire), date: o.date.slice(0, 30), h: o.h, ...(o.supprime === true ? { supprime: true } : {}) };
+    const mentions = lireAuteurs(o.mentions);
+    r[id] = { id, auteur, texte: texte(o.texte, BORNES.commentaire), date: o.date.slice(0, 30), h: o.h, ...(o.supprime === true ? { supprime: true } : {}), ...(mentions.length ? { mentions } : {}) };
   }
   return r;
 }
@@ -547,6 +652,12 @@ export function lireTache(v: unknown): Tache | undefined {
     ...(recurrence ? { recurrence } : {}),
     rappels,
     ...(jourValide(o.pourAujourdhui) ? { pourAujourdhui: o.pourAujourdhui } : {}),
+    ...((a => (Array.isArray(o.assignes) ? { assignes: a } : {}))(lireAuteurs(o.assignes))),
+    ...(jourValide(o.debut) ? { debut: o.debut } : {}),
+    ...((dep => (dep.length ? { dependances: dep } : {}))([...new Set((Array.isArray(o.dependances) ? o.dependances : []).filter(idValide))].filter(x => x !== o.id).slice(0, 30))),
+    ...(o.jalon === true ? { jalon: true } : {}),
+    ...((g => (g ? { github: g } : {}))(lireLienGithub(o.github))),
+    ...Object.fromEntries(Object.entries(o).filter(([c, v]) => MOTIF_CHAMP_CHRONO.test(c) && instantValide(v))),
     ordre: nombre(o.ordre),
     creeLe: typeof o.creeLe === 'string' ? o.creeLe.slice(0, 30) : new Date(0).toISOString(),
     creePar: lireAuteur(o.creePar) ?? 'fondateur',
@@ -575,7 +686,7 @@ export function lireFiltres(v: unknown): Filtres {
     statuts: liste(o.statuts).filter(s => MOTIF_FILTRE.test(s)),
     priorites: liste(o.priorites).filter((p): p is Priorite => PRIORITES.includes(p as Priorite)),
     etiquettes: liste(o.etiquettes),
-    assigne: o.assigne === 'fondateur' || o.assigne === 'ami' || o.assigne === 'personne' ? o.assigne : 'tous',
+    assigne: o.assigne === 'personne' ? 'personne' : lireAuteur(o.assigne) ?? 'tous',
     echeance: echeances.includes(o.echeance as FiltreEcheance) ? (o.echeance as FiltreEcheance) : 'toutes',
     terminees: o.terminees !== false,
   };
@@ -585,7 +696,7 @@ export function lireVue(v: unknown): VueEnregistree | undefined {
   const o = dict(v);
   const b = base(o);
   if (!b) return undefined;
-  const vues: TypeVue[] = ['liste', 'kanban', 'calendrier', 'journee'];
+  const vues: TypeVue[] = ['liste', 'kanban', 'calendrier', 'journee', 'gantt', 'tableau'];
   const tris: Tri[] = ['manuel', 'echeance', 'priorite', 'titre', 'creation', 'statut'];
   const groupes: Groupe[] = ['statut', 'priorite', 'echeance', 'aucun'];
   return {
@@ -614,6 +725,68 @@ export function lireReglages(v: unknown): Reglages {
     })(dict(o.liens))),
     ...(o.notifF && typeof o.notifF === 'object' ? { notifF: o.notifF } : {}),
     ...(o.notifA && typeof o.notifA === 'object' ? { notifA: o.notifA } : {}),
+    ...((m => (Object.keys(m).length ? { membres: m } : {}))(lireMembres(o.membres))),
+    ...((c => (Object.keys(c).length ? { clesProjets: c } : {}))(lireClesProjets(o.clesProjets))),
+    ...((n => (Object.keys(n).length ? { notifsMembres: n } : {}))(lireNotifsMembres(o.notifsMembres))),
+  };
+}
+
+const HEX64 = /^[0-9a-f]{64}$/;
+function lireMembres(v: unknown): Record<string, MembreTaches> {
+  const r: Record<string, MembreTaches> = {};
+  for (const [id, m] of Object.entries(dict(v)).slice(0, 50)) {
+    const o = dict(m);
+    if (!idMembreValide(id) || typeof o.cle !== 'string' || !HEX64.test(o.cle)) continue;
+    r[id] = {
+      nom: texte(o.nom, 40, 'Membre') || 'Membre',
+      cle: o.cle,
+      depuis: typeof o.depuis === 'string' ? o.depuis.slice(0, 30) : new Date(0).toISOString(),
+      ...(o.rang === 'ami' || o.rang === 'gestionnaire' ? { rang: o.rang } : {}),
+    };
+  }
+  return r;
+}
+function lireClesProjets(v: unknown): Record<string, { cle: string; avant?: string; le?: string }> {
+  const r: Record<string, { cle: string; avant?: string; le?: string }> = {};
+  for (const [id, c] of Object.entries(dict(v)).slice(0, 1000)) {
+    const o = dict(c);
+    if (!idValide(id) || typeof o.cle !== 'string' || !HEX64.test(o.cle)) continue;
+    r[id] = { cle: o.cle, ...(typeof o.avant === 'string' && HEX64.test(o.avant) ? { avant: o.avant } : {}), ...(typeof o.le === 'string' ? { le: o.le.slice(0, 30) } : {}) };
+  }
+  return r;
+}
+function lireNotifsMembres(v: unknown): Record<string, { valeur: unknown; h: string }> {
+  const r: Record<string, { valeur: unknown; h: string }> = {};
+  for (const [id, n] of Object.entries(dict(v)).slice(0, 50)) {
+    const o = dict(n);
+    if (idMembreValide(id) && hValide(o.h) && o.valeur && typeof o.valeur === 'object') r[id] = { valeur: o.valeur, h: o.h };
+  }
+  return r;
+}
+
+export function lireObjectif(v: unknown): Objectif | undefined {
+  const o = dict(v);
+  const b = base(o);
+  if (!b) return undefined;
+  const ids = (x: unknown) => [...new Set((Array.isArray(x) ? x : []).filter(idValide))].slice(0, 200);
+  const borne = (x: unknown, min: number, max: number) => (typeof x === 'number' && Number.isFinite(x) ? Math.min(max, Math.max(min, x)) : undefined);
+  const manuel = borne(o.manuel, 0, 100);
+  const cible = borne(o.cible, 0, 1e9);
+  const atteint = borne(o.atteint, 0, 1e9);
+  return {
+    ...b,
+    titre: texte(o.titre, BORNES.titre, 'Objectif') || 'Objectif',
+    ...(typeof o.description === 'string' && o.description ? { description: o.description.slice(0, 2000) } : {}),
+    ...(jourValide(o.echeance) ? { echeance: o.echeance } : {}),
+    mode: o.mode === 'manuel' ? 'manuel' : 'taches',
+    taches: ids(o.taches),
+    projets: ids(o.projets),
+    ...(manuel !== undefined ? { manuel: Math.round(manuel) } : {}),
+    ...(cible !== undefined && cible > 0 ? { cible } : {}),
+    ...(typeof o.unite === 'string' && o.unite ? { unite: o.unite.slice(0, 30) } : {}),
+    ...(atteint !== undefined ? { atteint } : {}),
+    couleur: couleur(o.couleur, COULEURS[0]),
+    ordre: nombre(o.ordre),
   };
 }
 
@@ -626,7 +799,7 @@ function lireDict<T extends Entite>(v: unknown, lire: (x: unknown) => T | undefi
   return r;
 }
 
-export const donneesVides = (): DonneesTaches => ({ v: 1, espaces: {}, projets: {}, listes: {}, taches: {}, vues: {}, reglages: { id: 'reglages', h: {} }, journal: {} });
+export const donneesVides = (): DonneesTaches => ({ v: 1, espaces: {}, projets: {}, listes: {}, taches: {}, vues: {}, reglages: { id: 'reglages', h: {} }, journal: {}, objectifs: {} });
 
 export function lireJournal(v: unknown): Record<string, EntreeJournal> {
   const r: Record<string, EntreeJournal> = {};
@@ -667,6 +840,7 @@ export function lireDonnees(brut: unknown): DonneesTaches {
     vues: lireDict(o.vues, lireVue, 100),
     reglages: lireReglages(o.reglages),
     journal: lireJournal(o.journal),
+    objectifs: lireDict(o.objectifs, lireObjectif, 500),
   };
 }
 
@@ -931,6 +1105,8 @@ export interface SaisieTache {
   rappels?: number[];
   pourAujourdhui?: string;
   estimation?: number;
+  assignes?: Auteur[];
+  debut?: string;
   source?: { app: AppLiee; cle: string };
   liensOffice?: LienOffice[];
 }
@@ -972,6 +1148,8 @@ export function creerTache(d: DonneesTaches, s: SaisieTache, ctx: Contexte, id?:
     rappels: [...new Set(s.rappels ?? [])].sort((a, b) => a - b).slice(0, BORNES.rappels),
     ...(s.pourAujourdhui ? { pourAujourdhui: s.pourAujourdhui } : {}),
     ...(s.estimation ? { estimation: s.estimation } : {}),
+    ...(s.assignes?.length ? { assignes: [...new Set(s.assignes)], assigne: s.assignes[0] } : {}),
+    ...(s.debut ? { debut: s.debut } : {}),
     ...(s.source ? { source: s.source } : {}),
     ...(s.liensOffice?.length ? { liensOffice: s.liensOffice } : {}),
     ordre,
@@ -986,7 +1164,39 @@ export function creerTache(d: DonneesTaches, s: SaisieTache, ctx: Contexte, id?:
   return { donnees: { ...d, taches: { ...d.taches, [tache.id]: tache } }, tache };
 }
 
-export type ChangementTache = Partial<Pick<Tache, 'titre' | 'description' | 'statut' | 'priorite' | 'echeance' | 'etiquettes' | 'assigne' | 'recurrence' | 'rappels' | 'pourAujourdhui' | 'ordre' | 'listeId' | 'projetId' | 'parentId' | 'estimation' | 'liensOffice'>>;
+export type ChangementTache = Partial<Pick<Tache, 'titre' | 'description' | 'statut' | 'priorite' | 'echeance' | 'etiquettes' | 'assigne' | 'assignes' | 'recurrence' | 'rappels' | 'pourAujourdhui' | 'ordre' | 'listeId' | 'projetId' | 'parentId' | 'estimation' | 'liensOffice' | 'debut' | 'dependances' | 'jalon' | 'github'>>;
+
+/**
+ * Personnes assignées : `assignes` (V3), sinon `assigne` (V1/V2). Si un
+ * appareil plus ancien a changé `assigne` après, c'est lui qui compte.
+ */
+export function assignesDe(t: Pick<Tache, 'assigne' | 'assignes' | 'h'>): Auteur[] {
+  if (t.assignes && !((t.h.assigne ?? '') > (t.h.assignes ?? ''))) return t.assignes;
+  return t.assigne ? [t.assigne] : [];
+}
+
+/**
+ * La tâche concerne-t-elle `qui` (rappels, notifications) ? Le Fondateur :
+ * les siennes et celles de personne ; un membre : celles qui lui sont assignées.
+ */
+export function pourQui(t: Pick<Tache, 'assigne' | 'assignes' | 'h'>, qui: Auteur): boolean {
+  const l = assignesDe(t);
+  return qui === 'fondateur' ? l.length === 0 || l.includes('fondateur') : l.includes(qui);
+}
+
+/** Une dépendance créerait-elle une boucle (B attend A qui attend B) ? */
+export function creeBoucle(d: DonneesTaches, tacheId: string, avant: string): boolean {
+  const vus = new Set<string>();
+  const pile = [avant];
+  while (pile.length) {
+    const x = pile.pop()!;
+    if (x === tacheId) return true;
+    if (vus.has(x)) continue;
+    vus.add(x);
+    pile.push(...(d.taches[x]?.dependances ?? []));
+  }
+  return false;
+}
 
 const ou = (v: string | undefined) => v || '—';
 
@@ -1009,7 +1219,19 @@ function decrire(d: DonneesTaches, t: Tache, cle: string, valeur: unknown, noms:
       return { texte: `Échéance : ${lib(t.echeance)} → ${lib(e)}` };
     }
     case 'assigne':
-      return { texte: valeur ? `Assignée à ${noms[valeur as Auteur] ?? (valeur === 'ami' ? 'l’ami' : 'le Fondateur')}` : 'Plus assignée' };
+      return undefined;
+    case 'assignes': {
+      const l = (valeur as Auteur[] | undefined) ?? [];
+      return { texte: l.length ? `Assignée à ${l.map(x => noms[x] ?? (x === 'ami' ? 'l’ami' : x === 'fondateur' ? 'le Fondateur' : 'un membre')).join(', ')}` : 'Plus assignée' };
+    }
+    case 'debut':
+      return { texte: `Début : ${valeur ? (valeur as string).split('-').reverse().join('/') : '—'}` };
+    case 'dependances':
+      return { texte: `Dépendances : ${((valeur as string[] | undefined) ?? []).map(x => `« ${d.taches[x]?.titre ?? '?'} »`).join(', ') || 'aucune'}` };
+    case 'jalon':
+      return { texte: valeur ? 'Devient un jalon' : 'N’est plus un jalon' };
+    case 'github':
+      return { texte: valeur ? `Lien GitHub : ${(valeur as LienGithub).depot}${(valeur as LienGithub).pr ? ` #${(valeur as LienGithub).pr}` : ''}` : 'Lien GitHub retiré' };
     case 'etiquettes': {
       const avant = new Set(t.etiquettes);
       const apres = new Set(valeur as string[]);
@@ -1043,6 +1265,21 @@ export function modifierTache(d: DonneesTaches, id: string, c: ChangementTache &
   if (c.description !== undefined) propre.description = c.description.slice(0, BORNES.description);
   if (c.etiquettes) propre.etiquettes = [...new Set(c.etiquettes.map(normaliserEtiquette).filter(Boolean))].slice(0, BORNES.etiquettes);
   if (c.rappels) propre.rappels = [...new Set(c.rappels)].sort((a, b) => a - b).slice(0, BORNES.rappels);
+  // Assignation : `assignes` (V3) et `assigne` (la première, pour les appareils plus anciens) vont ensemble.
+  if (c.assignes !== undefined) {
+    const l = [...new Set(c.assignes)].slice(0, 20);
+    propre.assignes = l.length ? l : undefined;
+    propre.assigne = l[0];
+  } else if ('assigne' in c) {
+    propre.assignes = c.assigne ? [c.assigne] : undefined;
+  }
+  if (c.dependances !== undefined) {
+    const l = [...new Set(c.dependances)].filter(x => x !== id && d.taches[x]);
+    for (const x of l) if (!(t.dependances ?? []).includes(x) && creeBoucle(d, id, x)) throw new ErreurTaches('Cette dépendance ferait une boucle.');
+    propre.dependances = l.length ? l.slice(0, 30) : undefined;
+  }
+  if (c.debut !== undefined && c.debut && !jourValide(c.debut)) throw new ErreurTaches('Date de début invalide.');
+  if (c.jalon === false) propre.jalon = undefined;
   if (c.listeId !== undefined && c.listeId !== t.listeId) {
     const l = d.listes[c.listeId];
     if (!vivant(l)) throw new ErreurTaches('Liste introuvable.');
@@ -1122,13 +1359,14 @@ export function changerElement(d: DonneesTaches, tacheId: string, id: string, c:
 
 export const elementsChecklist = (t: Tache): ElementChecklist[] => Object.values(t.checklist).filter(e => !e.supprime).sort((a, b) => a.ordre - b.ordre || a.id.localeCompare(b.id));
 
-export function ajouterCommentaire(d: DonneesTaches, tacheId: string, texteC: string, ctx: Contexte): DonneesTaches {
+export function ajouterCommentaire(d: DonneesTaches, tacheId: string, texteC: string, ctx: Contexte, mentions: readonly Auteur[] = []): DonneesTaches {
   const t = texteC.trim().slice(0, BORNES.commentaire);
   if (!t) throw new ErreurTaches('Commentaire vide.');
   return avecTache(d, tacheId, tache => {
     const id = nouvelId('m', ctx.maintenant, ctx.alea);
     const date = new Date(ctx.maintenant).toISOString();
-    return { ...tache, commentaires: { ...tache.commentaires, [id]: { id, auteur: ctx.auteur, texte: t, date, h: horodatage(ctx.maintenant, ctx.auteur) } } };
+    const m = [...new Set(mentions)].filter(x => x !== ctx.auteur).slice(0, 20);
+    return { ...tache, commentaires: { ...tache.commentaires, [id]: { id, auteur: ctx.auteur, texte: t, date, h: horodatage(ctx.maintenant, ctx.auteur), ...(m.length ? { mentions: m } : {}) } } };
   });
 }
 

@@ -16,8 +16,19 @@ import { maJournee } from './filtres';
 import { synchroniserLiens } from './integrations/moteur';
 import { ecrireDonnees, lireDonnees, projetsDe, type Auteur, type DonneesTaches } from './modele';
 import { enHeuresCalmes, evaluerNotifications, nomAppareil, prefsDe, type EvenementNotif, type NotifSysteme } from './notifications';
+import { nomsMembres } from './membres';
 import { CLES_TACHES, lireCopie } from './partage';
 import { lireEtatRappels, type AlerteRappel } from './rappels';
+
+/** Mon code d'auteur sur cet appareil : « fondateur », ou celui que le Fondateur m'a donné (« ami » pour l'ami des V1/V2). */
+export function moiTaches(role: RoleTaches, base: Pick<BasePrefs, 'lire'> | undefined): Auteur {
+  if (role === 'fondateur') return 'fondateur';
+  try {
+    return lireCopie(base?.lire(CLES_TACHES.copie)).moi ?? 'ami';
+  } catch {
+    return 'ami';
+  }
+}
 
 /** Données visibles pour ce rôle : les siennes (Fondateur), la copie partagée (ami). */
 export function donneesPour(role: RoleTaches, base: Pick<BasePrefs, 'lire'> | undefined): DonneesTaches {
@@ -40,7 +51,7 @@ export function infoTaches(contexte: ContexteHub): InfoLive | undefined {
   const role = roleTaches(contexte);
   if (!role || !contexte.baseProfil) return undefined;
   const d = donneesPour(role, contexte.baseProfil);
-  const j = maJournee(d, jourDe(contexte.maintenant ?? Date.now()), role);
+  const j = maJournee(d, jourDe(contexte.maintenant ?? Date.now()), moiTaches(role, contexte.baseProfil));
   const rappels = rappelsNonLus(contexte.baseProfil).length;
   const projets = projetsDe(d).length;
   const aujourdhui = j.aujourdhui.length + j.choisies.length;
@@ -101,9 +112,9 @@ export function appareilTaches(base: Pick<BasePrefs, 'lire' | 'ecrire'> | undefi
 /** Prénoms affichés dans les notifications. */
 export function nomsTaches(role: RoleTaches, contexte: Pick<ContexteHub, 'profil' | 'baseProfil'>, d: DonneesTaches): Record<Auteur, string> {
   const moi = contexte.profil?.nom && contexte.profil.nom !== 'Moi' ? contexte.profil.nom : 'Moi';
-  if (role === 'fondateur') return { fondateur: moi, ami: d.reglages.amiNom ?? 'L’ami' };
+  if (role === 'fondateur') return nomsMembres(d, moi);
   const copie = lireCopie(contexte.baseProfil?.lire(CLES_TACHES.copie));
-  return { fondateur: copie.fondateur ?? 'Le Fondateur', ami: copie.ami ?? moi };
+  return { ami: 'L’ami', ...(copie.membres ?? {}), fondateur: copie.fondateur ?? 'Le Fondateur', [copie.moi ?? 'ami']: copie.ami ?? moi };
 }
 
 /** Montre les notifications du système (son selon les réglages). */
@@ -141,14 +152,15 @@ export function verifierRappels(contexte: Pick<ContexteHub, 'profil' | 'admin' |
   }
   const etat = lireEtatRappels(base.lire(CLES_TACHES.rappels));
   const appareil = appareilTaches(base);
-  const r = evaluerNotifications(d, etat, maintenant, role, { appareilId: appareil.id, noms: nomsTaches(role, contexte, d) }, extra);
+  const qui = moiTaches(role, base);
+  const r = evaluerNotifications(d, etat, maintenant, qui, { appareilId: appareil.id, noms: nomsTaches(role, contexte, d) }, extra);
   if (r.pastille.length === 0 && r.systeme.length === 0 && JSON.stringify(r.etat) === JSON.stringify(etat)) return [];
   try {
     base.ecrire(CLES_TACHES.rappels, JSON.stringify(r.etat));
   } catch {
     return [];
   }
-  montrer(r.systeme, prefsDe(d, role).son);
+  montrer(r.systeme, prefsDe(d, qui).son);
   return r.pastille;
 }
 
@@ -158,7 +170,7 @@ export function testerNotification(contexte: Pick<ContexteHub, 'profil' | 'admin
   const base = contexte.baseProfil;
   if (!role || !base) return { systeme: false, calme: false, autreAppareil: false };
   const d = donneesPour(role, base);
-  const prefs = prefsDe(d, role);
+  const prefs = prefsDe(d, moiTaches(role, base));
   const etat = lireEtatRappels(base.lire(CLES_TACHES.rappels));
   const alerte: AlerteRappel = { cle: `test|${maintenant}`, tacheId: '', titre: 'Notification de test', texte: 'Les notifications de Tâches fonctionnent sur cet appareil.', date: new Date(maintenant).toISOString(), type: 'test' };
   base.ecrire(CLES_TACHES.rappels, JSON.stringify({ ...etat, nonLus: [...etat.nonLus, alerte].slice(-50) }));
