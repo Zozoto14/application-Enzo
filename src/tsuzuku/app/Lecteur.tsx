@@ -10,7 +10,8 @@ import { utiliserLectureEnCours } from '../../securite/presence';
 import { ouvrirExterne } from './externe';
 import { LecteurMedia } from './LecteurMedia';
 import { LienGererSources } from './EtatSources';
-import { enregistrerTitrePerso, lireAnime, lireFilm, lireTitresPerso, titresPourSources, type Lecture } from './resoudre';
+import { enregistrerTitrePerso, lireAnime, lireFilm, lireTitresPerso, prechargerEpisode, titresPourSources, type Lecture } from './resoudre';
+import { texteMesure } from './diagnosticTexte';
 import { PanneauEchec } from './DiagnosticSources';
 import { choisirLangue, langueVoulue, type OrigineLangue } from './langues';
 import { SelecteurLangue } from './SelecteurLangue';
@@ -110,6 +111,24 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
       .then(changee, () => undefined);
 
   const aSuivant = kind === 'anime' && (!meta?.total || n < meta.total);
+
+  // Lecteur trouvé : on prépare, sans l'afficher, la même page dans l'autre langue (bascule VF/VOSTFR
+  // immédiate) puis l'épisode suivant (une page chacun, lecteurs gardés 20 min).
+  useEffect(() => {
+    if (kind !== 'anime' || !meta || !lecture || lecture.origine !== 'source') return undefined;
+    let actif = true;
+    const minuteur = setTimeout(() => {
+      void (async () => {
+        const autre = lecture.langue ? (['vf', 'vostfr'] as const).find(l => l !== lecture.langue && lecture.langues?.options[l].etat === 'disponible') : undefined;
+        if (autre && actif) await prechargerEpisode(s, { id, titres: meta.titres, numero: n, langue: autre });
+        if (aSuivant && actif) await prechargerEpisode(s, { id, titres: meta.titres, numero: n + 1, langue: lecture.langue ?? null });
+      })();
+    }, 800);
+    return () => {
+      actif = false;
+      clearTimeout(minuteur);
+    };
+  }, [s, kind, id, n, meta, lecture, aSuivant]);
   const suivant = () => remplacer({ t: 'lecteur', kind, id, numero: n + 1 });
   const fin = () => {
     if (kind === 'movie') void marquerFilmVu();
@@ -172,6 +191,11 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
               </Text>
             ) : null}
             {lecture.message ? <Avis genre={courant ? 'alerte' : 'info'} texte={lecture.message} testID="lecteur-message" /> : null}
+            {courant && lecture.mesure ? (
+              <Text style={styleAttenue(theme, 12)} testID="lecteur-mesure">
+                {texteMesure(lecture.mesure)}
+              </Text>
+            ) : null}
             {!courant && lecture.diagnostic ? (
               <PanneauEchec
                 testID="lecteur-diagnostic"

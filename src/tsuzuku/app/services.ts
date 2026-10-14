@@ -41,6 +41,7 @@ import {
   type VueSourcePartagee,
 } from './gestion';
 import { ecrireReglages, lireReglages, type ReglagesTsuzuku } from './reglages';
+import { creerCache, empreinteTexte, type CacheTsuzuku } from './cache';
 
 export interface ServicesTsuzuku {
   plateforme: ChoixReseau['plateforme'];
@@ -56,6 +57,8 @@ export interface ServicesTsuzuku {
   /** Rang habilité à gérer les sources, les clés d'API et les options avancées (Fondateur). */
   estAdmin: boolean;
   stockage: Stockage;
+  /** Cache du profil (catalogue, recherches sur les sources, lecteurs) : mémoire + base chiffrée de l'appareil. */
+  cache: CacheTsuzuku;
   client: ClientSur;
   ctx: ContexteResolution;
   catalogue: Catalogue;
@@ -101,9 +104,15 @@ export interface OptionsServices {
   lireBase?: (cle: string) => string | undefined | null;
   /** Options avancées déjà lues (le client réseau est créé avec) ; sinon les défauts du moteur. */
   avances?: Pick<ReglagesAvances, 'delaiS' | 'tailleMaxMo'>;
+  /** Cache du profil déjà ouvert (gardé d'une ouverture de l'app à l'autre) ; sinon un cache sur `stockage`. */
+  cache?: CacheTsuzuku;
 }
 
-export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: ancien, journal, catalogue, avances, lireBase }: OptionsServices): ServicesTsuzuku {
+/** Catalogue : réponse fraîche pendant 30 min, puis servie aussitôt et rafraîchie en arrière-plan pendant 7 jours. */
+export const CATALOGUE_FRAIS_MS = 30 * 60_000;
+export const CATALOGUE_PERIME_MAX_MS = 7 * 24 * 3_600_000;
+
+export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: ancien, journal, catalogue, avances, lireBase, cache: cacheDonne }: OptionsServices): ServicesTsuzuku {
   const rang: Rang = rangDonne ?? (ancien === false ? 'ami' : 'fondateur');
   const habilite = peutGererSources(rang);
   const client = creerClient(choix.reseau, avances ? { delaiMs: avances.delaiS * 1000, tailleMax: avances.tailleMaxMo * 1024 * 1024 } : {});
@@ -114,6 +123,15 @@ export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: anci
   const choixPerso = async () => lireChoix(await stockage.lire(CLES.choixSources));
   // Site : le relais ne sert que le jeton maître (Fondateur historique) ; un autre rang garde le message du site.
   const lecture = () => (choix.plateforme === 'site' ? Boolean(choix.lectureSources) && rang === 'fondateur' : choix.lectureSources);
+  const cache = cacheDonne ?? creerCache(stockage);
+  // Réponses brutes des catalogues (jamais la clé TMDB : elle n'entre pas dans les clés), clé hachée.
+  const persistant = {
+    lire: async (cle: string) => {
+      const e = await cache.lire(`cat|${empreinteTexte(cle)}`);
+      return e ? { a: e.a, donnees: e.valeur } : undefined;
+    },
+    ecrire: (cle: string, donnees: unknown, a: number) => cache.ecrire(`cat|${empreinteTexte(cle)}`, donnees, { a }),
+  };
   return {
     plateforme: choix.plateforme,
     get lectureSources() {
@@ -125,10 +143,11 @@ export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: anci
     rang,
     estAdmin: habilite,
     stockage,
+    cache,
     client,
     ctx: { client, journal },
     // La clé TMDB est celle de la base du profil : jamais celle d'un autre compte.
-    catalogue: creerCatalogue({ client, cleTmdb: async () => (await lireAvancesStockees()).cleTmdb || null, journal, ...catalogue }),
+    catalogue: creerCatalogue({ client, cleTmdb: async () => (await lireAvancesStockees()).cleTmdb || null, journal, cacheMs: CATALOGUE_FRAIS_MS, perimeMaxMs: CATALOGUE_PERIME_MAX_MS, persistant, ...catalogue }),
     depot: new DepotBibliotheque(stockage, CLES.bibliotheque),
     reglages,
     enregistrerReglages: async r => {

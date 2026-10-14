@@ -246,3 +246,51 @@ describe('films : TMDB avec cle, sinon Jikan', () => {
     expect(u).toContain('order_by=score');
   });
 });
+
+describe('cache du catalogue : requêtes groupées, périmé servi puis rafraîchi, gardé sur l’appareil', () => {
+  const routes = (titre: string): Record<string, Reponse> => ({ [`${JIKAN}/anime/5114/full`]: json({ data: { ...animeJikan, synopsis: titre } }) });
+
+  it('deux demandes simultanées de la même fiche : une seule requête', async () => {
+    const reseau = fauxReseau(routes('Hagane'));
+    const cat = creerCatalogue({ client: creerClient(reseau), attendre: attenteNulle, horloge });
+    const [a, b] = await Promise.all([cat.animes.parId(5114), cat.animes.parId(5114)]);
+    expect(a.data).toEqual(b.data);
+    expect(reseau.appels).toHaveLength(1);
+  });
+
+  it('périmée mais dans `perimeMaxMs` : servie tout de suite, rafraîchie en arrière-plan', async () => {
+    const r = routes('Ancien titre');
+    const reseau = fauxReseau(r);
+    const cat = creerCatalogue({ client: creerClient(reseau), attendre: attenteNulle, horloge, cacheMs: 1000, perimeMaxMs: 60_000 });
+    const avant = maintenant.t;
+    try {
+      await cat.animes.parId(5114);
+      r[`${JIKAN}/anime/5114/full`] = json({ data: { ...animeJikan, synopsis: 'Nouveau' } });
+      maintenant.t += 5000;
+      const perimee = await cat.animes.parId(5114);
+      expect(perimee.data.synopsis).toBe('Ancien titre');
+      await new Promise<void>(ok => setTimeout(ok, 5));
+      expect(reseau.appels).toHaveLength(2);
+      expect((await cat.animes.parId(5114)).data.synopsis).toBe('Nouveau');
+      // Trop vieille (au-delà de perimeMaxMs) : redemandée, pas servie.
+      maintenant.t += 120_000;
+      r[`${JIKAN}/anime/5114/full`] = json({ data: { ...animeJikan, synopsis: 'Encore plus neuf' } });
+      expect((await cat.animes.parId(5114)).data.synopsis).toBe('Encore plus neuf');
+      expect(reseau.appels).toHaveLength(3);
+    } finally {
+      maintenant.t = avant;
+    }
+  });
+
+  it('cache persistant : un nouveau catalogue (relance de l’app) ne refait pas la requête', async () => {
+    const garde = new Map<string, { a: number; donnees: unknown }>();
+    const persistant = { lire: async (cle: string) => garde.get(cle), ecrire: (cle: string, donnees: unknown, a: number) => void garde.set(cle, { a, donnees }) };
+    const reseau = fauxReseau(routes('Hagane'));
+    await creerCatalogue({ client: creerClient(reseau), attendre: attenteNulle, horloge, persistant }).animes.parId(5114);
+    const relance = creerCatalogue({ client: creerClient(reseau), attendre: attenteNulle, horloge, persistant });
+    expect((await relance.animes.parId(5114)).data.id).toBe(5114);
+    expect(reseau.appels).toHaveLength(1);
+    // Jamais de clé d'API dans les clés gardées.
+    expect([...garde.keys()].every(c => !/api_key|Bearer/.test(c))).toBe(true);
+  });
+});

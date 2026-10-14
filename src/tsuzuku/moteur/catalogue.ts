@@ -343,6 +343,20 @@ export interface OptionsCatalogue {
   cacheMs?: number;
   /** Duree pendant laquelle Jikan est evite apres une panne (ms). */
   disjoncteurMs?: number;
+  /**
+   * Au-delà de `cacheMs` et jusqu'à cet âge (ms), une réponse en cache est
+   * servie TOUT DE SUITE puis rafraîchie en arrière-plan (« périmée mais
+   * servie »). 0 (défaut) : une réponse trop vieille est redemandée.
+   */
+  perimeMaxMs?: number;
+  /** Cache gardé sur l'appareil (réponses brutes des catalogues, par clé ; jamais de clé d'API). */
+  persistant?: CachePersistantCatalogue;
+}
+
+/** Ce que le catalogue attend d'un cache gardé sur l'appareil. */
+export interface CachePersistantCatalogue {
+  lire(cle: string): Promise<{ a: number; donnees: unknown } | undefined>;
+  ecrire(cle: string, donnees: unknown, a: number): void;
 }
 
 export type FournisseurAnime = 'jikan' | 'anilist';
@@ -392,14 +406,43 @@ export function creerCatalogue(options: OptionsCatalogue) {
   const INTERVALLE_JIKAN = 400;
 
   const cache = new Map<string, { a: number; donnees: unknown }>();
+  const perimeMax = options.perimeMaxMs ?? 0;
+  /** Requêtes en cours : la fiche, son lecteur et ses épisodes demandent souvent la même ; une seule part. */
+  const enVol = new Map<string, Promise<unknown>>();
+  function rafraichir<T>(cle: string, fn: () => Promise<T>): Promise<T> {
+    const deja = enVol.get(cle) as Promise<T> | undefined;
+    if (deja) {
+      return deja;
+    }
+    const p = fn().then(donnees => {
+      const a = horloge.maintenant();
+      cache.set(cle, { a, donnees });
+      options.persistant?.ecrire(cle, donnees, a);
+      return donnees;
+    });
+    enVol.set(cle, p);
+    const liberer = () => {
+      if (enVol.get(cle) === p) enVol.delete(cle);
+    };
+    p.then(liberer, liberer);
+    return p;
+  }
   async function enCache<T>(cle: string, fn: () => Promise<T>): Promise<T> {
-    const t = cache.get(cle);
-    if (t && horloge.maintenant() - t.a < dureeCache) {
+    let t = cache.get(cle);
+    if (!t && options.persistant) {
+      t = await options.persistant.lire(cle).catch(() => undefined);
+      if (t) cache.set(cle, t);
+    }
+    const age = t ? horloge.maintenant() - t.a : Infinity;
+    if (t && age < dureeCache) {
       return t.donnees as T;
     }
-    const donnees = await fn();
-    cache.set(cle, { a: horloge.maintenant(), donnees });
-    return donnees;
+    if (t && age < perimeMax) {
+      // Périmée mais servie : l'écran s'affiche tout de suite, la réponse fraîche servira la prochaine fois.
+      rafraichir(cle, fn).catch(err => journal(`[catalogue] rafraichissement en echec (${messageDe(err)})`));
+      return t.donnees as T;
+    }
+    return rafraichir(cle, fn);
   }
 
   // Jikan tolere ~3 requetes/s : file serialisee.

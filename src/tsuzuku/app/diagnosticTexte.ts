@@ -27,13 +27,43 @@ export const LIBELLE_STATUT_SOURCE: Record<StatutSource, string> = {
   'aucun-resultat': 'aucun résultat',
   'aucun-episode': 'aucun épisode lu',
   'non-configuree': 'non configurée pour ce type',
+  interrompue: 'interrompue (une autre source a trouvé avant elle)',
 };
+
+/** Temps de chaque étape d'une recherche ou d'une lecture, et si le résultat vient du cache. */
+export interface MesureLecture {
+  /** Étapes dans l'ordre (« recherche », « épisodes », « lecteur »…), en ms. */
+  etapes: Array<{ nom: string; ms: number }>;
+  /** Résultat servi par le cache : en mémoire (cette séance) ou rangé sur l'appareil, et son âge. */
+  cache?: { origine: 'memoire' | 'appareil'; ageMs: number };
+  /** Durée totale jusqu'au résultat (ms). */
+  totalMs?: number;
+}
+
+/** « 0,4 s », « 12 s ». */
+export const secondes = (ms: number): string => (ms < 10_000 ? `${(Math.max(0, ms) / 1000).toFixed(1).replace('.', ',')} s` : `${Math.round(ms / 1000)} s`);
+
+/** « il y a 3 min », « il y a 2 h ». */
+const age = (ms: number): string => (ms < 60_000 ? 'il y a moins d’une minute' : ms < 3_600_000 ? `il y a ${Math.round(ms / 60_000)} min` : `il y a ${Math.round(ms / 3_600_000)} h`);
+
+/** Ligne discrète : « Depuis le cache (cet appareil, il y a 3 min) · 0,0 s » ou « recherche 1,2 s · épisodes 0,8 s — total 2,0 s ». */
+export function texteMesure(m: MesureLecture | undefined): string {
+  if (!m) return '';
+  const etapes = m.etapes.filter(e => e.ms >= 0).map(e => `${e.nom} ${secondes(e.ms)}`).join(' · ');
+  const total = m.totalMs != null ? `total ${secondes(m.totalMs)}` : '';
+  if (m.cache) {
+    return `Depuis le cache (${m.cache.origine === 'appareil' ? 'gardé sur cet appareil' : 'cette séance'}, ${age(m.cache.ageMs)})${etapes ? ` · ${etapes}` : ''}${total ? ` — ${total}` : ''}`;
+  }
+  return [etapes, total].filter(Boolean).join(' — ');
+}
 
 /** Ce dont le texte a besoin (sous-ensemble de `DiagnosticLecture`). */
 export interface DiagnosticAExporter {
   raison: string;
   titres: readonly string[];
   sources: readonly DiagnosticSource[];
+  /** Temps par étape et origine (cache ou réseau). */
+  mesure?: MesureLecture;
 }
 
 const PARAMS_SENSIBLES = /^(?:key|api[_-]?key|apikey|token|access[_-]?token|auth|authorization|pass|passwd|password|pwd|secret|sig|signature|session|sessionid|sid|jwt|nonce|_wpnonce|code|cle|jeton|mdp)$/i;
@@ -153,6 +183,9 @@ export function lignesSource(x: DiagnosticSource): string[] {
   if (x.meilleurs?.length) l.push(`  · meilleurs candidats : ${x.meilleurs.map(m => `« ${m.title} » (${m.score}${m.langue !== undefined ? `, ${m.langue ? LL(m.langue) : 'langue non marquée'}` : ''})`).join(', ')} — minimum ${SCORE_MINIMAL}`);
   if (x.serie) l.push(`  · retenu : « ${x.serie.title} » (ressemblance ${x.serie.score}) — ${masquerAdresse(x.serie.url)}`);
   if (x.refuse) l.push(`  · écarté : « ${x.refuse.title} » (ressemblance ${x.refuse.score}, minimum ${SCORE_MINIMAL})`);
+  if (x.ms && (x.ms.recherche != null || x.ms.episodes != null)) {
+    l.push(`  · durée : ${[x.ms.recherche != null ? `recherche ${secondes(x.ms.recherche)}` : '', x.ms.episodes != null ? `page des épisodes ${secondes(x.ms.episodes)}` : ''].filter(Boolean).join(', ')}`);
+  }
   if (x.lectureEpisodes) l.push(...lignesEpisodes(x.lectureEpisodes));
   if (x.langues) l.push(...lignesLangues(x.langues));
   if (x.raison && !x.requetes.some(r => r.erreur === x.raison)) l.push(`  · raison : ${masquerTexte(x.raison)}`);
@@ -163,6 +196,7 @@ export function lignesSource(x: DiagnosticSource): string[] {
 /** Lignes affichées dans le panneau (« Détail du diagnostic »). */
 export function lignesDiagnostic(d: DiagnosticAExporter): string[] {
   const lignes = [`Titres cherchés : ${d.titres.map(t => `« ${t} »`).join(', ') || '(aucun)'}`];
+  if (d.mesure) lignes.push(`Temps : ${texteMesure(d.mesure)}`);
   if (!d.sources.length) lignes.push('Aucune source interrogée.');
   for (const x of d.sources) lignes.push(...lignesSource(x));
   return lignes;

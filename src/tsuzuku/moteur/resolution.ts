@@ -62,6 +62,7 @@ import {
   type Langue,
 } from './sources';
 import { journalMuet, type Journal } from './outils';
+import { clientAnnulable, courseAvecPriorite, courseOrdonnee, type SignalAnnulation } from './parallele';
 import { analyserAdresse } from './adresse';
 import {
   autreLangue,
@@ -91,7 +92,35 @@ export interface EpisodeSource {
 export interface ContexteResolution {
   client: ClientSur;
   journal?: Journal;
+  /** Annulation (une autre source ou variante a suffi) : plus aucune requête ne part. */
+  signal?: SignalAnnulation;
+  /** Parallélisme (défauts : `PARALLELE`) ; `{ variantes: 1, sources: 1 }` = l'ancien parcours séquentiel. */
+  parallele?: Partial<ParametresParallele>;
 }
+
+/** Réglages du parallélisme du moteur. */
+export interface ParametresParallele {
+  /** Requêtes de recherche en vol au plus, par source (variantes du titre, slugs). */
+  variantes: number;
+  /** La première variante part seule pendant ce délai (ms) : un site rapide ne reçoit rien d'inutile. */
+  relaisMs: number;
+  /** Sources cherchées en même temps. */
+  sources: number;
+  /** La source prioritaire part seule pendant ce délai (ms) : si elle trouve vite, les autres ne sont pas interrogées. */
+  relaisSourcesMs: number;
+  /**
+   * Une source moins prioritaire qui a trouvé attend au plus ce délai (ms) une
+   * source plus prioritaire encore en cours, puis l'emporte.
+   */
+  graceMs: number;
+}
+
+export const PARALLELE: ParametresParallele = { variantes: 3, relaisMs: 600, sources: 3, relaisSourcesMs: 1000, graceMs: 1200 };
+
+const parametresParallele = (ctx: ContexteResolution): ParametresParallele => ({ ...PARALLELE, ...ctx.parallele });
+
+/** Contexte d'une tâche annulable : même client, mais plus rien ne part après l'annulation. */
+const sousContexte = (ctx: ContexteResolution, signal: SignalAnnulation): ContexteResolution => ({ ...ctx, client: clientAnnulable(ctx.client, signal), signal });
 
 const journalDe = (c: ContexteResolution) => c.journal ?? journalMuet;
 
@@ -630,7 +659,7 @@ export interface RequeteDiagnostic extends Partial<Omit<DetailRequete, 'url' | '
 }
 
 /** Pourquoi une source donne (ou ne donne pas) le titre. */
-export type StatutSource = 'ok' | 'erreur' | 'bloquee' | 'titre-introuvable' | 'aucun-resultat' | 'aucun-episode' | 'non-configuree';
+export type StatutSource = 'ok' | 'erreur' | 'bloquee' | 'titre-introuvable' | 'aucun-resultat' | 'aucun-episode' | 'non-configuree' | 'interrompue';
 
 /** Un candidat comparé au titre (diagnostic : les meilleurs). */
 export interface CandidatCompare {
@@ -704,6 +733,8 @@ export interface DiagnosticSource {
   lectureEpisodes?: DetailEpisodes;
   /** Langues trouvées (VF / VOSTFR) et pourquoi une manque. */
   langues?: LanguesDiagnostic;
+  /** Durées (ms) : recherche sur la source, lecture de la page des épisodes. */
+  ms?: { recherche?: number; episodes?: number };
 }
 
 export interface ResultatEpisodes {
@@ -772,7 +803,7 @@ export function variantesDeLangue(classes: readonly ResultatClasse[], serie: Res
 const resume = (r: ResultatClasse | null) => (r ? { title: r.title, url: r.url, score: r.baseScore } : null);
 
 /** Erreurs identiques pour toutes les variantes du titre : inutile d'insister. */
-const ERREURS_DEFINITIVES = new Set(['anti-robot', 'cookies', 'garde', 'configuration']);
+const ERREURS_DEFINITIVES = new Set(['anti-robot', 'cookies', 'garde', 'configuration', 'annule']);
 /** Pages `{slug}` essayées au plus par titre. */
 const SLUGS_MAX = 6;
 
@@ -816,9 +847,8 @@ export async function chercherOeuvre(
   const parSlug = cheminParSlug(cheminDeRecherche(src, preference));
   let erreur: string | undefined;
   let code: string | undefined;
-  /** Une requête ; vrai s'il faut s'arrêter (correspondance sûre, ou erreur valable pour toutes). */
-  const essayer = async (requete: string, slug?: string): Promise<boolean> => {
-    const { resultats, detail } = await chercherSurDetail(ctx, src, requete, { langue: preference, slug, cibles: voulus });
+  /** Le résultat d'une requête, dans l'ordre ; vrai s'il faut s'arrêter (correspondance sûre, ou erreur valable pour toutes). */
+  const valider = (requete: string, slug: string | undefined, { resultats, detail }: { resultats: ResultatBrut[]; detail: DetailRequete }): boolean => {
     const { url, erreur: e, ...reste } = detail;
     delete (reste as Partial<DetailRequete>).candidats;
     requetes.push({ requete: slug ? `${requete} → ${slug}` : requete, url, resultats: resultats.length, ...reste, ...(e ? { erreur: e } : {}) });
@@ -836,18 +866,18 @@ export async function chercherOeuvre(
     const { choisi } = meilleurDe();
     return Boolean(choisi && choisi.baseScore >= SCORE_SUR);
   };
-  let fini = false;
+  // Toutes les requêtes à essayer, dans l'ordre ; elles partent par paquets (la première seule
+  // un instant), mais sont VALIDÉES dans cet ordre : le choix est celui d'une boucle séquentielle.
+  const essais: Array<{ requete: string; slug?: string }> = [];
   for (const requete of variantesDeRecherche(voulus)) {
-    for (const slug of parSlug ? variantesDeSlug(requete, preference) : [undefined]) {
-      fini = await essayer(requete, slug);
-      if (fini) {
-        break;
-      }
-    }
-    if (fini) {
-      break;
-    }
+    for (const slug of parSlug ? variantesDeSlug(requete, preference) : [undefined]) essais.push({ requete, slug });
   }
+  const p = parametresParallele(ctx);
+  await courseOrdonnee(
+    essais.map(e => (signal: SignalAnnulation) => chercherSurDetail(sousContexte(ctx, signal), src, e.requete, { langue: preference, slug: e.slug, cibles: voulus })),
+    (r, i) => valider(essais[i].requete, essais[i].slug, r),
+    { simultanees: p.variantes, relaisMs: p.relaisMs, signal: ctx.signal },
+  );
   const { classes, choisi } = meilleurDe();
   const serie = choisi && choisi.baseScore >= SCORE_MINIMAL ? choisi : null;
   // Une recherche dédiée à une langue (search.pathVf) donne des fiches de cette langue, même sans marqueur.
@@ -1019,8 +1049,10 @@ export async function episodesSur(ctx: ContexteResolution, src: DefinitionSource
   let serie: ResultatClasse | null = null;
   let pageUrl = o.url ?? null;
   let trouvees: VariantesRecherche = { variantes: {} };
+  const debut = Date.now();
   if (!pageUrl) {
     const r = await chercherOeuvre(ctx, src, o);
+    diag.ms = { recherche: Date.now() - debut };
     trouvees = r.langues;
     diag.requetes = r.requetes;
     diag.refuse = resume(r.refuse);
@@ -1038,7 +1070,9 @@ export async function episodesSur(ctx: ContexteResolution, src: DefinitionSource
   try {
     const voulue = saisonDe(o.titres[0] ?? '') ?? saisonDe(serie?.title ?? '');
     const titresSerie = [...o.titres, ...(serie?.title ? [serie.title] : [])];
+    const debutEpisodes = Date.now();
     const lecture = await lireEpisodesDetail(ctx, src, pageUrl, { saison: voulue, titres: titresSerie, langue: o.langue ?? src.language });
+    diag.ms = { ...diag.ms, episodes: Date.now() - debutEpisodes };
     const { episodes, detail } = lecture;
     const langues = composerLangues(src, pageUrl, serie, trouvees, lecture);
     diag.episodes = episodes.length;
@@ -1059,27 +1093,56 @@ export async function episodesSur(ctx: ContexteResolution, src: DefinitionSource
   }
 }
 
-/** Parcourt les sources activees jusqu'a ce que l'une donne des episodes ; garde le diagnostic de chacune. */
+/** Diagnostic d'une source abandonnée : une source moins prioritaire a trouvé, et elle tardait. */
+const interrompue = (src: DefinitionSource, gagnante: DefinitionSource, graceMs: number): DiagnosticSource => ({
+  source: src.name,
+  sourceId: src.id,
+  statut: 'interrompue',
+  requetes: [],
+  serie: null,
+  refuse: null,
+  episodes: 0,
+  raison: `recherche interrompue : « ${gagnante.name} » a trouvé, et cette source, plus prioritaire, n’avait pas répondu ${String(graceMs / 1000).replace('.', ',')} s plus tard`,
+});
+
+/**
+ * Cherche sur les sources activées EN PARALLÈLE (3 au plus), dans leur ordre
+ * de priorité : la première qui donne des épisodes l'emporte (une moins
+ * prioritaire n'attend une plus prioritaire encore en cours que
+ * `graceMs`) ; les autres sont annulées. Garde le diagnostic de chacune
+ * (jusqu'à la gagnante), dans l'ordre.
+ */
 export async function trouverEpisodes(
   ctx: ContexteResolution,
   sources: readonly DefinitionSource[],
   o: OptionsEpisodes,
 ): Promise<ResultatEpisodes> {
+  const actives = sourcesActives(sources);
+  const p = parametresParallele(ctx);
+  const { issues, gagnante } = await courseAvecPriorite(
+    actives.map(src => (signal: SignalAnnulation) => episodesSur(sousContexte(ctx, signal), src, o)),
+    r => r.episodes.length > 0,
+    { simultanees: p.sources, graceMs: p.graceMs, relaisMs: p.relaisSourcesMs, signal: ctx.signal },
+  );
   let refuse: ResultatClasse | null = null;
   let partiel: ResultatEpisodes | null = null;
   const diagnostics: DiagnosticSource[] = [];
-  for (const src of sourcesActives(sources)) {
-    try {
-      const r = await episodesSur(ctx, src, o);
+  for (const issue of issues) {
+    const src = actives[issue.i];
+    if (gagnante != null && issue.i > gagnante) break;
+    if (issue.interrompue) {
+      diagnostics.push(interrompue(src, actives[gagnante ?? 0], p.graceMs));
+    } else if (issue.erreur !== undefined) {
+      journalDe(ctx)(`[source:${src.name}] ${messageDe(issue.erreur)}`);
+      diagnostics.push({ source: src.name, sourceId: src.id, statut: 'erreur', requetes: [], serie: null, refuse: null, episodes: 0, erreur: messageDe(issue.erreur) });
+    } else if (issue.resultat) {
+      const r = issue.resultat;
       diagnostics.push(...r.diagnostics);
-      if (r.episodes.length) {
+      if (issue.i === gagnante) {
         return { ...r, diagnostics };
       }
       refuse = refuse ?? r.refuse;
       partiel = partiel ?? (r.serie ? r : null);
-    } catch (err) {
-      journalDe(ctx)(`[source:${src.name}] ${messageDe(err)}`);
-      diagnostics.push({ source: src.name, sourceId: src.id, statut: 'erreur', requetes: [], serie: null, refuse: null, episodes: 0, erreur: messageDe(err) });
     }
   }
   return { episodes: [], source: partiel?.source ?? null, serie: partiel?.serie ?? null, refuse, diagnostics };
@@ -1185,29 +1248,37 @@ export async function filmSur(
   }
 }
 
-/** Cherche le film chez chaque source ayant une section films. */
+/** Cherche le film chez chaque source ayant une section films (en parallèle, dans l'ordre de priorité). */
 export async function trouverFilm(
   ctx: ContexteResolution,
   sources: readonly DefinitionSource[],
   o: { titres: readonly string[]; annee?: number | string | null },
 ): Promise<ResultatFilm> {
+  const actives = sourcesActives(sources).filter(supporteFilms);
+  const p = parametresParallele(ctx);
+  // Les films se cherchent sans preference de doublage (comme avant).
+  const { issues, gagnante } = await courseAvecPriorite(
+    actives.map(brute => (signal: SignalAnnulation) => filmSur(sousContexte(ctx, signal), brute, { ...o, langue: 'indifferent' })),
+    r => r.sources.length > 0,
+    { simultanees: p.sources, graceMs: p.graceMs, relaisMs: p.relaisSourcesMs, signal: ctx.signal },
+  );
   let refuse: ResultatClasse | null = null;
   const diagnostics: DiagnosticSource[] = [];
-  for (const brute of sourcesActives(sources)) {
-    if (!supporteFilms(brute)) {
-      continue;
-    }
-    try {
-      // Les films se cherchent sans preference de doublage (comme avant).
-      const r = await filmSur(ctx, brute, { ...o, langue: 'indifferent' });
+  for (const issue of issues) {
+    const brute = actives[issue.i];
+    if (gagnante != null && issue.i > gagnante) break;
+    if (issue.interrompue) {
+      diagnostics.push(interrompue(brute, actives[gagnante ?? 0], p.graceMs));
+    } else if (issue.erreur !== undefined) {
+      journalDe(ctx)(`[source:${brute.name}] ${messageDe(issue.erreur)}`);
+      diagnostics.push({ source: brute.name, sourceId: brute.id, statut: 'erreur', requetes: [], serie: null, refuse: null, episodes: 0, erreur: messageDe(issue.erreur) });
+    } else if (issue.resultat) {
+      const r = issue.resultat;
       diagnostics.push(...r.diagnostics);
-      if (r.sources.length) {
+      if (issue.i === gagnante) {
         return { ...r, diagnostics };
       }
       refuse = refuse ?? r.refuse;
-    } catch (err) {
-      journalDe(ctx)(`[source:${brute.name}] ${messageDe(err)}`);
-      diagnostics.push({ source: brute.name, sourceId: brute.id, statut: 'erreur', requetes: [], serie: null, refuse: null, episodes: 0, erreur: messageDe(err) });
     }
   }
   return { sources: [], choisi: null, refuse, source: null, diagnostics };

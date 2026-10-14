@@ -45,6 +45,8 @@ export const CLES = {
   titresRecherche: 'tsuzuku.recherche.titres',
   /** Dernier mode ouvert (animés ou films). */
   mode: 'tsuzuku.mode',
+  /** Cache (catalogue, recherches sur les sources, lecteurs) : sur CET appareil, borné, jamais synchronisé. */
+  cache: 'tsuzuku.cache',
 } as const;
 
 export function stockageDepuisBase(base: BasePrefs): Stockage {
