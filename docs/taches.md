@@ -167,8 +167,8 @@ une session ou le minuteur du Fondateur.
 
 ### Partage à plusieurs (`src/taches/membres.ts`, `partage.ts`, `ui/Membres.tsx`)
 
-- **Membres** : 👥 › « Gérer les membres et leurs droits » — le Fondateur invite des comptes de rang **ami** ou
-  **gestionnaire** (30 au plus) ; l'invitation lui ouvre l'app (accès `taches`, comme en V2), il reçoit sa **clé de
+- **Membres** : 👥 › « Gérer les membres et leurs droits » — le Fondateur invite des comptes de rang **ami**,
+  **gestionnaire** ou **administrateur** (30 au plus) ; l'invitation lui ouvre l'app (accès `taches`), il reçoit sa **clé de
   membre** (32 octets, scelle ce qu'il renvoie). L'ami des V1/V2 reste membre, avec son code d'auteur historique
   « ami » (ses traces passées restent les siennes) ; les membres V3 signent avec l'identifiant de leur compte.
 - **Droits par projet et par personne** (`projet.acces`) : *lecture* (voir), *écriture* (tâches, checklist,
@@ -186,6 +186,29 @@ une session ou le minuteur du Fondateur.
 - **Mentions** (`src/taches/mentions.ts`) : « @ » dans un commentaire propose les personnes du projet (prénom, sans
   accents ni casse) ; le commentaire garde les mentionnés ; chacun reçoit la notification « On me mentionne » selon
   SES réglages (canal, heures calmes, sourdine…), jamais l'auteur lui-même.
+
+### Accès donné par l'Administration (`membres.ts` › `accorderAcces`)
+
+- **Accès à l'app = membre** : dans Administration › Utilisateurs › fiche d'un profil (ami, gestionnaire ou
+  administrateur), le niveau d'accès de l'app « Tâches » (Aucun / Complet) ouvre ou ferme l'app comme pour les autres
+  apps du registre. Au tour suivant du hub (30 s), le Fondateur invite le profil (sa clé de membre est créée) ou le
+  retire ; inviter depuis Tâches ouvre aussi l'accès. Une seule vérité : la liste des profils qui ont l'app.
+- **Sans projet partagé** : la tuile apparaît, l'app montre « Aucun projet partagé avec toi » (et, si le Fondateur
+  l'a permis, le bouton « Mes projets personnels »).
+- **Fermer l'accès** : retrait de Tâches — clés des projets tournées, dépôt effacé au tour suivant, la tuile
+  disparaît ; ce qui est écrit ensuite ne lui parvient plus (vérifié par `e2e-taches-v3`).
+- **« Peut créer ses propres projets »** (case par membre, 👥 › Membres) : le membre a alors un espace « Mes projets
+  personnels » (barre de navigation : Partagés / Personnels). Ces projets restent dans la **base chiffrée de son
+  compte** (`taches.perso`) : ils ne sont ni déposés chez le Fondateur ni partagés ; il en est le seul maître (toutes
+  les vues, ses notifications). Comme toute la base d'un profil, ils suivent la sauvegarde/séquestre du hub de ce
+  profil s'il en a une. Permission retirée : il les garde en lecture, sans en créer de nouveaux.
+
+### Paramètres › Tâches (page Paramètres du hub, `ui/ParametresTaches.tsx`)
+
+Une section « Tâches » dans les Paramètres du hub reprend les **mêmes fenêtres** que l'app (mêmes composants, même
+stockage) : pour tout compte qui a l'app, vue d'ouverture de l'appareil, SES notifications, relevé du temps ; pour
+le Fondateur seul, en plus : membres et droits, liens avec les autres apps, IA et GitHub, corbeille. « Ouvrir dans
+Tâches › » mène à l'app ; dans l'app, 👥 › « Paramètres › Tâches » y ramène.
 
 ### Chronologie — Gantt (`src/taches/gantt.ts`, `ui/Gantt.tsx`)
 
@@ -256,13 +279,13 @@ chemins en lecture). Un membre voit le lien mais ne le pose ni ne le change ; il
 | Compte | Tuile | Voit | Modifie | Gère |
 | --- | --- | --- | --- | --- |
 | Fondateur (compte historique) | oui | tout | tout | tout : membres, partage, suppression, objectifs, IA, GitHub, liens |
-| Membre (ami ou gestionnaire invité) | oui, dès que le dépôt scellé pour lui est arrivé | les projets où il a un droit (jamais les autres projets, les objectifs, les projets et tâches des autres apps, les sessions de Claude Office, les clés d'autrui) | là où il a *écriture* ou *admin* : tâches, checklist, commentaires (les siens), temps passé et SON minuteur, journal (ses entrées), suppression et restauration d'une tâche ; ses réglages de notifications | *admin du projet* : listes (créer, renommer), statuts et paramètres du projet — jamais le partage, ni la suppression d'un espace, d'un projet ou d'une liste, ni un lien GitHub ou avec une autre app |
-| Tout autre compte (non invité, administrateur, autre Fondateur, membre retiré) | non | rien | rien | non |
+| Membre (ami, gestionnaire ou administrateur qui a l'app) | oui, dès que le dépôt scellé pour lui est arrivé | les projets où il a un droit (jamais les autres projets, les objectifs, les projets et tâches des autres apps, les sessions de Claude Office, les clés d'autrui) | là où il a *écriture* ou *admin* : tâches, checklist, commentaires (les siens), temps passé et SON minuteur, journal (ses entrées), suppression et restauration d'une tâche ; ses réglages de notifications | *admin du projet* : listes (créer, renommer), statuts et paramètres du projet — jamais le partage, ni la suppression d'un espace, d'un projet ou d'une liste, ni un lien GitHub ou avec une autre app |
+| Tout autre compte (sans l'app, autre Fondateur, membre retiré) | non | rien | rien | non |
 
-`src/taches/acces.ts` : `roleTaches` exige, pour un membre, l'accès `taches` (donné par l'invitation du Fondateur,
-par `onAutoriser`) **et** la copie reçue avec sa clé de membre : un accès donné autrement (ou un ancien ami dont le dépôt
-est retiré) n'ouvre rien. L'Administration ne propose pas Tâches en case à cocher (`attribueeParApp` dans le
-registre) et un « modèle » d'accès ne retire pas cet accès.
+`src/taches/acces.ts` : `roleTaches` donne le rôle de membre à tout profil (non Fondateur, actif) qui a l'accès
+`taches`, ouvert dans l'Administration ou par une invitation depuis Tâches. Sans dépôt reçu, il ne lit rien : l'état
+vide s'affiche. Ce qu'il lit et écrit reste borné par les clés : sa clé de membre et celles des projets où il a un
+droit, vérifiées chez le Fondateur à chaque retour.
 
 ## Stockage et synchronisation (aucun changement du relais)
 

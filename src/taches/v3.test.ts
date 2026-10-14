@@ -72,6 +72,7 @@ import {
   type SuiviTachesAmi,
 } from './partage';
 import { etatRappelsVide } from './rappels';
+import { verifierRappels } from './resume';
 import { statistiques } from './tableauBord';
 import { ajouterTemps } from './temps';
 
@@ -324,6 +325,17 @@ describe('trois membres par le relais en mémoire', () => {
     // Un tour sans changement n'écrit rien.
     r = await tourF();
     expect(r.depots).toBe(0);
+    // Mention de Léa par le Fondateur : par le relais, elle arrive dans SES rappels (et pas chez Hugo).
+    const ctxM = (c: string) => ({ profil: { id: c, nom: c, admin: false, actif: true, apps: ['taches'] } as never, baseProfil: membres[c].base });
+    verifierRappels(ctxM(LEA), horloge);
+    verifierRappels(ctxM(HUGO), horloge);
+    pc.base.ecrire(CLES_TACHES.donnees, JSON.stringify(ajouterCommentaire(lireDonnees(pc.m.get(CLES_TACHES.donnees)), s.t1, '@Léa peux-tu relire ?', { maintenant: (horloge += 60_000), auteur: 'fondateur' }, [LEA])));
+    r = await tourF();
+    await tourM(LEA);
+    await tourM(HUGO);
+    const rl2 = verifierRappels(ctxM(LEA), (horloge += 30_000));
+    expect(rl2.map(x => x.texte)).toEqual([expect.stringContaining('vous mentionne')]);
+    expect(verifierRappels(ctxM(HUGO), horloge).some(x => /mentionne/.test(x.texte))).toBe(false);
     // Révocation : Léa retirée de Tâches → son dépôt est effacé, sa copie se vide.
     pc.base.ecrire(CLES_TACHES.donnees, JSON.stringify(retirerMembre(lireDonnees(pc.m.get(CLES_TACHES.donnees)), LEA, { ...f(), maintenant: horloge })));
     r = await tourF();

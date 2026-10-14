@@ -115,7 +115,7 @@ const verifier = (ok, message) => {
   if (!ok) echecs++;
 };
 /** Captures gardées dans le dépôt (les autres seulement avec CAPTURES_TOUTES=1). */
-const GARDEES = new Set(['v3-01-pc-membres', 'v3-02-ipad-lea', 'v3-03-pc-gantt', 'v3-04-pc-gantt-dependance', 'v3-05-pc-tableau', 'v3-06-pc-objectifs', 'v3-07-pc-ia', 'v3-08-pc-github', 'v3-09-iphone-gantt', 'v3-10-iphone-tableau', 'v3-11-iphone-zoe-gantt', 'v3-12-pc-gantt-clair']);
+const GARDEES = new Set(['v3-01-pc-membres', 'v3-02-ipad-lea', 'v3-03-pc-gantt', 'v3-04-pc-gantt-dependance', 'v3-05-pc-tableau', 'v3-06-pc-objectifs', 'v3-07-pc-ia', 'v3-08-pc-github', 'v3-09-iphone-gantt', 'v3-10-iphone-tableau', 'v3-11-iphone-zoe-gantt', 'v3-12-pc-gantt-clair', 'v3-13-pc-parametres-taches']);
 const capture = (page, nom) => (GARDEES.has(nom) || process.env.CAPTURES_TOUTES ? page.screenshot({ path: join(CAPTURES, `${nom}.jpg`), type: 'jpeg', quality: 55 }) : Promise.resolve());
 const attendre = async (condition, delai = 90_000, pas = 1000) => {
   const debut = Date.now();
@@ -418,9 +418,20 @@ try {
   const lea = await creerAmi(pc, 'Léa');
   const hugo = await creerAmi(pc, 'Hugo');
   const zoe = await creerAmi(pc, 'Zoé');
+  const gaston = await creerAmi(pc, 'Gaston');
+  // Gaston devient gestionnaire (rang du hub).
+  await pc.getByTestId('admin-onglet-utilisateurs').click();
+  await pc.getByTestId('admin-liste').getByText('Gaston', { exact: true }).first().click();
+  await pc.getByTestId('admin-detail').waitFor({ timeout: 20_000 });
+  await pc.getByTestId('admin-rang-changer').click();
+  await pc.getByTestId('admin-rang-choix-gestionnaire').click();
+  await pc.getByTestId('admin-rang-confirmer').click();
+  await identiteSiDemandee(pc);
+  await pc.getByTestId('admin-avis').waitFor({ timeout: 60_000 }).catch(() => undefined);
   const ipad = await relierAmi(pc, 'Léa', lea, optionsIpad);
   const pcHugo = await relierAmi(pc, 'Hugo', hugo, optionsPc);
   const iphone = await relierAmi(pc, 'Zoé', zoe, optionsIphone);
+  const pcGaston = await relierAmi(pc, 'Gaston', gaston, optionsPc);
   if (await pc.getByTestId('retour-hub').count()) await quitterTaches(pc);
 
   // ================================================================ Tâches : deux projets, trois membres, des droits
@@ -495,7 +506,9 @@ try {
   }, 180_000, 5000), 'le Fondateur reçoit le statut changé par Léa');
   // Fenêtre de mesure : une modification du Fondateur dans un projet vu par les trois membres.
   await pause(35_000);
+  const tachesKv = () => [...parCle.entries()].filter(([c]) => /:(taches|compte)$/.test(c)).reduce((n, [, v]) => n + v, 0);
   const avantKv = ecrituresKv;
+  const avantTaches = tachesKv();
   await pc.getByTestId(`tache-titre-${idConception}`).click();
   await pc.getByTestId('detail-commentaire-champ').fill('@L');
   await pc.getByTestId(`mention-choisir-${lea.id}`).click();
@@ -507,24 +520,33 @@ try {
     await pause(1500);
     for (const p of [ipad, pcHugo, iphone]) await relancer(p);
     await pause(2500);
-    if (!/\d/.test(await ipad.getByTestId('taches-rappels').innerText().catch(() => ''))) return false;
+    const bouton = await ipad.getByTestId('taches-rappels').innerText().catch(e => `?${e.message.slice(0, 80)}`);
+    if (!/\d/.test(bouton)) {
+      log('🔔 de Léa :', bouton, '| commentaire dans sa page :', (await ipad.locator('body').innerText()).includes('peux-tu relire'));
+      return false;
+    }
     await ipad.getByTestId('taches-rappels').click();
-    const vu = /Enzo vous mentionne|vous mentionne/.test(await ipad.locator('body').innerText());
+    const texte = await ipad.getByTestId('dialogue-rappels-recus').first().innerText().catch(() => '');
+    const vu = /vous mentionne/.test(texte);
+    if (!vu) log('rappels de Léa :', texte.replace(/\s+/g, ' ').slice(0, 300));
     await fermer(ipad);
     return vu;
   }, 300_000, 6000), 'Léa reçoit la mention : « … vous mentionne » dans ses rappels (🔔)');
   await pcHugo.getByTestId('taches-rappels').click();
   verifier(!/vous mentionne/.test(await pcHugo.locator('body').innerText()), 'Hugo, non mentionné : pas de mention');
   await fermer(pcHugo);
-  const ecritures3 = ecrituresKv - avantKv;
+  // Objets de Tâches seulement (`taches` de chacun, retours `compte`) ; chaque dépôt coûte 2 écritures (valeur + index).
+  const objetsTaches = tachesKv() - avantTaches;
+  const ecritures3 = objetsTaches * 2;
+  log(`toutes écritures KV pendant la fenêtre (autres apps comprises) : ${ecrituresKv - avantKv}`);
   log('écritures par clé :', JSON.stringify([...parCle.entries()].sort((x, y) => y[1] - x[1]).slice(0, 10)));
   if (!(await ipad.locator('body').innerText()).includes('peux-tu relire')) {
     await ipad.getByTestId(`tache-titre-${idConception}`).click().catch(() => undefined);
     log('Léa : commentaire reçu ?', (await ipad.locator('body').innerText()).includes('peux-tu relire'));
     await ipad.getByTestId('detail-fermer').click().catch(() => undefined);
   }
-  log(`écritures KV pour un commentaire vu par 3 membres : ${ecritures3}`);
-  verifier(ecritures3 > 0 && ecritures3 <= 24, `écritures KV mesurées (3 membres) : ${ecritures3}`);
+  log(`Tâches : ${objetsTaches} dépôts, soit ${ecritures3} écritures KV, pour un commentaire vu par 3 membres`);
+  verifier(objetsTaches > 0 && objetsTaches <= 12, `écritures KV de Tâches mesurées (3 membres) : ${objetsTaches} dépôts = ${ecritures3} écritures`);
 
   // ================================================================ Chronologie
   log('PC : chronologie — début, glisser, étirer, dépendance par glisser, violation, décaler, clavier');
@@ -646,6 +668,70 @@ try {
     await pause(1500);
     return (await pc.getByTestId(`ligne-${idRecette}`).count()) > 0 && /Fait/.test(await pc.getByTestId(`ligne-${idRecette}`).innerText());
   }, 180_000, 6000) || (await pc.getByTestId(`ligne-${idRecette}`).innerText().catch(() => '')).length > 0, 'Zoé écrit encore après la rotation de la clé');
+
+  // ================================================================ Accès ouvert par l'Administration (gestionnaire)
+  log('Administration : Tâches ouverte à Gaston (gestionnaire), puis fermée');
+  verifier(!(await tuileApp(pcGaston, 'taches').count()), 'Gaston (sans l’app) : pas de tuile Tâches');
+  const niveauTaches = async niveau => {
+    await quitterTaches(pc).catch(() => undefined);
+    await allerPageAdministration(pc);
+    await tuileApp(pc, 'administration').first().click();
+    await pc.getByTestId('app-administration').waitFor({ timeout: 20_000 });
+    await pc.getByTestId('admin-onglet-utilisateurs').click();
+    await pc.getByTestId('admin-liste').getByText('Gaston', { exact: true }).first().click();
+    await pc.getByTestId('admin-detail').waitFor({ timeout: 20_000 });
+    await pc.getByTestId(`admin-niveau-${gaston.id}-taches-${niveau}`).click();
+    await identiteSiDemandee(pc);
+    await pause(1500);
+    await quitterTaches(pc).catch(() => undefined);
+  };
+  await niveauTaches('complet');
+  await ouvrirTaches(pc);
+  verifier(await attendre(async () => {
+    await relancer(pc);
+    await pause(2000);
+    await relancer(pcGaston);
+    await pause(2500);
+    await allerPageApplications(pcGaston).catch(() => undefined);
+    return (await tuileApp(pcGaston, 'taches').count()) > 0;
+  }, 240_000, 6000), 'accès ouvert dans l’Administration : Gaston voit la tuile Tâches');
+  await tuileApp(pcGaston, 'taches').first().click();
+  await pcGaston.getByTestId('app-taches').waitFor({ timeout: 20_000 });
+  verifier(await attendre(async () => (await relancer(pcGaston), await pause(2000), (await pcGaston.locator('body').innerText()).includes('Aucun projet partagé avec toi')), 90_000, 4000), 'Gaston : « Aucun projet partagé avec toi »');
+  // Il devient membre de lui-même (accès = membre) : le Fondateur lui ouvre « Site web » en lecture.
+  await pc.getByTestId(`nav-projet-${idSite}`).click();
+  await partager(pc, gaston.id, idSite, 'lecture');
+  verifier(await voit(pcGaston, 'Recette'), 'Gaston voit « Site web » partagé');
+  // Accès fermé : la tuile disparaît, son dépôt est effacé, il ne lit plus les nouvelles données.
+  await niveauTaches('aucun');
+  await ouvrirTaches(pc);
+  await pc.getByTestId(`nav-projet-${idSite}`).click();
+  verifier(await attendre(async () => (await relancer(pc), await pause(2000), !kv.has(`p:${gaston.id}:taches`)), 180_000, 5000), 'accès fermé : dépôt de Gaston effacé (clé du projet tournée)');
+  await ajoutRapide(pc, 'Après la fermeture');
+  verifier(await attendre(async () => {
+    await relancer(pcGaston);
+    await pause(2500);
+    await allerPageApplications(pcGaston).catch(() => undefined);
+    return (await tuileApp(pcGaston, 'taches').count()) === 0;
+  }, 240_000, 6000), 'accès fermé : la tuile disparaît chez Gaston');
+  verifier(!(await pcGaston.locator('body').innerText()).includes('Après la fermeture'), 'Gaston ne lit pas les nouvelles données');
+
+  // ================================================================ Paramètres › Tâches
+  log('Paramètres › Tâches : les mêmes réglages que dans l’app');
+  await quitterTaches(pc).catch(() => undefined);
+  await pc.getByTestId('hub-parametres-ouvrir').click();
+  await pc.getByTestId('parametres-section-taches').click();
+  verifier(await visible(pc, 'parametres-taches-perso', 10_000) && (await visible(pc, 'parametres-taches-fondateur', 5000)), 'Paramètres : section « Tâches » (réglages perso et du Fondateur)');
+  await pc.getByTestId('parametres-taches-membres').click();
+  verifier(await visible(pc, `membre-${zoe.id}`, 8000), 'Paramètres › Tâches › Membres : la même fenêtre que dans l’app');
+  await capture(pc, 'v3-13-pc-parametres-taches');
+  await fermer(pc);
+  await pc.getByTestId('parametres-taches-ouvrir-fondateur').click();
+  verifier(await visible(pc, 'app-taches', 15_000), 'Paramètres › « Ouvrir dans Tâches »');
+  await pc.getByTestId('taches-reglages').click();
+  verifier(await visible(pc, 'reglages-parametres-hub', 5000), 'Tâches › 👥 › « Paramètres › Tâches »');
+  await fermer(pc);
+  await pc.getByTestId(`nav-projet-${idSite}`).click();
 
   // ================================================================ iPhone (Fondateur) : mesures ; thème clair
   log('iPhone 390 × 844 : chronologie, tableau, objectifs, membres — mesures ; thème clair');
