@@ -57,7 +57,7 @@ export const ENTREES: readonly EntreeDevblog[] = [
         emoji: '👥',
         titre: 'Plusieurs membres, des droits par projet',
         texte:
-          'Ouvre Tâches à un ami, un gestionnaire ou un administrateur depuis l’Administration (ou 👥 › Membres), puis choisis pour chacun, projet par projet : lecture, écriture ou admin du projet ; il peut aussi avoir ses propres projets. Fermer l’accès ou retirer quelqu’un change la clé du projet : il ne lit plus rien de nouveau. Réglages aussi dans Paramètres › Tâches. Toujours chiffré de bout en bout.',
+          'Ouvre Tâches à un ami, un gestionnaire ou un administrateur depuis l’Administration (ou 👥 › Membres), puis choisis pour chacun, projet par projet : lecture, écriture ou admin du projet ; il peut aussi avoir ses propres projets. Couper l’accès ou retirer quelqu’un change la clé du projet : il ne lit plus rien de nouveau. Réglages aussi dans Paramètres › Tâches. Toujours chiffré de bout en bout.',
         essayer: { genre: 'app', app: 'taches' },
         adminSeulement: true,
       },
