@@ -196,11 +196,13 @@ async function creerAmi(page, nom) {
   const ligne = await page.locator('[data-testid^="admin-ligne-"]').filter({ hasText: nom }).first().getAttribute('data-testid');
   return { motDePasse, secret, id: ligne.replace('admin-ligne-', '') };
 }
-async function ouvrirTaches(page) {
+/** Ouvre Tâches ; elle s'ouvre sur le calendrier de la semaine, puis (par défaut) on passe en Liste. */
+async function ouvrirTaches(page, { liste = true } = {}) {
   await allerPageApplications(page);
   await tuileApp(page, 'taches').first().waitFor({ timeout: 20_000 });
   await tuileApp(page, 'taches').first().click();
   await page.getByTestId('app-taches').waitFor({ timeout: 20_000 });
+  if (liste && (await page.getByTestId('onglet-liste').count())) await page.getByTestId('onglet-liste').first().click();
 }
 async function quitterTaches(page) {
   await page.getByTestId('retour-hub').first().click();
@@ -403,6 +405,7 @@ try {
   log('PC : Calendrier');
   await pc.keyboard.press('3');
   await pc.getByTestId('vue-calendrier').waitFor({ timeout: 10_000 });
+  await pc.getByTestId('cal-mode-mois').click();
   const cible = jourIso(1).slice(0, 7) === jourIso(0).slice(0, 7) ? jourIso(1) : jourIso(-1);
   await glisserSouris(pc, `cal-tache-${idMaquette}`, `jour-${cible}`);
   verifier(await attendre(async () => (await pc.getByTestId(`jour-${cible}`).innerText()).includes('Préparer la maquette'), 5000, 300), `Calendrier : tâche glissée sur le ${cible}`);

@@ -98,6 +98,41 @@ de plus** sur le relais (une notification n'écrit jamais rien sur le relais).
   l'heure — une modification qui arrive par la synchronisation des minutes plus tard est bien signalée. Le premier
   passage d'un appareil ne rattrape rien. Anti-répétition par clé, comme en V1.
 
+### Journal du jour et débriefing (`src/taches/journal.ts`, `ui/Journal.tsx`)
+
+- Chaque projet a un **Journal du jour** (bouton 📓 de l'en-tête, menu ⋯ du projet, « Noter dans le journal du jour »
+  dans le détail d'une tâche, et depuis « Ma journée » avec le choix du projet) : des entrées courtes, datées, signées
+  (Fondateur ou ami), liées ou non à une tâche, modifiables et retirables par leur auteur. Les tâches **terminées
+  aujourd'hui** et le **temps suivi** du jour sont **proposés** (texte modifiable, « ＋ » pour l'ajouter) — jamais
+  ajoutés d'office. Une entrée n'est écrite qu'à la validation (pas d'écriture par frappe) ; fusion entrée par entrée
+  (`journal` dans les données, élément par élément comme la checklist).
+- **Débriefing** par projet, du **jour** ou de la **semaine** : en tête le résumé (tâches terminées, temps suivi,
+  nombre d'entrées), puis les entrées **par auteur** et **par tâche** (liens vers les tâches), puis **ce qui reste**
+  (en retard, en revue / bloqué / en attente, à venir sur 7 jours, nombre de tâches ouvertes). « Copier (Markdown) »,
+  « Copier en texte » (presse-papiers, sinon fichier) et « Exporter .md ».
+- Partage : l'ami voit le journal et le débriefing des projets partagés avec lui ; il y écrit seulement dans ceux en
+  **écriture** (ses entrées partent dans le retour qu'il écrit déjà ; le Fondateur n'accepte que ses entrées, signées
+  de lui, dans un projet partagé en écriture). Rien d'un projet non partagé ne part.
+- Invite du soir « Note ce que tu as fait aujourd'hui » : type de notification « journal » (désactivé par défaut,
+  heure réglable, pas si une entrée a déjà été notée ce jour).
+
+### Paramètres des projets, espaces et listes
+
+- **Paramètres du projet** (⚙︎ Projet, ou ⋯ › Paramètres du projet) : nom et **icône** (un emoji, aussi dans la
+  barre latérale), couleur, **description**, **dates** de début et de fin (facultatives, en français), **étiquettes du
+  projet**, **espace** (déplacer), **statuts** (ajouter, renommer, réordonner, marquer « terminé », retirer — en
+  choisissant où vont ses tâches), listes, partage avec l'ami (lecture / écriture), suppression. **Historique du
+  projet** (dernières modifications, qui et quand ; fusionné par union entre appareils).
+- **Espace** : ⋯ › Modifier l'espace (nom, couleur). **Liste** : ⋯ › Renommer la liste.
+- Droits : la structure (espace, projet, liste, statuts, partage) est au Fondateur seul ; l'ami ne modifie pas un
+  projet (rien de tel n'est accepté de lui).
+
+### Vue d'ouverture
+
+Tâches s'ouvre sur le **calendrier de la semaine** (semaine courante). 👥 › « Vue d'ouverture (cet appareil) » :
+calendrier de la semaine (par défaut), Ma journée, toutes les tâches en liste, ou la dernière vue utilisée (alors
+seulement, la vue du moment est reprise à l'ouverture suivante).
+
 ### Liens avec les autres apps (`src/taches/integrations/`)
 
 Modules isolés : les apps reliées ne sont pas modifiées, sauf deux points d'accroche de Claude Office (un bouton fourni
@@ -204,7 +239,8 @@ au premier plan. Un dépôt coûte 2 écritures (valeur + index). Usage typique 
 
 **V2 — faite** : suppression des espaces / projets / listes avec corbeille ; liens avec Claude Office, Prospects,
 Abonnements et Portefeuille ; suivi du temps (minuteur, saisie, estimations, relevé hebdomadaire, CSV) ; réglages des
-notifications de chacun.
+notifications de chacun ; journal du jour et débriefing ; paramètres des projets (icône, description, dates,
+étiquettes, statuts avec réaffectation, historique) ; ouverture sur le calendrier de la semaine.
 
 **Reste de la V2 (reporté)** — Gantt (dépendances simples, glisser les barres) ; tableau de bord (tâches par statut /
 personne, en retard, faites cette semaine) ; pièces jointes chiffrées ; mentions dans les commentaires ; modèles de

@@ -114,7 +114,7 @@ const verifier = (ok, message) => {
   if (!ok) echecs++;
 };
 /** Captures gardées dans le dépôt (les autres seulement avec CAPTURES_TOUTES=1). */
-const GARDEES = new Set(['v2-01-pc-minuteur', 'v2-02-pc-detail-temps', 'v2-03-pc-releve', 'v2-04-pc-notifications', 'v2-05-pc-liens', 'v2-06-pc-prospects', 'v2-07-office-detail', 'v2-08-pc-tache-revue', 'v2-09-ipad-lea', 'v2-10-iphone-detail', 'v2-11-iphone-notifications', 'v2-12-iphone-releve']);
+const GARDEES = new Set(['v2-00-pc-ouverture-semaine', 'v2-13-pc-debriefing', 'v2-14-ipad-lea-debriefing', 'v2-15-iphone-journal', 'v2-01-pc-minuteur', 'v2-02-pc-detail-temps', 'v2-03-pc-releve', 'v2-04-pc-notifications', 'v2-05-pc-liens', 'v2-06-pc-prospects', 'v2-07-office-detail', 'v2-08-pc-tache-revue', 'v2-09-ipad-lea', 'v2-10-iphone-detail', 'v2-11-iphone-notifications', 'v2-12-iphone-releve']);
 const capture = (page, nom) => (GARDEES.has(nom) || process.env.CAPTURES_TOUTES ? page.screenshot({ path: join(CAPTURES, `${nom}.jpg`), type: 'jpeg', quality: 55 }) : Promise.resolve());
 const attendre = async (condition, delai = 90_000, pas = 1000) => {
   const debut = Date.now();
@@ -187,11 +187,13 @@ async function creerAmi(page, nom) {
   const ligne = await page.locator('[data-testid^="admin-ligne-"]').filter({ hasText: nom }).first().getAttribute('data-testid');
   return { motDePasse, secret, id: ligne.replace('admin-ligne-', '') };
 }
-async function ouvrirTaches(page) {
+/** Ouvre Tâches ; elle s'ouvre sur le calendrier de la semaine, puis (par défaut) on passe en Liste. */
+async function ouvrirTaches(page, { liste = true } = {}) {
   await allerPageApplications(page);
   await tuileApp(page, 'taches').first().waitFor({ timeout: 20_000 });
   await tuileApp(page, 'taches').first().click();
   await page.getByTestId('app-taches').waitFor({ timeout: 20_000 });
+  if (liste && (await page.getByTestId('onglet-liste').count())) await page.getByTestId('onglet-liste').first().click();
 }
 async function quitterTaches(page) {
   await page.getByTestId('retour-hub').first().click();
@@ -375,7 +377,10 @@ try {
   await pause(3000);
   // Rechargement complet de la page (nouvelle ouverture du site, connexion).
   await connecter(pc, 'admin', MDP_ADMIN, secretAdmin);
-  await ouvrirTaches(pc);
+  await ouvrirTaches(pc, { liste: false });
+  verifier((await pc.getByTestId('vue-calendrier').count()) === 1 && /Semaine du/.test(await texteDe(pc, 'cal-titre')), `vue d’ouverture : calendrier de la semaine (${await texteDe(pc, 'cal-titre').catch(() => '?')})`);
+  await capture(pc, 'v2-00-pc-ouverture-semaine');
+  await pc.getByTestId('onglet-liste').click();
   verifier(await visible(pc, 'taches-minuteur', 10_000) && /Rédiger la FAQ/.test(await texteDe(pc, 'taches-minuteur')), 'après rechargement : le minuteur tourne toujours');
   log(`écritures KV pendant que le minuteur tourne (rechargement compris) : ${ecrituresKv - ecrituresAvantMinuteur}`);
   await pause(25_000);
@@ -403,6 +408,62 @@ try {
   const csv = readFileSync(await telechargement.path(), 'utf8');
   verifier(/^\uFEFF?date;projet;liste;tache/.test(csv) && /Maquette/.test(csv) && /;90;1,50;/.test(csv), `export CSV (${telechargement.suggestedFilename()})`);
   await fermer(pc);
+
+  // ================================================================ Journal du jour et débriefing
+  log('PC : journal du jour (note, proposition), débriefing, export Markdown');
+  await pc.getByTestId(`nav-projet-${idSite}`).click();
+  await pc.getByTestId('taches-journal').click();
+  await pc.getByTestId('journal-champ').fill('Réunion de lancement avec le client');
+  await pc.getByTestId('journal-ajouter').click();
+  verifier(/Réunion de lancement/.test(await texteDe(pc, 'dialogue-journal')), 'journal : entrée notée');
+  verifier(await visible(pc, `journal-proposition-${idMaquette}`, 5000), 'journal : le temps suivi sur « Maquette » est proposé');
+  await pc.getByTestId(`journal-proposition-texte-${idMaquette}`).fill('Maquette : version 2 prête');
+  await pc.getByTestId(`journal-proposition-ajouter-${idMaquette}`).click();
+  verifier(/Maquette : version 2 prête/.test(await texteDe(pc, 'dialogue-journal')) && (await pc.getByTestId(`journal-proposition-${idMaquette}`).count()) === 0, 'proposition modifiée puis ajoutée');
+  await pc.getByTestId('journal-onglet-debrief').click();
+  const debrief = await texteDe(pc, 'debriefing');
+  verifier(/Réunion de lancement/.test(debrief) && /Maquette/.test(debrief) && /CE QUI RESTE/i.test(debrief), 'débriefing du jour : entrées, tâches, ce qui reste');
+  await pause(400);
+  await capture(pc, 'v2-13-pc-debriefing');
+  await pc.getByTestId('debrief-semaine').click();
+  verifier(/Semaine du/.test(await texteDe(pc, 'journal-jour')), 'débriefing de la semaine');
+  const [md] = await Promise.all([pc.waitForEvent('download', { timeout: 15_000 }), pc.getByTestId('debrief-exporter').click()]);
+  const markdown = readFileSync(await md.path(), 'utf8');
+  verifier(/^# Débriefing « Site web »/.test(markdown) && /\*\*En bref\*\*/.test(markdown) && /Réunion de lancement/.test(markdown), `export Markdown du débriefing (${md.suggestedFilename()})`);
+  await fermer(pc);
+
+  // ================================================================ Paramètres du projet, de l'espace
+  log('PC : paramètres du projet (icône, description, statut retiré avec réaffectation), espace renommé');
+  await pc.getByTestId(`statut-${idMaquette}`).click();
+  await pc.getByTestId('choix-statut-option-en-revue').click();
+  await pc.getByTestId(`nav-projet-menu-${idSite}`).click();
+  await pc.getByTestId('menu-reglages-projet').click();
+  await pc.getByTestId('projet-icone').fill('🚀');
+  await pc.getByTestId('projet-description').fill('Refonte du site vitrine');
+  await pc.getByTestId('projet-fin').fill('15/12');
+  await pc.getByTestId('statut-retirer-en-revue').click();
+  verifier(await visible(pc, 'statut-reaffecter-en-revue', 3000), 'statut retiré : choisir où vont ses tâches');
+  await pc.getByTestId('statut-reaffecter-en-revue-en-cours').click();
+  await pc.getByTestId('projet-enregistrer').click();
+  verifier(/En cours/.test(await texteDe(pc, `statut-${idMaquette}`)), 'la tâche « En revue » est passée « En cours »');
+  verifier(/🚀 Site web/.test(await texteDe(pc, `nav-projet-${idSite}`)), 'icône du projet dans la barre latérale');
+  await pc.getByTestId('taches-projet-reglages').click();
+  await pc.getByTestId('projet-historique').click();
+  const histo = await texteDe(pc, 'dialogue-projet');
+  verifier(/Icône : 🚀/.test(histo) && /Description modifiée/.test(histo) && /Statuts modifiés/.test(histo), 'historique des modifications du projet');
+  verifier((await pc.getByTestId('statut-ligne-en-revue').count()) === 0, 'statut « En revue » retiré');
+  await fermer(pc);
+  const idEspaceTravail = (await pc.locator('[data-testid^="nav-espace-menu-"]').first().getAttribute('data-testid')).replace('nav-espace-menu-', '');
+  await pc.getByTestId(`nav-espace-menu-${idEspaceTravail}`).click();
+  await pc.getByTestId('menu-modifier-espace').click();
+  await pc.getByTestId('espace-nom').fill('Boulot');
+  await pc.getByTestId('espace-enregistrer').click();
+  verifier(/Boulot/.test(await texteDe(pc, `nav-espace-${idEspaceTravail}`)), 'espace renommé');
+  // Le statut « En revue » revient (Claude Office s'en sert plus loin).
+  await pc.getByTestId('taches-projet-reglages').click();
+  await pc.getByTestId('statut-nouveau').fill('En revue');
+  await pc.getByTestId('statut-ajouter').click();
+  await pc.getByTestId('projet-enregistrer').click();
 
   // ================================================================ Notifications
   log('PC : notifications — type désactivé, rappel par défaut, heures calmes, test');
@@ -566,6 +627,16 @@ try {
   verifier(/1 min notées/.test(await texteDe(ipad, 'taches-avis')), `Léa : temps noté (${await texteDe(ipad, 'taches-avis')})`);
   await capture(ipad, 'v2-09-ipad-lea');
   await ipad.getByTestId('detail-fermer').click();
+  // Débriefing du projet partagé, et sa propre entrée au journal.
+  await ipad.getByTestId('taches-journal').click();
+  await ipad.getByTestId('journal-champ').fill('Relu les textes de la FAQ');
+  await ipad.getByTestId('journal-ajouter').click();
+  await ipad.getByTestId('journal-onglet-debrief').click();
+  const debLea = await texteDe(ipad, 'debriefing');
+  verifier(/Réunion de lancement/.test(debLea) && /Relu les textes/.test(debLea), 'Léa : le débriefing du projet partagé (entrées du Fondateur et les siennes)');
+  await pause(400);
+  await capture(ipad, 'v2-14-ipad-lea-debriefing');
+  await fermer(ipad);
   await ouvrirReglagesTaches(ipad, 'reglages-notifications');
   verifier((await ipad.getByTestId('notif-type-office').count()) === 0 && (await ipad.getByTestId('notif-type-ami').count()) === 1, 'Léa : ses réglages (pas de type Claude Office)');
   await ipad.getByTestId('notif-ami-aucun').click();
@@ -584,6 +655,17 @@ try {
     return /Léa/.test(t);
   }, 180_000, 5000);
   verifier(tempsLea, 'le Fondateur voit le temps de Léa sur « Rédiger la FAQ »');
+  verifier(await attendre(async () => {
+    await relancer(ipad);
+    await pause(1500);
+    await relancer(pc);
+    if (!(await pc.getByTestId('app-taches').count())) await ouvrirTaches(pc);
+    await pc.getByTestId(`nav-projet-${idSite}`).click().catch(() => undefined);
+    await pc.getByTestId('taches-journal').click();
+    const t = await texteDe(pc, 'dialogue-journal').catch(() => '');
+    await fermer(pc);
+    return /Relu les textes de la FAQ/.test(t);
+  }, 180_000, 5000), 'le Fondateur voit l’entrée de Léa dans le journal du projet');
   verifier(await attendre(async () => {
     if (!(await pc.getByTestId('app-taches').count())) await ouvrirTaches(pc);
     await pc.getByTestId('taches-rappels').click();
@@ -618,6 +700,22 @@ try {
   const m3 = await mesurer(pc);
   verifier(m3.petitesCibles === 0 && m3.petitsTextes === 0 && m3.debordementPage === 0 && m3.deborde.length === 0, `iPhone relevé : mesures (${[...m3.exemplesCibles, ...m3.exemplesPetits, ...m3.deborde].slice(0, 4).join(' ; ')})`);
   await capture(pc, 'v2-12-iphone-releve');
+  await fermer(pc);
+  await pc.getByTestId('taches-journal').click();
+  await pause(600);
+  const m5 = await mesurer(pc);
+  verifier(m5.petitesCibles === 0 && m5.petitsTextes === 0 && m5.debordementPage === 0 && m5.deborde.length === 0, `iPhone journal : mesures (${[...m5.exemplesCibles, ...m5.exemplesPetits, ...m5.deborde].slice(0, 4).join(' ; ')})`);
+  await capture(pc, 'v2-15-iphone-journal');
+  await pc.getByTestId('journal-onglet-debrief').click();
+  await pause(400);
+  const m6 = await mesurer(pc);
+  verifier(m6.petitesCibles === 0 && m6.petitsTextes === 0 && m6.debordementPage === 0 && m6.deborde.length === 0, `iPhone débriefing : mesures (${[...m6.exemplesCibles, ...m6.exemplesPetits, ...m6.deborde].slice(0, 4).join(' ; ')})`);
+  await fermer(pc);
+  await pc.getByTestId('taches-menu').click();
+  await pc.getByTestId('menu-reglages-projet').click();
+  await pause(600);
+  const m7 = await mesurer(pc);
+  verifier(m7.petitesCibles === 0 && m7.petitsTextes === 0 && m7.debordementPage === 0 && m7.deborde.length === 0, `iPhone paramètres du projet : mesures (${[...m7.exemplesCibles, ...m7.exemplesPetits, ...m7.deborde].slice(0, 4).join(' ; ')})`);
   await fermer(pc);
   await ouvrirReglagesTaches(pc, 'reglages-liens');
   await pause(600);

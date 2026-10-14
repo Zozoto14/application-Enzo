@@ -47,9 +47,9 @@ export const ENTREES: readonly EntreeDevblog[] = [
   {
     version: '2026.10.25',
     date: '2026-10-25',
-    titre: 'Tâches V2 : temps, notifications, liens',
+    titre: 'Tâches V2 : temps, journal, notifications, liens',
     resume:
-      'Un minuteur sur chaque tâche et un relevé de la semaine, des notifications réglables à ta façon (heures calmes, sourdine, un seul appareil), la corbeille, et des liens avec tes autres apps.',
+      'Un minuteur sur chaque tâche et un relevé de la semaine, un journal du jour et son débriefing, des notifications réglables à ta façon, la corbeille, des projets à ton image et des liens avec tes autres apps.',
     illustration: 'hub',
     fonctionnalites: [
       {
@@ -69,6 +69,23 @@ export const ENTREES: readonly EntreeDevblog[] = [
           'Dans 👥 › Notifications : par type (échéance, retard, tâche assignée, modification de l’autre…), système ou pastille, heures calmes, projets en sourdine, un seul appareil, et « Tester une notification ».',
         essayer: { genre: 'app', app: 'taches' },
         app: 'taches',
+      },
+      {
+        id: 'taches-journal',
+        emoji: '📓',
+        titre: 'Journal du jour et débriefing',
+        texte:
+          'Note en une phrase ce que tu as fait (📓) : tes tâches terminées et ton temps du jour sont proposés. Le débriefing du jour ou de la semaine résume tout pour les autres membres du projet — à copier en Markdown.',
+        essayer: { genre: 'app', app: 'taches' },
+        app: 'taches',
+      },
+      {
+        id: 'taches-projets',
+        emoji: '⚙️',
+        titre: 'Projets à ton image, ouverture sur la semaine',
+        texte: 'Icône, description, dates, étiquettes et statuts de chaque projet (avec son historique) ; Tâches s’ouvre maintenant sur le calendrier de la semaine (réglable dans 👥).',
+        essayer: { genre: 'app', app: 'taches' },
+        adminSeulement: true,
       },
       {
         id: 'taches-liens',
