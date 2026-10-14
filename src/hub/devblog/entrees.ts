@@ -45,6 +45,46 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.26',
+    date: '2026-10-26',
+    titre: 'Connexion des amis : une invitation, ton mot de passe',
+    resume:
+      'Plus de mot de passe à recopier ni de code à six chiffres : le Fondateur t’envoie un lien d’invitation, tu choisis TON mot de passe, et tu te connectes partout avec ton prénom.',
+    illustration: 'isolation',
+    fonctionnalites: [
+      {
+        id: 'connexion-invitation',
+        emoji: '✉️',
+        titre: 'Un lien d’invitation, et c’est tout',
+        texte:
+          'Ouvre le lien reçu (téléphone ou ordinateur), choisis ton mot de passe (10 caractères au moins, l’indicateur te guide) : tu es connecté. Le lien ne sert qu’une fois et expire.',
+      },
+      {
+        id: 'connexion-identifiant',
+        emoji: '🔑',
+        titre: 'Ton prénom et ton mot de passe, partout',
+        texte:
+          'Sur un nouvel appareil : « Se connecter » sur le site, ton prénom (majuscules, accents et espaces n’y changent rien) et ton mot de passe. Ou, depuis un appareil déjà connecté, Paramètres › Compte › « Connecter un autre appareil » (QR code).',
+      },
+      {
+        id: 'connexion-messages',
+        emoji: '💬',
+        titre: 'Des messages qui disent quoi faire',
+        texte:
+          'Identifiant inconnu, mot de passe incorrect, invitation expirée ou déjà utilisée, compte pas encore publié, serveur injoignable : chaque cas a son message et la marche à suivre. Mot de passe oublié ? Demande un lien de réinitialisation.',
+      },
+      {
+        id: 'connexion-fondateur',
+        emoji: '🛡',
+        titre: 'Inviter, renvoyer, réinitialiser, révoquer',
+        texte:
+          'Administration › un compte : état clair (invité, actif, dernière connexion, appareils), « Copier le message d’invitation » (lien, QR code, code court), « Renvoyer une invitation », « Réinitialiser l’accès », « Révoquer l’accès ». Chiffré de bout en bout : le relais ne voit ni mot de passe ni clé.',
+        essayer: { genre: 'app', app: 'administration' },
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.25',
     date: '2026-10-25',
     titre: 'Tâches V2 : temps, journal, notifications, liens',

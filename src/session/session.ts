@@ -113,6 +113,10 @@ export class ErreurInvitationUtilisee extends ErreurSession {
 /** Seul message d'échec d'authentification : il ne dit jamais quel facteur est faux. */
 export const MESSAGE_ECHEC = 'Mot de passe ou code incorrect';
 
+/** Échec sur un coffre sans code TOTP (mot de passe choisi par invitation) : un seul facteur, message précis. */
+export const MESSAGE_ECHEC_MOT_DE_PASSE =
+  'Mot de passe incorrect. Vérifie les majuscules et les accents ; s’il est oublié, touche « Mot de passe oublié ».';
+
 /** Caractères invisibles qu'un copier-coller (gestionnaire, notes, courriel) peut ajouter. */
 const INVISIBLES = /[\u200B-\u200D\u2060\uFEFF\u00AD]/g;
 
@@ -346,7 +350,8 @@ export class Session {
     const trouve = this.essayerMotDePasse(coffre, options.motDePasse, true);
     if (!trouve) {
       this.enregistrerEchec();
-      throw new ErreurDeverrouillage(MESSAGE_ECHEC);
+      // Coffre sans code (mot de passe choisi par invitation) : le seul facteur est le mot de passe, on le dit.
+      throw new ErreurDeverrouillage(coffre.sansTotp ? MESSAGE_ECHEC_MOT_DE_PASSE : MESSAGE_ECHEC);
     }
 
     const secretTotp = lireSecretTotp(trouve.coffre, trouve.cle);

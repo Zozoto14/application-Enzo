@@ -3,7 +3,7 @@ import { aleatoireDeterministe } from '../securite/aleatoire';
 import { exempterTotp, totpExige, deverrouillerParMotDePasse } from '../securite/coffre';
 import type { ParametresKdf } from '../securite/kdf';
 import { codeTotp } from '../securite/totp';
-import { ErreurInvitationUtilisee, MESSAGE_ECHEC, Session, variantesMotDePasse } from '../session/session';
+import { ErreurInvitationUtilisee, MESSAGE_ECHEC, MESSAGE_ECHEC_MOT_DE_PASSE, Session, variantesMotDePasse } from '../session/session';
 import { stockageMemoire } from '../session/stockage-coffre';
 import { creerAccesAmi } from './identifiants';
 import {
@@ -193,7 +193,7 @@ describe('acceptation d’une invitation (coffre)', () => {
     expect(ami.statut()).toBe('deverrouille');
     ami.verrouiller();
     // L'ancien mot de passe temporaire ne marche plus, ni le TOTP seul.
-    expect(() => ami.deverrouiller({ motDePasse: ids.motDePasse, codeTotp: codeTotp(ids.secretTotp, HORLOGE) })).toThrow(MESSAGE_ECHEC);
+    expect(() => ami.deverrouiller({ motDePasse: ids.motDePasse, codeTotp: codeTotp(ids.secretTotp, HORLOGE) })).toThrow(MESSAGE_ECHEC_MOT_DE_PASSE);
     // Invitation rejouée : refusée avec un message précis.
     const autre = session(stockage);
     expect(() => autre.accepterInvitation(ids.motDePasse, 'nouveau-mot-de-passe')).toThrow(ErreurInvitationUtilisee);

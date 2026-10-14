@@ -17,6 +17,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 import { Alerte, Bouton, Champ, SousTitre, Titre, usePalette } from '../src/ui/composants';
 import { ESPACEMENT, RAYON, stylesPartages } from '../src/ui/theme';
 import { LONGUEUR_MIN_AMI, evaluerMotDePasse, formeCanonique } from '../src/profils/invitation';
+import { useMobile } from '../src/ui/mobile/useMobile';
 
 function message(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : String(erreur);
@@ -44,6 +45,8 @@ export function ChampMotDePasse({
 }) {
   const palette = usePalette();
   const [visible, setVisible] = useState(false);
+  // Téléphone : le champ a déjà son bouton « Afficher » (ChampMobile).
+  const mobile = useMobile();
   return (
     <View style={{ gap: 4 }}>
       <Champ
@@ -63,14 +66,16 @@ export function ChampMotDePasse({
         indication={indication}
         testID={testID}
       />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-        onPress={() => setVisible(v => !v)}
-        testID={`${testID}-afficher`}
-        style={{ alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 4, minHeight: 36 }}>
-        <Text style={{ color: palette.accent, fontWeight: '600' }}>{visible ? '🙈 Masquer' : '👁 Afficher'}</Text>
-      </Pressable>
+      {mobile ? null : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+          onPress={() => setVisible(v => !v)}
+          testID={`${testID}-voir`}
+          style={{ alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 4, minHeight: 36 }}>
+          <Text style={{ color: palette.accent, fontWeight: '600' }}>{visible ? '🙈 Masquer' : '👁 Afficher'}</Text>
+        </Pressable>
+      )}
     </View>
   );
 }

@@ -275,14 +275,17 @@ export function Deverrouillage({
         }
       />
 
-      <Text
-        accessibilityRole="button"
-        accessibilityLabel={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-        onPress={() => setVisible(v => !v)}
-        testID="afficher-mot-de-passe"
-        style={{ alignSelf: 'flex-end', color: palette.accent, fontWeight: '600', paddingVertical: 8, minHeight: 36 }}>
-        {visible ? '🙈 Masquer' : '👁 Afficher'}
-      </Text>
+      {/* Téléphone : le champ a déjà son bouton « Afficher » (ChampMobile). */}
+      {mobile ? null : (
+        <Text
+          accessibilityRole="button"
+          accessibilityLabel={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+          onPress={() => setVisible(v => !v)}
+          testID="champ-mot-de-passe-voir"
+          style={{ alignSelf: 'flex-end', color: palette.accent, fontWeight: '600', paddingVertical: 8, minHeight: 36 }}>
+          {visible ? '🙈 Masquer' : '👁 Afficher'}
+        </Text>
+      )}
 
       {sansCode ? null : (
       <Champ
