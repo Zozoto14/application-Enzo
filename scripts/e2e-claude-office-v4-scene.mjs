@@ -112,44 +112,55 @@ try {
   }).then(() => pause(300));
   const zoom = async () => Number(await plateau().getAttribute('data-zoom'));
   const centre = async () => (await plateau().getAttribute('data-centre')).split(',').map(Number);
+  /** Attend que la caméra ne bouge plus (échelle et centre inchangés pendant 300 ms) : fin d'une transition, sans durée fixe. */
+  const cameraImmobile = async () => {
+    await page.evaluate(() => { window.__camera = undefined; });
+    await page.waitForFunction(() => {
+    const p = document.querySelector('[data-testid="bureau-plateau"]');
+    const etat = `${p.getAttribute('data-zoom')}|${p.getAttribute('data-centre')}`;
+    const w = window.__camera;
+    if (!w || w.etat !== etat) { window.__camera = { etat, depuis: performance.now() }; return false; }
+    return performance.now() - w.depuis >= 300;
+  }, undefined, { timeout: 8000, polling: 'raf' }).catch(() => undefined);
+  };
   const cadreVue = () => page.getByTestId('bureau-scene-defilement').boundingBox();
   const dansLEcran = r => r && r.x >= -1 && r.y >= -1 && r.x + r.width <= page.viewportSize().width + 1 && r.y + r.height <= page.viewportSize().height + 1;
-  /** Un point de la zone qui n'est couvert par aucun personnage (pour survoler ou toucher la zone elle-même). */
-  const pointZone = (zone, strict = false) => page.evaluate(([z, strict]) => {
+  /**
+   * Un point de la zone qui n'est couvert par rien (ni personnage, ni bouton flottant, ni mini-carte), le plus loin possible des
+   * personnages : `niveau` 0 = marges larges, 1 et 2 = marges réduites (l'iPhone ne montre qu'un morceau de la pièce, plein de monde).
+   */
+  const pointZone = (zone, niveau = 0) => page.evaluate(([z, niveau]) => {
     const poly = document.querySelector(`[data-co-zone="${z}"]`);
     const r = poly.getBoundingClientRect();
     const v = document.querySelector('[data-testid="bureau-scene-defilement"]').getBoundingClientRect();
-    // Loin de tout personnage (ils marchent : un double-tap ne doit pas tomber sur l'un d'eux entre les deux touchers).
+    const [margePerso, margeCadre] = [[45, 60], [28, 40], [14, 24]][niveau];
     const persos = [...document.querySelectorAll('[data-co-agent],[data-co-sous]')].map(e => e.getBoundingClientRect());
-    const libre = (x, y) => persos.every(p => x < p.left - 45 || x > p.right + 45 || y < p.top - 45 || y > p.bottom + 45);
-    for (let fy = 0.5; fy > 0.1; fy -= 0.05) {
-      for (let fx = 0.5; fx > 0.1; fx -= 0.05) {
-        for (const [x, y] of [[r.x + r.width * fx, r.y + r.height * fy], [r.x + r.width * (1 - fx), r.y + r.height * (1 - fy)]]) {
-          if (x < v.left + 60 || x > v.right - 60 || y < v.top + 60 || y > v.bottom - 70) continue;
-          if (document.elementFromPoint(x, y)?.getAttribute('data-co-zone') === z && libre(x, y)) return { x, y };
-        }
+    const libre = (x, y) => persos.every(p => x < p.left - margePerso || x > p.right + margePerso || y < p.top - margePerso || y > p.bottom + margePerso);
+    let meilleur;
+    for (let fy = 0.1; fy <= 0.9; fy += 0.04) {
+      for (let fx = 0.1; fx <= 0.9; fx += 0.04) {
+        const x = r.x + r.width * fx;
+        const y = r.y + r.height * fy;
+        if (x < v.left + margeCadre || x > v.right - margeCadre || y < v.top + margeCadre || y > v.bottom - margeCadre - 10) continue;
+        if (document.elementFromPoint(x, y)?.getAttribute('data-co-zone') !== z || !libre(x, y)) continue;
+        // Le plus éloigné des personnages.
+        const d = Math.min(1e9, ...persos.map(p => Math.hypot(Math.max(p.left - x, 0, x - p.right), Math.max(p.top - y, 0, y - p.bottom))));
+        if (!meilleur || d > meilleur.d) meilleur = { x, y, d };
       }
     }
-    // Repli : sans marge autour des personnages.
-    if (strict) return undefined;
-    for (let fy = 0.5; fy > 0.1; fy -= 0.05) {
-      for (let fx = 0.5; fx > 0.1; fx -= 0.05) {
-        const [x, y] = [r.x + r.width * fx, r.y + r.height * fy];
-        if (x < v.left + 60 || x > v.right - 60 || y < v.top + 60 || y > v.bottom - 70) continue;
-        if (document.elementFromPoint(x, y)?.getAttribute('data-co-zone') === z) return { x, y };
-      }
-    }
-    return undefined;
-  }, [zone, strict]);
+    return meilleur ? { x: meilleur.x, y: meilleur.y } : undefined;
+  }, [zone, niveau]);
+  /** Idem, en réduisant les marges jusqu'à trouver un point. */
+  const pointZoneAuto = async zone => (await pointZone(zone, 0)) ?? (await pointZone(zone, 1)) ?? (await pointZone(zone, 2));
   /** Un point du plateau hors de tout personnage et de toute zone (pour « toucher ailleurs »). */
   const pointVide = () => page.evaluate(() => {
     const v = document.querySelector('[data-testid="bureau-scene-defilement"]').getBoundingClientRect();
-    for (let fy = 0.15; fy < 0.9; fy += 0.05) {
-      for (let fx = 0.3; fx < 0.95; fx += 0.05) {
+    for (let fy = 0.1; fy < 0.9; fy += 0.025) {
+      for (let fx = 0.1; fx < 0.95; fx += 0.025) {
         const x = v.left + v.width * fx;
         const y = v.top + v.height * fy;
         const el = document.elementFromPoint(x, y);
-        if (el && el.closest('[data-testid="bureau-scene-defilement"]') && !el.closest('[data-co-agent],[data-co-sous],[data-co-zone],button')) return { x, y };
+        if (el && el.closest('[data-testid="bureau-scene-defilement"]') && !el.closest('[data-co-agent],[data-co-sous],[data-co-zone],button,[data-testid^="scene-carte"],[data-testid^="scene-minicarte"],[data-testid^="scene-relecture"],[data-testid^="scene-suivi"],[data-testid^="scene-puce"]')) return { x, y };
       }
     }
     return undefined;
@@ -163,7 +174,9 @@ try {
       const cible = page.locator(`[data-co-agent="${cle}"]`);
       const b = await cible.boundingBox();
       const mode = await page.locator(`g[data-cle="${cle}"]`).first().getAttribute('data-mode').catch(() => 'marche');
-      if (b && mode !== 'marche' && b.x > v.x + 50 && b.x + b.width < v.x + v.width - 50 && b.y > v.y + 50 && b.y + b.height < v.y + v.height - 60) return cible;
+      // Au-dessus de tout le reste en son centre : un personnage voisin ne doit pas intercepter le toucher.
+      const dessus = await cible.evaluate(e => { const r = e.getBoundingClientRect(); const t = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return t === e || e.contains(t); }).catch(() => false);
+      if (b && dessus && mode !== 'marche' && b.x > v.x + 50 && b.x + b.width < v.x + v.width - 50 && b.y > v.y + 50 && b.y + b.height < v.y + v.height - 60) return cible;
     }
     return page.locator(`[data-co-agent="${cles[0]}"]`);
   };
@@ -225,14 +238,14 @@ try {
   // Survol d'une zone : nom, nombre, rôle.
   await page.mouse.move(1, 1);
   await pause(400);
-  const pz = await pointZone('bibliotheque');
+  const pz = await pointZoneAuto('bibliotheque');
   if (pz) {
     await page.mouse.move(pz.x, pz.y);
     await page.mouse.move(pz.x + 3, pz.y + 2);
     await page.getByTestId('scene-carte-zone').waitFor({ timeout: 3000 }).catch(() => undefined);
   }
   verifier(Boolean(pz) && /Bibliothèque/.test(await page.getByTestId('scene-carte-zone').innerText().catch(() => '')), 'survol d’une zone : nom, nombre d’agents, à quoi elle sert');
-  const pg = await pointZone('guichet');
+  const pg = await pointZoneAuto('guichet');
   if (pg) {
     await page.mouse.move(pg.x, pg.y);
     await page.mouse.move(pg.x + 2, pg.y + 1);
@@ -280,7 +293,7 @@ try {
   await remonter();
   await page.getByTestId('scene-recentrer').click();
   await pause(500);
-  const pa = await pointZone('atelier');
+  const pa = await pointZoneAuto('atelier');
   if (pa) await page.mouse.dblclick(pa.x, pa.y);
   await pause(700);
   verifier(Boolean(pa) && (await zoom()) > z0 * 1.4, `double-clic sur l’Atelier : la zone est cadrée (${await zoom()})`);
@@ -307,13 +320,17 @@ try {
 
   // Mini-carte : repliable, et on s'y déplace.
   if (!(await page.getByTestId('scene-minicarte').count())) await page.getByTestId('scene-minicarte-basculer').click();
+  await cameraImmobile();
+  const cx0 = (await centre())[0];
   const mini = await page.getByTestId('scene-minicarte').boundingBox();
   await page.mouse.click(mini.x + mini.width * 0.85, mini.y + mini.height * 0.5);
-  await pause(500);
+  await cameraImmobile();
   await page.getByTestId('scene-zoom-plus').click();
+  await cameraImmobile();
   await page.mouse.click(mini.x + mini.width * 0.85, mini.y + mini.height * 0.5);
-  await pause(600);
-  verifier((await centre())[0] > 700, `mini-carte : un toucher y déplace la vue (${await centre()})`);
+  // Attente explicite de la caméra (la transition vers le point touché), pas d'une durée fixe.
+  await page.waitForFunction(x0 => Number(document.querySelector('[data-testid="bureau-plateau"]').getAttribute('data-centre').split(',')[0]) > x0 + 60, cx0, { timeout: 5000, polling: 'raf' }).catch(() => undefined);
+  verifier((await centre())[0] > cx0 + 60, `mini-carte : un toucher à droite y déplace la vue vers la droite (${cx0} → ${await centre()})`);
   await page.getByTestId('scene-minicarte-basculer').click();
   verifier((await page.getByTestId('scene-minicarte').count()) === 0, 'mini-carte repliée');
   await page.getByTestId('scene-minicarte-basculer').click();
@@ -375,15 +392,19 @@ try {
   await page.keyboard.press('f');
   await pause(900);
   verifier(modeF === 'immersif' && (await plateau().getAttribute('data-mode')) === 'normal', `touche F : plein écran puis retour (${modeF})`);
+  // Chaque touche est suivie d'une attente explicite du nouvel état (le libellé de suivi change), sans pause arbitraire :
+  // l'ordre des agents évolue avec la démo, donc J, J, K doivent s'enchaîner vite pour juger le même ordre.
+  const lireSuivi = () => page.getByTestId('scene-suivi').innerText({ timeout: 2000 }).catch(() => '');
+  const attendreSuiviDifferent = avant => page.waitForFunction(t => { const e = document.querySelector('[data-testid="scene-suivi"]'); return Boolean(e) && e.textContent !== t; }, avant, { timeout: 5000 }).catch(() => undefined);
   await page.keyboard.press('j');
-  await pause(1500);
-  const suiviJ = await page.getByTestId('scene-suivi').innerText().catch(() => '');
+  await attendreSuiviDifferent('');
+  const suiviJ = await lireSuivi();
   await page.keyboard.press('j');
-  await pause(1200);
-  const suiviJ2 = await page.getByTestId('scene-suivi').innerText().catch(() => '');
+  await attendreSuiviDifferent(suiviJ);
+  const suiviJ2 = await lireSuivi();
   await page.keyboard.press('k');
-  await pause(1200);
-  const suiviK = await page.getByTestId('scene-suivi').innerText().catch(() => '');
+  await attendreSuiviDifferent(suiviJ2);
+  const suiviK = await lireSuivi();
   verifier(Boolean(suiviJ) && suiviJ2 !== suiviJ && suiviK === suiviJ && (await page.getByTestId('scene-carte').count()) === 1 && (await page.getByTestId('bureau-detail').count()) === 0, `touches J / K : la caméra suit l’agent suivant puis le précédent (« ${suiviJ} » → « ${suiviJ2} » → « ${suiviK} »)`);
   await page.getByTestId('scene-suivi').click().catch(() => undefined);
   await page.keyboard.press('Escape');
@@ -403,12 +424,13 @@ try {
   // Sous-agents (démo) : un petit personnage sort de la réunion, travaille, rend son travail au parent et disparaît.
   await remonter();
   await page.getByTestId('scene-recentrer').click();
-  // Un sous-agent qui vient d'apparaître (il a toute sa vie devant lui).
+  // Un sous-agent qui vient d'apparaître ET qui vit longtemps : le « general-purpose » de la démo (« …-c », 41 s de travail avant
+  // de rendre son travail). Les autres vivent 12 à 27 s : trop justes pour enchaîner survol, détail et attente du rendu.
   const deja = new Set(await page.locator('[data-sous]').evaluateAll(e => e.map(x => x.getAttribute('data-sous'))));
   let idSous;
-  for (let i = 0; i < 60 && !idSous; i++) {
+  for (let i = 0; i < 130 && !idSous; i++) {
     const ids = await page.locator('[data-sous][data-phase="travaille"]').evaluateAll(e => e.map(x => x.getAttribute('data-sous')));
-    idSous = ids.find(x => !deja.has(x));
+    idSous = ids.find(x => !deja.has(x) && /^demo-agent-\d+-c$/.test(x));
     if (!idSous) await pause(1000);
   }
   verifier(Boolean(idSous), `sous-agent : un mini-personnage apparaît (${idSous})`);
@@ -424,14 +446,9 @@ try {
   verifier((await page.getByTestId('bureau-detail-sous-agents').count()) === 1, `détail du parent : section « Sous-agents » (détail ouvert : ${await page.getByTestId('bureau-detail').count()})`);
   await page.getByTestId('bureau-detail-fermer').click().catch(() => undefined);
   await page.mouse.move(1, 1);
-  let vuRendu = false;
-  let parti = false;
-  for (let i = 0; i < 60 && !parti; i++) {
-    const phase = await page.locator(`[data-sous="${idSous}"]`).getAttribute('data-phase', { timeout: 300 }).catch(() => undefined);
-    if (phase === 'rendu') vuRendu = true;
-    if (!phase) parti = true;
-    else await pause(1000);
-  }
+  // Attentes d'état (sondées à chaque image, pas toutes les secondes : la phase « rendu » ne dure que ~4 s), sans pause arbitraire.
+  const vuRendu = await page.waitForFunction(id => document.querySelector(`[data-sous="${id}"]`)?.getAttribute('data-phase') === 'rendu', idSous, { timeout: 90_000, polling: 'raf' }).then(() => true, () => false);
+  const parti = vuRendu && (await page.waitForFunction(id => !document.querySelector(`[data-sous="${id}"]`), idSous, { timeout: 20_000, polling: 'raf' }).then(() => true, () => false));
   verifier(vuRendu && parti, `sous-agent : à sa fin, il rend son travail au parent puis disparaît (rendu vu : ${vuRendu})`);
   await page.getByTestId('bureau-vue-liste').click();
   await page.locator('[data-testid^="bureau-sous-agents-"]').first().waitFor({ timeout: 40_000 }).catch(() => undefined);
@@ -469,6 +486,7 @@ try {
     await (await cibleVisible()).tap();
     await pause(300);
     const pzt = await pointVide();
+    verifier(Boolean(pzt), `${nom} : un point libre existe dans la scène pour « tap ailleurs »`);
     if (pzt) await page.touchscreen.tap(pzt.x, pzt.y);
     await pause(400);
     verifier((await page.getByTestId('scene-carte').count()) === 0, `${nom} : tap ailleurs = la carte se ferme`);
@@ -476,20 +494,38 @@ try {
     await page.getByTestId('scene-recentrer').tap();
     await pause(500);
     const zr = await zoom();
-    // Un point de zone loin des personnages (la démo en compte beaucoup) : d'abord sans repli, zone par zone.
+    // Un point de zone loin des personnages (la démo en compte beaucoup) : marges larges d'abord, zone par zone, puis réduites.
     let pd;
     let zd;
-    for (const z of ['atelier', 'reflexion', 'cafe', 'bibliotheque', 'detente']) if (!pd && (pd = await pointZone(z, true))) zd = z;
-    if (!pd) pd = await pointZone((zd = 'atelier'));
-    let sousLeDoigt = '';
+    for (const niveau of [0, 1, 2]) for (const z of ['atelier', 'reflexion', 'cafe', 'bibliotheque', 'detente', 'reunion', 'machines', 'accueil']) if (!pd && (pd = await pointZone(z, niveau))) zd = z;
+    // Rien ne doit couvrir le point choisi (carte d'aperçu restée ouverte, bouton flottant) : on le vérifie AVANT les touchers,
+    // pour que les deux touchers se suivent sans pause ni mesure entre eux (le double-tap se joue en moins de 340 ms).
+    verifier((await page.getByTestId('scene-carte').count()) === 0, `${nom} : aucune carte ouverte avant le double-tap`);
+    const sousLeDoigt = pd ? await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.getAttribute('data-co-zone') ?? 'couvert', [pd.x, pd.y]) : '';
+    verifier(Boolean(pd) && sousLeDoigt === zd, `${nom} : le point du double-tap est bien sur la zone « ${zd} » (sous le doigt : ${sousLeDoigt})`);
+    // « Cadrer » une zone = l'amener tout entière dans la vue (au-dessus de l'échelle de départ pour une petite zone, un peu en
+    // dessous pour une grande zone sur un téléphone, où la vue ne montre qu'un morceau de la pièce). Le test juge donc l'état de la
+    // caméra : elle a bougé ET la zone tient entièrement dans le cadre, une fois la transition terminée.
+    const avant = { zoom: zr, centre: await centre() };
+    const zoneCadree = ([z, avant]) => {
+      const plateau = document.querySelector('[data-testid="bureau-plateau"]');
+      const [cx, cy] = plateau.getAttribute('data-centre').split(',').map(Number);
+      const bouge = Math.abs(Number(plateau.getAttribute('data-zoom')) / avant.zoom - 1) > 0.02 || Math.hypot(cx - avant.centre[0], cy - avant.centre[1]) > 2;
+      const v = document.querySelector('[data-testid="bureau-scene-defilement"]').getBoundingClientRect();
+      const r = document.querySelector(`polygon[data-co-zone="${z}"]`).getBoundingClientRect();
+      return bouge && r.left >= v.left - 3 && r.right <= v.right + 3 && r.top >= v.top - 3 && r.bottom <= v.bottom + 3;
+    };
+    let cadree = false;
     if (pd) {
       await page.touchscreen.tap(pd.x, pd.y);
-      await pause(90);
-      sousLeDoigt = await page.evaluate(([x, y]) => { const e = document.elementFromPoint(x, y); return e?.getAttribute('data-co-zone') ?? e?.getAttribute('data-testid') ?? e?.closest('[data-testid]')?.getAttribute('data-testid') ?? e?.tagName; }, [pd.x, pd.y]);
       await page.touchscreen.tap(pd.x, pd.y);
+      cadree = await page.waitForFunction(zoneCadree, [zd, avant], { timeout: 5000, polling: 'raf' }).then(() => true, () => false);
+      // La transition (380 ms) se termine : l'état final est stable.
+      const z1 = await zoom();
+      await page.waitForFunction(z => Math.abs(Number(document.querySelector('[data-testid="bureau-plateau"]').getAttribute('data-zoom')) - z) < 1e-6, z1, { timeout: 3000, polling: 'raf' }).catch(() => undefined);
+      cadree = cadree && (await page.evaluate(zoneCadree, [zd, avant]));
     }
-    await pause(700);
-    verifier(Boolean(pd) && (await zoom()) > zr * 1.1, `${nom} : double-tap sur une zone = zoom dessus (${zd}, ${zr} → ${await zoom()}, sous le doigt : ${sousLeDoigt})`);
+    verifier(Boolean(pd) && cadree, `${nom} : double-tap sur une zone = zone cadrée (${zd}, échelle ${zr} → ${await zoom()}, centre ${avant.centre} → ${await centre()})`);
     await page.getByTestId('scene-recentrer').tap();
     await pause(500);
     await controler(`${nom}, démo en scène (sombre)`);

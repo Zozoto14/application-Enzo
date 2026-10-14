@@ -149,10 +149,39 @@ describe('sous-agents : statistiques, récap, chronologie, démo', () => {
     expect(sousAgentsEnCours(sousAgents(entreesDemoSousAgents(debut, cycle2), { maintenant: cycle2 })[`demo00000000|${SESSION_DEMO_SOUS_AGENTS}`])).toHaveLength(4);
   });
 
-  it('Statistiques : carte « Sous-agents » (démo)', async () => {
+  // Instants fixes (jamais l'heure courante) : le contenu de l'historique fictif dépend du jour de la semaine,
+  // le test doit donc être rejoué à des instants précis, dont les heures limites autour de minuit.
+  const CAS_STATS: Array<[string, string, string]> = [
+    ['Europe/Paris', '2026-10-14T00:30:00', 'mercredi 00:30'],
+    ['Europe/Paris', '2026-10-14T23:30:00', 'mercredi 23:30'],
+    ['Europe/Paris', '2026-10-17T00:30:00', 'samedi 00:30'],
+    ['Europe/Paris', '2026-10-18T23:30:00', 'dimanche 23:30'],
+    ['Europe/Paris', '2026-03-29T00:30:00', 'passage à l’heure d’été 00:30'],
+    ['UTC', '2026-10-14T00:30:00', 'UTC 00:30'],
+    ['UTC', '2026-10-14T23:30:00', 'UTC 23:30'],
+    ['America/Los_Angeles', '2026-10-14T23:30:00', 'Los Angeles 23:30'],
+  ];
+  const env = (globalThis as unknown as { process: { env: Record<string, string | undefined> } }).process.env; // Node (Jest) : le fuseau se change à chaud
+  const TZ_INITIAL = env.TZ;
+  afterEach(() => {
+    if (TZ_INITIAL === undefined) delete env.TZ;
+    else env.TZ = TZ_INITIAL;
+  });
+
+  it.each(CAS_STATS)('Statistiques : carte « Sous-agents » (démo), %s, %s (%s)', async (tz, local) => {
+    env.TZ = tz;
+    const maintenant = new Date(local).getTime(); // heure locale du fuseau simulé
     // L'historique fictif de 30 jours contient aussi des outils Task (hook d'avant la v4) : comptés comme sous-agents.
-    await render(<Statistiques theme={themeHub('nuit')} contexte={{} as ContexteHub} debutDemo={Date.now() - 60_000} />);
+    await render(<Statistiques theme={themeHub('nuit')} contexte={{} as ContexteHub} debutDemo={maintenant - 60_000} horloge={() => maintenant} />);
     expect(screen.getByTestId('stats-sous-agents')).toBeTruthy();
-    expect(screen.getByTestId('stats-sous-agents-resume').props.children.join('')).toMatch(/\d+ sous-agents dans \d+ sessions · jusqu’à 4 pour une session · jusqu’à 4 en parallèle · 1 en échec/);
+    const resume = screen.getByTestId('stats-sous-agents-resume').props.children.join('');
+    const m = resume.match(/^(\d+) sous-agents dans (\d+) sessions · jusqu’à (\d+) pour une session · jusqu’à (\d+) en parallèle · 1 en échec/);
+    expect(m).not.toBeNull();
+    const [total, sessions, maxSession, maxParalleles] = m!.slice(1).map(Number);
+    // La session de démo « refonte » (4 sous-agents lancés il y a 60 s, donc au plus tard la veille à minuit passé) est toujours comptée.
+    expect(total).toBeGreaterThanOrEqual(4);
+    expect(sessions).toBeGreaterThanOrEqual(1);
+    expect(maxSession).toBeGreaterThanOrEqual(4);
+    expect(maxParalleles).toBe(4);
   });
 });
