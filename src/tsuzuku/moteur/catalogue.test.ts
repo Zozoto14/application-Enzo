@@ -294,3 +294,12 @@ describe('cache du catalogue : requêtes groupées, périmé servi puis rafraîc
     expect([...garde.keys()].every(c => !/api_key|Bearer/.test(c))).toBe(true);
   });
 });
+
+describe('vignettes (cartes) : petite affiche, la grande pour la fiche', () => {
+  it('AniList « large », Jikan « image_url », TMDB w342 ; repli sur la grande', () => {
+    expect(mapperMediaAnilist({ ...mediaAnilist, coverImage: { extraLarge: 'https://img.exemple.fr/xl.jpg', large: 'https://img.exemple.fr/l.jpg' } })).toMatchObject({ image: 'https://img.exemple.fr/xl.jpg', vignette: 'https://img.exemple.fr/l.jpg' });
+    expect(mapperMediaAnilist(mediaAnilist)?.vignette).toBe('https://img.exemple.fr/x.jpg');
+    expect(mapperAnimeJikan(animeJikan)).toMatchObject({ image: 'https://img.exemple.fr/l.jpg', vignette: 'https://img.exemple.fr/s.jpg' });
+    expect(mapperFilmTmdb({ id: 1, title: 'X', poster_path: '/p.jpg' })).toMatchObject({ image: 'https://image.tmdb.org/t/p/w500/p.jpg', vignette: 'https://image.tmdb.org/t/p/w342/p.jpg' });
+  });
+});

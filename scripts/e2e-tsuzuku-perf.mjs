@@ -335,7 +335,14 @@ async function parcours(navigateur, mode) {
   const debutFiche = Date.now();
   await pg.getByTestId('catalogue-grille').getByTestId('carte-anime-1').first().click();
   t.fiche = await pg.getByTestId('fiche-titre').waitFor({ timeout: 30_000 }).then(() => Date.now() - debutFiche, () => null);
-  t.ficheSources = await pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 90_000 }).then(() => Date.now() - debutFiche, () => null);
+  // Premier affichage utile : le résultat provisoire (source moins prioritaire) ou le résultat final.
+  t.ficheSourcesPremier = await pg.locator('[data-testid="fiche-sources-provisoire"], [data-testid="fiche-sources-ok"]').first().waitFor({ timeout: 90_000 }).then(() => Date.now() - debutFiche, () => null);
+  const final = pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 90_000 }).then(() => Date.now() - debutFiche, () => null);
+  if (await pg.getByTestId('fiche-sources-provisoire').count()) {
+    await pg.getByTestId('fiche-sources').scrollIntoViewIfNeeded().catch(() => undefined);
+    await pg.screenshot({ path: join(CAPTURES, `${mode}-02a-fiche-provisoire.png`) }).catch(() => undefined);
+  }
+  t.ficheSources = await final;
   t.ficheLangues = await pg.getByTestId('fiche-langue-choix').waitFor({ timeout: 30_000 }).then(() => Date.now() - debutFiche, () => null);
   const texteOk = await pg.getByTestId('fiche-sources-ok').innerText().catch(() => '');
   verifier(/Médiathèque VF\/VOSTFR/.test(texteOk) && /12 épisode/.test(texteOk), `${mode} : « Le Long Voyage » trouvé sur la source 2 (12 épisodes, 2 pages)`);
@@ -395,7 +402,8 @@ const ETAPES = [
   ['accueil', 'Ouverture de l’app (Découvrir, 1re carte)'],
   ['catalogue', 'Recherche du catalogue'],
   ['fiche', 'Fiche : premier affichage (titre)'],
-  ['ficheSources', 'Fiche : « Sur vos sources » trouvé'],
+  ['ficheSourcesPremier', 'Fiche : 1er résultat des sources affiché'],
+  ['ficheSources', 'Fiche : « Sur vos sources » final'],
   ['ficheLangues', 'Fiche : sélecteur VF/VOSTFR'],
   ['episode', 'Épisode 2 : lecteur affiché'],
   ['langue', 'Bascule VF/VOSTFR'],
@@ -437,6 +445,7 @@ if (process.env.SORTIE) writeFileSync(process.env.SORTIE, JSON.stringify(mesures
 for (const mode of MODES) {
   const m = mesures[mode] ?? {};
   seuil(m.fiche, 3000, `${mode} : fiche affichée`);
+  seuil(m.ficheSourcesPremier, 5000, `${mode} : premier résultat des sources affiché (provisoire)`);
   seuil(m.ficheSources, 9000, `${mode} : « Sur vos sources » (source prioritaire lente : course + délai de grâce)`);
   seuil(m.episode, 4000, `${mode} : épisode lu depuis la fiche`);
   seuil(m.langue, 3000, `${mode} : bascule VF/VOSTFR`);

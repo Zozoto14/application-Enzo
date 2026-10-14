@@ -319,7 +319,10 @@ function texteLisibleSur(hexa: string): string {
 
 const LARGEUR_CARTE = 150;
 
-export function Affiche({ e, largeur = LARGEUR_CARTE }: { e: ElementCarte; largeur?: number }) {
+/** Affiches chargées tout de suite dans une rangée ; les suivantes, dès qu'on la fait défiler. */
+export const AFFICHES_IMMEDIATES = 8;
+
+export function Affiche({ e, largeur = LARGEUR_CARTE, differee = false }: { e: ElementCarte; largeur?: number; differee?: boolean }) {
   const { theme } = useTsuzuku();
   const hauteur = Math.round(largeur * 1.5);
   const vu = e.statut === 'vu' || e.statut === 'vu_ailleurs';
@@ -343,7 +346,7 @@ export function Affiche({ e, largeur = LARGEUR_CARTE }: { e: ElementCarte; large
         },
       ]}>
       <View style={{ width: largeur, height: hauteur, backgroundColor: teinteTransparente(theme.texte, 0.06), alignItems: 'center', justifyContent: 'center' }}>
-        {e.image ? (
+        {e.image && differee ? null : e.image ? (
           <Image source={{ uri: e.image }} accessibilityIgnoresInvertColors style={{ width: largeur, height: hauteur }} resizeMode="cover" />
         ) : (
           <Text numberOfLines={3} style={[styleTitre(theme, 14), { color: theme.attenue, textAlign: 'center', paddingHorizontal: 10 }]}>{e.titre}</Text>
@@ -406,10 +409,13 @@ export function Rangee({ titre, elements, testID }: { titre: string; elements: E
   const { theme, large } = useTsuzuku();
   const defil = React.useRef<React.ComponentRef<typeof ScrollView>>(null);
   const x = React.useRef(0);
+  // Images hors champ : chargées au premier défilement de la rangée (pas 20 affiches d'un coup par rangée).
+  const [toutes, setToutes] = React.useState(false);
   if (!elements.length) {
     return null;
   }
   const pousser = (sens: number) => {
+    setToutes(true);
     x.current = Math.max(0, x.current + sens * (LARGEUR_CARTE + 12) * 4);
     defil.current?.scrollTo({ x: x.current, animated: true });
   };
@@ -421,9 +427,18 @@ export function Rangee({ titre, elements, testID }: { titre: string; elements: E
   return (
     <View style={{ gap: 12 }} testID={testID} accessibilityLabel={titre}>
       <TitreSection action={large && elements.length > 4 ? <View style={{ flexDirection: 'row', gap: 6 }}>{fleche(-1, '‹', 'Défiler vers la gauche')}{fleche(1, '›', 'Défiler vers la droite')}</View> : undefined}>{titre}</TitreSection>
-      <ScrollView ref={defil} horizontal showsHorizontalScrollIndicator={false} onScroll={ev => (x.current = ev.nativeEvent.contentOffset.x)} scrollEventThrottle={64} contentContainerStyle={{ gap: 12, paddingRight: 16, paddingVertical: 2, alignItems: 'flex-start' }}>
-        {elements.map(e => (
-          <Affiche key={e.cle} e={e} />
+      <ScrollView
+        ref={defil}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        onScroll={ev => {
+          x.current = ev.nativeEvent.contentOffset.x;
+          if (!toutes && x.current > 0) setToutes(true);
+        }}
+        scrollEventThrottle={64}
+        contentContainerStyle={{ gap: 12, paddingRight: 16, paddingVertical: 2, alignItems: 'flex-start' }}>
+        {elements.map((e, i) => (
+          <Affiche key={e.cle} e={e} differee={!toutes && i >= AFFICHES_IMMEDIATES} />
         ))}
       </ScrollView>
     </View>

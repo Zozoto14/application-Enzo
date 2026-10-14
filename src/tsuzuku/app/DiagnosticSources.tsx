@@ -217,11 +217,21 @@ function Ecoule({ actif }: { actif: boolean }) {
 export function DisponibiliteSources({ id, titres, oeuvre }: { id: string; titres: readonly string[]; oeuvre?: string }) {
   const { s, theme, version, changee } = useTsuzuku();
   const [essai, setEssai] = useState(0);
+  // Affichage progressif : ce qu'une source moins prioritaire a déjà trouvé, pendant que les autres cherchent.
+  const [provisoire, setProvisoire] = useState<{ cle: string; d: Disponibilite } | null>(null);
+  const cleRecherche = `${id}|${titres.join('|')}|${essai}|${version}`;
   const etat = useCharger(async () => {
-    const d = await episodesDisponibles(s, { id, titres, forcer: essai > 0, langue: (await langueVoulue(s, `anime:${id}`)).langue });
+    const d = await episodesDisponibles(s, {
+      id,
+      titres,
+      forcer: essai > 0,
+      langue: (await langueVoulue(s, `anime:${id}`)).langue,
+      surProvisoire: p => setProvisoire({ cle: cleRecherche, d: p }),
+    });
     return { d, perso: (await lireTitresPerso(s))[`anime:${id}`] };
   }, [s, id, titres.join('|'), essai, version]);
   const d = etat.donnees?.d;
+  const enAttente = provisoire && provisoire.cle === cleRecherche && etat.enCours ? provisoire.d : null;
   // Résultat périmé servi par le cache : quand la recherche fraîche change quelque chose, les écrans se relisent.
   const rafraichissement = d?.rafraichissement;
   useEffect(() => {
@@ -244,7 +254,13 @@ export function DisponibiliteSources({ id, titres, oeuvre }: { id: string; titre
           Site web : lecture via le relais
         </Text>
       ) : null}
-      {etat.enCours && !d ? (
+      {etat.enCours && !d && enAttente?.resultat ? (
+        <Avis
+          genre="info"
+          testID="fiche-sources-provisoire"
+          texte={`« ${enAttente.resultat.serie?.title ?? titres[0]} » trouvé sur « ${enAttente.resultat.source?.name ?? 'une source'} » : ${enAttente.episodes.length} épisode(s). Vos sources prioritaires cherchent encore (quelques secondes au plus)…`}
+        />
+      ) : etat.enCours && !d ? (
         <Text style={styleAttenue(theme, 13)} testID="fiche-sources-recherche" accessibilityLiveRegion="polite">
           Recherche sur vos sources…
           <Ecoule actif={etat.enCours && !d} />

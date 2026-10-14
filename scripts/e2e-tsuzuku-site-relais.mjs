@@ -408,6 +408,14 @@ try {
   verifier(await pg.frameLocator('[data-testid="lecteur-iframe"]').getByText('Lecteur neutre (/embed/spa-2)').waitFor({ timeout: 20_000 }).then(() => true, () => false), 'l’épisode 2 se lit depuis le site');
   await capture(pg, '05-site-lecture');
   await pg.getByTestId('lecteur-retour').click();
+  // Seconde ouverture de la fiche : depuis le cache (gardé dans la base du profil), sans passer par le relais.
+  const appelsAvant = appelsTsuzuku('maitre').length;
+  const debutFiche = Date.now();
+  await ouvrirFiche(pg, 1);
+  await pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 30_000 });
+  const reouverture = Date.now() - debutFiche;
+  const mesureFiche = await pg.getByTestId('fiche-sources-mesure').innerText().catch(() => '');
+  verifier(reouverture < 2500 && /^Depuis le cache/.test(mesureFiche) && appelsTsuzuku('maitre').length === appelsAvant, `fiche rouverte en ${reouverture} ms « ${mesureFiche} », aucun appel au relais`);
 
   // ============================================================ Garde du relais, appels directs depuis la page
   log('Garde du relais (appels directs depuis la page)');

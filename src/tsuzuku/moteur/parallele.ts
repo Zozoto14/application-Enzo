@@ -180,7 +180,14 @@ export interface IssueSource<T> {
 export async function courseAvecPriorite<T>(
   taches: ReadonlyArray<(signal: SignalAnnulation) => Promise<T>>,
   gagne: (resultat: T) => boolean,
-  o: { simultanees: number; graceMs: number; relaisMs?: number; signal?: SignalAnnulation },
+  o: {
+    simultanees: number;
+    graceMs: number;
+    relaisMs?: number;
+    signal?: SignalAnnulation;
+    /** Une source moins prioritaire a trouvé, les plus prioritaires cherchent encore : résultat provisoire. */
+    surProvisoire?: (resultat: T, i: number) => void;
+  },
 ): Promise<{ issues: IssueSource<T>[]; gagnante: number | null }> {
   const n = taches.length;
   const issues: IssueSource<T>[] = [];
@@ -239,6 +246,14 @@ export async function courseAvecPriorite<T>(
         }
         premiereSeule = false;
         decider();
+        // Pas encore décidé : la meilleure trouvaille jusqu'ici peut déjà s'afficher.
+        if (fin && candidate === i && o.surProvisoire) {
+          try {
+            o.surProvisoire(r as T, i);
+          } catch {
+            // L'affichage provisoire ne doit jamais casser la recherche.
+          }
+        }
         if (fin) remplir();
       });
   };

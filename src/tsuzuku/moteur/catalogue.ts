@@ -30,6 +30,8 @@ export interface FicheAnime {
   titresAlternatifs?: string[];
   synopsis: string | null;
   image: string | null;
+  /** Affiche en petite taille (cartes des rangées et grilles : ~3 fois plus légère). */
+  vignette?: string | null;
   banner?: string | null;
   trailer: string | null;
   totalEpisodes: number | null;
@@ -58,6 +60,8 @@ export interface FicheFilm {
   originalTitle: string | null;
   synopsis: string | null;
   image: string | null;
+  /** Affiche en petite taille (cartes des rangées et grilles). */
+  vignette?: string | null;
   banner: string | null;
   year: number | null;
   releaseDate: string | null;
@@ -132,6 +136,7 @@ export function mapperAnimeJikan(a: Brut): FicheAnime | null {
     titresAlternatifs: titresJikan(a),
     synopsis: a.synopsis || null,
     image: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || null,
+    vignette: a.images?.jpg?.image_url || a.images?.jpg?.large_image_url || null,
     trailer: a.trailer?.embed_url || null,
     totalEpisodes: a.episodes ?? null,
     airingStatus: a.status || null,
@@ -188,6 +193,7 @@ export function mapperMediaAnilist(m: Brut): FicheAnime | null {
     titresAlternatifs: sansDoublon([m.title?.english, m.title?.romaji, ...(Array.isArray(m.synonyms) ? m.synonyms : [])]),
     synopsis: retirerHtml(m.description),
     image: m.coverImage?.extraLarge || m.coverImage?.large || null,
+    vignette: m.coverImage?.large || m.coverImage?.extraLarge || null,
     banner: m.bannerImage || null,
     trailer: null,
     totalEpisodes: m.episodes ?? null,
@@ -269,6 +275,7 @@ export function mapperFilmTmdb(m: Brut, nomsGenres: Map<number, string> = new Ma
     originalTitle: m.original_title || null,
     synopsis: m.overview || null,
     image: m.poster_path ? `${IMG}/w500${m.poster_path}` : null,
+    vignette: m.poster_path ? `${IMG}/w342${m.poster_path}` : null,
     banner: m.backdrop_path ? `${IMG}/w1280${m.backdrop_path}` : null,
     year: annee(m.release_date),
     releaseDate: m.release_date || null,
@@ -311,6 +318,7 @@ export function mapperFilmJikan(a: Brut): FicheFilm | null {
     originalTitle: a.title || null,
     synopsis: a.synopsis || null,
     image: a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || null,
+    vignette: a.images?.jpg?.image_url || a.images?.jpg?.large_image_url || null,
     banner: null,
     year: a.year ?? a.aired?.prop?.from?.year ?? null,
     releaseDate: a.aired?.from ? String(a.aired.from).slice(0, 10) : null,

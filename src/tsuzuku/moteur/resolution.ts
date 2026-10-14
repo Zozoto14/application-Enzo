@@ -645,6 +645,11 @@ export async function lireEpisodes(ctx: ContexteResolution, src: DefinitionSourc
 
 export interface OptionsEpisodes {
   titres: readonly string[];
+  /**
+   * Une source moins prioritaire a trouvé pendant que les plus prioritaires
+   * cherchent encore : son résultat, PROVISOIRE (affichage progressif).
+   */
+  surProvisoire?: (r: ResultatEpisodes) => void;
   /** Adresse de serie deja connue : saute la recherche. */
   url?: string | null;
   langue?: PreferenceLangue | null;
@@ -1122,7 +1127,7 @@ export async function trouverEpisodes(
   const { issues, gagnante } = await courseAvecPriorite(
     actives.map(src => (signal: SignalAnnulation) => episodesSur(sousContexte(ctx, signal), src, o)),
     r => r.episodes.length > 0,
-    { simultanees: p.sources, graceMs: p.graceMs, relaisMs: p.relaisSourcesMs, signal: ctx.signal },
+    { simultanees: p.sources, graceMs: p.graceMs, relaisMs: p.relaisSourcesMs, signal: ctx.signal, surProvisoire: o.surProvisoire ? r => o.surProvisoire!(r) : undefined },
   );
   let refuse: ResultatClasse | null = null;
   let partiel: ResultatEpisodes | null = null;

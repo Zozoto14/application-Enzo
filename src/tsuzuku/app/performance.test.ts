@@ -121,6 +121,21 @@ describe('cache des recherches sur les sources', () => {
     expect(neuf.rafraichissement).toBeUndefined();
   });
 
+  it('périmé et site injoignable au rafraîchissement : l’ancien résultat reste servi', async () => {
+    let t = Date.now() - EPISODES_FRAIS_MS - 60_000;
+    const r = routes(3);
+    const { s } = await services(r, { maintenant: () => t });
+    await episodesDisponibles(s, { id: '1', titres });
+    t = Date.now();
+    for (const k of Object.keys(r)) delete r[k];
+    const d = await episodesDisponibles(s, { id: '1', titres });
+    expect(d.episodes).toHaveLength(3);
+    expect(await d.rafraichissement).toBe(false);
+    const encore = await episodesDisponibles(s, { id: '1', titres });
+    expect(encore.episodes).toHaveLength(3);
+    expect(encore.mesure?.cache).toBeDefined();
+  });
+
   it('lecteur : épisode absent d’une liste venue du cache → recherche fraîche avant de conclure', async () => {
     const r = routes(3);
     const { s } = await services(r);
@@ -185,5 +200,21 @@ describe('sources lentes : en parallèle, dans l’ordre de priorité', () => {
     const d = await episodesDisponibles(s, { id: '1', titres });
     expect(d.resultat?.source?.id).toBe('lente');
     expect(d.episodes).toHaveLength(2);
+  });
+
+  it('affichage progressif : le résultat d’une source moins prioritaire est montré pendant que la prioritaire cherche encore', async () => {
+    const r: Record<string, Reponse> = {
+      ...routes(),
+      [`${LENT}/?s=`]: lent(300, html(`<ul><li class="r"><a href="${LENT}/anime/voyage/">Le Long Voyage</a></li></ul>`)),
+      [`${LENT}/anime/voyage/`]: html(`<ul>${eps(`${LENT}/anime/voyage`, 2)}</ul>`),
+    };
+    const { s } = await services(r, { sources: [S('lente', LENT), SOURCE] });
+    s.ctx.parallele = { relaisSourcesMs: 10, graceMs: 2000 };
+    const vus: Array<{ source?: string; n: number; provisoire?: boolean }> = [];
+    const d = await episodesDisponibles(s, { id: '1', titres, surProvisoire: p => vus.push({ source: p.resultat?.source?.id, n: p.episodes.length, provisoire: p.provisoire }) });
+    expect(vus).toEqual([{ source: 'fiches', n: 3, provisoire: true }]);
+    // Le résultat final respecte la priorité.
+    expect(d.resultat?.source?.id).toBe('lente');
+    expect(d.provisoire).toBeUndefined();
   });
 });

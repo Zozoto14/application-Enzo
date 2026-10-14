@@ -181,3 +181,20 @@ describe('courseAvecPriorite : sources en parallèle, ordre de priorité respect
     expect(r.issues[0].erreur).toBeInstanceOf(Error);
   });
 });
+
+describe('courseAvecPriorite : résultat provisoire', () => {
+  it('une source moins prioritaire a trouvé, la prioritaire cherche encore : provisoire annoncé, puis décision dans l’ordre', async () => {
+    const { tache } = journalise();
+    const vus: Array<[string, number]> = [];
+    const r = await courseAvecPriorite([tache('1', 80, 'ok-1'), tache('2', 10, 'ok-2')], v => v.startsWith('ok'), { simultanees: 2, graceMs: 500, surProvisoire: (v, i) => vus.push([v, i]) });
+    expect(vus).toEqual([['ok-2', 1]]);
+    expect(r.gagnante).toBe(0);
+  });
+
+  it('la prioritaire trouve d’abord : rien de provisoire', async () => {
+    const { tache } = journalise();
+    const vus: unknown[] = [];
+    await courseAvecPriorite([tache('1', 5, 'ok-1'), tache('2', 50, 'ok-2')], v => v.startsWith('ok'), { simultanees: 2, graceMs: 500, surProvisoire: v => vus.push(v) });
+    expect(vus).toEqual([]);
+  });
+});

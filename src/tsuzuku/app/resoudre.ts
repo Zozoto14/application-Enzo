@@ -66,7 +66,12 @@ export interface Lecture {
   avisLangue?: string;
   /** Temps par étape (épisodes, lecteur) et cache. */
   mesure?: MesureLecture;
+  /** L'autre langue est encore en cours de vérification : l'état du sélecteur, une fois vérifiée. */
+  languesAJour?: Promise<EtatLangues | undefined>;
 }
+
+/** Le lecteur attend au plus ce délai la vérification de l'autre langue avant de s'afficher. */
+export const ATTENTE_VERIFICATION_MS = 150;
 
 /** Une langue dans le sélecteur : disponible, non disponible (et pourquoi), ou à vérifier sur les autres sources. */
 export interface OptionLangue {
@@ -209,6 +214,8 @@ export interface Disponibilite {
    * arrière-plan, rend vrai si elle a changé quelque chose (l'écran se relit).
    */
   rafraichissement?: Promise<boolean>;
+  /** Résultat PROVISOIRE (affichage progressif) : une source plus prioritaire cherche encore. */
+  provisoire?: boolean;
 }
 
 /** Résultat trouvé : servi tel quel pendant 30 min. */
@@ -220,6 +227,18 @@ export const LECTEURS_FRAIS_MS = 20 * 60_000;
 
 /** Recherches en cours (la fiche et son sélecteur de langue demandent la même) : une seule part. */
 const enVol = new WeakMap<object, Map<string, Promise<ResultatEpisodes>>>();
+/** Résultats provisoires d'une recherche en cours, et qui les attend (affichage progressif). */
+const provisoires = new WeakMap<object, Map<string, { dernier?: Disponibilite; ecouteurs: Set<(d: Disponibilite) => void> }>>();
+function provisoiresDe(s: object, cle: string) {
+  const parCle = provisoires.get(s) ?? new Map<string, { dernier?: Disponibilite; ecouteurs: Set<(d: Disponibilite) => void> }>();
+  provisoires.set(s, parCle);
+  let e = parCle.get(cle);
+  if (!e) {
+    e = { ecouteurs: new Set() };
+    parCle.set(cle, e);
+  }
+  return e;
+}
 /** Rafraîchissements en arrière-plan en cours (un seul par fiche). */
 const enRafraichissement = new WeakMap<object, Set<string>>();
 /** Clé de cache de chaque résultat (pour le réécrire après une lecture à la demande). */
@@ -247,7 +266,14 @@ const empreinteResultat = (r: ResultatEpisodes) =>
  */
 export async function episodesDisponibles(
   s: ServicesTsuzuku,
-  o: { id: string | number; titres: readonly string[]; forcer?: boolean; langue?: LangueVersion | null },
+  o: {
+    id: string | number;
+    titres: readonly string[];
+    forcer?: boolean;
+    langue?: LangueVersion | null;
+    /** Affichage progressif : une source moins prioritaire a trouvé, les plus prioritaires cherchent encore. */
+    surProvisoire?: (d: Disponibilite) => void;
+  },
 ): Promise<Disponibilite> {
   const debut = Date.now();
   const perso = (await lireTitresPerso(s))[`anime:${o.id}`];
@@ -264,23 +290,46 @@ export async function episodesDisponibles(
   // changer de langue réutilise le résultat et ne lit que la page de l'autre langue.
   const langue = o.langue ?? (await s.reglages()).langue;
   const cle = `ep|${o.id}|${empreinteTexte(`${perso ?? ''}|${signature(sources)}`)}`;
-  const chercher = (): Promise<ResultatEpisodes> => {
+  /** `garder` : rafraîchissement en arrière-plan ; un échec (hors ligne, site en panne) ne retire pas l'ancien résultat. */
+  const chercher = (garder = false): Promise<ResultatEpisodes> => {
     const vols = enVol.get(s) ?? new Map<string, Promise<ResultatEpisodes>>();
     enVol.set(s, vols);
+    const ecoute = provisoiresDe(s, cle);
+    if (o.surProvisoire) {
+      ecoute.ecouteurs.add(o.surProvisoire);
+      // Rejoint une recherche déjà en cours : son résultat provisoire, s'il y en a un, tout de suite.
+      if (ecoute.dernier) o.surProvisoire(ecoute.dernier);
+    }
     const deja = o.forcer ? undefined : vols.get(cle);
     if (deja) return deja;
-    const promesse = trouverEpisodes(s.ctx, sources, { titres, langue }).then(r => {
+    ecoute.dernier = undefined;
+    const surProvisoire = (r: ResultatEpisodes) => {
+      const d: Disponibilite = {
+        episodes: r.episodes,
+        resultat: r,
+        provisoire: true,
+        diagnostic: { raison: 'aucune-source', titres: variantesDeRecherche(titres), sources: r.diagnostics },
+        mesure: { etapes: [], totalMs: Date.now() - debut },
+      };
+      ecoute.dernier = d;
+      for (const f of ecoute.ecouteurs) f(d);
+    };
+    const promesse = trouverEpisodes(s.ctx, sources, { titres, langue, surProvisoire }).then(r => {
       if (r.episodes.length) {
         s.cache.ecrire(cle, r);
         cleDeResultat.set(r, cle);
-      } else {
+      } else if (!garder) {
         s.cache.supprimer(cle);
       }
       return r;
     });
     vols.set(cle, promesse);
     const liberer = () => {
-      if (vols.get(cle) === promesse) vols.delete(cle);
+      if (vols.get(cle) === promesse) {
+        vols.delete(cle);
+        ecoute.dernier = undefined;
+        ecoute.ecouteurs.clear();
+      }
     };
     promesse.then(liberer, liberer);
     return promesse;
@@ -300,7 +349,7 @@ export async function episodesDisponibles(
       // Périmé : servi tout de suite, rafraîchi en arrière-plan (la prochaine lecture aura le neuf).
       enCours.add(cle);
       const avant = empreinteResultat(r);
-      rafraichissement = chercher()
+      rafraichissement = chercher(true)
         .then(neuf => neuf.episodes.length > 0 && empreinteResultat(neuf) !== avant, () => false)
         .finally(() => enCours.delete(cle));
     }
@@ -321,6 +370,28 @@ function resultatComplete(s: ServicesTsuzuku, r: ResultatEpisodes) {
   if (cle) s.cache.toucher(cle);
 }
 
+/** Lectures d'une langue en cours, par résultat : la vérification du lecteur et un clic sur « VF » ne lisent la page qu'une fois. */
+const languesEnVol = new WeakMap<ResultatEpisodes, Map<LangueVersion, ReturnType<typeof episodesEnLangue>>>();
+
+/** Épisodes d'une série dans une langue sur la source de la fiche (une page de plus au plus), résultat gardé en cache. */
+function lireLangue(s: ServicesTsuzuku, r: ResultatEpisodes, langue: LangueVersion, titres: readonly string[]): ReturnType<typeof episodesEnLangue> {
+  const vols = languesEnVol.get(r) ?? new Map<LangueVersion, ReturnType<typeof episodesEnLangue>>();
+  languesEnVol.set(r, vols);
+  const deja = vols.get(langue);
+  if (deja) return deja;
+  const dejaLue = Boolean(r.langues?.variantes[langue]?.episodes);
+  const p = episodesEnLangue(s.ctx, r.source!, r.langues!, langue, { titres }).then(x => {
+    if (!dejaLue && r.langues?.variantes[langue]?.episodes) resultatComplete(s, r);
+    return x;
+  });
+  vols.set(langue, p);
+  const liberer = () => {
+    if (vols.get(langue) === p) vols.delete(langue);
+  };
+  p.then(liberer, liberer);
+  return p;
+}
+
 /**
  * Lecteurs d'une page d'épisode, gardés 20 min (cache du profil) : revenir à
  * un épisode, changer de langue ou passer à l'épisode suivant préchargé ne
@@ -334,10 +405,26 @@ export async function lecteursDeLEpisode(s: ServicesTsuzuku, url: string, o: { f
   if (memo && Array.isArray(memo.valeur) && memo.valeur.length && Date.now() - memo.a < LECTEURS_FRAIS_MS) {
     return { lecteurs: memo.valeur, ms: Date.now() - debut, cache: { origine: memo.origine, ageMs: Date.now() - memo.a } };
   }
-  const lecteurs = await trouverLecteurs(s.ctx, sources, url);
-  if (lecteurs.length) s.cache.ecrire(cle, lecteurs);
-  return { lecteurs, ms: Date.now() - debut };
+  const vols = lecteursEnVol.get(s) ?? new Map<string, Promise<Lecteur[]>>();
+  lecteursEnVol.set(s, vols);
+  let p = o.forcer ? undefined : vols.get(cle);
+  if (!p) {
+    const promesse = trouverLecteurs(s.ctx, sources, url).then(l => {
+      if (l.length) s.cache.ecrire(cle, l);
+      return l;
+    });
+    vols.set(cle, promesse);
+    const liberer = () => {
+      if (vols.get(cle) === promesse) vols.delete(cle);
+    };
+    promesse.then(liberer, liberer);
+    p = promesse;
+  }
+  return { lecteurs: await p, ms: Date.now() - debut };
 }
+
+/** Pages d'épisode en cours de lecture (préchargement et clic simultanés : une seule requête). */
+const lecteursEnVol = new WeakMap<object, Map<string, Promise<Lecteur[]>>>();
 
 /**
  * Épisodes d'une série dans une langue : la source de la fiche d'abord (ce
@@ -355,9 +442,7 @@ export async function episodesDansLangue(
   const r = d.resultat;
   if (!r?.source || !r.langues) return { episodes: [], raison: 'la source ne distingue pas la langue' };
   if (r.langues.courante === langue) return { episodes: d.episodes, source: r.source };
-  const dejaLue = Boolean(r.langues.variantes[langue]?.episodes);
-  const ici = await episodesEnLangue(s.ctx, r.source, r.langues, langue, { titres });
-  if (!dejaLue && r.langues.variantes[langue]?.episodes) resultatComplete(s, r);
+  const ici = await lireLangue(s, r, langue, titres);
   if (ici.episodes.length) return { episodes: ici.episodes, source: r.source };
   const memo = ailleursDe.get(r) ?? {};
   ailleursDe.set(r, memo);
@@ -476,27 +561,29 @@ export async function lireAnime(
       return { lecteurs: [], origine: 'aucune', message: messageEchec(diagnostic, o.numero), diagnostic, langue: joue, langues: etatLangues(d, o.numero, autres), avisLangue };
     }
     const msLangue = Date.now() - debut - msEpisodes;
-    // En parallèle (borné) : la page de l'AUTRE langue sur la même source, pour griser le bouton si l'épisode n'y est pas.
+    // En parallèle : la page de l'AUTRE langue sur la même source, pour griser le bouton si l'épisode n'y est
+    // pas. Le lecteur ne l'attend pas (au plus un court instant) : le sélecteur se met à jour ensuite.
     const autre = joue ? langues?.variantes[autreLangue(joue)] : undefined;
-    const verification =
-      autre && !autre.episodes && !autre.aChercher && d.resultat?.source
-        ? episodesEnLangue(s.ctx, d.resultat.source, langues!, autre.langue, { titres: o.titres }).then(
-            () => resultatComplete(s, d.resultat!),
-            () => undefined,
-          )
-        : Promise.resolve(undefined);
-    const [trouves] = await Promise.all([lecteursDeLEpisode(s, ep.url, { forcer: o.forcer }), verification]);
+    const verification: Promise<unknown> | undefined =
+      autre && !autre.episodes && !autre.aChercher && d.resultat?.source ? lireLangue(s, d.resultat, autre.langue, o.titres).catch(() => undefined) : undefined;
+    const trouves = await lecteursDeLEpisode(s, ep.url, { forcer: o.forcer });
+    const verifiee = verification ? await Promise.race([verification.then(() => true), new Promise<boolean>(ok => setTimeout(() => ok(false), ATTENTE_VERIFICATION_MS))]) : true;
     const { lecteurs } = trouves;
     const mesure: MesureLecture = {
       etapes: [{ nom: 'épisodes', ms: msEpisodes }, ...(msLangue > 5 ? [{ nom: 'langue', ms: msLangue }] : []), { nom: 'lecteur', ms: trouves.ms }],
       cache: d.mesure?.cache && trouves.cache ? { origine: trouves.cache.origine, ageMs: Math.max(trouves.cache.ageMs, d.mesure.cache.ageMs) } : undefined,
       totalMs: Date.now() - debut,
     };
-    const etat = etatLangues(d, o.numero, autres);
-    if (etat && joue) etat.courante = joue;
-    if (lecteurs.length) return { lecteurs, origine: 'source', langue: joue, langues: etat, avisLangue, mesure };
+    const etatDesLangues = () => {
+      const e = etatLangues(d, o.numero, autres);
+      if (e && joue) e.courante = joue;
+      return e;
+    };
+    const etat = etatDesLangues();
+    const languesAJour = verifiee || !verification ? undefined : verification.then(etatDesLangues);
+    if (lecteurs.length) return { lecteurs, origine: 'source', langue: joue, langues: etat, languesAJour, avisLangue, mesure };
     const diagnostic: DiagnosticLecture = { ...d.diagnostic, raison: 'aucun-lecteur', mesure };
-    return { lecteurs, origine: 'aucune', message: messageEchec(diagnostic), diagnostic, langue: joue, langues: etat, avisLangue, mesure };
+    return { lecteurs, origine: 'aucune', message: messageEchec(diagnostic), diagnostic, langue: joue, langues: etat, languesAJour, avisLangue, mesure };
   } catch (erreur) {
     return { lecteurs: [], origine: 'aucune', message: messageDe(erreur), diagnostic: { raison: 'erreur', titres: [...o.titres], sources: [] } };
   }
