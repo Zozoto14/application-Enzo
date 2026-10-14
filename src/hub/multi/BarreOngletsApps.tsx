@@ -121,7 +121,7 @@ export function BarreOngletsApps({
         {annonce ?? ''}
       </Text>
       <Modal visible={Boolean(menu && appMenu)} transparent animationType="none" onRequestClose={() => setMenu(undefined)}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenu(undefined)} accessibilityLabel="Fermer le menu" testID="onglet-menu-fond" />
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => setMenu(undefined)} accessibilityLabel="Fermer le menu" testID="onglets-menu-fond" />
         {menu && appMenu ? (
           <MenuOnglet
             theme={theme}
@@ -200,7 +200,7 @@ function Onglet({
   return (
     <View
       ref={noeud as React.Ref<never>}
-      testID={`onglet-${app.id}`}
+      testID={`onglets-app-${app.id}`}
       style={[
         styles.onglet,
         etroit && styles.ongletEtroit,
@@ -211,7 +211,7 @@ function Onglet({
         },
       ]}>
       <Pressable
-        testID={`onglet-${app.id}-ouvrir`}
+        testID={`onglets-app-${app.id}-ouvrir`}
         accessibilityRole="tab"
         accessibilityState={{ selected: actif }}
         aria-selected={actif}
@@ -227,7 +227,7 @@ function Onglet({
       </Pressable>
       <Pressable
         ref={bouton as React.Ref<never>}
-        testID={`onglet-${app.id}-menu`}
+        testID={`onglets-app-${app.id}-menu`}
         accessibilityRole="button"
         accessibilityLabel={`Actions de l’onglet ${app.nom}`}
         onPress={ouvrirMenu}
@@ -235,7 +235,7 @@ function Onglet({
         <Text style={{ color: theme.attenue, fontSize: 14, fontWeight: '700' }}>⋯</Text>
       </Pressable>
       <Pressable
-        testID={`onglet-${app.id}-fermer`}
+        testID={`onglets-app-${app.id}-fermer`}
         accessibilityRole="button"
         accessibilityLabel={`Fermer l’onglet ${app.nom}`}
         onPress={onFermer}
@@ -294,15 +294,15 @@ function MenuOnglet({
   );
   return (
     <View
-      testID="onglet-menu"
+      testID="onglets-menu"
       accessibilityRole="menu"
       accessibilityLabel={`Actions de ${app.nom}`}
       style={[styles.menu, { left: gauche, top: ancre.y, width: LARGEUR, backgroundColor: theme.surface, borderColor: theme.ligne, borderRadius: theme.rayonMoyen }]}>
       <Text style={[styles.menuTitre, { color: theme.attenue }]}>{app.nom.toUpperCase()}</Text>
-      {peutACote ? ligne('onglet-menu-a-cote', '▐ Afficher à côté', onACote) : null}
-      {ailleurs === 'fenetre' ? ligne('onglet-menu-ailleurs', '⧉ Ouvrir dans une nouvelle fenêtre', onAilleurs) : null}
-      {ailleurs === 'navigateur' ? ligne('onglet-menu-ailleurs', '↗ Ouvrir dans un nouvel onglet du navigateur', onAilleurs) : null}
-      {ligne('onglet-menu-fermer', actif ? '× Fermer l’onglet' : '× Fermer cet onglet', onFermer)}
+      {peutACote ? ligne('onglets-menu-a-cote', '▐ Afficher à côté', onACote) : null}
+      {ailleurs === 'fenetre' ? ligne('onglets-menu-ailleurs', '⧉ Ouvrir dans une nouvelle fenêtre', onAilleurs) : null}
+      {ailleurs === 'navigateur' ? ligne('onglets-menu-ailleurs', '↗ Ouvrir dans un nouvel onglet du navigateur', onAilleurs) : null}
+      {ligne('onglets-menu-fermer', actif ? '× Fermer l’onglet' : '× Fermer cet onglet', onFermer)}
     </View>
   );
 }
