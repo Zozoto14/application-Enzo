@@ -147,6 +147,36 @@ export function normaliserCodeTotp(saisi: string): string {
   return saisi.normalize('NFKC').replace(/\D/g, '');
 }
 
+/**
+ * Coffre d'un ami après l'acceptation de son invitation (sans rien ouvrir) :
+ * le temporaire l'ouvre, le mot de passe choisi (forme canonique) le remplace,
+ * le code TOTP n'est plus exigé. Lève `ErreurInvitationUtilisee` si le
+ * temporaire ne l'ouvre plus. La clé rendue est à effacer après usage.
+ */
+export function coffreApresInvitation(
+  coffre: Coffre,
+  temporaire: string,
+  choisi: string,
+  options: { kdf?: ParametresKdf; alea?: SourceAleatoire } = {},
+): { coffre: Coffre; cle: Uint8Array } {
+  const nouveau = formeCanonique(choisi);
+  if (nouveau.length === 0) {
+    throw new ErreurSession('Choisissez un mot de passe.');
+  }
+  let cle: Uint8Array;
+  try {
+    cle = deverrouillerParMotDePasse(coffre, temporaire);
+  } catch (erreur) {
+    if (erreur instanceof ErreurDeverrouillage) {
+      throw new ErreurInvitationUtilisee();
+    }
+    throw erreur instanceof ErreurCalculCle ? erreur : new ErreurCalculCle(erreur);
+  }
+  const alea = options.alea ?? aleatoireParDefaut;
+  const final: Coffre = { ...exempterTotp(changerMotDePasseCoffre(coffre, cle, nouveau, { kdf: options.kdf, alea }), cle, alea), canonique: true };
+  return { coffre: final, cle };
+}
+
 export type StatutSession = 'non-initialise' | 'verrouille' | 'deverrouille';
 
 export interface DependancesSession {
@@ -427,23 +457,7 @@ export class Session {
   accepterInvitation(temporaire: string, choisi: string): Coffre {
     const coffre = this.exigerCoffre();
     this.exigerAbsenceDeTemporisation();
-    const nouveau = formeCanonique(choisi);
-    if (nouveau.length === 0) {
-      throw new ErreurSession('Choisissez un mot de passe.');
-    }
-    let cle: Uint8Array;
-    try {
-      cle = deverrouillerParMotDePasse(coffre, temporaire);
-    } catch (erreur) {
-      if (erreur instanceof ErreurDeverrouillage) {
-        throw new ErreurInvitationUtilisee();
-      }
-      throw erreur instanceof ErreurCalculCle ? erreur : new ErreurCalculCle(erreur);
-    }
-    const final = {
-      ...exempterTotp(changerMotDePasseCoffre(coffre, cle, nouveau, { kdf: this.deps.kdf, alea: this.alea }), cle, this.alea),
-      canonique: true,
-    };
+    const { coffre: final, cle } = coffreApresInvitation(coffre, temporaire, choisi, { kdf: this.deps.kdf, alea: this.alea });
     this.deps.stockage.ecrire(final);
     this.verrouiller();
     this.ouvrir(cle);
@@ -472,7 +486,7 @@ export class Session {
     const coffreFinal = changerMotDePasseCoffre(
       resultat.coffre,
       resultat.cleMaitresse,
-      options.nouveauMotDePasse,
+      resultat.coffre.canonique ? formeCanonique(options.nouveauMotDePasse) : options.nouveauMotDePasse,
       { kdf: this.deps.kdf, alea: this.alea },
     );
     this.deps.stockage.ecrire(coffreFinal);
