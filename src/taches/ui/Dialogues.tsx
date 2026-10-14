@@ -17,7 +17,6 @@ import {
   modifierEspace,
   creerListe,
   etiquettesUtilisees,
-  LIBELLES_PARTAGE,
   LIBELLES_PRIORITE,
   listesDe,
   modifierListe,
@@ -33,7 +32,6 @@ import {
   type Filtres,
   type FiltreEcheance,
   type Groupe,
-  type ModePartage,
   type Recurrence,
   type Statut,
   type Tache,
@@ -376,11 +374,11 @@ export function DialogueFiltres({
 
 export function DialogueReglages({
   a,
-  amis,
+  amis: _amis,
   onFermer,
   onDemo,
   onRetirerDemo,
-  onErreur,
+  onErreur: _onErreur,
   onNotifications,
   onLiens,
   onReleve,
@@ -405,8 +403,6 @@ export function DialogueReglages({
 }) {
   const theme = a.theme;
   const d = a.etat.donnees;
-  const profils = amis;
-  const [enCours, setEnCours] = useState(false);
   const raccourcis = (
     <View style={styles.rangee}>
       <Bouton theme={theme} titre="🔔 Notifications…" onPress={onNotifications} testID="reglages-notifications" />

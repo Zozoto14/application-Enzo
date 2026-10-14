@@ -40,7 +40,6 @@ import {
   vivant,
   assignesDe,
   LIBELLES_DROIT,
-  type Auteur,
   type Filtres,
   type Groupe,
   type Tache,

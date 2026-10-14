@@ -269,7 +269,7 @@ describe('trois membres par le relais en mémoire', () => {
     const s = scenario();
     const pc = mem();
     pc.base.ecrire(CLES_TACHES.donnees, JSON.stringify(s.d));
-    const membres = { [LEA]: mem(), [HUGO]: mem(), [ZOE]: mem() };
+    const membres: Record<string, ReturnType<typeof mem>> = { [LEA]: mem(), [HUGO]: mem(), [ZOE]: mem() };
     const esp = Object.fromEntries(Object.keys(membres).map(c => [c, espacesDuRelais(liaisonPourProfil(maitre, c), relais.requete)]));
     const suivis: Record<string, SuiviTachesAmi> = {};
     let etatF: EtatTachesFondateur = {};

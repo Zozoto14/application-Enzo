@@ -23,7 +23,6 @@ import { jourValide, heureValide, sansAccents } from './dates';
  * ou, depuis la V3, l'identifiant du compte d'un membre (10 caractères
  * a-z0-9). Le code d'horodatage est « f », « a » ou cet identifiant.
  */
-// eslint-disable-next-line @typescript-eslint/ban-types
 export type Auteur = 'fondateur' | 'ami' | (string & {});
 /** Droit d'un membre sur un projet (V3). « admin » : écriture et gestion du projet (listes, statuts, paramètres). */
 export type DroitMembre = 'lecture' | 'ecriture' | 'admin';

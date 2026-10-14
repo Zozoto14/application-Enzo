@@ -45,6 +45,77 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.26',
+    date: '2026-10-26',
+    titre: 'Tâches V3 : à plusieurs, chronologie, tableau de bord',
+    resume:
+      'Partage avec plusieurs personnes et des droits par projet, mentions @prénom, chronologie (Gantt) avec dépendances, tableau de bord, objectifs, et — si tu le veux — l’aide de l’IA et les PR GitHub.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'taches-membres',
+        emoji: '👥',
+        titre: 'Plusieurs membres, des droits par projet',
+        texte:
+          'Dans 👥 › Membres : invite des amis ou des gestionnaires, puis choisis pour chacun, projet par projet : lecture, écriture ou admin du projet. Retirer quelqu’un change la clé du projet : il ne lit plus rien de nouveau. Toujours chiffré de bout en bout.',
+        essayer: { genre: 'app', app: 'taches' },
+        adminSeulement: true,
+      },
+      {
+        id: 'taches-membres-ami',
+        emoji: '👥',
+        titre: 'On travaille à plusieurs',
+        texte:
+          'Tes projets partagés montrent maintenant qui y participe (pastilles d’initiales) et ton droit : lecture, écriture ou admin du projet (listes, statuts, paramètres). Une tâche peut être pour plusieurs personnes.',
+        essayer: { genre: 'app', app: 'taches' },
+        app: 'taches',
+        amiSeulement: true,
+      },
+      {
+        id: 'taches-mentions',
+        emoji: '💬',
+        titre: 'Mentions @prénom',
+        texte: 'Dans un commentaire, « @ » propose les personnes du projet : la personne mentionnée est notifiée selon ses réglages (👥 › Notifications › « On me mentionne »).',
+        essayer: { genre: 'app', app: 'taches' },
+        app: 'taches',
+      },
+      {
+        id: 'taches-gantt',
+        emoji: '▤',
+        titre: 'Chronologie (Gantt)',
+        texte:
+          'Onglet « Chronologie » : des barres du début à l’échéance, par jour, semaine ou mois. Glisse une barre pour la déplacer, ses bords pour l’étirer, sa pastille ● sur une autre tâche pour créer une dépendance ; « Décaler les suivantes » remet tout en ordre.',
+        essayer: { genre: 'app', app: 'taches' },
+        app: 'taches',
+      },
+      {
+        id: 'taches-tableau',
+        emoji: '◔',
+        titre: 'Tableau de bord',
+        texte: 'Avancement, tâches finies par semaine, retards, charge par personne, temps passé contre estimé et burndown — par projet ou pour tout, avec les valeurs aussi en texte.',
+        essayer: { genre: 'app', app: 'taches' },
+        app: 'taches',
+      },
+      {
+        id: 'taches-objectifs',
+        emoji: '◎',
+        titre: 'Objectifs',
+        texte: '« Finir la v2 de Tsuzuku » d’ici fin novembre : lie des tâches ou des projets (ou saisis l’avancement), et vois s’il est en cours, à risque ou atteint.',
+        essayer: { genre: 'app', app: 'taches' },
+        adminSeulement: true,
+      },
+      {
+        id: 'taches-ia-github',
+        emoji: '✨',
+        titre: 'IA et GitHub (facultatifs)',
+        texte:
+          'Dans 👥 › IA et GitHub : avec ta clé de l’API Claude (application du PC), découpe une tâche, résume un projet, propose ton planning — tu vois ce qui part et tu valides avant tout changement. Lie une tâche à une PR : son état et sa CI s’affichent, et elle passe « Faite » à la fusion.',
+        essayer: { genre: 'app', app: 'taches' },
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.25',
     date: '2026-10-25',
     titre: 'Tâches V2 : temps, journal, notifications, liens',

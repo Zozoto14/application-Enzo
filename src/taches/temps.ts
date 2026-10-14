@@ -72,7 +72,6 @@ export function lireDuree(texte: string): number | undefined {
 
 /** Tâche dont le minuteur de `qui` tourne (la plus récente si deux appareils en ont lancé chacun un). */
 export function minuteurActif(d: DonneesTaches, qui: Auteur): { tache: Tache; debut: number } | undefined {
-  const champ = champChrono(qui);
   let r: { tache: Tache; debut: number } | undefined;
   for (const t of tachesVivantes(d)) {
     const v = chronoDe(t, qui);

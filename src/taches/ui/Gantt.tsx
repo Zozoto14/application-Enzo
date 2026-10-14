@@ -246,6 +246,8 @@ export function VueGantt({ a, taches, onAvis, onErreur }: { a: Actions; taches: 
     const x = Math.max(0, position(e, a.etat.aujourdhui) - (a.mobile ? 60 : 200));
     const t = setTimeout(() => defile.current?.scrollTo({ x, animated: false }), 0);
     return () => clearTimeout(t);
+    // Seulement quand l'échelle change (pas à chaque modification).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom, e.debut, a.mobile, a.etat.aujourdhui]);
   const essayer = (f: () => void) => {
     try {
