@@ -124,8 +124,12 @@ export function FeuilleBasse({
               accessibilityRole="button"
               accessibilityLabel="Fermer"
               onPress={onFermer}
-              style={({ pressed }) => [styles.fermer, { backgroundColor: pressed ? theme.ligne : teinteTransparente(theme.sombre ? '#FFFFFF' : '#000000', 0.06) }]}>
-              <Text style={{ color: theme.attenue, fontSize: 17, fontWeight: '700' }}>✕</Text>
+              style={styles.fermer}>
+              {({ pressed }) => (
+                <View style={[styles.fermerRond, { backgroundColor: pressed ? theme.ligne : teinteTransparente(theme.sombre ? '#FFFFFF' : '#000000', 0.06) }]}>
+                  <Text style={{ color: theme.attenue, fontSize: 17, fontWeight: '700' }}>✕</Text>
+                </View>
+              )}
             </Pressable>
           </View>
           {description ? <Text style={[styles.description, { color: theme.attenue, ...police(theme.policeTexte) }]}>{description}</Text> : null}
@@ -145,7 +149,9 @@ const styles = StyleSheet.create({
   poigneeZone: { alignItems: 'center', paddingTop: 8, paddingBottom: 4, minHeight: 24 },
   poignee: { width: 40, height: 5, borderRadius: 3 },
   tete: { flexDirection: 'row', alignItems: 'center', gap: ESPACE.xs, paddingHorizontal: GOUTTIERE, paddingBottom: ESPACE.xs },
-  fermer: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  // Zone tactile de 48 px (marge négative : la mise en page reste celle d'un rond de 44 px) autour du rond visible.
+  fermer: { width: 48, height: 48, margin: -2, alignItems: 'center', justifyContent: 'center' },
+  fermerRond: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   description: { fontSize: TEXTE.legende, lineHeight: 21, paddingHorizontal: GOUTTIERE, paddingBottom: ESPACE.s },
   corps: { flexGrow: 0 },
   corpsContenu: { paddingHorizontal: GOUTTIERE, paddingBottom: ESPACE.s, gap: ESPACE.s },
