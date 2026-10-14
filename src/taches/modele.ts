@@ -74,6 +74,14 @@ export interface Projet extends Entite {
   partage: ModePartage;
   /** Projet tenu par une app reliée (« Prospects »…) : jamais partagé. */
   auto?: AppLiee;
+  /** Paramètres du projet (V2) : description, icône (un emoji), étiquettes proposées, dates. */
+  description?: string;
+  icone?: string;
+  etiquettes?: string[];
+  debut?: string;
+  fin?: string;
+  /** Historique des modifications du projet (union à la fusion, 100 derniers). */
+  historique?: EvenementHistorique[];
 }
 
 export interface Liste extends Entite {
@@ -140,6 +148,21 @@ export interface LienOffice {
   depuis: string;
   /** Dernière fin déjà prise en compte (ms). */
   finVue?: number;
+}
+
+/** Entrée du « Journal du jour » d'un projet : ce qui a été fait, en une phrase. */
+export interface EntreeJournal {
+  id: string;
+  projetId: string;
+  /** Jour (AAAA-MM-JJ). */
+  jour: string;
+  auteur: Auteur;
+  texte: string;
+  tacheId?: string;
+  minutes?: number;
+  creeLe: string;
+  h: string;
+  supprime?: boolean;
 }
 
 export interface EvenementHistorique {
@@ -239,6 +262,8 @@ export interface DonneesTaches {
   taches: Record<string, Tache>;
   vues: Record<string, VueEnregistree>;
   reglages: Reglages;
+  /** Journal du jour des projets (V2), fusionné entrée par entrée. */
+  journal: Record<string, EntreeJournal>;
 }
 
 /** Qui agit, quand : horodatages et historique. */
@@ -382,7 +407,24 @@ export function lireProjet(v: unknown): Projet | undefined {
   if (!b || !idValide(o.espaceId)) return undefined;
   const partage: ModePartage = o.partage === 'lecture' || o.partage === 'ecriture' ? o.partage : 'aucun';
   const auto = APPS_LIEES.includes(o.auto as AppLiee) ? (o.auto as AppLiee) : undefined;
-  return { ...b, espaceId: o.espaceId, nom: texte(o.nom, BORNES.nom, 'Projet') || 'Projet', couleur: couleur(o.couleur, COULEURS[0]), statuts: lireStatuts(o.statuts), ordre: nombre(o.ordre), partage: auto ? 'aucun' : partage, ...(auto ? { auto } : {}) };
+  const etiquettes = (Array.isArray(o.etiquettes) ? o.etiquettes : []).filter((e): e is string => typeof e === 'string').map(normaliserEtiquette).filter(Boolean).slice(0, 30);
+  const historique = Array.isArray(o.historique) ? lireHistorique(o.historique) : [];
+  return {
+    ...b,
+    espaceId: o.espaceId,
+    nom: texte(o.nom, BORNES.nom, 'Projet') || 'Projet',
+    couleur: couleur(o.couleur, COULEURS[0]),
+    statuts: lireStatuts(o.statuts),
+    ordre: nombre(o.ordre),
+    partage: auto ? 'aucun' : partage,
+    ...(auto ? { auto } : {}),
+    ...(typeof o.description === 'string' && o.description ? { description: o.description.slice(0, 2000) } : {}),
+    ...(typeof o.icone === 'string' && o.icone && o.icone.length <= 8 ? { icone: o.icone } : {}),
+    ...(etiquettes.length ? { etiquettes } : {}),
+    ...(jourValide(o.debut) ? { debut: o.debut } : {}),
+    ...(jourValide(o.fin) ? { fin: o.fin } : {}),
+    ...(historique.length ? { historique } : {}),
+  };
 }
 
 export function lireListe(v: unknown): Liste | undefined {
@@ -584,7 +626,29 @@ function lireDict<T extends Entite>(v: unknown, lire: (x: unknown) => T | undefi
   return r;
 }
 
-export const donneesVides = (): DonneesTaches => ({ v: 1, espaces: {}, projets: {}, listes: {}, taches: {}, vues: {}, reglages: { id: 'reglages', h: {} } });
+export const donneesVides = (): DonneesTaches => ({ v: 1, espaces: {}, projets: {}, listes: {}, taches: {}, vues: {}, reglages: { id: 'reglages', h: {} }, journal: {} });
+
+export function lireJournal(v: unknown): Record<string, EntreeJournal> {
+  const r: Record<string, EntreeJournal> = {};
+  for (const [id, e] of Object.entries(dict(v)).slice(0, 20_000)) {
+    const o = dict(e);
+    const auteur = lireAuteur(o.auteur);
+    if (!idValide(id) || !idValide(o.projetId) || !jourValide(o.jour) || !auteur || !hValide(o.h)) continue;
+    r[id] = {
+      id,
+      projetId: o.projetId,
+      jour: o.jour,
+      auteur,
+      texte: texte(o.texte, BORNES.commentaire),
+      ...(idValide(o.tacheId) ? { tacheId: o.tacheId } : {}),
+      ...(typeof o.minutes === 'number' && o.minutes > 0 && o.minutes <= 24 * 60 ? { minutes: Math.round(o.minutes) } : {}),
+      creeLe: typeof o.creeLe === 'string' ? o.creeLe.slice(0, 30) : new Date(0).toISOString(),
+      h: o.h,
+      ...(o.supprime === true ? { supprime: true } : {}),
+    };
+  }
+  return r;
+}
 
 /** Lit des données de tâches (texte JSON ou objet), en écartant tout ce qui est invalide. */
 export function lireDonnees(brut: unknown): DonneesTaches {
@@ -602,6 +666,7 @@ export function lireDonnees(brut: unknown): DonneesTaches {
     taches: lireDict(o.taches, lireTache, 20_000),
     vues: lireDict(o.vues, lireVue, 100),
     reglages: lireReglages(o.reglages),
+    journal: lireJournal(o.journal),
   };
 }
 
@@ -720,11 +785,64 @@ export function modifierEspace(d: DonneesTaches, id: string, c: Partial<Pick<Esp
   return { ...d, espaces: { ...d.espaces, [id]: changerChamps(e, c.nom !== undefined ? { ...c, nom: nomPropre(c.nom, e.nom) } : c, ctx) } };
 }
 
-export function modifierProjet(d: DonneesTaches, id: string, c: Partial<Pick<Projet, 'nom' | 'couleur' | 'ordre' | 'partage' | 'espaceId'>>, ctx: Contexte): DonneesTaches {
+export type ChangementProjet = Partial<Pick<Projet, 'nom' | 'couleur' | 'ordre' | 'partage' | 'espaceId' | 'description' | 'icone' | 'etiquettes' | 'debut' | 'fin'>>;
+
+/** Texte de l'historique du projet pour un champ changé. */
+function decrireProjet(d: DonneesTaches, p: Projet, cle: string, v: unknown): string | undefined {
+  switch (cle) {
+    case 'nom':
+      return `Renommé : « ${p.nom} » → « ${v as string} »`;
+    case 'couleur':
+      return 'Couleur changée';
+    case 'icone':
+      return v ? `Icône : ${v as string}` : 'Icône retirée';
+    case 'description':
+      return 'Description modifiée';
+    case 'etiquettes':
+      return `Étiquettes du projet : ${((v as string[]) ?? []).map(e => `#${e}`).join(' ') || 'aucune'}`;
+    case 'debut':
+      return `Début : ${v ? (v as string).split('-').reverse().join('/') : '—'}`;
+    case 'fin':
+      return `Fin : ${v ? (v as string).split('-').reverse().join('/') : '—'}`;
+    case 'espaceId':
+      return `Déplacé vers l’espace « ${d.espaces[v as string]?.nom ?? ''} »`;
+    case 'partage':
+      return `Partage : ${LIBELLES_PARTAGE[v as ModePartage]}`;
+    case 'statuts':
+      return 'Statuts modifiés';
+    default:
+      return undefined;
+  }
+}
+
+/** Ajoute à l'historique d'un projet ce qui a changé entre `avant` et `apres`. */
+function historiserProjet(d: DonneesTaches, avant: Projet, apres: Projet, champs: readonly string[], ctx: Contexte): Projet {
+  if (apres === avant) return apres;
+  const evts: EvenementHistorique[] = [];
+  for (const c of champs) {
+    if (JSON.stringify((avant as unknown as Record<string, unknown>)[c]) === JSON.stringify((apres as unknown as Record<string, unknown>)[c])) continue;
+    const t = decrireProjet(d, avant, c, (apres as unknown as Record<string, unknown>)[c]);
+    if (t) evts.push(evenement(ctx, t));
+  }
+  return evts.length ? { ...apres, historique: borneHistorique([...(apres.historique ?? []), ...evts]) } : apres;
+}
+
+export function modifierProjet(d: DonneesTaches, id: string, c: ChangementProjet, ctx: Contexte): DonneesTaches {
   const p = d.projets[id];
   if (!vivant(p)) throw new ErreurTaches('Projet introuvable.');
   if (p.auto && c.partage && c.partage !== 'aucun') throw new ErreurTaches('Ce projet est tenu par une autre app : il ne se partage pas.');
-  return { ...d, projets: { ...d.projets, [id]: changerChamps(p, c.nom !== undefined ? { ...c, nom: nomPropre(c.nom, p.nom) } : c, ctx) } };
+  if (c.espaceId !== undefined && !vivant(d.espaces[c.espaceId])) throw new ErreurTaches('Espace introuvable.');
+  if (c.debut && c.fin && c.fin < c.debut) throw new ErreurTaches('La fin du projet est avant son début.');
+  const propre: Record<string, unknown> = { ...c };
+  if (c.nom !== undefined) propre.nom = nomPropre(c.nom, p.nom);
+  if (c.description !== undefined) propre.description = c.description.trim().slice(0, 2000) || undefined;
+  if (c.icone !== undefined) propre.icone = c.icone.trim().slice(0, 8) || undefined;
+  if (c.etiquettes !== undefined) {
+    const e = [...new Set(c.etiquettes.map(normaliserEtiquette).filter(Boolean))].slice(0, 30);
+    propre.etiquettes = e.length ? e : undefined;
+  }
+  const apres = historiserProjet(d, p, changerChamps(p, propre, ctx), Object.keys(propre), ctx);
+  return { ...d, projets: { ...d.projets, [id]: apres } };
 }
 
 export function modifierListe(d: DonneesTaches, id: string, c: Partial<Pick<Liste, 'nom' | 'ordre'>>, ctx: Contexte): DonneesTaches {
@@ -781,7 +899,7 @@ export function changerStatuts(d: DonneesTaches, projetId: string, statuts: read
   if (!propres.some(s => s.ferme)) throw new ErreurTaches('Gardez au moins un statut « terminé ».');
   if (!propres.some(s => !s.ferme)) throw new ErreurTaches('Gardez au moins un statut ouvert.');
   const ids = new Set(propres.map(s => s.id));
-  let suivant: DonneesTaches = { ...d, projets: { ...d.projets, [projetId]: changerChamps(p, { statuts: propres }, ctx) } };
+  let suivant: DonneesTaches = { ...d, projets: { ...d.projets, [projetId]: historiserProjet(d, p, changerChamps(p, { statuts: propres }, ctx), ['statuts'], ctx) } };
   for (const t of Object.values(d.taches)) {
     if (t.projetId !== projetId || t.supprime || ids.has(t.statut)) continue;
     const cible = remplacement[t.statut] && ids.has(remplacement[t.statut]) ? remplacement[t.statut] : propres[0].id;

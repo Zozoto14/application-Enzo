@@ -616,7 +616,7 @@ export function DialogueNom({ a, titre, description, placeholder, onValider, onF
 
 // ------------------------------------------------------------------ Rappels non lus
 
-const ICONES_NOTIF: Record<string, string> = { retard: '⏰', assignee: '👤', ami: '💬', office: '🤖', recap: '☀︎', test: '✅' };
+const ICONES_NOTIF: Record<string, string> = { retard: '⏰', assignee: '👤', ami: '💬', office: '🤖', recap: '☀︎', test: '✅', journal: '📓' };
 
 export function DialogueRappelsRecus({ a, rappels, onOuvrir, onToutLu, onFermer }: { a: Actions; rappels: readonly AlerteRappel[]; onOuvrir(id: string): void; onToutLu(): void; onFermer: Fermer }) {
   const theme = a.theme;

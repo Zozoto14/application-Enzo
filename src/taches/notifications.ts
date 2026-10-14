@@ -27,10 +27,10 @@ import { estTerminee, tachesVivantes, type Auteur, type DonneesTaches, type Tach
 import { modeProjet } from './partage';
 import { TOLERANCE_RAPPEL_MS, type AlerteRappel, type EtatRappels } from './rappels';
 
-export type TypeNotif = 'echeance' | 'rappel' | 'retard' | 'assignee' | 'ami' | 'office' | 'recap';
+export type TypeNotif = 'echeance' | 'rappel' | 'retard' | 'assignee' | 'ami' | 'office' | 'recap' | 'journal';
 export type Canal = 'les-deux' | 'systeme' | 'pastille' | 'aucun';
 
-export const TYPES_NOTIF: readonly TypeNotif[] = ['echeance', 'rappel', 'retard', 'assignee', 'ami', 'office', 'recap'];
+export const TYPES_NOTIF: readonly TypeNotif[] = ['echeance', 'rappel', 'retard', 'assignee', 'ami', 'office', 'recap', 'journal'];
 export const CANAUX: readonly Canal[] = ['les-deux', 'systeme', 'pastille', 'aucun'];
 export const LIBELLES_TYPE: Record<TypeNotif, string> = {
   echeance: 'Échéance atteinte',
@@ -40,6 +40,7 @@ export const LIBELLES_TYPE: Record<TypeNotif, string> = {
   ami: 'Modification ou commentaire sur un projet partagé',
   office: 'Tâche liée à un agent Claude Office terminée',
   recap: 'Récap quotidien « Ma journée »',
+  journal: 'Invite du soir « Note ce que tu as fait aujourd’hui »',
 };
 export const LIBELLES_CANAL: Record<Canal, string> = { 'les-deux': 'Système + pastille', systeme: 'Système', pastille: 'Pastille', aucun: 'Aucune' };
 export const DELAIS_DEFAUT: readonly number[] = [0, 10, 60, 1440];
@@ -50,6 +51,8 @@ export interface PrefsNotif {
   /** Rappel posé par défaut sur une nouvelle échéance (minutes avant ; −1 : aucun). */
   delaiDefaut: number;
   heureRecap: string;
+  /** Heure de l'invite du soir (journal du jour). */
+  heureJournal: string;
   calme: { actif: boolean; debut: string; fin: string; weekEnd: boolean };
   regrouper: boolean;
   son: boolean;
@@ -61,9 +64,10 @@ export interface PrefsNotif {
 
 export const PREFS_DEFAUT: PrefsNotif = {
   actif: true,
-  types: { echeance: 'les-deux', rappel: 'les-deux', retard: 'pastille', assignee: 'les-deux', ami: 'pastille', office: 'les-deux', recap: 'aucun' },
+  types: { echeance: 'les-deux', rappel: 'les-deux', retard: 'pastille', assignee: 'les-deux', ami: 'pastille', office: 'les-deux', recap: 'aucun', journal: 'aucun' },
   delaiDefaut: -1,
   heureRecap: '08:30',
+  heureJournal: '18:00',
   calme: { actif: false, debut: '22:00', fin: '07:30', weekEnd: false },
   regrouper: true,
   son: true,
@@ -84,6 +88,7 @@ export function lirePrefs(brut: unknown): PrefsNotif {
     types: Object.fromEntries(TYPES_NOTIF.map(t => [t, CANAUX.includes(types[t] as Canal) ? (types[t] as Canal) : PREFS_DEFAUT.types[t]])) as Record<TypeNotif, Canal>,
     delaiDefaut: typeof o.delaiDefaut === 'number' && (o.delaiDefaut === -1 || DELAIS_DEFAUT.includes(o.delaiDefaut)) ? o.delaiDefaut : PREFS_DEFAUT.delaiDefaut,
     heureRecap: heure(o.heureRecap, PREFS_DEFAUT.heureRecap),
+    heureJournal: heure(o.heureJournal, PREFS_DEFAUT.heureJournal),
     calme: { actif: calme.actif === true, debut: heure(calme.debut, PREFS_DEFAUT.calme.debut), fin: heure(calme.fin, PREFS_DEFAUT.calme.fin), weekEnd: calme.weekEnd === true },
     regrouper: o.regrouper !== false,
     son: o.son !== false,
@@ -226,6 +231,13 @@ export function evenementsTaches(
     const morceaux = [j.retard.length ? `${j.retard.length} en retard` : '', aujourdhui ? `${aujourdhui} pour aujourd’hui` : '', j.aVenir.length ? `${j.aVenir.length} à venir cette semaine` : ''].filter(Boolean);
     r.push({ type: 'recap', cle: `recap|${jour}`, tacheId: '', titre: 'Ma journée', texte: morceaux.length ? `${morceaux.join(', ')}.` : 'Rien d’urgent aujourd’hui.', date: new Date(heureRecap).toISOString() });
   }
+  // Invite du soir : noter ce qu'on a fait (si un projet peut recevoir ses entrées et qu'il n'a rien noté aujourd'hui).
+  const heureJournal = instantDe(jour, prefs.heureJournal);
+  if (prefs.actif && prefs.types.journal !== 'aucun' && maintenant >= heureJournal && maintenant - heureJournal <= 6 * 3_600_000) {
+    const projets = Object.values(d.projets).filter(p => !p.supprime && (qui === 'fondateur' ? !p.auto : modeProjet(d, p.id) === 'ecriture'));
+    const dejaNote = Object.values(d.journal ?? {}).some(e => !e.supprime && e.jour === jour && e.auteur === qui);
+    if (projets.length && !dejaNote) r.push({ type: 'journal', cle: `journal|${jour}`, tacheId: '', titre: 'Journal du jour', texte: 'Note ce que tu as fait aujourd’hui (📓 dans le projet).', date: new Date(heureJournal).toISOString() });
+  }
   return { evenements: r, autres };
 }
 
@@ -250,7 +262,7 @@ export function filtrerNotifications(evenements: readonly EvenementNotif[], etat
     if (canal === 'aucun') continue;
     if (e.projetId && prefs.muets.includes(e.projetId)) continue;
     if (canal === 'les-deux' || canal === 'pastille') pastille.push({ cle: e.cle, tacheId: e.tacheId, titre: e.titre, texte: e.texte, date: e.date, type: e.type });
-    if (canal === 'les-deux' || canal === 'systeme') systeme.push({ titre: e.type === 'recap' ? '☀︎ Ma journée' : `Tâche : ${e.titre}`, corps: e.texte, ...(e.tacheId ? { tacheId: e.tacheId } : {}) });
+    if (canal === 'les-deux' || canal === 'systeme') systeme.push({ titre: e.type === 'recap' ? '☀︎ Ma journée' : e.type === 'journal' ? '📓 Journal du jour' : `Tâche : ${e.titre}`, corps: e.texte, ...(e.tacheId ? { tacheId: e.tacheId } : {}) });
   }
   const limite = new Date(maintenant - DUREE_MEMOIRE_MS).toISOString();
   for (const [c, date] of Object.entries(vus)) if (date < limite) delete vus[c];

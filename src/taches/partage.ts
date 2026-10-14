@@ -42,9 +42,11 @@ import {
   ecrireDonnees,
   hValide,
   lireDonnees,
+  lireJournal,
   lireTache,
   vivant,
   type DonneesTaches,
+  type EntreeJournal,
   type ModePartage,
   type Tache,
 } from './modele';
@@ -152,6 +154,8 @@ export function projectionPourAmi(d: DonneesTaches): DonneesTaches {
         }),
     ),
     vues: {},
+    // Journal du jour des projets partagés (lu par l'ami dans le débriefing).
+    journal: Object.fromEntries(Object.values(d.journal ?? {}).filter(e => projets[e.projetId]).map(e => [e.id, e])),
     // Seuls les réglages de notification de l'ami lui reviennent (ceux qu'il a envoyés).
     reglages: { id: 'reglages', h: d.reglages.h.notifA ? { notifA: d.reglages.h.notifA } : {}, ...(d.reglages.notifA ? { notifA: d.reglages.notifA } : {}) },
   };
@@ -164,6 +168,17 @@ export function projectionPourAmi(d: DonneesTaches): DonneesTaches {
  * son projet est partagé en écriture ; tout le reste (projet retiré du
  * partage) disparaît.
  */
+/** Journal chez l'ami : celui reçu, plus ses entrées pas encore renvoyées (projets en écriture), fusionnés entrée par entrée. */
+function journalRecu(copie: CopieAmi, recu: DonneesTaches): DonneesTaches['journal'] {
+  const r = { ...recu.journal };
+  for (const e of Object.values(copie.donnees.journal ?? {})) {
+    const x = r[e.id];
+    if (x) r[e.id] = x.h >= e.h ? x : e;
+    else if (e.auteur === 'ami' && modeProjet(recu, e.projetId) === 'ecriture') r[e.id] = e;
+  }
+  return r;
+}
+
 export function appliquerReception(copie: CopieAmi, doc: DocumentPourAmi): CopieAmi {
   const recu = lireDonnees(doc.donnees);
   const taches: Record<string, Tache> = {};
@@ -181,7 +196,7 @@ export function appliquerReception(copie: CopieAmi, doc: DocumentPourAmi): Copie
     ...(doc.fondateur ? { fondateur: doc.fondateur } : {}),
     ...(doc.amiNom ? { ami: doc.amiNom } : {}),
     cle: doc.cle,
-    donnees: { ...recu, taches, reglages },
+    donnees: { ...recu, taches, reglages, journal: journalRecu(copie, recu) },
     ...(copie.recuLe ? { recuLe: copie.recuLe } : {}),
   };
 }
@@ -193,6 +208,8 @@ export interface EnvoiAmi {
   taches: Record<string, Tache>;
   /** Ses réglages de notification (et leur horodatage), pour ses autres appareils. */
   notif?: { valeur: unknown; h: string };
+  /** Ses entrées du journal du jour (projets en écriture). */
+  journal?: Record<string, EntreeJournal>;
 }
 
 /** Une tâche porte-t-elle une trace de l'ami (champ, élément, commentaire, historique) ? */
@@ -213,7 +230,8 @@ export function envoiDeLAmi(copie: CopieAmi): EnvoiAmi {
     if (modeProjet(copie.donnees, t.projetId) === 'ecriture' && toucheeParAmi(t)) taches[t.id] = t;
   }
   const r = copie.donnees.reglages;
-  return { v: 1, taches, ...(r.notifA && r.h.notifA?.endsWith('|a') ? { notif: { valeur: r.notifA, h: r.h.notifA } } : {}) };
+  const journal = Object.fromEntries(Object.values(copie.donnees.journal ?? {}).filter(e => e.h.endsWith('|a') && modeProjet(copie.donnees, e.projetId) === 'ecriture').map(e => [e.id, e]));
+  return { v: 1, taches, ...(r.notifA && r.h.notifA?.endsWith('|a') ? { notif: { valeur: r.notifA, h: r.h.notifA } } : {}), ...(Object.keys(journal).length ? { journal } : {}) };
 }
 
 export interface BilanEnvoi {
@@ -284,8 +302,21 @@ export function appliquerEnvoiAmi(d: DonneesTaches, envoi: unknown): BilanEnvoi 
   if (notif && hValide(notif.h) && notif.h.endsWith('|a') && notif.valeur && typeof notif.valeur === 'object' && JSON.stringify(notif.valeur).length < 8000 && notif.h > (d.reglages.h.notifA ?? '')) {
     reglages = { ...d.reglages, notifA: notif.valeur, h: { ...d.reglages.h, notifA: notif.h } };
   }
+  // Journal : seulement ses entrées, dans un projet partagé en écriture (avant comme après).
+  const brutJournal = envoi && typeof envoi === 'object' ? (envoi as { journal?: unknown }).journal : undefined;
+  let journal = d.journal;
+  for (const e of Object.values(lireJournal(brutJournal))) {
+    const existante = d.journal[e.id];
+    if (e.auteur !== 'ami' || !e.h.endsWith('|a') || modeProjet(d, e.projetId) !== 'ecriture' || (existante && (existante.auteur !== 'ami' || existante.projetId !== e.projetId))) {
+      refusees++;
+      continue;
+    }
+    if (existante && existante.h >= e.h) continue;
+    journal = { ...journal, [e.id]: e };
+    acceptees++;
+  }
   const change = acceptees > 0 || reglages !== d.reglages;
-  return { donnees: change ? { ...d, taches, reglages } : d, acceptees, refusees };
+  return { donnees: change ? { ...d, taches, reglages, journal } : d, acceptees, refusees };
 }
 
 // ------------------------------------------------------------------ Scellement
@@ -520,7 +551,7 @@ export async function recevoirTachesAmi(o: {
     change = true;
   }
   const envoi = envoiDeLAmi(copie);
-  if (!copie.cle || (Object.keys(envoi.taches).length === 0 && !envoi.notif)) return { suivi, change };
+  if (!copie.cle || (Object.keys(envoi.taches).length === 0 && !envoi.notif && !envoi.journal)) return { suivi, change };
   const cle = copie.cle;
   const h = empreinte(envoi);
   if (h === suivi.envoye) return { suivi, change };

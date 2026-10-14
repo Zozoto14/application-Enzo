@@ -22,7 +22,9 @@ import {
   type Commentaire,
   type DonneesTaches,
   type ElementChecklist,
+  type EntreeJournal,
   type EntreeTemps,
+  type Projet,
   type Entite,
   type Horodatages,
   type Tache,
@@ -45,6 +47,16 @@ function canonique(v: unknown): unknown {
 export const texteCanonique = (v: unknown): string => JSON.stringify(canonique(v)) ?? '~';
 
 const SPECIAUX = new Set(['id', 'h', 'checklist', 'commentaires', 'historique', 'temps']);
+
+/** Projet : champs par champ, historique par union. */
+export function fusionnerProjet(a: Projet, b: Projet): Projet {
+  if (a === b) return a;
+  const base = fusionnerEntite(a, b);
+  const historique = borneHistorique([...(a.historique ?? []), ...(b.historique ?? [])]);
+  const r = { ...base } as Projet;
+  delete r.historique;
+  return historique.length ? { ...r, historique } : r;
+}
 
 /** Fusion champ par champ de deux versions d'une même entité. */
 export function fusionnerEntite<T extends Entite>(a: T, b: T): T {
@@ -111,11 +123,12 @@ export function fusionnerDonnees(a: DonneesTaches, b: DonneesTaches): DonneesTac
   return {
     v: 1,
     espaces: fusionnerCollection(a.espaces, b.espaces),
-    projets: fusionnerCollection(a.projets, b.projets),
+    projets: fusionnerCollection(a.projets, b.projets, fusionnerProjet),
     listes: fusionnerCollection(a.listes, b.listes),
     taches: fusionnerCollection(a.taches, b.taches, fusionnerTache),
     vues: fusionnerCollection(a.vues, b.vues),
     reglages: fusionnerEntite(a.reglages, b.reglages),
+    journal: fusionnerElements<EntreeJournal>(a.journal ?? {}, b.journal ?? {}),
   };
 }
 

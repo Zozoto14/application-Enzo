@@ -14,7 +14,7 @@ import { libelleDelai } from '../rappels';
 import type { Actions } from './actions';
 import { attenueDe, Bouton, Champ, Dialogue, Libelle, Puce, texteDe } from './atomes';
 
-const TYPES_AMI: readonly TypeNotif[] = ['echeance', 'rappel', 'retard', 'assignee', 'ami', 'recap'];
+const TYPES_AMI: readonly TypeNotif[] = ['echeance', 'rappel', 'retard', 'assignee', 'ami', 'recap', 'journal'];
 const COURTS: Record<Canal, string> = { 'les-deux': 'Les deux', systeme: 'Système', pastille: 'Pastille', aucun: 'Aucune' };
 
 function Interrupteur({ a, texte, actif, onPress, testID, detail }: { a: Actions; texte: string; actif: boolean; onPress(): void; testID: string; detail?: string }) {
@@ -37,6 +37,7 @@ export function DialogueNotifications({ a, appareil, systemeDisponible, onTester
   const [debut, setDebut] = useState(p.calme.debut);
   const [fin, setFin] = useState(p.calme.fin);
   const [heureRecap, setHeureRecap] = useState(p.heureRecap);
+  const [heureJournal, setHeureJournal] = useState(p.heureJournal);
   const changer = (c: Partial<PrefsNotif>) => a.etat.maj((x, ctx) => changerReglages(x, { [champPrefs(role)]: { ...prefsDe(x, role), ...c } }, ctx));
   const heure = (v: string) => (heureValide(v) ? v : lireHeure(v));
   const types = role === 'fondateur' ? TYPES_NOTIF : TYPES_AMI;
@@ -80,6 +81,12 @@ export function DialogueNotifications({ a, appareil, systemeDisponible, onTester
             <>
               <Libelle theme={theme}>HEURE DU RÉCAP « MA JOURNÉE »</Libelle>
               <Champ theme={theme} mobile={a.mobile} value={heureRecap} onChangeText={setHeureRecap} onBlur={() => (heure(heureRecap) ? changer({ heureRecap: heure(heureRecap)! }) : setHeureRecap(p.heureRecap))} placeholder="08:30" testID="notif-heure-recap" accessibilityLabel="Heure du récap quotidien" style={{ maxWidth: 160 }} />
+            </>
+          ) : null}
+          {p.types.journal !== 'aucun' ? (
+            <>
+              <Libelle theme={theme}>HEURE DE L’INVITE DU SOIR (JOURNAL DU JOUR)</Libelle>
+              <Champ theme={theme} mobile={a.mobile} value={heureJournal} onChangeText={setHeureJournal} onBlur={() => (heure(heureJournal) ? changer({ heureJournal: heure(heureJournal)! }) : setHeureJournal(p.heureJournal))} placeholder="18:00" testID="notif-heure-journal" accessibilityLabel="Heure de l’invite du soir" style={{ maxWidth: 160 }} />
             </>
           ) : null}
           <Libelle theme={theme}>HEURES CALMES (NE PAS DÉRANGER)</Libelle>
