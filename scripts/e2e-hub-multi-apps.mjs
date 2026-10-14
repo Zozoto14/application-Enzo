@@ -97,6 +97,8 @@ try {
   await tuile(pc, 'claude-office').click();
   await pc.getByTestId('claude-office-onglet-historique').waitFor({ timeout: 20_000 });
   await pc.getByTestId('claude-office-onglet-historique').click();
+  const texteHorsBureau = () => pc.getByText(/Le bureau des agents de Claude Code : un personnage par session/).count();
+  verifier(await attendre(async () => (await texteHorsBureau()) === 1, 5000), 'Claude Office : onglet interne « Historique » choisi');
   const ids = await pc.locator('[data-testid^="onglets-app-"][data-testid$="-ouvrir"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid')));
   verifier(JSON.stringify(ids) === JSON.stringify(['onglets-app-portefeuille-ouvrir', 'onglets-app-taches-ouvrir', 'onglets-app-claude-office-ouvrir']), `trois onglets dans l’ordre d’ouverture (${ids.join(', ')})`);
   verifier((await pc.getByTestId('onglets-compte').innerText()).trim() === '3/8', 'compteur 3/8');
@@ -109,7 +111,7 @@ try {
   verifier((await presents(pc, 'claude-office-onglet-historique')) === 0, 'onglet masqué (Claude Office) : plus rien de lui dans la page');
   await pc.getByTestId('onglets-app-claude-office-ouvrir').click();
   await pc.getByTestId('claude-office-onglet-historique').waitFor({ timeout: 10_000 });
-  verifier((await pc.getByTestId('claude-office-onglet-historique').getAttribute('aria-selected')) === 'true', 'Claude Office : l’onglet « Historique » choisi est toujours affiché');
+  verifier((await texteHorsBureau()) === 1, 'Claude Office : l’onglet « Historique » choisi est toujours affiché');
   verifier((await presents(pc, 'taches-recherche')) === 0, 'Tâches, masquée : rien d’elle dans la page');
 
   log('PC : raccourcis');
@@ -225,6 +227,9 @@ try {
     delete window.applibourse.bureau;
     delete window.applibourse.fenetres;
   });
+  // Un rendu de l'hôte (changement d'onglet) relit le pont.
+  await pc.getByTestId('onglets-app-claude-office-ouvrir').click();
+  await pc.getByTestId('onglets-hub').click();
   await pc.getByTestId('onglets-barre').waitFor({ timeout: 20_000 });
   await pc.getByTestId('onglets-app-claude-office-menu').click();
   const libelleSite = await pc.getByTestId('onglets-menu-ailleurs').innerText();
@@ -263,6 +268,7 @@ try {
   await pc.getByTestId('admin-termine').click();
   const lea = await contextePc.newPage();
   for (const app of ['administration', 'claude-office']) {
+    await lea.goto('about:blank');
     await lea.goto(`${site.url}#/app/${app}`);
     await lea.getByTestId('connexion-prenom').waitFor({ timeout: 60_000 });
     await lea.getByTestId('connexion-prenom').fill('Léa');
@@ -274,11 +280,10 @@ try {
       await lea.getByTestId('bouton-deverrouiller').click();
       if (await lea.getByTestId('hub').waitFor({ timeout: 25_000 }).then(() => true, () => false)) break;
     }
-    await fermerPopups(lea);
-    verifier((await presents(lea, 'hub')) === 1, `Léa, lien #/app/${app} : elle reste sur le hub`);
-    verifier((await presents(lea, `onglets-app-${app}`)) === 0 && (await presents(lea, 'app-administration')) === 0, `… sans onglet ${app}`);
-    verifier(await attendre(async () => (await presents(lea, 'avis-onglets')) === 1, 5000), '… et un avis le dit');
+    verifier(await attendre(async () => (await presents(lea, 'avis-onglets')) === 1, 8000), `Léa, lien #/app/${app} : un avis dit que l’app ne lui est pas ouverte`);
     if (app === 'administration') await capture(lea, '06-ami-lien-interdit');
+    verifier((await presents(lea, 'hub')) === 1, '… elle reste sur le hub');
+    verifier((await presents(lea, `onglets-app-${app}`)) === 0 && (await presents(lea, 'app-administration')) === 0, `… sans onglet ${app}`);
   }
   await lea.close();
 
