@@ -47,6 +47,7 @@ import {
   type Entite,
   type Tache,
 } from './modele';
+import { projetPartage } from './membres';
 import { modeProjet } from './partage';
 
 export type Genre = 'espace' | 'projet' | 'liste' | 'tache';
@@ -80,12 +81,12 @@ export function bilanSuppression(d: DonneesTaches, genre: Genre, id: string): Bi
         projets: projets.length,
         listes: projets.reduce((n, p) => n + listesDe(d, p.id).length, 0),
         taches: projets.reduce((n, p) => n + tachesVivantes(d, p.id).length, 0),
-        partages: projets.filter(p => p.partage !== 'aucun').length,
+        partages: projets.filter(p => projetPartage(d, p)).length,
       };
     }
     case 'projet': {
       const p = d.projets[id];
-      return { projets: 1, listes: listesDe(d, id).length, taches: tachesVivantes(d, id).length, partages: vivant(p) && p.partage !== 'aucun' ? 1 : 0 };
+      return { projets: 1, listes: listesDe(d, id).length, taches: tachesVivantes(d, id).length, partages: vivant(p) && projetPartage(d, p) ? 1 : 0 };
     }
     case 'liste':
       return { projets: 0, listes: 1, taches: tachesVivantes(d).filter(t => t.listeId === id).length, partages: 0 };

@@ -732,6 +732,9 @@ export async function synchroniserTachesFondateur(o: OptionsTachesFondateur): Pr
     }
   }
   // Chaque projet partagé a sa clé (créée ici si un appareil plus ancien a partagé sans).
+  // Ce qui a été enregistré ici pendant la lecture du relais (un droit donné, une tâche) n'est pas écrasé : fusionné.
+  const relu = o.base.lire(CLES_TACHES.donnees);
+  if (relu && relu !== brut) donnees = fusionnerDonnees(lireDonnees(relu), donnees);
   donnees = assurerClesProjets(donnees, { maintenant: Date.parse(o.maintenant), auteur: 'fondateur', aleaOctets: o.alea ?? aleatoireParDefaut });
   if (!memesDonnees(donnees, locales)) {
     o.base.ecrire(CLES_TACHES.donnees, ecrireDonnees(donnees));
@@ -838,11 +841,17 @@ export async function recevoirTachesAmi(o: {
 }): Promise<{ suivi: SuiviTachesAmi; change: boolean; envoi?: EnvoiPret }> {
   const suivi = { ...o.suivi };
   let change = false;
-  const brut = o.base.lire(CLES_TACHES.copie);
+  let brut = o.base.lire(CLES_TACHES.copie);
   let copie = lireCopie(brut);
   const date = o.objets[OBJET_TACHES]?.date;
   if (date && date !== suivi.lu) {
     const objet = await o.espaces.lire(o.id, OBJET_TACHES);
+    // Ce que le membre a changé pendant la lecture du relais est gardé : la réception part de la copie relue.
+    const relu = o.base.lire(CLES_TACHES.copie);
+    if (relu !== brut) {
+      brut = relu;
+      copie = lireCopie(relu);
+    }
     // Seul un dépôt du Fondateur (jeton maître) est cru.
     if (objet && publieParAdmin(objet.auteur)) {
       try {

@@ -502,17 +502,17 @@ try {
   await pc.getByTestId('rappels-enregistrer').click();
   const notifie = await attendre(async () => (await pc.evaluate(() => window.__notifications.length)) > 0, 70_000, 2000);
   verifier(notifie, 'notification système (pont du PC) envoyée à l’échéance');
-  const pastilleUn = await attendre(async () => /🔔 1/.test(await texteDe(pc, 'taches-rappels')), 10_000, 500);
-  if (!pastilleUn) {
-    await pc.getByTestId('taches-rappels').click();
-    log('rappels du Fondateur :', (await texteDe(pc, 'dialogue-rappels-recus')).replace(/\s+/g, ' ').slice(0, 500));
-    await pc.keyboard.press('Escape');
-  }
-  verifier(pastilleUn, `pastille 🔔 1 dans l’app (${await texteDe(pc, 'taches-rappels')})`);
+  // Le soir, « Préparer la maquette » (aujourd'hui 15 h) est déjà « En retard » : la pastille compte aussi ce rappel.
+  const pastilleUn = await attendre(async () => /🔔 [1-9]/.test(await texteDe(pc, 'taches-rappels')), 10_000, 500);
+  await pc.getByTestId('taches-rappels').click();
+  const recus = (await texteDe(pc, 'dialogue-rappels-recus').catch(() => '')).replace(/\s+/g, ' ');
+  await pc.keyboard.press('Escape');
+  const attendus = 1 + (/Préparer la maquette En retard/.test(recus) ? 1 : 0);
+  verifier(pastilleUn && /Rappel test/.test(recus) && new RegExp(`🔔 ${attendus}\\b`).test(await texteDe(pc, 'taches-rappels')), `pastille 🔔 dans l’app (${await texteDe(pc, 'taches-rappels')} : ${recus.slice(0, 160)})`);
   await pc.keyboard.press('Escape');
   await quitterTaches(pc);
   await allerPageApplications(pc);
-  verifier(/1 RAPPEL/.test(await tuileApp(pc, 'taches').first().innerText()), 'pastille « 1 RAPPEL » sur la tuile du hub');
+  verifier(new RegExp(`${attendus} RAPPEL`).test(await tuileApp(pc, 'taches').first().innerText()), `pastille « ${attendus} RAPPEL(S) » sur la tuile du hub`);
   await pause(1500);
   await capture(pc, '09-pc-hub-tuile');
   await pause(35_000);

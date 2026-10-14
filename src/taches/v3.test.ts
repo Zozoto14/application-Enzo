@@ -349,6 +349,29 @@ describe('trois membres par le relais en mémoire', () => {
   });
 });
 
+describe('synchronisation du Fondateur et écritures locales', () => {
+  it('un droit donné pendant la lecture du relais n’est pas écrasé', async () => {
+    const s = scenario();
+    const m = new Map<string, string>([[CLES_TACHES.donnees, JSON.stringify(s.d)]]);
+    const base = { lire: (k: string) => m.get(k), ecrire: (k: string, v: string) => void m.set(k, v) } as BasePrefs;
+    const espaces = {
+      lire: async () => {
+        // Pendant l'attente du relais : le Fondateur ouvre « Appli » à Zoé en lecture.
+        m.set(CLES_TACHES.donnees, JSON.stringify(changerDroit(lireDonnees(m.get(CLES_TACHES.donnees)), s.B, ZOE, 'lecture', { ...f(), maintenant: T0 + 5000 })));
+        // L'autre appareil du Fondateur a renommé une tâche.
+        const distant = modifierTache(s.d, s.t1, { titre: 'Maquette v2' }, { ...f(), maintenant: T0 + 1000 });
+        return { charge: JSON.stringify(sceller('11'.repeat(32), distant, OBJET_TACHES, new Date(T0).toISOString(), aleatoireDeterministe(6))), date: new Date(T0).toISOString() };
+      },
+      deposer: async () => undefined,
+      supprimer: async () => undefined,
+    } as never;
+    await synchroniserTachesFondateur({ espaces, base, cleSynchro: '11'.repeat(32), etat: {}, objetsAdmin: { [OBJET_TACHES]: { date: new Date(T0).toISOString() } } as never, objetsCompte: async () => ({}), comptes: new Set<string>(), retours: {}, nomFondateur: 'Enzo', maintenant: new Date(T0 + 6000).toISOString(), alea: aleatoireDeterministe(3) });
+    const fin = lireDonnees(m.get(CLES_TACHES.donnees));
+    expect(droitDe(fin, s.B, ZOE)).toBe('lecture');
+    expect(fin.taches[s.t1].titre).toBe('Maquette v2');
+  });
+});
+
 // ------------------------------------------------------------------ Mentions et assignation multiple
 
 describe('mentions et assignation à plusieurs', () => {
