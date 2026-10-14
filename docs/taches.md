@@ -193,6 +193,8 @@ une session ou le minuteur du Fondateur.
   administrateur), le niveau d'accès de l'app « Tâches » (Aucun / Complet) ouvre ou ferme l'app comme pour les autres
   apps du registre. Au tour suivant du hub (30 s), le Fondateur invite le profil (sa clé de membre est créée) ou le
   retire ; inviter depuis Tâches ouvre aussi l'accès. Une seule vérité : la liste des profils qui ont l'app.
+  Comme toute app partageable, Tâches fait partie du modèle d'accès « Ami » (accès complet) proposé à la création
+  d'un compte : un compte créé ainsi devient membre sans projet (état vide) tant que rien ne lui est partagé.
 - **Sans projet partagé** : la tuile apparaît, l'app montre « Aucun projet partagé avec toi » (et, si le Fondateur
   l'a permis, le bouton « Mes projets personnels »).
 - **Fermer l'accès** : retrait de Tâches — clés des projets tournées, dépôt effacé au tour suivant, la tuile
@@ -337,7 +339,9 @@ V3 : un membre ne reçoit un nouveau dépôt que si SA projection a changé (une
 rien chez les membres) ; la clé de chaque projet partagé est créée une fois. Mesuré (`v3.test.ts`, relais en
 mémoire) : premier envoi à 3 membres = 3 dépôts ; puis une modification de Léa dans un projet vu par les 3 = 1
 retour + 4 dépôts (principal et les 3 membres) = 5 objets, soit 10 écritures KV ; un tour sans changement : 0.
-Mesuré de bout en bout (`e2e-taches-v3`) : MESURE_E2E.
+Mesuré de bout en bout (`e2e-taches-v3`, relais local, objets `taches` et `compte` comptés) : un commentaire du
+Fondateur avec mention, dans un projet vu par 3 membres = 5 objets de Tâches, soit 10 écritures KV (les autres
+apps des comptes de test écrivent aussi pendant ce temps, sans lien avec Tâches).
 
 **Relais : inchangé** (`relais/worker.mjs` non modifié en V1, V2 et V3 : pas de redéploiement).
 

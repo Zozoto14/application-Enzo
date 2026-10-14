@@ -23,7 +23,8 @@ const cles = (nom: string): string[] => {
   return [...new Set([mots[0] ?? '', n.replace(/\s+/g, ''), n.replace(/\s+/g, '-')])].filter(Boolean);
 };
 
-const MOTIF = /(^|[\s(«"'])@([\p{L}\p{N}_-]{1,40})/gu;
+// Précédé d'un début, d'une espace ou d'une ponctuation (« ?@Léa ») — pas d'une lettre ni d'un chiffre (adresses e-mail).
+const MOTIF = /(^|[^\p{L}\p{N}_.@-])@([\p{L}\p{N}_-]{1,40})/gu;
 
 /** Codes des personnes mentionnées dans un texte (dans l'ordre, sans doublon). */
 export function trouverMentions(texte: string, personnes: readonly Personne[], moi?: Auteur): Auteur[] {

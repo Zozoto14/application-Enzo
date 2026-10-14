@@ -135,12 +135,13 @@ export function DialogueMembres({ a, comptes, onFermer, onErreur, onAvis }: { a:
               <Bouton theme={theme} compact variante="danger" titre="Retirer…" onPress={() => setRetrait(m.compte)} testID={`membre-retirer-${m.compte}`} />
             </View>
             {!m.historique ? (
-              <Puce
+              <Bouton
                 theme={theme}
-                grand={a.mobile}
-                texte={m.perso ? '✓ Peut créer ses propres projets' : 'Peut créer ses propres projets'}
-                couleur={theme.ok}
-                actif={Boolean(m.perso)}
+                compact={!a.mobile}
+                variante="discret"
+                style={{ alignSelf: 'flex-start' }}
+                titre={`${m.perso ? '☑' : '☐'} Peut créer ses propres projets`}
+                libelle={`Peut créer ses propres projets : ${m.perso ? 'oui' : 'non'}`}
                 onPress={() => {
                   try {
                     a.etat.maj((x, ctx) => changerPerso(x, m.compte, !m.perso, ctx));

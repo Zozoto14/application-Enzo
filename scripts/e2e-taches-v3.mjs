@@ -512,6 +512,7 @@ try {
   await pc.getByTestId(`tache-titre-${idConception}`).click();
   await pc.getByTestId('detail-commentaire-champ').fill('@L');
   await pc.getByTestId(`mention-choisir-${lea.id}`).click();
+  await pc.getByTestId('detail-commentaire-champ').press('End');
   await pc.getByTestId('detail-commentaire-champ').pressSequentially('peux-tu relire ?');
   await pc.getByTestId('detail-commentaire-publier').click();
   await fermer(pc);
@@ -671,7 +672,6 @@ try {
 
   // ================================================================ Accès ouvert par l'Administration (gestionnaire)
   log('Administration : Tâches ouverte à Gaston (gestionnaire), puis fermée');
-  verifier(!(await tuileApp(pcGaston, 'taches').count()), 'Gaston (sans l’app) : pas de tuile Tâches');
   const niveauTaches = async niveau => {
     await quitterTaches(pc).catch(() => undefined);
     await allerPageAdministration(pc);
@@ -685,6 +685,14 @@ try {
     await pause(1500);
     await quitterTaches(pc).catch(() => undefined);
   };
+  // Le modèle « Ami » d'un compte neuf ouvre toutes les apps partageables, Tâches comprise : on la ferme d'abord.
+  await niveauTaches('aucun');
+  verifier(await attendre(async () => {
+    await relancer(pcGaston);
+    await pause(2500);
+    await allerPageApplications(pcGaston).catch(() => undefined);
+    return (await tuileApp(pcGaston, 'taches').count()) === 0;
+  }, 180_000, 6000), 'Gaston (sans l’app) : pas de tuile Tâches');
   await niveauTaches('complet');
   await ouvrirTaches(pc);
   verifier(await attendre(async () => {
@@ -724,8 +732,13 @@ try {
   verifier(await visible(pc, 'parametres-taches-perso', 10_000) && (await visible(pc, 'parametres-taches-fondateur', 5000)), 'Paramètres : section « Tâches » (réglages perso et du Fondateur)');
   await pc.getByTestId('parametres-taches-membres').click();
   verifier(await visible(pc, `membre-${zoe.id}`, 8000), 'Paramètres › Tâches › Membres : la même fenêtre que dans l’app');
+  await pause(800);
   await capture(pc, 'v3-13-pc-parametres-taches');
   await fermer(pc);
+  if (!(await visible(pc, 'parametres-taches-ouvrir-fondateur', 2000))) {
+    if (!(await visible(pc, 'parametres-section-taches', 1000))) await pc.getByTestId('hub-parametres-ouvrir').click();
+    await pc.getByTestId('parametres-section-taches').click();
+  }
   await pc.getByTestId('parametres-taches-ouvrir-fondateur').click();
   verifier(await visible(pc, 'app-taches', 15_000), 'Paramètres › « Ouvrir dans Tâches »');
   await pc.getByTestId('taches-reglages').click();

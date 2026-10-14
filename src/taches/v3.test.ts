@@ -361,6 +361,7 @@ describe('mentions et assignation à plusieurs', () => {
     expect(trouverMentions('Merci @lea et @Hugo, voir avec @enzo', personnes, HUGO)).toEqual([LEA, 'fondateur']);
     expect(trouverMentions('email@exemple.fr', personnes)).toEqual([]);
     expect(trouverMentions('@LéaMartin ok', personnes)).toEqual([LEA]);
+    expect(trouverMentions('Relis ?@Léa (et @hugo)', personnes)).toEqual([LEA, HUGO]);
     expect(decouperMentions('Hé @Léa !', personnes)).toEqual([{ texte: 'Hé ' }, { texte: '@Léa', mention: LEA }, { texte: ' !' }]);
     expect(suggestionsMention('Bonjour @h', personnes).map(p => p.code)).toEqual([HUGO]);
     expect(suggestionsMention('Bonjour @', personnes, 'fondateur').map(p => p.code)).toEqual([LEA, HUGO]);
