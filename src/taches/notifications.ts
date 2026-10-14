@@ -186,8 +186,8 @@ export function evenementsTaches(
         if (declenche > maintenant || maintenant - declenche > TOLERANCE_RAPPEL_MS) continue;
         r.push({ type: m === 0 ? 'echeance' : 'rappel', cle: `${t.id}|${t.echeance.jour}T${t.echeance.heure ?? ''}|${m}`, tacheId: t.id, projetId: t.projetId, titre: t.titre, texte: texteRappel(m, t.echeance.heure), date: new Date(declenche).toISOString() });
       }
-      // En retard : une fois, quand l'échéance (fin de journée sans heure) est passée.
-      const fin = t.echeance.heure ? echeance : instantDe(t.echeance.jour, '23:59') + 60_000;
+      // En retard : une fois, une heure après l'échéance (fin de journée sans heure) — pas en double avec « échéance atteinte ».
+      const fin = t.echeance.heure ? echeance + 3_600_000 : instantDe(t.echeance.jour, '23:59') + 60_000;
       if (fin <= maintenant && maintenant - fin <= TOLERANCE_RAPPEL_MS) {
         r.push({ type: 'retard', cle: `${t.id}|retard|${t.echeance.jour}T${t.echeance.heure ?? ''}`, tacheId: t.id, projetId: t.projetId, titre: t.titre, texte: 'En retard : l’échéance est passée', date: new Date(fin).toISOString() });
       }

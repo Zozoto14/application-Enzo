@@ -204,7 +204,8 @@ describe('notifications : événements', () => {
     let d = modifierTache(m.d, m.t2, { echeance: { jour: AUJ, heure: '10:00' }, rappels: [0, 30] }, f());
     const ev = (n: number) => evenementsTaches(d, n, 'fondateur', { premiere: false, autres: {} }, prefs(), noms).evenements.map(e => e.type);
     expect(ev(new Date(2026, 9, 13, 9, 31).getTime())).toEqual(['rappel']);
-    expect(ev(new Date(2026, 9, 13, 10, 1).getTime())).toEqual(['echeance', 'rappel', 'retard']);
+    expect(ev(new Date(2026, 9, 13, 10, 1).getTime())).toEqual(['echeance', 'rappel']);
+    expect(ev(new Date(2026, 9, 13, 11, 1).getTime())).toEqual(['echeance', 'rappel', 'retard']);
     d = modifierTache(d, m.t2, { statut: 'fait' }, f());
     expect(ev(new Date(2026, 9, 13, 10, 1).getTime())).toEqual([]);
   });

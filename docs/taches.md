@@ -85,7 +85,7 @@ part dans le retour qu'il écrit déjà, puis lui revient scellé : synchronisé
 de plus** sur le relais (une notification n'écrit jamais rien sur le relais).
 
 - Activation globale ; **par type** — échéance atteinte, rappel avant échéance, tâche en retard (une fois, quand
-  l'échéance est passée), tâche qui m'est assignée, modification ou commentaire de l'autre sur un projet partagé, tâche
+  l'échéance passée d'une heure, ou le lendemain sans heure), tâche qui m'est assignée, modification ou commentaire de l'autre sur un projet partagé, tâche
   liée à un agent Claude Office terminée (Fondateur), récap quotidien « Ma journée » — un **canal** : notification du
   système (PC ; navigateur si déjà autorisé), pastille 🔔 dans le hub et dans Tâches, les deux, ou aucune.
 - **Rappel par défaut** d'une nouvelle échéance (aucun, à l'heure, 10 min, 1 h, 1 jour avant), modifiable par tâche.
