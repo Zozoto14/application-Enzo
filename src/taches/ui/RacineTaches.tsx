@@ -960,7 +960,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
           <View style={{ paddingHorizontal: 16, gap: 10 }}>
             {pastilleMinuteur}
             {ongletsVues}
-            <View style={[styles.rangee, { flexWrap: 'nowrap' }]}>
+            <View style={[styles.rangee, { flexWrap: 'nowrap' }, equipe && { display: 'none' }]}>
               <View style={{ flex: 1 }}>{recherche}</View>
               <Bouton theme={theme} titre={nbFiltres ? `Filtres · ${nbFiltres}` : 'Filtres'} onPress={() => setFenetre({ g: 'filtres' })} testID="taches-filtres" />
               {selection.g === 'projet' && projetSel && droits(projetSel.id).gerer ? <Bouton theme={theme} titre="⋯" libelle="Réglages et suppression du projet" onPress={() => setFenetre({ g: 'menu-vue' })} testID="taches-menu" /> : null}
@@ -1010,7 +1010,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
                 ) : null}
               </View>
               {ongletsVues}
-              {recherche}
+              {equipe ? null : recherche}
               {pastilleMinuteur}
               {outils}
             </View>

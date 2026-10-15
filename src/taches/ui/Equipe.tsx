@@ -645,7 +645,7 @@ function CarteMembre({
             accessibilityLabel={`Fiche de ${m.nom}`}
             onPress={onFiche}
             testID={`equipe-fiche-${m.compte}`}
-            style={{ minHeight: 28, justifyContent: 'center' }}
+            style={{ minHeight: 44, justifyContent: 'center' }}
           >
             <Text
               style={[titreDe(theme, 17), { color: theme.texte }]}
@@ -1581,7 +1581,7 @@ const styles = StyleSheet.create({
   },
   segment: { flexDirection: 'row', borderWidth: 1, padding: 3, gap: 3 },
   segmentBouton: {
-    minHeight: 40,
+    minHeight: 44,
     paddingHorizontal: 14,
     justifyContent: 'center',
   },

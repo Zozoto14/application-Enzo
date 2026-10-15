@@ -78,9 +78,9 @@ export function CaseSelection({
           <Text
             style={{
               color: theme.surAccent,
-              fontSize: 14,
+              fontSize: 15,
               fontWeight: '800',
-              lineHeight: 16,
+              lineHeight: 17,
             }}
           >
             ✓
@@ -109,6 +109,7 @@ export function BarreSelection({
       accessibilityRole="toolbar"
       style={[
         styles.barre,
+        a.mobile && styles.barreMobile,
         {
           backgroundColor: teinteTransparente(theme.accent, 0.12),
           borderColor: theme.accent,
@@ -127,14 +128,16 @@ export function BarreSelection({
           theme={theme}
           compact={!a.mobile}
           variante="plein"
-          titre={`↦ Déplacer ${n > 1 ? `${n} tâches` : 'la tâche'}…`}
+          titre={a.mobile ? '↦ Déplacer…' : `↦ Déplacer ${n > 1 ? `${n} tâches` : 'la tâche'}…`}
+          libelle={`Déplacer ${n > 1 ? `${n} tâches` : 'la tâche'}…`}
           onPress={onDeplacer}
           testID="selection-deplacer"
         />
         <Bouton
           theme={theme}
           compact={!a.mobile}
-          titre="Tout désélectionner"
+          titre={a.mobile ? 'Désélectionner' : 'Tout désélectionner'}
+          libelle="Tout désélectionner"
           onPress={sel.vider}
           testID="selection-vider"
         />
@@ -504,6 +507,7 @@ export function elementsMenuTache(
 }
 
 const styles = StyleSheet.create({
+  barreMobile: { flexDirection: 'column', alignItems: 'flex-start' },
   rangee: {
     flexDirection: 'row',
     alignItems: 'center',
