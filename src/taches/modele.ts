@@ -245,6 +245,11 @@ export interface Tache extends Entite {
   jalon?: boolean;
   /** Lien GitHub (V3, facultatif) : dépôt « propriétaire/nom », branche, numéro de PR. */
   github?: LienGithub;
+  /**
+   * Projets où la tâche a vécu avant un déplacement (10 derniers) : un membre
+   * qui voyait l'ancien projet, mais pas le nouveau, la retire de sa copie.
+   */
+  anciensProjets?: string[];
   ordre: number;
   creeLe: string;
   creePar: Auteur;
@@ -658,6 +663,7 @@ export function lireTache(v: unknown): Tache | undefined {
     ...((dep => (dep.length ? { dependances: dep } : {}))([...new Set((Array.isArray(o.dependances) ? o.dependances : []).filter(idValide))].filter(x => x !== o.id).slice(0, 30))),
     ...(o.jalon === true ? { jalon: true } : {}),
     ...((g => (g ? { github: g } : {}))(lireLienGithub(o.github))),
+    ...((l => (l.length ? { anciensProjets: l } : {}))([...new Set((Array.isArray(o.anciensProjets) ? o.anciensProjets : []).filter(idValide))].filter(x => x !== o.projetId).slice(-10))),
     ...Object.fromEntries(Object.entries(o).filter(([c, v]) => MOTIF_CHAMP_CHRONO.test(c) && instantValide(v))),
     ordre: nombre(o.ordre),
     creeLe: typeof o.creeLe === 'string' ? o.creeLe.slice(0, 30) : new Date(0).toISOString(),
@@ -1202,6 +1208,13 @@ export function creeBoucle(d: DonneesTaches, tacheId: string, avant: string): bo
 
 const ou = (v: string | undefined) => v || '—';
 
+/** Projets où la tâche a vécu, après un passage de son projet actuel vers `vers` (10 derniers). */
+export function anciensApres(t: Pick<Tache, 'projetId' | 'anciensProjets'>, vers: string): string[] | undefined {
+  if (vers === t.projetId) return t.anciensProjets;
+  const l = [...(t.anciensProjets ?? []).filter(x => x !== t.projetId && x !== vers), t.projetId].slice(-10);
+  return l.length ? l : undefined;
+}
+
 /** Texte de l'historique pour un champ changé. */
 function decrire(d: DonneesTaches, t: Tache, cle: string, valeur: unknown, noms: Partial<Record<Auteur, string>>): { texte: string; avant?: string } | undefined {
   switch (cle) {
@@ -1287,6 +1300,7 @@ export function modifierTache(d: DonneesTaches, id: string, c: ChangementTache &
     if (!vivant(l)) throw new ErreurTaches('Liste introuvable.');
     propre.projetId = l.projetId;
     if (l.projetId !== t.projetId) {
+      propre.anciensProjets = anciensApres(t, l.projetId);
       // Changement de projet : statut équivalent (même identifiant) ou le premier.
       const statuts = statutsDe(d, l.projetId);
       if (!statuts.some(s => s.id === (propre.statut ?? t.statut))) propre.statut = statuts[0].id;
@@ -1321,7 +1335,7 @@ export function modifierTache(d: DonneesTaches, id: string, c: ChangementTache &
     }
     const cs: Partial<Tache> = {};
     if (c.supprime === true) Object.assign(cs, { supprime: true, lot: c.lot ?? id });
-    if (finale.listeId !== st.listeId) Object.assign(cs, { listeId: finale.listeId, projetId: finale.projetId });
+    if (finale.listeId !== st.listeId) Object.assign(cs, { listeId: finale.listeId, projetId: finale.projetId, ...(finale.projetId !== st.projetId ? { anciensProjets: anciensApres(st, finale.projetId) } : {}) });
     if (finale.projetId !== st.projetId && !statutsDe(d, finale.projetId).some(s => s.id === st.statut)) cs.statut = statutsDe(d, finale.projetId)[0].id;
     if (Object.keys(cs).length) taches = { ...taches, [st.id]: changerChamps(st, cs, ctx) };
   }

@@ -46,6 +46,7 @@ import {
   donneesVides,
   ecrireDonnees,
   hValide,
+  idValide,
   lireDonnees,
   lireJournal,
   lireListe,
@@ -170,6 +171,8 @@ export interface DocumentPourAmi {
   membres?: Record<string, string>;
   clesProjets?: Record<string, string>;
   perso?: boolean;
+  /** Tâches sorties des projets qu'il voit (déplacées ailleurs) : il les retire de sa copie. */
+  partis?: string[];
 }
 
 /** Un projet tel qu'il part chez un membre : son droit dans `partage`, les droits des personnes du projet par code. */
@@ -233,6 +236,23 @@ export function projectionPourAmi(d: DonneesTaches): DonneesTaches {
   return projectionPourMembre(x, 'amihistorique');
 }
 
+/**
+ * Tâches qui ont quitté un projet que ce membre voit pour un projet qu'il ne
+ * voit pas (déplacées) : la « pierre tombale » de déplacement. Seulement des
+ * identifiants (ni titre ni projet d'arrivée) ; les 500 plus récentes.
+ */
+export function tachesParties(d: DonneesTaches, compte: string): string[] {
+  const voit = (pid: string) => {
+    const p = d.projets[pid];
+    return Boolean(p && !p.auto && droitDe(d, pid, compte) !== 'aucun');
+  };
+  return Object.values(d.taches)
+    .filter(t => t.anciensProjets?.length && !(voit(t.projetId) && !t.source) && t.anciensProjets.some(voit))
+    .sort((a, b) => (b.h.projetId ?? '').localeCompare(a.h.projetId ?? ''))
+    .slice(0, 500)
+    .map(t => t.id);
+}
+
 /** Document complet pour un membre (sans sa clé publique : scellé ensuite). */
 export function documentPourMembre(d: DonneesTaches, m: Membre, nomFondateur?: string): DocumentPourAmi {
   const donnees = projectionPourMembre(d, m.compte);
@@ -255,6 +275,7 @@ export function documentPourMembre(d: DonneesTaches, m: Membre, nomFondateur?: s
     membres,
     clesProjets,
     ...(m.perso ? { perso: true } : {}),
+    ...((p => (p.length ? { partis: p } : {}))(tachesParties(d, m.compte))),
   };
 }
 
@@ -283,12 +304,14 @@ export function appliquerReception(copie: CopieAmi, doc: DocumentPourAmi): Copie
   const recu = lireDonnees(doc.donnees);
   const moi: Auteur = doc.moi ?? 'ami';
   const taches: Record<string, Tache> = {};
+  const partis = new Set(Array.isArray(doc.partis) ? doc.partis.filter((x): x is string => typeof x === 'string') : []);
   for (const id of new Set([...Object.keys(recu.taches), ...Object.keys(copie.donnees.taches)])) {
     const a = copie.donnees.taches[id];
     const b = recu.taches[id];
     if (a && b) taches[id] = fusionnerTache(a, b);
     else if (b) taches[id] = b;
-    else if (a && modeProjet(recu, a.projetId) === 'ecriture' && (vivant(recu.listes[a.listeId]) || copie.donnees.listes[a.listeId]?.projetId === a.projetId) && (recu.listes[a.listeId]?.projetId ?? a.projetId) === a.projetId) taches[id] = a;
+    // Partie vers un projet qu'il ne voit pas : retirée de sa copie.
+    else if (a && !partis.has(id) && modeProjet(recu, a.projetId) === 'ecriture' && (vivant(recu.listes[a.listeId]) || copie.donnees.listes[a.listeId]?.projetId === a.projetId) && (recu.listes[a.listeId]?.projetId ?? a.projetId) === a.projetId) taches[id] = a;
   }
   // Admin d'un projet : ses changements du projet et de ses listes, pas encore renvoyés, restent.
   const projets = { ...recu.projets };
@@ -437,20 +460,25 @@ function garderReserves(x: Tache, existante: Tache | undefined, code: Auteur): T
 
 function appliquerTaches(d: DonneesTaches, brut: unknown, compte: string, code: Auteur, projetId: string | undefined, bilan: { acceptees: number; refusees: number }): DonneesTaches {
   let taches = d.taches;
-  for (const valeur of Object.values(brut && typeof brut === 'object' ? (brut as Record<string, unknown>) : {}).slice(0, 5000)) {
-    const lue = lireTache(valeur);
+  // Tâches principales d'abord : une sous-tâche déplacée avec sa parente la retrouve à sa nouvelle place.
+  const lues = Object.values(brut && typeof brut === 'object' ? (brut as Record<string, unknown>) : {})
+    .slice(0, 5000)
+    .map(v => lireTache(v))
+    .sort((a, b) => Number(Boolean(a?.parentId)) - Number(Boolean(b?.parentId)));
+  for (const lue of lues) {
     if (!lue || (projetId && lue.projetId !== projetId)) {
       bilan.refusees++;
       continue;
     }
     const existante = d.taches[lue.id];
-    if (existante && (!placeAutorisee(d, existante, compte) || (projetId && existante.projetId !== projetId))) {
+    // Une tâche déjà connue peut venir d'un autre projet (déplacée par le membre) : il doit pouvoir écrire là où elle était.
+    if (existante && (!vivant(d.projets[existante.projetId]) || !peutEcrire(droitDe(d, existante.projetId, compte)))) {
       bilan.refusees++;
       continue;
     }
     const t = seulementLesSiens(lue, existante, code);
     const fusion = garderReserves(existante ? fusionnerTache(existante, t) : t, existante, code);
-    if (!placeAutorisee(d, fusion, compte) || (projetId && fusion.projetId !== projetId)) {
+    if (!placeAutorisee({ ...d, taches }, fusion, compte) || (projetId && fusion.projetId !== projetId)) {
       bilan.refusees++;
       continue;
     }
@@ -605,6 +633,7 @@ export function ouvrirPourAmi(privee: string, id: string, charge: string): Docum
     ...(membres ? { membres } : {}),
     ...(cles ? { clesProjets: cles } : {}),
     ...(doc.perso === true ? { perso: true } : {}),
+    ...((l => (l.length ? { partis: l } : {}))((Array.isArray(doc.partis) ? doc.partis : []).filter(idValide).slice(0, 500))),
   };
 }
 

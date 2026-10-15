@@ -24,6 +24,7 @@
 
 import { sansAccents } from './dates';
 import {
+  anciensApres,
   changerChamps,
   creerEspace,
   ErreurTaches,
@@ -162,7 +163,7 @@ function exigerFondateur(ctx: Contexte, genre: Genre) {
 }
 
 /** Statut équivalent dans un autre projet : même identifiant, même nom, sinon premier ouvert (ou terminé). */
-function statutEquivalent(d: DonneesTaches, t: Tache, versProjet: string): string {
+export function statutEquivalent(d: DonneesTaches, t: Tache, versProjet: string): string {
   const cibles = statutsDe(d, versProjet);
   if (cibles.some(s => s.id === t.statut)) return t.statut;
   const actuel = statutsDe(d, t.projetId).find(s => s.id === t.statut);
@@ -187,8 +188,8 @@ function deplacerContenuProjet(d: DonneesTaches, source: string, cible: string, 
   for (const t of Object.values(d.taches)) {
     if (t.projetId !== source || !deplacees.has(t.listeId)) continue;
     const statut = statutEquivalent(d, t, cible);
-    retours.push({ c: 'taches', id: t.id, valeurs: { projetId: t.projetId, statut: t.statut } });
-    const suivante = changerChamps(t, { projetId: cible, statut }, ctx);
+    retours.push({ c: 'taches', id: t.id, valeurs: { projetId: t.projetId, statut: t.statut, anciensProjets: t.anciensProjets } });
+    const suivante = changerChamps(t, { projetId: cible, statut, anciensProjets: anciensApres(t, cible) }, ctx);
     taches[t.id] = t.supprime ? suivante : { ...suivante, historique: borneHistorique([...suivante.historique, evenement(ctx, `Déplacée vers le projet « ${nomCible} »`)]) };
   }
   return { ...d, listes, taches };
