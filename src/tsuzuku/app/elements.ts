@@ -29,7 +29,8 @@ export function carteAnime(f: FicheAnime, db: Bibliotheque | undefined, aller: (
   return {
     cle: `anime-${id}`,
     titre: f.title,
-    image: f.image,
+    // Petite affiche pour les cartes (la grande reste pour la fiche) : ~3 fois moins à télécharger.
+    image: f.vignette ?? f.image,
     sousTitre: [f.type, f.year, f.totalEpisodes ? `${f.totalEpisodes} ép.` : null].filter(Boolean).join(' · ') || undefined,
     badge: b,
     score: f.score,
@@ -44,7 +45,8 @@ export function carteFilm(f: FicheFilm, db: Bibliotheque | undefined, aller: (id
   return {
     cle: `movie-${f.id}`,
     titre: f.title,
-    image: f.image,
+    // Petite affiche pour les cartes (la grande reste pour la fiche) : ~3 fois moins à télécharger.
+    image: f.vignette ?? f.image,
     sousTitre: [f.year, f.runtime ? `${f.runtime} min` : null].filter(Boolean).join(' · ') || undefined,
     badge: b,
     score: f.score,

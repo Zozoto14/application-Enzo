@@ -306,17 +306,17 @@ describe('Tâches dans le hub', () => {
     expect(APP_TACHES.page).toBe('publique');
   });
   it('devblog : la nouveauté Tâches pour le Fondateur et l’ami concerné seulement', async () => {
-    const v3 = ENTREES[0];
-    expect(v3.version).toBe('2026.10.26');
+    const v3 = ENTREES.find(e => e.version === '2026.10.27')!;
+    expect(ENTREES[0]).toBe(v3);
     expect(fonctionnalitesPour(v3, true).map(f => f.id)).toEqual(['taches-membres', 'taches-mentions', 'taches-gantt', 'taches-tableau', 'taches-objectifs', 'taches-ia-github']);
     expect(fonctionnalitesPour(v3, false, false, ['taches']).map(f => f.id)).toEqual(['taches-membres-ami', 'taches-mentions', 'taches-gantt', 'taches-tableau']);
     expect(fonctionnalitesPour(v3, false, false, ['tsuzuku'])).toEqual([]);
-    const v2 = ENTREES[1];
+    const v2 = ENTREES.find(e => e.version === '2026.10.25')!;
     expect(v2.version).toBe('2026.10.25');
     expect(fonctionnalitesPour(v2, true).map(f => f.id)).toEqual(['taches-temps', 'taches-notifications', 'taches-journal', 'taches-projets', 'taches-liens', 'taches-corbeille']);
     expect(fonctionnalitesPour(v2, false, false, ['taches']).map(f => f.id)).toEqual(['taches-temps', 'taches-notifications', 'taches-journal']);
     expect(fonctionnalitesPour(v2, false, false, ['tsuzuku'])).toEqual([]);
-    const entree = ENTREES[2];
+    const entree = ENTREES.find(e => e.version === '2026.10.24')!;
     expect(entree.version).toBe('2026.10.24');
     expect(fonctionnalitesPour(entree, true).map(f => f.id)).toEqual(['taches-v1', 'taches-partage']);
     expect(fonctionnalitesPour(entree, false, false, ['taches']).map(f => f.id)).toEqual(['taches-v1', 'taches-partage-ami']);

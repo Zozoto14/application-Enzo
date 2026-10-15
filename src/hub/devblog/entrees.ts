@@ -45,8 +45,8 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
-    version: '2026.10.26',
-    date: '2026-10-26',
+    version: '2026.10.27',
+    date: '2026-10-27',
     titre: 'Tâches V3 : à plusieurs, chronologie, tableau de bord',
     resume:
       'Partage avec plusieurs personnes et des droits par projet, mentions @prénom, chronologie (Gantt) avec dépendances, tableau de bord, objectifs, et — si tu le veux — l’aide de l’IA et les PR GitHub.',
@@ -112,6 +112,41 @@ export const ENTREES: readonly EntreeDevblog[] = [
           'Dans 👥 › IA et GitHub : avec ta clé de l’API Claude (application du PC), découpe une tâche, résume un projet, propose ton planning — tu vois ce qui part et tu valides avant tout changement. Lie une tâche à une PR : son état et sa CI s’affichent, et elle passe « Faite » à la fusion.',
         essayer: { genre: 'app', app: 'taches' },
         adminSeulement: true,
+      },
+    ],
+  },
+  {
+    version: '2026.10.26',
+    date: '2026-10-26',
+    titre: 'Tsuzuku répond beaucoup plus vite',
+    resume:
+      'Les épisodes d’un animé s’affichent en quelques secondes au lieu d’une quinzaine, et une fiche déjà ouverte revient presque instantanément, même après avoir rechargé la page. Le changement VF/VOSTFR et l’épisode suivant sont préparés pendant que vous regardez.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'tsuzuku-rapide-sources',
+        emoji: '⚡',
+        titre: 'Vos sources cherchées en même temps',
+        texte:
+          'Tsuzuku interroge vos sources et les différents titres d’un animé en parallèle au lieu de l’un après l’autre. Le premier résultat s’affiche dès qu’il arrive ; votre source préférée garde la priorité, mais si elle est très lente, une autre prend le relais au bout d’une seconde.',
+        essayer: { genre: 'app', app: 'tsuzuku' },
+        app: 'tsuzuku',
+      },
+      {
+        id: 'tsuzuku-rapide-cache',
+        emoji: '💾',
+        titre: 'Une fiche déjà vue revient tout de suite',
+        texte:
+          'Les résultats sont gardés sur votre appareil, chiffrés avec votre profil : rouvrir une fiche ou l’accueil est quasi instantané, puis Tsuzuku vérifie en arrière-plan s’il y a du nouveau. « Rechercher à nouveau » repart toujours de zéro.',
+        app: 'tsuzuku',
+      },
+      {
+        id: 'tsuzuku-rapide-lecture',
+        emoji: '⏭',
+        titre: 'VF/VOSTFR et épisode suivant préparés',
+        texte:
+          'Pendant que vous regardez, Tsuzuku prépare le même épisode dans l’autre langue et l’épisode suivant : changer de langue ou passer à la suite ne fait plus attendre. Le temps de chaque étape (ou « depuis le cache ») est indiqué en petit sous le lecteur et dans le diagnostic.',
+        app: 'tsuzuku',
       },
     ],
   },
