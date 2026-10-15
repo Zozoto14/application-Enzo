@@ -103,6 +103,8 @@ import { definirLiaisonEnAttente, liaisonEnAttente } from '../sync/relais/actif'
 import { lireConfigRelais, mesurerEcartHorloge, recupererCoffre } from '../sync/relais/synchroniser';
 import { creerServiceHistorique } from '../claudeOffice/synchroHistorique';
 import { useSynchroHistoriqueOffice } from '../claudeOffice/synchroFond';
+import { useJournalAutomatique } from '../journal/automatique';
+import { creerLecteurPortefeuille } from './sourceJournalPortefeuille';
 import { useResumeClaudeOffice } from '../claudeOffice/resumeHub';
 import { APP_CLAUDE_OFFICE } from '../claudeOffice/registre';
 import { formaterDiagnostic, lireEnvironnement, messageHorloge } from '../diagnostic/deverrouillage';
@@ -2195,9 +2197,15 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     service: historiqueOffice,
     base: deverrouille ? baseProfil : undefined,
   });
-  const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin, baseProfil, tsuzuku: resumeTsuzuku, enregistrerFichier: enregistrerFichierHote, historiqueOffice, claudeOffice: resumeClaudeOffice };
+  // Journal automatique : opérations et variation du portefeuille, lues dans les données locales déjà chargées.
+  const journalPortefeuille = contenu
+    ? creerLecteurPortefeuille({ transactions: contenu.transactions, titres: contenu.titres, comptes: contenu.comptes, points: pointsValorisation })
+    : undefined;
+  const contexteHub: ContexteHub = { profil: profils?.actuel, profils, portefeuille: resumeHub, admin: servicesAdmin, baseProfil, tsuzuku: resumeTsuzuku, enregistrerFichier: enregistrerFichierHote, historiqueOffice, claudeOffice: resumeClaudeOffice, journalPortefeuille };
   // Tâches : rappels évalués toutes les 30 s tant que le compte est ouvert (notification sur le PC, pastille de la tuile).
   useRappelsTaches(contexteHub, deverrouille && !annexe);
+  // Journal : la page du soir (heure réglable) s'écrit seule, ou à la première ouverture du lendemain.
+  useJournalAutomatique(contexteHub, deverrouille && !annexe);
   useLiensOffice(contexteHub, deverrouille && !annexe);
   const themeDuHub = themeHub(themeAffiche);
   // --- Devblog « Quoi de neuf » : une fois par profil et par version -----------

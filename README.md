@@ -34,6 +34,7 @@ simplement jamais tourné.
 | `src/app` | Assemblage et navigation | |
 | `src/taches` | App du hub « Tâches » (projets, Kanban, calendrier, Ma journée, rappels, partage chiffré avec un ami) | [doc](docs/taches.md) |
 | [`src/claudeOffice`](src/claudeOffice) | App du hub « Claude Office » (bureau des agents Claude Code, PC) : `npm run office:hooks` | [doc](docs/claude-office.md), [historique](docs/claude-office-historique.md) |
+| [`src/journal`](src/journal) | App du hub « Journal » : une page écrite chaque soir à partir des apps (tâches, Claude, épisodes, bourse, abonnements), à relire comme un livre ; contrat de sources dans `src/hub/journal/` | [doc](docs/journal-automatique.md) |
 
 ## Les décisions qui engagent le reste
 

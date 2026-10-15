@@ -15,6 +15,7 @@ import type { ResumeTsuzuku } from '../tsuzuku/app/resume';
 import type { BasePrefs } from '../tsuzuku/plateforme/stockage';
 import type { ServiceHistoriqueRelais } from '../claudeOffice/synchroHistorique';
 import type { ResumeClaudeOffice } from '../claudeOffice/resumeHub';
+import type { LecteurPortefeuilleJournal, RedacteurExterne } from './journal/contrat';
 
 export type Tendance = 'hausse' | 'baisse' | 'neutre';
 
@@ -66,6 +67,13 @@ export interface ContexteHub {
   historiqueOffice?: ServiceHistoriqueRelais;
   /** Résumé de l'activité de Claude Office (agents au travail), pour sa tuile ; Fondateur seulement. */
   claudeOffice?: ResumeClaudeOffice;
+  /**
+   * Opérations et variation du portefeuille, lues dans sa base locale, pour le Journal automatique
+   * (contrat `journal/contrat.ts`). Rempli par l'hôte seulement quand le portefeuille est ouvert.
+   */
+  journalPortefeuille?: LecteurPortefeuilleJournal;
+  /** Rédacteur du journal par IA (point d'extension, absent par défaut : les modèles de phrases écrivent). */
+  redacteurJournal?: RedacteurExterne;
   /** Horloge injectable (tests) ; `Date.now` à défaut. */
   maintenant?: number;
 }

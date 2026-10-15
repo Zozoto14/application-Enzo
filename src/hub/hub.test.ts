@@ -40,7 +40,7 @@ describe('permissions', () => {
 
   it('respecte « disponible » et attribue seulement les apps non réservées', () => {
     expect(appsVisibles(REGISTRE, { profil: admin }).map(a => a.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku', 'claude-office']);
-    expect(appsAttribuables(REGISTRE).map(a => a.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku', 'taches']);
+    expect(appsAttribuables(REGISTRE).map(a => a.id)).toEqual([ID_PORTEFEUILLE, 'tsuzuku', 'taches', 'journal']);
   });
 
   it('compte les utilisateurs actifs et bascule une autorisation', () => {
