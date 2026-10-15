@@ -20,6 +20,7 @@ import { accorderAcces, nomsMembres } from './membres';
 import { aleatoireParDefaut } from '../securite/aleatoire';
 import { CLES_TACHES, lireCopie } from './partage';
 import { lireEtatRappels, type AlerteRappel } from './rappels';
+import { verifierPilote } from './pilote/notification';
 
 /** Mon code d'auteur sur cet appareil : « fondateur », ou celui que le Fondateur m'a donné (« ami » pour l'ami des V1/V2). */
 export function moiTaches(role: RoleTaches, base: Pick<BasePrefs, 'lire'> | undefined): Auteur {
@@ -178,9 +179,20 @@ export function verifierRappels(contexte: Pick<ContexteHub, 'profil' | 'admin' |
       // Réessayé au tour suivant.
     }
   }
-  const etat = lireEtatRappels(base.lire(CLES_TACHES.rappels));
   const appareil = appareilTaches(base);
   const qui = moiTaches(role, base);
+  // Pilote de semaine : la proposition du dimanche soir (une fois par semaine, sur cet appareil ; sonne selon les réglages de Tâches).
+  let pilote: AlerteRappel[] = [];
+  try {
+    const prefsP = prefsDe(d, qui);
+    const sonner = !enHeuresCalmes(prefsP, maintenant) && (!prefsP.appareil || prefsP.appareil.id === appareil.id);
+    const annonce = verifierPilote(contexte, { role, moi: qui, donnees: d }, maintenant, { sonner });
+    pilote = annonce.pastille;
+    if (annonce.systeme.length) montrer(annonce.systeme, prefsP.son);
+  } catch {
+    // Réessayé au tour suivant.
+  }
+  const etat = lireEtatRappels(base.lire(CLES_TACHES.rappels));
   let r = evaluerNotifications(d, etat, maintenant, qui, { appareilId: appareil.id, noms: nomsTaches(role, contexte, d) }, extra);
   // Membre : ses projets personnels aussi (il en est le maître ; SES réglages de notification).
   const perso = role === 'ami' ? lirePerso(base) : undefined;
@@ -189,14 +201,14 @@ export function verifierRappels(contexte: Pick<ContexteHub, 'profil' | 'admin' |
     const r2 = evaluerNotifications(avecPrefs, { ...r.etat, autres: etat.autres ?? {} }, maintenant, 'fondateur', { appareilId: appareil.id, noms: { fondateur: contexte.profil?.nom ?? 'Moi', ami: 'Ami' } });
     r = { ...r2, pastille: [...r.pastille, ...r2.pastille], systeme: [...r.systeme, ...r2.systeme], etat: { ...r2.etat, autres: { ...(r.etat.autres ?? {}), ...(r2.etat.autres ?? {}) } } };
   }
-  if (r.pastille.length === 0 && r.systeme.length === 0 && JSON.stringify(r.etat) === JSON.stringify(etat)) return [];
+  if (r.pastille.length === 0 && r.systeme.length === 0 && JSON.stringify(r.etat) === JSON.stringify(etat)) return pilote;
   try {
     base.ecrire(CLES_TACHES.rappels, JSON.stringify(r.etat));
   } catch {
-    return [];
+    return pilote;
   }
   montrer(r.systeme, prefsDe(d, qui).son);
-  return r.pastille;
+  return [...pilote, ...r.pastille];
 }
 
 /** « Tester une notification » : une notification du système (si l'appareil en a) et une ligne dans la pastille. */

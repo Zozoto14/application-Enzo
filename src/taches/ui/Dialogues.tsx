@@ -744,9 +744,9 @@ export function DialogueNom({ a, titre, description, placeholder, onValider, onF
 
 // ------------------------------------------------------------------ Rappels non lus
 
-const ICONES_NOTIF: Record<string, string> = { retard: '⏰', assignee: '👤', ami: '💬', office: '🤖', recap: '☀︎', test: '✅', journal: '📓' };
+const ICONES_NOTIF: Record<string, string> = { retard: '⏰', assignee: '👤', ami: '💬', office: '🤖', recap: '☀︎', test: '✅', journal: '📓', pilote: '🗓' };
 
-export function DialogueRappelsRecus({ a, rappels, onOuvrir, onToutLu, onFermer }: { a: Actions; rappels: readonly AlerteRappel[]; onOuvrir(id: string): void; onToutLu(): void; onFermer: Fermer }) {
+export function DialogueRappelsRecus({ a, rappels, onOuvrir, onSemaine, onToutLu, onFermer }: { a: Actions; rappels: readonly AlerteRappel[]; onOuvrir(id: string): void; onSemaine?(): void; onToutLu(): void; onFermer: Fermer }) {
   const theme = a.theme;
   return (
     <Dialogue
@@ -759,7 +759,7 @@ export function DialogueRappelsRecus({ a, rappels, onOuvrir, onToutLu, onFermer 
       pied={rappels.length ? <Bouton theme={theme} titre="Tout marquer comme lu" variante="plein" onPress={onToutLu} testID="rappels-tout-lu" /> : undefined}>
       {rappels.length === 0 ? <Text style={attenueDe(theme)}>Aucun rappel en attente.</Text> : null}
       {[...rappels].reverse().map(r => (
-        <Pressable key={r.cle} accessibilityRole="button" disabled={!r.tacheId || !a.etat.donnees.taches[r.tacheId]} onPress={() => onOuvrir(r.tacheId)} style={[styles.ligneProjet, { borderColor: theme.ligne, borderWidth: 1, borderRadius: 10, padding: 10 }]} testID={`rappel-recu-${r.tacheId || r.type || 'info'}`}>
+        <Pressable key={r.cle} accessibilityRole="button" disabled={r.type === 'pilote' ? !onSemaine : !r.tacheId || !a.etat.donnees.taches[r.tacheId]} onPress={() => (r.type === 'pilote' ? onSemaine?.() : onOuvrir(r.tacheId))} style={[styles.ligneProjet, { borderColor: theme.ligne, borderWidth: 1, borderRadius: 10, padding: 10 }]} testID={`rappel-recu-${r.tacheId || r.type || 'info'}`}>
           <Text style={{ fontSize: 18 }}>{ICONES_NOTIF[r.type ?? ''] ?? '🔔'}</Text>
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={[texteDe(theme), { fontWeight: '700' }]}>{r.titre}</Text>

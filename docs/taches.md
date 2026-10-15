@@ -4,6 +4,9 @@ App du hub « façon ClickUp » pour le Fondateur et les **membres** qu'il invit
 ami en V1/V2). Tuile sur la page « Applications » (catégorie `page: 'publique'`), visible du Fondateur et de ses
 membres ; invisible pour tout autre compte.
 
+**Ta semaine** (pilote automatique de semaine : proposition du dimanche soir, tâches, relances, paiements et épisodes
+rangés par jour, validation en un clic) : voir [`docs/pilote-semaine.md`](pilote-semaine.md).
+
 ## Ce que fait la V1
 
 - **Modèle** : Espaces › Projets › Listes › Tâches ; sous-tâches (un niveau : la sous-tâche d'une sous-tâche est

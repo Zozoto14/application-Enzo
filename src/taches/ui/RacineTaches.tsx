@@ -59,6 +59,7 @@ import { DialogueAides, DialogueIA } from './IA';
 import { DialogueMembres, PersonnesProjet } from './Membres';
 import { DialogueObjectif, VueObjectifs } from './Objectifs';
 import { VueTableau } from './TableauBord';
+import { VuePilote } from './PiloteSemaine';
 import { listeMembres, membresDuProjet, projetPartage } from '../membres';
 import type { Profil } from '../../profils/profils';
 import { attenueDe, Bouton, Champ, couleurPriorite, Dialogue, EtatVide, Options, Puce, T, texteDe, titreDe } from './atomes';
@@ -82,7 +83,7 @@ import { useEtatTaches } from './etat';
 import { ContexteZones, RegistreZones, useZoneDepot } from './glisser';
 import { VueCalendrier, VueJournee, VueKanban, VueListe } from './Vues';
 
-type Selection = { g: 'journee' } | { g: 'tout' } | { g: 'objectifs' } | { g: 'equipe' } | { g: 'projet'; id: string; liste?: string } | { g: 'vue'; id: string };
+type Selection = { g: 'journee' } | { g: 'tout' } | { g: 'objectifs' } | { g: 'equipe' } | { g: 'semaine' } | { g: 'projet'; id: string; liste?: string } | { g: 'vue'; id: string };
 
 type Fenetre =
   | { g: 'statut' | 'priorite' | 'assigne' | 'echeance' | 'recurrence' | 'rappels' | 'liste'; t: Tache }
@@ -290,6 +291,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
   const vueEffective: TypeVue = selection.g === 'journee' ? 'journee' : vue === 'journee' ? 'liste' : vue;
   const objectifs = selection.g === 'objectifs' && role === 'fondateur';
   const equipe = selection.g === 'equipe';
+  const pilote = selection.g === 'semaine';
   const toutes = useMemo(() => tachesVivantes(d, projetId).filter(t => !listeId || t.listeId === listeId), [d, projetId, listeId]);
   const visibles = useMemo(() => {
     const f = filtrer(d, toutes, filtres, etat.aujourdhui);
@@ -412,7 +414,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
         else deplacer(ids, dest, {});
       }),
     menuTache: t => setFenetre({ g: 'menu-tache', t }),
-    ...(vueEffective === 'liste' && !equipe && !objectifs
+    ...(vueEffective === 'liste' && !equipe && !pilote && !objectifs
       ? {
           selection: {
             ids: choisies,
@@ -606,7 +608,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
         if (v === 'journee') setSelection({ g: 'journee' });
         else {
           setVue(v);
-          setSelection(s => (s.g === 'journee' || s.g === 'objectifs' || s.g === 'equipe' ? { g: 'tout' } : s));
+          setSelection(s => (s.g === 'journee' || s.g === 'objectifs' || s.g === 'equipe' || s.g === 'semaine' ? { g: 'tout' } : s));
         }
       }
     };
@@ -618,7 +620,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
     if (v === 'journee') setSelection({ g: 'journee' });
     else {
       setVue(v);
-      if (selection.g === 'journee' || selection.g === 'objectifs' || selection.g === 'equipe') setSelection({ g: 'tout' });
+      if (selection.g === 'journee' || selection.g === 'objectifs' || selection.g === 'equipe' || selection.g === 'semaine') setSelection({ g: 'tout' });
     }
   };
   const choisirSelection = (s: Selection) => {
@@ -643,12 +645,14 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
 
   // --- Titre de la sélection
   const titreSelection =
-    selection.g === 'journee' ? 'Ma journée' : selection.g === 'objectifs' ? 'Objectifs' : selection.g === 'equipe' ? 'Équipe' : selection.g === 'tout' ? 'Toutes les tâches' : selection.g === 'vue' ? (vueSel?.nom ?? 'Vue') : `${projetSel?.nom ?? 'Projet'}${listeId ? ` › ${d.listes[listeId]?.nom ?? ''}` : ''}`;
+    selection.g === 'journee' ? 'Ma journée' : selection.g === 'objectifs' ? 'Objectifs' : selection.g === 'equipe' ? 'Équipe' : selection.g === 'semaine' ? 'Ta semaine' : selection.g === 'tout' ? 'Toutes les tâches' : selection.g === 'vue' ? (vueSel?.nom ?? 'Vue') : `${projetSel?.nom ?? 'Projet'}${listeId ? ` › ${d.listes[listeId]?.nom ?? ''}` : ''}`;
   const nbFiltres = filtresActifs(filtres) - (filtres.recherche.trim() ? 1 : 0);
   const aucunProjet = projetsDe(d).length === 0;
 
   // --- Contenu principal
-  const contenu = equipe ? (
+  const contenu = pilote ? (
+    <VuePilote a={actions} contexte={contexte} onOuvrirApp={onOuvrirApp} />
+  ) : equipe ? (
     <VueEquipe a={actions} fermeture={f => (fermerLocale.current = f)} comptes={contexte.profils?.tous ?? []} onOuvrirTache={id => setOuverte(id)} onErreur={signaler} onAvis={avisOk} />
   ) : aucunProjet ? (
     role === 'fondateur' ? (
@@ -722,7 +726,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
     />
   );
 
-  const barreRapide = (projetsModifiables.length > 0 || role === 'fondateur') && !aucunProjet && !equipe ? (
+  const barreRapide = (projetsModifiables.length > 0 || role === 'fondateur') && !aucunProjet && !equipe && !pilote ? (
     <View style={{ gap: 6 }}>
       <View style={[styles.rapide, { borderColor: rapide || rapideActif ? theme.accent : theme.ligne, backgroundColor: theme.surface, borderRadius: Math.min(theme.rayonMoyen, 12) }]}>
         <Text style={{ color: theme.accent, fontSize: 20, fontWeight: '700' }}>＋</Text>
@@ -776,7 +780,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
   const ongletsBrut = (
     <View style={[styles.onglets, { borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 12) }]} accessibilityRole="tablist">
       {VUES.map(([v, libelle, icone], i) => {
-        const actif = vueEffective === v && !objectifs && !equipe;
+        const actif = vueEffective === v && !objectifs && !equipe && !pilote;
         return (
           <Pressable
             key={v}
@@ -960,7 +964,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
           <View style={{ paddingHorizontal: 16, gap: 10 }}>
             {pastilleMinuteur}
             {ongletsVues}
-            <View style={[styles.rangee, { flexWrap: 'nowrap' }, equipe && { display: 'none' }]}>
+            <View style={[styles.rangee, { flexWrap: 'nowrap' }, (equipe || pilote) && { display: 'none' }]}>
               <View style={{ flex: 1 }}>{recherche}</View>
               <Bouton theme={theme} titre={nbFiltres ? `Filtres · ${nbFiltres}` : 'Filtres'} onPress={() => setFenetre({ g: 'filtres' })} testID="taches-filtres" />
               {selection.g === 'projet' && projetSel && droits(projetSel.id).gerer ? <Bouton theme={theme} titre="⋯" libelle="Réglages et suppression du projet" onPress={() => setFenetre({ g: 'menu-vue' })} testID="taches-menu" /> : null}
@@ -1010,7 +1014,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
                 ) : null}
               </View>
               {ongletsVues}
-              {equipe ? null : recherche}
+              {equipe || pilote ? null : recherche}
               {pastilleMinuteur}
               {outils}
             </View>
@@ -1107,6 +1111,7 @@ function Navigation({
       <LigneNav a={a} texte="Ma journée" gauche="☀︎" actif={selection.g === 'journee'} onPress={() => onChoisir({ g: 'journee' })} testID="nav-journee" compte={j} />
       <LigneNav a={a} texte="Toutes les tâches" gauche="▤" actif={selection.g === 'tout'} onPress={() => onChoisir({ g: 'tout' })} testID="nav-tout" />
       {fondateur ? <LigneNav a={a} texte="Objectifs" gauche="◎" actif={selection.g === 'objectifs'} onPress={() => onChoisir({ g: 'objectifs' })} testID="nav-objectifs" compte={Object.values(d.objectifs ?? {}).filter(vivant).length || undefined} /> : null}
+      <LigneNav a={a} texte="Ta semaine" gauche="🗓" actif={selection.g === 'semaine'} onPress={() => onChoisir({ g: 'semaine' })} testID="nav-semaine" />
       {!a.etat.perso ? <LigneNav a={a} texte="Équipe" gauche="👥" actif={selection.g === 'equipe'} onPress={() => onChoisir({ g: 'equipe' })} testID="nav-equipe" compte={a.etat.role === 'fondateur' ? listeMembres(d).length || undefined : undefined} /> : null}
       {vues.length ? <Text style={[attenueDe(theme), styles.intertitre]}>VUES ENREGISTRÉES</Text> : null}
       {vues.map(v => (
@@ -1608,6 +1613,10 @@ function Fenetres({
           a={a}
           rappels={a.etat.rappels}
           onOuvrir={onOuvrir}
+          onSemaine={() => {
+            onSelection({ g: 'semaine' });
+            onFermer();
+          }}
           onToutLu={() => {
             a.etat.rappelsLus();
             onFermer();
