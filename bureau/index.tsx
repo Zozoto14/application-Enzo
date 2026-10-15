@@ -1536,13 +1536,15 @@ function Racine() {
         await supprimerAcces(maitre, empreinteIdentifiant(ami.nom)).catch(() => undefined);
         return inviter(id, ami.nom, temporaire, jours, envoi?.politique);
       },
-      onNettoyerRelais: async (id: string, nom: string) => {
+      onSupprimerAvecRelais: async (id: string) => {
         exigerAdmin();
-        // Seulement pour un compte DÉJÀ supprimé ici : on n'efface jamais les copies d'un compte vivant.
-        if (profils.some(p => p.id === id) || id === ID_PRINCIPAL) throw new Error('Supprimez d’abord le compte : seules les copies d’un compte supprimé sont effacées du relais.');
+        const ami = profils.find(p => p.id === id && !p.admin);
+        exiger(profil, 'supprimer-ami', ami);
         const maitre = await liaisonMaitre();
-        if (!maitre) throw new Error('Reliez d’abord cet appareil au relais (Paramètres › Synchronisation) : le nettoyage passe par lui.');
-        return nettoyerCompteRelais(maitre, id, nom);
+        await effacerFichiers(id);
+        await enregistrer(supprimerProfil(profils, id));
+        if (!maitre) return { objets: 0, acces: false, revoque: false, restes: ['appareil non relié au relais avec le code maître : copies non effacées'] };
+        return nettoyerCompteRelais(maitre, id, ami!.nom);
       },
       onRevoquerConnexion: async (id: string, revoque: boolean) => {
         exigerAdmin();

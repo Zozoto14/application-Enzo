@@ -110,11 +110,12 @@ export interface ControleProfils {
    */
   onInvitation?(id: string, jours: number, envoi?: OptionsInvitationHote): Promise<InvitationAffichee>;
   /**
-   * Fondateur principal (jeton maître) : efface les copies d'un compte DÉJÀ
-   * supprimé sur le relais (objets de son espace, accès par identifiant) et
-   * révoque son jeton. Voir `bureau/connexionAmis.ts` (`nettoyerCompteRelais`).
+   * Fondateur principal (jeton maître) : supprime le compte comme `onSupprimer`,
+   * PUIS efface ses copies sur le relais (objets de son espace, accès par
+   * identifiant) et révoque son jeton. Voir `nettoyerCompteRelais`
+   * (`bureau/connexionAmis.ts`) ; chaque étape est tentée, le bilan dit ce qui reste.
    */
-  onNettoyerRelais?(id: string, nom: string): Promise<{ objets: number; acces: boolean; revoque: boolean; restes: string[] }>;
+  onSupprimerAvecRelais?(id: string): Promise<{ objets: number; acces: boolean; revoque: boolean; restes: string[] }>;
   /** Révoque (ou rétablit) l'accès du compte sur le relais : son jeton n'y vaut plus rien. */
   onRevoquerConnexion?(id: string, revoque: boolean): Promise<void>;
   /** État de l'accès sur le relais (révoqué ?), pour la fiche. */

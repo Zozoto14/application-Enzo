@@ -308,6 +308,7 @@ try {
   const message = await pc.evaluate(() => navigator.clipboard.readText()).catch(() => '');
   verifier(message.includes(lea.lien) && /Ton identifiant : Léa/.test(message), '« Copier le message » : lien + instructions');
   verifier((await pc.getByTestId('admin-invitation-partager').count()) === 0, 'PC sans feuille de partage : pas de bouton « Partager »');
+  await pc.getByTestId('admin-invitation').evaluate(e => e.scrollIntoView({ block: 'start' }));
   await capture(pc, '02-pc-invitation-lea-email');
   await terminer(pc);
   const idLea = await idDe(pc, 'Léa');
@@ -339,6 +340,8 @@ try {
   verifier(/envoyée/.test(attente), `invitations en attente : Léa « ${attente.replace(/\n/g, ' ')} »`);
   verifier((await pc.getByTestId('admin-dernieres-connexions').count()) === 1, 'panneau « Dernières connexions »');
   await capture(pc, '04-pc-tableau-de-bord');
+  await pc.getByTestId('admin-invitations-attente').evaluate(e => e.scrollIntoView({ block: 'center' }));
+  await capture(pc, '04b-pc-tableau-invitations-attente');
 
   // ---------------------------------------------------------------- Matrice comptes × apps
   log('PC : matrice comptes × apps');
@@ -422,7 +425,7 @@ try {
   verifier(publieHugo, 'Hugo a des copies sur le relais avant la suppression');
   await ficheDe(pc, 'Hugo');
   await pc.getByTestId('admin-supprimer').click();
-  verifier((await pc.getByTestId('admin-supprimer-relais').getAttribute('aria-checked')) === 'true', 'zone Danger : « Effacer aussi ses copies sur le relais » coché par défaut');
+  verifier((await pc.getByTestId('admin-supprimer-relais').innerText()).includes('✓'), 'zone Danger : « Effacer aussi ses copies sur le relais » coché par défaut');
   await capture(pc, '10-pc-zone-danger');
   await pc.getByTestId('admin-confirmation-nom').fill('Hugo');
   await pc.getByTestId('admin-confirmer').click();

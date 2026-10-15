@@ -580,17 +580,16 @@ function Fiche({
         return `Nouveaux identifiants de ${profil.nom} générés : l’ancien portefeuille a été effacé.`;
       }),
     );
-  const avecRelais = nettoyerRelais && Boolean(controle.onNettoyerRelais);
+  const avecRelais = nettoyerRelais && Boolean(controle.onSupprimerAvecRelais);
   const supprimer = () =>
     outils.exigerIdentite(`Supprimer le compte de ${profil.nom}`, () =>
       outils.agir('Suppression…', async () => {
         verifierSur(outils.acteur, 'supprimer-ami', outils.tous, profil.id);
-        await controle.onSupprimer(profil.id);
+        const bilan = avecRelais ? await controle.onSupprimerAvecRelais!(profil.id) : (await controle.onSupprimer(profil.id), undefined);
         outils.majDonnees(d => sansContactPar(outils.acteur, avecNotePar(outils.acteur, d, outils.tous, profil.id, ''), profil.id));
         outils.journaliser({ type: 'compte', ...cibleJournal, action: `Compte de ${profil.nom} supprimé (coffre et portefeuille effacés de cet appareil)` });
         onSupprime();
-        if (!avecRelais) return `Compte « ${profil.nom} » supprimé.`;
-        const bilan = await controle.onNettoyerRelais!(profil.id, profil.nom);
+        if (!bilan) return `Compte « ${profil.nom} » supprimé.`;
         outils.journaliser({
           type: 'compte',
           ...cibleJournal,
@@ -1187,7 +1186,7 @@ function Fiche({
               ? `De nouveaux identifiants remplacent les anciens. Le portefeuille actuel de ${profil.nom} est scellé par l’ancienne clé : il sera effacé. (S’il a seulement oublié son mot de passe, il peut utiliser « Mot de passe oublié ? » avec un code de récupération.)`
               : `Le compte de ${profil.nom}, son coffre, son portefeuille, son séquestre, son adresse e-mail et vos notes seront effacés de cet appareil${avecRelais ? ', et ses copies effacées du relais (son accès par identifiant retiré, son jeton révoqué)' : ''}. C’est définitif.`}
           </Text>
-          {confirmation === 'supprimer' && controle.onNettoyerRelais ? (
+          {confirmation === 'supprimer' && controle.onSupprimerAvecRelais ? (
             <View style={commun.ligne}>
               <Case theme={theme} coche={nettoyerRelais} libelle="Effacer aussi ses copies sur le relais" onChanger={setNettoyerRelais} testID="admin-supprimer-relais" />
               <Text style={[texte, { flex: 1, fontSize: 13 }]}>Effacer aussi ses copies sur le relais (recommandé).</Text>
