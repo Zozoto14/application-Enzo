@@ -96,6 +96,13 @@ export interface ContexteResolution {
   signal?: SignalAnnulation;
   /** Parallélisme (défauts : `PARALLELE`) ; `{ variantes: 1, sources: 1 }` = l'ancien parcours séquentiel. */
   parallele?: Partial<ParametresParallele>;
+  /**
+   * Vrai si le site de cette adresse est CONNU pour être lent (temps mesurés sur
+   * l'appareil) : ses variantes de titre partent ensemble, et, s'il est la source
+   * prioritaire, les autres sources partent sans l'attendre (la priorité, le délai
+   * de grâce et le résultat retenu ne changent pas).
+   */
+  estLente?: (url: string) => boolean;
 }
 
 /** Réglages du parallélisme du moteur. */
@@ -119,6 +126,15 @@ export const PARALLELE: ParametresParallele = { variantes: 3, relaisMs: 600, sou
 
 const parametresParallele = (ctx: ContexteResolution): ParametresParallele => ({ ...PARALLELE, ...ctx.parallele });
 
+/** Source connue pour être lente (voir `ContexteResolution.estLente`). */
+const sourceLente = (ctx: ContexteResolution, src?: Pick<DefinitionSource, 'baseUrl'>) => {
+  try {
+    return Boolean(src?.baseUrl && ctx.estLente?.(src.baseUrl));
+  } catch {
+    return false;
+  }
+};
+
 /** Contexte d'une tâche annulable : même client, mais plus rien ne part après l'annulation. */
 const sousContexte = (ctx: ContexteResolution, signal: SignalAnnulation): ContexteResolution => ({ ...ctx, client: clientAnnulable(ctx.client, signal), signal });
 
@@ -139,7 +155,7 @@ interface PageLue {
 async function chargerPage(client: ClientSur, url: string, src?: Pick<DefinitionSource, 'timeout' | 'userAgent' | 'baseUrl'>): Promise<PageLue> {
   let cible = url;
   for (let saut = 0; ; saut += 1) {
-    const rep = await client.texte(cible, { delaiMs: src?.timeout, agentUtilisateur: src?.userAgent, referer: refererDe(src) });
+    const rep = await client.texte(cible, { delaiMs: src?.timeout, agentUtilisateur: src?.userAgent, referer: refererDe(src), cache: 'page' });
     const page = lirePage(rep.corps);
     const final = rep.url || cible;
     // Miroir ou « le site a déménagé » annoncé par <meta http-equiv="refresh"> (page courte) : suivi deux fois au plus.
@@ -242,7 +258,7 @@ export async function chercherSurDetail(
   const parSlug = cheminParSlug(cheminDeRecherche(src, o.langue ?? null));
   let rep: ReponseTexte;
   try {
-    const appel = { delaiMs: src.timeout, agentUtilisateur: src.userAgent, referer: refererDe(src), entetes: sel.type === 'json' ? { accept: 'application/json, text/javascript, */*;q=0.1' } : undefined };
+    const appel = { delaiMs: src.timeout, agentUtilisateur: src.userAgent, referer: refererDe(src), entetes: sel.type === 'json' ? { accept: 'application/json, text/javascript, */*;q=0.1' } : undefined, cache: 'recherche' as const };
     rep = methode === 'POST' ? await ctx.client.envoyerFormulaire(url, corpsDeRecherche(src, requete, o.slug), appel) : await ctx.client.obtenir(url, appel);
   } catch (err) {
     return { resultats: [], detail: { ...detail, erreur: messageDe(err), code: err instanceof ErreurMoteur ? err.code : 'reseau' } };
@@ -881,7 +897,7 @@ export async function chercherOeuvre(
   await courseOrdonnee(
     essais.map(e => (signal: SignalAnnulation) => chercherSurDetail(sousContexte(ctx, signal), src, e.requete, { langue: preference, slug: e.slug, cibles: voulus })),
     (r, i) => valider(essais[i].requete, essais[i].slug, r),
-    { simultanees: p.variantes, relaisMs: p.relaisMs, signal: ctx.signal },
+    { simultanees: p.variantes, relaisMs: sourceLente(ctx, src) ? 0 : p.relaisMs, signal: ctx.signal },
   );
   const { classes, choisi } = meilleurDe();
   const serie = choisi && choisi.baseScore >= SCORE_MINIMAL ? choisi : null;
@@ -1127,7 +1143,7 @@ export async function trouverEpisodes(
   const { issues, gagnante } = await courseAvecPriorite(
     actives.map(src => (signal: SignalAnnulation) => episodesSur(sousContexte(ctx, signal), src, o)),
     r => r.episodes.length > 0,
-    { simultanees: p.sources, graceMs: p.graceMs, relaisMs: p.relaisSourcesMs, signal: ctx.signal, surProvisoire: o.surProvisoire ? r => o.surProvisoire!(r) : undefined },
+    { simultanees: p.sources, graceMs: p.graceMs, relaisMs: sourceLente(ctx, actives[0]) ? 0 : p.relaisSourcesMs, signal: ctx.signal, surProvisoire: o.surProvisoire ? r => o.surProvisoire!(r) : undefined },
   );
   let refuse: ResultatClasse | null = null;
   let partiel: ResultatEpisodes | null = null;
@@ -1265,7 +1281,7 @@ export async function trouverFilm(
   const { issues, gagnante } = await courseAvecPriorite(
     actives.map(brute => (signal: SignalAnnulation) => filmSur(sousContexte(ctx, signal), brute, { ...o, langue: 'indifferent' })),
     r => r.sources.length > 0,
-    { simultanees: p.sources, graceMs: p.graceMs, relaisMs: p.relaisSourcesMs, signal: ctx.signal },
+    { simultanees: p.sources, graceMs: p.graceMs, relaisMs: sourceLente(ctx, actives[0]) ? 0 : p.relaisSourcesMs, signal: ctx.signal },
   );
   let refuse: ResultatClasse | null = null;
   const diagnostics: DiagnosticSource[] = [];

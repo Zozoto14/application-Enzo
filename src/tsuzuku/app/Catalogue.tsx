@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import type { FicheAnime, FicheFilm } from '../moteur/catalogue';
 import { carteAnime, carteFilm, sansVus } from './elements';
 import { CarteSansSource } from './EtatSources';
+import { intentionAnime } from './precharge';
 import { useCharger, useTsuzuku } from './contexte';
 import { Bouton, Champ, Etat, EtatVide, Grille, Puce, Titre } from './ui';
 
@@ -52,7 +53,7 @@ export function Catalogue({ q: qInitial, genre: genreInitial }: { q?: string; ge
     .filter((f, i, l) => l.findIndex(g => String(g.id) === String(f.id)) === i)
     .map(f =>
     mode === 'anime'
-      ? carteAnime(f as FicheAnime, lib.donnees, id => aller({ t: 'fiche', kind: 'anime', id }))
+      ? carteAnime(f as FicheAnime, lib.donnees, id => aller({ t: 'fiche', kind: 'anime', id }), x => intentionAnime(s, x))
       : carteFilm(f as FicheFilm, lib.donnees, id => aller({ t: 'fiche', kind: 'movie', id })),
   );
 

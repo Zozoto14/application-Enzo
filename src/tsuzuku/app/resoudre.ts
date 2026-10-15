@@ -218,6 +218,9 @@ export interface Disponibilite {
   provisoire?: boolean;
 }
 
+/** Contexte qui relit toujours les sites (cache du relais seulement remis à jour) : « Réessayer », rafraîchissement. */
+const contexteFrais = (s: Pick<ServicesTsuzuku, 'ctx'> & Partial<Pick<ServicesTsuzuku, 'ctxFrais'>>) => s.ctxFrais ?? s.ctx;
+
 /** Résultat trouvé : servi tel quel pendant 30 min. */
 export const EPISODES_FRAIS_MS = 30 * 60_000;
 /** Jusqu'à 24 h : servi tout de suite, et rafraîchi en arrière-plan. */
@@ -314,7 +317,7 @@ export async function episodesDisponibles(
       ecoute.dernier = d;
       for (const f of ecoute.ecouteurs) f(d);
     };
-    const promesse = trouverEpisodes(s.ctx, sources, { titres, langue, surProvisoire }).then(r => {
+    const promesse = trouverEpisodes(garder || o.forcer ? contexteFrais(s) : s.ctx, sources, { titres, langue, surProvisoire }).then(r => {
       if (r.episodes.length) {
         s.cache.ecrire(cle, r);
         cleDeResultat.set(r, cle);
@@ -409,7 +412,7 @@ export async function lecteursDeLEpisode(s: ServicesTsuzuku, url: string, o: { f
   lecteursEnVol.set(s, vols);
   let p = o.forcer ? undefined : vols.get(cle);
   if (!p) {
-    const promesse = trouverLecteurs(s.ctx, sources, url).then(l => {
+    const promesse = trouverLecteurs(o.forcer ? contexteFrais(s) : s.ctx, sources, url).then(l => {
       if (l.length) s.cache.ecrire(cle, l);
       return l;
     });

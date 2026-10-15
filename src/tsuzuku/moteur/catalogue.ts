@@ -28,6 +28,12 @@ export interface FicheAnime {
   titleJapanese: string | null;
   /** Autres titres connus du catalogue (français d'abord, puis synonymes, anglais…) : servent à chercher sur les sources. */
   titresAlternatifs?: string[];
+  /**
+   * D'où vient la fiche. Une carte Jikan (recherche, classements) porte déjà
+   * TOUS les titres de sa fiche complète : la recherche sur les sources peut
+   * partir dès le clic, sans attendre la fiche (`app/precharge.ts`).
+   */
+  fournisseur?: FournisseurAnime;
   synopsis: string | null;
   image: string | null;
   /** Affiche en petite taille (cartes des rangées et grilles : ~3 fois plus légère). */
@@ -130,6 +136,7 @@ export function mapperAnimeJikan(a: Brut): FicheAnime | null {
   }
   return {
     id: a.mal_id ?? null,
+    fournisseur: 'jikan',
     title: a.title_english || a.title,
     titleOriginal: a.title ?? null,
     titleJapanese: a.title_japanese || null,
@@ -187,6 +194,7 @@ export function mapperMediaAnilist(m: Brut): FicheAnime | null {
   }
   return {
     id: m.idMal ?? null,
+    fournisseur: 'anilist',
     title: m.title?.english || m.title?.romaji || 'Sans titre',
     titleOriginal: m.title?.romaji || m.title?.english || null,
     titleJapanese: m.title?.native || null,

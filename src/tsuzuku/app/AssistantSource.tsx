@@ -250,10 +250,10 @@ export function AssistantSource({
       if (catalogue) {
         const c = await cibleDuCatalogue(s, titreTest, supporteAnimes(src) ? 'anime' : 'movie');
         setTitreCatalogue(`${c.libelle} — titres essayés : ${c.cible.titres.join(' · ')}`);
-        setTest(await testerSourcePasAPas(s.ctx, src, c.cible));
+        setTest(await testerSourcePasAPas(s.ctxFrais ?? s.ctx, src, c.cible));
       } else {
         setTitreCatalogue(undefined);
-        setTest(await testerSourcePasAPas(s.ctx, src, { titres: [titreTest.trim() || 'a'], langue: (await s.reglages()).langue }));
+        setTest(await testerSourcePasAPas(s.ctxFrais ?? s.ctx, src, { titres: [titreTest.trim() || 'a'], langue: (await s.reglages()).langue }));
       }
     } catch (e) {
       setErreur(messageDe(e));
