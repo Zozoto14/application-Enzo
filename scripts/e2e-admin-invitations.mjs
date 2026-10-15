@@ -432,8 +432,10 @@ try {
   await confirmerIdentite(pc, secretAdmin);
   const avisSuppression = await avis(pc);
   verifier(/copie\(s\) effacée\(s\) du relais/.test(avisSuppression), `suppression : « ${avisSuppression} »`);
-  const nettoye = await attendre(async () => ![...kv.keys()].some(c => c.startsWith(`p:${idHugo}:`)), 30_000, 500);
-  verifier(nettoye, 'plus aucune copie de Hugo sur le relais');
+  // Reste au plus l'index de son espace, vide (le relais le tient à jour ; il ne contient aucune donnée).
+  const restes = () => [...kv.keys()].filter(c => c.startsWith(`p:${idHugo}:`) && !(c.endsWith('~index') && Object.keys(JSON.parse(kv.get(c) ?? '{}')).every(n => n.startsWith('~'))));
+  const nettoye = await attendre(async () => restes().length === 0, 30_000, 500);
+  verifier(nettoye, `plus aucune copie de Hugo sur le relais${nettoye ? '' : ` (restes : ${restes().join(', ')})`}`);
   const revoque = await worker.fetch(new Request(`https://relais/revocations/${idHugo}`, { headers: { Authorization: `Bearer ${JETON}` } }), env);
   verifier(revoque.ok && (await revoque.json()).revoque === true, 'jeton de Hugo révoqué sur le relais');
   await pc.getByTestId('admin-onglet-journal').click();
