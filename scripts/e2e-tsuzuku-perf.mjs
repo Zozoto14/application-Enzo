@@ -340,7 +340,27 @@ async function chrono(action, attente) {
   await action();
   return attente().then(() => Date.now() - debut, () => null);
 }
-const iframeAvec = (pg, texte, delai = 60_000) => pg.frameLocator('[data-testid="lecteur-iframe"]').getByText(texte).waitFor({ timeout: delai });
+/**
+ * Mesure PRÉCISE à l'image près : `waitForFunction` vérifié à chaque image (requestAnimationFrame).
+ * (`locator.waitFor` vérifie de moins en moins souvent, jusqu'à 1 s d'écart : inutilisable pour chronométrer.)
+ */
+const T = id => `[data-testid="${id}"]`;
+const apparait = (pg, css, delai = 90_000) =>
+  pg.waitForFunction(c => [...document.querySelectorAll(c)].some(e => (typeof e.checkVisibility === 'function' ? e.checkVisibility() : true)), css, { polling: 'raf', timeout: delai });
+/** Un lecteur (iframe d'un autre site) affiche `texte` : chaque cadre est relu toutes les 15 ms. */
+async function iframeAvec(pg, texte, delai = 60_000) {
+  const fin = Date.now() + delai;
+  const voulu = t => (texte instanceof RegExp ? texte.test(t) : t.includes(texte));
+  while (Date.now() < fin) {
+    for (const cadre of pg.frames()) {
+      if (cadre === pg.mainFrame() || !cadre.url().includes('lecteur-exemple.fr')) continue;
+      const t = await cadre.evaluate(() => document.body?.innerText ?? '').catch(() => '');
+      if (voulu(t)) return;
+    }
+    await dormir(15);
+  }
+  throw new Error(`lecteur : « ${texte} » jamais affiché`);
+}
 const S = (id, name, baseUrl, search) => ({ id, name, baseUrl, enabled: true, language: 'indifferent', search, episodes: { item: 'li.ep', link: 'a' }, player: { iframe: 'iframe' } });
 const SOURCES = [
   S('lente', 'Médiathèque lente', 'https://lente-exemple.fr', { path: '/recherche?q={query}', item: 'li.r', title: 'a', link: 'a' }),
@@ -400,28 +420,28 @@ async function parcours(navigateur, mode) {
 
   // 1. Ouverture de l'app : Découvrir.
   log(`${mode} : ouverture de l'app (Découvrir)`);
-  t.accueil = await chrono(() => cliquerTuile(pg), () => pg.getByTestId('carte-anime-1').first().waitFor({ timeout: 30_000 }));
+  t.accueil = await chrono(() => cliquerTuile(pg), () => apparait(pg, T('carte-anime-1'), 30_000));
   await capture(pg, `${mode}-01-accueil`);
 
   // 2. Recherche dans le catalogue.
   log(`${mode} : recherche du catalogue`);
   await pg.getByTestId('accueil-recherche').fill('voyage');
-  t.catalogue = await chrono(() => pg.getByTestId('accueil-chercher').click(), () => pg.getByTestId('catalogue-grille').getByTestId('carte-anime-1').first().waitFor({ timeout: 30_000 }));
+  t.catalogue = await chrono(() => pg.getByTestId('accueil-chercher').click(), () => apparait(pg, `${T('catalogue-grille')} ${T('carte-anime-1')}`, 30_000));
 
   // 3. Fiche : premier affichage utile (titre), puis « Sur vos sources » (épisodes trouvés).
   log(`${mode} : fiche et recherche sur les sources`);
   const debutFiche = Date.now();
   await pg.getByTestId('catalogue-grille').getByTestId('carte-anime-1').first().click();
-  t.fiche = await pg.getByTestId('fiche-titre').waitFor({ timeout: 30_000 }).then(() => Date.now() - debutFiche, () => null);
+  t.fiche = await apparait(pg, T('fiche-titre'), 30_000).then(() => Date.now() - debutFiche, () => null);
   // Premier affichage utile : le résultat provisoire (source moins prioritaire) ou le résultat final.
-  t.ficheSourcesPremier = await pg.locator('[data-testid="fiche-sources-provisoire"], [data-testid="fiche-sources-ok"]').first().waitFor({ timeout: 90_000 }).then(() => Date.now() - debutFiche, () => null);
-  const final = pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 90_000 }).then(() => Date.now() - debutFiche, () => null);
+  t.ficheSourcesPremier = await apparait(pg, `${T('fiche-sources-provisoire')}, ${T('fiche-sources-ok')}`).then(() => Date.now() - debutFiche, () => null);
+  const final = apparait(pg, T('fiche-sources-ok'), 90_000).then(() => Date.now() - debutFiche, () => null);
   if (await pg.getByTestId('fiche-sources-provisoire').count()) {
     await pg.getByTestId('fiche-sources').scrollIntoViewIfNeeded().catch(() => undefined);
     await pg.screenshot({ path: join(CAPTURES, `${mode}-02a-fiche-provisoire.png`) }).catch(() => undefined);
   }
   t.ficheSources = await final;
-  t.ficheLangues = await pg.getByTestId('fiche-langue-choix').waitFor({ timeout: 30_000 }).then(() => Date.now() - debutFiche, () => null);
+  t.ficheLangues = await apparait(pg, T('fiche-langue-choix'), 30_000).then(() => Date.now() - debutFiche, () => null);
   const texteOk = await pg.getByTestId('fiche-sources-ok').innerText().catch(() => '');
   verifier(/Médiathèque VF\/VOSTFR/.test(texteOk) && /12 épisode/.test(texteOk), `${mode} : « Le Long Voyage » trouvé sur la source 2 (12 épisodes, 2 pages)`);
   await pg.getByTestId('fiche-sources').scrollIntoViewIfNeeded().catch(() => undefined);
@@ -447,14 +467,14 @@ async function parcours(navigateur, mode) {
 
   // 7. Retour du lecteur à la fiche, puis seconde ouverture de la fiche (retour au hub, l'app est rouverte).
   log(`${mode} : retour à la fiche, puis seconde ouverture`);
-  t.retour = await chrono(() => pg.getByTestId('lecteur-retour').click(), () => pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 30_000 }));
+  t.retour = await chrono(() => pg.getByTestId('lecteur-retour').click(), () => apparait(pg, T('fiche-sources-ok'), 30_000));
   await retourHub(pg);
   await cliquerTuile(pg);
   await pg.getByTestId('carte-anime-1').first().waitFor({ timeout: 30_000 });
   const debut2 = Date.now();
   await pg.getByTestId('carte-anime-1').first().click();
-  t.fiche2 = await pg.getByTestId('fiche-titre').waitFor({ timeout: 30_000 }).then(() => Date.now() - debut2, () => null);
-  t.ficheSources2 = await pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 90_000 }).then(() => Date.now() - debut2, () => null);
+  t.fiche2 = await apparait(pg, T('fiche-titre'), 30_000).then(() => Date.now() - debut2, () => null);
+  t.ficheSources2 = await apparait(pg, T('fiche-sources-ok'), 90_000).then(() => Date.now() - debut2, () => null);
 
   // 7 bis. Un AUTRE titre, jamais cherché (sources déjà connues : la prioritaire est lente, et n'a pas ce titre).
   log(`${mode} : autre titre (sources déjà connues)`);
@@ -464,8 +484,8 @@ async function parcours(navigateur, mode) {
   await pg.getByTestId('catalogue-grille').getByTestId('carte-anime-3').first().waitFor({ timeout: 30_000 });
   const debutAutre = Date.now();
   await pg.getByTestId('catalogue-grille').getByTestId('carte-anime-3').first().click();
-  t.autreSourcesPremier = await pg.locator('[data-testid="fiche-sources-provisoire"], [data-testid="fiche-sources-ok"]').first().waitFor({ timeout: 90_000 }).then(() => Date.now() - debutAutre, () => null);
-  t.autreSources = await pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 90_000 }).then(() => Date.now() - debutAutre, () => null);
+  t.autreSourcesPremier = await apparait(pg, `${T('fiche-sources-provisoire')}, ${T('fiche-sources-ok')}`).then(() => Date.now() - debutAutre, () => null);
+  t.autreSources = await apparait(pg, T('fiche-sources-ok'), 90_000).then(() => Date.now() - debutAutre, () => null);
   const texteAutre = await pg.getByTestId('fiche-sources-ok').innerText().catch(() => '');
   verifier(/Médiathèque VF\/VOSTFR/.test(texteAutre) && /12 épisode/.test(texteAutre), `${mode} : autre titre trouvé sur la source 2 (12 épisodes)`);
 
@@ -477,11 +497,11 @@ async function parcours(navigateur, mode) {
   await deverrouiller(pg, secret);
   await fermerPopups(pg);
   await activerPontPc();
-  t.accueil3 = await chrono(() => cliquerTuile(pg), () => pg.getByTestId('carte-anime-1').first().waitFor({ timeout: 30_000 }));
+  t.accueil3 = await chrono(() => cliquerTuile(pg), () => apparait(pg, T('carte-anime-1'), 30_000));
   const debut3 = Date.now();
   await pg.getByTestId('carte-anime-1').first().click();
-  t.fiche3 = await pg.getByTestId('fiche-titre').waitFor({ timeout: 30_000 }).then(() => Date.now() - debut3, () => null);
-  t.ficheSources3 = await pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 90_000 }).then(() => Date.now() - debut3, () => null);
+  t.fiche3 = await apparait(pg, T('fiche-titre'), 30_000).then(() => Date.now() - debut3, () => null);
+  t.ficheSources3 = await apparait(pg, T('fiche-sources-ok'), 90_000).then(() => Date.now() - debut3, () => null);
   await pg.getByTestId('fiche-sources').scrollIntoViewIfNeeded().catch(() => undefined);
   await capture(pg, `${mode}-05-fiche-apres-rechargement`);
   t.requetesSources = requetes.filter(r => !['img-exemple.fr', 'lecteur-exemple.fr'].includes(r.hote)).length;
@@ -502,10 +522,10 @@ async function secondAppareil(navigateur, mode) {
   await importerSources(pg, `${mode} (2e appareil)`);
   await brider(pg, mode);
   log(`${mode} : second appareil, même fiche`);
-  t.appareil2Accueil = await chrono(() => cliquerTuile(pg), () => pg.getByTestId('carte-anime-1').first().waitFor({ timeout: 30_000 }));
+  t.appareil2Accueil = await chrono(() => cliquerTuile(pg), () => apparait(pg, T('carte-anime-1'), 30_000));
   const debut = Date.now();
   await pg.getByTestId('carte-anime-1').first().click();
-  t.appareil2Sources = await pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 90_000 }).then(() => Date.now() - debut, () => null);
+  t.appareil2Sources = await apparait(pg, T('fiche-sources-ok'), 90_000).then(() => Date.now() - debut, () => null);
   const texteOk = await pg.getByTestId('fiche-sources-ok').innerText().catch(() => '');
   verifier(/Médiathèque VF\/VOSTFR/.test(texteOk) && /12 épisode/.test(texteOk), `${mode} : 2e appareil, même résultat (source 2, 12 épisodes)`);
   await pg.getByTestId('episode-2').scrollIntoViewIfNeeded();

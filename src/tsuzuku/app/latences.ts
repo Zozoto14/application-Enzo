@@ -20,6 +20,12 @@ export const MESURES_MIN = 2;
 /** Hôtes suivis au plus (les plus anciens partent d'abord). */
 export const HOTES_MAX = 60;
 const CLE = 'latences';
+/**
+ * Les mesures sont rangées dans la base du profil au plus tôt ce délai après la
+ * DERNIÈRE requête : écrire la base (chiffrée) pendant une recherche ralentirait
+ * l'affichage de son résultat.
+ */
+export const RANGEMENT_DIFFERE_MS = 8000;
 /** Poids de la dernière mesure (moyenne glissante). */
 const POIDS = 0.35;
 
@@ -45,10 +51,31 @@ function hoteDe(url: string): string | undefined {
   return m ? m[1].toLowerCase() : undefined;
 }
 
-export function creerSuiviLatences(cache?: Pick<CacheTsuzuku, 'lire' | 'ecrire'>): SuiviLatences {
+const parCache = new WeakMap<object, SuiviLatences>();
+
+/** Le suivi d'un cache du profil : le même d'une ouverture de l'app à l'autre (comme le cache). */
+export function latencesDuCache(cache: Pick<CacheTsuzuku, 'lire' | 'ecrire'>): SuiviLatences {
+  let l = parCache.get(cache);
+  if (!l) {
+    l = creerSuiviLatences(cache);
+    parCache.set(cache, l);
+  }
+  return l;
+}
+
+export function creerSuiviLatences(cache?: Pick<CacheTsuzuku, 'lire' | 'ecrire'>, o: { differeMs?: number } = {}): SuiviLatences {
   const hotes = new Map<string, Suivi>();
   let charge: Promise<void> | undefined;
-  const ranger = () => cache?.ecrire(CLE, Object.fromEntries(hotes));
+  let minuteur: ReturnType<typeof setTimeout> | undefined;
+  const ranger = () => {
+    if (!cache) return;
+    if (minuteur) clearTimeout(minuteur);
+    minuteur = setTimeout(() => {
+      minuteur = undefined;
+      cache.ecrire(CLE, Object.fromEntries(hotes));
+    }, o.differeMs ?? RANGEMENT_DIFFERE_MS);
+    (minuteur as unknown as { unref?: () => void }).unref?.();
+  };
   const typique = (url: string) => {
     const s = hotes.get(hoteDe(url) ?? '');
     return s && s.n >= MESURES_MIN ? s.ms : undefined;

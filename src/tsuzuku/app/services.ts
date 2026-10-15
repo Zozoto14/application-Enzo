@@ -42,7 +42,8 @@ import {
 } from './gestion';
 import { ecrireReglages, lireReglages, type ReglagesTsuzuku } from './reglages';
 import { creerCache, empreinteTexte, type CacheTsuzuku } from './cache';
-import { creerSuiviLatences, type SuiviLatences } from './latences';
+import { latencesDuCache, type SuiviLatences } from './latences';
+import { debutActivite, finActivite } from './activite';
 
 export interface ServicesTsuzuku {
   plateforme: ChoixReseau['plateforme'];
@@ -124,15 +125,20 @@ export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: anci
   const rang: Rang = rangDonne ?? (ancien === false ? 'ami' : 'fondateur');
   const habilite = peutGererSources(rang);
   const cache = cacheDonne ?? creerCache(stockage);
-  const latences = creerSuiviLatences(cache);
+  const latences = latencesDuCache(cache);
   void latences.charger();
   // Chaque page lue est chronométrée (une page servie par le cache du relais ne compte pas).
   const reseau: Reseau = {
     async requete(r) {
       const debut = Date.now();
-      const rep = await choix.reseau.requete(r);
-      if (rep.entetes?.['x-tsuzuku-relais-cache'] !== 'HIT') latences.noter(r.url, Date.now() - debut);
-      return rep;
+      debutActivite();
+      try {
+        const rep = await choix.reseau.requete(r);
+        if (rep.entetes?.['x-tsuzuku-relais-cache'] !== 'HIT') latences.noter(r.url, Date.now() - debut);
+        return rep;
+      } finally {
+        finActivite();
+      }
     },
     ...(choix.reseau.resoudre ? { resoudre: choix.reseau.resoudre.bind(choix.reseau) } : {}),
   };

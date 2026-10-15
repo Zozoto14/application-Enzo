@@ -60,7 +60,7 @@ const attendre = (ms: number) => new Promise<void>(ok => setTimeout(() => ok(), 
 describe('temps typique de chaque site (sources connues pour être lentes)', () => {
   it('moyenne glissante par hôte, 2 mesures au moins avant de conclure, gardée sur l’appareil', async () => {
     const cache = creerCache(stockageMemoire(), { delaiEcritureMs: 0 });
-    const l = creerSuiviLatences(cache);
+    const l = creerSuiviLatences(cache, { differeMs: 5 });
     l.noter('https://lent-exemple.fr/?s=a', 4000);
     expect(l.typique('https://lent-exemple.fr/x')).toBeUndefined();
     expect(l.estLente('https://lent-exemple.fr/')).toBe(false);
@@ -74,7 +74,9 @@ describe('temps typique de chaque site (sources connues pour être lentes)', () 
     // Un site qui s'améliore cesse d'être « lent ».
     for (let i = 0; i < 8; i += 1) l.noter('https://lent-exemple.fr/', 200);
     expect(l.estLente('https://lent-exemple.fr/')).toBe(false);
-    // Relu par un nouveau lancement (même cache du profil).
+    // Rangé plus tard (jamais pendant une recherche), puis relu par un nouveau lancement (même cache du profil).
+    expect((await cache.lire('latences'))).toBeUndefined();
+    await attendre(30);
     const relu = creerSuiviLatences(cache);
     await relu.charger();
     expect(relu.typique('https://vif-exemple.fr/')).toBe(l.typique('https://vif-exemple.fr/'));
@@ -270,5 +272,19 @@ describe('préchargement d’intention (borné)', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe('écriture de la base du cache : jamais pendant une recherche', () => {
+  it('attend le calme du réseau (20 s au plus), puis écrit', async () => {
+    const stockage = stockageMemoire();
+    let calme = false;
+    const cache = creerCache(stockage, { delaiEcritureMs: 5, calme: () => calme });
+    cache.ecrire('x', 1);
+    await attendre(80);
+    expect(await stockage.lire(CLES.cache)).toBeFalsy();
+    calme = true;
+    await attendre(700);
+    expect(await stockage.lire(CLES.cache)).toContain('"x"');
   });
 });
