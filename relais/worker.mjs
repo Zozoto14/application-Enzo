@@ -35,7 +35,9 @@ import {
 } from '../bureau/electron/reseau.mjs';
 import { CHEMIN_TSUZUKU, routeTsuzuku } from './tsuzuku.mjs';
 
-export const VERSION_RELAIS = 5;
+export const VERSION_RELAIS = 6;
+/** Fonctions annoncées par `/sante` (le site adapte ses écrans à un relais pas encore redéployé). */
+export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'invitations', 'acces', 'revocations'];
 /** Une enveloppe chiffrée : quelques centaines de Kio en pratique. */
 const TAILLE_MAX_ENVELOPPE = 20 * 1024 * 1024;
 const IDENTIFIANT_APPAREIL = /^[a-z0-9]{4,32}$/;
@@ -611,6 +613,305 @@ async function support(requete, env, portee) {
   return reponse({ ok: true, ...(ticket.numero ? { numero: ticket.numero } : {}) });
 }
 
+// ------------------------------------------------------------ Invitations et connexion des amis (version 6)
+//
+// Voir docs/connexion-amis.md. Le relais ne voit jamais ni mot de passe, ni
+// clé, ni jeton d'ami en clair : il garde des charges SCELLÉES par des clés
+// qu'il ne connaît pas, et l'EMPREINTE d'une preuve (SHA-256) qu'il compare.
+//
+//  - `PUT /invitations/<id>` (jeton maître) : dépose une invitation (charge
+//    scellée, empreinte de la preuve, expiration, compte). Une seule invitation
+//    active par compte : la précédente est révoquée (« Renvoyer »).
+//    `DELETE` (jeton maître) la révoque.
+//  - `GET /invitations/<id>` (SANS jeton : l'ami n'en a pas encore) : la
+//    charge, tant que l'invitation n'est ni utilisée, ni expirée, ni révoquée
+//    (410 et le motif sinon ; 404 si elle n'existe pas).
+//  - `POST /invitations/<id>/utiliser` (sans jeton, avec la preuve) : marque
+//    l'invitation utilisée et efface sa charge (usage unique).
+//  - `PUT /acces/<h>` (jeton du compte, ou maître) : l'« accès » d'un
+//    identifiant (empreinte `h`) pour se connecter depuis un appareil neuf.
+//    Le compte n'écrit que l'identifiant que le Fondateur lui a attribué
+//    (`acces-proprio:<h>`, posé avec l'invitation) : pas d'usurpation.
+//  - `GET /acces/<h>` (sans jeton) : sel et paramètres de dérivation ;
+//    `POST /acces/<h>/ouvrir` (sans jeton, avec la preuve tirée du mot de
+//    passe) : la charge scellée, ou 403. Délai progressif PAR IDENTIFIANT
+//    (KV) et PAR ADRESSE IP (mémoire du Worker) : anti-force brute.
+//  - `PUT`/`DELETE /revocations/<id>` (jeton maître) : le jeton de profil de
+//    ce compte est refusé partout (403, motif `revoque`) tant que la
+//    révocation n'est pas levée.
+
+const MOTIF_ID_INVITATION = /^[0-9a-f]{32}$/;
+const MOTIF_EMPREINTE = /^[0-9a-f]{64}$/;
+const TAILLE_MAX_CHARGE = 16 * 1024;
+const DUREE_MAX_INVITATION_MS = 90 * 86_400_000;
+/** Une invitation utilisée, expirée ou révoquée est gardée (sans charge) 30 jours pour dire pourquoi elle ne marche plus. */
+const GARDE_TOMBE_S = 30 * 86_400;
+const ESSAIS_LIBRES_IDENTIFIANT = 5;
+const ATTENTE_MAX_IDENTIFIANT_S = 3600;
+const ESSAIS_LIBRES_IP = 10;
+const ATTENTE_MAX_IP_S = 900;
+const limitesIp = new Map();
+
+export function adresseIp(requete) {
+  return requete.headers.get('CF-Connecting-IP') ?? ((requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || 'inconnue');
+}
+
+/** Délai à attendre (secondes) après `echecs` échecs, au-delà de `libres` essais. */
+export function attenteApres(echecs, libres, max, base = 30) {
+  if (echecs < libres) return 0;
+  return Math.min(max, base * 2 ** (echecs - libres));
+}
+
+function attenteIp(ip, maintenant) {
+  const l = limitesIp.get(ip);
+  return l && l.jusqua > maintenant ? Math.ceil((l.jusqua - maintenant) / 1000) : 0;
+}
+
+function echecIp(ip, maintenant) {
+  if (limitesIp.size > 5000) limitesIp.clear();
+  const l = limitesIp.get(ip) ?? { echecs: 0, jusqua: 0 };
+  // Un quart d'heure sans échec : on repart de zéro.
+  if (l.dernier && maintenant - l.dernier > 900_000) l.echecs = 0;
+  l.echecs++;
+  l.dernier = maintenant;
+  const attente = attenteApres(l.echecs, ESSAIS_LIBRES_IP, ATTENTE_MAX_IP_S, 5);
+  l.jusqua = attente > 0 ? maintenant + attente * 1000 : 0;
+  limitesIp.set(ip, l);
+}
+
+function tropDeTentatives(attenteS) {
+  const r = reponse({ erreur: 'Trop de tentatives : réessayez plus tard.', motif: 'trop-de-tentatives', attente: attenteS }, 429);
+  r.headers.set('Retry-After', String(attenteS));
+  return r;
+}
+
+const egal = (a, b) => typeof a === 'string' && typeof b === 'string' && a.length === b.length && jetonValideLong(a, b);
+function jetonValideLong(a, b) {
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
+
+async function empreinteHex(texte) {
+  return hexa(await crypto.subtle.digest('SHA-256', encodeur.encode(texte)));
+}
+
+async function lireJsonKv(env, cle) {
+  try {
+    const brut = await env.BOITE.get(cle);
+    return brut ? JSON.parse(brut) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function etatInvitation(inv, maintenant) {
+  if (inv.etat === 'revoquee') return 'revoquee';
+  if (inv.etat === 'utilisee') return 'utilisee';
+  if (maintenant >= inv.expire) return 'expiree';
+  return 'active';
+}
+
+const MOTIFS_INVITATION = {
+  revoquee: 'Invitation annulée ou remplacée par une plus récente.',
+  utilisee: 'Invitation déjà utilisée.',
+  expiree: 'Invitation expirée.',
+};
+
+async function ecrireInvitation(env, id, inv, maintenant) {
+  const ttl = Math.max(120, Math.ceil((inv.expire - maintenant) / 1000) + GARDE_TOMBE_S);
+  await env.BOITE.put(`inv:${id}`, JSON.stringify(inv), { expirationTtl: ttl });
+}
+
+async function revoquerInvitation(env, id, maintenant) {
+  const inv = await lireJsonKv(env, `inv:${id}`);
+  if (!inv || inv.alias) return;
+  if (inv.etat === 'active') {
+    const tombe = { ...inv, etat: 'revoquee', revoqueeLe: maintenant };
+    delete tombe.charge;
+    await ecrireInvitation(env, id, tombe, maintenant);
+  }
+  if (inv.court) await env.BOITE.delete(`inv:${inv.court}`);
+}
+
+async function invitations(requete, env, portee, id, action) {
+  const maintenant = Date.now();
+  if (!MOTIF_ID_INVITATION.test(id)) {
+    return erreur('Invitation invalide.', 400);
+  }
+  if (action === undefined && (requete.method === 'PUT' || requete.method === 'DELETE')) {
+    if (!portee?.maitre) return erreur('Réservé au jeton de l’administrateur.', portee ? 403 : 401);
+    if (requete.method === 'DELETE') {
+      await revoquerInvitation(env, id, maintenant);
+      return reponse({ ok: true });
+    }
+    const corps = await corpsJson(requete);
+    const expire = Date.parse(corps?.expire);
+    const court = corps?.court;
+    if (
+      !corps ||
+      !MOTIF_COMPTE.test(corps.profil ?? '') ||
+      corps.profil === 'principal' ||
+      typeof corps.charge !== 'string' ||
+      corps.charge.length > TAILLE_MAX_CHARGE ||
+      !MOTIF_EMPREINTE.test(corps.verif ?? '') ||
+      !Number.isFinite(expire) ||
+      expire <= maintenant ||
+      expire > maintenant + DUREE_MAX_INVITATION_MS ||
+      (corps.acces !== undefined && !MOTIF_EMPREINTE.test(corps.acces)) ||
+      (court !== undefined &&
+        (!court || !MOTIF_ID_INVITATION.test(court.id ?? '') || court.id === id || typeof court.charge !== 'string' || court.charge.length > TAILLE_MAX_CHARGE || !MOTIF_EMPREINTE.test(court.verif ?? '')))
+    ) {
+      return erreur('Invitation illisible.', 400);
+    }
+    // Une seule invitation active par compte : la précédente cesse aussitôt de marcher.
+    const precedente = await env.BOITE.get(`inv-profil:${corps.profil}`);
+    if (precedente && precedente !== id) await revoquerInvitation(env, precedente, maintenant);
+    const inv = { v: 1, profil: corps.profil, expire, charge: corps.charge, verif: corps.verif, etat: 'active', cree: maintenant, ...(court ? { court: court.id } : {}) };
+    await ecrireInvitation(env, id, inv, maintenant);
+    if (court) await ecrireInvitation(env, court.id, { v: 1, alias: id, profil: corps.profil, expire, charge: court.charge, verif: court.verif, etat: 'active', cree: maintenant }, maintenant);
+    await env.BOITE.put(`inv-profil:${corps.profil}`, id);
+    if (corps.acces) await env.BOITE.put(`acces-proprio:${corps.acces}`, corps.profil);
+    return reponse({ ok: true, expire: new Date(expire).toISOString() });
+  }
+
+  // Routes publiques : l'ami n'a pas encore de jeton.
+  const ip = adresseIp(requete);
+  const attente = attenteIp(ip, maintenant);
+  if (attente > 0) return tropDeTentatives(attente);
+  const lue = await lireJsonKv(env, `inv:${id}`);
+  if (!lue) {
+    echecIp(ip, maintenant);
+    return reponse({ erreur: 'Invitation introuvable.', motif: 'inconnue' }, 404);
+  }
+  const principale = lue.alias ? await lireJsonKv(env, `inv:${lue.alias}`) : lue;
+  const etat = principale ? etatInvitation(principale, maintenant) : 'revoquee';
+  if (etat !== 'active') {
+    return reponse({ erreur: MOTIFS_INVITATION[etat], motif: etat }, 410);
+  }
+  if (action === undefined && requete.method === 'GET') {
+    return reponse({ charge: lue.charge, expire: new Date(principale.expire).toISOString(), heure: maintenant });
+  }
+  if (action === 'utiliser' && requete.method === 'POST') {
+    const corps = await corpsJson(requete);
+    const preuve = typeof corps?.preuve === 'string' ? corps.preuve : '';
+    if (!/^[0-9a-f]{64}$/.test(preuve) || !egal(await empreinteHex(preuve), lue.verif)) {
+      echecIp(ip, maintenant);
+      return reponse({ erreur: 'Preuve refusée.', motif: 'preuve' }, 403);
+    }
+    const idPrincipal = lue.alias ?? id;
+    const tombe = { ...principale, etat: 'utilisee', utiliseeLe: maintenant };
+    delete tombe.charge;
+    await ecrireInvitation(env, idPrincipal, tombe, maintenant);
+    if (principale.court) await env.BOITE.delete(`inv:${principale.court}`);
+    return reponse({ ok: true });
+  }
+  return erreur('Méthode non autorisée.', 405);
+}
+
+function lireDepotAcces(corps) {
+  const kdf = corps?.kdf;
+  const entier = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+  if (
+    !corps ||
+    !MOTIF_COMPTE.test(corps.compte ?? '') ||
+    corps.compte === 'principal' ||
+    !/^[0-9a-f]{32}$/.test(corps.sel ?? '') ||
+    !MOTIF_EMPREINTE.test(corps.verif ?? '') ||
+    typeof corps.charge !== 'string' ||
+    !/^[0-9a-f]+$/.test(corps.charge) ||
+    corps.charge.length > TAILLE_MAX_CHARGE ||
+    !kdf ||
+    kdf.algorithme !== 'argon2id' ||
+    !entier(kdf.passes, 1, 10) ||
+    !entier(kdf.memoireKio, 8, 262144) ||
+    !entier(kdf.fils, 1, 4) ||
+    kdf.longueurCle !== 32
+  ) {
+    return undefined;
+  }
+  return { compte: corps.compte, sel: corps.sel, kdf: { algorithme: 'argon2id', passes: kdf.passes, memoireKio: kdf.memoireKio, fils: kdf.fils, longueurCle: 32 }, verif: corps.verif, charge: corps.charge };
+}
+
+async function acces(requete, env, portee, h, action) {
+  const maintenant = Date.now();
+  if (!MOTIF_EMPREINTE.test(h)) {
+    return erreur('Identifiant invalide.', 400);
+  }
+  if (action === undefined && (requete.method === 'PUT' || requete.method === 'DELETE')) {
+    if (!portee) return erreur('Jeton du relais manquant ou incorrect.', 401);
+    const proprio = await env.BOITE.get(`acces-proprio:${h}`);
+    if (requete.method === 'DELETE') {
+      if (!portee.maitre && (!proprio || portee.profil !== proprio)) return erreur('Cet identifiant n’est pas le vôtre.', 403);
+      await env.BOITE.delete(`acces:${h}`);
+      await env.BOITE.delete(`limite:acces:${h}`);
+      return reponse({ ok: true });
+    }
+    const depot = lireDepotAcces(await corpsJson(requete));
+    if (!depot) return erreur('Accès illisible.', 400);
+    // Le compte n'écrit que l'identifiant que le Fondateur lui a attribué (posé avec l'invitation).
+    if (!portee.maitre && (portee.profil !== depot.compte || proprio !== depot.compte)) {
+      return erreur('Cet identifiant n’est pas le vôtre.', 403);
+    }
+    await env.BOITE.put(`acces:${h}`, JSON.stringify(depot));
+    await env.BOITE.delete(`limite:acces:${h}`);
+    return reponse({ ok: true });
+  }
+
+  const ip = adresseIp(requete);
+  const attente = attenteIp(ip, maintenant);
+  if (attente > 0) return tropDeTentatives(attente);
+  const depot = await lireJsonKv(env, `acces:${h}`);
+  if (!depot) {
+    echecIp(ip, maintenant);
+    return reponse({ erreur: 'Identifiant inconnu.', motif: 'identifiant-inconnu' }, 404);
+  }
+  if (await env.BOITE.get(`revoque:${depot.compte}`)) {
+    return reponse({ erreur: 'Accès révoqué.', motif: 'revoque' }, 403);
+  }
+  if (action === undefined && requete.method === 'GET') {
+    return reponse({ sel: depot.sel, kdf: depot.kdf });
+  }
+  if (action === 'ouvrir' && requete.method === 'POST') {
+    const limite = (await lireJsonKv(env, `limite:acces:${h}`)) ?? { echecs: 0, jusqua: 0 };
+    if (limite.jusqua > maintenant) {
+      return tropDeTentatives(Math.ceil((limite.jusqua - maintenant) / 1000));
+    }
+    const corps = await corpsJson(requete);
+    const preuve = typeof corps?.preuve === 'string' ? corps.preuve : '';
+    if (!/^[0-9a-f]{64}$/.test(preuve) || !egal(await empreinteHex(preuve), depot.verif)) {
+      echecIp(ip, maintenant);
+      const echecs = limite.echecs + 1;
+      const attenteS = attenteApres(echecs, ESSAIS_LIBRES_IDENTIFIANT, ATTENTE_MAX_IDENTIFIANT_S);
+      await env.BOITE.put(`limite:acces:${h}`, JSON.stringify({ echecs, jusqua: attenteS > 0 ? maintenant + attenteS * 1000 : 0 }), { expirationTtl: 86_400 });
+      return reponse({ erreur: 'Mot de passe incorrect.', motif: 'mot-de-passe', ...(attenteS > 0 ? { attente: attenteS } : { restants: ESSAIS_LIBRES_IDENTIFIANT - echecs }) }, 403);
+    }
+    if (limite.echecs > 0) await env.BOITE.delete(`limite:acces:${h}`);
+    return reponse({ compte: depot.compte, charge: depot.charge });
+  }
+  return erreur('Méthode non autorisée.', 405);
+}
+
+async function revocations(requete, env, portee, id) {
+  if (!portee.maitre) return erreur('Réservé au jeton de l’administrateur.', 403);
+  if (!MOTIF_COMPTE.test(id) || id === 'principal') return erreur('Compte invalide.', 400);
+  if (requete.method === 'PUT') {
+    await env.BOITE.put(`revoque:${id}`, String(Date.now()));
+    // Plus d'invitation ni d'accès par identifiant pour ce compte.
+    const inv = await env.BOITE.get(`inv-profil:${id}`);
+    if (inv) await revoquerInvitation(env, inv, Date.now());
+    return reponse({ ok: true });
+  }
+  if (requete.method === 'DELETE') {
+    await env.BOITE.delete(`revoque:${id}`);
+    return reponse({ ok: true });
+  }
+  if (requete.method === 'GET') {
+    return reponse({ revoque: Boolean(await env.BOITE.get(`revoque:${id}`)) });
+  }
+  return erreur('Méthode non autorisée.', 405);
+}
+
 async function passerelle(requete, chemin) {
   if (requete.method !== 'POST') {
     return erreur('Méthode non autorisée.', 405);
@@ -649,13 +950,33 @@ export default {
     }
     const autorisation = requete.headers.get('Authorization') ?? '';
     const portee = await porteeDuJeton(autorisation.replace(/^Bearer\s+/i, ''), env.JETON);
+    const { pathname } = new URL(requete.url);
+
+    // Invitations et accès par identifiant : certaines routes se passent de jeton (voir plus haut).
+    const routeInvitation = /^\/invitations\/([^/]+)(?:\/(utiliser))?\/?$/.exec(pathname);
+    const routeAcces = /^\/acces\/([^/]+)(?:\/(ouvrir))?\/?$/.exec(pathname);
+    if (routeInvitation || routeAcces) {
+      if (!env.BOITE) {
+        return erreur('Boîte non configurée sur le relais.', 500);
+      }
+      if (portee?.profil && (await env.BOITE.get(`revoque:${portee.profil}`))) {
+        return reponse({ erreur: 'Accès révoqué par l’administrateur.', motif: 'revoque' }, 403);
+      }
+      return routeInvitation
+        ? invitations(requete, env, portee, routeInvitation[1], routeInvitation[2])
+        : acces(requete, env, portee, routeAcces[1], routeAcces[2]);
+    }
+
     if (!portee) {
       return erreur('Jeton du relais manquant ou incorrect.', 401);
     }
+    // Compte révoqué par l'administrateur : son jeton ne vaut plus rien.
+    if (portee.profil && env.BOITE && (await env.BOITE.get(`revoque:${portee.profil}`))) {
+      return reponse({ erreur: 'Accès révoqué par l’administrateur.', motif: 'revoque' }, 403);
+    }
 
-    const { pathname } = new URL(requete.url);
     if (pathname === '/sante') {
-      return reponse({ ok: true, version: VERSION_RELAIS, portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}), heure: Date.now() });
+      return reponse({ ok: true, version: VERSION_RELAIS, fonctions: FONCTIONS_RELAIS, portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}), heure: Date.now() });
     }
     if (pathname === '/heure') {
       // Ultra léger : l'appareil compare son horloge (codes TOTP) à celle du relais.
@@ -663,6 +984,13 @@ export default {
     }
     if (pathname === '/support') {
       return support(requete, env, portee);
+    }
+    const routeRevocation = /^\/revocations\/([^/]+)\/?$/.exec(pathname);
+    if (routeRevocation) {
+      if (!env.BOITE) {
+        return erreur('Boîte non configurée sur le relais.', 500);
+      }
+      return revocations(requete, env, portee, routeRevocation[1]);
     }
     if (pathname === '/rangs') {
       if (!env.BOITE) {

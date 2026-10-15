@@ -18,6 +18,15 @@ import { EcranMobile } from '../src/ui/mobile/EcranMobile';
 import { FeuilleBasse } from '../src/ui/mobile/FeuilleBasse';
 import { Cellule, GroupeCellules } from '../src/ui/mobile/ListeCellules';
 import { useMobile } from '../src/ui/mobile/useMobile';
+import { BlocConnexion } from './Invitation';
+
+/** Connexion d'un ami (identifiant + mot de passe) et ouverture d'une invitation collée. */
+export interface OptionsConnexionAccueil {
+  relaisConnu: boolean;
+  identifiantInitial?: string;
+  onConnexion(identifiant: string, motDePasse: string): Promise<void>;
+  onInvitation(texte: string): Promise<void>;
+}
 
 function message(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : String(erreur);
@@ -28,12 +37,14 @@ export function AccueilSite({
   erreur: erreurInitiale,
   onRelier,
   onCreer,
+  connexion,
 }: {
   /** Code apporté par un lien `#liaison=` : rien à recopier. */
   codeConnu?: string;
   erreur?: string;
   onRelier(code: string): Promise<void>;
   onCreer(): void;
+  connexion?: OptionsConnexionAccueil;
 }) {
   const palette = usePalette();
   const [code, setCode] = useState('');
@@ -57,10 +68,11 @@ export function AccueilSite({
     return (
       <EcranMobile
         testID="accueil-site"
-        pied={<BoutonPrincipal titre="Relier ce navigateur" desactive={!utilise} enCours={enCours} onPress={relier} testID="bouton-relier-accueil" />}>
+        pied={!connexion || utilise ? <BoutonPrincipal titre="Relier ce navigateur" desactive={!utilise} enCours={enCours} onPress={relier} testID="bouton-relier-accueil" /> : undefined}>
         <Titre>Bienvenue sur AppDashboard</Titre>
-        <SousTitre>Retrouvez votre compte : même prénom, même mot de passe et même code qu’ailleurs.</SousTitre>
-        <GroupeCellules titre="J’ai déjà un compte" note="Administrateur : le code de liaison de votre PC (Paramètres › Synchronisation › Appareils liés › Relier un autre appareil). Ami : le code de connexion envoyé par l’administrateur. Il commence par AB1. et ne se saisit qu’une fois.">
+        <SousTitre>{connexion && !codeConnu ? 'Connecte-toi avec ton identifiant et ton mot de passe, ou ouvre ton invitation.' : 'Retrouvez votre compte : même prénom, même mot de passe et même code qu’ailleurs.'}</SousTitre>
+        {connexion && !codeConnu ? <BlocConnexion {...connexion} /> : null}
+        <GroupeCellules titre={connexion && !codeConnu ? 'Administrateur : relier avec le code du PC' : 'J’ai déjà un compte'} note="Administrateur : le code de liaison de votre PC (Paramètres › Synchronisation › Appareils liés › Relier un autre appareil). Ami : le code de connexion envoyé par l’administrateur. Il commence par AB1. et ne se saisit qu’une fois.">
           {codeConnu ? (
             <Cellule titre="Code de liaison reçu par le lien" sousTitre="Rien à recopier." glyphe="✓" teinte={palette.hausse} testID="accueil-code-connu" />
           ) : (
@@ -103,8 +115,10 @@ export function AccueilSite({
       <Titre>Bienvenue sur AppDashboard</Titre>
       <SousTitre>Sur ce navigateur, rien n’est encore installé. Retrouvez votre compte, avec le même prénom, le même mot de passe et le même code qu’ailleurs.</SousTitre>
 
-      <View style={[styles.cadre, { borderColor: palette.accent, backgroundColor: palette.surface }]}>
-        <Text style={{ color: palette.texte, fontWeight: '800', fontSize: 18 }}>🔗 J’ai déjà un compte (le relier)</Text>
+      {connexion && !codeConnu ? <BlocConnexion {...connexion} /> : null}
+
+      <View style={[styles.cadre, { borderColor: connexion && !codeConnu ? palette.bordure : palette.accent, backgroundColor: palette.surface }]}>
+        <Text style={{ color: palette.texte, fontWeight: '800', fontSize: 18 }}>{connexion && !codeConnu ? '🔗 Administrateur : relier avec le code de liaison' : '🔗 J’ai déjà un compte (le relier)'}</Text>
         <Text style={{ color: palette.texteSecondaire }}>
           Administrateur : le code de liaison de votre PC (Paramètres › Synchronisation › Appareils liés › Relier un autre appareil). Ami : le code
           de connexion que l’administrateur vous a envoyé. Il commence par AB1. et ne se saisit qu’une fois.

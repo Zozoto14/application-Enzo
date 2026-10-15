@@ -9,10 +9,10 @@
  * `outils.exigerIdentite` (mot de passe + code de l'administrateur).
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { QrCode } from '../../../ui/ecrans/CarteSynchro';
-import type { IdentifiantsAmi } from '../../../profils/identifiants';
+import type { IdentifiantsAmi, InvitationAffichee } from '../../../profils/identifiants';
 import type { Profil } from '../../../profils/profils';
 import { police, teinteTransparente, type ThemeHub } from '../../themes';
 import type { AppHub } from '../../types';
@@ -250,6 +250,7 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
                             .join(', ') || 'Aucune app'}
                       {gestionnaire ? '' : ' · '}
                       {gestionnaire ? '' : p.derniereConnexion ? `vu ${relatif(p.derniereConnexion, maintenant)}` : 'jamais connecté'}
+                      {!gestionnaire && p.appareils && p.appareils.length > 0 ? ` · ${p.appareils.length} appareil${p.appareils.length > 1 ? 's' : ''}` : ''}
                     </Text>
                   </View>
                   <BadgeRang theme={theme} profil={p} testID={`admin-rang-${p.id}`} />
@@ -342,6 +343,19 @@ function Fiche({
   const [codeSaisi, setCodeSaisi] = useState('');
   const [ouverture, setOuverture] = useState(false);
   const [codeSite, setCodeSite] = useState<{ code: string; lien?: string } | undefined>();
+  const [invitation, setInvitation] = useState<InvitationAffichee | undefined>();
+  const [revoqueRelais, setRevoqueRelais] = useState<boolean | undefined>();
+  const [joursInvitation, setJoursInvitation] = useState(String(outils.donnees.reglages.invitationJours || 7));
+  useEffect(() => {
+    let actif = true;
+    controle.etatConnexion?.(profil.id).then(
+      e => actif && setRevoqueRelais(e.revoque),
+      () => undefined,
+    );
+    return () => {
+      actif = false;
+    };
+  }, [controle, profil.id]);
   const statut = statutCompte(profil, maintenant);
   const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
@@ -415,6 +429,39 @@ function Fiche({
         setCodeSite(valeurs);
         outils.journaliser({ type: 'identifiants', ...cibleJournal, action: `Code de connexion au site préparé pour ${profil.nom}` });
         return `Code de ${profil.nom} prêt : son compte est publié sur le relais d’ici une minute.`;
+      }),
+    );
+  const envoyerInvitation = () =>
+    outils.exigerIdentite(profil.derniereConnexion ? `Réinitialiser l’accès de ${profil.nom}` : `Renvoyer une invitation à ${profil.nom}`, () =>
+      outils.agir('Préparation de l’invitation…', async () => {
+        verifierSur(outils.acteur, 'regenerer-identifiants', outils.tous, profil.id);
+        const jours = Math.min(90, Math.max(1, Number(joursInvitation) || 7));
+        const valeurs = await controle.onInvitation!(profil.id, jours);
+        setInvitation(valeurs);
+        if (valeurs.erreur) return valeurs.erreur;
+        outils.journaliser({
+          type: 'invitation',
+          ...cibleJournal,
+          action: profil.derniereConnexion
+            ? `Accès de ${profil.nom} réinitialisé : nouveau lien d’invitation (${jours} j), l’ancien mot de passe ne fonctionne plus`
+            : `Nouvelle invitation envoyée à ${profil.nom} (${jours} j) : l’ancienne ne fonctionne plus`,
+        });
+        return `Invitation prête : copiez le message et envoyez-le à ${profil.nom}.`;
+      }),
+    );
+  const revoquerConnexion = (revoque: boolean) =>
+    outils.exigerIdentite(revoque ? `Révoquer l’accès de ${profil.nom}` : `Rétablir l’accès de ${profil.nom}`, () =>
+      outils.agir(revoque ? 'Révocation…' : 'Rétablissement…', async () => {
+        verifierSur(outils.acteur, 'etat-ami', outils.tous, profil.id);
+        await controle.onRevoquerConnexion!(profil.id, revoque);
+        setRevoqueRelais(revoque);
+        setInvitation(undefined);
+        if (revoque) {
+          await outils.modifierProfils(liste => desactiverPar(outils.acteur, liste, profil.id), [{ type: 'compte', ...cibleJournal, action: `Accès de ${profil.nom} révoqué (relais et compte désactivé)` }]);
+          return `${profil.nom} ne peut plus se connecter : son jeton est refusé par le relais, son compte est désactivé et ses invitations annulées.`;
+        }
+        await outils.modifierProfils(liste => reactiverPar(outils.acteur, liste, profil.id), [{ type: 'compte', ...cibleJournal, action: `Accès de ${profil.nom} rétabli` }]);
+        return `${profil.nom} peut de nouveau se connecter (envoyez-lui une invitation s’il a oublié son mot de passe).`;
       }),
     );
   const regenererCode = () =>
@@ -704,11 +751,56 @@ function Fiche({
         )}
       </View>
 
+      {gestionnaire ? null : (
+        <>
+          <Intertitre theme={theme}>Accès et connexion</Intertitre>
+          <Text style={[texte, { fontSize: 13 }]} testID="admin-acces-etat">
+            {etatAcces(profil, maintenant)}
+          </Text>
+          {revoqueRelais ? <Avis theme={theme} genre="critique" texte={`Accès révoqué sur le relais : ${profil.nom} ne peut plus se connecter.`} testID="admin-acces-revoque" /> : null}
+          {invitation ? <PanneauInvitation theme={theme} nom={profil.nom} invitation={invitation} /> : null}
+          {controle.onInvitation ? (
+            <>
+              <Text style={[attenue, { fontSize: 12 }]}>
+                {profil.derniereConnexion
+                  ? `Mot de passe oublié, appareil perdu : un nouveau lien remplace l’ancien mot de passe de ${profil.nom} (ses données sont gardées). Il choisira un nouveau mot de passe.`
+                  : `Pas encore connecté : un nouveau lien remplace l’ancien (qui cesse de marcher).`}
+              </Text>
+              <View style={[commun.grille, { alignItems: 'flex-end' }]}>
+                <Champ theme={theme} libelle="Lien valable (jours)" valeur={joursInvitation} onChanger={v => setJoursInvitation(v.replace(/[^\d]/g, ''))} clavier="number-pad" maxLength={2} testID="admin-invitation-jours" style={{ flexBasis: 140 }} />
+                <BoutonHub
+                  theme={theme}
+                  variante="plein"
+                  couleur={theme.teintes.admin}
+                  titre={profil.derniereConnexion ? 'Réinitialiser l’accès (nouveau lien)' : 'Renvoyer une invitation'}
+                  desactive={Boolean(outils.enCours) || Boolean(revoqueRelais)}
+                  onPress={envoyerInvitation}
+                  testID="admin-invitation-envoyer"
+                />
+              </View>
+            </>
+          ) : (
+            <Text style={[attenue, { fontSize: 12 }]} testID="admin-invitation-indisponible">
+              Les invitations partent de l’appareil du Fondateur principal (relié au relais avec le code maître).
+            </Text>
+          )}
+          {controle.onRevoquerConnexion ? (
+            <View style={commun.actions}>
+              {revoqueRelais ? (
+                <BoutonHub theme={theme} titre="Rétablir l’accès" onPress={() => revoquerConnexion(false)} testID="admin-acces-retablir" />
+              ) : (
+                <BoutonHub theme={theme} variante="danger" titre="Révoquer l’accès" onPress={() => revoquerConnexion(true)} testID="admin-acces-revoquer" />
+              )}
+            </View>
+          ) : null}
+        </>
+      )}
+
       {gestionnaire || !controle.onCodeSite ? null : (
         <>
-          <Intertitre theme={theme}>Connexion sur le site ou un téléphone</Intertitre>
+          <Intertitre theme={theme}>Code de liaison (avancé)</Intertitre>
           <Text style={[attenue, { fontSize: 12 }]}>
-            Un code PROPRE à {profil.nom} : il n’ouvre que son compte (ni l’annuaire, ni les autres comptes). {profil.nom} le saisit une fois sur son navigateur, puis se connecte avec son prénom, son mot de passe et son code, comme ici.
+            Ancienne méthode : un code PROPRE à {profil.nom} (il n’ouvre que son compte). {profil.nom} le saisit une fois sur son navigateur, puis se connecte avec son prénom, son mot de passe et son code. Préférez l’invitation ci-dessus.
           </Text>
           {codeSite ? (
             <View style={[commun.avis, { borderLeftColor: theme.teintes.admin, backgroundColor: teinteTransparente(theme.teintes.admin, 0.12), gap: 4 }]}>
@@ -724,7 +816,7 @@ function Fiche({
             </View>
           ) : null}
           <View style={commun.actions}>
-            <BoutonHub theme={theme} titre="Envoyer un code de connexion au site" onPress={envoyerCodeSite} testID="admin-code-site-generer" />
+            <BoutonHub theme={theme} titre="Code de liaison du site" onPress={envoyerCodeSite} testID="admin-code-site-generer" />
           </View>
         </>
       )}
@@ -965,8 +1057,16 @@ function PanneauIdentifiants({ theme, nom, valeurs, onTermine }: { theme: ThemeH
   const cle = { color: theme.sombre ? '#555' : '#AAA', ...mono, fontSize: 13.5, lineHeight: 23 };
   return (
     <Panneau theme={theme} testID="admin-identifiants">
-      <Text style={[styleTitre(theme), { fontSize: 20 }]}>Identifiants de {nom}</Text>
-      <Avis theme={theme} genre="alerte" texte={`Affichés une seule fois : ils ne sont conservés nulle part en clair. Transmettez-les à ${nom} de vive voix ou sur papier, puis ne les gardez pas.`} />
+      <Text style={[styleTitre(theme), { fontSize: 20 }]}>Accès de {nom}</Text>
+      {valeurs.invitation ? (
+        <PanneauInvitation theme={theme} nom={nom} invitation={valeurs.invitation} />
+      ) : (
+        <Text style={{ color: theme.attenue, fontSize: 13 }} testID="admin-invitation-indisponible">
+          Invitation par lien : elle part de l’appareil du Fondateur principal (Administration › {nom} › Renvoyer une invitation). En attendant, transmettez les identifiants ci-dessous.
+        </Text>
+      )}
+      <Intertitre theme={theme}>{valeurs.invitation?.lien ? 'Autre méthode (si le lien ne marche pas) : identifiants à dicter' : 'Identifiants'}</Intertitre>
+      <Avis theme={theme} genre="alerte" texte={`Affichés une seule fois : ils ne sont conservés nulle part en clair. Méthode manuelle : ${nom} relie son navigateur avec le code de liaison, puis saisit prénom, mot de passe ET code à 6 chiffres. Ils ne servent plus dès que ${nom} a choisi son mot de passe par le lien.`} />
       <View style={{ padding: 14, backgroundColor: theme.texte, borderRadius: Math.min(theme.rayonMoyen, 10) }}>
         <Text selectable style={code}>
           <Text style={cle}>Prénom        </Text>
@@ -993,14 +1093,100 @@ function PanneauIdentifiants({ theme, nom, valeurs, onTermine }: { theme: ThemeH
           </Text>
         ))}
       </View>
-      <Avis theme={theme} genre="info" texte={`À dire à ${nom} : « Les administrateurs et fondateurs peuvent accéder à ton compte. Chaque accès est journalisé et tu le verras dans tes Paramètres. Pour te connecter, saisis ton prénom. »`} />
+      <Avis theme={theme} genre="info" texte={`À dire à ${nom} : « Les administrateurs et fondateurs peuvent accéder à ton compte. Chaque accès est journalisé et tu le verras dans tes Paramètres. Ton identifiant est ton prénom. »`} />
       <View style={commun.ligne}>
         <Case theme={theme} coche={transmis} libelle="J’ai transmis ces identifiants" onChanger={setTransmis} testID="admin-transmis" />
-        <Text style={{ color: theme.texte, flex: 1 }}>J’ai transmis ces identifiants (et l’avertissement).</Text>
+        <Text style={{ color: theme.texte, flex: 1 }}>{valeurs.invitation?.lien ? 'J’ai envoyé l’invitation (et l’avertissement).' : 'J’ai transmis ces identifiants (et l’avertissement).'}</Text>
       </View>
       <View style={[commun.actions, { justifyContent: 'flex-end' }]}>
         <BoutonHub theme={theme} variante="plein" couleur={theme.teintes.admin} titre="Terminé" testID="admin-termine" desactive={!transmis} onPress={onTermine} />
       </View>
     </Panneau>
+  );
+}
+
+// --- Invitation -----------------------------------------------------------------------
+
+/** État de l'accès d'un compte, en clair : invité, expiré, actif (dernière connexion, appareils). */
+export function etatAcces(profil: Profil, maintenant: number): string {
+  if (profil.actif === false) return 'Désactivé : ne peut pas se connecter.';
+  if (profil.derniereConnexion) {
+    const appareils = profil.appareils ?? [];
+    const liste = appareils.length > 0 ? ` · ${appareils.length} appareil${appareils.length > 1 ? 's' : ''} (${appareils.map(a => a.nom).join(', ')})` : '';
+    return `Actif · dernière connexion ${relatif(profil.derniereConnexion, maintenant)}${profil.connexions ? ` · ${profil.connexions} connexion${profil.connexions > 1 ? 's' : ''}` : ''}${liste}.`;
+  }
+  if (profil.invitationExpireLe) {
+    return maintenant >= Date.parse(profil.invitationExpireLe)
+      ? `Invitation expirée le ${dateLisible(profil.invitationExpireLe, true)} : renvoyez-en une.`
+      : `Invité : invitation valable jusqu’au ${dateLisible(profil.invitationExpireLe, true)}, pas encore utilisée.`;
+  }
+  return profil.anterieur ? 'Compte d’avant le suivi des connexions.' : 'En attente : jamais connecté.';
+}
+
+/** Copie dans le presse-papiers (web, Electron) ; faux si indisponible. */
+async function copier(texte: string): Promise<boolean> {
+  const presse = (globalThis as { navigator?: { clipboard?: { writeText(t: string): Promise<void> } } }).navigator?.clipboard;
+  if (!presse) return false;
+  try {
+    await presse.writeText(texte);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Lien d'invitation, QR code, code court et message prêt à coller. */
+export function PanneauInvitation({ theme, nom, invitation }: { theme: ThemeHub; nom: string; invitation: InvitationAffichee }) {
+  const [copie, setCopie] = useState<string | undefined>();
+  const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
+  const texte = { color: theme.texte, ...police(theme.policeTexte) };
+  if (invitation.erreur || !invitation.lien) {
+    return <Avis theme={theme} genre="critique" texte={invitation.erreur ?? 'Invitation impossible.'} testID="admin-invitation-erreur" />;
+  }
+  const jour = invitation.expire ? dateLisible(invitation.expire, true) : '';
+  const copierTexte = (valeur: string, quoi: string) =>
+    void copier(valeur).then(ok => setCopie(ok ? `${quoi} copié : collez-le dans votre messagerie.` : 'Copie impossible ici : sélectionnez le texte ci-dessous.'));
+  return (
+    <View style={[commun.avis, { borderLeftColor: theme.ok, backgroundColor: teinteTransparente(theme.ok, 0.1), gap: 8 }]} testID="admin-invitation">
+      <Text style={[texte, { fontWeight: '700' }]}>✉️ Invitation de {nom} — valable une fois, jusqu’au {jour}</Text>
+      <Text style={[attenue, { fontSize: 13 }]}>
+        Envoyez ce message à {nom} (SMS, WhatsApp…). {nom} ouvre le lien, choisit SON mot de passe, et c’est tout : vous n’avez aucun mot de passe à transmettre.
+      </Text>
+      {invitation.publie === false ? (
+        <Avis theme={theme} genre="alerte" texte={`Le compte de ${nom} n’est pas encore publié sur le relais : gardez l’app ouverte (déverrouillée) une minute.`} testID="admin-invitation-non-publie" />
+      ) : invitation.publie ? (
+        <Text style={{ color: theme.ok, fontSize: 13 }} testID="admin-invitation-publie">
+          ✓ Compte publié sur le relais : {nom} peut ouvrir le lien dès maintenant.
+        </Text>
+      ) : null}
+      {invitation.avertissement ? <Avis theme={theme} genre="alerte" texte={invitation.avertissement} testID="admin-invitation-avertissement" /> : null}
+      <View style={commun.actions}>
+        <BoutonHub theme={theme} variante="plein" couleur={theme.teintes.admin} titre="Copier le message d’invitation" onPress={() => copierTexte(invitation.message ?? invitation.lien!, 'Message')} testID="admin-invitation-copier" />
+        <BoutonHub theme={theme} titre="Copier le lien seul" onPress={() => copierTexte(invitation.lien!, 'Lien')} testID="admin-invitation-copier-lien" />
+      </View>
+      {copie ? (
+        <Text style={{ color: theme.ok, fontSize: 13 }} testID="admin-invitation-copie">
+          {copie}
+        </Text>
+      ) : null}
+      <Text selectable style={[texte, { fontSize: 12 }]} testID="admin-invitation-lien">
+        {invitation.lien}
+      </Text>
+      {invitation.codeCourt ? (
+        <Text style={[texte, { fontSize: 13 }]}>
+          Code court (sur le site, « J’ai reçu une invitation ») :{' '}
+          <Text selectable style={[police(theme.policeChiffres), { fontWeight: '700', letterSpacing: 1.5 }]} testID="admin-invitation-code-court">
+            {invitation.codeCourt}
+          </Text>
+        </Text>
+      ) : null}
+      <View style={{ alignItems: 'flex-start' }}>
+        <QrCode texte={invitation.lien} legende={`Invitation · ${nom}`} testID="admin-invitation-qr" />
+      </View>
+      <Text style={[attenue, { fontSize: 12 }]}>Message :</Text>
+      <Text selectable style={[texte, { fontSize: 12 }]} testID="admin-invitation-message">
+        {invitation.message}
+      </Text>
+    </View>
   );
 }

@@ -353,17 +353,12 @@ try {
   nav.on('pageerror', e => log('erreur page navigateur de Hugo :', e.message));
   await relier(nav, codeHugo);
   await nav.getByTestId('connexion-prenom').waitFor({ timeout: 60_000 });
-  // Le Fondateur n'existe pas sur ce navigateur : son prénom mène au leurre, comme un prénom inconnu.
+  // Le Fondateur n'existe pas sur ce navigateur (relié au seul compte de Hugo) : son prénom ne mène à rien,
+  // avec un message précis (le leurre reste réservé aux appareils du Fondateur, voir docs/connexion-amis.md).
   await nav.getByTestId('connexion-prenom').fill('admin');
   await nav.getByTestId('connexion-continuer').click();
-  await nav.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
-  await nav.locator('input[type=password]').first().fill(MDP_ADMIN);
-  await nav.locator('input:not([type=password])').first().fill(totp(secretAdmin));
-  await nav.getByTestId('bouton-deverrouiller').click();
-  const leurre = await nav.getByText(/incorrect/i).first().innerText({ timeout: 20_000 }).catch(() => '');
-  verifier(/incorrect/i.test(leurre), `navigateur de Hugo : le Fondateur, même avec SES identifiants, mène au leurre (« ${leurre} »)`);
-  await nav.getByTestId('changer-profil-verrou').click();
-  await nav.getByTestId('connexion-prenom').waitFor({ timeout: 60_000 });
+  const leurre = await nav.getByTestId('connexion-prenom-erreur').innerText({ timeout: 20_000 }).catch(() => '');
+  verifier(/Identifiant inconnu sur ce navigateur/.test(leurre) && (await nav.getByTestId('bouton-deverrouiller').count()) === 0, `navigateur de Hugo : le Fondateur n’y ouvre rien (« ${leurre.slice(0, 50)}… »)`);
   await nav.getByTestId('connexion-prenom').fill('Hugo');
   await nav.getByTestId('connexion-continuer').click();
   await nav.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });

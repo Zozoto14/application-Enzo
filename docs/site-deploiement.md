@@ -47,6 +47,14 @@ Le paquet de mise à jour de l'app iPhone (`/maj`, signé sur le PC) est repris
 tel qu'il est en ligne : la publication automatique ne l'efface pas. Il ne se
 renouvelle que par `npm run relais:site` sur le PC.
 
+## Adresse du relais (`relais.json`)
+
+Le site publie, quand il la connaît, l'adresse du relais dans `relais.json` (rien de secret) : un ami qui ouvre le
+site sur un appareil neuf peut alors « Se connecter » avec son prénom et son mot de passe (voir
+`docs/connexion-amis.md`). Workflow GitHub : variable de dépôt **`RELAIS_URL`** ; sur le PC, `npm run relais:site`
+l'écrit depuis `relais/relais-local.json`. Sans elle, l'ami utilise le lien de son invitation (ou le lien de
+connexion `#relais=` qu'elle contient).
+
 ## Et le relais ?
 
 Ce workflow ne publie que le site. Le relais Cloudflare (Worker) se met à jour à part, à la main :

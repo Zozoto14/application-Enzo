@@ -2,8 +2,10 @@
 
 Le relais (`relais/worker.mjs`) doit être redéployé quand il gagne une route — par exemple
 `/tsuzuku/requete`, qui permet au **site web** de lire les pages des sources de Tsuzuku pour le
-compte Fondateur. Tant qu'il ne l'est pas, le site affiche : « Le relais ne connaît pas encore la
-lecture des sources : mettez à jour le relais… ».
+compte Fondateur, ou (version 6) les **invitations et la connexion des amis** (`/invitations`, `/acces`,
+`/revocations`, voir `docs/connexion-amis.md`). Tant qu'il ne l'est pas, le site affiche : « Le relais ne
+connaît pas encore la lecture des sources : mettez à jour le relais… », et les invitations passent en mode
+« lien » (l'Administration affiche « Relais à mettre à jour »).
 
 Deux façons de le faire : depuis GitHub (téléphone compris), ou depuis le PC.
 
@@ -28,8 +30,9 @@ affiche pas : les codes de liaison déjà donnés restent valables.
      (32 caractères). Il est dans `relais/relais-local.json` sur le PC (champ `kv`), ou sur
      dash.cloudflare.com › *Storage & Databases* › *KV* › `applibourse-boite`. (Un secret du même nom
      fonctionne aussi.)
-   - facultatif, variable **`RELAIS_URL`** = l'adresse du relais (`https://applibourse-relais.<vous>.workers.dev`,
-     champ `relais` de `relais/relais-local.json`) : sert au test de santé si wrangler ne l'affiche pas.
+   - conseillé, variable **`RELAIS_URL`** = l'adresse du relais (`https://applibourse-relais.<vous>.workers.dev`,
+     champ `relais` de `relais/relais-local.json`) : sert au test de santé, et le workflow « Site » la publie
+     dans `relais.json` pour qu'un ami se connecte depuis un appareil neuf avec son prénom et son mot de passe.
 
 ### À chaque mise à jour
 
@@ -39,7 +42,9 @@ affiche pas : les codes de liaison déjà donnés restent valables.
 3. Attendez la coche verte (1 à 2 minutes). Le dernier pas, « Test de santé », affiche :
    - `GET /sante (sans jeton) : HTTP 401` — le relais tourne (401 est normal : aucun jeton n'est
      envoyé, le `JETON` n'est jamais utilisé par GitHub) ;
-   - `OPTIONS /tsuzuku/requete … HTTP 204` puis « Relais à jour » — la route du site est en place.
+   - `OPTIONS /tsuzuku/requete … HTTP 204` — la route du site est en place ;
+   - `GET /invitations/… (sans jeton) : HTTP 404 {"…","motif":"inconnue"}` puis « Relais à jour » — la
+     version 6 (invitations, connexion des amis par identifiant, anti-force brute) est en place.
 4. Sur le site, rouvrez une fiche de Tsuzuku : « Sur vos sources » indique « Site web : lecture via le relais ».
 
 Le workflow ne se lance **que** à la main (`workflow_dispatch`), jamais sur un push. Il lance

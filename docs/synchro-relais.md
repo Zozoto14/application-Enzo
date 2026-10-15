@@ -182,6 +182,18 @@ passent par là. Elle reste bornée aux listes fermées d'hôtes de `bureau/elec
 flux et pages des médias connus) : ce n'est pas un proxy ouvert. La restreindre au jeton maître casserait les
 comptes d'amis existants ; elle n'est donc pas modifiée.
 
+## Invitations et connexion des amis (version 6 du relais)
+
+Parcours complet, messages et limites : **`docs/connexion-amis.md`**. En bref : `PUT/DELETE /invitations/<id>`
+(jeton maître), `GET /invitations/<id>` et `POST /invitations/<id>/utiliser` **sans jeton** (contenu scellé par une
+clé tirée du secret du lien, usage unique, expiration, une seule invitation active par compte),
+`PUT/DELETE /acces/<h>` (le compte, pour l'identifiant que le Fondateur lui a attribué) et `GET /acces/<h>`,
+`POST /acces/<h>/ouvrir` **sans jeton** (preuve tirée du mot de passe, délai progressif par identifiant et par adresse
+IP), `PUT/DELETE/GET /revocations/<id>` (jeton maître : le jeton de profil est refusé partout, 403 `revoque`).
+Clés KV : `inv:<id>`, `inv-profil:<compte>`, `acces:<h>`, `acces-proprio:<h>`, `limite:acces:<h>`, `revoque:<compte>`.
+Le relais n'y voit ni mot de passe, ni clé, ni jeton d'ami en clair. Les routes d'avant sont inchangées ; un relais pas
+encore redéployé fait passer les invitations en mode « lien » (contenu dans le lien) et le site l'annonce.
+
 ## Ce qui est publié, et qui peut le lire
 
 | Objet | Contenu | Chiffrement | Lisible par |
@@ -295,6 +307,9 @@ précédente reste). Sans estampille (relais pas encore redéployé, ou dépôt 
 
 ## Premier lancement sur un navigateur
 
+0. **Ami** : il ouvre son **lien d'invitation** (ou, sur un appareil suivant, « Se connecter » avec son prénom et son
+   mot de passe) — voir `docs/connexion-amis.md`. Le code de liaison ci-dessous reste la méthode de l'administrateur
+   (et la méthode de secours d'un ami).
 1. Écran d'accueil : **« J'ai déjà un compte (le relier) »** d'abord — code AB1 (ou lien `#liaison=`) : celui du PC pour
    l'administrateur, celui envoyé par l'administrateur pour un ami (« Envoyer un code de connexion au site » dans la fiche
    du compte). « Créer un nouveau coffre » vient en second, avec un avertissement.

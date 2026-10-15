@@ -273,22 +273,17 @@ try {
   await tel.getByTestId('connexion-prenom').waitFor({ timeout: 60_000 });
   await capture(tel, '07-telephone-lea-prenom');
 
-  // Leurre : prénom de l'administrateur → même écran, même erreur, aucun 404.
+  // Navigateur d'un ami (un seul compte) : un autre prénom (« admin ») reçoit un message précis, sans appel au
+  // relais ni 404 (le leurre reste réservé aux appareils de l'administrateur, voir docs/connexion-amis.md).
   const avantLeurre = journalRelais.length;
   await tel.getByTestId('connexion-prenom').fill('admin');
   await tel.getByTestId('connexion-continuer').click();
-  await tel.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
+  const erreurLeurre = await tel.getByTestId('connexion-prenom-erreur').innerText({ timeout: 20_000 }).catch(() => '');
+  verifier(/Identifiant inconnu sur ce navigateur/.test(erreurLeurre), `prénom inconnu sur le navigateur de Léa : « ${erreurLeurre.slice(0, 60)}… »`);
   const appelsLeurre = journalRelais.slice(avantLeurre);
-  verifier(appelsLeurre.every(a => a.statut === 200 && a.portee === idLea), `leurre : appels du même espace, sans 404 (${appelsLeurre.map(a => `${a.methode} ${a.chemin} ${a.statut}`).join(', ')})`);
-  await tel.locator('input[type=password]').first().fill(lea.motDePasse);
-  await tel.locator('input:not([type=password])').first().fill(totp(lea.secret));
-  await tel.getByTestId('bouton-deverrouiller').click();
-  const erreurLeurre = await tel.getByText(/incorrect/i).first().innerText({ timeout: 20_000 }).catch(() => '');
-  verifier(/incorrect/i.test(erreurLeurre), `leurre : échec « ${erreurLeurre} »`);
+  verifier(appelsLeurre.every(a => a.statut === 200 && a.portee === idLea), `aucun appel hors de son espace, sans 404 (${appelsLeurre.map(a => `${a.methode} ${a.chemin} ${a.statut}`).join(', ') || 'aucun'})`);
   await capture(tel, '08-telephone-leurre');
 
-  await tel.getByTestId('changer-profil-verrou').click();
-  await tel.getByTestId('connexion-prenom').waitFor({ timeout: 60_000 });
   await tel.getByTestId('connexion-prenom').fill('Léa');
   await tel.getByTestId('connexion-continuer').click();
   await tel.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });

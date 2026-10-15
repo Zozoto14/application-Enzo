@@ -157,6 +157,8 @@ async function webhookSupport() {
 async function publierSite(local) {
   etape('Compilation du site de secours');
   await lancer('npx', ['vite', 'build', '--outDir', '../site-dist', '--emptyOutDir']);
+  // Adresse du relais (rien de secret) : un appareil neuf d'un ami s'y connecte par identifiant + mot de passe.
+  if (local.relais && !aBlanc) writeFileSync(resolve(racine, 'site-dist', 'relais.json'), `${JSON.stringify({ relais: local.relais })}\n`);
 
   await joindreMiseAJourIphone(local);
 

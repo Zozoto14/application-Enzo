@@ -48,6 +48,13 @@ export interface DeverrouillageProps {
   avisHorloge?: string;
   /** Texte du diagnostic (sans secret), calculé à la demande. */
   diagnostic?: () => Promise<string>;
+  /**
+   * Coffre sans code TOTP (compte d'ami qui a choisi son mot de passe par une
+   * invitation) : seul le mot de passe est demandé.
+   */
+  sansCode?: boolean;
+  /** Mot de passe oublié d'un ami : à qui demander un lien de réinitialisation. */
+  aideOubli?: string;
 }
 
 /** Le code saisi ou collé, réduit à six chiffres (« 123 456 », chiffres pleine chasse). */
@@ -70,7 +77,11 @@ export function Deverrouillage({
   onFinTemporisation,
   avisHorloge,
   diagnostic,
+  sansCode = false,
+  aideOubli,
 }: DeverrouillageProps) {
+  const [montrerAideOubli, setMontrerAideOubli] = useState(false);
+  const [visible, setVisible] = useState(false);
   const [montrerLier, setMontrerLier] = useState(false);
   const [motDePasse, setMotDePasse] = useState('');
   const [code, setCode] = useState('');
@@ -109,7 +120,7 @@ export function Deverrouillage({
   const [copie, setCopie] = useState<string | undefined>();
 
   const verrouille = restant > 0;
-  const complet = motDePasse.length > 0 && code.length === 6;
+  const complet = motDePasse.length > 0 && (sansCode || code.length === 6);
   const espacesAutour = motDePasse.length > 0 && motDePasse !== motDePasse.trim();
 
   const mobile = useMobile();
@@ -171,13 +182,23 @@ export function Deverrouillage({
       pied={principal}
       apresPied={
         <>
-          {onRecuperer ? (
+          {aideOubli ? (
+            montrerAideOubli ? (
+              <View style={{ gap: ESPACEMENT.s }} testID="aide-oubli">
+                <Text style={{ color: palette.texte, fontSize: mobile ? TEXTE.legende : undefined }}>{aideOubli}</Text>
+                {onRecuperer ? <Bouton titre="J’ai un code de récupération" pleineLargeur variante="discret" desactive={enCours} onPress={onRecuperer} /> : null}
+              </View>
+            ) : (
+              <Bouton titre="Mot de passe oublié" pleineLargeur variante="discret" desactive={enCours} onPress={() => setMontrerAideOubli(true)} testID="mot-de-passe-oublie" />
+            )
+          ) : onRecuperer ? (
             <Bouton
               titre="Mot de passe oublié"
               pleineLargeur
               variante="discret"
               desactive={enCours}
               onPress={onRecuperer}
+              testID="mot-de-passe-oublie"
             />
           ) : null}
           {lier ? (
@@ -224,7 +245,7 @@ export function Deverrouillage({
       }>
       <Titre>Déverrouiller</Titre>
       <SousTitre>
-        Mot de passe et code à six chiffres sont tous deux nécessaires.
+        {sansCode ? 'Ton mot de passe (celui que tu as choisi).' : 'Mot de passe et code à six chiffres sont tous deux nécessaires.'}
       </SousTitre>
       {message ? (
         <Text style={{ color: palette.hausse, fontWeight: '600', fontSize: mobile ? TEXTE.legende : undefined }} testID="message-deverrouillage">
@@ -236,7 +257,9 @@ export function Deverrouillage({
         etiquette="Mot de passe"
         value={motDePasse}
         onChangeText={setMotDePasse}
-        secureTextEntry
+        secureTextEntry={!visible}
+        testID="champ-mot-de-passe"
+        onSubmitEditing={sansCode ? deverrouiller : undefined}
         autoCapitalize="none"
         autoCorrect={false}
         spellCheck={false}
@@ -244,7 +267,7 @@ export function Deverrouillage({
         textContentType="password"
         autoComplete="current-password"
         nature="motDePasse"
-        enterKeyHint="next"
+        enterKeyHint={sansCode ? 'go' : 'next'}
         indication={
           espacesAutour
             ? 'Espace ou retour à la ligne au début ou à la fin : le mot de passe sera aussi essayé sans.'
@@ -252,6 +275,19 @@ export function Deverrouillage({
         }
       />
 
+      {/* Téléphone : le champ a déjà son bouton « Afficher » (ChampMobile). */}
+      {mobile ? null : (
+        <Text
+          accessibilityRole="button"
+          accessibilityLabel={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+          onPress={() => setVisible(v => !v)}
+          testID="champ-mot-de-passe-voir"
+          style={{ alignSelf: 'flex-end', color: palette.accent, fontWeight: '600', paddingVertical: 8, minHeight: 36 }}>
+          {visible ? '🙈 Masquer' : '👁 Afficher'}
+        </Text>
+      )}
+
+      {sansCode ? null : (
       <Champ
         etiquette="Code d'authentification"
         value={code}
@@ -270,6 +306,7 @@ export function Deverrouillage({
         editable={!enCours && !verrouille}
         indication="Les six chiffres affichés par votre application d'authentification."
       />
+      )}
 
       {erreur ? <Alerte message={erreur} /> : null}
       {avisHorloge ? (
