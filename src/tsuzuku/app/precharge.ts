@@ -71,7 +71,7 @@ async function lancerRecherche(s: ServicesTsuzuku, id: string, titres: readonly 
   e.recherche = id;
   try {
     const langue = (await langueVoulue(s, `anime:${id}`)).langue;
-    await episodesDisponibles(s, { id, titres, langue });
+    await episodesDisponibles(s, { id, titres, langue, davance: true });
   } catch {
     // Refait au clic.
   } finally {

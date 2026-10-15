@@ -203,6 +203,20 @@ describe('préchargement d’intention (borné)', () => {
     expect(reseau.appels.length).toBe(n);
   });
 
+  it('recherche d’avance finie sans rien trouver (site qui bloque) : la fiche ouverte juste après ne la refait pas', async () => {
+    const { s, reseau } = await services({ [`${SITE}/?s=`]: { statut: 403, entetes: { 'content-type': 'text/html' }, corps: '<title>Just a moment...</title>' } });
+    intentionAnime(s, mapperAnimeJikan(animeJikan)!);
+    await attendre(80);
+    const n = reseau.urls().filter(u => u.startsWith(`${SITE}/?s=`)).length;
+    expect(n).toBe(1);
+    const d = await episodesDisponibles(s, { id: '1', titres: ['The Long Voyage'] });
+    expect(d.diagnostic.raison).toBe('bloquee');
+    expect(reseau.urls().filter(u => u.startsWith(`${SITE}/?s=`))).toHaveLength(1);
+    // « Réessayer » relit le site.
+    await episodesDisponibles(s, { id: '1', titres: ['The Long Voyage'], forcer: true });
+    expect(reseau.urls().filter(u => u.startsWith(`${SITE}/?s=`))).toHaveLength(2);
+  });
+
   it('carte AniList (sans titre français) : la recherche attend la fiche complète ; une seule recherche d’intention à la fois', async () => {
     const { s, reseau } = await services(
       routes({

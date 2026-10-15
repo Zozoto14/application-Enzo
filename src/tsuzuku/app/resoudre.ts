@@ -228,6 +228,8 @@ export const EPISODES_PERIME_MAX_MS = 24 * 3_600_000;
 /** Lecteurs d'un épisode (adresses parfois signées pour un temps) : 20 min. */
 export const LECTEURS_FRAIS_MS = 20 * 60_000;
 
+/** Une recherche finie reste rejointe ce délai (sans « forcer ») : voir `episodesDisponibles`. */
+export const RECHERCHE_REJOINTE_MS = 15_000;
 /** Recherches en cours (la fiche et son sélecteur de langue demandent la même) : une seule part. */
 const enVol = new WeakMap<object, Map<string, Promise<ResultatEpisodes>>>();
 /** Résultats provisoires d'une recherche en cours, et qui les attend (affichage progressif). */
@@ -276,6 +278,8 @@ export async function episodesDisponibles(
     langue?: LangueVersion | null;
     /** Affichage progressif : une source moins prioritaire a trouvé, les plus prioritaires cherchent encore. */
     surProvisoire?: (d: Disponibilite) => void;
+    /** Recherche lancée d'avance (toucher de la carte) : une fois finie, la fiche la rejoint encore 15 s. */
+    davance?: boolean;
   },
 ): Promise<Disponibilite> {
   const debut = Date.now();
@@ -329,9 +333,18 @@ export async function episodesDisponibles(
     vols.set(cle, promesse);
     const liberer = () => {
       if (vols.get(cle) === promesse) {
-        vols.delete(cle);
         ecoute.dernier = undefined;
         ecoute.ecouteurs.clear();
+        if (!o.davance) {
+          vols.delete(cle);
+          return;
+        }
+        // Lancée d'avance (toucher de la carte) et finie avant l'ouverture de la fiche : la fiche la
+        // rejoint encore un instant au lieu de la refaire (site qui bloque, rien trouvé).
+        const t = setTimeout(() => {
+          if (vols.get(cle) === promesse) vols.delete(cle);
+        }, RECHERCHE_REJOINTE_MS);
+        (t as unknown as { unref?: () => void }).unref?.();
       }
     };
     promesse.then(liberer, liberer);
