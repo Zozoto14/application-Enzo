@@ -7,8 +7,21 @@
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-tsuzuku-perf.mjs
  *
- * Variables : MODES=pc,site (défaut : les deux) ; SORTIE=fichier.json (mesures brutes) ;
- * SEUILS=0 pour mesurer sans vérifier les seuils (mesure de la version d'avant).
+ * Variables : MODES=pc,site,site4g (défaut : les trois) ; SORTIE=fichier.json (mesures brutes) ;
+ * SEUILS=0 pour mesurer sans vérifier les seuils (mesure de la version d'avant) ;
+ * RELAIS_WORKER=chemin/worker.mjs pour jouer le site contre un AUTRE relais (ex. l'ancien, sans
+ * route `/tsuzuku/lot` ni cache : le site doit se replier tout seul) ; CACHE_RELAIS=0 : relais sans
+ * cache Cloudflare (`caches.default` absent, comme sous l'offre qui ne l'aurait pas).
+ *
+ * Le relais local imite Cloudflare : HTTP/2 (requêtes multiplexées sur une connexion), réponses
+ * compressées (gzip) si le navigateur l'accepte, et un cache `caches.default` en mémoire (API Cache
+ * des Workers) partagé entre les « appareils » du même parcours.
+ *
+ * Mode `site4g` : le site sur un iPhone/iPad en 4G médiocre : le navigateur est bridé par Chrome
+ * (150 ms d'aller-retour, 1,6 Mbit/s descendant, 750 kbit/s montant : profil « Slow 4G » de
+ * Lighthouse), en plus des 80 ms navigateur → Cloudflare et des 200 à 800 ms Cloudflare → site.
+ * Les modes `site` et `site4g` finissent par un SECOND APPAREIL (nouveau navigateur, cache vide :
+ * l'iPhone après l'iPad) qui ouvre la même fiche.
  *
  * Sources actives, dans l'ordre de priorité :
  *   1. lente-exemple.fr   : chaque requête prend 3,5 à 4,5 s, et le titre n'y est pas ;
@@ -24,7 +37,8 @@ import { execFileSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
-import https from 'node:https';
+import http2 from 'node:http2';
+import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
@@ -35,11 +49,12 @@ const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium } = requireGlobal('playwright');
 const { requeteTsuzuku } = await import(pathToFileURL(join(racine, 'bureau/electron/tsuzuku.mjs')).href);
-const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href)).default;
+const RELAIS_WORKER = process.env.RELAIS_WORKER ?? join(racine, 'relais/worker.mjs');
+const worker = (await import(pathToFileURL(RELAIS_WORKER).href)).default;
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-tsuzuku-perf');
 mkdirSync(CAPTURES, { recursive: true });
-const MODES = (process.env.MODES ?? 'pc,site').split(',').map(m => m.trim()).filter(Boolean);
+const MODES = (process.env.MODES ?? 'pc,site,site4g').split(',').map(m => m.trim()).filter(Boolean);
 const AVEC_SEUILS = process.env.SEUILS !== '0';
 const PORT_SITE = 5223;
 const PORT_INTERNET = 5222;
@@ -49,6 +64,9 @@ const SITE = `${ORIGINE_SITE}/`;
 const JETON = 'jeton-e2e-perf-0123456789abcdef0123';
 const MDP = 'mot-de-passe-e2e-perf-tsuzuku-42';
 const ALLER_RETOUR_RELAIS_MS = 80;
+/** « Slow 4G » (Lighthouse) : appliqué par Chrome au navigateur (mode site4g). */
+const RESEAU_4G = { offline: false, latency: 150, downloadThroughput: (1.6e6 / 8) | 0, uploadThroughput: (750e3 / 8) | 0 };
+const estSite = mode => mode.startsWith('site');
 
 // ------------------------------------------------------------- Latences (déterministes)
 const hache = t => [...t].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -163,11 +181,31 @@ const env = {
     list: async ({ prefix = '' } = {}) => ({ keys: [...kv.keys()].filter(c => c.startsWith(prefix)).sort().map(name => ({ name })), list_complete: true }),
   },
 };
+// API Cache des Workers (`caches.default`), en mémoire : une « colo » Cloudflare partagée par les appareils.
+const cacheColo = new Map();
+const clefCache = r => (typeof r === 'string' ? r : r.url);
+if (process.env.CACHE_RELAIS !== '0') {
+  globalThis.caches = {
+    default: {
+      async match(r) {
+        const garde = cacheColo.get(clefCache(r));
+        return garde ? new Response(garde.corps, { status: garde.status, headers: garde.headers }) : undefined;
+      },
+      async put(r, reponse) {
+        cacheColo.set(clefCache(r), { corps: await reponse.arrayBuffer(), status: reponse.status, headers: [...reponse.headers] });
+      },
+      async delete(r) {
+        return cacheColo.delete(clefCache(r));
+      },
+    },
+  };
+}
 let appelsRelais = 0;
 const logOrigine = console.log;
 const dossier = mkdtempSync(join(tmpdir(), 'e2e-perf-'));
 execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(dossier, 'k.pem'), '-out', join(dossier, 'c.pem'), '-subj', '/CN=localhost', '-days', '1'], { stdio: 'ignore' });
-const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pem')), cert: readFileSync(join(dossier, 'c.pem')) }, async (req, res) => {
+// HTTP/2 comme Cloudflare (une connexion, requêtes multiplexées) ; HTTP/1.1 accepté aussi.
+const serveurRelais = http2.createSecureServer({ key: readFileSync(join(dossier, 'k.pem')), cert: readFileSync(join(dossier, 'c.pem')), allowHTTP1: true }, async (req, res) => {
   const morceaux = [];
   for await (const m of req) morceaux.push(m);
   const corps = Buffer.concat(morceaux);
@@ -176,7 +214,8 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
     // Aller-retour navigateur → Cloudflare (réseau mobile ou ADSL).
     await dormir(ALLER_RETOUR_RELAIS_MS);
   }
-  const requete = new Request(`https://localhost:${PORT_RELAIS}${req.url}`, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps });
+  const entetesRequete = Object.fromEntries(Object.entries(req.headers).filter(([k]) => !k.startsWith(':')));
+  const requete = new Request(`https://localhost:${PORT_RELAIS}${req.url}`, { method: req.method, headers: entetesRequete, body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps });
   console.log = () => undefined;
   let reponse;
   try {
@@ -184,8 +223,21 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
   } finally {
     console.log = logOrigine;
   }
-  res.writeHead(reponse.status, Object.fromEntries(reponse.headers));
-  res.end(Buffer.from(await reponse.arrayBuffer()));
+  const entetes = Object.fromEntries([...reponse.headers].filter(([k]) => !['content-length', 'connection', 'transfer-encoding'].includes(k)));
+  // Compression de Cloudflare (gzip ici) pour le JSON, flux compris (chaque morceau envoyé aussitôt).
+  const compresser = /gzip/.test(String(req.headers['accept-encoding'] ?? '')) && /json/.test(entetes['content-type'] ?? '') && !entetes['content-encoding'];
+  if (compresser) entetes['content-encoding'] = 'gzip';
+  res.writeHead(reponse.status, entetes);
+  const sortie = compresser ? zlib.createGzip() : null;
+  if (sortie) sortie.pipe(res);
+  const cible = sortie ?? res;
+  if (reponse.body) {
+    for await (const morceau of reponse.body) {
+      cible.write(Buffer.from(morceau));
+      sortie?.flush(zlib.constants.Z_SYNC_FLUSH);
+    }
+  }
+  cible.end();
 });
 await new Promise(ok => serveurRelais.listen(PORT_RELAIS, ok));
 
@@ -271,9 +323,16 @@ const cliquerTuile = async pg => {
   await allerPageApplications(pg);
   await pg.locator('[data-testid="cellule-tsuzuku"], [data-testid="tuile-tsuzuku"]').first().click();
 };
+/** Retour au hub ET fermeture de l'onglet de Tsuzuku (le hub garde les apps ouvertes en onglets) : la prochaine ouverture repart de Découvrir. */
 async function retourHub(pg) {
   await pg.getByTestId('retour-hub').first().click({ timeout: 5000 }).catch(() => pg.keyboard.press('Escape'));
   await pg.getByTestId('hub').waitFor({ timeout: 20_000 });
+  for (const el of await pg.locator('[data-testid^="onglets-n"][data-testid$="-ouvrir"]').all()) {
+    if (((await el.getAttribute('aria-label')) ?? '').startsWith('Tsuzuku')) {
+      await pg.getByTestId((await el.getAttribute('data-testid')).replace(/-ouvrir$/, '-fermer')).click().catch(() => undefined);
+    }
+  }
+  await pg.getByTestId('tsuzuku-racine').waitFor({ state: 'detached', timeout: 5000 }).catch(() => undefined);
 }
 /** Temps entre une action et l'apparition d'un élément (null : jamais vu). */
 async function chrono(action, attente) {
@@ -288,29 +347,30 @@ const SOURCES = [
   S('langues', 'Médiathèque VF/VOSTFR', 'https://langues-exemple.fr', { path: '/?s={query}', item: 'li.r', title: 'a', link: 'a' }),
 ];
 
-/** Le parcours complet sur une plateforme ; rend les temps (ms) de chaque étape. */
-async function parcours(navigateur, mode) {
-  const t = {};
+/** Contexte de navigateur : l'internet simulé pour le catalogue, les images et les lecteurs. */
+async function contexteSimule(navigateur, mode) {
   const contexte = await nouveauContexte(navigateur, { ignoreHTTPSErrors: true, viewport: { width: 1100, height: 820 } });
   await contexte.route(
     url => ['api.jikan.moe', 'graphql.anilist.co', 'img-exemple.fr', 'lecteur-exemple.fr'].includes(url.hostname),
     async route => {
       const url = new URL(route.request().url());
-      await dormir(latence(url.hostname, url.pathname + url.search));
+      // Réponses servies par Playwright : le bridage de Chrome ne s'y applique pas, l'aller-retour 4G est ajouté ici.
+      await dormir(latence(url.hostname, url.pathname + url.search) + (bride(mode) ? RESEAU_4G.latency : 0));
       const r = repondre(url.hostname, route.request().method(), url.pathname + url.search);
       await route.fulfill({ status: r.statut, contentType: r.type, body: r.corps, headers: { 'access-control-allow-origin': '*' } });
     },
   );
-  const pg = await contexte.newPage();
-  const erreurs = [];
-  pg.on('pageerror', e => erreurs.push(e.message));
-  if (mode === 'pc') {
-    await pg.exposeFunction('__tsuRequete', pontRequete);
-    await pg.exposeFunction('__tsuLecteur', async () => true);
-  }
-  const activerPontPc = () => (mode === 'pc' ? pg.evaluate(() => { globalThis.applibourse = { tsuzuku: { requete: r => globalThis.__tsuRequete(r), lecteur: u => globalThis.__tsuLecteur(u) } }; }) : undefined);
-  const secret = await creerCoffre(pg, mode === 'site' ? `${SITE}#liaison=${CODE_PC}` : SITE);
-  await activerPontPc();
+  return contexte;
+}
+const bride = mode => mode === 'site4g';
+/** Bride le réseau de la page (4G), une fois le coffre créé et les sources importées. */
+async function brider(pg, mode) {
+  if (!bride(mode)) return;
+  const cdp = await pg.context().newCDPSession(pg);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.emulateNetworkConditions', RESEAU_4G);
+}
+async function importerSources(pg, mode) {
   await cliquerTuile(pg);
   await pg.getByTestId('tsuzuku-racine').waitFor({ timeout: 20_000 });
   await pg.getByTestId('onglet-app-sources').click();
@@ -319,6 +379,24 @@ async function parcours(navigateur, mode) {
   await dormir(800);
   verifier((await pg.getByTestId('sources-compte').innerText()).includes('2 source(s) · 2 active(s)'), `${mode} : 2 sources actives importées`);
   await retourHub(pg);
+}
+
+/** Le parcours complet sur une plateforme ; rend les temps (ms) de chaque étape. */
+async function parcours(navigateur, mode) {
+  const t = {};
+  const contexte = await contexteSimule(navigateur, mode);
+  const pg = await contexte.newPage();
+  const erreurs = [];
+  pg.on('pageerror', e => erreurs.push(e.message));
+  if (mode === 'pc') {
+    await pg.exposeFunction('__tsuRequete', pontRequete);
+    await pg.exposeFunction('__tsuLecteur', async () => true);
+  }
+  const activerPontPc = () => (mode === 'pc' ? pg.evaluate(() => { globalThis.applibourse = { tsuzuku: { requete: r => globalThis.__tsuRequete(r), lecteur: u => globalThis.__tsuLecteur(u) } }; }) : undefined);
+  const secret = await creerCoffre(pg, estSite(mode) ? `${SITE}#liaison=${CODE_PC}` : SITE);
+  await activerPontPc();
+  await importerSources(pg, mode);
+  await brider(pg, mode);
 
   // 1. Ouverture de l'app : Découvrir.
   log(`${mode} : ouverture de l'app (Découvrir)`);
@@ -367,9 +445,9 @@ async function parcours(navigateur, mode) {
   t.suivant = await chrono(() => pg.getByTestId('lecteur-suivant').click(), () => iframeAvec(pg, `Lecteur neutre (/embed/${autre}-3)`));
   await capture(pg, `${mode}-04-episode-3`);
 
-  // 7. Seconde ouverture de la fiche (retour au hub, l'app est rouverte).
-  log(`${mode} : seconde ouverture de la fiche`);
-  await pg.getByTestId('lecteur-retour').click();
+  // 7. Retour du lecteur à la fiche, puis seconde ouverture de la fiche (retour au hub, l'app est rouverte).
+  log(`${mode} : retour à la fiche, puis seconde ouverture`);
+  t.retour = await chrono(() => pg.getByTestId('lecteur-retour').click(), () => pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 30_000 }));
   await retourHub(pg);
   await cliquerTuile(pg);
   await pg.getByTestId('carte-anime-1').first().waitFor({ timeout: 30_000 });
@@ -381,6 +459,7 @@ async function parcours(navigateur, mode) {
   // 8. Rechargement complet de la page (cache persistant dans la base du profil).
   log(`${mode} : rechargement de la page`);
   await pg.goto(SITE);
+  await brider(pg, mode);
   await pg.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
   await deverrouiller(pg, secret);
   await fermerPopups(pg);
@@ -395,6 +474,32 @@ async function parcours(navigateur, mode) {
   t.requetesSources = requetes.filter(r => !['img-exemple.fr', 'lecteur-exemple.fr'].includes(r.hote)).length;
   verifier(erreurs.length === 0, `${mode} : aucune erreur JavaScript (${erreurs.join(' | ').slice(0, 200)})`);
   await contexte.close();
+  if (estSite(mode)) Object.assign(t, await secondAppareil(navigateur, mode));
+  return t;
+}
+
+/** Site : un SECOND appareil (cache de l'appareil vide), relié au même relais, ouvre la même fiche. */
+async function secondAppareil(navigateur, mode) {
+  const t = {};
+  const contexte = await contexteSimule(navigateur, mode);
+  const pg = await contexte.newPage();
+  const erreurs = [];
+  pg.on('pageerror', e => erreurs.push(e.message));
+  await creerCoffre(pg, `${SITE}#liaison=${CODE_PC}`);
+  await importerSources(pg, `${mode} (2e appareil)`);
+  await brider(pg, mode);
+  log(`${mode} : second appareil, même fiche`);
+  t.appareil2Accueil = await chrono(() => cliquerTuile(pg), () => pg.getByTestId('carte-anime-1').first().waitFor({ timeout: 30_000 }));
+  const debut = Date.now();
+  await pg.getByTestId('carte-anime-1').first().click();
+  t.appareil2Sources = await pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 90_000 }).then(() => Date.now() - debut, () => null);
+  const texteOk = await pg.getByTestId('fiche-sources-ok').innerText().catch(() => '');
+  verifier(/Médiathèque VF\/VOSTFR/.test(texteOk) && /12 épisode/.test(texteOk), `${mode} : 2e appareil, même résultat (source 2, 12 épisodes)`);
+  await pg.getByTestId('episode-2').scrollIntoViewIfNeeded();
+  t.appareil2Episode = await chrono(() => pg.getByTestId('episode-2').click(), () => iframeAvec(pg, /Lecteur neutre \(\/embed\/(vf|vostfr)-2\)/));
+  await capture(pg, `${mode}-06-second-appareil`);
+  verifier(erreurs.length === 0, `${mode} (2e appareil) : aucune erreur JavaScript (${erreurs.join(' | ').slice(0, 200)})`);
+  await contexte.close();
   return t;
 }
 
@@ -408,10 +513,14 @@ const ETAPES = [
   ['episode', 'Épisode 2 : lecteur affiché'],
   ['langue', 'Bascule VF/VOSTFR'],
   ['suivant', 'Épisode suivant'],
+  ['retour', 'Retour du lecteur à la fiche'],
   ['fiche2', '2e ouverture : fiche'],
   ['ficheSources2', '2e ouverture : « Sur vos sources »'],
   ['accueil3', 'Après rechargement : Découvrir'],
   ['ficheSources3', 'Après rechargement : « Sur vos sources »'],
+  ['appareil2Accueil', '2e appareil (cache vide) : Découvrir'],
+  ['appareil2Sources', '2e appareil : « Sur vos sources »'],
+  ['appareil2Episode', '2e appareil : épisode 2'],
   ['requetesSources', 'Requêtes vers les sources (tout le parcours)'],
   ['appelsRelais', 'Appels au relais (site)'],
 ];
@@ -422,8 +531,10 @@ try {
   for (const mode of MODES) {
     requetes.length = 0;
     appelsRelais = 0;
+    cacheColo.clear(); // chaque mode part d'un relais au cache vide
     mesures[mode] = await parcours(navigateur, mode);
-    if (mode === 'site') mesures[mode].appelsRelais = appelsRelais;
+    if (estSite(mode)) mesures[mode].appelsRelais = appelsRelais;
+    mesures[mode].journal = requetes.map(r => `${r.quand} ${r.hote}${r.chemin}`);
   }
 } catch (erreur) {
   verifier(false, erreur instanceof Error ? erreur.message.split('\n')[0] : String(erreur));

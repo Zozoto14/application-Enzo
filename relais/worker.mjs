@@ -37,7 +37,7 @@ import { CHEMIN_TSUZUKU, routeTsuzuku } from './tsuzuku.mjs';
 
 export const VERSION_RELAIS = 6;
 /** Fonctions annoncées par `/sante` (le site adapte ses écrans à un relais pas encore redéployé). */
-export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'invitations', 'acces', 'revocations'];
+export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations'];
 /** Une enveloppe chiffrée : quelques centaines de Kio en pratique. */
 const TAILLE_MAX_ENVELOPPE = 20 * 1024 * 1024;
 const IDENTIFIANT_APPAREIL = /^[a-z0-9]{4,32}$/;
@@ -940,10 +940,12 @@ async function passerelle(requete, chemin) {
 }
 
 export default {
-  async fetch(requete, env) {
+  async fetch(requete, env, ctx) {
     // Lecture des sources de Tsuzuku (site web) : CORS, jeton et règles à part, préliminaire compris.
+    // `ctx.waitUntil` : la mise en cache d'une page lue finit après la réponse.
     if (new URL(requete.url).pathname === CHEMIN_TSUZUKU) {
-      return routeTsuzuku(requete, env, () => porteeDuJeton((requete.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, ''), env.JETON));
+      const deps = typeof ctx?.waitUntil === 'function' ? { waitUntil: p => ctx.waitUntil(p) } : {};
+      return routeTsuzuku(requete, env, () => porteeDuJeton((requete.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, ''), env.JETON), deps);
     }
     if (requete.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: ENTETES_CORS });
