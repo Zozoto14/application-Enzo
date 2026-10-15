@@ -12,6 +12,7 @@ import { LecteurMedia } from './LecteurMedia';
 import { LienGererSources } from './EtatSources';
 import { enregistrerTitrePerso, lireAnime, lireFilm, lireTitresPerso, prechargerEpisode, titresPourSources, type Lecture } from './resoudre';
 import { texteMesure } from './diagnosticTexte';
+import { texteDiagnosticLecteurs } from '../moteur/lecteursEpisode';
 import { PanneauEchec } from './DiagnosticSources';
 import { choisirLangue, langueVoulue, type OrigineLangue } from './langues';
 import { SelecteurLangue } from './SelecteurLangue';
@@ -198,6 +199,18 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
               </Text>
             ) : null}
             {lecture.message ? <Avis genre={courant ? 'alerte' : 'info'} texte={lecture.message} testID="lecteur-message" /> : null}
+            {!courant && lecture.diagnostic?.urlPage ? (
+              <View style={{ gap: 8 }} testID="lecteur-introuvable" accessibilityRole="alert">
+                <Text style={{ color: theme.texte, fontSize: 17, fontWeight: '800', ...police(theme.policeTexte) }}>Lecteur introuvable sur cette page</Text>
+                <Text style={styleAttenue(theme, 14)}>Aucun lecteur vidéo n’a pu être extrait de la page de l’épisode ; la page du site n’est jamais affichée à la place du lecteur.</Text>
+                {lecture.diagnostic.lecteurs ? (
+                  <Text style={styleAttenue(theme, 12)} testID="lecteur-introuvable-diagnostic" selectable>
+                    {texteDiagnosticLecteurs(lecture.diagnostic.lecteurs)}
+                  </Text>
+                ) : null}
+                <Bouton titre="Ouvrir l’épisode sur le site ↗" variante="plein" onPress={() => void ouvrirExterne(lecture.diagnostic!.urlPage!)} testID="lecteur-ouvrir-site" style={{ alignSelf: 'flex-start' }} />
+              </View>
+            ) : null}
             {courant && lecture.mesure ? (
               <Text style={styleAttenue(theme, 12)} testID="lecteur-mesure">
                 {texteMesure(lecture.mesure)}

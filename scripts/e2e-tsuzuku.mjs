@@ -321,7 +321,7 @@ try {
   await page.getByTestId('lecteur-iframe').waitFor({ timeout: 20_000 });
   const cadre = page.frameLocator('[data-testid="lecteur-iframe"]');
   verifier(await cadre.getByText('Lecteur neutre (/embed/frieren-ep-1)').waitFor({ timeout: 10_000 }).then(() => true, () => false), 'le lecteur (iframe) affiche l’épisode 1 par le lien manuel');
-  verifier((await page.getByTestId('lecteur-iframe').getAttribute('sandbox')) === 'allow-scripts allow-same-origin allow-presentation allow-forms', 'l’iframe est cloisonné (sandbox sans navigation du parent ni fenêtres)');
+  verifier((await page.getByTestId('lecteur-iframe').getAttribute('sandbox')) === 'allow-scripts allow-same-origin allow-presentation', 'l’iframe est cloisonné (sandbox sans navigation du parent ni fenêtres)');
   await capture(page, '08-animes-lecteur');
   await page.getByTestId('lecteur-suivant').click();
   verifier(await cadre.getByText('Lecteur neutre (/embed/frieren-ep-2)').waitFor({ timeout: 10_000 }).then(() => true, () => false), 'l’épisode suivant s’enchaîne avec le motif');

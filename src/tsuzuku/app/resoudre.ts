@@ -14,13 +14,14 @@ import {
   resumerLangues,
   trouverEpisodes,
   trouverFilm,
-  trouverLecteurs,
+  trouverLecteursDetail,
   type DiagnosticSource,
   type EpisodeSource,
   type Lecteur,
   type ResultatEpisodes,
 } from '../moteur/resolution';
-import { sourcesActives, type DefinitionSource } from '../moteur/sources';
+import { sourcePourUrl, sourcesActives, type DefinitionSource } from '../moteur/sources';
+import type { DiagnosticLecteurs } from '../moteur/lecteursEpisode';
 import { autreLangue, LANGUES_VERSION, LIBELLE_LANGUE_VERSION, type LangueVersion } from '../moteur/langues';
 import type { CibleTest } from '../moteur/assistant';
 import { CLES } from '../plateforme/stockage';
@@ -50,6 +51,10 @@ export interface DiagnosticLecture {
   sources: DiagnosticSource[];
   /** Temps par étape, et si le résultat vient du cache. */
   mesure?: MesureLecture;
+  /** Page de l'épisode lue sans lecteur extractible : son adresse (« Ouvrir l'épisode sur le site »). */
+  urlPage?: string;
+  /** Ce qui a été essayé sur cette page (sélecteurs, iframes, data-src…). */
+  lecteurs?: DiagnosticLecteurs;
 }
 
 export interface Lecture {
@@ -184,7 +189,7 @@ export function messageEchec(d: DiagnosticLecture, numero?: number): string {
       return `${nom} : épisodes trouvés ${plages} (${nums.length}), mais pas l’épisode ${numero}. Ouvrez « Détail du diagnostic » pour voir le numéro lu sur chaque lien (liste incomplète sur la page de la série, ou numérotation propre au site).`;
     }
     case 'aucun-lecteur':
-      return 'La page de l’épisode ne contient aucun lecteur reconnu.';
+      return `Lecteur introuvable sur cette page : aucun lecteur vidéo n’a pu en être extrait${d.lecteurs ? ` (${d.lecteurs.iframes} iframe(s), ${d.lecteurs.dataSrc} data-src, ${d.lecteurs.options} option(s) de lecteur)` : ''}.`;
   }
 }
 
@@ -413,21 +418,26 @@ function lireLangue(s: ServicesTsuzuku, r: ResultatEpisodes, langue: LangueVersi
  * un épisode, changer de langue ou passer à l'épisode suivant préchargé ne
  * relit pas la page. Une liste vide n'est jamais gardée.
  */
-export async function lecteursDeLEpisode(s: ServicesTsuzuku, url: string, o: { forcer?: boolean } = {}): Promise<{ lecteurs: Lecteur[]; ms: number; cache?: { origine: 'memoire' | 'appareil'; ageMs: number } }> {
+export async function lecteursDeLEpisode(
+  s: ServicesTsuzuku,
+  url: string,
+  o: { forcer?: boolean } = {},
+): Promise<{ lecteurs: Lecteur[]; ms: number; cache?: { origine: 'memoire' | 'appareil'; ageMs: number }; diagnostic?: DiagnosticLecteurs }> {
   const debut = Date.now();
   const sources = await s.sources();
-  const cle = `lec|${empreinteTexte(`${url}|${signature(sources)}`)}`;
+  // « lec2 » : les listes gardées avant la correction pouvaient contenir la page de l'épisode elle-même.
+  const cle = `lec2|${empreinteTexte(`${url}|${signature(sources)}`)}`;
   const memo = o.forcer ? undefined : await s.cache.lire<Lecteur[]>(cle);
   if (memo && Array.isArray(memo.valeur) && memo.valeur.length && Date.now() - memo.a < LECTEURS_FRAIS_MS) {
     return { lecteurs: memo.valeur, ms: Date.now() - debut, cache: { origine: memo.origine, ageMs: Date.now() - memo.a } };
   }
-  const vols = lecteursEnVol.get(s) ?? new Map<string, Promise<Lecteur[]>>();
+  const vols = lecteursEnVol.get(s) ?? new Map<string, Promise<{ lecteurs: Lecteur[]; diagnostic?: DiagnosticLecteurs }>>();
   lecteursEnVol.set(s, vols);
   let p = o.forcer ? undefined : vols.get(cle);
   if (!p) {
-    const promesse = trouverLecteurs(o.forcer ? contexteFrais(s) : s.ctx, sources, url).then(l => {
-      if (l.length) s.cache.ecrire(cle, l);
-      return l;
+    const promesse = trouverLecteursDetail(o.forcer ? contexteFrais(s) : s.ctx, sources, url).then(r => {
+      if (r.lecteurs.length) s.cache.ecrire(cle, r.lecteurs);
+      return r;
     });
     vols.set(cle, promesse);
     const liberer = () => {
@@ -436,11 +446,12 @@ export async function lecteursDeLEpisode(s: ServicesTsuzuku, url: string, o: { f
     promesse.then(liberer, liberer);
     p = promesse;
   }
-  return { lecteurs: await p, ms: Date.now() - debut };
+  const r = await p;
+  return { lecteurs: r.lecteurs, diagnostic: r.diagnostic, ms: Date.now() - debut };
 }
 
 /** Pages d'épisode en cours de lecture (préchargement et clic simultanés : une seule requête). */
-const lecteursEnVol = new WeakMap<object, Map<string, Promise<Lecteur[]>>>();
+const lecteursEnVol = new WeakMap<object, Map<string, Promise<{ lecteurs: Lecteur[]; diagnostic?: DiagnosticLecteurs }>>>();
 
 /**
  * Épisodes d'une série dans une langue : la source de la fiche d'abord (ce
@@ -515,8 +526,14 @@ export function etatLangues(d: Disponibilite, numero?: number, autresSources = 0
 
 /** Lien manuel → lecteurs. Sur le site (pas de lecture de pages) : le lien est affiché tel quel. */
 async function depuisLien(s: ServicesTsuzuku, url: string, label: string, kind: 'anime' | 'movie'): Promise<Lecture> {
+  const media = classerMedia(url);
+  // Page d'une de vos sources : c'est un site complet, jamais affiché tel quel dans le lecteur.
+  const pageDeSource = media === 'iframe' && Boolean(sourcePourUrl(await s.sources(), url));
   if (!s.lectureSources) {
-    const media = classerMedia(url);
+    if (pageDeSource) {
+      const diagnostic: DiagnosticLecture = { raison: 'site', titres: [], sources: [], urlPage: url };
+      return { lecteurs: [], origine: 'aucune', message: `Lecteur introuvable : cette adresse est une page de votre source, pas un lecteur. ${MESSAGE_SITE}`, diagnostic };
+    }
     return {
       lecteurs: [{ label: media === 'iframe' ? `${label} - page intégrée` : `${label} - fichier vidéo`, url, kind: media }],
       origine: 'manuel',
@@ -524,6 +541,10 @@ async function depuisLien(s: ServicesTsuzuku, url: string, label: string, kind: 
     };
   }
   const r = await lecteursPourPage(s.ctx, await s.sources(), url, { label, kind });
+  if (!r.sources.length) {
+    const diagnostic: DiagnosticLecture = { raison: 'aucun-lecteur', titres: [], sources: [], urlPage: url, lecteurs: r.diagnostic };
+    return { lecteurs: [], origine: 'aucune', message: r.warning ?? messageEchec(diagnostic), diagnostic };
+  }
   return { lecteurs: r.sources, origine: 'manuel', message: r.warning };
 }
 
@@ -598,7 +619,7 @@ export async function lireAnime(
     const etat = etatDesLangues();
     const languesAJour = verifiee || !verification ? undefined : verification.then(etatDesLangues);
     if (lecteurs.length) return { lecteurs, origine: 'source', langue: joue, langues: etat, languesAJour, avisLangue, mesure };
-    const diagnostic: DiagnosticLecture = { ...d.diagnostic, raison: 'aucun-lecteur', mesure };
+    const diagnostic: DiagnosticLecture = { ...d.diagnostic, raison: 'aucun-lecteur', mesure, urlPage: ep.url, lecteurs: trouves.diagnostic };
     return { lecteurs, origine: 'aucune', message: messageEchec(diagnostic), diagnostic, langue: joue, langues: etat, languesAJour, avisLangue, mesure };
   } catch (erreur) {
     return { lecteurs: [], origine: 'aucune', message: messageDe(erreur), diagnostic: { raison: 'erreur', titres: [...o.titres], sources: [] } };

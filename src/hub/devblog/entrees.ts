@@ -45,6 +45,40 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.33',
+    date: '2026-11-01',
+    titre: 'Tsuzuku : le lecteur affiche la vidéo, plus la page du site',
+    resume:
+      'Sur certaines sources, le cadre du lecteur montrait toute la page de l’épisode du site (recherche, menus, filtres…) au lieu de la vidéo. Corrigé : chaque lecteur (« LECTEUR A », « LECTEUR B »…) affiche désormais uniquement la vidéo de son hébergeur, sur le site comme sur le PC.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'tsuzuku-lecteur-video-seule',
+        emoji: '🎬',
+        titre: 'Seulement la vidéo, en plein cadre',
+        texte:
+          'Le lecteur va chercher, pour chaque lecteur proposé par la page de l’épisode, l’adresse de la vidéo elle-même et n’affiche qu’elle : plein cadre 16:9 sur iPad et iPhone, plein écran possible. Changer de lecteur change la vidéo. Si aucun lecteur ne peut être trouvé, un message le dit et un bouton ouvre l’épisode sur le site.',
+        essayer: { genre: 'app', app: 'tsuzuku' },
+        app: 'tsuzuku',
+      },
+      {
+        id: 'tsuzuku-lecteur-pause-onglet',
+        emoji: '⏸',
+        titre: 'Pause quand l’onglet est masqué',
+        texte: 'Quand vous passez à une autre app (onglets), la vidéo de Tsuzuku se met en pause au lieu de continuer à jouer en arrière-plan.',
+        app: 'tsuzuku',
+      },
+      {
+        id: 'tsuzuku-lecteur-diagnostic',
+        emoji: '🔎',
+        titre: '« Lecteur introuvable » : ce qui a été essayé',
+        texte:
+          'Pour régler une source : le lecteur indique les sélecteurs essayés et ce que la page contenait (iframes, attributs data-src, options de lecteur, adresses dans les scripts). Les menus de lecteurs nommés, les adresses encodées et le chargement AJAX du thème sont reconnus sans réglage.',
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.32',
     date: '2026-11-01',
     titre: 'Tâches : déplacer vos tâches, et un vrai menu Équipe',

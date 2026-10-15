@@ -18,7 +18,11 @@
  * cookie) → « Tester une source sur ce titre » pour chaque site simulé → lecture
  * d'un épisode → réseau local refusé → relais pas à jour (404) → limite de débit
  * (429) → téléphone 390 px → l'amie Léa (jeton de profil) ne voit pas la
- * fonction (403 au relais) → navigateur sans relais : message clair.
+ * fonction (403 au relais) → catalogue WordPress (lecteurs « LECTEUR A/B/C/D » nommés dans
+ * un menu : iframe visible, table base64 dans un script, AJAX, page `?host=`) sur iPad puis
+ * iPhone : la zone du lecteur ne contient QUE l'iframe de l'hôte, jamais la page du site
+ * (recherche, filtres, menus), bascule entre lecteurs, « Lecteur introuvable » sinon
+ * → navigateur sans relais : message clair.
  * Captures : docs/captures-tsuzuku-site-relais/.
  */
 
@@ -67,6 +71,19 @@ const j = (o, statut = 200) => ({ statut, type: 'application/json', corps: JSON.
 const page = (corps, tete = '') => ({ statut: 200, type: 'text/html; charset=utf-8', corps: `<!doctype html><html><head><meta charset="utf-8"><title>Exemple</title>${tete}</head><body>${corps}</body></html>` });
 const episodes = (prefixe, de, a) => Array.from({ length: a - de + 1 }, (_, i) => `<li><a href="${prefixe}/episode-${de + i}">Épisode ${de + i}</a></li>`).join('');
 const lecteur = id => page(`<div class="video"><iframe src="https://lecteur-exemple.fr/embed/${id}"></iframe></div>`);
+/** Habillage d'une page d'épisode d'un catalogue WordPress : ce qui ne doit JAMAIS apparaître dans le lecteur. */
+const TEXTES_SITE_SOURCE = ['Rechercher en VOSTFR', 'Generic filters', 'Exact matches only', 'Search in title', 'Search in content', 'ACCUEIL', 'RECHERCHE AV', 'Comédie'];
+const HABILLAGE = `<header><form class="search-form"><input type="text" placeholder="Rechercher en VOSTFR..." name="s"><span>Rechercher en VOSTFR...</span></form>
+  <div class="search-advanced"><label><input type="checkbox"> Generic filters</label><label><input type="checkbox" checked> Exact matches only</label><label><input type="checkbox" checked> Search in title</label><label><input type="checkbox" checked> Search in content</label></div>
+  <nav><ul><li><a href="/">ACCUEIL</a></li><li><a href="/liste/">LISTE</a></li><li><a href="/nouveau/">NOUVEAU</a></li><li><a href="/bientot/">BIENTÔT</a></li><li><a href="/?s=&post_type=wp-manga">RECHERCHE AV</a></li></ul></nav></header>
+  <ul class="genres"><li><a href="/genre/action/">Action</a></li><li><a href="/genre/aventure/">Aventure</a></li><li><a href="/genre/comedie/">Comédie</a></li></ul>`;
+const b64 = t => Buffer.from(t).toString('base64');
+const episodeWordPress = hote =>
+  page(`${HABILLAGE}<h1>Le Long Voyage · Épisode 1</h1>
+  <select class="selectpicker host-select"><option value="LECTEUR A"${hote ? '' : ' selected'}>LECTEUR A</option><option value="LECTEUR B">LECTEUR B</option>
+  <option value="LECTEUR C" data-post="4242" data-nume="3" data-type="tv">LECTEUR C</option><option value="LECTEUR D"${hote === 'LECTEUR D' ? ' selected' : ''}>LECTEUR D</option></select>
+  <div class="chapter-video-frame"><p><iframe src="${hote === 'LECTEUR D' ? 'https://hote-d-exemple.fr/v/444' : 'https://hote-a-exemple.fr/embed/111'}" allowfullscreen></iframe></p></div>
+  <script>var thisChapterSources = {"LECTEUR B":"${b64('<iframe src="https://hote-b-exemple.fr/e/222"></iframe>')}"};</script><footer>Pied de page du site</footer>`);
 
 function repondre(hote, methode, chemin, corpsRecu) {
   const url = new URL(chemin, 'https://x');
@@ -84,6 +101,7 @@ function repondre(hote, methode, chemin, corpsRecu) {
     const id = Number(/(\d+)/.exec(p)?.[1] ?? 0);
     return { statut: 200, type: 'image/svg+xml', corps: `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="435"><rect width="300" height="435" fill="hsl(${(id * 97) % 360},55%,38%)"/></svg>` };
   }
+  if (/^hote-[a-d]-exemple\.fr$/.test(hote)) return { statut: 200, type: 'text/html; charset=utf-8', corps: `<!doctype html><meta charset="utf-8"><body style="margin:0;background:#111;color:#eee;font:22px sans-serif;display:grid;place-items:center;height:100vh">Hôte ${hote[5].toUpperCase()} : lecteur neutre (${p})</body>` };
   if (hote === 'lecteur-exemple.fr') return { statut: 200, type: 'text/html', corps: `<!doctype html><body style="margin:0;background:#111;color:#eee;font:22px sans-serif;display:grid;place-items:center;height:100vh">Lecteur neutre (${p})</body>` };
   switch (hote) {
     case 'spa-exemple.fr':
@@ -118,6 +136,22 @@ function repondre(hote, methode, chemin, corpsRecu) {
       if (p === '/recherche') return latin('<ul class="res"><li><a href="/serie/ete">Été éternel</a></li></ul>');
       if (p === '/serie/ete') return latin(`<ul class="eps">${episodes('/serie/ete', 1, 2)}</ul>`);
       if (/episode-\d+$/.test(p)) return lecteur(`latin-${p.split('-').pop()}`);
+      break;
+    }
+    case 'wordpress-exemple.fr': {
+      const s = (url.searchParams.get('s') ?? '').toLowerCase();
+      if (p === '/' && url.searchParams.get('post_type') === 'wp-manga')
+        return page(`${HABILLAGE}<div class="c-tabs-item">${/voyage|nagai/.test(s) ? '<div class="row c-tabs-item__content"><div class="post-title"><h3><a href="https://wordpress-exemple.fr/anime/le-long-voyage/">Le Long Voyage</a></h3></div></div>' : ''}</div>`);
+      if (p === '/anime/le-long-voyage/') return page(`${HABILLAGE}<ul class="main version-chap">${[2, 1].map(n => `<li class="wp-manga-chapter"><a href="https://wordpress-exemple.fr/anime/le-long-voyage/episode-${n}/">Episode ${n}</a><span class="chapter-release-date">12/03/2025</span></li>`).join('')}</ul>`);
+      if (p === '/anime/le-long-voyage/episode-1/') return episodeWordPress(url.searchParams.get('host'));
+      // Épisode 2 : la page n'a aucun lecteur extractible.
+      if (p === '/anime/le-long-voyage/episode-2/') return page(`${HABILLAGE}<h1>Le Long Voyage · Épisode 2</h1><div class="chapter-video-frame"><p>Bientôt disponible.</p></div>`);
+      if (p === '/wp-admin/admin-ajax.php' && methode === 'POST') {
+        const f = new URLSearchParams(corpsRecu);
+        return f.get('action') === 'doo_player_ajax' && f.get('nume') === '3' ? j({ embed_url: '<iframe src="https://hote-c-exemple.fr/embed/333" frameborder="0"></iframe>', type: 'iframe' }) : j({ embed_url: '' });
+      }
+      // Toute autre page du site (ex. ancienne résolution « …/episode-1/LECTEUR%20A ») : la page de l'épisode, comme le vrai site.
+      if (p.startsWith('/anime/le-long-voyage/episode-1/')) return episodeWordPress(null);
       break;
     }
     case 'interne-exemple.fr':
@@ -309,7 +343,7 @@ const appelDirect = (pg, jeton, corps) =>
   );
 async function routerCatalogue(contexte) {
   await contexte.route(
-    url => ['api.jikan.moe', 'graphql.anilist.co', 'img-exemple.fr', 'lecteur-exemple.fr'].includes(url.hostname),
+    url => ['api.jikan.moe', 'graphql.anilist.co', 'img-exemple.fr', 'lecteur-exemple.fr', 'wordpress-exemple.fr'].includes(url.hostname) || /^hote-[a-d]-exemple\.fr$/.test(url.hostname),
     async route => {
       const url = new URL(route.request().url());
       const r = repondre(url.hostname, route.request().method(), url.pathname + url.search, route.request().postData() ?? '');
@@ -328,7 +362,32 @@ const SOURCES = [
   S('ancien', 'Ancienne adresse (miroir)', 'https://ancien-exemple.fr', { search: { path: '/recherche?q={query}', item: 'ul.res li', title: 'a', link: 'a' }, episodes: { item: 'ol.eps li', link: 'a' } }),
   S('latin', 'Site ISO-8859-1', 'https://latin-exemple.fr', { search: { path: '/recherche?q={query}', item: 'ul.res li', title: 'a', link: 'a' }, episodes: { item: 'ul.eps li', link: 'a' } }),
   S('interne', 'Nom vers le réseau local', 'https://interne-exemple.fr', { search: { path: '/recherche?q={query}', item: 'ul.res li', title: 'a', link: 'a' } }),
+  S('wordpress', 'Catalogue WordPress', 'https://wordpress-exemple.fr', {
+    search: { path: '/?s={query}&post_type=wp-manga', item: '.c-tabs-item__content', title: '.post-title a', link: '.post-title a' },
+    episodes: { item: 'li.wp-manga-chapter', link: 'a' },
+    player: { options: 'select.host-select option', optionAttr: 'value' },
+  }),
 ];
+
+/** Zone du lecteur : uniquement l'iframe de l'hôte attendu, aucun texte de la page du site (ni dans la zone, ni dans l'iframe). */
+async function zoneSeulementHote(pg, hote, nom) {
+  await pg.waitForFunction(h => document.querySelector('[data-testid="lecteur-zone"] iframe')?.src.startsWith(`https://${h}/`), hote, { timeout: 20_000 }).catch(() => undefined);
+  const zone = await pg.evaluate(() => {
+    const z = document.querySelector('[data-testid="lecteur-zone"]');
+    const f = z?.querySelector('iframe');
+    const r = f?.getBoundingClientRect();
+    return z && { iframes: z.querySelectorAll('iframe').length, enfants: z.children.length, src: f?.src ?? '', srcdoc: f?.hasAttribute('srcdoc'), sandbox: f?.getAttribute('sandbox'), allow: f?.getAttribute('allow'), plein: f?.hasAttribute('allowfullscreen'), texte: z.textContent, l: r?.width ?? 0, h: r?.height ?? 0, zl: z.getBoundingClientRect().width };
+  });
+  const cadre = pg.frameLocator('[data-testid="lecteur-zone"] iframe');
+  const dansCadre = await cadre.locator('body').innerText({ timeout: 15_000 }).catch(() => '');
+  const ecran = await pg.getByTestId('tsuzuku-lecteur').innerText();
+  const fuite = TEXTES_SITE_SOURCE.filter(t => dansCadre.includes(t) || ecran.includes(t) || (zone?.texte ?? '').includes(t));
+  verifier(
+    zone && zone.iframes === 1 && zone.enfants === 1 && zone.src.startsWith(`https://${hote}/`) && !zone.srcdoc && dansCadre.startsWith(`Hôte ${hote[5].toUpperCase()}`) && fuite.length === 0,
+    `${nom} : la zone ne contient QUE l'iframe de ${hote} (« ${dansCadre.slice(0, 40)} »)${fuite.length ? ` — textes du site trouvés : ${fuite.join(', ')}` : ''}`,
+  );
+  return zone;
+}
 
 const navigateur = await chromium.launch({ headless: true });
 const options = { ignoreHTTPSErrors: true, viewport: { width: 1100, height: 820 } };
@@ -461,6 +520,58 @@ try {
   await voir(pg, 'fiche-sources');
   verifier((await debordement(pg)) <= 0, 'téléphone : fiche « via le relais » sans défilement horizontal');
   await capture(pg, '08-tel-fiche-via-relais', true);
+  await pg.setViewportSize({ width: 1100, height: 820 });
+
+  // ============================================================ Catalogue WordPress : lecteurs nommés (iPad, puis iPhone)
+  log('Catalogue WordPress : lecteurs « LECTEUR A/B/C/D » (iframe, script base64, AJAX, ?host=), iPad puis iPhone');
+  await pg.getByTestId('onglet-app-sources').click();
+  await pg.getByTestId('source-activer-spa-api').click();
+  await pause(300);
+  await pg.getByTestId('source-activer-wordpress').click();
+  await pause(500);
+  for (const [appareil, taille] of [['iPad', { width: 820, height: 1180 }], ['iPhone', { width: 390, height: 844 }]]) {
+    await pg.setViewportSize(taille);
+    await ouvrirFiche(pg, 1);
+    await pg.getByTestId('episode-1').waitFor({ timeout: 30_000 });
+    await pg.getByTestId('episode-1').click();
+    await pg.getByTestId('lecteur-choix-3').waitFor({ timeout: 30_000 });
+    const libelles = await Promise.all([0, 1, 2, 3].map(i => pg.getByTestId(`lecteur-choix-${i}`).innerText()));
+    verifier(libelles.join('|') === ['A', 'B', 'C', 'D'].map(x => `Catalogue WordPress - LECTEUR ${x}`).join('|'), `${appareil} : 4 lecteurs nommés comme sur le site (${libelles.join(', ')})`);
+    const zone = await zoneSeulementHote(pg, 'hote-a-exemple.fr', `${appareil} LECTEUR A`);
+    if (zone) {
+      verifier(zone.sandbox === 'allow-scripts allow-same-origin allow-presentation' && /autoplay/.test(zone.allow) && /fullscreen/.test(zone.allow) && /encrypted-media/.test(zone.allow) && zone.plein, `${appareil} : iframe cloisonné (sandbox, autoplay, plein écran)`);
+      verifier(Math.abs(zone.l - zone.zl) <= 1 && Math.abs(zone.l / zone.h - 16 / 9) < 0.02, `${appareil} : plein cadre 16:9 (${Math.round(zone.l)} × ${Math.round(zone.h)})`);
+    }
+    verifier((await debordement(pg)) <= 0, `${appareil} : pas de défilement horizontal`);
+    await voir(pg, 'lecteur-zone');
+    await capture(pg, `11-${appareil.toLowerCase()}-lecteur-hote-a`);
+    for (const [i, hote] of [[1, 'hote-b-exemple.fr'], [2, 'hote-c-exemple.fr'], [3, 'hote-d-exemple.fr'], [0, 'hote-a-exemple.fr']]) {
+      await pg.getByTestId(`lecteur-choix-${i}`).click();
+      await zoneSeulementHote(pg, hote, `${appareil} bascule vers LECTEUR ${'ABCD'[i]}`);
+    }
+    if (appareil === 'iPhone') await capture(pg, '12-iphone-lecteur-bascule');
+    if (appareil === 'iPad' && (await pg.getByTestId('onglets-hub').count())) {
+      // Onglets multi-apps : Tsuzuku masqué → l'iframe de l'hôte est retiré (un iframe masqué jouerait encore le son).
+      await pg.getByTestId('onglets-hub').click();
+      const retire = await pg.waitForFunction(() => document.querySelectorAll('[data-testid="lecteur-iframe"]').length === 0, null, { timeout: 10_000 }).then(() => true, () => false);
+      await pg.getByTestId('onglets-n1-ouvrir').click();
+      await zoneSeulementHote(pg, 'hote-a-exemple.fr', 'iPad retour sur l’onglet Tsuzuku');
+      verifier(retire, 'iPad : onglet Tsuzuku masqué (Hub affiché) → lecteur en pause, iframe retiré ; rétabli au retour');
+    }
+    // Épisode 2 : aucun lecteur extractible → message, bouton vers le site, diagnostic ; jamais la page.
+    await pg.getByTestId('lecteur-suivant').click();
+    verifier(await visible(pg, 'lecteur-introuvable', 30_000), `${appareil} : épisode sans lecteur → « Lecteur introuvable sur cette page »`);
+    const diag = await pg.getByTestId('lecteur-introuvable-diagnostic').innerText().catch(() => '');
+    const ecran2 = await pg.getByTestId('tsuzuku-lecteur').innerText();
+    verifier(
+      (await pg.getByTestId('lecteur-ouvrir-site').count()) === 1 && /Sélecteurs essayés : select\.host-select option/.test(diag) && /0 iframe/.test(diag) && (await pg.locator('[data-testid="tsuzuku-lecteur"] iframe').count()) === 0 && !TEXTES_SITE_SOURCE.some(t => ecran2.includes(t)),
+      `${appareil} : « Ouvrir l’épisode sur le site », diagnostic (${diag.slice(0, 70)}…), aucun iframe`,
+    );
+    await voir(pg, 'lecteur-introuvable');
+    await capture(pg, `13-${appareil.toLowerCase()}-lecteur-introuvable`);
+    await pg.getByTestId('lecteur-retour').click();
+  }
+  verifier(sortants.some(a => a.methode === 'POST' && a.chemin === '/wp-admin/admin-ajax.php') && sortants.some(a => a.chemin.includes('?host=LECTEUR+D')), 'lecteur C par l’AJAX du thème, lecteur D par la page « ?host= », via le relais');
   await pg.setViewportSize({ width: 1100, height: 820 });
 
   // ============================================================ L'amie Léa : pas de lecture des sources

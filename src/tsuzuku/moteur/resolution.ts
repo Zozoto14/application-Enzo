@@ -24,7 +24,8 @@ import {
 } from './appariement';
 import { echec, ErreurMoteur, messageDe, type CodeErreur } from './erreurs';
 import { classerMedia, type TypeMedia, urlPubliqueSure } from './garde';
-import { choisir, lirePage, sembleRenduEnJs, suggererSelecteurs, texteCompact, texteSepare, texteVisible, type Noeud, type Page } from './lecteurPage';
+import { extraireLecteurs, type DiagnosticLecteurs, type LecteursExtraits } from './lecteursEpisode';
+import { choisir, lirePage, sembleRenduEnJs, suggererSelecteurs, texteSepare, texteVisible, type Noeud, type Page } from './lecteurPage';
 import { detecterBlocage, messageBlocage, type ClientSur, type ReponseTexte } from './reseau';
 import {
   analyserJson,
@@ -1193,51 +1194,62 @@ export async function trouverEpisodes(
 // Lecteurs
 // ---------------------------------------------------------------------------
 
-/** Lecteurs d'une page d'episode ou de film, selon les selecteurs de la source. */
-export async function lecteursSur(ctx: ContexteResolution, src: DefinitionSource, urlPage: string): Promise<Lecteur[]> {
+/**
+ * Lecteurs d'une page d'episode ou de film : l'adresse d'embed de chaque hote
+ * video (jamais la page du site elle-meme), voir `lecteursEpisode.ts`.
+ */
+export async function lecteursSurDetail(ctx: ContexteResolution, src: DefinitionSource, urlPage: string): Promise<LecteursExtraits> {
   if (!urlPage) {
-    return [];
+    return { lecteurs: [], diagnostic: { url: urlPage, selecteurs: [], iframes: 0, dataSrc: 0, options: 0, scripts: 0, differes: 0, ecartes: [] } };
   }
-  const { page, url: lue } = await chargerPage(ctx.client, urlPage, src);
-  const sortie: Lecteur[] = [];
-  const vus = new Set<string>();
-  const ajouter = (brut: string | null, nom: string) => {
-    const url = urlPubliqueSure(absolue(brut, lue || urlPage));
-    if (!url || vus.has(url)) {
-      return;
-    }
-    vus.add(url);
-    sortie.push({ label: `${src.name} - ${nom}`.trim(), url, kind: classerMedia(url) });
-  };
-  // Menu deroulant de lecteurs : l'iframe visible n'en montre qu'un.
-  if (src.player.options) {
-    page.tous(src.player.options).forEach((el, i) => {
-      const nom = (src.player.optionLabel ? choisir(page, el, src.player.optionLabel) : texteCompact(page, el)) || `Lecteur ${i + 1}`;
-      ajouter(page.attr(el, src.player.optionAttr || 'value'), nom);
-    });
-  }
-  if (src.player.iframe) {
-    page.tous(src.player.iframe).forEach((el, i) => {
-      ajouter(page.attr(el, src.player.attr || 'src'), `${src.player.label || 'Lecteur'} ${i + 1}`);
-    });
-  }
-  return sortie;
+  const { page, html, url: lue, base } = await chargerPage(ctx.client, urlPage, src);
+  const appel = { delaiMs: src.timeout, agentUtilisateur: src.userAgent, referer: lue || urlPage };
+  return extraireLecteurs(html, lue || urlPage, {
+    source: src.name,
+    player: src.player,
+    base,
+    page,
+    acces: {
+      page: async url => (await ctx.client.texte(url, { ...appel, cache: 'page' })).corps,
+      formulaire: async (url, corps) => {
+        const rep = await ctx.client.envoyerFormulaire(url, corps, { ...appel, entetes: { 'x-requested-with': 'XMLHttpRequest' } });
+        if (rep.statut >= 400) throw echec(`HTTP ${rep.statut}`, 'reseau', rep.statut);
+        return rep.corps;
+      },
+    },
+  });
 }
 
-export async function trouverLecteurs(ctx: ContexteResolution, sources: readonly DefinitionSource[], urlEpisode: string): Promise<Lecteur[]> {
+/** Lecteurs d'une page d'episode ou de film (voir `lecteursSurDetail`). */
+export async function lecteursSur(ctx: ContexteResolution, src: DefinitionSource, urlPage: string): Promise<Lecteur[]> {
+  return (await lecteursSurDetail(ctx, src, urlPage)).lecteurs;
+}
+
+/** Lecteurs d'une page d'episode : la source de l'adresse d'abord ; diagnostic de la premiere source si rien n'est lisible. */
+export async function trouverLecteursDetail(
+  ctx: ContexteResolution,
+  sources: readonly DefinitionSource[],
+  urlEpisode: string,
+): Promise<{ lecteurs: Lecteur[]; diagnostic?: DiagnosticLecteurs }> {
   const cible = sourcePourUrl(sources, urlEpisode);
   const ordre = cible ? [cible, ...sourcesActives(sources).filter(s => s !== cible)] : sourcesActives(sources);
+  let diagnostic: DiagnosticLecteurs | undefined;
   for (const src of ordre) {
     try {
-      const l = await lecteursSur(ctx, src, urlEpisode);
-      if (l.length) {
-        return l;
+      const r = await lecteursSurDetail(ctx, src, urlEpisode);
+      if (r.lecteurs.length) {
+        return r;
       }
+      diagnostic = diagnostic ?? r.diagnostic;
     } catch (err) {
       journalDe(ctx)(`[source:${src.name}] ${messageDe(err)}`);
     }
   }
-  return [];
+  return { lecteurs: [], diagnostic };
+}
+
+export async function trouverLecteurs(ctx: ContexteResolution, sources: readonly DefinitionSource[], urlEpisode: string): Promise<Lecteur[]> {
+  return (await trouverLecteursDetail(ctx, sources, urlEpisode)).lecteurs;
 }
 
 // ---------------------------------------------------------------------------
@@ -1371,6 +1383,8 @@ export interface ResolutionPage {
   method: MethodeResolution;
   sourceName?: string;
   warning?: string;
+  /** Page d'une source sans lecteur extractible : ce qui a ete essaye. */
+  diagnostic?: DiagnosticLecteurs;
 }
 
 /**
@@ -1402,18 +1416,26 @@ export async function lecteursPourPage(
     }
   }
   try {
-    const { html, url } = await chargerPage(ctx.client, urlPage, src ?? undefined);
-    const trouves = lecteursDansHtml(html, url || urlPage, label);
+    const { page, html, url, base } = await chargerPage(ctx.client, urlPage, src ?? undefined);
+    const { lecteurs: trouves, diagnostic } = await extraireLecteurs(html, url || urlPage, { source: label, base, page });
     if (trouves.length) {
       return { sources: trouves, method: 'heuristique' };
     }
+    if (src) {
+      // Page d'une de vos sources : JAMAIS affichee telle quelle dans le lecteur (c'est un site complet, pas un lecteur).
+      return { sources: [], method: 'page', warning: `Lecteur introuvable sur cette page (${diagnostic.iframes} iframe(s), ${diagnostic.dataSrc} data-src, ${diagnostic.options} option(s) de lecteur).`, diagnostic };
+    }
   } catch (err) {
+    if (src) {
+      return { sources: [], method: 'page', warning: `Lecteur introuvable : la page n'a pas pu etre analysee (${messageDe(err)}).` };
+    }
     return {
       sources: [{ label: `${label} - page integree`, url: urlPage, kind: 'iframe' }],
       method: 'page',
       warning: `La page n'a pas pu etre analysee (${messageDe(err)}) : elle est affichee telle quelle.`,
     };
   }
+  // Lien d'un autre site (souvent l'adresse d'embed d'un hote, collee a la main) : affiche tel quel.
   return {
     sources: [{ label: `${label} - page integree`, url: urlPage, kind: 'iframe' }],
     method: 'page',

@@ -191,23 +191,30 @@ describe('devblog', () => {
     expect(decider(undefined, { profilNeuf: false, admin: false, apps: ['tsuzuku'] }, ENTREES.slice(ENTREES.indexOf(onglets))).genre).toBe('afficher');
     // 2026.10.30 : Tsuzuku encore plus rapide — Fondateur et amis qui ont Tsuzuku ; le cache du relais : Fondateur seulement.
     const latence = ENTREES.find(e => e.version === '2026.10.30')!;
-    expect(ENTREES[2]).toBe(latence);
+    expect(ENTREES[3]).toBe(latence);
     expect(fonctionnalitesPour(latence, false, false, ['tsuzuku']).map(f => f.id)).toEqual(['tsuzuku-latence-toucher', 'tsuzuku-latence-lentes']);
     expect(fonctionnalitesPour(latence, true).map(f => f.id)).toContain('tsuzuku-latence-relais');
     expect(decider(undefined, { profilNeuf: false, admin: false, apps: ['taches'] }, [latence]).genre).toBe('rien');
     expect(decider(undefined, { profilNeuf: false, admin: false, apps: ['tsuzuku'] }, [latence]).genre).toBe('afficher');
     // 2026.10.31 : Administration (invitations par e-mail, réglages) — Fondateur seulement.
-    expect(ENTREES[1].version).toBe('2026.10.31');
-    expect(ENTREES[1].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
+    expect(ENTREES[2].version).toBe('2026.10.31');
+    expect(ENTREES[2].fonctionnalites.every(f => f.adminSeulement)).toBe(true);
     expect(decider(undefined, { profilNeuf: false, admin: true }, ENTREES).genre).toBe('afficher');
-    expect(decider(undefined, { profilNeuf: false, admin: false, gestionnaire: true, apps: ['taches', 'tsuzuku'] }, ENTREES.slice(1)).genre).toBe('rien');
-    // 2026.10.32 (dernière entrée) : Tâches — déplacer, menu Équipe ; le Fondateur et ceux qui ont l'app.
-    const equipe = ENTREES[0];
+    expect(decider(undefined, { profilNeuf: false, admin: false, gestionnaire: true, apps: ['taches', 'tsuzuku'] }, ENTREES.slice(2)).genre).toBe('rien');
+    // 2026.10.32 : Tâches — déplacer, menu Équipe ; le Fondateur et ceux qui ont l'app.
+    const equipe = ENTREES[1];
     expect(equipe.version).toBe('2026.10.32');
     expect(fonctionnalitesPour(equipe, true).map(f => f.id)).toEqual(['taches-deplacer', 'taches-visibilite', 'taches-equipe']);
     expect(decider(undefined, { profilNeuf: false, admin: false, apps: ['taches'] }, [equipe]).genre).toBe('afficher');
     expect(decider(undefined, { profilNeuf: false, admin: false, apps: ['tsuzuku'] }, [equipe]).genre).toBe('rien');
-    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.32', '2026.10.31', '2026.10.30', '2026.10.29', '2026.10.28', '2026.10.27', '2026.10.26', '2026.10.25', '2026.10.24', '2026.10.23', '2026.10.22', '2026.10.21', '2026.10.20', '2026.10.19', '2026.10.18', '2026.10.17', '2026.10.16', '2026.10.15', '2026.10.14', '2026.10.13', '2026.10.12', '2026.10.11', '2026.10.10', '2026.10.09', '2026.10.08', '2026.10.07', '2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
+    // 2026.10.33 (dernière entrée) : le lecteur de Tsuzuku n'affiche que la vidéo — amis qui ont Tsuzuku ; le diagnostic : Fondateur.
+    const lecteur = ENTREES[0];
+    expect(lecteur.version).toBe('2026.10.33');
+    expect(fonctionnalitesPour(lecteur, false, false, ['tsuzuku']).map(f => f.id)).toEqual(['tsuzuku-lecteur-video-seule', 'tsuzuku-lecteur-pause-onglet']);
+    expect(fonctionnalitesPour(lecteur, true).map(f => f.id)).toContain('tsuzuku-lecteur-diagnostic');
+    expect(decider(undefined, { profilNeuf: false, admin: false, apps: ['tsuzuku'] }, [lecteur]).genre).toBe('afficher');
+    expect(decider(undefined, { profilNeuf: false, admin: false, apps: ['taches'] }, [lecteur]).genre).toBe('rien');
+    expect(ENTREES.map(e => e.version)).toEqual(['2026.10.33', '2026.10.32', '2026.10.31', '2026.10.30', '2026.10.29', '2026.10.28', '2026.10.27', '2026.10.26', '2026.10.25', '2026.10.24', '2026.10.23', '2026.10.22', '2026.10.21', '2026.10.20', '2026.10.19', '2026.10.18', '2026.10.17', '2026.10.16', '2026.10.15', '2026.10.14', '2026.10.13', '2026.10.12', '2026.10.11', '2026.10.10', '2026.10.09', '2026.10.08', '2026.10.07', '2026.10.06', '2026.10.05', '2026.10.04', '2026.10.03', '2026.10.02', '2026.10.01', '2026.09.30', '2026.09.29']);
   });
 
   it('marquer lu est idempotent et tolère un état corrompu', () => {
