@@ -118,12 +118,16 @@ export interface EntreeDestination {
   couleur?: string;
 }
 
-/** Listes où l'on peut déplacer, et tâches dont on peut devenir sous-tâche, filtrées par la recherche (sans accents ni casse). */
-export function destinations(d: DonneesTaches, cote: Cote, recherche = '', taches: readonly Tache[] = [], max = 60): EntreeDestination[] {
+/**
+ * Listes où l'on peut déplacer, et tâches dont on peut devenir sous-tâche
+ * (dès qu'on cherche, ou toujours en mode « parents »), filtrées par la
+ * recherche (sans accents ni casse).
+ */
+export function destinations(d: DonneesTaches, cote: Cote, recherche = '', taches: readonly Tache[] = [], max = 60, mode: 'auto' | 'parents' = 'auto'): EntreeDestination[] {
   const q = sansAccents(recherche.trim());
   const exclus = new Set(taches.flatMap(t => [t.id, ...Object.values(d.taches).filter(s => s.parentId === t.id).map(s => s.id)]));
   const r: EntreeDestination[] = [];
-  for (const p of projetsDe(d)) {
+  for (const p of mode === 'parents' ? [] : projetsDe(d)) {
     if (!peutDeplacerVers(d, p.id, cote, taches)) continue;
     const e = d.espaces[p.espaceId];
     const listes = listesDe(d, p.id);
@@ -133,10 +137,10 @@ export function destinations(d: DonneesTaches, cote: Cote, recherche = '', tache
       if (!q || sansAccents(`${detail} ${p.nom} ${l.nom}`).includes(q)) r.push({ listeId: l.id, projetId: p.id, libelle: `${p.icone ? `${p.icone} ` : ''}${libelle}`, detail, couleur: p.couleur });
     }
   }
-  if (q) {
+  if (q || mode === 'parents') {
     for (const t of Object.values(d.taches)) {
       if (!vivant(t) || t.parentId || exclus.has(t.id) || !vivant(d.listes[t.listeId]) || !peutDeplacerVers(d, t.projetId, cote, taches)) continue;
-      if (!sansAccents(t.titre).includes(q)) continue;
+      if (q && !sansAccents(t.titre).includes(q)) continue;
       r.push({ listeId: t.listeId, projetId: t.projetId, parentId: t.id, libelle: `↳ Sous-tâche de « ${t.titre} »`, detail: cheminListe(d, t.listeId), couleur: d.projets[t.projetId]?.couleur });
     }
   }

@@ -33,6 +33,7 @@ import { jourLisible } from '../dates';
 import type { Actions } from './actions';
 import { attenueDe, Avatar, Bouton, CaseRonde, Champ, Libelle, PastillePriorite, Puce, T, texteDe, titreDe } from './atomes';
 import { couleurAuteur } from './Vues';
+import { cheminTache } from '../deplacer';
 import { SectionLiens, SectionTemps } from './SuiviTemps';
 import { BoutonsIA, ChampCommentaire, ListeAssignes, personnesPour, SectionChronologie, SectionGithub, TexteMentions } from './DetailV3';
 
@@ -178,6 +179,7 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
           {[espace?.nom, projet?.nom, liste?.nom].filter(Boolean).join(' › ')}
         </Text>
         {droits.mode === 'lecture' ? <Puce theme={theme} texte="Lecture seule" couleur={theme.alerte} testID="detail-lecture-seule" /> : null}
+        {m && a.menuTache ? <Bouton theme={theme} variante="discret" titre="⋯" libelle="Actions de la tâche : déplacer, convertir, supprimer" onPress={() => a.menuTache?.(t)} testID="detail-menu" /> : null}
         <Bouton theme={theme} variante="discret" titre={a.mobile ? 'Fermer' : '✕'} libelle="Fermer le détail" onPress={onFermer} testID="detail-fermer" />
       </View>
       <ScrollView contentContainerStyle={styles.corps} keyboardShouldPersistTaps="handled">
@@ -223,8 +225,15 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
           <Propriete a={a} libelle="Ma journée" onPress={m ? () => a.basculerJournee(t) : undefined} testID="detail-journee">
             <Text style={[texteDe(theme), { color: choisie ? theme.alerte : theme.attenue }]}>{choisie ? '☀︎ Choisie pour aujourd’hui' : 'Ajouter à ma journée'}</Text>
           </Propriete>
-          <Propriete a={a} libelle="Liste" onPress={m && listesDe(d, t.projetId).length > 1 && !t.parentId ? () => onListe(t) : undefined} testID="detail-liste">
-            <Text style={texteDe(theme)}>{liste?.nom}</Text>
+          <Propriete
+            a={a}
+            libelle="Emplacement"
+            onPress={m ? (a.demanderDeplacement ? () => a.demanderDeplacement?.([t.id]) : listesDe(d, t.projetId).length > 1 && !t.parentId ? () => onListe(t) : undefined) : undefined}
+            testID="detail-emplacement">
+            <Text style={texteDe(theme)} numberOfLines={2}>
+              {cheminTache(d, t)}
+              {m && a.demanderDeplacement ? <Text style={{ color: theme.accent }}>{'  '}↦ Déplacer</Text> : null}
+            </Text>
           </Propriete>
         </View>
 

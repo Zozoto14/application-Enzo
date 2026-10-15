@@ -17,6 +17,7 @@ import { useMobile } from '../../ui/mobile';
 import { droitsProjet, roleTaches } from '../acces';
 import { annulerSuppression, effacerElement, elementsCorbeille, purgerCorbeille, restaurerElement, supprimerElement, viderCorbeille, type Genre, type ResultatSuppression } from '../corbeille';
 import { lireAjoutRapide } from '../ajoutRapide';
+import { analyserDeplacement, annulerDeplacement, deplacerTaches, type Destination, type OptionsDeplacement, type ResultatDeplacement } from '../deplacer';
 import { jourLisible, sansAccents } from '../dates';
 import { ajouterDemo, retirerDemo } from '../demo';
 import { filtrer, filtresActifs, trier } from '../filtres';
@@ -40,6 +41,8 @@ import {
   vivant,
   assignesDe,
   LIBELLES_DROIT,
+  type Contexte,
+  type DonneesTaches,
   type Filtres,
   type Groupe,
   type Tache,
@@ -73,11 +76,13 @@ import { DialogueJournal } from './Journal';
 import { LIBELLES_OUVERTURE, type Ouverture } from './ouverture';
 import { DetailTache } from './Detail';
 import { DialogueChoix, DialogueEcheance, DialogueEspace, DialogueFiltres, DialogueNom, DialogueProjet, DialogueRappels, DialogueRappelsRecus, DialogueRecurrence, DialogueReglages } from './Dialogues';
+import { BarreSelection, DialogueDeplacer, elementsMenuTache } from './Deplacer';
+import { VueEquipe } from './Equipe';
 import { useEtatTaches } from './etat';
-import { ContexteZones, RegistreZones } from './glisser';
+import { ContexteZones, RegistreZones, useZoneDepot } from './glisser';
 import { VueCalendrier, VueJournee, VueKanban, VueListe } from './Vues';
 
-type Selection = { g: 'journee' } | { g: 'tout' } | { g: 'objectifs' } | { g: 'projet'; id: string; liste?: string } | { g: 'vue'; id: string };
+type Selection = { g: 'journee' } | { g: 'tout' } | { g: 'objectifs' } | { g: 'equipe' } | { g: 'projet'; id: string; liste?: string } | { g: 'vue'; id: string };
 
 type Fenetre =
   | { g: 'statut' | 'priorite' | 'assigne' | 'echeance' | 'recurrence' | 'rappels' | 'liste'; t: Tache }
@@ -104,7 +109,16 @@ type Fenetre =
   | { g: 'ia'; cible: CibleIA }
   | { g: 'objectif'; id?: string }
   | { g: 'dependance'; t: Tache }
-  | { g: 'menu-ia' };
+  | { g: 'menu-ia' }
+  | { g: 'deplacer'; ids: readonly string[]; dest?: Destination; mode?: 'auto' | 'parents' }
+  | { g: 'menu-tache'; t: Tache };
+
+/** « Annuler » pendant 10 s : une suppression ou un déplacement. */
+interface Annulable {
+  texte: string;
+  defaire(x: DonneesTaches, ctx: Contexte): DonneesTaches;
+  fait: string;
+}
 
 /** Durée pendant laquelle « Annuler » reste proposé après une suppression. */
 export const DELAI_ANNULER_MS = 10_000;
@@ -193,7 +207,10 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
   const [ouverte, setOuverte] = useState<string | undefined>();
   const [fenetre, setFenetre] = useState<Fenetre | undefined>();
   const [avis, setAvis] = useState<{ texte: string; genre: 'ok' | 'erreur' } | undefined>();
-  const [annulable, setAnnulable] = useState<ResultatSuppression | undefined>();
+  const [annulable, setAnnulable] = useState<Annulable | undefined>();
+  // Multi-sélection (vue Liste) : tâches cochées, et la dernière touchée (Maj + clic : la plage).
+  const [choisies, setChoisies] = useState<readonly string[]>([]);
+  const ancre = useRef<string | undefined>(undefined);
   const [rapide, setRapide] = useState('');
   const [rapideActif, setRapideActif] = useState(false);
   const [dernierProjet, setDernierProjet] = useState(affichageInitial.dernierProjet);
@@ -248,6 +265,11 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
     if ((selection.g === 'projet' && !vivant(projetSel)) || (selection.g === 'vue' && !vivant(vueSel))) setSelection({ g: 'journee' });
   }, [selection, projetSel, vueSel]);
 
+  useEffect(() => {
+    setChoisies([]);
+    ancre.current = undefined;
+  }, [selection, vue]);
+
   const signaler = useCallback((e: unknown) => setAvis({ texte: message(e), genre: 'erreur' }), []);
   const essayer = useCallback(
     (f: () => void) => {
@@ -265,6 +287,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
   const listeId = selection.g === 'projet' ? selection.liste : undefined;
   const vueEffective: TypeVue = selection.g === 'journee' ? 'journee' : vue === 'journee' ? 'liste' : vue;
   const objectifs = selection.g === 'objectifs' && role === 'fondateur';
+  const equipe = selection.g === 'equipe';
   const toutes = useMemo(() => tachesVivantes(d, projetId).filter(t => !listeId || t.listeId === listeId), [d, projetId, listeId]);
   const visibles = useMemo(() => {
     const f = filtrer(d, toutes, filtres, etat.aujourdhui);
@@ -280,6 +303,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
 
   // --- Actions
   const noms = etat.noms;
+  const cote = { role, moi: etat.moi } as const;
   const actions: Actions = {
     theme,
     mobile,
@@ -366,16 +390,72 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
         if (!r) return;
         if (genre === 'tache' && ouverte === id) setOuverte(undefined);
         setAvis(undefined);
-        setAnnulable(r);
+        const res = r;
+        setAnnulable({ texte: res.texte, defaire: (x, ctx) => annulerSuppression(x, res, ctx), fait: 'Suppression annulée.' });
       }),
+    demanderDeplacement: (ids, dest, mode) => setFenetre({ g: 'deplacer', ids, ...(dest ? { dest } : {}), ...(mode ? { mode } : {}) }),
+    deposer: (ids, zone) =>
+      essayer(() => {
+        const projet = zone.startsWith('projet:') ? zone.slice(7) : undefined;
+        const listeDepot = zone.startsWith('liste:') ? zone.slice(6) : projet ? listesDe(d, projet)[0]?.id : undefined;
+        if (!listeDepot) return;
+        // Sur son propre projet : rien (on ne change pas de liste sans le vouloir).
+        if (projet && ids.every(id => d.taches[id]?.projetId === projet)) return;
+        const dest: Destination = { listeId: listeDepot };
+        const an = analyserDeplacement(d, ids, dest, cote, noms);
+        if (an.refus) throw new ErreurTaches(an.refus);
+        if (an.rien) return;
+        // Un choix à faire ou un avertissement à lire : la fenêtre, déjà sur la bonne destination.
+        if (an.statuts.length || an.etiquettes.length || an.visibles.length || an.disparus.length) setFenetre({ g: 'deplacer', ids, dest });
+        else deplacer(ids, dest, {});
+      }),
+    menuTache: t => setFenetre({ g: 'menu-tache', t }),
+    ...(vueEffective === 'liste' && !equipe && !objectifs
+      ? {
+          selection: {
+            ids: choisies,
+            basculer: (id, mode, ordre) => {
+              const a0 = ancre.current;
+              setChoisies(c => {
+                if (mode === 'plage' && a0 && ordre?.includes(a0) && ordre.includes(id)) {
+                  const [i, j] = [ordre.indexOf(a0), ordre.indexOf(id)].sort((x, y) => x - y);
+                  return [...new Set([...c, ...ordre.slice(i, j + 1)])];
+                }
+                return c.includes(id) ? c.filter(x => x !== id) : [...c, id];
+              });
+              ancre.current = id;
+            },
+            tout: ids => setChoisies(c => (ids.every(id => c.includes(id)) ? c.filter(id => !ids.includes(id)) : [...new Set([...c, ...ids])])),
+            vider: () => setChoisies([]),
+          },
+        }
+      : {}),
   };
+  function deplacer(ids: readonly string[], dest: Destination, o: OptionsDeplacement) {
+    essayer(() => {
+      let r: ResultatDeplacement | undefined;
+      etat.maj((x, ctx) => {
+        r = deplacerTaches(x, ids, dest, ctx, cote, o, noms);
+        return r.donnees;
+      });
+      const res = r;
+      if (!res) return;
+      if (!res.nb) {
+        setAvis({ texte: res.texte, genre: 'ok' });
+        return;
+      }
+      setChoisies(c => c.filter(id => !ids.includes(id)));
+      setAvis(undefined);
+      setAnnulable({ texte: res.texte, defaire: (x, ctx) => annulerDeplacement(x, res.retours, ctx), fait: 'Déplacement annulé.' });
+    });
+  }
   const annuler = () =>
     essayer(() => {
       const r = annulable;
       if (!r) return;
       setAnnulable(undefined);
-      etat.maj((x, ctx) => annulerSuppression(x, r, ctx));
-      setAvis({ texte: 'Suppression annulée.', genre: 'ok' });
+      etat.maj((x, ctx) => r.defaire(x, ctx));
+      setAvis({ texte: r.fait, genre: 'ok' });
     });
   const nbCorbeille = elementsCorbeille(d, etat.maintenant(), role).length;
 
@@ -459,11 +539,12 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
     });
 
   // --- Clavier : N, /, 1-4, Échap (en capture : avant le hub et les feuilles)
-  const etatClavier = useRef({ fenetre, ouverte, selection, suppr: (_: string | undefined) => undefined as void });
+  const etatClavier = useRef({ fenetre, ouverte, selection, choisies: 0, suppr: (_: string | undefined) => undefined as void });
   etatClavier.current = {
     fenetre,
     ouverte,
     selection,
+    choisies: choisies.length,
     // Suppr : l'élément de la barre latérale qui a le focus, sinon la tâche ouverte, sinon la liste / le projet affiché.
     suppr: (focus: string | undefined) => {
       const m = focus?.match(/^nav-(espace|projet|liste)-([a-z0-9-]+)$/);
@@ -491,6 +572,9 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
           arreter();
           e.target?.blur?.();
           setOuverte(undefined);
+        } else if (etatClavier.current.choisies) {
+          arreter();
+          setChoisies([]);
         } else if (champ) {
           arreter();
           e.target?.blur?.();
@@ -516,7 +600,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
         if (v === 'journee') setSelection({ g: 'journee' });
         else {
           setVue(v);
-          setSelection(s => (s.g === 'journee' || s.g === 'objectifs' ? { g: 'tout' } : s));
+          setSelection(s => (s.g === 'journee' || s.g === 'objectifs' || s.g === 'equipe' ? { g: 'tout' } : s));
         }
       }
     };
@@ -528,7 +612,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
     if (v === 'journee') setSelection({ g: 'journee' });
     else {
       setVue(v);
-      if (selection.g === 'journee' || selection.g === 'objectifs') setSelection({ g: 'tout' });
+      if (selection.g === 'journee' || selection.g === 'objectifs' || selection.g === 'equipe') setSelection({ g: 'tout' });
     }
   };
   const choisirSelection = (s: Selection) => {
@@ -553,12 +637,14 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
 
   // --- Titre de la sélection
   const titreSelection =
-    selection.g === 'journee' ? 'Ma journée' : selection.g === 'objectifs' ? 'Objectifs' : selection.g === 'tout' ? 'Toutes les tâches' : selection.g === 'vue' ? (vueSel?.nom ?? 'Vue') : `${projetSel?.nom ?? 'Projet'}${listeId ? ` › ${d.listes[listeId]?.nom ?? ''}` : ''}`;
+    selection.g === 'journee' ? 'Ma journée' : selection.g === 'objectifs' ? 'Objectifs' : selection.g === 'equipe' ? 'Équipe' : selection.g === 'tout' ? 'Toutes les tâches' : selection.g === 'vue' ? (vueSel?.nom ?? 'Vue') : `${projetSel?.nom ?? 'Projet'}${listeId ? ` › ${d.listes[listeId]?.nom ?? ''}` : ''}`;
   const nbFiltres = filtresActifs(filtres) - (filtres.recherche.trim() ? 1 : 0);
   const aucunProjet = projetsDe(d).length === 0;
 
   // --- Contenu principal
-  const contenu = aucunProjet ? (
+  const contenu = equipe ? (
+    <VueEquipe a={actions} comptes={contexte.profils?.tous ?? []} onOuvrirTache={id => setOuverte(id)} onErreur={signaler} onAvis={avisOk} />
+  ) : aucunProjet ? (
     role === 'fondateur' ? (
       <EtatVide
         theme={theme}
@@ -609,7 +695,10 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
   ) : vueEffective === 'calendrier' ? (
     <VueCalendrier a={actions} taches={filtrer(d, toutes, filtres, etat.aujourdhui)} mode={modeCal} onMode={setModeCal} jour={jourCal} onJour={setJourCal} />
   ) : (
-    <VueListe a={actions} taches={visibles} groupe={groupe} projetId={projetId} />
+    <View style={{ gap: 12 }}>
+      <BarreSelection a={actions} onDeplacer={() => actions.demanderDeplacement?.(choisies)} />
+      <VueListe a={actions} taches={visibles} groupe={groupe} projetId={projetId} />
+    </View>
   );
 
   // --- Barre latérale (aussi en feuille sur téléphone / iPad portrait)
@@ -681,7 +770,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
   const ongletsBrut = (
     <View style={[styles.onglets, { borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 12) }]} accessibilityRole="tablist">
       {VUES.map(([v, libelle, icone], i) => {
-        const actif = vueEffective === v && !objectifs;
+        const actif = vueEffective === v && !objectifs && !equipe;
         return (
           <Pressable
             key={v}
@@ -828,6 +917,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
           setAvis({ texte: 'Corbeille vidée.', genre: 'ok' });
         })
       }
+      onDeplacer={deplacer}
     />
   );
 
@@ -956,6 +1046,19 @@ function LigneNav({ a, texte, actif, onPress, onLongPress, testID, couleur, gauc
   );
 }
 
+/** Ligne de la barre latérale qui reçoit une tâche glissée (souris ou doigt) : « projet:… » ou « liste:… ». */
+function ZoneNav({ a, id, children }: { a: Actions; id: string; children: React.ReactNode }) {
+  const zone = useZoneDepot(id);
+  return (
+    <View
+      ref={zone.ref as never}
+      testID={`zone-${id.replace(':', '-')}`}
+      style={zone.survolee ? ({ backgroundColor: teinteTransparente(a.theme.accent, 0.24), borderRadius: Math.min(a.theme.rayonMoyen, 10), outlineColor: a.theme.accent, outlineWidth: 2, outlineStyle: 'solid' } as object) : undefined}>
+      {children}
+    </View>
+  );
+}
+
 function Navigation({
   a,
   selection,
@@ -998,6 +1101,7 @@ function Navigation({
       <LigneNav a={a} texte="Ma journée" gauche="☀︎" actif={selection.g === 'journee'} onPress={() => onChoisir({ g: 'journee' })} testID="nav-journee" compte={j} />
       <LigneNav a={a} texte="Toutes les tâches" gauche="▤" actif={selection.g === 'tout'} onPress={() => onChoisir({ g: 'tout' })} testID="nav-tout" />
       {fondateur ? <LigneNav a={a} texte="Objectifs" gauche="◎" actif={selection.g === 'objectifs'} onPress={() => onChoisir({ g: 'objectifs' })} testID="nav-objectifs" compte={Object.values(d.objectifs ?? {}).filter(vivant).length || undefined} /> : null}
+      {!a.etat.perso ? <LigneNav a={a} texte="Équipe" gauche="👥" actif={selection.g === 'equipe'} onPress={() => onChoisir({ g: 'equipe' })} testID="nav-equipe" compte={a.etat.role === 'fondateur' ? listeMembres(d).length || undefined : undefined} /> : null}
       {vues.length ? <Text style={[attenueDe(theme), styles.intertitre]}>VUES ENREGISTRÉES</Text> : null}
       {vues.map(v => (
         <LigneNav key={v.id} a={a} texte={v.nom} gauche="★" actif={selection.g === 'vue' && selection.id === v.id} onPress={() => onChoisir({ g: 'vue', id: v.id })} testID={`nav-vue-${v.id}`} droite={fondateur ? petitBouton('✕', `Supprimer la vue ${v.nom}`, () => onSupprimerVue(v.id), `nav-vue-supprimer-${v.id}`) : undefined} />
@@ -1036,7 +1140,8 @@ function Navigation({
               const actif = selection.g === 'projet' && selection.id === p.id;
               return (
                 <View key={p.id} style={{ gap: 2 }}>
-                  <LigneNav
+                  <ZoneNav a={a} id={`projet:${p.id}`}>
+                    <LigneNav
                     a={a}
                     niveau={1}
                     texte={`${p.icone ? `${p.icone} ` : ''}${p.nom}${fondateur && projetPartage(d, p) ? '  👥' : ''}${!fondateur && p.partage === 'lecture' ? '  👁' : ''}`}
@@ -1047,11 +1152,12 @@ function Navigation({
                     testID={`nav-projet-${p.id}`}
                     compte={tachesVivantes(d, p.id).filter(t => !t.parentId && !statutsDe(d, p.id).find(s => s.id === t.statut)?.ferme).length}
                     droite={fondateur || a.droits(p.id).gerer ? petitBouton('⋯', `Actions du projet ${p.nom} (réglages${fondateur ? ', supprimer…' : ''})`, () => onMenu('projet', p.id), `nav-projet-menu-${p.id}`) : undefined}
-                  />
+                    />
+                  </ZoneNav>
                   {actif && listesDe(d, p.id).length > 1
                     ? listesDe(d, p.id).map(l => (
-                        <LigneNav
-                          key={l.id}
+                        <ZoneNav key={l.id} a={a} id={`liste:${l.id}`}>
+                          <LigneNav
                           a={a}
                           niveau={2}
                           gauche="·"
@@ -1061,7 +1167,8 @@ function Navigation({
                           onLongPress={fondateur ? () => onMenu('liste', l.id) : undefined}
                           testID={`nav-liste-${l.id}`}
                           droite={fondateur ? petitBouton('⋯', `Actions de la liste ${l.nom} (supprimer…)`, () => onMenu('liste', l.id), `nav-liste-menu-${l.id}`) : undefined}
-                        />
+                          />
+                        </ZoneNav>
                       ))
                     : null}
                 </View>
@@ -1108,6 +1215,7 @@ function Fenetres({
   onOuvertureChangee,
   comptes,
   onParametres,
+  onDeplacer,
 }: {
   a: Actions;
   fenetre?: Fenetre;
@@ -1134,6 +1242,7 @@ function Fenetres({
   onOuvertureChangee(o: Ouverture): void;
   comptes: readonly Profil[];
   onParametres?(): void;
+  onDeplacer(ids: readonly string[], dest: Destination, o: OptionsDeplacement): void;
 }) {
   if (!fenetre) return null;
   const d = a.etat.donnees;
@@ -1451,6 +1560,39 @@ function Fenetres({
             })
           }
           onFermer={onFermer}
+        />
+      );
+    }
+    case 'deplacer':
+      return (
+        <DialogueDeplacer
+          a={a}
+          ids={fenetre.ids}
+          {...(fenetre.dest ? { initiale: fenetre.dest } : {})}
+          {...(fenetre.mode ? { mode: fenetre.mode } : {})}
+          onFermer={onFermer}
+          onDeplacer={(dest, o) => {
+            onFermer();
+            onDeplacer(fenetre.ids, dest, o);
+          }}
+        />
+      );
+    case 'menu-tache': {
+      const t = d.taches[fenetre.t.id] ?? fenetre.t;
+      const sel = a.selection;
+      return (
+        <DialogueMenu
+          a={a}
+          titre={`Tâche « ${t.titre} »`}
+          elements={elementsMenuTache(a, t, {
+            onDeplacer: () => onAller({ g: 'deplacer', ids: [t.id] }),
+            onParent: () => onAller({ g: 'deplacer', ids: [t.id], mode: 'parents' }),
+            onPrincipale: () => onDeplacer([t.id], { listeId: t.listeId, parentId: null }, {}),
+            ...(sel ? { onSelectionner: () => !sel.ids.includes(t.id) && sel.basculer(t.id, 'ajout') } : {}),
+            onSupprimer: () => a.demanderSuppression('tache', t.id),
+          })}
+          onFermer={onFermer}
+          testID="dialogue-menu-tache"
         />
       );
     }

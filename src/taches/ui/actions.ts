@@ -7,6 +7,7 @@
 import type { ThemeHub } from '../../hub/themes';
 import type { Droits } from '../acces';
 import type { Genre } from '../corbeille';
+import type { Destination } from '../deplacer';
 import type { ChangementTache, Tache } from '../modele';
 import type { EtatApp } from './etat';
 import type { CacheGithub } from '../github';
@@ -50,4 +51,21 @@ export interface Actions {
   minuteur(t: Tache): void;
   /** V3 : IA et GitHub (Fondateur seulement). */
   aides?: AidesV3;
+  /** Ouvre la fenêtre « Déplacer » pour ces tâches (mode « parents » : convertir en sous-tâche). */
+  demanderDeplacement?(ids: readonly string[], dest?: Destination, mode?: 'auto' | 'parents'): void;
+  /** Dépôt d'un glisser sur la barre latérale (« projet:… », « liste:… ») : déplace, ou ouvre la fenêtre s'il y a un choix à faire. */
+  deposer?(ids: readonly string[], zone: string): void;
+  /** Menu « ⋯ » d'une tâche (déplacer, convertir, sélectionner, supprimer). */
+  menuTache?(t: Tache): void;
+  /** Multi-sélection (vue Liste) : cases, Maj + clic (plage), Ctrl/Cmd + clic (ajout). */
+  selection?: SelectionTaches;
+}
+
+export interface SelectionTaches {
+  ids: readonly string[];
+  /** `ordre` : les tâches affichées, dans l'ordre (pour la plage Maj + clic). */
+  basculer(id: string, mode: 'ajout' | 'plage', ordre?: readonly string[]): void;
+  /** Tout sélectionner (ou tout désélectionner si tout l'est déjà). */
+  tout(ids: readonly string[]): void;
+  vider(): void;
 }

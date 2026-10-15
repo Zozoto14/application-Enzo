@@ -24,6 +24,7 @@ import {
 } from '../modele';
 import type { Actions } from './actions';
 import { attenueDe, Avatar, Bouton, CaseRonde, couleurPriorite, EtatVide, PastillePriorite, Puce, T, texteDe, titreDe } from './atomes';
+import { CaseSelection } from './Deplacer';
 import { useGlissable, useZoneDepot } from './glisser';
 
 // ------------------------------------------------------------------ Morceaux communs
@@ -74,7 +75,13 @@ function Compteurs({ a, t }: { a: Actions; t: Tache }) {
 }
 
 /** Titre modifiable en place (Entrée ou sortie du champ valident, Échap annule). */
-function TitreEnPlace({ a, t, modifiable, ferme }: { a: Actions; t: Tache; modifiable: boolean; ferme: boolean }) {
+/** Maj / Ctrl / Cmd tenus pendant un clic (web) : la multi-sélection plutôt que l'ouverture. */
+export function touchesDe(e: unknown): { maj: boolean; ajout: boolean } {
+  const n = ((e as { nativeEvent?: unknown })?.nativeEvent ?? e) as { shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean } | undefined;
+  return { maj: Boolean(n?.shiftKey), ajout: Boolean(n?.ctrlKey || n?.metaKey) };
+}
+
+function TitreEnPlace({ a, t, modifiable, ferme, onClic }: { a: Actions; t: Tache; modifiable: boolean; ferme: boolean; onClic?(e: unknown): void }) {
   const [edition, setEdition] = useState<string | undefined>();
   const theme = a.theme;
   if (edition !== undefined) {
@@ -103,7 +110,7 @@ function TitreEnPlace({ a, t, modifiable, ferme }: { a: Actions; t: Tache; modif
       testID={`tache-titre-${t.id}`}
       accessibilityRole="button"
       accessibilityLabel={`${t.titre}${modifiable ? ' (double-clic ou F2 pour renommer)' : ''}`}
-      onPress={() => a.ouvrir(t.id)}
+      onPress={e => (onClic ? onClic(e) : a.ouvrir(t.id))}
       onLongPress={modifiable && !a.mobile ? () => setEdition(t.titre) : undefined}
       {...({ onDoubleClick: modifiable ? () => setEdition(t.titre) : undefined, onKeyDown: (e: { key: string }) => e.key === 'F2' && modifiable && setEdition(t.titre) } as object)}
       style={{ flex: 1, minWidth: 0, justifyContent: 'center', minHeight: 36 }}>
@@ -118,7 +125,7 @@ function TitreEnPlace({ a, t, modifiable, ferme }: { a: Actions; t: Tache; modif
 
 const COLONNES = { statut: 132, priorite: 112, echeance: 150, assigne: 72, etiquettes: 170 } as const;
 
-function LigneTache({ a, t, compacte, etiquettes = true, avecProjet = true }: { a: Actions; t: Tache; compacte: boolean; etiquettes?: boolean; avecProjet?: boolean }) {
+function LigneTache({ a, t, compacte, etiquettes = true, avecProjet = true, ordre }: { a: Actions; t: Tache; compacte: boolean; etiquettes?: boolean; avecProjet?: boolean; ordre?: readonly string[] }) {
   const theme = a.theme;
   const d = a.etat.donnees;
   const droits = a.droits(t.projetId);
@@ -126,9 +133,23 @@ function LigneTache({ a, t, compacte, etiquettes = true, avecProjet = true }: { 
   const ferme = statut.ferme;
   const ech = libelleEcheance(a, t);
   const projet = d.projets[t.projetId];
+  const sel = droits.modifier ? a.selection : undefined;
+  const choisie = Boolean(sel?.ids.includes(t.id));
+  // Glisser une ligne (avec la sélection si elle en fait partie) sur un projet ou une liste de la barre latérale.
+  const { ref, glisse } = useGlissable({
+    actif: !a.mobile && droits.modifier && Boolean(a.deposer),
+    onDeposer: zone => (zone.startsWith('projet:') || zone.startsWith('liste:')) && a.deposer?.(choisie && sel ? sel.ids : [t.id], zone),
+  });
+  const clic = (e: unknown) => {
+    const k = touchesDe(e);
+    if (sel && (k.maj || k.ajout)) sel.basculer(t.id, k.maj ? 'plage' : 'ajout', ordre);
+    else a.ouvrir(t.id);
+  };
+  const caseSel = sel ? <CaseSelection a={a} coche={choisie} onPress={e => sel.basculer(t.id, touchesDe(e).maj ? 'plage' : 'ajout', ordre)} libelle={`Sélectionner « ${t.titre} »`} testID={`choisir-${t.id}`} /> : null;
+  const fond = choisie ? teinteTransparente(theme.accent, 0.12) : undefined;
   if (compacte) {
     return (
-      <View testID={`ligne-${t.id}`} style={[styles.ligneMobile, { borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: Math.min(theme.rayonMoyen, 12) }]}>
+      <View testID={`ligne-${t.id}`} style={[styles.ligneMobile, { borderColor: choisie ? theme.accent : theme.ligne, backgroundColor: fond ?? theme.surface, borderRadius: Math.min(theme.rayonMoyen, 12) }]}>
         <CaseRonde theme={theme} coche={ferme} desactive={!droits.modifier} onPress={() => a.basculer(t.id)} libelle={`Terminer « ${t.titre} »`} testID={`case-${t.id}`} />
         <Pressable accessibilityRole="button" testID={`ouvrir-${t.id}`} onPress={() => a.ouvrir(t.id)} style={{ flex: 1, minWidth: 0, gap: 6, paddingVertical: 4 }}>
           <Text numberOfLines={2} style={[texteDe(theme, 17), { fontWeight: '600', textDecorationLine: ferme ? 'line-through' : 'none', color: ferme ? theme.attenue : theme.texte }]}>
@@ -142,14 +163,16 @@ function LigneTache({ a, t, compacte, etiquettes = true, avecProjet = true }: { 
           </View>
           <Compteurs a={a} t={t} />
         </Pressable>
+        {caseSel}
       </View>
     );
   }
   return (
-    <View testID={`ligne-${t.id}`} style={[styles.ligne, { borderColor: theme.ligne }]}>
+    <View ref={ref as never} testID={`ligne-${t.id}`} style={[styles.ligne, { borderColor: glisse ? theme.accent : theme.ligne, backgroundColor: glisse ? theme.surface : fond }]}>
+      {caseSel ?? (a.selection ? <View style={{ width: 30 }} /> : null)}
       <CaseRonde theme={theme} coche={ferme} desactive={!droits.modifier} onPress={() => a.basculer(t.id)} libelle={`Terminer « ${t.titre} »`} testID={`case-${t.id}`} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <TitreEnPlace a={a} t={t} modifiable={droits.modifier} ferme={ferme} />
+        <TitreEnPlace a={a} t={t} modifiable={droits.modifier} ferme={ferme} onClic={clic} />
         <View style={styles.meta}>
           {projet && avecProjet ? <Text style={attenueDe(theme)} numberOfLines={1}>{projet.nom}</Text> : null}
           <Compteurs a={a} t={t} />
@@ -177,6 +200,15 @@ function LigneTache({ a, t, compacte, etiquettes = true, avecProjet = true }: { 
           {t.etiquettes.length > 2 ? <Text style={attenueDe(theme)}>+{t.etiquettes.length - 2}</Text> : null}
         </View>
       ) : null}
+      {a.menuTache ? (
+        <View style={{ width: 44 }}>
+          {droits.modifier ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Actions de « ${t.titre} » (déplacer, convertir, supprimer)`} onPress={() => a.menuTache?.(t)} testID={`ligne-menu-${t.id}`} style={styles.menuLigne}>
+              <Text style={{ color: theme.attenue, fontSize: 18, fontWeight: '800' }}>⋯</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -189,10 +221,14 @@ export function VueListe({ a, taches, groupe, projetId }: { a: Actions; taches: 
   const avecEtiquettes = largeur >= 940;
   const groupes = grouper(a.etat.donnees, taches, groupe, a.etat.aujourdhui, projetId);
   const [replies, setReplies] = useState<Record<string, boolean>>({});
+  const ordre = groupes.flatMap(g => (replies[g.cle] ? [] : g.taches.map(t => t.id)));
+  const modifiables = ordre.filter(id => a.droits(a.etat.donnees.taches[id]?.projetId ?? '').modifier);
+  const toutes = modifiables.length > 0 && modifiables.every(id => a.selection?.ids.includes(id));
   return (
     <View testID="vue-liste" style={{ gap: 14 }} onLayout={e => setLargeur(Math.round(e.nativeEvent.layout.width))}>
       {!compacte ? (
         <View style={[styles.ligne, styles.entete, { borderColor: theme.ligne }]}>
+          {a.selection ? modifiables.length ? <CaseSelection a={a} coche={toutes} onPress={() => a.selection?.tout(modifiables)} libelle={toutes ? 'Tout désélectionner' : 'Tout sélectionner'} testID="choisir-tout" /> : <View style={{ width: 30 }} /> : null}
           <View style={{ width: 30 }} />
           <Text style={[attenueDe(theme), styles.colonneTitre, { flex: 1 }]}>Tâche</Text>
           <Text style={[attenueDe(theme), styles.colonneTitre, { width: COLONNES.statut }]}>Statut</Text>
@@ -200,6 +236,11 @@ export function VueListe({ a, taches, groupe, projetId }: { a: Actions; taches: 
           <Text style={[attenueDe(theme), styles.colonneTitre, { width: COLONNES.echeance }]}>Échéance</Text>
           <Text style={[attenueDe(theme), styles.colonneTitre, { width: COLONNES.assigne }]}>Pour</Text>
           {avecEtiquettes ? <Text style={[attenueDe(theme), styles.colonneTitre, { width: COLONNES.etiquettes }]}>Étiquettes</Text> : null}
+          {a.menuTache ? <View style={{ width: 44 }} /> : null}
+        </View>
+      ) : a.selection && modifiables.length ? (
+        <View style={[styles.meta, { justifyContent: 'flex-end' }]}>
+          <Bouton theme={theme} variante="discret" titre={toutes ? 'Tout désélectionner' : 'Tout sélectionner'} onPress={() => a.selection?.tout(modifiables)} testID="choisir-tout" />
         </View>
       ) : null}
       {groupes.map(g => (
@@ -215,7 +256,7 @@ export function VueListe({ a, taches, groupe, projetId }: { a: Actions; taches: 
           {replies[g.cle] ? null : g.taches.length === 0 ? (
             <Text style={[attenueDe(theme), { paddingVertical: 8, paddingLeft: 36 }]}>Aucune tâche.</Text>
           ) : (
-            g.taches.map(t => <LigneTache key={t.id} a={a} t={t} compacte={compacte} etiquettes={avecEtiquettes} avecProjet={!projetId} />)
+            g.taches.map(t => <LigneTache key={t.id} a={a} t={t} compacte={compacte} etiquettes={avecEtiquettes} avecProjet={!projetId} ordre={ordre} />)
           )}
         </View>
       ))}
@@ -230,7 +271,10 @@ function CarteKanban({ a, t, colonnes, iColonne }: { a: Actions; t: Tache; colon
   const droits = a.droits(t.projetId);
   const ech = libelleEcheance(a, t);
   const ferme = estTerminee(a.etat.donnees, t);
-  const { ref, glisse } = useGlissable({ actif: droits.modifier, onDeposer: zone => zone.startsWith('statut:') && a.versColonne(t, zone.slice(7)) });
+  const { ref, glisse } = useGlissable({
+    actif: droits.modifier,
+    onDeposer: zone => (zone.startsWith('statut:') ? a.versColonne(t, zone.slice(7)) : (zone.startsWith('projet:') || zone.startsWith('liste:')) && a.deposer?.([t.id], zone)),
+  });
   const surTouche = (e: { key: string; shiftKey?: boolean; altKey?: boolean; preventDefault(): void }) => {
     if (!droits.modifier || !(e.shiftKey || e.altKey)) return;
     const pas = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
@@ -574,6 +618,7 @@ export function VueJournee({ a, taches, qui }: { a: Actions; taches: readonly Ta
 
 const styles = StyleSheet.create({
   ligne: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, paddingHorizontal: 6, borderBottomWidth: StyleSheet.hairlineWidth, minHeight: 52 },
+  menuLigne: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   entete: { minHeight: 36, paddingVertical: 4 },
   colonneTitre: { fontWeight: '700', fontSize: 15 },
   ligneMobile: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 10, borderWidth: 1, minHeight: 56 },
