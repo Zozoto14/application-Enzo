@@ -47,6 +47,7 @@ import {
   type Entite,
   type Tache,
 } from './modele';
+import { projetPartage } from './membres';
 import { modeProjet } from './partage';
 
 export type Genre = 'espace' | 'projet' | 'liste' | 'tache';
@@ -80,12 +81,12 @@ export function bilanSuppression(d: DonneesTaches, genre: Genre, id: string): Bi
         projets: projets.length,
         listes: projets.reduce((n, p) => n + listesDe(d, p.id).length, 0),
         taches: projets.reduce((n, p) => n + tachesVivantes(d, p.id).length, 0),
-        partages: projets.filter(p => p.partage !== 'aucun').length,
+        partages: projets.filter(p => projetPartage(d, p)).length,
       };
     }
     case 'projet': {
       const p = d.projets[id];
-      return { projets: 1, listes: listesDe(d, id).length, taches: tachesVivantes(d, id).length, partages: vivant(p) && p.partage !== 'aucun' ? 1 : 0 };
+      return { projets: 1, listes: listesDe(d, id).length, taches: tachesVivantes(d, id).length, partages: vivant(p) && projetPartage(d, p) ? 1 : 0 };
     }
     case 'liste':
       return { projets: 0, listes: 1, taches: tachesVivantes(d).filter(t => t.listeId === id).length, partages: 0 };
@@ -206,7 +207,7 @@ export function supprimerElement(d: DonneesTaches, genre: Genre, id: string, ctx
   if (genre !== 'tache') exigerFondateur(ctx, genre);
   const e = d[COLLECTION[genre]][id];
   if (!vivant(e)) throw new ErreurTaches(`${LIBELLES_GENRE[genre]} introuvable.`);
-  if (genre === 'tache' && ctx.auteur === 'ami' && modeProjet(d, (e as Tache).projetId) !== 'ecriture') throw new ErreurTaches('Ce projet n’est pas partagé en écriture avec vous.');
+  if (genre === 'tache' && ctx.auteur !== 'fondateur' && modeProjet(d, (e as Tache).projetId) !== 'ecriture') throw new ErreurTaches('Ce projet n’est pas partagé en écriture avec vous.');
   const nom = nomDe(d, genre, id);
   const retours: Retour[] = [];
   let x = d;
@@ -390,7 +391,7 @@ export function restaurerElement(d: DonneesTaches, genre: Genre, id: string, ctx
   if (genre !== 'tache') exigerFondateur(ctx, genre);
   const racine = d[COLLECTION[genre]][id] as Entite | undefined;
   if (!racine || !racine.supprime || racine.efface) throw new ErreurTaches('Cet élément n’est plus dans la corbeille.');
-  if (genre === 'tache' && ctx.auteur === 'ami' && modeProjet(d, (racine as Tache).projetId) !== 'ecriture') throw new ErreurTaches('Ce projet n’est pas partagé en écriture avec vous.');
+  if (genre === 'tache' && ctx.auteur !== 'fondateur' && modeProjet(d, (racine as Tache).projetId) !== 'ecriture') throw new ErreurTaches('Ce projet n’est pas partagé en écriture avec vous.');
   const raison = obstacle(d, genre, racine);
   if (raison) throw new ErreurTaches(raison);
   let x = d;

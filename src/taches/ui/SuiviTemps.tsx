@@ -12,7 +12,7 @@ import { teinteTransparente } from '../../hub/themes';
 import { ajouterJours, debutSemaine, jourLisible, lireDateLibre } from '../dates';
 import { NOMS_APPS } from '../integrations/commun';
 import { estTerminee, type Tache } from '../modele';
-import { ajouterTemps, chronoLisible, CHAMP_CHRONO, dureeLisible, exporterTempsCsv, lireDuree, releveHebdo, supprimerTemps, tempsPasse, tempsVivants, type AxeReleve } from '../temps';
+import { ajouterTemps, chronoLisible, chronoDe, dureeLisible, exporterTempsCsv, lireDuree, releveHebdo, supprimerTemps, tempsPasse, tempsVivants, type AxeReleve } from '../temps';
 import type { Actions } from './actions';
 import { attenueDe, Bouton, Champ, Dialogue, Libelle, Puce, texteDe } from './atomes';
 
@@ -32,7 +32,7 @@ export function useSecondes(actif: boolean): number {
 export function SectionTemps({ a, t, onSaisir, onErreur }: { a: Actions; t: Tache; onSaisir(): void; onErreur(e: unknown): void }) {
   const theme = a.theme;
   const m = a.droits(t.projetId).modifier;
-  const debut = t[CHAMP_CHRONO[a.etat.role]];
+  const debut = chronoDe(t, a.etat.moi);
   const maintenant = useSecondes(Boolean(debut));
   const passe = tempsPasse(t);
   const [estimation, setEstimation] = useState(t.estimation ? dureeLisible(t.estimation) : '');

@@ -16,8 +16,30 @@ import { maJournee } from './filtres';
 import { synchroniserLiens } from './integrations/moteur';
 import { ecrireDonnees, lireDonnees, projetsDe, type Auteur, type DonneesTaches } from './modele';
 import { enHeuresCalmes, evaluerNotifications, nomAppareil, prefsDe, type EvenementNotif, type NotifSysteme } from './notifications';
+import { accorderAcces, nomsMembres } from './membres';
+import { aleatoireParDefaut } from '../securite/aleatoire';
 import { CLES_TACHES, lireCopie } from './partage';
 import { lireEtatRappels, type AlerteRappel } from './rappels';
+
+/** Mon code d'auteur sur cet appareil : « fondateur », ou celui que le Fondateur m'a donné (« ami » pour l'ami des V1/V2). */
+export function moiTaches(role: RoleTaches, base: Pick<BasePrefs, 'lire'> | undefined): Auteur {
+  if (role === 'fondateur') return 'fondateur';
+  try {
+    return lireCopie(base?.lire(CLES_TACHES.copie)).moi ?? 'ami';
+  } catch {
+    return 'ami';
+  }
+}
+
+/** Projets personnels d'un membre (sa base). */
+export function lirePerso(base: Pick<BasePrefs, 'lire'> | undefined): DonneesTaches | undefined {
+  try {
+    const brut = base?.lire(CLES_TACHES.perso);
+    return brut ? lireDonnees(brut) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /** Données visibles pour ce rôle : les siennes (Fondateur), la copie partagée (ami). */
 export function donneesPour(role: RoleTaches, base: Pick<BasePrefs, 'lire'> | undefined): DonneesTaches {
@@ -40,9 +62,13 @@ export function infoTaches(contexte: ContexteHub): InfoLive | undefined {
   const role = roleTaches(contexte);
   if (!role || !contexte.baseProfil) return undefined;
   const d = donneesPour(role, contexte.baseProfil);
-  const j = maJournee(d, jourDe(contexte.maintenant ?? Date.now()), role);
+  const jour = jourDe(contexte.maintenant ?? Date.now());
+  const j0 = maJournee(d, jour, moiTaches(role, contexte.baseProfil));
+  const perso = role === 'ami' ? lirePerso(contexte.baseProfil) : undefined;
+  const jp = perso ? maJournee(perso, jour, 'fondateur') : undefined;
+  const j = jp ? { retard: [...j0.retard, ...jp.retard], aujourdhui: [...j0.aujourdhui, ...jp.aujourdhui], choisies: [...j0.choisies, ...jp.choisies], aVenir: [...j0.aVenir, ...jp.aVenir] } : j0;
   const rappels = rappelsNonLus(contexte.baseProfil).length;
-  const projets = projetsDe(d).length;
+  const projets = projetsDe(d).length + (perso ? projetsDe(perso).length : 0);
   const aujourdhui = j.aujourdhui.length + j.choisies.length;
   const sousTitre =
     projets === 0
@@ -101,9 +127,9 @@ export function appareilTaches(base: Pick<BasePrefs, 'lire' | 'ecrire'> | undefi
 /** Prénoms affichés dans les notifications. */
 export function nomsTaches(role: RoleTaches, contexte: Pick<ContexteHub, 'profil' | 'baseProfil'>, d: DonneesTaches): Record<Auteur, string> {
   const moi = contexte.profil?.nom && contexte.profil.nom !== 'Moi' ? contexte.profil.nom : 'Moi';
-  if (role === 'fondateur') return { fondateur: moi, ami: d.reglages.amiNom ?? 'L’ami' };
+  if (role === 'fondateur') return nomsMembres(d, moi);
   const copie = lireCopie(contexte.baseProfil?.lire(CLES_TACHES.copie));
-  return { fondateur: copie.fondateur ?? 'Le Fondateur', ami: copie.ami ?? moi };
+  return { ami: 'L’ami', ...(copie.membres ?? {}), fondateur: copie.fondateur ?? 'Le Fondateur', [copie.moi ?? 'ami']: copie.ami ?? moi };
 }
 
 /** Montre les notifications du système (son selon les réglages). */
@@ -126,6 +152,19 @@ export function verifierRappels(contexte: Pick<ContexteHub, 'profil' | 'admin' |
   const base = contexte.baseProfil;
   if (!role || !base) return [];
   let d = donneesPour(role, base);
+  // L'accès à l'app (Administration) et la liste des membres ne font qu'un : invités ou retirés ici (rien n'est écrit sans changement).
+  const tous = contexte.profils?.tous;
+  if (role === 'fondateur' && tous && tous.length) {
+    try {
+      const x = accorderAcces(d, tous, { maintenant, auteur: 'fondateur', aleaOctets: aleatoireParDefaut });
+      if (x !== d) {
+        d = x;
+        base.ecrire(CLES_TACHES.donnees, ecrireDonnees(d));
+      }
+    } catch {
+      // Réessayé au tour suivant.
+    }
+  }
   if (role === 'fondateur' && (maintenant - derniereSynchroLiens >= INTERVALLE_LIENS_MS || maintenant < derniereSynchroLiens)) {
     derniereSynchroLiens = maintenant;
     try {
@@ -141,14 +180,22 @@ export function verifierRappels(contexte: Pick<ContexteHub, 'profil' | 'admin' |
   }
   const etat = lireEtatRappels(base.lire(CLES_TACHES.rappels));
   const appareil = appareilTaches(base);
-  const r = evaluerNotifications(d, etat, maintenant, role, { appareilId: appareil.id, noms: nomsTaches(role, contexte, d) }, extra);
+  const qui = moiTaches(role, base);
+  let r = evaluerNotifications(d, etat, maintenant, qui, { appareilId: appareil.id, noms: nomsTaches(role, contexte, d) }, extra);
+  // Membre : ses projets personnels aussi (il en est le maître ; SES réglages de notification).
+  const perso = role === 'ami' ? lirePerso(base) : undefined;
+  if (perso && Object.keys(perso.taches).length) {
+    const avecPrefs = { ...perso, reglages: { ...perso.reglages, notifF: d.reglages.notifA } };
+    const r2 = evaluerNotifications(avecPrefs, { ...r.etat, autres: etat.autres ?? {} }, maintenant, 'fondateur', { appareilId: appareil.id, noms: { fondateur: contexte.profil?.nom ?? 'Moi', ami: 'Ami' } });
+    r = { ...r2, pastille: [...r.pastille, ...r2.pastille], systeme: [...r.systeme, ...r2.systeme], etat: { ...r2.etat, autres: { ...(r.etat.autres ?? {}), ...(r2.etat.autres ?? {}) } } };
+  }
   if (r.pastille.length === 0 && r.systeme.length === 0 && JSON.stringify(r.etat) === JSON.stringify(etat)) return [];
   try {
     base.ecrire(CLES_TACHES.rappels, JSON.stringify(r.etat));
   } catch {
     return [];
   }
-  montrer(r.systeme, prefsDe(d, role).son);
+  montrer(r.systeme, prefsDe(d, qui).son);
   return r.pastille;
 }
 
@@ -158,7 +205,7 @@ export function testerNotification(contexte: Pick<ContexteHub, 'profil' | 'admin
   const base = contexte.baseProfil;
   if (!role || !base) return { systeme: false, calme: false, autreAppareil: false };
   const d = donneesPour(role, base);
-  const prefs = prefsDe(d, role);
+  const prefs = prefsDe(d, moiTaches(role, base));
   const etat = lireEtatRappels(base.lire(CLES_TACHES.rappels));
   const alerte: AlerteRappel = { cle: `test|${maintenant}`, tacheId: '', titre: 'Notification de test', texte: 'Les notifications de Tâches fonctionnent sur cet appareil.', date: new Date(maintenant).toISOString(), type: 'test' };
   base.ecrire(CLES_TACHES.rappels, JSON.stringify({ ...etat, nonLus: [...etat.nonLus, alerte].slice(-50) }));

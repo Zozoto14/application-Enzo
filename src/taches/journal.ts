@@ -23,6 +23,7 @@ import {
   horodatage,
   nouvelId,
   statutDe,
+  suffixeAuteur,
   tachesVivantes,
   vivant,
   type Auteur,
@@ -44,7 +45,7 @@ export interface SaisieJournal {
 
 function verifierDroit(d: DonneesTaches, projetId: string, ctx: Contexte) {
   if (!vivant(d.projets[projetId])) throw new ErreurTaches('Projet introuvable.');
-  if (ctx.auteur === 'ami' && modeProjet(d, projetId) !== 'ecriture') throw new ErreurTaches('Ce projet n’est pas partagé en écriture avec vous.');
+  if (ctx.auteur !== 'fondateur' && modeProjet(d, projetId) !== 'ecriture') throw new ErreurTaches('Ce projet n’est pas partagé en écriture avec vous.');
 }
 
 export function ajouterEntree(d: DonneesTaches, s: SaisieJournal, ctx: Contexte): { donnees: DonneesTaches; entree: EntreeJournal } {
@@ -108,7 +109,7 @@ export function propositions(d: DonneesTaches, projetId: string, jour: string, q
     const minutes = tempsVivants(t)
       .filter(e => e.jour === jour && e.auteur === qui)
       .reduce((n, e) => n + e.minutes, 0);
-    const fini = estTerminee(d, t) && t.termineLe && jourDe(Date.parse(t.termineLe)) === jour && (t.h.statut ?? '').endsWith(qui === 'ami' ? '|a' : '|f');
+    const fini = estTerminee(d, t) && t.termineLe && jourDe(Date.parse(t.termineLe)) === jour && (t.h.statut ?? '').endsWith(suffixeAuteur(qui));
     if (!fini && !minutes) continue;
     r.push({ cle: `${t.id}|${jour}`, tacheId: t.id, texte: fini ? `Terminé : ${t.titre}` : `Avancé sur : ${t.titre}`, ...(minutes ? { minutes } : {}) });
   }
@@ -145,9 +146,11 @@ export function debriefing(d: DonneesTaches, projetId: string, du: string, au: s
     .map(t => ({ id: t.id, titre: t.titre, jour: jourDe(Date.parse(t.termineLe!)) }))
     .sort((a, b) => a.jour.localeCompare(b.jour) || a.titre.localeCompare(b.titre));
   const minutesPar: Record<Auteur, number> = { fondateur: 0, ami: 0 };
-  for (const t of taches) for (const e of tempsVivants(t)) if (e.jour >= du && e.jour <= au) minutesPar[e.auteur] += e.minutes;
+  for (const t of taches) for (const e of tempsVivants(t)) if (e.jour >= du && e.jour <= au) minutesPar[e.auteur] = (minutesPar[e.auteur] ?? 0) + e.minutes;
   const parAuteur: Debriefing['parAuteur'] = [];
-  for (const auteur of ['fondateur', 'ami'] as const) {
+  // Le Fondateur, l'ami des V1/V2, puis les membres (V3) dans l'ordre de leur prénom.
+  const autres = [...new Set([...liste.map(e => e.auteur), ...Object.keys(minutesPar)])].filter(x => x !== 'fondateur' && x !== 'ami').sort((a, b) => (noms[a] ?? a).localeCompare(noms[b] ?? b));
+  for (const auteur of ['fondateur', 'ami', ...autres]) {
     const siennes = liste.filter(e => e.auteur === auteur);
     if (!siennes.length && !minutesPar[auteur]) continue;
     const groupes = new Map<string, GroupeDebrief>();
@@ -159,7 +162,7 @@ export function debriefing(d: DonneesTaches, projetId: string, du: string, au: s
     }
     // Les entrées libres d'abord, puis par tâche.
     const tries = [...groupes.entries()].sort(([a], [b]) => (a === '~' ? -1 : b === '~' ? 1 : 0)).map(([, g]) => g);
-    parAuteur.push({ auteur, nom: noms[auteur], minutes: minutesPar[auteur], groupes: tries });
+    parAuteur.push({ auteur, nom: noms[auteur] ?? 'Membre', minutes: minutesPar[auteur] ?? 0, groupes: tries });
   }
   const ouvertes = taches.filter(t => !estTerminee(d, t) && !t.parentId);
   const retard = ouvertes.filter(t => t.echeance && t.echeance.jour < au).sort((a, b) => a.echeance!.jour.localeCompare(b.echeance!.jour));
@@ -172,7 +175,7 @@ export function debriefing(d: DonneesTaches, projetId: string, du: string, au: s
     du,
     au,
     terminees,
-    minutes: minutesPar.fondateur + minutesPar.ami,
+    minutes: Object.values(minutesPar).reduce((n, m) => n + m, 0),
     nbEntrees: liste.length,
     parAuteur,
     reste: { retard, attente, aVenir, ouvertes: ouvertes.length },

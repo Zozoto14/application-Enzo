@@ -10,6 +10,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { teinteTransparente } from '../../hub/themes';
 import { bilanSuppression, ciblesDeplacement, DUREE_CORBEILLE_JOURS, elementsCorbeille, LIBELLES_GENRE, texteContenu, type ElementCorbeille, type Genre } from '../corbeille';
 import { COLLECTION } from '../corbeille';
+import { membresDuProjet } from '../membres';
 import { listesDe, vivant, type Entite } from '../modele';
 import type { Actions } from './actions';
 import { attenueDe, Bouton, Dialogue, Libelle, Options, texteDe } from './atomes';
@@ -66,6 +67,10 @@ export function DialogueSuppression({ a, genre, id, onFermer, onConfirmer }: { a
   const cibles = ciblesDeplacement(d, genre, id);
   const bilan = bilanSuppression(d, genre, id);
   const contenu = texteContenu(bilan, genre);
+  // Membres qui voient les projets supprimés (V3 : plusieurs ; l'ami des V1/V2 compris).
+  const projetsTouches = genre === 'projet' ? [id] : genre === 'espace' ? Object.values(d.projets).filter(p => vivant(p) && p.espaceId === id).map(p => p.id) : [];
+  const nomsTouches = [...new Set(projetsTouches.flatMap(pid => membresDuProjet(d, pid).map(m => m.nom)))];
+  const avecQui = nomsTouches.length > 1 ? `${nomsTouches.slice(0, -1).join(', ')} et ${nomsTouches.at(-1)}` : (nomsTouches[0] ?? '');
   const aDuContenu = genre !== 'tache' && contenu !== 'vide';
   const [mode, setMode] = useState<'corbeille' | 'deplacer'>('corbeille');
   const [cible, setCible] = useState<string | undefined>(cibles[0]?.id);
@@ -111,9 +116,9 @@ export function DialogueSuppression({ a, genre, id, onFermer, onConfirmer }: { a
           {genre === 'tache' ? (contenu === 'vide' ? 'La tâche' : `La tâche et ${contenu}`) : `Contenu : ${contenu}.`} {genre === 'tache' ? 'ira' : 'Tout ira'} à la corbeille {DUREE_CORBEILLE_JOURS} jours : « Annuler » pendant 10 s, puis restauration possible depuis la corbeille.
         </Text>
       )}
-      {bilan.partages > 0 && a.etat.donnees.reglages.amiNom ? (
+      {bilan.partages > 0 && avecQui ? (
         <Text style={[texteDe(theme), { color: theme.alerte }]} testID="suppression-partage">
-          {bilan.partages > 1 ? `${bilan.partages} projets sont partagés` : 'Un projet est partagé'} avec {a.etat.donnees.reglages.amiNom} : {bilan.partages > 1 ? 'ils disparaîtront' : 'il disparaîtra'} aussi chez {a.etat.donnees.reglages.amiNom}
+          {bilan.partages > 1 ? `${bilan.partages} projets sont partagés` : 'Un projet est partagé'} avec {avecQui} : {bilan.partages > 1 ? 'ils disparaîtront' : 'il disparaîtra'} aussi chez {nomsTouches.length > 1 ? 'eux' : avecQui}
           {mode === 'deplacer' && genre === 'espace' ? ' (sauf si vous déplacez les projets, qui restent partagés)' : ''}.
         </Text>
       ) : null}

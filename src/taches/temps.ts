@@ -31,7 +31,10 @@ import {
   type Tache,
 } from './modele';
 
-export const CHAMP_CHRONO: Record<Auteur, 'chronoF' | 'chronoA'> = { fondateur: 'chronoF', ami: 'chronoA' };
+/** Champ du minuteur de chacun : `chronoF` (Fondateur), `chronoA` (ami des V1/V2), `chrono_<identifiant>` (membre V3). */
+export const champChrono = (qui: Auteur): string => (qui === 'fondateur' ? 'chronoF' : qui === 'ami' ? 'chronoA' : `chrono_${qui}`);
+/** Début du minuteur de `qui` sur cette tâche (ISO), s'il tourne. */
+export const chronoDe = (t: Tache, qui: Auteur): string | undefined => (t as unknown as Record<string, string | undefined>)[champChrono(qui)];
 /** Moins de 30 s au minuteur : rien n'est noté (démarrage par erreur). */
 export const SEUIL_MINUTEUR_MS = 30_000;
 /** Un minuteur oublié ne compte pas plus de 12 h d'affilée. */
@@ -69,10 +72,9 @@ export function lireDuree(texte: string): number | undefined {
 
 /** Tâche dont le minuteur de `qui` tourne (la plus récente si deux appareils en ont lancé chacun un). */
 export function minuteurActif(d: DonneesTaches, qui: Auteur): { tache: Tache; debut: number } | undefined {
-  const champ = CHAMP_CHRONO[qui];
   let r: { tache: Tache; debut: number } | undefined;
   for (const t of tachesVivantes(d)) {
-    const v = t[champ];
+    const v = chronoDe(t, qui);
     if (!v) continue;
     const debut = Date.parse(v);
     if (!r || debut > r.debut) r = { tache: t, debut };
@@ -108,8 +110,8 @@ function nouvelleEntree(ctx: Contexte, jour: string, minutes: number, debut?: st
 /** Arrête le minuteur de l'auteur sur cette tâche et note le temps (au moins 1 min, rien sous 30 s). */
 export function arreterMinuteur(d: DonneesTaches, tacheId: string, ctx: Contexte): { donnees: DonneesTaches; minutes: number } {
   const t = d.taches[tacheId];
-  const champ = CHAMP_CHRONO[ctx.auteur];
-  const debutIso = t?.[champ];
+  const champ = champChrono(ctx.auteur);
+  const debutIso = t ? chronoDe(t, ctx.auteur) : undefined;
   if (!t || !debutIso) return { donnees: d, minutes: 0 };
   const debut = Date.parse(debutIso);
   const duree = Math.min(MAX_MINUTEUR_MS, Math.max(0, ctx.maintenant - debut));
@@ -123,16 +125,16 @@ export function arreterMinuteur(d: DonneesTaches, tacheId: string, ctx: Contexte
 export function demarrerMinuteur(d: DonneesTaches, tacheId: string, ctx: Contexte): { donnees: DonneesTaches; arrete?: { tache: Tache; minutes: number } } {
   const t = d.taches[tacheId];
   if (!vivant(t)) throw new ErreurTaches('Tâche introuvable.');
-  const champ = CHAMP_CHRONO[ctx.auteur];
+  const champ = champChrono(ctx.auteur);
   let x = d;
   let arrete: { tache: Tache; minutes: number } | undefined;
   for (const autre of Object.values(d.taches)) {
-    if (autre.id === tacheId || !autre[champ]) continue;
+    if (autre.id === tacheId || !chronoDe(autre, ctx.auteur)) continue;
     const r = arreterMinuteur(x, autre.id, ctx);
     x = r.donnees;
     if (vivant(autre)) arrete = { tache: autre, minutes: r.minutes };
   }
-  if (x.taches[tacheId][champ]) return { donnees: x, ...(arrete ? { arrete } : {}) };
+  if (chronoDe(x.taches[tacheId], ctx.auteur)) return { donnees: x, ...(arrete ? { arrete } : {}) };
   return { donnees: changerTache(x, x.taches[tacheId], { [champ]: new Date(ctx.maintenant).toISOString() }, ctx), ...(arrete ? { arrete } : {}) };
 }
 

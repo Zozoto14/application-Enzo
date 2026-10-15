@@ -57,7 +57,7 @@ function avecDemo(): { b: ReturnType<typeof base>; projetId: string } {
 
 describe('Tâches : écran', () => {
   it('garde : un compte sans accès ne voit rien', async () => {
-    await monter({ profil: hugo, baseProfil: base(), maintenant: T });
+    await monter({ profil: { ...hugo, apps: [] }, baseProfil: base(), maintenant: T });
     expect(screen.getByTestId('taches-refuse')).toBeTruthy();
     expect(screen.queryByTestId('ajout-rapide')).toBeNull();
   });
@@ -296,16 +296,21 @@ describe('Tâches : écran', () => {
 });
 
 describe('Tâches dans le hub', () => {
-  it('tuile : Fondateur oui, ami désigné oui, autre ami non ; pas de case dans l’Administration', async () => {
+  it('tuile : Fondateur oui, profil qui a l’app oui (V3 : ouverte par l’Administration), sans l’app non', async () => {
     const copie = JSON.stringify({ ...copieVide(), cle: 'ab'.repeat(32) });
     expect(appsVisibles([APP_TACHES], ctxF(base())).map(a => a.id)).toEqual(['taches']);
     expect(appsVisibles([APP_TACHES], { profil: lea, baseProfil: base({ [CLES_TACHES.copie]: copie }) })).toHaveLength(1);
-    expect(appsVisibles([APP_TACHES], { profil: hugo, baseProfil: base() })).toHaveLength(0);
+    expect(appsVisibles([APP_TACHES], { profil: hugo, baseProfil: base() })).toHaveLength(1);
     expect(appsVisibles([APP_TACHES], { profil: { ...hugo, apps: [] }, baseProfil: base({ [CLES_TACHES.copie]: copie }) })).toHaveLength(0);
-    expect(appsAttribuables(REGISTRE).some(a => a.id === 'taches')).toBe(false);
+    expect(appsAttribuables(REGISTRE).some(a => a.id === 'taches')).toBe(true);
     expect(APP_TACHES.page).toBe('publique');
   });
   it('devblog : la nouveauté Tâches pour le Fondateur et l’ami concerné seulement', async () => {
+    const v3 = ENTREES.find(e => e.version === '2026.10.28')!;
+    expect(ENTREES[1]).toBe(v3);
+    expect(fonctionnalitesPour(v3, true).map(f => f.id)).toEqual(['taches-membres', 'taches-mentions', 'taches-gantt', 'taches-tableau', 'taches-objectifs', 'taches-ia-github']);
+    expect(fonctionnalitesPour(v3, false, false, ['taches']).map(f => f.id)).toEqual(['taches-membres-ami', 'taches-mentions', 'taches-gantt', 'taches-tableau']);
+    expect(fonctionnalitesPour(v3, false, false, ['tsuzuku'])).toEqual([]);
     const v2 = ENTREES.find(e => e.version === '2026.10.25')!;
     expect(v2.version).toBe('2026.10.25');
     expect(fonctionnalitesPour(v2, true).map(f => f.id)).toEqual(['taches-temps', 'taches-notifications', 'taches-journal', 'taches-projets', 'taches-liens', 'taches-corbeille']);

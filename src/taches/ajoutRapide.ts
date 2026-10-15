@@ -22,6 +22,8 @@ export interface AjoutLu {
   etiquettes: string[];
   priorite?: Priorite;
   assigne?: Auteur;
+  /** Toutes les personnes nommées (« @Léa @Hugo »). */
+  assignes?: Auteur[];
   recurrence?: Recurrence;
   /** Morceaux reconnus, pour l'aperçu (« demain », « #prospects »…). */
   reconnus: string[];
@@ -42,6 +44,8 @@ export interface OptionsAjout {
   noms?: Partial<Record<Auteur, string>>;
   /** L'ami existe-t-il (sinon `@ami` reste dans le titre) ? */
   avecAmi?: boolean;
+  /** V3 : à qui « @ami » renvoie quand il n'y a pas d'ami des V1/V2 (le seul membre, ou soi-même chez un membre). */
+  amiParDefaut?: Auteur;
 }
 
 function lireRecurrenceEcrite(mots: string[], aujourdhui: string): { recurrence: Recurrence; debut: number; fin: number } | undefined {
@@ -83,10 +87,19 @@ export function lireAjoutRapide(ligne: string, o: OptionsAjout): AjoutLu {
   const reconnus: string[] = [];
   const etiquettes: string[] = [];
   let priorite: Priorite | undefined;
-  let assigne: Auteur | undefined;
+  const assignes: Auteur[] = [];
   const restants: string[] = [];
   const nomAmi = o.noms?.ami ? sansAccents(o.noms.ami) : undefined;
   const nomFondateur = o.noms?.fondateur ? sansAccents(o.noms.fondateur) : undefined;
+  // Membres (V3) : « @Léa » ou « @lea-martin » (prénom, ou nom entier sans espaces).
+  const parNom = new Map<string, Auteur>();
+  for (const [code, nom] of Object.entries(o.noms ?? {})) {
+    if (!nom || code === 'fondateur' || code === 'ami') continue;
+    const n = sansAccents(nom);
+    parNom.set(n.replace(/\s+/g, '-'), code);
+    parNom.set(n.replace(/\s+/g, ''), code);
+    if (!parNom.has(n.split(/\s+/)[0])) parNom.set(n.split(/\s+/)[0], code);
+  }
   for (const mot of ligne.split(/\s+/).filter(Boolean)) {
     if (/^#[^\s#]+$/.test(mot)) {
       const e = normaliserEtiquette(mot);
@@ -109,11 +122,13 @@ export function lireAjoutRapide(ligne: string, o: OptionsAjout): AjoutLu {
       let a: Auteur | undefined;
       if (qui === 'moi') a = o.auteur;
       else if (qui === 'ami' && o.avecAmi !== false) a = 'ami';
+      else if (qui === 'ami' && o.amiParDefaut) a = o.amiParDefaut;
       else if (nomAmi && qui === nomAmi) a = 'ami';
       else if (nomFondateur && qui === nomFondateur) a = 'fondateur';
       else if (qui === 'fondateur') a = 'fondateur';
+      else if (parNom.has(qui)) a = parNom.get(qui);
       if (a) {
-        assigne = a;
+        if (!assignes.includes(a)) assignes.push(a);
         reconnus.push(mot);
         continue;
       }
@@ -152,7 +167,7 @@ export function lireAjoutRapide(ligne: string, o: OptionsAjout): AjoutLu {
     ...(echeance ? { echeance } : {}),
     etiquettes,
     ...(priorite ? { priorite } : {}),
-    ...(assigne ? { assigne } : {}),
+    ...(assignes.length ? { assigne: assignes[0], assignes } : {}),
     ...(recurrence ? { recurrence } : {}),
     reconnus,
   };

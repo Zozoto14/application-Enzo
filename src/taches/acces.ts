@@ -14,23 +14,27 @@
 import { rangDe } from '../hub/admin/roles';
 import type { ContexteHub } from '../hub/types';
 import type { Auteur, DonneesTaches, ModePartage } from './modele';
+export type { Auteur };
 import { CLES_TACHES, lireCopie, modeProjet } from './partage';
 import type { BasePrefs } from '../tsuzuku/plateforme/stockage';
 
 export const ID_TACHES = 'taches';
 
-export type RoleTaches = Auteur;
+/** Rôle sur cet appareil : le Fondateur, ou un membre (« ami » : l'ami des V1/V2 comme les membres V3). */
+export type RoleTaches = 'fondateur' | 'ami';
 
 /**
- * Rôle du compte ouvert. L'ami doit avoir l'accès `taches` (donné par le
- * Fondateur en le choisissant) ET avoir reçu le dépôt scellé pour lui (qui
- * porte la clé de partage) : un compte à qui l'accès aurait été donné
- * autrement, ou un ancien ami (dépôt retiré), ne voit rien.
+ * Rôle du compte ouvert. Un membre a l'accès `taches` (donné par le
+ * Fondateur dans l'Administration ou par une invitation dans Tâches) : il
+ * voit les projets que le dépôt scellé pour lui contient (aucun tant que rien
+ * n'est partagé). Accès fermé : plus de tuile, et le Fondateur le retire des
+ * membres (clés tournées, dépôt effacé).
  */
 export function roleTaches(contexte: Pick<ContexteHub, 'profil' | 'admin' | 'baseProfil'>): RoleTaches | undefined {
   const profil = contexte.profil;
   if (contexte.admin && rangDe(profil) === 'fondateur' && (!profil || profil.admin)) return 'fondateur';
-  if (profil && !profil.admin && profil.actif !== false && (profil.apps ?? []).includes(ID_TACHES) && amiDesigne(contexte.baseProfil)) return 'ami';
+  // V3 : l'accès à l'app (Administration, ou invitation depuis Tâches) suffit — sans projet partagé, un état vide.
+  if (profil && !profil.admin && profil.actif !== false && (profil.apps ?? []).includes(ID_TACHES)) return 'ami';
   return undefined;
 }
 
@@ -50,17 +54,20 @@ export interface Droits {
   voir: boolean;
   /** Créer, modifier, terminer, commenter des tâches. */
   modifier: boolean;
-  /** Listes, statuts, partage, renommage, suppression du projet. */
+  /** Listes, statuts, paramètres du projet (le Fondateur, ou un membre admin du projet). */
   gerer: boolean;
+  /** Partage du projet (le Fondateur seul). */
+  partager: boolean;
   supprimerProjet: boolean;
   mode: ModePartage | 'proprietaire';
 }
 
-export function droitsProjet(role: RoleTaches | undefined, d: DonneesTaches, projetId: string): Droits {
-  if (role === 'fondateur') return { voir: Boolean(d.projets[projetId]), modifier: true, gerer: true, supprimerProjet: true, mode: 'proprietaire' };
+export function droitsProjet(role: RoleTaches | undefined, d: DonneesTaches, projetId: string, moi: Auteur = 'ami'): Droits {
+  if (role === 'fondateur') return { voir: Boolean(d.projets[projetId]), modifier: true, gerer: true, partager: true, supprimerProjet: true, mode: 'proprietaire' };
   if (role === 'ami') {
     const mode = modeProjet(d, projetId);
-    return { voir: mode !== 'aucun', modifier: mode === 'ecriture', gerer: false, supprimerProjet: false, mode };
+    const admin = mode === 'ecriture' && d.projets[projetId]?.acces?.[moi] === 'admin';
+    return { voir: mode !== 'aucun', modifier: mode === 'ecriture', gerer: admin, partager: false, supprimerProjet: false, mode };
   }
-  return { voir: false, modifier: false, gerer: false, supprimerProjet: false, mode: 'aucun' };
+  return { voir: false, modifier: false, gerer: false, partager: false, supprimerProjet: false, mode: 'aucun' };
 }

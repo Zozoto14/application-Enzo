@@ -173,6 +173,20 @@ async function identiteSiDemandee(page) {
   }
   throw new Error('vérification d’identité impossible');
 }
+/** V3 : invite le compte s'il ne l'est pas, puis lui donne ce droit sur le projet (👥 › Membres). */
+async function partager(page, compte, projetId, droit) {
+  await page.getByTestId('taches-reglages').click();
+  await page.getByTestId('reglages-membres').click();
+  await page.getByTestId('dialogue-membres').first().waitFor({ timeout: 10_000 });
+  if (await page.getByTestId(`membre-inviter-${compte}`).count()) {
+    await page.getByTestId(`membre-inviter-${compte}`).click();
+    await page.getByTestId(`membre-${compte}`).waitFor({ timeout: 10_000 });
+  }
+  if (!(await page.getByTestId(`droit-${projetId}-${compte}-${droit}`).count())) await page.getByTestId(`membre-droits-${compte}`).click();
+  await page.getByTestId(`droit-${projetId}-${compte}-${droit}`).click();
+  await page.keyboard.press('Escape');
+}
+
 async function creerAmi(page, nom) {
   await page.getByTestId('admin-onglet-utilisateurs').click();
   await page.getByTestId('admin-nouveau').click();
@@ -351,10 +365,7 @@ try {
   await pc.getByTestId('projet-nom').fill('Site web');
   await pc.getByTestId('projet-enregistrer').click();
   const idSite = await idProjet(pc, 'Site web');
-  await pc.getByTestId('taches-reglages').click();
-  await pc.getByTestId(`reglages-ami-${lea.id}`).click();
-  await pc.getByTestId(`partage-${idSite}-ecriture`).click();
-  await fermer(pc);
+  await partager(pc, lea.id, idSite, 'ecriture');
   await pc.getByTestId(`nav-projet-${idSite}`).click();
   await ajoutRapide(pc, 'Maquette #design');
   await ajoutRapide(pc, 'Rédiger la FAQ #redaction');
@@ -617,6 +628,18 @@ try {
   }, 150_000, 4000);
   verifier(tuileLea, 'Léa voit la tuile Tâches');
   await ouvrirTaches(ipad);
+  // V3 : la tuile est là dès l'accès (modèle « Ami ») ; le projet arrive avec le dépôt suivant.
+  const recu = await attendre(async () => (await relancer(ipad), await relancer(pc), await pause(1500), (await ipad.getByTestId(`nav-projet-${idSite}`).count()) > 0), 180_000, 4000);
+  if (!recu) {
+    await ouvrirTaches(pc).catch(() => undefined);
+    await pc.getByTestId('taches-reglages').click().catch(() => undefined);
+    await pc.getByTestId('reglages-membres').click().catch(() => undefined);
+    await pc.getByTestId(`membre-droits-${lea.id}`).click().catch(() => undefined);
+    log('membres chez le Fondateur :', (await pc.getByTestId('dialogue-membres').first().innerText().catch(e => e.message)).replace(/\s+/g, ' ').slice(0, 600));
+    log('Léa :', (await ipad.locator('body').innerText()).replace(/\s+/g, ' ').slice(0, 300));
+    await pc.keyboard.press('Escape');
+  }
+  verifier(recu, 'Léa reçoit « Site web »');
   await ipad.getByTestId(`nav-projet-${idSite}`).click();
   const vueLea = await texteDe(ipad, 'app-taches');
   verifier(/Maquette/.test(vueLea) && !/Paul Relance|Prospects|Claude Office|Corrige le test|Applications/.test(vueLea), 'Léa : le projet partagé, rien des autres apps');

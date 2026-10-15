@@ -14,7 +14,6 @@ import { teinteTransparente } from '../../hub/themes';
 import { decrireRecurrence } from '../recurrence';
 import { libelleDelai } from '../rappels';
 import {
-  ajouterCommentaire,
   ajouterElement,
   changerElement,
   commentairesDe,
@@ -35,6 +34,7 @@ import type { Actions } from './actions';
 import { attenueDe, Avatar, Bouton, CaseRonde, Champ, Libelle, PastillePriorite, Puce, T, texteDe, titreDe } from './atomes';
 import { couleurAuteur } from './Vues';
 import { SectionLiens, SectionTemps } from './SuiviTemps';
+import { BoutonsIA, ChampCommentaire, ListeAssignes, personnesPour, SectionChronologie, SectionGithub, TexteMentions } from './DetailV3';
 
 export interface PropsDetail {
   a: Actions;
@@ -51,6 +51,8 @@ export interface PropsDetail {
   /** Ouvre l'Historique de Claude Office filtré sur la session (absent : pas de lien cliquable). */
   onOuvrirSession?(session: string): void;
   onOuvrirApp?(id: string): void;
+  /** Choisir une tâche dont celle-ci dépend. */
+  onDependance?(t: Tache): void;
 }
 
 function Propriete({ a, libelle, children, onPress, testID, desactive }: { a: Actions; libelle: string; children: React.ReactNode; onPress?(): void; testID?: string; desactive?: boolean }) {
@@ -100,7 +102,7 @@ function TexteAvecLiens({ a, texte }: { a: Actions; texte: string }) {
   );
 }
 
-export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe, onErreur, onSaisirTemps, onJournal, onOuvrirSession, onOuvrirApp }: PropsDetail) {
+export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe, onErreur, onAvis, onSaisirTemps, onJournal, onOuvrirSession, onOuvrirApp, onDependance }: PropsDetail) {
   const theme = a.theme;
   const d = a.etat.donnees;
   const t = d.taches[id];
@@ -110,7 +112,6 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
   const [etiquette, setEtiquette] = useState('');
   const [element, setElement] = useState('');
   const [sousTache, setSousTache] = useState('');
-  const [commentaire, setCommentaire] = useState('');
   const [historique, setHistorique] = useState(false);
   const [confirmer, setConfirmer] = useState(false);
   // Nouvelle tâche ouverte, ou modifiée ailleurs (synchronisation) : les champs suivent.
@@ -211,14 +212,7 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
             <Text style={texteDe(theme)}>{ech}</Text>
           </Propriete>
           <Propriete a={a} libelle="Pour" onPress={m ? () => a.menuAssigne(t) : undefined} testID="detail-assigne">
-            {t.assigne ? (
-              <View style={styles.rangee}>
-                <Avatar theme={theme} nom={a.etat.noms[t.assigne]} couleur={couleurAuteur(a, t.assigne)} />
-                <Text style={texteDe(theme)}>{a.etat.noms[t.assigne]}{t.assigne === a.etat.role ? ' (moi)' : ''}</Text>
-              </View>
-            ) : (
-              <Text style={attenueDe(theme)}>Personne</Text>
-            )}
+            <ListeAssignes a={a} t={t} />
           </Propriete>
           <Propriete a={a} libelle="Récurrence" onPress={m ? () => onRecurrence(t) : undefined} testID="detail-recurrence">
             <Text style={texteDe(theme)}>{decrireRecurrence(t.recurrence)}</Text>
@@ -237,6 +231,8 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
         <SectionTemps a={a} t={t} onSaisir={() => onSaisirTemps(t)} onErreur={onErreur} />
         {m && !d.projets[t.projetId]?.auto ? <Bouton theme={theme} titre="📓 Noter dans le journal du jour" onPress={() => onJournal(t)} testID="detail-journal" style={{ alignSelf: 'flex-start' }} /> : null}
         <SectionLiens a={a} t={t} onOuvrirSession={s => onOuvrirSession?.(s)} onOuvrirApp={onOuvrirApp} />
+        <SectionChronologie a={a} t={t} onAjouterDependance={() => onDependance?.(t)} onErreur={onErreur} onAvis={onAvis} />
+        <SectionGithub a={a} t={t} onErreur={onErreur} />
 
         <View style={styles.section}>
           <Libelle theme={theme}>ÉTIQUETTES</Libelle>
@@ -279,6 +275,7 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
         {!t.parentId ? (
           <View style={styles.section}>
             <Libelle theme={theme}>{`SOUS-TÂCHES${st.length ? ` · ${st.filter(s => estTerminee(d, s)).length}/${st.length}` : ''}`}</Libelle>
+            <BoutonsIA a={a} t={t} />
             {st.map(s => (
               <View key={s.id} style={styles.rangee}>
                 <CaseRonde theme={theme} coche={estTerminee(d, s)} desactive={!m} onPress={() => a.basculer(s.id)} libelle={`Terminer « ${s.titre} »`} testID={`sous-tache-case-${s.id}`} />
@@ -347,35 +344,18 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
           {commentaires.map(c => (
             <View key={c.id} style={[styles.commentaire, { backgroundColor: teinteTransparente(couleurAuteur(a, c.auteur), 0.1), borderRadius: 10 }]} testID={`commentaire-${c.id}`}>
               <View style={styles.rangee}>
-                <Avatar theme={theme} nom={a.etat.noms[c.auteur]} couleur={couleurAuteur(a, c.auteur)} taille={24} />
-                <Text style={[texteDe(theme), { fontWeight: '700' }]}>{a.etat.noms[c.auteur]}</Text>
+                <Avatar theme={theme} nom={a.etat.noms[c.auteur] ?? 'Membre'} couleur={couleurAuteur(a, c.auteur)} taille={24} />
+                <Text style={[texteDe(theme), { fontWeight: '700' }]}>{a.etat.noms[c.auteur] ?? 'Membre'}</Text>
                 <Text style={[attenueDe(theme), { flex: 1 }]}>{new Date(c.date).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</Text>
-                {m && (c.auteur === a.etat.role || a.etat.role === 'fondateur') ? (
+                {m && (c.auteur === a.etat.moi || a.etat.role === 'fondateur') ? (
                   <Bouton theme={theme} variante="discret" compact titre="✕" libelle="Supprimer le commentaire" onPress={() => essayer(() => a.etat.maj((x, ctx) => supprimerCommentaire(x, t.id, c.id, ctx)))} />
                 ) : null}
               </View>
-              <TexteAvecLiens a={a} texte={c.texte} />
+              {c.mentions?.length ? <TexteMentions a={a} texte={c.texte} personnes={personnesPour(a, t.projetId)} /> : <TexteAvecLiens a={a} texte={c.texte} />}
             </View>
           ))}
           {m ? (
-            <View style={{ gap: 8 }}>
-              <Champ theme={theme} mobile={a.mobile} multiline value={commentaire} onChangeText={setCommentaire} placeholder="Écrire un commentaire…" testID="detail-commentaire-champ" accessibilityLabel="Nouveau commentaire" style={{ minHeight: 64 }} />
-              <Bouton
-                theme={theme}
-                compact
-                variante="plein"
-                titre="Publier"
-                desactive={!commentaire.trim()}
-                onPress={() =>
-                  essayer(() => {
-                    a.etat.maj((x, ctx) => ajouterCommentaire(x, t.id, commentaire, ctx));
-                    setCommentaire('');
-                  })
-                }
-                testID="detail-commentaire-publier"
-                style={{ alignSelf: 'flex-start' }}
-              />
-            </View>
+            <ChampCommentaire a={a} t={t} onErreur={onErreur} />
           ) : null}
         </View>
 
@@ -387,7 +367,7 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
             ? [...t.historique].reverse().map(e => (
                 <View key={e.id} style={{ gap: 2 }}>
                   <Text style={texteDe(theme, T.petit)}>
-                    <Text style={{ fontWeight: '700' }}>{a.etat.noms[e.auteur]}</Text> · {e.texte}
+                    <Text style={{ fontWeight: '700' }}>{a.etat.noms[e.auteur] ?? 'Membre'}</Text> · {e.texte}
                   </Text>
                   <Text style={attenueDe(theme)}>
                     {new Date(e.date).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
@@ -425,7 +405,7 @@ export function DetailTache({ a, id, onFermer, onRecurrence, onRappels, onListe,
           </View>
         ) : null}
         <Text style={[attenueDe(theme), { marginTop: 4 }]}>
-          Créée par {a.etat.noms[t.creePar]} le {new Date(t.creeLe).toLocaleDateString('fr-FR')} · {LIBELLES_PRIORITE[t.priorite].toLowerCase()}
+          Créée par {a.etat.noms[t.creePar] ?? 'un membre'} le {new Date(t.creeLe).toLocaleDateString('fr-FR')} · {LIBELLES_PRIORITE[t.priorite].toLowerCase()}
         </Text>
       </ScrollView>
     </View>

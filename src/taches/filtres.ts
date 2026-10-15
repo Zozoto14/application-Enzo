@@ -5,6 +5,8 @@
 
 import { ajouterJours, debutSemaine, ecartJours, instantDe, sansAccents } from './dates';
 import {
+  assignesDe,
+  type Auteur,
   LIBELLES_PRIORITE,
   PRIORITES,
   RANG_PRIORITE,
@@ -35,8 +37,8 @@ export function filtrer(d: DonneesTaches, taches: readonly Tache[], f: Filtres, 
     if (f.statuts.length && !f.statuts.includes(t.statut)) return false;
     if (f.priorites.length && !f.priorites.includes(t.priorite)) return false;
     if (f.etiquettes.length && !f.etiquettes.some(e => t.etiquettes.includes(e))) return false;
-    if (f.assigne === 'personne' && t.assigne) return false;
-    if ((f.assigne === 'fondateur' || f.assigne === 'ami') && t.assigne !== f.assigne) return false;
+    if (f.assigne === 'personne' && assignesDe(t).length) return false;
+    if (f.assigne !== 'personne' && f.assigne !== 'tous' && !assignesDe(t).includes(f.assigne)) return false;
     const jour = t.echeance?.jour;
     switch (f.echeance) {
       case 'retard':
@@ -145,9 +147,9 @@ export interface Journee {
  * sur 7 jours. Chaque tâche n'apparaît qu'une fois ; seules les tâches
  * ouvertes, assignées à `qui` ou à personne.
  */
-export function maJournee(d: DonneesTaches, aujourdhui: string, qui?: 'fondateur' | 'ami', taches: readonly Tache[] = tachesVivantes(d)): Journee {
+export function maJournee(d: DonneesTaches, aujourdhui: string, qui?: Auteur, taches: readonly Tache[] = tachesVivantes(d)): Journee {
   const fin = ajouterJours(aujourdhui, 7);
-  const ouvertes = taches.filter(t => !estTerminee(d, t) && (!qui || !t.assigne || t.assigne === qui));
+  const ouvertes = taches.filter(t => !estTerminee(d, t) && (!qui || !assignesDe(t).length || assignesDe(t).includes(qui)));
   const tri = (l: Tache[]) => trier(d, l, 'echeance');
   const vus = new Set<string>();
   const prendre = (l: Tache[]) => {

@@ -17,7 +17,6 @@ import {
   modifierEspace,
   creerListe,
   etiquettesUtilisees,
-  LIBELLES_PARTAGE,
   LIBELLES_PRIORITE,
   listesDe,
   modifierListe,
@@ -33,7 +32,6 @@ import {
   type Filtres,
   type FiltreEcheance,
   type Groupe,
-  type ModePartage,
   type Recurrence,
   type Statut,
   type Tache,
@@ -44,6 +42,8 @@ import { LIBELLES_OUVERTURE, type Ouverture } from './ouverture';
 import { prefsDe } from '../notifications';
 import type { Actions } from './actions';
 import { attenueDe, Bouton, Champ, Dialogue, Libelle, Options, Puce, texteDe } from './atomes';
+import { droitDe, listeMembres, projetPartage } from '../membres';
+import { PartageProjet, ResumePartageMembre } from './Membres';
 
 type Fermer = () => void;
 
@@ -315,7 +315,7 @@ export function DialogueFiltres({
           [
             ['tous', 'Tout le monde'],
             ['fondateur', a.etat.noms.fondateur],
-            ['ami', a.etat.noms.ami],
+            ...Object.entries(a.etat.noms).filter(([c]) => c !== 'fondateur' && (c !== 'ami' || a.etat.moi === 'ami' || Boolean(a.etat.donnees.reglages.ami) || Boolean(a.etat.copie?.membres?.ami))),
             ['personne', 'Personne'],
           ] as Array<[Filtres['assigne'], string]>
         ).map(([v, l]) => (
@@ -374,19 +374,26 @@ export function DialogueFiltres({
 
 export function DialogueReglages({
   a,
-  amis,
+  amis: _amis,
   onFermer,
   onDemo,
   onRetirerDemo,
-  onErreur,
+  onErreur: _onErreur,
   onNotifications,
   onLiens,
   onReleve,
   ouverture,
   onOuverture,
+  onMembres,
+  onAides,
+  onParametres,
 }: {
   a: Actions;
   amis: ReadonlyArray<{ id: string; nom: string }>;
+  onMembres(): void;
+  onAides(): void;
+  /** Ouvre Paramètres › Tâches (les mêmes réglages, dans la page Paramètres du hub). */
+  onParametres?(): void;
   onFermer: Fermer;
   onDemo(): void;
   onRetirerDemo(): void;
@@ -399,12 +406,12 @@ export function DialogueReglages({
 }) {
   const theme = a.theme;
   const d = a.etat.donnees;
-  const profils = amis;
-  const [enCours, setEnCours] = useState(false);
   const raccourcis = (
     <View style={styles.rangee}>
       <Bouton theme={theme} titre="🔔 Notifications…" onPress={onNotifications} testID="reglages-notifications" />
-      {a.etat.role === 'fondateur' ? <Bouton theme={theme} titre="🔗 Liens avec les autres apps…" onPress={onLiens} testID="reglages-liens" /> : null}
+      {a.etat.role === 'fondateur' && !a.etat.perso ? <Bouton theme={theme} titre="🔗 Liens avec les autres apps…" onPress={onLiens} testID="reglages-liens" /> : null}
+      {a.etat.role === 'fondateur' && !a.etat.perso ? <Bouton theme={theme} titre="✨ IA et GitHub…" onPress={onAides} testID="reglages-aides" /> : null}
+      {onParametres ? <Bouton theme={theme} titre="⚙︎ Paramètres › Tâches" onPress={onParametres} testID="reglages-parametres-hub" /> : null}
       <Bouton theme={theme} titre="⏱ Relevé du temps…" onPress={onReleve} testID="reglages-releve" />
     </View>
   );
@@ -421,62 +428,35 @@ export function DialogueReglages({
         {raccourcis}
         {vueOuverture}
         <Text style={texteDe(theme)}>
-          {a.etat.parFondateur.charAt(0).toUpperCase() + a.etat.parFondateur.slice(1)} partage {projets.length} projet{projets.length > 1 ? 's' : ''} avec vous. Tout reste chiffré de bout en bout : le relais ne voit que des données illisibles.
+          {a.etat.parFondateur.charAt(0).toUpperCase() + a.etat.parFondateur.slice(1)} partage {projets.length} projet{projets.length > 1 ? 's' : ''} avec vous. Tout reste chiffré de bout en bout : le relais ne voit que des données illisibles, et vous ne recevez que vos projets.
         </Text>
-        {projets.map(p => (
-          <View key={p.id} style={styles.ligneProjet}>
-            <View style={[styles.point, { backgroundColor: p.couleur }]} />
-            <Text style={[texteDe(theme), { flex: 1 }]}>{p.nom}</Text>
-            <Puce theme={theme} texte={LIBELLES_PARTAGE[p.partage]} couleur={p.partage === 'ecriture' ? theme.ok : theme.alerte} />
-          </View>
-        ))}
+        <ResumePartageMembre a={a} />
       </Dialogue>
     );
   }
-  const ami = d.reglages.ami;
-  const choisir = (id: string | undefined, nom?: string) => {
-    setEnCours(true);
-    a.etat
-      .choisirAmi(id, nom)
-      .catch(onErreur)
-      .finally(() => setEnCours(false));
-  };
+  const membres = listeMembres(d);
   return (
     <Dialogue theme={theme} mobile={a.mobile} visible large titre="Réglages de Tâches" onFermer={onFermer} testID="dialogue-reglages">
       {raccourcis}
       {vueOuverture}
-      <Libelle theme={theme}>PARTAGE AVEC UN AMI (UN SEUL POUR L’INSTANT)</Libelle>
-      <Text style={attenueDe(theme)}>
-        L’ami choisi voit seulement les projets que vous lui partagez, en lecture ou en écriture. Il ne peut pas supprimer de projet. Tout est chiffré de bout en bout.
-      </Text>
-      {profils.length === 0 ? (
-        <Text style={texteDe(theme)}>Aucun compte d’ami pour l’instant : créez-en un dans l’Administration.</Text>
+      {a.etat.perso ? (
+        <Text style={attenueDe(theme)} testID="reglages-perso">Tes projets personnels : rangés dans ta base chiffrée, ils ne partent chez personne.</Text>
       ) : (
-        <Options
-          theme={theme}
-          valeur={ami ?? 'personne'}
-          onChoisir={v => !enCours && (v === 'personne' ? choisir(undefined) : choisir(v, profils.find(p => p.id === v)?.nom))}
-          options={[{ valeur: 'personne', texte: 'Personne (rien n’est partagé)' }, ...profils.map(p => ({ valeur: p.id, texte: p.nom }))]}
-          testID="reglages-ami"
-        />
-      )}
-      {ami ? (
         <>
-          <Libelle theme={theme}>{`PROJETS PARTAGÉS AVEC ${(d.reglages.amiNom ?? 'l’ami').toUpperCase()}`}</Libelle>
-          {projetsDe(d).length === 0 ? <Text style={attenueDe(theme)}>Aucun projet.</Text> : null}
-          {projetsDe(d).filter(p => !p.auto).map(p => (
-            <View key={p.id} style={[styles.ligneProjet, { flexWrap: 'wrap' }]}>
-              <View style={[styles.point, { backgroundColor: p.couleur }]} />
-              <Text style={[texteDe(theme), { flex: 1, minWidth: 120 }]}>{p.nom}</Text>
-              <View style={styles.rangee}>
-                {(['aucun', 'lecture', 'ecriture'] as ModePartage[]).map(m => (
-                  <Puce key={m} theme={theme} grand={a.mobile} texte={m === 'aucun' ? 'Non' : m === 'lecture' ? 'Lecture' : 'Écriture'} couleur={m === 'ecriture' ? theme.ok : m === 'lecture' ? theme.alerte : theme.attenue} actif={p.partage === m} onPress={() => a.etat.maj((x, ctx) => modifierProjet(x, p.id, { partage: m }, ctx))} testID={`partage-${p.id}-${m}`} />
-                ))}
-              </View>
-            </View>
+      <Libelle theme={theme}>{`MEMBRES ET PARTAGE · ${membres.length}`}</Libelle>
+      <Text style={attenueDe(theme)}>
+        Invitez des amis ou des gestionnaires du hub ; chacun ne voit que les projets que vous lui ouvrez, en lecture, en écriture ou comme admin du projet. Tout est chiffré de bout en bout.
+      </Text>
+      {membres.length ? (
+        <View style={[styles.rangee, { gap: 6 }]}>
+          {membres.map(m => (
+            <Puce key={m.compte} theme={theme} texte={`${m.nom} · ${projetsDe(d).filter(p => droitDe(d, p.id, m.compte) !== 'aucun').length} projet(s)`} couleur={theme.teintes.admin} />
           ))}
-        </>
+        </View>
       ) : null}
+      <Bouton theme={theme} variante="plein" titre="👥 Gérer les membres et leurs droits…" onPress={onMembres} testID="reglages-membres" style={{ alignSelf: 'flex-start' }} />
+        </>
+      )}
       <Libelle theme={theme}>DONNÉES D’EXEMPLE</Libelle>
       <Text style={attenueDe(theme)}>Un espace « Exemple » avec un projet et quelques tâches, pour découvrir les vues. Retirez-le d’un geste.</Text>
       <View style={styles.rangee}>
@@ -492,9 +472,11 @@ export function DialogueReglages({
 
 // ------------------------------------------------------------------ Réglages d'un projet
 
-export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur }: { a: Actions; projetId: string; onFermer: Fermer; onSupprimer(): void; onErreur(e: unknown): void }) {
+export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur, onMembres }: { a: Actions; projetId: string; onFermer: Fermer; onSupprimer(): void; onErreur(e: unknown): void; onMembres?(): void }) {
   const theme = a.theme;
   const d = a.etat.donnees;
+  // Le Fondateur, ou un membre admin du projet (sans l'espace, le partage ni la suppression).
+  const fondateur = a.etat.role === 'fondateur';
   const p = d.projets[projetId];
   const [nom, setNom] = useState(p?.nom ?? '');
   const [icone, setIcone] = useState(p?.icone ?? '');
@@ -574,7 +556,7 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur }:
       </View>
       <Libelle theme={theme}>ÉTIQUETTES DU PROJET</Libelle>
       <Champ theme={theme} mobile={a.mobile} value={etiquettes} onChangeText={setEtiquettes} placeholder="design, client, urgent" testID="projet-etiquettes" accessibilityLabel="Étiquettes du projet, séparées par des virgules" />
-      {espacesVivants(d).length > 1 ? (
+      {fondateur && espacesVivants(d).length > 1 ? (
         <>
           <Libelle theme={theme}>ESPACE</Libelle>
           <View style={styles.rangee}>
@@ -672,34 +654,30 @@ export function DialogueProjet({ a, projetId, onFermer, onSupprimer, onErreur }:
           testID="liste-ajouter"
         />
       </View>
-      <Libelle theme={theme}>PARTAGE</Libelle>
-      {p.auto ? (
-        <Text style={attenueDe(theme)}>Projet tenu par une autre app : il ne se partage pas (rien de ces apps n’est montré à votre ami).</Text>
-      ) : a.etat.donnees.reglages.ami ? (
-        <View style={styles.rangee}>
-          {(['aucun', 'lecture', 'ecriture'] as ModePartage[]).map(m => (
-            <Puce key={m} theme={theme} grand={a.mobile} texte={LIBELLES_PARTAGE[m]} couleur={m === 'ecriture' ? theme.ok : m === 'lecture' ? theme.alerte : theme.attenue} actif={p.partage === m} onPress={() => a.etat.maj((x, ctx) => modifierProjet(x, projetId, { partage: m }, ctx))} testID={`projet-partage-${m}`} />
-          ))}
-        </View>
-      ) : (
-        <Text style={attenueDe(theme)}>Choisissez d’abord un ami dans les réglages de Tâches (⚙︎).</Text>
-      )}
+      {fondateur && !a.etat.perso ? (
+        <>
+          <Libelle theme={theme}>PARTAGE</Libelle>
+          <PartageProjet a={a} projet={p} onErreur={onErreur} onMembres={onMembres ?? onFermer} />
+        </>
+      ) : null}
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: historique }} onPress={() => setHistorique(h => !h)} style={{ minHeight: 44, justifyContent: 'center' }} testID="projet-historique">
         <Libelle theme={theme}>{`${historique ? '▾' : '▸'} HISTORIQUE DU PROJET · ${p.historique?.length ?? 0}`}</Libelle>
       </Pressable>
       {historique
         ? [...(p.historique ?? [])].reverse().map(e => (
             <Text key={e.id} style={attenueDe(theme)}>
-              {new Date(e.date).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {a.etat.noms[e.auteur]} · {e.texte}
+              {new Date(e.date).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · {a.etat.noms[e.auteur] ?? 'Membre'} · {e.texte}
             </Text>
           ))
         : null}
-      <View style={[styles.zoneDanger, { borderColor: teinteTransparente(theme.critique, 0.5), borderRadius: 10 }]}>
-        <Text style={attenueDe(theme)}>
-          {nbTaches} tâche{nbTaches > 1 ? 's' : ''}. La suppression passe par la corbeille (30 jours){p.partage !== 'aucun' ? ' ; le projet disparaîtra aussi chez votre ami' : ''}. Vous pourrez d’abord déplacer son contenu.
-        </Text>
-        <Bouton theme={theme} variante="danger" titre="Supprimer le projet…" onPress={onSupprimer} testID="projet-supprimer" style={{ alignSelf: 'flex-start' }} />
-      </View>
+      {fondateur ? (
+        <View style={[styles.zoneDanger, { borderColor: teinteTransparente(theme.critique, 0.5), borderRadius: 10 }]}>
+          <Text style={attenueDe(theme)}>
+            {nbTaches} tâche{nbTaches > 1 ? 's' : ''}. La suppression passe par la corbeille (30 jours){projetPartage(d, p) ? ' ; le projet disparaîtra aussi chez ses membres' : ''}. Vous pourrez d’abord déplacer son contenu.
+          </Text>
+          <Bouton theme={theme} variante="danger" titre="Supprimer le projet…" onPress={onSupprimer} testID="projet-supprimer" style={{ alignSelf: 'flex-start' }} />
+        </View>
+      ) : null}
     </Dialogue>
   );
 }

@@ -13,7 +13,7 @@
  */
 
 import { heureValide, instantDe } from './dates';
-import { estTerminee, tachesVivantes, type Auteur, type DonneesTaches } from './modele';
+import { estTerminee, pourQui, tachesVivantes, type Auteur, type DonneesTaches } from './modele';
 
 export const TOLERANCE_RAPPEL_MS = 24 * 3_600_000;
 const DUREE_MEMOIRE_MS = 40 * 86_400_000;
@@ -82,7 +82,7 @@ export function evaluerRappels(d: DonneesTaches, etat: EtatRappels, maintenant: 
   for (const t of tachesVivantes(d)) {
     if (!t.echeance || !t.rappels.length || estTerminee(d, t)) continue;
     // Le Fondateur : ses tâches et celles de personne ; l'ami : seulement celles qui lui sont assignées.
-    if (qui === 'ami' ? t.assigne !== 'ami' : t.assigne === 'ami') continue;
+    if (!pourQui(t, qui)) continue;
     const echeance = instantDe(t.echeance.jour, t.echeance.heure);
     for (const m of t.rappels) {
       const declenche = echeance - m * 60_000;
