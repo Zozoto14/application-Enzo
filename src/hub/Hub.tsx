@@ -819,6 +819,12 @@ function Tuile({
       {etatApp.maintenance && ouvrable ? ' (visible par vous seul·e : vous pouvez l’ouvrir)' : ''}
     </Text>
   ) : null;
+  // Déjà ouverte dans un onglet : la rouvrir reprend là où on l'avait laissée.
+  const marqueOuverte = (
+    <Text testID="tuile-ouverte" style={[styles.etiquette, { color: hautTexte, borderColor: blocs ? 'rgba(255,255,255,0.6)' : couleur, borderRadius: theme.rayonGrand ? 999 : 0 }]}>
+      ● OUVERTE
+    </Text>
+  );
   const etiquette = (
     <View style={styles.etiquettes}>
       {etatApp?.niveau === 'lecture' ? (
@@ -826,11 +832,7 @@ function Tuile({
           LECTURE SEULE
         </Text>
       ) : null}
-      {ouverte && !edition ? (
-        <Text testID="tuile-ouverte" style={[styles.etiquette, { color: hautTexte, borderColor: blocs ? 'rgba(255,255,255,0.6)' : couleur, borderRadius: theme.rayonGrand ? 999 : 0 }]}>
-          ● OUVERTE
-        </Text>
-      ) : null}
+      {ouverte && !edition && liste ? marqueOuverte : null}
       {epinglee ? <Text style={{ color: hautAttenue, fontSize: 12 }} accessibilityLabel="Épinglée">★</Text> : null}
       <Text
         style={[
@@ -910,6 +912,7 @@ function Tuile({
                 {etiquette}
               </View>
               <View>
+                {ouverte && !edition ? <View style={[styles.direct, { marginBottom: 10 }]}>{marqueOuverte}</View> : null}
                 {info ? (
                   <View style={styles.direct}>
                     <View style={[styles.point, { backgroundColor: blocs ? '#FFFFFF' : couleur }]} />
