@@ -1395,10 +1395,7 @@ function PanneauIdentifiants({ outils, nom, valeurs, id, onTermine }: { outils: 
           email={id ? outils.donnees.contacts[id]?.email : undefined}
           modele={outils.donnees.modeleInvitation}
           fondateur={outils.acteur.nom}
-          onEnvoye={canal => {
-            noterEnvoi(outils, id, nom, canal);
-            if (canal === 'email' || canal === 'copie' || canal === 'partage') setTransmis(true);
-          }}
+          onEnvoye={canal => noterEnvoi(outils, id, nom, canal)}
         />
       ) : (
         <Text style={{ color: theme.attenue, fontSize: 13 }} testID="admin-invitation-indisponible">

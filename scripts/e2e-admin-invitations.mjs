@@ -210,7 +210,8 @@ async function creerAmi(page, nom, email) {
   return { lien, mailto, motDePasse, secret };
 }
 async function terminer(page) {
-  await page.getByTestId('admin-transmis').click().catch(() => undefined);
+  // Un envoi (e-mail, copie, partage) coche déjà « J'ai envoyé l'invitation ».
+  if ((await page.getByTestId('admin-termine').getAttribute('aria-disabled')) === 'true') await page.getByTestId('admin-transmis').click();
   await page.getByTestId('admin-termine').click();
 }
 async function idDe(page, nom) {
