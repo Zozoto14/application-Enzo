@@ -45,6 +45,50 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.30',
+    date: '2026-10-30',
+    titre: 'Tâches : déplacer vos tâches, et un vrai menu Équipe',
+    resume:
+      'Changez une tâche d’endroit en deux gestes — projet, liste ou tâche parente —, une ou plusieurs à la fois. Et le nouveau menu « Équipe » montre qui travaille sur quoi, avec quels droits, et permet de tout régler d’un coup.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'taches-deplacer',
+        emoji: '↦',
+        titre: 'Déplacer une tâche',
+        texte:
+          'Dans le détail, « Emplacement » (avec recherche), le menu « ⋯ » d’une tâche, ou en la glissant sur un projet de la barre latérale (souris ou doigt). Cochez plusieurs tâches en vue Liste (Maj + clic pour une plage) : « Déplacer N tâches… ». Une tâche peut aussi devenir sous-tâche d’une autre, ou l’inverse. Son temps, ses commentaires, ses liens et son historique la suivent ; « Annuler » pendant 10 s.',
+        essayer: { genre: 'app', app: 'taches' },
+        app: 'taches',
+      },
+      {
+        id: 'taches-visibilite',
+        emoji: '👁',
+        titre: 'Qui la verra : dit avant de valider',
+        texte:
+          'Vers un projet partagé, Tâches dit qui la verra et avec quel droit ; hors d’un projet partagé, elle disparaît chez ceux qui ne voient pas l’arrivée. Un statut absent du projet d’arrivée ? Vous choisissez celui qu’elle prend.',
+        app: 'taches',
+      },
+      {
+        id: 'taches-equipe',
+        emoji: '👥',
+        titre: 'Le menu « Équipe »',
+        texte:
+          'Dans la barre de Tâches : chaque membre, son rang, son accès, sa dernière activité, ses projets et sa charge (tâches ouvertes, en retard, temps de la semaine). Invitez un profil du hub, ouvrez ou fermez son accès, réglez les droits de tous d’un coup dans la matrice membres × projets, retirez quelqu’un en réassignant ses tâches, et ouvrez sa fiche (ses tâches, son activité, ses débriefings).',
+        essayer: { genre: 'app', app: 'taches' },
+        adminSeulement: true,
+      },
+      {
+        id: 'taches-equipe-membre',
+        emoji: '👥',
+        titre: 'Voir ton équipe',
+        texte: 'Le menu « Équipe » de Tâches montre les personnes des projets partagés avec toi et leur droit (en lecture seule).',
+        app: 'taches',
+        amiSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.29',
     date: '2026-10-29',
     titre: 'Plusieurs apps ouvertes en même temps',

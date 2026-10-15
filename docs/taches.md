@@ -1,4 +1,4 @@
-# Tâches (V1 + V2 + V3)
+# Tâches (V1 + V2 + V3, déplacer et Équipe)
 
 App du hub « façon ClickUp » pour le Fondateur et les **membres** qu'il invite (amis et gestionnaires du hub ; un seul
 ami en V1/V2). Tuile sur la page « Applications » (catégorie `page: 'publique'`), visible du Fondateur et de ses
@@ -278,6 +278,76 @@ tâche passe au statut terminé (une écriture, une fois). L'API GitHub accepte 
 le site lit directement, l'application du PC passe par son processus principal (`taches:github`, liste fermée de
 chemins en lecture). Un membre voit le lien mais ne le pose ni ne le change ; il ne reçoit jamais le jeton.
 
+## Déplacer des tâches et menu « Équipe »
+
+### Déplacer (`src/taches/deplacer.ts`, `ui/Deplacer.tsx`)
+
+- **Où** : dans le détail, la propriété **« Emplacement »** (Espace › Projet › Liste, et « ↳ tâche parente » pour une
+  sous-tâche) ouvre la fenêtre « Déplacer » avec **recherche** (espace, projet, liste ; en tapant le titre d'une tâche :
+  « ↳ Sous-tâche de « … » ») ; le menu **« ⋯ »** d'une tâche (ligne de la vue Liste, en-tête du détail) : Déplacer…,
+  Convertir en sous-tâche de… / En faire une tâche principale, Sélectionner, Supprimer ; le **glisser-déposer** d'une ligne
+  (vue Liste) ou d'une carte (Kanban) sur un projet ou une liste de la **barre latérale**, à la souris (au-delà de 6 px)
+  et au doigt (appui long, comme le Kanban ; PC et iPad, où la barre latérale est affichée — sur iPhone, le menu ⋯) ;
+  la **multi-sélection** de la vue Liste : une case carrée par ligne (et « Tout sélectionner »), **Maj + clic** pour une
+  plage, **Ctrl / Cmd + clic** pour ajouter, Échap pour tout désélectionner ; la barre « N tâches sélectionnées »
+  propose « ↦ Déplacer N tâches… ».
+- **Convertir** : une tâche devient sous-tâche d'une autre (un seul niveau : ses propres sous-tâches sont rattachées à
+  la nouvelle parente ; une sous-tâche de sous-tâche est rattachée à la principale ; jamais sous elle-même ni sous une de
+  ses sous-tâches), ou une sous-tâche redevient une tâche principale. Une sous-tâche déplacée seule ailleurs que dans la
+  liste de sa parente devient principale ; une tâche déplacée emmène ses sous-tâches.
+- **Statut** : s'il n'existe pas dans le projet d'arrivée, la fenêtre demande lequel prendre, statut par statut (proposé :
+  le même identifiant, le même nom, sinon le premier du même genre ouvert / terminé). Un dépôt par glisser qui n'a rien
+  à demander déplace tout de suite ; sinon la fenêtre s'ouvre, déjà sur la bonne destination.
+- **Étiquettes** propres au projet de départ (ou absentes des étiquettes proposées du projet d'arrivée) : gardées sur la
+  tâche, ou **créées** dans le projet d'arrivée (Fondateur, ou membre admin de ce projet).
+- **Tout suit la tâche**, qui garde son identifiant : dépendances, jalon, début, objectifs, temps suivi et minuteur,
+  commentaires, checklist, journal (entrées liées par l'identifiant), débriefing, liens (sessions de Claude Office,
+  relance de Prospects, échéance d'Abonnements — la source ne change pas, aucun doublon), lien GitHub, historique.
+- **Historique** « Déplacée de « Travail › Site » vers « Travail › Appli » » (« Devenue sous-tâche de … », « Statut :
+  … → … »), puis l'avis **« … déplacée vers … — Annuler »** pendant 10 s (valeurs d'avant remises, étiquettes créées
+  retirées, « Déplacement annulé » dans l'historique).
+- **Droits** : le Fondateur partout (sauf vers un projet tenu par une autre app, qui ne reçoit que ses propres tâches) ;
+  un membre **seulement depuis et vers des projets où il écrit**. Le Fondateur le revérifie : une tâche connue peut
+  revenir d'un membre dans un autre projet seulement s'il a l'écriture là où elle était ET là où elle arrive (paquet
+  scellé par la clé du projet d'arrivée) ; ses sous-tâches la suivent (tâches principales appliquées d'abord).
+- **Visibilité** : vers un projet partagé, la fenêtre dit **qui la verra et avec quel droit** (« Elle sera visible par
+  Hugo (lecture), Léa (écriture) ») ; hors d'un projet partagé, **chez qui elle disparaîtra**. Une tâche venue d'une autre
+  app n'est jamais montrée aux membres (dit aussi). **Pierres tombales de déplacement** : une tâche garde les
+  `anciensProjets` où elle a vécu (10 derniers) ; le dépôt de chaque membre porte `partis`, les identifiants (rien
+  d'autre) des tâches qui ont quitté un projet qu'il voit pour un projet qu'il ne voit pas : sa copie les retire. Remise
+  dans un projet qu'il voit, elle revient (elle est de nouveau dans son dépôt).
+
+### Menu « Équipe » (`src/taches/equipe.ts`, `ui/Equipe.tsx`)
+
+Entrée **« 👥 Équipe »** de la barre de navigation de Tâches (sous Objectifs ; dans la feuille ☰ sur téléphone).
+
+- **Fondateur** : un résumé (membres, accès ouverts, projets partagés), la **recherche** (membre ou projet) et des
+  **filtres** (accès ouvert / fermé / profils supprimés, en retard, rang, projet), puis deux onglets :
+  - **Membres** : une carte par membre — avatar, nom, **rang du hub**, **état de l'accès** (ouvert, fermé, profil
+    désactivé, profil supprimé du hub), **dernière activité** (dernière trace dans Tâches ou dernière connexion), ses
+    **projets et son droit** sur chacun, sa **charge** (tâches ouvertes qui lui sont assignées, en retard, temps suivi
+    cette semaine) ; actions : Fiche…, Ouvrir l'accès, « Ses propres projets » (☐/☑), Retirer… ; puis « Inviter à
+    Tâches » pour chaque profil du hub qui n'est pas membre. Ouvrir / fermer l'accès passe par la **même vérité que
+    l'Administration** (les apps du profil : inviter ouvre `taches`, fermer le retire et retire le membre).
+  - **Droits par projet** : la **matrice membres × projets** (Aucun / Lecture / Écriture / Admin). Une case, une ligne
+    (un membre sur tous les projets) ou une colonne (tous les membres sur un projet) se change par un choix ; les
+    changements attendent (« 3 changements en attente dont 1 retrait ») et partent d'un geste avec **« Appliquer »** —
+    chaque retrait fait tourner la clé du projet (`changerDroit`, mécanisme existant).
+  - **Retirer** : d'un projet (fiche), de **tous les projets** (il reste membre, sans projet), ou **fermer son accès à
+    Tâches** ; la fenêtre propose de **réassigner ses tâches ouvertes** (à moi, à un autre membre, à personne, ou les
+    laisser) — une tâche d'un projet que la personne choisie ne voit pas reste sans elle. Révocation et rotation de
+    clé : celles de la V3, inchangées.
+  - **Fiche du membre** : en-tête (rang, accès, activité, membre depuis), actions, droits par projet (changés tout de
+    suite), **ses tâches** (ouvertes d'abord ; un clic ouvre la tâche), **son activité récente** (historique des tâches,
+    commentaires, journal), **ses débriefings** (ses entrées de journal des 14 derniers jours, par jour et par projet).
+  - **Profils supprimés du hub** : signalés en tête (« Un profil supprimé du hub est encore membre : Hugo. ») et
+    **nettoyés en un clic** (retrait de Tâches : clés tournées). Jamais retirés automatiquement (un annuaire pas encore
+    chargé ne retire personne).
+- **Membre** : la liste des personnes des projets partagés avec lui (le Fondateur, propriétaire ; chaque membre, son
+  droit par projet et sa charge visible dans ces projets), **en lecture seule** ; rien des autres projets.
+- Responsive (cartes sur deux colonnes au-delà de 1180 px, une sur iPad portrait et iPhone ; la matrice défile à
+  l'horizontale), cibles ≥ 44 px, textes ≥ 15 px, rôles d'accessibilité (onglets, grille, cases), 8 thèmes.
+
 ## Droits
 
 | Compte | Tuile | Voit | Modifie | Gère |
@@ -377,6 +447,13 @@ apps des comptes de test écrivent aussi pendant ce temps, sans lien avec Tâche
   expiration) est signalé à la relecture. Une dépendance se viole « au jour près » (pas d'heures dans la
   chronologie).
 
+- Déplacer / Équipe : le glisser vers la barre latérale demande qu'elle soit affichée (PC, iPad à l'horizontale ;
+  sinon le menu ⋯ ou la multi-sélection) ; la multi-sélection est dans la vue Liste (pas dans le Kanban ni le
+  calendrier). Un membre ne déplace pas entre ses projets personnels et les projets partagés. Un appareil d'une version
+  antérieure ignore `partis` : chez un membre pas encore à jour, une tâche sortie de ses projets reste visible (en
+  lecture) jusqu'à sa mise à jour. La dernière activité d'un membre est celle que le Fondateur voit (ses traces reçues,
+  sa dernière connexion connue).
+
 ## Feuille de route
 
 **V2 — faite** : suppression des espaces / projets / listes avec corbeille ; liens avec Claude Office, Prospects,
@@ -437,6 +514,21 @@ tableau de bord ; objectifs ; aide de l'IA (facultative) ; lien GitHub (facultat
   et GitHub en mode essai, membre admin et membre en lecture.
 - `bureau/electron/tachesReseau.test.mjs` (`node --test`) : requête à l'API Claude (clé en en-tête, sortie
   structurée, repli), erreurs lisibles, demandes invalides refusées sans envoi ; GitHub : liste fermée de chemins.
-- Bout en bout : `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-taches.mjs`, `scripts/e2e-taches-v2.mjs`
-  et `scripts/e2e-taches-v3.mjs` (après `npx vite build`), captures JPEG dans `docs/captures-taches/` (`v2-…`,
-  `v3-…`).
+- `src/taches/equipe.test.ts` : déplacer (vers un autre projet avec ses sous-tâches, statut équivalent ou choisi,
+  étiquettes conservées ou créées, liens / temps / journal / objectifs / dépendances conservés, multi-sélection,
+  convertir en sous-tâche et en tâche principale, sélecteur et recherche, projet d'une autre app refusé, droits d'un
+  membre, déplacement d'un membre accepté par le Fondateur et forgé refusé, avertissement de visibilité, pierres
+  tombales de déplacement : disparition chez le membre puis retour, annuler) ; Équipe (lignes, accès, charge, dernière
+  activité, invitables, filtres, profils supprimés, matrice et rotation de clé, retrait d'un projet ou de tous,
+  réassignation, fiche, vue d'un membre).
+- `src/taches/RacineEquipe.test.tsx` : menu Équipe dans les 8 thèmes (bureau, téléphone), entrée de navigation,
+  matrice appliquée d'un geste, retrait avec réassignation, profils supprimés nettoyés, inviter, vue d'un membre ;
+  déplacer depuis le détail (avertissement, Annuler), multi-sélection (cases, Maj + clic), convertir par le menu ⋯,
+  téléphone (détail › ⋯ › Déplacer).
+- Bout en bout : `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-taches.mjs`, `scripts/e2e-taches-v2.mjs`,
+  `scripts/e2e-taches-v3.mjs` et `scripts/e2e-taches-equipe.mjs` (après `npx vite build`), captures JPEG dans
+  `docs/captures-taches/` (`v2-…`, `v3-…`, `equipe-…`). `e2e-taches-equipe` : matrice de droits, déplacer depuis le
+  détail vers un projet partagé (reçue par le membre), multi-sélection hors du projet partagé (disparue chez le membre),
+  glisser sur la barre latérale à la souris puis Annuler, convertir en sous-tâche, glisser AU DOIGT d'un membre sur
+  iPad (reçu par le Fondateur), fiche et retrait avec réassignation (copie vidée), vue d'un membre sur iPhone, mesures
+  iPhone (équipe, matrice, liste, Déplacer).
