@@ -51,6 +51,8 @@ const { chromium } = requireGlobal('playwright');
 const { requeteTsuzuku } = await import(pathToFileURL(join(racine, 'bureau/electron/tsuzuku.mjs')).href);
 const RELAIS_WORKER = process.env.RELAIS_WORKER ?? join(racine, 'relais/worker.mjs');
 const worker = (await import(pathToFileURL(RELAIS_WORKER).href)).default;
+// Cache MÉMOIRE de l'instance du relais (relais à jour seulement) : vidé entre deux modes, comme l'API Cache.
+const moduleTsuzukuRelais = await import(pathToFileURL(join(RELAIS_WORKER, '..', 'tsuzuku.mjs')).href);
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-tsuzuku-perf');
 mkdirSync(CAPTURES, { recursive: true });
@@ -120,6 +122,7 @@ function repondre(hote, methode, chemin) {
   }
   if (hote === 'langues-exemple.fr') {
     if (p === '/' && url.searchParams.has('s')) {
+      if (/eternal|été|eien/.test(q)) return page('<ul class="resultats"><li class="r"><a href="/anime/ete-eternel/">Été éternel</a></li></ul>');
       return /voyage/.test(q) ? page('<ul class="resultats"><li class="r"><a href="/anime/le-long-voyage/">Le Long Voyage</a></li><li class="r"><a href="/anime/le-long-voyage-vf/">Le Long Voyage (VF)</a></li></ul>') : page('<p>Aucun résultat.</p>');
     }
     const serie = /^\/anime\/le-long-voyage(-vf)?\/(?:page-(\d+)\/?)?$/.exec(p);
@@ -128,6 +131,7 @@ function repondre(hote, methode, chemin) {
       const n = Number(serie[2] ?? 1);
       return page(`<h1>Le Long Voyage${serie[1] ? ' (VF)' : ''}</h1><ul>${n === 1 ? listeEps(prefixe, 1, 6) : listeEps(prefixe, 7, 12)}</ul>${n === 1 ? `<a rel="next" href="${prefixe}/page-2/">Suivant</a>` : ''}`);
     }
+    if (p === '/anime/ete-eternel/') return page(`<h1>Été éternel</h1><ul>${listeEps('/anime/ete-eternel', 1, 12)}</ul>`);
     const ep = /^\/anime\/le-long-voyage(-vf)?\/episode-(\d+)$/.exec(p);
     if (ep) return lecteur(`${ep[1] ? 'vf' : 'vostfr'}-${ep[2]}`);
   }
@@ -202,6 +206,8 @@ if (process.env.CACHE_RELAIS !== '0') {
 }
 let appelsRelais = 0;
 const logOrigine = console.log;
+// Journal du relais (« tsuzuku hôte statut durée ») : muet pendant la mesure.
+console.log = (...a) => (typeof a[0] === 'string' && a[0].startsWith('tsuzuku ') ? undefined : logOrigine(...a));
 const dossier = mkdtempSync(join(tmpdir(), 'e2e-perf-'));
 execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(dossier, 'k.pem'), '-out', join(dossier, 'c.pem'), '-subj', '/CN=localhost', '-days', '1'], { stdio: 'ignore' });
 // HTTP/2 comme Cloudflare (une connexion, requêtes multiplexées) ; HTTP/1.1 accepté aussi.
@@ -216,13 +222,7 @@ const serveurRelais = http2.createSecureServer({ key: readFileSync(join(dossier,
   }
   const entetesRequete = Object.fromEntries(Object.entries(req.headers).filter(([k]) => !k.startsWith(':')));
   const requete = new Request(`https://localhost:${PORT_RELAIS}${req.url}`, { method: req.method, headers: entetesRequete, body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps });
-  console.log = () => undefined;
-  let reponse;
-  try {
-    reponse = await worker.fetch(requete, env);
-  } finally {
-    console.log = logOrigine;
-  }
+  const reponse = await worker.fetch(requete, env);
   const entetes = Object.fromEntries([...reponse.headers].filter(([k]) => !['content-length', 'connection', 'transfer-encoding'].includes(k)));
   // Compression de Cloudflare (gzip ici) pour le JSON, flux compris (chaque morceau envoyé aussitôt).
   const compresser = /gzip/.test(String(req.headers['accept-encoding'] ?? '')) && /json/.test(entetes['content-type'] ?? '') && !entetes['content-encoding'];
@@ -456,6 +456,19 @@ async function parcours(navigateur, mode) {
   t.fiche2 = await pg.getByTestId('fiche-titre').waitFor({ timeout: 30_000 }).then(() => Date.now() - debut2, () => null);
   t.ficheSources2 = await pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 90_000 }).then(() => Date.now() - debut2, () => null);
 
+  // 7 bis. Un AUTRE titre, jamais cherché (sources déjà connues : la prioritaire est lente, et n'a pas ce titre).
+  log(`${mode} : autre titre (sources déjà connues)`);
+  await pg.getByTestId('fiche-retour').click();
+  await pg.getByTestId('accueil-recherche').fill('eternal');
+  await pg.getByTestId('accueil-chercher').click();
+  await pg.getByTestId('catalogue-grille').getByTestId('carte-anime-3').first().waitFor({ timeout: 30_000 });
+  const debutAutre = Date.now();
+  await pg.getByTestId('catalogue-grille').getByTestId('carte-anime-3').first().click();
+  t.autreSourcesPremier = await pg.locator('[data-testid="fiche-sources-provisoire"], [data-testid="fiche-sources-ok"]').first().waitFor({ timeout: 90_000 }).then(() => Date.now() - debutAutre, () => null);
+  t.autreSources = await pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 90_000 }).then(() => Date.now() - debutAutre, () => null);
+  const texteAutre = await pg.getByTestId('fiche-sources-ok').innerText().catch(() => '');
+  verifier(/Médiathèque VF\/VOSTFR/.test(texteAutre) && /12 épisode/.test(texteAutre), `${mode} : autre titre trouvé sur la source 2 (12 épisodes)`);
+
   // 8. Rechargement complet de la page (cache persistant dans la base du profil).
   log(`${mode} : rechargement de la page`);
   await pg.goto(SITE);
@@ -516,6 +529,8 @@ const ETAPES = [
   ['retour', 'Retour du lecteur à la fiche'],
   ['fiche2', '2e ouverture : fiche'],
   ['ficheSources2', '2e ouverture : « Sur vos sources »'],
+  ['autreSourcesPremier', 'Autre titre (sources connues) : 1er résultat'],
+  ['autreSources', 'Autre titre : « Sur vos sources » final'],
   ['accueil3', 'Après rechargement : Découvrir'],
   ['ficheSources3', 'Après rechargement : « Sur vos sources »'],
   ['appareil2Accueil', '2e appareil (cache vide) : Découvrir'],
@@ -532,6 +547,7 @@ try {
     requetes.length = 0;
     appelsRelais = 0;
     cacheColo.clear(); // chaque mode part d'un relais au cache vide
+    moduleTsuzukuRelais.cacheMemoireDuRelais?.vider();
     mesures[mode] = await parcours(navigateur, mode);
     if (estSite(mode)) mesures[mode].appelsRelais = appelsRelais;
     mesures[mode].journal = requetes.map(r => `${r.quand} ${r.hote}${r.chemin}`);
@@ -553,16 +569,24 @@ for (const [cle, libelle] of ETAPES) {
 if (process.env.SORTIE) writeFileSync(process.env.SORTIE, JSON.stringify(mesures, null, 2));
 
 // Seuils (version optimisée) : raisonnables pour une machine de test chargée.
+// Seuils de la 2e passe (latence) : marge d'environ 40 % sur les mesures, machine de test chargée.
+// Le relais ANCIEN (RELAIS_WORKER) n'a pas de cache : le 2e appareil n'y est pas plus rapide.
+const ANCIEN_RELAIS = Boolean(process.env.RELAIS_WORKER) || process.env.CACHE_RELAIS === '0';
 for (const mode of MODES) {
   const m = mesures[mode] ?? {};
-  seuil(m.fiche, 3000, `${mode} : fiche affichée`);
-  seuil(m.ficheSourcesPremier, 5000, `${mode} : premier résultat des sources affiché (provisoire)`);
-  seuil(m.ficheSources, 9000, `${mode} : « Sur vos sources » (source prioritaire lente : course + délai de grâce)`);
-  seuil(m.episode, 4000, `${mode} : épisode lu depuis la fiche`);
-  seuil(m.langue, 3000, `${mode} : bascule VF/VOSTFR`);
-  seuil(m.suivant, 2000, `${mode} : épisode suivant (préchargé)`);
-  seuil(m.ficheSources2, 1500, `${mode} : 2e ouverture quasi instantanée (cache)`);
-  seuil(m.ficheSources3, 2500, `${mode} : après rechargement (cache persistant)`);
+  const en4g = mode === 'site4g';
+  seuil(m.fiche, en4g ? 2500 : 2000, `${mode} : fiche affichée`);
+  seuil(m.ficheSourcesPremier, en4g ? 3500 : 3000, `${mode} : premier résultat des sources affiché (provisoire)`);
+  seuil(m.ficheSources, en4g ? 5000 : 4500, `${mode} : « Sur vos sources » (source prioritaire lente : course + délai de grâce)`);
+  seuil(m.episode, en4g ? 3000 : 2500, `${mode} : épisode lu depuis la fiche`);
+  seuil(m.langue, 2000, `${mode} : bascule VF/VOSTFR`);
+  seuil(m.suivant, 1500, `${mode} : épisode suivant (préchargé)`);
+  seuil(m.retour, 1000, `${mode} : retour du lecteur à la fiche`);
+  seuil(m.ficheSources2, 1000, `${mode} : 2e ouverture quasi instantanée (cache)`);
+  seuil(m.autreSources, en4g ? 4000 : 3500, `${mode} : autre titre, source prioritaire connue lente (sans l'attendre)`);
+  seuil(m.ficheSources3, 1500, `${mode} : après rechargement (cache persistant)`);
+  if (estSite(mode) && !ANCIEN_RELAIS) seuil(m.appareil2Sources, en4g ? 3000 : 2500, `${mode} : 2e appareil (cache du relais)`);
+  if (estSite(mode) && ANCIEN_RELAIS) seuil(m.appareil2Sources, en4g ? 6000 : 5500, `${mode} : 2e appareil, ancien relais (sans cache)`);
 }
 if (echecs > 0) {
   logOrigine(`E2E ECHEC (${echecs})`);

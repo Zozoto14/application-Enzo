@@ -167,8 +167,8 @@ export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: anci
     stockage,
     cache,
     client,
-    ctx: { client, journal, estLente: latences.estLente },
-    ctxFrais: { client: clientFrais, journal, estLente: latences.estLente },
+    ctx: { client, journal, estLente: latences.estLente, dureeTypique: latences.typique },
+    ctxFrais: { client: clientFrais, journal, estLente: latences.estLente, dureeTypique: latences.typique },
     latences,
     // La clé TMDB est celle de la base du profil : jamais celle d'un autre compte.
     catalogue: creerCatalogue({ client, cleTmdb: async () => (await lireAvancesStockees()).cleTmdb || null, journal, cacheMs: CATALOGUE_FRAIS_MS, perimeMaxMs: CATALOGUE_PERIME_MAX_MS, persistant, ...catalogue }),

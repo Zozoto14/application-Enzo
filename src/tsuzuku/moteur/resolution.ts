@@ -103,6 +103,8 @@ export interface ContexteResolution {
    * de grâce et le résultat retenu ne changent pas).
    */
   estLente?: (url: string) => boolean;
+  /** Temps typique d'une page du site de cette adresse (ms), s'il est connu (voir `courseAvecPriorite`). */
+  dureeTypique?: (url: string) => number | undefined;
 }
 
 /** Réglages du parallélisme du moteur. */
@@ -1115,7 +1117,7 @@ export async function episodesSur(ctx: ContexteResolution, src: DefinitionSource
 }
 
 /** Diagnostic d'une source abandonnée : une source moins prioritaire a trouvé, et elle tardait. */
-const interrompue = (src: DefinitionSource, gagnante: DefinitionSource, graceMs: number): DiagnosticSource => ({
+const interrompue = (src: DefinitionSource, gagnante: DefinitionSource, graceMs: number, abregee = false): DiagnosticSource => ({
   source: src.name,
   sourceId: src.id,
   statut: 'interrompue',
@@ -1123,8 +1125,19 @@ const interrompue = (src: DefinitionSource, gagnante: DefinitionSource, graceMs:
   serie: null,
   refuse: null,
   episodes: 0,
-  raison: `recherche interrompue : « ${gagnante.name} » a trouvé, et cette source, plus prioritaire, n’avait pas répondu ${String(graceMs / 1000).replace('.', ',')} s plus tard`,
+  raison: abregee
+    ? `recherche interrompue : « ${gagnante.name} » a trouvé, et cette source, plus prioritaire, est connue pour être lente (temps mesurés sur cet appareil) : elle n’aurait pas répondu dans les ${String(graceMs / 1000).replace('.', ',')} s d’attente`
+    : `recherche interrompue : « ${gagnante.name} » a trouvé, et cette source, plus prioritaire, n’avait pas répondu ${String(graceMs / 1000).replace('.', ',')} s plus tard`,
 });
+
+/** Temps typique d'une page de la source (contexte), s'il est connu. */
+const dureeTypiqueDe = (ctx: ContexteResolution, src: Pick<DefinitionSource, 'baseUrl'>) => {
+  try {
+    return src.baseUrl ? ctx.dureeTypique?.(src.baseUrl) : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 /**
  * Cherche sur les sources activées EN PARALLÈLE (3 au plus), dans leur ordre
@@ -1140,10 +1153,17 @@ export async function trouverEpisodes(
 ): Promise<ResultatEpisodes> {
   const actives = sourcesActives(sources);
   const p = parametresParallele(ctx);
-  const { issues, gagnante } = await courseAvecPriorite(
+  const { issues, gagnante, abregee } = await courseAvecPriorite(
     actives.map(src => (signal: SignalAnnulation) => episodesSur(sousContexte(ctx, signal), src, o)),
     r => r.episodes.length > 0,
-    { simultanees: p.sources, graceMs: p.graceMs, relaisMs: sourceLente(ctx, actives[0]) ? 0 : p.relaisSourcesMs, signal: ctx.signal, surProvisoire: o.surProvisoire ? r => o.surProvisoire!(r) : undefined },
+    {
+      simultanees: p.sources,
+      graceMs: p.graceMs,
+      relaisMs: sourceLente(ctx, actives[0]) ? 0 : p.relaisSourcesMs,
+      signal: ctx.signal,
+      surProvisoire: o.surProvisoire ? r => o.surProvisoire!(r) : undefined,
+      dureeTypiqueMs: ctx.dureeTypique ? i => dureeTypiqueDe(ctx, actives[i]) : undefined,
+    },
   );
   let refuse: ResultatClasse | null = null;
   let partiel: ResultatEpisodes | null = null;
@@ -1152,7 +1172,7 @@ export async function trouverEpisodes(
     const src = actives[issue.i];
     if (gagnante != null && issue.i > gagnante) break;
     if (issue.interrompue) {
-      diagnostics.push(interrompue(src, actives[gagnante ?? 0], p.graceMs));
+      diagnostics.push(interrompue(src, actives[gagnante ?? 0], p.graceMs, abregee));
     } else if (issue.erreur !== undefined) {
       journalDe(ctx)(`[source:${src.name}] ${messageDe(issue.erreur)}`);
       diagnostics.push({ source: src.name, sourceId: src.id, statut: 'erreur', requetes: [], serie: null, refuse: null, episodes: 0, erreur: messageDe(issue.erreur) });
@@ -1278,10 +1298,16 @@ export async function trouverFilm(
   const actives = sourcesActives(sources).filter(supporteFilms);
   const p = parametresParallele(ctx);
   // Les films se cherchent sans preference de doublage (comme avant).
-  const { issues, gagnante } = await courseAvecPriorite(
+  const { issues, gagnante, abregee } = await courseAvecPriorite(
     actives.map(brute => (signal: SignalAnnulation) => filmSur(sousContexte(ctx, signal), brute, { ...o, langue: 'indifferent' })),
     r => r.sources.length > 0,
-    { simultanees: p.sources, graceMs: p.graceMs, relaisMs: sourceLente(ctx, actives[0]) ? 0 : p.relaisSourcesMs, signal: ctx.signal },
+    {
+      simultanees: p.sources,
+      graceMs: p.graceMs,
+      relaisMs: sourceLente(ctx, actives[0]) ? 0 : p.relaisSourcesMs,
+      signal: ctx.signal,
+      dureeTypiqueMs: ctx.dureeTypique ? i => dureeTypiqueDe(ctx, actives[i]) : undefined,
+    },
   );
   let refuse: ResultatClasse | null = null;
   const diagnostics: DiagnosticSource[] = [];
@@ -1289,7 +1315,7 @@ export async function trouverFilm(
     const brute = actives[issue.i];
     if (gagnante != null && issue.i > gagnante) break;
     if (issue.interrompue) {
-      diagnostics.push(interrompue(brute, actives[gagnante ?? 0], p.graceMs));
+      diagnostics.push(interrompue(brute, actives[gagnante ?? 0], p.graceMs, abregee));
     } else if (issue.erreur !== undefined) {
       journalDe(ctx)(`[source:${brute.name}] ${messageDe(issue.erreur)}`);
       diagnostics.push({ source: brute.name, sourceId: brute.id, statut: 'erreur', requetes: [], serie: null, refuse: null, episodes: 0, erreur: messageDe(issue.erreur) });

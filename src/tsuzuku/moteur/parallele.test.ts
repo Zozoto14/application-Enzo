@@ -198,3 +198,33 @@ describe('courseAvecPriorite : résultat provisoire', () => {
     expect(vus).toEqual([]);
   });
 });
+
+describe('courseAvecPriorite : délai de grâce abrégé pour une source connue lente', () => {
+  const tache = (nom: string, ms: number, valeur: string) => () => new Promise<string>(ok => setTimeout(() => ok(valeur), ms));
+  const trouve = (v: string) => v.startsWith('ok');
+
+  it('la prioritaire, connue lente, ne peut pas finir dans la grâce : décision tout de suite', async () => {
+    const debut = Date.now();
+    const r = await courseAvecPriorite([tache('lente', 900, 'ok-lente'), tache('rapide', 20, 'ok-rapide')], trouve, { simultanees: 3, graceMs: 300, dureeTypiqueMs: i => (i === 0 ? 4000 : 100) });
+    expect(r.gagnante).toBe(1);
+    expect(r.abregee).toBe(true);
+    expect(r.issues[0].interrompue).toBe(true);
+    expect(Date.now() - debut).toBeLessThan(250);
+  });
+
+  it('temps inconnu, ou assez court pour finir dans la grâce : on attend comme avant (même gagnante)', async () => {
+    for (const typique of [undefined, 350]) {
+      const debut = Date.now();
+      const r = await courseAvecPriorite([tache('lente', 250, 'ok-lente'), tache('rapide', 20, 'ok-rapide')], trouve, { simultanees: 3, graceMs: 300, dureeTypiqueMs: () => typique });
+      expect(r.gagnante).toBe(0);
+      expect(r.abregee).toBeUndefined();
+      expect(Date.now() - debut).toBeGreaterThanOrEqual(240);
+    }
+  });
+
+  it('une prioritaire pas encore lancée : jamais abrégé', async () => {
+    const r = await courseAvecPriorite([tache('1', 200, 'rien'), tache('2', 300, 'rien'), tache('3', 10, 'ok-3')], trouve, { simultanees: 1, graceMs: 50, dureeTypiqueMs: () => 99_999 });
+    expect(r.gagnante).toBe(2);
+    expect(r.abregee).toBeUndefined();
+  });
+});

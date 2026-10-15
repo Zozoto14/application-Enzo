@@ -125,6 +125,28 @@ describe('temps typique de chaque site (sources connues pour être lentes)', () 
   });
 });
 
+describe('délai de grâce : abrégé quand la prioritaire, connue lente, ne peut pas finir à temps', () => {
+  it('résultat aussitôt, diagnostic « connue pour être lente » ; temps inconnu : attente de 1,2 s comme avant', async () => {
+    const essai = async (typique?: number) => {
+      const { s } = await services(routes({ [`${LENT}/?s=`]: apres(3000, html('<ul><li class="r"><a href="/autre">Autre chose</a></li></ul>')) }), [S('lent', LENT), S('fiches', SITE)]);
+      if (typique) for (let i = 0; i < 2; i += 1) s.latences.noter(`${LENT}/`, typique);
+      const debut = Date.now();
+      const d = await episodesDisponibles(s, { id: '1', titres });
+      return { ms: Date.now() - debut, d };
+    };
+    const connue = await essai(4000);
+    expect(connue.d.resultat?.source?.id).toBe('fiches');
+    expect(connue.ms).toBeLessThan(800);
+    const lent = connue.d.diagnostic.sources.find(x => x.sourceId === 'lent');
+    expect(lent?.statut).toBe('interrompue');
+    expect(lent?.raison).toMatch(/connue pour être lente/);
+    const inconnue = await essai();
+    expect(inconnue.d.resultat?.source?.id).toBe('fiches');
+    expect(inconnue.ms).toBeGreaterThanOrEqual(2100);
+    expect(inconnue.d.diagnostic.sources.find(x => x.sourceId === 'lent')?.raison).toMatch(/n’avait pas répondu 1,2 s plus tard/);
+  });
+});
+
 describe('cache du relais : ce que le site demande', () => {
   it('recherche (GET) et pages : indication de cache ; « Réessayer » et rafraîchissement : frais', async () => {
     const { s, reseau } = await services(routes());
