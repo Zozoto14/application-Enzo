@@ -311,7 +311,7 @@ test('Worker complet : la route passe par le fetch global, les autres routes ne 
     const ami = await relais.fetch(demande({ url: 'https://api-worker-exemple.fr/' }, { jeton: await jetonDeProfil(JETON, 'amilea0001') }), env());
     assert.equal(ami.status, 403);
     const sante = await relais.fetch(new Request('https://relais.test/sante', { headers: { Authorization: `Bearer ${JETON}` } }), env());
-    assert.equal((await sante.json()).version, 5);
+    assert.ok((await sante.json()).version >= 5);
   } finally {
     globalThis.fetch = fetchOrigine;
   }

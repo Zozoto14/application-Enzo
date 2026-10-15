@@ -67,6 +67,19 @@ export interface Coffre {
   enveloppes: Enveloppe[];
   /** Secret TOTP, scellé par la clé maîtresse. */
   totp?: SecretScelle;
+  /**
+   * Exemption du code TOTP (compte d'ami qui a choisi son mot de passe par
+   * une invitation) : une marque scellée par la clé maîtresse. Sa présence
+   * seule n'exempte de rien (elle sert d'indication à l'écran) ; c'est son
+   * ouverture par la clé reconstituée qui décide (voir `totpExige`).
+   */
+  sansTotp?: SecretScelle;
+  /**
+   * Le mot de passe a été scellé sous sa forme canonique (`formeCanonique` :
+   * NFC, bords nettoyés, guillemets droits) : la saisie est ramenée à la
+   * même forme avant la dérivation. Simple indication d'ordre des essais.
+   */
+  canonique?: boolean;
 }
 
 export class ErreurDeverrouillage extends Error {
@@ -329,6 +342,31 @@ export function lireSecretTotp(
   return versBase32(
     desceller(cleMaitresse, coffre.totp.nonce, coffre.totp.charge, 'motdepasse'),
   );
+}
+
+const MARQUE_SANS_TOTP = utf8ToBytes('applibourse/coffre/sans-totp/v1');
+const donneeSansTotp = utf8ToBytes(`applibourse/coffre/v${VERSION_COFFRE}/sans-totp`);
+
+/** Exempte ce coffre du code TOTP : marque scellée par la clé maîtresse (infalsifiable sans elle). */
+export function exempterTotp(coffre: Coffre, cleMaitresse: Uint8Array, alea: SourceAleatoire = aleatoireParDefaut): Coffre {
+  const nonce = alea(LONGUEUR_NONCE);
+  const charge = xchacha20poly1305(cleMaitresse, nonce, donneeSansTotp).encrypt(MARQUE_SANS_TOTP);
+  return { ...coffre, sansTotp: { nonce: bytesToHex(nonce), charge: bytesToHex(charge) } };
+}
+
+/**
+ * Le code TOTP est-il exigé à l'ouverture ? Oui, sauf si la marque
+ * d'exemption s'ouvre avec CETTE clé maîtresse (une marque recopiée d'un
+ * autre coffre, ou fabriquée, ne s'ouvre pas).
+ */
+export function totpExige(coffre: Coffre, cleMaitresse: Uint8Array): boolean {
+  if (!coffre.sansTotp) return true;
+  try {
+    const lu = xchacha20poly1305(cleMaitresse, hexToBytes(coffre.sansTotp.nonce), donneeSansTotp).decrypt(hexToBytes(coffre.sansTotp.charge));
+    return !(lu.length === MARQUE_SANS_TOTP.length && lu.every((o, i) => o === MARQUE_SANS_TOTP[i]));
+  } catch {
+    return true;
+  }
 }
 
 /** Clé au format attendu par SQLCipher (`PRAGMA key = "x'...'"`). */

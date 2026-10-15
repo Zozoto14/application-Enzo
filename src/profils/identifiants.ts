@@ -20,6 +20,25 @@ export interface IdentifiantsAmi {
   codesRecuperation: string[];
   secretTotp: string;
   uriTotp: string;
+  /** Invitation à envoyer (lien à usage unique), quand l'appareil est relié au relais avec le code maître. */
+  invitation?: InvitationAffichee;
+}
+
+/** Invitation telle que l'Administration l'affiche (voir bureau/connexionAmis.ts et docs/connexion-amis.md). */
+export interface InvitationAffichee {
+  lien?: string;
+  /** Message prêt à coller (lien + instructions). */
+  message?: string;
+  codeCourt?: string;
+  expire?: string;
+  /** `relais` : usage unique tenu par le relais ; `lien` : relais pas encore mis à jour. */
+  mode?: 'relais' | 'lien';
+  lienConnexion?: string;
+  avertissement?: string;
+  /** Le compte de l'ami est publié sur le relais (sinon : garder l'app ouverte). */
+  publie?: boolean;
+  /** Invitation impossible ici (appareil non relié, séquestre absent…) : pourquoi. */
+  erreur?: string;
 }
 
 /** Sans caractères ambigus (0/O, 1/l/I) : le mot de passe se recopie à la main. */

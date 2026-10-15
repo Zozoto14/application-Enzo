@@ -209,6 +209,20 @@ export function decoderCorps(tampon, typeContenu) {
 
 // ------------------------------------------------------------------ Requête
 
+/**
+ * Connexions gardées ouvertes (keep-alive) : la recherche, la page de la série,
+ * ses pages suivantes et les pages d'épisodes d'un MÊME site réutilisent la
+ * connexion TLS au lieu d'en ouvrir une par requête (une à deux allers-retours
+ * de moins chacune). Node ne réutilise une connexion que pour la même origine
+ * (hôte, port, nom TLS) : jamais d'un site à l'autre. Le `lookup` vérifié
+ * s'applique à chaque NOUVELLE connexion ; une connexion réutilisée l'a déjà
+ * passé. Aucun cookie n'est lié à une connexion.
+ */
+export const AGENTS = {
+  http: new http.Agent({ keepAlive: true, keepAliveMsecs: 15_000, maxSockets: 6, maxFreeSockets: 4, timeout: 60_000 }),
+  https: new https.Agent({ keepAlive: true, keepAliveMsecs: 15_000, maxSockets: 6, maxFreeSockets: 4, timeout: 60_000 }),
+};
+
 /** `lookup` de socket : refuse tout nom qui résout vers une IP non publique, et impose l'IP vérifiée. */
 export function lookupPublic(resoudre = dns.lookup) {
   return (hote, options, rappel) => {
@@ -277,8 +291,8 @@ export async function requeteTsuzuku(brute, deps = {}) {
         ...r.entetes,
         ...(r.corps !== undefined ? { 'content-length': String(Buffer.byteLength(r.corps)) } : {}),
       },
-      // Jamais de cookie, jamais de connexion réutilisée entre origines.
-      agent: false,
+      // Jamais de cookie ; connexion réutilisée pour la MÊME origine seulement (voir AGENTS).
+      agent: deps.agent ?? (adresse.https ? AGENTS.https : AGENTS.http),
       lookup: deps.lookup ?? lookupPublic(),
     };
     const req = requeter(adresse.url, options, reponse => {

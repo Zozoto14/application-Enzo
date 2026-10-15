@@ -10,10 +10,11 @@ import { Alerte, Bouton, Champ, SousTitre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON } from '../theme';
 import type { OptionsNouveauProfil, Profil } from '../../profils/profils';
 import type { PolitiqueHub } from '../../hub/admin/politique';
-import type { IdentifiantsAmi } from '../../profils/identifiants';
+import type { IdentifiantsAmi, InvitationAffichee } from '../../profils/identifiants';
 import type { OptionsLier } from './LierCompte';
 import type { DocsJuridiques } from '../../juridique/modele';
 import { rangDe, texteTransparence } from '../../hub/admin/roles';
+import { QrCode } from './CarteSynchro';
 
 export interface ControleProfils {
   actuel: Profil;
@@ -97,6 +98,22 @@ export interface ControleProfils {
    */
   onCodeSite?(id: string): Promise<{ code: string; lien?: string }>;
   /**
+   * « Renvoyer une invitation » / « Réinitialiser l'accès » : nouveau mot de
+   * passe temporaire posé par séquestre (l'ancien mot de passe et l'ancienne
+   * invitation cessent de marcher), et nouveau lien à usage unique.
+   */
+  onInvitation?(id: string, jours: number): Promise<InvitationAffichee>;
+  /** Révoque (ou rétablit) l'accès du compte sur le relais : son jeton n'y vaut plus rien. */
+  onRevoquerConnexion?(id: string, revoque: boolean): Promise<void>;
+  /** État de l'accès sur le relais (révoqué ?), pour la fiche. */
+  etatConnexion?(id: string): Promise<{ revoque?: boolean }>;
+  /**
+   * Compte d'un ami ouvert sur un navigateur relié : de quoi connecter un AUTRE
+   * appareil (lien à scanner, qui ne porte que l'accès à SON compte ; il faudra
+   * encore son prénom et son mot de passe), et le lien de connexion par identifiant.
+   */
+  autreAppareil?: { lien: string; lienConnexion?: string };
+  /**
    * « Lier à mon compte » fourni par l'hôte (site) : remplace celui de l'app,
    * pour tous les comptes. `suggererAutreCoffre` : après un échec de
    * déverrouillage, proposer de reprendre le coffre du compte relié.
@@ -153,9 +170,22 @@ export function CarteProfils({ controle }: { controle: ControleProfils }) {
         ) : (
           <>
             <SousTitre>
-              Ce profil a été créé par l’administrateur. Pour l’ouvrir aussi sur le site ou ton téléphone, demande-lui ton code de
-              connexion : il n’ouvre que ton compte. Aucun autre compte ne voit tes données, et tu ne vois pas les leurs.
+              Ce profil a été créé par l’administrateur. Ton identifiant est ton prénom ; pour l’ouvrir sur un autre appareil, utilise
+              le lien ci-dessous (ou « Se connecter » sur le site). Aucun autre compte ne voit tes données, et tu ne vois pas les leurs.
             </SousTitre>
+            {controle.autreAppareil ? (
+              <View style={[styles.profil, { borderColor: palette.bordure, flexDirection: 'column', alignItems: 'flex-start' }]} testID="autre-appareil">
+                <Text style={{ color: palette.texte, fontWeight: '700' }}>📱 Connecter un autre appareil</Text>
+                <Text style={{ color: palette.texteSecondaire }}>
+                  Scanne ce QR code avec l’appareil photo de ton autre appareil (ou ouvre le lien), puis saisis ton prénom et ton mot de passe.
+                  Ne le montre à personne d’autre.
+                </Text>
+                <QrCode texte={controle.autreAppareil.lien} legende="Mon compte AppDashboard" testID="autre-appareil-qr" />
+                <Text selectable style={{ color: palette.texteSecondaire, fontSize: 12 }} testID="autre-appareil-lien">
+                  {controle.autreAppareil.lien}
+                </Text>
+              </View>
+            ) : null}
             {texteTransparence(rangDe(actuel)) ? (
               <View style={[styles.profil, { borderColor: palette.accent }]} testID="transparence-admin">
                 <Text style={{ color: palette.texte, flex: 1 }}>

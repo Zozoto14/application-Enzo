@@ -117,8 +117,15 @@ jobs:
             echo "::error::La route /tsuzuku/requete ne répond pas au site (HTTP $cors) : vérifiez ORIGINES_SITE dans relais/wrangler.toml."
             exit 1
           fi
-          echo "Relais à jour : $RELAIS_URL (lecture des sources de Tsuzuku disponible pour le site)."
+          # Version 6 : invitations des amis, sans jeton (une invitation inconnue répond 404 « inconnue », un ancien relais 401).
+          inv=$(curl -s -o inv.json -w '%{http_code}' "$RELAIS_URL/invitations/00000000000000000000000000000000" || true)
+          echo "GET /invitations/… (sans jeton) : HTTP $inv $(cat inv.json 2>/dev/null)"
+          if [ "$inv" != "404" ] || ! grep -q '"motif":"inconnue"' inv.json; then
+            echo "::error::La route des invitations (version 6) ne répond pas comme attendu (HTTP $inv)."
+            exit 1
+          fi
+          echo "Relais à jour : $RELAIS_URL (lecture des sources de Tsuzuku, invitations et connexion des amis disponibles)."
 
       - name: Nettoyer
         if: always()
-        run: rm -f relais/wrangler.ci.toml kv.json kv.err deploiement.log sante.json cors.txt
+        run: rm -f relais/wrangler.ci.toml kv.json kv.err deploiement.log sante.json cors.txt inv.json

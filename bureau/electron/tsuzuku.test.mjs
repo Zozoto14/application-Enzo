@@ -98,7 +98,9 @@ test('rend le texte, retire les cookies (présence seulement signalée), accepte
   assert.equal(JSON.stringify(r.entetes).includes('a=1'), false);
   assert.equal('cookie' in vus[0].options.headers, false);
   assert.equal(vus[0].options.headers['accept-encoding'], 'gzip, deflate, br');
-  assert.equal(vus[0].options.agent, false);
+  // Connexion gardée ouverte, propre à l'origine (agent keep-alive de Node, jamais partagé entre sites).
+  assert.equal(vus[0].options.agent.keepAlive, true);
+  assert.equal(vus[0].options.agent.options.maxSockets, 6);
   assert.equal(typeof vus[0].options.lookup, 'function');
 });
 

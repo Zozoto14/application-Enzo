@@ -45,8 +45,8 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
-    version: '2026.10.27',
-    date: '2026-10-27',
+    version: '2026.10.28',
+    date: '2026-10-28',
     titre: 'Plusieurs apps ouvertes en même temps',
     resume:
       'Vos apps s’ouvrent désormais en onglets, comme dans un navigateur : passez de l’une à l’autre sans rien perdre. Sur grand écran, affichez-en deux côte à côte ; sur le PC, ouvrez une app dans sa propre fenêtre.',
@@ -72,6 +72,81 @@ export const ENTREES: readonly EntreeDevblog[] = [
         titre: 'Une app dans sa propre fenêtre',
         texte:
           'Sur le PC : « Ouvrir dans une nouvelle fenêtre » (menu « ⋯ » d’un onglet), sans vous reconnecter. Sur le site : « Ouvrir dans un nouvel onglet du navigateur », un lien qui ouvre directement l’app après le déverrouillage. Vos droits restent les mêmes : un lien n’ouvre jamais une app qui ne vous est pas ouverte.',
+      },
+    ],
+  },
+  {
+    version: '2026.10.27',
+    date: '2026-10-27',
+    titre: 'Connexion des amis : une invitation, ton mot de passe',
+    resume:
+      'Plus de mot de passe à recopier ni de code à six chiffres : le Fondateur t’envoie un lien d’invitation, tu choisis TON mot de passe, et tu te connectes partout avec ton prénom.',
+    illustration: 'isolation',
+    fonctionnalites: [
+      {
+        id: 'connexion-invitation',
+        emoji: '✉️',
+        titre: 'Un lien d’invitation, et c’est tout',
+        texte:
+          'Ouvre le lien reçu (téléphone ou ordinateur), choisis ton mot de passe (10 caractères au moins, l’indicateur te guide) : tu es connecté. Le lien ne sert qu’une fois et expire.',
+      },
+      {
+        id: 'connexion-identifiant',
+        emoji: '🔑',
+        titre: 'Ton prénom et ton mot de passe, partout',
+        texte:
+          'Sur un nouvel appareil : « Se connecter » sur le site, ton prénom (majuscules, accents et espaces n’y changent rien) et ton mot de passe. Ou, depuis un appareil déjà connecté, Paramètres › Compte › « Connecter un autre appareil » (QR code).',
+      },
+      {
+        id: 'connexion-messages',
+        emoji: '💬',
+        titre: 'Des messages qui disent quoi faire',
+        texte:
+          'Identifiant inconnu, mot de passe incorrect, invitation expirée ou déjà utilisée, compte pas encore publié, serveur injoignable : chaque cas a son message et la marche à suivre. Mot de passe oublié ? Demande un lien de réinitialisation.',
+      },
+      {
+        id: 'connexion-fondateur',
+        emoji: '🛡',
+        titre: 'Inviter, renvoyer, réinitialiser, révoquer',
+        texte:
+          'Administration › un compte : état clair (invité, actif, dernière connexion, appareils), « Copier le message d’invitation » (lien, QR code, code court), « Renvoyer une invitation », « Réinitialiser l’accès », « Révoquer l’accès ». Chiffré de bout en bout : le relais ne voit ni mot de passe ni clé.',
+        essayer: { genre: 'app', app: 'administration' },
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
+    version: '2026.10.26',
+    date: '2026-10-26',
+    titre: 'Tsuzuku répond beaucoup plus vite',
+    resume:
+      'Les épisodes d’un animé s’affichent en quelques secondes au lieu d’une quinzaine, et une fiche déjà ouverte revient presque instantanément, même après avoir rechargé la page. Le changement VF/VOSTFR et l’épisode suivant sont préparés pendant que vous regardez.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'tsuzuku-rapide-sources',
+        emoji: '⚡',
+        titre: 'Vos sources cherchées en même temps',
+        texte:
+          'Tsuzuku interroge vos sources et les différents titres d’un animé en parallèle au lieu de l’un après l’autre. Le premier résultat s’affiche dès qu’il arrive ; votre source préférée garde la priorité, mais si elle est très lente, une autre prend le relais au bout d’une seconde.',
+        essayer: { genre: 'app', app: 'tsuzuku' },
+        app: 'tsuzuku',
+      },
+      {
+        id: 'tsuzuku-rapide-cache',
+        emoji: '💾',
+        titre: 'Une fiche déjà vue revient tout de suite',
+        texte:
+          'Les résultats sont gardés sur votre appareil, chiffrés avec votre profil : rouvrir une fiche ou l’accueil est quasi instantané, puis Tsuzuku vérifie en arrière-plan s’il y a du nouveau. « Rechercher à nouveau » repart toujours de zéro.',
+        app: 'tsuzuku',
+      },
+      {
+        id: 'tsuzuku-rapide-lecture',
+        emoji: '⏭',
+        titre: 'VF/VOSTFR et épisode suivant préparés',
+        texte:
+          'Pendant que vous regardez, Tsuzuku prépare le même épisode dans l’autre langue et l’épisode suivant : changer de langue ou passer à la suite ne fait plus attendre. Le temps de chaque étape (ou « depuis le cache ») est indiqué en petit sous le lecteur et dans le diagnostic.',
+        app: 'tsuzuku',
       },
     ],
   },

@@ -520,6 +520,8 @@ export function noterConnexionAmi(
   connexions: number,
   deposer?: (publique: string) => string,
   alea: SourceAleatoire = aleatoireParDefaut,
+  /** Appareils où l'ami s'est connecté (nom lisible, dernière fois) : scellés pour l'administrateur avec le suivi. */
+  appareils?: ReadonlyArray<{ nom: string; vu: string }>,
 ): Annuaire {
   if (annuaire.heritage) {
     return annuaire;
@@ -532,7 +534,8 @@ export function noterConnexionAmi(
       const suivant: EntreeCompte = { ...c, acces: { ...c.acces } };
       delete suivant.acces.invitationExpireLe;
       if (publique) {
-        suivant.suivi = scellerPourAdmin(publique, utf8ToBytes(JSON.stringify({ derniereConnexion: maintenantIso, connexions })), usageSuivi(id), alea);
+        const liste = (appareils ?? []).slice(0, 8).map(a => ({ nom: String(a.nom).slice(0, 40), vu: String(a.vu).slice(0, 40) }));
+        suivant.suivi = scellerPourAdmin(publique, utf8ToBytes(JSON.stringify({ derniereConnexion: maintenantIso, connexions, ...(liste.length > 0 ? { appareils: liste } : {}) })), usageSuivi(id), alea);
         // Un Fondateur n'est scellé pour personne.
         if (c.sequestre.etat === 'attendu' && deposer && c.acces.role !== 'fondateur') {
           suivant.sequestre = { etat: 'depose', depot: deposer(publique) };
@@ -729,10 +732,11 @@ export function ouvrirAnnuaireAdmin(source: Annuaire, cles: ClesAdmin, alea: Sou
         ...(annuaire.admin.derniereConnexion ? { derniereConnexion: annuaire.admin.derniereConnexion } : {}),
       },
       ...annuaire.comptes.map(c => {
-        const suivi = suivisHerites[c.id] ?? lireSuivi(privee, c);
+        const suivi: { derniereConnexion?: string; connexions?: number; appareils?: Array<{ nom: string; vu: string }> } = suivisHerites[c.id] ?? lireSuivi(privee, c);
         const profil: Profil = { id: c.id, nom: prive.noms[c.id] ?? '(prénom inconnu)', admin: false, creeLe: prive.creeLe[c.id] ?? '', ...c.acces, sequestre: c.sequestre.etat };
         if (suivi.derniereConnexion) profil.derniereConnexion = suivi.derniereConnexion;
         if (suivi.connexions !== undefined) profil.connexions = suivi.connexions;
+        if (suivi.appareils) profil.appareils = suivi.appareils;
         if (prive.anterieurs.includes(c.id)) profil.anterieur = true;
         if (prive.creePar[c.id]) profil.creePar = prive.creePar[c.id];
         return profil;
@@ -744,13 +748,20 @@ export function ouvrirAnnuaireAdmin(source: Annuaire, cles: ClesAdmin, alea: Sou
   }
 }
 
-function lireSuivi(privee: Uint8Array, c: EntreeCompte): { derniereConnexion?: string; connexions?: number } {
+function lireSuivi(privee: Uint8Array, c: EntreeCompte): { derniereConnexion?: string; connexions?: number; appareils?: Array<{ nom: string; vu: string }> } {
   if (!c.suivi) return {};
   try {
     const o = JSON.parse(utf8DepuisOctets(ouvrirDepot(privee, c.suivi, usageSuivi(c.id))));
+    const appareils = Array.isArray(o.appareils)
+      ? (o.appareils as unknown[])
+          .filter((a): a is { nom: string; vu: string } => Boolean(a) && typeof (a as { nom?: unknown }).nom === 'string' && typeof (a as { vu?: unknown }).vu === 'string')
+          .slice(0, 8)
+          .map(a => ({ nom: a.nom.slice(0, 40), vu: a.vu.slice(0, 40) }))
+      : undefined;
     return {
       derniereConnexion: dateIso(o.derniereConnexion),
       connexions: typeof o.connexions === 'number' && Number.isFinite(o.connexions) && o.connexions >= 0 ? Math.floor(o.connexions) : undefined,
+      ...(appareils && appareils.length > 0 ? { appareils } : {}),
     };
   } catch {
     return {};

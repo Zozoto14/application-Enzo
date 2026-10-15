@@ -65,6 +65,19 @@ jobs:
       - name: Construire le site
         run: npx vite build --outDir ../site-dist --emptyOutDir
 
+      # Adresse du relais (variable RELAIS_URL, rien de secret) : un appareil neuf d'un ami
+      # s'y connecte par identifiant + mot de passe (voir docs/connexion-amis.md). Facultatif.
+      - name: Adresse du relais pour la connexion des amis
+        env:
+          RELAIS_URL: ${{ vars.RELAIS_URL }}
+        run: |
+          if printf '%s' "$RELAIS_URL" | grep -Eq '^https://[^ /]+'; then
+            node -e "require('fs').writeFileSync('site-dist/relais.json', JSON.stringify({ relais: process.env.RELAIS_URL.replace(/\\/+$/, '') }) + '\\n')"
+            cat site-dist/relais.json
+          else
+            echo "::notice::Variable RELAIS_URL absente : les amis se connectent avec le lien reçu dans l'invitation (voir docs/connexion-amis.md)."
+          fi
+
       # Le paquet de mise à jour de l'app iPhone est signé sur le PC (clé privée
       # jamais sur GitHub) et publié avec le site : republier sans lui le ferait
       # disparaître. On reprend donc celui qui est déjà en ligne.

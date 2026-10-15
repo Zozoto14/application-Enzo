@@ -10,7 +10,8 @@ import { utiliserLectureEnCours } from '../../securite/presence';
 import { ouvrirExterne } from './externe';
 import { LecteurMedia } from './LecteurMedia';
 import { LienGererSources } from './EtatSources';
-import { enregistrerTitrePerso, lireAnime, lireFilm, lireTitresPerso, titresPourSources, type Lecture } from './resoudre';
+import { enregistrerTitrePerso, lireAnime, lireFilm, lireTitresPerso, prechargerEpisode, titresPourSources, type Lecture } from './resoudre';
+import { texteMesure } from './diagnosticTexte';
 import { PanneauEchec } from './DiagnosticSources';
 import { choisirLangue, langueVoulue, type OrigineLangue } from './langues';
 import { SelecteurLangue } from './SelecteurLangue';
@@ -110,6 +111,31 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
       .then(changee, () => undefined);
 
   const aSuivant = kind === 'anime' && (!meta?.total || n < meta.total);
+
+  // Lecteur trouvé : on prépare, sans l'afficher, la même page dans l'autre langue (bascule VF/VOSTFR
+  // immédiate, dès que la liste de l'autre langue est lue) puis l'épisode suivant (une page chacun,
+  // lecteurs gardés 20 min).
+  const [languesMaj, setLanguesMaj] = useState<{ pour: Lecture; etat: Lecture['langues'] } | null>(null);
+  useEffect(() => {
+    if (kind !== 'anime' || !meta || !lecture || lecture.origine !== 'source') return undefined;
+    let actif = true;
+    void (async () => {
+      let etat = lecture.langues;
+      if (lecture.languesAJour) {
+        etat = await lecture.languesAJour.catch(() => lecture.langues);
+        if (!actif) return;
+        setLanguesMaj({ pour: lecture, etat });
+      }
+      const autre = lecture.langue ? (['vf', 'vostfr'] as const).find(l => l !== lecture.langue && etat?.options[l].etat === 'disponible') : undefined;
+      if (autre && actif) await prechargerEpisode(s, { id, titres: meta.titres, numero: n, langue: autre });
+      if (aSuivant && actif) await prechargerEpisode(s, { id, titres: meta.titres, numero: n + 1, langue: lecture.langue ?? null });
+    })();
+    return () => {
+      actif = false;
+    };
+  }, [s, kind, id, n, meta, lecture, aSuivant]);
+  const languesAffichees = languesMaj && languesMaj.pour === lecture ? languesMaj.etat : lecture?.langues;
+
   const suivant = () => remplacer({ t: 'lecteur', kind, id, numero: n + 1 });
   const fin = () => {
     if (kind === 'movie') void marquerFilmVu();
@@ -146,15 +172,15 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
                 ))}
               </View>
             ) : null}
-            {kind === 'anime' && lecture.langues ? (
+            {kind === 'anime' && languesAffichees ? (
               <SelecteurLangue
                 testID="lecteur-langue"
-                etat={lecture.langues}
+                etat={languesAffichees}
                 valeur={lecture.langue ?? null}
                 enCours={charge.enCours}
                 onChoisir={changerLangue}
                 note={
-                  lecture.langues.inconnue
+                  languesAffichees.inconnue
                     ? undefined
                     : charge.donnees?.auChoix
                       ? 'Au choix à chaque fois (Paramètres › Tsuzuku) : ce choix vaut pour cette séance.'
@@ -172,6 +198,11 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
               </Text>
             ) : null}
             {lecture.message ? <Avis genre={courant ? 'alerte' : 'info'} texte={lecture.message} testID="lecteur-message" /> : null}
+            {courant && lecture.mesure ? (
+              <Text style={styleAttenue(theme, 12)} testID="lecteur-mesure">
+                {texteMesure(lecture.mesure)}
+              </Text>
+            ) : null}
             {!courant && lecture.diagnostic ? (
               <PanneauEchec
                 testID="lecteur-diagnostic"

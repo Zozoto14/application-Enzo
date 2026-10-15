@@ -33,6 +33,7 @@ Vite et Jest. Point d'entree : `index.ts`.
 | `langues` | Langue (VF / VOSTFR) d'un titre, d'une adresse, d'un bloc de page (onglets, `data-lang`, sections, `<optgroup>`) ou d'un objet JSON, avec son indice |
 | `sources` | Definitions de sources par selecteurs CSS (`search`, `episodes`, `player`, `movies.search/player`), langue `vf`/`vostfr`/`indifferent`, gestion de liste, import des anciens `sources.json` |
 | `resolution` | Titre -> episodes -> lecteurs (iframe ou fichier direct mp4/m3u8/webm) ; films ; page collee a la main ; diagnostic |
+| `parallele` | Parallelisme borne et annulation : variantes du titre validees dans l'ordre (`courseOrdonnee`), sources en parallele avec priorite et delai de grace (`courseAvecPriorite`), client annulable |
 | `catalogue` | Animes : Jikan (file serialisee, cache, 429) puis AniList en repli (disjoncteur 60 s). Films : TMDB (cle optionnelle, v3 ou Bearer) avec repli Jikan |
 | `liensManuels` | Motif `{n}` (padding, decalage), extraction depuis une page de serie, corrections par episode, lien de film, mapping par titre |
 | `bibliotheque` | Statuts, « vu ailleurs », historique borne (200), deja vu, import/export JSON, migration des anciens `backend/data/libraries/{userId}.json`, `DepotBibliotheque` sur l'interface `Stockage` |
@@ -168,6 +169,13 @@ episodes pagines, onglets de saisons) ; `scripts/e2e-tsuzuku-sources-reel.mjs`
 fait de meme dans le navigateur avec le vrai module du PC (decodage,
 decompression, POST). Captures : `docs/captures-tsuzuku-sources-reel/`.
 
+Temps de reponse : `moteur/parallele.test.ts` (ordre de validation, bornes, annulation, priorite,
+delai de grace, resultat provisoire), `moteur/resolutionParallele.test.ts` (meme resultat que le
+sequentiel, une seule requete vers un site qui bloque), `app/cache.test.ts` (bornes, persistance,
+invalidation), `app/performance.test.ts` (seconde ouverture sans requete, perime servi puis
+rafraichi, prechargement), `app/affichageProgressif.test.tsx` ; E2E `scripts/e2e-tsuzuku-perf.mjs`
+(PC et site, seuils) et temps verifies dans `e2e-tsuzuku-sources-reel`, `-site-relais`, `-langues`.
+
 ## Phase 2 : Tsuzuku, app du hub
 
 Meme mot de passe, memes profils, memes permissions que le hub ; aucun serveur.
@@ -189,6 +197,7 @@ Meme mot de passe, memes profils, memes permissions que le hub ; aucun serveur.
 | `app/LienAnime`, `LienFilm` | Liens manuels : episode + suivants (motif `{n}`) ; film : lien direct |
 | `app/LecteurMedia.web.tsx` / `LecteurMedia.tsx` | Site et PC : iframe `sandbox`, `<video>`, HLS (hls.js charge a la demande). iPhone : « Ouvrir dans Safari » en attendant la WebView (P4) |
 | `app/services.ts`, `resoudre.ts` | Assemblage du moteur par profil ; lien manuel puis sources -> lecteurs |
+| `app/cache.ts` | Cache du profil (memoire + base chiffree, borne) : catalogue, episodes d'une fiche, lecteurs ; voir « Temps de reponse » |
 | `app/reglages.ts`, `ParametresTsuzuku.tsx` | Reglages de confort (Parametres > Tsuzuku, tous) : langue par defaut (VF, VOSTFR, au choix a chaque fois), episode suivant auto, masquer les deja vus |
 | `app/langues.ts`, `SelecteurLangue.tsx` | Langue retenue par serie (ou pour la seance) ; selecteur « VF \| VOSTFR » de la fiche et du lecteur (voir « VF ou VOSTFR ») |
 | `app/resume.ts` | Information en direct de la tuile : « Reprendre <titre> · Ep. N » ou « N a voir » |
@@ -247,11 +256,45 @@ Offre gratuite des Workers : ~10 ms de calcul par requete (l'attente reseau ne c
 grosse page (proche de 2 Mo) peut depasser ce budget et revenir en erreur « injoignable ».
 Deploiement sans PC : `docs/relais-deploiement-github.md`. E2E : `scripts/e2e-tsuzuku-site-relais.mjs`.
 
+### Temps de reponse (`moteur/parallele.ts`, `app/cache.ts`)
+
+Mesure : `scripts/e2e-tsuzuku-perf.mjs` (PC par le vrai pont Electron, site par le vrai relais),
+contre un internet local neutre a latences realistes (200 a 800 ms par requete, une source
+prioritaire lente a 3,5-4,5 s qui n'a pas le titre, 80 ms d'aller-retour navigateur → relais).
+Tableau avant/apres : `docs/tsuzuku-performance.md`.
+
+- **Variantes du titre en parallele** (`courseOrdonnee`) : la premiere requete part seule
+  600 ms (un site rapide ou qui bloque ne recoit rien de plus), puis 3 au plus en vol ; les
+  resultats sont VALIDES DANS L'ORDRE : titre retenu, requetes du diagnostic et arret (correspondance
+  sure, anti-robot) sont exactement ceux du parcours sequentiel. Les requetes devenues inutiles
+  sont annulees (`clientAnnulable` : plus rien ne part, la reponse en vol est ignoree).
+- **Sources en parallele, priorite gardee** (`courseAvecPriorite`) : la source prioritaire part
+  seule 1 s ; si elle n'a pas fini, les suivantes partent (3 au plus). La premiere DANS L'ORDRE qui
+  trouve l'emporte ; une moins prioritaire qui a trouve n'attend une plus prioritaire encore en cours
+  que 1,2 s, puis l'emporte (la lente est « interrompue » dans le diagnostic). Reglages :
+  `ctx.parallele` (`PARALLELE` ; `{ variantes: 1, sources: 1 }` = l'ancien parcours).
+- **Cache du profil** (`creerCache`) : en memoire, garde d'une ouverture de l'app a l'autre, et
+  dans la base CHIFFREE du profil (`tsuzuku.cache` : IndexedDB sur le site, fichier sur le PC ;
+  jamais en clair dans le navigateur, jamais synchronise), borne a 200 entrees / ~0,6 Mo,
+  ecriture groupee. Catalogue (Jikan, AniList, TMDB) : frais 30 min, puis « perime mais servi »
+  et rafraichi en arriere-plan jusqu'a 7 jours, requetes identiques simultanees groupees.
+  Episodes d'une fiche : frais 30 min, perime servi jusqu'a 24 h (rafraichi derriere ; l'ecran se
+  relit si quelque chose a change ; un echec du rafraichissement garde l'ancien resultat ; un
+  episode absent d'une liste du cache relance une recherche fraiche). Lecteurs d'un episode : 20 min.
+- **Prechargement** : pendant la lecture, la page du meme episode dans l'autre langue (bascule
+  VF/VOSTFR immediate) puis celle de l'episode suivant (une page chacune, jamais une page de serie).
+- **PC** : connexions gardees ouvertes par origine (`AGENTS` keep-alive de
+  `bureau/electron/tsuzuku.mjs`) : plus de poignee de main TLS a chaque page d'un meme site.
+- **Affichage** : la fiche s'affiche sans attendre les sources (« Recherche sur vos sources… 4 s ») ;
+  cartes des rangees en petite affiche (`vignette` : AniList `large`, Jikan `image_url`, TMDB
+  `w342`), les 8 premieres tout de suite, les autres au premier defilement de la rangee.
+- **Relais** : inchange (une requete par appel, DNS deja garde 60 s, pre-vol CORS garde 10 min).
+
 ### Stockage et isolation
 
 Les donnees sont des parametres de la base chiffree du profil ouvert, sous le
 prefixe `tsuzuku.` (`tsuzuku.bibliotheque`, `tsuzuku.reglages`, `tsuzuku.mode`,
-`tsuzuku.sources`). Une base par profil : la bibliotheque, les liens manuels et
+`tsuzuku.sources`, `tsuzuku.cache`). Une base par profil : la bibliotheque, les liens manuels et
 la cle TMDB ne sont jamais partages entre profils. Les services (cache du
 catalogue compris) sont recrees par profil.
 
@@ -331,9 +374,15 @@ sources dont vous avez le droit d'utiliser le contenu. »
   activees sans recherche d'animes), sources toutes desactivees.
 - Aide « Comment bien configurer une source » (page Sources,
   `app/AideSources.tsx`).
-- Le cache de la fiche (10 min, resultats trouves seulement) depend de TOUTE
-  la definition des sources activees : une source modifiee n'est jamais servie
-  par un ancien resultat.
+- Le cache de la fiche (frais 30 min, puis servi aussitot et rafraichi en
+  arriere-plan jusqu'a 24 h ; resultats trouves seulement) depend de TOUTE la
+  definition des sources activees et du titre choisi a la main : une source
+  modifiee n'est jamais servie par un ancien resultat. « Rechercher a nouveau »
+  et « Reessayer » l'ignorent. Voir « Temps de reponse ».
+- Temps : sous le resultat et dans le diagnostic (copie compris), « recherche
+  1,2 s · episodes 0,8 s — total 2,0 s », ou « Depuis le cache (garde sur cet
+  appareil, il y a 3 min) » ; une source abandonnee parce qu'une autre a trouve
+  avant elle est dite « interrompue ».
 
 ### VF ou VOSTFR (`moteur/langues.ts`, `app/langues.ts`, `app/SelecteurLangue.tsx`)
 
@@ -356,7 +405,7 @@ de serie propose les episodes par langue (onglets, sections), ou les adresses po
   page entierement marquee → page dans cette langue ; sinon inconnue.
 - **Sans requete inutile** : la premiere recherche suit la langue voulue ; l'autre langue est une page
   de plus, lue a la demande ou en parallele de l'episode (pour griser le bouton si l'episode y manque),
-  donc 2 pages de serie au plus, gardees avec le resultat (10 min). Recherche dediee (`search.pathVf` /
+  donc 2 pages de serie au plus, gardees avec le resultat (cache de la fiche). Recherche dediee (`search.pathVf` /
   `pathVostfr`) : lancee seulement si on choisit cette langue. Langue absente de la source de la fiche
   et autres sources activees : « chercher sur vos autres sources », 2 sources au plus, au clic.
 - **Ecrans** : selecteur segmente « VF | VOSTFR » dans le lecteur (au-dessus de la video) et au-dessus
