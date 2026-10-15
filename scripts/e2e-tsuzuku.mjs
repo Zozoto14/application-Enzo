@@ -212,6 +212,10 @@ async function ouvrirTsuzuku(page) {
 async function retourHub(page) {
   await page.getByTestId('retour-hub').click();
   await page.getByTestId('hub').waitFor({ timeout: 20_000 });
+  // Les apps restent ouvertes en onglets : on ferme celui de Tsuzuku, pour la rouvrir à neuf (le pont simulé change entre deux ouvertures).
+  for (let i = 0; i < 8 && (await page.locator('[data-testid^="onglets-n"][data-testid$="-fermer"]').count()) > 0; i++) {
+    await page.locator('[data-testid^="onglets-n"][data-testid$="-fermer"]').first().click();
+  }
   await allerPageApplications(page);
 }
 

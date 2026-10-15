@@ -1,6 +1,9 @@
 /**
  * Barre d'onglets des apps ouvertes, comme dans un navigateur.
  *
+ * Identifiants de test par RANG (`onglets-n1`, `onglets-n1-ouvrir`…), jamais par app : une recherche
+ * « tout ce qui parle de prospects » dans la page ne doit pas tomber sur la barre.
+ *
  * Bureau, tablette (`BarreOngletsApps`) : « ⌂ Hub », puis un onglet par app
  * (icône, nom, « ⋯ » pour ses actions, « × » pour le fermer). Clic molette sur
  * un onglet : il se ferme. Le menu « ⋯ » propose « Afficher à côté » (écrans
@@ -77,7 +80,7 @@ export function BarreOngletsApps({
   const appMenu = menu ? apps.find(app => app.id === menu.id) : undefined;
   const etroit = width < 900;
   return (
-    <View style={[styles.barre, { backgroundColor: theme.surface, borderBottomColor: theme.ligne }]} testID="onglets-barre" accessibilityRole="tablist" accessibilityLabel="Apps ouvertes">
+    <View style={[styles.barre, { backgroundColor: theme.fond, borderBottomColor: theme.ligne }]} testID="onglets-barre" accessibilityRole="tablist" accessibilityLabel="Apps ouvertes">
       <Pressable
         testID="onglets-hub"
         accessibilityRole="tab"
@@ -200,18 +203,18 @@ function Onglet({
   return (
     <View
       ref={noeud as React.Ref<never>}
-      testID={`onglets-app-${app.id}`}
+      testID={`onglets-n${rang}`}
       style={[
         styles.onglet,
         etroit && styles.ongletEtroit,
         {
           borderRadius: rayon,
-          backgroundColor: actif || aDroite ? theme.fond : 'transparent',
+          backgroundColor: actif || aDroite ? theme.surface : 'transparent',
           borderColor: actif ? couleur : aDroite ? theme.ligne : 'transparent',
         },
       ]}>
       <Pressable
-        testID={`onglets-app-${app.id}-ouvrir`}
+        testID={`onglets-n${rang}-ouvrir`}
         accessibilityRole="tab"
         accessibilityState={{ selected: actif }}
         aria-selected={actif}
@@ -227,7 +230,7 @@ function Onglet({
       </Pressable>
       <Pressable
         ref={bouton as React.Ref<never>}
-        testID={`onglets-app-${app.id}-menu`}
+        testID={`onglets-n${rang}-menu`}
         accessibilityRole="button"
         accessibilityLabel={`Actions de l’onglet ${app.nom}`}
         onPress={ouvrirMenu}
@@ -235,7 +238,7 @@ function Onglet({
         <Text style={{ color: theme.attenue, fontSize: 14, fontWeight: '700' }}>⋯</Text>
       </Pressable>
       <Pressable
-        testID={`onglets-app-${app.id}-fermer`}
+        testID={`onglets-n${rang}-fermer`}
         accessibilityRole="button"
         accessibilityLabel={`Fermer l’onglet ${app.nom}`}
         onPress={onFermer}

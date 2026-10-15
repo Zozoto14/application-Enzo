@@ -2952,7 +2952,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     const placement = placementDe(app.id);
     const Racine = app.Racine!;
     return (
-      <PanneauOnglet key={app.id} scene={scene} placement={placement} testID={`onglets-contenu-${app.id}`}>
+      <PanneauOnglet key={app.id} scene={scene} placement={placement} testID={placement ? (placement.gauche > 0 ? 'onglets-contenu-droite' : 'onglets-contenu-gauche') : undefined}>
         <InfoOngletContexte.Provider value={placement ? infoGauche : INFO_MASQUE}>
           <GardeErreur quoi={app.nom} onRevenir={annexe ? undefined : profils?.onChanger}>
             <BarreAppContexte.Provider value={barreApp}>

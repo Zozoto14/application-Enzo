@@ -134,6 +134,10 @@ function useCarnet({ contexte }: PropsRacineApp) {
   useEffect(() => {
     if (version > 0) setDonnees(chargerDonnees(stockage).prospects);
   }, [stockage, version]);
+  // Onglet du hub de retour à l'écran (ses effets reprennent) : relu, une autre app (Tâches…) a pu écrire entre-temps.
+  useEffect(() => {
+    setDonnees(chargerDonnees(stockage).prospects);
+  }, [stockage]);
   const maj = useCallback(
     (changer: (d: DonneesProspects) => DonneesProspects): DonneesProspects => {
       // Toujours à partir de ce qui est enregistré : une réception entre-temps n'est pas écrasée.

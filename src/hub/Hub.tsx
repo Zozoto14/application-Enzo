@@ -827,7 +827,7 @@ function Tuile({
         </Text>
       ) : null}
       {ouverte && !edition ? (
-        <Text testID={`tuile-${app.id}-ouverte`} style={[styles.etiquette, { color: hautTexte, borderColor: blocs ? 'rgba(255,255,255,0.6)' : couleur, borderRadius: theme.rayonGrand ? 999 : 0 }]}>
+        <Text testID="tuile-ouverte" style={[styles.etiquette, { color: hautTexte, borderColor: blocs ? 'rgba(255,255,255,0.6)' : couleur, borderRadius: theme.rayonGrand ? 999 : 0 }]}>
           ● OUVERTE
         </Text>
       ) : null}

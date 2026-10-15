@@ -49,7 +49,18 @@ const attendre = async (condition, delai = 30_000, pas = 250) => {
 const tuile = (page, id) => page.locator(`[data-testid="cellule-${id}"], [data-testid="tuile-${id}"]`).first();
 const presents = (page, id) => page.locator(`[data-testid="${id}"]`).count();
 const boite = async (page, id) => page.getByTestId(id).first().boundingBox();
-const actif = async page => page.locator('[data-testid^="onglets-app-"][data-testid$="-ouvrir"][aria-selected="true"]').getAttribute('data-testid').catch(() => undefined);
+/** Onglet d'une app dans la barre (identifiants de test par rang : on le retrouve par son nom). */
+const ongletDe = async (page, nom) => {
+  for (const el of await page.locator('[data-testid^="onglets-n"][data-testid$="-ouvrir"]').all()) {
+    if (((await el.getAttribute('aria-label')) ?? '').startsWith(`${nom}`)) return (await el.getAttribute('data-testid')).replace(/-ouvrir$/, '');
+  }
+  return undefined;
+};
+const ongletPresent = async (page, nom) => ((await ongletDe(page, nom)) ? 1 : 0);
+const cliquerOnglet = async (page, nom, quoi) => page.getByTestId(`${await ongletDe(page, nom)}-${quoi}`).click();
+const toucherOnglet = async (page, nom, quoi) => toucher(page, `${await ongletDe(page, nom)}-${quoi}`);
+const nomsOnglets = async page => (await page.locator('[data-testid^="onglets-n"][data-testid$="-ouvrir"]').evaluateAll(els => els.map(e => e.getAttribute('aria-label') ?? ''))).map(l => l.split(',')[0].replace(' (à droite)', ''));
+const actif = async page => ((await page.locator('[data-testid^="onglets-n"][data-testid$="-ouvrir"][aria-selected="true"]').getAttribute('aria-label').catch(() => '')) ?? '').split(',')[0];
 
 async function fermerPopups(page) {
   for (let i = 0; i < 3; i++) {
@@ -85,7 +96,7 @@ try {
   log('PC : Portefeuille, Tâches et Claude Office en onglets');
   await tuile(pc, 'portefeuille').click();
   await pc.getByTestId('onglets-barre').waitFor({ timeout: 20_000 });
-  verifier((await presents(pc, 'onglets-app-portefeuille')) === 1, 'Portefeuille ouvert : son onglet apparaît');
+  verifier((await ongletPresent(pc, 'Portefeuille')) === 1, 'Portefeuille ouvert : son onglet apparaît');
   await pc.getByTestId('onglets-hub').click();
   await tuile(pc, 'taches').click();
   await pc.getByTestId('app-taches').waitFor({ timeout: 20_000 });
@@ -99,17 +110,17 @@ try {
   await pc.getByTestId('claude-office-onglet-historique').click();
   const texteHorsBureau = () => pc.getByText(/Le bureau des agents de Claude Code : un personnage par session/).count();
   verifier(await attendre(async () => (await texteHorsBureau()) === 1, 5000), 'Claude Office : onglet interne « Historique » choisi');
-  const ids = await pc.locator('[data-testid^="onglets-app-"][data-testid$="-ouvrir"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid')));
-  verifier(JSON.stringify(ids) === JSON.stringify(['onglets-app-portefeuille-ouvrir', 'onglets-app-taches-ouvrir', 'onglets-app-claude-office-ouvrir']), `trois onglets dans l’ordre d’ouverture (${ids.join(', ')})`);
+  const ids = await nomsOnglets(pc);
+  verifier(JSON.stringify(ids) === JSON.stringify(['Portefeuille', 'Tâches', 'Claude Office']), `trois onglets dans l’ordre d’ouverture (${ids.join(', ')})`);
   verifier((await pc.getByTestId('onglets-compte').innerText()).trim() === '3/8', 'compteur 3/8');
   await capture(pc, '01-pc-trois-onglets');
 
   log('PC : chaque app garde son état');
-  await pc.getByTestId('onglets-app-taches-ouvrir').click();
+  await cliquerOnglet(pc, 'Tâches', 'ouvrir');
   await pc.getByTestId('app-taches').waitFor({ timeout: 10_000 });
   verifier((await pc.getByTestId('taches-recherche').inputValue()) === 'Facture', 'Tâches : la recherche en cours est toujours là');
   verifier((await presents(pc, 'claude-office-onglet-historique')) === 0, 'onglet masqué (Claude Office) : plus rien de lui dans la page');
-  await pc.getByTestId('onglets-app-claude-office-ouvrir').click();
+  await cliquerOnglet(pc, 'Claude Office', 'ouvrir');
   await pc.getByTestId('claude-office-onglet-historique').waitFor({ timeout: 10_000 });
   verifier((await texteHorsBureau()) === 1, 'Claude Office : l’onglet « Historique » choisi est toujours affiché');
   verifier((await presents(pc, 'taches-recherche')) === 0, 'Tâches, masquée : rien d’elle dans la page');
@@ -117,50 +128,50 @@ try {
   log('PC : raccourcis');
   await pc.mouse.click(720, 450).catch(() => undefined);
   await pc.keyboard.press('Control+1');
-  verifier(await attendre(async () => (await actif(pc)) === 'onglets-app-portefeuille-ouvrir', 5000), 'Ctrl+1 : Portefeuille');
+  verifier(await attendre(async () => (await actif(pc)) === 'Portefeuille', 5000), 'Ctrl+1 : Portefeuille');
   await pc.keyboard.press('Control+Tab');
-  verifier(await attendre(async () => (await actif(pc)) === 'onglets-app-taches-ouvrir', 5000), 'Ctrl+Tab : onglet suivant (Tâches)');
+  verifier(await attendre(async () => (await actif(pc)) === 'Tâches', 5000), 'Ctrl+Tab : onglet suivant (Tâches)');
   await pc.keyboard.press('Control+Shift+Tab');
-  verifier(await attendre(async () => (await actif(pc)) === 'onglets-app-portefeuille-ouvrir', 5000), 'Ctrl+Maj+Tab : onglet précédent (Portefeuille)');
+  verifier(await attendre(async () => (await actif(pc)) === 'Portefeuille', 5000), 'Ctrl+Maj+Tab : onglet précédent (Portefeuille)');
   await pc.keyboard.press('Control+9');
-  verifier(await attendre(async () => (await actif(pc)) === 'onglets-app-claude-office-ouvrir', 5000), 'Ctrl+9 : dernier onglet (Claude Office)');
-  await pc.getByTestId('onglets-app-taches-ouvrir').click();
+  verifier(await attendre(async () => (await actif(pc)) === 'Claude Office', 5000), 'Ctrl+9 : dernier onglet (Claude Office)');
+  await cliquerOnglet(pc, 'Tâches', 'ouvrir');
   await pc.getByTestId('taches-recherche').click();
   await pc.keyboard.press('Control+Tab');
   await pause(400);
-  verifier((await actif(pc)) === 'onglets-app-taches-ouvrir', 'pendant la saisie, Ctrl+Tab ne change pas d’onglet');
+  verifier((await actif(pc)) === 'Tâches', 'pendant la saisie, Ctrl+Tab ne change pas d’onglet');
   await pc.getByTestId('onglets-hub').click();
 
   log('PC : clic molette et appui long sur une tuile = nouvel onglet, sans quitter le hub');
   await allerPageApplications(pc);
   await tuile(pc, 'tsuzuku').click({ button: 'middle' });
-  verifier(await attendre(async () => (await presents(pc, 'onglets-app-tsuzuku')) === 1, 5000), 'clic molette : Tsuzuku en nouvel onglet');
+  verifier(await attendre(async () => (await ongletPresent(pc, 'Tsuzuku')) === 1, 5000), 'clic molette : Tsuzuku en nouvel onglet');
   verifier((await presents(pc, 'hub')) === 1 && (await presents(pc, 'tsuzuku-racine')) === 0, '… et l’on reste sur le hub');
-  await pc.getByTestId('onglets-app-tsuzuku-fermer').click();
+  await cliquerOnglet(pc, 'Tsuzuku', 'fermer');
   const boiteTsuzuku = await tuile(pc, 'tsuzuku').boundingBox();
   await pc.mouse.move(boiteTsuzuku.x + boiteTsuzuku.width / 2, boiteTsuzuku.y + boiteTsuzuku.height / 2);
   await pc.mouse.down();
   await pause(900);
   await pc.mouse.up();
-  verifier(await attendre(async () => (await presents(pc, 'onglets-app-tsuzuku')) === 1, 5000), 'appui long : Tsuzuku en nouvel onglet');
+  verifier(await attendre(async () => (await ongletPresent(pc, 'Tsuzuku')) === 1, 5000), 'appui long : Tsuzuku en nouvel onglet');
   verifier((await presents(pc, 'hub')) === 1, '… toujours sur le hub');
-  verifier((await presents(pc, 'tuile-taches-ouverte')) === 1, 'la tuile d’une app ouverte le dit (« OUVERTE »)');
+  verifier((await tuile(pc, 'taches').getByTestId('tuile-ouverte').count()) === 1, 'la tuile d’une app ouverte le dit (« OUVERTE »)');
   await capture(pc, '02-pc-hub-onglets');
 
   log('PC : Ctrl+W ferme l’onglet affiché');
-  await pc.getByTestId('onglets-app-tsuzuku-ouvrir').click();
+  await cliquerOnglet(pc, 'Tsuzuku', 'ouvrir');
   await pc.getByTestId('tsuzuku-racine').waitFor({ timeout: 20_000 });
   await pc.mouse.click(720, 600).catch(() => undefined);
   await pc.keyboard.press('Control+w');
-  verifier(await attendre(async () => (await presents(pc, 'onglets-app-tsuzuku')) === 0, 5000), 'Ctrl+W : onglet Tsuzuku fermé');
+  verifier(await attendre(async () => (await ongletPresent(pc, 'Tsuzuku')) === 0, 5000), 'Ctrl+W : onglet Tsuzuku fermé');
 
   log('PC : côte à côte');
-  await pc.getByTestId('onglets-app-taches-ouvrir').click();
-  await pc.getByTestId('onglets-app-claude-office-menu').click();
+  await cliquerOnglet(pc, 'Tâches', 'ouvrir');
+  await cliquerOnglet(pc, 'Claude Office', 'menu');
   await pc.getByTestId('onglets-menu-a-cote').click();
   await pc.getByTestId('onglets-separation').waitFor({ timeout: 10_000 });
-  const g1 = await boite(pc, 'onglets-contenu-taches');
-  const d1 = await boite(pc, 'onglets-contenu-claude-office');
+  const g1 = await boite(pc, 'onglets-contenu-gauche');
+  const d1 = await boite(pc, 'onglets-contenu-droite');
   verifier(g1 && d1 && g1.x < 10 && Math.abs(g1.width - d1.width) < 30 && d1.x > g1.x + g1.width - 10, `Tâches à gauche, Claude Office à droite, moitié-moitié (${Math.round(g1?.width)} / ${Math.round(d1?.width)} px)`);
   verifier((await pc.getByTestId('taches-recherche').inputValue()) === 'Facture', 'côte à côte, Tâches garde sa recherche');
   const sep = await boite(pc, 'onglets-separation');
@@ -169,24 +180,25 @@ try {
   await pc.mouse.move(sep.x + sep.width / 2 - 120, sep.y + sep.height / 2, { steps: 8 });
   await pc.mouse.move(sep.x + sep.width / 2 - 220, sep.y + sep.height / 2, { steps: 8 });
   await pc.mouse.up();
-  const g2 = await boite(pc, 'onglets-contenu-taches');
-  const d2 = await boite(pc, 'onglets-contenu-claude-office');
+  const g2 = await boite(pc, 'onglets-contenu-gauche');
+  const d2 = await boite(pc, 'onglets-contenu-droite');
   verifier(g2.width < g1.width - 150 && d2.width > d1.width + 150, `séparation glissée : ${Math.round(g2.width)} / ${Math.round(d2.width)} px`);
   await capture(pc, '03-pc-cote-a-cote');
   await pc.getByTestId('onglets-echanger').click();
-  const g3 = await boite(pc, 'onglets-contenu-claude-office');
-  const d3 = await boite(pc, 'onglets-contenu-taches');
+  const g3 = await boite(pc, 'onglets-contenu-gauche');
+  const d3 = await boite(pc, 'onglets-contenu-droite');
+  verifier((await pc.getByTestId('onglets-contenu-gauche').getByTestId('claude-office-onglet-historique').count()) === 1, 'Claude Office passe à gauche');
   verifier(g3.x < 10 && d3.x > g3.x + 100 && Math.abs(g3.width - d2.width) < 20, 'côtés échangés : chaque app garde sa largeur');
   await pc.getByTestId('onglets-quitter-droite').click();
   verifier(await attendre(async () => (await presents(pc, 'onglets-separation')) === 0, 5000), 'côté droit fermé : une seule app à l’écran');
-  verifier((await presents(pc, 'onglets-app-taches')) === 1, '… son onglet reste dans la barre');
+  verifier((await ongletPresent(pc, 'Tâches')) === 1, '… son onglet reste dans la barre');
 
   log('PC : onglets restaurés après rechargement (sur le hub)');
   await pc.reload();
   await deverrouillerSiDemande(pc, secret, 'hub');
   await fermerPopups(pc);
   await pc.getByTestId('onglets-barre').waitFor({ timeout: 30_000 });
-  const restaures = await pc.locator('[data-testid^="onglets-app-"][data-testid$="-ouvrir"]').count();
+  const restaures = (await nomsOnglets(pc)).length;
   verifier(restaures === 3, `onglets restaurés (${restaures})`);
   verifier((await presents(pc, 'hub')) === 1 && (await presents(pc, 'app-taches')) === 0, 'au redémarrage : sur le hub, rien ne s’ouvre seul');
 
@@ -195,9 +207,9 @@ try {
   await pc.evaluate(() => {
     window.applibourse = Object.assign(window.applibourse ?? {}, { bureau: true, fenetres: { version: 1 } });
   });
-  await pc.getByTestId('onglets-app-taches-ouvrir').click();
+  await cliquerOnglet(pc, 'Tâches', 'ouvrir');
   await pc.getByTestId('app-taches').waitFor({ timeout: 20_000 });
-  await pc.getByTestId('onglets-app-taches-menu').click();
+  await cliquerOnglet(pc, 'Tâches', 'menu');
   const libelle = await pc.getByTestId('onglets-menu-ailleurs').innerText();
   verifier(/nouvelle fenêtre/.test(libelle), `menu : « ${libelle.trim()} »`);
   const [fenetre] = await Promise.all([pc.waitForEvent('popup'), pc.getByTestId('onglets-menu-ailleurs').click()]);
@@ -206,7 +218,7 @@ try {
   verifier(ouverte, 'la nouvelle fenêtre affiche Tâches');
   verifier((await presents(fenetre, 'bouton-deverrouiller')) === 0, '… sans second déverrouillage (même session)');
   verifier((await presents(fenetre, 'onglets-barre')) === 0, '… sans barre d’onglets (une app par fenêtre)');
-  verifier(await attendre(async () => (await presents(pc, 'onglets-app-taches')) === 0, 5000), 'l’onglet Tâches quitte la fenêtre principale (pas deux fois la même app)');
+  verifier(await attendre(async () => (await ongletPresent(pc, 'Tâches')) === 0, 5000), 'l’onglet Tâches quitte la fenêtre principale (pas deux fois la même app)');
   await fenetre.setViewportSize({ width: 1100, height: 800 });
   await capture(fenetre, '04-bureau-fenetre-taches');
   // Rouvrir Tâches depuis le hub : la fenêtre existante passe au premier plan (pas de doublon).
@@ -214,7 +226,7 @@ try {
   await allerPageApplications(pc);
   await tuile(pc, 'taches').click();
   await pause(600);
-  verifier((await presents(pc, 'onglets-app-taches')) === 0, 'rouvrir Tâches depuis le hub : sa fenêtre est remontée, pas de second exemplaire');
+  verifier((await ongletPresent(pc, 'Tâches')) === 0, 'rouvrir Tâches depuis le hub : sa fenêtre est remontée, pas de second exemplaire');
   // Verrouiller la fenêtre principale ferme la fenêtre annexe.
   await pc.getByTestId('hub-verrouiller').click();
   verifier(await attendre(async () => fenetre.isClosed(), 10_000), 'verrouiller : la fenêtre annexe se ferme');
@@ -228,10 +240,10 @@ try {
     delete window.applibourse.fenetres;
   });
   // Un rendu de l'hôte (changement d'onglet) relit le pont.
-  await pc.getByTestId('onglets-app-claude-office-ouvrir').click();
+  await cliquerOnglet(pc, 'Claude Office', 'ouvrir');
   await pc.getByTestId('onglets-hub').click();
   await pc.getByTestId('onglets-barre').waitFor({ timeout: 20_000 });
-  await pc.getByTestId('onglets-app-claude-office-menu').click();
+  await cliquerOnglet(pc, 'Claude Office', 'menu');
   const libelleSite = await pc.getByTestId('onglets-menu-ailleurs').innerText();
   verifier(/onglet du navigateur/.test(libelleSite), `menu du site : « ${libelleSite.trim()} »`);
   const [ongletNav] = await Promise.all([contextePc.waitForEvent('page'), pc.getByTestId('onglets-menu-ailleurs').click()]);
@@ -283,7 +295,7 @@ try {
     verifier(await attendre(async () => (await presents(lea, 'avis-onglets')) === 1, 8000), `Léa, lien #/app/${app} : un avis dit que l’app ne lui est pas ouverte`);
     if (app === 'administration') await capture(lea, '06-ami-lien-interdit');
     verifier((await presents(lea, 'hub')) === 1, '… elle reste sur le hub');
-    verifier((await presents(lea, `onglets-app-${app}`)) === 0 && (await presents(lea, 'app-administration')) === 0, `… sans onglet ${app}`);
+    verifier((await ongletPresent(lea, app === 'administration' ? 'Administration' : 'Claude Office')) === 0 && (await presents(lea, 'app-administration')) === 0, `… sans onglet ${app}`);
   }
   await lea.close();
 
@@ -302,11 +314,11 @@ try {
   await ipad.getByTestId('app-taches').waitFor({ timeout: 20_000 });
   await toucher(ipad, 'onglets-hub');
   await toucher(ipad, 'tuile-portefeuille');
-  await toucher(ipad, 'onglets-app-taches-menu');
+  await toucherOnglet(ipad, 'Tâches', 'menu');
   await toucher(ipad, 'onglets-menu-a-cote');
   await ipad.getByTestId('onglets-separation').waitFor({ timeout: 10_000 });
   const gi = await boite(ipad, 'vue-principale');
-  const di = await boite(ipad, 'onglets-contenu-taches');
+  const di = await boite(ipad, 'onglets-contenu-droite');
   verifier(gi && di && gi.x < 10 && di.x > 600 && Math.abs(gi.width - di.width) < 30, `iPad : Portefeuille à gauche, Tâches à droite (${Math.round(gi?.width)} / ${Math.round(di?.width)} px)`);
   await capture(ipad, '07-ipad-cote-a-cote');
   await contexteIpad.close();

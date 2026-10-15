@@ -75,6 +75,13 @@ afterEach(() => {
   theme.definirTheme('nuit');
 });
 
+/** Onglet d'une app (identifiants par rang) : `onglets-nK`, ou `undefined`. */
+const onglet = (nom: string): string | undefined =>
+  screen
+    .queryAllByTestId(/^onglets-n\d+-ouvrir$/)
+    .find(n => String(n.props.accessibilityLabel ?? '').startsWith(nom))
+    ?.props.testID.replace(/-ouvrir$/, '');
+
 const presser = async (id: string) => {
   await fireEvent.press(screen.getByTestId(id));
   await laisserTravailler();
@@ -89,7 +96,7 @@ describe('onglets d’apps dans l’hôte', () => {
     // Une tuile ouvre l'app dans un onglet.
     await presser('tuile-taches');
     expect(screen.getByTestId('app-taches')).toBeTruthy();
-    expect(screen.getByTestId('onglets-app-taches')).toBeTruthy();
+    expect(onglet('Tâches')).toBeDefined();
     // Un état non enregistré dans l'app : une recherche en cours.
     await presser('taches-demo');
     await fireEvent.changeText(screen.getByTestId('taches-recherche'), 'Atelier');
@@ -97,23 +104,23 @@ describe('onglets d’apps dans l’hôte', () => {
     // Retour au hub par la barre : l'app reste ouverte.
     await presser('onglets-hub');
     expect(screen.getByTestId('hub')).toBeTruthy();
-    expect(screen.getByTestId('tuile-taches-ouverte')).toBeTruthy();
+    expect(screen.getByTestId('tuile-ouverte')).toBeTruthy();
 
     // Appui long sur une tuile : nouvel onglet, sans quitter le hub.
     await fireEvent(screen.getByTestId('tuile-tsuzuku'), 'longPress');
     await laisserTravailler();
     expect(screen.getByTestId('hub')).toBeTruthy();
-    expect(screen.getByTestId('onglets-app-tsuzuku')).toBeTruthy();
+    expect(onglet('Tsuzuku')).toBeDefined();
     expect(screen.getByTestId('onglets-annonce').props.children).toContain('Tsuzuku ouverte dans un nouvel onglet');
 
     // De retour sur Tâches : la saisie est toujours là.
-    await presser('onglets-app-taches-ouvrir');
+    await presser(`${onglet('Tâches')}-ouvrir`);
     expect(screen.getByTestId('taches-recherche').props.value).toBe('Atelier');
 
     // Fermer l'onglet affiché : son voisin prend la place.
-    await presser('onglets-app-taches-fermer');
-    expect(screen.queryByTestId('onglets-app-taches')).toBeNull();
-    expect(screen.getByTestId('onglets-app-tsuzuku')).toBeTruthy();
+    await presser(`${onglet('Tâches')}-fermer`);
+    expect(onglet('Tâches')).toBeUndefined();
+    expect(onglet('Tsuzuku')).toBeDefined();
 
     // Mémoire de l'appareil : la liste des onglets.
     expect(JSON.parse(local.valeurs.get('applibourse.onglets') ?? '{}').ouverts).toEqual(['tsuzuku']);
@@ -123,12 +130,12 @@ describe('onglets d’apps dans l’hôte', () => {
     local.valeurs.set('applibourse.onglets', JSON.stringify({ v: 1, ouverts: ['taches', 'administration', '../x'], ratio: 0.5 }));
     await ouvrirLeHub();
     expect(screen.getByTestId('hub')).toBeTruthy();
-    expect(screen.getByTestId('onglets-app-taches')).toBeTruthy();
+    expect(onglet('Tâches')).toBeDefined();
     // L'Administration n'est pas ouverte à ce compte (appareil sans profils) : pas d'onglet.
-    expect(screen.queryByTestId('onglets-app-administration')).toBeNull();
+    expect(onglet('Administration')).toBeUndefined();
     // Rien ne s'ouvre seul : l'app n'est montée qu'une fois choisie.
     expect(screen.queryByTestId('app-taches')).toBeNull();
-    await presser('onglets-app-taches-ouvrir');
+    await presser(`${onglet('Tâches')}-ouvrir`);
     expect(screen.getByTestId('app-taches')).toBeTruthy();
   });
 
@@ -147,7 +154,7 @@ describe('onglets d’apps dans l’hôte', () => {
     await ouvrirLeHub();
     expect(screen.getByTestId('hub')).toBeTruthy();
     expect(screen.getByTestId('avis-onglets')).toBeTruthy();
-    expect(screen.queryByTestId('onglets-app-administration')).toBeNull();
+    expect(onglet('Administration')).toBeUndefined();
   });
 
   it('« ← Hub » revient à la page d’origine de l’app', async () => {
