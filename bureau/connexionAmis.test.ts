@@ -17,7 +17,8 @@ import { ajouterProfil, type Profil } from '../src/profils/profils';
 import { decoderInvitation, ErreurInvitation } from '../src/profils/invitation';
 import type { Liaison } from '../src/sync/relais/liaison';
 import { JETON_TEST, RELAIS_TEST, relaisPortees } from '../src/sync/relais/__fixtures__/relaisPortees';
-import { accepterInvitation, chargerCodeCourt, chargerInvitation, connecterParIdentifiant, creerInvitation } from './connexionAmis';
+import { accepterInvitation, chargerCodeCourt, chargerInvitation, connecterParIdentifiant, creerInvitation, nettoyerCompteRelais } from './connexionAmis';
+import { espacesDuRelais } from '../src/sync/relais/espaces';
 import { lireAnnuaireFichier, synchroniserComptesAdmin, type Fichiers, type Memoire } from './synchroComptes';
 
 const KDF: ParametresKdf = { algorithme: 'argon2id', passes: 1, memoireKio: 64, fils: 1, longueurCle: 32 };
@@ -211,5 +212,67 @@ describe('relais pas encore redéployé (compatibilité)', () => {
     await expect(chargerInvitation(decoderInvitation(vieille.lien)!, relais.requete)).rejects.toMatchObject({ code: 'invitation-expiree' });
     await expect(connecterParIdentifiant(RELAIS_TEST, 'Léa', 'Été à Biarritz 2026', relais.requete)).rejects.toBeInstanceOf(ErreurInvitation);
     await expect(connecterParIdentifiant(RELAIS_TEST, 'Léa', 'Été à Biarritz 2026', relais.requete)).rejects.toMatchObject({ code: 'relais-ancien' });
+  });
+});
+
+describe('Administration : politique du mot de passe et nettoyage du relais', () => {
+  it('la politique du Fondateur voyage, scellée, dans l’invitation et est revérifiée à l’acceptation', async () => {
+    const relais = relaisV6();
+    const pc = await pcAvecLea();
+    await pc.tour(relais);
+    const inv = await creerInvitation({
+      maitre: MAITRE,
+      compte: 'lea0000001',
+      prenom: 'Léa',
+      motDePasse: pc.ids.motDePasse,
+      fondateur: 'Enzo',
+      jours: 7,
+      site: 'https://site.test',
+      requete: relais.requete,
+      kdfCodeCourt: KDF,
+      politique: { longueurMin: 16, forceMin: 3 },
+    });
+    expect(inv.longueur).toBe(16);
+    expect(inv.prenom).toBe('Léa');
+    expect(inv.message).toContain('16 caractères au moins');
+    // Rien en clair sur le relais : la politique est dans la charge scellée.
+    expect(JSON.stringify([...relais.invs.values()])).not.toContain('"l":16');
+    const chargee = await chargerInvitation(decoderInvitation(inv.lien)!, relais.requete);
+    expect(chargee.contenu.politique).toEqual({ l: 16, f: 3 });
+    await expect(accepterInvitation({ invitation: chargee, motDePasse: 'Été à Biarritz', requete: relais.requete, kdf: KDF })).rejects.toThrow(/16 caractères au moins/);
+    await expect(accepterInvitation({ invitation: chargee, motDePasse: 'abcdefghijklmnop', requete: relais.requete, kdf: KDF })).rejects.toThrow(/Solide/);
+    const ok = await accepterInvitation({ invitation: chargee, motDePasse: 'Été à Biarritz 2026', requete: relais.requete, kdf: KDF });
+    expect(ok.relie.compte).toBe('lea0000001');
+  });
+
+  it('relais pas encore redéployé : la politique voyage dans le lien ; sans politique, rien n’est ajouté', async () => {
+    const relais = relaisV6({ ancien: true });
+    const pc = await pcAvecLea();
+    await pc.tour(relais);
+    const avec = await creerInvitation({ maitre: MAITRE, compte: 'lea0000001', prenom: 'Léa', motDePasse: pc.ids.motDePasse, jours: 7, site: 'https://site.test', requete: relais.requete, politique: { longueurMin: 12, forceMin: 2 } });
+    expect(avec.mode).toBe('lien');
+    expect((await chargerInvitation(decoderInvitation(avec.lien)!, relais.requete)).contenu.politique).toEqual({ l: 12, f: 2 });
+    const sans = await creerInvitation({ maitre: MAITRE, compte: 'lea0000001', prenom: 'Léa', motDePasse: pc.ids.motDePasse, jours: 7, site: 'https://site.test', requete: relais.requete });
+    expect((await chargerInvitation(decoderInvitation(sans.lien)!, relais.requete)).contenu.politique).toBeUndefined();
+    expect(sans.message).toContain('10 caractères au moins');
+  });
+
+  it('suppression d’un compte : ses copies sont effacées du relais, son accès retiré, chaque étape tentée', async () => {
+    const relais = relaisV6();
+    const pc = await pcAvecLea();
+    await pc.tour(relais);
+    const inv = await creerInvitation({ maitre: MAITRE, compte: 'lea0000001', prenom: 'Léa', motDePasse: pc.ids.motDePasse, jours: 7, site: 'https://site.test', requete: relais.requete, kdfCodeCourt: KDF });
+    await accepterInvitation({ invitation: await chargerInvitation(decoderInvitation(inv.lien)!, relais.requete), motDePasse: 'Été à Biarritz 2026', requete: relais.requete, kdf: KDF });
+    const espaces = espacesDuRelais(MAITRE, relais.requete);
+    expect(Object.keys(await espaces.lister('lea0000001')).length).toBeGreaterThan(0);
+    expect(relais.acces.size).toBe(1);
+    const bilan = await nettoyerCompteRelais(MAITRE, 'lea0000001', 'Léa', relais.requete);
+    expect(bilan.objets).toBeGreaterThan(0);
+    expect(bilan.acces).toBe(true);
+    expect(Object.keys(await espaces.lister('lea0000001'))).toEqual([]);
+    expect(relais.acces.size).toBe(0);
+    // Ce relais de test ne connaît pas les révocations : noté, sans bloquer le reste.
+    expect(bilan.revoque || bilan.restes.some(r => /révocation/.test(r))).toBe(true);
+    await expect(connecterParIdentifiant(RELAIS_TEST, 'Léa', 'Été à Biarritz 2026', relais.requete)).rejects.toMatchObject({ code: 'identifiant-inconnu' });
   });
 });

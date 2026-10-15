@@ -24,6 +24,17 @@ test('liens web et mailto : vers le système, le reste refusé', () => {
   assert.equal(decisionOuverture({ url: 'data:text/html,x', frameName: '' }), 'refus');
 });
 
+test('invitation par e-mail (Administration) : mailto encodé, objet et corps accentués, lien en fragment → messagerie du système', () => {
+  const corps = encodeURIComponent('Salut Léa !\r\n1. Ouvre ce lien :\r\nhttps://site.exemple.fr/#invitation=AI1.abc\r\nÀ bientôt').replace(/'/g, '%27');
+  const url = `mailto:lea.martin%2Bamis@exemple.fr?subject=${encodeURIComponent('Enzo t’invite sur AppDashboard')}&body=${corps}`;
+  assert.ok(url.length < 2000);
+  assert.equal(decisionOuverture({ url, frameName: '' }), 'externe');
+  // Sans destinataire (aucune adresse enregistrée) : la messagerie s'ouvre quand même.
+  assert.equal(decisionOuverture({ url: `mailto:?subject=x&body=${corps}`, frameName: '' }), 'externe');
+  // Un mailto non encodé (espace, retour à la ligne) n'est pas confié au système.
+  assert.equal(decisionOuverture({ url: 'mailto:a@exemple.fr?body=deux mots', frameName: '' }), 'refus');
+});
+
 test('nombre d’annexes borné', () => {
   assert.equal(decisionOuverture({ url: 'about:blank', frameName: NOM }, MAX_ANNEXES - 1), 'annexe');
   assert.equal(decisionOuverture({ url: 'about:blank', frameName: NOM }, MAX_ANNEXES), 'refus');

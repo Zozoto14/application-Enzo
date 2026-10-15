@@ -16,7 +16,20 @@ export function Tableau({ outils }: { outils: OutilsAdmin }) {
   const maintenant = outils.maintenant();
   // Un gestionnaire ne reçoit que des chiffres : `apercu` ne porte aucun prénom.
   const stats = statistiques(apercu, registre, outils.politique, maintenant);
-  const alertes: AlerteAdmin[] = [...(gestionnaire ? [] : alertesSecurite(outils)), ...alertesComptes(tous, maintenant, donnees.reglages.inactifJours)];
+  // Échecs de vérification d'identité notés au journal ces 7 derniers jours (le relais, lui, ne communique pas
+  // les tentatives refusées : sa protection anti-force brute les bloque sans les remonter).
+  const echecsIdentite = donnees.journal.filter(e => e.type === 'securite' && /^Échec/.test(e.action) && maintenant - Date.parse(e.date) < 7 * 86_400_000).length;
+  const alertes: AlerteAdmin[] = [
+    ...(gestionnaire ? [] : alertesSecurite(outils)),
+    ...(!gestionnaire && echecsIdentite > 0
+      ? [{ genre: 'securite' as const, gravite: 'alerte' as const, message: `${echecsIdentite} échec${echecsIdentite > 1 ? 's' : ''} de vérification d’identité dans l’Administration ces 7 derniers jours (voir le journal).` }]
+      : []),
+    ...alertesComptes(tous, maintenant, donnees.reglages.inactifJours, gestionnaire ? undefined : donnees.reglages.appareilsMax),
+  ];
+  const enAttente = tous
+    .filter(p => !p.admin && !p.derniereConnexion && p.invitationExpireLe && p.actif !== false)
+    .sort((a, b) => Date.parse(a.invitationExpireLe!) - Date.parse(b.invitationExpireLe!))
+    .slice(0, 6);
   const resumeAbo = peutVoirAbonnements(outils.acteur) ? resumeRappels(lignesAbo(comptesSuivis(outils.acteur, tous), donnees.abonnements, dateDuJour(maintenant))) : undefined;
   const autres = outils.controle.gestion?.autres ?? 0;
   const recents = [...donnees.journal].reverse().slice(0, 8);
@@ -53,7 +66,9 @@ export function Tableau({ outils }: { outils: OutilsAdmin }) {
         {chiffre('Comptes', stats.total, 'admin-stat-total', () => outils.allerA('utilisateurs'))}
         {chiffre('Actifs', stats.actifs, 'admin-stat-actifs', () => outils.allerA('utilisateurs'))}
         {chiffre('Désactivés', stats.desactives, 'admin-stat-desactives', () => outils.allerA('utilisateurs'))}
-        {chiffre('Invités en attente', stats.invites, 'admin-stat-invites', () => outils.allerA('utilisateurs'))}
+        {chiffre('Invités en attente', stats.invites - stats.expirees, 'admin-stat-invites', () => outils.allerA('utilisateurs'))}
+        {chiffre('Invitations expirées', stats.expirees, 'admin-stat-expirees', () => outils.allerA('utilisateurs'))}
+        {gestionnaire ? null : chiffre('Appareils', stats.appareils, 'admin-stat-appareils', () => outils.allerA('utilisateurs'))}
       </View>
 
       {resumeAbo && resumeAbo.texte ? (
@@ -116,6 +131,47 @@ export function Tableau({ outils }: { outils: OutilsAdmin }) {
               Dernière activité : {stats.derniereActivite ? `${stats.derniereActivite.nom}, ${relatif(stats.derniereActivite.date, maintenant)}` : 'aucune connexion notée'}
             </Text>
           )}
+        </Panneau>
+      </View>
+
+      <View style={[{ gap: 16 }, outils.large && { flexDirection: 'row', alignItems: 'flex-start' }]}>
+        {gestionnaire ? null : (
+          <Panneau theme={theme} style={outils.large ? { flex: 1 } : undefined} testID="admin-dernieres-connexions">
+            <Intertitre theme={theme}>Dernières connexions</Intertitre>
+            {stats.dernieresConnexions.length === 0 ? <Text style={attenue}>Aucune connexion notée.</Text> : null}
+            {stats.dernieresConnexions.map((c, index) => (
+              <Pressable
+                key={c.id}
+                accessibilityRole="button"
+                onPress={() => outils.allerA('utilisateurs', c.id)}
+                style={[commun.ligne, index > 0 && { borderTopWidth: 1, borderTopColor: theme.ligne }]}>
+                <Text style={[texte, { flex: 1, fontWeight: '600' }]}>{c.nom}</Text>
+                <Text style={[attenue, { fontSize: 13 }]}>{relatif(c.date, maintenant)}</Text>
+              </Pressable>
+            ))}
+          </Panneau>
+        )}
+        <Panneau theme={theme} style={outils.large ? { flex: 1 } : undefined} testID="admin-invitations-attente">
+          <Intertitre theme={theme}>{`Invitations en attente (${enAttente.length})`}</Intertitre>
+          {enAttente.length === 0 ? <Text style={attenue}>Aucune invitation en attente.</Text> : null}
+          {enAttente.map((p, index) => {
+            const expiree = maintenant >= Date.parse(p.invitationExpireLe!);
+            const envoi = donnees.contacts[p.id]?.envois.slice(-1)[0];
+            return (
+              <Pressable
+                key={p.id}
+                accessibilityRole="button"
+                onPress={() => outils.allerA('utilisateurs', p.id)}
+                style={[commun.ligne, { flexWrap: 'wrap' }, index > 0 && { borderTopWidth: 1, borderTopColor: theme.ligne }]}
+                testID={`admin-attente-${p.id}`}>
+                <Text style={[texte, { flex: 1, fontWeight: '600' }]}>{p.nom}</Text>
+                <Text style={[{ fontSize: 13, color: expiree ? theme.alerte : theme.attenue }, police(theme.policeTexte)]}>
+                  {expiree ? `expirée ${relatif(p.invitationExpireLe, maintenant)}` : `expire ${relatif(p.invitationExpireLe, maintenant)}`}
+                  {envoi ? ` · envoyée ${relatif(envoi.date, maintenant)}` : ' · jamais envoyée'}
+                </Text>
+              </Pressable>
+            );
+          })}
         </Panneau>
       </View>
 

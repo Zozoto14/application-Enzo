@@ -77,6 +77,30 @@ export function formeCanonique(motDePasse: string): string {
 
 export const LONGUEUR_MIN_AMI = 10;
 
+/**
+ * Politique du mot de passe d'un ami, réglée par le Fondateur (Administration
+ * › Réglages) et portée, scellée, par l'invitation : longueur minimale (10 à
+ * 64) et force minimale (1 Correct … 4 Excellent). Les règles de base
+ * (10 caractères, pas seulement des chiffres, ni le prénom…) s'appliquent
+ * toujours : la politique ne peut que les durcir.
+ */
+export interface PolitiqueMdp {
+  longueurMin: number;
+  forceMin: 1 | 2 | 3 | 4;
+}
+export const POLITIQUE_MDP_DEFAUT: PolitiqueMdp = { longueurMin: LONGUEUR_MIN_AMI, forceMin: 1 };
+export const LIBELLES_FORCE = ['Trop faible', 'Correct', 'Bien', 'Solide', 'Excellent'] as const;
+
+/** Politique lue d'une source quelconque, bornée ; undefined si absente ou illisible. */
+export function lirePolitiqueMdp(brut: unknown): PolitiqueMdp | undefined {
+  if (!brut || typeof brut !== 'object' || Array.isArray(brut)) return undefined;
+  const o = brut as Record<string, unknown>;
+  const l = typeof o.l === 'number' ? o.l : o.longueurMin;
+  const f = typeof o.f === 'number' ? o.f : o.forceMin;
+  if (typeof l !== 'number' || typeof f !== 'number' || !Number.isFinite(l) || !Number.isFinite(f)) return undefined;
+  return { longueurMin: Math.min(64, Math.max(LONGUEUR_MIN_AMI, Math.round(l))), forceMin: Math.min(4, Math.max(1, Math.round(f))) as PolitiqueMdp['forceMin'] };
+}
+
 const COURANTS = ['motdepasse', 'password', 'azerty', 'qwerty', '123456', 'soleil', 'bonjour', 'doudou', 'loulou', 'chouchou', 'iloveyou', 'marseille', 'football', 'appdashboard'];
 
 export interface EvaluationMotDePasse {
@@ -94,10 +118,11 @@ export interface EvaluationMotDePasse {
  * forme canonique), pas seulement des chiffres, ni son prénom, ni un mot de
  * passe courant. L'indicateur de force compte la longueur et la variété.
  */
-export function evaluerMotDePasse(saisi: string, prenom = ''): EvaluationMotDePasse {
+export function evaluerMotDePasse(saisi: string, prenom = '', politique: PolitiqueMdp = POLITIQUE_MDP_DEFAUT): EvaluationMotDePasse {
   const mdp = formeCanonique(saisi);
   const erreurs: string[] = [];
-  if (mdp.length < LONGUEUR_MIN_AMI) erreurs.push(`${LONGUEUR_MIN_AMI} caractères au moins (${mdp.length} pour l’instant).`);
+  const longueurMin = Math.max(LONGUEUR_MIN_AMI, politique.longueurMin);
+  if (mdp.length < longueurMin) erreurs.push(`${longueurMin} caractères au moins (${mdp.length} pour l’instant).`);
   if (mdp.length > 0 && /^\d+$/.test(mdp)) erreurs.push('Pas seulement des chiffres.');
   const bas = normaliserNom(mdp).replace(/\s+/g, '');
   const nom = normaliserNom(prenom).replace(/\s+/g, '');
@@ -110,8 +135,11 @@ export function evaluerMotDePasse(saisi: string, prenom = ''): EvaluationMotDePa
   if (erreurs.length === 0) {
     const points = (mdp.length >= 12 ? 1 : 0) + (mdp.length >= 16 ? 1 : 0) + (mdp.length >= 20 ? 1 : 0) + (classes >= 3 ? 1 : 0) + (classes >= 2 ? 1 : 0);
     force = Math.max(1, Math.min(4, points)) as EvaluationMotDePasse['force'];
+    if (force < politique.forceMin) {
+      erreurs.push(`Plus solide : force « ${LIBELLES_FORCE[politique.forceMin]} » au moins (ajoute des mots, des chiffres ou des symboles).`);
+    }
   }
-  const libelle = ['Trop faible', 'Correct', 'Bien', 'Solide', 'Excellent'][force];
+  const libelle = LIBELLES_FORCE[force];
   return { valide: erreurs.length === 0, erreurs, force, libelle };
 }
 
@@ -139,6 +167,8 @@ export interface ContenuInvitation {
   /** Prénom du Fondateur, pour les messages (« demande à … »). */
   fondateur?: string;
   creeLe: string;
+  /** Politique du mot de passe à choisir (`l` longueur minimale, `f` force minimale) ; absente : règles de base. */
+  politique?: { l: number; f: number };
 }
 
 export interface LienInvitationRelais {
@@ -233,7 +263,19 @@ function lireContenu(brut: unknown): ContenuInvitation | undefined {
     expire: o.expire,
     ...(typeof o.fondateur === 'string' && o.fondateur.trim() ? { fondateur: o.fondateur.trim().slice(0, 30) } : {}),
     creeLe: typeof o.creeLe === 'string' ? o.creeLe.slice(0, 40) : '',
+    ...politiqueContenu(lirePolitiqueMdp(o.politique)),
   };
+}
+
+/** Forme courte d'une politique dans le contenu d'une invitation (rien si ce sont les règles de base). */
+export function politiqueContenu(politique: PolitiqueMdp | undefined): { politique?: { l: number; f: number } } {
+  if (!politique || (politique.longueurMin <= LONGUEUR_MIN_AMI && politique.forceMin <= 1)) return {};
+  return { politique: { l: politique.longueurMin, f: politique.forceMin } };
+}
+
+/** Politique portée par une invitation (règles de base si elle n'en porte pas). */
+export function politiqueDeContenu(contenu: Pick<ContenuInvitation, 'politique'> | undefined): PolitiqueMdp {
+  return lirePolitiqueMdp(contenu?.politique) ?? POLITIQUE_MDP_DEFAUT;
 }
 
 export function encoderInvitation(lien: LienInvitation): string {
@@ -513,6 +555,8 @@ export function messageErreur(code: CodeErreurConnexion, o: { qui?: string; atte
 }
 
 export interface ElementsMessage {
+  /** Longueur minimale du mot de passe à choisir (défaut : 10). */
+  longueur?: number;
   prenom: string;
   fondateur?: string;
   lien: string;
@@ -531,7 +575,7 @@ export function messageInvitation(e: ElementsMessage): string {
     '',
     '1. Ouvre ce lien (sur ton téléphone ou ton ordinateur) :',
     e.lien,
-    `2. Choisis ton mot de passe (10 caractères au moins). Ton identifiant : ${e.prenom}`,
+    `2. Choisis ton mot de passe (${e.longueur ?? LONGUEUR_MIN_AMI} caractères au moins). Ton identifiant : ${e.prenom}`,
     '3. C’est tout : tu es connecté.',
     '',
     `Le lien ne marche qu’une fois, jusqu’au ${jour}. Ne le transfère à personne.`,

@@ -34,7 +34,7 @@ import { definirStockageCaches, cachesSynchro } from '../src/sync/relais/caches'
 import { Prechargeur, definirPrechargeur, noterEtatDemarrage } from '../src/sync/relais/prechargement';
 import { Connexion } from '../src/ui/ecrans/ChoixProfil';
 import { GardeErreur } from '../src/ui/GardeErreur';
-import type { ControleProfils } from '../src/ui/ecrans/CarteProfils';
+import type { ControleProfils, OptionsInvitationHote } from '../src/ui/ecrans/CarteProfils';
 import {
   ID_PRINCIPAL,
   activerProfil,
@@ -139,6 +139,7 @@ import {
   chargerInvitation,
   connecterParIdentifiant,
   creerInvitation,
+  nettoyerCompteRelais,
   type InvitationChargee,
 } from './connexionAmis';
 import {
@@ -146,8 +147,10 @@ import {
   decoderInvitation,
   empreinteIdentifiant,
   normaliserCodeCourt,
+  politiqueDeContenu,
   relaisDuLien,
   type LienInvitation,
+  type PolitiqueMdp,
 } from '../src/profils/invitation';
 import { compteRevoque, revoquerCompte, supprimerAcces } from '../src/sync/relais/connexionAmis';
 import { espacesDuRelais } from '../src/sync/relais/espaces';
@@ -1103,7 +1106,7 @@ function Racine() {
     const contenu = etat.chargee?.contenu;
     return (
       <EcranInvitation
-        infos={contenu ? { prenom: contenu.prenom, fondateur: contenu.fondateur, expire: contenu.expire } : undefined}
+        infos={contenu ? { prenom: contenu.prenom, fondateur: contenu.fondateur, expire: contenu.expire, politique: politiqueDeContenu(contenu) } : undefined}
         chargement={!etat.chargee && !etat.erreur}
         erreur={etat.erreur}
         autreCompteIci={etat.autreCompteIci}
@@ -1464,13 +1467,13 @@ function Racine() {
     }
   };
   /** Invitation d'un ami dont on connaît le mot de passe temporaire (création, réinitialisation). */
-  const inviter = async (id: string, prenom: string, motDePasse: string, jours: number): Promise<InvitationAffichee> => {
+  const inviter = async (id: string, prenom: string, motDePasse: string, jours: number, politique?: PolitiqueMdp): Promise<InvitationAffichee> => {
     const maitre = await liaisonMaitre();
     if (!maitre) {
       return { erreur: 'Invitation impossible depuis cet appareil : reliez-le d’abord au relais (Paramètres › Synchronisation). En attendant, transmettez les identifiants ci-dessous.' };
     }
     try {
-      const invitation = await creerInvitation({ maitre, compte: id, prenom, motDePasse, fondateur: profil.nom, jours });
+      const invitation = await creerInvitation({ maitre, compte: id, prenom, motDePasse, fondateur: profil.nom, jours, politique });
       const publie = await publierCompteAmi(maitre, id);
       return { ...invitation, publie };
     } catch (erreur) {
@@ -1481,7 +1484,7 @@ function Racine() {
 
   if (admin) {
     Object.assign(controle, {
-      onCreerCompte: async (nom: string, apps: readonly string[], options?: OptionsNouveauProfil) => {
+      onCreerCompte: async (nom: string, apps: readonly string[], options?: OptionsNouveauProfil, envoi?: OptionsInvitationHote) => {
         exigerAdmin();
         const id = nouvelIdentifiant(n => crypto.getRandomValues(new Uint8Array(n)));
         // On valide le nom et l'identifiant avant de créer le moindre fichier.
@@ -1491,10 +1494,10 @@ function Racine() {
           await rafraichirAdmin(deposerSequestre(appliquerProfilsAdmin(annuaire, suivante, cles), id, depot), true);
         });
         // L'invitation : un lien à usage unique, plus de mot de passe brut à transmettre.
-        const invitation = await inviter(id, nom.trim(), identifiants.motDePasse, joursAvant(options?.invitationExpireLe));
-        return { ...identifiants, invitation };
+        const invitation = await inviter(id, nom.trim(), identifiants.motDePasse, joursAvant(options?.invitationExpireLe), envoi?.politique);
+        return { ...identifiants, invitation, id };
       },
-      onInvitation: async (id: string, jours: number): Promise<InvitationAffichee> => {
+      onInvitation: async (id: string, jours: number, envoi?: OptionsInvitationHote): Promise<InvitationAffichee> => {
         exigerAdmin();
         const ami = profils.find(p => p.id === id && !p.admin);
         if (!ami) throw new Error('Compte introuvable.');
@@ -1531,7 +1534,17 @@ function Racine() {
         await enregistrer(profils.map(p => (p.id === id ? { ...p, invitationExpireLe: expire } : p)));
         // L'ancien accès par identifiant ne correspond plus au mot de passe : retiré (relais à jour).
         await supprimerAcces(maitre, empreinteIdentifiant(ami.nom)).catch(() => undefined);
-        return inviter(id, ami.nom, temporaire, jours);
+        return inviter(id, ami.nom, temporaire, jours, envoi?.politique);
+      },
+      onSupprimerAvecRelais: async (id: string) => {
+        exigerAdmin();
+        const ami = profils.find(p => p.id === id && !p.admin);
+        exiger(profil, 'supprimer-ami', ami);
+        const maitre = await liaisonMaitre();
+        await effacerFichiers(id);
+        await enregistrer(supprimerProfil(profils, id));
+        if (!maitre) return { objets: 0, acces: false, revoque: false, restes: ['appareil non relié au relais avec le code maître : copies non effacées'] };
+        return nettoyerCompteRelais(maitre, id, ami!.nom);
       },
       onRevoquerConnexion: async (id: string, revoque: boolean) => {
         exigerAdmin();
@@ -1695,7 +1708,7 @@ function Racine() {
         }
         depotGestion().ecrire(CLE_CARNET_GESTION, ecrireCarnet(ajouterAuCarnet(carnetCourant(), { id, nom: nom.trim().slice(0, 30), creeLe: maintenant.slice(0, 10) })));
         rafraichirGestion();
-        return identifiants;
+        return { ...identifiants, id };
       },
       onRegenerer: async (id: string) => {
         const annuaire = await exigerGestionnaire();
@@ -1802,7 +1815,7 @@ function Racine() {
               await effacerFichiers(id).catch(() => undefined);
               throw erreur;
             }
-            return identifiants;
+            return { ...identifiants, id };
           },
       onRegenerer: restreintIci
         ? undefined

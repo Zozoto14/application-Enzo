@@ -11,6 +11,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import type { OptionsInvitationHote } from '../../../ui/ecrans/CarteProfils';
 import { QrCode } from '../../../ui/ecrans/CarteSynchro';
 import type { IdentifiantsAmi, InvitationAffichee } from '../../../profils/identifiants';
 import type { Profil } from '../../../profils/profils';
@@ -19,6 +20,9 @@ import type { AppHub } from '../../types';
 import {
   annulerInvitationPar,
   appliquerGroupePar,
+  avecEmailCreationPar,
+  avecEmailPar,
+  avecEnvoiPar,
   avecNotePar,
   definirExpirationPar,
   definirNiveauxPar,
@@ -26,13 +30,19 @@ import {
   prolongerInvitationPar,
   reactiverPar,
   renommerProfilPar,
+  sansContactPar,
   suspendrePar,
+  verifierGroupe,
+  verifierGroupeRang,
   verifierSur,
 } from '../actions';
+import { LIBELLES_CANAL, erreurEmail, normaliserEmail, type CanalInvitation } from '../contacts';
+import { LIBELLES_TYPE } from '../journal';
+import { PanneauInvitation } from './EnvoiInvitation';
 import { LIBELLES_STATUT, filtrerComptes, niveauProfil, niveauxProfil, recapitulatif, statutCompte, versAutorisations, type StatutCompte, type TriComptes } from '../comptes';
 import { LONGUEUR_MAX_NOTE } from '../donnees';
 import { CE_QUE_NE_PERMET_PAS, CE_QUE_PERMET, LIBELLES_RANG, NIVEAU_RANG, RANGS, autorise, rangDe, rangsAttribuables, type Rang } from '../roles';
-import { LIBELLES_NIVEAU, MODELES, modeleCorrespondant, niveauxDe, niveauxDuModele, type IdModele, type Niveaux } from '../niveaux';
+import { LIBELLES_NIVEAU, MODELES, modeleCorrespondant, niveauxDe, niveauxDuModele, type IdModele, type NiveauAcces, type Niveaux } from '../niveaux';
 import { etatApp } from '../politique';
 import { Avis, BoutonHub, Case, Champ, Intertitre, Panneau, Pilule, Segments, commun, dansJours, dateLisible, relatif, styleTitre, type OutilsAdmin } from './commun';
 
@@ -74,6 +84,25 @@ function BadgeRang({ theme, profil, testID }: { theme: ThemeHub; profil: Profil;
   return <Pilule theme={theme} texte={LIBELLES_RANG[rang]} couleur={couleurRang(theme, rang)} testID={testID} />;
 }
 
+/** Options d'invitation réglées par le Fondateur (politique du mot de passe de l'ami). */
+export function optionsInvitation(outils: OutilsAdmin): OptionsInvitationHote {
+  const r = outils.donnees.reglages;
+  return { politique: { longueurMin: r.mdpLongueurMin, forceMin: Math.min(4, Math.max(1, r.mdpForceMin)) as 1 | 2 | 3 | 4 } };
+}
+
+/** Note une transmission d'invitation : historique du compte (données chiffrées) et journal (sans l'adresse). */
+export function noterEnvoi(outils: OutilsAdmin, id: string | undefined, nom: string, canal: CanalInvitation): void {
+  if (!id) return;
+  try {
+    outils.majDonnees(d => avecEnvoiPar(outils.acteur, d, outils.tous, id, canal, outils.maintenant()));
+  } catch {
+    return;
+  }
+  outils.journaliser({ type: 'invitation', cible: id, nomCible: nom, action: `Invitation de ${nom} transmise (${LIBELLES_CANAL[canal].toLowerCase()})` });
+}
+
+type Identifiants = { nom: string; valeurs: IdentifiantsAmi; id?: string };
+
 export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: string }) {
   const { theme, tous, registre, controle } = outils;
   const maintenant = outils.maintenant();
@@ -85,7 +114,8 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
   const [selection, setSelection] = useState<string[]>([]);
   const [choisi, setChoisi] = useState<string | undefined>(cible);
   const [creation, setCreation] = useState(false);
-  const [identifiants, setIdentifiants] = useState<{ nom: string; valeurs: IdentifiantsAmi } | undefined>();
+  const [identifiants, setIdentifiants] = useState<Identifiants | undefined>();
+  const [invitationsGroupe, setInvitationsGroupe] = useState<Array<{ id: string; nom: string; invitation: InvitationAffichee }> | undefined>();
   const gestionnaire = outils.role === 'gestionnaire';
   // Une app qui choisit elle-même à qui elle s'ouvre (Tâches) n'a pas de case ici.
   const attribuables = registre.filter(a => !a.adminSeulement && !a.attribueeParApp);
@@ -103,11 +133,11 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
   const basculer = (id: string, coche: boolean) => setSelection(s => (coche ? [...new Set([...s, id])] : s.filter(x => x !== id)));
 
   const barreGroupee = selectionnes.length > 0 ? (
-    <ActionsGroupees outils={outils} ids={selectionnes} apps={attribuables} onFini={() => setSelection([])} />
+    <ActionsGroupees outils={outils} ids={selectionnes} apps={attribuables} onFini={() => setSelection([])} onInvitations={setInvitationsGroupe} />
   ) : null;
 
   const detail = identifiants ? (
-    <PanneauIdentifiants theme={theme} nom={identifiants.nom} valeurs={identifiants.valeurs} onTermine={() => setIdentifiants(undefined)} />
+    <PanneauIdentifiants outils={outils} nom={identifiants.nom} valeurs={identifiants.valeurs} id={identifiants.id ?? identifiants.valeurs.id} onTermine={() => setIdentifiants(undefined)} />
   ) : creation ? (
     <FormulaireCreation
       outils={outils}
@@ -115,11 +145,11 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
       onAnnuler={() => setCreation(false)}
       onCree={(nom, valeurs) => {
         setCreation(false);
-        setIdentifiants({ nom, valeurs });
+        setIdentifiants({ nom, valeurs, id: valeurs.id });
       }}
     />
   ) : profil ? (
-    <Fiche key={profil.id} outils={outils} profil={profil} apps={attribuables} onIdentifiants={(nom, valeurs) => setIdentifiants({ nom, valeurs })} onSupprime={() => setChoisi(undefined)} />
+    <Fiche key={profil.id} outils={outils} profil={profil} apps={attribuables} onIdentifiants={(nom, valeurs) => setIdentifiants({ nom, valeurs, id: profil.id })} onSupprime={() => setChoisi(undefined)} />
   ) : (
     <Panneau theme={theme}>
       <Text style={attenue}>
@@ -195,6 +225,29 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
 
       {barreGroupee}
 
+      {invitationsGroupe ? (
+        <Panneau theme={theme} testID="admin-groupe-invitations">
+          <View style={[commun.ligne, { justifyContent: 'space-between', paddingVertical: 0, flexWrap: 'wrap' }]}>
+            <Intertitre theme={theme}>{`Invitations prêtes (${invitationsGroupe.length})`}</Intertitre>
+            <BoutonHub theme={theme} titre="Fermer" onPress={() => setInvitationsGroupe(undefined)} testID="admin-groupe-invitations-fermer" />
+          </View>
+          {invitationsGroupe.map(({ id, nom, invitation }) => (
+            <View key={id} style={{ gap: 6 }} testID={`admin-groupe-invitation-${id}`}>
+              <Text style={[texte, { fontWeight: '700' }]}>{nom}</Text>
+              <PanneauInvitation
+                theme={theme}
+                nom={nom}
+                invitation={invitation}
+                email={outils.donnees.contacts[id]?.email}
+                modele={outils.donnees.modeleInvitation}
+                fondateur={outils.acteur.nom}
+                onEnvoye={canal => noterEnvoi(outils, id, nom, canal)}
+              />
+            </View>
+          ))}
+        </Panneau>
+      ) : null}
+
       <View style={[{ gap: 16 }, outils.large && { flexDirection: 'row', alignItems: 'flex-start' }]}>
         <Panneau theme={theme} style={[{ padding: 0, gap: 0 }, outils.large && { flex: 1.2 }]} testID="admin-liste">
           <View style={[commun.ligne, { paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: theme.ligne }]}>
@@ -251,6 +304,7 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
                       {gestionnaire ? '' : ' · '}
                       {gestionnaire ? '' : p.derniereConnexion ? `vu ${relatif(p.derniereConnexion, maintenant)}` : 'jamais connecté'}
                       {!gestionnaire && p.appareils && p.appareils.length > 0 ? ` · ${p.appareils.length} appareil${p.appareils.length > 1 ? 's' : ''}` : ''}
+                      {outils.donnees.contacts[p.id]?.email ? ' · ✉︎' : ''}
                     </Text>
                   </View>
                   <BadgeRang theme={theme} profil={p} testID={`admin-rang-${p.id}`} />
@@ -269,18 +323,113 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
 
 // --- Actions groupées --------------------------------------------------------------
 
-function ActionsGroupees({ outils, ids, apps, onFini }: { outils: OutilsAdmin; ids: string[]; apps: AppHub[]; onFini(): void }) {
-  const { theme, tous } = outils;
+function ActionsGroupees({
+  outils,
+  ids,
+  apps,
+  onFini,
+  onInvitations,
+}: {
+  outils: OutilsAdmin;
+  ids: string[];
+  apps: AppHub[];
+  onFini(): void;
+  onInvitations(liste: Array<{ id: string; nom: string; invitation: InvitationAffichee }>): void;
+}) {
+  const { theme, tous, controle } = outils;
   const [modele, setModele] = useState<IdModele>('ami');
+  const [appChoisie, setAppChoisie] = useState<string>(apps[0]?.id ?? '');
+  const [rang, setRang] = useState<Rang>('ami');
   const noms = ids.map(id => tous.find(p => p.id === id)?.nom ?? id);
+  const nomDe = (id: string) => tous.find(p => p.id === id)?.nom ?? id;
   const appliquer = (action: Parameters<typeof appliquerGroupePar>[3], libelle: string) => {
     outils.modifierProfils(
       liste => appliquerGroupePar(outils.acteur, liste, ids, action, apps, outils.maintenant()).profils,
-      ids.map(id => ({ type: action.genre === 'niveaux' ? 'permissions' : action.genre === 'prolonger' ? 'invitation' : 'compte', cible: id, nomCible: tous.find(p => p.id === id)?.nom, action: libelle })),
+      ids.map(id => ({
+        type: action.genre === 'niveaux' || action.genre === 'app' ? 'permissions' : action.genre === 'prolonger' ? 'invitation' : 'compte',
+        cible: id,
+        nomCible: nomDe(id),
+        ...(action.genre === 'app' ? { app: action.app } : {}),
+        action: libelle,
+      })),
       `${libelle} : ${noms.join(', ')}.`,
     );
     onFini();
   };
+  const app = apps.find(a => a.id === appChoisie);
+  const niveauOuvert: NiveauAcces = app && niveauxDe(app).includes('complet') ? 'complet' : 'lecture';
+  // Rangs qu'on peut donner à TOUTE la sélection (règle des rangs), sauf Fondateur (confirmation forte, compte par compte).
+  const rangsGroupe = RANGS.filter(r => r !== 'fondateur' && ids.every(id => rangsAttribuables(outils.acteur, tous.find(p => p.id === id)).includes(r) || rangDe(tous.find(p => p.id === id)) === r));
+  const peutRenvoyer = Boolean(controle.onInvitation) && ids.every(id => autorise(outils.acteur, 'regenerer-identifiants', tous.find(p => p.id === id)).ok);
+
+  /** Action faite par l'hôte, compte par compte, après vérification de TOUTE la sélection et de l'identité. */
+  const enSerie = (raison: string, verifier: () => void, action: (id: string) => Promise<void>, fin: () => string) => {
+    try {
+      verifier();
+    } catch (e) {
+      outils.agir('Vérification…', async () => {
+        throw e;
+      });
+      return;
+    }
+    outils.exigerIdentite(raison, () =>
+      outils.agir(`${raison}…`, async () => {
+        const echecs: string[] = [];
+        for (const id of ids) {
+          try {
+            await action(id);
+          } catch (e) {
+            echecs.push(`${nomDe(id)} : ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
+        onFini();
+        if (echecs.length > 0) throw new Error(`${fin()} Échecs — ${echecs.join(' ; ')}`);
+        return fin();
+      }),
+    );
+  };
+
+  const renvoyer = () => {
+    const prets: Array<{ id: string; nom: string; invitation: InvitationAffichee }> = [];
+    enSerie(
+      `Renvoyer une invitation à ${ids.length} compte${ids.length > 1 ? 's' : ''}`,
+      () => verifierGroupe(outils.acteur, 'regenerer-identifiants', tous, ids),
+      async id => {
+        const invitation = await controle.onInvitation!(id, outils.donnees.reglages.invitationJours, optionsInvitation(outils));
+        if (invitation.erreur) throw new Error(invitation.erreur);
+        prets.push({ id, nom: nomDe(id), invitation });
+        outils.journaliser({ type: 'invitation', cible: id, nomCible: nomDe(id), action: `Nouvelle invitation préparée pour ${nomDe(id)} (${outils.donnees.reglages.invitationJours} j, action groupée) : l’ancienne ne fonctionne plus` });
+        onInvitations([...prets]);
+      },
+      () => `Invitations prêtes : ${prets.map(p => p.nom).join(', ') || 'aucune'}. Envoyez-les ci-dessous.`,
+    );
+  };
+  const revoquer = () =>
+    enSerie(
+      `Révoquer l’accès de ${ids.length} compte${ids.length > 1 ? 's' : ''}`,
+      () => verifierGroupe(outils.acteur, 'etat-ami', tous, ids),
+      async id => {
+        await controle.onRevoquerConnexion!(id, true);
+        outils.journaliser({ type: 'compte', cible: id, nomCible: nomDe(id), action: `Accès de ${nomDe(id)} révoqué sur le relais (action groupée)` });
+      },
+      () => {
+        outils.modifierProfils(liste => appliquerGroupePar(outils.acteur, liste, ids, { genre: 'desactiver' }, apps, outils.maintenant()).profils, [], undefined);
+        return `Accès révoqués : ${noms.join(', ')} (relais et comptes désactivés).`;
+      },
+    );
+  const changerRang = () =>
+    enSerie(
+      `Changer le rang de ${ids.length} compte${ids.length > 1 ? 's' : ''} : ${LIBELLES_RANG[rang]}`,
+      () => verifierGroupeRang(outils.acteur, tous, ids, rang),
+      async id => {
+        const avant = rangDe(tous.find(p => p.id === id));
+        if (avant === rang) return;
+        const { enAttente } = await controle.onChangerRang!(id, rang);
+        outils.journaliser({ type: 'role', cible: id, nomCible: nomDe(id), action: `${nomDe(id)} : ${LIBELLES_RANG[avant]} → ${LIBELLES_RANG[rang]} (action groupée)${enAttente ? ' (clé en attente de sa prochaine connexion)' : ''}` });
+      },
+      () => `Rang ${LIBELLES_RANG[rang]} appliqué : ${noms.join(', ')}.`,
+    );
+
   return (
     <Panneau theme={theme} testID="admin-groupe" style={{ borderColor: theme.teintes.admin }}>
       <Intertitre theme={theme}>{`Actions groupées · ${ids.length} compte${ids.length > 1 ? 's' : ''}`}</Intertitre>
@@ -294,7 +443,28 @@ function ActionsGroupees({ outils, ids, apps, onFini }: { outils: OutilsAdmin; i
           onPress={() => appliquer({ genre: 'prolonger', jours: outils.donnees.reglages.invitationJours }, `Invitation prolongée de ${outils.donnees.reglages.invitationJours} jours (action groupée)`)}
           testID="admin-groupe-prolonger"
         />
+        {peutRenvoyer ? <BoutonHub theme={theme} titre="Renvoyer l’invitation (nouveau lien)" onPress={renvoyer} testID="admin-groupe-renvoyer" /> : null}
+        {controle.onRevoquerConnexion && outils.role !== 'gestionnaire' ? <BoutonHub theme={theme} variante="danger" titre="Révoquer l’accès" onPress={revoquer} testID="admin-groupe-revoquer" /> : null}
       </View>
+      {apps.length > 0 ? (
+        <View style={[commun.actions, { alignItems: 'center' }]}>
+          <Segments theme={theme} libelle="Application" valeur={appChoisie} options={apps.map(a => [a.id, a.nom] as const)} onChoisir={setAppChoisie} testID="admin-groupe-app" />
+          <BoutonHub
+            theme={theme}
+            titre={`Ouvrir ${app?.nom ?? 'l’app'}`}
+            desactive={!app}
+            onPress={() => app && appliquer({ genre: 'app', app: app.id, niveau: niveauOuvert }, `${app.nom} ouverte${niveauOuvert === 'lecture' ? ' (lecture)' : ''} (action groupée)`)}
+            testID="admin-groupe-app-ouvrir"
+          />
+          <BoutonHub
+            theme={theme}
+            titre={`Fermer ${app?.nom ?? 'l’app'}`}
+            desactive={!app}
+            onPress={() => app && appliquer({ genre: 'app', app: app.id, niveau: 'aucun' }, `${app.nom} fermée (action groupée)`)}
+            testID="admin-groupe-app-fermer"
+          />
+        </View>
+      ) : null}
       <View style={[commun.actions, { alignItems: 'center' }]}>
         <Segments<IdModele>
           theme={theme}
@@ -310,7 +480,15 @@ function ActionsGroupees({ outils, ids, apps, onFini }: { outils: OutilsAdmin; i
           onPress={() => appliquer({ genre: 'niveaux', niveaux: niveauxDuModele(apps, modele) }, `Modèle « ${MODELES.find(m => m.id === modele)?.nom} » appliqué (action groupée)`)}
           testID="admin-groupe-appliquer-modele"
         />
-        <BoutonHub theme={theme} titre="Annuler la sélection" onPress={onFini} />
+      </View>
+      {controle.onChangerRang && outils.role !== 'gestionnaire' && rangsGroupe.length > 0 ? (
+        <View style={[commun.actions, { alignItems: 'center' }]}>
+          <Segments<Rang> theme={theme} libelle="Nouveau rang" valeur={rangsGroupe.includes(rang) ? rang : rangsGroupe[0]} options={rangsGroupe.map(r => [r, LIBELLES_RANG[r]] as const)} onChoisir={setRang} testID="admin-groupe-rang" />
+          <BoutonHub theme={theme} titre="Changer le rang (mot de passe + code)" onPress={changerRang} desactive={!rangsGroupe.includes(rang)} testID="admin-groupe-rang-appliquer" />
+        </View>
+      ) : null}
+      <View style={commun.actions}>
+        <BoutonHub theme={theme} titre="Annuler la sélection" onPress={onFini} testID="admin-groupe-annuler" />
       </View>
     </Panneau>
   );
@@ -346,6 +524,9 @@ function Fiche({
   const [invitation, setInvitation] = useState<InvitationAffichee | undefined>();
   const [revoqueRelais, setRevoqueRelais] = useState<boolean | undefined>();
   const [joursInvitation, setJoursInvitation] = useState(String(outils.donnees.reglages.invitationJours || 7));
+  const contact = donnees.contacts[profil.id];
+  const [email, setEmail] = useState(contact?.email ?? '');
+  const [nettoyerRelais, setNettoyerRelais] = useState(true);
   useEffect(() => {
     let actif = true;
     controle.etatConnexion?.(profil.id).then(
@@ -399,15 +580,24 @@ function Fiche({
         return `Nouveaux identifiants de ${profil.nom} générés : l’ancien portefeuille a été effacé.`;
       }),
     );
+  const avecRelais = nettoyerRelais && Boolean(controle.onSupprimerAvecRelais);
   const supprimer = () =>
     outils.exigerIdentite(`Supprimer le compte de ${profil.nom}`, () =>
       outils.agir('Suppression…', async () => {
         verifierSur(outils.acteur, 'supprimer-ami', outils.tous, profil.id);
-        await controle.onSupprimer(profil.id);
-        outils.majDonnees(d => avecNotePar(outils.acteur, d, outils.tous, profil.id, ''));
-        outils.journaliser({ type: 'compte', ...cibleJournal, action: `Compte de ${profil.nom} supprimé (coffre et portefeuille effacés)` });
+        const bilan = avecRelais ? await controle.onSupprimerAvecRelais!(profil.id) : (await controle.onSupprimer(profil.id), undefined);
+        outils.majDonnees(d => sansContactPar(outils.acteur, avecNotePar(outils.acteur, d, outils.tous, profil.id, ''), profil.id));
+        outils.journaliser({ type: 'compte', ...cibleJournal, action: `Compte de ${profil.nom} supprimé (coffre et portefeuille effacés de cet appareil)` });
         onSupprime();
-        return `Compte « ${profil.nom} » supprimé.`;
+        if (!bilan) return `Compte « ${profil.nom} » supprimé.`;
+        outils.journaliser({
+          type: 'compte',
+          ...cibleJournal,
+          action: `Copies de ${profil.nom} effacées du relais : ${bilan.objets} objet${bilan.objets > 1 ? 's' : ''}${bilan.acces ? ', accès par identifiant retiré' : ''}${bilan.revoque ? ', jeton révoqué' : ''}${bilan.restes.length ? ` (restes : ${bilan.restes.length})` : ''}`,
+        });
+        return bilan.restes.length > 0
+          ? `Compte « ${profil.nom} » supprimé. Relais : ${bilan.objets} copie(s) effacée(s) ; à reprendre : ${bilan.restes.join(' ; ')}.`
+          : `Compte « ${profil.nom} » supprimé, et ses ${bilan.objets} copie(s) effacée(s) du relais (accès retiré, jeton révoqué).`;
       }),
     );
 
@@ -436,7 +626,7 @@ function Fiche({
       outils.agir('Préparation de l’invitation…', async () => {
         verifierSur(outils.acteur, 'regenerer-identifiants', outils.tous, profil.id);
         const jours = Math.min(90, Math.max(1, Number(joursInvitation) || 7));
-        const valeurs = await controle.onInvitation!(profil.id, jours);
+        const valeurs = await controle.onInvitation!(profil.id, jours, optionsInvitation(outils));
         setInvitation(valeurs);
         if (valeurs.erreur) return valeurs.erreur;
         outils.journaliser({
@@ -543,6 +733,63 @@ function Fiche({
         />
       </View>
       )}
+
+      {autorise(outils.acteur, 'contact-ami', profil).ok ? (
+        <>
+          <Intertitre theme={theme}>Contact et invitations</Intertitre>
+          <View style={[commun.grille, { alignItems: 'flex-end' }]}>
+            <Champ
+              theme={theme}
+              libelle="Adresse e-mail (facultative, visible de vous seul)"
+              valeur={email}
+              onChanger={setEmail}
+              placeholder="lea@exemple.fr"
+              maxLength={254}
+              testID="admin-fiche-email"
+              style={{ flexBasis: 240, flexGrow: 1 }}
+            />
+            <BoutonHub
+              theme={theme}
+              titre="Enregistrer l’adresse"
+              desactive={Boolean(erreurEmail(email)) || normaliserEmail(email) === (contact?.email ?? '')}
+              onPress={() => {
+                outils.majDonnees(d => avecEmailPar(outils.acteur, d, outils.tous, profil.id, email, outils.maintenant()));
+                outils.journaliser({ type: 'compte', ...cibleJournal, action: normaliserEmail(email) ? `Adresse e-mail de ${profil.nom} enregistrée` : `Adresse e-mail de ${profil.nom} effacée` });
+              }}
+              testID="admin-fiche-email-enregistrer"
+            />
+          </View>
+          {erreurEmail(email) ? <Text style={{ color: theme.critique, fontSize: 12 }} testID="admin-fiche-email-erreur">{erreurEmail(email)}</Text> : null}
+          <View style={{ gap: 2 }} testID="admin-historique-invitations">
+            {contact && contact.envois.length > 0 ? (
+              [...contact.envois]
+                .reverse()
+                .slice(0, 8)
+                .map((e, index) => (
+                  <Text key={`${e.date}-${index}`} style={[attenue, { fontSize: 12 }]}>
+                    {dateLisible(e.date, true)} · {LIBELLES_CANAL[e.canal]}
+                    {e.relance ? ' (relance)' : ''}
+                  </Text>
+                ))
+            ) : (
+              <Text style={[attenue, { fontSize: 12 }]}>Aucune invitation transmise depuis l’Administration.</Text>
+            )}
+          </View>
+          {!gestionnaire && controle.onInvitation && !profil.derniereConnexion && autorise(outils.acteur, 'regenerer-identifiants', profil).ok ? (
+            <View style={commun.actions}>
+              <BoutonHub
+                theme={theme}
+                variante="plein"
+                couleur={theme.teintes.admin}
+                titre={invitation?.lien ? 'Invitation prête ci-dessous' : contact?.envois.length ? 'Relancer (nouveau lien)' : 'Préparer l’invitation'}
+                desactive={Boolean(outils.enCours) || Boolean(revoqueRelais) || Boolean(invitation?.lien)}
+                onPress={envoyerInvitation}
+                testID="admin-relancer"
+              />
+            </View>
+          ) : null}
+        </>
+      ) : null}
 
       {gestionnaire ? null : (
         <>
@@ -758,7 +1005,30 @@ function Fiche({
             {etatAcces(profil, maintenant)}
           </Text>
           {revoqueRelais ? <Avis theme={theme} genre="critique" texte={`Accès révoqué sur le relais : ${profil.nom} ne peut plus se connecter.`} testID="admin-acces-revoque" /> : null}
-          {invitation ? <PanneauInvitation theme={theme} nom={profil.nom} invitation={invitation} /> : null}
+          {profil.appareils && profil.appareils.length > 0 ? (
+            <View style={{ gap: 4 }} testID="admin-fiche-appareils">
+              {profil.appareils.map((a, index) => (
+                <Text key={`${a.nom}-${index}`} style={[texte, { fontSize: 13 }]}>
+                  💻 {a.nom} · vu {relatif(a.vu, maintenant)}
+                </Text>
+              ))}
+              <Text style={[attenue, { fontSize: 12 }]}>
+                Pour déconnecter ses appareils : « Réinitialiser l’accès » ci-dessous (son ancien mot de passe ne marche plus sur aucun appareil), ou
+                « Révoquer l’accès » (le relais refuse tous ses appareils).
+              </Text>
+            </View>
+          ) : null}
+          {invitation ? (
+            <PanneauInvitation
+              theme={theme}
+              nom={profil.nom}
+              invitation={invitation}
+              email={contact?.email}
+              modele={donnees.modeleInvitation}
+              fondateur={outils.acteur.nom}
+              onEnvoye={canal => noterEnvoi(outils, profil.id, profil.nom, canal)}
+            />
+          ) : null}
           {controle.onInvitation ? (
             <>
               <Text style={[attenue, { fontSize: 12 }]}>
@@ -890,14 +1160,38 @@ function Fiche({
         </>
       )}
 
-      <Intertitre theme={theme}>{gestionnaire ? 'Identifiants' : 'Identifiants et suppression'}</Intertitre>
+      <Intertitre theme={theme}>Activité</Intertitre>
+      <View style={{ gap: 2 }} testID="admin-fiche-activite">
+        {donnees.journal.filter(e => e.cible === profil.id).length === 0 ? <Text style={[attenue, { fontSize: 12 }]}>Rien au journal pour ce compte.</Text> : null}
+        {donnees.journal
+          .filter(e => e.cible === profil.id)
+          .slice(-8)
+          .reverse()
+          .map((e, index) => (
+            <Text key={`${e.date}-${index}`} style={[attenue, { fontSize: 12 }]}>
+              {dateLisible(e.date, true)} · {LIBELLES_TYPE[e.type]} · {e.acteur ? `[${e.acteur}] ` : ''}
+              {e.action}
+            </Text>
+          ))}
+        <Pressable accessibilityRole="link" onPress={() => outils.allerA('journal')} testID="admin-fiche-journal">
+          <Text style={{ color: theme.teintes.admin, fontWeight: '600', fontSize: 13 }}>Tout le journal →</Text>
+        </Pressable>
+      </View>
+
+      <Intertitre theme={theme}>{gestionnaire ? 'Identifiants' : 'Zone Danger'}</Intertitre>
       {confirmation ? (
         <View style={[commun.avis, { borderLeftColor: theme.critique, backgroundColor: teinteTransparente(theme.critique, 0.12), gap: 8 }]} testID="admin-confirmation">
           <Text style={texte}>
             {confirmation === 'regenerer'
               ? `De nouveaux identifiants remplacent les anciens. Le portefeuille actuel de ${profil.nom} est scellé par l’ancienne clé : il sera effacé. (S’il a seulement oublié son mot de passe, il peut utiliser « Mot de passe oublié ? » avec un code de récupération.)`
-              : `Le compte de ${profil.nom}, son coffre, son portefeuille et son séquestre seront effacés de cet appareil. C’est définitif.`}
+              : `Le compte de ${profil.nom}, son coffre, son portefeuille, son séquestre, son adresse e-mail et vos notes seront effacés de cet appareil${avecRelais ? ', et ses copies effacées du relais (son accès par identifiant retiré, son jeton révoqué)' : ''}. C’est définitif.`}
           </Text>
+          {confirmation === 'supprimer' && controle.onSupprimerAvecRelais ? (
+            <View style={commun.ligne}>
+              <Case theme={theme} coche={nettoyerRelais} libelle="Effacer aussi ses copies sur le relais" onChanger={setNettoyerRelais} testID="admin-supprimer-relais" />
+              <Text style={[texte, { flex: 1, fontSize: 13 }]}>Effacer aussi ses copies sur le relais (recommandé).</Text>
+            </View>
+          ) : null}
           <Champ theme={theme} libelle={`Pour confirmer, saisissez « ${profil.nom} »`} valeur={saisieConfirmation} onChanger={setSaisieConfirmation} testID="admin-confirmation-nom" />
           <View style={commun.actions}>
             <BoutonHub
@@ -971,18 +1265,35 @@ function FormulaireCreation({
   const [invitation, setInvitation] = useState(String(outils.donnees.reglages.invitationJours));
   const [expiration, setExpiration] = useState('');
   const [informe, setInforme] = useState(false);
+  const [email, setEmail] = useState('');
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
+  const problemeEmail = erreurEmail(email);
   const expirationValide = expiration === '' || (/^\d{4}-\d{2}-\d{2}$/.test(expiration) && !Number.isNaN(Date.parse(expiration)));
   const creer = () =>
     outils.agir('Création du compte…', async () => {
       const { apps: ouvertes, niveaux: restreints } = versAutorisations(registre, niveaux);
       const jours = Number(invitation);
-      const valeurs = await controle.onCreerCompte!(nom, ouvertes, {
-        niveaux: restreints,
-        invitationExpireLe: jours > 0 ? dansJours(outils.maintenant(), jours) : undefined,
-        expireLe: expiration ? `${expiration}T23:59:59.000Z` : undefined,
+      const valeurs = await controle.onCreerCompte!(
+        nom,
+        ouvertes,
+        {
+          niveaux: restreints,
+          invitationExpireLe: jours > 0 ? dansJours(outils.maintenant(), jours) : undefined,
+          expireLe: expiration ? `${expiration}T23:59:59.000Z` : undefined,
+        },
+        optionsInvitation(outils),
+      );
+      const adresse = normaliserEmail(email);
+      if (adresse && valeurs.id) {
+        // Chiffrée avec les données de l'Administration ; jamais dans la liste des profils ni sur le relais.
+        outils.majDonnees(d => avecEmailCreationPar(outils.acteur, d, valeurs.id!, adresse, outils.maintenant()));
+      }
+      outils.journaliser({
+        type: 'compte',
+        ...(valeurs.id ? { cible: valeurs.id } : {}),
+        nomCible: nom.trim(),
+        action: `Compte de ${nom.trim()} créé (apps : ${ouvertes.join(', ') || 'aucune'} ; séquestre créé pour les rangs supérieurs ; ami averti${adresse ? ' ; adresse e-mail enregistrée' : ''})`,
       });
-      outils.journaliser({ type: 'compte', nomCible: nom.trim(), action: `Compte de ${nom.trim()} créé (apps : ${ouvertes.join(', ') || 'aucune'} ; séquestre créé pour les rangs supérieurs ; ami averti)` });
       onCree(nom.trim(), valeurs);
       return `Compte de ${nom.trim()} créé.`;
     });
@@ -990,6 +1301,22 @@ function FormulaireCreation({
     <Panneau theme={theme} testID="admin-creation">
       <Text style={[styleTitre(theme), { fontSize: 20 }]}>Nouvel utilisateur</Text>
       <Champ theme={theme} libelle="Prénom de l’ami (il s’en servira pour se connecter)" valeur={nom} onChanger={setNom} placeholder="ex. Lucas" maxLength={30} testID="admin-nom" />
+      <Champ
+        theme={theme}
+        libelle="Adresse e-mail (facultative, conseillée : pour lui envoyer l’invitation)"
+        valeur={email}
+        onChanger={setEmail}
+        placeholder="lucas@exemple.fr"
+        maxLength={254}
+        testID="admin-nouveau-email"
+      />
+      {problemeEmail ? (
+        <Text style={{ color: theme.critique, fontSize: 12 }} testID="admin-nouveau-email-erreur">
+          {problemeEmail}
+        </Text>
+      ) : (
+        <Text style={{ color: theme.attenue, fontSize: 12 }}>Chiffrée avec vos données d’administration : jamais visible des autres comptes, jamais en clair sur le relais.</Text>
+      )}
       <Intertitre theme={theme}>Permissions</Intertitre>
       <Segments
         theme={theme}
@@ -1034,14 +1361,14 @@ function FormulaireCreation({
         Un mot de passe, une clé d’authentification (TOTP) et des codes de récupération seront générés et affichés une seule fois.
       </Text>
       <View style={[commun.actions, { justifyContent: 'flex-end' }]}>
-        <BoutonHub theme={theme} titre="Annuler" onPress={onAnnuler} />
+        <BoutonHub theme={theme} titre="Annuler" onPress={onAnnuler} testID="admin-creation-annuler" />
         <BoutonHub
           theme={theme}
           variante="plein"
           couleur={theme.teintes.admin}
           titre="Créer et afficher les identifiants"
           testID="admin-creer"
-          desactive={Boolean(outils.enCours) || !nom.trim() || !informe || !expirationValide || !controle.onCreerCompte}
+          desactive={Boolean(outils.enCours) || !nom.trim() || !informe || !expirationValide || Boolean(problemeEmail) || !controle.onCreerCompte}
           onPress={creer}
         />
       </View>
@@ -1050,7 +1377,8 @@ function FormulaireCreation({
 }
 
 /** Identifiants affichés une seule fois, avec l'avertissement de transparence à transmettre. */
-function PanneauIdentifiants({ theme, nom, valeurs, onTermine }: { theme: ThemeHub; nom: string; valeurs: IdentifiantsAmi; onTermine(): void }) {
+function PanneauIdentifiants({ outils, nom, valeurs, id, onTermine }: { outils: OutilsAdmin; nom: string; valeurs: IdentifiantsAmi; id?: string; onTermine(): void }) {
+  const { theme } = outils;
   const [transmis, setTransmis] = useState(false);
   const mono = police(theme.policeChiffres);
   const code = { color: theme.fond, ...mono, fontSize: 13.5, lineHeight: 23 };
@@ -1059,7 +1387,15 @@ function PanneauIdentifiants({ theme, nom, valeurs, onTermine }: { theme: ThemeH
     <Panneau theme={theme} testID="admin-identifiants">
       <Text style={[styleTitre(theme), { fontSize: 20 }]}>Accès de {nom}</Text>
       {valeurs.invitation ? (
-        <PanneauInvitation theme={theme} nom={nom} invitation={valeurs.invitation} />
+        <PanneauInvitation
+          theme={theme}
+          nom={nom}
+          invitation={valeurs.invitation}
+          email={id ? outils.donnees.contacts[id]?.email : undefined}
+          modele={outils.donnees.modeleInvitation}
+          fondateur={outils.acteur.nom}
+          onEnvoye={canal => noterEnvoi(outils, id, nom, canal)}
+        />
       ) : (
         <Text style={{ color: theme.attenue, fontSize: 13 }} testID="admin-invitation-indisponible">
           Invitation par lien : elle part de l’appareil du Fondateur principal (Administration › {nom} › Renvoyer une invitation). En attendant, transmettez les identifiants ci-dessous.
@@ -1121,72 +1457,4 @@ export function etatAcces(profil: Profil, maintenant: number): string {
       : `Invité : invitation valable jusqu’au ${dateLisible(profil.invitationExpireLe, true)}, pas encore utilisée.`;
   }
   return profil.anterieur ? 'Compte d’avant le suivi des connexions.' : 'En attente : jamais connecté.';
-}
-
-/** Copie dans le presse-papiers (web, Electron) ; faux si indisponible. */
-async function copier(texte: string): Promise<boolean> {
-  const presse = (globalThis as { navigator?: { clipboard?: { writeText(t: string): Promise<void> } } }).navigator?.clipboard;
-  if (!presse) return false;
-  try {
-    await presse.writeText(texte);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** Lien d'invitation, QR code, code court et message prêt à coller. */
-export function PanneauInvitation({ theme, nom, invitation }: { theme: ThemeHub; nom: string; invitation: InvitationAffichee }) {
-  const [copie, setCopie] = useState<string | undefined>();
-  const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
-  const texte = { color: theme.texte, ...police(theme.policeTexte) };
-  if (invitation.erreur || !invitation.lien) {
-    return <Avis theme={theme} genre="critique" texte={invitation.erreur ?? 'Invitation impossible.'} testID="admin-invitation-erreur" />;
-  }
-  const jour = invitation.expire ? dateLisible(invitation.expire, true) : '';
-  const copierTexte = (valeur: string, quoi: string) =>
-    void copier(valeur).then(ok => setCopie(ok ? `${quoi} copié : collez-le dans votre messagerie.` : 'Copie impossible ici : sélectionnez le texte ci-dessous.'));
-  return (
-    <View style={[commun.avis, { borderLeftColor: theme.ok, backgroundColor: teinteTransparente(theme.ok, 0.1), gap: 8 }]} testID="admin-invitation">
-      <Text style={[texte, { fontWeight: '700' }]}>✉️ Invitation de {nom} — valable une fois, jusqu’au {jour}</Text>
-      <Text style={[attenue, { fontSize: 13 }]}>
-        Envoyez ce message à {nom} (SMS, WhatsApp…). {nom} ouvre le lien, choisit SON mot de passe, et c’est tout : vous n’avez aucun mot de passe à transmettre.
-      </Text>
-      {invitation.publie === false ? (
-        <Avis theme={theme} genre="alerte" texte={`Le compte de ${nom} n’est pas encore publié sur le relais : gardez l’app ouverte (déverrouillée) une minute.`} testID="admin-invitation-non-publie" />
-      ) : invitation.publie ? (
-        <Text style={{ color: theme.ok, fontSize: 13 }} testID="admin-invitation-publie">
-          ✓ Compte publié sur le relais : {nom} peut ouvrir le lien dès maintenant.
-        </Text>
-      ) : null}
-      {invitation.avertissement ? <Avis theme={theme} genre="alerte" texte={invitation.avertissement} testID="admin-invitation-avertissement" /> : null}
-      <View style={commun.actions}>
-        <BoutonHub theme={theme} variante="plein" couleur={theme.teintes.admin} titre="Copier le message d’invitation" onPress={() => copierTexte(invitation.message ?? invitation.lien!, 'Message')} testID="admin-invitation-copier" />
-        <BoutonHub theme={theme} titre="Copier le lien seul" onPress={() => copierTexte(invitation.lien!, 'Lien')} testID="admin-invitation-copier-lien" />
-      </View>
-      {copie ? (
-        <Text style={{ color: theme.ok, fontSize: 13 }} testID="admin-invitation-copie">
-          {copie}
-        </Text>
-      ) : null}
-      <Text selectable style={[texte, { fontSize: 12 }]} testID="admin-invitation-lien">
-        {invitation.lien}
-      </Text>
-      {invitation.codeCourt ? (
-        <Text style={[texte, { fontSize: 13 }]}>
-          Code court (sur le site, « J’ai reçu une invitation ») :{' '}
-          <Text selectable style={[police(theme.policeChiffres), { fontWeight: '700', letterSpacing: 1.5 }]} testID="admin-invitation-code-court">
-            {invitation.codeCourt}
-          </Text>
-        </Text>
-      ) : null}
-      <View style={{ alignItems: 'flex-start' }}>
-        <QrCode texte={invitation.lien} legende={`Invitation · ${nom}`} testID="admin-invitation-qr" />
-      </View>
-      <Text style={[attenue, { fontSize: 12 }]}>Message :</Text>
-      <Text selectable style={[texte, { fontSize: 12 }]} testID="admin-invitation-message">
-        {invitation.message}
-      </Text>
-    </View>
-  );
 }

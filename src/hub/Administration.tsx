@@ -1,8 +1,8 @@
 /**
  * App « Administration » du hub, réservée au profil administrateur.
  *
- * Six sections : Tableau de bord · Utilisateurs · Applications · Sécurité ·
- * Journal · Réglages (`admin/ui/`). Le suivi des abonnements est une app à part
+ * Sept sections : Tableau de bord · Utilisateurs · Accès par app (matrice
+ * comptes × apps) · Applications · Sécurité · Journal · Réglages (`admin/ui/`). Le suivi des abonnements est une app à part
  * (`abonnements/AppAbonnements.tsx`, page « Administration » du hub).
  * Cet écran assemble les sections et leur fournit
  * les outils communs (`OutilsAdmin`) :
@@ -31,6 +31,7 @@ import { apresVerification, confianceValide, doitVerrouiller, etatInitial, noter
 import { Applications } from './admin/ui/Applications';
 import { Avis, BoutonHub, Champ, Panneau, styleTitre, type IdSection, type OutilsAdmin } from './admin/ui/commun';
 import { Journal } from './admin/ui/Journal';
+import { Matrice } from './admin/ui/Matrice';
 import { Reglages } from './admin/ui/Reglages';
 import { Securite } from './admin/ui/Securite';
 import { Tableau } from './admin/ui/Tableau';
@@ -42,15 +43,16 @@ import { useInfoOnglet } from './multi/contexte';
 
 /** Sections par rang : un gestionnaire n'a ni applications globales, ni sécurité, ni réglages ; un administrateur, pas les apps globales. */
 const SECTIONS_PAR_RANG: Record<Rang, readonly IdSection[]> = {
-  fondateur: ['tableau', 'utilisateurs', 'applications', 'securite', 'journal', 'reglages'],
-  administrateur: ['tableau', 'utilisateurs', 'securite', 'journal', 'reglages'],
-  gestionnaire: ['tableau', 'utilisateurs', 'journal'],
+  fondateur: ['tableau', 'utilisateurs', 'acces', 'applications', 'securite', 'journal', 'reglages'],
+  administrateur: ['tableau', 'utilisateurs', 'acces', 'securite', 'journal', 'reglages'],
+  gestionnaire: ['tableau', 'utilisateurs', 'acces', 'journal'],
   ami: [],
 };
 
 const SECTIONS: ReadonlyArray<readonly [IdSection, string, string]> = [
   ['tableau', '◧', 'Tableau de bord'],
   ['utilisateurs', '👥', 'Utilisateurs'],
+  ['acces', '▤', 'Accès par app'],
   ['applications', '▦', 'Applications'],
   ['securite', '🛡', 'Sécurité'],
   ['journal', '☰', 'Journal'],
@@ -380,6 +382,7 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
         <View style={{ marginTop: 12 }}>
           {section === 'tableau' ? <Tableau outils={outils} /> : null}
           {section === 'utilisateurs' ? <Utilisateurs key={cible ?? 'liste'} outils={outils} cible={cible} /> : null}
+          {section === 'acces' ? <Matrice outils={outils} /> : null}
           {section === 'applications' && sectionsPermises.includes('applications') ? <Applications outils={outils} /> : null}
           {section === 'securite' && sectionsPermises.includes('securite') ? (
             <Securite
