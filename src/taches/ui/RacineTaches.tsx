@@ -211,6 +211,8 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
   // Multi-sélection (vue Liste) : tâches cochées, et la dernière touchée (Maj + clic : la plage).
   const [choisies, setChoisies] = useState<readonly string[]>([]);
   const ancre = useRef<string | undefined>(undefined);
+  // Fenêtre ouverte DANS une vue (menu Équipe) : Échap la ferme, elle.
+  const fermerLocale = useRef<(() => void) | undefined>(undefined);
   const [rapide, setRapide] = useState('');
   const [rapideActif, setRapideActif] = useState(false);
   const [dernierProjet, setDernierProjet] = useState(affichageInitial.dernierProjet);
@@ -565,7 +567,11 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
         e.stopPropagation();
       };
       if (e.key === 'Escape') {
-        if (etatClavier.current.fenetre) {
+        if (fermerLocale.current) {
+          // Une fenêtre du menu Équipe (fiche, retrait, choix) : elle se ferme, pas l'app.
+          arreter();
+          fermerLocale.current();
+        } else if (etatClavier.current.fenetre) {
           arreter();
           setFenetre(undefined);
         } else if (etatClavier.current.ouverte) {
@@ -643,7 +649,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
 
   // --- Contenu principal
   const contenu = equipe ? (
-    <VueEquipe a={actions} comptes={contexte.profils?.tous ?? []} onOuvrirTache={id => setOuverte(id)} onErreur={signaler} onAvis={avisOk} />
+    <VueEquipe a={actions} fermeture={f => (fermerLocale.current = f)} comptes={contexte.profils?.tous ?? []} onOuvrirTache={id => setOuverte(id)} onErreur={signaler} onAvis={avisOk} />
   ) : aucunProjet ? (
     role === 'fondateur' ? (
       <EtatVide

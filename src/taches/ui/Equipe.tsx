@@ -13,7 +13,7 @@
  *  - Membre : l'équipe des projets partagés avec lui, en lecture seule.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -163,19 +163,25 @@ type Retrait = {
   projetId?: string;
 };
 
+type Fermeture = (f: (() => void) | undefined) => void;
+
 export function VueEquipe({
   a,
   comptes,
   onOuvrirTache,
   onErreur,
   onAvis,
+  fermeture,
 }: {
   a: Actions;
   comptes: readonly Profil[];
   onOuvrirTache(id: string): void;
   onErreur(e: unknown): void;
   onAvis(t: string): void;
+  /** Échap : la racine ferme la fenêtre du dessus du menu Équipe (pas l'app). */
+  fermeture?: Fermeture;
 }) {
+  useEffect(() => () => fermeture?.(undefined), [fermeture]);
   if (a.etat.role !== 'fondateur' || a.etat.perso)
     return <EquipeMembre a={a} />;
   return (
@@ -185,6 +191,7 @@ export function VueEquipe({
       onOuvrirTache={onOuvrirTache}
       onErreur={onErreur}
       onAvis={onAvis}
+      fermeture={fermeture}
     />
   );
 }
@@ -197,12 +204,14 @@ function EquipeFondateur({
   onOuvrirTache,
   onErreur,
   onAvis,
+  fermeture,
 }: {
   a: Actions;
   comptes: readonly Profil[];
   onOuvrirTache(id: string): void;
   onErreur(e: unknown): void;
   onAvis(t: string): void;
+  fermeture?: Fermeture;
 }) {
   const theme = a.theme;
   const d = a.etat.donnees;
@@ -218,6 +227,21 @@ function EquipeFondateur({
   const [retrait, setRetrait] = useState<Retrait | undefined>();
   const [choixProjet, setChoixProjet] = useState(false);
   const [enCours, setEnCours] = useState(false);
+  const [choixMatrice, setChoixMatrice] = useState(false);
+  // Échap ferme la fenêtre du dessus (retrait, fiche, choix), jamais l'app.
+  useEffect(() => {
+    fermeture?.(
+      retrait
+        ? () => setRetrait(undefined)
+        : fiche
+          ? () => setFiche(undefined)
+          : choixProjet
+            ? () => setChoixProjet(false)
+            : choixMatrice
+              ? () => setChoixMatrice(false)
+              : undefined,
+    );
+  }, [fermeture, retrait, fiche, choixProjet, choixMatrice]);
   const visibles = filtrerEquipe(lignes, filtres);
   const supprimes = lignes.filter(l => l.acces === 'supprime');
   const aInviter = invitables(d, profils);
@@ -507,6 +531,8 @@ function EquipeFondateur({
           lignes={visibles}
           onErreur={onErreur}
           onAvis={onAvis}
+          ouvert={choixMatrice}
+          onOuvert={setChoixMatrice}
         />
       )}
 
@@ -731,11 +757,16 @@ function MatriceDroits({
   lignes,
   onErreur,
   onAvis,
+  ouvert,
+  onOuvert,
 }: {
   a: Actions;
   lignes: readonly LigneEquipe[];
   onErreur(e: unknown): void;
   onAvis(t: string): void;
+  /** Le choix d'un droit est ouvert (Échap le ferme par la racine). */
+  ouvert: boolean;
+  onOuvert(o: boolean): void;
 }) {
   const theme = a.theme;
   const d = a.etat.donnees;
@@ -744,10 +775,15 @@ function MatriceDroits({
     lignes.some(l => l.membre.compte === x.compte),
   );
   const [brouillon, setBrouillon] = useState<Record<string, DroitOuAucun>>({});
-  const [choix, setChoix] = useState<
+  const [choixBrut, setChoixBrut] = useState<
     | { titre: string; cellules: Array<{ compte: string; projetId: string }> }
     | undefined
   >();
+  const choix = ouvert ? choixBrut : undefined;
+  const setChoix = (c: typeof choixBrut) => {
+    setChoixBrut(c);
+    onOuvert(Boolean(c));
+  };
   const cle = (compte: string, projetId: string) => `${compte}|${projetId}`;
   const valeur = (compte: string, projetId: string): DroitOuAucun =>
     brouillon[cle(compte, projetId)] ?? m.droits[compte]?.[projetId] ?? 'aucun';
