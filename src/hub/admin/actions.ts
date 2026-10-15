@@ -213,7 +213,8 @@ export function avecReglagesComptesPar(acteur: Acteur | undefined, donnees: Donn
 export function avecModeleInvitationPar(acteur: Acteur | undefined, donnees: DonneesAdmin, modele: ModeleInvitation | undefined): DonneesAdmin {
   exiger(acteur, 'reglages-comptes');
   if (!modele) {
-    const { modeleInvitation: _retire, ...reste } = donnees;
+    const reste = { ...donnees };
+    delete reste.modeleInvitation;
     return reste;
   }
   const erreurs = validerModele(modele);
