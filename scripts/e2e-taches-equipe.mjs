@@ -607,6 +607,7 @@ try {
 
   // ================================================================ iPhone du Fondateur : mesures
   log('iPhone 390 × 844 (Fondateur) : équipe, matrice, liste avec cases, « Déplacer »');
+  await pc.getByTestId('nav-equipe').click();
   await pc.setViewportSize({ width: 390, height: 844 });
   await pause(1000);
   const mesures = [];
