@@ -41,6 +41,29 @@ test('le DNS est vérifié à la connexion : un nom qui résout en privé est re
   assert.equal(ok.e, null);
 });
 
+test('DNS gardé 60 s : seulement une liste publique vérifiée, jamais un refus', async () => {
+  let appels = 0;
+  let adresses = [{ address: '93.184.216.34', family: 4 }];
+  const resoudre = (hote, opts, rappel) => {
+    appels += 1;
+    rappel(null, adresses);
+  };
+  let t = 1000;
+  const cache = new Map();
+  const lookup = lookupPublic(resoudre, { cache, maintenant: () => t });
+  const appeler = (o = {}) => new Promise(res => lookup('Exemple.fr', o, (e, a, f) => res({ e, a, f })));
+  assert.equal((await appeler()).a, '93.184.216.34');
+  assert.deepEqual((await appeler({ all: true })).a, adresses);
+  assert.equal(appels, 1, 'seconde connexion : adresses déjà vérifiées');
+  t += 60_000;
+  adresses = [{ address: '10.0.0.1', family: 4 }];
+  assert.match((await appeler()).e.message, /non publique/, 'au-delà de 60 s : revérifié (et refusé)');
+  assert.match((await appeler()).e.message, /non publique/, 'un refus n’est jamais gardé comme accepté');
+  assert.equal(appels, 3);
+  adresses = [{ address: '93.184.216.34', family: 4 }];
+  assert.equal((await appeler()).e, null);
+});
+
 test('valide la forme de la requête : méthode, bornes, en-têtes sans cookie', () => {
   assert.throws(() => validerRequete({ url: 'https://exemple.fr/', methode: 'DELETE' }));
   assert.throws(() => validerRequete(null));

@@ -32,7 +32,18 @@
  *    mémoire du Worker : rien n'est écrit dans la boîte KV) ;
  *  - CORS restreint aux origines du site (`ORIGINES_SITE`), réponses
  *    `Cache-Control: no-store`, erreurs uniformes `{ erreur, code }` sans
- *    détail interne ; le journal ne garde que l'hôte, le statut et la durée.
+ *    détail interne ; le journal ne garde que l'hôte, le statut et la durée ;
+ *  - CACHE DU RELAIS (temps de réponse) : un GET que le site DEMANDE de garder
+ *    (`cache: { nature: 'recherche' | 'page' }`) et qui a réussi (200, entier,
+ *    pas une page anti-robot) est gardé 15 min (recherche) ou 30 min (page de
+ *    série ou d'épisode) : en mémoire de l'instance du Worker, et dans l'API
+ *    Cache de Cloudflare (`caches.default`, gratuite ; pas KV). Clé : empreinte
+ *    SHA-256 de la méthode, de l'adresse normalisée et des en-têtes envoyés
+ *    (jamais le jeton, jamais de cookie : aucun n'est envoyé ni rendu, la page
+ *    gardée est la version publique, la même pour tous). Jamais un POST.
+ *    `cache.frais` : lecture directe du site (« Réessayer »), le cache est
+ *    seulement remis à jour. Réponse : `cache: 'HIT' | 'MISS'` et en-tête
+ *    `x-tsuzuku-cache`. Un ancien site n'envoie pas `cache` : rien n'est gardé.
  *
  * Aucune dépendance au runtime : testable sous Node (`tsuzuku.test.mjs`).
  */
@@ -45,6 +56,13 @@ export const TAILLE_MAX_REPONSE = 2 * 1024 * 1024;
 export const TAILLE_MAX_REQUETE = 96 * 1024;
 export const CORPS_SORTANT_MAX = 64 * 1024;
 export const LIMITE_PAR_MINUTE = 60;
+/** Durée de garde dans le cache du relais, par nature de page (secondes). */
+export const DUREES_CACHE_S = { recherche: 15 * 60, page: 30 * 60 };
+/** Au-delà, une réponse n'est pas gardée (une très grosse page coûte plus à garder qu'à relire). */
+export const TAILLE_MAX_CACHE = 1024 * 1024;
+/** Cache mémoire de l'instance : entrées et caractères au plus (les plus anciennes partent d'abord). */
+export const CACHE_MEMOIRE_ENTREES = 200;
+export const CACHE_MEMOIRE_CARACTERES = 16 * 1024 * 1024;
 const FENETRE_MS = 60_000;
 const DOH = 'https://cloudflare-dns.com/dns-query';
 
@@ -244,6 +262,12 @@ export function validerDemande(corps, options = {}) {
       entetes[cle] = valeur;
     }
   }
+  // Cache du relais : demandé par le site, GET seulement (un POST n'est jamais gardé).
+  let cache;
+  const c = corps.cache;
+  if (methode === 'GET' && c && typeof c === 'object' && !Array.isArray(c) && Object.hasOwn(DUREES_CACHE_S, c.nature)) {
+    cache = { nature: c.nature, frais: c.frais === true };
+  }
   let corpsSortant;
   if (methode === 'POST') {
     const b = corps.body ?? corps.corps ?? '';
@@ -251,8 +275,115 @@ export function validerDemande(corps, options = {}) {
     if (new TextEncoder().encode(b).length > CORPS_SORTANT_MAX) throw refus('Corps de requête trop volumineux.', 'taille', 413);
     corpsSortant = b;
   }
-  return { ...adresse, methode, entetes, corps: corpsSortant };
+  return { ...adresse, methode, entetes, corps: corpsSortant, ...(cache ? { cache } : {}) };
 }
+
+// ------------------------------------------------------------------ Cache du relais
+
+const hex = tampon => [...new Uint8Array(tampon)].map(o => o.toString(16).padStart(2, '0')).join('');
+
+/**
+ * Clé de cache d'une demande validée : empreinte SHA-256 de la méthode, de
+ * l'adresse NORMALISÉE (`URL` : casse de l'hôte, port par défaut, encodage ;
+ * le fragment `#…` est retiré) et des en-têtes sortants triés. Rien du compte
+ * (ni jeton ni origine) : la page gardée est celle que n'importe qui lirait.
+ */
+export async function cleDeCache(demande) {
+  const url = new URL(demande.url.href);
+  url.hash = '';
+  const entetes = Object.entries(demande.entetes ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  const texte = JSON.stringify(['v1', demande.methode, url.href, entetes]);
+  return hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texte)));
+}
+
+/** Adresse sous laquelle `caches.default` range une entrée (jamais appelée : seulement une clé). */
+export const adresseDeCache = (hoteRelais, cle) => `https://${hoteRelais}/__tsuzuku-cache/v1/${cle}`;
+
+const MARQUES_ANTI_ROBOT = /just a moment|cf-chl|challenge-platform|captcha|ddos-guard|attention required|are you a robot|access denied/i;
+
+/** Vrai si la réponse peut être gardée : 200, entière, texte, pas trop grosse, pas une page anti-robot. */
+export function gardable(sortie) {
+  if (sortie.status !== 200 || sortie.tronque || typeof sortie.texte !== 'string') return false;
+  if (sortie.texte.length > TAILLE_MAX_CACHE) return false;
+  if (sortie.headers?.['cf-mitigated']) return false;
+  return !MARQUES_ANTI_ROBOT.test(sortie.texte.slice(0, 6000));
+}
+
+/** Cache mémoire de l'instance du Worker (borné) : sert même là où l'API Cache est sans effet (*.workers.dev). */
+export function creerCacheMemoire({ entrees = CACHE_MEMOIRE_ENTREES, caracteres = CACHE_MEMOIRE_CARACTERES } = {}) {
+  const lignes = new Map();
+  let total = 0;
+  const retirer = cle => {
+    const l = lignes.get(cle);
+    if (l) {
+      total -= l.texte.length;
+      lignes.delete(cle);
+    }
+  };
+  return {
+    lire(cle, maintenant = Date.now()) {
+      const l = lignes.get(cle);
+      if (!l) return undefined;
+      if (maintenant >= l.expire) {
+        retirer(cle);
+        return undefined;
+      }
+      return l;
+    },
+    ecrire(cle, texte, a, expire) {
+      retirer(cle);
+      if (texte.length > caracteres) return;
+      lignes.set(cle, { texte, a, expire });
+      total += texte.length;
+      while (lignes.size > entrees || total > caracteres) retirer(lignes.keys().next().value);
+    },
+    taille: () => lignes.size,
+    vider() {
+      lignes.clear();
+      total = 0;
+    },
+  };
+}
+
+const cacheMemoire = creerCacheMemoire();
+/** Tests : le cache mémoire du module. */
+export const cacheMemoireDuRelais = cacheMemoire;
+
+/** Lit l'entrée gardée (mémoire, puis API Cache) ; `undefined` si absente ou expirée. */
+async function lireCache(cle, adresse, cacheCf, maintenant) {
+  const l = cacheMemoire.lire(cle, maintenant);
+  if (l) return { texte: l.texte, a: l.a };
+  if (!cacheCf) return undefined;
+  try {
+    const r = await cacheCf.match(adresse);
+    if (!r) return undefined;
+    const a = Number(r.headers.get('x-tsuzuku-a'));
+    const expire = Number(r.headers.get('x-tsuzuku-expire'));
+    if (!Number.isFinite(a) || !Number.isFinite(expire) || maintenant >= expire) return undefined;
+    const texte = await r.text();
+    cacheMemoire.ecrire(cle, texte, a, expire);
+    return { texte, a };
+  } catch {
+    return undefined; // Cache indisponible : on lit le site.
+  }
+}
+
+async function ecrireCache(cle, adresse, cacheCf, texte, a, dureeS) {
+  const expire = a + dureeS * 1000;
+  cacheMemoire.ecrire(cle, texte, a, expire);
+  if (!cacheCf) return;
+  try {
+    await cacheCf.put(
+      adresse,
+      new Response(texte, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': `public, max-age=${dureeS}`, 'x-tsuzuku-a': String(a), 'x-tsuzuku-expire': String(expire) } }),
+    );
+  } catch {
+    // Sans cache Cloudflare (aperçu, quota) : la mémoire suffit.
+  }
+}
+
+/** `caches.default` s'il existe (Cloudflare) ; absent sous Node et dans les tests sans `deps.cache`. */
+const cacheCloudflare = () => (typeof globalThis.caches === 'object' && globalThis.caches?.default) || undefined;
 
 // ------------------------------------------------------------------ Corps : jeu de caractères
 
@@ -448,9 +579,29 @@ export async function routeTsuzuku(requete, env, obtenirPortee, deps = {}) {
   }
 
   let demande;
+  const hoteRelais = new URL(requete.url).hostname;
   try {
-    demande = validerDemande(await lireCorpsRequete(requete), { hoteRelais: new URL(requete.url).hostname });
-    await verifierDns(demande.hote, deps.resoudre ?? resolveurDoh(deps.fetch), deps.maintenant?.() ?? Date.now());
+    demande = validerDemande(await lireCorpsRequete(requete), { hoteRelais });
+  } catch (e) {
+    return erreur(e);
+  }
+  // Cache du relais : une page déjà lue (adresse vérifiée ci-dessus) ne repart pas vers le site.
+  const maintenant = deps.maintenant?.() ?? Date.now();
+  const cacheCf = deps.cache === undefined ? cacheCloudflare() : deps.cache ?? undefined;
+  let cle;
+  let adresseCache;
+  if (demande.cache) {
+    cle = await cleDeCache(demande);
+    adresseCache = adresseDeCache(hoteRelais, cle);
+    const garde = demande.cache.frais ? undefined : await lireCache(cle, adresseCache, cacheCf, maintenant);
+    if (garde) {
+      journal(`tsuzuku ${demande.hote} cache ${Date.now() - debut}ms`);
+      const sortie = JSON.parse(garde.texte);
+      return json({ ...sortie, cache: 'HIT', ageS: Math.max(0, Math.round((maintenant - garde.a) / 1000)) }, 200, origine, env, { 'x-tsuzuku-cache': 'HIT' });
+    }
+  }
+  try {
+    await verifierDns(demande.hote, deps.resoudre ?? resolveurDoh(deps.fetch), maintenant);
   } catch (e) {
     return erreur(e);
   }
@@ -500,6 +651,15 @@ export async function routeTsuzuku(requete, env, obtenirPortee, deps = {}) {
       }
     }
     journal(`tsuzuku ${demande.hote} ${rep.status} ${Date.now() - debut}ms`);
+    if (demande.cache) {
+      if (gardable(sortie)) {
+        const ecriture = ecrireCache(cle, adresseCache, cacheCf, JSON.stringify(sortie), maintenant, DUREES_CACHE_S[demande.cache.nature]);
+        // Cloudflare : l'écriture finit après la réponse (`waitUntil`) ; ailleurs, on l'attend.
+        if (deps.waitUntil) deps.waitUntil(ecriture);
+        else await ecriture;
+      }
+      return json({ ...sortie, cache: 'MISS' }, 200, origine, env, { 'x-tsuzuku-cache': 'MISS' });
+    }
     return json(sortie, 200, origine, env);
   } catch (e) {
     if (expire) return erreur(refus(`Délai dépassé (${Math.round(delaiMs / 1000)} s).`, 'delai', 504));

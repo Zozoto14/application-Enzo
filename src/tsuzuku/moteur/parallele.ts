@@ -187,8 +187,17 @@ export async function courseAvecPriorite<T>(
     signal?: SignalAnnulation;
     /** Une source moins prioritaire a trouvé, les plus prioritaires cherchent encore : résultat provisoire. */
     surProvisoire?: (resultat: T, i: number) => void;
+    /**
+     * Temps TYPIQUE d'une page de la source i (mesuré sur l'appareil), s'il est
+     * connu. Quand une moins prioritaire a trouvé et que TOUTES les plus
+     * prioritaires encore en cours sont connues pour ne pas pouvoir finir dans
+     * le délai de grâce (temps typique restant > 1,5 × `graceMs`, sans compter
+     * leurs pages suivantes), attendre ne servirait à rien : la décision est
+     * prise tout de suite (`abregee`).
+     */
+    dureeTypiqueMs?: (i: number) => number | undefined;
   },
-): Promise<{ issues: IssueSource<T>[]; gagnante: number | null }> {
+): Promise<{ issues: IssueSource<T>[]; gagnante: number | null; abregee?: boolean }> {
   const n = taches.length;
   const issues: IssueSource<T>[] = [];
   if (!n) return { issues, gagnante: null };
@@ -200,6 +209,25 @@ export async function courseAvecPriorite<T>(
   const termine = new Promise<number | null>(ok => (fin = ok));
   let grace: ReturnType<typeof setTimeout> | undefined;
   let candidate: number | null = null;
+  let abregee = false;
+  const debuts: number[] = [];
+  /** Les plus prioritaires que `c`, encore en cours, sont toutes connues pour être trop lentes pour finir dans le délai de grâce. */
+  const attenteInutile = (c: number) => {
+    if (!o.dureeTypiqueMs) return false;
+    for (let j = 0; j < c; j += 1) {
+      if (finies.has(j)) continue;
+      if (j >= lancees) return false;
+      let typique: number | undefined;
+      try {
+        typique = o.dureeTypiqueMs(j);
+      } catch {
+        typique = undefined;
+      }
+      if (typique === undefined || !Number.isFinite(typique)) return false;
+      if (typique - (Date.now() - debuts[j]) <= o.graceMs * 1.5) return false;
+    }
+    return true;
+  };
   const decider = (force = false) => {
     if (!fin) return;
     // Première source (dans l'ordre) qui a trouvé, si toutes celles d'avant sont finies.
@@ -230,6 +258,7 @@ export async function courseAvecPriorite<T>(
     const i = lancees++;
     const a = creerAnnulation(global.signal);
     enVol += 1;
+    debuts[i] = Date.now();
     void Promise.resolve()
       .then(() => taches[i](a.signal))
       .then(
@@ -246,6 +275,10 @@ export async function courseAvecPriorite<T>(
         }
         premiereSeule = false;
         decider();
+        if (fin && candidate === i && attenteInutile(i)) {
+          abregee = true;
+          decider(true);
+        }
         // Pas encore décidé : la meilleure trouvaille jusqu'ici peut déjà s'afficher.
         if (fin && candidate === i && o.surProvisoire) {
           try {
@@ -280,7 +313,7 @@ export async function courseAvecPriorite<T>(
   for (let i = 0; i < lancees; i += 1) {
     sortie.push(finies.has(i) && issues[i] ? issues[i] : { i, interrompue: true });
   }
-  return { issues: sortie, gagnante };
+  return { issues: sortie, gagnante, ...(abregee && gagnante != null ? { abregee: true } : {}) };
 }
 
 /**

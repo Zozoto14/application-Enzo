@@ -27,7 +27,16 @@ export interface RequeteReseau {
   delaiMs: number;
   /** Taille maximale du corps en octets ; l'implementation doit abandonner au-dela. */
   tailleMax: number;
+  /**
+   * Facultatif (GET) : la page peut etre gardee un moment par le RELAIS du site
+   * (page publique, lue sans cookie) ; `frais` : relire le site quand meme.
+   * Ignore par le PC, l'iPhone et un ancien relais.
+   */
+  cache?: { nature: NatureCache; frais?: boolean };
 }
+
+/** Nature d'une page pour le cache du relais : recherche (15 min) ou page de serie / d'episode (30 min). */
+export type NatureCache = 'recherche' | 'page';
 
 export interface ReponseReseau {
   statut: number;
@@ -50,6 +59,8 @@ export interface Reseau {
 }
 
 export interface OptionsClient extends OptionsGarde {
+  /** Toujours relire les sites (« Réessayer », rafraichissement) : le cache du relais est seulement remis a jour. */
+  cacheFrais?: boolean;
   delaiMs?: number;
   tailleMax?: number;
   redirectionsMax?: number;
@@ -63,6 +74,8 @@ export interface OptionsAppel {
   entetes?: Record<string, string>;
   /** En-tête Referer (page « d'où l'on vient ») : certains sites refusent une requête sans. */
   referer?: string;
+  /** GET d'une page publique que le relais du site peut garder un moment (voir `RequeteReseau.cache`). */
+  cache?: NatureCache;
 }
 
 export interface ReponseTexte {
@@ -138,12 +151,13 @@ export function creerClient(reseau: Reseau, options: OptionsClient = {}): Client
       ...minuscules(appel.entetes),
     };
     let cookiesDemandes = 0;
+    const cache = methode === 'GET' && appel.cache ? { nature: appel.cache, ...(options.cacheFrais ? { frais: true } : {}) } : undefined;
 
     let courante = await verifierUrlPublique(url, garde);
     for (let saut = 0; saut <= redirectionsMax; saut += 1) {
       let rep: ReponseReseau;
       try {
-        rep = await avecDelai(reseau.requete({ url: courante, methode, entetes, corps, delaiMs, tailleMax }), delaiMs);
+        rep = await avecDelai(reseau.requete({ url: courante, methode, entetes, corps, delaiMs, tailleMax, ...(cache ? { cache } : {}) }), delaiMs);
       } catch (err) {
         if (err instanceof ErreurMoteur) {
           throw err;

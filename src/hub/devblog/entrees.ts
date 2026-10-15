@@ -45,8 +45,8 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
-    version: '2026.10.30',
-    date: '2026-10-30',
+    version: '2026.10.31',
+    date: '2026-10-31',
     titre: 'Administration : invitations par e-mail et nouveaux réglages',
     resume:
       'À la création d’un compte, enregistrez l’adresse e-mail de votre ami et envoyez-lui l’invitation en un geste, depuis votre messagerie. L’Administration gagne un tableau de bord plus complet, une matrice des accès, des actions groupées et des réglages pour les comptes.',
@@ -83,6 +83,41 @@ export const ENTREES: readonly EntreeDevblog[] = [
         titre: 'Tableau de bord et fiche plus complets',
         texte:
           'Invitations en attente et expirées, appareils, dernières connexions, alertes (trop d’appareils, échecs de vérification). La fiche d’un compte montre son adresse, ses invitations, ses appareils et son activité ; la zone Danger supprime un compte ET efface ses copies sur le relais.',
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
+    version: '2026.10.30',
+    date: '2026-10-30',
+    titre: 'Tsuzuku encore plus rapide, surtout sur iPhone et iPad',
+    resume:
+      'Les épisodes d’un animé arrivent plus vite sur le site, même en 4G : la recherche part dès que vous touchez l’affiche, une source connue pour être lente ne fait plus attendre les autres, et un second appareil profite de ce que le premier vient de lire.',
+    illustration: 'hub',
+    fonctionnalites: [
+      {
+        id: 'tsuzuku-latence-toucher',
+        emoji: '👆',
+        titre: 'La recherche part dès que vous touchez l’affiche',
+        texte:
+          'Tsuzuku n’attend plus que la fiche soit ouverte : dès que votre doigt (ou votre souris, après un court survol) se pose sur une affiche, il commence à chercher l’animé sur vos sources. Les premières fiches de l’accueil et l’épisode que vous visez sont aussi préparés d’avance, avec modération.',
+        essayer: { genre: 'app', app: 'tsuzuku' },
+        app: 'tsuzuku',
+      },
+      {
+        id: 'tsuzuku-latence-lentes',
+        emoji: '🐢',
+        titre: 'Une source lente ne bloque plus les autres',
+        texte:
+          'Tsuzuku retient, sur votre appareil, le temps de réponse de chaque site. Si votre source prioritaire est connue pour être lente, les autres sont interrogées tout de suite, et on n’attend plus pour rien une réponse qui ne viendra pas à temps. Le diagnostic le dit.',
+        app: 'tsuzuku',
+      },
+      {
+        id: 'tsuzuku-latence-relais',
+        emoji: '📦',
+        titre: 'Le relais garde les pages qu’il vient de lire',
+        texte:
+          'Sur le site, le relais garde un moment (15 à 30 min) les pages publiques des sources qu’il vient de lire : votre iPhone retrouve aussitôt ce que votre iPad vient de chercher. « Réessayer » relit toujours le site. Nécessite la mise à jour du relais.',
         adminSeulement: true,
       },
     ],

@@ -14,6 +14,7 @@ import { SelecteurLangue } from './SelecteurLangue';
 import { LIBELLE_LANGUE_VERSION } from '../moteur/langues';
 import { sourcesActives } from '../moteur/sources';
 import { LienAnime, prochainEpisode } from './LienAnime';
+import { intentionEpisode, poigneesIntention } from './precharge';
 import { Bouton, Etat, LIBELLE_STATUT, TitreSection, styleAttenue, styleTexte } from './ui';
 
 const PAR_PAGE = 30;
@@ -113,6 +114,7 @@ export function FicheAnimeEcran({ id }: { id: string }) {
                         accessibilityRole="button"
                         accessibilityLabel={`Lire l’épisode ${ep.number}${ep.title ? `, ${ep.title}` : ''}${vu ? ', vu' : ''}`}
                         onPress={() => aller({ t: 'lecteur', kind: 'anime', id, numero: ep.number })}
+                        {...poigneesIntention(() => intentionEpisode(s, { id, titres: titresPourSources(f), numero: ep.number }))}
                         style={(p: { hovered?: boolean; pressed: boolean }) => ({ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 54, paddingHorizontal: 12, paddingVertical: 8, borderTopWidth: i ? 1 : 0, borderTopColor: theme.ligne, backgroundColor: p.hovered || p.pressed ? teinteTransparente(theme.texte, 0.05) : 'transparent' })}>
                         <View style={{ width: 30, height: 30, borderRadius: Math.min(theme.rayonMoyen, 8), alignItems: 'center', justifyContent: 'center', backgroundColor: vu ? theme.accent : teinteTransparente(theme.texte, 0.08) }}>
                           <Text style={{ color: vu ? theme.surAccent : theme.texte, fontWeight: '800', fontSize: 13 }}>{ep.number}</Text>

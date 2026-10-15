@@ -175,6 +175,13 @@ async function creerAmi(pg, nom) {
   return { motDePasse, secret };
 }
 async function ouvrirTsuzuku(pg) {
+  // Le hub garde les apps ouvertes en onglets : l'onglet de Tsuzuku laissé ouvert est fermé, l'app repart de Découvrir.
+  for (const el of await pg.locator('[data-testid^="onglets-n"][data-testid$="-ouvrir"]').all()) {
+    if (((await el.getAttribute('aria-label')) ?? '').startsWith('Tsuzuku')) {
+      await pg.getByTestId((await el.getAttribute('data-testid')).replace(/-ouvrir$/, '-fermer')).click().catch(() => undefined);
+      await pg.getByTestId('tsuzuku-racine').waitFor({ state: 'detached', timeout: 5000 }).catch(() => undefined);
+    }
+  }
   await allerPageApplications(pg);
   await tuile(pg, 'tsuzuku').click();
   await pg.getByTestId('tsuzuku-racine').waitFor({ timeout: 20_000 });

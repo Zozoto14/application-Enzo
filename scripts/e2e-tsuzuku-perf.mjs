@@ -7,8 +7,21 @@
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-tsuzuku-perf.mjs
  *
- * Variables : MODES=pc,site (défaut : les deux) ; SORTIE=fichier.json (mesures brutes) ;
- * SEUILS=0 pour mesurer sans vérifier les seuils (mesure de la version d'avant).
+ * Variables : MODES=pc,site,site4g (défaut : les trois) ; SORTIE=fichier.json (mesures brutes) ;
+ * SEUILS=0 pour mesurer sans vérifier les seuils (mesure de la version d'avant) ;
+ * RELAIS_WORKER=chemin/worker.mjs pour jouer le site contre un AUTRE relais (ex. l'ancien, sans
+ * route `/tsuzuku/lot` ni cache : le site doit se replier tout seul) ; CACHE_RELAIS=0 : relais sans
+ * cache Cloudflare (`caches.default` absent, comme sous l'offre qui ne l'aurait pas).
+ *
+ * Le relais local imite Cloudflare : HTTP/2 (requêtes multiplexées sur une connexion), réponses
+ * compressées (gzip) si le navigateur l'accepte, et un cache `caches.default` en mémoire (API Cache
+ * des Workers) partagé entre les « appareils » du même parcours.
+ *
+ * Mode `site4g` : le site sur un iPhone/iPad en 4G médiocre : le navigateur est bridé par Chrome
+ * (150 ms d'aller-retour, 1,6 Mbit/s descendant, 750 kbit/s montant : profil « Slow 4G » de
+ * Lighthouse), en plus des 80 ms navigateur → Cloudflare et des 200 à 800 ms Cloudflare → site.
+ * Les modes `site` et `site4g` finissent par un SECOND APPAREIL (nouveau navigateur, cache vide :
+ * l'iPhone après l'iPad) qui ouvre la même fiche.
  *
  * Sources actives, dans l'ordre de priorité :
  *   1. lente-exemple.fr   : chaque requête prend 3,5 à 4,5 s, et le titre n'y est pas ;
@@ -24,7 +37,8 @@ import { execFileSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import { createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import http from 'node:http';
-import https from 'node:https';
+import http2 from 'node:http2';
+import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
@@ -35,11 +49,14 @@ const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium } = requireGlobal('playwright');
 const { requeteTsuzuku } = await import(pathToFileURL(join(racine, 'bureau/electron/tsuzuku.mjs')).href);
-const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href)).default;
+const RELAIS_WORKER = process.env.RELAIS_WORKER ?? join(racine, 'relais/worker.mjs');
+const worker = (await import(pathToFileURL(RELAIS_WORKER).href)).default;
+// Cache MÉMOIRE de l'instance du relais (relais à jour seulement) : vidé entre deux modes, comme l'API Cache.
+const moduleTsuzukuRelais = await import(pathToFileURL(join(RELAIS_WORKER, '..', 'tsuzuku.mjs')).href);
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-tsuzuku-perf');
 mkdirSync(CAPTURES, { recursive: true });
-const MODES = (process.env.MODES ?? 'pc,site').split(',').map(m => m.trim()).filter(Boolean);
+const MODES = (process.env.MODES ?? 'pc,site,site4g').split(',').map(m => m.trim()).filter(Boolean);
 const AVEC_SEUILS = process.env.SEUILS !== '0';
 const PORT_SITE = 5223;
 const PORT_INTERNET = 5222;
@@ -49,6 +66,9 @@ const SITE = `${ORIGINE_SITE}/`;
 const JETON = 'jeton-e2e-perf-0123456789abcdef0123';
 const MDP = 'mot-de-passe-e2e-perf-tsuzuku-42';
 const ALLER_RETOUR_RELAIS_MS = 80;
+/** « Slow 4G » (Lighthouse) : appliqué par Chrome au navigateur (mode site4g). */
+const RESEAU_4G = { offline: false, latency: 150, downloadThroughput: (1.6e6 / 8) | 0, uploadThroughput: (750e3 / 8) | 0 };
+const estSite = mode => mode.startsWith('site');
 
 // ------------------------------------------------------------- Latences (déterministes)
 const hache = t => [...t].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
@@ -102,6 +122,7 @@ function repondre(hote, methode, chemin) {
   }
   if (hote === 'langues-exemple.fr') {
     if (p === '/' && url.searchParams.has('s')) {
+      if (/eternal|été|eien/.test(q)) return page('<ul class="resultats"><li class="r"><a href="/anime/ete-eternel/">Été éternel</a></li></ul>');
       return /voyage/.test(q) ? page('<ul class="resultats"><li class="r"><a href="/anime/le-long-voyage/">Le Long Voyage</a></li><li class="r"><a href="/anime/le-long-voyage-vf/">Le Long Voyage (VF)</a></li></ul>') : page('<p>Aucun résultat.</p>');
     }
     const serie = /^\/anime\/le-long-voyage(-vf)?\/(?:page-(\d+)\/?)?$/.exec(p);
@@ -110,6 +131,7 @@ function repondre(hote, methode, chemin) {
       const n = Number(serie[2] ?? 1);
       return page(`<h1>Le Long Voyage${serie[1] ? ' (VF)' : ''}</h1><ul>${n === 1 ? listeEps(prefixe, 1, 6) : listeEps(prefixe, 7, 12)}</ul>${n === 1 ? `<a rel="next" href="${prefixe}/page-2/">Suivant</a>` : ''}`);
     }
+    if (p === '/anime/ete-eternel/') return page(`<h1>Été éternel</h1><ul>${listeEps('/anime/ete-eternel', 1, 12)}</ul>`);
     const ep = /^\/anime\/le-long-voyage(-vf)?\/episode-(\d+)$/.exec(p);
     if (ep) return lecteur(`${ep[1] ? 'vf' : 'vostfr'}-${ep[2]}`);
   }
@@ -163,11 +185,33 @@ const env = {
     list: async ({ prefix = '' } = {}) => ({ keys: [...kv.keys()].filter(c => c.startsWith(prefix)).sort().map(name => ({ name })), list_complete: true }),
   },
 };
+// API Cache des Workers (`caches.default`), en mémoire : une « colo » Cloudflare partagée par les appareils.
+const cacheColo = new Map();
+const clefCache = r => (typeof r === 'string' ? r : r.url);
+if (process.env.CACHE_RELAIS !== '0') {
+  globalThis.caches = {
+    default: {
+      async match(r) {
+        const garde = cacheColo.get(clefCache(r));
+        return garde ? new Response(garde.corps, { status: garde.status, headers: garde.headers }) : undefined;
+      },
+      async put(r, reponse) {
+        cacheColo.set(clefCache(r), { corps: await reponse.arrayBuffer(), status: reponse.status, headers: [...reponse.headers] });
+      },
+      async delete(r) {
+        return cacheColo.delete(clefCache(r));
+      },
+    },
+  };
+}
 let appelsRelais = 0;
 const logOrigine = console.log;
+// Journal du relais (« tsuzuku hôte statut durée ») : muet pendant la mesure.
+console.log = (...a) => (typeof a[0] === 'string' && a[0].startsWith('tsuzuku ') ? undefined : logOrigine(...a));
 const dossier = mkdtempSync(join(tmpdir(), 'e2e-perf-'));
 execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(dossier, 'k.pem'), '-out', join(dossier, 'c.pem'), '-subj', '/CN=localhost', '-days', '1'], { stdio: 'ignore' });
-const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pem')), cert: readFileSync(join(dossier, 'c.pem')) }, async (req, res) => {
+// HTTP/2 comme Cloudflare (une connexion, requêtes multiplexées) ; HTTP/1.1 accepté aussi.
+const serveurRelais = http2.createSecureServer({ key: readFileSync(join(dossier, 'k.pem')), cert: readFileSync(join(dossier, 'c.pem')), allowHTTP1: true }, async (req, res) => {
   const morceaux = [];
   for await (const m of req) morceaux.push(m);
   const corps = Buffer.concat(morceaux);
@@ -176,16 +220,24 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
     // Aller-retour navigateur → Cloudflare (réseau mobile ou ADSL).
     await dormir(ALLER_RETOUR_RELAIS_MS);
   }
-  const requete = new Request(`https://localhost:${PORT_RELAIS}${req.url}`, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps });
-  console.log = () => undefined;
-  let reponse;
-  try {
-    reponse = await worker.fetch(requete, env);
-  } finally {
-    console.log = logOrigine;
+  const entetesRequete = Object.fromEntries(Object.entries(req.headers).filter(([k]) => !k.startsWith(':')));
+  const requete = new Request(`https://localhost:${PORT_RELAIS}${req.url}`, { method: req.method, headers: entetesRequete, body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps });
+  const reponse = await worker.fetch(requete, env);
+  const entetes = Object.fromEntries([...reponse.headers].filter(([k]) => !['content-length', 'connection', 'transfer-encoding'].includes(k)));
+  // Compression de Cloudflare (gzip ici) pour le JSON, flux compris (chaque morceau envoyé aussitôt).
+  const compresser = /gzip/.test(String(req.headers['accept-encoding'] ?? '')) && /json/.test(entetes['content-type'] ?? '') && !entetes['content-encoding'];
+  if (compresser) entetes['content-encoding'] = 'gzip';
+  res.writeHead(reponse.status, entetes);
+  const sortie = compresser ? zlib.createGzip() : null;
+  if (sortie) sortie.pipe(res);
+  const cible = sortie ?? res;
+  if (reponse.body) {
+    for await (const morceau of reponse.body) {
+      cible.write(Buffer.from(morceau));
+      sortie?.flush(zlib.constants.Z_SYNC_FLUSH);
+    }
   }
-  res.writeHead(reponse.status, Object.fromEntries(reponse.headers));
-  res.end(Buffer.from(await reponse.arrayBuffer()));
+  cible.end();
 });
 await new Promise(ok => serveurRelais.listen(PORT_RELAIS, ok));
 
@@ -271,9 +323,16 @@ const cliquerTuile = async pg => {
   await allerPageApplications(pg);
   await pg.locator('[data-testid="cellule-tsuzuku"], [data-testid="tuile-tsuzuku"]').first().click();
 };
+/** Retour au hub ET fermeture de l'onglet de Tsuzuku (le hub garde les apps ouvertes en onglets) : la prochaine ouverture repart de Découvrir. */
 async function retourHub(pg) {
   await pg.getByTestId('retour-hub').first().click({ timeout: 5000 }).catch(() => pg.keyboard.press('Escape'));
   await pg.getByTestId('hub').waitFor({ timeout: 20_000 });
+  for (const el of await pg.locator('[data-testid^="onglets-n"][data-testid$="-ouvrir"]').all()) {
+    if (((await el.getAttribute('aria-label')) ?? '').startsWith('Tsuzuku')) {
+      await pg.getByTestId((await el.getAttribute('data-testid')).replace(/-ouvrir$/, '-fermer')).click().catch(() => undefined);
+    }
+  }
+  await pg.getByTestId('tsuzuku-racine').waitFor({ state: 'detached', timeout: 5000 }).catch(() => undefined);
 }
 /** Temps entre une action et l'apparition d'un élément (null : jamais vu). */
 async function chrono(action, attente) {
@@ -281,36 +340,57 @@ async function chrono(action, attente) {
   await action();
   return attente().then(() => Date.now() - debut, () => null);
 }
-const iframeAvec = (pg, texte, delai = 60_000) => pg.frameLocator('[data-testid="lecteur-iframe"]').getByText(texte).waitFor({ timeout: delai });
+/**
+ * Mesure PRÉCISE à l'image près : `waitForFunction` vérifié à chaque image (requestAnimationFrame).
+ * (`locator.waitFor` vérifie de moins en moins souvent, jusqu'à 1 s d'écart : inutilisable pour chronométrer.)
+ */
+const T = id => `[data-testid="${id}"]`;
+const apparait = (pg, css, delai = 90_000) =>
+  pg.waitForFunction(c => [...document.querySelectorAll(c)].some(e => (typeof e.checkVisibility === 'function' ? e.checkVisibility() : true)), css, { polling: 'raf', timeout: delai });
+/** Un lecteur (iframe d'un autre site) affiche `texte` : chaque cadre est relu toutes les 15 ms. */
+async function iframeAvec(pg, texte, delai = 60_000) {
+  const fin = Date.now() + delai;
+  const voulu = t => (texte instanceof RegExp ? texte.test(t) : t.includes(texte));
+  while (Date.now() < fin) {
+    for (const cadre of pg.frames()) {
+      if (cadre === pg.mainFrame() || !cadre.url().includes('lecteur-exemple.fr')) continue;
+      const t = await cadre.evaluate(() => document.body?.innerText ?? '').catch(() => '');
+      if (voulu(t)) return;
+    }
+    await dormir(15);
+  }
+  throw new Error(`lecteur : « ${texte} » jamais affiché`);
+}
 const S = (id, name, baseUrl, search) => ({ id, name, baseUrl, enabled: true, language: 'indifferent', search, episodes: { item: 'li.ep', link: 'a' }, player: { iframe: 'iframe' } });
 const SOURCES = [
   S('lente', 'Médiathèque lente', 'https://lente-exemple.fr', { path: '/recherche?q={query}', item: 'li.r', title: 'a', link: 'a' }),
   S('langues', 'Médiathèque VF/VOSTFR', 'https://langues-exemple.fr', { path: '/?s={query}', item: 'li.r', title: 'a', link: 'a' }),
 ];
 
-/** Le parcours complet sur une plateforme ; rend les temps (ms) de chaque étape. */
-async function parcours(navigateur, mode) {
-  const t = {};
+/** Contexte de navigateur : l'internet simulé pour le catalogue, les images et les lecteurs. */
+async function contexteSimule(navigateur, mode) {
   const contexte = await nouveauContexte(navigateur, { ignoreHTTPSErrors: true, viewport: { width: 1100, height: 820 } });
   await contexte.route(
     url => ['api.jikan.moe', 'graphql.anilist.co', 'img-exemple.fr', 'lecteur-exemple.fr'].includes(url.hostname),
     async route => {
       const url = new URL(route.request().url());
-      await dormir(latence(url.hostname, url.pathname + url.search));
+      // Réponses servies par Playwright : le bridage de Chrome ne s'y applique pas, l'aller-retour 4G est ajouté ici.
+      await dormir(latence(url.hostname, url.pathname + url.search) + (bride(mode) ? RESEAU_4G.latency : 0));
       const r = repondre(url.hostname, route.request().method(), url.pathname + url.search);
       await route.fulfill({ status: r.statut, contentType: r.type, body: r.corps, headers: { 'access-control-allow-origin': '*' } });
     },
   );
-  const pg = await contexte.newPage();
-  const erreurs = [];
-  pg.on('pageerror', e => erreurs.push(e.message));
-  if (mode === 'pc') {
-    await pg.exposeFunction('__tsuRequete', pontRequete);
-    await pg.exposeFunction('__tsuLecteur', async () => true);
-  }
-  const activerPontPc = () => (mode === 'pc' ? pg.evaluate(() => { globalThis.applibourse = { tsuzuku: { requete: r => globalThis.__tsuRequete(r), lecteur: u => globalThis.__tsuLecteur(u) } }; }) : undefined);
-  const secret = await creerCoffre(pg, mode === 'site' ? `${SITE}#liaison=${CODE_PC}` : SITE);
-  await activerPontPc();
+  return contexte;
+}
+const bride = mode => mode === 'site4g';
+/** Bride le réseau de la page (4G), une fois le coffre créé et les sources importées. */
+async function brider(pg, mode) {
+  if (!bride(mode)) return;
+  const cdp = await pg.context().newCDPSession(pg);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.emulateNetworkConditions', RESEAU_4G);
+}
+async function importerSources(pg, mode) {
   await cliquerTuile(pg);
   await pg.getByTestId('tsuzuku-racine').waitFor({ timeout: 20_000 });
   await pg.getByTestId('onglet-app-sources').click();
@@ -319,31 +399,49 @@ async function parcours(navigateur, mode) {
   await dormir(800);
   verifier((await pg.getByTestId('sources-compte').innerText()).includes('2 source(s) · 2 active(s)'), `${mode} : 2 sources actives importées`);
   await retourHub(pg);
+}
+
+/** Le parcours complet sur une plateforme ; rend les temps (ms) de chaque étape. */
+async function parcours(navigateur, mode) {
+  const t = {};
+  const contexte = await contexteSimule(navigateur, mode);
+  const pg = await contexte.newPage();
+  const erreurs = [];
+  pg.on('pageerror', e => erreurs.push(e.message));
+  if (mode === 'pc') {
+    await pg.exposeFunction('__tsuRequete', pontRequete);
+    await pg.exposeFunction('__tsuLecteur', async () => true);
+  }
+  const activerPontPc = () => (mode === 'pc' ? pg.evaluate(() => { globalThis.applibourse = { tsuzuku: { requete: r => globalThis.__tsuRequete(r), lecteur: u => globalThis.__tsuLecteur(u) } }; }) : undefined);
+  const secret = await creerCoffre(pg, estSite(mode) ? `${SITE}#liaison=${CODE_PC}` : SITE);
+  await activerPontPc();
+  await importerSources(pg, mode);
+  await brider(pg, mode);
 
   // 1. Ouverture de l'app : Découvrir.
   log(`${mode} : ouverture de l'app (Découvrir)`);
-  t.accueil = await chrono(() => cliquerTuile(pg), () => pg.getByTestId('carte-anime-1').first().waitFor({ timeout: 30_000 }));
+  t.accueil = await chrono(() => cliquerTuile(pg), () => apparait(pg, T('carte-anime-1'), 30_000));
   await capture(pg, `${mode}-01-accueil`);
 
   // 2. Recherche dans le catalogue.
   log(`${mode} : recherche du catalogue`);
   await pg.getByTestId('accueil-recherche').fill('voyage');
-  t.catalogue = await chrono(() => pg.getByTestId('accueil-chercher').click(), () => pg.getByTestId('catalogue-grille').getByTestId('carte-anime-1').first().waitFor({ timeout: 30_000 }));
+  t.catalogue = await chrono(() => pg.getByTestId('accueil-chercher').click(), () => apparait(pg, `${T('catalogue-grille')} ${T('carte-anime-1')}`, 30_000));
 
   // 3. Fiche : premier affichage utile (titre), puis « Sur vos sources » (épisodes trouvés).
   log(`${mode} : fiche et recherche sur les sources`);
   const debutFiche = Date.now();
   await pg.getByTestId('catalogue-grille').getByTestId('carte-anime-1').first().click();
-  t.fiche = await pg.getByTestId('fiche-titre').waitFor({ timeout: 30_000 }).then(() => Date.now() - debutFiche, () => null);
+  t.fiche = await apparait(pg, T('fiche-titre'), 30_000).then(() => Date.now() - debutFiche, () => null);
   // Premier affichage utile : le résultat provisoire (source moins prioritaire) ou le résultat final.
-  t.ficheSourcesPremier = await pg.locator('[data-testid="fiche-sources-provisoire"], [data-testid="fiche-sources-ok"]').first().waitFor({ timeout: 90_000 }).then(() => Date.now() - debutFiche, () => null);
-  const final = pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 90_000 }).then(() => Date.now() - debutFiche, () => null);
+  t.ficheSourcesPremier = await apparait(pg, `${T('fiche-sources-provisoire')}, ${T('fiche-sources-ok')}`).then(() => Date.now() - debutFiche, () => null);
+  const final = apparait(pg, T('fiche-sources-ok'), 90_000).then(() => Date.now() - debutFiche, () => null);
   if (await pg.getByTestId('fiche-sources-provisoire').count()) {
     await pg.getByTestId('fiche-sources').scrollIntoViewIfNeeded().catch(() => undefined);
     await pg.screenshot({ path: join(CAPTURES, `${mode}-02a-fiche-provisoire.png`) }).catch(() => undefined);
   }
   t.ficheSources = await final;
-  t.ficheLangues = await pg.getByTestId('fiche-langue-choix').waitFor({ timeout: 30_000 }).then(() => Date.now() - debutFiche, () => null);
+  t.ficheLangues = await apparait(pg, T('fiche-langue-choix'), 30_000).then(() => Date.now() - debutFiche, () => null);
   const texteOk = await pg.getByTestId('fiche-sources-ok').innerText().catch(() => '');
   verifier(/Médiathèque VF\/VOSTFR/.test(texteOk) && /12 épisode/.test(texteOk), `${mode} : « Le Long Voyage » trouvé sur la source 2 (12 épisodes, 2 pages)`);
   await pg.getByTestId('fiche-sources').scrollIntoViewIfNeeded().catch(() => undefined);
@@ -367,33 +465,73 @@ async function parcours(navigateur, mode) {
   t.suivant = await chrono(() => pg.getByTestId('lecteur-suivant').click(), () => iframeAvec(pg, `Lecteur neutre (/embed/${autre}-3)`));
   await capture(pg, `${mode}-04-episode-3`);
 
-  // 7. Seconde ouverture de la fiche (retour au hub, l'app est rouverte).
-  log(`${mode} : seconde ouverture de la fiche`);
-  await pg.getByTestId('lecteur-retour').click();
+  // 7. Retour du lecteur à la fiche, puis seconde ouverture de la fiche (retour au hub, l'app est rouverte).
+  log(`${mode} : retour à la fiche, puis seconde ouverture`);
+  t.retour = await chrono(() => pg.getByTestId('lecteur-retour').click(), () => apparait(pg, T('fiche-sources-ok'), 30_000));
   await retourHub(pg);
   await cliquerTuile(pg);
   await pg.getByTestId('carte-anime-1').first().waitFor({ timeout: 30_000 });
   const debut2 = Date.now();
   await pg.getByTestId('carte-anime-1').first().click();
-  t.fiche2 = await pg.getByTestId('fiche-titre').waitFor({ timeout: 30_000 }).then(() => Date.now() - debut2, () => null);
-  t.ficheSources2 = await pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 90_000 }).then(() => Date.now() - debut2, () => null);
+  t.fiche2 = await apparait(pg, T('fiche-titre'), 30_000).then(() => Date.now() - debut2, () => null);
+  t.ficheSources2 = await apparait(pg, T('fiche-sources-ok'), 90_000).then(() => Date.now() - debut2, () => null);
+
+  // 7 bis. Un AUTRE titre, jamais cherché (sources déjà connues : la prioritaire est lente, et n'a pas ce titre).
+  log(`${mode} : autre titre (sources déjà connues)`);
+  await pg.getByTestId('fiche-retour').click();
+  await pg.getByTestId('accueil-recherche').fill('eternal');
+  await pg.getByTestId('accueil-chercher').click();
+  await pg.getByTestId('catalogue-grille').getByTestId('carte-anime-3').first().waitFor({ timeout: 30_000 });
+  const debutAutre = Date.now();
+  await pg.getByTestId('catalogue-grille').getByTestId('carte-anime-3').first().click();
+  t.autreSourcesPremier = await apparait(pg, `${T('fiche-sources-provisoire')}, ${T('fiche-sources-ok')}`).then(() => Date.now() - debutAutre, () => null);
+  t.autreSources = await apparait(pg, T('fiche-sources-ok'), 90_000).then(() => Date.now() - debutAutre, () => null);
+  const texteAutre = await pg.getByTestId('fiche-sources-ok').innerText().catch(() => '');
+  verifier(/Médiathèque VF\/VOSTFR/.test(texteAutre) && /12 épisode/.test(texteAutre), `${mode} : autre titre trouvé sur la source 2 (12 épisodes)`);
 
   // 8. Rechargement complet de la page (cache persistant dans la base du profil).
   log(`${mode} : rechargement de la page`);
   await pg.goto(SITE);
+  await brider(pg, mode);
   await pg.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
   await deverrouiller(pg, secret);
   await fermerPopups(pg);
   await activerPontPc();
-  t.accueil3 = await chrono(() => cliquerTuile(pg), () => pg.getByTestId('carte-anime-1').first().waitFor({ timeout: 30_000 }));
+  t.accueil3 = await chrono(() => cliquerTuile(pg), () => apparait(pg, T('carte-anime-1'), 30_000));
   const debut3 = Date.now();
   await pg.getByTestId('carte-anime-1').first().click();
-  t.fiche3 = await pg.getByTestId('fiche-titre').waitFor({ timeout: 30_000 }).then(() => Date.now() - debut3, () => null);
-  t.ficheSources3 = await pg.getByTestId('fiche-sources-ok').waitFor({ timeout: 90_000 }).then(() => Date.now() - debut3, () => null);
+  t.fiche3 = await apparait(pg, T('fiche-titre'), 30_000).then(() => Date.now() - debut3, () => null);
+  t.ficheSources3 = await apparait(pg, T('fiche-sources-ok'), 90_000).then(() => Date.now() - debut3, () => null);
   await pg.getByTestId('fiche-sources').scrollIntoViewIfNeeded().catch(() => undefined);
   await capture(pg, `${mode}-05-fiche-apres-rechargement`);
   t.requetesSources = requetes.filter(r => !['img-exemple.fr', 'lecteur-exemple.fr'].includes(r.hote)).length;
   verifier(erreurs.length === 0, `${mode} : aucune erreur JavaScript (${erreurs.join(' | ').slice(0, 200)})`);
+  await contexte.close();
+  if (estSite(mode)) Object.assign(t, await secondAppareil(navigateur, mode));
+  return t;
+}
+
+/** Site : un SECOND appareil (cache de l'appareil vide), relié au même relais, ouvre la même fiche. */
+async function secondAppareil(navigateur, mode) {
+  const t = {};
+  const contexte = await contexteSimule(navigateur, mode);
+  const pg = await contexte.newPage();
+  const erreurs = [];
+  pg.on('pageerror', e => erreurs.push(e.message));
+  await creerCoffre(pg, `${SITE}#liaison=${CODE_PC}`);
+  await importerSources(pg, `${mode} (2e appareil)`);
+  await brider(pg, mode);
+  log(`${mode} : second appareil, même fiche`);
+  t.appareil2Accueil = await chrono(() => cliquerTuile(pg), () => apparait(pg, T('carte-anime-1'), 30_000));
+  const debut = Date.now();
+  await pg.getByTestId('carte-anime-1').first().click();
+  t.appareil2Sources = await apparait(pg, T('fiche-sources-ok'), 90_000).then(() => Date.now() - debut, () => null);
+  const texteOk = await pg.getByTestId('fiche-sources-ok').innerText().catch(() => '');
+  verifier(/Médiathèque VF\/VOSTFR/.test(texteOk) && /12 épisode/.test(texteOk), `${mode} : 2e appareil, même résultat (source 2, 12 épisodes)`);
+  await pg.getByTestId('episode-2').scrollIntoViewIfNeeded();
+  t.appareil2Episode = await chrono(() => pg.getByTestId('episode-2').click(), () => iframeAvec(pg, /Lecteur neutre \(\/embed\/(vf|vostfr)-2\)/));
+  await capture(pg, `${mode}-06-second-appareil`);
+  verifier(erreurs.length === 0, `${mode} (2e appareil) : aucune erreur JavaScript (${erreurs.join(' | ').slice(0, 200)})`);
   await contexte.close();
   return t;
 }
@@ -408,10 +546,16 @@ const ETAPES = [
   ['episode', 'Épisode 2 : lecteur affiché'],
   ['langue', 'Bascule VF/VOSTFR'],
   ['suivant', 'Épisode suivant'],
+  ['retour', 'Retour du lecteur à la fiche'],
   ['fiche2', '2e ouverture : fiche'],
   ['ficheSources2', '2e ouverture : « Sur vos sources »'],
+  ['autreSourcesPremier', 'Autre titre (sources connues) : 1er résultat'],
+  ['autreSources', 'Autre titre : « Sur vos sources » final'],
   ['accueil3', 'Après rechargement : Découvrir'],
   ['ficheSources3', 'Après rechargement : « Sur vos sources »'],
+  ['appareil2Accueil', '2e appareil (cache vide) : Découvrir'],
+  ['appareil2Sources', '2e appareil : « Sur vos sources »'],
+  ['appareil2Episode', '2e appareil : épisode 2'],
   ['requetesSources', 'Requêtes vers les sources (tout le parcours)'],
   ['appelsRelais', 'Appels au relais (site)'],
 ];
@@ -422,8 +566,11 @@ try {
   for (const mode of MODES) {
     requetes.length = 0;
     appelsRelais = 0;
+    cacheColo.clear(); // chaque mode part d'un relais au cache vide
+    moduleTsuzukuRelais.cacheMemoireDuRelais?.vider();
     mesures[mode] = await parcours(navigateur, mode);
-    if (mode === 'site') mesures[mode].appelsRelais = appelsRelais;
+    if (estSite(mode)) mesures[mode].appelsRelais = appelsRelais;
+    mesures[mode].journal = requetes.map(r => `${r.quand} ${r.hote}${r.chemin}`);
   }
 } catch (erreur) {
   verifier(false, erreur instanceof Error ? erreur.message.split('\n')[0] : String(erreur));
@@ -442,16 +589,24 @@ for (const [cle, libelle] of ETAPES) {
 if (process.env.SORTIE) writeFileSync(process.env.SORTIE, JSON.stringify(mesures, null, 2));
 
 // Seuils (version optimisée) : raisonnables pour une machine de test chargée.
+// Seuils de la 2e passe (latence) : marge d'environ 40 % sur les mesures, machine de test chargée.
+// Le relais ANCIEN (RELAIS_WORKER) n'a pas de cache : le 2e appareil n'y est pas plus rapide.
+const ANCIEN_RELAIS = Boolean(process.env.RELAIS_WORKER) || process.env.CACHE_RELAIS === '0';
 for (const mode of MODES) {
   const m = mesures[mode] ?? {};
-  seuil(m.fiche, 3000, `${mode} : fiche affichée`);
-  seuil(m.ficheSourcesPremier, 5000, `${mode} : premier résultat des sources affiché (provisoire)`);
-  seuil(m.ficheSources, 9000, `${mode} : « Sur vos sources » (source prioritaire lente : course + délai de grâce)`);
-  seuil(m.episode, 4000, `${mode} : épisode lu depuis la fiche`);
-  seuil(m.langue, 3000, `${mode} : bascule VF/VOSTFR`);
-  seuil(m.suivant, 2000, `${mode} : épisode suivant (préchargé)`);
-  seuil(m.ficheSources2, 1500, `${mode} : 2e ouverture quasi instantanée (cache)`);
-  seuil(m.ficheSources3, 2500, `${mode} : après rechargement (cache persistant)`);
+  const en4g = mode === 'site4g';
+  seuil(m.fiche, en4g ? 2500 : 2000, `${mode} : fiche affichée`);
+  seuil(m.ficheSourcesPremier, en4g ? 3500 : 3000, `${mode} : premier résultat des sources affiché (provisoire)`);
+  seuil(m.ficheSources, en4g ? 5000 : 4500, `${mode} : « Sur vos sources » (source prioritaire lente : course + délai de grâce)`);
+  seuil(m.episode, en4g ? 3000 : 2500, `${mode} : épisode lu depuis la fiche`);
+  seuil(m.langue, 2000, `${mode} : bascule VF/VOSTFR`);
+  seuil(m.suivant, 1500, `${mode} : épisode suivant (préchargé)`);
+  seuil(m.retour, 1000, `${mode} : retour du lecteur à la fiche`);
+  seuil(m.ficheSources2, 1000, `${mode} : 2e ouverture quasi instantanée (cache)`);
+  seuil(m.autreSources, en4g ? 4000 : 3500, `${mode} : autre titre, source prioritaire connue lente (sans l'attendre)`);
+  seuil(m.ficheSources3, 1500, `${mode} : après rechargement (cache persistant)`);
+  if (estSite(mode) && !ANCIEN_RELAIS) seuil(m.appareil2Sources, en4g ? 3000 : 2500, `${mode} : 2e appareil (cache du relais)`);
+  if (estSite(mode) && ANCIEN_RELAIS) seuil(m.appareil2Sources, en4g ? 6000 : 5500, `${mode} : 2e appareil, ancien relais (sans cache)`);
 }
 if (echecs > 0) {
   logOrigine(`E2E ECHEC (${echecs})`);
