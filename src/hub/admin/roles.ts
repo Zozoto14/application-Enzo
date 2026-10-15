@@ -94,6 +94,8 @@ export type ActionAdmin =
   | 'supprimer-ami'
   | 'notes'
   | 'code-site'
+  /** Adresse e-mail et historique des invitations d'un compte (données chiffrées de l'acteur). */
+  | 'contact-ami'
   // Rangs
   | 'changer-rang'
   /** Ancien nom de `changer-rang`. */
@@ -103,6 +105,10 @@ export type ActionAdmin =
   | 'reglages-admin'
   | 'reglages-securite'
   // Fondateurs seulement
+  /** Réglages des comptes et invitations : modèle du message, politique de mot de passe des amis, appareils, durée par défaut. */
+  | 'reglages-comptes'
+  /** Sauvegarde chiffrée (export / import) des données de l'Administration. */
+  | 'sauvegarde-admin'
   | 'politique-apps'
   | 'modifier-admin'
   // Abonnements (suivi manuel) : Fondateurs seulement, sur des rangs strictement inférieurs
@@ -122,6 +128,7 @@ export const ACTIONS_GESTIONNAIRE: readonly ActionAdmin[] = [
   'etat-ami',
   'invitation-ami',
   'regenerer-identifiants',
+  'contact-ami',
 ];
 
 /**
@@ -135,6 +142,9 @@ export const ACTIONS_REFUSEES_ADMINISTRATEUR: readonly ActionAdmin[] = [
   'modifier-admin',
   'renommer-ami',
   'code-site',
+  // Réglages des comptes (politique des mots de passe des amis, modèle d'invitation) et sauvegarde : Fondateurs.
+  'reglages-comptes',
+  'sauvegarde-admin',
   // Abonnements : option la plus protectrice. Ces données (paiements, notes) vivent dans la base chiffrée du
   // compte historique ; un Administrateur n'y touche pas, même sur ses Gestionnaires et Amis.
   'abonnements-voir',
@@ -153,6 +163,7 @@ const ACTIONS_SUR_CIBLE: readonly ActionAdmin[] = [
   'supprimer-ami',
   'notes',
   'code-site',
+  'contact-ami',
   'changer-rang',
   'changer-role',
   'acces-sequestre',

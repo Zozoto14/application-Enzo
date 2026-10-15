@@ -52,7 +52,7 @@ export interface OutilsAdmin {
   large: boolean;
 }
 
-export type IdSection = 'tableau' | 'utilisateurs' | 'applications' | 'securite' | 'journal' | 'reglages';
+export type IdSection = 'tableau' | 'utilisateurs' | 'acces' | 'applications' | 'securite' | 'journal' | 'reglages';
 
 export function styleTitre(theme: ThemeHub) {
   return {

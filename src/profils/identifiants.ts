@@ -22,6 +22,8 @@ export interface IdentifiantsAmi {
   uriTotp: string;
   /** Invitation à envoyer (lien à usage unique), quand l'appareil est relié au relais avec le code maître. */
   invitation?: InvitationAffichee;
+  /** Identifiant du compte créé (pour y rattacher son adresse e-mail dans l'Administration). */
+  id?: string;
 }
 
 /** Invitation telle que l'Administration l'affiche (voir bureau/connexionAmis.ts et docs/connexion-amis.md). */
@@ -39,6 +41,12 @@ export interface InvitationAffichee {
   publie?: boolean;
   /** Invitation impossible ici (appareil non relié, séquestre absent…) : pourquoi. */
   erreur?: string;
+  /** Éléments du message, pour le modèle personnalisé (Administration › Réglages). */
+  prenom?: string;
+  fondateur?: string;
+  site?: string;
+  /** Longueur minimale du mot de passe que l'ami choisira. */
+  longueur?: number;
 }
 
 /** Sans caractères ambigus (0/O, 1/l/I) : le mot de passe se recopie à la main. */

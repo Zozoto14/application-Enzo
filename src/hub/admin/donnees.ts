@@ -15,6 +15,8 @@ import { lireJournal, borner, journaliser, TAILLE_MAX_JOURNAL, type EvenementAud
 import type { StockagePrefs } from '../personnalisation';
 import { abonnementsVides, lireAbonnements, type DonneesAbo } from '../abonnements/abonnements';
 import { lireProspects, prospectsVides, type DonneesProspects } from '../../prospects/prospects';
+import { lireContacts, type ContactCompte } from './contacts';
+import { lireModele, type ModeleInvitation } from './modeleInvitation';
 
 export const VERSION_DONNEES = 1;
 export const CLE_DONNEES = 'admin.donnees';
@@ -32,6 +34,15 @@ export interface ReglagesAdmin {
   invitationJours: number;
   /** Minutes pendant lesquelles une vérification d'identité reste valable pour les actions sensibles. */
   confianceMinutes: number;
+  /**
+   * Politique du mot de passe que choisit un ami en acceptant son invitation
+   * (Fondateur seulement) : longueur minimale, et force minimale (1 Correct,
+   * 2 Bien, 3 Solide, 4 Excellent). Elle voyage, scellée, dans l'invitation.
+   */
+  mdpLongueurMin: number;
+  mdpForceMin: number;
+  /** Au-delà de ce nombre d'appareils, un compte est signalé au tableau de bord (Fondateur seulement). */
+  appareilsMax: number;
 }
 
 export const REGLAGES_DEFAUT: ReglagesAdmin = {
@@ -41,6 +52,9 @@ export const REGLAGES_DEFAUT: ReglagesAdmin = {
   inactifJours: 30,
   invitationJours: 7,
   confianceMinutes: 5,
+  mdpLongueurMin: 10,
+  mdpForceMin: 1,
+  appareilsMax: 5,
 };
 
 /** Bornes de chaque réglage : en dehors, on retombe sur la borne. */
@@ -51,7 +65,13 @@ export const BORNES_REGLAGES: Record<keyof ReglagesAdmin, { min: number; max: nu
   inactifJours: { min: 1, max: 365 },
   invitationJours: { min: 1, max: 90 },
   confianceMinutes: { min: 1, max: 60 },
+  mdpLongueurMin: { min: 10, max: 64 },
+  mdpForceMin: { min: 1, max: 4 },
+  appareilsMax: { min: 1, max: 20 },
 };
+
+/** Réglages des comptes et invitations : réservés aux Fondateurs (`reglages-comptes`). */
+export const REGLAGES_COMPTES: ReadonlyArray<keyof ReglagesAdmin> = ['invitationJours', 'mdpLongueurMin', 'mdpForceMin', 'appareilsMax'];
 
 export type Robustesse = 'faible' | 'moyenne' | 'forte';
 
@@ -67,6 +87,10 @@ export interface DonneesAdmin {
   abonnements: DonneesAbo;
   /** Carnet de prospection du Fondateur (app Prospects, `src/prospects/prospects.ts`). */
   prospects: DonneesProspects;
+  /** Adresse e-mail et invitations envoyées, par compte (`contacts.ts`) : jamais ailleurs qu'ici. */
+  contacts: Record<string, ContactCompte>;
+  /** Modèle du message d'invitation (absent : modèle par défaut, `modeleInvitation.ts`). */
+  modeleInvitation?: ModeleInvitation;
   /**
    * Robustesse du mot de passe administrateur, évaluée lors de la dernière
    * vérification d'identité (le mot de passe lui-même n'est jamais gardé).
@@ -78,7 +102,7 @@ export const LONGUEUR_MAX_NOTE = 1000;
 const MOTIF_ID = /^[a-z0-9]{2,16}$/;
 
 export function donneesVides(): DonneesAdmin {
-  return { version: VERSION_DONNEES, reglages: { ...REGLAGES_DEFAUT }, notes: {}, journal: [], connexionsVues: {}, abonnements: abonnementsVides(), prospects: prospectsVides() };
+  return { version: VERSION_DONNEES, reglages: { ...REGLAGES_DEFAUT }, notes: {}, journal: [], connexionsVues: {}, abonnements: abonnementsVides(), prospects: prospectsVides(), contacts: {} };
 }
 
 export function bornerReglage(cle: keyof ReglagesAdmin, valeur: unknown): number {
@@ -153,7 +177,10 @@ export function lireDonnees(brut: string | undefined | null): DonneesAdmin {
     connexionsVues: lireCompteurs(o.connexionsVues),
     abonnements: lireAbonnements(o.abonnements),
     prospects: lireProspects(o.prospects),
+    contacts: lireContacts(o.contacts),
   };
+  const modele = lireModele(o.modeleInvitation);
+  if (modele) donnees.modeleInvitation = modele;
   const r = o.robustesse as { niveau?: unknown; le?: unknown } | undefined;
   if (r && (r.niveau === 'faible' || r.niveau === 'moyenne' || r.niveau === 'forte') && typeof r.le === 'string') {
     donnees.robustesse = { niveau: r.niveau, le: r.le };

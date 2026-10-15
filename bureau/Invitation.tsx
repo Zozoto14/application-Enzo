@@ -16,7 +16,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Alerte, Bouton, Champ, SousTitre, Titre, usePalette } from '../src/ui/composants';
 import { ESPACEMENT, RAYON, stylesPartages } from '../src/ui/theme';
-import { LONGUEUR_MIN_AMI, evaluerMotDePasse, formeCanonique } from '../src/profils/invitation';
+import { LIBELLES_FORCE, POLITIQUE_MDP_DEFAUT, evaluerMotDePasse, formeCanonique, type PolitiqueMdp } from '../src/profils/invitation';
 import { useMobile } from '../src/ui/mobile/useMobile';
 
 function message(erreur: unknown): string {
@@ -81,9 +81,9 @@ export function ChampMotDePasse({
 }
 
 /** Barre de force et règles du nouveau mot de passe. */
-function IndicateurForce({ motDePasse, prenom }: { motDePasse: string; prenom: string }) {
+function IndicateurForce({ motDePasse, prenom, politique = POLITIQUE_MDP_DEFAUT }: { motDePasse: string; prenom: string; politique?: PolitiqueMdp }) {
   const palette = usePalette();
-  const e = evaluerMotDePasse(motDePasse, prenom);
+  const e = evaluerMotDePasse(motDePasse, prenom, politique);
   const couleurs = [palette.danger, '#d9822b', '#c9a227', palette.hausse, palette.hausse];
   const vide = motDePasse.length === 0;
   return (
@@ -94,7 +94,9 @@ function IndicateurForce({ motDePasse, prenom }: { motDePasse: string; prenom: s
         ))}
       </View>
       <Text style={{ color: vide ? palette.texteSecondaire : couleurs[e.force], fontWeight: '600' }} testID="invitation-force-libelle">
-        {vide ? `Au moins ${LONGUEUR_MIN_AMI} caractères. Une phrase facile à retenir est idéale.` : `Force : ${e.libelle}`}
+        {vide
+          ? `Au moins ${politique.longueurMin} caractères${politique.forceMin > 1 ? `, force « ${LIBELLES_FORCE[politique.forceMin]} » au moins` : ''}. Une phrase facile à retenir est idéale.`
+          : `Force : ${e.libelle}`}
       </Text>
       {!vide && e.erreurs.length > 0 ? (
         <View testID="invitation-regles">
@@ -113,6 +115,8 @@ export interface InfosInvitation {
   prenom: string;
   fondateur?: string;
   expire: string;
+  /** Politique du mot de passe réglée par le Fondateur (absente : règles de base). */
+  politique?: PolitiqueMdp;
 }
 
 export function EcranInvitation({
@@ -139,7 +143,7 @@ export function EcranInvitation({
   const [erreur, setErreur] = useState<string | undefined>();
   const [remplacer, setRemplacer] = useState(false);
   const affichee = erreur ?? erreurInitiale;
-  const evaluation = evaluerMotDePasse(mdp, infos?.prenom ?? '');
+  const evaluation = evaluerMotDePasse(mdp, infos?.prenom ?? '', infos?.politique);
   const differents = confirmation.length > 0 && formeCanonique(confirmation) !== formeCanonique(mdp);
   const pret = Boolean(infos) && evaluation.valide && formeCanonique(confirmation) === formeCanonique(mdp) && (!autreCompteIci || remplacer) && !enCours;
   const valider = () => {
@@ -179,7 +183,7 @@ export function EcranInvitation({
             {/* Gestionnaire de mots de passe : l'identifiant accompagne le nouveau mot de passe. */}
             <TextInput value={infos.prenom} editable={false} autoComplete="username" textContentType="username" style={{ height: 1, width: 1, opacity: 0, padding: 0 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" testID="invitation-identifiant-cache" />
             <ChampMotDePasse etiquette="Ton mot de passe" valeur={mdp} onChanger={setMdp} nouveau testID="invitation-mdp" desactive={enCours} />
-            <IndicateurForce motDePasse={mdp} prenom={infos.prenom} />
+            <IndicateurForce motDePasse={mdp} prenom={infos.prenom} politique={infos.politique} />
             <ChampMotDePasse
               etiquette="Confirme ton mot de passe"
               valeur={confirmation}

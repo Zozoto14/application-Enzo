@@ -22,11 +22,13 @@ import {
   suspendre,
   type ActionGroupee,
 } from './comptes';
-import { avecNote, avecReglages, type DonneesAdmin, type ReglagesAdmin } from './donnees';
+import { avecNote, avecReglages, REGLAGES_COMPTES, type DonneesAdmin, type ReglagesAdmin } from './donnees';
+import { avecEmail, avecEnvoi, sansContact, type CanalInvitation } from './contacts';
+import { validerModele, type ModeleInvitation } from './modeleInvitation';
 import { exporterCsv, exporterJson, type EvenementAudit } from './journal';
 import type { Niveaux } from './niveaux';
 import type { PolitiqueHub } from './politique';
-import { definirRang, exiger, exigerRang, type ActionAdmin, type Rang } from './roles';
+import { definirRang, ErreurPermission, exiger, exigerRang, type ActionAdmin, type Rang } from './roles';
 
 type Acteur = Pick<Profil, 'id' | 'admin' | 'role'>;
 
@@ -79,6 +81,7 @@ const ACTION_DU_GROUPE: Record<ActionGroupee['genre'], ActionAdmin> = {
   reactiver: 'etat-ami',
   niveaux: 'permissions-ami',
   prolonger: 'invitation-ami',
+  app: 'permissions-ami',
 };
 
 /**
@@ -177,4 +180,75 @@ export function verifierModifications(acteur: Acteur | undefined, avant: readonl
     }
     exiger(acteur, 'permissions-ami', a);
   }
+}
+
+// --- Contacts, invitations envoyées, réglages des comptes ------------------------
+
+/** Adresse e-mail d'un compte (chiffrée avec les données de l'Administration de l'acteur). */
+export function avecEmailPar(acteur: Acteur | undefined, donnees: DonneesAdmin, profils: readonly Profil[], id: string, email: string, maintenant: number): DonneesAdmin {
+  verifierSur(acteur, 'contact-ami', profils, id);
+  return avecEmail(donnees, id, email, maintenant);
+}
+
+/** Note qu'une invitation a été transmise à ce compte, et par quel canal. */
+export function avecEnvoiPar(acteur: Acteur | undefined, donnees: DonneesAdmin, profils: readonly Profil[], id: string, canal: CanalInvitation, maintenant: number): DonneesAdmin {
+  verifierSur(acteur, 'contact-ami', profils, id);
+  return avecEnvoi(donnees, id, canal, maintenant);
+}
+
+/** Oublie le contact d'un compte supprimé (le compte n'est plus dans la liste : seule la suppression est vérifiée en amont). */
+export function sansContactPar(acteur: Acteur | undefined, donnees: DonneesAdmin, id: string): DonneesAdmin {
+  exiger(acteur, 'voir-tableau');
+  return sansContact(donnees, id);
+}
+
+/** Réglages des comptes et invitations (Fondateurs) ; les autres clés sont ignorées. */
+export function avecReglagesComptesPar(acteur: Acteur | undefined, donnees: DonneesAdmin, changement: Partial<ReglagesAdmin>, maintenant: number): DonneesAdmin {
+  exiger(acteur, 'reglages-comptes');
+  const permis = Object.fromEntries(Object.entries(changement).filter(([cle]) => REGLAGES_COMPTES.includes(cle as keyof ReglagesAdmin))) as Partial<ReglagesAdmin>;
+  return avecReglages(donnees, permis, maintenant);
+}
+
+/** Modèle du message d'invitation (Fondateurs) ; undefined revient au modèle par défaut. Lève si le modèle est invalide. */
+export function avecModeleInvitationPar(acteur: Acteur | undefined, donnees: DonneesAdmin, modele: ModeleInvitation | undefined): DonneesAdmin {
+  exiger(acteur, 'reglages-comptes');
+  if (!modele) {
+    const { modeleInvitation: _retire, ...reste } = donnees;
+    return reste;
+  }
+  const erreurs = validerModele(modele);
+  if (erreurs.length > 0) {
+    throw new ErreurPermission(erreurs[0]);
+  }
+  return { ...donnees, modeleInvitation: { objet: modele.objet.trim(), corps: modele.corps.replace(/\r\n?/g, '\n') } };
+}
+
+/**
+ * Action groupée faite par l'hôte, compte par compte (renvoyer l'invitation,
+ * révoquer, changer de rang) : TOUS les comptes sont vérifiés AVANT la
+ * première action ; un seul refus et rien n'est fait.
+ */
+export function verifierGroupe(acteur: Acteur | undefined, action: ActionAdmin, profils: readonly Profil[], ids: readonly string[]): void {
+  if (ids.length === 0) {
+    throw new ErreurPermission('Aucun compte sélectionné.');
+  }
+  for (const id of ids) {
+    verifierSur(acteur, action, profils, id);
+  }
+}
+
+/** Comme `verifierGroupe`, pour un changement de rang (règle des rangs : rang donné ET rang de chaque cible). */
+export function verifierGroupeRang(acteur: Acteur | undefined, profils: readonly Profil[], ids: readonly string[], rang: Rang): void {
+  if (ids.length === 0) {
+    throw new ErreurPermission('Aucun compte sélectionné.');
+  }
+  for (const id of ids) {
+    exigerRang(acteur, cibleDe(profils, id), rang);
+  }
+}
+
+/** Adresse saisie à la création d'un compte (le compte vient d'être créé par l'acteur : il n'est pas encore dans sa liste). */
+export function avecEmailCreationPar(acteur: Acteur | undefined, donnees: DonneesAdmin, id: string, email: string, maintenant: number): DonneesAdmin {
+  exiger(acteur, 'creer-ami');
+  return avecEmail(donnees, id, email, maintenant);
 }

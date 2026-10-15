@@ -16,6 +16,12 @@ import type { DocsJuridiques } from '../../juridique/modele';
 import { rangDe, texteTransparence } from '../../hub/admin/roles';
 import { QrCode } from './CarteSynchro';
 
+/** Options d'une invitation, réglées dans l'Administration (Fondateur). */
+export interface OptionsInvitationHote {
+  /** Politique du mot de passe que l'ami choisira (portée, scellée, par l'invitation). */
+  politique?: import('../../profils/invitation').PolitiqueMdp;
+}
+
 export interface ControleProfils {
   actuel: Profil;
   /**
@@ -60,7 +66,7 @@ export interface ControleProfils {
    * créer le coffre d'un autre profil.
    */
   /** Crée le compte d'un ami et rend ses identifiants, à montrer une fois. */
-  onCreerCompte?(nom: string, apps: readonly string[], options?: OptionsNouveauProfil): Promise<IdentifiantsAmi>;
+  onCreerCompte?(nom: string, apps: readonly string[], options?: OptionsNouveauProfil, envoi?: OptionsInvitationHote): Promise<IdentifiantsAmi>;
   /** Nouveau coffre pour l'ami : l'ancien, et le portefeuille qu'il scelle, sont effacés. */
   onRegenerer?(id: string): Promise<IdentifiantsAmi>;
   onAutoriser?(id: string, apps: readonly string[]): Promise<void>;
@@ -102,7 +108,13 @@ export interface ControleProfils {
    * passe temporaire posé par séquestre (l'ancien mot de passe et l'ancienne
    * invitation cessent de marcher), et nouveau lien à usage unique.
    */
-  onInvitation?(id: string, jours: number): Promise<InvitationAffichee>;
+  onInvitation?(id: string, jours: number, envoi?: OptionsInvitationHote): Promise<InvitationAffichee>;
+  /**
+   * Fondateur principal (jeton maître) : efface les copies d'un compte DÉJÀ
+   * supprimé sur le relais (objets de son espace, accès par identifiant) et
+   * révoque son jeton. Voir `bureau/connexionAmis.ts` (`nettoyerCompteRelais`).
+   */
+  onNettoyerRelais?(id: string, nom: string): Promise<{ objets: number; acces: boolean; revoque: boolean; restes: string[] }>;
   /** Révoque (ou rétablit) l'accès du compte sur le relais : son jeton n'y vaut plus rien. */
   onRevoquerConnexion?(id: string, revoque: boolean): Promise<void>;
   /** État de l'accès sur le relais (révoqué ?), pour la fiche. */

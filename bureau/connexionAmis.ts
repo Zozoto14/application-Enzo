@@ -22,12 +22,15 @@ import {
   ErreurInvitation,
   empreinteIdentifiant,
   encoderInvitation,
+  evaluerMotDePasse,
   invitationExpiree,
   lienConnexion,
   lienInvitation,
   messageErreur,
   messageInvitation,
   nouveauCodeCourt,
+  politiqueContenu,
+  politiqueDeContenu,
   nouveauSecret,
   ouvrirAcces,
   ouvrirContenu,
@@ -39,11 +42,14 @@ import {
   type ContenuAcces,
   type ContenuInvitation,
   type LienInvitation,
+  type PolitiqueMdp,
   type SecretsInvitation,
 } from '../src/profils/invitation';
 import {
   heureRelais,
   lireInvitationRelais,
+  revoquerCompte,
+  supprimerAcces,
   lireSelAcces,
   ouvrirAccesRelais,
   publierAcces,
@@ -77,6 +83,11 @@ export interface InvitationCreee {
   lienConnexion?: string;
   /** Message à montrer au Fondateur (relais à mettre à jour…). */
   avertissement?: string;
+  /** Éléments du message, pour le modèle personnalisé de l'Administration (rien de secret hors du lien). */
+  prenom: string;
+  fondateur?: string;
+  site: string;
+  longueur: number;
 }
 
 export interface OptionsCreation {
@@ -94,6 +105,8 @@ export interface OptionsCreation {
   maintenant?: () => number;
   /** Paramètres de dérivation du code court (tests). */
   kdfCodeCourt?: ParametresKdf;
+  /** Politique du mot de passe que l'ami choisira (Administration › Réglages) ; absente : règles de base. */
+  politique?: PolitiqueMdp;
 }
 
 /** Adresse du site où l'ami ouvre son lien (repli : l'adresse de la page en cours). */
@@ -121,9 +134,11 @@ export async function creerInvitation(o: OptionsCreation): Promise<InvitationCre
     expire,
     ...(o.fondateur && o.fondateur !== 'Moi' ? { fondateur: o.fondateur.trim().slice(0, 30) } : {}),
     creeLe: new Date(maintenant).toISOString(),
+    ...politiqueContenu(o.politique),
   };
   const version = await versionRelais(o.maitre, o.requete);
-  const elements = { prenom: contenu.prenom, fondateur: contenu.fondateur, expire, site, lienConnexion: lienConnexion(site, o.maitre.relais) };
+  const longueur = contenu.politique?.l ?? 10;
+  const elements = { prenom: contenu.prenom, fondateur: contenu.fondateur, expire, site, lienConnexion: lienConnexion(site, o.maitre.relais), longueur };
   if (relaisAJour(version)) {
     const secret = nouveauSecret(alea);
     const secrets = secretsInvitation(secret);
@@ -143,7 +158,18 @@ export async function creerInvitation(o: OptionsCreation): Promise<InvitationCre
       o.requete,
     );
     const lien = lienInvitation(site, encoderInvitation({ mode: 'relais', relais: o.maitre.relais, ...(o.maitre.site ? { site: o.maitre.site } : {}), secret }));
-    return { lien, codeCourt, expire, mode: 'relais', lienConnexion: elements.lienConnexion, message: messageInvitation({ ...elements, lien, codeCourt }) };
+    return {
+      lien,
+      codeCourt,
+      expire,
+      mode: 'relais',
+      lienConnexion: elements.lienConnexion,
+      message: messageInvitation({ ...elements, lien, codeCourt }),
+      prenom: elements.prenom,
+      ...(elements.fondateur ? { fondateur: elements.fondateur } : {}),
+      site,
+      longueur,
+    };
   }
   // Relais pas encore redéployé : le contenu voyage dans le lien (le mot de passe temporaire n'y sert qu'une fois).
   const lien = lienInvitation(site, encoderInvitation({ mode: 'lien', relais: o.maitre.relais, ...(o.maitre.site ? { site: o.maitre.site } : {}), contenu }));
@@ -152,11 +178,64 @@ export async function creerInvitation(o: OptionsCreation): Promise<InvitationCre
     expire,
     mode: 'lien',
     message: messageInvitation({ ...elements, lienConnexion: undefined, lien }),
+    prenom: elements.prenom,
+    ...(elements.fondateur ? { fondateur: elements.fondateur } : {}),
+    site,
+    longueur,
     avertissement:
       version === undefined
         ? 'Relais injoignable pour l’instant : l’invitation marche quand même (lien complet), mais pensez à garder l’app ouverte pour publier le compte.'
         : 'Relais à mettre à jour (workflow GitHub « Relais (Cloudflare Worker) ») : en attendant, le lien marche, mais l’usage unique et l’expiration sont vérifiés par l’appareil, et la connexion par identifiant sur un nouvel appareil n’est pas disponible.',
   };
+}
+
+/** Bilan du nettoyage d'un compte supprimé sur le relais. */
+export interface NettoyageRelais {
+  /** Objets effacés de son espace (`p/<id>/boite/…` : coffre, portefeuille, annuaire, suivi…). */
+  objets: number;
+  /** Accès par identifiant retiré. */
+  acces: boolean;
+  /** Jeton de profil révoqué (un appareil resté connecté est refusé). */
+  revoque: boolean;
+  /** Ce qui n'a pas pu être fait (relais ancien, injoignable…). */
+  restes: string[];
+}
+
+/**
+ * Efface les copies d'un compte SUPPRIMÉ sur le relais (jeton maître) : tous
+ * les objets de son espace, son accès par identifiant, et révoque son jeton
+ * de profil pour qu'un appareil resté connecté n'écrive plus rien. Chaque
+ * étape est tentée même si une autre échoue ; aucune route nouvelle (relais 6).
+ */
+export async function nettoyerCompteRelais(maitre: Liaison, compte: string, prenom: string, requete?: Fetch): Promise<NettoyageRelais> {
+  const bilan: NettoyageRelais = { objets: 0, acces: false, revoque: false, restes: [] };
+  const espaces = espacesDuRelais(maitre, requete);
+  try {
+    const objets = await espaces.lister(compte);
+    for (const nom of Object.keys(objets)) {
+      try {
+        await espaces.supprimer(compte, nom);
+        bilan.objets++;
+      } catch (e) {
+        bilan.restes.push(`${nom} : ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  } catch (e) {
+    bilan.restes.push(`espace du compte : ${e instanceof Error ? e.message : String(e)}`);
+  }
+  try {
+    await supprimerAcces(maitre, empreinteIdentifiant(prenom), requete);
+    bilan.acces = true;
+  } catch (e) {
+    bilan.restes.push(`accès par identifiant : ${e instanceof Error ? e.message : String(e)}`);
+  }
+  try {
+    await revoquerCompte(maitre, compte, true, requete);
+    bilan.revoque = true;
+  } catch (e) {
+    bilan.restes.push(e instanceof ErreurInvitation && e.code === 'relais-ancien' ? 'révocation : relais à mettre à jour' : `révocation : ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return bilan;
 }
 
 // ------------------------------------------------------------ Côté ami
@@ -237,6 +316,9 @@ export interface OptionsAcceptation {
 export async function accepterInvitation(o: OptionsAcceptation): Promise<Acceptation> {
   const { contenu } = o.invitation;
   const qui = contenu.fondateur;
+  // La politique réglée par le Fondateur est revérifiée ici, pas seulement par l'écran.
+  const evaluation = evaluerMotDePasse(o.motDePasse, contenu.prenom, politiqueDeContenu(contenu));
+  if (!evaluation.valide) throw new Error(`Mot de passe refusé : ${evaluation.erreurs.join(' ')}`);
   const liaison = liaisonDe(contenu);
   const relie = await relierCompte(liaison, qui, o.requete);
   const espaces = espacesDuRelais(liaison, o.requete);

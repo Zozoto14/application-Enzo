@@ -116,10 +116,15 @@ function remplacer(profils: readonly Profil[], id: string, changer: (p: Profil) 
 
 export function definirNiveaux(profils: readonly Profil[], id: string, apps: readonly AppHub[], niveaux: Niveaux): Profil[] {
   const autorisations = versAutorisations(apps, niveaux);
+  // Les apps absentes de `apps` (Tâches, qui choisit elle-même à qui elle s'ouvre) gardent leur accès : même source de vérité.
+  const connue = (app: string) => apps.some(a => a.id === app);
   return remplacer(profils, id, p => {
-    p.apps = autorisations.apps;
-    if (autorisations.niveaux) {
-      p.niveaux = autorisations.niveaux;
+    const gardees = (p.apps ?? []).filter(app => !connue(app));
+    const niveauxGardes = Object.fromEntries(Object.entries(p.niveaux ?? {}).filter(([app]) => !connue(app) && gardees.includes(app)));
+    p.apps = [...autorisations.apps, ...gardees.filter(app => !autorisations.apps.includes(app))];
+    const tous = { ...niveauxGardes, ...(autorisations.niveaux ?? {}) };
+    if (Object.keys(tous).length > 0) {
+      p.niveaux = tous;
     } else {
       delete p.niveaux;
     }
@@ -194,7 +199,9 @@ export type ActionGroupee =
   | { genre: 'desactiver' }
   | { genre: 'reactiver' }
   | { genre: 'niveaux'; niveaux: Niveaux }
-  | { genre: 'prolonger'; jours: number };
+  | { genre: 'prolonger'; jours: number }
+  /** Ouvre (niveau donné) ou ferme (« aucun ») UNE app, sans toucher aux autres. */
+  | { genre: 'app'; app: string; niveau: NiveauAcces };
 
 /** Applique une action à plusieurs comptes ; l'administrateur est toujours écarté. */
 export function appliquerGroupe(
@@ -217,6 +224,12 @@ export function appliquerGroupe(
       liste = reactiver(liste, id);
     } else if (action.genre === 'niveaux') {
       liste = definirNiveaux(liste, id, apps, action.niveaux);
+    } else if (action.genre === 'app') {
+      const app = apps.find(a => a.id === action.app);
+      if (!app || app.adminSeulement) {
+        throw new ErreurProfil('Application inconnue ou réservée.');
+      }
+      liste = definirNiveaux(liste, id, [app], { [app.id]: action.niveau });
     } else {
       if (profil.derniereConnexion) {
         continue;
@@ -304,6 +317,12 @@ export interface Statistiques {
   actifs: number;
   desactives: number;
   invites: number;
+  /** Parmi les invités : invitations expirées sans avoir été acceptées. */
+  expirees: number;
+  /** Appareils connus (vus par le suivi des connexions), tous comptes confondus. */
+  appareils: number;
+  /** Les cinq dernières connexions (prénom, date ISO). */
+  dernieresConnexions: Array<{ id: string; nom: string; date: string }>;
   /** Utilisateurs (admin compris) par app visible du registre. */
   parApp: Array<{ app: AppHub; utilisateurs: number; active: boolean; maintenance: boolean }>;
   derniereActivite?: { nom: string; date: string };
@@ -320,6 +339,13 @@ export function statistiques(profils: readonly Profil[], registre: readonly AppH
     actifs: statuts.filter(s => s === 'actif').length,
     desactives: statuts.filter(s => s === 'desactive' || s === 'suspendu' || s === 'expire').length,
     invites: statuts.filter(s => s === 'invite' || s === 'invitation-expiree').length,
+    expirees: statuts.filter(s => s === 'invitation-expiree').length,
+    appareils: amis.reduce((n, p) => n + (p.appareils?.length ?? 0), 0),
+    dernieresConnexions: [...profils]
+      .filter(p => p.derniereConnexion && !Number.isNaN(Date.parse(p.derniereConnexion)))
+      .sort((a, b) => Date.parse(b.derniereConnexion!) - Date.parse(a.derniereConnexion!))
+      .slice(0, 5)
+      .map(p => ({ id: p.id, nom: p.nom, date: p.derniereConnexion! })),
     parApp: registre.map(app => {
       const etat = etatApp(politique, app.id);
       return {
@@ -333,7 +359,7 @@ export function statistiques(profils: readonly Profil[], registre: readonly AppH
   };
 }
 
-export type GenreAlerte = 'jamais-connecte' | 'inactif' | 'invitation-expiree' | 'invitation-proche' | 'acces-expire' | 'securite' | 'sequestre-absent';
+export type GenreAlerte = 'jamais-connecte' | 'inactif' | 'invitation-expiree' | 'invitation-proche' | 'acces-expire' | 'securite' | 'sequestre-absent' | 'appareils' | 'revoque';
 
 export interface AlerteAdmin {
   genre: GenreAlerte;
@@ -343,13 +369,22 @@ export interface AlerteAdmin {
 }
 
 /** Alertes des comptes (la sécurité du coffre est ajoutée par `alertesSecurite`). */
-export function alertesComptes(profils: readonly Profil[], maintenant: number, inactifJours: number): AlerteAdmin[] {
+export function alertesComptes(profils: readonly Profil[], maintenant: number, inactifJours: number, appareilsMax?: number): AlerteAdmin[] {
   const alertes: AlerteAdmin[] = [];
   for (const p of profils) {
     if (p.admin) {
       continue;
     }
     const statut = statutCompte(p, maintenant);
+    const appareils = p.appareils?.length ?? 0;
+    if (appareilsMax !== undefined && appareils > appareilsMax) {
+      alertes.push({
+        genre: 'appareils',
+        gravite: 'alerte',
+        cible: p.id,
+        message: `${p.nom} utilise ${appareils} appareils (au-delà de ${appareilsMax}) : vérifiez qu’ils sont bien à lui·elle, sinon réinitialisez son accès.`,
+      });
+    }
     if (p.sequestre === 'attendu' || p.sequestre === 'absent') {
       alertes.push({
         genre: 'sequestre-absent',
