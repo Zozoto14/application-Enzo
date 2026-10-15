@@ -716,7 +716,7 @@ function AppTaches({ contexte, theme, onRetour, onOuvrirApp, onParametres }: Pro
     />
   );
 
-  const barreRapide = (projetsModifiables.length > 0 || role === 'fondateur') && !aucunProjet ? (
+  const barreRapide = (projetsModifiables.length > 0 || role === 'fondateur') && !aucunProjet && !equipe ? (
     <View style={{ gap: 6 }}>
       <View style={[styles.rapide, { borderColor: rapide || rapideActif ? theme.accent : theme.ligne, backgroundColor: theme.surface, borderRadius: Math.min(theme.rayonMoyen, 12) }]}>
         <Text style={{ color: theme.accent, fontSize: 20, fontWeight: '700' }}>＋</Text>

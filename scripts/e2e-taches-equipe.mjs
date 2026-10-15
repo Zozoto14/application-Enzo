@@ -566,7 +566,8 @@ try {
   verifier(await fondateurVoitDans(pc, idRecette, 'Photos'), 'le Fondateur reçoit le déplacement de Léa (Site web → Recette)');
   await pc.getByTestId(`nav-projet-${idRecette}`).click();
   await ouvrirDetail(pc, idPhotos);
-  verifier(/Déplacée de « Travail › Site web » vers « Travail › Recette »/.test(await pc.getByTestId('detail-tache').innerText()) || /Déplacée/.test(await pc.getByTestId('detail-tache').innerText()), 'historique : « Déplacée de … vers … »');
+  await pc.getByTestId('detail-historique').click();
+  verifier(/Déplacée de « Travail › Site web » vers « Travail › Recette »/.test(await pc.getByTestId('detail-tache').innerText()), 'historique : « Déplacée de … vers … »');
   await pc.getByTestId('detail-fermer').click();
 
   // ================================================================ Équipe : fiche, retrait de tous les projets, réassignation
@@ -578,15 +579,18 @@ try {
   await pc.getByTestId('equipe-fiche').first().waitFor({ timeout: 10_000 });
   verifier(/Relecture/.test(await pc.getByTestId('equipe-fiche').first().innerText()), 'fiche de Léa : ses tâches');
   verifier(/Déplacée/.test(await pc.getByTestId('equipe-fiche').first().innerText()), 'fiche de Léa : son activité récente');
+  await pause(700);
   await capture(pc, 'equipe-07-pc-fiche');
   await pc.getByTestId('fiche-retirer-tous').click();
   await pc.getByTestId('retrait-vers-fondateur').click();
   await pc.getByTestId('retrait-confirmer').click();
   verifier(/Léa est retiré de tous les projets ; 1 tâche réassignée/.test(await texteDe(pc, 'taches-avis')), 'retrait de Léa avec réassignation (avis)');
   verifier(/Aucun projet partagé/.test(await texteDe(pc, `equipe-membre-${lea.id}`)), 'carte de Léa : plus aucun projet');
+  await fermer(pc);
   verifier(await nevoitPlus(ipad, 'Photos'), 'Léa ne voit plus rien (clés tournées, dépôt réécrit)');
   verifier(await fondateurVoitDans(pc, idRecette, 'Relecture', 10_000), '« Relecture » toujours là chez le Fondateur');
   await ouvrirDetail(pc, idRelecture);
+  await pc.getByTestId('detail-historique').click();
   verifier(/Assignée à Moi|Assignée à/.test(await pc.getByTestId('detail-tache').innerText()), 'tâche réassignée (historique)');
   await pc.getByTestId('detail-fermer').click();
 

@@ -307,7 +307,11 @@ describe('Tâches dans le hub', () => {
   });
   it('devblog : la nouveauté Tâches pour le Fondateur et l’ami concerné seulement', async () => {
     const v3 = ENTREES.find(e => e.version === '2026.10.28')!;
-    expect(ENTREES[1]).toBe(v3);
+    expect(ENTREES.indexOf(v3)).toBeGreaterThan(0);
+    // 2026.10.30 : déplacer, menu Équipe.
+    const equipe = ENTREES.find(e => e.version === '2026.10.30')!;
+    expect(fonctionnalitesPour(equipe, false, false, ['taches']).map(f => f.id)).toEqual(['taches-deplacer', 'taches-visibilite', 'taches-equipe-membre']);
+    expect(fonctionnalitesPour(equipe, false, false, ['tsuzuku'])).toEqual([]);
     expect(fonctionnalitesPour(v3, true).map(f => f.id)).toEqual(['taches-membres', 'taches-mentions', 'taches-gantt', 'taches-tableau', 'taches-objectifs', 'taches-ia-github']);
     expect(fonctionnalitesPour(v3, false, false, ['taches']).map(f => f.id)).toEqual(['taches-membres-ami', 'taches-mentions', 'taches-gantt', 'taches-tableau']);
     expect(fonctionnalitesPour(v3, false, false, ['tsuzuku'])).toEqual([]);
