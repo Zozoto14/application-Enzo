@@ -18,7 +18,6 @@
 
 import type { Stockage } from '../moteur/bibliotheque';
 import { CLES } from '../plateforme/stockage';
-import { reseauCalme } from './activite';
 
 export interface EntreeCache<T = unknown> {
   valeur: T;
@@ -33,16 +32,7 @@ export interface OptionsCache {
   octetsMax?: number;
   delaiEcritureMs?: number;
   maintenant?: () => number;
-  /**
-   * L'écriture de la base attend le calme du réseau (aucune requête en vol
-   * depuis un instant), 20 s au plus : écrire la base chiffrée bloque le fil
-   * principal, jamais pendant qu'un résultat arrive. Défaut : `reseauCalme`.
-   */
-  calme?: () => boolean;
 }
-
-/** Report maximal d'une écriture qui attend le calme du réseau. */
-export const REPORT_MAX_MS = 20_000;
 
 export interface CacheTsuzuku {
   lire<T>(cle: string): Promise<EntreeCache<T> | undefined>;
@@ -143,27 +133,15 @@ export function creerCache(stockage: Pick<Stockage, 'lire' | 'ecrire'> | null, o
     }
   }
 
-  const calme = o.calme ?? (() => reseauCalme());
-  let premiereDemande: number | undefined;
-  const armer = (ms: number) => {
-    minuteur = setTimeout(() => {
-      minuteur = undefined;
-      // Réseau occupé (une recherche est en cours) : plus tard, 20 s au plus après la première demande.
-      if (!calme() && premiereDemande !== undefined && Date.now() - premiereDemande < REPORT_MAX_MS) {
-        armer(500);
-        return;
-      }
-      premiereDemande = undefined;
-      ecriture = ecriture.then(ecrireBase, ecrireBase);
-    }, ms);
-    // Node (tests, Electron) : l'écriture en attente ne retient pas le processus.
-    (minuteur as { unref?: () => void }).unref?.();
-  };
   const programmer = () => {
     if (!stockage) return;
     if (minuteur) clearTimeout(minuteur);
-    if (premiereDemande === undefined) premiereDemande = Date.now();
-    armer(delai);
+    minuteur = setTimeout(() => {
+      minuteur = undefined;
+      ecriture = ecriture.then(ecrireBase, ecrireBase);
+    }, delai);
+    // Node (tests, Electron) : l'écriture en attente ne retient pas le processus.
+    (minuteur as { unref?: () => void }).unref?.();
   };
 
   return {
@@ -208,14 +186,12 @@ export function creerCache(stockage: Pick<Stockage, 'lire' | 'ecrire'> | null, o
       memoire.clear();
       if (minuteur) clearTimeout(minuteur);
       minuteur = undefined;
-      premiereDemande = undefined;
       await (ecriture = ecriture.then(ecrireBase, ecrireBase));
     },
     async ecrireMaintenant() {
       if (minuteur) {
         clearTimeout(minuteur);
         minuteur = undefined;
-        premiereDemande = undefined;
         ecriture = ecriture.then(ecrireBase, ecrireBase);
       }
       await ecriture;

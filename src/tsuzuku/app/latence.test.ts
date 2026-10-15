@@ -275,16 +275,3 @@ describe('préchargement d’intention (borné)', () => {
   });
 });
 
-describe('écriture de la base du cache : jamais pendant une recherche', () => {
-  it('attend le calme du réseau (20 s au plus), puis écrit', async () => {
-    const stockage = stockageMemoire();
-    let calme = false;
-    const cache = creerCache(stockage, { delaiEcritureMs: 5, calme: () => calme });
-    cache.ecrire('x', 1);
-    await attendre(80);
-    expect(await stockage.lire(CLES.cache)).toBeFalsy();
-    calme = true;
-    await attendre(700);
-    expect(await stockage.lire(CLES.cache)).toContain('"x"');
-  });
-});

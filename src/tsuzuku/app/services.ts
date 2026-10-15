@@ -43,7 +43,6 @@ import {
 import { ecrireReglages, lireReglages, type ReglagesTsuzuku } from './reglages';
 import { creerCache, empreinteTexte, type CacheTsuzuku } from './cache';
 import { latencesDuCache, type SuiviLatences } from './latences';
-import { debutActivite, finActivite } from './activite';
 
 export interface ServicesTsuzuku {
   plateforme: ChoixReseau['plateforme'];
@@ -131,14 +130,9 @@ export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: anci
   const reseau: Reseau = {
     async requete(r) {
       const debut = Date.now();
-      debutActivite();
-      try {
-        const rep = await choix.reseau.requete(r);
-        if (rep.entetes?.['x-tsuzuku-relais-cache'] !== 'HIT') latences.noter(r.url, Date.now() - debut);
-        return rep;
-      } finally {
-        finActivite();
-      }
+      const rep = await choix.reseau.requete(r);
+      if (rep.entetes?.['x-tsuzuku-relais-cache'] !== 'HIT') latences.noter(r.url, Date.now() - debut);
+      return rep;
     },
     ...(choix.reseau.resoudre ? { resoudre: choix.reseau.resoudre.bind(choix.reseau) } : {}),
   };
