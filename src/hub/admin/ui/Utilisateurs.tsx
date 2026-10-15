@@ -1362,7 +1362,7 @@ function FormulaireCreation({
         Un mot de passe, une clé d’authentification (TOTP) et des codes de récupération seront générés et affichés une seule fois.
       </Text>
       <View style={[commun.actions, { justifyContent: 'flex-end' }]}>
-        <BoutonHub theme={theme} titre="Annuler" onPress={onAnnuler} />
+        <BoutonHub theme={theme} titre="Annuler" onPress={onAnnuler} testID="admin-creation-annuler" />
         <BoutonHub
           theme={theme}
           variante="plein"

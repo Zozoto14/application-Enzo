@@ -45,6 +45,49 @@ export interface EntreeDevblog {
 
 export const ENTREES: readonly EntreeDevblog[] = [
   {
+    version: '2026.10.30',
+    date: '2026-10-30',
+    titre: 'Administration : invitations par e-mail et nouveaux réglages',
+    resume:
+      'À la création d’un compte, enregistrez l’adresse e-mail de votre ami et envoyez-lui l’invitation en un geste, depuis votre messagerie. L’Administration gagne un tableau de bord plus complet, une matrice des accès, des actions groupées et des réglages pour les comptes.',
+    illustration: 'administration',
+    fonctionnalites: [
+      {
+        id: 'admin-invitation-email',
+        emoji: '✉️',
+        titre: 'L’invitation part par e-mail',
+        texte:
+          'Nouvel utilisateur : saisissez son adresse (facultative, chiffrée avec vos données d’administration). « Envoyer l’invitation par e-mail » ouvre votre messagerie avec le destinataire, l’objet et le message prêts ; aussi « Copier le message », « Partager » sur iPhone/iPad, et le QR code. Aucun e-mail ne part d’un serveur. Chaque envoi est noté dans la fiche (date, canal), avec une relance en un clic.',
+        essayer: { genre: 'app', app: 'administration' },
+        adminSeulement: true,
+      },
+      {
+        id: 'admin-reglages-comptes',
+        emoji: '⚙',
+        titre: 'Réglages des comptes',
+        texte:
+          'Administration › Réglages : le message d’invitation à vos mots ({prenom}, {lien}, {expiration}, {fondateur}…), la durée des invitations, la longueur et la force minimales du mot de passe de vos amis (appliquées quand ils le choisissent), le nombre d’appareils avant alerte, et une sauvegarde chiffrée de l’Administration.',
+        adminSeulement: true,
+      },
+      {
+        id: 'admin-matrice',
+        emoji: '▤',
+        titre: 'Accès par app, actions groupées',
+        texte:
+          'Un écran « Accès par app » montre qui a quoi (comptes × apps) : touchez une case pour changer l’accès. Sélectionnez plusieurs comptes pour ouvrir ou fermer une app, renvoyer l’invitation, révoquer l’accès ou changer de rang d’un coup.',
+        adminSeulement: true,
+      },
+      {
+        id: 'admin-tableau-fiche',
+        emoji: '◧',
+        titre: 'Tableau de bord et fiche plus complets',
+        texte:
+          'Invitations en attente et expirées, appareils, dernières connexions, alertes (trop d’appareils, échecs de vérification). La fiche d’un compte montre son adresse, ses invitations, ses appareils et son activité ; la zone Danger supprime un compte ET efface ses copies sur le relais.',
+        adminSeulement: true,
+      },
+    ],
+  },
+  {
     version: '2026.10.29',
     date: '2026-10-29',
     titre: 'Plusieurs apps ouvertes en même temps',

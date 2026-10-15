@@ -28,14 +28,21 @@ taper le code à six chiffres à chaque connexion. Reproduit avec la version d'a
 ## Côté Fondateur : inviter un ami
 
 1. Ouvre **Administration › Utilisateurs › ＋ Nouvel utilisateur**, saisis son **prénom** (ce sera son identifiant),
-   ses apps, la durée de l'invitation (7 jours par défaut), coche l'avertissement, puis **Créer**.
-2. Le panneau **Invitation de …** s'affiche : touche **« Copier le message d'invitation »** et colle-le dans
-   WhatsApp, SMS, Messenger… Le message contient le lien, son identifiant et trois étapes simples. Tu peux aussi lui
-   montrer le **QR code**, ou lui dicter le **code court** (`K7M2Q-9XH4T`).
+   son **adresse e-mail** (facultative, conseillée), ses apps, la durée de l'invitation (7 jours par défaut), coche
+   l'avertissement, puis **Créer**.
+2. Le panneau **Invitation de …** s'affiche : touche **« Envoyer l'invitation par e-mail »** — ta messagerie s'ouvre,
+   adressée à ton ami, objet et message prêts : vérifie et envoie. Ou **« Copier le message »** et colle-le dans
+   WhatsApp, SMS, Messenger… ; sur iPhone/iPad, **« Partager… »**. Le message contient le lien, son identifiant et trois
+   étapes simples. Tu peux aussi lui montrer le **QR code**, ou lui dicter le **code court** (`K7M2Q-9XH4T`).
+   **Aucun e-mail ne part d'un serveur** : c'est ta messagerie qui l'envoie (détails : `docs/hub/administration.md`).
 3. Vérifie la ligne **« ✓ Compte publié sur le relais »**. Si tu lis « pas encore publié », garde l'app ouverte
    (déverrouillée) une minute : c'est ton appareil qui publie le compte de ton ami sur le relais.
 
-Il n'y a **plus de mot de passe à transmettre**. (Les identifiants « à l'ancienne » restent affichés en dessous, en
+Il n'y a **plus de mot de passe à transmettre**. Chaque envoi est noté dans sa fiche (« Contact et invitations » :
+date, canal) ; « Relancer (nouveau lien) » en prépare un autre en un clic. Le message se personnalise dans
+**Administration › Réglages › Message d'invitation** (`{prenom}`, `{lien}`, `{expiration}`, `{fondateur}`…), et la
+**politique du mot de passe** de tes amis (longueur, force minimales) dans **Réglages › Comptes et invitations** : elle
+voyage, scellée, dans l'invitation, et l'écran de l'ami l'applique. (Les identifiants « à l'ancienne » restent affichés en dessous, en
 secours : code de liaison, mot de passe, code à six chiffres.)
 
 ### Suivre et gérer les accès
@@ -62,8 +69,8 @@ avec le code du PC).
 **La première fois** (n'importe quel appareil, même neuf) :
 
 1. Ouvre le lien reçu.
-2. Ton identifiant s'affiche (ton prénom). Choisis **ton mot de passe** : 10 caractères au moins, pas seulement des
-   chiffres, pas ton prénom. Une phrase facile à retenir est idéale (« Été à Biarritz 2026 »). L'indicateur de force
+2. Ton identifiant s'affiche (ton prénom). Choisis **ton mot de passe** : 10 caractères au moins (ou ce que le
+   Fondateur a réglé : l'écran l'indique), pas seulement des chiffres, pas ton prénom. Une phrase facile à retenir est idéale (« Été à Biarritz 2026 »). L'indicateur de force
    t'aide ; le bouton 👁 Afficher te laisse vérifier ce que tu tapes.
 3. Confirme-le, touche **Créer mon accès** : tu es connecté. Pas de code à six chiffres.
 
@@ -179,6 +186,9 @@ message « Ce navigateur ne sait pas encore où est ton compte » oriente vers l
 
 ### Limites connues
 
+- L'invitation par e-mail passe par la messagerie de l'appareil (`mailto:`) : aucun serveur n'envoie d'e-mail, et
+  l'Administration ne sait pas si le message est parti. Sans messagerie configurée : « Copier le message ».
+
 - Pas de WebKit dans l'environnement de test : l'iPhone est émulé (agent, écran, tactile de l'iPhone 13) dans
   Chromium ; à vérifier sur un vrai iPhone.
 - Mode « lien » (relais pas à jour) : un lien volé AVANT que l'ami ne l'ait utilisé reste utilisable, et l'expiration
@@ -189,4 +199,5 @@ message « Ce navigateur ne sait pas encore où est ton compte » oriente vers l
   (comme pour l'annuaire publié, dont le sel est à côté). Il ne peut rien ouvrir sans le mot de passe.
 
 Tests : `src/profils/invitation.test.ts`, `bureau/connexionAmis.test.ts`, `relais/connexion.test.mjs` ; bout en bout :
-`scripts/e2e-connexion-amis.mjs` (captures `docs/captures-connexion-amis/`).
+`scripts/e2e-connexion-amis.mjs` (captures `docs/captures-connexion-amis/`) et, pour l'e-mail, la politique du mot de
+passe et l'Administration, `scripts/e2e-admin-invitations.mjs` (captures `docs/captures-admin-invitations/`).
