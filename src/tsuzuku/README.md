@@ -288,7 +288,47 @@ Tableau avant/apres : `docs/tsuzuku-performance.md`.
 - **Affichage** : la fiche s'affiche sans attendre les sources (« Recherche sur vos sources… 4 s ») ;
   cartes des rangees en petite affiche (`vignette` : AniList `large`, Jikan `image_url`, TMDB
   `w342`), les 8 premieres tout de suite, les autres au premier defilement de la rangee.
-- **Relais** : inchange (une requete par appel, DNS deja garde 60 s, pre-vol CORS garde 10 min).
+- **Relais** : une requete par appel (DNS deja garde 60 s, pre-vol CORS garde 10 min), et un
+  CACHE (2e passe, voir ci-dessous).
+
+#### 2e passe : latence du site (iPhone/iPad, 4G)
+
+Mesure : `scripts/e2e-tsuzuku-perf.mjs`, modes `site` et `site4g` (Chrome bride « Slow 4G »,
+relais local en HTTP/2 compresse comme Cloudflare), plus un SECOND APPAREIL et un AUTRE TITRE.
+Tableau : `docs/tsuzuku-performance.md`.
+
+- **Recherche des le toucher** (`app/precharge.ts`, `app/intention.ts`) : `onPressIn` d'une carte
+  (ou survol de 250 ms a la souris) lance la fiche du catalogue ET la recherche sur les sources.
+  Carte Jikan (`FicheAnime.fournisseur === 'jikan'`) : ses titres sont ceux de la fiche complete
+  (meme `mapperAnimeJikan`), la recherche part tout de suite ; la fiche la rejoint (meme cle
+  `ep|id|…`, une seule recherche). Carte AniList (pas de titre francais) : apres la fiche. Une seule
+  recherche « d'intention » en vol ; une meme intention n'est pas relancee avant 10 min.
+- **Accueil** : fiches du catalogue des 4 premieres cartes (une apres l'autre, apres 1,2 s de
+  calme ; jamais les sources). **Ligne d'episode** touchee ou survolee : sa page est lue d'avance.
+- **Sources connues pour etre lentes** (`app/latences.ts`) : temps typique de chaque site (moyenne
+  glissante, cache chiffre du profil, 60 hotes ; une page servie par le cache du relais ne compte
+  pas). Prioritaire typiquement >= 1,5 s par page : les autres sources et ses variantes partent sans
+  l'attendre (`ContexteResolution.estLente`) ; et si une moins prioritaire trouve alors qu'elle ne
+  peut pas finir dans le delai de grace (temps typique restant > 1,5 x 1,2 s), la decision est
+  prise tout de suite (`courseAvecPriorite` › `dureeTypiqueMs`, `abregee` ; diagnostic : « connue
+  pour etre lente »). La priorite et le resultat retenu ne changent pas sinon.
+- **Cache du relais** (`relais/tsuzuku.mjs`) : le moteur indique `cache: 'recherche'` (GET de
+  recherche) ou `'page'` (`chargerPage` : serie, episode) ; le relais garde 15 / 30 min une reponse
+  200 entiere, texte, < 1 Mo, sans marque anti-robot ni `cf-mitigated` ; jamais un POST. Cle :
+  SHA-256 de la methode, de l'adresse normalisee (sans `#`) et des en-tetes sortants (liste blanche :
+  ni cookie, ni jeton). Deux niveaux : memoire de l'instance du Worker (200 entrees / 16 M
+  caracteres) et API Cache de Cloudflare (`caches.default`, `Cache-Control: max-age`, ecriture par
+  `waitUntil`). LIMITE : l'API Cache est sans effet sur une adresse `*.workers.dev` (doc Cloudflare) ;
+  elle sert si le relais est sur un domaine personnel ; la memoire de l'instance sert partout, tant
+  que l'instance vit. HIT : ni DNS ni sortie vers le site ; `cache: 'HIT' | 'MISS'`, `ageS`, en-tete
+  `x-tsuzuku-cache`. Les garde-fous restent AVANT le cache (jeton maitre, origine, debit, adresse) ;
+  la page gardee est la version publique (aucun cookie envoye) : rien de personnel. « Reessayer »,
+  rafraichissement en arriere-plan et tests de source passent par `ctxFrais` (`cache.frais`) : le
+  site est relu, le cache remis a jour. Un ANCIEN relais ignore `cache` : tout marche comme avant.
+- **PC** : adresses DNS verifiees publiques gardees 60 s (`lookupPublic`, jamais un refus).
+- **Pas de route « lot »** : le site parle au relais en HTTP/2 (Cloudflare), les requetes paralleles
+  partagent deja une connexion ; regrouper n'enleverait aucun aller-retour et ferait attendre les
+  pages rapides derriere les lentes. Compression : faite par Cloudflare (JSON).
 
 ### Stockage et isolation
 

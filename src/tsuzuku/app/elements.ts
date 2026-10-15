@@ -23,7 +23,7 @@ function badge(db: Bibliotheque | undefined, kind: Genre, id: string, titre: str
   };
 }
 
-export function carteAnime(f: FicheAnime, db: Bibliotheque | undefined, aller: (id: string) => void): ElementCarte & { vu: boolean } {
+export function carteAnime(f: FicheAnime, db: Bibliotheque | undefined, aller: (id: string) => void, intention?: (f: FicheAnime) => void): ElementCarte & { vu: boolean } {
   const id = String(f.id);
   const { vu, badge: b, ...etat } = badge(db, 'anime', id, f.title, f.year, f.totalEpisodes);
   return {
@@ -37,6 +37,7 @@ export function carteAnime(f: FicheAnime, db: Bibliotheque | undefined, aller: (
     ...etat,
     vu,
     onPress: () => aller(id),
+    ...(intention ? { intention: () => intention(f) } : {}),
   };
 }
 

@@ -4,13 +4,14 @@
  * films selon le mode), puis « Ma bibliothèque ». Squelettes au chargement.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Image, Text, View } from 'react-native';
 import { police, teinteTransparente } from '../../hub/themes';
 import { ajouterOuMettreAJour, trouver, type Entree } from '../moteur/bibliotheque';
 import type { FicheAnime, FicheFilm, Rangee as RangeeCatalogue } from '../moteur/catalogue';
 import { carteAnime, carteFilm, sansVus } from './elements';
 import { CarteSansSource } from './EtatSources';
+import { intentionAnime, prechargerFichesAccueil } from './precharge';
 import { useCharger, useTsuzuku } from './contexte';
 import { Avis, Bouton, Champ, Etat, EtatVide, Rangee, RangeeReprendre, elementDepuisEntree, styleAttenue } from './ui';
 
@@ -97,6 +98,9 @@ export function Accueil() {
     .sort((a, b) => String(b.lastWatched ?? b.dateAdded ?? '').localeCompare(String(a.lastWatched ?? a.dateAdded ?? '')));
   const chercher = () => aller({ t: 'catalogue', q: q.trim() });
   const une = uneDepuis(cat.donnees);
+  // Fiches du catalogue des premières cartes : préchargées (4 au plus), après un temps de calme.
+  const premiere = cat.donnees?.anime?.find(r => r.items.length)?.items;
+  useEffect(() => (premiere ? prechargerFichesAccueil(s, premiere) : undefined), [s, premiere]);
   const vide = !cat.enCours && !cat.erreur && !cat.donnees?.anime?.some(r => r.items.length) && !cat.donnees?.films?.some(r => r.items.length);
 
   return (
@@ -116,7 +120,7 @@ export function Accueil() {
           />
           {mode === 'movie' && cat.donnees?.source === 'jikan' ? <Avis texte="Sans clé TMDB, seuls les films d’animation (Jikan) sont proposés. L’administration peut ajouter une clé pour tout le catalogue." /> : null}
           {cat.donnees?.anime?.map(r => (
-            <Rangee key={r.key} titre={r.title} testID={`rangee-${r.key}`} elements={sansVus(r.items.map(f => carteAnime(f, db, id => aller({ t: 'fiche', kind: 'anime', id }))), masquer)} />
+            <Rangee key={r.key} titre={r.title} testID={`rangee-${r.key}`} elements={sansVus(r.items.map(f => carteAnime(f, db, id => aller({ t: 'fiche', kind: 'anime', id }), x => intentionAnime(s, x))), masquer)} />
           ))}
           {cat.donnees?.films?.map(r => (
             <Rangee key={r.key} titre={r.title} testID={`rangee-${r.key}`} elements={sansVus(r.items.map(f => carteFilm(f, db, id => aller({ t: 'fiche', kind: 'movie', id }))), masquer)} />

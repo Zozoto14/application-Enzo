@@ -223,19 +223,33 @@ export const AGENTS = {
   https: new https.Agent({ keepAlive: true, keepAliveMsecs: 15_000, maxSockets: 6, maxFreeSockets: 4, timeout: 60_000 }),
 };
 
-/** `lookup` de socket : refuse tout nom qui résout vers une IP non publique, et impose l'IP vérifiée. */
-export function lookupPublic(resoudre = dns.lookup) {
+/** Adresses PUBLIQUES déjà vérifiées, gardées 60 s (temps de réponse : pas de résolution à chaque connexion). */
+export const DNS_GARDE_MS = 60_000;
+const CACHE_DNS = new Map();
+
+/**
+ * `lookup` de socket : refuse tout nom qui résout vers une IP non publique, et impose l'IP vérifiée.
+ * Une liste vérifiée publique est gardée `DNS_GARDE_MS` (jamais un refus, jamais une erreur) : la
+ * connexion suivante vers le même nom part vers ces mêmes adresses, déjà vérifiées.
+ */
+export function lookupPublic(resoudre = dns.lookup, { cache = resoudre === dns.lookup ? CACHE_DNS : new Map(), maintenant = () => Date.now() } = {}) {
   return (hote, options, rappel) => {
     const rappelFinal = typeof options === 'function' ? options : rappel;
     const opts = typeof options === 'function' ? {} : options ?? {};
+    const rendre = liste => (opts.all ? rappelFinal(null, liste) : rappelFinal(null, liste[0].address, liste[0].family));
+    const cle = `${String(hote).toLowerCase()}|${opts.family ?? 0}`;
+    const garde = cache.get(cle);
+    if (garde && maintenant() - garde.quand < DNS_GARDE_MS) return rendre(garde.liste);
     resoudre(hote, { ...opts, all: true, verbatim: true }, (erreur, adresses) => {
       if (erreur) return rappelFinal(erreur);
       const liste = Array.isArray(adresses) ? adresses : [{ address: adresses, family: 4 }];
       if (liste.length === 0 || liste.some(a => ipEstPrivee(a.address))) {
+        cache.delete(cle);
         return rappelFinal(new Error('Le nom résout vers une adresse non publique.'));
       }
-      if (opts.all) return rappelFinal(null, liste);
-      return rappelFinal(null, liste[0].address, liste[0].family);
+      if (cache.size > 200) cache.delete(cache.keys().next().value);
+      cache.set(cle, { quand: maintenant(), liste });
+      return rendre(liste);
     });
   };
 }

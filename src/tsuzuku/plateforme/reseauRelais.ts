@@ -21,6 +21,8 @@ export interface DemandeRelais {
   method: 'GET' | 'POST';
   headers: Record<string, string>;
   body?: string;
+  /** GET d'une page publique que le relais peut garder (relais à jour ; un ancien relais l'ignore). */
+  cache?: { nature: 'recherche' | 'page'; frais?: boolean };
 }
 
 /** Ce que le site expose (`window.applibourse.tsuzukuRelais`). */
@@ -41,6 +43,8 @@ interface ReponseRelais {
   texte?: string;
   bodyBase64?: string;
   tronque?: boolean;
+  /** Relais à jour : la page venait de son cache (HIT) ou du site (MISS). */
+  cache?: string;
 }
 
 export const MESSAGES_RELAIS = {
@@ -90,6 +94,7 @@ export function lireReponseRelais(brut: unknown): ReponseReseau {
     if (typeof valeur === 'string') entetes[nom.toLowerCase()] = valeur;
   }
   if (r.tronque) entetes['x-tsuzuku-tronque'] = '1';
+  if (r.cache === 'HIT' || r.cache === 'MISS') entetes['x-tsuzuku-relais-cache'] = r.cache;
   let corps = '';
   if (typeof r.texte === 'string') corps = r.texte;
   else if (typeof r.bodyBase64 === 'string') corps = decoderOctets(octetsDepuisBase64(r.bodyBase64), r.charset);
@@ -128,7 +133,10 @@ export function reseauRelais(transport: TransportRelais): Reseau {
     async requete(r: RequeteReseau): Promise<ReponseReseau> {
       let rep: { statut: number; json: unknown };
       try {
-        rep = await transport.envoyer({ url: r.url, method: r.methode, headers: r.entetes, ...(r.corps !== undefined ? { body: r.corps } : {}) }, r.delaiMs);
+        rep = await transport.envoyer(
+          { url: r.url, method: r.methode, headers: r.entetes, ...(r.corps !== undefined ? { body: r.corps } : {}), ...(r.cache && r.methode === 'GET' ? { cache: r.cache } : {}) },
+          r.delaiMs,
+        );
       } catch {
         throw echec(MESSAGES_RELAIS.injoignable, 'reseau', 502);
       }

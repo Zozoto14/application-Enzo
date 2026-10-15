@@ -96,6 +96,15 @@ export interface ContexteResolution {
   signal?: SignalAnnulation;
   /** Parallélisme (défauts : `PARALLELE`) ; `{ variantes: 1, sources: 1 }` = l'ancien parcours séquentiel. */
   parallele?: Partial<ParametresParallele>;
+  /**
+   * Vrai si le site de cette adresse est CONNU pour être lent (temps mesurés sur
+   * l'appareil) : ses variantes de titre partent ensemble, et, s'il est la source
+   * prioritaire, les autres sources partent sans l'attendre (la priorité, le délai
+   * de grâce et le résultat retenu ne changent pas).
+   */
+  estLente?: (url: string) => boolean;
+  /** Temps typique d'une page du site de cette adresse (ms), s'il est connu (voir `courseAvecPriorite`). */
+  dureeTypique?: (url: string) => number | undefined;
 }
 
 /** Réglages du parallélisme du moteur. */
@@ -119,6 +128,15 @@ export const PARALLELE: ParametresParallele = { variantes: 3, relaisMs: 600, sou
 
 const parametresParallele = (ctx: ContexteResolution): ParametresParallele => ({ ...PARALLELE, ...ctx.parallele });
 
+/** Source connue pour être lente (voir `ContexteResolution.estLente`). */
+const sourceLente = (ctx: ContexteResolution, src?: Pick<DefinitionSource, 'baseUrl'>) => {
+  try {
+    return Boolean(src?.baseUrl && ctx.estLente?.(src.baseUrl));
+  } catch {
+    return false;
+  }
+};
+
 /** Contexte d'une tâche annulable : même client, mais plus rien ne part après l'annulation. */
 const sousContexte = (ctx: ContexteResolution, signal: SignalAnnulation): ContexteResolution => ({ ...ctx, client: clientAnnulable(ctx.client, signal), signal });
 
@@ -139,7 +157,7 @@ interface PageLue {
 async function chargerPage(client: ClientSur, url: string, src?: Pick<DefinitionSource, 'timeout' | 'userAgent' | 'baseUrl'>): Promise<PageLue> {
   let cible = url;
   for (let saut = 0; ; saut += 1) {
-    const rep = await client.texte(cible, { delaiMs: src?.timeout, agentUtilisateur: src?.userAgent, referer: refererDe(src) });
+    const rep = await client.texte(cible, { delaiMs: src?.timeout, agentUtilisateur: src?.userAgent, referer: refererDe(src), cache: 'page' });
     const page = lirePage(rep.corps);
     const final = rep.url || cible;
     // Miroir ou « le site a déménagé » annoncé par <meta http-equiv="refresh"> (page courte) : suivi deux fois au plus.
@@ -242,7 +260,7 @@ export async function chercherSurDetail(
   const parSlug = cheminParSlug(cheminDeRecherche(src, o.langue ?? null));
   let rep: ReponseTexte;
   try {
-    const appel = { delaiMs: src.timeout, agentUtilisateur: src.userAgent, referer: refererDe(src), entetes: sel.type === 'json' ? { accept: 'application/json, text/javascript, */*;q=0.1' } : undefined };
+    const appel = { delaiMs: src.timeout, agentUtilisateur: src.userAgent, referer: refererDe(src), entetes: sel.type === 'json' ? { accept: 'application/json, text/javascript, */*;q=0.1' } : undefined, cache: 'recherche' as const };
     rep = methode === 'POST' ? await ctx.client.envoyerFormulaire(url, corpsDeRecherche(src, requete, o.slug), appel) : await ctx.client.obtenir(url, appel);
   } catch (err) {
     return { resultats: [], detail: { ...detail, erreur: messageDe(err), code: err instanceof ErreurMoteur ? err.code : 'reseau' } };
@@ -881,7 +899,7 @@ export async function chercherOeuvre(
   await courseOrdonnee(
     essais.map(e => (signal: SignalAnnulation) => chercherSurDetail(sousContexte(ctx, signal), src, e.requete, { langue: preference, slug: e.slug, cibles: voulus })),
     (r, i) => valider(essais[i].requete, essais[i].slug, r),
-    { simultanees: p.variantes, relaisMs: p.relaisMs, signal: ctx.signal },
+    { simultanees: p.variantes, relaisMs: sourceLente(ctx, src) ? 0 : p.relaisMs, signal: ctx.signal },
   );
   const { classes, choisi } = meilleurDe();
   const serie = choisi && choisi.baseScore >= SCORE_MINIMAL ? choisi : null;
@@ -1099,7 +1117,7 @@ export async function episodesSur(ctx: ContexteResolution, src: DefinitionSource
 }
 
 /** Diagnostic d'une source abandonnée : une source moins prioritaire a trouvé, et elle tardait. */
-const interrompue = (src: DefinitionSource, gagnante: DefinitionSource, graceMs: number): DiagnosticSource => ({
+const interrompue = (src: DefinitionSource, gagnante: DefinitionSource, graceMs: number, abregee = false): DiagnosticSource => ({
   source: src.name,
   sourceId: src.id,
   statut: 'interrompue',
@@ -1107,8 +1125,19 @@ const interrompue = (src: DefinitionSource, gagnante: DefinitionSource, graceMs:
   serie: null,
   refuse: null,
   episodes: 0,
-  raison: `recherche interrompue : « ${gagnante.name} » a trouvé, et cette source, plus prioritaire, n’avait pas répondu ${String(graceMs / 1000).replace('.', ',')} s plus tard`,
+  raison: abregee
+    ? `recherche interrompue : « ${gagnante.name} » a trouvé, et cette source, plus prioritaire, est connue pour être lente (temps mesurés sur cet appareil) : elle n’aurait pas répondu dans les ${String(graceMs / 1000).replace('.', ',')} s d’attente`
+    : `recherche interrompue : « ${gagnante.name} » a trouvé, et cette source, plus prioritaire, n’avait pas répondu ${String(graceMs / 1000).replace('.', ',')} s plus tard`,
 });
+
+/** Temps typique d'une page de la source (contexte), s'il est connu. */
+const dureeTypiqueDe = (ctx: ContexteResolution, src: Pick<DefinitionSource, 'baseUrl'>) => {
+  try {
+    return src.baseUrl ? ctx.dureeTypique?.(src.baseUrl) : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 /**
  * Cherche sur les sources activées EN PARALLÈLE (3 au plus), dans leur ordre
@@ -1124,10 +1153,17 @@ export async function trouverEpisodes(
 ): Promise<ResultatEpisodes> {
   const actives = sourcesActives(sources);
   const p = parametresParallele(ctx);
-  const { issues, gagnante } = await courseAvecPriorite(
+  const { issues, gagnante, abregee } = await courseAvecPriorite(
     actives.map(src => (signal: SignalAnnulation) => episodesSur(sousContexte(ctx, signal), src, o)),
     r => r.episodes.length > 0,
-    { simultanees: p.sources, graceMs: p.graceMs, relaisMs: p.relaisSourcesMs, signal: ctx.signal, surProvisoire: o.surProvisoire ? r => o.surProvisoire!(r) : undefined },
+    {
+      simultanees: p.sources,
+      graceMs: p.graceMs,
+      relaisMs: sourceLente(ctx, actives[0]) ? 0 : p.relaisSourcesMs,
+      signal: ctx.signal,
+      surProvisoire: o.surProvisoire ? r => o.surProvisoire!(r) : undefined,
+      dureeTypiqueMs: ctx.dureeTypique ? i => dureeTypiqueDe(ctx, actives[i]) : undefined,
+    },
   );
   let refuse: ResultatClasse | null = null;
   let partiel: ResultatEpisodes | null = null;
@@ -1136,7 +1172,7 @@ export async function trouverEpisodes(
     const src = actives[issue.i];
     if (gagnante != null && issue.i > gagnante) break;
     if (issue.interrompue) {
-      diagnostics.push(interrompue(src, actives[gagnante ?? 0], p.graceMs));
+      diagnostics.push(interrompue(src, actives[gagnante ?? 0], p.graceMs, abregee));
     } else if (issue.erreur !== undefined) {
       journalDe(ctx)(`[source:${src.name}] ${messageDe(issue.erreur)}`);
       diagnostics.push({ source: src.name, sourceId: src.id, statut: 'erreur', requetes: [], serie: null, refuse: null, episodes: 0, erreur: messageDe(issue.erreur) });
@@ -1262,10 +1298,16 @@ export async function trouverFilm(
   const actives = sourcesActives(sources).filter(supporteFilms);
   const p = parametresParallele(ctx);
   // Les films se cherchent sans preference de doublage (comme avant).
-  const { issues, gagnante } = await courseAvecPriorite(
+  const { issues, gagnante, abregee } = await courseAvecPriorite(
     actives.map(brute => (signal: SignalAnnulation) => filmSur(sousContexte(ctx, signal), brute, { ...o, langue: 'indifferent' })),
     r => r.sources.length > 0,
-    { simultanees: p.sources, graceMs: p.graceMs, relaisMs: p.relaisSourcesMs, signal: ctx.signal },
+    {
+      simultanees: p.sources,
+      graceMs: p.graceMs,
+      relaisMs: sourceLente(ctx, actives[0]) ? 0 : p.relaisSourcesMs,
+      signal: ctx.signal,
+      dureeTypiqueMs: ctx.dureeTypique ? i => dureeTypiqueDe(ctx, actives[i]) : undefined,
+    },
   );
   let refuse: ResultatClasse | null = null;
   const diagnostics: DiagnosticSource[] = [];
@@ -1273,7 +1315,7 @@ export async function trouverFilm(
     const brute = actives[issue.i];
     if (gagnante != null && issue.i > gagnante) break;
     if (issue.interrompue) {
-      diagnostics.push(interrompue(brute, actives[gagnante ?? 0], p.graceMs));
+      diagnostics.push(interrompue(brute, actives[gagnante ?? 0], p.graceMs, abregee));
     } else if (issue.erreur !== undefined) {
       journalDe(ctx)(`[source:${brute.name}] ${messageDe(issue.erreur)}`);
       diagnostics.push({ source: brute.name, sourceId: brute.id, statut: 'erreur', requetes: [], serie: null, refuse: null, episodes: 0, erreur: messageDe(issue.erreur) });

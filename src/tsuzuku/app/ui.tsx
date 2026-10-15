@@ -5,6 +5,7 @@ import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, Text
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { Entree, Statut } from '../moteur/bibliotheque';
 import { useTsuzuku } from './contexte';
+import { poigneesIntention } from './intention';
 
 type EtatPresse = { pressed: boolean; hovered?: boolean; focused?: boolean };
 
@@ -261,6 +262,8 @@ export interface ElementCarte {
   /** Ligne d'accent (« Épisode 5 / 12 »). */
   ligneAccent?: string;
   onPress(): void;
+  /** Intention d'ouvrir (toucher, survol prolongé) : préchargement borné (`precharge.ts`). */
+  intention?: () => void;
 }
 
 export const LIBELLE_STATUT: Record<Statut, string> = {
@@ -327,12 +330,15 @@ export function Affiche({ e, largeur = LARGEUR_CARTE, differee = false }: { e: E
   const hauteur = Math.round(largeur * 1.5);
   const vu = e.statut === 'vu' || e.statut === 'vu_ailleurs';
   const rayon = Math.max(theme.rayonMoyen, 4);
+  const intention = e.intention;
+  const poignees = React.useMemo(() => (intention ? poigneesIntention(intention) : undefined), [intention]);
   return (
     <Pressable
       testID={`carte-${e.cle}`}
       accessibilityRole="button"
       accessibilityLabel={`${e.titre}${e.badge ? `, ${e.badge}` : ''}${e.sousTitre ? `, ${e.sousTitre}` : ''}`}
       onPress={e.onPress}
+      {...poignees}
       style={(p: EtatPresse) => [
         {
           width: largeur,

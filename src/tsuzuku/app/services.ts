@@ -11,7 +11,7 @@
 import type { Rang } from '../../hub/admin/roles';
 import { DepotBibliotheque, type Stockage } from '../moteur/bibliotheque';
 import { creerCatalogue, type Catalogue, type OptionsCatalogue } from '../moteur/catalogue';
-import { creerClient, type ClientSur } from '../moteur/reseau';
+import { creerClient, type ClientSur, type Reseau } from '../moteur/reseau';
 import type { ContexteResolution } from '../moteur/resolution';
 import type { DefinitionSource } from '../moteur/sources';
 import type { ChoixReseau } from '../plateforme/reseau';
@@ -42,6 +42,7 @@ import {
 } from './gestion';
 import { ecrireReglages, lireReglages, type ReglagesTsuzuku } from './reglages';
 import { creerCache, empreinteTexte, type CacheTsuzuku } from './cache';
+import { latencesDuCache, type SuiviLatences } from './latences';
 
 export interface ServicesTsuzuku {
   plateforme: ChoixReseau['plateforme'];
@@ -61,6 +62,13 @@ export interface ServicesTsuzuku {
   cache: CacheTsuzuku;
   client: ClientSur;
   ctx: ContexteResolution;
+  /**
+   * Même moteur, mais les sites sont TOUJOURS relus (« Réessayer », rafraîchissement
+   * en arrière-plan, tests de source) : le cache du relais est seulement remis à jour.
+   */
+  ctxFrais: ContexteResolution;
+  /** Temps de réponse typique de chaque site source (sources connues pour être lentes). */
+  latences: SuiviLatences;
   catalogue: Catalogue;
   depot: DepotBibliotheque;
   reglages(): Promise<ReglagesTsuzuku>;
@@ -115,7 +123,22 @@ export const CATALOGUE_PERIME_MAX_MS = 7 * 24 * 3_600_000;
 export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: ancien, journal, catalogue, avances, lireBase, cache: cacheDonne }: OptionsServices): ServicesTsuzuku {
   const rang: Rang = rangDonne ?? (ancien === false ? 'ami' : 'fondateur');
   const habilite = peutGererSources(rang);
-  const client = creerClient(choix.reseau, avances ? { delaiMs: avances.delaiS * 1000, tailleMax: avances.tailleMaxMo * 1024 * 1024 } : {});
+  const cache = cacheDonne ?? creerCache(stockage);
+  const latences = latencesDuCache(cache);
+  void latences.charger();
+  // Chaque page lue est chronométrée (une page servie par le cache du relais ne compte pas).
+  const reseau: Reseau = {
+    async requete(r) {
+      const debut = Date.now();
+      const rep = await choix.reseau.requete(r);
+      if (rep.entetes?.['x-tsuzuku-relais-cache'] !== 'HIT') latences.noter(r.url, Date.now() - debut);
+      return rep;
+    },
+    ...(choix.reseau.resoudre ? { resoudre: choix.reseau.resoudre.bind(choix.reseau) } : {}),
+  };
+  const limites = avances ? { delaiMs: avances.delaiS * 1000, tailleMax: avances.tailleMaxMo * 1024 * 1024 } : {};
+  const client = creerClient(reseau, limites);
+  const clientFrais = creerClient(reseau, { ...limites, cacheFrais: true });
   const reglages = async () => lireReglages(await stockage.lire(CLES.reglages));
   const lireAvancesStockees = async () => lireAvances(await stockage.lire(CLES.avance), (await reglages()).cleTmdb);
   const propres = async () => (habilite ? lireListeSources(await stockage.lire(CLES.sources)) : []);
@@ -123,7 +146,6 @@ export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: anci
   const choixPerso = async () => lireChoix(await stockage.lire(CLES.choixSources));
   // Site : le relais ne sert que le jeton maître (Fondateur historique) ; un autre rang garde le message du site.
   const lecture = () => (choix.plateforme === 'site' ? Boolean(choix.lectureSources) && rang === 'fondateur' : choix.lectureSources);
-  const cache = cacheDonne ?? creerCache(stockage);
   // Réponses brutes des catalogues (jamais la clé TMDB : elle n'entre pas dans les clés), clé hachée.
   const persistant = {
     lire: async (cle: string) => {
@@ -145,7 +167,9 @@ export function creerServices({ choix, stockage, rang: rangDonne, estAdmin: anci
     stockage,
     cache,
     client,
-    ctx: { client, journal },
+    ctx: { client, journal, estLente: latences.estLente, dureeTypique: latences.typique },
+    ctxFrais: { client: clientFrais, journal, estLente: latences.estLente, dureeTypique: latences.typique },
+    latences,
     // La clé TMDB est celle de la base du profil : jamais celle d'un autre compte.
     catalogue: creerCatalogue({ client, cleTmdb: async () => (await lireAvancesStockees()).cleTmdb || null, journal, cacheMs: CATALOGUE_FRAIS_MS, perimeMaxMs: CATALOGUE_PERIME_MAX_MS, persistant, ...catalogue }),
     depot: new DepotBibliotheque(stockage, CLES.bibliotheque),

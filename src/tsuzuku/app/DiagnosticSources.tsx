@@ -153,7 +153,7 @@ function TesterSurCeTitre({ titres, id }: { titres: readonly string[]; id: strin
     try {
       const perso = (await lireTitresPerso(s))[`anime:${id}`];
       const cible = perso ? [perso, ...titres.filter(t => t !== perso)] : [...titres];
-      setResultat({ id: src.id, etapes: await testerSourcePasAPas(s.ctx, src, { titres: cible, langue: (await s.reglages()).langue }) });
+      setResultat({ id: src.id, etapes: await testerSourcePasAPas(s.ctxFrais ?? s.ctx, src, { titres: cible, langue: (await s.reglages()).langue }) });
     } catch (e) {
       setResultat({ id: src.id, erreur: messageDe(e) });
     } finally {
