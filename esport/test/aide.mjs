@@ -5,7 +5,7 @@
  */
 
 import relais, { jetonDeProfil } from '../../relais/worker.mjs';
-import { baseSqliteMigree } from '../adaptateurs/sqlite.mjs';
+import { baseMigree } from './base.mjs';
 import { stockageMemoire } from '../adaptateurs/stockage.mjs';
 import { creerApi } from '../noyau/api.mjs';
 import { verificateurRelais } from '../noyau/authentification.mjs';
@@ -19,7 +19,7 @@ export function kvMemoire() {
 }
 
 export async function banc({ creationTeams = 'fondateur', relaisAncien = false, sansStockage = false, fetchDiscord, cleDiscord, lienApp, discordBot, attenteDiffere } = {}) {
-  const base = await baseSqliteMigree();
+  const base = await baseMigree();
   const stockage = sansStockage ? undefined : stockageMemoire();
   const envRelais = { JETON: JETON_MAITRE, BOITE: kvMemoire() };
   const horloge = { t: Date.parse('2026-10-20T10:00:00.000Z') };

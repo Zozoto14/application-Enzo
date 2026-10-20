@@ -10,7 +10,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import relais, { jetonDeProfil } from '../../relais/worker.mjs';
-import { baseSqlite, baseSqliteMigree, lireMigrations } from '../adaptateurs/sqlite.mjs';
+import { baseSqliteMigree } from '../adaptateurs/sqlite.mjs';
+import { baseMigree, baseVierge, lireMigrations, nomsTables } from './base.mjs';
 import { stockageDisque, stockageMemoire } from '../adaptateurs/stockage.mjs';
 import { appliquerMigrations } from '../noyau/migrations.mjs';
 import { exporterBase } from '../noyau/transfert.mjs';
@@ -60,18 +61,18 @@ test('migrations : fichiers NNNN_nom.sql, appliquées une seule fois, schéma co
     // SQL standard : rien de propre à D1/SQLite (AUTOINCREMENT, datetime(), strftime, json_…, PRAGMA, WITHOUT ROWID).
     assert.doesNotMatch(sql, /AUTOINCREMENT|datetime\(|strftime|json_|PRAGMA|WITHOUT ROWID|INSERT OR /i);
   }
-  const base = await baseSqlite();
+  const base = await baseVierge();
   // Toutes les migrations du dossier, dans l'ordre des noms (les numéros peuvent avoir des trous).
   assert.deepEqual(await appliquerMigrations(base, migrations), migrations.map(m => m.nom).sort());
   assert.deepEqual(await appliquerMigrations(base, migrations), []);
-  const tables = (await base.tous("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name", [])).map(l => l.name);
+  const tables = await nomsTables(base);
   for (const t of ['comptes', 'teams', 'team_modules', 'roles', 'role_permissions', 'membres', 'invitations', 'tentatives', 'evenements', 'journal', 'notifications', 'types_reunion', 'fichiers', 'reunions', 'objectifs', 'taches', 'planning_evenements', 'planning_exceptions', 'presences', 'dispo_regles', 'dispo_exceptions', 'ical_jetons']) {
     assert.ok(tables.includes(t), t);
   }
 });
 
 test('lot atomique : une instruction en échec annule tout le lot', async () => {
-  const base = await baseSqliteMigree();
+  const base = await baseMigree();
   const date = new Date().toISOString();
   await assert.rejects(
     base.lot([
@@ -122,7 +123,7 @@ test('Worker Cloudflare (entrée worker.mjs + adaptateur D1) : session par la li
 });
 
 test('graines : une team Valorant complète avec ses membres et rôles', async () => {
-  const base = await baseSqliteMigree();
+  const base = await baseMigree();
   const id = await semer(base);
   const membres = await base.tous('SELECT c.pseudo, r.nom AS role, m.poste_jeu FROM membres m JOIN comptes c ON c.id = m.compte_id JOIN roles r ON r.id = m.role_id WHERE m.team_id = ?', [id]);
   assert.equal(membres.length, COMPTES_GRAINES.length + 1);
@@ -146,7 +147,7 @@ test('graines : une team Valorant complète avec ses membres et rôles', async (
 });
 
 test('graines avec stockage : un résumé terminé avec son PDF ; stockage sur disque', async () => {
-  const base = await baseSqliteMigree();
+  const base = await baseMigree();
   const dossier = mkdtempSync(join(tmpdir(), 'esport-fichiers-'));
   const st = await stockageDisque(dossier);
   const id = await semer(base, { stockage: st });

@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { baseSqliteMigree } from '../adaptateurs/sqlite.mjs';
+import { baseMigree } from './base.mjs';
 import { CLE, JETON_MAITRE, banc, teamAvecMembres } from './aide.mjs';
 import { creerSession } from '../noyau/session.mjs';
 import { exporterBase, importerBase } from '../noyau/transfert.mjs';
@@ -413,14 +413,14 @@ test('admin : export JSON de toute la base, import dans une base vide (identique
   assert.equal(exp.tables.teams.length, 1);
   assert.equal(exp.tables.membres.length, 4);
   assert.equal((await b.appel('/admin/import', { methode: 'POST', jeton: sessions.fondateur, corps: exp })).statut, 409);
-  const neuve = await baseSqliteMigree();
+  const neuve = await baseMigree();
   const bilan = await importerBase(neuve, exp);
   assert.equal(bilan.membres, 4);
   assert.deepEqual(await exporterBase(neuve, Date.parse(exp.exporteLe)), exp);
   const t = await neuve.premier('SELECT nom FROM teams WHERE id = ?', [teamId]);
   assert.equal(t.nom, 'Team Alpha');
-  await assert.rejects(importerBase(await baseSqliteMigree(), { ...exp, tables: { ...exp.tables, pirate: [] } }));
-  await assert.rejects(importerBase(await baseSqliteMigree(), { format: 'autre' }));
+  await assert.rejects(importerBase(await baseMigree(), { ...exp, tables: { ...exp.tables, pirate: [] } }));
+  await assert.rejects(importerBase(await baseMigree(), { format: 'autre' }));
 });
 
 test('sécurité HTTP : en-têtes, CORS, corps trop gros, JSON illisible, route inconnue', async () => {

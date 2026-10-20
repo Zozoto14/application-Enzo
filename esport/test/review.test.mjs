@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { banc, teamAvecMembres } from './aide.mjs';
-import { baseSqlite, lireMigrations } from '../adaptateurs/sqlite.mjs';
+import { baseVierge, lireMigrations } from './base.mjs';
 import { appliquerMigrations } from '../noyau/migrations.mjs';
 import { exporterMarkdown, formatTemps, nomFichierExport } from '../noyau/review/export.mjs';
 import { COULEURS, lienSur, nettoyerNote, NOTE_MAX } from '../noyau/review/markdown.mjs';
@@ -405,7 +405,7 @@ test('bus : « review créée » dans l’outbox, le journal et les notification
 });
 
 test('migration 0005 : les rôles système des teams existantes reçoivent les permissions review et scouting', async () => {
-  const base = await baseSqlite();
+  const base = await baseVierge();
   const migrations = lireMigrations();
   await appliquerMigrations(base, migrations.filter(m => m.nom < '0005'));
   const d = '2026-01-01T00:00:00.000Z';

@@ -11,7 +11,7 @@ import { champCsv, csv, periodeDe, statistiques } from '../noyau/planning/presen
 import { estOccurrence, lireRecurrence, occurrences, occurrencesBrutes } from '../noyau/planning/recurrence.mjs';
 import { decalage, fuseauValide, instantMural, lireDate, lireHeure, partiesLocales, versUtc } from '../noyau/planning/temps.mjs';
 import { appliquerMigrations } from '../noyau/migrations.mjs';
-import { baseSqlite, lireMigrations } from '../adaptateurs/sqlite.mjs';
+import { baseVierge, lireMigrations } from './base.mjs';
 import { verifierIcs } from './ics.mjs';
 
 const Z = t => new Date(t).toISOString();
@@ -270,7 +270,7 @@ test('iCal : calendrier valide (CRLF, pliage à 75 octets, échappement, UID sta
 
 test('migrations : numéros croissants avec des trous acceptés (0001, 0003 puis 0002)', async () => {
   const [m1] = lireMigrations();
-  const base = await baseSqlite();
+  const base = await baseVierge();
   const m3 = { nom: '0003_autre_branche.sql', sql: 'CREATE TABLE essai_trois (id TEXT PRIMARY KEY);' };
   assert.deepEqual(await appliquerMigrations(base, [m1, m3]), ['0001_fondations.sql', '0003_autre_branche.sql']);
   const m2 = lireMigrations().find(m => m.nom.startsWith('0002_'));

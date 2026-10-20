@@ -1,0 +1,19 @@
+{
+  "name": "applibourse-esport-serveur",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Serveur Esport autonome (Node + PostgreSQL), hors Cloudflare : voir docs/esport/o2switch.md",
+  "type": "module",
+  "main": "serveur/app.cjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node serveur/app.mjs",
+    "migrer": "node serveur/migrer.mjs",
+    "cron": "node serveur/cron.mjs"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}

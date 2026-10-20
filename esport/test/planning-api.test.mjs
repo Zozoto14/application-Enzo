@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { baseSqlite, lireMigrations } from '../adaptateurs/sqlite.mjs';
+import { baseVierge, lireMigrations } from './base.mjs';
 import { distribuer } from '../noyau/evenements.mjs';
 import { appliquerMigrations } from '../noyau/migrations.mjs';
 import { rappelsPresence } from '../noyau/planning/rappels.mjs';
@@ -455,7 +455,7 @@ test('accueil de la team : prochains événements, alertes de présence (RSVP ma
 });
 
 test('migration 0002 : les rôles système déjà créés reçoivent les permissions du plan', async () => {
-  const base = await baseSqlite();
+  const base = await baseVierge();
   const [m1, m2] = lireMigrations();
   await appliquerMigrations(base, [m1]);
   const d = '2026-10-01T00:00:00.000Z';

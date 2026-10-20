@@ -9,7 +9,7 @@ import { banc, teamAvecMembres } from './aide.mjs';
 import { octetsPdf, validerPdf, nomOriginal, TAILLE_MAX_PDF } from '../noyau/fichiers.mjs';
 import { distribuer } from '../noyau/evenements.mjs';
 import { appliquerMigrations } from '../noyau/migrations.mjs';
-import { baseSqlite, lireMigrations } from '../adaptateurs/sqlite.mjs';
+import { baseVierge, lireMigrations } from './base.mjs';
 
 const MEMBRES = {
   max12345: { pseudo: 'Max', role: 'manager' },
@@ -324,7 +324,7 @@ test('suppression d’un dépôt : le déposant tant qu’il n’est pas pris en
 });
 
 test('migration 0003 : les rôles système des teams existantes reçoivent les nouvelles permissions', async () => {
-  const base = await baseSqlite();
+  const base = await baseVierge();
   const migrations = lireMigrations();
   await appliquerMigrations(base, migrations.filter(m => m.nom < '0003'));
   const d = '2026-01-01T00:00:00.000Z';

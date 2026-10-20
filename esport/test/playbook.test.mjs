@@ -10,7 +10,7 @@ import { banc, teamAvecMembres } from './aide.mjs';
 import { ASCENT, docExemple, jpegDataUrl } from './strats-aide.mjs';
 import { filtrerPlaybook, trierPlaybook } from '../noyau/strats/playbook.mjs';
 import { appliquerMigrations } from '../noyau/migrations.mjs';
-import { baseSqlite, lireMigrations } from '../adaptateurs/sqlite.mjs';
+import { baseVierge, lireMigrations } from './base.mjs';
 
 const entree = (champs = {}) => ({ titre: 'X', description: '', tags: [], carte: null, side: null, type: 'default', statut: 'brouillon', favori: false, majLe: '2026-10-01', ...champs });
 
@@ -136,7 +136,7 @@ test('playbook : une strat privée ne se lie pas ; Discord « playbook validé �
 });
 
 test('migration 0006 : les Coachs et Analystes des teams existantes reçoivent strats.share', async () => {
-  const base = await baseSqlite();
+  const base = await baseVierge();
   const migrations = lireMigrations();
   await appliquerMigrations(base, migrations.filter(m => m.nom < '0006'));
   const d = '2026-01-01T00:00:00.000Z';

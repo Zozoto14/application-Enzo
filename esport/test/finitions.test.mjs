@@ -10,6 +10,7 @@ import { purgerJournal, moduleDAction } from '../noyau/journal.mjs';
 import { purgerLimites } from '../noyau/limites.mjs';
 import { distribuer } from '../noyau/evenements.mjs';
 import { banc, teamAvecMembres } from './aide.mjs';
+import { SUR_POSTGRES, nomsIndex } from './base.mjs';
 
 const MEMBRES = {
   max12345: { pseudo: 'Max', role: 'manager' },
@@ -259,11 +260,13 @@ test('RGPD : le Fondateur exporte et supprime le compte Esport d’un membre ; j
 
 test('migration 0007 : index présents sur les requêtes fréquentes, table des limites', async () => {
   const { b } = await preparer();
-  const index = (await b.base.tous("SELECT name FROM sqlite_master WHERE type = 'index'", [])).map(l => l.name);
+  const index = await nomsIndex(b.base);
   for (const i of ['membres_team_statut', 'journal_team_action', 'journal_team_acteur', 'journal_cree', 'reunions_team_statut', 'taches_team_echeance', 'taches_team_termine', 'strats_team_maj', 'presences_team_compte', 'limites_debut']) {
     assert.ok(index.includes(i), i);
   }
-  // Le plan d'exécution du journal filtré passe par un index (pas de parcours complet).
+  // Le plan d'exécution du journal filtré passe par un index (pas de parcours complet) : vérifié sur SQLite
+  // (sur une table presque vide, Postgres préfère à raison un parcours séquentiel).
+  if (SUR_POSTGRES) return;
   const plan = await b.base.tous("EXPLAIN QUERY PLAN SELECT * FROM journal WHERE team_id = ? AND action = ? ORDER BY cree_le DESC LIMIT 50", ['x', 'task.created']);
   assert.ok(plan.some(l => /USING (COVERING )?INDEX/.test(l.detail)), JSON.stringify(plan));
 });

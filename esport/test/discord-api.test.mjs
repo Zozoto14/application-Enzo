@@ -13,6 +13,7 @@ import { texteCharge } from '../noyau/discord/messages.mjs';
 import { rappelsDiscord } from '../noyau/discord/rappels.mjs';
 import { distribuer } from '../noyau/evenements.mjs';
 import { banc, CLE, teamAvecMembres } from './aide.mjs';
+import { ordreInsertion } from './base.mjs';
 import { ID, JETON, URL_TEST } from './discord-aide.mjs';
 
 const URL_B = `https://discord.com/api/webhooks/987654321098765432/ZyXwVvUuTtSsRrQqPpOoNnMmLlKk9876543210-_wxyz`;
@@ -40,6 +41,7 @@ function fauxDiscord() {
 
 async function preparer({ discord = fauxDiscord(), ...optionsTeam } = {}) {
   const b = await banc({ fetchDiscord: discord.fetch });
+  await ordreInsertion(b.base, ['journal', 'discord_file']);
   const A = await teamAvecMembres(b, { nom: 'Team Alpha', membres: MEMBRES, ...optionsTeam });
   const B = await teamAvecMembres(b, { nom: 'Team Bravo', membres: { bob12345: { pseudo: 'Bob', role: 'manager' } } });
   const api = (chemin, jeton, options = {}) => b.appel(chemin, { jeton, ...options });

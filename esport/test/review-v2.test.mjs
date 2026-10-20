@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { banc, teamAvecMembres } from './aide.mjs';
-import { baseSqlite, lireMigrations } from '../adaptateurs/sqlite.mjs';
+import { baseVierge, lireMigrations } from './base.mjs';
 import { appliquerMigrations } from '../noyau/migrations.mjs';
 import { OBJETS_DESSIN_MAX, TAILLE_DESSIN_MAX, lireDessin, resumeDessin, validerDessin } from '../noyau/review/dessin.mjs';
 import { exporterMarkdown } from '../noyau/review/export.mjs';
@@ -126,7 +126,7 @@ test('réactions : unicité garantie par la base (une ligne par membre et par ci
   assert.deepEqual(lignes.map(l => l.valeur), [-1]);
   await assert.rejects(
     b.base.executer("INSERT INTO review_reactions (id, team_id, review_id, repere_id, cible_type, cible_id, compte_id, valeur, cree_le, maj_le) SELECT 'x', team_id, review_id, repere_id, cible_type, cible_id, compte_id, 1, cree_le, maj_le FROM review_reactions", []),
-    /UNIQUE/,
+    /UNIQUE/i,
   );
 });
 
@@ -225,7 +225,7 @@ test('export Markdown : réactions et mention du dessin, rien de dangereux', () 
 });
 
 test('migration 0010 : table des réactions, colonne dessin, video_review.react pour les rôles qui voient la review', async () => {
-  const base = await baseSqlite();
+  const base = await baseVierge();
   const migrations = lireMigrations();
   await appliquerMigrations(base, migrations.filter(m => m.nom < '0010'));
   const d = '2026-01-01T00:00:00.000Z';
@@ -248,6 +248,6 @@ test('migration 0010 : table des réactions, colonne dessin, video_review.react 
   );
   assert.equal((await base.premier("SELECT dessin FROM review_reperes WHERE id = 'rp'", [])).dessin, null);
   await base.executer("INSERT INTO review_reactions (id, team_id, review_id, repere_id, cible_type, cible_id, compte_id, valeur, cree_le, maj_le) VALUES ('x1', 't', 'rv', 'rp', 'repere', 'rp', 'lea12345', 1, ?, ?)", [d, d]);
-  await assert.rejects(base.executer("INSERT INTO review_reactions (id, team_id, review_id, repere_id, cible_type, cible_id, compte_id, valeur, cree_le, maj_le) VALUES ('x2', 't', 'rv', 'rp', 'repere', 'rp', 'lea12345', -1, ?, ?)", [d, d]), /UNIQUE/);
-  await assert.rejects(base.executer("INSERT INTO review_reactions (id, team_id, review_id, repere_id, cible_type, cible_id, compte_id, valeur, cree_le, maj_le) VALUES ('x3', 't', 'rv', 'rp', 'repere', 'rp', 'kai12345', 2, ?, ?)", [d, d]), /CHECK/);
+  await assert.rejects(base.executer("INSERT INTO review_reactions (id, team_id, review_id, repere_id, cible_type, cible_id, compte_id, valeur, cree_le, maj_le) VALUES ('x2', 't', 'rv', 'rp', 'repere', 'rp', 'lea12345', -1, ?, ?)", [d, d]), /UNIQUE/i);
+  await assert.rejects(base.executer("INSERT INTO review_reactions (id, team_id, review_id, repere_id, cible_type, cible_id, compte_id, valeur, cree_le, maj_le) VALUES ('x3', 't', 'rv', 'rp', 'repere', 'rp', 'kai12345', 2, ?, ?)", [d, d]), /CHECK/i);
 });

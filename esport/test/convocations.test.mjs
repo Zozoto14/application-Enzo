@@ -14,7 +14,7 @@
 import { texteCharge } from '../noyau/discord/messages.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { baseSqlite, lireMigrations } from '../adaptateurs/sqlite.mjs';
+import { baseVierge, lireMigrations, nomsTables } from './base.mjs';
 import { traiterFile } from '../noyau/discord/file.mjs';
 import { rappelsDiscord } from '../noyau/discord/rappels.mjs';
 import { distribuer } from '../noyau/evenements.mjs';
@@ -293,7 +293,7 @@ test('statistiques : un Propriétaire non coché n’est ni attendu ni compté (
 // ------------------------------------------------------------------ Migration
 
 test('migration 0009 : événements existants → convoqués = tous les membres actifs sauf les Propriétaires ; liste nominative gardée', async () => {
-  const base = await baseSqlite();
+  const base = await baseVierge();
   const toutes = lireMigrations();
   const avant = toutes.filter(m => m.nom < '0009');
   await appliquerMigrations(base, avant);
@@ -317,6 +317,6 @@ test('migration 0009 : événements existants → convoqués = tous les membres 
   assert.deepEqual(convoques(convocationDe({ convocation: JSON.stringify(await lu('e1')) }), membres, fin).map(x => x.compte), ['coach123', 'lea12345']);
   assert.deepEqual(convoques(convocationDe({ convocation: JSON.stringify(await lu('e2')) }), membres, fin).map(x => x.compte), ['principal', 'lea12345']);
   // La table des demandes de compte existe ; aucun rôle système ne reçoit members.create.
-  assert.ok(await base.premier("SELECT name FROM sqlite_master WHERE name = 'demandes_compte'", []));
+  assert.ok((await nomsTables(base)).includes('demandes_compte'));
   assert.equal(Number((await base.premier("SELECT COUNT(*) AS n FROM role_permissions WHERE permission = 'members.create'", [])).n), 0);
 });
