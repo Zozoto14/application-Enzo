@@ -33,7 +33,17 @@ const attendre = (ms: number) => new Promise<void>(ok => setTimeout(() => ok(), 
 const pages = (reseau: ReturnType<typeof fauxReseau>, motif: string) => reseau.appels.filter(a => a.url.includes(motif)).length;
 const titres = ['Le Long Voyage'];
 
+/**
+ * La file est testée sous horloge simulée : chaque délai (temps de calme, durée
+ * d'une étape) avance exactement de ce qu'on demande, quelle que soit la charge
+ * de la machine. Auparavant, de vrais délais (10 à 120 ms) laissaient une suite
+ * jest chargée finir une étape APRÈS l'assertion : échec aléatoire.
+ */
 describe('file de préchargement (une requête à la fois, annulable)', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+  const avancer = (ms: number) => jest.advanceTimersByTimeAsync(ms);
+
   it('attend le temps de calme, puis passe les étapes l’une après l’autre', async () => {
     const f = creerFileSuite();
     const journal: string[] = [];
@@ -48,10 +58,16 @@ describe('file de préchargement (une requête à la fois, annulable)', () => {
       enVol--;
     };
     f.lancer([etape('a'), etape('b')], { calmeMs: 30 });
-    await attendre(10);
+    await avancer(29);
     expect(journal).toEqual([]);
-    await attendre(120);
+    expect(f.enCours()).toBe(true);
+    await avancer(1);
+    expect(journal).toEqual(['debut a']);
+    await avancer(15);
+    expect(journal).toEqual(['debut a', 'fin a', 'debut b']);
+    await avancer(15);
     expect(journal).toEqual(['debut a', 'fin a', 'debut b', 'fin b']);
+    await f.fin();
     expect(max).toBe(1);
     expect(f.enCours()).toBe(false);
   });
@@ -60,9 +76,11 @@ describe('file de préchargement (une requête à la fois, annulable)', () => {
     const etape = jest.fn(async () => undefined);
     const annuler = f.lancer([etape], { calmeMs: 20 });
     annuler();
-    await attendre(60);
+    await avancer(1000);
+    await f.fin();
     expect(etape).not.toHaveBeenCalled();
     expect(f.enCours()).toBe(false);
+    expect(jest.getTimerCount()).toBe(0);
   });
   it('annulée pendant une étape : la suivante ne part pas, et l’étape en cours voit le signal', async () => {
     const f = creerFileSuite();
@@ -78,9 +96,12 @@ describe('file de préchargement (une requête à la fois, annulable)', () => {
       ],
       { calmeMs: 0 },
     );
-    await attendre(10);
+    await avancer(10);
+    expect(vu).toBeUndefined();
     annuler();
-    await attendre(60);
+    expect(f.enCours()).toBe(false);
+    await avancer(20);
+    await f.fin();
     expect(vu).toBe(true);
     expect(b).not.toHaveBeenCalled();
   });
@@ -90,7 +111,8 @@ describe('file de préchargement (une requête à la fois, annulable)', () => {
     const nouvelle = jest.fn(async () => undefined);
     f.lancer([ancienne], { calmeMs: 20 });
     f.lancer([nouvelle], { calmeMs: 0 });
-    await attendre(60);
+    await avancer(1000);
+    await f.fin();
     expect(ancienne).not.toHaveBeenCalled();
     expect(nouvelle).toHaveBeenCalledTimes(1);
   });
@@ -98,8 +120,13 @@ describe('file de préchargement (une requête à la fois, annulable)', () => {
     const f = creerFileSuite();
     const b = jest.fn(async () => undefined);
     f.lancer([() => Promise.reject(new Error('réseau')), b], { calmeMs: 0 });
-    await attendre(30);
+    await avancer(0);
+    await f.fin();
     expect(b).toHaveBeenCalledTimes(1);
+    expect(f.enCours()).toBe(false);
+  });
+  it('fin() est tenue tout de suite sans file en cours', async () => {
+    await expect(creerFileSuite().fin()).resolves.toBeUndefined();
   });
   it('une seule file par profil', () => {
     const cle = {};
@@ -126,7 +153,11 @@ describe('épisode suivant préparé en arrière-plan', () => {
     await episodesDisponibles(s, { id: '1', titres });
     expect(pages(reseau, 'episode-3')).toBe(0);
     const annuler = prechargerSuite(s, { id: '1', titres, numero: 2, langue: null, suivant: true }, { calmeMs: 0, economie: false });
-    await attendre(80);
+    expect(fileSuiteDe(s).enCours()).toBe(true);
+    // Fin réelle de la file (et non un délai arbitraire) : déterministe même sur une machine chargée.
+    await attendre(0);
+    await fileSuiteDe(s).fin();
+    expect(fileSuiteDe(s).enCours()).toBe(false);
     expect(pages(reseau, 'episode-3')).toBe(1);
     expect(pages(reseau, 'episode-4')).toBe(0);
     expect(pages(reseau, 'episode-2')).toBe(0);
@@ -144,7 +175,8 @@ describe('épisode suivant préparé en arrière-plan', () => {
     const avant = reseau.appels.length;
     const annuler = prechargerSuite(s, { id: '1', titres, numero: 2, langue: null, suivant: true }, { calmeMs: 30, economie: false });
     annuler();
-    await attendre(80);
+    await fileSuiteDe(s).fin();
+    await attendre(60);
     expect(reseau.appels.length).toBe(avant);
   });
   it('un autre animé annule le préchargement du précédent', async () => {
@@ -153,7 +185,10 @@ describe('épisode suivant préparé en arrière-plan', () => {
     prechargerSuite(s, { id: '1', titres, numero: 2, langue: null, suivant: true }, { calmeMs: 30, economie: false });
     // Autre animé (non résolu : aucune source ne l'a) : il remplace la file.
     prechargerSuite(s, { id: '99', titres: ['Autre Titre Inconnu'], numero: 1, langue: null, suivant: true }, { calmeMs: 0, economie: false });
-    await attendre(120);
+    await attendre(0);
+    await fileSuiteDe(s).fin();
+    // Le délai de calme (30 ms) de la file remplacée est largement passé : elle n'est jamais partie.
+    await attendre(60);
     expect(pages(reseau, 'episode-3')).toBe(0);
   });
   it('rien en économie de données, ni sans lecture des sources, ni sans suite à préparer', async () => {

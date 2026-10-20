@@ -30,22 +30,53 @@ export interface FileSuite {
   annuler(): void;
   /** Vrai si une file est en cours (tests). */
   enCours(): boolean;
+  /**
+   * Promesse tenue quand la file en cours est finie (toutes ses étapes passées)
+   * ou annulée ; tenue tout de suite s'il n'y en a pas. Sert aux tests (attendre
+   * la fin réelle plutôt qu'un délai arbitraire) et à qui veut savoir.
+   */
+  fin(): Promise<void>;
+}
+
+interface Execution {
+  annule: boolean;
+  minuteur?: ReturnType<typeof setTimeout>;
+  /** Tenue à la fin (étapes passées) ou à l'annulation avant le départ. */
+  termine: Promise<void>;
+  terminer(): void;
+}
+
+function nouvelleExecution(): Execution {
+  let terminer = () => undefined as void;
+  const termine = new Promise<void>(ok => {
+    terminer = ok;
+  });
+  return { annule: false, termine, terminer };
 }
 
 export function creerFileSuite(): FileSuite {
-  let courante: { annule: boolean; minuteur?: ReturnType<typeof setTimeout> } | undefined;
+  let courante: Execution | undefined;
+  // Exécution annulée dont une étape est encore en vol : `fin()` l'attend aussi.
+  let enVol: Promise<void> = Promise.resolve();
   const annuler = () => {
     if (!courante) return;
-    courante.annule = true;
-    if (courante.minuteur) clearTimeout(courante.minuteur);
+    const c = courante;
+    c.annule = true;
     courante = undefined;
+    if (c.minuteur) {
+      clearTimeout(c.minuteur);
+      c.minuteur = undefined;
+      // Pas encore partie : rien ne tournera, elle est finie.
+      c.terminer();
+    }
   };
   return {
     annuler,
     enCours: () => Boolean(courante),
+    fin: () => Promise.all([enVol, courante?.termine]).then(() => undefined),
     lancer(etapes, o = {}) {
       annuler();
-      const mienne: { annule: boolean; minuteur?: ReturnType<typeof setTimeout> } = { annule: false };
+      const mienne = nouvelleExecution();
       courante = mienne;
       const fini = () => {
         if (courante === mienne) courante = undefined;
@@ -58,13 +89,23 @@ export function creerFileSuite(): FileSuite {
           }
         } finally {
           fini();
+          mienne.terminer();
         }
       };
-      mienne.minuteur = setTimeout(() => void executer(), o.calmeMs ?? CALME_SUITE_MS);
+      mienne.minuteur = setTimeout(() => {
+        mienne.minuteur = undefined;
+        const tourne = executer();
+        enVol = Promise.all([enVol, tourne]).then(() => undefined);
+      }, o.calmeMs ?? CALME_SUITE_MS);
       (mienne.minuteur as unknown as { unref?: () => void }).unref?.();
       return () => {
         if (courante === mienne) annuler();
         else mienne.annule = true;
+        if (mienne.minuteur) {
+          clearTimeout(mienne.minuteur);
+          mienne.minuteur = undefined;
+          mienne.terminer();
+        }
       };
     },
   };
