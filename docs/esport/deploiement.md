@@ -113,6 +113,12 @@ relancer.
    d'utilisations › **Créer l'invitation** › copiez le code `esp_…` (montré une seule fois) et envoyez-le.
 3. Le joueur ouvre l'app › **Esport** › choisit son pseudo › **Rejoindre une team** › colle le code.
 
+## Étape 8 (facultative) : notifications Discord
+
+Rien à déployer de plus : la migration `0004_discord.sql` est appliquée par le workflow, et l'onglet **Discord**
+de chaque team (droit `discord.manage`) sert à coller le webhook. Voir [discord.md](discord.md) (créer le
+webhook, choisir les messages, sécurité). Facultatifs : le secret `CLE_DISCORD` et la variable `LIEN_APP`.
+
 ## En cas de souci
 
 | Message | Que faire |
