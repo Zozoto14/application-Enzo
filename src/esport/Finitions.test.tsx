@@ -162,9 +162,13 @@ describe('exports et RGPD', () => {
     const exporterObjectifs = jest.fn(async () => ({ nom: 'objectifs.csv', type: 'text/csv', contenu: 'b' }));
     const onExporter = jest.fn(async () => true);
     await monter(fauxClient({ exporterTaches, exporterObjectifs }), detail(['goals_tasks.view']), 'module:goals_tasks', { onExporter });
+    // Exports : actions secondaires, dans le menu « ⋯ » de l'en-tête.
+    expect(screen.queryByTestId('esport-taches-csv')).toBeNull();
+    await fireEvent.press(await screen.findByTestId('esport-menu'));
     await fireEvent.press(await screen.findByTestId('esport-taches-csv'));
     await waitFor(() => expect(onExporter).toHaveBeenCalledWith('taches.csv', 'a', 'text/csv'));
-    await fireEvent.press(screen.getByTestId('esport-objectifs-csv'));
+    await fireEvent.press(screen.getByTestId('esport-menu'));
+    await fireEvent.press(await screen.findByTestId('esport-objectifs-csv'));
     await waitFor(() => expect(onExporter).toHaveBeenCalledWith('objectifs.csv', 'b', 'text/csv'));
   });
 
@@ -207,13 +211,22 @@ describe('accessibilité de base', () => {
     for (const c of CATEGORIES) expect(contraste(encreSur(c.couleur), c.couleur)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('onglets de la team : 44 px de haut, rôle « tab » et état « sélectionné » (téléphone)', async () => {
+  it('sections et sous-onglets de la team : 44 px de haut, rôle « tab » et état « sélectionné » (téléphone)', async () => {
     await monter(fauxClient(), detail(['activity_log.view']), 'accueil', { mode: 'telephone' });
-    const onglet = await screen.findByTestId('esport-onglet-accueil');
-    expect(StyleSheet.flatten(onglet.props.style).minHeight).toBeGreaterThanOrEqual(44);
-    expect(onglet.props.accessibilityRole).toBe('tab');
-    expect(onglet.props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
-    expect(screen.getByTestId('esport-onglet-journal').props.accessibilityLabel).toBe('Journal');
+    // Barre basse : les sections (Accueil, Réglages…), Accueil sélectionnée.
+    const section = await screen.findByTestId('esport-section-accueil');
+    expect(StyleSheet.flatten(section.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(section.props.accessibilityRole).toBe('tab');
+    expect(section.props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
+    // Réglages : sous-onglets Paramètres et Journal.
+    await fireEvent.press(screen.getByTestId('esport-section-reglages'));
+    const journal = await screen.findByTestId('esport-onglet-journal');
+    expect(journal.props.accessibilityLabel).toBe('Journal');
+    expect(journal.props.accessibilityRole).toBe('tab');
+    expect(StyleSheet.flatten(journal.props.style).minHeight).toBeGreaterThanOrEqual(44);
+    expect(screen.getByTestId('esport-onglet-parametres').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
+    await fireEvent.press(journal);
+    expect(await screen.findByTestId('esport-journal')).toBeTruthy();
   });
 
   it('filtres du journal : cibles de 44 px et libellés accessibles, dans les 8 thèmes', async () => {

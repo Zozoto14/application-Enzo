@@ -21,6 +21,7 @@ import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs';
 import http from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { ongletPresent, ongletTeam } from './esport-navigation.mjs';
 import { allerPageAdministration, allerPageApplications, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
 import { chargerPlaywright, demarrerRelais, deverrouiller, optionsIphone, pause, premierLancement, racine, totp } from './mobile-outils.mjs';
 
@@ -202,7 +203,7 @@ try {
   await capture(lea, '07-iphone-lea-teams');
   await lea.getByTestId('esport-team-faucons-valorant').click();
   await lea.getByTestId('esport-barre').waitFor({ timeout: 20_000 });
-  verifier((await lea.getByTestId('esport-onglet-journal').count()) === 0, 'Léa (Joueur) : pas de Journal');
+  verifier(!(await ongletPresent(lea, 'journal')), 'Léa (Joueur) : pas de Journal');
   await capture(lea, '08-iphone-lea-team');
   const active = await esport.base.premier('SELECT active_le FROM comptes WHERE id = ?', [idLea]);
   verifier(Boolean(active.active_le), 'serveur : Léa « active » depuis sa première session');

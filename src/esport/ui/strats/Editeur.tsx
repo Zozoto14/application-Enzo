@@ -6,11 +6,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { BoutonHub, Intertitre, Panneau } from '../../../hub/admin/ui/commun';
+import { BoutonHub } from '../../../hub/admin/ui/commun';
 import { police } from '../../../hub/themes';
 import type { Strat } from '../../strats/api';
 import { LIBELLES_SIDE, LIBELLES_TYPE_STRAT } from '../../strats/libelles';
-import { Retours, TitreSection, styles, useAgir } from '../commun';
+import { Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from '../commun';
 import { Etiquette, MentionRiot, Miniature } from './commun';
 import type { PropsEditeur } from './types';
 

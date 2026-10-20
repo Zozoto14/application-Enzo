@@ -22,6 +22,7 @@ import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs';
 import http from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { ongletTeam } from './esport-navigation.mjs';
 import { nouveauContexte, allerPageApplications, tuileApp } from './e2e-acceptation.mjs';
 import { chargerPlaywright, demarrerRelais, deverrouiller, pause, premierLancement, racine } from './mobile-outils.mjs';
 
@@ -156,7 +157,7 @@ try {
   await pc.getByTestId('app-esport').waitFor({ timeout: 20_000 });
   await pc.getByTestId('esport-team-faucons-valorant').waitFor({ timeout: 30_000 });
   await pc.getByTestId('esport-team-faucons-valorant').click();
-  await pc.getByTestId('esport-onglet-module-discord').click();
+  await ongletTeam(pc, 'module-discord');
   await pc.getByTestId('esport-discord').waitFor({ timeout: 20_000 });
   verifier((await pc.getByTestId('esport-discord-masque').count()) === 0, 'aucun webhook au départ');
   verifier(await pc.getByTestId('esport-discord-test').isDisabled().catch(() => true), 'bouton de test inactif sans webhook');
@@ -212,8 +213,8 @@ try {
   discordEnPanne = true;
   await api(`/teams/${faucons.id}/planning`, sessFond, { methode: 'POST', corps: { type: 'training', titre: 'Entraînement du soir', date: '2026-12-11', heureDebut: '19:00', heureFin: '21:00' } });
   verifier(await attendre(async () => (await esport.base.premier("SELECT COUNT(*) AS n FROM discord_file WHERE statut = 'attente'", [])).n === 1), 'message en attente (essai 1)');
-  await pc.getByTestId('esport-onglet-accueil').click();
-  await pc.getByTestId('esport-onglet-module-discord').click();
+  await ongletTeam(pc, 'accueil');
+  await ongletTeam(pc, 'module-discord');
   await pc.getByTestId('esport-discord-envoi').first().waitFor({ timeout: 20_000 });
   verifier(/En attente \(essai 1\)/.test(await pc.getByTestId('esport-discord-envois').innerText()), 'écran : « En attente (essai 1) »');
   await capture(pc, '04-pc-discord-envois');

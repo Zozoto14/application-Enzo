@@ -7,11 +7,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { Intertitre, Panneau } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { nomModule, type ClientEsport, type DetailTeam, type StatsTeam as Stats } from '../client';
 import { aujourdhui } from '../libelles';
-import { Choix } from './commun';
+import { Choix, Intertitre, Panneau } from './commun';
 
 const PERIODES = [
   { id: '7', nom: '7 jours' },

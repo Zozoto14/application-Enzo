@@ -12,13 +12,13 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Linking, Pressable, ScrollView, Text, View } from 'react-native';
-import { Avis, BoutonHub, Champ, Intertitre, Panneau, Segments } from '../../../hub/admin/ui/commun';
+import { Avis, BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { dateCourte } from '../../libelles';
 import { apiReview, type ApiReview, type CategorieRepere, type DetailReview, type Repere, type SaisieRepere } from '../../review/api';
 import { CATEGORIES, categorie, formatTemps, repereActif } from '../../review/libelles';
 import { extraireYoutube, lienYoutubeA, miniatureYoutube } from '../../review/youtube';
-import { BoutonConfirme, Choix, Retours, TitreSection, styles, useAgir } from '../commun';
+import { BoutonConfirme, Choix, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from '../commun';
 import type { PropsModule } from '../modules';
 import { FormulaireRepere, type InitialRepere } from './FormulaireRepere';
 import { Lecteur, VITESSES, lecteurIntegre } from './Lecteur';

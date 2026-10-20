@@ -196,6 +196,8 @@ describe('strats', () => {
     expect(await screen.findByTestId('esport-strat-s1')).toBeTruthy();
     expect(screen.queryByTestId('esport-strats-nouvelle')).toBeNull();
     expect(screen.queryByTestId('esport-strat-lien-s1')).toBeNull();
+    // Joueur : aucune action secondaire (dupliquer, playbook, lien, supprimer) : pas de menu « ⋯ ».
+    expect(screen.queryByTestId('esport-strat-actions-s1')).toBeNull();
     await fireEvent.press(screen.getByTestId('esport-strats-filtre-carte-ascent'));
     await waitFor(() => expect(requete).toHaveBeenLastCalledWith('/teams/t1/strats?carte=ascent'));
     await fireEvent.press(screen.getByTestId('esport-strat-ouvrir-s1'));
@@ -217,6 +219,8 @@ describe('strats', () => {
       throw new Error(`inattendu : ${chemin}`);
     });
     await monter(fauxClient(requete), detail(COACH), 'module:strat_editor');
+    // Actions secondaires de la carte : dans le menu « ⋯ ».
+    await fireEvent.press(await screen.findByTestId('esport-strat-actions-s1'));
     await fireEvent.press(await screen.findByTestId('esport-strat-lien-s1'));
     await fireEvent.press(await screen.findByTestId('esport-strat-partage-creer'));
     expect((await screen.findByTestId('esport-strat-partage-url')).props.children).toBe('https://esport.test/partage/strats/sp1.x');

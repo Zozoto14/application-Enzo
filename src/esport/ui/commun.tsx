@@ -5,10 +5,11 @@
  */
 
 import React, { useCallback, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Avis, BoutonHub, styleTitre } from '../../hub/admin/ui/commun';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Avis, BoutonHub } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { ErreurEsport } from '../client';
+import { ESP, TYPO, ombre, rayonCarte, titre as styleTitreEsport } from './design';
 
 export const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -51,14 +52,38 @@ export function Retours({ theme, erreur, avis, prefixe }: { theme: ThemeHub; err
   );
 }
 
+/** Titre d'une page ou d'un écran de module (voir aussi `EnTetePage` dans design.tsx). */
 export function TitreSection({ theme, titre, sous }: { theme: ThemeHub; titre: string; sous?: string }) {
   return (
-    <View style={{ gap: 2 }}>
-      <Text accessibilityRole="header" style={[{ fontSize: 22 }, styleTitre(theme)]}>
+    <View style={{ gap: ESP.xxs, flexShrink: 1, minWidth: 0 }}>
+      <Text accessibilityRole="header" style={styleTitreEsport(theme, 24)}>
         {titre}
       </Text>
-      {sous ? <Text style={{ color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) }}>{sous}</Text> : null}
+      {sous ? <Text style={{ color: theme.attenue, fontSize: TYPO.sousTitre, lineHeight: 21, ...police(theme.policeTexte) }}>{sous}</Text> : null}
     </View>
+  );
+}
+
+/** Carte de l'Esport (même usage que le Panneau du hub) : rayon, ombre douce, plus d'air. */
+export function Panneau({ theme, children, style, testID }: { theme: ThemeHub; children: React.ReactNode; style?: StyleProp<ViewStyle>; testID?: string }) {
+  return (
+    <View
+      testID={testID}
+      style={[
+        { borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: rayonCarte(theme), padding: ESP.l, gap: ESP.m, minWidth: 0, ...ombre(theme) },
+        style,
+      ]}>
+      {children}
+    </View>
+  );
+}
+
+/** Titre d'un bloc dans une carte : lisible (16 px, gras), pas en petites capitales. */
+export function Intertitre({ theme, children }: { theme: ThemeHub; children: string }) {
+  return (
+    <Text accessibilityRole="header" style={{ color: theme.texte, fontSize: 16, fontWeight: '700', textTransform: theme.majuscules ? 'uppercase' : 'none', ...police(theme.policeTexte) }}>
+      {children}
+    </Text>
   );
 }
 
@@ -66,7 +91,7 @@ export function PastilleRole({ theme, nom, couleur, testID }: { theme: ThemeHub;
   return (
     <View testID={testID} style={[styles.pastille, { borderColor: couleur, backgroundColor: teinteTransparente(couleur, 0.16), borderRadius: theme.rayonGrand ? 999 : 4 }]}>
       <View style={[styles.point, { backgroundColor: couleur }]} />
-      <Text style={{ color: theme.texte, fontSize: 12, fontWeight: '600', ...police(theme.policeTexte) }}>{nom}</Text>
+      <Text style={{ color: theme.texte, fontSize: 13, fontWeight: '600', ...police(theme.policeTexte) }}>{nom}</Text>
     </View>
   );
 }
@@ -157,9 +182,9 @@ export function Choix<T extends string>({
 }
 
 export const styles = StyleSheet.create({
-  ligne: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
-  pastille: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2, alignSelf: 'flex-start' },
+  ligne: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' },
+  pastille: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 3, alignSelf: 'flex-start' },
   point: { width: 8, height: 8, borderRadius: 4 },
   // Cible tactile de 44 px (pastilles de choix, utilisées aussi sur téléphone).
-  choix: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, minHeight: 44 },
+  choix: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, minHeight: 44, minWidth: 44 },
 });

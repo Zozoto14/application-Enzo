@@ -8,11 +8,11 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { BoutonHub, Champ, Intertitre, Panneau } from '../../hub/admin/ui/commun';
+import { BoutonHub, Champ } from '../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../hub/themes';
 import { nomModule, type ClientEsport, type DetailTeam, type FiltresJournal, type PageJournal, type ReglagesJournal } from '../client';
 import { FILTRES_JOURNAL, aujourdhui, dateCourte, lireDateSaisie, phraseJournal } from '../libelles';
-import { Choix, Retours, TitreSection, useAgir } from './commun';
+import { Choix, Retours, TitreSection, useAgir, Intertitre, Panneau } from './commun';
 
 /** Familles d'actions par module (même table que le serveur, esport/noyau/journal.mjs). */
 export const ACTIONS_PAR_MODULE: Record<string, readonly string[]> = {

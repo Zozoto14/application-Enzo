@@ -5,11 +5,12 @@
  */
 
 import React, { useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
-import { BoutonHub, Case, Champ, Panneau } from '../../hub/admin/ui/commun';
+import { Pressable, ScrollView, Text, View } from 'react-native';
+import { BoutonHub, Champ } from '../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../hub/themes';
 import { CATALOGUE, type ClientEsport, type DetailTeam } from '../client';
-import { Choix, Retours, TitreSection, styles, useAgir } from './commun';
+import { Choix, Retours, styles, useAgir, Panneau } from './commun';
+import { ESP, EnTetePage } from './design';
 
 const ETAPES = ['Informations', 'Jeu et preset', 'Modules'] as const;
 
@@ -18,7 +19,7 @@ export function modulesDuPreset(preset: string, choisis: readonly string[]): str
   return p?.modules ? [...p.modules] : [...choisis];
 }
 
-export function Assistant({ theme, client, onCreee, onAnnuler }: { theme: ThemeHub; client: ClientEsport; onCreee(d: DetailTeam): void; onAnnuler(): void }) {
+export function Assistant({ theme, client, large = true, onCreee, onAnnuler }: { theme: ThemeHub; client: ClientEsport; large?: boolean; onCreee(d: DetailTeam): void; onAnnuler(): void }) {
   const [etape, setEtape] = useState(0);
   const [nom, setNom] = useState('');
   const [description, setDescription] = useState('');
@@ -50,11 +51,14 @@ export function Assistant({ theme, client, onCreee, onAnnuler }: { theme: ThemeH
     });
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 16, maxWidth: 760, width: '100%', alignSelf: 'center' }} testID="esport-assistant">
-      <TitreSection theme={theme} titre="Créer une team" sous={`Étape ${etape + 1} sur 3 : ${ETAPES[etape]}`} />
-      <View style={styles.ligne} accessibilityRole="progressbar" accessibilityValue={{ min: 1, max: 3, now: etape + 1 }}>
+    <ScrollView contentContainerStyle={{ paddingHorizontal: large ? ESP.xxl : ESP.m, paddingVertical: large ? ESP.xl : ESP.m, gap: ESP.l, maxWidth: 760 + 2 * ESP.xxl, width: '100%', alignSelf: 'center' }} testID="esport-assistant">
+      <EnTetePage theme={theme} large={large} titre="Créer une team" sous={`Étape ${etape + 1} sur 3 : ${ETAPES[etape]}`} />
+      <View style={{ flexDirection: 'row', gap: ESP.xs }} accessibilityRole="progressbar" accessibilityValue={{ min: 1, max: 3, now: etape + 1 }}>
         {ETAPES.map((e, i) => (
-          <View key={e} style={{ flex: 1, minWidth: 80, height: 6, borderRadius: 3, backgroundColor: i <= etape ? theme.accent : theme.ligne }} />
+          <View key={e} style={{ flex: 1, gap: ESP.xxs }}>
+            <View style={{ height: 6, borderRadius: 3, backgroundColor: i <= etape ? theme.accent : theme.ligne }} />
+            <Text style={{ color: i === etape ? theme.texte : theme.attenue, fontSize: 13, fontWeight: i === etape ? '700' : '500', ...police(theme.policeTexte) }} numberOfLines={1}>{`${i + 1}. ${e}`}</Text>
+          </View>
         ))}
       </View>
       <Panneau theme={theme}>
@@ -73,36 +77,36 @@ export function Assistant({ theme, client, onCreee, onAnnuler }: { theme: ThemeH
         ) : null}
         {etape === 2 ? (
           <>
-            <Text style={attenue}>Les modules se réactivent ou se désactivent plus tard (Paramètres de la team), sans perte de données. Les modules des prochaines versions apparaissent « bientôt ».</Text>
+            <Text style={attenue}>Les modules se réactivent ou se désactivent plus tard (Paramètres de la team), sans perte de données. Ils sont rangés dans les sections de la team : Agenda, Jeu, Équipe et Réglages.</Text>
             {CATALOGUE.modules.map(m => {
               const coche = choisis.includes(m.cle);
               return (
-                <View key={m.cle} style={[styles.ligne, { flexWrap: 'nowrap' }]}>
-                  <Case
-                    theme={theme}
-                    coche={coche}
-                    libelle={m.nom}
-                    onChanger={v => {
-                      setPreset('personnalise');
-                      setChoisis(l => (v ? [...l, m.cle] : l.filter(x => x !== m.cle)));
-                    }}
-                    testID={`esport-assistant-module-${m.cle}`}
-                  />
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={[texte, { fontWeight: '600' }]}>
-                      {m.nom}
-                      {m.phase > 1 ? <Text style={attenue}>  · bientôt</Text> : null}
-                    </Text>
+                <Pressable
+                  key={m.cle}
+                  testID={`esport-assistant-module-${m.cle}`}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: coche }}
+                  accessibilityLabel={m.nom}
+                  onPress={() => {
+                    setPreset('personnalise');
+                    setChoisis(l => (!coche ? [...l, m.cle] : l.filter(x => x !== m.cle)));
+                  }}
+                  style={{ flexDirection: 'row', gap: ESP.s, alignItems: 'flex-start', minHeight: 44, paddingVertical: ESP.xxs }}>
+                  <View style={{ width: 22, height: 22, marginTop: 1, borderRadius: theme.id === 'terminal' ? 0 : 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center', borderColor: coche ? theme.accent : theme.attenue, backgroundColor: coche ? theme.accent : 'transparent' }}>
+                    <Text style={{ color: theme.surAccent, fontSize: 13, fontWeight: '800' }}>{coche ? '✓' : ''}</Text>
+                  </View>
+                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                    <Text style={[texte, { fontWeight: '600' }]}>{m.nom}</Text>
                     <Text style={attenue}>{m.description}</Text>
                   </View>
-                </View>
+                </Pressable>
               );
             })}
           </>
         ) : null}
       </Panneau>
       <Retours theme={theme} erreur={erreur} prefixe="esport-assistant" />
-      <View style={styles.ligne}>
+      <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
         <BoutonHub theme={theme} titre={etape === 0 ? 'Annuler' : '← Retour'} onPress={etape === 0 ? onAnnuler : () => setEtape(e => e - 1)} testID="esport-assistant-retour" />
         {etape < 2 ? (
           <BoutonHub theme={theme} titre="Suivant →" variante="plein" onPress={suivant} testID="esport-assistant-suivant" />

@@ -9,7 +9,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { BoutonHub, Case, Champ, Intertitre, Panneau, Segments } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Case, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import type { Membre } from '../../client';
 import { apiPlanning, type AbonnementIcal, type ApiPlanning, type DetailEvenement, type DroitsPlanning, type ListePlanning, type Occurrence, type SaisieEvenement, type TypeEvenement } from '../../planning/api';
@@ -29,7 +29,8 @@ import {
   resumeRecurrence,
   typeEvenement,
 } from '../../planning/libelles';
-import { BoutonConfirme, Choix, Retours, TitreSection, styles, useAgir } from '../commun';
+import { BoutonConfirme, Choix, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from '../commun';
+import { EnTetePage, EtatVide, Pliable, Volet } from '../design';
 import type { PropsModule } from '../modules';
 import { BoutonsRsvp, CarteOccurrence, Pastille, PastilleType, SelecteurFuseau, useFuseau } from './commun';
 import { ListePresence } from './ListePresence';
@@ -114,8 +115,8 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
   }, [donnees]);
   const auj = aujourdhui(f.fuseau);
 
-  if (formulaire) {
-    return (
+  // Formulaire et détail : volet latéral sur PC (le calendrier reste visible), plein écran sur iPhone.
+  const volet = formulaire ? (
       <FormulaireEvenement
         theme={theme}
         api={api}
@@ -133,11 +134,7 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
           });
         }}
       />
-    );
-  }
-
-  if (selection && droits) {
-    return (
+  ) : selection && droits ? (
       <DetailOccurrence
         theme={theme}
         api={api}
@@ -157,8 +154,9 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
         }}
         fuseau={f.fuseau}
       />
-    );
-  }
+  ) : undefined;
+  if (volet && !large) return volet;
+  const fermerVolet = () => (formulaire ? setFormulaire(undefined) : setSelection(undefined));
 
   const attenue = { color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) };
   const ouvrir = (o: Occurrence) => setSelection(o);
@@ -175,19 +173,24 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
   );
 
   return (
-    <View style={{ gap: 14 }} testID="esport-planning">
-      <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
-        <TitreSection theme={theme} titre="Planning" sous={p.titre} />
-        {droits?.creer ? (
-          <BoutonHub
-            theme={theme}
-            titre="+ Nouvel événement"
-            variante="plein"
-            onPress={() => setFormulaire({ f: { mode: 'creer' }, initial: { date: jourChoisi ?? (ref >= auj ? ref : auj) } })}
-            testID="esport-planning-nouveau"
-          />
-        ) : null}
-      </View>
+    <View style={{ gap: 16 }} testID="esport-planning">
+      <EnTetePage
+        theme={theme}
+        large={large}
+        titre="Planning"
+        sous={p.titre}
+        action={
+          droits?.creer ? (
+            <BoutonHub
+              theme={theme}
+              titre="+ Nouvel événement"
+              variante="plein"
+              onPress={() => setFormulaire({ f: { mode: 'creer' }, initial: { date: jourChoisi ?? (ref >= auj ? ref : auj) } })}
+              testID="esport-planning-nouveau"
+            />
+          ) : undefined
+        }
+      />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-planning" />
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
         <Segments theme={theme} libelle="Vue" valeur={vue} options={VUES} onChoisir={v => setVue(v as Vue)} testID="esport-planning-vue" />
@@ -197,30 +200,36 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
           <BoutonHub theme={theme} titre="›" libelle="Suivant" onPress={() => deplacer(1)} testID="esport-planning-suivant" />
         </View>
       </View>
-      <View style={styles.ligne} testID="esport-planning-filtres">
-        {TYPES_EVENEMENT.map(t => (
-          <Pastille
-            key={t.cle}
-            theme={theme}
-            actif={types.includes(t.cle)}
-            libelle={t.nom}
-            couleur={t.couleur}
-            role="checkbox"
-            onPress={() => setTypes(l => (l.includes(t.cle) ? l.filter(x => x !== t.cle) : [...l, t.cle]))}
-            testID={`esport-filtre-type-${t.cle}`}
-          />
-        ))}
-      </View>
-      {membres.length > 0 ? (
-        <View style={styles.ligne} accessibilityLabel="Filtrer par membre">
-          <Text style={attenue}>Membre :</Text>
-          <Pastille theme={theme} actif={!membre} libelle="Tous" onPress={() => setMembre('')} role="radio" testID="esport-filtre-membre-tous" />
-          {membres.map(m => (
-            <Pastille key={m.compte} theme={theme} actif={membre === m.compte} libelle={m.pseudo} onPress={() => setMembre(membre === m.compte ? '' : m.compte)} role="radio" testID={`esport-filtre-membre-${m.compte}`} />
+      <Pliable
+        theme={theme}
+        titre="Filtres"
+        resume={[types.length ? `${types.length} type${types.length > 1 ? 's' : ''}` : '', membre ? (membres.find(m => m.compte === membre)?.pseudo ?? '1 membre') : '', f.choix === 'appareil' ? 'mon heure' : ''].filter(Boolean).join(' · ') || 'aucun'}
+        testID="esport-planning-filtres-ouvrir">
+        <View style={styles.ligne} testID="esport-planning-filtres">
+          {TYPES_EVENEMENT.map(t => (
+            <Pastille
+              key={t.cle}
+              theme={theme}
+              actif={types.includes(t.cle)}
+              libelle={t.nom}
+              couleur={t.couleur}
+              role="checkbox"
+              onPress={() => setTypes(l => (l.includes(t.cle) ? l.filter(x => x !== t.cle) : [...l, t.cle]))}
+              testID={`esport-filtre-type-${t.cle}`}
+            />
           ))}
         </View>
-      ) : null}
-      <SelecteurFuseau theme={theme} fuseauTeam={detail.team.fuseau} f={f} />
+        {membres.length > 0 ? (
+          <View style={styles.ligne} accessibilityLabel="Filtrer par membre">
+            <Text style={attenue}>Membre :</Text>
+            <Pastille theme={theme} actif={!membre} libelle="Tous" onPress={() => setMembre('')} role="radio" testID="esport-filtre-membre-tous" />
+            {membres.map(m => (
+              <Pastille key={m.compte} theme={theme} actif={membre === m.compte} libelle={m.pseudo} onPress={() => setMembre(membre === m.compte ? '' : m.compte)} role="radio" testID={`esport-filtre-membre-${m.compte}`} />
+            ))}
+          </View>
+        ) : null}
+        <SelecteurFuseau theme={theme} fuseauTeam={detail.team.fuseau} f={f} />
+      </Pliable>
 
       {vue === 'mois' ? (
         <View style={{ gap: 12 }}>
@@ -256,7 +265,14 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
         </View>
       ) : (
         <View style={{ gap: 12 }} testID="esport-planning-liste">
-          {donnees && donnees.occurrences.length === 0 ? <Text style={attenue}>Aucun événement sur cette période.</Text> : null}
+          {donnees && donnees.occurrences.length === 0 ? (
+            <EtatVide
+              theme={theme}
+              glyphe="◷"
+              titre="Aucun événement sur cette période"
+              texte={droits?.creer ? 'Planifiez un entraînement, un scrim ou un match : il apparaîtra ici et chez chaque joueur.' : 'Le staff n’a encore rien prévu sur cette période.'}
+            />
+          ) : null}
           {[...parJour.entries()].map(([j, liste]) => (
             <View key={j} style={{ gap: 8 }}>
               <Intertitre theme={theme}>{`${dateLongue(j)}${j === auj ? ' · aujourd’hui' : ''}`}</Intertitre>
@@ -267,6 +283,9 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
       )}
 
       <PanneauIcal theme={theme} api={api} adresse={client.config.adresse} onExporter={onExporter} />
+      <Volet theme={theme} visible={Boolean(volet)} titre={formulaire ? 'Événement' : 'Détail'} onFermer={fermerVolet} testID="esport-planning-volet">
+        {volet}
+      </Volet>
     </View>
   );
 }

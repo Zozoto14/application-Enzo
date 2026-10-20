@@ -101,7 +101,7 @@ export function Filtre<T extends string>({
 }) {
   return (
     <View style={[styles.ligne, { gap: 6 }]} accessibilityRole="radiogroup" accessibilityLabel={libelle}>
-      <Text style={{ color: theme.attenue, fontSize: 12, fontWeight: '600', ...police(theme.policeTexte) }}>{libelle}</Text>
+      <Text style={{ color: theme.attenue, fontSize: 13, fontWeight: '600', minWidth: 44, ...police(theme.policeTexte) }}>{libelle}</Text>
       {options.map(([cle, nom]) => {
         const actif = cle === valeur;
         return (
@@ -117,12 +117,13 @@ export function Filtre<T extends string>({
               borderColor: actif ? theme.accent : theme.ligne,
               backgroundColor: actif ? teinteTransparente(theme.accent, 0.2) : 'transparent',
               borderRadius: theme.rayonGrand ? 999 : 6,
-              paddingHorizontal: 10,
-              paddingVertical: 5,
-              minHeight: 32,
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              // Cible tactile de 44 px (iPhone, iPad).
+              minHeight: 44,
               justifyContent: 'center',
             }}>
-            <Text style={{ color: theme.texte, fontSize: 12, fontWeight: actif ? '700' : '500', ...police(theme.policeTexte) }}>{nom}</Text>
+            <Text style={{ color: theme.texte, fontSize: 14, fontWeight: actif ? '700' : '500', ...police(theme.policeTexte) }}>{nom}</Text>
           </Pressable>
         );
       })}

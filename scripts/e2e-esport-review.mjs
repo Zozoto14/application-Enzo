@@ -21,6 +21,7 @@ import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs';
 import http from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { ongletTeam } from './esport-navigation.mjs';
 import { nouveauContexte } from './e2e-acceptation.mjs';
 import { chargerPlaywright, demarrerRelais, deverrouiller, pause, premierLancement, racine } from './mobile-outils.mjs';
 
@@ -161,7 +162,7 @@ try {
 
   // ---------------------------------------------------------------- Création d'une review
   log('PC : création d’une review depuis une adresse YouTube');
-  await pc.getByTestId('esport-onglet-module-video_review').click();
+  await ongletTeam(pc, 'module-video_review');
   await pc.getByTestId('esport-review-nouvelle').waitFor({ timeout: 20_000 });
   verifier((await pc.getByTestId('esport-review-limite').innerText()).includes('pas de dessin'), 'mention : pas de dessin sur la vidéo');
   await pc.getByTestId('esport-review-url').fill('https://exemple.fr/pas-youtube');
@@ -254,7 +255,7 @@ try {
   // ---------------------------------------------------------------- Scouting
   log('PC : fiche adversaire, VOD, « Ouvrir en review vidéo »');
   await pc.getByTestId('esport-review-retour').click();
-  await pc.getByTestId('esport-onglet-module-scouting').click();
+  await ongletTeam(pc, 'module-scouting');
   await pc.getByTestId('esport-adversaire-nouveau').waitFor({ timeout: 20_000 });
   await pc.getByTestId('esport-adversaire-nom').fill('Team Nova');
   await pc.getByTestId('esport-adversaire-notes').fill('Équipe rapide, aime les rushs B.');
@@ -302,10 +303,10 @@ try {
     verifier(!(await debordement(pc)), `${nom} (review) : pas de défilement horizontal`);
     await capture(pc, `07-${nom}-review`);
     await pc.getByTestId('esport-review-retour').click();
-    await pc.getByTestId('esport-onglet-module-scouting').click();
+    await ongletTeam(pc, 'module-scouting');
     await pc.getByTestId('esport-scouting').waitFor({ timeout: 10_000 });
     verifier(!(await debordement(pc)), `${nom} (scouting) : pas de défilement horizontal`);
-    await pc.getByTestId('esport-onglet-module-video_review').click();
+    await ongletTeam(pc, 'module-video_review');
     await pc.getByTestId('esport-review-liste').waitFor({ timeout: 10_000 });
     await pc.locator('[data-testid^="esport-review-"][aria-label^="Ouvrir la review"]').first().click();
   }

@@ -192,6 +192,8 @@ describe('objectifs et tâches', () => {
     await screen.findByTestId('esport-objectif-o1');
     expect(screen.getByTestId('esport-objectif-pourcentage-o1').props.children).toEqual([25, ' %']);
     expect(screen.queryByTestId('esport-tache-nouvelle')).toBeNull();
+    // Ni bouton « + Nouvelle tâche » (le formulaire s'ouvre de là).
+    expect(screen.queryByTestId('esport-tache-creer')).toBeNull();
     await screen.findByTestId('esport-kanban-a_faire');
     expect(screen.getByTestId('esport-tache-retard-a')).toBeTruthy();
     // Sa tâche : il peut la passer « En cours » ; pas celle de Kai.

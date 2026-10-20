@@ -11,11 +11,11 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { BoutonHub, Case, Champ, Intertitre, Panneau } from '../../hub/admin/ui/commun';
+import { BoutonHub, Case, Champ } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { CATALOGUE, LIBELLES_COLONNES, lignesMatrice, type ClientEsport, type DetailTeam, type Membre, type Role } from '../client';
 import { dateCourte } from '../libelles';
-import { BoutonConfirme, Choix, PastilleRole, Retours, TitreSection, styles, useAgir } from './commun';
+import { BoutonConfirme, Choix, PastilleRole, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from './commun';
 
 const COULEURS: ReadonlyArray<readonly [string, string]> = [
   ['#d64545', 'Rouge'],

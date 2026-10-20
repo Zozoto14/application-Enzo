@@ -6,11 +6,11 @@
 
 import React, { useState } from 'react';
 import { Text, View } from 'react-native';
-import { BoutonHub, Champ, Panneau } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
 import type { CategorieRepere, SaisieRepere } from '../../review/api';
 import { CATEGORIES, formatTemps, lireTemps } from '../../review/libelles';
-import { Choix, styles } from '../commun';
+import { Choix, styles, Panneau } from '../commun';
 import { NoteMarkdown } from './Note';
 
 export interface InitialRepere {

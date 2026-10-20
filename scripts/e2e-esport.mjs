@@ -24,6 +24,7 @@ import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs';
 import http from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { ongletPresent, ongletTeam } from './esport-navigation.mjs';
 import { allerPageAdministration, allerPageApplications, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
 import { chargerPlaywright, demarrerRelais, deverrouiller, optionsIphone, pause, premierLancement, racine, totp } from './mobile-outils.mjs';
 
@@ -168,9 +169,11 @@ try {
   await pc.getByTestId('esport-assistant-creer').click();
   await pc.getByTestId('esport-team').waitFor({ timeout: 20_000 });
   await pc.getByTestId('esport-membres').waitFor({ timeout: 20_000 });
-  verifier((await pc.getByTestId('esport-onglet-module-scouting').count()) === 0, 'barre latérale : le module désactivé (Scouting) n’apparaît pas');
-  verifier((await pc.getByTestId('esport-onglet-module-planning').count()) === 1, 'barre latérale : Planning activé (écran livré en phase 2)');
-  verifier((await pc.getByTestId('esport-onglet-journal').count()) === 1, 'barre latérale : Journal');
+  verifier(!(await ongletPresent(pc, 'module-scouting')), 'barre latérale : le module désactivé (Scouting) n’apparaît pas');
+  verifier((await ongletPresent(pc, 'module-planning')), 'barre latérale : Planning activé (écran livré en phase 2)');
+  verifier((await ongletPresent(pc, 'journal')), 'barre latérale : Journal');
+  // Retour sur Membres et rôles (section Équipe), où l'assistant avait ouvert la team.
+  await ongletTeam(pc, 'membres');
 
   verifier((await pc.getByTestId('esport-invitation-creer').count()) === 0, 'plus de création de code esp_ dans la team');
   verifier((await pc.getByTestId('esport-inviter').count()) === 1, 'Membres et rôles : renvoi vers la page Membres pour inviter');
@@ -267,10 +270,10 @@ try {
   await capture(lea, '11-iphone-lea-teams');
   await lea.getByTestId('esport-team-faucons-valorant').click();
   await lea.getByTestId('esport-barre').waitFor({ timeout: 20_000 });
-  verifier((await lea.getByTestId('esport-onglet-journal').count()) === 0, 'Joueur : pas de Journal');
-  verifier((await lea.getByTestId('esport-onglet-membres').count()) === 1, 'Joueur : Membres visibles');
+  verifier(!(await ongletPresent(lea, 'journal')), 'Joueur : pas de Journal');
+  verifier((await ongletPresent(lea, 'membres')), 'Joueur : Membres visibles');
   await capture(lea, '12-iphone-lea-team');
-  await lea.getByTestId('esport-onglet-membres').click();
+  await ongletTeam(lea, 'membres');
   await lea.getByTestId('esport-liste-membres').waitFor({ timeout: 20_000 });
   verifier((await lea.getByTestId('esport-inviter').count()) === 0, 'Joueur : pas de panneau d’invitation');
   await capture(lea, '13-iphone-lea-membres');
@@ -297,7 +300,7 @@ try {
   log('PC : Journal et matrice des rôles');
   await ouvrirEsport(pc);
   await pc.getByTestId('esport-team-faucons-valorant').click();
-  await pc.getByTestId('esport-onglet-journal').click();
+  await ongletTeam(pc, 'journal');
   await pc.getByTestId('esport-journal').waitFor({ timeout: 20_000 });
   await pc.getByText(/Léa a rejoint la team \(Joueur\)/).first().waitFor({ timeout: 20_000 }).catch(() => undefined);
   verifier((await pc.getByText(/Léa a rejoint la team \(Joueur\)/).count()) >= 1, 'Journal : « Léa a rejoint la team (Joueur) »');
@@ -311,15 +314,18 @@ try {
   verifier(/Conservation : 1 an/.test((await pc.getByTestId('esport-journal-retention').textContent({ timeout: 20_000 })) ?? ''), 'Journal : conservation 1 an');
   verifier((await api(`/teams/${faucons.id}/journal/export.csv?format=json`, sessFond)).corps?.contenu?.includes('member.joined'), 'Journal : export CSV');
   // Statistiques de la team sur l'accueil.
-  await pc.getByTestId('esport-onglet-accueil').click();
+  await ongletTeam(pc, 'accueil');
   await pc.getByTestId('esport-stats').waitFor({ timeout: 20_000 });
   verifier(await pc.getByTestId('esport-stats-membres').isVisible(), 'Accueil : statistiques de la team');
   await capture(pc, '14b-pc-stats');
-  // Navigation au clavier : l'onglet « Membres et rôles » s'ouvre avec Entrée.
+  // Navigation au clavier : la section « Équipe », puis son sous-onglet « Membres et rôles », s'ouvrent avec Entrée.
+  await pc.getByTestId('esport-section-equipe').focus();
+  await pc.keyboard.press('Enter');
+  await pc.getByTestId('esport-onglet-membres').waitFor({ timeout: 20_000 });
   await pc.getByTestId('esport-onglet-membres').focus();
   await pc.keyboard.press('Enter');
   await pc.getByTestId(`esport-membre-${idLea}`).waitFor({ timeout: 20_000 });
-  verifier(true, 'Clavier : onglet ouvert avec Entrée');
+  verifier(true, 'Clavier : section et sous-onglet ouverts avec Entrée');
   await pc.getByTestId('esport-matrice').waitFor({ timeout: 20_000 });
   await capture(pc, '15-pc-membres-matrice');
 
@@ -330,7 +336,7 @@ try {
   await ouvrirEsport(ipad);
   await ipad.getByTestId('esport-team-faucons-valorant').click();
   await ipad.getByTestId('esport-barre').waitFor({ timeout: 20_000 });
-  await ipad.getByTestId('esport-onglet-membres').click();
+  await ongletTeam(ipad, 'membres');
   await ipad.getByTestId('esport-matrice').waitFor({ timeout: 20_000 });
   await capture(ipad, '16-ipad-membres');
   const debord = await ipad.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);

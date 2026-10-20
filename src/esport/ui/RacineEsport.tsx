@@ -2,7 +2,9 @@
  * App « Esport » du hub. Navigation de premier niveau, avant d'entrer dans une
  * team : Dashboard (résumé de toutes les teams) · Teams (liste, création,
  * notifications, profil) · Membres (tous les membres, création de comptes,
- * invitations). Puis la page d'une team, avec ses modules.
+ * invitations), dans la barre latérale (PC) ou la barre d'onglets du bas
+ * (iPhone) : voir CadreEsport.tsx. Puis la page d'une team, ses modules
+ * rangés en cinq sections (PageTeam.tsx).
  *
  * Tout passe par le Worker Esport (esport/), avec le jeton du relais déjà
  * gardé par l'app. Worker pas encore déployé (ou relais pas encore en
@@ -13,20 +15,20 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { RetourHub } from '../../hub/Hub';
-import { Avis, BoutonHub, Champ, Intertitre, Panneau, Segments } from '../../hub/admin/ui/commun';
+import { Avis, BoutonHub, Champ } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { PropsRacineApp } from '../../hub/types';
 import { fabrique } from '../fabrique';
-import { DOC_ACTIVATION, ErreurEsport, MENTION_DONNEES, estInactif, nomModule, trouverConfig, type Boite, type ClientEsport, type Moi, type Notifications, type TeamListee } from '../client';
+import { CATALOGUE, DOC_ACTIVATION, ErreurEsport, MENTION_DONNEES, estInactif, trouverConfig, type Boite, type ClientEsport, type Moi, type Notifications, type TeamListee } from '../client';
 import { dateCourte, phraseNotification } from '../libelles';
 import { Assistant } from './Assistant';
+import { CadreEsport, PageEsport, type OngletEsport } from './CadreEsport';
 import { Dashboard } from './Dashboard';
 import { MembresGlobal } from './MembresGlobal';
-import { MonProfil, PageTeam, type SectionTeam } from './PageTeam';
+import { GROUPES_TEAM, MonProfil, PageTeam, type SectionTeam } from './PageTeam';
 import { BadgeNouveau, BoiteResumes } from './Resumes';
-import { PastilleRole, Retours, TitreSection, styles as communs, useAgir } from './commun';
-
-const LARGEUR_BARRE = 900;
+import { Panneau, PastilleRole, Retours, styles as communs, useAgir } from './commun';
+import { AvatarTeam, Badge, Carte, ESP, EnTetePage, EtatVide, Grille, LARGEUR_PC, SqueletteCartes, TitreCarte, attenue, couleurTeam, texte } from './design';
 
 type Etat =
   | { e: 'chargement' }
@@ -34,14 +36,8 @@ type Etat =
   | { e: 'erreur'; message: string }
   | { e: 'pret'; client: ClientEsport; moi: Moi };
 
-type Onglet = 'dashboard' | 'teams' | 'membres';
+type Onglet = OngletEsport;
 type Vue = { v: Onglet } | { v: 'assistant' } | { v: 'boite' } | { v: 'team'; id: string; section?: SectionTeam };
-
-const ONGLETS: ReadonlyArray<readonly [Onglet, string]> = [
-  ['dashboard', 'Dashboard'],
-  ['teams', 'Teams'],
-  ['membres', 'Membres'],
-];
 
 /** Fabrique du client (remplaçable par les tests) : voir ../fabrique.ts. */
 export { fabrique };
@@ -51,7 +47,7 @@ export function Esport(props: PropsRacineApp) {
   const [etat, setEtat] = useState<Etat>({ e: 'chargement' });
   const [vue, setVue] = useState<Vue>({ v: 'dashboard' });
   const { width } = useWindowDimensions();
-  const large = width >= LARGEUR_BARRE;
+  const large = width >= LARGEUR_PC;
 
   const ouvrir = useCallback(async () => {
     setEtat({ e: 'chargement' });
@@ -78,30 +74,25 @@ export function Esport(props: PropsRacineApp) {
 
   let contenu: React.ReactNode;
   if (etat.e === 'chargement') {
-    contenu = <Text style={{ color: theme.attenue, padding: 24 }}>Connexion à l’Esport…</Text>;
+    contenu = (
+      <View style={{ padding: large ? ESP.xxl : ESP.m, gap: ESP.l, maxWidth: 900, width: '100%', alignSelf: 'center' }} testID="esport-chargement">
+        <Text style={{ color: theme.attenue, fontSize: 15, ...police(theme.policeTexte) }}>Connexion à l’Esport…</Text>
+        <SqueletteCartes theme={theme} n={large ? 3 : 2} large={large} />
+      </View>
+    );
   } else if (etat.e === 'inactif') {
     contenu = <PasEncoreActive theme={theme} raison={etat.raison} fondateur={fondateur} onReessayer={() => void ouvrir()} />;
   } else if (etat.e === 'erreur') {
     contenu = (
-      <View style={{ padding: 16, gap: 12 }}>
+      <View style={{ padding: ESP.m, gap: ESP.s, maxWidth: 680, width: '100%', alignSelf: 'center' }}>
         <Avis theme={theme} genre="critique" texte={etat.message} testID="esport-erreur" />
-        <BoutonHub theme={theme} titre="Réessayer" onPress={() => void ouvrir()} testID="esport-reessayer" />
+        <View style={{ alignSelf: 'flex-start' }}>
+          <BoutonHub theme={theme} titre="Réessayer" onPress={() => void ouvrir()} testID="esport-reessayer" />
+        </View>
       </View>
     );
   } else if (!etat.moi.profil) {
     contenu = <ProfilInitial theme={theme} client={etat.client} onFait={moi => setEtat({ ...etat, moi })} />;
-  } else if (vue.v === 'assistant') {
-    contenu = <Assistant theme={theme} client={etat.client} onAnnuler={() => setVue({ v: 'teams' })} onCreee={d => setVue({ v: 'team', id: d.team.id, section: 'membres' })} />;
-  } else if (vue.v === 'boite') {
-    contenu = (
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 16, maxWidth: 1400, width: '100%', alignSelf: 'center' }} testID="esport-boite-globale">
-        <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
-          <TitreSection theme={theme} titre="Résumés à rédiger" sous="Tous les dépôts des teams où vous rédigez les résumés." />
-          <BoutonHub theme={theme} titre="← Mes teams" onPress={() => setVue({ v: 'teams' })} testID="esport-boite-retour" />
-        </View>
-        <BoiteResumes theme={theme} client={etat.client} large={large} />
-      </ScrollView>
-    );
   } else if (vue.v === 'team') {
     contenu = (
       <PageTeam
@@ -114,13 +105,42 @@ export function Esport(props: PropsRacineApp) {
         onQuitter={() => setVue({ v: 'teams' })}
         onExporter={exporter}
         onMembresGlobal={() => setVue({ v: 'membres' })}
+        onNaviguer={o => setVue({ v: o })}
+        onChangerTeam={(id, section) => setVue({ v: 'team', id, section })}
+        pseudo={etat.moi.profil.pseudo}
       />
     );
   } else {
-    const onglet = vue.v;
+    const onglet: Onglet = vue.v === 'assistant' || vue.v === 'boite' ? 'teams' : vue.v;
     let page: React.ReactNode;
-    if (onglet === 'dashboard') {
-      page = <Dashboard theme={theme} client={etat.client} large={large} onOuvrir={id => setVue({ v: 'team', id })} onBoite={() => setVue({ v: 'boite' })} onMembres={() => setVue({ v: 'membres' })} />;
+    if (vue.v === 'assistant') {
+      page = <Assistant theme={theme} client={etat.client} large={large} onAnnuler={() => setVue({ v: 'teams' })} onCreee={d => setVue({ v: 'team', id: d.team.id, section: 'membres' })} />;
+    } else if (vue.v === 'boite') {
+      page = (
+        <PageEsport large={large} testID="esport-boite-globale">
+          <EnTetePage
+            theme={theme}
+            large={large}
+            titre="Résumés à rédiger"
+            sous="Tous les dépôts des teams où vous rédigez les résumés."
+            avant={<LienRetour theme={theme} titre="Teams" onPress={() => setVue({ v: 'teams' })} testID="esport-boite-retour" />}
+          />
+          <BoiteResumes theme={theme} client={etat.client} large={large} />
+        </PageEsport>
+      );
+    } else if (onglet === 'dashboard') {
+      page = (
+        <Dashboard
+          theme={theme}
+          client={etat.client}
+          large={large}
+          pseudo={etat.moi.profil.pseudo}
+          onOuvrir={id => setVue({ v: 'team', id })}
+          onBoite={() => setVue({ v: 'boite' })}
+          onMembres={() => setVue({ v: 'membres' })}
+          onTeams={() => setVue({ v: 'teams' })}
+        />
+      );
     } else if (onglet === 'membres') {
       page = <MembresGlobal theme={theme} client={etat.client} contexte={contexte} registre={registre} large={large} onOuvrirTeam={id => setVue({ v: 'team', id })} onOuvrirApp={onOuvrirApp} />;
     } else {
@@ -140,25 +160,30 @@ export function Esport(props: PropsRacineApp) {
       );
     }
     contenu = (
-      <View style={{ flex: 1 }}>
-        <View style={[styles.nav, { borderBottomColor: theme.ligne }]} testID="esport-nav">
-          <Segments<Onglet> theme={theme} libelle="Esport" valeur={onglet} options={ONGLETS} onChoisir={v => setVue({ v })} testID="esport-nav" />
-        </View>
-        <View style={{ flex: 1 }}>{page}</View>
-      </View>
+      <CadreEsport theme={theme} large={large} onglet={onglet} onOnglet={o => setVue({ v: o })} pseudo={etat.moi.profil.pseudo}>
+        {page}
+      </CadreEsport>
     );
   }
 
   return (
     <View style={[styles.racine, { backgroundColor: theme.fond }]} testID="app-esport">
       <RetourHub theme={theme} onRetour={onRetour} titre="Esport" />
-      <View style={{ flex: 1 }}>{contenu}</View>
+      <View style={{ flex: 1, borderTopWidth: large ? 1 : 0, borderTopColor: theme.ligne }}>{contenu}</View>
     </View>
   );
 }
 
+/** Lien de retour discret, au-dessus d'un titre de page (« ‹ Teams »). */
+function LienRetour({ theme, titre, onPress, testID }: { theme: ThemeHub; titre: string; onPress(): void; testID: string }) {
+  return (
+    <Pressable testID={testID} accessibilityRole="link" accessibilityLabel={`Retour : ${titre}`} onPress={onPress} style={{ minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' }}>
+      <Text style={{ color: theme.accent, fontSize: 15, fontWeight: '600', ...police(theme.policeTexte) }}>{`‹ ${titre}`}</Text>
+    </Pressable>
+  );
+}
+
 function PasEncoreActive({ theme, raison, fondateur, onReessayer }: { theme: ThemeHub; raison: 'sans-relais' | 'sans-adresse' | 'serveur'; fondateur: boolean; onReessayer(): void }) {
-  const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const explication =
     raison === 'sans-relais'
       ? 'Cet appareil n’est pas relié au relais : l’Esport utilise votre compte du hub, par le relais (Paramètres › Synchronisation).'
@@ -166,20 +191,17 @@ function PasEncoreActive({ theme, raison, fondateur, onReessayer }: { theme: The
         ? 'Le serveur Esport (Worker Cloudflare « applibourse-esport ») n’est pas encore déployé, ou le relais n’est pas encore en version 7. La marche à suivre tient en quelques étapes.'
         : 'Le Fondateur n’a pas encore activé l’Esport. Réessayez plus tard.';
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 16, maxWidth: 680, width: '100%', alignSelf: 'center' }}>
-      <Panneau theme={theme} testID="esport-inactif">
-        <Text accessibilityRole="header" style={[texte, { fontSize: 20, fontWeight: '800' }]}>
-          Esport pas encore activé
-        </Text>
-        <Text style={texte}>{explication}</Text>
-        <View style={communs.ligne}>
+    <ScrollView contentContainerStyle={{ padding: ESP.m, paddingTop: ESP.xxl, gap: ESP.m, maxWidth: 680, width: '100%', alignSelf: 'center' }}>
+      <Carte theme={theme} testID="esport-inactif">
+        <EtatVide theme={theme} glyphe="◆" titre="Esport pas encore activé" texte={explication} />
+        <View style={[communs.ligne, { justifyContent: 'center' }]}>
           {fondateur ? (
             <BoutonHub theme={theme} titre="Voir la marche à suivre" variante="plein" onPress={() => void Linking.openURL(DOC_ACTIVATION)} testID="esport-doc" />
           ) : null}
           <BoutonHub theme={theme} titre="Réessayer" onPress={onReessayer} testID="esport-reessayer" />
         </View>
-        {fondateur ? <Text style={{ color: theme.attenue, fontSize: 12 }}>docs/esport/deploiement.md</Text> : null}
-      </Panneau>
+        {fondateur ? <Text style={{ ...attenue(theme), textAlign: 'center' }}>docs/esport/deploiement.md</Text> : null}
+      </Carte>
     </ScrollView>
   );
 }
@@ -190,8 +212,8 @@ function ProfilInitial({ theme, client, onFait }: { theme: ThemeHub; client: Cli
   const [discord, setDiscord] = useState('');
   const { enCours, erreur, agir } = useAgir();
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 16, maxWidth: 560, width: '100%', alignSelf: 'center' }} testID="esport-profil-initial">
-      <TitreSection theme={theme} titre="Bienvenue dans l’Esport" sous="Choisissez le pseudo que verront vos coéquipiers." />
+    <ScrollView contentContainerStyle={{ padding: ESP.m, paddingTop: ESP.xl, gap: ESP.l, maxWidth: 560, width: '100%', alignSelf: 'center' }} testID="esport-profil-initial">
+      <EnTetePage theme={theme} titre="Bienvenue dans l’Esport" sous="Choisissez le pseudo que verront vos coéquipiers. Le reste est facultatif." />
       <Panneau theme={theme}>
         <Champ theme={theme} libelle="Pseudo (obligatoire)" valeur={pseudo} onChanger={setPseudo} maxLength={24} testID="esport-pseudo" />
         <Champ theme={theme} libelle="Riot ID (facultatif, Pseudo#TAG)" valeur={riotId} onChanger={setRiotId} maxLength={22} testID="esport-riot" />
@@ -209,7 +231,7 @@ function ProfilInitial({ theme, client, onFait }: { theme: ThemeHub; client: Cli
           testID="esport-pseudo-valider"
         />
         <Retours theme={theme} erreur={erreur} prefixe="esport-pseudo" />
-        <Text style={{ color: theme.attenue, fontSize: 12 }} testID="esport-mention">
+        <Text style={attenue(theme, 12)} testID="esport-mention">
           {MENTION_DONNEES}
         </Text>
       </Panneau>
@@ -256,87 +278,71 @@ function MesTeams({
     void agir('', recharger);
   }, [agir, recharger]);
 
-  const texte = { color: theme.texte, ...police(theme.policeTexte) };
-  const attenue = { color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) };
   const nonLues = useMemo(() => notifs?.liste.filter(n => !n.lue) ?? [], [notifs]);
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 16, maxWidth: 1200, width: '100%', alignSelf: 'center' }} testID="esport-teams">
-      <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
-        <TitreSection theme={theme} titre="Mes teams" sous={`Connecté en tant que ${moi.profil?.pseudo ?? moi.compte}${moi.superAdmin ? ' · Fondateur (toutes les teams)' : ''}`} />
-        <View style={communs.ligne}>
-          {moi.peutCreerTeam ? <BoutonHub theme={theme} titre="Créer une team" variante="plein" onPress={onCreer} testID="esport-creer" /> : null}
-          {moi.superAdmin ? <BoutonHub theme={theme} titre="Inviter un joueur" onPress={onMembres} testID="esport-teams-inviter" /> : null}
-          <BoutonHub theme={theme} titre="Mon profil" onPress={() => setProfil(p => !p)} testID="esport-mon-profil-ouvrir" />
-        </View>
-      </View>
+    <PageEsport large={large} testID="esport-teams">
+      <EnTetePage
+        theme={theme}
+        large={large}
+        titre="Mes teams"
+        sous={`Connecté en tant que ${moi.profil?.pseudo ?? moi.compte}${moi.superAdmin ? ' · Fondateur (toutes les teams)' : ''}`}
+        action={
+          <>
+            {moi.superAdmin ? <BoutonHub theme={theme} titre="Inviter un joueur" onPress={onMembres} testID="esport-teams-inviter" /> : null}
+            <BoutonHub theme={theme} titre={profil ? 'Fermer mon profil' : 'Mon profil'} onPress={() => setProfil(p => !p)} testID="esport-mon-profil-ouvrir" />
+            {moi.peutCreerTeam ? <BoutonHub theme={theme} titre="+ Créer une team" variante="plein" onPress={onCreer} testID="esport-creer" /> : null}
+          </>
+        }
+      />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-teams" />
       {boite && boite.teams.length > 0 ? (
-        <Panneau theme={theme} testID="esport-redacteur">
+        <Carte theme={theme} testID="esport-redacteur" accent={theme.accent}>
           <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
-            <View style={[communs.ligne, { flexShrink: 1 }]}>
-              <Text style={[texte, { fontSize: 16, fontWeight: '800' }]} testID="esport-redacteur-compteur">
-                {`Résumés à rédiger : ${boite.attente} en attente`}
-              </Text>
-              {boite.nouveaux > 0 ? <BadgeNouveau theme={theme} testID="esport-redacteur-nouveaux" /> : null}
-              {boite.nouveaux > 0 ? <Text style={attenue}>{`${boite.nouveaux} jamais ouvert${boite.nouveaux > 1 ? 's' : ''}`}</Text> : null}
+            <View style={{ flexShrink: 1, gap: ESP.xxs }}>
+              <View style={communs.ligne}>
+                <Text style={{ ...texte(theme, 17), fontWeight: '700' }} testID="esport-redacteur-compteur">
+                  {`Résumés à rédiger : ${boite.attente} en attente`}
+                </Text>
+                {boite.nouveaux > 0 ? <BadgeNouveau theme={theme} testID="esport-redacteur-nouveaux" /> : null}
+              </View>
+              <Text style={attenue(theme)}>{boite.nouveaux > 0 ? `${boite.nouveaux} jamais ouvert${boite.nouveaux > 1 ? 's' : ''}` : 'Tous les dépôts des teams où vous rédigez.'}</Text>
             </View>
             <BoutonHub theme={theme} titre="Boîte de réception" variante="plein" onPress={onBoite} testID="esport-redacteur-ouvrir" />
           </View>
-        </Panneau>
+        </Carte>
       ) : null}
       {profil ? <MonProfil theme={theme} client={client} onExporter={onExporter} onSupprime={onProfilSupprime} /> : null}
-      <View style={[communs.ligne, { alignItems: 'stretch', gap: 12 }]} testID="esport-liste-teams">
-        {teams?.length === 0 ? (
-          <Panneau theme={theme} style={{ flex: 1 }}>
-            <Text style={texte}>
-              {moi.peutCreerTeam
-                ? 'Aucune team pour l’instant : créez la première, puis invitez vos joueurs depuis l’onglet Membres.'
-                : 'Vous n’êtes dans aucune team pour l’instant. Le Fondateur ou le staff de votre team vous y ajoute : elle apparaîtra ici d’elle-même, sans code.'}
-            </Text>
-          </Panneau>
-        ) : null}
-        {teams?.map(t => (
-          <Pressable
-            key={t.id}
-            testID={`esport-team-${t.slug}`}
-            accessibilityRole="button"
-            accessibilityLabel={`Ouvrir ${t.nom}`}
-            disabled={t.suspendu}
-            onPress={() => onOuvrir(t.id)}
-            style={(etat: { pressed: boolean }) => [
-              styles.carte,
-              {
-                width: large ? 340 : ('100%' as const),
-                backgroundColor: theme.surface,
-                borderColor: (etat as { hovered?: boolean }).hovered ? theme.accent : theme.ligne,
-                borderRadius: theme.rayonMoyen,
-                opacity: t.suspendu ? 0.5 : 1,
-              },
-            ]}>
-            <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
-              <Text style={[texte, { fontSize: 18, fontWeight: '800' }]} numberOfLines={1}>
-                {t.nom}
-              </Text>
-              {t.role ? <PastilleRole theme={theme} nom={t.role.nom} couleur={t.role.couleur} /> : <Text style={attenue}>Super admin</Text>}
-            </View>
-            <Text style={attenue} numberOfLines={2}>
-              {t.description || (t.jeu === 'valorant' ? 'Valorant' : 'Autre jeu')}
-            </Text>
-            <Text style={attenue}>
-              {t.membres} membre(s) · {t.modules.length} module(s){t.suspendu ? ' · accès suspendu' : ''}
-            </Text>
-            <Text style={[attenue, { fontSize: 11 }]} numberOfLines={1}>
-              {t.modules.map(nomModule).join(' · ')}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      <View style={large ? { flexDirection: 'row', gap: 16, alignItems: 'flex-start' } : { gap: 16 }}>
-        <Panneau theme={theme} style={{ flex: 1 }} testID="esport-notifications">
-          <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
-            <Intertitre theme={theme}>{`Notifications${nonLues.length ? ` (${nonLues.length})` : ''}`}</Intertitre>
-            {nonLues.length ? (
+      {!teams ? <SqueletteCartes theme={theme} n={large ? 3 : 2} large={large} /> : null}
+      {teams?.length === 0 ? (
+        <Carte theme={theme}>
+          <EtatVide
+            theme={theme}
+            glyphe="◆"
+            titre={moi.peutCreerTeam ? 'Aucune team pour l’instant' : 'Vous n’êtes dans aucune team'}
+            texte={
+              moi.peutCreerTeam
+                ? 'Créez la première, puis invitez vos joueurs depuis l’onglet Membres.'
+                : 'Le Fondateur ou le staff de votre team vous y ajoute : elle apparaîtra ici d’elle-même, sans code.'
+            }
+            action={moi.peutCreerTeam ? { titre: '+ Créer une team', onPress: onCreer } : undefined}
+          />
+        </Carte>
+      ) : null}
+      {teams?.length ? (
+        <Grille min={large ? 320 : 280} testID="esport-liste-teams">
+          {teams.map(t => (
+            <CarteTeamListe key={t.id} theme={theme} team={t} onOuvrir={() => onOuvrir(t.id)} />
+          ))}
+        </Grille>
+      ) : null}
+      <Carte theme={theme} testID="esport-notifications">
+        <TitreCarte
+          theme={theme}
+          titre={`Notifications${nonLues.length ? ` (${nonLues.length})` : ''}`}
+          sous={nonLues.length ? 'Les plus récentes de toutes vos teams.' : undefined}
+          droite={
+            nonLues.length ? (
               <BoutonHub
                 theme={theme}
                 titre="Tout marquer lu"
@@ -347,27 +353,65 @@ function MesTeams({
                 }
                 testID="esport-notifications-lues"
               />
-            ) : null}
+            ) : undefined
+          }
+        />
+        {notifs?.liste.length ? null : <Text style={attenue(theme, 15)}>Rien de nouveau.</Text>}
+        {notifs?.liste.slice(0, 8).map(n => (
+          <View key={n.id} style={{ flexDirection: 'row', gap: ESP.s, alignItems: 'flex-start', paddingVertical: ESP.xxs }}>
+            <View style={{ width: 8, height: 8, borderRadius: 4, marginTop: 7, backgroundColor: n.lue ? theme.ligne : theme.accent }} />
+            <Text style={{ ...texte(theme), flex: 1, fontWeight: n.lue ? '400' : '700' }}>{phraseNotification(n, notifs.noms)}</Text>
+            <Text style={attenue(theme)}>{dateCourte(n.date)}</Text>
           </View>
-          {notifs?.liste.length ? null : <Text style={attenue}>Rien de nouveau.</Text>}
-          {notifs?.liste.slice(0, 8).map(n => (
-            <View key={n.id} style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: n.lue ? 'transparent' : theme.accent }} />
-              <Text style={[texte, { flex: 1, fontWeight: n.lue ? '400' : '700' }]}>{phraseNotification(n, notifs.noms)}</Text>
-              <Text style={attenue}>{dateCourte(n.date)}</Text>
-            </View>
-          ))}
-        </Panneau>
-      </View>
-      <Text style={[attenue, { fontSize: 12, backgroundColor: teinteTransparente(theme.attenue, 0.08), padding: 10, borderRadius: 8 }]} testID="esport-mention">
+        ))}
+      </Carte>
+      <Text style={{ ...attenue(theme, 12), backgroundColor: teinteTransparente(theme.attenue, 0.08), padding: ESP.s, borderRadius: 10 }} testID="esport-mention">
         {MENTION_DONNEES}
       </Text>
-    </ScrollView>
+    </PageEsport>
+  );
+}
+
+/** Carte d'une team (page Teams) : logo et couleur, rôle, effectif, sections. */
+function CarteTeamListe({ theme, team: t, onOuvrir }: { theme: ThemeHub; team: TeamListee; onOuvrir(): void }) {
+  const couleur = couleurTeam(t.slug);
+  const jeu = CATALOGUE.jeux.find(j => j.cle === t.jeu)?.nom ?? t.jeu;
+  // Sections de la team, d'après ses modules (comme la navigation dans la team).
+  const groupes = GROUPES_TEAM.filter(g => g.id !== 'accueil' && g.id !== 'reglages' && t.modules.some(m => g.sections.includes(`module:${m}`)));
+  return (
+    <Carte
+      theme={theme}
+      testID={`esport-team-${t.slug}`}
+      libelle={`Ouvrir ${t.nom}`}
+      onPress={onOuvrir}
+      desactive={t.suspendu}
+      accent={couleur}
+      style={{ height: '100%', minHeight: 180 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.s }}>
+        <AvatarTeam theme={theme} team={t} taille={48} />
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text style={{ ...texte(theme, 18), fontWeight: '800' }} numberOfLines={1}>
+            {t.nom}
+          </Text>
+          <Text style={attenue(theme)} numberOfLines={1}>{`${jeu} · ${t.membres} membre${t.membres > 1 ? 's' : ''}`}</Text>
+        </View>
+      </View>
+      <Text style={attenue(theme, 14)} numberOfLines={2}>
+        {t.description || 'Pas encore de description.'}
+      </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs }}>
+        {t.role ? <PastilleRole theme={theme} nom={t.role.nom} couleur={t.role.couleur} /> : <Badge theme={theme} texte="Super admin" ton="accent" />}
+        {t.suspendu ? <Badge theme={theme} texte="Accès suspendu" ton="critique" /> : null}
+        {groupes.map(g => (
+          <Badge key={g.id} theme={theme} texte={g.libelle} />
+        ))}
+      </View>
+      <View style={{ flex: 1 }} />
+      <Text style={{ ...texte(theme, 14), color: theme.accent, fontWeight: '700' }}>{t.suspendu ? 'Accès suspendu' : 'Ouvrir la team ›'}</Text>
+    </Carte>
   );
 }
 
 const styles = StyleSheet.create({
   racine: { flex: 1 },
-  carte: { borderWidth: 1, padding: 16, gap: 8, minHeight: 120 },
-  nav: { paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, alignItems: 'center' },
 });

@@ -12,12 +12,12 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Image, Linking, Pressable, Text, View } from 'react-native';
-import { BoutonHub, Champ, Intertitre, Panneau } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
 import { dateCourte } from '../../libelles';
 import { apiScouting, type AdversaireListe, type ApiScouting, type Confrontation, type DetailAdversaire, type JoueurAdverse, type SaisieJoueur, type SaisieTendance, type SideTendance, type TendanceMap, type VodAdverse } from '../../review/api';
 import { SIDES, nomSide } from '../../review/libelles';
-import { BoutonConfirme, Choix, Retours, TitreSection, styles, useAgir } from '../commun';
+import { BoutonConfirme, Choix, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from '../commun';
 import type { PropsModule } from '../modules';
 
 const listeTexte = (t: string): string[] => [...new Set(t.split(/[,;]/).map(x => x.trim()).filter(Boolean))];

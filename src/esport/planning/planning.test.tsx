@@ -142,6 +142,9 @@ describe('écran Planning', () => {
     await fireEvent.press(screen.getByTestId('esport-mois-2026-10-20'));
     expect(await screen.findByTestId('esport-planning-jour')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('esport-planning-vue-semaine'));
+    // Filtres repliés par défaut : on les ouvre.
+    expect(screen.queryByTestId('esport-filtre-type-match')).toBeNull();
+    await fireEvent.press(screen.getByTestId('esport-planning-filtres-ouvrir'));
     await fireEvent.press(screen.getByTestId('esport-filtre-type-match'));
     await waitFor(() => expect(appels.some(a => a.chemin.includes('types=match'))).toBe(true));
   });

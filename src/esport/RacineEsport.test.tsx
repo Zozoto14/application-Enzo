@@ -160,12 +160,17 @@ describe('Esport', () => {
     expect(screen.queryByTestId('esport-rejoindre')).toBeNull();
     await fireEvent.press(await screen.findByTestId('esport-team-faucons'));
     await screen.findByTestId('esport-barre');
-    expect(screen.getByTestId('esport-onglet-module-planning')).toBeTruthy();
+    // Sections : Accueil, Agenda (Planning seul : pas de sous-onglets), Équipe (Membres), Réglages ; pas de Jeu (aucun module).
+    expect(screen.getByTestId('esport-section-agenda')).toBeTruthy();
+    expect(screen.queryByTestId('esport-section-jeu')).toBeNull();
     expect(screen.queryByTestId('esport-onglet-module-scouting')).toBeNull();
     // Joueur : pas de journal (permission), mais Membres et Paramètres.
+    await fireEvent.press(screen.getByTestId('esport-section-reglages'));
+    expect(await screen.findByTestId('esport-parametres')).toBeTruthy();
     expect(screen.queryByTestId('esport-onglet-journal')).toBeNull();
-    expect(screen.getByTestId('esport-onglet-membres')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('esport-onglet-module-planning'));
+    await fireEvent.press(screen.getByTestId('esport-section-equipe'));
+    expect(await screen.findByTestId('esport-membres')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-section-agenda'));
     // Planning livré (phase 2) : l'écran s'ouvre ; un Joueur n'a pas le bouton de création.
     expect(await screen.findByTestId('esport-planning')).toBeTruthy();
     expect(screen.queryByTestId('esport-planning-nouveau')).toBeNull();

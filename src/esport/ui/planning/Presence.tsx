@@ -8,11 +8,11 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { BoutonHub, Intertitre, Panneau, Segments } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Segments } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { apiPlanning, type CompteurPresence, type Occurrence, type StatsPresence, type TypeEvenement } from '../../planning/api';
 import { TYPES_EVENEMENT, ajouterJours, aujourdhui, dateCourteJour, pourcentage, typeEvenement } from '../../planning/libelles';
-import { Retours, TitreSection, styles, useAgir } from '../commun';
+import { Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from '../commun';
 import type { PropsModule } from '../modules';
 import { CarteOccurrence, Pastille } from './commun';
 import { ListePresence } from './ListePresence';
@@ -94,7 +94,7 @@ export function Presence({ theme, client, detail, large, onExporter }: PropsModu
                   accessibilityState={{ expanded: ouverte === id }}
                   onPress={() => setOuverte(ouverte === id ? undefined : id)}
                   testID={`esport-a-marquer-${o.jour}`}
-                  style={[styles.ligne, { justifyContent: 'space-between', paddingVertical: 6, borderTopWidth: 1, borderTopColor: theme.ligne }]}>
+                  style={[styles.ligne, { justifyContent: 'space-between', paddingVertical: 6, minHeight: 44, borderTopWidth: 1, borderTopColor: theme.ligne }]}>
                   <Text style={{ flex: 1, color: theme.texte, ...police(theme.policeTexte) }}>
                     <Text style={{ color: typeEvenement(o.type).couleur }}>● </Text>
                     {dateCourteJour(o.jour)} {o.heureDebut} · {o.titre}

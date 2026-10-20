@@ -6,11 +6,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { BoutonHub, Intertitre, Panneau, Segments } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Segments } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
 import type { ApiPlanning, PresenceOccurrence, Reel } from '../../planning/api';
 import { LIBELLES_REEL, LIBELLES_RSVP } from '../../planning/libelles';
-import { Retours, styles, useAgir } from '../commun';
+import { Retours, styles, useAgir, Intertitre, Panneau } from '../commun';
 
 const MARQUES: ReadonlyArray<readonly [Reel, string]> = [
   ['present', 'Présent'],

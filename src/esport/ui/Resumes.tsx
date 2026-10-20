@@ -16,13 +16,14 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
-import { BoutonHub, Case, Champ, Intertitre, Panneau, Segments } from '../../hub/admin/ui/commun';
+import { BoutonHub, Case, Champ, Segments } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { Boite, ClientEsport, Depot, DetailDepot, DetailTeam, FiltresBoite, StatutDepot, TypeReunion } from '../client';
 import { LIBELLES_STATUT_DEPOT, aujourdhui, dateCourte, dateJour, lireDateSaisie, tailleLisible } from '../libelles';
 import { choisirPdf, choixPdfDisponible } from './choixPdf';
 import { ouvrirLienDiffere } from './ouvrirLien';
-import { BoutonConfirme, Choix, PastilleRole, Retours, TitreSection, styles, useAgir } from './commun';
+import { BoutonConfirme, Choix, PastilleRole, Retours, styles, useAgir, Intertitre, Panneau } from './commun';
+import { Carte, ESP, EnTetePage, EtatVide, Onglets } from './design';
 
 type VueResumes = 'deposer' | 'miens' | 'bibliotheque' | 'boite' | 'types';
 
@@ -45,6 +46,9 @@ export function ouvrirPdf(client: ClientEsport, teamId: string, depotId: string,
   return ouvrirLienDiffere(async () => (await client.lienPdf(teamId, depotId, options)).url);
 }
 
+/** Libellés courts des vues (iPhone). */
+const COURTS_RESUMES: Partial<Record<VueResumes, string>> = { boite: 'Boîte', types: 'Types', bibliotheque: 'Résumés', miens: 'Mes dépôts' };
+
 export function SectionResumes({ theme, client, detail, large }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; large: boolean }) {
   const peut = (p: string) => detail.moi.permissions.includes(p);
   const redacteur = peut('meeting_summaries.write_summary');
@@ -60,10 +64,34 @@ export function SectionResumes({ theme, client, detail, large }: { theme: ThemeH
   const [vue, setVue] = useState<VueResumes>(options[0]?.[0] ?? 'bibliotheque');
   const active = options.some(o => o[0] === vue) ? vue : (options[0]?.[0] ?? 'bibliotheque');
   return (
-    <View style={{ gap: 16 }} testID="esport-resumes">
-      <TitreSection theme={theme} titre="Résumés de réunions" sous="Déposez l’enregistrement d’une réunion : le résumé en PDF arrive ici dès qu’il est prêt." />
-      {options.length > 1 ? <Segments theme={theme} libelle="Vue" valeur={active} options={options} onChoisir={v => setVue(v as VueResumes)} testID="esport-resumes-vue" /> : null}
-      {options.length === 0 ? <Text style={{ color: theme.attenue }}>Votre rôle ne donne pas accès aux résumés.</Text> : null}
+    <View style={{ gap: ESP.l }} testID="esport-resumes">
+      <EnTetePage
+        theme={theme}
+        large={large}
+        titre="Résumés de réunions"
+        sous="Déposez l’enregistrement d’une réunion : le résumé en PDF arrive ici dès qu’il est prêt."
+        action={
+          options.some(o => o[0] === 'deposer') && active !== 'deposer' ? (
+            <BoutonHub theme={theme} titre="+ Déposer une réunion" variante="plein" onPress={() => setVue('deposer')} testID="esport-resumes-nouveau" />
+          ) : undefined
+        }
+      />
+      {options.length > 1 ? (
+        <Onglets
+          theme={theme}
+          prefixe="esport-resumes-vue"
+          actif={active}
+          defilant={!large && options.length > 3}
+          pleineLargeur={!large && options.length <= 3}
+          onChoisir={v => setVue(v as VueResumes)}
+          entrees={options.map(([id, nom]) => ({ id, libelle: large ? nom : (COURTS_RESUMES[id] ?? nom), description: nom }))}
+        />
+      ) : null}
+      {options.length === 0 ? (
+        <Carte theme={theme}>
+          <EtatVide theme={theme} glyphe="✎" titre="Pas d’accès aux résumés" texte="Votre rôle ne donne pas accès aux résumés de réunions de cette team." />
+        </Carte>
+      ) : null}
       {active === 'deposer' ? <FormulaireDepot theme={theme} client={client} teamId={detail.team.id} onDepose={() => setVue('miens')} /> : null}
       {active === 'miens' ? <MesDepots theme={theme} client={client} teamId={detail.team.id} /> : null}
       {active === 'bibliotheque' ? <Bibliotheque theme={theme} client={client} teamId={detail.team.id} /> : null}
@@ -93,7 +121,7 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   const type = types.find(t => t.id === typeId);
   return (
-    <Panneau theme={theme} testID="esport-depot-formulaire">
+    <Panneau theme={theme} style={{ maxWidth: 820 }} testID="esport-depot-formulaire">
       <Intertitre theme={theme}>Nouveau dépôt</Intertitre>
       <Champ theme={theme} libelle="Lien de l’enregistrement" valeur={lien} onChanger={setLien} placeholder="https://…" maxLength={500} testID="esport-depot-lien" />
       <Choix theme={theme} libelle="Type de réunion" valeur={typeId} options={types.map(t => ({ id: t.id, nom: t.visibilite === 'staff' && !/staff/i.test(t.nom) ? `${t.nom} (staff)` : t.nom, couleur: t.couleur }))} onChoisir={setTypeId} testID="esport-depot-type" />

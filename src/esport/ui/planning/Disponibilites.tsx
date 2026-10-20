@@ -11,11 +11,11 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { BoutonHub, Champ, Intertitre, Panneau, Segments } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { apiPlanning, type CarteDispos, type CelluleCarte, type MesDispos, type RegleDispo } from '../../planning/api';
 import { JOURS, JOURS_COURTS, ajouterJours, aujourdhui, dateCourteJour, dateLongue, dateValide, heureValide, lundiDe, nomFuseau } from '../../planning/libelles';
-import { BoutonConfirme, Retours, TitreSection, styles, useAgir } from '../commun';
+import { BoutonConfirme, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from '../commun';
 import type { PropsModule } from '../modules';
 import { Pastille, SelecteurFuseau, useFuseau } from './commun';
 

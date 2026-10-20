@@ -24,6 +24,7 @@ import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs';
 import http from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { ongletPresent, ongletTeam } from './esport-navigation.mjs';
 import { allerPageAdministration, allerPageApplications, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
 import { chargerPlaywright, demarrerRelais, deverrouiller, optionsIphone, pause, premierLancement, racine, totp } from './mobile-outils.mjs';
 
@@ -179,7 +180,7 @@ try {
   await lea.getByTestId('esport-team-faucons-valorant').waitFor({ timeout: 20_000 });
   verifier((await lea.getByTestId('esport-redacteur').count()) === 0, 'Léa (Joueur) : pas de bloc « Résumés à rédiger »');
   await lea.getByTestId('esport-team-faucons-valorant').click();
-  await lea.getByTestId('esport-onglet-module-meeting_summaries').click();
+  await ongletTeam(lea, 'module-meeting_summaries');
   await lea.getByTestId('esport-depot-formulaire').waitFor({ timeout: 20_000 });
   verifier((await lea.getByTestId('esport-resumes-vue-boite').count()) === 0, 'Joueur : pas de boîte de réception');
   verifier((await lea.getByTestId('esport-resumes-vue-types').count()) === 0, 'Joueur : pas de gestion des types');
@@ -247,7 +248,7 @@ try {
   verifier(true, 'notification in-app : « Le résumé … est prêt »');
   await capture(lea, '06-iphone-lea-notification');
   await lea.getByTestId('esport-team-faucons-valorant').click();
-  await lea.getByTestId('esport-onglet-module-meeting_summaries').click();
+  await ongletTeam(lea, 'module-meeting_summaries');
   await lea.getByTestId('esport-resumes-vue-miens').click();
   await lea.getByTestId(`esport-depot-pdf-${depot.id}`).waitFor({ timeout: 20_000 });
   verifier((await lea.getByTestId(`esport-depot-statut-${depot.id}`).innerText()).includes('Terminé'), 'Mes dépôts : « Terminé »');
@@ -288,7 +289,7 @@ try {
   await ipad.getByText('Réunion hebdo : retakes B').first().waitFor({ timeout: 20_000 });
   verifier(true, 'accueil : dernier résumé affiché');
   await capture(ipad, '08-ipad-accueil');
-  await ipad.getByTestId('esport-onglet-module-goals_tasks').click();
+  await ongletTeam(ipad, 'module-goals_tasks');
   await ipad.getByTestId(`esport-objectif-${obj.id}`).waitFor({ timeout: 20_000 });
   verifier((await ipad.getByTestId(`esport-objectif-pourcentage-${obj.id}`).innerText()).trim() === '50 %', 'progression calculée : 50 %');
   await ipad.getByTestId('esport-taches-vue-kanban').click();
@@ -302,10 +303,10 @@ try {
   await lea.getByText(/vous a assigné « Revoir la VOD du scrim »/).first().waitFor({ timeout: 20_000 });
   verifier(true, 'Léa : notification d’assignation');
   await lea.getByTestId('esport-team-faucons-valorant').click();
-  await lea.getByTestId('esport-onglet-module-goals_tasks').click();
+  await ongletTeam(lea, 'module-goals_tasks');
   await lea.getByTestId('esport-taches-filtre-miennes').click();
   await lea.getByText('Revoir la VOD du scrim').first().waitFor({ timeout: 20_000 });
-  verifier((await lea.getByTestId('esport-tache-nouvelle').count()) === 0, 'Joueur : pas de création de tâche');
+  verifier((await lea.getByTestId('esport-tache-nouvelle').count()) === 0 && (await lea.getByTestId('esport-tache-creer').count()) === 0, 'Joueur : pas de création de tâche');
   await capture(lea, '10-iphone-lea-mes-taches');
 } catch (e) {
   echecs++;

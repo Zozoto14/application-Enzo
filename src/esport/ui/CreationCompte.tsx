@@ -9,12 +9,12 @@
 import React, { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import { PanneauInvitation } from '../../hub/admin/ui/EnvoiInvitation';
-import { Avis, BoutonHub, Case, Champ, Intertitre, Panneau } from '../../hub/admin/ui/commun';
+import { Avis, BoutonHub, Case, Champ } from '../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../hub/themes';
 import type { AppHub, ContexteHub } from '../../hub/types';
 import type { Affectation, Annuaire, ClientEsport, TeamAnnuaire } from '../client';
 import { creerCompteEsport, erreurSaisie, modeleInvitationEsport, noterEnvoiEsport, rattacherCompte, type CompteCree } from '../comptesHub';
-import { Choix, Retours, styles as communs, useAgir } from './commun';
+import { Choix, Retours, styles as communs, useAgir, Intertitre, Panneau } from './commun';
 
 type Choisie = { roleId: string; poste: string };
 

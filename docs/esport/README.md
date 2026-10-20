@@ -23,20 +23,57 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 
 ## Les trois pages de l'Esport
 
-En ouvrant la tuile **Esport**, trois pages de premier niveau, avant d'entrer dans une team :
+En ouvrant la tuile **Esport**, trois pages de premier niveau, avant d'entrer dans une team. Sur PC et iPad
+paysage, elles sont dans la **barre latérale** à gauche ; sur iPhone, dans la **barre d'onglets en bas** :
 
 | Page | Pour quoi faire |
 | --- | --- |
-| **Dashboard** (ouvre par défaut) | Résumé de toutes vos teams. En haut : résumés à rédiger, événements de la semaine (toutes teams), alertes (tâches en retard, résumé en attente depuis plus de 7 jours, présence faible, invités pas encore connectés). Puis une carte par team : membres, présence des 14 derniers jours, résumés en attente, tâches en retard, prochains événements, dernière activité. Touchez une carte pour ouvrir la team. |
+| **Dashboard** (ouvre par défaut) | Résumé de toutes vos teams. En haut, quatre chiffres clés (teams, événements des 7 jours, résumés à rédiger ou tâches en retard, alertes), puis la semaine à venir (toutes teams) et les alertes (tâches en retard, résumé en attente depuis plus de 7 jours, présence faible, invités pas encore connectés). Puis une carte par team : membres, présence des 14 derniers jours, résumés en attente, tâches en retard, prochains événements, dernière activité. Touchez une carte pour ouvrir la team. |
 | **Teams** | Vos teams, création d'une team (Fondateur), notifications, votre profil Esport. |
-| **Membres** | Tous les membres des teams dont vous voyez les membres : filtres (team, rôle, statut invité / actif / suspendu), recherche, création de compte (Fondateur), ajout à une team, rôle, suspension, retrait, invitations. Voir [invitations.md](invitations.md). |
+| **Membres** | Tous les membres des teams dont vous voyez les membres (le Fondateur : aussi les comptes du hub qui ont l'Esport sans être dans aucune team, voir plus bas) : filtres (team, rôle, statut invité / actif / suspendu / sans team), recherche, création de compte (Fondateur), ajout à une team, rôle, suspension, retrait, invitations. Voir [invitations.md](invitations.md). |
 
 Chaque bloc du Dashboard n'apparaît que si le module est activé dans la team **et** que votre rôle
 permet de le voir (un Joueur ne voit pas la présence de toute l'équipe ni le détail du journal). Le
 serveur ne renvoie jamais rien d'une team où vous n'êtes pas.
 
-Dans une team, la barre latérale garde ses modules (planning, disponibilités, présence, résumés,
-objectifs et tâches, review, scouting, strats, playbook, Discord, membres et rôles, journal, paramètres).
+### Dans une team : cinq sections
+
+Les modules activés sont rangés en cinq sections ; une section n'apparaît que si elle contient au moins un
+module ouvert à votre rôle, et chaque section n'affiche que ses modules activés (en sous-onglets) :
+
+```
+Esport
+├── Dashboard
+├── Teams
+│   └── <une team>
+│       ├── Accueil      prochains événements (réponse en un appui), derniers résumés, tâches en retard,
+│       │                l'équipe, notifications, statistiques
+│       ├── Agenda       Planning · Disponibilités · Présence
+│       ├── Jeu          Strats · Playbook · Review vidéo · Scouting
+│       ├── Équipe       Résumés · Objectifs et tâches · Membres et rôles
+│       └── Réglages     Paramètres · Discord · Journal
+└── Membres
+```
+
+- **PC et iPad paysage** : sous Dashboard · Teams · Membres, la barre latérale montre la team ouverte (logo ou
+  initiales sur sa couleur, nom, votre rôle), le bouton **⇄ Changer de team** et les cinq sections. En haut de la
+  page, un fil d'Ariane (**Teams › Faucons Valorant › Agenda**) ramène à la liste des teams, puis les
+  sous-onglets de la section.
+- **iPhone** : en-tête **‹ Teams**, logo et nom de la team, **⇄** pour changer de team, sous-onglets juste
+  dessous ; les cinq sections dans la barre d'onglets en bas.
+- Chaque section se souvient du dernier sous-onglet ouvert. En changeant de team, vous restez sur la même section
+  si elle existe dans l'autre team.
+- Sur chaque page : une seule action principale, à droite du titre (**+ Nouvel événement**, **+ Nouvelle strat**,
+  **+ Nouvelle tâche**…). Les actions secondaires (exports CSV, dupliquer, ajouter au playbook, lien de partage,
+  supprimer) sont dans le menu **⋯**. Les filtres du planning, des strats et du playbook se replient derrière un
+  bouton **Filtres** qui résume ceux qui sont actifs.
+- Sur PC, les formulaires longs (nouvel événement, détail d'un événement, nouvelle tâche, nouvel objectif)
+  s'ouvrent dans un **volet à droite** : la page reste visible derrière (Échap ou le voile le referment). Sur
+  iPhone, ils prennent tout l'écran.
+
+Captures avant et après la refonte de la navigation : [`docs/captures-esport-refonte/`](../captures-esport-refonte/).
+Le système visuel (espacements, typographie, cartes, badges, états vides, en-tête de page, sous-onglets, volet
+latéral) est dans `src/esport/ui/design.tsx`, le cadre de navigation dans `src/esport/ui/CadreEsport.tsx`.
 
 Inviter quelqu'un : **Membres › Créer un compte** ([invitations.md](invitations.md)). Il n'y a plus de
 code d'invitation.
@@ -81,6 +118,14 @@ Plus de code à transmettre :
 2. Le compte « Esport seulement » est créé dans l'Administration et le joueur est déjà dans sa team (statut
    **Invité**). **Envoyer l'invitation par e-mail** ouvre votre messagerie, message prêt.
 3. Le joueur ouvre le lien, choisit son mot de passe, et retrouve sa team dans l'Esport (statut **Actif**).
+
+**Comptes créés dans l'Administration** (avant les invitations directes, ou sans passer par l'Esport) : tout
+compte du hub qui a l'Esport parmi ses apps apparaît dans **Membres**, même s'il n'a jamais ouvert l'Esport,
+avec les pastilles **Jamais connecté** et **Sans team** (filtre **Sans team** ; l'en-tête compte « X comptes,
+dont Y sans team »). **Le compte › Ajouter à une team** (team, rôle, pseudo Esport) le pré-enregistre côté
+serveur, comme une invitation directe : il voit sa team dès sa prochaine ouverture de l'Esport, sans code ni
+écran de pseudo. Cette liste est lue sur l'appareil du Fondateur (annuaire du hub) ; un Manager garde
+l'annuaire du serveur.
 
 Relancer ou révoquer une invitation : **Membres** › le compte. Un Manager ajoute à ses teams un compte qui existe
 déjà (**Membres** › le compte › **Ajouter à une team**). Supprimer un compte dans l'Administration le retire aussi
@@ -135,8 +180,10 @@ mineur : l'accord d'un représentant légal est nécessaire.
 
 ## Accessibilité
 
-Les 8 thèmes du hub respectent les contrastes AA (texte, texte atténué, états, boutons). Sur téléphone, les onglets,
-boutons, cases et choix font au moins 44 px. Tout se fait au clavier sur ordinateur (Tab, Entrée, Espace ; « M »
+Les 8 thèmes du hub respectent les contrastes AA (texte, texte atténué, états, boutons ; l'encre des initiales de
+team est choisie, noire ou blanche, pour le contraste). Sur téléphone, les onglets, sections, sous-onglets,
+boutons, cases, choix, filtres et menus font au moins 44 px, et aucune page ne défile horizontalement.
+Les sections et sous-onglets sont des onglets annoncés (« sélectionné ») et s'ouvrent au clavier (Tab, Entrée). Tout se fait au clavier sur ordinateur (Tab, Entrée, Espace ; « M »
 dans la review) ; les boutons, onglets, choix et barres de statistiques ont un libellé lu par VoiceOver et les
 lecteurs d'écran.
 

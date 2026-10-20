@@ -6,11 +6,11 @@
 
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { BoutonHub, Intertitre, Panneau } from '../../hub/admin/ui/commun';
+import { BoutonHub } from '../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../hub/themes';
 import type { ClientEsport, Depot, DetailTeam, Tache } from '../client';
 import { dateJour } from '../libelles';
-import { styles } from './commun';
+import { styles, Intertitre, Panneau } from './commun';
 import { ouvrirPdf } from './Resumes';
 
 export function AccueilPhase3({ theme, client, detail, onAller }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; onAller(section: `module:${string}`): void }) {

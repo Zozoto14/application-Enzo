@@ -10,11 +10,12 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { BoutonHub, Champ, Intertitre, Panneau, Segments } from '../../hub/admin/ui/commun';
+import { BoutonHub, Champ, Segments } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { ClientEsport, DetailTeam, FiltresTaches, Membre, Objectif, Priorite, StatutTache, Tache } from '../client';
 import { LIBELLES_PRIORITE, LIBELLES_STATUT_TACHE, dateJour, lireDateSaisie } from '../libelles';
-import { BoutonConfirme, Choix, PastilleRole, Retours, TitreSection, styles, useAgir } from './commun';
+import { BoutonConfirme, Choix, PastilleRole, Retours, styles, useAgir, Intertitre, Panneau } from './commun';
+import { EnTetePage, EtatVide, Volet } from './design';
 
 const STATUTS: StatutTache[] = ['a_faire', 'en_cours', 'fait'];
 const PRIORITES: Priorite[] = ['basse', 'normale', 'haute', 'urgente'];
@@ -59,6 +60,7 @@ export function SectionObjectifs({
   const [membres, setMembres] = useState<Membre[]>([]);
   const [filtre, setFiltre] = useState<Filtre>('toutes');
   const [vue, setVue] = useState<'liste' | 'kanban'>(large ? 'kanban' : 'liste');
+  const [formulaire, setFormulaire] = useState<'objectif' | 'tache' | undefined>();
   const { erreur, avis, agir } = useAgir();
 
   const recharger = useCallback(async () => {
@@ -87,42 +89,71 @@ export function SectionObjectifs({
       return 'Tâche supprimée.';
     });
   const peutBouger = (t: Tache) => peut('goals_tasks.update') || (Boolean(moi) && t.assigne?.compte === moi);
+  const cree = async () => {
+    setFormulaire(undefined);
+    await recharger();
+  };
+  const formulaireEl =
+    formulaire === 'objectif' ? (
+      <Panneau theme={theme}>
+        <NouvelObjectif theme={theme} client={client} teamId={teamId} membres={membres} onCree={cree} />
+        <BoutonHub theme={theme} titre="Annuler" onPress={() => setFormulaire(undefined)} testID="esport-objectif-annuler" />
+      </Panneau>
+    ) : formulaire === 'tache' ? (
+      <View style={{ gap: 8 }}>
+        <NouvelleTache theme={theme} client={client} teamId={teamId} membres={membres} objectifs={objectifs ?? []} moi={moi} peutAssigner={peut('goals_tasks.assign')} onCree={cree} large={false} />
+        <BoutonHub theme={theme} titre="Annuler" onPress={() => setFormulaire(undefined)} testID="esport-tache-annuler" />
+      </View>
+    ) : null;
 
   return (
     <View style={{ gap: 16 }} testID="esport-objectifs">
-      <TitreSection theme={theme} titre="Objectifs et tâches" sous="Propres à la team (séparés de l’app Tâches du hub)." />
-      <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-objectifs" />
-      {onExporter && peut('goals_tasks.view') ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          <BoutonHub
-            theme={theme}
-            titre="Exporter les tâches (CSV)"
-            onPress={() =>
+      <EnTetePage
+        theme={theme}
+        large={large}
+        titre="Objectifs et tâches"
+        sous="Propres à la team (séparés de l’app Tâches du hub)."
+        action={peut('goals_tasks.create') ? <BoutonHub theme={theme} titre="+ Nouvelle tâche" variante="plein" onPress={() => setFormulaire('tache')} testID="esport-tache-creer" /> : undefined}
+        actions={[
+          peut('goals_tasks.create') && { titre: '+ Nouvel objectif', onPress: () => setFormulaire('objectif'), testID: 'esport-objectif-creer' },
+          onExporter && peut('goals_tasks.view') && {
+            titre: 'Exporter les tâches (CSV)',
+            testID: 'esport-taches-csv',
+            onPress: () =>
               void agir('Export', async () => {
                 const f = await client.exporterTaches(teamId, filtre === 'toutes' ? {} : { filtre });
                 return (await onExporter(f.nom, f.contenu, 'text/csv')) ? 'Export CSV des tâches enregistré.' : undefined;
-              })
-            }
-            testID="esport-taches-csv"
-          />
-          <BoutonHub
-            theme={theme}
-            titre="Exporter les objectifs (CSV)"
-            onPress={() =>
+              }),
+          },
+          onExporter && peut('goals_tasks.view') && {
+            titre: 'Exporter les objectifs (CSV)',
+            testID: 'esport-objectifs-csv',
+            onPress: () =>
               void agir('Export', async () => {
                 const f = await client.exporterObjectifs(teamId);
                 return (await onExporter(f.nom, f.contenu, 'text/csv')) ? 'Export CSV des objectifs enregistré.' : undefined;
-              })
-            }
-            testID="esport-objectifs-csv"
-          />
-        </View>
-      ) : null}
-
-      <View style={large ? { flexDirection: 'row', gap: 16, alignItems: 'flex-start' } : { gap: 16 }}>
-        <Panneau theme={theme} style={large ? { flex: 1 } : undefined} testID="esport-objectifs-liste">
+              }),
+          },
+        ]}
+      />
+      <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-objectifs" />
+      {/* Formulaires : volet latéral sur PC, bloc en haut de page sur iPhone. */}
+      {formulaire && !large ? formulaireEl : null}
+      <Volet theme={theme} visible={Boolean(formulaire) && large} titre={formulaire === 'objectif' ? 'Nouvel objectif' : 'Nouvelle tâche'} onFermer={() => setFormulaire(undefined)} testID="esport-objectifs-volet">
+        {formulaireEl}
+      </Volet>
+      <View style={{ gap: 16 }}>
+        <Panneau theme={theme} testID="esport-objectifs-liste">
           <Intertitre theme={theme}>Objectifs</Intertitre>
-          {objectifs?.length === 0 ? <Text style={{ color: theme.attenue }}>Aucun objectif pour l’instant.</Text> : null}
+          {objectifs?.length === 0 ? (
+            <EtatVide
+              theme={theme}
+              glyphe="⚑"
+              titre="Aucun objectif pour l’instant"
+              texte="Un objectif regroupe des tâches : sa progression se calcule toute seule."
+              action={peut('goals_tasks.create') ? { titre: '+ Nouvel objectif', onPress: () => setFormulaire('objectif') } : undefined}
+            />
+          ) : null}
           {objectifs?.map(o => (
             <View key={o.id} style={{ gap: 4, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 8 }} testID={`esport-objectif-${o.id}`}>
               <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
@@ -172,11 +203,7 @@ export function SectionObjectifs({
               ) : null}
             </View>
           ))}
-          {peut('goals_tasks.create') ? <NouvelObjectif theme={theme} client={client} teamId={teamId} membres={membres} onCree={recharger} /> : null}
         </Panneau>
-        {peut('goals_tasks.create') ? (
-          <NouvelleTache theme={theme} client={client} teamId={teamId} membres={membres} objectifs={objectifs ?? []} moi={moi} peutAssigner={peut('goals_tasks.assign')} onCree={recharger} large={large} />
-        ) : null}
       </View>
 
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
@@ -207,7 +234,7 @@ export function SectionObjectifs({
 
       {vue === 'liste' ? (
         <Panneau theme={theme} testID="esport-taches-liste">
-          {taches?.length === 0 ? <Text style={{ color: theme.attenue }}>Aucune tâche.</Text> : null}
+          {taches?.length === 0 ? <EtatVide theme={theme} glyphe="☑︎" titre="Aucune tâche" texte={filtre === 'toutes' ? 'Créez la première tâche de la team.' : 'Rien pour ce filtre.'} /> : null}
           {taches?.map(t => (
             <CarteTache key={t.id} theme={theme} tache={t} peutBouger={peutBouger(t)} peutSupprimer={peut('goals_tasks.delete')} onStatut={s => modifier(t, { statut: s })} onSupprimer={() => supprimer(t)} />
           ))}

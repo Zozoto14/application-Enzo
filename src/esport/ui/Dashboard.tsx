@@ -11,32 +11,15 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { BoutonHub, Intertitre, Panneau } from '../../hub/admin/ui/commun';
+import { Pressable, Text, View } from 'react-native';
+import { BoutonHub } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
-import type {
-  CarteTeam,
-  ClientEsport,
-  OccurrenceTableau,
-  Tableau,
-} from '../client';
+import type { CarteTeam, ClientEsport, OccurrenceTableau, Tableau } from '../client';
 import { phraseJournal } from '../libelles';
-import {
-  PastilleRole,
-  Retours,
-  TitreSection,
-  styles as communs,
-  useAgir,
-} from './commun';
-
-const TYPES: Record<string, string> = {
-  scrim: 'Scrim',
-  match: 'Match',
-  training: 'Entraînement',
-  meeting: 'Réunion',
-  tournament: 'Tournoi',
-  other: 'Autre',
-};
+import { typeEvenement } from '../planning/libelles';
+import { PageEsport } from './CadreEsport';
+import { PastilleRole, Retours, useAgir } from './commun';
+import { AvatarTeam, Badge, Carte, ChiffreCle, ESP, EnTetePage, EtatVide, Grille, SqueletteCartes, TitreCarte, attenue, couleurTeam, texte, type EtatPresse } from './design';
 
 /** « jeu. 22/10 · 20:00 » (heure de l'appareil). */
 export function quandCourt(iso: string): string {
@@ -65,365 +48,216 @@ export function Dashboard({
   theme,
   client,
   large,
+  pseudo,
   onOuvrir,
   onBoite,
   onMembres,
+  onTeams,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
   large: boolean;
+  pseudo?: string;
   onOuvrir(teamId: string): void;
   onBoite(): void;
   onMembres?(): void;
+  onTeams?(): void;
 }) {
   const [tableau, setTableau] = useState<Tableau | undefined>();
   const { erreur, agir } = useAgir();
-  const charger = useCallback(
-    async () => setTableau(await client.tableau()),
-    [client],
-  );
+  const charger = useCallback(async () => setTableau(await client.tableau()), [client]);
   useEffect(() => {
     void agir('', charger);
   }, [agir, charger]);
 
-  const texte = { color: theme.texte, ...police(theme.policeTexte) };
-  const attenue = {
-    color: theme.attenue,
-    fontSize: 13,
-    ...police(theme.policeTexte),
-  };
   const g = tableau?.global;
+  const redacteur = Boolean(tableau?.teams.some(t => t.resumes?.redacteur));
+  const enRetard = tableau?.teams.reduce((n, t) => n + (t.taches?.enRetard ?? 0), 0) ?? 0;
+  const membres = tableau?.teams.reduce((n, t) => n + t.effectif.actifs, 0) ?? 0;
 
   return (
-    <ScrollView
-      contentContainerStyle={{
-        padding: 16,
-        gap: 20,
-        maxWidth: 1200,
-        width: '100%',
-        alignSelf: 'center',
-      }}
-      testID="esport-dashboard"
-    >
-      <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
-        <TitreSection
-          theme={theme}
-          titre="Dashboard"
-          sous="Toutes vos teams en un coup d’œil."
-        />
-        <BoutonHub
-          theme={theme}
-          titre="Actualiser"
-          onPress={() => void agir('', charger)}
-          testID="esport-dashboard-actualiser"
-        />
-      </View>
+    <PageEsport large={large} testID="esport-dashboard">
+      <EnTetePage
+        theme={theme}
+        large={large}
+        titre={pseudo ? `Bonjour ${pseudo}` : 'Dashboard'}
+        sous="Toutes vos teams en un coup d’œil : chiffres clés, semaine à venir, alertes."
+        action={<BoutonHub theme={theme} titre="⟳ Actualiser" libelle="Actualiser le dashboard" onPress={() => void agir('', charger)} testID="esport-dashboard-actualiser" />}
+      />
       <Retours theme={theme} erreur={erreur} prefixe="esport-dashboard" />
-      {!tableau ? <Text style={attenue}>Chargement…</Text> : null}
+      {!tableau && !erreur ? <SqueletteCartes theme={theme} n={large ? 4 : 2} large={large} /> : null}
       {tableau && tableau.teams.length === 0 ? (
-        <Panneau theme={theme} testID="esport-dashboard-vide">
-          <Text style={texte}>
-            Vous n’êtes encore dans aucune team. Le Fondateur ou le staff de
-            votre team vous y ajoute : elle apparaîtra ici d’elle-même.
-          </Text>
-        </Panneau>
+        <Carte theme={theme} testID="esport-dashboard-vide">
+          <EtatVide
+            theme={theme}
+            glyphe="◆"
+            titre="Aucune team pour l’instant"
+            texte="Vous n’êtes encore dans aucune team. Le Fondateur ou le staff de votre team vous y ajoute : elle apparaîtra ici d’elle-même."
+            action={onTeams ? { titre: 'Voir les teams', onPress: onTeams, testID: 'esport-dashboard-vers-teams' } : undefined}
+          />
+        </Carte>
       ) : null}
       {g && tableau && tableau.teams.length > 0 ? (
-        <View
-          style={
-            large
-              ? { flexDirection: 'row', gap: 16, alignItems: 'stretch' }
-              : { gap: 16 }
-          }
-          testID="esport-dashboard-global"
-        >
-          {tableau.teams.some(t => t.resumes?.redacteur) ? (
-            <Panneau
-              theme={theme}
-              style={large ? { flex: 1 } : undefined}
-              testID="esport-dashboard-resumes"
-            >
-              <Text style={attenue}>Résumés à rédiger</Text>
-              <Text
-                style={[texte, { fontSize: 32, fontWeight: '800' }]}
-                testID="esport-dashboard-resumes-nombre"
-              >
-                {g.resumesARediger}
-              </Text>
-              {g.resumesARediger > 0 ? (
-                <BoutonHub
-                  theme={theme}
-                  titre="Boîte de réception"
-                  onPress={onBoite}
-                  testID="esport-dashboard-boite"
-                />
-              ) : (
-                <Text style={attenue}>Rien en attente.</Text>
-              )}
-            </Panneau>
-          ) : null}
-          <Panneau
-            theme={theme}
-            style={large ? { flex: 2 } : undefined}
-            testID="esport-dashboard-semaine"
-          >
-            <Intertitre
-              theme={theme}
-            >{`Cette semaine (${g.evenementsSemaine.length})`}</Intertitre>
-            {g.evenementsSemaine.length === 0 ? (
-              <Text style={attenue}>
-                Aucun événement dans les 7 prochains jours.
-              </Text>
-            ) : null}
-            {g.evenementsSemaine.slice(0, 8).map(o => (
-              <LigneEvenement
-                key={`${o.evenementId}-${o.cle}`}
+        <>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: large ? ESP.m : ESP.s }} testID="esport-dashboard-global">
+            <ChiffreCle theme={theme} large={large} glyphe="◆" libelle="Teams" valeur={String(tableau.teams.length)} detail={`${membres} membre${membres > 1 ? 's' : ''} actif${membres > 1 ? 's' : ''}`} onPress={onTeams} testID="esport-dashboard-chiffre-teams" />
+            <ChiffreCle theme={theme} large={large} glyphe="◷" libelle="Événements (7 jours)" valeur={String(g.evenementsSemaine.length)} detail={g.evenementsSemaine[0] ? `Prochain : ${quandCourt(g.evenementsSemaine[0].debut)}` : 'Rien de prévu'} testID="esport-dashboard-chiffre-semaine" />
+            {redacteur ? (
+              <ChiffreCle
                 theme={theme}
-                o={o}
-                avecTeam
+                large={large}
+                glyphe="✎"
+                libelle="Résumés à rédiger"
+                valeur={String(g.resumesARediger)}
+                testIDValeur="esport-dashboard-resumes-nombre"
+                ton={g.resumesARediger > 0 ? 'alerte' : 'neutre'}
+                detail={g.resumesARediger > 0 ? 'Ouvrir la boîte ›' : 'Rien en attente'}
+                onPress={g.resumesARediger > 0 ? onBoite : undefined}
+                testID="esport-dashboard-resumes"
               />
-            ))}
-          </Panneau>
-          <Panneau
-            theme={theme}
-            style={large ? { flex: 1.4 } : undefined}
-            testID="esport-dashboard-alertes"
-          >
-            <Intertitre theme={theme}>{`Alertes${
-              g.alertes.length ? ` (${g.alertes.length})` : ''
-            }`}</Intertitre>
-            {g.alertes.length === 0 ? (
-              <Text style={attenue}>Tout est en ordre.</Text>
-            ) : null}
-            {g.alertes.map(a => (
-              <Pressable
-                key={`${a.genre}-${a.teamId}`}
-                accessibilityRole="button"
-                accessibilityLabel={`${a.teamNom} : ${a.texte}`}
-                onPress={() =>
-                  a.genre === 'invites' && onMembres
-                    ? onMembres()
-                    : onOuvrir(a.teamId)
-                }
-                style={{
-                  flexDirection: 'row',
-                  gap: 8,
-                  alignItems: 'center',
-                  minHeight: 32,
-                }}
-                testID={`esport-alerte-${a.genre}-${a.teamId}`}
-              >
-                <View
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 4,
-                    backgroundColor:
-                      a.genre === 'invites' ? theme.accent : theme.alerte,
-                  }}
-                />
-                <Text style={[texte, { flex: 1 }]}>
-                  <Text style={{ fontWeight: '700' }}>{a.teamNom}</Text> ·{' '}
-                  {a.texte}
-                </Text>
-              </Pressable>
-            ))}
-          </Panneau>
-        </View>
+            ) : (
+              <ChiffreCle theme={theme} large={large} glyphe="☑︎" libelle="Tâches en retard" valeur={String(enRetard)} ton={enRetard > 0 ? 'critique' : 'ok'} detail={enRetard > 0 ? 'À rattraper' : 'Tout est à jour'} testID="esport-dashboard-chiffre-taches" />
+            )}
+            <ChiffreCle theme={theme} large={large} glyphe="!" libelle="Alertes" valeur={String(g.alertes.length)} ton={g.alertes.length > 0 ? 'alerte' : 'ok'} detail={g.alertes.length > 0 ? 'Voir ci-dessous' : 'Tout est en ordre'} testID="esport-dashboard-chiffre-alertes" />
+          </View>
+          <View style={large ? { flexDirection: 'row', gap: ESP.l, alignItems: 'flex-start' } : { gap: ESP.m }}>
+            <Carte theme={theme} style={large ? { flex: 2 } : undefined} testID="esport-dashboard-semaine">
+              <TitreCarte theme={theme} titre={`Cette semaine (${g.evenementsSemaine.length})`} sous="Les 7 prochains jours, toutes teams confondues." />
+              {g.evenementsSemaine.length === 0 ? <EtatVide theme={theme} glyphe="◷" titre="Semaine libre" texte="Aucun événement dans les 7 prochains jours." /> : null}
+              <View style={{ gap: ESP.xs }}>
+                {g.evenementsSemaine.slice(0, 8).map(o => (
+                  <LigneEvenement key={`${o.evenementId}-${o.cle}`} theme={theme} o={o} avecTeam onPress={() => onOuvrir(o.teamId)} />
+                ))}
+              </View>
+            </Carte>
+            <Carte theme={theme} style={large ? { flex: 1.2 } : undefined} testID="esport-dashboard-alertes">
+              <TitreCarte theme={theme} titre={`Alertes${g.alertes.length ? ` (${g.alertes.length})` : ''}`} />
+              {g.alertes.length === 0 ? <EtatVide theme={theme} glyphe="✓" titre="Tout est en ordre" texte="Aucune tâche en retard, aucun résumé ni présence en souffrance." /> : null}
+              {g.alertes.map(a => (
+                <Pressable
+                  key={`${a.genre}-${a.teamId}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${a.teamNom} : ${a.texte}`}
+                  onPress={() => (a.genre === 'invites' && onMembres ? onMembres() : onOuvrir(a.teamId))}
+                  style={(etat: EtatPresse) => ({
+                    flexDirection: 'row',
+                    gap: ESP.s,
+                    alignItems: 'center',
+                    minHeight: 48,
+                    paddingHorizontal: ESP.s,
+                    borderRadius: 10,
+                    backgroundColor: teinteTransparente(a.genre === 'invites' ? theme.accent : theme.alerte, etat.hovered ? 0.18 : 0.1),
+                  })}
+                  testID={`esport-alerte-${a.genre}-${a.teamId}`}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: a.genre === 'invites' ? theme.accent : theme.alerte }} />
+                  <Text style={{ ...texte(theme), flex: 1 }}>
+                    <Text style={{ fontWeight: '700' }}>{a.teamNom}</Text> · {a.texte}
+                  </Text>
+                  <Text style={{ color: theme.attenue, fontSize: 18 }}>›</Text>
+                </Pressable>
+              ))}
+            </Carte>
+          </View>
+          <View style={{ gap: ESP.m }}>
+            <Text accessibilityRole="header" style={{ ...texte(theme, 20), fontWeight: '700', ...police(theme.policeTitre) }}>
+              Vos teams
+            </Text>
+            <Grille min={large ? 340 : 280} gap={ESP.m} testID="esport-dashboard-teams">
+              {tableau.teams.map(c => (
+                <CarteDashboard key={c.team.id} theme={theme} carte={c} onOuvrir={() => onOuvrir(c.team.id)} />
+              ))}
+            </Grille>
+          </View>
+        </>
       ) : null}
-      {tableau && tableau.teams.length > 0 ? (
-        <View
-          style={[communs.ligne, { alignItems: 'stretch', gap: 16 }]}
-          testID="esport-dashboard-teams"
-        >
-          {tableau.teams.map(c => (
-            <CarteDashboard
-              key={c.team.id}
-              theme={theme}
-              carte={c}
-              large={large}
-              onOuvrir={() => onOuvrir(c.team.id)}
-            />
-          ))}
-        </View>
-      ) : null}
-    </ScrollView>
+    </PageEsport>
   );
 }
 
-function LigneEvenement({
-  theme,
-  o,
-  avecTeam,
-}: {
-  theme: ThemeHub;
-  o: OccurrenceTableau;
-  avecTeam?: boolean;
-}) {
-  const texte = {
-    color: theme.texte,
-    fontSize: 13,
-    ...police(theme.policeTexte),
-  };
+/** Une ligne d'événement : jour et heure, liseré de la couleur du type, titre, type et team. */
+function LigneEvenement({ theme, o, avecTeam, onPress }: { theme: ThemeHub; o: OccurrenceTableau; avecTeam?: boolean; onPress?(): void }) {
+  const t = typeEvenement(o.type);
   return (
-    <View style={{ flexDirection: 'row', gap: 8, alignItems: 'baseline' }}>
-      <Text
-        style={[
-          texte,
-          {
-            color: theme.attenue,
-            minWidth: 108,
-            ...police(theme.policeChiffres),
-          },
-        ]}
-      >
-        {quandCourt(o.debut)}
-      </Text>
-      <Text style={[texte, { flex: 1 }]} numberOfLines={1}>
-        {o.titre}
-        <Text style={{ color: theme.attenue }}>{` · ${TYPES[o.type] ?? o.type}${
-          avecTeam && o.teamNom ? ` · ${o.teamNom}` : ''
-        }`}</Text>
-      </Text>
-    </View>
+    <Pressable
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={`${o.titre}, ${t.nom}, ${quandCourt(o.debut)}${avecTeam && o.teamNom ? `, ${o.teamNom}` : ''}`}
+      disabled={!onPress}
+      onPress={onPress}
+      style={(etat: EtatPresse) => ({
+        flexDirection: 'row',
+        gap: ESP.s,
+        alignItems: 'center',
+        minHeight: 48,
+        paddingVertical: ESP.xs,
+        paddingHorizontal: ESP.s,
+        borderRadius: 10,
+        backgroundColor: etat.hovered ? teinteTransparente(theme.attenue, 0.1) : teinteTransparente(theme.attenue, 0.05),
+      })}>
+      <View style={{ width: 4, alignSelf: 'stretch', borderRadius: 2, backgroundColor: t.couleur }} />
+      <View style={{ width: 92 }}>
+        <Text style={{ ...texte(theme, 14), fontWeight: '700', ...police(theme.policeChiffres) }}>{quandCourt(o.debut).split(' · ')[0]}</Text>
+        <Text style={{ ...attenue(theme), ...police(theme.policeChiffres) }}>{quandCourt(o.debut).split(' · ')[1]}</Text>
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text style={{ ...texte(theme), fontWeight: '600' }} numberOfLines={1}>
+          {o.titre}
+        </Text>
+        <Text style={attenue(theme)} numberOfLines={1}>
+          {`${t.nom}${avecTeam && o.teamNom ? ` · ${o.teamNom}` : ''}${o.lieu ? ` · ${o.lieu}` : ''}`}
+        </Text>
+      </View>
+    </Pressable>
   );
 }
 
-function Indicateur({
-  theme,
-  libelle,
-  valeur,
-  alerte,
-  testID,
-}: {
-  theme: ThemeHub;
-  libelle: string;
-  valeur: string;
-  alerte?: boolean;
-  testID: string;
-}) {
+function Indicateur({ theme, libelle, valeur, alerte, testID }: { theme: ThemeHub; libelle: string; valeur: string; alerte?: boolean; testID: string }) {
   return (
     <View
       style={{
-        minWidth: 90,
+        minWidth: 92,
         flex: 1,
         gap: 2,
-        padding: 8,
-        borderRadius: Math.min(theme.rayonMoyen, 8),
-        backgroundColor: teinteTransparente(
-          alerte ? theme.alerte : theme.attenue,
-          alerte ? 0.14 : 0.07,
-        ),
+        paddingVertical: ESP.xs,
+        paddingHorizontal: ESP.s,
+        borderRadius: Math.min(theme.rayonMoyen, 10),
+        backgroundColor: teinteTransparente(alerte ? theme.alerte : theme.attenue, alerte ? 0.14 : 0.07),
       }}
-      testID={testID}
-    >
-      <Text
-        style={{
-          color: theme.attenue,
-          fontSize: 11,
-          ...police(theme.policeTexte),
-        }}
-      >
+      testID={testID}>
+      <Text style={{ color: alerte ? theme.alerte : theme.texte, fontSize: 20, fontWeight: '700', ...police(theme.policeChiffres) }}>{valeur}</Text>
+      <Text style={attenue(theme, 12)} numberOfLines={1}>
         {libelle}
-      </Text>
-      <Text
-        style={{
-          color: alerte ? theme.alerte : theme.texte,
-          fontSize: 17,
-          fontWeight: '800',
-          ...police(theme.policeChiffres),
-        }}
-      >
-        {valeur}
       </Text>
     </View>
   );
 }
 
-function CarteDashboard({
-  theme,
-  carte,
-  large,
-  onOuvrir,
-}: {
-  theme: ThemeHub;
-  carte: CarteTeam;
-  large: boolean;
-  onOuvrir(): void;
-}) {
+function CarteDashboard({ theme, carte, onOuvrir }: { theme: ThemeHub; carte: CarteTeam; onOuvrir(): void }) {
   const { team, effectif } = carte;
-  const texte = { color: theme.texte, ...police(theme.policeTexte) };
-  const attenue = {
-    color: theme.attenue,
-    fontSize: 12,
-    ...police(theme.policeTexte),
-  };
   const activite = carte.derniereActivite;
   const phrase = activite?.action
     ? phraseJournal(
-        {
-          id: '',
-          action: activite.action,
-          acteur: activite.acteur ?? null,
-          entiteType: null,
-          entiteId: null,
-          meta: activite.meta ?? {},
-          date: activite.date,
-        },
+        { id: '', action: activite.action, acteur: activite.acteur ?? null, entiteType: null, entiteId: null, meta: activite.meta ?? {}, date: activite.date },
         activite.acteur ? { [activite.acteur]: activite.pseudo ?? null } : {},
       )
     : undefined;
   return (
-    <Pressable
-      testID={`esport-team-${team.slug}`}
-      accessibilityRole="button"
-      accessibilityLabel={`Ouvrir ${team.nom}`}
-      onPress={onOuvrir}
-      style={(etat: { pressed: boolean }) => ({
-        width: large ? 360 : ('100%' as const),
-        borderWidth: 1,
-        padding: 16,
-        gap: 12,
-        backgroundColor: theme.surface,
-        borderColor: (etat as { hovered?: boolean }).hovered
-          ? theme.accent
-          : theme.ligne,
-        borderRadius: theme.rayonMoyen,
-      })}
-    >
-      <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
-        <Text
-          style={[texte, { fontSize: 18, fontWeight: '800', flexShrink: 1 }]}
-          numberOfLines={1}
-        >
-          {team.nom}
-        </Text>
-        {carte.role ? (
-          <PastilleRole
-            theme={theme}
-            nom={carte.role.nom}
-            couleur={carte.role.couleur}
-          />
-        ) : (
-          <Text style={attenue}>Fondateur</Text>
-        )}
+    <Carte theme={theme} testID={`esport-team-${team.slug}`} libelle={`Ouvrir ${team.nom}`} onPress={onOuvrir} accent={couleurTeam(team.slug)} style={{ height: '100%' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.s }}>
+        <AvatarTeam theme={theme} team={team} taille={44} />
+        <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+          <Text style={{ ...texte(theme, 18), fontWeight: '800' }} numberOfLines={1}>
+            {team.nom}
+          </Text>
+          {carte.role ? <PastilleRole theme={theme} nom={carte.role.nom} couleur={carte.role.couleur} /> : <Badge theme={theme} texte="Fondateur" ton="accent" />}
+        </View>
       </View>
-      <View style={[communs.ligne, { gap: 8 }]}>
-        <Indicateur
-          theme={theme}
-          libelle="Membres"
-          valeur={`${effectif.actifs}${
-            effectif.invites ? ` +${effectif.invites}` : ''
-          }`}
-          testID={`esport-carte-membres-${team.slug}`}
-        />
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs }}>
+        <Indicateur theme={theme} libelle="Membres" valeur={`${effectif.actifs}${effectif.invites ? ` +${effectif.invites}` : ''}`} testID={`esport-carte-membres-${team.slug}`} />
         {carte.presence ? (
           <Indicateur
             theme={theme}
             libelle={`Présence ${carte.presence.jours} j`}
-            valeur={
-              carte.presence.taux === null ? '—' : `${carte.presence.taux} %`
-            }
+            valeur={carte.presence.taux === null ? '—' : `${carte.presence.taux} %`}
             alerte={carte.presence.taux !== null && carte.presence.taux < 60}
             testID={`esport-carte-presence-${team.slug}`}
           />
@@ -433,56 +267,35 @@ function CarteDashboard({
             theme={theme}
             libelle="Résumés en attente"
             valeur={String(carte.resumes.aResumer + carte.resumes.enCours)}
-            alerte={
-              carte.resumes.aResumer + carte.resumes.enCours > 0 &&
-              carte.resumes.redacteur
-            }
+            alerte={carte.resumes.aResumer + carte.resumes.enCours > 0 && carte.resumes.redacteur}
             testID={`esport-carte-resumes-${team.slug}`}
           />
         ) : null}
-        {carte.taches ? (
-          <Indicateur
-            theme={theme}
-            libelle="Tâches en retard"
-            valeur={String(carte.taches.enRetard)}
-            alerte={carte.taches.enRetard > 0}
-            testID={`esport-carte-taches-${team.slug}`}
-          />
-        ) : null}
+        {carte.taches ? <Indicateur theme={theme} libelle="Tâches en retard" valeur={String(carte.taches.enRetard)} alerte={carte.taches.enRetard > 0} testID={`esport-carte-taches-${team.slug}`} /> : null}
       </View>
-      {effectif.invites > 0 ? (
-        <Text style={attenue}>{`${effectif.invites} invité${
-          effectif.invites > 1 ? 's' : ''
-        } pas encore connecté${effectif.invites > 1 ? 's' : ''}`}</Text>
-      ) : null}
+      {effectif.invites > 0 ? <Text style={attenue(theme)}>{`${effectif.invites} invité${effectif.invites > 1 ? 's' : ''} pas encore connecté${effectif.invites > 1 ? 's' : ''}`}</Text> : null}
       {carte.prochains ? (
-        <View style={{ gap: 4 }}>
-          <Text style={[attenue, { fontWeight: '700' }]}>
-            Prochains événements
-          </Text>
-          {carte.prochains.length === 0 ? (
-            <Text style={attenue}>Rien de prévu dans les 30 jours.</Text>
-          ) : null}
-          {carte.prochains.map(o => (
-            <LigneEvenement
-              key={`${o.evenementId}-${o.cle}`}
-              theme={theme}
-              o={o}
-            />
-          ))}
+        <View style={{ gap: ESP.xxs }}>
+          <Text style={{ ...attenue(theme), fontWeight: '700' }}>Prochains événements</Text>
+          {carte.prochains.length === 0 ? <Text style={attenue(theme)}>Rien de prévu dans les 30 jours.</Text> : null}
+          {carte.prochains.slice(0, 3).map(o => {
+            const t = typeEvenement(o.type);
+            return (
+              <View key={`${o.evenementId}-${o.cle}`} style={{ flexDirection: 'row', gap: ESP.xs, alignItems: 'center' }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: t.couleur }} />
+                <Text style={{ ...attenue(theme), minWidth: 104, ...police(theme.policeChiffres) }}>{quandCourt(o.debut)}</Text>
+                <Text style={{ ...texte(theme, 14), flex: 1 }} numberOfLines={1}>
+                  {o.titre}
+                </Text>
+              </View>
+            );
+          })}
         </View>
       ) : null}
-      <Text
-        style={attenue}
-        numberOfLines={2}
-        testID={`esport-carte-activite-${team.slug}`}
-      >
-        {activite
-          ? `Dernière activité ${depuis(activite.date)}${
-              phrase ? ` : ${phrase}` : ''
-            }`
-          : 'Aucune activité pour l’instant.'}
+      <View style={{ flex: 1 }} />
+      <Text style={attenue(theme)} numberOfLines={2} testID={`esport-carte-activite-${team.slug}`}>
+        {activite ? `Dernière activité ${depuis(activite.date)}${phrase ? ` : ${phrase}` : ''}` : 'Aucune activité pour l’instant.'}
       </Text>
-    </Pressable>
+    </Carte>
   );
 }

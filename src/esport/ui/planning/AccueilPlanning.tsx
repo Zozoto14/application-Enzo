@@ -7,12 +7,13 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
-import { BoutonHub, Champ, Intertitre, Panneau } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
 import type { ClientEsport, DetailTeam } from '../../client';
 import { apiPlanning, type AccueilPlanning as Donnees } from '../../planning/api';
 import { dateCourteJour, fuseauAppareil } from '../../planning/libelles';
-import { Retours, styles, useAgir } from '../commun';
+import { Retours, styles, useAgir, Intertitre, Panneau } from '../commun';
+import { EtatVide, Squelette, TitreCarte } from '../design';
 import type { PropsModule } from '../modules';
 import { BoutonsRsvp, CarteOccurrence } from './commun';
 
@@ -34,12 +35,15 @@ export function AccueilPlanning({ theme, client, detail, onAller }: { theme: The
   return (
     <>
       <Panneau theme={theme} testID="esport-accueil-prochains">
-        <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
-          <Intertitre theme={theme}>Prochains événements</Intertitre>
-          <BoutonHub theme={theme} titre="Planning" onPress={() => onAller('module:planning')} testID="esport-accueil-planning" />
-        </View>
-        {d && d.prochains.length === 0 ? <Text style={attenue}>Rien de prévu dans les deux semaines.</Text> : null}
-        {d?.prochains.map(o => (
+        <TitreCarte
+          theme={theme}
+          titre="Prochains événements"
+          sous={d && d.prochains.length > 3 ? `${d.prochains.length} dans les deux semaines` : undefined}
+          droite={<BoutonHub theme={theme} titre="Tout le planning ›" onPress={() => onAller('module:planning')} testID="esport-accueil-planning" />}
+        />
+        {!d ? <Squelette theme={theme} lignes={3} /> : null}
+        {d && d.prochains.length === 0 ? <EtatVide theme={theme} glyphe="◷" titre="Rien de prévu" texte="Aucun événement dans les deux semaines." /> : null}
+        {d?.prochains.slice(0, 3).map(o => (
           <CarteOccurrence
             key={`${o.evenementId}-${o.cle}`}
             theme={theme}

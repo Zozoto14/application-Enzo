@@ -12,7 +12,7 @@
 
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
-import { BoutonHub, Champ, Intertitre, Panneau, Segments } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { ErreurEsport } from '../../client';
 import type { Strat } from '../../strats/api';
@@ -37,7 +37,7 @@ import {
   type Vue,
 } from '../../strats/document';
 import { LIBELLES_SIDE } from '../../strats/libelles';
-import { Retours, styles, useAgir } from '../commun';
+import { Retours, styles, useAgir, Intertitre, Panneau } from '../commun';
 import type { ExportCanevas, Outil } from './CanevasStrat.web';
 import { MentionRiot } from './commun';
 import type { PropsEditeur } from './types';

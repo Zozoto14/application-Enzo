@@ -22,6 +22,7 @@ import http from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { deflateSync } from 'node:zlib';
+import { ongletTeam } from './esport-navigation.mjs';
 import { nouveauContexte, allerPageApplications, tuileApp } from './e2e-acceptation.mjs';
 import { chargerPlaywright, demarrerRelais, deverrouiller, pause, premierLancement, racine } from './mobile-outils.mjs';
 
@@ -209,7 +210,7 @@ async function allerModule(page, cle) {
     await page.getByTestId('esport-team-faucons-valorant').waitFor({ timeout: 30_000 });
     await page.getByTestId('esport-team-faucons-valorant').click();
   }
-  await page.getByTestId(`esport-onglet-module-${cle}`).click();
+  await ongletTeam(page, `module-${cle}`);
 }
 
 /** Point du canevas en coordonnées du document (carré de 1000) → coordonnées de la page. */
@@ -324,6 +325,8 @@ try {
   // ================================================================ Playbook
   log('PC : ajouter au playbook, filtrer, valider');
   await pc.getByTestId('esport-editeur-retour').click();
+  // Actions secondaires de la carte : menu « ⋯ ».
+  await pc.getByTestId(`esport-strat-actions-${id}`).click();
   await pc.getByTestId(`esport-strat-playbook-${id}`).click();
   await pc.getByTestId('esport-playbook').waitFor({ timeout: 20_000 });
   const entree = (await api(`/teams/${faucons.id}/playbook`, sessFond)).corps.entrees[0];

@@ -11,12 +11,13 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { BoutonHub, Champ, Intertitre, Panneau, Segments } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
 import { apiStrats, type EntreePlaybook, type FiltresPlaybook, type Playbook as DonneesPlaybook, type StatutPlaybook, type Strat } from '../../strats/api';
 import type { Side, TypeStrat } from '../../strats/document';
 import { LIBELLES_SIDE, LIBELLES_STATUT_PLAYBOOK, LIBELLES_TYPE_STRAT, TYPES_STRAT, lireTags } from '../../strats/libelles';
-import { BoutonConfirme, Choix, Retours, TitreSection, styles, useAgir } from '../commun';
+import { BoutonConfirme, Choix, Retours, styles, useAgir, Intertitre, Panneau } from '../commun';
+import { ESP, EnTetePage, Pliable } from '../design';
 import type { PropsModule } from '../modules';
 import { Etiquette, Filtre, MentionRiot, Miniature, demanderStrat, useAssets } from './commun';
 
@@ -50,13 +51,16 @@ export function Playbook({ theme, client, detail, large, onAller }: PropsModule)
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
 
   return (
-    <View style={{ gap: 14 }} testID="esport-playbook">
-      <TitreSection theme={theme} titre="Playbook" sous="La bibliothèque de la team : strats validées par carte, side et type, et protocoles écrits." />
+    <View style={{ gap: ESP.l }} testID="esport-playbook">
+      <EnTetePage
+        theme={theme}
+        large={large}
+        titre="Playbook"
+        sous="La bibliothèque de la team : strats validées par carte, side et type, et protocoles écrits."
+        action={gerer ? <BoutonHub theme={theme} titre={creation ? 'Fermer' : '+ Nouvelle entrée'} variante={creation ? 'normal' : 'plein'} onPress={() => setCreation(!creation)} testID="esport-playbook-nouvelle" /> : undefined}
+      />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-playbook" />
-      <View style={styles.ligne}>
-        {gerer ? <BoutonHub theme={theme} titre={creation ? 'Fermer' : 'Nouvelle entrée'} variante={creation ? 'normal' : 'plein'} onPress={() => setCreation(!creation)} testID="esport-playbook-nouvelle" /> : null}
-        <Champ theme={theme} libelle="Rechercher" valeur={recherche} onChanger={setRecherche} placeholder="Titre, description, tag…" maxLength={60} style={{ flex: 1, minWidth: 180 }} testID="esport-playbook-recherche" />
-      </View>
+      <Champ theme={theme} libelle="Rechercher" valeur={recherche} onChanger={setRecherche} placeholder="Titre, description, tag…" maxLength={60} style={{ maxWidth: 480 }} testID="esport-playbook-recherche" />
       {creation ? (
         <NouvelleEntree
           theme={theme}
@@ -73,6 +77,12 @@ export function Playbook({ theme, client, detail, large, onAller }: PropsModule)
           }
         />
       ) : null}
+      <Pliable
+        theme={theme}
+        titre="Filtres"
+        ouvertParDefaut={large}
+        resume={[filtres.statut ? { validee: 'validées', brouillon: 'brouillons', archivee: 'archivées', tous: 'toutes' }[filtres.statut] : '', filtres.carte ?? '', filtres.side ? LIBELLES_SIDE[filtres.side] : '', filtres.type ? LIBELLES_TYPE_STRAT[filtres.type] : '', filtres.tag ? `#${filtres.tag}` : '', filtres.favoris ? 'favoris' : ''].filter(Boolean).join(' · ') || 'aucun'}
+        testID="esport-playbook-filtres-ouvrir">
       <Panneau theme={theme} testID="esport-playbook-filtres">
         <Filtre<StatutPlaybook | 'tous'>
           theme={theme}
@@ -88,6 +98,7 @@ export function Playbook({ theme, client, detail, large, onAller }: PropsModule)
         {donnees?.tags.length ? <Filtre theme={theme} libelle="Tag" valeur={filtres.tag ?? ''} options={[['', 'Tous'], ...donnees.tags.map(t => [t, `#${t}`] as const)]} onChoisir={v => setFiltres(f => ({ ...f, tag: v || undefined }))} testID="esport-playbook-filtre-tag" /> : null}
         <Filtre<'1'> theme={theme} libelle="Favoris" valeur={filtres.favoris ? '1' : ''} options={[['', 'Tout'], ['1', '★ Favoris']]} onChoisir={v => setFiltres(f => ({ ...f, favoris: v === '1' || undefined }))} testID="esport-playbook-filtre-favoris" />
       </Panneau>
+      </Pliable>
       {donnees ? <Text style={attenue} testID="esport-playbook-compte">{`${donnees.entrees.length} entrée(s) sur ${donnees.total}`}</Text> : null}
       <View style={[styles.ligne, { alignItems: 'stretch' }]}>
         {donnees?.entrees.map(e => (
@@ -117,7 +128,7 @@ export function Playbook({ theme, client, detail, large, onAller }: PropsModule)
                 {e.titre}
               </Text>
               {gerer ? (
-                <Pressable accessibilityRole="button" accessibilityLabel={e.favori ? 'Retirer des favoris' : 'Ajouter aux favoris'} onPress={() => modifier(e, { favori: !e.favori })} testID={`esport-playbook-favori-${e.id}`} hitSlop={8}>
+                <Pressable accessibilityRole="button" accessibilityLabel={e.favori ? 'Retirer des favoris' : 'Ajouter aux favoris'} onPress={() => modifier(e, { favori: !e.favori })} testID={`esport-playbook-favori-${e.id}`} style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
                   <Text style={{ color: e.favori ? theme.alerte : theme.attenue, fontSize: 20 }}>{e.favori ? '★' : '☆'}</Text>
                 </Pressable>
               ) : null}

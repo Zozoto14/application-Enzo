@@ -7,13 +7,13 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
-import { BoutonHub, Champ, Interrupteur, Intertitre, Panneau } from '../../hub/admin/ui/commun';
+import { Pressable, Text, View } from 'react-native';
+import { BoutonHub, Champ, Interrupteur } from '../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../hub/themes';
 import { nomModule } from '../client';
 import { apiDiscord, type EnvoiDiscord, type EtatDiscord, type ParametreDiscord } from '../discord/api';
 import { dateCourte } from '../libelles';
-import { BoutonConfirme, Retours, TitreSection, styles, useAgir } from './commun';
+import { BoutonConfirme, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from './commun';
 import type { PropsModule } from './modules';
 
 const STATUTS: Record<EnvoiDiscord['statut'], string> = { attente: 'En attente', envoye: 'Envoyé', abandonne: 'Abandonné' };
@@ -38,7 +38,15 @@ function CarteNotification({ theme, parametre, onEnregistrer, occupe }: { theme:
           <Text style={attenue}>{parametre.description}</Text>
           {!parametre.disponible ? <Text style={{ color: theme.alerte, fontSize: 12 }}>Indisponible : le module {absent.join(', ')} n’est pas activé pour cette team.</Text> : null}
         </View>
-        <Interrupteur theme={theme} libelle={`${parametre.libelle} : envoyer sur Discord`} valeur={parametre.actif} desactive={!parametre.disponible || occupe} onChanger={v => onEnregistrer({ actif: v })} testID={`esport-discord-actif-${id}`} />
+        {/* Zone tactile de 44 px autour de l'interrupteur natif (qui en dessine 40 × 20). */}
+        <Pressable
+          accessible={false}
+          disabled={!parametre.disponible || occupe}
+          onPress={() => onEnregistrer({ actif: !parametre.actif })}
+          style={{ minWidth: 56, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
+          {...({ dataSet: { cibleExemptee: 'oui' } } as object)}>
+          <Interrupteur theme={theme} libelle={`${parametre.libelle} : envoyer sur Discord`} valeur={parametre.actif} desactive={!parametre.disponible || occupe} onChanger={v => onEnregistrer({ actif: v })} testID={`esport-discord-actif-${id}`} />
+        </Pressable>
       </View>
       {parametre.disponible ? (
         <BoutonHub theme={theme} titre={ouvert ? 'Fermer' : 'Message et mention'} onPress={() => setOuvert(o => !o)} testID={`esport-discord-ouvrir-${id}`} />

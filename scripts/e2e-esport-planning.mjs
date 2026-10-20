@@ -21,6 +21,7 @@ import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs';
 import http from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { ongletPresent, ongletTeam } from './esport-navigation.mjs';
 import { allerPageAdministration, allerPageApplications, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
 import { chargerPlaywright, demarrerRelais, deverrouiller, optionsIphone, pause, premierLancement, racine, totp } from './mobile-outils.mjs';
 
@@ -192,7 +193,7 @@ try {
   log(`PC : création d’un entraînement récurrent (à partir du ${DEMAIN})`);
   await ouvrirEsport(pc);
   await pc.getByTestId('esport-team-faucons-valorant').click();
-  await pc.getByTestId('esport-onglet-module-planning').click();
+  await ongletTeam(pc, 'module-planning');
   await pc.getByTestId('esport-planning-mois').waitFor({ timeout: 20_000 });
   await capture(pc, '01-pc-planning-mois-vide');
   await pc.getByTestId('esport-planning-nouveau').click();
@@ -238,7 +239,7 @@ try {
   verifier(rsvp?.rsvp === 'oui', 'RSVP « Oui » enregistré côté serveur');
   await capture(lea, '06-iphone-rsvp-oui');
   verifier(!(await debordement(lea)), 'iPhone (accueil) : pas de défilement horizontal');
-  await lea.getByTestId('esport-onglet-module-planning').click();
+  await ongletTeam(lea, 'module-planning');
   await lea.getByTestId('esport-planning-liste').waitFor({ timeout: 20_000 });
   verifier((await lea.getByTestId('esport-planning-nouveau').count()) === 0, 'Joueur : pas de bouton « Nouvel événement »');
   await capture(lea, '07-iphone-planning-liste');
@@ -261,10 +262,14 @@ try {
   const marque = await esport.base.premier('SELECT reel FROM presences WHERE compte_id = ?', [idLea]);
   verifier(marque?.reel === 'present', 'présence réelle de Léa : présente');
   await capture(pc, '08-pc-marquage');
+  // Le détail s'ouvre dans un volet latéral (PC) : on le referme avant de changer de section.
+  verifier((await pc.getByTestId('esport-planning-volet').count()) === 1, 'PC : détail de l’occurrence dans un volet latéral (calendrier gardé derrière)');
+  await pc.getByTestId('esport-evenement-retour').click();
+  await pc.getByTestId('esport-planning-volet').waitFor({ state: 'detached', timeout: 10_000 });
 
   // ================================================================ PC : statistiques
   log('PC : statistiques de présence');
-  await pc.getByTestId('esport-onglet-module-attendance').click();
+  await ongletTeam(pc, 'module-attendance');
   await pc.getByTestId('esport-presence-stats').waitFor({ timeout: 20_000 });
   await pc.getByTestId(`esport-stat-joueur-${idLea}-taux`).waitFor({ timeout: 20_000 });
   verifier((await pc.getByTestId(`esport-stat-joueur-${idLea}-taux`).innerText()).trim() === '100 %', 'statistiques : Léa à 100 %');
@@ -277,7 +282,7 @@ try {
 
   // ================================================================ iPhone : disponibilités
   log('iPhone : disponibilités et heatmap');
-  await lea.getByTestId('esport-onglet-module-availability').click();
+  await ongletTeam(lea, 'module-availability');
   await lea.getByTestId('esport-dispos-creneaux').waitFor({ timeout: 20_000 });
   await lea.getByTestId('esport-creneau-jour-2').click();
   await lea.getByTestId('esport-creneau-ajouter').click();
