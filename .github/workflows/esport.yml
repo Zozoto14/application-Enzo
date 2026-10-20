@@ -151,8 +151,14 @@ jobs:
             exit 0
           fi
           ESPORT_URL="${ESPORT_URL%/}"
-          sleep 5
-          sante=$(curl -s -o sante.json -w '%{http_code}' --retry 3 --retry-all-errors "$ESPORT_URL/sante" || true)
+          # Premier déploiement : l'adresse workers.dev peut répondre 404 (code 1042) le temps
+          # que Cloudflare la propage. On réessaie jusqu'à environ 3 minutes.
+          for essai in $(seq 1 18); do
+            sleep 10
+            sante=$(curl -s -o sante.json -w '%{http_code}' --retry 3 --retry-all-errors "$ESPORT_URL/sante" || true)
+            [ "$sante" = "200" ] && break
+            echo "Essai $essai : HTTP $sante (adresse pas encore propagée ?), nouvel essai dans 10 s."
+          done
           echo "GET /sante : HTTP $sante $(cat sante.json 2>/dev/null)"
           if [ "$sante" != "200" ] || ! grep -q '"service":"esport"' sante.json; then
             echo "::error::Le Worker Esport ne répond pas comme attendu sur /sante (HTTP $sante)."
