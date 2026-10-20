@@ -11,6 +11,8 @@
  * `/api/esport`.
  */
 
+import { servicesDiscord, routerDiscord } from './discord/routes.mjs';
+import { traiterFile } from './discord/file.mjs';
 import { distribuer } from './evenements.mjs';
 import { routePublique, routesPlanning } from './planning/routes.mjs';
 import { servicesPlanning } from './planning/service.mjs';
@@ -76,10 +78,14 @@ const jetonPorteur = requete => (requete.headers.get('Authorization') ?? '').rep
  *  - `cleSession` : secret CLE_ESPORT ; `verifierJeton(jeton, ip)` : voir authentification.mjs ;
  *  - `creationTeams` : « fondateur » ou « tous » ; `maintenant` : horloge (tests).
  */
-export function creerApi({ base, stockage, cleSession, verifierJeton, creationTeams = 'fondateur', maintenant = () => Date.now() }) {
+export function creerApi({ base, stockage, cleSession, verifierJeton, creationTeams = 'fondateur', maintenant = () => Date.now(), cleDiscord, fetchDiscord, lienApp = '' }) {
   const s = servicesEsport({ base, maintenant, creationTeams });
   const s3 = servicesPhase3({ base, stockage, cleSession, maintenant, socle: s });
   const p = servicesPlanning({ base, maintenant, noyau: s });
+  // Discord : secret de chiffrement des webhooks (CLE_DISCORD, sinon dérivé de CLE_ESPORT) ; `fetchDiscord` : réseau simulé en test.
+  const secretDiscord = cleDiscord || cleSession;
+  const envoiDiscord = fetchDiscord ?? ((...a) => globalThis.fetch(...a));
+  const d = servicesDiscord({ base, maintenant, noyau: s, cle: secretDiscord, fetch: envoiDiscord });
 
   async function acteurDeSession(requete) {
     if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
@@ -133,6 +139,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     }
     const planning = await routesPlanning({ p, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete) });
     if (planning !== undefined) return planning;
+    const discord = await routerDiscord(d, { methode: m, chemin, acteur, lireCorps: () => lireCorps(requete) });
+    if (discord !== undefined) return discord;
     const t = /^\/teams\/([^/]+)(?:\/([a-z]+)(?:\/([^/]+))?(?:\/.*)?)?$/.exec(chemin);
     if (t) {
       const [, teamId, section, sousId] = t;
@@ -185,7 +193,10 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       reponse = reponseErreur(e);
     }
     if (!['GET', 'HEAD', 'OPTIONS'].includes(requete.method)) {
-      const travail = distribuer(base, { maintenant: maintenant() }).catch(e => console.error('[esport] distribution', e));
+      // Distribution du bus, puis envoi immédiat des messages Discord mis en file (le cron reprend les réessais).
+      const travail = distribuer(base, { maintenant: maintenant() })
+        .then(() => traiterFile(base, { cle: secretDiscord, fetch: envoiDiscord, maintenant: maintenant(), lienApp }))
+        .catch(e => console.error('[esport] distribution', e));
       if (attendre) attendre(travail);
       else await travail;
     }

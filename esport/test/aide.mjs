@@ -18,7 +18,7 @@ export function kvMemoire() {
   return { donnees, get: async c => (donnees.has(c) ? donnees.get(c) : null), put: async (c, v) => void donnees.set(c, v), delete: async c => void donnees.delete(c) };
 }
 
-export async function banc({ creationTeams = 'fondateur', relaisAncien = false, sansStockage = false } = {}) {
+export async function banc({ creationTeams = 'fondateur', relaisAncien = false, sansStockage = false, fetchDiscord, cleDiscord, lienApp } = {}) {
   const base = await baseSqliteMigree();
   const stockage = sansStockage ? undefined : stockageMemoire();
   const envRelais = { JETON: JETON_MAITRE, BOITE: kvMemoire() };
@@ -36,6 +36,10 @@ export async function banc({ creationTeams = 'fondateur', relaisAncien = false, 
     verifierJeton: verificateurRelais({ liaison }),
     creationTeams,
     maintenant: () => horloge.t,
+    // Discord : jamais de réseau réel en test (fetch simulé ; sans lui, un appel échouerait bruyamment).
+    fetchDiscord: fetchDiscord ?? (async () => { throw new Error('réseau Discord interdit en test'); }),
+    cleDiscord,
+    lienApp,
   });
   let ipCompteur = 0;
   async function appel(chemin, { methode = 'GET', jeton, corps, ip } = {}) {

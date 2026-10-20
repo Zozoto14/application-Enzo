@@ -27,7 +27,7 @@ bucket_name = "esport-fichiers"
 binding = "RELAIS"
 service = "applibourse-relais"
 
-# Bus d'événements (nouvel essai des événements en attente) ; Discord en phase 4.
+# Cron : bus d'événements (nouvel essai des événements en attente), rappels, file d'envoi Discord (réessais).
 [triggers]
 crons = ["*/15 * * * *"]
 

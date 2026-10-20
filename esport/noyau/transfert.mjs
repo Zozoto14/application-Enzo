@@ -36,6 +36,11 @@ export const TABLES = [
   ['reunions', 'id'],
   ['objectifs', 'id'],
   ['taches', 'id'],
+  // Phase 4 (migration 0004) : l'adresse du webhook reste CHIFFRÉE dans l'export.
+  ['discord_webhooks', 'team_id'],
+  ['discord_notification_settings', 'team_id, cle'],
+  ['discord_file', 'id'],
+  ['discord_rappels', 'evenement_id, occurrence, genre'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

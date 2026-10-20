@@ -15,6 +15,8 @@
  */
 
 import { iso, jsonOu, nouvelId } from './outils.mjs';
+import { TYPES_DISCORD } from './discord/catalogue.mjs';
+import { abonneDiscord } from './discord/file.mjs';
 import { TYPES_PLANNING, abonnePlanning } from './planning/bus.mjs';
 
 export const TYPES_EVENEMENTS = [
@@ -52,6 +54,8 @@ export const TYPES_EVENEMENTS = [
   'task.deleted',
   'task.due_soon',
   ...TYPES_PLANNING,
+  // Phase 4 : Discord (rappels J-1 / H-1, configuration, échecs d'envoi).
+  ...TYPES_DISCORD,
 ];
 
 const ESSAIS_MAX = 8;
@@ -149,7 +153,7 @@ export async function abonneNotifications(base, ev) {
   }
 }
 
-export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning];
+export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord];
 
 /**
  * Distribue les événements en attente aux abonnés. Un événement dont un
