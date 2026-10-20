@@ -282,7 +282,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     const { r } = await reunionDeTeam(ctx, reunionId);
     const [publie] = await publier([r], new Map([[teamId, ctx]]));
     const historique = lecteurDeTout(ctx)
-      ? await base.tous("SELECT * FROM fichiers WHERE entite_type = 'reunion' AND entite_id = ? ORDER BY cree_le DESC, id DESC", [r.id])
+      ? await base.tous("SELECT * FROM fichiers WHERE entite_type = 'reunion' AND entite_id = ? ORDER BY CASE WHEN remplace_le IS NULL THEN 0 ELSE 1 END, remplace_le DESC, cree_le DESC, id DESC", [r.id])
       : r.fichier_id
         ? await base.tous('SELECT * FROM fichiers WHERE id = ?', [r.fichier_id])
         : [];
