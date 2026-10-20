@@ -17,6 +17,7 @@ import { servicesEsport } from './service.mjs';
 import { creerSession, lireSession } from './session.mjs';
 import { ErreurEsport, echec } from './outils.mjs';
 import { exporterBase, importerBase } from './transfert.mjs';
+import { routeFichierSigne, routerPhase3, servicesPhase3 } from './routes-phase3.mjs';
 
 export const VERSION_ESPORT = 1;
 const TAILLE_MAX_CORPS = 64 * 1024;
@@ -25,7 +26,7 @@ const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 const ENTETES = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Nom-Fichier',
   'Access-Control-Max-Age': '86400',
   'Cache-Control': 'no-store',
   'X-Content-Type-Options': 'nosniff',
@@ -75,6 +76,7 @@ const jetonPorteur = requete => (requete.headers.get('Authorization') ?? '').rep
  */
 export function creerApi({ base, stockage, cleSession, verifierJeton, creationTeams = 'fondateur', maintenant = () => Date.now() }) {
   const s = servicesEsport({ base, maintenant, creationTeams });
+  const s3 = servicesPhase3({ base, stockage, cleSession, maintenant, socle: s });
 
   async function acteurDeSession(requete) {
     if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
@@ -93,6 +95,7 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       return { ok: true, service: 'esport', version: VERSION_ESPORT, stockage: Boolean(stockage), session: Boolean(cleSession), heure: maintenant() };
     }
     if (chemin === '/catalogue' && m === 'GET') return catalogue;
+    if (chemin.startsWith('/fichiers/') && m === 'GET') return routeFichierSigne(s3.resumes, url);
     if (chemin === '/session' && m === 'POST') {
       if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
       const qui = await verifierJeton(jetonPorteur(requete), ip);
@@ -154,6 +157,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       }
       if (section === 'm' && sousId) return s.moduleFutur(acteur, teamId, sousId);
     }
+    const phase3 = await routerPhase3(s3, { requete, url, chemin, acteur, lireCorps });
+    if (phase3 !== undefined) return phase3;
     throw echec(404, 'route', 'Adresse inconnue.');
   }
 
@@ -166,7 +171,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     if (requete.method === 'OPTIONS') return new Response(null, { status: 204, headers: ENTETES });
     let reponse;
     try {
-      reponse = reponseJson(await router(requete));
+      const resultat = await router(requete);
+      reponse = resultat instanceof Response ? resultat : reponseJson(resultat);
     } catch (e) {
       reponse = reponseErreur(e);
     }

@@ -79,7 +79,7 @@ describe('adresse du Worker Esport', () => {
   });
 });
 
-type Appel = { url: string; method?: string; headers?: Record<string, string>; body?: string };
+type Appel = { url: string; method?: string; headers?: Record<string, string>; body?: string | ArrayBuffer | Uint8Array };
 function fauxServeur(reponses: (a: Appel) => { status: number; corps?: unknown; html?: boolean }) {
   const appels: Appel[] = [];
   const requete = async (url: string, init: Omit<Appel, 'url'> = {}) => {

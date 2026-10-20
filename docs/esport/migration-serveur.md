@@ -32,12 +32,13 @@ Le Worker (`esport/worker.mjs`) ne fait que brancher le runtime sur le cœur. Le
    - Postgres : écrire `adaptateurs/postgres.mjs` sur le même modèle (paquet `pg`) : convertir les `?` en
      `$1, $2…`, `lot` dans une transaction (`BEGIN` / `COMMIT`), `script` pour les migrations. Rien d'autre.
 2. **Fichiers** (`stockage`) : interface `deposer`, `lire`, `supprimer` (`adaptateurs/stockage.mjs`).
-   Aujourd'hui R2 ; ensuite un dossier sur le disque ou un stockage S3 (même interface).
+   Aujourd'hui R2 ; sur un serveur : `stockageDisque(dossier)` (déjà écrit, utilisé par le serveur local) ou un
+   stockage S3 (même interface).
 3. **Vérification des jetons** : par l'adresse publique du relais (`verificateurRelais({ adresse })`) au lieu
    de la liaison de service. Le relais peut rester sur Cloudflare.
 
-Le cron (toutes les 15 minutes) devient une tâche planifiée (systemd timer, cron) qui appelle `distribuer()`
-de `evenements.mjs`.
+Le cron (toutes les 15 minutes) devient une tâche planifiée (systemd timer, cron) qui appelle
+`rappelsEcheances()` de `objectifs.mjs` puis `distribuer()` de `evenements.mjs` (le serveur local le fait déjà).
 
 ## Déménager, pas à pas
 
@@ -69,8 +70,10 @@ de `evenements.mjs`.
 5. **Pointer l'app** vers le nouveau serveur : variable GitHub `ESPORT_URL` = adresse HTTPS du serveur, puis
    workflow « Site (Cloudflare Pages) » (fichier `esport.json`). Les apps PC et iPhone lisent l'adresse
    déduite du relais : publiez une version qui la lit aussi depuis la configuration si besoin.
-6. **Fichiers** (à partir de la phase 3) : copier le bucket R2 `esport-fichiers` vers le disque ou S3
-   (`rclone` sait lire R2), puis brancher l'adaptateur de stockage correspondant.
+6. **Fichiers** (PDF des résumés) : copier le bucket R2 `esport-fichiers` vers le disque ou S3 (`rclone` sait lire
+   R2) en gardant les mêmes clés (`teams/<team>/resumes/<uuid>.pdf`), puis brancher l'adaptateur correspondant
+   (`stockageDisque` : le serveur local range les fichiers dans `<base>.fichiers/`). L'export JSON de la base ne
+   contient pas les fichiers, seulement leurs clés.
 7. Vérifier (`/sante`, connexion, une team), puis arrêter le Worker Cloudflare.
 
 ## Sauvegardes

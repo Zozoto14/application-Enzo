@@ -781,7 +781,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     const ids = new Set();
     for (const e of entrees) {
       if (e.acteur) ids.add(e.acteur);
-      if (typeof e.meta.compte === 'string') ids.add(e.meta.compte);
+      // Comptes cités dans les métadonnées (membre visé, assigné d'une tâche, déposant d'une réunion).
+      for (const cle of ['compte', 'assigne', 'deposePar']) if (typeof e.meta[cle] === 'string') ids.add(e.meta[cle]);
     }
     const noms = {};
     for (const id of ids) {

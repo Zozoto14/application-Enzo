@@ -74,7 +74,8 @@
         { "cle": "meeting_summaries.view_all", "action": "voir", "libelle": "Voir tous les dépôts" },
         { "cle": "meeting_summaries.submit", "action": "creer", "libelle": "Déposer" },
         { "cle": "meeting_summaries.write_summary", "action": "special", "libelle": "Rédiger les résumés" },
-        { "cle": "meeting_summaries.view_summary", "action": "special", "libelle": "Lire les résumés" }
+        { "cle": "meeting_summaries.view_summary", "action": "special", "libelle": "Lire les résumés" },
+        { "cle": "meeting_summaries.view_staff", "action": "special", "libelle": "Lire les réunions staff" }
       ]
     },
     {
@@ -148,14 +149,14 @@
       "cle": "manager",
       "nom": "Manager",
       "couleur": "#7c3aed",
-      "description": "Membres, rôles, planning, résumés, Discord, journal.",
+      "description": "Membres, rôles, planning, résumés (rédaction comprise), Discord, journal.",
       "permissions": [
         "team.manage",
         "members.view", "members.invite", "members.assign_role", "members.remove", "roles.manage",
         "planning.view", "planning.create", "planning.update", "planning.delete",
         "availability.view_all", "availability.edit_own",
         "attendance.view_all", "attendance.mark", "attendance.rsvp_own",
-        "meeting_summaries.view_all", "meeting_summaries.submit", "meeting_summaries.view_summary",
+        "meeting_summaries.view_all", "meeting_summaries.submit", "meeting_summaries.view_summary", "meeting_summaries.write_summary", "meeting_summaries.view_staff",
         "goals_tasks.view",
         "discord.manage",
         "video_review.view", "scouting.view", "strats.view", "playbook.view",
@@ -172,7 +173,7 @@
         "planning.view", "planning.create", "planning.update", "planning.delete",
         "availability.view_all", "availability.edit_own",
         "attendance.view_all", "attendance.mark", "attendance.rsvp_own",
-        "meeting_summaries.submit", "meeting_summaries.view_summary",
+        "meeting_summaries.submit", "meeting_summaries.view_summary", "meeting_summaries.view_staff",
         "goals_tasks.view", "goals_tasks.create", "goals_tasks.update", "goals_tasks.delete", "goals_tasks.assign",
         "video_review.view", "video_review.create", "video_review.annotate", "video_review.delete",
         "scouting.view", "scouting.manage",
@@ -189,7 +190,7 @@
         "members.view",
         "planning.view",
         "availability.edit_own", "attendance.rsvp_own",
-        "meeting_summaries.submit", "meeting_summaries.view_summary",
+        "meeting_summaries.submit", "meeting_summaries.view_summary", "meeting_summaries.view_staff",
         "goals_tasks.view",
         "video_review.view", "video_review.create", "video_review.annotate",
         "scouting.view", "scouting.manage",

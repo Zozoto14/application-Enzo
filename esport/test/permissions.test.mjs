@@ -49,7 +49,7 @@ const PERMISES = {
   manager: [
     'team.manage', 'members.view', 'members.invite', 'members.assign_role', 'members.remove', 'roles.manage',
     'planning.view', 'planning.create', 'planning.delete', 'availability.edit_own', 'attendance.mark', 'attendance.rsvp_own',
-    'meeting_summaries.submit', 'meeting_summaries.view_all', 'video_review.view', 'playbook.view', 'scouting.view',
+    'meeting_summaries.submit', 'meeting_summaries.view_all', 'meeting_summaries.write_summary', 'video_review.view', 'playbook.view', 'scouting.view',
     'discord.manage', 'activity_log.view',
   ],
   coach: [
@@ -73,8 +73,11 @@ test('matrice rôle × action des rôles système', () => {
     const perms = permissionsEffectives({ membre: { statut: 'actif' }, role: { cle_systeme: cle }, permissionsRole: permissionsRoleSysteme(cle) });
     for (const action of ACTIONS) assert.equal(autorise(perms, tousModules, action), permises.includes(action), `${cle} × ${action}`);
   }
-  // Résumés : seuls les rôles qui ont write_summary (par défaut le Propriétaire) les rédigent.
-  assert.deepEqual(ROLES_SYSTEME.filter(r => permissionsRoleSysteme(r.cle).includes('meeting_summaries.write_summary')).map(r => r.cle), ['proprietaire']);
+  // Résumés : seuls les rôles qui ont write_summary (par défaut le Propriétaire et le Manager) les rédigent ;
+  // les réunions « staff » se lisent avec view_staff (Manager, Coach, Analyste) ; le Joueur dépose seulement.
+  assert.deepEqual(ROLES_SYSTEME.filter(r => permissionsRoleSysteme(r.cle).includes('meeting_summaries.write_summary')).map(r => r.cle), ['proprietaire', 'manager']);
+  assert.deepEqual(ROLES_SYSTEME.filter(r => permissionsRoleSysteme(r.cle).includes('meeting_summaries.view_staff')).map(r => r.cle), ['proprietaire', 'manager', 'coach', 'analyste']);
+  assert.ok(permissionsRoleSysteme('joueur').includes('meeting_summaries.submit') && !permissionsRoleSysteme('joueur').includes('meeting_summaries.write_summary'));
 });
 
 test('Propriétaire et super admin : toutes les permissions ; suspendu ou absent : aucune', () => {

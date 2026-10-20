@@ -3,7 +3,41 @@
  * (« Max a changé le rôle de Léa de Joueur à Coach »). Pur, testé.
  */
 
-import { nomModule, type EntreeJournal, type Notification } from './client';
+import { nomModule, type EntreeJournal, type Notification, type Priorite, type StatutDepot, type StatutTache } from './client';
+
+/** Statuts d'un dépôt de réunion. */
+export const LIBELLES_STATUT_DEPOT: Record<StatutDepot, string> = { a_resumer: 'À résumer', en_cours: 'En cours', termine: 'Terminé' };
+export const LIBELLES_STATUT_TACHE: Record<StatutTache, string> = { a_faire: 'À faire', en_cours: 'En cours', fait: 'Fait' };
+export const LIBELLES_PRIORITE: Record<Priorite, string> = { basse: 'Basse', normale: 'Normale', haute: 'Haute', urgente: 'Urgente' };
+
+/** Date du jour (AAAA-MM-JJ, heure locale de l'appareil). */
+export function aujourdhui(ms: number = Date.now()): string {
+  const d = new Date(ms);
+  const deux = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${deux(d.getMonth() + 1)}-${deux(d.getDate())}`;
+}
+
+/** « 2026-10-19 » → « 19/10/2026 » ; saisie « 19/10/2026 » → « 2026-10-19 » (ou undefined). */
+export function dateJour(iso: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? '');
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : (iso ?? '');
+}
+export function lireDateSaisie(texte: string): string | undefined {
+  const t = texte.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+  if (!m) return undefined;
+  const iso = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  const d = new Date(`${iso}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso ? iso : undefined;
+}
+
+/** Taille lisible (« 1,2 Mo »). */
+export function tailleLisible(octets: number): string {
+  if (octets < 1024) return `${octets} o`;
+  if (octets < 1024 * 1024) return `${Math.round(octets / 1024)} Ko`;
+  return `${(octets / (1024 * 1024)).toFixed(1).replace('.', ',')} Mo`;
+}
 
 const nom = (noms: Record<string, string | null>, id: unknown): string =>
   typeof id === 'string' ? (noms[id] ?? (id === 'principal' ? 'Le Fondateur' : 'Un compte supprimé')) : 'Quelqu’un';
@@ -47,6 +81,36 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
       return `${qui} a créé une invitation${typeof m.role === 'string' ? ` (${m.role})` : ''}`;
     case 'invitation.revoked':
       return `${qui} a annulé une invitation`;
+    case 'meeting.submitted':
+      return `${qui} a déposé la réunion « ${texte(m.titre)} »`;
+    case 'meeting.status_changed':
+      return `${qui} a passé « ${texte(m.titre)} » en ${LIBELLES_STATUT_DEPOT[m.vers as StatutDepot] ?? texte(m.vers)}${m.automatique ? ' (PDF déposé)' : ''}`;
+    case 'meeting.summary_published':
+      return `${qui} a ${m.remplacement ? 'remplacé le PDF du résumé' : 'publié le résumé'} « ${texte(m.titre)} »`;
+    case 'meeting.deleted':
+      return `${qui} a supprimé le dépôt « ${texte(m.titre)} »`;
+    case 'meeting_type.created':
+      return `${qui} a créé le type de réunion ${texte(m.nom)}${m.visibilite === 'staff' ? ' (staff)' : ''}`;
+    case 'meeting_type.updated':
+      return `${qui} a modifié le type de réunion ${texte(m.nom)}`;
+    case 'meeting_type.deleted':
+      return `${qui} a supprimé le type de réunion ${texte(m.nom)}`;
+    case 'goal.created':
+      return `${qui} a créé l’objectif « ${texte(m.titre)} »`;
+    case 'goal.updated':
+      return `${qui} a modifié l’objectif « ${texte(m.titre)} »`;
+    case 'goal.deleted':
+      return `${qui} a supprimé l’objectif « ${texte(m.titre)} »`;
+    case 'task.created':
+      return `${qui} a créé la tâche « ${texte(m.titre)} »`;
+    case 'task.updated':
+      return m.vers ? `${qui} a passé « ${texte(m.titre)} » en ${LIBELLES_STATUT_TACHE[m.vers as StatutTache] ?? texte(m.vers)}` : `${qui} a modifié la tâche « ${texte(m.titre)} »`;
+    case 'task.assigned':
+      return `${qui} a assigné « ${texte(m.titre)} » à ${nom(noms, m.assigne)}`;
+    case 'task.deleted':
+      return `${qui} a supprimé la tâche « ${texte(m.titre)} »`;
+    case 'task.due_soon':
+      return `Rappel d’échéance envoyé à ${nom(noms, m.assigne)} pour « ${texte(m.titre)} »`;
     default:
       return `${qui} : ${e.action}`;
   }
@@ -60,6 +124,9 @@ export const FILTRES_JOURNAL: ReadonlyArray<readonly [string, string]> = [
   ['invitation', 'Invitations'],
   ['modules', 'Modules'],
   ['team', 'Team'],
+  ['meeting', 'Résumés'],
+  ['task', 'Tâches'],
+  ['goal', 'Objectifs'],
 ];
 
 export function phraseNotification(n: Notification, noms: Record<string, string | null>): string {
@@ -76,6 +143,14 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
       return `Vous avez été retiré de ${team}`;
     case 'modules':
       return `Les modules de ${team} ont changé`;
+    case 'resume-depose':
+      return `${nom(noms, c.membre)} a déposé une réunion à résumer dans ${team}${typeof c.titre === 'string' ? ` : « ${c.titre} »` : ''}`;
+    case 'resume-publie':
+      return `Le résumé de « ${typeof c.titre === 'string' ? c.titre : 'votre réunion'} » est ${c.remplacement ? 'mis à jour' : 'prêt'} (${team})`;
+    case 'tache-assignee':
+      return `${nom(noms, c.membre)} vous a assigné « ${typeof c.titre === 'string' ? c.titre : 'une tâche'} »${typeof c.echeance === 'string' ? ` pour le ${dateJour(c.echeance)}` : ''} (${team})`;
+    case 'tache-echeance':
+      return `${c.retard ? 'En retard' : 'Échéance proche'} : « ${typeof c.titre === 'string' ? c.titre : 'une tâche'} »${typeof c.echeance === 'string' ? ` (${dateJour(c.echeance)})` : ''}`;
     default:
       return `${team} : ${n.type}`;
   }

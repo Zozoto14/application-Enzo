@@ -34,3 +34,4 @@ site-dist/
 esport/wrangler.ci.toml
 esport/.wrangler/
 esport-export*.json
+esport/esport-local.db*

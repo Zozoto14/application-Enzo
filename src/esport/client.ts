@@ -145,6 +145,109 @@ export interface Notifications {
   liste: Notification[];
 }
 
+// ------------------------------------------------------------------ Phase 3 : résumés de réunions
+
+export type StatutDepot = 'a_resumer' | 'en_cours' | 'termine';
+export interface TypeReunion {
+  id: string;
+  nom: string;
+  couleur: string;
+  visibilite: 'team' | 'staff';
+  global: boolean;
+  position: number;
+}
+export interface Personne {
+  compte: string;
+  pseudo: string | null;
+}
+export interface Depot {
+  id: string;
+  team: { id: string; nom: string | null };
+  titre: string;
+  lien: string;
+  type: TypeReunion | null;
+  dateReunion: string;
+  note: string;
+  statut: StatutDepot;
+  deposePar: Personne;
+  creeLe: string;
+  majLe: string;
+  resume: { fichierId: string; le: string | null; par: Personne | null } | null;
+  nouveau: boolean;
+  vu: { le: string; par: string } | null;
+  moi: { deposant: boolean; redacteur: boolean };
+}
+export interface FichierDepot {
+  id: string;
+  nom: string;
+  taille: number;
+  type: string;
+  deposePar: Personne;
+  le: string;
+  actuel: boolean;
+  remplaceLe: string | null;
+}
+export interface DetailDepot extends Depot {
+  fichiers: FichierDepot[];
+}
+export interface FiltresBoite {
+  statut?: StatutDepot;
+  team?: string;
+  type?: string;
+  du?: string;
+  au?: string;
+  deposePar?: string;
+  nouveaux?: boolean;
+  tri?: 'recent' | 'ancien' | 'date' | 'statut';
+}
+export interface Boite {
+  depots: Depot[];
+  teams: Array<{ id: string; nom: string; redacteur: boolean }>;
+  types: TypeReunion[];
+  deposants: Personne[];
+  attente: number;
+  nouveaux: number;
+  total: number;
+}
+
+// ------------------------------------------------------------------ Phase 3 : objectifs et tâches
+
+export type StatutTache = 'a_faire' | 'en_cours' | 'fait';
+export type Priorite = 'basse' | 'normale' | 'haute' | 'urgente';
+export interface Objectif {
+  id: string;
+  titre: string;
+  description: string;
+  proprietaire: Personne | null;
+  dateCible: string | null;
+  statut: 'actif' | 'atteint' | 'abandonne';
+  progression: { total: number; faites: number; pourcentage: number };
+  creePar: Personne | null;
+  creeLe: string;
+}
+export interface Tache {
+  id: string;
+  titre: string;
+  description: string;
+  objectif: { id: string; titre: string | null } | null;
+  assigne: Personne | null;
+  echeance: string | null;
+  priorite: Priorite;
+  statut: StatutTache;
+  enRetard: boolean;
+  creePar: Personne | null;
+  creeLe: string;
+  majLe: string;
+  termineLe: string | null;
+}
+export interface FiltresTaches {
+  filtre?: 'miennes' | 'retard';
+  statut?: StatutTache;
+  objectif?: string;
+  assigne?: string;
+  priorite?: Priorite;
+}
+
 // ------------------------------------------------------------------ Erreurs
 
 export class ErreurEsport extends Error {
@@ -168,11 +271,11 @@ export const DOC_ACTIVATION = 'https://github.com/Zozoto14/application-Enzo/blob
 
 /** Mention affichée dans l'app (données en clair côté serveur). */
 export const MENTION_DONNEES =
-  'Les données Esport (teams, membres, rôles, journal) sont stockées en clair sur le serveur Esport, chiffrées au repos par Cloudflare : elles ne sont pas chiffrées de bout en bout comme le reste de l’app. Seuls un pseudo (obligatoire), un Riot ID et un nom Discord (facultatifs) sont enregistrés, jamais d’adresse e-mail. Vous pouvez exporter ou supprimer vos données Esport dans Paramètres.';
+  'Les données Esport (teams, membres, rôles, journal, réunions et résumés PDF, objectifs et tâches) sont stockées en clair sur le serveur Esport, chiffrées au repos par Cloudflare : elles ne sont pas chiffrées de bout en bout comme le reste de l’app. Seuls un pseudo (obligatoire), un Riot ID et un nom Discord (facultatifs) sont enregistrés, jamais d’adresse e-mail. Vous pouvez exporter ou supprimer vos données Esport dans Paramètres.';
 
 // ------------------------------------------------------------------ Adresse du Worker
 
-type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: unknown }) => Promise<{
+type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string | ArrayBuffer | Uint8Array; signal?: unknown }) => Promise<{
   ok: boolean;
   status: number;
   json(): Promise<unknown>;
@@ -263,21 +366,54 @@ export interface ClientEsport {
   journal(id: string, filtres?: { avant?: string; action?: string; limite?: number }): Promise<PageJournal>;
   notifications(): Promise<Notifications>;
   marquerLues(tout: boolean, ids?: string[]): Promise<Notifications>;
+  // Résumés de réunions (phase 3)
+  typesReunion(id: string): Promise<TypeReunion[]>;
+  creerTypeReunion(id: string, t: { nom: string; couleur?: string; visibilite: 'team' | 'staff'; global?: boolean }): Promise<TypeReunion>;
+  modifierTypeReunion(id: string, typeId: string, t: Partial<{ nom: string; couleur: string; visibilite: 'team' | 'staff' }>): Promise<TypeReunion>;
+  supprimerTypeReunion(id: string, typeId: string): Promise<void>;
+  deposerReunion(id: string, d: { lien: string; typeId: string; dateReunion: string; titre: string; note?: string }): Promise<Depot>;
+  mesDepots(id: string): Promise<Depot[]>;
+  resumesTeam(id: string, limite?: number): Promise<Depot[]>;
+  depot(id: string, depotId: string): Promise<DetailDepot>;
+  supprimerDepot(id: string, depotId: string): Promise<void>;
+  boiteResumes(filtres?: FiltresBoite): Promise<Boite>;
+  marquerVu(id: string, depotId: string): Promise<DetailDepot>;
+  changerStatutDepot(id: string, depotId: string, statut: StatutDepot): Promise<DetailDepot>;
+  envoyerPdf(id: string, depotId: string, octets: ArrayBuffer | Uint8Array, nom: string): Promise<DetailDepot>;
+  lienPdf(id: string, depotId: string, options?: { fichierId?: string; telecharger?: boolean }): Promise<{ url: string; expire: string }>;
+  // Objectifs et tâches (phase 3)
+  objectifs(id: string): Promise<Objectif[]>;
+  creerObjectif(id: string, o: { titre: string; description?: string; proprietaire?: string | null; dateCible?: string | null }): Promise<Objectif>;
+  modifierObjectif(id: string, objectifId: string, o: Partial<{ titre: string; description: string; proprietaire: string | null; dateCible: string | null; statut: Objectif['statut'] }>): Promise<Objectif>;
+  supprimerObjectif(id: string, objectifId: string): Promise<void>;
+  taches(id: string, filtres?: FiltresTaches): Promise<{ jour: string; taches: Tache[] }>;
+  creerTache(id: string, t: { titre: string; description?: string; assigne?: string | null; echeance?: string | null; priorite?: Priorite; statut?: StatutTache; objectifId?: string | null }): Promise<Tache>;
+  modifierTache(id: string, tacheId: string, t: Partial<{ titre: string; description: string; assigne: string | null; echeance: string | null; priorite: Priorite; statut: StatutTache; objectifId: string | null }>): Promise<Tache>;
+  supprimerTache(id: string, tacheId: string): Promise<void>;
+}
+
+/** Paramètres d'URL (valeurs vides ignorées). */
+export function requeteUrl(params: Record<string, string | number | boolean | undefined | null>): string {
+  const p = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '' && v !== false)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v === true ? '1' : String(v))}`)
+    .join('&');
+  return p ? `?${p}` : '';
 }
 
 export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.fetch as unknown as Fetch, maintenant: () => number = Date.now): ClientEsport {
   const cle = `${config.adresse}|${config.jetonRelais}`;
 
-  async function brut<T>(chemin: string, methode = 'GET', corps?: unknown, jeton?: string): Promise<T> {
+  async function brut<T>(chemin: string, methode = 'GET', corps?: unknown, jeton?: string, binaire?: { octets: ArrayBuffer | Uint8Array; type: string; entetes: Record<string, string> }): Promise<T> {
     let r: Awaited<ReturnType<Fetch>>;
     try {
       r = await auPlus(
         requete(`${config.adresse}${chemin}`, {
           method: methode,
-          headers: { 'Content-Type': 'application/json', ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}) },
-          body: corps === undefined ? undefined : JSON.stringify(corps),
+          headers: { 'Content-Type': binaire ? binaire.type : 'application/json', ...(binaire?.entetes ?? {}), ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}) },
+          body: binaire ? binaire.octets : corps === undefined ? undefined : JSON.stringify(corps),
         }),
-        15_000,
+        binaire ? 120_000 : 15_000,
       );
     } catch (e) {
       if (e instanceof ErreurEsport) throw e;
@@ -306,12 +442,12 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     return r.session;
   }
 
-  async function appel<T>(chemin: string, methode = 'GET', corps?: unknown): Promise<T> {
+  async function appel<T>(chemin: string, methode = 'GET', corps?: unknown, binaire?: Parameters<typeof brut>[4]): Promise<T> {
     try {
-      return await brut<T>(chemin, methode, corps, await session());
+      return await brut<T>(chemin, methode, corps, await session(), binaire);
     } catch (e) {
       // Session expirée (ou Worker redéployé avec une nouvelle clé) : une nouvelle, une fois.
-      if (e instanceof ErreurEsport && e.code === 'session') return brut<T>(chemin, methode, corps, await session(true));
+      if (e instanceof ErreurEsport && e.code === 'session') return brut<T>(chemin, methode, corps, await session(true), binaire);
       throw e;
     }
   }
@@ -361,6 +497,39 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     },
     notifications: () => appel('/notifications'),
     marquerLues: (tout, ids) => appel('/notifications/lues', 'POST', tout ? { tout: true } : { ids: ids ?? [] }),
+    // ---- Résumés de réunions
+    typesReunion: async id => (await appel<{ types: TypeReunion[] }>(`${t(id)}/resumes/types`)).types,
+    creerTypeReunion: (id, ty) => appel(`${t(id)}/resumes/types`, 'POST', ty),
+    modifierTypeReunion: (id, typeId, ty) => appel(`${t(id)}/resumes/types/${encodeURIComponent(typeId)}`, 'PATCH', ty),
+    supprimerTypeReunion: async (id, typeId) => {
+      await appel(`${t(id)}/resumes/types/${encodeURIComponent(typeId)}`, 'DELETE');
+    },
+    deposerReunion: (id, d) => appel(`${t(id)}/resumes`, 'POST', d),
+    mesDepots: async id => (await appel<{ depots: Depot[] }>(`${t(id)}/resumes/miens`)).depots,
+    resumesTeam: async (id, limite) => (await appel<{ resumes: Depot[] }>(`${t(id)}/resumes${requeteUrl({ limite })}`)).resumes,
+    depot: (id, depotId) => appel(`${t(id)}/resumes/${encodeURIComponent(depotId)}`),
+    supprimerDepot: async (id, depotId) => {
+      await appel(`${t(id)}/resumes/${encodeURIComponent(depotId)}`, 'DELETE');
+    },
+    boiteResumes: (f = {}) => appel(`/resumes/boite${requeteUrl({ ...f })}`),
+    marquerVu: (id, depotId) => appel(`${t(id)}/resumes/${encodeURIComponent(depotId)}/vu`, 'POST', {}),
+    changerStatutDepot: (id, depotId, statut) => appel(`${t(id)}/resumes/${encodeURIComponent(depotId)}`, 'PATCH', { statut }),
+    envoyerPdf: (id, depotId, octets, nom) =>
+      appel(`${t(id)}/resumes/${encodeURIComponent(depotId)}/pdf`, 'PUT', undefined, { octets, type: 'application/pdf', entetes: { 'X-Nom-Fichier': encodeURIComponent(nom) } }),
+    lienPdf: (id, depotId, options = {}) => appel(`${t(id)}/resumes/${encodeURIComponent(depotId)}/lien`, 'POST', options),
+    // ---- Objectifs et tâches
+    objectifs: async id => (await appel<{ objectifs: Objectif[] }>(`${t(id)}/objectifs`)).objectifs,
+    creerObjectif: (id, o) => appel(`${t(id)}/objectifs`, 'POST', o),
+    modifierObjectif: (id, objectifId, o) => appel(`${t(id)}/objectifs/${encodeURIComponent(objectifId)}`, 'PATCH', o),
+    supprimerObjectif: async (id, objectifId) => {
+      await appel(`${t(id)}/objectifs/${encodeURIComponent(objectifId)}`, 'DELETE');
+    },
+    taches: (id, f = {}) => appel(`${t(id)}/taches${requeteUrl({ ...f })}`),
+    creerTache: (id, ta) => appel(`${t(id)}/taches`, 'POST', ta),
+    modifierTache: (id, tacheId, ta) => appel(`${t(id)}/taches/${encodeURIComponent(tacheId)}`, 'PATCH', ta),
+    supprimerTache: async (id, tacheId) => {
+      await appel(`${t(id)}/taches/${encodeURIComponent(tacheId)}`, 'DELETE');
+    },
   };
 }
 

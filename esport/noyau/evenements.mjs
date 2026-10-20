@@ -34,6 +34,22 @@ export const TYPES_EVENEMENTS = [
   'invitation.refused',
   'account.exported',
   'account.deleted',
+  // Phase 3 : résumés de réunions, objectifs et tâches.
+  'meeting.submitted',
+  'meeting.status_changed',
+  'meeting.summary_published',
+  'meeting.deleted',
+  'meeting_type.created',
+  'meeting_type.updated',
+  'meeting_type.deleted',
+  'goal.created',
+  'goal.updated',
+  'goal.deleted',
+  'task.created',
+  'task.updated',
+  'task.assigned',
+  'task.deleted',
+  'task.due_soon',
 ];
 
 const ESSAIS_MAX = 8;
@@ -96,6 +112,28 @@ export async function abonneNotifications(base, ev) {
       return;
     case 'member.removed':
       if (charge.compte && charge.compte !== ev.acteur_id) await notifier(base, ev, charge.compte, 'retire', {});
+      return;
+    case 'meeting.submitted': {
+      // Rédacteurs de la team, et le Fondateur (rédacteur partout) s'il a un profil Esport.
+      const redacteurs = new Set(await comptesAvecPermission(base, ev.team_id, 'meeting_summaries.write_summary'));
+      if (await base.premier("SELECT id FROM comptes WHERE id = 'principal'", [])) redacteurs.add('principal');
+      for (const compte of redacteurs) {
+        if (compte !== ev.acteur_id) await notifier(base, ev, compte, 'resume-depose', { membre: ev.acteur_id, titre: charge.titre ?? null, reunion: ev.entite_id });
+      }
+      return;
+    }
+    case 'meeting.summary_published':
+      if (charge.deposePar && charge.deposePar !== ev.acteur_id) {
+        await notifier(base, ev, charge.deposePar, 'resume-publie', { titre: charge.titre ?? null, reunion: ev.entite_id, remplacement: Boolean(charge.remplacement) });
+      }
+      return;
+    case 'task.assigned':
+      if (charge.assigne && charge.assigne !== ev.acteur_id) {
+        await notifier(base, ev, charge.assigne, 'tache-assignee', { membre: ev.acteur_id, titre: charge.titre ?? null, tache: ev.entite_id, echeance: charge.echeance ?? null });
+      }
+      return;
+    case 'task.due_soon':
+      if (charge.assigne) await notifier(base, ev, charge.assigne, 'tache-echeance', { titre: charge.titre ?? null, tache: ev.entite_id, echeance: charge.echeance ?? null, retard: Boolean(charge.retard) });
       return;
     case 'modules.changed': {
       const membres = await base.tous("SELECT compte_id AS compte FROM membres WHERE team_id = ? AND statut = 'actif'", [ev.team_id]);

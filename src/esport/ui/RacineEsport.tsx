@@ -15,10 +15,11 @@ import { Avis, BoutonHub, Champ, Intertitre, Panneau } from '../../hub/admin/ui/
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { PropsRacineApp } from '../../hub/types';
 import { relaisDuCompte } from '../../sync/relais/actif';
-import { DOC_ACTIVATION, ErreurEsport, MENTION_DONNEES, clientEsport, estInactif, nomModule, trouverConfig, type ClientEsport, type Moi, type Notifications, type TeamListee } from '../client';
+import { DOC_ACTIVATION, ErreurEsport, MENTION_DONNEES, clientEsport, estInactif, nomModule, trouverConfig, type Boite, type ClientEsport, type Moi, type Notifications, type TeamListee } from '../client';
 import { dateCourte, phraseNotification } from '../libelles';
 import { Assistant } from './Assistant';
 import { MonProfil, PageTeam, type SectionTeam } from './PageTeam';
+import { BadgeNouveau, BoiteResumes } from './Resumes';
 import { PastilleRole, Retours, TitreSection, styles as communs, useAgir } from './commun';
 
 const LARGEUR_BARRE = 900;
@@ -29,7 +30,7 @@ type Etat =
   | { e: 'erreur'; message: string }
   | { e: 'pret'; client: ClientEsport; moi: Moi };
 
-type Vue = { v: 'teams' } | { v: 'assistant' } | { v: 'team'; id: string; section?: SectionTeam };
+type Vue = { v: 'teams' } | { v: 'assistant' } | { v: 'boite' } | { v: 'team'; id: string; section?: SectionTeam };
 
 /** Fabrique du client (remplaçable par les tests). */
 export const fabrique = {
@@ -83,6 +84,16 @@ export function Esport(props: PropsRacineApp) {
     contenu = <ProfilInitial theme={theme} client={etat.client} onFait={moi => setEtat({ ...etat, moi })} />;
   } else if (vue.v === 'assistant') {
     contenu = <Assistant theme={theme} client={etat.client} onAnnuler={() => setVue({ v: 'teams' })} onCreee={d => setVue({ v: 'team', id: d.team.id, section: 'membres' })} />;
+  } else if (vue.v === 'boite') {
+    contenu = (
+      <ScrollView contentContainerStyle={{ padding: 16, gap: 16, maxWidth: 1400, width: '100%', alignSelf: 'center' }} testID="esport-boite-globale">
+        <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
+          <TitreSection theme={theme} titre="Résumés à rédiger" sous="Tous les dépôts des teams où vous rédigez les résumés." />
+          <BoutonHub theme={theme} titre="← Mes teams" onPress={() => setVue({ v: 'teams' })} testID="esport-boite-retour" />
+        </View>
+        <BoiteResumes theme={theme} client={etat.client} large={large} />
+      </ScrollView>
+    );
   } else if (vue.v === 'team') {
     contenu = <PageTeam key={vue.id} theme={theme} client={etat.client} teamId={vue.id} large={large} sectionInitiale={vue.section} onQuitter={() => setVue({ v: 'teams' })} onExporter={exporter} />;
   } else {
@@ -94,6 +105,7 @@ export function Esport(props: PropsRacineApp) {
         large={large}
         onOuvrir={id => setVue({ v: 'team', id })}
         onCreer={() => setVue({ v: 'assistant' })}
+        onBoite={() => setVue({ v: 'boite' })}
         onExporter={exporter}
         onProfilSupprime={() => void ouvrir()}
       />
@@ -175,6 +187,7 @@ function MesTeams({
   large,
   onOuvrir,
   onCreer,
+  onBoite,
   onExporter,
   onProfilSupprime,
 }: {
@@ -184,19 +197,22 @@ function MesTeams({
   large: boolean;
   onOuvrir(id: string): void;
   onCreer(): void;
+  onBoite(): void;
   onExporter?(nom: string, contenu: string): Promise<boolean>;
   onProfilSupprime(): void;
 }) {
   const [teams, setTeams] = useState<TeamListee[] | undefined>();
   const [notifs, setNotifs] = useState<Notifications | undefined>();
+  const [boite, setBoite] = useState<Boite | undefined>();
   const [code, setCode] = useState('');
   const [profil, setProfil] = useState(false);
   const { enCours, erreur, avis, agir } = useAgir();
 
   const recharger = useCallback(async () => {
-    const [t, n] = await Promise.all([client.teams(), client.notifications().catch(() => undefined)]);
+    const [t, n, b] = await Promise.all([client.teams(), client.notifications().catch(() => undefined), Promise.resolve().then(() => client.boiteResumes()).catch(() => undefined)]);
     setTeams(t);
     setNotifs(n);
+    setBoite(b);
   }, [client]);
   useEffect(() => {
     void agir('', recharger);
@@ -216,6 +232,20 @@ function MesTeams({
         </View>
       </View>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-teams" />
+      {boite && boite.teams.length > 0 ? (
+        <Panneau theme={theme} testID="esport-redacteur">
+          <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
+            <View style={[communs.ligne, { flexShrink: 1 }]}>
+              <Text style={[texte, { fontSize: 16, fontWeight: '800' }]} testID="esport-redacteur-compteur">
+                {`Résumés à rédiger : ${boite.attente} en attente`}
+              </Text>
+              {boite.nouveaux > 0 ? <BadgeNouveau theme={theme} testID="esport-redacteur-nouveaux" /> : null}
+              {boite.nouveaux > 0 ? <Text style={attenue}>{`${boite.nouveaux} jamais ouvert${boite.nouveaux > 1 ? 's' : ''}`}</Text> : null}
+            </View>
+            <BoutonHub theme={theme} titre="Boîte de réception" variante="plein" onPress={onBoite} testID="esport-redacteur-ouvrir" />
+          </View>
+        </Panneau>
+      ) : null}
       {profil ? <MonProfil theme={theme} client={client} onExporter={onExporter} onSupprime={onProfilSupprime} /> : null}
       <View style={[communs.ligne, { alignItems: 'stretch', gap: 12 }]} testID="esport-liste-teams">
         {teams?.length === 0 ? (

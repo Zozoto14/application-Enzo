@@ -16,7 +16,7 @@ import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { baseSqliteMigree } from '../adaptateurs/sqlite.mjs';
-import { stockageMemoire } from '../adaptateurs/stockage.mjs';
+import { stockageDisque, stockageMemoire } from '../adaptateurs/stockage.mjs';
 import { creerApi } from '../noyau/api.mjs';
 import { verificateurRelais } from '../noyau/authentification.mjs';
 
@@ -41,6 +41,8 @@ export async function demarrerServeurEsport({
   hote = '127.0.0.1',
 } = {}) {
   const base = await baseSqliteMigree(chemin);
+  // Fichiers (PDF des résumés) : à côté de la base SQLite (dossier `<base>.fichiers/`), en mémoire sinon.
+  const stockage = chemin === ':memory:' ? stockageMemoire() : await stockageDisque(`${chemin}.fichiers`);
   let envRelais;
   let verifierJeton;
   if (relais) {
@@ -53,9 +55,19 @@ export async function demarrerServeurEsport({
   if (graines) {
     const { semer } = await import('./graines.mjs');
     const existe = await base.premier('SELECT id FROM teams LIMIT 1', []);
-    if (!existe) await semer(base);
+    if (!existe) await semer(base, { stockage });
   }
-  const traiter = creerApi({ base, stockage: stockageMemoire(), cleSession: cle, verifierJeton, creationTeams });
+  const traiter = creerApi({ base, stockage, cleSession: cle, verifierJeton, creationTeams });
+  // Cron du Worker (rappels d'échéance des tâches, événements en attente), toutes les 15 minutes.
+  const cron = setInterval(() => {
+    void (async () => {
+      const { rappelsEcheances } = await import('../noyau/objectifs.mjs');
+      const { distribuer } = await import('../noyau/evenements.mjs');
+      await rappelsEcheances(base, { maintenant: Date.now() });
+      await distribuer(base, { maintenant: Date.now() });
+    })().catch(e => console.error('[esport] cron local', e));
+  }, 15 * 60 * 1000);
+  cron.unref?.();
   const serveur = http.createServer(async (req, res) => {
     const morceaux = [];
     for await (const m of req) morceaux.push(m);
@@ -79,9 +91,13 @@ export async function demarrerServeurEsport({
   return {
     url: `http://localhost:${port}`,
     base,
+    stockage,
     envRelais,
     jetonDev: envRelais ? jetonDev : undefined,
-    fermer: () => new Promise(ok => serveur.close(() => ok())),
+    fermer: () => {
+      clearInterval(cron);
+      return new Promise(ok => serveur.close(() => ok()));
+    },
   };
 }
 

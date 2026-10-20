@@ -18,8 +18,9 @@ export function kvMemoire() {
   return { donnees, get: async c => (donnees.has(c) ? donnees.get(c) : null), put: async (c, v) => void donnees.set(c, v), delete: async c => void donnees.delete(c) };
 }
 
-export async function banc({ creationTeams = 'fondateur', relaisAncien = false } = {}) {
+export async function banc({ creationTeams = 'fondateur', relaisAncien = false, sansStockage = false } = {}) {
   const base = await baseSqliteMigree();
+  const stockage = sansStockage ? undefined : stockageMemoire();
   const envRelais = { JETON: JETON_MAITRE, BOITE: kvMemoire() };
   const horloge = { t: Date.parse('2026-10-20T10:00:00.000Z') };
   const liaison = {
@@ -30,7 +31,7 @@ export async function banc({ creationTeams = 'fondateur', relaisAncien = false }
   };
   const traiter = creerApi({
     base,
-    stockage: stockageMemoire(),
+    stockage,
     cleSession: CLE,
     verifierJeton: verificateurRelais({ liaison }),
     creationTeams,
@@ -55,7 +56,18 @@ export async function banc({ creationTeams = 'fondateur', relaisAncien = false }
     }
     return r.corps.session;
   }
-  return { base, envRelais, horloge, appel, session, jetonDeProfil: c => jetonDeProfil(JETON_MAITRE, c) };
+  /** Envoi binaire (PDF) : `type` = Content-Type annoncé, `nom` = en-tête X-Nom-Fichier. */
+  async function envoyer(chemin, { methode = 'PUT', jeton, octets, type = 'application/pdf', nom, entetes = {} } = {}) {
+    const headers = { 'Content-Type': type, 'CF-Connecting-IP': '198.51.100.250', ...entetes };
+    if (jeton) headers.Authorization = `Bearer ${jeton}`;
+    if (nom) headers['X-Nom-Fichier'] = encodeURIComponent(nom);
+    const r = await traiter(new Request(`https://esport.test${chemin}`, { method: methode, headers, body: octets }));
+    const texte = await r.text();
+    return { statut: r.status, corps: texte ? JSON.parse(texte) : null };
+  }
+  /** Requête GET brute (lien signé d'un fichier) : rend la Response. */
+  const brut = url => traiter(new Request(url));
+  return { base, stockage, envRelais, horloge, appel, envoyer, brut, session, jetonDeProfil: c => jetonDeProfil(JETON_MAITRE, c) };
 }
 
 /** Une team créée par le Fondateur, ses rôles par clé, et un code d'invitation par rôle demandé. */

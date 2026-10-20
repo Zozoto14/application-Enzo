@@ -2,7 +2,8 @@
  * Page d'une team : barre latérale (PC, iPad paysage) ou onglets défilants
  * (iPhone, iPad portrait) qui ne listent QUE les modules activés. Phase 1 :
  * Accueil, Membres et rôles, Journal, Paramètres ; les modules des phases
- * suivantes, s'ils sont activés, apparaissent « bientôt ».
+ * suivantes, s'ils sont activés, apparaissent « bientôt ». Phase 3 : Résumés de
+ * réunions, Objectifs et tâches (et leurs blocs sur l'accueil).
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -11,10 +12,16 @@ import { BoutonHub, Case, Champ, Intertitre, Panneau, Segments } from '../../hub
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { CATALOGUE, MENTION_DONNEES, nomModule, type ClientEsport, type DetailTeam, type Notifications, type PageJournal } from '../client';
 import { FILTRES_JOURNAL, dateCourte, phraseJournal, phraseNotification } from '../libelles';
+import { AccueilPhase3 } from './AccueilPhase3';
 import { MembresRoles } from './MembresRoles';
+import { SectionObjectifs } from './Objectifs';
+import { SectionResumes } from './Resumes';
 import { BoutonConfirme, PastilleRole, Retours, TitreSection, styles, useAgir } from './commun';
 
 export type SectionTeam = 'accueil' | 'membres' | 'journal' | 'parametres' | `module:${string}`;
+
+/** Modules déjà disponibles (les autres activés apparaissent « bientôt »). */
+const MODULES_DISPONIBLES = new Set(['meeting_summaries', 'goals_tasks']);
 
 /** Entrées de la barre : le cœur, puis les modules ACTIVÉS (Journal ouvert ; les autres « bientôt »). */
 export function entreesBarre(detail: DetailTeam): Array<{ id: SectionTeam; libelle: string; bientot?: boolean }> {
@@ -23,7 +30,7 @@ export function entreesBarre(detail: DetailTeam): Array<{ id: SectionTeam; libel
   const entrees: Array<{ id: SectionTeam; libelle: string; bientot?: boolean }> = [{ id: 'accueil', libelle: 'Accueil' }];
   for (const m of CATALOGUE.modules) {
     if (!actifs.has(m.cle) || m.cle === 'activity_log') continue;
-    entrees.push({ id: `module:${m.cle}`, libelle: m.nom, bientot: true });
+    entrees.push({ id: `module:${m.cle}`, libelle: m.nom, bientot: !MODULES_DISPONIBLES.has(m.cle) });
   }
   if (peut('members.view') || peut('members.invite') || peut('roles.manage')) entrees.push({ id: 'membres', libelle: 'Membres et rôles' });
   if (actifs.has('activity_log') && peut('activity_log.view')) entrees.push({ id: 'journal', libelle: 'Journal' });
@@ -120,6 +127,8 @@ export function PageTeam({
   if (active === 'membres') contenu = <MembresRoles theme={theme} client={client} detail={detail} large={large} />;
   else if (active === 'journal') contenu = <Journal theme={theme} client={client} detail={detail} />;
   else if (active === 'parametres') contenu = <Parametres theme={theme} client={client} detail={detail} onChange={recharger} onSupprimee={onQuitter} onExporter={onExporter} />;
+  else if (active === 'module:meeting_summaries') contenu = <SectionResumes theme={theme} client={client} detail={detail} large={large} />;
+  else if (active === 'module:goals_tasks') contenu = <SectionObjectifs theme={theme} client={client} detail={detail} large={large} />;
   else if (active.startsWith('module:')) {
     const cle = active.slice('module:'.length);
     const module = CATALOGUE.modules.find(m => m.cle === cle);
@@ -187,7 +196,7 @@ function AccueilTeam({ theme, client, detail, onAller }: { theme: ThemeHub; clie
           </Text>
         ))}
       </Panneau>
-      <Text style={attenue}>Prochains événements, tâches en retard et résumés arriveront avec les modules Planning, Objectifs et Résumés.</Text>
+      <AccueilPhase3 theme={theme} client={client} detail={detail} onAller={onAller} />
     </View>
   );
 }

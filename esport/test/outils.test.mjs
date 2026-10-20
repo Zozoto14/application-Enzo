@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import relais, { jetonDeProfil } from '../../relais/worker.mjs';
 import { baseSqlite, baseSqliteMigree, lireMigrations } from '../adaptateurs/sqlite.mjs';
-import { stockageMemoire } from '../adaptateurs/stockage.mjs';
+import { stockageDisque, stockageMemoire } from '../adaptateurs/stockage.mjs';
 import { appliquerMigrations } from '../noyau/migrations.mjs';
 import { exporterBase } from '../noyau/transfert.mjs';
 import { COMPTES_GRAINES, semer } from '../outils/graines.mjs';
@@ -61,10 +61,11 @@ test('migrations : fichiers NNNN_nom.sql, appliquées une seule fois, schéma co
     assert.doesNotMatch(sql, /AUTOINCREMENT|datetime\(|strftime|json_|PRAGMA|WITHOUT ROWID|INSERT OR /i);
   }
   const base = await baseSqlite();
-  assert.deepEqual(await appliquerMigrations(base, migrations), ['0001_fondations.sql']);
+  // Toutes les migrations du dossier, dans l'ordre des noms (les numéros peuvent avoir des trous).
+  assert.deepEqual(await appliquerMigrations(base, migrations), migrations.map(m => m.nom).sort());
   assert.deepEqual(await appliquerMigrations(base, migrations), []);
   const tables = (await base.tous("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name", [])).map(l => l.name);
-  for (const t of ['comptes', 'teams', 'team_modules', 'roles', 'role_permissions', 'membres', 'invitations', 'tentatives', 'evenements', 'journal', 'notifications']) {
+  for (const t of ['comptes', 'teams', 'team_modules', 'roles', 'role_permissions', 'membres', 'invitations', 'tentatives', 'evenements', 'journal', 'notifications', 'types_reunion', 'fichiers', 'reunions', 'objectifs', 'taches']) {
     assert.ok(tables.includes(t), t);
   }
 });
@@ -131,6 +132,27 @@ test('graines : une team Valorant complète avec ses membres et rôles', async (
   assert.ok(roles.some(r => r.nom === 'Capitaine'));
   const modules = await base.tous('SELECT module FROM team_modules WHERE team_id = ? AND active = 1', [id]);
   assert.equal(modules.length, 11);
+  // Phase 3 : dépôts de réunion et tâches (sans stockage : pas de PDF).
+  const statuts = (await base.tous('SELECT statut FROM reunions WHERE team_id = ? ORDER BY statut', [id])).map(l => l.statut);
+  assert.deepEqual(statuts, ['a_resumer', 'a_resumer', 'en_cours']);
+  assert.equal((await base.tous('SELECT id FROM taches WHERE team_id = ?', [id])).length, 4);
+  assert.equal((await base.tous('SELECT id FROM objectifs WHERE team_id = ?', [id])).length, 2);
+});
+
+test('graines avec stockage : un résumé terminé avec son PDF ; stockage sur disque', async () => {
+  const base = await baseSqliteMigree();
+  const dossier = mkdtempSync(join(tmpdir(), 'esport-fichiers-'));
+  const st = await stockageDisque(dossier);
+  const id = await semer(base, { stockage: st });
+  const fait = await base.premier("SELECT r.titre, f.cle_stockage, f.nom_original FROM reunions r JOIN fichiers f ON f.id = r.fichier_id WHERE r.team_id = ? AND r.statut = 'termine'", [id]);
+  assert.equal(fait.titre, 'Bilan du mois');
+  assert.equal(fait.nom_original, 'Bilan du mois.pdf');
+  const lu = await st.lire(fait.cle_stockage);
+  assert.equal(new TextDecoder().decode(lu.octets.slice(0, 5)), '%PDF-');
+  assert.equal(lu.type, 'application/pdf');
+  await st.supprimer(fait.cle_stockage);
+  assert.equal(await st.lire(fait.cle_stockage), null);
+  await assert.rejects(st.deposer('../evasion', new Uint8Array([1])));
 });
 
 test('transfert en ligne de commande : export SQLite → import SQLite neuve, identique', async () => {

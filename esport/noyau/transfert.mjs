@@ -24,6 +24,12 @@ export const TABLES = [
   ['evenements', 'id'],
   ['journal', 'id'],
   ['notifications', 'id'],
+  // Phase 3 (migration 0003).
+  ['types_reunion', 'id'],
+  ['fichiers', 'id'],
+  ['reunions', 'id'],
+  ['objectifs', 'id'],
+  ['taches', 'id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;
@@ -56,6 +62,8 @@ export async function importerBase(base, donnees, { tailleLot = 50 } = {}) {
   const bilan = {};
   for (const table of NOMS_TABLES) {
     const lignes = Array.isArray(donnees.tables[table]) ? donnees.tables[table] : [];
+    // Types de réunion globaux posés par la migration : remplacés par ceux de l'export (éventuellement modifiés).
+    if (table === 'types_reunion' && lignes.length > 0) await base.executer('DELETE FROM types_reunion WHERE team_id IS NULL', []);
     bilan[table] = lignes.length;
     let lot = [];
     for (const ligne of lignes) {

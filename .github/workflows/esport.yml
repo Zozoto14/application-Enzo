@@ -112,8 +112,9 @@ jobs:
             fi
           fi
           cat r2.err 2>/dev/null || true
-          # La phase 1 n'utilise pas encore de fichiers : on déploie sans R2 plutôt que d'échouer.
-          echo "::warning::R2 indisponible (R2 pas encore activé sur le compte, ou permission Workers R2 Storage > Edit absente du jeton) : déploiement SANS fichiers. Rien ne manque en phase 1 ; à corriger avant la phase 3 (docs/esport/deploiement.md, étape 2)."
+          # Sans R2, on déploie quand même (teams, dépôts de réunion, tâches marchent) mais les PDF des
+          # résumés ne peuvent pas être déposés ni lus : avertissement très visible.
+          echo "::warning::R2 indisponible (R2 pas encore activé sur le compte, ou permission Workers R2 Storage > Edit absente du jeton) : déploiement SANS fichiers. Les PDF des résumés de réunion NE MARCHENT PAS tant que R2 n'est pas activé (docs/esport/deploiement.md, étapes 2 et 3), puis relancez ce workflow."
           node -e "const f='esport/wrangler.ci.toml';const fs=require('fs');fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace(/\[\[r2_buckets\]\][^\[]*/,''))"
 
       - name: Migrations de la base (esport/migrations)
@@ -171,6 +172,9 @@ jobs:
           if [ "$session" != "401" ]; then
             echo "::error::La route /session ne répond pas comme attendu (HTTP $session)."
             exit 1
+          fi
+          if ! grep -q '"stockage":true' sante.json; then
+            echo "::warning::Esport en service SANS stockage de fichiers (R2) : les PDF des résumés de réunion ne peuvent pas être déposés. Activez R2 (docs/esport/deploiement.md, étapes 2 et 3) puis relancez ce workflow."
           fi
           echo "Esport en service : $ESPORT_URL"
           echo "::notice::Esport en service : $ESPORT_URL. Si cette adresse n'est pas https://applibourse-esport.<sous-domaine du relais>.workers.dev, créez la variable ESPORT_URL puis relancez le workflow du site."

@@ -46,8 +46,10 @@ le bucket.
 2. Si Cloudflare le demande : **Purchase R2 Plan** / **Activer R2** (offre gratuite : 10 Go, sans frais en
    dessous ; Cloudflare peut demander un moyen de paiement).
 
-La phase 1 n'utilise pas encore de fichiers : si R2 n'est pas activé, le workflow déploie quand même (avec un
-avertissement). À faire avant les résumés de réunions.
+**Obligatoire depuis les résumés de réunions (phase 3)** : les PDF des résumés sont dans R2. Sans R2, le workflow
+déploie quand même (avertissement « R2 indisponible »), teams, dépôts et tâches marchent, mais le dépôt d'un PDF
+répond « stockage des fichiers non branché ». Après avoir activé R2 (et la permission de l'étape 2), relancez le
+workflow « Esport (Worker) » : il crée le bucket et le relie.
 
 ## Étape 4 (facultative) : créer la base et le bucket à la main
 
@@ -117,9 +119,11 @@ relancer.
 | --- | --- |
 | « Esport pas encore activé » | Étapes 1 et 6. Si l'adresse du Worker n'est pas `applibourse-esport.<même sous-domaine que le relais>.workers.dev`, créez `ESPORT_URL` puis relancez le workflow du site. |
 | Workflow : « Impossible de lister les bases D1 » | Étape 2 (permission D1). |
-| Workflow : avertissement « R2 indisponible » | Étape 3 (activer R2) et étape 2 (permission R2). Sans gravité en phase 1. |
+| Workflow : avertissement « R2 indisponible » ou « SANS stockage de fichiers » | Étape 3 (activer R2) et étape 2 (permission R2), puis relancez l'étape 6. Sans R2, pas de PDF de résumé. |
+| « Le stockage des fichiers (R2) n'est pas branché » en déposant un PDF | Même chose : R2, puis workflow « Esport (Worker) ». |
 | Workflow : « le relais n'est pas encore en version 7 » | Étape 1, puis relancez l'étape 6. |
 | Workflow : liaison de service vers le relais | Le Worker `applibourse-relais` doit exister dans le même compte Cloudflare. |
 | « Accès révoqué » dans l'Esport | Le compte a été révoqué dans l'Administration : c'est voulu. |
 
+Modules : [résumés de réunions](resumes.md), [objectifs et tâches](objectifs-taches.md).
 Passer plus tard sur un vrai serveur : voir [migration-serveur.md](migration-serveur.md).
