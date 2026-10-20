@@ -252,9 +252,8 @@ try {
   const idLea = (await esport.base.premier("SELECT id FROM comptes WHERE pseudo = 'Léa'", [])).id;
   await pc.getByTestId(`esport-compte-${idLea}`).waitFor({ timeout: 20_000 });
   await pc.getByLabel('Gérer Léa').click();
-  const faucons0 = (await esport.base.premier("SELECT id FROM teams WHERE nom = 'Faucons Valorant'", [])).id;
-  await pc.getByTestId(`esport-ajout-team-${idLea}-${faucons0}`).click();
-  await pc.getByTestId(`esport-ajout-poste-${idLea}`).fill('Duelliste');
+  await pc.getByTestId(`esport-ajout-team-${idLea}-faucons-valorant`).click();
+  await pc.getByTestId(`esport-ajout-poste-${idLea}-faucons-valorant`).fill('Duelliste');
   await capture(pc, '10-pc-membres-ajout');
   await pc.getByTestId(`esport-ajout-valider-${idLea}`).click();
   await pc.getByTestId('esport-membres-global-avis').waitFor({ timeout: 20_000 });

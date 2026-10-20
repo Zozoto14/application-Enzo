@@ -235,7 +235,7 @@ try {
   verifier((await pc.getByTestId(`esport-ajout-team-${idLuca}-faucons-valorant`).count()) === 0, 'team déjà rejointe non cochable');
   await pc.getByTestId(`esport-ajout-team-${idLuca}-les-aigles`).click();
   await pc.getByTestId(`esport-ajout-valider-${idLuca}`).click();
-  await pc.getByTestId('esport-membres-global-avis').waitFor({ timeout: 20_000 });
+  await pc.getByTestId('esport-membres-global-avis').filter({ hasText: 'Les Aigles' }).waitFor({ timeout: 20_000 });
   verifier(/Luca est ajouté à Les Aigles/.test(await pc.getByTestId('esport-membres-global-avis').innerText()), 'Luca ajouté à Les Aigles');
   const m3 = await esport.base.premier('SELECT role_id FROM membres WHERE compte_id = ? AND team_id = ?', [idLuca, teamId3]);
   verifier(m3?.role_id === joueur3.id, 'membre de Les Aigles (Joueur)');
