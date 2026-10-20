@@ -236,6 +236,19 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       if (!rgpd[2] && m === 'DELETE') return s.supprimerCompteMembre(acteur, compte);
     }
 
+    // Déménagement (esport/serveur/importer.mjs) : un fichier privé (PDF, miniature) par sa clé, Fondateur seulement.
+    if (chemin === '/admin/fichier' && m === 'GET') {
+      if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Réservé au Fondateur.');
+      if (!stockage) throw echec(503, 'stockage', 'Le stockage des fichiers n’est pas branché.');
+      let objet;
+      try {
+        objet = await stockage.lire(url.searchParams.get('cle') ?? '');
+      } catch {
+        throw echec(400, 'cle', 'Clé de fichier invalide.');
+      }
+      if (!objet) throw echec(404, 'fichier', 'Fichier introuvable.');
+      return new Response(objet.octets, { status: 200, headers: { ...ENTETES, 'Content-Type': 'application/octet-stream', 'X-Type-Fichier': objet.type } });
+    }
     if (chemin === '/admin/export' || chemin === '/admin/import') {
       if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Réservé au Fondateur.');
       if (chemin === '/admin/export' && m === 'GET') return exporterBase(base, maintenant());

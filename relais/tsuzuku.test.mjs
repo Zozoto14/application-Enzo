@@ -321,7 +321,8 @@ test('le modèle wrangler.toml autorise l’origine du site déclarée dans src/
   const toml = readFileSync(new URL('./wrangler.toml', import.meta.url), 'utf8');
   const { site } = JSON.parse(readFileSync(new URL('../src/config/site.json', import.meta.url), 'utf8'));
   assert.match(toml, /^\[vars\]$/m);
-  assert.equal(/ORIGINES_SITE = "([^"]+)"/.exec(toml)?.[1], site);
+  // L'origine du site Pages, plus celle du site hébergé chez o2switch (docs/o2switch.md).
+  assert.ok(/ORIGINES_SITE = "([^"]+)"/.exec(toml)?.[1].split(',').includes(site));
   assert.equal(/JETON|DISCORD/.test(toml.replace(/#.*$/gm, '')), false, 'aucun secret dans le modèle');
 });
 

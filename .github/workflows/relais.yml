@@ -31,6 +31,8 @@ jobs:
       RELAIS_KV_ID: ${{ secrets.RELAIS_KV_ID || vars.RELAIS_KV_ID }}
       # Facultatif : adresse du relais (https://applibourse-relais.<vous>.workers.dev) pour le test de santé.
       RELAIS_URL: ${{ vars.RELAIS_URL }}
+      # Bascule vers o2switch (docs/o2switch.md) : adresse du nouveau relais ; vide = relais Cloudflare normal.
+      RELAIS_CIBLE: ${{ vars.RELAIS_CIBLE }}
     steps:
       - uses: actions/checkout@v4
 
@@ -80,6 +82,11 @@ jobs:
         run: |
           grep -q 'A_REMPLIR_PAR_LE_SCRIPT' relais/wrangler.toml || { echo "::error::relais/wrangler.toml : marqueur A_REMPLIR_PAR_LE_SCRIPT introuvable."; exit 1; }
           sed "s/A_REMPLIR_PAR_LE_SCRIPT/$RELAIS_KV_ID/" relais/wrangler.toml > relais/wrangler.ci.toml
+          # Après la bascule : le Worker transmet tout au relais o2switch (aucune donnée n'est effacée ici).
+          if printf '%s' "$RELAIS_CIBLE" | grep -Eq '^https://[a-z0-9.-]+/?$'; then
+            printf 'RELAIS_CIBLE = "%s"\n' "$RELAIS_CIBLE" >> relais/wrangler.ci.toml
+            echo "::notice::Relais en mode « transmission » vers $RELAIS_CIBLE (docs/o2switch.md)."
+          fi
           if grep -Eiq 'JETON|DISCORD_WEBHOOK' <(grep -v '^#' relais/wrangler.ci.toml); then
             echo "::error::La configuration ne doit contenir aucun secret."
             exit 1

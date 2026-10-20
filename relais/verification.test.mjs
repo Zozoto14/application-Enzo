@@ -11,7 +11,7 @@ let ip = 0;
 
 function kv() {
   const donnees = new Map();
-  return { get: async c => (donnees.has(c) ? donnees.get(c) : null), put: async (c, v) => void donnees.set(c, v), delete: async c => void donnees.delete(c) };
+  return { donnees, get: async c => (donnees.has(c) ? donnees.get(c) : null), put: async (c, v) => void donnees.set(c, v), delete: async c => void donnees.delete(c) };
 }
 
 async function verifier(env, jeton, { methode = 'POST', adresse } = {}) {

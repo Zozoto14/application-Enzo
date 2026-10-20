@@ -22,6 +22,7 @@
     "relais:deployer": "node scripts/deployer-relais.mjs",
     "relais:site": "node scripts/deployer-relais.mjs --site",
     "relais:tester": "node --test relais/*.test.mjs",
+    "relais:tester:pg": "node relais/test-pg/lancer.mjs",
     "esport:tester": "node --test esport/test/*.test.mjs",
     "esport:tester:pg": "node esport/test/pg/lancer.mjs",
     "esport:local": "node esport/outils/serveur-local.mjs --graines",

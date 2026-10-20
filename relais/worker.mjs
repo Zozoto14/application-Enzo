@@ -25,6 +25,13 @@
  * liaison de service) si le jeton présenté est valable, révoqué, et de quel
  * compte il est (voir « Vérification de jeton » plus bas). Rien d'autre.
  *
+ * Version 8 (déménagement vers o2switch, docs/o2switch.md) : `GET /admin/boite`
+ * (jeton maître) rend toute la boîte, page par page, pour l'import sur le
+ * nouveau serveur ; avec la variable `RELAIS_CIBLE` (https://relais.appdashboard.fr),
+ * le Worker transmet chaque requête au nouveau serveur (les appareils qui ont
+ * encore l'ancienne adresse continuent de marcher) et l'annonce par l'en-tête
+ * `X-Relais-Deplace`. Le même fichier tourne sous Node (relais/serveur/app.mjs).
+ *
  * Une troisième route, `POST /support`, relaie un ticket d'assistance vers un
  * salon Discord (voir « Support » plus bas et docs/support-discord.md). L'adresse
  * du webhook est un SECRET du Worker (`DISCORD_WEBHOOK_URL`) : elle ne figure ni
@@ -39,9 +46,9 @@ import {
 } from '../bureau/electron/reseau.mjs';
 import { CHEMIN_TSUZUKU, routeTsuzuku } from './tsuzuku.mjs';
 
-export const VERSION_RELAIS = 7;
+export const VERSION_RELAIS = 8;
 /** Fonctions annoncées par `/sante` (le site adapte ses écrans à un relais pas encore redéployé). */
-export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations', 'verification-jeton'];
+export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations', 'verification-jeton', 'export-boite', 'demenagement'];
 /** Une enveloppe chiffrée : quelques centaines de Kio en pratique. */
 const TAILLE_MAX_ENVELOPPE = 20 * 1024 * 1024;
 const IDENTIFIANT_APPAREIL = /^[a-z0-9]{4,32}$/;
@@ -976,8 +983,47 @@ async function passerelle(requete, chemin) {
   }
 }
 
+// ------------------------------------------------- Déménagement (version 8)
+
+/** Toute la boîte, par pages (jeton maître) : clé, valeur, métadonnées, expiration (secondes Unix). */
+async function exporterBoite(requete, env) {
+  if (requete.method !== 'GET') return erreur('Méthode non permise.', 405);
+  if (typeof env.BOITE.list !== 'function') return erreur('Cette boîte ne sait pas se lister.', 501);
+  const curseur = new URL(requete.url).searchParams.get('curseur') || undefined;
+  // 100 clés par page : sous la limite d'opérations KV par requête d'un Worker gratuit.
+  const page = await env.BOITE.list({ cursor: curseur, limit: 100 });
+  const cles = [];
+  for (const cle of page.keys ?? []) {
+    const valeur = await env.BOITE.get(cle.name);
+    if (valeur === null) continue;
+    cles.push({ nom: cle.name, valeur, ...(cle.metadata ? { metadata: cle.metadata } : {}), ...(cle.expiration ? { expiration: cle.expiration } : {}) });
+  }
+  return reponse({ cles, suite: page.list_complete === false ? page.cursor : null });
+}
+
+const cibleValide = c => typeof c === 'string' && /^https:\/\/[a-z0-9.-]+(:\d+)?\/?$/i.test(c.trim());
+
+/** Transmet la requête telle quelle au nouveau relais ; la réponse annonce la nouvelle adresse. */
+export async function proxifier(requete, cible) {
+  const source = new URL(requete.url);
+  const destination = new URL(`${source.pathname}${source.search}`, `${String(cible).trim().replace(/\/+$/, '')}/`);
+  const entetes = new Headers(requete.headers);
+  entetes.delete('host');
+  const corps = ['GET', 'HEAD'].includes(requete.method) ? undefined : await requete.arrayBuffer();
+  const r = await fetch(destination, { method: requete.method, headers: entetes, body: corps, redirect: 'manual' });
+  const sortie = new Headers(r.headers);
+  sortie.set('X-Relais-Deplace', destination.origin);
+  const exposes = sortie.get('Access-Control-Expose-Headers');
+  sortie.set('Access-Control-Expose-Headers', exposes ? `${exposes}, X-Relais-Deplace` : 'X-Relais-Deplace');
+  return new Response(r.body, { status: r.status, statusText: r.statusText, headers: sortie });
+}
+
 export default {
   async fetch(requete, env, ctx) {
+    // Après la bascule vers o2switch : tout part vers le nouveau relais (docs/o2switch.md).
+    if (cibleValide(env?.RELAIS_CIBLE)) {
+      return proxifier(requete, env.RELAIS_CIBLE);
+    }
     // Lecture des sources de Tsuzuku (site web) : CORS, jeton et règles à part, préliminaire compris.
     // `ctx.waitUntil` : la mise en cache d'une page lue finit après la réponse.
     if (new URL(requete.url).pathname === CHEMIN_TSUZUKU) {
@@ -1035,6 +1081,12 @@ export default {
         return erreur('Boîte non configurée sur le relais.', 500);
       }
       return revocations(requete, env, portee, routeRevocation[1]);
+    }
+    if (pathname === '/admin/boite') {
+      if (!env.BOITE) {
+        return erreur('Boîte non configurée sur le relais.', 500);
+      }
+      return portee.maitre ? exporterBoite(requete, env) : erreur('Réservé au jeton de l’administrateur.', 403);
     }
     if (pathname === '/rangs') {
       if (!env.BOITE) {

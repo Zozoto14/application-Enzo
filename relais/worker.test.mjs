@@ -181,7 +181,11 @@ test('espaces : noms et identifiants validés, enveloppe au bon nom', async () =
   assert.equal(env.BOITE.donnees.size, 0);
 });
 
-test('course sur l’index : réparé depuis la liste de la boîte, au plus une fois par heure', async () => {
+// Sous `npm run relais:tester:pg`, les requêtes passent une à une par le serveur Node (boîte miroir) : la course
+// propre à ce double en mémoire ne peut pas s'y produire. La réparation par la liste PostgreSQL est vérifiée par
+// relais/test-pg/kv-postgres.test.mjs.
+const SOUS_PG = Boolean(process.env.RELAIS_TEST_PG);
+test('course sur l’index : réparé depuis la liste de la boîte, au plus une fois par heure', { skip: SOUS_PG && 'double en mémoire (voir relais/test-pg/kv-postgres.test.mjs)' }, async () => {
   const kv = kvMemoire();
   let listes = 0;
   const lister = kv.list;

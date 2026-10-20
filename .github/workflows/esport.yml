@@ -43,6 +43,10 @@ jobs:
       ESPORT_URL: ${{ vars.ESPORT_URL }}
       # Facultatif : « tous » ouvre la création de teams à tout compte relié (défaut : Fondateur seul).
       ESPORT_CREATION_TEAMS: ${{ vars.ESPORT_CREATION_TEAMS }}
+      # Déménagement vers o2switch (docs/o2switch.md) : « 1 » = lecture seule le temps de l'export final ;
+      # ESPORT_CIBLE = adresse du nouveau serveur (le Worker lui transmet tout). Vides : Worker normal.
+      ESPORT_LECTURE_SEULE: ${{ vars.ESPORT_LECTURE_SEULE }}
+      ESPORT_CIBLE: ${{ vars.ESPORT_CIBLE }}
       # Facultatif : bot Discord (docs/esport/bot-discord.md). Identifiant et clé publique : variables
       # (pas des secrets) ; le jeton du bot : SECRET, posé sur le Worker, jamais dans le dépôt.
       DISCORD_APPLICATION_ID: ${{ vars.DISCORD_APPLICATION_ID }}
@@ -111,6 +115,14 @@ jobs:
           sed "s/A_REMPLIR_ESPORT_D1_ID/$ESPORT_D1_ID/" esport/wrangler.toml > esport/wrangler.ci.toml
           if [ "$ESPORT_CREATION_TEAMS" = "tous" ]; then
             sed -i 's/^CREATION_TEAMS = "fondateur"/CREATION_TEAMS = "tous"/' esport/wrangler.ci.toml
+          fi
+          if [ "$ESPORT_LECTURE_SEULE" = "1" ]; then
+            printf 'LECTURE_SEULE = "1"\n' >> esport/wrangler.ci.toml
+            echo "::notice::Worker Esport en LECTURE SEULE (déménagement)."
+          fi
+          if printf '%s' "$ESPORT_CIBLE" | grep -Eq '^https://[a-z0-9.-]+/?$'; then
+            printf 'ESPORT_CIBLE = "%s"\n' "$ESPORT_CIBLE" >> esport/wrangler.ci.toml
+            echo "::notice::Worker Esport en mode « transmission » vers $ESPORT_CIBLE."
           fi
           # Bot Discord : identifiant et clé PUBLIQUE en variables du Worker (le jeton reste un secret).
           if [ -n "$DISCORD_APPLICATION_ID" ] && [ -n "$DISCORD_PUBLIC_KEY" ]; then
