@@ -10,7 +10,7 @@ import { Text, View } from 'react-native';
 import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
 import type { ClientEsport, DetailTeam } from '../../client';
-import { apiPlanning, type AccueilPlanning as Donnees } from '../../planning/api';
+import { apiPlanning, type AccueilPlanning as Donnees, type Annonce } from '../../planning/api';
 import { dateCourteJour, fuseauAppareil } from '../../planning/libelles';
 import { Retours, styles, useAgir, Intertitre, Panneau } from '../commun';
 import { EtatVide, Squelette, TitreCarte } from '../design';
@@ -33,6 +33,10 @@ export function AccueilPlanning({ theme, client, detail, onAller }: { theme: The
     await api.repondre(evenementId, cle, r);
     await charger();
   };
+  const annoncer = (evenementId: string, cle: string) => async (r: 'oui' | 'non' | 'peut_etre', a: Partial<Annonce>) => {
+    await api.repondre(evenementId, cle, r, a);
+    await charger();
+  };
   return (
     <>
       <Panneau theme={theme} testID="esport-accueil-prochains">
@@ -51,6 +55,7 @@ export function AccueilPlanning({ theme, client, detail, onAller }: { theme: The
             o={o}
             onOuvrir={() => onAller('module:planning')}
             onRepondre={d.modules.presence && d.droits.rsvp ? repondre(o.evenementId, o.cle) : undefined}
+            onAnnoncer={d.modules.presence && d.droits.rsvp ? annoncer(o.evenementId, o.cle) : undefined}
             testID={`esport-prochain-${o.jour}`}
           />
         ))}
@@ -88,6 +93,7 @@ export function ReglagesPlanning({ theme, client, detail, onChange }: { theme: T
   const [fuseau, setFuseau] = useState(detail.team.fuseau);
   const [effectif, setEffectif] = useState('');
   const [rappel, setRappel] = useState('');
+  const [saison, setSaison] = useState('');
   const { enCours, erreur, avis, agir } = useAgir();
   useEffect(() => {
     if (actif && peut)
@@ -95,6 +101,7 @@ export function ReglagesPlanning({ theme, client, detail, onChange }: { theme: T
         r => {
           setEffectif(String(r.effectifMin));
           setRappel(String(r.rappelHeures));
+          setSaison(r.debutSaison ?? '09-01');
         },
         () => undefined,
       );
@@ -109,6 +116,7 @@ export function ReglagesPlanning({ theme, client, detail, onChange }: { theme: T
       <View style={styles.ligne}>
         <Champ theme={theme} libelle={tr('planning.accueilPlanning.effectif_minimum')} valeur={effectif} onChanger={setEffectif} clavier="number-pad" maxLength={2} style={{ width: 150 }} testID="esport-parametres-effectif" />
         <Champ theme={theme} libelle={tr('planning.accueilPlanning.rappel_heures_avant_0')} valeur={rappel} onChanger={setRappel} clavier="number-pad" maxLength={3} style={{ width: 220 }} testID="esport-parametres-rappel" />
+        <Champ theme={theme} libelle={tr('presence.debut_de_saison')} valeur={saison} onChanger={setSaison} maxLength={5} placeholder="09-01" style={{ width: 180 }} testID="esport-parametres-saison" />
       </View>
       <BoutonHub
         theme={theme}
@@ -118,7 +126,7 @@ export function ReglagesPlanning({ theme, client, detail, onChange }: { theme: T
         onPress={() =>
           void agir('planning', async () => {
             if (fuseau.trim() !== detail.team.fuseau) await client.requete(`/teams/${encodeURIComponent(detail.team.id)}`, 'PATCH', { fuseau: fuseau.trim() });
-            await api.changerReglages({ effectifMin: Number(effectif), rappelHeures: Number(rappel) });
+            await api.changerReglages({ effectifMin: Number(effectif), rappelHeures: Number(rappel), ...(saison.trim() ? { debutSaison: saison.trim() } : {}) });
             await onChange();
             return tr('planning.accueilPlanning.reglages_du_planning_enregistr');
           })

@@ -257,7 +257,7 @@ function CarteDashboard({ theme, carte, onOuvrir }: { theme: ThemeHub; carte: Ca
           <Indicateur
             theme={theme}
             libelle={tr('dashboard.presence_j', { jours: carte.presence.jours })}
-            valeur={carte.presence.taux === null ? '—' : `${carte.presence.taux} %`}
+            valeur={carte.presence.taux === null ? tr('presence.rien_de_marque') : `${carte.presence.taux} %`}
             alerte={carte.presence.taux !== null && carte.presence.taux < 60}
             testID={`esport-carte-presence-${team.slug}`}
           />

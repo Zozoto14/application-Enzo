@@ -84,7 +84,7 @@ export function StatsTeam({ theme, client, detail, maintenant = Date.now }: { th
         <View style={{ gap: 16 }}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
             <Chiffre theme={theme} valeur={s.membres.actifs} libelle={tr('statsTeam.membres_actifs')} testID="esport-stats-membres" />
-            {s.presence ? <Chiffre theme={theme} valeur={s.presence.taux === null ? '—' : `${s.presence.taux} %`} libelle={tr('statsTeam.presence_seances', { seances: trn('statsTeam.seances', s.presence.seances) })} testID="esport-stats-presence" /> : null}
+            {s.presence ? <Chiffre theme={theme} valeur={s.presence.taux === null ? tr('presence.rien_de_marque') : `${s.presence.taux} %`} libelle={tr('statsTeam.presence_seances', { seances: trn('statsTeam.seances', s.presence.seances) })} testID="esport-stats-presence" /> : null}
             {s.taches ? <Chiffre theme={theme} valeur={s.taches.terminees} libelle={tr('statsTeam.taches_faites_sur_creees', { creees: s.taches.creees })} testID="esport-stats-taches" /> : null}
             {s.taches ? <Chiffre theme={theme} valeur={s.taches.enRetard} libelle={tr('statsTeam.taches_en_retard')} /> : null}
             {s.resumes ? <Chiffre theme={theme} valeur={s.resumes.deposes} libelle={tr('statsTeam.reunions_deposees_a_resumer', { enAttente: s.resumes.enAttente })} testID="esport-stats-resumes" /> : null}

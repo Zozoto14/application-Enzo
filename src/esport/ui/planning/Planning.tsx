@@ -12,7 +12,7 @@ import { Pressable, Text, View } from 'react-native';
 import { BoutonHub, Case, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import type { Membre } from '../../client';
-import { apiPlanning, type AbonnementIcal, type ApiPlanning, type Convocation, type DetailEvenement, type DroitsPlanning, type ListePlanning, type MembreConvocable, type Occurrence, type SaisieEvenement, type TypeEvenement } from '../../planning/api';
+import { apiPlanning, type AbonnementIcal, type Annonce, type ApiPlanning, type Convocation, type DetailEvenement, type DroitsPlanning, type ListePlanning, type MembreConvocable, type Occurrence, type SaisieEvenement, type TypeEvenement } from '../../planning/api';
 import { CONVOCATION_DEFAUT, memeConvocation } from '../../planning/convocations';
 import {
   joursCourts,
@@ -34,7 +34,7 @@ import { BoutonConfirme, Choix, Retours, TitreSection, styles, useAgir, Intertit
 import { EnTetePage, EtatVide, Pliable, Volet } from '../design';
 import type { PropsModule } from '../modules';
 import { BoutonsRsvp, CarteOccurrence, Pastille, PastilleType, SelecteurConvocation, SelecteurFuseau, useFuseau } from './commun';
-import { ListePresence } from './ListePresence';
+import { FeuilleAppel } from './FeuilleAppel';
 import { tr, trn } from '../../i18n';
 
 type Vue = 'mois' | 'semaine' | 'liste';
@@ -114,6 +114,13 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
     await api.repondre(o.evenementId, o.cle, r);
     setDonnees(d => (d ? { ...d, occurrences: d.occurrences.map(x => (x.evenementId === o.evenementId && x.cle === o.cle ? { ...x, monRsvp: r } : x)) } : d));
   };
+  /** Retard prévu ou motif d'absence, envoyés avec la réponse (facultatif). */
+  const annoncer = (o: Occurrence) => async (r: 'oui' | 'non' | 'peut_etre', a: Partial<Annonce>) => {
+    const rep = await api.repondre(o.evenementId, o.cle, r, a);
+    const maReponse = { retardPrevu: rep.retardPrevu ?? null, motif: rep.motif ?? '' };
+    setDonnees(d => (d ? { ...d, occurrences: d.occurrences.map(x => (x.evenementId === o.evenementId && x.cle === o.cle ? { ...x, monRsvp: r, maReponse } : x)) } : d));
+    setSelection(x => (x && x.evenementId === o.evenementId && x.cle === o.cle ? { ...x, monRsvp: r, maReponse } : x));
+  };
   const avecRsvp = Boolean(donnees?.modules.presence && droits?.rsvp);
   const deplacer = (sens: number) => setRef(r => (vue === 'mois' ? moisVoisin(r, sens) : ajouterJours(r, sens * (vue === 'semaine' ? 7 : 31))));
   const parJour = useMemo(() => {
@@ -152,6 +159,7 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
         adversaires={adversaires}
         noms={noms}
         onRepondre={avecRsvp ? repondre(selection) : undefined}
+        onAnnoncer={avecRsvp ? annoncer(selection) : undefined}
         onRetour={() => setSelection(undefined)}
         onModifier={(mode, initial) => setFormulaire({ f: mode === 'serie' ? { mode: 'serie', id: selection.evenementId } : { mode: 'occurrence', id: selection.evenementId, cle: selection.cle }, initial })}
         onSupprime={async message => {
@@ -177,6 +185,7 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
       avecDate={avecDate}
       onOuvrir={() => ouvrir(o)}
       onRepondre={avecRsvp ? repondre(o) : undefined}
+      onAnnoncer={avecRsvp ? annoncer(o) : undefined}
       testID={`esport-occ-${o.evenementId.slice(0, 8)}-${o.jour}`}
     />
   );
@@ -422,6 +431,7 @@ function DetailOccurrence({
   droits,
   presenceActive,
   onRepondre,
+  onAnnoncer,
   onRetour,
   onModifier,
   onSupprime,
@@ -435,6 +445,7 @@ function DetailOccurrence({
   droits: DroitsPlanning;
   presenceActive: boolean;
   onRepondre?(r: 'oui' | 'non' | 'peut_etre'): Promise<unknown>;
+  onAnnoncer?(r: 'oui' | 'non' | 'peut_etre', a: Partial<Annonce>): Promise<unknown>;
   onRetour(): void;
   onModifier(mode: 'serie' | 'occurrence', initial: Partial<SaisieEvenement>): void;
   onSupprime(message: string): Promise<void>;
@@ -492,11 +503,16 @@ function DetailOccurrence({
       {onRepondre && o.concerneMoi !== false && !o.termine && o.monRsvp !== null && o.monRsvp !== undefined ? (
         <Panneau theme={theme} testID="esport-evenement-rsvp">
           <Intertitre theme={theme}>{tr('planning.planning.serez_vous_la')}</Intertitre>
-          <BoutonsRsvp theme={theme} valeur={o.monRsvp} onRepondre={onRepondre} testID="esport-evenement-rsvp-boutons" />
+          <BoutonsRsvp theme={theme} valeur={o.monRsvp} onRepondre={onRepondre} annonce={o.maReponse} onAnnoncer={onAnnoncer} testID="esport-evenement-rsvp-boutons" />
         </Panneau>
       ) : null}
 
-      {voirPresence ? <ListePresence key={`${o.cle}-${o.monRsvp ?? ''}`} theme={theme} api={api} evenementId={o.evenementId} cle={o.cle} marquer={droits.marquer} /> : null}
+      {voirPresence ? (
+        <Panneau theme={theme} testID="esport-evenement-presence">
+          <Intertitre theme={theme}>{tr('planning.listePresence.presence')}</Intertitre>
+          <FeuilleAppel key={o.cle} rechargement={o.monRsvp ?? ''} theme={theme} api={api} evenementId={o.evenementId} cle={o.cle} marquer={droits.marquer} />
+        </Panneau>
+      ) : null}
 
       {droits.modifier || droits.supprimer ? (
         <Panneau theme={theme} testID="esport-evenement-actions">

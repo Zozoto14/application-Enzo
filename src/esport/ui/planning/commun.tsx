@@ -5,10 +5,10 @@
  * couleurs de type sont fixes (teintes moyennes, posées en transparence).
  */
 
-import React, { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
-import type { Convocation, MembreConvocable, Occurrence, Rsvp } from '../../planning/api';
+import type { Annonce, Convocation, MembreConvocable, Occurrence, Rsvp } from '../../planning/api';
 import { GROUPES, basculerGroupe, basculerMembre, basculerProprietaire, convocationVide, estConvoque, groupeActif, resumeConvocation } from '../../planning/convocations';
 import { dateCourteJour, fuseauAppareil, nomFuseau, typeEvenement } from '../../planning/libelles';
 import { styles } from '../commun';
@@ -103,24 +103,34 @@ const CHOIX_RSVP: Array<{ cle: Exclude<Rsvp, 'sans_reponse'>; libelle: string; g
     }, genre: 'critique' },
 ];
 
-/** Trois gros boutons (44 px au moins) : un appui suffit, la réponse s'affiche aussitôt. */
+/**
+ * Trois gros boutons (44 px au moins) : un appui suffit, la réponse s'affiche
+ * aussitôt. Avec `onAnnoncer`, une ligne facultative sous la réponse : « Je
+ * serai en retard » (5, 10, 15, 30 min) après Oui ou Peut-être, « Motif »
+ * après Non — jamais obligatoire.
+ */
 export function BoutonsRsvp({
   theme,
   valeur,
   onRepondre,
   testID,
   desactive,
+  annonce,
+  onAnnoncer,
 }: {
   theme: ThemeHub;
   valeur: Rsvp | null | undefined;
   onRepondre(r: Exclude<Rsvp, 'sans_reponse'>): Promise<unknown>;
   testID: string;
   desactive?: boolean;
+  annonce?: Annonce | null;
+  onAnnoncer?(r: Exclude<Rsvp, 'sans_reponse'>, a: Partial<Annonce>): Promise<unknown>;
 }) {
   const [local, setLocal] = useState<Rsvp | null | undefined>(undefined);
   const [envoi, setEnvoi] = useState(false);
   const actuel = local ?? valeur;
   return (
+    <View style={{ gap: 8 }}>
     <View style={{ flexDirection: 'row', gap: 8 }} accessibilityRole="radiogroup" accessibilityLabel={tr('planning.planning.serez_vous_la')} testID={testID}>
       {CHOIX_RSVP.map(c => {
         const couleur = theme[c.genre];
@@ -164,6 +174,68 @@ export function BoutonsRsvp({
         );
       })}
     </View>
+    {onAnnoncer && actuel && actuel !== 'sans_reponse' && !desactive ? <AnnonceRsvp theme={theme} rsvp={actuel} annonce={annonce} onAnnoncer={a => onAnnoncer(actuel, a)} testID={`${testID}-annonce`} /> : null}
+    </View>
+  );
+}
+
+const RETARDS_ANNONCES = [5, 10, 15, 30];
+
+/** Ce que le joueur annonce avec sa réponse : retard prévu (Oui, Peut-être) ou motif (Non). Facultatif, un appui. */
+function AnnonceRsvp({ theme, rsvp, annonce, onAnnoncer, testID }: { theme: ThemeHub; rsvp: Exclude<Rsvp, 'sans_reponse'>; annonce?: Annonce | null; onAnnoncer(a: Partial<Annonce>): Promise<unknown>; testID: string }) {
+  const [retard, setRetard] = useState<number | null>(annonce?.retardPrevu ?? null);
+  const [motif, setMotif] = useState(annonce?.motif ?? '');
+  const [enregistre, setEnregistre] = useState(false);
+  useEffect(() => {
+    setRetard(annonce?.retardPrevu ?? null);
+    setMotif(annonce?.motif ?? '');
+  }, [annonce?.retardPrevu, annonce?.motif]);
+  const attenue = { color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) };
+  const envoyer = async (a: Partial<Annonce>) => {
+    setEnregistre(false);
+    await onAnnoncer(a);
+    setEnregistre(true);
+  };
+  if (rsvp === 'non') {
+    return (
+      <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }} testID={testID}>
+        <TextInput
+          testID={`${testID}-motif`}
+          accessibilityLabel={tr('presence.motif_absence_facultatif')}
+          value={motif}
+          onChangeText={v => {
+            setMotif(v);
+            setEnregistre(false);
+          }}
+          maxLength={200}
+          placeholder={tr('presence.motif_absence_facultatif')}
+          placeholderTextColor={theme.attenue}
+          style={{ flex: 1, minWidth: 0, minHeight: 44, borderWidth: 1, borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 12), paddingHorizontal: 12, color: theme.texte, backgroundColor: theme.surface, ...police(theme.policeTexte) }}
+        />
+        <Pastille theme={theme} actif={enregistre} libelle={enregistre ? tr('presence.enregistre_court') : tr('presence.envoyer')} onPress={() => void envoyer({ motif }).catch(() => undefined)} testID={`${testID}-motif-ok`} />
+      </View>
+    );
+  }
+  return (
+    <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center', flexWrap: 'wrap' }} testID={testID}>
+      <Text style={attenue}>{tr('presence.je_serai_en_retard')}</Text>
+      {RETARDS_ANNONCES.map(n => (
+        <Pastille
+          key={n}
+          theme={theme}
+          actif={retard === n}
+          role="radio"
+          libelle={tr('presence.n_min', { n })}
+          onPress={() => {
+            const v = retard === n ? null : n;
+            setRetard(v);
+            void envoyer({ retardPrevu: v }).catch(() => setRetard(retard));
+          }}
+          testID={`${testID}-retard-${n}`}
+        />
+      ))}
+      {enregistre ? <Text style={{ ...attenue, color: theme.ok, fontWeight: '700' }}>{tr('presence.enregistre_court')}</Text> : null}
+    </View>
   );
 }
 
@@ -174,6 +246,7 @@ export function CarteOccurrence({
   o,
   onOuvrir,
   onRepondre,
+  onAnnoncer,
   avecDate = true,
   testID,
   extra,
@@ -182,6 +255,8 @@ export function CarteOccurrence({
   o: Occurrence;
   onOuvrir?(): void;
   onRepondre?(r: Exclude<Rsvp, 'sans_reponse'>): Promise<unknown>;
+  /** Retard prévu ou motif d'absence, annoncés avec la réponse (facultatif). */
+  onAnnoncer?(r: Exclude<Rsvp, 'sans_reponse'>, a: Partial<Annonce>): Promise<unknown>;
   avecDate?: boolean;
   testID?: string;
   extra?: React.ReactNode;
@@ -222,7 +297,7 @@ export function CarteOccurrence({
         ) : null}
       </Pressable>
       {onRepondre && !o.termine && o.concerneMoi !== false && o.monRsvp !== null && o.monRsvp !== undefined ? (
-        <BoutonsRsvp theme={theme} valeur={o.monRsvp} onRepondre={onRepondre} testID={testID ? `${testID}-rsvp` : 'esport-rsvp'} />
+        <BoutonsRsvp theme={theme} valeur={o.monRsvp} onRepondre={onRepondre} annonce={o.maReponse} onAnnoncer={onAnnoncer} testID={testID ? `${testID}-rsvp` : 'esport-rsvp'} />
       ) : null}
       {extra}
     </View>

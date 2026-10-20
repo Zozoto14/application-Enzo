@@ -10,7 +10,7 @@ import type { ClientEsport, DetailTeam } from '../client';
 import type { SaisieEvenement } from '../planning/api';
 import { PERMISSION_DISCORD } from '../discord/api';
 // Sur le web, chargés à la demande (differe.web.tsx) : bundle principal plus léger.
-import { Discord, Disponibilites, Planning, Playbook, Presence, Review, Scouting, Strats } from './differe';
+import { Discord, Disponibilites, Planning, Playbook, Presence, Review, Scouting, Strats, SuiviJoueurs } from './differe';
 
 export type SectionModule = `module:${string}`;
 
@@ -37,6 +37,7 @@ export const ECRANS_MODULES: Record<string, (props: PropsModule) => React.ReactE
   scouting: Scouting,
   strat_editor: Strats,
   playbook: Playbook,
+  player_notes: SuiviJoueurs,
 };
 
 /** Permissions dont l'une ouvre l'écran du module (sinon, pas d'entrée dans la barre). */
@@ -50,6 +51,8 @@ const ACCES_MODULES: Record<string, string[]> = {
   scouting: ['scouting.view'],
   strat_editor: ['strats.view'],
   playbook: ['playbook.view'],
+  // Notes du staff : jamais pour les joueurs (ils voient les notes partagées sur l'accueil de la team).
+  player_notes: ['player_notes.view'],
 };
 
 export function moduleAccessible(cle: string, permissions: readonly string[]): boolean {

@@ -15,4 +15,5 @@ export const Review = differe<PropsModule>(async () => (await import('./review/R
 export const Scouting = differe<PropsModule>(async () => (await import('./scouting/Scouting')).Scouting);
 export const Strats = differe<PropsModule>(async () => (await import('./strats/Strats')).Strats);
 export const Playbook = differe<PropsModule>(async () => (await import('./strats/Playbook')).Playbook);
+export const SuiviJoueurs = differe<PropsModule>(async () => (await import('./suivi/SuiviJoueurs')).SuiviJoueurs);
 export const Discord = differe<PropsModule>(async () => (await import('./Discord')).Discord);

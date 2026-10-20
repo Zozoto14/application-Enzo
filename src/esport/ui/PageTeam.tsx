@@ -4,7 +4,7 @@
  *  - Accueil ;
  *  - Agenda : Planning, Disponibilités, Présence ;
  *  - Jeu : Strats, Playbook, Review vidéo, Scouting ;
- *  - Équipe : Résumés, Objectifs et tâches, Membres et rôles ;
+ *  - Équipe : Résumés, Objectifs et tâches, Suivi joueurs, Membres et rôles ;
  *  - Réglages : Paramètres, Discord, Journal.
  *
  * Une section n'apparaît que si elle contient au moins un écran ouvert au
@@ -24,6 +24,7 @@ import { CATALOGUE, mentionDonnees, nomModule, type ClientEsport, type DetailTea
 import { dateCourte, phraseNotification } from '../libelles';
 import type { SaisieEvenement } from '../planning/api';
 import { AccueilPhase3 } from './AccueilPhase3';
+import { MonSuivi } from './MonSuivi';
 import { CadreEsport, EntreeLaterale, type OngletEsport } from './CadreEsport';
 import { Journal } from './Journal';
 import { StatsTeam } from './StatsTeam';
@@ -66,7 +67,7 @@ export const GROUPES_TEAM: ReadonlyArray<{ id: GroupeTeam; libelle: string; glyp
       return tr('pageTeam.equipe');
     }, glyphe: '⚑', get description() {
       return tr('pageTeam.equipe_resumes_objectifs_et');
-    }, sections: ['module:meeting_summaries', 'module:goals_tasks', 'membres'] },
+    }, sections: ['module:meeting_summaries', 'module:goals_tasks', 'module:player_notes', 'membres'] },
   { id: 'reglages', get libelle() {
       return tr('pageTeam.reglages');
     }, glyphe: '⚙︎', get description() {
@@ -87,6 +88,9 @@ const COURTS: Record<string, string> = {
     },
   get membres() {
       return tr('dashboard.membres');
+    },
+  get 'module:player_notes'() {
+      return tr('suivi.court');
     },
 };
 
@@ -420,6 +424,7 @@ function AccueilTeam({ theme, client, detail, large, onAller }: { theme: ThemeHu
         {/* Planning d'abord : sur iPhone, répondre doit se faire sans défiler. */}
         <View style={{ gap: ESP.m, flex: large ? 1.6 : undefined, minWidth: 0 }}>
           <AccueilPlanning theme={theme} client={client} detail={detail} onAller={onAller} />
+          <MonSuivi theme={theme} client={client} detail={detail} />
           <AccueilPhase3 theme={theme} client={client} detail={detail} onAller={onAller} />
         </View>
         {colonneDroite}

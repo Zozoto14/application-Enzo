@@ -182,6 +182,15 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
       return tr('jr.discord_account_linked', { qui });
     case 'discord.account_unlinked':
       return tr('jr.discord_account_unlinked', { qui });
+    // Suivi des joueurs : jamais le contenu d'une note, seulement le joueur concerné.
+    case 'player_note.created':
+      return tr('jr.player_note_created', { qui, joueur: nom(noms, m.compte) });
+    case 'player_note.updated':
+      return tr('jr.player_note_updated', { qui, joueur: nom(noms, m.compte) });
+    case 'player_note.deleted':
+      return tr('jr.player_note_deleted', { qui, joueur: nom(noms, m.compte) });
+    case 'player_note.shared':
+      return tr(m.partagee ? 'jr.player_note_shared' : 'jr.player_note_unshared', { qui, joueur: nom(noms, m.compte) });
     case 'attendance.relance':
       return tr('jr.attendance_relance', { qui, titre: texte(m.titre) });
     case 'event.starting':
@@ -213,6 +222,7 @@ export function filtresJournal(): ReadonlyArray<readonly [string, string]> {
     ['opponent', tr('cat.groupe.scouting')],
     ['strat', tr('cat.groupe.strat_editor')],
     ['playbook', tr('cat.groupe.playbook')],
+    ['player_note', tr('cat.groupe.player_notes')],
   ];
 }
 
@@ -252,6 +262,8 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
         motif: typeof c.motif === 'string' && c.motif ? tr('nt.titre_apres_deux_points', { titre: c.motif }) : '',
         team,
       });
+    case 'note-partagee':
+      return tr('nt.note_partagee', { team });
     case 'tache-echeance':
       return tr(c.retard ? 'nt.tache_en_retard' : 'nt.tache_echeance_proche', {
         titre: str(c.titre, tr('nt.une_tache')),

@@ -73,6 +73,8 @@ export interface Occurrence {
   concerneMoi?: boolean;
   monRsvp?: Rsvp | null;
   maPresence?: Reel | null;
+  /** Ce que j'ai annoncé avec ma réponse (retard prévu, motif d'absence). */
+  maReponse?: Annonce | null;
   reponses?: { oui: number; non: number; peut_etre: number; attendues?: number } | null;
   termine?: boolean;
 }
@@ -144,32 +146,119 @@ export interface AccueilPlanning {
   modules: { presence: boolean };
 }
 
+/** Annonce du joueur avec sa réponse : « en retard de X min » ou « absent : motif ». */
+export interface Annonce {
+  retardPrevu: number | null;
+  motif: string;
+}
+
 export interface LignePresence {
   compte: string;
-  pseudo: string;
+  pseudo: string | null;
+  /** Non convoqué, venu quand même (ajouté par le staff) : hors des taux. */
+  horsConvocation?: boolean;
   rsvp: Rsvp;
+  retardPrevu?: number | null;
+  motifPrevu?: string;
   reel: Reel;
+  retardMinutes?: number | null;
+  motif?: string;
   note: string;
   marqueLe: string | null;
+}
+
+export interface CompteursSeance {
+  convoques: number;
+  oui: number;
+  peutEtre: number;
+  non: number;
+  sansReponse: number;
+  marques: number;
+  nonMarques: number;
+  present: number;
+  retard: number;
+  absent: number;
+  excuse: number;
+  enPlus: number;
 }
 
 export interface PresenceOccurrence {
   occurrence: Occurrence;
   lignes: LignePresence[];
+  compteurs?: CompteursSeance;
+  /** Membres non convoqués qu'on peut ajouter (« venu sans être convoqué »). */
+  ajoutables?: Array<{ compte: string; pseudo: string }>;
+  commence?: boolean;
+  termine?: boolean;
   droits: DroitsPlanning;
 }
 
+/** Un marquage : un appui de la feuille d'appel. */
+export interface Marque {
+  compte: string;
+  reel: Reel;
+  retardMinutes?: number | null;
+  motif?: string;
+  note?: string;
+  horsConvocation?: boolean;
+}
+
+export type PeriodeStats = '7' | '30' | '90' | 'saison';
+export interface ParamsPeriode {
+  periode?: PeriodeStats;
+  debut?: string;
+  fin?: string;
+  types?: string[];
+  fuseau?: string;
+}
+
+export type SeanceAMarquer = Occurrence & { convoquesTotal: number; marques: number; restants: number; enCours: boolean };
+export interface AMarquer {
+  total: number;
+  jours: number;
+  seances: SeanceAMarquer[];
+}
+
+export type SeanceHistorique = CompteurPresence & { evenementId: string; cle: string; titre: string; type: TypeEvenement; jour: string; heureDebut: string };
+export interface HistoriquePresence {
+  debut: string;
+  fin: string;
+  fuseau: string;
+  seances: SeanceHistorique[];
+}
+
+export type LigneFiche = LignePresence & { evenementId: string; cle: string; titre: string; type: TypeEvenement; jour: string; heureDebut: string };
+export type FichePresence = CompteurPresence & {
+  compte: string;
+  pseudo: string | null;
+  debut: string;
+  fin: string;
+  serie: number;
+  serieMax: number;
+  historique: LigneFiche[];
+  motifs: Array<{ motif: string; n: number }>;
+};
+
+/**
+ * Compteurs de présence. Définitions (serveur, presence.mjs) : seuls les
+ * convoqués comptent ; taux = (présents + retards) / séances marquées ;
+ * ponctualité = présents / (présents + retards) ; un non marqué n'entre dans
+ * aucun taux ; `enPlus` : venues sans convocation (hors des taux).
+ */
 export interface CompteurPresence {
   evenements: number;
   marques: number;
+  nonMarques?: number;
   present: number;
   retard: number;
   absent: number;
   excuse: number;
+  enPlus?: number;
   rsvpOui: number;
   rsvpRepondus: number;
   taux: number | null;
   ponctualite: number | null;
+  retardMoyen?: number | null;
   tauxReponse: number | null;
 }
 
@@ -180,7 +269,8 @@ export interface StatsPresence {
   tout: boolean;
   noms: Record<string, string | null>;
   global: CompteurPresence;
-  joueurs: Array<CompteurPresence & { compte: string }>;
+  debutSaison?: string;
+  joueurs: Array<CompteurPresence & { compte: string; serie?: number; serieMax?: number; tendance?: number | null }>;
   parType: Array<CompteurPresence & { type: TypeEvenement }>;
   parPeriode: Array<CompteurPresence & { periode: string }>;
 }
@@ -240,6 +330,8 @@ export interface CarteDispos {
 export interface ReglagesPlanning {
   effectifMin: number;
   rappelHeures: number;
+  /** Début de saison (MM-JJ) : période « Saison » des statistiques. */
+  debutSaison?: string;
   fuseau: string;
   droits: DroitsPlanning;
 }
@@ -280,13 +372,20 @@ export function apiPlanning(client: ClientEsport, teamId: string) {
       client.requete<{ ok: true }>(`${t}/planning/${encodeURIComponent(id)}${q({ portee, occurrence: cle })}`, 'DELETE'),
     accueil: (fuseau?: string) => client.requete<AccueilPlanning>(`${t}/planning/accueil${q({ fuseau })}`),
     reglages: () => client.requete<ReglagesPlanning>(`${t}/planning/reglages`),
-    changerReglages: (r: { effectifMin?: number; rappelHeures?: number }) => client.requete<ReglagesPlanning>(`${t}/planning/reglages`, 'PUT', r),
-    repondre: (id: string, cle: string, rsvp: Rsvp) => client.requete<{ ok: true; rsvp: Rsvp }>(`${o(id, cle)}/rsvp`, 'PUT', { rsvp }),
+    changerReglages: (r: { effectifMin?: number; rappelHeures?: number; debutSaison?: string }) => client.requete<ReglagesPlanning>(`${t}/planning/reglages`, 'PUT', r),
+    /** Réponse en un appui ; `annonce` : retard prévu (minutes) ou motif d'absence, facultatifs. */
+    repondre: (id: string, cle: string, rsvp: Rsvp, annonce?: Partial<Annonce>) =>
+      client.requete<{ ok: true; rsvp: Rsvp } & Partial<Annonce>>(`${o(id, cle)}/rsvp`, 'PUT', { rsvp, ...(annonce?.retardPrevu !== undefined ? { retardPrevu: annonce.retardPrevu } : {}), ...(annonce?.motif !== undefined ? { motif: annonce.motif } : {}) }),
     presence: (id: string, cle: string) => client.requete<PresenceOccurrence>(`${o(id, cle)}/presence`),
-    marquer: (id: string, cle: string, marques: Array<{ compte: string; reel: Reel; note?: string }>) => client.requete<PresenceOccurrence>(`${o(id, cle)}/presence`, 'PUT', { marques }),
-    stats: (p: { debut: string; fin: string; types?: string[]; granularite?: 'mois' | 'semaine'; fuseau?: string }) =>
-      client.requete<StatsPresence>(`${t}/presence/stats${q({ debut: p.debut, fin: p.fin, types: p.types?.join(','), granularite: p.granularite, fuseau: p.fuseau })}`),
-    exportCsv: (p: { debut: string; fin: string }) => client.requete<Fichier>(`${t}/presence/export.csv${q({ ...p, format: 'json' })}`),
+    marquer: (id: string, cle: string, marques: Marque[], options: { toutPresent?: boolean } = {}) => client.requete<PresenceOccurrence>(`${o(id, cle)}/presence`, 'PUT', { marques, ...options }),
+    stats: (p: ParamsPeriode & { granularite?: 'mois' | 'semaine' }) =>
+      client.requete<StatsPresence>(`${t}/presence/stats${q({ periode: p.periode, debut: p.debut, fin: p.fin, types: p.types?.join(','), granularite: p.granularite, fuseau: p.fuseau })}`),
+    aMarquer: (fuseau?: string) => client.requete<AMarquer>(`${t}/presence/a-marquer${q({ fuseau })}`),
+    historique: (p: ParamsPeriode) => client.requete<HistoriquePresence>(`${t}/presence/historique${q({ periode: p.periode, debut: p.debut, fin: p.fin, types: p.types?.join(','), fuseau: p.fuseau })}`),
+    /** Fiche de présence d'un joueur (« moi » : la mienne). */
+    fiche: (compte: string, p: ParamsPeriode = {}) =>
+      client.requete<FichePresence>(`${t}/presence/joueurs/${encodeURIComponent(compte)}${q({ periode: p.periode, debut: p.debut, fin: p.fin, types: p.types?.join(','), fuseau: p.fuseau })}`),
+    exportCsv: (p: ParamsPeriode) => client.requete<Fichier>(`${t}/presence/export.csv${q({ periode: p.periode, debut: p.debut, fin: p.fin, types: p.types?.join(','), format: 'json' })}`),
     exportIcs: () => client.requete<Fichier>(`${t}/planning/export.ics?format=json`),
     abonnements: async () => (await client.requete<{ abonnements: AbonnementIcal[] }>(`${t}/planning/ical`)).abonnements,
     creerAbonnement: (libelle: string) => client.requete<{ jeton: string; chemin: string; abonnement: AbonnementIcal }>(`${t}/planning/ical`, 'POST', { libelle }),

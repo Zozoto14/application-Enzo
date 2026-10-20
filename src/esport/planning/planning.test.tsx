@@ -248,6 +248,7 @@ describe('écrans Disponibilités, Présence et accueil', () => {
   it('présence : taux, par joueur et par type, export CSV', async () => {
     const exporter = jest.fn(async () => true);
     await monter(COACH, 'module:attendance', 'large', theme, exporter);
+    await fireEvent.press(await screen.findByTestId('esport-presence-onglet-stats'));
     expect((await screen.findByTestId('esport-presence-taux-global')).props.children).toBe('75 %');
     expect(screen.getByTestId('esport-stat-joueur-lea12345-taux').props.children).toBe('75 %');
     expect(screen.getByTestId('esport-stat-type-training')).toBeTruthy();
@@ -269,7 +270,7 @@ describe('écrans Disponibilités, Présence et accueil', () => {
       for (const [section, id] of [
         ['module:planning', 'esport-planning'],
         ['module:availability', 'esport-heatmap'],
-        ['module:attendance', 'esport-presence-stats'],
+        ['module:attendance', 'esport-presence-a-marquer'],
       ] as const) {
         const { unmount } = await monter(COACH, section, 'telephone', t);
         expect(await screen.findByTestId(id)).toBeTruthy();
