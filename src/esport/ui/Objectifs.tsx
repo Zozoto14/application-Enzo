@@ -14,7 +14,9 @@ import { BoutonHub, Champ, Segments } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { ClientEsport, DetailTeam, FiltresTaches, Membre, Objectif, Priorite, StatutTache, Tache } from '../client';
 import { LIBELLES_PRIORITE, LIBELLES_STATUT_TACHE, dateJour, lireDateSaisie } from '../libelles';
+import { ChampNote } from './ChampNote';
 import { BoutonConfirme, Choix, PastilleRole, Retours, styles, useAgir, Intertitre, Panneau } from './commun';
+import { NoteMarkdown } from './review/Note';
 import { EnTetePage, EtatVide, Volet } from './design';
 
 const STATUTS: StatutTache[] = ['a_faire', 'en_cours', 'fait'];
@@ -307,7 +309,7 @@ function CarteTache({
         <Text style={attenue}>{t.assigne ? t.assigne.pseudo ?? '?' : 'Non assignée'}</Text>
         {t.objectif ? <Text style={attenue}>· {t.objectif.titre}</Text> : null}
       </View>
-      {t.description ? <Text style={{ color: theme.texte, fontSize: 13, ...police(theme.policeTexte) }}>{t.description}</Text> : null}
+      {t.description ? <NoteMarkdown theme={theme} source={t.description} testID={`esport-tache-description-${t.id}`} /> : null}
       {peutBouger || peutSupprimer ? (
         <View style={styles.ligne}>
           {peutBouger && i > 0 ? <BoutonHub theme={theme} titre={`← ${LIBELLES_STATUT_TACHE[STATUTS[i - 1]]}`} onPress={() => onStatut(STATUTS[i - 1])} testID={`esport-tache-${t.id}-${STATUTS[i - 1]}`} /> : null}
@@ -390,7 +392,7 @@ function NouvelleTache({
     <Panneau theme={theme} style={large ? { flex: 1 } : undefined} testID="esport-tache-nouvelle">
       <Intertitre theme={theme}>Nouvelle tâche</Intertitre>
       <Champ theme={theme} libelle="Titre" valeur={titre} onChanger={setTitre} maxLength={120} testID="esport-tache-titre" />
-      <Champ theme={theme} libelle="Description (facultative)" valeur={description} onChanger={setDescription} maxLength={2000} multiligne testID="esport-tache-description" />
+      <ChampNote theme={theme} libelle="Description (facultative)" valeur={description} onChanger={setDescription} maxLength={2000} testID="esport-tache-description" />
       <Choix theme={theme} libelle="Assignée à" valeur={assigne} options={[{ id: '', nom: 'Personne' }, ...assignables.map(m => ({ id: m.compte, nom: m.pseudo }))]} onChoisir={setAssigne} testID="esport-tache-assigne" />
       <Choix theme={theme} libelle="Priorité" valeur={priorite} options={PRIORITES.map(p => ({ id: p, nom: LIBELLES_PRIORITE[p], couleur: couleurPriorite(theme, p) }))} onChoisir={v => setPriorite(v as Priorite)} testID="esport-tache-priorite" />
       <Champ theme={theme} libelle="Échéance (JJ/MM/AAAA, facultative)" valeur={echeance} onChanger={setEcheance} maxLength={10} testID="esport-tache-echeance" />

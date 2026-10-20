@@ -3,7 +3,7 @@
  * et phrases du journal et des notifications.
  */
 
-import type { CategorieRepere, SideTendance } from './api';
+import type { CategorieRepere, Reactions, SideTendance } from './api';
 
 export interface InfoCategorie {
   cle: CategorieRepere;
@@ -63,6 +63,21 @@ export function repereActif<T extends { debut: number; fin: number | null }>(rep
   return actif;
 }
 
+export type TriReperes = 'instant' | 'likes' | 'dislikes';
+
+export const TRIS_REPERES: ReadonlyArray<readonly [TriReperes, string]> = [
+  ['instant', 'Par instant'],
+  ['likes', 'Plus likés 👍'],
+  ['dislikes', 'Plus dislikés 👎'],
+];
+
+/** Tri de la liste des repères : par instant (ordre du serveur), ou par réactions (à égalité, par instant). */
+export function trierReperes<T extends { debut: number; reactions?: Reactions }>(reperes: readonly T[], tri: TriReperes): T[] {
+  if (tri === 'instant') return [...reperes];
+  const cle = tri === 'likes' ? 'like' : 'dislike';
+  return [...reperes].sort((a, b) => (b.reactions?.[cle] ?? 0) - (a.reactions?.[cle] ?? 0) || a.debut - b.debut);
+}
+
 /** Position (0 à 100 %) d'un instant sur la timeline. */
 export const positionPourcent = (t: number, total: number): number => (total > 0 ? Math.max(0, Math.min(100, (t / total) * 100)) : 0);
 
@@ -87,6 +102,11 @@ export function phraseJournalReview(action: string, qui: string, m: Record<strin
       return `${qui} a commenté le repère « ${texte(m.repereTitre)} » de « ${texte(m.titre)} »`;
     case 'review.comment_deleted':
       return `${qui} a supprimé un commentaire de « ${texte(m.titre)} »`;
+    case 'review.reaction_changed': {
+      const sur = m.cible === 'commentaire' ? `un commentaire du repère « ${texte(m.repereTitre)} »` : `le repère « ${texte(m.repereTitre)} »`;
+      const quoi = m.valeur === 'like' ? 'aime 👍' : m.valeur === 'dislike' ? 'n’aime pas 👎' : 'a retiré sa réaction à';
+      return `${qui} ${quoi} ${sur} de « ${texte(m.review)} »`;
+    }
     case 'opponent.created':
       return `${qui} a créé la fiche adversaire « ${texte(m.nom)} »`;
     case 'opponent.updated':

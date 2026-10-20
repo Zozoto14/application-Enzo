@@ -62,7 +62,7 @@ export function chargerApiYoutube(): Promise<ApiYT> {
   return chargement;
 }
 
-export function Lecteur({ theme, videoId, depart = 0, onPret, onEtat }: PropsLecteur) {
+export function Lecteur({ theme, videoId, depart = 0, onPret, onEtat, calque }: PropsLecteur) {
   const zone = useRef<HTMLDivElement>(null);
   const [erreur, setErreur] = useState<string | undefined>();
   const retours = useRef({ onPret, onEtat });
@@ -139,6 +139,10 @@ export function Lecteur({ theme, videoId, depart = 0, onPret, onEtat }: PropsLec
     <View testID="esport-lecteur" style={{ gap: 8 }}>
       <div style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', background: '#000', borderRadius: Math.min(theme.rayonMoyen, 10), overflow: 'hidden' }}>
         <div ref={zone} data-testid="esport-lecteur-zone" style={{ position: 'absolute', inset: 0 }} />
+        {/* Calque du dessin, par-dessus l'iframe : transparent aux clics, sauf l'éditeur. */}
+        <div data-testid="esport-lecteur-calque" style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none' }}>
+          {calque}
+        </div>
       </div>
       {erreur ? (
         <View testID="esport-lecteur-erreur" style={{ gap: 4 }}>

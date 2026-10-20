@@ -37,6 +37,7 @@ import {
   type Vue,
 } from '../../strats/document';
 import { LIBELLES_SIDE } from '../../strats/libelles';
+import { ChampNote } from '../ChampNote';
 import { Retours, styles, useAgir, Intertitre, Panneau } from '../commun';
 import type { ExportCanevas, Outil } from './CanevasStrat.web';
 import { MentionRiot } from './commun';
@@ -424,7 +425,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
       {etapeCourante ? (
         <View style={[styles.ligne, { alignItems: 'flex-start' }]}>
           <Champ theme={theme} libelle="Titre de l’étape" valeur={etapeCourante.titre} onChanger={titre => faire({ type: 'titreEtape', etape: iEtape, titre })} maxLength={60} style={{ flex: 1, minWidth: 180 }} testID="esport-etape-titre" />
-          <Champ theme={theme} libelle="Note de l’étape" valeur={etapeCourante.note} onChanger={note => faire({ type: 'noteEtape', etape: iEtape, note })} maxLength={2000} multiligne style={{ flex: 2, minWidth: 220 }} testID="esport-etape-note" />
+          <ChampNote theme={theme} libelle="Note de l’étape" valeur={etapeCourante.note} onChanger={note => faire({ type: 'noteEtape', etape: iEtape, note })} maxLength={2000} style={{ flex: 2, minWidth: 220 }} testID="esport-etape-note" />
         </View>
       ) : null}
     </Panneau>

@@ -6,29 +6,50 @@
  * fil de commentaires par repère, filtres, liste synchronisée avec la lecture,
  * export Markdown et PDF (impression).
  *
- * Droits (vérifiés par le serveur) : video_review.view|create|annotate|delete.
- * Limite connue : pas de dessin sur la vidéo, les notes sont liées à un instant.
+ * v2 : réactions 👍 / 👎 sur les repères et leurs commentaires (tri « plus
+ * likés / dislikés »), barre de mise en forme des notes (gras, italique,
+ * liste, lien ; Ctrl/Cmd+B et Ctrl/Cmd+I), et DESSIN SUR LA VIDÉO : un calque
+ * transparent posé par-dessus le lecteur (site, app PC, iPad dans le
+ * navigateur), rattaché au repère du timestamp courant, réaffiché pendant la
+ * lecture. Sur l'app iOS native (sans lecteur intégré), le dessin est signalé.
+ *
+ * Droits (vérifiés par le serveur) : video_review.view|create|annotate|delete|react.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Linking, Pressable, ScrollView, Text, View } from 'react-native';
-import { Avis, BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { dateCourte } from '../../libelles';
-import { apiReview, type ApiReview, type CategorieRepere, type DetailReview, type Repere, type SaisieRepere } from '../../review/api';
-import { CATEGORIES, categorie, formatTemps, repereActif } from '../../review/libelles';
+import { apiReview, type ApiReview, type CategorieRepere, type DetailReview, type Repere, type SaisieRepere, type ValeurReaction } from '../../review/api';
+import {
+  COULEURS_DESSIN,
+  ajouterForme,
+  annulerDessin,
+  dessinDe,
+  dessinsAAfficher,
+  gommerForme,
+  historiqueDessin,
+  repereDuDessin,
+  retablirDessin,
+  type HistoriqueDessin,
+  type OutilDessin,
+} from '../../review/dessin';
+import { CATEGORIES, TRIS_REPERES, categorie, formatTemps, repereActif, trierReperes, type TriReperes } from '../../review/libelles';
 import { extraireYoutube, lienYoutubeA, miniatureYoutube } from '../../review/youtube';
 import { BoutonConfirme, Choix, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from '../commun';
 import type { PropsModule } from '../modules';
+import { ChampNote } from '../ChampNote';
+import { BarreDessin } from './BarreDessin';
+import { ApercuDessin, EditeurDessin, dessinDisponible } from './dessinVideo';
 import { FormulaireRepere, type InitialRepere } from './FormulaireRepere';
 import { Lecteur, VITESSES, lecteurIntegre } from './Lecteur';
 import { NoteMarkdown as Note } from './Note';
+import { BoutonsReaction } from './Reactions';
 import { Timeline } from './Timeline';
-import type { CommandeLecteur } from './typesLecteur';
+import type { CommandeLecteur, EtatLecteur } from './typesLecteur';
 import { imprimerNotes, impressionDisponible } from './impression';
 import { TOUCHE_RACCOURCI, useRaccourciRepere } from './raccourci';
-
-export const MENTION_LIMITE = 'Limite connue : pas de dessin sur la vidéo. Les notes sont liées à un instant de la vidéo (timestamp), pas à un endroit de l’image.';
 
 export function Review({ theme, client, detail, large, reviewId, onExporter }: PropsModule) {
   const teamId = detail.team.id;
@@ -79,7 +100,6 @@ function ListeReviews({ theme, api, message, onOuvrir }: { theme: ThemeHub; api:
     <View style={{ gap: 16 }} testID="esport-review">
       <TitreSection theme={theme} titre="Review vidéo" sous="Analysez vos matchs et scrims sur YouTube : repères horodatés, notes et commentaires." />
       <Retours theme={theme} erreur={erreur} avis={avis ?? message} prefixe="esport-review" />
-      <Avis theme={theme} genre="info" texte={MENTION_LIMITE} testID="esport-review-limite" />
       {liste?.droits.creer ? (
         <Panneau theme={theme} testID="esport-review-nouvelle">
           <Intertitre theme={theme}>Nouvelle review</Intertitre>
@@ -155,6 +175,15 @@ function DetailReviewEcran({
   const [filtres, setFiltres] = useState<Filtres>({ categories: [], joueur: '', auteur: '' });
   const [selection, setSelection] = useState<string | undefined>();
   const [formulaire, setFormulaire] = useState<{ edition?: Repere; initial: InitialRepere } | undefined>();
+  const [tri, setTri] = useState<TriReperes>('instant');
+  const [etatLecteur, setEtatLecteur] = useState<EtatLecteur>('chargement');
+  // Dessin sur la vidéo : mode édition (instant, repère rattaché, historique), outils, affichage.
+  const [dessin, setDessin] = useState<{ instant: number; repere?: Repere; histo: HistoriqueDessin } | undefined>();
+  const [outil, setOutil] = useState<OutilDessin>('fleche');
+  const [couleur, setCouleur] = useState(COULEURS_DESSIN[0].cle);
+  const [epaisseur, setEpaisseur] = useState(4);
+  const [texteDessin, setTexteDessin] = useState('');
+  const [voirDessins, setVoirDessins] = useState(true);
   const { enCours, erreur, avis, agir } = useAgir();
 
   const recharger = useCallback(async () => setData(await api.detail(id)), [api, id]);
@@ -189,8 +218,12 @@ function DetailReviewEcran({
       ),
     [reperes, filtres],
   );
+  const ordonnes = useMemo(() => trierReperes(visibles, tri), [visibles, tri]);
   const total = duree > 0 ? duree : Math.max(60, ...reperes.map(r => (r.fin ?? r.debut) + 30));
   const actif = lecteurIntegre && pret ? repereActif(visibles, temps) : undefined;
+  const enPause = etatLecteur !== 'lecture';
+  const affiches = lecteurIntegre && pret && voirDessins && !dessin ? dessinsAAfficher(reperes, temps, enPause) : [];
+  const avecDessin = reperes.some(r => r.dessin?.objets.length);
 
   // Liste latérale synchronisée avec la lecture : le repère en cours est visible.
   const liste = useRef<React.ComponentRef<typeof ScrollView>>(null);
@@ -211,7 +244,19 @@ function DetailReviewEcran({
     commande.current?.pause();
     setFormulaire({ initial: { debut: t } });
   }, []);
-  useRaccourciRepere(Boolean(data?.droits.annoter) && lecteurIntegre && !formulaire, ouvrirAjout);
+  useRaccourciRepere(Boolean(data?.droits.annoter) && lecteurIntegre && !formulaire && !dessin, ouvrirAjout);
+
+  /** « Dessiner » : la vidéo se met en pause, le calque s'active au temps courant. */
+  const ouvrirDessin = useCallback(() => {
+    const c = commande.current;
+    if (!c) return;
+    c.pause();
+    const t = Math.round(c.temps() * 10) / 10;
+    setTemps(t);
+    setFormulaire(undefined);
+    const repere = repereDuDessin(data?.reperes ?? [], t);
+    setDessin({ instant: t, repere, histo: historiqueDessin(repere?.dessin?.objets ?? []) });
+  }, [data]);
 
   if (!data) {
     return (
@@ -254,6 +299,23 @@ function DetailReviewEcran({
       return 'Commentaire supprimé.';
     });
 
+  const reagir = (r: Repere, valeur: ValeurReaction | null, commentaireId?: string) =>
+    void agir('', async () => {
+      const maj = commentaireId ? await api.reagirCommentaire(id, r.id, commentaireId, valeur) : await api.reagir(id, r.id, valeur);
+      setData(d => (d ? { ...d, reperes: d.reperes.map(x => (x.id === maj.id ? maj : x)) } : d));
+    });
+
+  const enregistrerDessin = () =>
+    void agir('Dessin', async () => {
+      if (!dessin) return;
+      const contenu = dessinDe(dessin.histo.present);
+      if (dessin.repere) await api.modifierRepere(id, dessin.repere.id, { dessin: contenu });
+      else if (contenu) await api.ajouterRepere(id, { debut: dessin.instant, categorie: 'placement', titre: `Dessin ${formatTemps(dessin.instant)}`, dessin: contenu });
+      setDessin(undefined);
+      await recharger();
+      return contenu ? 'Dessin enregistré : il s’affichera par-dessus la vidéo à cet instant.' : dessin.repere ? 'Dessin retiré.' : undefined;
+    });
+
   const exporterMarkdown = () =>
     void agir('Export', async () => {
       const f = await api.exporter(id);
@@ -270,11 +332,70 @@ function DetailReviewEcran({
 
   const colLecteur = (
     <View style={{ gap: 12, flex: large ? 3 : undefined, minWidth: 0 }}>
-      <Lecteur theme={theme} videoId={data.review.videoId} depart={depart} large={large} onPret={surPret} />
+      <Lecteur
+        theme={theme}
+        videoId={data.review.videoId}
+        depart={depart}
+        large={large}
+        onPret={surPret}
+        onEtat={setEtatLecteur}
+        calque={
+          dessin ? (
+            <EditeurDessin
+              objets={dessin.histo.present}
+              outil={outil}
+              couleur={couleur}
+              epaisseur={epaisseur}
+              texte={texteDessin}
+              onAjouter={f => setDessin(d => (d ? { ...d, histo: ajouterForme(d.histo, f) } : d))}
+              onGommer={i => setDessin(d => (d ? { ...d, histo: gommerForme(d.histo, i) } : d))}
+            />
+          ) : (
+            affiches.map(r => <ApercuDessin key={r.id} theme={theme} dessin={r.dessin} cadre="calque" testID={`esport-dessin-affiche-${r.id}`} />)
+          )
+        }
+      />
+      {dessin ? (
+        <BarreDessin
+          theme={theme}
+          instant={dessin.instant}
+          rattache={dessin.repere?.titre}
+          outil={outil}
+          couleur={couleur}
+          epaisseur={epaisseur}
+          texte={texteDessin}
+          formes={dessin.histo.present.length}
+          peutAnnuler={dessin.histo.passe.length > 0}
+          peutRetablir={dessin.histo.futur.length > 0}
+          enCours={Boolean(enCours)}
+          onOutil={setOutil}
+          onCouleur={setCouleur}
+          onEpaisseur={setEpaisseur}
+          onTexte={setTexteDessin}
+          onAnnuler={() => setDessin(d => (d ? { ...d, histo: annulerDessin(d.histo) } : d))}
+          onRetablir={() => setDessin(d => (d ? { ...d, histo: retablirDessin(d.histo) } : d))}
+          onEnregistrer={enregistrerDessin}
+          onQuitter={() => setDessin(undefined)}
+        />
+      ) : null}
       {lecteurIntegre ? (
         <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
           {data.droits.annoter ? (
-            <BoutonHub theme={theme} titre={`+ Repère à ${formatTemps(temps)}  (${TOUCHE_RACCOURCI})`} variante="plein" onPress={ouvrirAjout} desactive={!pret} testID="esport-review-ajouter" libelle={`Ajouter un repère au temps courant, ${formatTemps(temps)}`} />
+            <View style={styles.ligne}>
+              <BoutonHub theme={theme} titre={`+ Repère à ${formatTemps(temps)}  (${TOUCHE_RACCOURCI})`} variante="plein" onPress={ouvrirAjout} desactive={!pret || Boolean(dessin)} testID="esport-review-ajouter" libelle={`Ajouter un repère au temps courant, ${formatTemps(temps)}`} />
+              {dessinDisponible ? (
+                <BoutonHub theme={theme} titre="✏️ Dessiner" onPress={ouvrirDessin} desactive={!pret || Boolean(dessin)} testID="esport-review-dessiner" libelle={`Dessiner sur la vidéo à ${formatTemps(temps)} (la vidéo se met en pause)`} />
+              ) : null}
+            </View>
+          ) : null}
+          {avecDessin && dessinDisponible ? (
+            <BoutonHub
+              theme={theme}
+              titre={voirDessins ? 'Masquer les dessins' : 'Afficher les dessins'}
+              onPress={() => setVoirDessins(v => !v)}
+              testID="esport-dessins-bascule"
+              libelle={voirDessins ? 'Masquer les dessins sur la vidéo' : 'Afficher les dessins sur la vidéo'}
+            />
           ) : null}
           <Segments
             theme={theme}
@@ -344,6 +465,7 @@ function DetailReviewEcran({
         {auteurs.length > 1 ? (
           <Choix theme={theme} libelle="Auteur" valeur={filtres.auteur} options={[{ id: '', nom: 'Tous' }, ...auteurs.map(([c, p]) => ({ id: c, nom: p }))]} onChoisir={v => setFiltres(f => ({ ...f, auteur: v }))} testID="esport-filtre-auteur" />
         ) : null}
+        <Segments<TriReperes> theme={theme} libelle="Trier" valeur={tri} options={TRIS_REPERES} onChoisir={setTri} testID="esport-review-tri" />
         <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
           <Text testID="esport-review-compte" style={{ color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) }}>
             {visibles.length} / {reperes.length} repère(s)
@@ -357,7 +479,7 @@ function DetailReviewEcran({
             {lecteurIntegre && data.droits.annoter ? `Aucun repère : pendant la lecture, appuyez sur ${TOUCHE_RACCOURCI} (ou le bouton « Repère ») pour en poser un.` : 'Aucun repère pour l’instant.'}
           </Text>
         ) : null}
-        {visibles.map(r => (
+        {ordonnes.map(r => (
           <View
             key={r.id}
             onLayout={e => {
@@ -379,6 +501,7 @@ function DetailReviewEcran({
               onSupprimer={() => supprimer(r)}
               onCommenter={t => commenter(r, t)}
               onSupprimerCommentaire={cid => supprimerCommentaire(r, cid)}
+              onReagir={(v, cid) => reagir(r, v, cid)}
             />
           </View>
         ))}
@@ -419,7 +542,6 @@ function DetailReviewEcran({
         </View>
       </View>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-review" />
-      <Avis theme={theme} genre="info" texte={MENTION_LIMITE} testID="esport-review-limite" />
       <View style={large ? { flexDirection: 'row', gap: 16, alignItems: 'flex-start' } : { gap: 16 }}>
         {colLecteur}
         {colListe}
@@ -443,6 +565,7 @@ function CarteRepere({
   onSupprimer,
   onCommenter,
   onSupprimerCommentaire,
+  onReagir,
 }: {
   theme: ThemeHub;
   repere: Repere;
@@ -456,6 +579,7 @@ function CarteRepere({
   onSupprimer(): void;
   onCommenter(texte: string): Promise<boolean>;
   onSupprimerCommentaire(id: string): void;
+  onReagir(valeur: ValeurReaction | null, commentaireId?: string): void;
 }) {
   const c = categorie(r.categorie);
   const [texte, setTexte] = useState('');
@@ -485,6 +609,11 @@ function CarteRepere({
           {c.glyphe}
         </Text>
         <Text style={{ color: theme.texte, fontWeight: '700', flex: 1, ...police(theme.policeTexte) }}>{r.titre}</Text>
+        {r.dessin?.objets.length ? (
+          <Text testID={`esport-repere-icone-dessin-${r.id}`} accessibilityLabel="Ce repère porte un dessin" style={{ fontSize: 15 }}>
+            ✏️
+          </Text>
+        ) : null}
       </Pressable>
       <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>{meta}</Text>
       {actif ? (
@@ -494,6 +623,12 @@ function CarteRepere({
         </Text>
       ) : null}
       {r.note ? <Note theme={theme} source={r.note} testID={`esport-repere-note-${r.id}`} /> : null}
+      {r.dessin?.objets.length ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Voir le dessin à ${formatTemps(r.debut)}`} onPress={lecteurIntegre ? onAller : undefined} disabled={!lecteurIntegre} style={{ alignSelf: 'flex-start' }}>
+          <ApercuDessin theme={theme} dessin={r.dessin} cadre="miniature" testID={`esport-repere-miniature-${r.id}`} />
+        </Pressable>
+      ) : null}
+      <BoutonsReaction theme={theme} reactions={r.reactions} peutReagir={Boolean(droits.reagir)} onReagir={v => onReagir(v)} testID={`esport-repere-reaction-${r.id}`} />
       <View style={styles.ligne}>
         {!lecteurIntegre ? <BoutonHub theme={theme} titre={`Ouvrir dans YouTube à ${formatTemps(r.debut)}`} onPress={() => void Linking.openURL(lienYoutubeA(videoId, r.debut))} testID={`esport-repere-youtube-${r.id}`} /> : null}
         <BoutonHub theme={theme} titre={`Commentaires (${r.commentaires.length})`} onPress={onBascule} testID={`esport-repere-commentaires-${r.id}`} />
@@ -508,13 +643,14 @@ function CarteRepere({
               <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>
                 {k.auteur?.pseudo ?? 'Un compte supprimé'} · {dateCourte(k.creeLe)}
               </Text>
-              <Text style={{ color: theme.texte, ...police(theme.policeTexte) }}>{k.texte}</Text>
+              <Note theme={theme} source={k.texte} testID={`esport-commentaire-texte-rendu-${k.id}`} />
+              <BoutonsReaction theme={theme} reactions={k.reactions} peutReagir={Boolean(droits.reagir)} onReagir={v => onReagir(v, k.id)} testID={`esport-commentaire-reaction-${k.id}`} compact />
               {k.peutSupprimer ? <BoutonConfirme theme={theme} titre="Supprimer" confirmation="Oui, supprimer" onConfirme={() => onSupprimerCommentaire(k.id)} testID={`esport-commentaire-supprimer-${k.id}`} /> : null}
             </View>
           ))}
           {droits.annoter ? (
             <View style={{ gap: 6 }}>
-              <Champ theme={theme} libelle="Votre commentaire" valeur={texte} onChanger={setTexte} testID={`esport-commentaire-texte-${r.id}`} multiligne maxLength={1000} />
+              <ChampNote theme={theme} libelle="Votre commentaire" valeur={texte} onChanger={setTexte} testID={`esport-commentaire-texte-${r.id}`} maxLength={1000} />
               <BoutonHub
                 theme={theme}
                 titre="Commenter"

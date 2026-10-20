@@ -218,10 +218,10 @@ describe('écran Review (app native : lecture seule, ouverture dans YouTube)', (
   });
   afterEach(() => ouvrir.mockRestore());
 
-  it('liste des reviews, mention de la limite, ouverture du détail', async () => {
+  it('liste des reviews (plus de mention « pas de dessin »), ouverture du détail', async () => {
     await monter(JOUEUR, 'module:video_review', 'telephone');
     expect(await screen.findByTestId('esport-review-rv1')).toBeTruthy();
-    expect(screen.getByTestId('esport-review-limite')).toBeTruthy();
+    expect(screen.queryByTestId('esport-review-limite')).toBeNull();
     expect(screen.queryByTestId('esport-review-nouvelle')).toBeNull();
     await fireEvent.press(screen.getByTestId('esport-review-rv1'));
     expect(await screen.findByTestId('esport-review-detail')).toBeTruthy();

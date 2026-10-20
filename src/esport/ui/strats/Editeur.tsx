@@ -11,6 +11,7 @@ import { police } from '../../../hub/themes';
 import type { Strat } from '../../strats/api';
 import { LIBELLES_SIDE, LIBELLES_TYPE_STRAT } from '../../strats/libelles';
 import { Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from '../commun';
+import { NoteMarkdown } from '../review/Note';
 import { Etiquette, MentionRiot, Miniature } from './commun';
 import type { PropsEditeur } from './types';
 
@@ -42,7 +43,7 @@ export function Editeur({ theme, api, teamId, stratId, onRetour }: PropsEditeur)
           {strat.donnees?.etapes.map((e, i) => (
             <Panneau key={e.id} theme={theme} testID="esport-strat-lecture-etape">
               <Intertitre theme={theme}>{`${i + 1}. ${e.titre}`}</Intertitre>
-              <Text style={e.note ? { color: theme.texte, ...police(theme.policeTexte) } : attenue}>{e.note || 'Pas de note.'}</Text>
+              {e.note ? <NoteMarkdown theme={theme} source={e.note} /> : <Text style={attenue}>Pas de note.</Text>}
             </Panneau>
           ))}
           <MentionRiot theme={theme} />

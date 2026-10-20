@@ -1,7 +1,8 @@
 /**
  * Formulaire d'un repère : instant (pré-rempli avec le temps courant du
  * lecteur), titre, catégorie, joueur concerné, durée facultative et note en
- * Markdown limité (aperçu sous le champ).
+ * Markdown limité : barre de mise en forme (gras, italique, liste, lien ;
+ * Ctrl/Cmd+B et Ctrl/Cmd+I) et aperçu sous le champ.
  */
 
 import React, { useState } from 'react';
@@ -10,8 +11,8 @@ import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
 import type { CategorieRepere, SaisieRepere } from '../../review/api';
 import { CATEGORIES, formatTemps, lireTemps } from '../../review/libelles';
+import { ChampNote } from '../ChampNote';
 import { Choix, styles, Panneau } from '../commun';
-import { NoteMarkdown } from './Note';
 
 export interface InitialRepere {
   debut: number;
@@ -87,13 +88,7 @@ export function FormulaireRepere({
         onChoisir={setCible}
         testID="esport-repere-joueur"
       />
-      <Champ theme={theme} libelle="Note (Markdown léger : **gras**, *italique*, - listes, [lien](https://…))" valeur={note} onChanger={setNote} testID="esport-repere-note" multiligne maxLength={4000} />
-      {note.trim() ? (
-        <View style={{ gap: 4 }}>
-          <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>Aperçu</Text>
-          <NoteMarkdown theme={theme} source={note} testID="esport-repere-apercu" />
-        </View>
-      ) : null}
+      <ChampNote theme={theme} libelle="Note" valeur={note} onChanger={setNote} testID="esport-repere-note" maxLength={4000} apercu="toujours" testIDApercu="esport-repere-apercu" placeholder="**Gras**, *italique*, - listes, [lien](https://…)" />
       {erreur ? (
         <Text accessibilityRole="alert" testID="esport-repere-erreur" style={{ color: theme.critique, ...police(theme.policeTexte) }}>
           {erreur}

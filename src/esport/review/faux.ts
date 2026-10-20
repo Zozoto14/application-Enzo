@@ -4,7 +4,7 @@
  * en mémoire. Les droits suivent la liste de permissions donnée.
  */
 
-import type { AdversaireListe, DetailAdversaire, DetailReview, DroitsReview, Repere, ReviewListee } from './api';
+import { SANS_REACTION, type AdversaireListe, type DetailAdversaire, type DetailReview, type DroitsReview, type Reactions, type Repere, type ReviewListee, type ValeurReaction } from './api';
 
 const ID_VIDEO = 'dQw4w9WgXcQ';
 
@@ -16,7 +16,7 @@ export interface AppelReview {
 
 export function droitsReviewDe(permissions: readonly string[]): DroitsReview {
   const a = (p: string) => permissions.includes(p);
-  return { creer: a('video_review.create'), annoter: a('video_review.annotate'), supprimer: a('video_review.delete') };
+  return { creer: a('video_review.create'), annoter: a('video_review.annotate'), supprimer: a('video_review.delete'), reagir: a('video_review.react') };
 }
 
 const MEMBRES = [
@@ -38,6 +38,8 @@ export function repereDe(champs: Partial<Repere> & { id: string }): Repere {
     majLe: '2026-10-20T10:00:00.000Z',
     peutModifier: true,
     peutSupprimer: true,
+    dessin: null,
+    reactions: SANS_REACTION,
     commentaires: [],
     ...champs,
   };
@@ -72,7 +74,19 @@ export function fauxReviewScouting(permissions: readonly string[], { reperes: re
       reviews.push(nouvelle);
       r = { ...nouvelle, depart: null };
     } else if ((m = /\/review\/([^/]+)\/export\.md$/.exec(c))) r = { nom: 'Review - Faucons vs Nova.md', type: 'text/markdown; charset=utf-8', contenu: '# Faucons vs Nova\n\n### [01:23] Peek trop large\n' };
-    else if ((m = /\/review\/([^/]+)\/reperes\/([^/]+)\/commentaires\/([^/]+)$/.exec(c)) && methode === 'DELETE') {
+    else if ((m = /\/review\/([^/]+)\/reperes\/([^/]+)(?:\/commentaires\/([^/]+))?\/reaction$/.exec(c))) {
+      // Réaction de « Léa » (le compte de l'écran) : une par cible, changée ou retirée.
+      const rep = reperes.find(x => x.id === m![2])!;
+      const valeur = (b.valeur ?? null) as ValeurReaction | null;
+      const maj = (avant: Reactions = SANS_REACTION): Reactions => {
+        const sans = { like: avant.qui.like.filter(p => p.compte !== 'lea12345'), dislike: avant.qui.dislike.filter(p => p.compte !== 'lea12345') };
+        if (valeur) sans[valeur] = [...sans[valeur], { compte: 'lea12345', pseudo: 'Léa' }];
+        return { like: sans.like.length, dislike: sans.dislike.length, moi: valeur, qui: sans };
+      };
+      if (m[3]) rep.commentaires = rep.commentaires.map(k => (k.id === m![3] ? { ...k, reactions: maj(k.reactions) } : k));
+      else rep.reactions = maj(rep.reactions);
+      r = { ...rep };
+    } else if ((m = /\/review\/([^/]+)\/reperes\/([^/]+)\/commentaires\/([^/]+)$/.exec(c)) && methode === 'DELETE') {
       const rep = reperes.find(x => x.id === m![2])!;
       rep.commentaires = rep.commentaires.filter(k => k.id !== m![3]);
       r = rep;

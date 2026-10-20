@@ -5,6 +5,7 @@
  */
 
 import type { ClientEsport } from '../client';
+import type { Dessin } from './dessin';
 
 export type CategorieRepere = 'erreur' | 'bonne_action' | 'utilitaires' | 'placement' | 'comms';
 export type SideTendance = 'attaque' | 'defense' | 'les_deux';
@@ -30,7 +31,21 @@ export interface DroitsReview {
   creer: boolean;
   annoter: boolean;
   supprimer: boolean;
+  /** Réagir (👍 / 👎) aux repères et aux commentaires (video_review.react). */
+  reagir?: boolean;
 }
+
+export type ValeurReaction = 'like' | 'dislike';
+
+/** Réactions d'un repère ou d'un commentaire : compteurs, la mienne, et qui a réagi. */
+export interface Reactions {
+  like: number;
+  dislike: number;
+  moi: ValeurReaction | null;
+  qui: { like: PersonneReview[]; dislike: PersonneReview[] };
+}
+
+export const SANS_REACTION: Reactions = { like: 0, dislike: 0, moi: null, qui: { like: [], dislike: [] } };
 
 export interface CommentaireRepere {
   id: string;
@@ -38,6 +53,7 @@ export interface CommentaireRepere {
   auteur: PersonneReview | null;
   creeLe: string;
   peutSupprimer: boolean;
+  reactions?: Reactions;
 }
 
 export interface Repere {
@@ -47,12 +63,15 @@ export interface Repere {
   categorie: CategorieRepere;
   titre: string;
   note: string;
+  /** Dessin posé sur la vidéo à cet instant (coordonnées relatives), ou null. */
+  dessin?: Dessin | null;
   cible: PersonneReview | null;
   auteur: PersonneReview | null;
   creeLe: string;
   majLe: string;
   peutModifier: boolean;
   peutSupprimer: boolean;
+  reactions?: Reactions;
   commentaires: CommentaireRepere[];
 }
 
@@ -73,6 +92,7 @@ export interface SaisieRepere {
   titre: string;
   note?: string;
   cible?: string | null;
+  dessin?: Dessin | null;
 }
 
 export interface FichierExporte {
@@ -177,6 +197,11 @@ export function apiReview(client: ClientEsport, teamId: string) {
     supprimerCommentaire: (id: string, repere: string, commentaire: string) =>
       client.requete<Repere>(`${t}/${e(id)}/reperes/${e(repere)}/commentaires/${e(commentaire)}`, 'DELETE'),
     exporter: (id: string) => client.requete<FichierExporte>(`${t}/${e(id)}/export.md?format=json`),
+    /** Réaction au repère (`null` : retirer). */
+    reagir: (id: string, repere: string, valeur: ValeurReaction | null) => client.requete<Repere>(`${t}/${e(id)}/reperes/${e(repere)}/reaction`, 'PUT', { valeur }),
+    /** Réaction à un commentaire du repère (`null` : retirer). */
+    reagirCommentaire: (id: string, repere: string, commentaire: string, valeur: ValeurReaction | null) =>
+      client.requete<Repere>(`${t}/${e(id)}/reperes/${e(repere)}/commentaires/${e(commentaire)}/reaction`, 'PUT', { valeur }),
   };
 }
 export type ApiReview = ReturnType<typeof apiReview>;

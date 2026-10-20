@@ -22,7 +22,9 @@ import type { Boite, ClientEsport, Depot, DetailDepot, DetailTeam, FiltresBoite,
 import { LIBELLES_STATUT_DEPOT, aujourdhui, dateCourte, dateJour, lireDateSaisie, tailleLisible } from '../libelles';
 import { choisirPdf, choixPdfDisponible } from './choixPdf';
 import { ouvrirLienDiffere } from './ouvrirLien';
+import { ChampNote } from './ChampNote';
 import { BoutonConfirme, Choix, PastilleRole, Retours, styles, useAgir, Intertitre, Panneau } from './commun';
+import { NoteMarkdown } from './review/Note';
 import { Carte, ESP, EnTetePage, EtatVide, Onglets } from './design';
 
 type VueResumes = 'deposer' | 'miens' | 'bibliotheque' | 'boite' | 'types';
@@ -130,7 +132,7 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
         <Champ theme={theme} libelle="Date (JJ/MM/AAAA)" valeur={date} onChanger={setDate} maxLength={10} testID="esport-depot-date" style={{ minWidth: 160 }} />
         <Champ theme={theme} libelle="Titre" valeur={titre} onChanger={setTitre} maxLength={120} testID="esport-depot-titre" style={{ flex: 1, minWidth: 220 }} />
       </View>
-      <Champ theme={theme} libelle="Note (facultative)" valeur={note} onChanger={setNote} multiligne maxLength={2000} testID="esport-depot-note" />
+      <ChampNote theme={theme} libelle="Note (facultative)" valeur={note} onChanger={setNote} maxLength={2000} testID="esport-depot-note" />
       <BoutonHub
         theme={theme}
         titre={enCours === 'Dépôt' ? 'Envoi…' : 'Déposer la réunion'}
@@ -469,7 +471,7 @@ function DetailDepotRedacteur({
           {d.lien}
         </Text>
       </Pressable>
-      {d.note ? <Text style={texte}>{d.note}</Text> : null}
+      {d.note ? <NoteMarkdown theme={theme} source={d.note} testID="esport-detail-note" /> : null}
       {d.moi.redacteur ? (
         <>
           <Intertitre theme={theme}>Statut</Intertitre>

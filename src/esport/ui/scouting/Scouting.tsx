@@ -17,7 +17,9 @@ import { police, type ThemeHub } from '../../../hub/themes';
 import { dateCourte } from '../../libelles';
 import { apiScouting, type AdversaireListe, type ApiScouting, type Confrontation, type DetailAdversaire, type JoueurAdverse, type SaisieJoueur, type SaisieTendance, type SideTendance, type TendanceMap, type VodAdverse } from '../../review/api';
 import { SIDES, nomSide } from '../../review/libelles';
+import { ChampNote } from '../ChampNote';
 import { BoutonConfirme, Choix, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from '../commun';
+import { NoteMarkdown } from '../review/Note';
 import type { PropsModule } from '../modules';
 
 const listeTexte = (t: string): string[] => [...new Set(t.split(/[,;]/).map(x => x.trim()).filter(Boolean))];
@@ -83,7 +85,7 @@ function ListeAdversaires({ theme, api, message, large, onOuvrir }: { theme: The
           <Intertitre theme={theme}>Nouvel adversaire</Intertitre>
           <Champ theme={theme} libelle="Nom de la team" valeur={nom} onChanger={setNom} testID="esport-adversaire-nom" maxLength={60} />
           <Champ theme={theme} libelle="Logo (adresse https, facultatif)" valeur={logo} onChanger={setLogo} testID="esport-adversaire-logo" placeholder="https://…/logo.png" />
-          <Champ theme={theme} libelle="Notes générales" valeur={notes} onChanger={setNotes} testID="esport-adversaire-notes" multiligne />
+          <ChampNote theme={theme} libelle="Notes générales" valeur={notes} onChanger={setNotes} testID="esport-adversaire-notes" />
           <BoutonHub
             theme={theme}
             titre="Créer la fiche"
@@ -224,7 +226,7 @@ function FicheAdversaire({ theme, api, id, large, onRetour, onReview }: { theme:
       ) : (
         <Panneau theme={theme} testID="esport-adversaire-notes-affichees">
           <Intertitre theme={theme}>Notes générales</Intertitre>
-          <Text style={{ color: d.adversaire.notes ? theme.texte : theme.attenue, ...police(theme.policeTexte) }}>{d.adversaire.notes || 'Aucune note.'}</Text>
+          {d.adversaire.notes ? <NoteMarkdown theme={theme} source={d.adversaire.notes} /> : <Text style={{ color: theme.attenue, ...police(theme.policeTexte) }}>Aucune note.</Text>}
         </Panneau>
       )}
       <View style={large ? { flexDirection: 'row', gap: 16, alignItems: 'flex-start' } : { gap: 16 }}>
@@ -243,7 +245,7 @@ function FormulaireFiche({ theme, initial, onEnregistrer }: { theme: ThemeHub; i
     <Panneau theme={theme} testID="esport-adversaire-form">
       <Champ theme={theme} libelle="Nom" valeur={nom} onChanger={setNom} testID="esport-adversaire-form-nom" maxLength={60} />
       <Champ theme={theme} libelle="Logo (adresse https)" valeur={logo} onChanger={setLogo} testID="esport-adversaire-form-logo" />
-      <Champ theme={theme} libelle="Notes générales" valeur={notes} onChanger={setNotes} testID="esport-adversaire-form-notes" multiligne />
+      <ChampNote theme={theme} libelle="Notes générales" valeur={notes} onChanger={setNotes} testID="esport-adversaire-form-notes" />
       <BoutonHub theme={theme} titre="Enregistrer" variante="plein" onPress={() => onEnregistrer({ nom, logoUrl: logo.trim() || null, notes })} testID="esport-adversaire-form-enregistrer" />
     </Panneau>
   );
@@ -265,7 +267,7 @@ function Joueurs({ theme, joueurs, gerer, onAjouter, onModifier, onSupprimer }: 
           </Text>
           {j.riotId ? <Text style={{ color: theme.attenue, fontSize: 12 }}>Riot ID : {j.riotId}</Text> : null}
           {j.agents.length > 0 ? <Text style={{ color: theme.texte, fontSize: 13, ...police(theme.policeTexte) }}>Agents : {j.agents.join(', ')}</Text> : null}
-          {j.notes ? <Text style={{ color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) }}>{j.notes}</Text> : null}
+          {j.notes ? <NoteMarkdown theme={theme} source={j.notes} /> : null}
           {gerer ? (
             <View style={styles.ligne}>
               <BoutonHub theme={theme} titre="Modifier" onPress={() => setEdition(j)} testID={`esport-joueur-adverse-modifier-${j.id}`} />
@@ -303,7 +305,7 @@ function FormulaireJoueur({ theme, initial, onEnregistrer, onAnnuler }: { theme:
       <Champ theme={theme} libelle="Riot ID" valeur={riotId} onChanger={setRiotId} testID="esport-joueur-adverse-riot" placeholder="Pseudo#TAG" maxLength={40} />
       <Champ theme={theme} libelle="Rôle" valeur={role} onChanger={setRole} testID="esport-joueur-adverse-role" placeholder="Duelliste, Contrôleur…" maxLength={30} />
       <Champ theme={theme} libelle="Agents joués (séparés par des virgules)" valeur={agents} onChanger={setAgents} testID="esport-joueur-adverse-agents" placeholder="Jett, Raze" />
-      <Champ theme={theme} libelle="Notes" valeur={notes} onChanger={setNotes} testID="esport-joueur-adverse-notes" multiligne maxLength={1000} />
+      <ChampNote theme={theme} libelle="Notes" valeur={notes} onChanger={setNotes} testID="esport-joueur-adverse-notes" maxLength={1000} />
       <View style={styles.ligne}>
         <BoutonHub theme={theme} titre="Enregistrer" variante="plein" desactive={pseudo.trim() === ''} onPress={() => onEnregistrer({ pseudo, riotId, role, agents: listeTexte(agents), notes })} testID="esport-joueur-adverse-enregistrer" />
         <BoutonHub theme={theme} titre="Annuler" onPress={onAnnuler} testID="esport-joueur-adverse-annuler" />
@@ -326,7 +328,7 @@ function Tendances({ theme, tendances, gerer, onAjouter, onModifier, onSupprimer
             {x.map} · {nomSide(x.side)}
             {x.tauxVictoire !== null ? ` · ${x.tauxVictoire} % de victoires` : ''}
           </Text>
-          {x.notes ? <Text style={{ color: theme.texte, fontSize: 13, ...police(theme.policeTexte) }}>{x.notes}</Text> : null}
+          {x.notes ? <NoteMarkdown theme={theme} source={x.notes} /> : null}
           {x.compos.map((c, i) => (
             <Text key={i} style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>
               Compo {i + 1} : {c.join(', ')}
@@ -378,7 +380,7 @@ function FormulaireTendance({ theme, initial, onEnregistrer, onAnnuler }: { them
       <Champ theme={theme} libelle="Map" valeur={map} onChanger={setMap} testID="esport-tendance-map" placeholder="Ascent" maxLength={30} />
       <Choix<SideTendance> theme={theme} libelle="Side" valeur={side} options={SIDES.map(([id, nom]) => ({ id, nom }))} onChoisir={setSide} testID="esport-tendance-side" />
       <Champ theme={theme} libelle="Taux de victoire en % (facultatif)" valeur={taux} onChanger={setTaux} testID="esport-tendance-taux" clavier="number-pad" />
-      <Champ theme={theme} libelle="Tendances (rush, défauts, lineups…)" valeur={notes} onChanger={setNotes} testID="esport-tendance-notes" multiligne maxLength={2000} />
+      <ChampNote theme={theme} libelle="Tendances (rush, défauts, lineups…)" valeur={notes} onChanger={setNotes} testID="esport-tendance-notes" maxLength={2000} />
       <Champ theme={theme} libelle="Compositions habituelles (une par ligne, agents séparés par des virgules)" valeur={lignes} onChanger={setLignes} testID="esport-tendance-compos" multiligne />
       {erreur ? (
         <Text accessibilityRole="alert" style={{ color: theme.critique }} testID="esport-tendance-erreur">

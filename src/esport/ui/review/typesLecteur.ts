@@ -4,6 +4,7 @@
  * WebView : lecture dans YouTube, `Lecteur.tsx`).
  */
 
+import type React from 'react';
 import type { ThemeHub } from '../../../hub/themes';
 
 export interface CommandeLecteur {
@@ -30,6 +31,12 @@ export interface PropsLecteur {
   /** Commandes du lecteur, dès qu'il est prêt (`undefined` quand il disparaît). */
   onPret(commande: CommandeLecteur | undefined): void;
   onEtat?(etat: EtatLecteur): void;
+  /**
+   * Calque posé PAR-DESSUS la vidéo (dessin) : même cadre 16:9 que le lecteur.
+   * Il laisse passer les clics vers la vidéo, sauf là où il les demande
+   * (`pointer-events: auto`). Ignoré sur l'app iOS native.
+   */
+  calque?: React.ReactNode;
 }
 
 export const VITESSES = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
