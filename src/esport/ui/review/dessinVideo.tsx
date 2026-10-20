@@ -9,15 +9,16 @@ import React from 'react';
 import { Text } from 'react-native';
 import { police } from '../../../hub/themes';
 import type { PropsApercuDessin, PropsEditeurDessin } from './typesDessin';
+import { tr } from '../../i18n';
 
 export const dessinDisponible = false;
-export const MESSAGE_DESSIN_NATIF = '✏️ Dessin disponible sur le site ou le PC';
+export const messageDessinNatif = (): string => tr('review.dessinVideo.dessin_disponible_sur_le');
 
 export function ApercuDessin({ theme, dessin, cadre, testID }: PropsApercuDessin) {
   if (!dessin?.objets.length || cadre === 'calque') return null;
   return (
     <Text testID={testID} style={{ color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) }}>
-      {MESSAGE_DESSIN_NATIF}
+      {messageDessinNatif()}
     </Text>
   );
 }

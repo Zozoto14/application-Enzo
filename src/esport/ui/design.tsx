@@ -22,6 +22,7 @@ import { BoutonHub } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { tt } from '../../ui/mobile/jetons';
 import { contraste, encreSur } from '../contraste';
+import { tr } from '../i18n';
 
 /** État d'un Pressable sur le web (survol et focus clavier en plus). */
 export type EtatPresse = { pressed: boolean; hovered?: boolean; focused?: boolean };
@@ -110,7 +111,7 @@ export function AvatarTeam({ theme, team, taille = 40, testID }: { theme: ThemeH
         testID={testID}
         source={{ uri: team.logoUrl }}
         accessibilityIgnoresInvertColors
-        accessibilityLabel={`Logo de ${team.nom}`}
+        accessibilityLabel={tr('design.logo_de', { nom: team.nom })}
         style={{ width: taille, height: taille, borderRadius: rayon, backgroundColor: couleur }}
       />
     );
@@ -264,7 +265,7 @@ export function EnTetePage({
  * part, aucun conflit d'empilement avec les cartes voisines), sous le bouton ;
  * le voile ou Échap le referment.
  */
-export function MenuActions({ theme, actions: brutes, libelle = 'Plus d’actions', testID = 'esport-menu', titreBouton = '⋯' }: { theme: ThemeHub; actions: ReadonlyArray<ActionSecondaire | false | null | undefined | 0 | ''>; libelle?: string; testID?: string; titreBouton?: string }) {
+export function MenuActions({ theme, actions: brutes, libelle = tr('design.plus_d_actions'), testID = 'esport-menu', titreBouton = '⋯' }: { theme: ThemeHub; actions: ReadonlyArray<ActionSecondaire | false | null | undefined | 0 | ''>; libelle?: string; testID?: string; titreBouton?: string }) {
   const actions = brutes.filter((a): a is ActionSecondaire => Boolean(a));
   const [position, setPosition] = useState<{ x: number; y: number; l: number } | undefined>();
   const bouton = React.useRef<React.ComponentRef<typeof Pressable>>(null);
@@ -301,7 +302,7 @@ export function MenuActions({ theme, actions: brutes, libelle = 'Plus d’action
       </Pressable>
       {position ? (
         <Modal transparent visible animationType="none" onRequestClose={() => setPosition(undefined)}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Fermer le menu" onPress={() => setPosition(undefined)} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+          <Pressable accessibilityRole="button" accessibilityLabel={tr('design.fermer_le_menu')} onPress={() => setPosition(undefined)} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
           <View
             accessibilityRole="menu"
             testID={`${testID}-liste`}
@@ -468,7 +469,7 @@ export function EtatVide({
 /** Squelette de chargement : quelques barres pâles, annoncé « Chargement… ». */
 export function Squelette({ theme, lignes = 3, testID, hauteur = 14 }: { theme: ThemeHub; lignes?: number; testID?: string; hauteur?: number }) {
   return (
-    <View testID={testID} accessibilityLabel="Chargement…" accessibilityRole="progressbar" style={{ gap: ESP.s }}>
+    <View testID={testID} accessibilityLabel={tr('journal.chargement')} accessibilityRole="progressbar" style={{ gap: ESP.s }}>
       {Array.from({ length: lignes }, (_, i) => (
         <View key={i} style={{ height: hauteur, width: `${[92, 76, 84, 60, 70][i % 5]}%`, borderRadius: 6, backgroundColor: teinteTransparente(theme.attenue, theme.sombre ? 0.16 : 0.12) }} />
       ))}
@@ -542,7 +543,7 @@ export function Onglets({
             accessibilityRole="tab"
             accessibilityState={{ selected: choisi }}
             aria-selected={choisi}
-            accessibilityLabel={`${e.description ?? e.libelle}${e.bientot ? ' (bientôt)' : ''}`}
+            accessibilityLabel={`${e.description ?? e.libelle}${e.bientot ? tr('design.bientot') : ''}`}
             onPress={() => onChoisir(e.id)}
             style={(etat: EtatPresse) => ({
               flexGrow: pleineLargeur ? 1 : 0,
@@ -635,7 +636,7 @@ export function Volet({ theme, visible, titre: t, onFermer, children, testID, la
   return (
     <Modal transparent visible animationType="none" onRequestClose={onFermer}>
       <View style={{ flex: 1, flexDirection: 'row' }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Fermer le volet" onPress={onFermer} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.42)' }} />
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('design.fermer_le_volet')} onPress={onFermer} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.42)' }} />
         <View
           testID={testID}
           accessibilityViewIsModal
@@ -650,7 +651,7 @@ export function Volet({ theme, visible, titre: t, onFermer, children, testID, la
             <Pressable
               testID={testID ? `${testID}-fermer` : undefined}
               accessibilityRole="button"
-              accessibilityLabel="Fermer"
+              accessibilityLabel={tr('discord.fermer')}
               onPress={onFermer}
               style={{ minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ color: theme.texte, fontSize: 22 }}>×</Text>

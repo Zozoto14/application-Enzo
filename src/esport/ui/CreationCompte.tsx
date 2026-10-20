@@ -15,6 +15,8 @@ import type { AppHub, ContexteHub } from '../../hub/types';
 import type { Affectation, Annuaire, ClientEsport, DemandeCompte, TeamAnnuaire } from '../client';
 import { creerCompteEsport, erreurSaisie, modeleInvitationEsport, noterEnvoiEsport, rattacherCompte, type CompteCree } from '../comptesHub';
 import { Choix, Retours, styles as communs, useAgir, Intertitre, Panneau } from './commun';
+import { tr } from '../i18n';
+import { nomRole } from '../client';
 
 type Choisie = { roleId: string; poste: string };
 
@@ -67,37 +69,37 @@ export function CreationCompte({
   const probleme = erreurSaisie({ nom, email, affectations });
 
   const creer = () =>
-    exigerIdentite(`Créer le compte de ${nom.trim()}`, () =>
-      void agir('Création', async () => {
+    exigerIdentite(tr('creationCompte.creer_le_compte_de', { v: nom.trim() }), () =>
+      void agir('creation', async () => {
         const r = await creerCompteEsport({ contexte, registre, client, saisie: { nom, email, affectations, ...(demande ? { demandeId: demande.id } : {}) }, nomsTeams, maintenant: contexte.maintenant ?? Date.now() });
         setCree(r);
-        return r.erreurEsport ? undefined : `Compte de ${r.nom} créé : ${nomsTeams.join(', ')}. Envoyez-lui l’invitation ci-dessous.`;
+        return r.erreurEsport ? undefined : tr('creationCompte.compte_de_cree_envoyez', { nom: r.nom, v: nomsTeams.join(', ') });
       }),
     );
 
   if (cree) {
     return (
       <Panneau theme={theme} testID="esport-compte-cree">
-        <Intertitre theme={theme}>{`Invitation de ${cree.nom}`}</Intertitre>
+        <Intertitre theme={theme}>{tr('creationCompte.invitation_de', { nom: cree.nom })}</Intertitre>
         <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-compte" />
         {cree.erreurEsport ? (
           <View style={{ gap: 8 }}>
             <Avis
               theme={theme}
               genre="alerte"
-              texte={`Le compte du hub de ${cree.nom} est créé, mais l’Esport n’a pas pu l’ajouter à ses teams (${cree.erreurEsport}). Réessayez avant d’envoyer l’invitation.`}
+              texte={tr('creationCompte.le_compte_du_hub', { nom: cree.nom, erreurEsport: cree.erreurEsport })}
               testID="esport-compte-rattachement-echec"
             />
             <BoutonHub
               theme={theme}
-              titre={enCours ? 'Nouvel essai…' : 'Réessayer l’ajout aux teams'}
+              titre={enCours ? tr('creationCompte.nouvel_essai') : tr('creationCompte.reessayer_l_ajout_aux')}
               variante="plein"
               desactive={Boolean(enCours)}
               onPress={() =>
-                void agir('Rattacher', async () => {
+                void agir('rattacher', async () => {
                   const fiche = await rattacherCompte(client, cree.id, cree.nom, affectations, demande?.id);
                   setCree({ ...cree, fiche, erreurEsport: undefined });
-                  return `${cree.nom} est ajouté à ses teams.`;
+                  return tr('creationCompte.est_ajoute_a_ses', { nom: cree.nom });
                 })
               }
               testID="esport-compte-rattacher"
@@ -105,7 +107,7 @@ export function CreationCompte({
           </View>
         ) : null}
         <Text style={texte}>
-          {`${cree.nom} ouvre le lien, choisit son mot de passe, et retrouve directement ${nomsTeams.length > 1 ? 'ses teams' : 'sa team'} dans l’Esport : aucun code à saisir.`}
+          {tr(nomsTeams.length > 1 ? 'creationCompte.recap_teams' : 'creationCompte.recap_team', { nom: cree.nom })}
         </Text>
         <PanneauInvitation
           theme={theme}
@@ -117,7 +119,7 @@ export function CreationCompte({
           onEnvoye={canal => noterEnvoiEsport(contexte, cree.id, cree.nom, canal)}
         />
         <View style={[communs.ligne, { justifyContent: 'flex-end' }]}>
-          <BoutonHub theme={theme} titre="Terminé" variante="plein" onPress={onFini} testID="esport-compte-termine" />
+          <BoutonHub theme={theme} titre={tr('creationCompte.termine')} variante="plein" onPress={onFini} testID="esport-compte-termine" />
         </View>
       </Panneau>
     );
@@ -125,19 +127,17 @@ export function CreationCompte({
 
   return (
     <Panneau theme={theme} testID="esport-creation-compte">
-      <Intertitre theme={theme}>{demande ? `Valider la demande de ${demande.demandeurPseudo ?? 'un membre'}` : 'Créer un compte'}</Intertitre>
+      <Intertitre theme={theme}>{demande ? tr('creationCompte.valider_la_demande_de', { nom: demande.demandeurPseudo ?? tr('creationCompte.un_membre') }) : tr('creationCompte.creer_un_compte')}</Intertitre>
       {demande?.message ? <Text style={attenue}>{`« ${demande.message} »`}</Text> : null}
       <Text style={attenue}>
-        Le compte est créé dans l’Administration (rang Ami, « Esport seulement » : il ne verra que l’Esport) et ajouté tout de suite à ses teams. Il reçoit un
-        e-mail avec un lien à usage unique : il choisit son mot de passe à sa première connexion.
-      </Text>
+        {tr('creationCompte.le_compte_est_cree')}</Text>
       <View style={[communs.ligne, { alignItems: 'flex-start', gap: 12 }]}>
-        <Champ theme={theme} libelle="Nom ou pseudo (son identifiant)" valeur={nom} onChanger={setNom} maxLength={24} placeholder="ex. Léa" testID="esport-compte-nom" style={{ flexGrow: 1, flexBasis: 220 }} />
-        <Champ theme={theme} libelle="Adresse e-mail" valeur={email} onChanger={setEmail} maxLength={254} placeholder="lea@exemple.fr" testID="esport-compte-email" style={{ flexGrow: 1, flexBasis: 260 }} />
+        <Champ theme={theme} libelle={tr('creationCompte.nom_ou_pseudo_son')} valeur={nom} onChanger={setNom} maxLength={24} placeholder={tr('creationCompte.ex_lea')} testID="esport-compte-nom" style={{ flexGrow: 1, flexBasis: 220 }} />
+        <Champ theme={theme} libelle={tr('creationCompte.adresse_e_mail')} valeur={email} onChanger={setEmail} maxLength={254} placeholder={tr('creationCompte.ex_email')} testID="esport-compte-email" style={{ flexGrow: 1, flexBasis: 260 }} />
       </View>
-      <Text style={attenue}>L’adresse reste chiffrée dans l’Administration du Fondateur : le serveur Esport ne la voit jamais.</Text>
-      <Intertitre theme={theme}>Teams et rôles</Intertitre>
-      {teams.length === 0 ? <Text style={attenue}>Aucune team : créez d’abord une team (onglet Teams).</Text> : null}
+      <Text style={attenue}>{tr('creationCompte.l_adresse_reste_chiffree')}</Text>
+      <Intertitre theme={theme}>{tr('creationCompte.teams_et_roles')}</Intertitre>
+      {teams.length === 0 ? <Text style={attenue}>{tr('creationCompte.aucune_team_creez_d')}</Text> : null}
       {teams.map(t => {
         const c = choisies[t.id];
         return (
@@ -146,7 +146,7 @@ export function CreationCompte({
               <Case
                 theme={theme}
                 coche={Boolean(c)}
-                libelle={`Ajouter à ${t.nom}`}
+                libelle={tr('ajoutTeams.ajouter_a', { nom: t.nom })}
                 onChanger={v =>
                   setChoisies(avant => {
                     const suite = { ...avant };
@@ -164,19 +164,19 @@ export function CreationCompte({
               <View style={{ gap: 8, paddingLeft: 30 }}>
                 <Choix
                   theme={theme}
-                  libelle={`Rôle dans ${t.nom}`}
+                  libelle={tr('ajoutTeams.role_dans', { nom: t.nom })}
                   valeur={c.roleId}
-                  options={t.roles.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur, desactive: !r.attribuable }))}
+                  options={t.roles.map(r => ({ id: r.id, nom: nomRole(r.nom), couleur: r.couleur, desactive: !r.attribuable }))}
                   onChoisir={roleId => setChoisies(avant => ({ ...avant, [t.id]: { ...avant[t.id], roleId } }))}
                   testID={`esport-compte-role-${t.slug}`}
                 />
                 <Champ
                   theme={theme}
-                  libelle="Poste en jeu (facultatif)"
+                  libelle={tr('ajoutTeams.poste_en_jeu_facultatif')}
                   valeur={c.poste}
                   onChanger={poste => setChoisies(avant => ({ ...avant, [t.id]: { ...avant[t.id], poste } }))}
                   maxLength={30}
-                  placeholder="ex. Duelliste, IGL"
+                  placeholder={tr('creationCompte.ex_duelliste_igl')}
                   testID={`esport-compte-poste-${t.slug}`}
                 />
               </View>
@@ -184,13 +184,13 @@ export function CreationCompte({
           </View>
         );
       })}
-      {nom || email ? <Text style={[attenue, { color: probleme ? theme.alerte : theme.ok }]} testID="esport-compte-etat">{probleme ?? 'Prêt : le compte sera créé, puis l’e-mail d’invitation préparé.'}</Text> : null}
+      {nom || email ? <Text style={[attenue, { color: probleme ? theme.alerte : theme.ok }]} testID="esport-compte-etat">{probleme ?? tr('creationCompte.pret_le_compte_sera')}</Text> : null}
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-compte" />
       <View style={[communs.ligne, { justifyContent: 'flex-end' }]}>
-        <BoutonHub theme={theme} titre="Annuler" onPress={onAnnuler} testID="esport-compte-annuler" />
+        <BoutonHub theme={theme} titre={tr('assistant.annuler')} onPress={onAnnuler} testID="esport-compte-annuler" />
         <BoutonHub
           theme={theme}
-          titre={enCours ? 'Création du compte…' : 'Créer le compte et l’invitation'}
+          titre={enCours ? tr('creationCompte.creation_du_compte') : tr('creationCompte.creer_le_compte_et')}
           variante="plein"
           desactive={Boolean(enCours) || Boolean(probleme)}
           onPress={creer}

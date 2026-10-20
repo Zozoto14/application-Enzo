@@ -10,7 +10,7 @@ import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { THEMES_HUB, themeHub } from '../hub/themes';
 import { ModeAffichageForce } from '../ui/mobile';
-import { CATALOGUE, MENTION_DONNEES, type ClientEsport, type DetailTeam, type Membre, type PageJournal, type StatsTeam } from './client';
+import { CATALOGUE, mentionDonnees, type ClientEsport, type DetailTeam, type Membre, type PageJournal, type StatsTeam } from './client';
 import { contraste, encreSur } from './contraste';
 import { CATEGORIES } from './review/libelles';
 import { bornesPeriode, libelleRetention } from './ui/Journal';
@@ -114,7 +114,7 @@ describe('journal d’activité', () => {
     const onExporter = jest.fn(async () => true);
     await monter(fauxClient({ exporterJournal, changerRetentionJournal }), detail(['activity_log.view', 'team.manage']), 'journal', { onExporter });
     await screen.findAllByTestId('esport-journal-entree');
-    expect((await screen.findByTestId('esport-journal-retention')).props.children.join('')).toBe('Conservation : 1 an');
+    expect([(await screen.findByTestId('esport-journal-retention')).props.children].flat().join('')).toBe('Conservation : 1 an');
     await fireEvent.press(screen.getByTestId('esport-journal-module-coeur'));
     await fireEvent.press(screen.getByTestId('esport-journal-csv'));
     await waitFor(() => expect(onExporter).toHaveBeenCalledWith('journal-faucons-2026-10-20.csv', '﻿"Date"\r\n', 'text/csv'));
@@ -194,7 +194,7 @@ describe('exports et RGPD', () => {
 
   it('mention d’information : données stockées, durée, droits, mineurs', () => {
     for (const mot of ['pseudo', 'Riot ID', 'Discord', 'jamais d’adresse e-mail', 'disponibilités', 'journal d’activité', 'exporter', 'supprimer', 'Fondateur', 'mineur']) {
-      expect(MENTION_DONNEES).toContain(mot);
+      expect(mentionDonnees()).toContain(mot);
     }
   });
 });

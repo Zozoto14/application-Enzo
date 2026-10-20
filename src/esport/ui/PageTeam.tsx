@@ -20,7 +20,7 @@ import { BoutonHub, Champ } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { ContexteHub } from '../../hub/types';
 import { BarreOnglets } from '../../ui/mobile/BarreOnglets';
-import { CATALOGUE, MENTION_DONNEES, nomModule, type ClientEsport, type DetailTeam, type Notifications, type TeamListee } from '../client';
+import { CATALOGUE, mentionDonnees, nomModule, type ClientEsport, type DetailTeam, type Notifications, type TeamListee, nomRole, nomJeu, descriptionModule } from '../client';
 import { dateCourte, phraseNotification } from '../libelles';
 import type { SaisieEvenement } from '../planning/api';
 import { AccueilPhase3 } from './AccueilPhase3';
@@ -36,6 +36,8 @@ import { BoutonConfirme, Panneau, PastilleRole, Retours, TitreSection, styles, u
 import { CodeAffiche } from './CodeLiaison';
 import { apiMonDiscord, type CodeLiaison, type MonDiscord } from '../discord/api';
 import { AvatarTeam, Badge, Carte, ESP, EtatVide, LARGEUR_CONTENU, MenuActions, Onglets, Squelette, TitreCarte, TYPO, attenue as styleAttenue, couleurTeam, texte as styleTexte, titre as styleTitreEsport, type EtatPresse } from './design';
+import { definirLangue, tr, trn, useLangue } from '../i18n';
+import { ChoixLangue } from './ChoixLangue';
 
 export type SectionTeam = 'accueil' | 'membres' | 'journal' | 'parametres' | `module:${string}`;
 export type GroupeTeam = 'accueil' | 'agenda' | 'jeu' | 'equipe' | 'reglages';
@@ -45,19 +47,47 @@ const MODULES_DISPONIBLES = new Set(['meeting_summaries', 'goals_tasks']);
 
 /** Les cinq sections d'une team, et l'ordre de leurs sous-onglets. */
 export const GROUPES_TEAM: ReadonlyArray<{ id: GroupeTeam; libelle: string; glyphe: string; description: string; sections: readonly SectionTeam[] }> = [
-  { id: 'accueil', libelle: 'Accueil', glyphe: '⌂', description: 'Accueil de la team', sections: ['accueil'] },
-  { id: 'agenda', libelle: 'Agenda', glyphe: '◷', description: 'Agenda : planning, disponibilités, présence', sections: ['module:planning', 'module:availability', 'module:attendance'] },
-  { id: 'jeu', libelle: 'Jeu', glyphe: '◎', description: 'Jeu : strats, playbook, review vidéo, scouting', sections: ['module:strat_editor', 'module:playbook', 'module:video_review', 'module:scouting'] },
-  { id: 'equipe', libelle: 'Équipe', glyphe: '⚑', description: 'Équipe : résumés, objectifs et tâches, membres', sections: ['module:meeting_summaries', 'module:goals_tasks', 'membres'] },
-  { id: 'reglages', libelle: 'Réglages', glyphe: '⚙︎', description: 'Réglages : paramètres, Discord, journal', sections: ['parametres', 'module:discord', 'journal'] },
+  { id: 'accueil', get libelle() {
+      return tr('pageTeam.accueil');
+    }, glyphe: '⌂', get description() {
+      return tr('pageTeam.accueil_de_la_team');
+    }, sections: ['accueil'] },
+  { id: 'agenda', get libelle() {
+      return tr('pageTeam.agenda');
+    }, glyphe: '◷', get description() {
+      return tr('pageTeam.agenda_planning_disponibilites');
+    }, sections: ['module:planning', 'module:availability', 'module:attendance'] },
+  { id: 'jeu', get libelle() {
+      return tr('assistant.jeu');
+    }, glyphe: '◎', get description() {
+      return tr('pageTeam.jeu_strats_playbook_review');
+    }, sections: ['module:strat_editor', 'module:playbook', 'module:video_review', 'module:scouting'] },
+  { id: 'equipe', get libelle() {
+      return tr('pageTeam.equipe');
+    }, glyphe: '⚑', get description() {
+      return tr('pageTeam.equipe_resumes_objectifs_et');
+    }, sections: ['module:meeting_summaries', 'module:goals_tasks', 'membres'] },
+  { id: 'reglages', get libelle() {
+      return tr('pageTeam.reglages');
+    }, glyphe: '⚙︎', get description() {
+      return tr('pageTeam.reglages_parametres_discord_jo');
+    }, sections: ['parametres', 'module:discord', 'journal'] },
 ];
 
 /** Libellés courts des sous-onglets (iPhone) ; le nom complet reste le nom accessible. */
 const COURTS: Record<string, string> = {
-  'module:availability': 'Dispos',
-  'module:video_review': 'Review',
-  'module:goals_tasks': 'Objectifs',
-  membres: 'Membres',
+  get 'module:availability'() {
+      return tr('pageTeam.dispos');
+    },
+  get 'module:video_review'() {
+      return tr('review.review.review');
+    },
+  get 'module:goals_tasks'() {
+      return tr('objectifs.objectifs');
+    },
+  get membres() {
+      return tr('dashboard.membres');
+    },
 };
 
 /** Groupe d'une section (une section inconnue va dans « Équipe »). */
@@ -69,16 +99,16 @@ export function groupeDe(section: SectionTeam): GroupeTeam {
 export function entreesBarre(detail: DetailTeam): Array<{ id: SectionTeam; libelle: string; bientot?: boolean }> {
   const actifs = new Set(detail.modules.filter(m => m.active).map(m => m.cle));
   const peut = (p: string) => detail.moi.permissions.includes(p);
-  const entrees: Array<{ id: SectionTeam; libelle: string; bientot?: boolean }> = [{ id: 'accueil', libelle: 'Accueil' }];
+  const entrees: Array<{ id: SectionTeam; libelle: string; bientot?: boolean }> = [{ id: 'accueil', libelle: tr('pageTeam.accueil') }];
   for (const m of CATALOGUE.modules) {
     if (!actifs.has(m.cle) || m.cle === 'activity_log') continue;
     const livre = Boolean(ECRANS_MODULES[m.cle]);
     if (livre && !moduleAccessible(m.cle, detail.moi.permissions)) continue;
-    entrees.push({ id: `module:${m.cle}`, libelle: m.nom, bientot: !livre && !MODULES_DISPONIBLES.has(m.cle) });
+    entrees.push({ id: `module:${m.cle}`, libelle: nomModule(m.cle), bientot: !livre && !MODULES_DISPONIBLES.has(m.cle) });
   }
-  if (peut('members.view') || peut('members.invite') || peut('roles.manage')) entrees.push({ id: 'membres', libelle: 'Membres et rôles' });
-  if (actifs.has('activity_log') && peut('activity_log.view')) entrees.push({ id: 'journal', libelle: 'Journal' });
-  entrees.push({ id: 'parametres', libelle: 'Paramètres' });
+  if (peut('members.view') || peut('members.invite') || peut('roles.manage')) entrees.push({ id: 'membres', libelle: tr('membresRoles.membres_et_roles') });
+  if (actifs.has('activity_log') && peut('activity_log.view')) entrees.push({ id: 'journal', libelle: tr('journal.journal') });
+  entrees.push({ id: 'parametres', libelle: tr('pageTeam.parametres') });
   return entrees;
 }
 
@@ -170,7 +200,7 @@ export function PageTeam({
       <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo}>
         <View style={{ padding: large ? ESP.xxl : ESP.m, gap: ESP.m }} testID="esport-team-chargement">
           {erreur ? <Retours theme={theme} erreur={erreur} prefixe="esport-team" /> : <Squelette theme={theme} lignes={4} hauteur={18} />}
-          <BoutonHub theme={theme} titre="← Teams" onPress={onQuitter} testID="esport-team-retour" />
+          <BoutonHub theme={theme} titre={tr('pageTeam.teams')} onPress={onQuitter} testID="esport-team-retour" />
         </View>
       </CadreEsport>
     );
@@ -188,13 +218,13 @@ export function PageTeam({
       <MenuActions
         theme={theme}
         testID="esport-changer-team"
-        libelle="Changer de team"
-        titreBouton={large ? '⇄ Changer de team' : '⇄'}
+        libelle={tr('pageTeam.changer_de_team')}
+        titreBouton={large ? tr('pageTeam.changer_de_team_2') : '⇄'}
         actions={autres.map(t => ({ titre: t.nom, onPress: () => onChangerTeam(t.id, active), testID: `esport-changer-team-${t.slug}` }))}
       />
     ) : null;
   const couleur = couleurTeam(detail.team.slug);
-  const jeu = CATALOGUE.jeux.find(j => j.cle === detail.team.jeu)?.nom ?? detail.team.jeu;
+  const jeu = nomJeu(detail.team.jeu);
 
   let contenu: React.ReactNode;
   if (active === 'membres') contenu = <MembresRoles theme={theme} client={client} detail={detail} large={large} onExporter={onExporter} onMembresGlobal={onMembresGlobal} contexte={contexte} />;
@@ -210,7 +240,7 @@ export function PageTeam({
     const module = CATALOGUE.modules.find(m => m.cle === cle);
     contenu = (
       <Carte theme={theme} testID={`esport-bientot-${cle}`}>
-        <EtatVide theme={theme} glyphe="◔" titre={`${module?.nom ?? cle} : bientôt disponible`} texte={`${module?.description ?? ''} Ce module est activé pour la team : il arrivera dans une prochaine version (étape ${module?.phase} du plan).`} />
+        <EtatVide theme={theme} glyphe="◔" titre={tr('pageTeam.bientot_disponible', { nom: module ? nomModule(module.cle) : cle })} texte={tr('pageTeam.module_a_venir', { description: module ? descriptionModule(module.cle) : '', phase: module?.phase ?? '?' })} />
       </Carte>
     );
   } else contenu = <AccueilTeam theme={theme} client={client} detail={detail} large={large} onAller={aller} />;
@@ -237,11 +267,11 @@ export function PageTeam({
           <Text style={{ ...styleTexte(theme, 16), fontWeight: '800' }} numberOfLines={2}>
             {detail.team.nom}
           </Text>
-          {detail.moi.role ? <PastilleRole theme={theme} nom={detail.moi.role.nom} couleur={detail.moi.role.couleur} /> : <Text style={styleAttenue(theme, 12)}>Super admin</Text>}
+          {detail.moi.role ? <PastilleRole theme={theme} nom={nomRole(detail.moi.role.nom)} couleur={detail.moi.role.couleur} /> : <Text style={styleAttenue(theme, 12)}>{tr('pageTeam.super_admin')}</Text>}
         </View>
       </View>
       {selecteur ? <View style={{ paddingHorizontal: ESP.xxs, paddingBottom: ESP.xs }}>{selecteur}</View> : null}
-      <View testID="esport-barre" accessibilityRole="tablist" accessibilityLabel={`Sections de ${detail.team.nom}`} style={{ gap: ESP.xxs }}>
+      <View testID="esport-barre" accessibilityRole="tablist" accessibilityLabel={tr('pageTeam.sections_de', { nom: detail.team.nom })} style={{ gap: ESP.xxs }}>
         {sections.map(g => (
           <EntreeLaterale
             key={g.id}
@@ -266,11 +296,11 @@ export function PageTeam({
         <Pressable
           testID="esport-team-retour"
           accessibilityRole="button"
-          accessibilityLabel="Retour aux teams"
+          accessibilityLabel={tr('pageTeam.retour_aux_teams')}
           onPress={onQuitter}
           style={{ minHeight: 44, minWidth: 44, flexDirection: 'row', alignItems: 'center', paddingHorizontal: ESP.xxs }}>
           <Text style={{ color: theme.accent, fontSize: 26, lineHeight: 28, marginTop: -2 }}>‹</Text>
-          <Text style={{ color: theme.accent, fontSize: 15, fontWeight: '600', ...police(theme.policeTexte) }}>Teams</Text>
+          <Text style={{ color: theme.accent, fontSize: 15, fontWeight: '600', ...police(theme.policeTexte) }}>{tr('dashboard.teams')}</Text>
         </Pressable>
         <AvatarTeam theme={theme} team={detail.team} taille={32} />
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -278,7 +308,7 @@ export function PageTeam({
             {detail.team.nom}
           </Text>
           <Text style={styleAttenue(theme)} numberOfLines={1}>
-            {`${groupe?.libelle ?? 'Accueil'} · ${detail.moi.role?.nom ?? 'Super admin'}`}
+            {`${groupe?.libelle ?? tr('pageTeam.accueil')} · ${detail.moi.role ? nomRole(detail.moi.role.nom) : tr('pageTeam.super_admin')}`}
           </Text>
         </View>
         {selecteur}
@@ -299,16 +329,16 @@ export function PageTeam({
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: large ? ESP.xxl : ESP.m, paddingTop: large ? ESP.l : ESP.m, paddingBottom: ESP.xxxl, gap: large ? ESP.l : ESP.m, maxWidth: LARGEUR_CONTENU + 2 * ESP.xxl, width: '100%', alignSelf: 'center' }}>
           {large ? (
             <View style={{ gap: ESP.s }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xxs, flexWrap: 'wrap' }} accessibilityRole="navigation" aria-label="Fil d’Ariane">
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.xxs, flexWrap: 'wrap' }} accessibilityRole="navigation" aria-label={tr('pageTeam.fil_d_ariane')}>
                 <Pressable testID="esport-team-retour" accessibilityRole="link" onPress={onQuitter} style={{ minHeight: 32, justifyContent: 'center' }}>
-                  <Text style={{ ...styleTexte(theme, 14), color: theme.accent, fontWeight: '600' }}>Teams</Text>
+                  <Text style={{ ...styleTexte(theme, 14), color: theme.accent, fontWeight: '600' }}>{tr('dashboard.teams')}</Text>
                 </Pressable>
                 <Text style={styleAttenue(theme, 14)}>›</Text>
                 <Text style={{ ...styleTexte(theme, 14), fontWeight: '600' }}>{detail.team.nom}</Text>
                 <Text style={styleAttenue(theme, 14)}>›</Text>
                 <Text style={styleAttenue(theme, 14)}>{groupe?.libelle}</Text>
                 <View style={{ flex: 1 }} />
-                <Text style={styleAttenue(theme, 14)}>{`${jeu} · ${detail.membres} membre${detail.membres > 1 ? 's' : ''}`}</Text>
+                <Text style={styleAttenue(theme, 14)}>{`${jeu} · ${trn('statsTeam.membres', detail.membres)}`}</Text>
               </View>
               {sousOnglets}
             </View>
@@ -329,29 +359,29 @@ function AccueilTeam({ theme, client, detail, large, onAller }: { theme: ThemeHu
   }, [client]);
   const actifs = detail.modules.filter(m => m.active).map(m => m.cle);
   const miennes = notifs?.liste.filter(n => n.team?.id === detail.team.id).slice(0, 5) ?? [];
-  const jeu = CATALOGUE.jeux.find(j => j.cle === detail.team.jeu)?.nom ?? detail.team.jeu;
+  const jeu = nomJeu(detail.team.jeu);
   const couleur = couleurTeam(detail.team.slug);
   const colonneDroite = (
     <View style={{ gap: ESP.m, flex: large ? 1 : undefined, minWidth: 0 }}>
       <Carte theme={theme} testID="esport-accueil-equipe">
-        <TitreCarte theme={theme} titre="L’équipe" droite={detail.moi.permissions.includes('members.view') ? <BoutonHub theme={theme} titre="Voir" onPress={() => onAller('membres')} testID="esport-accueil-membres" /> : undefined} />
+        <TitreCarte theme={theme} titre={tr('objectifs.l_equipe')} droite={detail.moi.permissions.includes('members.view') ? <BoutonHub theme={theme} titre={tr('pageTeam.voir')} onPress={() => onAller('membres')} testID="esport-accueil-membres" /> : undefined} />
         <View style={{ flexDirection: 'row', gap: ESP.l, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <View style={{ gap: 2 }}>
             <Text style={{ color: theme.texte, fontSize: 30, fontWeight: '700', ...police(theme.policeChiffres) }}>{detail.membres}</Text>
-            <Text style={styleAttenue(theme)}>{`membre${detail.membres > 1 ? 's' : ''}`}</Text>
+            <Text style={styleAttenue(theme)}>{trn('pageTeam.mot_membre', detail.membres)}</Text>
           </View>
           <View style={{ gap: ESP.xxs, flexShrink: 1 }}>
-            <Text style={styleAttenue(theme)}>Mon rôle</Text>
-            {detail.moi.role ? <PastilleRole theme={theme} nom={detail.moi.role.nom} couleur={detail.moi.role.couleur} testID="esport-mon-role" /> : <Text style={styleTexte(theme)}>Super admin (Fondateur)</Text>}
+            <Text style={styleAttenue(theme)}>{tr('pageTeam.mon_role')}</Text>
+            {detail.moi.role ? <PastilleRole theme={theme} nom={nomRole(detail.moi.role.nom)} couleur={detail.moi.role.couleur} testID="esport-mon-role" /> : <Text style={styleTexte(theme)}>{tr('pageTeam.super_admin_fondateur')}</Text>}
           </View>
         </View>
         <Text style={styleAttenue(theme)} numberOfLines={3}>
-          {actifs.map(nomModule).join(' · ') || 'Aucun module activé'}
+          {actifs.map(nomModule).join(' · ') || tr('pageTeam.aucun_module_active')}
         </Text>
       </Carte>
       <Carte theme={theme} testID="esport-accueil-notifications">
-        <TitreCarte theme={theme} titre="Notifications" />
-        {miennes.length === 0 ? <Text style={styleAttenue(theme, TYPO.texte)}>Rien de nouveau.</Text> : null}
+        <TitreCarte theme={theme} titre={tr('discord.notifications')} />
+        {miennes.length === 0 ? <Text style={styleAttenue(theme, TYPO.texte)}>{tr('pageTeam.rien_de_nouveau')}</Text> : null}
         {miennes.map(n => (
           <View key={n.id} style={{ flexDirection: 'row', gap: ESP.xs, alignItems: 'flex-start' }}>
             <View style={{ width: 8, height: 8, borderRadius: 4, marginTop: 7, backgroundColor: n.lue ? theme.ligne : theme.accent }} />
@@ -375,14 +405,14 @@ function AccueilTeam({ theme, client, detail, large, onAller }: { theme: ThemeHu
               {detail.team.nom}
             </Text>
             <Text style={styleAttenue(theme, TYPO.sousTitre)} numberOfLines={3}>
-              {detail.team.description || `${jeu} · ${detail.membres} membre(s)`}
+              {detail.team.description || `${jeu} · ${trn('statsTeam.membres', detail.membres)}`}
             </Text>
           </View>
         </View>
         <View style={{ flexDirection: 'row', gap: ESP.xs, flexWrap: 'wrap' }}>
           <Badge theme={theme} texte={jeu} couleur={couleur} />
-          <Badge theme={theme} texte={`${detail.membres} membre${detail.membres > 1 ? 's' : ''}`} />
-          {detail.team.archivee ? <Badge theme={theme} ton="alerte" texte="Archivée" /> : null}
+          <Badge theme={theme} texte={trn('statsTeam.membres', detail.membres)} />
+          {detail.team.archivee ? <Badge theme={theme} ton="alerte" texte={tr('pageTeam.archivee')} /> : null}
         </View>
       </Carte>
       ) : null}
@@ -430,20 +460,20 @@ function Parametres({
     <View style={{ gap: ESP.m, flex: large ? 1 : undefined, minWidth: 0 }}>
       {peut('team.manage') ? (
         <Panneau theme={theme}>
-          <TitreCarte theme={theme} titre="La team" sous="Nom et description, visibles de tous les membres." />
-          <Champ theme={theme} libelle="Nom" valeur={nom} onChanger={setNom} maxLength={60} testID="esport-parametres-nom" />
-          <Champ theme={theme} libelle="Description" valeur={description} onChanger={setDescription} maxLength={500} multiligne testID="esport-parametres-description" />
+          <TitreCarte theme={theme} titre={tr('pageTeam.la_team')} sous={tr('pageTeam.nom_et_description_visibles')} />
+          <Champ theme={theme} libelle={tr('pageTeam.nom')} valeur={nom} onChanger={setNom} maxLength={60} testID="esport-parametres-nom" />
+          <Champ theme={theme} libelle={tr('pageTeam.description')} valeur={description} onChanger={setDescription} maxLength={500} multiligne testID="esport-parametres-description" />
           <View style={{ alignSelf: 'flex-start' }}>
             <BoutonHub
               theme={theme}
-              titre="Enregistrer"
+              titre={tr('discord.enregistrer')}
               variante="plein"
               desactive={Boolean(enCours)}
               onPress={() =>
-                void agir('Team', async () => {
+                void agir('team', async () => {
                   await client.modifierTeam(detail.team.id, { nom: nom.trim(), description });
                   await onChange();
-                  return 'Team enregistrée.';
+                  return tr('pageTeam.team_enregistree');
                 })
               }
               testID="esport-parametres-enregistrer"
@@ -454,8 +484,8 @@ function Parametres({
       <Panneau theme={theme} testID="esport-parametres-modules">
         <TitreCarte
           theme={theme}
-          titre="Modules"
-          sous={gerer ? 'Désactiver un module le cache (et ferme ses routes) sans rien effacer : le réactiver rend tout.' : 'Seul le Propriétaire active ou désactive les modules.'}
+          titre={tr('pageTeam.modules')}
+          sous={gerer ? tr('pageTeam.desactiver_un_module_le') : tr('pageTeam.seul_le_proprietaire_active')}
         />
         {parGroupe.map(g => (
           <View key={g.id} style={{ gap: ESP.xxs }}>
@@ -469,13 +499,13 @@ function Parametres({
                   testID={gerer ? `esport-parametres-module-${m.cle}` : undefined}
                   accessibilityRole={gerer ? 'checkbox' : undefined}
                   accessibilityState={gerer ? { checked: actif } : undefined}
-                  accessibilityLabel={m.nom}
+                  accessibilityLabel={nomModule(m.cle)}
                   disabled={!gerer}
                   onPress={() =>
-                    void agir('Modules', async () => {
+                    void agir('modules', async () => {
                       await client.changerModules(detail.team.id, { [m.cle]: !actif });
                       await onChange();
-                      return `${m.nom} ${!actif ? 'activé' : 'désactivé'}.`;
+                      return tr(actif ? 'pageTeam.module_desactive' : 'pageTeam.module_active', { nom: nomModule(m.cle) });
                     })
                   }
                   style={(etat: EtatPresse) => ({
@@ -502,10 +532,10 @@ function Parametres({
                     <Text style={{ color: theme.surAccent, fontSize: 13, fontWeight: '800' }}>{actif ? '✓' : ''}</Text>
                   </View>
                   <Text style={{ ...styleTexte(theme), flex: 1 }}>
-                    {m.nom}
-                    {bientot ? <Text style={styleAttenue(theme)}> · bientôt</Text> : null}
+                    {nomModule(m.cle)}
+                    {bientot ? <Text style={styleAttenue(theme)}> {tr('pageTeam.bientot')}</Text> : null}
                   </Text>
-                  <Text style={styleAttenue(theme)}>{actif ? 'Activé' : 'Désactivé'}</Text>
+                  <Text style={styleAttenue(theme)}>{actif ? tr('pageTeam.active') : tr('pageTeam.desactive_2')}</Text>
                 </Pressable>
               );
             })}
@@ -520,13 +550,13 @@ function Parametres({
       <MonProfil theme={theme} client={client} onExporter={onExporter} />
       {peut('team.delete') ? (
         <Panneau theme={theme} style={{ borderColor: teinteTransparente(theme.critique, 0.5) }}>
-          <TitreCarte theme={theme} titre="Zone sensible" sous="La suppression est définitive : planning, résumés, strats et journal de la team." />
+          <TitreCarte theme={theme} titre={tr('pageTeam.zone_sensible')} sous={tr('pageTeam.la_suppression_est_definitive')} />
           <BoutonConfirme
             theme={theme}
-            titre="Supprimer la team"
-            confirmation={`Oui, supprimer « ${detail.team.nom} »`}
+            titre={tr('pageTeam.supprimer_la_team')}
+            confirmation={tr('pageTeam.oui_supprimer', { nom: detail.team.nom })}
             onConfirme={() =>
-              void agir('Suppression', async () => {
+              void agir('suppression', async () => {
                 await client.supprimerTeam(detail.team.id);
                 onSupprimee();
               })
@@ -539,7 +569,7 @@ function Parametres({
   );
   return (
     <View style={{ gap: ESP.l }} testID="esport-parametres">
-      <TitreSection theme={theme} titre="Paramètres" sous="La team, ses modules, le planning et votre profil." />
+      <TitreSection theme={theme} titre={tr('pageTeam.parametres')} sous={tr('pageTeam.la_team_ses_modules')} />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-parametres" />
       <View style={large ? { flexDirection: 'row', gap: ESP.l, alignItems: 'flex-start' } : { gap: ESP.m }}>
         {gauche}
@@ -569,26 +599,26 @@ export function LierDiscord({ theme, client }: { theme: ThemeHub; client: Client
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   return (
     <View style={{ gap: 8, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 10 }} testID="esport-lier-discord">
-      <Text style={{ color: theme.texte, fontWeight: '700', ...police(theme.policeTexte) }}>Bot Discord</Text>
+      <Text style={{ color: theme.texte, fontWeight: '700', ...police(theme.policeTexte) }}>{tr('discord.bot_discord')}</Text>
       {etat.lie ? (
         <Text style={{ color: theme.texte, ...police(theme.policeTexte) }} testID="esport-lier-discord-etat">
-          ✓ Discord lié{etat.discordNom ? ` : ${etat.discordNom}` : ''}. Le bot vous mentionne quand vous êtes convoqué.
+          {tr('pageTeam.discord_lie', { nom: etat.discordNom ? tr('fmt.suite', { texte: etat.discordNom }) : '' })}
         </Text>
       ) : (
-        <Text style={attenue}>Liez votre compte Discord : le bot vous mentionnera pour vos scrims et matchs, et vous répondrez d’un clic.</Text>
+        <Text style={attenue}>{tr('pageTeam.liez_votre_compte_discord')}</Text>
       )}
       {code && !etat.lie ? <CodeAffiche theme={theme} code={code} testID="esport-lier-discord-code" /> : null}
       <View style={styles.ligne}>
         <BoutonHub
           theme={theme}
-          titre={etat.lie ? 'Lier un autre compte Discord' : 'Lier mon Discord'}
+          titre={etat.lie ? tr('pageTeam.lier_un_autre_compte') : tr('pageTeam.lier_mon_discord')}
           variante={etat.lie ? undefined : 'plein'}
           desactive={Boolean(enCours) || !etat.botDisponible}
           onPress={() =>
-            void agir('Code', async () => {
+            void agir('code', async () => {
               setCode(await api.code());
               setEtat({ ...etat, lie: false });
-              return 'Tapez la commande affichée dans le serveur Discord de la team.';
+              return tr('pageTeam.tapez_la_commande_affichee');
             })
           }
           testID="esport-lier-discord-bouton"
@@ -596,19 +626,19 @@ export function LierDiscord({ theme, client }: { theme: ThemeHub; client: Client
         {etat.lie ? (
           <BoutonHub
             theme={theme}
-            titre="Délier mon Discord"
+            titre={tr('pageTeam.delier_mon_discord')}
             desactive={Boolean(enCours)}
             onPress={() =>
-              void agir('Délier', async () => {
+              void agir('delier', async () => {
                 await api.delier();
                 await recharger();
-                return 'Discord délié.';
+                return tr('pageTeam.discord_delie');
               })
             }
             testID="esport-lier-discord-delier"
           />
         ) : (
-          <BoutonHub theme={theme} titre="J’ai tapé le code" desactive={Boolean(enCours) || !code} onPress={() => void agir('', recharger)} testID="esport-lier-discord-verifier" />
+          <BoutonHub theme={theme} titre={tr('pageTeam.j_ai_tape_le')} desactive={Boolean(enCours) || !code} onPress={() => void agir('', recharger)} testID="esport-lier-discord-verifier" />
         )}
       </View>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-lier-discord" />
@@ -620,6 +650,7 @@ export function LierDiscord({ theme, client }: { theme: ThemeHub; client: Client
 export function MonProfil({ theme, client, onExporter, onSupprime }: { theme: ThemeHub; client: ClientEsport; onExporter?(nom: string, contenu: string): Promise<boolean>; onSupprime?(): void }) {
   const [profil, setProfil] = useState<{ pseudo: string; riotId: string; discord: string } | undefined>();
   const { enCours, erreur, avis, agir } = useAgir();
+  const langue = useLangue();
   useEffect(() => {
     client.moi().then(m => setProfil({ pseudo: m.profil?.pseudo ?? '', riotId: m.profil?.riotId ?? '', discord: m.profil?.discord ?? '' }), () => undefined);
   }, [client]);
@@ -627,21 +658,35 @@ export function MonProfil({ theme, client, onExporter, onSupprime }: { theme: Th
   if (!profil) return null;
   return (
     <Panneau theme={theme} testID="esport-mon-profil">
-      <TitreCarte theme={theme} titre="Mon profil Esport" sous="Ce que voient vos coéquipiers." />
-      <Champ theme={theme} libelle="Pseudo (obligatoire)" valeur={profil.pseudo} onChanger={pseudo => setProfil({ ...profil, pseudo })} maxLength={24} testID="esport-profil-pseudo" />
-      <Champ theme={theme} libelle="Riot ID (facultatif, Pseudo#TAG)" valeur={profil.riotId} onChanger={riotId => setProfil({ ...profil, riotId })} maxLength={22} testID="esport-profil-riot" />
-      <Champ theme={theme} libelle="Discord (facultatif)" valeur={profil.discord} onChanger={discord => setProfil({ ...profil, discord })} maxLength={32} testID="esport-profil-discord" />
+      <TitreCarte theme={theme} titre={tr('pageTeam.mon_profil_esport')} sous={tr('pageTeam.ce_que_voient_vos')} />
+      <Champ theme={theme} libelle={tr('pageTeam.pseudo_obligatoire')} valeur={profil.pseudo} onChanger={pseudo => setProfil({ ...profil, pseudo })} maxLength={24} testID="esport-profil-pseudo" />
+      <Champ theme={theme} libelle={tr('pageTeam.riot_id_facultatif_pseudo')} valeur={profil.riotId} onChanger={riotId => setProfil({ ...profil, riotId })} maxLength={22} testID="esport-profil-riot" />
+      <Champ theme={theme} libelle={tr('pageTeam.discord_facultatif')} valeur={profil.discord} onChanger={discord => setProfil({ ...profil, discord })} maxLength={32} testID="esport-profil-discord" />
+      <ChoixLangue
+        theme={theme}
+        libelle={tr('profil.langue')}
+        valeur={langue}
+        onChoisir={l => {
+          // Changement instantané (sans recharger), puis enregistré sur le compte : le bot Discord et les exports la connaissent.
+          definirLangue(l);
+          void agir('langue', async () => {
+            await client.majLangue(l);
+            return tr('profil.langue_enregistree');
+          });
+        }}
+        testID="esport-profil-langue"
+      />
       <LierDiscord theme={theme} client={client} />
       <View style={styles.ligne}>
         <BoutonHub
           theme={theme}
-          titre="Enregistrer le profil"
+          titre={tr('pageTeam.enregistrer_le_profil')}
           variante="plein"
           desactive={Boolean(enCours)}
           onPress={() =>
-            void agir('Profil', async () => {
+            void agir('profil', async () => {
               await client.majProfil({ pseudo: profil.pseudo.trim(), riotId: profil.riotId.trim() || undefined, discord: profil.discord.trim() || undefined });
-              return 'Profil enregistré.';
+              return tr('pageTeam.profil_enregistre');
             })
           }
           testID="esport-profil-enregistrer"
@@ -649,12 +694,12 @@ export function MonProfil({ theme, client, onExporter, onSupprime }: { theme: Th
         {onExporter ? (
           <BoutonHub
             theme={theme}
-            titre="Exporter mes données"
+            titre={tr('pageTeam.exporter_mes_donnees')}
             onPress={() =>
-              void agir('Export', async () => {
+              void agir('export', async () => {
                 const donnees = await client.exporterMesDonnees();
                 const ok = await onExporter('esport-mes-donnees.json', JSON.stringify(donnees, null, 2));
-                return ok ? 'Export enregistré.' : undefined;
+                return ok ? tr('pageTeam.export_enregistre') : undefined;
               })
             }
             testID="esport-profil-exporter"
@@ -662,13 +707,13 @@ export function MonProfil({ theme, client, onExporter, onSupprime }: { theme: Th
         ) : null}
         <BoutonConfirme
           theme={theme}
-          titre="Supprimer mes données Esport"
-          confirmation="Oui, tout supprimer"
+          titre={tr('pageTeam.supprimer_mes_donnees_esport')}
+          confirmation={tr('pageTeam.oui_tout_supprimer')}
           onConfirme={() =>
-            void agir('Suppression', async () => {
+            void agir('suppression', async () => {
               await client.supprimerMesDonnees();
               onSupprime?.();
-              return 'Vos données Esport sont supprimées.';
+              return tr('pageTeam.vos_donnees_esport_sont');
             })
           }
           testID="esport-profil-supprimer"
@@ -676,7 +721,7 @@ export function MonProfil({ theme, client, onExporter, onSupprime }: { theme: Th
       </View>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-profil" />
       <Text style={attenue} testID="esport-mention">
-        {MENTION_DONNEES}
+        {mentionDonnees()}
       </Text>
     </Panneau>
   );

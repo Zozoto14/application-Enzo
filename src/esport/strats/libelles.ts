@@ -5,11 +5,34 @@
 
 import type { StatutPlaybook } from './api';
 import type { Side, TypeStrat } from './document';
+import { tr } from '../i18n';
 
-export const LIBELLES_SIDE: Record<Side, string> = { attaque: 'Attaque', defense: 'Défense' };
-export const LIBELLES_TYPE_STRAT: Record<TypeStrat, string> = { default: 'Default', execute: 'Exécution', eco: 'Éco', pistol: 'Pistol', retake: 'Retake', other: 'Autre' };
+export const LIBELLES_SIDE: Record<Side, string> = { get attaque() {
+      return tr('strats.editeur.attaque');
+    }, get defense() {
+      return tr('strats.editeur.defense');
+    } };
+export const LIBELLES_TYPE_STRAT: Record<TypeStrat, string> = { get default() {
+      return tr('strats.libelles.default');
+    }, get execute() {
+      return tr('strats.libelles.execution');
+    }, get eco() {
+      return tr('strats.libelles.eco');
+    }, get pistol() {
+      return tr('strats.libelles.pistol');
+    }, get retake() {
+      return tr('strats.libelles.retake');
+    }, get other() {
+      return tr('planning.libelles.autre');
+    } };
 export const TYPES_STRAT = Object.keys(LIBELLES_TYPE_STRAT) as TypeStrat[];
-export const LIBELLES_STATUT_PLAYBOOK: Record<StatutPlaybook, string> = { brouillon: 'Brouillon', validee: 'Validée', archivee: 'Archivée' };
+export const LIBELLES_STATUT_PLAYBOOK: Record<StatutPlaybook, string> = { get brouillon() {
+      return tr('strats.libelles.brouillon');
+    }, get validee() {
+      return tr('strats.libelles.validee');
+    }, get archivee() {
+      return tr('pageTeam.archivee');
+    } };
 
 /** Tags saisis « A, exec, rapide » → liste propre (sans doublon, 12 au plus). */
 export function lireTags(texte: string): string[] {
@@ -30,33 +53,33 @@ const texte = (v: unknown) => (typeof v === 'string' ? v : '?');
 export function phraseJournalStrats(action: string, qui: string, m: Record<string, unknown>): string | undefined {
   switch (action) {
     case 'strat.created':
-      return `${qui} a créé la strat « ${texte(m.titre)} »${typeof m.carte === 'string' ? ` (${m.carte})` : ''}`;
+      return tr('strats.libelles.a_cree_la_strat', { qui, titre: texte(m.titre), carte: typeof m.carte === 'string' ? ` (${m.carte})` : '' });
     case 'strat.updated':
-      return `${qui} a enregistré la strat « ${texte(m.titre)} »${typeof m.revision === 'number' ? ` (version ${m.revision})` : ''}`;
+      return tr('strats.libelles.a_enregistre_la_strat', { qui, titre: texte(m.titre), version: typeof m.revision === 'number' ? tr('strats.libelles.version_entre_parentheses', { n: m.revision }) : '' });
     case 'strat.duplicated':
-      return `${qui} a dupliqué « ${texte(m.sourceTitre)} » en « ${texte(m.titre)} »`;
+      return tr('strats.libelles.a_duplique_en', { qui, v: texte(m.sourceTitre), v2: texte(m.titre) });
     case 'strat.deleted':
-      return `${qui} a supprimé la strat « ${texte(m.titre)} »`;
+      return tr('strats.libelles.a_supprime_la_strat', { qui, v: texte(m.titre) });
     case 'strat.share_created':
-      return `${qui} a créé un lien de lecture seule pour « ${texte(m.titre)} »`;
+      return tr('strats.libelles.a_cree_un_lien', { qui, v: texte(m.titre) });
     case 'strat.share_revoked':
-      return `${qui} a révoqué un lien de lecture seule de « ${texte(m.titre)} »`;
+      return tr('strats.libelles.a_revoque_un_lien', { qui, v: texte(m.titre) });
     case 'playbook.created':
-      return `${qui} a ajouté « ${texte(m.titre)} » au playbook`;
+      return tr('strats.libelles.a_ajoute_au_playbook', { qui, v: texte(m.titre) });
     case 'playbook.updated':
-      return `${qui} a modifié « ${texte(m.titre)} » dans le playbook`;
+      return tr('strats.libelles.a_modifie_dans_le', { qui, v: texte(m.titre) });
     case 'playbook.validated':
-      return `${qui} a validé « ${texte(m.titre)} » dans le playbook`;
+      return tr('strats.libelles.a_valide_dans_le', { qui, v: texte(m.titre) });
     case 'playbook.archived':
-      return `${qui} a archivé « ${texte(m.titre)} » dans le playbook`;
+      return tr('strats.libelles.a_archive_dans_le', { qui, v: texte(m.titre) });
     case 'playbook.deleted':
-      return `${qui} a retiré « ${texte(m.titre)} » du playbook`;
+      return tr('strats.libelles.a_retire_du_playbook', { qui, v: texte(m.titre) });
     default:
       return undefined;
   }
 }
 
 export function phraseNotificationStrats(type: string, team: string, c: Record<string, unknown>): string | undefined {
-  if (type === 'playbook-valide') return `Nouvelle entrée validée au playbook de ${team} : « ${texte(c.titre)} »${typeof c.carte === 'string' ? ` (${c.carte})` : ''}`;
+  if (type === 'playbook-valide') return tr('strats.libelles.playbook_valide', { team, titre: texte(c.titre), carte: typeof c.carte === 'string' ? ` (${c.carte})` : '' });
   return undefined;
 }

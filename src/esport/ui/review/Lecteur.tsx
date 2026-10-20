@@ -11,6 +11,7 @@ import { BoutonHub } from '../../../hub/admin/ui/commun';
 import { police } from '../../../hub/themes';
 import { lienYoutubeA, miniatureYoutube } from '../../review/youtube';
 import type { PropsLecteur } from './typesLecteur';
+import { tr } from '../../i18n';
 
 export { VITESSES } from './typesLecteur';
 export const lecteurIntegre = false;
@@ -31,13 +32,12 @@ export function Lecteur({ theme, videoId, depart = 0, onPret }: PropsLecteur) {
     <View testID="esport-lecteur-natif" style={{ gap: 8 }}>
       <Image
         source={{ uri: miniatureYoutube(videoId) }}
-        accessibilityLabel="Miniature de la vidéo"
+        accessibilityLabel={tr('review.lecteur.miniature_de_la_video')}
         style={{ width: '100%', aspectRatio: 16 / 9, borderRadius: Math.min(theme.rayonMoyen, 10), backgroundColor: theme.surface }}
       />
       <Text style={{ color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) }}>
-        Le lecteur intégré n’existe pas sur l’app iOS : les repères restent lisibles ici, et chacun ouvre la vidéo dans YouTube au bon moment.
-      </Text>
-      <BoutonHub theme={theme} titre="Ouvrir la vidéo dans YouTube" variante="plein" onPress={() => void Linking.openURL(lienYoutubeA(videoId, depart))} testID="esport-lecteur-youtube" />
+        {tr('review.lecteur.le_lecteur_integre_n')}</Text>
+      <BoutonHub theme={theme} titre={tr('review.lecteur.ouvrir_la_video_dans')} variante="plein" onPress={() => void Linking.openURL(lienYoutubeA(videoId, depart))} testID="esport-lecteur-youtube" />
     </View>
   );
 }

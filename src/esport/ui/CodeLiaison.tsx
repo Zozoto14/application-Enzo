@@ -7,6 +7,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import { police, type ThemeHub } from '../../hub/themes';
 import type { CodeLiaison } from '../discord/api';
+import { tr } from '../i18n';
 
 /** Code de liaison affiché en grand, avec la commande à taper et sa durée de validité. */
 export function CodeAffiche({ theme, code, testID }: { theme: ThemeHub; code: CodeLiaison; testID: string }) {
@@ -17,9 +18,8 @@ export function CodeAffiche({ theme, code, testID }: { theme: ThemeHub; code: Co
         {code.code}
       </Text>
       <Text selectable style={{ color: theme.texte, ...police(theme.policeTexte) }}>
-        Dans Discord, tapez : {code.commande}
-      </Text>
-      <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>Valable {minutes} min, une seule fois.</Text>
+        {tr('codeLiaison.dans_discord_tapez', { commande: code.commande })}</Text>
+      <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>{tr('codeLiaison.valable_min_une_seule', { minutes })}</Text>
     </View>
   );
 }

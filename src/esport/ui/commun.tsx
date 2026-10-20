@@ -10,6 +10,7 @@ import { Avis, BoutonHub } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { ErreurEsport } from '../client';
 import { ESP, TYPO, ombre, rayonCarte, titre as styleTitreEsport } from './design';
+import { tr } from '../i18n';
 
 export const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -126,7 +127,7 @@ export function BoutonConfirme({
         }}
         testID={`${testID}-confirmer`}
       />
-      <BoutonHub theme={theme} titre="Annuler" onPress={() => setArme(false)} testID={`${testID}-annuler`} />
+      <BoutonHub theme={theme} titre={tr('assistant.annuler')} onPress={() => setArme(false)} testID={`${testID}-annuler`} />
     </View>
   );
 }

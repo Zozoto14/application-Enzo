@@ -18,6 +18,8 @@
  * Le champ `jeu` garde la structure prête pour d'autres jeux.
  */
 
+import { langueCourante, tr } from '../i18n';
+
 export const URL_API_VALORANT = 'https://valorant-api.com/v1';
 export const ORIGINES_ASSETS = ['https://valorant-api.com', 'https://media.valorant-api.com'];
 export const CHEMIN_MANIFESTE_LOCAL = 'esport-assets/manifeste.json';
@@ -107,7 +109,7 @@ export function assetsRepli(maintenant = Date.now()): Assets {
       nom,
       role,
       icone: null,
-      capacites: ORDRE_SLOTS.map(cle => ({ cle, nom: `Capacité ${TOUCHES[cle]}`, icone: null, touche: TOUCHES[cle] })),
+      capacites: ORDRE_SLOTS.map(cle => ({ cle, nom: tr('strats.assets.capacite', { v: TOUCHES[cle] }), icone: null, touche: TOUCHES[cle] })),
     })),
   };
 }
@@ -138,7 +140,7 @@ export function depuisApi(cartesJson: unknown, agentsJson: unknown, maintenant =
   const donnees = (j: unknown) => ((j as { data?: unknown })?.data && Array.isArray((j as { data: unknown[] }).data) ? (j as { data: unknown[] }).data : null);
   const cartes = donnees(cartesJson) as CarteApi[] | null;
   const agents = donnees(agentsJson) as AgentApi[] | null;
-  if (!cartes || !agents) throw new Error('Réponse de valorant-api.com illisible.');
+  if (!cartes || !agents) throw new Error(tr('strats.assets.reponse_de_valorant_api'));
   const vues = new Set<string>();
   const sortieCartes = cartes
     .filter(c => typeof c.displayName === 'string' && https(c.displayIcon) && c.tacticalDescription)
@@ -158,14 +160,14 @@ export function depuisApi(cartesJson: unknown, agentsJson: unknown, maintenant =
         .map(c => ({ cle: c.slot as string, nom: c.displayName ?? (c.slot as string), icone: https(c.displayIcon), touche: TOUCHES[c.slot as string] })),
     }))
     .sort((a, b) => a.nom.localeCompare(b.nom));
-  if (sortieCartes.length === 0 || sortieAgents.length === 0) throw new Error('valorant-api.com : aucune carte ou aucun agent.');
+  if (sortieCartes.length === 0 || sortieAgents.length === 0) throw new Error(tr('strats.assets.valorant_api_com_aucune'));
   return { jeu: 'valorant', source: 'api', cartes: sortieCartes, agents: sortieAgents, majLe: maintenant };
 }
 
 /** Manifeste du dossier remplaçable (`esport-assets/manifeste.json`), même forme que `Assets`. */
 export function depuisManifeste(json: unknown, maintenant = Date.now()): Assets {
   const m = json as { jeu?: string; cartes?: unknown; agents?: unknown };
-  if (!m || m.jeu !== 'valorant' || !Array.isArray(m.cartes) || !Array.isArray(m.agents) || m.cartes.length === 0) throw new Error('Manifeste d’assets illisible.');
+  if (!m || m.jeu !== 'valorant' || !Array.isArray(m.cartes) || !Array.isArray(m.agents) || m.cartes.length === 0) throw new Error(tr('strats.assets.manifeste_d_assets_illisible'));
   const image = (v: unknown) => https(v) ?? relatif(v);
   return {
     jeu: 'valorant',
@@ -196,9 +198,13 @@ async function json(fetchA: FetchAssets, url: string, delai: number): Promise<un
   }
 }
 
+/** Les noms d'agents et de capacités suivent la langue : un cache par langue (le français garde la clé historique). */
+const cleCache = (): string => (langueCourante() === 'en' ? `${CLE_CACHE}.en` : CLE_CACHE);
+const langueApi = (): string => (langueCourante() === 'en' ? 'en-US' : 'fr-FR');
+
 function lireCache(stockage: StockageAssets | undefined): Assets | undefined {
   try {
-    const brut = stockage?.lire(CLE_CACHE);
+    const brut = stockage?.lire(cleCache());
     if (!brut) return undefined;
     const a = JSON.parse(brut) as Assets;
     return Array.isArray(a.cartes) && Array.isArray(a.agents) && typeof a.majLe === 'number' ? a : undefined;
@@ -237,12 +243,12 @@ export async function chargerAssets({
   if (fetchA) {
     try {
       const [cartes, agents] = await Promise.all([
-        json(fetchA, `${URL_API_VALORANT}/maps?language=fr-FR`, delai),
-        json(fetchA, `${URL_API_VALORANT}/agents?isPlayableCharacter=true&language=fr-FR`, delai),
+        json(fetchA, `${URL_API_VALORANT}/maps?language=${langueApi()}`, delai),
+        json(fetchA, `${URL_API_VALORANT}/agents?isPlayableCharacter=true&language=${langueApi()}`, delai),
       ]);
       const a = depuisApi(cartes, agents, maintenant);
       try {
-        stockage?.ecrire(CLE_CACHE, JSON.stringify(a));
+        stockage?.ecrire(cleCache(), JSON.stringify(a));
       } catch {
         // Stockage plein : tant pis, le réseau resservira.
       }

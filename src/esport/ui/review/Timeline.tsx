@@ -10,6 +10,7 @@ import { police, type ThemeHub } from '../../../hub/themes';
 import { encreSur } from '../../contraste';
 import type { Repere } from '../../review/api';
 import { categorie, formatTemps, positionPourcent } from '../../review/libelles';
+import { tr, trn } from '../../i18n';
 
 export function Timeline({
   theme,
@@ -43,12 +44,12 @@ export function Timeline({
     if (l > 0 && typeof x === 'number' && !Number.isNaN(x)) onAller(Math.max(0, Math.min(1, x / l)) * total);
   };
   return (
-    <View testID="esport-timeline" accessibilityLabel={`Timeline : ${reperes.length} repère(s) sur ${formatTemps(total)}`} style={{ gap: 4 }}>
+    <View testID="esport-timeline" accessibilityLabel={tr('review.timeline.timeline_repere_s_sur', { reperes: trn('review.review.reperes', reperes.length), v: formatTemps(total) })} style={{ gap: 4 }}>
       <View style={{ height: 40, justifyContent: 'center' }} onLayout={(e: LayoutChangeEvent) => setLargeur(e.nativeEvent.layout.width)}>
         <Pressable
           testID="esport-timeline-piste"
           accessibilityRole="adjustable"
-          accessibilityLabel="Piste de la vidéo : appuyer pour sauter à cet instant"
+          accessibilityLabel={tr('review.timeline.piste_de_la_video')}
           onPress={surPiste}
           style={{ position: 'absolute', left: 0, right: 0, top: 4, height: 32, justifyContent: 'center' }}>
           <View pointerEvents="none" style={{ height: 12, borderRadius: 6, backgroundColor: theme.ligne }} />
@@ -83,7 +84,7 @@ export function Timeline({
               key={r.id}
               testID={`esport-timeline-repere-${r.id}`}
               accessibilityRole="button"
-              accessibilityLabel={`${c.nom} à ${formatTemps(r.debut)} : ${r.titre}`}
+              accessibilityLabel={tr('review.timeline.a', { nom: c.nom, v: formatTemps(r.debut), titre: r.titre })}
               onPress={() => {
                 onChoisir(r);
                 onAller(r.debut);

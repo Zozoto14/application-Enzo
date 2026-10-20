@@ -11,13 +11,26 @@
  */
 
 import type { Convocation, GroupeConvocation, MembreConvocable } from './api';
+import { tr, trn } from '../i18n';
 
 export const CONVOCATION_DEFAUT: Convocation = { groupes: ['joueurs'], membres: [], exclus: [], proprietaires: [] };
 
 export const GROUPES: ReadonlyArray<{ cle: GroupeConvocation; nom: string; detail: string }> = [
-  { cle: 'joueurs', nom: 'Joueurs', detail: 'Joueur et Remplaçant' },
-  { cle: 'staff', nom: 'Staff', detail: 'Coach, Analyste, Manager' },
-  { cle: 'tous', nom: 'Tout le monde', detail: 'Tous sauf les Propriétaires' },
+  { cle: 'joueurs', get nom() {
+      return tr('planning.convocations.joueurs');
+    }, get detail() {
+      return tr('planning.convocations.joueur_et_remplacant');
+    } },
+  { cle: 'staff', get nom() {
+      return tr('resumes.staff');
+    }, get detail() {
+      return tr('planning.convocations.coach_analyste_manager');
+    } },
+  { cle: 'tous', get nom() {
+      return tr('planning.convocations.tout_le_monde');
+    }, get detail() {
+      return tr('planning.convocations.tous_sauf_les_proprietaires');
+    } },
 ];
 
 const sans = (l: readonly string[], x: string) => l.filter(y => y !== x);
@@ -81,10 +94,10 @@ export function resumeConvocation(c: Convocation, membres: readonly MembreConvoc
   const morceaux: string[] = [];
   const effective = convocationVide(c) ? CONVOCATION_DEFAUT : c;
   for (const g of GROUPES) if (effective.groupes.includes(g.cle)) morceaux.push(g.nom);
-  if (effective.membres.length) morceaux.push(`+ ${effective.membres.length} au choix`);
-  if (effective.proprietaires.length) morceaux.push(`${effective.proprietaires.length} Propriétaire${effective.proprietaires.length > 1 ? 's' : ''}`);
+  if (effective.membres.length) morceaux.push(tr('planning.convocations.au_choix', { length: effective.membres.length }));
+  if (effective.proprietaires.length) morceaux.push(trn('planning.convocations.proprietaires', effective.proprietaires.length));
   const n = convoquesParmi(c, membres).length;
-  return `${morceaux.join(' · ') || 'Personne'} — ${n} convoqué${n > 1 ? 's' : ''}`;
+  return tr('planning.convocations.resume', { liste: morceaux.join(' · ') || tr('planning.convocations.personne'), convoques: trn('planning.convocations.convoques', n) });
 }
 
 /** Deux convocations identiques (pour n'envoyer une liste propre à une date que si elle change) ? */

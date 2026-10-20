@@ -22,8 +22,19 @@ import type { Annuaire, ClientEsport, DemandeCompte, ListeDemandes } from '../cl
 import { MOTIF_PSEUDO } from '../comptesHub';
 import { BoutonConfirme, Choix, Retours, styles as communs, useAgir, Intertitre, Panneau } from './commun';
 import { roleParDefaut } from './CreationCompte';
+import { dateJour } from '../libelles';
+import { tr } from '../i18n';
+import { nomRole } from '../client';
 
-const STATUTS: Record<DemandeCompte['statut'], string> = { en_attente: 'En attente', validee: 'Validée', refusee: 'Refusée', annulee: 'Annulée' };
+const STATUTS: Record<DemandeCompte['statut'], string> = { get en_attente() {
+      return tr('demandesCompte.en_attente');
+    }, get validee() {
+      return tr('strats.libelles.validee');
+    }, get refusee() {
+      return tr('demandesCompte.refusee');
+    }, get annulee() {
+      return tr('demandesCompte.annulee');
+    } };
 
 /** Équipes où l'on peut proposer un membre (permission « Créer des membres »). */
 export const teamsDemande = (annuaire: Annuaire) => annuaire.teams.filter(t => t.droits.demander && !t.archivee);
@@ -77,30 +88,30 @@ export function DemandesCompte({
       {fondateur ? (
         <Panneau theme={theme} testID="esport-demandes">
           <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
-            <Intertitre theme={theme}>Demandes en attente</Intertitre>
+            <Intertitre theme={theme}>{tr('demandesCompte.demandes_en_attente')}</Intertitre>
             <Pilule theme={theme} texte={String(enAttente.length)} couleur={enAttente.length ? theme.alerte : theme.attenue} testID="esport-demandes-nombre" />
           </View>
-          {enAttente.length === 0 ? <Text style={attenue}>Aucune demande de compte en attente.</Text> : null}
-          {!peutValider && enAttente.length ? <Text style={attenue}>Valider crée le compte du hub : faites-le sur votre PC ou votre iPhone, là où vous êtes connecté en Fondateur.</Text> : null}
+          {enAttente.length === 0 ? <Text style={attenue}>{tr('demandesCompte.aucune_demande_de_compte')}</Text> : null}
+          {!peutValider && enAttente.length ? <Text style={attenue}>{tr('demandesCompte.valider_cree_le_compte')}</Text> : null}
           {enAttente.map(d => (
             <View key={d.id} style={{ gap: 6, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 8 }} testID={`esport-demande-${d.id}`}>
               <Text style={[texte, { fontWeight: '700' }]}>
                 {d.pseudo}
-                <Text style={attenue}>{`  ${d.role.nom} · ${d.team ?? '?'}${d.posteJeu ? ` · ${d.posteJeu}` : ''}`}</Text>
+                <Text style={attenue}>{`  ${nomRole(d.role.nom)} · ${d.team ?? '?'}${d.posteJeu ? ` · ${d.posteJeu}` : ''}`}</Text>
               </Text>
-              <Text style={attenue}>{`Proposé par ${d.demandeurPseudo ?? 'un membre'} le ${d.creeLe.slice(0, 10).split('-').reverse().join('/')}${d.email ? ` · ${d.email}` : ''}`}</Text>
+              <Text style={attenue}>{tr('demandesCompte.propose_par', { nom: d.demandeurPseudo ?? tr('creationCompte.un_membre'), date: dateJour(d.creeLe.slice(0, 10)), email: d.email ? ` · ${d.email}` : '' })}</Text>
               {d.message ? <Text style={attenue}>{`« ${d.message} »`}</Text> : null}
               <View style={communs.ligne}>
-                <BoutonHub theme={theme} titre="Valider" variante="plein" desactive={occupe || Boolean(enCours) || !peutValider} onPress={() => onValider(d)} testID={`esport-demande-valider-${d.id}`} />
+                <BoutonHub theme={theme} titre={tr('demandesCompte.valider')} variante="plein" desactive={occupe || Boolean(enCours) || !peutValider} onPress={() => onValider(d)} testID={`esport-demande-valider-${d.id}`} />
                 <BoutonConfirme
                   theme={theme}
-                  titre="Refuser"
-                  confirmation={`Oui, refuser ${d.pseudo}`}
+                  titre={tr('demandesCompte.refuser')}
+                  confirmation={tr('demandesCompte.oui_refuser', { pseudo: d.pseudo })}
                   desactive={occupe || Boolean(enCours)}
                   onConfirme={() =>
-                    action('Refus', async () => {
+                    action(tr('demandesCompte.refus'), async () => {
                       await client.refuserDemande(d.id);
-                      return `Demande pour ${d.pseudo} refusée : ${d.demandeurPseudo ?? 'le demandeur'} est prévenu.`;
+                      return tr('demandesCompte.refusee', { pseudo: d.pseudo, nom: d.demandeurPseudo ?? tr('demandesCompte.le_demandeur') });
                     })
                   }
                   testID={`esport-demande-refuser-${d.id}`}
@@ -108,18 +119,18 @@ export function DemandesCompte({
               </View>
             </View>
           ))}
-          {traitees.length ? <Text style={attenue}>{`Dernières traitées : ${traitees.slice(0, 5).map(d => `${d.pseudo} (${STATUTS[d.statut].toLowerCase()})`).join(', ')}`}</Text> : null}
+          {traitees.length ? <Text style={attenue}>{tr('demandesCompte.dernieres_traitees', { v: traitees.slice(0, 5).map(d => `${d.pseudo} (${STATUTS[d.statut].toLowerCase()})`).join(', ') })}</Text> : null}
         </Panneau>
       ) : null}
       {!fondateur && possibles.length > 0 ? <Proposer theme={theme} client={client} annuaire={annuaire} occupe={occupe || Boolean(enCours)} onAction={action} /> : null}
       {!fondateur && liste?.demandes.length ? (
         <Panneau theme={theme} testID="esport-mes-demandes">
-          <Intertitre theme={theme}>Mes demandes</Intertitre>
+          <Intertitre theme={theme}>{tr('demandesCompte.mes_demandes')}</Intertitre>
           {liste.demandes.map(d => (
             <View key={d.id} style={[communs.ligne, { justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 6 }]} testID={`esport-ma-demande-${d.id}`}>
               <Text style={[texte, { flex: 1 }]}>
                 {d.pseudo}
-                <Text style={attenue}>{`  ${d.role.nom} · ${d.team ?? '?'}${d.statut === 'refusee' && d.motif ? ` · ${d.motif}` : ''}`}</Text>
+                <Text style={attenue}>{`  ${nomRole(d.role.nom)} · ${d.team ?? '?'}${d.statut === 'refusee' && d.motif ? ` · ${d.motif}` : ''}`}</Text>
               </Text>
               <Pilule
                 theme={theme}
@@ -130,12 +141,12 @@ export function DemandesCompte({
               {d.statut === 'en_attente' ? (
                 <BoutonHub
                   theme={theme}
-                  titre="Annuler"
+                  titre={tr('assistant.annuler')}
                   desactive={Boolean(enCours)}
                   onPress={() =>
-                    action('Annulation', async () => {
+                    action(tr('demandesCompte.annulation'), async () => {
                       await client.annulerDemande(d.id);
-                      return 'Demande annulée.';
+                      return tr('demandesCompte.demande_annulee');
                     })
                   }
                   testID={`esport-ma-demande-annuler-${d.id}`}
@@ -177,20 +188,20 @@ function Proposer({
   const pret = MOTIF_PSEUDO.test(pseudo.trim()) && Boolean(roleId) && (mode === 'existant' || /^\S+@\S+\.\S+$/.test(email.trim()));
   return (
     <Panneau theme={theme} testID="esport-proposer">
-      <Intertitre theme={theme}>Proposer un membre</Intertitre>
+      <Intertitre theme={theme}>{tr('demandesCompte.proposer_un_membre')}</Intertitre>
       <View style={communs.ligne}>
-        <BoutonHub theme={theme} titre="Nouveau compte" variante={mode === 'nouveau' ? 'plein' : 'normal'} onPress={() => setMode('nouveau')} testID="esport-proposer-mode-nouveau" />
-        <BoutonHub theme={theme} titre="Compte Esport existant" variante={mode === 'existant' ? 'plein' : 'normal'} onPress={() => setMode('existant')} testID="esport-proposer-mode-existant" />
+        <BoutonHub theme={theme} titre={tr('demandesCompte.nouveau_compte')} variante={mode === 'nouveau' ? 'plein' : 'normal'} onPress={() => setMode('nouveau')} testID="esport-proposer-mode-nouveau" />
+        <BoutonHub theme={theme} titre={tr('demandesCompte.compte_esport_existant')} variante={mode === 'existant' ? 'plein' : 'normal'} onPress={() => setMode('existant')} testID="esport-proposer-mode-existant" />
       </View>
       <Text style={attenue}>
         {mode === 'nouveau'
-          ? 'Créer un compte demande les clés du Fondateur : votre demande lui est envoyée. Il la valide en un clic, et la personne reçoit son invitation par e-mail.'
-          : 'La personne a déjà l’Esport : saisissez son pseudo exact, elle est ajoutée tout de suite (sans le Fondateur).'}
+          ? tr('demandesCompte.creer_un_compte_demande')
+          : tr('demandesCompte.la_personne_a_deja')}
       </Text>
       {possibles.length > 1 ? (
         <Choix
           theme={theme}
-          libelle="Team"
+          libelle={tr('demandesCompte.team')}
           valeur={team.id}
           options={possibles.map(t => ({ id: t.id, nom: t.nom }))}
           onChoisir={id => {
@@ -203,26 +214,26 @@ function Proposer({
       ) : null}
       <Choix
         theme={theme}
-        libelle={`Rôle dans ${team.nom}`}
+        libelle={tr('ajoutTeams.role_dans', { nom: team.nom })}
         valeur={roleId}
-        options={team.roles.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur, desactive: !r.attribuable }))}
+        options={team.roles.map(r => ({ id: r.id, nom: nomRole(r.nom), couleur: r.couleur, desactive: !r.attribuable }))}
         onChoisir={setRoleId}
         testID="esport-proposer-role"
       />
       <View style={[communs.ligne, { alignItems: 'flex-start', gap: 12 }]}>
-        <Champ theme={theme} libelle={mode === 'nouveau' ? 'Nom ou pseudo' : 'Pseudo Esport exact'} valeur={pseudo} onChanger={setPseudo} maxLength={24} testID="esport-proposer-pseudo" style={{ flexGrow: 1, flexBasis: 200 }} />
-        {mode === 'nouveau' ? <Champ theme={theme} libelle="Adresse e-mail" valeur={email} onChanger={setEmail} maxLength={254} testID="esport-proposer-email" style={{ flexGrow: 1, flexBasis: 240 }} /> : null}
+        <Champ theme={theme} libelle={mode === 'nouveau' ? tr('demandesCompte.nom_ou_pseudo') : tr('demandesCompte.pseudo_esport_exact')} valeur={pseudo} onChanger={setPseudo} maxLength={24} testID="esport-proposer-pseudo" style={{ flexGrow: 1, flexBasis: 200 }} />
+        {mode === 'nouveau' ? <Champ theme={theme} libelle={tr('creationCompte.adresse_e_mail')} valeur={email} onChanger={setEmail} maxLength={254} testID="esport-proposer-email" style={{ flexGrow: 1, flexBasis: 240 }} /> : null}
       </View>
-      <Champ theme={theme} libelle="Poste en jeu (facultatif)" valeur={poste} onChanger={setPoste} maxLength={30} testID="esport-proposer-poste" />
-      {mode === 'nouveau' ? <Champ theme={theme} libelle="Mot pour le Fondateur (facultatif)" valeur={message} onChanger={setMessage} maxLength={200} testID="esport-proposer-message" /> : null}
+      <Champ theme={theme} libelle={tr('ajoutTeams.poste_en_jeu_facultatif')} valeur={poste} onChanger={setPoste} maxLength={30} testID="esport-proposer-poste" />
+      {mode === 'nouveau' ? <Champ theme={theme} libelle={tr('demandesCompte.mot_pour_le_fondateur')} valeur={message} onChanger={setMessage} maxLength={200} testID="esport-proposer-message" /> : null}
       <View style={[communs.ligne, { justifyContent: 'flex-end' }]}>
         <BoutonHub
           theme={theme}
-          titre={mode === 'nouveau' ? 'Envoyer la demande au Fondateur' : `Ajouter à ${team.nom}`}
+          titre={mode === 'nouveau' ? tr('demandesCompte.envoyer_la_demande_au') : tr('ajoutTeams.ajouter_a', { nom: team.nom })}
           variante="plein"
           desactive={occupe || !pret}
           onPress={() =>
-            onAction(mode === 'nouveau' ? 'Demande' : 'Ajout', async () => {
+            onAction(mode === 'nouveau' ? 'demande' : 'ajout', async () => {
               const extra = poste.trim() ? { posteJeu: poste.trim() } : {};
               if (mode === 'nouveau') {
                 await client.demanderCompte({ teamId: team.id, roleId: roleId!, pseudo: pseudo.trim(), email: email.trim(), ...extra, ...(message.trim() ? { message: message.trim() } : {}) });
@@ -234,7 +245,7 @@ function Proposer({
               setEmail('');
               setPoste('');
               setMessage('');
-              return mode === 'nouveau' ? `Demande envoyée au Fondateur pour ${nom}. Vous suivez son statut ci-dessous.` : `${nom} est ajouté à ${team.nom}.`;
+              return mode === 'nouveau' ? tr('demandesCompte.demande_envoyee_au_fondateur', { nom }) : tr('demandesCompte.est_ajoute_a', { nom, nom2: team.nom });
             })
           }
           testID="esport-proposer-envoyer"

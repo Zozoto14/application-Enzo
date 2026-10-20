@@ -15,6 +15,8 @@
  */
 
 import catalogueBrut from '../../esport/noyau/catalogue.json';
+import { langueCourante, tr, trOu, type Langue } from './i18n';
+import { traduireServeur } from './i18n/erreurs';
 
 // ------------------------------------------------------------------ Types (miroir de l'API)
 
@@ -53,6 +55,8 @@ export interface ProfilEsport {
 }
 export interface Moi {
   compte: string;
+  /** Langue choisie dans le profil (null : jamais choisie, on suit la langue de l'appareil). */
+  langue?: Langue | null;
   superAdmin: boolean;
   profil: ProfilEsport | null;
   peutCreerTeam: boolean;
@@ -430,8 +434,7 @@ export const estInactif = (e: unknown): boolean => e instanceof ErreurEsport && 
 export const DOC_ACTIVATION = 'https://github.com/Zozoto14/application-Enzo/blob/main/docs/esport/deploiement.md';
 
 /** Mention affichée dans l'app (données en clair côté serveur). */
-export const MENTION_DONNEES =
-  'Les données Esport sont stockées en clair sur le serveur Esport (Cloudflare, chiffrées au repos) : elles ne sont pas chiffrées de bout en bout comme le reste de l’app. Le serveur garde : votre pseudo (obligatoire), votre Riot ID et votre nom Discord (facultatifs), jamais d’adresse e-mail (celle d’un invité reste chiffrée dans l’Administration du Fondateur) ; vos teams, rôles et poste ; vos disponibilités, réponses et présences ; les réunions que vous déposez et leurs résumés PDF ; les tâches, objectifs, repères et commentaires de review, strats et fiches de scouting de la team ; le journal d’activité (conservé selon la durée choisie par la team, 1 an par défaut). Ces données servent uniquement au fonctionnement de la team, ne sont ni vendues ni transmises, sauf les messages que la team choisit d’envoyer sur son Discord. Vous pouvez à tout moment exporter vos données (JSON) ou supprimer votre compte Esport ci-dessous ; le Fondateur peut aussi le faire à votre demande. Membre mineur : l’accord d’un représentant légal est nécessaire.';
+export const mentionDonnees = (): string => tr('client.mention_donnees');
 
 // ------------------------------------------------------------------ Adresse du Worker
 
@@ -469,7 +472,7 @@ export async function adressePubliee(requete: Fetch | undefined): Promise<string
 
 function auPlus<T>(promesse: Promise<T>, ms: number): Promise<T> {
   return new Promise((ok, ko) => {
-    const minuterie = setTimeout(() => ko(new ErreurEsport('Le serveur Esport ne répond pas.', 0, 'injoignable')), ms);
+    const minuterie = setTimeout(() => ko(new ErreurEsport(tr('client.le_serveur_esport_ne'), 0, 'injoignable')), ms);
     promesse.then(
       v => {
         clearTimeout(minuterie);
@@ -504,6 +507,8 @@ export interface ClientEsport {
   ouvrir(): Promise<Moi>;
   moi(): Promise<Moi>;
   majProfil(p: { pseudo: string; riotId?: string; discord?: string }): Promise<Moi>;
+  /** Langue du profil (français / anglais), enregistrée sur le compte : le bot et les exports la connaissent. */
+  majLangue(langue: Langue): Promise<Moi>;
   exporterMesDonnees(): Promise<unknown>;
   supprimerMesDonnees(): Promise<void>;
   teams(): Promise<TeamListee[]>;
@@ -604,14 +609,14 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
       r = await auPlus(
         requete(`${config.adresse}${chemin}`, {
           method: methode,
-          headers: { 'Content-Type': binaire ? binaire.type : 'application/json', ...(binaire?.entetes ?? {}), ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}) },
+          headers: { 'Content-Type': binaire ? binaire.type : 'application/json', 'Accept-Language': langueCourante(), ...(binaire?.entetes ?? {}), ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}) },
           body: binaire ? binaire.octets : corps === undefined ? undefined : JSON.stringify(corps),
         }),
         binaire ? 120_000 : 15_000,
       );
     } catch (e) {
       if (e instanceof ErreurEsport) throw e;
-      throw new ErreurEsport('Le serveur Esport est injoignable.', 0, 'injoignable');
+      throw new ErreurEsport(tr('client.le_serveur_esport_est'), 0, 'injoignable');
     }
     let lu: unknown;
     try {
@@ -622,8 +627,8 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     if (!r.ok) {
       const o = (lu ?? {}) as { erreur?: string; code?: string; details?: Record<string, unknown> };
       // Pas de JSON de l'API (page d'erreur Cloudflare d'un Worker absent) : pas encore activé.
-      if (!o.code) throw new ErreurEsport('Le serveur Esport ne répond pas comme prévu.', r.status, 'injoignable');
-      throw new ErreurEsport(o.erreur ?? `Erreur ${r.status}`, r.status, o.code, o.details);
+      if (!o.code) throw new ErreurEsport(tr('client.le_serveur_esport_ne_2'), r.status, 'injoignable');
+      throw new ErreurEsport(o.erreur ? traduireServeur(o.erreur) : tr('client.erreur', { status: r.status }), r.status, o.code, o.details);
     }
     return lu as T;
   }
@@ -656,6 +661,7 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     },
     moi: () => appel('/moi'),
     majProfil: p => appel('/moi', 'PUT', p),
+    majLangue: langue => appel('/moi/langue', 'PUT', { langue }),
     exporterMesDonnees: () => appel('/moi/export'),
     supprimerMesDonnees: async () => {
       await appel('/moi', 'DELETE');
@@ -761,7 +767,17 @@ export async function trouverConfig(
 // ------------------------------------------------------------------ Aides pures
 
 const ACTIONS_COLONNES: ReadonlyArray<PermissionCatalogue['action']> = ['voir', 'creer', 'modifier', 'supprimer', 'special'];
-export const LIBELLES_COLONNES: Record<PermissionCatalogue['action'], string> = { voir: 'Voir', creer: 'Créer', modifier: 'Modifier', supprimer: 'Supprimer', special: 'Spécial' };
+export const LIBELLES_COLONNES: Record<PermissionCatalogue['action'], string> = { get voir() {
+      return tr('pageTeam.voir');
+    }, get creer() {
+      return tr('client.creer');
+    }, get modifier() {
+      return tr('membresRoles.modifier');
+    }, get supprimer() {
+      return tr('discord.supprimer');
+    }, get special() {
+      return tr('client.special');
+    } };
 
 /** Lignes de la matrice des permissions (seulement les groupes du cœur et des modules activés). */
 export function lignesMatrice(modulesActifs: readonly string[]): Array<GroupeCatalogue & { colonnes: Record<PermissionCatalogue['action'], PermissionCatalogue[]> }> {
@@ -769,8 +785,37 @@ export function lignesMatrice(modulesActifs: readonly string[]): Array<GroupeCat
     .filter(g => g.module === null || modulesActifs.includes(g.module))
     .map(g => ({
       ...g,
-      colonnes: Object.fromEntries(ACTIONS_COLONNES.map(a => [a, g.permissions.filter(p => p.action === a)])) as Record<PermissionCatalogue['action'], PermissionCatalogue[]>,
+      nom: nomGroupe(g),
+      colonnes: Object.fromEntries(ACTIONS_COLONNES.map(a => [a, g.permissions.filter(p => p.action === a).map(p => ({ ...p, libelle: libellePermission(p) }))])) as Record<
+        PermissionCatalogue['action'],
+        PermissionCatalogue[]
+      >,
     }));
 }
 
-export const nomModule = (cle: string): string => CATALOGUE.modules.find(m => m.cle === cle)?.nom ?? cle;
+// Noms du catalogue (catalogue.json, en français) traduits : clés `cat.*` des dictionnaires.
+const slugPoste = (p: string): string =>
+  p
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+export const nomModule = (cle: string): string => trOu(`cat.module.${cle}.nom`, CATALOGUE.modules.find(m => m.cle === cle)?.nom ?? cle);
+export const descriptionModule = (cle: string): string => trOu(`cat.module.${cle}.description`, CATALOGUE.modules.find(m => m.cle === cle)?.description ?? '');
+export const nomGroupe = (g: GroupeCatalogue): string => trOu(`cat.groupe.${g.cle}`, g.nom);
+export const libellePermission = (p: PermissionCatalogue): string => trOu(`cat.perm.${p.cle}`, p.libelle);
+/** Nom d'un rôle : les six rôles système (reconnus à leur nom français) sont traduits, pas les rôles créés par la team. */
+export const nomRole = (nom: string): string => {
+  const systeme = CATALOGUE.rolesSysteme.find(r => r.nom === nom);
+  return systeme ? trOu(`cat.role.${systeme.cle}.nom`, nom) : nom;
+};
+/** Type de réunion : les cinq types système (reconnus à leur nom français) sont traduits, pas ceux créés par la team. */
+const TYPES_REUNION_SYSTEME: Record<string, string> = { Hebdo: 'weekly', Mensuel: 'monthly', 'Débrief de match': 'debrief', Staff: 'staff', Autre: 'autre' };
+export const nomTypeReunion = (nom: string): string => (TYPES_REUNION_SYSTEME[nom] ? trOu(`cat.typereunion.${TYPES_REUNION_SYSTEME[nom]}`, nom) : nom);
+export const descriptionRole = (r: { cle: string; description: string }): string => trOu(`cat.role.${r.cle}.description`, r.description);
+export const nomPreset = (p: { cle: string; nom: string }): string => trOu(`cat.preset.${p.cle}.nom`, p.nom);
+export const descriptionPreset = (p: { cle: string; description: string }): string => trOu(`cat.preset.${p.cle}.description`, p.description);
+export const nomJeu = (cle: string): string => trOu(`cat.jeu.${cle}`, CATALOGUE.jeux.find(j => j.cle === cle)?.nom ?? cle);
+/** Poste d'un jeu (« Duelliste » / « Duelist »). */
+export const nomPoste = (poste: string): string => trOu(`cat.poste.${slugPoste(poste)}`, poste);

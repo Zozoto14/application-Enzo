@@ -144,7 +144,7 @@ describe('playbook', () => {
     expect(screen.getByTestId('esport-playbook-entree-p2')).toBeTruthy();
     expect(screen.getAllByTestId('esport-playbook-miniature')).toHaveLength(1);
     expect(screen.getByText('Notre exécution principale.')).toBeTruthy();
-    expect(screen.getByTestId('esport-playbook-compte').props.children).toBe('2 entrée(s) sur 3');
+    expect(screen.getByTestId('esport-playbook-compte').props.children).toBe('2 entrées sur 3');
     expect(screen.queryByTestId('esport-playbook-nouvelle')).toBeNull();
     expect(screen.queryByTestId('esport-playbook-valider-p2')).toBeNull();
     expect(screen.getByTestId('esport-mention-riot')).toBeTruthy();

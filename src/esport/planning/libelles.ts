@@ -5,25 +5,60 @@
  */
 
 import type { Recurrence, Reel, Rsvp, TypeEvenement } from './api';
+import { formaterDate, tr } from '../i18n';
 
 /** Types d'événements : libellé et couleur (lisible sur fond clair comme sombre). */
 export const TYPES_EVENEMENT: ReadonlyArray<{ cle: TypeEvenement; nom: string; couleur: string }> = [
-  { cle: 'training', nom: 'Entraînement', couleur: '#2563eb' },
-  { cle: 'scrim', nom: 'Scrim', couleur: '#7c3aed' },
-  { cle: 'match', nom: 'Match', couleur: '#dc2626' },
-  { cle: 'tournament', nom: 'Tournoi', couleur: '#d97706' },
-  { cle: 'meeting', nom: 'Réunion', couleur: '#0891b2' },
-  { cle: 'other', nom: 'Autre', couleur: '#64748b' },
+  { cle: 'training', get nom() {
+      return tr('planning.libelles.entrainement');
+    }, couleur: '#2563eb' },
+  { cle: 'scrim', get nom() {
+      return tr('planning.disponibilites.scrim');
+    }, couleur: '#7c3aed' },
+  { cle: 'match', get nom() {
+      return tr('planning.libelles.match');
+    }, couleur: '#dc2626' },
+  { cle: 'tournament', get nom() {
+      return tr('planning.libelles.tournoi');
+    }, couleur: '#d97706' },
+  { cle: 'meeting', get nom() {
+      return tr('planning.libelles.reunion');
+    }, couleur: '#0891b2' },
+  { cle: 'other', get nom() {
+      return tr('planning.libelles.autre');
+    }, couleur: '#64748b' },
 ];
 
 export const typeEvenement = (cle: string) => TYPES_EVENEMENT.find(t => t.cle === cle) ?? TYPES_EVENEMENT[TYPES_EVENEMENT.length - 1];
 
-export const LIBELLES_RSVP: Record<Rsvp, string> = { oui: 'Oui', peut_etre: 'Peut-être', non: 'Non', sans_reponse: 'Sans réponse' };
-export const LIBELLES_REEL: Record<Reel, string> = { present: 'Présent', retard: 'En retard', absent: 'Absent', excuse: 'Excusé', inconnu: 'Non marqué' };
+export const LIBELLES_RSVP: Record<Rsvp, string> = { get oui() {
+      return tr('objectifs.oui');
+    }, get peut_etre() {
+      return tr('planning.libelles.peut_etre');
+    }, get non() {
+      return tr('planning.libelles.non');
+    }, get sans_reponse() {
+      return tr('planning.libelles.sans_reponse');
+    } };
+export const LIBELLES_REEL: Record<Reel, string> = { get present() {
+      return tr('planning.libelles.present');
+    }, get retard() {
+      return tr('libelles.en_retard');
+    }, get absent() {
+      return tr('planning.libelles.absent');
+    }, get excuse() {
+      return tr('planning.libelles.excuse');
+    }, get inconnu() {
+      return tr('planning.libelles.non_marque');
+    } };
 
-export const JOURS_COURTS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-export const JOURS = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
-const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+/** Nom d'un jour ISO (1 = lundi … 7 = dimanche) dans la langue courante. */
+export const nomJour = (iso: number, style: 'long' | 'short' | 'narrow' = 'long'): string => formaterDate(Date.UTC(2024, 0, iso), { weekday: style, timeZone: 'UTC' });
+/** Les sept jours, du lundi au dimanche : « lundi » … ou « Monday » … */
+export const joursSemaine = (): string[] => [1, 2, 3, 4, 5, 6, 7].map(i => nomJour(i));
+/** Initiales des jours : « L M M J V S D » ou « M T W T F S S ». */
+export const joursCourts = (): string[] => [1, 2, 3, 4, 5, 6, 7].map(i => nomJour(i, 'narrow'));
+const nomDuMois = (m: number): string => formaterDate(Date.UTC(2024, m - 1, 1), { month: 'long', timeZone: 'UTC' });
 
 // ------------------------------------------------------------------ Dates civiles
 
@@ -51,17 +86,18 @@ export const grilleMois = (d: string): string[] => {
   const debut = lundiDe(premierDuMois(d));
   return Array.from({ length: 42 }, (_, i) => ajouterJours(debut, i));
 };
+/** « octobre 2026 » / « October 2026 » */
 export const nomMois = (d: string): string => {
   const [a, m] = parties(d);
-  return `${MOIS[m - 1]} ${a}`;
+  return `${nomDuMois(m)} ${a}`;
 };
-/** « mardi 20 octobre » */
+/** « mardi 20 octobre » / « Tuesday 20 October » */
 export const dateLongue = (d: string): string => {
   const [, m, j] = parties(d);
-  return `${JOURS[jourSemaine(d) - 1]} ${j} ${MOIS[m - 1]}`;
+  return `${nomJour(jourSemaine(d))} ${j} ${nomDuMois(m)}`;
 };
-/** « mar. 20/10 » */
-export const dateCourteJour = (d: string): string => `${JOURS[jourSemaine(d) - 1].slice(0, 3)}. ${d.slice(8, 10)}/${d.slice(5, 7)}`;
+/** « mar. 20/10 » / « Tue 20/10 » */
+export const dateCourteJour = (d: string): string => `${nomJour(jourSemaine(d), 'short')} ${d.slice(8, 10)}/${d.slice(5, 7)}`;
 
 /** Fuseau de l'appareil (IANA), « UTC » à défaut. */
 export function fuseauAppareil(): string {
@@ -94,11 +130,11 @@ export const nomFuseau = (f: string): string => (f.split('/').pop() ?? f).replac
 export const pourcentage = (taux: number | null | undefined): string => (taux === null || taux === undefined ? '—' : `${Math.round(taux * 100)} %`);
 
 export function resumeRecurrence(r: Recurrence | null | undefined): string {
-  if (!r) return 'Une seule fois';
-  const jours = r.jours.map(j => JOURS[j - 1]).join(', ');
-  const rythme = r.intervalle > 1 ? `Toutes les ${r.intervalle} semaines` : 'Chaque semaine';
-  const fin = r.jusqua ? ` · jusqu’au ${r.jusqua.slice(8, 10)}/${r.jusqua.slice(5, 7)}/${r.jusqua.slice(0, 4)}` : r.nombre ? ` · ${r.nombre} fois` : '';
-  return `${rythme} : ${jours}${fin}`;
+  if (!r) return tr('planning.libelles.une_seule_fois');
+  const jours = r.jours.map(j => nomJour(j)).join(', ');
+  const rythme = r.intervalle > 1 ? tr('planning.libelles.toutes_les_semaines', { intervalle: r.intervalle }) : tr('planning.libelles.chaque_semaine');
+  const fin = r.jusqua ? tr('planning.libelles.jusqu_au', { jour: r.jusqua.slice(8, 10), mois: r.jusqua.slice(5, 7), annee: r.jusqua.slice(0, 4) }) : r.nombre ? tr('planning.libelles.n_fois', { n: r.nombre }) : '';
+  return tr('planning.libelles.recurrence', { rythme, jours, fin });
 }
 
 const texte = (v: unknown): string => (typeof v === 'string' ? v : '?');
@@ -107,29 +143,29 @@ const texte = (v: unknown): string => (typeof v === 'string' ? v : '?');
 export function phraseJournalPlanning(action: string, qui: string, m: Record<string, unknown>, nom: (id: unknown) => string): string | undefined {
   switch (action) {
     case 'event.created':
-      return `${qui} a créé « ${texte(m.titre)} » (${typeEvenement(texte(m.type)).nom}${m.recurrent ? ', récurrent' : ''})`;
+      return tr(m.recurrent ? 'planning.libelles.a_cree_recurrent' : 'planning.libelles.a_cree', { qui, titre: texte(m.titre), type: typeEvenement(texte(m.type)).nom });
     case 'event.updated':
-      return `${qui} a modifié « ${texte(m.titre)} »`;
+      return tr('planning.libelles.a_modifie', { qui, v: texte(m.titre) });
     case 'event.deleted':
-      return `${qui} a supprimé « ${texte(m.titre)} »`;
+      return tr('planning.libelles.a_supprime', { qui, v: texte(m.titre) });
     case 'event.occurrence_updated':
-      return `${qui} a modifié une date de « ${texte(m.titre)} »`;
+      return tr('planning.libelles.a_modifie_une_date', { qui, v: texte(m.titre) });
     case 'event.occurrence_cancelled':
-      return m.suivantes ? `${qui} a arrêté la série « ${texte(m.titre)} »` : `${qui} a annulé une date de « ${texte(m.titre)} »`;
+      return m.suivantes ? tr('planning.libelles.a_arrete_la_serie', { qui, v: texte(m.titre) }) : tr('planning.libelles.a_annule_une_date', { qui, v: texte(m.titre) });
     case 'attendance.rsvp':
-      return `${qui} a répondu « ${LIBELLES_RSVP[m.rsvp as Rsvp] ?? '?'} » pour « ${texte(m.titre)} »`;
+      return tr('planning.libelles.a_repondu', { qui, reponse: LIBELLES_RSVP[m.rsvp as Rsvp] ?? '?', titre: texte(m.titre) });
     case 'attendance.marked':
-      return `${qui} a marqué la présence de « ${texte(m.titre)} »`;
+      return tr('planning.libelles.a_marque_la_presence', { qui, v: texte(m.titre) });
     case 'attendance.reminder':
-      return `Rappel de réponse envoyé à ${nom(m.compte)} pour « ${texte(m.titre)} »`;
+      return tr('planning.libelles.rappel_de_reponse_envoye', { v: nom(m.compte), v2: texte(m.titre) });
     case 'availability.updated':
-      return `${qui} a mis à jour ses disponibilités`;
+      return tr('planning.libelles.a_mis_a_jour', { qui });
     case 'availability.settings_changed':
-      return `${qui} a changé les réglages du planning (effectif minimum ${String(m.effectifMin ?? '?')})`;
+      return tr('planning.libelles.reglages_changes', { qui, min: String(m.effectifMin ?? '?') });
     case 'ical.token_created':
-      return `${qui} a créé un abonnement au calendrier`;
+      return tr('planning.libelles.a_cree_un_abonnement', { qui });
     case 'ical.token_revoked':
-      return `${qui} a révoqué un abonnement au calendrier`;
+      return tr('planning.libelles.a_revoque_un_abonnement', { qui });
     default:
       return undefined;
   }
@@ -137,16 +173,16 @@ export function phraseJournalPlanning(action: string, qui: string, m: Record<str
 
 /** Phrase d'une notification du planning (ou `undefined`). */
 export function phraseNotificationPlanning(type: string, team: string, c: Record<string, unknown>): string | undefined {
-  const quand = typeof c.debut === 'string' ? ` (${new Date(c.debut).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })})` : '';
+  const quand = typeof c.debut === 'string' ? ` (${formaterDate(new Date(c.debut), { weekday: 'short', day: 'numeric', month: 'short' })})` : '';
   switch (type) {
     case 'evenement-nouveau':
-      return `Nouvel événement dans ${team} : ${texte(c.titre)}${quand}`;
+      return tr('planning.libelles.nouvel_evenement_dans', { team, v: texte(c.titre), quand });
     case 'evenement-modifie':
-      return `${team} : « ${texte(c.titre)} » a changé${quand}`;
+      return tr('planning.libelles.a_change', { team, v: texte(c.titre), quand });
     case 'evenement-annule':
-      return `${team} : « ${texte(c.titre)} » est annulé${quand}`;
+      return tr('planning.libelles.est_annule', { team, v: texte(c.titre), quand });
     case 'rappel-rsvp':
-      return `Serez-vous là ? ${texte(c.titre)}${quand} · ${team}`;
+      return tr('planning.libelles.serez_vous_la', { v: texte(c.titre), quand, team });
     default:
       return undefined;
   }

@@ -17,6 +17,7 @@ import { Text, View } from 'react-native';
 import { police } from '../../../hub/themes';
 import { lienYoutubeA } from '../../review/youtube';
 import type { CommandeLecteur, EtatLecteur, PropsLecteur } from './typesLecteur';
+import { tr } from '../../i18n';
 
 export { VITESSES } from './typesLecteur';
 export const lecteurIntegre = true;
@@ -48,14 +49,14 @@ export function chargerApiYoutube(): Promise<ApiYT> {
     g.onYouTubeIframeAPIReady = () => {
       precedent?.();
       if (g.YT?.Player) ok(g.YT);
-      else ko(new Error('API YouTube indisponible'));
+      else ko(new Error(tr('review.lecteur.api_youtube_indisponible')));
     };
     const script = g.document!.createElement('script');
     script.src = SCRIPT;
     script.async = true;
     script.onerror = () => {
       chargement = undefined;
-      ko(new Error('Le lecteur YouTube n’a pas pu être chargé.'));
+      ko(new Error(tr('review.lecteur.le_lecteur_youtube_n')));
     };
     g.document!.head.appendChild(script);
   });
@@ -112,14 +113,14 @@ export function Lecteur({ theme, videoId, depart = 0, onPret, onEtat, calque }: 
               else if (e.data === YT.PlayerState.ENDED) signaler('fin');
             },
             onError: (e: { data: number }) => {
-              setErreur(e.data === 101 || e.data === 150 ? 'Le propriétaire de la vidéo interdit la lecture intégrée.' : 'La vidéo n’a pas pu être lue (privée, supprimée ou indisponible).');
+              setErreur(e.data === 101 || e.data === 150 ? tr('review.lecteur.le_proprietaire_de_la') : tr('review.lecteur.la_video_n_a'));
               signaler('erreur');
             },
           },
         });
       },
       e => {
-        if (vivant) setErreur(e instanceof Error ? e.message : 'Lecteur indisponible.');
+        if (vivant) setErreur(e instanceof Error ? e.message : tr('review.lecteur.lecteur_indisponible'));
         signaler('erreur');
       },
     );
@@ -148,8 +149,7 @@ export function Lecteur({ theme, videoId, depart = 0, onPret, onEtat, calque }: 
         <View testID="esport-lecteur-erreur" style={{ gap: 4 }}>
           <Text style={{ color: theme.critique, ...police(theme.policeTexte) }}>{erreur}</Text>
           <a href={lienYoutubeA(videoId, depart)} target="_blank" rel="noopener noreferrer" style={{ color: theme.accent }}>
-            Ouvrir dans YouTube
-          </a>
+            {tr('review.lecteur.ouvrir_dans_youtube')}</a>
         </View>
       ) : null}
     </View>

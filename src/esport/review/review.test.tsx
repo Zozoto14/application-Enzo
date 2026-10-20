@@ -253,11 +253,11 @@ describe('écran Review (app native : lecture seule, ouverture dans YouTube)', (
     await fireEvent.press(await screen.findByTestId('esport-review-rv1'));
     await screen.findByTestId('esport-repere-r1');
     expect(within(screen.getByTestId('esport-repere-note-r1')).getByText(/trader/)).toBeTruthy();
-    expect(screen.getByTestId('esport-review-compte').props.children.join('')).toBe('3 / 3 repère(s)');
+    expect([screen.getByTestId('esport-review-compte').props.children].flat().join('')).toBe('3 / 3 repères');
     await fireEvent.press(screen.getByTestId('esport-filtre-cat-erreur'));
     expect(screen.queryByTestId('esport-repere-r2')).toBeNull();
     expect(screen.getByTestId('esport-repere-r1')).toBeTruthy();
-    expect(screen.getByTestId('esport-review-compte').props.children.join('')).toBe('1 / 3 repère(s)');
+    expect([screen.getByTestId('esport-review-compte').props.children].flat().join('')).toBe('1 / 3 repères');
     await fireEvent.press(screen.getByTestId('esport-filtre-effacer'));
     await fireEvent.press(screen.getByTestId('esport-filtre-joueur-kai12345'));
     expect(screen.queryByTestId('esport-repere-r1')).toBeNull();

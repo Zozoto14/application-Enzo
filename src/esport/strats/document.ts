@@ -7,6 +7,8 @@
  * toujours dans la forme que le serveur accepte. Repère : carré de 1000.
  */
 
+import { tr } from '../i18n';
+
 export const FORMAT_STRAT = 'esport-strat';
 export const VERSION_DOCUMENT = 2;
 export const TAILLE_MAX_DOCUMENT = 256 * 1024;
@@ -134,9 +136,9 @@ export function documentVide(carte: Carte, side: Side = 'attaque', jeu: Document
     jeu,
     carte,
     side,
-    joueurs: COULEURS_JOUEURS.map((couleur, i) => ({ nom: `Joueur ${i + 1}`, couleur, agent: null })),
+    joueurs: COULEURS_JOUEURS.map((couleur, i) => ({ nom: tr('strats.document.joueur', { v: i + 1 }), couleur, agent: null })),
     calques: calquesParDefaut(),
-    etapes: [{ id: 'e1', titre: 'Étape 1', note: '', objets: [] }],
+    etapes: [{ id: 'e1', titre: tr('strats.document.etape_1'), note: '', objets: [] }],
   };
 }
 
@@ -224,7 +226,7 @@ export function appliquer(d: DocumentStrat, a: Action): DocumentStrat {
       if (d.etapes.length >= ETAPES_MAX) return d;
       const id = idUnique(d.etapes.map(e => e.id), 'e');
       const etapes = d.etapes.slice();
-      etapes.splice(borne(a.apres + 1, 0, etapes.length), 0, { id, titre: `Étape ${d.etapes.length + 1}`, note: '', objets: [] });
+      etapes.splice(borne(a.apres + 1, 0, etapes.length), 0, { id, titre: tr('strats.document.etape', { v: d.etapes.length + 1 }), note: '', objets: [] });
       return { ...d, etapes };
     }
     case 'dupliquerEtape': {
@@ -238,7 +240,7 @@ export function appliquer(d: DocumentStrat, a: Action): DocumentStrat {
         return { ...o, id };
       });
       const etapes = d.etapes.slice();
-      etapes.splice(a.etape + 1, 0, { id: idUnique(d.etapes.map(e => e.id), 'e'), titre: `${source.titre} (suite)`.slice(0, 60), note: source.note, objets });
+      etapes.splice(a.etape + 1, 0, { id: idUnique(d.etapes.map(e => e.id), 'e'), titre: tr('strats.document.suite', { titre: source.titre }).slice(0, 60), note: source.note, objets });
       return { ...d, etapes };
     }
     case 'supprimerEtape': {
@@ -320,9 +322,9 @@ function migrerV1(v: Record<string, unknown>): Record<string, unknown> {
     jeu: v.jeu ?? 'valorant',
     carte,
     side: v.side,
-    joueurs: COULEURS_JOUEURS.map((couleur, i) => ({ nom: `Joueur ${i + 1}`, couleur, agent: null })),
+    joueurs: COULEURS_JOUEURS.map((couleur, i) => ({ nom: tr('strats.document.joueur', { v: i + 1 }), couleur, agent: null })),
     calques: calquesParDefaut(),
-    etapes: [{ id: 'e1', titre: 'Étape 1', note: typeof v.notes === 'string' ? v.notes : '', objets: Array.isArray(v.objets) ? v.objets : [] }],
+    etapes: [{ id: 'e1', titre: tr('strats.document.etape_1'), note: typeof v.notes === 'string' ? v.notes : '', objets: Array.isArray(v.objets) ? v.objets : [] }],
   };
 }
 
@@ -337,18 +339,18 @@ export function lireDocument(source: string | unknown): DocumentStrat {
     try {
       v = JSON.parse(source);
     } catch {
-      throw new ErreurDocument('Strat illisible (JSON).');
+      throw new ErreurDocument(tr('strats.document.strat_illisible_json'));
     }
   }
-  if (!v || typeof v !== 'object' || Array.isArray(v)) throw new ErreurDocument('Strat illisible.');
+  if (!v || typeof v !== 'object' || Array.isArray(v)) throw new ErreurDocument(tr('strats.document.strat_illisible'));
   let d = v as Record<string, unknown>;
   const version = (d.version as number | undefined) ?? 1;
-  if (!Number.isInteger(version) || version < 1) throw new ErreurDocument('Version de strat illisible.');
-  if (version > VERSION_DOCUMENT) throw new ErreurDocument('Cette strat vient d’une version plus récente de l’app : mettez l’app à jour.');
+  if (!Number.isInteger(version) || version < 1) throw new ErreurDocument(tr('strats.document.version_de_strat_illisible'));
+  if (version > VERSION_DOCUMENT) throw new ErreurDocument(tr('strats.document.cette_strat_vient_d'));
   if (version === 1) d = migrerV1(d);
   const carte = d.carte as Carte | undefined;
-  if (!carte || typeof carte.cle !== 'string') throw new ErreurDocument('Strat sans carte.');
-  if (!Array.isArray(d.etapes) || d.etapes.length === 0) throw new ErreurDocument('Strat sans étape.');
+  if (!carte || typeof carte.cle !== 'string') throw new ErreurDocument(tr('strats.document.strat_sans_carte'));
+  if (!Array.isArray(d.etapes) || d.etapes.length === 0) throw new ErreurDocument(tr('strats.document.strat_sans_etape'));
   const calques = calquesParDefaut();
   const brut = (d.calques ?? {}) as Partial<DocumentStrat['calques']>;
   for (const c of CALQUES) calques[c] = { visible: brut[c]?.visible !== false, verrou: brut[c]?.verrou === true };

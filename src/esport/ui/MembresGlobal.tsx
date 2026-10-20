@@ -25,6 +25,9 @@ import { AjoutTeams } from './AjoutTeams';
 import { CreationCompte } from './CreationCompte';
 import { DemandesCompte } from './DemandesCompte';
 import { useIdentite } from './Identite';
+import { dateJour } from '../libelles';
+import { tr, trn } from '../i18n';
+import { nomRole, nomPoste } from '../client';
 
 type FiltreStatut = 'tous' | 'invite' | 'actif' | 'suspendu' | 'sansteam';
 
@@ -49,7 +52,13 @@ export function filtrerComptes(comptes: readonly CompteEsport[], f: { recherche:
   });
 }
 
-const LIBELLES_STATUT: Record<Exclude<FiltreStatut, 'tous' | 'sansteam'>, string> = { invite: 'Invité', actif: 'Actif', suspendu: 'Suspendu' };
+const LIBELLES_STATUT: Record<Exclude<FiltreStatut, 'tous' | 'sansteam'>, string> = { get invite() {
+      return tr('membresGlobal.invite');
+    }, get actif() {
+      return tr('membresGlobal.actif');
+    }, get suspendu() {
+      return tr('membresGlobal.suspendu');
+    } };
 
 export function MembresGlobal({
   theme,
@@ -117,13 +126,13 @@ export function MembresGlobal({
       <EnTetePage
         theme={theme}
         large={large}
-        titre="Membres"
-        sous={annuaire ? `${tous.length} compte${tous.length > 1 ? 's' : ''}, dont ${sansTeam} sans team · ${annuaire.teams.length} team${annuaire.teams.length > 1 ? 's' : ''}` : 'Chargement…'}
+        titre={tr('dashboard.membres')}
+        sous={annuaire ? tr('membresGlobal.resume_annuaire', { comptes: trn('membresGlobal.comptes', tous.length), sansTeam, teams: trn('membresGlobal.teams', annuaire.teams.length) }) : tr('journal.chargement')}
         action={
           capacite.creer ? (
             <BoutonHub
               theme={theme}
-              titre={creation ? 'Fermer' : '+ Créer un compte'}
+              titre={creation ? tr('discord.fermer') : tr('membresGlobal.creer_un_compte')}
               variante={creation ? 'normal' : 'plein'}
               onPress={() => {
                 setDemande(undefined);
@@ -137,7 +146,7 @@ export function MembresGlobal({
       />
       {annuaire?.superAdmin && (annuaire.demandesEnAttente ?? 0) > 0 ? (
         <View style={communs.ligne}>
-          <Pilule theme={theme} texte={`Demandes en attente : ${annuaire.demandesEnAttente}`} couleur={theme.alerte} testID="esport-membres-badge-demandes" />
+          <Pilule theme={theme} texte={tr('membresGlobal.demandes_en_attente', { demandesEnAttente: annuaire.demandesEnAttente })} couleur={theme.alerte} testID="esport-membres-badge-demandes" />
         </View>
       ) : null}
       {!annuaire && !erreur ? <SqueletteCartes theme={theme} n={2} large={large} /> : null}
@@ -184,20 +193,20 @@ export function MembresGlobal({
       ) : null}
       {orphelins.length > 0 ? (
         <Panneau theme={theme} testID="esport-membres-orphelins">
-          <Intertitre theme={theme}>Comptes supprimés de l’Administration</Intertitre>
-          <Text style={attenue}>Ces comptes n’existent plus dans le hub mais sont encore dans l’Esport (serveur injoignable au moment de la suppression).</Text>
+          <Intertitre theme={theme}>{tr('membresGlobal.comptes_supprimes_de_l')}</Intertitre>
+          <Text style={attenue}>{tr('membresGlobal.ces_comptes_n_existent')}</Text>
           {orphelins.map(c => (
             <View key={c.compte} style={communs.ligne}>
               <Text style={[texte, { flex: 1 }]}>{c.pseudo}</Text>
               <BoutonHub
                 theme={theme}
-                titre="Retirer de l’Esport"
+                titre={tr('membresGlobal.retirer_de_l_esport')}
                 variante="danger"
                 desactive={Boolean(enCours)}
                 onPress={() =>
-                  action('Retrait', async () => {
+                  action(tr('membresGlobal.retrait'), async () => {
                     const r = await client.retirerCompte(c.compte);
-                    return `${c.pseudo} retiré de l’Esport (${r.teams} team(s)).`;
+                    return tr('membresGlobal.retire_de_l_esport', { pseudo: c.pseudo, teams: trn('membresGlobal.teams', Number(r.teams)) });
                   })
                 }
                 testID={`esport-orphelin-retirer-${c.compte}`}
@@ -208,21 +217,21 @@ export function MembresGlobal({
       ) : null}
       {annuaire ? (
         <Panneau theme={theme} testID="esport-membres-filtres">
-          <Champ theme={theme} libelle="Rechercher" valeur={recherche} onChanger={setRecherche} placeholder="Pseudo, Riot ID, Discord" maxLength={40} testID="esport-membres-recherche" />
+          <Champ theme={theme} libelle={tr('membresGlobal.rechercher')} valeur={recherche} onChanger={setRecherche} placeholder={tr('membresGlobal.pseudo_riot_id_discord')} maxLength={40} testID="esport-membres-recherche" />
           <Segments<FiltreStatut>
             theme={theme}
-            libelle="Statut"
+            libelle={tr('membresGlobal.statut')}
             valeur={statut}
-            options={[['tous', 'Tous'], ['invite', 'Invités'], ['actif', 'Actifs'], ['suspendu', 'Suspendus'], ['sansteam', 'Sans team']]}
+            options={[['tous', tr('journal.tous')], ['invite', tr('membresGlobal.invites')], ['actif', tr('membresGlobal.actifs')], ['suspendu', tr('membresGlobal.suspendus')], ['sansteam', tr('membresGlobal.sans_team')]]}
             onChoisir={setStatut}
             testID="esport-membres-statut"
           />
           {annuaire.teams.length > 1 ? (
             <Choix
               theme={theme}
-              libelle="Team"
+              libelle={tr('demandesCompte.team')}
               valeur={team}
-              options={[{ id: 'toutes', nom: 'Toutes' }, ...annuaire.teams.map(t => ({ id: t.id, nom: t.nom }))]}
+              options={[{ id: 'toutes', nom: tr('journal.toutes') }, ...annuaire.teams.map(t => ({ id: t.id, nom: t.nom }))]}
               onChoisir={v => {
                 setTeam(v);
                 setRole('tous');
@@ -230,16 +239,16 @@ export function MembresGlobal({
               testID="esport-membres-team"
             />
           ) : null}
-          <Choix theme={theme} libelle="Rôle" valeur={role} options={[{ id: 'tous', nom: 'Tous' }, ...nomsRoles.map(n => ({ id: n, nom: n }))]} onChoisir={setRole} testID="esport-membres-role" />
+          <Choix theme={theme} libelle={tr('membresGlobal.role')} valeur={role} options={[{ id: 'tous', nom: tr('journal.tous') }, ...nomsRoles.map(n => ({ id: n, nom: nomRole(n) }))]} onChoisir={setRole} testID="esport-membres-role" />
         </Panneau>
       ) : null}
       {annuaire && annuaire.teams.length === 0 ? (
         <Panneau theme={theme}>
-          <Text style={texte}>Vous ne voyez les membres d’aucune team.</Text>
+          <Text style={texte}>{tr('membresGlobal.vous_ne_voyez_les')}</Text>
         </Panneau>
       ) : null}
       <View style={{ gap: 8 }} testID="esport-membres-liste">
-        {annuaire && visibles.length === 0 && tous.length > 0 ? <EtatVide theme={theme} glyphe="☺" titre="Aucun membre ne correspond aux filtres" texte="Changez la recherche ou le statut." /> : null}
+        {annuaire && visibles.length === 0 && tous.length > 0 ? <EtatVide theme={theme} glyphe="☺" titre={tr('membresGlobal.aucun_membre_ne_correspond')} texte={tr('membresGlobal.changez_la_recherche_ou')} /> : null}
         {annuaire
           ? visibles.map(c => (
               <LigneCompte
@@ -314,31 +323,31 @@ function LigneCompte({
   const hubConnu = contexte.profils?.tous.some(p => p.id === compte.compte);
 
   const renvoyer = () =>
-    exigerIdentite(`Renvoyer l’invitation de ${compte.pseudo}`, () =>
-      onAction('Invitation', async () => {
+    exigerIdentite(tr('membresGlobal.renvoyer_l_invitation_de', { pseudo: compte.pseudo }), () =>
+      onAction('invitation', async () => {
         setErreurLocale(undefined);
         const inv = await renvoyerInvitation(contexte, compte.compte, compte.pseudo, contexte.maintenant ?? Date.now());
         setInvitation(inv);
         if (inv.erreur) setErreurLocale(inv.erreur);
-        return inv.erreur ? undefined : `Nouvelle invitation de ${compte.pseudo} prête : l’ancienne ne fonctionne plus.`;
+        return inv.erreur ? undefined : tr('membresGlobal.nouvelle_invitation_de_prete', { pseudo: compte.pseudo });
       }),
     );
   const revoquer = () =>
-    exigerIdentite(`Révoquer l’accès de ${compte.pseudo}`, () =>
-      onAction('Révocation', async () => {
+    exigerIdentite(tr('membresGlobal.revoquer_l_acces_de', { pseudo: compte.pseudo }), () =>
+      onAction('revocation', async () => {
         await revoquerCompte(contexte, compte.compte, compte.pseudo, contexte.maintenant ?? Date.now());
         // Côté Esport : suspendu dans ses teams (rétablir l'accès se fait dans l'Administration).
         for (const a of compte.appartenances) {
           if (a.statut === 'actif' && a.gerable) await client.modifierMembre(a.teamId, a.membreId, { statut: 'suspendu' }).catch(() => undefined);
         }
         setInvitation(undefined);
-        return `${compte.pseudo} ne peut plus se connecter (invitation annulée, compte désactivé dans l’Administration).`;
+        return tr('membresGlobal.ne_peut_plus_se', { pseudo: compte.pseudo });
       }),
     );
 
   return (
     <View style={{ borderWidth: 1, borderColor: ouvert ? theme.accent : theme.ligne, borderRadius: theme.rayonMoyen, backgroundColor: theme.surface }} testID={`esport-compte-${compte.compte}`}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Gérer ${compte.pseudo}`} accessibilityState={{ expanded: ouvert }} onPress={onBasculer} style={{ padding: 12, gap: 6 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={tr('membresGlobal.gerer', { pseudo: compte.pseudo })} accessibilityState={{ expanded: ouvert }} onPress={onBasculer} style={{ padding: 12, gap: 6 }}>
         <View style={[communs.ligne, { gap: 10 }]}>
           <View style={{ width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: teinteTransparente(couleur, 0.22) }}>
             <Text style={[texte, { fontWeight: '800' }]}>{compte.pseudo.slice(0, 1).toUpperCase()}</Text>
@@ -346,30 +355,30 @@ function LigneCompte({
           <View style={{ flex: 1, minWidth: 140 }}>
             <Text style={[texte, { fontWeight: '700' }]} numberOfLines={1}>
               {compte.pseudo}
-              {compte.moi ? ' (vous)' : ''}
+              {compte.moi ? tr('membresGlobal.vous') : ''}
             </Text>
             <Text style={attenue} numberOfLines={1}>
-              {[compte.riotId, nomsTeams.join(', ') || 'Aucune team'].filter(Boolean).join(' · ')}
+              {[compte.riotId, nomsTeams.join(', ') || tr('membresGlobal.aucune_team')].filter(Boolean).join(' · ')}
             </Text>
           </View>
           {compte.horsEsport ? (
-            <Pilule theme={theme} texte="Jamais connecté" couleur={theme.attenue} testID={`esport-compte-statut-${compte.compte}`} />
+            <Pilule theme={theme} texte={tr('membresGlobal.jamais_connecte')} couleur={theme.attenue} testID={`esport-compte-statut-${compte.compte}`} />
           ) : (
             <Pilule theme={theme} texte={LIBELLES_STATUT[statut]} couleur={couleur} testID={`esport-compte-statut-${compte.compte}`} />
           )}
-          {compte.appartenances.length === 0 ? <Pilule theme={theme} texte="Sans team" couleur={theme.alerte} testID={`esport-compte-sans-team-${compte.compte}`} /> : null}
+          {compte.appartenances.length === 0 ? <Pilule theme={theme} texte={tr('membresGlobal.sans_team')} couleur={theme.alerte} testID={`esport-compte-sans-team-${compte.compte}`} /> : null}
         </View>
         {large || ouvert ? (
           <View style={[communs.ligne, { paddingLeft: 44 }]}>
             {compte.appartenances.map(a => (
-              <PastilleRole key={a.membreId} theme={theme} nom={`${teamDe(a.teamId)?.nom ?? '?'} · ${a.role.nom}${a.statut === 'suspendu' ? ' (suspendu)' : ''}`} couleur={a.role.couleur} />
+              <PastilleRole key={a.membreId} theme={theme} nom={`${teamDe(a.teamId)?.nom ?? '?'} · ${nomRole(a.role.nom)}${a.statut === 'suspendu' ? tr('membresGlobal.suspendu_entre_parentheses') : ''}`} couleur={a.role.couleur} />
             ))}
           </View>
         ) : null}
       </Pressable>
       {!ouvert && annuaire.teams.some(t => t.droits.ajouter && !t.archivee) ? (
         <View style={{ paddingHorizontal: 12, paddingBottom: 12, paddingLeft: 56, flexDirection: 'row' }}>
-          <BoutonHub theme={theme} titre="Ajouter à une team" onPress={onBasculer} testID={`esport-compte-ajouter-${compte.compte}`} />
+          <BoutonHub theme={theme} titre={tr('ajoutTeams.ajouter_a_une_team')} onPress={onBasculer} testID={`esport-compte-ajouter-${compte.compte}`} />
         </View>
       ) : null}
       {ouvert ? (
@@ -381,18 +390,17 @@ function LigneCompte({
           <AjoutTeams theme={theme} compte={compte} annuaire={annuaire} client={client} onFait={onRecharger} onAvis={onAvis} />
           {compte.horsEsport ? (
             <Text style={attenue} testID={`esport-compte-hors-esport-${compte.compte}`}>
-              Compte du hub avec accès à l’Esport, jamais ouvert dans l’Esport. Ajoutez-le à une team : il la verra directement à sa prochaine ouverture de l’Esport, sans code.
-            </Text>
+              {tr('membresGlobal.compte_du_hub_avec')}</Text>
           ) : null}
           {capacite && statut === 'invite' && !compte.horsEsport ? (
             <View style={{ gap: 8 }} testID={`esport-compte-invitation-${compte.compte}`}>
-              <Intertitre theme={theme}>Invitation</Intertitre>
-              <Text style={attenue}>{`Pas encore connecté${compte.inviteLe ? ` (invité le ${compte.inviteLe.slice(0, 10).split('-').reverse().join('/')})` : ''}.`}</Text>
+              <Intertitre theme={theme}>{tr('membresGlobal.invitation')}</Intertitre>
+              <Text style={attenue}>{tr('membresGlobal.pas_encore_connecte', { invite: compte.inviteLe ? tr('membresGlobal.invite_le', { v: dateJour(compte.inviteLe.slice(0, 10)) }) : '' })}</Text>
               <View style={communs.ligne}>
-                <BoutonHub theme={theme} titre="Renvoyer l’invitation" desactive={occupe || !hubConnu} onPress={renvoyer} testID={`esport-renvoyer-${compte.compte}`} />
-                <BoutonConfirme theme={theme} titre="Révoquer l’invitation" confirmation={`Oui, révoquer ${compte.pseudo}`} desactive={occupe || !hubConnu} onConfirme={revoquer} testID={`esport-revoquer-${compte.compte}`} />
+                <BoutonHub theme={theme} titre={tr('membresGlobal.renvoyer_l_invitation')} desactive={occupe || !hubConnu} onPress={renvoyer} testID={`esport-renvoyer-${compte.compte}`} />
+                <BoutonConfirme theme={theme} titre={tr('membresGlobal.revoquer_l_invitation')} confirmation={tr('membresGlobal.oui_revoquer', { pseudo: compte.pseudo })} desactive={occupe || !hubConnu} onConfirme={revoquer} testID={`esport-revoquer-${compte.compte}`} />
               </View>
-              {!hubConnu ? <Text style={attenue}>Compte pas encore visible sur cet appareil (synchronisation en cours).</Text> : null}
+              {!hubConnu ? <Text style={attenue}>{tr('membresGlobal.compte_pas_encore_visible')}</Text> : null}
               {erreurLocale ? <Avis theme={theme} genre="critique" texte={erreurLocale} /> : null}
               {invitation && !invitation.erreur ? (
                 <PanneauInvitation
@@ -409,10 +417,8 @@ function LigneCompte({
           ) : null}
           {capacite && onOuvrirApp && !compte.moi ? (
             <Text style={attenue}>
-              Supprimer le compte (il quitte alors toutes ses teams) ou rétablir un accès révoqué :{' '}
-              <Text style={{ color: theme.accent, fontWeight: '700' }} accessibilityRole="link" onPress={() => onOuvrirApp('administration')} testID={`esport-compte-administration-${compte.compte}`}>
-                Administration
-              </Text>
+              {tr('membresGlobal.supprimer_le_compte_il', { v: ' ' })}<Text style={{ color: theme.accent, fontWeight: '700' }} accessibilityRole="link" onPress={() => onOuvrirApp('administration')} testID={`esport-compte-administration-${compte.compte}`}>
+                {tr('membresGlobal.administration')}</Text>
               .
             </Text>
           ) : null}
@@ -453,50 +459,50 @@ function Appartenance({
       <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
         <Text style={[texte, { fontWeight: '700' }]}>
           {team.nom}
-          <Text style={attenue}>{`  ${a.role.nom}${a.posteJeu ? ` · ${a.posteJeu}` : ''}${suspendu ? ' · suspendu' : ''}`}</Text>
+          <Text style={attenue}>{`  ${nomRole(a.role.nom)}${a.posteJeu ? ` · ${nomPoste(a.posteJeu)}` : ''}${suspendu ? tr('membresGlobal.suspendu_suite') : ''}`}</Text>
         </Text>
-        <BoutonHub theme={theme} titre="Ouvrir la team" onPress={() => onOuvrirTeam(team.id)} testID={`esport-appartenance-ouvrir-${slug}`} />
+        <BoutonHub theme={theme} titre={tr('membresGlobal.ouvrir_la_team')} onPress={() => onOuvrirTeam(team.id)} testID={`esport-appartenance-ouvrir-${slug}`} />
       </View>
       {peutRole ? (
         <Choix
           theme={theme}
-          libelle={`Rôle dans ${team.nom}`}
+          libelle={tr('ajoutTeams.role_dans', { nom: team.nom })}
           valeur={a.role.id}
-          options={team.roles.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur, desactive: !r.attribuable }))}
+          options={team.roles.map(r => ({ id: r.id, nom: nomRole(r.nom), couleur: r.couleur, desactive: !r.attribuable }))}
           onChoisir={roleId =>
-            onAction('Rôle', async () => {
+            onAction('role', async () => {
               await client.modifierMembre(team.id, a.membreId, { roleId });
-              return `Rôle de ${compte.pseudo} changé dans ${team.nom}.`;
+              return tr('membresGlobal.role_de_change_dans', { pseudo: compte.pseudo, nom: team.nom });
             })
           }
           testID={`esport-appartenance-role-${slug}`}
         />
       ) : !a.gerable && (team.droits.roles || team.droits.retirer) && !compte.moi ? (
-        <Text style={attenue}>Rôle au-dessus du vôtre : vous ne pouvez pas modifier ce membre.</Text>
+        <Text style={attenue}>{tr('membresGlobal.role_au_dessus_du')}</Text>
       ) : null}
       {peutRetirer ? (
         <View style={communs.ligne}>
           <BoutonHub
             theme={theme}
-            titre={suspendu ? 'Réactiver' : 'Suspendre'}
+            titre={suspendu ? tr('membresGlobal.reactiver') : tr('membresGlobal.suspendre')}
             desactive={occupe}
             onPress={() =>
-              onAction('Statut', async () => {
+              onAction('statut', async () => {
                 await client.modifierMembre(team.id, a.membreId, { statut: suspendu ? 'actif' : 'suspendu' });
-                return suspendu ? `${compte.pseudo} est réactivé dans ${team.nom}.` : `${compte.pseudo} est suspendu dans ${team.nom}.`;
+                return suspendu ? tr('membresGlobal.est_reactive_dans', { pseudo: compte.pseudo, nom: team.nom }) : tr('membresGlobal.est_suspendu_dans', { pseudo: compte.pseudo, nom: team.nom });
               })
             }
             testID={`esport-appartenance-suspendre-${slug}`}
           />
           <BoutonConfirme
             theme={theme}
-            titre="Retirer de la team"
-            confirmation={`Oui, retirer de ${team.nom}`}
+            titre={tr('membresGlobal.retirer_de_la_team')}
+            confirmation={tr('membresGlobal.oui_retirer_de', { nom: team.nom })}
             desactive={occupe}
             onConfirme={() =>
-              onAction('Retrait', async () => {
+              onAction('retrait', async () => {
                 await client.retirerMembre(team.id, a.membreId);
-                return `${compte.pseudo} a été retiré de ${team.nom}.`;
+                return tr('membresGlobal.a_ete_retire_de', { pseudo: compte.pseudo, nom: team.nom });
               })
             }
             testID={`esport-appartenance-retirer-${slug}`}

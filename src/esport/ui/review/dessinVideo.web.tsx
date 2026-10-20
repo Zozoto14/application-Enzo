@@ -14,9 +14,10 @@ import React, { Suspense } from 'react';
 import { View } from 'react-native';
 import { HAUTEUR_REFERENCE, LARGEUR_REFERENCE, elementsSvg, resumeDessin } from '../../review/dessin';
 import type { PropsApercuDessin, PropsEditeurDessin } from './typesDessin';
+import { tr } from '../../i18n';
 
 export const dessinDisponible = true;
-export const MESSAGE_DESSIN_NATIF = '✏️ Dessin disponible sur le site ou le PC';
+export const messageDessinNatif = (): string => tr('review.dessinVideo.dessin_disponible_sur_le');
 
 const Calque = React.lazy(() => import('./CalqueDessin.web'));
 
@@ -26,7 +27,7 @@ function Svg({ dessin, testID }: { dessin: PropsApercuDessin['dessin']; testID?:
     <svg
       data-testid={testID}
       role="img"
-      aria-label={`Dessin : ${resumeDessin(dessin)}`}
+      aria-label={tr('review.dessinVideo.dessin', { v: resumeDessin(dessin) })}
       viewBox={`0 0 ${LARGEUR_REFERENCE} ${HAUTEUR_REFERENCE}`}
       preserveAspectRatio="none"
       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
@@ -60,7 +61,7 @@ export function ApercuDessin({ theme, dessin, cadre, testID, style }: PropsAperc
   return (
     <View
       testID={testID}
-      accessibilityLabel={`Dessin sur la vidéo : ${resumeDessin(dessin)}`}
+      accessibilityLabel={tr('review.dessinVideo.dessin_sur_la_video', { v: resumeDessin(dessin) })}
       style={[{ width: 112, aspectRatio: 16 / 9, borderRadius: 6, overflow: 'hidden', backgroundColor: '#0b1220', borderWidth: 1, borderColor: theme.ligne }, style]}>
       <Svg dessin={dessin} />
     </View>

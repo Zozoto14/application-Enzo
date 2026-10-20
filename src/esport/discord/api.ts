@@ -7,6 +7,7 @@
  */
 
 import type { ClientEsport } from '../client';
+import { tr, type Langue } from '../i18n';
 
 export interface WebhookDiscord {
   configure: boolean;
@@ -55,6 +56,8 @@ export interface EnvoiDiscord {
 }
 
 export interface EtatDiscord {
+  /** Langue des messages Discord de la team (français par défaut). */
+  langue?: Langue;
   webhook: WebhookDiscord;
   parametres: ParametreDiscord[];
   file: { enAttente: number; abandonnes: number };
@@ -80,6 +83,7 @@ export function apiDiscord(client: ClientEsport, teamId: string) {
     tester: async () => {
       await client.requete(`${base}/test`, 'POST', {});
     },
+    majLangue: (langue: Langue) => client.requete<{ langue: Langue }>(`${base}/langue`, 'PUT', { langue }),
     majParametre: (cle: string, champs: ChampsParametreDiscord) => client.requete<ParametreDiscord>(`${base}/parametres/${encodeURIComponent(cle)}`, 'PUT', champs),
   };
 }
@@ -152,17 +156,43 @@ export const PERMISSION_DISCORD = 'discord.manage';
 
 /** Libellés des types de notification (miroir de esport/noyau/discord/catalogue.mjs), pour le journal. */
 export const LIBELLES_DISCORD: Record<string, string> = {
-  event_created: 'Nouvel événement',
-  reminder_d1: 'Rappel J-1',
-  reminder_h1: 'Rappel H-1',
-  event_now: 'C’est maintenant',
-  rsvp_relance: 'Relance des convoqués',
-  rsvp_missing: 'RSVP manquant',
-  summary_published: 'Résumé publié',
-  summary_submitted: 'Nouveau dépôt de réunion',
-  task_assigned: 'Tâche assignée',
-  task_due: 'Échéance de tâche',
-  member_joined: 'Membre rejoint',
-  role_changed: 'Changement de rôle',
-  review_created: 'Review créée',
+  get event_created() {
+      return tr('planning.planning.nouvel_evenement_2');
+    },
+  get reminder_d1() {
+      return tr('discord.api.rappel_j_1');
+    },
+  get reminder_h1() {
+      return tr('discord.api.rappel_h_1');
+    },
+  get event_now() {
+      return tr('discord.api.c_est_maintenant');
+    },
+  get rsvp_relance() {
+      return tr('discord.api.relance_des_convoques');
+    },
+  get rsvp_missing() {
+      return tr('discord.api.rsvp_manquant');
+    },
+  get summary_published() {
+      return tr('discord.api.resume_publie');
+    },
+  get summary_submitted() {
+      return tr('discord.api.nouveau_depot_de_reunion');
+    },
+  get task_assigned() {
+      return tr('discord.api.tache_assignee');
+    },
+  get task_due() {
+      return tr('discord.api.echeance_de_tache');
+    },
+  get member_joined() {
+      return tr('discord.api.membre_rejoint');
+    },
+  get role_changed() {
+      return tr('discord.api.changement_de_role');
+    },
+  get review_created() {
+      return tr('discord.api.review_creee');
+    },
 };

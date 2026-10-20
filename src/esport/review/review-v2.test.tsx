@@ -14,7 +14,7 @@ import { ModeAffichageForce } from '../../ui/mobile';
 import { CATALOGUE, type ClientEsport, type DetailTeam } from '../client';
 import { ChampNote } from '../ui/ChampNote';
 import { PageTeam } from '../ui/PageTeam';
-import { MESSAGE_DESSIN_NATIF } from '../ui/review/dessinVideo';
+import { messageDessinNatif } from '../ui/review/dessinVideo';
 import { SANS_REACTION } from './api';
 import {
   ajouterForme,
@@ -299,7 +299,7 @@ describe('écran Review v2 (app native)', () => {
     await monter(JOUEUR, 'telephone');
     expect(screen.queryByTestId('esport-review-dessiner')).toBeNull();
     expect(screen.getByTestId('esport-repere-icone-dessin-r1')).toBeTruthy();
-    expect(screen.getByTestId('esport-repere-miniature-r1').props.children).toBe(MESSAGE_DESSIN_NATIF);
+    expect(screen.getByTestId('esport-repere-miniature-r1').props.children).toBe(messageDessinNatif());
     expect(screen.queryByTestId('esport-repere-miniature-r2')).toBeNull();
   });
 });

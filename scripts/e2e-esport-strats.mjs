@@ -333,7 +333,7 @@ try {
   await pc.getByTestId(`esport-playbook-entree-${entree.id}`).waitFor({ timeout: 20_000 });
   await api(`/teams/${faucons.id}/playbook`, sessFond, { methode: 'POST', corps: { titre: 'Protocole anti-éco', type: 'eco', carte: null, description: 'Stack B, pas de peek seul.' } });
   await pc.getByTestId('esport-playbook-filtre-type-execute').click();
-  await pc.getByTestId('esport-playbook-compte').filter({ hasText: '1 entrée(s) sur 2' }).waitFor({ timeout: 20_000 });
+  await pc.getByTestId('esport-playbook-compte').filter({ hasText: '1 entrée sur 2' }).waitFor({ timeout: 20_000 });
   verifier(await pc.getByTestId(`esport-playbook-entree-${entree.id}`).isVisible(), 'filtre type « Exécution » : la strat');
   await pc.getByTestId('esport-playbook-filtre-type-eco').click();
   await pc.getByTestId(`esport-playbook-entree-${entree.id}`).waitFor({ state: 'detached', timeout: 20_000 });
@@ -341,7 +341,7 @@ try {
   await pc.getByTestId('esport-playbook-filtre-type-defaut').click();
   await pc.getByTestId('esport-playbook-filtre-carte-ascent').click();
   await pc.getByTestId('esport-playbook-recherche').fill('split');
-  await pc.getByTestId('esport-playbook-compte').filter({ hasText: '1 entrée(s) sur 2' }).waitFor({ timeout: 20_000 });
+  await pc.getByTestId('esport-playbook-compte').filter({ hasText: '1 entrée sur 2' }).waitFor({ timeout: 20_000 });
   verifier(await pc.getByTestId(`esport-playbook-entree-${entree.id}`).isVisible(), 'filtres combinés (carte Ascent + recherche) : la strat');
   await pc.getByTestId(`esport-playbook-valider-${entree.id}`).click();
   await pc.getByText(/Entrée validée/).waitFor({ timeout: 20_000 });

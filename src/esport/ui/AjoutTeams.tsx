@@ -13,15 +13,16 @@ import React, { useState } from 'react';
 import { Text, View } from 'react-native';
 import { BoutonHub, Case, Champ } from '../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../hub/themes';
-import { ErreurEsport, type Affectation, type Annuaire, type ClientEsport, type CompteEsport } from '../client';
+import { ErreurEsport, type Affectation, type Annuaire, type ClientEsport, type CompteEsport, nomRole } from '../client';
 import { MOTIF_PSEUDO } from '../comptesHub';
 import { Choix, Retours, styles as communs, useAgir, Intertitre } from './commun';
 import { roleParDefaut } from './CreationCompte';
+import { tr } from '../i18n';
 
 type Choisie = { roleId: string; poste: string };
 
-/** Liste en français : « A », « A et B », « A, B et C ». */
-export const listeFrancaise = (noms: readonly string[]): string => (noms.length <= 1 ? (noms[0] ?? '') : `${noms.slice(0, -1).join(', ')} et ${noms[noms.length - 1]}`);
+/** Liste dans la langue courante : « A », « A et B », « A, B et C » / « A, B and C ». */
+export const listeTeams = (noms: readonly string[]): string => (noms.length <= 1 ? (noms[0] ?? '') : tr('ajoutTeams.liste_et', { debut: noms.slice(0, -1).join(', '), fin: noms[noms.length - 1] }));
 
 export function AjoutTeams({
   theme,
@@ -63,17 +64,17 @@ export function AjoutTeams({
     .filter(t => choisies[t.id] && !dejaMembre(t.id))
     .map(t => ({ teamId: t.id, roleId: choisies[t.id].roleId, ...(choisies[t.id].poste.trim() ? { posteJeu: choisies[t.id].poste.trim() } : {}) }));
   const nomsChoisis = affectations.map(a => teams.find(t => t.id === a.teamId)?.nom ?? '?');
-  const probleme = compte.horsEsport && !MOTIF_PSEUDO.test(pseudoFinal) ? 'Pseudo Esport : 2 à 24 caractères (lettres, chiffres, espace, _ . -).' : undefined;
+  const probleme = compte.horsEsport && !MOTIF_PSEUDO.test(pseudoFinal) ? tr('ajoutTeams.pseudo_esport_2_a') : undefined;
   const libres = teams.filter(t => !dejaMembre(t.id)).length;
 
   const valider = () =>
-    void agir('Ajout', async () => {
+    void agir('ajout', async () => {
       try {
         const fiche = await client.ajouterATeams(compte.compte, { affectations, ...(compte.horsEsport ? { pseudo: pseudoFinal } : {}) });
         setChoisies({});
         setPseudoPris(false);
         await onFait();
-        const message = `${fiche?.pseudo ?? pseudoFinal} est ajouté à ${listeFrancaise(nomsChoisis)}${compte.horsEsport || compte.statut === 'invite' ? ' : il verra ses teams à sa prochaine ouverture de l’Esport.' : '.'}`;
+        const message = tr(compte.horsEsport || compte.statut === 'invite' ? 'ajoutTeams.ajoute_invite' : 'ajoutTeams.ajoute', { pseudo: fiche?.pseudo ?? pseudoFinal, teams: listeTeams(nomsChoisis) });
         onAvis?.(message);
         return message;
       } catch (e) {
@@ -86,8 +87,8 @@ export function AjoutTeams({
 
   return (
     <View style={{ gap: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: theme.ligne }} testID={`esport-ajout-${compte.compte}`}>
-      <Intertitre theme={theme}>Ajouter à une team</Intertitre>
-      {teams.length === 0 ? <Text style={attenue}>Aucune team où vous pouvez ajouter des membres.</Text> : <Text style={attenue}>Cochez une ou plusieurs teams, avec un rôle par team.</Text>}
+      <Intertitre theme={theme}>{tr('ajoutTeams.ajouter_a_une_team')}</Intertitre>
+      {teams.length === 0 ? <Text style={attenue}>{tr('ajoutTeams.aucune_team_ou_vous')}</Text> : <Text style={attenue}>{tr('ajoutTeams.cochez_une_ou_plusieurs')}</Text>}
       {teams.map(t => {
         const membre = dejaMembre(t.id);
         const c = choisies[t.id];
@@ -100,7 +101,7 @@ export function AjoutTeams({
                 <Case
                   theme={theme}
                   coche={Boolean(c)}
-                  libelle={`Ajouter à ${t.nom}`}
+                  libelle={tr('ajoutTeams.ajouter_a', { nom: t.nom })}
                   onChanger={v =>
                     setChoisies(avant => {
                       const suite = { ...avant };
@@ -116,23 +117,22 @@ export function AjoutTeams({
               <Text style={[texte, { fontWeight: '700' }]}>{t.nom}</Text>
               {membre ? (
                 <Text style={attenue} testID={`esport-ajout-deja-${compte.compte}-${t.slug}`}>
-                  déjà membre
-                </Text>
+                  {tr('ajoutTeams.deja_membre')}</Text>
               ) : null}
             </View>
             {c && !membre ? (
               <View style={{ gap: 8, paddingLeft: 30 }}>
                 <Choix
                   theme={theme}
-                  libelle={`Rôle dans ${t.nom}`}
+                  libelle={tr('ajoutTeams.role_dans', { nom: t.nom })}
                   valeur={c.roleId}
-                  options={t.roles.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur, desactive: !r.attribuable }))}
+                  options={t.roles.map(r => ({ id: r.id, nom: nomRole(r.nom), couleur: r.couleur, desactive: !r.attribuable }))}
                   onChoisir={roleId => setChoisies(avant => ({ ...avant, [t.id]: { ...avant[t.id], roleId } }))}
                   testID={`esport-ajout-role-${compte.compte}-${t.slug}`}
                 />
                 <Champ
                   theme={theme}
-                  libelle="Poste en jeu (facultatif)"
+                  libelle={tr('ajoutTeams.poste_en_jeu_facultatif')}
                   valeur={c.poste}
                   onChanger={poste => setChoisies(avant => ({ ...avant, [t.id]: { ...avant[t.id], poste } }))}
                   maxLength={30}
@@ -143,11 +143,11 @@ export function AjoutTeams({
           </View>
         );
       })}
-      {teams.length > 0 && libres === 0 ? <Text style={attenue} testID={`esport-ajout-toutes-${compte.compte}`}>{`${compte.pseudo} est déjà membre de toutes vos teams.`}</Text> : null}
+      {teams.length > 0 && libres === 0 ? <Text style={attenue} testID={`esport-ajout-toutes-${compte.compte}`}>{tr('ajoutTeams.est_deja_membre_de', { pseudo: compte.pseudo })}</Text> : null}
       {pseudoAChoisir ? (
         <>
-          <Text style={attenue}>{pseudoPris ? 'Ce pseudo est déjà pris dans l’Esport : choisissez-en un autre.' : 'Le nom du compte n’est pas un pseudo Esport valide : choisissez-en un.'}</Text>
-          <Champ theme={theme} libelle="Pseudo Esport" valeur={pseudo} onChanger={setPseudo} maxLength={24} testID={`esport-ajout-pseudo-${compte.compte}`} />
+          <Text style={attenue}>{pseudoPris ? tr('ajoutTeams.ce_pseudo_est_deja') : tr('ajoutTeams.le_nom_du_compte')}</Text>
+          <Champ theme={theme} libelle={tr('ajoutTeams.pseudo_esport')} valeur={pseudo} onChanger={setPseudo} maxLength={24} testID={`esport-ajout-pseudo-${compte.compte}`} />
         </>
       ) : null}
       {affectations.length > 0 && probleme ? <Text style={[attenue, { color: theme.alerte }]}>{probleme}</Text> : null}
@@ -156,7 +156,7 @@ export function AjoutTeams({
         <View style={communs.ligne}>
           <BoutonHub
             theme={theme}
-            titre={enCours ? 'Ajout…' : affectations.length > 1 ? `Ajouter à ${affectations.length} teams` : affectations.length === 1 ? `Ajouter à ${nomsChoisis[0]}` : 'Ajouter'}
+            titre={enCours ? tr('ajoutTeams.ajout_2') : affectations.length > 1 ? tr('ajoutTeams.ajouter_a_teams', { length: affectations.length }) : affectations.length === 1 ? tr('ajoutTeams.ajouter_a_2', { v: nomsChoisis[0] }) : tr('ajoutTeams.ajouter')}
             variante="plein"
             desactive={Boolean(enCours) || affectations.length === 0 || Boolean(probleme)}
             onPress={valider}

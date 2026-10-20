@@ -14,21 +14,22 @@ import { Pressable, Text, View } from 'react-native';
 import { Avis, BoutonHub, Case, Champ } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { ContexteHub } from '../../hub/types';
-import { CATALOGUE, LIBELLES_COLONNES, lignesMatrice, type Annuaire, type ClientEsport, type CompteEsport, type DetailTeam, type Membre, type Role } from '../client';
+import { CATALOGUE, LIBELLES_COLONNES, lignesMatrice, type Annuaire, type ClientEsport, type CompteEsport, type DetailTeam, type Membre, type Role, nomRole } from '../client';
 import { dateCourte } from '../libelles';
 import { comptesHubSansEsport } from '../synchroAdmin';
 import { AjoutTeams } from './AjoutTeams';
 import { BoutonConfirme, Choix, PastilleRole, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from './commun';
+import { tr, trn } from '../i18n';
 
-const COULEURS: ReadonlyArray<readonly [string, string]> = [
-  ['#d64545', 'Rouge'],
-  ['#f59e0b', 'Ambre'],
-  ['#16a34a', 'Vert'],
-  ['#0891b2', 'Cyan'],
-  ['#2563eb', 'Bleu'],
-  ['#7c3aed', 'Violet'],
-  ['#db2777', 'Rose'],
-  ['#8b8b9a', 'Gris'],
+const couleursRole = (): ReadonlyArray<readonly [string, string]> => [
+  ['#d64545', tr('review.dessin.rouge')],
+  ['#f59e0b', tr('review.dessin.ambre')],
+  ['#16a34a', tr('review.dessin.vert')],
+  ['#0891b2', tr('membresRoles.cyan')],
+  ['#2563eb', tr('review.dessin.bleu')],
+  ['#7c3aed', tr('membresRoles.violet')],
+  ['#db2777', tr('membresRoles.rose')],
+  ['#8b8b9a', tr('membresRoles.gris')],
 ];
 const COLONNES = ['voir', 'creer', 'modifier', 'supprimer', 'special'] as const;
 
@@ -81,13 +82,13 @@ export function MembresRoles({
 
   return (
     <View style={{ gap: 16 }} testID="esport-membres">
-      <TitreSection theme={theme} titre="Membres et rôles" sous={`${membres.filter(m => m.statut === 'actif').length} membre(s) actif(s)`} />
+      <TitreSection theme={theme} titre={tr('membresRoles.membres_et_roles')} sous={trn('dashboard.membres_actifs', membres.filter(m => m.statut === 'actif').length)} />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-membres" />
       <View style={large ? { flexDirection: 'row', gap: 16, alignItems: 'flex-start' } : { gap: 16 }}>
         <View style={{ flex: 1, minWidth: 0, gap: 16 }}>
           {peut('members.view') ? (
             <Panneau theme={theme} testID="esport-liste-membres">
-              <Intertitre theme={theme}>Membres</Intertitre>
+              <Intertitre theme={theme}>{tr('dashboard.membres')}</Intertitre>
               {membres.map(m => (
                 <LigneMembre
                   key={m.id}
@@ -112,15 +113,15 @@ export function MembresRoles({
           ) : null}
           {peut('members.invite') || peut('members.create') ? (
             <Panneau theme={theme} testID="esport-inviter">
-              <Intertitre theme={theme}>Inviter quelqu’un</Intertitre>
+              <Intertitre theme={theme}>{tr('membresRoles.inviter_quelqu_un')}</Intertitre>
               <Text style={{ color: theme.texte, ...police(theme.policeTexte) }}>
                 {detail.moi.superAdmin
-                  ? 'Créez son compte depuis la page Membres de l’Esport (nom, e-mail, team et rôle) : il reçoit un e-mail, choisit son mot de passe et voit directement la team. Plus aucun code à transmettre.'
+                  ? tr('membresRoles.creez_son_compte_depuis')
                   : peut('members.create')
-                    ? 'Depuis la page Membres de l’Esport : proposez un nouveau membre (le Fondateur valide la création de son compte) ou ajoutez un compte qui a déjà l’Esport.'
-                    : 'Ajoutez à la team un compte qui existe déjà depuis la page Membres de l’Esport. Seul le Fondateur crée de nouveaux comptes.'}
+                    ? tr('membresRoles.depuis_la_page_membres')
+                    : tr('membresRoles.ajoutez_a_la_team')}
               </Text>
-              {onMembresGlobal ? <BoutonHub theme={theme} titre="Ouvrir la page Membres" variante="plein" onPress={onMembresGlobal} testID="esport-inviter-membres" /> : null}
+              {onMembresGlobal ? <BoutonHub theme={theme} titre={tr('membresRoles.ouvrir_la_page_membres')} variante="plein" onPress={onMembresGlobal} testID="esport-inviter-membres" /> : null}
               {peut('members.invite') ? <AjouterUnCompte theme={theme} client={client} detail={detail} contexte={contexte} onFait={recharger} /> : null}
             </Panneau>
           ) : null}
@@ -129,7 +130,7 @@ export function MembresRoles({
           <Roles theme={theme} client={client} detail={detail} roles={roles} onChange={recharger} />
         </View>
       </View>
-      <Text style={attenue}>Les rôles d’équipe sont propres à l’Esport : ils ne changent jamais le rang d’un compte dans le hub.</Text>
+      <Text style={attenue}>{tr('membresRoles.les_roles_d_equipe')}</Text>
     </View>
   );
 }
@@ -164,7 +165,7 @@ function AjouterUnCompte({ theme, client, detail, contexte, onFait }: { theme: T
       {!ouvert ? (
         <BoutonHub
           theme={theme}
-          titre="Ajouter un compte existant à cette team"
+          titre={tr('membresRoles.ajouter_un_compte_existant')}
           onPress={() => {
             setOuvert(true);
             void agir('', charger);
@@ -173,15 +174,15 @@ function AjouterUnCompte({ theme, client, detail, contexte, onFait }: { theme: T
         />
       ) : (
         <>
-          <Champ theme={theme} libelle="Compte à ajouter" valeur={recherche} onChanger={setRecherche} placeholder="Rechercher par pseudo" maxLength={40} testID="esport-ajouter-compte-recherche" />
+          <Champ theme={theme} libelle={tr('membresRoles.compte_a_ajouter')} valeur={recherche} onChanger={setRecherche} placeholder={tr('membresRoles.rechercher_par_pseudo')} maxLength={40} testID="esport-ajouter-compte-recherche" />
           {erreur ? <Avis theme={theme} genre="critique" texte={erreur} testID="esport-ajouter-compte-erreur" /> : null}
-          {!annuaire && !erreur ? <Text style={attenue}>Chargement…</Text> : null}
-          {annuaire && candidats.length === 0 ? <Text style={attenue}>Aucun compte à ajouter : tous les comptes que vous voyez sont déjà dans cette team.</Text> : null}
+          {!annuaire && !erreur ? <Text style={attenue}>{tr('journal.chargement')}</Text> : null}
+          {annuaire && candidats.length === 0 ? <Text style={attenue}>{tr('membresRoles.aucun_compte_a_ajouter')}</Text> : null}
           <Choix
             theme={theme}
-            libelle={`${candidats.length} compte(s) hors de cette team`}
+            libelle={tr('membresRoles.compte_s_hors_de', { comptes: trn('membresGlobal.comptes', candidats.length) })}
             valeur={choisi}
-            options={candidats.slice(0, 40).map(c => ({ id: c.compte, nom: c.horsEsport ? `${c.pseudo} (jamais connecté)` : c.pseudo }))}
+            options={candidats.slice(0, 40).map(c => ({ id: c.compte, nom: c.horsEsport ? tr('membresRoles.jamais_connecte', { pseudo: c.pseudo }) : c.pseudo }))}
             onChoisir={setChoisi}
             testID="esport-ajouter-compte-choix"
           />
@@ -199,7 +200,7 @@ function AjouterUnCompte({ theme, client, detail, contexte, onFait }: { theme: T
               }}
             />
           ) : null}
-          <BoutonHub theme={theme} titre="Fermer" onPress={() => setOuvert(false)} testID="esport-ajouter-compte-fermer" />
+          <BoutonHub theme={theme} titre={tr('discord.fermer')} onPress={() => setOuvert(false)} testID="esport-ajouter-compte-fermer" />
         </>
       )}
     </View>
@@ -240,7 +241,7 @@ function LigneMembre({
     <View style={{ borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 8, gap: 8 }} testID={`esport-membre-${membre.compte}`}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Gérer ${membre.pseudo}`}
+        accessibilityLabel={tr('membresGlobal.gerer', { pseudo: membre.pseudo })}
         accessibilityState={{ expanded: ouvert }}
         onPress={() => setOuvert(o => !o)}
         style={[styles.ligne, { minHeight: 44 }]}>
@@ -250,25 +251,25 @@ function LigneMembre({
         <View style={{ flex: 1, minWidth: 120 }}>
           <Text style={[texte, { fontWeight: '700', opacity: suspendu ? 0.5 : 1 }]} numberOfLines={1}>
             {membre.pseudo}
-            {membre.moi ? ' (vous)' : ''}
+            {membre.moi ? tr('membresGlobal.vous') : ''}
           </Text>
           <Text style={attenue} numberOfLines={1}>
-            {[membre.posteJeu, membre.riotId, suspendu ? 'suspendu' : undefined].filter(Boolean).join(' · ') || `depuis le ${dateCourte(membre.rejointLe).split(' ')[0]}`}
+            {[membre.posteJeu, membre.riotId, suspendu ? tr('membresRoles.suspendu') : undefined].filter(Boolean).join(' · ') || tr('membresRoles.depuis_le', { v: dateCourte(membre.rejointLe).split(' ')[0] })}
           </Text>
         </View>
-        <PastilleRole theme={theme} nom={membre.role.nom} couleur={membre.role.couleur} testID={`esport-membre-role-${membre.compte}`} />
+        <PastilleRole theme={theme} nom={nomRole(membre.role.nom)} couleur={membre.role.couleur} testID={`esport-membre-role-${membre.compte}`} />
       </Pressable>
       {ouvert ? (
         <View style={{ gap: 8, paddingLeft: 8 }}>
           {peutRole && roles.length > 0 ? (
             <Choix
               theme={theme}
-              libelle={`Rôle de ${membre.pseudo}`}
+              libelle={tr('membresRoles.role_de', { pseudo: membre.pseudo })}
               valeur={membre.role.id}
-              options={roles.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur }))}
-              onChoisir={roleId => onAction('Rôle', async () => {
+              options={roles.map(r => ({ id: r.id, nom: nomRole(r.nom), couleur: r.couleur }))}
+              onChoisir={roleId => onAction('role', async () => {
                 await client.modifierMembre(teamId, membre.id, { roleId });
-                return `Rôle de ${membre.pseudo} changé.`;
+                return tr('membresRoles.role_de_change', { pseudo: membre.pseudo });
               })}
               testID={`esport-role-de-${membre.compte}`}
             />
@@ -277,11 +278,11 @@ function LigneMembre({
             {peutRetirer && !membre.moi ? (
               <BoutonHub
                 theme={theme}
-                titre={suspendu ? 'Réactiver' : 'Suspendre'}
+                titre={suspendu ? tr('membresGlobal.reactiver') : tr('membresGlobal.suspendre')}
                 desactive={occupe}
-                onPress={() => onAction('Statut', async () => {
+                onPress={() => onAction('statut', async () => {
                   await client.modifierMembre(teamId, membre.id, { statut: suspendu ? 'actif' : 'suspendu' });
-                  return suspendu ? `${membre.pseudo} est réactivé.` : `${membre.pseudo} est suspendu.`;
+                  return suspendu ? tr('membresRoles.est_reactive', { pseudo: membre.pseudo }) : tr('membresRoles.est_suspendu', { pseudo: membre.pseudo });
                 })}
                 testID={`esport-suspendre-${membre.compte}`}
               />
@@ -289,12 +290,12 @@ function LigneMembre({
             {(peutRetirer && !membre.moi) || membre.moi ? (
               <BoutonConfirme
                 theme={theme}
-                titre={membre.moi ? 'Quitter la team' : 'Retirer de la team'}
-                confirmation={membre.moi ? 'Oui, quitter' : `Oui, retirer ${membre.pseudo}`}
+                titre={membre.moi ? tr('membresRoles.quitter_la_team') : tr('membresGlobal.retirer_de_la_team')}
+                confirmation={membre.moi ? tr('membresRoles.oui_quitter') : tr('membresRoles.oui_retirer', { pseudo: membre.pseudo })}
                 desactive={occupe}
-                onConfirme={() => onAction('Retrait', async () => {
+                onConfirme={() => onAction('retrait', async () => {
                   await client.retirerMembre(teamId, membre.id);
-                  return membre.moi ? 'Vous avez quitté la team.' : `${membre.pseudo} a été retiré.`;
+                  return membre.moi ? tr('membresRoles.vous_avez_quitte_la') : tr('membresRoles.a_ete_retire', { pseudo: membre.pseudo });
                 })}
                 testID={`esport-retirer-${membre.compte}`}
               />
@@ -302,28 +303,28 @@ function LigneMembre({
           </View>
           {fondateur && !membre.moi ? (
             <View style={{ gap: 6 }} testID={`esport-rgpd-${membre.compte}`}>
-              <Text style={attenue}>Demande RGPD de {membre.pseudo} (Fondateur) : ses données Esport, dans toutes les teams.</Text>
+              <Text style={attenue}>{tr('membresRoles.demande_rgpd_de_fondateur', { pseudo: membre.pseudo })}</Text>
               <View style={styles.ligne}>
                 {onExporter ? (
                   <BoutonHub
                     theme={theme}
-                    titre="Exporter ses données"
+                    titre={tr('membresRoles.exporter_ses_donnees')}
                     desactive={occupe}
-                    onPress={() => onAction('Export', async () => {
+                    onPress={() => onAction('export', async () => {
                       const donnees = await client.exporterCompte(membre.compte);
-                      return (await onExporter(`esport-donnees-${membre.compte}.json`, JSON.stringify(donnees, null, 2), 'application/json')) ? `Données de ${membre.pseudo} exportées.` : undefined;
+                      return (await onExporter(`esport-donnees-${membre.compte}.json`, JSON.stringify(donnees, null, 2), 'application/json')) ? tr('membresRoles.donnees_de_exportees', { pseudo: membre.pseudo }) : undefined;
                     })}
                     testID={`esport-rgpd-exporter-${membre.compte}`}
                   />
                 ) : null}
                 <BoutonConfirme
                   theme={theme}
-                  titre="Supprimer son compte Esport"
-                  confirmation={`Oui, effacer ${membre.pseudo} partout`}
+                  titre={tr('membresRoles.supprimer_son_compte_esport')}
+                  confirmation={tr('membresRoles.oui_effacer_partout', { pseudo: membre.pseudo })}
                   desactive={occupe}
-                  onConfirme={() => onAction('Suppression', async () => {
+                  onConfirme={() => onAction('suppression', async () => {
                     await client.supprimerCompte(membre.compte);
-                    return `Compte Esport de ${membre.pseudo} supprimé (ses contenus de team sont anonymisés).`;
+                    return tr('membresRoles.compte_esport_de_supprime', { pseudo: membre.pseudo });
                   })}
                   testID={`esport-rgpd-supprimer-${membre.compte}`}
                 />
@@ -352,50 +353,49 @@ function Roles({ theme, client, detail, roles, onChange }: { theme: ThemeHub; cl
 
   return (
     <Panneau theme={theme} testID="esport-roles">
-      <Intertitre theme={theme}>Rôles et permissions</Intertitre>
+      <Intertitre theme={theme}>{tr('membresRoles.roles_et_permissions')}</Intertitre>
       <Choix
         theme={theme}
-        libelle="Rôle affiché"
+        libelle={tr('membresRoles.role_affiche')}
         valeur={edition ? undefined : role?.id}
-        options={roles.map(r => ({ id: r.id, nom: `${r.nom}${r.membres ? ` (${r.membres})` : ''}`, couleur: r.couleur }))}
+        options={roles.map(r => ({ id: r.id, nom: `${nomRole(r.nom)}${r.membres ? ` (${r.membres})` : ''}`, couleur: r.couleur }))}
         onChoisir={id => {
           setEdition(undefined);
           setChoisi(id);
         }}
         testID="esport-role-choisi"
       />
-      {role && !edition ? <Text style={attenue}>{role.systeme ? 'Rôle système : non modifiable (sauf « Créer des membres »), mais duplicable en rôle personnalisé.' : 'Rôle personnalisé.'}</Text> : null}
+      {role && !edition ? <Text style={attenue}>{role.systeme ? tr('membresRoles.role_systeme_non_modifiable') : tr('membresRoles.role_personnalise')}</Text> : null}
       {role && !edition && role.systeme && role.cle !== 'proprietaire' && gere && mes.has('members.create') ? (
         <View style={[styles.ligne, { flexWrap: 'nowrap' }]} testID="esport-role-creer-membres">
           <Case
             theme={theme}
             coche={role.permissions.includes('members.create')}
-            libelle={`${role.nom} : créer des membres`}
+            libelle={tr('membresRoles.creer_des_membres', { nom: role.nom })}
             onChanger={v =>
-              void agir('Rôle', async () => {
+              void agir('role', async () => {
                 const permissions = v ? [...role.permissions, 'members.create'] : role.permissions.filter(p => p !== 'members.create');
                 await client.modifierRole(detail.team.id, role.id, { permissions });
                 await onChange();
-                return v ? `${role.nom} : peut proposer de nouveaux membres (le Fondateur valide la création du compte).` : `${role.nom} : ne propose plus de membres.`;
+                return v ? tr('membresRoles.peut_proposer_de_nouveaux', { nom: role.nom }) : tr('membresRoles.ne_propose_plus_de', { nom: role.nom });
               })
             }
             testID="esport-role-creer-membres-case"
           />
           <Text style={{ flex: 1, color: theme.texte, fontSize: 13, ...police(theme.policeTexte) }}>
-            Créer des membres : proposer un nouveau compte au Fondateur, ou ajouter un compte qui a déjà l’Esport (rôle au plus égal au sien).
-          </Text>
+            {tr('membresRoles.creer_des_membres_proposer')}</Text>
         </View>
       ) : null}
       {edition ? (
         <View style={{ gap: 8 }}>
-          <Champ theme={theme} libelle="Nom du rôle" valeur={edition.nom} onChanger={nom => setEdition({ ...edition, nom })} maxLength={40} testID="esport-role-nom" />
-          <Choix theme={theme} libelle="Couleur" valeur={edition.couleur} options={COULEURS.map(([c, nom]) => ({ id: c, nom, couleur: c }))} onChoisir={couleur => setEdition({ ...edition, couleur })} testID="esport-role-couleur" />
+          <Champ theme={theme} libelle={tr('membresRoles.nom_du_role')} valeur={edition.nom} onChanger={nom => setEdition({ ...edition, nom })} maxLength={40} testID="esport-role-nom" />
+          <Choix theme={theme} libelle={tr('membresRoles.couleur')} valeur={edition.couleur} options={couleursRole().map(([c, nom]) => ({ id: c, nom, couleur: c }))} onChoisir={couleur => setEdition({ ...edition, couleur })} testID="esport-role-couleur" />
         </View>
       ) : null}
       {/* Matrice : modules en lignes, actions en colonnes. */}
       <View accessibilityRole="none" testID="esport-matrice" style={{ borderWidth: 1, borderColor: theme.ligne, borderRadius: 8, overflow: 'hidden' }}>
         <View style={[styles.ligne, { flexWrap: 'nowrap', gap: 0, backgroundColor: theme.fond, paddingHorizontal: 8 }]}>
-          <Text style={[attenue, { flex: 2, minWidth: 90, fontWeight: '700' }]}>Module</Text>
+          <Text style={[attenue, { flex: 2, minWidth: 90, fontWeight: '700' }]}>{tr('journal.module')}</Text>
           {COLONNES.map(c => (
             <Text key={c} style={[attenue, cellule, { textAlign: 'center', fontWeight: '700' }]}>
               {LIBELLES_COLONNES[c]}
@@ -423,7 +423,7 @@ function Roles({ theme, client, detail, roles, onChange }: { theme: ThemeHub; cl
                   ) : (
                     <Text
                       key={p.cle}
-                      accessibilityLabel={`${l.nom} : ${p.libelle} : ${perms.has(p.cle) ? 'oui' : 'non'}`}
+                      accessibilityLabel={`${l.nom} : ${p.libelle} : ${perms.has(p.cle) ? tr('membresRoles.oui') : tr('membresRoles.non')}`}
                       testID={`esport-case-${p.cle}`}
                       style={{ color: perms.has(p.cle) ? theme.ok : theme.attenue, fontSize: c === 'special' ? 11 : 15, fontWeight: '700', textAlign: 'center' }}>
                       {c === 'special' ? `${perms.has(p.cle) ? '✓' : '·'} ${p.libelle}` : perms.has(p.cle) ? '✓' : '·'}
@@ -435,54 +435,54 @@ function Roles({ theme, client, detail, roles, onChange }: { theme: ThemeHub; cl
           </View>
         ))}
       </View>
-      <Text style={attenue}>Seuls les modules activés sont listés. On ne donne jamais une permission que l’on n’a pas soi-même.</Text>
+      <Text style={attenue}>{tr('membresRoles.seuls_les_modules_actives')}</Text>
       {gere ? (
         <View style={styles.ligne}>
           {edition ? (
             <>
               <BoutonHub
                 theme={theme}
-                titre={enCours ? 'Enregistrement…' : 'Enregistrer le rôle'}
+                titre={enCours ? tr('membresRoles.enregistrement') : tr('membresRoles.enregistrer_le_role')}
                 variante="plein"
                 desactive={Boolean(enCours)}
                 onPress={() =>
-                  void agir('Rôle', async () => {
+                  void agir('role', async () => {
                     const corps = { nom: edition.nom.trim(), couleur: edition.couleur, permissions: edition.permissions };
                     const r = edition.id ? await client.modifierRole(detail.team.id, edition.id, corps) : await client.creerRole(detail.team.id, corps);
                     setEdition(undefined);
                     setChoisi(r.id);
                     await onChange();
-                    return `Rôle « ${r.nom} » enregistré.`;
+                    return tr('membresRoles.role_enregistre', { nom: r.nom });
                   })
                 }
                 testID="esport-role-enregistrer"
               />
-              <BoutonHub theme={theme} titre="Annuler" onPress={() => setEdition(undefined)} testID="esport-role-annuler" />
+              <BoutonHub theme={theme} titre={tr('assistant.annuler')} onPress={() => setEdition(undefined)} testID="esport-role-annuler" />
             </>
           ) : (
             <>
-              <BoutonHub theme={theme} titre="Nouveau rôle" onPress={() => setEdition({ nom: '', couleur: COULEURS[4][0], permissions: ['members.view'] })} testID="esport-role-nouveau" />
+              <BoutonHub theme={theme} titre={tr('membresRoles.nouveau_role')} onPress={() => setEdition({ nom: '', couleur: couleursRole()[4][0], permissions: ['members.view'] })} testID="esport-role-nouveau" />
               {role ? (
                 <BoutonHub
                   theme={theme}
-                  titre="Dupliquer"
-                  onPress={() => setEdition({ nom: `${role.nom} (copie)`.slice(0, 40), couleur: role.couleur, permissions: role.permissions.filter(p => mes.has(p)) })}
+                  titre={tr('membresRoles.dupliquer')}
+                  onPress={() => setEdition({ nom: tr('membresRoles.copie', { nom: role.nom }).slice(0, 40), couleur: role.couleur, permissions: role.permissions.filter(p => mes.has(p)) })}
                   testID="esport-role-dupliquer"
                 />
               ) : null}
               {role && !role.systeme ? (
                 <>
-                  <BoutonHub theme={theme} titre="Modifier" onPress={() => setEdition({ id: role.id, nom: role.nom, couleur: role.couleur, permissions: role.permissions })} testID="esport-role-modifier" />
+                  <BoutonHub theme={theme} titre={tr('membresRoles.modifier')} onPress={() => setEdition({ id: role.id, nom: role.nom, couleur: role.couleur, permissions: role.permissions })} testID="esport-role-modifier" />
                   <BoutonConfirme
                     theme={theme}
-                    titre="Supprimer"
-                    confirmation={`Supprimer « ${role.nom} »`}
+                    titre={tr('discord.supprimer')}
+                    confirmation={tr('membresRoles.supprimer', { nom: role.nom })}
                     onConfirme={() =>
-                      void agir('Suppression', async () => {
+                      void agir('suppression', async () => {
                         await client.supprimerRole(detail.team.id, role.id);
                         setChoisi(undefined);
                         await onChange();
-                        return 'Rôle supprimé.';
+                        return tr('membresRoles.role_supprime');
                       })
                     }
                     testID="esport-role-supprimer"

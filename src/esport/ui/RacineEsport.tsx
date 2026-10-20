@@ -19,7 +19,7 @@ import { Avis, BoutonHub, Champ } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { PropsRacineApp } from '../../hub/types';
 import { fabrique } from '../fabrique';
-import { CATALOGUE, DOC_ACTIVATION, ErreurEsport, MENTION_DONNEES, estInactif, trouverConfig, type Boite, type ClientEsport, type Moi, type Notifications, type TeamListee } from '../client';
+import { DOC_ACTIVATION, ErreurEsport, mentionDonnees, estInactif, trouverConfig, type Boite, type ClientEsport, type Moi, type Notifications, type TeamListee, nomRole, nomJeu } from '../client';
 import { dateCourte, phraseNotification } from '../libelles';
 import { Assistant } from './Assistant';
 import { CadreEsport, PageEsport, type OngletEsport } from './CadreEsport';
@@ -29,6 +29,8 @@ import { GROUPES_TEAM, MonProfil, PageTeam, type SectionTeam } from './PageTeam'
 import { BadgeNouveau, BoiteResumes } from './Resumes';
 import { Panneau, PastilleRole, Retours, styles as communs, useAgir } from './commun';
 import { AvatarTeam, Badge, Carte, ESP, EnTetePage, EtatVide, Grille, LARGEUR_PC, SqueletteCartes, TitreCarte, attenue, couleurTeam, texte } from './design';
+import { definirLangue, langueAppareil, langueCourante, tr, trn, useLangue } from '../i18n';
+import { ChoixLangue } from './ChoixLangue';
 
 type Etat =
   | { e: 'chargement' }
@@ -44,6 +46,8 @@ export { fabrique };
 
 export function Esport(props: PropsRacineApp) {
   const { theme, onRetour, contexte, registre, onOuvrirApp } = props;
+  // Abonné à la langue : un changement re-rend toute l'app Esport, sans recharger.
+  useLangue();
   const [etat, setEtat] = useState<Etat>({ e: 'chargement' });
   const [vue, setVue] = useState<Vue>({ v: 'dashboard' });
   const { width } = useWindowDimensions();
@@ -58,7 +62,10 @@ export function Esport(props: PropsRacineApp) {
     }
     const client = fabrique.client(config);
     try {
-      setEtat({ e: 'pret', client, moi: await client.ouvrir() });
+      const moi = await client.ouvrir();
+      // Langue du compte si elle a été choisie, sinon celle de l'appareil (jamais celle d'un compte précédent).
+      definirLangue(moi.langue ?? langueAppareil());
+      setEtat({ e: 'pret', client, moi });
     } catch (e) {
       if (estInactif(e)) setEtat({ e: 'inactif', raison: 'serveur' });
       else setEtat({ e: 'erreur', message: e instanceof ErreurEsport ? e.message : String(e) });
@@ -76,7 +83,7 @@ export function Esport(props: PropsRacineApp) {
   if (etat.e === 'chargement') {
     contenu = (
       <View style={{ padding: large ? ESP.xxl : ESP.m, gap: ESP.l, maxWidth: 900, width: '100%', alignSelf: 'center' }} testID="esport-chargement">
-        <Text style={{ color: theme.attenue, fontSize: 15, ...police(theme.policeTexte) }}>Connexion à l’Esport…</Text>
+        <Text style={{ color: theme.attenue, fontSize: 15, ...police(theme.policeTexte) }}>{tr('racineEsport.connexion_a_l_esport')}</Text>
         <SqueletteCartes theme={theme} n={large ? 3 : 2} large={large} />
       </View>
     );
@@ -87,7 +94,7 @@ export function Esport(props: PropsRacineApp) {
       <View style={{ padding: ESP.m, gap: ESP.s, maxWidth: 680, width: '100%', alignSelf: 'center' }}>
         <Avis theme={theme} genre="critique" texte={etat.message} testID="esport-erreur" />
         <View style={{ alignSelf: 'flex-start' }}>
-          <BoutonHub theme={theme} titre="Réessayer" onPress={() => void ouvrir()} testID="esport-reessayer" />
+          <BoutonHub theme={theme} titre={tr('racineEsport.reessayer')} onPress={() => void ouvrir()} testID="esport-reessayer" />
         </View>
       </View>
     );
@@ -122,9 +129,9 @@ export function Esport(props: PropsRacineApp) {
           <EnTetePage
             theme={theme}
             large={large}
-            titre="Résumés à rédiger"
-            sous="Tous les dépôts des teams où vous rédigez les résumés."
-            avant={<LienRetour theme={theme} titre="Teams" onPress={() => setVue({ v: 'teams' })} testID="esport-boite-retour" />}
+            titre={tr('dashboard.resumes_a_rediger')}
+            sous={tr('racineEsport.tous_les_depots_des')}
+            avant={<LienRetour theme={theme} titre={tr('dashboard.teams')} onPress={() => setVue({ v: 'teams' })} testID="esport-boite-retour" />}
           />
           <BoiteResumes theme={theme} client={etat.client} large={large} />
         </PageEsport>
@@ -178,7 +185,7 @@ export function Esport(props: PropsRacineApp) {
 /** Lien de retour discret, au-dessus d'un titre de page (« ‹ Teams »). */
 function LienRetour({ theme, titre, onPress, testID }: { theme: ThemeHub; titre: string; onPress(): void; testID: string }) {
   return (
-    <Pressable testID={testID} accessibilityRole="link" accessibilityLabel={`Retour : ${titre}`} onPress={onPress} style={{ minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' }}>
+    <Pressable testID={testID} accessibilityRole="link" accessibilityLabel={tr('racineEsport.retour', { titre })} onPress={onPress} style={{ minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' }}>
       <Text style={{ color: theme.accent, fontSize: 15, fontWeight: '600', ...police(theme.policeTexte) }}>{`‹ ${titre}`}</Text>
     </Pressable>
   );
@@ -187,19 +194,19 @@ function LienRetour({ theme, titre, onPress, testID }: { theme: ThemeHub; titre:
 function PasEncoreActive({ theme, raison, fondateur, onReessayer }: { theme: ThemeHub; raison: 'sans-relais' | 'sans-adresse' | 'serveur'; fondateur: boolean; onReessayer(): void }) {
   const explication =
     raison === 'sans-relais'
-      ? 'Cet appareil n’est pas relié au relais : l’Esport utilise votre compte du hub, par le relais (Paramètres › Synchronisation).'
+      ? tr('racineEsport.cet_appareil_n_est')
       : fondateur
-        ? 'Le serveur Esport (Worker Cloudflare « applibourse-esport ») n’est pas encore déployé, ou le relais n’est pas encore en version 7. La marche à suivre tient en quelques étapes.'
-        : 'Le Fondateur n’a pas encore activé l’Esport. Réessayez plus tard.';
+        ? tr('racineEsport.le_serveur_esport_worker')
+        : tr('racineEsport.le_fondateur_n_a');
   return (
     <ScrollView contentContainerStyle={{ padding: ESP.m, paddingTop: ESP.xxl, gap: ESP.m, maxWidth: 680, width: '100%', alignSelf: 'center' }}>
       <Carte theme={theme} testID="esport-inactif">
-        <EtatVide theme={theme} glyphe="◆" titre="Esport pas encore activé" texte={explication} />
+        <EtatVide theme={theme} glyphe="◆" titre={tr('racineEsport.esport_pas_encore_active')} texte={explication} />
         <View style={[communs.ligne, { justifyContent: 'center' }]}>
           {fondateur ? (
-            <BoutonHub theme={theme} titre="Voir la marche à suivre" variante="plein" onPress={() => void Linking.openURL(DOC_ACTIVATION)} testID="esport-doc" />
+            <BoutonHub theme={theme} titre={tr('racineEsport.voir_la_marche_a')} variante="plein" onPress={() => void Linking.openURL(DOC_ACTIVATION)} testID="esport-doc" />
           ) : null}
-          <BoutonHub theme={theme} titre="Réessayer" onPress={onReessayer} testID="esport-reessayer" />
+          <BoutonHub theme={theme} titre={tr('racineEsport.reessayer')} onPress={onReessayer} testID="esport-reessayer" />
         </View>
         {fondateur ? <Text style={{ ...attenue(theme), textAlign: 'center' }}>docs/esport/deploiement.md</Text> : null}
       </Carte>
@@ -212,28 +219,33 @@ function ProfilInitial({ theme, client, onFait }: { theme: ThemeHub; client: Cli
   const [riotId, setRiotId] = useState('');
   const [discord, setDiscord] = useState('');
   const { enCours, erreur, agir } = useAgir();
+  const langue = useLangue();
   return (
     <ScrollView contentContainerStyle={{ padding: ESP.m, paddingTop: ESP.xl, gap: ESP.l, maxWidth: 560, width: '100%', alignSelf: 'center' }} testID="esport-profil-initial">
-      <EnTetePage theme={theme} titre="Bienvenue dans l’Esport" sous="Choisissez le pseudo que verront vos coéquipiers. Le reste est facultatif." />
+      <EnTetePage theme={theme} titre={tr('racineEsport.bienvenue_dans_l_esport')} sous={tr('racineEsport.choisissez_le_pseudo_que')} />
       <Panneau theme={theme}>
-        <Champ theme={theme} libelle="Pseudo (obligatoire)" valeur={pseudo} onChanger={setPseudo} maxLength={24} testID="esport-pseudo" />
-        <Champ theme={theme} libelle="Riot ID (facultatif, Pseudo#TAG)" valeur={riotId} onChanger={setRiotId} maxLength={22} testID="esport-riot" />
-        <Champ theme={theme} libelle="Discord (facultatif)" valeur={discord} onChanger={setDiscord} maxLength={32} testID="esport-discord" />
+        <ChoixLangue theme={theme} libelle={tr('profil.langue')} valeur={langue} onChoisir={definirLangue} testID="esport-langue" />
+        <Champ theme={theme} libelle={tr('pageTeam.pseudo_obligatoire')} valeur={pseudo} onChanger={setPseudo} maxLength={24} testID="esport-pseudo" />
+        <Champ theme={theme} libelle={tr('pageTeam.riot_id_facultatif_pseudo')} valeur={riotId} onChanger={setRiotId} maxLength={22} testID="esport-riot" />
+        <Champ theme={theme} libelle={tr('pageTeam.discord_facultatif')} valeur={discord} onChanger={setDiscord} maxLength={32} testID="esport-discord" />
         <BoutonHub
           theme={theme}
-          titre={enCours ? 'Enregistrement…' : 'Continuer'}
+          titre={enCours ? tr('membresRoles.enregistrement') : tr('racineEsport.continuer')}
           variante="plein"
           desactive={Boolean(enCours) || pseudo.trim().length < 2}
           onPress={() =>
-            void agir('Profil', async () => {
-              onFait(await client.majProfil({ pseudo: pseudo.trim(), riotId: riotId.trim() || undefined, discord: discord.trim() || undefined }));
+            void agir('profil', async () => {
+              const moi = await client.majProfil({ pseudo: pseudo.trim(), riotId: riotId.trim() || undefined, discord: discord.trim() || undefined });
+              // La langue affichée devient celle du compte (le bot Discord et les exports la connaissent) ; sans bloquer l'entrée.
+              const avecLangue = await client.majLangue?.(langueCourante()).catch(() => undefined);
+              onFait(avecLangue ?? moi);
             })
           }
           testID="esport-pseudo-valider"
         />
         <Retours theme={theme} erreur={erreur} prefixe="esport-pseudo" />
         <Text style={attenue(theme, 12)} testID="esport-mention">
-          {MENTION_DONNEES}
+          {mentionDonnees()}
         </Text>
       </Panneau>
     </ScrollView>
@@ -286,13 +298,13 @@ function MesTeams({
       <EnTetePage
         theme={theme}
         large={large}
-        titre="Mes teams"
-        sous={`Connecté en tant que ${moi.profil?.pseudo ?? moi.compte}${moi.superAdmin ? ' · Fondateur (toutes les teams)' : ''}`}
+        titre={tr('racineEsport.mes_teams')}
+        sous={tr('racineEsport.connecte_en_tant_que', { nom: moi.profil?.pseudo ?? moi.compte, fondateur: moi.superAdmin ? tr('racineEsport.fondateur_toutes_les_teams') : '' })}
         action={
           <>
-            {moi.superAdmin ? <BoutonHub theme={theme} titre="Inviter un joueur" onPress={onMembres} testID="esport-teams-inviter" /> : null}
-            <BoutonHub theme={theme} titre={profil ? 'Fermer mon profil' : 'Mon profil'} onPress={() => setProfil(p => !p)} testID="esport-mon-profil-ouvrir" />
-            {moi.peutCreerTeam ? <BoutonHub theme={theme} titre="+ Créer une team" variante="plein" onPress={onCreer} testID="esport-creer" /> : null}
+            {moi.superAdmin ? <BoutonHub theme={theme} titre={tr('racineEsport.inviter_un_joueur')} onPress={onMembres} testID="esport-teams-inviter" /> : null}
+            <BoutonHub theme={theme} titre={profil ? tr('racineEsport.fermer_mon_profil') : tr('racineEsport.mon_profil')} onPress={() => setProfil(p => !p)} testID="esport-mon-profil-ouvrir" />
+            {moi.peutCreerTeam ? <BoutonHub theme={theme} titre={tr('racineEsport.creer_une_team')} variante="plein" onPress={onCreer} testID="esport-creer" /> : null}
           </>
         }
       />
@@ -303,13 +315,13 @@ function MesTeams({
             <View style={{ flexShrink: 1, gap: ESP.xxs }}>
               <View style={communs.ligne}>
                 <Text style={{ ...texte(theme, 17), fontWeight: '700' }} testID="esport-redacteur-compteur">
-                  {`Résumés à rédiger : ${boite.attente} en attente`}
+                  {tr('racineEsport.resumes_a_rediger_en', { attente: boite.attente })}
                 </Text>
                 {boite.nouveaux > 0 ? <BadgeNouveau theme={theme} testID="esport-redacteur-nouveaux" /> : null}
               </View>
-              <Text style={attenue(theme)}>{boite.nouveaux > 0 ? `${boite.nouveaux} jamais ouvert${boite.nouveaux > 1 ? 's' : ''}` : 'Tous les dépôts des teams où vous rédigez.'}</Text>
+              <Text style={attenue(theme)}>{boite.nouveaux > 0 ? trn('racineEsport.jamais_ouverts', boite.nouveaux) : tr('racineEsport.tous_les_depots_des_2')}</Text>
             </View>
-            <BoutonHub theme={theme} titre="Boîte de réception" variante="plein" onPress={onBoite} testID="esport-redacteur-ouvrir" />
+            <BoutonHub theme={theme} titre={tr('racineEsport.boite_de_reception')} variante="plein" onPress={onBoite} testID="esport-redacteur-ouvrir" />
           </View>
         </Carte>
       ) : null}
@@ -320,13 +332,13 @@ function MesTeams({
           <EtatVide
             theme={theme}
             glyphe="◆"
-            titre={moi.peutCreerTeam ? 'Aucune team pour l’instant' : 'Vous n’êtes dans aucune team'}
+            titre={moi.peutCreerTeam ? tr('dashboard.aucune_team_pour_l') : tr('racineEsport.vous_n_etes_dans')}
             texte={
               moi.peutCreerTeam
-                ? 'Créez la première, puis invitez vos joueurs depuis l’onglet Membres.'
-                : 'Le Fondateur ou le staff de votre team vous y ajoute : elle apparaîtra ici d’elle-même, sans code.'
+                ? tr('racineEsport.creez_la_premiere_puis')
+                : tr('racineEsport.le_fondateur_ou_le')
             }
-            action={moi.peutCreerTeam ? { titre: '+ Créer une team', onPress: onCreer } : undefined}
+            action={moi.peutCreerTeam ? { titre: tr('racineEsport.creer_une_team'), onPress: onCreer } : undefined}
           />
         </Carte>
       ) : null}
@@ -340,13 +352,13 @@ function MesTeams({
       <Carte theme={theme} testID="esport-notifications">
         <TitreCarte
           theme={theme}
-          titre={`Notifications${nonLues.length ? ` (${nonLues.length})` : ''}`}
-          sous={nonLues.length ? 'Les plus récentes de toutes vos teams.' : undefined}
+          titre={nonLues.length ? tr('racineEsport.notifications_n', { n: nonLues.length }) : tr('racineEsport.notifications')}
+          sous={nonLues.length ? tr('racineEsport.les_plus_recentes_de') : undefined}
           droite={
             nonLues.length ? (
               <BoutonHub
                 theme={theme}
-                titre="Tout marquer lu"
+                titre={tr('racineEsport.tout_marquer_lu')}
                 onPress={() =>
                   void agir('Lu', async () => {
                     setNotifs(await client.marquerLues(true));
@@ -357,7 +369,7 @@ function MesTeams({
             ) : undefined
           }
         />
-        {notifs?.liste.length ? null : <Text style={attenue(theme, 15)}>Rien de nouveau.</Text>}
+        {notifs?.liste.length ? null : <Text style={attenue(theme, 15)}>{tr('pageTeam.rien_de_nouveau')}</Text>}
         {notifs?.liste.slice(0, 8).map(n => (
           <View key={n.id} style={{ flexDirection: 'row', gap: ESP.s, alignItems: 'flex-start', paddingVertical: ESP.xxs }}>
             <View style={{ width: 8, height: 8, borderRadius: 4, marginTop: 7, backgroundColor: n.lue ? theme.ligne : theme.accent }} />
@@ -367,7 +379,7 @@ function MesTeams({
         ))}
       </Carte>
       <Text style={{ ...attenue(theme, 12), backgroundColor: teinteTransparente(theme.attenue, 0.08), padding: ESP.s, borderRadius: 10 }} testID="esport-mention">
-        {MENTION_DONNEES}
+        {mentionDonnees()}
       </Text>
     </PageEsport>
   );
@@ -376,14 +388,14 @@ function MesTeams({
 /** Carte d'une team (page Teams) : logo et couleur, rôle, effectif, sections. */
 function CarteTeamListe({ theme, team: t, onOuvrir }: { theme: ThemeHub; team: TeamListee; onOuvrir(): void }) {
   const couleur = couleurTeam(t.slug);
-  const jeu = CATALOGUE.jeux.find(j => j.cle === t.jeu)?.nom ?? t.jeu;
+  const jeu = nomJeu(t.jeu);
   // Sections de la team, d'après ses modules (comme la navigation dans la team).
   const groupes = GROUPES_TEAM.filter(g => g.id !== 'accueil' && g.id !== 'reglages' && t.modules.some(m => g.sections.includes(`module:${m}`)));
   return (
     <Carte
       theme={theme}
       testID={`esport-team-${t.slug}`}
-      libelle={`Ouvrir ${t.nom}`}
+      libelle={tr('dashboard.ouvrir', { nom: t.nom })}
       onPress={onOuvrir}
       desactive={t.suspendu}
       accent={couleur}
@@ -394,21 +406,21 @@ function CarteTeamListe({ theme, team: t, onOuvrir }: { theme: ThemeHub; team: T
           <Text style={{ ...texte(theme, 18), fontWeight: '800' }} numberOfLines={1}>
             {t.nom}
           </Text>
-          <Text style={attenue(theme)} numberOfLines={1}>{`${jeu} · ${t.membres} membre${t.membres > 1 ? 's' : ''}`}</Text>
+          <Text style={attenue(theme)} numberOfLines={1}>{`${jeu} · ${trn('statsTeam.membres', t.membres)}`}</Text>
         </View>
       </View>
       <Text style={attenue(theme, 14)} numberOfLines={2}>
-        {t.description || 'Pas encore de description.'}
+        {t.description || tr('racineEsport.pas_encore_de_description')}
       </Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs }}>
-        {t.role ? <PastilleRole theme={theme} nom={t.role.nom} couleur={t.role.couleur} /> : <Badge theme={theme} texte="Super admin" ton="accent" />}
-        {t.suspendu ? <Badge theme={theme} texte="Accès suspendu" ton="critique" /> : null}
+        {t.role ? <PastilleRole theme={theme} nom={nomRole(t.role.nom)} couleur={t.role.couleur} /> : <Badge theme={theme} texte={tr('pageTeam.super_admin')} ton="accent" />}
+        {t.suspendu ? <Badge theme={theme} texte={tr('racineEsport.acces_suspendu')} ton="critique" /> : null}
         {groupes.map(g => (
           <Badge key={g.id} theme={theme} texte={g.libelle} />
         ))}
       </View>
       <View style={{ flex: 1 }} />
-      <Text style={{ ...texte(theme, 14), color: theme.accent, fontWeight: '700' }}>{t.suspendu ? 'Accès suspendu' : 'Ouvrir la team ›'}</Text>
+      <Text style={{ ...texte(theme, 14), color: theme.accent, fontWeight: '700' }}>{t.suspendu ? tr('racineEsport.acces_suspendu') : tr('racineEsport.ouvrir_la_team')}</Text>
     </Carte>
   );
 }

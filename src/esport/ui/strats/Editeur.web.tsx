@@ -42,24 +42,33 @@ import { Retours, styles, useAgir, Intertitre, Panneau } from '../commun';
 import type { ExportCanevas, Outil } from './CanevasStrat.web';
 import { MentionRiot } from './commun';
 import type { PropsEditeur } from './types';
+import { tr } from '../../i18n';
 
 export type { PropsEditeur };
 
 const Canevas = React.lazy(() => import('./CanevasStrat.web'));
 
-const OUTILS: ReadonlyArray<readonly [Outil, string, string]> = [
-  ['selection', '↖', 'Sélection et déplacement (V)'],
-  ['main', '✋', 'Déplacer la vue (H)'],
-  ['agent', '◉', 'Agent (A)'],
-  ['capacite', '✦', 'Capacité (C)'],
-  ['fleche', '➜', 'Flèche (F)'],
-  ['ligne', '╱', 'Ligne (L)'],
-  ['forme', '▭', 'Forme (R)'],
-  ['texte', 'T', 'Texte (T)'],
-  ['gomme', '⌫', 'Gomme (E)'],
+const outilsEditeur = (): ReadonlyArray<readonly [Outil, string, string]> => [
+  ['selection', '↖', tr('strats.editeur.selection_et_deplacement_v')],
+  ['main', '✋', tr('strats.editeur.deplacer_la_vue_h')],
+  ['agent', '◉', tr('strats.editeur.agent_a')],
+  ['capacite', '✦', tr('strats.editeur.capacite_c')],
+  ['fleche', '➜', tr('strats.editeur.fleche_f')],
+  ['ligne', '╱', tr('strats.editeur.ligne_l')],
+  ['forme', '▭', tr('strats.editeur.forme_r')],
+  ['texte', 'T', tr('strats.editeur.texte_t')],
+  ['gomme', '⌫', tr('strats.editeur.gomme_e')],
 ];
 const TOUCHES_OUTILS: Record<string, Outil> = { v: 'selection', h: 'main', a: 'agent', c: 'capacite', f: 'fleche', l: 'ligne', r: 'forme', t: 'texte', e: 'gomme' };
-const NOMS_CALQUES: Record<Calque, string> = { fond: 'Fond (carte)', utilitaires: 'Utilitaires', dessins: 'Dessins', texte: 'Texte' };
+const NOMS_CALQUES: Record<Calque, string> = { get fond() {
+      return tr('strats.editeur.fond_carte');
+    }, get utilitaires() {
+      return tr('review.libelles.utilitaires');
+    }, get dessins() {
+      return tr('strats.editeur.dessins');
+    }, get texte() {
+      return tr('review.dessin.texte');
+    } };
 
 const cacheImages = creerCacheImages({
   fetch: (url, init) => globalThis.fetch(url, init as RequestInit),
@@ -151,9 +160,9 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
 
   const enregistrer = useCallback(
     (forcer?: number) =>
-      agir('Enregistrement', async () => {
+      agir('enregistrement', async () => {
         if (!doc || !strat) return;
-        if (tailleDocument(doc) > TAILLE_MAX_DOCUMENT) throw new Error('Strat trop volumineuse (256 Ko au plus) : retirez des étapes ou des dessins.');
+        if (tailleDocument(doc) > TAILLE_MAX_DOCUMENT) throw new Error(tr('strats.editeur.strat_trop_volumineuse_256'));
         let miniature: string | undefined;
         try {
           miniature = exportRef.current?.miniature();
@@ -166,7 +175,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
           setRevision(s.revision);
           setEnregistre(doc);
           setConflit(undefined);
-          return s.avertissement ? 'Strat enregistrée (miniature non stockée : stockage absent).' : `Strat enregistrée (version ${s.revision}).`;
+          return s.avertissement ? tr('strats.editeur.strat_enregistree_miniature_no') : tr('strats.editeur.strat_enregistree_version', { revision: s.revision });
         } catch (e) {
           if (e instanceof ErreurEsport && e.code === 'conflit') setConflit(Number((e.details as { revision?: number } | undefined)?.revision ?? 0) || undefined);
           throw e;
@@ -176,13 +185,13 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
   );
 
   const exporterPng = useCallback(() => {
-    void agir('Export', async () => {
-      if (!exportRef.current || !strat || !doc) throw new Error('Le canevas n’est pas encore prêt.');
+    void agir('export', async () => {
+      if (!exportRef.current || !strat || !doc) throw new Error(tr('strats.editeur.le_canevas_n_est'));
       let url: string;
       try {
         url = exportRef.current.png(2);
       } catch {
-        throw new Error('Export impossible : une image n’a pas pu être chargée proprement. Réessayez sans le fond de carte.');
+        throw new Error(tr('strats.editeur.export_impossible_une_image'));
       }
       // Data URL → Blob : un lien court, et le nom de fichier respecté par tous les navigateurs.
       const blob = await (await fetch(url)).blob();
@@ -196,7 +205,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(lien), 30_000);
-      return 'Image PNG exportée.';
+      return tr('strats.editeur.image_png_exportee');
     });
   }, [agir, strat, doc, iEtape]);
 
@@ -247,8 +256,8 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
   if (!strat || !doc || !h) {
     return (
       <View style={{ gap: 12 }} testID="esport-editeur-chargement">
-        <BoutonHub theme={theme} titre="← Strats" onPress={onRetour} testID="esport-editeur-retour" />
-        {erreur ? <Retours theme={theme} erreur={erreur} prefixe="esport-editeur" /> : <Text style={{ color: theme.attenue }}>Chargement de la strat…</Text>}
+        <BoutonHub theme={theme} titre={tr('strats.editeur.strats')} onPress={onRetour} testID="esport-editeur-retour" />
+        {erreur ? <Retours theme={theme} erreur={erreur} prefixe="esport-editeur" /> : <Text style={{ color: theme.attenue }}>{tr('strats.editeur.chargement_de_la_strat')}</Text>}
       </View>
     );
   }
@@ -258,26 +267,26 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
   const carteAsset = assets?.cartes.find(c => c.cle === doc.carte.cle);
 
   const barreOutils = (
-    <View style={[styles.ligne, { gap: 6 }]} accessibilityRole="toolbar" accessibilityLabel="Outils" testID="esport-editeur-outils">
-      {OUTILS.map(([id, icone, libelle]) => (
+    <View style={[styles.ligne, { gap: 6 }]} accessibilityRole="toolbar" accessibilityLabel={tr('strats.editeur.outils')} testID="esport-editeur-outils">
+      {outilsEditeur().map(([id, icone, libelle]) => (
         <Pastille key={id} theme={theme} actif={outil === id} onPress={() => setOutil(id)} libelle={libelle} testID={`esport-outil-${id}`}>
           <Text style={{ color: theme.texte, fontSize: 17 }}>{icone}</Text>
         </Pastille>
       ))}
       <View style={{ width: 8 }} />
-      <Pastille theme={theme} actif={false} onPress={() => setH(annuler(h))} libelle="Annuler (Ctrl+Z)" testID="esport-editeur-annuler">
+      <Pastille theme={theme} actif={false} onPress={() => setH(annuler(h))} libelle={tr('strats.editeur.annuler_ctrl_z')} testID="esport-editeur-annuler">
         <Text style={{ color: h.passe.length ? theme.texte : theme.attenue, fontSize: 17 }}>↶</Text>
       </Pastille>
-      <Pastille theme={theme} actif={false} onPress={() => setH(retablir(h))} libelle="Rétablir (Ctrl+Maj+Z)" testID="esport-editeur-retablir">
+      <Pastille theme={theme} actif={false} onPress={() => setH(retablir(h))} libelle={tr('strats.editeur.retablir_ctrl_maj_z')} testID="esport-editeur-retablir">
         <Text style={{ color: h.futur.length ? theme.texte : theme.attenue, fontSize: 17 }}>↷</Text>
       </Pastille>
-      <Pastille theme={theme} actif={false} onPress={() => setVue(v => zoomer(v, 1.25, { x: taille / 2, y: taille / 2 }))} libelle="Zoomer (+)" testID="esport-editeur-zoom-plus">
+      <Pastille theme={theme} actif={false} onPress={() => setVue(v => zoomer(v, 1.25, { x: taille / 2, y: taille / 2 }))} libelle={tr('strats.editeur.zoomer')} testID="esport-editeur-zoom-plus">
         <Text style={{ color: theme.texte, fontSize: 17 }}>＋</Text>
       </Pastille>
-      <Pastille theme={theme} actif={false} onPress={() => setVue(v => zoomer(v, 1 / 1.25, { x: taille / 2, y: taille / 2 }))} libelle="Dézoomer (-)" testID="esport-editeur-zoom-moins">
+      <Pastille theme={theme} actif={false} onPress={() => setVue(v => zoomer(v, 1 / 1.25, { x: taille / 2, y: taille / 2 }))} libelle={tr('strats.editeur.dezoomer')} testID="esport-editeur-zoom-moins">
         <Text style={{ color: theme.texte, fontSize: 17 }}>－</Text>
       </Pastille>
-      <Pastille theme={theme} actif={false} onPress={() => setVue(VUE_INITIALE)} libelle="Vue entière (0)" testID="esport-editeur-zoom-zero">
+      <Pastille theme={theme} actif={false} onPress={() => setVue(VUE_INITIALE)} libelle={tr('strats.editeur.vue_entiere_0')} testID="esport-editeur-zoom-zero">
         <Text style={{ color: theme.texte, fontSize: 12 }}>{Math.round(vue.echelle * 100)} %</Text>
       </Pastille>
     </View>
@@ -286,7 +295,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
   const palette = (
     <View style={{ gap: 10 }}>
       <Panneau theme={theme} testID="esport-editeur-joueurs">
-        <Intertitre theme={theme}>Joueurs et couleurs</Intertitre>
+        <Intertitre theme={theme}>{tr('strats.editeur.joueurs_et_couleurs')}</Intertitre>
         <View style={[styles.ligne, { gap: 6 }]}>
           {doc.joueurs.map((j, i) => (
             <Pastille key={i} theme={theme} actif={joueur === i && !couleurLibre} couleur={j.couleur} onPress={() => (setJoueur(i), setCouleurLibre(undefined))} libelle={`${j.nom} (${i + 1})`} testID={`esport-joueur-${i}`}>
@@ -297,18 +306,18 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
             </Pastille>
           ))}
           {COULEURS_LIBRES.map(c => (
-            <Pastille key={c} theme={theme} actif={couleurLibre === c} couleur={c} onPress={() => (setCouleurLibre(c), setJoueur(null))} libelle={`Couleur ${c}`} testID={`esport-couleur-${c.slice(1)}`}>
+            <Pastille key={c} theme={theme} actif={couleurLibre === c} couleur={c} onPress={() => (setCouleurLibre(c), setJoueur(null))} libelle={tr('strats.editeur.couleur', { c })} testID={`esport-couleur-${c.slice(1)}`}>
               <View style={{ width: 16, height: 16, borderRadius: 4, backgroundColor: c, borderWidth: 1, borderColor: theme.ligne }} />
             </Pastille>
           ))}
         </View>
         {joueur !== null ? (
-          <Champ theme={theme} libelle={`Nom du joueur ${joueur + 1}`} valeur={doc.joueurs[joueur].nom} onChanger={nom => faire({ type: 'joueur', index: joueur, champs: { nom: nom.slice(0, 24) } })} maxLength={24} testID="esport-joueur-nom" />
+          <Champ theme={theme} libelle={tr('strats.editeur.nom_du_joueur', { v: joueur + 1 })} valeur={doc.joueurs[joueur].nom} onChanger={nom => faire({ type: 'joueur', index: joueur, champs: { nom: nom.slice(0, 24) } })} maxLength={24} testID="esport-joueur-nom" />
         ) : null}
       </Panneau>
       {outil === 'agent' || outil === 'capacite' ? (
         <Panneau theme={theme} testID="esport-editeur-agents">
-          <Intertitre theme={theme}>{outil === 'agent' ? 'Agent à poser' : 'Capacité à poser'}</Intertitre>
+          <Intertitre theme={theme}>{outil === 'agent' ? tr('strats.editeur.agent_a_poser') : tr('strats.editeur.capacite_a_poser')}</Intertitre>
           <View style={[styles.ligne, { gap: 4 }]}>
             {agents.map(a => (
               <Pastille
@@ -338,27 +347,27 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
                   </Pastille>
                 ))}
               </View>
-              <Text style={attenue}>{capacite ? `${capacite.nom} : choisissez la zone, puis touchez la carte.` : ''}</Text>
-              <Segments<FormeZone | 'aucune'> theme={theme} libelle="Zone" valeur={formeZone} options={[['cercle', 'Cercle (smoke, molly)'], ['mur', 'Mur / ligne'], ['cone', 'Cône (flash)'], ['aucune', 'Icône seule']]} onChoisir={setFormeZone} testID="esport-zone" />
+              <Text style={attenue}>{capacite ? tr('strats.editeur.choisissez_la_zone_puis', { nom: capacite.nom }) : ''}</Text>
+              <Segments<FormeZone | 'aucune'> theme={theme} libelle={tr('strats.editeur.zone')} valeur={formeZone} options={[['cercle', tr('strats.editeur.cercle_smoke_molly')], ['mur', tr('strats.editeur.mur_ligne')], ['cone', tr('strats.editeur.cone_flash')], ['aucune', tr('strats.editeur.icone_seule')]]} onChoisir={setFormeZone} testID="esport-zone" />
             </>
           ) : null}
         </Panneau>
       ) : null}
       {outil === 'texte' ? (
         <Panneau theme={theme}>
-          <Champ theme={theme} libelle="Texte à poser (touchez la carte)" valeur={texte} onChanger={setTexte} maxLength={200} testID="esport-editeur-texte" />
+          <Champ theme={theme} libelle={tr('strats.editeur.texte_a_poser_touchez')} valeur={texte} onChanger={setTexte} maxLength={200} testID="esport-editeur-texte" />
         </Panneau>
       ) : null}
       {outil === 'forme' ? (
-        <Segments<'rect' | 'ellipse'> theme={theme} libelle="Forme" valeur={formeDessin} options={[['rect', 'Rectangle'], ['ellipse', 'Ellipse']]} onChoisir={setFormeDessin} testID="esport-forme" />
+        <Segments<'rect' | 'ellipse'> theme={theme} libelle={tr('strats.editeur.forme')} valeur={formeDessin} options={[['rect', tr('strats.editeur.rectangle')], ['ellipse', tr('strats.editeur.ellipse')]]} onChoisir={setFormeDessin} testID="esport-forme" />
       ) : null}
       {outil === 'fleche' || outil === 'ligne' ? (
-        <Segments<'plein' | 'tirets'> theme={theme} libelle="Trait" valeur={tirets ? 'tirets' : 'plein'} options={[['plein', 'Plein'], ['tirets', 'Tirets (rotation)']]} onChoisir={v => setTirets(v === 'tirets')} testID="esport-trait" />
+        <Segments<'plein' | 'tirets'> theme={theme} libelle={tr('strats.editeur.trait')} valeur={tirets ? 'tirets' : 'plein'} options={[['plein', tr('strats.editeur.plein')], ['tirets', tr('strats.editeur.tirets_rotation')]]} onChoisir={v => setTirets(v === 'tirets')} testID="esport-trait" />
       ) : null}
       {selection && outil === 'selection' ? (
         <BoutonHub
           theme={theme}
-          titre="Effacer la sélection (Suppr)"
+          titre={tr('strats.editeur.effacer_la_selection_suppr')}
           variante="danger"
           onPress={() => {
             faire({ type: 'supprimer', etape: iEtape, id: selection });
@@ -368,13 +377,13 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
         />
       ) : null}
       <Panneau theme={theme} testID="esport-editeur-calques">
-        <Intertitre theme={theme}>Calques</Intertitre>
+        <Intertitre theme={theme}>{tr('strats.editeur.calques')}</Intertitre>
         {CALQUES.map(c => (
           <View key={c} style={[styles.ligne, { justifyContent: 'space-between' }]}>
             <Text style={{ color: theme.texte, fontSize: 13, flex: 1 }}>{NOMS_CALQUES[c]}</Text>
-            <BoutonHub theme={theme} titre={doc.calques[c].visible ? '👁' : '—'} libelle={`${doc.calques[c].visible ? 'Masquer' : 'Afficher'} ${NOMS_CALQUES[c]}`} onPress={() => faire({ type: 'calque', calque: c, champs: { visible: !doc.calques[c].visible } })} testID={`esport-calque-${c}-visible`} />
+            <BoutonHub theme={theme} titre={doc.calques[c].visible ? '👁' : '—'} libelle={`${doc.calques[c].visible ? tr('strats.editeur.masquer') : tr('strats.editeur.afficher')} ${NOMS_CALQUES[c]}`} onPress={() => faire({ type: 'calque', calque: c, champs: { visible: !doc.calques[c].visible } })} testID={`esport-calque-${c}-visible`} />
             {c !== 'fond' ? (
-              <BoutonHub theme={theme} titre={doc.calques[c].verrou ? '🔒' : '🔓'} libelle={`${doc.calques[c].verrou ? 'Déverrouiller' : 'Verrouiller'} ${NOMS_CALQUES[c]}`} onPress={() => faire({ type: 'calque', calque: c, champs: { verrou: !doc.calques[c].verrou } })} testID={`esport-calque-${c}-verrou`} />
+              <BoutonHub theme={theme} titre={doc.calques[c].verrou ? '🔒' : '🔓'} libelle={`${doc.calques[c].verrou ? tr('strats.editeur.deverrouiller') : tr('strats.editeur.verrouiller')} ${NOMS_CALQUES[c]}`} onPress={() => faire({ type: 'calque', calque: c, champs: { verrou: !doc.calques[c].verrou } })} testID={`esport-calque-${c}-verrou`} />
             ) : null}
           </View>
         ))}
@@ -385,14 +394,13 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
   const etapes = (
     <Panneau theme={theme} testID="esport-editeur-etapes">
       <View style={[styles.ligne, { gap: 6 }]}>
-        <BoutonHub theme={theme} titre="◀" libelle="Étape précédente ([)" onPress={() => setEtape(Math.max(0, iEtape - 1))} desactive={iEtape === 0} testID="esport-etape-precedente" />
+        <BoutonHub theme={theme} titre="◀" libelle={tr('strats.editeur.etape_precedente')} onPress={() => setEtape(Math.max(0, iEtape - 1))} desactive={iEtape === 0} testID="esport-etape-precedente" />
         <Text style={{ color: theme.texte, fontWeight: '700', ...police(theme.policeTexte) }} testID="esport-etape-position">
-          Étape {iEtape + 1} / {doc.etapes.length}
-        </Text>
-        <BoutonHub theme={theme} titre="▶" libelle="Étape suivante (])" onPress={() => setEtape(Math.min(doc.etapes.length - 1, iEtape + 1))} desactive={iEtape >= doc.etapes.length - 1} testID="esport-etape-suivante" />
+          {tr('strats.editeur.etape', { v: iEtape + 1, length: doc.etapes.length })}</Text>
+        <BoutonHub theme={theme} titre="▶" libelle={tr('strats.editeur.etape_suivante')} onPress={() => setEtape(Math.min(doc.etapes.length - 1, iEtape + 1))} desactive={iEtape >= doc.etapes.length - 1} testID="esport-etape-suivante" />
         <BoutonHub
           theme={theme}
-          titre="+ Étape"
+          titre={tr('strats.editeur.etape_2')}
           desactive={doc.etapes.length >= ETAPES_MAX}
           onPress={() => {
             faire({ type: 'ajouterEtape', apres: iEtape });
@@ -402,7 +410,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
         />
         <BoutonHub
           theme={theme}
-          titre="Dupliquer l’étape"
+          titre={tr('strats.editeur.dupliquer_l_etape')}
           desactive={doc.etapes.length >= ETAPES_MAX}
           onPress={() => {
             faire({ type: 'dupliquerEtape', etape: iEtape });
@@ -412,7 +420,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
         />
         <BoutonHub
           theme={theme}
-          titre="Supprimer l’étape"
+          titre={tr('strats.editeur.supprimer_l_etape')}
           variante="danger"
           desactive={doc.etapes.length <= 1}
           onPress={() => {
@@ -424,8 +432,8 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
       </View>
       {etapeCourante ? (
         <View style={[styles.ligne, { alignItems: 'flex-start' }]}>
-          <Champ theme={theme} libelle="Titre de l’étape" valeur={etapeCourante.titre} onChanger={titre => faire({ type: 'titreEtape', etape: iEtape, titre })} maxLength={60} style={{ flex: 1, minWidth: 180 }} testID="esport-etape-titre" />
-          <ChampNote theme={theme} libelle="Note de l’étape" valeur={etapeCourante.note} onChanger={note => faire({ type: 'noteEtape', etape: iEtape, note })} maxLength={2000} style={{ flex: 2, minWidth: 220 }} testID="esport-etape-note" />
+          <Champ theme={theme} libelle={tr('strats.editeur.titre_de_l_etape')} valeur={etapeCourante.titre} onChanger={titre => faire({ type: 'titreEtape', etape: iEtape, titre })} maxLength={60} style={{ flex: 1, minWidth: 180 }} testID="esport-etape-titre" />
+          <ChampNote theme={theme} libelle={tr('strats.editeur.note_de_l_etape')} valeur={etapeCourante.note} onChanger={note => faire({ type: 'noteEtape', etape: iEtape, note })} maxLength={2000} style={{ flex: 2, minWidth: 220 }} testID="esport-etape-note" />
         </View>
       ) : null}
     </Panneau>
@@ -435,24 +443,24 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
     <View style={{ gap: 12 }} testID="esport-editeur">
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
         <View style={[styles.ligne, { flex: 1 }]}>
-          <BoutonHub theme={theme} titre="← Strats" onPress={onRetour} testID="esport-editeur-retour" />
+          <BoutonHub theme={theme} titre={tr('strats.editeur.strats')} onPress={onRetour} testID="esport-editeur-retour" />
           <Text style={{ color: theme.texte, fontSize: 20, fontWeight: '800', ...police(theme.policeTitre) }} numberOfLines={1} testID="esport-editeur-titre">
             {strat.titre}
           </Text>
           <Text style={attenue}>
-            {doc.carte.nom} · {LIBELLES_SIDE[doc.side]} · version {revision}
-            {modifie ? ' · modifications non enregistrées' : ''}
+            {doc.carte.nom} · {LIBELLES_SIDE[doc.side]} · {tr('strats.editeur.version', { n: revision })}
+            {modifie ? tr('strats.editeur.modifications_non_enregistrees') : ''}
           </Text>
         </View>
         <View style={styles.ligne}>
-          {peutModifier ? <BoutonHub theme={theme} titre={enCours === 'Enregistrement' ? 'Enregistrement…' : 'Enregistrer'} variante="plein" desactive={Boolean(enCours)} onPress={() => void enregistrer()} testID="esport-editeur-enregistrer" /> : null}
-          <BoutonHub theme={theme} titre="Exporter en PNG" onPress={exporterPng} testID="esport-editeur-png" />
+          {peutModifier ? <BoutonHub theme={theme} titre={enCours === 'enregistrement' ? tr('membresRoles.enregistrement') : tr('discord.enregistrer')} variante="plein" desactive={Boolean(enCours)} onPress={() => void enregistrer()} testID="esport-editeur-enregistrer" /> : null}
+          <BoutonHub theme={theme} titre={tr('strats.editeur.exporter_en_png')} onPress={exporterPng} testID="esport-editeur-png" />
           {peutModifier ? (
             <BoutonHub
               theme={theme}
-              titre="Dupliquer la strat"
+              titre={tr('strats.editeur.dupliquer_la_strat')}
               onPress={() =>
-                void agir('Duplication', async () => {
+                void agir('duplication', async () => {
                   const copie = await api.dupliquer(teamId, strat.id);
                   onOuvrir(copie.id);
                 })
@@ -465,24 +473,24 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-editeur" />
       {conflit !== undefined ? (
         <View style={styles.ligne}>
-          <BoutonHub theme={theme} titre="Recharger la version du serveur" onPress={() => void agir('', charger)} testID="esport-editeur-recharger" />
-          <BoutonHub theme={theme} titre="Garder la mienne (écraser)" variante="danger" onPress={() => (setErreur(undefined), void enregistrer(conflit))} testID="esport-editeur-ecraser" />
+          <BoutonHub theme={theme} titre={tr('strats.editeur.recharger_la_version_du')} onPress={() => void agir('', charger)} testID="esport-editeur-recharger" />
+          <BoutonHub theme={theme} titre={tr('strats.editeur.garder_la_mienne_ecraser')} variante="danger" onPress={() => (setErreur(undefined), void enregistrer(conflit))} testID="esport-editeur-ecraser" />
         </View>
       ) : null}
-      {!peutModifier ? <Text style={attenue}>Lecture seule : votre rôle ne permet pas de modifier les strats.</Text> : null}
+      {!peutModifier ? <Text style={attenue}>{tr('strats.editeur.lecture_seule_votre_role')}</Text> : null}
       {peutModifier ? (
         <View style={[styles.ligne, { gap: 8 }]}>
           <Segments
             theme={theme}
-            libelle="Side"
+            libelle={tr('scouting.scouting.side')}
             valeur={doc.side}
-            options={[['attaque', 'Attaque'], ['defense', 'Défense']] as const}
+            options={[['attaque', tr('strats.editeur.attaque')], ['defense', tr('strats.editeur.defense')]] as const}
             onChoisir={side => faire({ type: 'side', side })}
             testID="esport-editeur-side"
           />
-          <View style={[styles.ligne, { gap: 4, flex: 1 }]} accessibilityRole="radiogroup" accessibilityLabel="Carte">
+          <View style={[styles.ligne, { gap: 4, flex: 1 }]} accessibilityRole="radiogroup" accessibilityLabel={tr('strats.editeur.carte')}>
             {(assets?.cartes ?? []).map(c => (
-              <Pastille key={c.cle} theme={theme} actif={doc.carte.cle === c.cle} onPress={() => faire({ type: 'carte', carte: { cle: c.cle, nom: c.nom, image: c.minimap } })} libelle={`Carte ${c.nom}`} testID={`esport-editeur-carte-${c.cle}`}>
+              <Pastille key={c.cle} theme={theme} actif={doc.carte.cle === c.cle} onPress={() => faire({ type: 'carte', carte: { cle: c.cle, nom: c.nom, image: c.minimap } })} libelle={tr('strats.editeur.carte_2', { nom: c.nom })} testID={`esport-editeur-carte-${c.cle}`}>
                 <Text style={{ color: theme.texte, fontSize: 12 }}>{c.nom}</Text>
               </Pastille>
             ))}
@@ -492,7 +500,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
       {peutModifier ? barreOutils : null}
       <View style={{ flexDirection: large ? 'row' : 'column', gap: 12, alignItems: 'flex-start' }}>
         <View style={{ flex: 1, width: '100%', gap: 8 }} onLayout={ev => setLargeur(ev.nativeEvent.layout.width)}>
-          <Suspense fallback={<Text style={attenue}>Chargement de l’éditeur…</Text>}>
+          <Suspense fallback={<Text style={attenue}>{tr('strats.editeur.chargement_de_l_editeur')}</Text>}>
             <Canevas
               doc={doc}
               fond={doc.carte.image ?? carteAsset?.minimap ?? null}
@@ -517,7 +525,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
               onPret={surPret}
             />
           </Suspense>
-          {!carteAsset?.minimap && !doc.carte.image ? <Text style={attenue}>Fond générique : l’image de la carte n’a pas pu être chargée (hors ligne ou API indisponible).</Text> : null}
+          {!carteAsset?.minimap && !doc.carte.image ? <Text style={attenue}>{tr('strats.editeur.fond_generique_l_image')}</Text> : null}
           {etapes}
         </View>
         {peutModifier ? <View style={{ width: large ? 320 : '100%' }}>{palette}</View> : null}

@@ -16,12 +16,21 @@ import { useMobile } from '../../ui/mobile/useMobile';
 import { appliquerFormat, formatDuRaccourci, type Format, type Selection } from '../review/formatage';
 import { ESP, rayonControle, type EtatPresse } from './design';
 import { NoteMarkdown } from './review/Note';
+import { tr } from '../i18n';
 
 const BOUTONS: ReadonlyArray<{ format: Format; glyphe: string; nom: string; style?: object }> = [
-  { format: 'gras', glyphe: 'B', nom: 'Gras (Ctrl+B)', style: { fontWeight: '900' } },
-  { format: 'italique', glyphe: 'I', nom: 'Italique (Ctrl+I)', style: { fontStyle: 'italic', fontWeight: '700' } },
-  { format: 'liste', glyphe: '•≡', nom: 'Liste à puces' },
-  { format: 'lien', glyphe: '🔗', nom: 'Lien' },
+  { format: 'gras', glyphe: 'B', get nom() {
+      return tr('champNote.gras_ctrl_b');
+    }, style: { fontWeight: '900' } },
+  { format: 'italique', glyphe: 'I', get nom() {
+      return tr('champNote.italique_ctrl_i');
+    }, style: { fontStyle: 'italic', fontWeight: '700' } },
+  { format: 'liste', glyphe: '•≡', get nom() {
+      return tr('champNote.liste_a_puces');
+    } },
+  { format: 'lien', glyphe: '🔗', get nom() {
+      return tr('strats.strats.lien');
+    } },
 ];
 
 type NoeudTexte = { selectionStart?: number; selectionEnd?: number; setSelectionRange?(a: number, b: number): void; focus?(): void };
@@ -106,7 +115,7 @@ export function ChampNote({
       <View style={{ borderWidth: 1, borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 10), backgroundColor: theme.fond, overflow: 'hidden' }}>
         <View
           accessibilityRole="toolbar"
-          accessibilityLabel={`Mise en forme : ${libelle}`}
+          accessibilityLabel={tr('champNote.mise_en_forme', { libelle })}
           testID={`${testID}-outils`}
           style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 2, padding: 2, borderBottomWidth: 1, borderBottomColor: theme.ligne, backgroundColor: theme.surface }}>
           {BOUTONS.map(b => (
@@ -127,10 +136,10 @@ export function ChampNote({
               testID={`${testID}-voir-apercu`}
               accessibilityRole="button"
               accessibilityState={{ selected: voir }}
-              accessibilityLabel={voir ? 'Masquer l’aperçu' : 'Voir l’aperçu du rendu'}
+              accessibilityLabel={voir ? tr('champNote.masquer_l_apercu') : tr('champNote.voir_l_apercu_du')}
               onPress={() => setVoir(v => !v)}
               style={(etat: EtatPresse) => ({ ...bouton(etat, voir), marginLeft: 'auto', paddingHorizontal: ESP.s })}>
-              <Text style={{ color: theme.texte, fontSize: 13, fontWeight: '600', ...police(theme.policeTexte) }}>Aperçu</Text>
+              <Text style={{ color: theme.texte, fontSize: 13, fontWeight: '600', ...police(theme.policeTexte) }}>{tr('champNote.apercu')}</Text>
             </Pressable>
           ) : null}
         </View>
@@ -164,7 +173,7 @@ export function ChampNote({
       </View>
       {montrerApercu ? (
         <View style={{ gap: 4, padding: ESP.xs, borderRadius: Math.min(theme.rayonMoyen, 10), backgroundColor: teinteTransparente(theme.attenue, 0.08) }}>
-          <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>Aperçu</Text>
+          <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>{tr('champNote.apercu')}</Text>
           <NoteMarkdown theme={theme} source={valeur} testID={testIDApercu ?? `${testID}-apercu`} />
         </View>
       ) : null}

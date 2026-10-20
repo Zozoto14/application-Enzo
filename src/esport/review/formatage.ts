@@ -10,6 +10,8 @@
  * Sans sélection, un texte d'exemple est inséré puis sélectionné.
  */
 
+import { tr } from '../i18n';
+
 export interface Selection {
   start: number;
   end: number;
@@ -23,7 +25,11 @@ export interface Edition {
 export type Format = 'gras' | 'italique' | 'liste' | 'lien';
 
 const MARQUES = { gras: '**', italique: '*' } as const;
-const EXEMPLES = { gras: 'texte en gras', italique: 'texte en italique' } as const;
+const EXEMPLES = { get gras() {
+      return tr('review.formatage.texte_en_gras');
+    }, get italique() {
+      return tr('review.formatage.texte_en_italique');
+    } } as const;
 
 const borner = (texte: string, s: Selection): Selection => {
   const a = Math.max(0, Math.min(texte.length, Math.min(s.start, s.end)));

@@ -15,12 +15,13 @@ import { police, type ThemeHub } from '../../../hub/themes';
 import type { ApiPlanning, PresenceOccurrence, Reel } from '../../planning/api';
 import { LIBELLES_REEL, LIBELLES_RSVP } from '../../planning/libelles';
 import { Retours, styles, useAgir, Intertitre, Panneau } from '../commun';
+import { tr } from '../../i18n';
 
-const MARQUES: ReadonlyArray<readonly [Reel, string]> = [
-  ['present', 'Présent'],
-  ['retard', 'Retard'],
-  ['absent', 'Absent'],
-  ['excuse', 'Excusé'],
+const marquesPresence = (): ReadonlyArray<readonly [Reel, string]> => [
+  ['present', tr('planning.libelles.present')],
+  ['retard', tr('planning.listePresence.retard')],
+  ['absent', tr('planning.libelles.absent')],
+  ['excuse', tr('planning.libelles.excuse')],
 ];
 
 export function ListePresence({ theme, api, evenementId, cle, marquer, onMarque }: { theme: ThemeHub; api: ApiPlanning; evenementId: string; cle: string; marquer: boolean; onMarque?(): void }) {
@@ -38,29 +39,29 @@ export function ListePresence({ theme, api, evenementId, cle, marquer, onMarque 
   const attenue = { color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) };
   return (
     <Panneau theme={theme} testID="esport-presence-liste">
-      <Intertitre theme={theme}>Présence</Intertitre>
+      <Intertitre theme={theme}>{tr('planning.listePresence.presence')}</Intertitre>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-presence" />
-      {presence && presence.lignes.length === 0 ? <Text style={attenue}>Personne n’est convoqué à cet événement.</Text> : null}
-      {marquer && presence?.lignes.length ? <Text style={attenue}>Un appui enregistre la présence.</Text> : null}
+      {presence && presence.lignes.length === 0 ? <Text style={attenue}>{tr('planning.listePresence.personne_n_est_convoque')}</Text> : null}
+      {marquer && presence?.lignes.length ? <Text style={attenue}>{tr('planning.listePresence.un_appui_enregistre_la')}</Text> : null}
       {presence?.lignes.map(l => (
         <View key={l.compte} style={{ gap: 6, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 8 }} testID={`esport-presence-${l.compte}`}>
           <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
             <Text style={[texte, { fontWeight: '700' }]}>{l.pseudo}</Text>
             <Text style={attenue}>
-              Réponse : {LIBELLES_RSVP[l.rsvp]}
+              {tr('planning.listePresence.reponse', { reponse: LIBELLES_RSVP[l.rsvp] })}
               {marquer ? '' : ` · ${LIBELLES_REEL[l.reel]}`}
             </Text>
           </View>
           {marquer ? (
             <Segments
               theme={theme}
-              libelle={`Présence de ${l.pseudo}`}
+              libelle={tr('planning.listePresence.presence_de', { pseudo: l.pseudo })}
               valeur={marques[l.compte] ?? 'inconnu'}
-              options={MARQUES}
+              options={marquesPresence()}
               onChoisir={v => {
                 const avant = marques[l.compte] ?? 'inconnu';
                 setMarques(m => ({ ...m, [l.compte]: v }));
-                void agir('Présence', async () => {
+                void agir('presence', async () => {
                   try {
                     setPresence(await api.marquer(evenementId, cle, [{ compte: l.compte, reel: v }]));
                   } catch (e) {
@@ -68,7 +69,7 @@ export function ListePresence({ theme, api, evenementId, cle, marquer, onMarque 
                     throw e;
                   }
                   onMarque?.();
-                  return `${l.pseudo} : ${LIBELLES_REEL[v].toLowerCase()} (enregistré).`;
+                  return tr('planning.listePresence.enregistre', { pseudo: l.pseudo, v: LIBELLES_REEL[v].toLowerCase() });
                 });
               }}
               testID={`esport-marque-${l.compte}`}

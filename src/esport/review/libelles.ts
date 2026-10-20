@@ -4,6 +4,7 @@
  */
 
 import type { CategorieRepere, Reactions, SideTendance } from './api';
+import { tr, type Cle } from '../i18n';
 
 export interface InfoCategorie {
   cle: CategorieRepere;
@@ -14,21 +15,31 @@ export interface InfoCategorie {
 }
 
 export const CATEGORIES: readonly InfoCategorie[] = [
-  { cle: 'erreur', nom: 'Erreur', couleur: '#E5484D', glyphe: '✕' },
-  { cle: 'bonne_action', nom: 'Bonne action', couleur: '#30A46C', glyphe: '✓' },
-  { cle: 'utilitaires', nom: 'Utilitaires', couleur: '#3E63DD', glyphe: '◆' },
-  { cle: 'placement', nom: 'Placement', couleur: '#F5A524', glyphe: '⌖' },
-  { cle: 'comms', nom: 'Comms', couleur: '#AB4ABA', glyphe: '✉' },
+  { cle: 'erreur', get nom() {
+      return tr('review.libelles.erreur');
+    }, couleur: '#E5484D', glyphe: '✕' },
+  { cle: 'bonne_action', get nom() {
+      return tr('review.libelles.bonne_action');
+    }, couleur: '#30A46C', glyphe: '✓' },
+  { cle: 'utilitaires', get nom() {
+      return tr('review.libelles.utilitaires');
+    }, couleur: '#3E63DD', glyphe: '◆' },
+  { cle: 'placement', get nom() {
+      return tr('review.libelles.placement');
+    }, couleur: '#F5A524', glyphe: '⌖' },
+  { cle: 'comms', get nom() {
+      return tr('review.libelles.comms');
+    }, couleur: '#AB4ABA', glyphe: '✉' },
 ];
 
 export const categorie = (cle: string): InfoCategorie => CATEGORIES.find(c => c.cle === cle) ?? CATEGORIES[0];
 
-export const SIDES: ReadonlyArray<readonly [SideTendance, string]> = [
-  ['attaque', 'Attaque'],
-  ['defense', 'Défense'],
-  ['les_deux', 'Les deux'],
+export const sidesTendance = (): ReadonlyArray<readonly [SideTendance, string]> => [
+  ['attaque', tr('strats.editeur.attaque')],
+  ['defense', tr('strats.editeur.defense')],
+  ['les_deux', tr('strats.playbook.les_deux')],
 ];
-export const nomSide = (s: string): string => SIDES.find(([c]) => c === s)?.[1] ?? s;
+export const nomSide = (s: string): string => sidesTendance().find(([c]) => c === s)?.[1] ?? s;
 
 const deux = (n: number) => String(Math.floor(n)).padStart(2, '0');
 
@@ -65,10 +76,10 @@ export function repereActif<T extends { debut: number; fin: number | null }>(rep
 
 export type TriReperes = 'instant' | 'likes' | 'dislikes';
 
-export const TRIS_REPERES: ReadonlyArray<readonly [TriReperes, string]> = [
-  ['instant', 'Par instant'],
-  ['likes', 'Plus likés 👍'],
-  ['dislikes', 'Plus dislikés 👎'],
+export const trisReperes = (): ReadonlyArray<readonly [TriReperes, string]> => [
+  ['instant', tr('review.libelles.par_instant')],
+  ['likes', tr('review.libelles.plus_likes')],
+  ['dislikes', tr('review.libelles.plus_dislikes')],
 ];
 
 /** Tri de la liste des repères : par instant (ordre du serveur), ou par réactions (à égalité, par instant). */
@@ -87,36 +98,35 @@ const texte = (v: unknown, repli = '?') => (typeof v === 'string' && v ? v : rep
 export function phraseJournalReview(action: string, qui: string, m: Record<string, unknown>): string | undefined {
   switch (action) {
     case 'review.created':
-      return `${qui} a créé la review « ${texte(m.titre)} »${m.depuisVod ? ' (depuis une VOD de scouting)' : ''}`;
+      return tr('review.libelles.a_cree_la_review', { qui, titre: texte(m.titre), vod: m.depuisVod ? tr('review.libelles.depuis_une_vod_de') : '' });
     case 'review.updated':
-      return `${qui} a modifié la review « ${texte(m.titre)} »`;
+      return tr('review.libelles.a_modifie_la_review', { qui, v: texte(m.titre) });
     case 'review.deleted':
-      return `${qui} a supprimé la review « ${texte(m.titre)} »`;
+      return tr('review.libelles.a_supprime_la_review', { qui, v: texte(m.titre) });
     case 'review.marker_added':
-      return `${qui} a ajouté le repère « ${texte(m.titre)} » (${categorie(texte(m.categorie)).nom}, ${formatTemps(Number(m.debut) || 0)}) à « ${texte(m.review)} »`;
+      return tr('review.libelles.a_ajoute_le_repere', { qui, titre: texte(m.titre), categorie: categorie(texte(m.categorie)).nom, temps: formatTemps(Number(m.debut) || 0), review: texte(m.review) });
     case 'review.marker_updated':
-      return `${qui} a modifié le repère « ${texte(m.titre)} » de « ${texte(m.review)} »`;
+      return tr('review.libelles.a_modifie_le_repere', { qui, v: texte(m.titre), v2: texte(m.review) });
     case 'review.marker_deleted':
-      return `${qui} a supprimé le repère « ${texte(m.titre)} » de « ${texte(m.review)} »`;
+      return tr('review.libelles.a_supprime_le_repere', { qui, v: texte(m.titre), v2: texte(m.review) });
     case 'review.comment_added':
-      return `${qui} a commenté le repère « ${texte(m.repereTitre)} » de « ${texte(m.titre)} »`;
+      return tr('review.libelles.a_commente_le_repere', { qui, v: texte(m.repereTitre), v2: texte(m.titre) });
     case 'review.comment_deleted':
-      return `${qui} a supprimé un commentaire de « ${texte(m.titre)} »`;
+      return tr('review.libelles.a_supprime_un_commentaire', { qui, v: texte(m.titre) });
     case 'review.reaction_changed': {
-      const sur = m.cible === 'commentaire' ? `un commentaire du repère « ${texte(m.repereTitre)} »` : `le repère « ${texte(m.repereTitre)} »`;
-      const quoi = m.valeur === 'like' ? 'aime 👍' : m.valeur === 'dislike' ? 'n’aime pas 👎' : 'a retiré sa réaction à';
-      return `${qui} ${quoi} ${sur} de « ${texte(m.review)} »`;
+      const cle = m.valeur === 'like' ? 'like' : m.valeur === 'dislike' ? 'dislike' : 'retrait';
+      return tr(`review.libelles.reaction_${cle}_${m.cible === 'commentaire' ? 'commentaire' : 'repere'}` as Cle, { qui, repere: texte(m.repereTitre), review: texte(m.review) });
     }
     case 'opponent.created':
-      return `${qui} a créé la fiche adversaire « ${texte(m.nom)} »`;
+      return tr('review.libelles.a_cree_la_fiche', { qui, v: texte(m.nom) });
     case 'opponent.updated':
-      return `${qui} a modifié la fiche adversaire « ${texte(m.nom)} »`;
+      return tr('review.libelles.a_modifie_la_fiche', { qui, v: texte(m.nom) });
     case 'opponent.deleted':
-      return `${qui} a supprimé la fiche adversaire « ${texte(m.nom)} »`;
+      return tr('review.libelles.a_supprime_la_fiche', { qui, v: texte(m.nom) });
     case 'opponent.detail_changed': {
-      const partie = ({ joueur: 'un joueur', tendance: 'une tendance', vod: 'une VOD' } as Record<string, string>)[texte(m.partie, '')] ?? 'un élément';
-      const act = ({ ajout: 'a ajouté', modification: 'a modifié', suppression: 'a supprimé', review: 'a ouvert en review', liaison: 'a lié à une review' } as Record<string, string>)[texte(m.action, '')] ?? 'a changé';
-      return `${qui} ${act} ${partie} (« ${texte(m.nom)} ») de la fiche « ${texte(m.adversaire)} »`;
+      const partie = ({ joueur: tr('review.libelles.un_joueur'), tendance: tr('review.libelles.une_tendance'), vod: tr('review.libelles.une_vod') } as Record<string, string>)[texte(m.partie, '')] ?? tr('review.libelles.un_element');
+      const act = ['ajout', 'modification', 'suppression', 'review', 'liaison'].includes(texte(m.action, '')) ? texte(m.action, '') : 'autre';
+      return tr(`review.libelles.fiche_${act}` as Cle, { qui, partie, nom: texte(m.nom), adversaire: texte(m.adversaire) });
     }
     default:
       return undefined;
@@ -125,7 +135,7 @@ export function phraseJournalReview(action: string, qui: string, m: Record<strin
 
 /** Phrase d'une notification de review (undefined : pas la nôtre). */
 export function phraseNotificationReview(type: string, team: string, c: Record<string, unknown>): string | undefined {
-  if (type === 'review-nouvelle') return `Nouvelle review « ${texte(c.titre, 'sans titre')} » (${team})`;
-  if (type === 'review-commentaire') return `Nouveau commentaire sur votre repère « ${texte(c.repere, 'sans titre')} » (${team})`;
+  if (type === 'review-nouvelle') return tr('review.libelles.nouvelle_review', { titre: texte(c.titre, tr('review.libelles.sans_titre')), team });
+  if (type === 'review-commentaire') return tr('review.libelles.nouveau_commentaire', { repere: texte(c.repere, tr('review.libelles.sans_titre')), team });
   return undefined;
 }

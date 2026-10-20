@@ -14,6 +14,7 @@ import { Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from '../
 import { NoteMarkdown } from '../review/Note';
 import { Etiquette, MentionRiot, Miniature } from './commun';
 import type { PropsEditeur } from './types';
+import { tr } from '../../i18n';
 
 export type { PropsEditeur };
 
@@ -27,12 +28,12 @@ export function Editeur({ theme, api, teamId, stratId, onRetour }: PropsEditeur)
   return (
     <View style={{ gap: 12 }} testID="esport-strat-lecture">
       <View style={styles.ligne}>
-        <BoutonHub theme={theme} titre="← Strats" onPress={onRetour} testID="esport-strat-retour" />
+        <BoutonHub theme={theme} titre={tr('strats.editeur.strats')} onPress={onRetour} testID="esport-strat-retour" />
       </View>
       <Retours theme={theme} erreur={erreur} prefixe="esport-strat-lecture" />
       {strat ? (
         <>
-          <TitreSection theme={theme} titre={strat.titre} sous="Lecture seule sur iPhone et iPad (app) : l’éditeur s’ouvre sur le site ou l’app PC." />
+          <TitreSection theme={theme} titre={strat.titre} sous={tr('strats.editeur.lecture_seule_sur_iphone')} />
           <View style={[styles.ligne, { gap: 4 }]}>
             <Etiquette theme={theme} texte={strat.carte.nom} />
             <Etiquette theme={theme} texte={LIBELLES_SIDE[strat.side]} />
@@ -43,7 +44,7 @@ export function Editeur({ theme, api, teamId, stratId, onRetour }: PropsEditeur)
           {strat.donnees?.etapes.map((e, i) => (
             <Panneau key={e.id} theme={theme} testID="esport-strat-lecture-etape">
               <Intertitre theme={theme}>{`${i + 1}. ${e.titre}`}</Intertitre>
-              {e.note ? <NoteMarkdown theme={theme} source={e.note} /> : <Text style={attenue}>Pas de note.</Text>}
+              {e.note ? <NoteMarkdown theme={theme} source={e.note} /> : <Text style={attenue}>{tr('strats.editeur.pas_de_note')}</Text>}
             </Panneau>
           ))}
           <MentionRiot theme={theme} />

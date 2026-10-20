@@ -2,10 +2,11 @@
 
 import React, { Suspense } from 'react';
 import { ActivityIndicator, View } from 'react-native';
+import { tr } from '../i18n';
 
 function Attente() {
   return (
-    <View style={{ padding: 24, alignItems: 'center' }} accessibilityLabel="Chargement" accessibilityRole="progressbar">
+    <View style={{ padding: 24, alignItems: 'center' }} accessibilityLabel={tr('attente.chargement')} accessibilityRole="progressbar">
       <ActivityIndicator />
     </View>
   );

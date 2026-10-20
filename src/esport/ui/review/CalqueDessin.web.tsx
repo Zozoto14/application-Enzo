@@ -15,6 +15,7 @@ import React, { useLayoutEffect, useRef, useState } from 'react';
 import { Arrow, Ellipse, Layer, Line, Rect, Stage, Text as KText } from 'react-konva';
 import { HAUTEUR_REFERENCE as H, LARGEUR_REFERENCE as L, POINTS_TRAIT_MAX, tailleTexte, type FormeDessin } from '../../review/dessin';
 import type { PropsEditeurDessin } from './typesDessin';
+import { tr } from '../../i18n';
 
 Konva.hitOnDragEnabled = true;
 
@@ -120,7 +121,7 @@ export default function CalqueDessin({ objets, outil, couleur, epaisseur, texte,
     <div
       ref={boite}
       data-testid="esport-dessin-calque"
-      aria-label="Calque de dessin sur la vidéo"
+      aria-label={tr('review.calqueDessin.calque_de_dessin_sur')}
       style={{ position: 'absolute', inset: 0, touchAction: 'none', pointerEvents: 'auto', cursor: outil === 'gomme' ? 'not-allowed' : outil === 'texte' ? 'text' : 'crosshair', outline: '2px dashed rgba(255,255,255,0.55)', outlineOffset: -2 }}>
       {taille.l > 0 ? (
         <Stage ref={scene} width={taille.l} height={taille.h} scaleX={k} scaleY={taille.h > 0 ? taille.h / H : k} onPointerDown={bas} onPointerMove={bouge} onPointerUp={haut} onPointerLeave={haut}>

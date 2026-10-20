@@ -8,6 +8,8 @@
  * 200 points par trait, 120 caractères par texte, 32 Ko au plus.
  */
 
+import { tr, trn } from '../i18n';
+
 export type TypeForme = 'fleche' | 'cercle' | 'rect' | 'trait' | 'texte';
 
 export interface FormeDessin {
@@ -30,27 +32,57 @@ export interface Dessin {
 export type OutilDessin = TypeForme | 'gomme';
 
 export const OUTILS_DESSIN: ReadonlyArray<{ cle: OutilDessin; nom: string; glyphe: string }> = [
-  { cle: 'fleche', nom: 'Flèche', glyphe: '➜' },
-  { cle: 'cercle', nom: 'Cercle', glyphe: '◯' },
-  { cle: 'rect', nom: 'Rectangle', glyphe: '▭' },
-  { cle: 'trait', nom: 'Trait libre', glyphe: '✎' },
-  { cle: 'texte', nom: 'Texte', glyphe: 'T' },
-  { cle: 'gomme', nom: 'Gomme', glyphe: '⌫' },
+  { cle: 'fleche', get nom() {
+      return tr('review.dessin.fleche_2');
+    }, glyphe: '➜' },
+  { cle: 'cercle', get nom() {
+      return tr('review.dessin.cercle');
+    }, glyphe: '◯' },
+  { cle: 'rect', get nom() {
+      return tr('strats.editeur.rectangle');
+    }, glyphe: '▭' },
+  { cle: 'trait', get nom() {
+      return tr('review.dessin.trait_libre');
+    }, glyphe: '✎' },
+  { cle: 'texte', get nom() {
+      return tr('review.dessin.texte');
+    }, glyphe: 'T' },
+  { cle: 'gomme', get nom() {
+      return tr('review.dessin.gomme');
+    }, glyphe: '⌫' },
 ];
 
 export const COULEURS_DESSIN: ReadonlyArray<{ cle: string; nom: string }> = [
-  { cle: '#e5484d', nom: 'Rouge' },
-  { cle: '#f5a524', nom: 'Ambre' },
-  { cle: '#30a46c', nom: 'Vert' },
-  { cle: '#3e63dd', nom: 'Bleu' },
-  { cle: '#ffffff', nom: 'Blanc' },
-  { cle: '#111111', nom: 'Noir' },
+  { cle: '#e5484d', get nom() {
+      return tr('review.dessin.rouge');
+    } },
+  { cle: '#f5a524', get nom() {
+      return tr('review.dessin.ambre');
+    } },
+  { cle: '#30a46c', get nom() {
+      return tr('review.dessin.vert');
+    } },
+  { cle: '#3e63dd', get nom() {
+      return tr('review.dessin.bleu');
+    } },
+  { cle: '#ffffff', get nom() {
+      return tr('review.dessin.blanc');
+    } },
+  { cle: '#111111', get nom() {
+      return tr('review.dessin.noir');
+    } },
 ];
 
 export const EPAISSEURS_DESSIN: ReadonlyArray<{ cle: number; nom: string }> = [
-  { cle: 2, nom: 'Fin' },
-  { cle: 4, nom: 'Moyen' },
-  { cle: 8, nom: 'Épais' },
+  { cle: 2, get nom() {
+      return tr('planning.planning.fin');
+    } },
+  { cle: 4, get nom() {
+      return tr('review.dessin.moyen');
+    } },
+  { cle: 8, get nom() {
+      return tr('review.dessin.epais');
+    } },
 ];
 
 export const OBJETS_DESSIN_MAX = 100;
@@ -222,7 +254,7 @@ export function elementsSvg(d: Dessin | null | undefined, largeur = LARGEUR_REFE
 /** Libellé accessible d'un dessin : « Dessin : 2 formes (flèche, cercle) ». */
 export function resumeDessin(d: Dessin | null | undefined): string {
   if (!d?.objets.length) return '';
-  const noms: Record<TypeForme, string> = { fleche: 'flèche', cercle: 'cercle', rect: 'rectangle', trait: 'trait', texte: 'texte' };
+  const noms: Record<TypeForme, string> = { fleche: tr('review.dessin.fleche'), cercle: tr('review.dessin.cercle_min'), rect: tr('review.dessin.rectangle_min'), trait: tr('review.dessin.trait_min'), texte: tr('review.dessin.texte_min') };
   const types = [...new Set(d.objets.map(o => noms[o.t] ?? o.t))];
-  return `${d.objets.length} forme${d.objets.length > 1 ? 's' : ''} (${types.join(', ')})`;
+  return tr('review.dessin.resume', { formes: trn('review.dessin.formes', d.objets.length), types: types.join(', ') });
 }

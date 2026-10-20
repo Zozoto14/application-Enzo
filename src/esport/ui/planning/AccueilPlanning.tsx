@@ -16,6 +16,7 @@ import { Retours, styles, useAgir, Intertitre, Panneau } from '../commun';
 import { EtatVide, Squelette, TitreCarte } from '../design';
 import type { PropsModule } from '../modules';
 import { BoutonsRsvp, CarteOccurrence } from './commun';
+import { tr, trn } from '../../i18n';
 
 export function AccueilPlanning({ theme, client, detail, onAller }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; onAller: PropsModule['onAller'] }) {
   const actif = detail.modules.some(m => m.cle === 'planning' && m.active) && detail.moi.permissions.includes('planning.view');
@@ -37,12 +38,12 @@ export function AccueilPlanning({ theme, client, detail, onAller }: { theme: The
       <Panneau theme={theme} testID="esport-accueil-prochains">
         <TitreCarte
           theme={theme}
-          titre="Prochains événements"
-          sous={d && d.prochains.length > 3 ? `${d.prochains.length} dans les deux semaines` : undefined}
-          droite={<BoutonHub theme={theme} titre="Tout le planning ›" onPress={() => onAller('module:planning')} testID="esport-accueil-planning" />}
+          titre={tr('dashboard.prochains_evenements')}
+          sous={d && d.prochains.length > 3 ? tr('planning.accueilPlanning.dans_les_deux_semaines', { length: d.prochains.length }) : undefined}
+          droite={<BoutonHub theme={theme} titre={tr('planning.accueilPlanning.tout_le_planning')} onPress={() => onAller('module:planning')} testID="esport-accueil-planning" />}
         />
         {!d ? <Squelette theme={theme} lignes={3} /> : null}
-        {d && d.prochains.length === 0 ? <EtatVide theme={theme} glyphe="◷" titre="Rien de prévu" texte="Aucun événement dans les deux semaines." /> : null}
+        {d && d.prochains.length === 0 ? <EtatVide theme={theme} glyphe="◷" titre={tr('dashboard.rien_de_prevu')} texte={tr('planning.accueilPlanning.aucun_evenement_dans_les')} /> : null}
         {d?.prochains.slice(0, 3).map(o => (
           <CarteOccurrence
             key={`${o.evenementId}-${o.cle}`}
@@ -56,22 +57,22 @@ export function AccueilPlanning({ theme, client, detail, onAller }: { theme: The
       </Panneau>
       {d && d.alertes.length ? (
         <Panneau theme={theme} testID="esport-accueil-alertes">
-          <Intertitre theme={theme}>Alertes de présence</Intertitre>
+          <Intertitre theme={theme}>{tr('planning.accueilPlanning.alertes_de_presence')}</Intertitre>
           {d.alertes.map(a => (
             <View key={`${a.genre}-${a.evenementId}-${a.cle}`} style={{ gap: 6, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 8 }} testID={`esport-alerte-${a.genre}`}>
               <Text style={texte}>
                 {a.genre === 'rsvp'
-                  ? `Répondez : ${a.titre}`
+                  ? tr('planning.accueilPlanning.repondez', { titre: a.titre })
                   : a.genre === 'sans-reponse'
-                    ? `${a.sansReponse} sans réponse : ${a.titre}`
-                    : `${a.nonMarques} présence(s) à marquer : ${a.titre}`}
+                    ? tr('planning.accueilPlanning.sans_reponse', { sansReponse: a.sansReponse, titre: a.titre })
+                    : tr('planning.accueilPlanning.presence_s_a_marquer', { presences: trn('planning.accueilPlanning.presences', a.nonMarques ?? 0), titre: a.titre })}
                 <Text style={attenue}>
                   {' '}
                   · {dateCourteJour(a.jour)} {a.heureDebut}
                 </Text>
               </Text>
               {a.genre === 'rsvp' && d.droits.rsvp ? <BoutonsRsvp theme={theme} valeur="sans_reponse" onRepondre={repondre(a.evenementId, a.cle)} testID={`esport-alerte-rsvp-${a.jour}`} /> : null}
-              {a.genre === 'a-marquer' ? <BoutonHub theme={theme} titre="Marquer" onPress={() => onAller('module:attendance')} testID={`esport-alerte-marquer-${a.jour}`} /> : null}
+              {a.genre === 'a-marquer' ? <BoutonHub theme={theme} titre={tr('planning.accueilPlanning.marquer')} onPress={() => onAller('module:attendance')} testID={`esport-alerte-marquer-${a.jour}`} /> : null}
             </View>
           ))}
         </Panneau>
@@ -102,24 +103,24 @@ export function ReglagesPlanning({ theme, client, detail, onChange }: { theme: T
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   return (
     <Panneau theme={theme} testID="esport-parametres-planning">
-      <Intertitre theme={theme}>Planning</Intertitre>
-      <Champ theme={theme} libelle="Fuseau horaire de la team (IANA)" valeur={fuseau} onChanger={setFuseau} maxLength={60} placeholder="Europe/Paris" testID="esport-parametres-fuseau" />
-      <Text style={attenue}>Heures affichées par défaut. Cet appareil : {fuseauAppareil()}.</Text>
+      <Intertitre theme={theme}>{tr('planning.accueilPlanning.planning')}</Intertitre>
+      <Champ theme={theme} libelle={tr('planning.accueilPlanning.fuseau_horaire_de_la')} valeur={fuseau} onChanger={setFuseau} maxLength={60} placeholder="Europe/Paris" testID="esport-parametres-fuseau" />
+      <Text style={attenue}>{tr('planning.accueilPlanning.heures_affichees_par_defaut', { v: fuseauAppareil() })}</Text>
       <View style={styles.ligne}>
-        <Champ theme={theme} libelle="Effectif minimum" valeur={effectif} onChanger={setEffectif} clavier="number-pad" maxLength={2} style={{ width: 150 }} testID="esport-parametres-effectif" />
-        <Champ theme={theme} libelle="Rappel (heures avant, 0 = jamais)" valeur={rappel} onChanger={setRappel} clavier="number-pad" maxLength={3} style={{ width: 220 }} testID="esport-parametres-rappel" />
+        <Champ theme={theme} libelle={tr('planning.accueilPlanning.effectif_minimum')} valeur={effectif} onChanger={setEffectif} clavier="number-pad" maxLength={2} style={{ width: 150 }} testID="esport-parametres-effectif" />
+        <Champ theme={theme} libelle={tr('planning.accueilPlanning.rappel_heures_avant_0')} valeur={rappel} onChanger={setRappel} clavier="number-pad" maxLength={3} style={{ width: 220 }} testID="esport-parametres-rappel" />
       </View>
       <BoutonHub
         theme={theme}
-        titre="Enregistrer"
+        titre={tr('discord.enregistrer')}
         variante="plein"
         desactive={Boolean(enCours)}
         onPress={() =>
-          void agir('Planning', async () => {
+          void agir('planning', async () => {
             if (fuseau.trim() !== detail.team.fuseau) await client.requete(`/teams/${encodeURIComponent(detail.team.id)}`, 'PATCH', { fuseau: fuseau.trim() });
             await api.changerReglages({ effectifMin: Number(effectif), rappelHeures: Number(rappel) });
             await onChange();
-            return 'Réglages du planning enregistrés.';
+            return tr('planning.accueilPlanning.reglages_du_planning_enregistr');
           })
         }
         testID="esport-parametres-planning-enregistrer"

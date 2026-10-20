@@ -214,7 +214,7 @@ describe('« Lier mon Discord » (profil)', () => {
     expect(screen.getByText(/\/lier code:WXYZ-2345/)).toBeTruthy();
     lie = true;
     await fireEvent.press(screen.getByTestId('esport-lier-discord-verifier'));
-    expect((await screen.findByTestId('esport-lier-discord-etat')).props.children.join('')).toMatch(/Discord lié : Léa/);
+    expect([(await screen.findByTestId('esport-lier-discord-etat')).props.children].flat().join('')).toMatch(/Discord lié : Léa/);
     await fireEvent.press(screen.getByTestId('esport-lier-discord-delier'));
     await waitFor(() => expect(appels).toContain('DELETE /moi/discord'));
     await screen.findByTestId('esport-lier-discord-bouton');

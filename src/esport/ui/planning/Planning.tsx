@@ -15,7 +15,7 @@ import type { Membre } from '../../client';
 import { apiPlanning, type AbonnementIcal, type ApiPlanning, type Convocation, type DetailEvenement, type DroitsPlanning, type ListePlanning, type MembreConvocable, type Occurrence, type SaisieEvenement, type TypeEvenement } from '../../planning/api';
 import { CONVOCATION_DEFAUT, memeConvocation } from '../../planning/convocations';
 import {
-  JOURS_COURTS,
+  joursCourts,
   TYPES_EVENEMENT,
   ajouterJours,
   aujourdhui,
@@ -35,14 +35,15 @@ import { EnTetePage, EtatVide, Pliable, Volet } from '../design';
 import type { PropsModule } from '../modules';
 import { BoutonsRsvp, CarteOccurrence, Pastille, PastilleType, SelecteurConvocation, SelecteurFuseau, useFuseau } from './commun';
 import { ListePresence } from './ListePresence';
+import { tr, trn } from '../../i18n';
 
 type Vue = 'mois' | 'semaine' | 'liste';
 type Formulaire = { mode: 'creer' } | { mode: 'serie'; id: string } | { mode: 'occurrence'; id: string; cle: string };
 
-const VUES: ReadonlyArray<readonly [Vue, string]> = [
-  ['mois', 'Mois'],
-  ['semaine', 'Semaine'],
-  ['liste', 'Liste'],
+const vuesPlanning = (): ReadonlyArray<readonly [Vue, string]> => [
+  ['mois', tr('planning.planning.mois')],
+  ['semaine', tr('planning.planning.semaine')],
+  ['liste', tr('objectifs.liste')],
 ];
 
 function plage(vue: Vue, ref: string): { debut: string; fin: string; titre: string } {
@@ -52,9 +53,9 @@ function plage(vue: Vue, ref: string): { debut: string; fin: string; titre: stri
   }
   if (vue === 'semaine') {
     const l = lundiDe(ref);
-    return { debut: l, fin: ajouterJours(l, 7), titre: `Semaine du ${dateLongue(l)}` };
+    return { debut: l, fin: ajouterJours(l, 7), titre: tr('planning.disponibilites.semaine_du', { v: dateLongue(l) }) };
   }
-  return { debut: ref, fin: ajouterJours(ref, 31), titre: `À partir du ${dateLongue(ref)}` };
+  return { debut: ref, fin: ajouterJours(ref, 31), titre: tr('planning.planning.a_partir_du', { v: dateLongue(ref) }) };
 }
 
 async function copier(texte: string): Promise<boolean> {
@@ -185,13 +186,13 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
       <EnTetePage
         theme={theme}
         large={large}
-        titre="Planning"
+        titre={tr('planning.accueilPlanning.planning')}
         sous={p.titre}
         action={
           droits?.creer ? (
             <BoutonHub
               theme={theme}
-              titre="+ Nouvel événement"
+              titre={tr('planning.planning.nouvel_evenement')}
               variante="plein"
               onPress={() => setFormulaire({ f: { mode: 'creer' }, initial: { date: jourChoisi ?? (ref >= auj ? ref : auj) } })}
               testID="esport-planning-nouveau"
@@ -201,17 +202,17 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
       />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-planning" />
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
-        <Segments theme={theme} libelle="Vue" valeur={vue} options={VUES} onChoisir={v => setVue(v as Vue)} testID="esport-planning-vue" />
+        <Segments theme={theme} libelle={tr('planning.planning.vue')} valeur={vue} options={vuesPlanning()} onChoisir={v => setVue(v as Vue)} testID="esport-planning-vue" />
         <View style={styles.ligne}>
-          <BoutonHub theme={theme} titre="‹" libelle="Précédent" onPress={() => deplacer(-1)} testID="esport-planning-precedent" />
-          <BoutonHub theme={theme} titre="Aujourd’hui" onPress={() => setRef(auj)} testID="esport-planning-aujourdhui" />
-          <BoutonHub theme={theme} titre="›" libelle="Suivant" onPress={() => deplacer(1)} testID="esport-planning-suivant" />
+          <BoutonHub theme={theme} titre="‹" libelle={tr('planning.planning.precedent')} onPress={() => deplacer(-1)} testID="esport-planning-precedent" />
+          <BoutonHub theme={theme} titre={tr('planning.planning.aujourd_hui')} onPress={() => setRef(auj)} testID="esport-planning-aujourdhui" />
+          <BoutonHub theme={theme} titre="›" libelle={tr('planning.planning.suivant')} onPress={() => deplacer(1)} testID="esport-planning-suivant" />
         </View>
       </View>
       <Pliable
         theme={theme}
-        titre="Filtres"
-        resume={[types.length ? `${types.length} type${types.length > 1 ? 's' : ''}` : '', membre === 'moi' ? 'mes convocations' : membre ? (membres.find(m => m.compte === membre)?.pseudo ?? '1 membre') : '', f.choix === 'appareil' ? 'mon heure' : ''].filter(Boolean).join(' · ') || 'aucun'}
+        titre={tr('planning.planning.filtres')}
+        resume={[types.length ? trn('planning.planning.types_filtre', types.length) : '', membre === 'moi' ? tr('planning.planning.mes_convocations') : membre ? (membres.find(m => m.compte === membre)?.pseudo ?? tr('planning.planning.1_membre')) : '', f.choix === 'appareil' ? tr('planning.planning.mon_heure') : ''].filter(Boolean).join(' · ') || tr('planning.planning.filtre_aucun')}
         testID="esport-planning-filtres-ouvrir">
         <View style={styles.ligne} testID="esport-planning-filtres">
           {TYPES_EVENEMENT.map(t => (
@@ -227,20 +228,20 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
             />
           ))}
         </View>
-        <View style={styles.ligne} accessibilityLabel="Mes convocations">
+        <View style={styles.ligne} accessibilityLabel={tr('planning.planning.mes_convocations_2')}>
           <Pastille
             theme={theme}
             actif={membre === 'moi'}
-            libelle="Où je suis convoqué"
+            libelle={tr('planning.planning.ou_je_suis_convoque')}
             role="checkbox"
             onPress={() => setMembre(membre === 'moi' ? '' : 'moi')}
             testID="esport-filtre-mes-convocations"
           />
         </View>
         {membres.length > 0 ? (
-          <View style={styles.ligne} accessibilityLabel="Filtrer par membre convoqué">
-            <Text style={attenue}>Membre :</Text>
-            <Pastille theme={theme} actif={!membre} libelle="Tous" onPress={() => setMembre('')} role="radio" testID="esport-filtre-membre-tous" />
+          <View style={styles.ligne} accessibilityLabel={tr('planning.planning.filtrer_par_membre_convoque')}>
+            <Text style={attenue}>{tr('planning.planning.membre')}</Text>
+            <Pastille theme={theme} actif={!membre} libelle={tr('journal.tous')} onPress={() => setMembre('')} role="radio" testID="esport-filtre-membre-tous" />
             {membres.map(m => (
               <Pastille key={m.compte} theme={theme} actif={membre === m.compte} libelle={m.pseudo} onPress={() => setMembre(membre === m.compte ? '' : m.compte)} role="radio" testID={`esport-filtre-membre-${m.compte}`} />
             ))}
@@ -264,7 +265,7 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
           {jourChoisi ? (
             <View style={{ gap: 8 }} testID="esport-planning-jour">
               <Intertitre theme={theme}>{dateLongue(jourChoisi)}</Intertitre>
-              {(parJour.get(jourChoisi) ?? []).length === 0 ? <Text style={attenue}>Rien ce jour-là.</Text> : null}
+              {(parJour.get(jourChoisi) ?? []).length === 0 ? <Text style={attenue}>{tr('planning.planning.rien_ce_jour_la')}</Text> : null}
               {(parJour.get(jourChoisi) ?? []).map(o => carte(o, false))}
             </View>
           ) : null}
@@ -273,7 +274,7 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
         <View style={large ? { flexDirection: 'row', gap: 8, alignItems: 'flex-start' } : { gap: 12 }} testID="esport-planning-semaine">
           {Array.from({ length: 7 }, (_, i) => ajouterJours(lundiDe(ref), i)).map(j => (
             <View key={j} style={large ? { flex: 1, gap: 6, minWidth: 0 } : { gap: 6 }}>
-              <Text style={{ color: j === auj ? theme.accent : theme.texte, fontWeight: '700', fontSize: 13, ...police(theme.policeTexte) }}>{large ? `${JOURS_COURTS[jourSemaine(j) - 1]} ${j.slice(8)}` : dateLongue(j)}</Text>
+              <Text style={{ color: j === auj ? theme.accent : theme.texte, fontWeight: '700', fontSize: 13, ...police(theme.policeTexte) }}>{large ? `${joursCourts()[jourSemaine(j) - 1]} ${j.slice(8)}` : dateLongue(j)}</Text>
               {(parJour.get(j) ?? []).map(o =>
                 large ? <PuceOccurrence key={`${o.evenementId}-${o.cle}`} theme={theme} o={o} onPress={() => ouvrir(o)} /> : carte(o, false),
               )}
@@ -287,13 +288,13 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
             <EtatVide
               theme={theme}
               glyphe="◷"
-              titre="Aucun événement sur cette période"
-              texte={droits?.creer ? 'Planifiez un entraînement, un scrim ou un match : il apparaîtra ici et chez chaque joueur.' : 'Le staff n’a encore rien prévu sur cette période.'}
+              titre={tr('planning.planning.aucun_evenement_sur_cette')}
+              texte={droits?.creer ? tr('planning.planning.planifiez_un_entrainement_un') : tr('planning.planning.le_staff_n_a')}
             />
           ) : null}
           {[...parJour.entries()].map(([j, liste]) => (
             <View key={j} style={{ gap: 8 }}>
-              <Intertitre theme={theme}>{`${dateLongue(j)}${j === auj ? ' · aujourd’hui' : ''}`}</Intertitre>
+              <Intertitre theme={theme}>{`${dateLongue(j)}${j === auj ? tr('planning.planning.aujourd_hui_2') : ''}`}</Intertitre>
               {liste.map(o => carte(o, false))}
             </View>
           ))}
@@ -301,7 +302,7 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
       )}
 
       <PanneauIcal theme={theme} api={api} adresse={client.config.adresse} onExporter={onExporter} />
-      <Volet theme={theme} visible={Boolean(volet)} titre={formulaire ? 'Événement' : 'Détail'} onFermer={fermerVolet} testID="esport-planning-volet">
+      <Volet theme={theme} visible={Boolean(volet)} titre={formulaire ? tr('planning.planning.evenement') : tr('planning.planning.detail')} onFermer={fermerVolet} testID="esport-planning-volet">
         {volet}
       </Volet>
     </View>
@@ -334,7 +335,7 @@ function GrilleMois({
   return (
     <View style={{ borderWidth: 1, borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 12), overflow: 'hidden' }} testID="esport-planning-mois">
       <View style={{ flexDirection: 'row' }}>
-        {JOURS_COURTS.map((j, i) => (
+        {joursCourts().map((j, i) => (
           <Text key={i} style={{ flex: 1, textAlign: 'center', paddingVertical: 6, color: theme.attenue, fontSize: 12, fontWeight: '700', ...police(theme.policeTexte) }}>
             {j}
           </Text>
@@ -350,7 +351,7 @@ function GrilleMois({
                 key={j}
                 testID={`esport-mois-${j}`}
                 accessibilityRole="button"
-                accessibilityLabel={`${dateLongue(j)} : ${liste.length} événement(s)`}
+                accessibilityLabel={tr('planning.planning.evenement_s', { v: dateLongue(j), evenements: trn('planning.planning.evenements', liste.length) })}
                 onPress={() => onJour(j)}
                 style={{
                   flex: 1,
@@ -456,7 +457,7 @@ function DetailOccurrence({
   return (
     <View style={{ gap: 14 }} testID="esport-evenement">
       <View style={styles.ligne}>
-        <BoutonHub theme={theme} titre="← Planning" onPress={onRetour} testID="esport-evenement-retour" />
+        <BoutonHub theme={theme} titre={tr('planning.planning.planning')} onPress={onRetour} testID="esport-evenement-retour" />
       </View>
       <Panneau theme={theme} style={{ borderLeftWidth: 4, borderLeftColor: typeEvenement(o.type).couleur }}>
         <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
@@ -467,32 +468,30 @@ function DetailOccurrence({
         </View>
         <Text style={texte}>
           {dateLongue(o.jour)} · {o.heureDebut}–{o.heureFin}
-          {o.jourFin !== o.jour ? ' (lendemain)' : ''}
+          {o.jourFin !== o.jour ? tr('planning.planning.lendemain') : ''}
         </Text>
         {o.lieu ? <Text style={texte}>📍 {o.lieu}</Text> : null}
         {o.description ? <Text style={attenue}>{o.description}</Text> : null}
         {o.adversaireId && adversaires?.some(a => a.id === o.adversaireId) ? (
           <Text style={texte} testID="esport-evenement-adversaire">
-            Adversaire : {adversaires.find(a => a.id === o.adversaireId)?.nom}
-          </Text>
+            {tr('planning.planning.adversaire', { nom: adversaires.find(a => a.id === o.adversaireId)?.nom })}</Text>
         ) : null}
-        {evenement ? <Text style={attenue}>{resumeRecurrence(evenement.recurrence)}{o.modifiee ? ' · cette date a été modifiée' : ''}</Text> : null}
+        {evenement ? <Text style={attenue}>{resumeRecurrence(evenement.recurrence)}{o.modifiee ? tr('planning.planning.cette_date_a_ete') : ''}</Text> : null}
         <Text style={attenue} testID="esport-evenement-convoques">
           {convoques.length
-            ? `Convoqués (${convoques.length}) : ${convoques.map(c => noms[c] ?? '…').join(', ')}${o.convocationPropre ? ' · liste propre à cette date' : ''}`
-            : 'Personne n’est convoqué.'}
+            ? tr('planning.planning.convoques', { n: convoques.length, noms: convoques.map(c => noms[c] ?? '…').join(', '), propre: o.convocationPropre ? tr('planning.planning.liste_propre_a_cette') : '' })
+            : tr('planning.planning.personne_n_est_convoque')}
         </Text>
         {o.convoqueMoi === false ? (
           <Text style={attenue} testID="esport-evenement-non-convoque">
-            Vous n’êtes pas convoqué : vous voyez l’événement, sans y être attendu ni relancé.
-          </Text>
+            {tr('planning.planning.vous_n_etes_pas')}</Text>
         ) : null}
       </Panneau>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-evenement" />
 
       {onRepondre && o.concerneMoi !== false && !o.termine && o.monRsvp !== null && o.monRsvp !== undefined ? (
         <Panneau theme={theme} testID="esport-evenement-rsvp">
-          <Intertitre theme={theme}>Serez-vous là ?</Intertitre>
+          <Intertitre theme={theme}>{tr('planning.planning.serez_vous_la')}</Intertitre>
           <BoutonsRsvp theme={theme} valeur={o.monRsvp} onRepondre={onRepondre} testID="esport-evenement-rsvp-boutons" />
         </Panneau>
       ) : null}
@@ -501,12 +500,12 @@ function DetailOccurrence({
 
       {droits.modifier || droits.supprimer ? (
         <Panneau theme={theme} testID="esport-evenement-actions">
-          <Intertitre theme={theme}>Gérer</Intertitre>
+          <Intertitre theme={theme}>{tr('planning.planning.gerer')}</Intertitre>
           <View style={styles.ligne}>
             {droits.modifier ? (
               <>
-                <BoutonHub theme={theme} titre={o.recurrent ? 'Modifier cette date' : 'Modifier'} onPress={() => onModifier(o.recurrent ? 'occurrence' : 'serie', initialOccurrence)} testID="esport-evenement-modifier" />
-                {o.recurrent ? <BoutonHub theme={theme} titre="Modifier la série" onPress={() => onModifier('serie', {})} testID="esport-evenement-modifier-serie" /> : null}
+                <BoutonHub theme={theme} titre={o.recurrent ? tr('planning.planning.modifier_cette_date') : tr('membresRoles.modifier')} onPress={() => onModifier(o.recurrent ? 'occurrence' : 'serie', initialOccurrence)} testID="esport-evenement-modifier" />
+                {o.recurrent ? <BoutonHub theme={theme} titre={tr('planning.planning.modifier_la_serie')} onPress={() => onModifier('serie', {})} testID="esport-evenement-modifier-serie" /> : null}
               </>
             ) : null}
           </View>
@@ -516,24 +515,24 @@ function DetailOccurrence({
                 <>
                   <BoutonConfirme
                     theme={theme}
-                    titre="Annuler cette date"
-                    confirmation="Oui, annuler cette date"
+                    titre={tr('planning.planning.annuler_cette_date')}
+                    confirmation={tr('planning.planning.oui_annuler_cette_date')}
                     onConfirme={() =>
-                  void agir('Suppression', async () => {
+                  void agir('suppression', async () => {
                     await api.supprimer(o.evenementId, 'occurrence', o.cle);
-                    await onSupprime('Date annulée.');
+                    await onSupprime(tr('planning.planning.date_annulee'));
                   })
                 }
                     testID="esport-evenement-annuler-date"
                   />
                   <BoutonConfirme
                     theme={theme}
-                    titre="Cette date et les suivantes"
-                    confirmation="Oui, arrêter la série ici"
+                    titre={tr('planning.planning.cette_date_et_les')}
+                    confirmation={tr('planning.planning.oui_arreter_la_serie')}
                     onConfirme={() =>
-                  void agir('Suppression', async () => {
+                  void agir('suppression', async () => {
                     await api.supprimer(o.evenementId, 'suivantes', o.cle);
-                    await onSupprime('Série arrêtée.');
+                    await onSupprime(tr('planning.planning.serie_arretee'));
                   })
                 }
                     testID="esport-evenement-annuler-suivantes"
@@ -542,12 +541,12 @@ function DetailOccurrence({
               ) : null}
               <BoutonConfirme
                 theme={theme}
-                titre={o.recurrent ? 'Toute la série' : 'Supprimer'}
-                confirmation="Oui, supprimer"
+                titre={o.recurrent ? tr('planning.planning.toute_la_serie') : tr('discord.supprimer')}
+                confirmation={tr('planning.planning.oui_supprimer')}
                 onConfirme={() =>
-                  void agir('Suppression', async () => {
+                  void agir('suppression', async () => {
                     await api.supprimer(o.evenementId, 'serie');
-                    await onSupprime('Événement supprimé.');
+                    await onSupprime(tr('planning.planning.evenement_supprime'));
                   })
                 }
                 testID="esport-evenement-supprimer"
@@ -620,15 +619,15 @@ function FormulaireEvenement({
   }, [agir, api, formulaire]);
 
   const maj = (champ: Partial<SaisieEvenement>) => setS(x => ({ ...x, ...champ }));
-  const titre = formulaire.mode === 'creer' ? 'Nouvel événement' : formulaire.mode === 'serie' ? 'Modifier la série' : 'Modifier cette date';
+  const titre = formulaire.mode === 'creer' ? tr('planning.planning.nouvel_evenement_2') : formulaire.mode === 'serie' ? tr('planning.planning.modifier_la_serie') : tr('planning.planning.modifier_cette_date');
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
 
   const enregistrer = () =>
-    agir('Enregistrer', async () => {
-      if (s.titre.trim().length < 2) throw new Error('Titre : 2 caractères au moins.');
-      if (!dateValide(s.date)) throw new Error('Date : AAAA-MM-JJ.');
-      if (!heureValide(s.heureDebut) || !heureValide(s.heureFin)) throw new Error('Heures : HH:MM.');
-      if (repeter && jusqua && !dateValide(jusqua)) throw new Error('Fin de la série : AAAA-MM-JJ.');
+    agir('enregistrer', async () => {
+      if (s.titre.trim().length < 2) throw new Error(tr('review.formulaireRepere.titre_2_caracteres_au'));
+      if (!dateValide(s.date)) throw new Error(tr('planning.planning.date_aaaa_mm_jj_2'));
+      if (!heureValide(s.heureDebut) || !heureValide(s.heureFin)) throw new Error(tr('planning.planning.heures_hh_mm'));
+      if (repeter && jusqua && !dateValide(jusqua)) throw new Error(tr('planning.planning.fin_de_la_serie'));
       const recurrence = repeter ? { freq: 'hebdo' as const, intervalle: Number(intervalle), jours: jours.length ? jours : [jourSemaine(s.date)], jusqua: jusqua || null } : null;
       const corps = { ...s, titre: s.titre.trim() };
       if (formulaire.mode === 'creer') await api.creer({ ...corps, recurrence });
@@ -645,18 +644,18 @@ function FormulaireEvenement({
           // Une liste propre à cette date, seulement si elle a changé.
           ...(corps.convocation && !memeConvocation(corps.convocation, convocationOrigine) ? { convocation: corps.convocation } : {}),
         });
-      await onFini(formulaire.mode === 'creer' ? 'Événement créé.' : 'Modification enregistrée.');
+      await onFini(formulaire.mode === 'creer' ? tr('planning.planning.evenement_cree') : tr('planning.planning.modification_enregistree'));
     });
 
   return (
     <View style={{ gap: 14 }} testID="esport-formulaire">
-      <TitreSection theme={theme} titre={titre} sous={formulaire.mode === 'serie' ? 'Changer l’horaire ou la règle remet à zéro les dates modifiées une à une.' : undefined} />
+      <TitreSection theme={theme} titre={titre} sous={formulaire.mode === 'serie' ? tr('planning.planning.changer_l_horaire_ou') : undefined} />
       <Retours theme={theme} erreur={erreur} prefixe="esport-formulaire" />
-      {!pret ? <Text style={attenue}>Chargement…</Text> : null}
+      {!pret ? <Text style={attenue}>{tr('journal.chargement')}</Text> : null}
       <Panneau theme={theme}>
         {serie ? (
           <View style={{ gap: 6 }}>
-            <Text style={{ color: theme.texte, fontWeight: '600', fontSize: 13, ...police(theme.policeTexte) }}>Type</Text>
+            <Text style={{ color: theme.texte, fontWeight: '600', fontSize: 13, ...police(theme.policeTexte) }}>{tr('resumes.type')}</Text>
             <View style={styles.ligne}>
               {TYPES_EVENEMENT.map(t => (
                 <Pastille key={t.cle} theme={theme} actif={s.type === t.cle} libelle={t.nom} couleur={t.couleur} role="radio" onPress={() => maj({ type: t.cle })} testID={`esport-formulaire-type-${t.cle}`} />
@@ -664,21 +663,21 @@ function FormulaireEvenement({
             </View>
           </View>
         ) : null}
-        <Champ theme={theme} libelle="Titre" valeur={s.titre} onChanger={titre => maj({ titre })} maxLength={80} placeholder="Scrim vs …" testID="esport-formulaire-titre" />
+        <Champ theme={theme} libelle={tr('objectifs.titre')} valeur={s.titre} onChanger={titre => maj({ titre })} maxLength={80} placeholder={tr('planning.planning.scrim_vs')} testID="esport-formulaire-titre" />
         <View style={styles.ligne}>
-          <Champ theme={theme} libelle="Date (AAAA-MM-JJ)" valeur={s.date} onChanger={date => maj({ date })} maxLength={10} style={{ flexGrow: 1, minWidth: 140 }} testID="esport-formulaire-date" />
-          <Champ theme={theme} libelle="Début" valeur={s.heureDebut} onChanger={heureDebut => maj({ heureDebut })} maxLength={5} style={{ width: 90 }} testID="esport-formulaire-debut" />
-          <Champ theme={theme} libelle="Fin" valeur={s.heureFin} onChanger={heureFin => maj({ heureFin })} maxLength={5} style={{ width: 90 }} testID="esport-formulaire-fin" />
+          <Champ theme={theme} libelle={tr('planning.planning.date_aaaa_mm_jj')} valeur={s.date} onChanger={date => maj({ date })} maxLength={10} style={{ flexGrow: 1, minWidth: 140 }} testID="esport-formulaire-date" />
+          <Champ theme={theme} libelle={tr('planning.planning.debut')} valeur={s.heureDebut} onChanger={heureDebut => maj({ heureDebut })} maxLength={5} style={{ width: 90 }} testID="esport-formulaire-debut" />
+          <Champ theme={theme} libelle={tr('planning.planning.fin')} valeur={s.heureFin} onChanger={heureFin => maj({ heureFin })} maxLength={5} style={{ width: 90 }} testID="esport-formulaire-fin" />
         </View>
-        <Text style={attenue}>Heures de {s.fuseau}. Une fin avant le début tombe le lendemain.</Text>
-        <Champ theme={theme} libelle="Lieu ou lien" valeur={s.lieu ?? ''} onChanger={lieu => maj({ lieu })} maxLength={200} testID="esport-formulaire-lieu" />
-        <Champ theme={theme} libelle="Description" valeur={s.description ?? ''} onChanger={description => maj({ description })} maxLength={2000} multiligne testID="esport-formulaire-description" />
+        <Text style={attenue}>{tr('planning.planning.heures_de_une_fin', { fuseau: s.fuseau })}</Text>
+        <Champ theme={theme} libelle={tr('planning.planning.lieu_ou_lien')} valeur={s.lieu ?? ''} onChanger={lieu => maj({ lieu })} maxLength={200} testID="esport-formulaire-lieu" />
+        <Champ theme={theme} libelle={tr('pageTeam.description')} valeur={s.description ?? ''} onChanger={description => maj({ description })} maxLength={2000} multiligne testID="esport-formulaire-description" />
         {serie && adversaires.length > 0 ? (
           <Choix
             theme={theme}
-            libelle="Adversaire (scouting)"
+            libelle={tr('planning.planning.adversaire_scouting')}
             valeur={s.adversaireId ?? ''}
-            options={[{ id: '', nom: 'Aucun' }, ...adversaires.map(a => ({ id: a.id, nom: a.nom }))]}
+            options={[{ id: '', nom: tr('objectifs.aucun') }, ...adversaires.map(a => ({ id: a.id, nom: a.nom }))]}
             onChoisir={v => maj({ adversaireId: v || null })}
             testID="esport-formulaire-adversaire"
           />
@@ -686,13 +685,13 @@ function FormulaireEvenement({
         {serie ? (
           <>
             <View style={[styles.ligne, { flexWrap: 'nowrap' }]}>
-              <Case theme={theme} coche={repeter} libelle="Répéter chaque semaine" onChanger={setRepeter} testID="esport-formulaire-repeter" />
-              <Text style={{ color: theme.texte, ...police(theme.policeTexte) }}>Répéter chaque semaine</Text>
+              <Case theme={theme} coche={repeter} libelle={tr('planning.planning.repeter_chaque_semaine')} onChanger={setRepeter} testID="esport-formulaire-repeter" />
+              <Text style={{ color: theme.texte, ...police(theme.policeTexte) }}>{tr('planning.planning.repeter_chaque_semaine')}</Text>
             </View>
             {repeter ? (
               <View style={{ gap: 8 }}>
                 <View style={styles.ligne}>
-                  {JOURS_COURTS.map((j, i) => (
+                  {joursCourts().map((j, i) => (
                     <Pastille
                       key={i}
                       theme={theme}
@@ -704,8 +703,8 @@ function FormulaireEvenement({
                     />
                   ))}
                 </View>
-                <Segments theme={theme} libelle="Rythme" valeur={intervalle} options={[['1', 'Chaque semaine'], ['2', 'Une semaine sur deux']]} onChoisir={v => setIntervalle(v === '2' ? '2' : '1')} testID="esport-formulaire-intervalle" />
-                <Champ theme={theme} libelle="Jusqu’au (facultatif, AAAA-MM-JJ)" valeur={jusqua} onChanger={setJusqua} maxLength={10} testID="esport-formulaire-jusqua" />
+                <Segments theme={theme} libelle={tr('planning.planning.rythme')} valeur={intervalle} options={[['1', tr('planning.libelles.chaque_semaine')], ['2', tr('planning.planning.une_semaine_sur_deux')]]} onChoisir={v => setIntervalle(v === '2' ? '2' : '1')} testID="esport-formulaire-intervalle" />
+                <Champ theme={theme} libelle={tr('planning.planning.jusqu_au_facultatif_aaaa')} valeur={jusqua} onChanger={setJusqua} maxLength={10} testID="esport-formulaire-jusqua" />
               </View>
             ) : null}
           </>
@@ -713,12 +712,12 @@ function FormulaireEvenement({
         {membres.length ? (
           <SelecteurConvocation theme={theme} membres={membres} valeur={s.convocation ?? CONVOCATION_DEFAUT} onChange={convocation => maj({ convocation })} testID="esport-formulaire-convocation" />
         ) : null}
-        {!serie && membres.length ? <Text style={attenue}>Cette liste ne vaut que pour cette date : les autres gardent celle de la série.</Text> : null}
+        {!serie && membres.length ? <Text style={attenue}>{tr('planning.planning.cette_liste_ne_vaut')}</Text> : null}
         <View style={styles.ligne}>
-          <BoutonHub theme={theme} titre={enCours ? 'Enregistrement…' : 'Enregistrer'} variante="plein" desactive={Boolean(enCours) || !pret} onPress={() => void enregistrer()} testID="esport-formulaire-enregistrer" />
+          <BoutonHub theme={theme} titre={enCours ? tr('membresRoles.enregistrement') : tr('discord.enregistrer')} variante="plein" desactive={Boolean(enCours) || !pret} onPress={() => void enregistrer()} testID="esport-formulaire-enregistrer" />
           <BoutonHub
             theme={theme}
-            titre="Annuler"
+            titre={tr('assistant.annuler')}
             onPress={() => {
               setErreur(undefined);
               void onFini();
@@ -741,17 +740,17 @@ function PanneauIcal({ theme, api, adresse, onExporter }: { theme: ThemeHub; api
   const charger = useCallback(async () => setAbonnements(await api.abonnements()), [api]);
   return (
     <Panneau theme={theme} testID="esport-ical">
-      <Intertitre theme={theme}>Calendrier (iCal)</Intertitre>
-      <Text style={attenue}>Exportez le planning (.ics) ou abonnez votre calendrier (iPhone, Google, Outlook) à un lien privé, révocable à tout moment.</Text>
+      <Intertitre theme={theme}>{tr('planning.planning.calendrier_ical')}</Intertitre>
+      <Text style={attenue}>{tr('planning.planning.exportez_le_planning_ics')}</Text>
       <View style={styles.ligne}>
         {onExporter ? (
           <BoutonHub
             theme={theme}
-            titre="Exporter (.ics)"
+            titre={tr('planning.planning.exporter_ics')}
             onPress={() =>
-              void agir('Export', async () => {
+              void agir('export', async () => {
                 const f = await api.exportIcs();
-                return (await onExporter(f.nom, f.contenu, 'text/calendar')) ? 'Calendrier exporté.' : undefined;
+                return (await onExporter(f.nom, f.contenu, 'text/calendar')) ? tr('planning.planning.calendrier_exporte') : undefined;
               })
             }
             testID="esport-ical-exporter"
@@ -759,19 +758,19 @@ function PanneauIcal({ theme, api, adresse, onExporter }: { theme: ThemeHub; api
         ) : null}
         <BoutonHub
           theme={theme}
-          titre="Créer un lien d’abonnement"
+          titre={tr('planning.planning.creer_un_lien_d')}
           desactive={Boolean(enCours)}
           onPress={() =>
-            void agir('Abonnement', async () => {
-              const r = await api.creerAbonnement('Mon calendrier');
+            void agir('abonnement', async () => {
+              const r = await api.creerAbonnement(tr('planning.planning.mon_calendrier'));
               setNouveau(`${adresse}${r.chemin}`);
               await charger();
-              return 'Lien créé : il ne sera plus affiché, copiez-le maintenant.';
+              return tr('planning.planning.lien_cree_il_ne');
             })
           }
           testID="esport-ical-creer"
         />
-        {abonnements === undefined ? <BoutonHub theme={theme} titre="Mes abonnements" onPress={() => void agir('', charger)} testID="esport-ical-liste" /> : null}
+        {abonnements === undefined ? <BoutonHub theme={theme} titre={tr('planning.planning.mes_abonnements')} onPress={() => void agir('', charger)} testID="esport-ical-liste" /> : null}
       </View>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-ical" />
       {nouveau ? (
@@ -780,9 +779,9 @@ function PanneauIcal({ theme, api, adresse, onExporter }: { theme: ThemeHub; api
             {nouveau}
           </Text>
           <View style={styles.ligne}>
-            <BoutonHub theme={theme} titre="Copier" onPress={() => void copier(nouveau)} testID="esport-ical-copier" />
+            <BoutonHub theme={theme} titre={tr('planning.planning.copier')} onPress={() => void copier(nouveau)} testID="esport-ical-copier" />
             <Text selectable style={attenue}>
-              Sur iPhone : {nouveau.replace(/^https?:/, 'webcal:')}
+              {tr('planning.planning.sur_iphone', { lien: nouveau.replace(/^https?:/, 'webcal:') })}
             </Text>
           </View>
         </View>
@@ -790,18 +789,18 @@ function PanneauIcal({ theme, api, adresse, onExporter }: { theme: ThemeHub; api
       {abonnements?.map(a => (
         <View key={a.id} style={[styles.ligne, { justifyContent: 'space-between' }]}>
           <Text style={{ color: a.revoque ? theme.attenue : theme.texte, ...police(theme.policeTexte) }}>
-            {a.libelle} · {a.revoque ? 'révoqué' : a.dernierAcces ? `lu le ${a.dernierAcces.slice(0, 10)}` : 'jamais lu'}
+            {a.libelle} · {a.revoque ? tr('planning.planning.revoque') : a.dernierAcces ? tr('planning.planning.lu_le', { v: a.dernierAcces.slice(0, 10) }) : tr('planning.planning.jamais_lu')}
           </Text>
           {!a.revoque ? (
             <BoutonHub
               theme={theme}
-              titre="Révoquer"
+              titre={tr('planning.planning.revoquer')}
               variante="danger"
               onPress={() =>
-                void agir('Révocation', async () => {
+                void agir('revocation', async () => {
                   await api.revoquerAbonnement(a.id);
                   await charger();
-                  return 'Abonnement révoqué : le lien ne marche plus.';
+                  return tr('planning.planning.abonnement_revoque_le_lien');
                 })
               }
               testID={`esport-ical-revoquer-${a.id}`}

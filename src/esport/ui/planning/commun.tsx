@@ -12,6 +12,7 @@ import type { Convocation, MembreConvocable, Occurrence, Rsvp } from '../../plan
 import { GROUPES, basculerGroupe, basculerMembre, basculerProprietaire, convocationVide, estConvoque, groupeActif, resumeConvocation } from '../../planning/convocations';
 import { dateCourteJour, fuseauAppareil, nomFuseau, typeEvenement } from '../../planning/libelles';
 import { styles } from '../commun';
+import { tr } from '../../i18n';
 
 // ------------------------------------------------------------------ Fuseau d'affichage
 
@@ -30,13 +31,13 @@ export function useFuseau(fuseauTeam: string): { fuseau: string; choix: 'team' |
 }
 
 export function SelecteurFuseau({ theme, fuseauTeam, f }: { theme: ThemeHub; fuseauTeam: string; f: ReturnType<typeof useFuseau> }) {
-  if (!f.different) return <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>Heures de {nomFuseau(fuseauTeam)}</Text>;
+  if (!f.different) return <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>{tr('planning.commun.heures_de', { v: nomFuseau(fuseauTeam) })}</Text>;
   const options: Array<['team' | 'appareil', string]> = [
-    ['team', `Team (${nomFuseau(fuseauTeam)})`],
-    ['appareil', `Mon heure (${nomFuseau(fuseauAppareil())})`],
+    ['team', tr('planning.commun.team', { v: nomFuseau(fuseauTeam) })],
+    ['appareil', tr('planning.commun.mon_heure', { v: nomFuseau(fuseauAppareil()) })],
   ];
   return (
-    <View style={styles.ligne} accessibilityRole="radiogroup" accessibilityLabel="Fuseau horaire">
+    <View style={styles.ligne} accessibilityRole="radiogroup" accessibilityLabel={tr('planning.commun.fuseau_horaire')}>
       {options.map(([cle, libelle]) => (
         <Pastille key={cle} theme={theme} actif={f.choix === cle} libelle={libelle} onPress={() => f.setChoix(cle)} testID={`esport-fuseau-${cle}`} role="radio" />
       ))}
@@ -91,9 +92,15 @@ export function PastilleType({ theme, type }: { theme: ThemeHub; type: string })
 // ------------------------------------------------------------------ RSVP rapide
 
 const CHOIX_RSVP: Array<{ cle: Exclude<Rsvp, 'sans_reponse'>; libelle: string; genre: 'ok' | 'alerte' | 'critique' }> = [
-  { cle: 'oui', libelle: 'Oui', genre: 'ok' },
-  { cle: 'peut_etre', libelle: 'Peut-être', genre: 'alerte' },
-  { cle: 'non', libelle: 'Non', genre: 'critique' },
+  { cle: 'oui', get libelle() {
+      return tr('objectifs.oui');
+    }, genre: 'ok' },
+  { cle: 'peut_etre', get libelle() {
+      return tr('planning.libelles.peut_etre');
+    }, genre: 'alerte' },
+  { cle: 'non', get libelle() {
+      return tr('planning.libelles.non');
+    }, genre: 'critique' },
 ];
 
 /** Trois gros boutons (44 px au moins) : un appui suffit, la réponse s'affiche aussitôt. */
@@ -114,7 +121,7 @@ export function BoutonsRsvp({
   const [envoi, setEnvoi] = useState(false);
   const actuel = local ?? valeur;
   return (
-    <View style={{ flexDirection: 'row', gap: 8 }} accessibilityRole="radiogroup" accessibilityLabel="Serez-vous là ?" testID={testID}>
+    <View style={{ flexDirection: 'row', gap: 8 }} accessibilityRole="radiogroup" accessibilityLabel={tr('planning.planning.serez_vous_la')} testID={testID}>
       {CHOIX_RSVP.map(c => {
         const couleur = theme[c.genre];
         const actif = actuel === c.cle;
@@ -124,7 +131,7 @@ export function BoutonsRsvp({
             testID={`${testID}-${c.cle}`}
             accessibilityRole="radio"
             accessibilityState={{ checked: actif, disabled: desactive || envoi }}
-            accessibilityLabel={`Réponse : ${c.libelle}`}
+            accessibilityLabel={tr('planning.commun.reponse', { libelle: c.libelle })}
             disabled={desactive || envoi}
             onPress={async () => {
               const avant = actuel;
@@ -194,7 +201,7 @@ export function CarteOccurrence({
         padding: 12,
         gap: 8,
       }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Ouvrir ${o.titre}`} onPress={onOuvrir} disabled={!onOuvrir} style={{ gap: 4 }} testID={testID ? `${testID}-ouvrir` : undefined}>
+      <Pressable accessibilityRole="button" accessibilityLabel={tr('resumes.ouvrir', { titre: o.titre })} onPress={onOuvrir} disabled={!onOuvrir} style={{ gap: 4 }} testID={testID ? `${testID}-ouvrir` : undefined}>
         <View style={[styles.ligne, { justifyContent: 'space-between', flexWrap: 'nowrap' }]}>
           <Text style={{ flex: 1, color: theme.texte, fontSize: 15, fontWeight: '700', ...police(theme.policeTexte) }} numberOfLines={2}>
             {o.titre}
@@ -204,15 +211,14 @@ export function CarteOccurrence({
         <Text style={attenue}>
           {avecDate ? `${dateCourteJour(o.jour)} · ` : ''}
           {o.heureDebut}–{o.heureFin}
-          {o.jourFin !== o.jour ? ' (lendemain)' : ''}
+          {o.jourFin !== o.jour ? tr('planning.planning.lendemain') : ''}
           {o.lieu ? ` · ${o.lieu}` : ''}
           {o.recurrent ? ' · ↻' : ''}
-          {o.modifiee ? ' · modifié' : ''}
+          {o.modifiee ? tr('planning.commun.modifie') : ''}
         </Text>
         {o.reponses ? (
           <Text style={attenue}>
-            {o.reponses.oui} oui · {o.reponses.peut_etre} peut-être · {o.reponses.non} non
-          </Text>
+            {tr('planning.commun.oui_peut_etre_non', { oui: o.reponses.oui, peut_etre: o.reponses.peut_etre, non: o.reponses.non })}</Text>
         ) : null}
       </Pressable>
       {onRepondre && !o.termine && o.concerneMoi !== false && o.monRsvp !== null && o.monRsvp !== undefined ? (
@@ -252,8 +258,8 @@ export function SelecteurConvocation({
   const proprietaires = membres.filter(m => m.groupe === 'proprietaire');
   return (
     <View style={{ gap: 8 }} testID={testID}>
-      <Text style={titre}>Convoqués</Text>
-      <View style={styles.ligne} accessibilityLabel="Raccourcis de convocation">
+      <Text style={titre}>{tr('planning.commun.convoques')}</Text>
+      <View style={styles.ligne} accessibilityLabel={tr('planning.commun.raccourcis_de_convocation')}>
         {GROUPES.map(g => (
           <Pastille
             key={g.cle}
@@ -267,7 +273,7 @@ export function SelecteurConvocation({
         ))}
       </View>
       {personnes.length ? (
-        <View style={styles.ligne} accessibilityLabel="Convoqués, personne par personne">
+        <View style={styles.ligne} accessibilityLabel={tr('planning.commun.convoques_personne_par_personn')}>
           {personnes.map(m => (
             <Pastille key={m.compte} theme={theme} actif={estConvoque(affiche, m)} libelle={m.pseudo} role="checkbox" onPress={() => onChange(basculerMembre(affiche, m))} testID={`${testID}-membre-${m.compte}`} />
           ))}
@@ -275,8 +281,8 @@ export function SelecteurConvocation({
       ) : null}
       {proprietaires.length ? (
         <View style={{ gap: 6 }}>
-          <Text style={titre}>Propriétaires à convoquer</Text>
-          <View style={styles.ligne} accessibilityLabel="Propriétaires à convoquer">
+          <Text style={titre}>{tr('planning.commun.proprietaires_a_convoquer')}</Text>
+          <View style={styles.ligne} accessibilityLabel={tr('planning.commun.proprietaires_a_convoquer')}>
             {proprietaires.map(m => (
               <Pastille
                 key={m.compte}
@@ -289,11 +295,11 @@ export function SelecteurConvocation({
               />
             ))}
           </View>
-          <Text style={attenue}>Un Propriétaire n’est convoqué que s’il est coché : sinon il voit l’événement au calendrier, sans être attendu ni relancé.</Text>
+          <Text style={attenue}>{tr('planning.commun.un_proprietaire_n_est')}</Text>
         </View>
       ) : null}
       <Text style={attenue} testID={`${testID}-resume`}>
-        {vide ? 'Aucun choix : les joueurs seront convoqués. ' : ''}
+        {vide ? tr('planning.commun.aucun_choix_les_joueurs') : ''}
         {resumeConvocation(valeur, membres)}
       </Text>
     </View>

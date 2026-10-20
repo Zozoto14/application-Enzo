@@ -3,12 +3,32 @@
  * (« Max a changé le rôle de Léa de Joueur à Coach »). Pur, testé.
  */
 
-import { nomModule, type EntreeJournal, type Notification, type Priorite, type StatutDepot, type StatutTache } from './client';
+import { nomModule, nomRole, type AlerteTableau, type EntreeJournal, type Notification, type Priorite, type StatutDepot, type StatutTache } from './client';
 
 /** Statuts d'un dépôt de réunion. */
-export const LIBELLES_STATUT_DEPOT: Record<StatutDepot, string> = { a_resumer: 'À résumer', en_cours: 'En cours', termine: 'Terminé' };
-export const LIBELLES_STATUT_TACHE: Record<StatutTache, string> = { a_faire: 'À faire', en_cours: 'En cours', fait: 'Fait' };
-export const LIBELLES_PRIORITE: Record<Priorite, string> = { basse: 'Basse', normale: 'Normale', haute: 'Haute', urgente: 'Urgente' };
+export const LIBELLES_STATUT_DEPOT: Record<StatutDepot, string> = { get a_resumer() {
+      return tr('libelles.a_resumer');
+    }, get en_cours() {
+      return tr('libelles.en_cours');
+    }, get termine() {
+      return tr('creationCompte.termine');
+    } };
+export const LIBELLES_STATUT_TACHE: Record<StatutTache, string> = { get a_faire() {
+      return tr('libelles.a_faire');
+    }, get en_cours() {
+      return tr('libelles.en_cours');
+    }, get fait() {
+      return tr('libelles.fait');
+    } };
+export const LIBELLES_PRIORITE: Record<Priorite, string> = { get basse() {
+      return tr('libelles.basse');
+    }, get normale() {
+      return tr('libelles.normale');
+    }, get haute() {
+      return tr('libelles.haute');
+    }, get urgente() {
+      return tr('libelles.urgente');
+    } };
 
 /** Date du jour (AAAA-MM-JJ, heure locale de l'appareil). */
 export function aujourdhui(ms: number = Date.now()): string {
@@ -32,24 +52,27 @@ export function lireDateSaisie(texte: string): string | undefined {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso ? iso : undefined;
 }
 
-/** Taille lisible (« 1,2 Mo »). */
+/** Taille lisible (« 1,2 Mo » / « 1.2 MB »). */
 export function tailleLisible(octets: number): string {
-  if (octets < 1024) return `${octets} o`;
-  if (octets < 1024 * 1024) return `${Math.round(octets / 1024)} Ko`;
-  return `${(octets / (1024 * 1024)).toFixed(1).replace('.', ',')} Mo`;
+  if (octets < 1024) return tr('fmt.octets', { n: octets });
+  if (octets < 1024 * 1024) return tr('fmt.ko', { n: Math.round(octets / 1024) });
+  return tr('fmt.mo', { n: formaterNombre(octets / (1024 * 1024), { minimumFractionDigits: 1, maximumFractionDigits: 1 }) });
 }
 import { LIBELLES_DISCORD } from './discord/api';
+import { formaterDate, formaterNombre, tr, trn } from './i18n';
 import { phraseJournalPlanning, phraseNotificationPlanning } from './planning/libelles';
 import { phraseJournalReview, phraseNotificationReview } from './review/libelles';
 import { phraseJournalStrats, phraseNotificationStrats } from './strats/libelles';
 
 const nom = (noms: Record<string, string | null>, id: unknown): string =>
-  typeof id === 'string' ? (noms[id] ?? (id === 'principal' ? 'Le Fondateur' : 'Un compte supprimé')) : 'Quelqu’un';
+  typeof id === 'string' ? (noms[id] ?? (id === 'principal' ? tr('jr.fondateur') : tr('jr.compte_supprime'))) : tr('jr.quelquun');
 
 const nombre = (v: unknown): string => (typeof v === 'number' ? String(v) : '?');
 const libelleDiscord = (cle: unknown): string => (typeof cle === 'string' ? (LIBELLES_DISCORD[cle] ?? cle) : '?');
 
 const liste = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+/** « (Joueur) » après un nom de team ou de compte, quand le rôle est connu. */
+const avecRole = (v: unknown): string => (typeof v === 'string' ? tr('jr.role_entre_parentheses', { role: nomRole(v) }) : '');
 
 export function phraseJournal(e: EntreeJournal, noms: Record<string, string | null>): string {
   const qui = nom(noms, e.acteur);
@@ -57,168 +80,213 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
   const texte = (v: unknown) => (typeof v === 'string' ? v : '?');
   switch (e.action) {
     case 'team.created':
-      return `${qui} a créé la team`;
+      return tr('jr.team_created', { qui });
     case 'team.updated':
-      return `${qui} a modifié la team (${liste(m.champs).join(', ') || 'réglages'})`;
+      return tr('jr.team_updated', { qui, champs: liste(m.champs).join(', ') || tr('jr.reglages') });
     case 'team.deleted':
-      return `${qui} a supprimé la team`;
+      return tr('jr.team_deleted', { qui });
     case 'modules.changed': {
       const parts = [];
-      if (liste(m.actives).length) parts.push(`activé ${liste(m.actives).map(nomModule).join(', ')}`);
-      if (liste(m.desactives).length) parts.push(`désactivé ${liste(m.desactives).map(nomModule).join(', ')}`);
-      return `${qui} a ${parts.join(' et ') || 'changé les modules'}`;
+      if (liste(m.actives).length) parts.push(tr('jr.modules_actives', { modules: liste(m.actives).map(nomModule).join(', ') }));
+      if (liste(m.desactives).length) parts.push(tr('jr.modules_desactives', { modules: liste(m.desactives).map(nomModule).join(', ') }));
+      return tr('jr.modules_changed', { qui, actions: parts.join(tr('jr.et')) || tr('jr.modules_changes') });
     }
     case 'role.created':
-      return `${qui} a créé le rôle ${texte(m.nom)}`;
+      return tr('jr.role_created', { qui, nom: texte(m.nom) });
     case 'role.updated':
-      return `${qui} a modifié le rôle ${texte(m.nom)}`;
+      return tr('jr.role_updated', { qui, nom: texte(m.nom) });
     case 'role.deleted':
-      return `${qui} a supprimé le rôle ${texte(m.nom)}`;
+      return tr('jr.role_deleted', { qui, nom: texte(m.nom) });
     case 'member.joined':
-      return `${qui} a rejoint la team${typeof m.role === 'string' ? ` (${m.role})` : ''}`;
+      return tr('jr.member_joined', { qui, role: avecRole(m.role) });
     case 'member.role_changed':
-      return `${qui} a changé le rôle de ${nom(noms, m.compte)} de ${texte(m.de)} à ${texte(m.vers)}`;
+      return tr('jr.member_role_changed', { qui, compte: nom(noms, m.compte), de: nomRole(texte(m.de)), vers: nomRole(texte(m.vers)) });
     case 'member.status_changed':
-      return `${qui} a ${m.statut === 'suspendu' ? 'suspendu' : 'réactivé'} ${nom(noms, m.compte)}`;
+      return tr(m.statut === 'suspendu' ? 'jr.member_suspended' : 'jr.member_reactivated', { qui, compte: nom(noms, m.compte) });
     case 'member.added':
-      return `${qui} a ajouté ${nom(noms, m.compte)} à la team${typeof m.role === 'string' ? ` (${m.role})` : ''}${m.invite ? ' : invitation envoyée' : ''}`;
+      return tr('jr.member_added', { qui, compte: nom(noms, m.compte), role: avecRole(m.role), invite: m.invite ? tr('jr.invitation_envoyee') : '' });
     case 'member.account_requested':
-      return `${qui} a demandé un compte pour ${texte(m.pseudo)}${typeof m.role === 'string' ? ` (${m.role})` : ''} : à valider par le Fondateur`;
+      return tr('jr.account_requested', { qui, pseudo: texte(m.pseudo), role: avecRole(m.role) });
     case 'member.account_request_validated':
-      return `${qui} a validé la demande de compte de ${texte(m.pseudo)}`;
+      return tr('jr.account_request_validated', { qui, pseudo: texte(m.pseudo) });
     case 'member.account_request_refused':
-      return `${qui} a refusé la demande de compte de ${texte(m.pseudo)}`;
+      return tr('jr.account_request_refused', { qui, pseudo: texte(m.pseudo) });
     case 'member.removed':
-      return m.suppression === 'administration' ? `${typeof m.pseudo === 'string' ? m.pseudo : nom(noms, m.compte)} a été retiré (compte supprimé dans l’Administration)` : `${qui} a retiré ${nom(noms, m.compte)} de la team`;
+      return m.suppression === 'administration'
+        ? tr('jr.member_removed_admin', { pseudo: typeof m.pseudo === 'string' ? m.pseudo : nom(noms, m.compte) })
+        : tr('jr.member_removed', { qui, compte: nom(noms, m.compte) });
     case 'member.left':
-      return m.suppression ? `${qui} a quitté la team (données supprimées)` : `${qui} a quitté la team`;
+      return tr(m.suppression ? 'jr.member_left_deleted' : 'jr.member_left', { qui });
     case 'invitation.created':
-      return `${qui} a créé une invitation${typeof m.role === 'string' ? ` (${m.role})` : ''}`;
+      return tr('jr.invitation_created', { qui, role: avecRole(m.role) });
     case 'invitation.revoked':
-      return `${qui} a annulé une invitation`;
+      return tr('jr.invitation_revoked', { qui });
     case 'meeting.submitted':
-      return `${qui} a déposé la réunion « ${texte(m.titre)} »`;
+      return tr('jr.meeting_submitted', { qui, titre: texte(m.titre) });
     case 'meeting.status_changed':
-      return `${qui} a passé « ${texte(m.titre)} » en ${LIBELLES_STATUT_DEPOT[m.vers as StatutDepot] ?? texte(m.vers)}${m.automatique ? ' (PDF déposé)' : ''}`;
+      return tr('jr.meeting_status_changed', {
+        qui,
+        titre: texte(m.titre),
+        statut: LIBELLES_STATUT_DEPOT[m.vers as StatutDepot] ?? texte(m.vers),
+        auto: m.automatique ? tr('jr.pdf_depose') : '',
+      });
     case 'meeting.summary_published':
-      return `${qui} a ${m.remplacement ? 'remplacé le PDF du résumé' : 'publié le résumé'} « ${texte(m.titre)} »`;
+      return tr(m.remplacement ? 'jr.summary_replaced' : 'jr.summary_published', { qui, titre: texte(m.titre) });
     case 'meeting.deleted':
-      return `${qui} a supprimé le dépôt « ${texte(m.titre)} »`;
+      return tr('jr.meeting_deleted', { qui, titre: texte(m.titre) });
     case 'meeting_type.created':
-      return `${qui} a créé le type de réunion ${texte(m.nom)}${m.visibilite === 'staff' ? ' (staff)' : ''}`;
+      return tr('jr.meeting_type_created', { qui, nom: texte(m.nom), staff: m.visibilite === 'staff' ? tr('jr.staff_entre_parentheses') : '' });
     case 'meeting_type.updated':
-      return `${qui} a modifié le type de réunion ${texte(m.nom)}`;
+      return tr('jr.meeting_type_updated', { qui, nom: texte(m.nom) });
     case 'meeting_type.deleted':
-      return `${qui} a supprimé le type de réunion ${texte(m.nom)}`;
+      return tr('jr.meeting_type_deleted', { qui, nom: texte(m.nom) });
     case 'goal.created':
-      return `${qui} a créé l’objectif « ${texte(m.titre)} »`;
+      return tr('jr.goal_created', { qui, titre: texte(m.titre) });
     case 'goal.updated':
-      return `${qui} a modifié l’objectif « ${texte(m.titre)} »`;
+      return tr('jr.goal_updated', { qui, titre: texte(m.titre) });
     case 'goal.deleted':
-      return `${qui} a supprimé l’objectif « ${texte(m.titre)} »`;
+      return tr('jr.goal_deleted', { qui, titre: texte(m.titre) });
     case 'task.created':
-      return `${qui} a créé la tâche « ${texte(m.titre)} »`;
+      return tr('jr.task_created', { qui, titre: texte(m.titre) });
     case 'task.updated':
-      return m.vers ? `${qui} a passé « ${texte(m.titre)} » en ${LIBELLES_STATUT_TACHE[m.vers as StatutTache] ?? texte(m.vers)}` : `${qui} a modifié la tâche « ${texte(m.titre)} »`;
+      return m.vers
+        ? tr('jr.task_status_changed', { qui, titre: texte(m.titre), statut: LIBELLES_STATUT_TACHE[m.vers as StatutTache] ?? texte(m.vers) })
+        : tr('jr.task_updated', { qui, titre: texte(m.titre) });
     case 'task.assigned':
-      return `${qui} a assigné « ${texte(m.titre)} » à ${nom(noms, m.assigne)}`;
+      return tr('jr.task_assigned', { qui, titre: texte(m.titre), assigne: nom(noms, m.assigne) });
     case 'task.deleted':
-      return `${qui} a supprimé la tâche « ${texte(m.titre)} »`;
+      return tr('jr.task_deleted', { qui, titre: texte(m.titre) });
     case 'task.due_soon':
-      return `Rappel d’échéance envoyé à ${nom(noms, m.assigne)} pour « ${texte(m.titre)} »`;
+      return tr('jr.task_due_soon', { assigne: nom(noms, m.assigne), titre: texte(m.titre) });
     case 'discord.webhook_set':
-      return `${qui} a ${m.remplace ? 'remplacé' : 'enregistré'} le webhook Discord`;
+      return tr(m.remplace ? 'jr.webhook_replaced' : 'jr.webhook_saved', { qui });
     case 'discord.webhook_removed':
-      return `${qui} a supprimé le webhook Discord`;
+      return tr('jr.webhook_removed', { qui });
     case 'discord.settings_changed':
-      return `${qui} a modifié la notification Discord « ${libelleDiscord(m.notification)} »`;
+      return tr('jr.discord_settings_changed', { qui, notification: libelleDiscord(m.notification) });
     case 'discord.test_sent':
-      return `${qui} a envoyé un message de test sur Discord`;
+      return tr('jr.discord_test_sent', { qui });
     case 'discord.delivery_failed':
-      return `Envoi Discord « ${libelleDiscord(m.cle)} » échoué (essai ${nombre(m.essai)}/${nombre(m.sur)}) : ${texte(m.motif)}`;
+      return tr('jr.discord_delivery_failed', { notification: libelleDiscord(m.cle), essai: nombre(m.essai), sur: nombre(m.sur), motif: texte(m.motif) });
     case 'discord.delivery_abandoned':
-      return `Envoi Discord « ${libelleDiscord(m.cle)} » abandonné : ${texte(m.motif)}`;
+      return tr('jr.discord_delivery_abandoned', { notification: libelleDiscord(m.cle), motif: texte(m.motif) });
     case 'discord.server_linked':
-      return `${qui} a lié un serveur Discord à la team${typeof m.salon === 'string' && m.salon ? ` (salon #${m.salon})` : ''}`;
+      return tr('jr.discord_server_linked', { qui, salon: typeof m.salon === 'string' && m.salon ? tr('jr.salon_entre_parentheses', { salon: m.salon }) : '' });
     case 'discord.server_unlinked':
-      return `${qui} a délié le serveur Discord de la team`;
+      return tr('jr.discord_server_unlinked', { qui });
     case 'discord.pings_changed':
-      return `${qui} a ${m.ping ? 'activé' : 'coupé'} le ping Discord des ${texte(m.type)}`;
+      return tr(m.ping ? 'jr.discord_ping_on' : 'jr.discord_ping_off', { qui, type: texte(m.type) });
     case 'discord.command_used':
-      return `${qui} a utilisé /${texte(m.commande)} sur Discord`;
+      return tr('jr.discord_command_used', { qui, commande: texte(m.commande) });
     case 'discord.account_linked':
-      return `${qui} a lié son compte Discord`;
+      return tr('jr.discord_account_linked', { qui });
     case 'discord.account_unlinked':
-      return `${qui} a délié son compte Discord`;
+      return tr('jr.discord_account_unlinked', { qui });
     case 'attendance.relance':
-      return `${qui} a relancé sur Discord les convoqués sans réponse de « ${texte(m.titre)} »`;
+      return tr('jr.attendance_relance', { qui, titre: texte(m.titre) });
     case 'event.starting':
-      return `« C’est maintenant » préparé pour « ${texte(m.titre)} »`;
+      return tr('jr.event_starting', { titre: texte(m.titre) });
     case 'event.reminder_d1':
     case 'event.reminder_h1':
-      return `Rappel ${e.action === 'event.reminder_d1' ? 'J-1' : 'H-1'} préparé pour « ${texte(m.titre)} »`;
+      return tr('jr.event_reminder', { delai: e.action === 'event.reminder_d1' ? 'J-1' : 'H-1', titre: texte(m.titre) });
     default:
       return phraseJournalPlanning(e.action, qui, m, id => nom(noms, id)) ?? phraseJournalReview(e.action, qui, m) ?? phraseJournalStrats(e.action, qui, m) ?? `${qui} : ${e.action}`;
   }
 }
 
 /** Catégories de filtre du journal (préfixe d'action). */
-export const FILTRES_JOURNAL: ReadonlyArray<readonly [string, string]> = [
-  ['', 'Tout'],
-  ['member', 'Membres'],
-  ['role', 'Rôles'],
-  ['invitation', 'Invitations'],
-  ['modules', 'Modules'],
-  ['team', 'Team'],
-  ['meeting', 'Résumés'],
-  ['task', 'Tâches'],
-  ['goal', 'Objectifs'],
-  ['event', 'Planning'],
-  ['attendance', 'Présence'],
-  ['discord', 'Discord'],
-  ['review', 'Review'],
-  ['opponent', 'Scouting'],
-  ['strat', 'Strats'],
-  ['playbook', 'Playbook'],
-];
+export function filtresJournal(): ReadonlyArray<readonly [string, string]> {
+  return [
+    ['', tr('jr.filtre_tout')],
+    ['member', tr('jr.filtre_membres')],
+    ['role', tr('jr.filtre_roles')],
+    ['invitation', tr('jr.filtre_invitations')],
+    ['modules', tr('jr.filtre_modules')],
+    ['team', tr('jr.filtre_team')],
+    ['meeting', tr('jr.filtre_resumes')],
+    ['task', tr('jr.filtre_taches')],
+    ['goal', tr('jr.filtre_objectifs')],
+    ['event', tr('jr.filtre_planning')],
+    ['attendance', tr('jr.filtre_presence')],
+    ['discord', 'Discord'],
+    ['review', tr('review.review.review')],
+    ['opponent', tr('cat.groupe.scouting')],
+    ['strat', tr('cat.groupe.strat_editor')],
+    ['playbook', tr('cat.groupe.playbook')],
+  ];
+}
 
 export function phraseNotification(n: Notification, noms: Record<string, string | null>): string {
-  const team = n.team?.nom ?? 'une team';
+  const team = n.team?.nom ?? tr('jr.une_team');
   const c = n.charge;
+  const str = (v: unknown, secours: string) => (typeof v === 'string' ? v : secours);
   switch (n.type) {
     case 'bienvenue':
-      return `Bienvenue dans ${team}${typeof c.role === 'string' ? ` (${c.role})` : ''} !`;
+      return tr('nt.bienvenue', { team, role: avecRole(c.role) });
     case 'membre-arrive':
-      return `${nom(noms, c.membre)} a rejoint ${team}${typeof c.role === 'string' ? ` (${c.role})` : ''}`;
+      return tr('nt.membre_arrive', { membre: nom(noms, c.membre), team, role: avecRole(c.role) });
     case 'role-change':
-      return `Votre rôle dans ${team} est maintenant ${typeof c.vers === 'string' ? c.vers : '?'}`;
+      return tr('nt.role_change', { team, role: nomRole(str(c.vers, '?')) });
     case 'retire':
-      return `Vous avez été retiré de ${team}`;
+      return tr('nt.retire', { team });
     case 'modules':
-      return `Les modules de ${team} ont changé`;
+      return tr('nt.modules', { team });
     case 'resume-depose':
-      return `${nom(noms, c.membre)} a déposé une réunion à résumer dans ${team}${typeof c.titre === 'string' ? ` : « ${c.titre} »` : ''}`;
+      return tr('nt.resume_depose', { membre: nom(noms, c.membre), team, titre: typeof c.titre === 'string' ? tr('nt.titre_apres_deux_points', { titre: c.titre }) : '' });
     case 'resume-publie':
-      return `Le résumé de « ${typeof c.titre === 'string' ? c.titre : 'votre réunion'} » est ${c.remplacement ? 'mis à jour' : 'prêt'} (${team})`;
+      return tr(c.remplacement ? 'nt.resume_mis_a_jour' : 'nt.resume_pret', { titre: str(c.titre, tr('nt.votre_reunion')), team });
     case 'tache-assignee':
-      return `${nom(noms, c.membre)} vous a assigné « ${typeof c.titre === 'string' ? c.titre : 'une tâche'} »${typeof c.echeance === 'string' ? ` pour le ${dateJour(c.echeance)}` : ''} (${team})`;
+      return tr('nt.tache_assignee', {
+        membre: nom(noms, c.membre),
+        titre: str(c.titre, tr('nt.une_tache')),
+        echeance: typeof c.echeance === 'string' ? tr('nt.pour_le', { date: dateJour(c.echeance) }) : '',
+        team,
+      });
     case 'demande-compte':
-      return `${nom(noms, c.membre)} demande un compte pour ${typeof c.pseudo === 'string' ? c.pseudo : 'un nouveau membre'}${typeof c.role === 'string' ? ` (${c.role})` : ''} dans ${team} : à valider dans Esport › Membres`;
+      return tr('nt.demande_compte', { membre: nom(noms, c.membre), pseudo: str(c.pseudo, tr('nt.un_nouveau_membre')), role: avecRole(c.role), team });
     case 'demande-compte-validee':
-      return `Votre demande de compte pour ${typeof c.pseudo === 'string' ? c.pseudo : 'un nouveau membre'} est validée : son invitation est partie (${team})`;
+      return tr('nt.demande_compte_validee', { pseudo: str(c.pseudo, tr('nt.un_nouveau_membre')), team });
     case 'demande-compte-refusee':
-      return `Votre demande de compte pour ${typeof c.pseudo === 'string' ? c.pseudo : 'un nouveau membre'} est refusée${typeof c.motif === 'string' && c.motif ? ` : ${c.motif}` : ''} (${team})`;
+      return tr('nt.demande_compte_refusee', {
+        pseudo: str(c.pseudo, tr('nt.un_nouveau_membre')),
+        motif: typeof c.motif === 'string' && c.motif ? tr('nt.titre_apres_deux_points', { titre: c.motif }) : '',
+        team,
+      });
     case 'tache-echeance':
-      return `${c.retard ? 'En retard' : 'Échéance proche'} : « ${typeof c.titre === 'string' ? c.titre : 'une tâche'} »${typeof c.echeance === 'string' ? ` (${dateJour(c.echeance)})` : ''}`;
+      return tr(c.retard ? 'nt.tache_en_retard' : 'nt.tache_echeance_proche', {
+        titre: str(c.titre, tr('nt.une_tache')),
+        echeance: typeof c.echeance === 'string' ? ` (${dateJour(c.echeance)})` : '',
+      });
     default:
       return phraseNotificationPlanning(n.type, team, c) ?? phraseNotificationReview(n.type, team, c) ?? phraseNotificationStrats(n.type, team, c) ?? `${team} : ${n.type}`;
   }
 }
 
-/** Date courte en français (« 20/10 à 14:05 »). */
+/** Date courte (« 20/10 à 14:05 » / « 20/10 at 14:05 »). */
 export function dateCourte(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  const deux = (n: number) => String(n).padStart(2, '0');
-  return `${deux(d.getDate())}/${deux(d.getMonth() + 1)} à ${deux(d.getHours())}:${deux(d.getMinutes())}`;
+  const jour = formaterDate(d, { day: '2-digit', month: '2-digit' });
+  const heure = formaterDate(d, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  return tr('fmt.date_heure', { jour, heure });
+}
+
+/**
+ * Texte d'une alerte du Dashboard. Le serveur envoie un genre et un nombre (et un texte français de
+ * secours) : le texte affiché est composé ici, dans la langue courante. Seuils du serveur (tableau.mjs) :
+ * présence sur 14 jours, résumé en attente depuis plus de 7 jours.
+ */
+export function texteAlerte(a: AlerteTableau): string {
+  switch (a.genre) {
+    case 'presence':
+      return tr('dashboard.alerte_presence', { n: a.nombre, jours: 14 });
+    case 'resumes':
+      return tr('dashboard.alerte_resumes', { jours: 7 });
+    case 'taches':
+      return trn('dashboard.alerte_taches', a.nombre);
+    case 'invites':
+      return trn('dashboard.invites_pas_connectes', a.nombre);
+    default:
+      return a.texte;
+  }
 }

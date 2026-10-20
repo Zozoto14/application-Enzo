@@ -11,8 +11,9 @@ import { Pressable, Text, View } from 'react-native';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { SANS_REACTION, type Reactions, type ValeurReaction } from '../../review/api';
 import { rayonControle, type EtatPresse } from '../design';
+import { tr } from '../../i18n';
 
-const noms = (liste: Reactions['qui']['like']) => liste.map(p => p.pseudo ?? 'Compte supprimé').join(', ');
+const noms = (liste: Reactions['qui']['like']) => liste.map(p => p.pseudo ?? tr('resumes.compte_supprime')).join(', ');
 
 export function BoutonsReaction({
   theme,
@@ -40,8 +41,8 @@ export function BoutonsReaction({
         accessibilityRole="button"
         accessibilityState={{ selected: moi, disabled: !peutReagir }}
         aria-pressed={moi}
-        accessibilityLabel={`${nom} : ${n}${personnes ? ` (${personnes})` : ''}${peutReagir ? (moi ? '. Appuyer pour retirer votre réaction.' : '') : ''}`}
-        accessibilityHint={peutReagir ? undefined : 'Vous ne pouvez pas réagir ici.'}
+        accessibilityLabel={`${nom} : ${n}${personnes ? ` (${personnes})` : ''}${peutReagir ? (moi ? tr('review.reactions.appuyer_pour_retirer_votre') : '') : ''}`}
+        accessibilityHint={peutReagir ? undefined : tr('review.reactions.vous_ne_pouvez_pas')}
         onPress={() => (peutReagir ? onReagir(moi ? null : v) : setQui(q => !q))}
         onLongPress={() => setQui(q => !q)}
         onHoverIn={() => setQui(true)}
@@ -72,9 +73,9 @@ export function BoutonsReaction({
   const listeDislike = noms(reactions.qui.dislike);
   return (
     <View style={{ gap: 4 }}>
-      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }} accessibilityLabel="Réactions">
-        {bouton('like', '👍', 'J’aime')}
-        {bouton('dislike', '👎', 'Je n’aime pas')}
+      <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }} accessibilityLabel={tr('review.reactions.reactions')}>
+        {bouton('like', '👍', tr('review.reactions.j_aime'))}
+        {bouton('dislike', '👎', tr('review.reactions.je_n_aime_pas'))}
       </View>
       {qui && (listeLike || listeDislike) ? (
         <Text testID={`${testID}-qui`} style={{ color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) }}>

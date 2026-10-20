@@ -24,6 +24,7 @@ import { Carte, ESP, EnTetePage, EtatVide, Grille, MenuActions, Pliable, Squelet
 import type { PropsModule } from '../modules';
 import { Editeur } from './Editeur';
 import { Etiquette, Filtre, MentionRiot, Miniature, prendreStratDemandee, useAssets } from './commun';
+import { tr } from '../../i18n';
 
 export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
   const teamId = detail.team.id;
@@ -68,9 +69,9 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
       <EnTetePage
         theme={theme}
         large={large}
-        titre="Strats"
-        sous="Stratégies dessinées sur la minimap, étape par étape. Ouvrez-en une pour l’éditer, ou ajoutez-la au playbook."
-        action={peut('strats.create') ? <BoutonHub theme={theme} titre={creation ? 'Fermer' : '+ Nouvelle strat'} variante={creation ? 'normal' : 'plein'} onPress={() => setCreation(!creation)} testID="esport-strats-nouvelle" /> : undefined}
+        titre={tr('strats.strats.strats')}
+        sous={tr('strats.strats.strategies_dessinees_sur_la')}
+        action={peut('strats.create') ? <BoutonHub theme={theme} titre={creation ? tr('discord.fermer') : tr('strats.strats.nouvelle_strat_2')} variante={creation ? 'normal' : 'plein'} onPress={() => setCreation(!creation)} testID="esport-strats-nouvelle" /> : undefined}
       />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-strats" />
       {creation ? (
@@ -78,7 +79,7 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
           theme={theme}
           cartes={cartes.map(c => ({ cle: c.cle, nom: c.nom, image: c.minimap }))}
           onCreer={corps =>
-            void agir('Création', async () => {
+            void agir('creation', async () => {
               const s = await api.creer(teamId, corps);
               setCreation(false);
               setOuverte(s.id);
@@ -88,12 +89,12 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
         />
       ) : null}
       <View style={{ gap: ESP.s }}>
-      <Champ theme={theme} libelle="Rechercher" valeur={recherche} onChanger={setRecherche} placeholder="Titre, carte, tag…" maxLength={60} style={{ maxWidth: 480 }} testID="esport-strats-recherche" />
-      <Pliable theme={theme} titre="Filtres" resume={[filtres.carte ? cartes.find(c => c.cle === filtres.carte)?.nom : '', filtres.side ? LIBELLES_SIDE[filtres.side] : '', filtres.type ? LIBELLES_TYPE_STRAT[filtres.type] : ''].filter(Boolean).join(' · ') || 'aucun'} ouvertParDefaut={large} testID="esport-strats-filtres-ouvrir">
+      <Champ theme={theme} libelle={tr('membresGlobal.rechercher')} valeur={recherche} onChanger={setRecherche} placeholder={tr('strats.strats.titre_carte_tag')} maxLength={60} style={{ maxWidth: 480 }} testID="esport-strats-recherche" />
+      <Pliable theme={theme} titre={tr('planning.planning.filtres')} resume={[filtres.carte ? cartes.find(c => c.cle === filtres.carte)?.nom : '', filtres.side ? LIBELLES_SIDE[filtres.side] : '', filtres.type ? LIBELLES_TYPE_STRAT[filtres.type] : ''].filter(Boolean).join(' · ') || tr('planning.planning.filtre_aucun')} ouvertParDefaut={large} testID="esport-strats-filtres-ouvrir">
       <Panneau theme={theme} testID="esport-strats-filtres">
-        <Filtre theme={theme} libelle="Carte" valeur={filtres.carte ?? ''} options={[['', 'Toutes'], ...cartes.map(c => [c.cle, c.nom] as const)]} onChoisir={v => setFiltres(f => ({ ...f, carte: v || undefined }))} testID="esport-strats-filtre-carte" />
-        <Filtre<Side> theme={theme} libelle="Side" valeur={filtres.side ?? ''} options={[['', 'Les deux'], ['attaque', 'Attaque'], ['defense', 'Défense']]} onChoisir={v => setFiltres(f => ({ ...f, side: v || undefined }))} testID="esport-strats-filtre-side" />
-        <Filtre<TypeStrat> theme={theme} libelle="Type" valeur={filtres.type ?? ''} options={[['', 'Tous'], ...TYPES_STRAT.map(t => [t, LIBELLES_TYPE_STRAT[t]] as const)]} onChoisir={v => setFiltres(f => ({ ...f, type: v || undefined }))} testID="esport-strats-filtre-type" />
+        <Filtre theme={theme} libelle={tr('strats.editeur.carte')} valeur={filtres.carte ?? ''} options={[['', tr('journal.toutes')], ...cartes.map(c => [c.cle, c.nom] as const)]} onChoisir={v => setFiltres(f => ({ ...f, carte: v || undefined }))} testID="esport-strats-filtre-carte" />
+        <Filtre<Side> theme={theme} libelle={tr('scouting.scouting.side')} valeur={filtres.side ?? ''} options={[['', tr('strats.playbook.les_deux')], ['attaque', tr('strats.editeur.attaque')], ['defense', tr('strats.editeur.defense')]]} onChoisir={v => setFiltres(f => ({ ...f, side: v || undefined }))} testID="esport-strats-filtre-side" />
+        <Filtre<TypeStrat> theme={theme} libelle={tr('resumes.type')} valeur={filtres.type ?? ''} options={[['', tr('journal.tous')], ...TYPES_STRAT.map(t => [t, LIBELLES_TYPE_STRAT[t]] as const)]} onChoisir={v => setFiltres(f => ({ ...f, type: v || undefined }))} testID="esport-strats-filtre-type" />
       </Panneau>
       </Pliable>
       </View>
@@ -103,9 +104,9 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
           <EtatVide
             theme={theme}
             glyphe="◎"
-            titre={Object.keys(filtres).some(k => filtres[k as keyof FiltresStrats]) || recherche ? 'Aucune strat pour ces filtres' : 'Aucune strat pour l’instant'}
-            texte="Une strat se dessine sur la minimap, étape par étape : positions, utilitaires, timings."
-            action={peut('strats.create') && !creation ? { titre: '+ Nouvelle strat', onPress: () => setCreation(true) } : undefined}
+            titre={Object.keys(filtres).some(k => filtres[k as keyof FiltresStrats]) || recherche ? tr('strats.strats.aucune_strat_pour_ces') : tr('strats.strats.aucune_strat_pour_l')}
+            texte={tr('strats.strats.une_strat_se_dessine')}
+            action={peut('strats.create') && !creation ? { titre: tr('strats.strats.nouvelle_strat_2'), onPress: () => setCreation(true) } : undefined}
           />
         </Carte>
       ) : null}
@@ -120,45 +121,45 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
               <Etiquette theme={theme} texte={s.carte.nom} />
               <Etiquette theme={theme} texte={LIBELLES_SIDE[s.side]} couleur={s.side === 'attaque' ? theme.critique : theme.accent} />
               <Etiquette theme={theme} texte={LIBELLES_TYPE_STRAT[s.type]} />
-              {s.visibilite === 'privee' ? <Etiquette theme={theme} texte="Privée" couleur={theme.alerte} /> : null}
+              {s.visibilite === 'privee' ? <Etiquette theme={theme} texte={tr('strats.strats.privee')} couleur={theme.alerte} /> : null}
               {s.tags.map(t => (
                 <Etiquette key={t} theme={theme} texte={`#${t}`} />
               ))}
             </View>
             <Text style={attenue}>
-              Modifiée {dateCourte(s.majLe)} par {s.majPar.pseudo ?? '?'} · version {s.revision}
+              {tr('strats.strats.modifiee_par', { date: dateCourte(s.majLe), nom: s.majPar.pseudo ?? '?', n: s.revision })}
             </Text>
             <View style={{ flex: 1 }} />
             <View style={[styles.ligne, { gap: ESP.xs, flexWrap: 'nowrap' }]}>
               <View style={{ flex: 1 }}>
-                <BoutonHub theme={theme} titre="Ouvrir" variante="plein" onPress={() => setOuverte(s.id)} testID={`esport-strat-ouvrir-${s.id}`} />
+                <BoutonHub theme={theme} titre={tr('resumes.ouvrir_2')} variante="plein" onPress={() => setOuverte(s.id)} testID={`esport-strat-ouvrir-${s.id}`} />
               </View>
               <MenuActions
                 theme={theme}
-                libelle={`Plus d’actions pour ${s.titre}`}
+                libelle={tr('strats.strats.plus_d_actions_pour', { titre: s.titre })}
                 testID={`esport-strat-actions-${s.id}`}
                 actions={[
                   peut('strats.create') && {
-                    titre: 'Dupliquer',
+                    titre: tr('membresRoles.dupliquer'),
                     testID: `esport-strat-dupliquer-${s.id}`,
                     onPress: () =>
-                      void agir('Duplication', async () => {
+                      void agir('duplication', async () => {
                         const copie = await api.dupliquer(teamId, s.id);
                         await recharger();
-                        return `Copie créée : « ${copie.titre} ».`;
+                        return tr('strats.strats.copie_creee', { titre: copie.titre });
                       }),
                   },
                   playbookActif && s.visibilite === 'team' && {
-                    titre: 'Ajouter au playbook',
+                    titre: tr('strats.playbook.ajouter_au_playbook'),
                     testID: `esport-strat-playbook-${s.id}`,
                     onPress: () =>
-                      void agir('Playbook', async () => {
+                      void agir('playbook', async () => {
                         await api.creerEntree(teamId, { stratId: s.id, tags: s.tags });
                         onAller('module:playbook');
                       }),
                   },
-                  s.moi.partager && { titre: partage === s.id ? 'Masquer le partage' : 'Partage et lien', testID: `esport-strat-lien-${s.id}`, onPress: () => setPartage(partage === s.id ? undefined : s.id) },
-                  s.moi.supprimer && { titre: 'Supprimer…', danger: true, testID: `esport-strat-supprimer-${s.id}`, onPress: () => setASupprimer(s.id) },
+                  s.moi.partager && { titre: partage === s.id ? tr('strats.strats.masquer_le_partage') : tr('strats.strats.partage_et_lien'), testID: `esport-strat-lien-${s.id}`, onPress: () => setPartage(partage === s.id ? undefined : s.id) },
+                  s.moi.supprimer && { titre: tr('strats.strats.supprimer'), danger: true, testID: `esport-strat-supprimer-${s.id}`, onPress: () => setASupprimer(s.id) },
                 ]}
               />
             </View>
@@ -166,19 +167,19 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
               <View style={[styles.ligne, { gap: ESP.xs }]}>
                 <BoutonHub
                   theme={theme}
-                  titre="Oui, supprimer"
+                  titre={tr('planning.planning.oui_supprimer')}
                   variante="danger"
                   onPress={() =>
-                    void agir('Suppression', async () => {
+                    void agir('suppression', async () => {
                       setASupprimer(undefined);
                       await api.supprimer(teamId, s.id);
                       await recharger();
-                      return 'Strat supprimée.';
+                      return tr('strats.strats.strat_supprimee');
                     })
                   }
                   testID={`esport-strat-supprimer-${s.id}-confirmer`}
                 />
-                <BoutonHub theme={theme} titre="Annuler" onPress={() => setASupprimer(undefined)} testID={`esport-strat-supprimer-${s.id}-annuler`} />
+                <BoutonHub theme={theme} titre={tr('assistant.annuler')} onPress={() => setASupprimer(undefined)} testID={`esport-strat-supprimer-${s.id}-annuler`} />
               </View>
             ) : null}
             {partage === s.id ? <Partages theme={theme} api={api} teamId={teamId} strat={s} /> : null}
@@ -210,16 +211,16 @@ function NouvelleStrat({
   const choisie = cartes.find(c => c.cle === carte);
   return (
     <Panneau theme={theme} testID="esport-strats-creation">
-      <Intertitre theme={theme}>Nouvelle strat</Intertitre>
-      <Champ theme={theme} libelle="Titre" valeur={titre} onChanger={setTitre} maxLength={80} placeholder="Exécution A, retake B…" testID="esport-strats-titre" />
-      <Choix theme={theme} libelle="Carte" valeur={carte} options={cartes.map(c => ({ id: c.cle, nom: c.nom }))} onChoisir={setCarte} testID="esport-strats-carte" />
-      <Segments<Side> theme={theme} libelle="Side" valeur={side} options={[['attaque', 'Attaque'], ['defense', 'Défense']]} onChoisir={setSide} testID="esport-strats-side" />
-      <Choix<TypeStrat> theme={theme} libelle="Type" valeur={type} options={TYPES_STRAT.map(t => ({ id: t, nom: LIBELLES_TYPE_STRAT[t] }))} onChoisir={setType} testID="esport-strats-type" />
-      <Champ theme={theme} libelle="Tags (séparés par des virgules)" valeur={tags} onChanger={setTags} maxLength={200} testID="esport-strats-tags" />
-      <Segments<'team' | 'privee'> theme={theme} libelle="Visibilité" valeur={privee ? 'privee' : 'team'} options={[['team', 'Partagée avec la team'], ['privee', 'Privée (brouillon)']]} onChoisir={v => setPrivee(v === 'privee')} testID="esport-strats-visibilite" />
+      <Intertitre theme={theme}>{tr('strats.strats.nouvelle_strat')}</Intertitre>
+      <Champ theme={theme} libelle={tr('objectifs.titre')} valeur={titre} onChanger={setTitre} maxLength={80} placeholder={tr('strats.strats.execution_a_retake_b')} testID="esport-strats-titre" />
+      <Choix theme={theme} libelle={tr('strats.editeur.carte')} valeur={carte} options={cartes.map(c => ({ id: c.cle, nom: c.nom }))} onChoisir={setCarte} testID="esport-strats-carte" />
+      <Segments<Side> theme={theme} libelle={tr('scouting.scouting.side')} valeur={side} options={[['attaque', tr('strats.editeur.attaque')], ['defense', tr('strats.editeur.defense')]]} onChoisir={setSide} testID="esport-strats-side" />
+      <Choix<TypeStrat> theme={theme} libelle={tr('resumes.type')} valeur={type} options={TYPES_STRAT.map(t => ({ id: t, nom: LIBELLES_TYPE_STRAT[t] }))} onChoisir={setType} testID="esport-strats-type" />
+      <Champ theme={theme} libelle={tr('strats.playbook.tags_separes_par_des')} valeur={tags} onChanger={setTags} maxLength={200} testID="esport-strats-tags" />
+      <Segments<'team' | 'privee'> theme={theme} libelle={tr('resumes.visibilite')} valeur={privee ? 'privee' : 'team'} options={[['team', tr('strats.strats.partagee_avec_la_team')], ['privee', tr('strats.strats.privee_brouillon')]]} onChoisir={v => setPrivee(v === 'privee')} testID="esport-strats-visibilite" />
       <BoutonHub
         theme={theme}
-        titre="Créer et ouvrir l’éditeur"
+        titre={tr('strats.strats.creer_et_ouvrir_l')}
         variante="plein"
         desactive={enCours || titre.trim().length < 2 || !choisie}
         onPress={() => choisie && onCreer({ titre: titre.trim(), type, carte: choisie, side, tags: lireTags(tags), visibilite: privee ? 'privee' : 'team' })}
@@ -242,14 +243,14 @@ function Partages({ theme, api, teamId, strat }: { theme: ThemeHub; api: ReturnT
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   return (
     <View style={{ gap: 6, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 8 }} testID="esport-strat-partages">
-      <Text style={attenue}>Un lien de lecture seule montre la strat (étapes et notes) sans compte. Révocable à tout moment.</Text>
+      <Text style={attenue}>{tr('strats.strats.un_lien_de_lecture')}</Text>
       <View style={styles.ligne}>
-        <Champ theme={theme} libelle="Validité (jours, vide : sans fin)" valeur={jours} onChanger={v => setJours(v.replace(/\D/g, ''))} clavier="number-pad" maxLength={3} style={{ minWidth: 140 }} testID="esport-strat-partage-jours" />
+        <Champ theme={theme} libelle={tr('strats.strats.validite_jours_vide_sans')} valeur={jours} onChanger={v => setJours(v.replace(/\D/g, ''))} clavier="number-pad" maxLength={3} style={{ minWidth: 140 }} testID="esport-strat-partage-jours" />
         <BoutonHub
           theme={theme}
-          titre="Créer un lien"
+          titre={tr('strats.strats.creer_un_lien')}
           onPress={() =>
-            void agir('Lien', async () => {
+            void agir('lien', async () => {
               setNouveau(await api.creerPartage(teamId, strat.id, jours ? { jours: Number(jours) } : {}));
               await charger();
             })
@@ -266,16 +267,16 @@ function Partages({ theme, api, teamId, strat }: { theme: ThemeHub; api: ReturnT
         <View key={l.id} style={[styles.ligne, { justifyContent: 'space-between' }]}>
           <Text style={{ color: l.revoque ? theme.attenue : theme.texte, fontSize: 12, textDecorationLine: l.revoque ? 'line-through' : 'none' }}>
             {l.libelle} · {dateCourte(l.creeLe)}
-            {l.expireLe ? ` · expire ${dateCourte(l.expireLe)}` : ''}
+            {l.expireLe ? tr('strats.strats.expire', { v: dateCourte(l.expireLe) }) : ''}
             {l.dernierAcces ? ` · vu ${dateCourte(l.dernierAcces)}` : ''}
           </Text>
           {!l.revoque ? (
             <BoutonHub
               theme={theme}
-              titre="Révoquer"
+              titre={tr('planning.planning.revoquer')}
               variante="danger"
               onPress={() =>
-                void agir('Révocation', async () => {
+                void agir('revocation', async () => {
                   await api.revoquerPartage(teamId, strat.id, l.id);
                   await charger();
                 })

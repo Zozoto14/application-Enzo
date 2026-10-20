@@ -29,6 +29,7 @@ import { autorise, rangDe } from '../hub/admin/roles';
 import type { AppHub, ContexteHub } from '../hub/types';
 import type { InvitationAffichee } from '../profils/identifiants';
 import type { Affectation, ClientEsport, CompteEsport } from './client';
+import { tr, traduire } from './i18n';
 
 /** Même règle que le serveur (esport/noyau/service.mjs) : le pseudo sert aussi d'identifiant dans le hub. */
 export const MOTIF_PSEUDO = /^[\p{L}\p{N}][\p{L}\p{N} _.\-]{1,23}$/u;
@@ -48,13 +49,13 @@ export function capaciteComptes(contexte: ContexteHub, superAdmin: boolean): Cap
   const controle = contexte.profils;
   const acteur = controle?.actuel;
   if (!superAdmin) {
-    return { creer: false, raison: 'Seul le Fondateur crée des comptes (il faut ses clés du hub). Vous pouvez ajouter à vos teams un compte qui existe déjà.' };
+    return { creer: false, raison: tr('comptesHub.seul_le_fondateur_cree') };
   }
   if (!controle?.onCreerCompte || !contexte.admin || !acteur || controle.restreint || controle.sessionAdmin) {
-    return { creer: false, raison: 'Créer un compte se fait sur un appareil où le Fondateur est connecté (comme dans l’Administration) : son PC ou son iPhone relié au relais.' };
+    return { creer: false, raison: tr('comptesHub.creer_un_compte_se') };
   }
   if (rangDe(acteur) !== 'fondateur' || !autorise(acteur, 'creer-ami').ok) {
-    return { creer: false, raison: 'Réservé au Fondateur.' };
+    return { creer: false, raison: tr('comptesHub.reserve_au_fondateur') };
   }
   return { creer: true };
 }
@@ -70,11 +71,11 @@ export interface SaisieCompte {
 /** Problème de saisie (undefined : prêt à créer). */
 export function erreurSaisie(saisie: SaisieCompte): string | undefined {
   const nom = saisie.nom.trim();
-  if (!MOTIF_PSEUDO.test(nom)) return 'Nom ou pseudo : 2 à 24 caractères (lettres, chiffres, espace, _ . -).';
-  if (!saisie.email.trim()) return 'L’adresse e-mail est obligatoire : c’est par elle que part l’invitation.';
+  if (!MOTIF_PSEUDO.test(nom)) return tr('comptesHub.nom_ou_pseudo_2');
+  if (!saisie.email.trim()) return tr('comptesHub.l_adresse_e_mail');
   const email = erreurEmail(saisie.email);
   if (email) return email;
-  if (saisie.affectations.length === 0) return 'Choisissez au moins une team et un rôle.';
+  if (saisie.affectations.length === 0) return tr('comptesHub.choisissez_au_moins_une');
   return undefined;
 }
 
@@ -134,23 +135,23 @@ export async function creerCompteEsport({
   const { apps, niveaux } = versAutorisations(registre, niveauxDuModele(registre, 'esport'));
   const jours = donnees.reglages.invitationJours || 7;
   const valeurs = await controle.onCreerCompte!(nom, apps, { niveaux, invitationExpireLe: new Date(maintenant + jours * 86_400_000).toISOString() }, optionsInvitation(donnees));
-  if (!valeurs.id) throw new Error('Le compte a été créé sans identifiant : ouvrez l’Administration pour le terminer.');
+  if (!valeurs.id) throw new Error(tr('comptesHub.le_compte_a_ete'));
   const id = valeurs.id;
   // 3. Adresse (chiffrée, base du Fondateur) et journal de l'Administration.
   majDonnees(contexte, d =>
     avecEvenement(
       avecEmailCreationPar(acteur, d, id, email, maintenant),
-      { type: 'compte', cible: id, nomCible: nom, app: 'esport', action: `Compte de ${nom} créé depuis l’Esport (Esport seulement ; teams : ${nomsTeams.join(', ')} ; adresse e-mail enregistrée)` },
+      { type: 'compte', cible: id, nomCible: nom, app: 'esport', action: traduire('fr', 'comptesHub.compte_de_cree_depuis', { nom, v: nomsTeams.join(', ') }) },
       maintenant,
     ),
   );
   // 4. Pré-enregistrement Esport.
   try {
     const fiche = await client.preinscrire({ compte: id, pseudo: nom, affectations: saisie.affectations, ...(saisie.demandeId ? { demandeId: saisie.demandeId } : {}) });
-    return { id, nom, email, invitation: valeurs.invitation ?? { erreur: 'Invitation indisponible sur cet appareil.' }, fiche };
+    return { id, nom, email, invitation: valeurs.invitation ?? { erreur: tr('comptesHub.invitation_indisponible_sur_ce') }, fiche };
   } catch (e) {
     const texte = e instanceof Error ? e.message : String(e);
-    return { id, nom, email, invitation: valeurs.invitation ?? { erreur: 'Invitation indisponible sur cet appareil.' }, fiche: null, erreurEsport: texte };
+    return { id, nom, email, invitation: valeurs.invitation ?? { erreur: tr('comptesHub.invitation_indisponible_sur_ce') }, fiche: null, erreurEsport: texte };
   }
 }
 
@@ -162,14 +163,14 @@ export async function rattacherCompte(client: ClientEsport, id: string, nom: str
 /** Nouveau lien d'invitation (l'ancien cesse de marcher) : même action que l'Administration. */
 export async function renvoyerInvitation(contexte: ContexteHub, id: string, nom: string, maintenant = Date.now()): Promise<InvitationAffichee> {
   const controle = contexte.profils;
-  if (!controle?.onInvitation || !contexte.admin) throw new Error('Renvoyer l’invitation se fait sur l’appareil du Fondateur (relié au relais avec le code maître).');
+  if (!controle?.onInvitation || !contexte.admin) throw new Error(tr('comptesHub.renvoyer_l_invitation_se'));
   const profil = controle.tous.find(p => p.id === id);
-  if (profil?.derniereConnexion) throw new Error(`${nom} s’est déjà connecté : pour un mot de passe oublié, passez par l’Administration (« Réinitialiser l’accès »).`);
+  if (profil?.derniereConnexion) throw new Error(tr('comptesHub.s_est_deja_connecte', { nom }));
   const donnees = chargerDonnees(contexte.admin.stockage);
   const jours = donnees.reglages.invitationJours || 7;
   const invitation = await controle.onInvitation(id, jours, optionsInvitation(donnees));
   if (!invitation.erreur) {
-    journaliser(contexte, { type: 'invitation', cible: id, nomCible: nom, action: `Nouvelle invitation de ${nom} préparée depuis l’Esport (${jours} j) : l’ancienne ne fonctionne plus` }, maintenant);
+    journaliser(contexte, { type: 'invitation', cible: id, nomCible: nom, action: traduire('fr', 'comptesHub.nouvelle_invitation_de_prepare', { nom, jours }) }, maintenant);
   }
   return invitation;
 }
@@ -181,10 +182,10 @@ export async function renvoyerInvitation(contexte: ContexteHub, id: string, nom:
  */
 export async function revoquerCompte(contexte: ContexteHub, id: string, nom: string, maintenant = Date.now()): Promise<void> {
   const controle = contexte.profils;
-  if (!controle?.onModifierProfils || !contexte.admin) throw new Error('Révoquer se fait sur l’appareil du Fondateur.');
+  if (!controle?.onModifierProfils || !contexte.admin) throw new Error(tr('comptesHub.revoquer_se_fait_sur'));
   if (controle.onRevoquerConnexion) await controle.onRevoquerConnexion(id, true);
   await controle.onModifierProfils(desactiverPar(controle.actuel, controle.tous, id));
-  journaliser(contexte, { type: 'compte', cible: id, nomCible: nom, action: `Accès de ${nom} révoqué depuis l’Esport (relais et compte désactivé)` }, maintenant);
+  journaliser(contexte, { type: 'compte', cible: id, nomCible: nom, action: traduire('fr', 'comptesHub.acces_de_revoque_depuis', { nom }) }, maintenant);
 }
 
 /** Note une transmission d'invitation (historique du compte, journal sans l'adresse). */
@@ -195,7 +196,7 @@ export function noterEnvoiEsport(contexte: ContexteHub, id: string, nom: string,
     majDonnees(contexte, d =>
       avecEvenement(
         avecEnvoiPar(controle.actuel, d, controle.tous, id, canal, maintenant),
-        { type: 'invitation', cible: id, nomCible: nom, app: 'esport', action: `Invitation de ${nom} transmise (${LIBELLES_CANAL[canal].toLowerCase()})` },
+        { type: 'invitation', cible: id, nomCible: nom, app: 'esport', action: traduire('fr', 'comptesHub.invitation_de_transmise', { nom, v: LIBELLES_CANAL[canal].toLowerCase() }) },
         maintenant,
       ),
     );
@@ -220,23 +221,23 @@ const sansAccolades = (texte: string) => texte.replace(/[{}]/g, '').trim();
 /** Message d'invitation Esport (variables du modèle de l'Administration ; les noms de teams sont du texte). */
 export function modeleInvitationEsport(teams: readonly string[]): ModeleInvitation {
   const liste = teams.map(sansAccolades).filter(Boolean);
-  const phraseTeams = liste.length === 0 ? 'dans l’Esport' : liste.length === 1 ? `dans la team ${liste[0]}` : `dans les teams ${liste.slice(0, -1).join(', ')} et ${liste[liste.length - 1]}`;
+  const phraseTeams = liste.length === 0 ? tr('comptesHub.dans_l_esport') : liste.length === 1 ? tr('comptesHub.dans_la_team', { v: liste[0] }) : tr('comptesHub.dans_les_teams_et', { v: liste.slice(0, -1).join(', '), v2: liste[liste.length - 1] });
   return {
-    objet: '{fondateur} t’invite dans l’Esport (AppDashboard)',
+    objet: tr('comptesHub.t_invite_dans_l'),
     corps: [
-      'Salut {prenom} !',
+      tr('comptesHub.salut'),
       '',
-      `{fondateur} t’a ajouté ${phraseTeams}.`,
+      tr('comptesHub.t_a_ajoute', { phraseTeams }),
       '',
-      '1. Ouvre ce lien (sur ton téléphone ou ton ordinateur) :',
+      tr('comptesHub.1_ouvre_ce_lien'),
       '{lien}',
-      '2. Choisis ton mot de passe ({longueur} caractères au moins). Ton identifiant : {prenom}',
-      '3. Ouvre la tuile Esport : ta team est déjà là, aucun code à saisir.',
+      tr('comptesHub.2_choisis_ton_mot'),
+      tr('comptesHub.3_ouvre_la_tuile'),
       '',
-      'Le lien ne marche qu’une fois, jusqu’au {expiration}. Ne le transfère à personne.',
+      tr('comptesHub.le_lien_ne_marche'),
       '',
-      'Si le lien ne s’ouvre pas : va sur {site}, touche « J’ai une invitation » et tape le code {code}.',
-      'Plus tard, sur un autre appareil : {connexion} puis ton prénom et ton mot de passe.',
+      tr('comptesHub.si_le_lien_ne'),
+      tr('comptesHub.plus_tard_sur_un'),
     ].join('\n'),
   };
 }

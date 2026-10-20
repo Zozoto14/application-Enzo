@@ -10,14 +10,24 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
 import { BoutonHub, Champ, Interrupteur } from '../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../hub/themes';
-import { nomModule } from '../client';
+import { nomModule, nomRole } from '../client';
+import { typeEvenement } from '../planning/libelles';
 import { apiBot, apiDiscord, type CodeLiaison, type EnvoiDiscord, type EtatBot, type EtatDiscord, type ParametreDiscord } from '../discord/api';
 import { dateCourte } from '../libelles';
 import { BoutonConfirme, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from './commun';
 import { CodeAffiche } from './CodeLiaison';
 import type { PropsModule } from './modules';
+import { tr, trn } from '../i18n';
+import { traduireServeur } from '../i18n/erreurs';
+import { ChoixLangue } from './ChoixLangue';
 
-const STATUTS: Record<EnvoiDiscord['statut'], string> = { attente: 'En attente', envoye: 'Envoyé', abandonne: 'Abandonné' };
+const STATUTS: Record<EnvoiDiscord['statut'], string> = { get attente() {
+      return tr('demandesCompte.en_attente');
+    }, get envoye() {
+      return tr('discord.envoye');
+    }, get abandonne() {
+      return tr('discord.abandonne');
+    } };
 
 /** Une notification : interrupteur, puis (déplié) modèle, rôle et aperçu. */
 function CarteNotification({ theme, parametre, onEnregistrer, occupe }: { theme: ThemeHub; parametre: ParametreDiscord; onEnregistrer(champs: { actif?: boolean; modele?: string | null; roleMention?: string | null }): void; occupe: boolean }) {
@@ -37,7 +47,7 @@ function CarteNotification({ theme, parametre, onEnregistrer, occupe }: { theme:
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={{ color: theme.texte, fontWeight: '700', fontSize: 15, ...police(theme.policeTexte) }}>{parametre.libelle}</Text>
           <Text style={attenue}>{parametre.description}</Text>
-          {!parametre.disponible ? <Text style={{ color: theme.alerte, fontSize: 12 }}>Indisponible : le module {absent.join(', ')} n’est pas activé pour cette team.</Text> : null}
+          {!parametre.disponible ? <Text style={{ color: theme.alerte, fontSize: 12 }}>{tr('discord.indisponible_le_module_n', { v: absent.join(', ') })}</Text> : null}
         </View>
         {/* Zone tactile de 44 px autour de l'interrupteur natif (qui en dessine 40 × 20). */}
         <Pressable
@@ -46,21 +56,20 @@ function CarteNotification({ theme, parametre, onEnregistrer, occupe }: { theme:
           onPress={() => onEnregistrer({ actif: !parametre.actif })}
           style={{ minWidth: 56, minHeight: 44, alignItems: 'center', justifyContent: 'center' }}
           {...({ dataSet: { cibleExemptee: 'oui' } } as object)}>
-          <Interrupteur theme={theme} libelle={`${parametre.libelle} : envoyer sur Discord`} valeur={parametre.actif} desactive={!parametre.disponible || occupe} onChanger={v => onEnregistrer({ actif: v })} testID={`esport-discord-actif-${id}`} />
+          <Interrupteur theme={theme} libelle={tr('discord.envoyer_sur_discord', { libelle: parametre.libelle })} valeur={parametre.actif} desactive={!parametre.disponible || occupe} onChanger={v => onEnregistrer({ actif: v })} testID={`esport-discord-actif-${id}`} />
         </Pressable>
       </View>
       {parametre.disponible ? (
-        <BoutonHub theme={theme} titre={ouvert ? 'Fermer' : 'Message et mention'} onPress={() => setOuvert(o => !o)} testID={`esport-discord-ouvrir-${id}`} />
+        <BoutonHub theme={theme} titre={ouvert ? tr('discord.fermer') : tr('discord.message_et_mention')} onPress={() => setOuvert(o => !o)} testID={`esport-discord-ouvrir-${id}`} />
       ) : null}
       {ouvert && parametre.disponible ? (
         <View style={{ gap: 10 }}>
-          <Champ theme={theme} libelle="Modèle du message (vide : modèle par défaut)" valeur={modele} onChanger={setModele} multiligne maxLength={500} placeholder={parametre.modeleDefaut} testID={`esport-discord-modele-${id}`} />
+          <Champ theme={theme} libelle={tr('discord.modele_du_message_vide')} valeur={modele} onChanger={setModele} multiligne maxLength={500} placeholder={parametre.modeleDefaut} testID={`esport-discord-modele-${id}`} />
           <Text style={attenue}>
-            Variables : {parametre.variables.map(v => `{${v.nom}}`).join(' ')}. {parametre.variables.map(v => `{${v.nom}} = ${v.description}`).join(' ; ')}.
-          </Text>
+            {tr('discord.variables', { v: parametre.variables.map(v => `{${v.nom}}`).join(' '), v2: parametre.variables.map(v => `{${v.nom}} = ${v.description}`).join(' ; ') })}</Text>
           <Champ
             theme={theme}
-            libelle="Rôle Discord à mentionner (identifiant, facultatif)"
+            libelle={tr('discord.role_discord_a_mentionner')}
             valeur={role}
             onChanger={setRole}
             clavier="number-pad"
@@ -68,20 +77,19 @@ function CarteNotification({ theme, parametre, onEnregistrer, occupe }: { theme:
             placeholder="123456789012345678"
             testID={`esport-discord-role-${id}`}
           />
-          <Text style={attenue}>Seulement l’identifiant numérique d’un rôle. @everyone et @here sont refusés. Dans Discord : Paramètres avancés › Mode développeur, puis clic droit sur le rôle › Copier l’identifiant du rôle.</Text>
+          <Text style={attenue}>{tr('discord.seulement_l_identifiant_numeri')}</Text>
           <Text style={{ color: theme.texte, ...police(theme.policeTexte) }} testID={`esport-discord-apercu-${id}`}>
-            Aperçu : {parametre.apercu}
-          </Text>
+            {tr('discord.apercu', { apercu: parametre.apercu })}</Text>
           <View style={styles.ligne}>
             <BoutonHub
               theme={theme}
-              titre="Enregistrer"
+              titre={tr('discord.enregistrer')}
               variante="plein"
               desactive={occupe}
               onPress={() => onEnregistrer({ modele: modele.trim() === '' ? null : modele, roleMention: role.trim() === '' ? null : role.trim() })}
               testID={`esport-discord-enregistrer-${id}`}
             />
-            <BoutonHub theme={theme} titre="Modèle par défaut" desactive={occupe || !parametre.personnalise} onPress={() => onEnregistrer({ modele: null })} testID={`esport-discord-defaut-${id}`} />
+            <BoutonHub theme={theme} titre={tr('discord.modele_par_defaut')} desactive={occupe || !parametre.personnalise} onPress={() => onEnregistrer({ modele: null })} testID={`esport-discord-defaut-${id}`} />
           </View>
         </View>
       ) : null}
@@ -109,40 +117,39 @@ function BotDiscord({ theme, client, teamId }: { theme: ThemeHub; client: PropsM
   const lies = etat?.comptes.filter(c => c.lie).length ?? 0;
   return (
     <Panneau theme={theme} testID="esport-bot">
-      <Intertitre theme={theme}>Bot Discord</Intertitre>
-      <Text style={attenue}>Le bot annonce les scrims, matchs et tournois dans le salon de la team, mentionne les convoqués qui ont lié leur compte, et leur permet de répondre Oui / Peut-être / Non d’un clic.</Text>
+      <Intertitre theme={theme}>{tr('discord.bot_discord')}</Intertitre>
+      <Text style={attenue}>{tr('discord.le_bot_annonce_les')}</Text>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-bot" />
       {etat && !etat.disponible ? (
         <Text style={{ color: theme.alerte, fontSize: 13 }} testID="esport-bot-absent">
-          Le bot n’est pas encore installé sur le serveur Esport : le Fondateur suit docs/esport/bot-discord.md.
-        </Text>
+          {tr('discord.le_bot_n_est')}</Text>
       ) : null}
       {s ? (
         <View style={{ gap: 4 }} testID="esport-bot-serveur">
           <Text style={{ color: theme.texte, ...police(theme.policeTexte) }}>
-            Serveur lié · annonces dans #{s.salonNom ?? s.salon}
+            {tr('discord.serveur_lie_annonces', { salon: s.salonNom ?? s.salon })}
           </Text>
           <Text style={attenue}>
-            Lié le {dateCourte(s.lieLe)}
-            {s.dernierSucces ? ` · dernier envoi réussi ${dateCourte(s.dernierSucces)}` : ''}
+            {tr('discord.lie_le', { date: dateCourte(s.lieLe) })}
+            {s.dernierSucces ? tr('discord.dernier_envoi_reussi_2', { v: dateCourte(s.dernierSucces) }) : ''}
           </Text>
-          {s.invalide ? <Text style={{ color: theme.critique, fontSize: 13 }}>Discord refuse le salon : vérifiez que le bot y a accès, ou liez un autre salon.</Text> : null}
+          {s.invalide ? <Text style={{ color: theme.critique, fontSize: 13 }}>{tr('discord.discord_refuse_le_salon')}</Text> : null}
         </View>
       ) : etat?.disponible ? (
-        <Text style={attenue}>Aucun serveur lié. Invitez le bot sur votre serveur, puis liez-le avec un code.</Text>
+        <Text style={attenue}>{tr('discord.aucun_serveur_lie_invitez')}</Text>
       ) : null}
       {code ? <CodeAffiche theme={theme} code={code} testID="esport-bot-code" /> : null}
       <View style={styles.ligne}>
-        {etat?.invitation ? <BoutonHub theme={theme} titre="Inviter le bot sur un serveur" onPress={() => void Linking.openURL(etat.invitation!)} testID="esport-bot-inviter" /> : null}
+        {etat?.invitation ? <BoutonHub theme={theme} titre={tr('discord.inviter_le_bot_sur')} onPress={() => void Linking.openURL(etat.invitation!)} testID="esport-bot-inviter" /> : null}
         <BoutonHub
           theme={theme}
-          titre={s ? 'Lier un autre salon ou serveur' : 'Lier un serveur Discord'}
+          titre={s ? tr('discord.lier_un_autre_salon') : tr('discord.lier_un_serveur_discord')}
           variante="plein"
           desactive={occupe || !etat?.disponible}
           onPress={() =>
-            void agir('Code', async () => {
+            void agir('code', async () => {
               setCode(await api.code());
-              return 'Code créé : un administrateur du serveur Discord tape la commande affichée, dans le salon des annonces.';
+              return tr('discord.code_cree_un_administrateur');
             })
           }
           testID="esport-bot-lier"
@@ -150,14 +157,14 @@ function BotDiscord({ theme, client, teamId }: { theme: ThemeHub; client: PropsM
         {s ? (
           <BoutonConfirme
             theme={theme}
-            titre="Délier le serveur"
-            confirmation="Confirmer : délier"
+            titre={tr('discord.delier_le_serveur')}
+            confirmation={tr('discord.confirmer_delier')}
             desactive={occupe}
             onConfirme={() =>
-              void agir('Délier', async () => {
+              void agir('delier', async () => {
                 await api.delier();
                 await recharger();
-                return 'Serveur Discord délié : plus aucune annonce du bot.';
+                return tr('discord.serveur_discord_delie_plus');
               })
             }
             testID="esport-bot-delier"
@@ -166,21 +173,21 @@ function BotDiscord({ theme, client, teamId }: { theme: ThemeHub; client: PropsM
       </View>
       {etat ? (
         <View style={{ gap: 6 }} testID="esport-bot-pings">
-          <Text style={{ color: theme.texte, fontWeight: '700', ...police(theme.policeTexte) }}>Mentionner les convoqués</Text>
-          <Text style={attenue}>Par type d’événement. Seuls les convoqués qui ont lié leur compte sont mentionnés ; jamais @everyone ni @here. Les réunions réservées au staff ne sont jamais annoncées.</Text>
+          <Text style={{ color: theme.texte, fontWeight: '700', ...police(theme.policeTexte) }}>{tr('discord.mentionner_les_convoques')}</Text>
+          <Text style={attenue}>{tr('discord.par_type_d_evenement')}</Text>
           {etat.pings.map(p => (
             <View key={p.type} style={[styles.ligne, { justifyContent: 'space-between', flexWrap: 'nowrap' }]}>
-              <Text style={{ color: theme.texte, flex: 1, ...police(theme.policeTexte) }}>{p.libelle}</Text>
+              <Text style={{ color: theme.texte, flex: 1, ...police(theme.policeTexte) }}>{typeEvenement(p.type).nom}</Text>
               <Interrupteur
                 theme={theme}
-                libelle={`Mentionner les convoqués : ${p.libelle}`}
+                libelle={tr('discord.mentionner_les_convoques_2', { libelle: typeEvenement(p.type).nom })}
                 valeur={p.ping}
                 desactive={occupe}
                 onChanger={v =>
-                  void agir('Ping', async () => {
+                  void agir('ping', async () => {
                     const r = await api.ping(p.type, v);
                     setEtat(e => (e ? { ...e, pings: r.pings } : e));
-                    return `${p.libelle} : ${v ? 'mention activée' : 'sans mention'}.`;
+                    return tr(v ? 'discord.ping_active' : 'discord.ping_coupe', { libelle: typeEvenement(p.type).nom });
                   })
                 }
                 testID={`esport-bot-ping-${p.type}`}
@@ -192,14 +199,13 @@ function BotDiscord({ theme, client, teamId }: { theme: ThemeHub; client: PropsM
       {etat ? (
         <View style={{ gap: 4 }} testID="esport-bot-comptes">
           <Text style={{ color: theme.texte, fontWeight: '700', ...police(theme.policeTexte) }}>
-            Comptes Discord liés : {lies} / {etat.comptes.length}
-          </Text>
+            {tr('discord.comptes_discord_lies', { lies, length: etat.comptes.length })}</Text>
           {etat.comptes.map(c => (
             <Text key={c.compte} style={{ color: c.lie ? theme.texte : theme.attenue, ...police(theme.policeTexte) }} testID={`esport-bot-compte-${c.compte}`}>
-              {c.lie ? '✓' : '·'} {c.pseudo} ({c.role}){c.lie ? ` — ${c.discordNom ?? 'lié'}` : ' — pas lié'}
+              {c.lie ? '✓' : '·'} {c.pseudo} ({nomRole(c.role)}){c.lie ? ` — ${c.discordNom ?? tr('discord.lie')}` : tr('discord.pas_lie')}
             </Text>
           ))}
-          <Text style={attenue}>Chacun lie son compte dans Mon profil › Lier mon Discord, puis tape /lier dans Discord.</Text>
+          <Text style={attenue}>{tr('discord.chacun_lie_son_compte')}</Text>
         </View>
       ) : null}
     </Panneau>
@@ -222,92 +228,108 @@ export function Discord({ theme, client, detail }: PropsModule) {
   }, [agir, recharger]);
 
   const enregistrer = () =>
-    void agir('Webhook', async () => {
+    void agir('webhook', async () => {
       await api.definirWebhook(url);
       setUrl('');
       await recharger();
-      return 'Webhook enregistré. Envoyez un message de test pour vérifier.';
+      return tr('discord.webhook_enregistre_envoyez_un');
     });
   const tester = () =>
-    void agir('Test', async () => {
+    void agir('test', async () => {
       await api.tester();
       await recharger();
-      return 'Message de test envoyé : regardez le salon Discord.';
+      return tr('discord.message_de_test_envoye');
     });
   const supprimer = () =>
-    void agir('Webhook', async () => {
+    void agir('webhook', async () => {
       await api.supprimerWebhook();
       await recharger();
-      return 'Webhook supprimé.';
+      return tr('discord.webhook_supprime');
     });
   const maj = (p: ParametreDiscord, champs: { actif?: boolean; modele?: string | null; roleMention?: string | null }) =>
-    void agir('Réglage', async () => {
+    void agir('reglage', async () => {
       await api.majParametre(p.cle, champs);
       await recharger();
-      return `« ${p.libelle} » enregistré.`;
+      return tr('discord.enregistre', { libelle: p.libelle });
     });
 
   const attenue = { color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) };
   const w = etat?.webhook;
   return (
     <View style={{ gap: 16 }} testID="esport-discord">
-      <TitreSection theme={theme} titre="Discord" sous="Les événements de la team arrivent dans un salon Discord : par le bot (recommandé), sinon par un webhook." />
+      <TitreSection theme={theme} titre="Discord" sous={tr('discord.les_evenements_de_la')} />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-discord" />
 
       <BotDiscord theme={theme} client={client} teamId={teamId} />
 
+      <Panneau theme={theme} testID="esport-discord-langue-panneau">
+        <Intertitre theme={theme}>{tr('discord.langue_des_messages')}</Intertitre>
+        <Text style={attenue}>{tr('discord.langue_des_messages_aide')}</Text>
+        <ChoixLangue
+          theme={theme}
+          libelle={tr('discord.langue_des_messages')}
+          valeur={etat?.langue ?? 'fr'}
+          onChoisir={l =>
+            void agir('langue', async () => {
+              await api.majLangue(l);
+              await recharger();
+              return tr('discord.langue_enregistree');
+            })
+          }
+          testID="esport-discord-langue"
+        />
+      </Panneau>
+
       <Panneau theme={theme} testID="esport-discord-webhook">
-        <Intertitre theme={theme}>Webhook du salon (repli sans bot)</Intertitre>
+        <Intertitre theme={theme}>{tr('discord.webhook_du_salon_repli')}</Intertitre>
         {w?.configure ? (
           <Text style={{ color: theme.texte, ...police(theme.policeTexte) }} testID="esport-discord-masque">
-            Webhook enregistré : discord.com/api/webhooks/{w.masque}
-          </Text>
+            {tr('discord.webhook_enregistre_discord_com', { masque: w.masque })}</Text>
         ) : (
-          <Text style={attenue}>Aucun webhook. Créez-en un dans Discord, puis collez son adresse ci-dessous.</Text>
+          <Text style={attenue}>{tr('discord.aucun_webhook_creez_en')}</Text>
         )}
-        {w?.invalide ? <Text style={{ color: theme.critique, fontSize: 13 }}>Discord ne reconnaît plus ce webhook : recréez-le et saisissez la nouvelle adresse.</Text> : null}
-        {w?.dernierSucces ? <Text style={attenue}>Dernier envoi réussi : {dateCourte(w.dernierSucces)}</Text> : null}
-        {w?.dernierEchec ? <Text style={attenue}>Dernier échec : {dateCourte(w.dernierEchec)}</Text> : null}
+        {w?.invalide ? <Text style={{ color: theme.critique, fontSize: 13 }}>{tr('discord.discord_ne_reconnait_plus')}</Text> : null}
+        {w?.dernierSucces ? <Text style={attenue}>{tr('discord.dernier_envoi_reussi', { v: dateCourte(w.dernierSucces) })}</Text> : null}
+        {w?.dernierEchec ? <Text style={attenue}>{tr('discord.dernier_echec', { v: dateCourte(w.dernierEchec) })}</Text> : null}
         <Champ
           theme={theme}
-          libelle={w?.configure ? 'Remplacer l’adresse du webhook' : 'Adresse du webhook'}
+          libelle={w?.configure ? tr('discord.remplacer_l_adresse_du') : tr('discord.adresse_du_webhook')}
           valeur={url}
           onChanger={setUrl}
           secret
           placeholder="https://discord.com/api/webhooks/…"
           testID="esport-discord-url"
         />
-        <Text style={attenue}>Cette adresse est un secret : elle est chiffrée sur le serveur et plus jamais affichée en entier.</Text>
+        <Text style={attenue}>{tr('discord.cette_adresse_est_un')}</Text>
         <View style={styles.ligne}>
-          <BoutonHub theme={theme} titre={w?.configure ? 'Remplacer' : 'Enregistrer'} variante="plein" desactive={occupe || url.trim() === ''} onPress={enregistrer} testID="esport-discord-enregistrer" />
-          <BoutonHub theme={theme} titre="Envoyer un message de test" desactive={occupe || !w?.configure} onPress={tester} testID="esport-discord-test" />
-          {w?.configure ? <BoutonConfirme theme={theme} titre="Supprimer" confirmation="Confirmer la suppression" desactive={occupe} onConfirme={supprimer} testID="esport-discord-supprimer" /> : null}
+          <BoutonHub theme={theme} titre={w?.configure ? tr('discord.remplacer') : tr('discord.enregistrer')} variante="plein" desactive={occupe || url.trim() === ''} onPress={enregistrer} testID="esport-discord-enregistrer" />
+          <BoutonHub theme={theme} titre={tr('discord.envoyer_un_message_de')} desactive={occupe || !w?.configure} onPress={tester} testID="esport-discord-test" />
+          {w?.configure ? <BoutonConfirme theme={theme} titre={tr('discord.supprimer')} confirmation={tr('discord.confirmer_la_suppression')} desactive={occupe} onConfirme={supprimer} testID="esport-discord-supprimer" /> : null}
         </View>
       </Panneau>
 
       <Panneau theme={theme} testID="esport-discord-parametres">
-        <Intertitre theme={theme}>Notifications</Intertitre>
-        <Text style={attenue}>Choisissez ce qui part sur Discord, le texte du message et le rôle à prévenir. Un salon réservé au staff convient aux dépôts de réunion.</Text>
+        <Intertitre theme={theme}>{tr('discord.notifications')}</Intertitre>
+        <Text style={attenue}>{tr('discord.choisissez_ce_qui_part')}</Text>
         {etat?.parametres.map(p => <CarteNotification key={p.cle} theme={theme} parametre={p} occupe={occupe} onEnregistrer={champs => maj(p, champs)} />)}
       </Panneau>
 
       <Panneau theme={theme} testID="esport-discord-envois">
-        <Intertitre theme={theme}>Derniers envois</Intertitre>
+        <Intertitre theme={theme}>{tr('discord.derniers_envois')}</Intertitre>
         {etat && (etat.file.enAttente > 0 || etat.file.abandonnes > 0) ? (
           <Text style={attenue}>
-            {etat.file.enAttente} en attente · {etat.file.abandonnes} abandonné(s). Les échecs sont aussi dans le Journal.
-          </Text>
+            {tr('discord.en_attente_abandonne_s', { enAttente: etat.file.enAttente, abandonnes: trn('discord.abandonnes', etat.file.abandonnes) })}</Text>
         ) : null}
-        {etat?.envois.length === 0 ? <Text style={attenue}>Aucun envoi pour l’instant.</Text> : null}
+        {etat?.envois.length === 0 ? <Text style={attenue}>{tr('discord.aucun_envoi_pour_l')}</Text> : null}
         {etat?.envois.map(e => (
           <View key={e.id} style={{ borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 6 }} testID="esport-discord-envoi">
             <Text style={{ color: e.statut === 'abandonne' ? theme.critique : theme.texte, ...police(theme.policeTexte) }}>
               {e.libelle} · {STATUTS[e.statut]}
-              {e.statut === 'attente' && e.essais > 0 ? ` (essai ${e.essais})` : ''}
+              {e.statut === 'attente' && e.essais > 0 ? tr('discord.essai', { essais: e.essais }) : ''}
             </Text>
             <Text style={attenue}>
               {dateCourte(e.creeLe)}
-              {e.erreur ? ` · ${e.erreur}` : ''}
+              {e.erreur ? ` · ${traduireServeur(e.erreur)}` : ''}
             </Text>
           </View>
         ))}

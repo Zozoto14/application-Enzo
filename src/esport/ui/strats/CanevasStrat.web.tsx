@@ -19,6 +19,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Arrow, Circle, Ellipse, Group, Image as KImage, Layer, Line, Rect, Stage, Text as KText, Wedge } from 'react-konva';
 import { initiales, type AgentAsset, type CacheImages, type CapaciteAsset } from '../../strats/assets';
 import { calqueDe, couleurJoueur, idUnique, zoneParDefaut, zoomer, type Action, type DocumentStrat, type FormeZone, type ObjetStrat, type Vue } from '../../strats/document';
+import { tr } from '../../i18n';
 
 export type Outil = 'selection' | 'main' | 'agent' | 'capacite' | 'fleche' | 'ligne' | 'forme' | 'texte' | 'gomme';
 
@@ -150,7 +151,7 @@ export default function CanevasStrat(p: PropsCanevas) {
   const exporter = useCallback(
     (options: { pixelRatio: number; mimeType?: string; quality?: number }) => {
       const st = scene.current;
-      if (!st) throw new Error('Canevas pas prêt.');
+      if (!st) throw new Error(tr('strats.canevasStrat.canevas_pas_pret'));
       const avant = { echelle: st.scaleX(), x: st.x(), y: st.y() };
       st.scale({ x: 1, y: 1 });
       st.position({ x: 0, y: 0 });

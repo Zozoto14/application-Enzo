@@ -18,7 +18,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Linking, Pressable, Text, View } from 'react-native';
 import { BoutonHub, Case, Champ, Segments } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
-import type { Boite, ClientEsport, Depot, DetailDepot, DetailTeam, FiltresBoite, StatutDepot, TypeReunion } from '../client';
+import { nomTypeReunion, type Boite, type ClientEsport, type Depot, type DetailDepot, type DetailTeam, type FiltresBoite, type StatutDepot, type TypeReunion } from '../client';
 import { LIBELLES_STATUT_DEPOT, aujourdhui, dateCourte, dateJour, lireDateSaisie, tailleLisible } from '../libelles';
 import { choisirPdf, choixPdfDisponible } from './choixPdf';
 import { ouvrirLienDiffere } from './ouvrirLien';
@@ -26,6 +26,7 @@ import { ChampNote } from './ChampNote';
 import { BoutonConfirme, Choix, PastilleRole, Retours, styles, useAgir, Intertitre, Panneau } from './commun';
 import { NoteMarkdown } from './review/Note';
 import { Carte, ESP, EnTetePage, EtatVide, Onglets } from './design';
+import { tr, trn } from '../i18n';
 
 type VueResumes = 'deposer' | 'miens' | 'bibliotheque' | 'boite' | 'types';
 
@@ -38,8 +39,7 @@ export function PastilleStatut({ theme, statut, testID }: { theme: ThemeHub; sta
 export function BadgeNouveau({ theme, testID }: { theme: ThemeHub; testID?: string }) {
   return (
     <Text testID={testID} style={{ color: theme.surAccent, backgroundColor: theme.accent, fontSize: 11, fontWeight: '800', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 999, overflow: 'hidden' }}>
-      Nouveau
-    </Text>
+      {tr('resumes.nouveau')}</Text>
   );
 }
 
@@ -49,17 +49,25 @@ export function ouvrirPdf(client: ClientEsport, teamId: string, depotId: string,
 }
 
 /** Libellés courts des vues (iPhone). */
-const COURTS_RESUMES: Partial<Record<VueResumes, string>> = { boite: 'Boîte', types: 'Types', bibliotheque: 'Résumés', miens: 'Mes dépôts' };
+const COURTS_RESUMES: Partial<Record<VueResumes, string>> = { get boite() {
+      return tr('resumes.boite');
+    }, get types() {
+      return tr('resumes.types');
+    }, get bibliotheque() {
+      return tr('resumes.resumes');
+    }, get miens() {
+      return tr('resumes.mes_depots');
+    } };
 
 export function SectionResumes({ theme, client, detail, large }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; large: boolean }) {
   const peut = (p: string) => detail.moi.permissions.includes(p);
   const redacteur = peut('meeting_summaries.write_summary');
   const options = useMemo(() => {
     const o: Array<readonly [VueResumes, string]> = [];
-    if (peut('meeting_summaries.submit')) o.push(['deposer', 'Déposer'], ['miens', 'Mes dépôts']);
-    if (peut('meeting_summaries.view_summary') || peut('meeting_summaries.view_all') || redacteur) o.push(['bibliotheque', 'Résumés']);
-    if (redacteur || peut('meeting_summaries.view_all')) o.push(['boite', 'Boîte de réception']);
-    if (redacteur) o.push(['types', 'Types de réunion']);
+    if (peut('meeting_summaries.submit')) o.push(['deposer', tr('resumes.deposer')], ['miens', tr('resumes.mes_depots')]);
+    if (peut('meeting_summaries.view_summary') || peut('meeting_summaries.view_all') || redacteur) o.push(['bibliotheque', tr('resumes.resumes')]);
+    if (redacteur || peut('meeting_summaries.view_all')) o.push(['boite', tr('racineEsport.boite_de_reception')]);
+    if (redacteur) o.push(['types', tr('resumes.types_de_reunion')]);
     return o;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail]);
@@ -70,11 +78,11 @@ export function SectionResumes({ theme, client, detail, large }: { theme: ThemeH
       <EnTetePage
         theme={theme}
         large={large}
-        titre="Résumés de réunions"
-        sous="Déposez l’enregistrement d’une réunion : le résumé en PDF arrive ici dès qu’il est prêt."
+        titre={tr('resumes.resumes_de_reunions')}
+        sous={tr('resumes.deposez_l_enregistrement_d')}
         action={
           options.some(o => o[0] === 'deposer') && active !== 'deposer' ? (
-            <BoutonHub theme={theme} titre="+ Déposer une réunion" variante="plein" onPress={() => setVue('deposer')} testID="esport-resumes-nouveau" />
+            <BoutonHub theme={theme} titre={tr('resumes.deposer_une_reunion')} variante="plein" onPress={() => setVue('deposer')} testID="esport-resumes-nouveau" />
           ) : undefined
         }
       />
@@ -91,7 +99,7 @@ export function SectionResumes({ theme, client, detail, large }: { theme: ThemeH
       ) : null}
       {options.length === 0 ? (
         <Carte theme={theme}>
-          <EtatVide theme={theme} glyphe="✎" titre="Pas d’accès aux résumés" texte="Votre rôle ne donne pas accès aux résumés de réunions de cette team." />
+          <EtatVide theme={theme} glyphe="✎" titre={tr('resumes.pas_d_acces_aux')} texte={tr('resumes.votre_role_ne_donne')} />
         </Carte>
       ) : null}
       {active === 'deposer' ? <FormulaireDepot theme={theme} client={client} teamId={detail.team.id} onDepose={() => setVue('miens')} /> : null}
@@ -124,33 +132,33 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
   const type = types.find(t => t.id === typeId);
   return (
     <Panneau theme={theme} style={{ maxWidth: 820 }} testID="esport-depot-formulaire">
-      <Intertitre theme={theme}>Nouveau dépôt</Intertitre>
-      <Champ theme={theme} libelle="Lien de l’enregistrement" valeur={lien} onChanger={setLien} placeholder="https://…" maxLength={500} testID="esport-depot-lien" />
-      <Choix theme={theme} libelle="Type de réunion" valeur={typeId} options={types.map(t => ({ id: t.id, nom: t.visibilite === 'staff' && !/staff/i.test(t.nom) ? `${t.nom} (staff)` : t.nom, couleur: t.couleur }))} onChoisir={setTypeId} testID="esport-depot-type" />
-      {type?.visibilite === 'staff' ? <Text style={attenue}>Résumé visible du staff seulement (et de vous).</Text> : null}
+      <Intertitre theme={theme}>{tr('resumes.nouveau_depot')}</Intertitre>
+      <Champ theme={theme} libelle={tr('resumes.lien_de_l_enregistrement')} valeur={lien} onChanger={setLien} placeholder="https://…" maxLength={500} testID="esport-depot-lien" />
+      <Choix theme={theme} libelle={tr('resumes.type_de_reunion')} valeur={typeId} options={types.map(t => ({ id: t.id, nom: t.visibilite === 'staff' && !/staff/i.test(t.nom) ? tr('resumes.staff_2', { nom: nomTypeReunion(t.nom) }) : nomTypeReunion(t.nom), couleur: t.couleur }))} onChoisir={setTypeId} testID="esport-depot-type" />
+      {type?.visibilite === 'staff' ? <Text style={attenue}>{tr('resumes.resume_visible_du_staff')}</Text> : null}
       <View style={[styles.ligne, { alignItems: 'flex-start' }]}>
-        <Champ theme={theme} libelle="Date (JJ/MM/AAAA)" valeur={date} onChanger={setDate} maxLength={10} testID="esport-depot-date" style={{ minWidth: 160 }} />
-        <Champ theme={theme} libelle="Titre" valeur={titre} onChanger={setTitre} maxLength={120} testID="esport-depot-titre" style={{ flex: 1, minWidth: 220 }} />
+        <Champ theme={theme} libelle={tr('resumes.date_jj_mm_aaaa')} valeur={date} onChanger={setDate} maxLength={10} testID="esport-depot-date" style={{ minWidth: 160 }} />
+        <Champ theme={theme} libelle={tr('objectifs.titre')} valeur={titre} onChanger={setTitre} maxLength={120} testID="esport-depot-titre" style={{ flex: 1, minWidth: 220 }} />
       </View>
-      <ChampNote theme={theme} libelle="Note (facultative)" valeur={note} onChanger={setNote} maxLength={2000} testID="esport-depot-note" />
+      <ChampNote theme={theme} libelle={tr('resumes.note_facultative')} valeur={note} onChanger={setNote} maxLength={2000} testID="esport-depot-note" />
       <BoutonHub
         theme={theme}
-        titre={enCours === 'Dépôt' ? 'Envoi…' : 'Déposer la réunion'}
+        titre={enCours === 'depot' ? tr('resumes.envoi') : tr('resumes.deposer_la_reunion')}
         variante="plein"
         desactive={Boolean(enCours) || !lien.trim() || titre.trim().length < 2 || !typeId}
         onPress={() => {
           const iso = lireDateSaisie(date);
           if (!iso) {
-            setErreur('Date : JJ/MM/AAAA.');
+            setErreur(tr('resumes.date_jj_mm_aaaa_2'));
             return;
           }
-          void agir('Dépôt', async () => {
+          void agir('depot', async () => {
             await client.deposerReunion(teamId, { lien: lien.trim(), typeId: typeId!, dateReunion: iso, titre: titre.trim(), note: note.trim() || undefined });
             setLien('');
             setTitre('');
             setNote('');
             onDepose();
-            return 'Réunion déposée : le rédacteur est prévenu.';
+            return tr('resumes.reunion_deposee_le_redacteur');
           });
         }}
         testID="esport-depot-envoyer"
@@ -181,18 +189,18 @@ function LigneDepot({
         <PastilleStatut theme={theme} statut={depot.statut} testID={`esport-depot-statut-${depot.id}`} />
       </View>
       <Text style={attenue}>
-        {depot.type?.nom ?? 'Type supprimé'} · réunion du {dateJour(depot.dateReunion)}
-        {avecDeposant ? ` · déposé par ${depot.deposePar.pseudo ?? 'un compte supprimé'}` : ` · déposé le ${dateCourte(depot.creeLe)}`}
+        {depot.type?.nom ?? tr('resumes.type_supprime')} · {tr('resumes.reunion_du', { date: dateJour(depot.dateReunion) })}
+        {avecDeposant ? tr('resumes.depose_par', { nom: depot.deposePar.pseudo ?? tr('resumes.un_compte_supprime') }) : tr('resumes.depose_le', { v: dateCourte(depot.creeLe) })}
       </Text>
       {onOuvrirPdf || onSupprimer ? (
         <View style={styles.ligne}>
           {onOuvrirPdf && depot.resume ? (
             <>
-              <BoutonHub theme={theme} titre="Ouvrir le PDF" variante="plein" onPress={() => onOuvrirPdf(false)} testID={`esport-depot-pdf-${depot.id}`} />
-              <BoutonHub theme={theme} titre="Télécharger" onPress={() => onOuvrirPdf(true)} testID={`esport-depot-telecharger-${depot.id}`} />
+              <BoutonHub theme={theme} titre={tr('resumes.ouvrir_le_pdf')} variante="plein" onPress={() => onOuvrirPdf(false)} testID={`esport-depot-pdf-${depot.id}`} />
+              <BoutonHub theme={theme} titre={tr('resumes.telecharger')} onPress={() => onOuvrirPdf(true)} testID={`esport-depot-telecharger-${depot.id}`} />
             </>
           ) : null}
-          {onSupprimer ? <BoutonConfirme theme={theme} titre="Retirer" confirmation="Oui, retirer ce dépôt" onConfirme={onSupprimer} testID={`esport-depot-retirer-${depot.id}`} /> : null}
+          {onSupprimer ? <BoutonConfirme theme={theme} titre={tr('resumes.retirer')} confirmation={tr('resumes.oui_retirer_ce_depot')} onConfirme={onSupprimer} testID={`esport-depot-retirer-${depot.id}`} /> : null}
         </View>
       ) : null}
     </View>
@@ -208,9 +216,9 @@ function MesDepots({ theme, client, teamId }: { theme: ThemeHub; client: ClientE
   }, [charger]);
   return (
     <Panneau theme={theme} testID="esport-mes-depots">
-      <Intertitre theme={theme}>Mes dépôts</Intertitre>
+      <Intertitre theme={theme}>{tr('resumes.mes_depots')}</Intertitre>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-mes-depots" />
-      {depots?.length === 0 ? <Text style={{ color: theme.attenue }}>Aucun dépôt pour l’instant.</Text> : null}
+      {depots?.length === 0 ? <Text style={{ color: theme.attenue }}>{tr('resumes.aucun_depot_pour_l')}</Text> : null}
       {depots?.map(d => (
         <LigneDepot
           key={d.id}
@@ -220,10 +228,10 @@ function MesDepots({ theme, client, teamId }: { theme: ThemeHub; client: ClientE
           onSupprimer={
             d.statut === 'a_resumer'
               ? () =>
-                  void agir('Retrait', async () => {
+                  void agir('retrait', async () => {
                     await client.supprimerDepot(teamId, d.id);
                     setDepots(await client.mesDepots(teamId));
-                    return 'Dépôt retiré.';
+                    return tr('resumes.depot_retire');
                   })
               : undefined
           }
@@ -241,9 +249,9 @@ function Bibliotheque({ theme, client, teamId }: { theme: ThemeHub; client: Clie
   }, [agir, client, teamId]);
   return (
     <Panneau theme={theme} testID="esport-bibliotheque">
-      <Intertitre theme={theme}>Résumés de la team</Intertitre>
+      <Intertitre theme={theme}>{tr('resumes.resumes_de_la_team')}</Intertitre>
       <Retours theme={theme} erreur={erreur} prefixe="esport-bibliotheque" />
-      {resumes?.length === 0 ? <Text style={{ color: theme.attenue }}>Aucun résumé publié pour l’instant.</Text> : null}
+      {resumes?.length === 0 ? <Text style={{ color: theme.attenue }}>{tr('accueilPhase3.aucun_resume_publie_pour')}</Text> : null}
       {resumes?.map(d => (
         <LigneDepot key={d.id} theme={theme} depot={d} avecDeposant onOuvrirPdf={telecharger => void agir('PDF', () => ouvrirPdf(client, teamId, d.id, { telecharger }))} />
       ))}
@@ -253,17 +261,17 @@ function Bibliotheque({ theme, client, teamId }: { theme: ThemeHub; client: Clie
 
 // ------------------------------------------------------------------ Rédacteur
 
-const OPTIONS_STATUT: ReadonlyArray<readonly ['' | StatutDepot, string]> = [
-  ['', 'Tous'],
-  ['a_resumer', 'À résumer'],
-  ['en_cours', 'En cours'],
-  ['termine', 'Terminé'],
+const optionsStatut = (): ReadonlyArray<readonly ['' | StatutDepot, string]> => [
+  ['', tr('journal.tous')],
+  ['a_resumer', tr('libelles.a_resumer')],
+  ['en_cours', tr('libelles.en_cours')],
+  ['termine', tr('creationCompte.termine')],
 ];
-const OPTIONS_TRI: ReadonlyArray<readonly [NonNullable<FiltresBoite['tri']>, string]> = [
-  ['recent', 'Plus récents'],
-  ['ancien', 'Plus anciens'],
-  ['statut', 'Par statut'],
-  ['date', 'Date de réunion'],
+const optionsTri = (): ReadonlyArray<readonly [NonNullable<FiltresBoite['tri']>, string]> => [
+  ['recent', tr('resumes.plus_recents')],
+  ['ancien', tr('resumes.plus_anciens')],
+  ['statut', tr('resumes.par_statut')],
+  ['date', tr('resumes.date_de_reunion')],
 ];
 
 /**
@@ -284,7 +292,7 @@ export function BoiteResumes({ theme, client, large, teamFixe, onCompteurs }: { 
 
   const charger = useCallback(
     () =>
-      agir('Boîte', async () => {
+      agir('boite', async () => {
         const b = await client.boiteResumes({ ...filtres, team: teamFixe ?? filtres.team });
         setBoite(b);
         rappel.current?.(b);
@@ -300,7 +308,7 @@ export function BoiteResumes({ theme, client, large, teamFixe, onCompteurs }: { 
     const d = du.trim() ? lireDateSaisie(du) : undefined;
     const a = au.trim() ? lireDateSaisie(au) : undefined;
     if ((du.trim() && !d) || (au.trim() && !a)) {
-      setErreur('Dates : JJ/MM/AAAA.');
+      setErreur(tr('journal.dates_jj_mm_aaaa'));
       return;
     }
     setFiltres(f => ({ ...f, du: d, au: a }));
@@ -310,18 +318,18 @@ export function BoiteResumes({ theme, client, large, teamFixe, onCompteurs }: { 
     <View style={{ gap: 12, flex: large && ouvert ? 1 : undefined, minWidth: 0 }}>
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
         <Text style={{ color: theme.texte, fontSize: 16, fontWeight: '800', ...police(theme.policeTitre) }} testID="esport-boite-compteur">
-          {boite ? `${boite.attente} en attente · ${boite.nouveaux} nouveau${boite.nouveaux > 1 ? 'x' : ''}` : 'Boîte de réception'}
+          {boite ? tr('resumes.boite_resume', { attente: boite.attente, nouveaux: trn('resumes.nouveaux', boite.nouveaux) }) : tr('racineEsport.boite_de_reception')}
         </Text>
-        <BoutonHub theme={theme} titre={enCours === 'Boîte' ? 'Actualisation…' : 'Actualiser'} onPress={() => void charger()} testID="esport-boite-actualiser" />
+        <BoutonHub theme={theme} titre={enCours === 'boite' ? tr('resumes.actualisation') : tr('resumes.actualiser')} onPress={() => void charger()} testID="esport-boite-actualiser" />
       </View>
       <Panneau theme={theme} testID="esport-boite-filtres">
-        <Segments theme={theme} libelle="Statut" valeur={filtres.statut ?? ''} options={OPTIONS_STATUT} onChoisir={v => setFiltres(f => ({ ...f, statut: v || undefined }))} testID="esport-boite-statut" />
+        <Segments theme={theme} libelle={tr('membresGlobal.statut')} valeur={filtres.statut ?? ''} options={optionsStatut()} onChoisir={v => setFiltres(f => ({ ...f, statut: v || undefined }))} testID="esport-boite-statut" />
         {!teamFixe && (boite?.teams.length ?? 0) > 1 ? (
           <Choix
             theme={theme}
-            libelle="Team"
+            libelle={tr('demandesCompte.team')}
             valeur={filtres.team ?? ''}
-            options={[{ id: '', nom: 'Toutes' }, ...(boite?.teams ?? []).map(t => ({ id: t.id, nom: t.nom }))]}
+            options={[{ id: '', nom: tr('journal.toutes') }, ...(boite?.teams ?? []).map(t => ({ id: t.id, nom: t.nom }))]}
             onChoisir={v => setFiltres(f => ({ ...f, team: v || undefined }))}
             testID="esport-boite-team"
           />
@@ -329,9 +337,9 @@ export function BoiteResumes({ theme, client, large, teamFixe, onCompteurs }: { 
         {(boite?.types.length ?? 0) > 0 ? (
           <Choix
             theme={theme}
-            libelle="Type"
+            libelle={tr('resumes.type')}
             valeur={filtres.type ?? ''}
-            options={[{ id: '', nom: 'Tous' }, ...(boite?.types ?? []).map(t => ({ id: t.id, nom: t.nom, couleur: t.couleur }))]}
+            options={[{ id: '', nom: tr('journal.tous') }, ...(boite?.types ?? []).map(t => ({ id: t.id, nom: nomTypeReunion(t.nom), couleur: t.couleur }))]}
             onChoisir={v => setFiltres(f => ({ ...f, type: v || undefined }))}
             testID="esport-boite-type"
           />
@@ -339,27 +347,27 @@ export function BoiteResumes({ theme, client, large, teamFixe, onCompteurs }: { 
         {(boite?.deposants.length ?? 0) > 1 ? (
           <Choix
             theme={theme}
-            libelle="Déposant"
+            libelle={tr('resumes.deposant')}
             valeur={filtres.deposePar ?? ''}
-            options={[{ id: '', nom: 'Tous' }, ...(boite?.deposants ?? []).map(d => ({ id: d.compte, nom: d.pseudo ?? 'Compte supprimé' }))]}
+            options={[{ id: '', nom: tr('journal.tous') }, ...(boite?.deposants ?? []).map(d => ({ id: d.compte, nom: d.pseudo ?? tr('resumes.compte_supprime') }))]}
             onChoisir={v => setFiltres(f => ({ ...f, deposePar: v || undefined }))}
             testID="esport-boite-deposant"
           />
         ) : null}
         <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
-          <Champ theme={theme} libelle="Du (JJ/MM/AAAA)" valeur={du} onChanger={setDu} maxLength={10} testID="esport-boite-du" style={{ width: 150 }} />
-          <Champ theme={theme} libelle="Au" valeur={au} onChanger={setAu} maxLength={10} testID="esport-boite-au" style={{ width: 150 }} />
-          <BoutonHub theme={theme} titre="Appliquer" onPress={appliquerDates} testID="esport-boite-dates" />
+          <Champ theme={theme} libelle={tr('journal.du_jj_mm_aaaa')} valeur={du} onChanger={setDu} maxLength={10} testID="esport-boite-du" style={{ width: 150 }} />
+          <Champ theme={theme} libelle={tr('resumes.au')} valeur={au} onChanger={setAu} maxLength={10} testID="esport-boite-au" style={{ width: 150 }} />
+          <BoutonHub theme={theme} titre={tr('resumes.appliquer')} onPress={appliquerDates} testID="esport-boite-dates" />
         </View>
         <View style={styles.ligne}>
-          <Case theme={theme} coche={Boolean(filtres.nouveaux)} libelle="Nouveaux seulement" onChanger={v => setFiltres(f => ({ ...f, nouveaux: v || undefined }))} testID="esport-boite-nouveaux" />
-          <Text style={{ color: theme.texte, ...police(theme.policeTexte) }}>Nouveaux seulement</Text>
+          <Case theme={theme} coche={Boolean(filtres.nouveaux)} libelle={tr('resumes.nouveaux_seulement')} onChanger={v => setFiltres(f => ({ ...f, nouveaux: v || undefined }))} testID="esport-boite-nouveaux" />
+          <Text style={{ color: theme.texte, ...police(theme.policeTexte) }}>{tr('resumes.nouveaux_seulement')}</Text>
         </View>
-        <Segments theme={theme} libelle="Tri" valeur={filtres.tri ?? 'recent'} options={OPTIONS_TRI} onChoisir={tri => setFiltres(f => ({ ...f, tri }))} testID="esport-boite-tri" />
+        <Segments theme={theme} libelle={tr('resumes.tri')} valeur={filtres.tri ?? 'recent'} options={optionsTri()} onChoisir={tri => setFiltres(f => ({ ...f, tri }))} testID="esport-boite-tri" />
       </Panneau>
       <Retours theme={theme} erreur={erreur} prefixe="esport-boite" />
       <View style={{ gap: 8 }} testID="esport-boite-liste">
-        {boite?.depots.length === 0 ? <Text style={attenue}>Aucun dépôt ne correspond.</Text> : null}
+        {boite?.depots.length === 0 ? <Text style={attenue}>{tr('resumes.aucun_depot_ne_correspond')}</Text> : null}
         {boite?.depots.map(d => {
           const choisi = ouvert?.id === d.id;
           return (
@@ -367,7 +375,7 @@ export function BoiteResumes({ theme, client, large, teamFixe, onCompteurs }: { 
               key={d.id}
               testID={`esport-boite-depot-${d.id}`}
               accessibilityRole="button"
-              accessibilityLabel={`Ouvrir ${d.titre}`}
+              accessibilityLabel={tr('resumes.ouvrir', { titre: d.titre })}
               onPress={() => setOuvert({ teamId: d.team.id, id: d.id })}
               style={{
                 borderWidth: 1,
@@ -385,8 +393,8 @@ export function BoiteResumes({ theme, client, large, teamFixe, onCompteurs }: { 
                 <PastilleStatut theme={theme} statut={d.statut} />
               </View>
               <Text style={attenue}>
-                {teamFixe ? '' : `${d.team.nom ?? 'Team'} · `}
-                {d.type?.nom ?? 'Type supprimé'} · {dateJour(d.dateReunion)} · {d.deposePar.pseudo ?? 'Compte supprimé'} · déposé le {dateCourte(d.creeLe)}
+                {teamFixe ? '' : `${d.team.nom ?? tr('demandesCompte.team')} · `}
+                {d.type?.nom ?? tr('resumes.type_supprime')} · {dateJour(d.dateReunion)} · {d.deposePar.pseudo ?? tr('resumes.compte_supprime')}{tr('resumes.depose_le', { v: dateCourte(d.creeLe) })}
               </Text>
             </Pressable>
           );
@@ -447,24 +455,24 @@ function DetailDepotRedacteur({
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const changer = (statut: StatutDepot) =>
-    void agir('Statut', async () => {
+    void agir('statut', async () => {
       setD(await client.changerStatutDepot(teamId, depotId, statut));
       onChange();
-      return `Statut : ${LIBELLES_STATUT_DEPOT[statut]}.`;
+      return tr('resumes.statut', { v: LIBELLES_STATUT_DEPOT[statut] });
     });
   return (
     <Panneau theme={theme} testID="esport-detail-depot">
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
         <Text style={[texte, { fontSize: 17, fontWeight: '800', flexShrink: 1 }]}>{d.titre}</Text>
-        <BoutonHub theme={theme} titre="Fermer" onPress={onFermer} testID="esport-detail-fermer" />
+        <BoutonHub theme={theme} titre={tr('discord.fermer')} onPress={onFermer} testID="esport-detail-fermer" />
       </View>
       <View style={styles.ligne}>
         <PastilleStatut theme={theme} statut={d.statut} testID="esport-detail-statut" />
-        {d.type ? <PastilleRole theme={theme} nom={d.type.visibilite === 'staff' ? `${d.type.nom} · staff` : d.type.nom} couleur={d.type.couleur} /> : null}
-        {d.vu ? <Text style={attenue}>Vu le {dateCourte(d.vu.le)}</Text> : null}
+        {d.type ? <PastilleRole theme={theme} nom={d.type.visibilite === 'staff' ? tr('resumes.staff_3', { nom: nomTypeReunion(d.type.nom) }) : nomTypeReunion(d.type.nom)} couleur={d.type.couleur} /> : null}
+        {d.vu ? <Text style={attenue}>{tr('resumes.vu_le', { v: dateCourte(d.vu.le) })}</Text> : null}
       </View>
       <Text style={attenue}>
-        {d.team.nom ?? 'Team'} · réunion du {dateJour(d.dateReunion)} · déposé par {d.deposePar.pseudo ?? 'un compte supprimé'} le {dateCourte(d.creeLe)}
+        {tr('resumes.detail_ligne', { team: d.team.nom ?? tr('demandesCompte.team'), date: dateJour(d.dateReunion), nom: d.deposePar.pseudo ?? tr('resumes.un_compte_supprime'), creeLe: dateCourte(d.creeLe) })}
       </Text>
       <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(d.lien)} testID="esport-detail-lien">
         <Text style={{ color: theme.accent, textDecorationLine: 'underline', ...police(theme.policeTexte) }} numberOfLines={2}>
@@ -474,7 +482,7 @@ function DetailDepotRedacteur({
       {d.note ? <NoteMarkdown theme={theme} source={d.note} testID="esport-detail-note" /> : null}
       {d.moi.redacteur ? (
         <>
-          <Intertitre theme={theme}>Statut</Intertitre>
+          <Intertitre theme={theme}>{tr('membresGlobal.statut')}</Intertitre>
           <View style={styles.ligne}>
             {(['a_resumer', 'en_cours', 'termine'] as const).map(s => (
               <BoutonHub
@@ -488,41 +496,41 @@ function DetailDepotRedacteur({
               />
             ))}
           </View>
-          {!d.resume ? <Text style={attenue}>« Terminé » se pose tout seul au dépôt du PDF.</Text> : null}
-          <Intertitre theme={theme}>Résumé en PDF</Intertitre>
+          {!d.resume ? <Text style={attenue}>{tr('resumes.termine_se_pose_tout')}</Text> : null}
+          <Intertitre theme={theme}>{tr('resumes.resume_en_pdf')}</Intertitre>
           {choixPdfDisponible ? (
             <BoutonHub
               theme={theme}
-              titre={enCours === 'PDF' ? 'Envoi du PDF…' : d.resume ? 'Remplacer le PDF' : 'Déposer le PDF'}
+              titre={enCours === 'PDF' ? tr('resumes.envoi_du_pdf') : d.resume ? tr('resumes.remplacer_le_pdf') : tr('resumes.deposer_le_pdf')}
               variante="plein"
               desactive={Boolean(enCours)}
               onPress={() =>
                 void agir('PDF', async () => {
                   const f = await choisirPdf();
                   if (!f) return;
-                  if (f.taille > 20 * 1024 * 1024) throw new Error('PDF trop volumineux : 20 Mo au plus.');
+                  if (f.taille > 20 * 1024 * 1024) throw new Error(tr('resumes.pdf_trop_volumineux_20'));
                   setD(await client.envoyerPdf(teamId, depotId, f.octets, f.nom));
                   onChange();
-                  return d.resume ? 'PDF remplacé (l’ancien reste dans l’historique).' : 'Résumé publié : le déposant est prévenu.';
+                  return d.resume ? tr('resumes.pdf_remplace_l_ancien') : tr('resumes.resume_publie_le_deposant');
                 })
               }
               testID="esport-detail-pdf"
             />
           ) : (
-            <Text style={attenue}>Déposez le PDF depuis le PC ou le site (sélecteur de fichiers).</Text>
+            <Text style={attenue}>{tr('resumes.deposez_le_pdf_depuis')}</Text>
           )}
         </>
       ) : null}
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-detail" />
       {d.fichiers.length > 0 ? (
         <View style={{ gap: 6 }} testID="esport-detail-historique">
-          <Intertitre theme={theme}>{d.fichiers.length > 1 ? 'Versions du PDF' : 'PDF'}</Intertitre>
+          <Intertitre theme={theme}>{d.fichiers.length > 1 ? tr('resumes.versions_du_pdf') : 'PDF'}</Intertitre>
           {d.fichiers.map(f => (
             <View key={f.id} style={[styles.ligne, { borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 6 }]} testID={`esport-detail-fichier-${f.id}`}>
               <Text style={[texte, { flex: 1, minWidth: 160, fontWeight: f.actuel ? '700' : '400' }]}>
-                {f.nom} <Text style={attenue}>· {tailleLisible(f.taille)} · {dateCourte(f.le)}{f.actuel ? ' · actuel' : ' · remplacé'}</Text>
+                {f.nom} <Text style={attenue}>· {tailleLisible(f.taille)} · {dateCourte(f.le)}{f.actuel ? tr('resumes.actuel') : tr('resumes.remplace')}</Text>
               </Text>
-              <BoutonHub theme={theme} titre="Ouvrir" onPress={() => void agir('Ouvrir', () => ouvrirPdf(client, teamId, depotId, { fichierId: f.id }))} testID={`esport-detail-ouvrir-${f.id}`} />
+              <BoutonHub theme={theme} titre={tr('resumes.ouvrir_2')} onPress={() => void agir('ouvrir', () => ouvrirPdf(client, teamId, depotId, { fichierId: f.id }))} testID={`esport-detail-ouvrir-${f.id}`} />
             </View>
           ))}
         </View>
@@ -545,45 +553,45 @@ function TypesReunion({ theme, client, teamId, superAdmin }: { theme: ThemeHub; 
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   return (
     <Panneau theme={theme} testID="esport-types-reunion">
-      <Intertitre theme={theme}>Types de réunion</Intertitre>
-      <Text style={attenue}>« Team » : les membres qui lisent les résumés. « Staff » : seulement les rôles qui lisent les réunions staff (et le déposant).</Text>
+      <Intertitre theme={theme}>{tr('resumes.types_de_reunion')}</Intertitre>
+      <Text style={attenue}>{tr('resumes.team_les_membres_qui')}</Text>
       {types?.map(t => {
         const modifiable = !t.global || superAdmin;
         return (
           <View key={t.id} style={[styles.ligne, { borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 6 }]} testID={`esport-type-${t.id}`}>
-            <PastilleRole theme={theme} nom={t.nom} couleur={t.couleur} />
-            <Text style={[attenue, { flex: 1 }]}>{t.global ? 'Commun à toutes les teams' : 'Propre à la team'}</Text>
+            <PastilleRole theme={theme} nom={nomTypeReunion(t.nom)} couleur={t.couleur} />
+            <Text style={[attenue, { flex: 1 }]}>{t.global ? tr('resumes.commun_a_toutes_les') : tr('resumes.propre_a_la_team')}</Text>
             {modifiable ? (
               <Segments
                 theme={theme}
-                libelle={`Visibilité de ${t.nom}`}
+                libelle={tr('resumes.visibilite_de', { nom: nomTypeReunion(t.nom) })}
                 valeur={t.visibilite}
                 options={[
-                  ['team', 'Team'],
-                  ['staff', 'Staff'],
+                  ['team', tr('demandesCompte.team')],
+                  ['staff', tr('resumes.staff')],
                 ]}
                 onChoisir={v =>
-                  void agir('Type', async () => {
+                  void agir('type', async () => {
                     await client.modifierTypeReunion(teamId, t.id, { visibilite: v });
                     await recharger();
-                    return `${t.nom} : visible ${v === 'staff' ? 'du staff seulement' : 'de la team'}.`;
+                    return tr(v === 'staff' ? 'resumes.visible_staff' : 'resumes.visible_team', { nom: nomTypeReunion(t.nom) });
                   })
                 }
                 testID={`esport-type-visibilite-${t.id}`}
               />
             ) : (
-              <Text style={attenue}>{t.visibilite === 'staff' ? 'Staff' : 'Team'}</Text>
+              <Text style={attenue}>{t.visibilite === 'staff' ? tr('resumes.staff') : tr('demandesCompte.team')}</Text>
             )}
             {modifiable ? (
               <BoutonConfirme
                 theme={theme}
-                titre="Supprimer"
-                confirmation="Oui"
+                titre={tr('discord.supprimer')}
+                confirmation={tr('objectifs.oui')}
                 onConfirme={() =>
-                  void agir('Type', async () => {
+                  void agir('type', async () => {
                     await client.supprimerTypeReunion(teamId, t.id);
                     await recharger();
-                    return `${t.nom} supprimé (les dépôts existants le gardent).`;
+                    return tr('resumes.supprime_les_depots_existants', { nom: nomTypeReunion(t.nom) });
                   })
                 }
                 testID={`esport-type-supprimer-${t.id}`}
@@ -593,29 +601,29 @@ function TypesReunion({ theme, client, teamId, superAdmin }: { theme: ThemeHub; 
         );
       })}
       <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
-        <Champ theme={theme} libelle="Nouveau type" valeur={nom} onChanger={setNom} maxLength={40} testID="esport-type-nom" style={{ flex: 1, minWidth: 180 }} />
+        <Champ theme={theme} libelle={tr('resumes.nouveau_type')} valeur={nom} onChanger={setNom} maxLength={40} testID="esport-type-nom" style={{ flex: 1, minWidth: 180 }} />
         <Segments
           theme={theme}
-          libelle="Visibilité"
+          libelle={tr('resumes.visibilite')}
           valeur={visibilite}
           options={[
-            ['team', 'Team'],
-            ['staff', 'Staff'],
+            ['team', tr('demandesCompte.team')],
+            ['staff', tr('resumes.staff')],
           ]}
           onChoisir={v => setVisibilite(v as 'team' | 'staff')}
           testID="esport-type-nouvelle-visibilite"
         />
         <BoutonHub
           theme={theme}
-          titre="Ajouter"
+          titre={tr('ajoutTeams.ajouter')}
           variante="plein"
           desactive={Boolean(enCours) || nom.trim().length < 2}
           onPress={() =>
-            void agir('Type', async () => {
+            void agir('type', async () => {
               await client.creerTypeReunion(teamId, { nom: nom.trim(), visibilite });
               setNom('');
               await recharger();
-              return 'Type ajouté.';
+              return tr('resumes.type_ajoute');
             })
           }
           testID="esport-type-ajouter"

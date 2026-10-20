@@ -35,7 +35,7 @@ import {
   type HistoriqueDessin,
   type OutilDessin,
 } from '../../review/dessin';
-import { CATEGORIES, TRIS_REPERES, categorie, formatTemps, repereActif, trierReperes, type TriReperes } from '../../review/libelles';
+import { CATEGORIES, trisReperes, categorie, formatTemps, repereActif, trierReperes, type TriReperes } from '../../review/libelles';
 import { extraireYoutube, lienYoutubeA, miniatureYoutube } from '../../review/youtube';
 import { BoutonConfirme, Choix, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from '../commun';
 import type { PropsModule } from '../modules';
@@ -50,6 +50,7 @@ import { Timeline } from './Timeline';
 import type { CommandeLecteur, EtatLecteur } from './typesLecteur';
 import { imprimerNotes, impressionDisponible } from './impression';
 import { TOUCHE_RACCOURCI, useRaccourciRepere } from './raccourci';
+import { tr, trn } from '../../i18n';
 
 export function Review({ theme, client, detail, large, reviewId, onExporter }: PropsModule) {
   const teamId = detail.team.id;
@@ -91,37 +92,37 @@ function ListeReviews({ theme, api, message, onOuvrir }: { theme: ThemeHub; api:
 
   const id = extraireYoutube(url);
   const creer = () =>
-    void agir('Création', async () => {
+    void agir('creation', async () => {
       const r = await api.creer({ titre, url, reference });
       onOuvrir(r.id, r.depart ?? undefined);
     });
 
   return (
     <View style={{ gap: 16 }} testID="esport-review">
-      <TitreSection theme={theme} titre="Review vidéo" sous="Analysez vos matchs et scrims sur YouTube : repères horodatés, notes et commentaires." />
+      <TitreSection theme={theme} titre={tr('review.review.review_video')} sous={tr('review.review.analysez_vos_matchs_et')} />
       <Retours theme={theme} erreur={erreur} avis={avis ?? message} prefixe="esport-review" />
       {liste?.droits.creer ? (
         <Panneau theme={theme} testID="esport-review-nouvelle">
-          <Intertitre theme={theme}>Nouvelle review</Intertitre>
-          <Champ theme={theme} libelle="Adresse YouTube (watch, youtu.be, shorts, embed ou live)" valeur={url} onChanger={setUrl} testID="esport-review-url" placeholder="https://www.youtube.com/watch?v=…" />
+          <Intertitre theme={theme}>{tr('review.review.nouvelle_review')}</Intertitre>
+          <Champ theme={theme} libelle={tr('review.review.adresse_youtube_watch_youtu')} valeur={url} onChanger={setUrl} testID="esport-review-url" placeholder="https://www.youtube.com/watch?v=…" />
           {url.trim() ? (
             <Text testID="esport-review-url-etat" style={{ color: id ? theme.ok : theme.critique, fontSize: 13, ...police(theme.policeTexte) }}>
-              {id ? `Vidéo reconnue (${id.id})` : 'Adresse YouTube non reconnue.'}
+              {id ? tr('review.review.video_reconnue', { id: id.id }) : tr('review.review.adresse_youtube_non_reconnue')}
             </Text>
           ) : null}
-          <Champ theme={theme} libelle="Titre" valeur={titre} onChanger={setTitre} testID="esport-review-titre" maxLength={120} placeholder="Faucons vs Nova · Ascent" />
-          <Champ theme={theme} libelle="Match ou scrim concerné (facultatif)" valeur={reference} onChanger={setReference} testID="esport-review-reference" maxLength={120} />
-          <BoutonHub theme={theme} titre="Créer la review" variante="plein" onPress={creer} desactive={!id || titre.trim().length < 2} testID="esport-review-creer" />
+          <Champ theme={theme} libelle={tr('objectifs.titre')} valeur={titre} onChanger={setTitre} testID="esport-review-titre" maxLength={120} placeholder={tr('review.review.faucons_vs_nova_ascent')} />
+          <Champ theme={theme} libelle={tr('review.review.match_ou_scrim_concerne')} valeur={reference} onChanger={setReference} testID="esport-review-reference" maxLength={120} />
+          <BoutonHub theme={theme} titre={tr('review.review.creer_la_review')} variante="plein" onPress={creer} desactive={!id || titre.trim().length < 2} testID="esport-review-creer" />
         </Panneau>
       ) : null}
       <View style={{ gap: 8 }} testID="esport-review-liste">
-        {liste && liste.reviews.length === 0 ? <Text style={{ color: theme.attenue, ...police(theme.policeTexte) }}>Aucune review pour l’instant.</Text> : null}
+        {liste && liste.reviews.length === 0 ? <Text style={{ color: theme.attenue, ...police(theme.policeTexte) }}>{tr('review.review.aucune_review_pour_l')}</Text> : null}
         {liste?.reviews.map(r => (
           <Pressable
             key={r.id}
             testID={`esport-review-${r.id}`}
             accessibilityRole="button"
-            accessibilityLabel={`Ouvrir la review ${r.titre}`}
+            accessibilityLabel={tr('review.review.ouvrir_la_review', { titre: r.titre })}
             onPress={() => onOuvrir(r.id)}
             style={{ flexDirection: 'row', gap: 12, padding: 10, borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen, alignItems: 'center' }}>
             <Image source={{ uri: miniatureYoutube(r.videoId) }} accessibilityLabel="" style={{ width: 120, height: 68, borderRadius: 6, backgroundColor: theme.fond }} />
@@ -131,7 +132,7 @@ function ListeReviews({ theme, api, message, onOuvrir }: { theme: ThemeHub; api:
               </Text>
               {r.reference ? <Text style={{ color: theme.attenue, fontSize: 13 }}>{r.reference}</Text> : null}
               <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>
-                {r.reperes} repère(s) · par {r.creePar?.pseudo ?? 'un compte supprimé'} · {dateCourte(r.creeLe)}
+                {tr('review.review.liste_reperes', { reperes: trn('review.review.reperes', r.reperes), nom: r.creePar?.pseudo ?? tr('resumes.un_compte_supprime'), date: dateCourte(r.creeLe) })}
               </Text>
             </View>
           </Pressable>
@@ -262,8 +263,8 @@ function DetailReviewEcran({
     return (
       <View testID="esport-review-detail" style={{ gap: 12 }}>
         <Retours theme={theme} erreur={erreur} prefixe="esport-review" />
-        {!erreur ? <Text style={{ color: theme.attenue }}>Chargement de la review…</Text> : null}
-        <BoutonHub theme={theme} titre="← Reviews" onPress={() => onRetour()} testID="esport-review-retour" />
+        {!erreur ? <Text style={{ color: theme.attenue }}>{tr('review.review.chargement_de_la_review')}</Text> : null}
+        <BoutonHub theme={theme} titre={tr('review.review.reviews')} onPress={() => onRetour()} testID="esport-review-retour" />
       </View>
     );
   }
@@ -273,30 +274,30 @@ function DetailReviewEcran({
   const filtre = filtres.categories.length > 0 || filtres.joueur !== '' || filtres.auteur !== '';
 
   const enregistrer = (s: SaisieRepere) =>
-    void agir('Repère', async () => {
+    void agir('repere', async () => {
       if (formulaire?.edition) await api.modifierRepere(id, formulaire.edition.id, s);
       else await api.ajouterRepere(id, s);
       const edition = Boolean(formulaire?.edition);
       setFormulaire(undefined);
       await recharger();
-      return edition ? 'Repère modifié.' : 'Repère ajouté.';
+      return edition ? tr('review.review.repere_modifie') : tr('review.review.repere_ajoute');
     });
   const supprimer = (r: Repere) =>
-    void agir('Repère', async () => {
+    void agir('repere', async () => {
       await api.supprimerRepere(id, r.id);
       await recharger();
-      return 'Repère supprimé.';
+      return tr('review.review.repere_supprime');
     });
   const commenter = async (r: Repere, texte: string) =>
-    agir('Commentaire', async () => {
+    agir('commentaire', async () => {
       await api.commenter(id, r.id, texte);
       await recharger();
     });
   const supprimerCommentaire = (r: Repere, commentaireId: string) =>
-    void agir('Commentaire', async () => {
+    void agir('commentaire', async () => {
       await api.supprimerCommentaire(id, r.id, commentaireId);
       await recharger();
-      return 'Commentaire supprimé.';
+      return tr('review.review.commentaire_supprime');
     });
 
   const reagir = (r: Repere, valeur: ValeurReaction | null, commentaireId?: string) =>
@@ -306,28 +307,28 @@ function DetailReviewEcran({
     });
 
   const enregistrerDessin = () =>
-    void agir('Dessin', async () => {
+    void agir('dessin', async () => {
       if (!dessin) return;
       const contenu = dessinDe(dessin.histo.present);
       if (dessin.repere) await api.modifierRepere(id, dessin.repere.id, { dessin: contenu });
-      else if (contenu) await api.ajouterRepere(id, { debut: dessin.instant, categorie: 'placement', titre: `Dessin ${formatTemps(dessin.instant)}`, dessin: contenu });
+      else if (contenu) await api.ajouterRepere(id, { debut: dessin.instant, categorie: 'placement', titre: tr('review.review.dessin_2', { v: formatTemps(dessin.instant) }), dessin: contenu });
       setDessin(undefined);
       await recharger();
-      return contenu ? 'Dessin enregistré : il s’affichera par-dessus la vidéo à cet instant.' : dessin.repere ? 'Dessin retiré.' : undefined;
+      return contenu ? tr('review.review.dessin_enregistre_il_s') : dessin.repere ? tr('review.review.dessin_retire') : undefined;
     });
 
   const exporterMarkdown = () =>
-    void agir('Export', async () => {
+    void agir('export', async () => {
       const f = await api.exporter(id);
-      if (!onExporter) return 'L’export de fichier n’est pas disponible sur cet appareil.';
+      if (!onExporter) return tr('review.review.l_export_de_fichier');
       const ok = await onExporter(f.nom, f.contenu, 'text/markdown');
-      return ok ? 'Notes exportées en Markdown.' : undefined;
+      return ok ? tr('review.review.notes_exportees_en_markdown') : undefined;
     });
   const exporterPdf = () =>
-    void agir('Export', async () => {
+    void agir('export', async () => {
       const f = await api.exporter(id);
       const ok = await imprimerNotes(data.review.titre, f.contenu);
-      return ok ? 'Boîte d’impression ouverte : choisissez « Enregistrer au format PDF ».' : 'L’impression n’est pas disponible ici.';
+      return ok ? tr('review.review.boite_d_impression_ouverte') : tr('review.review.l_impression_n_est');
     });
 
   const colLecteur = (
@@ -382,24 +383,24 @@ function DetailReviewEcran({
         <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
           {data.droits.annoter ? (
             <View style={styles.ligne}>
-              <BoutonHub theme={theme} titre={`+ Repère à ${formatTemps(temps)}  (${TOUCHE_RACCOURCI})`} variante="plein" onPress={ouvrirAjout} desactive={!pret || Boolean(dessin)} testID="esport-review-ajouter" libelle={`Ajouter un repère au temps courant, ${formatTemps(temps)}`} />
+              <BoutonHub theme={theme} titre={tr('review.review.repere_a', { v: formatTemps(temps), TOUCHE_RACCOURCI })} variante="plein" onPress={ouvrirAjout} desactive={!pret || Boolean(dessin)} testID="esport-review-ajouter" libelle={tr('review.review.ajouter_un_repere_au', { v: formatTemps(temps) })} />
               {dessinDisponible ? (
-                <BoutonHub theme={theme} titre="✏️ Dessiner" onPress={ouvrirDessin} desactive={!pret || Boolean(dessin)} testID="esport-review-dessiner" libelle={`Dessiner sur la vidéo à ${formatTemps(temps)} (la vidéo se met en pause)`} />
+                <BoutonHub theme={theme} titre={tr('review.review.dessiner')} onPress={ouvrirDessin} desactive={!pret || Boolean(dessin)} testID="esport-review-dessiner" libelle={tr('review.review.dessiner_sur_la_video', { v: formatTemps(temps) })} />
               ) : null}
             </View>
           ) : null}
           {avecDessin && dessinDisponible ? (
             <BoutonHub
               theme={theme}
-              titre={voirDessins ? 'Masquer les dessins' : 'Afficher les dessins'}
+              titre={voirDessins ? tr('review.review.masquer_les_dessins') : tr('review.review.afficher_les_dessins')}
               onPress={() => setVoirDessins(v => !v)}
               testID="esport-dessins-bascule"
-              libelle={voirDessins ? 'Masquer les dessins sur la vidéo' : 'Afficher les dessins sur la vidéo'}
+              libelle={voirDessins ? tr('review.review.masquer_les_dessins_sur') : tr('review.review.afficher_les_dessins_sur')}
             />
           ) : null}
           <Segments
             theme={theme}
-            libelle="Vitesse"
+            libelle={tr('review.review.vitesse')}
             valeur={String(vitesse)}
             options={VITESSES.map(v => [String(v), `${v}×`] as const)}
             onChoisir={v => {
@@ -429,8 +430,8 @@ function DetailReviewEcran({
   const colListe = (
     <View style={{ gap: 12, flex: large ? 2 : undefined, minWidth: large ? 320 : 0 }}>
       <Panneau theme={theme} testID="esport-review-filtres">
-        <Intertitre theme={theme}>Filtres</Intertitre>
-        <View style={styles.ligne} accessibilityLabel="Catégories">
+        <Intertitre theme={theme}>{tr('planning.planning.filtres')}</Intertitre>
+        <View style={styles.ligne} accessibilityLabel={tr('review.review.categories')}>
           {CATEGORIES.map(c => {
             const coche = filtres.categories.includes(c.cle);
             return (
@@ -439,7 +440,7 @@ function DetailReviewEcran({
                 testID={`esport-filtre-cat-${c.cle}`}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: coche }}
-                accessibilityLabel={`Catégorie ${c.nom}`}
+                accessibilityLabel={tr('review.review.categorie', { nom: c.nom })}
                 onPress={() => setFiltres(f => ({ ...f, categories: coche ? f.categories.filter(x => x !== c.cle) : [...f.categories, c.cle] }))}
                 style={{
                   flexDirection: 'row',
@@ -460,23 +461,23 @@ function DetailReviewEcran({
           })}
         </View>
         {joueurs.length > 0 ? (
-          <Choix theme={theme} libelle="Joueur" valeur={filtres.joueur} options={[{ id: '', nom: 'Tous' }, ...joueurs.map(([c, p]) => ({ id: c, nom: p }))]} onChoisir={v => setFiltres(f => ({ ...f, joueur: v }))} testID="esport-filtre-joueur" />
+          <Choix theme={theme} libelle={tr('review.review.joueur')} valeur={filtres.joueur} options={[{ id: '', nom: tr('journal.tous') }, ...joueurs.map(([c, p]) => ({ id: c, nom: p }))]} onChoisir={v => setFiltres(f => ({ ...f, joueur: v }))} testID="esport-filtre-joueur" />
         ) : null}
         {auteurs.length > 1 ? (
-          <Choix theme={theme} libelle="Auteur" valeur={filtres.auteur} options={[{ id: '', nom: 'Tous' }, ...auteurs.map(([c, p]) => ({ id: c, nom: p }))]} onChoisir={v => setFiltres(f => ({ ...f, auteur: v }))} testID="esport-filtre-auteur" />
+          <Choix theme={theme} libelle={tr('review.review.auteur')} valeur={filtres.auteur} options={[{ id: '', nom: tr('journal.tous') }, ...auteurs.map(([c, p]) => ({ id: c, nom: p }))]} onChoisir={v => setFiltres(f => ({ ...f, auteur: v }))} testID="esport-filtre-auteur" />
         ) : null}
-        <Segments<TriReperes> theme={theme} libelle="Trier" valeur={tri} options={TRIS_REPERES} onChoisir={setTri} testID="esport-review-tri" />
+        <Segments<TriReperes> theme={theme} libelle={tr('review.review.trier')} valeur={tri} options={trisReperes()} onChoisir={setTri} testID="esport-review-tri" />
         <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
           <Text testID="esport-review-compte" style={{ color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) }}>
-            {visibles.length} / {reperes.length} repère(s)
+            {tr('review.review.visibles_sur', { visibles: visibles.length, reperes: trn('review.review.reperes', reperes.length) })}
           </Text>
-          {filtre ? <BoutonHub theme={theme} titre="Effacer les filtres" onPress={() => setFiltres({ categories: [], joueur: '', auteur: '' })} testID="esport-filtre-effacer" /> : null}
+          {filtre ? <BoutonHub theme={theme} titre={tr('review.review.effacer_les_filtres')} onPress={() => setFiltres({ categories: [], joueur: '', auteur: '' })} testID="esport-filtre-effacer" /> : null}
         </View>
       </Panneau>
       <ScrollView ref={liste} testID="esport-review-reperes" style={large ? { maxHeight: 640 } : { maxHeight: 520 }} contentContainerStyle={{ gap: 8 }} nestedScrollEnabled>
         {reperes.length === 0 ? (
           <Text style={{ color: theme.attenue, ...police(theme.policeTexte) }}>
-            {lecteurIntegre && data.droits.annoter ? `Aucun repère : pendant la lecture, appuyez sur ${TOUCHE_RACCOURCI} (ou le bouton « Repère ») pour en poser un.` : 'Aucun repère pour l’instant.'}
+            {lecteurIntegre && data.droits.annoter ? tr('review.review.aucun_repere_pendant_la', { TOUCHE_RACCOURCI }) : tr('review.review.aucun_repere_pour_l')}
           </Text>
         ) : null}
         {ordonnes.map(r => (
@@ -518,27 +519,27 @@ function DetailReviewEcran({
           </Text>
           <Text style={{ color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) }}>
             {data.equipe}
-            {data.review.reference ? ` · ${data.review.reference}` : ''} · par {data.review.creePar?.pseudo ?? 'un compte supprimé'}
+            {data.review.reference ? ` · ${data.review.reference}` : ''}{tr('review.review.par_suffixe', { nom: data.review.creePar?.pseudo ?? tr('resumes.un_compte_supprime') })}
           </Text>
         </View>
         <View style={[styles.ligne, { flexShrink: 1 }]}>
-          <BoutonHub theme={theme} titre="Exporter en Markdown" onPress={exporterMarkdown} testID="esport-review-export-md" />
-          {impressionDisponible ? <BoutonHub theme={theme} titre="Exporter en PDF" onPress={exporterPdf} testID="esport-review-export-pdf" /> : null}
+          <BoutonHub theme={theme} titre={tr('review.review.exporter_en_markdown')} onPress={exporterMarkdown} testID="esport-review-export-md" />
+          {impressionDisponible ? <BoutonHub theme={theme} titre={tr('review.review.exporter_en_pdf')} onPress={exporterPdf} testID="esport-review-export-pdf" /> : null}
           {data.droits.supprimer ? (
             <BoutonConfirme
               theme={theme}
-              titre="Supprimer la review"
-              confirmation="Oui, supprimer"
+              titre={tr('review.review.supprimer_la_review')}
+              confirmation={tr('planning.planning.oui_supprimer')}
               onConfirme={() =>
-                void agir('Review', async () => {
+                void agir('review', async () => {
                   await api.supprimer(id);
-                  onRetour('Review supprimée.');
+                  onRetour(tr('review.review.review_supprimee'));
                 })
               }
               testID="esport-review-supprimer"
             />
           ) : null}
-          <BoutonHub theme={theme} titre="← Reviews" onPress={() => onRetour()} testID="esport-review-retour" />
+          <BoutonHub theme={theme} titre={tr('review.review.reviews')} onPress={() => onRetour()} testID="esport-review-retour" />
         </View>
       </View>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-review" />
@@ -583,7 +584,7 @@ function CarteRepere({
 }) {
   const c = categorie(r.categorie);
   const [texte, setTexte] = useState('');
-  const meta = [c.nom, r.cible ? `Joueur : ${r.cible.pseudo ?? '?'}` : '', `par ${r.auteur?.pseudo ?? 'un compte supprimé'}`, r.fin != null ? `durée ${Math.round(r.fin - r.debut)} s` : ''].filter(Boolean).join(' · ');
+  const meta = [c.nom, r.cible ? tr('review.review.joueur_cible', { nom: r.cible.pseudo ?? '?' }) : '', tr('review.review.par', { nom: r.auteur?.pseudo ?? tr('resumes.un_compte_supprime') }), r.fin != null ? tr('review.review.duree_s', { v: Math.round(r.fin - r.debut) }) : ''].filter(Boolean).join(' · ');
   return (
     <View
       testID={`esport-repere-${r.id}`}
@@ -601,7 +602,7 @@ function CarteRepere({
       <Pressable
         testID={`esport-repere-aller-${r.id}`}
         accessibilityRole="button"
-        accessibilityLabel={lecteurIntegre ? `Aller à ${formatTemps(r.debut)} : ${r.titre}` : `Ouvrir dans YouTube à ${formatTemps(r.debut)} : ${r.titre}`}
+        accessibilityLabel={lecteurIntegre ? tr('review.review.aller_a', { v: formatTemps(r.debut), titre: r.titre }) : tr('review.review.ouvrir_dans_youtube_a', { v: formatTemps(r.debut), titre: r.titre })}
         onPress={lecteurIntegre ? onAller : onBascule}
         style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start', minHeight: 36 }}>
         <Text style={{ color: theme.texte, fontWeight: '800', minWidth: 56, ...police(theme.policeChiffres) }}>{formatTemps(r.debut)}</Text>
@@ -610,7 +611,7 @@ function CarteRepere({
         </Text>
         <Text style={{ color: theme.texte, fontWeight: '700', flex: 1, ...police(theme.policeTexte) }}>{r.titre}</Text>
         {r.dessin?.objets.length ? (
-          <Text testID={`esport-repere-icone-dessin-${r.id}`} accessibilityLabel="Ce repère porte un dessin" style={{ fontSize: 15 }}>
+          <Text testID={`esport-repere-icone-dessin-${r.id}`} accessibilityLabel={tr('review.review.ce_repere_porte_un')} style={{ fontSize: 15 }}>
             ✏️
           </Text>
         ) : null}
@@ -619,41 +620,40 @@ function CarteRepere({
       {actif ? (
         // Texte en couleur d'accent (contraste AA garanti dans les 8 thèmes) ; la couleur de catégorie reste sur le pictogramme.
         <Text testID={`esport-repere-actif-${r.id}`} style={{ color: theme.accent, fontSize: 12, fontWeight: '800', ...police(theme.policeTexte) }}>
-          ▶ En cours de lecture
-        </Text>
+          {tr('review.review.en_cours_de_lecture')}</Text>
       ) : null}
       {r.note ? <Note theme={theme} source={r.note} testID={`esport-repere-note-${r.id}`} /> : null}
       {r.dessin?.objets.length ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`Voir le dessin à ${formatTemps(r.debut)}`} onPress={lecteurIntegre ? onAller : undefined} disabled={!lecteurIntegre} style={{ alignSelf: 'flex-start' }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('review.review.voir_le_dessin_a', { v: formatTemps(r.debut) })} onPress={lecteurIntegre ? onAller : undefined} disabled={!lecteurIntegre} style={{ alignSelf: 'flex-start' }}>
           <ApercuDessin theme={theme} dessin={r.dessin} cadre="miniature" testID={`esport-repere-miniature-${r.id}`} />
         </Pressable>
       ) : null}
       <BoutonsReaction theme={theme} reactions={r.reactions} peutReagir={Boolean(droits.reagir)} onReagir={v => onReagir(v)} testID={`esport-repere-reaction-${r.id}`} />
       <View style={styles.ligne}>
-        {!lecteurIntegre ? <BoutonHub theme={theme} titre={`Ouvrir dans YouTube à ${formatTemps(r.debut)}`} onPress={() => void Linking.openURL(lienYoutubeA(videoId, r.debut))} testID={`esport-repere-youtube-${r.id}`} /> : null}
-        <BoutonHub theme={theme} titre={`Commentaires (${r.commentaires.length})`} onPress={onBascule} testID={`esport-repere-commentaires-${r.id}`} />
-        {lecteurIntegre && r.peutModifier ? <BoutonHub theme={theme} titre="Modifier" onPress={onModifier} testID={`esport-repere-modifier-${r.id}`} /> : null}
-        {lecteurIntegre && r.peutSupprimer ? <BoutonConfirme theme={theme} titre="Supprimer" confirmation="Oui, supprimer" onConfirme={onSupprimer} testID={`esport-repere-supprimer-${r.id}`} /> : null}
+        {!lecteurIntegre ? <BoutonHub theme={theme} titre={tr('review.review.ouvrir_dans_youtube_a_2', { v: formatTemps(r.debut) })} onPress={() => void Linking.openURL(lienYoutubeA(videoId, r.debut))} testID={`esport-repere-youtube-${r.id}`} /> : null}
+        <BoutonHub theme={theme} titre={tr('review.review.commentaires', { length: r.commentaires.length })} onPress={onBascule} testID={`esport-repere-commentaires-${r.id}`} />
+        {lecteurIntegre && r.peutModifier ? <BoutonHub theme={theme} titre={tr('membresRoles.modifier')} onPress={onModifier} testID={`esport-repere-modifier-${r.id}`} /> : null}
+        {lecteurIntegre && r.peutSupprimer ? <BoutonConfirme theme={theme} titre={tr('discord.supprimer')} confirmation={tr('planning.planning.oui_supprimer')} onConfirme={onSupprimer} testID={`esport-repere-supprimer-${r.id}`} /> : null}
       </View>
       {ouvert ? (
         <View style={{ gap: 6, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 8 }} testID={`esport-fil-${r.id}`}>
-          {r.commentaires.length === 0 ? <Text style={{ color: theme.attenue, fontSize: 13 }}>Pas encore de commentaire.</Text> : null}
+          {r.commentaires.length === 0 ? <Text style={{ color: theme.attenue, fontSize: 13 }}>{tr('review.review.pas_encore_de_commentaire')}</Text> : null}
           {r.commentaires.map(k => (
             <View key={k.id} testID={`esport-commentaire-${k.id}`} style={{ gap: 2 }}>
               <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>
-                {k.auteur?.pseudo ?? 'Un compte supprimé'} · {dateCourte(k.creeLe)}
+                {k.auteur?.pseudo ?? tr('libelles.un_compte_supprime')} · {dateCourte(k.creeLe)}
               </Text>
               <Note theme={theme} source={k.texte} testID={`esport-commentaire-texte-rendu-${k.id}`} />
               <BoutonsReaction theme={theme} reactions={k.reactions} peutReagir={Boolean(droits.reagir)} onReagir={v => onReagir(v, k.id)} testID={`esport-commentaire-reaction-${k.id}`} compact />
-              {k.peutSupprimer ? <BoutonConfirme theme={theme} titre="Supprimer" confirmation="Oui, supprimer" onConfirme={() => onSupprimerCommentaire(k.id)} testID={`esport-commentaire-supprimer-${k.id}`} /> : null}
+              {k.peutSupprimer ? <BoutonConfirme theme={theme} titre={tr('discord.supprimer')} confirmation={tr('planning.planning.oui_supprimer')} onConfirme={() => onSupprimerCommentaire(k.id)} testID={`esport-commentaire-supprimer-${k.id}`} /> : null}
             </View>
           ))}
           {droits.annoter ? (
             <View style={{ gap: 6 }}>
-              <ChampNote theme={theme} libelle="Votre commentaire" valeur={texte} onChanger={setTexte} testID={`esport-commentaire-texte-${r.id}`} maxLength={1000} />
+              <ChampNote theme={theme} libelle={tr('review.review.votre_commentaire')} valeur={texte} onChanger={setTexte} testID={`esport-commentaire-texte-${r.id}`} maxLength={1000} />
               <BoutonHub
                 theme={theme}
-                titre="Commenter"
+                titre={tr('review.review.commenter')}
                 variante="plein"
                 desactive={texte.trim() === ''}
                 onPress={() =>

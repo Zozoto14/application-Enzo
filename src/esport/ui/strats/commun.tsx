@@ -9,6 +9,7 @@ import { Image, Pressable, Text, View } from 'react-native';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { MENTION_RIOT, assetsRepli, chargerAssets, initiales, type Assets, type FetchAssets, type StockageAssets } from '../../strats/assets';
 import { styles } from '../commun';
+import { tr } from '../../i18n';
 
 // ------------------------------------------------------------------ Assets (une fois par session)
 
@@ -71,7 +72,7 @@ export function Miniature({ theme, url, carte, taille = 160, testID }: { theme: 
   if (url && !echec) {
     return (
       <View style={fond}>
-        <Image testID={testID} source={{ uri: url }} accessibilityLabel={carte ? `Miniature, ${carte}` : 'Miniature'} onError={() => setEchec(true)} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+        <Image testID={testID} source={{ uri: url }} accessibilityLabel={carte ? tr('strats.commun.miniature_2', { carte }) : tr('strats.commun.miniature')} onError={() => setEchec(true)} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
       </View>
     );
   }

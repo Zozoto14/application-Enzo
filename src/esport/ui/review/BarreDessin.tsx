@@ -12,6 +12,7 @@ import { COULEURS_DESSIN, EPAISSEURS_DESSIN, OUTILS_DESSIN, TEXTE_DESSIN_MAX, ty
 import { formatTemps } from '../../review/libelles';
 import { Panneau, styles } from '../commun';
 import { ESP, rayonControle, type EtatPresse } from '../design';
+import { tr, trn } from '../../i18n';
 
 export function BarreDessin({
   theme,
@@ -69,12 +70,11 @@ export function BarreDessin({
   return (
     <Panneau theme={theme} testID="esport-dessin-barre" style={{ padding: ESP.m, gap: ESP.s }}>
       <Text accessibilityRole="header" style={{ color: theme.texte, fontWeight: '800', fontSize: 16, ...police(theme.policeTitre) }}>
-        ✏️ Dessin à {formatTemps(instant)}
-      </Text>
+        {tr('review.barreDessin.dessin_a', { v: formatTemps(instant) })}</Text>
       <Text style={{ color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) }}>
-        {rattache ? `Rattaché au repère « ${rattache} ».` : 'Un repère sera créé à cet instant.'} La vidéo est en pause ; dessinez par-dessus.
+        {rattache ? tr('review.barreDessin.rattache_au_repere', { rattache }) : tr('review.barreDessin.un_repere_sera_cree')} {tr('review.barreDessin.video_en_pause')}
       </Text>
-      <View style={styles.ligne} accessibilityRole="radiogroup" accessibilityLabel="Outil de dessin">
+      <View style={styles.ligne} accessibilityRole="radiogroup" accessibilityLabel={tr('review.barreDessin.outil_de_dessin')}>
         {OUTILS_DESSIN.map(o => (
           <Pressable
             key={o.cle}
@@ -89,16 +89,16 @@ export function BarreDessin({
         ))}
       </View>
       {outil === 'texte' ? (
-        <Champ theme={theme} libelle="Texte à poser (touchez la vidéo pour le placer)" valeur={texte} onChanger={onTexte} maxLength={TEXTE_DESSIN_MAX} testID="esport-dessin-texte" />
+        <Champ theme={theme} libelle={tr('review.barreDessin.texte_a_poser_touchez')} valeur={texte} onChanger={onTexte} maxLength={TEXTE_DESSIN_MAX} testID="esport-dessin-texte" />
       ) : null}
-      <View style={styles.ligne} accessibilityRole="radiogroup" accessibilityLabel="Couleur">
+      <View style={styles.ligne} accessibilityRole="radiogroup" accessibilityLabel={tr('membresRoles.couleur')}>
         {COULEURS_DESSIN.map(c => (
           <Pressable
             key={c.cle}
             testID={`esport-dessin-couleur-${c.cle.slice(1)}`}
             accessibilityRole="radio"
             accessibilityState={{ checked: couleur === c.cle }}
-            accessibilityLabel={`Couleur ${c.nom}`}
+            accessibilityLabel={tr('review.barreDessin.couleur', { nom: c.nom })}
             onPress={() => onCouleur(c.cle)}
             style={pastille(couleur === c.cle)}>
             <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: c.cle, borderWidth: 1, borderColor: theme.ligne }} />
@@ -111,7 +111,7 @@ export function BarreDessin({
             testID={`esport-dessin-epaisseur-${e.cle}`}
             accessibilityRole="radio"
             accessibilityState={{ checked: epaisseur === e.cle }}
-            accessibilityLabel={`Épaisseur ${e.nom}`}
+            accessibilityLabel={tr('review.barreDessin.epaisseur', { nom: e.nom })}
             onPress={() => onEpaisseur(e.cle)}
             style={pastille(epaisseur === e.cle)}>
             <View style={{ width: 24, height: Math.max(2, e.cle), borderRadius: e.cle, backgroundColor: theme.texte }} />
@@ -120,15 +120,15 @@ export function BarreDessin({
       </View>
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
         <View style={styles.ligne}>
-          <BoutonHub theme={theme} titre="↶ Annuler" onPress={onAnnuler} desactive={!peutAnnuler} testID="esport-dessin-annuler" libelle="Annuler la dernière forme" />
-          <BoutonHub theme={theme} titre="↷ Rétablir" onPress={onRetablir} desactive={!peutRetablir} testID="esport-dessin-retablir" libelle="Rétablir" />
+          <BoutonHub theme={theme} titre={tr('review.barreDessin.annuler')} onPress={onAnnuler} desactive={!peutAnnuler} testID="esport-dessin-annuler" libelle={tr('review.barreDessin.annuler_la_derniere_forme')} />
+          <BoutonHub theme={theme} titre={tr('review.barreDessin.retablir')} onPress={onRetablir} desactive={!peutRetablir} testID="esport-dessin-retablir" libelle={tr('review.barreDessin.retablir_2')} />
           <Text testID="esport-dessin-nombre" style={{ color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) }}>
-            {formes} forme(s)
+            {trn('review.barreDessin.formes', formes)}
           </Text>
         </View>
         <View style={styles.ligne}>
-          <BoutonHub theme={theme} titre="Quitter sans enregistrer" onPress={onQuitter} testID="esport-dessin-quitter" />
-          <BoutonHub theme={theme} titre="Enregistrer le dessin" variante="plein" onPress={onEnregistrer} desactive={enCours} testID="esport-dessin-enregistrer" />
+          <BoutonHub theme={theme} titre={tr('review.barreDessin.quitter_sans_enregistrer')} onPress={onQuitter} testID="esport-dessin-quitter" />
+          <BoutonHub theme={theme} titre={tr('review.barreDessin.enregistrer_le_dessin')} variante="plein" onPress={onEnregistrer} desactive={enCours} testID="esport-dessin-enregistrer" />
         </View>
       </View>
     </Panneau>

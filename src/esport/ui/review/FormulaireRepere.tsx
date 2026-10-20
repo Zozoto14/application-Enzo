@@ -13,6 +13,7 @@ import type { CategorieRepere, SaisieRepere } from '../../review/api';
 import { CATEGORIES, formatTemps, lireTemps } from '../../review/libelles';
 import { ChampNote } from '../ChampNote';
 import { Choix, styles, Panneau } from '../commun';
+import { tr } from '../../i18n';
 
 export interface InitialRepere {
   debut: number;
@@ -50,12 +51,12 @@ export function FormulaireRepere({
 
   const valider = () => {
     const debut = lireTemps(instant);
-    if (debut === undefined) return setErreur('Instant invalide : écrivez 1:23, 83 ou 1m23s.');
-    if (titre.trim().length < 2) return setErreur('Titre : 2 caractères au moins.');
+    if (debut === undefined) return setErreur(tr('review.formulaireRepere.instant_invalide_ecrivez_1'));
+    if (titre.trim().length < 2) return setErreur(tr('review.formulaireRepere.titre_2_caracteres_au'));
     let d: number | null = null;
     if (duree.trim() !== '') {
       const n = Number(duree.replace(',', '.'));
-      if (!Number.isFinite(n) || n <= 0 || n > 3600) return setErreur('Durée : un nombre de secondes entre 1 et 3600.');
+      if (!Number.isFinite(n) || n <= 0 || n > 3600) return setErreur(tr('review.formulaireRepere.duree_un_nombre_de'));
       d = n;
     }
     setErreur(undefined);
@@ -65,16 +66,16 @@ export function FormulaireRepere({
   return (
     <Panneau theme={theme} testID="esport-repere-form">
       <Text accessibilityRole="header" style={{ color: theme.texte, fontWeight: '800', fontSize: 16, ...police(theme.policeTitre) }}>
-        {edition ? 'Modifier le repère' : 'Nouveau repère'}
+        {edition ? tr('review.formulaireRepere.modifier_le_repere') : tr('review.formulaireRepere.nouveau_repere')}
       </Text>
       <View style={[styles.ligne, { alignItems: 'flex-start' }]}>
-        <Champ theme={theme} libelle="Instant (mm:ss)" valeur={instant} onChanger={setInstant} testID="esport-repere-instant" style={{ width: 130 }} />
-        <Champ theme={theme} libelle="Durée en secondes (facultatif)" valeur={duree} onChanger={setDuree} testID="esport-repere-duree" clavier="number-pad" style={{ width: 200 }} />
+        <Champ theme={theme} libelle={tr('review.formulaireRepere.instant_mm_ss')} valeur={instant} onChanger={setInstant} testID="esport-repere-instant" style={{ width: 130 }} />
+        <Champ theme={theme} libelle={tr('review.formulaireRepere.duree_en_secondes_facultatif')} valeur={duree} onChanger={setDuree} testID="esport-repere-duree" clavier="number-pad" style={{ width: 200 }} />
       </View>
-      <Champ theme={theme} libelle="Titre" valeur={titre} onChanger={setTitre} testID="esport-repere-titre" maxLength={120} />
+      <Champ theme={theme} libelle={tr('objectifs.titre')} valeur={titre} onChanger={setTitre} testID="esport-repere-titre" maxLength={120} />
       <Choix<CategorieRepere>
         theme={theme}
-        libelle="Catégorie"
+        libelle={tr('review.formulaireRepere.categorie')}
         valeur={cat}
         options={CATEGORIES.map(c => ({ id: c.cle, nom: `${c.glyphe} ${c.nom}`, couleur: c.couleur }))}
         onChoisir={setCat}
@@ -82,21 +83,21 @@ export function FormulaireRepere({
       />
       <Choix
         theme={theme}
-        libelle="Joueur concerné"
+        libelle={tr('review.formulaireRepere.joueur_concerne')}
         valeur={cible}
-        options={[{ id: '', nom: 'Aucun' }, ...membres.map(m => ({ id: m.compte, nom: m.pseudo }))]}
+        options={[{ id: '', nom: tr('objectifs.aucun') }, ...membres.map(m => ({ id: m.compte, nom: m.pseudo }))]}
         onChoisir={setCible}
         testID="esport-repere-joueur"
       />
-      <ChampNote theme={theme} libelle="Note" valeur={note} onChanger={setNote} testID="esport-repere-note" maxLength={4000} apercu="toujours" testIDApercu="esport-repere-apercu" placeholder="**Gras**, *italique*, - listes, [lien](https://…)" />
+      <ChampNote theme={theme} libelle={tr('review.formulaireRepere.note')} valeur={note} onChanger={setNote} testID="esport-repere-note" maxLength={4000} apercu="toujours" testIDApercu="esport-repere-apercu" placeholder={tr('review.formulaireRepere.gras_italique_listes_lien')} />
       {erreur ? (
         <Text accessibilityRole="alert" testID="esport-repere-erreur" style={{ color: theme.critique, ...police(theme.policeTexte) }}>
           {erreur}
         </Text>
       ) : null}
       <View style={styles.ligne}>
-        <BoutonHub theme={theme} titre={edition ? 'Enregistrer' : 'Ajouter le repère'} variante="plein" onPress={valider} desactive={enCours} testID="esport-repere-enregistrer" />
-        <BoutonHub theme={theme} titre="Annuler" onPress={onAnnuler} testID="esport-repere-annuler" />
+        <BoutonHub theme={theme} titre={edition ? tr('discord.enregistrer') : tr('review.formulaireRepere.ajouter_le_repere')} variante="plein" onPress={valider} desactive={enCours} testID="esport-repere-enregistrer" />
+        <BoutonHub theme={theme} titre={tr('assistant.annuler')} onPress={onAnnuler} testID="esport-repere-annuler" />
       </View>
     </Panneau>
   );

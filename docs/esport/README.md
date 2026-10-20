@@ -187,6 +187,23 @@ chiffrées de bout en bout comme le reste de l'app. Jamais d'adresse e-mail. **P
 Esport** : modifier votre profil, **Exporter mes données** (JSON) ou **Supprimer mes données Esport**. Membre
 mineur : l'accord d'un représentant légal est nécessaire.
 
+## Langues : français et English
+
+L'Esport est disponible en **français** et en **English** (écrans, messages d'erreur, journal, notifications,
+e-mail d'invitation, en-têtes des exports CSV). Le reste du hub reste en français.
+
+- **Choisir sa langue** : à la création du profil, puis **Mon profil Esport › Langue**. Le changement est
+  immédiat, sans recharger. Le choix est enregistré sur le compte Esport (le bot Discord et les notifications le
+  connaissent). Par défaut : la langue de l'appareil si elle est l'anglais, sinon le français.
+- **Discord** : les messages publics suivent la **langue de la team** (Réglages › Discord), les réponses du bot la
+  langue du compte lié, sinon la locale Discord. Voir [le bot Discord](bot-discord.md).
+- **Ce qui n'est pas traduit** : ce que les gens saisissent (titres, notes, noms de rôles ou de types créés par la
+  team), la page publique de partage d'une strat et les agendas iCal.
+- **Développeurs** : dictionnaires typés `src/esport/i18n/fr.ts` et `en.ts` (TypeScript refuse une clé manquante en
+  anglais), fonctions `tr()` / `trn()` (pluriels) et dates via `Intl`. Le test `src/esport/i18n/chaines.test.ts`
+  échoue si une chaîne française en dur apparaît dans un composant. Test de bout en bout :
+  `scripts/e2e-esport-anglais.mjs`.
+
 ## Accessibilité
 
 Les 8 thèmes du hub respectent les contrastes AA (texte, texte atténué, états, boutons ; l'encre des initiales de

@@ -16,12 +16,13 @@ import { Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from '../
 import type { PropsModule } from '../modules';
 import { CarteOccurrence, Pastille } from './commun';
 import { ListePresence } from './ListePresence';
+import { tr, trn } from '../../i18n';
 
 type Periode = '30' | '90' | '365';
-const PERIODES: ReadonlyArray<readonly [Periode, string]> = [
-  ['30', '30 jours'],
-  ['90', '3 mois'],
-  ['365', '12 mois'],
+const periodes = (): ReadonlyArray<readonly [Periode, string]> => [
+  ['30', tr('journal.30_jours')],
+  ['90', tr('planning.presence.3_mois')],
+  ['365', tr('planning.presence.12_mois')],
 ];
 
 export function Presence({ theme, client, detail, large, onExporter }: PropsModule) {
@@ -64,12 +65,12 @@ export function Presence({ theme, client, detail, large, onExporter }: PropsModu
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   return (
     <View style={{ gap: 16 }} testID="esport-presence">
-      <TitreSection theme={theme} titre="Présence" sous="Réponses des joueurs, présence réelle marquée par le staff, et taux de présence." />
+      <TitreSection theme={theme} titre={tr('planning.listePresence.presence')} sous={tr('planning.presence.reponses_des_joueurs_presence')} />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-presence-page" />
 
       {aVenir.length ? (
         <View style={{ gap: 8 }} testID="esport-presence-a-venir">
-          <Intertitre theme={theme}>Mes prochaines réponses</Intertitre>
+          <Intertitre theme={theme}>{tr('planning.presence.mes_prochaines_reponses')}</Intertitre>
           {aVenir.slice(0, 6).map(o => (
             <CarteOccurrence
               key={`${o.evenementId}-${o.cle}`}
@@ -86,7 +87,7 @@ export function Presence({ theme, client, detail, large, onExporter }: PropsModu
 
       {peut('attendance.mark') && passees.length ? (
         <Panneau theme={theme} testID="esport-presence-a-marquer">
-          <Intertitre theme={theme}>Marquer la présence (commencés, 14 derniers jours)</Intertitre>
+          <Intertitre theme={theme}>{tr('planning.presence.marquer_la_presence_commences')}</Intertitre>
           {passees.slice(0, 10).map(o => {
             const id = `${o.evenementId}-${o.cle}`;
             return (
@@ -101,7 +102,7 @@ export function Presence({ theme, client, detail, large, onExporter }: PropsModu
                     <Text style={{ color: typeEvenement(o.type).couleur }}>● </Text>
                     {dateCourteJour(o.jour)} {o.heureDebut} · {o.titre}
                   </Text>
-                  <Text style={attenue}>{ouverte === id ? 'Fermer' : 'Marquer'}</Text>
+                  <Text style={attenue}>{ouverte === id ? tr('discord.fermer') : tr('planning.accueilPlanning.marquer')}</Text>
                 </Pressable>
                 {ouverte === id ? <ListePresence theme={theme} api={api} evenementId={o.evenementId} cle={o.cle} marquer onMarque={() => void charger()} /> : null}
               </View>
@@ -112,15 +113,15 @@ export function Presence({ theme, client, detail, large, onExporter }: PropsModu
 
       <Panneau theme={theme} testID="esport-presence-stats">
         <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
-          <Intertitre theme={theme}>{stats?.tout ? 'Statistiques de la team' : 'Mes statistiques'}</Intertitre>
+          <Intertitre theme={theme}>{stats?.tout ? tr('statsTeam.statistiques_de_la_team') : tr('planning.presence.mes_statistiques')}</Intertitre>
           {peut('attendance.view_all') && onExporter ? (
             <BoutonHub
               theme={theme}
-              titre="Exporter (CSV)"
+              titre={tr('journal.exporter_csv')}
               onPress={() =>
-                void agir('Export', async () => {
+                void agir('export', async () => {
                   const f = await api.exportCsv({ debut, fin });
-                  return (await onExporter(f.nom, f.contenu, 'text/csv')) ? 'Export CSV enregistré.' : undefined;
+                  return (await onExporter(f.nom, f.contenu, 'text/csv')) ? tr('journal.export_csv_enregistre') : undefined;
                 })
               }
               testID="esport-presence-csv"
@@ -128,8 +129,8 @@ export function Presence({ theme, client, detail, large, onExporter }: PropsModu
           ) : null}
         </View>
         <View style={styles.ligne}>
-          <Segments theme={theme} libelle="Période" valeur={periode} options={PERIODES} onChoisir={v => setPeriode(v as Periode)} testID="esport-presence-periode" />
-          <Segments theme={theme} libelle="Regrouper" valeur={granularite} options={[['mois', 'Par mois'], ['semaine', 'Par semaine']]} onChoisir={v => setGranularite(v === 'semaine' ? 'semaine' : 'mois')} testID="esport-presence-granularite" />
+          <Segments theme={theme} libelle={tr('journal.periode')} valeur={periode} options={periodes()} onChoisir={v => setPeriode(v as Periode)} testID="esport-presence-periode" />
+          <Segments theme={theme} libelle={tr('planning.presence.regrouper')} valeur={granularite} options={[['mois', tr('planning.presence.par_mois')], ['semaine', tr('planning.presence.par_semaine')]]} onChoisir={v => setGranularite(v === 'semaine' ? 'semaine' : 'mois')} testID="esport-presence-granularite" />
         </View>
         <View style={styles.ligne}>
           {TYPES_EVENEMENT.map(t => (
@@ -151,18 +152,17 @@ export function Presence({ theme, client, detail, large, onExporter }: PropsModu
               {pourcentage(stats.global.taux)}
             </Text>
             <Text style={attenue}>
-              Taux de présence · {stats.global.marques} présence(s) marquée(s) · ponctualité {pourcentage(stats.global.ponctualite)} · réponses {pourcentage(stats.global.tauxReponse)}
-            </Text>
-            <Intertitre theme={theme}>Par joueur</Intertitre>
-            {stats.joueurs.length === 0 ? <Text style={attenue}>Aucune présence sur la période.</Text> : null}
+              {tr('planning.presence.taux_de_presence_presence', { marques: trn('planning.presence.marquees', stats.global.marques), v: pourcentage(stats.global.ponctualite), v2: pourcentage(stats.global.tauxReponse) })}</Text>
+            <Intertitre theme={theme}>{tr('planning.presence.par_joueur')}</Intertitre>
+            {stats.joueurs.length === 0 ? <Text style={attenue}>{tr('planning.presence.aucune_presence_sur_la')}</Text> : null}
             {stats.joueurs.map(j => (
               <LigneStat key={j.compte} theme={theme} nom={stats.noms[j.compte] ?? j.compte} c={j} large={large} testID={`esport-stat-joueur-${j.compte}`} />
             ))}
-            <Intertitre theme={theme}>Par type d’événement</Intertitre>
+            <Intertitre theme={theme}>{tr('planning.presence.par_type_d_evenement')}</Intertitre>
             {stats.parType.map(t => (
               <LigneStat key={t.type} theme={theme} nom={typeEvenement(t.type).nom} couleur={typeEvenement(t.type).couleur} c={t} large={large} testID={`esport-stat-type-${t.type}`} />
             ))}
-            <Intertitre theme={theme}>Par période</Intertitre>
+            <Intertitre theme={theme}>{tr('planning.presence.par_periode')}</Intertitre>
             {stats.parPeriode.map(p => (
               <LigneStat key={p.periode} theme={theme} nom={p.periode} c={p} large={large} testID={`esport-stat-periode-${p.periode}`} />
             ))}
@@ -190,8 +190,8 @@ function LigneStat({ theme, nom, c, couleur, large, testID }: { theme: ThemeHub;
         <View style={{ width: `${Math.round((c.taux ?? 0) * 100)}%`, height: 6, backgroundColor: barre }} />
       </View>
       <Text style={attenue}>
-        {c.present} présent · {c.retard} retard · {c.absent} absent · {c.excuse} excusé
-        {large ? ` · ${c.evenements - c.marques} non marqué · réponses ${pourcentage(c.tauxReponse)}` : ''}
+        {tr('planning.presence.compteurs', { present: c.present, retard: c.retard, absent: c.absent, excuse: c.excuse })}
+        {large ? tr('planning.presence.non_marque_reponses', { v: c.evenements - c.marques, v2: pourcentage(c.tauxReponse) }) : ''}
       </Text>
     </View>
   );

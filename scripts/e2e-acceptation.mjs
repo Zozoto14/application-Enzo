@@ -19,7 +19,7 @@ const SCRIPT = `
 `;
 
 export async function nouveauContexte(navigateur, options) {
-  const contexte = await navigateur.newContext(options);
+  const contexte = await navigateur.newContext({ locale: 'fr-FR', ...options });
   await contexte.addInitScript(SCRIPT);
   return contexte;
 }

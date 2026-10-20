@@ -11,6 +11,7 @@ import type { AppHub } from '../hub/types';
 import { ID_ESPORT } from './acces';
 // Chargé à la demande sur le web (ui/differe.web.tsx) : le hub n'embarque pas le code de l'Esport.
 import { EsportDiffere } from './ui/racineDifferee';
+import { tr } from './i18n';
 
 export { ID_ESPORT };
 
@@ -19,7 +20,9 @@ export const APP_ESPORT: AppHub = {
   nom: 'Esport',
   categorie: 'Esport',
   page: 'publique',
-  description: 'Teams, membres et rôles, invitations, journal, planning, disponibilités et présence, résumés de réunions, objectifs et tâches, review vidéo YouTube et scouting adverse, éditeur de strats et playbook.',
+  get description() {
+      return tr('registre.teams_membres_et_roles');
+    },
   icone: '◆',
   teinte: 'anime',
   Racine: EsportDiffere,

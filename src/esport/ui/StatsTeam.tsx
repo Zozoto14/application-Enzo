@@ -11,15 +11,22 @@ import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { nomModule, type ClientEsport, type DetailTeam, type StatsTeam as Stats } from '../client';
 import { aujourdhui } from '../libelles';
 import { Choix, Intertitre, Panneau } from './commun';
+import { tr, trn } from '../i18n';
 
 const PERIODES = [
-  { id: '7', nom: '7 jours' },
-  { id: '30', nom: '30 jours' },
-  { id: '90', nom: '90 jours' },
+  { id: '7', get nom() {
+      return tr('journal.7_jours');
+    } },
+  { id: '30', get nom() {
+      return tr('journal.30_jours');
+    } },
+  { id: '90', get nom() {
+      return tr('journal.90_jours');
+    } },
 ] as const;
 
 /** Nom d'un module dans les statistiques d'activité. */
-const nomBloc = (cle: string): string => (cle === 'coeur' ? 'Team et membres' : nomModule(cle));
+const nomBloc = (cle: string): string => (cle === 'coeur' ? tr('journal.team_et_membres') : nomModule(cle));
 
 function Chiffre({ theme, valeur, libelle, testID }: { theme: ThemeHub; valeur: string | number; libelle: string; testID?: string }) {
   return (
@@ -71,35 +78,35 @@ export function StatsTeam({ theme, client, detail, maintenant = Date.now }: { th
   const modules = s?.activite ? Object.entries(s.activite.parModule).sort((a, b) => b[1] - a[1]) : [];
   return (
     <Panneau theme={theme} testID="esport-stats">
-      <Intertitre theme={theme}>Statistiques de la team</Intertitre>
-      <Choix theme={theme} libelle="Période" valeur={periode} options={PERIODES} onChoisir={v => setPeriode(v as '7' | '30' | '90')} testID="esport-stats-periode" />
+      <Intertitre theme={theme}>{tr('statsTeam.statistiques_de_la_team')}</Intertitre>
+      <Choix theme={theme} libelle={tr('journal.periode')} valeur={periode} options={PERIODES} onChoisir={v => setPeriode(v as '7' | '30' | '90')} testID="esport-stats-periode" />
       {s ? (
         <View style={{ gap: 16 }}>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-            <Chiffre theme={theme} valeur={s.membres.actifs} libelle="membres actifs" testID="esport-stats-membres" />
-            {s.presence ? <Chiffre theme={theme} valeur={s.presence.taux === null ? '—' : `${s.presence.taux} %`} libelle={`présence (${s.presence.seances} séance${s.presence.seances > 1 ? 's' : ''})`} testID="esport-stats-presence" /> : null}
-            {s.taches ? <Chiffre theme={theme} valeur={s.taches.terminees} libelle={`tâches faites sur ${s.taches.creees} créées`} testID="esport-stats-taches" /> : null}
-            {s.taches ? <Chiffre theme={theme} valeur={s.taches.enRetard} libelle="tâches en retard" /> : null}
-            {s.resumes ? <Chiffre theme={theme} valeur={s.resumes.deposes} libelle={`réunions déposées, ${s.resumes.enAttente} à résumer`} testID="esport-stats-resumes" /> : null}
-            {s.activite ? <Chiffre theme={theme} valeur={s.activite.actions} libelle={`actions de ${s.activite.membresActifs} membre${s.activite.membresActifs > 1 ? 's' : ''}`} testID="esport-stats-activite" /> : null}
+            <Chiffre theme={theme} valeur={s.membres.actifs} libelle={tr('statsTeam.membres_actifs')} testID="esport-stats-membres" />
+            {s.presence ? <Chiffre theme={theme} valeur={s.presence.taux === null ? '—' : `${s.presence.taux} %`} libelle={tr('statsTeam.presence_seances', { seances: trn('statsTeam.seances', s.presence.seances) })} testID="esport-stats-presence" /> : null}
+            {s.taches ? <Chiffre theme={theme} valeur={s.taches.terminees} libelle={tr('statsTeam.taches_faites_sur_creees', { creees: s.taches.creees })} testID="esport-stats-taches" /> : null}
+            {s.taches ? <Chiffre theme={theme} valeur={s.taches.enRetard} libelle={tr('statsTeam.taches_en_retard')} /> : null}
+            {s.resumes ? <Chiffre theme={theme} valeur={s.resumes.deposes} libelle={tr('statsTeam.reunions_deposees_a_resumer', { enAttente: s.resumes.enAttente })} testID="esport-stats-resumes" /> : null}
+            {s.activite ? <Chiffre theme={theme} valeur={s.activite.actions} libelle={tr('statsTeam.actions_de', { membres: trn('statsTeam.membres', s.activite.membresActifs) })} testID="esport-stats-activite" /> : null}
           </View>
           {s.presence && s.presence.joueurs.length > 0 ? (
             <View style={{ gap: 6 }} testID="esport-stats-joueurs">
-              <Text style={attenue}>Présence par joueur (présent ou en retard, sur les séances marquées)</Text>
+              <Text style={attenue}>{tr('statsTeam.presence_par_joueur_present')}</Text>
               {s.presence.joueurs.slice(0, 10).map(j => (
-                <Barre key={j.compte} theme={theme} libelle={j.pseudo ?? 'Compte supprimé'} valeur={j.taux ?? 0} max={100} texte={j.taux === null ? 'non marqué' : `${j.taux} % (${j.marques})`} />
+                <Barre key={j.compte} theme={theme} libelle={j.pseudo ?? tr('resumes.compte_supprime')} valeur={j.taux ?? 0} max={100} texte={j.taux === null ? tr('statsTeam.non_marque') : `${j.taux} % (${j.marques})`} />
               ))}
             </View>
           ) : null}
           {modules.length > 0 ? (
             <View style={{ gap: 6 }} testID="esport-stats-modules">
-              <Text style={attenue}>Activité par module</Text>
+              <Text style={attenue}>{tr('statsTeam.activite_par_module')}</Text>
               {modules.map(([m, n]) => (
                 <Barre key={m} theme={theme} libelle={nomBloc(m)} valeur={n} max={modules[0][1]} texte={String(n)} />
               ))}
             </View>
           ) : null}
-          {vide ? <Text style={attenue}>Votre rôle ne donne pas accès aux statistiques détaillées de la team.</Text> : null}
+          {vide ? <Text style={attenue}>{tr('statsTeam.votre_role_ne_donne')}</Text> : null}
         </View>
       ) : null}
     </Panneau>

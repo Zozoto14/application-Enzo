@@ -12,6 +12,7 @@ import type { ClientEsport, Depot, DetailTeam, Tache } from '../client';
 import { dateJour } from '../libelles';
 import { styles, Intertitre, Panneau } from './commun';
 import { ouvrirPdf } from './Resumes';
+import { tr } from '../i18n';
 
 export function AccueilPhase3({ theme, client, detail, onAller }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; onAller(section: `module:${string}`): void }) {
   const actifs = new Set(detail.modules.filter(m => m.active).map(m => m.cle));
@@ -32,8 +33,8 @@ export function AccueilPhase3({ theme, client, detail, onAller }: { theme: Theme
     <View style={styles.ligne}>
       {voitResumes ? (
         <Panneau theme={theme} style={{ flex: 1, minWidth: 260, alignSelf: 'stretch' }} testID="esport-accueil-resumes">
-          <Intertitre theme={theme}>Derniers résumés</Intertitre>
-          {resumes?.length === 0 ? <Text style={attenue}>Aucun résumé publié pour l’instant.</Text> : null}
+          <Intertitre theme={theme}>{tr('accueilPhase3.derniers_resumes')}</Intertitre>
+          {resumes?.length === 0 ? <Text style={attenue}>{tr('accueilPhase3.aucun_resume_publie_pour')}</Text> : null}
           {resumes?.map(r => (
             <View key={r.id} style={[styles.ligne, { flexWrap: 'nowrap' }]}>
               <Text style={[texte, { flex: 1 }]} numberOfLines={1}>
@@ -47,22 +48,22 @@ export function AccueilPhase3({ theme, client, detail, onAller }: { theme: Theme
               />
             </View>
           ))}
-          <BoutonHub theme={theme} titre="Tous les résumés" onPress={() => onAller('module:meeting_summaries')} testID="esport-accueil-aller-resumes" />
+          <BoutonHub theme={theme} titre={tr('accueilPhase3.tous_les_resumes')} onPress={() => onAller('module:meeting_summaries')} testID="esport-accueil-aller-resumes" />
         </Panneau>
       ) : null}
       {voitTaches ? (
         <Panneau theme={theme} style={{ flex: 1, minWidth: 260, alignSelf: 'stretch' }} testID="esport-accueil-retard">
-          <Intertitre theme={theme}>{`Tâches en retard${retard?.length ? ` (${retard.length})` : ''}`}</Intertitre>
-          {retard?.length === 0 ? <Text style={attenue}>Rien en retard.</Text> : null}
+          <Intertitre theme={theme}>{retard?.length ? tr('accueilPhase3.taches_en_retard_n', { n: retard.length }) : tr('accueilPhase3.taches_en_retard')}</Intertitre>
+          {retard?.length === 0 ? <Text style={attenue}>{tr('accueilPhase3.rien_en_retard')}</Text> : null}
           {retard?.slice(0, 6).map(t => (
             <Text key={t.id} style={texte} numberOfLines={1} testID={`esport-accueil-retard-${t.id}`}>
               {t.titre}{' '}
               <Text style={{ color: theme.critique, fontSize: 12 }}>
-                · {dateJour(t.echeance)} · {t.assigne?.pseudo ?? 'non assignée'}
+                · {dateJour(t.echeance)} · {t.assigne?.pseudo ?? tr('accueilPhase3.non_assignee')}
               </Text>
             </Text>
           ))}
-          <BoutonHub theme={theme} titre="Objectifs et tâches" onPress={() => onAller('module:goals_tasks')} testID="esport-accueil-aller-taches" />
+          <BoutonHub theme={theme} titre={tr('accueilPhase3.objectifs_et_taches')} onPress={() => onAller('module:goals_tasks')} testID="esport-accueil-aller-taches" />
         </Panneau>
       ) : null}
     </View>

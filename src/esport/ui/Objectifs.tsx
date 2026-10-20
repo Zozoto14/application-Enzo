@@ -18,6 +18,7 @@ import { ChampNote } from './ChampNote';
 import { BoutonConfirme, Choix, PastilleRole, Retours, styles, useAgir, Intertitre, Panneau } from './commun';
 import { NoteMarkdown } from './review/Note';
 import { EnTetePage, EtatVide, Volet } from './design';
+import { tr, trn } from '../i18n';
 
 const STATUTS: StatutTache[] = ['a_faire', 'en_cours', 'fait'];
 const PRIORITES: Priorite[] = ['basse', 'normale', 'haute', 'urgente'];
@@ -79,16 +80,16 @@ export function SectionObjectifs({
   }, [client, teamId, detail]);
 
   const modifier = (t: Tache, champs: Parameters<ClientEsport['modifierTache']>[2], message?: string) =>
-    void agir('Tâche', async () => {
+    void agir('tache', async () => {
       await client.modifierTache(teamId, t.id, champs);
       await recharger();
       return message;
     });
   const supprimer = (t: Tache) =>
-    void agir('Tâche', async () => {
+    void agir('tache', async () => {
       await client.supprimerTache(teamId, t.id);
       await recharger();
-      return 'Tâche supprimée.';
+      return tr('objectifs.tache_supprimee');
     });
   const peutBouger = (t: Tache) => peut('goals_tasks.update') || (Boolean(moi) && t.assigne?.compte === moi);
   const cree = async () => {
@@ -99,12 +100,12 @@ export function SectionObjectifs({
     formulaire === 'objectif' ? (
       <Panneau theme={theme}>
         <NouvelObjectif theme={theme} client={client} teamId={teamId} membres={membres} onCree={cree} />
-        <BoutonHub theme={theme} titre="Annuler" onPress={() => setFormulaire(undefined)} testID="esport-objectif-annuler" />
+        <BoutonHub theme={theme} titre={tr('assistant.annuler')} onPress={() => setFormulaire(undefined)} testID="esport-objectif-annuler" />
       </Panneau>
     ) : formulaire === 'tache' ? (
       <View style={{ gap: 8 }}>
         <NouvelleTache theme={theme} client={client} teamId={teamId} membres={membres} objectifs={objectifs ?? []} moi={moi} peutAssigner={peut('goals_tasks.assign')} onCree={cree} large={false} />
-        <BoutonHub theme={theme} titre="Annuler" onPress={() => setFormulaire(undefined)} testID="esport-tache-annuler" />
+        <BoutonHub theme={theme} titre={tr('assistant.annuler')} onPress={() => setFormulaire(undefined)} testID="esport-tache-annuler" />
       </View>
     ) : null;
 
@@ -113,27 +114,27 @@ export function SectionObjectifs({
       <EnTetePage
         theme={theme}
         large={large}
-        titre="Objectifs et tâches"
-        sous="Propres à la team (séparés de l’app Tâches du hub)."
-        action={peut('goals_tasks.create') ? <BoutonHub theme={theme} titre="+ Nouvelle tâche" variante="plein" onPress={() => setFormulaire('tache')} testID="esport-tache-creer" /> : undefined}
+        titre={tr('accueilPhase3.objectifs_et_taches')}
+        sous={tr('objectifs.propres_a_la_team')}
+        action={peut('goals_tasks.create') ? <BoutonHub theme={theme} titre={tr('objectifs.nouvelle_tache_2')} variante="plein" onPress={() => setFormulaire('tache')} testID="esport-tache-creer" /> : undefined}
         actions={[
-          peut('goals_tasks.create') && { titre: '+ Nouvel objectif', onPress: () => setFormulaire('objectif'), testID: 'esport-objectif-creer' },
+          peut('goals_tasks.create') && { titre: tr('objectifs.nouvel_objectif'), onPress: () => setFormulaire('objectif'), testID: 'esport-objectif-creer' },
           onExporter && peut('goals_tasks.view') && {
-            titre: 'Exporter les tâches (CSV)',
+            titre: tr('objectifs.exporter_les_taches_csv'),
             testID: 'esport-taches-csv',
             onPress: () =>
-              void agir('Export', async () => {
+              void agir('export', async () => {
                 const f = await client.exporterTaches(teamId, filtre === 'toutes' ? {} : { filtre });
-                return (await onExporter(f.nom, f.contenu, 'text/csv')) ? 'Export CSV des tâches enregistré.' : undefined;
+                return (await onExporter(f.nom, f.contenu, 'text/csv')) ? tr('objectifs.export_csv_des_taches') : undefined;
               }),
           },
           onExporter && peut('goals_tasks.view') && {
-            titre: 'Exporter les objectifs (CSV)',
+            titre: tr('objectifs.exporter_les_objectifs_csv'),
             testID: 'esport-objectifs-csv',
             onPress: () =>
-              void agir('Export', async () => {
+              void agir('export', async () => {
                 const f = await client.exporterObjectifs(teamId);
-                return (await onExporter(f.nom, f.contenu, 'text/csv')) ? 'Export CSV des objectifs enregistré.' : undefined;
+                return (await onExporter(f.nom, f.contenu, 'text/csv')) ? tr('objectifs.export_csv_des_objectifs') : undefined;
               }),
           },
         ]}
@@ -141,19 +142,19 @@ export function SectionObjectifs({
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-objectifs" />
       {/* Formulaires : volet latéral sur PC, bloc en haut de page sur iPhone. */}
       {formulaire && !large ? formulaireEl : null}
-      <Volet theme={theme} visible={Boolean(formulaire) && large} titre={formulaire === 'objectif' ? 'Nouvel objectif' : 'Nouvelle tâche'} onFermer={() => setFormulaire(undefined)} testID="esport-objectifs-volet">
+      <Volet theme={theme} visible={Boolean(formulaire) && large} titre={formulaire === 'objectif' ? tr('objectifs.nouvel_objectif_2') : tr('objectifs.nouvelle_tache')} onFermer={() => setFormulaire(undefined)} testID="esport-objectifs-volet">
         {formulaireEl}
       </Volet>
       <View style={{ gap: 16 }}>
         <Panneau theme={theme} testID="esport-objectifs-liste">
-          <Intertitre theme={theme}>Objectifs</Intertitre>
+          <Intertitre theme={theme}>{tr('objectifs.objectifs')}</Intertitre>
           {objectifs?.length === 0 ? (
             <EtatVide
               theme={theme}
               glyphe="⚑"
-              titre="Aucun objectif pour l’instant"
-              texte="Un objectif regroupe des tâches : sa progression se calcule toute seule."
-              action={peut('goals_tasks.create') ? { titre: '+ Nouvel objectif', onPress: () => setFormulaire('objectif') } : undefined}
+              titre={tr('objectifs.aucun_objectif_pour_l')}
+              texte={tr('objectifs.un_objectif_regroupe_des')}
+              action={peut('goals_tasks.create') ? { titre: tr('objectifs.nouvel_objectif'), onPress: () => setFormulaire('objectif') } : undefined}
             />
           ) : null}
           {objectifs?.map(o => (
@@ -166,21 +167,21 @@ export function SectionObjectifs({
               </View>
               <BarreProgression theme={theme} pourcentage={o.progression.pourcentage} testID={`esport-objectif-progression-${o.id}`} />
               <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>
-                {o.proprietaire ? `Objectif de ${o.proprietaire.pseudo ?? '?'}` : 'Objectif d’équipe'} · {o.progression.faites}/{o.progression.total} tâche(s) faite(s)
-                {o.dateCible ? ` · pour le ${dateJour(o.dateCible)}` : ''}
-                {o.statut !== 'actif' ? ` · ${o.statut === 'atteint' ? 'atteint' : 'abandonné'}` : ''}
+                {o.proprietaire ? tr('objectifs.objectif_de', { nom: o.proprietaire.pseudo ?? '?' }) : tr('objectifs.objectif_d_equipe')} · {trn('objectifs.taches_faites', o.progression.total, { faites: o.progression.faites })}
+                {o.dateCible ? tr('objectifs.pour_le', { v: dateJour(o.dateCible) }) : ''}
+                {o.statut !== 'actif' ? ` · ${o.statut === 'atteint' ? 'atteint' : tr('objectifs.abandonne')}` : ''}
               </Text>
               {peut('goals_tasks.update') || peut('goals_tasks.delete') ? (
                 <View style={styles.ligne}>
                   {peut('goals_tasks.update') && o.statut === 'actif' ? (
                     <BoutonHub
                       theme={theme}
-                      titre="Atteint"
+                      titre={tr('objectifs.atteint')}
                       onPress={() =>
-                        void agir('Objectif', async () => {
+                        void agir('objectif', async () => {
                           await client.modifierObjectif(teamId, o.id, { statut: 'atteint' });
                           await recharger();
-                          return 'Objectif atteint. Bravo !';
+                          return tr('objectifs.objectif_atteint_bravo');
                         })
                       }
                       testID={`esport-objectif-atteint-${o.id}`}
@@ -189,13 +190,13 @@ export function SectionObjectifs({
                   {peut('goals_tasks.delete') ? (
                     <BoutonConfirme
                       theme={theme}
-                      titre="Supprimer"
-                      confirmation="Oui (les tâches restent)"
+                      titre={tr('discord.supprimer')}
+                      confirmation={tr('objectifs.oui_les_taches_restent')}
                       onConfirme={() =>
-                        void agir('Objectif', async () => {
+                        void agir('objectif', async () => {
                           await client.supprimerObjectif(teamId, o.id);
                           await recharger();
-                          return 'Objectif supprimé.';
+                          return tr('objectifs.objectif_supprime');
                         })
                       }
                       testID={`esport-objectif-supprimer-${o.id}`}
@@ -211,23 +212,23 @@ export function SectionObjectifs({
       <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
         <Segments
           theme={theme}
-          libelle="Filtre"
+          libelle={tr('objectifs.filtre')}
           valeur={filtre}
           options={[
-            ['toutes', 'Toutes'],
-            ['miennes', 'Mes tâches'],
-            ['retard', 'En retard'],
+            ['toutes', tr('journal.toutes')],
+            ['miennes', tr('objectifs.mes_taches')],
+            ['retard', tr('libelles.en_retard')],
           ]}
           onChoisir={v => setFiltre(v as Filtre)}
           testID="esport-taches-filtre"
         />
         <Segments
           theme={theme}
-          libelle="Affichage"
+          libelle={tr('objectifs.affichage')}
           valeur={vue}
           options={[
-            ['liste', 'Liste'],
-            ['kanban', 'Kanban'],
+            ['liste', tr('objectifs.liste')],
+            ['kanban', tr('objectifs.kanban')],
           ]}
           onChoisir={v => setVue(v as 'liste' | 'kanban')}
           testID="esport-taches-vue"
@@ -236,7 +237,7 @@ export function SectionObjectifs({
 
       {vue === 'liste' ? (
         <Panneau theme={theme} testID="esport-taches-liste">
-          {taches?.length === 0 ? <EtatVide theme={theme} glyphe="☑︎" titre="Aucune tâche" texte={filtre === 'toutes' ? 'Créez la première tâche de la team.' : 'Rien pour ce filtre.'} /> : null}
+          {taches?.length === 0 ? <EtatVide theme={theme} glyphe="☑︎" titre={tr('objectifs.aucune_tache')} texte={filtre === 'toutes' ? tr('objectifs.creez_la_premiere_tache') : tr('objectifs.rien_pour_ce_filtre')} /> : null}
           {taches?.map(t => (
             <CarteTache key={t.id} theme={theme} tache={t} peutBouger={peutBouger(t)} peutSupprimer={peut('goals_tasks.delete')} onStatut={s => modifier(t, { statut: s })} onSupprimer={() => supprimer(t)} />
           ))}
@@ -302,11 +303,11 @@ function CarteTache({
         <PastilleRole theme={theme} nom={LIBELLES_PRIORITE[t.priorite]} couleur={couleurPriorite(theme, t.priorite)} />
         {t.echeance ? (
           <Text style={[attenue, t.enRetard ? { color: theme.critique, fontWeight: '700' } : null]} testID={t.enRetard ? `esport-tache-retard-${t.id}` : undefined}>
-            {t.enRetard ? 'En retard · ' : ''}
+            {t.enRetard ? tr('objectifs.en_retard') : ''}
             {dateJour(t.echeance)}
           </Text>
         ) : null}
-        <Text style={attenue}>{t.assigne ? t.assigne.pseudo ?? '?' : 'Non assignée'}</Text>
+        <Text style={attenue}>{t.assigne ? t.assigne.pseudo ?? '?' : tr('objectifs.non_assignee')}</Text>
         {t.objectif ? <Text style={attenue}>· {t.objectif.titre}</Text> : null}
       </View>
       {t.description ? <NoteMarkdown theme={theme} source={t.description} testID={`esport-tache-description-${t.id}`} /> : null}
@@ -316,7 +317,7 @@ function CarteTache({
           {peutBouger && i < STATUTS.length - 1 ? (
             <BoutonHub theme={theme} titre={`${LIBELLES_STATUT_TACHE[STATUTS[i + 1]]} →`} variante="plein" onPress={() => onStatut(STATUTS[i + 1])} testID={`esport-tache-${t.id}-${STATUTS[i + 1]}`} />
           ) : null}
-          {peutSupprimer ? <BoutonConfirme theme={theme} titre="Supprimer" confirmation="Oui" onConfirme={onSupprimer} testID={`esport-tache-supprimer-${t.id}`} /> : null}
+          {peutSupprimer ? <BoutonConfirme theme={theme} titre={tr('discord.supprimer')} confirmation={tr('objectifs.oui')} onConfirme={onSupprimer} testID={`esport-tache-supprimer-${t.id}`} /> : null}
         </View>
       ) : null}
     </View>
@@ -330,26 +331,26 @@ function NouvelObjectif({ theme, client, teamId, membres, onCree }: { theme: The
   const { enCours, erreur, avis, agir, setErreur } = useAgir();
   return (
     <View style={{ gap: 8, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 8 }} testID="esport-objectif-nouveau">
-      <Champ theme={theme} libelle="Nouvel objectif" valeur={titre} onChanger={setTitre} maxLength={120} testID="esport-objectif-titre" />
-      <Choix theme={theme} libelle="Pour" valeur={pour} options={[{ id: '', nom: 'L’équipe' }, ...membres.map(m => ({ id: m.compte, nom: m.pseudo }))]} onChoisir={setPour} testID="esport-objectif-pour" />
-      <Champ theme={theme} libelle="Date cible (JJ/MM/AAAA, facultative)" valeur={date} onChanger={setDate} maxLength={10} testID="esport-objectif-date" />
+      <Champ theme={theme} libelle={tr('objectifs.nouvel_objectif_2')} valeur={titre} onChanger={setTitre} maxLength={120} testID="esport-objectif-titre" />
+      <Choix theme={theme} libelle={tr('objectifs.pour')} valeur={pour} options={[{ id: '', nom: tr('objectifs.l_equipe') }, ...membres.map(m => ({ id: m.compte, nom: m.pseudo }))]} onChoisir={setPour} testID="esport-objectif-pour" />
+      <Champ theme={theme} libelle={tr('objectifs.date_cible_jj_mm')} valeur={date} onChanger={setDate} maxLength={10} testID="esport-objectif-date" />
       <BoutonHub
         theme={theme}
-        titre="Créer l’objectif"
+        titre={tr('objectifs.creer_l_objectif')}
         variante="plein"
         desactive={Boolean(enCours) || titre.trim().length < 2}
         onPress={() => {
           const iso = date.trim() ? lireDateSaisie(date) : null;
           if (iso === undefined) {
-            setErreur('Date cible : JJ/MM/AAAA.');
+            setErreur(tr('objectifs.date_cible_jj_mm_2'));
             return;
           }
-          void agir('Objectif', async () => {
+          void agir('objectif', async () => {
             await client.creerObjectif(teamId, { titre: titre.trim(), proprietaire: pour || null, dateCible: iso });
             setTitre('');
             setDate('');
             await onCree();
-            return 'Objectif créé.';
+            return tr('objectifs.objectif_cree');
           });
         }}
         testID="esport-objectif-creer"
@@ -390,40 +391,40 @@ function NouvelleTache({
   const assignables = peutAssigner ? membres : membres.filter(m => m.compte === moi);
   return (
     <Panneau theme={theme} style={large ? { flex: 1 } : undefined} testID="esport-tache-nouvelle">
-      <Intertitre theme={theme}>Nouvelle tâche</Intertitre>
-      <Champ theme={theme} libelle="Titre" valeur={titre} onChanger={setTitre} maxLength={120} testID="esport-tache-titre" />
-      <ChampNote theme={theme} libelle="Description (facultative)" valeur={description} onChanger={setDescription} maxLength={2000} testID="esport-tache-description" />
-      <Choix theme={theme} libelle="Assignée à" valeur={assigne} options={[{ id: '', nom: 'Personne' }, ...assignables.map(m => ({ id: m.compte, nom: m.pseudo }))]} onChoisir={setAssigne} testID="esport-tache-assigne" />
-      <Choix theme={theme} libelle="Priorité" valeur={priorite} options={PRIORITES.map(p => ({ id: p, nom: LIBELLES_PRIORITE[p], couleur: couleurPriorite(theme, p) }))} onChoisir={v => setPriorite(v as Priorite)} testID="esport-tache-priorite" />
-      <Champ theme={theme} libelle="Échéance (JJ/MM/AAAA, facultative)" valeur={echeance} onChanger={setEcheance} maxLength={10} testID="esport-tache-echeance" />
+      <Intertitre theme={theme}>{tr('objectifs.nouvelle_tache')}</Intertitre>
+      <Champ theme={theme} libelle={tr('objectifs.titre')} valeur={titre} onChanger={setTitre} maxLength={120} testID="esport-tache-titre" />
+      <ChampNote theme={theme} libelle={tr('assistant.description_facultative')} valeur={description} onChanger={setDescription} maxLength={2000} testID="esport-tache-description" />
+      <Choix theme={theme} libelle={tr('objectifs.assignee_a')} valeur={assigne} options={[{ id: '', nom: tr('planning.convocations.personne') }, ...assignables.map(m => ({ id: m.compte, nom: m.pseudo }))]} onChoisir={setAssigne} testID="esport-tache-assigne" />
+      <Choix theme={theme} libelle={tr('objectifs.priorite')} valeur={priorite} options={PRIORITES.map(p => ({ id: p, nom: LIBELLES_PRIORITE[p], couleur: couleurPriorite(theme, p) }))} onChoisir={v => setPriorite(v as Priorite)} testID="esport-tache-priorite" />
+      <Champ theme={theme} libelle={tr('objectifs.echeance_jj_mm_aaaa')} valeur={echeance} onChanger={setEcheance} maxLength={10} testID="esport-tache-echeance" />
       {objectifs.length > 0 ? (
         <Choix
           theme={theme}
-          libelle="Objectif"
+          libelle={tr('objectifs.objectif')}
           valeur={objectif}
-          options={[{ id: '', nom: 'Aucun' }, ...objectifs.filter(o => o.statut === 'actif').map(o => ({ id: o.id, nom: o.titre }))]}
+          options={[{ id: '', nom: tr('objectifs.aucun') }, ...objectifs.filter(o => o.statut === 'actif').map(o => ({ id: o.id, nom: o.titre }))]}
           onChoisir={setObjectif}
           testID="esport-tache-objectif"
         />
       ) : null}
       <BoutonHub
         theme={theme}
-        titre="Créer la tâche"
+        titre={tr('objectifs.creer_la_tache')}
         variante="plein"
         desactive={Boolean(enCours) || titre.trim().length < 2}
         onPress={() => {
           const iso = echeance.trim() ? lireDateSaisie(echeance) : null;
           if (iso === undefined) {
-            setErreur('Échéance : JJ/MM/AAAA.');
+            setErreur(tr('objectifs.echeance_jj_mm_aaaa_2'));
             return;
           }
-          void agir('Tâche', async () => {
+          void agir('tache', async () => {
             await client.creerTache(teamId, { titre: titre.trim(), description: description.trim() || undefined, assigne: assigne || null, echeance: iso, priorite, objectifId: objectif || null });
             setTitre('');
             setDescription('');
             setEcheance('');
             await onCree();
-            return assigne && assigne !== moi ? 'Tâche créée : la personne assignée est prévenue.' : 'Tâche créée.';
+            return assigne && assigne !== moi ? tr('objectifs.tache_creee_la_personne') : tr('objectifs.tache_creee');
           });
         }}
         testID="esport-tache-creer"

@@ -13,13 +13,26 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { BarreOnglets } from '../../ui/mobile/BarreOnglets';
 import { Compteur, ESP, attenue, rayonControle, texte, type EtatPresse } from './design';
+import { tr } from '../i18n';
 
 export type OngletEsport = 'dashboard' | 'teams' | 'membres';
 
 export const NAV_ESPORT: ReadonlyArray<{ cle: OngletEsport; libelle: string; glyphe: string; description: string }> = [
-  { cle: 'dashboard', libelle: 'Dashboard', glyphe: '▦', description: 'Dashboard : toutes vos teams' },
-  { cle: 'teams', libelle: 'Teams', glyphe: '◆', description: 'Teams : la liste, la création, vos notifications' },
-  { cle: 'membres', libelle: 'Membres', glyphe: '☺', description: 'Membres : tous les comptes, les invitations' },
+  { cle: 'dashboard', get libelle() {
+      return tr('dashboard.dashboard');
+    }, glyphe: '▦', get description() {
+      return tr('cadreEsport.dashboard_toutes_vos_teams');
+    } },
+  { cle: 'teams', get libelle() {
+      return tr('dashboard.teams');
+    }, glyphe: '◆', get description() {
+      return tr('cadreEsport.teams_la_liste_la');
+    } },
+  { cle: 'membres', get libelle() {
+      return tr('dashboard.membres');
+    }, glyphe: '☺', get description() {
+      return tr('cadreEsport.membres_tous_les_comptes');
+    } },
 ];
 
 export const LARGEUR_BARRE_LATERALE = 252;
@@ -122,9 +135,9 @@ export function CadreEsport({
       <View
         style={{ width: LARGEUR_BARRE_LATERALE, borderRightWidth: 1, borderRightColor: theme.ligne, backgroundColor: theme.surface, paddingHorizontal: ESP.s, paddingVertical: ESP.m, gap: ESP.l }}
         accessibilityRole="navigation"
-        aria-label="Navigation de l’Esport">
+        aria-label={tr('cadreEsport.navigation_de_l_esport')}>
         <View style={{ gap: ESP.xxs }} testID="esport-nav" accessibilityRole="tablist" accessibilityLabel="Esport">
-          <Text style={{ ...attenue(theme, 12), fontWeight: '700', letterSpacing: 1.2, paddingHorizontal: ESP.s, paddingBottom: ESP.xxs }}>ESPORT</Text>
+          <Text style={{ ...attenue(theme, 12), fontWeight: '700', letterSpacing: 1.2, paddingHorizontal: ESP.s, paddingBottom: ESP.xxs }}>{tr('cadre.esport')}</Text>
           {NAV_ESPORT.map(n => (
             <EntreeLaterale
               key={n.cle}
@@ -143,7 +156,7 @@ export function CadreEsport({
         <View style={{ flex: 1 }} />
         {pseudo ? (
           <Text style={{ ...attenue(theme), paddingHorizontal: ESP.s }} numberOfLines={1}>
-            {`Connecté : ${pseudo}`}
+            {tr('cadreEsport.connecte', { pseudo })}
           </Text>
         ) : null}
       </View>
