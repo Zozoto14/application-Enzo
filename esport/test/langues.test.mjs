@@ -377,5 +377,5 @@ test('exports CSV : en-têtes et valeurs dans la langue de l’app (Accept-Langu
   const jrnEn = (await b.appel(`/teams/${A.teamId}/journal/export.csv?format=json`, { jeton, entetes: { 'Accept-Language': 'en' } })).corps.contenu;
   assert.match(jrnEn, /"Date \(UTC\)","Member","Module","Action","Item","Identifier","Details"/);
   const presEn = (await b.appel(`/teams/${A.teamId}/presence/export.csv?format=json&debut=2026-10-01&fin=2026-10-31`, { jeton, entetes: { 'Accept-Language': 'en' } })).corps.contenu;
-  assert.match(presEn, /"Date","Time","Event","Type","Player","Response","Attendance","Note"/);
+  assert.match(presEn, /"Date","Time","Event","Type","Player","Called up","Response","Announced delay \(min\)","Announced reason","Attendance","Late \(min\)","Reason","Note"/);
 });

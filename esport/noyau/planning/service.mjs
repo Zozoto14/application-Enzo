@@ -11,12 +11,12 @@
 import { evenement } from '../evenements.mjs';
 import { CLE_PROPRIETAIRE, autorise } from '../permissions.mjs';
 import { aleatoire, echec, iso, jsonOu, nouvelId, sha256Hex, texteLong, texteNettoye } from '../outils.mjs';
-import { lignesParIds } from '../requetes.mjs';
+import { lignesParIds, pseudosDe } from '../requetes.mjs';
 import { heatmap, plagesPropices, TYPES_DISPO, PAS_AUTORISES } from './dispos.mjs';
 import { calendrierIcs, LIBELLES_TYPES } from './ical.mjs';
 import { LANGUE_DEFAUT, lireLangue, listeTextes, texte as T } from '../langues.mjs';
 import { convocationDe, convocationDepuisListe, convoques, CONVOCATION_DEFAUT, estConvoque, groupeDe, normaliserConvocation, preparerConvocation } from './convocations.mjs';
-import { RSVP, REELS, csv, statistiques } from './presence.mjs';
+import { RSVP, REELS, MARQUES_REELLES, compter, csv, lireMinutes, seriesAbsences, statistiques } from './presence.mjs';
 import { DEPLACEMENT_MAX_MS, estOccurrence, lireRecurrence, occurrences, occurrencesBrutes, veilleLocale } from './recurrence.mjs';
 import { ajouterJours, dateLocale, ecartJours, fuseauValide, instantMural, jourSemaine, lireDate, lireHeure, lundiDe, partiesLocales, texteDate, texteHeure } from './temps.mjs';
 
@@ -28,7 +28,11 @@ const JOUR_MS = 86_400_000;
 const DUREE_MAX_MS = 14 * JOUR_MS;
 const PLAGE_MAX_JOURS = 100;
 const MARGE_MS = DEPLACEMENT_MAX_MS + JOUR_MS;
-export const REGLAGES_DEFAUT = { effectifMin: 5, rappelHeures: 24 };
+export const REGLAGES_DEFAUT = { effectifMin: 5, rappelHeures: 24, debutSaison: '09-01' };
+/** Début de saison « MM-JJ » (statistiques « Saison »). */
+const MOTIF_SAISON = /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+/** Période des listes « À marquer » : les séances commencées des 30 derniers jours. */
+const A_MARQUER_JOURS = 30;
 
 const uuidOuNull = (v, quoi) => {
   if (v === undefined || v === null || v === '') return null;
@@ -88,6 +92,7 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     return {
       effectifMin: Number.isInteger(dispo.effectifMin) ? dispo.effectifMin : REGLAGES_DEFAUT.effectifMin,
       rappelHeures: Number.isInteger(presence.rappelHeures) ? presence.rappelHeures : REGLAGES_DEFAUT.rappelHeures,
+      debutSaison: typeof presence.debutSaison === 'string' && MOTIF_SAISON.test(presence.debutSaison) ? presence.debutSaison : REGLAGES_DEFAUT.debutSaison,
     };
   }
 
@@ -232,6 +237,9 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     };
   };
 
+  /** Ce que le joueur a annoncé avec sa réponse (retard prévu, motif d'absence). */
+  const reponseDe = l => ({ retardPrevu: l?.retard_prevu === null || l?.retard_prevu === undefined ? null : Number(l.retard_prevu), motif: l?.motif_prevu ?? '' });
+
   const droits = ctx => ({
     creer: peut(ctx, 'planning.create'),
     modifier: peut(ctx, 'planning.update'),
@@ -263,7 +271,7 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     }
     const presenceActive = ctx.modules.has('attendance');
     const lignes = presenceActive
-      ? await base.tous('SELECT evenement_id, occurrence, compte_id, rsvp, reel FROM presences WHERE team_id = ? AND occurrence >= ? AND occurrence < ?', [teamId, iso(du - MARGE_MS), iso(au + MARGE_MS)])
+      ? await base.tous('SELECT evenement_id, occurrence, compte_id, rsvp, reel, retard_prevu, motif_prevu FROM presences WHERE team_id = ? AND occurrence >= ? AND occurrence < ?', [teamId, iso(du - MARGE_MS), iso(au + MARGE_MS)])
       : [];
     const voirTout = peut(ctx, 'attendance.view_all');
     const resultat = toutes.map(({ ev, o }) => {
@@ -282,6 +290,7 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
           convoqueMoi: convoque,
           monRsvp: presenceActive && convoque ? (ligneMoi?.rsvp ?? 'sans_reponse') : null,
           maPresence: presenceActive && convoque ? (ligneMoi?.reel ?? 'inconnu') : null,
+          maReponse: presenceActive && convoque ? reponseDe(ligneMoi) : null,
           reponses: presenceActive && voirTout ? { oui: compte('oui'), non: compte('non'), peut_etre: compte('peut_etre'), attendues: convoquesOcc.size } : null,
           termine: o.fin <= maintenant(),
         },
@@ -578,6 +587,10 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
       if (!Number.isInteger(n) || n < 0 || n > 168) throw echec(400, 'rappel', 'Rappel : 0 (désactivé) à 168 heures avant.');
       nouveaux.rappelHeures = n;
     }
+    if (corps?.debutSaison !== undefined) {
+      if (typeof corps.debutSaison !== 'string' || !MOTIF_SAISON.test(corps.debutSaison)) throw echec(400, 'saison', 'Début de saison : MM-JJ (ex. 09-01).');
+      nouveaux.debutSaison = corps.debutSaison;
+    }
     const t = maintenant();
     const config = async module => jsonOu((await base.premier('SELECT config FROM team_modules WHERE team_id = ? AND module = ?', [teamId, module]))?.config, {});
     const ecrire = (module, valeur) => ({
@@ -587,7 +600,7 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     });
     await base.lot([
       ecrire('availability', { ...(await config('availability')), effectifMin: nouveaux.effectifMin }),
-      ecrire('attendance', { ...(await config('attendance')), rappelHeures: nouveaux.rappelHeures }),
+      ecrire('attendance', { ...(await config('attendance')), rappelHeures: nouveaux.rappelHeures, debutSaison: nouveaux.debutSaison }),
       evenement('availability.settings_changed', { teamId, acteur: acteur.compte, entiteType: 'team', entiteId: teamId, charge: nouveaux, maintenant: t }),
     ]);
     return lireReglages(acteur, teamId);
@@ -602,7 +615,7 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     const t = maintenant();
     const a = await occurrencesTeam(teamId, t - 14 * JOUR_MS, t + 14 * JOUR_MS);
     const presenceActive = ctx.modules.has('attendance');
-    const lignes = presenceActive ? await base.tous('SELECT evenement_id, occurrence, compte_id, rsvp, reel FROM presences WHERE team_id = ? AND occurrence >= ?', [teamId, iso(t - 15 * JOUR_MS - MARGE_MS)]) : [];
+    const lignes = presenceActive ? await base.tous('SELECT evenement_id, occurrence, compte_id, rsvp, reel, retard_prevu, motif_prevu, hors_convocation FROM presences WHERE team_id = ? AND occurrence >= ?', [teamId, iso(t - 15 * JOUR_MS - MARGE_MS)]) : [];
     const de = (ev, o) => lignes.filter(l => l.evenement_id === ev.id && l.occurrence === o.cle);
     const membres = await membresActifs(teamId);
     const moi = membres.find(m => m.compte === acteur.compte);
@@ -612,7 +625,7 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
       .slice(0, 6)
       .map(({ ev, o }) => {
         const ligne = de(ev, o).find(l => l.compte_id === acteur.compte);
-        return occurrencePublique(ev, o, fuseau, { convoqueMoi: true, concerneMoi: true, monRsvp: presenceActive ? (ligne?.rsvp ?? 'sans_reponse') : null });
+        return occurrencePublique(ev, o, fuseau, { convoqueMoi: true, concerneMoi: true, monRsvp: presenceActive ? (ligne?.rsvp ?? 'sans_reponse') : null, maReponse: presenceActive ? reponseDe(ligne) : null });
       });
     const alertes = [];
     if (presenceActive && peut(ctx, 'attendance.rsvp_own')) {
@@ -627,7 +640,8 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
         const deja = de(ev, o);
         // Attendus : les convoqués, eux seuls.
         const liste = roster(membres, ev, o);
-        if (o.fin <= t && peut(ctx, 'attendance.mark')) {
+        // À marquer : les séances COMMENCÉES (en cours comprises), comme la page Présence.
+        if (o.debut <= t && peut(ctx, 'attendance.mark')) {
           const nonMarques = liste.filter(m => !deja.some(l => l.compte_id === m.compte && l.reel !== 'inconnu')).length;
           if (nonMarques > 0) alertes.push({ genre: 'a-marquer', nonMarques, ...occurrencePublique(ev, o, fuseau) });
         } else if (o.debut > t && o.debut <= t + 3 * JOUR_MS) {
@@ -641,6 +655,14 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
 
   // -------------------------------------------------------------- Présence
 
+  /**
+   * Réponse du joueur (RSVP) : Oui / Peut-être / Non, et en option ce qu'il
+   * annonce : `retardPrevu` (minutes, « je serai en retard de X min ») ou
+   * `motif` (« absent : motif »). Même chemin pour l'app et pour les boutons du
+   * bot Discord (qui n'envoient que `rsvp`) : un champ absent garde sa valeur,
+   * sauf incohérence — « Non » efface un retard annoncé, « Oui » ou
+   * « Peut-être » effacent un motif d'absence.
+   */
   async function repondre(acteur, teamId, evId, cle, corps) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'planning.view');
@@ -654,83 +676,197 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     const rsvp = corps?.rsvp;
     if (!RSVP.includes(rsvp)) throw echec(400, 'rsvp', 'Réponse : oui, non ou peut-être.');
     const note = corps?.note !== undefined ? texteNettoye(corps.note, 200) : null;
+    const avant = await base.premier('SELECT retard_prevu, motif_prevu FROM presences WHERE evenement_id = ? AND occurrence = ? AND compte_id = ?', [evId, o.cle, acteur.compte]);
+    let retard = avant?.retard_prevu === null || avant?.retard_prevu === undefined ? null : Number(avant.retard_prevu);
+    let motif = avant?.motif_prevu ?? '';
+    if (corps?.retardPrevu !== undefined) {
+      const n = lireMinutes(corps.retardPrevu);
+      if (n === undefined) throw echec(400, 'retard', 'Retard annoncé : de 1 à 600 minutes.');
+      retard = n;
+    }
+    if (corps?.motif !== undefined) motif = texteNettoye(corps.motif, 200);
+    if (rsvp === 'non' || rsvp === 'sans_reponse') retard = null;
+    if (rsvp !== 'non') motif = '';
     const t = maintenant();
     await base.lot([
       {
-        sql: `INSERT INTO presences (evenement_id, occurrence, compte_id, team_id, rsvp, note, rsvp_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT (evenement_id, occurrence, compte_id) DO UPDATE SET rsvp = excluded.rsvp, note = COALESCE(?, presences.note), rsvp_le = excluded.rsvp_le, maj_le = excluded.maj_le`,
-        params: [evId, o.cle, acteur.compte, teamId, rsvp, note ?? '', iso(t), iso(t), note],
+        sql: `INSERT INTO presences (evenement_id, occurrence, compte_id, team_id, rsvp, note, retard_prevu, motif_prevu, rsvp_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT (evenement_id, occurrence, compte_id) DO UPDATE SET rsvp = excluded.rsvp, note = COALESCE(?, presences.note), retard_prevu = excluded.retard_prevu, motif_prevu = excluded.motif_prevu, rsvp_le = excluded.rsvp_le, maj_le = excluded.maj_le`,
+        params: [evId, o.cle, acteur.compte, teamId, rsvp, note ?? '', retard, motif, iso(t), iso(t), note],
       },
-      evenement('attendance.rsvp', { teamId, acteur: acteur.compte, entiteType: 'evenement', entiteId: evId, charge: { titre: o.titre, occurrence: o.cle, rsvp }, maintenant: t }),
+      // Journal : la réponse et le retard annoncé, jamais le motif (donnée personnelle).
+      evenement('attendance.rsvp', { teamId, acteur: acteur.compte, entiteType: 'evenement', entiteId: evId, charge: { titre: o.titre, occurrence: o.cle, rsvp, ...(retard ? { retardPrevu: retard } : {}) }, maintenant: t }),
     ]);
-    return { ok: true, rsvp };
+    return { ok: true, rsvp, retardPrevu: retard, motif };
   }
 
+  /** Une ligne de la feuille d'appel. */
+  const lignePublique = (l, compte, pseudo, hors) => ({
+    compte,
+    pseudo,
+    horsConvocation: hors,
+    rsvp: l?.rsvp ?? 'sans_reponse',
+    retardPrevu: l?.retard_prevu === null || l?.retard_prevu === undefined ? null : Number(l.retard_prevu),
+    motifPrevu: l?.motif_prevu ?? '',
+    reel: l?.reel ?? 'inconnu',
+    retardMinutes: l?.retard_minutes === null || l?.retard_minutes === undefined ? null : Number(l.retard_minutes),
+    motif: l?.motif ?? '',
+    note: l?.note ?? '',
+    marqueLe: l?.marque_le ?? null,
+  });
+
+  /** Compteurs d'une séance : convoqués, réponses, présence réelle (les ajoutés sont à part). */
+  function compteursSeance(lignes) {
+    const conv = lignes.filter(l => !l.horsConvocation);
+    const n = f => conv.filter(f).length;
+    return {
+      convoques: conv.length,
+      oui: n(l => l.rsvp === 'oui'),
+      peutEtre: n(l => l.rsvp === 'peut_etre'),
+      non: n(l => l.rsvp === 'non'),
+      sansReponse: n(l => l.rsvp === 'sans_reponse'),
+      marques: n(l => l.reel !== 'inconnu'),
+      nonMarques: n(l => l.reel === 'inconnu'),
+      present: n(l => l.reel === 'present'),
+      retard: n(l => l.reel === 'retard'),
+      absent: n(l => l.reel === 'absent'),
+      excuse: n(l => l.reel === 'excuse'),
+      enPlus: lignes.filter(l => l.horsConvocation && (l.reel === 'present' || l.reel === 'retard')).length,
+    };
+  }
+
+  /**
+   * Vue « Présence » d'une séance : les CONVOQUÉS (et, à part, les non-convoqués
+   * ajoutés par le staff), leur réponse, ce qu'ils ont annoncé, leur présence
+   * réelle ; compteurs ; membres ajoutables (staff qui marque).
+   */
   async function presenceOccurrence(acteur, teamId, evId, cle) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'planning.view');
     if (!peut(ctx, 'attendance.view_all')) exiger(ctx, 'attendance.rsvp_own');
     const ev = await evenementDeTeam(teamId, evId);
     const o = await occurrenceDe(ev, cle);
-    const lignes = await base.tous('SELECT * FROM presences WHERE evenement_id = ? AND occurrence = ?', [evId, o.cle]);
+    const brutes = await base.tous('SELECT * FROM presences WHERE evenement_id = ? AND occurrence = ?', [evId, o.cle]);
     const membres = await membresActifs(teamId);
-    let liste = roster(membres, ev, o);
-    if (!peut(ctx, 'attendance.view_all')) liste = liste.filter(m => m.compte === acteur.compte);
+    const liste = roster(membres, ev, o);
+    const ids = new Set(liste.map(m => m.compte));
+    const ajoutes = brutes.filter(l => Number(l.hors_convocation) === 1 && !ids.has(l.compte_id));
+    const pseudos = await pseudosDe(base, ajoutes.map(l => l.compte_id));
+    let lignes = [
+      ...liste.map(m => lignePublique(brutes.find(x => x.compte_id === m.compte), m.compte, m.pseudo, false)),
+      ...ajoutes.map(l => lignePublique(l, l.compte_id, pseudos[l.compte_id] ?? null, true)),
+    ];
+    if (!peut(ctx, 'attendance.view_all')) lignes = lignes.filter(l => l.compte === acteur.compte);
+    const marquer = peut(ctx, 'attendance.mark');
+    const t = maintenant();
     return {
       occurrence: occurrencePublique(ev, o, ctx.team.fuseau, {}, membres),
-      lignes: liste.map(m => {
-        const l = lignes.find(x => x.compte_id === m.compte);
-        return { compte: m.compte, pseudo: m.pseudo, rsvp: l?.rsvp ?? 'sans_reponse', reel: l?.reel ?? 'inconnu', note: l?.note ?? '', marqueLe: l?.marque_le ?? null };
-      }),
+      lignes,
+      compteurs: compteursSeance(lignes),
+      // Non-convoqués qui peuvent être ajoutés (« venu sans être convoqué ») : membres actifs.
+      ajoutables: marquer ? membres.filter(m => !ids.has(m.compte) && !ajoutes.some(a => a.compte_id === m.compte)).map(m => ({ compte: m.compte, pseudo: m.pseudo })) : [],
+      commence: o.debut <= t,
+      termine: o.fin <= t,
       droits: droits(ctx),
     };
   }
 
+  /**
+   * Marquage (staff), un appui = une requête. Corps :
+   *  - `marques: [{ compte, reel, retardMinutes?, motif?, note?, horsConvocation? }]` ;
+   *  - `toutPresent: true` : tous les convoqués PAS ENCORE marqués passent
+   *    « présent » (les exceptions déjà saisies restent), puis on ajuste.
+   * Un non-convoqué n'est accepté qu'avec `horsConvocation: true` (venu quand
+   * même) ; le remettre « non marqué » le retire de la feuille. Les minutes ne
+   * valent qu'avec « en retard », le motif qu'avec « absent » ou « excusé ».
+   */
   async function marquer(acteur, teamId, evId, cle, corps) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'planning.view');
     exiger(ctx, 'attendance.mark');
     const ev = await evenementDeTeam(teamId, evId);
     const o = await occurrenceDe(ev, cle);
-    const marques = corps?.marques;
-    if (!Array.isArray(marques) || marques.length === 0 || marques.length > 60) throw echec(400, 'marques', 'Liste de présences illisible.');
-    const membres = new Set((await base.tous('SELECT compte_id FROM membres WHERE team_id = ?', [teamId])).map(l => l.compte_id));
+    const toutPresent = corps?.toutPresent === true;
+    const marques = corps?.marques ?? [];
+    if (!Array.isArray(marques) || marques.length > 60 || (marques.length === 0 && !toutPresent)) throw echec(400, 'marques', 'Liste de présences illisible.');
+    const tousMembres = new Set((await base.tous('SELECT compte_id FROM membres WHERE team_id = ?', [teamId])).map(l => l.compte_id));
+    const actifs = await membresActifs(teamId);
+    const actifsIds = new Set(actifs.map(m => m.compte));
     // Seuls les convoqués de CETTE occurrence se marquent (un Propriétaire non coché n'est pas attendu).
-    const convoquesOcc = new Set(roster(await membresActifs(teamId), ev, o).map(m => m.compte));
+    const convoquesOcc = roster(actifs, ev, o).map(m => m.compte);
+    const estConv = new Set(convoquesOcc);
+    const existantes = new Map((await base.tous('SELECT * FROM presences WHERE evenement_id = ? AND occurrence = ?', [evId, o.cle])).map(l => [l.compte_id, l]));
     const t = maintenant();
     const lot = [];
-    for (const m of marques) {
-      if (typeof m?.compte !== 'string' || !membres.has(m.compte)) throw echec(400, 'compte', 'Un des joueurs ne fait pas partie de la team.');
-      if (!convoquesOcc.has(m.compte)) throw echec(400, 'non-convoque', 'Ce membre n’est pas convoqué à cet événement : ajoutez-le aux convoqués d’abord.');
-      if (!REELS.includes(m.reel)) throw echec(400, 'reel', 'Présence : présent, absent, excusé, en retard ou inconnu.');
-      const note = m.note !== undefined ? texteNettoye(m.note, 200) : null;
+    const resume = [];
+    const ecrire = (compte, reel, retard, motif, note, hors) =>
       lot.push({
-        sql: `INSERT INTO presences (evenement_id, occurrence, compte_id, team_id, reel, note, marque_par, marque_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT (evenement_id, occurrence, compte_id) DO UPDATE SET reel = excluded.reel, note = COALESCE(?, presences.note), marque_par = excluded.marque_par, marque_le = excluded.marque_le, maj_le = excluded.maj_le`,
-        params: [evId, o.cle, m.compte, teamId, m.reel, note ?? '', acteur.compte, iso(t), iso(t), note],
+        sql: `INSERT INTO presences (evenement_id, occurrence, compte_id, team_id, reel, retard_minutes, motif, note, hors_convocation, marque_par, marque_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT (evenement_id, occurrence, compte_id) DO UPDATE SET reel = excluded.reel, retard_minutes = excluded.retard_minutes, motif = excluded.motif, note = COALESCE(?, presences.note), hors_convocation = excluded.hors_convocation, marque_par = excluded.marque_par, marque_le = excluded.marque_le, maj_le = excluded.maj_le`,
+        params: [evId, o.cle, compte, teamId, reel, retard, motif, note ?? '', hors ? 1 : 0, acteur.compte, iso(t), iso(t), note],
       });
+    const vus = new Set();
+    const absence = r => r === 'absent' || r === 'excuse';
+    for (const m of marques) {
+      if (typeof m?.compte !== 'string' || !tousMembres.has(m.compte)) throw echec(400, 'compte', 'Un des joueurs ne fait pas partie de la team.');
+      if (!REELS.includes(m.reel)) throw echec(400, 'reel', 'Présence : présent, absent, excusé, en retard ou inconnu.');
+      const avant = existantes.get(m.compte);
+      const convoque = estConv.has(m.compte);
+      const hors = !convoque && (m.horsConvocation === true || Number(avant?.hors_convocation) === 1);
+      if (!convoque && !hors) throw echec(400, 'non-convoque', 'Ce membre n’est pas convoqué à cet événement : ajoutez-le comme « venu sans être convoqué ».');
+      if (hors && !avant && !actifsIds.has(m.compte)) throw echec(400, 'compte', 'Seul un membre actif de la team peut être ajouté.');
+      vus.add(m.compte);
+      // Un non-convoqué remis à « non marqué » est retiré de la feuille d'appel.
+      if (hors && m.reel === 'inconnu') {
+        if (avant) lot.push({ sql: 'DELETE FROM presences WHERE evenement_id = ? AND occurrence = ? AND compte_id = ?', params: [evId, o.cle, m.compte] });
+        resume.push({ compte: m.compte, reel: 'inconnu' });
+        continue;
+      }
+      let retard = m.reel === 'retard' && avant?.reel === 'retard' && avant.retard_minutes !== null && avant.retard_minutes !== undefined ? Number(avant.retard_minutes) : null;
+      if (m.retardMinutes !== undefined) {
+        const n = lireMinutes(m.retardMinutes);
+        if (n === undefined) throw echec(400, 'retard', 'Retard : de 1 à 600 minutes.');
+        retard = m.reel === 'retard' ? n : null;
+      }
+      let motif = absence(m.reel) && absence(avant?.reel) ? (avant.motif ?? '') : '';
+      if (m.motif !== undefined) motif = absence(m.reel) ? texteNettoye(m.motif, 200) : '';
+      const note = m.note !== undefined ? texteNettoye(m.note, 200) : null;
+      ecrire(m.compte, m.reel, retard, motif, note, hors);
+      resume.push({ compte: m.compte, reel: m.reel });
     }
-    lot.push(
-      evenement('attendance.marked', {
-        teamId,
-        acteur: acteur.compte,
-        entiteType: 'evenement',
-        entiteId: evId,
-        charge: { titre: o.titre, occurrence: o.cle, marques: marques.map(m => ({ compte: m.compte, reel: m.reel })) },
-        maintenant: t,
-      }),
-    );
-    await base.lot(lot);
+    if (toutPresent) {
+      for (const c of convoquesOcc) {
+        const avant = existantes.get(c);
+        if (vus.has(c) || (avant && avant.reel !== 'inconnu')) continue;
+        ecrire(c, 'present', null, '', null, false);
+        resume.push({ compte: c, reel: 'present' });
+      }
+    }
+    if (lot.length > 0) {
+      lot.push(
+        evenement('attendance.marked', {
+          teamId,
+          acteur: acteur.compte,
+          entiteType: 'evenement',
+          entiteId: evId,
+          // Journal : qui et quoi, jamais le motif (donnée personnelle).
+          charge: { titre: o.titre, occurrence: o.cle, marques: resume, ...(toutPresent ? { toutPresent: true } : {}) },
+          maintenant: t,
+        }),
+      );
+      await base.lot(lot);
+    }
     return presenceOccurrence(acteur, teamId, evId, o.cle);
   }
 
   /**
    * Lignes de présence de la team sur une plage (clé d'occurrence dans
    * [du, au[), avec le type et le titre de l'événement : celles des
-   * CONVOQUÉS seulement. Un convoqué sans ligne à une séance déjà commencée
-   * reçoit une ligne « sans réponse, non marqué » (il était attendu). Un
-   * non-convoqué (Propriétaire non coché qui a répondu…) n'est pas compté.
-   * Un ancien membre (parti de la team) garde ses présences marquées.
+   * CONVOQUÉS. Un convoqué sans ligne à une séance déjà commencée reçoit une
+   * ligne « sans réponse, non marqué » (il était attendu). Un non-convoqué
+   * ajouté par le staff (`hors_convocation`) est rendu avec `hors: true`
+   * (compté à part, jamais dans les taux) ; tout autre non-convoqué est
+   * ignoré. Un ancien membre (parti de la team) garde ses présences marquées.
    */
   async function lignesPresence(teamId, du, au, { types, compte } = {}) {
     const conditions = ['p.team_id = ?', 'p.occurrence >= ?', 'p.occurrence < ?'];
@@ -750,14 +886,17 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
       params,
     );
     const membres = new Map((await membresActifs(teamId, { tous: true })).map(m => [m.compte, m]));
-    const garde = brutes.filter(l => {
-      if (types?.length && !types.includes(l.type)) return false;
+    const garde = [];
+    for (const l of brutes) {
+      if (types?.length && !types.includes(l.type)) continue;
       const m = membres.get(l.compte_id);
-      if (!m) return l.reel !== 'inconnu';
       const fin = l.x_fin ? Date.parse(l.x_fin) : Date.parse(l.occurrence) + (Date.parse(l.ev_fin) - Date.parse(l.ev_debut));
       const conv = (l.x_convocation && normaliserConvocation(l.x_convocation)) || convocationDe({ convocation: l.ev_convocation, concernes: l.ev_concernes });
-      return estConvoque(conv, m, fin);
-    });
+      if (m && estConvoque(conv, m, fin)) garde.push({ ...l, hors: false });
+      else if (Number(l.hors_convocation) === 1) {
+        if (l.reel !== 'inconnu') garde.push({ ...l, hors: true });
+      } else if (!m && l.reel !== 'inconnu') garde.push({ ...l, hors: false });
+    }
     // Convoqués attendus sans ligne (séances commencées) : comptés « sans réponse, non marqué ».
     const presentes = new Set(garde.map(l => `${l.evenement_id}|${l.occurrence}|${l.compte_id}`));
     const actifs = [...membres.values()].filter(m => m.statut === 'actif' && (!compte || m.compte === compte));
@@ -768,7 +907,7 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
       if (types?.length && !types.includes(ev.type)) continue;
       for (const m of roster(actifs, ev, o)) {
         if (presentes.has(`${ev.id}|${o.cle}|${m.compte}`)) continue;
-        garde.push({ evenement_id: ev.id, occurrence: o.cle, compte_id: m.compte, team_id: teamId, rsvp: 'sans_reponse', reel: 'inconnu', note: '', type: ev.type, titre: o.titre ?? ev.titre, pseudo: m.pseudo, pseudo_cle: m.pseudo.toLocaleLowerCase('fr') });
+        garde.push({ evenement_id: ev.id, occurrence: o.cle, compte_id: m.compte, team_id: teamId, rsvp: 'sans_reponse', reel: 'inconnu', note: '', motif: '', motif_prevu: '', retard_minutes: null, retard_prevu: null, hors: false, type: ev.type, titre: o.titre ?? ev.titre, pseudo: m.pseudo, pseudo_cle: m.pseudo.toLocaleLowerCase('fr') });
       }
     }
     return garde
@@ -776,12 +915,35 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
       .sort((a, b) => a.occurrence.localeCompare(b.occurrence) || String(a.pseudo_cle ?? '').localeCompare(String(b.pseudo_cle ?? '')));
   }
 
-  function lirePeriode(params, fuseau) {
+  /** Ligne brute → ligne des statistiques pures. */
+  const pourStats = l => ({
+    compte: l.compte_id,
+    type: l.type,
+    debut: Date.parse(l.occurrence),
+    rsvp: l.rsvp,
+    reel: l.reel,
+    retardMinutes: l.retard_minutes === null || l.retard_minutes === undefined ? null : Number(l.retard_minutes),
+    hors: Boolean(l.hors),
+  });
+
+  /**
+   * Période des statistiques : `debut` et `fin` (AAAA-MM-JJ, fin exclue), ou
+   * `periode` = 7 | 30 | 90 (derniers jours, aujourd'hui compris) | saison
+   * (depuis le début de saison de la team, `debutSaison` MM-JJ). Défaut : 90 jours.
+   */
+  function lirePeriode(params, fuseau, debutSaison = REGLAGES_DEFAUT.debutSaison) {
     const p = { ...params };
+    const auj = dateLocale(fuseau, maintenant());
     if (!p.debut && !p.fin) {
-      const auj = dateLocale(fuseau, maintenant());
-      p.debut = texteDate(ajouterJours(auj, -90));
       p.fin = texteDate(ajouterJours(auj, 1));
+      if (p.periode === 'saison') {
+        const [mm, jj] = debutSaison.split('-').map(Number);
+        const annee = auj.mois * 100 + auj.jour >= mm * 100 + jj ? auj.annee : auj.annee - 1;
+        p.debut = texteDate({ annee, mois: mm, jour: jj });
+      } else {
+        const jours = ['7', '30', '90'].includes(String(p.periode ?? '')) ? Number(p.periode) : 90;
+        p.debut = texteDate(ajouterJours(auj, 1 - jours));
+      }
     }
     const d = lireDate(p.debut);
     const f = lireDate(p.fin);
@@ -789,40 +951,154 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     return { du: instantMural(fuseau, d, 0), au: instantMural(fuseau, f, 0), debut: texteDate(d), fin: texteDate(f) };
   }
 
+  const lireTypes = params => (params.types ? String(params.types).split(',').filter(t => TYPES_EVENEMENT.includes(t)) : []);
+
+  /**
+   * Statistiques : par joueur (taux, ponctualité, retard moyen, séries
+   * d'absences, tendance), par type, par mois ou semaine. Le staff
+   * (`attendance.view_all`) voit la team, un joueur ses propres chiffres.
+   */
   async function stats(acteur, teamId, params = {}) {
     const ctx = await contexteTeam(acteur, teamId);
     const tout = peut(ctx, 'attendance.view_all');
     if (!tout) exiger(ctx, 'attendance.rsvp_own');
     const fuseau = fuseauValide(params.fuseau) ? params.fuseau : ctx.team.fuseau;
-    const { du, au, debut, fin } = lirePeriode(params, fuseau);
-    const types = params.types ? String(params.types).split(',').filter(t => TYPES_EVENEMENT.includes(t)) : [];
+    const { debutSaison } = await reglages(teamId);
+    const { du, au, debut, fin } = lirePeriode(params, fuseau, debutSaison);
+    const types = lireTypes(params);
     const lignes = await lignesPresence(teamId, du, au, { types, compte: tout ? null : acteur.compte });
-    const s = statistiques(
-      lignes.map(l => ({ compte: l.compte_id, type: l.type, debut: Date.parse(l.occurrence), rsvp: l.rsvp, reel: l.reel })),
-      { fuseau, granularite: params.granularite === 'semaine' ? 'semaine' : 'mois' },
-    );
+    // Tendance : on compare les deux moitiés de la période ÉCOULÉE (le futur n'a rien de marqué).
+    const milieu = du + (Math.min(au, maintenant()) - du) / 2;
+    const s = statistiques(lignes.map(pourStats), { fuseau, granularite: params.granularite === 'semaine' ? 'semaine' : 'mois', milieu });
     const noms = {};
     for (const l of lignes) noms[l.compte_id] = l.pseudo ?? null;
     s.joueurs.sort((a, b) => (noms[a.compte] ?? '').localeCompare(noms[b.compte] ?? '', 'fr'));
-    return { debut, fin, fuseau, tout, noms, ...s };
+    return { debut, fin, fuseau, debutSaison, tout, noms, ...s };
+  }
+
+  /**
+   * « À marquer » (staff) : les séances COMMENCÉES (en cours comprises) des
+   * 30 derniers jours dont la présence n'est pas complète (un convoqué au moins
+   * non marqué), la plus récente d'abord, avec le nombre restant.
+   */
+  async function aMarquer(acteur, teamId, params = {}) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exiger(ctx, 'planning.view');
+    exiger(ctx, 'attendance.mark');
+    const fuseau = fuseauValide(params.fuseau) ? params.fuseau : ctx.team.fuseau;
+    const t = maintenant();
+    const occs = (await occurrencesTeam(teamId, t - A_MARQUER_JOURS * JOUR_MS, t + 1)).filter(({ o }) => o.debut <= t);
+    const membres = await membresActifs(teamId);
+    const lignes = await base.tous('SELECT evenement_id, occurrence, compte_id, reel FROM presences WHERE team_id = ? AND occurrence >= ?', [teamId, iso(t - A_MARQUER_JOURS * JOUR_MS - MARGE_MS)]);
+    const seances = [];
+    for (const { ev, o } of occs) {
+      const liste = roster(membres, ev, o);
+      if (liste.length === 0) continue;
+      const marques = liste.filter(m => lignes.some(l => l.evenement_id === ev.id && l.occurrence === o.cle && l.compte_id === m.compte && l.reel !== 'inconnu')).length;
+      if (marques >= liste.length) continue;
+      seances.push(occurrencePublique(ev, o, fuseau, { convoquesTotal: liste.length, marques, restants: liste.length - marques, enCours: o.fin > t }));
+    }
+    seances.sort((a, b) => b.debut.localeCompare(a.debut));
+    return { total: seances.length, jours: A_MARQUER_JOURS, seances };
+  }
+
+  /** Historique (staff) : une ligne par séance commencée de la période, avec ses compteurs et son taux. */
+  async function historique(acteur, teamId, params = {}) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exiger(ctx, 'planning.view');
+    exiger(ctx, 'attendance.view_all');
+    const fuseau = fuseauValide(params.fuseau) ? params.fuseau : ctx.team.fuseau;
+    const { debutSaison } = await reglages(teamId);
+    const { du, au, debut, fin } = lirePeriode(params, fuseau, debutSaison);
+    const lignes = await lignesPresence(teamId, du, au, { types: lireTypes(params) });
+    const parSeance = new Map();
+    for (const l of lignes) {
+      const cle = `${l.evenement_id}|${l.occurrence}`;
+      if (!parSeance.has(cle)) parSeance.set(cle, []);
+      parSeance.get(cle).push(l);
+    }
+    const seances = [...parSeance.values()].map(ls => {
+      const l = ls[0];
+      const d = local(fuseau, Date.parse(l.occurrence));
+      return { evenementId: l.evenement_id, cle: l.occurrence, titre: l.titre, type: l.type, jour: d.jour, heureDebut: d.heure, ...compter(ls.map(pourStats)) };
+    });
+    seances.sort((a, b) => b.cle.localeCompare(a.cle));
+    return { debut, fin, fuseau, seances };
+  }
+
+  /**
+   * Fiche de présence d'un joueur : compteurs, séries, historique séance par
+   * séance (réponse, annonce, présence, retard, motif) et motifs. Le staff
+   * (`attendance.view_all`) pour tout membre ; un joueur pour lui-même (`moi`).
+   */
+  async function fichePresence(acteur, teamId, compte, params = {}) {
+    const ctx = await contexteTeam(acteur, teamId);
+    const cible = compte === 'moi' ? acteur.compte : compte;
+    if (typeof cible !== 'string' || !MOTIF_COMPTE.test(cible)) throw echec(404, 'membre-introuvable', 'Membre introuvable.');
+    if (cible !== acteur.compte || !peut(ctx, 'attendance.rsvp_own')) exiger(ctx, 'attendance.view_all');
+    const fuseau = fuseauValide(params.fuseau) ? params.fuseau : ctx.team.fuseau;
+    const { debutSaison } = await reglages(teamId);
+    const { du, au, debut, fin } = lirePeriode(params, fuseau, debutSaison);
+    const lignes = await lignesPresence(teamId, du, au, { types: lireTypes(params), compte: cible });
+    const pseudo = (await pseudosDe(base, [cible]))[cible] ?? null;
+    const t = maintenant();
+    const passees = lignes.filter(l => Date.parse(l.occurrence) <= t);
+    const motifs = new Map();
+    for (const l of passees) {
+      const m = (l.motif || l.motif_prevu || '').trim();
+      if (m && (l.reel === 'absent' || l.reel === 'excuse')) motifs.set(m, (motifs.get(m) ?? 0) + 1);
+    }
+    return {
+      compte: cible,
+      pseudo,
+      debut,
+      fin,
+      fuseau,
+      ...compter(passees.map(pourStats)),
+      ...seriesAbsences(passees.map(pourStats)),
+      historique: passees
+        .slice()
+        .reverse()
+        .map(l => {
+          const d = local(fuseau, Date.parse(l.occurrence));
+          const lp = lignePublique(l, cible, pseudo, Boolean(l.hors));
+          return { evenementId: l.evenement_id, cle: l.occurrence, titre: l.titre, type: l.type, jour: d.jour, heureDebut: d.heure, ...lp };
+        }),
+      motifs: [...motifs].map(([motif, n]) => ({ motif, n })).sort((a, b) => b.n - a.n),
+    };
   }
 
   async function exportCsv(acteur, teamId, params = {}) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'attendance.view_all');
     const fuseau = fuseauValide(params.fuseau) ? params.fuseau : ctx.team.fuseau;
-    const { du, au, debut, fin } = lirePeriode(params, fuseau);
-    const types = params.types ? String(params.types).split(',').filter(t => TYPES_EVENEMENT.includes(t)) : [];
-    const lignes = await lignesPresence(teamId, du, au, { types });
+    const { debutSaison } = await reglages(teamId);
+    const { du, au, debut, fin } = lirePeriode(params, fuseau, debutSaison);
+    const lignes = await lignesPresence(teamId, du, au, { types: lireTypes(params) });
     const L = lireLangue(acteur.langue) ?? LANGUE_DEFAUT;
     const R = cle => (['oui', 'non', 'peut_etre', 'sans_reponse'].includes(cle) ? T(L, `csv.rsvp.${cle}`) : cle);
     const P = cle => (['present', 'absent', 'excuse', 'retard', 'inconnu'].includes(cle) ? T(L, `csv.reel.${cle}`) : cle);
     const typeLibelle = cle => (TYPES_EVENEMENT.includes(cle) ? T(L, cle === 'other' ? 'type.choix_autre' : `type.${cle}`) : cle);
+    const num = v => (v === null || v === undefined ? '' : String(Number(v)));
     const contenu = csv(
       listeTextes(L, 'csv.presence.entetes'),
       lignes.map(l => {
         const d = local(fuseau, Date.parse(l.occurrence));
-        return [d.jour, d.heure, l.titre, typeLibelle(l.type), l.pseudo ?? l.compte_id, R(l.rsvp), P(l.reel), l.note];
+        return [
+          d.jour,
+          d.heure,
+          l.titre,
+          typeLibelle(l.type),
+          l.pseudo ?? l.compte_id,
+          T(L, l.hors ? 'csv.convoque.non' : 'csv.convoque.oui'),
+          R(l.rsvp),
+          num(l.retard_prevu),
+          l.motif_prevu ?? '',
+          P(l.reel),
+          num(l.retard_minutes),
+          l.motif ?? '',
+          l.note ?? '',
+        ];
       }),
     );
     return { nom: `presence-${ctx.team.slug}-${debut}-${fin}.csv`, type: 'text/csv; charset=utf-8', contenu };
@@ -1047,6 +1323,9 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     presenceOccurrence,
     marquer,
     stats,
+    aMarquer,
+    historique,
+    fichePresence,
     exportCsv,
     exportIcs,
     jetonsIcal,

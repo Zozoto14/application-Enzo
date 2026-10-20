@@ -38,6 +38,7 @@ import { servicesScouting } from './scouting/service.mjs';
 import { servicesPlaybook } from './strats/playbook.mjs';
 import { routePubliqueStrats, routesStrats } from './strats/routes.mjs';
 import { servicesStrats } from './strats/service.mjs';
+import { routesSuivi, servicesSuivi } from './suivi/service.mjs';
 
 export const VERSION_ESPORT = 4;
 const TAILLE_MAX_CORPS = 64 * 1024;
@@ -113,6 +114,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
   const pb = servicesPlaybook({ base, maintenant, socle: s, strats: st });
   const jr = servicesJournal({ base, maintenant, socle: s });
   const stt = servicesStats({ base, maintenant, socle: s });
+  // Suivi des joueurs (notes du staff) : le résumé de la fiche reprend la présence du planning.
+  const sj = servicesSuivi({ base, maintenant, socle: s, planning: p });
   const limite = (genre, qui) => limiter(base, genre, qui, maintenant());
   // Premier niveau (toutes teams) : invitation directe, annuaire des membres, dashboard.
   const dm = servicesDemandes({ base, maintenant, noyau: s });
@@ -277,6 +280,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     if (discord !== undefined) return discord;
     const reviewScouting = await routesReview({ review: rv, scouting: sc, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete) });
     if (reviewScouting !== undefined) return reviewScouting;
+    const suiviJoueurs = await routesSuivi({ suivi: sj, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete) });
+    if (suiviJoueurs !== undefined) return suiviJoueurs;
     const stratsPlaybook = await routesStrats({ strats: st, playbook: pb, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max) });
     if (stratsPlaybook !== undefined) return stratsPlaybook;
     const t = /^\/teams\/([^/]+)(?:\/([a-z]+)(?:\/([^/]+))?(?:\/.*)?)?$/.exec(chemin);

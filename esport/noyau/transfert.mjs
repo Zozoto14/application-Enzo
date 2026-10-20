@@ -65,6 +65,8 @@ export const TABLES = [
   ['discord_bot_pings', 'team_id, type_evenement'],
   ['discord_annonces', 'evenement_id, occurrence'],
   ['discord_debuts', 'evenement_id, occurrence'],
+  // Suivi des joueurs (migration 0013) : notes du staff.
+  ['notes_joueurs', 'id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

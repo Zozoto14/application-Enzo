@@ -255,7 +255,20 @@ test('présence : RSVP du joueur, marquage par le staff, statistiques par joueur
   }
   const m = await api(`/teams/${A.teamId}/planning/${id}/occurrences/${occ(MARDI)}/presence`, s.coach123, { methode: 'PUT', corps: { marques } });
   assert.equal(m.statut, 200);
-  assert.deepEqual(m.corps.lignes.find(l => l.pseudo === 'Kai'), { compte: 'kai12345', pseudo: 'Kai', rsvp: 'non', reel: 'excuse', note: 'Examen', marqueLe: m.corps.lignes.find(l => l.pseudo === 'Kai').marqueLe });
+  assert.deepEqual(m.corps.lignes.find(l => l.pseudo === 'Kai'), {
+    compte: 'kai12345',
+    pseudo: 'Kai',
+    horsConvocation: false,
+    rsvp: 'non',
+    retardPrevu: null,
+    motifPrevu: '',
+    reel: 'excuse',
+    retardMinutes: null,
+    motif: '',
+    note: 'Examen',
+    marqueLe: m.corps.lignes.find(l => l.pseudo === 'Kai').marqueLe,
+  });
+  assert.deepEqual(m.corps.compteurs, { convoques: 4, oui: 1, peutEtre: 1, non: 1, sansReponse: 1, marques: 4, nonMarques: 0, present: 1, retard: 1, absent: 1, excuse: 1, enPlus: 0 });
   await api(`/teams/${A.teamId}/planning/${scrim}/occurrences/${occ(SCRIM)}/presence`, s.coach123, {
     methode: 'PUT',
     corps: { marques: [{ compte: 'lea12345', reel: 'absent' }, { compte: 'kai12345', reel: 'present' }] },
@@ -273,12 +286,13 @@ test('présence : RSVP du joueur, marquage par le staff, statistiques par joueur
   const par = Object.fromEntries(st.corps.joueurs.map(j => [st.corps.noms[j.compte], j]));
   assert.equal(par['Léa'].evenements, 3);
   assert.equal(par['Léa'].taux, 2 / 3);
-  assert.equal(par.Kai.taux, 1, 'excusé hors du taux');
+  assert.equal(par.Kai.taux, 1 / 2, 'excusé : marqué, compte comme une absence (justifiée) ; présent au scrim');
+  assert.equal(par.Kai.excuse, 1);
   assert.equal(par.Tom.taux, 1);
   assert.equal(par.Tom.ponctualite, 0);
   assert.equal(par.Ana.taux, 0);
   assert.equal(st.corps.parType.find(t => t.type === 'scrim').taux, 1 / 2);
-  assert.equal(st.corps.parType.find(t => t.type === 'training').taux, 3 / 4); // mardi : 2 sur 3 (Kai excusé), jeudi : Léa
+  assert.equal(st.corps.parType.find(t => t.type === 'training').taux, 3 / 5); // mardi : 2 sur 4 (Kai excusé, Ana absente), jeudi : Léa
   assert.deepEqual(st.corps.parPeriode.map(p => p.periode), ['2026-10']);
   // Par type d'événement (filtre) et par semaine.
   const scrims = await api(`/teams/${A.teamId}/presence/stats?debut=2026-10-01&fin=2026-11-01&types=scrim&granularite=semaine`, s.coach123);
@@ -296,8 +310,8 @@ test('présence : RSVP du joueur, marquage par le staff, statistiques par joueur
   assert.match(c.entetes.get('Content-Type'), /^text\/csv/);
   assert.match(c.entetes.get('Content-Disposition'), /attachment; filename="presence-team-alpha-2026-10-01-2026-11-01\.csv"/);
   const lignes = c.corps.replace(/^﻿/, '').trim().split('\r\n');
-  assert.equal(lignes[0], '"Date","Heure","Événement","Type","Joueur","Réponse","Présence","Note"');
-  assert.ok(lignes.includes('"2026-10-20","20:00","Entraînement","Entraînement","Kai","Non","Excusé","Examen"'));
+  assert.equal(lignes[0], '"Date","Heure","Événement","Type","Joueur","Convoqué","Réponse","Retard annoncé (min)","Motif annoncé","Présence","Retard (min)","Motif","Note"');
+  assert.ok(lignes.includes('"2026-10-20","20:00","Entraînement","Entraînement","Kai","Oui","Non","","","Excusé","","","Examen"'));
   assert.equal(lignes.length, 1 + 4 + 2 + 1);
   const json = await api(`/teams/${A.teamId}/presence/export.csv?debut=2026-10-01&fin=2026-11-01&format=json`, s.coach123);
   assert.equal(json.corps.nom, 'presence-team-alpha-2026-10-01-2026-11-01.csv');

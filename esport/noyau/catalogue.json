@@ -11,7 +11,8 @@
     { "cle": "video_review", "nom": "Review vidéo", "phase": 5, "description": "Review YouTube avec repères horodatés." },
     { "cle": "scouting", "nom": "Scouting", "phase": 5, "description": "Fiches adversaires, joueurs, tendances, VODs." },
     { "cle": "strat_editor", "nom": "Strats", "phase": 6, "description": "Éditeur de stratégies sur la carte." },
-    { "cle": "playbook", "nom": "Playbook", "phase": 6, "description": "Bibliothèque de strats par carte, side et type." }
+    { "cle": "playbook", "nom": "Playbook", "phase": 6, "description": "Bibliothèque de strats par carte, side et type." },
+    { "cle": "player_notes", "nom": "Suivi joueurs", "phase": 7, "description": "Notes du staff sur chaque joueur, partage note par note." }
   ],
   "groupes": [
     {
@@ -140,6 +141,16 @@
       ]
     },
     {
+      "cle": "player_notes",
+      "nom": "Suivi joueurs",
+      "module": "player_notes",
+      "permissions": [
+        { "cle": "player_notes.view", "action": "voir", "libelle": "Voir les fiches des joueurs" },
+        { "cle": "player_notes.write", "action": "creer", "libelle": "Écrire des notes" },
+        { "cle": "player_notes.delete", "action": "supprimer", "libelle": "Supprimer des notes" }
+      ]
+    },
+    {
       "cle": "activity_log",
       "nom": "Journal",
       "module": "activity_log",
@@ -163,6 +174,7 @@
         "goals_tasks.view",
         "discord.manage",
         "video_review.view", "video_review.react", "scouting.view", "strats.view", "playbook.view",
+        "player_notes.view", "player_notes.write", "player_notes.delete",
         "activity_log.view"
       ]
     },
@@ -181,7 +193,8 @@
         "video_review.view", "video_review.create", "video_review.annotate", "video_review.delete", "video_review.react",
         "scouting.view", "scouting.manage",
         "strats.view", "strats.create", "strats.update", "strats.delete", "strats.share",
-        "playbook.view", "playbook.manage"
+        "playbook.view", "playbook.manage",
+        "player_notes.view", "player_notes.write", "player_notes.delete"
       ]
     },
     {
@@ -198,7 +211,8 @@
         "video_review.view", "video_review.create", "video_review.annotate", "video_review.react",
         "scouting.view", "scouting.manage",
         "strats.view", "strats.create", "strats.update", "strats.share",
-        "playbook.view", "playbook.manage"
+        "playbook.view", "playbook.manage",
+        "player_notes.view", "player_notes.write"
       ]
     },
     {
@@ -229,7 +243,7 @@
       "cle": "valorant_complet",
       "nom": "Team Valorant complète",
       "description": "Tous les modules.",
-      "modules": ["activity_log", "planning", "availability", "attendance", "meeting_summaries", "goals_tasks", "discord", "video_review", "scouting", "strat_editor", "playbook"]
+      "modules": ["activity_log", "planning", "availability", "attendance", "meeting_summaries", "goals_tasks", "discord", "video_review", "scouting", "strat_editor", "playbook", "player_notes"]
     },
     { "cle": "minimal", "nom": "Minimal", "description": "Journal, planning et disponibilités.", "modules": ["activity_log", "planning", "availability"] },
     { "cle": "personnalise", "nom": "Personnalisé", "description": "Vous choisissez chaque module.", "modules": null }

@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { heatmap, libresDe, plagesPropices, soustraire, union } from '../noyau/planning/dispos.mjs';
 import { calendrierIcs, echapper, plier } from '../noyau/planning/ical.mjs';
-import { champCsv, csv, periodeDe, statistiques } from '../noyau/planning/presence.mjs';
+import { champCsv, csv, lireMinutes, periodeDe, seriesAbsences, statistiques } from '../noyau/planning/presence.mjs';
 import { estOccurrence, lireRecurrence, occurrences, occurrencesBrutes } from '../noyau/planning/recurrence.mjs';
 import { decalage, fuseauValide, instantMural, lireDate, lireHeure, partiesLocales, versUtc } from '../noyau/planning/temps.mjs';
 import { appliquerMigrations } from '../noyau/migrations.mjs';
@@ -200,35 +200,64 @@ test('heatmap : règle saisie à Paris vue depuis New York, et jours de changeme
 
 // ------------------------------------------------------------------ Présence
 
-test('statistiques de présence : par joueur, par type, par période ; excusés et non marqués hors du taux', () => {
+test('statistiques de présence : par joueur, par type, par période ; taux = (présents + retards) / marqués, non marqués hors du taux', () => {
   const t = s => Date.parse(s);
   const lignes = [
     { compte: 'lea', type: 'training', debut: t('2026-09-01T18:00:00Z'), rsvp: 'oui', reel: 'present' },
-    { compte: 'lea', type: 'training', debut: t('2026-09-08T18:00:00Z'), rsvp: 'oui', reel: 'retard' },
+    { compte: 'lea', type: 'training', debut: t('2026-09-08T18:00:00Z'), rsvp: 'oui', reel: 'retard', retardMinutes: 10 },
     { compte: 'lea', type: 'scrim', debut: t('2026-10-02T18:00:00Z'), rsvp: 'non', reel: 'excuse' },
     { compte: 'lea', type: 'match', debut: t('2026-10-05T18:00:00Z'), rsvp: 'sans_reponse', reel: 'absent' },
     { compte: 'kai', type: 'training', debut: t('2026-09-01T18:00:00Z'), rsvp: 'peut_etre', reel: 'absent' },
     { compte: 'kai', type: 'scrim', debut: t('2026-10-02T18:00:00Z'), rsvp: 'oui', reel: 'inconnu' },
+    // Tom n'était pas convoqué au scrim : venu en plus, jamais dans les taux.
+    { compte: 'tom', type: 'scrim', debut: t('2026-10-02T18:00:00Z'), rsvp: 'sans_reponse', reel: 'present', hors: true },
   ];
-  const s = statistiques(lignes, { fuseau: PARIS });
+  const s = statistiques(lignes, { fuseau: PARIS, milieu: t('2026-09-20T00:00:00Z') });
   const lea = s.joueurs.find(j => j.compte === 'lea');
   assert.equal(lea.evenements, 4);
   assert.equal(lea.marques, 4);
-  assert.equal(lea.taux, 2 / 3); // présent + retard sur (4 marqués − 1 excusé)
+  assert.equal(lea.taux, 2 / 4); // (présent + retard) / séances convoquées ET marquées (l'excusé compte, comme une absence justifiée)
   assert.equal(lea.ponctualite, 1 / 2);
+  assert.equal(lea.retardMoyen, 10);
   assert.equal(lea.tauxReponse, 3 / 4);
+  assert.equal(lea.serie, 2, 'deux absences de suite (excusé puis absent) à la fin');
+  assert.equal(lea.serieMax, 2);
+  assert.equal(lea.tendance, 0 - 1, 'septembre 100 %, octobre 0 %');
   const kai = s.joueurs.find(j => j.compte === 'kai');
   assert.equal(kai.marques, 1);
+  assert.equal(kai.nonMarques, 1);
   assert.equal(kai.taux, 0);
+  assert.equal(kai.tendance, null, 'rien de marqué en octobre : pas de tendance');
+  const tom = s.joueurs.find(j => j.compte === 'tom');
+  assert.equal(tom.evenements, 0);
+  assert.equal(tom.taux, null);
+  assert.equal(tom.enPlus, 1);
   const training = s.parType.find(x => x.type === 'training');
   assert.equal(training.taux, 2 / 3);
-  assert.equal(s.parType.find(x => x.type === 'scrim').taux, null, 'seulement un excusé et un non marqué');
+  assert.equal(s.parType.find(x => x.type === 'scrim').taux, 0, 'un excusé (marqué) et un non marqué ; le venu en plus ne compte pas');
+  assert.equal(s.parType.find(x => x.type === 'scrim').evenements, 2);
   assert.deepEqual(s.parPeriode.map(p => p.periode), ['2026-09', '2026-10']);
   assert.equal(s.parPeriode[0].taux, 2 / 3);
-  assert.equal(s.global.taux, 2 / 4);
+  assert.equal(s.global.taux, 2 / 5);
+  assert.equal(s.global.enPlus, 1);
   assert.equal(periodeDe(t('2026-10-20T18:00:00Z'), PARIS, 'semaine'), '2026-S43');
   assert.equal(periodeDe(t('2027-01-01T12:00:00Z'), PARIS, 'semaine'), '2026-S53');
   assert.deepEqual(statistiques([]).joueurs, []);
+  assert.equal(statistiques([]).global.taux, null);
+});
+
+test('séries d’absences et minutes de retard', () => {
+  const l = reel => ({ reel });
+  assert.deepEqual(seriesAbsences([l('absent'), l('absent'), l('present'), l('excuse'), l('inconnu'), l('absent')]), { serie: 2, serieMax: 2 });
+  assert.deepEqual(seriesAbsences([l('absent'), l('absent'), l('absent'), l('retard')]), { serie: 0, serieMax: 3 });
+  assert.deepEqual(seriesAbsences([{ reel: 'absent', hors: true }]), { serie: 0, serieMax: 0 });
+  assert.equal(lireMinutes(15), 15);
+  assert.equal(lireMinutes('5'), 5);
+  assert.equal(lireMinutes(null), null);
+  assert.equal(lireMinutes(0), null);
+  assert.equal(lireMinutes(601), undefined);
+  assert.equal(lireMinutes(2.5), undefined);
+  assert.equal(lireMinutes('abc'), undefined);
 });
 
 test('CSV : guillemets, BOM, CRLF, formules neutralisées', () => {

@@ -89,7 +89,7 @@ export function servicesTableau({ base, maintenant = () => Date.now(), noyau }) 
       choisis =>
         base.tous(
           `SELECT team_id, reel, COUNT(*) AS n FROM presences
-            WHERE team_id IN (${choisis.map(() => '?').join(', ')}) AND occurrence >= ? AND occurrence < ? AND reel <> 'inconnu'
+            WHERE team_id IN (${choisis.map(() => '?').join(', ')}) AND occurrence >= ? AND occurrence < ? AND reel <> 'inconnu' AND hors_convocation = 0
             GROUP BY team_id, reel`,
           [...choisis, iso(t - PRESENCE_JOURS * JOUR_MS), iso(t)],
         ),

@@ -258,7 +258,21 @@
   "Personne n’est convoqué": "Nobody is called up",
   "Tout le monde a déjà répondu": "Everyone has already responded",
   "Langue : fr ou en.": "Language: fr or en.",
-  "Clé de fichier invalide.": "Invalid file key."
+  "Clé de fichier invalide.": "Invalid file key.",
+  "Début de saison : MM-JJ (ex. 09-01).": "Season start: MM-DD (e.g. 09-01).",
+  "Retard annoncé : de 1 à 600 minutes.": "Announced delay: 1 to 600 minutes.",
+  "Ce membre n’est pas convoqué à cet événement : ajoutez-le comme « venu sans être convoqué ».": "This member is not called up for this event: add them as “came without being called up”.",
+  "Seul un membre actif de la team peut être ajouté.": "Only an active member of the team can be added.",
+  "Retard : de 1 à 600 minutes.": "Delay: 1 to 600 minutes.",
+  "Étiquettes : 10 au plus.": "Tags: 10 at most.",
+  "Fiche introuvable.": "Profile not found.",
+  "Les notes du staff sur vous ne vous sont pas accessibles (sauf celles partagées avec vous).": "Staff notes about you are not accessible to you (except those shared with you).",
+  "Lien inconnu (événement, review ou repère).": "Unknown link (event, review or marker).",
+  "La note est vide.": "The note is empty.",
+  "Catégorie inconnue.": "Unknown category.",
+  "Ton : positif, à travailler ou neutre.": "Tone: positive, to work on or neutral.",
+  "Note introuvable.": "Note not found.",
+  "Seul l’auteur (ou qui peut supprimer les notes) modifie cette note.": "Only the author (or someone who can delete notes) can edit this note."
  },
  "motifs": [
   [

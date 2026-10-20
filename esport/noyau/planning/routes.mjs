@@ -16,6 +16,9 @@
  *   GET|PUT            /teams/:t/planning/:e/occurrences/:o/presence
  *   GET                /teams/:t/presence/stats              (?debut&fin&types&granularite)
  *   GET                /teams/:t/presence/export.csv
+ *   GET                /teams/:t/presence/a-marquer         séances commencées à marquer (staff)
+ *   GET                /teams/:t/presence/historique        par séance (?debut&fin|periode&types)
+ *   GET                /teams/:t/presence/joueurs/:c        fiche d'un joueur (« moi » : la sienne)
  *   GET                /teams/:t/dispos/moi ; PUT …/moi/regles ; POST …/moi/exceptions ; DELETE …/moi/exceptions/:id
  *   GET                /teams/:t/dispos/carte                heatmap (?semaine&fuseau&pas)
  */
@@ -83,6 +86,9 @@ export async function routesPlanning({ p, acteur, chemin, methode, url, lireCorp
   if (section === 'presence') {
     if (n === 1 && a === 'stats' && methode === 'GET') return p.stats(acteur, teamId, q);
     if (n === 1 && a === 'export.csv' && methode === 'GET') return fichier(await p.exportCsv(acteur, teamId, q), url);
+    if (n === 1 && a === 'a-marquer' && methode === 'GET') return p.aMarquer(acteur, teamId, q);
+    if (n === 1 && a === 'historique' && methode === 'GET') return p.historique(acteur, teamId, q);
+    if (n === 2 && a === 'joueurs' && methode === 'GET') return p.fichePresence(acteur, teamId, b, q);
   }
   if (section === 'dispos') {
     if (n === 1 && a === 'moi' && methode === 'GET') return p.mesDispos(acteur, teamId, q);

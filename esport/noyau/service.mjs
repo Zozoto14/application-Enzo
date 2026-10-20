@@ -734,7 +734,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
    * dessins), commentaires et réactions 👍 / 👎 de review, strats et entrées de playbook créées, abonnements iCal (sans
    * leur jeton), invitations créées (sans leur code).
    */
-  async function donneesDuCompte(compte) {
+  async function donneesDuCompte(compte, { parFondateur = false } = {}) {
     const profil = await profilDe(compte);
     const q = sql => base.tous(`${sql} LIMIT ?`, [compte, 5000]);
     const nomsTeams = new Map((await base.tous('SELECT id, nom FROM teams', [])).map(t => [t.id, t.nom]));
@@ -770,13 +770,26 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
         const l = await base.premier('SELECT discord_user_id, discord_nom, lie_le FROM discord_comptes WHERE compte_id = ?', [compte]);
         return l ? { lie: true, discordUserId: l.discord_user_id, discordNom: l.discord_nom || null, lieLe: l.lie_le } : { lie: false };
       })(),
+      // Suivi des joueurs : les notes du staff PARTAGÉES avec lui (auteur selon son choix). Les notes privées du staff
+      // ne figurent que dans l'export demandé par le Fondateur (`notesStaffPrivees`) : voir docs/esport/suivi-joueurs.md.
+      notesPartagees: await (async () => {
+        const lignes = await q('SELECT team_id, categorie, ton, contenu, tags, date_note, auteur_id, auteur_masque FROM notes_joueurs WHERE joueur_id = ? AND partagee = 1 ORDER BY date_note');
+        const noms = await pseudosDe(base, lignes.filter(n => Number(n.auteur_masque) !== 1).map(n => n.auteur_id).filter(Boolean));
+        return lignes.map(n => ({ team: team(n.team_id), date: n.date_note, categorie: n.categorie, ton: n.ton, contenu: n.contenu, tags: jsonOu(n.tags, []), auteur: Number(n.auteur_masque) === 1 || !n.auteur_id ? null : (noms[n.auteur_id] ?? null) }));
+      })(),
+      ...(parFondateur
+        ? {
+            notesStaffPrivees: (await q('SELECT team_id, categorie, ton, contenu, tags, date_note, auteur_id FROM notes_joueurs WHERE joueur_id = ? AND partagee = 0 ORDER BY date_note')).map(n => ({ team: team(n.team_id), date: n.date_note, categorie: n.categorie, ton: n.ton, contenu: n.contenu, tags: jsonOu(n.tags, []), auteur: n.auteur_id ?? null })),
+          }
+        : {}),
+      notesRedigees: (await q('SELECT team_id, COUNT(*) AS n FROM notes_joueurs WHERE auteur_id = ? GROUP BY team_id')).map(n => ({ team: team(n.team_id), notes: Number(n.n) })),
       invitationsCreees: (await q('SELECT team_id, libelle, expire_le, utilisations, utilisations_max, cree_le FROM invitations WHERE cree_par = ? ORDER BY cree_le')).map(i => ({ team: team(i.team_id), libelle: i.libelle, expireLe: i.expire_le, utilisations: Number(i.utilisations), utilisationsMax: Number(i.utilisations_max), creeLe: i.cree_le })),
     };
   }
 
   async function exporter(acteur, compte) {
     const t = maintenant();
-    const donnees = await donneesDuCompte(compte);
+    const donnees = await donneesDuCompte(compte, { parFondateur: compte !== acteur.compte && acteur.superAdmin });
     await base.lot([
       evenement('account.exported', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: compte === acteur.compte ? {} : { compte, parFondateur: true }, maintenant: t }),
     ]);
@@ -828,6 +841,9 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       { sql: 'UPDATE objectifs SET proprietaire_id = NULL WHERE proprietaire_id = ?', params: [compte] },
       { sql: 'UPDATE review_reperes SET cible_id = NULL WHERE cible_id = ?', params: [compte] },
       { sql: 'DELETE FROM review_reactions WHERE compte_id = ?', params: [compte] },
+      // Suivi des joueurs : les notes du staff SUR lui sont effacées (ses données) ; celles qu'il a écrites restent, sans auteur.
+      { sql: 'DELETE FROM notes_joueurs WHERE joueur_id = ?', params: [compte] },
+      { sql: 'UPDATE notes_joueurs SET auteur_id = NULL, auteur_masque = 1 WHERE auteur_id = ?', params: [compte] },
       { sql: 'DELETE FROM tentatives WHERE cle = ?', params: [`invitation:compte:${compte}`] },
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, ...(compte === acteur.compte ? {} : { parFondateur: true }) }, maintenant: t }),

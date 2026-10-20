@@ -271,8 +271,8 @@ test('statistiques : Réunion et Scrim le mardi 20/10, « présent » marqué pa
   // CSV : mêmes lignes que les statistiques (convoqués, dont les non-marqués), filtre de type compris.
   const csv = (await api(`${t}/presence/export.csv?debut=2026-07-23&fin=2026-10-28`, s.fondateur)).corps.trim().split('\r\n');
   assert.equal(csv.length, 1 + 2 * 4);
-  assert.ok(csv.includes('"2026-10-20","14:00","Réunion","Réunion","Fondateur","Oui","Présent",""'));
-  assert.ok(csv.includes('"2026-10-20","15:00","Scrim","Scrim","Kai","Sans réponse","Non marqué",""'));
+  assert.ok(csv.includes('"2026-10-20","14:00","Réunion","Réunion","Fondateur","Oui","Oui","","","Présent","","",""'));
+  assert.ok(csv.includes('"2026-10-20","15:00","Scrim","Scrim","Kai","Oui","Sans réponse","","","Non marqué","","",""'));
   const csvReunion = (await api(`${t}/presence/export.csv?debut=2026-07-23&fin=2026-10-28&types=meeting`, s.fondateur)).corps.trim().split('\r\n');
   assert.equal(csvReunion.length, 1 + 4);
 });

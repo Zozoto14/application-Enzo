@@ -43,6 +43,7 @@ export const ACTIONS_PAR_MODULE = {
   scouting: ['opponent'],
   strat_editor: ['strat'],
   playbook: ['playbook'],
+  player_notes: ['player_note'],
 };
 
 /** Module d'une action (« event.created » → « planning »), ou « coeur ». */

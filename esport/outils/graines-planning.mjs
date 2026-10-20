@@ -55,10 +55,10 @@ export async function semerPlanning(base, teamId, { maintenant = () => Date.now(
     await p.marquer(coach, teamId, entrainement.id, o.cle, {
       marques: [
         { compte: 'lea12345', reel: 'present' },
-        { compte: 'kai12345', reel: motifs[i % motifs.length] },
-        { compte: 'ines1234', reel: i % 3 === 0 ? 'retard' : 'present' },
+        { compte: 'kai12345', reel: motifs[i % motifs.length], ...(motifs[i % motifs.length] === 'retard' ? { retardMinutes: 10 } : motifs[i % motifs.length] === 'excuse' ? { motif: 'Examen' } : {}) },
+        { compte: 'ines1234', reel: i % 3 === 0 ? 'retard' : 'present', ...(i % 3 === 0 ? { retardMinutes: 5 + 5 * (i % 2) } : {}) },
         { compte: 'sam12345', reel: i % 4 === 1 ? 'absent' : 'present' },
-        { compte: 'tom12345', reel: i % 2 === 0 ? 'excuse' : 'present' },
+        { compte: 'tom12345', reel: i % 2 === 0 ? 'excuse' : 'present', ...(i % 2 === 0 ? { motif: 'Travail' } : {}) },
       ],
     });
   }
@@ -66,6 +66,8 @@ export async function semerPlanning(base, teamId, { maintenant = () => Date.now(
   for (const { o } of prochaines) {
     await p.repondre(joueur('kai12345'), teamId, entrainement.id, o.cle, { rsvp: 'oui' });
     await p.repondre(joueur('sam12345'), teamId, entrainement.id, o.cle, { rsvp: 'peut_etre' });
+    await p.repondre(joueur('ines1234'), teamId, entrainement.id, o.cle, { rsvp: 'oui', retardPrevu: 15 });
+    await p.repondre(joueur('tom12345'), teamId, entrainement.id, o.cle, { rsvp: 'non', motif: 'Déplacement' });
   }
   await p.changerReglages(fondateur, teamId, { effectifMin: 4, rappelHeures: 24 });
 }

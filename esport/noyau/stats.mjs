@@ -9,6 +9,8 @@
  *  - tâches : `goals_tasks.view` ;
  *  - résumés : `meeting_summaries.view_all` ou `meeting_summaries.write_summary` ;
  *  - activité (journal) : `activity_log.view`.
+ * Présence : même définition que la page Présence (taux = présents et retards
+ * / séances marquées ; un non-convoqué venu en plus n'y entre pas).
  * Sinon le bloc vaut `null`. Requêtes agrégées (GROUP BY) : rien n'est chargé
  * ligne à ligne.
  */
@@ -48,11 +50,11 @@ export function servicesStats({ base, maintenant = () => Date.now(), socle }) {
 
     if (peut('attendance.view_all')) {
       const lignes = await base.tous(
-        'SELECT compte_id, reel, rsvp, COUNT(*) AS n FROM presences WHERE team_id = ? AND occurrence >= ? AND occurrence < ? GROUP BY compte_id, reel, rsvp',
+        'SELECT compte_id, reel, rsvp, COUNT(*) AS n FROM presences WHERE team_id = ? AND occurrence >= ? AND occurrence < ? AND hors_convocation = 0 GROUP BY compte_id, reel, rsvp',
         [teamId, du, au],
       );
       const seances = await base.premier(
-        "SELECT COUNT(DISTINCT evenement_id || '|' || occurrence) AS n FROM presences WHERE team_id = ? AND occurrence >= ? AND occurrence < ?",
+        "SELECT COUNT(DISTINCT evenement_id || '|' || occurrence) AS n FROM presences WHERE team_id = ? AND occurrence >= ? AND occurrence < ? AND hors_convocation = 0",
         [teamId, du, au],
       );
       const reel = { present: 0, retard: 0, absent: 0, excuse: 0, inconnu: 0 };

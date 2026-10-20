@@ -67,6 +67,11 @@ export const TYPES_EVENEMENTS = [
   ...TYPES_REVIEW,
   // Phase 6 : strats et playbook.
   ...TYPES_STRATS,
+  // Suivi des joueurs (notes du staff) : la charge ne contient que le joueur concerné, jamais le contenu.
+  'player_note.created',
+  'player_note.updated',
+  'player_note.shared',
+  'player_note.deleted',
 ];
 
 const ESSAIS_MAX = 8;
@@ -162,6 +167,10 @@ export async function abonneNotifications(base, ev) {
       if (charge.demandeur && charge.demandeur !== ev.acteur_id) {
         await notifier(base, ev, charge.demandeur, ev.type === 'member.account_request_validated' ? 'demande-compte-validee' : 'demande-compte-refusee', { pseudo: charge.pseudo ?? null, motif: charge.motif ?? null, demande: ev.entite_id });
       }
+      return;
+    case 'player_note.shared':
+      // Note partagée avec le joueur : il est prévenu (sans le contenu) ; jamais quand le partage est retiré.
+      if (charge.partagee === true && charge.compte && charge.compte !== ev.acteur_id) await notifier(base, ev, charge.compte, 'note-partagee', {});
       return;
     case 'modules.changed': {
       const membres = await base.tous("SELECT compte_id AS compte FROM membres WHERE team_id = ? AND statut = 'actif'", [ev.team_id]);

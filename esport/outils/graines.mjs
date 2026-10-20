@@ -12,6 +12,8 @@
 
 import { pathToFileURL } from 'node:url';
 import { servicesComptes } from '../noyau/comptes.mjs';
+import { servicesPlanning } from '../noyau/planning/service.mjs';
+import { servicesSuivi } from '../noyau/suivi/service.mjs';
 import { distribuer } from '../noyau/evenements.mjs';
 import { servicesObjectifs } from '../noyau/objectifs.mjs';
 import { servicesResumes } from '../noyau/resumes.mjs';
@@ -104,6 +106,12 @@ export async function semer(base, { maintenant = () => Date.now(), stockage } = 
   await o.creerTache(zed, team.id, { titre: 'Réserver le créneau de scrim', echeance: jour(4), priorite: 'basse' });
   await semerReview(base, team.id, { maintenant, noyau: s });
   await semerStrats(base, team.id, { maintenant, noyau: s, stockage });
+  // Suivi des joueurs : quelques notes du Coach (une épinglée, une partagée avec Léa).
+  const suivi = servicesSuivi({ base, maintenant, socle: s, planning: servicesPlanning({ base, maintenant, noyau: s }) });
+  await suivi.creer(zed, team.id, 'lea12345', { contenu: '**Très bon** entry sur Ascent : timings propres, à garder.', categorie: 'performance', ton: 'positif', tags: ['entry', 'ascent'], date: jour(-6), partagee: true });
+  await suivi.creer(zed, team.id, 'lea12345', { contenu: 'Objectif du mois : prendre la parole en début de round (annonces de contact).', categorie: 'objectif', ton: 'neutre', tags: ['comms'], date: jour(-4), epinglee: true });
+  await suivi.creer(zed, team.id, 'kai12345', { contenu: 'Se décourage vite après deux rounds perdus : en parler en individuel.', categorie: 'mental', ton: 'a_travailler', tags: ['tilt'], date: jour(-3) });
+  await suivi.creer({ compte: 'ana12345', superAdmin: false }, team.id, 'kai12345', { contenu: 'Smokes de Viper sur Breeze : 3 lineups à revoir.', categorie: 'performance', ton: 'a_travailler', tags: ['breeze', 'lineups'], date: jour(-2) });
   await distribuer(base, { maintenant: maintenant() });
   return team.id;
 }
