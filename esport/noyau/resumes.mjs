@@ -20,6 +20,7 @@ import { evenement } from './evenements.mjs';
 import { cheminSigne, cleStockageResume, empreinteSha256, lireOctets, nomOriginal, validerPdf, verifierEntetesPdf, verifierLien } from './fichiers.mjs';
 import { autorise } from './permissions.mjs';
 import { echec, iso, nouvelId, texteLong, texteNettoye } from './outils.mjs';
+import { lignesParIds, pseudosDe } from './requetes.mjs';
 
 export const MODULE_RESUMES = 'meeting_summaries';
 export const STATUTS_REUNION = ['a_resumer', 'en_cours', 'termine'];
@@ -87,11 +88,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
   }
 
   async function noms(ids) {
-    const sortie = {};
-    for (const id of new Set(ids.filter(x => typeof x === 'string'))) {
-      sortie[id] = (await base.premier('SELECT pseudo FROM comptes WHERE id = ?', [id]))?.pseudo ?? null;
-    }
-    return sortie;
+    return pseudosDe(base, ids);
   }
 
   const typePublic = t => ({ id: t.id, nom: t.nom, couleur: t.couleur, visibilite: t.visibilite, global: t.team_id == null, position: Number(t.position) });
@@ -126,10 +123,9 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
 
   async function publier(lignes, ctxParTeam) {
     const pseudos = await noms(lignes.flatMap(l => [l.depose_par, l.resume_par]));
-    const types = new Map();
+    const types = new Map((await lignesParIds(base, 'SELECT * FROM types_reunion WHERE id', lignes.map(l => l.type_id))).map(y => [y.id, y]));
     const sortie = [];
     for (const l of lignes) {
-      if (!types.has(l.type_id)) types.set(l.type_id, await base.premier('SELECT * FROM types_reunion WHERE id = ?', [l.type_id]));
       const ctx = ctxParTeam.get(l.team_id);
       sortie.push(reunionPublique(l, types.get(l.type_id), pseudos, ctx, ctx.team));
     }
@@ -503,9 +499,13 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
   /** Lecture par lien signé (sans session : le lien a été délivré après vérification des droits). */
   async function lireFichierSigne(fichierId, params) {
     exigerUuid(fichierId, 'fichier');
-    const { telecharger } = await verifierLien(cleSession, fichierId, params, maintenant());
+    const { compte, telecharger } = await verifierLien(cleSession, fichierId, params, maintenant());
     const f = await base.premier('SELECT f.* FROM fichiers f JOIN teams t ON t.id = f.team_id WHERE f.id = ? AND t.supprimee_le IS NULL', [fichierId]);
     if (!f) throw echec(404, 'fichier-introuvable', 'Fichier introuvable.');
+    // Le lien vaut quelques minutes, mais un membre retiré ou suspendu entre-temps ne lit plus rien.
+    if (compte !== 'principal' && !(await base.premier("SELECT id FROM membres WHERE team_id = ? AND compte_id = ? AND statut = 'actif'", [f.team_id, compte]))) {
+      throw echec(403, 'lien-invalide', 'Lien de fichier invalide.');
+    }
     if (!stockage) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché.');
     const objet = await stockage.lire(f.cle_stockage);
     if (!objet) throw echec(404, 'fichier-introuvable', 'Fichier introuvable.');

@@ -21,6 +21,10 @@ import { servicesEsport } from './service.mjs';
 import { creerSession, lireSession } from './session.mjs';
 import { ErreurEsport, echec } from './outils.mjs';
 import { exporterBase, importerBase } from './transfert.mjs';
+import { ENTETES_CORS, ENTETES_SECURITE, reponseFichier } from './entetes.mjs';
+import { servicesJournal } from './journal.mjs';
+import { limiter } from './limites.mjs';
+import { servicesStats } from './stats.mjs';
 import { routeFichierSigne, routerPhase3, servicesPhase3 } from './routes-phase3.mjs';
 import { routesReview } from './review/routes.mjs';
 import { servicesReview } from './review/service.mjs';
@@ -29,19 +33,15 @@ import { servicesPlaybook } from './strats/playbook.mjs';
 import { routePubliqueStrats, routesStrats } from './strats/routes.mjs';
 import { servicesStrats } from './strats/service.mjs';
 
-export const VERSION_ESPORT = 3;
+export const VERSION_ESPORT = 4;
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
 const ENTETES = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Nom-Fichier',
-  'Access-Control-Max-Age': '86400',
+  ...ENTETES_CORS,
+  ...ENTETES_SECURITE,
   'Cache-Control': 'no-store',
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'no-referrer',
-  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
+  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'; sandbox",
 };
 
 export function reponseJson(corps, statut = 200, entetes = {}) {
@@ -61,12 +61,21 @@ export function adresseIp(requete) {
   return requete.headers.get('CF-Connecting-IP') ?? ((requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || null);
 }
 
+/** Type de contenu annoncé, sans paramètres (« application/json; charset=utf-8 » → « application/json »). */
+export const typeContenu = requete => (requete.headers.get('Content-Type') ?? '').split(';')[0].trim().toLowerCase();
+
+/**
+ * Corps JSON borné. Un corps non vide DOIT être annoncé `application/json` :
+ * un formulaire HTML ou un `fetch` « simple » d'un site tiers (text/plain,
+ * x-www-form-urlencoded, multipart) est refusé (415) avant toute lecture.
+ */
 async function lireCorps(requete, max = TAILLE_MAX_CORPS) {
   const longueur = Number(requete.headers.get('Content-Length') ?? 0);
   if (longueur > max) throw echec(413, 'trop-gros', 'Requête trop volumineuse.');
   const texte = await requete.text();
   if (texte.length > max) throw echec(413, 'trop-gros', 'Requête trop volumineuse.');
   if (!texte) return {};
+  if (typeContenu(requete) !== 'application/json') throw echec(415, 'type-contenu', 'Corps JSON attendu (Content-Type: application/json).');
   try {
     const corps = JSON.parse(texte);
     if (!corps || typeof corps !== 'object' || Array.isArray(corps)) throw new Error();
@@ -96,6 +105,9 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
   const sc = servicesScouting({ base, maintenant, socle: s, review: rv });
   const st = servicesStrats({ base, stockage, cleSession, maintenant, socle: s });
   const pb = servicesPlaybook({ base, maintenant, socle: s, strats: st });
+  const jr = servicesJournal({ base, maintenant, socle: s });
+  const stt = servicesStats({ base, maintenant, socle: s });
+  const limite = (genre, qui) => limiter(base, genre, qui, maintenant());
 
   async function acteurDeSession(requete) {
     if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
@@ -121,6 +133,7 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     if (partage !== undefined) return partage;
     if (chemin === '/session' && m === 'POST') {
       if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
+      await limite('session', ip);
       const qui = await verifierJeton(jetonPorteur(requete), ip);
       const { jeton, expire } = await creerSession(cleSession, qui, maintenant());
       return { session: jeton, expire: new Date(expire).toISOString(), ...(await s.moi(qui)) };
@@ -131,13 +144,38 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
 
     if (chemin === '/moi') {
       if (m === 'GET') return s.moi(acteur);
-      if (m === 'PUT') return s.majProfil(acteur, await lireCorps(requete));
+      if (m === 'PUT') {
+        // Création ou changement du profil (« création de compte » Esport) : bornée par compte et par IP.
+        const corps = await lireCorps(requete);
+        await limite('profil', acteur.compte);
+        await limite('profil_ip', ip);
+        return s.majProfil(acteur, corps);
+      }
       if (m === 'DELETE') return s.supprimerMesDonnees(acteur);
     }
-    if (chemin === '/moi/export' && m === 'GET') return s.exporterMesDonnees(acteur);
+    if (chemin === '/moi/export' && m === 'GET') {
+      await limite('export', acteur.compte);
+      return s.exporterMesDonnees(acteur);
+    }
     if (chemin === '/notifications' && m === 'GET') return s.notifications(acteur);
     if (chemin === '/notifications/lues' && m === 'POST') return s.marquerLues(acteur, await lireCorps(requete));
-    if (chemin === '/invitations/accepter' && m === 'POST') return s.accepterInvitation(acteur, await lireCorps(requete), ip);
+    if (chemin === '/invitations/accepter' && m === 'POST') {
+      const corps = await lireCorps(requete);
+      await limite('acceptation_ip', ip);
+      return s.accepterInvitation(acteur, corps, ip);
+    }
+
+    // RGPD, pour le Fondateur : données d'un membre (export) et suppression de son compte Esport.
+    const rgpd = /^\/admin\/comptes\/([^/]+)(\/export)?$/.exec(chemin);
+    if (rgpd) {
+      if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Réservé au Fondateur.');
+      const compte = decodeURIComponent(rgpd[1]);
+      if (rgpd[2] && m === 'GET') {
+        await limite('export', acteur.compte);
+        return s.exporterCompte(acteur, compte);
+      }
+      if (!rgpd[2] && m === 'DELETE') return s.supprimerCompteMembre(acteur, compte);
+    }
 
     if (chemin === '/admin/export' || chemin === '/admin/import') {
       if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Réservé au Fondateur.');
@@ -147,7 +185,11 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
 
     if (chemin === '/teams') {
       if (m === 'GET') return { teams: await s.listeTeams(acteur) };
-      if (m === 'POST') return s.creerTeam(acteur, await lireCorps(requete));
+      if (m === 'POST') {
+        const corps = await lireCorps(requete);
+        await limite('team', acteur.compte);
+        return s.creerTeam(acteur, corps);
+      }
     }
     const planning = await routesPlanning({ p, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete) });
     if (planning !== undefined) return planning;
@@ -179,12 +221,27 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       }
       if (section === 'invitations') {
         if (!sousId && m === 'GET') return { invitations: await s.listeInvitations(acteur, teamId) };
-        if (!sousId && m === 'POST') return s.creerInvitation(acteur, teamId, await lireCorps(requete));
+        if (!sousId && m === 'POST') {
+          const corps = await lireCorps(requete);
+          await limite('invitation', acteur.compte);
+          return s.creerInvitation(acteur, teamId, corps);
+        }
         if (sousId && m === 'DELETE') return s.revoquerInvitation(acteur, teamId, sousId);
       }
-      if (section === 'journal' && !sousId && m === 'GET') {
-        const p = url.searchParams;
-        return s.journal(acteur, teamId, { avant: p.get('avant'), limite: p.get('limite'), action: p.get('action'), acteur: p.get('acteur') });
+      if (section === 'journal') {
+        const q = url.searchParams;
+        const filtres = { action: q.get('action') || undefined, module: q.get('module') || undefined, acteur: q.get('acteur') || undefined, du: q.get('du') || undefined, au: q.get('au') || undefined };
+        if (!sousId && m === 'GET') return jr.liste(acteur, teamId, { ...filtres, avant: q.get('avant') || undefined, limite: q.get('limite') || undefined });
+        if (sousId === 'export.csv' && m === 'GET') {
+          await limite('export', acteur.compte);
+          return reponseFichier(await jr.exporter(acteur, teamId, filtres), url);
+        }
+        if (sousId === 'reglages' && m === 'GET') return jr.lireReglages(acteur, teamId);
+        if (sousId === 'reglages' && m === 'PUT') return jr.changerReglages(acteur, teamId, await lireCorps(requete));
+      }
+      if (section === 'stats' && !sousId && m === 'GET') {
+        const q = url.searchParams;
+        return stt.stats(acteur, teamId, { du: q.get('du') || undefined, au: q.get('au') || undefined });
       }
       if (section === 'm' && sousId) return s.moduleFutur(acteur, teamId, sousId);
     }

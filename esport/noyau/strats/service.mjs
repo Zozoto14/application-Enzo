@@ -22,6 +22,7 @@ import { evenement } from '../evenements.mjs';
 import { cheminSigne, empreinteSha256 } from '../fichiers.mjs';
 import { autorise } from '../permissions.mjs';
 import { base64url, depuisBase64url, echec, egal, iso, jsonOu, nouvelId, texteLong, texteNettoye } from '../outils.mjs';
+import { pseudosDe } from '../requetes.mjs';
 import { SIDES, TYPES_STRAT, documentVide, validerDocument } from './document.mjs';
 
 export const MODULE_STRATS = 'strat_editor';
@@ -104,11 +105,7 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
     return s;
   }
 
-  async function pseudos(ids) {
-    const sortie = {};
-    for (const id of new Set(ids.filter(x => typeof x === 'string'))) sortie[id] = (await base.premier('SELECT pseudo FROM comptes WHERE id = ?', [id]))?.pseudo ?? null;
-    return sortie;
-  }
+  const pseudos = ids => pseudosDe(base, ids);
 
   /** Lien signé (1 h) vers la miniature, à préfixer par l'adresse du serveur (`origine`). */
   async function lienMiniature(fichierId, compte, origine = '') {

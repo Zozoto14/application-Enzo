@@ -13,6 +13,7 @@
 import { evenement } from '../evenements.mjs';
 import { autorise } from '../permissions.mjs';
 import { echec, iso, jsonOu, nouvelId, texteLong, texteNettoye } from '../outils.mjs';
+import { lignesParIds, pseudosDe } from '../requetes.mjs';
 import { SIDES, TYPES_STRAT } from './document.mjs';
 import { MODULE_STRATS, normaliser, tagsPropres } from './service.mjs';
 
@@ -79,13 +80,10 @@ export function servicesPlaybook({ base, maintenant = () => Date.now(), socle, s
     const liees = new Map();
     // La strat liée n'apparaît que si le module Strats est actif (sa miniature reste celle du playbook).
     if (ids.length > 0 && ctx.modules.has(MODULE_STRATS)) {
-      for (const id of ids) {
-        const s = await base.premier('SELECT id, titre, miniature_id, visibilite, revision FROM strats WHERE id = ? AND team_id = ? AND supprime_le IS NULL', [id, ctx.team.id]);
-        if (s && s.visibilite === 'team') liees.set(id, s);
-      }
+      const strats = await lignesParIds(base, 'SELECT id, titre, miniature_id, visibilite, revision FROM strats WHERE team_id = ? AND supprime_le IS NULL AND id', ids, { paramsAvant: [ctx.team.id] });
+      for (const s of strats) if (s.visibilite === 'team') liees.set(s.id, s);
     }
-    const noms = {};
-    for (const c of new Set(lignes.flatMap(l => [l.cree_par, l.valide_par]).filter(Boolean))) noms[c] = (await base.premier('SELECT pseudo FROM comptes WHERE id = ?', [c]))?.pseudo ?? null;
+    const noms = await pseudosDe(base, lignes.flatMap(l => [l.cree_par, l.valide_par]));
     return Promise.all(
       lignes.map(async l => {
         const s = l.strat_id ? liees.get(l.strat_id) : undefined;

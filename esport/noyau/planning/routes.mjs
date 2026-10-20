@@ -20,20 +20,14 @@
  *   GET                /teams/:t/dispos/carte                heatmap (?semaine&fuseau&pas)
  */
 
-const ENTETES_FICHIER = {
-  'Access-Control-Allow-Origin': '*',
-  'Cache-Control': 'no-store',
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'no-referrer',
-  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
-};
+import { ENTETES_FICHIER, disposition } from '../entetes.mjs';
 
 /** Fichier : brut (Content-Disposition) ou, avec ?format=json, enveloppe `{ nom, type, contenu }`. */
 function fichier(f, url, enLigne = false) {
   if (url.searchParams.get('format') === 'json') return f;
   return new Response(f.contenu, {
     status: 200,
-    headers: { ...ENTETES_FICHIER, 'Content-Type': f.type, 'Content-Disposition': `${enLigne ? 'inline' : 'attachment'}; filename="${f.nom}"` },
+    headers: { ...ENTETES_FICHIER, 'Content-Type': f.type, 'Content-Disposition': disposition(f.nom, enLigne) },
   });
 }
 

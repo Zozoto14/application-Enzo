@@ -28,6 +28,7 @@ import {
   validerPermissions,
 } from './permissions.mjs';
 import { aleatoire, echec, iso, jsonOu, nouvelId, sha256Hex, slugDe, texteLong, texteNettoye } from './outils.mjs';
+import { lignesParIds, pseudosDe } from './requetes.mjs';
 
 const MOTIF_PSEUDO = /^[\p{L}\p{N}][\p{L}\p{N} _.\-]{1,23}$/u;
 const MOTIF_RIOT = /^[^#\s][^#]{2,15}#[\p{L}\p{N}]{3,5}$/u;
@@ -217,14 +218,19 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
             WHERE m.compte_id = ? AND t.supprimee_le IS NULL ORDER BY t.nom`,
           [acteur.compte],
         );
+    // Effectifs et modules de toutes les teams listées : deux requêtes groupées (pas une par team).
+    const ids = lignes.map(l => l.id);
+    const effectifs = new Map(
+      (await lignesParIds(base, "SELECT team_id, COUNT(*) AS n FROM membres WHERE statut = 'actif' AND team_id", ids, { apres: 'GROUP BY team_id' })).map(l => [l.team_id, Number(l.n)]),
+    );
+    const modulesParTeam = new Map(ids.map(id => [id, []]));
+    for (const m of await lignesParIds(base, 'SELECT team_id, module FROM team_modules WHERE active = 1 AND team_id', ids)) modulesParTeam.get(m.team_id)?.push(m.module);
     const teams = [];
     for (const l of lignes) {
-      const n = await base.premier("SELECT COUNT(*) AS n FROM membres WHERE team_id = ? AND statut = 'actif'", [l.id]);
-      const mods = await base.tous('SELECT module FROM team_modules WHERE team_id = ? AND active = 1', [l.id]);
       teams.push({
         ...teamPublique(l),
-        membres: Number(n?.n ?? 0),
-        modules: mods.map(m => m.module).filter(moduleConnu),
+        membres: effectifs.get(l.id) ?? 0,
+        modules: MODULES.filter(m => modulesParTeam.get(l.id)?.includes(m)),
         role: l.membre_id ? { nom: l.role_nom, couleur: l.role_couleur } : null,
         suspendu: l.membre_statut === 'suspendu',
       });
@@ -748,50 +754,6 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     return { team: teamPublique(team), role: role ? { id: role.id, nom: role.nom, couleur: role.couleur } : null };
   }
 
-  // -------------------------------------------------------------- Journal
-
-  async function journal(acteur, teamId, filtres = {}) {
-    const ctx = await contexteTeam(acteur, teamId);
-    exiger(ctx, 'activity_log.view');
-    const limite = Math.min(100, Math.max(1, Number(filtres.limite) || 50));
-    const conditions = ['team_id = ?'];
-    const params = [teamId];
-    if (filtres.avant && !Number.isNaN(Date.parse(filtres.avant))) {
-      conditions.push('cree_le < ?');
-      params.push(new Date(Date.parse(filtres.avant)).toISOString());
-    }
-    if (filtres.action && /^[a-z_]+(\.[a-z_]+)?$/.test(filtres.action)) {
-      conditions.push(filtres.action.includes('.') ? 'action = ?' : 'action LIKE ?');
-      params.push(filtres.action.includes('.') ? filtres.action : `${filtres.action}.%`);
-    }
-    if (filtres.acteur && /^(principal|[a-z0-9]{6,16})$/.test(filtres.acteur)) {
-      conditions.push('acteur_id = ?');
-      params.push(filtres.acteur);
-    }
-    const lignes = await base.tous(`SELECT * FROM journal WHERE ${conditions.join(' AND ')} ORDER BY cree_le DESC, id DESC LIMIT ?`, [...params, limite + 1]);
-    const entrees = lignes.slice(0, limite).map(l => ({
-      id: l.id,
-      action: l.action,
-      acteur: l.acteur_id,
-      entiteType: l.entite_type,
-      entiteId: l.entite_id,
-      meta: jsonOu(l.meta, {}),
-      date: l.cree_le,
-    }));
-    const ids = new Set();
-    for (const e of entrees) {
-      if (e.acteur) ids.add(e.acteur);
-      // Comptes cités dans les métadonnées (membre visé, assigné d'une tâche, déposant d'une réunion).
-      for (const cle of ['compte', 'assigne', 'deposePar']) if (typeof e.meta[cle] === 'string') ids.add(e.meta[cle]);
-    }
-    const noms = {};
-    for (const id of ids) {
-      const c = await base.premier('SELECT pseudo FROM comptes WHERE id = ?', [id]);
-      noms[id] = c?.pseudo ?? null;
-    }
-    return { entrees, noms, suite: lignes.length > limite ? entrees[entrees.length - 1].date : null };
-  }
-
   // -------------------------------------------------------------- Notifications
 
   async function notifications(acteur) {
@@ -800,13 +762,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       [acteur.compte],
     );
     const nonLues = await base.premier('SELECT COUNT(*) AS n FROM notifications WHERE compte_id = ? AND lue_le IS NULL', [acteur.compte]);
-    const ids = new Set();
-    for (const l of lignes) {
-      const c = jsonOu(l.charge, {});
-      if (typeof c.membre === 'string') ids.add(c.membre);
-    }
-    const noms = {};
-    for (const id of ids) noms[id] = (await base.premier('SELECT pseudo FROM comptes WHERE id = ?', [id]))?.pseudo ?? null;
+    const noms = await pseudosDe(base, lignes.map(l => jsonOu(l.charge, {}).membre));
     return {
       nonLues: Number(nonLues?.n ?? 0),
       noms,
@@ -828,59 +784,126 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
 
   // -------------------------------------------------------------- RGPD
 
-  async function exporterMesDonnees(acteur) {
-    const profil = await profilDe(acteur.compte);
+  /**
+   * Toutes les données Esport d'un compte (droit d'accès et de portabilité) :
+   * profil, appartenances, notifications, actions du journal, disponibilités,
+   * présences, réunions déposées, tâches et objectifs, repères et commentaires
+   * de review, strats et entrées de playbook créées, abonnements iCal (sans
+   * leur jeton), invitations créées (sans leur code).
+   */
+  async function donneesDuCompte(compte) {
+    const profil = await profilDe(compte);
+    const q = sql => base.tous(`${sql} LIMIT ?`, [compte, 5000]);
+    const nomsTeams = new Map((await base.tous('SELECT id, nom FROM teams', [])).map(t => [t.id, t.nom]));
+    const team = id => nomsTeams.get(id) ?? null;
     const appartenances = await base.tous(
       'SELECT t.nom AS team, r.nom AS role, m.poste_jeu, m.statut, m.rejoint_le FROM membres m JOIN teams t ON t.id = m.team_id JOIN roles r ON r.id = m.role_id WHERE m.compte_id = ?',
-      [acteur.compte],
+      [compte],
     );
-    const notifs = await base.tous('SELECT type, charge, lue_le, cree_le FROM notifications WHERE compte_id = ? ORDER BY cree_le', [acteur.compte]);
-    const actions = await base.tous('SELECT action, entite_type, meta, cree_le FROM journal WHERE acteur_id = ? ORDER BY cree_le LIMIT 5000', [acteur.compte]);
-    const dispos = await base.tous('SELECT team_id, jour, debut, fin, type, fuseau FROM dispo_regles WHERE compte_id = ? ORDER BY team_id, jour, debut', [acteur.compte]);
-    const exceptionsDispo = await base.tous('SELECT team_id, debut, fin, type, note FROM dispo_exceptions WHERE compte_id = ? ORDER BY debut', [acteur.compte]);
-    const presences = await base.tous('SELECT team_id, evenement_id, occurrence, rsvp, reel, note FROM presences WHERE compte_id = ? ORDER BY occurrence LIMIT 5000', [acteur.compte]);
-    const t = maintenant();
-    await base.lot([evenement('account.exported', { acteur: acteur.compte, entiteType: 'compte', entiteId: acteur.compte, charge: {}, maintenant: t })]);
     return {
       format: 'applibourse-esport-mes-donnees',
-      exporteLe: iso(t),
-      compte: acteur.compte,
-      profil: profil ? { pseudo: profil.pseudo, riotId: profil.riot_id ?? null, discord: profil.discord ?? null, creeLe: profil.cree_le } : null,
+      version: 2,
+      compte,
+      profil: profil ? { pseudo: profil.pseudo, riotId: profil.riot_id ?? null, discord: profil.discord ?? null, creeLe: profil.cree_le, majLe: profil.maj_le } : null,
       teams: appartenances.map(a => ({ team: a.team, role: a.role, posteJeu: a.poste_jeu ?? null, statut: a.statut, rejointLe: a.rejoint_le })),
-      notifications: notifs.map(n => ({ type: n.type, charge: jsonOu(n.charge, {}), lue: Boolean(n.lue_le), date: n.cree_le })),
-      journal: actions.map(a => ({ action: a.action, entite: a.entite_type, meta: jsonOu(a.meta, {}), date: a.cree_le })),
-      disponibilites: { regles: dispos, exceptions: exceptionsDispo },
-      presences,
+      notifications: (await q('SELECT type, team_id, charge, lue_le, cree_le FROM notifications WHERE compte_id = ? ORDER BY cree_le')).map(n => ({ type: n.type, team: team(n.team_id), charge: jsonOu(n.charge, {}), lue: Boolean(n.lue_le), date: n.cree_le })),
+      journal: (await q('SELECT team_id, action, entite_type, meta, cree_le FROM journal WHERE acteur_id = ? ORDER BY cree_le')).map(a => ({ team: team(a.team_id), action: a.action, entite: a.entite_type, meta: jsonOu(a.meta, {}), date: a.cree_le })),
+      disponibilites: {
+        regles: (await q('SELECT team_id, jour, debut, fin, type, fuseau FROM dispo_regles WHERE compte_id = ? ORDER BY team_id, jour, debut')).map(r => ({ ...r, team_id: undefined, team: team(r.team_id) })),
+        exceptions: (await q('SELECT team_id, debut, fin, type, note FROM dispo_exceptions WHERE compte_id = ? ORDER BY debut')).map(r => ({ ...r, team_id: undefined, team: team(r.team_id) })),
+      },
+      presences: (await q('SELECT p.team_id, e.titre, p.occurrence, p.rsvp, p.reel, p.note FROM presences p LEFT JOIN planning_evenements e ON e.id = p.evenement_id WHERE p.compte_id = ? ORDER BY p.occurrence')).map(r => ({ team: team(r.team_id), evenement: r.titre ?? null, occurrence: r.occurrence, rsvp: r.rsvp, presence: r.reel, note: r.note })),
+      reunionsDeposees: (await q('SELECT team_id, titre, lien, date_reunion, note, statut, cree_le FROM reunions WHERE depose_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(r => ({ team: team(r.team_id), titre: r.titre, lien: r.lien, date: r.date_reunion, note: r.note, statut: r.statut, deposeLe: r.cree_le })),
+      taches: (await base.tous('SELECT team_id, titre, description, statut, priorite, echeance, assigne_id, cree_par, cree_le FROM taches WHERE (assigne_id = ? OR cree_par = ?) AND supprime_le IS NULL ORDER BY cree_le LIMIT 5000', [compte, compte])).map(t => ({ team: team(t.team_id), titre: t.titre, description: t.description, statut: t.statut, priorite: t.priorite, echeance: t.echeance, assigneAMoi: t.assigne_id === compte, creeeParMoi: t.cree_par === compte, creeLe: t.cree_le })),
+      objectifs: (await base.tous('SELECT team_id, titre, description, statut, date_cible, proprietaire_id, cree_par, cree_le FROM objectifs WHERE (proprietaire_id = ? OR cree_par = ?) AND supprime_le IS NULL ORDER BY cree_le LIMIT 5000', [compte, compte])).map(o => ({ team: team(o.team_id), titre: o.titre, description: o.description, statut: o.statut, dateCible: o.date_cible, aMoi: o.proprietaire_id === compte, creeParMoi: o.cree_par === compte, creeLe: o.cree_le })),
+      reviewReperes: (await base.tous('SELECT r.team_id, v.titre AS review, r.debut_s, r.categorie, r.titre, r.note, r.auteur_id, r.cible_id, r.cree_le FROM review_reperes r JOIN reviews v ON v.id = r.review_id WHERE (r.auteur_id = ? OR r.cible_id = ?) AND r.supprime_le IS NULL ORDER BY r.cree_le LIMIT 5000', [compte, compte])).map(r => ({ team: team(r.team_id), review: r.review, seconde: Number(r.debut_s), categorie: r.categorie, titre: r.titre, note: r.note, auteur: r.auteur_id === compte, concerne: r.cible_id === compte, date: r.cree_le })),
+      reviewCommentaires: (await q('SELECT team_id, texte, cree_le FROM review_commentaires WHERE auteur_id = ? AND supprime_le IS NULL ORDER BY cree_le')).map(c => ({ team: team(c.team_id), texte: c.texte, date: c.cree_le })),
+      strats: (await q('SELECT team_id, titre, carte_nom, side, type, visibilite, cree_le FROM strats WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), titre: x.titre, carte: x.carte_nom, side: x.side, type: x.type, visibilite: x.visibilite, creeLe: x.cree_le })),
+      playbook: (await q('SELECT team_id, titre, statut, cree_le FROM playbook_entrees WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), titre: x.titre, statut: x.statut, creeLe: x.cree_le })),
+      abonnementsIcal: (await q('SELECT team_id, libelle, cree_le, dernier_acces_le, revoque_le FROM ical_jetons WHERE compte_id = ? ORDER BY cree_le')).map(j => ({ team: team(j.team_id), libelle: j.libelle, creeLe: j.cree_le, dernierAcces: j.dernier_acces_le, revoqueLe: j.revoque_le })),
+      invitationsCreees: (await q('SELECT team_id, libelle, expire_le, utilisations, utilisations_max, cree_le FROM invitations WHERE cree_par = ? ORDER BY cree_le')).map(i => ({ team: team(i.team_id), libelle: i.libelle, expireLe: i.expire_le, utilisations: Number(i.utilisations), utilisationsMax: Number(i.utilisations_max), creeLe: i.cree_le })),
     };
   }
 
-  async function supprimerMesDonnees(acteur) {
-    const membres = await base.tous('SELECT m.*, t.nom AS team_nom FROM membres m JOIN teams t ON t.id = m.team_id WHERE m.compte_id = ? AND t.supprimee_le IS NULL', [acteur.compte]);
+  async function exporter(acteur, compte) {
+    const t = maintenant();
+    const donnees = await donneesDuCompte(compte);
+    await base.lot([
+      evenement('account.exported', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: compte === acteur.compte ? {} : { compte, parFondateur: true }, maintenant: t }),
+    ]);
+    return { ...donnees, exporteLe: iso(t) };
+  }
+
+  /** Export de mes données (droit d'accès). */
+  async function exporterMesDonnees(acteur) {
+    return exporter(acteur, acteur.compte);
+  }
+
+  /**
+   * Suppression (droit à l'effacement) : le compte Esport et ses données
+   * personnelles sont effacés ; ce qu'il a écrit pour la team (réunions
+   * déposées, repères, commentaires, strats) reste, mais n'est plus relié à
+   * un pseudo (« Compte supprimé ») ; il est retiré des tâches et objectifs
+   * qui lui étaient attribués et des repères qui le visaient. Le journal garde
+   * l'identifiant technique (sans pseudo), effacé à la fin de sa rétention.
+   */
+  async function supprimerCompte(acteur, compte) {
+    const membres = await base.tous('SELECT m.*, t.nom AS team_nom FROM membres m JOIN teams t ON t.id = m.team_id WHERE m.compte_id = ? AND t.supprimee_le IS NULL', [compte]);
     const bloquantes = [];
     for (const m of membres) if (await estDernierProprietaire(m.team_id, m)) bloquantes.push(m.team_nom);
     if (bloquantes.length > 0) {
-      const e = echec(409, 'dernier-proprietaire', `Vous êtes le dernier Propriétaire de : ${bloquantes.join(', ')}. Nommez un autre Propriétaire (ou supprimez la team) d’abord.`);
+      const qui = compte === acteur.compte ? 'Vous êtes' : 'Ce compte est';
+      const e = echec(409, 'dernier-proprietaire', `${qui} le dernier Propriétaire de : ${bloquantes.join(', ')}. Nommez un autre Propriétaire (ou supprimez la team) d’abord.`);
       e.details = { teams: bloquantes };
       throw e;
     }
     const t = maintenant();
     const lot = [];
     for (const m of membres) {
-      lot.push(evenement('member.left', { teamId: m.team_id, acteur: acteur.compte, entiteType: 'membre', entiteId: m.id, charge: { compte: acteur.compte, suppression: true }, maintenant: t }));
+      lot.push(evenement(compte === acteur.compte ? 'member.left' : 'member.removed', { teamId: m.team_id, acteur: acteur.compte, entiteType: 'membre', entiteId: m.id, charge: { compte, suppression: true }, maintenant: t }));
     }
     lot.push(
-      { sql: 'DELETE FROM membres WHERE compte_id = ?', params: [acteur.compte] },
-      { sql: 'DELETE FROM notifications WHERE compte_id = ?', params: [acteur.compte] },
-      { sql: 'DELETE FROM dispo_regles WHERE compte_id = ?', params: [acteur.compte] },
-      { sql: 'DELETE FROM dispo_exceptions WHERE compte_id = ?', params: [acteur.compte] },
-      { sql: 'DELETE FROM presences WHERE compte_id = ?', params: [acteur.compte] },
-      { sql: 'UPDATE ical_jetons SET revoque_le = ? WHERE compte_id = ? AND revoque_le IS NULL', params: [iso(t), acteur.compte] },
-      { sql: 'DELETE FROM tentatives WHERE cle = ?', params: [`invitation:compte:${acteur.compte}`] },
-      { sql: 'DELETE FROM comptes WHERE id = ?', params: [acteur.compte] },
-      evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: acteur.compte, charge: { teams: membres.length }, maintenant: t }),
+      { sql: 'DELETE FROM membres WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM notifications WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM dispo_regles WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM dispo_exceptions WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM presences WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM ical_jetons WHERE compte_id = ?', params: [compte] },
+      // Anonymisation : plus rien n'est attribué à ce compte.
+      { sql: 'UPDATE taches SET assigne_id = NULL WHERE assigne_id = ?', params: [compte] },
+      { sql: 'UPDATE objectifs SET proprietaire_id = NULL WHERE proprietaire_id = ?', params: [compte] },
+      { sql: 'UPDATE review_reperes SET cible_id = NULL WHERE cible_id = ?', params: [compte] },
+      { sql: 'DELETE FROM tentatives WHERE cle = ?', params: [`invitation:compte:${compte}`] },
+      { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
+      evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, ...(compte === acteur.compte ? {} : { parFondateur: true }) }, maintenant: t }),
     );
     await base.lot(lot);
     return { ok: true };
+  }
+
+  async function supprimerMesDonnees(acteur) {
+    return supprimerCompte(acteur, acteur.compte);
+  }
+
+  const MOTIF_COMPTE = /^(principal|[a-z0-9]{6,16})$/;
+  function compteCible(acteur, compte) {
+    if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Réservé au Fondateur.');
+    if (typeof compte !== 'string' || !MOTIF_COMPTE.test(compte)) throw echec(404, 'compte-introuvable', 'Compte introuvable.');
+    return compte;
+  }
+
+  /** Fondateur : export des données d'un membre (demande RGPD transmise au Fondateur). */
+  async function exporterCompte(acteur, compte) {
+    compteCible(acteur, compte);
+    if (!(await profilDe(compte)) && !(await base.premier('SELECT id FROM membres WHERE compte_id = ?', [compte]))) throw echec(404, 'compte-introuvable', 'Compte introuvable.');
+    return exporter(acteur, compte);
+  }
+
+  /** Fondateur : suppression (anonymisation) du compte Esport d'un membre. */
+  async function supprimerCompteMembre(acteur, compte) {
+    compteCible(acteur, compte);
+    if (!(await profilDe(compte)) && !(await base.premier('SELECT id FROM membres WHERE compte_id = ?', [compte]))) throw echec(404, 'compte-introuvable', 'Compte introuvable.');
+    return supprimerCompte(acteur, compte);
   }
 
   // -------------------------------------------------------------- Modules futurs
@@ -914,11 +937,12 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     creerInvitation,
     revoquerInvitation,
     accepterInvitation,
-    journal,
     notifications,
     marquerLues,
     exporterMesDonnees,
     supprimerMesDonnees,
+    exporterCompte,
+    supprimerCompteMembre,
     moduleFutur,
   };
 }

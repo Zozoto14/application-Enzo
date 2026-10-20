@@ -14,6 +14,7 @@
  *   PATCH|DELETE      /teams/:t/playbook/:id
  */
 
+import { ENTETES_SECURITE } from '../entetes.mjs';
 import { echec } from '../outils.mjs';
 import { CSP_PAGE_STRAT, pageStrat } from './svg.mjs';
 
@@ -28,12 +29,11 @@ const segment = s => {
   }
 };
 
+/** Page publique de partage : CSP stricte (aucun script), jamais dans un cadre, jamais indexée. */
 const ENTETES_PAGE = {
+  ...ENTETES_SECURITE,
   'Content-Type': 'text/html; charset=utf-8',
   'Cache-Control': 'no-store',
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'no-referrer',
-  'X-Robots-Tag': 'noindex',
   'Content-Security-Policy': CSP_PAGE_STRAT,
 };
 

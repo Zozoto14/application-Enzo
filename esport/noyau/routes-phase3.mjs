@@ -23,17 +23,18 @@
  *   GET|POST          /teams/:t/objectifs          ; PATCH|DELETE /teams/:t/objectifs/:id
  *   GET|POST          /teams/:t/taches             (?filtre=miennes|retard&statut=&objectif=&assigne=&priorite=)
  *   PATCH|DELETE      /teams/:t/taches/:id
+ *   GET               /teams/:t/taches/export.csv ; /teams/:t/objectifs/export.csv  (?format=json : enveloppe)
  */
 
 import { servicesObjectifs } from './objectifs.mjs';
 import { servicesResumes } from './resumes.mjs';
+import { ENTETES_SECURITE, disposition, reponseFichier } from './entetes.mjs';
 import { echec } from './outils.mjs';
 
-const ENTETES_FICHIER = {
+const ENTETES_PDF = {
   'Access-Control-Allow-Origin': '*',
   'Cache-Control': 'private, no-store',
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'no-referrer',
+  ...ENTETES_SECURITE,
   // Pas de « sandbox » : Chrome refuserait d'afficher le PDF.
   'Content-Security-Policy': "frame-ancestors 'none'",
 };
@@ -43,17 +44,19 @@ export async function routeFichierSigne(resumes, url) {
   const f = /^\/fichiers\/([^/]+)$/.exec(url.pathname.replace(/^\/api\/esport(?=\/|$)/, ''));
   if (!f) return undefined;
   const { octets, type, nom, telecharger } = await resumes.lireFichierSigne(f[1], url.searchParams);
-  const nomAscii = nom.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '');
   return new Response(octets, {
     status: 200,
-    headers: {
-      ...ENTETES_FICHIER,
-      'Content-Type': type,
-      'Content-Length': String(octets.length),
-      'Content-Disposition': `${telecharger ? 'attachment' : 'inline'}; filename="${nomAscii}"; filename*=UTF-8''${encodeURIComponent(nom)}`,
-    },
+    headers: { ...ENTETES_PDF, 'Content-Type': type, 'Content-Length': String(octets.length), 'Content-Disposition': disposition(nom, !telecharger) },
   });
 }
+
+const filtresTaches = q => ({
+  filtre: q.get('filtre') || undefined,
+  statut: q.get('statut') || undefined,
+  objectif: q.get('objectif') || undefined,
+  assigne: q.get('assigne') || undefined,
+  priorite: q.get('priorite') || undefined,
+});
 
 export function servicesPhase3({ base, stockage, cleSession, maintenant, socle }) {
   return {
@@ -115,6 +118,8 @@ export async function routerPhase3({ resumes, objectifs }, { requete, url, chemi
     throw echec(404, 'route', 'Adresse inconnue.');
   }
 
+  if (section === 'objectifs' && a === 'export.csv' && !b && m === 'GET') return reponseFichier(await objectifs.exporterObjectifs(acteur, teamId), url);
+  if (section === 'taches' && a === 'export.csv' && !b && m === 'GET') return reponseFichier(await objectifs.exporterTaches(acteur, teamId, filtresTaches(q)), url);
   if (section === 'objectifs' && !b) {
     if (!a && m === 'GET') return { objectifs: await objectifs.objectifs(acteur, teamId) };
     if (!a && m === 'POST') return objectifs.creerObjectif(acteur, teamId, await lireCorps(requete));
@@ -123,13 +128,7 @@ export async function routerPhase3({ resumes, objectifs }, { requete, url, chemi
   }
   if (section === 'taches' && !b) {
     if (!a && m === 'GET') {
-      return objectifs.taches(acteur, teamId, {
-        filtre: q.get('filtre') || undefined,
-        statut: q.get('statut') || undefined,
-        objectif: q.get('objectif') || undefined,
-        assigne: q.get('assigne') || undefined,
-        priorite: q.get('priorite') || undefined,
-      });
+      return objectifs.taches(acteur, teamId, { ...filtresTaches(q), limite: q.get('limite') || undefined, decalage: q.get('decalage') || undefined });
     }
     if (!a && m === 'POST') return objectifs.creerTache(acteur, teamId, await lireCorps(requete));
     if (a && m === 'PATCH') return objectifs.modifierTache(acteur, teamId, a, await lireCorps(requete));

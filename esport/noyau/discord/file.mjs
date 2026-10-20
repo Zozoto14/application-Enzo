@@ -67,6 +67,12 @@ async function pseudoDe(base, compte) {
   return l?.pseudo ?? (compte === 'principal' ? 'Le Fondateur' : 'Un membre');
 }
 
+/** Réunion d'un type « staff » (ou introuvable) : rien ne sort sur Discord. */
+async function reunionStaff(base, ev) {
+  const r = await base.premier('SELECT y.visibilite FROM reunions r JOIN types_reunion y ON y.id = r.type_id WHERE r.id = ? AND r.team_id = ?', [ev.entite_id, ev.team_id]);
+  return !r || r.visibilite === 'staff';
+}
+
 /** Variables du message pour un événement de domaine ; `null` : rien à envoyer. */
 async function variablesDe(base, ev, cle, charge, team) {
   const t = Date.parse(ev.cree_le);
@@ -83,14 +89,12 @@ async function variablesDe(base, ev, cle, charge, team) {
       return { ...base_, ...instant, membre: await pseudoDe(base, charge.compte) };
     case 'summary_published': {
       // Les réunions de type « staff » ne sortent jamais du staff : rien n'est publié sur Discord.
-      const r = await base.premier(
-        'SELECT y.visibilite FROM reunions r JOIN types_reunion y ON y.id = r.type_id WHERE r.id = ? AND r.team_id = ?',
-        [ev.entite_id, ev.team_id],
-      );
-      if (!r || r.visibilite === 'staff') return null;
+      if (await reunionStaff(base, ev)) return null;
       return { ...base_, titre: charge.titre ?? '', acteur: await pseudoDe(base, ev.acteur_id), membre: await pseudoDe(base, charge.deposePar) };
     }
     case 'summary_submitted':
+      // Même règle au dépôt : le titre d'une réunion staff ne part pas sur le salon de la team.
+      if (await reunionStaff(base, ev)) return null;
       return { ...base_, titre: charge.titre ?? '', type: charge.type ?? '', date: dateJour(charge.dateReunion), membre: await pseudoDe(base, ev.acteur_id) };
     case 'task_assigned':
       return {
@@ -114,8 +118,12 @@ async function variablesDe(base, ev, cle, charge, team) {
       return { ...base_, membre: await pseudoDe(base, charge.compte), de: charge.de ?? '', vers: charge.vers ?? '', acteur: await pseudoDe(base, ev.acteur_id) };
     case 'review_created':
       return { ...base_, titre: charge.titre ?? '', acteur: await pseudoDe(base, ev.acteur_id) };
-    case 'strat_created':
+    case 'strat_created': {
+      // Une strat privée (brouillon de son auteur) n'est jamais annoncée.
+      const s = await base.premier('SELECT visibilite FROM strats WHERE id = ? AND team_id = ?', [ev.entite_id, ev.team_id]);
+      if (!s || s.visibilite !== 'team') return null;
       return { ...base_, titre: charge.titre ?? '', carte: charge.carte ?? '', side: charge.side === 'defense' ? 'Défense' : 'Attaque', acteur: await pseudoDe(base, ev.acteur_id) };
+    }
     case 'playbook_validated':
       return { ...base_, titre: charge.titre ?? '', surCarte: charge.carte ? ` sur ${charge.carte}` : '', acteur: await pseudoDe(base, ev.acteur_id) };
     default:

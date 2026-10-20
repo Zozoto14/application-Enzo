@@ -12,7 +12,7 @@ import { echec, iso } from './outils.mjs';
 export const FORMAT_EXPORT = 'applibourse-esport';
 export const VERSION_EXPORT = 1;
 
-/** Tables dans l'ordre des dépendances (clés étrangères) ; `tentatives` (passagère) n'est pas exportée. */
+/** Tables dans l'ordre des dépendances (clés étrangères) ; `tentatives` et `limites` (passagères) ne sont pas exportées. */
 export const TABLES = [
   ['comptes', 'id'],
   ['teams', 'id'],

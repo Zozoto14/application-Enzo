@@ -17,6 +17,7 @@
 import { evenement } from '../evenements.mjs';
 import { autorise } from '../permissions.mjs';
 import { echec, iso, jsonOu, nouvelId, texteLong, texteNettoye } from '../outils.mjs';
+import { lignesParIds } from '../requetes.mjs';
 import { lienSur } from '../review/markdown.mjs';
 import { extraireYoutube } from '../review/youtube.mjs';
 
@@ -84,15 +85,17 @@ export function servicesScouting({ base, maintenant = () => Date.now(), socle, r
     if (!peut(ctx, 'planning.view') || adversaireIds.length === 0) return null;
     const voitReview = peut(ctx, 'video_review.view');
     const sortie = new Map(adversaireIds.map(id => [id, []]));
-    for (const id of adversaireIds) {
-      const lignes = await base.tous(
-        'SELECT id, titre, type, debut, fin, fuseau, recurrence, review_id FROM planning_evenements WHERE team_id = ? AND adversaire_id = ? AND supprime_le IS NULL ORDER BY debut DESC LIMIT ?',
-        [ctx.team.id, id, MAX.confrontations],
-      );
-      sortie.set(
-        id,
-        lignes.map(e => ({ id: e.id, titre: e.titre, type: e.type, debut: e.debut, fin: e.fin, fuseau: e.fuseau, recurrent: Boolean(e.recurrence), reviewId: voitReview ? (e.review_id ?? null) : null })),
-      );
+    // Une requête par paquet d'adversaires (et non une par adversaire), puis les plus récentes de chacun.
+    const lignes = await lignesParIds(
+      base,
+      'SELECT id, titre, type, debut, fin, fuseau, recurrence, review_id, adversaire_id FROM planning_evenements WHERE team_id = ? AND supprime_le IS NULL AND adversaire_id',
+      adversaireIds,
+      { paramsAvant: [ctx.team.id], apres: 'ORDER BY debut DESC' },
+    );
+    for (const e of lignes) {
+      const liste = sortie.get(e.adversaire_id);
+      if (!liste || liste.length >= MAX.confrontations) continue;
+      liste.push({ id: e.id, titre: e.titre, type: e.type, debut: e.debut, fin: e.fin, fuseau: e.fuseau, recurrent: Boolean(e.recurrence), reviewId: voitReview ? (e.review_id ?? null) : null });
     }
     return sortie;
   }

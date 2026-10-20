@@ -19,6 +19,8 @@
 import { evenement } from './evenements.mjs';
 import { autorise } from './permissions.mjs';
 import { echec, iso, nouvelId, texteLong, texteNettoye } from './outils.mjs';
+import { csv } from './planning/presence.mjs';
+import { pseudosDe } from './requetes.mjs';
 import { dateValide } from './resumes.mjs';
 
 export const MODULE_OBJECTIFS = 'goals_tasks';
@@ -64,11 +66,7 @@ export function servicesObjectifs({ base, maintenant = () => Date.now(), socle }
     return Boolean(await base.premier("SELECT id FROM membres WHERE team_id = ? AND compte_id = ? AND statut = 'actif'", [teamId, compte]));
   }
 
-  async function noms(ids) {
-    const sortie = {};
-    for (const id of new Set(ids.filter(x => typeof x === 'string'))) sortie[id] = (await base.premier('SELECT pseudo FROM comptes WHERE id = ?', [id]))?.pseudo ?? null;
-    return sortie;
-  }
+  const noms = ids => pseudosDe(base, ids);
 
   const personne = (id, pseudos) => (id ? { compte: id, pseudo: pseudos[id] ?? null } : null);
 
@@ -235,16 +233,53 @@ export function servicesObjectifs({ base, maintenant = () => Date.now(), socle }
       conditions.push('assigne_id = ?');
       params.push(filtres.assigne);
     }
+    // Pagination : `limite` (500 par défaut et au plus), `decalage` ; `suite` = décalage de la page suivante.
+    const limite = Math.min(500, Math.max(1, Number(filtres.limite) || 500));
+    const decalage = Math.max(0, Math.floor(Number(filtres.decalage) || 0));
     const lignes = await base.tous(
       `SELECT * FROM taches WHERE ${conditions.join(' AND ')}
         ORDER BY CASE WHEN echeance IS NULL THEN 1 ELSE 0 END, echeance,
                  CASE priorite WHEN 'urgente' THEN 0 WHEN 'haute' THEN 1 WHEN 'normale' THEN 2 ELSE 3 END, cree_le
-        LIMIT 500`,
-      params,
+        LIMIT ? OFFSET ?`,
+      [...params, limite + 1, decalage],
     );
+    const page = lignes.slice(0, limite);
     const objectifsTeam = new Map((await base.tous('SELECT id, titre FROM objectifs WHERE team_id = ?', [teamId])).map(o => [o.id, o]));
-    const pseudos = await noms(lignes.flatMap(t => [t.assigne_id, t.cree_par]));
-    return { jour, taches: lignes.map(t => tachePublique(t, pseudos, jour, objectifsTeam)) };
+    const pseudos = await noms(page.flatMap(t => [t.assigne_id, t.cree_par]));
+    return { jour, taches: page.map(t => tachePublique(t, pseudos, jour, objectifsTeam)), suite: lignes.length > limite ? decalage + limite : null };
+  }
+
+  /** Export CSV des tâches (mêmes filtres que la liste, sans pagination : 5 000 au plus). */
+  async function exporterTaches(acteur, teamId, filtres = {}) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exiger(ctx, 'goals_tasks.view');
+    const toutes = [];
+    for (let decalage = 0; toutes.length < 5000; ) {
+      const p = await taches(acteur, teamId, { ...filtres, limite: 500, decalage });
+      toutes.push(...p.taches);
+      if (p.suite === null) break;
+      decalage = p.suite;
+    }
+    const S = { a_faire: 'À faire', en_cours: 'En cours', fait: 'Fait' };
+    const P = { basse: 'Basse', normale: 'Normale', haute: 'Haute', urgente: 'Urgente' };
+    const contenu = csv(
+      ['Titre', 'Description', 'Objectif', 'Assigné', 'Échéance', 'Priorité', 'Statut', 'En retard', 'Créée par', 'Créée le', 'Terminée le'],
+      toutes.map(t => [t.titre, t.description, t.objectif?.titre ?? '', t.assigne?.pseudo ?? (t.assigne ? 'Compte supprimé' : ''), t.echeance ?? '', P[t.priorite] ?? t.priorite, S[t.statut] ?? t.statut, t.enRetard ? 'Oui' : 'Non', t.creePar?.pseudo ?? '', t.creeLe, t.termineLe ?? '']),
+    );
+    return { nom: `taches-${ctx.team.slug}-${dateDuJour(maintenant(), ctx.team.fuseau)}.csv`, type: 'text/csv; charset=utf-8', contenu };
+  }
+
+  /** Export CSV des objectifs, avec leur progression. */
+  async function exporterObjectifs(acteur, teamId) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exiger(ctx, 'goals_tasks.view');
+    const liste = await objectifsPublics(teamId, await lignesObjectifs(teamId));
+    const S = { actif: 'En cours', atteint: 'Atteint', abandonne: 'Abandonné' };
+    const contenu = csv(
+      ['Titre', 'Description', 'Pour', 'Date cible', 'Statut', 'Tâches faites', 'Tâches', 'Progression (%)', 'Créé par', 'Créé le'],
+      liste.map(o => [o.titre, o.description, o.proprietaire ? (o.proprietaire.pseudo ?? 'Compte supprimé') : 'Équipe', o.dateCible ?? '', S[o.statut] ?? o.statut, o.progression.faites, o.progression.total, o.progression.pourcentage, o.creePar?.pseudo ?? '', o.creeLe]),
+    );
+    return { nom: `objectifs-${ctx.team.slug}-${dateDuJour(maintenant(), ctx.team.fuseau)}.csv`, type: 'text/csv; charset=utf-8', contenu };
   }
 
   async function tacheDeTeam(teamId, id) {
@@ -374,7 +409,7 @@ export function servicesObjectifs({ base, maintenant = () => Date.now(), socle }
     return { ok: true };
   }
 
-  return { objectifs, creerObjectif, modifierObjectif, supprimerObjectif, taches, creerTache, modifierTache, supprimerTache };
+  return { objectifs, creerObjectif, modifierObjectif, supprimerObjectif, taches, creerTache, modifierTache, supprimerTache, exporterTaches, exporterObjectifs };
 }
 
 /**

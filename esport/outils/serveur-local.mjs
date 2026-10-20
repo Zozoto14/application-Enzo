@@ -75,6 +75,11 @@ export async function demarrerServeurEsport({
       await rappelsDiscord(base, { maintenant: Date.now() });
       await distribuer(base, { maintenant: Date.now() });
       await traiterFile(base, { cle: cleDiscord || cle, fetch: fetchDiscord, maintenant: Date.now(), lienApp });
+      // Rétention : journal (durée choisie par chaque team), événements traités, compteurs de débit.
+      const { purgerJournal } = await import('../noyau/journal.mjs');
+      const { purgerLimites } = await import('../noyau/limites.mjs');
+      await purgerJournal(base, { maintenant: Date.now() });
+      await purgerLimites(base, Date.now());
     })().catch(e => console.error('[esport] cron local', e));
   }, 15 * 60 * 1000);
   cron.unref?.();

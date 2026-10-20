@@ -122,7 +122,8 @@ export async function abonneNotifications(base, ev) {
       }
       return;
     case 'member.removed':
-      if (charge.compte && charge.compte !== ev.acteur_id) await notifier(base, ev, charge.compte, 'retire', {});
+      // Compte supprimé (RGPD) : plus personne à prévenir, et rien ne doit être recréé à son nom.
+      if (charge.compte && charge.compte !== ev.acteur_id && !charge.suppression) await notifier(base, ev, charge.compte, 'retire', {});
       return;
     case 'meeting.submitted': {
       // Rédacteurs de la team, et le Fondateur (rédacteur partout) s'il a un profil Esport.

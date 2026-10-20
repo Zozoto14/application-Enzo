@@ -24,6 +24,7 @@
 import { evenement } from '../evenements.mjs';
 import { autorise } from '../permissions.mjs';
 import { echec, iso, nouvelId, texteNettoye } from '../outils.mjs';
+import { pseudosDe } from '../requetes.mjs';
 import { CATEGORIES, exporterMarkdown, nomFichierExport } from './export.mjs';
 import { nettoyerNote } from './markdown.mjs';
 import { adresseYoutube, extraireYoutube } from './youtube.mjs';
@@ -59,11 +60,7 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
     if (permission && !peut(ctx, permission)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
   }
 
-  async function pseudos(ids) {
-    const sortie = {};
-    for (const id of new Set(ids.filter(x => typeof x === 'string'))) sortie[id] = (await base.premier('SELECT pseudo FROM comptes WHERE id = ?', [id]))?.pseudo ?? null;
-    return sortie;
-  }
+  const pseudos = ids => pseudosDe(base, ids);
   const personne = (id, noms) => (id ? { compte: id, pseudo: noms[id] ?? null } : null);
 
   async function membreActif(teamId, compte) {

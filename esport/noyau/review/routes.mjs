@@ -19,23 +19,14 @@
  *   POST                /teams/:t/scouting/adversaires/:a/vods/:x/review   ouvrir en review vidéo (crée ou lie)
  */
 
+import { ENTETES_FICHIER, disposition } from '../entetes.mjs';
 import { echec } from '../outils.mjs';
 
-const ENTETES_FICHIER = {
-  'Access-Control-Allow-Origin': '*',
-  'Cache-Control': 'no-store',
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'no-referrer',
-  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
-};
+
 
 function fichier(f, url) {
   if (url.searchParams.get('format') === 'json') return f;
-  const nomAscii = f.nom.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '');
-  return new Response(f.contenu, {
-    status: 200,
-    headers: { ...ENTETES_FICHIER, 'Content-Type': f.type, 'Content-Disposition': `attachment; filename="${nomAscii}"; filename*=UTF-8''${encodeURIComponent(f.nom)}` },
-  });
+  return new Response(f.contenu, { status: 200, headers: { ...ENTETES_FICHIER, 'Content-Type': f.type, 'Content-Disposition': disposition(f.nom) } });
 }
 
 const segment = s => {

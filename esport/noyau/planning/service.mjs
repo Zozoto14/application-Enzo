@@ -11,6 +11,7 @@
 import { evenement } from '../evenements.mjs';
 import { CLE_PROPRIETAIRE, autorise } from '../permissions.mjs';
 import { aleatoire, echec, iso, jsonOu, nouvelId, sha256Hex, texteLong, texteNettoye } from '../outils.mjs';
+import { lignesParIds } from '../requetes.mjs';
 import { heatmap, plagesPropices, TYPES_DISPO, PAS_AUTORISES } from './dispos.mjs';
 import { calendrierIcs, LIBELLES_TYPES } from './ical.mjs';
 import { RSVP, REELS, csv, statistiques } from './presence.mjs';
@@ -140,9 +141,7 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
 
   async function exceptionsDe(ids) {
     const parEv = new Map(ids.map(id => [id, new Map()]));
-    for (const id of ids) {
-      for (const x of await base.tous('SELECT * FROM planning_exceptions WHERE evenement_id = ?', [id])) parEv.get(id).set(x.occurrence, x);
-    }
+    for (const x of await lignesParIds(base, 'SELECT * FROM planning_exceptions WHERE evenement_id', ids)) parEv.get(x.evenement_id)?.set(x.occurrence, x);
     return parEv;
   }
 
@@ -785,6 +784,8 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
 
   async function revoquerJetonIcal(acteur, teamId, jetonId) {
     const ctx = await contexteTeam(acteur, teamId);
+    // Ordre des contrôles : module avant tout (désactivé : 404 comme les autres routes du planning).
+    if (!ctx.modules.has('planning')) throw echec(404, 'module-desactive', 'Ce module n’est pas activé pour cette team.');
     if (typeof jetonId !== 'string' || !MOTIF_UUID.test(jetonId)) throw echec(404, 'jeton-introuvable', 'Abonnement introuvable.');
     const j = await base.premier('SELECT * FROM ical_jetons WHERE id = ? AND team_id = ?', [jetonId, teamId]);
     // Le sien, ou n'importe lequel pour qui gère les membres.

@@ -25,6 +25,8 @@ import { verificateurRelais } from './noyau/authentification.mjs';
 import { traiterFile } from './noyau/discord/file.mjs';
 import { rappelsDiscord } from './noyau/discord/rappels.mjs';
 import { distribuer } from './noyau/evenements.mjs';
+import { purgerJournal } from './noyau/journal.mjs';
+import { purgerLimites } from './noyau/limites.mjs';
 import { rappelsEcheances } from './noyau/objectifs.mjs';
 import { rappelsPresence } from './noyau/planning/rappels.mjs';
 
@@ -48,7 +50,11 @@ export default {
     return api(env)(requete, { attendre: p => ctx.waitUntil(p) });
   },
 
-  /** Cron : rappels de présence, d'échéance des tâches et J-1/H-1 Discord, événements en attente (nouvel essai), file d'envoi Discord (réessais), ménage des tentatives anciennes. */
+  /**
+   * Cron : rappels de présence, d'échéance des tâches et J-1/H-1 Discord, événements en attente (nouvel essai),
+   * file d'envoi Discord (réessais), purge de rétention (journal selon la durée de chaque team, événements traités),
+   * ménage des tentatives et des compteurs de débit anciens.
+   */
   async scheduled(_evenement, env, ctx) {
     if (!env.BASE) return;
     const base = baseD1(env.BASE);
@@ -59,6 +65,8 @@ export default {
         await rappelsDiscord(base, { maintenant: Date.now() }).catch(e => console.error('[esport] rappels discord', e));
         await distribuer(base, { maintenant: Date.now(), limite: 500 });
         await traiterFile(base, { cle: env.CLE_DISCORD || env.CLE_ESPORT, maintenant: Date.now(), lienApp: env.LIEN_APP }).catch(e => console.error('[esport] file discord', e));
+        await purgerJournal(base, { maintenant: Date.now() }).catch(e => console.error('[esport] rétention', e));
+        await purgerLimites(base, Date.now()).catch(e => console.error('[esport] limites', e));
         await base.executer('DELETE FROM tentatives WHERE maj_le < ?', [new Date(Date.now() - 7 * 86_400_000).toISOString()]);
       })(),
     );
