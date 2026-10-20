@@ -30,8 +30,12 @@ async function notifier(base, ev, compte, type, charge) {
   );
 }
 
-/** Membres actifs concernés par un événement (liste vide : toute la team) qui voient le planning. */
-async function concernes(base, teamId, liste) {
+/**
+ * Destinataires d'une notification d'événement : les CONVOQUÉS (`convoques`,
+ * résolus à l'écriture) qui voient le planning. Ancien format (`concernes`,
+ * liste vide = toute la team) : gardé pour les événements de l'outbox d'avant.
+ */
+async function concernes(base, teamId, liste, convoques) {
   const lignes = await base.tous(
     `SELECT DISTINCT m.compte_id AS compte FROM membres m
        JOIN roles r ON r.id = m.role_id
@@ -40,6 +44,7 @@ async function concernes(base, teamId, liste) {
     [teamId],
   );
   const tous = lignes.map(l => l.compte);
+  if (Array.isArray(convoques)) return tous.filter(c => convoques.includes(c));
   return Array.isArray(liste) && liste.length > 0 ? tous.filter(c => liste.includes(c)) : tous;
 }
 
@@ -67,7 +72,7 @@ export async function abonnePlanning(base, ev) {
   }
   const type = NOTIFS[ev.type];
   if (!type) return;
-  for (const compte of await concernes(base, ev.team_id, charge.concernes)) {
+  for (const compte of await concernes(base, ev.team_id, charge.concernes, charge.convoques)) {
     if (compte === ev.acteur_id) continue;
     await notifier(base, ev, compte, type, { evenementId: ev.entite_id, titre: charge.titre ?? null, debut: charge.debut ?? null, type: charge.type ?? null, occurrence: charge.occurrence ?? null });
   }

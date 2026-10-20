@@ -104,7 +104,7 @@ export function occurrencesBrutes(evenement, du, au) {
 /**
  * Occurrences effectives sur [du, au[ : exceptions appliquées (annulée →
  * retirée ; déplacée → nouvelles dates ; titre, description, lieu remplacés).
- * `exceptions` : Map cle → `{ annulee, titre, description, debut, fin, lieu }`.
+ * `exceptions` : Map cle → `{ annulee, titre, description, debut, fin, lieu, convocation }`.
  */
 export function occurrences(evenement, du, au, exceptions = new Map()) {
   const marge = DEPLACEMENT_MAX_MS + 86_400_000;
@@ -123,6 +123,8 @@ export function occurrences(evenement, du, au, exceptions = new Map()) {
       titre: x?.titre ?? null,
       description: x?.description ?? null,
       lieu: x?.lieu ?? null,
+      // Convocation propre à cette date (JSON), sinon celle de la série.
+      convocation: x?.convocation ?? null,
     });
   }
   return sortie.sort((a, b) => a.debut - b.debut);

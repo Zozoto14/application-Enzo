@@ -21,7 +21,7 @@
  */
 
 import { evenement } from './evenements.mjs';
-import { CLE_PROPRIETAIRE } from './permissions.mjs';
+import { CLE_PROPRIETAIRE, autorise } from './permissions.mjs';
 import { lirePseudo } from './service.mjs';
 import { echec, iso, nouvelId, texteNettoye } from './outils.mjs';
 
@@ -39,7 +39,7 @@ const lirePoste = valeur => (valeur ? texteNettoye(valeur, 30) || null : null);
 /** Statut d'un compte Esport : invité (créé depuis l'Esport, jamais connecté) ou actif. */
 const statutCompte = c => (c.invite_le && !c.active_le ? 'invite' : 'actif');
 
-export function servicesComptes({ base, maintenant = () => Date.now(), noyau }) {
+export function servicesComptes({ base, maintenant = () => Date.now(), noyau, demandes }) {
   const { contexteTeam, contextesDe, exiger, exigerRoleGerable, roleGerable, roleDeTeam } = noyau;
 
   /** Teams (et rôles) demandées : chaque team accessible, rôle de la team, une seule fois par team. */
@@ -75,6 +75,8 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau }) 
     const pseudo = lirePseudo(corps?.pseudo);
     const affectations = await lireAffectations(acteur, corps?.affectations);
     await pseudoLibre(pseudo);
+    // Validation d'une demande de compte (members.create) : la demande doit être en attente ; close dans le même lot.
+    const demande = corps?.demandeId !== undefined && corps?.demandeId !== null ? await demandes.aValider(acteur, corps.demandeId) : null;
     if (corps?.verifier === true) return { ok: true, verifie: true };
     const compte = lireCompte(corps?.compte);
     if (await base.premier('SELECT id FROM comptes WHERE id = ?', [compte])) {
@@ -105,6 +107,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau }) 
         }),
       );
     }
+    if (demande) lot.push(...demandes.cloreValidee(acteur, demande, compte, t));
     try {
       await base.lot(lot);
     } catch (e) {
@@ -130,17 +133,30 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau }) 
 
   /**
    * `POST /teams/:id/membres` : ajoute un compte EXISTANT à une team, avec un
-   * rôle. Permission `members.invite` dans la team, rôle attribuable par
-   * l'acteur, compte déjà visible de l'acteur (on n'ajoute pas un inconnu).
+   * rôle attribuable par l'acteur (anti-escalade).
+   *  - `members.invite` : un compte déjà visible de l'acteur (membre d'une de
+   *    ses teams) ; on n'ajoute pas un inconnu ;
+   *  - `members.create` : tout compte du hub qui a DÉJÀ un profil Esport,
+   *    désigné par son identifiant ou son pseudo exact (`pseudo`) : pas besoin
+   *    du Fondateur, le compte existe.
    */
   async function ajouterMembre(acteur, teamId, corps) {
     const ctx = await contexteTeam(acteur, teamId);
-    exiger(ctx, 'members.invite');
+    const createur = autorise(ctx.permissions, ctx.modules, 'members.create');
+    if (!createur) exiger(ctx, 'members.invite');
     const role = await roleDeTeam(teamId, corps?.roleId);
     await exigerRoleGerable(ctx, role, 'Vous ne pouvez pas attribuer un rôle plus élevé que le vôtre.');
-    const compte = corps?.compte === 'principal' && acteur.superAdmin ? 'principal' : lireCompte(corps?.compte);
-    const fiche = await base.premier('SELECT * FROM comptes WHERE id = ?', [compte]);
-    if (!fiche || !(await compteVisible(acteur, compte))) throw echec(404, 'compte-introuvable', 'Compte introuvable (il doit déjà être membre d’une de vos teams).');
+    let fiche;
+    if (corps?.compte === undefined && typeof corps?.pseudo === 'string' && createur) {
+      fiche = await base.premier('SELECT * FROM comptes WHERE pseudo_cle = ?', [texteNettoye(corps.pseudo, 24).toLocaleLowerCase('fr')]);
+      if (fiche?.id === 'principal' && !acteur.superAdmin) fiche = null;
+    } else {
+      const id = corps?.compte === 'principal' && acteur.superAdmin ? 'principal' : lireCompte(corps?.compte);
+      fiche = await base.premier('SELECT * FROM comptes WHERE id = ?', [id]);
+      if (fiche && !createur && !(await compteVisible(acteur, id))) fiche = null;
+    }
+    if (!fiche) throw echec(404, 'compte-introuvable', createur ? 'Aucun compte de l’Esport à ce nom : demandez sa création au Fondateur.' : 'Compte introuvable (il doit déjà être membre d’une de vos teams).');
+    const compte = fiche.id;
     if (await base.premier('SELECT id FROM membres WHERE team_id = ? AND compte_id = ?', [teamId, compte])) throw echec(409, 'deja-membre', `${fiche.pseudo} est déjà membre de cette team.`);
     const t = maintenant();
     const date = iso(t);
@@ -167,8 +183,11 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau }) 
    * appartenances dans CES teams seulement. Rien d'une autre team ne sort.
    */
   async function annuaire(acteur) {
-    const ctxs = await contextesMembres(acteur);
+    // Teams où l'on voit les membres, et celles où l'on peut en proposer (members.create) : rôles et droits.
+    const ctxs = (await contextesDe(acteur)).filter(ctx => ctx.permissions.has('members.view') || ctx.permissions.has('members.create'));
     const ids = ctxs.map(c => c.team.id);
+    // Les comptes ne sortent que des teams où l'on voit les membres.
+    const idsVus = ctxs.filter(ctx => ctx.permissions.has('members.view')).map(c => c.team.id);
     const teams = [];
     const rolesParId = new Map();
     const gerables = new Set();
@@ -189,18 +208,18 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau }) 
           slug: ctx.team.slug,
           jeu: ctx.team.jeu,
           archivee: Boolean(ctx.team.archivee_le),
-          droits: { ajouter: p('members.invite'), roles: p('members.assign_role'), retirer: p('members.remove') },
+          droits: { ajouter: p('members.invite'), demander: p('members.create'), roles: p('members.assign_role'), retirer: p('members.remove') },
           roles: sien,
         });
       }
     }
     const lignes =
-      ids.length > 0
+      idsVus.length > 0
         ? await base.tous(
             `SELECT m.id, m.team_id, m.compte_id, m.role_id, m.poste_jeu, m.statut, m.rejoint_le, c.pseudo, c.pseudo_cle, c.riot_id, c.discord, c.invite_le, c.active_le
                FROM membres m JOIN comptes c ON c.id = m.compte_id
-              WHERE m.team_id IN (${ids.map(() => '?').join(', ')}) ORDER BY c.pseudo_cle`,
-            ids,
+              WHERE m.team_id IN (${idsVus.map(() => '?').join(', ')}) ORDER BY c.pseudo_cle`,
+            idsVus,
           )
         : [];
     const comptes = new Map();
@@ -236,7 +255,12 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau }) 
       }
     }
     const liste = [...comptes.values()].sort((a, b) => a.pseudo.localeCompare(b.pseudo, 'fr'));
-    return { superAdmin: acteur.superAdmin, peutCreerCompte: acteur.superAdmin, teams, comptes: liste };
+    // Demandes de compte : en attente (Fondateur : toutes ; sinon les siennes).
+    const attente = await base.premier(
+      acteur.superAdmin ? "SELECT COUNT(*) AS n FROM demandes_compte WHERE statut = 'en_attente'" : "SELECT COUNT(*) AS n FROM demandes_compte WHERE statut = 'en_attente' AND demandeur_id = ?",
+      acteur.superAdmin ? [] : [acteur.compte],
+    );
+    return { superAdmin: acteur.superAdmin, peutCreerCompte: acteur.superAdmin, teams, comptes: liste, demandesEnAttente: Number(attente?.n ?? 0) };
   }
 
   async function ficheCompte(acteur, compte) {
@@ -296,6 +320,8 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau }) 
       { sql: 'DELETE FROM dispo_regles WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM dispo_exceptions WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM presences WHERE compte_id = ?', params: [compte] },
+      // Ses demandes de compte en attente (avec l'adresse proposée) disparaissent.
+      { sql: "DELETE FROM demandes_compte WHERE demandeur_id = ? AND statut = 'en_attente'", params: [compte] },
       { sql: 'DELETE FROM ical_jetons WHERE compte_id = ?', params: [compte] },
       // Anonymisation, comme « Supprimer mes données » : plus rien n'est attribué à ce compte.
       { sql: 'UPDATE taches SET assigne_id = NULL WHERE assigne_id = ?', params: [compte] },

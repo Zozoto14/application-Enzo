@@ -104,13 +104,15 @@ export function MembresRoles({
               ))}
             </Panneau>
           ) : null}
-          {peut('members.invite') ? (
+          {peut('members.invite') || peut('members.create') ? (
             <Panneau theme={theme} testID="esport-inviter">
               <Intertitre theme={theme}>Inviter quelqu’un</Intertitre>
               <Text style={{ color: theme.texte, ...police(theme.policeTexte) }}>
                 {detail.moi.superAdmin
                   ? 'Créez son compte depuis la page Membres de l’Esport (nom, e-mail, team et rôle) : il reçoit un e-mail, choisit son mot de passe et voit directement la team. Plus aucun code à transmettre.'
-                  : 'Ajoutez à la team un compte qui existe déjà depuis la page Membres de l’Esport. Seul le Fondateur crée de nouveaux comptes.'}
+                  : peut('members.create')
+                    ? 'Depuis la page Membres de l’Esport : proposez un nouveau membre (le Fondateur valide la création de son compte) ou ajoutez un compte qui a déjà l’Esport.'
+                    : 'Ajoutez à la team un compte qui existe déjà depuis la page Membres de l’Esport. Seul le Fondateur crée de nouveaux comptes.'}
               </Text>
               {onMembresGlobal ? <BoutonHub theme={theme} titre="Ouvrir la page Membres" variante="plein" onPress={onMembresGlobal} testID="esport-inviter-membres" /> : null}
             </Panneau>
@@ -283,7 +285,28 @@ function Roles({ theme, client, detail, roles, onChange }: { theme: ThemeHub; cl
         }}
         testID="esport-role-choisi"
       />
-      {role && !edition ? <Text style={attenue}>{role.systeme ? 'Rôle système : non modifiable, mais duplicable en rôle personnalisé.' : 'Rôle personnalisé.'}</Text> : null}
+      {role && !edition ? <Text style={attenue}>{role.systeme ? 'Rôle système : non modifiable (sauf « Créer des membres »), mais duplicable en rôle personnalisé.' : 'Rôle personnalisé.'}</Text> : null}
+      {role && !edition && role.systeme && role.cle !== 'proprietaire' && gere && mes.has('members.create') ? (
+        <View style={[styles.ligne, { flexWrap: 'nowrap' }]} testID="esport-role-creer-membres">
+          <Case
+            theme={theme}
+            coche={role.permissions.includes('members.create')}
+            libelle={`${role.nom} : créer des membres`}
+            onChanger={v =>
+              void agir('Rôle', async () => {
+                const permissions = v ? [...role.permissions, 'members.create'] : role.permissions.filter(p => p !== 'members.create');
+                await client.modifierRole(detail.team.id, role.id, { permissions });
+                await onChange();
+                return v ? `${role.nom} : peut proposer de nouveaux membres (le Fondateur valide la création du compte).` : `${role.nom} : ne propose plus de membres.`;
+              })
+            }
+            testID="esport-role-creer-membres-case"
+          />
+          <Text style={{ flex: 1, color: theme.texte, fontSize: 13, ...police(theme.policeTexte) }}>
+            Créer des membres : proposer un nouveau compte au Fondateur, ou ajouter un compte qui a déjà l’Esport (rôle au plus égal au sien).
+          </Text>
+        </View>
+      ) : null}
       {edition ? (
         <View style={{ gap: 8 }}>
           <Champ theme={theme} libelle="Nom du rôle" valeur={edition.nom} onChanger={nom => setEdition({ ...edition, nom })} maxLength={40} testID="esport-role-nom" />

@@ -14,6 +14,24 @@ export type TypeEvenement = 'scrim' | 'match' | 'training' | 'meeting' | 'tourna
 export type Rsvp = 'oui' | 'non' | 'peut_etre' | 'sans_reponse';
 export type Reel = 'present' | 'absent' | 'excuse' | 'retard' | 'inconnu';
 
+/**
+ * Convocation d'un événement : une RÈGLE (groupes résolus à la lecture) plus
+ * des choix nominatifs. Les Propriétaires ne sont convoqués que cochés.
+ */
+export type GroupeConvocation = 'joueurs' | 'staff' | 'tous';
+export interface Convocation {
+  groupes: GroupeConvocation[];
+  membres: string[];
+  exclus: string[];
+  proprietaires: string[];
+}
+/** Membre convocable (formulaire) et son groupe. */
+export interface MembreConvocable {
+  compte: string;
+  pseudo: string;
+  groupe: 'joueurs' | 'staff' | 'proprietaire' | 'autres';
+}
+
 export interface DroitsPlanning {
   creer: boolean;
   modifier: boolean;
@@ -45,11 +63,17 @@ export interface Occurrence {
   modifiee: boolean;
   adversaireId: string | null;
   reviewId: string | null;
+  /** Convocation de cette occurrence (la sienne si `convocationPropre`, sinon celle de la série). */
+  convocation?: Convocation;
+  convocationPropre?: boolean;
+  /** Comptes convoqués à cette occurrence (`concernes` : même liste, ancien nom). */
+  convoques?: string[];
   concernes: string[];
+  convoqueMoi?: boolean;
   concerneMoi?: boolean;
   monRsvp?: Rsvp | null;
   maPresence?: Reel | null;
-  reponses?: { oui: number; non: number; peut_etre: number } | null;
+  reponses?: { oui: number; non: number; peut_etre: number; attendues?: number } | null;
   termine?: boolean;
 }
 
@@ -61,6 +85,8 @@ export interface ListePlanning {
   occurrences: Occurrence[];
   droits: DroitsPlanning;
   modules: { presence: boolean; dispos: boolean };
+  /** Staff (création, modification) : membres convocables et leur groupe. */
+  membres?: MembreConvocable[] | null;
 }
 
 export interface Recurrence {
@@ -86,8 +112,9 @@ export interface DetailEvenement {
   recurrence: Recurrence | null;
   adversaireId: string | null;
   reviewId: string | null;
+  convocation?: Convocation;
   concernes: string[];
-  exceptions: Array<{ occurrence: string; annulee: boolean; titre: string | null; debut: string | null; fin: string | null }>;
+  exceptions: Array<{ occurrence: string; annulee: boolean; titre: string | null; debut: string | null; fin: string | null; convocation?: Convocation | null }>;
   droits: DroitsPlanning;
 }
 
@@ -101,6 +128,8 @@ export interface SaisieEvenement {
   heureFin: string;
   fuseau?: string;
   recurrence?: Partial<Recurrence> | null;
+  /** Convoqués (aucun choix : les joueurs ; `null` pour une date : reprendre la liste de la série). */
+  convocation?: Convocation | null;
   concernes?: string[];
   adversaireId?: string | null;
 }

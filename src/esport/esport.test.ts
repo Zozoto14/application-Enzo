@@ -220,7 +220,7 @@ describe('page d’une team', () => {
     expect(lignesMatrice(['planning']).map(l => l.cle)).toEqual(['team', 'members', 'planning']);
     const membres = lignesMatrice([]).find(l => l.cle === 'members')!;
     expect(membres.colonnes.voir.map(p => p.cle)).toEqual(['members.view']);
-    expect(membres.colonnes.special.map(p => p.cle)).toEqual(['roles.manage']);
+    expect(membres.colonnes.special.map(p => p.cle)).toEqual(['members.create', 'roles.manage']);
   });
 
   it('rôles proposés à l’attribution : jamais au-dessus du sien', () => {

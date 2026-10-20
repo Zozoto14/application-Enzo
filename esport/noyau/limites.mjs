@@ -25,6 +25,8 @@ export const LIMITES = {
   team: { max: 10, fenetreS: 3600 },
   // Invitations créées : par compte.
   invitation: { max: 30, fenetreS: 3600 },
+  // Demandes de compte (members.create) : par compte (en plus du plafond de demandes en attente).
+  demande_compte: { max: 10, fenetreS: 3600 },
   // Codes d'invitation présentés (réussis ou non) : par IP, en plus de l'anti-force brute.
   acceptation_ip: { max: 30, fenetreS: 3600 },
   // Exports RGPD et exports CSV : par compte.

@@ -39,6 +39,9 @@ const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const STATUTS_MEMBRE = ['actif', 'suspendu'];
 
 /** Pseudo saisi (nettoyé) ou erreur 400. */
+/** Permissions qu'un Propriétaire peut donner ou retirer à un rôle SYSTÈME (Joueur, Coach…), sans le dupliquer. */
+export const PERMISSIONS_AJUSTABLES = ['members.create'];
+
 export function lirePseudo(saisie) {
   const pseudo = texteNettoye(saisie, 24);
   if (!MOTIF_PSEUDO.test(pseudo)) throw echec(400, 'pseudo', 'Pseudo : 2 à 24 caractères (lettres, chiffres, espace, _ . -).');
@@ -457,8 +460,14 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'roles.manage');
     const role = await roleDeTeam(teamId, roleId);
-    if (Number(role.systeme) === 1) throw echec(403, 'role-systeme', 'Un rôle système ne se modifie pas : dupliquez-le en rôle personnalisé.');
     const actuelles = await permissionsDuRole(role);
+    if (Number(role.systeme) === 1) {
+      // Rôle système : ni nom ni couleur ; seules les permissions AJUSTABLES (members.create) se donnent ou se retirent.
+      const saisiSysteme = lireRoleSaisi(corps, true);
+      const changees = saisiSysteme.permissions ? [...saisiSysteme.permissions.filter(p => !actuelles.includes(p)), ...actuelles.filter(p => !saisiSysteme.permissions.includes(p))] : [];
+      const ajustable = role.cle_systeme !== CLE_PROPRIETAIRE && corps?.nom === undefined && corps?.couleur === undefined && saisiSysteme.permissions && changees.every(p => PERMISSIONS_AJUSTABLES.includes(p));
+      if (!ajustable) throw echec(403, 'role-systeme', 'Un rôle système ne se modifie pas (sauf « Créer des membres ») : dupliquez-le en rôle personnalisé.');
+    }
     exigerSousEnsemble(ctx, actuelles, 'Ce rôle a des permissions que vous n’avez pas : vous ne pouvez pas le modifier.');
     const saisi = lireRoleSaisi(corps, true);
     if (saisi.permissions) exigerSousEnsemble(ctx, saisi.permissions);
@@ -787,6 +796,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       { sql: 'DELETE FROM dispo_regles WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM dispo_exceptions WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM presences WHERE compte_id = ?', params: [compte] },
+      // Ses demandes de compte en attente (avec l'adresse proposée) disparaissent.
+      { sql: "DELETE FROM demandes_compte WHERE demandeur_id = ? AND statut = 'en_attente'", params: [compte] },
       { sql: 'DELETE FROM ical_jetons WHERE compte_id = ?', params: [compte] },
       // Anonymisation : plus rien n'est attribué à ce compte.
       { sql: 'UPDATE taches SET assigne_id = NULL WHERE assigne_id = ?', params: [compte] },

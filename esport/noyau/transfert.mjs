@@ -56,6 +56,8 @@ export const TABLES = [
   ['strat_versions', 'id'],
   ['strat_partages', 'id'],
   ['playbook_entrees', 'id'],
+  // Migration 0009 : demandes de compte.
+  ['demandes_compte', 'id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

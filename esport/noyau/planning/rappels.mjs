@@ -1,7 +1,8 @@
 /**
  * Rappels de présence (cron) : pour chaque occurrence qui commence dans les
  * `rappelHeures` (réglage de la team, 24 h par défaut, 0 = jamais), chaque
- * joueur de la liste de présence qui n'a pas répondu reçoit UN rappel.
+ * CONVOQUÉ de l'occurrence qui n'a pas répondu reçoit UN rappel (un
+ * Propriétaire non coché n'est jamais relancé).
  *
  * Le rappel n'est pas envoyé d'ici : on publie l'événement de domaine
  * `attendance.reminder` dans l'outbox ; l'abonné des notifications in-app le
@@ -10,7 +11,7 @@
  */
 
 import { evenement } from '../evenements.mjs';
-import { iso, jsonOu } from '../outils.mjs';
+import { iso } from '../outils.mjs';
 import { servicesPlanning } from './service.mjs';
 
 /** Rend le nombre de rappels publiés. */
@@ -33,7 +34,8 @@ export async function rappelsPresence(base, { maintenant = Date.now(), limite = 
     const membres = await s.membresActifs(teamId);
     for (const { ev, o } of a) {
       const lignes = await base.tous('SELECT compte_id, rsvp, rappel_le FROM presences WHERE evenement_id = ? AND occurrence = ?', [ev.id, o.cle]);
-      const liste = s.roster(membres, ev, lignes.map(l => l.compte_id)).filter(m => m.a('attendance.rsvp_own'));
+      // Les CONVOQUÉS de cette occurrence qui répondent (RSVP) : jamais un Propriétaire non coché.
+      const liste = s.roster(membres, ev, o).filter(m => m.a('attendance.rsvp_own'));
       for (const m of liste) {
         const l = lignes.find(x => x.compte_id === m.compte);
         if (l && (l.rsvp !== 'sans_reponse' || l.rappel_le)) continue;
@@ -49,7 +51,7 @@ export async function rappelsPresence(base, { maintenant = Date.now(), limite = 
             acteur: null,
             entiteType: 'evenement',
             entiteId: ev.id,
-            charge: { compte: m.compte, evenementId: ev.id, occurrence: o.cle, titre: o.titre ?? ev.titre, type: ev.type, debut: iso(o.debut), concernes: jsonOu(ev.concernes, []) },
+            charge: { compte: m.compte, evenementId: ev.id, occurrence: o.cle, titre: o.titre ?? ev.titre, type: ev.type, debut: iso(o.debut) },
             maintenant,
           }),
         ]);

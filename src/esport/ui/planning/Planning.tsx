@@ -12,7 +12,8 @@ import { Pressable, Text, View } from 'react-native';
 import { BoutonHub, Case, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import type { Membre } from '../../client';
-import { apiPlanning, type AbonnementIcal, type ApiPlanning, type DetailEvenement, type DroitsPlanning, type ListePlanning, type Occurrence, type SaisieEvenement, type TypeEvenement } from '../../planning/api';
+import { apiPlanning, type AbonnementIcal, type ApiPlanning, type Convocation, type DetailEvenement, type DroitsPlanning, type ListePlanning, type MembreConvocable, type Occurrence, type SaisieEvenement, type TypeEvenement } from '../../planning/api';
+import { CONVOCATION_DEFAUT, memeConvocation } from '../../planning/convocations';
 import {
   JOURS_COURTS,
   TYPES_EVENEMENT,
@@ -32,7 +33,7 @@ import {
 import { BoutonConfirme, Choix, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from '../commun';
 import { EnTetePage, EtatVide, Pliable, Volet } from '../design';
 import type { PropsModule } from '../modules';
-import { BoutonsRsvp, CarteOccurrence, Pastille, PastilleType, SelecteurFuseau, useFuseau } from './commun';
+import { BoutonsRsvp, CarteOccurrence, Pastille, PastilleType, SelecteurConvocation, SelecteurFuseau, useFuseau } from './commun';
 import { ListePresence } from './ListePresence';
 
 type Vue = 'mois' | 'semaine' | 'liste';
@@ -102,6 +103,12 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
   }, [api, voitScouting]);
 
   const droits = donnees?.droits;
+  // Membres convocables (staff) et noms pour le détail.
+  const [convocables, setConvocables] = useState<MembreConvocable[]>([]);
+  useEffect(() => {
+    if (donnees?.membres) setConvocables(donnees.membres);
+  }, [donnees]);
+  const noms = useMemo(() => Object.fromEntries([...membres.map(m => [m.compte, m.pseudo] as const), ...convocables.map(m => [m.compte, m.pseudo] as const)]), [membres, convocables]);
   const repondre = (o: Occurrence) => async (r: 'oui' | 'non' | 'peut_etre') => {
     await api.repondre(o.evenementId, o.cle, r);
     setDonnees(d => (d ? { ...d, occurrences: d.occurrences.map(x => (x.evenementId === o.evenementId && x.cle === o.cle ? { ...x, monRsvp: r } : x)) } : d));
@@ -120,7 +127,7 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
       <FormulaireEvenement
         theme={theme}
         api={api}
-        membres={membres}
+        membres={convocables}
         adversaires={adversaires}
         fuseau={f.fuseau}
         formulaire={formulaire.f}
@@ -142,6 +149,7 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
         droits={droits}
         presenceActive={Boolean(donnees?.modules.presence)}
         adversaires={adversaires}
+        noms={noms}
         onRepondre={avecRsvp ? repondre(selection) : undefined}
         onRetour={() => setSelection(undefined)}
         onModifier={(mode, initial) => setFormulaire({ f: mode === 'serie' ? { mode: 'serie', id: selection.evenementId } : { mode: 'occurrence', id: selection.evenementId, cle: selection.cle }, initial })}
@@ -203,7 +211,7 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
       <Pliable
         theme={theme}
         titre="Filtres"
-        resume={[types.length ? `${types.length} type${types.length > 1 ? 's' : ''}` : '', membre ? (membres.find(m => m.compte === membre)?.pseudo ?? '1 membre') : '', f.choix === 'appareil' ? 'mon heure' : ''].filter(Boolean).join(' · ') || 'aucun'}
+        resume={[types.length ? `${types.length} type${types.length > 1 ? 's' : ''}` : '', membre === 'moi' ? 'mes convocations' : membre ? (membres.find(m => m.compte === membre)?.pseudo ?? '1 membre') : '', f.choix === 'appareil' ? 'mon heure' : ''].filter(Boolean).join(' · ') || 'aucun'}
         testID="esport-planning-filtres-ouvrir">
         <View style={styles.ligne} testID="esport-planning-filtres">
           {TYPES_EVENEMENT.map(t => (
@@ -219,8 +227,18 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
             />
           ))}
         </View>
+        <View style={styles.ligne} accessibilityLabel="Mes convocations">
+          <Pastille
+            theme={theme}
+            actif={membre === 'moi'}
+            libelle="Où je suis convoqué"
+            role="checkbox"
+            onPress={() => setMembre(membre === 'moi' ? '' : 'moi')}
+            testID="esport-filtre-mes-convocations"
+          />
+        </View>
         {membres.length > 0 ? (
-          <View style={styles.ligne} accessibilityLabel="Filtrer par membre">
+          <View style={styles.ligne} accessibilityLabel="Filtrer par membre convoqué">
             <Text style={attenue}>Membre :</Text>
             <Pastille theme={theme} actif={!membre} libelle="Tous" onPress={() => setMembre('')} role="radio" testID="esport-filtre-membre-tous" />
             {membres.map(m => (
@@ -408,6 +426,7 @@ function DetailOccurrence({
   onSupprime,
   fuseau,
   adversaires,
+  noms = {},
 }: {
   theme: ThemeHub;
   api: ApiPlanning;
@@ -420,6 +439,7 @@ function DetailOccurrence({
   onSupprime(message: string): Promise<void>;
   fuseau: string;
   adversaires?: Array<{ id: string; nom: string }>;
+  noms?: Record<string, string>;
 }) {
   const [evenement, setEvenement] = useState<DetailEvenement | undefined>();
   const { erreur, avis, agir } = useAgir();
@@ -431,7 +451,8 @@ function DetailOccurrence({
 
   const attenue = { color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) };
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
-  const initialOccurrence: Partial<SaisieEvenement> = { type: o.type, titre: o.titre, description: o.description, lieu: o.lieu, date: o.jour, heureDebut: o.heureDebut, heureFin: o.heureFin, fuseau };
+  const initialOccurrence: Partial<SaisieEvenement> = { type: o.type, titre: o.titre, description: o.description, lieu: o.lieu, date: o.jour, heureDebut: o.heureDebut, heureFin: o.heureFin, fuseau, convocation: o.convocation };
+  const convoques = o.convoques ?? o.concernes;
   return (
     <View style={{ gap: 14 }} testID="esport-evenement">
       <View style={styles.ligne}>
@@ -456,7 +477,16 @@ function DetailOccurrence({
           </Text>
         ) : null}
         {evenement ? <Text style={attenue}>{resumeRecurrence(evenement.recurrence)}{o.modifiee ? ' · cette date a été modifiée' : ''}</Text> : null}
-        {o.concernes.length ? <Text style={attenue}>Convoqués : {o.concernes.length} membre(s)</Text> : <Text style={attenue}>Toute la team</Text>}
+        <Text style={attenue} testID="esport-evenement-convoques">
+          {convoques.length
+            ? `Convoqués (${convoques.length}) : ${convoques.map(c => noms[c] ?? '…').join(', ')}${o.convocationPropre ? ' · liste propre à cette date' : ''}`
+            : 'Personne n’est convoqué.'}
+        </Text>
+        {o.convoqueMoi === false ? (
+          <Text style={attenue} testID="esport-evenement-non-convoque">
+            Vous n’êtes pas convoqué : vous voyez l’événement, sans y être attendu ni relancé.
+          </Text>
+        ) : null}
       </Panneau>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-evenement" />
 
@@ -467,7 +497,7 @@ function DetailOccurrence({
         </Panneau>
       ) : null}
 
-      {voirPresence ? <ListePresence theme={theme} api={api} evenementId={o.evenementId} cle={o.cle} marquer={droits.marquer} /> : null}
+      {voirPresence ? <ListePresence key={`${o.cle}-${o.monRsvp ?? ''}`} theme={theme} api={api} evenementId={o.evenementId} cle={o.cle} marquer={droits.marquer} /> : null}
 
       {droits.modifier || droits.supprimer ? (
         <Panneau theme={theme} testID="esport-evenement-actions">
@@ -544,7 +574,7 @@ function FormulaireEvenement({
 }: {
   theme: ThemeHub;
   api: ApiPlanning;
-  membres: Membre[];
+  membres: MembreConvocable[];
   adversaires?: Array<{ id: string; nom: string }>;
   fuseau: string;
   formulaire: Formulaire;
@@ -560,9 +590,11 @@ function FormulaireEvenement({
     heureDebut: initial.heureDebut ?? '20:00',
     heureFin: initial.heureFin ?? '22:00',
     fuseau: initial.fuseau ?? fuseau,
-    concernes: initial.concernes ?? [],
+    convocation: initial.convocation ?? CONVOCATION_DEFAUT,
     adversaireId: initial.adversaireId ?? null,
   });
+  // Liste d'origine d'une date (pour n'en faire une liste propre que si elle change).
+  const [convocationOrigine] = useState<Convocation | null | undefined>(initial.convocation);
   const [repeter, setRepeter] = useState(false);
   const [jours, setJours] = useState<number[]>([]);
   const [intervalle, setIntervalle] = useState<'1' | '2'>('1');
@@ -576,7 +608,7 @@ function FormulaireEvenement({
     if (formulaire.mode !== 'serie') return;
     void agir('', async () => {
       const d = await api.detail(formulaire.id);
-      setS({ type: d.type, titre: d.titre, description: d.description, lieu: d.lieu, date: d.date, heureDebut: d.heureDebut, heureFin: d.heureFin, fuseau: d.fuseau, concernes: d.concernes, adversaireId: d.adversaireId });
+      setS({ type: d.type, titre: d.titre, description: d.description, lieu: d.lieu, date: d.date, heureDebut: d.heureDebut, heureFin: d.heureFin, fuseau: d.fuseau, convocation: d.convocation ?? CONVOCATION_DEFAUT, adversaireId: d.adversaireId });
       if (d.recurrence) {
         setRepeter(true);
         setJours(d.recurrence.jours);
@@ -601,7 +633,18 @@ function FormulaireEvenement({
       const corps = { ...s, titre: s.titre.trim() };
       if (formulaire.mode === 'creer') await api.creer({ ...corps, recurrence });
       else if (formulaire.mode === 'serie') await api.modifier(formulaire.id, { ...corps, recurrence });
-      else await api.modifierOccurrence(formulaire.id, formulaire.cle, { titre: corps.titre, description: corps.description, lieu: corps.lieu, date: corps.date, heureDebut: corps.heureDebut, heureFin: corps.heureFin, fuseau: corps.fuseau });
+      else
+        await api.modifierOccurrence(formulaire.id, formulaire.cle, {
+          titre: corps.titre,
+          description: corps.description,
+          lieu: corps.lieu,
+          date: corps.date,
+          heureDebut: corps.heureDebut,
+          heureFin: corps.heureFin,
+          fuseau: corps.fuseau,
+          // Une liste propre à cette date, seulement si elle a changé.
+          ...(corps.convocation && !memeConvocation(corps.convocation, convocationOrigine) ? { convocation: corps.convocation } : {}),
+        });
       await onFini(formulaire.mode === 'creer' ? 'Événement créé.' : 'Modification enregistrée.');
     });
 
@@ -665,26 +708,12 @@ function FormulaireEvenement({
                 <Champ theme={theme} libelle="Jusqu’au (facultatif, AAAA-MM-JJ)" valeur={jusqua} onChanger={setJusqua} maxLength={10} testID="esport-formulaire-jusqua" />
               </View>
             ) : null}
-            {membres.length ? (
-              <View style={{ gap: 6 }}>
-                <Text style={{ color: theme.texte, fontWeight: '600', fontSize: 13, ...police(theme.policeTexte) }}>Convoqués (aucun : toute la team)</Text>
-                <View style={styles.ligne}>
-                  {membres.map(m => (
-                    <Pastille
-                      key={m.compte}
-                      theme={theme}
-                      actif={(s.concernes ?? []).includes(m.compte)}
-                      libelle={m.pseudo}
-                      role="checkbox"
-                      onPress={() => maj({ concernes: (s.concernes ?? []).includes(m.compte) ? (s.concernes ?? []).filter(c => c !== m.compte) : [...(s.concernes ?? []), m.compte] })}
-                      testID={`esport-formulaire-concerne-${m.compte}`}
-                    />
-                  ))}
-                </View>
-              </View>
-            ) : null}
           </>
         ) : null}
+        {membres.length ? (
+          <SelecteurConvocation theme={theme} membres={membres} valeur={s.convocation ?? CONVOCATION_DEFAUT} onChange={convocation => maj({ convocation })} testID="esport-formulaire-convocation" />
+        ) : null}
+        {!serie && membres.length ? <Text style={attenue}>Cette liste ne vaut que pour cette date : les autres gardent celle de la série.</Text> : null}
         <View style={styles.ligne}>
           <BoutonHub theme={theme} titre={enCours ? 'Enregistrement…' : 'Enregistrer'} variante="plein" desactive={Boolean(enCours) || !pret} onPress={() => void enregistrer()} testID="esport-formulaire-enregistrer" />
           <BoutonHub

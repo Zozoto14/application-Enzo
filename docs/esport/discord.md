@@ -45,14 +45,15 @@ mentionner** (facultatif).
 | Notification | Quand | Activée par défaut |
 | --- | --- | --- |
 | Nouvel événement au planning | un scrim, match, entraînement… est ajouté | oui |
-| Rappel J-1 | environ 24 h avant le début | oui |
-| Rappel H-1 | environ 1 h avant le début | oui |
-| RSVP manquant | un joueur n'a pas répondu à un événement qui approche (un message par joueur) | non |
+| Rappel J-1 | environ 24 h avant le début, pour les convoqués (nommés par `{convoques}`) | oui |
+| Rappel H-1 | environ 1 h avant le début, pour les convoqués | oui |
+| RSVP manquant | un convoqué n'a pas répondu à un événement qui approche (un message par convoqué) | non |
 | Résumé publié | le PDF d'un résumé de réunion est publié | oui |
 | Nouveau dépôt de réunion (staff) | un joueur dépose une réunion à résumer | non |
 | Tâche assignée | une tâche est assignée à quelqu'un | oui |
 | Échéance de tâche | une tâche arrive à échéance ou est en retard | non |
 | Membre rejoint | quelqu'un entre dans la team | non |
+| Demande de compte | un membre (permission « Créer des membres ») propose un nouveau compte, à valider par le Fondateur ; jamais l'adresse e-mail | oui |
 | Changement de rôle | le rôle d'un membre change | non |
 | Review créée | une review vidéo est créée (phase 5) | non |
 
@@ -66,6 +67,9 @@ grisée et ne peut pas être activée.
 - Le **résumé d'une réunion de type « staff »** n'est jamais envoyé sur Discord.
 - Les rappels J-1 et H-1 partent au plus tard 15 minutes après le seuil (le serveur vérifie toutes les
   15 minutes), une seule fois par date d'un événement. Un événement qui commence dans moins de 2 h n'a pas de J-1.
+- Les rappels ne concernent que les **convoqués** (un Propriétaire non coché n'est ni nommé ni attendu ; pas de
+  rappel pour un événement sans convoqué). Discord n'autorise ici qu'une mention de **rôle** : la mention réglée
+  reste celle de la team, et le message nomme les convoqués (`{convoques}`), sans les notifier un par un.
 
 ### Écrire un modèle
 
@@ -77,8 +81,8 @@ Scrim ce soir : {titre} ({type}), {date} à {heure}. Réponds dans l'app !
 
 Variables communes à tous les messages : `{team}` (nom de la team) et `{lien}` (adresse de l'app, si le serveur la
 connaît, voir plus bas). Les autres dépendent du message et sont listées sous le champ : `{titre}`, `{type}`,
-`{date}`, `{heure}`, `{delai}`, `{membre}`, `{acteur}`, `{assigne}`, `{echeance}`, `{role}`, `{de}`, `{vers}`,
-`{etat}`.
+`{date}`, `{heure}`, `{delai}`, `{convoques}`, `{membre}`, `{acteur}`, `{assigne}`, `{echeance}`, `{role}`, `{de}`,
+`{vers}`, `{etat}`.
 
 - Une variable inconnue est **refusée** à l'enregistrement (le message d'erreur donne la liste permise).
 - Modèle vide : on revient au modèle par défaut (bouton **Modèle par défaut**).

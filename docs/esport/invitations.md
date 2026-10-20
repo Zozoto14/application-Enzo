@@ -48,9 +48,51 @@ l'**ajouter à une autre team**.
 
 Seul le Fondateur crée des comptes (il faut ses clés du hub). Un Manager peut **ajouter à une de ses
 teams un compte qui existe déjà** et qu'il voit (membre d'une autre de ses teams), avec un rôle qu'il
-peut attribuer : **Esport › Membres › (compte) › Ajouter à une team**. Les règles anti-escalade
+peut attribuer : **Esport › Membres › (compte) › Ajouter à une team**. Avec la permission « Créer des
+membres », un rôle peut aussi **demander** un compte au Fondateur (voir plus bas). Les règles anti-escalade
 s'appliquent partout : jamais un rôle au-dessus du sien, jamais d'action sur un Propriétaire ou un
 rôle supérieur.
+
+## Laisser des joueurs créer des membres (permission « Créer des membres »)
+
+La permission **`members.create`** (« Créer des membres (demande au Fondateur) », colonne spéciale de la ligne
+Membres et rôles) est **désactivée par défaut** pour tous les rôles sauf le Propriétaire. Le Propriétaire la donne
+au rôle **Joueur** (ou à tout rôle système sauf Propriétaire : case **« créer des membres »** sous la matrice
+d'un rôle système, la seule permission qu'on peut y ajuster) ou à tout **rôle personnalisé** (matrice). Personne
+ne la donne sans l'avoir (anti-escalade : un Manager ne peut pas).
+
+Créer un compte du hub exige les clés du Fondateur (séquestre), sur un appareil où il est connecté. Donc, pour un
+membre qui a la permission sans être le Fondateur :
+
+1. **Esport › Membres › Proposer un membre › Nouveau compte** : nom ou pseudo, adresse e-mail, team et rôle (un
+   rôle **au plus égal au sien** : anti-escalade, sinon 403), poste et mot pour le Fondateur facultatifs.
+   Cela crée une **demande** côté serveur Esport (pas de compte).
+2. Le Fondateur la voit dans **Esport › Membres** : badge **« Demandes en attente : N »**, panneau **Demandes en
+   attente**, notification in-app (« X demande un compte pour Y ») et message Discord **« Demande de compte »**
+   si la team a un webhook (activé par défaut ; jamais l'adresse e-mail).
+3. **Valider** ouvre la création de compte **préremplie** (nom, e-mail, team, rôle, poste ; modifiables) :
+   confirmation d'identité, puis exactement une invitation directe — création réelle du compte du hub (« Esport
+   seulement »), pré-enregistrement dans la team, e-mail d'invitation prêt. La demande est close **dans le même
+   lot** que le pré-enregistrement (`POST /comptes` avec `demandeId`). **Refuser** la clôt (motif facultatif).
+4. Le demandeur suit le statut dans **Mes demandes** (En attente, Validée, Refusée, Annulée) et reçoit une
+   notification à la décision ; il peut **annuler** une demande en attente.
+
+La même permission permet aussi d'**ajouter à la team un compte qui a déjà l'Esport** (profil Esport existant),
+sans le Fondateur : **Proposer un membre › Compte Esport existant**, son **pseudo exact** et un rôle ≤ au sien
+(`POST /teams/:id/membres` avec `pseudo`). Un pseudo inconnu de l'Esport : 404 (il faut alors une demande).
+
+Garde-fous : 10 demandes par heure et par compte (429 au-delà), 10 demandes en attente au plus par demandeur,
+pas de doublon (pseudo déjà pris dans l'Esport ou déjà demandé : 409). Isolation : on ne demande que pour une
+team dont on est membre avec la permission (404 sinon) ; le demandeur ne voit que ses demandes ; seul le
+Fondateur liste, valide ou refuse (403 sinon). L'adresse e-mail n'est gardée sur le serveur Esport que le temps
+de la décision : effacée à la validation (elle passe, chiffrée, dans l'Administration), au refus ou à
+l'annulation ; jamais dans le journal, le bus ni Discord.
+
+API : `GET|POST /comptes/demandes`, `POST /comptes/demandes/:id/refuser` (Fondateur), `DELETE
+/comptes/demandes/:id` (le demandeur), `POST /comptes` + `demandeId` (validation). Événements
+`member.account_requested`, `member.account_request_validated`, `member.account_request_refused` (journal de la
+team, notifications). Table `demandes_compte` (migration `0009_convocations_demandes.sql`). Tests :
+`esport/test/demandes-compte.test.mjs`, `src/esport/InvitationsDirectes.test.tsx`.
 
 ## Une seule source de vérité : l'Administration
 

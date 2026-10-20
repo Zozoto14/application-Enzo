@@ -1,12 +1,16 @@
 /**
- * Liste de présence d'une occurrence : réponses des joueurs et, pour le staff
- * (attendance.mark), marquage de la présence réelle (présent, en retard,
- * absent, excusé) en un écran.
+ * Liste de présence d'une occurrence : ses CONVOQUÉS (et eux seuls), leurs
+ * réponses et, pour le staff (attendance.mark), le marquage de la présence
+ * réelle (présent, en retard, absent, excusé).
+ *
+ * Chaque appui ENREGISTRE aussitôt (avant, il fallait un bouton
+ * « Enregistrer la présence » plus bas : un appui sur « Présent » sans ce
+ * bouton ne comptait pas, et les statistiques restaient à « non marqué »).
  */
 
 import React, { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { BoutonHub, Segments } from '../../../hub/admin/ui/commun';
+import { Segments } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
 import type { ApiPlanning, PresenceOccurrence, Reel } from '../../planning/api';
 import { LIBELLES_REEL, LIBELLES_RSVP } from '../../planning/libelles';
@@ -22,7 +26,7 @@ const MARQUES: ReadonlyArray<readonly [Reel, string]> = [
 export function ListePresence({ theme, api, evenementId, cle, marquer, onMarque }: { theme: ThemeHub; api: ApiPlanning; evenementId: string; cle: string; marquer: boolean; onMarque?(): void }) {
   const [presence, setPresence] = useState<PresenceOccurrence | undefined>();
   const [marques, setMarques] = useState<Record<string, Reel>>({});
-  const { enCours, erreur, avis, agir } = useAgir();
+  const { erreur, avis, agir } = useAgir();
   useEffect(() => {
     void agir('', async () => {
       const pr = await api.presence(evenementId, cle);
@@ -36,7 +40,8 @@ export function ListePresence({ theme, api, evenementId, cle, marquer, onMarque 
     <Panneau theme={theme} testID="esport-presence-liste">
       <Intertitre theme={theme}>Présence</Intertitre>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-presence" />
-      {presence && presence.lignes.length === 0 ? <Text style={attenue}>Personne dans la liste de présence.</Text> : null}
+      {presence && presence.lignes.length === 0 ? <Text style={attenue}>Personne n’est convoqué à cet événement.</Text> : null}
+      {marquer && presence?.lignes.length ? <Text style={attenue}>Un appui enregistre la présence.</Text> : null}
       {presence?.lignes.map(l => (
         <View key={l.compte} style={{ gap: 6, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 8 }} testID={`esport-presence-${l.compte}`}>
           <View style={[styles.ligne, { justifyContent: 'space-between' }]}>
@@ -52,32 +57,25 @@ export function ListePresence({ theme, api, evenementId, cle, marquer, onMarque 
               libelle={`Présence de ${l.pseudo}`}
               valeur={marques[l.compte] ?? 'inconnu'}
               options={MARQUES}
-              onChoisir={v => setMarques(m => ({ ...m, [l.compte]: v }))}
+              onChoisir={v => {
+                const avant = marques[l.compte] ?? 'inconnu';
+                setMarques(m => ({ ...m, [l.compte]: v }));
+                void agir('Présence', async () => {
+                  try {
+                    setPresence(await api.marquer(evenementId, cle, [{ compte: l.compte, reel: v }]));
+                  } catch (e) {
+                    setMarques(m => ({ ...m, [l.compte]: avant }));
+                    throw e;
+                  }
+                  onMarque?.();
+                  return `${l.pseudo} : ${LIBELLES_REEL[v].toLowerCase()} (enregistré).`;
+                });
+              }}
               testID={`esport-marque-${l.compte}`}
             />
           ) : null}
         </View>
       ))}
-      {marquer && presence?.lignes.length ? (
-        <BoutonHub
-          theme={theme}
-          titre={enCours === 'Présence' ? 'Enregistrement…' : 'Enregistrer la présence'}
-          variante="plein"
-          desactive={Boolean(enCours)}
-          onPress={() =>
-            void agir('Présence', async () => {
-              const liste = Object.entries(marques)
-                .filter(([, r]) => r !== 'inconnu')
-                .map(([compte, reel]) => ({ compte, reel }));
-              if (!liste.length) return 'Choisissez au moins une présence.';
-              setPresence(await api.marquer(evenementId, cle, liste));
-              onMarque?.();
-              return 'Présence enregistrée.';
-            })
-          }
-          testID="esport-presence-enregistrer"
-        />
-      ) : null}
     </Panneau>
   );
 }

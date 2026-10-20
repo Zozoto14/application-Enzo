@@ -14,6 +14,7 @@ import { aleatoire, echec, iso, jsonOu, nouvelId, sha256Hex, texteLong, texteNet
 import { lignesParIds } from '../requetes.mjs';
 import { heatmap, plagesPropices, TYPES_DISPO, PAS_AUTORISES } from './dispos.mjs';
 import { calendrierIcs, LIBELLES_TYPES } from './ical.mjs';
+import { convocationDe, convocationDepuisListe, convoques, CONVOCATION_DEFAUT, estConvoque, groupeDe, normaliserConvocation, preparerConvocation } from './convocations.mjs';
 import { RSVP, REELS, csv, statistiques } from './presence.mjs';
 import { DEPLACEMENT_MAX_MS, estOccurrence, lireRecurrence, occurrences, occurrencesBrutes, veilleLocale } from './recurrence.mjs';
 import { ajouterJours, dateLocale, ecartJours, fuseauValide, instantMural, jourSemaine, lireDate, lireHeure, lundiDe, partiesLocales, texteDate, texteHeure } from './temps.mjs';
@@ -89,48 +90,44 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     };
   }
 
-  /** Membres actifs et leurs permissions (Propriétaire : toutes). */
-  async function membresActifs(teamId) {
+  /**
+   * Membres de la team et leurs permissions (Propriétaire : toutes), avec ce
+   * qu'il faut pour résoudre les convocations (rôle système, arrivée).
+   * `tous` : aussi les suspendus (statistiques : leur historique reste).
+   */
+  async function membresActifs(teamId, { tous = false } = {}) {
     const lignes = await base.tous(
-      `SELECT m.compte_id, r.cle_systeme, rp.permission, c.pseudo FROM membres m
+      `SELECT m.compte_id, m.statut, m.rejoint_le, r.cle_systeme, rp.permission, c.pseudo FROM membres m
          JOIN roles r ON r.id = m.role_id
          JOIN comptes c ON c.id = m.compte_id
          LEFT JOIN role_permissions rp ON rp.role_id = r.id
-        WHERE m.team_id = ? AND m.statut = 'actif'`,
-      [teamId],
+        WHERE m.team_id = ? AND (m.statut = 'actif' OR ? = 1)`,
+      [teamId, tous ? 1 : 0],
     );
     const parCompte = new Map();
     for (const l of lignes) {
-      if (!parCompte.has(l.compte_id)) parCompte.set(l.compte_id, { compte: l.compte_id, pseudo: l.pseudo, proprietaire: l.cle_systeme === CLE_PROPRIETAIRE, perms: new Set() });
+      if (!parCompte.has(l.compte_id)) {
+        parCompte.set(l.compte_id, { compte: l.compte_id, pseudo: l.pseudo, statut: l.statut, cle: l.cle_systeme ?? null, rejointLe: l.rejoint_le, proprietaire: l.cle_systeme === CLE_PROPRIETAIRE, perms: new Set() });
+      }
       if (l.permission) parCompte.get(l.compte_id).perms.add(l.permission);
     }
     const a = (m, p) => m.proprietaire || m.perms.has(p);
     return [...parCompte.values()].map(m => ({ ...m, a: p => a(m, p) })).sort((x, y) => x.pseudo.localeCompare(y.pseudo, 'fr'));
   }
 
+  /** Convocation effective d'une occurrence : celle de la date (exception), sinon celle de la série. */
+  const convocationOcc = (ev, o) => (o?.convocation ? (normaliserConvocation(o.convocation) ?? convocationDe(ev)) : convocationDe(ev));
+
   /**
-   * Liste de présence d'une occurrence : les membres nommés par l'événement,
-   * sinon les membres qui répondent (attendance.rsvp_own) sans marquer
-   * (attendance.mark : le staff), plus quiconque a déjà une ligne.
+   * Liste de présence d'une occurrence : ses CONVOQUÉS, et eux seuls (un
+   * Propriétaire non coché n'y figure pas, même s'il a répondu).
    */
-  function roster(membres, ev, dejaLa = []) {
-    const liste = jsonOu(ev.concernes, []);
-    const choisis = liste.length > 0 ? membres.filter(m => liste.includes(m.compte)) : membres.filter(m => m.a('attendance.rsvp_own') && !m.a('attendance.mark'));
-    const comptes = new Set(choisis.map(m => m.compte));
-    for (const c of dejaLa) {
-      const m = membres.find(x => x.compte === c);
-      if (m && !comptes.has(c)) {
-        choisis.push(m);
-        comptes.add(c);
-      }
-    }
-    return choisis;
+  function roster(membres, ev, o) {
+    return convoques(convocationOcc(ev, o), membres, o?.fin);
   }
 
-  const estConcerne = (ev, compte) => {
-    const liste = jsonOu(ev.concernes, []);
-    return liste.length === 0 || liste.includes(compte);
-  };
+  /** L'acteur est-il convoqué à cette occurrence ? (`moi` : sa fiche de membre, ou rien.) */
+  const convoqueMoi = (ev, o, moi) => Boolean(moi && estConvoque(convocationOcc(ev, o), moi, o.fin));
 
   async function evenementDeTeam(teamId, id) {
     if (typeof id !== 'string' || !MOTIF_UUID.test(id)) throw echec(404, 'evenement-introuvable', 'Événement introuvable.');
@@ -158,6 +155,7 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
       debut: x?.debut ? Date.parse(x.debut) : brute.debut,
       fin: x?.fin ? Date.parse(x.fin) : brute.fin,
       titre: x?.titre ?? ev.titre,
+      convocation: x?.convocation ?? null,
       exception: x ?? null,
     };
   }
@@ -201,9 +199,12 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     return { du, au, fuseau };
   }
 
-  const occurrencePublique = (ev, o, fuseau, extra = {}) => {
+  /** Occurrence telle que l'app la voit. `membres` (facultatif) : pour rendre la liste des convoqués. */
+  const occurrencePublique = (ev, o, fuseau, extra = {}, membres) => {
     const d = local(fuseau, o.debut);
     const f = local(fuseau, o.fin);
+    const convocation = convocationOcc(ev, o);
+    const liste = membres ? convoques(convocation, membres, o.fin).map(m => m.compte) : [];
     return {
       evenementId: ev.id,
       cle: o.cle,
@@ -221,7 +222,11 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
       modifiee: Boolean(o.modifiee),
       adversaireId: ev.adversaire_id ?? null,
       reviewId: ev.review_id ?? null,
-      concernes: jsonOu(ev.concernes, []),
+      convocation,
+      convocationPropre: Boolean(o.convocation),
+      // Comptes convoqués à CETTE occurrence (`concernes` : ancien nom, gardé pour les anciennes apps).
+      convoques: liste,
+      concernes: liste,
       ...extra,
     };
   };
@@ -245,28 +250,55 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     exiger(ctx, 'planning.view');
     const { du, au, fuseau } = lirePlage(params, ctx.team.fuseau);
     const types = params.types ? String(params.types).split(',').filter(t => TYPES_EVENEMENT.includes(t)) : [];
-    const membre = params.membre && MOTIF_COMPTE.test(params.membre) ? params.membre : null;
+    // `membre=moi` : « Mes convocations » (filtre du planning).
+    const membre = params.membre === 'moi' ? acteur.compte : params.membre && MOTIF_COMPTE.test(params.membre) ? params.membre : null;
+    const membres = await membresActifs(teamId);
+    const moi = membres.find(m => m.compte === acteur.compte);
     let toutes = await occurrencesTeam(teamId, du, au);
     if (types.length) toutes = toutes.filter(({ ev }) => types.includes(ev.type));
-    if (membre) toutes = toutes.filter(({ ev }) => estConcerne(ev, membre));
+    if (membre) {
+      const cible = membres.find(m => m.compte === membre);
+      toutes = toutes.filter(({ ev, o }) => convoqueMoi(ev, o, cible));
+    }
     const presenceActive = ctx.modules.has('attendance');
     const lignes = presenceActive
       ? await base.tous('SELECT evenement_id, occurrence, compte_id, rsvp, reel FROM presences WHERE team_id = ? AND occurrence >= ? AND occurrence < ?', [teamId, iso(du - MARGE_MS), iso(au + MARGE_MS)])
       : [];
     const voirTout = peut(ctx, 'attendance.view_all');
     const resultat = toutes.map(({ ev, o }) => {
-      const miennes = lignes.filter(l => l.evenement_id === ev.id && l.occurrence === o.cle);
-      const moi = miennes.find(l => l.compte_id === acteur.compte);
+      const convoquesOcc = new Set(roster(membres, ev, o).map(m => m.compte));
+      // Réponses : celles des convoqués seulement.
+      const miennes = lignes.filter(l => l.evenement_id === ev.id && l.occurrence === o.cle && convoquesOcc.has(l.compte_id));
+      const ligneMoi = miennes.find(l => l.compte_id === acteur.compte);
       const compte = r => miennes.filter(l => l.rsvp === r).length;
-      return occurrencePublique(ev, o, fuseau, {
-        concerneMoi: estConcerne(ev, acteur.compte),
-        monRsvp: presenceActive ? (moi?.rsvp ?? 'sans_reponse') : null,
-        maPresence: presenceActive ? (moi?.reel ?? 'inconnu') : null,
-        reponses: presenceActive && voirTout ? { oui: compte('oui'), non: compte('non'), peut_etre: compte('peut_etre') } : null,
-        termine: o.fin <= maintenant(),
-      });
+      const convoque = convoqueMoi(ev, o, moi);
+      return occurrencePublique(
+        ev,
+        o,
+        fuseau,
+        {
+          concerneMoi: convoque,
+          convoqueMoi: convoque,
+          monRsvp: presenceActive && convoque ? (ligneMoi?.rsvp ?? 'sans_reponse') : null,
+          maPresence: presenceActive && convoque ? (ligneMoi?.reel ?? 'inconnu') : null,
+          reponses: presenceActive && voirTout ? { oui: compte('oui'), non: compte('non'), peut_etre: compte('peut_etre'), attendues: convoquesOcc.size } : null,
+          termine: o.fin <= maintenant(),
+        },
+        membres,
+      );
     });
-    return { fuseau, fuseauTeam: ctx.team.fuseau, du: iso(du), au: iso(au), occurrences: resultat, droits: droits(ctx), modules: { presence: presenceActive, dispos: ctx.modules.has('availability') } };
+    // Formulaire (staff) : qui peut être convoqué, et dans quel groupe (joueurs, staff, propriétaire).
+    const convocables = peut(ctx, 'planning.create') || peut(ctx, 'planning.update') ? membres.map(m => ({ compte: m.compte, pseudo: m.pseudo, groupe: groupeDe(m) })) : null;
+    return {
+      fuseau,
+      fuseauTeam: ctx.team.fuseau,
+      du: iso(du),
+      au: iso(au),
+      occurrences: resultat,
+      droits: droits(ctx),
+      modules: { presence: presenceActive, dispos: ctx.modules.has('availability') },
+      membres: convocables,
+    };
   }
 
   async function detail(acteur, teamId, evId) {
@@ -290,16 +322,18 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
       recurrence: jsonOu(ev.recurrence, null),
       adversaireId: ev.adversaire_id ?? null,
       reviewId: ev.review_id ?? null,
-      concernes: jsonOu(ev.concernes, []),
+      convocation: convocationDe(ev),
+      concernes: convoques(convocationDe(ev), await membresActifs(teamId)).map(m => m.compte),
       creePar: ev.cree_par,
       creeLe: ev.cree_le,
       majLe: ev.maj_le,
-      exceptions: (await base.tous('SELECT occurrence, annulee, titre, debut, fin FROM planning_exceptions WHERE evenement_id = ? ORDER BY occurrence', [ev.id])).map(x => ({
+      exceptions: (await base.tous('SELECT occurrence, annulee, titre, debut, fin, convocation FROM planning_exceptions WHERE evenement_id = ? ORDER BY occurrence', [ev.id])).map(x => ({
         occurrence: x.occurrence,
         annulee: Number(x.annulee) === 1,
         titre: x.titre ?? null,
         debut: x.debut ?? null,
         fin: x.fin ?? null,
+        convocation: x.convocation ? normaliserConvocation(x.convocation) : null,
       })),
       droits: droits(ctx),
     };
@@ -307,14 +341,28 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
 
   // -------------------------------------------------------------- Planning : écriture
 
-  async function lireConcernes(teamId, valeur) {
-    if (valeur === undefined || valeur === null) return [];
-    if (!Array.isArray(valeur) || valeur.length > 50) throw echec(400, 'concernes', 'Liste de membres illisible.');
-    const membres = new Set((await base.tous("SELECT compte_id FROM membres WHERE team_id = ? AND statut = 'actif'", [teamId])).map(l => l.compte_id));
-    const liste = [...new Set(valeur)];
-    if (!liste.every(c => typeof c === 'string' && membres.has(c))) throw echec(400, 'concernes', 'Un membre choisi ne fait pas partie de la team.');
-    return liste.sort();
+  /**
+   * Convocation saisie (`convocation`, ou l'ancienne liste `concernes`) →
+   * forme stockée (JSON), contrôlée contre les membres actifs de la team.
+   * Personne de choisi : les joueurs (jamais les Propriétaires).
+   */
+  async function lireConvocation(teamId, corps) {
+    let saisie;
+    if (corps?.convocation !== undefined && corps.convocation !== null) saisie = corps.convocation;
+    else if (Array.isArray(corps?.concernes)) {
+      if (corps.concernes.length > 60) throw echec(400, 'concernes', 'Liste de membres illisible.');
+      saisie = convocationDepuisListe(corps.concernes);
+    } else if (corps?.concernes !== undefined && corps.concernes !== null) throw echec(400, 'concernes', 'Liste de membres illisible.');
+    else saisie = CONVOCATION_DEFAUT;
+    try {
+      return preparerConvocation(saisie, await membresActifs(teamId));
+    } catch (e) {
+      throw echec(400, 'convocation', e.message);
+    }
   }
+
+  /** Comptes choisis nommément (ancienne colonne `concernes`, gardée pour les anciennes lectures). */
+  const nominatifs = c => JSON.stringify([...new Set([...c.membres, ...c.proprietaires])].sort());
 
   async function lireSaisie(ctx, corps, existant) {
     const s = {};
@@ -344,7 +392,11 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
         if (!ok) throw echec(400, 'review', 'Review inconnue.');
       }
     }
-    if (champ('concernes')) s.concernes = JSON.stringify(await lireConcernes(ctx.team.id, corps.concernes));
+    if (!existant || champ('convocation') || champ('concernes')) {
+      const c = await lireConvocation(ctx.team.id, corps);
+      s.convocation = JSON.stringify(c);
+      s.concernes = nominatifs(c);
+    }
     const horaire = ['date', 'heureDebut', 'heureFin', 'debut', 'fin', 'fuseau'].some(champ);
     if (!existant || horaire) {
       const c = lireCreneau(
@@ -370,20 +422,25 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     return s;
   }
 
+  /** Comptes convoqués (aujourd'hui) par une convocation stockée : destinataires des notifications. */
+  async function comptesConvoques(teamId, convocation) {
+    return convoques(normaliserConvocation(convocation) ?? CONVOCATION_DEFAUT, await membresActifs(teamId)).map(m => m.compte);
+  }
+
   async function creer(acteur, teamId, corps) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'planning.create');
     const s = await lireSaisie(ctx, corps);
     const t = maintenant();
     const id = nouvelId();
-    const concernes = jsonOu(s.concernes, []);
+    const convoquesListe = await comptesConvoques(teamId, s.convocation);
     await base.lot([
       {
-        sql: `INSERT INTO planning_evenements (id, team_id, type, titre, description, debut, fin, fuseau, lieu, adversaire_id, review_id, recurrence, fin_serie, concernes, cree_par, cree_le, maj_le)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        params: [id, teamId, s.type, s.titre, s.description ?? '', s.debut, s.fin, s.fuseau, s.lieu ?? '', s.adversaire_id ?? null, s.review_id ?? null, s.recurrence, s.fin_serie, s.concernes ?? '[]', acteur.compte, iso(t), iso(t)],
+        sql: `INSERT INTO planning_evenements (id, team_id, type, titre, description, debut, fin, fuseau, lieu, adversaire_id, review_id, recurrence, fin_serie, concernes, convocation, cree_par, cree_le, maj_le)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        params: [id, teamId, s.type, s.titre, s.description ?? '', s.debut, s.fin, s.fuseau, s.lieu ?? '', s.adversaire_id ?? null, s.review_id ?? null, s.recurrence, s.fin_serie, s.concernes ?? '[]', s.convocation, acteur.compte, iso(t), iso(t)],
       },
-      evenement('event.created', { teamId, acteur: acteur.compte, entiteType: 'evenement', entiteId: id, charge: { titre: s.titre, type: s.type, debut: s.debut, recurrent: Boolean(s.recurrence), concernes }, maintenant: t }),
+      evenement('event.created', { teamId, acteur: acteur.compte, entiteType: 'evenement', entiteId: id, charge: { titre: s.titre, type: s.type, debut: s.debut, recurrent: Boolean(s.recurrence), convoques: convoquesListe }, maintenant: t }),
     ]);
     return detail(acteur, teamId, id);
   }
@@ -406,7 +463,7 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
         acteur: acteur.compte,
         entiteType: 'evenement',
         entiteId: evId,
-        charge: { titre: s.titre ?? ev.titre, type: s.type ?? ev.type, debut: s.debut ?? ev.debut, champs, concernes: jsonOu(s.concernes ?? ev.concernes, []) },
+        charge: { titre: s.titre ?? ev.titre, type: s.type ?? ev.type, debut: s.debut ?? ev.debut, champs, convoques: await comptesConvoques(teamId, s.convocation ?? JSON.stringify(convocationDe(ev))) },
         maintenant: t,
       }),
     );
@@ -427,6 +484,10 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     const lieu = corps?.lieu !== undefined ? texteNettoye(corps.lieu, 200) : (x.lieu ?? null);
     let debut = x.debut ?? null;
     let fin = x.fin ?? null;
+    // Convocation propre à cette date : `convocation` (objet), `null` pour reprendre celle de la série.
+    let convocation = x.convocation ?? null;
+    if (corps?.convocation === null) convocation = null;
+    else if (corps?.convocation !== undefined || corps?.concernes !== undefined) convocation = JSON.stringify(await lireConvocation(teamId, corps));
     if (['date', 'heureDebut', 'heureFin', 'debut', 'fin'].some(c => corps?.[c] !== undefined)) {
       const c = lireCreneau(corps, ev.fuseau);
       if (Math.abs(c.debut - Date.parse(o.cle)) > DEPLACEMENT_MAX_MS) throw echec(400, 'deplacement', 'Une occurrence se déplace de 30 jours au plus.');
@@ -436,16 +497,16 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     const t = maintenant();
     await base.lot([
       {
-        sql: `INSERT INTO planning_exceptions (evenement_id, occurrence, team_id, annulee, titre, description, debut, fin, lieu, maj_par, maj_le) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
-              ON CONFLICT (evenement_id, occurrence) DO UPDATE SET annulee = 0, titre = excluded.titre, description = excluded.description, debut = excluded.debut, fin = excluded.fin, lieu = excluded.lieu, maj_par = excluded.maj_par, maj_le = excluded.maj_le`,
-        params: [evId, o.cle, teamId, titre, description, debut, fin, lieu, acteur.compte, iso(t)],
+        sql: `INSERT INTO planning_exceptions (evenement_id, occurrence, team_id, annulee, titre, description, debut, fin, lieu, convocation, maj_par, maj_le) VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+              ON CONFLICT (evenement_id, occurrence) DO UPDATE SET annulee = 0, titre = excluded.titre, description = excluded.description, debut = excluded.debut, fin = excluded.fin, lieu = excluded.lieu, convocation = excluded.convocation, maj_par = excluded.maj_par, maj_le = excluded.maj_le`,
+        params: [evId, o.cle, teamId, titre, description, debut, fin, lieu, convocation, acteur.compte, iso(t)],
       },
       evenement('event.occurrence_updated', {
         teamId,
         acteur: acteur.compte,
         entiteType: 'evenement',
         entiteId: evId,
-        charge: { titre: titre ?? ev.titre, type: ev.type, occurrence: o.cle, debut: debut ?? o.cle, concernes: jsonOu(ev.concernes, []) },
+        charge: { titre: titre ?? ev.titre, type: ev.type, occurrence: o.cle, debut: debut ?? o.cle, convoques: await comptesConvoques(teamId, convocation ?? JSON.stringify(convocationDe(ev))) },
         maintenant: t,
       }),
     ]);
@@ -458,7 +519,7 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     exiger(ctx, 'planning.delete');
     const ev = await evenementDeTeam(teamId, evId);
     const t = maintenant();
-    const charge = { titre: ev.titre, type: ev.type, debut: ev.debut, concernes: jsonOu(ev.concernes, []) };
+    const charge = { titre: ev.titre, type: ev.type, debut: ev.debut, convoques: await comptesConvoques(teamId, JSON.stringify(convocationDe(ev))) };
     if (portee !== 'serie' && ev.recurrence) {
       const o = await occurrenceDe(ev, occurrence);
       const premiere = occurrencesBrutes(ev, Date.parse(ev.debut) - 1, Date.parse(ev.debut) + 35 * JOUR_MS)[0];
@@ -542,33 +603,34 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     const presenceActive = ctx.modules.has('attendance');
     const lignes = presenceActive ? await base.tous('SELECT evenement_id, occurrence, compte_id, rsvp, reel FROM presences WHERE team_id = ? AND occurrence >= ?', [teamId, iso(t - 15 * JOUR_MS - MARGE_MS)]) : [];
     const de = (ev, o) => lignes.filter(l => l.evenement_id === ev.id && l.occurrence === o.cle);
+    const membres = await membresActifs(teamId);
+    const moi = membres.find(m => m.compte === acteur.compte);
+    // « Mes prochains événements » : ceux où l'on est CONVOQUÉ (un Propriétaire non coché ne les voit qu'au planning).
     const prochains = a
-      .filter(({ ev, o }) => o.fin > t && estConcerne(ev, acteur.compte))
+      .filter(({ ev, o }) => o.fin > t && convoqueMoi(ev, o, moi))
       .slice(0, 6)
       .map(({ ev, o }) => {
-        const moi = de(ev, o).find(l => l.compte_id === acteur.compte);
-        return occurrencePublique(ev, o, fuseau, { monRsvp: presenceActive ? (moi?.rsvp ?? 'sans_reponse') : null });
+        const ligne = de(ev, o).find(l => l.compte_id === acteur.compte);
+        return occurrencePublique(ev, o, fuseau, { convoqueMoi: true, concerneMoi: true, monRsvp: presenceActive ? (ligne?.rsvp ?? 'sans_reponse') : null });
       });
     const alertes = [];
     if (presenceActive && peut(ctx, 'attendance.rsvp_own')) {
       for (const { ev, o } of a) {
-        if (o.debut <= t || o.debut > t + 7 * JOUR_MS || !estConcerne(ev, acteur.compte)) continue;
-        const moi = de(ev, o).find(l => l.compte_id === acteur.compte);
-        if ((!moi || moi.rsvp === 'sans_reponse') && (jsonOu(ev.concernes, []).length > 0 || !peut(ctx, 'attendance.mark'))) {
-          alertes.push({ genre: 'rsvp', ...occurrencePublique(ev, o, fuseau) });
-        }
+        if (o.debut <= t || o.debut > t + 7 * JOUR_MS || !convoqueMoi(ev, o, moi)) continue;
+        const ligne = de(ev, o).find(l => l.compte_id === acteur.compte);
+        if (!ligne || ligne.rsvp === 'sans_reponse') alertes.push({ genre: 'rsvp', ...occurrencePublique(ev, o, fuseau, { convoqueMoi: true, concerneMoi: true }) });
       }
     }
     if (presenceActive && (peut(ctx, 'attendance.mark') || peut(ctx, 'attendance.view_all'))) {
-      const membres = await membresActifs(teamId);
       for (const { ev, o } of a) {
         const deja = de(ev, o);
-        const liste = roster(membres, ev, deja.map(l => l.compte_id));
+        // Attendus : les convoqués, eux seuls.
+        const liste = roster(membres, ev, o);
         if (o.fin <= t && peut(ctx, 'attendance.mark')) {
           const nonMarques = liste.filter(m => !deja.some(l => l.compte_id === m.compte && l.reel !== 'inconnu')).length;
           if (nonMarques > 0) alertes.push({ genre: 'a-marquer', nonMarques, ...occurrencePublique(ev, o, fuseau) });
         } else if (o.debut > t && o.debut <= t + 3 * JOUR_MS) {
-          const sansReponse = liste.filter(m => !deja.some(l => l.compte_id === m.compte && l.rsvp !== 'sans_reponse')).length;
+          const sansReponse = liste.filter(m => m.a('attendance.rsvp_own') && !deja.some(l => l.compte_id === m.compte && l.rsvp !== 'sans_reponse')).length;
           if (sansReponse > 0) alertes.push({ genre: 'sans-reponse', sansReponse, ...occurrencePublique(ev, o, fuseau) });
         }
       }
@@ -583,9 +645,10 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     exiger(ctx, 'planning.view');
     exiger(ctx, 'attendance.rsvp_own');
     const ev = await evenementDeTeam(teamId, evId);
-    if (!estConcerne(ev, acteur.compte)) throw echec(403, 'non-concerne', 'Cet événement ne vous concerne pas.');
     if (!ctx.membre) throw echec(403, 'non-membre', 'Seuls les membres de la team répondent.');
     const o = await occurrenceDe(ev, cle);
+    const moi = (await membresActifs(teamId)).find(m => m.compte === acteur.compte);
+    if (!convoqueMoi(ev, o, moi)) throw echec(403, 'non-concerne', 'Vous n’êtes pas convoqué à cet événement.');
     if (o.fin <= maintenant()) throw echec(409, 'termine', 'Cet événement est terminé : la présence est marquée par le staff.');
     const rsvp = corps?.rsvp;
     if (!RSVP.includes(rsvp)) throw echec(400, 'rsvp', 'Réponse : oui, non ou peut-être.');
@@ -610,10 +673,10 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     const o = await occurrenceDe(ev, cle);
     const lignes = await base.tous('SELECT * FROM presences WHERE evenement_id = ? AND occurrence = ?', [evId, o.cle]);
     const membres = await membresActifs(teamId);
-    let liste = roster(membres, ev, lignes.map(l => l.compte_id));
+    let liste = roster(membres, ev, o);
     if (!peut(ctx, 'attendance.view_all')) liste = liste.filter(m => m.compte === acteur.compte);
     return {
-      occurrence: occurrencePublique(ev, o, ctx.team.fuseau),
+      occurrence: occurrencePublique(ev, o, ctx.team.fuseau, {}, membres),
       lignes: liste.map(m => {
         const l = lignes.find(x => x.compte_id === m.compte);
         return { compte: m.compte, pseudo: m.pseudo, rsvp: l?.rsvp ?? 'sans_reponse', reel: l?.reel ?? 'inconnu', note: l?.note ?? '', marqueLe: l?.marque_le ?? null };
@@ -631,10 +694,13 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     const marques = corps?.marques;
     if (!Array.isArray(marques) || marques.length === 0 || marques.length > 60) throw echec(400, 'marques', 'Liste de présences illisible.');
     const membres = new Set((await base.tous('SELECT compte_id FROM membres WHERE team_id = ?', [teamId])).map(l => l.compte_id));
+    // Seuls les convoqués de CETTE occurrence se marquent (un Propriétaire non coché n'est pas attendu).
+    const convoquesOcc = new Set(roster(await membresActifs(teamId), ev, o).map(m => m.compte));
     const t = maintenant();
     const lot = [];
     for (const m of marques) {
       if (typeof m?.compte !== 'string' || !membres.has(m.compte)) throw echec(400, 'compte', 'Un des joueurs ne fait pas partie de la team.');
+      if (!convoquesOcc.has(m.compte)) throw echec(400, 'non-convoque', 'Ce membre n’est pas convoqué à cet événement : ajoutez-le aux convoqués d’abord.');
       if (!REELS.includes(m.reel)) throw echec(400, 'reel', 'Présence : présent, absent, excusé, en retard ou inconnu.');
       const note = m.note !== undefined ? texteNettoye(m.note, 200) : null;
       lot.push({
@@ -657,7 +723,14 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     return presenceOccurrence(acteur, teamId, evId, o.cle);
   }
 
-  /** Lignes de présence de la team sur une plage, avec le type et le titre de l'événement. */
+  /**
+   * Lignes de présence de la team sur une plage (clé d'occurrence dans
+   * [du, au[), avec le type et le titre de l'événement : celles des
+   * CONVOQUÉS seulement. Un convoqué sans ligne à une séance déjà commencée
+   * reçoit une ligne « sans réponse, non marqué » (il était attendu). Un
+   * non-convoqué (Propriétaire non coché qui a répondu…) n'est pas compté.
+   * Un ancien membre (parti de la team) garde ses présences marquées.
+   */
   async function lignesPresence(teamId, du, au, { types, compte } = {}) {
     const conditions = ['p.team_id = ?', 'p.occurrence >= ?', 'p.occurrence < ?'];
     const params = [teamId, iso(du), iso(au)];
@@ -665,14 +738,41 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
       conditions.push('p.compte_id = ?');
       params.push(compte);
     }
-    const lignes = await base.tous(
-      `SELECT p.*, e.type, e.titre, c.pseudo FROM presences p
+    const brutes = await base.tous(
+      `SELECT p.*, e.type, e.titre, e.debut AS ev_debut, e.fin AS ev_fin, e.convocation AS ev_convocation, e.concernes AS ev_concernes,
+              x.convocation AS x_convocation, x.fin AS x_fin, x.titre AS x_titre, c.pseudo, c.pseudo_cle
+         FROM presences p
          JOIN planning_evenements e ON e.id = p.evenement_id
+         LEFT JOIN planning_exceptions x ON x.evenement_id = p.evenement_id AND x.occurrence = p.occurrence
          LEFT JOIN comptes c ON c.id = p.compte_id
         WHERE ${conditions.join(' AND ')} ORDER BY p.occurrence, c.pseudo_cle`,
       params,
     );
-    return types?.length ? lignes.filter(l => types.includes(l.type)) : lignes;
+    const membres = new Map((await membresActifs(teamId, { tous: true })).map(m => [m.compte, m]));
+    const garde = brutes.filter(l => {
+      if (types?.length && !types.includes(l.type)) return false;
+      const m = membres.get(l.compte_id);
+      if (!m) return l.reel !== 'inconnu';
+      const fin = l.x_fin ? Date.parse(l.x_fin) : Date.parse(l.occurrence) + (Date.parse(l.ev_fin) - Date.parse(l.ev_debut));
+      const conv = (l.x_convocation && normaliserConvocation(l.x_convocation)) || convocationDe({ convocation: l.ev_convocation, concernes: l.ev_concernes });
+      return estConvoque(conv, m, fin);
+    });
+    // Convoqués attendus sans ligne (séances commencées) : comptés « sans réponse, non marqué ».
+    const presentes = new Set(garde.map(l => `${l.evenement_id}|${l.occurrence}|${l.compte_id}`));
+    const actifs = [...membres.values()].filter(m => m.statut === 'actif' && (!compte || m.compte === compte));
+    const t = maintenant();
+    for (const { ev, o } of await occurrencesTeam(teamId, du, au)) {
+      const cleMs = Date.parse(o.cle);
+      if (cleMs < du || cleMs >= au || o.debut > t) continue;
+      if (types?.length && !types.includes(ev.type)) continue;
+      for (const m of roster(actifs, ev, o)) {
+        if (presentes.has(`${ev.id}|${o.cle}|${m.compte}`)) continue;
+        garde.push({ evenement_id: ev.id, occurrence: o.cle, compte_id: m.compte, team_id: teamId, rsvp: 'sans_reponse', reel: 'inconnu', note: '', type: ev.type, titre: o.titre ?? ev.titre, pseudo: m.pseudo, pseudo_cle: m.pseudo.toLocaleLowerCase('fr') });
+      }
+    }
+    return garde
+      .map(l => ({ ...l, titre: l.x_titre ?? l.titre }))
+      .sort((a, b) => a.occurrence.localeCompare(b.occurrence) || String(a.pseudo_cle ?? '').localeCompare(String(b.pseudo_cle ?? '')));
   }
 
   function lirePeriode(params, fuseau) {
@@ -711,7 +811,8 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     exiger(ctx, 'attendance.view_all');
     const fuseau = fuseauValide(params.fuseau) ? params.fuseau : ctx.team.fuseau;
     const { du, au, debut, fin } = lirePeriode(params, fuseau);
-    const lignes = await lignesPresence(teamId, du, au);
+    const types = params.types ? String(params.types).split(',').filter(t => TYPES_EVENEMENT.includes(t)) : [];
+    const lignes = await lignesPresence(teamId, du, au, { types });
     const R = { oui: 'Oui', non: 'Non', peut_etre: 'Peut-être', sans_reponse: 'Sans réponse' };
     const P = { present: 'Présent', absent: 'Absent', excuse: 'Excusé', retard: 'En retard', inconnu: 'Non marqué' };
     const contenu = csv(

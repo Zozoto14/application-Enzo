@@ -8,7 +8,8 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
-import type { Occurrence, Rsvp } from '../../planning/api';
+import type { Convocation, MembreConvocable, Occurrence, Rsvp } from '../../planning/api';
+import { GROUPES, basculerGroupe, basculerMembre, basculerProprietaire, convocationVide, estConvoque, groupeActif, resumeConvocation } from '../../planning/convocations';
 import { dateCourteJour, fuseauAppareil, nomFuseau, typeEvenement } from '../../planning/libelles';
 import { styles } from '../commun';
 
@@ -218,6 +219,83 @@ export function CarteOccurrence({
         <BoutonsRsvp theme={theme} valeur={o.monRsvp} onRepondre={onRepondre} testID={testID ? `${testID}-rsvp` : 'esport-rsvp'} />
       ) : null}
       {extra}
+    </View>
+  );
+}
+
+// ------------------------------------------------------------------ Convoqués (formulaire)
+
+/**
+ * Sélecteur « Convoqués » : raccourcis (Joueurs, Staff, Tout le monde), choix
+ * personne par personne, et liste à part « Propriétaires à convoquer » (un
+ * Propriétaire n'est jamais convoqué sans être coché). Aucun choix : les joueurs.
+ */
+export function SelecteurConvocation({
+  theme,
+  membres,
+  valeur,
+  onChange,
+  testID = 'esport-convocation',
+}: {
+  theme: ThemeHub;
+  membres: readonly MembreConvocable[];
+  valeur: Convocation;
+  onChange(c: Convocation): void;
+  testID?: string;
+}) {
+  const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
+  const titre = { color: theme.texte, fontWeight: '600' as const, fontSize: 13, ...police(theme.policeTexte) };
+  // Les cases montrent la saisie telle quelle ; sans aucun choix, le résumé annonce le défaut (les joueurs).
+  const vide = convocationVide(valeur);
+  const affiche = valeur;
+  const personnes = membres.filter(m => m.groupe !== 'proprietaire');
+  const proprietaires = membres.filter(m => m.groupe === 'proprietaire');
+  return (
+    <View style={{ gap: 8 }} testID={testID}>
+      <Text style={titre}>Convoqués</Text>
+      <View style={styles.ligne} accessibilityLabel="Raccourcis de convocation">
+        {GROUPES.map(g => (
+          <Pastille
+            key={g.cle}
+            theme={theme}
+            actif={groupeActif(affiche, g.cle)}
+            libelle={g.nom}
+            role="checkbox"
+            onPress={() => onChange(basculerGroupe(affiche, g.cle))}
+            testID={`${testID}-groupe-${g.cle}`}
+          />
+        ))}
+      </View>
+      {personnes.length ? (
+        <View style={styles.ligne} accessibilityLabel="Convoqués, personne par personne">
+          {personnes.map(m => (
+            <Pastille key={m.compte} theme={theme} actif={estConvoque(affiche, m)} libelle={m.pseudo} role="checkbox" onPress={() => onChange(basculerMembre(affiche, m))} testID={`${testID}-membre-${m.compte}`} />
+          ))}
+        </View>
+      ) : null}
+      {proprietaires.length ? (
+        <View style={{ gap: 6 }}>
+          <Text style={titre}>Propriétaires à convoquer</Text>
+          <View style={styles.ligne} accessibilityLabel="Propriétaires à convoquer">
+            {proprietaires.map(m => (
+              <Pastille
+                key={m.compte}
+                theme={theme}
+                actif={valeur.proprietaires.includes(m.compte) || valeur.membres.includes(m.compte)}
+                libelle={m.pseudo}
+                role="checkbox"
+                onPress={() => onChange(basculerProprietaire(valeur, m.compte))}
+                testID={`${testID}-proprietaire-${m.compte}`}
+              />
+            ))}
+          </View>
+          <Text style={attenue}>Un Propriétaire n’est convoqué que s’il est coché : sinon il voit l’événement au calendrier, sans être attendu ni relancé.</Text>
+        </View>
+      ) : null}
+      <Text style={attenue} testID={`${testID}-resume`}>
+        {vide ? 'Aucun choix : les joueurs seront convoqués. ' : ''}
+        {resumeConvocation(valeur, membres)}
+      </Text>
     </View>
   );
 }

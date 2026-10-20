@@ -156,7 +156,8 @@ export interface TeamAnnuaire {
   slug: string;
   jeu: string;
   archivee: boolean;
-  droits: { ajouter: boolean; roles: boolean; retirer: boolean };
+  /** `demander` : permission « Créer des membres » (demande de compte au Fondateur, ajout d'un compte Esport existant). */
+  droits: { ajouter: boolean; demander?: boolean; roles: boolean; retirer: boolean };
   roles: RoleAnnuaire[];
 }
 export interface Annuaire {
@@ -164,6 +165,34 @@ export interface Annuaire {
   peutCreerCompte: boolean;
   teams: TeamAnnuaire[];
   comptes: CompteEsport[];
+  /** Demandes de compte en attente (Fondateur : toutes ; sinon les siennes). */
+  demandesEnAttente?: number;
+}
+
+/** Demande de compte (permission `members.create`), validée ou refusée par le Fondateur. */
+export interface DemandeCompte {
+  id: string;
+  teamId: string;
+  team: string | null;
+  teamSlug: string | null;
+  role: { id: string; nom: string; couleur: string; cle: string | null };
+  demandeur: string;
+  demandeurPseudo: string | null;
+  pseudo: string;
+  /** Adresse proposée : visible du Fondateur et du demandeur tant que la demande attend. */
+  email: string | null;
+  posteJeu: string | null;
+  message: string;
+  statut: 'en_attente' | 'validee' | 'refusee' | 'annulee';
+  compte: string | null;
+  motif: string;
+  creeLe: string;
+  traiteLe: string | null;
+}
+export interface ListeDemandes {
+  demandes: DemandeCompte[];
+  enAttente: number;
+  fondateur: boolean;
 }
 export interface Affectation {
   teamId: string;
@@ -499,17 +528,25 @@ export interface ClientEsport {
   exporterCompte(compte: string): Promise<unknown>;
   /** Fondateur : suppression (anonymisation) du compte Esport d'un membre. */
   supprimerCompte(compte: string): Promise<void>;
-  /** Ajoute un compte existant (déjà visible) à une team, avec un rôle. */
-  ajouterMembre(id: string, m: { compte: string; roleId: string; posteJeu?: string }): Promise<CompteEsport | null>;
+  /** Ajoute un compte existant à une team, avec un rôle : par son identifiant (déjà visible), ou son pseudo exact (« Créer des membres »). */
+  ajouterMembre(id: string, m: { compte?: string; pseudo?: string; roleId: string; posteJeu?: string }): Promise<CompteEsport | null>;
+  /** Demandes de compte : les siennes (Fondateur : toutes celles en attente). */
+  demandes(): Promise<ListeDemandes>;
+  /** Dépose une demande de compte (permission « Créer des membres »). */
+  demanderCompte(d: { teamId: string; roleId: string; pseudo: string; email: string; posteJeu?: string; message?: string }): Promise<DemandeCompte>;
+  /** Fondateur : refuse une demande. */
+  refuserDemande(id: string, motif?: string): Promise<DemandeCompte>;
+  /** Le demandeur annule sa demande en attente. */
+  annulerDemande(id: string): Promise<void>;
   // Premier niveau (toutes teams)
   /** Page Membres : comptes de toutes les teams où l'on voit les membres. */
   annuaire(): Promise<Annuaire>;
   /** Dashboard : résumé de toutes ses teams (une seule requête). */
   tableau(): Promise<Tableau>;
   /** Fondateur : contrôle une invitation directe AVANT de créer le compte du hub (rien n'est écrit). */
-  verifierPreinscription(c: { pseudo: string; affectations: Affectation[] }): Promise<void>;
+  verifierPreinscription(c: { pseudo: string; affectations: Affectation[]; demandeId?: string }): Promise<void>;
   /** Fondateur : pré-enregistre le compte du hub tout juste créé, avec ses teams. */
-  preinscrire(c: { compte: string; pseudo: string; affectations: Affectation[] }): Promise<CompteEsport | null>;
+  preinscrire(c: { compte: string; pseudo: string; affectations: Affectation[]; demandeId?: string }): Promise<CompteEsport | null>;
   /** Fondateur : compte supprimé dans l'Administration → retiré de l'Esport. */
   retirerCompte(compte: string): Promise<{ ok: boolean; retire: boolean; teams: number }>;
   notifications(): Promise<Notifications>;
@@ -638,6 +675,12 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
       await appel(`${t(id)}/membres/${encodeURIComponent(membreId)}`, 'DELETE');
     },
     ajouterMembre: (id, m) => appel(`${t(id)}/membres`, 'POST', m),
+    demandes: () => appel('/comptes/demandes'),
+    demanderCompte: d => appel('/comptes/demandes', 'POST', d),
+    refuserDemande: (id, motif) => appel(`/comptes/demandes/${encodeURIComponent(id)}/refuser`, 'POST', motif ? { motif } : {}),
+    annulerDemande: async id => {
+      await appel(`/comptes/demandes/${encodeURIComponent(id)}`, 'DELETE');
+    },
     annuaire: () => appel('/membres'),
     tableau: () => appel('/dashboard'),
     verifierPreinscription: async c => {

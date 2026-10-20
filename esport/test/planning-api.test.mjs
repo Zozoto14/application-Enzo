@@ -40,7 +40,8 @@ async function preparer() {
   return { b, A, B, s, api, creer, avancer };
 }
 
-const ENTRAINEMENT = { type: 'training', titre: 'Entraînement', date: '2026-10-20', heureDebut: '20:00', heureFin: '22:00', lieu: 'Discord', recurrence: { jours: [2, 4] } };
+// Convoqués : les joueurs (Léa, Kai, Tom) et, nommément, Ana (Analyste : staff, pas dans le groupe « joueurs »).
+const ENTRAINEMENT = { type: 'training', titre: 'Entraînement', date: '2026-10-20', heureDebut: '20:00', heureFin: '22:00', lieu: 'Discord', recurrence: { jours: [2, 4] }, convocation: { groupes: ['joueurs'], membres: ['ana12345'] } };
 
 test('planning : CRUD par le Coach ; un Joueur sans droit ne voit pas les boutons et reçoit 403', async () => {
   const { A, s, api, creer } = await preparer();
@@ -85,7 +86,9 @@ test('planning : CRUD par le Coach ; un Joueur sans droit ne voit pas les bouton
   assert.equal((await creer({ ...ENTRAINEMENT, date: '2026-02-30' })).statut, 400);
   assert.equal((await creer({ ...ENTRAINEMENT, recurrence: { freq: 'mensuel' } })).statut, 400);
   assert.equal((await creer({ ...ENTRAINEMENT, adversaireId: 'pas-un-uuid' })).statut, 400);
-  assert.equal((await creer({ ...ENTRAINEMENT, concernes: ['inconnu1'] })).statut, 400);
+  assert.equal((await creer({ ...ENTRAINEMENT, convocation: undefined, concernes: ['inconnu1'] })).statut, 400);
+  assert.equal((await creer({ ...ENTRAINEMENT, convocation: { membres: ['bob12345'] } })).statut, 400, 'membre d’une autre team');
+  assert.equal((await creer({ ...ENTRAINEMENT, convocation: 'tous' })).statut, 400);
   assert.equal((await creer({ ...ENTRAINEMENT, fuseau: 'Mars/Olympus' })).statut, 400);
   // Un adversaire inconnu (ou d'une autre team) est refusé ; un vrai est accepté (scouting, phase 5).
   assert.equal((await creer({ ...ENTRAINEMENT, adversaireId: '0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d' })).statut, 400);
@@ -232,7 +235,7 @@ test('présence : RSVP du joueur, marquage par le staff, statistiques par joueur
   const moi = await api(`/teams/${A.teamId}/planning/${id}/occurrences/${occ(MARDI)}/presence`, s.lea12345);
   assert.deepEqual(moi.corps.lignes.map(l => l.pseudo), ['Léa']);
   const liste = await api(`/teams/${A.teamId}/planning?debut=2026-10-19&fin=2026-10-21`, s.coach123);
-  assert.deepEqual(liste.corps.occurrences[0].reponses, { oui: 1, non: 1, peut_etre: 1 });
+  assert.deepEqual(liste.corps.occurrences[0].reponses, { oui: 1, non: 1, peut_etre: 1, attendues: 4 });
   assert.equal((await api(`/teams/${A.teamId}/planning?debut=2026-10-19&fin=2026-10-21`, s.lea12345)).corps.occurrences[0].reponses, null);
 
   // Marquage : 403 pour un joueur ; le staff marque.
@@ -244,6 +247,12 @@ test('présence : RSVP du joueur, marquage par le staff, statistiques par joueur
   ];
   assert.equal((await api(`/teams/${A.teamId}/planning/${id}/occurrences/${occ(MARDI)}/presence`, s.lea12345, { methode: 'PUT', corps: { marques } })).statut, 403);
   assert.equal((await api(`/teams/${A.teamId}/planning/${id}/occurrences/${occ(MARDI)}/presence`, s.coach123, { methode: 'PUT', corps: { marques: [{ compte: 'lea12345', reel: 'parti' }] } })).statut, 400);
+  // Un membre non convoqué (le Manager, ou le Fondateur Propriétaire non coché) ne se marque pas.
+  for (const compte of ['max12345', 'principal']) {
+    const x = await api(`/teams/${A.teamId}/planning/${id}/occurrences/${occ(MARDI)}/presence`, s.coach123, { methode: 'PUT', corps: { marques: [{ compte, reel: 'present' }] } });
+    assert.equal(x.statut, 400, compte);
+    assert.equal(x.corps.code, 'non-convoque');
+  }
   const m = await api(`/teams/${A.teamId}/planning/${id}/occurrences/${occ(MARDI)}/presence`, s.coach123, { methode: 'PUT', corps: { marques } });
   assert.equal(m.statut, 200);
   assert.deepEqual(m.corps.lignes.find(l => l.pseudo === 'Kai'), { compte: 'kai12345', pseudo: 'Kai', rsvp: 'non', reel: 'excuse', note: 'Examen', marqueLe: m.corps.lignes.find(l => l.pseudo === 'Kai').marqueLe });

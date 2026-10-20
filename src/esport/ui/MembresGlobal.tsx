@@ -16,12 +16,13 @@ import { PanneauInvitation } from '../../hub/admin/ui/EnvoiInvitation';
 import { Avis, BoutonHub, Champ, Pilule, Segments } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { AppHub, ContexteHub } from '../../hub/types';
-import type { Annuaire, AppartenanceCompte, ClientEsport, CompteEsport, TeamAnnuaire } from '../client';
+import type { Annuaire, AppartenanceCompte, ClientEsport, CompteEsport, DemandeCompte, TeamAnnuaire } from '../client';
 import { MOTIF_PSEUDO, capaciteComptes, emailDe, modeleInvitationEsport, noterEnvoiEsport, renvoyerInvitation, revoquerCompte } from '../comptesHub';
 import { comptesHubSansEsport, comptesOrphelins } from '../synchroAdmin';
 import { BoutonConfirme, Choix, PastilleRole, Retours, styles as communs, useAgir, Intertitre, Panneau } from './commun';
 import { ESP, EnTetePage, EtatVide, SqueletteCartes } from './design';
 import { CreationCompte, roleParDefaut } from './CreationCompte';
+import { DemandesCompte } from './DemandesCompte';
 import { useIdentite } from './Identite';
 
 type FiltreStatut = 'tous' | 'invite' | 'actif' | 'suspendu' | 'sansteam';
@@ -72,6 +73,9 @@ export function MembresGlobal({
   const [role, setRole] = useState('tous');
   const [statut, setStatut] = useState<FiltreStatut>('tous');
   const [creation, setCreation] = useState(false);
+  // Validation d'une demande de compte (Fondateur) : la création s'ouvre préremplie.
+  const [demande, setDemande] = useState<DemandeCompte | undefined>();
+  const [versionDemandes, setVersionDemandes] = useState(0);
   const [ouvert, setOuvert] = useState<string | undefined>();
   const { enCours, erreur, avis, agir } = useAgir();
   const identite = useIdentite(contexte);
@@ -114,15 +118,50 @@ export function MembresGlobal({
         large={large}
         titre="Membres"
         sous={annuaire ? `${tous.length} compte${tous.length > 1 ? 's' : ''}, dont ${sansTeam} sans team · ${annuaire.teams.length} team${annuaire.teams.length > 1 ? 's' : ''}` : 'Chargement…'}
-        action={capacite.creer ? <BoutonHub theme={theme} titre={creation ? 'Fermer' : '+ Créer un compte'} variante={creation ? 'normal' : 'plein'} onPress={() => setCreation(c => !c)} testID="esport-membres-creer" /> : undefined}
+        action={
+          capacite.creer ? (
+            <BoutonHub
+              theme={theme}
+              titre={creation ? 'Fermer' : '+ Créer un compte'}
+              variante={creation ? 'normal' : 'plein'}
+              onPress={() => {
+                setDemande(undefined);
+                setCreation(c => !c);
+              }}
+              testID="esport-membres-creer"
+            />
+          ) : undefined
+        }
         testID="esport-membres-entete"
       />
+      {annuaire?.superAdmin && (annuaire.demandesEnAttente ?? 0) > 0 ? (
+        <View style={communs.ligne}>
+          <Pilule theme={theme} texte={`Demandes en attente : ${annuaire.demandesEnAttente}`} couleur={theme.alerte} testID="esport-membres-badge-demandes" />
+        </View>
+      ) : null}
       {!annuaire && !erreur ? <SqueletteCartes theme={theme} n={2} large={large} /> : null}
       {!capacite.creer && peutAjouter ? <Text style={attenue} testID="esport-membres-creation-indisponible">{capacite.raison}</Text> : null}
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-membres-global" />
       {identite.rendu(theme)}
+      {annuaire && !creation ? (
+        <DemandesCompte
+          theme={theme}
+          client={client}
+          annuaire={annuaire}
+          peutValider={capacite.creer}
+          occupe={Boolean(enCours)}
+          version={versionDemandes}
+          onValider={d => {
+            setDemande(d);
+            setCreation(true);
+          }}
+          onChange={recharger}
+        />
+      ) : null}
       {creation && annuaire && capacite.creer ? (
         <CreationCompte
+          key={demande?.id ?? 'nouveau'}
+          demande={demande}
           theme={theme}
           client={client}
           contexte={contexte}
@@ -132,9 +171,14 @@ export function MembresGlobal({
           equipeInitiale={team !== 'toutes' ? team : undefined}
           onFini={() => {
             setCreation(false);
+            setDemande(undefined);
+            setVersionDemandes(v => v + 1);
             void agir('', recharger);
           }}
-          onAnnuler={() => setCreation(false)}
+          onAnnuler={() => {
+            setCreation(false);
+            setDemande(undefined);
+          }}
         />
       ) : null}
       {orphelins.length > 0 ? (

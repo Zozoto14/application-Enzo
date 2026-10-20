@@ -63,6 +63,8 @@ export interface SaisieCompte {
   nom: string;
   email: string;
   affectations: Affectation[];
+  /** Validation d'une demande de compte (permission « Créer des membres ») : close avec le pré-enregistrement. */
+  demandeId?: string;
 }
 
 /** Problème de saisie (undefined : prêt à créer). */
@@ -126,7 +128,7 @@ export async function creerCompteEsport({
   const nom = saisie.nom.trim();
   const email = normaliserEmail(saisie.email);
   // 1. Serveur Esport d'abord : un pseudo pris ne doit pas laisser un compte du hub orphelin.
-  await client.verifierPreinscription({ pseudo: nom, affectations: saisie.affectations });
+  await client.verifierPreinscription({ pseudo: nom, affectations: saisie.affectations, ...(saisie.demandeId ? { demandeId: saisie.demandeId } : {}) });
   // 2. Compte du hub, comme l'Administration (modèle « Esport seulement »).
   const donnees = chargerDonnees(contexte.admin!.stockage);
   const { apps, niveaux } = versAutorisations(registre, niveauxDuModele(registre, 'esport'));
@@ -144,7 +146,7 @@ export async function creerCompteEsport({
   );
   // 4. Pré-enregistrement Esport.
   try {
-    const fiche = await client.preinscrire({ compte: id, pseudo: nom, affectations: saisie.affectations });
+    const fiche = await client.preinscrire({ compte: id, pseudo: nom, affectations: saisie.affectations, ...(saisie.demandeId ? { demandeId: saisie.demandeId } : {}) });
     return { id, nom, email, invitation: valeurs.invitation ?? { erreur: 'Invitation indisponible sur cet appareil.' }, fiche };
   } catch (e) {
     const texte = e instanceof Error ? e.message : String(e);
@@ -153,8 +155,8 @@ export async function creerCompteEsport({
 }
 
 /** Refait le pré-enregistrement Esport d'un compte du hub déjà créé (après un échec réseau). */
-export async function rattacherCompte(client: ClientEsport, id: string, nom: string, affectations: Affectation[]): Promise<CompteEsport | null> {
-  return client.preinscrire({ compte: id, pseudo: nom, affectations });
+export async function rattacherCompte(client: ClientEsport, id: string, nom: string, affectations: Affectation[], demandeId?: string): Promise<CompteEsport | null> {
+  return client.preinscrire({ compte: id, pseudo: nom, affectations, ...(demandeId ? { demandeId } : {}) });
 }
 
 /** Nouveau lien d'invitation (l'ancien cesse de marcher) : même action que l'Administration. */

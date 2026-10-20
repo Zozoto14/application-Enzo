@@ -82,6 +82,12 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
       return `${qui} a ${m.statut === 'suspendu' ? 'suspendu' : 'réactivé'} ${nom(noms, m.compte)}`;
     case 'member.added':
       return `${qui} a ajouté ${nom(noms, m.compte)} à la team${typeof m.role === 'string' ? ` (${m.role})` : ''}${m.invite ? ' : invitation envoyée' : ''}`;
+    case 'member.account_requested':
+      return `${qui} a demandé un compte pour ${texte(m.pseudo)}${typeof m.role === 'string' ? ` (${m.role})` : ''} : à valider par le Fondateur`;
+    case 'member.account_request_validated':
+      return `${qui} a validé la demande de compte de ${texte(m.pseudo)}`;
+    case 'member.account_request_refused':
+      return `${qui} a refusé la demande de compte de ${texte(m.pseudo)}`;
     case 'member.removed':
       return m.suppression === 'administration' ? `${typeof m.pseudo === 'string' ? m.pseudo : nom(noms, m.compte)} a été retiré (compte supprimé dans l’Administration)` : `${qui} a retiré ${nom(noms, m.compte)} de la team`;
     case 'member.left':
@@ -180,6 +186,12 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
       return `Le résumé de « ${typeof c.titre === 'string' ? c.titre : 'votre réunion'} » est ${c.remplacement ? 'mis à jour' : 'prêt'} (${team})`;
     case 'tache-assignee':
       return `${nom(noms, c.membre)} vous a assigné « ${typeof c.titre === 'string' ? c.titre : 'une tâche'} »${typeof c.echeance === 'string' ? ` pour le ${dateJour(c.echeance)}` : ''} (${team})`;
+    case 'demande-compte':
+      return `${nom(noms, c.membre)} demande un compte pour ${typeof c.pseudo === 'string' ? c.pseudo : 'un nouveau membre'}${typeof c.role === 'string' ? ` (${c.role})` : ''} dans ${team} : à valider dans Esport › Membres`;
+    case 'demande-compte-validee':
+      return `Votre demande de compte pour ${typeof c.pseudo === 'string' ? c.pseudo : 'un nouveau membre'} est validée : son invitation est partie (${team})`;
+    case 'demande-compte-refusee':
+      return `Votre demande de compte pour ${typeof c.pseudo === 'string' ? c.pseudo : 'un nouveau membre'} est refusée${typeof c.motif === 'string' && c.motif ? ` : ${c.motif}` : ''} (${team})`;
     case 'tache-echeance':
       return `${c.retard ? 'En retard' : 'Échéance proche'} : « ${typeof c.titre === 'string' ? c.titre : 'une tâche'} »${typeof c.echeance === 'string' ? ` (${dateJour(c.echeance)})` : ''}`;
     default:

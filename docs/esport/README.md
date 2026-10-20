@@ -30,7 +30,7 @@ paysage, elles sont dans la **barre latérale** à gauche ; sur iPhone, dans la 
 | --- | --- |
 | **Dashboard** (ouvre par défaut) | Résumé de toutes vos teams. En haut, quatre chiffres clés (teams, événements des 7 jours, résumés à rédiger ou tâches en retard, alertes), puis la semaine à venir (toutes teams) et les alertes (tâches en retard, résumé en attente depuis plus de 7 jours, présence faible, invités pas encore connectés). Puis une carte par team : membres, présence des 14 derniers jours, résumés en attente, tâches en retard, prochains événements, dernière activité. Touchez une carte pour ouvrir la team. |
 | **Teams** | Vos teams, création d'une team (Fondateur), notifications, votre profil Esport. |
-| **Membres** | Tous les membres des teams dont vous voyez les membres (le Fondateur : aussi les comptes du hub qui ont l'Esport sans être dans aucune team, voir plus bas) : filtres (team, rôle, statut invité / actif / suspendu / sans team), recherche, création de compte (Fondateur), ajout à une team, rôle, suspension, retrait, invitations. Voir [invitations.md](invitations.md). |
+| **Membres** | Tous les membres des teams dont vous voyez les membres (le Fondateur : aussi les comptes du hub qui ont l'Esport sans être dans aucune team, voir plus bas) : filtres (team, rôle, statut invité / actif / suspendu / sans team), recherche, création de compte (Fondateur), **demandes de compte** (badge « Demandes en attente » du Fondateur ; « Proposer un membre » avec la permission « Créer des membres »), ajout à une team, rôle, suspension, retrait, invitations. Voir [invitations.md](invitations.md). |
 
 Chaque bloc du Dashboard n'apparaît que si le module est activé dans la team **et** que votre rôle
 permet de le voir (un Joueur ne voit pas la présence de toute l'équipe ni le détail du journal). Le
@@ -88,11 +88,13 @@ Chaque membre a **un rôle par team** (on peut être Coach dans une team et Joue
 | **Manager** | Membres, rôles, invitations, planning, résumés, Discord, journal |
 | **Coach** | Planning, présence, review, strats, playbook, scouting, objectifs |
 | **Analyste** | Review, strats, playbook, scouting ; lit le planning |
-| **Joueur** | Lit la team, donne ses disponibilités, répond aux événements, dépose des réunions, commente les reviews |
+| **Joueur** | Lit la team, donne ses disponibilités, répond aux événements où il est convoqué, dépose des réunions, commente les reviews |
 | **Remplaçant** | Lecture limitée |
 
 Le Propriétaire et le Manager peuvent créer des **rôles personnalisés** (Membres et rôles › Rôles) ; personne ne
-peut donner une permission qu'il n'a pas lui-même. Le **Fondateur** (vous, le propriétaire de l'app) a tous les
+peut donner une permission qu'il n'a pas lui-même. Le Propriétaire peut donner au rôle **Joueur** (ou à un rôle
+personnalisé) la permission **« Créer des membres »** : ses membres proposent alors de nouveaux comptes, que le
+Fondateur valide en un clic ([invitations.md](invitations.md)). Le **Fondateur** (vous, le propriétaire de l'app) a tous les
 droits partout.
 
 ## Pour le Fondateur
@@ -100,8 +102,9 @@ droits partout.
 ### Mettre l'Esport en route (une fois)
 
 Suivez [deploiement.md](deploiement.md) (10 minutes depuis le navigateur). Pour cette version, relancez simplement
-le workflow **« Esport (Worker) »** : il applique les migrations `0007_finitions.sql` (index et limites de débit)
-et `0008_invitations_directes.sql` (invitation directe).
+le workflow **« Esport (Worker) »** : il applique les migrations `0007_finitions.sql` (index et limites de débit),
+`0008_invitations_directes.sql` (invitation directe) et `0009_convocations_demandes.sql` (convocations
+explicites, demandes de compte).
 
 ### Créer une team
 
@@ -133,6 +136,11 @@ de l'Esport. Détails : [invitations.md](invitations.md).
 
 ### Gérer la team au quotidien
 
+- **Convocations** : à chaque événement (planning, réunions…), choisissez les **Convoqués** (raccourcis Joueurs,
+  Staff, Tout le monde, ou personne par personne) et, à part, les **Propriétaires à convoquer**. Sans choix : les
+  joueurs. Vous n'êtes convoqué (réponse attendue, rappels, statistiques) que si vous vous cochez ; vous voyez
+  quand même tout le calendrier, et le filtre **« Où je suis convoqué »** n'affiche que vos convocations.
+  Détails : [planning.md](planning.md).
 - **Membres et rôles** : changer un rôle, suspendre (le membre ne voit plus la team), retirer.
 - **Journal** : qui a fait quoi. Filtres par module, type d'action, membre et période ; **Exporter (CSV)** ;
   **Durée de conservation** (1 an par défaut ; de 30 jours à 2 ans, ou illimitée) : les entrées plus anciennes
@@ -195,8 +203,8 @@ lecteurs d'écran.
   de l'image.
 - **Strats** : édition sur PC et iPad (site), lecture seule sur iPhone ; images Riot chargées depuis
   valorant-api.com (voir la politique Riot dans [strats-playbook.md](strats-playbook.md)).
-- **Statistiques** : la présence compte les séances **marquées** par le staff ; une séance sans marquage n'entre pas
-  dans le taux.
+- **Statistiques** : la présence compte les **convoqués** ; une séance sans marquage compte « non marqué » et
+  n'entre pas dans le taux. Marquer la présence enregistre à chaque appui.
 - **Hors ligne** : l'Esport a besoin du serveur ; sans réseau, il affiche un message et le reste de l'app marche.
 - **Discord** : notifications par webhook (pas de bot ni de commandes) ; un message envoyé ne se retire pas.
 - **Fichiers** : PDF de 20 Mo au plus ; pas d'antivirus (type, taille et contenu vérifiés).

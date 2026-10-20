@@ -32,6 +32,10 @@ export const TYPES_EVENEMENTS = [
   'member.joined',
   // Invitation directe : ajout par un gestionnaire (compte créé depuis l'Esport ou existant).
   'member.added',
+  // Demandes de compte (members.create) : déposée, validée par le Fondateur, refusée.
+  'member.account_requested',
+  'member.account_request_validated',
+  'member.account_request_refused',
   'member.role_changed',
   'member.status_changed',
   'member.removed',
@@ -148,6 +152,16 @@ export async function abonneNotifications(base, ev) {
       return;
     case 'task.due_soon':
       if (charge.assigne) await notifier(base, ev, charge.assigne, 'tache-echeance', { titre: charge.titre ?? null, tache: ev.entite_id, echeance: charge.echeance ?? null, retard: Boolean(charge.retard) });
+      return;
+    case 'member.account_requested':
+      // Le Fondateur (seul à pouvoir créer le compte du hub) est prévenu.
+      if (ev.acteur_id !== 'principal') await notifier(base, ev, 'principal', 'demande-compte', { membre: ev.acteur_id, pseudo: charge.pseudo ?? null, role: charge.role ?? null, demande: ev.entite_id });
+      return;
+    case 'member.account_request_validated':
+    case 'member.account_request_refused':
+      if (charge.demandeur && charge.demandeur !== ev.acteur_id) {
+        await notifier(base, ev, charge.demandeur, ev.type === 'member.account_request_validated' ? 'demande-compte-validee' : 'demande-compte-refusee', { pseudo: charge.pseudo ?? null, motif: charge.motif ?? null, demande: ev.entite_id });
+      }
       return;
     case 'modules.changed': {
       const membres = await base.tous("SELECT compte_id AS compte FROM membres WHERE team_id = ? AND statut = 'actif'", [ev.team_id]);

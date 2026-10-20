@@ -14,6 +14,7 @@ import { autorise } from './permissions.mjs';
 import { occurrences, DEPLACEMENT_MAX_MS } from './planning/recurrence.mjs';
 import { dateLocale, texteDate } from './planning/temps.mjs';
 import { dateDuJour } from './objectifs.mjs';
+import { convocationDe, estConvoque, normaliserConvocation } from './planning/convocations.mjs';
 import { iso, jsonOu } from './outils.mjs';
 
 const JOUR_MS = 86_400_000;
@@ -62,10 +63,20 @@ export function servicesTableau({ base, maintenant = () => Date.now(), noyau }) 
         exceptions.get(x.evenement_id)?.set(x.occurrence, x);
       }
     }
+    // « Mes prochains événements » : ceux où l'acteur est CONVOQUÉ (un Propriétaire non coché n'est pas attendu).
+    const moiDans = new Map(
+      ctxs
+        .filter(c => c.membre && c.membre.statut === 'actif')
+        .map(c => [c.team.id, { compte: acteur.compte, cle: c.role?.cle_systeme ?? null, proprietaire: c.role?.cle_systeme === 'proprietaire', perms: c.permissions, rejointLe: c.membre.rejoint_le }]),
+    );
     const occurrencesParTeam = new Map();
     for (const ev of evs) {
+      const moi = moiDans.get(ev.team_id);
+      if (!moi) continue;
       for (const o of occurrences(ev, t, au, exceptions.get(ev.id))) {
         if (o.fin <= t) continue;
+        const convocation = (o.convocation && normaliserConvocation(o.convocation)) || convocationDe(ev);
+        if (!estConvoque(convocation, moi, o.fin)) continue;
         const liste = occurrencesParTeam.get(ev.team_id) ?? [];
         liste.push({ teamId: ev.team_id, evenementId: ev.id, cle: o.cle, type: ev.type, titre: o.titre ?? ev.titre, debut: iso(o.debut), fin: iso(o.fin), lieu: o.lieu ?? ev.lieu ?? '' });
         occurrencesParTeam.set(ev.team_id, liste);

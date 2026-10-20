@@ -12,7 +12,8 @@ import { ModeAffichageForce } from '../../ui/mobile';
 import { CATALOGUE, type ClientEsport, type DetailTeam } from '../client';
 import { phraseJournal, phraseNotification } from '../libelles';
 import { PageTeam, type SectionTeam } from '../ui/PageTeam';
-import { fauxPlanning } from './faux';
+import { CONVOCATION_DEFAUT, basculerGroupe, basculerMembre, basculerProprietaire, convoquesParmi, memeConvocation, resumeConvocation } from './convocations';
+import { MEMBRES_CONVOCABLES, fauxPlanning } from './faux';
 import { ajouterJours, dateLongue, grilleMois, jourSemaine, lundiDe, moisVoisin, nomMois, pourcentage, resumeRecurrence, typeEvenement } from './libelles';
 
 const theme = themeHub('nuit');
@@ -85,6 +86,32 @@ describe('planning : dates et libellés', () => {
   });
 });
 
+describe('convocations (règles du sélecteur)', () => {
+  const noms = (c: typeof CONVOCATION_DEFAUT) => convoquesParmi(c, MEMBRES_CONVOCABLES).map(m => m.compte);
+  it('défaut : les joueurs, jamais un Propriétaire ; Tout le monde = tous sauf les Propriétaires', () => {
+    expect(noms(CONVOCATION_DEFAUT)).toEqual(['lea12345', 'kai12345']);
+    expect(noms({ groupes: [], membres: [], exclus: [], proprietaires: [] })).toEqual(['lea12345', 'kai12345']);
+    const tous = basculerGroupe(CONVOCATION_DEFAUT, 'tous');
+    expect(noms(tous)).toEqual(['lea12345', 'kai12345', 'zed12345']);
+    // Retirer « Joueurs » sous « Tout le monde » : reste le Staff.
+    expect(noms(basculerGroupe(tous, 'joueurs'))).toEqual(['zed12345']);
+  });
+  it('personne par personne (exclusion d’un groupe, choix nominatif) et Propriétaires à part', () => {
+    const sansKai = basculerMembre(CONVOCATION_DEFAUT, MEMBRES_CONVOCABLES[1]);
+    expect(sansKai.exclus).toEqual(['kai12345']);
+    expect(noms(sansKai)).toEqual(['lea12345']);
+    expect(noms(basculerMembre(sansKai, MEMBRES_CONVOCABLES[1]))).toEqual(['lea12345', 'kai12345']);
+    const avecZed = basculerMembre(CONVOCATION_DEFAUT, MEMBRES_CONVOCABLES[2]);
+    expect(avecZed.membres).toEqual(['zed12345']);
+    const avecOlga = basculerProprietaire(avecZed, 'own12345');
+    expect(noms(avecOlga)).toEqual(['lea12345', 'kai12345', 'zed12345', 'own12345']);
+    expect(resumeConvocation(avecOlga, MEMBRES_CONVOCABLES)).toBe('Joueurs · + 1 au choix · 1 Propriétaire — 4 convoqués');
+    expect(noms(basculerProprietaire(avecOlga, 'own12345'))).not.toContain('own12345');
+    expect(memeConvocation(CONVOCATION_DEFAUT, { groupes: ['joueurs'], membres: [], exclus: [], proprietaires: [] })).toBe(true);
+    expect(memeConvocation(CONVOCATION_DEFAUT, avecOlga)).toBe(false);
+  });
+});
+
 describe('écran Planning', () => {
   it('Coach : création d’un événement récurrent (corps envoyé au serveur)', async () => {
     const { appels } = await monter(COACH, 'module:planning');
@@ -101,6 +128,44 @@ describe('écran Planning', () => {
     const post = appels.find(a => a.methode === 'POST');
     expect(post?.chemin).toBe('/teams/t1/planning');
     expect(post?.corps).toMatchObject({ type: 'scrim', titre: 'Scrim du mardi', date: '2026-10-20', heureDebut: '21:00', heureFin: '23:00', fuseau: 'Europe/Paris', recurrence: { freq: 'hebdo', intervalle: 1, jours: [2, 4], jusqua: null } });
+    // Aucun choix : les joueurs, jamais les Propriétaires.
+    expect(post?.corps).toMatchObject({ convocation: { groupes: ['joueurs'], membres: [], exclus: [], proprietaires: [] } });
+  });
+
+  it('Coach : convoquer 2 joueurs et 1 Propriétaire choisi (raccourcis, personne par personne, Propriétaires à part)', async () => {
+    const { appels } = await monter(COACH, 'module:planning');
+    await fireEvent.press(await screen.findByTestId('esport-planning-nouveau'));
+    await fireEvent.press(screen.getByTestId('esport-formulaire-type-meeting'));
+    await fireEvent.changeText(screen.getByTestId('esport-formulaire-titre'), 'Réunion stratégie');
+    // Par défaut : les joueurs cochés, les Propriétaires non.
+    expect(screen.getByTestId('esport-formulaire-convocation-membre-lea12345').props.accessibilityState).toEqual({ checked: true });
+    expect(screen.getByTestId('esport-formulaire-convocation-membre-zed12345').props.accessibilityState).toEqual({ checked: false });
+    expect(screen.getByTestId('esport-formulaire-convocation-proprietaire-principal').props.accessibilityState).toEqual({ checked: false });
+    // « Tout le monde » : le Staff aussi ; puis retour aux joueurs.
+    await fireEvent.press(screen.getByTestId('esport-formulaire-convocation-groupe-tous'));
+    expect(screen.getByTestId('esport-formulaire-convocation-membre-zed12345').props.accessibilityState).toEqual({ checked: true });
+    expect(screen.getByTestId('esport-formulaire-convocation-proprietaire-principal').props.accessibilityState).toEqual({ checked: false });
+    await fireEvent.press(screen.getByTestId('esport-formulaire-convocation-groupe-tous'));
+    // Les deux joueurs nommément (sans le groupe) et Olga, Propriétaire choisie.
+    await fireEvent.press(screen.getByTestId('esport-formulaire-convocation-membre-lea12345'));
+    await fireEvent.press(screen.getByTestId('esport-formulaire-convocation-membre-kai12345'));
+    await fireEvent.press(screen.getByTestId('esport-formulaire-convocation-proprietaire-own12345'));
+    expect(screen.getByTestId('esport-formulaire-convocation-resume').props.children.join('')).toContain('3 convoqués');
+    await fireEvent.press(screen.getByTestId('esport-formulaire-enregistrer'));
+    await screen.findByTestId('esport-planning');
+    const post = appels.find(a => a.methode === 'POST');
+    expect(post?.corps).toMatchObject({ type: 'meeting', convocation: { groupes: [], membres: ['kai12345', 'lea12345'], exclus: [], proprietaires: ['own12345'] } });
+  });
+
+  it('filtre « Où je suis convoqué » et détail : liste des convoqués, avis au Propriétaire non convoqué', async () => {
+    const { appels } = await monter(COACH, 'module:planning', 'telephone');
+    await screen.findByTestId('esport-planning-liste');
+    await fireEvent.press(screen.getByTestId('esport-planning-filtres-ouvrir'));
+    await fireEvent.press(screen.getByTestId('esport-filtre-mes-convocations'));
+    await waitFor(() => expect(appels.some(a => a.chemin.includes('membre=moi'))).toBe(true));
+    await fireEvent.press(await screen.findByTestId('esport-occ-e1e1e1e1-2026-10-20-ouvrir'));
+    expect((await screen.findByTestId('esport-evenement-convoques')).props.children).toContain('Convoqués (2) : Léa, Kai');
+    expect(screen.queryByTestId('esport-evenement-non-convoque')).toBeNull();
   });
 
   it('Joueur sur téléphone : pas de bouton de création ; RSVP en un appui', async () => {
@@ -124,16 +189,17 @@ describe('écran Planning', () => {
     await fireEvent.press(await screen.findByTestId('esport-occ-e1e1e1e1-2026-10-20-ouvrir'));
     await screen.findByTestId('esport-presence-liste');
     expect(screen.getByTestId('esport-evenement-actions')).toBeTruthy();
+    // Chaque appui enregistre aussitôt (plus de bouton « Enregistrer » à ne pas oublier).
+    expect(screen.queryByTestId('esport-presence-enregistrer')).toBeNull();
     await fireEvent.press(await screen.findByTestId('esport-marque-lea12345-present'));
+    await waitFor(() => expect(appels.filter(a => a.methode === 'PUT' && a.chemin.endsWith('/presence'))).toHaveLength(1));
+    expect(await screen.findByTestId('esport-presence-avis')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('esport-marque-kai12345-excuse'));
-    await fireEvent.press(screen.getByTestId('esport-presence-enregistrer'));
-    await waitFor(() => expect(appels.some(a => a.methode === 'PUT' && a.chemin.endsWith('/presence'))).toBe(true));
-    expect(appels.find(a => a.methode === 'PUT' && a.chemin.endsWith('/presence'))?.corps).toEqual({
-      marques: [
-        { compte: 'lea12345', reel: 'present' },
-        { compte: 'kai12345', reel: 'excuse' },
-      ],
-    });
+    await waitFor(() => expect(appels.filter(a => a.methode === 'PUT' && a.chemin.endsWith('/presence'))).toHaveLength(2));
+    expect(appels.filter(a => a.methode === 'PUT' && a.chemin.endsWith('/presence')).map(a => a.corps)).toEqual([
+      { marques: [{ compte: 'lea12345', reel: 'present' }] },
+      { marques: [{ compte: 'kai12345', reel: 'excuse' }] },
+    ]);
   });
 
   it('vues mois et semaine, filtre par type', async () => {

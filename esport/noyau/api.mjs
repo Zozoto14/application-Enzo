@@ -18,6 +18,7 @@ import { routePublique, routesPlanning } from './planning/routes.mjs';
 import { servicesPlanning } from './planning/service.mjs';
 import { catalogue } from './permissions.mjs';
 import { servicesComptes } from './comptes.mjs';
+import { servicesDemandes } from './demandes.mjs';
 import { servicesEsport } from './service.mjs';
 import { servicesTableau } from './tableau.mjs';
 import { creerSession, lireSession } from './session.mjs';
@@ -111,7 +112,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
   const stt = servicesStats({ base, maintenant, socle: s });
   const limite = (genre, qui) => limiter(base, genre, qui, maintenant());
   // Premier niveau (toutes teams) : invitation directe, annuaire des membres, dashboard.
-  const cp = servicesComptes({ base, maintenant, noyau: s });
+  const dm = servicesDemandes({ base, maintenant, noyau: s });
+  const cp = servicesComptes({ base, maintenant, noyau: s, demandes: dm });
   const tb = servicesTableau({ base, maintenant, noyau: s });
 
   async function acteurDeSession(requete) {
@@ -179,6 +181,18 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       if (corps.verifier !== true) await limite('invitation', acteur.compte);
       return cp.preinscrire(acteur, corps);
     }
+    // Demandes de compte (members.create) : dépôt (borné), suivi, refus (Fondateur), annulation (demandeur).
+    if (chemin === '/comptes/demandes') {
+      if (m === 'GET') return dm.liste(acteur);
+      if (m === 'POST') {
+        const corps = await lireCorps(requete);
+        await limite('demande_compte', acteur.compte);
+        return dm.creer(acteur, corps);
+      }
+    }
+    const demande = /^\/comptes\/demandes\/([^/]+)(\/refuser)?$/.exec(chemin);
+    if (demande && demande[2] && m === 'POST') return dm.refuser(acteur, decodeURIComponent(demande[1]), await lireCorps(requete));
+    if (demande && !demande[2] && m === 'DELETE') return dm.annuler(acteur, decodeURIComponent(demande[1]));
     // Compte supprimé dans l'Administration (source de vérité) : retiré de l'Esport.
     const retrait = /^\/admin\/comptes\/([^/]+)\/hub$/.exec(chemin);
     if (retrait && m === 'DELETE') return cp.retirerCompte(acteur, decodeURIComponent(retrait[1]));

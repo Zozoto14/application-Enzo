@@ -12,7 +12,7 @@ import { PanneauInvitation } from '../../hub/admin/ui/EnvoiInvitation';
 import { Avis, BoutonHub, Case, Champ } from '../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../hub/themes';
 import type { AppHub, ContexteHub } from '../../hub/types';
-import type { Affectation, Annuaire, ClientEsport, TeamAnnuaire } from '../client';
+import type { Affectation, Annuaire, ClientEsport, DemandeCompte, TeamAnnuaire } from '../client';
 import { creerCompteEsport, erreurSaisie, modeleInvitationEsport, noterEnvoiEsport, rattacherCompte, type CompteCree } from '../comptesHub';
 import { Choix, Retours, styles as communs, useAgir, Intertitre, Panneau } from './commun';
 
@@ -32,6 +32,7 @@ export function CreationCompte({
   annuaire,
   exigerIdentite,
   equipeInitiale,
+  demande,
   onFini,
   onAnnuler,
 }: {
@@ -42,13 +43,16 @@ export function CreationCompte({
   annuaire: Annuaire;
   exigerIdentite(raison: string, action: () => void): void;
   equipeInitiale?: string;
+  /** Validation d'une demande de compte : saisie préremplie, demande close avec la création. */
+  demande?: DemandeCompte;
   onFini(): void;
   onAnnuler(): void;
 }) {
   const teams = useMemo(() => annuaire.teams.filter(t => t.droits.ajouter && !t.archivee), [annuaire.teams]);
-  const [nom, setNom] = useState('');
-  const [email, setEmail] = useState('');
+  const [nom, setNom] = useState(demande?.pseudo ?? '');
+  const [email, setEmail] = useState(demande?.email ?? '');
   const [choisies, setChoisies] = useState<Record<string, Choisie>>(() => {
+    if (demande && teams.some(x => x.id === demande.teamId)) return { [demande.teamId]: { roleId: demande.role.id, poste: demande.posteJeu ?? '' } };
     const t = teams.find(x => x.id === equipeInitiale) ?? (teams.length === 1 ? teams[0] : undefined);
     const role = t ? roleParDefaut(t) : undefined;
     return t && role ? { [t.id]: { roleId: role, poste: '' } } : {};
@@ -65,7 +69,7 @@ export function CreationCompte({
   const creer = () =>
     exigerIdentite(`Créer le compte de ${nom.trim()}`, () =>
       void agir('Création', async () => {
-        const r = await creerCompteEsport({ contexte, registre, client, saisie: { nom, email, affectations }, nomsTeams, maintenant: contexte.maintenant ?? Date.now() });
+        const r = await creerCompteEsport({ contexte, registre, client, saisie: { nom, email, affectations, ...(demande ? { demandeId: demande.id } : {}) }, nomsTeams, maintenant: contexte.maintenant ?? Date.now() });
         setCree(r);
         return r.erreurEsport ? undefined : `Compte de ${r.nom} créé : ${nomsTeams.join(', ')}. Envoyez-lui l’invitation ci-dessous.`;
       }),
@@ -91,7 +95,7 @@ export function CreationCompte({
               desactive={Boolean(enCours)}
               onPress={() =>
                 void agir('Rattacher', async () => {
-                  const fiche = await rattacherCompte(client, cree.id, cree.nom, affectations);
+                  const fiche = await rattacherCompte(client, cree.id, cree.nom, affectations, demande?.id);
                   setCree({ ...cree, fiche, erreurEsport: undefined });
                   return `${cree.nom} est ajouté à ses teams.`;
                 })
@@ -121,7 +125,8 @@ export function CreationCompte({
 
   return (
     <Panneau theme={theme} testID="esport-creation-compte">
-      <Intertitre theme={theme}>Créer un compte</Intertitre>
+      <Intertitre theme={theme}>{demande ? `Valider la demande de ${demande.demandeurPseudo ?? 'un membre'}` : 'Créer un compte'}</Intertitre>
+      {demande?.message ? <Text style={attenue}>{`« ${demande.message} »`}</Text> : null}
       <Text style={attenue}>
         Le compte est créé dans l’Administration (rang Ami, « Esport seulement » : il ne verra que l’Esport) et ajouté tout de suite à ses teams. Il reçoit un
         e-mail avec un lien à usage unique : il choisit son mot de passe à sa première connexion.

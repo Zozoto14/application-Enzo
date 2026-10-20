@@ -11,6 +11,11 @@
  * après le seuil. H-1 : l'événement commence dans moins d'1 h. J-1 : dans
  * moins de 24 h mais plus de 2 h (un événement ajouté la veille au soir n'a pas
  * de « J-1 » qui ferait doublon avec H-1).
+ *
+ * Seuls les CONVOQUÉS sont rappelés : leurs pseudos remplissent la variable
+ * {convoques} du message. Discord ne permet ici qu'une mention de RÔLE (pas de
+ * mention par personne, faute d'identifiant Discord des membres) : la mention
+ * configurée reste celle de la team ; le message nomme les convoqués.
  */
 
 import { evenement } from '../evenements.mjs';
@@ -39,7 +44,11 @@ export async function rappelsDiscord(base, { maintenant = Date.now(), limite = 2
     const genres = ['d1', 'h1'].filter(permis);
     if (genres.length === 0) continue;
     const proches = (await s.occurrencesTeam(teamId, maintenant, maintenant + 24 * HEURE)).filter(({ o }) => o.debut > maintenant);
+    const membres = proches.length > 0 ? await s.membresActifs(teamId) : [];
     for (const { ev, o } of proches) {
+      // Les CONVOQUÉS seulement : leur liste part dans le message ({convoques}) ; personne de convoqué, pas de rappel.
+      const convoques = s.roster(membres, ev, o);
+      if (convoques.length === 0) continue;
       const reste = o.debut - maintenant;
       for (const genre of genres) {
         const horsFenetre = genre === 'h1' ? reste > HEURE : reste > 24 * HEURE || reste <= 2 * HEURE;
@@ -52,7 +61,7 @@ export async function rappelsDiscord(base, { maintenant = Date.now(), limite = 2
               acteur: null,
               entiteType: 'evenement',
               entiteId: ev.id,
-              charge: { evenementId: ev.id, occurrence: o.cle, titre: o.titre ?? ev.titre, type: ev.type, debut: iso(o.debut) },
+              charge: { evenementId: ev.id, occurrence: o.cle, titre: o.titre ?? ev.titre, type: ev.type, debut: iso(o.debut), convoques: convoques.map(m => m.compte) },
               maintenant,
             }),
           ]);

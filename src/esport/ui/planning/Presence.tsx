@@ -52,7 +52,9 @@ export function Presence({ theme, client, detail, large, onExporter }: PropsModu
     api.liste({ debut: ajouterJours(auj, -14), fin: ajouterJours(auj, 15), fuseau }).then(
       l => {
         setAVenir(l.occurrences.filter(o => !o.termine && o.concerneMoi && l.droits.rsvp));
-        setPassees(l.occurrences.filter(o => o.termine).reverse());
+        // À marquer : les événements COMMENCÉS (le jour même aussi, sans attendre la fin).
+        const maintenant = Date.now();
+        setPassees(l.occurrences.filter(o => o.termine || Date.parse(o.debut) <= maintenant).reverse());
       },
       () => undefined,
     );
@@ -84,7 +86,7 @@ export function Presence({ theme, client, detail, large, onExporter }: PropsModu
 
       {peut('attendance.mark') && passees.length ? (
         <Panneau theme={theme} testID="esport-presence-a-marquer">
-          <Intertitre theme={theme}>Marquer la présence (14 derniers jours)</Intertitre>
+          <Intertitre theme={theme}>Marquer la présence (commencés, 14 derniers jours)</Intertitre>
           {passees.slice(0, 10).map(o => {
             const id = `${o.evenementId}-${o.cle}`;
             return (

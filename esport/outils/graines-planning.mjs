@@ -19,6 +19,8 @@ export async function semerPlanning(base, teamId, { maintenant = () => Date.now(
   const joueur = compte => ({ compte, superAdmin: false });
   const lundi = lundiDe(dateLocale(FUSEAU, maintenant()));
   const jour = n => texteDate(ajouterJours(lundi, n));
+  // Les membres semés sont arrivés il y a un mois : ils sont convoqués (groupe « joueurs ») aux séances passées.
+  await base.executer('UPDATE membres SET rejoint_le = ? WHERE team_id = ?', [new Date(maintenant() - 30 * 86_400_000).toISOString(), teamId]);
 
   const entrainement = await p.creer(coach, teamId, {
     type: 'training',

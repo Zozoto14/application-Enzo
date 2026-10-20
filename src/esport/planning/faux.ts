@@ -4,7 +4,7 @@
  * fixes. Les droits suivent la liste de permissions donnée.
  */
 
-import type { AccueilPlanning, CarteDispos, DroitsPlanning, ListePlanning, MesDispos, Occurrence, PresenceOccurrence, StatsPresence } from './api';
+import type { AccueilPlanning, CarteDispos, DroitsPlanning, ListePlanning, MembreConvocable, MesDispos, Occurrence, PresenceOccurrence, StatsPresence } from './api';
 
 export function droitsDe(permissions: readonly string[]): DroitsPlanning {
   const a = (p: string) => permissions.includes(p);
@@ -38,13 +38,25 @@ export const OCCURRENCE: Occurrence = {
   modifiee: false,
   adversaireId: null,
   reviewId: null,
-  concernes: [],
+  convocation: { groupes: ['joueurs'], membres: [], exclus: [], proprietaires: [] },
+  convoques: ['lea12345', 'kai12345'],
+  concernes: ['lea12345', 'kai12345'],
+  convoqueMoi: true,
   concerneMoi: true,
   monRsvp: 'sans_reponse',
   maPresence: 'inconnu',
   reponses: null,
   termine: false,
 };
+
+/** Membres convocables (formulaire du staff) : deux joueurs, un coach, deux Propriétaires (dont le Fondateur). */
+export const MEMBRES_CONVOCABLES: MembreConvocable[] = [
+  { compte: 'lea12345', pseudo: 'Léa', groupe: 'joueurs' },
+  { compte: 'kai12345', pseudo: 'Kai', groupe: 'joueurs' },
+  { compte: 'zed12345', pseudo: 'Zed', groupe: 'staff' },
+  { compte: 'principal', pseudo: 'Fondateur', groupe: 'proprietaire' },
+  { compte: 'own12345', pseudo: 'Olga', groupe: 'proprietaire' },
+];
 
 export interface AppelPlanning {
   chemin: string;
@@ -61,7 +73,7 @@ export function fauxPlanning(permissions: readonly string[], { occurrences = [OC
     const c = chemin.split('?')[0];
     let r: unknown = { ok: true };
     if (/\/planning$/.test(c) && methode === 'GET') {
-      r = { fuseau: 'Europe/Paris', fuseauTeam: 'Europe/Paris', du: '', au: '', occurrences, droits, modules: { presence: true, dispos: true } } satisfies ListePlanning;
+      r = { fuseau: 'Europe/Paris', fuseauTeam: 'Europe/Paris', du: '', au: '', occurrences, droits, modules: { presence: true, dispos: true }, membres: droits.creer || droits.modifier ? MEMBRES_CONVOCABLES : null } satisfies ListePlanning;
     } else if (/\/planning\/accueil$/.test(c)) {
       r = { fuseau: 'Europe/Paris', prochains: occurrences, alertes: [{ ...occurrences[0], genre: 'rsvp' }], droits, modules: { presence: true } } satisfies AccueilPlanning;
     } else if (/\/planning\/ical$/.test(c) && methode === 'GET') {

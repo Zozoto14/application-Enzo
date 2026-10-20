@@ -67,6 +67,14 @@ async function pseudoDe(base, compte) {
   return l?.pseudo ?? (compte === 'principal' ? 'Le Fondateur' : 'Un membre');
 }
 
+/** Pseudos d'une liste de comptes, séparés par des virgules (« toute la team » pour un ancien rappel sans liste). */
+async function pseudosListe(base, comptes) {
+  if (!Array.isArray(comptes)) return 'toute la team';
+  const noms = [];
+  for (const c of comptes.slice(0, 30)) noms.push(await pseudoDe(base, c));
+  return noms.join(', ') + (comptes.length > 30 ? '…' : '');
+}
+
 /** Réunion d'un type « staff » (ou introuvable) : rien ne sort sur Discord. */
 async function reunionStaff(base, ev) {
   const r = await base.premier('SELECT y.visibilite FROM reunions r JOIN types_reunion y ON y.id = r.type_id WHERE r.id = ? AND r.team_id = ?', [ev.entite_id, ev.team_id]);
@@ -84,7 +92,7 @@ async function variablesDe(base, ev, cle, charge, team) {
       return { ...base_, ...instant, acteur: await pseudoDe(base, ev.acteur_id) };
     case 'reminder_d1':
     case 'reminder_h1':
-      return { ...base_, ...instant, delai: formaterDelai(Date.parse(charge.debut) - t) };
+      return { ...base_, ...instant, delai: formaterDelai(Date.parse(charge.debut) - t), convoques: await pseudosListe(base, charge.convoques) };
     case 'rsvp_missing':
       return { ...base_, ...instant, membre: await pseudoDe(base, charge.compte) };
     case 'summary_published': {
@@ -114,6 +122,9 @@ async function variablesDe(base, ev, cle, charge, team) {
       };
     case 'member_joined':
       return { ...base_, membre: await pseudoDe(base, ev.acteur_id), role: charge.role ?? '' };
+    case 'account_requested':
+      // Jamais l'adresse e-mail : seulement le pseudo proposé et le rôle.
+      return { ...base_, membre: charge.pseudo ?? '', role: charge.role ?? '', acteur: await pseudoDe(base, ev.acteur_id) };
     case 'role_changed':
       return { ...base_, membre: await pseudoDe(base, charge.compte), de: charge.de ?? '', vers: charge.vers ?? '', acteur: await pseudoDe(base, ev.acteur_id) };
     case 'review_created':

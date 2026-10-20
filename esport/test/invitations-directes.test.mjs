@@ -115,8 +115,11 @@ test('dashboard agrégé : une requête, toutes les teams autorisées, blocs sel
   b.horloge.t = Date.parse(`${JOUR}T10:00:00.000Z`);
   const coachA = await b.session('coa12345');
   const bob = await b.session('bob12345');
-  // Team A : un entraînement jeudi, une tâche en retard, un résumé à rédiger.
-  assert.equal((await api(`/teams/${A.teamId}/planning`, coachA, { methode: 'POST', corps: { type: 'training', titre: 'Entraînement Alpha', date: '2026-10-22', heureDebut: '20:00', heureFin: '22:00' } })).statut, 200);
+  // Team A : un entraînement jeudi (tout le monde, et le Fondateur coché), une tâche en retard, un résumé à rédiger.
+  const convocation = { groupes: ['tous'], proprietaires: ['principal'] };
+  assert.equal((await api(`/teams/${A.teamId}/planning`, coachA, { methode: 'POST', corps: { type: 'training', titre: 'Entraînement Alpha', date: '2026-10-22', heureDebut: '20:00', heureFin: '22:00', convocation } })).statut, 200);
+  // Une réunion des joueurs (défaut) : le Fondateur, Propriétaire non coché, ne l'a pas dans « ses » événements.
+  assert.equal((await api(`/teams/${A.teamId}/planning`, coachA, { methode: 'POST', corps: { type: 'meeting', titre: 'Réunion joueurs', date: '2026-10-23', heureDebut: '18:00', heureFin: '19:00' } })).statut, 200);
   assert.equal((await api(`/teams/${A.teamId}/taches`, coachA, { methode: 'POST', corps: { titre: 'Tâche Alpha', echeance: '2026-10-18' } })).statut, 200);
   // Team B : de quoi fuir si le filtre manquait.
   assert.equal((await api(`/teams/${B.teamId}/planning`, bob, { methode: 'POST', corps: { type: 'scrim', titre: 'Scrim secret Bravo', date: '2026-10-21', heureDebut: '20:00', heureFin: '22:00' } })).statut, 200);
@@ -130,7 +133,9 @@ test('dashboard agrégé : une requête, toutes les teams autorisées, blocs sel
   assert.equal(alpha.taches.enRetard, 1);
   assert.equal(alpha.effectif.actifs, 4);
   assert.ok(alpha.derniereActivite.action, 'Journal visible du Fondateur : détail de la dernière activité');
-  assert.deepEqual(tout.global.evenementsSemaine.map(e => e.titre), ['Scrim secret Bravo', 'Entraînement Alpha']);
+  // Le scrim Bravo (joueurs) et la réunion des joueurs ne convoquent pas le Fondateur : ni attendu, ni compté.
+  assert.deepEqual(tout.global.evenementsSemaine.map(e => e.titre), ['Entraînement Alpha']);
+  assert.deepEqual(alpha.prochains.map(e => e.titre), ['Entraînement Alpha']);
   assert.ok(tout.global.alertes.some(a => a.genre === 'taches' && a.teamId === B.teamId));
 
   // Coach de la Team A : seulement elle, et rien de Bravo nulle part dans la réponse.
@@ -139,6 +144,8 @@ test('dashboard agrégé : une requête, toutes les teams autorisées, blocs sel
   const texte = JSON.stringify(coach);
   for (const secret of ['Bravo', B.teamId, 'Scrim secret', 'Tâche secrète']) assert.ok(!texte.includes(secret), secret);
   assert.deepEqual(coach.global.evenementsSemaine.map(e => e.titre), ['Entraînement Alpha']);
+  // Un joueur : les deux (il est convoqué à la réunion des joueurs).
+  assert.deepEqual((await api('/dashboard', A.sessions.lea12345)).corps.global.evenementsSemaine.map(e => e.titre), ['Entraînement Alpha', 'Réunion joueurs']);
 
   // Joueur : pas de Journal → date de la dernière activité seulement.
   const lea = (await api('/dashboard', A.sessions.lea12345)).corps.teams[0];
@@ -160,7 +167,7 @@ test('page Membres : annuaire limité aux teams où l’on voit les membres ; an
   assert.deepEqual(annuaire.teams.map(t => t.nom), ['Team Alpha', 'Team Charlie']);
   assert.ok(!annuaire.comptes.some(c => c.compte === 'tom12345'));
   const alpha = annuaire.teams.find(t => t.id === A.teamId);
-  assert.deepEqual(alpha.droits, { ajouter: true, roles: true, retirer: true });
+  assert.deepEqual(alpha.droits, { ajouter: true, demander: false, roles: true, retirer: true });
   // Rôles attribuables : jamais Propriétaire ni Manager pour un Manager.
   assert.equal(alpha.roles.find(r => r.cle === 'proprietaire').attribuable, false);
   assert.equal(alpha.roles.find(r => r.cle === 'joueur').attribuable, true);

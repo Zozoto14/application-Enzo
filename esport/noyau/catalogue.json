@@ -31,6 +31,7 @@
       "permissions": [
         { "cle": "members.view", "action": "voir", "libelle": "Voir les membres" },
         { "cle": "members.invite", "action": "creer", "libelle": "Inviter" },
+        { "cle": "members.create", "action": "special", "libelle": "Créer des membres (demande au Fondateur)" },
         { "cle": "members.assign_role", "action": "modifier", "libelle": "Changer les rôles" },
         { "cle": "members.remove", "action": "supprimer", "libelle": "Retirer un membre" },
         { "cle": "roles.manage", "action": "special", "libelle": "Gérer les rôles" }

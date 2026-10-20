@@ -256,8 +256,8 @@ try {
   await pc.getByTestId('esport-presence-liste').waitFor({ timeout: 20_000 });
   await pc.getByTestId(`esport-marque-${idLea}-present`).waitFor({ timeout: 20_000 });
   verifier((await pc.getByTestId(`esport-presence-${idLea}`).innerText()).includes('Réponse : Oui'), 'liste de présence : réponse de Léa visible');
+  // Un appui enregistre (plus de bouton « Enregistrer la présence » à ne pas oublier).
   await pc.getByTestId(`esport-marque-${idLea}-present`).click();
-  await pc.getByTestId('esport-presence-enregistrer').click();
   await pc.getByTestId('esport-presence-avis').waitFor({ timeout: 20_000 });
   const marque = await esport.base.premier('SELECT reel FROM presences WHERE compte_id = ?', [idLea]);
   verifier(marque?.reel === 'present', 'présence réelle de Léa : présente');

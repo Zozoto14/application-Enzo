@@ -396,3 +396,88 @@ describe('Aides pures', () => {
     expect(m.objet).not.toContain('{lien}');
   });
 });
+
+describe('Esport › Membres : demandes de compte (« Créer des membres »)', () => {
+  const DEMANDE = {
+    id: 'd1',
+    teamId: 't1',
+    team: 'Faucons',
+    teamSlug: 'faucons',
+    role: { id: 'r-jou', nom: 'Joueur', couleur: '#16a34a', cle: 'joueur' },
+    demandeur: 'lea12345',
+    demandeurPseudo: 'Léa',
+    pseudo: 'Noa',
+    email: 'noa@exemple.fr',
+    posteJeu: 'Sentinelle',
+    message: 'Ma cousine',
+    statut: 'en_attente' as const,
+    compte: null,
+    motif: '',
+    creeLe: '2026-10-20T09:00:00Z',
+    traiteLe: null,
+  };
+
+  it('Fondateur : badge « Demandes en attente », validation en un clic (création préremplie, demande close avec le pré-enregistrement)', async () => {
+    const { ctx, appels } = contexteFondateur([fondateur]);
+    const verifierPreinscription = jest.fn(async () => {
+      appels.push('verification');
+    });
+    const preinscrire = jest.fn(async (c: { compte: string; pseudo: string }) => {
+      appels.push('esport');
+      return compte(c.compte, c.pseudo, { statut: 'invite' });
+    });
+    fabrique.client = () =>
+      fauxClient({
+        ouvrir: moi(true),
+        annuaire: async () => ({ ...annuaire(true), demandesEnAttente: 1 }),
+        demandes: async () => ({ demandes: [DEMANDE], enAttente: 1, fondateur: true }),
+        verifierPreinscription,
+        preinscrire,
+      });
+    await monter(ctx);
+    await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    expect(await screen.findByTestId('esport-membres-badge-demandes')).toHaveTextContent('Demandes en attente : 1');
+    expect(await screen.findByTestId('esport-demande-d1')).toHaveTextContent(/Proposé par Léa/);
+    await fireEvent.press(screen.getByTestId('esport-demande-valider-d1'));
+    // Saisie préremplie : nom, adresse, team et rôle de la demande.
+    expect(screen.getByTestId('esport-compte-nom').props.value).toBe('Noa');
+    expect(screen.getByTestId('esport-compte-email').props.value).toBe('noa@exemple.fr');
+    await fireEvent.press(screen.getByTestId('esport-compte-creer'));
+    await confirmerIdentite();
+    await screen.findByTestId('esport-compte-cree');
+    expect(appels).toEqual(['verification', 'hub', 'esport']);
+    const affectations = [{ teamId: 't1', roleId: 'r-jou', posteJeu: 'Sentinelle' }];
+    expect(verifierPreinscription).toHaveBeenCalledWith({ pseudo: 'Noa', affectations, demandeId: 'd1' });
+    expect(preinscrire).toHaveBeenCalledWith({ compte: 'lea0000001', pseudo: 'Noa', affectations, demandeId: 'd1' });
+  });
+
+  it('Joueur autorisé : demande au Fondateur (nom, e-mail, team, rôle), statut suivi ; ajout d’un compte Esport existant par pseudo', async () => {
+    const avecDroit: Annuaire = { ...annuaire(false), teams: annuaire(false).teams.map(t => ({ ...t, droits: { ajouter: false, demander: t.id === 't1', roles: false, retirer: false } })) };
+    let demandes: (typeof DEMANDE)[] = [];
+    const demanderCompte = jest.fn(async (d: { pseudo: string }) => {
+      demandes = [{ ...DEMANDE, pseudo: d.pseudo }];
+      return demandes[0];
+    });
+    const ajouterMembre = jest.fn(async () => null);
+    fabrique.client = () => fauxClient({ ouvrir: moi(false), annuaire: async () => avecDroit, demandes: async () => ({ demandes, enAttente: demandes.length, fondateur: false }), demanderCompte, ajouterMembre });
+    await monter({ profil: { id: 'lea12345', nom: 'Léa', admin: false, creeLe: '', apps: ['esport'] } });
+    await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await screen.findByTestId('esport-proposer');
+    await fireEvent.changeText(screen.getByTestId('esport-proposer-pseudo'), 'Noa');
+    await fireEvent.changeText(screen.getByTestId('esport-proposer-email'), 'noa@exemple.fr');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-proposer-envoyer'));
+      await new Promise<void>(r => setTimeout(r, 20));
+    });
+    expect(demanderCompte).toHaveBeenCalledWith({ teamId: 't1', roleId: 'r-jou', pseudo: 'Noa', email: 'noa@exemple.fr' });
+    expect(await screen.findByTestId('esport-ma-demande-statut-d1')).toHaveTextContent('En attente');
+    // Compte qui a déjà l'Esport : ajouté tout de suite, sans le Fondateur.
+    await fireEvent.press(screen.getByTestId('esport-proposer-mode-existant'));
+    await fireEvent.changeText(screen.getByTestId('esport-proposer-pseudo'), 'Bob');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-proposer-envoyer'));
+      await new Promise<void>(r => setTimeout(r, 20));
+    });
+    expect(ajouterMembre).toHaveBeenCalledWith('t1', { pseudo: 'Bob', roleId: 'r-jou' });
+  });
+});
