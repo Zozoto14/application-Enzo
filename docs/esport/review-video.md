@@ -47,16 +47,40 @@ position de départ.
 - **Touche M** (site, app PC) : ajoute un repère au temps courant et met la vidéo en pause. Ignorée pendant la
   saisie dans un champ. Champs : instant (modifiable), titre, catégorie, joueur concerné, durée facultative,
   note.
-- **Note** : Markdown limité (`**gras**`, `*italique*`, `` `code` ``, listes `-` et `1.`, titres `#` à `###`,
-  liens `[texte](https://…)`). Nettoyée côté serveur (`nettoyerNote` : HTML neutralisé en `&lt;`, images et
-  définitions de liens retirées, liens http(s) seulement) et rendue côté app par des composants, **jamais en HTML
-  brut**.
-- **Barre de mise en forme** (`src/esport/ui/ChampNote.tsx`, logique pure `src/esport/review/formatage.ts`) au-dessus
-  des champs de note de repère et de commentaire : **B** (gras), *I* (italique), liste à puces, lien, et
-  « Aperçu » du rendu. Raccourcis **Ctrl/Cmd+B** et **Ctrl/Cmd+I** (site, app PC) : la sélection est entourée de
-  `**…**` ou `*…*` (un second appui retire). Boutons de 44 px (iPhone, iPad). Réutilisée ailleurs dans l'Esport,
-  avec un rendu Markdown à l'affichage : note du dépôt (résumés), description des tâches, notes du scouting
-  (fiche, joueurs adverses, tendances), notes d'étape des strats.
+- **Note** : Markdown limité, jusqu'à 8000 caractères (commentaires : 1000). Éléments : paragraphes, `**gras**`,
+  `*italique*`, `~~barré~~`, `==surlignage==`, `{{couleur|texte}}`, `@pseudo`, `` `code` `` et blocs de code
+  (```), citations `>`, séparateur `---`, titres `#` à `###`, listes à puces (`-`, `*`), numérotées (`1.`) et
+  cases (`- [ ]`, `- [x]`) avec retraits (3 niveaux), liens `[texte](https://…)`. Nettoyée côté serveur
+  (`nettoyerNote` : HTML neutralisé en `&lt;` `&gt;` y compris dans le code, images et définitions de liens
+  retirées, liens http(s) seulement, couleur hors liste = texte seul ; le `>` de citation en début de ligne
+  reste, le reste de la ligne est neutralisé) et rendue côté app par des composants, **jamais en HTML brut** (même
+  liste d'éléments dans `src/esport/review/markdown.ts`, qui sert aussi à l'impression PDF).
+  - **Couleurs** : syntaxe maison `{{rouge|texte}}`, huit couleurs prédéfinies seulement (rouge, orange, jaune,
+    vert, bleu, violet, rose, gris), validées côté serveur ET à l'affichage ; pas de couleur libre, pas de CSS.
+    Pas de couleurs imbriquées. Le surlignage est un jaune fixe (`==texte==`).
+  - **Pas de souligné** : le Markdown limité ne l'a pas (le soulignement se confond avec un lien). Le bouton S et
+    **Ctrl/Cmd+U** appliquent le **barré**.
+  - **@mentions** : `@pseudo` (lettres, chiffres, `_ . -`), mis en valeur à l'affichage ; l'autocomplétion
+    propose les joueurs de la team dans le formulaire de repère. C'est un repère visuel : aucune notification.
+- **Éditeur** (`src/esport/ui/ChampNote.tsx`, logique pure `src/esport/review/formatage.ts`) au-dessus des champs de
+  note : zone de saisie de 11 lignes sur PC et 8 sur téléphone, qui grandit avec le texte (jusqu'à 560 px sur PC,
+  380 px sur téléphone, puis défile), poignée de redimensionnement sur le web, bouton **Agrandir** (plein écran :
+  éditeur et aperçu côte à côte dès 900 px de large, onglets Écrire / Aperçu sinon), aperçu repliable, compteur
+  de caractères visible à partir de 80 % de la limite. Barre : annuler / rétablir, **B**, *I*, ~~S~~, liste à
+  puces, case, lien, surlignage, couleur, H1 à H3, liste numérotée, citation, code, bloc de code, séparateur,
+  emoji, @ ; sur petit écran, la barre défile horizontalement et « ⋯ » ouvre le reste. Boutons de 44 px.
+  Les cases sont cochables dans l'aperçu.
+  - **Raccourcis** (site, app PC) : Ctrl/Cmd+**B**, **I**, **U** (barré), Maj+**X** (barré), **K** (lien),
+    Maj+**7** (liste numérotée), Maj+**8** (liste à puces), **Z** (annuler), **Y** ou Maj+Z (rétablir). **Entrée**
+    continue une liste (puce, numéro suivant, case décochée, citation) ; Entrée sur un élément vide en sort (ou
+    remonte d'un niveau) ; **Tab** / **Maj+Tab** indentent les listes. L'historique annuler / rétablir est propre
+    à l'éditeur (la sélection est entourée de la marque ; un second appui la retire).
+  - Dans le formulaire de repère, un `<` écrit dans une note est stocké `&lt;` par le serveur et redevient `<`
+    quand la note est rouverte dans l'éditeur.
+  - Réutilisé ailleurs dans l'Esport, avec un rendu Markdown à l'affichage : note du dépôt (résumés), description
+    des tâches, notes du scouting (fiche, joueurs adverses, tendances), notes d'étape des strats, commentaires.
+    Ces zones ont leurs propres limites (1000 à 2000 caractères), inchangées ; l'@mention n'est proposée que dans
+    les repères.
 - Liste latérale synchronisée avec la lecture (repère en cours mis en avant et visible), filtres par catégorie,
   joueur et auteur, **tri** par instant, « plus likés 👍 » ou « plus dislikés 👎 ».
 - Fil de commentaires par repère (rendu Markdown).
@@ -146,5 +170,6 @@ Notifications in-app : nouvelle review (lecteurs de la review), commentaire sur 
   `raccourci.web.ts`, `impression.web.ts` ; `src/esport/ui/ChampNote.tsx`.
 - Graines : `esport/outils/graines-review.mjs` (`npm run esport:local`).
 - Tests : `esport/test/review.test.mjs`, `esport/test/review-v2.test.mjs`, `src/esport/review/review.test.tsx`,
-  `src/esport/review/review-v2.test.tsx`, `bureau/electron/youtube.test.mjs`, e2e `scripts/e2e-esport-review.mjs`
-  et `scripts/e2e-esport-review-v2.mjs` (faux script YouTube intercepté, aucun appel à YouTube).
+  `src/esport/review/review-v2.test.tsx`, `src/esport/review/note-editeur.test.tsx` (éditeur), `bureau/electron/youtube.test.mjs`,
+  e2e `scripts/e2e-esport-review.mjs`, `scripts/e2e-esport-review-v2.mjs` et `scripts/e2e-esport-notes.mjs` (éditeur de notes ;
+  faux script YouTube intercepté, aucun appel à YouTube).

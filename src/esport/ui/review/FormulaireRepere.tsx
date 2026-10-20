@@ -1,8 +1,8 @@
 /**
  * Formulaire d'un repère : instant (pré-rempli avec le temps courant du
  * lecteur), titre, catégorie, joueur concerné, durée facultative et note en
- * Markdown limité : barre de mise en forme (gras, italique, liste, lien ;
- * Ctrl/Cmd+B et Ctrl/Cmd+I) et aperçu sous le champ.
+ * Markdown limité : barre de mise en forme complète (voir ChampNote), @mentions des
+ * joueurs de la team et aperçu sous le champ.
  */
 
 import React, { useState } from 'react';
@@ -10,6 +10,7 @@ import { Text, View } from 'react-native';
 import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
 import type { CategorieRepere, SaisieRepere } from '../../review/api';
+import { decoder } from '../../review/markdown';
 import { CATEGORIES, formatTemps, lireTemps } from '../../review/libelles';
 import { ChampNote } from '../ChampNote';
 import { Choix, styles, Panneau } from '../commun';
@@ -46,7 +47,7 @@ export function FormulaireRepere({
   const [cat, setCat] = useState<CategorieRepere>(initial.categorie ?? 'erreur');
   const [cible, setCible] = useState(initial.cible ?? '');
   const [duree, setDuree] = useState(initial.fin != null ? String(Math.round((initial.fin - initial.debut) * 10) / 10) : '');
-  const [note, setNote] = useState(initial.note ?? '');
+  const [note, setNote] = useState(decoder(initial.note ?? ''));
   const [erreur, setErreur] = useState<string | undefined>();
 
   const valider = () => {
@@ -89,7 +90,7 @@ export function FormulaireRepere({
         onChoisir={setCible}
         testID="esport-repere-joueur"
       />
-      <ChampNote theme={theme} libelle={tr('review.formulaireRepere.note')} valeur={note} onChanger={setNote} testID="esport-repere-note" maxLength={4000} apercu="toujours" testIDApercu="esport-repere-apercu" placeholder={tr('review.formulaireRepere.gras_italique_listes_lien')} />
+      <ChampNote theme={theme} libelle={tr('review.formulaireRepere.note')} valeur={note} onChanger={setNote} testID="esport-repere-note" maxLength={8000} joueurs={membres.map(m => m.pseudo)} apercu="toujours" testIDApercu="esport-repere-apercu" placeholder={tr('review.formulaireRepere.gras_italique_listes_lien')} />
       {erreur ? (
         <Text accessibilityRole="alert" testID="esport-repere-erreur" style={{ color: theme.critique, ...police(theme.policeTexte) }}>
           {erreur}

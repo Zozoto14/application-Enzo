@@ -9,7 +9,7 @@ import { banc, teamAvecMembres } from './aide.mjs';
 import { baseSqlite, lireMigrations } from '../adaptateurs/sqlite.mjs';
 import { appliquerMigrations } from '../noyau/migrations.mjs';
 import { exporterMarkdown, formatTemps, nomFichierExport } from '../noyau/review/export.mjs';
-import { lienSur, nettoyerNote } from '../noyau/review/markdown.mjs';
+import { COULEURS, lienSur, nettoyerNote, NOTE_MAX } from '../noyau/review/markdown.mjs';
 import { adresseYoutube, extraireYoutube, idYoutubeValide, lienYoutubeA, secondesDe } from '../noyau/review/youtube.mjs';
 
 const ID = 'dQw4w9WgXcQ';
@@ -112,10 +112,39 @@ test('notes : nettoyage XSS (HTML neutralisé, liens http(s) seulement, images r
   assert.equal(nettoyerNote(ok), ok);
   // Contrôles et sens d'écriture retirés, retours Windows normalisés, longueur bornée.
   assert.equal(nettoyerNote('a\u0000b‮c\r\nd'), 'abc\nd');
-  assert.equal(nettoyerNote('x'.repeat(9000)).length, 4000);
+  assert.equal(nettoyerNote('x'.repeat(9000)).length, NOTE_MAX);
   assert.equal(nettoyerNote(undefined), '');
   // Idempotent : repasser une note déjà nettoyée ne change rien.
   for (const brut of dangereux) assert.equal(nettoyerNote(nettoyerNote(brut)), nettoyerNote(brut), brut);
+});
+
+test('notes : nouveaux éléments (titres, listes, cases, citation, code, séparateur, barré, couleurs) conservés, sans HTML', () => {
+  const riche = [
+    '# Titre', '## Sous-titre', '### Petit', '',
+    '1. un', '2. deux', '   - imbriqué', '',
+    '- [ ] à faire', '- [x] fait', '',
+    '> citation de **Kai**', '', '---', '',
+    '~~barré~~ ==surligné== {{rouge|alerte}} {{vert|ok}} @Kai',
+    '', '```', 'const x = 1;', '```', '', '`en ligne`',
+  ].join('\n');
+  assert.equal(nettoyerNote(riche), riche, 'le Markdown limité étendu reste intact');
+  assert.equal(nettoyerNote(nettoyerNote(riche)), riche, 'idempotent');
+  // Couleur hors liste ou syntaxe détournée : le texte seul.
+  assert.equal(nettoyerNote('{{javascript|alerte}}'), 'alerte');
+  assert.equal(nettoyerNote('{{rouge;background:url(x)|a}}'), 'a');
+  assert.equal(nettoyerNote('{{rouge|ok}}'), '{{rouge|ok}}');
+  assert.equal(COULEURS.length, 8);
+  // Pas de HTML : dans la citation, le code, les titres, les cases et les couleurs.
+  const piege = ['> <img src=x onerror=alert(1)>', '```', '<script>alert(1)</script>', '```', '# <b>t</b>', '- [ ] <i>x</i>', '{{rouge|<u>x</u>}}', '[x](javascript:alert(1))'].join('\n');
+  const propre = nettoyerNote(piege);
+  assert.ok(!/<[a-z/!]/i.test(propre), propre);
+  assert.ok(propre.includes('> &lt;img src=x onerror=alert(1)&gt;'));
+  assert.ok(propre.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
+  assert.ok(!propre.includes('javascript:'));
+  assert.equal(nettoyerNote(propre), propre, 'idempotent');
+  // Dans un bloc de code, les liens ne sont pas réécrits (mais restent neutres) ; un bloc non fermé va jusqu'à la fin.
+  assert.equal(nettoyerNote('```\n[a](javascript:x)\n```'), '```\n[a](javascript:x)\n```');
+  assert.equal(nettoyerNote('```\n<b>x'), '```\n&lt;b&gt;x');
 });
 
 test('export Markdown : titre, repères triés, liens à l’instant, commentaires, rien de dangereux', () => {

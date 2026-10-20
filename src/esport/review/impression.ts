@@ -16,6 +16,14 @@ export const STYLE_IMPRESSION = `
 #impression-esport ul, #impression-esport ol { margin: 2pt 0 6pt; padding-left: 18pt; }
 #impression-esport a { color: #1a4fc4; word-break: break-all; }
 #impression-esport code { font-family: ui-monospace, Menlo, Consolas, monospace; background: #f1f1f1; padding: 0 2pt; }
+#impression-esport blockquote { margin: 4pt 0; padding: 0 0 0 8pt; border-left: 3px solid #bbb; color: #444; }
+#impression-esport pre { margin: 4pt 0; padding: 6pt; background: #f1f1f1; white-space: pre-wrap; word-break: break-word; }
+#impression-esport pre code { padding: 0; }
+#impression-esport hr { border: 0; border-top: 1px solid #bbb; margin: 8pt 0; }
+#impression-esport mark { background: #fff1a8; }
+#impression-esport .c-rouge { color: #c62828; } #impression-esport .c-orange { color: #d9660b; } #impression-esport .c-jaune { color: #8a6d00; }
+#impression-esport .c-vert { color: #2e7d32; } #impression-esport .c-bleu { color: #1a4fc4; } #impression-esport .c-violet { color: #6a3fc4; }
+#impression-esport .c-rose { color: #c2185b; } #impression-esport .c-gris { color: #666; }
 #impression-esport h3, #impression-esport p, #impression-esport li { break-inside: avoid; }
 @media screen { #impression-esport { display: none; } }
 @media print {
