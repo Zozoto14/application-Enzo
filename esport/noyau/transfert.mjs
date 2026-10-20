@@ -49,6 +49,11 @@ export const TABLES = [
   ['adversaire_vods', 'id'],
   ['review_reperes', 'id'],
   ['review_commentaires', 'id'],
+  // Phase 6 (migration 0006) : strats et playbook.
+  ['strats', 'id'],
+  ['strat_versions', 'id'],
+  ['strat_partages', 'id'],
+  ['playbook_entrees', 'id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

@@ -25,6 +25,9 @@ import { routeFichierSigne, routerPhase3, servicesPhase3 } from './routes-phase3
 import { routesReview } from './review/routes.mjs';
 import { servicesReview } from './review/service.mjs';
 import { servicesScouting } from './scouting/service.mjs';
+import { servicesPlaybook } from './strats/playbook.mjs';
+import { routePubliqueStrats, routesStrats } from './strats/routes.mjs';
+import { servicesStrats } from './strats/service.mjs';
 
 export const VERSION_ESPORT = 3;
 const TAILLE_MAX_CORPS = 64 * 1024;
@@ -91,6 +94,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
   const d = servicesDiscord({ base, maintenant, noyau: s, cle: secretDiscord, fetch: envoiDiscord });
   const rv = servicesReview({ base, maintenant, socle: s });
   const sc = servicesScouting({ base, maintenant, socle: s, review: rv });
+  const st = servicesStrats({ base, stockage, cleSession, maintenant, socle: s });
+  const pb = servicesPlaybook({ base, maintenant, socle: s, strats: st });
 
   async function acteurDeSession(requete) {
     if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
@@ -112,6 +117,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     if (chemin.startsWith('/fichiers/') && m === 'GET') return routeFichierSigne(s3.resumes, url);
     const publique = await routePublique({ p, chemin, methode: m, url });
     if (publique !== undefined) return publique;
+    const partage = await routePubliqueStrats({ strats: st, chemin, methode: m, url });
+    if (partage !== undefined) return partage;
     if (chemin === '/session' && m === 'POST') {
       if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
       const qui = await verifierJeton(jetonPorteur(requete), ip);
@@ -148,6 +155,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     if (discord !== undefined) return discord;
     const reviewScouting = await routesReview({ review: rv, scouting: sc, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete) });
     if (reviewScouting !== undefined) return reviewScouting;
+    const stratsPlaybook = await routesStrats({ strats: st, playbook: pb, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max) });
+    if (stratsPlaybook !== undefined) return stratsPlaybook;
     const t = /^\/teams\/([^/]+)(?:\/([a-z]+)(?:\/([^/]+))?(?:\/.*)?)?$/.exec(chemin);
     if (t) {
       const [, teamId, section, sousId] = t;

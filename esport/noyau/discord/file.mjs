@@ -114,6 +114,10 @@ async function variablesDe(base, ev, cle, charge, team) {
       return { ...base_, membre: await pseudoDe(base, charge.compte), de: charge.de ?? '', vers: charge.vers ?? '', acteur: await pseudoDe(base, ev.acteur_id) };
     case 'review_created':
       return { ...base_, titre: charge.titre ?? '', acteur: await pseudoDe(base, ev.acteur_id) };
+    case 'strat_created':
+      return { ...base_, titre: charge.titre ?? '', carte: charge.carte ?? '', side: charge.side === 'defense' ? 'Défense' : 'Attaque', acteur: await pseudoDe(base, ev.acteur_id) };
+    case 'playbook_validated':
+      return { ...base_, titre: charge.titre ?? '', surCarte: charge.carte ? ` sur ${charge.carte}` : '', acteur: await pseudoDe(base, ev.acteur_id) };
     default:
       return null;
   }

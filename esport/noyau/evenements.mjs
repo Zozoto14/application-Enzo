@@ -19,6 +19,7 @@ import { TYPES_DISCORD } from './discord/catalogue.mjs';
 import { abonneDiscord } from './discord/file.mjs';
 import { TYPES_PLANNING, abonnePlanning } from './planning/bus.mjs';
 import { TYPES_REVIEW, abonneReview } from './review/bus.mjs';
+import { TYPES_STRATS, abonneStrats } from './strats/bus.mjs';
 
 export const TYPES_EVENEMENTS = [
   'team.created',
@@ -58,6 +59,8 @@ export const TYPES_EVENEMENTS = [
   // Phase 4 : Discord (rappels J-1 / H-1, configuration, échecs d'envoi).
   ...TYPES_DISCORD,
   ...TYPES_REVIEW,
+  // Phase 6 : strats et playbook.
+  ...TYPES_STRATS,
 ];
 
 const ESSAIS_MAX = 8;
@@ -155,7 +158,7 @@ export async function abonneNotifications(base, ev) {
   }
 }
 
-export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord, abonneReview];
+export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord, abonneReview, abonneStrats];
 
 /**
  * Distribue les événements en attente aux abonnés. Un événement dont un

@@ -134,6 +134,26 @@ export const EVENEMENTS_DISCORD = [
     modele: '**Nouvelle review** : {titre}, par {acteur}.',
     variables: variables({ titre: 'Titre de la review', acteur: 'Qui l’a créée' }),
   },
+  {
+    cle: 'strat_created',
+    libelle: 'Strat créée',
+    description: 'Une strat est créée dans l’éditeur (module Strats, phase 6).',
+    types: ['strat.created'],
+    modules: ['strat_editor'],
+    defaut: false,
+    modele: '**Nouvelle strat** : {titre} ({carte}, {side}), par {acteur}.',
+    variables: variables({ titre: 'Titre de la strat', carte: 'Carte', side: 'Attaque ou Défense', acteur: 'Qui l’a créée' }),
+  },
+  {
+    cle: 'playbook_validated',
+    libelle: 'Entrée du playbook validée',
+    description: 'Une entrée du playbook passe au statut « validée » (module Playbook, phase 6).',
+    types: ['playbook.validated'],
+    modules: ['playbook'],
+    defaut: false,
+    modele: '**Playbook** : {titre} est validée{surCarte}, par {acteur}.',
+    variables: variables({ titre: 'Titre de l’entrée', surCarte: 'Carte (« sur Ascent », vide sans carte)', acteur: 'Qui l’a validée' }),
+  },
 ];
 
 export const CLES_EVENEMENTS_DISCORD = EVENEMENTS_DISCORD.map(e => e.cle);
@@ -172,5 +192,8 @@ export const EXEMPLES = {
   de: 'Joueur',
   vers: 'Coach',
   team: 'Team Alpha',
+  carte: 'Ascent',
+  side: 'Attaque',
+  surCarte: ' sur Ascent',
   lien: 'https://app.exemple',
 };

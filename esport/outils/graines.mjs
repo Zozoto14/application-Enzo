@@ -3,7 +3,8 @@
  * personnalisé et quelques actions journalisées ; son planning (événements,
  * disponibilités, présences : graines-planning.mjs) ; des dépôts de réunion
  * (à résumer, en cours, terminé avec un PDF si un stockage est fourni), des
- * objectifs et des tâches (dont une en retard). Passe par les services
+ * objectifs et des tâches (dont une en retard) ; des strats et un playbook
+ * (graines-strats.mjs). Passe par les services
  * (mêmes règles que l'API : invitations réelles, anti-escalade…).
  *
  *   node esport/outils/graines.mjs [fichier.db]   (base SQLite locale, migrée au besoin)
@@ -16,6 +17,7 @@ import { servicesResumes } from '../noyau/resumes.mjs';
 import { servicesEsport } from '../noyau/service.mjs';
 import { semerPlanning } from './graines-planning.mjs';
 import { semerReview } from './graines-review.mjs';
+import { semerStrats } from './graines-strats.mjs';
 
 /** Un petit PDF valide (une page, un texte) pour les graines et les tests de bout en bout. */
 export function pdfDeDemo(texte = 'Résumé de démonstration') {
@@ -104,6 +106,7 @@ export async function semer(base, { maintenant = () => Date.now(), stockage } = 
   await o.modifierTache(zed, team.id, faite.id, { statut: 'fait' });
   await o.creerTache(zed, team.id, { titre: 'Réserver le créneau de scrim', echeance: jour(4), priorite: 'basse' });
   await semerReview(base, team.id, { maintenant, noyau: s });
+  await semerStrats(base, team.id, { maintenant, noyau: s, stockage });
   await distribuer(base, { maintenant: maintenant() });
   return team.id;
 }

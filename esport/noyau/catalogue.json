@@ -11,7 +11,7 @@
     { "cle": "video_review", "nom": "Review vidéo", "phase": 5, "description": "Review YouTube avec repères horodatés." },
     { "cle": "scouting", "nom": "Scouting", "phase": 5, "description": "Fiches adversaires, joueurs, tendances, VODs." },
     { "cle": "strat_editor", "nom": "Strats", "phase": 6, "description": "Éditeur de stratégies sur la carte." },
-    { "cle": "playbook", "nom": "Playbook", "phase": 6, "description": "Bibliothèque de strats validées." }
+    { "cle": "playbook", "nom": "Playbook", "phase": 6, "description": "Bibliothèque de strats par carte, side et type." }
   ],
   "groupes": [
     {
@@ -124,7 +124,8 @@
         { "cle": "strats.view", "action": "voir", "libelle": "Voir" },
         { "cle": "strats.create", "action": "creer", "libelle": "Créer" },
         { "cle": "strats.update", "action": "modifier", "libelle": "Modifier" },
-        { "cle": "strats.delete", "action": "supprimer", "libelle": "Supprimer" }
+        { "cle": "strats.delete", "action": "supprimer", "libelle": "Supprimer" },
+        { "cle": "strats.share", "action": "special", "libelle": "Lien en lecture seule" }
       ]
     },
     {
@@ -177,7 +178,7 @@
         "goals_tasks.view", "goals_tasks.create", "goals_tasks.update", "goals_tasks.delete", "goals_tasks.assign",
         "video_review.view", "video_review.create", "video_review.annotate", "video_review.delete",
         "scouting.view", "scouting.manage",
-        "strats.view", "strats.create", "strats.update", "strats.delete",
+        "strats.view", "strats.create", "strats.update", "strats.delete", "strats.share",
         "playbook.view", "playbook.manage"
       ]
     },
@@ -194,7 +195,7 @@
         "goals_tasks.view",
         "video_review.view", "video_review.create", "video_review.annotate",
         "scouting.view", "scouting.manage",
-        "strats.view", "strats.create", "strats.update",
+        "strats.view", "strats.create", "strats.update", "strats.share",
         "playbook.view", "playbook.manage"
       ]
     },

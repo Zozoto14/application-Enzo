@@ -335,7 +335,7 @@ test('migration 0003 : les rôles système des teams existantes reçoivent les n
   await appliquerMigrations(base, migrations);
   const perms = async role => (await base.tous('SELECT permission FROM role_permissions WHERE role_id = ? ORDER BY permission', [role])).map(l => l.permission);
   assert.deepEqual(await perms('manager'), ['meeting_summaries.view_staff', 'meeting_summaries.write_summary', 'scouting.view', 'video_review.view']); // + 0005 : review et scouting
-  assert.deepEqual((await perms('coach')).filter(p => p.startsWith('meeting_summaries.')), ['meeting_summaries.view_staff']);
   assert.deepEqual(await perms('joueur'), ['video_review.annotate', 'video_review.view']); // 0005 : le Joueur commente la review
+  assert.deepEqual((await perms('coach')).filter(p => p.startsWith('meeting_summaries.')), ['meeting_summaries.view_staff']);
   assert.equal((await base.tous('SELECT id FROM types_reunion WHERE team_id IS NULL', [])).length, 5);
 });
