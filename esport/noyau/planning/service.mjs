@@ -330,8 +330,21 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     }
     if (champ('description')) s.description = texteLong(corps.description, 2000);
     if (champ('lieu')) s.lieu = texteNettoye(corps.lieu, 200);
-    if (champ('adversaireId')) s.adversaire_id = uuidOuNull(corps.adversaireId, 'adversaire');
-    if (champ('reviewId')) s.review_id = uuidOuNull(corps.reviewId, 'review');
+    // Adversaire (scouting) et review : de la même team, et visibles par celui qui les lie (null efface toujours).
+    if (champ('adversaireId')) {
+      s.adversaire_id = uuidOuNull(corps.adversaireId, 'adversaire');
+      if (s.adversaire_id && s.adversaire_id !== existant?.adversaire_id) {
+        const ok = peut(ctx, 'scouting.view') && (await base.premier('SELECT id FROM adversaires WHERE id = ? AND team_id = ? AND supprime_le IS NULL', [s.adversaire_id, ctx.team.id]));
+        if (!ok) throw echec(400, 'adversaire', 'Adversaire inconnu.');
+      }
+    }
+    if (champ('reviewId')) {
+      s.review_id = uuidOuNull(corps.reviewId, 'review');
+      if (s.review_id && s.review_id !== existant?.review_id) {
+        const ok = peut(ctx, 'video_review.view') && (await base.premier('SELECT id FROM reviews WHERE id = ? AND team_id = ? AND supprime_le IS NULL', [s.review_id, ctx.team.id]));
+        if (!ok) throw echec(400, 'review', 'Review inconnue.');
+      }
+    }
     if (champ('concernes')) s.concernes = JSON.stringify(await lireConcernes(ctx.team.id, corps.concernes));
     const horaire = ['date', 'heureDebut', 'heureFin', 'debut', 'fin', 'fuseau'].some(champ);
     if (!existant || horaire) {

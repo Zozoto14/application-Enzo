@@ -41,6 +41,14 @@ export const TABLES = [
   ['discord_notification_settings', 'team_id, cle'],
   ['discord_file', 'id'],
   ['discord_rappels', 'evenement_id, occurrence, genre'],
+  // Phase 5 (migration 0005) : review vidéo et scouting.
+  ['adversaires', 'id'],
+  ['adversaire_joueurs', 'id'],
+  ['adversaire_tendances', 'id'],
+  ['reviews', 'id'],
+  ['adversaire_vods', 'id'],
+  ['review_reperes', 'id'],
+  ['review_commentaires', 'id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

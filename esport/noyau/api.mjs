@@ -22,6 +22,9 @@ import { creerSession, lireSession } from './session.mjs';
 import { ErreurEsport, echec } from './outils.mjs';
 import { exporterBase, importerBase } from './transfert.mjs';
 import { routeFichierSigne, routerPhase3, servicesPhase3 } from './routes-phase3.mjs';
+import { routesReview } from './review/routes.mjs';
+import { servicesReview } from './review/service.mjs';
+import { servicesScouting } from './scouting/service.mjs';
 
 export const VERSION_ESPORT = 3;
 const TAILLE_MAX_CORPS = 64 * 1024;
@@ -86,6 +89,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
   const secretDiscord = cleDiscord || cleSession;
   const envoiDiscord = fetchDiscord ?? ((...a) => globalThis.fetch(...a));
   const d = servicesDiscord({ base, maintenant, noyau: s, cle: secretDiscord, fetch: envoiDiscord });
+  const rv = servicesReview({ base, maintenant, socle: s });
+  const sc = servicesScouting({ base, maintenant, socle: s, review: rv });
 
   async function acteurDeSession(requete) {
     if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
@@ -141,6 +146,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     if (planning !== undefined) return planning;
     const discord = await routerDiscord(d, { methode: m, chemin, acteur, lireCorps: () => lireCorps(requete) });
     if (discord !== undefined) return discord;
+    const reviewScouting = await routesReview({ review: rv, scouting: sc, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete) });
+    if (reviewScouting !== undefined) return reviewScouting;
     const t = /^\/teams\/([^/]+)(?:\/([a-z]+)(?:\/([^/]+))?(?:\/.*)?)?$/.exec(chemin);
     if (t) {
       const [, teamId, section, sousId] = t;

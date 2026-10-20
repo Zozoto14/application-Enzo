@@ -87,11 +87,14 @@ test('planning : CRUD par le Coach ; un Joueur sans droit ne voit pas les bouton
   assert.equal((await creer({ ...ENTRAINEMENT, adversaireId: 'pas-un-uuid' })).statut, 400);
   assert.equal((await creer({ ...ENTRAINEMENT, concernes: ['inconnu1'] })).statut, 400);
   assert.equal((await creer({ ...ENTRAINEMENT, fuseau: 'Mars/Olympus' })).statut, 400);
-  // Passe minuit : fin le lendemain ; adversaire (scouting, phase 5) facultatif.
-  const nuit = await creer({ type: 'match', titre: 'Match de nuit', date: '2026-10-24', heureDebut: '23:00', heureFin: '01:00', adversaireId: '0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d' });
+  // Un adversaire inconnu (ou d'une autre team) est refusé ; un vrai est accepté (scouting, phase 5).
+  assert.equal((await creer({ ...ENTRAINEMENT, adversaireId: '0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d' })).statut, 400);
+  const nova = (await api(`/teams/${A.teamId}/scouting/adversaires`, s.coach123, { methode: 'POST', corps: { nom: 'Nova' } })).corps.id;
+  // Passe minuit : fin le lendemain ; adversaire facultatif.
+  const nuit = await creer({ type: 'match', titre: 'Match de nuit', date: '2026-10-24', heureDebut: '23:00', heureFin: '01:00', adversaireId: nova });
   assert.equal(nuit.statut, 200);
   assert.equal(nuit.corps.fin, '2026-10-24T23:00:00.000Z');
-  assert.equal(nuit.corps.adversaireId, '0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d');
+  assert.equal(nuit.corps.adversaireId, nova);
   assert.equal(nuit.corps.recurrence, null);
 
   // Série : le Manager renomme ; filtres type et membre.
