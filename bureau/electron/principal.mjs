@@ -27,6 +27,7 @@ import { synthetiser, VOIX_NATURELLES } from './voix.mjs';
 import { MOTIF_PROFIL, changementPermis, extensionPermise, fichierAutorise, fichierDeProfil } from './portee.mjs';
 import { fluxMedia, pageArticle, yahooJson, yahooScreener } from './reseau.mjs';
 import { creerListeLecteurs, requeteTsuzuku } from './tsuzuku.mjs';
+import { entetesYoutube, sousCadreYoutube } from './youtube.mjs';
 import { brancherClaudeOffice } from './claudeOfficeIpc.mjs';
 import { decisionOuverture, lireFonctionnalites, optionsAnnexe } from './fenetresAnnexes.mjs';
 import { appelerClaude, lireGithub } from './tachesReseau.mjs';
@@ -613,6 +614,8 @@ function creerPlateau() {
 
 /** Sites de lecteur que la fenêtre peut afficher en sous-cadre (voir tsuzuku.mjs). */
 const lecteursTsuzuku = creerListeLecteurs();
+// Sous-cadres : lecteurs de Tsuzuku déclarés, et le lecteur YouTube de la review Esport (youtube.mjs).
+const sousCadreAutorise = adresse => sousCadreYoutube(adresse) || lecteursTsuzuku.sousCadreAutorise(adresse);
 let filtreSousCadresPose = false;
 
 /** Mêmes gardes que la fenêtre principale : aucune navigation, aucun sous-cadre non déclaré, liens vers le système. */
@@ -621,7 +624,7 @@ function protegerAnnexe(enfant) {
   enfant.on('closed', () => annexes.delete(enfant));
   enfant.webContents.on('will-navigate', evenement => evenement.preventDefault());
   enfant.webContents.on('will-frame-navigate', evenement => {
-    if (!evenement.isMainFrame && !lecteursTsuzuku.sousCadreAutorise(evenement.url)) {
+    if (!evenement.isMainFrame && !sousCadreAutorise(evenement.url)) {
       evenement.preventDefault();
     }
   });
@@ -696,11 +699,14 @@ function creerFenetre() {
   if (!filtreSousCadresPose) {
     filtreSousCadresPose = true;
     session.defaultSession.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (details, rappel) => {
-      rappel({ cancel: details.resourceType === 'subFrame' && !lecteursTsuzuku.sousCadreAutorise(details.url) });
+      rappel({ cancel: details.resourceType === 'subFrame' && !sousCadreAutorise(details.url) });
     });
   }
+  session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['https://www.youtube.com/embed/*', 'https://www.youtube-nocookie.com/embed/*'] }, (details, rappel) => {
+    rappel({ requestHeaders: entetesYoutube(details) });
+  });
   fenetre.webContents.on('will-frame-navigate', evenement => {
-    if (!evenement.isMainFrame && !lecteursTsuzuku.sousCadreAutorise(evenement.url)) {
+    if (!evenement.isMainFrame && !sousCadreAutorise(evenement.url)) {
       evenement.preventDefault();
     }
   });

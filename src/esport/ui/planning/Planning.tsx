@@ -29,7 +29,7 @@ import {
   resumeRecurrence,
   typeEvenement,
 } from '../../planning/libelles';
-import { BoutonConfirme, Retours, TitreSection, styles, useAgir } from '../commun';
+import { BoutonConfirme, Choix, Retours, TitreSection, styles, useAgir } from '../commun';
 import type { PropsModule } from '../modules';
 import { BoutonsRsvp, CarteOccurrence, Pastille, PastilleType, SelecteurFuseau, useFuseau } from './commun';
 import { ListePresence } from './ListePresence';
@@ -76,6 +76,7 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
   const [membre, setMembre] = useState('');
   const [donnees, setDonnees] = useState<ListePlanning | undefined>();
   const [membres, setMembres] = useState<Membre[]>([]);
+  const [adversaires, setAdversaires] = useState<Array<{ id: string; nom: string }>>([]);
   const [selection, setSelection] = useState<Occurrence | undefined>();
   const [formulaire, setFormulaire] = useState<{ f: Formulaire; initial: Partial<SaisieEvenement> } | undefined>(brouillon ? { f: { mode: 'creer' }, initial: brouillon } : undefined);
   const [jourChoisi, setJourChoisi] = useState<string | undefined>();
@@ -93,6 +94,11 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
   useEffect(() => {
     if (detail.moi.permissions.includes('members.view')) client.membres(teamId).then(m => setMembres(m.filter(x => x.statut === 'actif')), () => undefined);
   }, [client, teamId, detail.moi.permissions]);
+  // Sélecteur d'adversaire (scouting) : seulement pour qui voit le scouting, module activé.
+  const voitScouting = detail.moi.permissions.includes('scouting.view') && detail.modules.some(m => m.cle === 'scouting' && m.active);
+  useEffect(() => {
+    if (voitScouting) api.adversaires().then(setAdversaires, () => undefined);
+  }, [api, voitScouting]);
 
   const droits = donnees?.droits;
   const repondre = (o: Occurrence) => async (r: 'oui' | 'non' | 'peut_etre') => {
@@ -114,6 +120,7 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
         theme={theme}
         api={api}
         membres={membres}
+        adversaires={adversaires}
         fuseau={f.fuseau}
         formulaire={formulaire.f}
         initial={formulaire.initial}
@@ -137,6 +144,7 @@ export function Planning({ theme, client, detail, large, brouillon, onExporter }
         o={selection}
         droits={droits}
         presenceActive={Boolean(donnees?.modules.presence)}
+        adversaires={adversaires}
         onRepondre={avecRsvp ? repondre(selection) : undefined}
         onRetour={() => setSelection(undefined)}
         onModifier={(mode, initial) => setFormulaire({ f: mode === 'serie' ? { mode: 'serie', id: selection.evenementId } : { mode: 'occurrence', id: selection.evenementId, cle: selection.cle }, initial })}
@@ -380,6 +388,7 @@ function DetailOccurrence({
   onModifier,
   onSupprime,
   fuseau,
+  adversaires,
 }: {
   theme: ThemeHub;
   api: ApiPlanning;
@@ -391,6 +400,7 @@ function DetailOccurrence({
   onModifier(mode: 'serie' | 'occurrence', initial: Partial<SaisieEvenement>): void;
   onSupprime(message: string): Promise<void>;
   fuseau: string;
+  adversaires?: Array<{ id: string; nom: string }>;
 }) {
   const [evenement, setEvenement] = useState<DetailEvenement | undefined>();
   const { erreur, avis, agir } = useAgir();
@@ -421,6 +431,11 @@ function DetailOccurrence({
         </Text>
         {o.lieu ? <Text style={texte}>📍 {o.lieu}</Text> : null}
         {o.description ? <Text style={attenue}>{o.description}</Text> : null}
+        {o.adversaireId && adversaires?.some(a => a.id === o.adversaireId) ? (
+          <Text style={texte} testID="esport-evenement-adversaire">
+            Adversaire : {adversaires.find(a => a.id === o.adversaireId)?.nom}
+          </Text>
+        ) : null}
         {evenement ? <Text style={attenue}>{resumeRecurrence(evenement.recurrence)}{o.modifiee ? ' · cette date a été modifiée' : ''}</Text> : null}
         {o.concernes.length ? <Text style={attenue}>Convoqués : {o.concernes.length} membre(s)</Text> : <Text style={attenue}>Toute la team</Text>}
       </Panneau>
@@ -502,6 +517,7 @@ function FormulaireEvenement({
   theme,
   api,
   membres,
+  adversaires = [],
   fuseau,
   formulaire,
   initial,
@@ -510,6 +526,7 @@ function FormulaireEvenement({
   theme: ThemeHub;
   api: ApiPlanning;
   membres: Membre[];
+  adversaires?: Array<{ id: string; nom: string }>;
   fuseau: string;
   formulaire: Formulaire;
   initial: Partial<SaisieEvenement>;
@@ -525,6 +542,7 @@ function FormulaireEvenement({
     heureFin: initial.heureFin ?? '22:00',
     fuseau: initial.fuseau ?? fuseau,
     concernes: initial.concernes ?? [],
+    adversaireId: initial.adversaireId ?? null,
   });
   const [repeter, setRepeter] = useState(false);
   const [jours, setJours] = useState<number[]>([]);
@@ -539,7 +557,7 @@ function FormulaireEvenement({
     if (formulaire.mode !== 'serie') return;
     void agir('', async () => {
       const d = await api.detail(formulaire.id);
-      setS({ type: d.type, titre: d.titre, description: d.description, lieu: d.lieu, date: d.date, heureDebut: d.heureDebut, heureFin: d.heureFin, fuseau: d.fuseau, concernes: d.concernes });
+      setS({ type: d.type, titre: d.titre, description: d.description, lieu: d.lieu, date: d.date, heureDebut: d.heureDebut, heureFin: d.heureFin, fuseau: d.fuseau, concernes: d.concernes, adversaireId: d.adversaireId });
       if (d.recurrence) {
         setRepeter(true);
         setJours(d.recurrence.jours);
@@ -593,6 +611,16 @@ function FormulaireEvenement({
         <Text style={attenue}>Heures de {s.fuseau}. Une fin avant le début tombe le lendemain.</Text>
         <Champ theme={theme} libelle="Lieu ou lien" valeur={s.lieu ?? ''} onChanger={lieu => maj({ lieu })} maxLength={200} testID="esport-formulaire-lieu" />
         <Champ theme={theme} libelle="Description" valeur={s.description ?? ''} onChanger={description => maj({ description })} maxLength={2000} multiligne testID="esport-formulaire-description" />
+        {serie && adversaires.length > 0 ? (
+          <Choix
+            theme={theme}
+            libelle="Adversaire (scouting)"
+            valeur={s.adversaireId ?? ''}
+            options={[{ id: '', nom: 'Aucun' }, ...adversaires.map(a => ({ id: a.id, nom: a.nom }))]}
+            onChoisir={v => maj({ adversaireId: v || null })}
+            testID="esport-formulaire-adversaire"
+          />
+        ) : null}
         {serie ? (
           <>
             <View style={[styles.ligne, { flexWrap: 'nowrap' }]}>

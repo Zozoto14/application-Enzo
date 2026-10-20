@@ -4,3 +4,12 @@
 # (revalidés à chaque visite) : une mise à jour du site est vue au chargement suivant.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Review vidéo Esport (lecteur YouTube IFrame, miniatures ytimg). AUCUNE politique CSP n'est posée
+# aujourd'hui (le site charge librement les relais, polices et lecteurs de Tsuzuku) : YouTube
+# fonctionne donc tel quel. Le jour où une CSP sera ajoutée ici, elle devra autoriser au minimum :
+#   script-src  https://www.youtube.com https://s.ytimg.com
+#   frame-src   https://www.youtube.com https://www.youtube-nocookie.com
+#   img-src     https://i.ytimg.com https://*.ytimg.com
+#   connect-src https://www.youtube.com
+# (même liste pour l'app PC si une CSP y est posée ; voir docs/esport/review-video.md).

@@ -267,6 +267,8 @@ export function apiPlanning(client: ClientEsport, teamId: string) {
     ajouterException: (x: { date: string; heureDebut: string; heureFin: string; fuseau: string; type: 'disponible' | 'indisponible'; note?: string }) =>
       client.requete<MesDispos>(`${t}/dispos/moi/exceptions`, 'POST', x),
     supprimerException: (id: string) => client.requete<MesDispos>(`${t}/dispos/moi/exceptions/${encodeURIComponent(id)}`, 'DELETE'),
+    /** Adversaires du scouting (sélecteur du formulaire) ; vide si le scouting n'est pas accessible. */
+    adversaires: async () => (await client.requete<{ adversaires?: Array<{ id: string; nom: string }> }>(`${t}/scouting/adversaires`)).adversaires ?? [],
     carte: (p: { semaine: string; fuseau?: string; pas?: 30 | 60 }) => client.requete<CarteDispos>(`${t}/dispos/carte${q(p)}`),
   };
 }

@@ -63,9 +63,9 @@ export function PageTeam({
 }) {
   const [detail, setDetail] = useState<DetailTeam | undefined>();
   const [section, setSection] = useState<SectionTeam>(sectionInitiale);
-  const [brouillon, setBrouillon] = useState<{ n: number; b?: Partial<SaisieEvenement> }>({ n: 0 });
-  const aller = useCallback((s: SectionTeam, b?: Partial<SaisieEvenement>) => {
-    setBrouillon(x => ({ n: x.n + 1, b }));
+  const [brouillon, setBrouillon] = useState<{ n: number; b?: Partial<SaisieEvenement>; reviewId?: string }>({ n: 0 });
+  const aller = useCallback((s: SectionTeam, b?: Partial<SaisieEvenement>, reviewId?: string) => {
+    setBrouillon(x => ({ n: x.n + 1, b, reviewId }));
     setSection(s);
   }, []);
   const { erreur, agir } = useAgir();
@@ -142,7 +142,7 @@ export function PageTeam({
   else if (active === 'module:goals_tasks') contenu = <SectionObjectifs theme={theme} client={client} detail={detail} large={large} />;
   else if (active.startsWith('module:') && ECRANS_MODULES[active.slice('module:'.length)]) {
     const Ecran = ECRANS_MODULES[active.slice('module:'.length)];
-    contenu = <Ecran key={`${active}-${brouillon.n}`} theme={theme} client={client} detail={detail} large={large} onAller={aller} brouillon={brouillon.b} onExporter={onExporter} />;
+    contenu = <Ecran key={`${active}-${brouillon.n}`} theme={theme} client={client} detail={detail} large={large} onAller={aller} brouillon={brouillon.b} reviewId={brouillon.reviewId} onExporter={onExporter} />;
   } else if (active.startsWith('module:')) {
     const cle = active.slice('module:'.length);
     const module = CATALOGUE.modules.find(m => m.cle === cle);

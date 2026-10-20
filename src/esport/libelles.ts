@@ -40,6 +40,7 @@ export function tailleLisible(octets: number): string {
 }
 import { LIBELLES_DISCORD } from './discord/api';
 import { phraseJournalPlanning, phraseNotificationPlanning } from './planning/libelles';
+import { phraseJournalReview, phraseNotificationReview } from './review/libelles';
 
 const nom = (noms: Record<string, string | null>, id: unknown): string =>
   typeof id === 'string' ? (noms[id] ?? (id === 'principal' ? 'Le Fondateur' : 'Un compte supprimé')) : 'Quelqu’un';
@@ -132,7 +133,7 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
     case 'event.reminder_h1':
       return `Rappel ${e.action === 'event.reminder_d1' ? 'J-1' : 'H-1'} préparé pour « ${texte(m.titre)} »`;
     default:
-      return phraseJournalPlanning(e.action, qui, m, id => nom(noms, id)) ?? `${qui} : ${e.action}`;
+      return phraseJournalPlanning(e.action, qui, m, id => nom(noms, id)) ?? phraseJournalReview(e.action, qui, m) ?? `${qui} : ${e.action}`;
   }
 }
 
@@ -150,6 +151,8 @@ export const FILTRES_JOURNAL: ReadonlyArray<readonly [string, string]> = [
   ['event', 'Planning'],
   ['attendance', 'Présence'],
   ['discord', 'Discord'],
+  ['review', 'Review'],
+  ['opponent', 'Scouting'],
 ];
 
 export function phraseNotification(n: Notification, noms: Record<string, string | null>): string {
@@ -175,7 +178,7 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
     case 'tache-echeance':
       return `${c.retard ? 'En retard' : 'Échéance proche'} : « ${typeof c.titre === 'string' ? c.titre : 'une tâche'} »${typeof c.echeance === 'string' ? ` (${dateJour(c.echeance)})` : ''}`;
     default:
-      return phraseNotificationPlanning(n.type, team, c) ?? `${team} : ${n.type}`;
+      return phraseNotificationPlanning(n.type, team, c) ?? phraseNotificationReview(n.type, team, c) ?? `${team} : ${n.type}`;
   }
 }
 

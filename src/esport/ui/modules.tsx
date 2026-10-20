@@ -13,6 +13,8 @@ import { Discord } from './Discord';
 import { Disponibilites } from './planning/Disponibilites';
 import { Planning } from './planning/Planning';
 import { Presence } from './planning/Presence';
+import { Review } from './review/Review';
+import { Scouting } from './scouting/Scouting';
 
 export type SectionModule = `module:${string}`;
 
@@ -22,9 +24,11 @@ export interface PropsModule {
   detail: DetailTeam;
   large: boolean;
   /** Aller à une autre section de la team (ex. proposer un événement depuis la heatmap). */
-  onAller(section: SectionModule | 'accueil', brouillon?: Partial<SaisieEvenement>): void;
+  onAller(section: SectionModule | 'accueil', brouillon?: Partial<SaisieEvenement>, reviewId?: string): void;
   /** Brouillon d'événement transmis par une autre section. */
   brouillon?: Partial<SaisieEvenement>;
+  /** Review à ouvrir directement (ex. « Ouvrir en review vidéo » depuis le scouting). */
+  reviewId?: string;
   onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
 }
 
@@ -33,6 +37,8 @@ export const ECRANS_MODULES: Record<string, (props: PropsModule) => React.ReactE
   availability: Disponibilites,
   attendance: Presence,
   discord: Discord,
+  video_review: Review,
+  scouting: Scouting,
 };
 
 /** Permissions dont l'une ouvre l'écran du module (sinon, pas d'entrée dans la barre). */
@@ -42,6 +48,8 @@ const ACCES_MODULES: Record<string, string[]> = {
   attendance: ['attendance.rsvp_own', 'attendance.view_all', 'attendance.mark'],
   // Le webhook est un secret : l'écran Discord n'existe que pour qui peut le gérer.
   discord: [PERMISSION_DISCORD],
+  video_review: ['video_review.view'],
+  scouting: ['scouting.view'],
 };
 
 export function moduleAccessible(cle: string, permissions: readonly string[]): boolean {

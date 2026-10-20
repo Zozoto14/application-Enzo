@@ -172,11 +172,14 @@ describe('page d’une team', () => {
   });
 
   it('la barre ne montre que les modules activés (futurs « bientôt ») et ce que le rôle permet', () => {
-    const e = entreesBarre(detail(['planning', 'scouting', 'activity_log'], ['members.view', 'planning.view']));
-    expect(e.map(x => x.id)).toEqual(['accueil', 'module:planning', 'module:scouting', 'membres', 'parametres']);
-    // Planning est livré (phase 2) ; Scouting, activé mais pas encore livré, est « bientôt ».
+    const e = entreesBarre(detail(['planning', 'strat_editor', 'activity_log'], ['members.view', 'planning.view']));
+    expect(e.map(x => x.id)).toEqual(['accueil', 'module:planning', 'module:strat_editor', 'membres', 'parametres']);
+    // Planning est livré (phase 2) ; Strats, activé mais pas encore livré, est « bientôt ».
     expect(e.find(x => x.id === 'module:planning')?.bientot).toBe(false);
-    expect(e.find(x => x.id === 'module:scouting')?.bientot).toBe(true);
+    expect(e.find(x => x.id === 'module:strat_editor')?.bientot).toBe(true);
+    // Scouting (phase 5) : livré, mais sans scouting.view (un Joueur), pas d'entrée.
+    expect(entreesBarre(detail(['scouting'], ['members.view', 'planning.view'])).map(x => x.id)).not.toContain('module:scouting');
+    expect(entreesBarre(detail(['scouting'], ['scouting.view'])).map(x => x.id)).toContain('module:scouting');
     // Module livré mais sans aucune permission pour l'ouvrir : pas d'entrée.
     expect(entreesBarre(detail(['planning', 'attendance'], ['members.view', 'planning.view'])).map(x => x.id)).not.toContain('module:attendance');
     expect(entreesBarre(detail(['planning', 'attendance'], ['planning.view', 'attendance.rsvp_own'])).map(x => x.id)).toContain('module:attendance');

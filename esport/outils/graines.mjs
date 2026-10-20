@@ -15,6 +15,7 @@ import { servicesObjectifs } from '../noyau/objectifs.mjs';
 import { servicesResumes } from '../noyau/resumes.mjs';
 import { servicesEsport } from '../noyau/service.mjs';
 import { semerPlanning } from './graines-planning.mjs';
+import { semerReview } from './graines-review.mjs';
 
 /** Un petit PDF valide (une page, un texte) pour les graines et les tests de bout en bout. */
 export function pdfDeDemo(texte = 'Résumé de démonstration') {
@@ -102,6 +103,7 @@ export async function semer(base, { maintenant = () => Date.now(), stockage } = 
   const faite = await o.creerTache(zed, team.id, { titre: 'Préparer la compo de Lotus', assigne: 'kai12345', echeance: jour(-1), objectifId: objectif.id });
   await o.modifierTache(zed, team.id, faite.id, { statut: 'fait' });
   await o.creerTache(zed, team.id, { titre: 'Réserver le créneau de scrim', echeance: jour(4), priorite: 'basse' });
+  await semerReview(base, team.id, { maintenant, noyau: s });
   await distribuer(base, { maintenant: maintenant() });
   return team.id;
 }
