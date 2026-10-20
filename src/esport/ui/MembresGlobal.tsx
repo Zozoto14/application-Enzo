@@ -13,20 +13,21 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import type { InvitationAffichee } from '../../profils/identifiants';
 import { PanneauInvitation } from '../../hub/admin/ui/EnvoiInvitation';
-import { Avis, BoutonHub, Champ, Intertitre, Panneau, Pilule, Segments } from '../../hub/admin/ui/commun';
+import { Avis, BoutonHub, Champ, Pilule, Segments } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { AppHub, ContexteHub } from '../../hub/types';
 import type { Annuaire, AppartenanceCompte, ClientEsport, CompteEsport, TeamAnnuaire } from '../client';
-import { capaciteComptes, emailDe, modeleInvitationEsport, noterEnvoiEsport, renvoyerInvitation, revoquerCompte } from '../comptesHub';
-import { comptesOrphelins } from '../synchroAdmin';
-import { BoutonConfirme, Choix, PastilleRole, Retours, TitreSection, styles as communs, useAgir } from './commun';
+import { MOTIF_PSEUDO, capaciteComptes, emailDe, modeleInvitationEsport, noterEnvoiEsport, renvoyerInvitation, revoquerCompte } from '../comptesHub';
+import { comptesHubSansEsport, comptesOrphelins } from '../synchroAdmin';
+import { BoutonConfirme, Choix, PastilleRole, Retours, styles as communs, useAgir, Intertitre, Panneau } from './commun';
+import { ESP, EnTetePage, EtatVide, SqueletteCartes } from './design';
 import { CreationCompte, roleParDefaut } from './CreationCompte';
 import { useIdentite } from './Identite';
 
-type FiltreStatut = 'tous' | 'invite' | 'actif' | 'suspendu';
+type FiltreStatut = 'tous' | 'invite' | 'actif' | 'suspendu' | 'sansteam';
 
 /** Statut affiché d'un compte : invité, suspendu (dans toutes ses teams visibles) ou actif. */
-export function statutAffiche(c: CompteEsport): Exclude<FiltreStatut, 'tous'> {
+export function statutAffiche(c: CompteEsport): Exclude<FiltreStatut, 'tous' | 'sansteam'> {
   if (c.statut === 'invite') return 'invite';
   if (c.appartenances.length > 0 && c.appartenances.every(a => a.statut === 'suspendu')) return 'suspendu';
   return 'actif';
@@ -39,13 +40,14 @@ export function filtrerComptes(comptes: readonly CompteEsport[], f: { recherche:
     if (q && !`${c.pseudo} ${c.riotId ?? ''} ${c.discord ?? ''}`.toLocaleLowerCase('fr').includes(q)) return false;
     if (f.team !== 'toutes' && !c.appartenances.some(a => a.teamId === f.team)) return false;
     if (f.role !== 'tous' && !c.appartenances.some(a => (f.team === 'toutes' || a.teamId === f.team) && a.role.nom === f.role)) return false;
+    if (f.statut === 'sansteam') return c.appartenances.length === 0;
     if (f.statut === 'suspendu') return c.appartenances.some(a => a.statut === 'suspendu');
     if (f.statut !== 'tous' && statutAffiche(c) !== f.statut) return false;
     return true;
   });
 }
 
-const LIBELLES_STATUT: Record<Exclude<FiltreStatut, 'tous'>, string> = { invite: 'Invité', actif: 'Actif', suspendu: 'Suspendu' };
+const LIBELLES_STATUT: Record<Exclude<FiltreStatut, 'tous' | 'sansteam'>, string> = { invite: 'Invité', actif: 'Actif', suspendu: 'Suspendu' };
 
 export function MembresGlobal({
   theme,
@@ -81,7 +83,11 @@ export function MembresGlobal({
 
   const capacite = capaciteComptes(contexte, Boolean(annuaire?.superAdmin));
   const peutAjouter = Boolean(annuaire?.teams.some(t => t.droits.ajouter));
-  const visibles = useMemo(() => (annuaire ? filtrerComptes(annuaire.comptes, { recherche, team, role, statut }) : []), [annuaire, recherche, team, role, statut]);
+  // Fondateur, liste complète des comptes du hub : aussi les comptes du hub qui ont l'Esport mais aucune fiche Esport (jamais ouverts).
+  const listeComplete = Boolean(annuaire?.superAdmin && contexte.profils && !contexte.profils.restreint && !contexte.profils.gestion);
+  const tous = useMemo(() => (annuaire ? [...annuaire.comptes, ...comptesHubSansEsport(annuaire.comptes, contexte.profils?.tous, listeComplete)] : []), [annuaire, contexte.profils, listeComplete]);
+  const sansTeam = tous.filter(c => c.appartenances.length === 0).length;
+  const visibles = useMemo(() => filtrerComptes(tous, { recherche, team, role, statut }), [tous, recherche, team, role, statut]);
   const nomsRoles = useMemo(() => [...new Set((annuaire?.teams ?? []).filter(t => team === 'toutes' || t.id === team).flatMap(t => t.roles.map(r => r.nom)))], [annuaire, team]);
   const orphelins = useMemo(
     () => (annuaire && capacite.creer ? comptesOrphelins(annuaire.comptes, contexte.profils?.tous, !contexte.profils?.restreint && !contexte.profils?.gestion) : []),
@@ -99,13 +105,19 @@ export function MembresGlobal({
     });
 
   return (
-    <ScrollView contentContainerStyle={{ padding: 16, gap: 16, maxWidth: 1200, width: '100%', alignSelf: 'center' }} keyboardShouldPersistTaps="handled" testID="esport-membres-global">
-      <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
-        <TitreSection theme={theme} titre="Membres" sous={annuaire ? `${annuaire.comptes.length} compte(s) dans ${annuaire.teams.length} team(s)` : 'Chargement…'} />
-        {capacite.creer ? (
-          <BoutonHub theme={theme} titre="Créer un compte" variante="plein" onPress={() => setCreation(c => !c)} testID="esport-membres-creer" />
-        ) : null}
-      </View>
+    <ScrollView
+      contentContainerStyle={{ paddingHorizontal: large ? ESP.xxl : ESP.m, paddingTop: large ? ESP.xl : ESP.m, paddingBottom: ESP.xxxl, gap: large ? ESP.xl : ESP.l, maxWidth: 1240 + 2 * ESP.xxl, width: '100%', alignSelf: 'center' }}
+      keyboardShouldPersistTaps="handled"
+      testID="esport-membres-global">
+      <EnTetePage
+        theme={theme}
+        large={large}
+        titre="Membres"
+        sous={annuaire ? `${tous.length} compte${tous.length > 1 ? 's' : ''}, dont ${sansTeam} sans team · ${annuaire.teams.length} team${annuaire.teams.length > 1 ? 's' : ''}` : 'Chargement…'}
+        action={capacite.creer ? <BoutonHub theme={theme} titre={creation ? 'Fermer' : '+ Créer un compte'} variante={creation ? 'normal' : 'plein'} onPress={() => setCreation(c => !c)} testID="esport-membres-creer" /> : undefined}
+        testID="esport-membres-entete"
+      />
+      {!annuaire && !erreur ? <SqueletteCartes theme={theme} n={2} large={large} /> : null}
       {!capacite.creer && peutAjouter ? <Text style={attenue} testID="esport-membres-creation-indisponible">{capacite.raison}</Text> : null}
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-membres-global" />
       {identite.rendu(theme)}
@@ -156,7 +168,7 @@ export function MembresGlobal({
             theme={theme}
             libelle="Statut"
             valeur={statut}
-            options={[['tous', 'Tous'], ['invite', 'Invités'], ['actif', 'Actifs'], ['suspendu', 'Suspendus']]}
+            options={[['tous', 'Tous'], ['invite', 'Invités'], ['actif', 'Actifs'], ['suspendu', 'Suspendus'], ['sansteam', 'Sans team']]}
             onChoisir={setStatut}
             testID="esport-membres-statut"
           />
@@ -182,7 +194,7 @@ export function MembresGlobal({
         </Panneau>
       ) : null}
       <View style={{ gap: 8 }} testID="esport-membres-liste">
-        {annuaire && visibles.length === 0 && annuaire.comptes.length > 0 ? <Text style={attenue}>Aucun membre ne correspond aux filtres.</Text> : null}
+        {annuaire && visibles.length === 0 && tous.length > 0 ? <EtatVide theme={theme} glyphe="☺" titre="Aucun membre ne correspond aux filtres" texte="Changez la recherche ou le statut." /> : null}
         {annuaire
           ? visibles.map(c => (
               <LigneCompte
@@ -289,7 +301,12 @@ function LigneCompte({
               {[compte.riotId, nomsTeams.join(', ') || 'Aucune team'].filter(Boolean).join(' · ')}
             </Text>
           </View>
-          <Pilule theme={theme} texte={LIBELLES_STATUT[statut]} couleur={couleur} testID={`esport-compte-statut-${compte.compte}`} />
+          {compte.horsEsport ? (
+            <Pilule theme={theme} texte="Jamais connecté" couleur={theme.attenue} testID={`esport-compte-statut-${compte.compte}`} />
+          ) : (
+            <Pilule theme={theme} texte={LIBELLES_STATUT[statut]} couleur={couleur} testID={`esport-compte-statut-${compte.compte}`} />
+          )}
+          {compte.appartenances.length === 0 ? <Pilule theme={theme} texte="Sans team" couleur={theme.alerte} testID={`esport-compte-sans-team-${compte.compte}`} /> : null}
         </View>
         {large || ouvert ? (
           <View style={[communs.ligne, { paddingLeft: 44 }]}>
@@ -306,7 +323,12 @@ function LigneCompte({
             return t ? <Appartenance key={a.membreId} theme={theme} compte={compte} a={a} team={t} occupe={occupe} client={client} onAction={onAction} onOuvrirTeam={onOuvrirTeam} /> : null;
           })}
           <AjoutTeam theme={theme} compte={compte} annuaire={annuaire} occupe={occupe} client={client} onAction={onAction} />
-          {capacite && statut === 'invite' ? (
+          {compte.horsEsport ? (
+            <Text style={attenue} testID={`esport-compte-hors-esport-${compte.compte}`}>
+              Compte du hub avec accès à l’Esport, jamais ouvert dans l’Esport. Ajoutez-le à une team : il la verra directement à sa prochaine ouverture de l’Esport, sans code.
+            </Text>
+          ) : null}
+          {capacite && statut === 'invite' && !compte.horsEsport ? (
             <View style={{ gap: 8 }} testID={`esport-compte-invitation-${compte.compte}`}>
               <Intertitre theme={theme}>Invitation</Intertitre>
               <Text style={attenue}>{`Pas encore connecté${compte.inviteLe ? ` (invité le ${compte.inviteLe.slice(0, 10).split('-').reverse().join('/')})` : ''}.`}</Text>
@@ -449,6 +471,8 @@ function AjoutTeam({
   const [teamId, setTeamId] = useState<string | undefined>();
   const [roleId, setRoleId] = useState<string | undefined>();
   const [poste, setPoste] = useState('');
+  // Compte du hub sans fiche Esport : on choisit aussi son pseudo Esport (le nom du hub par défaut).
+  const [pseudo, setPseudo] = useState(compte.pseudo);
   if (possibles.length === 0) return null;
   const team = possibles.find(t => t.id === teamId);
   return (
@@ -476,6 +500,7 @@ function AjoutTeam({
             onChoisir={setRoleId}
             testID={`esport-ajout-role-${compte.compte}`}
           />
+          {compte.horsEsport ? <Champ theme={theme} libelle="Pseudo Esport" valeur={pseudo} onChanger={setPseudo} maxLength={24} testID={`esport-ajout-pseudo-${compte.compte}`} /> : null}
           <Champ theme={theme} libelle="Poste en jeu (facultatif)" valeur={poste} onChanger={setPoste} maxLength={30} testID={`esport-ajout-poste-${compte.compte}`} />
           <BoutonHub
             theme={theme}
@@ -484,10 +509,16 @@ function AjoutTeam({
             desactive={occupe || !roleId}
             onPress={() =>
               onAction('Ajout', async () => {
-                await client.ajouterMembre(team.id, { compte: compte.compte, roleId: roleId!, ...(poste.trim() ? { posteJeu: poste.trim() } : {}) });
+                if (compte.horsEsport) {
+                  // Pré-enregistrement (comme une invitation directe) : statut invité, actif à sa première session.
+                  if (!MOTIF_PSEUDO.test(pseudo.trim())) throw new Error('Pseudo Esport : 2 à 24 caractères (lettres, chiffres, espace, _ . -).');
+                  await client.preinscrire({ compte: compte.compte, pseudo: pseudo.trim(), affectations: [{ teamId: team.id, roleId: roleId!, ...(poste.trim() ? { posteJeu: poste.trim() } : {}) }] });
+                } else {
+                  await client.ajouterMembre(team.id, { compte: compte.compte, roleId: roleId!, ...(poste.trim() ? { posteJeu: poste.trim() } : {}) });
+                }
                 setTeamId(undefined);
                 setPoste('');
-                return `${compte.pseudo} est ajouté à ${team.nom}.`;
+                return compte.horsEsport ? `${pseudo.trim()} est ajouté à ${team.nom} : il verra sa team à sa prochaine ouverture de l’Esport.` : `${compte.pseudo} est ajouté à ${team.nom}.`;
               })
             }
             testID={`esport-ajout-valider-${compte.compte}`}

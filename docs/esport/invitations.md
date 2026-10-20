@@ -85,3 +85,13 @@ Choix : **pré-enregistrement par le Fondateur, activation à la première sessi
 
 Tests : `esport/test/invitations-directes.test.mjs`, `src/esport/InvitationsDirectes.test.tsx` ; bout
 en bout : `scripts/e2e-esport-invitations.mjs` (captures `docs/captures-esport-invitations/`).
+
+## Comptes du hub créés dans l'Administration
+
+Un compte du hub qui a l'Esport parmi ses apps (accès complet ou lecture), créé dans l'Administration et jamais
+ouvert dans l'Esport, n'a pas encore de fiche sur le serveur Esport. La page **Membres** du Fondateur le liste
+quand même : elle lit l'annuaire du hub sur l'appareil du Fondateur (`comptesHubSansEsport`,
+`src/esport/synchroAdmin.ts`) et l'affiche **Jamais connecté · Sans team**. **Ajouter à une team** fait le
+pré-enregistrement (`POST /comptes` : identifiant du compte, pseudo Esport, team et rôle), statut invité, actif à
+la première session : le joueur voit sa team directement. Un Manager (sans annuaire du hub) ne voit que
+l'annuaire du serveur. Test de bout en bout : `scripts/e2e-esport-comptes-hub.mjs`.

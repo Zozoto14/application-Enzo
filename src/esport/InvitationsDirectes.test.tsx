@@ -24,7 +24,7 @@ import { ModeAffichageForce } from '../ui/mobile';
 import { ErreurEsport, oublierSessions, type Annuaire, type ClientEsport, type CompteEsport } from './client';
 import { modeleInvitationEsport } from './comptesHub';
 import { fabrique } from './fabrique';
-import { comptesOrphelins, retirerCompteEsport } from './synchroAdmin';
+import { comptesHubSansEsport, comptesOrphelins, retirerCompteEsport } from './synchroAdmin';
 import { oublierVerification } from './ui/Identite';
 import { filtrerComptes } from './ui/MembresGlobal';
 import { Esport } from './ui/RacineEsport';
@@ -310,6 +310,65 @@ describe('Une seule source de vérité : suppression dans l’Administration', (
   });
 });
 
+describe('Esport › Membres : comptes du hub créés dans l’Administration (sans fiche Esport)', () => {
+  const luca: Profil = { id: 'luca000001', nom: 'LUCA', admin: false, creeLe: '2026-09-01', apps: ['esport', 'portefeuille'], actif: true };
+  const sansEsport: Profil = { id: 'zoe0000001', nom: 'Zoé', admin: false, creeLe: '2026-09-01', apps: ['portefeuille'], actif: true };
+  const desactive: Profil = { id: 'old0000001', nom: 'Ancien', admin: false, creeLe: '2026-09-01', apps: ['esport'], actif: false };
+
+  it('aide pure : seulement les comptes du hub avec l’Esport, sans fiche, avec la liste complète', () => {
+    const connus = [compte('principal', 'Enzo', { moi: true }), compte('lea0000001', 'Léa')];
+    const lea: Profil = { id: 'lea0000001', nom: 'Léa', admin: false, creeLe: '', apps: ['esport'] };
+    const r = comptesHubSansEsport(connus, [fondateur, luca, sansEsport, desactive, lea], true);
+    expect(r.map(c => [c.compte, c.pseudo, c.horsEsport, c.appartenances.length])).toEqual([['luca000001', 'LUCA', true, 0]]);
+    expect(comptesHubSansEsport(connus, [luca], false)).toEqual([]);
+    expect(comptesHubSansEsport(connus, undefined, true)).toEqual([]);
+  });
+
+  it('Fondateur : LUCA apparaît « Jamais connecté · Sans team », compteur et filtre « Sans team », puis ajout à une team (pré-enregistrement)', async () => {
+    const { ctx } = contexteFondateur([fondateur, luca, sansEsport]);
+    let comptes = [compte('principal', 'Enzo', { moi: true, appartenances: [{ teamId: 't1', membreId: 'm0', role: { id: 'r-prop', nom: 'Propriétaire', couleur: '#d64545', cle: 'proprietaire' }, posteJeu: null, statut: 'actif', rejointLe: '', gerable: false }] })];
+    const preinscrire = jest.fn(async (c: { compte: string; pseudo: string; affectations: Array<{ teamId: string; roleId: string }> }) => {
+      const fiche = compte(c.compte, c.pseudo, { statut: 'invite', appartenances: [{ teamId: 't1', membreId: 'm9', role: { id: 'r-jou', nom: 'Joueur', couleur: '#16a34a', cle: 'joueur' }, posteJeu: null, statut: 'actif', rejointLe: '', gerable: true }] });
+      comptes = [...comptes, fiche];
+      return fiche;
+    });
+    const ajouterMembre = jest.fn();
+    fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, comptes), preinscrire, ajouterMembre });
+    await monter(ctx);
+    await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await screen.findByTestId('esport-compte-luca000001');
+    expect(screen.queryByTestId('esport-compte-zoe0000001')).toBeNull();
+    expect(screen.getByText('2 comptes, dont 1 sans team · 2 teams')).toBeTruthy();
+    expect(screen.getByTestId('esport-compte-statut-luca000001')).toHaveTextContent('Jamais connecté');
+    expect(screen.getByTestId('esport-compte-sans-team-luca000001')).toHaveTextContent('Sans team');
+    // Filtre « Sans team » : LUCA seulement.
+    await fireEvent.press(screen.getByTestId('esport-membres-statut-sansteam'));
+    expect(screen.queryByTestId('esport-compte-principal')).toBeNull();
+    expect(screen.getByTestId('esport-compte-luca000001')).toBeTruthy();
+    // Ajouter à une team : pré-enregistrement (compte du relais + pseudo + team et rôle), pas un ajout de compte existant.
+    await fireEvent.press(screen.getByLabelText('Gérer LUCA'));
+    await fireEvent.press(screen.getByTestId('esport-ajout-team-luca000001-t1'));
+    await fireEvent.press(screen.getByTestId('esport-ajout-role-luca000001-r-jou'));
+    await fireEvent.press(screen.getByTestId('esport-ajout-valider-luca000001'));
+    await waitFor(() => expect(preinscrire).toHaveBeenCalledWith({ compte: 'luca000001', pseudo: 'LUCA', affectations: [{ teamId: 't1', roleId: 'r-jou' }] }));
+    expect(ajouterMembre).not.toHaveBeenCalled();
+    expect(await screen.findByText('LUCA est ajouté à Faucons : il verra sa team à sa prochaine ouverture de l’Esport.')).toBeTruthy();
+    // Rechargé : LUCA a une fiche (invité) et une team ; plus « sans team ».
+    await fireEvent.press(screen.getByTestId('esport-membres-statut-tous'));
+    await waitFor(() => expect(screen.getByTestId('esport-compte-statut-luca000001')).toHaveTextContent('Invité'));
+    expect(screen.queryByTestId('esport-compte-sans-team-luca000001')).toBeNull();
+  });
+
+  it('Manager (sans annuaire du hub) : rien de plus que l’annuaire du serveur', async () => {
+    const { ctx } = contexteFondateur([fondateur, luca]);
+    fabrique.client = () => fauxClient({ ouvrir: moi(false), annuaire: async () => annuaire(false, [compte('max12345', 'Max', { moi: true })]) });
+    await monter({ ...ctx, profil: { ...fondateur, admin: false } });
+    await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await screen.findByTestId('esport-compte-max12345');
+    expect(screen.queryByTestId('esport-compte-luca000001')).toBeNull();
+  });
+});
+
 describe('Aides pures', () => {
   it('filtres de la page Membres : recherche, team, rôle, statut', () => {
     const a = (teamId: string, role: string, statut: 'actif' | 'suspendu' = 'actif') => ({ teamId, membreId: `${teamId}-${role}`, role: { id: role, nom: role, couleur: '#000000', cle: null }, posteJeu: null, statut, rejointLe: '', gerable: true });
@@ -326,6 +385,8 @@ describe('Aides pures', () => {
     expect(f({ statut: 'invite' })).toEqual(['Zoé']);
     expect(f({ statut: 'suspendu' })).toEqual(['Kai']);
     expect(f({ statut: 'actif' })).toEqual(['Léa', 'Max']);
+    // « Sans team » : comptes sans aucune appartenance (dont ceux du hub sans fiche Esport).
+    expect(filtrerComptes([...comptes, compte('e', 'Luca', { horsEsport: true, statut: 'invite' })], { recherche: '', team: 'toutes', role: 'tous', statut: 'sansteam' }).map(c => c.pseudo)).toEqual(['Luca']);
   });
 
   it('message Esport : variables du modèle, noms de teams en texte (sans accolades)', () => {

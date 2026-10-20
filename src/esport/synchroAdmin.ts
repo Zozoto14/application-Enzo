@@ -10,6 +10,7 @@
  */
 
 import type { Profil } from '../profils/profils';
+import { aAccesEsport } from './acces';
 import { estInactif, trouverConfig, type CompteEsport } from './client';
 import { fabrique } from './fabrique';
 
@@ -44,4 +45,35 @@ export function comptesOrphelins(comptes: readonly CompteEsport[], profils: read
   if (!profils || !complete || profils.length === 0) return [];
   const connus = new Set(profils.map(p => p.id));
   return comptes.filter(c => c.compte !== 'principal' && !connus.has(c.compte));
+}
+
+/**
+ * Comptes du hub qui ont accès à l'Esport (apps contenant `esport`, accès
+ * complet ou en lecture) mais qu'aucune fiche Esport ne connaît encore : créés
+ * dans l'Administration (avant les invitations directes, ou sans passer par
+ * l'Esport) et jamais ouverts dans l'Esport. Le Fondateur les voit dans la
+ * page Membres, « Sans team · Jamais connecté », et peut les ajouter à une
+ * team (pré-enregistrement `POST /comptes`, comme une invitation directe).
+ *
+ * Seulement avec la liste COMPLÈTE des comptes du hub (Fondateur, appareil non
+ * restreint) : sinon, rien (un Manager garde l'annuaire du serveur).
+ */
+export function comptesHubSansEsport(comptes: readonly CompteEsport[], profils: readonly Profil[] | undefined, complete: boolean): CompteEsport[] {
+  if (!profils || !complete) return [];
+  const connus = new Set(comptes.map(c => c.compte));
+  return profils
+    .filter(p => p.id !== 'principal' && !p.admin && p.actif !== false && aAccesEsport(p) && !connus.has(p.id))
+    .map(p => ({
+      compte: p.id,
+      pseudo: p.nom,
+      riotId: null,
+      discord: null,
+      statut: 'invite' as const,
+      inviteLe: null,
+      activeLe: null,
+      moi: false,
+      appartenances: [],
+      horsEsport: true,
+    }))
+    .sort((a, b) => a.pseudo.localeCompare(b.pseudo, 'fr'));
 }

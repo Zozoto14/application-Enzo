@@ -133,6 +133,12 @@ export interface CompteEsport {
   activeLe: string | null;
   moi: boolean;
   appartenances: AppartenanceCompte[];
+  /**
+   * Côté app seulement : compte du hub avec accès à l'Esport, sans fiche
+   * Esport (jamais ouvert, aucune team). Lu dans l'Administration, sur
+   * l'appareil du Fondateur (`comptesHubSansEsport`).
+   */
+  horsEsport?: boolean;
 }
 export interface RoleAnnuaire {
   id: string;
