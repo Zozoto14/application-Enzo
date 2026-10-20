@@ -124,7 +124,9 @@ async function ouvrirEsport(page) {
   await tuile.click();
   await page.getByTestId('app-esport').waitFor({ timeout: 20_000 });
   // L'onglet de l'app garde sa page : on repart de la liste des teams.
-  if (await page.getByTestId('esport-nav-teams').count()) await page.getByTestId('esport-nav-teams').click();
+  // (Premier passage : écran du pseudo, sans navigation.)
+  const nav = page.getByTestId('esport-nav-teams');
+  if (await nav.waitFor({ timeout: 8_000 }).then(() => true, () => false)) await nav.click();
 }
 
 async function api(chemin, jeton, { methode = 'GET', corps } = {}) {

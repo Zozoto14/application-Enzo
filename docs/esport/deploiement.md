@@ -110,7 +110,7 @@ Plus de code : **Esport › Membres › Créer un compte** (nom, adresse e-mail,
 « Esport seulement » est créé dans l'Administration, le joueur est ajouté à sa team, et votre
 messagerie ouvre l'e-mail d'invitation. Il choisit son mot de passe en ouvrant le lien et voit
 directement sa team. Détails : [invitations.md](invitations.md) ; les trois pages de l'Esport :
-[guide.md](guide.md).
+[README.md](README.md).
 
 ## Étape 8 (facultative) : notifications Discord
 
@@ -149,6 +149,6 @@ Rien à configurer : relancez le workflow **Esport (Worker)** (étape 6). Il app
 | « Accès révoqué » dans l'Esport | Le compte a été révoqué dans l'Administration : c'est voulu. |
 | « Trop de demandes en peu de temps » | Limite de débit (protection) : attendez la durée indiquée (une minute pour la connexion, une heure au plus pour les créations). |
 
-Guide : [les trois pages de l'Esport](guide.md), [inviter un joueur](invitations.md).
+Guide : [les trois pages de l'Esport](README.md), [inviter un joueur](invitations.md).
 Modules : [résumés de réunions](resumes.md), [objectifs et tâches](objectifs-taches.md), [strats et playbook](strats-playbook.md).
 Passer plus tard sur un vrai serveur : voir [migration-serveur.md](migration-serveur.md).

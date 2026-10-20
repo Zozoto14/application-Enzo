@@ -47,12 +47,19 @@ d'un compte dans le hub.
 
 ## Invitations
 
-- Code `esp_` + 24 octets aléatoires (192 bits), montré **une seule fois** ; seule son empreinte SHA-256 est gardée
-  (vérifié : ni la base, ni le journal, ni l'API ne le contiennent).
-- Durée de 1 à 30 jours, 1 à 50 utilisations (compteur atomique : deux acceptations simultanées ne dépassent jamais
-  le maximum), révocables ; team supprimée : invitations révoquées.
-- **Force brute** : 5 essais libres, puis attente doublée à chaque échec (30 s … 1 h), par compte ET par IP ; un
-  bon code est refusé pendant le blocage. En plus : 30 codes présentés par heure et par IP.
+Invitation directe (voir [invitations.md](invitations.md)) : plus aucun code à deviner.
+
+- **Création de compte** (`POST /comptes`) : super admin seulement (jeton maître validé par le relais), et côté app
+  sur l'appareil du Fondateur, après vérification de son identité (mot de passe + code, comme l'Administration).
+- Le lien compte du hub ↔ Esport est l'identifiant du compte que le relais valide à chaque session : un invité ne
+  peut pas réclamer les teams d'un autre. Statut « invité » jusqu'à la première session.
+- **Ajout d'un compte existant** (`POST /teams/:id/membres`) : `members.invite`, rôle attribuable (anti-escalade),
+  compte déjà visible de l'acteur (sinon 404 : on ne sonde pas les comptes des autres teams). 30 par heure et par
+  compte (`invitation`).
+- Routes agrégées (`/dashboard`, `/membres`) : seulement les teams où l'acteur est membre actif, et dans chacune
+  seulement les blocs que ses permissions ouvrent.
+- Anciens codes `esp_` : création et acceptation répondent 410 sans rien écrire.
+- Compte supprimé dans l'Administration : retiré de l'Esport (`DELETE /admin/comptes/:id/hub`, super admin).
 
 ## Fichiers
 

@@ -9,6 +9,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | Document | Pour qui | Contenu |
 | --- | --- | --- |
 | [README.md](README.md) (ce guide) | Tout le monde | Utilisation, rôles, vos données, limites connues |
+| [invitations.md](invitations.md) | Fondateur, staff | Inviter un joueur (création de compte depuis l'Esport), page Membres |
 | [deploiement.md](deploiement.md) | Fondateur | Activer le serveur Esport (Cloudflare + GitHub), ajouter un joueur |
 | [planning.md](planning.md) | Tout le monde | Planning, disponibilités, présence, agenda iCal |
 | [resumes.md](resumes.md) | Tout le monde | Déposer une réunion, boîte du rédacteur, PDF |
@@ -19,6 +20,26 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [strats-playbook.md](strats-playbook.md) | Coach, Analyste, joueurs | Éditeur de strats, partage, playbook, licences Riot |
 | [securite.md](securite.md) | Fondateur | Revue de sécurité, RGPD, limites |
 | [migration-serveur.md](migration-serveur.md) | Fondateur | Quitter Cloudflare pour un vrai serveur, sauvegardes |
+
+## Les trois pages de l'Esport
+
+En ouvrant la tuile **Esport**, trois pages de premier niveau, avant d'entrer dans une team :
+
+| Page | Pour quoi faire |
+| --- | --- |
+| **Dashboard** (ouvre par défaut) | Résumé de toutes vos teams. En haut : résumés à rédiger, événements de la semaine (toutes teams), alertes (tâches en retard, résumé en attente depuis plus de 7 jours, présence faible, invités pas encore connectés). Puis une carte par team : membres, présence des 14 derniers jours, résumés en attente, tâches en retard, prochains événements, dernière activité. Touchez une carte pour ouvrir la team. |
+| **Teams** | Vos teams, création d'une team (Fondateur), notifications, votre profil Esport. |
+| **Membres** | Tous les membres des teams dont vous voyez les membres : filtres (team, rôle, statut invité / actif / suspendu), recherche, création de compte (Fondateur), ajout à une team, rôle, suspension, retrait, invitations. Voir [invitations.md](invitations.md). |
+
+Chaque bloc du Dashboard n'apparaît que si le module est activé dans la team **et** que votre rôle
+permet de le voir (un Joueur ne voit pas la présence de toute l'équipe ni le détail du journal). Le
+serveur ne renvoie jamais rien d'une team où vous n'êtes pas.
+
+Dans une team, la barre latérale garde ses modules (planning, disponibilités, présence, résumés,
+objectifs et tâches, review, scouting, strats, playbook, Discord, membres et rôles, journal, paramètres).
+
+Inviter quelqu'un : **Membres › Créer un compte** ([invitations.md](invitations.md)). Il n'y a plus de
+code d'invitation.
 
 ## Les rôles en deux minutes
 
@@ -42,7 +63,8 @@ droits partout.
 ### Mettre l'Esport en route (une fois)
 
 Suivez [deploiement.md](deploiement.md) (10 minutes depuis le navigateur). Pour cette version, relancez simplement
-le workflow **« Esport (Worker) »** : il applique la migration `0007_finitions.sql` (index et limites de débit).
+le workflow **« Esport (Worker) »** : il applique les migrations `0007_finitions.sql` (index et limites de débit)
+et `0008_invitations_directes.sql` (invitation directe).
 
 ### Créer une team
 
@@ -52,14 +74,17 @@ le workflow **« Esport (Worker) »** : il applique la migration `0007_finitions
 
 ### Inviter un joueur
 
-1. **Administration › Utilisateurs** : créez son compte avec le modèle **« Esport seulement »** (il ne verra que
-   l'Esport dans le hub) et envoyez l'invitation du hub comme d'habitude.
-2. **Esport › la team › Membres et rôles › Inviter** : choisissez le rôle, la validité (1 à 30 jours) et le nombre
-   d'utilisations, puis **Créer l'invitation**. Copiez le code `esp_…` : il n'est montré **qu'une fois**.
-3. Le joueur ouvre l'Esport › **Rejoindre une team** › colle le code.
+Plus de code à transmettre :
 
-Une invitation se révoque à tout moment (Membres et rôles › Invitations). Après plusieurs codes faux, l'app impose
-une attente (protection contre les essais au hasard).
+1. **Esport › Membres › Créer un compte** (sur votre appareil, où vous êtes connecté en Fondateur) : nom ou
+   pseudo, adresse e-mail, team(s) et rôle par team, poste en jeu (facultatif) ; confirmez votre identité.
+2. Le compte « Esport seulement » est créé dans l'Administration et le joueur est déjà dans sa team (statut
+   **Invité**). **Envoyer l'invitation par e-mail** ouvre votre messagerie, message prêt.
+3. Le joueur ouvre le lien, choisit son mot de passe, et retrouve sa team dans l'Esport (statut **Actif**).
+
+Relancer ou révoquer une invitation : **Membres** › le compte. Un Manager ajoute à ses teams un compte qui existe
+déjà (**Membres** › le compte › **Ajouter à une team**). Supprimer un compte dans l'Administration le retire aussi
+de l'Esport. Détails : [invitations.md](invitations.md).
 
 ### Gérer la team au quotidien
 
@@ -84,8 +109,9 @@ d'abord nommer un successeur.
 
 ### Premier passage
 
-Ouvrez l'app › **Esport** › choisissez un **pseudo** (obligatoire). Riot ID et Discord sont facultatifs. Puis
-**Rejoindre une team** avec le code `esp_…` reçu.
+Ouvrez le lien d'invitation reçu par e-mail, choisissez votre mot de passe, puis **Esport** : votre pseudo et votre
+team sont déjà là (Dashboard et Teams), aucun code à saisir. Riot ID et Discord se renseignent dans votre profil
+(Teams › Mon profil), facultatifs.
 
 ### Ce que vous faites le plus souvent
 
