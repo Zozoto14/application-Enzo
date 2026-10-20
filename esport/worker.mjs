@@ -16,6 +16,9 @@
  * Secret : CLE_ESPORT (`wrangler secret put CLE_ESPORT`), jamais dans le dépôt.
  * Facultatifs : CLE_DISCORD (secret séparé pour chiffrer les webhooks Discord ; sinon dérivé de
  * CLE_ESPORT) et LIEN_APP (adresse de l'app, variable {lien} des messages Discord).
+ * Bot Discord (facultatif, docs/esport/bot-discord.md) : DISCORD_APPLICATION_ID et
+ * DISCORD_PUBLIC_KEY (variables publiques), DISCORD_BOT_TOKEN (secret) ; Discord
+ * appelle POST /discord/interactions.
  */
 
 import { baseD1 } from './adaptateurs/d1.mjs';
@@ -23,7 +26,7 @@ import { stockageR2 } from './adaptateurs/stockage.mjs';
 import { creerApi, reponseJson } from './noyau/api.mjs';
 import { verificateurRelais } from './noyau/authentification.mjs';
 import { traiterFile } from './noyau/discord/file.mjs';
-import { rappelsDiscord } from './noyau/discord/rappels.mjs';
+import { debutsDiscord, rappelsDiscord } from './noyau/discord/rappels.mjs';
 import { distribuer } from './noyau/evenements.mjs';
 import { purgerJournal } from './noyau/journal.mjs';
 import { purgerLimites } from './noyau/limites.mjs';
@@ -39,6 +42,7 @@ function api(env) {
     creationTeams: env.CREATION_TEAMS === 'tous' ? 'tous' : 'fondateur',
     cleDiscord: env.CLE_DISCORD,
     lienApp: env.LIEN_APP,
+    discordBot: { applicationId: env.DISCORD_APPLICATION_ID, publicKey: env.DISCORD_PUBLIC_KEY, jetonBot: env.DISCORD_BOT_TOKEN },
   });
 }
 
@@ -63,8 +67,9 @@ export default {
         await rappelsPresence(base, { maintenant: Date.now() }).catch(e => console.error('[esport] rappels', e));
         await rappelsEcheances(base, { maintenant: Date.now() });
         await rappelsDiscord(base, { maintenant: Date.now() }).catch(e => console.error('[esport] rappels discord', e));
+        await debutsDiscord(base, { maintenant: Date.now() }).catch(e => console.error('[esport] débuts discord', e));
         await distribuer(base, { maintenant: Date.now(), limite: 500 });
-        await traiterFile(base, { cle: env.CLE_DISCORD || env.CLE_ESPORT, maintenant: Date.now(), lienApp: env.LIEN_APP }).catch(e => console.error('[esport] file discord', e));
+        await traiterFile(base, { cle: env.CLE_DISCORD || env.CLE_ESPORT, maintenant: Date.now(), lienApp: env.LIEN_APP, jetonBot: env.DISCORD_BOT_TOKEN }).catch(e => console.error('[esport] file discord', e));
         await purgerJournal(base, { maintenant: Date.now() }).catch(e => console.error('[esport] rétention', e));
         await purgerLimites(base, Date.now()).catch(e => console.error('[esport] limites', e));
         await base.executer('DELETE FROM tentatives WHERE maj_le < ?', [new Date(Date.now() - 7 * 86_400_000).toISOString()]);

@@ -70,6 +70,7 @@ GitHub › dépôt › **Settings** › **Secrets and variables** › **Actions*
 | `ESPORT_D1_ID` | le Database ID de `applibourse-esport` | Recommandée (sinon la base est cherchée par son nom à chaque fois) |
 | `ESPORT_URL` | `https://applibourse-esport.<vous>.workers.dev` | Facultative : l'app la déduit de l'adresse du relais |
 | `ESPORT_CREATION_TEAMS` | `tous` | Facultative : par défaut, seul le Fondateur crée des teams |
+| `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY` | identifiant et clé publique du bot Discord | Facultatives : bot Discord, voir [bot-discord.md](bot-discord.md) (avec le **secret** `DISCORD_BOT_TOKEN`) |
 
 Les secrets `CLOUDFLARE_API_TOKEN` et `CLOUDFLARE_ACCOUNT_ID` existent déjà (relais, site) : rien à ajouter.
 Si vous ne connaissez pas encore le Database ID, lancez d'abord l'étape 6 : le workflow l'affiche dans son

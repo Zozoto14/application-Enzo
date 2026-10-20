@@ -138,6 +138,22 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
       return `Envoi Discord « ${libelleDiscord(m.cle)} » échoué (essai ${nombre(m.essai)}/${nombre(m.sur)}) : ${texte(m.motif)}`;
     case 'discord.delivery_abandoned':
       return `Envoi Discord « ${libelleDiscord(m.cle)} » abandonné : ${texte(m.motif)}`;
+    case 'discord.server_linked':
+      return `${qui} a lié un serveur Discord à la team${typeof m.salon === 'string' && m.salon ? ` (salon #${m.salon})` : ''}`;
+    case 'discord.server_unlinked':
+      return `${qui} a délié le serveur Discord de la team`;
+    case 'discord.pings_changed':
+      return `${qui} a ${m.ping ? 'activé' : 'coupé'} le ping Discord des ${texte(m.type)}`;
+    case 'discord.command_used':
+      return `${qui} a utilisé /${texte(m.commande)} sur Discord`;
+    case 'discord.account_linked':
+      return `${qui} a lié son compte Discord`;
+    case 'discord.account_unlinked':
+      return `${qui} a délié son compte Discord`;
+    case 'attendance.relance':
+      return `${qui} a relancé sur Discord les convoqués sans réponse de « ${texte(m.titre)} »`;
+    case 'event.starting':
+      return `« C’est maintenant » préparé pour « ${texte(m.titre)} »`;
     case 'event.reminder_d1':
     case 'event.reminder_h1':
       return `Rappel ${e.action === 'event.reminder_d1' ? 'J-1' : 'H-1'} préparé pour « ${texte(m.titre)} »`;

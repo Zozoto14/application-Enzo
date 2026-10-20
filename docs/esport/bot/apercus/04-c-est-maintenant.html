@@ -1,0 +1,56 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>« C’est maintenant » d’un entraînement</title>
+<style>
+@font-face { font-family: Manrope; font-weight: 500; src: url('../../../../node_modules/@fontsource/manrope/files/manrope-latin-500-normal.woff2'); }
+@font-face { font-family: Manrope; font-weight: 700; src: url('../../../../node_modules/@fontsource/manrope/files/manrope-latin-700-normal.woff2'); }
+@font-face { font-family: Manrope; font-weight: 800; src: url('../../../../node_modules/@fontsource/manrope/files/manrope-latin-800-normal.woff2'); }
+body { margin: 0; background: #313338; color: #dbdee1; font: 15px/1.375 Manrope, 'gg sans', 'Segoe UI', sans-serif; }
+.message { display: flex; gap: 16px; padding: 18px 20px 18px 16px; width: 640px; }
+.message.ephemere { background: rgba(88,101,242,.06); border-left: 2px solid #5865f2; }
+.avatar { width: 40px; height: 40px; border-radius: 50%; flex: none; background: url('../avatar.png') center/cover; }
+.entete { display: flex; align-items: center; gap: 6px; }
+.nom-bot { color: #fff; font-weight: 700; }
+.tag { background: #5865f2; color: #fff; font-size: 10px; font-weight: 800; padding: 1px 5px; border-radius: 3px; }
+.heure { color: #949ba4; font-size: 12px; }
+.mention { background: rgba(88,101,242,.3); color: #c9cdfb; border-radius: 3px; padding: 0 2px; font-weight: 600; }
+.ts { background: rgba(255,255,255,.06); border-radius: 3px; padding: 0 2px; }
+.embed { margin-top: 6px; display: flex; gap: 16px; max-width: 520px; background: #2b2d31; border-left: 4px solid; border-radius: 4px; padding: 10px 16px 14px 12px; }
+.corps-embed { flex: 1; min-width: 0; }
+.auteur { font-size: 13px; font-weight: 700; color: #fff; margin: 4px 0 6px; }
+.titre { font-weight: 800; color: #fff; font-size: 16px; margin-bottom: 6px; }
+.titre a { color: #00a8fc; }
+.description { font-size: 14px; margin-bottom: 8px; }
+.champs { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 4px; }
+.champ { flex: 1 1 100%; min-width: 0; }
+.champ.inline { flex: 1 1 28%; }
+.champ .nom { font-weight: 700; color: #fff; font-size: 13px; margin-bottom: 2px; }
+.champ .valeur { font-size: 13.5px; }
+.pied { margin-top: 10px; color: #b5bac1; font-size: 12px; }
+.vignette { width: 80px; height: 80px; border-radius: 6px; flex: none; margin-top: 8px; display: flex; align-items: flex-end; justify-content: center; }
+.vignette span { color: #fff; font-weight: 800; font-size: 11px; letter-spacing: 2px; margin-bottom: 6px; text-shadow: 0 1px 2px #000; }
+code { background: #1e1f22; border-radius: 3px; padding: 0 3px; font-size: 13px; }
+.rangee { display: flex; gap: 8px; margin-top: 8px; }
+.bouton { padding: 6px 14px; border-radius: 4px; font-size: 14px; font-weight: 600; color: #fff; }
+.vert { background: #248046; } .rouge { background: #da373c; } .gris { background: #4e5058; } .primaire { background: #5865f2; } .lien { background: #4e5058; }
+.inactif { opacity: .5; }
+.externe { font-size: 12px; opacity: .8; }
+.note { color: #949ba4; font-size: 12px; margin-top: 6px; }
+</style></head><body>
+<div class="message">
+  <div class="avatar"></div>
+  <div style="flex:1;min-width:0">
+    <div class="entete"><span class="nom-bot">Esport HQ</span><span class="tag">APP</span><span class="heure">Aujourd’hui à 19:00</span></div>
+    <div><span class="mention">@Léa</span> <span class="mention">@Tom</span></div>
+    <div class="embed" style="border-left-color:#2563eb">
+    <div class="corps-embed">
+      <div class="auteur">🔴 C’est maintenant !</div>
+      <div class="titre"><a>🎯 Entraînement · Entraînement aim + exécutions</a></div>
+      <div class="description"><strong>C’est parti</strong> : Entraînement aim + exécutions (Entraînement) commence maintenant.</div>
+      <div class="champs"><div class="champ inline"><div class="nom">🕒 Quand</div><div class="valeur"><span class="ts">jeudi 22 octobre 2026 à 20:30</span><br><span class="ts">dans 1 jour</span></div></div><div class="champ inline"><div class="nom">⌛ Fin</div><div class="valeur"><span class="ts">22:00</span></div></div><div class="champ inline"><div class="nom">🗺️ Map</div><div class="valeur">Bind</div></div><div class="champ"><div class="nom">👥 Convoqués (2)</div><div class="valeur"><span class="mention">@Léa</span> · <span class="mention">@Tom</span></div></div><div class="champ"><div class="nom">🗳️ Réponses</div><div class="valeur">✅ <strong>2</strong> Oui · 🤔 <strong>0</strong> Peut-être · ❌ <strong>0</strong> Non</div></div></div>
+      <div class="pied">Faucons Valorant · Esport • 22/10/2026 20:30</div>
+    </div>
+    <div class="vignette" style="background:linear-gradient(135deg, #3a2b20, #e09b5a)"><span>BIND</span></div>
+  </div>
+    <div class="rangee"><span class="bouton lien">📲 Ouvrir dans l’app <span class="externe">↗</span></span></div>
+    
+  </div>
+</div></body></html>

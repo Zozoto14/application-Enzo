@@ -7,13 +7,14 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Linking, Pressable, Text, View } from 'react-native';
 import { BoutonHub, Champ, Interrupteur } from '../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../hub/themes';
 import { nomModule } from '../client';
-import { apiDiscord, type EnvoiDiscord, type EtatDiscord, type ParametreDiscord } from '../discord/api';
+import { apiBot, apiDiscord, type CodeLiaison, type EnvoiDiscord, type EtatBot, type EtatDiscord, type ParametreDiscord } from '../discord/api';
 import { dateCourte } from '../libelles';
 import { BoutonConfirme, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from './commun';
+import { CodeAffiche } from './CodeLiaison';
 import type { PropsModule } from './modules';
 
 const STATUTS: Record<EnvoiDiscord['statut'], string> = { attente: 'En attente', envoye: 'Envoyé', abandonne: 'Abandonné' };
@@ -88,6 +89,123 @@ function CarteNotification({ theme, parametre, onEnregistrer, occupe }: { theme:
   );
 }
 
+/**
+ * Bot Discord (interactions) : lier un serveur Discord à la team (code pour
+ * /esport-lier-serveur), salon des annonces, ping des convoqués par type
+ * d'événement, et qui a lié son compte Discord.
+ */
+function BotDiscord({ theme, client, teamId }: { theme: ThemeHub; client: PropsModule['client']; teamId: string }) {
+  const api = React.useMemo(() => apiBot(client, teamId), [client, teamId]);
+  const [etat, setEtat] = useState<EtatBot | undefined>();
+  const [code, setCode] = useState<CodeLiaison | undefined>();
+  const { enCours, erreur, avis, agir } = useAgir();
+  const occupe = Boolean(enCours);
+  const recharger = useCallback(async () => setEtat(await api.etat()), [api]);
+  useEffect(() => {
+    void agir('', recharger);
+  }, [agir, recharger]);
+  const attenue = { color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) };
+  const s = etat?.serveur;
+  const lies = etat?.comptes.filter(c => c.lie).length ?? 0;
+  return (
+    <Panneau theme={theme} testID="esport-bot">
+      <Intertitre theme={theme}>Bot Discord</Intertitre>
+      <Text style={attenue}>Le bot annonce les scrims, matchs et tournois dans le salon de la team, mentionne les convoqués qui ont lié leur compte, et leur permet de répondre Oui / Peut-être / Non d’un clic.</Text>
+      <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-bot" />
+      {etat && !etat.disponible ? (
+        <Text style={{ color: theme.alerte, fontSize: 13 }} testID="esport-bot-absent">
+          Le bot n’est pas encore installé sur le serveur Esport : le Fondateur suit docs/esport/bot-discord.md.
+        </Text>
+      ) : null}
+      {s ? (
+        <View style={{ gap: 4 }} testID="esport-bot-serveur">
+          <Text style={{ color: theme.texte, ...police(theme.policeTexte) }}>
+            Serveur lié · annonces dans #{s.salonNom ?? s.salon}
+          </Text>
+          <Text style={attenue}>
+            Lié le {dateCourte(s.lieLe)}
+            {s.dernierSucces ? ` · dernier envoi réussi ${dateCourte(s.dernierSucces)}` : ''}
+          </Text>
+          {s.invalide ? <Text style={{ color: theme.critique, fontSize: 13 }}>Discord refuse le salon : vérifiez que le bot y a accès, ou liez un autre salon.</Text> : null}
+        </View>
+      ) : etat?.disponible ? (
+        <Text style={attenue}>Aucun serveur lié. Invitez le bot sur votre serveur, puis liez-le avec un code.</Text>
+      ) : null}
+      {code ? <CodeAffiche theme={theme} code={code} testID="esport-bot-code" /> : null}
+      <View style={styles.ligne}>
+        {etat?.invitation ? <BoutonHub theme={theme} titre="Inviter le bot sur un serveur" onPress={() => void Linking.openURL(etat.invitation!)} testID="esport-bot-inviter" /> : null}
+        <BoutonHub
+          theme={theme}
+          titre={s ? 'Lier un autre salon ou serveur' : 'Lier un serveur Discord'}
+          variante="plein"
+          desactive={occupe || !etat?.disponible}
+          onPress={() =>
+            void agir('Code', async () => {
+              setCode(await api.code());
+              return 'Code créé : un administrateur du serveur Discord tape la commande affichée, dans le salon des annonces.';
+            })
+          }
+          testID="esport-bot-lier"
+        />
+        {s ? (
+          <BoutonConfirme
+            theme={theme}
+            titre="Délier le serveur"
+            confirmation="Confirmer : délier"
+            desactive={occupe}
+            onConfirme={() =>
+              void agir('Délier', async () => {
+                await api.delier();
+                await recharger();
+                return 'Serveur Discord délié : plus aucune annonce du bot.';
+              })
+            }
+            testID="esport-bot-delier"
+          />
+        ) : null}
+      </View>
+      {etat ? (
+        <View style={{ gap: 6 }} testID="esport-bot-pings">
+          <Text style={{ color: theme.texte, fontWeight: '700', ...police(theme.policeTexte) }}>Mentionner les convoqués</Text>
+          <Text style={attenue}>Par type d’événement. Seuls les convoqués qui ont lié leur compte sont mentionnés ; jamais @everyone ni @here. Les réunions réservées au staff ne sont jamais annoncées.</Text>
+          {etat.pings.map(p => (
+            <View key={p.type} style={[styles.ligne, { justifyContent: 'space-between', flexWrap: 'nowrap' }]}>
+              <Text style={{ color: theme.texte, flex: 1, ...police(theme.policeTexte) }}>{p.libelle}</Text>
+              <Interrupteur
+                theme={theme}
+                libelle={`Mentionner les convoqués : ${p.libelle}`}
+                valeur={p.ping}
+                desactive={occupe}
+                onChanger={v =>
+                  void agir('Ping', async () => {
+                    const r = await api.ping(p.type, v);
+                    setEtat(e => (e ? { ...e, pings: r.pings } : e));
+                    return `${p.libelle} : ${v ? 'mention activée' : 'sans mention'}.`;
+                  })
+                }
+                testID={`esport-bot-ping-${p.type}`}
+              />
+            </View>
+          ))}
+        </View>
+      ) : null}
+      {etat ? (
+        <View style={{ gap: 4 }} testID="esport-bot-comptes">
+          <Text style={{ color: theme.texte, fontWeight: '700', ...police(theme.policeTexte) }}>
+            Comptes Discord liés : {lies} / {etat.comptes.length}
+          </Text>
+          {etat.comptes.map(c => (
+            <Text key={c.compte} style={{ color: c.lie ? theme.texte : theme.attenue, ...police(theme.policeTexte) }} testID={`esport-bot-compte-${c.compte}`}>
+              {c.lie ? '✓' : '·'} {c.pseudo} ({c.role}){c.lie ? ` — ${c.discordNom ?? 'lié'}` : ' — pas lié'}
+            </Text>
+          ))}
+          <Text style={attenue}>Chacun lie son compte dans Mon profil › Lier mon Discord, puis tape /lier dans Discord.</Text>
+        </View>
+      ) : null}
+    </Panneau>
+  );
+}
+
 export function Discord({ theme, client, detail }: PropsModule) {
   const teamId = detail.team.id;
   const api = React.useMemo(() => apiDiscord(client, teamId), [client, teamId]);
@@ -133,11 +251,13 @@ export function Discord({ theme, client, detail }: PropsModule) {
   const w = etat?.webhook;
   return (
     <View style={{ gap: 16 }} testID="esport-discord">
-      <TitreSection theme={theme} titre="Discord" sous="Les événements de la team arrivent dans un salon Discord, par un webhook." />
+      <TitreSection theme={theme} titre="Discord" sous="Les événements de la team arrivent dans un salon Discord : par le bot (recommandé), sinon par un webhook." />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-discord" />
 
+      <BotDiscord theme={theme} client={client} teamId={teamId} />
+
       <Panneau theme={theme} testID="esport-discord-webhook">
-        <Intertitre theme={theme}>Webhook du salon</Intertitre>
+        <Intertitre theme={theme}>Webhook du salon (repli sans bot)</Intertitre>
         {w?.configure ? (
           <Text style={{ color: theme.texte, ...police(theme.policeTexte) }} testID="esport-discord-masque">
             Webhook enregistré : discord.com/api/webhooks/{w.masque}

@@ -32,6 +32,8 @@ import { SectionResumes } from './Resumes';
 import { ECRANS_MODULES, moduleAccessible } from './modules';
 import { AccueilPlanning, ReglagesPlanning } from './planning/AccueilPlanning';
 import { BoutonConfirme, Panneau, PastilleRole, Retours, TitreSection, styles, useAgir } from './commun';
+import { CodeAffiche } from './CodeLiaison';
+import { apiMonDiscord, type CodeLiaison, type MonDiscord } from '../discord/api';
 import { AvatarTeam, Badge, Carte, ESP, EtatVide, LARGEUR_CONTENU, MenuActions, Onglets, Squelette, TitreCarte, TYPO, attenue as styleAttenue, couleurTeam, texte as styleTexte, titre as styleTitreEsport, type EtatPresse } from './design';
 
 export type SectionTeam = 'accueil' | 'membres' | 'journal' | 'parametres' | `module:${string}`;
@@ -543,6 +545,73 @@ function Parametres({
   );
 }
 
+/**
+ * « Lier mon Discord » : un code à usage unique (10 min) à taper dans Discord
+ * (/lier code:XXXX) ; le bot pourra alors me mentionner quand je suis convoqué.
+ * Délier à tout moment. Rien ne s'affiche si le serveur ne connaît pas le bot.
+ */
+export function LierDiscord({ theme, client }: { theme: ThemeHub; client: ClientEsport }) {
+  const api = React.useMemo(() => apiMonDiscord(client), [client]);
+  const [etat, setEtat] = useState<MonDiscord | undefined>();
+  const [code, setCode] = useState<CodeLiaison | undefined>();
+  const { enCours, erreur, avis, agir } = useAgir();
+  const recharger = React.useCallback(async () => {
+    setEtat(await Promise.resolve().then(() => api.etat()).catch(() => undefined));
+  }, [api]);
+  useEffect(() => {
+    void recharger();
+  }, [recharger]);
+  if (!etat || (!etat.botDisponible && !etat.lie)) return null;
+  const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
+  return (
+    <View style={{ gap: 8, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 10 }} testID="esport-lier-discord">
+      <Text style={{ color: theme.texte, fontWeight: '700', ...police(theme.policeTexte) }}>Bot Discord</Text>
+      {etat.lie ? (
+        <Text style={{ color: theme.texte, ...police(theme.policeTexte) }} testID="esport-lier-discord-etat">
+          ✓ Discord lié{etat.discordNom ? ` : ${etat.discordNom}` : ''}. Le bot vous mentionne quand vous êtes convoqué.
+        </Text>
+      ) : (
+        <Text style={attenue}>Liez votre compte Discord : le bot vous mentionnera pour vos scrims et matchs, et vous répondrez d’un clic.</Text>
+      )}
+      {code && !etat.lie ? <CodeAffiche theme={theme} code={code} testID="esport-lier-discord-code" /> : null}
+      <View style={styles.ligne}>
+        <BoutonHub
+          theme={theme}
+          titre={etat.lie ? 'Lier un autre compte Discord' : 'Lier mon Discord'}
+          variante={etat.lie ? undefined : 'plein'}
+          desactive={Boolean(enCours) || !etat.botDisponible}
+          onPress={() =>
+            void agir('Code', async () => {
+              setCode(await api.code());
+              setEtat({ ...etat, lie: false });
+              return 'Tapez la commande affichée dans le serveur Discord de la team.';
+            })
+          }
+          testID="esport-lier-discord-bouton"
+        />
+        {etat.lie ? (
+          <BoutonHub
+            theme={theme}
+            titre="Délier mon Discord"
+            desactive={Boolean(enCours)}
+            onPress={() =>
+              void agir('Délier', async () => {
+                await api.delier();
+                await recharger();
+                return 'Discord délié.';
+              })
+            }
+            testID="esport-lier-discord-delier"
+          />
+        ) : (
+          <BoutonHub theme={theme} titre="J’ai tapé le code" desactive={Boolean(enCours) || !code} onPress={() => void agir('', recharger)} testID="esport-lier-discord-verifier" />
+        )}
+      </View>
+      <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-lier-discord" />
+    </View>
+  );
+}
+
 /** Profil Esport, mention des données, export et suppression (RGPD). */
 export function MonProfil({ theme, client, onExporter, onSupprime }: { theme: ThemeHub; client: ClientEsport; onExporter?(nom: string, contenu: string): Promise<boolean>; onSupprime?(): void }) {
   const [profil, setProfil] = useState<{ pseudo: string; riotId: string; discord: string } | undefined>();
@@ -558,6 +627,7 @@ export function MonProfil({ theme, client, onExporter, onSupprime }: { theme: Th
       <Champ theme={theme} libelle="Pseudo (obligatoire)" valeur={profil.pseudo} onChanger={pseudo => setProfil({ ...profil, pseudo })} maxLength={24} testID="esport-profil-pseudo" />
       <Champ theme={theme} libelle="Riot ID (facultatif, Pseudo#TAG)" valeur={profil.riotId} onChanger={riotId => setProfil({ ...profil, riotId })} maxLength={22} testID="esport-profil-riot" />
       <Champ theme={theme} libelle="Discord (facultatif)" valeur={profil.discord} onChanger={discord => setProfil({ ...profil, discord })} maxLength={32} testID="esport-profil-discord" />
+      <LierDiscord theme={theme} client={client} />
       <View style={styles.ligne}>
         <BoutonHub
           theme={theme}

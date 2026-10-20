@@ -749,6 +749,11 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       strats: (await q('SELECT team_id, titre, carte_nom, side, type, visibilite, cree_le FROM strats WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), titre: x.titre, carte: x.carte_nom, side: x.side, type: x.type, visibilite: x.visibilite, creeLe: x.cree_le })),
       playbook: (await q('SELECT team_id, titre, statut, cree_le FROM playbook_entrees WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), titre: x.titre, statut: x.statut, creeLe: x.cree_le })),
       abonnementsIcal: (await q('SELECT team_id, libelle, cree_le, dernier_acces_le, revoque_le FROM ical_jetons WHERE compte_id = ? ORDER BY cree_le')).map(j => ({ team: team(j.team_id), libelle: j.libelle, creeLe: j.cree_le, dernierAcces: j.dernier_acces_le, revoqueLe: j.revoque_le })),
+      // Bot Discord : liaison du compte (identifiant Discord public, jamais de code).
+      discord: await (async () => {
+        const l = await base.premier('SELECT discord_user_id, discord_nom, lie_le FROM discord_comptes WHERE compte_id = ?', [compte]);
+        return l ? { lie: true, discordUserId: l.discord_user_id, discordNom: l.discord_nom || null, lieLe: l.lie_le } : { lie: false };
+      })(),
       invitationsCreees: (await q('SELECT team_id, libelle, expire_le, utilisations, utilisations_max, cree_le FROM invitations WHERE cree_par = ? ORDER BY cree_le')).map(i => ({ team: team(i.team_id), libelle: i.libelle, expireLe: i.expire_le, utilisations: Number(i.utilisations), utilisationsMax: Number(i.utilisations_max), creeLe: i.cree_le })),
     };
   }
@@ -799,6 +804,9 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       // Ses demandes de compte en attente (avec l'adresse proposée) disparaissent.
       { sql: "DELETE FROM demandes_compte WHERE demandeur_id = ? AND statut = 'en_attente'", params: [compte] },
       { sql: 'DELETE FROM ical_jetons WHERE compte_id = ?', params: [compte] },
+      // Bot Discord : liaison du compte et codes en cours.
+      { sql: 'DELETE FROM discord_comptes WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM discord_codes WHERE compte_id = ?', params: [compte] },
       // Anonymisation : plus rien n'est attribué à ce compte.
       { sql: 'UPDATE taches SET assigne_id = NULL WHERE assigne_id = ?', params: [compte] },
       { sql: 'UPDATE objectifs SET proprietaire_id = NULL WHERE proprietaire_id = ?', params: [compte] },

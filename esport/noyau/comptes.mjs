@@ -323,6 +323,8 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       // Ses demandes de compte en attente (avec l'adresse proposée) disparaissent.
       { sql: "DELETE FROM demandes_compte WHERE demandeur_id = ? AND statut = 'en_attente'", params: [compte] },
       { sql: 'DELETE FROM ical_jetons WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM discord_comptes WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM discord_codes WHERE compte_id = ?', params: [compte] },
       // Anonymisation, comme « Supprimer mes données » : plus rien n'est attribué à ce compte.
       { sql: 'UPDATE taches SET assigne_id = NULL WHERE assigne_id = ?', params: [compte] },
       { sql: 'UPDATE objectifs SET proprietaire_id = NULL WHERE proprietaire_id = ?', params: [compte] },

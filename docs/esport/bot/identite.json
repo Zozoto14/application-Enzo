@@ -1,0 +1,9 @@
+{
+  "nom": "Esport HQ",
+  "description": "Le QG de ta team dans Discord : annonces des scrims, matchs et tournois, rappels J-1 et H-1, réponses Oui / Peut-être / Non en un clic, tâches, dispos et strats du playbook.",
+  "aPropos": "🎮 Bot de la team Esport · scrims, matchs, rappels et présences. /aide pour commencer, /lier pour relier ton compte.",
+  "couleurAccent": "#5B8CFF",
+  "police": "Manrope",
+  "avatar": "docs/esport/bot/avatar.png",
+  "banniere": "docs/esport/bot/banniere.png"
+}

@@ -18,7 +18,7 @@ export function kvMemoire() {
   return { donnees, get: async c => (donnees.has(c) ? donnees.get(c) : null), put: async (c, v) => void donnees.set(c, v), delete: async c => void donnees.delete(c) };
 }
 
-export async function banc({ creationTeams = 'fondateur', relaisAncien = false, sansStockage = false, fetchDiscord, cleDiscord, lienApp } = {}) {
+export async function banc({ creationTeams = 'fondateur', relaisAncien = false, sansStockage = false, fetchDiscord, cleDiscord, lienApp, discordBot, attenteDiffere } = {}) {
   const base = await baseSqliteMigree();
   const stockage = sansStockage ? undefined : stockageMemoire();
   const envRelais = { JETON: JETON_MAITRE, BOITE: kvMemoire() };
@@ -40,6 +40,8 @@ export async function banc({ creationTeams = 'fondateur', relaisAncien = false, 
     fetchDiscord: fetchDiscord ?? (async () => { throw new Error('réseau Discord interdit en test'); }),
     cleDiscord,
     lienApp,
+    discordBot,
+    attenteDiffere,
   });
   let ipCompteur = 0;
   async function appel(chemin, { methode = 'GET', jeton, corps, ip, type = 'application/json' } = {}) {
@@ -72,7 +74,7 @@ export async function banc({ creationTeams = 'fondateur', relaisAncien = false, 
   }
   /** Requête GET brute (lien signé d'un fichier) : rend la Response. */
   const brut = url => traiter(new Request(url));
-  return { base, stockage, envRelais, horloge, appel, envoyer, brut, session, jetonDeProfil: c => jetonDeProfil(JETON_MAITRE, c) };
+  return { base, stockage, envRelais, horloge, appel, envoyer, brut, session, traiter, jetonDeProfil: c => jetonDeProfil(JETON_MAITRE, c) };
 }
 
 /**

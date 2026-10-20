@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { chiffrerWebhook, dechiffrerWebhook, finDeWebhook, masquerWebhook, validerUrlWebhook } from '../noyau/discord/chiffrement.mjs';
 import { CLES_EVENEMENTS_DISCORD, EVENEMENTS_DISCORD, TYPES_DISCORD, clesPourType } from '../noyau/discord/catalogue.mjs';
 import { TYPES_EVENEMENTS } from '../noyau/evenements.mjs';
-import { construireCharge, lireRoleMention, nettoyerTexteDiscord, rendreModele, validerModele, variablesDuModele } from '../noyau/discord/messages.mjs';
+import { construireCharge, lireRoleMention, nettoyerTexteDiscord, rendreModele, texteCharge, validerModele, variablesDuModele } from '../noyau/discord/messages.mjs';
 import { formaterDelai, formaterInstant, posterWebhook } from '../noyau/discord/file.mjs';
 
 import { ID, JETON, URL_TEST } from './discord-aide.mjs';
@@ -136,22 +136,30 @@ test('mention de rôle : identifiant numérique seulement ; @everyone, @here, te
   }
 });
 
-test('charge Discord : sans rôle, aucune mention ne notifie ; avec rôle, seul ce rôle est autorisé', () => {
+test('charge Discord : un embed ; sans rôle, aucune mention ne notifie ; avec rôle, seul ce rôle est autorisé', () => {
   let c = construireCharge('Bonjour @everyone <@&111222333> <@42424>', { nomTeam: 'Les @everyone' });
   assert.deepEqual(c.allowed_mentions, { parse: [] });
-  assert.ok(!/@everyone/i.test(c.content) && !/<@/.test(c.content));
+  assert.equal(c.content, undefined);
+  const texte = texteCharge(c);
+  assert.ok(!/@everyone/i.test(texte) && !/<@/.test(texte), texte);
   assert.ok(!/@everyone/i.test(c.username));
+  assert.equal(c.embeds.length, 1);
   c = construireCharge('Match ce soir', { roleId: '987654321012345678' });
-  assert.equal(c.content, '<@&987654321012345678> Match ce soir');
+  assert.equal(c.content, '<@&987654321012345678>');
+  assert.match(c.embeds[0].description, /Match ce soir/);
   assert.deepEqual(c.allowed_mentions, { parse: [], roles: ['987654321012345678'] });
   // Un identifiant qui n’est pas numérique ne passe jamais (défense en profondeur, même si la base était altérée).
   c = construireCharge('x', { roleId: 'everyone' });
   assert.deepEqual(c.allowed_mentions, { parse: [] });
-  assert.ok(!c.content.includes('<@&'));
-  // Longueur : 2000 caractères au plus, mention comprise.
+  assert.ok(!texteCharge(c).includes('<@&'));
+  // Bot : utilisateurs listés un à un, jamais rien d’autre ; identifiants non numériques écartés.
+  c = construireCharge('Scrim', { utilisateurs: ['111111111111111111', 'everyone', '222222222222222222', '111111111111111111'] });
+  assert.equal(c.content, '<@111111111111111111> <@222222222222222222>');
+  assert.deepEqual(c.allowed_mentions, { parse: [], users: ['111111111111111111', '222222222222222222'] });
+  // Longueurs : limites de Discord.
   c = construireCharge('é'.repeat(5000), { roleId: '987654321012345678' });
-  assert.ok(c.content.length <= 2000);
-  assert.equal(construireCharge('   ').content, 'Notification Esport');
+  assert.ok(c.embeds[0].description.length <= 4096);
+  assert.equal(construireCharge('   ').embeds[0].description, 'Notification Esport');
 });
 
 // ------------------------------------------------------------------ Modèles et variables

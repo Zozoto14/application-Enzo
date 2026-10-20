@@ -21,6 +21,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LIMITES } from '../noyau/limites.mjs';
 import { banc, teamAvecMembres } from './aide.mjs';
+import { texteCharge } from '../noyau/discord/messages.mjs';
 import { URL_TEST } from './discord-aide.mjs';
 import { ASCENT } from './strats-aide.mjs';
 
@@ -110,6 +111,11 @@ const ROUTES_TEAM = [
   ['DELETE', '/discord/webhook', 'discord'],
   ['POST', '/discord/test', 'discord'],
   ['PUT', '/discord/parametres/event_created', 'discord'],
+  // Bot Discord : liaison du serveur, pings, qui est lié.
+  ['GET', '/discord/bot', 'discord'],
+  ['POST', '/discord/bot/code', 'discord'],
+  ['DELETE', '/discord/bot/serveur', 'discord'],
+  ['PUT', '/discord/bot/pings/scrim', 'discord'],
   // Review vidéo.
   ['GET', '/review', 'video_review'],
   ['POST', '/review', 'video_review'],
@@ -557,7 +563,7 @@ test('injection SQL : les filtres hostiles sont refusés ou traités comme du te
 
 test('fuites : rien de sensible dans le journal ni vers Discord (réunion staff, strat privée)', async () => {
   const envois = [];
-  const { b, A } = await preparer({ fetchDiscord: async (url, init) => (envois.push(JSON.parse(init.body).content), new Response(null, { status: 204 })) });
+  const { b, A } = await preparer({ fetchDiscord: async (url, init) => (envois.push(texteCharge(JSON.parse(init.body))), new Response(null, { status: 204 })) });
   const own = A.sessions.own12345;
   await b.appel(`/teams/${A.teamId}/discord/webhook`, { methode: 'PUT', jeton: own, corps: { url: URL_TEST } });
   for (const cle of ['summary_submitted', 'strat_created']) await b.appel(`/teams/${A.teamId}/discord/parametres/${cle}`, { methode: 'PUT', jeton: own, corps: { actif: true } });

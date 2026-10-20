@@ -137,7 +137,7 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
     const url = await dechiffrerWebhook(cle, teamId, w.url_chiffree);
     if (!url) throw echec(409, 'webhook-illisible', 'L’adresse enregistrée est illisible (clé de chiffrement changée) : saisissez-la à nouveau.');
     await base.executer('UPDATE discord_webhooks SET dernier_test_le = ? WHERE team_id = ?', [iso(t), teamId]);
-    const r = await posterWebhook(fetchDiscord, url, construireCharge(`Message de test : le webhook de ${ctx.team.nom} fonctionne. Les notifications de l’Esport arriveront ici.`, { nomTeam: ctx.team.nom }));
+    const r = await posterWebhook(fetchDiscord, url, construireCharge(`Message de test : le webhook de ${ctx.team.nom} fonctionne. Les notifications de l’Esport arriveront ici.`, { nomTeam: ctx.team.nom, titre: 'Message de test', cle: 'test' }));
     if (!r.ok) {
       await base.executer('UPDATE discord_webhooks SET dernier_echec_le = ?, invalide_le = CASE WHEN ? = 1 THEN ? ELSE invalide_le END WHERE team_id = ?', [iso(t), r.webhookPerdu ? 1 : 0, iso(t), teamId]);
       if (r.statut === 429) {

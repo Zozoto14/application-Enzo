@@ -13,6 +13,8 @@
 
 import { servicesDiscord, routerDiscord } from './discord/routes.mjs';
 import { traiterFile } from './discord/file.mjs';
+import { creerBot } from './discord/bot/interactions.mjs';
+import { routesLiaisons, servicesLiaisons } from './discord/bot/liaisons.mjs';
 import { distribuer } from './evenements.mjs';
 import { routePublique, routesPlanning } from './planning/routes.mjs';
 import { servicesPlanning } from './planning/service.mjs';
@@ -96,7 +98,7 @@ const jetonPorteur = requete => (requete.headers.get('Authorization') ?? '').rep
  *  - `cleSession` : secret CLE_ESPORT ; `verifierJeton(jeton, ip)` : voir authentification.mjs ;
  *  - `creationTeams` : « fondateur » ou « tous » ; `maintenant` : horloge (tests).
  */
-export function creerApi({ base, stockage, cleSession, verifierJeton, creationTeams = 'fondateur', maintenant = () => Date.now(), cleDiscord, fetchDiscord, lienApp = '' }) {
+export function creerApi({ base, stockage, cleSession, verifierJeton, creationTeams = 'fondateur', maintenant = () => Date.now(), cleDiscord, fetchDiscord, lienApp = '', discordBot = {}, attenteDiffere }) {
   const s = servicesEsport({ base, maintenant, creationTeams });
   const s3 = servicesPhase3({ base, stockage, cleSession, maintenant, socle: s });
   const p = servicesPlanning({ base, maintenant, noyau: s });
@@ -115,6 +117,20 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
   const dm = servicesDemandes({ base, maintenant, noyau: s });
   const cp = servicesComptes({ base, maintenant, noyau: s, demandes: dm });
   const tb = servicesTableau({ base, maintenant, noyau: s });
+  // Bot Discord (interactions HTTP) : DISCORD_APPLICATION_ID et DISCORD_PUBLIC_KEY (variables), DISCORD_BOT_TOKEN (secret).
+  const configBot = { applicationId: discordBot.applicationId || '', publicKey: discordBot.publicKey || '' };
+  const jetonBot = discordBot.jetonBot || undefined;
+  const lb = servicesLiaisons({ base, maintenant, noyau: s, config: configBot });
+  const bot = creerBot({
+    base,
+    maintenant,
+    services: { noyau: s, planning: p, resumes: s3.resumes, objectifs: s3.objectifs, playbook: pb, liaisons: lb },
+    config: configBot,
+    fetch: envoiDiscord,
+    lienApp,
+    limite,
+    attenteDiffere,
+  });
 
   async function acteurDeSession(requete) {
     if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
@@ -130,7 +146,7 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     const ip = adresseIp(requete);
 
     if (chemin === '/sante' && m === 'GET') {
-      return { ok: true, service: 'esport', version: VERSION_ESPORT, stockage: Boolean(stockage), session: Boolean(cleSession), heure: maintenant() };
+      return { ok: true, service: 'esport', version: VERSION_ESPORT, stockage: Boolean(stockage), session: Boolean(cleSession), bot: Boolean(configBot.applicationId && configBot.publicKey && jetonBot), heure: maintenant() };
     }
     if (chemin === '/catalogue' && m === 'GET') return catalogue;
     if (chemin.startsWith('/fichiers/') && m === 'GET') return routeFichierSigne(s3.resumes, url);
@@ -162,6 +178,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       }
       if (m === 'DELETE') return s.supprimerMesDonnees(acteur);
     }
+    const liaisonsDiscord = await routesLiaisons(lb, { methode: m, chemin, acteur, lireCorps: () => lireCorps(requete), limite });
+    if (liaisonsDiscord !== undefined) return liaisonsDiscord;
     if (chemin === '/moi/export' && m === 'GET') {
       await limite('export', acteur.compte);
       return s.exporterMesDonnees(acteur);
@@ -296,7 +314,9 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     if (requete.method === 'OPTIONS') return new Response(null, { status: 204, headers: ENTETES });
     let reponse;
     try {
-      const resultat = await router(requete);
+      const chemin = new URL(requete.url).pathname.replace(/^\/api\/esport(?=\/|$)/, '').replace(/\/+$/, '');
+      // Discord appelle cette adresse (signature Ed25519, pas de session) : le bot répond lui-même.
+      const resultat = chemin === '/discord/interactions' && requete.method === 'POST' ? await bot.traiter(requete, { attendre }) : await router(requete);
       // Fichiers (iCal, CSV) : réponse déjà faite par la route.
       reponse = resultat instanceof Response ? resultat : reponseJson(resultat);
     } catch (e) {
@@ -305,7 +325,7 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     if (!['GET', 'HEAD', 'OPTIONS'].includes(requete.method)) {
       // Distribution du bus, puis envoi immédiat des messages Discord mis en file (le cron reprend les réessais).
       const travail = distribuer(base, { maintenant: maintenant() })
-        .then(() => traiterFile(base, { cle: secretDiscord, fetch: envoiDiscord, maintenant: maintenant(), lienApp }))
+        .then(() => traiterFile(base, { cle: secretDiscord, fetch: envoiDiscord, maintenant: maintenant(), lienApp, jetonBot }))
         .catch(e => console.error('[esport] distribution', e));
       if (attendre) attendre(travail);
       else await travail;

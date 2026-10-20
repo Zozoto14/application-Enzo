@@ -84,6 +84,69 @@ export function apiDiscord(client: ClientEsport, teamId: string) {
   };
 }
 
+// ------------------------------------------------------------------ Bot Discord (interactions)
+
+export interface PingBot {
+  type: string;
+  libelle: string;
+  ping: boolean;
+}
+
+export interface CompteLieBot {
+  compte: string;
+  pseudo: string;
+  role: string;
+  lie: boolean;
+  discordNom: string | null;
+  lieLe: string | null;
+}
+
+export interface EtatBot {
+  /** Le serveur Esport a l'Application ID et la clé publique du bot. */
+  disponible: boolean;
+  /** Lien d'invitation du bot sur un serveur (scopes bot + applications.commands). */
+  invitation: string | null;
+  serveur: { serveur: string; salon: string; salonNom: string | null; lieLe: string; majLe: string; dernierSucces: string | null; dernierEchec: string | null; invalide: boolean } | null;
+  pings: PingBot[];
+  comptes: CompteLieBot[];
+}
+
+export interface CodeLiaison {
+  code: string;
+  expire: string;
+  commande: string;
+}
+
+export interface MonDiscord {
+  botDisponible: boolean;
+  lie: boolean;
+  discordNom: string | null;
+  lieLe: string | null;
+}
+
+export function apiBot(client: ClientEsport, teamId: string) {
+  const base = `/teams/${encodeURIComponent(teamId)}/discord/bot`;
+  return {
+    etat: () => client.requete<EtatBot>(base),
+    code: () => client.requete<CodeLiaison>(`${base}/code`, 'POST', {}),
+    delier: async () => {
+      await client.requete(`${base}/serveur`, 'DELETE');
+    },
+    ping: (type: string, ping: boolean) => client.requete<{ pings: PingBot[] }>(`${base}/pings/${encodeURIComponent(type)}`, 'PUT', { ping }),
+  };
+}
+
+/** Mon compte Discord (bouton « Lier mon Discord » du profil). */
+export function apiMonDiscord(client: ClientEsport) {
+  return {
+    etat: () => client.requete<MonDiscord>('/moi/discord'),
+    code: () => client.requete<CodeLiaison>('/moi/discord/code', 'POST', {}),
+    delier: async () => {
+      await client.requete('/moi/discord', 'DELETE');
+    },
+  };
+}
+
 /** Permission qui ouvre l'écran Discord. */
 export const PERMISSION_DISCORD = 'discord.manage';
 
@@ -92,6 +155,8 @@ export const LIBELLES_DISCORD: Record<string, string> = {
   event_created: 'Nouvel événement',
   reminder_d1: 'Rappel J-1',
   reminder_h1: 'Rappel H-1',
+  event_now: 'C’est maintenant',
+  rsvp_relance: 'Relance des convoqués',
   rsvp_missing: 'RSVP manquant',
   summary_published: 'Résumé publié',
   summary_submitted: 'Nouveau dépôt de réunion',

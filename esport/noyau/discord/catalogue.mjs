@@ -55,14 +55,34 @@ export const EVENEMENTS_DISCORD = [
     variables: variables({ titre: 'Titre de l’événement', type: 'Type (Scrim, Match…)', date: 'Date (jour et mois)', heure: 'Heure (fuseau de la team)', delai: 'Délai (« dans 45 min »)', convoques: 'Pseudos des convoqués' }),
   },
   {
+    cle: 'event_now',
+    libelle: 'C’est maintenant',
+    description: 'Au début de l’événement (bot : les convoqués liés sont mentionnés).',
+    types: ['event.starting'],
+    modules: ['planning'],
+    defaut: true,
+    modele: '**C’est parti** : {titre} ({type}) commence maintenant.',
+    variables: variables({ titre: 'Titre de l’événement', type: 'Type (Scrim, Match…)', date: 'Date (jour et mois)', heure: 'Heure (fuseau de la team)', convoques: 'Pseudos des convoqués' }),
+  },
+  {
+    cle: 'rsvp_relance',
+    libelle: 'Relance des convoqués (/relancer)',
+    description: 'Un membre du staff relance, depuis Discord, les convoqués qui n’ont pas répondu (un seul message, groupé).',
+    types: ['attendance.relance'],
+    modules: ['planning', 'attendance'],
+    defaut: true,
+    modele: 'Pensez à répondre pour {titre} ({date} à {heure}) : {membre}.',
+    variables: variables({ membre: 'Pseudos des convoqués sans réponse', titre: 'Titre de l’événement', type: 'Type (Scrim, Match…)', date: 'Date (jour et mois)', heure: 'Heure (fuseau de la team)' }),
+  },
+  {
     cle: 'rsvp_missing',
     libelle: 'RSVP manquant',
-    description: 'Un joueur n’a pas répondu à un événement qui approche (un message par joueur).',
+    description: 'Des convoqués n’ont pas répondu à un événement qui approche (un seul message, groupé).',
     types: ['attendance.reminder'],
     modules: ['planning', 'attendance'],
     defaut: false,
-    modele: '{membre} n’a pas encore répondu pour {titre} ({date} à {heure}).',
-    variables: variables({ membre: 'Pseudo du joueur', titre: 'Titre de l’événement', type: 'Type (Scrim, Match…)', date: 'Date (jour et mois)', heure: 'Heure (fuseau de la team)' }),
+    modele: '{membre} : pas encore de réponse pour {titre} ({date} à {heure}).',
+    variables: variables({ membre: 'Pseudos des convoqués sans réponse', titre: 'Titre de l’événement', type: 'Type (Scrim, Match…)', date: 'Date (jour et mois)', heure: 'Heure (fuseau de la team)' }),
   },
   {
     cle: 'summary_published',
@@ -179,6 +199,15 @@ export const TYPES_DISCORD = [
   'discord.test_sent',
   'discord.delivery_failed',
   'discord.delivery_abandoned',
+  // Bot Discord (migration 0011) : liaisons, commandes, début d'événement, relance.
+  'event.starting',
+  'attendance.relance',
+  'discord.server_linked',
+  'discord.server_unlinked',
+  'discord.account_linked',
+  'discord.account_unlinked',
+  'discord.pings_changed',
+  'discord.command_used',
 ];
 
 /** Événement de domaine → types de messages Discord qu'il peut déclencher. */
@@ -207,3 +236,6 @@ export const EXEMPLES = {
   surCarte: ' sur Ascent',
   lien: 'https://app.exemple',
 };
+
+/** Messages qui montrent une occurrence du planning (embed riche, boutons RSVP et mentions avec le bot). */
+export const CLES_OCCURRENCE = ['event_created', 'reminder_d1', 'reminder_h1', 'event_now', 'rsvp_missing', 'rsvp_relance'];

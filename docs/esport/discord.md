@@ -1,5 +1,11 @@
 # Esport : notifications Discord
 
+> **Nouveau : le bot Discord** ([bot-discord.md](bot-discord.md)) mentionne les joueurs convoqués, ajoute des
+> boutons Oui / Peut-être / Non et répond à des commandes. Quand un serveur est lié par le bot, tous les messages
+> passent par lui ; le webhook ci-dessous reste le **repli** sans bot. Les messages sont désormais de vrais
+> **embeds** (couleur et emoji du type d'événement, horodatages, lien vers l'app). Les relances « RSVP manquant »
+> sont groupées en un seul message par événement.
+
 Chaque team peut envoyer des messages dans **un salon Discord** : nouvel événement au planning, rappels,
 résumé publié, tâche assignée… Le serveur Esport poste sur un **webhook** (une adresse secrète fournie par
 Discord). Rien à installer côté Discord, pas de bot.
@@ -47,7 +53,9 @@ mentionner** (facultatif).
 | Nouvel événement au planning | un scrim, match, entraînement… est ajouté | oui |
 | Rappel J-1 | environ 24 h avant le début, pour les convoqués (nommés par `{convoques}`) | oui |
 | Rappel H-1 | environ 1 h avant le début, pour les convoqués | oui |
-| RSVP manquant | un convoqué n'a pas répondu à un événement qui approche (un message par convoqué) | non |
+| C'est maintenant | au début de l'événement, pour les convoqués | oui |
+| Relance des convoqués | un membre du staff tape `/relancer` (bot) : un seul message | oui |
+| RSVP manquant | des convoqués n'ont pas répondu à un événement qui approche (un seul message, groupé) | non |
 | Résumé publié | le PDF d'un résumé de réunion est publié | oui |
 | Nouveau dépôt de réunion (staff) | un joueur dépose une réunion à résumer | non |
 | Tâche assignée | une tâche est assignée à quelqu'un | oui |

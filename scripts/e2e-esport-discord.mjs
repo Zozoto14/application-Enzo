@@ -177,7 +177,7 @@ try {
   await pc.getByTestId('esport-discord-test').click();
   await pc.getByTestId('esport-discord-avis').waitFor({ timeout: 20_000 });
   verifier(await attendre(() => recus.length === 1), 'le faux Discord a reçu le message de test');
-  verifier(recus[0]?.chemin === `/api/webhooks/${ID_FAUX}/${JETON_FAUX}` && /Message de test/.test(recus[0]?.corps.content ?? ''), 'message de test au bon webhook');
+  verifier(recus[0]?.chemin === `/api/webhooks/${ID_FAUX}/${JETON_FAUX}` && /Message de test/.test(JSON.stringify(recus[0]?.corps.embeds ?? '')), 'message de test au bon webhook');
   await capture(pc, '02-pc-discord-test-envoye');
 
   // Modèle et rôle de « Nouvel événement au planning ».
@@ -204,8 +204,10 @@ try {
   verifier(ev.statut === 200, 'événement créé');
   verifier(await attendre(() => recus.length === 2), 'le faux Discord a reçu le message de l’événement');
   const m = recus[1]?.corps;
-  verifier(Boolean(m) && m.content.startsWith(`<@&${ROLE}> Nouveau : Scrim`) && /à 20:30$/.test(m.content), 'modèle personnalisé et mention du rôle configuré');
-  verifier(!/@everyone/.test(m?.content ?? ''), '« @everyone » du titre neutralisé');
+  const description = m?.embeds?.[0]?.description ?? '';
+  verifier(Boolean(m) && m.content === `<@&${ROLE}>` && description.startsWith('Nouveau : Scrim') && /à 20:30$/.test(description), 'embed avec le modèle personnalisé, mention du rôle configuré');
+  verifier(!/@everyone/.test(JSON.stringify(m ?? {})), '« @everyone » du titre neutralisé');
+  verifier(m?.embeds?.[0]?.color === 0x7c3aed && /^⚔️ Scrim/.test(m?.embeds?.[0]?.title ?? ''), 'embed : couleur et emoji du scrim');
   verifier(JSON.stringify(m?.allowed_mentions) === JSON.stringify({ parse: [], roles: [ROLE] }), 'seule la mention du rôle est autorisée');
 
   // ================================================================ Discord en panne

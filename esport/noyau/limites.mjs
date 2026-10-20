@@ -31,6 +31,12 @@ export const LIMITES = {
   acceptation_ip: { max: 30, fenetreS: 3600 },
   // Exports RGPD et exports CSV : par compte.
   export: { max: 30, fenetreS: 3600 },
+  // Bot Discord : codes de liaison demandés (par compte), codes tapés dans Discord (par utilisateur
+  // Discord : anti-force brute), commandes (par utilisateur Discord), relances (par événement).
+  discord_code: { max: 20, fenetreS: 3600 },
+  discord_lier: { max: 10, fenetreS: 600 },
+  discord_commande: { max: 40, fenetreS: 60 },
+  discord_relance: { max: 3, fenetreS: 3600 },
 };
 
 /**

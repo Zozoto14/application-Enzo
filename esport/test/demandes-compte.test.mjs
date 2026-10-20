@@ -9,6 +9,7 @@
  *    close, adresse effacée) ou la refuse ; le demandeur suit le statut ;
  *  - la permission ajoute aussi un compte qui a déjà un profil Esport.
  */
+import { texteCharge } from '../noyau/discord/messages.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { traiterFile } from '../noyau/discord/file.mjs';
@@ -20,7 +21,7 @@ const EMAIL = 'noa@exemple.fr';
 async function preparer() {
   const appels = [];
   const fetchDiscord = async (url, init) => {
-    appels.push(JSON.parse(init.body).content);
+    appels.push(texteCharge(JSON.parse(init.body)));
     return new Response(null, { status: 204 });
   };
   const b = await banc({ fetchDiscord });

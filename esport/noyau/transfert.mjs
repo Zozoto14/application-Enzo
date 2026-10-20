@@ -58,6 +58,13 @@ export const TABLES = [
   ['playbook_entrees', 'id'],
   // Migration 0009 : demandes de compte.
   ['demandes_compte', 'id'],
+  // Bot Discord (migration 0011) : identifiants Discord publics, empreintes des codes.
+  ['discord_serveurs', 'team_id'],
+  ['discord_comptes', 'compte_id'],
+  ['discord_codes', 'code_hash'],
+  ['discord_bot_pings', 'team_id, type_evenement'],
+  ['discord_annonces', 'evenement_id, occurrence'],
+  ['discord_debuts', 'evenement_id, occurrence'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

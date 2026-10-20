@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Avatar du bot Esport : fond nuit, emblème losange (le ◆ de l'app), réticule, accent #5B8CFF → violet scrim. -->
+  <defs>
+    <radialGradient id="fond" cx="50%" cy="38%" r="75%">
+      <stop offset="0" stop-color="#1b2550"/>
+      <stop offset="0.55" stop-color="#0f1630"/>
+      <stop offset="1" stop-color="#080c1c"/>
+    </radialGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7aa2ff"/>
+      <stop offset="0.5" stop-color="#5b8cff"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <filter id="halo" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="28"/>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#fond)"/>
+  <!-- Grille discrète -->
+  <g stroke="#5b8cff" stroke-opacity="0.07" stroke-width="2">
+    <path d="M0 256H1024M0 512H1024M0 768H1024M256 0V1024M512 0V1024M768 0V1024"/>
+  </g>
+  <!-- Halo -->
+  <path d="M512 196 L828 512 L512 828 L196 512 Z" fill="#5b8cff" opacity="0.35" filter="url(#halo)"/>
+  <!-- Losange extérieur -->
+  <path d="M512 176 L848 512 L512 848 L176 512 Z" fill="none" stroke="url(#accent)" stroke-width="34" stroke-linejoin="round"/>
+  <!-- Losange intérieur plein -->
+  <path d="M512 300 L724 512 L512 724 L300 512 Z" fill="url(#accent)"/>
+  <!-- Chevron « E » / flèche d'attaque -->
+  <path d="M452 420 L544 512 L452 604" fill="none" stroke="#ffffff" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M572 604 H628" stroke="#ffffff" stroke-width="44" stroke-linecap="round"/>
+  <!-- Réticule -->
+  <g stroke="#e6ecff" stroke-width="18" stroke-linecap="round" opacity="0.9">
+    <path d="M512 88 V138 M512 886 V936 M88 512 H138 M886 512 H936"/>
+  </g>
+</svg>

@@ -13,9 +13,9 @@
  * de « J-1 » qui ferait doublon avec H-1).
  *
  * Seuls les CONVOQUÉS sont rappelés : leurs pseudos remplissent la variable
- * {convoques} du message. Discord ne permet ici qu'une mention de RÔLE (pas de
- * mention par personne, faute d'identifiant Discord des membres) : la mention
- * configurée reste celle de la team ; le message nomme les convoqués.
+ * {convoques} du message. Par le webhook, seule la mention de RÔLE configurée
+ * sonne et le message nomme les convoqués ; par le bot (serveur lié), chaque
+ * convoqué LIÉ est mentionné individuellement (file.mjs, convoques.mjs).
  */
 
 import { evenement } from '../evenements.mjs';
@@ -25,15 +25,21 @@ import { evenementDiscord } from './catalogue.mjs';
 import { modulesActifs, reglageEffectif } from './file.mjs';
 
 const HEURE = 3_600_000;
+const MINUTE = 60_000;
+
+/** Teams qui ont un webhook OU un serveur lié par le bot. */
+async function teamsDiscord(base) {
+  return base.tous(
+    `SELECT t.id FROM teams t
+      WHERE t.supprimee_le IS NULL AND t.archivee_le IS NULL
+        AND (t.id IN (SELECT team_id FROM discord_webhooks) OR t.id IN (SELECT team_id FROM discord_serveurs))`,
+    [],
+  );
+}
 
 /** Rend le nombre de rappels publiés. */
 export async function rappelsDiscord(base, { maintenant = Date.now(), limite = 200 } = {}) {
-  const teams = await base.tous(
-    `SELECT t.id FROM teams t
-       JOIN discord_webhooks w ON w.team_id = t.id
-      WHERE t.supprimee_le IS NULL AND t.archivee_le IS NULL`,
-    [],
-  );
+  const teams = await teamsDiscord(base);
   const s = servicesPlanning({ base, maintenant: () => maintenant, noyau: { contexteTeam: null, exiger: null } });
   let publies = 0;
   for (const { id: teamId } of teams) {
@@ -72,6 +78,44 @@ export async function rappelsDiscord(base, { maintenant = Date.now(), limite = 2
         }
         if (publies >= limite) return publies;
       }
+    }
+  }
+  return publies;
+}
+
+/**
+ * « C'est maintenant » (cron) : publie `event.starting` pour les occurrences qui
+ * commencent dans la fenêtre [maintenant − 10 min, maintenant + 5 min] (15 min,
+ * le pas du cron : chaque début est vu une fois). Une seule fois par occurrence
+ * (`discord_debuts`). Rend le nombre d'événements publiés.
+ */
+export async function debutsDiscord(base, { maintenant = Date.now(), limite = 200 } = {}) {
+  const s = servicesPlanning({ base, maintenant: () => maintenant, noyau: { contexteTeam: null, exiger: null } });
+  let publies = 0;
+  for (const { id: teamId } of await teamsDiscord(base)) {
+    const actifs = await modulesActifs(base, teamId);
+    if (!actifs.has('discord') || !actifs.has('planning')) continue;
+    const ligne = await base.premier("SELECT cle, actif, modele, role_mention FROM discord_notification_settings WHERE team_id = ? AND cle = 'event_now'", [teamId]);
+    if (!reglageEffectif(evenementDiscord('event_now'), ligne).actif) continue;
+    const proches = (await s.occurrencesTeam(teamId, maintenant - 10 * MINUTE, maintenant + 5 * MINUTE + 1)).filter(({ o }) => o.debut > maintenant - 10 * MINUTE && o.debut <= maintenant + 5 * MINUTE);
+    for (const { ev, o } of proches) {
+      try {
+        await base.lot([
+          { sql: 'INSERT INTO discord_debuts (evenement_id, occurrence, team_id, cree_le) VALUES (?, ?, ?, ?)', params: [ev.id, o.cle, teamId, iso(maintenant)] },
+          evenement('event.starting', {
+            teamId,
+            acteur: null,
+            entiteType: 'evenement',
+            entiteId: ev.id,
+            charge: { evenementId: ev.id, occurrence: o.cle, titre: o.titre ?? ev.titre, type: ev.type, debut: iso(o.debut) },
+            maintenant,
+          }),
+        ]);
+        publies++;
+      } catch (e) {
+        if (!/UNIQUE|PRIMARY|constraint/i.test(String(e?.message ?? e))) throw e;
+      }
+      if (publies >= limite) return publies;
     }
   }
   return publies;

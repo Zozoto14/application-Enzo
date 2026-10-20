@@ -15,6 +15,11 @@ name: Esport (Worker)
 
 on:
   workflow_dispatch:
+    inputs:
+      identite_bot:
+        description: 'Bot Discord : mettre à jour l’avatar, la bannière et le « À propos » (docs/esport/bot/)'
+        type: boolean
+        default: false
 
 concurrency:
   group: esport-worker
@@ -38,6 +43,11 @@ jobs:
       ESPORT_URL: ${{ vars.ESPORT_URL }}
       # Facultatif : « tous » ouvre la création de teams à tout compte relié (défaut : Fondateur seul).
       ESPORT_CREATION_TEAMS: ${{ vars.ESPORT_CREATION_TEAMS }}
+      # Facultatif : bot Discord (docs/esport/bot-discord.md). Identifiant et clé publique : variables
+      # (pas des secrets) ; le jeton du bot : SECRET, posé sur le Worker, jamais dans le dépôt.
+      DISCORD_APPLICATION_ID: ${{ vars.DISCORD_APPLICATION_ID }}
+      DISCORD_PUBLIC_KEY: ${{ vars.DISCORD_PUBLIC_KEY }}
+      DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -50,6 +60,14 @@ jobs:
           fi
           if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "::error::Secret CLOUDFLARE_ACCOUNT_ID absent : GitHub > Settings > Secrets and variables > Actions > New repository secret (identifiant du compte, visible sur dash.cloudflare.com > Workers & Pages, colonne de droite)."
+            manque=1
+          fi
+          if [ -n "$DISCORD_APPLICATION_ID" ] && ! printf '%s' "$DISCORD_APPLICATION_ID" | grep -Eq '^[0-9]{5,25}$'; then
+            echo "::error::DISCORD_APPLICATION_ID doit être l'« Application ID » (chiffres seulement), copié sur discord.com/developers > votre application > General Information."
+            manque=1
+          fi
+          if [ -n "$DISCORD_PUBLIC_KEY" ] && ! printf '%s' "$DISCORD_PUBLIC_KEY" | grep -Eq '^[0-9a-fA-F]{64}$'; then
+            echo "::error::DISCORD_PUBLIC_KEY doit être la « Public Key » (64 caractères 0-9 a-f), sur discord.com/developers > votre application > General Information."
             manque=1
           fi
           if [ -n "$ESPORT_D1_ID" ] && ! printf '%s' "$ESPORT_D1_ID" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
@@ -94,7 +112,12 @@ jobs:
           if [ "$ESPORT_CREATION_TEAMS" = "tous" ]; then
             sed -i 's/^CREATION_TEAMS = "fondateur"/CREATION_TEAMS = "tous"/' esport/wrangler.ci.toml
           fi
-          if grep -Eiq 'CLE_ESPORT *=|JETON *=|webhook' <(grep -v '^#' esport/wrangler.ci.toml); then
+          # Bot Discord : identifiant et clé PUBLIQUE en variables du Worker (le jeton reste un secret).
+          if [ -n "$DISCORD_APPLICATION_ID" ] && [ -n "$DISCORD_PUBLIC_KEY" ]; then
+            printf 'DISCORD_APPLICATION_ID = "%s"\nDISCORD_PUBLIC_KEY = "%s"\n' "$DISCORD_APPLICATION_ID" "$DISCORD_PUBLIC_KEY" >> esport/wrangler.ci.toml
+            echo "Bot Discord : variables DISCORD_APPLICATION_ID et DISCORD_PUBLIC_KEY ajoutées."
+          fi
+          if grep -Eiq 'CLE_ESPORT *=|JETON *=|TOKEN *=|webhook' <(grep -v '^#' esport/wrangler.ci.toml); then
             echo "::error::La configuration ne doit contenir aucun secret."
             exit 1
           fi
@@ -143,6 +166,32 @@ jobs:
             openssl rand -hex 32 | npx --yes wrangler@4 secret put CLE_ESPORT --config esport/wrangler.ci.toml > /dev/null
             echo "CLE_ESPORT : créée et posée sur le Worker."
           fi
+
+      - name: "Bot Discord (facultatif) : jeton du bot sur le Worker"
+        run: |
+          if [ -z "$DISCORD_BOT_TOKEN" ]; then
+            echo "Bot Discord : secret DISCORD_BOT_TOKEN absent, étape sautée (docs/esport/bot-discord.md)."
+            exit 0
+          fi
+          # Envoyé directement au Worker : jamais affiché, jamais écrit dans le dépôt.
+          printf '%s' "$DISCORD_BOT_TOKEN" | npx --yes wrangler@4 secret put DISCORD_BOT_TOKEN --config esport/wrangler.ci.toml > /dev/null
+          echo "Bot Discord : jeton posé sur le Worker."
+
+      - name: "Bot Discord (facultatif) : commandes, adresse des interactions, identité"
+        env:
+          IDENTITE_BOT: ${{ inputs.identite_bot }}
+        run: |
+          if [ -z "$DISCORD_BOT_TOKEN" ] || [ -z "$DISCORD_APPLICATION_ID" ] || [ -z "$DISCORD_PUBLIC_KEY" ]; then
+            echo "Bot Discord : non configuré (DISCORD_APPLICATION_ID, DISCORD_PUBLIC_KEY, DISCORD_BOT_TOKEN), étape sautée."
+            exit 0
+          fi
+          options=""
+          if [ -n "$ESPORT_URL" ]; then options="--adresse ${ESPORT_URL%/}"; fi
+          if [ "$IDENTITE_BOT" = "true" ]; then options="$options --identite"; fi
+          # Discord vérifie l'adresse des interactions en appelant le Worker (signature) : laisser le
+          # temps au déploiement de se propager.
+          sleep 15
+          node esport/outils/discord-commandes.mjs $options || echo "::warning::Bot Discord : enregistrement incomplet (voir ci-dessus). Les commandes peuvent être réenregistrées en relançant ce workflow."
 
       - name: Test de santé
         run: |

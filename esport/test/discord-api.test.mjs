@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { ESSAIS_MAX, traiterFile } from '../noyau/discord/file.mjs';
+import { texteCharge } from '../noyau/discord/messages.mjs';
 import { rappelsDiscord } from '../noyau/discord/rappels.mjs';
 import { distribuer } from '../noyau/evenements.mjs';
 import { banc, CLE, teamAvecMembres } from './aide.mjs';
@@ -34,7 +35,7 @@ function fauxDiscord() {
     if (r instanceof Error) throw r;
     return new Response(r.corps === undefined ? null : JSON.stringify(r.corps), { status: r.statut, headers: r.entetes ?? {} });
   };
-  return { appels, programme, fetch, contenus: () => appels.map(a => a.corps.content) };
+  return { appels, programme, fetch, contenus: () => appels.map(a => texteCharge(a.corps)) };
 }
 
 async function preparer({ discord = fauxDiscord(), ...optionsTeam } = {}) {
@@ -139,7 +140,9 @@ test('message de test : envoyé tout de suite au webhook, sans mention ; erreurs
   assert.equal(r.statut, 200, JSON.stringify(r.corps));
   assert.equal(p.discord.appels.length, 1);
   assert.equal(p.discord.appels[0].url, URL_TEST);
-  assert.match(p.discord.appels[0].corps.content, /Message de test.*Team Alpha/);
+  assert.match(texteCharge(p.discord.appels[0].corps), /Message de test.*Team Alpha/);
+  assert.equal(p.discord.appels[0].corps.content, undefined, 'sans rôle : aucun texte qui mentionne');
+  assert.equal(p.discord.appels[0].corps.embeds.length, 1, 'un embed');
   assert.deepEqual(p.discord.appels[0].corps.allowed_mentions, { parse: [] });
 
   // Pas de rafale de tests.
@@ -186,7 +189,7 @@ test('réglages : un type de message par événement du plan, valeurs par défau
   const { parametres } = (await p.api(p.d, p.s.max12345)).corps;
   assert.deepEqual(
     parametres.map(x => x.cle),
-    ['event_created', 'reminder_d1', 'reminder_h1', 'rsvp_missing', 'summary_published', 'summary_submitted', 'task_assigned', 'task_due', 'member_joined', 'account_requested', 'role_changed', 'review_created', 'strat_created', 'playbook_validated'],
+    ['event_created', 'reminder_d1', 'reminder_h1', 'event_now', 'rsvp_relance', 'rsvp_missing', 'summary_published', 'summary_submitted', 'task_assigned', 'task_due', 'member_joined', 'account_requested', 'role_changed', 'review_created', 'strat_created', 'playbook_validated'],
   );
   const creation = parametres.find(x => x.cle === 'event_created');
   assert.deepEqual([creation.actif, creation.personnalise, creation.roleMention, creation.disponible], [true, false, null, true]);
@@ -327,10 +330,12 @@ test('événements : mentions injectées dans un titre neutralisées ; la mentio
   await p.parametre('event_created', { roleMention: ROLE, modele: 'Nouveau : {titre} {acteur}' });
   await p.evenementPlanning({ titre: '@everyone <@&111222333> @here Scrim' });
   const a = p.discord.appels.at(-1).corps;
-  assert.ok(a.content.startsWith(`<@&${ROLE}> Nouveau :`), a.content);
-  assert.ok(!/@everyone|@here/i.test(a.content) && !a.content.includes('<@&111222333>'), a.content);
+  assert.equal(a.content, `<@&${ROLE}>`, 'seule la mention du rôle est dans le texte');
+  const texte = texteCharge(a);
+  assert.match(texte, /Nouveau :/);
+  assert.ok(!/@everyone|@here/i.test(texte) && !texte.includes('<@&111222333>'), texte);
   assert.deepEqual(a.allowed_mentions, { parse: [], roles: [ROLE] });
-  assert.ok(a.content.length <= 2000);
+  assert.ok(JSON.stringify(a.embeds).length <= 6000);
   // Sans rôle : aucune mention possible.
   await p.parametre('event_created', { roleMention: null });
   await p.evenementPlanning({ titre: '@everyone encore' });
@@ -344,7 +349,10 @@ test('{lien} : adresse de l’app donnée par le serveur ; vide sinon', async ()
   await b.appel(`/teams/${teamId}/discord/webhook`, { methode: 'PUT', jeton: sessions.max12345, corps: { url: URL_TEST } });
   await b.appel(`/teams/${teamId}/discord/parametres/event_created`, { methode: 'PUT', jeton: sessions.max12345, corps: { modele: 'Voir {lien} pour {titre}' } });
   await b.appel(`/teams/${teamId}/planning`, { methode: 'POST', jeton: sessions.coach123, corps: { type: 'scrim', titre: 'Scrim', date: '2026-10-22', heureDebut: '20:30', heureFin: '22:00' } });
-  assert.equal(discord.contenus()[0], 'Voir https://app.exemple/esport pour Scrim');
+  const corps = discord.appels[0].corps;
+  assert.equal(corps.embeds[0].description, 'Voir https://app.exemple/esport pour Scrim');
+  assert.equal(corps.embeds[0].url, 'https://app.exemple/esport', 'titre de l’embed : lien vers l’app');
+  assert.equal(corps.components[0].components[0].url, 'https://app.exemple/esport', 'bouton « Ouvrir dans l’app »');
 });
 
 // ------------------------------------------------------------------ Rappels J-1 / H-1 (cron)
@@ -627,7 +635,7 @@ test('isolation : un membre de la team B ne voit ni ne change rien de la team A 
   // Chaque événement part vers le webhook de sa team, avec le nom de sa team.
   await p.evenementPlanning({ titre: 'Pour A' });
   await p.evenementPlanning({ titre: 'Pour B' }, p.s.bob12345, p.B.teamId);
-  const vers = Object.fromEntries(p.discord.appels.map(a => [a.corps.content.includes('Pour A') || a.corps.content.includes('Modèle A') ? 'A' : 'B', a.url]));
+  const vers = Object.fromEntries(p.discord.appels.map(a => [texteCharge(a.corps).includes('Pour A') || texteCharge(a.corps).includes('Modèle A') ? 'A' : 'B', a.url]));
   assert.deepEqual(vers, { A: URL_TEST, B: URL_B });
   assert.equal(p.discord.appels.length, 2);
   // Une team sans le module Discord : 404.
@@ -672,13 +680,16 @@ test('e2e : webhook → message de test → un événement du planning est livr�
     assert.equal(test.statut, 200, JSON.stringify(test.corps));
     assert.equal(recus.length, 1);
     assert.deepEqual([recus[0].methode, recus[0].chemin, recus[0].type], ['POST', `/api/webhooks/${ID}/${JETON}`, 'application/json']);
-    assert.match(recus[0].corps.content, /Message de test/);
+    assert.match(texteCharge(recus[0].corps), /Message de test/);
 
     // Le Coach ajoute un scrim : l'abonné Discord le met en file, la requête l'envoie.
     const ev = await p.evenementPlanning({ titre: 'Scrim e2e', date: '2026-10-22', heureDebut: '20:30', heureFin: '22:00' });
     assert.equal(ev.statut, 200);
     assert.equal(recus.length, 2);
-    assert.equal(recus[1].corps.content, `<@&${ROLE}> **Nouvel événement** : Scrim e2e (Scrim), le jeudi 22 octobre à 20:30.`);
+    assert.equal(recus[1].corps.content, `<@&${ROLE}>`);
+    assert.equal(recus[1].corps.embeds[0].description, '**Nouvel événement** : Scrim e2e (Scrim), le jeudi 22 octobre à 20:30.');
+    assert.equal(recus[1].corps.embeds[0].color, 0x7c3aed, 'couleur du type « scrim »');
+    assert.match(recus[1].corps.embeds[0].title, /⚔️ Scrim · Scrim e2e/);
     assert.deepEqual(recus[1].corps.allowed_mentions, { parse: [], roles: [ROLE] });
     assert.match(recus[1].corps.username, /Team Alpha/);
     assert.equal((await p.file())[0].statut, 'envoye');
@@ -696,7 +707,7 @@ test('e2e : webhook → message de test → un événement du planning est livr�
     panne = false;
     await traiterFile(p.b.base, { cle: CLE, fetch: fetchLocal, maintenant: Date.parse(attente.prochain_essai_le) });
     assert.equal(recus.length, 3);
-    assert.match(recus[2].corps.content, /Hors ligne/);
+    assert.match(texteCharge(recus[2].corps), /Hors ligne/);
     assert.equal((await p.file())[1].statut, 'envoye');
   } finally {
     serveur.closeAllConnections();

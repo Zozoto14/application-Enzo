@@ -14,7 +14,8 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [planning.md](planning.md) | Tout le monde | Planning, disponibilités, présence, agenda iCal |
 | [resumes.md](resumes.md) | Tout le monde | Déposer une réunion, boîte du rédacteur, PDF |
 | [objectifs-taches.md](objectifs-taches.md) | Tout le monde | Objectifs, tâches, kanban |
-| [discord.md](discord.md) | Propriétaire, Manager | Webhook, messages, sécurité |
+| [bot-discord.md](bot-discord.md) | Fondateur, tout le monde | Bot Discord : activation, commandes, pings des convoqués, /lier |
+| [discord.md](discord.md) | Propriétaire, Manager | Webhook (repli sans bot), messages, sécurité |
 | [review-video.md](review-video.md) | Coach, Analyste, joueurs | Review YouTube, repères, export |
 | [scouting.md](scouting.md) | Staff | Fiches adversaires, VODs |
 | [strats-playbook.md](strats-playbook.md) | Coach, Analyste, joueurs | Éditeur de strats, partage, playbook, licences Riot |

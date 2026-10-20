@@ -16,6 +16,7 @@
 
 import { echec } from '../outils.mjs';
 import { EXEMPLES, evenementDiscord } from './catalogue.mjs';
+import { bornerEmbeds, embedMessage } from './embeds.mjs';
 
 export const LONGUEUR_MAX_MESSAGE = 2000;
 export const LONGUEUR_MAX_MODELE = 500;
@@ -92,17 +93,34 @@ export function apercuModele(modele) {
 }
 
 /**
- * Charge JSON envoyée au webhook. `roleId` : mention optionnelle (déjà
- * validée). La mention de rôle est la SEULE autorisée dans `allowed_mentions`.
+ * Charge JSON d'un message (webhook ou bot) : un EMBED soigné (embeds.mjs).
+ * `contenu` : texte du message (modèle rendu) ; `embed` : embed déjà construit
+ * (sinon un embed simple de type `cle`, titre `titre`). La mention de rôle
+ * (`roleId`, déjà validée) est la SEULE mention autorisée par défaut ; le bot y
+ * ajoute les utilisateurs convoqués (`utilisateurs`, identifiants numériques),
+ * listés un à un dans `allowed_mentions.users` : jamais @everyone ni @here.
  */
-export function construireCharge(contenu, { roleId = null, nomTeam = '' } = {}) {
+export function construireCharge(contenu, { roleId = null, nomTeam = '', logoTeam = null, embed, cle = 'test', titre, lien = '', utilisateurs = [], composants, maintenant = Date.now() } = {}) {
   const role = roleId && MOTIF_ROLE.test(roleId) ? roleId : null;
-  const prefixe = role ? `<@&${role}> ` : '';
-  const texte = nettoyerTexteDiscord(contenu, LONGUEUR_MAX_MESSAGE - prefixe.length);
+  const ids = [...new Set(utilisateurs.filter(id => /^[0-9]{5,25}$/.test(String(id))).map(String))].slice(0, 50);
+  const mentions = [role ? `<@&${role}>` : '', ...ids.map(id => `<@${id}>`)].filter(Boolean).join(' ');
   const nom = nettoyerVariable(nomTeam);
+  const texte = nettoyerTexteDiscord(contenu, LONGUEUR_MAX_MESSAGE).trim() || 'Notification Esport';
+  const corps = embed ?? embedMessage({ cle, titre: titre ?? 'Notification', texte, team: { nom, logo: logoTeam }, lien, maintenant });
+  const allowed = { parse: [] };
+  if (role) allowed.roles = [role];
+  if (ids.length) allowed.users = ids;
   return {
     username: nom ? `Esport · ${nom}`.slice(0, 80) : 'Esport',
-    content: `${prefixe}${texte}`.trim() || 'Notification Esport',
-    allowed_mentions: role ? { parse: [], roles: [role] } : { parse: [] },
+    ...(mentions ? { content: mentions } : {}),
+    embeds: bornerEmbeds([corps]),
+    allowed_mentions: allowed,
+    ...(composants?.length ? { components: composants } : {}),
   };
+}
+
+/** Tout le texte visible d'une charge (contenu et embeds) : journaux, tests, aperçus. */
+export function texteCharge(charge) {
+  const e = charge?.embeds ?? [];
+  return [charge?.content ?? '', ...e.flatMap(x => [x.author?.name, x.title, x.description, ...(x.fields ?? []).flatMap(f => [f.name, f.value]), x.footer?.text])].filter(Boolean).join('\n');
 }

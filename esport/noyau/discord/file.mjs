@@ -21,8 +21,12 @@
 
 import { iso, jsonOu, nouvelId } from '../outils.mjs';
 import { dechiffrerWebhook } from './chiffrement.mjs';
-import { clesPourType, evenementDiscord, libelleTypeEvenement } from './catalogue.mjs';
+import { CLES_OCCURRENCE, clesPourType, evenementDiscord, libelleTypeEvenement } from './catalogue.mjs';
+import { estReunionStaff, membresTeam } from './convoques.mjs';
+import { boutonLien, boutonsRsvp } from './embeds.mjs';
+import { formaterDelai, formaterInstant } from './formats.mjs';
 import { construireCharge, rendreModele } from './messages.mjs';
+import { contexteOccurrence, embedOccurrence, variablesOccurrence } from './occurrence.mjs';
 
 export const ESSAIS_MAX = 6;
 /** Attente (secondes) après le n-ième échec (n = 1…). */
@@ -39,27 +43,7 @@ const dateJour = texte => {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : String(texte ?? '');
 };
 
-/** Date longue et heure d'un instant dans le fuseau de la team. */
-export function formaterInstant(fuseau, instantIso) {
-  const d = new Date(instantIso);
-  if (Number.isNaN(d.getTime())) return { date: '', heure: '' };
-  try {
-    return {
-      date: new Intl.DateTimeFormat('fr-FR', { timeZone: fuseau, weekday: 'long', day: 'numeric', month: 'long' }).format(d),
-      heure: new Intl.DateTimeFormat('fr-FR', { timeZone: fuseau, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d),
-    };
-  } catch {
-    return { date: d.toISOString().slice(0, 10), heure: d.toISOString().slice(11, 16) };
-  }
-}
-
-/** « dans 45 min », « dans 5 h », « dans 2 jours ». */
-export function formaterDelai(ms) {
-  if (ms <= 60_000) return 'maintenant';
-  if (ms < 90 * 60_000) return `dans ${Math.round(ms / 60_000)} min`;
-  if (ms < 48 * 3_600_000) return `dans ${Math.round(ms / 3_600_000)} h`;
-  return `dans ${Math.round(ms / 86_400_000)} jours`;
-}
+export { formaterDelai, formaterInstant };
 
 async function pseudoDe(base, compte) {
   if (typeof compte !== 'string' || !compte) return '';
@@ -86,15 +70,22 @@ async function variablesDe(base, ev, cle, charge, team) {
   const t = Date.parse(ev.cree_le);
   const base_ = { team: team.nom };
   const quand = charge.debut ? formaterInstant(team.fuseau, charge.debut) : { date: '', heure: '' };
-  const instant = { titre: charge.titre ?? '', type: libelleTypeEvenement(charge.type), ...quand };
+  // Occurrence montrée (embed, boutons RSVP, mentions) : relue au moment de l'envoi.
+  const occurrence = charge.occurrence ?? charge.debut ?? null;
+  const evenementId = charge.evenementId ?? ev.entite_id ?? null;
+  const instant = { titre: charge.titre ?? '', type: libelleTypeEvenement(charge.type), ...quand, evenementId, occurrence };
   switch (cle) {
     case 'event_created':
       return { ...base_, ...instant, acteur: await pseudoDe(base, ev.acteur_id) };
     case 'reminder_d1':
     case 'reminder_h1':
       return { ...base_, ...instant, delai: formaterDelai(Date.parse(charge.debut) - t), convoques: await pseudosListe(base, charge.convoques) };
+    case 'event_now':
+      return { ...base_, ...instant, delai: formaterDelai(Date.parse(charge.debut) - t), convoques: await pseudosListe(base, charge.convoques) };
     case 'rsvp_missing':
       return { ...base_, ...instant, membre: await pseudoDe(base, charge.compte) };
+    case 'rsvp_relance':
+      return { ...base_, ...instant, membre: '' };
     case 'summary_published': {
       // Les réunions de type « staff » ne sortent jamais du staff : rien n'est publié sur Discord.
       if (await reunionStaff(base, ev)) return null;
@@ -160,22 +151,61 @@ export function reglageEffectif(def, ligne) {
   };
 }
 
+/** Serveur Discord lié par le bot pour une team (null : pas de bot, le webhook sert de repli). */
+export const serveurBot = (base, teamId) => base.premier('SELECT * FROM discord_serveurs WHERE team_id = ?', [teamId]);
+
+/**
+ * Identifiant de la ligne de file. Les relances (RSVP manquant, /relancer)
+ * sont GROUPÉES : une seule ligne par occurrence et par heure, quel que soit le
+ * nombre de joueurs sans réponse.
+ */
+function idDeLigne(ev, cle, variables) {
+  if ((cle === 'rsvp_missing' || cle === 'rsvp_relance') && variables.evenementId && variables.occurrence) {
+    return `${cle}:${variables.evenementId}:${variables.occurrence}:${String(ev.cree_le).slice(0, 13)}`;
+  }
+  return `${ev.id}:${cle}`;
+}
+
+/** Réponse d'un joueur : l'annonce du bot pour cette occurrence est rééditée (compteurs à jour). */
+async function majAnnonce(base, ev) {
+  const charge = jsonOu(ev.charge, {});
+  const occurrence = charge.occurrence;
+  if (!ev.entite_id || !occurrence) return;
+  const annonce = await base.premier('SELECT * FROM discord_annonces WHERE evenement_id = ? AND occurrence = ? AND team_id = ?', [ev.entite_id, occurrence, ev.team_id]);
+  if (!annonce || !(await serveurBot(base, ev.team_id))) return;
+  // Une seule édition en attente par annonce : plusieurs réponses rapprochées ne font qu'une édition.
+  await base.executer(
+    `INSERT INTO discord_file (id, team_id, evenement_id, cle, modele, variables, statut, essais, prochain_essai_le, expire_le, cree_le, maj_le, canal, operation, salon_id)
+     VALUES (?, ?, ?, 'event_created', '', ?, 'attente', 0, ?, ?, ?, ?, 'bot', 'editer', ?)
+     ON CONFLICT (id) DO UPDATE SET statut = 'attente', essais = 0, prochain_essai_le = excluded.prochain_essai_le, expire_le = excluded.expire_le, derniere_erreur = NULL, maj_le = excluded.maj_le`,
+    [`maj:${ev.entite_id}:${occurrence}`, ev.team_id, ev.id, JSON.stringify({ evenementId: ev.entite_id, occurrence }), ev.cree_le, iso(Date.parse(ev.cree_le) + VALIDITE_MESSAGE_MS), ev.cree_le, ev.cree_le, annonce.salon_id],
+  );
+}
+
 /** Abonné du bus : met en file les messages Discord que l'événement déclenche. */
 export async function abonneDiscord(base, ev) {
   if (ev.type === 'team.deleted' && ev.team_id) {
-    // Team supprimée : l'adresse du webhook (secret) et la file disparaissent avec elle.
-    await base.executer('DELETE FROM discord_file WHERE team_id = ?', [ev.team_id]);
-    await base.executer('DELETE FROM discord_webhooks WHERE team_id = ?', [ev.team_id]);
+    // Team supprimée : l'adresse du webhook (secret), la liaison du bot et la file disparaissent avec elle.
+    for (const table of ['discord_file', 'discord_webhooks', 'discord_serveurs', 'discord_annonces', 'discord_debuts', 'discord_bot_pings', 'discord_codes']) {
+      await base.executer(`DELETE FROM ${table} WHERE team_id = ?`, [ev.team_id]);
+    }
+    return;
+  }
+  if (ev.type === 'attendance.rsvp' && ev.team_id) {
+    await majAnnonce(base, ev);
     return;
   }
   const cles = clesPourType(ev.type);
   if (cles.length === 0 || !ev.team_id) return;
-  if (!(await base.premier('SELECT team_id FROM discord_webhooks WHERE team_id = ?', [ev.team_id]))) return;
+  // Le bot (serveur lié) a la priorité ; sinon le webhook ; sinon rien.
+  const serveur = await serveurBot(base, ev.team_id);
+  if (!serveur && !(await base.premier('SELECT team_id FROM discord_webhooks WHERE team_id = ?', [ev.team_id]))) return;
   const team = await base.premier('SELECT nom, fuseau FROM teams WHERE id = ? AND supprimee_le IS NULL AND archivee_le IS NULL', [ev.team_id]);
   if (!team) return;
   const actifs = await modulesActifs(base, ev.team_id);
   if (!actifs.has('discord')) return;
   const charge = jsonOu(ev.charge, {});
+  let membres;
   for (const cle of cles) {
     const def = evenementDiscord(cle);
     if (!def.modules.every(m => actifs.has(m))) continue;
@@ -183,31 +213,40 @@ export async function abonneDiscord(base, ev) {
     if (!reglage.actif) continue;
     const variables = await variablesDe(base, ev, cle, charge, team);
     if (!variables) continue;
+    if (CLES_OCCURRENCE.includes(cle) && variables.evenementId) {
+      // Réunion staff : jamais annoncée publiquement (ni bot, ni webhook).
+      const evPlanning = await base.premier('SELECT type, concernes, convocation FROM planning_evenements WHERE id = ? AND team_id = ?', [variables.evenementId, ev.team_id]);
+      membres ??= await membresTeam(base, ev.team_id);
+      if (evPlanning && estReunionStaff(evPlanning, membres)) continue;
+    }
     const creeMs = Date.parse(ev.cree_le);
-    // Un rappel n'a plus de sens une fois l'événement commencé ; les autres messages valent 24 h.
+    // Un rappel n'a plus de sens une fois l'événement commencé ; « c'est maintenant » vaut 30 min ; les autres 24 h.
     const debut = Date.parse(charge.debut);
-    const expire = cle.startsWith('reminder_') && Number.isFinite(debut) ? debut : creeMs + VALIDITE_MESSAGE_MS;
+    const expire = cle.startsWith('reminder_') && Number.isFinite(debut) ? debut : cle === 'event_now' && Number.isFinite(debut) ? debut + 30 * 60_000 : creeMs + VALIDITE_MESSAGE_MS;
     await base.executer(
-      `INSERT INTO discord_file (id, team_id, evenement_id, cle, modele, variables, role_mention, statut, essais, prochain_essai_le, expire_le, cree_le, maj_le)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'attente', 0, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`,
-      [`${ev.id}:${cle}`, ev.team_id, ev.id, cle, reglage.modele, JSON.stringify(variables), reglage.roleMention, ev.cree_le, iso(expire), ev.cree_le, ev.cree_le],
+      `INSERT INTO discord_file (id, team_id, evenement_id, cle, modele, variables, role_mention, statut, essais, prochain_essai_le, expire_le, cree_le, maj_le, canal, salon_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'attente', 0, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`,
+      [idDeLigne(ev, cle, variables), ev.team_id, ev.id, cle, reglage.modele, JSON.stringify(variables), reglage.roleMention, ev.cree_le, iso(expire), ev.cree_le, ev.cree_le, serveur ? 'bot' : 'webhook', serveur?.salon_id ?? null],
     );
   }
 }
 
 // ------------------------------------------------------------------ Envoi
 
+export const API_DISCORD = 'https://discord.com/api/v10';
+const AGENT = 'DiscordBot (https://github.com/Zozoto14/application-Enzo, 1)';
+
 /**
- * POST sur le webhook. Rend `{ ok }`, ou `{ ok: false, statut, retryApresS?, definitif, motif }`.
- * Ne lit jamais la réponse de Discord au-delà de `retry_after` (elle peut citer le webhook), ne suit
- * aucune redirection.
+ * Appel à Discord (webhook, ou API du bot avec `jetonBot`). Rend `{ ok, statut, corps? }`, ou
+ * `{ ok: false, statut, retryApresS?, definitif, motif }`. Ne lit la réponse que pour `retry_after`
+ * (429) et, si `lireCorps`, l'identifiant du message créé ; ne suit aucune redirection.
  */
-export async function posterWebhook(fetchDiscord, url, charge) {
+export async function appelerDiscord(fetchDiscord, url, charge, { methode = 'POST', jetonBot, lireCorps = false } = {}) {
   let r;
   try {
     r = await fetchDiscord(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: methode,
+      headers: { 'Content-Type': 'application/json', ...(jetonBot ? { Authorization: `Bot ${jetonBot}`, 'User-Agent': AGENT } : {}) },
       body: JSON.stringify(charge),
       redirect: 'manual',
       signal: AbortSignal.timeout(DELAI_ENVOI_MS),
@@ -215,7 +254,17 @@ export async function posterWebhook(fetchDiscord, url, charge) {
   } catch {
     return { ok: false, statut: 0, definitif: false, motif: 'Discord injoignable' };
   }
-  if (r.status >= 200 && r.status < 300) return { ok: true, statut: r.status };
+  const quoi = jetonBot ? 'Bot ou salon' : 'Webhook';
+  if (r.status >= 200 && r.status < 300) {
+    if (!lireCorps) return { ok: true, statut: r.status };
+    let corps = null;
+    try {
+      corps = await r.json();
+    } catch {
+      corps = null;
+    }
+    return { ok: true, statut: r.status, messageId: typeof corps?.id === 'string' && /^\d{5,25}$/.test(corps.id) ? corps.id : null };
+  }
   if (r.status === 429) {
     let corps = {};
     try {
@@ -229,10 +278,13 @@ export async function posterWebhook(fetchDiscord, url, charge) {
     return { ok: false, statut: 429, retryApresS: Math.min(Math.ceil(s), 3600), definitif: false, motif: 'Limite de débit de Discord' };
   }
   if (r.status >= 300 && r.status < 400) return { ok: false, statut: r.status, definitif: true, motif: 'Redirection refusée' };
-  if ([401, 403, 404].includes(r.status)) return { ok: false, statut: r.status, definitif: true, webhookPerdu: true, motif: `Webhook refusé ou supprimé (HTTP ${r.status})` };
+  if ([401, 403, 404].includes(r.status)) return { ok: false, statut: r.status, definitif: true, webhookPerdu: true, motif: `${quoi} refusé ou supprimé (HTTP ${r.status})` };
   if (r.status >= 400 && r.status < 500) return { ok: false, statut: r.status, definitif: true, motif: `Message refusé par Discord (HTTP ${r.status})` };
   return { ok: false, statut: r.status, definitif: false, motif: `Erreur de Discord (HTTP ${r.status})` };
 }
+
+/** POST sur le webhook (historique : même contrat qu'avant le bot). */
+export const posterWebhook = (fetchDiscord, url, charge) => appelerDiscord(fetchDiscord, url, charge);
 
 async function consigner(base, ligne, action, meta, t) {
   await base.executer(
@@ -241,12 +293,62 @@ async function consigner(base, ligne, action, meta, t) {
   );
 }
 
+/** Pings de la team par type d'événement (ligne absente : activé). */
+export async function pingActif(base, teamId, type) {
+  const l = await base.premier('SELECT ping FROM discord_bot_pings WHERE team_id = ? AND type_evenement = ?', [teamId, type]);
+  return !l || Number(l.ping) === 1;
+}
+
+/** Qui mentionner pour ce message : les convoqués LIÉS (relances : seulement ceux qui n'ont pas répondu). */
+function aMentionner(cle, c) {
+  const cibles = cle === 'rsvp_missing' || cle === 'rsvp_relance' ? c.sansReponse : c.convoques;
+  return cibles.map(m => m.discordId).filter(Boolean);
+}
+
 /**
- * Envoie les messages dus. Options : `cle` (secret de chiffrement), `fetch`,
- * `maintenant` (ms), `limite`, `lienApp` (adresse de l'app pour {lien}).
- * Rend `{ envoyes, abandonnes, reportes }`.
+ * Charge d'une ligne de file. Rend `{ charge }`, ou `{ abandon: motif }` (rien à envoyer).
+ * Les messages d'une occurrence sont reconstruits ICI, au moment de l'envoi (compteurs à jour).
  */
-export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => globalThis.fetch(...a), maintenant = Date.now(), limite = 50, lienApp = '' } = {}) {
+async function chargeDeLigne(base, ligne, { team, bot, lienApp, t }) {
+  const variables = jsonOu(ligne.variables, {});
+  const occurrence = CLES_OCCURRENCE.includes(ligne.cle) && variables.evenementId && variables.occurrence;
+  if (!occurrence) {
+    const contenu = rendreModele(ligne.modele, { ...variables, lien: lienApp });
+    const def = evenementDiscord(ligne.cle);
+    return { charge: construireCharge(contenu, { roleId: ligne.role_mention, nomTeam: team.nom, logoTeam: team.logo_url, cle: ligne.cle, titre: def?.libelle ?? 'Notification', lien: lienApp, composants: boutonLien(lienApp), maintenant: t }) };
+  }
+  const c = await contexteOccurrence(base, ligne.team_id, variables.evenementId, variables.occurrence, t);
+  if (!c) return { abandon: 'Événement supprimé ou occurrence annulée' };
+  if (c.staff) return { abandon: 'Réunion staff : jamais annoncée publiquement' };
+  // Rappels, « c'est maintenant », relances : seulement s'il y a des convoqués (l'annonce part toujours).
+  if (c.convoques.length === 0 && ligne.cle !== 'event_created') return { abandon: 'Personne n’est convoqué', silencieux: true };
+  const relance = ligne.cle === 'rsvp_missing' || ligne.cle === 'rsvp_relance';
+  if (relance && c.sansReponse.length === 0) return { abandon: 'Tout le monde a déjà répondu', silencieux: true };
+  let genre = ligne.cle;
+  let modele = ligne.modele;
+  if (ligne.operation === 'editer') {
+    const annonce = await base.premier('SELECT cle FROM discord_annonces WHERE evenement_id = ? AND occurrence = ?', [variables.evenementId, variables.occurrence]);
+    genre = annonce?.cle ?? 'event_created';
+    const def = evenementDiscord(genre);
+    modele = reglageEffectif(def, await base.premier('SELECT * FROM discord_notification_settings WHERE team_id = ? AND cle = ?', [ligne.team_id, genre])).modele;
+  }
+  const vars = { ...variablesOccurrence(c, t, libelleTypeEvenement), acteur: variables.acteur ?? '', lien: lienApp };
+  const texte = rendreModele(modele, vars);
+  const embed = embedOccurrence(c, { genre, texte, lien: lienApp, maintenant: t });
+  const rsvpPossible = bot && c.presenceActive && !c.termine;
+  const composants = rsvpPossible ? boutonsRsvp(c.ev.id, c.occurrence.cle, { lien: lienApp }) : boutonLien(lienApp);
+  // Mentions : uniquement le bot, uniquement les convoqués liés, et seulement si la team garde le ping pour ce type.
+  const utilisateurs = bot && ligne.operation !== 'editer' && (await pingActif(base, ligne.team_id, c.occurrence.type)) ? aMentionner(ligne.cle, c) : [];
+  const charge = construireCharge(texte, { roleId: ligne.operation === 'editer' ? null : ligne.role_mention, nomTeam: team.nom, embed, utilisateurs, composants, maintenant: t });
+  return { charge, contexte: c, genre };
+}
+
+/**
+ * Envoie les messages dus. Options : `cle` (secret de chiffrement des webhooks), `fetch`,
+ * `maintenant` (ms), `limite`, `lienApp` (adresse de l'app), `jetonBot` (DISCORD_BOT_TOKEN : sans lui,
+ * les messages du bot sont abandonnés). Rend `{ envoyes, abandonnes, reportes }`.
+ */
+export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => globalThis.fetch(...a), maintenant = Date.now(), limite = 50, lienApp = '', jetonBot } = {}) {
   const bilan = { envoyes: 0, abandonnes: 0, reportes: 0 };
   const t = maintenant;
   const dues = await base.tous(
@@ -263,7 +365,9 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
   }
 
   for (const ligne of dues) {
-    if (teamsBloquees.has(ligne.team_id)) continue;
+    const bot = ligne.canal === 'bot';
+    const cleBlocage = `${bot ? 'bot' : 'webhook'}:${ligne.team_id}`;
+    if (teamsBloquees.has(cleBlocage)) continue;
     // Bail : un seul traitement à la fois par message (requête et cron simultanés).
     const pris = await base.executer(
       "UPDATE discord_file SET verrou_jusqua = ? WHERE id = ? AND statut = 'attente' AND (verrou_jusqua IS NULL OR verrou_jusqua < ?)",
@@ -272,40 +376,80 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
     if (pris.changements !== 1) continue;
 
     if (Date.parse(ligne.expire_le) <= t) {
-      await abandonner(ligne, 'Message périmé (trop ancien pour être utile)');
+      await abandonner(ligne, 'Message périmé (trop ancien pour être utile)', { journal: ligne.operation !== 'editer' });
       continue;
     }
-    const team = await base.premier('SELECT nom FROM teams WHERE id = ? AND supprimee_le IS NULL AND archivee_le IS NULL', [ligne.team_id]);
-    const webhook = await base.premier('SELECT * FROM discord_webhooks WHERE team_id = ?', [ligne.team_id]);
-    if (!team || !webhook) {
-      await abandonner(ligne, 'Team ou webhook supprimé', { journal: false });
+    const team = await base.premier('SELECT nom, logo_url FROM teams WHERE id = ? AND supprimee_le IS NULL AND archivee_le IS NULL', [ligne.team_id]);
+    const cible = bot ? await serveurBot(base, ligne.team_id) : await base.premier('SELECT * FROM discord_webhooks WHERE team_id = ?', [ligne.team_id]);
+    const table = bot ? 'discord_serveurs' : 'discord_webhooks';
+    if (!team || !cible) {
+      await abandonner(ligne, bot ? 'Team ou serveur Discord délié' : 'Team ou webhook supprimé', { journal: false });
       continue;
     }
     if (!(await modulesActifs(base, ligne.team_id)).has('discord')) {
       await abandonner(ligne, 'Module Discord désactivé', { journal: false });
       continue;
     }
-    if (webhook.bloque_jusqua && Date.parse(webhook.bloque_jusqua) > t) {
-      await base.executer('UPDATE discord_file SET prochain_essai_le = ?, verrou_jusqua = NULL WHERE id = ?', [webhook.bloque_jusqua, ligne.id]);
+    if (cible.bloque_jusqua && Date.parse(cible.bloque_jusqua) > t) {
+      await base.executer('UPDATE discord_file SET prochain_essai_le = ?, verrou_jusqua = NULL WHERE id = ?', [cible.bloque_jusqua, ligne.id]);
       bilan.reportes++;
-      teamsBloquees.add(ligne.team_id);
+      teamsBloquees.add(cleBlocage);
       continue;
     }
-    const url = await dechiffrerWebhook(cle, ligne.team_id, webhook.url_chiffree);
-    if (!url) {
-      await abandonner(ligne, 'Adresse du webhook illisible (clé de chiffrement changée ?) : saisissez-la à nouveau');
-      continue;
+    let url;
+    let methode = 'POST';
+    if (bot) {
+      if (!jetonBot) {
+        await abandonner(ligne, 'Bot Discord non configuré sur le serveur (DISCORD_BOT_TOKEN)');
+        continue;
+      }
+      if (ligne.operation === 'editer') {
+        const v = jsonOu(ligne.variables, {});
+        const annonce = await base.premier('SELECT * FROM discord_annonces WHERE evenement_id = ? AND occurrence = ? AND team_id = ?', [v.evenementId, v.occurrence, ligne.team_id]);
+        if (!annonce) {
+          await abandonner(ligne, 'Annonce introuvable', { journal: false });
+          continue;
+        }
+        url = `${API_DISCORD}/channels/${annonce.salon_id}/messages/${annonce.message_id}`;
+        methode = 'PATCH';
+      } else {
+        url = `${API_DISCORD}/channels/${ligne.salon_id || cible.salon_id}/messages`;
+      }
+    } else {
+      url = await dechiffrerWebhook(cle, ligne.team_id, cible.url_chiffree);
+      if (!url) {
+        await abandonner(ligne, 'Adresse du webhook illisible (clé de chiffrement changée ?) : saisissez-la à nouveau');
+        continue;
+      }
     }
 
-    const variables = jsonOu(ligne.variables, {});
-    const contenu = rendreModele(ligne.modele, { ...variables, lien: lienApp });
-    const resultat = await posterWebhook(fetchDiscord, url, construireCharge(contenu, { roleId: ligne.role_mention, nomTeam: team.nom }));
+    const prepare = await chargeDeLigne(base, ligne, { team, bot, lienApp, t });
+    if (prepare.abandon) {
+      await abandonner(ligne, prepare.abandon, { journal: false });
+      continue;
+    }
+    let charge = prepare.charge;
+    if (bot) {
+      // API du bot : pas de nom d'expéditeur ; une édition ne touche ni au texte ni aux mentions.
+      const { username: _u, ...reste } = charge;
+      charge = methode === 'PATCH' ? { embeds: reste.embeds, components: reste.components ?? [], allowed_mentions: { parse: [] } } : reste;
+    }
+    const resultat = await appelerDiscord(fetchDiscord, url, charge, { methode, jetonBot: bot ? jetonBot : undefined, lireCorps: bot && methode === 'POST' });
 
     if (resultat.ok) {
-      await base.lot([
+      const lot = [
         { sql: "UPDATE discord_file SET statut = 'envoye', envoye_le = ?, essais = essais + 1, derniere_erreur = NULL, verrou_jusqua = NULL, maj_le = ? WHERE id = ?", params: [iso(t), iso(t), ligne.id] },
-        { sql: 'UPDATE discord_webhooks SET dernier_succes_le = ?, bloque_jusqua = NULL WHERE team_id = ?', params: [iso(t), ligne.team_id] },
-      ]);
+        { sql: `UPDATE ${table} SET dernier_succes_le = ?, bloque_jusqua = NULL WHERE team_id = ?`, params: [iso(t), ligne.team_id] },
+      ];
+      // Annonce d'une occurrence par le bot : retenue pour être éditée quand les réponses changent.
+      if (bot && methode === 'POST' && resultat.messageId && prepare.contexte && !['rsvp_missing', 'rsvp_relance'].includes(prepare.genre)) {
+        lot.push({
+          sql: `INSERT INTO discord_annonces (evenement_id, occurrence, team_id, salon_id, message_id, cle, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (evenement_id, occurrence) DO UPDATE SET salon_id = excluded.salon_id, message_id = excluded.message_id, cle = excluded.cle, maj_le = excluded.maj_le`,
+          params: [prepare.contexte.ev.id, prepare.contexte.occurrence.cle, ligne.team_id, ligne.salon_id || cible.salon_id, resultat.messageId, prepare.genre, iso(t), iso(t)],
+        });
+      }
+      await base.lot(lot);
       bilan.envoyes++;
       continue;
     }
@@ -314,15 +458,18 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
       const jusqua = iso(t + resultat.retryApresS * 1000);
       await base.lot([
         { sql: 'UPDATE discord_file SET prochain_essai_le = ?, verrou_jusqua = NULL, derniere_erreur = ?, maj_le = ? WHERE id = ?', params: [jusqua, resultat.motif, iso(t), ligne.id] },
-        { sql: 'UPDATE discord_webhooks SET bloque_jusqua = ? WHERE team_id = ?', params: [jusqua, ligne.team_id] },
+        { sql: `UPDATE ${table} SET bloque_jusqua = ? WHERE team_id = ?`, params: [jusqua, ligne.team_id] },
       ]);
-      teamsBloquees.add(ligne.team_id);
+      teamsBloquees.add(cleBlocage);
       bilan.reportes++;
       continue;
     }
 
     const essais = Number(ligne.essais) + 1;
-    await base.executer('UPDATE discord_webhooks SET dernier_echec_le = ?, invalide_le = CASE WHEN ? = 1 THEN ? ELSE invalide_le END WHERE team_id = ?', [iso(t), resultat.webhookPerdu ? 1 : 0, iso(t), ligne.team_id]);
+    // Une annonce supprimée dans Discord (édition en 404) n'invalide pas le salon.
+    const perdu = resultat.webhookPerdu && methode !== 'PATCH';
+    await base.executer(`UPDATE ${table} SET dernier_echec_le = ?, invalide_le = CASE WHEN ? = 1 THEN ? ELSE invalide_le END WHERE team_id = ?`, [iso(t), perdu ? 1 : 0, iso(t), ligne.team_id]);
+    if (methode === 'PATCH' && resultat.statut === 404) await base.executer('DELETE FROM discord_annonces WHERE evenement_id = ? AND occurrence = ?', [jsonOu(ligne.variables, {}).evenementId, jsonOu(ligne.variables, {}).occurrence]);
     if (resultat.definitif || essais >= ESSAIS_MAX) {
       await base.executer('UPDATE discord_file SET essais = ? WHERE id = ?', [essais, ligne.id]);
       await abandonner({ ...ligne, essais }, resultat.motif);
@@ -336,8 +483,10 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
     bilan.reportes++;
   }
 
-  // Ménage : envois terminés depuis plus de 30 jours, rappels très anciens.
+  // Ménage : envois terminés depuis plus de 30 jours, rappels et annonces très anciens.
   await base.executer("DELETE FROM discord_file WHERE statut != 'attente' AND maj_le < ?", [iso(t - CONSERVATION_MS)]);
   await base.executer('DELETE FROM discord_rappels WHERE cree_le < ?', [iso(t - 2 * CONSERVATION_MS)]);
+  await base.executer('DELETE FROM discord_debuts WHERE cree_le < ?', [iso(t - 2 * CONSERVATION_MS)]);
+  await base.executer('DELETE FROM discord_annonces WHERE maj_le < ?', [iso(t - 2 * CONSERVATION_MS)]);
   return bilan;
 }

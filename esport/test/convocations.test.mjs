@@ -11,6 +11,7 @@
  *  - le cas du Fondateur : Réunion et Scrim le mardi 20/10, « présent » marqué
  *    pour lui-même et pour un joueur, période 3 mois par mois.
  */
+import { texteCharge } from '../noyau/discord/messages.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { baseSqlite, lireMigrations } from '../adaptateurs/sqlite.mjs';
@@ -39,7 +40,7 @@ function fauxDiscord() {
     appels.push({ url, corps: JSON.parse(init.body) });
     return new Response(null, { status: 204 });
   };
-  return { appels, fetch, contenus: () => appels.map(a => a.corps.content) };
+  return { appels, fetch, contenus: () => appels.map(a => texteCharge(a.corps)) };
 }
 
 async function preparer() {
