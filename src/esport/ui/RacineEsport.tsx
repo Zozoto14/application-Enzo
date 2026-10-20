@@ -65,7 +65,7 @@ export function Esport(props: PropsRacineApp) {
     void ouvrir();
   }, [ouvrir]);
 
-  const exporter = contexte.enregistrerFichier ? (nom: string, contenu: string) => contexte.enregistrerFichier!(nom, contenu, 'application/json') : undefined;
+  const exporter = contexte.enregistrerFichier ? (nom: string, contenu: string, type = 'application/json') => contexte.enregistrerFichier!(nom, contenu, type) : undefined;
   const fondateur = !contexte.profil || contexte.profil.admin;
 
   let contenu: React.ReactNode;

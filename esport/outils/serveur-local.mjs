@@ -19,6 +19,8 @@ import { baseSqliteMigree } from '../adaptateurs/sqlite.mjs';
 import { stockageDisque, stockageMemoire } from '../adaptateurs/stockage.mjs';
 import { creerApi } from '../noyau/api.mjs';
 import { verificateurRelais } from '../noyau/authentification.mjs';
+import { distribuer } from '../noyau/evenements.mjs';
+import { rappelsPresence } from '../noyau/planning/rappels.mjs';
 
 function kvMemoire() {
   const donnees = new Map();
@@ -58,11 +60,11 @@ export async function demarrerServeurEsport({
     if (!existe) await semer(base, { stockage });
   }
   const traiter = creerApi({ base, stockage, cleSession: cle, verifierJeton, creationTeams });
-  // Cron du Worker (rappels d'échéance des tâches, événements en attente), toutes les 15 minutes.
+  // Cron du Worker (rappels de présence et d'échéance des tâches, événements en attente), toutes les 15 minutes.
   const cron = setInterval(() => {
     void (async () => {
       const { rappelsEcheances } = await import('../noyau/objectifs.mjs');
-      const { distribuer } = await import('../noyau/evenements.mjs');
+      await rappelsPresence(base, { maintenant: Date.now() });
       await rappelsEcheances(base, { maintenant: Date.now() });
       await distribuer(base, { maintenant: Date.now() });
     })().catch(e => console.error('[esport] cron local', e));

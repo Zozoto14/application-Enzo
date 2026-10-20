@@ -65,7 +65,7 @@ test('migrations : fichiers NNNN_nom.sql, appliquées une seule fois, schéma co
   assert.deepEqual(await appliquerMigrations(base, migrations), migrations.map(m => m.nom).sort());
   assert.deepEqual(await appliquerMigrations(base, migrations), []);
   const tables = (await base.tous("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name", [])).map(l => l.name);
-  for (const t of ['comptes', 'teams', 'team_modules', 'roles', 'role_permissions', 'membres', 'invitations', 'tentatives', 'evenements', 'journal', 'notifications', 'types_reunion', 'fichiers', 'reunions', 'objectifs', 'taches']) {
+  for (const t of ['comptes', 'teams', 'team_modules', 'roles', 'role_permissions', 'membres', 'invitations', 'tentatives', 'evenements', 'journal', 'notifications', 'types_reunion', 'fichiers', 'reunions', 'objectifs', 'taches', 'planning_evenements', 'planning_exceptions', 'presences', 'dispo_regles', 'dispo_exceptions', 'ical_jetons']) {
     assert.ok(tables.includes(t), t);
   }
 });
@@ -132,6 +132,12 @@ test('graines : une team Valorant complète avec ses membres et rôles', async (
   assert.ok(roles.some(r => r.nom === 'Capitaine'));
   const modules = await base.tous('SELECT module FROM team_modules WHERE team_id = ? AND active = 1', [id]);
   assert.equal(modules.length, 11);
+  // Planning : des événements (dont une série), des disponibilités, des présences marquées.
+  const evenements = await base.tous('SELECT type, recurrence FROM planning_evenements WHERE team_id = ?', [id]);
+  assert.deepEqual([...new Set(evenements.map(e => e.type))].sort(), ['match', 'meeting', 'other', 'scrim', 'tournament', 'training']);
+  assert.ok(evenements.some(e => e.recurrence));
+  assert.ok(Number((await base.premier("SELECT COUNT(*) AS n FROM presences WHERE team_id = ? AND reel <> 'inconnu'", [id])).n) >= 10);
+  assert.ok(Number((await base.premier('SELECT COUNT(*) AS n FROM dispo_regles WHERE team_id = ?', [id])).n) >= 10);
   // Phase 3 : dépôts de réunion et tâches (sans stockage : pas de PDF).
   const statuts = (await base.tous('SELECT statut FROM reunions WHERE team_id = ? ORDER BY statut', [id])).map(l => l.statut);
   assert.deepEqual(statuts, ['a_resumer', 'a_resumer', 'en_cours']);

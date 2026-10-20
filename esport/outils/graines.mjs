@@ -1,6 +1,7 @@
 /**
  * Graines de développement : une team Valorant avec ses membres, un rôle
- * personnalisé et quelques actions journalisées ; des dépôts de réunion
+ * personnalisé et quelques actions journalisées ; son planning (événements,
+ * disponibilités, présences : graines-planning.mjs) ; des dépôts de réunion
  * (à résumer, en cours, terminé avec un PDF si un stockage est fourni), des
  * objectifs et des tâches (dont une en retard). Passe par les services
  * (mêmes règles que l'API : invitations réelles, anti-escalade…).
@@ -13,6 +14,7 @@ import { distribuer } from '../noyau/evenements.mjs';
 import { servicesObjectifs } from '../noyau/objectifs.mjs';
 import { servicesResumes } from '../noyau/resumes.mjs';
 import { servicesEsport } from '../noyau/service.mjs';
+import { semerPlanning } from './graines-planning.mjs';
 
 /** Un petit PDF valide (une page, un texte) pour les graines et les tests de bout en bout. */
 export function pdfDeDemo(texte = 'Résumé de démonstration') {
@@ -71,6 +73,8 @@ export async function semer(base, { maintenant = () => Date.now(), stockage } = 
   }
   await s.creerRole(fondateur, team.id, { nom: 'Capitaine', couleur: '#f59e0b', permissions: ['members.view', 'planning.view', 'planning.create', 'attendance.mark', 'attendance.rsvp_own', 'availability.edit_own'] });
   await s.creerInvitation(fondateur, team.id, { roleId: roles.joueur.id, libelle: 'Essai joueur', joursValidite: 7, utilisationsMax: 3 });
+
+  await semerPlanning(base, team.id, { maintenant });
 
   // Résumés de réunions (phase 3).
   const r = servicesResumes({ base, stockage, cleSession: undefined, maintenant, socle: s });

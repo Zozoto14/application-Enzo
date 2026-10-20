@@ -22,6 +22,7 @@ import { creerApi, reponseJson } from './noyau/api.mjs';
 import { verificateurRelais } from './noyau/authentification.mjs';
 import { distribuer } from './noyau/evenements.mjs';
 import { rappelsEcheances } from './noyau/objectifs.mjs';
+import { rappelsPresence } from './noyau/planning/rappels.mjs';
 
 function api(env) {
   return creerApi({
@@ -41,12 +42,13 @@ export default {
     return api(env)(requete, { attendre: p => ctx.waitUntil(p) });
   },
 
-  /** Cron : rappels d'échéance des tâches, événements en attente (nouvel essai), ménage des tentatives anciennes. */
+  /** Cron : rappels de présence et d'échéance des tâches, événements en attente (nouvel essai), ménage des tentatives anciennes. */
   async scheduled(_evenement, env, ctx) {
     if (!env.BASE) return;
     const base = baseD1(env.BASE);
     ctx.waitUntil(
       (async () => {
+        await rappelsPresence(base, { maintenant: Date.now() }).catch(e => console.error('[esport] rappels', e));
         await rappelsEcheances(base, { maintenant: Date.now() });
         await distribuer(base, { maintenant: Date.now(), limite: 500 });
         await base.executer('DELETE FROM tentatives WHERE maj_le < ?', [new Date(Date.now() - 7 * 86_400_000).toISOString()]);

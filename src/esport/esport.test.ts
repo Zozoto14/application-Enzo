@@ -172,9 +172,14 @@ describe('page d’une team', () => {
   });
 
   it('la barre ne montre que les modules activés (futurs « bientôt ») et ce que le rôle permet', () => {
-    const e = entreesBarre(detail(['planning', 'activity_log'], ['members.view', 'planning.view']));
-    expect(e.map(x => x.id)).toEqual(['accueil', 'module:planning', 'membres', 'parametres']);
-    expect(e.find(x => x.id === 'module:planning')?.bientot).toBe(true);
+    const e = entreesBarre(detail(['planning', 'scouting', 'activity_log'], ['members.view', 'planning.view']));
+    expect(e.map(x => x.id)).toEqual(['accueil', 'module:planning', 'module:scouting', 'membres', 'parametres']);
+    // Planning est livré (phase 2) ; Scouting, activé mais pas encore livré, est « bientôt ».
+    expect(e.find(x => x.id === 'module:planning')?.bientot).toBe(false);
+    expect(e.find(x => x.id === 'module:scouting')?.bientot).toBe(true);
+    // Module livré mais sans aucune permission pour l'ouvrir : pas d'entrée.
+    expect(entreesBarre(detail(['planning', 'attendance'], ['members.view', 'planning.view'])).map(x => x.id)).not.toContain('module:attendance');
+    expect(entreesBarre(detail(['planning', 'attendance'], ['planning.view', 'attendance.rsvp_own'])).map(x => x.id)).toContain('module:attendance');
     const manager = entreesBarre(detail(['activity_log'], ['members.view', 'activity_log.view']));
     expect(manager.map(x => x.id)).toEqual(['accueil', 'membres', 'journal', 'parametres']);
     // Journal désactivé : plus d'entrée, même avec la permission.

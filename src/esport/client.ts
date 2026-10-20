@@ -390,6 +390,8 @@ export interface ClientEsport {
   creerTache(id: string, t: { titre: string; description?: string; assigne?: string | null; echeance?: string | null; priorite?: Priorite; statut?: StatutTache; objectifId?: string | null }): Promise<Tache>;
   modifierTache(id: string, tacheId: string, t: Partial<{ titre: string; description: string; assigne: string | null; echeance: string | null; priorite: Priorite; statut: StatutTache; objectifId: string | null }>): Promise<Tache>;
   supprimerTache(id: string, tacheId: string): Promise<void>;
+  /** Appel générique avec la session (modules : planning, etc. ; voir src/esport/planning/api.ts). */
+  requete<T>(chemin: string, methode?: string, corps?: unknown): Promise<T>;
 }
 
 /** Paramètres d'URL (valeurs vides ignorées). */
@@ -530,6 +532,7 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     supprimerTache: async (id, tacheId) => {
       await appel(`${t(id)}/taches/${encodeURIComponent(tacheId)}`, 'DELETE');
     },
+    requete: (chemin, methode, corps) => appel(chemin, methode, corps),
   };
 }
 

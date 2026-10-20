@@ -158,7 +158,7 @@ try {
   await pc.getByTestId('esport-team').waitFor({ timeout: 20_000 });
   await pc.getByTestId('esport-membres').waitFor({ timeout: 20_000 });
   verifier((await pc.getByTestId('esport-onglet-module-scouting').count()) === 0, 'barre latérale : le module désactivé (Scouting) n’apparaît pas');
-  verifier((await pc.getByTestId('esport-onglet-module-planning').count()) === 1, 'barre latérale : Planning activé, affiché « bientôt »');
+  verifier((await pc.getByTestId('esport-onglet-module-planning').count()) === 1, 'barre latérale : Planning activé (écran livré en phase 2)');
   verifier((await pc.getByTestId('esport-onglet-journal').count()) === 1, 'barre latérale : Journal');
 
   log('PC : invitation (rôle Joueur)');

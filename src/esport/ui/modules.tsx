@@ -1,0 +1,45 @@
+/**
+ * Écrans des modules livrés, par clé de module (catalogue). Un module activé
+ * SANS écran ici apparaît « bientôt » dans la barre de la team. Pour livrer un
+ * module : ajouter sa ligne ci-dessous (une seule ligne par module).
+ */
+
+import type React from 'react';
+import type { ThemeHub } from '../../hub/themes';
+import type { ClientEsport, DetailTeam } from '../client';
+import type { SaisieEvenement } from '../planning/api';
+import { Disponibilites } from './planning/Disponibilites';
+import { Planning } from './planning/Planning';
+import { Presence } from './planning/Presence';
+
+export type SectionModule = `module:${string}`;
+
+export interface PropsModule {
+  theme: ThemeHub;
+  client: ClientEsport;
+  detail: DetailTeam;
+  large: boolean;
+  /** Aller à une autre section de la team (ex. proposer un événement depuis la heatmap). */
+  onAller(section: SectionModule | 'accueil', brouillon?: Partial<SaisieEvenement>): void;
+  /** Brouillon d'événement transmis par une autre section. */
+  brouillon?: Partial<SaisieEvenement>;
+  onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
+}
+
+export const ECRANS_MODULES: Record<string, (props: PropsModule) => React.ReactElement> = {
+  planning: Planning,
+  availability: Disponibilites,
+  attendance: Presence,
+};
+
+/** Permissions dont l'une ouvre l'écran du module (sinon, pas d'entrée dans la barre). */
+const ACCES_MODULES: Record<string, string[]> = {
+  planning: ['planning.view'],
+  availability: ['availability.edit_own', 'availability.view_all'],
+  attendance: ['attendance.rsvp_own', 'attendance.view_all', 'attendance.mark'],
+};
+
+export function moduleAccessible(cle: string, permissions: readonly string[]): boolean {
+  const requises = ACCES_MODULES[cle];
+  return !requises || requises.some(p => permissions.includes(p));
+}

@@ -43,7 +43,8 @@ export async function banc({ creationTeams = 'fondateur', relaisAncien = false, 
     if (jeton) headers.Authorization = `Bearer ${jeton}`;
     const r = await traiter(new Request(`https://esport.test${chemin}`, { method: methode, headers, body: corps === undefined ? undefined : JSON.stringify(corps) }));
     const texte = await r.text();
-    return { statut: r.status, corps: texte ? JSON.parse(texte) : null, entetes: r.headers };
+    const json = (r.headers.get('Content-Type') ?? '').includes('json');
+    return { statut: r.status, corps: texte ? (json ? JSON.parse(texte) : texte) : null, entetes: r.headers };
   }
   /** Session Esport d'un compte (« principal » = Fondateur, jeton maître), avec pseudo si demandé. */
   async function session(compte, pseudo) {

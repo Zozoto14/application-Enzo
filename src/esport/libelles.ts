@@ -38,6 +38,7 @@ export function tailleLisible(octets: number): string {
   if (octets < 1024 * 1024) return `${Math.round(octets / 1024)} Ko`;
   return `${(octets / (1024 * 1024)).toFixed(1).replace('.', ',')} Mo`;
 }
+import { phraseJournalPlanning, phraseNotificationPlanning } from './planning/libelles';
 
 const nom = (noms: Record<string, string | null>, id: unknown): string =>
   typeof id === 'string' ? (noms[id] ?? (id === 'principal' ? 'Le Fondateur' : 'Un compte supprimé')) : 'Quelqu’un';
@@ -112,7 +113,7 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
     case 'task.due_soon':
       return `Rappel d’échéance envoyé à ${nom(noms, m.assigne)} pour « ${texte(m.titre)} »`;
     default:
-      return `${qui} : ${e.action}`;
+      return phraseJournalPlanning(e.action, qui, m, id => nom(noms, id)) ?? `${qui} : ${e.action}`;
   }
 }
 
@@ -127,6 +128,8 @@ export const FILTRES_JOURNAL: ReadonlyArray<readonly [string, string]> = [
   ['meeting', 'Résumés'],
   ['task', 'Tâches'],
   ['goal', 'Objectifs'],
+  ['event', 'Planning'],
+  ['attendance', 'Présence'],
 ];
 
 export function phraseNotification(n: Notification, noms: Record<string, string | null>): string {
@@ -152,7 +155,7 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
     case 'tache-echeance':
       return `${c.retard ? 'En retard' : 'Échéance proche'} : « ${typeof c.titre === 'string' ? c.titre : 'une tâche'} »${typeof c.echeance === 'string' ? ` (${dateJour(c.echeance)})` : ''}`;
     default:
-      return `${team} : ${n.type}`;
+      return phraseNotificationPlanning(n.type, team, c) ?? `${team} : ${n.type}`;
   }
 }
 
