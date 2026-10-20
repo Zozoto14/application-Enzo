@@ -1893,7 +1893,6 @@ export const fr = {
   'presence.convoques': 'Convoqués',
   'presence.ont_dit_oui': 'Oui',
   'presence.avancement': '{marques} sur {convoques} marqués',
-  'presence.detail_reel': '{present} présents, {retard} en retard, {absent} absents, {excuse} excusés',
   'presence.pas_encore_commence': 'L’événement n’a pas encore commencé : vous pouvez déjà noter un excusé.',
   'presence.tout_le_monde_present': 'Tout le monde présent',
   'presence.puis_ajustez': 'Marque présents ceux qui ne le sont pas encore ; ajustez ensuite les exceptions.',
@@ -2009,6 +2008,7 @@ export const fr = {
   'jr.player_note_unshared': '{qui} ne partage plus une note avec {joueur}',
   'nt.note_partagee': 'Le staff de {team} a partagé une note avec vous',
   'presence.rien_de_marque': 'Rien de marqué',
+  'presence.resume_reponses': '{convoques} convoqués · Oui {oui} · Peut-être {peutEtre} · Non {non} · Sans réponse {sansReponse}',
 } as const;
 
 export type Cle = keyof typeof fr;

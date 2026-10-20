@@ -118,10 +118,17 @@ rien ne sort pour une réunion staff ou une strat privée.
 - **Export** (membre : Paramètres › Exporter mes données ; Fondateur : Membres et rôles › un membre › Exporter ses
   données) : profil, teams, notifications, actions du journal, disponibilités, présences, réunions déposées, tâches
   et objectifs, repères et commentaires de review, strats et entrées de playbook créées, abonnements iCal (sans
-  jeton), invitations créées (sans code).
+  jeton), invitations créées (sans code), **notes du staff partagées avec lui** (`notesPartagees`) et le nombre de
+  notes qu'il a rédigées par team (`notesRedigees`, sans leur contenu : il s'agit de données d'autres joueurs).
+- **Notes privées du staff** (Suivi joueurs, [suivi-joueurs.md](suivi-joueurs.md)) : ce sont des données
+  personnelles du joueur concerné, mais elles ne figurent PAS dans l'export qu'il fait lui-même. Quand le Fondateur
+  exporte les données d'un membre (Administration, demande d'accès RGPD transmise), l'export contient en plus
+  `notesStaffPrivees` (date, catégorie, ton, texte, étiquettes, auteur) : le Fondateur les transmet au demandeur
+  s'il exerce son droit d'accès, après avoir vérifié qu'elles ne contiennent rien sur un tiers.
 - **Suppression** (membre ou Fondateur) : compte, appartenances, notifications, disponibilités, présences,
   abonnements iCal effacés ; tâches, objectifs et repères qui le visaient désattribués ; ce qu'il a écrit pour la
-  team reste, sans pseudo (« Compte supprimé »). Journalisé (`account.deleted`, `member.left` / `member.removed`).
+  team reste, sans pseudo (« Compte supprimé »). Notes du staff : celles **sur** lui sont effacées, celles qu'il a
+  **écrites** restent, sans auteur (anonymisées). Journalisé (`account.deleted`, `member.left` / `member.removed`).
 - **Minimisation** : pas d'adresse e-mail ; Riot ID et Discord facultatifs ; journal conservé 1 an par défaut,
   réglable par la team (30 jours à 2 ans, ou illimité), purgé par le cron ; événements traités effacés après
   30 jours.

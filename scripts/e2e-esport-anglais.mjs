@@ -170,7 +170,7 @@ try {
   await pc.getByTestId('esport-team').waitFor({ timeout: 20_000 });
   await verifierAnglais(pc, 'Accueil de la team');
 
-  const sections = ['module-planning', 'module-availability', 'module-attendance', 'module-strat_editor', 'module-playbook', 'module-video_review', 'module-scouting', 'module-meeting_summaries', 'module-goals_tasks', 'membres', 'parametres', 'module-discord', 'journal'];
+  const sections = ['module-planning', 'module-availability', 'module-attendance', 'module-strat_editor', 'module-playbook', 'module-video_review', 'module-scouting', 'module-meeting_summaries', 'module-goals_tasks', 'module-player_notes', 'membres', 'parametres', 'module-discord', 'journal'];
   for (const id of sections) {
     try {
       await ongletTeam(pc, id, { delai: 10_000 });

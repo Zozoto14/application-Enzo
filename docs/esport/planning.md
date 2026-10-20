@@ -113,27 +113,118 @@ Code : `esport/noyau/planning/convocations.mjs` (règles pures, serveur) et `src
   prérempli (Coach, Manager, Propriétaire).
 - Effectif minimum : 5 par défaut, réglable (1 à 30) dans Paramètres › Planning (Propriétaire, Manager).
 
-## Présence
+## Présence (refonte, migration 0013)
 
-- **RSVP** par le joueur : Oui / Peut-être / Non, en un appui (accueil de la team, planning, page Présence).
-  Possible jusqu'à la fin de l'événement.
-- **Présence réelle** marquée par le staff : Présent, En retard, Absent, Excusé (détail d'une occurrence, ou
-  « Marquer la présence » de la page Présence, qui liste les événements **commencés** des 14 derniers jours, le
-  jour même compris ; l'accueil signale les événements passés non marqués). **Chaque appui enregistre** : il n'y a
-  plus de bouton « Enregistrer la présence » séparé.
-- Liste de présence : les **convoqués** de l'occurrence, et eux seuls ; elle se recharge après une réponse (RSVP)
-  donnée dans le même détail.
-- **Statistiques** par joueur, par type d'événement et par mois ou par semaine, **des convoqués** : un convoqué
-  sans réponse ni marquage à une séance déjà commencée compte « non marqué » (il était attendu) ; un
-  non-convoqué n'est jamais compté, même s'il avait répondu avant la migration ; un ancien membre garde ses
-  présences marquées. Taux = (présent + en retard) / (marqués − excusés) ; un excusé ne compte ni pour ni contre,
-  un non-marqué n'entre pas dans le taux. Ponctualité = présent / (présent + en retard).
-- **Export CSV** (staff) : les MÊMES lignes que les statistiques (convoqués, non-marqués attendus compris, filtre
-  `types` accepté) : date, heure, événement, type, joueur, réponse, présence, note (UTF-8 avec BOM, formules
-  neutralisées).
-- **Rappel automatique** : le cron publie l'événement `attendance.reminder` sur le bus (une fois par convoqué
-  et par occurrence) pour les convoqués sans réponse, `rappelHeures` avant le début (24 h par défaut, 0 =
-  jamais). L'abonné in-app en fait une notification ; Discord (« RSVP manquant ») s'y abonne aussi.
+La réponse du joueur (**RSVP**, à l'avance) et la **présence réelle** (constatée par le staff) sont deux choses
+distinctes, affichées séparément partout.
+
+### Côté joueur
+
+- **Réponse en un appui** : Oui / Peut-être / Non (accueil de la team, planning, page Présence › Mes réponses, bot
+  Discord). Possible jusqu'à la fin de l'événement.
+- **Annonce facultative**, sous la réponse : après Oui ou Peut-être, « Je serai en retard : 5 / 10 / 15 / 30 min » ;
+  après Non, « Motif de l'absence ». Rien n'est obligatoire. Même modèle que les boutons RSVP du bot Discord : un
+  appui qui n'envoie que la réponse garde l'annonce, sauf incohérence (« Non » efface le retard annoncé, « Oui » ou
+  « Peut-être » effacent le motif).
+- **Sa présence** : page Présence › Ma présence (période au choix) et carte **Mon profil de joueur** sur l'accueil
+  de la team (30 jours) : taux, ponctualité, absences de suite, dernières séances avec sa réponse et la présence
+  marquée. Un joueur ne voit jamais les chiffres des autres.
+
+### Côté staff : la page Présence
+
+Trois onglets (Marquer / Voir tout) :
+
+- **À marquer (n)** : les séances **commencées** (en cours comprises) des 30 derniers jours dont la présence n'est
+  pas complète (au moins un convoqué non marqué), la plus récente d'abord, avec « 3 à marquer sur 5 » et
+  « En cours ». Deux boutons : **Feuille d'appel** et **Voir le détail**. L'accueil de la team signale les mêmes
+  séances (commencées, et plus seulement terminées).
+- **Historique** : une ligne par séance (période et types au choix) : convoqués, présents, en retard, absents,
+  excusés, non marqués, venus en plus, taux. Un appui ouvre la séance.
+- **Statistiques** : périodes **7 jours, 30 jours, 3 mois, saison** (depuis le début de saison de la team,
+  `MM-JJ`, 1er septembre par défaut, réglable dans Paramètres › Planning) **ou dates** ; filtre par type
+  d'événement ; chiffres clés (taux de présence, ponctualité et retard moyen, séances non marquées) ; par joueur :
+  taux en chiffre et en barre, **tendance** (↗ / ↘ en points), ponctualité, **« n absences de suite »** ; par type
+  d'événement ; un appui sur un joueur ouvre **sa fiche** (historique séance par séance, motifs). Jamais de « — » :
+  une valeur absente est écrite (« pas encore marqué », « non convoqué ») et un **état vide** explique quoi faire
+  (« 3 séances ont eu lieu mais leur présence n'est pas marquée »). Les **définitions** sont dans l'écran
+  (« Comment ces chiffres sont calculés »). Export CSV.
+
+### Vue Présence d'une séance et feuille d'appel
+
+Une seule brique (`FeuilleAppel.tsx`), dans le détail d'un événement (vue) et en **feuille d'appel** (plein écran
+sur iPhone, volet sur PC) :
+
+- en haut, les **compteurs** : convoqués, ont répondu Oui / Peut-être / Non / sans réponse, puis « 3 sur 5
+  marqués » avec une barre ;
+- une ligne par convoqué : sa réponse (et son annonce : « annonce 15 min de retard », motif), et un **sélecteur en
+  un appui** (Présent / En retard / Absent / Excusé, quatre boutons d'égale largeur sur une ligne, 44 px, 52 en
+  feuille d'appel). **Chaque appui enregistre** et la ligne affiche « ✓ Enregistré » (ou « Non enregistré » et
+  revient en arrière si le serveur refuse). En retard : minutes en option (5, 10, 15, 30 ou saisies). Absent ou
+  Excusé : motif en option ;
+- **Tout le monde présent** : marque présents les convoqués **pas encore marqués** (les exceptions déjà saisies
+  restent), puis on ajuste ;
+- **Ajouter quelqu'un de non convoqué** : un remplaçant venu quand même, noté présent, compté à part
+  (« venu en plus »), jamais dans les taux ; « Retirer de la feuille » l'enlève.
+
+On peut marquer une séance pas encore commencée (par ex. un excusé prévenu à l'avance) ; elle n'apparaît dans
+« À marquer » qu'une fois commencée.
+
+### Définitions (une seule, partout : page Présence, accueil, Dashboard, statistiques de la team, CSV)
+
+- **Seuls les convoqués comptent** (voir Convocations) ; un non-convoqué venu quand même est compté à part.
+- **Marquées** = séances où il était convoqué **et** dont la présence est marquée (présent, en retard, absent,
+  excusé). Une séance commencée non marquée est « non marquée » : elle n'entre dans aucun taux.
+- **Taux de présence** = (présents + en retard) ÷ marquées. **Un excusé compte comme une absence (justifiée)** :
+  c'est la définition demandée par le Fondateur ; avant la refonte, l'écran Présence l'excluait alors que le
+  Dashboard et les statistiques de la team le comptaient (trois chiffres différents pour la même chose).
+- **Ponctualité** = présents ÷ (présents + en retard) ; **retard moyen** sur les retards chronométrés.
+- **Absences de suite** = absences ou excuses consécutives en partant de la dernière séance marquée
+  (`serieMax` : la plus longue).
+- **Tendance** = taux de la seconde moitié de la période écoulée − taux de la première (en points ; « stable »
+  sous 5 points).
+
+### Données (migration `0013_presence_notes.sql`)
+
+Colonnes ajoutées à `presences` : `retard_prevu` et `motif_prevu` (annonce du joueur), `retard_minutes` et `motif`
+(constat du staff), `hors_convocation` (0/1). Les anciennes lignes restent valables. Le journal (`attendance.rsvp`,
+`attendance.marked`) ne contient jamais de motif (donnée personnelle).
+
+### Export CSV
+
+Les MÊMES lignes que les statistiques (convoqués, non-marqués attendus compris, venus en plus signalés), filtres de
+période et de type acceptés : date, heure, événement, type, joueur, **convoqué** (« Non (venu en plus) »),
+réponse, **retard annoncé (min)**, **motif annoncé**, présence, **retard (min)**, **motif**, note (UTF-8 avec BOM,
+formules neutralisées).
+
+### Rappel automatique
+
+Le cron publie `attendance.reminder` (une fois par convoqué et par occurrence) pour les convoqués sans réponse,
+`rappelHeures` avant le début (24 h par défaut, 0 = jamais) ; in-app et Discord (« RSVP manquant »).
+
+### Audit d'octobre 2026 (avant la refonte)
+
+Relevé sur l'app lancée avec les graines (PC 1440 × 900 et iPhone 390 × 844) :
+
+1. Une seule longue page mélangeait trois métiers (mes réponses, marquage, statistiques), sans onglets.
+2. « Marquer la présence » listait toutes les séances commencées des 14 derniers jours, **même déjà marquées**,
+   sans état ni compteur ; « Marquer » était un petit texte gris ; la liste s'ouvrait en accordéon et poussait la
+   suite hors de l'écran ; aucun « tout le monde présent » : un appui par joueur, toujours.
+3. Sur iPhone, les quatre boutons passaient sur deux lignes (« Excusé » seul en dessous) ; la confirmation
+   (« enregistré ») s'affichait en haut du bloc, hors de l'écran.
+4. Ni minutes de retard, ni motif, ni moyen d'ajouter un remplaçant non convoqué (refus 400).
+5. Réponse et présence mélangées : chaque ligne d'une séance passée affichait « Réponse : Sans réponse » et les
+   statistiques un « réponses 0 % » sans intérêt.
+6. Statistiques : des « — » (Match, mois de septembre), des clés brutes (« 2026-09 », « 2026-S43 »), une ligne de
+   chiffres à décoder ; **trois définitions différentes du taux** (page Présence sans les excusés : Tom à 100 %
+   avec 3 excusés sur 6 ; Dashboard et statistiques de la team avec) ; ni 7 jours, ni saison, ni dates ; ni fiche
+   joueur, ni séries, ni tendance ; la période par défaut englobait la semaine à venir.
+7. Incohérence « à marquer » : la page Présence prenait les séances commencées, l'accueil seulement les terminées
+   (l'entraînement en cours manquait à l'accueil).
+8. Le joueur ne pouvait ni prévenir d'un retard ni donner un motif, et ses chiffres étaient en bas d'une page de
+   staff.
+
+Tout est corrigé ci-dessus ; tests : `esport/test/presence-notes.test.mjs`, `src/esport/planning/presence.test.tsx`,
+e2e `scripts/e2e-esport-presence-notes.mjs` (captures `docs/captures-esport-presence-notes/`).
 
 ### Correctif : « présent » qui ne comptait pas (octobre 2026)
 
@@ -173,14 +264,17 @@ annulé (membres concernés), rappel de réponse.
 | `POST /teams/:t/planning` (`convocation: { groupes, membres, exclus, proprietaires }`) | planning.create |
 | `GET\|PATCH\|DELETE /teams/:t/planning/:e` (`DELETE ?portee=serie\|occurrence\|suivantes&occurrence=`) | view / update / delete |
 | `PATCH /teams/:t/planning/:e/occurrences/:clé` (`convocation` propre à la date, `null` : celle de la série) | planning.update |
-| `PUT /teams/:t/planning/:e/occurrences/:clé/rsvp` | attendance.rsvp_own, et être convoqué |
-| `GET\|PUT /teams/:t/planning/:e/occurrences/:clé/presence` | view_all (ou la sienne) / attendance.mark |
+| `PUT /teams/:t/planning/:e/occurrences/:clé/rsvp` (`rsvp`, `retardPrevu?`, `motif?`) | attendance.rsvp_own, et être convoqué |
+| `GET\|PUT /teams/:t/planning/:e/occurrences/:clé/presence` (`marques: [{ compte, reel, retardMinutes?, motif?, horsConvocation? }]`, `toutPresent?`) | view_all (ou la sienne) / attendance.mark |
 | `GET /teams/:t/planning/accueil` | planning.view |
 | `GET\|PUT /teams/:t/planning/reglages` | planning.view / team.manage |
 | `GET /teams/:t/planning/export.ics` ; `GET\|POST /teams/:t/planning/ical` ; `DELETE …/ical/:id` | planning.view |
 | `GET /ical/<jeton>.ics` (sans session) | jeton actif + accès du titulaire |
-| `GET /teams/:t/presence/stats?debut&fin&types&granularite` | view_all (ou les siennes) |
-| `GET /teams/:t/presence/export.csv?debut&fin&types` | attendance.view_all |
+| `GET /teams/:t/presence/stats?debut&fin\|periode&types&granularite` | view_all (ou les siennes) |
+| `GET /teams/:t/presence/export.csv?debut&fin&types` (ou `periode=7\|30\|90\|saison`) | attendance.view_all |
+| `GET /teams/:t/presence/a-marquer` | attendance.mark |
+| `GET /teams/:t/presence/historique?periode\|debut&fin&types` | attendance.view_all |
+| `GET /teams/:t/presence/joueurs/:compte` (`moi` : la sienne) | attendance.view_all (ou la sienne) |
 | `GET /teams/:t/dispos/moi` ; `PUT …/moi/regles` ; `POST …/moi/exceptions` ; `DELETE …/moi/exceptions/:id` | availability.edit_own |
 | `GET /teams/:t/dispos/carte?semaine&fuseau&pas` | availability.view_all |
 
@@ -189,12 +283,12 @@ Ajouter `?format=json` aux exports pour recevoir `{ nom, type, contenu }` (utili
 ## Code
 
 - Cœur portable : `esport/noyau/planning/` — `temps.mjs` (fuseaux), `recurrence.mjs`, `convocations.mjs`, `dispos.mjs`
-  (heatmap), `presence.mjs` (statistiques, CSV), `ical.mjs`, `service.mjs`, `routes.mjs`, `bus.mjs`,
+  (heatmap), `presence.mjs` (statistiques, définitions, séries, CSV), `ical.mjs`, `service.mjs`, `routes.mjs`, `bus.mjs`,
   `rappels.mjs` (cron). SQL standard (SQLite/D1, Postgres).
 - App : `src/esport/planning/` (client, libellés) et `src/esport/ui/planning/` ; écrans branchés par
   `src/esport/ui/modules.tsx`.
 - Graines : `esport/outils/graines-planning.mjs` (`npm run esport:local`).
 - Tests : `esport/test/planning.test.mjs`, `esport/test/planning-api.test.mjs`, `esport/test/convocations.test.mjs`,
-  `src/esport/planning/planning.test.tsx`, e2e `scripts/e2e-esport-planning.mjs` et
-  `scripts/e2e-esport-convocations.mjs`.
+  `esport/test/presence-notes.test.mjs`, `src/esport/planning/planning.test.tsx`, `src/esport/planning/presence.test.tsx`,
+  e2e `scripts/e2e-esport-planning.mjs`, `scripts/e2e-esport-convocations.mjs` et `scripts/e2e-esport-presence-notes.mjs`.
 - Migrations : numéros croissants, **trous permis** (une autre branche peut livrer `0003` avant `0002`).

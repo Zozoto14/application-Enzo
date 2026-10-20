@@ -14,6 +14,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [planning.md](planning.md) | Tout le monde | Planning, disponibilités, présence, agenda iCal |
 | [resumes.md](resumes.md) | Tout le monde | Déposer une réunion, boîte du rédacteur, PDF |
 | [objectifs-taches.md](objectifs-taches.md) | Tout le monde | Objectifs, tâches, kanban |
+| [suivi-joueurs.md](suivi-joueurs.md) | Staff, Fondateur | Suivi joueurs : notes du staff, partage, RGPD |
 | [bot-discord.md](bot-discord.md) | Fondateur, tout le monde | Bot Discord : activation, commandes, pings des convoqués, /lier |
 | [discord.md](discord.md) | Propriétaire, Manager | Webhook (repli sans bot), messages, sécurité |
 | [review-video.md](review-video.md) | Coach, Analyste, joueurs | Review YouTube, repères, export |
@@ -51,7 +52,7 @@ Esport
 │       │                l'équipe, notifications, statistiques
 │       ├── Agenda       Planning · Disponibilités · Présence
 │       ├── Jeu          Strats · Playbook · Review vidéo · Scouting
-│       ├── Équipe       Résumés · Objectifs et tâches · Membres et rôles
+│       ├── Équipe       Résumés · Objectifs et tâches · Suivi joueurs · Membres et rôles
 │       └── Réglages     Paramètres · Discord · Journal
 └── Membres
 ```
@@ -169,8 +170,10 @@ team sont déjà là (Dashboard et Teams), aucun code à saisir. Riot ID et Disc
 
 ### Ce que vous faites le plus souvent
 
-- **Accueil** : prochains événements (répondez **Oui / Non / Peut-être** en un geste, même sur iPhone), tâches en
-  retard, derniers résumés, notifications.
+- **Accueil** : prochains événements (répondez **Oui / Non / Peut-être** en un geste, même sur iPhone ; prévenez
+  d'un retard ou donnez le motif d'une absence si vous voulez), **Mon profil de joueur** (votre présence sur 30 jours
+  et les notes que le staff a partagées avec vous), tâches en retard, derniers résumés, notifications.
+- **Présence** : « Mes réponses » et « Ma présence » (votre taux, votre ponctualité, vos dernières séances).
 - **Disponibilités** : vos créneaux habituels par jour, et les exceptions (vacances, soirée prise).
 - **Résumés** : déposez le lien de l'enregistrement d'une réunion ; vous verrez quand le résumé PDF est prêt.
 - **Objectifs et tâches** : « Mes tâches », faites-les avancer (À faire › En cours › Fait).

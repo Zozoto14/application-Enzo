@@ -270,6 +270,7 @@ try {
   // ================================================================ PC : statistiques
   log('PC : statistiques de présence');
   await ongletTeam(pc, 'module-attendance');
+  await pc.getByTestId('esport-presence-onglet-stats').click();
   await pc.getByTestId('esport-presence-stats').waitFor({ timeout: 20_000 });
   await pc.getByTestId(`esport-stat-joueur-${idLea}-taux`).waitFor({ timeout: 20_000 });
   verifier((await pc.getByTestId(`esport-stat-joueur-${idLea}-taux`).innerText()).trim() === '100 %', 'statistiques : Léa à 100 %');

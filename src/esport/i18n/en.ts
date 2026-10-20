@@ -1690,7 +1690,6 @@ export const en: Record<Cle, string> = {
   'presence.convoques': 'Called up',
   'presence.ont_dit_oui': 'Yes',
   'presence.avancement': '{marques} of {convoques} marked',
-  'presence.detail_reel': '{present} present, {retard} late, {absent} absent, {excuse} excused',
   'presence.pas_encore_commence': 'The event has not started yet: you can already note someone as excused.',
   'presence.tout_le_monde_present': 'Everyone present',
   'presence.puis_ajustez': 'Marks as present everyone not marked yet; then adjust the exceptions.',
@@ -1806,4 +1805,5 @@ export const en: Record<Cle, string> = {
   'jr.player_note_unshared': '{qui} stopped sharing a note with {joueur}',
   'nt.note_partagee': 'The {team} staff shared a note with you',
   'presence.rien_de_marque': 'Nothing marked',
+  'presence.resume_reponses': '{convoques} called up · Yes {oui} · Maybe {peutEtre} · No {non} · No response {sansReponse}',
 };

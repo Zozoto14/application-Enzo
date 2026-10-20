@@ -273,6 +273,11 @@ export function FeuilleAppel({
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-presence" />
       {c ? (
         <View style={{ gap: ESP.xs }} testID="esport-presence-compteurs">
+          {appel ? (
+            <Text style={styleAttenue(theme, TYPO.texte)} testID="esport-presence-compteur-convoques">
+              {tr('presence.resume_reponses', { convoques: c.convoques, oui: c.oui, peutEtre: c.peutEtre, non: c.non, sansReponse: c.sansReponse })}
+            </Text>
+          ) : (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs }}>
             <Compteur theme={theme} libelle={tr('presence.convoques')} n={c.convoques} ton="neutre" testID="esport-presence-compteur-convoques" />
             <Compteur theme={theme} libelle={tr('presence.ont_dit_oui')} n={c.oui} ton="ok" testID="esport-presence-compteur-oui" />
@@ -280,11 +285,12 @@ export function FeuilleAppel({
             <Compteur theme={theme} libelle={tr('planning.libelles.non')} n={c.non} ton="critique" testID="esport-presence-compteur-non" />
             <Compteur theme={theme} libelle={tr('planning.libelles.sans_reponse')} n={c.sansReponse} ton="neutre" testID="esport-presence-compteur-sans-reponse" />
           </View>
+          )}
           {marquer || c.marques > 0 ? (
             <View style={{ gap: ESP.xxs }}>
               <Text style={{ ...styleTexte(theme), fontWeight: '600' }} testID="esport-presence-avancement">
                 {tr('presence.avancement', { marques: c.marques, convoques: c.convoques })}
-                {c.marques > 0 ? ` · ${tr('presence.detail_reel', { present: c.present, retard: c.retard, absent: c.absent, excuse: c.excuse })}` : ''}
+                {c.marques > 0 ? ` · ${[trn('presence.n_presents', c.present), trn('presence.n_retards', c.retard), trn('presence.n_absents', c.absent), trn('presence.n_excuses', c.excuse)].join(', ')}` : ''}
                 {c.enPlus > 0 ? ` · ${trn('presence.en_plus', c.enPlus)}` : ''}
               </Text>
               <View style={{ height: 8, borderRadius: 4, backgroundColor: teinteTransparente(theme.attenue, 0.18), overflow: 'hidden' }} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: 100, now: pct }}>
