@@ -160,5 +160,6 @@ export const styles = StyleSheet.create({
   ligne: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   pastille: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2, alignSelf: 'flex-start' },
   point: { width: 8, height: 8, borderRadius: 4 },
-  choix: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, minHeight: 36 },
+  // Cible tactile de 44 px (pastilles de choix, utilisées aussi sur téléphone).
+  choix: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8, minHeight: 44 },
 });

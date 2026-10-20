@@ -279,8 +279,23 @@ try {
   verifier((await pc.getByText(/Léa a rejoint la team \(Joueur\)/).count()) >= 1, 'Journal : « Léa a rejoint la team (Joueur) »');
   verifier((await pc.getByText(/Fondateur a créé une invitation \(Joueur\)/).count()) >= 1, 'Journal : invitation');
   await capture(pc, '13-pc-journal');
-  await pc.getByTestId('esport-onglet-membres').click();
+  // Phase 7 : filtres, export CSV et durée de conservation du journal.
+  await pc.getByTestId('esport-journal-module-coeur').click();
+  await pc.getByText(/Léa a rejoint la team \(Joueur\)/).first().waitFor({ timeout: 20_000 }).catch(() => undefined);
+  verifier((await pc.getByText(/Léa a rejoint la team \(Joueur\)/).count()) >= 1, 'Journal filtré (Team et membres) : arrivée de Léa');
+  verifier(await pc.getByTestId('esport-journal-csv').isVisible(), 'Journal : bouton « Exporter (CSV) »');
+  verifier(/Conservation : 1 an/.test((await pc.getByTestId('esport-journal-retention').textContent({ timeout: 20_000 })) ?? ''), 'Journal : conservation 1 an');
+  verifier((await api(`/teams/${faucons.id}/journal/export.csv?format=json`, sessFond)).corps?.contenu?.includes('member.joined'), 'Journal : export CSV');
+  // Statistiques de la team sur l'accueil.
+  await pc.getByTestId('esport-onglet-accueil').click();
+  await pc.getByTestId('esport-stats').waitFor({ timeout: 20_000 });
+  verifier(await pc.getByTestId('esport-stats-membres').isVisible(), 'Accueil : statistiques de la team');
+  await capture(pc, '13b-pc-stats');
+  // Navigation au clavier : l'onglet « Membres et rôles » s'ouvre avec Entrée.
+  await pc.getByTestId('esport-onglet-membres').focus();
+  await pc.keyboard.press('Enter');
   await pc.getByTestId(`esport-membre-${idLea}`).waitFor({ timeout: 20_000 });
+  verifier(true, 'Clavier : onglet ouvert avec Entrée');
   await pc.getByTestId('esport-matrice').waitFor({ timeout: 20_000 });
   await capture(pc, '14-pc-membres-matrice');
 

@@ -35,7 +35,19 @@ export function BarreProgression({ theme, pourcentage, testID }: { theme: ThemeH
   );
 }
 
-export function SectionObjectifs({ theme, client, detail, large }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; large: boolean }) {
+export function SectionObjectifs({
+  theme,
+  client,
+  detail,
+  large,
+  onExporter,
+}: {
+  theme: ThemeHub;
+  client: ClientEsport;
+  detail: DetailTeam;
+  large: boolean;
+  onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
+}) {
   const teamId = detail.team.id;
   const [moi, setMoi] = useState<string | undefined>();
   useEffect(() => {
@@ -80,6 +92,32 @@ export function SectionObjectifs({ theme, client, detail, large }: { theme: Them
     <View style={{ gap: 16 }} testID="esport-objectifs">
       <TitreSection theme={theme} titre="Objectifs et tâches" sous="Propres à la team (séparés de l’app Tâches du hub)." />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-objectifs" />
+      {onExporter && peut('goals_tasks.view') ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          <BoutonHub
+            theme={theme}
+            titre="Exporter les tâches (CSV)"
+            onPress={() =>
+              void agir('Export', async () => {
+                const f = await client.exporterTaches(teamId, filtre === 'toutes' ? {} : { filtre });
+                return (await onExporter(f.nom, f.contenu, 'text/csv')) ? 'Export CSV des tâches enregistré.' : undefined;
+              })
+            }
+            testID="esport-taches-csv"
+          />
+          <BoutonHub
+            theme={theme}
+            titre="Exporter les objectifs (CSV)"
+            onPress={() =>
+              void agir('Export', async () => {
+                const f = await client.exporterObjectifs(teamId);
+                return (await onExporter(f.nom, f.contenu, 'text/csv')) ? 'Export CSV des objectifs enregistré.' : undefined;
+              })
+            }
+            testID="esport-objectifs-csv"
+          />
+        </View>
+      ) : null}
 
       <View style={large ? { flexDirection: 'row', gap: 16, alignItems: 'flex-start' } : { gap: 16 }}>
         <Panneau theme={theme} style={large ? { flex: 1 } : undefined} testID="esport-objectifs-liste">

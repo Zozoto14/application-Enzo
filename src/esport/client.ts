@@ -120,6 +120,8 @@ export interface Invitation {
 export interface EntreeJournal {
   id: string;
   action: string;
+  /** Module de l'action (« coeur » : team, membres, rôles, invitations). */
+  module?: string;
   acteur: string | null;
   entiteType: string | null;
   entiteId: string | null;
@@ -129,7 +131,48 @@ export interface EntreeJournal {
 export interface PageJournal {
   entrees: EntreeJournal[];
   noms: Record<string, string | null>;
+  /** Curseur de la page suivante (opaque), ou null. */
   suite: string | null;
+  /** Membres de la team (filtre « membre »). */
+  membres?: Array<{ compte: string; pseudo: string | null }>;
+  /** Durée de conservation du journal (jours ; 0 = illimitée). */
+  retentionJours?: number;
+}
+export interface FiltresJournal {
+  avant?: string;
+  action?: string;
+  module?: string;
+  acteur?: string;
+  /** Période (AAAA-MM-JJ, incluses, fuseau de la team). */
+  du?: string;
+  au?: string;
+  limite?: number;
+}
+export interface ReglagesJournal {
+  retentionJours: number;
+  choix: number[];
+  modifiable: boolean;
+}
+/** Fichier rendu par le serveur pour que l'app l'enregistre (CSV…). */
+export interface FichierServeur {
+  nom: string;
+  type: string;
+  contenu: string;
+}
+/** Statistiques d'une team sur une période (blocs `null` : module désactivé ou droit absent). */
+export interface StatsTeam {
+  periode: { du: string; au: string; fuseau: string };
+  membres: { actifs: number; suspendus: number };
+  presence: {
+    seances: number;
+    taux: number | null;
+    reel: Record<'present' | 'retard' | 'absent' | 'excuse' | 'inconnu', number>;
+    rsvp: Record<'oui' | 'non' | 'peut_etre' | 'sans_reponse', number>;
+    joueurs: Array<{ compte: string; pseudo: string | null; marques: number; taux: number | null }>;
+  } | null;
+  taches: { creees: number; terminees: number; ouvertes: number; enRetard: number; aFaire: number; enCours: number; objectifs: Record<'actif' | 'atteint' | 'abandonne', number> } | null;
+  resumes: { deposes: number; termines: number; enAttente: number } | null;
+  activite: { actions: number; membresActifs: number; parModule: Record<string, number>; parJour: Array<{ jour: string; n: number }> } | null;
 }
 export interface Notification {
   id: string;
@@ -271,7 +314,7 @@ export const DOC_ACTIVATION = 'https://github.com/Zozoto14/application-Enzo/blob
 
 /** Mention affichée dans l'app (données en clair côté serveur). */
 export const MENTION_DONNEES =
-  'Les données Esport (teams, membres, rôles, journal, réunions et résumés PDF, objectifs et tâches) sont stockées en clair sur le serveur Esport, chiffrées au repos par Cloudflare : elles ne sont pas chiffrées de bout en bout comme le reste de l’app. Seuls un pseudo (obligatoire), un Riot ID et un nom Discord (facultatifs) sont enregistrés, jamais d’adresse e-mail. Vous pouvez exporter ou supprimer vos données Esport dans Paramètres.';
+  'Les données Esport sont stockées en clair sur le serveur Esport (Cloudflare, chiffrées au repos) : elles ne sont pas chiffrées de bout en bout comme le reste de l’app. Le serveur garde : votre pseudo (obligatoire), votre Riot ID et votre nom Discord (facultatifs), jamais d’adresse e-mail ; vos teams, rôles et poste ; vos disponibilités, réponses et présences ; les réunions que vous déposez et leurs résumés PDF ; les tâches, objectifs, repères et commentaires de review, strats et fiches de scouting de la team ; le journal d’activité (conservé selon la durée choisie par la team, 1 an par défaut). Ces données servent uniquement au fonctionnement de la team, ne sont ni vendues ni transmises, sauf les messages que la team choisit d’envoyer sur son Discord. Vous pouvez à tout moment exporter vos données (JSON) ou supprimer votre compte Esport ci-dessous ; le Fondateur peut aussi le faire à votre demande. Membre mineur : l’accord d’un représentant légal est nécessaire.';
 
 // ------------------------------------------------------------------ Adresse du Worker
 
@@ -363,7 +406,15 @@ export interface ClientEsport {
   creerInvitation(id: string, i: { roleId: string; joursValidite: number; utilisationsMax: number; libelle?: string }): Promise<{ code: string; invitation: Invitation }>;
   revoquerInvitation(id: string, invitationId: string): Promise<void>;
   accepterInvitation(code: string): Promise<{ team: Team; role: { id: string; nom: string; couleur: string } | null }>;
-  journal(id: string, filtres?: { avant?: string; action?: string; limite?: number }): Promise<PageJournal>;
+  journal(id: string, filtres?: FiltresJournal): Promise<PageJournal>;
+  exporterJournal(id: string, filtres?: Omit<FiltresJournal, 'avant' | 'limite'>): Promise<FichierServeur>;
+  reglagesJournal(id: string): Promise<ReglagesJournal>;
+  changerRetentionJournal(id: string, retentionJours: number): Promise<ReglagesJournal>;
+  stats(id: string, periode?: { du?: string; au?: string }): Promise<StatsTeam>;
+  /** Fondateur : données Esport d'un membre (RGPD). */
+  exporterCompte(compte: string): Promise<unknown>;
+  /** Fondateur : suppression (anonymisation) du compte Esport d'un membre. */
+  supprimerCompte(compte: string): Promise<void>;
   notifications(): Promise<Notifications>;
   marquerLues(tout: boolean, ids?: string[]): Promise<Notifications>;
   // Résumés de réunions (phase 3)
@@ -390,6 +441,8 @@ export interface ClientEsport {
   creerTache(id: string, t: { titre: string; description?: string; assigne?: string | null; echeance?: string | null; priorite?: Priorite; statut?: StatutTache; objectifId?: string | null }): Promise<Tache>;
   modifierTache(id: string, tacheId: string, t: Partial<{ titre: string; description: string; assigne: string | null; echeance: string | null; priorite: Priorite; statut: StatutTache; objectifId: string | null }>): Promise<Tache>;
   supprimerTache(id: string, tacheId: string): Promise<void>;
+  exporterTaches(id: string, filtres?: FiltresTaches): Promise<FichierServeur>;
+  exporterObjectifs(id: string): Promise<FichierServeur>;
   /** Appel générique avec la session (modules : planning, etc. ; voir src/esport/planning/api.ts). */
   requete<T>(chemin: string, methode?: string, corps?: unknown): Promise<T>;
 }
@@ -493,9 +546,14 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
       await appel(`${t(id)}/invitations/${encodeURIComponent(invitationId)}`, 'DELETE');
     },
     accepterInvitation: code => appel('/invitations/accepter', 'POST', { code: code.trim() }),
-    journal: (id, f = {}) => {
-      const p = [f.avant ? `avant=${encodeURIComponent(f.avant)}` : '', f.action ? `action=${encodeURIComponent(f.action)}` : '', f.limite ? `limite=${f.limite}` : ''].filter(Boolean).join('&');
-      return appel(`${t(id)}/journal${p ? `?${p}` : ''}`);
+    journal: (id, f = {}) => appel(`${t(id)}/journal${requeteUrl({ ...f })}`),
+    exporterJournal: (id, f = {}) => appel(`${t(id)}/journal/export.csv${requeteUrl({ ...f, format: 'json' })}`),
+    reglagesJournal: id => appel(`${t(id)}/journal/reglages`),
+    changerRetentionJournal: (id, retentionJours) => appel(`${t(id)}/journal/reglages`, 'PUT', { retentionJours }),
+    stats: (id, p = {}) => appel(`${t(id)}/stats${requeteUrl({ ...p })}`),
+    exporterCompte: compte => appel(`/admin/comptes/${encodeURIComponent(compte)}/export`),
+    supprimerCompte: async compte => {
+      await appel(`/admin/comptes/${encodeURIComponent(compte)}`, 'DELETE');
     },
     notifications: () => appel('/notifications'),
     marquerLues: (tout, ids) => appel('/notifications/lues', 'POST', tout ? { tout: true } : { ids: ids ?? [] }),
@@ -532,6 +590,8 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     supprimerTache: async (id, tacheId) => {
       await appel(`${t(id)}/taches/${encodeURIComponent(tacheId)}`, 'DELETE');
     },
+    exporterTaches: (id, f = {}) => appel(`${t(id)}/taches/export.csv${requeteUrl({ ...f, format: 'json' })}`),
+    exporterObjectifs: id => appel(`${t(id)}/objectifs/export.csv?format=json`),
     requete: (chemin, methode, corps) => appel(chemin, methode, corps),
   };
 }

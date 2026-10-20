@@ -114,6 +114,32 @@ describe('client Esport', () => {
     expect(s.appels.filter(a => a.url.endsWith('/teams')).every(a => a.headers?.Authorization === 'Bearer es1.x.y')).toBe(true);
   });
 
+  it('phase 7 : adresses du journal (filtres), des exports CSV, des statistiques et des demandes RGPD ; JSON annoncé', async () => {
+    const s = fauxServeur(a => (a.url.endsWith('/session') ? { status: 200, corps: { session: 'es1.x.y', expire: new Date(Date.now() + 3600_000).toISOString() } } : { status: 200, corps: {} }));
+    const c = clientEsport(config, s.requete);
+    await c.journal('t1', { module: 'goals_tasks', acteur: 'lea12345', du: '2026-10-01', au: '2026-10-20', avant: '2026-10-19T10:00:00.000Z|abc', limite: 50 });
+    await c.exporterJournal('t1', { module: 'coeur' });
+    await c.changerRetentionJournal('t1', 90);
+    await c.stats('t1', { du: '2026-10-01', au: '2026-10-30' });
+    await c.exporterTaches('t1', { filtre: 'miennes' });
+    await c.exporterObjectifs('t1');
+    await c.exporterCompte('lea12345');
+    await c.supprimerCompte('lea12345');
+    const urls = s.appels.filter(a => !a.url.endsWith('/session')).map(a => `${a.method ?? 'GET'} ${a.url.replace(config.adresse, '')}`);
+    expect(urls).toEqual([
+      'GET /teams/t1/journal?module=goals_tasks&acteur=lea12345&du=2026-10-01&au=2026-10-20&avant=2026-10-19T10%3A00%3A00.000Z%7Cabc&limite=50',
+      'GET /teams/t1/journal/export.csv?module=coeur&format=json',
+      'PUT /teams/t1/journal/reglages',
+      'GET /teams/t1/stats?du=2026-10-01&au=2026-10-30',
+      'GET /teams/t1/taches/export.csv?filtre=miennes&format=json',
+      'GET /teams/t1/objectifs/export.csv?format=json',
+      'GET /admin/comptes/lea12345/export',
+      'DELETE /admin/comptes/lea12345',
+    ]);
+    // Le serveur refuse un corps qui n'est pas annoncé JSON : le client l'annonce toujours.
+    expect(s.appels.every(a => a.headers?.['Content-Type'] === 'application/json')).toBe(true);
+  });
+
   it('session expirée côté serveur : une nouvelle, une fois', async () => {
     let n = 0;
     const s = fauxServeur(a => {

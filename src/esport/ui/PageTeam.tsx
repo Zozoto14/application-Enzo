@@ -9,12 +9,14 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { BoutonHub, Case, Champ, Intertitre, Panneau, Segments } from '../../hub/admin/ui/commun';
+import { BoutonHub, Case, Champ, Intertitre, Panneau } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
-import { CATALOGUE, MENTION_DONNEES, nomModule, type ClientEsport, type DetailTeam, type Notifications, type PageJournal } from '../client';
-import { FILTRES_JOURNAL, dateCourte, phraseJournal, phraseNotification } from '../libelles';
+import { CATALOGUE, MENTION_DONNEES, nomModule, type ClientEsport, type DetailTeam, type Notifications } from '../client';
+import { dateCourte, phraseNotification } from '../libelles';
 import type { SaisieEvenement } from '../planning/api';
 import { AccueilPhase3 } from './AccueilPhase3';
+import { Journal } from './Journal';
+import { StatsTeam } from './StatsTeam';
 import { MembresRoles } from './MembresRoles';
 import { SectionObjectifs } from './Objectifs';
 import { SectionResumes } from './Resumes';
@@ -120,7 +122,8 @@ export function PageTeam({
                 gap: 6,
                 paddingHorizontal: 10,
                 paddingVertical: 8,
-                minHeight: 40,
+                // Cible tactile de 44 px (WCAG 2.5.5, recommandations Apple).
+                minHeight: 44,
                 borderRadius: Math.min(theme.rayonMoyen, 10),
                 backgroundColor: choisie ? teinteTransparente(theme.accent, 0.18) : 'transparent',
               }}>
@@ -135,11 +138,11 @@ export function PageTeam({
   );
 
   let contenu: React.ReactNode;
-  if (active === 'membres') contenu = <MembresRoles theme={theme} client={client} detail={detail} large={large} />;
-  else if (active === 'journal') contenu = <Journal theme={theme} client={client} detail={detail} />;
+  if (active === 'membres') contenu = <MembresRoles theme={theme} client={client} detail={detail} large={large} onExporter={onExporter} />;
+  else if (active === 'journal') contenu = <Journal theme={theme} client={client} detail={detail} onExporter={onExporter} />;
   else if (active === 'parametres') contenu = <Parametres theme={theme} client={client} detail={detail} onChange={recharger} onSupprimee={onQuitter} onExporter={onExporter} />;
   else if (active === 'module:meeting_summaries') contenu = <SectionResumes theme={theme} client={client} detail={detail} large={large} />;
-  else if (active === 'module:goals_tasks') contenu = <SectionObjectifs theme={theme} client={client} detail={detail} large={large} />;
+  else if (active === 'module:goals_tasks') contenu = <SectionObjectifs theme={theme} client={client} detail={detail} large={large} onExporter={onExporter} />;
   else if (active.startsWith('module:') && ECRANS_MODULES[active.slice('module:'.length)]) {
     const Ecran = ECRANS_MODULES[active.slice('module:'.length)];
     contenu = <Ecran key={`${active}-${brouillon.n}`} theme={theme} client={client} detail={detail} large={large} onAller={aller} brouillon={brouillon.b} reviewId={brouillon.reviewId} onExporter={onExporter} />;
@@ -213,41 +216,7 @@ function AccueilTeam({ theme, client, detail, onAller }: { theme: ThemeHub; clie
         ))}
       </Panneau>
       <AccueilPhase3 theme={theme} client={client} detail={detail} onAller={onAller} />
-    </View>
-  );
-}
-
-function Journal({ theme, client, detail }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam }) {
-  const [filtre, setFiltre] = useState('');
-  const [page, setPage] = useState<PageJournal | undefined>();
-  const { enCours, erreur, agir } = useAgir();
-  const charger = useCallback(
-    (avant?: string) =>
-      agir('Journal', async () => {
-        const p = await client.journal(detail.team.id, { action: filtre || undefined, avant, limite: 50 });
-        setPage(prec => (avant && prec ? { entrees: [...prec.entrees, ...p.entrees], noms: { ...prec.noms, ...p.noms }, suite: p.suite } : p));
-      }),
-    [agir, client, detail.team.id, filtre],
-  );
-  useEffect(() => {
-    void charger();
-  }, [charger]);
-  const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
-  return (
-    <View style={{ gap: 12 }} testID="esport-journal">
-      <TitreSection theme={theme} titre="Journal" sous="Toutes les actions sensibles, dans l’ordre. Rien ne s’y modifie ni ne s’y efface." />
-      <Segments theme={theme} libelle="Filtre" valeur={filtre} options={FILTRES_JOURNAL} onChoisir={setFiltre} testID="esport-journal-filtre" />
-      <Retours theme={theme} erreur={erreur} prefixe="esport-journal" />
-      <Panneau theme={theme}>
-        {page?.entrees.length === 0 ? <Text style={attenue}>Aucune entrée.</Text> : null}
-        {page?.entrees.map(e => (
-          <View key={e.id} style={{ borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 6 }} testID="esport-journal-entree">
-            <Text style={{ color: theme.texte, ...police(theme.policeTexte) }}>{phraseJournal(e, page.noms)}</Text>
-            <Text style={attenue}>{dateCourte(e.date)}</Text>
-          </View>
-        ))}
-        {page?.suite ? <BoutonHub theme={theme} titre={enCours ? 'Chargement…' : 'Plus ancien'} onPress={() => void charger(page.suite ?? undefined)} testID="esport-journal-suite" /> : null}
-      </Panneau>
+      <StatsTeam theme={theme} client={client} detail={detail} />
     </View>
   );
 }

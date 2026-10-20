@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import { Pressable, Text, View, type LayoutChangeEvent, type GestureResponderEvent } from 'react-native';
 import { police, type ThemeHub } from '../../../hub/themes';
+import { encreSur } from '../../contraste';
 import type { Repere } from '../../review/api';
 import { categorie, formatTemps, positionPourcent } from '../../review/libelles';
 
@@ -102,7 +103,7 @@ export function Timeline({
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-              <Text style={{ color: '#fff', fontSize: actif ? 12 : 10, fontWeight: '800' }} accessibilityElementsHidden importantForAccessibility="no">
+              <Text style={{ color: encreSur(c.couleur), fontSize: actif ? 12 : 10, fontWeight: '800' }} accessibilityElementsHidden importantForAccessibility="no">
                 {c.glyphe}
               </Text>
             </Pressable>

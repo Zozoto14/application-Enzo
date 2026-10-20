@@ -9,14 +9,8 @@ import type { ThemeHub } from '../../hub/themes';
 import type { ClientEsport, DetailTeam } from '../client';
 import type { SaisieEvenement } from '../planning/api';
 import { PERMISSION_DISCORD } from '../discord/api';
-import { Discord } from './Discord';
-import { Disponibilites } from './planning/Disponibilites';
-import { Planning } from './planning/Planning';
-import { Presence } from './planning/Presence';
-import { Review } from './review/Review';
-import { Scouting } from './scouting/Scouting';
-import { Playbook } from './strats/Playbook';
-import { Strats } from './strats/Strats';
+// Sur le web, chargés à la demande (differe.web.tsx) : bundle principal plus léger.
+import { Discord, Disponibilites, Planning, Playbook, Presence, Review, Scouting, Strats } from './differe';
 
 export type SectionModule = `module:${string}`;
 

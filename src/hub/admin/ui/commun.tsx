@@ -1,7 +1,7 @@
 /**
  * Briques d'interface partagées par les sections de l'Administration :
  * panneaux, pastilles, champs, segments, cases. Couleurs et polices du thème
- * du hub ; cibles tactiles d'au moins 36 px ; rôles d'accessibilité.
+ * du hub ; cibles tactiles d'au moins 36 px (44 px sur téléphone) ; rôles d'accessibilité.
  */
 
 import React from 'react';
@@ -14,6 +14,7 @@ import type { DonneesAdmin } from '../donnees';
 import type { EvenementAudit } from '../journal';
 import type { PolitiqueHub } from '../politique';
 import type { RoleAdmin } from '../roles';
+import { useMobile } from '../../../ui/mobile/useMobile';
 
 export { BoutonHub } from '../../Hub';
 
@@ -118,6 +119,7 @@ export function Champ({
   maxLength?: number;
   style?: StyleProp<ViewStyle>;
 }) {
+  const mobile = useMobile();
   return (
     <View style={[{ gap: 4 }, style]}>
       <Text style={{ color: theme.texte, fontWeight: '600', fontSize: 13, ...police(theme.policeTexte) }}>{libelle}</Text>
@@ -137,6 +139,7 @@ export function Champ({
         style={[
           commun.champ,
           { color: theme.texte, backgroundColor: theme.fond, borderColor: theme.ligne, borderRadius: Math.min(theme.rayonMoyen, 10), ...police(theme.policeTexte) },
+          mobile && { minHeight: 44 },
           multiligne && { minHeight: 80, textAlignVertical: 'top' },
         ]}
       />
@@ -160,6 +163,8 @@ export function Segments<T extends string>({
   testID: string;
 }) {
   const rayon = Math.min(theme.rayonMoyen, 10);
+  // Téléphone : cibles de 44 px de haut.
+  const mobile = useMobile();
   return (
     <View style={[commun.segments, { borderColor: theme.ligne, borderRadius: rayon }]} accessibilityRole="radiogroup" accessibilityLabel={libelle}>
       {options.map(([cle, texte]) => {
@@ -172,7 +177,7 @@ export function Segments<T extends string>({
             accessibilityState={{ checked: actif }}
             accessibilityLabel={`${libelle} : ${texte}`}
             onPress={() => onChoisir(cle)}
-            style={[commun.segment, { backgroundColor: actif ? theme.accent : 'transparent' }]}>
+            style={[commun.segment, mobile && { minHeight: 44 }, { backgroundColor: actif ? theme.accent : 'transparent' }]}>
             <Text style={{ color: actif ? theme.surAccent : theme.texte, fontWeight: '600', fontSize: 13, ...police(theme.policeTexte) }}>{texte}</Text>
           </Pressable>
         );
@@ -217,7 +222,8 @@ export function Case({ theme, coche, libelle, onChanger, testID }: { theme: Them
       accessibilityState={{ checked: coche }}
       accessibilityLabel={libelle}
       onPress={() => onChanger(!coche)}
-      hitSlop={6}
+      // 22 px dessinés, 44 px touchables.
+      hitSlop={11}
       style={[commun.case, { borderColor: coche ? theme.teintes.admin : theme.attenue, backgroundColor: coche ? theme.teintes.admin : 'transparent', borderRadius: 4 }]}>
       <Text style={{ color: theme.surAccent, fontSize: 13, fontWeight: '800' }}>{coche ? '✓' : ''}</Text>
     </Pressable>

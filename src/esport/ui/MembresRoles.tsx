@@ -49,7 +49,19 @@ export function rolesAttribuables(roles: readonly Role[], detail: DetailTeam): R
   return roles.filter(r => r.permissions.every(p => mes.has(p)) || (r.systeme && monRole?.systeme && r.position > monRole.position));
 }
 
-export function MembresRoles({ theme, client, detail, large }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; large: boolean }) {
+export function MembresRoles({
+  theme,
+  client,
+  detail,
+  large,
+  onExporter,
+}: {
+  theme: ThemeHub;
+  client: ClientEsport;
+  detail: DetailTeam;
+  large: boolean;
+  onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
+}) {
   const teamId = detail.team.id;
   const peut = useCallback((p: string) => detail.moi.permissions.includes(p), [detail.moi.permissions]);
   const [membres, setMembres] = useState<Membre[]>([]);
@@ -100,6 +112,8 @@ export function MembresRoles({ theme, client, detail, large }: { theme: ThemeHub
                   })}
                   client={client}
                   teamId={teamId}
+                  fondateur={detail.moi.superAdmin}
+                  onExporter={onExporter}
                 />
               ))}
             </Panneau>
@@ -127,6 +141,8 @@ function LigneMembre({
   onAction,
   client,
   teamId,
+  fondateur = false,
+  onExporter,
 }: {
   theme: ThemeHub;
   membre: Membre;
@@ -137,6 +153,9 @@ function LigneMembre({
   onAction(libelle: string, action: () => Promise<string | void>): void;
   client: ClientEsport;
   teamId: string;
+  /** Fondateur : demandes RGPD d'un membre (export, suppression du compte Esport). */
+  fondateur?: boolean;
+  onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
 }) {
   const [ouvert, setOuvert] = useState(false);
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
@@ -144,7 +163,12 @@ function LigneMembre({
   const suspendu = membre.statut === 'suspendu';
   return (
     <View style={{ borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 8, gap: 8 }} testID={`esport-membre-${membre.compte}`}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Gérer ${membre.pseudo}`} onPress={() => setOuvert(o => !o)} style={[styles.ligne, { minHeight: 40 }]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Gérer ${membre.pseudo}`}
+        accessibilityState={{ expanded: ouvert }}
+        onPress={() => setOuvert(o => !o)}
+        style={[styles.ligne, { minHeight: 44 }]}>
         <View style={{ width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: teinteTransparente(membre.role.couleur, 0.25) }}>
           <Text style={[texte, { fontWeight: '800' }]}>{membre.pseudo.slice(0, 1).toUpperCase()}</Text>
         </View>
@@ -201,6 +225,36 @@ function LigneMembre({
               />
             ) : null}
           </View>
+          {fondateur && !membre.moi ? (
+            <View style={{ gap: 6 }} testID={`esport-rgpd-${membre.compte}`}>
+              <Text style={attenue}>Demande RGPD de {membre.pseudo} (Fondateur) : ses données Esport, dans toutes les teams.</Text>
+              <View style={styles.ligne}>
+                {onExporter ? (
+                  <BoutonHub
+                    theme={theme}
+                    titre="Exporter ses données"
+                    desactive={occupe}
+                    onPress={() => onAction('Export', async () => {
+                      const donnees = await client.exporterCompte(membre.compte);
+                      return (await onExporter(`esport-donnees-${membre.compte}.json`, JSON.stringify(donnees, null, 2), 'application/json')) ? `Données de ${membre.pseudo} exportées.` : undefined;
+                    })}
+                    testID={`esport-rgpd-exporter-${membre.compte}`}
+                  />
+                ) : null}
+                <BoutonConfirme
+                  theme={theme}
+                  titre="Supprimer son compte Esport"
+                  confirmation={`Oui, effacer ${membre.pseudo} partout`}
+                  desactive={occupe}
+                  onConfirme={() => onAction('Suppression', async () => {
+                    await client.supprimerCompte(membre.compte);
+                    return `Compte Esport de ${membre.pseudo} supprimé (ses contenus de team sont anonymisés).`;
+                  })}
+                  testID={`esport-rgpd-supprimer-${membre.compte}`}
+                />
+              </View>
+            </View>
+          ) : null}
         </View>
       ) : null}
     </View>

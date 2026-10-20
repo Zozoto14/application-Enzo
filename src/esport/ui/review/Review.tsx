@@ -488,7 +488,8 @@ function CarteRepere({
       </Pressable>
       <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>{meta}</Text>
       {actif ? (
-        <Text testID={`esport-repere-actif-${r.id}`} style={{ color: c.couleur, fontSize: 12, fontWeight: '800', ...police(theme.policeTexte) }}>
+        // Texte en couleur d'accent (contraste AA garanti dans les 8 thèmes) ; la couleur de catégorie reste sur le pictogramme.
+        <Text testID={`esport-repere-actif-${r.id}`} style={{ color: theme.accent, fontSize: 12, fontWeight: '800', ...police(theme.policeTexte) }}>
           ▶ En cours de lecture
         </Text>
       ) : null}

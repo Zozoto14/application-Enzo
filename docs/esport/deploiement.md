@@ -125,6 +125,13 @@ Rien à déployer de plus : la migration `0006_strats_playbook.sql` est appliqu�
 des strats vont dans R2 (étape 3). Les images Riot viennent de valorant-api.com à l'exécution (politique
 « Legal Jibber Jabber ») : voir [strats-playbook.md](strats-playbook.md).
 
+## Étape 10 : finitions (phase 7)
+
+Rien à déployer de plus : la migration `0007_finitions.sql` (index pour les performances, table des limites de
+débit) est appliquée par le workflow « Esport (Worker) ». Le cron purge désormais le journal selon la durée de
+conservation de chaque team (1 an par défaut). Revue de sécurité : [securite.md](securite.md) ; guide
+d'utilisation : [README.md](README.md).
+
 ## En cas de souci
 
 | Message | Que faire |
@@ -136,6 +143,7 @@ des strats vont dans R2 (étape 3). Les images Riot viennent de valorant-api.com
 | Workflow : « le relais n'est pas encore en version 7 » | Étape 1, puis relancez l'étape 6. |
 | Workflow : liaison de service vers le relais | Le Worker `applibourse-relais` doit exister dans le même compte Cloudflare. |
 | « Accès révoqué » dans l'Esport | Le compte a été révoqué dans l'Administration : c'est voulu. |
+| « Trop de demandes en peu de temps » | Limite de débit (protection) : attendez la durée indiquée (une minute pour la connexion, une heure au plus pour les créations). |
 
 Modules : [résumés de réunions](resumes.md), [objectifs et tâches](objectifs-taches.md), [strats et playbook](strats-playbook.md).
 Passer plus tard sur un vrai serveur : voir [migration-serveur.md](migration-serveur.md).
