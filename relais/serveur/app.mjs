@@ -11,6 +11,7 @@
  *   DISCORD_WEBHOOK_URL   salon du support (facultatif)
  *   ORIGINES_SITE         origines du site pour /tsuzuku/requete (défaut : https://appdashboard.fr et l'ancien site Pages)
  *   LIMITE_TSUZUKU_MINUTE facultatif ; URL_PUBLIQUE : https://relais.appdashboard.fr
+ *   RELAIS_CIBLE, SITE_CIBLE  retour arrière seulement : tout transmettre à un autre relais (et l'annoncer)
  *
  * Les limites de débit gardées en mémoire par le relais valent pour UN processus : une seule instance
  * suffit largement (voir docs/o2switch.md).
@@ -32,6 +33,9 @@ export function chargerConfigRelais(env = process.env) {
     DISCORD_WEBHOOK_URL: env.DISCORD_WEBHOOK_URL || undefined,
     ORIGINES_SITE: env.ORIGINES_SITE || ORIGINES_PAR_DEFAUT,
     LIMITE_TSUZUKU_MINUTE: env.LIMITE_TSUZUKU_MINUTE || undefined,
+    // Retour arrière (docs/o2switch.md) : ce relais transmet tout à RELAIS_CIBLE et l'annonce aux appareils.
+    RELAIS_CIBLE: env.RELAIS_CIBLE || undefined,
+    SITE_CIBLE: env.SITE_CIBLE || undefined,
     urlPublique: env.URL_PUBLIQUE || undefined,
     baseConfiguree: Boolean(env.DATABASE_URL || env.PGDATABASE || env.PGHOST),
   };
@@ -50,7 +54,15 @@ export async function preparerRelais({ config = chargerConfigRelais(), base, env
   const b = base ?? (await basePostgres(optionsDepuisEnv()));
   await creerTableKv(b);
   await purgerKvExpire(b).catch(() => 0);
-  const env = { JETON: config.JETON, BOITE: kvPostgres(b), DISCORD_WEBHOOK_URL: config.DISCORD_WEBHOOK_URL, ORIGINES_SITE: config.ORIGINES_SITE, LIMITE_TSUZUKU_MINUTE: config.LIMITE_TSUZUKU_MINUTE };
+  const env = {
+    JETON: config.JETON,
+    BOITE: kvPostgres(b),
+    DISCORD_WEBHOOK_URL: config.DISCORD_WEBHOOK_URL,
+    ORIGINES_SITE: config.ORIGINES_SITE,
+    LIMITE_TSUZUKU_MINUTE: config.LIMITE_TSUZUKU_MINUTE,
+    RELAIS_CIBLE: config.RELAIS_CIBLE,
+    SITE_CIBLE: config.SITE_CIBLE,
+  };
   const fetchWorker = relais.fetch.bind(relais);
   const traiter = (requete, { attendre } = {}) => fetchWorker(requete, envPour ? envPour(requete) : env, { waitUntil: p => (attendre ? attendre(p) : p) });
   return { traiter, base: b, env, config, fermer: async () => (base ? undefined : b.fermer()) };

@@ -68,11 +68,12 @@ test('mode transmission : chaque requête (avec ou sans jeton, préliminaire com
     return new Response('{"ok":true}', { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
   };
   try {
-    const env = { JETON, BOITE: kvListable(), RELAIS_CIBLE: 'https://relais.appdashboard.fr/' };
+    const env = { JETON, BOITE: kvListable(), RELAIS_CIBLE: 'https://relais.appdashboard.fr/', SITE_CIBLE: 'https://appdashboard.fr' };
     const r = await relais.fetch(new Request('https://relais.test/boite/pc000001?v=2', { method: 'PUT', headers: { Authorization: `Bearer ${JETON}`, 'X-Forwarded-For': '203.0.113.9' }, body: 'enveloppe' }), env);
     assert.equal(r.status, 200);
     assert.equal(r.headers.get('X-Relais-Deplace'), 'https://relais.appdashboard.fr');
-    assert.match(r.headers.get('Access-Control-Expose-Headers'), /X-Relais-Deplace/);
+    assert.equal(r.headers.get('X-Site-Deplace'), 'https://appdashboard.fr');
+    assert.match(r.headers.get('Access-Control-Expose-Headers'), /X-Relais-Deplace, X-Site-Deplace/);
     await relais.fetch(new Request('https://relais.test/tsuzuku/requete', { method: 'OPTIONS', headers: { Origin: 'https://appdashboard.fr' } }), env);
     await relais.fetch(new Request('https://relais.test/jeton/verifier', { method: 'POST', body: '{}' }), env);
     assert.deepEqual(recues.map(x => [x.url, x.methode]), [

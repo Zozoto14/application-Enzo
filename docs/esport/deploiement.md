@@ -152,4 +152,5 @@ Rien à configurer : relancez le workflow **Esport (Worker)** (étape 6). Il app
 
 Guide : [les trois pages de l'Esport](README.md), [inviter un joueur](invitations.md).
 Modules : [résumés de réunions](resumes.md), [objectifs et tâches](objectifs-taches.md), [strats et playbook](strats-playbook.md).
-Passer plus tard sur un vrai serveur : voir [migration-serveur.md](migration-serveur.md).
+Passer plus tard sur un vrai serveur : voir [migration-serveur.md](migration-serveur.md) ; hébergement o2switch du
+Fondateur (Esport, relais et site) : [docs/o2switch.md](../o2switch.md).

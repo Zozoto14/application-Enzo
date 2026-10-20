@@ -240,7 +240,10 @@ describe('déménagement du relais (Cloudflare → o2switch)', () => {
     const requete = (async (url: string, init: RequestInit = {}) => {
       appels.push(url);
       const autorise = (init.headers as Record<string, string>).Authorization === `Bearer ${JETON}`;
-      const entetes = new Map([['x-relais-deplace', annonce]]);
+      const entetes = new Map([
+        ['x-relais-deplace', annonce],
+        ['x-site-deplace', 'https://appdashboard.fr'],
+      ]);
       const reponse = (corps: unknown, status = 200, avecEntete = false) =>
         ({ ok: status < 300, status, headers: { get: (n: string) => (avecEntete ? entetes.get(n.toLowerCase()) ?? null : null) }, json: async () => corps }) as unknown as Response;
       if (!autorise) return reponse({}, 401);
@@ -269,7 +272,8 @@ describe('déménagement du relais (Cloudflare → o2switch)', () => {
     const relais = relaisDeplace();
     await synchroniser({ pilote, appareil: 'aaaa1111', moi: { plateforme: 'bureau' }, maintenant, requete: relais.requete });
     expect(relais.appels).toContain(`${NOUVEAU}/sante`);
-    expect(lireConfigRelais(pilote)).toEqual({ relais: NOUVEAU, jeton: JETON, cle, nom: 'PC', site: 'https://applibourse-ef0ddb.pages.dev' });
+    // Le site annoncé suit (mises à jour de l'iPhone) ; clé et nom inchangés.
+    expect(lireConfigRelais(pilote)).toEqual({ relais: NOUVEAU, jeton: JETON, cle, nom: 'PC', site: 'https://appdashboard.fr' });
     pilote.fermer();
   });
 

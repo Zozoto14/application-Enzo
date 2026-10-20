@@ -1,0 +1,10 @@
+{
+  "name": "applibourse-relais-serveur",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Relais en serveur Node autonome (o2switch « Setup Node.js App ») : aucune dépendance propre, le paquet pg vient de esport/ (docs/o2switch.md)",
+  "main": "serveur/app.cjs",
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -116,7 +116,10 @@ jobs:
             echo "::error::src/config/site.json : verifie n'est pas true, publication refusée."
             exit 1
           fi
-          if [ "$site" != "https://$projet.pages.dev" ]; then
+          # Après la bascule vers o2switch, site.json peut nommer https://appdashboard.fr et garder l'adresse Pages
+          # dans anciensSites : la publication manuelle sur Pages reste alors possible.
+          ancien=$(node -p "(require('./src/config/site.json').anciensSites || []).includes('https://$projet.pages.dev')")
+          if [ "$site" != "https://$projet.pages.dev" ] && [ "$ancien" != "true" ]; then
             echo "::error::site.json : $site ne correspond pas au projet $projet."
             exit 1
           fi

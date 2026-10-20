@@ -30,7 +30,8 @@
  * nouveau serveur ; avec la variable `RELAIS_CIBLE` (https://relais.appdashboard.fr),
  * le Worker transmet chaque requête au nouveau serveur (les appareils qui ont
  * encore l'ancienne adresse continuent de marcher) et l'annonce par l'en-tête
- * `X-Relais-Deplace`. Le même fichier tourne sous Node (relais/serveur/app.mjs).
+ * `X-Relais-Deplace` (et le nouveau site, `SITE_CIBLE`, par `X-Site-Deplace`) :
+ * l'app vérifie la nouvelle adresse avec le même jeton, puis la retient. Le même fichier tourne sous Node (relais/serveur/app.mjs).
  *
  * Une troisième route, `POST /support`, relaie un ticket d'assistance vers un
  * salon Discord (voir « Support » plus bas et docs/support-discord.md). L'adresse
@@ -1004,7 +1005,7 @@ async function exporterBoite(requete, env) {
 const cibleValide = c => typeof c === 'string' && /^https:\/\/[a-z0-9.-]+(:\d+)?\/?$/i.test(c.trim());
 
 /** Transmet la requête telle quelle au nouveau relais ; la réponse annonce la nouvelle adresse. */
-export async function proxifier(requete, cible) {
+export async function proxifier(requete, cible, site) {
   const source = new URL(requete.url);
   const destination = new URL(`${source.pathname}${source.search}`, `${String(cible).trim().replace(/\/+$/, '')}/`);
   const entetes = new Headers(requete.headers);
@@ -1013,8 +1014,10 @@ export async function proxifier(requete, cible) {
   const r = await fetch(destination, { method: requete.method, headers: entetes, body: corps, redirect: 'manual' });
   const sortie = new Headers(r.headers);
   sortie.set('X-Relais-Deplace', destination.origin);
+  // Nouveau site (paquets de mise à jour de l'iPhone, liens de liaison) : annoncé aussi s'il est connu.
+  if (cibleValide(site)) sortie.set('X-Site-Deplace', String(site).trim().replace(/\/+$/, ''));
   const exposes = sortie.get('Access-Control-Expose-Headers');
-  sortie.set('Access-Control-Expose-Headers', exposes ? `${exposes}, X-Relais-Deplace` : 'X-Relais-Deplace');
+  sortie.set('Access-Control-Expose-Headers', `${exposes ? `${exposes}, ` : ''}X-Relais-Deplace, X-Site-Deplace`);
   return new Response(r.body, { status: r.status, statusText: r.statusText, headers: sortie });
 }
 
@@ -1022,7 +1025,7 @@ export default {
   async fetch(requete, env, ctx) {
     // Après la bascule vers o2switch : tout part vers le nouveau relais (docs/o2switch.md).
     if (cibleValide(env?.RELAIS_CIBLE)) {
-      return proxifier(requete, env.RELAIS_CIBLE);
+      return proxifier(requete, env.RELAIS_CIBLE, env.SITE_CIBLE);
     }
     // Lecture des sources de Tsuzuku (site web) : CORS, jeton et règles à part, préliminaire compris.
     // `ctx.waitUntil` : la mise en cache d'une page lue finit après la réponse.

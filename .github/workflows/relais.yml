@@ -33,6 +33,8 @@ jobs:
       RELAIS_URL: ${{ vars.RELAIS_URL }}
       # Bascule vers o2switch (docs/o2switch.md) : adresse du nouveau relais ; vide = relais Cloudflare normal.
       RELAIS_CIBLE: ${{ vars.RELAIS_CIBLE }}
+      # Nouveau site annoncé aux appareils avec le déménagement (https://appdashboard.fr). Facultatif.
+      SITE_CIBLE: ${{ vars.SITE_CIBLE }}
     steps:
       - uses: actions/checkout@v4
 
@@ -86,6 +88,9 @@ jobs:
           if printf '%s' "$RELAIS_CIBLE" | grep -Eq '^https://[a-z0-9.-]+/?$'; then
             printf 'RELAIS_CIBLE = "%s"\n' "$RELAIS_CIBLE" >> relais/wrangler.ci.toml
             echo "::notice::Relais en mode « transmission » vers $RELAIS_CIBLE (docs/o2switch.md)."
+            if printf '%s' "$SITE_CIBLE" | grep -Eq '^https://[a-z0-9.-]+/?$'; then
+              printf 'SITE_CIBLE = "%s"\n' "$SITE_CIBLE" >> relais/wrangler.ci.toml
+            fi
           fi
           if grep -Eiq 'JETON|DISCORD_WEBHOOK' <(grep -v '^#' relais/wrangler.ci.toml); then
             echo "::error::La configuration ne doit contenir aucun secret."

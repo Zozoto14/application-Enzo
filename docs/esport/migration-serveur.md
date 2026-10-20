@@ -1,5 +1,9 @@
 # Esport : passer de Cloudflare à un vrai serveur
 
+> **Hébergement o2switch (cPanel)** : c'est fait. Serveur Node + PostgreSQL prêt à l'emploi (`esport/serveur/`,
+> `esport/adaptateurs/postgres.mjs`) et mode d'emploi pas à pas : **[docs/o2switch.md](../o2switch.md)**. Ce document
+> reste la description générale (autre hébergeur, serveur à soi).
+
 Le serveur Esport a été écrit pour déménager sans réécriture. Ce document dit ce qui change et comment faire.
 
 ## Ce qui ne bouge pas
