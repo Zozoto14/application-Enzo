@@ -15,7 +15,8 @@
  */
 
 import { echec } from '../outils.mjs';
-import { EXEMPLES, evenementDiscord } from './catalogue.mjs';
+import { evenementDiscord, exemples } from './catalogue.mjs';
+import { texte as T } from '../langues.mjs';
 import { bornerEmbeds, embedMessage } from './embeds.mjs';
 
 export const LONGUEUR_MAX_MESSAGE = 2000;
@@ -88,8 +89,8 @@ export function rendreModele(modele, valeurs = {}) {
 }
 
 /** Aperçu d'un modèle avec des valeurs d'exemple. */
-export function apercuModele(modele) {
-  return nettoyerTexteDiscord(rendreModele(modele, EXEMPLES), LONGUEUR_MAX_MESSAGE);
+export function apercuModele(modele, langue = 'fr') {
+  return nettoyerTexteDiscord(rendreModele(modele, exemples(langue)), LONGUEUR_MAX_MESSAGE);
 }
 
 /**
@@ -100,18 +101,18 @@ export function apercuModele(modele) {
  * ajoute les utilisateurs convoqués (`utilisateurs`, identifiants numériques),
  * listés un à un dans `allowed_mentions.users` : jamais @everyone ni @here.
  */
-export function construireCharge(contenu, { roleId = null, nomTeam = '', logoTeam = null, embed, cle = 'test', titre, lien = '', utilisateurs = [], composants, maintenant = Date.now() } = {}) {
+export function construireCharge(contenu, { roleId = null, nomTeam = '', logoTeam = null, embed, cle = 'test', titre, lien = '', utilisateurs = [], composants, maintenant = Date.now(), langue = 'fr' } = {}) {
   const role = roleId && MOTIF_ROLE.test(roleId) ? roleId : null;
   const ids = [...new Set(utilisateurs.filter(id => /^[0-9]{5,25}$/.test(String(id))).map(String))].slice(0, 50);
   const mentions = [role ? `<@&${role}>` : '', ...ids.map(id => `<@${id}>`)].filter(Boolean).join(' ');
   const nom = nettoyerVariable(nomTeam);
-  const texte = nettoyerTexteDiscord(contenu, LONGUEUR_MAX_MESSAGE).trim() || 'Notification Esport';
-  const corps = embed ?? embedMessage({ cle, titre: titre ?? 'Notification', texte, team: { nom, logo: logoTeam }, lien, maintenant });
+  const texte = nettoyerTexteDiscord(contenu, LONGUEUR_MAX_MESSAGE).trim() || T(langue, 'message.notification_defaut');
+  const corps = embed ?? embedMessage({ cle, titre: titre ?? T(langue, 'message.titre_defaut'), texte, team: { nom, logo: logoTeam }, lien, maintenant });
   const allowed = { parse: [] };
   if (role) allowed.roles = [role];
   if (ids.length) allowed.users = ids;
   return {
-    username: nom ? `Esport · ${nom}`.slice(0, 80) : 'Esport',
+    username: nom ? T(langue, 'message.expediteur', { team: nom }).slice(0, 80) : 'Esport',
     ...(mentions ? { content: mentions } : {}),
     embeds: bornerEmbeds([corps]),
     allowed_mentions: allowed,

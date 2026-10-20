@@ -111,6 +111,7 @@ const ROUTES_TEAM = [
   ['DELETE', '/discord/webhook', 'discord'],
   ['POST', '/discord/test', 'discord'],
   ['PUT', '/discord/parametres/event_created', 'discord'],
+  ['PUT', '/discord/langue', 'discord'],
   // Bot Discord : liaison du serveur, pings, qui est lié.
   ['GET', '/discord/bot', 'discord'],
   ['POST', '/discord/bot/code', 'discord'],
@@ -163,6 +164,7 @@ const ROUTES_TEAM = [
 const ROUTES_SESSION = [
   ['GET', '/moi'],
   ['PUT', '/moi'],
+  ['PUT', '/moi/langue'],
   ['DELETE', '/moi'],
   ['GET', '/moi/export'],
   ['GET', '/notifications'],

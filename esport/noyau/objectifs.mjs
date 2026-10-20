@@ -19,6 +19,7 @@
 import { evenement } from './evenements.mjs';
 import { autorise } from './permissions.mjs';
 import { echec, iso, nouvelId, texteLong, texteNettoye } from './outils.mjs';
+import { LANGUE_DEFAUT, lireLangue, listeTextes, texte as T } from './langues.mjs';
 import { csv } from './planning/presence.mjs';
 import { pseudosDe } from './requetes.mjs';
 import { dateValide } from './resumes.mjs';
@@ -260,11 +261,12 @@ export function servicesObjectifs({ base, maintenant = () => Date.now(), socle }
       if (p.suite === null) break;
       decalage = p.suite;
     }
-    const S = { a_faire: 'À faire', en_cours: 'En cours', fait: 'Fait' };
-    const P = { basse: 'Basse', normale: 'Normale', haute: 'Haute', urgente: 'Urgente' };
+    const L = lireLangue(acteur.langue) ?? LANGUE_DEFAUT;
+    const S = cle => (['a_faire', 'en_cours', 'fait'].includes(cle) ? T(L, `csv.statut_tache.${cle}`) : cle);
+    const P = cle => (['basse', 'normale', 'haute', 'urgente'].includes(cle) ? T(L, `csv.priorite.${cle}`) : cle);
     const contenu = csv(
-      ['Titre', 'Description', 'Objectif', 'Assigné', 'Échéance', 'Priorité', 'Statut', 'En retard', 'Créée par', 'Créée le', 'Terminée le'],
-      toutes.map(t => [t.titre, t.description, t.objectif?.titre ?? '', t.assigne?.pseudo ?? (t.assigne ? 'Compte supprimé' : ''), t.echeance ?? '', P[t.priorite] ?? t.priorite, S[t.statut] ?? t.statut, t.enRetard ? 'Oui' : 'Non', t.creePar?.pseudo ?? '', t.creeLe, t.termineLe ?? '']),
+      listeTextes(L, 'csv.taches.entetes'),
+      toutes.map(t => [t.titre, t.description, t.objectif?.titre ?? '', t.assigne?.pseudo ?? (t.assigne ? T(L, 'csv.compte_supprime') : ''), t.echeance ?? '', P(t.priorite), S(t.statut), T(L, t.enRetard ? 'csv.oui' : 'csv.non'), t.creePar?.pseudo ?? '', t.creeLe, t.termineLe ?? '']),
     );
     return { nom: `taches-${ctx.team.slug}-${dateDuJour(maintenant(), ctx.team.fuseau)}.csv`, type: 'text/csv; charset=utf-8', contenu };
   }
@@ -274,10 +276,11 @@ export function servicesObjectifs({ base, maintenant = () => Date.now(), socle }
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'goals_tasks.view');
     const liste = await objectifsPublics(teamId, await lignesObjectifs(teamId));
-    const S = { actif: 'En cours', atteint: 'Atteint', abandonne: 'Abandonné' };
+    const L = lireLangue(acteur.langue) ?? LANGUE_DEFAUT;
+    const S = cle => (['actif', 'atteint', 'abandonne'].includes(cle) ? T(L, `csv.statut_objectif.${cle}`) : cle);
     const contenu = csv(
-      ['Titre', 'Description', 'Pour', 'Date cible', 'Statut', 'Tâches faites', 'Tâches', 'Progression (%)', 'Créé par', 'Créé le'],
-      liste.map(o => [o.titre, o.description, o.proprietaire ? (o.proprietaire.pseudo ?? 'Compte supprimé') : 'Équipe', o.dateCible ?? '', S[o.statut] ?? o.statut, o.progression.faites, o.progression.total, o.progression.pourcentage, o.creePar?.pseudo ?? '', o.creeLe]),
+      listeTextes(L, 'csv.objectifs.entetes'),
+      liste.map(o => [o.titre, o.description, o.proprietaire ? (o.proprietaire.pseudo ?? T(L, 'csv.compte_supprime')) : T(L, 'csv.objectifs.equipe'), o.dateCible ?? '', S(o.statut), o.progression.faites, o.progression.total, o.progression.pourcentage, o.creePar?.pseudo ?? '', o.creeLe]),
     );
     return { nom: `objectifs-${ctx.team.slug}-${dateDuJour(maintenant(), ctx.team.fuseau)}.csv`, type: 'text/csv; charset=utf-8', contenu };
   }

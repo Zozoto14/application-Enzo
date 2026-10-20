@@ -16,7 +16,7 @@
 import { evenement } from '../../evenements.mjs';
 import { echec, iso, sha256Hex } from '../../outils.mjs';
 import { TYPES_EVENEMENT } from '../../planning/service.mjs';
-import { NOMS_TYPES } from '../embeds.mjs';
+import { nomType } from '../embeds.mjs';
 
 export const DUREE_CODE_MS = 10 * 60_000;
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -135,11 +135,11 @@ export function servicesLiaisons({ base, maintenant = () => Date.now(), noyau, c
     return ctx;
   }
 
-  async function pings(teamId) {
+  async function pings(teamId, langue = 'fr') {
     const lignes = await base.tous('SELECT type_evenement, ping FROM discord_bot_pings WHERE team_id = ?', [teamId]);
     return TYPES_EVENEMENT.map(type => {
       const l = lignes.find(x => x.type_evenement === type);
-      return { type, libelle: NOMS_TYPES[type] ?? type, ping: !l || Number(l.ping) === 1 };
+      return { type, libelle: nomType(type, langue), ping: !l || Number(l.ping) === 1 };
     });
   }
 
@@ -159,7 +159,7 @@ export function servicesLiaisons({ base, maintenant = () => Date.now(), noyau, c
       serveur: s
         ? { serveur: masquerId(s.guild_id), salonNom: s.salon_nom || null, salon: masquerId(s.salon_id), lieLe: s.cree_le, majLe: s.maj_le, dernierSucces: s.dernier_succes_le ?? null, dernierEchec: s.dernier_echec_le ?? null, invalide: Boolean(s.invalide_le) }
         : null,
-      pings: await pings(teamId),
+      pings: await pings(teamId, acteur.langue),
       comptes: comptes.map(l => ({ compte: l.compte_id, pseudo: l.pseudo, role: l.role, lie: Boolean(l.lie_le), discordNom: l.discord_nom || null, lieLe: l.lie_le ?? null })),
     };
   }
@@ -214,7 +214,7 @@ export function servicesLiaisons({ base, maintenant = () => Date.now(), noyau, c
       },
       evenement('discord.pings_changed', { teamId, acteur: acteur.compte, entiteType: 'discord', entiteId: teamId, charge: { type, ping: corps.ping }, maintenant: t }),
     ]);
-    return { pings: await pings(teamId) };
+    return { pings: await pings(teamId, acteur.langue) };
   }
 
   return { moiDiscord, codeCompte, delierCompte, lierCompte, etatTeam, codeServeur, delierServeur, lierServeur, changerPing, consommerCode };

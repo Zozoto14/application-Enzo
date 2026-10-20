@@ -14,6 +14,7 @@ import { aleatoire, echec, iso, jsonOu, nouvelId, sha256Hex, texteLong, texteNet
 import { lignesParIds } from '../requetes.mjs';
 import { heatmap, plagesPropices, TYPES_DISPO, PAS_AUTORISES } from './dispos.mjs';
 import { calendrierIcs, LIBELLES_TYPES } from './ical.mjs';
+import { LANGUE_DEFAUT, lireLangue, listeTextes, texte as T } from '../langues.mjs';
 import { convocationDe, convocationDepuisListe, convoques, CONVOCATION_DEFAUT, estConvoque, groupeDe, normaliserConvocation, preparerConvocation } from './convocations.mjs';
 import { RSVP, REELS, csv, statistiques } from './presence.mjs';
 import { DEPLACEMENT_MAX_MS, estOccurrence, lireRecurrence, occurrences, occurrencesBrutes, veilleLocale } from './recurrence.mjs';
@@ -813,13 +814,15 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     const { du, au, debut, fin } = lirePeriode(params, fuseau);
     const types = params.types ? String(params.types).split(',').filter(t => TYPES_EVENEMENT.includes(t)) : [];
     const lignes = await lignesPresence(teamId, du, au, { types });
-    const R = { oui: 'Oui', non: 'Non', peut_etre: 'Peut-être', sans_reponse: 'Sans réponse' };
-    const P = { present: 'Présent', absent: 'Absent', excuse: 'Excusé', retard: 'En retard', inconnu: 'Non marqué' };
+    const L = lireLangue(acteur.langue) ?? LANGUE_DEFAUT;
+    const R = cle => (['oui', 'non', 'peut_etre', 'sans_reponse'].includes(cle) ? T(L, `csv.rsvp.${cle}`) : cle);
+    const P = cle => (['present', 'absent', 'excuse', 'retard', 'inconnu'].includes(cle) ? T(L, `csv.reel.${cle}`) : cle);
+    const typeLibelle = cle => (TYPES_EVENEMENT.includes(cle) ? T(L, cle === 'other' ? 'type.choix_autre' : `type.${cle}`) : cle);
     const contenu = csv(
-      ['Date', 'Heure', 'Événement', 'Type', 'Joueur', 'Réponse', 'Présence', 'Note'],
+      listeTextes(L, 'csv.presence.entetes'),
       lignes.map(l => {
         const d = local(fuseau, Date.parse(l.occurrence));
-        return [d.jour, d.heure, l.titre, LIBELLES_TYPES[l.type] ?? l.type, l.pseudo ?? l.compte_id, R[l.rsvp] ?? l.rsvp, P[l.reel] ?? l.reel, l.note];
+        return [d.jour, d.heure, l.titre, typeLibelle(l.type), l.pseudo ?? l.compte_id, R(l.rsvp), P(l.reel), l.note];
       }),
     );
     return { nom: `presence-${ctx.team.slug}-${debut}-${fin}.csv`, type: 'text/csv; charset=utf-8', contenu };

@@ -21,7 +21,8 @@
 
 import { iso, jsonOu, nouvelId } from '../outils.mjs';
 import { dechiffrerWebhook } from './chiffrement.mjs';
-import { CLES_OCCURRENCE, clesPourType, evenementDiscord, libelleTypeEvenement } from './catalogue.mjs';
+import { CLES_OCCURRENCE, clesPourType, evenementDiscord, libelleTypeEvenement, textesEvenement } from './catalogue.mjs';
+import { lireLangue, nomRoleSysteme, texte as T } from '../langues.mjs';
 import { estReunionStaff, membresTeam } from './convoques.mjs';
 import { boutonLien, boutonsRsvp } from './embeds.mjs';
 import { formaterDelai, formaterInstant } from './formats.mjs';
@@ -45,17 +46,17 @@ const dateJour = texte => {
 
 export { formaterDelai, formaterInstant };
 
-async function pseudoDe(base, compte) {
+async function pseudoDe(base, compte, langue = 'fr') {
   if (typeof compte !== 'string' || !compte) return '';
   const l = await base.premier('SELECT pseudo FROM comptes WHERE id = ?', [compte]);
-  return l?.pseudo ?? (compte === 'principal' ? 'Le Fondateur' : 'Un membre');
+  return l?.pseudo ?? T(langue, compte === 'principal' ? 'var.fondateur' : 'var.un_membre');
 }
 
 /** Pseudos d'une liste de comptes, séparés par des virgules (« toute la team » pour un ancien rappel sans liste). */
-async function pseudosListe(base, comptes) {
-  if (!Array.isArray(comptes)) return 'toute la team';
+async function pseudosListe(base, comptes, langue = 'fr') {
+  if (!Array.isArray(comptes)) return T(langue, 'var.toute_la_team');
   const noms = [];
-  for (const c of comptes.slice(0, 30)) noms.push(await pseudoDe(base, c));
+  for (const c of comptes.slice(0, 30)) noms.push(await pseudoDe(base, c, langue));
   return noms.join(', ') + (comptes.length > 30 ? '…' : '');
 }
 
@@ -68,66 +69,70 @@ async function reunionStaff(base, ev) {
 /** Variables du message pour un événement de domaine ; `null` : rien à envoyer. */
 async function variablesDe(base, ev, cle, charge, team) {
   const t = Date.parse(ev.cree_le);
-  const base_ = { team: team.nom };
-  const quand = charge.debut ? formaterInstant(team.fuseau, charge.debut) : { date: '', heure: '' };
+  // Langue des messages Discord de la team : mémorisée avec le message (`_langue`), pour qu'il parte tel quel.
+  const L = lireLangue(team.langue_discord) ?? 'fr';
+  const pseudo = compte => pseudoDe(base, compte, L);
+  const role = nom => nomRoleSysteme(L, nom);
+  const base_ = { team: team.nom, _langue: L };
+  const quand = charge.debut ? formaterInstant(team.fuseau, charge.debut, L) : { date: '', heure: '' };
   // Occurrence montrée (embed, boutons RSVP, mentions) : relue au moment de l'envoi.
   const occurrence = charge.occurrence ?? charge.debut ?? null;
   const evenementId = charge.evenementId ?? ev.entite_id ?? null;
-  const instant = { titre: charge.titre ?? '', type: libelleTypeEvenement(charge.type), ...quand, evenementId, occurrence };
+  const instant = { titre: charge.titre ?? '', type: libelleTypeEvenement(charge.type, L), ...quand, evenementId, occurrence };
   switch (cle) {
     case 'event_created':
-      return { ...base_, ...instant, acteur: await pseudoDe(base, ev.acteur_id) };
+      return { ...base_, ...instant, acteur: await pseudo(ev.acteur_id) };
     case 'reminder_d1':
     case 'reminder_h1':
-      return { ...base_, ...instant, delai: formaterDelai(Date.parse(charge.debut) - t), convoques: await pseudosListe(base, charge.convoques) };
+      return { ...base_, ...instant, delai: formaterDelai(Date.parse(charge.debut) - t, L), convoques: await pseudosListe(base, charge.convoques, L) };
     case 'event_now':
-      return { ...base_, ...instant, delai: formaterDelai(Date.parse(charge.debut) - t), convoques: await pseudosListe(base, charge.convoques) };
+      return { ...base_, ...instant, delai: formaterDelai(Date.parse(charge.debut) - t, L), convoques: await pseudosListe(base, charge.convoques, L) };
     case 'rsvp_missing':
-      return { ...base_, ...instant, membre: await pseudoDe(base, charge.compte) };
+      return { ...base_, ...instant, membre: await pseudo(charge.compte) };
     case 'rsvp_relance':
       return { ...base_, ...instant, membre: '' };
     case 'summary_published': {
       // Les réunions de type « staff » ne sortent jamais du staff : rien n'est publié sur Discord.
       if (await reunionStaff(base, ev)) return null;
-      return { ...base_, titre: charge.titre ?? '', acteur: await pseudoDe(base, ev.acteur_id), membre: await pseudoDe(base, charge.deposePar) };
+      return { ...base_, titre: charge.titre ?? '', acteur: await pseudo(ev.acteur_id), membre: await pseudo(charge.deposePar) };
     }
     case 'summary_submitted':
       // Même règle au dépôt : le titre d'une réunion staff ne part pas sur le salon de la team.
       if (await reunionStaff(base, ev)) return null;
-      return { ...base_, titre: charge.titre ?? '', type: charge.type ?? '', date: dateJour(charge.dateReunion), membre: await pseudoDe(base, ev.acteur_id) };
+      return { ...base_, titre: charge.titre ?? '', type: charge.type ?? '', date: dateJour(charge.dateReunion), membre: await pseudo(ev.acteur_id) };
     case 'task_assigned':
       return {
         ...base_,
         titre: charge.titre ?? '',
-        assigne: await pseudoDe(base, charge.assigne),
-        echeance: charge.echeance ? `, pour le ${dateJour(charge.echeance)}` : '',
-        acteur: await pseudoDe(base, ev.acteur_id),
+        assigne: await pseudo(charge.assigne),
+        echeance: charge.echeance ? T(L, 'var.pour_le', { date: dateJour(charge.echeance) }) : '',
+        acteur: await pseudo(ev.acteur_id),
       };
     case 'task_due':
       return {
         ...base_,
         titre: charge.titre ?? '',
-        assigne: await pseudoDe(base, charge.assigne),
+        assigne: await pseudo(charge.assigne),
         echeance: dateJour(charge.echeance),
-        etat: charge.retard ? 'en retard' : 'échéance proche',
+        etat: T(L, charge.retard ? 'var.en_retard' : 'var.echeance_proche'),
       };
     case 'member_joined':
-      return { ...base_, membre: await pseudoDe(base, ev.acteur_id), role: charge.role ?? '' };
+      return { ...base_, membre: await pseudo(ev.acteur_id), role: role(charge.role ?? '') };
     case 'account_requested':
       // Jamais l'adresse e-mail : seulement le pseudo proposé et le rôle.
-      return { ...base_, membre: charge.pseudo ?? '', role: charge.role ?? '', acteur: await pseudoDe(base, ev.acteur_id) };
+      return { ...base_, membre: charge.pseudo ?? '', role: role(charge.role ?? ''), acteur: await pseudo(ev.acteur_id) };
     case 'role_changed':
-      return { ...base_, membre: await pseudoDe(base, charge.compte), de: charge.de ?? '', vers: charge.vers ?? '', acteur: await pseudoDe(base, ev.acteur_id) };
+      return { ...base_, membre: await pseudo(charge.compte), de: role(charge.de ?? ''), vers: role(charge.vers ?? ''), acteur: await pseudo(ev.acteur_id) };
     case 'review_created':
-      return { ...base_, titre: charge.titre ?? '', acteur: await pseudoDe(base, ev.acteur_id) };
+      return { ...base_, titre: charge.titre ?? '', acteur: await pseudo(ev.acteur_id) };
     case 'strat_created': {
       // Une strat privée (brouillon de son auteur) n'est jamais annoncée.
       const s = await base.premier('SELECT visibilite FROM strats WHERE id = ? AND team_id = ?', [ev.entite_id, ev.team_id]);
       if (!s || s.visibilite !== 'team') return null;
-      return { ...base_, titre: charge.titre ?? '', carte: charge.carte ?? '', side: charge.side === 'defense' ? 'Défense' : 'Attaque', acteur: await pseudoDe(base, ev.acteur_id) };
+      return { ...base_, titre: charge.titre ?? '', carte: charge.carte ?? '', side: T(L, charge.side === 'defense' ? 'var.defense' : 'var.attaque'), acteur: await pseudo(ev.acteur_id) };
     }
     case 'playbook_validated':
-      return { ...base_, titre: charge.titre ?? '', surCarte: charge.carte ? ` sur ${charge.carte}` : '', acteur: await pseudoDe(base, ev.acteur_id) };
+      return { ...base_, titre: charge.titre ?? '', surCarte: charge.carte ? T(L, 'var.sur_carte', { carte: charge.carte }) : '', acteur: await pseudo(ev.acteur_id) };
     default:
       return null;
   }
@@ -142,10 +147,10 @@ export async function modulesActifs(base, teamId) {
 }
 
 /** Réglage effectif d'un type de message : ligne de la team, sinon valeurs par défaut du catalogue. */
-export function reglageEffectif(def, ligne) {
+export function reglageEffectif(def, ligne, langue = 'fr') {
   return {
     actif: ligne ? Number(ligne.actif) === 1 : def.defaut,
-    modele: ligne?.modele || def.modele,
+    modele: ligne?.modele || textesEvenement(def, langue).modele,
     personnalise: Boolean(ligne?.modele),
     roleMention: ligne?.role_mention ?? null,
   };
@@ -173,12 +178,13 @@ async function majAnnonce(base, ev) {
   if (!ev.entite_id || !occurrence) return;
   const annonce = await base.premier('SELECT * FROM discord_annonces WHERE evenement_id = ? AND occurrence = ? AND team_id = ?', [ev.entite_id, occurrence, ev.team_id]);
   if (!annonce || !(await serveurBot(base, ev.team_id))) return;
+  const langue = lireLangue((await base.premier('SELECT langue_discord FROM teams WHERE id = ?', [ev.team_id]))?.langue_discord) ?? 'fr';
   // Une seule édition en attente par annonce : plusieurs réponses rapprochées ne font qu'une édition.
   await base.executer(
     `INSERT INTO discord_file (id, team_id, evenement_id, cle, modele, variables, statut, essais, prochain_essai_le, expire_le, cree_le, maj_le, canal, operation, salon_id)
      VALUES (?, ?, ?, 'event_created', '', ?, 'attente', 0, ?, ?, ?, ?, 'bot', 'editer', ?)
      ON CONFLICT (id) DO UPDATE SET statut = 'attente', essais = 0, prochain_essai_le = excluded.prochain_essai_le, expire_le = excluded.expire_le, derniere_erreur = NULL, maj_le = excluded.maj_le`,
-    [`maj:${ev.entite_id}:${occurrence}`, ev.team_id, ev.id, JSON.stringify({ evenementId: ev.entite_id, occurrence }), ev.cree_le, iso(Date.parse(ev.cree_le) + VALIDITE_MESSAGE_MS), ev.cree_le, ev.cree_le, annonce.salon_id],
+    [`maj:${ev.entite_id}:${occurrence}`, ev.team_id, ev.id, JSON.stringify({ evenementId: ev.entite_id, occurrence, _langue: langue }), ev.cree_le, iso(Date.parse(ev.cree_le) + VALIDITE_MESSAGE_MS), ev.cree_le, ev.cree_le, annonce.salon_id],
   );
 }
 
@@ -200,8 +206,9 @@ export async function abonneDiscord(base, ev) {
   // Le bot (serveur lié) a la priorité ; sinon le webhook ; sinon rien.
   const serveur = await serveurBot(base, ev.team_id);
   if (!serveur && !(await base.premier('SELECT team_id FROM discord_webhooks WHERE team_id = ?', [ev.team_id]))) return;
-  const team = await base.premier('SELECT nom, fuseau FROM teams WHERE id = ? AND supprimee_le IS NULL AND archivee_le IS NULL', [ev.team_id]);
+  const team = await base.premier('SELECT nom, fuseau, langue_discord FROM teams WHERE id = ? AND supprimee_le IS NULL AND archivee_le IS NULL', [ev.team_id]);
   if (!team) return;
+  const langue = lireLangue(team.langue_discord) ?? 'fr';
   const actifs = await modulesActifs(base, ev.team_id);
   if (!actifs.has('discord')) return;
   const charge = jsonOu(ev.charge, {});
@@ -209,7 +216,7 @@ export async function abonneDiscord(base, ev) {
   for (const cle of cles) {
     const def = evenementDiscord(cle);
     if (!def.modules.every(m => actifs.has(m))) continue;
-    const reglage = reglageEffectif(def, await base.premier('SELECT * FROM discord_notification_settings WHERE team_id = ? AND cle = ?', [ev.team_id, cle]));
+    const reglage = reglageEffectif(def, await base.premier('SELECT * FROM discord_notification_settings WHERE team_id = ? AND cle = ?', [ev.team_id, cle]), langue);
     if (!reglage.actif) continue;
     const variables = await variablesDe(base, ev, cle, charge, team);
     if (!variables) continue;
@@ -311,11 +318,12 @@ function aMentionner(cle, c) {
  */
 async function chargeDeLigne(base, ligne, { team, bot, lienApp, t }) {
   const variables = jsonOu(ligne.variables, {});
+  const langue = lireLangue(variables._langue) ?? 'fr';
   const occurrence = CLES_OCCURRENCE.includes(ligne.cle) && variables.evenementId && variables.occurrence;
   if (!occurrence) {
     const contenu = rendreModele(ligne.modele, { ...variables, lien: lienApp });
     const def = evenementDiscord(ligne.cle);
-    return { charge: construireCharge(contenu, { roleId: ligne.role_mention, nomTeam: team.nom, logoTeam: team.logo_url, cle: ligne.cle, titre: def?.libelle ?? 'Notification', lien: lienApp, composants: boutonLien(lienApp), maintenant: t }) };
+    return { charge: construireCharge(contenu, { roleId: ligne.role_mention, nomTeam: team.nom, logoTeam: team.logo_url, cle: ligne.cle, titre: def ? textesEvenement(def, langue).libelle : T(langue, 'message.titre_defaut'), lien: lienApp, composants: boutonLien(lienApp, undefined, langue), maintenant: t, langue }) };
   }
   const c = await contexteOccurrence(base, ligne.team_id, variables.evenementId, variables.occurrence, t);
   if (!c) return { abandon: 'Événement supprimé ou occurrence annulée' };
@@ -330,16 +338,16 @@ async function chargeDeLigne(base, ligne, { team, bot, lienApp, t }) {
     const annonce = await base.premier('SELECT cle FROM discord_annonces WHERE evenement_id = ? AND occurrence = ?', [variables.evenementId, variables.occurrence]);
     genre = annonce?.cle ?? 'event_created';
     const def = evenementDiscord(genre);
-    modele = reglageEffectif(def, await base.premier('SELECT * FROM discord_notification_settings WHERE team_id = ? AND cle = ?', [ligne.team_id, genre])).modele;
+    modele = reglageEffectif(def, await base.premier('SELECT * FROM discord_notification_settings WHERE team_id = ? AND cle = ?', [ligne.team_id, genre]), langue).modele;
   }
-  const vars = { ...variablesOccurrence(c, t, libelleTypeEvenement), acteur: variables.acteur ?? '', lien: lienApp };
+  const vars = { ...variablesOccurrence(c, t, libelleTypeEvenement, langue), acteur: variables.acteur ?? '', lien: lienApp };
   const texte = rendreModele(modele, vars);
-  const embed = embedOccurrence(c, { genre, texte, lien: lienApp, maintenant: t });
+  const embed = embedOccurrence(c, { genre, texte, lien: lienApp, maintenant: t, langue });
   const rsvpPossible = bot && c.presenceActive && !c.termine;
-  const composants = rsvpPossible ? boutonsRsvp(c.ev.id, c.occurrence.cle, { lien: lienApp }) : boutonLien(lienApp);
+  const composants = rsvpPossible ? boutonsRsvp(c.ev.id, c.occurrence.cle, { lien: lienApp, langue }) : boutonLien(lienApp, undefined, langue);
   // Mentions : uniquement le bot, uniquement les convoqués liés, et seulement si la team garde le ping pour ce type.
   const utilisateurs = bot && ligne.operation !== 'editer' && (await pingActif(base, ligne.team_id, c.occurrence.type)) ? aMentionner(ligne.cle, c) : [];
-  const charge = construireCharge(texte, { roleId: ligne.operation === 'editer' ? null : ligne.role_mention, nomTeam: team.nom, embed, utilisateurs, composants, maintenant: t });
+  const charge = construireCharge(texte, { roleId: ligne.operation === 'editer' ? null : ligne.role_mention, nomTeam: team.nom, embed, utilisateurs, composants, maintenant: t, langue });
   return { charge, contexte: c, genre };
 }
 

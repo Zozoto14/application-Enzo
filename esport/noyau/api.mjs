@@ -28,6 +28,7 @@ import { ErreurEsport, echec } from './outils.mjs';
 import { exporterBase, importerBase } from './transfert.mjs';
 import { ENTETES_CORS, ENTETES_SECURITE, reponseFichier } from './entetes.mjs';
 import { servicesJournal } from './journal.mjs';
+import { LANGUE_DEFAUT, langueDepuisEntete } from './langues.mjs';
 import { limiter } from './limites.mjs';
 import { servicesStats } from './stats.mjs';
 import { routeFichierSigne, routerPhase3, servicesPhase3 } from './routes-phase3.mjs';
@@ -136,7 +137,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
     const session = await lireSession(cleSession, jetonPorteur(requete), maintenant());
     if (!session) throw echec(401, 'session', 'Session Esport absente ou expirée.');
-    return { compte: session.compte, superAdmin: session.superAdmin };
+    // Langue des textes produits par le serveur (exports CSV, libellés Discord) : celle de l'app (Accept-Language), français par défaut.
+    return { compte: session.compte, superAdmin: session.superAdmin, langue: langueDepuisEntete(requete.headers.get('Accept-Language')) ?? LANGUE_DEFAUT };
   }
 
   async function router(requete) {
@@ -177,6 +179,10 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
         return s.majProfil(acteur, corps);
       }
       if (m === 'DELETE') return s.supprimerMesDonnees(acteur);
+    }
+    if (chemin === '/moi/langue' && m === 'PUT') {
+      await limite('profil', acteur.compte);
+      return s.majLangue(acteur, await lireCorps(requete));
     }
     const liaisonsDiscord = await routesLiaisons(lb, { methode: m, chemin, acteur, lireCorps: () => lireCorps(requete), limite });
     if (liaisonsDiscord !== undefined) return liaisonsDiscord;

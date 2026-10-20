@@ -19,6 +19,7 @@
  */
 
 import { evenement } from '../../evenements.mjs';
+import { LANGUE_DEFAUT, langueDepuisLocale, lireLangue, nomRoleSysteme, texte as T, texteNombre, traduireErreur } from '../../langues.mjs';
 import { ErreurEsport, echec, jsonOu } from '../../outils.mjs';
 import { ajouterJours, dateLocale, lireDate, lireHeure, texteDate, texteHeure } from '../../planning/temps.mjs';
 import { convocationParGroupe } from '../convoques.mjs';
@@ -28,7 +29,6 @@ import {
   COULEUR_ERREUR,
   COULEUR_OK,
   EMOJIS_TYPES,
-  NOMS_TYPES,
   REPONSES_BOUTONS,
   boutonLien,
   boutonsPagination,
@@ -38,6 +38,7 @@ import {
   embedReponse,
   horodatage,
   imageCarte,
+  nomType,
   occurrenceCourte,
   occurrenceLongue,
   paginer,
@@ -55,10 +56,12 @@ const JOUR = 86_400_000;
 const PERMISSION_ADMIN = 0x8n;
 const PERMISSION_GERER_SERVEUR = 0x20n;
 const LENT = Symbol('lent');
-const ICONES_RSVP = { oui: '✅ Oui', peut_etre: '🤔 Peut-être', non: '❌ Non', sans_reponse: '⏳ Pas encore répondu' };
-const SIDES = { attaque: '🗡️ Attaque', defense: '🛡️ Défense' };
-const TYPES_STRAT = { default: 'Default', execute: 'Execute', eco: 'Éco', pistol: 'Pistol', retake: 'Retake', other: 'Autre' };
-const JOURS = ['', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+const TYPES_STRAT = ['default', 'execute', 'eco', 'pistol', 'retake', 'other'];
+const PRIORITES = ['basse', 'normale', 'haute', 'urgente'];
+
+/** Langue des réponses de cette interaction (résolue une fois par `resoudreLangue`) : compte lié, sinon locale Discord. */
+const lg = i => lireLangue(i.langueEsport) ?? LANGUE_DEFAUT;
+const rsvpTexte = (i, cle) => T(lg(i), `bot.rsvp.${cle in { oui: 1, peut_etre: 1, non: 1 } ? cle : 'sans_reponse'}`);
 
 const json = (corps, statut = 200) => new Response(JSON.stringify(corps), { status: statut, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 
@@ -68,38 +71,34 @@ function message({ embeds = [], components = [], ephemere = true, content } = {}
 }
 const miseAJour = ({ embeds = [], components = [] }) => ({ type: REPONSE.MAJ, data: { embeds: bornerEmbeds(embeds), components, allowed_mentions: { parse: [] } } });
 const avis = (titre, description, couleur = ACCENT, extra = {}) => message({ embeds: [embedReponse({ titre, description, couleur, ...extra })] });
-const erreur = texte => avis('⚠️ Impossible', texte, COULEUR_ERREUR);
+const erreur = (i, texte) => avis(T(lg(i), 'bot.impossible'), texte, COULEUR_ERREUR);
 
-const PAS_LIE = () =>
-  avis(
-    '🔗 Lie ton compte avec /lier',
-    'Ton compte Discord n’est pas encore lié à l’Esport.\n\n**1.** Dans l’app : **Esport › Mon profil › Lier mon Discord**.\n**2.** Tape ici `/lier code:XXXX-XXXX` avec le code affiché (valable 10 minutes).',
-    COULEUR_ALERTE,
-  );
+const PAS_LIE = i => avis(T(lg(i), 'bot.pas_lie.titre'), T(lg(i), 'bot.pas_lie.description'), COULEUR_ALERTE);
 
 /** Option d'une commande (premier niveau). */
 const opt = (i, nom) => (i.data?.options ?? []).find(o => o.name === nom)?.value;
 
 /** Message lisible d'une erreur des services. */
-function texteErreur(e) {
+function texteErreur(e, langue = LANGUE_DEFAUT) {
   if (!(e instanceof ErreurEsport)) {
     console.error('[esport] bot', e);
-    return 'Erreur interne du serveur Esport. Réessaie dans un instant.';
+    return T(langue, 'bot.erreur.interne');
   }
-  if (e.code === 'permission') return 'Tu n’as pas la permission de faire cela dans cette team.';
-  if (e.code === 'module-desactive') return 'Ce module n’est pas activé pour cette team.';
-  if (e.code === 'team-introuvable') return 'Tu n’es pas membre de cette team.';
-  if (e.code === 'non-concerne') return 'Tu n’es pas convoqué à cet événement.';
-  if (e.code === 'trop-de-requetes') return 'Trop de demandes en peu de temps : réessaie dans un moment.';
-  return e.message;
+  if (e.code === 'permission') return T(langue, 'bot.erreur.permission');
+  if (e.code === 'module-desactive') return T(langue, 'bot.erreur.module_desactive');
+  if (e.code === 'team-introuvable') return T(langue, 'bot.erreur.team_introuvable');
+  if (e.code === 'non-concerne') return T(langue, 'bot.erreur.non_concerne');
+  if (e.code === 'trop-de-requetes') return T(langue, 'bot.erreur.trop_de_requetes');
+  // Les autres messages de l'API sont écrits en français : traduits par la table partagée avec l'app.
+  return traduireErreur(langue, e.message);
 }
 
-/** Date saisie : « 2026-10-24 », « 24/10 », « 24/10/2026 », « aujourd'hui », « demain ». */
+/** Date saisie : « 2026-10-24 », « 24/10 », « 24/10/2026 », « aujourd'hui »/« today », « demain »/« tomorrow ». */
 export function lireDateSaisie(saisie, fuseau, maintenant) {
   const t = String(saisie ?? '').trim().toLowerCase().replace(/’/g, "'");
   const auj = dateLocale(fuseau, maintenant);
-  if (/^aujourd'?hui$/.test(t)) return texteDate(auj);
-  if (t === 'demain') return texteDate(ajouterJours(auj, 1));
+  if (/^(aujourd'?hui|today)$/.test(t)) return texteDate(auj);
+  if (t === 'demain' || t === 'tomorrow') return texteDate(ajouterJours(auj, 1));
   const iso = lireDate(t);
   if (iso) return texteDate(iso);
   const m = /^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{4}))?$/.exec(t);
@@ -134,9 +133,18 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
 
   // ------------------------------------------------------------ Contexte
 
-  async function acteurDe(utilisateur) {
+  async function acteurDe(utilisateur, langue) {
     const l = await base.premier('SELECT dc.compte_id, dc.super_admin FROM discord_comptes dc JOIN comptes c ON c.id = dc.compte_id WHERE dc.discord_user_id = ?', [utilisateur.id]);
-    return l ? { compte: l.compte_id, superAdmin: Number(l.super_admin) === 1 } : null;
+    return l ? { compte: l.compte_id, superAdmin: Number(l.super_admin) === 1, langue } : null;
+  }
+
+  /** Langue des réponses : celle du compte Esport lié, sinon la locale Discord de l'interaction (`locale`), sinon le français. */
+  async function resoudreLangue(i) {
+    const utilisateur = i.member?.user ?? i.user;
+    const l = utilisateur?.id
+      ? await base.premier('SELECT c.langue FROM discord_comptes dc JOIN comptes c ON c.id = dc.compte_id WHERE dc.discord_user_id = ?', [utilisateur.id])
+      : null;
+    return lireLangue(l?.langue) ?? langueDepuisLocale(i.locale);
   }
 
   /** Teams liées à ce serveur où l'acteur peut entrer (membre actif, ou Fondateur). */
@@ -179,14 +187,14 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
   /** Préambule commun : compte lié, teams du serveur. Rend `{ acteur, contextes }` ou une réponse. */
   async function preparer(i, { serveur = true } = {}) {
     const utilisateur = i.member?.user ?? i.user;
-    const acteur = await acteurDe(utilisateur);
-    if (!acteur) return { reponse: PAS_LIE() };
+    const acteur = await acteurDe(utilisateur, lg(i));
+    if (!acteur) return { reponse: PAS_LIE(i) };
     if (!serveur) return { acteur };
-    if (!i.guild_id) return { reponse: erreur('Cette commande se tape dans le serveur Discord de la team.') };
+    if (!i.guild_id) return { reponse: erreur(i, T(lg(i), 'bot.erreur.dans_serveur')) };
     const lie = await base.premier('SELECT team_id FROM discord_serveurs WHERE guild_id = ? LIMIT 1', [i.guild_id]);
-    if (!lie) return { reponse: erreur('Ce serveur n’est lié à aucune team Esport : un admin du serveur tape `/esport-lier-serveur` avec le code de l’app.') };
+    if (!lie) return { reponse: erreur(i, T(lg(i), 'bot.erreur.serveur_non_lie')) };
     const contextes = await teamsDuServeur(i.guild_id, acteur);
-    if (contextes.length === 0) return { reponse: erreur('Tu n’es membre d’aucune team liée à ce serveur.') };
+    if (contextes.length === 0) return { reponse: erreur(i, T(lg(i), 'bot.erreur.aucune_team')) };
     return { acteur, contextes };
   }
 
@@ -201,12 +209,12 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
 
   // ------------------------------------------------------------ Occurrences
 
-  const ligneOccurrence = (o, { team, monRsvp } = {}) => {
+  const ligneOccurrence = (i, o, { team, monRsvp } = {}) => {
     const debut = Date.parse(o.debut);
     const type = EMOJIS_TYPES[o.type] ? o.type : 'other';
     return {
       nom: `${EMOJIS_TYPES[type]} ${nettoyerVariable(o.titre)}`,
-      valeur: [`${horodatage(debut, 'f')} · ${horodatage(debut, 'R')}`, team ? `🏷️ ${nettoyerVariable(team)}` : '', monRsvp ? `Ta réponse : ${ICONES_RSVP[monRsvp] ?? ICONES_RSVP.sans_reponse}` : ''].filter(Boolean).join('\n'),
+      valeur: [`${horodatage(debut, 'f')} · ${horodatage(debut, 'R')}`, team ? `🏷️ ${nettoyerVariable(team)}` : '', monRsvp ? T(lg(i), 'bot.ligne.ta_reponse', { reponse: rsvpTexte(i, monRsvp) }) : ''].filter(Boolean).join('\n'),
     };
   };
 
@@ -230,57 +238,47 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
 
   // ------------------------------------------------------------ Commandes
 
-  async function aide() {
-    const champs = [
-      { nom: '🔗 /lier · /delier', valeur: 'Lier (ou délier) ton compte Discord à ton compte Esport.' },
-      { nom: '📅 /prochain', valeur: 'Tes prochains événements, là où tu es convoqué.' },
-      { nom: '🗓️ /planning [jours]', valeur: 'Les événements de la team (7 jours par défaut).' },
-      { nom: '🗳️ /rsvp', valeur: 'Choisir un événement, puis Oui, Peut-être ou Non.' },
-      { nom: '🟢 /dispo', valeur: 'Tes disponibilités de la semaine.' },
-      { nom: '✅ /taches', valeur: 'Tes tâches ouvertes et en retard.' },
-      { nom: '🗺️ /strat map:', valeur: 'Les strats validées du playbook pour une map.' },
-      { nom: '📥 /resume', valeur: 'Déposer le lien d’une réunion à résumer.' },
-      { nom: '🛠️ Staff', valeur: '`/evenement-creer` crée un événement ; `/relancer` relance les convoqués sans réponse.' },
-      { nom: '⚙️ Admin du serveur', valeur: '`/esport-lier-serveur code:` lie ce serveur à une team (code dans l’app : Discord › Lier un serveur Discord).' },
-    ];
-    return message({ embeds: [embedReponse({ titre: '🛰️ Bot Esport · aide', description: 'Les annonces des scrims, matchs et tournois arrivent dans le salon de la team, avec les convoqués mentionnés et des boutons pour répondre.', champs, lien })], components: boutonLien(lien) });
+  async function aide(i) {
+    const l = lg(i);
+    const champs = ['lier', 'prochain', 'planning', 'rsvp', 'dispo', 'taches', 'strat', 'resume', 'staff', 'admin'].map(k => ({ nom: T(l, `bot.aide.${k}.nom`), valeur: T(l, `bot.aide.${k}.valeur`) }));
+    return message({ embeds: [embedReponse({ titre: T(l, 'bot.aide.titre'), description: T(l, 'bot.aide.description'), champs, pied: T(l, 'embed.pied_defaut'), lien })], components: boutonLien(lien, undefined, l) });
   }
 
   async function lier(i) {
     const utilisateur = i.member?.user ?? i.user;
     await limite('discord_lier', utilisateur.id);
     const ligne = await liaisons.consommerCode('compte', opt(i, 'code'));
-    if (!ligne) return erreur('Code invalide, déjà utilisé ou expiré (10 minutes). Demande un nouveau code dans l’app : **Mon profil › Lier mon Discord**.');
+    if (!ligne) return erreur(i, T(lg(i), 'bot.lier.code_invalide'));
     await liaisons.lierCompte(ligne, utilisateur);
     const profil = await base.premier('SELECT pseudo FROM comptes WHERE id = ?', [ligne.compte_id]);
-    return avis('✅ Compte lié', `Ton Discord est lié au compte Esport de **${nettoyerVariable(profil?.pseudo ?? 'ton compte')}**. Tu seras mentionné quand tu es convoqué. \`/aide\` pour la suite.`, COULEUR_OK);
+    return avis(T(lg(i), 'bot.lier.titre'), T(lg(i), 'bot.lier.description', { pseudo: nettoyerVariable(profil?.pseudo ?? T(lg(i), 'bot.lier.ton_compte')) }), COULEUR_OK);
   }
 
   async function delier(i) {
     const { acteur, reponse } = await preparer(i, { serveur: false });
     if (reponse) return reponse;
     await liaisons.delierCompte(acteur, { origine: 'discord' });
-    return avis('🔓 Compte délié', 'Ton Discord n’est plus lié à l’Esport : tu ne seras plus mentionné. Tu peux le relier à tout moment avec `/lier`.', COULEUR_OK);
+    return avis(T(lg(i), 'bot.delier.titre'), T(lg(i), 'bot.delier.description'), COULEUR_OK);
   }
 
   async function lierServeur(i) {
     const utilisateur = i.member?.user ?? i.user;
-    if (!i.guild_id || !i.member) return erreur('Cette commande se tape dans un serveur Discord.');
+    if (!i.guild_id || !i.member) return erreur(i, T(lg(i), 'bot.serveur.dans_serveur'));
     let droits = 0n;
     try {
       droits = BigInt(i.member.permissions ?? '0');
     } catch {
       droits = 0n;
     }
-    if ((droits & (PERMISSION_ADMIN | PERMISSION_GERER_SERVEUR)) === 0n) return erreur('Seul un administrateur du serveur Discord (droit « Gérer le serveur ») peut le lier à une team.');
+    if ((droits & (PERMISSION_ADMIN | PERMISSION_GERER_SERVEUR)) === 0n) return erreur(i, T(lg(i), 'bot.serveur.droits'));
     await limite('discord_lier', utilisateur.id);
     const ligne = await liaisons.consommerCode('serveur', opt(i, 'code'));
-    if (!ligne) return erreur('Code invalide, déjà utilisé ou expiré (10 minutes). Demande un nouveau code dans l’app : **Discord › Lier un serveur Discord**.');
+    if (!ligne) return erreur(i, T(lg(i), 'bot.serveur.code_invalide'));
     const salonId = opt(i, 'salon') ?? i.channel_id ?? i.channel?.id;
-    if (!/^\d{5,25}$/.test(String(salonId ?? ''))) return erreur('Salon introuvable.');
+    if (!/^\d{5,25}$/.test(String(salonId ?? ''))) return erreur(i, T(lg(i), 'bot.serveur.salon_introuvable'));
     const salonNom = i.data?.resolved?.channels?.[salonId]?.name ?? (salonId === (i.channel_id ?? i.channel?.id) ? i.channel?.name : '') ?? '';
     const team = await liaisons.lierServeur(ligne, { guildId: i.guild_id, salonId: String(salonId), salonNom, discordUserId: utilisateur.id });
-    return avis('🔗 Serveur lié', `Ce serveur est lié à la team **${nettoyerVariable(team.nom)}**. Les annonces arriveront dans <#${salonId}>.\n\nLes joueurs lient maintenant leur compte : **Mon profil › Lier mon Discord** dans l’app, puis \`/lier\` ici.`, COULEUR_OK);
+    return avis(T(lg(i), 'bot.serveur.titre'), T(lg(i), 'bot.serveur.description', { team: nettoyerVariable(team.nom), salon: salonId }), COULEUR_OK);
   }
 
   async function prochain(i, page = 1) {
@@ -290,15 +288,16 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     for (const ctx of contextes) await journaliser(ctx.team.id, acteur, 'prochain');
     const pg = paginer(liste, page, 5);
     const plusieurs = contextes.length > 1;
+    const l = lg(i);
     const embed = embedReponse({
-      titre: '📅 Tes prochains événements',
-      description: liste.length ? `${liste.length} événement${liste.length > 1 ? 's' : ''} où tu es convoqué, dans les 30 prochains jours.` : 'Aucun événement à venir où tu es convoqué. Profites-en !',
-      champs: pg.elements.map(({ o, ctx }) => ligneOccurrence(o, { team: plusieurs ? ctx.team.nom : null, monRsvp: o.monRsvp })),
+      titre: T(l, 'bot.prochain.titre'),
+      description: liste.length ? texteNombre(l, 'bot.prochain.description', liste.length) : T(l, 'bot.prochain.vide'),
+      champs: pg.elements.map(({ o, ctx }) => ligneOccurrence(i, o, { team: plusieurs ? ctx.team.nom : null, monRsvp: o.monRsvp })),
       couleur: pg.elements[0] ? couleurType(pg.elements[0].o.type) : ACCENT,
-      pied: `Page ${pg.page} / ${pg.pages} · Esport`,
+      pied: T(l, 'embed.pied_page', { page: pg.page, pages: pg.pages }),
       lien,
     });
-    return { embeds: [embed], components: [...boutonsPagination('prochain', pg.page, pg.pages), ...(liste.length ? [] : boutonLien(lien))] };
+    return { embeds: [embed], components: [...boutonsPagination('prochain', pg.page, pg.pages, l), ...(liste.length ? [] : boutonLien(lien, undefined, l))] };
   }
 
   async function planningCmd(i, page = 1, args = {}) {
@@ -310,34 +309,36 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     const liste = await aVenir(acteur, cibles, { jours });
     for (const ctx of cibles) await journaliser(ctx.team.id, acteur, 'planning');
     const pg = paginer(liste, page, 6);
+    const l = lg(i);
     const embed = embedReponse({
-      titre: `🗓️ Planning · ${jours} prochain${jours > 1 ? 's' : ''} jour${jours > 1 ? 's' : ''}`,
-      description: liste.length ? (cibles.length === 1 ? `Team **${nettoyerVariable(cibles[0].team.nom)}**` : `${cibles.length} teams`) : 'Rien de prévu sur cette période.',
-      champs: pg.elements.map(({ o, ctx, convoque }) => ({ ...ligneOccurrence(o, { team: cibles.length > 1 ? ctx.team.nom : null }), nom: `${ligneOccurrence(o).nom}${convoque ? ' · 📌 toi' : ''}` })),
-      pied: `Page ${pg.page} / ${pg.pages} · Esport`,
+      titre: texteNombre(l, 'bot.planning.titre', jours),
+      description: liste.length ? (cibles.length === 1 ? T(l, 'bot.planning.team', { team: nettoyerVariable(cibles[0].team.nom) }) : T(l, 'bot.planning.teams', { n: cibles.length })) : T(l, 'bot.planning.vide'),
+      champs: pg.elements.map(({ o, ctx, convoque }) => ({ ...ligneOccurrence(i, o, { team: cibles.length > 1 ? ctx.team.nom : null }), nom: `${ligneOccurrence(i, o).nom}${convoque ? T(l, 'bot.planning.toi') : ''}` })),
+      pied: T(l, 'embed.pied_page', { page: pg.page, pages: pg.pages }),
       lien,
     });
     const cle = ['planning', jours, choix ? cibles[0].team.id : ''].filter(x => x !== '').join('.');
-    return { embeds: [embed], components: [...boutonsPagination(cle, pg.page, pg.pages), ...boutonLien(lien)] };
+    return { embeds: [embed], components: [...boutonsPagination(cle, pg.page, pg.pages, l), ...boutonLien(lien, undefined, l)] };
   }
 
   async function rsvp(i) {
     const { acteur, contextes, reponse } = await preparer(i);
     if (reponse) return reponse;
     const liste = (await aVenir(acteur, contextes, { jours: 14, garder: ({ convoque, ctx }) => convoque && peut(ctx, 'attendance.rsvp_own') })).slice(0, 25);
-    if (liste.length === 0) return avis('🗳️ Rien à répondre', 'Aucun événement des 14 prochains jours ne t’attend.', ACCENT);
+    const l = lg(i);
+    if (liste.length === 0) return avis(T(l, 'bot.rsvp.rien_titre'), T(l, 'bot.rsvp.rien_description'), ACCENT);
     const options = liste.map(({ o, ctx }) => {
       const type = EMOJIS_TYPES[o.type] ? o.type : 'other';
       return {
-        label: nettoyerVariable(o.titre).slice(0, 100) || 'Événement',
-        description: `${NOMS_TYPES[type]} · ${o.jour} ${o.heureDebut}${contextes.length > 1 ? ` · ${ctx.team.nom}` : ''} · ${ICONES_RSVP[o.monRsvp] ?? ICONES_RSVP.sans_reponse}`.slice(0, 100),
+        label: nettoyerVariable(o.titre).slice(0, 100) || T(l, 'bot.rsvp.evenement'),
+        description: `${nomType(type, l)} · ${o.jour} ${o.heureDebut}${contextes.length > 1 ? ` · ${ctx.team.nom}` : ''} · ${rsvpTexte(i, o.monRsvp)}`.slice(0, 100),
         value: `${o.evenementId}|${occurrenceCourte(o.cle)}`,
         emoji: { name: EMOJIS_TYPES[type] },
       };
     });
     return message({
-      embeds: [embedReponse({ titre: '🗳️ Répondre à un événement', description: 'Choisis l’événement, puis réponds avec les boutons.' })],
-      components: [{ type: 1, components: [{ type: 3, custom_id: 'rs', placeholder: 'Choisis un événement', options }] }],
+      embeds: [embedReponse({ titre: T(l, 'bot.rsvp.titre'), description: T(l, 'bot.rsvp.description'), pied: T(l, 'embed.pied_defaut') })],
+      components: [{ type: 1, components: [{ type: 3, custom_id: 'rs', placeholder: T(l, 'bot.rsvp.placeholder'), options }] }],
     });
   }
 
@@ -346,13 +347,13 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     const { acteur, reponse } = await preparer(i);
     if (reponse) return reponse;
     const ev = await evenementDuServeur(evId, i.guild_id);
-    if (!ev) return erreur('Événement introuvable sur ce serveur.');
+    if (!ev) return erreur(i, T(lg(i), 'bot.erreur.evenement_introuvable'));
     await noyau.contexteTeam(acteur, ev.team_id);
     const c = await contexteOccurrence(base, ev.team_id, evId, occIso, maintenant());
-    if (!c || c.termine) return erreur('Cet événement est terminé ou annulé.');
+    if (!c || c.termine) return erreur(i, T(lg(i), 'bot.erreur.evenement_termine'));
     const moi = c.rsvpDe.get(acteur.compte) ?? 'sans_reponse';
-    const embed = embedOccurrence(c, { genre: 'rsvp_choix', texte: `Ta réponse actuelle : **${ICONES_RSVP[moi]}**`, lien, maintenant: maintenant() });
-    return miseAJour({ embeds: [embed], components: boutonsRsvp(evId, c.occurrence.cle, { lien }) });
+    const embed = embedOccurrence(c, { genre: 'rsvp_choix', texte: T(lg(i), 'bot.rsvp.actuelle', { reponse: rsvpTexte(i, moi) }), lien, maintenant: maintenant(), langue: lg(i) });
+    return miseAJour({ embeds: [embed], components: boutonsRsvp(evId, c.occurrence.cle, { lien, langue: lg(i) }) });
   }
 
   async function bouttonRsvp(i, [evId, occCourte, choix]) {
@@ -361,16 +362,17 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     const rsvpChoisi = REPONSES_BOUTONS[choix];
     const occIso = occurrenceLongue(occCourte);
     const ev = await evenementDuServeur(evId, i.guild_id);
-    if (!rsvpChoisi || !occIso || !ev) return erreur('Événement introuvable sur ce serveur.');
+    if (!rsvpChoisi || !occIso || !ev) return erreur(i, T(lg(i), 'bot.erreur.evenement_introuvable'));
     await p.repondre(acteur, ev.team_id, evId, occIso, { rsvp: rsvpChoisi });
     const c = await contexteOccurrence(base, ev.team_id, evId, occIso, maintenant());
-    const titre = c ? nettoyerVariable(c.occurrence.titre) : 'cet événement';
-    return avis(`${ICONES_RSVP[rsvpChoisi].split(' ')[0]} C’est noté`, `Ta réponse pour **${titre}** : **${ICONES_RSVP[rsvpChoisi]}**. L’app est à jour.`, COULEUR_OK);
+    const titre = c ? nettoyerVariable(c.occurrence.titre) : T(lg(i), 'bot.rsvp.cet_evenement');
+    return avis(`${rsvpTexte(i, rsvpChoisi).split(' ')[0]} ${T(lg(i), 'bot.rsvp.note_titre')}`, T(lg(i), 'bot.rsvp.note_description', { titre, reponse: rsvpTexte(i, rsvpChoisi) }), COULEUR_OK);
   }
 
   async function dispo(i) {
     const { acteur, contextes, reponse } = await preparer(i);
     if (reponse) return reponse;
+    const l = lg(i);
     const embeds = [];
     for (const ctx of contextes.filter(c => peut(c, 'availability.edit_own'))) {
       const d = await p.mesDispos(acteur, ctx.team.id);
@@ -378,14 +380,14 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
       const champs = [];
       for (let jour = 1; jour <= 7; jour++) {
         const regles = d.regles.filter(r => r.jour === jour);
-        champs.push({ nom: JOURS[jour], valeur: regles.length ? regles.map(r => `${r.type === 'indisponible' ? '🔴' : '🟢'} ${r.debut}–${r.fin}`).join('\n') : '—', inline: true });
+        champs.push({ nom: T(l, `bot.jour.${jour}`), valeur: regles.length ? regles.map(r => `${r.type === 'indisponible' ? '🔴' : '🟢'} ${r.debut}–${r.fin}`).join('\n') : '—', inline: true });
       }
       const semaine = d.exceptions.filter(x => Date.parse(x.debut) < maintenant() + 7 * JOUR).slice(0, 8);
-      if (semaine.length) champs.push({ nom: '📌 Exceptions cette semaine', valeur: semaine.map(x => `${x.type === 'indisponible' ? '🔴' : '🟢'} ${x.jour} ${x.heureDebut}–${x.heureFin}${x.note ? ` · ${nettoyerVariable(x.note)}` : ''}`).join('\n') });
-      embeds.push(embedReponse({ titre: `🟢 Tes disponibilités · ${nettoyerVariable(ctx.team.nom)}`, description: d.regles.length ? `Fuseau : ${d.fuseau}. 🟢 disponible · 🔴 indisponible.` : 'Tu n’as encore rien saisi : ouvre l’app pour remplir ta semaine type.', champs, couleur: COULEUR_OK, lien }));
+      if (semaine.length) champs.push({ nom: T(l, 'bot.dispo.exceptions'), valeur: semaine.map(x => `${x.type === 'indisponible' ? '🔴' : '🟢'} ${x.jour} ${x.heureDebut}–${x.heureFin}${x.note ? ` · ${nettoyerVariable(x.note)}` : ''}`).join('\n') });
+      embeds.push(embedReponse({ titre: T(l, 'bot.dispo.titre', { team: nettoyerVariable(ctx.team.nom) }), description: d.regles.length ? T(l, 'bot.dispo.description', { fuseau: d.fuseau }) : T(l, 'bot.dispo.vide'), champs, couleur: COULEUR_OK, lien }));
     }
-    if (embeds.length === 0) return erreur('Le module Disponibilités n’est pas activé pour tes teams, ou tu n’as pas la permission de saisir tes dispos.');
-    return message({ embeds, components: boutonLien(lien, 'Modifier dans l’app') });
+    if (embeds.length === 0) return erreur(i, T(l, 'bot.dispo.indisponible_module'));
+    return message({ embeds, components: boutonLien(lien, T(l, 'bouton.modifier_app')) });
   }
 
   async function taches(i, page = 1) {
@@ -399,22 +401,27 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
       await journaliser(ctx.team.id, acteur, 'taches');
       for (const t of r.taches.filter(x => x.statut !== 'fait')) liste.push({ t, ctx });
     }
-    if (!accessible) return erreur('Le module Objectifs et tâches n’est pas activé pour tes teams.');
+    const l = lg(i);
+    if (!accessible) return erreur(i, T(l, 'bot.taches.module'));
     liste.sort((a, b) => Number(b.t.enRetard) - Number(a.t.enRetard) || (a.t.echeance ?? '9999').localeCompare(b.t.echeance ?? '9999'));
     const retard = liste.filter(x => x.t.enRetard).length;
     const pg = paginer(liste, page, 6);
     const embed = embedReponse({
-      titre: '✅ Tes tâches',
-      description: liste.length ? `${liste.length} ouverte${liste.length > 1 ? 's' : ''}${retard ? ` · 🔴 **${retard} en retard**` : ''}` : 'Aucune tâche ouverte. Bravo !',
+      titre: T(l, 'bot.taches.titre'),
+      description: liste.length ? `${texteNombre(l, 'bot.taches.ouvertes', liste.length)}${retard ? T(l, 'bot.taches.en_retard', { n: retard }) : ''}` : T(l, 'bot.taches.vide'),
       couleur: retard ? COULEUR_ERREUR : COULEUR_OK,
       champs: pg.elements.map(({ t, ctx }) => ({
         nom: `${t.enRetard ? '🔴' : t.statut === 'en_cours' ? '🟡' : '⚪'} ${nettoyerVariable(t.titre)}`,
-        valeur: [t.echeance ? `Échéance : ${t.echeance.split('-').reverse().join('/')}${t.enRetard ? ' (**en retard**)' : ''}` : 'Sans échéance', `Priorité : ${t.priorite}`, contextes.length > 1 ? `🏷️ ${nettoyerVariable(ctx.team.nom)}` : ''].filter(Boolean).join(' · '),
+        valeur: [
+          t.echeance ? `${T(l, 'bot.taches.echeance', { date: t.echeance.split('-').reverse().join('/') })}${t.enRetard ? T(l, 'bot.taches.retard_marque') : ''}` : T(l, 'bot.taches.sans_echeance'),
+          T(l, 'bot.taches.priorite', { priorite: PRIORITES.includes(t.priorite) ? T(l, `bot.priorite.${t.priorite}`) : t.priorite }),
+          contextes.length > 1 ? `🏷️ ${nettoyerVariable(ctx.team.nom)}` : '',
+        ].filter(Boolean).join(' · '),
       })),
-      pied: `Page ${pg.page} / ${pg.pages} · Esport`,
+      pied: T(l, 'embed.pied_page', { page: pg.page, pages: pg.pages }),
       lien,
     });
-    return { embeds: [embed], components: [...boutonsPagination('taches', pg.page, pg.pages), ...boutonLien(lien)] };
+    return { embeds: [embed], components: [...boutonsPagination('taches', pg.page, pg.pages, l), ...boutonLien(lien, undefined, l)] };
   }
 
   const normaliser = v => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
@@ -429,19 +436,20 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     const carte = r.cartes.find(c => normaliser(c.cle) === carteSaisie || normaliser(c.nom) === carteSaisie) ?? { cle: carteSaisie.replace(/[^a-z0-9-]/g, ''), nom: args.map ?? opt(i, 'map') };
     const entrees = r.entrees.filter(e => e.carte?.cle === carte.cle);
     const pg = paginer(entrees, page, 6);
+    const l = lg(i);
     const embed = embedReponse({
-      titre: `🗺️ Strats validées · ${nettoyerVariable(carte.nom)}`,
-      description: entrees.length ? `${entrees.length} entrée${entrees.length > 1 ? 's' : ''} validée${entrees.length > 1 ? 's' : ''} du playbook de **${nettoyerVariable(ctx.team.nom)}**.` : 'Aucune strat validée pour cette map dans le playbook.',
+      titre: T(l, 'bot.strat.titre', { carte: nettoyerVariable(carte.nom) }),
+      description: entrees.length ? texteNombre(l, 'bot.strat.description', entrees.length, { team: nettoyerVariable(ctx.team.nom) }) : T(l, 'bot.strat.vide'),
       champs: pg.elements.map(e => ({
         nom: `${e.favori ? '⭐ ' : ''}${nettoyerVariable(e.titre)}`,
-        valeur: [[e.side ? SIDES[e.side] : '', TYPES_STRAT[e.type] ?? e.type].filter(Boolean).join(' · '), e.description ? nettoyerVariable(e.description).slice(0, 180) : '', e.tags.length ? e.tags.map(t => `\`${nettoyerVariable(t)}\``).join(' ') : ''].filter(Boolean).join('\n'),
+        valeur: [[e.side ? T(l, `bot.side.${e.side === 'defense' ? 'defense' : 'attaque'}`) : '', TYPES_STRAT.includes(e.type) ? T(l, `bot.strat.${e.type}`) : e.type].filter(Boolean).join(' · '), e.description ? nettoyerVariable(e.description).slice(0, 180) : '', e.tags.length ? e.tags.map(t => `\`${nettoyerVariable(t)}\``).join(' ') : ''].filter(Boolean).join('\n'),
       })),
       couleur: couleurType('scrim'),
       miniature: imageCarte(carte.cle),
-      pied: `Page ${pg.page} / ${pg.pages} · Esport`,
+      pied: T(l, 'embed.pied_page', { page: pg.page, pages: pg.pages }),
       lien,
     });
-    return { embeds: [embed], components: [...boutonsPagination(`strat.${carte.cle}.${ctx.team.id}`.slice(0, 80), pg.page, pg.pages), ...boutonLien(lien, 'Ouvrir le playbook')] };
+    return { embeds: [embed], components: [...boutonsPagination(`strat.${carte.cle}.${ctx.team.id}`.slice(0, 80), pg.page, pg.pages, l), ...boutonLien(lien, T(l, 'bouton.ouvrir_playbook'))] };
   }
 
   async function resume(i) {
@@ -451,7 +459,7 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     const dateReunion = texteDate(dateLocale(ctx.team.fuseau, maintenant()));
     const depot = await resumes.deposer(acteur, ctx.team.id, { titre: opt(i, 'titre'), lien: String(opt(i, 'lien') ?? ''), typeId: opt(i, 'type'), dateReunion });
     await journaliser(ctx.team.id, acteur, 'resume');
-    return avis('📥 Réunion déposée', `**${nettoyerVariable(depot.titre ?? opt(i, 'titre'))}** est dans la boîte des rédacteurs de **${nettoyerVariable(ctx.team.nom)}**. Tu seras prévenu quand le résumé sera publié.`, COULEUR_OK);
+    return avis(T(lg(i), 'bot.resume.titre'), T(lg(i), 'bot.resume.description', { titre: nettoyerVariable(depot.titre ?? opt(i, 'titre')), team: nettoyerVariable(ctx.team.nom) }), COULEUR_OK);
   }
 
   async function evenementCreer(i) {
@@ -460,9 +468,9 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     const ctx = teamVisee(contextes, opt(i, 'team'));
     noyau.exiger(ctx, 'planning.create');
     const date = lireDateSaisie(opt(i, 'date'), ctx.team.fuseau, maintenant());
-    if (!date) return erreur('Date illisible : 2026-10-24, 24/10, aujourd’hui ou demain.');
+    if (!date) return erreur(i, T(lg(i), 'bot.evenement.date_illisible'));
     const heure = lireHeureSaisie(opt(i, 'heure'));
-    if (!heure) return erreur('Heure illisible : 20:30 ou 20h30.');
+    if (!heure) return erreur(i, T(lg(i), 'bot.evenement.heure_illisible'));
     const duree = Math.min(1440, Math.max(15, Number(opt(i, 'duree') ?? 120) || 120));
     const debutMin = lireHeure(heure);
     const groupe = ['joueurs', 'staff', 'tous'].includes(opt(i, 'convoques')) ? opt(i, 'convoques') : 'joueurs';
@@ -471,9 +479,10 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     await journaliser(ctx.team.id, acteur, 'evenement-creer');
     const debut = Date.parse(cree.debut);
     const type = EMOJIS_TYPES[cree.type] ? cree.type : 'other';
+    const l = lg(i);
     return avis(
-      `${EMOJIS_TYPES[type]} Événement créé`,
-      `**${nettoyerVariable(cree.titre)}** (${NOMS_TYPES[type]}) le ${horodatage(debut, 'F')}, ${horodatage(debut, 'R')}.\nConvoqués : **${groupe === 'tous' ? 'tous (sauf les Propriétaires)' : groupe}** (${nombre}). L’annonce part dans le salon de la team (si elle est activée).`,
+      T(l, 'bot.evenement.titre', { emoji: EMOJIS_TYPES[type] }),
+      T(l, 'bot.evenement.description', { titre: nettoyerVariable(cree.titre), type: nomType(type, l), debut: horodatage(debut, 'F'), relatif: horodatage(debut, 'R'), groupe: T(l, `bot.evenement.groupe_${groupe}`), n: nombre }),
       COULEUR_OK,
     );
   }
@@ -484,13 +493,14 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     const [evId, occCourte] = String(opt(i, 'evenement') ?? '').split('|');
     const occIso = occurrenceLongue(occCourte);
     const ev = await evenementDuServeur(evId, i.guild_id);
-    if (!ev || !occIso) return erreur('Événement introuvable sur ce serveur : choisis-le dans la liste proposée.');
+    if (!ev || !occIso) return erreur(i, T(lg(i), 'bot.relancer.introuvable'));
     const ctx = await noyau.contexteTeam(acteur, ev.team_id);
     noyau.exiger(ctx, 'planning.view');
     noyau.exiger(ctx, 'attendance.mark');
     const c = await contexteOccurrence(base, ev.team_id, evId, occIso, maintenant());
-    if (!c || c.termine) return erreur('Cet événement est terminé ou annulé.');
-    if (c.sansReponse.length === 0) return avis('👌 Personne à relancer', 'Tous les convoqués ont déjà répondu.', COULEUR_OK);
+    const l = lg(i);
+    if (!c || c.termine) return erreur(i, T(l, 'bot.erreur.evenement_termine'));
+    if (c.sansReponse.length === 0) return avis(T(l, 'bot.relancer.personne_titre'), T(l, 'bot.relancer.personne_description'), COULEUR_OK);
     await limite('discord_relance', `${evId}:${c.occurrence.cle}`);
     const t = maintenant();
     await base.lot([
@@ -504,7 +514,7 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
       }),
     ]);
     const lies = c.sansReponse.filter(m => m.discordId).length;
-    return avis('🔔 Relance envoyée', `${c.sansReponse.length} convoqué${c.sansReponse.length > 1 ? 's' : ''} sans réponse pour **${nettoyerVariable(c.occurrence.titre)}** : ${lies} mentionné${lies > 1 ? 's' : ''} (comptes liés), les autres cités par leur pseudo. Un seul message, dans le salon de la team.`, COULEUR_OK);
+    return avis(T(l, 'bot.relancer.titre'), T(l, 'bot.relancer.description', { sans: texteNombre(l, 'bot.relancer.sans', c.sansReponse.length), titre: nettoyerVariable(c.occurrence.titre), lies: texteNombre(l, 'bot.relancer.lies', lies) }), COULEUR_OK);
   }
 
   // ------------------------------------------------------------ Autocomplétion
@@ -525,7 +535,7 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
         for (const [cle, nom] of vues) choix.push({ name: nom.slice(0, 100), value: cle });
       } else if (i.data.name === 'resume' && focus?.name === 'type') {
         const ctx = contextes.find(c => c.team.id === opt(i, 'team')) ?? contextes[0];
-        for (const t of await resumes.typesReunion(acteur, ctx.team.id).catch(() => [])) choix.push({ name: `${t.nom}${t.visibilite === 'staff' ? ' (staff)' : ''}`.slice(0, 100), value: t.id });
+        for (const t of await resumes.typesReunion(acteur, ctx.team.id).catch(() => [])) choix.push({ name: `${t.nom}${t.visibilite === 'staff' ? T(lg(i), 'bot.autocomplete.staff') : ''}`.slice(0, 100), value: t.id });
       } else if (i.data.name === 'relancer' && focus?.name === 'evenement') {
         const liste = await aVenir(acteur, contextes, { jours: 14, garder: ({ ctx }) => peut(ctx, 'attendance.mark') });
         for (const { o, ctx } of liste) {
@@ -565,15 +575,16 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     else if (liste === 'planning') r = await planningCmd(i, n, { jours: a, team: b });
     else if (liste === 'taches') r = await taches(i, n);
     else if (liste === 'strat') r = await strat(i, n, { map: a, team: b });
-    else return erreur('Liste inconnue.');
+    else return erreur(i, T(lg(i), 'bot.erreur.liste_inconnue'));
     return r.type ? r : miseAJour(r);
   }
 
   async function executer(i) {
+    i.langueEsport ??= await resoudreLangue(i);
     try {
       if (i.type === TYPE.COMMANDE) {
         const f = COMMANDES[i.data?.name];
-        return f ? await f(i) : erreur('Commande inconnue : relance l’enregistrement des commandes (workflow Esport).');
+        return f ? await f(i) : erreur(i, T(lg(i), 'bot.erreur.commande_inconnue'));
       }
       if (i.type === TYPE.COMPOSANT) {
         const id = String(i.data?.custom_id ?? '');
@@ -585,11 +596,11 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
         if (r) return await bouttonRsvp(i, r.slice(1));
         const pg = /^pg:([a-z0-9.-]{1,90}):(\d{1,4})$/.exec(id);
         if (pg) return await paginer_(i, pg[1], pg[2]);
-        return erreur('Bouton inconnu ou expiré.');
+        return erreur(i, T(lg(i), 'bot.erreur.bouton_inconnu'));
       }
-      return erreur('Interaction inconnue.');
+      return erreur(i, T(lg(i), 'bot.erreur.interaction_inconnue'));
     } catch (e) {
-      return erreur(texteErreur(e));
+      return erreur(i, texteErreur(e, lg(i)));
     }
   }
 
@@ -624,6 +635,7 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     if (i.type === TYPE.PING) return json({ type: REPONSE.PONG });
     const utilisateur = i.member?.user ?? i.user;
     if (!utilisateur || !/^\d{5,25}$/.test(String(utilisateur.id ?? ''))) return json({ erreur: 'Utilisateur Discord absent.' }, 400);
+    i.langueEsport = await resoudreLangue(i);
     if (i.type === TYPE.AUTOCOMPLETE) {
       try {
         return json(await autocomplete(i));
@@ -634,7 +646,7 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     try {
       await limite('discord_commande', utilisateur.id);
     } catch (e) {
-      return json(erreur(texteErreur(e)));
+      return json(erreur(i, texteErreur(e, lg(i))));
     }
     const travail = executer(i);
     const premier = await Promise.race([travail, attendreLent().then(() => LENT)]);

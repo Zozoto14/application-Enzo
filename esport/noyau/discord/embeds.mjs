@@ -16,6 +16,7 @@
  * listées une à une dans `allowed_mentions`.
  */
 
+import { texte as T, texteNombre } from '../langues.mjs';
 import { nettoyerTexteDiscord } from './messages.mjs';
 
 export const LIMITES_EMBED = Object.freeze({ titre: 256, description: 4096, champs: 25, nomChamp: 256, valeurChamp: 1024, pied: 2048, auteur: 256, total: 6000, embeds: 10 });
@@ -28,6 +29,8 @@ export const COULEUR_ALERTE = '#d97706';
 export const COULEUR_ERREUR = '#dc2626';
 export const EMOJIS_TYPES = Object.freeze({ scrim: '⚔️', match: '🏆', training: '🎯', tournament: '🏟️', meeting: '📋', other: '📅' });
 export const NOMS_TYPES = Object.freeze({ scrim: 'Scrim', match: 'Match', training: 'Entraînement', tournament: 'Tournoi', meeting: 'Réunion', other: 'Événement' });
+/** Nom d'un type d'événement dans une langue (`NOMS_TYPES` : français). */
+export const nomType = (type, langue = 'fr') => T(langue, `type.${type in NOMS_TYPES ? type : 'other'}`);
 
 export const couleurEntier = hexa => Number.parseInt(String(hexa).replace('#', ''), 16) || 0;
 export const couleurType = type => couleurEntier(COULEURS_TYPES[type] ?? COULEURS_TYPES.other);
@@ -35,7 +38,7 @@ export const couleurType = type => couleurEntier(COULEURS_TYPES[type] ?? COULEUR
 /** Horodatage Discord : affiché dans l'heure locale de chaque lecteur (F : date complète, R : « dans 2 h »). */
 export const horodatage = (ms, style = 'F') => `<t:${Math.floor(Number(ms) / 1000)}:${style}>`;
 
-/** Bandeau de l'embed selon le message. */
+/** Bandeau de l'embed selon le message (`nom` : français ; `nomGenre` : dans une langue). */
 export const GENRES = Object.freeze({
   event_created: { emoji: '📣', nom: 'Nouvel événement' },
   reminder_d1: { emoji: '⏰', nom: 'Rappel : c’est demain' },
@@ -45,6 +48,8 @@ export const GENRES = Object.freeze({
   rsvp_relance: { emoji: '🔔', nom: 'Relance : réponds pour cet événement' },
   rsvp_choix: { emoji: '🗳️', nom: 'Ta réponse' },
 });
+
+export const nomGenre = (genre, langue = 'fr') => T(langue, `genre.${genre in GENRES ? genre : 'event_created'}`);
 
 /** Emoji et couleur des autres messages (résumés, tâches, membres…). */
 const MESSAGES = {
@@ -120,8 +125,8 @@ export function bornerEmbeds(embeds) {
 // ------------------------------------------------------------------ Événements
 
 /** Champ « Réponses » : ✅ / 🤔 / ❌ et ⏳ sans réponse. */
-export function texteReponses(r = {}) {
-  return `✅ **${r.oui ?? 0}** Oui · 🤔 **${r.peut_etre ?? 0}** Peut-être · ❌ **${r.non ?? 0}** Non${r.sans ? ` · ⏳ ${r.sans} sans réponse` : ''}`;
+export function texteReponses(r = {}, langue = 'fr') {
+  return `✅ **${r.oui ?? 0}** ${T(langue, 'rep.oui')} · 🤔 **${r.peut_etre ?? 0}** ${T(langue, 'rep.peut_etre')} · ❌ **${r.non ?? 0}** ${T(langue, 'rep.non')}${r.sans ? ` · ⏳ ${T(langue, 'rep.sans_reponse', { n: r.sans })}` : ''}`;
 }
 
 /**
@@ -129,15 +134,15 @@ export function texteReponses(r = {}) {
  * ne prévient personne dans un embed), les autres par leur pseudo. Tronquée
  * proprement (« et 4 autres ») sous 1024 caractères.
  */
-export function texteConvoques(convoques = []) {
-  if (convoques.length === 0) return 'Toute la team';
+export function texteConvoques(convoques = [], langue = 'fr') {
+  if (convoques.length === 0) return T(langue, 'convoques.toute_la_team');
   const morceaux = convoques.map(c => (c.discordId && /^\d{5,25}$/.test(c.discordId) ? `<@${c.discordId}>` : ligne(c.pseudo, 40)));
   let sortie = '';
   for (let i = 0; i < morceaux.length; i++) {
     const suivant = sortie ? `${sortie} · ${morceaux[i]}` : morceaux[i];
     if (suivant.length > LIMITES_EMBED.valeurChamp - 30) {
       const reste = morceaux.length - i;
-      return `${sortie} · et ${reste} autre${reste > 1 ? 's' : ''}`;
+      return `${sortie} · ${texteNombre(langue, 'convoques.et_autres', reste)}`;
     }
     sortie = suivant;
   }
@@ -152,21 +157,21 @@ export function texteConvoques(convoques = []) {
  *  - `convoques` : `[{ pseudo, discordId }]` ; `reponses` : `{ oui, peut_etre, non, sans }` (null : présence inactive) ;
  *  - `texte` : message de la team (modèle rendu) ; `lien` : adresse de l'app ; `maintenant` (ms).
  */
-export function embedEvenement({ genre = 'event_created', occurrence, team = {}, carte = null, adversaire = null, convoques = [], reponses = null, texte: message = '', lien = '', maintenant = Date.now() }) {
+export function embedEvenement({ genre = 'event_created', occurrence, team = {}, carte = null, adversaire = null, convoques = [], reponses = null, texte: message = '', lien = '', maintenant = Date.now(), langue = 'fr' }) {
   const type = occurrence.type in EMOJIS_TYPES ? occurrence.type : 'other';
-  const g = GENRES[genre] ?? GENRES.event_created;
-  const champs = [{ name: '🕒 Quand', value: `${horodatage(occurrence.debut, 'F')}\n${horodatage(occurrence.debut, 'R')}`, inline: true }];
-  if (occurrence.fin) champs.push({ name: '⌛ Fin', value: horodatage(occurrence.fin, 't'), inline: true });
-  if (carte?.nom) champs.push({ name: '🗺️ Map', value: ligne(carte.nom, 60), inline: true });
-  if (adversaire?.nom) champs.push({ name: '🆚 Adversaire', value: ligne(adversaire.nom, 80), inline: true });
-  if (occurrence.lieu) champs.push({ name: '📍 Lieu', value: ligne(occurrence.lieu, 200), inline: true });
-  champs.push({ name: `👥 Convoqués (${convoques.length})`, value: texteConvoques(convoques), inline: false });
-  if (reponses) champs.push({ name: '🗳️ Réponses', value: texteReponses(reponses), inline: false });
+  const g = { emoji: (GENRES[genre] ?? GENRES.event_created).emoji, nom: nomGenre(genre, langue) };
+  const champs = [{ name: `🕒 ${T(langue, 'embed.quand')}`, value: `${horodatage(occurrence.debut, 'F')}\n${horodatage(occurrence.debut, 'R')}`, inline: true }];
+  if (occurrence.fin) champs.push({ name: `⌛ ${T(langue, 'embed.fin')}`, value: horodatage(occurrence.fin, 't'), inline: true });
+  if (carte?.nom) champs.push({ name: `🗺️ ${T(langue, 'embed.map')}`, value: ligne(carte.nom, 60), inline: true });
+  if (adversaire?.nom) champs.push({ name: `🆚 ${T(langue, 'embed.adversaire')}`, value: ligne(adversaire.nom, 80), inline: true });
+  if (occurrence.lieu) champs.push({ name: `📍 ${T(langue, 'embed.lieu')}`, value: ligne(occurrence.lieu, 200), inline: true });
+  champs.push({ name: `👥 ${T(langue, 'embed.convoques', { n: convoques.length })}`, value: texteConvoques(convoques, langue), inline: false });
+  if (reponses) champs.push({ name: `🗳️ ${T(langue, 'embed.reponses')}`, value: texteReponses(reponses, langue), inline: false });
   const miniature = https(carte?.image) ?? https(adversaire?.logo) ?? https(team.logo);
   const lienApp = https(lien);
   const embed = {
     author: { name: `${g.emoji} ${g.nom}` },
-    title: `${EMOJIS_TYPES[type]} ${NOMS_TYPES[type]} · ${ligne(occurrence.titre, 200)}`,
+    title: `${EMOJIS_TYPES[type]} ${nomType(type, langue)} · ${ligne(occurrence.titre, 200)}`,
     ...(lienApp ? { url: lienApp } : {}),
     color: couleurType(type),
     ...(message ? { description: texte(message, 1500) } : {}),
@@ -218,32 +223,32 @@ export const occurrenceLongue = court => {
 export const REPONSES_BOUTONS = Object.freeze({ o: 'oui', p: 'peut_etre', n: 'non' });
 
 /** Boutons RSVP (vert Oui, gris Peut-être, rouge Non) et lien « Ouvrir dans l'app ». */
-export function boutonsRsvp(evenementId, occurrenceIso, { lien = '', desactive = false } = {}) {
+export function boutonsRsvp(evenementId, occurrenceIso, { lien = '', desactive = false, langue = 'fr' } = {}) {
   const base = `r:${evenementId}:${occurrenceCourte(occurrenceIso)}`;
   const boutons = [
-    { type: 2, style: 3, label: 'Oui', emoji: { name: '✅' }, custom_id: `${base}:o`, disabled: desactive },
-    { type: 2, style: 2, label: 'Peut-être', emoji: { name: '🤔' }, custom_id: `${base}:p`, disabled: desactive },
-    { type: 2, style: 4, label: 'Non', emoji: { name: '❌' }, custom_id: `${base}:n`, disabled: desactive },
+    { type: 2, style: 3, label: T(langue, 'bouton.oui'), emoji: { name: '✅' }, custom_id: `${base}:o`, disabled: desactive },
+    { type: 2, style: 2, label: T(langue, 'bouton.peut_etre'), emoji: { name: '🤔' }, custom_id: `${base}:p`, disabled: desactive },
+    { type: 2, style: 4, label: T(langue, 'bouton.non'), emoji: { name: '❌' }, custom_id: `${base}:n`, disabled: desactive },
   ];
-  if (https(lien)) boutons.push({ type: 2, style: 5, label: 'Ouvrir dans l’app', emoji: { name: '📲' }, url: lien });
+  if (https(lien)) boutons.push({ type: 2, style: 5, label: T(langue, 'bouton.ouvrir_app'), emoji: { name: '📲' }, url: lien });
   return [{ type: 1, components: boutons }];
 }
 
 /** Seul bouton lien « Ouvrir dans l'app » (webhooks : pas de boutons interactifs). */
-export function boutonLien(lien, libelle = 'Ouvrir dans l’app') {
-  return https(lien) ? [{ type: 1, components: [{ type: 2, style: 5, label: libelle, emoji: { name: '📲' }, url: lien }] }] : [];
+export function boutonLien(lien, libelle, langue = 'fr') {
+  return https(lien) ? [{ type: 1, components: [{ type: 2, style: 5, label: libelle ?? T(langue, 'bouton.ouvrir_app'), emoji: { name: '📲' }, url: lien }] }] : [];
 }
 
 /** Pagination : « ◀ Précédent » · « page / total » · « Suivant ▶ ». `cle` identifie la liste (100 caractères au plus). */
-export function boutonsPagination(cle, page, pages) {
+export function boutonsPagination(cle, page, pages, langue = 'fr') {
   if (pages <= 1) return [];
   return [
     {
       type: 1,
       components: [
-        { type: 2, style: 2, label: 'Précédent', emoji: { name: '◀️' }, custom_id: `pg:${cle}:${page - 1}`, disabled: page <= 1 },
+        { type: 2, style: 2, label: T(langue, 'bouton.precedent'), emoji: { name: '◀️' }, custom_id: `pg:${cle}:${page - 1}`, disabled: page <= 1 },
         { type: 2, style: 2, label: `${page} / ${pages}`, custom_id: `pg:noop:${page}`, disabled: true },
-        { type: 2, style: 2, label: 'Suivant', emoji: { name: '▶️' }, custom_id: `pg:${cle}:${page + 1}`, disabled: page >= pages },
+        { type: 2, style: 2, label: T(langue, 'bouton.suivant'), emoji: { name: '▶️' }, custom_id: `pg:${cle}:${page + 1}`, disabled: page >= pages },
       ],
     },
   ];

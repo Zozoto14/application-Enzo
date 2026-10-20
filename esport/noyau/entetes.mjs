@@ -23,7 +23,7 @@ export const ENTETES_SECURITE = {
 export const ENTETES_CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Nom-Fichier',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type, Accept-Language, X-Nom-Fichier',
   'Access-Control-Max-Age': '86400',
 };
 

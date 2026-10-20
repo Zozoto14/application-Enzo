@@ -10,7 +10,8 @@
 
 import { evenement } from '../evenements.mjs';
 import { echec, iso, nouvelId } from '../outils.mjs';
-import { EVENEMENTS_DISCORD, evenementDiscord, EXEMPLES } from './catalogue.mjs';
+import { EVENEMENTS_DISCORD, evenementDiscord, exemples, textesEvenement } from './catalogue.mjs';
+import { lireLangue, texte as T } from '../langues.mjs';
 import { chiffrerWebhook, dechiffrerWebhook, finDeWebhook, masquerWebhook, validerUrlWebhook } from './chiffrement.mjs';
 import { posterWebhook, reglageEffectif } from './file.mjs';
 import { apercuModele, construireCharge, lireRoleMention, validerModele } from './messages.mjs';
@@ -45,23 +46,27 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
   async function etat(acteur, teamId) {
     const ctx = await contexte(acteur, teamId);
     const actifs = ctx.modules;
+    // Libellés et descriptions : langue de l'utilisateur ; modèles par défaut et aperçus : langue des messages de la team.
+    const langueUi = lireLangue(acteur.langue) ?? 'fr';
+    const langueTeam = lireLangue(ctx.team.langue_discord) ?? 'fr';
     const lignes = await base.tous('SELECT * FROM discord_notification_settings WHERE team_id = ?', [teamId]);
     const parametres = EVENEMENTS_DISCORD.map(def => {
-      const r = reglageEffectif(def, lignes.find(l => l.cle === def.cle));
+      const r = reglageEffectif(def, lignes.find(l => l.cle === def.cle), langueTeam);
       const disponible = def.modules.every(m => actifs.has(m));
+      const ui = textesEvenement(def, langueUi);
       return {
         cle: def.cle,
-        libelle: def.libelle,
-        description: def.description,
+        libelle: ui.libelle,
+        description: ui.description,
         modules: def.modules,
         disponible,
         actif: disponible && r.actif,
         modele: r.modele,
-        modeleDefaut: def.modele,
+        modeleDefaut: textesEvenement(def, langueTeam).modele,
         personnalise: r.personnalise,
         roleMention: r.roleMention,
-        variables: Object.entries(def.variables).map(([nom, description]) => ({ nom, description })),
-        apercu: apercuModele(r.modele),
+        variables: Object.entries(ui.variables).map(([nom, description]) => ({ nom, description })),
+        apercu: apercuModele(r.modele, langueTeam),
       };
     });
     const envois = await base.tous(
@@ -74,13 +79,14 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
     );
     return {
       webhook: webhookPublic(await ligneWebhook(teamId)),
+      langue: langueTeam,
       parametres,
-      exemples: EXEMPLES,
+      exemples: exemples(langueTeam),
       file: { enAttente: Number(compte?.attente ?? 0), abandonnes: Number(compte?.abandonnes ?? 0) },
       envois: envois.map(e => ({
         id: e.id,
         cle: e.cle,
-        libelle: evenementDiscord(e.cle)?.libelle ?? e.cle,
+        libelle: evenementDiscord(e.cle) ? textesEvenement(evenementDiscord(e.cle), langueUi).libelle : e.cle,
         statut: e.statut,
         essais: Number(e.essais),
         erreur: e.derniere_erreur ?? null,
@@ -134,10 +140,11 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
       e.attente = Math.ceil((INTERVALLE_TEST_MS - (t - Date.parse(w.dernier_test_le))) / 1000);
       throw e;
     }
+    const langueTeam = lireLangue(ctx.team.langue_discord) ?? 'fr';
     const url = await dechiffrerWebhook(cle, teamId, w.url_chiffree);
     if (!url) throw echec(409, 'webhook-illisible', 'L’adresse enregistrée est illisible (clé de chiffrement changée) : saisissez-la à nouveau.');
     await base.executer('UPDATE discord_webhooks SET dernier_test_le = ? WHERE team_id = ?', [iso(t), teamId]);
-    const r = await posterWebhook(fetchDiscord, url, construireCharge(`Message de test : le webhook de ${ctx.team.nom} fonctionne. Les notifications de l’Esport arriveront ici.`, { nomTeam: ctx.team.nom, titre: 'Message de test', cle: 'test' }));
+    const r = await posterWebhook(fetchDiscord, url, construireCharge(T(langueTeam, 'test.message', { team: ctx.team.nom }), { nomTeam: ctx.team.nom, titre: T(langueTeam, 'test.titre'), cle: 'test', langue: langueTeam }));
     if (!r.ok) {
       await base.executer('UPDATE discord_webhooks SET dernier_echec_le = ?, invalide_le = CASE WHEN ? = 1 THEN ? ELSE invalide_le END WHERE team_id = ?', [iso(t), r.webhookPerdu ? 1 : 0, iso(t), teamId]);
       if (r.statut === 429) {
@@ -159,7 +166,7 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
     const def = evenementDiscord(cleEvenement);
     if (!def) throw echec(404, 'discord-evenement', 'Type de notification inconnu.');
     const ligne = await base.premier('SELECT * FROM discord_notification_settings WHERE team_id = ? AND cle = ?', [teamId, cleEvenement]);
-    const avant = reglageEffectif(def, ligne);
+    const avant = reglageEffectif(def, ligne, lireLangue(ctx.team.langue_discord) ?? 'fr');
     const manquants = def.modules.filter(m => !ctx.modules.has(m));
     let actif = avant.actif;
     if (corps?.actif !== undefined) {
@@ -189,5 +196,21 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
     return (await etat(acteur, teamId)).parametres.find(p => p.cle === cleEvenement);
   }
 
-  return { etat, definirWebhook, supprimerWebhook, tester, majParametre };
+  /** `PUT /teams/:t/discord/langue` { langue } : langue des messages Discord de la team (français par défaut). */
+  async function majLangue(acteur, teamId, corps) {
+    const ctx = await contexte(acteur, teamId);
+    const langue = lireLangue(corps?.langue);
+    if (!langue) throw echec(400, 'langue', 'Langue : fr ou en.');
+    const avant = lireLangue(ctx.team.langue_discord) ?? 'fr';
+    const t = maintenant();
+    await base.lot([
+      { sql: 'UPDATE teams SET langue_discord = ? WHERE id = ?', params: [langue, teamId] },
+      ...(langue !== avant
+        ? [evenement('discord.settings_changed', { teamId, acteur: acteur.compte, entiteType: 'discord', entiteId: nouvelId(), charge: { notification: 'langue', champs: ['langue'], langue }, maintenant: t })]
+        : []),
+    ]);
+    return { langue };
+  }
+
+  return { etat, definirWebhook, supprimerWebhook, tester, majParametre, majLangue };
 }

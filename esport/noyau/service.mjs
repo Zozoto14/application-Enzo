@@ -28,6 +28,7 @@ import {
   validerPermissions,
 } from './permissions.mjs';
 import { aleatoire, echec, iso, jsonOu, nouvelId, slugDe, texteLong, texteNettoye } from './outils.mjs';
+import { lireLangue } from './langues.mjs';
 import { lignesParIds, pseudosDe } from './requetes.mjs';
 import { lireDessin } from './review/dessin.mjs';
 
@@ -68,7 +69,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
   // -------------------------------------------------------------- Lectures internes
 
   async function profilDe(compte) {
-    return base.premier('SELECT id, pseudo, riot_id, discord, cree_le, maj_le FROM comptes WHERE id = ?', [compte]);
+    return base.premier('SELECT id, pseudo, riot_id, discord, langue, cree_le, maj_le FROM comptes WHERE id = ?', [compte]);
   }
 
   async function exigerProfil(acteur) {
@@ -185,6 +186,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       compte: acteur.compte,
       superAdmin: acteur.superAdmin,
       profil: profil ? { pseudo: profil.pseudo, riotId: profil.riot_id ?? null, discord: profil.discord ?? null } : null,
+      // Langue choisie dans le profil (null : jamais choisie, l'app suit la langue de l'appareil).
+      langue: lireLangue(profil?.langue),
       peutCreerTeam: acteur.superAdmin || creationTeams === 'tous',
     };
   }
@@ -198,12 +201,25 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     const cle = pseudo.toLocaleLowerCase('fr');
     const pris = await base.premier('SELECT id FROM comptes WHERE pseudo_cle = ? AND id <> ?', [cle, acteur.compte]);
     if (pris) throw echec(409, 'pseudo-pris', 'Ce pseudo est déjà pris.');
+    // Langue : facultative ; absente, celle déjà enregistrée est conservée.
+    const langue = corps?.langue === undefined || corps?.langue === null ? null : lireLangue(corps.langue);
+    if (corps?.langue !== undefined && corps?.langue !== null && !langue) throw echec(400, 'langue', 'Langue : fr ou en.');
     const date = iso(maintenant());
     await base.executer(
-      `INSERT INTO comptes (id, pseudo, pseudo_cle, riot_id, discord, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (id) DO UPDATE SET pseudo = excluded.pseudo, pseudo_cle = excluded.pseudo_cle, riot_id = excluded.riot_id, discord = excluded.discord, maj_le = excluded.maj_le`,
-      [acteur.compte, pseudo, cle, riot || null, discord || null, date, date],
+      `INSERT INTO comptes (id, pseudo, pseudo_cle, riot_id, discord, langue, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET pseudo = excluded.pseudo, pseudo_cle = excluded.pseudo_cle, riot_id = excluded.riot_id, discord = excluded.discord,
+         langue = COALESCE(excluded.langue, comptes.langue), maj_le = excluded.maj_le`,
+      [acteur.compte, pseudo, cle, riot || null, discord || null, langue, date, date],
     );
+    return moi(acteur);
+  }
+
+  /** `PUT /moi/langue` { langue } : change la langue du profil (français / anglais). */
+  async function majLangue(acteur, corps) {
+    const langue = lireLangue(corps?.langue);
+    if (!langue) throw echec(400, 'langue', 'Langue : fr ou en.');
+    await exigerProfil(acteur);
+    await base.executer('UPDATE comptes SET langue = ?, maj_le = ? WHERE id = ?', [langue, iso(maintenant()), acteur.compte]);
     return moi(acteur);
   }
 
@@ -731,7 +747,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       format: 'applibourse-esport-mes-donnees',
       version: 2,
       compte,
-      profil: profil ? { pseudo: profil.pseudo, riotId: profil.riot_id ?? null, discord: profil.discord ?? null, creeLe: profil.cree_le, majLe: profil.maj_le } : null,
+      profil: profil ? { pseudo: profil.pseudo, riotId: profil.riot_id ?? null, discord: profil.discord ?? null, langue: lireLangue(profil.langue), creeLe: profil.cree_le, majLe: profil.maj_le } : null,
       teams: appartenances.map(a => ({ team: a.team, role: a.role, posteJeu: a.poste_jeu ?? null, statut: a.statut, rejointLe: a.rejoint_le })),
       notifications: (await q('SELECT type, team_id, charge, lue_le, cree_le FROM notifications WHERE compte_id = ? ORDER BY cree_le')).map(n => ({ type: n.type, team: team(n.team_id), charge: jsonOu(n.charge, {}), lue: Boolean(n.lue_le), date: n.cree_le })),
       journal: (await q('SELECT team_id, action, entite_type, meta, cree_le FROM journal WHERE acteur_id = ? ORDER BY cree_le')).map(a => ({ team: team(a.team_id), action: a.action, entite: a.entite_type, meta: jsonOu(a.meta, {}), date: a.cree_le })),
@@ -898,6 +914,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     teamPublique,
     moi,
     majProfil,
+    majLangue,
     listeTeams,
     creerTeam,
     detailTeam,

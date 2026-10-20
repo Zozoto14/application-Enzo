@@ -19,8 +19,11 @@ const COMMUNES = {
 
 const variables = extra => ({ ...extra, ...COMMUNES });
 
-const TYPE_EVENEMENT = { scrim: 'Scrim', match: 'Match', training: 'Entraînement', meeting: 'Réunion', tournament: 'Tournoi', other: 'Événement' };
-export const libelleTypeEvenement = type => TYPE_EVENEMENT[type] ?? 'Événement';
+import { texte as texteLangue } from '../langues.mjs';
+
+const TYPES = ['scrim', 'match', 'training', 'meeting', 'tournament', 'other'];
+/** Nom d'un type d'événement dans une langue (variable {type} des modèles). */
+export const libelleTypeEvenement = (type, langue = 'fr') => texteLangue(langue, `type.${TYPES.includes(type) ? type : 'other'}`);
 
 /** Types de messages Discord, dans l'ordre d'affichage. `module` : module requis (null : cœur). */
 export const EVENEMENTS_DISCORD = [
@@ -239,3 +242,141 @@ export const EXEMPLES = {
 
 /** Messages qui montrent une occurrence du planning (embed riche, boutons RSVP et mentions avec le bot). */
 export const CLES_OCCURRENCE = ['event_created', 'reminder_d1', 'reminder_h1', 'event_now', 'rsvp_missing', 'rsvp_relance'];
+
+// ------------------------------------------------------------------ Textes anglais
+
+const COMMUNES_EN = { team: 'Team name', lien: 'App address (if the server knows it)' };
+
+/** Version anglaise de chaque type de message : libellé, description, modèle par défaut, variables propres. */
+const TEXTES_EN = {
+  event_created: {
+    libelle: 'New event on the schedule',
+    description: 'A scrim, a match, a practice… is added to the schedule.',
+    modele: '**New event**: {titre} ({type}), on {date} at {heure}.',
+    variables: { titre: 'Event title', type: 'Type (Scrim, Match…)', date: 'Date (day and month)', heure: 'Time (team time zone)', acteur: 'Who created it' },
+  },
+  reminder_d1: {
+    libelle: 'Reminder before the event (D-1)',
+    description: 'A reminder about 24 h before the start, for the called-up players.',
+    modele: '**Reminder**: {titre} ({type}) starts {delai}, on {date} at {heure}. Called up: {convoques}.',
+    variables: { titre: 'Event title', type: 'Type (Scrim, Match…)', date: 'Date (day and month)', heure: 'Time (team time zone)', delai: 'Delay (“in 23 h”)', convoques: 'Nicknames of the called-up players' },
+  },
+  reminder_h1: {
+    libelle: 'Reminder before the event (H-1)',
+    description: 'A reminder about 1 h before the start, for the called-up players.',
+    modele: '**Heads up**: {titre} ({type}) starts {delai}, at {heure}. Called up: {convoques}.',
+    variables: { titre: 'Event title', type: 'Type (Scrim, Match…)', date: 'Date (day and month)', heure: 'Time (team time zone)', delai: 'Delay (“in 45 min”)', convoques: 'Nicknames of the called-up players' },
+  },
+  event_now: {
+    libelle: 'It’s happening now',
+    description: 'When the event starts (bot: the linked called-up players are mentioned).',
+    modele: '**Let’s go**: {titre} ({type}) is starting now.',
+    variables: { titre: 'Event title', type: 'Type (Scrim, Match…)', date: 'Date (day and month)', heure: 'Time (team time zone)', convoques: 'Nicknames of the called-up players' },
+  },
+  rsvp_relance: {
+    libelle: 'Nudge for called-up players (/relancer)',
+    description: 'A staff member nudges, from Discord, the called-up players who haven’t responded (one single grouped message).',
+    modele: 'Please respond for {titre} ({date} at {heure}): {membre}.',
+    variables: { membre: 'Nicknames of the players without a response', titre: 'Event title', type: 'Type (Scrim, Match…)', date: 'Date (day and month)', heure: 'Time (team time zone)' },
+  },
+  rsvp_missing: {
+    libelle: 'Missing RSVP',
+    description: 'Called-up players haven’t responded to an upcoming event (one single grouped message).',
+    modele: '{membre}: no response yet for {titre} ({date} at {heure}).',
+    variables: { membre: 'Nicknames of the players without a response', titre: 'Event title', type: 'Type (Scrim, Match…)', date: 'Date (day and month)', heure: 'Time (team time zone)' },
+  },
+  summary_published: {
+    libelle: 'Summary published',
+    description: 'The PDF summary of a meeting is published. Nothing is sent for “staff” meetings.',
+    modele: '**Summary published**: {titre}, by {acteur}.',
+    variables: { titre: 'Meeting title', acteur: 'Who published the summary', membre: 'Who submitted the meeting' },
+  },
+  summary_submitted: {
+    libelle: 'New meeting submission (staff)',
+    description: 'A player submits a meeting to be summarized. Keep it for a staff channel: the message quotes the title.',
+    modele: '**Meeting to summarize**: {titre} ({type}, {date}), submitted by {membre}.',
+    variables: { titre: 'Meeting title', type: 'Meeting type', date: 'Meeting date', membre: 'Who submitted it' },
+  },
+  task_assigned: {
+    libelle: 'Task assigned',
+    description: 'A task is assigned to a member.',
+    modele: '**New task** for {assigne}: {titre}{echeance}.',
+    variables: { titre: 'Task title', assigne: 'Assignee’s nickname', echeance: 'Due date (“, due 2026-10-25”, empty without a due date)', acteur: 'Who assigned it' },
+  },
+  task_due: {
+    libelle: 'Task due date',
+    description: 'A task is about to be due (or is overdue).',
+    modele: '**Due**: {titre} ({assigne}) — {etat}.',
+    variables: { titre: 'Task title', assigne: 'Assignee’s nickname', echeance: 'Due date', etat: '“due soon” or “overdue”' },
+  },
+  member_joined: {
+    libelle: 'Member joined',
+    description: 'Someone joins the team with an invitation.',
+    modele: '**{membre}** joined {team} ({role}).',
+    variables: { membre: 'New member’s nickname', role: 'Their role' },
+  },
+  account_requested: {
+    libelle: 'Account request',
+    description: 'A member proposes a new account (“Create members” permission): the Founder has to approve it.',
+    modele: '**Account request**: {acteur} proposes {membre} ({role}). The Founder approves it in Esport › Members.',
+    variables: { membre: 'Proposed nickname', role: 'Proposed role', acteur: 'Who made the request' },
+  },
+  role_changed: {
+    libelle: 'Role change',
+    description: 'A member’s role changes.',
+    modele: '**{membre}** goes from {de} to {vers} (by {acteur}).',
+    variables: { membre: 'Member’s nickname', de: 'Previous role', vers: 'New role', acteur: 'Who changed the role' },
+  },
+  review_created: {
+    libelle: 'Review created',
+    description: 'A video review is created (Video review module).',
+    modele: '**New review**: {titre}, by {acteur}.',
+    variables: { titre: 'Review title', acteur: 'Who created it' },
+  },
+  strat_created: {
+    libelle: 'Strat created',
+    description: 'A strat is created in the editor (Strats module).',
+    modele: '**New strat**: {titre} ({carte}, {side}), by {acteur}.',
+    variables: { titre: 'Strat title', carte: 'Map', side: 'Attack or Defense', acteur: 'Who created it' },
+  },
+  playbook_validated: {
+    libelle: 'Playbook entry validated',
+    description: 'A playbook entry moves to the “validated” status (Playbook module).',
+    modele: '**Playbook**: {titre} is validated{surCarte}, by {acteur}.',
+    variables: { titre: 'Entry title', surCarte: 'Map (“ on Ascent”, empty without a map)', acteur: 'Who validated it' },
+  },
+};
+
+/** Libellé, description, modèle par défaut et variables d'un type de message dans une langue. */
+export function textesEvenement(def, langue = 'fr') {
+  const en = langue === 'en' ? TEXTES_EN[def.cle] : null;
+  if (!en) return { libelle: def.libelle, description: def.description, modele: def.modele, variables: def.variables };
+  return { libelle: en.libelle, description: en.description, modele: en.modele, variables: { ...en.variables, ...COMMUNES_EN } };
+}
+
+export const CLES_TEXTES_EN = Object.keys(TEXTES_EN);
+
+/** Exemple de valeurs (aperçu d'un modèle) dans une langue. */
+export function exemples(langue = 'fr') {
+  if (langue !== 'en') return EXEMPLES;
+  return {
+    titre: 'Scrim vs the Falcons',
+    type: 'Scrim',
+    date: 'Tuesday 21 October',
+    heure: '20:30',
+    delai: 'in 23 h',
+    acteur: 'Léa',
+    membre: 'Max',
+    assigne: 'Max',
+    echeance: ', due 2026-10-25',
+    etat: 'due soon',
+    role: 'Player',
+    de: 'Player',
+    vers: 'Coach',
+    team: 'Team Alpha',
+    carte: 'Ascent',
+    side: 'Attack',
+    surCarte: ' on Ascent',
+    lien: 'https://app.exemple',
+  };
+}

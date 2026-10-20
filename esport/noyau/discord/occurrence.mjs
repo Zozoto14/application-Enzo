@@ -63,20 +63,20 @@ export async function contexteOccurrence(base, teamId, evenementId, occurrenceIs
 }
 
 /** Variables des modèles de messages pour une occurrence (titre, type, date, heure, délai, membres sans réponse). */
-export function variablesOccurrence(c, maintenant, libelleType) {
-  const quand = formaterInstant(c.team.fuseau, new Date(c.occurrence.debut).toISOString());
+export function variablesOccurrence(c, maintenant, libelleType, langue = 'fr') {
+  const quand = formaterInstant(c.team.fuseau, new Date(c.occurrence.debut).toISOString(), langue);
   return {
     team: c.team.nom,
     titre: c.occurrence.titre,
-    type: libelleType(c.occurrence.type),
+    type: libelleType(c.occurrence.type, langue),
     ...quand,
-    delai: formaterDelai(c.occurrence.debut - maintenant),
+    delai: formaterDelai(c.occurrence.debut - maintenant, langue),
     membre: c.sansReponse.map(m => m.pseudo).join(', '),
     convoques: c.convoques.map(m => m.pseudo).join(', '),
   };
 }
 
 /** Embed d'une occurrence (genre : event_created, reminder_d1…). */
-export function embedOccurrence(c, { genre, texte = '', lien = '', maintenant = Date.now() }) {
-  return embedEvenement({ genre, occurrence: c.occurrence, team: c.team, carte: c.carte, adversaire: c.adversaire, convoques: c.convoques, reponses: c.reponses, texte, lien, maintenant });
+export function embedOccurrence(c, { genre, texte = '', lien = '', maintenant = Date.now(), langue = 'fr' }) {
+  return embedEvenement({ genre, occurrence: c.occurrence, team: c.team, carte: c.carte, adversaire: c.adversaire, convoques: c.convoques, reponses: c.reponses, texte, lien, maintenant, langue });
 }

@@ -16,6 +16,7 @@
 
 import { evenement } from './evenements.mjs';
 import { exigerPeriode } from './periode.mjs';
+import { LANGUE_DEFAUT, lireLangue, listeTextes, texte as T } from './langues.mjs';
 import { csv } from './planning/presence.mjs';
 import { pseudosDe } from './requetes.mjs';
 import { echec, iso, jsonOu } from './outils.mjs';
@@ -154,9 +155,10 @@ export function servicesJournal({ base, maintenant = () => Date.now(), socle }) 
     const lignes = await base.tous(`SELECT * FROM journal WHERE ${conditions.join(' AND ')} ORDER BY cree_le DESC, id DESC LIMIT ?`, [...params, MAX_EXPORT]);
     const entrees = lignes.map(entreePublique);
     const noms = await pseudosDe(base, comptesCites(entrees));
-    const qui = id => (id ? (noms[id] ?? (id === 'principal' ? 'Fondateur' : 'Compte supprimé')) : 'Système');
+    const L = lireLangue(acteur.langue) ?? LANGUE_DEFAUT;
+    const qui = id => (id ? (noms[id] ?? T(L, id === 'principal' ? 'csv.journal.fondateur' : 'csv.compte_supprime')) : T(L, 'csv.journal.systeme'));
     const contenu = csv(
-      ['Date (UTC)', 'Membre', 'Module', 'Action', 'Élément', 'Identifiant', 'Détails'],
+      listeTextes(L, 'csv.journal.entetes'),
       entrees.map(e => [e.date, qui(e.acteur), e.module, e.action, e.entiteType ?? '', e.entiteId ?? '', JSON.stringify(e.meta)]),
     );
     const jour = new Date(maintenant()).toISOString().slice(0, 10);

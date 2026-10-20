@@ -44,8 +44,8 @@ export async function banc({ creationTeams = 'fondateur', relaisAncien = false, 
     attenteDiffere,
   });
   let ipCompteur = 0;
-  async function appel(chemin, { methode = 'GET', jeton, corps, ip, type = 'application/json' } = {}) {
-    const headers = { 'Content-Type': type, 'CF-Connecting-IP': ip ?? `198.51.100.${(++ipCompteur % 200) + 1}` };
+  async function appel(chemin, { methode = 'GET', jeton, corps, ip, type = 'application/json', entetes = {} } = {}) {
+    const headers = { 'Content-Type': type, 'CF-Connecting-IP': ip ?? `198.51.100.${(++ipCompteur % 200) + 1}`, ...entetes };
     if (jeton) headers.Authorization = `Bearer ${jeton}`;
     const r = await traiter(new Request(`https://esport.test${chemin}`, { method: methode, headers, body: corps === undefined ? undefined : JSON.stringify(corps) }));
     const texte = await r.text();

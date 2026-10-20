@@ -172,6 +172,24 @@ les teams liées au serveur** où elle est tapée. Tout est écrit dans le **Jou
 
 Quelqu'un qui n'a pas lié son compte reçoit : **« Lie ton compte avec /lier »**.
 
+## Langues : français et English
+
+- **Messages publics** (annonces, rappels, relances, message de test du webhook, embeds) : la **langue de la team**,
+  réglée dans **Réglages › Discord › Langue des messages Discord** (français par défaut). Les modèles par défaut, les
+  noms des types d'événement, les dates (`mercredi 21 octobre` / `Wednesday 21 October`) et les boutons suivent cette
+  langue. Un **modèle personnalisé** n'est jamais traduit ; un message déjà en file garde la langue de sa création.
+- **Réponses aux commandes** (éphémères) : la langue du **compte lié** (profil Esport, Français / English) ; sans
+  langue choisie, ou compte non lié, la **locale Discord** de la personne (`locale` de l'interaction : `en-US`,
+  `en-GB` → English, le reste → français).
+- **Noms des commandes** inchangés (`/prochain`, `/planning`…) : Discord affiche leurs **descriptions en anglais**
+  aux clients en `en-US` / `en-GB` (`description_localizations`, noms des choix compris). `/evenement-creer` accepte
+  aussi `today` et `tomorrow`.
+- Les messages d'erreur de l'API restent des codes ; le bot les traduit avec la même table que l'app
+  (`esport/noyau/erreurs.json`).
+
+**Après la mise à jour**, relancez le workflow **Esport (Worker)** (étape 6) : il applique la migration `0012` et
+**enregistre les traductions des commandes** auprès de Discord.
+
 ## Identité visuelle
 
 - Nom conseillé : **Esport HQ**. « À propos » : *🎮 Bot de la team Esport · scrims, matchs, rappels et présences.
@@ -224,6 +242,9 @@ Quelqu'un qui n'a pas lié son compte reçoit : **« Lie ton compte avec /lier �
   `POST /moi/discord/code` ; `GET /teams/:t/discord/bot`, `POST …/bot/code`, `DELETE …/bot/serveur`,
   `PUT …/bot/pings/:type`.
 - Commandes : `node esport/outils/discord-commandes.mjs [--identite] [--adresse URL] [--essai]`.
+- Langues : `esport/noyau/langues.mjs` et `esport/noyau/textes/{fr,en}.mjs` (textes du serveur), `catalogue.mjs`
+  (modèles par défaut en anglais), migration `0012_langues.sql` (`comptes.langue`, `teams.langue_discord`), routes
+  `PUT /moi/langue` et `PUT /teams/:t/discord/langue`. Test : `esport/test/langues.test.mjs`.
 - Tests : `esport/test/bot-discord.test.mjs`, `bot-embeds.test.mjs`, `bot-outils.test.mjs` (fetch simulé, clé de
   test générée, faux Discord local), `src/esport/Discord.test.tsx` (écrans), `scripts/e2e-esport-bot.mjs`
   (navigateur). Aucun test n'appelle le vrai Discord.
