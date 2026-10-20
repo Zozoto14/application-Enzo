@@ -44,6 +44,7 @@ import { LONGUEUR_MAX_NOTE } from '../donnees';
 import { CE_QUE_NE_PERMET_PAS, CE_QUE_PERMET, LIBELLES_RANG, NIVEAU_RANG, RANGS, autorise, rangDe, rangsAttribuables, type Rang } from '../roles';
 import { LIBELLES_NIVEAU, MODELES, modeleCorrespondant, niveauxDe, niveauxDuModele, type IdModele, type NiveauAcces, type Niveaux } from '../niveaux';
 import { etatApp } from '../politique';
+import { perimetreEsportSeul } from '../../../esport/acces';
 import { Avis, BoutonHub, Case, Champ, Intertitre, Panneau, Pilule, Segments, commun, dansJours, dateLisible, relatif, styleTitre, type OutilsAdmin } from './commun';
 
 type Filtre = StatutCompte | 'tous';
@@ -308,6 +309,7 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
                     </Text>
                   </View>
                   <BadgeRang theme={theme} profil={p} testID={`admin-rang-${p.id}`} />
+                  {perimetreEsportSeul(p) ? <Pilule theme={theme} texte="Esport" couleur={theme.teintes.anime} testID={`admin-esport-${p.id}`} /> : null}
                   {p.titulaire === 'en-attente' ? <Pilule theme={theme} texte="Clé en attente" couleur={theme.alerte} testID={`admin-titulaire-${p.id}`} /> : null}
                   <Pilule theme={theme} texte={LIBELLES_STATUT[s]} couleur={couleurStatut(theme, s)} testID={`admin-statut-${p.id}`} />
                 </Pressable>
@@ -796,6 +798,7 @@ function Fiche({
           <Intertitre theme={theme}>Rang</Intertitre>
           <View style={[commun.ligne, { paddingVertical: 0, flexWrap: 'wrap' }]}>
             <Pilule theme={theme} texte={LIBELLES_RANG[rangDe(profil)]} couleur={couleurRang(theme, rangDe(profil))} testID="admin-fiche-rang" />
+            {perimetreEsportSeul(profil) ? <Pilule theme={theme} texte="Esport" couleur={theme.teintes.anime} testID="admin-fiche-esport" /> : null}
             {profil.titulaire ? (
               <Text style={[attenue, { fontSize: 12 }]} testID="admin-fiche-titulaire">
                 {profil.titulaire === 'actif' ? 'Clé de séquestre confirmée : les comptes inférieurs lui sont scellés.' : 'Clé de séquestre en attente : créée ou confirmée à sa prochaine connexion (ou à celle d’un Fondateur qui peut l’ouvrir).'}

@@ -1,0 +1,36 @@
+# Worker Esport (applibourse-esport) : déployé par le workflow GitHub
+# « Esport (Worker) » (.github/workflows/esport.yml), qui remplace les
+# marqueurs ci-dessous par les identifiants lus dans les variables GitHub
+# (ESPORT_D1_ID…). Mode d'emploi : docs/esport/deploiement.md.
+#
+# AUCUN secret ici : la clé de session CLE_ESPORT se pose avec
+#   npx wrangler secret put CLE_ESPORT --config esport/wrangler.toml
+name = "applibourse-esport"
+main = "worker.mjs"
+compatibility_date = "2026-09-01"
+
+# Base SQL (D1). Migrations versionnées : esport/migrations/.
+[[d1_databases]]
+binding = "BASE"
+database_name = "applibourse-esport"
+database_id = "A_REMPLIR_ESPORT_D1_ID"
+migrations_dir = "migrations"
+
+# Fichiers privés (PDF de résumés, logos : phases suivantes). Jamais public.
+[[r2_buckets]]
+binding = "FICHIERS"
+bucket_name = "esport-fichiers"
+
+# Validation des jetons par le relais existant (route POST /jeton/verifier,
+# version 7), par un appel interne : le jeton maître n'est jamais copié ici.
+[[services]]
+binding = "RELAIS"
+service = "applibourse-relais"
+
+# Bus d'événements (nouvel essai des événements en attente) ; Discord en phase 4.
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+# « fondateur » : seul le Fondateur crée des teams ; « tous » : tout compte relié.
+CREATION_TEAMS = "fondateur"

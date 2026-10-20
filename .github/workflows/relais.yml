@@ -124,8 +124,15 @@ jobs:
             echo "::error::La route des invitations (version 6) ne répond pas comme attendu (HTTP $inv)."
             exit 1
           fi
-          echo "Relais à jour : $RELAIS_URL (lecture des sources de Tsuzuku, invitations et connexion des amis disponibles)."
+          # Version 7 : vérification de jeton pour l'Esport (sans jeton : 200 « valide: false »).
+          verif=$(curl -s -o verif.json -w '%{http_code}' -X POST "$RELAIS_URL/jeton/verifier" || true)
+          echo "POST /jeton/verifier (sans jeton) : HTTP $verif $(cat verif.json 2>/dev/null)"
+          if [ "$verif" != "200" ] || ! grep -q '"valide":false' verif.json; then
+            echo "::error::La route de vérification de jeton (version 7) ne répond pas comme attendu (HTTP $verif)."
+            exit 1
+          fi
+          echo "Relais à jour : $RELAIS_URL (lecture des sources de Tsuzuku, invitations, connexion des amis et vérification de jeton pour l'Esport disponibles)."
 
       - name: Nettoyer
         if: always()
-        run: rm -f relais/wrangler.ci.toml kv.json kv.err deploiement.log sante.json cors.txt inv.json
+        run: rm -f relais/wrangler.ci.toml kv.json kv.err deploiement.log sante.json cors.txt inv.json verif.json

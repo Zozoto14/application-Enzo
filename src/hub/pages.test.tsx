@@ -60,7 +60,7 @@ describe('registre : catégorie de page', () => {
       expect(app.page === 'publique' || app.page === 'administration').toBe(true);
       expect(categorieDe(app) === 'administration').toBe(Boolean(app.adminSeulement));
     }
-    expect(ids(appsDeCategorie(REGISTRE, 'publique'))).toEqual([ID_PORTEFEUILLE, 'tsuzuku', 'taches', 'journal']);
+    expect(ids(appsDeCategorie(REGISTRE, 'publique'))).toEqual([ID_PORTEFEUILLE, 'tsuzuku', 'taches', 'journal', 'esport']);
     expect(ids(appsDeCategorie(REGISTRE, 'administration'))).toEqual([ID_ADMINISTRATION, ID_ABONNEMENTS, ID_PROSPECTS, ID_CLAUDE_OFFICE]);
   });
 

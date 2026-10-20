@@ -20,6 +20,7 @@ import { APP_PROSPECTS } from '../prospects/registre';
 import { APP_CLAUDE_OFFICE } from '../claudeOffice/registre';
 import { APP_TACHES } from '../taches/registre';
 import { APP_JOURNAL } from '../journal/registre';
+import { APP_ESPORT } from '../esport/registre';
 import type { AppHub } from './types';
 
 export const ID_PORTEFEUILLE = 'portefeuille';
@@ -40,6 +41,7 @@ export const REGISTRE: readonly AppHub[] = [
   APP_TSUZUKU,
   APP_TACHES,
   APP_JOURNAL,
+  APP_ESPORT,
   {
     id: ID_ADMINISTRATION,
     nom: 'Administration',

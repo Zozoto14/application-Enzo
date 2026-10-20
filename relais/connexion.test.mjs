@@ -36,10 +36,10 @@ const ID = hex(32, 'b');
 const H = hex(64, 'c');
 const invitation = (o = {}) => ({ profil: 'lea12345', expire: new Date(Date.now() + 7 * 86_400_000).toISOString(), charge: 'charge-scellee', verif: sha(PREUVE), acces: H, ...o });
 
-test('/sante annonce la version 6 et ses fonctions', async () => {
+test('/sante annonce la version 6 (ou plus) et ses fonctions', async () => {
   const env = { JETON, BOITE: kv() };
   const corps = await (await appel(env, '/sante', { jeton: JETON })).json();
-  assert.equal(corps.version, 6);
+  assert.ok(corps.version >= 6);
   assert.ok(corps.fonctions.includes('invitations') && corps.fonctions.includes('acces'));
 });
 

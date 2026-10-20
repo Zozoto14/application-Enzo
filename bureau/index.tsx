@@ -126,6 +126,7 @@ import {
 } from './synchroComptes';
 import { decoderLiaison, encoderLiaison, lienSite, type Liaison } from '../src/sync/relais/liaison';
 import { compteDeLiaison, estMaitre, liaisonPourProfil } from '../src/sync/relais/portees';
+import { definirLiaisonCompte } from '../src/sync/relais/actif';
 import { lireConfigRelais, mesurerEcartHorloge } from '../src/sync/relais/synchroniser';
 import { formaterDiagnostic, lireEnvironnement } from '../src/diagnostic/deverrouillage';
 import { empreinte as empreinteCanonique } from '../src/sync/relais/fusionLww';
@@ -1320,6 +1321,8 @@ function Racine() {
     const premier = Object.values(liaisonsIci.comptes)[0];
     return propre ?? (liaisonsIci.maitre ? decoderLiaison(liaisonsIci.maitre) : undefined) ?? (premier ? decoderLiaison(premier) : undefined);
   };
+  // Esport (et autres services du compte) : la liaison du compte ouvert, jeton de profil d'un ami compris.
+  definirLiaisonCompte(profil.id === 'leurre' ? undefined : liaisonIci());
   const ecartHorloge = async () => {
     const liaison = liaisonIci() ?? (await liaisonDuPont());
     return liaison ? mesurerEcartHorloge(liaison) : undefined;

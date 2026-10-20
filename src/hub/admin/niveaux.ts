@@ -58,7 +58,7 @@ export function simpleInterrupteur(app: AppNiveaux): boolean {
 
 // --- Modèles -----------------------------------------------------------------
 
-export type IdModele = 'ami' | 'lecture' | 'aucun' | 'personnalise';
+export type IdModele = 'ami' | 'lecture' | 'aucun' | 'esport' | 'personnalise';
 
 export interface ModelePermissions {
   id: IdModele;
@@ -66,6 +66,8 @@ export interface ModelePermissions {
   description: string;
   /** Niveau visé pour chaque app ; ajusté à ce que l'app sait faire. */
   niveau?: NiveauAcces;
+  /** Le niveau ne vaut que pour ces apps ; toutes les autres sont fermées (périmètre « Esport seulement »). */
+  seulement?: readonly string[];
 }
 
 export const MODELES: readonly ModelePermissions[] = [
@@ -77,6 +79,13 @@ export const MODELES: readonly ModelePermissions[] = [
     niveau: 'lecture',
   },
   { id: 'aucun', nom: 'Aucun accès', description: 'Le compte existe mais n’ouvre aucune app.', niveau: 'aucun' },
+  {
+    id: 'esport',
+    nom: 'Esport seulement',
+    description: 'Membre d’une team : le hub ne lui montre que l’Esport (rangs du hub inchangés : Ami).',
+    niveau: 'complet',
+    seulement: ['esport'],
+  },
   { id: 'personnalise', nom: 'Personnalisé', description: 'Réglage app par app.' },
 ];
 
@@ -89,14 +98,17 @@ export function niveauxDuModele(apps: readonly AppHub[], id: IdModele, actuels: 
     return { ...actuels };
   }
   const niveau = modele.niveau;
-  return Object.fromEntries(apps.filter(app => !app.adminSeulement).map(app => [app.id, ajusterNiveau(app, niveau)]));
+  return Object.fromEntries(
+    apps.filter(app => !app.adminSeulement).map(app => [app.id, !modele.seulement || modele.seulement.includes(app.id) ? ajusterNiveau(app, niveau) : 'aucun']),
+  );
 }
 
 /** Modèle auquel correspondent des niveaux, « Personnalisé » sinon. */
 export function modeleCorrespondant(apps: readonly AppHub[], niveaux: Niveaux): IdModele {
   const attribuables = apps.filter(app => !app.adminSeulement);
   for (const modele of MODELES) {
-    if (!modele.niveau) {
+    // Un périmètre réservé à une app absente du registre ne correspond à rien.
+    if (!modele.niveau || (modele.seulement && !modele.seulement.some(id => attribuables.some(app => app.id === id)))) {
       continue;
     }
     const attendus = niveauxDuModele(attribuables, modele.id);

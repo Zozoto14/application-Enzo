@@ -22,6 +22,9 @@
     "relais:deployer": "node scripts/deployer-relais.mjs",
     "relais:site": "node scripts/deployer-relais.mjs --site",
     "relais:tester": "node --test relais/*.test.mjs",
+    "esport:tester": "node --test esport/test/*.test.mjs",
+    "esport:local": "node esport/outils/serveur-local.mjs --graines",
+    "esport:transfert": "node esport/outils/transfert.mjs",
     "office:hooks": "node scripts/office-hooks.mjs"
   },
   "dependencies": {

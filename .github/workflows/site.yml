@@ -67,6 +67,17 @@ jobs:
 
       # Adresse du relais (variable RELAIS_URL, rien de secret) : un appareil neuf d'un ami
       # s'y connecte par identifiant + mot de passe (voir docs/connexion-amis.md). Facultatif.
+      # Adresse du Worker Esport (variable ESPORT_URL, rien de secret). Facultatif : sans elle, l'app la déduit
+      # de l'adresse du relais (applibourse-relais.<vous>.workers.dev → applibourse-esport.<vous>.workers.dev).
+      - name: Adresse du Worker Esport
+        env:
+          ESPORT_URL: ${{ vars.ESPORT_URL }}
+        run: |
+          if printf '%s' "$ESPORT_URL" | grep -Eq '^https://[^ /]+'; then
+            node -e "require('fs').writeFileSync('site-dist/esport.json', JSON.stringify({ esport: process.env.ESPORT_URL.replace(/\\/+$/, '') }) + '\\n')"
+            cat site-dist/esport.json
+          fi
+
       - name: Adresse du relais pour la connexion des amis
         env:
           RELAIS_URL: ${{ vars.RELAIS_URL }}

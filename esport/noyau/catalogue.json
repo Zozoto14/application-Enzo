@@ -1,0 +1,237 @@
+{
+  "version": 1,
+  "modules": [
+    { "cle": "activity_log", "nom": "Journal", "phase": 1, "description": "Journal d’activité de la team (append-only)." },
+    { "cle": "planning", "nom": "Planning", "phase": 2, "description": "Scrims, matchs, entraînements, réunions, tournois." },
+    { "cle": "availability", "nom": "Disponibilités", "phase": 2, "description": "Créneaux récurrents, exceptions et heatmap." },
+    { "cle": "attendance", "nom": "Présence", "phase": 2, "description": "RSVP, présence réelle et statistiques." },
+    { "cle": "meeting_summaries", "nom": "Résumés", "phase": 3, "description": "Dépôt des réunions et résumés en PDF." },
+    { "cle": "goals_tasks", "nom": "Objectifs et tâches", "phase": 3, "description": "Objectifs, tâches, kanban." },
+    { "cle": "discord", "nom": "Discord", "phase": 4, "description": "Notifications par webhook Discord." },
+    { "cle": "video_review", "nom": "Review vidéo", "phase": 5, "description": "Review YouTube avec repères horodatés." },
+    { "cle": "scouting", "nom": "Scouting", "phase": 5, "description": "Fiches adversaires, joueurs, tendances, VODs." },
+    { "cle": "strat_editor", "nom": "Strats", "phase": 6, "description": "Éditeur de stratégies sur la carte." },
+    { "cle": "playbook", "nom": "Playbook", "phase": 6, "description": "Bibliothèque de strats validées." }
+  ],
+  "groupes": [
+    {
+      "cle": "team",
+      "nom": "Team",
+      "module": null,
+      "permissions": [
+        { "cle": "team.manage", "action": "modifier", "libelle": "Modifier la team" },
+        { "cle": "team.delete", "action": "supprimer", "libelle": "Supprimer la team" },
+        { "cle": "modules.manage", "action": "special", "libelle": "Gérer les modules" }
+      ]
+    },
+    {
+      "cle": "members",
+      "nom": "Membres et rôles",
+      "module": null,
+      "permissions": [
+        { "cle": "members.view", "action": "voir", "libelle": "Voir les membres" },
+        { "cle": "members.invite", "action": "creer", "libelle": "Inviter" },
+        { "cle": "members.assign_role", "action": "modifier", "libelle": "Changer les rôles" },
+        { "cle": "members.remove", "action": "supprimer", "libelle": "Retirer un membre" },
+        { "cle": "roles.manage", "action": "special", "libelle": "Gérer les rôles" }
+      ]
+    },
+    {
+      "cle": "planning",
+      "nom": "Planning",
+      "module": "planning",
+      "permissions": [
+        { "cle": "planning.view", "action": "voir", "libelle": "Voir" },
+        { "cle": "planning.create", "action": "creer", "libelle": "Créer" },
+        { "cle": "planning.update", "action": "modifier", "libelle": "Modifier" },
+        { "cle": "planning.delete", "action": "supprimer", "libelle": "Supprimer" }
+      ]
+    },
+    {
+      "cle": "availability",
+      "nom": "Disponibilités",
+      "module": "availability",
+      "permissions": [
+        { "cle": "availability.view_all", "action": "voir", "libelle": "Voir celles de tous" },
+        { "cle": "availability.edit_own", "action": "special", "libelle": "Saisir les siennes" }
+      ]
+    },
+    {
+      "cle": "attendance",
+      "nom": "Présence",
+      "module": "attendance",
+      "permissions": [
+        { "cle": "attendance.view_all", "action": "voir", "libelle": "Voir toutes" },
+        { "cle": "attendance.mark", "action": "modifier", "libelle": "Marquer la présence" },
+        { "cle": "attendance.rsvp_own", "action": "special", "libelle": "Répondre (RSVP)" }
+      ]
+    },
+    {
+      "cle": "meeting_summaries",
+      "nom": "Résumés",
+      "module": "meeting_summaries",
+      "permissions": [
+        { "cle": "meeting_summaries.view_all", "action": "voir", "libelle": "Voir tous les dépôts" },
+        { "cle": "meeting_summaries.submit", "action": "creer", "libelle": "Déposer" },
+        { "cle": "meeting_summaries.write_summary", "action": "special", "libelle": "Rédiger les résumés" },
+        { "cle": "meeting_summaries.view_summary", "action": "special", "libelle": "Lire les résumés" }
+      ]
+    },
+    {
+      "cle": "goals_tasks",
+      "nom": "Objectifs et tâches",
+      "module": "goals_tasks",
+      "permissions": [
+        { "cle": "goals_tasks.view", "action": "voir", "libelle": "Voir" },
+        { "cle": "goals_tasks.create", "action": "creer", "libelle": "Créer" },
+        { "cle": "goals_tasks.update", "action": "modifier", "libelle": "Modifier" },
+        { "cle": "goals_tasks.delete", "action": "supprimer", "libelle": "Supprimer" },
+        { "cle": "goals_tasks.assign", "action": "special", "libelle": "Assigner" }
+      ]
+    },
+    {
+      "cle": "discord",
+      "nom": "Discord",
+      "module": "discord",
+      "permissions": [{ "cle": "discord.manage", "action": "modifier", "libelle": "Configurer" }]
+    },
+    {
+      "cle": "video_review",
+      "nom": "Review vidéo",
+      "module": "video_review",
+      "permissions": [
+        { "cle": "video_review.view", "action": "voir", "libelle": "Voir" },
+        { "cle": "video_review.create", "action": "creer", "libelle": "Créer" },
+        { "cle": "video_review.annotate", "action": "modifier", "libelle": "Annoter et commenter" },
+        { "cle": "video_review.delete", "action": "supprimer", "libelle": "Supprimer" }
+      ]
+    },
+    {
+      "cle": "scouting",
+      "nom": "Scouting",
+      "module": "scouting",
+      "permissions": [
+        { "cle": "scouting.view", "action": "voir", "libelle": "Voir" },
+        { "cle": "scouting.manage", "action": "modifier", "libelle": "Gérer" }
+      ]
+    },
+    {
+      "cle": "strat_editor",
+      "nom": "Strats",
+      "module": "strat_editor",
+      "permissions": [
+        { "cle": "strats.view", "action": "voir", "libelle": "Voir" },
+        { "cle": "strats.create", "action": "creer", "libelle": "Créer" },
+        { "cle": "strats.update", "action": "modifier", "libelle": "Modifier" },
+        { "cle": "strats.delete", "action": "supprimer", "libelle": "Supprimer" }
+      ]
+    },
+    {
+      "cle": "playbook",
+      "nom": "Playbook",
+      "module": "playbook",
+      "permissions": [
+        { "cle": "playbook.view", "action": "voir", "libelle": "Voir" },
+        { "cle": "playbook.manage", "action": "modifier", "libelle": "Gérer" }
+      ]
+    },
+    {
+      "cle": "activity_log",
+      "nom": "Journal",
+      "module": "activity_log",
+      "permissions": [{ "cle": "activity_log.view", "action": "voir", "libelle": "Consulter" }]
+    }
+  ],
+  "rolesSysteme": [
+    { "cle": "proprietaire", "nom": "Propriétaire", "couleur": "#d64545", "description": "Tout, y compris la suppression de la team et la gestion des modules.", "permissions": "*" },
+    {
+      "cle": "manager",
+      "nom": "Manager",
+      "couleur": "#7c3aed",
+      "description": "Membres, rôles, planning, résumés, Discord, journal.",
+      "permissions": [
+        "team.manage",
+        "members.view", "members.invite", "members.assign_role", "members.remove", "roles.manage",
+        "planning.view", "planning.create", "planning.update", "planning.delete",
+        "availability.view_all", "availability.edit_own",
+        "attendance.view_all", "attendance.mark", "attendance.rsvp_own",
+        "meeting_summaries.view_all", "meeting_summaries.submit", "meeting_summaries.view_summary",
+        "goals_tasks.view",
+        "discord.manage",
+        "video_review.view", "scouting.view", "strats.view", "playbook.view",
+        "activity_log.view"
+      ]
+    },
+    {
+      "cle": "coach",
+      "nom": "Coach",
+      "couleur": "#2563eb",
+      "description": "Planning, review, strats, playbook, scouting, objectifs, présence.",
+      "permissions": [
+        "members.view",
+        "planning.view", "planning.create", "planning.update", "planning.delete",
+        "availability.view_all", "availability.edit_own",
+        "attendance.view_all", "attendance.mark", "attendance.rsvp_own",
+        "meeting_summaries.submit", "meeting_summaries.view_summary",
+        "goals_tasks.view", "goals_tasks.create", "goals_tasks.update", "goals_tasks.delete", "goals_tasks.assign",
+        "video_review.view", "video_review.create", "video_review.annotate", "video_review.delete",
+        "scouting.view", "scouting.manage",
+        "strats.view", "strats.create", "strats.update", "strats.delete",
+        "playbook.view", "playbook.manage"
+      ]
+    },
+    {
+      "cle": "analyste",
+      "nom": "Analyste",
+      "couleur": "#0891b2",
+      "description": "Review, strats, playbook, scouting ; lecture du planning.",
+      "permissions": [
+        "members.view",
+        "planning.view",
+        "availability.edit_own", "attendance.rsvp_own",
+        "meeting_summaries.submit", "meeting_summaries.view_summary",
+        "goals_tasks.view",
+        "video_review.view", "video_review.create", "video_review.annotate",
+        "scouting.view", "scouting.manage",
+        "strats.view", "strats.create", "strats.update",
+        "playbook.view", "playbook.manage"
+      ]
+    },
+    {
+      "cle": "joueur",
+      "nom": "Joueur",
+      "couleur": "#16a34a",
+      "description": "Lecture générale, disponibilités, RSVP, dépôt de résumés, commentaires de review.",
+      "permissions": [
+        "members.view",
+        "planning.view",
+        "availability.edit_own", "attendance.rsvp_own",
+        "meeting_summaries.submit", "meeting_summaries.view_summary",
+        "goals_tasks.view",
+        "video_review.view", "video_review.annotate",
+        "strats.view", "playbook.view"
+      ]
+    },
+    {
+      "cle": "remplacant",
+      "nom": "Remplaçant / Invité",
+      "couleur": "#8b8b9a",
+      "description": "Lecture limitée.",
+      "permissions": ["members.view", "planning.view", "attendance.rsvp_own", "playbook.view"]
+    }
+  ],
+  "presets": [
+    {
+      "cle": "valorant_complet",
+      "nom": "Team Valorant complète",
+      "description": "Tous les modules.",
+      "modules": ["activity_log", "planning", "availability", "attendance", "meeting_summaries", "goals_tasks", "discord", "video_review", "scouting", "strat_editor", "playbook"]
+    },
+    { "cle": "minimal", "nom": "Minimal", "description": "Journal, planning et disponibilités.", "modules": ["activity_log", "planning", "availability"] },
+    { "cle": "personnalise", "nom": "Personnalisé", "description": "Vous choisissez chaque module.", "modules": null }
+  ],
+  "jeux": [
+    { "cle": "valorant", "nom": "Valorant", "postes": ["Duelliste", "Contrôleur", "Initiateur", "Sentinelle", "Flex", "IGL"] },
+    { "cle": "autre", "nom": "Autre jeu", "postes": [] }
+  ]
+}

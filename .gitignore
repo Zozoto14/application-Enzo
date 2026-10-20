@@ -29,3 +29,8 @@ site-dist/
 # Claude Office (dépôt à part) posé dans le dossier du projet : jamais versionné ici (docs/claude-office.md)
 /Claude Office/
 /claude-office/
+
+# Esport : base locale (*.db déjà ignoré), configuration temporaire du workflow, exports de la base
+esport/wrangler.ci.toml
+esport/.wrangler/
+esport-export*.json

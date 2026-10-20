@@ -21,6 +21,10 @@
  * le site web, avec le jeton MAÎTRE seulement (voir tsuzuku.mjs et
  * src/tsuzuku/README.md) ; son CORS est restreint aux origines du site.
  *
+ * Version 7 : `POST /jeton/verifier` dit au Worker Esport (esport/worker.mjs,
+ * liaison de service) si le jeton présenté est valable, révoqué, et de quel
+ * compte il est (voir « Vérification de jeton » plus bas). Rien d'autre.
+ *
  * Une troisième route, `POST /support`, relaie un ticket d'assistance vers un
  * salon Discord (voir « Support » plus bas et docs/support-discord.md). L'adresse
  * du webhook est un SECRET du Worker (`DISCORD_WEBHOOK_URL`) : elle ne figure ni
@@ -35,9 +39,9 @@ import {
 } from '../bureau/electron/reseau.mjs';
 import { CHEMIN_TSUZUKU, routeTsuzuku } from './tsuzuku.mjs';
 
-export const VERSION_RELAIS = 6;
+export const VERSION_RELAIS = 7;
 /** Fonctions annoncées par `/sante` (le site adapte ses écrans à un relais pas encore redéployé). */
-export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations'];
+export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations', 'verification-jeton'];
 /** Une enveloppe chiffrée : quelques centaines de Kio en pratique. */
 const TAILLE_MAX_ENVELOPPE = 20 * 1024 * 1024;
 const IDENTIFIANT_APPAREIL = /^[a-z0-9]{4,32}$/;
@@ -912,6 +916,39 @@ async function revocations(requete, env, portee, id) {
   return erreur('Méthode non autorisée.', 405);
 }
 
+// ------------------------------------------------------------ Vérification de jeton (version 7)
+//
+// `POST /jeton/verifier`, jeton à vérifier dans `Authorization: Bearer …` :
+// réponse 200 `{ valide, revoque, compte, maitre }` (`compte` : « principal »
+// pour le jeton maître, l'identifiant du compte pour un jeton de profil).
+// Appelée par le Worker Esport (liaison de service), qui n'a donc jamais
+// besoin du jeton maître. La réponse ne parle que du jeton présenté : elle
+// n'apprend rien de plus que `/sante` à qui le détient déjà. Les échecs
+// comptent dans l'anti-force brute par adresse IP.
+
+export const CHEMIN_VERIFICATION = '/jeton/verifier';
+
+async function verifierJeton(requete, env, portee) {
+  if (requete.method !== 'POST') {
+    return erreur('Méthode non autorisée.', 405);
+  }
+  const maintenant = Date.now();
+  // Par la liaison de service, l'adresse vue est celle du Worker Esport : celui-ci transmet celle du
+  // navigateur dans X-Forwarded-For, prise ici en premier (sinon tous les comptes partageraient un compteur).
+  const ip = (requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || adresseIp(requete);
+  const attente = attenteIp(ip, maintenant);
+  if (attente > 0) return tropDeTentatives(attente);
+  if (!portee) {
+    echecIp(ip, maintenant);
+    return reponse({ valide: false, revoque: false, version: VERSION_RELAIS });
+  }
+  if (portee.maitre) {
+    return reponse({ valide: true, revoque: false, compte: 'principal', maitre: true, version: VERSION_RELAIS });
+  }
+  const revoque = Boolean(env.BOITE && (await env.BOITE.get(`revoque:${portee.profil}`)));
+  return reponse({ valide: true, revoque, compte: portee.profil, maitre: false, version: VERSION_RELAIS });
+}
+
 async function passerelle(requete, chemin) {
   if (requete.method !== 'POST') {
     return erreur('Méthode non autorisée.', 405);
@@ -967,6 +1004,11 @@ export default {
       return routeInvitation
         ? invitations(requete, env, portee, routeInvitation[1], routeInvitation[2])
         : acces(requete, env, portee, routeAcces[1], routeAcces[2]);
+    }
+
+    // Vérification de jeton (version 7) : répond aussi pour un jeton refusé ou révoqué.
+    if (pathname === CHEMIN_VERIFICATION) {
+      return verifierJeton(requete, env, portee);
     }
 
     if (!portee) {

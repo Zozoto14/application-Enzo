@@ -1,0 +1,180 @@
+# Worker Esport (applibourse-esport) : création ou migration de la base D1,
+# bucket R2, clé de session, puis déploiement. À LA MAIN depuis l'onglet
+# Actions (téléphone compris). Mode d'emploi : docs/esport/deploiement.md.
+#
+# - Jamais déclenché par un push : `workflow_dispatch` seulement.
+# - Jamais depuis une autre branche que main : le job est réservé à main.
+# - Aucun secret dans le dépôt : la clé de session CLE_ESPORT est un secret du
+#   Worker. Si elle manque, ce workflow en tire une au hasard et la pose sur le
+#   Worker (elle n'apparaît jamais dans les journaux) ; elle n'est jamais
+#   remplacée ensuite.
+# - Le relais doit être en version 7 (workflow « Relais (Cloudflare Worker) ») :
+#   l'Esport lui fait valider les jetons par la liaison de service RELAIS.
+
+name: Esport (Worker)
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: esport-worker
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deployer:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # Identifiant de la base D1 (variable, pas un secret). Absent : la base est cherchée par son nom, ou créée.
+      ESPORT_D1_ID: ${{ vars.ESPORT_D1_ID || secrets.ESPORT_D1_ID }}
+      # Facultatif : adresse du Worker Esport pour le test de santé (sinon lue dans la sortie du déploiement).
+      ESPORT_URL: ${{ vars.ESPORT_URL }}
+      # Facultatif : « tous » ouvre la création de teams à tout compte relié (défaut : Fondateur seul).
+      ESPORT_CREATION_TEAMS: ${{ vars.ESPORT_CREATION_TEAMS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vérifier les secrets Cloudflare
+        run: |
+          manque=0
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "::error::Secret CLOUDFLARE_API_TOKEN absent : GitHub > Settings > Secrets and variables > Actions > New repository secret. Le jeton Cloudflare doit avoir les permissions Account > Workers Scripts > Edit, Account > D1 > Edit et Account > Workers R2 Storage > Edit (voir docs/esport/deploiement.md)."
+            manque=1
+          fi
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Secret CLOUDFLARE_ACCOUNT_ID absent : GitHub > Settings > Secrets and variables > Actions > New repository secret (identifiant du compte, visible sur dash.cloudflare.com > Workers & Pages, colonne de droite)."
+            manque=1
+          fi
+          if [ -n "$ESPORT_D1_ID" ] && ! printf '%s' "$ESPORT_D1_ID" | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+            echo "::error::ESPORT_D1_ID n'a pas la forme d'un identifiant de base D1 (UUID, ex. 0a1b2c3d-…). Il est sur dash.cloudflare.com > Storage & Databases > D1 > applibourse-esport."
+            manque=1
+          fi
+          exit $manque
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Tests (relais et Esport)
+        run: node --test relais/*.test.mjs esport/test/*.test.mjs
+
+      - name: Base D1 (trouvée ou créée)
+        run: |
+          if [ -z "$ESPORT_D1_ID" ]; then
+            if ! npx --yes wrangler@4 d1 list --json > d1.json 2> d1.err; then
+              cat d1.err
+              echo "::error::Impossible de lister les bases D1 : ajoutez au jeton Cloudflare la permission Account > D1 > Edit (docs/esport/deploiement.md, étape 1)."
+              exit 1
+            fi
+            ESPORT_D1_ID=$(node -e "const l=JSON.parse(require('fs').readFileSync('d1.json','utf8').replace(/^[^\[]*/,''));const b=l.find(x=>x.name==='applibourse-esport');process.stdout.write(b?(b.uuid||b.database_id||''):'')")
+            if [ -z "$ESPORT_D1_ID" ]; then
+              echo "Base applibourse-esport absente : création."
+              npx --yes wrangler@4 d1 create applibourse-esport 2>&1 | tee d1-creation.log
+              ESPORT_D1_ID=$(grep -Eo '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' d1-creation.log | head -n1)
+              if [ -z "$ESPORT_D1_ID" ]; then
+                echo "::error::Création de la base D1 impossible (voir le message ci-dessus)."
+                exit 1
+              fi
+            fi
+            echo "::notice::Base D1 applibourse-esport : $ESPORT_D1_ID. Pour les prochains lancements, créez la variable ESPORT_D1_ID avec cette valeur (GitHub > Settings > Secrets and variables > Actions > Variables)."
+          fi
+          echo "ESPORT_D1_ID=$ESPORT_D1_ID" >> "$GITHUB_ENV"
+
+      - name: Configuration temporaire depuis esport/wrangler.toml
+        run: |
+          grep -q 'A_REMPLIR_ESPORT_D1_ID' esport/wrangler.toml || { echo "::error::esport/wrangler.toml : marqueur A_REMPLIR_ESPORT_D1_ID introuvable."; exit 1; }
+          sed "s/A_REMPLIR_ESPORT_D1_ID/$ESPORT_D1_ID/" esport/wrangler.toml > esport/wrangler.ci.toml
+          if [ "$ESPORT_CREATION_TEAMS" = "tous" ]; then
+            sed -i 's/^CREATION_TEAMS = "fondateur"/CREATION_TEAMS = "tous"/' esport/wrangler.ci.toml
+          fi
+          if grep -Eiq 'CLE_ESPORT *=|JETON *=|webhook' <(grep -v '^#' esport/wrangler.ci.toml); then
+            echo "::error::La configuration ne doit contenir aucun secret."
+            exit 1
+          fi
+
+      - name: Bucket R2 privé esport-fichiers
+        run: |
+          if npx --yes wrangler@4 r2 bucket list > r2.txt 2> r2.err; then
+            if grep -q 'esport-fichiers' r2.txt; then
+              echo "Bucket esport-fichiers : présent."
+              exit 0
+            fi
+            if npx --yes wrangler@4 r2 bucket create esport-fichiers; then
+              echo "Bucket esport-fichiers : créé (privé : aucun accès public n'est ouvert)."
+              exit 0
+            fi
+          fi
+          cat r2.err 2>/dev/null || true
+          # La phase 1 n'utilise pas encore de fichiers : on déploie sans R2 plutôt que d'échouer.
+          echo "::warning::R2 indisponible (R2 pas encore activé sur le compte, ou permission Workers R2 Storage > Edit absente du jeton) : déploiement SANS fichiers. Rien ne manque en phase 1 ; à corriger avant la phase 3 (docs/esport/deploiement.md, étape 2)."
+          node -e "const f='esport/wrangler.ci.toml';const fs=require('fs');fs.writeFileSync(f,fs.readFileSync(f,'utf8').replace(/\[\[r2_buckets\]\][^\[]*/,''))"
+
+      - name: Migrations de la base (esport/migrations)
+        run: npx --yes wrangler@4 d1 migrations apply applibourse-esport --remote --config esport/wrangler.ci.toml
+
+      - name: Déployer le Worker Esport
+        run: |
+          npx --yes wrangler@4 deploy --config esport/wrangler.ci.toml 2>&1 | tee deploiement.log
+          test "${PIPESTATUS[0]}" -eq 0 || {
+            if grep -qi 'applibourse-relais' deploiement.log; then
+              echo "::error::La liaison de service vers le relais a échoué : le Worker applibourse-relais doit exister dans ce compte (workflow « Relais (Cloudflare Worker) »)."
+            fi
+            exit 1
+          }
+          adresse=$(grep -Eo 'https://[a-z0-9.-]+\.workers\.dev' deploiement.log | head -n1 || true)
+          if [ -n "$adresse" ] && [ -z "$ESPORT_URL" ]; then
+            echo "ESPORT_URL=$adresse" >> "$GITHUB_ENV"
+          fi
+
+      - name: Clé de session CLE_ESPORT (posée une seule fois)
+        run: |
+          if npx --yes wrangler@4 secret list --config esport/wrangler.ci.toml 2>/dev/null | grep -q '"CLE_ESPORT"'; then
+            echo "CLE_ESPORT : déjà posée sur le Worker (inchangée)."
+          else
+            # Tirée au hasard ICI, envoyée directement au Worker : jamais affichée, jamais écrite dans le dépôt.
+            openssl rand -hex 32 | npx --yes wrangler@4 secret put CLE_ESPORT --config esport/wrangler.ci.toml > /dev/null
+            echo "CLE_ESPORT : créée et posée sur le Worker."
+          fi
+
+      - name: Test de santé
+        run: |
+          if [ -z "$ESPORT_URL" ]; then
+            echo "::warning::Adresse du Worker Esport inconnue (ajoutez la variable ESPORT_URL) : test de santé sauté."
+            exit 0
+          fi
+          ESPORT_URL="${ESPORT_URL%/}"
+          sleep 5
+          sante=$(curl -s -o sante.json -w '%{http_code}' --retry 3 --retry-all-errors "$ESPORT_URL/sante" || true)
+          echo "GET /sante : HTTP $sante $(cat sante.json 2>/dev/null)"
+          if [ "$sante" != "200" ] || ! grep -q '"service":"esport"' sante.json; then
+            echo "::error::Le Worker Esport ne répond pas comme attendu sur /sante (HTTP $sante)."
+            exit 1
+          fi
+          if ! grep -q '"session":true' sante.json; then
+            echo "::error::CLE_ESPORT absente du Worker : relancez ce workflow, ou posez-la (docs/esport/deploiement.md)."
+            exit 1
+          fi
+          # Sans jeton : le relais répond « jeton refusé » (401). 503 « relais-ancien » : le relais n'est pas en version 7.
+          session=$(curl -s -o session.json -w '%{http_code}' -X POST "$ESPORT_URL/session" || true)
+          echo "POST /session (sans jeton) : HTTP $session $(cat session.json 2>/dev/null)"
+          if grep -q 'relais-ancien\|relais-absent' session.json; then
+            echo "::error::Le relais n'est pas encore en version 7 : lancez d'abord le workflow « Relais (Cloudflare Worker) », puis relancez celui-ci."
+            exit 1
+          fi
+          if [ "$session" != "401" ]; then
+            echo "::error::La route /session ne répond pas comme attendu (HTTP $session)."
+            exit 1
+          fi
+          echo "Esport en service : $ESPORT_URL"
+          echo "::notice::Esport en service : $ESPORT_URL. Si cette adresse n'est pas https://applibourse-esport.<sous-domaine du relais>.workers.dev, créez la variable ESPORT_URL puis relancez le workflow du site."
+
+      - name: Nettoyer
+        if: always()
+        run: rm -f esport/wrangler.ci.toml d1.json d1.err d1-creation.log r2.txt r2.err deploiement.log sante.json session.json

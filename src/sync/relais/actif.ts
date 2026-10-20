@@ -20,6 +20,7 @@ let actif: RelaisActif | undefined;
 surChangementDeCompte(() => {
   actif = undefined;
   enAttente = undefined;
+  liaisonCompte = undefined;
 });
 
 export function definirRelaisActif(relais: RelaisActif | undefined): void {
@@ -28,6 +29,24 @@ export function definirRelaisActif(relais: RelaisActif | undefined): void {
 
 export function relaisActif(): RelaisActif | undefined {
   return actif;
+}
+
+// ------------------------------------------------- Liaison du compte ouvert (site)
+//
+// Sur le site, un ami connecté par identifiant + mot de passe n'a pas de
+// configuration de relais dans sa base : sa liaison (jeton de PROFIL) est
+// gardée par le navigateur (bureau/synchroComptes.ts). Le site la déclare ici
+// pour les apps qui parlent à un service avec le jeton du compte (Esport).
+
+let liaisonCompte: RelaisActif | undefined;
+
+export function definirLiaisonCompte(relais: RelaisActif | undefined): void {
+  liaisonCompte = relais ? { relais: relais.relais, jeton: relais.jeton } : undefined;
+}
+
+/** Relais et jeton du compte ouvert : configuration du relais, sinon liaison gardée par le site. */
+export function relaisDuCompte(): RelaisActif | undefined {
+  return actif ?? liaisonCompte;
 }
 
 // ------------------------------------------------- Liaison en attente
