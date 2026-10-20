@@ -11,18 +11,24 @@
  *  1. migrations PostgreSQL (idempotentes) ;
  *  2. export de la base du Worker, import dans une base VIDE (refus sinon : l'import ne fusionne jamais) ;
  *  3. vérification : nombre de lignes de chaque table, export contre PostgreSQL ;
- *  4. copie des fichiers (PDF, miniatures) dans FICHIERS_DIR ; un fichier déjà copié est sauté.
+ *  4. copie des fichiers (PDF, miniatures) dans FICHIERS_DIR ; un fichier déjà copié est sauté ;
+ *  5. reprise des clés du serveur (CLE_ESPORT, CLE_DISCORD) quand le Worker est en LECTURE SEULE : écrites dans
+ *     ~/.appdashboard/esport.env (copie de l'ancien fichier gardée), pour que les liens de partage de strats
+ *     et les webhooks Discord (chiffrés) restent valables ; l'app Esport est ensuite redémarrée.
  * `--fichiers-seulement` : refait seulement l'étape 4 (reprise après coupure).
  * Variante hors ligne : `--entree esport-export.json` (export fait par esport/outils/transfert.mjs).
  */
 
-import { readFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
 import { basePostgres, optionsDepuisEnv } from '../adaptateurs/postgres.mjs';
 import { stockageDisque } from '../adaptateurs/stockage.mjs';
 import { TABLES, baseVide, importerBase } from '../noyau/transfert.mjs';
 import { chargerConfigRelais } from '../../relais/serveur/app.mjs';
 import { chargerConfigEsport } from './config.mjs';
+import { fichierEnvParDefaut } from './commun.mjs';
 import { migrer } from './migrer.mjs';
 
 async function ouvrirSession(source, jeton, requete) {
@@ -64,6 +70,26 @@ export async function copierFichiers(base, stockage, lireDistant) {
   }
   return bilan;
 }
+
+/** Remplace (ou ajoute) des variables dans un fichier .env ; une valeur `null` retire la ligne. Copie de sauvegarde. */
+export function majFichierEnv(chemin, valeurs) {
+  mkdirSync(dirname(chemin), { recursive: true });
+  const avant = existsSync(chemin) ? readFileSync(chemin, 'utf8') : '';
+  if (avant) copyFileSync(chemin, `${chemin}.avant-import`);
+  const restantes = new Map(Object.entries(valeurs));
+  const lignes = avant.split(/\r?\n/).flatMap(l => {
+    const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(l);
+    if (!m || !restantes.has(m[1])) return [l];
+    const v = restantes.get(m[1]);
+    restantes.delete(m[1]);
+    return v === null ? [`# ${m[1]} retirée par l'import (la valeur de Cloudflare n'en avait pas)`] : [`${m[1]}=${v}`];
+  });
+  for (const [cle, v] of restantes) if (v !== null) lignes.push(`${cle}=${v}`);
+  writeFileSync(chemin, `${lignes.join('\n').replace(/\n+$/, '')}\n`, { mode: 0o600 });
+  chmodSync(chemin, 0o600);
+}
+
+const REDEMARRAGE = fileURLToPath(new URL('../tmp/restart.txt', import.meta.url));
 
 export async function principal(args, env = process.env, { fetch: requete = globalThis.fetch, journal = console } = {}) {
   const option = nom => {
@@ -111,7 +137,24 @@ export async function principal(args, env = process.env, { fetch: requete = glob
     };
     const f = await copierFichiers(base, stockage, lireDistant);
     journal.log(`Fichiers : ${f.copies} copiés, ${f.deja} déjà présents, ${f.absents.length} introuvables sur Cloudflare${f.absents.length ? ` (${f.absents.slice(0, 5).join(', ')})` : ''} → ${config.dossierFichiers}`);
-    return { ok: true, fichiers: f };
+    // Clés du serveur : seulement si le Worker est en lecture seule (fenêtre de déménagement).
+    let cles = false;
+    const rs = await requete(`${source}/admin/secrets`, { headers: { Authorization: `Bearer ${session}` } });
+    if (rs.ok) {
+      const lu = await rs.json();
+      if (typeof lu.cleEsport === 'string' && lu.cleEsport.length >= 16) {
+        const fichierEnv = env.ESPORT_ENV || fichierEnvParDefaut('esport');
+        majFichierEnv(fichierEnv, { CLE_ESPORT: lu.cleEsport, CLE_DISCORD: typeof lu.cleDiscord === 'string' && lu.cleDiscord ? lu.cleDiscord : null });
+        const redemarrage = env.FICHIER_REDEMARRAGE || REDEMARRAGE;
+        mkdirSync(dirname(redemarrage), { recursive: true });
+        writeFileSync(redemarrage, new Date().toISOString());
+        cles = true;
+        journal.log(`Clés du serveur reprises de Cloudflare (CLE_ESPORT${lu.cleDiscord ? ', CLE_DISCORD' : ''}) dans ${fichierEnv} ; app Esport redémarrée. Liens de partage et webhooks Discord conservés.`);
+      }
+    } else {
+      journal.log('Clés du serveur NON reprises (Worker pas en lecture seule) : relancez avec --fichiers-seulement une fois ESPORT_LECTURE_SEULE=1, sinon les liens de partage de strats et les webhooks Discord seront à refaire.');
+    }
+    return { ok: true, fichiers: f, cles };
   } finally {
     await base.fermer();
   }

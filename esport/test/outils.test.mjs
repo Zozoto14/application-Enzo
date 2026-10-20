@@ -207,3 +207,64 @@ test('stockage mémoire (interface des fichiers) : dépôt, lecture, suppression
   assert.equal(await st.lire('teams/a/resume.pdf'), null);
   await assert.rejects(st.deposer('../evasion', new Uint8Array()));
 });
+
+test('Worker en déménagement : LECTURE_SEULE refuse les écritures (sauf la session), clés exportables ; ESPORT_CIBLE transmet tout', async () => {
+  const d1 = fauxD1();
+  for (const { sql } of lireMigrations()) d1.db.exec(sql);
+  const JETON = 'jeton-maitre-worker-esport-0123456789';
+  const envRelais = { JETON, BOITE: kvMemoire() };
+  const base = {
+    BASE: d1,
+    CLE_ESPORT: 'cle-esport-du-worker-de-test-0123456789abcdef',
+    CLE_DISCORD: 'cle-discord-du-worker-0123456789',
+    RELAIS: { fetch: (url, init) => relais.fetch(new Request(url, init), envRelais) },
+  };
+  const attentes = [];
+  const ctx = { waitUntil: p => attentes.push(p) };
+  const appel = async (env, chemin, { methode = 'GET', jeton, corps } = {}) => {
+    const r = await worker.fetch(new Request(`https://esport.test${chemin}`, { method: methode, headers: { 'Content-Type': 'application/json', ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}) }, body: corps ? JSON.stringify(corps) : undefined }), env, ctx);
+    await Promise.all(attentes.splice(0));
+    return { statut: r.status, corps: await r.json(), entetes: r.headers };
+  };
+  // Normal : pas de clés exportées.
+  const s = (await appel(base, '/session', { methode: 'POST', jeton: JETON })).corps.session;
+  assert.equal((await appel(base, '/admin/secrets', { jeton: s })).statut, 404);
+  // Lecture seule : session et lectures permises, écritures refusées, clés pour le Fondateur seulement.
+  const ls = { ...base, LECTURE_SEULE: '1' };
+  const s2 = (await appel(ls, '/session', { methode: 'POST', jeton: JETON })).corps.session;
+  assert.ok(s2);
+  assert.equal((await appel(ls, '/teams', { jeton: s2 })).statut, 200);
+  const refus = await appel(ls, '/teams', { methode: 'POST', jeton: s2, corps: { nom: 'Pendant le déménagement' } });
+  assert.equal(refus.statut, 503);
+  assert.equal(refus.corps.code, 'lecture-seule');
+  assert.equal(refus.entetes.get('Retry-After'), '300');
+  assert.deepEqual((await appel(ls, '/admin/secrets', { jeton: s2 })).corps, { cleEsport: base.CLE_ESPORT, cleDiscord: base.CLE_DISCORD });
+  const lea = (await appel(ls, '/session', { methode: 'POST', jeton: await jetonDeProfil(JETON, 'lea12345') })).corps.session;
+  assert.equal((await appel(ls, '/admin/secrets', { jeton: lea })).statut, 403);
+  // Le cron ne tourne pas en lecture seule.
+  d1.db.prepare("INSERT INTO evenements (id, type, charge, cree_le, essais) VALUES ('e-ls', 'team.updated', '{}', ?, 0)").run(new Date().toISOString());
+  await worker.scheduled({}, ls, ctx);
+  await Promise.all(attentes.splice(0));
+  assert.equal(d1.db.prepare("SELECT traite_le FROM evenements WHERE id = 'e-ls'").get().traite_le, null);
+  // Transmission : chaque requête part telle quelle vers le nouveau serveur ; l'en-tête annonce l'adresse.
+  const recues = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    recues.push({ url: String(url), methode: init.method, auth: new Headers(init.headers).get('Authorization'), corps: init.body ? new TextDecoder().decode(init.body) : undefined });
+    return new Response(JSON.stringify({ ok: true, ici: 'o2switch' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+  };
+  try {
+    const t = { ...base, ESPORT_CIBLE: 'https://esport.appdashboard.fr' };
+    const r = await appel(t, '/teams?x=1', { methode: 'POST', jeton: 'es1.session', corps: { nom: 'A' } });
+    assert.equal(r.statut, 201);
+    assert.equal(r.corps.ici, 'o2switch');
+    assert.equal(r.entetes.get('X-Esport-Deplace'), 'https://esport.appdashboard.fr');
+    assert.deepEqual(recues, [{ url: 'https://esport.appdashboard.fr/teams?x=1', methode: 'POST', auth: 'Bearer es1.session', corps: '{"nom":"A"}' }]);
+    await worker.scheduled({}, t, ctx);
+    assert.equal(attentes.length, 0, 'pas de cron sur l’ancien serveur après la bascule');
+    // Une cible invalide (http, chemin) est ignorée : Worker normal.
+    assert.equal((await appel({ ...base, ESPORT_CIBLE: 'http://pirate.exemple' }, '/sante')).corps.service, 'esport');
+  } finally {
+    globalThis.fetch = original;
+  }
+});

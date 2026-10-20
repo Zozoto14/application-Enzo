@@ -37,6 +37,8 @@ function api(env) {
     cleDiscord: env.CLE_DISCORD,
     lienApp: env.LIEN_APP,
     discordBot: { applicationId: env.DISCORD_APPLICATION_ID, publicKey: env.DISCORD_PUBLIC_KEY, jetonBot: env.DISCORD_BOT_TOKEN },
+    // Fenêtre de déménagement seulement (LECTURE_SEULE) : l'importeur o2switch reprend les clés (docs/o2switch.md).
+    secretsExportables: env.LECTURE_SEULE === '1',
   });
 }
 

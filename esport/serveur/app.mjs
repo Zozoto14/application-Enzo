@@ -20,7 +20,7 @@ import { creerServeurHttp, ecouter, exigerNode } from './commun.mjs';
  * Prépare le gestionnaire HTTP. `base` et `stockage` peuvent être fournis (tests) ; sinon Postgres
  * (environnement) et le dossier FICHIERS_DIR. Rend `{ traiter, base, stockage, config, fermer }`.
  */
-export async function preparerEsport({ config = chargerConfigEsport(), base, stockage, fetchDiscord, verifierJeton } = {}) {
+export async function preparerEsport({ config = chargerConfigEsport(), base, stockage, fetchDiscord, verifierJeton, secretsExportables = false } = {}) {
   const problemes = problemesConfig({ ...config, baseConfiguree: config.baseConfiguree || Boolean(base) });
   if (problemes.length) {
     console.error(`[esport] configuration incomplète :\n - ${problemes.join('\n - ')}`);
@@ -39,6 +39,7 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     lienApp: config.lienApp,
     discordBot: config.discordBot,
     fetchDiscord,
+    secretsExportables,
   });
   return { traiter: api, base: b, stockage: st, config, problemes, fermer: async () => (base ? undefined : b.fermer()) };
 }

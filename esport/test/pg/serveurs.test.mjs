@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { jetonDeProfil } from '../../../relais/worker.mjs';
@@ -143,7 +143,8 @@ test('o2switch : déménagement d’un ancien serveur (base et fichiers) vers Po
   await migrer(cible.base);
   const ancienneBase = await baseSqliteMigree();
   const ancienDossier = mkdtempSync(join(tmpdir(), 'esport-ancien-'));
-  const ancien = await demarrerEsport({ port: 0, hote: '127.0.0.1', base: ancienneBase, stockage: await stockageDisque(ancienDossier), config: configEsport(relais.url, ancienDossier) });
+  // Comme le Worker en LECTURE_SEULE : les clés du serveur sont reprises par l'importeur.
+  const ancien = await demarrerEsport({ port: 0, hote: '127.0.0.1', base: ancienneBase, stockage: await stockageDisque(ancienDossier), config: configEsport(relais.url, ancienDossier, { cleDiscord: 'cle-discord-de-cloudflare-0123456789' }), secretsExportables: true });
   const nouveauDossier = mkdtempSync(join(tmpdir(), 'esport-nouveau-'));
   try {
     const f = await sessionFondateur(ancien.url);
@@ -153,11 +154,21 @@ test('o2switch : déménagement d’un ancien serveur (base et fichiers) vers Po
     assert.equal((await api(ancien.url, `/teams/${teamId}/resumes/${depot.corps.id}/pdf`, { methode: 'PUT', jeton: f, octets: PDF })).statut, 200);
 
     const messages = [];
-    const env = { DATABASE_URL: URL_PG, SCHEMA_BASE: cible.schema, ESPORT_SOURCE: ancien.url, JETON, CLE_ESPORT: CLE, FICHIERS_DIR: nouveauDossier, RELAIS_URL: relais.url, ESPORT_ENV: '/inexistant', RELAIS_ENV: '/inexistant' };
+    const fichierEnv = join(nouveauDossier, 'esport.env');
+    writeFileSync(fichierEnv, `DATABASE_URL=${URL_PG}\nCLE_ESPORT=cle-provisoire-${'x'.repeat(40)}\nRELAIS_URL=${relais.url}\n`);
+    const env = { DATABASE_URL: URL_PG, SCHEMA_BASE: cible.schema, ESPORT_SOURCE: ancien.url, JETON, FICHIERS_DIR: nouveauDossier, RELAIS_URL: relais.url, ESPORT_ENV: fichierEnv, RELAIS_ENV: '/inexistant', FICHIER_REDEMARRAGE: join(nouveauDossier, 'tmp', 'restart.txt') };
     const r = await importer([], env, { journal: { log: m => messages.push(m) } });
     assert.equal(r.ok, true);
     assert.ok(messages.some(m => /mêmes nombres de lignes/.test(m)), messages.join('\n'));
     assert.ok(messages.some(m => /Fichiers : 1 copiés/.test(m)), messages.join('\n'));
+    // Clés reprises : CLE_ESPORT et CLE_DISCORD de « Cloudflare » dans le fichier .env (privé), sauvegarde gardée.
+    assert.equal(r.cles, true);
+    const lu = readFileSync(fichierEnv, 'utf8');
+    assert.match(lu, new RegExp(`^CLE_ESPORT=${CLE}$`, 'm'));
+    assert.match(lu, /^CLE_DISCORD=cle-discord-de-cloudflare-0123456789$/m);
+    assert.match(lu, /^RELAIS_URL=/m);
+    assert.equal(statSync(fichierEnv).mode & 0o777, 0o600);
+    assert.ok(existsSync(`${fichierEnv}.avant-import`));
     assert.equal((await cible.base.premier('SELECT nom FROM teams', [])).nom, 'Team Cloudflare');
     const cle = (await cible.base.premier('SELECT cle_stockage FROM fichiers', [])).cle_stockage;
     assert.deepEqual(new Uint8Array(readFileSync(join(nouveauDossier, cle))), PDF);
@@ -171,6 +182,8 @@ test('o2switch : déménagement d’un ancien serveur (base et fichiers) vers Po
     try {
       const f2 = await sessionFondateur(nouveau.url);
       assert.deepEqual((await api(nouveau.url, '/teams', { jeton: f2 })).corps.teams.map(t => t.nom), ['Team Cloudflare']);
+      // Hors déménagement, jamais de clé exportée.
+      assert.equal((await api(nouveau.url, '/admin/secrets', { jeton: f2 })).statut, 404);
       // Une session ouverte sur l'ancien serveur reste valable (même CLE_ESPORT).
       assert.equal((await api(nouveau.url, '/moi', { jeton: f })).statut, 200);
     } finally {

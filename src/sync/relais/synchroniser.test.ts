@@ -6,7 +6,7 @@ import { migrer } from '../../db/schema';
 import { deriverCleSynchro, depuisBase64, ouvrirEnveloppe, sceller, versBase64 } from './chiffrement';
 import { SITE_PRINCIPAL, SITE_VERIFIE, choisirSite, estSiteConnu } from '../../config/site';
 import { decoderLiaison, encoderLiaison, lienSite } from './liaison';
-import { ecrireConfigRelais, lireEtatSynchro, recupererCoffre, synchroniser } from './synchroniser';
+import { adresseDeplacee, ecrireConfigRelais, lireConfigRelais, lireEtatSynchro, recupererCoffre, synchroniser } from './synchroniser';
 
 const KDF_RAPIDE = { algorithme: 'argon2id' as const, passes: 1, memoireKio: 8, fils: 1, longueurCle: 32 };
 const JETON = 'jeton-du-relais-0123456789';
@@ -228,5 +228,57 @@ describe('enveloppes et code de liaison', () => {
     const ok = { ...config, verifie: true };
     expect(choisirSite(undefined, ok)).toBe('https://x.pages.dev');
     expect(choisirSite('https://autre.pages.dev/', ok)).toBe('https://x.pages.dev');
+  });
+});
+
+describe('déménagement du relais (Cloudflare → o2switch)', () => {
+  const NOUVEAU = 'https://relais.appdashboard.fr';
+  const cle = deriverCleSynchro('mot de passe commun', JETON, KDF_RAPIDE);
+  /** Ancien relais en mode transmission : il répond et annonce la nouvelle adresse ; le nouveau accepte le même jeton. */
+  function relaisDeplace({ nouveauRepond = true, annonce = NOUVEAU }: { nouveauRepond?: boolean; annonce?: string } = {}) {
+    const appels: string[] = [];
+    const requete = (async (url: string, init: RequestInit = {}) => {
+      appels.push(url);
+      const autorise = (init.headers as Record<string, string>).Authorization === `Bearer ${JETON}`;
+      const entetes = new Map([['x-relais-deplace', annonce]]);
+      const reponse = (corps: unknown, status = 200, avecEntete = false) =>
+        ({ ok: status < 300, status, headers: { get: (n: string) => (avecEntete ? entetes.get(n.toLowerCase()) ?? null : null) }, json: async () => corps }) as unknown as Response;
+      if (!autorise) return reponse({}, 401);
+      if (url.startsWith(NOUVEAU)) return nouveauRepond ? reponse({ ok: true }) : reponse({}, 503);
+      if (url === `${RELAIS}/boite`) return reponse({ appareils: {} }, 200, true);
+      return reponse({ ok: true }, 200, true);
+    }) as unknown as typeof fetch;
+    return { appels, requete };
+  }
+
+  it('adresse annoncée : https sans chemin, différente de l’actuelle', () => {
+    const r = (v: string | null) => ({ headers: { get: () => v } });
+    expect(adresseDeplacee(r(NOUVEAU), RELAIS)).toBe(NOUVEAU);
+    expect(adresseDeplacee(r(`${NOUVEAU}/`), RELAIS)).toBe(NOUVEAU);
+    expect(adresseDeplacee(r(RELAIS), RELAIS)).toBeUndefined();
+    expect(adresseDeplacee(r('http://relais.appdashboard.fr'), RELAIS)).toBeUndefined();
+    expect(adresseDeplacee(r('https://relais.appdashboard.fr/piege'), RELAIS)).toBeUndefined();
+    expect(adresseDeplacee(r(null), RELAIS)).toBeUndefined();
+    expect(adresseDeplacee({}, RELAIS)).toBeUndefined();
+  });
+
+  it('un tour sur l’ancien relais bascule l’appareil vers la nouvelle adresse, après vérification du jeton', async () => {
+    const pilote = ouvrirBaseNode();
+    migrer(pilote);
+    ecrireConfigRelais(pilote, { relais: RELAIS, jeton: JETON, cle, nom: 'PC', site: 'https://applibourse-ef0ddb.pages.dev' });
+    const relais = relaisDeplace();
+    await synchroniser({ pilote, appareil: 'aaaa1111', moi: { plateforme: 'bureau' }, maintenant, requete: relais.requete });
+    expect(relais.appels).toContain(`${NOUVEAU}/sante`);
+    expect(lireConfigRelais(pilote)).toEqual({ relais: NOUVEAU, jeton: JETON, cle, nom: 'PC', site: 'https://applibourse-ef0ddb.pages.dev' });
+    pilote.fermer();
+  });
+
+  it('nouvelle adresse injoignable : l’appareil garde l’ancienne (qui continue de marcher)', async () => {
+    const pilote = ouvrirBaseNode();
+    migrer(pilote);
+    ecrireConfigRelais(pilote, { relais: RELAIS, jeton: JETON, cle, nom: 'PC' });
+    await synchroniser({ pilote, appareil: 'aaaa1111', moi: { plateforme: 'bureau' }, maintenant, requete: relaisDeplace({ nouveauRepond: false }).requete });
+    expect(lireConfigRelais(pilote)?.relais).toBe(RELAIS);
+    pilote.fermer();
   });
 });

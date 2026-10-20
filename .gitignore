@@ -35,3 +35,7 @@ esport/wrangler.ci.toml
 esport/.wrangler/
 esport-export*.json
 esport/esport-local.db*
+
+# Serveurs Node chez o2switch (docs/o2switch.md) : redémarrage Passenger, dépendances du serveur
+esport/tmp/
+relais/tmp/

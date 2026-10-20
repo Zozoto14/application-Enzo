@@ -99,7 +99,7 @@ const jetonPorteur = requete => (requete.headers.get('Authorization') ?? '').rep
  *  - `cleSession` : secret CLE_ESPORT ; `verifierJeton(jeton, ip)` : voir authentification.mjs ;
  *  - `creationTeams` : « fondateur » ou « tous » ; `maintenant` : horloge (tests).
  */
-export function creerApi({ base, stockage, cleSession, verifierJeton, creationTeams = 'fondateur', maintenant = () => Date.now(), cleDiscord, fetchDiscord, lienApp = '', discordBot = {}, attenteDiffere }) {
+export function creerApi({ base, stockage, cleSession, verifierJeton, creationTeams = 'fondateur', maintenant = () => Date.now(), cleDiscord, fetchDiscord, lienApp = '', discordBot = {}, attenteDiffere, secretsExportables = false }) {
   const s = servicesEsport({ base, maintenant, creationTeams });
   const s3 = servicesPhase3({ base, stockage, cleSession, maintenant, socle: s });
   const p = servicesPlanning({ base, maintenant, noyau: s });
@@ -236,6 +236,14 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       if (!rgpd[2] && m === 'DELETE') return s.supprimerCompteMembre(acteur, compte);
     }
 
+    // Déménagement (esport/serveur/importer.mjs) : les clés du serveur (session, Discord), pour que les liens de
+    // partage de strats et les webhooks Discord chiffrés restent valables sur le nouveau serveur. Seulement pour le
+    // Fondateur ET pendant la fenêtre de déménagement (Worker en lecture seule) ; jamais sinon.
+    if (chemin === '/admin/secrets' && m === 'GET') {
+      if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Réservé au Fondateur.');
+      if (!secretsExportables) throw echec(404, 'route', 'Adresse inconnue.');
+      return { cleEsport: cleSession, ...(cleDiscord ? { cleDiscord } : {}) };
+    }
     // Déménagement (esport/serveur/importer.mjs) : un fichier privé (PDF, miniature) par sa clé, Fondateur seulement.
     if (chemin === '/admin/fichier' && m === 'GET') {
       if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Réservé au Fondateur.');

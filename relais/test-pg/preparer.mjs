@@ -46,7 +46,8 @@ const exclusif = tache => {
 
 async function versPg(boite) {
   await base.executer(`DELETE FROM ${TABLE_KV}`, []);
-  const m = metas.get(boite) ?? new Map();
+  // Métadonnées : celles que le double expose (`metas`), sinon celles relues de PostgreSQL au tour précédent.
+  const m = boite.metas instanceof Map ? boite.metas : (metas.get(boite) ?? new Map());
   for (const [cle, valeur] of boite.donnees) await kvPg.put(cle, valeur, m.has(cle) ? { metadata: m.get(cle) } : {});
 }
 async function depuisPg(boite) {

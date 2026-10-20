@@ -101,6 +101,33 @@ export async function appeler(
   return reponse;
 }
 
+/**
+ * Adresse annoncée par l'en-tête `X-Relais-Deplace` (relais version 8 en mode transmission), si elle est
+ * valable (https, sans chemin) et différente de l'adresse actuelle.
+ */
+export function adresseDeplacee(reponse: { headers?: { get?(nom: string): string | null } }, actuelle: string): string | undefined {
+  const brut = reponse.headers?.get?.('X-Relais-Deplace')?.trim().replace(/\/+$/, '');
+  if (!brut || !/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(brut)) {
+    return undefined;
+  }
+  return brut.toLowerCase() === actuelle.trim().replace(/\/+$/, '').toLowerCase() ? undefined : brut;
+}
+
+/**
+ * Suit un déménagement du relais : la nouvelle adresse n'est retenue qu'après avoir vérifié qu'elle
+ * répond et accepte le MÊME jeton (`/sante`). Le reste de la configuration (clé, nom, site) ne change pas.
+ * Rend vrai si la configuration a été mise à jour.
+ */
+export async function suivreDeplacement(pilote: PiloteSqlite, config: ConfigRelais, adresse: string, requete: Fetch = fetch): Promise<boolean> {
+  try {
+    await testerLiaison({ ...config, relais: adresse }, requete);
+  } catch {
+    return false;
+  }
+  ecrireConfigRelais(pilote, { ...config, relais: adresse });
+  return true;
+}
+
 /** Vérifie l'adresse et le jeton avant de les enregistrer. */
 export async function testerLiaison(liaison: Liaison, requete: Fetch = fetch): Promise<void> {
   const reponse = await appeler(liaison, '/sante', {}, requete);
@@ -290,6 +317,8 @@ export async function synchroniser(options: OptionsSynchro): Promise<ResultatSyn
       throw new ErreurRelais(`Le relais a répondu ${reponseIndex.status}.`, reponseIndex.status);
     }
     const index = ((await reponseIndex.json()) as { appareils?: Record<string, { date: string }> }).appareils ?? {};
+    // Relais déménagé (Worker Cloudflare en mode transmission, docs/o2switch.md) : nouvelle adresse annoncée.
+    const deplace = adresseDeplacee(reponseIndex, config!.relais);
 
     for (const [autre, { date }] of Object.entries(index)) {
       if (autre === appareil || autre === ID_COFFRE || (etat.lus[autre] ?? '') >= date) {
@@ -387,6 +416,9 @@ export async function synchroniser(options: OptionsSynchro): Promise<ResultatSyn
 
     etat = { ...etat, derniereSynchro: maintenant };
     sauver(etat);
+    if (deplace) {
+      await suivreDeplacement(pilote, config!, deplace, requete);
+    }
     return { recus, bilan, envoye, differeDans, erreurs, appareils: etat.appareils };
   }
 }
