@@ -106,12 +106,11 @@ relancer.
 
 ## Ajouter un joueur
 
-1. **Administration** › **Utilisateurs** › nouveau compte : modèle de permissions **« Esport seulement »**
-   (rang Ami). Envoyez l'invitation du hub comme d'habitude. Le compte porte le badge **Esport** : il ne verra
-   que l'Esport dans le hub.
-2. **Esport** › votre team › **Membres et rôles** › **Inviter** : choisissez le rôle, la validité et le nombre
-   d'utilisations › **Créer l'invitation** › copiez le code `esp_…` (montré une seule fois) et envoyez-le.
-3. Le joueur ouvre l'app › **Esport** › choisit son pseudo › **Rejoindre une team** › colle le code.
+Plus de code : **Esport › Membres › Créer un compte** (nom, adresse e-mail, team et rôle). Le compte
+« Esport seulement » est créé dans l'Administration, le joueur est ajouté à sa team, et votre
+messagerie ouvre l'e-mail d'invitation. Il choisit son mot de passe en ouvrant le lien et voit
+directement sa team. Détails : [invitations.md](invitations.md) ; les trois pages de l'Esport :
+[guide.md](guide.md).
 
 ## Étape 8 (facultative) : notifications Discord
 
@@ -132,6 +131,11 @@ débit) est appliquée par le workflow « Esport (Worker) ». Le cron purge dés
 conservation de chaque team (1 an par défaut). Revue de sécurité : [securite.md](securite.md) ; guide
 d'utilisation : [README.md](README.md).
 
+## Étape 11 : invitations directes, Dashboard et Membres
+
+Rien à configurer : relancez le workflow **Esport (Worker)** (étape 6). Il applique la migration
+`0008_invitations_directes.sql` et déploie le serveur en version 4. Le relais ne change pas.
+
 ## En cas de souci
 
 | Message | Que faire |
@@ -145,5 +149,6 @@ d'utilisation : [README.md](README.md).
 | « Accès révoqué » dans l'Esport | Le compte a été révoqué dans l'Administration : c'est voulu. |
 | « Trop de demandes en peu de temps » | Limite de débit (protection) : attendez la durée indiquée (une minute pour la connexion, une heure au plus pour les créations). |
 
+Guide : [les trois pages de l'Esport](guide.md), [inviter un joueur](invitations.md).
 Modules : [résumés de réunions](resumes.md), [objectifs et tâches](objectifs-taches.md), [strats et playbook](strats-playbook.md).
 Passer plus tard sur un vrai serveur : voir [migration-serveur.md](migration-serveur.md).

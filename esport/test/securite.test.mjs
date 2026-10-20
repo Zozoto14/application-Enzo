@@ -20,7 +20,6 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LIMITES } from '../noyau/limites.mjs';
-import { sha256Hex } from '../noyau/outils.mjs';
 import { banc, teamAvecMembres } from './aide.mjs';
 import { URL_TEST } from './discord-aide.mjs';
 import { ASCENT } from './strats-aide.mjs';
@@ -302,48 +301,32 @@ test('anti-escalade : le Manager ne crée pas de rôle plus fort que le sien, n�
   assert.deepEqual(role.corps.details.manquantes, ['team.delete']);
   const promo = await b.appel(`/teams/${A.teamId}/membres/${A.membres.lea12345.id}`, { methode: 'PATCH', jeton: max, corps: { roleId: A.roles.proprietaire.id } });
   assert.equal(promo.statut, 403);
-  const inv = await b.appel(`/teams/${A.teamId}/invitations`, { methode: 'POST', jeton: max, corps: { roleId: A.roles.proprietaire.id } });
+  const inv = await b.appel(`/teams/${A.teamId}/membres`, { methode: 'POST', jeton: max, corps: { compte: 'lea12345', roleId: A.roles.proprietaire.id } });
   assert.equal(inv.statut, 403);
+  assert.equal(inv.corps.code, 'escalade');
+  // Invitation directe (création de compte) : réservée au Fondateur.
+  const creation = await b.appel('/comptes', { methode: 'POST', jeton: max, corps: { compte: 'neo12345', pseudo: 'Neo', affectations: [{ teamId: A.teamId, roleId: A.roles.joueur.id }] } });
+  assert.equal(creation.statut, 403);
   // Il ne touche pas non plus au Propriétaire.
   assert.equal((await b.appel(`/teams/${A.teamId}/membres/${A.membres.own12345.id}`, { methode: 'DELETE', jeton: max })).statut, 403);
   // Un Joueur ne se donne rien.
   assert.equal((await b.appel(`/teams/${A.teamId}/membres/${A.membres.lea12345.id}`, { methode: 'PATCH', jeton: A.sessions.lea12345, corps: { roleId: A.roles.manager.id } })).statut, 403);
 });
 
-test('invitations : code jamais stocké en clair (empreinte SHA-256), expiration, révocation, force brute bloquée', async () => {
+test('codes d’invitation esp_ retirés : ni création ni acceptation (410), rien n’est écrit', async () => {
   const { b, A } = await preparer();
   const own = A.sessions.own12345;
   const inv = await b.appel(`/teams/${A.teamId}/invitations`, { methode: 'POST', jeton: own, corps: { roleId: A.roles.joueur.id, joursValidite: 1 } });
-  const code = inv.corps.code;
-  assert.match(code, /^esp_[A-Za-z0-9_-]{32}$/);
-  // Aucune table ne contient le code ; seule son empreinte est gardée.
-  const export_ = JSON.stringify(await b.base.tous('SELECT * FROM invitations', []));
-  assert.ok(!export_.includes(code));
-  assert.ok(export_.includes(await sha256Hex(code)));
-  assert.ok(!JSON.stringify(await b.base.tous('SELECT * FROM journal', [])).includes(code), 'le code n’est pas journalisé');
-  assert.ok(!JSON.stringify((await b.appel(`/teams/${A.teamId}/invitations`, { jeton: own })).corps).includes(code), 'la liste ne le renvoie pas');
-  // Expirée : 410.
+  assert.equal(inv.statut, 410);
+  assert.equal(inv.corps.code, 'codes-retires');
+  assert.equal(Number((await b.base.premier('SELECT COUNT(*) AS n FROM invitations', [])).n), 0);
   const tim = await b.session('tim12345', 'Tim');
-  b.horloge.t += 2 * 86_400_000;
-  const exp = await b.appel('/invitations/accepter', { methode: 'POST', jeton: await b.session('tim12345'), corps: { code } });
-  assert.equal(exp.statut, 410);
-  assert.equal(exp.corps.code, 'invitation-expiree');
-  // Révoquée : 410.
-  const inv2 = await b.appel(`/teams/${A.teamId}/invitations`, { methode: 'POST', jeton: await b.session('own12345'), corps: { roleId: A.roles.joueur.id } });
-  await b.appel(`/teams/${A.teamId}/invitations/${inv2.corps.invitation.id}`, { methode: 'DELETE', jeton: await b.session('own12345') });
-  assert.equal((await b.appel('/invitations/accepter', { methode: 'POST', jeton: await b.session('tim12345'), corps: { code: inv2.corps.code } })).corps.code, 'invitation-revoquee');
-  // Force brute : après quelques codes faux, même un BON code est refusé (429 + Retry-After).
-  const jeton = await b.session('tim12345');
-  const inv3 = await b.appel(`/teams/${A.teamId}/invitations`, { methode: 'POST', jeton: await b.session('own12345'), corps: { roleId: A.roles.joueur.id } });
-  let bloque;
-  for (let i = 0; i < 10 && !bloque; i++) {
-    const r = await b.appel('/invitations/accepter', { methode: 'POST', jeton, corps: { code: `esp_${'x'.repeat(31)}${i}` } });
-    if (r.statut === 429) bloque = r;
+  for (let i = 0; i < 3; i++) {
+    const r = await b.appel('/invitations/accepter', { methode: 'POST', jeton: tim, corps: { code: `esp_${'x'.repeat(31)}${i}` } });
+    assert.equal(r.statut, 410);
   }
-  assert.ok(bloque, 'bloqué après des essais ratés');
-  assert.ok(Number(bloque.entetes.get('Retry-After')) > 0);
-  assert.equal((await b.appel('/invitations/accepter', { methode: 'POST', jeton, corps: { code: inv3.corps.code } })).statut, 429);
-  assert.ok(tim);
+  assert.equal(await b.base.premier("SELECT id FROM membres WHERE compte_id = 'tim12345'", []), null);
+  assert.equal(Number((await b.base.premier('SELECT COUNT(*) AS n FROM tentatives', [])).n), 0);
 });
 
 // ------------------------------------------------------------------ 3. Limites de débit

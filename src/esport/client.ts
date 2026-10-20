@@ -103,19 +103,101 @@ export interface Membre {
   discord: string | null;
   posteJeu: string | null;
   statut: 'actif' | 'suspendu';
+  /** Compte créé depuis l'Esport, pas encore connecté. */
+  invite?: boolean;
   rejointLe: string;
   role: { id: string; nom: string; couleur: string; cle: string | null };
   moi: boolean;
 }
-export interface Invitation {
+
+// ------------------------------------------------------------------ Premier niveau : Membres et Dashboard
+
+export interface AppartenanceCompte {
+  teamId: string;
+  membreId: string;
+  role: { id: string; nom: string; couleur: string; cle: string | null };
+  posteJeu: string | null;
+  statut: 'actif' | 'suspendu';
+  rejointLe: string;
+  /** Rôle sous celui de l'acteur (anti-escalade) : il peut agir sur ce membre. */
+  gerable: boolean;
+}
+export interface CompteEsport {
+  compte: string;
+  pseudo: string;
+  riotId: string | null;
+  discord: string | null;
+  /** « invite » : créé depuis l'Esport, jamais connecté. */
+  statut: 'invite' | 'actif';
+  inviteLe: string | null;
+  activeLe: string | null;
+  moi: boolean;
+  appartenances: AppartenanceCompte[];
+}
+export interface RoleAnnuaire {
   id: string;
-  libelle: string;
-  role: { id: string; nom: string | null };
-  expireLe: string;
-  utilisationsMax: number;
-  utilisations: number;
-  creeLe: string;
-  etat: 'active' | 'expiree' | 'revoquee' | 'epuisee';
+  nom: string;
+  couleur: string;
+  cle: string | null;
+  position: number;
+  systeme: boolean;
+  /** L'acteur peut attribuer ce rôle (anti-escalade). */
+  attribuable: boolean;
+}
+export interface TeamAnnuaire {
+  id: string;
+  nom: string;
+  slug: string;
+  jeu: string;
+  archivee: boolean;
+  droits: { ajouter: boolean; roles: boolean; retirer: boolean };
+  roles: RoleAnnuaire[];
+}
+export interface Annuaire {
+  superAdmin: boolean;
+  peutCreerCompte: boolean;
+  teams: TeamAnnuaire[];
+  comptes: CompteEsport[];
+}
+export interface Affectation {
+  teamId: string;
+  roleId: string;
+  posteJeu?: string;
+}
+export interface OccurrenceTableau {
+  teamId: string;
+  teamNom?: string;
+  evenementId: string;
+  cle: string;
+  type: string;
+  titre: string;
+  debut: string;
+  fin: string;
+  lieu: string;
+}
+export interface CarteTeam {
+  team: Team;
+  role: { nom: string; couleur: string; cle: string | null } | null;
+  effectif: { actifs: number; invites: number; suspendus: number };
+  /** `null` : module désactivé ou pas la permission de le voir. */
+  prochains: OccurrenceTableau[] | null;
+  presence: { jours: number; marques: number; presents: number; taux: number | null } | null;
+  resumes: { aResumer: number; enCours: number; plusAncien: string | null; redacteur: boolean } | null;
+  taches: { enRetard: number } | null;
+  /** Date de la dernière activité ; le détail seulement avec le Journal. */
+  derniereActivite: { date: string; action?: string; acteur?: string | null; pseudo?: string | null; meta?: Record<string, unknown> } | null;
+}
+export interface AlerteTableau {
+  genre: 'taches' | 'resumes' | 'presence' | 'invites';
+  teamId: string;
+  teamNom: string;
+  nombre: number;
+  texte: string;
+}
+export interface Tableau {
+  genereLe: string;
+  teams: CarteTeam[];
+  global: { resumesARediger: number; evenementsSemaine: OccurrenceTableau[]; alertes: AlerteTableau[] };
 }
 export interface EntreeJournal {
   id: string;
@@ -314,7 +396,7 @@ export const DOC_ACTIVATION = 'https://github.com/Zozoto14/application-Enzo/blob
 
 /** Mention affichée dans l'app (données en clair côté serveur). */
 export const MENTION_DONNEES =
-  'Les données Esport sont stockées en clair sur le serveur Esport (Cloudflare, chiffrées au repos) : elles ne sont pas chiffrées de bout en bout comme le reste de l’app. Le serveur garde : votre pseudo (obligatoire), votre Riot ID et votre nom Discord (facultatifs), jamais d’adresse e-mail ; vos teams, rôles et poste ; vos disponibilités, réponses et présences ; les réunions que vous déposez et leurs résumés PDF ; les tâches, objectifs, repères et commentaires de review, strats et fiches de scouting de la team ; le journal d’activité (conservé selon la durée choisie par la team, 1 an par défaut). Ces données servent uniquement au fonctionnement de la team, ne sont ni vendues ni transmises, sauf les messages que la team choisit d’envoyer sur son Discord. Vous pouvez à tout moment exporter vos données (JSON) ou supprimer votre compte Esport ci-dessous ; le Fondateur peut aussi le faire à votre demande. Membre mineur : l’accord d’un représentant légal est nécessaire.';
+  'Les données Esport sont stockées en clair sur le serveur Esport (Cloudflare, chiffrées au repos) : elles ne sont pas chiffrées de bout en bout comme le reste de l’app. Le serveur garde : votre pseudo (obligatoire), votre Riot ID et votre nom Discord (facultatifs), jamais d’adresse e-mail (celle d’un invité reste chiffrée dans l’Administration du Fondateur) ; vos teams, rôles et poste ; vos disponibilités, réponses et présences ; les réunions que vous déposez et leurs résumés PDF ; les tâches, objectifs, repères et commentaires de review, strats et fiches de scouting de la team ; le journal d’activité (conservé selon la durée choisie par la team, 1 an par défaut). Ces données servent uniquement au fonctionnement de la team, ne sont ni vendues ni transmises, sauf les messages que la team choisit d’envoyer sur son Discord. Vous pouvez à tout moment exporter vos données (JSON) ou supprimer votre compte Esport ci-dessous ; le Fondateur peut aussi le faire à votre demande. Membre mineur : l’accord d’un représentant légal est nécessaire.';
 
 // ------------------------------------------------------------------ Adresse du Worker
 
@@ -402,10 +484,6 @@ export interface ClientEsport {
   membres(id: string): Promise<Membre[]>;
   modifierMembre(id: string, membreId: string, m: Partial<{ roleId: string; posteJeu: string | null; statut: 'actif' | 'suspendu' }>): Promise<Membre>;
   retirerMembre(id: string, membreId: string): Promise<void>;
-  invitations(id: string): Promise<Invitation[]>;
-  creerInvitation(id: string, i: { roleId: string; joursValidite: number; utilisationsMax: number; libelle?: string }): Promise<{ code: string; invitation: Invitation }>;
-  revoquerInvitation(id: string, invitationId: string): Promise<void>;
-  accepterInvitation(code: string): Promise<{ team: Team; role: { id: string; nom: string; couleur: string } | null }>;
   journal(id: string, filtres?: FiltresJournal): Promise<PageJournal>;
   exporterJournal(id: string, filtres?: Omit<FiltresJournal, 'avant' | 'limite'>): Promise<FichierServeur>;
   reglagesJournal(id: string): Promise<ReglagesJournal>;
@@ -415,6 +493,19 @@ export interface ClientEsport {
   exporterCompte(compte: string): Promise<unknown>;
   /** Fondateur : suppression (anonymisation) du compte Esport d'un membre. */
   supprimerCompte(compte: string): Promise<void>;
+  /** Ajoute un compte existant (déjà visible) à une team, avec un rôle. */
+  ajouterMembre(id: string, m: { compte: string; roleId: string; posteJeu?: string }): Promise<CompteEsport | null>;
+  // Premier niveau (toutes teams)
+  /** Page Membres : comptes de toutes les teams où l'on voit les membres. */
+  annuaire(): Promise<Annuaire>;
+  /** Dashboard : résumé de toutes ses teams (une seule requête). */
+  tableau(): Promise<Tableau>;
+  /** Fondateur : contrôle une invitation directe AVANT de créer le compte du hub (rien n'est écrit). */
+  verifierPreinscription(c: { pseudo: string; affectations: Affectation[] }): Promise<void>;
+  /** Fondateur : pré-enregistre le compte du hub tout juste créé, avec ses teams. */
+  preinscrire(c: { compte: string; pseudo: string; affectations: Affectation[] }): Promise<CompteEsport | null>;
+  /** Fondateur : compte supprimé dans l'Administration → retiré de l'Esport. */
+  retirerCompte(compte: string): Promise<{ ok: boolean; retire: boolean; teams: number }>;
   notifications(): Promise<Notifications>;
   marquerLues(tout: boolean, ids?: string[]): Promise<Notifications>;
   // Résumés de réunions (phase 3)
@@ -540,12 +631,12 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     retirerMembre: async (id, membreId) => {
       await appel(`${t(id)}/membres/${encodeURIComponent(membreId)}`, 'DELETE');
     },
-    invitations: async id => (await appel<{ invitations: Invitation[] }>(`${t(id)}/invitations`)).invitations,
-    creerInvitation: (id, i) => appel(`${t(id)}/invitations`, 'POST', i),
-    revoquerInvitation: async (id, invitationId) => {
-      await appel(`${t(id)}/invitations/${encodeURIComponent(invitationId)}`, 'DELETE');
+    ajouterMembre: (id, m) => appel(`${t(id)}/membres`, 'POST', m),
+    annuaire: () => appel('/membres'),
+    tableau: () => appel('/dashboard'),
+    verifierPreinscription: async c => {
+      await appel('/comptes', 'POST', { ...c, verifier: true });
     },
-    accepterInvitation: code => appel('/invitations/accepter', 'POST', { code: code.trim() }),
     journal: (id, f = {}) => appel(`${t(id)}/journal${requeteUrl({ ...f })}`),
     exporterJournal: (id, f = {}) => appel(`${t(id)}/journal/export.csv${requeteUrl({ ...f, format: 'json' })}`),
     reglagesJournal: id => appel(`${t(id)}/journal/reglages`),
@@ -555,6 +646,8 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     supprimerCompte: async compte => {
       await appel(`/admin/comptes/${encodeURIComponent(compte)}`, 'DELETE');
     },
+    preinscrire: c => appel('/comptes', 'POST', c),
+    retirerCompte: compte => appel(`/admin/comptes/${encodeURIComponent(compte)}/hub`, 'DELETE'),
     notifications: () => appel('/notifications'),
     marquerLues: (tout, ids) => appel('/notifications/lues', 'POST', tout ? { tout: true } : { ids: ids ?? [] }),
     // ---- Résumés de réunions

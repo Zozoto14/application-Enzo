@@ -75,7 +75,11 @@ export async function banc({ creationTeams = 'fondateur', relaisAncien = false, 
   return { base, stockage, envRelais, horloge, appel, envoyer, brut, session, jetonDeProfil: c => jetonDeProfil(JETON_MAITRE, c) };
 }
 
-/** Une team créée par le Fondateur, ses rôles par clé, et un code d'invitation par rôle demandé. */
+/**
+ * Une team créée par le Fondateur, ses rôles par clé, et des membres : chaque
+ * compte ouvre sa session (pseudo), puis le Fondateur l'ajoute à la team avec
+ * son rôle (invitation directe, sans code).
+ */
 export async function teamAvecMembres(b, { nom = 'Team Alpha', preset = 'valorant_complet', modules, membres = {} } = {}) {
   const fondateur = await b.session('principal', 'Fondateur');
   const creation = await b.appel('/teams', { methode: 'POST', jeton: fondateur, corps: { nom, jeu: 'valorant', preset, modules } });
@@ -85,9 +89,8 @@ export async function teamAvecMembres(b, { nom = 'Team Alpha', preset = 'valoran
   const sessions = { fondateur };
   for (const [compte, { pseudo, role }] of Object.entries(membres)) {
     const s = await b.session(compte, pseudo);
-    const inv = await b.appel(`/teams/${teamId}/invitations`, { methode: 'POST', jeton: fondateur, corps: { roleId: roles[role].id } });
-    const acc = await b.appel('/invitations/accepter', { methode: 'POST', jeton: s, corps: { code: inv.corps.code } });
-    if (acc.statut !== 200) throw new Error(`acceptation ${compte} : ${acc.statut} ${JSON.stringify(acc.corps)}`);
+    const ajout = await b.appel(`/teams/${teamId}/membres`, { methode: 'POST', jeton: fondateur, corps: { compte, roleId: roles[role].id } });
+    if (ajout.statut !== 200) throw new Error(`ajout ${compte} : ${ajout.statut} ${JSON.stringify(ajout.corps)}`);
     sessions[compte] = s;
   }
   const membresListe = (await b.appel(`/teams/${teamId}/membres`, { jeton: fondateur })).corps.membres;

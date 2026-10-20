@@ -30,6 +30,8 @@ export const TYPES_EVENEMENTS = [
   'role.updated',
   'role.deleted',
   'member.joined',
+  // Invitation directe : ajout par un gestionnaire (compte créé depuis l'Esport ou existant).
+  'member.added',
   'member.role_changed',
   'member.status_changed',
   'member.removed',

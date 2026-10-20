@@ -269,10 +269,12 @@ test('événements : planning, membres, rôles, tâches et résumés mis en file
   for (const a of p.discord.appels) assert.equal(a.url, URL_TEST);
   assert.ok((await p.file()).every(f => f.statut === 'envoye'));
 
-  // Phase 1 : membre rejoint (invitation acceptée).
-  const inv = await p.api(`/teams/${p.A.teamId}/invitations`, p.s.fondateur, { methode: 'POST', corps: { roleId: p.A.roles.joueur.id } });
-  const nouveau = await p.b.session('nou12345', 'Nouveau');
-  await p.api('/invitations/accepter', nouveau, { methode: 'POST', corps: { code: inv.corps.code } });
+  // Membre rejoint : compte créé depuis l'Esport (invitation directe), annoncé à sa première session.
+  const avant = p.discord.contenus().length;
+  const pre = await p.api('/comptes', p.s.fondateur, { methode: 'POST', corps: { compte: 'nou12345', pseudo: 'Nouveau', affectations: [{ teamId: p.A.teamId, roleId: p.A.roles.joueur.id }] } });
+  assert.equal(pre.statut, 200);
+  assert.equal(p.discord.contenus().length, avant, 'rien d’annoncé tant que le compte n’est pas connecté');
+  await p.b.session('nou12345');
   assert.match(p.discord.contenus().at(-1), /\*\*Nouveau\*\* a rejoint Team Alpha \(Joueur\)/);
 });
 

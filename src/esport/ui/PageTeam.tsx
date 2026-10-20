@@ -54,6 +54,7 @@ export function PageTeam({
   sectionInitiale = 'accueil',
   onQuitter,
   onExporter,
+  onMembresGlobal,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
@@ -62,6 +63,8 @@ export function PageTeam({
   sectionInitiale?: SectionTeam;
   onQuitter(): void;
   onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
+  /** Page « Membres » de premier niveau (inviter, ajouter un compte existant). */
+  onMembresGlobal?(): void;
 }) {
   const [detail, setDetail] = useState<DetailTeam | undefined>();
   const [section, setSection] = useState<SectionTeam>(sectionInitiale);
@@ -138,7 +141,7 @@ export function PageTeam({
   );
 
   let contenu: React.ReactNode;
-  if (active === 'membres') contenu = <MembresRoles theme={theme} client={client} detail={detail} large={large} onExporter={onExporter} />;
+  if (active === 'membres') contenu = <MembresRoles theme={theme} client={client} detail={detail} large={large} onExporter={onExporter} onMembresGlobal={onMembresGlobal} />;
   else if (active === 'journal') contenu = <Journal theme={theme} client={client} detail={detail} onExporter={onExporter} />;
   else if (active === 'parametres') contenu = <Parametres theme={theme} client={client} detail={detail} onChange={recharger} onSupprimee={onQuitter} onExporter={onExporter} />;
   else if (active === 'module:meeting_summaries') contenu = <SectionResumes theme={theme} client={client} detail={detail} large={large} />;

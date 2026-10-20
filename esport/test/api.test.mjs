@@ -157,6 +157,7 @@ test('isolation : un membre de la team A n’accède JAMAIS à la team B (404 pa
     ['DELETE', `/teams/${teamB}/roles/${roleB}`],
     ['GET', `/teams/${teamB}/invitations`],
     ['POST', `/teams/${teamB}/invitations`, { roleId: roleB }],
+    ['POST', `/teams/${teamB}/membres`, { compte: 'lea12345', roleId: roleB }],
     ['GET', `/teams/${teamB}/journal`],
     ['GET', `/teams/${teamB}/m/planning`],
   ];
@@ -169,7 +170,11 @@ test('isolation : un membre de la team A n’accède JAMAIS à la team B (404 pa
   }
   // Les identifiants d'une autre team, glissés sous SA team, ne passent pas non plus.
   assert.equal((await b.appel(`/teams/${a.teamId}/membres/${membreB}`, { methode: 'DELETE', jeton: max })).statut, 404);
-  assert.equal((await b.appel(`/teams/${a.teamId}/invitations`, { methode: 'POST', jeton: max, corps: { roleId: roleB } })).statut, 404);
+  assert.equal((await b.appel(`/teams/${a.teamId}/membres`, { methode: 'POST', jeton: max, corps: { compte: 'tom12345', roleId: roleB } })).statut, 404);
+  // Un compte d'une team qu'il ne voit pas n'est pas ajoutable non plus (on n'ajoute pas un inconnu).
+  const ajout = await b.appel(`/teams/${a.teamId}/membres`, { methode: 'POST', jeton: max, corps: { compte: 'tom12345', roleId: a.roles.joueur.id } });
+  assert.equal(ajout.statut, 404);
+  assert.equal(ajout.corps.code, 'compte-introuvable');
   // La liste ne montre que ses teams.
   const liste = (await b.appel('/teams', { jeton: lea })).corps.teams.map(t => t.nom);
   assert.deepEqual(liste, ['Team A']);
@@ -195,12 +200,13 @@ test('rôles : matrice côté serveur (Joueur ne peut ni inviter ni lire le jour
   const { teamId, sessions, roles } = await teamAvecMembres(b, { membres: MEMBRES });
   const lea = sessions.lea12345;
   assert.equal((await b.appel(`/teams/${teamId}/membres`, { jeton: lea })).statut, 200);
-  assert.equal((await b.appel(`/teams/${teamId}/invitations`, { methode: 'POST', jeton: lea, corps: { roleId: roles.joueur.id } })).statut, 403);
+  assert.equal((await b.appel(`/teams/${teamId}/membres`, { methode: 'POST', jeton: lea, corps: { compte: 'max12345', roleId: roles.joueur.id } })).statut, 403);
   assert.equal((await b.appel(`/teams/${teamId}/journal`, { jeton: lea })).statut, 403);
   assert.equal((await b.appel(`/teams/${teamId}`, { methode: 'PATCH', jeton: lea, corps: { nom: 'Team Léa' } })).statut, 403);
   assert.equal((await b.appel(`/teams/${teamId}`, { methode: 'DELETE', jeton: lea })).statut, 403);
   assert.equal((await b.appel(`/teams/${teamId}/journal`, { jeton: sessions.max12345 })).statut, 200);
-  assert.equal((await b.appel(`/teams/${teamId}/invitations`, { methode: 'POST', jeton: sessions.max12345, corps: { roleId: roles.joueur.id } })).statut, 200);
+  // Le Manager a le droit d'ajouter (le refus vient du compte, déjà membre).
+  assert.equal((await b.appel(`/teams/${teamId}/membres`, { methode: 'POST', jeton: sessions.max12345, corps: { compte: 'lea12345', roleId: roles.joueur.id } })).corps.code, 'deja-membre');
   assert.equal((await b.appel(`/teams/${teamId}`, { methode: 'DELETE', jeton: sessions.max12345 })).statut, 403, 'seul le Propriétaire supprime la team');
   const detail = (await b.appel(`/teams/${teamId}`, { jeton: lea })).corps;
   assert.ok(detail.moi.permissions.includes('planning.view'));
@@ -219,9 +225,10 @@ test('anti-escalade : un Manager ne crée pas de rôle plus fort que lui, n’in
   assert.equal(r.statut, 200);
   const capitaine = r.corps;
   assert.equal(capitaine.systeme, false);
-  // Hiérarchie des rôles système : un Manager invite un Coach (rôle placé sous le sien).
-  assert.equal((await b.appel(`/teams/${teamId}/invitations`, { methode: 'POST', jeton: max, corps: { roleId: roles.coach.id } })).statut, 200);
-  r = await b.appel(`/teams/${teamId}/invitations`, { methode: 'POST', jeton: max, corps: { roleId: roles.proprietaire.id } });
+  // Hiérarchie des rôles système : un Manager ajoute un Coach (rôle placé sous le sien) ; le refus vient
+  // ici du compte, déjà membre. Jamais un Propriétaire (escalade, avant tout autre contrôle).
+  assert.equal((await b.appel(`/teams/${teamId}/membres`, { methode: 'POST', jeton: max, corps: { compte: 'lea12345', roleId: roles.coach.id } })).corps.code, 'deja-membre');
+  r = await b.appel(`/teams/${teamId}/membres`, { methode: 'POST', jeton: max, corps: { compte: 'lea12345', roleId: roles.proprietaire.id } });
   assert.equal(r.statut, 403);
   assert.equal(r.corps.code, 'escalade');
   r = await b.appel(`/teams/${teamId}/membres/${membres.lea12345.id}`, { methode: 'PATCH', jeton: max, corps: { roleId: roles.proprietaire.id } });
@@ -300,91 +307,34 @@ test('suspension : le membre suspendu n’ouvre plus la team (403) ; levée → 
   assert.equal((await b.appel(`/teams/${teamId}/membres/${membres.principal.id}`, { methode: 'PATCH', jeton: sessions.max12345, corps: { statut: 'suspendu' } })).statut, 403);
 });
 
-// ------------------------------------------------------------------ Invitations
+// ------------------------------------------------------------------ Codes d'invitation (retirés)
 
-test('invitations : code haché en base, montré une fois ; usage unique ; expiration ; révocation ; déjà membre', async () => {
+test('codes esp_ retirés : création et acceptation → 410 sans rien écrire ; les anciennes restent listables et révocables', async () => {
   const b = await banc();
   const { teamId, sessions, roles } = await teamAvecMembres(b);
   const f = sessions.fondateur;
-  const r = await b.appel(`/teams/${teamId}/invitations`, { methode: 'POST', jeton: f, corps: { roleId: roles.joueur.id, joursValidite: 2, libelle: 'Pour Léa' } });
-  assert.equal(r.statut, 200);
-  const { code, invitation } = r.corps;
-  assert.match(code, /^esp_[A-Za-z0-9_-]{32}$/);
-  const ligne = await b.base.premier('SELECT * FROM invitations WHERE id = ?', [invitation.id]);
-  assert.ok(!JSON.stringify(ligne).includes(code), 'le code n’est jamais stocké en clair');
-  assert.match(ligne.jeton_hash, /^[0-9a-f]{64}$/);
-  const liste = (await b.appel(`/teams/${teamId}/invitations`, { jeton: f })).corps.invitations;
-  assert.ok(!JSON.stringify(liste).includes(code), 'ni renvoyé par la liste');
-  const journal = await b.base.tous('SELECT meta FROM journal', []);
-  assert.ok(!JSON.stringify(journal).includes(code), 'ni écrit dans le journal');
-
+  let r = await b.appel(`/teams/${teamId}/invitations`, { methode: 'POST', jeton: f, corps: { roleId: roles.joueur.id } });
+  assert.equal(r.statut, 410);
+  assert.equal(r.corps.code, 'codes-retires');
+  assert.equal(Number((await b.base.premier('SELECT COUNT(*) AS n FROM invitations', [])).n), 0);
   const lea = await b.session('lea12345', 'Léa');
-  const tom = await b.session('tom12345', 'Tom');
-  let a = await b.appel('/invitations/accepter', { methode: 'POST', jeton: lea, corps: { code } });
-  assert.equal(a.statut, 200);
-  assert.equal(a.corps.role.nom, 'Joueur');
-  a = await b.appel('/invitations/accepter', { methode: 'POST', jeton: tom, corps: { code } });
-  assert.equal(a.statut, 410);
-  assert.equal(a.corps.code, 'invitation-epuisee');
-  a = await b.appel('/invitations/accepter', { methode: 'POST', jeton: lea, corps: { code } });
-  assert.equal(a.statut, 410);
-
-  // Plusieurs utilisations, puis révocation.
-  const multi = (await b.appel(`/teams/${teamId}/invitations`, { methode: 'POST', jeton: f, corps: { roleId: roles.remplacant.id, utilisationsMax: 2 } })).corps;
-  assert.equal((await b.appel('/invitations/accepter', { methode: 'POST', jeton: tom, corps: { code: multi.code } })).statut, 200);
-  assert.equal((await b.appel('/invitations/accepter', { methode: 'POST', jeton: tom, corps: { code: multi.code } })).corps.code, 'deja-membre');
-  assert.equal((await b.appel(`/teams/${teamId}/invitations/${multi.invitation.id}`, { methode: 'DELETE', jeton: f })).statut, 200);
-  const zoe = await b.session('zoe12345', 'Zoé');
-  a = await b.appel('/invitations/accepter', { methode: 'POST', jeton: zoe, corps: { code: multi.code } });
-  assert.equal(a.statut, 410);
-  assert.equal(a.corps.code, 'invitation-revoquee');
-
-  // Expiration.
-  const courte = (await b.appel(`/teams/${teamId}/invitations`, { methode: 'POST', jeton: f, corps: { roleId: roles.joueur.id, joursValidite: 1 } })).corps;
-  b.horloge.t += 25 * 3_600_000;
-  const zoe2 = await b.session('zoe12345');
-  a = await b.appel('/invitations/accepter', { methode: 'POST', jeton: zoe2, corps: { code: courte.code } });
-  assert.equal(a.statut, 410);
-  assert.equal(a.corps.code, 'invitation-expiree');
-  const etats = (await b.appel(`/teams/${teamId}/invitations`, { jeton: await b.session('principal') })).corps.invitations.map(i => i.etat).sort();
-  assert.deepEqual(etats, ['epuisee', 'expiree', 'revoquee']);
-  // Bornes.
-  assert.equal((await b.appel(`/teams/${teamId}/invitations`, { methode: 'POST', jeton: await b.session('principal'), corps: { roleId: roles.joueur.id, joursValidite: 90 } })).statut, 400);
-});
-
-test('invitations : pseudo requis pour accepter ; compte non relié (sans session) refusé', async () => {
-  const b = await banc();
-  const { teamId, sessions, roles } = await teamAvecMembres(b);
-  const { code } = (await b.appel(`/teams/${teamId}/invitations`, { methode: 'POST', jeton: sessions.fondateur, corps: { roleId: roles.joueur.id } })).corps;
-  const sansPseudo = await b.session('neo12345');
-  const r = await b.appel('/invitations/accepter', { methode: 'POST', jeton: sansPseudo, corps: { code } });
-  assert.equal(r.statut, 428);
-  assert.equal((await b.appel('/invitations/accepter', { methode: 'POST', corps: { code } })).statut, 401);
-});
-
-test('invitations : anti-force brute (par compte et par adresse) → 429 après 5 codes faux', async () => {
-  const b = await banc();
-  const { teamId, sessions, roles } = await teamAvecMembres(b);
-  const { code } = (await b.appel(`/teams/${teamId}/invitations`, { methode: 'POST', jeton: sessions.fondateur, corps: { roleId: roles.joueur.id } })).corps;
-  const pirate = await b.session('pir12345', 'Pirate');
-  const statuts = [];
-  for (let i = 0; i < 7; i++) {
-    statuts.push((await b.appel('/invitations/accepter', { methode: 'POST', jeton: pirate, corps: { code: `esp_${String(i).repeat(32).slice(0, 32)}` } })).statut);
-  }
-  assert.deepEqual(statuts.slice(0, 6), [404, 404, 404, 404, 404, 429]);
-  const r = await b.appel('/invitations/accepter', { methode: 'POST', jeton: pirate, corps: { code } });
-  assert.equal(r.statut, 429, 'même le bon code attend la fin du délai');
-  assert.ok(r.corps.attente > 0);
-  assert.ok(Number(r.entetes.get('Retry-After')) > 0);
-  // Par adresse : un autre compte depuis la même IP est freiné aussi.
-  const ip = '203.0.113.77';
-  const autre = await b.session('aut12345', 'Autre');
-  for (let i = 0; i < 5; i++) await b.appel('/invitations/accepter', { methode: 'POST', jeton: autre, ip, corps: { code: 'faux' } });
-  const complice = await b.session('com12345', 'Complice');
-  assert.equal((await b.appel('/invitations/accepter', { methode: 'POST', jeton: complice, ip, corps: { code } })).statut, 429);
-  // Le délai passé, le bon code marche.
-  b.horloge.t += 2 * 3_600_000;
-  assert.equal((await b.appel('/invitations/accepter', { methode: 'POST', jeton: await b.session('pir12345'), corps: { code } })).statut, 200);
+  r = await b.appel('/invitations/accepter', { methode: 'POST', jeton: lea, corps: { code: `esp_${'a'.repeat(32)}` } });
+  assert.equal(r.statut, 410);
+  assert.equal(r.corps.code, 'codes-retires');
+  assert.equal(Number((await b.base.premier('SELECT COUNT(*) AS n FROM membres WHERE compte_id = ?', ['lea12345'])).n), 0);
+  // Sans session : 401 (comme toute route privée).
+  assert.equal((await b.appel('/invitations/accepter', { methode: 'POST', corps: { code: 'x' } })).statut, 401);
+  // Une invitation d'avant (base existante) se liste et s'annule encore.
+  const id = '00000000-0000-4000-8000-000000000001';
+  await b.base.executer(
+    'INSERT INTO invitations (id, team_id, role_id, jeton_hash, libelle, expire_le, utilisations_max, utilisations, cree_par, cree_le) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?)',
+    [id, teamId, roles.joueur.id, 'f'.repeat(64), 'Ancienne', '2026-12-01T00:00:00.000Z', 'principal', '2026-10-01T00:00:00.000Z'],
+  );
+  assert.deepEqual((await b.appel(`/teams/${teamId}/invitations`, { jeton: f })).corps.invitations.map(i => i.etat), ['active']);
+  assert.equal((await b.appel(`/teams/${teamId}/invitations/${id}`, { methode: 'DELETE', jeton: f })).statut, 200);
+  assert.deepEqual((await b.appel(`/teams/${teamId}/invitations`, { jeton: f })).corps.invitations.map(i => i.etat), ['revoquee']);
+  // Un Joueur n'y touche pas.
+  assert.equal((await b.appel(`/teams/${teamId}/invitations`, { methode: 'POST', jeton: lea, corps: { roleId: roles.joueur.id } })).statut, 404);
 });
 
 // ------------------------------------------------------------------ Journal, notifications
@@ -395,7 +345,7 @@ test('journal : tout est journalisé (création, invitation, arrivée, rôle, mo
   await b.appel(`/teams/${teamId}/membres/${membres.lea12345.id}`, { methode: 'PATCH', jeton: sessions.fondateur, corps: { roleId: roles.coach.id } });
   const r = await b.appel(`/teams/${teamId}/journal`, { jeton: sessions.max12345 });
   const actions = r.corps.entrees.map(e => e.action);
-  for (const a of ['team.created', 'invitation.created', 'member.joined', 'member.role_changed']) assert.ok(actions.includes(a), a);
+  for (const a of ['team.created', 'member.added', 'member.joined', 'member.role_changed']) assert.ok(actions.includes(a), a);
   const changement = r.corps.entrees.find(e => e.action === 'member.role_changed');
   assert.deepEqual([changement.meta.de, changement.meta.vers], ['Joueur', 'Coach']);
   assert.equal(r.corps.noms[changement.meta.compte], 'Léa');

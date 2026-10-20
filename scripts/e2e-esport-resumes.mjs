@@ -131,7 +131,6 @@ try {
   const faucons = (await api('/teams', sessFond, { methode: 'POST', corps: { nom: 'Faucons Valorant', jeu: 'valorant', preset: 'valorant_complet' } })).corps.team;
   const teamB = (await api('/teams', sessFond, { methode: 'POST', corps: { nom: 'Team B', jeu: 'valorant', preset: 'valorant_complet' } })).corps.team;
   const roles = (await api(`/teams/${faucons.id}/roles`, sessFond)).corps.roles;
-  const codeLea = (await api(`/teams/${faucons.id}/invitations`, sessFond, { methode: 'POST', corps: { roleId: roles.find(r => r.cle === 'joueur').id } })).corps.code;
 
   // ================================================================ PC : compte du hub de Léa
   log('PC : Administration, compte de Léa (« Esport seulement »)');
@@ -171,11 +170,14 @@ try {
   await lea.getByTestId('esport-profil-initial').waitFor({ timeout: 30_000 });
   await lea.getByTestId('esport-pseudo').fill('Léa');
   await lea.getByTestId('esport-pseudo-valider').click();
+  await lea.getByTestId('esport-dashboard').waitFor({ timeout: 20_000 });
+  // Invitation directe, sans code : le Fondateur ajoute le compte de Léa à la team.
+  const idLeaAjout = (await esport.base.premier("SELECT id FROM comptes WHERE pseudo = 'Léa'", [])).id;
+  verifier((await api(`/teams/${faucons.id}/membres`, sessFond, { methode: 'POST', corps: { compte: idLeaAjout, roleId: roles.find(r => r.cle === 'joueur').id } })).statut === 200, 'Léa ajoutée à Faucons Valorant (Joueur), sans code');
+  await lea.getByTestId('esport-nav-teams').click();
   await lea.getByTestId('esport-teams').waitFor({ timeout: 20_000 });
-  verifier((await lea.getByTestId('esport-redacteur').count()) === 0, 'Léa (Joueur) : pas de bloc « Résumés à rédiger »');
-  await lea.getByTestId('esport-code').fill(codeLea);
-  await lea.getByTestId('esport-rejoindre-valider').click();
   await lea.getByTestId('esport-team-faucons-valorant').waitFor({ timeout: 20_000 });
+  verifier((await lea.getByTestId('esport-redacteur').count()) === 0, 'Léa (Joueur) : pas de bloc « Résumés à rédiger »');
   await lea.getByTestId('esport-team-faucons-valorant').click();
   await lea.getByTestId('esport-onglet-module-meeting_summaries').click();
   await lea.getByTestId('esport-depot-formulaire').waitFor({ timeout: 20_000 });
@@ -199,6 +201,10 @@ try {
   // ================================================================ PC : le Fondateur rédige
   log('PC : boîte de réception du rédacteur');
   await ouvrirEsport(pc);
+  // Dashboard (premier écran) : le compteur global des résumés à rédiger.
+  await pc.getByTestId('esport-dashboard-resumes-nombre').waitFor({ timeout: 30_000 });
+  verifier((await pc.getByTestId('esport-dashboard-resumes-nombre').innerText()).trim() === '1', 'Dashboard : 1 résumé à rédiger');
+  await pc.getByTestId('esport-nav-teams').click();
   await pc.getByTestId('esport-redacteur').waitFor({ timeout: 30_000 });
   verifier(/1 en attente/.test(await pc.getByTestId('esport-redacteur-compteur').innerText()), 'compteur : 1 en attente');
   verifier((await pc.getByTestId('esport-redacteur-nouveaux').count()) === 1, 'badge « Nouveau » sur l’accueil Esport');

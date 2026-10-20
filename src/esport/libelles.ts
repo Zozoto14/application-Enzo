@@ -80,8 +80,10 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
       return `${qui} a changé le rôle de ${nom(noms, m.compte)} de ${texte(m.de)} à ${texte(m.vers)}`;
     case 'member.status_changed':
       return `${qui} a ${m.statut === 'suspendu' ? 'suspendu' : 'réactivé'} ${nom(noms, m.compte)}`;
+    case 'member.added':
+      return `${qui} a ajouté ${nom(noms, m.compte)} à la team${typeof m.role === 'string' ? ` (${m.role})` : ''}${m.invite ? ' : invitation envoyée' : ''}`;
     case 'member.removed':
-      return `${qui} a retiré ${nom(noms, m.compte)} de la team`;
+      return m.suppression === 'administration' ? `${typeof m.pseudo === 'string' ? m.pseudo : nom(noms, m.compte)} a été retiré (compte supprimé dans l’Administration)` : `${qui} a retiré ${nom(noms, m.compte)} de la team`;
     case 'member.left':
       return m.suppression ? `${qui} a quitté la team (données supprimées)` : `${qui} a quitté la team`;
     case 'invitation.created':

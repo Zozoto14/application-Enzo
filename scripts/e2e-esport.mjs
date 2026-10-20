@@ -3,11 +3,13 @@
  *
  *  - faux relais (le vrai relais/worker.mjs, version 7) et serveur Esport local (esport/outils/
  *    serveur-local.mjs : même API que le Worker, base SQLite en mémoire) ;
- *  - PC (1440 × 900), le Fondateur : tuile Esport, pseudo, assistant de création en 3 étapes,
- *    invitation (code montré une fois), seconde team « Team B » ;
- *  - iPhone (390 × 844), Léa (son propre compte : jeton de profil) : pseudo, « Rejoindre une team »
- *    avec le code, page de la team limitée à son rôle (pas de Journal, pas d'invitation) ; accès
- *    restreint vérifié côté serveur (la Team B répond 404) ;
+ *  - PC (1440 × 900), le Fondateur : tuile Esport (Dashboard · Teams · Membres), pseudo, assistant
+ *    de création en 3 étapes, seconde team « Team B » ;
+ *  - Léa a un compte « Esport seulement » créé dans l'Administration (avant l'invitation directe) :
+ *    le Fondateur l'ajoute à sa team depuis Esport › Membres (« Ajouter à une team »), sans code ;
+ *  - iPhone (390 × 844), Léa (son propre compte : jeton de profil) : pseudo, la team est déjà là,
+ *    page de la team limitée à son rôle (pas de Journal, pas d'invitation) ; accès restreint vérifié
+ *    côté serveur (la Team B répond 404) ;
  *  - retour au Fondateur : Journal (« Léa a rejoint la team (Joueur) »), matrice des rôles ;
  *  - iPad (1024 × 1366) : rendu de la page de la team ;
  *  - serveur Esport absent : « Esport pas encore activé », le reste de l'app marche.
@@ -114,11 +116,15 @@ async function confirmerIdentite(page) {
 }
 
 async function ouvrirEsport(page) {
+  // Déjà dans une app (l'Esport) : retour au hub d'abord.
+  if (await page.getByTestId('app-esport').count()) await page.getByTestId('retour-hub').first().click();
   await allerPageApplications(page);
   const tuile = tuileApp(page, 'esport').first();
   await tuile.waitFor({ timeout: 30_000 });
   await tuile.click();
   await page.getByTestId('app-esport').waitFor({ timeout: 20_000 });
+  // L'onglet de l'app garde sa page : on repart de la liste des teams.
+  if (await page.getByTestId('esport-nav-teams').count()) await page.getByTestId('esport-nav-teams').click();
 }
 
 async function api(chemin, jeton, { methode = 'GET', corps } = {}) {
@@ -128,7 +134,6 @@ async function api(chemin, jeton, { methode = 'GET', corps } = {}) {
 
 const { chromium } = chargerPlaywright();
 const navigateur = await chromium.launch({ headless: true });
-let codeInvitation;
 try {
   // ================================================================ PC : le Fondateur
   log('PC : coffre du Fondateur, relié au relais (jeton maître)');
@@ -139,7 +144,11 @@ try {
   verifier((await pc.getByTestId('esport-mention').innerText()).includes('en clair sur le serveur'), 'mention : données Esport en clair côté serveur');
   await pc.getByTestId('esport-pseudo').fill('Fondateur');
   await pc.getByTestId('esport-pseudo-valider').click();
+  await pc.getByTestId('esport-dashboard').waitFor({ timeout: 20_000 });
+  verifier((await pc.getByTestId('esport-nav-dashboard').count()) === 1 && (await pc.getByTestId('esport-nav-membres').count()) === 1, 'navigation de premier niveau : Dashboard · Teams · Membres');
+  await pc.getByTestId('esport-nav-teams').click();
   await pc.getByTestId('esport-teams').waitFor({ timeout: 20_000 });
+  verifier((await pc.getByTestId('esport-rejoindre').count()) === 0, 'plus de « Rejoindre une team avec un code »');
   await capture(pc, '01-pc-teams-vide');
 
   log('PC : assistant de création (3 étapes)');
@@ -161,13 +170,9 @@ try {
   verifier((await pc.getByTestId('esport-onglet-module-planning').count()) === 1, 'barre latérale : Planning activé (écran livré en phase 2)');
   verifier((await pc.getByTestId('esport-onglet-journal').count()) === 1, 'barre latérale : Journal');
 
-  log('PC : invitation (rôle Joueur)');
-  await pc.getByTestId('esport-invitation-libelle').fill('Pour Léa');
-  await pc.getByTestId('esport-invitation-creer').click();
-  await pc.getByTestId('esport-invitation-code').waitFor({ timeout: 20_000 });
-  codeInvitation = (await pc.getByTestId('esport-invitation-code').innerText()).trim();
-  verifier(/^esp_[A-Za-z0-9_-]{32}$/.test(codeInvitation), `code d’invitation affiché (${codeInvitation.slice(0, 8)}…)`);
-  await capture(pc, '05-pc-membres-invitation');
+  verifier((await pc.getByTestId('esport-invitation-creer').count()) === 0, 'plus de création de code esp_ dans la team');
+  verifier((await pc.getByTestId('esport-inviter').count()) === 1, 'Membres et rôles : renvoi vers la page Membres pour inviter');
+  await capture(pc, '05-pc-membres-team');
 
   log('PC : une seconde team, sans Léa');
   await pc.getByTestId('esport-team-retour').first().click();
@@ -231,31 +236,44 @@ try {
   await lea.getByTestId('esport-pseudo').fill('Léa');
   await lea.getByTestId('esport-riot').fill('Lea#EUW');
   await lea.getByTestId('esport-pseudo-valider').click();
+  await lea.getByTestId('esport-dashboard-vide').waitFor({ timeout: 20_000 });
+  verifier(true, 'Léa, sans team : Dashboard vide (aucun code demandé)');
+
+  // ================================================================ PC : Esport › Membres › « Ajouter à une team » (compte existant)
+  log('PC : Esport › Membres, ajout du compte existant de Léa à Faucons Valorant (Joueur)');
+  await ouvrirEsport(pc);
+  await pc.getByTestId('esport-nav-membres').click();
+  await pc.getByTestId('esport-membres-global').waitFor({ timeout: 20_000 });
+  const idLea = (await esport.base.premier("SELECT id FROM comptes WHERE pseudo = 'Léa'", [])).id;
+  await pc.getByTestId(`esport-compte-${idLea}`).waitFor({ timeout: 20_000 });
+  await pc.getByLabel('Gérer Léa').click();
+  const faucons0 = (await esport.base.premier("SELECT id FROM teams WHERE nom = 'Faucons Valorant'", [])).id;
+  await pc.getByTestId(`esport-ajout-team-${idLea}-${faucons0}`).click();
+  await pc.getByTestId(`esport-ajout-poste-${idLea}`).fill('Duelliste');
+  await capture(pc, '10-pc-membres-ajout');
+  await pc.getByTestId(`esport-ajout-valider-${idLea}`).click();
+  await pc.getByTestId('esport-membres-global-avis').waitFor({ timeout: 20_000 });
+  verifier(/Léa est ajouté à Faucons Valorant/.test(await pc.getByTestId('esport-membres-global-avis').innerText()), 'Membres : Léa ajoutée à Faucons Valorant');
+
+  log('iPhone : la team de Léa apparaît, sans code');
+  await lea.getByTestId('esport-nav-teams').click();
   await lea.getByTestId('esport-teams').waitFor({ timeout: 20_000 });
   verifier((await lea.getByTestId('esport-creer').count()) === 0, 'Léa : pas de bouton « Créer une team » (réservé au Fondateur)');
-  await lea.getByTestId('esport-code').fill('esp_mauvaiscodemauvaiscodemauvaiscode');
-  await lea.getByTestId('esport-rejoindre-valider').click();
-  await lea.getByTestId('esport-teams-erreur').waitFor({ timeout: 20_000 });
-  verifier(/inconnu/i.test(await lea.getByTestId('esport-teams-erreur').innerText()), 'code faux : refusé');
-  await lea.getByTestId('esport-code').fill(codeInvitation);
-  await lea.getByTestId('esport-rejoindre-valider').click();
-  await lea.getByTestId('esport-teams-avis').waitFor({ timeout: 20_000 });
-  verifier(/Bienvenue dans Faucons Valorant \(Joueur\)/.test(await lea.getByTestId('esport-teams-avis').innerText()), 'Léa a rejoint Faucons Valorant (Joueur)');
+  verifier((await lea.getByTestId('esport-code').count()) === 0, 'Léa : aucun champ de code');
   await lea.getByTestId('esport-team-faucons-valorant').waitFor({ timeout: 20_000 });
   verifier((await lea.getByTestId('esport-team-team-b').count()) === 0, 'Léa ne voit pas la Team B');
-  await capture(lea, '10-iphone-lea-teams');
+  await capture(lea, '11-iphone-lea-teams');
   await lea.getByTestId('esport-team-faucons-valorant').click();
   await lea.getByTestId('esport-barre').waitFor({ timeout: 20_000 });
   verifier((await lea.getByTestId('esport-onglet-journal').count()) === 0, 'Joueur : pas de Journal');
   verifier((await lea.getByTestId('esport-onglet-membres').count()) === 1, 'Joueur : Membres visibles');
-  await capture(lea, '11-iphone-lea-team');
+  await capture(lea, '12-iphone-lea-team');
   await lea.getByTestId('esport-onglet-membres').click();
   await lea.getByTestId('esport-liste-membres').waitFor({ timeout: 20_000 });
-  verifier((await lea.getByTestId('esport-invitations').count()) === 0, 'Joueur : pas de panneau d’invitation');
-  await capture(lea, '12-iphone-lea-membres');
+  verifier((await lea.getByTestId('esport-inviter').count()) === 0, 'Joueur : pas de panneau d’invitation');
+  await capture(lea, '13-iphone-lea-membres');
 
   log('Accès restreint côté serveur (API directe avec le jeton de Léa)');
-  const idLea = (await esport.base.premier("SELECT id FROM comptes WHERE pseudo = 'Léa'", [])).id;
   const jetonLea = await jetonDeProfil(JETON, idLea);
   const sessLea = (await api('/session', jetonLea, { methode: 'POST' })).corps.session;
   const sessFond = (await api('/session', JETON, { methode: 'POST' })).corps.session;
@@ -266,7 +284,11 @@ try {
   verifier((await api(`/teams/${teamB.id}/membres`, sessLea)).statut === 404, 'Team B (membres) : 404 pour Léa');
   verifier((await api(`/teams/${faucons.id}/journal`, sessLea)).statut === 403, 'Journal de sa team : 403 (Joueur)');
   const roles = (await api(`/teams/${faucons.id}/roles`, sessLea)).corps.roles;
-  verifier((await api(`/teams/${faucons.id}/invitations`, sessLea, { methode: 'POST', corps: { roleId: roles[0].id } })).statut === 403, 'Inviter : 403 (Joueur)');
+  verifier((await api(`/teams/${faucons.id}/membres`, sessLea, { methode: 'POST', corps: { compte: idLea, roleId: roles[0].id } })).statut === 403, 'Ajouter un membre : 403 (Joueur)');
+  verifier((await api(`/teams/${faucons.id}/invitations`, sessFond, { methode: 'POST', corps: { roleId: roles[0].id } })).statut === 410, 'codes esp_ retirés : 410');
+  verifier((await api('/comptes', sessLea, { methode: 'POST', corps: { compte: 'pirate01', pseudo: 'Pirate', affectations: [{ teamId: faucons.id, roleId: roles[0].id }] } })).statut === 403, 'créer un compte : réservé au Fondateur (403)');
+  const dashLea = (await api('/dashboard', sessLea)).corps;
+  verifier(dashLea.teams.length === 1 && !JSON.stringify(dashLea).includes(teamB.id), 'Dashboard de Léa : sa team seulement');
   verifier((await api(`/teams/${faucons.id}/m/scouting`, sessFond)).statut === 404, 'module désactivé (Scouting) : 404');
 
   // ================================================================ Retour au Fondateur
@@ -277,8 +299,8 @@ try {
   await pc.getByTestId('esport-journal').waitFor({ timeout: 20_000 });
   await pc.getByText(/Léa a rejoint la team \(Joueur\)/).first().waitFor({ timeout: 20_000 }).catch(() => undefined);
   verifier((await pc.getByText(/Léa a rejoint la team \(Joueur\)/).count()) >= 1, 'Journal : « Léa a rejoint la team (Joueur) »');
-  verifier((await pc.getByText(/Fondateur a créé une invitation \(Joueur\)/).count()) >= 1, 'Journal : invitation');
-  await capture(pc, '13-pc-journal');
+  verifier((await pc.getByText(/Fondateur a ajouté Léa à la team \(Joueur\)/).count()) >= 1, 'Journal : ajout par le Fondateur');
+  await capture(pc, '14-pc-journal');
   // Phase 7 : filtres, export CSV et durée de conservation du journal.
   await pc.getByTestId('esport-journal-module-coeur').click();
   await pc.getByText(/Léa a rejoint la team \(Joueur\)/).first().waitFor({ timeout: 20_000 }).catch(() => undefined);
@@ -290,14 +312,14 @@ try {
   await pc.getByTestId('esport-onglet-accueil').click();
   await pc.getByTestId('esport-stats').waitFor({ timeout: 20_000 });
   verifier(await pc.getByTestId('esport-stats-membres').isVisible(), 'Accueil : statistiques de la team');
-  await capture(pc, '13b-pc-stats');
+  await capture(pc, '14b-pc-stats');
   // Navigation au clavier : l'onglet « Membres et rôles » s'ouvre avec Entrée.
   await pc.getByTestId('esport-onglet-membres').focus();
   await pc.keyboard.press('Enter');
   await pc.getByTestId(`esport-membre-${idLea}`).waitFor({ timeout: 20_000 });
   verifier(true, 'Clavier : onglet ouvert avec Entrée');
   await pc.getByTestId('esport-matrice').waitFor({ timeout: 20_000 });
-  await capture(pc, '14-pc-membres-matrice');
+  await capture(pc, '15-pc-membres-matrice');
 
   // ================================================================ iPad
   log('iPad : page de la team');
@@ -308,7 +330,7 @@ try {
   await ipad.getByTestId('esport-barre').waitFor({ timeout: 20_000 });
   await ipad.getByTestId('esport-onglet-membres').click();
   await ipad.getByTestId('esport-matrice').waitFor({ timeout: 20_000 });
-  await capture(ipad, '15-ipad-membres');
+  await capture(ipad, '16-ipad-membres');
   const debord = await ipad.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   verifier(!debord, 'iPad : pas de défilement horizontal de la page');
 
@@ -320,7 +342,7 @@ try {
   await sans.getByTestId('esport-inactif').waitFor({ timeout: 30_000 });
   verifier((await sans.getByText('Esport pas encore activé').count()) === 1, '« Esport pas encore activé » affiché');
   verifier((await sans.getByTestId('esport-doc').count()) === 1, 'lien vers la marche à suivre (Fondateur)');
-  await capture(sans, '16-pc-esport-pas-active');
+  await capture(sans, '17-pc-esport-pas-active');
   await sans.getByTestId('retour-hub').first().click();
   await sans.getByTestId('hub').waitFor({ timeout: 20_000 });
   verifier((await tuileApp(sans, 'portefeuille').count()) >= 1, 'le reste du hub marche');

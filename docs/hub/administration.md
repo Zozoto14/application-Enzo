@@ -107,7 +107,9 @@ ses appareils, « Réinitialiser l'accès » (son ancien mot de passe ne marche 
 portefeuille, son séquestre, son adresse et vos notes ; case « Effacer aussi ses copies sur le relais » (cochée par
 défaut, appareil du Fondateur principal) : tous les objets de son espace `p/<id>/`, son accès par identifiant, et
 révocation de son jeton (`nettoyerCompteRelais`, `bureau/connexionAmis.ts` ; routes existantes, relais version 6 ;
-avec un relais plus ancien, la révocation est signalée comme « relais à mettre à jour », le reste est fait).
+avec un relais plus ancien, la révocation est signalée comme « relais à mettre à jour », le reste est fait). Un compte
+qui a l'app Esport en est aussi retiré (toutes ses teams, `DELETE /admin/comptes/:id/hub` du serveur Esport) : voir
+[docs/esport/invitations.md](../esport/invitations.md). Les comptes Esport se créent aussi depuis **Esport › Membres**.
 
 ## Sauvegarde chiffrée (Fondateurs)
 

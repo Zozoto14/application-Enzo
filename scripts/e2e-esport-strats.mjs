@@ -229,8 +229,8 @@ try {
   const roles = (await api(`/teams/${faucons.id}/roles`, sessFond)).corps.roles;
   const sessLea = (await api('/session', await jetonDeProfil(JETON, 'lea12345'), { methode: 'POST' })).corps.session;
   await api('/moi', sessLea, { methode: 'PUT', corps: { pseudo: 'Léa' } });
-  const code = (await api(`/teams/${faucons.id}/invitations`, sessFond, { methode: 'POST', corps: { roleId: roles.find(r => r.cle === 'joueur').id } })).corps.code;
-  await api('/invitations/accepter', sessLea, { methode: 'POST', corps: { code } });
+  // Invitation directe (sans code) : le Fondateur ajoute le compte de Léa à la team.
+  await api(`/teams/${faucons.id}/membres`, sessFond, { methode: 'POST', corps: { compte: 'lea12345', roleId: roles.find(r => r.cle === 'joueur').id } });
 
   // ================================================================ PC : créer une strat
   const ctxPc = await nouveauContexte(navigateur, { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, ignoreHTTPSErrors: true, acceptDownloads: true });

@@ -17,7 +17,9 @@ import { distribuer } from './evenements.mjs';
 import { routePublique, routesPlanning } from './planning/routes.mjs';
 import { servicesPlanning } from './planning/service.mjs';
 import { catalogue } from './permissions.mjs';
+import { servicesComptes } from './comptes.mjs';
 import { servicesEsport } from './service.mjs';
+import { servicesTableau } from './tableau.mjs';
 import { creerSession, lireSession } from './session.mjs';
 import { ErreurEsport, echec } from './outils.mjs';
 import { exporterBase, importerBase } from './transfert.mjs';
@@ -108,6 +110,9 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
   const jr = servicesJournal({ base, maintenant, socle: s });
   const stt = servicesStats({ base, maintenant, socle: s });
   const limite = (genre, qui) => limiter(base, genre, qui, maintenant());
+  // Premier niveau (toutes teams) : invitation directe, annuaire des membres, dashboard.
+  const cp = servicesComptes({ base, maintenant, noyau: s });
+  const tb = servicesTableau({ base, maintenant, noyau: s });
 
   async function acteurDeSession(requete) {
     if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
@@ -135,6 +140,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
       await limite('session', ip);
       const qui = await verifierJeton(jetonPorteur(requete), ip);
+      // Compte pré-enregistré par le Fondateur : sa première session (jeton validé par le relais) l'active.
+      await cp.activer(qui.compte);
       const { jeton, expire } = await creerSession(cleSession, qui, maintenant());
       return { session: jeton, expire: new Date(expire).toISOString(), ...(await s.moi(qui)) };
     }
@@ -159,11 +166,22 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     }
     if (chemin === '/notifications' && m === 'GET') return s.notifications(acteur);
     if (chemin === '/notifications/lues' && m === 'POST') return s.marquerLues(acteur, await lireCorps(requete));
+    // Ancienne route des codes esp_ (retirés) : 410, sans rien écrire.
     if (chemin === '/invitations/accepter' && m === 'POST') {
-      const corps = await lireCorps(requete);
       await limite('acceptation_ip', ip);
-      return s.accepterInvitation(acteur, corps, ip);
+      return s.accepterInvitation(acteur, await lireCorps(requete), ip);
     }
+    // Premier niveau : dashboard agrégé, annuaire des membres, invitation directe (Fondateur).
+    if (chemin === '/dashboard' && m === 'GET') return tb.tableau(acteur);
+    if (chemin === '/membres' && m === 'GET') return cp.annuaire(acteur);
+    if (chemin === '/comptes' && m === 'POST') {
+      const corps = await lireCorps(requete);
+      if (corps.verifier !== true) await limite('invitation', acteur.compte);
+      return cp.preinscrire(acteur, corps);
+    }
+    // Compte supprimé dans l'Administration (source de vérité) : retiré de l'Esport.
+    const retrait = /^\/admin\/comptes\/([^/]+)\/hub$/.exec(chemin);
+    if (retrait && m === 'DELETE') return cp.retirerCompte(acteur, decodeURIComponent(retrait[1]));
 
     // RGPD, pour le Fondateur : données d'un membre (export) et suppression de son compte Esport.
     const rgpd = /^\/admin\/comptes\/([^/]+)(\/export)?$/.exec(chemin);
@@ -216,6 +234,11 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       }
       if (section === 'membres') {
         if (!sousId && m === 'GET') return { membres: await s.listeMembres(acteur, teamId) };
+        if (!sousId && m === 'POST') {
+          const corps = await lireCorps(requete);
+          await limite('invitation', acteur.compte);
+          return cp.ajouterMembre(acteur, teamId, corps);
+        }
         if (sousId && m === 'PATCH') return s.modifierMembre(acteur, teamId, sousId, await lireCorps(requete));
         if (sousId && m === 'DELETE') return s.retirerMembre(acteur, teamId, sousId);
       }

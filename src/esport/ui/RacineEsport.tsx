@@ -1,6 +1,8 @@
 /**
- * App « Esport » du hub : liste des teams, assistant de création, page d'une
- * team, invitation à rejoindre une team, profil Esport.
+ * App « Esport » du hub. Navigation de premier niveau, avant d'entrer dans une
+ * team : Dashboard (résumé de toutes les teams) · Teams (liste, création,
+ * notifications, profil) · Membres (tous les membres, création de comptes,
+ * invitations). Puis la page d'une team, avec ses modules.
  *
  * Tout passe par le Worker Esport (esport/), avec le jeton du relais déjà
  * gardé par l'app. Worker pas encore déployé (ou relais pas encore en
@@ -11,13 +13,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { RetourHub } from '../../hub/Hub';
-import { Avis, BoutonHub, Champ, Intertitre, Panneau } from '../../hub/admin/ui/commun';
+import { Avis, BoutonHub, Champ, Intertitre, Panneau, Segments } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { PropsRacineApp } from '../../hub/types';
-import { relaisDuCompte } from '../../sync/relais/actif';
-import { DOC_ACTIVATION, ErreurEsport, MENTION_DONNEES, clientEsport, estInactif, nomModule, trouverConfig, type Boite, type ClientEsport, type Moi, type Notifications, type TeamListee } from '../client';
+import { fabrique } from '../fabrique';
+import { DOC_ACTIVATION, ErreurEsport, MENTION_DONNEES, estInactif, nomModule, trouverConfig, type Boite, type ClientEsport, type Moi, type Notifications, type TeamListee } from '../client';
 import { dateCourte, phraseNotification } from '../libelles';
 import { Assistant } from './Assistant';
+import { Dashboard } from './Dashboard';
+import { MembresGlobal } from './MembresGlobal';
 import { MonProfil, PageTeam, type SectionTeam } from './PageTeam';
 import { BadgeNouveau, BoiteResumes } from './Resumes';
 import { PastilleRole, Retours, TitreSection, styles as communs, useAgir } from './commun';
@@ -30,18 +34,22 @@ type Etat =
   | { e: 'erreur'; message: string }
   | { e: 'pret'; client: ClientEsport; moi: Moi };
 
-type Vue = { v: 'teams' } | { v: 'assistant' } | { v: 'boite' } | { v: 'team'; id: string; section?: SectionTeam };
+type Onglet = 'dashboard' | 'teams' | 'membres';
+type Vue = { v: Onglet } | { v: 'assistant' } | { v: 'boite' } | { v: 'team'; id: string; section?: SectionTeam };
 
-/** Fabrique du client (remplaçable par les tests). */
-export const fabrique = {
-  relais: () => relaisDuCompte(),
-  client: clientEsport,
-};
+const ONGLETS: ReadonlyArray<readonly [Onglet, string]> = [
+  ['dashboard', 'Dashboard'],
+  ['teams', 'Teams'],
+  ['membres', 'Membres'],
+];
+
+/** Fabrique du client (remplaçable par les tests) : voir ../fabrique.ts. */
+export { fabrique };
 
 export function Esport(props: PropsRacineApp) {
-  const { theme, onRetour, contexte } = props;
+  const { theme, onRetour, contexte, registre, onOuvrirApp } = props;
   const [etat, setEtat] = useState<Etat>({ e: 'chargement' });
-  const [vue, setVue] = useState<Vue>({ v: 'teams' });
+  const [vue, setVue] = useState<Vue>({ v: 'dashboard' });
   const { width } = useWindowDimensions();
   const large = width >= LARGEUR_BARRE;
 
@@ -95,20 +103,49 @@ export function Esport(props: PropsRacineApp) {
       </ScrollView>
     );
   } else if (vue.v === 'team') {
-    contenu = <PageTeam key={vue.id} theme={theme} client={etat.client} teamId={vue.id} large={large} sectionInitiale={vue.section} onQuitter={() => setVue({ v: 'teams' })} onExporter={exporter} />;
-  } else {
     contenu = (
-      <MesTeams
+      <PageTeam
+        key={vue.id}
         theme={theme}
         client={etat.client}
-        moi={etat.moi}
+        teamId={vue.id}
         large={large}
-        onOuvrir={id => setVue({ v: 'team', id })}
-        onCreer={() => setVue({ v: 'assistant' })}
-        onBoite={() => setVue({ v: 'boite' })}
+        sectionInitiale={vue.section}
+        onQuitter={() => setVue({ v: 'teams' })}
         onExporter={exporter}
-        onProfilSupprime={() => void ouvrir()}
+        onMembresGlobal={() => setVue({ v: 'membres' })}
       />
+    );
+  } else {
+    const onglet = vue.v;
+    let page: React.ReactNode;
+    if (onglet === 'dashboard') {
+      page = <Dashboard theme={theme} client={etat.client} large={large} onOuvrir={id => setVue({ v: 'team', id })} onBoite={() => setVue({ v: 'boite' })} onMembres={() => setVue({ v: 'membres' })} />;
+    } else if (onglet === 'membres') {
+      page = <MembresGlobal theme={theme} client={etat.client} contexte={contexte} registre={registre} large={large} onOuvrirTeam={id => setVue({ v: 'team', id })} onOuvrirApp={onOuvrirApp} />;
+    } else {
+      page = (
+        <MesTeams
+          theme={theme}
+          client={etat.client}
+          moi={etat.moi}
+          large={large}
+          onOuvrir={id => setVue({ v: 'team', id })}
+          onCreer={() => setVue({ v: 'assistant' })}
+          onBoite={() => setVue({ v: 'boite' })}
+          onMembres={() => setVue({ v: 'membres' })}
+          onExporter={exporter}
+          onProfilSupprime={() => void ouvrir()}
+        />
+      );
+    }
+    contenu = (
+      <View style={{ flex: 1 }}>
+        <View style={[styles.nav, { borderBottomColor: theme.ligne }]} testID="esport-nav">
+          <Segments<Onglet> theme={theme} libelle="Esport" valeur={onglet} options={ONGLETS} onChoisir={v => setVue({ v })} testID="esport-nav" />
+        </View>
+        <View style={{ flex: 1 }}>{page}</View>
+      </View>
     );
   }
 
@@ -188,6 +225,7 @@ function MesTeams({
   onOuvrir,
   onCreer,
   onBoite,
+  onMembres,
   onExporter,
   onProfilSupprime,
 }: {
@@ -198,15 +236,15 @@ function MesTeams({
   onOuvrir(id: string): void;
   onCreer(): void;
   onBoite(): void;
+  onMembres(): void;
   onExporter?(nom: string, contenu: string): Promise<boolean>;
   onProfilSupprime(): void;
 }) {
   const [teams, setTeams] = useState<TeamListee[] | undefined>();
   const [notifs, setNotifs] = useState<Notifications | undefined>();
   const [boite, setBoite] = useState<Boite | undefined>();
-  const [code, setCode] = useState('');
   const [profil, setProfil] = useState(false);
-  const { enCours, erreur, avis, agir } = useAgir();
+  const { erreur, avis, agir } = useAgir();
 
   const recharger = useCallback(async () => {
     const [t, n, b] = await Promise.all([client.teams(), client.notifications().catch(() => undefined), Promise.resolve().then(() => client.boiteResumes()).catch(() => undefined)]);
@@ -228,6 +266,7 @@ function MesTeams({
         <TitreSection theme={theme} titre="Mes teams" sous={`Connecté en tant que ${moi.profil?.pseudo ?? moi.compte}${moi.superAdmin ? ' · Fondateur (toutes les teams)' : ''}`} />
         <View style={communs.ligne}>
           {moi.peutCreerTeam ? <BoutonHub theme={theme} titre="Créer une team" variante="plein" onPress={onCreer} testID="esport-creer" /> : null}
+          {moi.superAdmin ? <BoutonHub theme={theme} titre="Inviter un joueur" onPress={onMembres} testID="esport-teams-inviter" /> : null}
           <BoutonHub theme={theme} titre="Mon profil" onPress={() => setProfil(p => !p)} testID="esport-mon-profil-ouvrir" />
         </View>
       </View>
@@ -250,7 +289,11 @@ function MesTeams({
       <View style={[communs.ligne, { alignItems: 'stretch', gap: 12 }]} testID="esport-liste-teams">
         {teams?.length === 0 ? (
           <Panneau theme={theme} style={{ flex: 1 }}>
-            <Text style={texte}>{moi.peutCreerTeam ? 'Aucune team pour l’instant : créez la première.' : 'Vous n’êtes dans aucune team : collez le code d’invitation reçu ci-dessous.'}</Text>
+            <Text style={texte}>
+              {moi.peutCreerTeam
+                ? 'Aucune team pour l’instant : créez la première, puis invitez vos joueurs depuis l’onglet Membres.'
+                : 'Vous n’êtes dans aucune team pour l’instant. Le Fondateur ou le staff de votre team vous y ajoute : elle apparaîtra ici d’elle-même, sans code.'}
+            </Text>
           </Panneau>
         ) : null}
         {teams?.map(t => (
@@ -290,25 +333,6 @@ function MesTeams({
         ))}
       </View>
       <View style={large ? { flexDirection: 'row', gap: 16, alignItems: 'flex-start' } : { gap: 16 }}>
-        <Panneau theme={theme} style={{ flex: 1 }} testID="esport-rejoindre">
-          <Intertitre theme={theme}>Rejoindre une team</Intertitre>
-          <Champ theme={theme} libelle="Code d’invitation" valeur={code} onChanger={setCode} placeholder="esp_…" maxLength={80} testID="esport-code" />
-          <BoutonHub
-            theme={theme}
-            titre={enCours === 'Rejoindre' ? 'Vérification…' : 'Rejoindre'}
-            variante="plein"
-            desactive={Boolean(enCours) || code.trim().length < 8}
-            onPress={() =>
-              void agir('Rejoindre', async () => {
-                const r = await client.accepterInvitation(code);
-                setCode('');
-                await recharger();
-                return `Bienvenue dans ${r.team.nom}${r.role ? ` (${r.role.nom})` : ''} !`;
-              })
-            }
-            testID="esport-rejoindre-valider"
-          />
-        </Panneau>
         <Panneau theme={theme} style={{ flex: 1 }} testID="esport-notifications">
           <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
             <Intertitre theme={theme}>{`Notifications${nonLues.length ? ` (${nonLues.length})` : ''}`}</Intertitre>
@@ -345,4 +369,5 @@ function MesTeams({
 const styles = StyleSheet.create({
   racine: { flex: 1 },
   carte: { borderWidth: 1, padding: 16, gap: 8, minHeight: 120 },
+  nav: { paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, alignItems: 'center' },
 });

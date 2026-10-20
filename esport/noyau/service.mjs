@@ -27,7 +27,7 @@ import {
   permissionsRoleSysteme,
   validerPermissions,
 } from './permissions.mjs';
-import { aleatoire, echec, iso, jsonOu, nouvelId, sha256Hex, slugDe, texteLong, texteNettoye } from './outils.mjs';
+import { aleatoire, echec, iso, jsonOu, nouvelId, slugDe, texteLong, texteNettoye } from './outils.mjs';
 import { lignesParIds, pseudosDe } from './requetes.mjs';
 
 const MOTIF_PSEUDO = /^[\p{L}\p{N}][\p{L}\p{N} _.\-]{1,23}$/u;
@@ -35,18 +35,20 @@ const MOTIF_RIOT = /^[^#\s][^#]{2,15}#[\p{L}\p{N}]{3,5}$/u;
 const MOTIF_DISCORD = /^[a-z0-9_.]{2,32}$/;
 const MOTIF_COULEUR = /^#[0-9a-fA-F]{6}$/;
 const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const MOTIF_CODE = /^esp_[A-Za-z0-9_-]{32}$/;
 const STATUTS_MEMBRE = ['actif', 'suspendu'];
 
-/** Anti-force brute des invitations : essais libres, puis attente doublée à chaque échec. */
-const ESSAIS_LIBRES = 5;
-const ATTENTE_MAX_S = 3600;
-const OUBLI_ECHECS_MS = 86_400_000;
-
-export function attenteApres(echecs, libres = ESSAIS_LIBRES, max = ATTENTE_MAX_S, base = 30) {
-  if (echecs < libres) return 0;
-  return Math.min(max, base * 2 ** (echecs - libres));
+/** Pseudo saisi (nettoyé) ou erreur 400. */
+export function lirePseudo(saisie) {
+  const pseudo = texteNettoye(saisie, 24);
+  if (!MOTIF_PSEUDO.test(pseudo)) throw echec(400, 'pseudo', 'Pseudo : 2 à 24 caractères (lettres, chiffres, espace, _ . -).');
+  return pseudo;
 }
+
+/**
+ * Codes d'invitation `esp_…` : retirés (invitation directe depuis l'Esport,
+ * voir comptes.mjs et docs/esport/invitations.md). Les routes répondent 410.
+ */
+export const CODES_RETIRES = 'Les codes d’invitation esp_ sont retirés : le Fondateur crée le compte depuis l’Esport (page Membres) et le joueur voit directement ses teams.';
 
 const exigerUuid = (valeur, quoi) => {
   if (typeof valeur !== 'string' || !MOTIF_UUID.test(valeur)) throw echec(404, `${quoi}-introuvable`, 'Introuvable.');
@@ -184,8 +186,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
   }
 
   async function majProfil(acteur, corps) {
-    const pseudo = texteNettoye(corps?.pseudo, 24);
-    if (!MOTIF_PSEUDO.test(pseudo)) throw echec(400, 'pseudo', 'Pseudo : 2 à 24 caractères (lettres, chiffres, espace, _ . -).');
+    const pseudo = lirePseudo(corps?.pseudo);
     const riot = corps?.riotId ? texteNettoye(corps.riotId, 22) : '';
     if (riot && !MOTIF_RIOT.test(riot)) throw echec(400, 'riot-id', 'Riot ID : de la forme Pseudo#TAG.');
     const discord = corps?.discord ? texteNettoye(corps.discord, 32).toLowerCase() : '';
@@ -509,7 +510,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'members.view');
     const lignes = await base.tous(
-      `SELECT m.id, m.compte_id, m.role_id, m.poste_jeu, m.statut, m.rejoint_le, c.pseudo, c.riot_id, c.discord, r.nom AS role_nom, r.couleur AS role_couleur, r.cle_systeme
+      `SELECT m.id, m.compte_id, m.role_id, m.poste_jeu, m.statut, m.rejoint_le, c.pseudo, c.riot_id, c.discord, c.invite_le, c.active_le, r.nom AS role_nom, r.couleur AS role_couleur, r.cle_systeme
          FROM membres m JOIN comptes c ON c.id = m.compte_id JOIN roles r ON r.id = m.role_id
         WHERE m.team_id = ? ORDER BY r.position, c.pseudo_cle`,
       [teamId],
@@ -522,6 +523,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       discord: l.discord ?? null,
       posteJeu: l.poste_jeu ?? null,
       statut: l.statut,
+      // Compte créé depuis l'Esport, pas encore connecté (première session à venir).
+      invite: Boolean(l.invite_le) && !l.active_le,
       rejointLe: l.rejoint_le,
       role: { id: l.role_id, nom: l.role_nom, couleur: l.role_couleur, cle: l.cle_systeme ?? null },
       moi: l.compte_id === acteur.compte,
@@ -641,29 +644,11 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     return lignes.map(i => invitationPublique(i, t));
   }
 
-  async function creerInvitation(acteur, teamId, corps) {
+  /** Codes `esp_…` retirés : plus aucune création (410). Les anciennes invitations restent listables et révocables. */
+  async function creerInvitation(acteur, teamId) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'members.invite');
-    const role = await roleDeTeam(teamId, corps?.roleId);
-    await exigerRoleGerable(ctx, role, 'Vous ne pouvez pas inviter avec un rôle plus élevé que le vôtre.');
-    const jours = Number(corps?.joursValidite ?? 7);
-    if (!Number.isInteger(jours) || jours < 1 || jours > 30) throw echec(400, 'validite', 'Validité : 1 à 30 jours.');
-    const max = Number(corps?.utilisationsMax ?? 1);
-    if (!Number.isInteger(max) || max < 1 || max > 50) throw echec(400, 'utilisations', 'Utilisations : 1 à 50.');
-    const libelle = texteNettoye(corps?.libelle, 60);
-    // Le code n'est montré qu'une fois ; seule son empreinte est gardée.
-    const code = `esp_${aleatoire(24)}`;
-    const t = maintenant();
-    const id = nouvelId();
-    const expire = iso(t + jours * 86_400_000);
-    await base.lot([
-      {
-        sql: 'INSERT INTO invitations (id, team_id, role_id, jeton_hash, libelle, expire_le, utilisations_max, utilisations, cree_par, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)',
-        params: [id, teamId, role.id, await sha256Hex(code), libelle, expire, max, acteur.compte, iso(t)],
-      },
-      evenement('invitation.created', { teamId, acteur: acteur.compte, entiteType: 'invitation', entiteId: id, charge: { role: role.nom, expireLe: expire, utilisationsMax: max }, maintenant: t }),
-    ]);
-    return { code, invitation: invitationPublique({ id, libelle, role_id: role.id, role_nom: role.nom, expire_le: expire, utilisations_max: max, utilisations: 0, cree_le: iso(t) }, t) };
+    throw echec(410, 'codes-retires', CODES_RETIRES);
   }
 
   async function revoquerInvitation(acteur, teamId, invitationId) {
@@ -681,77 +666,9 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     return { ok: true };
   }
 
-  async function verifierTentatives(cles) {
-    const t = maintenant();
-    for (const cle of cles) {
-      const l = await base.premier('SELECT bloque_jusqua FROM tentatives WHERE cle = ?', [cle]);
-      if (l?.bloque_jusqua && Date.parse(l.bloque_jusqua) > t) {
-        const e = echec(429, 'trop-de-tentatives', 'Trop de codes invalides : réessayez plus tard.');
-        e.attente = Math.ceil((Date.parse(l.bloque_jusqua) - t) / 1000);
-        throw e;
-      }
-    }
-  }
-
-  async function noterEchec(cles) {
-    const t = maintenant();
-    for (const cle of cles) {
-      const l = await base.premier('SELECT echecs, maj_le FROM tentatives WHERE cle = ?', [cle]);
-      const echecs = (l && t - Date.parse(l.maj_le) < OUBLI_ECHECS_MS ? Number(l.echecs) : 0) + 1;
-      const attente = attenteApres(echecs);
-      await base.executer(
-        `INSERT INTO tentatives (cle, echecs, bloque_jusqua, maj_le) VALUES (?, ?, ?, ?)
-         ON CONFLICT (cle) DO UPDATE SET echecs = excluded.echecs, bloque_jusqua = excluded.bloque_jusqua, maj_le = excluded.maj_le`,
-        [cle, echecs, attente > 0 ? iso(t + attente * 1000) : null, iso(t)],
-      );
-    }
-  }
-
-  async function accepterInvitation(acteur, corps, ip) {
-    const cles = [`invitation:compte:${acteur.compte}`, ...(ip ? [`invitation:ip:${ip}`] : [])];
-    await verifierTentatives(cles);
-    await exigerProfil(acteur);
-    const code = String(corps?.code ?? '').trim();
-    const refuser = async (statut, codeErreur, message) => {
-      await noterEchec(cles);
-      throw echec(statut, codeErreur, message);
-    };
-    if (!MOTIF_CODE.test(code)) return refuser(404, 'invitation-inconnue', 'Code d’invitation inconnu.');
-    const inv = await base.premier('SELECT * FROM invitations WHERE jeton_hash = ?', [await sha256Hex(code)]);
-    if (!inv) return refuser(404, 'invitation-inconnue', 'Code d’invitation inconnu.');
-    const t = maintenant();
-    const team = await base.premier('SELECT * FROM teams WHERE id = ? AND supprimee_le IS NULL', [inv.team_id]);
-    if (!team || inv.revoquee_le) return refuser(410, 'invitation-revoquee', 'Cette invitation a été annulée.');
-    if (Date.parse(inv.expire_le) <= t) return refuser(410, 'invitation-expiree', 'Cette invitation a expiré : demandez-en une nouvelle.');
-    if (Number(inv.utilisations) >= Number(inv.utilisations_max)) return refuser(410, 'invitation-epuisee', 'Cette invitation a déjà servi.');
-    const deja = await base.premier('SELECT id FROM membres WHERE team_id = ? AND compte_id = ?', [inv.team_id, acteur.compte]);
-    if (deja) throw echec(409, 'deja-membre', 'Vous êtes déjà membre de cette team.');
-    const role = await base.premier('SELECT * FROM roles WHERE id = ?', [inv.role_id]);
-    const membreId = nouvelId();
-    const ev = evenement('member.joined', {
-      teamId: inv.team_id,
-      acteur: acteur.compte,
-      entiteType: 'membre',
-      entiteId: membreId,
-      charge: { role: role?.nom ?? null, invitation: inv.id },
-      maintenant: t,
-    });
-    // Un seul lot atomique, conditionné : deux acceptations simultanées ne dépassent jamais `utilisations_max`.
-    const condition = 'EXISTS (SELECT 1 FROM invitations WHERE id = ? AND revoquee_le IS NULL AND utilisations < utilisations_max)';
-    const resultats = await base.lot([
-      {
-        sql: `INSERT INTO membres (id, team_id, compte_id, role_id, statut, rejoint_le, maj_le) SELECT ?, ?, ?, ?, 'actif', ?, ? WHERE ${condition}`,
-        params: [membreId, inv.team_id, acteur.compte, inv.role_id, iso(t), iso(t), inv.id],
-      },
-      {
-        sql: `INSERT INTO evenements (id, type, team_id, acteur_id, entite_type, entite_id, charge, cree_le, essais) SELECT ?, ?, ?, ?, ?, ?, ?, ?, 0 WHERE EXISTS (SELECT 1 FROM membres WHERE id = ?) AND ${condition}`,
-        params: [...ev.params, membreId, inv.id],
-      },
-      { sql: 'UPDATE invitations SET utilisations = utilisations + 1 WHERE id = ? AND EXISTS (SELECT 1 FROM membres WHERE id = ?) AND utilisations < utilisations_max', params: [inv.id, membreId] },
-    ]);
-    if (!resultats?.[0] || resultats[0].changements === 0) return refuser(410, 'invitation-epuisee', 'Cette invitation a déjà servi.');
-    await base.executer('DELETE FROM tentatives WHERE cle = ?', [cles[0]]);
-    return { team: teamPublique(team), role: role ? { id: role.id, nom: role.nom, couleur: role.couleur } : null };
+  /** Codes `esp_…` retirés : l'acceptation répond 410, sans rien écrire. */
+  async function accepterInvitation() {
+    throw echec(410, 'codes-retires', CODES_RETIRES);
   }
 
   // -------------------------------------------------------------- Notifications
@@ -906,6 +823,38 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     return supprimerCompte(acteur, compte);
   }
 
+  // -------------------------------------------------------------- Vues globales
+
+  /**
+   * Contextes de toutes les teams que l'acteur peut ouvrir : membre ACTIF
+   * (une team où il est suspendu n'y figure pas), ou toutes pour le super
+   * admin. Base des vues de premier niveau (Dashboard, Membres).
+   */
+  async function contextesDe(acteur) {
+    const lignes = acteur.superAdmin
+      ? await base.tous('SELECT id FROM teams WHERE supprimee_le IS NULL ORDER BY nom', [])
+      : await base.tous(
+          "SELECT t.id FROM membres m JOIN teams t ON t.id = m.team_id WHERE m.compte_id = ? AND m.statut = 'actif' AND t.supprimee_le IS NULL ORDER BY t.nom",
+          [acteur.compte],
+        );
+    const sortie = [];
+    for (const { id } of lignes) {
+      const ctx = await contexteTeam(acteur, id).catch(() => null);
+      if (ctx) sortie.push(ctx);
+    }
+    return sortie;
+  }
+
+  /** Vrai si l'acteur peut attribuer ce rôle / agir sur un membre qui l'a (anti-escalade, voir exigerRoleGerable). */
+  async function roleGerable(ctx, role) {
+    try {
+      await exigerRoleGerable(ctx, role);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // -------------------------------------------------------------- Modules futurs
 
   /** Route d'un module des phases suivantes : 404 s'il est désactivé, 501 « bientôt » sinon. */
@@ -917,7 +866,14 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
 
   return {
     contexteTeam,
+    contextesDe,
     exiger,
+    exigerRoleGerable,
+    roleGerable,
+    roleDeTeam,
+    permissionsDuRole,
+    estDernierProprietaire,
+    teamPublique,
     moi,
     majProfil,
     listeTeams,

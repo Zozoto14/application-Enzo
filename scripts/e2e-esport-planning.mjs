@@ -140,8 +140,7 @@ try {
   const team = (await api('/teams', sessFond, { methode: 'POST', corps: { nom: 'Faucons Valorant', jeu: 'valorant', preset: 'valorant_complet' } })).corps;
   const teamId = team.team.id;
   const roles = (await api(`/teams/${teamId}/roles`, sessFond)).corps.roles;
-  const codeLea = (await api(`/teams/${teamId}/invitations`, sessFond, { methode: 'POST', corps: { roleId: roles.find(r => r.cle === 'joueur').id } })).corps.code;
-  verifier(/^esp_/.test(codeLea ?? ''), 'team et invitation prêtes (API)');
+  verifier(roles.some(r => r.cle === 'joueur'), 'team prête (API)');
 
   // ================================================================ PC : compte du hub de Léa
   log('PC : Fondateur, compte « Esport seulement » de Léa');
@@ -181,12 +180,13 @@ try {
   await lea.getByTestId('esport-profil-initial').waitFor({ timeout: 30_000 });
   await lea.getByTestId('esport-pseudo').fill('Léa');
   await lea.getByTestId('esport-pseudo-valider').click();
-  await lea.getByTestId('esport-teams').waitFor({ timeout: 20_000 });
-  await lea.getByTestId('esport-code').fill(codeLea);
-  await lea.getByTestId('esport-rejoindre-valider').click();
-  await lea.getByTestId('esport-team-faucons-valorant').waitFor({ timeout: 20_000 });
+  await lea.getByTestId('esport-dashboard').waitFor({ timeout: 20_000 });
   const idLea = (await esport.base.premier("SELECT id FROM comptes WHERE pseudo = 'Léa'", [])).id;
-  verifier(Boolean(idLea), 'Léa est membre (Joueur)');
+  // Invitation directe, sans code : le Fondateur ajoute le compte existant de Léa à la team.
+  const ajout = await api(`/teams/${teamId}/membres`, sessFond, { methode: 'POST', corps: { compte: idLea, roleId: roles.find(r => r.cle === 'joueur').id } });
+  verifier(ajout.statut === 200, 'Léa est membre (Joueur), ajoutée sans code');
+  await lea.getByTestId('esport-nav-teams').click();
+  await lea.getByTestId('esport-team-faucons-valorant').waitFor({ timeout: 20_000 });
 
   // ================================================================ PC : événement récurrent
   log(`PC : création d’un entraînement récurrent (à partir du ${DEMAIN})`);

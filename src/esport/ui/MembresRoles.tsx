@@ -1,7 +1,8 @@
 /**
  * « Membres et rôles » d'une team : membres (rôle, poste, suspension,
- * retrait), invitations (code montré une seule fois), rôles et matrice des
- * permissions (modules en lignes, actions en colonnes), rôles personnalisés.
+ * retrait), rôles et matrice des permissions (modules en lignes, actions en
+ * colonnes), rôles personnalisés. Inviter ou ajouter quelqu'un se fait depuis
+ * la page « Membres » de l'Esport (premier niveau) : plus aucun code.
  *
  * L'écran n'affiche que ce que les permissions permettent, mais c'est le
  * serveur qui décide (anti-escalade, dernier Propriétaire…) : ses refus sont
@@ -10,9 +11,9 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { BoutonHub, Case, Champ, Intertitre, Panneau, Segments } from '../../hub/admin/ui/commun';
+import { BoutonHub, Case, Champ, Intertitre, Panneau } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
-import { CATALOGUE, LIBELLES_COLONNES, lignesMatrice, type ClientEsport, type DetailTeam, type Invitation, type Membre, type Role } from '../client';
+import { CATALOGUE, LIBELLES_COLONNES, lignesMatrice, type ClientEsport, type DetailTeam, type Membre, type Role } from '../client';
 import { dateCourte } from '../libelles';
 import { BoutonConfirme, Choix, PastilleRole, Retours, TitreSection, styles, useAgir } from './commun';
 
@@ -27,18 +28,6 @@ const COULEURS: ReadonlyArray<readonly [string, string]> = [
   ['#8b8b9a', 'Gris'],
 ];
 const COLONNES = ['voir', 'creer', 'modifier', 'supprimer', 'special'] as const;
-const LIBELLES_ETAT: Record<Invitation['etat'], string> = { active: 'Active', expiree: 'Expirée', revoquee: 'Annulée', epuisee: 'Utilisée' };
-
-async function copier(texte: string): Promise<boolean> {
-  const presse = (globalThis as { navigator?: { clipboard?: { writeText(t: string): Promise<void> } } }).navigator?.clipboard;
-  if (!presse) return false;
-  try {
-    await presse.writeText(texte);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /** Rôles que l'acteur peut attribuer (approximation de la règle du serveur, pour ne pas proposer l'impossible). */
 export function rolesAttribuables(roles: readonly Role[], detail: DetailTeam): Role[] {
@@ -55,29 +44,26 @@ export function MembresRoles({
   detail,
   large,
   onExporter,
+  onMembresGlobal,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
   detail: DetailTeam;
   large: boolean;
   onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
+  /** Page « Membres » de premier niveau (inviter, ajouter un compte existant). */
+  onMembresGlobal?(): void;
 }) {
   const teamId = detail.team.id;
   const peut = useCallback((p: string) => detail.moi.permissions.includes(p), [detail.moi.permissions]);
   const [membres, setMembres] = useState<Membre[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
-  const [invitations, setInvitations] = useState<Invitation[]>([]);
   const { enCours, erreur, avis, agir } = useAgir();
 
   const recharger = useCallback(async () => {
-    const [m, r, i] = await Promise.all([
-      peut('members.view') ? client.membres(teamId) : Promise.resolve([]),
-      client.roles(teamId).catch(() => []),
-      peut('members.invite') ? client.invitations(teamId) : Promise.resolve([]),
-    ]);
+    const [m, r] = await Promise.all([peut('members.view') ? client.membres(teamId) : Promise.resolve([]), client.roles(teamId).catch(() => [])]);
     setMembres(m);
     setRoles(r);
-    setInvitations(i);
   }, [client, teamId, peut]);
 
   useEffect(() => {
@@ -119,7 +105,15 @@ export function MembresRoles({
             </Panneau>
           ) : null}
           {peut('members.invite') ? (
-            <Invitations theme={theme} client={client} teamId={teamId} roles={attribuables} invitations={invitations} onChange={recharger} />
+            <Panneau theme={theme} testID="esport-inviter">
+              <Intertitre theme={theme}>Inviter quelqu’un</Intertitre>
+              <Text style={{ color: theme.texte, ...police(theme.policeTexte) }}>
+                {detail.moi.superAdmin
+                  ? 'Créez son compte depuis la page Membres de l’Esport (nom, e-mail, team et rôle) : il reçoit un e-mail, choisit son mot de passe et voit directement la team. Plus aucun code à transmettre.'
+                  : 'Ajoutez à la team un compte qui existe déjà depuis la page Membres de l’Esport. Seul le Fondateur crée de nouveaux comptes.'}
+              </Text>
+              {onMembresGlobal ? <BoutonHub theme={theme} titre="Ouvrir la page Membres" variante="plein" onPress={onMembresGlobal} testID="esport-inviter-membres" /> : null}
+            </Panneau>
           ) : null}
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
@@ -258,88 +252,6 @@ function LigneMembre({
         </View>
       ) : null}
     </View>
-  );
-}
-
-function Invitations({ theme, client, teamId, roles, invitations, onChange }: { theme: ThemeHub; client: ClientEsport; teamId: string; roles: Role[]; invitations: Invitation[]; onChange(): Promise<void> }) {
-  const [roleId, setRoleId] = useState<string | undefined>();
-  const [jours, setJours] = useState<'1' | '7' | '30'>('7');
-  const [usages, setUsages] = useState<'1' | '5' | '20'>('1');
-  const [libelle, setLibelle] = useState('');
-  const [code, setCode] = useState<string | undefined>();
-  const [copie, setCopie] = useState(false);
-  const { enCours, erreur, avis, agir } = useAgir();
-  const parDefaut = roles.find(r => r.cle === 'joueur')?.id ?? roles[roles.length - 1]?.id;
-  const choisi = roleId ?? parDefaut;
-  const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
-  return (
-    <Panneau theme={theme} testID="esport-invitations">
-      <Intertitre theme={theme}>Inviter</Intertitre>
-      <Text style={attenue}>
-        Pour un compte qui existe déjà dans le hub (le Fondateur le crée d’abord dans l’Administration, modèle « Esport seulement »). Le membre ouvre Esport › Rejoindre une team et colle le code.
-      </Text>
-      <Choix theme={theme} libelle="Rôle" valeur={choisi} options={roles.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur }))} onChoisir={setRoleId} testID="esport-invitation-role" />
-      <Segments<'1' | '7' | '30'> theme={theme} libelle="Validité" valeur={jours} options={[['1', '1 jour'], ['7', '7 jours'], ['30', '30 jours']]} onChoisir={setJours} testID="esport-invitation-jours" />
-      <Segments<'1' | '5' | '20'> theme={theme} libelle="Utilisations" valeur={usages} options={[['1', '1 personne'], ['5', '5'], ['20', '20']]} onChoisir={setUsages} testID="esport-invitation-usages" />
-      <Champ theme={theme} libelle="Note (facultative)" valeur={libelle} onChanger={setLibelle} maxLength={60} placeholder="Ex. pour Léa" testID="esport-invitation-libelle" />
-      <BoutonHub
-        theme={theme}
-        titre={enCours ? 'Création…' : 'Créer l’invitation'}
-        variante="plein"
-        desactive={Boolean(enCours) || !choisi}
-        onPress={() =>
-          void agir('Invitation', async () => {
-            const r = await client.creerInvitation(teamId, { roleId: choisi!, joursValidite: Number(jours), utilisationsMax: Number(usages), libelle: libelle.trim() || undefined });
-            setCode(r.code);
-            setCopie(false);
-            setLibelle('');
-            await onChange();
-          })
-        }
-        testID="esport-invitation-creer"
-      />
-      {code ? (
-        <View style={{ gap: 6, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: theme.accent, backgroundColor: teinteTransparente(theme.accent, 0.1) }}>
-          <Text style={attenue}>Code d’invitation (montré une seule fois) :</Text>
-          <Text selectable testID="esport-invitation-code" style={{ color: theme.texte, fontSize: 15, fontWeight: '700', ...police(theme.policeChiffres) }}>
-            {code}
-          </Text>
-          <View style={styles.ligne}>
-            <BoutonHub theme={theme} titre={copie ? 'Copié ✓' : 'Copier'} onPress={() => void copier(code).then(setCopie)} testID="esport-invitation-copier" />
-            <BoutonHub theme={theme} titre="Masquer" onPress={() => setCode(undefined)} testID="esport-invitation-masquer" />
-          </View>
-        </View>
-      ) : null}
-      <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-invitation" />
-      {invitations.length > 0 ? <Intertitre theme={theme}>Invitations</Intertitre> : null}
-      {invitations.map(i => (
-        <View key={i.id} style={[styles.ligne, { borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 6 }]} testID={`esport-invitation-${i.id}`}>
-          <View style={{ flex: 1, minWidth: 140 }}>
-            <Text style={{ color: theme.texte, fontWeight: '600', ...police(theme.policeTexte) }}>
-              {i.role.nom ?? 'Rôle'} {i.libelle ? `· ${i.libelle}` : ''}
-            </Text>
-            <Text style={attenue}>
-              {LIBELLES_ETAT[i.etat]} · {i.utilisations}/{i.utilisationsMax} · expire le {dateCourte(i.expireLe)}
-            </Text>
-          </View>
-          {i.etat === 'active' ? (
-            <BoutonHub
-              theme={theme}
-              titre="Annuler"
-              variante="danger"
-              onPress={() =>
-                void agir('Annulation', async () => {
-                  await client.revoquerInvitation(teamId, i.id);
-                  await onChange();
-                  return 'Invitation annulée.';
-                })
-              }
-              testID={`esport-invitation-annuler-${i.id}`}
-            />
-          ) : null}
-        </View>
-      ))}
-    </Panneau>
   );
 }
 

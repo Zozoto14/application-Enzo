@@ -1,11 +1,12 @@
 /**
  * Écran Esport : Worker absent (« Esport pas encore activé », rien ne casse),
- * pseudo à choisir, liste des teams, rejoindre une team, page d'une team.
+ * pseudo à choisir, navigation Dashboard · Teams · Membres, team visible sans
+ * code, page d'une team.
  */
 
 import React from 'react';
 import { Linking } from 'react-native';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { REGISTRE } from '../hub/registre';
 import { THEMES_HUB, themeHub } from '../hub/themes';
 import { ModeAffichageForce } from '../ui/mobile';
@@ -63,10 +64,12 @@ function fauxClient(surcharges: Partial<ClientEsport> = {}): ClientEsport {
     membres: async () => [],
     modifierMembre: non,
     retirerMembre: non,
-    invitations: async () => [],
-    creerInvitation: non,
-    revoquerInvitation: non,
-    accepterInvitation: non,
+    ajouterMembre: non,
+    annuaire: async () => ({ superAdmin: false, peutCreerCompte: false, teams: [], comptes: [] }),
+    tableau: async () => ({ genereLe: '', teams: [], global: { resumesARediger: 0, evenementsSemaine: [], alertes: [] } }),
+    verifierPreinscription: non,
+    preinscrire: non,
+    retirerCompte: non,
     journal: async () => ({ entrees: [], noms: {}, suite: null }),
     notifications: async () => ({ nonLues: 0, noms: {}, liste: [] }),
     marquerLues: non,
@@ -113,23 +116,48 @@ describe('Esport', () => {
     await fireEvent.changeText(screen.getByTestId('esport-pseudo'), 'Léa');
     await fireEvent.press(screen.getByTestId('esport-pseudo-valider'));
     expect(majProfil).toHaveBeenCalledWith({ pseudo: 'Léa', riotId: undefined, discord: undefined });
+    // On arrive sur le Dashboard (navigation de premier niveau).
+    expect(await screen.findByTestId('esport-dashboard')).toBeTruthy();
+    expect(screen.getByTestId('esport-dashboard-vide')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-nav-teams'));
     expect(await screen.findByTestId('esport-teams')).toBeTruthy();
     expect(screen.queryByTestId('esport-creer')).toBeNull();
   });
 
-  it('rejoindre une team avec un code, puis l’ouvrir : barre limitée aux modules activés', async () => {
-    let teams = [] as Awaited<ReturnType<ClientEsport['teams']>>;
-    const accepterInvitation = jest.fn(async () => {
-      teams = [{ ...DETAIL.team, membres: 2, modules: ['activity_log', 'planning'], role: { nom: 'Joueur', couleur: '#16a34a' }, suspendu: false }];
-      return { team: DETAIL.team, role: { id: 'r1', nom: 'Joueur', couleur: '#16a34a' } };
-    });
+  it('plus de code : la team où le Fondateur l’a ajouté est déjà là ; Teams et Dashboard l’ouvrent ; barre limitée aux modules', async () => {
+    const teams = [{ ...DETAIL.team, membres: 2, modules: ['activity_log', 'planning'], role: { nom: 'Joueur', couleur: '#16a34a' }, suspendu: false }];
     fabrique.relais = () => ({ relais: 'https://applibourse-relais.enzo.workers.dev', jeton: 'x'.repeat(20) });
-    fabrique.client = () => fauxClient({ teams: async () => teams, accepterInvitation });
+    fabrique.client = () =>
+      fauxClient({
+        teams: async () => teams,
+        tableau: async () => ({
+          genereLe: '',
+          teams: [
+            {
+              team: DETAIL.team,
+              role: { nom: 'Joueur', couleur: '#16a34a', cle: 'joueur' },
+              effectif: { actifs: 2, invites: 0, suspendus: 0 },
+              prochains: [{ teamId: 't1', evenementId: 'e1', cle: '2026-10-22T18:00:00.000Z', type: 'training', titre: 'Entraînement', debut: '2026-10-22T18:00:00.000Z', fin: '2026-10-22T20:00:00.000Z', lieu: '' }],
+              presence: null,
+              resumes: null,
+              taches: { enRetard: 1 },
+              derniereActivite: { date: '2026-10-20T08:00:00.000Z' },
+            },
+          ],
+          global: { resumesARediger: 0, evenementsSemaine: [], alertes: [{ genre: 'taches', teamId: 't1', teamNom: 'Faucons', nombre: 1, texte: '1 tâche en retard' }] },
+        }),
+      });
     await monter();
+    // Dashboard : la carte de la team, avec ses blocs autorisés.
+    await screen.findByTestId('esport-dashboard-teams');
+    expect(screen.getByTestId('esport-carte-taches-faucons')).toHaveTextContent(/1/);
+    expect(screen.queryByTestId('esport-carte-presence-faucons')).toBeNull();
+    expect(screen.getByTestId('esport-alerte-taches-t1')).toBeTruthy();
+    // Teams : aucun champ de code, la team est listée.
+    await fireEvent.press(screen.getByTestId('esport-nav-teams'));
     await screen.findByTestId('esport-teams');
-    await fireEvent.changeText(screen.getByTestId('esport-code'), 'esp_' + 'a'.repeat(32));
-    await fireEvent.press(screen.getByTestId('esport-rejoindre-valider'));
-    await waitFor(() => expect(screen.getByTestId('esport-teams-avis').props.children).toMatch(/Bienvenue dans Faucons \(Joueur\)/));
+    expect(screen.queryByTestId('esport-code')).toBeNull();
+    expect(screen.queryByTestId('esport-rejoindre')).toBeNull();
     await fireEvent.press(await screen.findByTestId('esport-team-faucons'));
     await screen.findByTestId('esport-barre');
     expect(screen.getByTestId('esport-onglet-module-planning')).toBeTruthy();
@@ -141,6 +169,11 @@ describe('Esport', () => {
     // Planning livré (phase 2) : l'écran s'ouvre ; un Joueur n'a pas le bouton de création.
     expect(await screen.findByTestId('esport-planning')).toBeTruthy();
     expect(screen.queryByTestId('esport-planning-nouveau')).toBeNull();
+    // Retour : la liste des teams ; la carte du Dashboard ouvre aussi la team.
+    await fireEvent.press(screen.getAllByTestId('esport-team-retour')[0]);
+    await fireEvent.press(await screen.findByTestId('esport-nav-dashboard'));
+    await fireEvent.press(await screen.findByTestId('esport-team-faucons'));
+    expect(await screen.findByTestId('esport-barre')).toBeTruthy();
   });
 
   it('s’affiche dans les 8 thèmes (clairs et sombres) et sur téléphone', async () => {
@@ -149,7 +182,9 @@ describe('Esport', () => {
     expect(THEMES_HUB.length).toBe(8);
     for (const t of THEMES_HUB) {
       const { unmount } = await monter({ theme: t }, 'telephone');
-      expect(await screen.findByTestId('esport-teams')).toBeTruthy();
+      expect(await screen.findByTestId('esport-dashboard')).toBeTruthy();
+      await fireEvent.press(screen.getByTestId('esport-nav-membres'));
+      expect(await screen.findByTestId('esport-membres-global')).toBeTruthy();
       await unmount();
     }
   });

@@ -11,6 +11,7 @@
  */
 
 import { pathToFileURL } from 'node:url';
+import { servicesComptes } from '../noyau/comptes.mjs';
 import { distribuer } from '../noyau/evenements.mjs';
 import { servicesObjectifs } from '../noyau/objectifs.mjs';
 import { servicesResumes } from '../noyau/resumes.mjs';
@@ -55,6 +56,7 @@ export const COMPTES_GRAINES = [
 /** Sème la base (vide ou non) ; rend l'identifiant de la team créée. `stockage` : pour le PDF de démonstration. */
 export async function semer(base, { maintenant = () => Date.now(), stockage } = {}) {
   const s = servicesEsport({ base, maintenant, creationTeams: 'fondateur' });
+  const comptes = servicesComptes({ base, maintenant, noyau: s });
   const fondateur = { compte: 'principal', superAdmin: true };
   await s.majProfil(fondateur, { pseudo: 'Fondateur' });
   const { team } = await s.creerTeam(fondateur, {
@@ -67,15 +69,10 @@ export async function semer(base, { maintenant = () => Date.now(), stockage } = 
   for (const c of COMPTES_GRAINES) {
     const acteur = { compte: c.compte, superAdmin: false };
     await s.majProfil(acteur, { pseudo: c.pseudo, riotId: c.riotId, discord: c.discord });
-    const { code } = await s.creerInvitation(fondateur, team.id, { roleId: roles[c.role].id, libelle: `Graine ${c.pseudo}` });
-    await s.accepterInvitation(acteur, { code }, null);
-    if (c.poste) {
-      const membre = (await s.listeMembres(fondateur, team.id)).find(m => m.compte === c.compte);
-      await s.modifierMembre(acteur, team.id, membre.id, { posteJeu: c.poste });
-    }
+    // Invitation directe : le Fondateur ajoute le compte à la team, avec son rôle et son poste.
+    await comptes.ajouterMembre(fondateur, team.id, { compte: c.compte, roleId: roles[c.role].id, posteJeu: c.poste });
   }
   await s.creerRole(fondateur, team.id, { nom: 'Capitaine', couleur: '#f59e0b', permissions: ['members.view', 'planning.view', 'planning.create', 'attendance.mark', 'attendance.rsvp_own', 'availability.edit_own'] });
-  await s.creerInvitation(fondateur, team.id, { roleId: roles.joueur.id, libelle: 'Essai joueur', joursValidite: 7, utilisationsMax: 3 });
 
   await semerPlanning(base, team.id, { maintenant });
 

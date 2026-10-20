@@ -44,7 +44,8 @@ import { LONGUEUR_MAX_NOTE } from '../donnees';
 import { CE_QUE_NE_PERMET_PAS, CE_QUE_PERMET, LIBELLES_RANG, NIVEAU_RANG, RANGS, autorise, rangDe, rangsAttribuables, type Rang } from '../roles';
 import { LIBELLES_NIVEAU, MODELES, modeleCorrespondant, niveauxDe, niveauxDuModele, type IdModele, type NiveauAcces, type Niveaux } from '../niveaux';
 import { etatApp } from '../politique';
-import { perimetreEsportSeul } from '../../../esport/acces';
+import { ID_ESPORT, perimetreEsportSeul } from '../../../esport/acces';
+import { retirerCompteEsport } from '../../../esport/synchroAdmin';
 import { Avis, BoutonHub, Case, Champ, Intertitre, Panneau, Pilule, Segments, commun, dansJours, dateLisible, relatif, styleTitre, type OutilsAdmin } from './commun';
 
 type Filtre = StatutCompte | 'tous';
@@ -103,6 +104,26 @@ export function noterEnvoi(outils: OutilsAdmin, id: string | undefined, nom: str
 }
 
 type Identifiants = { nom: string; valeurs: IdentifiantsAmi; id?: string };
+
+/**
+ * Retire de l'Esport un compte qui vient d'être supprimé (teams, données
+ * Esport). Jamais bloquant : un échec est dit, journalisé, et la page Membres
+ * de l'Esport le proposera de nouveau. Rend la phrase à ajouter à l'avis.
+ */
+export async function retirerDeLEsport(outils: OutilsAdmin, profil: Profil, cibleJournal: { cible: string; nomCible: string }): Promise<string> {
+  try {
+    const bilan = await retirerCompteEsport(profil.id);
+    if (bilan.inactif) return '';
+    if (bilan.retire) {
+      outils.journaliser({ type: 'compte', ...cibleJournal, app: ID_ESPORT, action: `${profil.nom} retiré de l’Esport (${bilan.teams} team${bilan.teams > 1 ? 's' : ''})` });
+      return ` Retiré aussi de l’Esport (${bilan.teams} team${bilan.teams > 1 ? 's' : ''}).`;
+    }
+    return '';
+  } catch (e) {
+    outils.journaliser({ type: 'compte', ...cibleJournal, app: ID_ESPORT, action: `Retrait de ${profil.nom} de l’Esport à refaire (serveur Esport injoignable)` });
+    return ` L’Esport n’a pas pu être prévenu (${e instanceof Error ? e.message : 'erreur'}) : retirez-le depuis Esport › Membres.`;
+  }
+}
 
 export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: string }) {
   const { theme, tous, registre, controle } = outils;
@@ -590,16 +611,18 @@ function Fiche({
         const bilan = avecRelais ? await controle.onSupprimerAvecRelais!(profil.id) : (await controle.onSupprimer(profil.id), undefined);
         outils.majDonnees(d => sansContactPar(outils.acteur, avecNotePar(outils.acteur, d, outils.tous, profil.id, ''), profil.id));
         outils.journaliser({ type: 'compte', ...cibleJournal, action: `Compte de ${profil.nom} supprimé (coffre et portefeuille effacés de cet appareil)` });
+        // Une seule source de vérité : le compte quitte aussi l'Esport (ses teams, ses données Esport).
+        const esport = (profil.apps ?? []).includes(ID_ESPORT) ? await retirerDeLEsport(outils, profil, cibleJournal) : '';
         onSupprime();
-        if (!bilan) return `Compte « ${profil.nom} » supprimé.`;
+        if (!bilan) return `Compte « ${profil.nom} » supprimé.${esport}`;
         outils.journaliser({
           type: 'compte',
           ...cibleJournal,
           action: `Copies de ${profil.nom} effacées du relais : ${bilan.objets} objet${bilan.objets > 1 ? 's' : ''}${bilan.acces ? ', accès par identifiant retiré' : ''}${bilan.revoque ? ', jeton révoqué' : ''}${bilan.restes.length ? ` (restes : ${bilan.restes.length})` : ''}`,
         });
         return bilan.restes.length > 0
-          ? `Compte « ${profil.nom} » supprimé. Relais : ${bilan.objets} copie(s) effacée(s) ; à reprendre : ${bilan.restes.join(' ; ')}.`
-          : `Compte « ${profil.nom} » supprimé, et ses ${bilan.objets} copie(s) effacée(s) du relais (accès retiré, jeton révoqué).`;
+          ? `Compte « ${profil.nom} » supprimé. Relais : ${bilan.objets} copie(s) effacée(s) ; à reprendre : ${bilan.restes.join(' ; ')}.${esport}`
+          : `Compte « ${profil.nom} » supprimé, et ses ${bilan.objets} copie(s) effacée(s) du relais (accès retiré, jeton révoqué).${esport}`;
       }),
     );
 
