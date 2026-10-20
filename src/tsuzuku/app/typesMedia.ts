@@ -9,4 +9,8 @@ export interface PropsMedia {
   debut?: number;
   /** Position courante (vidéo directe), pour la reprendre dans l'autre langue. */
   onPosition?(secondes: number): void;
+  /** Signe de vie : la page de l'hôte est chargée, ou la vidéo a ses métadonnées (lecteur qui marche). */
+  onVivant?(): void;
+  /** Le lecteur ne marche pas (erreur, adresse invalide, page d'erreur, délai sans signe de vie) : la bascule prend le suivant. */
+  onEchec?(raison: string): void;
 }

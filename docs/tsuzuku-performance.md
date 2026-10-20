@@ -163,3 +163,28 @@ second appareil (4,21 s site, 4,43 s en 4G : rien n'est gardé par le relais).
   Cloudflare) : il reste le cache MÉMOIRE de l'instance du Worker (souvent la même pendant quelques
   minutes, sans garantie). Pour un cache garanti, mettre le relais sur un domaine personnel.
 - Non mesuré : vrais sites, vrai Cloudflare, vraie 4G de l'iPad ; chiffres de l'internet simulé.
+
+## Lecteurs : bascule automatique et préchargement de la suite
+
+- **Bascule automatique** (`moteur/basculeLecteurs.ts`, `app/LecteurMedia.web.tsx`, `app/Lecteur.tsx`) :
+  un lecteur est abandonné quand sa page ne charge pas (erreur du cadre), que son hôte est
+  injoignable (sonde `HEAD` « no-cors » en parallèle : la page d'erreur du navigateur déclenche aussi
+  `onLoad`, la sonde a le dernier mot), que son adresse est invalide ou refusée par la garde du PC,
+  qu'une page d'erreur lisible (404, vidéo supprimée…) s'affiche, ou qu'aucun signe de vie n'arrive
+  avant 9 s (iframe) / 12 s (vidéo directe, HLS). Le suivant non encore essayé le remplace avec le
+  message discret « Lecteur X indisponible, passage à Y ». Le choix manuel reste possible (la bascule
+  repart de ce lecteur). Si tous échouent : « Aucun lecteur ne répond pour cet épisode. » et bouton
+  « Réessayer » (la page de l'épisode est relue). Mobile : l'ouverture se fait dans Safari, rien à
+  surveiller, le choix manuel suffit.
+- **Mémoire par source** (`app/fiabiliteLecteurs.ts`) : réussites et échecs par hôte vidéo, gardés dans
+  le cache chiffré du profil (sur l'appareil, jamais synchronisés, bornés : 20 lecteurs par source,
+  40 sources, compteurs lissés). Les lecteurs fiables passent en premier la fois suivante.
+- **Préchargement de la suite** (`app/prechargeSuite.ts`) : pendant la lecture, la page de l'autre
+  langue puis celle de l'épisode suivant sont lues et mises en cache (lecteurs gardés 20 min), sans
+  lancer de vidéo. Une seule requête à la fois, un temps de calme de 0,4 s, rien en « économie de
+  données » ni sur connexion 2G ; une seule file par profil : changer d'épisode ou d'animé, ou quitter
+  le lecteur, l'annule (plus aucune requête ne part). Mesure (e2e `e2e-tsuzuku-lecteurs`) : « Suivant »
+  affiche le lecteur en ~90 ms, sans relire la page de l'épisode.
+- Vérifications : `moteur/basculeLecteurs.test.ts`, `app/fiabiliteLecteurs.test.ts`,
+  `app/prechargeSuite.test.ts`, `scripts/e2e-tsuzuku-lecteurs.mjs` (captures :
+  `docs/captures-tsuzuku-lecteurs/`, domaines fictifs `*-exemple.fr`).

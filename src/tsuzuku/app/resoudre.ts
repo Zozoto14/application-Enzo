@@ -73,6 +73,8 @@ export interface Lecture {
   mesure?: MesureLecture;
   /** L'autre langue est encore en cours de vérification : l'état du sélecteur, une fois vérifiée. */
   languesAJour?: Promise<EtatLangues | undefined>;
+  /** Source dont viennent les lecteurs (mémoire des lecteurs qui marchent le mieux, par source). */
+  sourceId?: string;
 }
 
 /** Le lecteur attend au plus ce délai la vérification de l'autre langue avant de s'afficher. */
@@ -618,7 +620,7 @@ export async function lireAnime(
     };
     const etat = etatDesLangues();
     const languesAJour = verifiee || !verification ? undefined : verification.then(etatDesLangues);
-    if (lecteurs.length) return { lecteurs, origine: 'source', langue: joue, langues: etat, languesAJour, avisLangue, mesure };
+    if (lecteurs.length) return { lecteurs, origine: 'source', langue: joue, langues: etat, languesAJour, avisLangue, mesure, sourceId: d.resultat?.source?.id };
     const diagnostic: DiagnosticLecture = { ...d.diagnostic, raison: 'aucun-lecteur', mesure, urlPage: ep.url, lecteurs: trouves.diagnostic };
     return { lecteurs, origine: 'aucune', message: messageEchec(diagnostic), diagnostic, langue: joue, langues: etat, languesAJour, avisLangue, mesure };
   } catch (erreur) {
@@ -632,12 +634,18 @@ export async function lireAnime(
  * seule la page de l'épisode est lue, et ses lecteurs gardés. Rien pour un
  * lien manuel ni pour une langue dont la liste n'est pas lue. Jamais d'erreur.
  */
-export async function prechargerEpisode(s: ServicesTsuzuku, o: { id: string | number; titres: readonly string[]; numero: number; langue?: LangueVersion | null }): Promise<boolean> {
+export async function prechargerEpisode(
+  s: ServicesTsuzuku,
+  o: { id: string | number; titres: readonly string[]; numero: number; langue?: LangueVersion | null; signal?: { readonly annule: boolean } },
+): Promise<boolean> {
   try {
     if (!s.lectureSources) return false;
     const db = await s.depot.lire();
     if (adresseEpisode(lireAssociation(db.manualSources, o.id), o.numero)) return false;
+    // Annulé (l'utilisateur a changé d'animé ou d'épisode) : plus aucune requête ne part.
+    if (o.signal?.annule) return false;
     const d = await episodesDisponibles(s, o);
+    if (o.signal?.annule) return false;
     if (!d.resultat?.source) return false;
     const langues = d.resultat.langues;
     // Autre langue : seulement si sa liste est déjà lue (jamais une page de série de plus pour précharger).

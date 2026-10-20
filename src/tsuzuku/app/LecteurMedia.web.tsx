@@ -15,6 +15,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import type { Lecteur } from '../moteur/resolution';
+import { DELAI_IFRAME_MS, DELAI_VIDEO_MS, pageErreurDetectee, sonderHote, surveiller, urlLecteurValide, type Surveillance } from '../moteur/basculeLecteurs';
 import { useInfoOnglet } from '../../hub/multi/contexte';
 import { useTsuzuku } from './contexte';
 import type { PropsMedia } from './typesMedia';
@@ -28,10 +29,56 @@ export const ALLOW_LECTEUR = 'autoplay; fullscreen; encrypted-media; picture-in-
 export const REFERRER_LECTEUR = 'origin';
 const CADRE = { width: '100%', aspectRatio: '16 / 9', border: 0, background: '#000', borderRadius: 4, display: 'block' } as const;
 
-function VideoWeb({ lecteur, titre, onFin, debut, onPosition }: { lecteur: Lecteur; titre: string; onFin?(): void; debut?: number; onPosition?(s: number): void }) {
+/**
+ * Surveille un lecteur affiché (`actif`) : adresse invalide = échec tout de suite ;
+ * sinon échec si aucun signe de vie avant `delaiMs`. Rend la surveillance en cours
+ * (`vivant()` / `echec()` à appeler depuis les événements du lecteur).
+ */
+function useSurveillance(actif: boolean, delaiMs: number, url: string, onEchec?: (raison: string) => void, onVivant?: () => void) {
+  const ref = useRef<Surveillance | null>(null);
+  const rappels = useRef({ onEchec, onVivant });
+  rappels.current = { onEchec, onVivant };
+  useEffect(() => {
+    ref.current = null;
+    if (!actif) return undefined;
+    if (!urlLecteurValide(url)) {
+      const t = setTimeout(() => rappels.current.onEchec?.('adresse invalide'), 0);
+      return () => clearTimeout(t);
+    }
+    const v = surveiller(delaiMs, raison => rappels.current.onEchec?.(raison));
+    ref.current = v;
+    return () => {
+      v.arreter();
+      if (ref.current === v) ref.current = null;
+    };
+  }, [actif, delaiMs, url]);
+  return {
+    vivant: () => {
+      if (!ref.current) return;
+      ref.current.vivant();
+      ref.current = null;
+      rappels.current.onVivant?.();
+    },
+    echec: (raison: string) => ref.current?.echec(raison),
+  };
+}
+
+/** Document d'un iframe quand il est lisible (même origine) ; null sinon (hôte d'un autre site : on ne peut rien voir). */
+function documentLisible(cadre: HTMLIFrameElement): Document | null {
+  try {
+    return cadre.contentDocument;
+  } catch {
+    return null;
+  }
+}
+
+function VideoWeb({ lecteur, titre, onFin, debut, onPosition, onVivant, onEchec }: { lecteur: Lecteur; titre: string; onFin?(): void; debut?: number; onPosition?(s: number): void; onVivant?(): void; onEchec?(raison: string): void }) {
   const ref = useRef<HTMLVideoElement | null>(null);
   const [erreur, setErreur] = useState<string | undefined>();
   const { affiche } = useInfoOnglet();
+  const veille = useSurveillance(affiche, DELAI_VIDEO_MS, lecteur.url, onEchec, onVivant);
+  const veilleRef = useRef(veille);
+  veilleRef.current = veille;
   // Onglet masqué (ou effets suspendus) : pause.
   useEffect(() => {
     const video = ref.current;
@@ -53,17 +100,24 @@ function VideoWeb({ lecteur, titre, onFin, debut, onPosition }: { lecteur: Lecte
         if (detruit) return;
         if (!Hls.isSupported()) {
           setErreur('Ce navigateur ne sait pas lire les flux HLS.');
+          veilleRef.current.echec('HLS non pris en charge');
           return;
         }
         const h = new Hls();
         hls = h;
         h.on(Hls.Events.ERROR, (_e: unknown, d: { fatal?: boolean; details?: string }) => {
-          if (d.fatal) setErreur(`Lecture impossible (${d.details ?? 'erreur réseau'}) : le site du flux refuse peut-être l’accès depuis l’application.`);
+          if (d.fatal) {
+            setErreur(`Lecture impossible (${d.details ?? 'erreur réseau'}) : le site du flux refuse peut-être l’accès depuis l’application.`);
+            veilleRef.current.echec(d.details ?? 'erreur réseau');
+          }
         });
         h.loadSource(lecteur.url);
         h.attachMedia(video);
       })
-      .catch(() => setErreur('Le lecteur HLS n’a pas pu être chargé.'));
+      .catch(() => {
+        setErreur('Le lecteur HLS n’a pas pu être chargé.');
+        veilleRef.current.echec('lecteur HLS indisponible');
+      });
     return () => {
       detruit = true;
       hls?.destroy();
@@ -83,10 +137,14 @@ function VideoWeb({ lecteur, titre, onFin, debut, onPosition }: { lecteur: Lecte
         onEnded: onFin,
         // Changement de langue : reprise à la même position (si la vidéo le permet).
         onLoadedMetadata: (e: { currentTarget: HTMLVideoElement }) => {
+          veille.vivant();
           if (debut && debut > 0 && Number.isFinite(e.currentTarget.duration) && debut < e.currentTarget.duration) e.currentTarget.currentTime = debut;
         },
         onTimeUpdate: (e: { currentTarget: HTMLVideoElement }) => onPosition?.(e.currentTarget.currentTime),
-        onError: () => setErreur('La vidéo ne peut pas être lue depuis cette adresse.'),
+        onError: () => {
+          setErreur('La vidéo ne peut pas être lue depuis cette adresse.');
+          veille.echec('erreur de lecture');
+        },
         style: CADRE,
       })}
       {erreur ? <Avis genre="alerte" texte={erreur} testID="lecteur-erreur" /> : null}
@@ -94,16 +152,41 @@ function VideoWeb({ lecteur, titre, onFin, debut, onPosition }: { lecteur: Lecte
   );
 }
 
-export function LecteurMedia({ lecteur, titre, onFin, debut, onPosition }: PropsMedia) {
+export function LecteurMedia({ lecteur, titre, onFin, debut, onPosition, onVivant, onEchec }: PropsMedia) {
   const { s, theme } = useTsuzuku();
   const { affiche } = useInfoOnglet();
   const [pret, setPret] = useState(lecteur.kind !== 'iframe');
+  // Iframe : surveillé une fois prêt (déclaré) et affiché ; la vidéo se surveille elle-même (`VideoWeb`).
+  const veille = useSurveillance(lecteur.kind === 'iframe' && pret && affiche, DELAI_IFRAME_MS, lecteur.url, onEchec, onVivant);
+  const rappels = useRef({ onEchec });
+  rappels.current = { onEchec };
+  // Hôte injoignable (le navigateur affiche alors sa propre page d'erreur, illisible d'ici) : sondé en parallèle du cadre.
+  const sondable = lecteur.kind === 'iframe' && pret && affiche;
+  // Le résultat de la sonde passe avant le « chargé » du cadre : la page d'erreur du navigateur déclenche aussi `onLoad`.
+  const sonde = useRef<Promise<boolean>>(Promise.resolve(true));
+  useEffect(() => {
+    sonde.current = Promise.resolve(true);
+    if (!sondable) return undefined;
+    let vivant = true;
+    const p = sonderHote(lecteur.url);
+    sonde.current = p;
+    void p.then(ok => vivant && !ok && veille.echec('hôte injoignable'));
+    return () => {
+      vivant = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sondable, lecteur.url]);
   useEffect(() => {
     let vivant = true;
     if (lecteur.kind === 'iframe') {
       setPret(false);
       // Sur PC, le processus principal n'autorise le sous-cadre qu'après cette déclaration.
-      void s.declarerLecteur(lecteur.url).then(() => vivant && setPret(true));
+      // Adresse refusée par la garde du PC (invalide, réseau privé…) : échec tout de suite, sans afficher de cadre.
+      void s.declarerLecteur(lecteur.url).then(ok => {
+        if (!vivant) return;
+        if (ok === false) rappels.current.onEchec?.('adresse refusée');
+        else setPret(true);
+      });
     } else {
       setPret(true);
     }
@@ -128,6 +211,13 @@ export function LecteurMedia({ lecteur, titre, onFin, debut, onPosition }: Props
               allowFullScreen: true,
               referrerPolicy: REFERRER_LECTEUR,
               'data-testid': 'lecteur-iframe',
+              // Chargé : signe de vie, sauf page d'erreur lisible (même origine) ou vide ; les hôtes d'un autre site ne sont pas lisibles.
+              onLoad: (e: { currentTarget: HTMLIFrameElement }) => {
+                const doc = documentLisible(e.currentTarget);
+                if (doc && doc.URL !== 'about:blank' && pageErreurDetectee(doc.body?.innerText ?? doc.body?.textContent, Boolean(doc.querySelector('video,iframe,canvas,embed,object')))) veille.echec('page d’erreur');
+                else if (!doc || doc.URL !== 'about:blank') void sonde.current.then(ok => (ok ? veille.vivant() : veille.echec('hôte injoignable')));
+              },
+              onError: () => veille.echec('erreur de chargement'),
               style: CADRE,
             })
           ) : (
@@ -141,7 +231,7 @@ export function LecteurMedia({ lecteur, titre, onFin, debut, onPosition }: Props
   }
   return (
     <View testID="lecteur-zone">
-      <VideoWeb lecteur={lecteur} titre={titre} onFin={onFin} debut={debut} onPosition={onPosition} />
+      <VideoWeb lecteur={lecteur} titre={titre} onFin={onFin} debut={debut} onPosition={onPosition} onVivant={onVivant} onEchec={onEchec} />
     </View>
   );
 }
