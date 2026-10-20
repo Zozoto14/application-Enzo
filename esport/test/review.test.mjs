@@ -385,8 +385,9 @@ test('migration 0005 : les rôles système des teams existantes reçoivent les p
     await base.executer('INSERT INTO roles (id, team_id, cle_systeme, nom, couleur, systeme, position, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?)', [cle, 't', cle, cle, '#000000', d, d]);
   }
   await base.executer("INSERT INTO roles (id, team_id, cle_systeme, nom, couleur, systeme, position, cree_le, maj_le) VALUES ('perso', 't', NULL, 'Perso', '#000000', 0, 9, ?, ?)", [d, d]);
-  assert.deepEqual(await appliquerMigrations(base, migrations), ['0005_review_scouting.sql']);
-  assert.deepEqual(await appliquerMigrations(base, migrations), [], 'idempotente');
+  const jusqua5 = migrations.filter(m => m.nom < '0006');
+  assert.deepEqual(await appliquerMigrations(base, jusqua5), ['0005_review_scouting.sql']);
+  assert.deepEqual(await appliquerMigrations(base, jusqua5), [], 'idempotente');
   const perms = async role => (await base.tous("SELECT permission FROM role_permissions WHERE role_id = ? AND (permission LIKE 'video_review.%' OR permission LIKE 'scouting.%') ORDER BY permission", [role])).map(l => l.permission);
   assert.deepEqual(await perms('coach'), ['scouting.manage', 'scouting.view', 'video_review.annotate', 'video_review.create', 'video_review.delete', 'video_review.view']);
   assert.deepEqual(await perms('analyste'), ['scouting.manage', 'scouting.view', 'video_review.annotate', 'video_review.create', 'video_review.view']);

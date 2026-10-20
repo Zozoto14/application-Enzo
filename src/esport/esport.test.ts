@@ -171,12 +171,13 @@ describe('page d’une team', () => {
     moi: { membreId: 'm', role: { id: 'r', nom: 'Joueur', couleur: '#16a34a', cle: 'joueur' }, permissions, superAdmin: false },
   });
 
-  it('la barre ne montre que les modules activés (futurs « bientôt ») et ce que le rôle permet', () => {
-    const e = entreesBarre(detail(['planning', 'strat_editor', 'activity_log'], ['members.view', 'planning.view']));
+  it('la barre ne montre que les modules activés et ce que le rôle permet (tous les modules sont livrés)', () => {
+    const e = entreesBarre(detail(['planning', 'strat_editor', 'activity_log'], ['members.view', 'planning.view', 'strats.view']));
     expect(e.map(x => x.id)).toEqual(['accueil', 'module:planning', 'module:strat_editor', 'membres', 'parametres']);
-    // Planning est livré (phase 2) ; Strats, activé mais pas encore livré, est « bientôt ».
-    expect(e.find(x => x.id === 'module:planning')?.bientot).toBe(false);
-    expect(e.find(x => x.id === 'module:strat_editor')?.bientot).toBe(true);
+    // Planning (phase 2) et Strats (phase 6) sont livrés : plus aucun « bientôt ».
+    expect(e.some(x => x.bientot)).toBe(false);
+    // Strats activé mais sans strats.view : pas d'entrée.
+    expect(entreesBarre(detail(['strat_editor'], ['members.view', 'planning.view'])).map(x => x.id)).not.toContain('module:strat_editor');
     // Scouting (phase 5) : livré, mais sans scouting.view (un Joueur), pas d'entrée.
     expect(entreesBarre(detail(['scouting'], ['members.view', 'planning.view'])).map(x => x.id)).not.toContain('module:scouting');
     expect(entreesBarre(detail(['scouting'], ['scouting.view'])).map(x => x.id)).toContain('module:scouting');
