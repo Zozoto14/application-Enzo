@@ -1,23 +1,25 @@
 # Esport : review vidéo (phase 5)
 
-Module `video_review` : analyser un match ou un scrim posé sur YouTube, avec des repères horodatés, des notes
-et un fil de commentaires par repère. Rien à déployer à la main : relancer le workflow « Esport (Worker) »
-applique la migration `esport/migrations/0005_review_scouting.sql`.
+Module `video_review` : analyser un match ou un scrim posé sur YouTube, avec des repères horodatés, des notes,
+un fil de commentaires par repère, des réactions 👍 / 👎 et des dessins posés sur la vidéo (v2). Rien à
+déployer à la main : relancer le workflow « Esport (Worker) » applique les migrations
+`esport/migrations/0005_review_scouting.sql` et `0010_review_v2.sql`.
 
 ## Ce que voit chacun
 
-| Rôle (système) | Voir | Créer / renommer | Repères et commentaires | Supprimer |
-| --- | --- | --- | --- | --- |
-| Propriétaire, Coach | oui | oui | oui (tous les repères modifiables) | tout |
-| Analyste | oui | oui | oui | ses repères et commentaires |
-| Joueur | oui | non | oui : ajoute et commente ; modifie et supprime SES contributions | non (ni la review, ni le travail d'un autre) |
-| Manager | oui | non | non | non |
-| Remplaçant / Invité | non | non | non | non |
+| Rôle (système) | Voir | Créer / renommer | Repères, commentaires, dessins | Réagir 👍 / 👎 | Supprimer |
+| --- | --- | --- | --- | --- | --- |
+| Propriétaire, Coach | oui | oui | oui (tous les repères modifiables) | oui | tout |
+| Analyste | oui | oui | oui | oui | ses repères et commentaires |
+| Joueur | oui | non | oui : ajoute, commente, dessine ; modifie et supprime SES contributions | oui | non (ni la review, ni le travail d'un autre) |
+| Manager | oui | non | non | oui | non |
+| Remplaçant / Invité | non | non | non | non | non |
 
-Permissions : `video_review.view|create|annotate|delete`. Contrôles dans l'ordre : session → appartenance à la
+Permissions : `video_review.view|create|annotate|delete|react` (`annotate` couvre aussi le dessin). Contrôles dans l'ordre : session → appartenance à la
 team (404) → module activé (404) → permission (403). Une review d'une autre team est introuvable (404).
-La migration 0005 donne aux rôles système **déjà créés** les permissions ci-dessus (idempotente ; rôles
-personnalisés inchangés).
+La migration 0005 donne aux rôles système **déjà créés** les permissions ci-dessus ; la migration 0010 leur
+ajoute `video_review.react` (Manager, Coach, Analyste, Joueur : tous ceux qui voient la review). Idempotentes ;
+rôles personnalisés inchangés (à cocher dans la matrice des rôles si besoin).
 
 ## Création
 
@@ -33,8 +35,9 @@ position de départ.
   d'une review ; vidéo servie par `youtube-nocookie.com`). Temps courant interrogé 4 fois par seconde,
   `seekTo`, vitesse (0,5× à 2×). Si le propriétaire interdit la lecture intégrée, un lien ouvre YouTube.
 - **App iOS native** (sans WebView) : lecture seule de la liste des repères ; chaque repère ouvre la vidéo dans
-  YouTube au bon timestamp (`&t=83s`). Les commentaires restent lisibles et écrivables ; pas d'ajout, de
-  modification ni de suppression de repère, pas d'export PDF.
+  YouTube au bon timestamp (`&t=83s`). Les commentaires et les réactions restent utilisables ; pas d'ajout, de
+  modification ni de suppression de repère, pas de dessin (un repère dessiné affiche ✏️ et « Dessin disponible
+  sur le site ou le PC »), pas d'export PDF.
 
 ## Repères
 
@@ -48,19 +51,54 @@ position de départ.
   liens `[texte](https://…)`). Nettoyée côté serveur (`nettoyerNote` : HTML neutralisé en `&lt;`, images et
   définitions de liens retirées, liens http(s) seulement) et rendue côté app par des composants, **jamais en HTML
   brut**.
-- Liste latérale triée, synchronisée avec la lecture (repère en cours mis en avant et visible), filtres par
-  catégorie, joueur et auteur.
-- Fil de commentaires par repère.
+- **Barre de mise en forme** (`src/esport/ui/ChampNote.tsx`, logique pure `src/esport/review/formatage.ts`) au-dessus
+  des champs de note de repère et de commentaire : **B** (gras), *I* (italique), liste à puces, lien, et
+  « Aperçu » du rendu. Raccourcis **Ctrl/Cmd+B** et **Ctrl/Cmd+I** (site, app PC) : la sélection est entourée de
+  `**…**` ou `*…*` (un second appui retire). Boutons de 44 px (iPhone, iPad). Réutilisée ailleurs dans l'Esport,
+  avec un rendu Markdown à l'affichage : note du dépôt (résumés), description des tâches, notes du scouting
+  (fiche, joueurs adverses, tendances), notes d'étape des strats.
+- Liste latérale synchronisée avec la lecture (repère en cours mis en avant et visible), filtres par catégorie,
+  joueur et auteur, **tri** par instant, « plus likés 👍 » ou « plus dislikés 👎 ».
+- Fil de commentaires par repère (rendu Markdown).
+
+## Réactions 👍 / 👎
+
+- Sur chaque repère (liste et détail) et sur chaque commentaire : **une réaction par membre et par cible**
+  (contrainte d'unicité en base), qu'il change (👍 ↔ 👎) ou retire (second appui).
+- Compteurs visibles par tous les lecteurs ; la liste des personnes s'affiche au survol (site, app PC) ou à
+  l'appui long (doigt), et figure dans le nom accessible du bouton.
+- Pas de notification ni de Discord : seul l'événement `review.reaction_changed` part sur le bus (journal).
+- Export RGPD (`reviewReactions`) ; supprimées avec le compte.
+
+## Dessin sur la vidéo
+
+On ne peut pas dessiner DANS l'iframe YouTube : un **calque transparent** est posé par-dessus le lecteur (même
+cadre 16:9).
+
+- **« ✏️ Dessiner »** (site, app PC, iPad dans le navigateur ; permission `video_review.annotate`) : la vidéo se
+  met en pause, le calque s'active. Outils : flèche, cercle, rectangle, trait libre, texte, gomme ; 6 couleurs,
+  3 épaisseurs ; annuler et rétablir. Éditeur Konva (`CalqueDessin.web.tsx`) chargé à la demande, comme
+  l'éditeur de strats.
+- **Enregistrement** : rattaché au repère qui commence au timestamp courant (à 0,5 s près, si on peut le
+  modifier), sinon un repère « Dessin mm:ss » (Placement) est créé. Coordonnées **relatives (0 à 1)** : le dessin
+  suit la taille du lecteur.
+- **Lecture** : quand la vidéo passe sur un repère dessiné, le dessin s'affiche par-dessus (SVG, les clics
+  traversent) pendant la durée du repère, ou 3 s par défaut ; en continu tant que la vidéo est en pause sur ce
+  repère. Bouton « Masquer / Afficher les dessins ». Miniature et icône ✏️ dans la liste des repères.
+- **Serveur** (`esport/noyau/review/dessin.mjs`) : JSON `{ v: 1, objets: [{ t, c, e, p, x? }] }` validé (types
+  connus, couleur `#rrggbb`, épaisseur 1 à 20, coordonnées 0 à 1, 100 formes, 200 points par trait, 120
+  caractères par texte, 32 Ko au plus) ; colonne `review_reperes.dessin`.
+- **Exports** : mention dans le Markdown et le PDF (« ✏️ Dessin sur la vidéo : 1 forme (flèche)… ») ; dessin
+  complet dans l'export RGPD (`reviewReperes[].dessin`).
 
 ## Exports
 
 - **Markdown** : `GET /teams/:t/review/:id/export.md` (`?format=json` : `{ nom, type, contenu }`, utilisé par
-  l'app). Titre, repères triés avec lien à l'instant, joueur, auteur, note, commentaires.
+  l'app). Titre, repères triés avec lien à l'instant, joueur, auteur, réactions, mention du dessin, note,
+  commentaires.
 - **PDF par impression** (site, app PC) : le Markdown exporté devient un document HTML échappé posé dans la page
   (`#impression-esport`, visible seulement à l'impression), puis `window.print()` : choisir « Enregistrer au
   format PDF ». Pas de fenêtre ni de cadre (l'app PC les bloque).
-
-**Limite connue** : pas de dessin sur la vidéo YouTube ; les notes sont liées à un instant (timestamp) seulement.
 
 ## CSP et en-têtes
 
@@ -77,7 +115,8 @@ position de départ.
 ## Bus d'événements et journal
 
 `review.created` (charge `{ titre, videoId, url, reference, adversaireId?, depuisVod? }` : **Discord s'y abonne**),
-`review.updated`, `review.deleted`, `review.marker_added|updated|deleted`, `review.comment_added|deleted`.
+`review.updated`, `review.deleted`, `review.marker_added|updated|deleted`, `review.comment_added|deleted`,
+`review.reaction_changed` (journal seulement).
 Notifications in-app : nouvelle review (lecteurs de la review), commentaire sur son repère.
 
 ## API (préfixe facultatif `/api/esport`)
@@ -90,17 +129,22 @@ Notifications in-app : nouvelle review (lecteurs de la review), commentaire sur 
 | `PATCH /teams/:t/review/:id` | video_review.create |
 | `DELETE /teams/:t/review/:id` | video_review.delete |
 | `GET /teams/:t/review/:id/export.md` | video_review.view |
-| `POST /teams/:t/review/:id/reperes` `{ debut, fin? \| duree?, categorie, titre, note?, cible? }` | video_review.annotate |
+| `POST /teams/:t/review/:id/reperes` `{ debut, fin? \| duree?, categorie, titre, note?, cible?, dessin? }` | video_review.annotate |
 | `PATCH \| DELETE /teams/:t/review/:id/reperes/:r` | auteur (annotate) ou create / delete |
 | `POST /teams/:t/review/:id/reperes/:r/commentaires` `{ texte }` | video_review.annotate |
 | `DELETE /teams/:t/review/:id/reperes/:r/commentaires/:c` | auteur (annotate) ou delete |
+| `PUT \| DELETE /teams/:t/review/:id/reperes/:r/reaction` `{ valeur: 'like' \| 'dislike' \| null }` | video_review.react |
+| `PUT \| DELETE /teams/:t/review/:id/reperes/:r/commentaires/:c/reaction` | video_review.react |
 
 ## Code et tests
 
-- Cœur portable : `esport/noyau/review/` (`youtube.mjs`, `markdown.mjs`, `export.mjs`, `service.mjs`, `routes.mjs`,
+- Cœur portable : `esport/noyau/review/` (`youtube.mjs`, `markdown.mjs`, `dessin.mjs`, `export.mjs`, `service.mjs`, `routes.mjs`,
   `bus.mjs`). SQL standard (SQLite/D1, Postgres).
-- App : `src/esport/review/` (client, libellés, Markdown, impression) et `src/esport/ui/review/` ;
-  `Lecteur.web.tsx` (IFrame) / `Lecteur.tsx` (iOS), `raccourci.web.ts`, `impression.web.ts`.
+- App : `src/esport/review/` (client, libellés, Markdown, `formatage.ts`, `dessin.ts`, impression) et
+  `src/esport/ui/review/` ; `Lecteur.web.tsx` (IFrame, calque par-dessus) / `Lecteur.tsx` (iOS),
+  `dessinVideo.web.tsx` (SVG + Konva) / `dessinVideo.tsx` (iOS), `BarreDessin.tsx`, `Reactions.tsx`,
+  `raccourci.web.ts`, `impression.web.ts` ; `src/esport/ui/ChampNote.tsx`.
 - Graines : `esport/outils/graines-review.mjs` (`npm run esport:local`).
-- Tests : `esport/test/review.test.mjs`, `src/esport/review/review.test.tsx`, `bureau/electron/youtube.test.mjs`,
-  e2e `scripts/e2e-esport-review.mjs` (faux script YouTube intercepté, aucun appel à YouTube).
+- Tests : `esport/test/review.test.mjs`, `esport/test/review-v2.test.mjs`, `src/esport/review/review.test.tsx`,
+  `src/esport/review/review-v2.test.tsx`, `bureau/electron/youtube.test.mjs`, e2e `scripts/e2e-esport-review.mjs`
+  et `scripts/e2e-esport-review-v2.mjs` (faux script YouTube intercepté, aucun appel à YouTube).

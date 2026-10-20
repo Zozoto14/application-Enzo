@@ -164,7 +164,7 @@ try {
   log('PC : création d’une review depuis une adresse YouTube');
   await ongletTeam(pc, 'module-video_review');
   await pc.getByTestId('esport-review-nouvelle').waitFor({ timeout: 20_000 });
-  verifier((await pc.getByTestId('esport-review-limite').innerText()).includes('pas de dessin'), 'mention : pas de dessin sur la vidéo');
+  verifier((await pc.getByTestId('esport-review-limite').count()) === 0, 'plus de mention « pas de dessin sur la vidéo » (le dessin existe)');
   await pc.getByTestId('esport-review-url').fill('https://exemple.fr/pas-youtube');
   verifier(/non reconnue/.test(await pc.getByTestId('esport-review-url-etat').innerText()), 'adresse non YouTube refusée');
   await pc.getByTestId('esport-review-url').fill(`https://youtu.be/${ID}`);
