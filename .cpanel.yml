@@ -1,0 +1,9 @@
+---
+# Alternative au cron de déploiement (docs/o2switch.md) : cPanel › Git Version Control › Gérer ›
+# Pull or Deploy › « Update from Remote » puis « Deploy HEAD Commit » exécute ces tâches. Le script est le
+# même que celui de la tâche cron (dépendances, migrations, redémarrage des apps, site) ; --sans-git : cPanel
+# vient lui-même de mettre le code à jour.
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/jayo8828/application-enzo
+    - /bin/bash /home/jayo8828/application-enzo/esport/serveur/deployer.sh --sans-git

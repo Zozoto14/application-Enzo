@@ -143,14 +143,35 @@ export function configurationDepuisEnv(env = process.env) {
 
 const MOTIF_SCHEMA = /^[a-z_][a-z0-9_]{0,62}$/;
 
+/** Schéma des tables en production (SCHEMA_BASE, défaut « appdashboard ») : créé s'il manque. */
+export const SCHEMA_PAR_DEFAUT = 'appdashboard';
+
+/**
+ * Options de connexion des serveurs (Esport, relais, cron, imports) depuis l'environnement : DATABASE_URL
+ * ou PG*, schéma SCHEMA_BASE (défaut « appdashboard », créé au besoin). Un schéma à nous évite le schéma
+ * `public`, fermé en écriture aux utilisateurs non propriétaires depuis PostgreSQL 15.
+ */
+export function optionsDepuisEnv(env = process.env) {
+  return { ...(env.DATABASE_URL ? { connexion: env.DATABASE_URL } : {}), schema: env.SCHEMA_BASE || SCHEMA_PAR_DEFAUT, creerSchema: true };
+}
+
 /**
  * Ouvre une base Postgres. `connexion` : chaîne postgres://… ou objet de configuration `pg`
  * (défaut : variables d'environnement). `schema` : schéma de travail (tests : un schéma par base).
  */
-export async function basePostgres({ connexion, schema, max = 5, ...options } = {}) {
+export async function basePostgres({ connexion, schema, creerSchema = false, max = 5, ...options } = {}) {
   const { pg, types } = await analyseurs();
   const config = typeof connexion === 'string' ? { connectionString: connexion } : { ...configurationDepuisEnv(), ...(connexion ?? {}) };
   if (schema !== undefined && !MOTIF_SCHEMA.test(schema)) throw new Error(`Nom de schéma invalide : ${schema}`);
+  if (schema && creerSchema) {
+    const client = new pg.Client({ ...config, types });
+    await client.connect();
+    try {
+      await client.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
+    } finally {
+      await client.end();
+    }
+  }
   const pool = new pg.Pool({
     ...config,
     max,

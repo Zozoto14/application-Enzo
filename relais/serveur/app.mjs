@@ -17,7 +17,7 @@
  */
 
 import { pathToFileURL } from 'node:url';
-import { basePostgres } from '../../esport/adaptateurs/postgres.mjs';
+import { basePostgres, optionsDepuisEnv } from '../../esport/adaptateurs/postgres.mjs';
 import { chargerEnv, creerServeurHttp, ecouter, exigerNode, fichierEnvParDefaut } from '../../esport/serveur/commun.mjs';
 import relais from '../worker.mjs';
 import { creerTableKv, kvPostgres, purgerKvExpire } from './kv-postgres.mjs';
@@ -47,7 +47,7 @@ export async function preparerRelais({ config = chargerConfigRelais(), base, env
     const traiter = async () => new Response(JSON.stringify({ erreur: 'Relais pas encore configuré (voir docs/o2switch.md).' }), { status: 503, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' } });
     return { traiter, config, fermer: async () => {} };
   }
-  const b = base ?? (await basePostgres());
+  const b = base ?? (await basePostgres(optionsDepuisEnv()));
   await creerTableKv(b);
   await purgerKvExpire(b).catch(() => 0);
   const env = { JETON: config.JETON, BOITE: kvPostgres(b), DISCORD_WEBHOOK_URL: config.DISCORD_WEBHOOK_URL, ORIGINES_SITE: config.ORIGINES_SITE, LIMITE_TSUZUKU_MINUTE: config.LIMITE_TSUZUKU_MINUTE };

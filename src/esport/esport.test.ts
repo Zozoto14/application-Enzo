@@ -59,6 +59,11 @@ describe('adresse du Worker Esport', () => {
     expect(adresseDepuisRelais('https://applibourse-relais.enzo.workers.dev')).toBe('https://applibourse-esport.enzo.workers.dev');
     expect(adresseDepuisRelais('https://applibourse-relais.enzo.workers.dev/')).toBe('https://applibourse-esport.enzo.workers.dev');
     expect(adresseDepuisRelais('https://autre.exemple.fr')).toBeUndefined();
+    // Hébergement o2switch : relais.<domaine> → esport.<domaine>.
+    expect(adresseDepuisRelais('https://relais.appdashboard.fr')).toBe('https://esport.appdashboard.fr');
+    expect(adresseDepuisRelais('https://RELAIS.AppDashboard.fr/')).toBe('https://esport.appdashboard.fr');
+    expect(adresseDepuisRelais('https://relais.appdashboard.fr/chemin')).toBeUndefined();
+    expect(adresseDepuisRelais('http://relais.appdashboard.fr')).toBeUndefined();
     expect(adresseDepuisRelais(undefined)).toBeUndefined();
   });
 

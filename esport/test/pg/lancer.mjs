@@ -19,7 +19,9 @@ if (!url) {
   process.exit(2);
 }
 const dossier = fileURLToPath(new URL('..', import.meta.url));
-const fichiers = process.argv.slice(2).length ? process.argv.slice(2) : readdirSync(dossier).filter(f => f.endsWith('.test.mjs')).sort().map(f => `${dossier}${f}`);
+const fichiers = process.argv.slice(2).length
+  ? process.argv.slice(2)
+  : [...readdirSync(dossier).filter(f => f.endsWith('.test.mjs')).sort().map(f => `${dossier}${f}`), fileURLToPath(new URL('./serveurs.test.mjs', import.meta.url)), fileURLToPath(new URL('./deployer.test.mjs', import.meta.url))];
 
 async function nettoyer() {
   const admin = await basePostgres({ connexion: url, max: 1 });

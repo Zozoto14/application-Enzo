@@ -14,7 +14,7 @@
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { basePostgres } from '../../esport/adaptateurs/postgres.mjs';
+import { basePostgres, optionsDepuisEnv } from '../../esport/adaptateurs/postgres.mjs';
 import { chargerConfigRelais } from './app.mjs';
 import { creerTableKv, kvPostgres, TABLE_KV } from './kv-postgres.mjs';
 
@@ -75,7 +75,7 @@ export async function principal(args, env = process.env) {
   }
   const sortie = option('--sortie');
   if (sortie) writeFileSync(sortie, JSON.stringify({ cles }), { mode: 0o600 });
-  const base = await basePostgres({ max: 2 });
+  const base = await basePostgres({ ...optionsDepuisEnv(env), max: 2 });
   try {
     const bilan = await importerBoite(base, cles);
     const total = Number((await base.premier(`SELECT COUNT(*) AS n FROM ${TABLE_KV}`, [])).n);

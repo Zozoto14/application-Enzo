@@ -9,7 +9,7 @@
  */
 
 import { pathToFileURL } from 'node:url';
-import { basePostgres } from '../adaptateurs/postgres.mjs';
+import { basePostgres, optionsDepuisEnv } from '../adaptateurs/postgres.mjs';
 import { stockageDisque } from '../adaptateurs/stockage.mjs';
 import { creerApi, reponseJson } from '../noyau/api.mjs';
 import { verificateurRelais } from '../noyau/authentification.mjs';
@@ -27,7 +27,7 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     const traiter = async () => reponseJson({ erreur: 'Serveur Esport pas encore configuré (voir docs/o2switch.md).', code: 'non-configure', problemes }, 503);
     return { traiter, config, problemes, fermer: async () => {} };
   }
-  const b = base ?? (await basePostgres());
+  const b = base ?? (await basePostgres(optionsDepuisEnv()));
   const st = stockage ?? (await stockageDisque(config.dossierFichiers));
   const api = creerApi({
     base: b,

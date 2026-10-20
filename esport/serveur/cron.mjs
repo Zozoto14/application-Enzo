@@ -12,7 +12,7 @@ import { mkdirSync, openSync, closeSync, rmSync, statSync, writeFileSync } from 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { basePostgres } from '../adaptateurs/postgres.mjs';
+import { basePostgres, optionsDepuisEnv } from '../adaptateurs/postgres.mjs';
 import { tachesPlanifiees } from '../noyau/cron.mjs';
 import { purgerKvExpire } from '../../relais/serveur/kv-postgres.mjs';
 import { chargerConfigEsport } from './config.mjs';
@@ -54,7 +54,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     console.log(`${new Date().toISOString()} cron Esport : exécution précédente encore en cours, rien à faire.`);
     process.exit(0);
   }
-  const base = await basePostgres({ max: 2 });
+  const base = await basePostgres({ ...optionsDepuisEnv(), max: 2 });
   try {
     const rapport = await executerCron(base, config);
     const echecs = rapport.filter(r => !r.ok);

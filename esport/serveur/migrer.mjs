@@ -7,7 +7,7 @@
  */
 
 import { pathToFileURL } from 'node:url';
-import { basePostgres } from '../adaptateurs/postgres.mjs';
+import { basePostgres, optionsDepuisEnv } from '../adaptateurs/postgres.mjs';
 import { lireMigrations } from '../adaptateurs/sqlite.mjs';
 import { appliquerMigrations } from '../noyau/migrations.mjs';
 import { creerTableKv } from '../../relais/serveur/kv-postgres.mjs';
@@ -21,7 +21,7 @@ export async function migrer(base) {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   chargerConfigEsport();
-  const base = await basePostgres({ max: 1 });
+  const base = await basePostgres({ ...optionsDepuisEnv(), max: 1 });
   try {
     const appliquees = await migrer(base);
     console.log(appliquees.length ? `Migrations appliquées : ${appliquees.join(', ')}` : 'Base à jour : aucune migration à appliquer.');

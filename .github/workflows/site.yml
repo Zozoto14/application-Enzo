@@ -27,7 +27,9 @@ permissions:
 
 jobs:
   deployer:
-    if: github.ref == 'refs/heads/main'
+    # Bascule vers o2switch (docs/o2switch.md) : la variable GitHub SITE_CLOUDFLARE_ARRET = 1 arrête les
+    # publications sur Cloudflare Pages (le site Pages reste en ligne tel quel, rien n'y est effacé).
+    if: github.ref == 'refs/heads/main' && vars.SITE_CLOUDFLARE_ARRET != '1'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:

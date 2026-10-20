@@ -1,0 +1,81 @@
+# Site AppDashboard pour o2switch (https://appdashboard.fr, dossier public_html) : construit ici à chaque
+# changement de l'app sur main, puis poussé (fichiers construits SEULEMENT) sur la branche
+# `deploiement-o2switch`. Le serveur o2switch tire cette branche toutes les 5 minutes
+# (esport/serveur/deployer.sh) : aucun accès entrant, aucun secret d'hébergement ici.
+# Mode d'emploi : docs/o2switch.md. Le workflow « Site (Cloudflare Pages) » continue en parallèle jusqu'à
+# la bascule.
+#
+# La branche deploiement-o2switch ne contient jamais de code : elle est réécrite à chaque construction
+# (un seul commit), pour ne pas faire grossir le dépôt cloné sur l'hébergement.
+
+name: Site (o2switch)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.github/workflows/app-iphone.yml'
+      - 'ios/**'
+      - 'android/**'
+      - 'pour-le-mac/**'
+  workflow_dispatch:
+
+concurrency:
+  group: site-o2switch
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  construire:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Adresses publiées avec le site (rien de secret). Par défaut : les serveurs o2switch.
+      ESPORT_URL: ${{ vars.O2SWITCH_ESPORT_URL || 'https://esport.appdashboard.fr' }}
+      RELAIS_URL: ${{ vars.O2SWITCH_RELAIS_URL || 'https://relais.appdashboard.fr' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Vérifier les types
+        run: npx tsc --noEmit
+
+      - name: Tests
+        run: npm test -- --silent
+
+      - name: Construire le site
+        run: npx vite build --outDir ../site-dist --emptyOutDir
+
+      - name: Adresses des serveurs (esport.json, relais.json) et règles Apache (.htaccess)
+        run: |
+          for u in "$ESPORT_URL" "$RELAIS_URL"; do
+            printf '%s' "$u" | grep -Eq '^https://[a-z0-9.-]+/?$' || { echo "::error::Adresse invalide : $u"; exit 1; }
+          done
+          node -e "const fs=require('fs');fs.writeFileSync('site-dist/esport.json',JSON.stringify({esport:process.env.ESPORT_URL.replace(/\/+$/,'')})+'\n');fs.writeFileSync('site-dist/relais.json',JSON.stringify({relais:process.env.RELAIS_URL.replace(/\/+$/,'')})+'\n')"
+          cat site-dist/esport.json site-dist/relais.json
+          node scripts/htaccess-o2switch.mjs generer bureau/public > site-dist/htaccess-appdashboard.conf
+          rm -f site-dist/_headers site-dist/_redirects
+          printf 'Branche de déploiement du site (fichiers construits par .github/workflows/site-o2switch.yml depuis %s).\nNe pas modifier à la main : voir docs/o2switch.md.\n' "$GITHUB_SHA" > site-dist/LISEZMOI-deploiement.md
+          du -sh site-dist
+
+      - name: Pousser sur la branche deploiement-o2switch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd site-dist
+          git init -q -b deploiement-o2switch
+          git add -A
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -q -m "Site construit depuis ${GITHUB_SHA::12}"
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" deploiement-o2switch
+          echo "Branche deploiement-o2switch à jour ($(git rev-parse --short HEAD)) : le serveur o2switch la tire dans les 5 minutes."

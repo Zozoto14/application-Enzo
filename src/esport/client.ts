@@ -10,7 +10,9 @@
  *  1. `esport.json` publié avec le site (`{ "esport": "https://…" }`, variable
  *     GitHub ESPORT_URL du workflow du site) ;
  *  2. déduite de l'adresse du relais : `applibourse-relais.<vous>.workers.dev`
- *     → `applibourse-esport.<vous>.workers.dev` (même compte Cloudflare).
+ *     → `applibourse-esport.<vous>.workers.dev` (même compte Cloudflare), ou
+ *     `relais.<domaine>` → `esport.<domaine>` (serveurs hébergés chez o2switch,
+ *     docs/o2switch.md).
  * Sans réponse du Worker : « Esport pas encore activé », rien d'autre ne casse.
  */
 
@@ -449,10 +451,16 @@ export function adresseValide(adresse: unknown): adresse is string {
   return typeof adresse === 'string' && (/^https:\/\/[a-z0-9.-]+(:\d+)?(\/[^\s]*)?$/i.test(adresse) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(adresse));
 }
 
-/** `https://applibourse-relais.x.workers.dev` → `https://applibourse-esport.x.workers.dev`. */
+/**
+ * `https://applibourse-relais.x.workers.dev` → `https://applibourse-esport.x.workers.dev` ;
+ * `https://relais.appdashboard.fr` → `https://esport.appdashboard.fr` (même domaine, hébergement o2switch).
+ */
 export function adresseDepuisRelais(relais: string | undefined): string | undefined {
-  const trouve = /^https:\/\/applibourse-relais\.([a-z0-9-]+)\.workers\.dev\/?$/i.exec(relais?.trim() ?? '');
-  return trouve ? `https://applibourse-esport.${trouve[1].toLowerCase()}.workers.dev` : undefined;
+  const propre = relais?.trim() ?? '';
+  const trouve = /^https:\/\/applibourse-relais\.([a-z0-9-]+)\.workers\.dev\/?$/i.exec(propre);
+  if (trouve) return `https://applibourse-esport.${trouve[1].toLowerCase()}.workers.dev`;
+  const domaine = /^https:\/\/relais\.((?:[a-z0-9-]+\.)+[a-z]{2,})\/?$/i.exec(propre);
+  return domaine ? `https://esport.${domaine[1].toLowerCase()}` : undefined;
 }
 
 /** Adresse publiée avec le site (`esport.json`), si elle existe et est valide. */

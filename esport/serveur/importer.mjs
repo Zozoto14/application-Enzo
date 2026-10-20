@@ -18,7 +18,7 @@
 
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { basePostgres } from '../adaptateurs/postgres.mjs';
+import { basePostgres, optionsDepuisEnv } from '../adaptateurs/postgres.mjs';
 import { stockageDisque } from '../adaptateurs/stockage.mjs';
 import { TABLES, baseVide, importerBase } from '../noyau/transfert.mjs';
 import { chargerConfigRelais } from '../../relais/serveur/app.mjs';
@@ -78,7 +78,7 @@ export async function principal(args, env = process.env, { fetch: requete = glob
   if (!entree && !source) throw new Error('ESPORT_SOURCE absente : adresse de l’ancien serveur Esport (https://applibourse-esport.<vous>.workers.dev).');
   if (source && !jeton) throw new Error('JETON absent de ~/.appdashboard/relais.env (jeton maître : il ouvre la session du Fondateur sur l’ancien serveur).');
 
-  const base = await basePostgres({ max: 2 });
+  const base = await basePostgres({ ...optionsDepuisEnv(env), max: 2 });
   try {
     const appliquees = await migrer(base);
     if (appliquees.length) journal.log(`Migrations appliquées : ${appliquees.join(', ')}`);
