@@ -49,6 +49,8 @@ export const TABLES = [
   ['adversaire_vods', 'id'],
   ['review_reperes', 'id'],
   ['review_commentaires', 'id'],
+  // Review v2 (migration 0010) : réactions 👍 / 👎.
+  ['review_reactions', 'id'],
   // Phase 6 (migration 0006) : strats et playbook.
   ['strats', 'id'],
   ['strat_versions', 'id'],

@@ -10,6 +10,8 @@
  *   PATCH|DELETE        /teams/:t/review/:id/reperes/:r                    modifier, supprimer
  *   POST                /teams/:t/review/:id/reperes/:r/commentaires       commenter
  *   DELETE              /teams/:t/review/:id/reperes/:r/commentaires/:c    supprimer un commentaire
+ *   PUT|DELETE          /teams/:t/review/:id/reperes/:r/reaction           réagir (👍 / 👎) au repère, retirer
+ *   PUT|DELETE          /teams/:t/review/:id/reperes/:r/commentaires/:c/reaction  réagir au commentaire, retirer
  *
  *   GET|POST            /teams/:t/scouting/adversaires                     liste, création
  *   GET|PATCH|DELETE    /teams/:t/scouting/adversaires/:a                  fiche complète, modification, suppression
@@ -57,6 +59,12 @@ export async function routesReview({ review, scouting, acteur, chemin, methode, 
     if (n === 3 && sous === 'reperes' && methode === 'DELETE') return review.supprimerRepere(acteur, teamId, id, repere);
     if (n === 4 && sous === 'reperes' && p[3] === 'commentaires' && methode === 'POST') return review.commenter(acteur, teamId, id, repere, await lireCorps());
     if (n === 5 && sous === 'reperes' && p[3] === 'commentaires' && methode === 'DELETE') return review.supprimerCommentaire(acteur, teamId, id, repere, commentaire);
+    if (n === 4 && sous === 'reperes' && p[3] === 'reaction' && (methode === 'PUT' || methode === 'DELETE')) {
+      return review.reagir(acteur, teamId, id, repere, undefined, methode === 'DELETE' ? { valeur: null } : await lireCorps());
+    }
+    if (n === 6 && sous === 'reperes' && p[3] === 'commentaires' && p[5] === 'reaction' && (methode === 'PUT' || methode === 'DELETE')) {
+      return review.reagir(acteur, teamId, id, repere, commentaire, methode === 'DELETE' ? { valeur: null } : await lireCorps());
+    }
     throw echec(404, 'route', 'Adresse inconnue.');
   }
 

@@ -5,6 +5,8 @@
  * (« review créée ») sans que la review ne l'appelle jamais.
  *
  * Charge de `review.created` : `{ titre, videoId, url, reference, adversaireId, depuisVod }`.
+ * `review.reaction_changed` (👍 / 👎) va au journal seulement : aucune
+ * notification (trop bruyant), et Discord ne s'y abonne pas.
  *
  * Ce fichier n'importe pas evenements.mjs (c'est lui qui nous importe).
  */
@@ -18,6 +20,7 @@ export const TYPES_REVIEW = [
   'review.marker_deleted',
   'review.comment_added',
   'review.comment_deleted',
+  'review.reaction_changed',
   'opponent.created',
   'opponent.updated',
   'opponent.deleted',

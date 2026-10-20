@@ -5,6 +5,7 @@
  * `nettoyerNote` (aucune balise HTML ne sort d'ici).
  */
 
+import { resumeDessin } from './dessin.mjs';
 import { ligneSure, nettoyerNote } from './markdown.mjs';
 import { lienYoutubeA } from './youtube.mjs';
 
@@ -23,8 +24,9 @@ export function formatTemps(secondes) {
 const jour = iso => String(iso ?? '').slice(0, 10);
 
 /**
- * `reperes` : `[{ debut, fin, categorie, titre, note, cible, auteur, creeLe, commentaires: [{ auteur, texte, creeLe }] }]`
- * (`cible` et `auteur` : pseudos ou null), déjà triés par instant.
+ * `reperes` : `[{ debut, fin, categorie, titre, note, cible, auteur, creeLe, reactions?: { like, dislike },
+ * dessin?: { v, objets } | null, commentaires: [{ auteur, texte, creeLe }] }]` (`cible` et `auteur` :
+ * pseudos ou null), déjà triés par instant. Le dessin est mentionné (il se voit sur le site ou l'app PC).
  */
 export function exporterMarkdown({ review, reperes, equipe, exporteLe }) {
   const l = [];
@@ -42,6 +44,10 @@ export function exporterMarkdown({ review, reperes, equipe, exporteLe }) {
     if (r.auteur) meta.push(`Auteur : ${ligneSure(r.auteur, 60)}`);
     l.push(`**${meta.join('** · **')}**`, '');
     l.push(`[Ouvrir à ${formatTemps(r.debut)}](${lienYoutubeA(review.videoId, r.debut)})`, '');
+    const like = Number(r.reactions?.like) || 0;
+    const dislike = Number(r.reactions?.dislike) || 0;
+    if (like || dislike) l.push(`Réactions : 👍 ${like} · 👎 ${dislike}`, '');
+    if (r.dessin?.objets?.length) l.push(`✏️ Dessin sur la vidéo : ${resumeDessin(r.dessin)}, visible sur le site ou l’app PC.`, '');
     if (r.note) l.push(nettoyerNote(r.note), '');
     if (r.commentaires?.length) {
       l.push('Commentaires :', '');

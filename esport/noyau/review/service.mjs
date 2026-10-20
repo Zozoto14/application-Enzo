@@ -14,8 +14,17 @@
  *   video_review.annotate  ajouter des repères et des commentaires ; modifier et
  *                          supprimer SES repères et SES commentaires
  *   video_review.delete    supprimer une review, n'importe quel repère ou commentaire
- * Le Joueur (view + annotate) commente donc, mais ne supprime ni une review
- * ni le travail d'un autre.
+ *   video_review.react     réagir (👍 / 👎) à un repère ou à un commentaire
+ * Le Joueur (view + annotate + react) commente, dessine et réagit, mais ne
+ * supprime ni une review ni le travail d'un autre.
+ *
+ * Réactions (v2) : une par membre et par cible (repère ou commentaire), qu'il
+ * change ou retire ; compteurs et noms visibles par tous les lecteurs. Un
+ * changement publie `review.reaction_changed` (journal seulement : ni
+ * notification, ni Discord).
+ *
+ * Dessin (v2) : `dessin` d'un repère, JSON validé par review/dessin.mjs
+ * (coordonnées relatives, taille bornée), écrit avec la permission annotate.
  *
  * Chaque écriture ajoute son événement de domaine à l'outbox dans le même lot
  * atomique ; `review.created` est celui auquel Discord s'abonnera (phase 4).
@@ -26,6 +35,7 @@ import { autorise } from '../permissions.mjs';
 import { echec, iso, nouvelId, texteNettoye } from '../outils.mjs';
 import { pseudosDe } from '../requetes.mjs';
 import { CATEGORIES, exporterMarkdown, nomFichierExport } from './export.mjs';
+import { lireDessin, validerDessin } from './dessin.mjs';
 import { nettoyerNote } from './markdown.mjs';
 import { adresseYoutube, extraireYoutube } from './youtube.mjs';
 
@@ -94,13 +104,28 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
     ...(nbReperes === undefined ? {} : { reperes: nbReperes }),
   });
 
-  /** Repères d'une review, avec leurs commentaires, triés par instant. */
+  /** Repères d'une review, avec leurs commentaires et réactions, triés par instant. */
   async function reperesDe(ctx, review) {
     const teamId = ctx.team.id;
     const lignes = await base.tous('SELECT * FROM review_reperes WHERE review_id = ? AND team_id = ? AND supprime_le IS NULL ORDER BY debut_s, cree_le LIMIT ?', [review.id, teamId, REPERES_MAX]);
     const coms = await base.tous('SELECT * FROM review_commentaires WHERE review_id = ? AND team_id = ? AND supprime_le IS NULL ORDER BY cree_le LIMIT 5000', [review.id, teamId]);
-    const noms = await pseudos([...lignes.flatMap(r => [r.auteur_id, r.cible_id]), ...coms.map(c => c.auteur_id)]);
+    const reacts = await base.tous('SELECT cible_type, cible_id, compte_id, valeur FROM review_reactions WHERE review_id = ? AND team_id = ? ORDER BY cree_le LIMIT 50000', [review.id, teamId]);
+    const noms = await pseudos([...lignes.flatMap(r => [r.auteur_id, r.cible_id]), ...coms.map(c => c.auteur_id), ...reacts.map(x => x.compte_id)]);
     const moi = ctx.acteur.compte;
+    const parCible = new Map();
+    for (const x of reacts) {
+      const cle = `${x.cible_type}:${x.cible_id}`;
+      if (!parCible.has(cle)) parCible.set(cle, []);
+      parCible.get(cle).push(x);
+    }
+    const reactions = (type, id) => {
+      const liste = parCible.get(`${type}:${id}`) ?? [];
+      const de = v => liste.filter(x => Number(x.valeur) === v).map(x => personne(x.compte_id, noms));
+      const mienne = liste.find(x => x.compte_id === moi);
+      const like = de(1);
+      const dislike = de(-1);
+      return { like: like.length, dislike: dislike.length, moi: mienne ? (Number(mienne.valeur) === 1 ? 'like' : 'dislike') : null, qui: { like, dislike } };
+    };
     const annote = peut(ctx, 'video_review.annotate');
     const supprime = peut(ctx, 'video_review.delete');
     const modifieTout = peut(ctx, 'video_review.create');
@@ -111,15 +136,17 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
       categorie: r.categorie,
       titre: r.titre,
       note: r.note,
+      dessin: lireDessin(r.dessin),
       cible: personne(r.cible_id, noms),
       auteur: personne(r.auteur_id, noms),
       creeLe: r.cree_le,
       majLe: r.maj_le,
       peutModifier: modifieTout || (annote && r.auteur_id === moi),
       peutSupprimer: supprime || (annote && r.auteur_id === moi),
+      reactions: reactions('repere', r.id),
       commentaires: coms
         .filter(c => c.repere_id === r.id)
-        .map(c => ({ id: c.id, texte: c.texte, auteur: personne(c.auteur_id, noms), creeLe: c.cree_le, peutSupprimer: supprime || (annote && c.auteur_id === moi) })),
+        .map(c => ({ id: c.id, texte: c.texte, auteur: personne(c.auteur_id, noms), creeLe: c.cree_le, peutSupprimer: supprime || (annote && c.auteur_id === moi), reactions: reactions('commentaire', c.id) })),
     }));
   }
 
@@ -127,6 +154,7 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
     creer: peut(ctx, 'video_review.create'),
     annoter: peut(ctx, 'video_review.annotate'),
     supprimer: peut(ctx, 'video_review.delete'),
+    reagir: peut(ctx, 'video_review.react'),
   });
 
   // -------------------------------------------------------------- Lectures
@@ -276,6 +304,10 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
       if (c !== null && !(await membreActif(ctx.team.id, c))) throw echec(400, 'cible', 'Ce joueur n’est pas membre actif de la team.');
       s.cible_id = c;
     }
+    if (champ('dessin')) {
+      const d = validerDessin(corps.dessin);
+      s.dessin = d ? JSON.stringify(d) : null;
+    }
     return s;
   }
 
@@ -290,10 +322,10 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
     const rid = nouvelId();
     await base.lot([
       {
-        sql: 'INSERT INTO review_reperes (id, review_id, team_id, debut_s, fin_s, categorie, titre, note, cible_id, auteur_id, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        params: [rid, id, teamId, s.debut_s, s.fin_s ?? null, s.categorie, s.titre, s.note, s.cible_id ?? null, acteur.compte, iso(t), iso(t)],
+        sql: 'INSERT INTO review_reperes (id, review_id, team_id, debut_s, fin_s, categorie, titre, note, cible_id, auteur_id, dessin, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [rid, id, teamId, s.debut_s, s.fin_s ?? null, s.categorie, s.titre, s.note, s.cible_id ?? null, acteur.compte, s.dessin ?? null, iso(t), iso(t)],
       },
-      evenement('review.marker_added', { teamId, acteur: acteur.compte, entiteType: 'repere', entiteId: rid, charge: { reviewId: id, review: review.titre, titre: s.titre, categorie: s.categorie, debut: s.debut_s, cible: s.cible_id ?? null }, maintenant: t }),
+      evenement('review.marker_added', { teamId, acteur: acteur.compte, entiteType: 'repere', entiteId: rid, charge: { reviewId: id, review: review.titre, titre: s.titre, categorie: s.categorie, debut: s.debut_s, cible: s.cible_id ?? null, ...(s.dessin ? { dessin: true } : {}) }, maintenant: t }),
     ]);
     return (await reperesDe(ctx, review)).find(r => r.id === rid);
   }
@@ -369,6 +401,58 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
     return (await reperesDe(ctx, review)).find(x => x.id === repereId);
   }
 
+  // -------------------------------------------------------------- Réactions
+
+  const VALEURS_REACTION = { like: 1, dislike: -1 };
+
+  /**
+   * Réaction de l'acteur à un repère (`commentaireId` absent) ou à un
+   * commentaire : `{ valeur: 'like' | 'dislike' | null }` (null retire).
+   * Une seule réaction par membre et par cible ; rend le repère à jour.
+   */
+  async function reagir(acteur, teamId, id, repereId, commentaireId, corps) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exiger(ctx, 'video_review.react');
+    const review = await reviewDeTeam(teamId, id);
+    const r = await repereDeReview(teamId, id, repereId);
+    let cibleType = 'repere';
+    let cibleId = repereId;
+    if (commentaireId !== undefined) {
+      exigerUuid(commentaireId, 'commentaire');
+      const c = await base.premier('SELECT id FROM review_commentaires WHERE id = ? AND repere_id = ? AND team_id = ? AND supprime_le IS NULL', [commentaireId, repereId, teamId]);
+      if (!c) throw echec(404, 'commentaire-introuvable', 'Commentaire introuvable.');
+      cibleType = 'commentaire';
+      cibleId = commentaireId;
+    }
+    const brute = corps?.valeur ?? null;
+    if (brute !== null && !(brute in VALEURS_REACTION)) throw echec(400, 'valeur', 'Réaction inconnue (like, dislike ou null).');
+    const valeur = brute === null ? null : VALEURS_REACTION[brute];
+    const avant = await base.premier('SELECT id, valeur FROM review_reactions WHERE cible_type = ? AND cible_id = ? AND compte_id = ? AND team_id = ?', [cibleType, cibleId, acteur.compte, teamId]);
+    const ancienne = avant ? (Number(avant.valeur) === 1 ? 'like' : 'dislike') : null;
+    if (ancienne !== brute) {
+      const t = maintenant();
+      const sql =
+        valeur === null
+          ? { sql: 'DELETE FROM review_reactions WHERE cible_type = ? AND cible_id = ? AND compte_id = ? AND team_id = ?', params: [cibleType, cibleId, acteur.compte, teamId] }
+          : {
+              sql: 'INSERT INTO review_reactions (id, team_id, review_id, repere_id, cible_type, cible_id, compte_id, valeur, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (cible_type, cible_id, compte_id) DO UPDATE SET valeur = excluded.valeur, maj_le = excluded.maj_le',
+              params: [nouvelId(), teamId, id, repereId, cibleType, cibleId, acteur.compte, valeur, iso(t), iso(t)],
+            };
+      await base.lot([
+        sql,
+        evenement('review.reaction_changed', {
+          teamId,
+          acteur: acteur.compte,
+          entiteType: cibleType === 'repere' ? 'repere' : 'commentaire',
+          entiteId: cibleId,
+          charge: { reviewId: id, review: review.titre, repereId, repereTitre: r.titre, cible: cibleType, valeur: brute, avant: ancienne },
+          maintenant: t,
+        }),
+      ]);
+    }
+    return (await reperesDe(ctx, review)).find(x => x.id === repereId);
+  }
+
   // -------------------------------------------------------------- Export
 
   async function exporter(acteur, teamId, id) {
@@ -386,6 +470,8 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
         note: r.note,
         cible: r.cible?.pseudo ?? null,
         auteur: r.auteur?.pseudo ?? null,
+        reactions: { like: r.reactions.like, dislike: r.reactions.dislike },
+        dessin: r.dessin,
         commentaires: r.commentaires.map(c => ({ auteur: c.auteur?.pseudo ?? null, texte: c.texte, creeLe: c.creeLe })),
       })),
       equipe: ctx.team.nom,
@@ -394,5 +480,5 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
     return { nom: nomFichierExport(review.titre), type: 'text/markdown; charset=utf-8', contenu };
   }
 
-  return { liste, detail, creer, modifier, supprimer, ajouterRepere, modifierRepere, supprimerRepere, commenter, supprimerCommentaire, exporter, preparerCreation, reviewDeTeam, exiger };
+  return { liste, detail, creer, modifier, supprimer, ajouterRepere, modifierRepere, supprimerRepere, commenter, supprimerCommentaire, reagir, exporter, preparerCreation, reviewDeTeam, exiger };
 }

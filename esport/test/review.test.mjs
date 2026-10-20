@@ -184,7 +184,7 @@ test('review : création depuis une URL YouTube, validation, détail et liste', 
   const liste = await api(`/teams/${A.teamId}/review`, s.lea12345);
   assert.equal(liste.statut, 200);
   assert.equal(liste.corps.reviews.length, 1);
-  assert.deepEqual(liste.corps.droits, { creer: false, annoter: true, supprimer: false });
+  assert.deepEqual(liste.corps.droits, { creer: false, annoter: true, supprimer: false, reagir: true });
   const detail = await api(`/teams/${A.teamId}/review/${r.corps.id}`, s.lea12345);
   assert.equal(detail.corps.review.reference, 'Match J4');
   assert.deepEqual(detail.corps.reperes, []);

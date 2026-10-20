@@ -29,6 +29,7 @@ import {
 } from './permissions.mjs';
 import { aleatoire, echec, iso, jsonOu, nouvelId, slugDe, texteLong, texteNettoye } from './outils.mjs';
 import { lignesParIds, pseudosDe } from './requetes.mjs';
+import { lireDessin } from './review/dessin.mjs';
 
 const MOTIF_PSEUDO = /^[\p{L}\p{N}][\p{L}\p{N} _.\-]{1,23}$/u;
 const MOTIF_RIOT = /^[^#\s][^#]{2,15}#[\p{L}\p{N}]{3,5}$/u;
@@ -704,8 +705,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
   /**
    * Toutes les données Esport d'un compte (droit d'accès et de portabilité) :
    * profil, appartenances, notifications, actions du journal, disponibilités,
-   * présences, réunions déposées, tâches et objectifs, repères et commentaires
-   * de review, strats et entrées de playbook créées, abonnements iCal (sans
+   * présences, réunions déposées, tâches et objectifs, repères (et leurs
+   * dessins), commentaires et réactions 👍 / 👎 de review, strats et entrées de playbook créées, abonnements iCal (sans
    * leur jeton), invitations créées (sans leur code).
    */
   async function donneesDuCompte(compte) {
@@ -733,7 +734,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       reunionsDeposees: (await q('SELECT team_id, titre, lien, date_reunion, note, statut, cree_le FROM reunions WHERE depose_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(r => ({ team: team(r.team_id), titre: r.titre, lien: r.lien, date: r.date_reunion, note: r.note, statut: r.statut, deposeLe: r.cree_le })),
       taches: (await base.tous('SELECT team_id, titre, description, statut, priorite, echeance, assigne_id, cree_par, cree_le FROM taches WHERE (assigne_id = ? OR cree_par = ?) AND supprime_le IS NULL ORDER BY cree_le LIMIT 5000', [compte, compte])).map(t => ({ team: team(t.team_id), titre: t.titre, description: t.description, statut: t.statut, priorite: t.priorite, echeance: t.echeance, assigneAMoi: t.assigne_id === compte, creeeParMoi: t.cree_par === compte, creeLe: t.cree_le })),
       objectifs: (await base.tous('SELECT team_id, titre, description, statut, date_cible, proprietaire_id, cree_par, cree_le FROM objectifs WHERE (proprietaire_id = ? OR cree_par = ?) AND supprime_le IS NULL ORDER BY cree_le LIMIT 5000', [compte, compte])).map(o => ({ team: team(o.team_id), titre: o.titre, description: o.description, statut: o.statut, dateCible: o.date_cible, aMoi: o.proprietaire_id === compte, creeParMoi: o.cree_par === compte, creeLe: o.cree_le })),
-      reviewReperes: (await base.tous('SELECT r.team_id, v.titre AS review, r.debut_s, r.categorie, r.titre, r.note, r.auteur_id, r.cible_id, r.cree_le FROM review_reperes r JOIN reviews v ON v.id = r.review_id WHERE (r.auteur_id = ? OR r.cible_id = ?) AND r.supprime_le IS NULL ORDER BY r.cree_le LIMIT 5000', [compte, compte])).map(r => ({ team: team(r.team_id), review: r.review, seconde: Number(r.debut_s), categorie: r.categorie, titre: r.titre, note: r.note, auteur: r.auteur_id === compte, concerne: r.cible_id === compte, date: r.cree_le })),
+      reviewReperes: (await base.tous('SELECT r.team_id, v.titre AS review, r.debut_s, r.categorie, r.titre, r.note, r.dessin, r.auteur_id, r.cible_id, r.cree_le FROM review_reperes r JOIN reviews v ON v.id = r.review_id WHERE (r.auteur_id = ? OR r.cible_id = ?) AND r.supprime_le IS NULL ORDER BY r.cree_le LIMIT 5000', [compte, compte])).map(r => ({ team: team(r.team_id), review: r.review, seconde: Number(r.debut_s), categorie: r.categorie, titre: r.titre, note: r.note, dessin: lireDessin(r.dessin), auteur: r.auteur_id === compte, concerne: r.cible_id === compte, date: r.cree_le })),
+      reviewReactions: (await base.tous("SELECT x.team_id, v.titre AS review, p.titre AS repere, x.cible_type, x.valeur, x.cree_le, x.maj_le FROM review_reactions x JOIN reviews v ON v.id = x.review_id JOIN review_reperes p ON p.id = x.repere_id WHERE x.compte_id = ? ORDER BY x.cree_le LIMIT ?", [compte, 5000])).map(x => ({ team: team(x.team_id), review: x.review, repere: x.repere, cible: x.cible_type, reaction: Number(x.valeur) === 1 ? 'like' : 'dislike', date: x.maj_le })),
       reviewCommentaires: (await q('SELECT team_id, texte, cree_le FROM review_commentaires WHERE auteur_id = ? AND supprime_le IS NULL ORDER BY cree_le')).map(c => ({ team: team(c.team_id), texte: c.texte, date: c.cree_le })),
       strats: (await q('SELECT team_id, titre, carte_nom, side, type, visibilite, cree_le FROM strats WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), titre: x.titre, carte: x.carte_nom, side: x.side, type: x.type, visibilite: x.visibilite, creeLe: x.cree_le })),
       playbook: (await q('SELECT team_id, titre, statut, cree_le FROM playbook_entrees WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), titre: x.titre, statut: x.statut, creeLe: x.cree_le })),
@@ -790,6 +792,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       { sql: 'UPDATE taches SET assigne_id = NULL WHERE assigne_id = ?', params: [compte] },
       { sql: 'UPDATE objectifs SET proprietaire_id = NULL WHERE proprietaire_id = ?', params: [compte] },
       { sql: 'UPDATE review_reperes SET cible_id = NULL WHERE cible_id = ?', params: [compte] },
+      { sql: 'DELETE FROM review_reactions WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM tentatives WHERE cle = ?', params: [`invitation:compte:${compte}`] },
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, ...(compte === acteur.compte ? {} : { parFondateur: true }) }, maintenant: t }),

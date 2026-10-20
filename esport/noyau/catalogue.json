@@ -103,7 +103,8 @@
       "permissions": [
         { "cle": "video_review.view", "action": "voir", "libelle": "Voir" },
         { "cle": "video_review.create", "action": "creer", "libelle": "Créer" },
-        { "cle": "video_review.annotate", "action": "modifier", "libelle": "Annoter et commenter" },
+        { "cle": "video_review.annotate", "action": "modifier", "libelle": "Annoter, commenter et dessiner" },
+        { "cle": "video_review.react", "action": "special", "libelle": "Réagir (👍 / 👎)" },
         { "cle": "video_review.delete", "action": "supprimer", "libelle": "Supprimer" }
       ]
     },
@@ -160,7 +161,7 @@
         "meeting_summaries.view_all", "meeting_summaries.submit", "meeting_summaries.view_summary", "meeting_summaries.write_summary", "meeting_summaries.view_staff",
         "goals_tasks.view",
         "discord.manage",
-        "video_review.view", "scouting.view", "strats.view", "playbook.view",
+        "video_review.view", "video_review.react", "scouting.view", "strats.view", "playbook.view",
         "activity_log.view"
       ]
     },
@@ -176,7 +177,7 @@
         "attendance.view_all", "attendance.mark", "attendance.rsvp_own",
         "meeting_summaries.submit", "meeting_summaries.view_summary", "meeting_summaries.view_staff",
         "goals_tasks.view", "goals_tasks.create", "goals_tasks.update", "goals_tasks.delete", "goals_tasks.assign",
-        "video_review.view", "video_review.create", "video_review.annotate", "video_review.delete",
+        "video_review.view", "video_review.create", "video_review.annotate", "video_review.delete", "video_review.react",
         "scouting.view", "scouting.manage",
         "strats.view", "strats.create", "strats.update", "strats.delete", "strats.share",
         "playbook.view", "playbook.manage"
@@ -193,7 +194,7 @@
         "availability.view_all", "availability.edit_own", "attendance.rsvp_own",
         "meeting_summaries.submit", "meeting_summaries.view_summary", "meeting_summaries.view_staff",
         "goals_tasks.view",
-        "video_review.view", "video_review.create", "video_review.annotate",
+        "video_review.view", "video_review.create", "video_review.annotate", "video_review.react",
         "scouting.view", "scouting.manage",
         "strats.view", "strats.create", "strats.update", "strats.share",
         "playbook.view", "playbook.manage"
@@ -210,7 +211,7 @@
         "availability.view_all", "availability.edit_own", "attendance.rsvp_own",
         "meeting_summaries.submit", "meeting_summaries.view_summary",
         "goals_tasks.view",
-        "video_review.view", "video_review.annotate",
+        "video_review.view", "video_review.annotate", "video_review.react",
         "strats.view", "playbook.view"
       ]
     },

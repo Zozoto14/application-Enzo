@@ -301,6 +301,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau }) 
       { sql: 'UPDATE taches SET assigne_id = NULL WHERE assigne_id = ?', params: [compte] },
       { sql: 'UPDATE objectifs SET proprietaire_id = NULL WHERE proprietaire_id = ?', params: [compte] },
       { sql: 'UPDATE review_reperes SET cible_id = NULL WHERE cible_id = ?', params: [compte] },
+      { sql: 'DELETE FROM review_reactions WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, par: 'administration' }, maintenant: t }),
     );
