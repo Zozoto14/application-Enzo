@@ -38,10 +38,14 @@ export function tailleLisible(octets: number): string {
   if (octets < 1024 * 1024) return `${Math.round(octets / 1024)} Ko`;
   return `${(octets / (1024 * 1024)).toFixed(1).replace('.', ',')} Mo`;
 }
+import { LIBELLES_DISCORD } from './discord/api';
 import { phraseJournalPlanning, phraseNotificationPlanning } from './planning/libelles';
 
 const nom = (noms: Record<string, string | null>, id: unknown): string =>
   typeof id === 'string' ? (noms[id] ?? (id === 'principal' ? 'Le Fondateur' : 'Un compte supprimé')) : 'Quelqu’un';
+
+const nombre = (v: unknown): string => (typeof v === 'number' ? String(v) : '?');
+const libelleDiscord = (cle: unknown): string => (typeof cle === 'string' ? (LIBELLES_DISCORD[cle] ?? cle) : '?');
 
 const liste = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 
@@ -112,6 +116,21 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
       return `${qui} a supprimé la tâche « ${texte(m.titre)} »`;
     case 'task.due_soon':
       return `Rappel d’échéance envoyé à ${nom(noms, m.assigne)} pour « ${texte(m.titre)} »`;
+    case 'discord.webhook_set':
+      return `${qui} a ${m.remplace ? 'remplacé' : 'enregistré'} le webhook Discord`;
+    case 'discord.webhook_removed':
+      return `${qui} a supprimé le webhook Discord`;
+    case 'discord.settings_changed':
+      return `${qui} a modifié la notification Discord « ${libelleDiscord(m.notification)} »`;
+    case 'discord.test_sent':
+      return `${qui} a envoyé un message de test sur Discord`;
+    case 'discord.delivery_failed':
+      return `Envoi Discord « ${libelleDiscord(m.cle)} » échoué (essai ${nombre(m.essai)}/${nombre(m.sur)}) : ${texte(m.motif)}`;
+    case 'discord.delivery_abandoned':
+      return `Envoi Discord « ${libelleDiscord(m.cle)} » abandonné : ${texte(m.motif)}`;
+    case 'event.reminder_d1':
+    case 'event.reminder_h1':
+      return `Rappel ${e.action === 'event.reminder_d1' ? 'J-1' : 'H-1'} préparé pour « ${texte(m.titre)} »`;
     default:
       return phraseJournalPlanning(e.action, qui, m, id => nom(noms, id)) ?? `${qui} : ${e.action}`;
   }
@@ -130,6 +149,7 @@ export const FILTRES_JOURNAL: ReadonlyArray<readonly [string, string]> = [
   ['goal', 'Objectifs'],
   ['event', 'Planning'],
   ['attendance', 'Présence'],
+  ['discord', 'Discord'],
 ];
 
 export function phraseNotification(n: Notification, noms: Record<string, string | null>): string {

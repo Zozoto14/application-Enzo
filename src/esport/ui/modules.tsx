@@ -8,6 +8,8 @@ import type React from 'react';
 import type { ThemeHub } from '../../hub/themes';
 import type { ClientEsport, DetailTeam } from '../client';
 import type { SaisieEvenement } from '../planning/api';
+import { PERMISSION_DISCORD } from '../discord/api';
+import { Discord } from './Discord';
 import { Disponibilites } from './planning/Disponibilites';
 import { Planning } from './planning/Planning';
 import { Presence } from './planning/Presence';
@@ -30,6 +32,7 @@ export const ECRANS_MODULES: Record<string, (props: PropsModule) => React.ReactE
   planning: Planning,
   availability: Disponibilites,
   attendance: Presence,
+  discord: Discord,
 };
 
 /** Permissions dont l'une ouvre l'écran du module (sinon, pas d'entrée dans la barre). */
@@ -37,6 +40,8 @@ const ACCES_MODULES: Record<string, string[]> = {
   planning: ['planning.view'],
   availability: ['availability.edit_own', 'availability.view_all'],
   attendance: ['attendance.rsvp_own', 'attendance.view_all', 'attendance.mark'],
+  // Le webhook est un secret : l'écran Discord n'existe que pour qui peut le gérer.
+  discord: [PERMISSION_DISCORD],
 };
 
 export function moduleAccessible(cle: string, permissions: readonly string[]): boolean {
