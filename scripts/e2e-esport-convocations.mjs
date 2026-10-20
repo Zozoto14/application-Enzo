@@ -11,7 +11,7 @@
  *  - le Fondateur voit l'événement au calendrier (« vous n'êtes pas convoqué »),
  *    la liste de présence ne contient que les convoqués, il MARQUE la présence
  *    (un appui enregistre) ;
- *  - les STATISTIQUES (3 mois) comptent les présents et calculent le
+ *  - les STATISTIQUES (90 jours jusqu’à demain) comptent les présents et calculent le
  *    taux ; le Fondateur n'y figure pas.
  *
  *   npx vite build
@@ -206,7 +206,11 @@ try {
   // Page Présence à onglets (refonte) : « À marquer », « Historique », « Statistiques ».
   await pc.getByTestId('esport-presence-onglet-stats').click();
   await pc.getByTestId('esport-presence-stats').waitFor({ timeout: 20_000 });
-  await pc.getByTestId('esport-presence-periode-90').click();
+  // La réunion a lieu DEMAIN (marquée d'avance) : période « Dates… » qui l'englobe (les périodes toutes faites
+  // s'arrêtent à aujourd'hui, la séance de demain y entrera une fois passée).
+  await pc.getByTestId('esport-presence-periode-perso').click();
+  await pc.getByTestId('esport-presence-du').fill(plusJours(DEMAIN, -89));
+  await pc.getByTestId('esport-presence-au').fill(DEMAIN);
   await pc.getByTestId('esport-stat-joueur-lea12345-taux').waitFor({ timeout: 20_000 });
   const taux = async id => (await pc.getByTestId(id).innerText()).trim();
   verifier((await taux('esport-stat-joueur-lea12345-taux')) === '100 %', 'Léa : 100 %');

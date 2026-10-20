@@ -272,6 +272,11 @@ try {
   await ongletTeam(pc, 'module-attendance');
   await pc.getByTestId('esport-presence-onglet-stats').click();
   await pc.getByTestId('esport-presence-stats').waitFor({ timeout: 20_000 });
+  // La réunion a lieu DEMAIN (marquée d'avance) : période « Dates… » qui l'englobe (les périodes toutes faites
+  // s'arrêtent à aujourd'hui, la séance de demain y entrera une fois passée).
+  await pc.getByTestId('esport-presence-periode-perso').click();
+  await pc.getByTestId('esport-presence-du').fill(plusJours(DEMAIN, -89));
+  await pc.getByTestId('esport-presence-au').fill(DEMAIN);
   await pc.getByTestId(`esport-stat-joueur-${idLea}-taux`).waitFor({ timeout: 20_000 });
   verifier((await pc.getByTestId(`esport-stat-joueur-${idLea}-taux`).innerText()).trim() === '100 %', 'statistiques : Léa à 100 %');
   verifier((await pc.getByTestId('esport-stat-type-training').count()) === 1, 'statistiques par type d’événement');
