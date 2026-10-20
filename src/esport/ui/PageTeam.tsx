@@ -1,8 +1,9 @@
 /**
  * Page d'une team : barre latérale (PC, iPad paysage) ou onglets défilants
- * (iPhone, iPad portrait) qui ne listent QUE les modules activés. Phase 1 :
- * Accueil, Membres et rôles, Journal, Paramètres ; les modules des phases
- * suivantes, s'ils sont activés, apparaissent « bientôt ».
+ * (iPhone, iPad portrait) qui ne listent QUE les modules activés. Accueil,
+ * Membres et rôles, Journal, Paramètres, et les modules livrés (écrans dans
+ * ui/modules.tsx : Planning, Disponibilités, Présence) ; les autres modules
+ * activés apparaissent « bientôt ».
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -11,7 +12,10 @@ import { BoutonHub, Case, Champ, Intertitre, Panneau, Segments } from '../../hub
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { CATALOGUE, MENTION_DONNEES, nomModule, type ClientEsport, type DetailTeam, type Notifications, type PageJournal } from '../client';
 import { FILTRES_JOURNAL, dateCourte, phraseJournal, phraseNotification } from '../libelles';
+import type { SaisieEvenement } from '../planning/api';
 import { MembresRoles } from './MembresRoles';
+import { ECRANS_MODULES, moduleAccessible } from './modules';
+import { AccueilPlanning, ReglagesPlanning } from './planning/AccueilPlanning';
 import { BoutonConfirme, PastilleRole, Retours, TitreSection, styles, useAgir } from './commun';
 
 export type SectionTeam = 'accueil' | 'membres' | 'journal' | 'parametres' | `module:${string}`;
@@ -23,7 +27,9 @@ export function entreesBarre(detail: DetailTeam): Array<{ id: SectionTeam; libel
   const entrees: Array<{ id: SectionTeam; libelle: string; bientot?: boolean }> = [{ id: 'accueil', libelle: 'Accueil' }];
   for (const m of CATALOGUE.modules) {
     if (!actifs.has(m.cle) || m.cle === 'activity_log') continue;
-    entrees.push({ id: `module:${m.cle}`, libelle: m.nom, bientot: true });
+    const livre = Boolean(ECRANS_MODULES[m.cle]);
+    if (livre && !moduleAccessible(m.cle, detail.moi.permissions)) continue;
+    entrees.push({ id: `module:${m.cle}`, libelle: m.nom, bientot: !livre });
   }
   if (peut('members.view') || peut('members.invite') || peut('roles.manage')) entrees.push({ id: 'membres', libelle: 'Membres et rôles' });
   if (actifs.has('activity_log') && peut('activity_log.view')) entrees.push({ id: 'journal', libelle: 'Journal' });
@@ -46,10 +52,15 @@ export function PageTeam({
   large: boolean;
   sectionInitiale?: SectionTeam;
   onQuitter(): void;
-  onExporter?(nom: string, contenu: string): Promise<boolean>;
+  onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
 }) {
   const [detail, setDetail] = useState<DetailTeam | undefined>();
   const [section, setSection] = useState<SectionTeam>(sectionInitiale);
+  const [brouillon, setBrouillon] = useState<{ n: number; b?: Partial<SaisieEvenement> }>({ n: 0 });
+  const aller = useCallback((s: SectionTeam, b?: Partial<SaisieEvenement>) => {
+    setBrouillon(x => ({ n: x.n + 1, b }));
+    setSection(s);
+  }, []);
   const { erreur, agir } = useAgir();
 
   const recharger = useCallback(async () => setDetail(await client.team(teamId)), [client, teamId]);
@@ -95,7 +106,7 @@ export function PageTeam({
               accessibilityRole="tab"
               accessibilityState={{ selected: choisie }}
               accessibilityLabel={`${e.libelle}${e.bientot ? ' (bientôt)' : ''}`}
-              onPress={() => setSection(e.id)}
+              onPress={() => aller(e.id)}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -120,7 +131,10 @@ export function PageTeam({
   if (active === 'membres') contenu = <MembresRoles theme={theme} client={client} detail={detail} large={large} />;
   else if (active === 'journal') contenu = <Journal theme={theme} client={client} detail={detail} />;
   else if (active === 'parametres') contenu = <Parametres theme={theme} client={client} detail={detail} onChange={recharger} onSupprimee={onQuitter} onExporter={onExporter} />;
-  else if (active.startsWith('module:')) {
+  else if (active.startsWith('module:') && ECRANS_MODULES[active.slice('module:'.length)]) {
+    const Ecran = ECRANS_MODULES[active.slice('module:'.length)];
+    contenu = <Ecran key={`${active}-${brouillon.n}`} theme={theme} client={client} detail={detail} large={large} onAller={aller} brouillon={brouillon.b} onExporter={onExporter} />;
+  } else if (active.startsWith('module:')) {
     const cle = active.slice('module:'.length);
     const module = CATALOGUE.modules.find(m => m.cle === cle);
     contenu = (
@@ -132,7 +146,7 @@ export function PageTeam({
         </Panneau>
       </View>
     );
-  } else contenu = <AccueilTeam theme={theme} client={client} detail={detail} onAller={setSection} />;
+  } else contenu = <AccueilTeam theme={theme} client={client} detail={detail} onAller={aller} />;
 
   return (
     <View style={{ flex: 1, flexDirection: large ? 'row' : 'column' }} testID="esport-team">
@@ -152,7 +166,7 @@ export function PageTeam({
   );
 }
 
-function AccueilTeam({ theme, client, detail, onAller }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; onAller(s: SectionTeam): void }) {
+function AccueilTeam({ theme, client, detail, onAller }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; onAller(s: SectionTeam, b?: Partial<SaisieEvenement>): void }) {
   const [notifs, setNotifs] = useState<Notifications | undefined>();
   useEffect(() => {
     client.notifications().then(setNotifs, () => undefined);
@@ -163,6 +177,8 @@ function AccueilTeam({ theme, client, detail, onAller }: { theme: ThemeHub; clie
   return (
     <View style={{ gap: 16 }} testID="esport-accueil-team">
       <TitreSection theme={theme} titre={detail.team.nom} sous={detail.team.description || `${CATALOGUE.jeux.find(j => j.cle === detail.team.jeu)?.nom ?? detail.team.jeu} · ${detail.membres} membre(s)`} />
+      {/* Planning d'abord : sur iPhone, répondre doit se faire sans défiler. */}
+      <AccueilPlanning theme={theme} client={client} detail={detail} onAller={onAller} />
       <View style={styles.ligne}>
         <Panneau theme={theme} style={{ flex: 1, minWidth: 180 }}>
           <Intertitre theme={theme}>Mon rôle</Intertitre>
@@ -187,7 +203,7 @@ function AccueilTeam({ theme, client, detail, onAller }: { theme: ThemeHub; clie
           </Text>
         ))}
       </Panneau>
-      <Text style={attenue}>Prochains événements, tâches en retard et résumés arriveront avec les modules Planning, Objectifs et Résumés.</Text>
+      <Text style={attenue}>Tâches en retard et derniers résumés arriveront avec les modules Objectifs et Résumés.</Text>
     </View>
   );
 }
@@ -240,7 +256,7 @@ function Parametres({
   detail: DetailTeam;
   onChange(): Promise<void>;
   onSupprimee(): void;
-  onExporter?(nom: string, contenu: string): Promise<boolean>;
+  onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
 }) {
   const [nom, setNom] = useState(detail.team.nom);
   const [description, setDescription] = useState(detail.team.description);
@@ -300,12 +316,13 @@ function Parametres({
               )}
               <Text style={{ flex: 1, color: theme.texte, ...police(theme.policeTexte) }}>
                 {m.nom}
-                {m.phase > 1 ? <Text style={attenue}> · bientôt</Text> : null}
+                {m.cle !== 'activity_log' && !ECRANS_MODULES[m.cle] ? <Text style={attenue}> · bientôt</Text> : null}
               </Text>
             </View>
           );
         })}
       </Panneau>
+      <ReglagesPlanning theme={theme} client={client} detail={detail} onChange={onChange} />
       <MonProfil theme={theme} client={client} onExporter={onExporter} />
       {peut('team.delete') ? (
         <Panneau theme={theme}>

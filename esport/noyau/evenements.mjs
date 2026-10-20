@@ -15,6 +15,7 @@
  */
 
 import { iso, jsonOu, nouvelId } from './outils.mjs';
+import { TYPES_PLANNING, abonnePlanning } from './planning/bus.mjs';
 
 export const TYPES_EVENEMENTS = [
   'team.created',
@@ -34,6 +35,7 @@ export const TYPES_EVENEMENTS = [
   'invitation.refused',
   'account.exported',
   'account.deleted',
+  ...TYPES_PLANNING,
 ];
 
 const ESSAIS_MAX = 8;
@@ -109,7 +111,7 @@ export async function abonneNotifications(base, ev) {
   }
 }
 
-export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications];
+export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning];
 
 /**
  * Distribue les événements en attente aux abonnés. Un événement dont un

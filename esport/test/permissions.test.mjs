@@ -37,8 +37,8 @@ test('catalogue : permissions uniques, de la forme module.action, modules connus
 const ACTIONS = [
   'team.manage', 'team.delete', 'modules.manage',
   'members.view', 'members.invite', 'members.assign_role', 'members.remove', 'roles.manage',
-  'planning.view', 'planning.create', 'planning.delete',
-  'availability.edit_own', 'attendance.mark', 'attendance.rsvp_own',
+  'planning.view', 'planning.create', 'planning.update', 'planning.delete',
+  'availability.view_all', 'availability.edit_own', 'attendance.view_all', 'attendance.mark', 'attendance.rsvp_own',
   'meeting_summaries.submit', 'meeting_summaries.view_all', 'meeting_summaries.write_summary',
   'video_review.view', 'video_review.create', 'video_review.annotate',
   'strats.create', 'playbook.view', 'playbook.manage', 'scouting.view', 'scouting.manage',
@@ -48,22 +48,24 @@ const PERMISES = {
   proprietaire: ACTIONS,
   manager: [
     'team.manage', 'members.view', 'members.invite', 'members.assign_role', 'members.remove', 'roles.manage',
-    'planning.view', 'planning.create', 'planning.delete', 'availability.edit_own', 'attendance.mark', 'attendance.rsvp_own',
+    'planning.view', 'planning.create', 'planning.update', 'planning.delete',
+    'availability.view_all', 'availability.edit_own', 'attendance.view_all', 'attendance.mark', 'attendance.rsvp_own',
     'meeting_summaries.submit', 'meeting_summaries.view_all', 'video_review.view', 'playbook.view', 'scouting.view',
     'discord.manage', 'activity_log.view',
   ],
   coach: [
-    'members.view', 'planning.view', 'planning.create', 'planning.delete', 'availability.edit_own', 'attendance.mark', 'attendance.rsvp_own',
+    'members.view', 'planning.view', 'planning.create', 'planning.update', 'planning.delete',
+    'availability.view_all', 'availability.edit_own', 'attendance.view_all', 'attendance.mark', 'attendance.rsvp_own',
     'meeting_summaries.submit', 'video_review.view', 'video_review.create', 'video_review.annotate', 'strats.create',
     'playbook.view', 'playbook.manage', 'scouting.view', 'scouting.manage', 'goals_tasks.assign',
   ],
   analyste: [
-    'members.view', 'planning.view', 'availability.edit_own', 'attendance.rsvp_own', 'meeting_summaries.submit',
+    'members.view', 'planning.view', 'availability.view_all', 'availability.edit_own', 'attendance.rsvp_own', 'meeting_summaries.submit',
     'video_review.view', 'video_review.create', 'video_review.annotate', 'strats.create', 'playbook.view', 'playbook.manage',
     'scouting.view', 'scouting.manage',
   ],
-  joueur: ['members.view', 'planning.view', 'availability.edit_own', 'attendance.rsvp_own', 'meeting_summaries.submit', 'video_review.view', 'video_review.annotate', 'playbook.view'],
-  remplacant: ['members.view', 'planning.view', 'attendance.rsvp_own', 'playbook.view'],
+  joueur: ['members.view', 'planning.view', 'availability.view_all', 'availability.edit_own', 'attendance.rsvp_own', 'meeting_summaries.submit', 'video_review.view', 'video_review.annotate', 'playbook.view'],
+  remplacant: ['members.view', 'planning.view', 'availability.edit_own', 'attendance.rsvp_own', 'playbook.view'],
 };
 
 test('matrice rôle × action des rôles système', () => {

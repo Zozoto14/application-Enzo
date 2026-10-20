@@ -1,6 +1,7 @@
 /**
  * Graines de développement : une team Valorant avec ses membres, un rôle
- * personnalisé et quelques actions journalisées. Passe par les services
+ * personnalisé, quelques actions journalisées, et son planning (événements,
+ * disponibilités, présences : graines-planning.mjs). Passe par les services
  * (mêmes règles que l'API : invitations réelles, anti-escalade…).
  *
  *   node esport/outils/graines.mjs [fichier.db]   (base SQLite locale, migrée au besoin)
@@ -9,6 +10,7 @@
 import { pathToFileURL } from 'node:url';
 import { distribuer } from '../noyau/evenements.mjs';
 import { servicesEsport } from '../noyau/service.mjs';
+import { semerPlanning } from './graines-planning.mjs';
 
 export const COMPTES_GRAINES = [
   { compte: 'max12345', pseudo: 'Max', riotId: 'Max#EUW', role: 'manager', poste: 'IGL' },
@@ -45,6 +47,7 @@ export async function semer(base, { maintenant = () => Date.now() } = {}) {
   }
   await s.creerRole(fondateur, team.id, { nom: 'Capitaine', couleur: '#f59e0b', permissions: ['members.view', 'planning.view', 'planning.create', 'attendance.mark', 'attendance.rsvp_own', 'availability.edit_own'] });
   await s.creerInvitation(fondateur, team.id, { roleId: roles.joueur.id, libelle: 'Essai joueur', joursValidite: 7, utilisationsMax: 3 });
+  await semerPlanning(base, team.id, { maintenant });
   await distribuer(base, { maintenant: maintenant() });
   return team.id;
 }

@@ -835,6 +835,9 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     );
     const notifs = await base.tous('SELECT type, charge, lue_le, cree_le FROM notifications WHERE compte_id = ? ORDER BY cree_le', [acteur.compte]);
     const actions = await base.tous('SELECT action, entite_type, meta, cree_le FROM journal WHERE acteur_id = ? ORDER BY cree_le LIMIT 5000', [acteur.compte]);
+    const dispos = await base.tous('SELECT team_id, jour, debut, fin, type, fuseau FROM dispo_regles WHERE compte_id = ? ORDER BY team_id, jour, debut', [acteur.compte]);
+    const exceptionsDispo = await base.tous('SELECT team_id, debut, fin, type, note FROM dispo_exceptions WHERE compte_id = ? ORDER BY debut', [acteur.compte]);
+    const presences = await base.tous('SELECT team_id, evenement_id, occurrence, rsvp, reel, note FROM presences WHERE compte_id = ? ORDER BY occurrence LIMIT 5000', [acteur.compte]);
     const t = maintenant();
     await base.lot([evenement('account.exported', { acteur: acteur.compte, entiteType: 'compte', entiteId: acteur.compte, charge: {}, maintenant: t })]);
     return {
@@ -845,6 +848,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       teams: appartenances.map(a => ({ team: a.team, role: a.role, posteJeu: a.poste_jeu ?? null, statut: a.statut, rejointLe: a.rejoint_le })),
       notifications: notifs.map(n => ({ type: n.type, charge: jsonOu(n.charge, {}), lue: Boolean(n.lue_le), date: n.cree_le })),
       journal: actions.map(a => ({ action: a.action, entite: a.entite_type, meta: jsonOu(a.meta, {}), date: a.cree_le })),
+      disponibilites: { regles: dispos, exceptions: exceptionsDispo },
+      presences,
     };
   }
 
@@ -865,6 +870,10 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     lot.push(
       { sql: 'DELETE FROM membres WHERE compte_id = ?', params: [acteur.compte] },
       { sql: 'DELETE FROM notifications WHERE compte_id = ?', params: [acteur.compte] },
+      { sql: 'DELETE FROM dispo_regles WHERE compte_id = ?', params: [acteur.compte] },
+      { sql: 'DELETE FROM dispo_exceptions WHERE compte_id = ?', params: [acteur.compte] },
+      { sql: 'DELETE FROM presences WHERE compte_id = ?', params: [acteur.compte] },
+      { sql: 'UPDATE ical_jetons SET revoque_le = ? WHERE compte_id = ? AND revoque_le IS NULL', params: [iso(t), acteur.compte] },
       { sql: 'DELETE FROM tentatives WHERE cle = ?', params: [`invitation:compte:${acteur.compte}`] },
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [acteur.compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: acteur.compte, charge: { teams: membres.length }, maintenant: t }),
@@ -884,6 +893,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
 
   return {
     contexteTeam,
+    exiger,
     moi,
     majProfil,
     listeTeams,

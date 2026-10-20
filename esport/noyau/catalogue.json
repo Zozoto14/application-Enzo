@@ -188,7 +188,7 @@
       "permissions": [
         "members.view",
         "planning.view",
-        "availability.edit_own", "attendance.rsvp_own",
+        "availability.view_all", "availability.edit_own", "attendance.rsvp_own",
         "meeting_summaries.submit", "meeting_summaries.view_summary",
         "goals_tasks.view",
         "video_review.view", "video_review.create", "video_review.annotate",
@@ -205,7 +205,7 @@
       "permissions": [
         "members.view",
         "planning.view",
-        "availability.edit_own", "attendance.rsvp_own",
+        "availability.view_all", "availability.edit_own", "attendance.rsvp_own",
         "meeting_summaries.submit", "meeting_summaries.view_summary",
         "goals_tasks.view",
         "video_review.view", "video_review.annotate",
@@ -217,7 +217,7 @@
       "nom": "Remplaçant / Invité",
       "couleur": "#8b8b9a",
       "description": "Lecture limitée.",
-      "permissions": ["members.view", "planning.view", "attendance.rsvp_own", "playbook.view"]
+      "permissions": ["members.view", "planning.view", "availability.edit_own", "attendance.rsvp_own", "playbook.view"]
     }
   ],
   "presets": [

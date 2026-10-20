@@ -18,7 +18,7 @@ export const APP_ESPORT: AppHub = {
   nom: 'Esport',
   categorie: 'Esport',
   page: 'publique',
-  description: 'Teams, membres et rôles, invitations, journal ; planning, résumés, review et strats à venir.',
+  description: 'Teams, membres et rôles, invitations, journal, planning, disponibilités et présence ; résumés, review et strats à venir.',
   icone: '◆',
   teinte: 'anime',
   Racine: Esport,

@@ -4,6 +4,7 @@
  */
 
 import { nomModule, type EntreeJournal, type Notification } from './client';
+import { phraseJournalPlanning, phraseNotificationPlanning } from './planning/libelles';
 
 const nom = (noms: Record<string, string | null>, id: unknown): string =>
   typeof id === 'string' ? (noms[id] ?? (id === 'principal' ? 'Le Fondateur' : 'Un compte supprimé')) : 'Quelqu’un';
@@ -48,7 +49,7 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
     case 'invitation.revoked':
       return `${qui} a annulé une invitation`;
     default:
-      return `${qui} : ${e.action}`;
+      return phraseJournalPlanning(e.action, qui, m, id => nom(noms, id)) ?? `${qui} : ${e.action}`;
   }
 }
 
@@ -60,6 +61,8 @@ export const FILTRES_JOURNAL: ReadonlyArray<readonly [string, string]> = [
   ['invitation', 'Invitations'],
   ['modules', 'Modules'],
   ['team', 'Team'],
+  ['event', 'Planning'],
+  ['attendance', 'Présence'],
 ];
 
 export function phraseNotification(n: Notification, noms: Record<string, string | null>): string {
@@ -77,7 +80,7 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
     case 'modules':
       return `Les modules de ${team} ont changé`;
     default:
-      return `${team} : ${n.type}`;
+      return phraseNotificationPlanning(n.type, team, c) ?? `${team} : ${n.type}`;
   }
 }
 

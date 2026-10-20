@@ -11,6 +11,7 @@ import { THEMES_HUB, themeHub } from '../hub/themes';
 import { ModeAffichageForce } from '../ui/mobile';
 import { CATALOGUE, DOC_ACTIVATION, ErreurEsport, oublierSessions, type ClientEsport } from './client';
 import { Esport, fabrique } from './ui/RacineEsport';
+import { fauxPlanning } from './planning/faux';
 
 const theme = themeHub('nuit');
 const relaisReel = fabrique.relais;
@@ -69,6 +70,7 @@ function fauxClient(surcharges: Partial<ClientEsport> = {}): ClientEsport {
     journal: async () => ({ entrees: [], noms: {}, suite: null }),
     notifications: async () => ({ nonLues: 0, noms: {}, liste: [] }),
     marquerLues: non,
+    requete: fauxPlanning(DETAIL.moi.permissions).requete,
     ...surcharges,
   } as ClientEsport;
 }
@@ -136,7 +138,9 @@ describe('Esport', () => {
     expect(screen.queryByTestId('esport-onglet-journal')).toBeNull();
     expect(screen.getByTestId('esport-onglet-membres')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('esport-onglet-module-planning'));
-    expect(await screen.findByTestId('esport-bientot-planning')).toBeTruthy();
+    // Planning livré (phase 2) : l'écran s'ouvre ; un Joueur n'a pas le bouton de création.
+    expect(await screen.findByTestId('esport-planning')).toBeTruthy();
+    expect(screen.queryByTestId('esport-planning-nouveau')).toBeNull();
   });
 
   it('s’affiche dans les 8 thèmes (clairs et sombres) et sur téléphone', async () => {

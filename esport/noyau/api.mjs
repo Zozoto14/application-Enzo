@@ -12,13 +12,15 @@
  */
 
 import { distribuer } from './evenements.mjs';
+import { routePublique, routesPlanning } from './planning/routes.mjs';
+import { servicesPlanning } from './planning/service.mjs';
 import { catalogue } from './permissions.mjs';
 import { servicesEsport } from './service.mjs';
 import { creerSession, lireSession } from './session.mjs';
 import { ErreurEsport, echec } from './outils.mjs';
 import { exporterBase, importerBase } from './transfert.mjs';
 
-export const VERSION_ESPORT = 1;
+export const VERSION_ESPORT = 2;
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
@@ -75,6 +77,7 @@ const jetonPorteur = requete => (requete.headers.get('Authorization') ?? '').rep
  */
 export function creerApi({ base, stockage, cleSession, verifierJeton, creationTeams = 'fondateur', maintenant = () => Date.now() }) {
   const s = servicesEsport({ base, maintenant, creationTeams });
+  const p = servicesPlanning({ base, maintenant, noyau: s });
 
   async function acteurDeSession(requete) {
     if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
@@ -93,6 +96,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       return { ok: true, service: 'esport', version: VERSION_ESPORT, stockage: Boolean(stockage), session: Boolean(cleSession), heure: maintenant() };
     }
     if (chemin === '/catalogue' && m === 'GET') return catalogue;
+    const publique = await routePublique({ p, chemin, methode: m, url });
+    if (publique !== undefined) return publique;
     if (chemin === '/session' && m === 'POST') {
       if (!cleSession) throw echec(503, 'non-configure', 'Le serveur Esport n’a pas de clé de session (CLE_ESPORT).');
       const qui = await verifierJeton(jetonPorteur(requete), ip);
@@ -123,6 +128,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       if (m === 'GET') return { teams: await s.listeTeams(acteur) };
       if (m === 'POST') return s.creerTeam(acteur, await lireCorps(requete));
     }
+    const planning = await routesPlanning({ p, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete) });
+    if (planning !== undefined) return planning;
     const t = /^\/teams\/([^/]+)(?:\/([a-z]+)(?:\/([^/]+))?(?:\/.*)?)?$/.exec(chemin);
     if (t) {
       const [, teamId, section, sousId] = t;
@@ -166,7 +173,9 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     if (requete.method === 'OPTIONS') return new Response(null, { status: 204, headers: ENTETES });
     let reponse;
     try {
-      reponse = reponseJson(await router(requete));
+      const resultat = await router(requete);
+      // Fichiers (iCal, CSV) : réponse déjà faite par la route.
+      reponse = resultat instanceof Response ? resultat : reponseJson(resultat);
     } catch (e) {
       reponse = reponseErreur(e);
     }

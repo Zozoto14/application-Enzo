@@ -19,6 +19,8 @@ import { baseSqliteMigree } from '../adaptateurs/sqlite.mjs';
 import { stockageMemoire } from '../adaptateurs/stockage.mjs';
 import { creerApi } from '../noyau/api.mjs';
 import { verificateurRelais } from '../noyau/authentification.mjs';
+import { distribuer } from '../noyau/evenements.mjs';
+import { rappelsPresence } from '../noyau/planning/rappels.mjs';
 
 function kvMemoire() {
   const donnees = new Map();
@@ -76,12 +78,23 @@ export async function demarrerServeurEsport({
     }
   });
   await new Promise(ok => serveur.listen(port, hote, ok));
+  // Le « cron » du Worker (toutes les 15 minutes) : rappels de présence, puis le bus.
+  const cron = setInterval(() => {
+    rappelsPresence(base, { maintenant: Date.now() })
+      .then(() => distribuer(base, { maintenant: Date.now() }))
+      .catch(e => console.error('[esport] cron', e));
+  }, 15 * 60_000);
+  cron.unref();
   return {
     url: `http://localhost:${port}`,
     base,
     envRelais,
     jetonDev: envRelais ? jetonDev : undefined,
-    fermer: () => new Promise(ok => serveur.close(() => ok())),
+    fermer: () =>
+      new Promise(ok => {
+        clearInterval(cron);
+        serveur.close(() => ok());
+      }),
   };
 }
 

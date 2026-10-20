@@ -263,6 +263,8 @@ export interface ClientEsport {
   journal(id: string, filtres?: { avant?: string; action?: string; limite?: number }): Promise<PageJournal>;
   notifications(): Promise<Notifications>;
   marquerLues(tout: boolean, ids?: string[]): Promise<Notifications>;
+  /** Appel générique avec la session (modules : planning, etc. ; voir src/esport/planning/api.ts). */
+  requete<T>(chemin: string, methode?: string, corps?: unknown): Promise<T>;
 }
 
 export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.fetch as unknown as Fetch, maintenant: () => number = Date.now): ClientEsport {
@@ -361,6 +363,7 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     },
     notifications: () => appel('/notifications'),
     marquerLues: (tout, ids) => appel('/notifications/lues', 'POST', tout ? { tout: true } : { ids: ids ?? [] }),
+    requete: (chemin, methode, corps) => appel(chemin, methode, corps),
   };
 }
 
