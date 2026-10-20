@@ -15,6 +15,8 @@ import { Planning } from './planning/Planning';
 import { Presence } from './planning/Presence';
 import { Review } from './review/Review';
 import { Scouting } from './scouting/Scouting';
+import { Playbook } from './strats/Playbook';
+import { Strats } from './strats/Strats';
 
 export type SectionModule = `module:${string}`;
 
@@ -39,6 +41,8 @@ export const ECRANS_MODULES: Record<string, (props: PropsModule) => React.ReactE
   discord: Discord,
   video_review: Review,
   scouting: Scouting,
+  strat_editor: Strats,
+  playbook: Playbook,
 };
 
 /** Permissions dont l'une ouvre l'écran du module (sinon, pas d'entrée dans la barre). */
@@ -50,6 +54,8 @@ const ACCES_MODULES: Record<string, string[]> = {
   discord: [PERMISSION_DISCORD],
   video_review: ['video_review.view'],
   scouting: ['scouting.view'],
+  strat_editor: ['strats.view'],
+  playbook: ['playbook.view'],
 };
 
 export function moduleAccessible(cle: string, permissions: readonly string[]): boolean {

@@ -119,6 +119,12 @@ Rien à déployer de plus : la migration `0004_discord.sql` est appliquée par l
 de chaque team (droit `discord.manage`) sert à coller le webhook. Voir [discord.md](discord.md) (créer le
 webhook, choisir les messages, sécurité). Facultatifs : le secret `CLE_DISCORD` et la variable `LIEN_APP`.
 
+## Étape 9 : strats et playbook
+
+Rien à déployer de plus : la migration `0006_strats_playbook.sql` est appliquée par le workflow. Les miniatures
+des strats vont dans R2 (étape 3). Les images Riot viennent de valorant-api.com à l'exécution (politique
+« Legal Jibber Jabber ») : voir [strats-playbook.md](strats-playbook.md).
+
 ## En cas de souci
 
 | Message | Que faire |
@@ -131,5 +137,5 @@ webhook, choisir les messages, sécurité). Facultatifs : le secret `CLE_DISCORD
 | Workflow : liaison de service vers le relais | Le Worker `applibourse-relais` doit exister dans le même compte Cloudflare. |
 | « Accès révoqué » dans l'Esport | Le compte a été révoqué dans l'Administration : c'est voulu. |
 
-Modules : [résumés de réunions](resumes.md), [objectifs et tâches](objectifs-taches.md).
+Modules : [résumés de réunions](resumes.md), [objectifs et tâches](objectifs-taches.md), [strats et playbook](strats-playbook.md).
 Passer plus tard sur un vrai serveur : voir [migration-serveur.md](migration-serveur.md).

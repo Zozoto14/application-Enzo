@@ -13,3 +13,13 @@
 #   img-src     https://i.ytimg.com https://*.ytimg.com
 #   connect-src https://www.youtube.com
 # (même liste pour l'app PC si une CSP y est posée ; voir docs/esport/review-video.md).
+
+# Éditeur de strats Esport (images Riot sous la politique « Legal Jibber Jabber ») : données et images
+# chargées à l'exécution depuis valorant-api.com (JSON) et media.valorant-api.com (images, lues par fetch
+# puis converties en blob: pour garder l'export PNG possible). AUCUNE politique CSP n'est posée
+# aujourd'hui sur le site : rien à ouvrir. Le jour où une CSP sera ajoutée ici (et dans l'app PC), elle
+# devra autoriser au minimum :
+#   connect-src https://valorant-api.com https://media.valorant-api.com
+#   img-src     https://media.valorant-api.com blob: data:
+# (voir docs/esport/strats-playbook.md). La page publique d'une strat partagée (serveur Esport) a, elle,
+# sa propre CSP stricte : img-src https://media.valorant-api.com data: et rien d'autre.
