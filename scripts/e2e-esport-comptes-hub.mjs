@@ -1,9 +1,11 @@
 /**
  * Test de bout en bout : un compte du hub créé dans l'ADMINISTRATION (rang Ami,
  * accès à l'Esport), jamais ouvert dans l'Esport, apparaît dans Esport ›
- * Membres (« Jamais connecté · Sans team ») ; le Fondateur l'ajoute à une team
- * (pré-enregistrement, comme une invitation directe) ; le joueur ouvre ensuite
- * l'Esport sur son iPhone et voit directement sa team, sans code ni pseudo.
+ * Membres (« Jamais connecté · Sans team ») ; le Fondateur l'ajoute à DEUX teams
+ * en une seule fois (un rôle par team, pseudo du hub repris) ; le joueur ouvre
+ * ensuite l'Esport sur son iPhone et voit directement ses deux teams, sans code
+ * ni pseudo ; puis le Fondateur l'ajoute à une troisième team (compte déjà
+ * connu : « déjà membre » grisé) et le retire d'une team sans toucher aux autres.
  *
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-esport-comptes-hub.mjs
@@ -123,6 +125,13 @@ try {
   const teamId = team.team.id;
   const roles = (await api(`/teams/${teamId}/roles`, sessFond)).corps.roles;
   const joueur = roles.find(r => r.cle === 'joueur');
+  const team2 = (await api('/teams', sessFond, { methode: 'POST', corps: { nom: 'The Final', jeu: 'valorant', preset: 'minimal' } })).corps;
+  const teamId2 = team2.team.id;
+  const roles2 = (await api(`/teams/${teamId2}/roles`, sessFond)).corps.roles;
+  const coach2 = roles2.find(r => r.cle === 'coach') ?? roles2.find(r => r.cle === 'joueur');
+  const team3 = (await api('/teams', sessFond, { methode: 'POST', corps: { nom: 'Les Aigles', jeu: 'valorant', preset: 'minimal' } })).corps;
+  const teamId3 = team3.team.id;
+  const joueur3 = (await api(`/teams/${teamId3}/roles`, sessFond)).corps.roles.find(r => r.cle === 'joueur');
 
   // ================================================================ PC : compte de Luca dans l'Administration
   log('PC : Administration, compte Ami « Luca » avec accès à l’Esport');
@@ -166,16 +175,23 @@ try {
   await pc.getByTestId('esport-membres-statut-sansteam').click();
   verifier((await pc.getByTestId('esport-compte-principal').count()) === 0 && (await pc.getByTestId(`esport-compte-${idLuca}`).count()) === 1, 'filtre « Sans team » : Luca seulement');
   await capture(pc, '01-pc-membres-sans-team');
-  await pc.getByLabel('Gérer Luca').click();
-  await pc.getByTestId(`esport-ajout-team-${idLuca}-${teamId}`).click();
-  await pc.getByTestId(`esport-ajout-role-${idLuca}-${joueur.id}`).click();
+  // Une seule action pour deux teams : un rôle par team, pseudo du hub repris (aucun champ à saisir).
+  await pc.getByTestId(`esport-compte-ajouter-${idLuca}`).click();
+  await pc.getByTestId(`esport-ajout-team-${idLuca}-faucons-valorant`).click();
+  await pc.getByTestId(`esport-ajout-role-${idLuca}-faucons-valorant-${joueur.id}`).click();
+  await pc.getByTestId(`esport-ajout-team-${idLuca}-the-final`).click();
+  await pc.getByTestId(`esport-ajout-role-${idLuca}-the-final-${coach2.id}`).click();
+  verifier((await pc.getByTestId(`esport-ajout-pseudo-${idLuca}`).count()) === 0, 'pseudo du hub réutilisé (pas de double saisie)');
+  await capture(pc, '01b-pc-ajout-deux-teams');
   await pc.getByTestId(`esport-ajout-valider-${idLuca}`).click();
   await pc.getByTestId('esport-membres-global-avis').waitFor({ timeout: 20_000 });
-  verifier(/Luca est ajouté à Faucons Valorant/.test(await pc.getByTestId('esport-membres-global-avis').innerText()), 'Luca ajouté à Faucons Valorant');
+  verifier(/Luca est ajouté à Faucons Valorant et The Final/.test(await pc.getByTestId('esport-membres-global-avis').innerText()), 'Luca ajouté à Faucons Valorant et The Final en une fois');
   const fiche = await esport.base.premier('SELECT id, invite_le, active_le FROM comptes WHERE id = ?', [idLuca]);
   verifier(Boolean(fiche?.invite_le) && !fiche?.active_le, 'pré-enregistrement côté serveur : statut invité');
   const membre = await esport.base.premier('SELECT role_id FROM membres WHERE compte_id = ? AND team_id = ?', [idLuca, teamId]);
   verifier(membre?.role_id === joueur.id, 'membre de Faucons Valorant (Joueur)');
+  const membre2 = await esport.base.premier('SELECT role_id FROM membres WHERE compte_id = ? AND team_id = ?', [idLuca, teamId2]);
+  verifier(membre2?.role_id === coach2.id, 'membre de The Final (rôle choisi pour cette team)');
   await pc.getByTestId('esport-membres-statut-tous').click();
   await capture(pc, '02-pc-membres-ajoute');
 
@@ -197,6 +213,7 @@ try {
   verifier((await luca.getByTestId('esport-profil-initial').count()) === 0, 'Luca : pas d’écran de pseudo (déjà pré-enregistré)');
   await luca.getByTestId('esport-nav-teams').click();
   await luca.getByTestId('esport-team-faucons-valorant').waitFor({ timeout: 20_000 });
+  verifier((await luca.getByTestId('esport-team-the-final').count()) === 1, 'Luca voit AUSSI The Final (deux teams ajoutées en une fois)');
   verifier((await luca.getByTestId('esport-code').count()) === 0, 'Luca : aucun code demandé');
   await capture(luca, '03-iphone-luca-teams');
   await luca.getByTestId('esport-team-faucons-valorant').click();
@@ -205,6 +222,28 @@ try {
   const active = await esport.base.premier('SELECT active_le FROM comptes WHERE id = ?', [idLuca]);
   verifier(Boolean(active?.active_le), 'première session : invité → actif');
   await capture(luca, '04-iphone-luca-team');
+
+  // ================================================================ PC : une 3e team plus tard, puis retrait d'une seule team
+  log('PC : Luca (déjà actif) ajouté à une 3e team ; « déjà membre » grisé ; retrait d’une team sans toucher aux autres');
+  await pc.getByTestId('esport-nav-membres').click();
+  await pc.getByTestId(`esport-compte-${idLuca}`).waitFor({ timeout: 20_000 });
+  if (!(await pc.getByTestId(`esport-ajout-${idLuca}`).count())) {
+    if (await pc.getByTestId(`esport-compte-ajouter-${idLuca}`).count()) await pc.getByTestId(`esport-compte-ajouter-${idLuca}`).click();
+    else await pc.getByLabel('Gérer Luca').click();
+  }
+  verifier((await pc.getByTestId(`esport-ajout-deja-${idLuca}-faucons-valorant`).innerText()).includes('déjà membre'), 'Faucons Valorant grisée « déjà membre »');
+  verifier((await pc.getByTestId(`esport-ajout-team-${idLuca}-faucons-valorant`).count()) === 0, 'team déjà rejointe non cochable');
+  await pc.getByTestId(`esport-ajout-team-${idLuca}-les-aigles`).click();
+  await pc.getByTestId(`esport-ajout-valider-${idLuca}`).click();
+  await pc.getByTestId('esport-membres-global-avis').waitFor({ timeout: 20_000 });
+  verifier(/Luca est ajouté à Les Aigles/.test(await pc.getByTestId('esport-membres-global-avis').innerText()), 'Luca ajouté à Les Aigles');
+  const m3 = await esport.base.premier('SELECT role_id FROM membres WHERE compte_id = ? AND team_id = ?', [idLuca, teamId3]);
+  verifier(m3?.role_id === joueur3.id, 'membre de Les Aigles (Joueur)');
+  const retirer = await api(`/teams/${teamId2}/membres/${(await esport.base.premier('SELECT id FROM membres WHERE compte_id = ? AND team_id = ?', [idLuca, teamId2])).id}`, sessFond, { methode: 'DELETE' });
+  verifier(retirer.statut === 200, 'retrait de The Final');
+  const restantes = await esport.base.tous('SELECT team_id FROM membres WHERE compte_id = ? ORDER BY team_id', [idLuca]);
+  verifier(restantes.length === 2 && restantes.every(r => r.team_id !== teamId2), 'les deux autres teams sont intactes');
+  await capture(pc, '05-pc-membres-trois-teams');
 } catch (e) {
   echecs++;
   console.error(e);

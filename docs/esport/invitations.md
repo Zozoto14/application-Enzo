@@ -115,6 +115,15 @@ Choix : **pré-enregistrement par le Fondateur, activation à la première sessi
   `comptes.active_le` est posé et un `member.joined` est émis pour chaque team (idempotent).
 - `POST /teams/:id/membres` `{ compte, roleId, posteJeu? }` : ajout d'un compte existant
   (`members.invite`, rôle attribuable par l'acteur, compte déjà visible de l'acteur ; sinon 404).
+- `POST /comptes/:compte/teams` `{ affectations: [{ teamId, roleId, posteJeu? }], pseudo? }` : ajoute un
+  compte à **une ou plusieurs teams en une fois**, un rôle par team, tout ou rien (une team déjà
+  rejointe → 409 `deja-membre` avec le nom de la team ; rôle trop haut → 403 `escalade` ; rien n'est
+  écrit). Compte connu (invité, actif, avec ou sans team) : son pseudo ne change pas, ses autres teams
+  non plus, `member.joined` tout de suite s'il est actif. Compte du hub sans fiche Esport : le Fondateur
+  seul le pré-enregistre (`pseudo` requis). Un Manager ajoute un compte qu'il voit déjà, avec un rôle
+  attribuable. C'est la route de l'écran « Ajouter à une team » (page Membres et Membres et rôles d'une
+  team) : les teams où le compte est déjà membre sont grisées « déjà membre » ; l'erreur du serveur
+  s'affiche sous le bouton. `POST /comptes` sur un compte déjà connu répond 409 `compte-existe`.
 - `GET /membres` : annuaire de premier niveau (teams où l'on a `members.view`, rôles attribuables,
   droits, comptes et appartenances de CES teams seulement).
 - `GET /dashboard` : résumé agrégé de toutes ses teams en une requête (lectures `team_id IN (…)`), un

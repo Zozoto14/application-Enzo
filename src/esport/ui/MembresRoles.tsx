@@ -11,10 +11,13 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { BoutonHub, Case, Champ } from '../../hub/admin/ui/commun';
+import { Avis, BoutonHub, Case, Champ } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
-import { CATALOGUE, LIBELLES_COLONNES, lignesMatrice, type ClientEsport, type DetailTeam, type Membre, type Role } from '../client';
+import type { ContexteHub } from '../../hub/types';
+import { CATALOGUE, LIBELLES_COLONNES, lignesMatrice, type Annuaire, type ClientEsport, type CompteEsport, type DetailTeam, type Membre, type Role } from '../client';
 import { dateCourte } from '../libelles';
+import { comptesHubSansEsport } from '../synchroAdmin';
+import { AjoutTeams } from './AjoutTeams';
 import { BoutonConfirme, Choix, PastilleRole, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from './commun';
 
 const COULEURS: ReadonlyArray<readonly [string, string]> = [
@@ -45,11 +48,14 @@ export function MembresRoles({
   large,
   onExporter,
   onMembresGlobal,
+  contexte,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
   detail: DetailTeam;
   large: boolean;
+  /** Contexte du hub : comptes du hub jamais connectés à l'Esport (Fondateur, liste complète). */
+  contexte?: ContexteHub;
   onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
   /** Page « Membres » de premier niveau (inviter, ajouter un compte existant). */
   onMembresGlobal?(): void;
@@ -115,6 +121,7 @@ export function MembresRoles({
                     : 'Ajoutez à la team un compte qui existe déjà depuis la page Membres de l’Esport. Seul le Fondateur crée de nouveaux comptes.'}
               </Text>
               {onMembresGlobal ? <BoutonHub theme={theme} titre="Ouvrir la page Membres" variante="plein" onPress={onMembresGlobal} testID="esport-inviter-membres" /> : null}
+              {peut('members.invite') ? <AjouterUnCompte theme={theme} client={client} detail={detail} contexte={contexte} onFait={recharger} /> : null}
             </Panneau>
           ) : null}
         </View>
@@ -123,6 +130,78 @@ export function MembresRoles({
         </View>
       </View>
       <Text style={attenue}>Les rôles d’équipe sont propres à l’Esport : ils ne changent jamais le rang d’un compte dans le hub.</Text>
+    </View>
+  );
+}
+
+/**
+ * Ajouter à CETTE team un compte qui existe déjà (invité, actif dans d'autres
+ * teams, ou compte du hub jamais connecté à l'Esport), sans quitter la team :
+ * recherche, choix du compte, puis le même formulaire que la page Membres
+ * (plusieurs teams d'un coup, un rôle par team, erreurs affichées).
+ */
+function AjouterUnCompte({ theme, client, detail, contexte, onFait }: { theme: ThemeHub; client: ClientEsport; detail: DetailTeam; contexte?: ContexteHub; onFait(): Promise<void> }) {
+  const [ouvert, setOuvert] = useState(false);
+  const [annuaire, setAnnuaire] = useState<Annuaire | undefined>();
+  const [recherche, setRecherche] = useState('');
+  const [choisi, setChoisi] = useState<string | undefined>();
+  const { erreur, agir } = useAgir();
+  const teamId = detail.team.id;
+  const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
+
+  const charger = useCallback(async () => setAnnuaire(await client.annuaire()), [client]);
+  const complete = Boolean(annuaire?.superAdmin && contexte?.profils && !contexte.profils.restreint && !contexte.profils.gestion);
+  const comptes: CompteEsport[] = useMemo(
+    () => (annuaire ? [...annuaire.comptes, ...comptesHubSansEsport(annuaire.comptes, contexte?.profils?.tous, complete)] : []),
+    [annuaire, contexte?.profils, complete],
+  );
+  const q = recherche.trim().toLocaleLowerCase('fr');
+  const candidats = comptes.filter(c => !c.appartenances.some(a => a.teamId === teamId) && (!q || c.pseudo.toLocaleLowerCase('fr').includes(q)));
+  const fiche = comptes.find(c => c.compte === choisi);
+
+  return (
+    <View style={{ gap: 8 }} testID="esport-ajouter-compte">
+      {!ouvert ? (
+        <BoutonHub
+          theme={theme}
+          titre="Ajouter un compte existant à cette team"
+          onPress={() => {
+            setOuvert(true);
+            void agir('', charger);
+          }}
+          testID="esport-ajouter-compte-ouvrir"
+        />
+      ) : (
+        <>
+          <Champ theme={theme} libelle="Compte à ajouter" valeur={recherche} onChanger={setRecherche} placeholder="Rechercher par pseudo" maxLength={40} testID="esport-ajouter-compte-recherche" />
+          {erreur ? <Avis theme={theme} genre="critique" texte={erreur} testID="esport-ajouter-compte-erreur" /> : null}
+          {!annuaire && !erreur ? <Text style={attenue}>Chargement…</Text> : null}
+          {annuaire && candidats.length === 0 ? <Text style={attenue}>Aucun compte à ajouter : tous les comptes que vous voyez sont déjà dans cette team.</Text> : null}
+          <Choix
+            theme={theme}
+            libelle={`${candidats.length} compte(s) hors de cette team`}
+            valeur={choisi}
+            options={candidats.slice(0, 40).map(c => ({ id: c.compte, nom: c.horsEsport ? `${c.pseudo} (jamais connecté)` : c.pseudo }))}
+            onChoisir={setChoisi}
+            testID="esport-ajouter-compte-choix"
+          />
+          {annuaire && fiche ? (
+            <AjoutTeams
+              key={fiche.compte}
+              theme={theme}
+              compte={fiche}
+              annuaire={annuaire}
+              client={client}
+              teamInitiale={teamId}
+              onFait={async () => {
+                await charger();
+                await onFait();
+              }}
+            />
+          ) : null}
+          <BoutonHub theme={theme} titre="Fermer" onPress={() => setOuvert(false)} testID="esport-ajouter-compte-fermer" />
+        </>
+      )}
     </View>
   );
 }

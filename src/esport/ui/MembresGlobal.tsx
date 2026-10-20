@@ -17,11 +17,12 @@ import { Avis, BoutonHub, Champ, Pilule, Segments } from '../../hub/admin/ui/com
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { AppHub, ContexteHub } from '../../hub/types';
 import type { Annuaire, AppartenanceCompte, ClientEsport, CompteEsport, DemandeCompte, TeamAnnuaire } from '../client';
-import { MOTIF_PSEUDO, capaciteComptes, emailDe, modeleInvitationEsport, noterEnvoiEsport, renvoyerInvitation, revoquerCompte } from '../comptesHub';
+import { capaciteComptes, emailDe, modeleInvitationEsport, noterEnvoiEsport, renvoyerInvitation, revoquerCompte } from '../comptesHub';
 import { comptesHubSansEsport, comptesOrphelins } from '../synchroAdmin';
 import { BoutonConfirme, Choix, PastilleRole, Retours, styles as communs, useAgir, Intertitre, Panneau } from './commun';
 import { ESP, EnTetePage, EtatVide, SqueletteCartes } from './design';
-import { CreationCompte, roleParDefaut } from './CreationCompte';
+import { AjoutTeams } from './AjoutTeams';
+import { CreationCompte } from './CreationCompte';
 import { DemandesCompte } from './DemandesCompte';
 import { useIdentite } from './Identite';
 
@@ -255,6 +256,8 @@ export function MembresGlobal({
                 exigerIdentite={identite.exiger}
                 onBasculer={() => setOuvert(o => (o === c.compte ? undefined : c.compte))}
                 onAction={action}
+                onRecharger={recharger}
+                onAvis={m => void agir('', async () => m)}
                 onOuvrirTeam={onOuvrirTeam}
                 onOuvrirApp={onOuvrirApp}
               />
@@ -278,6 +281,8 @@ function LigneCompte({
   exigerIdentite,
   onBasculer,
   onAction,
+  onRecharger,
+  onAvis,
   onOuvrirTeam,
   onOuvrirApp,
 }: {
@@ -293,6 +298,8 @@ function LigneCompte({
   exigerIdentite(raison: string, action: () => void): void;
   onBasculer(): void;
   onAction(libelle: string, faire: () => Promise<string | void>): void;
+  onRecharger(): Promise<void>;
+  onAvis(message: string): void;
   onOuvrirTeam(teamId: string): void;
   onOuvrirApp?(id: string): void;
 }) {
@@ -360,13 +367,18 @@ function LigneCompte({
           </View>
         ) : null}
       </Pressable>
+      {!ouvert && annuaire.teams.some(t => t.droits.ajouter && !t.archivee) ? (
+        <View style={{ paddingHorizontal: 12, paddingBottom: 12, paddingLeft: 56, flexDirection: 'row' }}>
+          <BoutonHub theme={theme} titre="Ajouter à une team" onPress={onBasculer} testID={`esport-compte-ajouter-${compte.compte}`} />
+        </View>
+      ) : null}
       {ouvert ? (
         <View style={{ padding: 12, paddingTop: 0, gap: 12 }}>
           {compte.appartenances.map(a => {
             const t = teamDe(a.teamId);
             return t ? <Appartenance key={a.membreId} theme={theme} compte={compte} a={a} team={t} occupe={occupe} client={client} onAction={onAction} onOuvrirTeam={onOuvrirTeam} /> : null;
           })}
-          <AjoutTeam theme={theme} compte={compte} annuaire={annuaire} occupe={occupe} client={client} onAction={onAction} />
+          <AjoutTeams theme={theme} compte={compte} annuaire={annuaire} client={client} onFait={onRecharger} onAvis={onAvis} />
           {compte.horsEsport ? (
             <Text style={attenue} testID={`esport-compte-hors-esport-${compte.compte}`}>
               Compte du hub avec accès à l’Esport, jamais ouvert dans l’Esport. Ajoutez-le à une team : il la verra directement à sa prochaine ouverture de l’Esport, sans code.
@@ -490,84 +502,6 @@ function Appartenance({
             testID={`esport-appartenance-retirer-${slug}`}
           />
         </View>
-      ) : null}
-    </View>
-  );
-}
-
-/** Ajouter ce compte (déjà visible) à une autre team où l'on peut ajouter. */
-function AjoutTeam({
-  theme,
-  compte,
-  annuaire,
-  occupe,
-  client,
-  onAction,
-}: {
-  theme: ThemeHub;
-  compte: CompteEsport;
-  annuaire: Annuaire;
-  occupe: boolean;
-  client: ClientEsport;
-  onAction(libelle: string, faire: () => Promise<string | void>): void;
-}) {
-  const possibles = annuaire.teams.filter(t => t.droits.ajouter && !t.archivee && !compte.appartenances.some(a => a.teamId === t.id));
-  const [teamId, setTeamId] = useState<string | undefined>();
-  const [roleId, setRoleId] = useState<string | undefined>();
-  const [poste, setPoste] = useState('');
-  // Compte du hub sans fiche Esport : on choisit aussi son pseudo Esport (le nom du hub par défaut).
-  const [pseudo, setPseudo] = useState(compte.pseudo);
-  if (possibles.length === 0) return null;
-  const team = possibles.find(t => t.id === teamId);
-  return (
-    <View style={{ gap: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: theme.ligne }} testID={`esport-ajout-${compte.compte}`}>
-      <Intertitre theme={theme}>Ajouter à une team</Intertitre>
-      <Choix
-        theme={theme}
-        libelle="Team"
-        valeur={teamId}
-        options={possibles.map(t => ({ id: t.id, nom: t.nom }))}
-        onChoisir={id => {
-          setTeamId(id);
-          const t = possibles.find(x => x.id === id);
-          setRoleId(t ? roleParDefaut(t) : undefined);
-        }}
-        testID={`esport-ajout-team-${compte.compte}`}
-      />
-      {team ? (
-        <>
-          <Choix
-            theme={theme}
-            libelle={`Rôle dans ${team.nom}`}
-            valeur={roleId}
-            options={team.roles.map(r => ({ id: r.id, nom: r.nom, couleur: r.couleur, desactive: !r.attribuable }))}
-            onChoisir={setRoleId}
-            testID={`esport-ajout-role-${compte.compte}`}
-          />
-          {compte.horsEsport ? <Champ theme={theme} libelle="Pseudo Esport" valeur={pseudo} onChanger={setPseudo} maxLength={24} testID={`esport-ajout-pseudo-${compte.compte}`} /> : null}
-          <Champ theme={theme} libelle="Poste en jeu (facultatif)" valeur={poste} onChanger={setPoste} maxLength={30} testID={`esport-ajout-poste-${compte.compte}`} />
-          <BoutonHub
-            theme={theme}
-            titre={`Ajouter à ${team.nom}`}
-            variante="plein"
-            desactive={occupe || !roleId}
-            onPress={() =>
-              onAction('Ajout', async () => {
-                if (compte.horsEsport) {
-                  // Pré-enregistrement (comme une invitation directe) : statut invité, actif à sa première session.
-                  if (!MOTIF_PSEUDO.test(pseudo.trim())) throw new Error('Pseudo Esport : 2 à 24 caractères (lettres, chiffres, espace, _ . -).');
-                  await client.preinscrire({ compte: compte.compte, pseudo: pseudo.trim(), affectations: [{ teamId: team.id, roleId: roleId!, ...(poste.trim() ? { posteJeu: poste.trim() } : {}) }] });
-                } else {
-                  await client.ajouterMembre(team.id, { compte: compte.compte, roleId: roleId!, ...(poste.trim() ? { posteJeu: poste.trim() } : {}) });
-                }
-                setTeamId(undefined);
-                setPoste('');
-                return compte.horsEsport ? `${pseudo.trim()} est ajouté à ${team.nom} : il verra sa team à sa prochaine ouverture de l’Esport.` : `${compte.pseudo} est ajouté à ${team.nom}.`;
-              })
-            }
-            testID={`esport-ajout-valider-${compte.compte}`}
-          />
-        </>
       ) : null}
     </View>
   );

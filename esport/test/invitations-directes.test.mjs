@@ -223,3 +223,86 @@ test('compte supprimé dans l’Administration : retiré de toutes ses teams ; r
   assert.equal((await api('/admin/comptes/lea12345/hub', f, { methode: 'DELETE' })).corps.teams, 1);
   assert.equal((await api('/admin/comptes/..%2Fx/hub', f, { methode: 'DELETE' })).statut, 400);
 });
+
+test('ajout multi-teams : compte pré-enregistré, actif et jamais vu, en une fois, un rôle par team ; doublon refusé proprement', async () => {
+  const { b, A, B, f, api } = await preparer();
+  const C = await teamAvecMembres(b, { nom: 'Team Charlie' });
+  const D = await teamAvecMembres(b, { nom: 'Team Delta' });
+  const affectations = (...liste) => liste.map(([T, role, posteJeu]) => ({ teamId: T.teamId, roleId: T.roles[role].id, ...(posteJeu ? { posteJeu } : {}) }));
+
+  // Jamais vu (compte du hub sans fiche Esport) : pré-enregistré dans deux teams d'un coup, pseudo du hub.
+  let r = await api('/comptes/luca12345/teams', f, { methode: 'POST', corps: { pseudo: 'LUCA', affectations: affectations([A, 'joueur'], [B, 'coach']) } });
+  assert.equal(r.statut, 200, JSON.stringify(r.corps));
+  assert.equal(r.corps.statut, 'invite');
+  assert.deepEqual(r.corps.appartenances.map(a => [a.teamId, a.role.nom]).sort(), [[A.teamId, 'Joueur'], [B.teamId, 'Coach']].sort());
+  // Le pseudo est exigé seulement pour un compte jamais vu.
+  r = await api('/comptes/zoe12345/teams', f, { methode: 'POST', corps: { affectations: affectations([A, 'joueur']) } });
+  assert.equal(r.statut, 400);
+  assert.equal(r.corps.code, 'pseudo');
+
+  // Pré-enregistré (invité, jamais connecté) : deux teams de plus, sans pseudo ; les autres teams ne bougent pas.
+  r = await api('/comptes/luca12345/teams', f, { methode: 'POST', corps: { affectations: affectations([C, 'joueur', 'Sentinelle'], [D, 'remplacant']) } });
+  assert.equal(r.statut, 200, JSON.stringify(r.corps));
+  assert.equal(r.corps.statut, 'invite');
+  assert.equal(r.corps.pseudo, 'LUCA');
+  assert.equal(r.corps.appartenances.length, 4);
+  assert.equal(r.corps.appartenances.find(a => a.teamId === C.teamId).posteJeu, 'Sentinelle');
+  // Il se connecte : il voit ses quatre teams.
+  const luca = await b.session('luca12345');
+  assert.equal((await api('/teams', luca)).corps.teams.length, 4);
+
+  // Actif (déjà connecté, sans team) : ajout en une fois ; « bienvenue » immédiate (member.joined).
+  const lea = await b.session('ana12345', 'Ana');
+  r = await api('/comptes/ana12345/teams', f, { methode: 'POST', corps: { affectations: affectations([A, 'joueur'], [B, 'joueur']) } });
+  assert.equal(r.statut, 200, JSON.stringify(r.corps));
+  assert.equal(r.corps.statut, 'actif');
+  assert.deepEqual((await api('/teams', lea)).corps.teams.map(t => t.nom).sort(), ['Team Alpha', 'Team Bravo']);
+  assert.equal((await api(`/teams/${A.teamId}/journal`, f)).corps.entrees.filter(e => e.acteur === 'ana12345' && e.action === 'member.joined').length, 1);
+  // Encore une team plus tard : les deux premières restent telles quelles.
+  r = await api('/comptes/ana12345/teams', f, { methode: 'POST', corps: { affectations: affectations([C, 'coach']) } });
+  assert.equal(r.statut, 200, JSON.stringify(r.corps));
+  assert.equal(r.corps.appartenances.length, 3);
+
+  // Doublon dans la même team : refus net (409), rien n'est écrit (tout ou rien), message avec le nom de la team.
+  r = await api('/comptes/ana12345/teams', f, { methode: 'POST', corps: { affectations: affectations([D, 'joueur'], [A, 'coach']) } });
+  assert.equal(r.statut, 409);
+  assert.equal(r.corps.code, 'deja-membre');
+  assert.match(r.corps.erreur, /Team Alpha/);
+  assert.equal((await api('/membres', f)).corps.comptes.find(c => c.compte === 'ana12345').appartenances.length, 3, 'Team Delta non ajoutée');
+  r = await api('/comptes/ana12345/teams', f, { methode: 'POST', corps: { affectations: affectations([D, 'joueur'], [D, 'coach']) } });
+  assert.equal(r.statut, 400, 'même team deux fois');
+  // POST /comptes pour un compte déjà connu : message exact (et non « pseudo pris »).
+  r = await api('/comptes', f, { methode: 'POST', corps: { compte: 'luca12345', pseudo: 'LUCA', affectations: affectations([D, 'joueur']) } });
+  assert.equal(r.corps.code, 'compte-existe');
+
+  // Retirer d'une team sans toucher aux autres.
+  const fiche = (await api('/membres', f)).corps.comptes.find(c => c.compte === 'luca12345');
+  const enA = fiche.appartenances.find(a => a.teamId === A.teamId);
+  assert.equal((await api(`/teams/${A.teamId}/membres/${enA.membreId}`, f, { methode: 'DELETE' })).statut, 200);
+  const apres = (await api('/membres', f)).corps.comptes.find(c => c.compte === 'luca12345');
+  assert.deepEqual(apres.appartenances.map(a => a.teamId).sort(), [B.teamId, C.teamId, D.teamId].sort());
+});
+
+test('ajout multi-teams : anti-escalade (Manager), compte invisible, Joueur refusé', async () => {
+  const { b, A, B, f, api } = await preparer();
+  const C = await teamAvecMembres(b, { nom: 'Team Charlie', membres: { max12345: { pseudo: 'Max', role: 'manager' } } });
+  const max = await b.session('max12345');
+  const D = await teamAvecMembres(b, { nom: 'Team Delta', membres: { max12345: { pseudo: 'Max', role: 'manager' } } });
+  const af = (T, role) => ({ teamId: T.teamId, roleId: T.roles[role].id });
+  // Léa (Team Alpha, que Max gère aussi) : visible pour Max. Plusieurs teams, rôles attribuables : accepté.
+  let r = await api('/comptes/lea12345/teams', max, { methode: 'POST', corps: { affectations: [af(C, 'joueur'), af(D, 'coach')] } });
+  assert.equal(r.statut, 200, JSON.stringify(r.corps));
+  // Anti-escalade : un seul rôle trop haut fait tout refuser, rien n'est écrit.
+  r = await api('/comptes/coa12345/teams', max, { methode: 'POST', corps: { affectations: [af(C, 'joueur'), af(D, 'proprietaire')] } });
+  assert.equal(r.statut, 403);
+  assert.equal(r.corps.code, 'escalade');
+  assert.ok(!(await api('/membres', f)).corps.comptes.find(c => c.compte === 'coa12345').appartenances.some(a => a.teamId === C.teamId));
+  // Compte d'une team invisible pour Max : introuvable ; compte jamais vu : le Fondateur seul le crée.
+  r = await api('/comptes/tom12345/teams', max, { methode: 'POST', corps: { affectations: [af(C, 'joueur')] } });
+  assert.equal(r.statut, 404);
+  r = await api('/comptes/neuf12345/teams', max, { methode: 'POST', corps: { pseudo: 'Neuf', affectations: [af(C, 'joueur')] } });
+  assert.equal(r.statut, 404);
+  // Un Joueur n'ajoute personne.
+  r = await api('/comptes/coa12345/teams', A.sessions.lea12345, { methode: 'POST', corps: { affectations: [af(A, 'joueur')] } });
+  assert.equal(r.statut, 403);
+});

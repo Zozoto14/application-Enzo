@@ -74,6 +74,11 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
     if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Seul le Fondateur crée des comptes : il faut ses clés du hub (Administration).');
     const pseudo = lirePseudo(corps?.pseudo);
     const affectations = await lireAffectations(acteur, corps?.affectations);
+    // Compte déjà connu : message exact (et non « pseudo pris », qui serait le sien), avant le contrôle du pseudo.
+    if (corps?.verifier !== true) {
+      const deja = await base.premier('SELECT id FROM comptes WHERE id = ?', [lireCompte(corps?.compte)]);
+      if (deja) throw echec(409, 'compte-existe', 'Ce compte a déjà un profil Esport : ajoutez-le à ses teams depuis la page Membres.');
+    }
     await pseudoLibre(pseudo);
     // Validation d'une demande de compte (members.create) : la demande doit être en attente ; close dans le même lot.
     const demande = corps?.demandeId !== undefined && corps?.demandeId !== null ? await demandes.aValider(acteur, corps.demandeId) : null;
@@ -116,6 +121,69 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       throw e;
     }
     return ficheCompte(acteur, compte);
+  }
+
+  /**
+   * `POST /comptes/:compte/teams` : ajoute un compte à UNE OU PLUSIEURS teams en
+   * une fois, un rôle par team, quel que soit son état :
+   *  - compte déjà connu (invité, actif, avec ou sans team) : il rejoint les
+   *    teams demandées ; son pseudo ne change pas ; les autres teams ne bougent pas ;
+   *  - compte du hub sans fiche Esport (jamais connecté) : le Fondateur le
+   *    pré-enregistre (`pseudo` requis), comme une invitation directe.
+   * Tout ou rien : une team déjà rejointe, un rôle non attribuable (anti-escalade)
+   * ou une team inaccessible refuse l'ensemble, sans rien écrire.
+   */
+  async function ajouterATeams(acteur, compteId, corps) {
+    const id = compteId === 'principal' && acteur.superAdmin ? 'principal' : lireCompte(compteId);
+    const fiche = await base.premier('SELECT * FROM comptes WHERE id = ?', [id]);
+    if (!fiche) {
+      if (!acteur.superAdmin) throw echec(404, 'compte-introuvable', 'Compte introuvable (il doit déjà être membre d’une de vos teams).');
+      return preinscrire(acteur, { compte: id, pseudo: corps?.pseudo, affectations: corps?.affectations });
+    }
+    const liste = corps?.affectations;
+    if (!Array.isArray(liste) || liste.length === 0) throw echec(400, 'affectations', 'Choisissez au moins une team et un rôle.');
+    if (liste.length > AFFECTATIONS_MAX) throw echec(400, 'affectations', `${AFFECTATIONS_MAX} teams au plus.`);
+    const vues = new Set();
+    const prevues = [];
+    let toutCreateur = true;
+    for (const a of liste) {
+      const ctx = await contexteTeam(acteur, a?.teamId);
+      if (vues.has(ctx.team.id)) throw echec(400, 'affectations', 'Une même team est demandée deux fois.');
+      vues.add(ctx.team.id);
+      if (autorise(ctx.permissions, ctx.modules, 'members.create')) {
+        // Créateur : tout compte qui a un profil Esport.
+      } else {
+        exiger(ctx, 'members.invite');
+        toutCreateur = false;
+      }
+      const role = await roleDeTeam(ctx.team.id, a?.roleId);
+      await exigerRoleGerable(ctx, role, 'Vous ne pouvez pas attribuer un rôle plus élevé que le vôtre.');
+      prevues.push({ ctx, role, posteJeu: lirePoste(a?.posteJeu) });
+    }
+    if (!toutCreateur && !(await compteVisible(acteur, id))) throw echec(404, 'compte-introuvable', 'Compte introuvable (il doit déjà être membre d’une de vos teams).');
+    const deja = [];
+    for (const { ctx } of prevues) {
+      if (await base.premier('SELECT id FROM membres WHERE team_id = ? AND compte_id = ?', [ctx.team.id, id])) deja.push(ctx.team.nom);
+    }
+    if (deja.length > 0) throw echec(409, 'deja-membre', `${fiche.pseudo} est déjà membre de ${deja.join(', ')}.`);
+    const t = maintenant();
+    const date = iso(t);
+    const actif = statutCompte(fiche) === 'actif';
+    const lot = [];
+    for (const { ctx, role, posteJeu } of prevues) {
+      const membreId = nouvelId();
+      lot.push(
+        {
+          sql: "INSERT INTO membres (id, team_id, compte_id, role_id, poste_jeu, statut, rejoint_le, maj_le) VALUES (?, ?, ?, ?, ?, 'actif', ?, ?)",
+          params: [membreId, ctx.team.id, id, role.id, posteJeu, date, date],
+        },
+        evenement('member.added', { teamId: ctx.team.id, acteur: acteur.compte, entiteType: 'membre', entiteId: membreId, charge: { compte: id, role: role.nom, invite: !actif }, maintenant: t }),
+      );
+      // Compte déjà actif : il arrive tout de suite ; invité : à sa première session.
+      if (actif) lot.push(evenement('member.joined', { teamId: ctx.team.id, acteur: id, entiteType: 'membre', entiteId: membreId, charge: { role: role.nom, ajoutePar: acteur.compte }, maintenant: t }));
+    }
+    await base.lot(lot);
+    return ficheCompte(acteur, id);
   }
 
   /** Teams où l'acteur voit les membres (`members.view`) : périmètre de ce qu'il peut connaître des comptes. */
@@ -337,5 +405,5 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
     return { ok: true, retire: true, teams: membres.length };
   }
 
-  return { preinscrire, ajouterMembre, annuaire, activer, retirerCompte };
+  return { preinscrire, ajouterATeams, ajouterMembre, annuaire, activer, retirerCompte };
 }

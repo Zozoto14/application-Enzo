@@ -545,6 +545,11 @@ export interface ClientEsport {
   tableau(): Promise<Tableau>;
   /** Fondateur : contrôle une invitation directe AVANT de créer le compte du hub (rien n'est écrit). */
   verifierPreinscription(c: { pseudo: string; affectations: Affectation[]; demandeId?: string }): Promise<void>;
+  /**
+   * Ajoute un compte à une ou plusieurs teams d'un coup (un rôle par team) : compte connu (invité, actif, avec
+   * ou sans team) ; compte du hub jamais connecté (Fondateur : `pseudo` requis). Tout ou rien.
+   */
+  ajouterATeams(compte: string, c: { affectations: Affectation[]; pseudo?: string }): Promise<CompteEsport | null>;
   /** Fondateur : pré-enregistre le compte du hub tout juste créé, avec ses teams. */
   preinscrire(c: { compte: string; pseudo: string; affectations: Affectation[]; demandeId?: string }): Promise<CompteEsport | null>;
   /** Fondateur : compte supprimé dans l'Administration → retiré de l'Esport. */
@@ -696,6 +701,7 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
       await appel(`/admin/comptes/${encodeURIComponent(compte)}`, 'DELETE');
     },
     preinscrire: c => appel('/comptes', 'POST', c),
+    ajouterATeams: (compte, c) => appel(`/comptes/${encodeURIComponent(compte)}/teams`, 'POST', c),
     retirerCompte: compte => appel(`/admin/comptes/${encodeURIComponent(compte)}/hub`, 'DELETE'),
     notifications: () => appel('/notifications'),
     marquerLues: (tout, ids) => appel('/notifications/lues', 'POST', tout ? { tout: true } : { ids: ids ?? [] }),

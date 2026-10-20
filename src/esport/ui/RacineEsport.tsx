@@ -108,6 +108,7 @@ export function Esport(props: PropsRacineApp) {
         onNaviguer={o => setVue({ v: o })}
         onChangerTeam={(id, section) => setVue({ v: 'team', id, section })}
         pseudo={etat.moi.profil.pseudo}
+        contexte={contexte}
       />
     );
   } else {

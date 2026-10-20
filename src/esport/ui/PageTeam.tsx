@@ -18,6 +18,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { BoutonHub, Champ } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
+import type { ContexteHub } from '../../hub/types';
 import { BarreOnglets } from '../../ui/mobile/BarreOnglets';
 import { CATALOGUE, MENTION_DONNEES, nomModule, type ClientEsport, type DetailTeam, type Notifications, type TeamListee } from '../client';
 import { dateCourte, phraseNotification } from '../libelles';
@@ -120,6 +121,7 @@ export function PageTeam({
   onNaviguer,
   onChangerTeam,
   pseudo,
+  contexte,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
@@ -135,6 +137,8 @@ export function PageTeam({
   /** Sélecteur rapide : ouvrir une autre team, sur la même section si elle y existe. */
   onChangerTeam?(id: string, section: SectionTeam): void;
   pseudo?: string;
+  /** Contexte du hub (comptes du hub à ajouter à la team depuis « Membres et rôles »). */
+  contexte?: ContexteHub;
 }) {
   const [detail, setDetail] = useState<DetailTeam | undefined>();
   const [section, setSection] = useState<SectionTeam>(sectionInitiale);
@@ -193,7 +197,7 @@ export function PageTeam({
   const jeu = CATALOGUE.jeux.find(j => j.cle === detail.team.jeu)?.nom ?? detail.team.jeu;
 
   let contenu: React.ReactNode;
-  if (active === 'membres') contenu = <MembresRoles theme={theme} client={client} detail={detail} large={large} onExporter={onExporter} onMembresGlobal={onMembresGlobal} />;
+  if (active === 'membres') contenu = <MembresRoles theme={theme} client={client} detail={detail} large={large} onExporter={onExporter} onMembresGlobal={onMembresGlobal} contexte={contexte} />;
   else if (active === 'journal') contenu = <Journal theme={theme} client={client} detail={detail} onExporter={onExporter} />;
   else if (active === 'parametres') contenu = <Parametres theme={theme} client={client} detail={detail} large={large} onChange={recharger} onSupprimee={onQuitter} onExporter={onExporter} />;
   else if (active === 'module:meeting_summaries') contenu = <SectionResumes theme={theme} client={client} detail={detail} large={large} />;

@@ -199,6 +199,9 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       if (corps.verifier !== true) await limite('invitation', acteur.compte);
       return cp.preinscrire(acteur, corps);
     }
+    // Ajouter un compte à une ou plusieurs teams d'un coup (un rôle par team).
+    const ajoutTeams = /^\/comptes\/([^/]+)\/teams$/.exec(chemin);
+    if (ajoutTeams && m === 'POST') return cp.ajouterATeams(acteur, decodeURIComponent(ajoutTeams[1]), await lireCorps(requete));
     // Demandes de compte (members.create) : dépôt (borné), suivi, refus (Fondateur), annulation (demandeur).
     if (chemin === '/comptes/demandes') {
       if (m === 'GET') return dm.liste(acteur);

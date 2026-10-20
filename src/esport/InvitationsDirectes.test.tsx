@@ -220,8 +220,8 @@ describe('Esport › Membres : invitation directe', () => {
   it('Manager : pas de création de compte ; anti-escalade (Propriétaire non gérable, rôles au-dessus grisés) ; ajout d’un compte existant', async () => {
     const lea = compte('lea12345', 'Léa', { appartenances: [{ teamId: 't1', membreId: 'm-lea', role: { id: 'r-jou', nom: 'Joueur', couleur: '#16a34a', cle: 'joueur' }, posteJeu: null, statut: 'actif', rejointLe: '', gerable: true }] });
     const enzo = compte('principal', 'Enzo', { appartenances: [{ teamId: 't1', membreId: 'm-enzo', role: { id: 'r-prop', nom: 'Propriétaire', couleur: '#d64545', cle: 'proprietaire' }, posteJeu: null, statut: 'actif', rejointLe: '', gerable: false }] });
-    const ajouterMembre = jest.fn(async () => lea);
-    fabrique.client = () => fauxClient({ ouvrir: moi(false), annuaire: async () => annuaire(false, [enzo, lea]), ajouterMembre });
+    const ajouterATeams = jest.fn(async () => lea);
+    fabrique.client = () => fauxClient({ ouvrir: moi(false), annuaire: async () => annuaire(false, [enzo, lea]), ajouterATeams });
     await monter({ profil: { id: 'max12345', nom: 'Max', admin: false, creeLe: '', apps: ['esport'] } });
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
     await screen.findByTestId('esport-compte-lea12345');
@@ -236,13 +236,14 @@ describe('Esport › Membres : invitation directe', () => {
     expect(screen.getByTestId('esport-appartenance-suspendre-faucons-lea12345')).toBeTruthy();
     expect(screen.getByTestId('esport-appartenance-role-faucons-lea12345-r-prop').props.accessibilityState.disabled).toBe(true);
     // Ajouter Léa à la team Aigles, en Joueur.
-    await fireEvent.press(screen.getByTestId('esport-ajout-team-lea12345-t2'));
-    expect(screen.getByTestId('esport-ajout-role-lea12345-r-man-2').props.accessibilityState.disabled).toBe(true);
+    expect(screen.getByTestId('esport-ajout-deja-lea12345-faucons')).toHaveTextContent('déjà membre');
+    await fireEvent.press(screen.getByTestId('esport-ajout-team-lea12345-aigles'));
+    expect(screen.getByTestId('esport-ajout-role-lea12345-aigles-r-man-2').props.accessibilityState.disabled).toBe(true);
     await act(async () => {
       fireEvent.press(screen.getByTestId('esport-ajout-valider-lea12345'));
       await new Promise<void>(r => setTimeout(r, 20));
     });
-    expect(ajouterMembre).toHaveBeenCalledWith('t2', { compte: 'lea12345', roleId: 'r-jou-2' });
+    expect(ajouterATeams).toHaveBeenCalledWith('lea12345', { affectations: [{ teamId: 't2', roleId: 'r-jou-2' }] });
   });
 
   it('Fondateur : renvoyer l’invitation d’un invité (nouveau lien, message Esport)', async () => {
@@ -327,13 +328,12 @@ describe('Esport › Membres : comptes du hub créés dans l’Administration (s
   it('Fondateur : LUCA apparaît « Jamais connecté · Sans team », compteur et filtre « Sans team », puis ajout à une team (pré-enregistrement)', async () => {
     const { ctx } = contexteFondateur([fondateur, luca, sansEsport]);
     let comptes = [compte('principal', 'Enzo', { moi: true, appartenances: [{ teamId: 't1', membreId: 'm0', role: { id: 'r-prop', nom: 'Propriétaire', couleur: '#d64545', cle: 'proprietaire' }, posteJeu: null, statut: 'actif', rejointLe: '', gerable: false }] })];
-    const preinscrire = jest.fn(async (c: { compte: string; pseudo: string; affectations: Array<{ teamId: string; roleId: string }> }) => {
-      const fiche = compte(c.compte, c.pseudo, { statut: 'invite', appartenances: [{ teamId: 't1', membreId: 'm9', role: { id: 'r-jou', nom: 'Joueur', couleur: '#16a34a', cle: 'joueur' }, posteJeu: null, statut: 'actif', rejointLe: '', gerable: true }] });
+    const ajouterATeams = jest.fn(async (id: string, c: { pseudo?: string; affectations: Array<{ teamId: string; roleId: string }> }) => {
+      const fiche = compte(id, c.pseudo ?? '?', { statut: 'invite', appartenances: [{ teamId: 't1', membreId: 'm9', role: { id: 'r-jou', nom: 'Joueur', couleur: '#16a34a', cle: 'joueur' }, posteJeu: null, statut: 'actif', rejointLe: '', gerable: true }] });
       comptes = [...comptes, fiche];
       return fiche;
     });
-    const ajouterMembre = jest.fn();
-    fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, comptes), preinscrire, ajouterMembre });
+    fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, comptes), ajouterATeams });
     await monter(ctx);
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
     await screen.findByTestId('esport-compte-luca000001');
@@ -347,12 +347,13 @@ describe('Esport › Membres : comptes du hub créés dans l’Administration (s
     expect(screen.getByTestId('esport-compte-luca000001')).toBeTruthy();
     // Ajouter à une team : pré-enregistrement (compte du relais + pseudo + team et rôle), pas un ajout de compte existant.
     await fireEvent.press(screen.getByLabelText('Gérer LUCA'));
-    await fireEvent.press(screen.getByTestId('esport-ajout-team-luca000001-t1'));
-    await fireEvent.press(screen.getByTestId('esport-ajout-role-luca000001-r-jou'));
+    await fireEvent.press(screen.getByTestId('esport-ajout-team-luca000001-faucons'));
+    await fireEvent.press(screen.getByTestId('esport-ajout-role-luca000001-faucons-r-jou'));
+    // Pseudo du hub réutilisé : aucun champ à saisir.
+    expect(screen.queryByTestId('esport-ajout-pseudo-luca000001')).toBeNull();
     await fireEvent.press(screen.getByTestId('esport-ajout-valider-luca000001'));
-    await waitFor(() => expect(preinscrire).toHaveBeenCalledWith({ compte: 'luca000001', pseudo: 'LUCA', affectations: [{ teamId: 't1', roleId: 'r-jou' }] }));
-    expect(ajouterMembre).not.toHaveBeenCalled();
-    expect(await screen.findByText('LUCA est ajouté à Faucons : il verra sa team à sa prochaine ouverture de l’Esport.')).toBeTruthy();
+    await waitFor(() => expect(ajouterATeams).toHaveBeenCalledWith('luca000001', { pseudo: 'LUCA', affectations: [{ teamId: 't1', roleId: 'r-jou' }] }));
+    expect(await screen.findByText('LUCA est ajouté à Faucons : il verra ses teams à sa prochaine ouverture de l’Esport.')).toBeTruthy();
     // Rechargé : LUCA a une fiche (invité) et une team ; plus « sans team ».
     await fireEvent.press(screen.getByTestId('esport-membres-statut-tous'));
     await waitFor(() => expect(screen.getByTestId('esport-compte-statut-luca000001')).toHaveTextContent('Invité'));
@@ -366,6 +367,93 @@ describe('Esport › Membres : comptes du hub créés dans l’Administration (s
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
     await screen.findByTestId('esport-compte-max12345');
     expect(screen.queryByTestId('esport-compte-luca000001')).toBeNull();
+  });
+});
+
+describe('Esport › Membres : ajouter un compte à plusieurs teams', () => {
+  const luca: Profil = { id: 'luca000001', nom: 'LUCA', admin: false, creeLe: '2026-09-01', apps: ['esport'], actif: true };
+  const rang = (teamId: string, membreId: string) => ({ teamId, membreId, role: { id: 'r-jou', nom: 'Joueur', couleur: '#16a34a', cle: 'joueur' }, posteJeu: null, statut: 'actif' as const, rejointLe: '', gerable: true });
+
+  it('Fondateur : LUCA (jamais connecté) ajouté à DEUX teams en une fois, un rôle par team, sans ressaisir le pseudo', async () => {
+    const { ctx } = contexteFondateur([fondateur, luca]);
+    const ajouterATeams = jest.fn(async (id: string) => compte(id, 'LUCA', { statut: 'invite' }));
+    fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, []), ajouterATeams });
+    await monter(ctx);
+    await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    // Action disponible dès la ligne repliée.
+    await fireEvent.press(await screen.findByTestId('esport-compte-ajouter-luca000001'));
+    await fireEvent.press(screen.getByTestId('esport-ajout-team-luca000001-faucons'));
+    await fireEvent.press(screen.getByTestId('esport-ajout-team-luca000001-aigles'));
+    await fireEvent.press(screen.getByTestId('esport-ajout-role-luca000001-aigles-r-man-2'));
+    await fireEvent.changeText(screen.getByTestId('esport-ajout-poste-luca000001-faucons'), 'Sentinelle');
+    expect(screen.getByTestId('esport-ajout-valider-luca000001')).toHaveTextContent('Ajouter à 2 teams');
+    await fireEvent.press(screen.getByTestId('esport-ajout-valider-luca000001'));
+    await waitFor(() =>
+      expect(ajouterATeams).toHaveBeenCalledWith('luca000001', {
+        pseudo: 'LUCA',
+        affectations: [
+          { teamId: 't1', roleId: 'r-jou', posteJeu: 'Sentinelle' },
+          { teamId: 't2', roleId: 'r-man-2' },
+        ],
+      }),
+    );
+    expect(await screen.findByTestId('esport-ajout-luca000001-avis')).toHaveTextContent(/LUCA est ajouté à Faucons et Aigles/);
+  });
+
+  it('compte déjà dans une team : l’action reste disponible, la team actuelle est grisée « déjà membre », les autres se cochent', async () => {
+    const { ctx } = contexteFondateur([fondateur]);
+    const ana = compte('ana0000001', 'Ana', { appartenances: [rang('t1', 'm-ana')] });
+    const ajouterATeams = jest.fn(async () => ana);
+    fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, [ana]), ajouterATeams });
+    await monter(ctx);
+    await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-compte-ajouter-ana0000001'));
+    expect(screen.getByTestId('esport-ajout-deja-ana0000001-faucons')).toHaveTextContent('déjà membre');
+    expect(screen.queryByTestId('esport-ajout-team-ana0000001-faucons')).toBeNull();
+    await fireEvent.press(screen.getByTestId('esport-ajout-team-ana0000001-aigles'));
+    await fireEvent.press(screen.getByTestId('esport-ajout-valider-ana0000001'));
+    await waitFor(() => expect(ajouterATeams).toHaveBeenCalledWith('ana0000001', { affectations: [{ teamId: 't2', roleId: 'r-jou-2' }] }));
+  });
+
+  it('compte déjà dans toutes les teams : message clair, aucun bouton inutile', async () => {
+    const { ctx } = contexteFondateur([fondateur]);
+    const ana = compte('ana0000001', 'Ana', { appartenances: [rang('t1', 'm1'), rang('t2', 'm2')] });
+    fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, [ana]) });
+    await monter(ctx);
+    await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByLabelText('Gérer Ana'));
+    expect(screen.getByTestId('esport-ajout-toutes-ana0000001')).toHaveTextContent(/déjà membre de toutes vos teams/);
+    expect(screen.queryByTestId('esport-ajout-valider-ana0000001')).toBeNull();
+  });
+
+  it('erreur du serveur affichée sous le bouton (jamais d’échec silencieux) ; pseudo déjà pris → champ pour en choisir un autre', async () => {
+    const { ctx } = contexteFondateur([fondateur, luca]);
+    const ajouterATeams = jest
+      .fn()
+      .mockRejectedValueOnce(new ErreurEsport('Ce pseudo est déjà pris dans l’Esport.', 409, 'pseudo-pris'))
+      .mockResolvedValueOnce(compte('luca000001', 'LUCA2', { statut: 'invite' }));
+    fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, []), ajouterATeams });
+    await monter(ctx);
+    await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-compte-ajouter-luca000001'));
+    await fireEvent.press(screen.getByTestId('esport-ajout-team-luca000001-faucons'));
+    await fireEvent.press(screen.getByTestId('esport-ajout-valider-luca000001'));
+    expect(await screen.findByTestId('esport-ajout-luca000001-erreur')).toHaveTextContent('Ce pseudo est déjà pris dans l’Esport.');
+    await fireEvent.changeText(await screen.findByTestId('esport-ajout-pseudo-luca000001'), 'LUCA2');
+    await fireEvent.press(screen.getByTestId('esport-ajout-valider-luca000001'));
+    await waitFor(() => expect(ajouterATeams).toHaveBeenLastCalledWith('luca000001', { pseudo: 'LUCA2', affectations: [{ teamId: 't1', roleId: 'r-jou' }] }));
+  });
+
+  it('doublon (compte déjà membre côté serveur) : erreur nette affichée', async () => {
+    const { ctx } = contexteFondateur([fondateur, luca]);
+    const ajouterATeams = jest.fn().mockRejectedValue(new ErreurEsport('LUCA est déjà membre de Faucons.', 409, 'deja-membre'));
+    fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, []), ajouterATeams });
+    await monter(ctx);
+    await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-compte-ajouter-luca000001'));
+    await fireEvent.press(screen.getByTestId('esport-ajout-team-luca000001-faucons'));
+    await fireEvent.press(screen.getByTestId('esport-ajout-valider-luca000001'));
+    expect(await screen.findByTestId('esport-ajout-luca000001-erreur')).toHaveTextContent('LUCA est déjà membre de Faucons.');
   });
 });
 
