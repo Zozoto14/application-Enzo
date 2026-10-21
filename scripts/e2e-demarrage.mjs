@@ -205,8 +205,8 @@ try {
 
   // ----- B : « Lier à mon compte »
   log('B : liaison');
+  // Navigateur déjà relié avant la mise à jour (ce scénario teste l'ancienne boîte, relais sans coffre serveur).
   await B.goto(URL_SITE);
-  await B.getByTestId('bouton-relier-accueil').click({ timeout: 60_000 });
   await B.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
   await deverrouiller(B, secret);
   await B.getByTestId('synchro-indicateur').waitFor({ timeout: 60_000 });

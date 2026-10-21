@@ -65,6 +65,7 @@ import { encoderLiaison, type Liaison } from '../src/sync/relais/liaison';
 import { jetonDeProfil } from '../src/sync/relais/portees';
 import { ErreurRelais } from '../src/sync/relais/synchroniser';
 import { choisirSite } from '../src/config/site';
+import { viderCoffreServeur } from '../src/sync/relais/coffreServeur';
 import { preparerLiaison, type CompteRelie } from './synchroComptes';
 
 type Fetch = typeof fetch;
@@ -224,6 +225,12 @@ export async function nettoyerCompteRelais(maitre: Liaison, compte: string, pren
     }
   } catch (e) {
     bilan.restes.push(`espace du compte : ${e instanceof Error ? e.message : String(e)}`);
+  }
+  try {
+    // Version 9 : son coffre serveur (données chiffrées par sa clé) part aussi.
+    await viderCoffreServeur(maitre, compte, requete);
+  } catch (e) {
+    bilan.restes.push(`coffre serveur : ${e instanceof Error ? e.message : String(e)}`);
   }
   try {
     await supprimerAcces(maitre, empreinteIdentifiant(prenom), requete);

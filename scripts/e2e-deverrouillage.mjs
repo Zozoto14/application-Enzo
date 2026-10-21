@@ -180,9 +180,8 @@ async function navigateurRelie(options, init = []) {
   for (const script of init) await contexte.addInitScript(script);
   const page = await contexte.newPage();
   page.on('pageerror', e => log('erreur page :', e.message));
+  // Navigateur déjà relié au compte du PC (relais version 9 : plus de carte « code de liaison » à l'accueil).
   await page.goto(`${SITE}#liaison=${CODE_PC}`);
-  await page.getByTestId('accueil-site').waitFor({ timeout: 60_000 });
-  await page.getByTestId('bouton-relier-accueil').click();
   await page.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
   return page;
 }
@@ -214,7 +213,7 @@ try {
   // ================================================================ 1. Espace final + invisible collés
   log('iPad relié : mot de passe collé avec espace final et caractère invisible');
   const ipad = await navigateurRelie(options);
-  verifier(await ipad.getByText(/Lier à mon compte/).isVisible(), 'écran Déverrouiller sans prénom, « Lier à mon compte » visible (comme la capture)');
+  verifier((await ipad.getByText(/Lier à mon compte|code de liaison/).count()) === 0, 'écran Déverrouiller sans prénom, plus de « Lier à mon compte (code de liaison) » (relais version 9)');
   const attributs = await ipad.locator('input[type=password]').first().evaluate(e => [e.getAttribute('autocapitalize'), e.getAttribute('autocorrect'), e.getAttribute('spellcheck')].join(','));
   verifier(/^(none|off),off,false$/.test(attributs), `correcteurs iOS coupés sur le mot de passe (${attributs})`);
   let reussi = false;
@@ -295,12 +294,11 @@ try {
   await autre.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
   await saisir(autre, 'pas-le-bon-mot-de-passe', '000000');
   await autre.getByText(/Mot de passe ou code incorrect/).first().waitFor({ timeout: 25_000 });
-  verifier((await autre.getByTestId('suggestion-autre-coffre').count()) === 0, 'après 1 échec : pas encore de suggestion');
   await pause(500);
   await saisir(autre, 'pas-le-bon-mot-de-passe-2', '000000');
-  const suggestion = await autre.getByTestId('suggestion-autre-coffre').innerText({ timeout: 25_000 }).catch(() => '');
-  verifier(/autre coffre que celui de ton PC : relier mon compte/.test(suggestion), `après 2 échecs : « ${suggestion.split('\n')[0]} »`);
-  await capture(autre, '05-autre-coffre-suggestion');
+  await pause(1500);
+  verifier((await autre.getByTestId('suggestion-autre-coffre').count()) === 0, 'après 2 échecs : plus de suggestion « relier avec le code de liaison » (relais version 9)');
+  await capture(autre, '05-autre-coffre-sans-code-de-liaison');
   await pause(500);
   await saisir(autre, MDP_ADMIN, totp(secret));
   const differe = await autre.getByText(/ouvrent le compte publié par votre PC/).first().innerText({ timeout: 25_000 }).catch(() => '');

@@ -412,7 +412,7 @@ Presque rien : **les appareils suivent tout seuls**.
 | --- | --- |
 | **PC** (app Electron) | Installer la dernière version de l'app (comme d'habitude). Ouvrir l'app › **Paramètres** › **Synchronisation** › **Synchroniser maintenant** : l'app voit que le relais a déménagé, vérifie la nouvelle adresse avec son jeton, et l'enregistre. L'Esport suit (adresse déduite : `relais.appdashboard.fr` → `esport.appdashboard.fr`). |
 | **iPhone** (AltStore) | Mettre l'app à jour (mise à jour JavaScript habituelle, ou nouvelle version AltStore). Ouvrir l'app › **Synchroniser maintenant**. Le site des mises à jour suit aussi (appdashboard.fr). Pour publier une mise à jour JavaScript après la bascule : déposez `main.jsbundle` et `manifeste.json` dans `public_html/maj/` (cPanel › **Gestionnaire de fichiers**). |
-| **Site** | Utiliser **https://appdashboard.fr** (l'ancienne adresse `pages.dev` marche encore, et suit aussi). Les amis se connectent avec leur identifiant et leur mot de passe, comme avant. |
+| **Site** | Utiliser **https://appdashboard.fr** (l'ancienne adresse `pages.dev` marche encore, et suit aussi). Tout le monde se connecte avec son identifiant et son mot de passe (partie G). |
 | **Amis** | Rien. Leur appareil suit au premier « Synchroniser » ; un appareil qui n'est pas mis à jour continue de marcher par l'ancienne adresse, tant que Cloudflare n'est pas coupé. |
 
 Un appareil a suivi quand sa synchronisation marche encore après la coupure de Cloudflare… ce qu'on ne fait
@@ -453,6 +453,59 @@ Ensuite seulement (rien de tout cela n'est automatique) :
 3. **Workers & Pages** › le projet Pages `applibourse-ef0ddb` › **Settings** › **Delete project**.
 4. Dans GitHub, vous pouvez alors désactiver les workflows Cloudflare (**Actions** › le workflow › **⋯** ›
    **Disable workflow**).
+
+---
+
+## Partie G — Données sur le serveur et connexion par identifiant (relais version 9)
+
+Depuis cette version, **toutes vos données sont enregistrées sur le serveur o2switch**, chiffrées par vos appareils
+(le serveur ne peut pas les lire), et **chacun se connecte avec son identifiant et son mot de passe**, vous compris.
+Plus de code de liaison, plus de « Synchronisation » dans les Paramètres. Détails : `docs/synchro-relais.md` et
+`docs/connexion-amis.md`.
+
+**Côté serveur : rien à faire.** La tâche cron de déploiement (toutes les 5 minutes) installe la nouvelle version ; au
+redémarrage, le relais crée lui-même ses trois nouvelles tables PostgreSQL (`relais_coffre`, `relais_coffre_rev`,
+`relais_coffre_historique`). Pour vérifier, dans le Terminal cPanel :
+
+```bash
+curl -s https://relais.appdashboard.fr/sante -H "Authorization: Bearer $(grep ^JETON= ~/.appdashboard/relais.env | cut -d= -f2)" | grep -o '"version":[0-9]*'
+```
+
+Attendu : `"version":9`. L'ancien relais Cloudflare transmet tout à o2switch : rien à y faire non plus.
+
+**Ce que vous faites, dans cet ordre :**
+
+1. **Le PC d'abord.** Installez la dernière version de l'app (comme d'habitude), ouvrez-la et déverrouillez-la (mot de
+   passe et code à six chiffres, une dernière fois). Laissez-la ouverte 1 minute : elle envoie toutes vos données au
+   serveur (première synchronisation). Puis l'écran **« Se connecter partout avec un identifiant »** apparaît :
+   - **Identifiant** : votre prénom (par exemple « Enzo ») ;
+   - **Mot de passe actuel** et **code à six chiffres** (vérification) ;
+   - **Nouveau mot de passe**, deux fois (10 caractères au moins ; une phrase facile à retenir est idéale) ;
+   - **Activer la connexion par identifiant**.
+   L'app affiche **dix codes de récupération** : **notez-les sur papier** et rangez-les (c'est votre seule solution si
+   vous oubliez votre mot de passe : personne, pas même le serveur, ne peut rouvrir votre compte). Puis « J'ai noté
+   mes codes ». Si vous aviez cliqué « Plus tard » : Paramètres › Sécurité › « Identifiant et mot de passe de
+   connexion ».
+2. **Le site** : ouvrez **https://appdashboard.fr** (sur n'importe quel ordinateur). L'écran « Bienvenue sur
+   AppDashboard » n'a plus de carte « code de liaison » : tapez votre identifiant (l'écran prend aussitôt votre style),
+   votre nouveau mot de passe, « Se connecter ». Toutes vos apps et vos données arrivent du serveur. Un navigateur
+   qui était déjà relié marche comme avant : au prochain déverrouillage, c'est le nouveau mot de passe (si l'écran
+   demande encore le code à six chiffres, tapez-le une dernière fois).
+3. **L'iPhone** : dans Safari, https://appdashboard.fr → identifiant + mot de passe (vous pouvez l'ajouter à l'écran
+   d'accueil). L'app AltStore déjà reliée continue de marcher après sa mise à jour habituelle (elle synchronise avec
+   le serveur, avec le nouveau mot de passe au prochain déverrouillage ; si l'écran demande encore le code à six
+   chiffres, tapez-le une dernière fois). Sur un iPhone neuf, utilisez le site : la connexion par identifiant n'est pas
+   encore dans l'app native.
+4. **Les amis** : rien à faire. Leur identifiant et leur mot de passe marchent tels quels, sur n'importe quel appareil.
+   Un ami « à l'ancienne » (code de liaison + code à six chiffres) : Administration › son compte › **Réinitialiser
+   l'accès** et envoyez-lui le lien (il choisit son mot de passe ; ses données sont gardées).
+
+**Mot de passe oublié ?** Sur l'écran de connexion : « Mot de passe oublié ? », votre identifiant, UN de vos codes de
+récupération et un nouveau mot de passe. Dix nouveaux codes s'affichent : notez-les (les anciens ne marchent plus).
+
+**Anciens appareils de la liste « Appareils liés »** (« Site de secours · il y a 22 jours ») : ils disparaissent seuls.
+Leurs données sont reprises dans le serveur à la première ouverture d'un appareil à jour, puis leurs vieux dépôts sont
+effacés (rien n'est perdu).
 
 ---
 

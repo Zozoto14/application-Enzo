@@ -31,7 +31,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { allerPageAdministration, allerPageApplications, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
+import { accepterInvitationAmi, allerPageAdministration, allerPageApplications, lienInvitationDuPanneau, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
 import { mesurer } from './mobile-outils.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
@@ -200,10 +200,12 @@ async function creerAmi(page, nom) {
   await page.getByTestId('admin-identifiants').waitFor({ timeout: 60_000 });
   const motDePasse = (await page.getByTestId('admin-mot-de-passe').innerText()).replace(/^\s*Mot de passe\s*/, '').trim();
   const secret = (await page.getByTestId('admin-secret-totp').innerText()).replace(/^\s*Clé TOTP\s*/, '').replace(/\s+/g, '');
+  // Relais version 9 : l'ami se connecte par son invitation (plus de code de connexion au site).
+  const lien = await lienInvitationDuPanneau(page);
   await page.getByTestId('admin-transmis').click().catch(() => undefined);
   await page.getByTestId('admin-termine').click();
   const ligne = await page.locator('[data-testid^="admin-ligne-"]').filter({ hasText: nom }).first().getAttribute('data-testid');
-  return { motDePasse, secret, id: ligne.replace('admin-ligne-', '') };
+  return { motDePasse, secret, lien, id: ligne.replace('admin-ligne-', '') };
 }
 /** Ouvre Tâches ; elle s'ouvre sur le calendrier de la semaine, puis (par défaut) on passe en Liste. */
 async function ouvrirTaches(page, { liste = true } = {}) {
@@ -344,24 +346,14 @@ async function relierAmi(pc, nom, ami, options) {
   if (!(await pc.getByTestId('admin-liste').count())) await pc.getByTestId('admin-onglet-utilisateurs').click();
   await pc.getByTestId('admin-liste').getByText(nom, { exact: true }).first().click();
   await pc.getByTestId('admin-detail').waitFor({ timeout: 20_000 });
-  await pc.getByTestId('admin-code-site-generer').click();
-  await identiteSiDemandee(pc);
-  await pc.getByTestId('admin-code-site').waitFor({ timeout: 20_000 });
-  const code = (await pc.getByTestId('admin-code-site').innerText()).trim();
+  const code = ami.lien;
   await pc.keyboard.press('Escape').catch(() => undefined);
   const page = await (await nouveauContexte(navigateur, options)).newPage();
   page.on('pageerror', e => {
     erreursPage.push(e.message);
     log(`erreur page ${nom} :`, e.message);
   });
-  await page.goto(`${SITE}#liaison=${code}`);
-  await page.getByTestId('accueil-site').waitFor({ timeout: 60_000 });
-  await page.getByTestId('bouton-relier-accueil').click();
-  await page.getByTestId('connexion-prenom').waitFor({ timeout: 60_000 });
-  await page.getByTestId('connexion-prenom').fill(nom);
-  await page.getByTestId('connexion-continuer').click();
-  await page.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
-  await deverrouiller(page, ami.motDePasse, ami.secret);
+  await accepterInvitationAmi(page, code, SITE);
   await fermerPopups(page);
   verifier(await attendre(async () => (await relancer(page), kv.has(`p:${ami.id}:tsuzuku-cle`)), 120_000, 3000), `${nom} a publié sa clé de réception`);
   return page;

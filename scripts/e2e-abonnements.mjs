@@ -20,7 +20,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { allerPageAdministration, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
+import { allerPageAdministration, codeAmiDejaRelie, idCompteAdmin, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
@@ -176,9 +176,8 @@ async function creerAmi(page, nom) {
 
 /** Relie un navigateur neuf avec un code (lien #liaison=) et attend l'écran suivant. */
 async function relier(page, code) {
+  // Navigateur déjà relié avant la version 9 (plus de carte « code de liaison » à l'accueil).
   await page.goto(`${SITE}#liaison=${code}`);
-  await page.getByTestId('accueil-site').waitFor({ timeout: 60_000 });
-  await page.getByTestId('bouton-relier-accueil').click();
 }
 
 /** Recharge la page (la session en mémoire disparaît) et ouvre un compte par son prénom. */
@@ -399,10 +398,9 @@ try {
     await pc.getByTestId('admin-onglet-utilisateurs').click();
     await pc.getByTestId('admin-liste').getByText(nom, { exact: true }).first().click();
     await pc.getByTestId('admin-detail').waitFor({ timeout: 20_000 });
-    await pc.getByTestId('admin-code-site-generer').click();
-    await identiteSiDemandee(pc, MDP_ADMIN, secretAdmin);
-    await pc.getByTestId('admin-code-site').waitFor({ timeout: 20_000 });
-    const code = (await pc.getByTestId('admin-code-site').innerText()).trim();
+    // Navigateur de l'ami déjà relié avant la version 9 (plus de « code de connexion au site »).
+    await pc.getByTestId('admin-onglet-utilisateurs').click();
+    const code = await codeAmiDejaRelie(`https://localhost:${PORT_RELAIS}`, JETON, await idCompteAdmin(pc, nom));
     const nav = await (await nouveauContexte(navigateur, options)).newPage();
     nav.on('pageerror', e => log(`erreur page ${nom} :`, e.message));
     await relier(nav, code);

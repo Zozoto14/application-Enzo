@@ -1,4 +1,83 @@
-# Synchronisation par le relais : déclencheurs, formats, budget d'écritures
+# Synchronisation : le serveur est la référence (relais version 9)
+
+Depuis la version 9 du relais (hébergé chez o2switch, `https://relais.appdashboard.fr`, PostgreSQL), **toutes les
+données de chaque compte sont sur le serveur**, chiffrées de bout en bout. Plus d'échange d'appareil à appareil, plus
+d'« appareils liés », plus de code de liaison : chaque appareil parle au serveur, et c'est tout.
+
+## Le modèle, en bref
+
+| Avant (Cloudflare KV, ≤ v8) | Maintenant (o2switch, v9) |
+| --- | --- |
+| Chaque appareil du Fondateur déposait SON état dans `/boite/<appareil>` ; les autres lisaient tous les dépôts | Un **coffre serveur par compte** (`/v9/coffre/<compte>`) : un enregistrement chiffré par donnée, avec un numéro de révision |
+| Synchro limitée par le quota KV (≈ 1 000 écritures/jour) : 30 s mini entre deux dépôts, tour toutes les 2 min, journal jamais synchronisé | Plus de quota : envoi ~1,5 s après une modification, tour toutes les 30 s, au retour au premier plan et au retour du réseau |
+| Seuls le portefeuille, le thème, les tuiles et les sources Tsuzuku voyageaient | En plus : pages et boîte du **journal automatique**, notes de Claude Office, espace perso et pilote de semaine des Tâches, carnet d'un gestionnaire, réglages de notifications et de cours, bibliothèque Tsuzuku… (`src/sync/relais/entitesApps.ts`) |
+| Amis : leur base entière en un fichier (`p/<id>/boite/portefeuille`), « le plus récent gagne » au niveau du fichier | Amis : le même coffre serveur que le Fondateur (enregistrement par enregistrement), le fichier reste publié pour le séquestre |
+| Nouvel appareil du Fondateur : code de liaison `AB1.…` (portant le jeton maître) | Identifiant + mot de passe (`docs/connexion-amis.md`), le serveur rend un jeton de **session** ; le jeton maître ne quitte plus le serveur |
+
+## Un tour de synchronisation (`src/sync/relais/coffreServeur.ts`)
+
+1. **Noter** ce qui a changé ici depuis le tour précédent (empreintes) : la **file d'envoi** (`enAttente`), rangée dans
+   la base chiffrée de l'appareil. C'est elle qui sert de file d'attente hors ligne.
+2. **Migration**, une seule fois par appareil : toutes ses données entrent dans la file (elles seront fusionnées dans le
+   coffre serveur). Chez le Fondateur, les anciens dépôts par appareil encore présents sur le relais sont d'abord
+   fusionnés ici (un appareil pas encore à jour continue d'y déposer : il est lu à chaque tour).
+3. **Tirer** les enregistrements modifiés sur le serveur depuis la dernière révision lue (par pages de 500, 8 Mio au plus)
+   et les appliquer.
+4. **Pousser** la file (lots de 400 enregistrements ou 16 Mio). Chaque enregistrement porte la révision qu'on
+   connaissait (`base`).
+
+**Conflits (règle par enregistrement, sans perte).** Si un autre appareil a changé le même enregistrement entre-temps
+(révision différente), le serveur garde le **plus récent par sa date** (à date égale, ce qui existe déjà) et range
+l'AUTRE version dans son **historique** (`conflit`). L'appareil qui perd reçoit la version gardée. Une suppression
+garde l'ancienne valeur dans la **corbeille** (`suppression`). Historique et corbeille : 180 jours, 5 000 lignes par
+compte (`GET /v9/coffre/<compte>/historique`, lu et déchiffré par `historiqueServeur`). Les événements de la boîte du
+journal se fusionnent par **union** (deux appareils n'effacent jamais ceux de l'autre).
+
+**Chiffrement.** L'identifiant d'un enregistrement est un HMAC-SHA256 de sa clé (`genre:identifiant`) par la clé de
+synchronisation DU COMPTE (`cleDerivee('synchro')`, tirée de sa clé maîtresse) ; le contenu est scellé par
+XChaCha20-Poly1305 avec la même clé, lié au compte, à l'identifiant et à la date. Le serveur voit : le nombre
+d'enregistrements, leur taille, leurs dates et révisions. Il ne voit ni la clé de la donnée, ni son contenu.
+
+**Hors ligne.** L'appareil garde une copie complète (sa base chiffrée) : tout s'affiche et se modifie sans réseau ; la
+pastille dit « Hors ligne » ou « N éléments en attente » ; tout part au retour du réseau (événement `online`,
+réessais à 5 s, 30 s, 2 min, 10 min, bouton « Réessayer »).
+
+**Réglages.** Il n'y a plus de section « Synchronisation » dans les Paramètres : seulement l'état de la **connexion au
+serveur** (Paramètres › Général, et la pastille de l'en-tête), avec « Réessayer » quand quelque chose attend.
+
+**Anciens dépôts « par appareil »** (`/boite/<appareil>`, les « Site de secours · il y a 22 jours ») : fusionnés au
+premier tour d'un appareil à jour, puis effacés du relais s'ils ont plus de 30 jours (une fois par jour) ; le dépôt de
+l'appareil lui-même est retiré dès sa migration. Rien n'est perdu : tout dépôt lu est déjà fusionné.
+
+**Ce qui reste sur leur propre canal** (fusion plus fine, déjà sur le serveur) : l'annuaire, les données
+d'administration (`p/principal/boite/admin`), les tâches du Fondateur et leur partage, les sources Tsuzuku partagées,
+les abonnements. Leurs freins d'écriture (30 s mini, tour de 2 min) sont levés : tour toutes les 30 s, ~2 s après une
+modification.
+
+**Restent sur l'appareil** (choix voulus) : l'identifiant d'appareil, l'état de la synchro, le mode discret, le délai de
+verrouillage, les tickets de support et les documents légaux acceptés, les secrets « jamais synchronisés » des Tâches,
+les caches (cours, Tsuzuku).
+
+## Compatibilité et déploiement
+
+- `/sante` annonce `version: 9` et `coffre-serveur` **seulement si le serveur a son magasin PostgreSQL** (le Worker
+  Cloudflare, qui transmet tout à o2switch, ne l'annonce pas lui-même). Un appareil à jour face à un relais qui ne
+  l'annonce pas garde l'ancienne synchronisation (ci-dessous) : rien ne casse pendant le déploiement.
+- Un appareil pas encore à jour continue de déposer dans `/boite/<appareil>` : ses changements sont fusionnés par les
+  appareils à jour. L'inverse n'est pas vrai : **mettez à jour tous les appareils**.
+- Tables PostgreSQL (créées seules au démarrage du relais) : `relais_coffre`, `relais_coffre_rev`,
+  `relais_coffre_historique` (`relais/serveur/coffres-postgres.mjs`). Valeurs en `TEXT` (enveloppes JSON en base 64,
+  8 Mio au plus chacune ; un envoi : 48 Mio au plus).
+
+Tests : `relais/coffre-serveur.test.mjs` (aussi contre PostgreSQL : `npm run relais:tester:pg`),
+`src/sync/relais/coffreServeur.test.ts`, `bureau/connexionV9.test.ts` ; bout en bout :
+`scripts/e2e-synchro-serveur.mjs` (captures `docs/captures-synchro-serveur/`).
+
+---
+
+# Ancienne synchronisation (relais d'avant la version 9, ou sans PostgreSQL)
+
+Ce qui suit décrit l'ancienne boîte par appareil, gardée pour la transition.
 
 ## Ce qui est synchronisé
 
@@ -116,7 +195,7 @@ les comptes d'amis ne synchronisent pas par `/boite` et ne sont pas concernés.
    dès que le dernier est à jour. Un ancien appareil qui recevrait quand même un genre récent l'ignore (au pire il
    garde une date inutile pour cette clé).
 
-## Budget d'écritures Cloudflare KV (plan gratuit : ~1 000 écritures/jour, 100 000 lectures/jour)
+## Budget d'écritures Cloudflare KV (historique : levé depuis PostgreSQL, voir plus haut)
 
 - Un dépôt (`PUT /boite/<appareil>`) coûte **2 écritures** (dépôt + index). Le coffre (`PUT /boite/coffre`) : 1 écriture,
   seulement quand il change (changement de mot de passe).

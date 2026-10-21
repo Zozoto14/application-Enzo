@@ -1,7 +1,31 @@
-# Connexion des amis : invitation, mot de passe, appareils
+# Connexion : identifiant + mot de passe pour tous (Fondateur compris)
 
-Ce document explique, pas à pas, comment un ami accède à AppDashboard — côté **Fondateur** (toi, qui crées les comptes)
-et côté **ami**. La partie technique (sécurité, relais, compatibilité) est à la fin.
+Ce document explique, pas à pas, comment on se connecte à AppDashboard — le **Fondateur** comme ses **amis** — et
+comment un ami est invité. La partie technique (sécurité, relais, compatibilité) est à la fin.
+
+## Nouveau (relais version 9) : plus de code de liaison, pour personne
+
+- **Tout le monde** se connecte sur n'importe quel appareil ou navigateur avec son **identifiant** (son prénom, par
+  exemple) et son **mot de passe** : « Se connecter » sur https://appdashboard.fr. Le Fondateur aussi : la carte
+  « Administrateur : relier avec le code de liaison » et tout le parcours `AB1.…` ont disparu.
+- **Dès qu'on tape son identifiant**, l'écran prend le **style** (thème) de ce compte. Le serveur ne rend que le NOM
+  du thème, et la même réponse neutre (« pas de thème ») pour un identifiant inconnu.
+- **Identifiant inconnu ou mot de passe faux : le même message** (« Identifiant ou mot de passe incorrect »), pour
+  qu'on ne puisse pas deviner quels comptes existent.
+- **Mot de passe oublié** : le Fondateur utilise un de ses **codes de récupération** (« Mot de passe oublié ? » sous
+  « Se connecter ») ; un ami demande au Fondateur de **réinitialiser son accès** (nouveau lien).
+- « J'ai reçu une invitation » reste : c'est la première connexion d'un invité, qui choisit son mot de passe.
+
+### Côté Fondateur : passer à la connexion par identifiant (une fois)
+
+1. Mettez à jour l'app du PC et ouvrez-la (déverrouillée, comme d'habitude : mot de passe et code à six chiffres).
+2. Quelques secondes après, l'écran **« Se connecter partout avec un identifiant »** s'affiche : choisissez votre
+   identifiant (votre prénom), tapez votre mot de passe actuel (et le code à six chiffres une dernière fois), puis
+   votre **nouveau mot de passe** deux fois (10 caractères au moins ; une phrase est idéale).
+3. L'app affiche **dix nouveaux codes de récupération** : notez-les sur papier. Les anciens ne marchent plus.
+4. C'est tout : sur https://appdashboard.fr, l'iPhone ou un autre PC, « Se connecter », votre identifiant, votre mot
+   de passe. Plus de code de liaison, plus de code à six chiffres. (« Plus tard » repousse l'écran ; il est aussi dans
+   Paramètres › Sécurité › « Identifiant et mot de passe de connexion », qui sert ensuite à les changer.)
 
 ## Pourquoi ça a changé (les vraies causes des échecs)
 
@@ -90,8 +114,7 @@ recevras un nouveau lien pour choisir un nouveau mot de passe. Tes données sont
 
 | Message | Ce qu'il faut faire |
 | --- | --- |
-| Identifiant inconnu | vérifie ton prénom tel que le Fondateur l'a écrit |
-| Mot de passe incorrect | vérifie majuscules et accents ; sinon « Mot de passe oublié » |
+| Identifiant ou mot de passe incorrect | vérifie ton prénom tel que le Fondateur l'a écrit, puis majuscules et accents du mot de passe ; sinon « Mot de passe oublié » (le serveur ne dit pas lequel des deux est faux) |
 | Cette invitation a expiré / a été annulée | demande un nouveau lien |
 | Cette invitation a déjà été utilisée | connecte-toi avec ton prénom et ton mot de passe (si ce n'était pas toi, préviens le Fondateur) |
 | Ton compte n'est pas encore publié | demande au Fondateur d'ouvrir AppDashboard, puis réessaie |
@@ -99,6 +122,8 @@ recevras un nouveau lien pour choisir un nouveau mot de passe. Tes données sont
 | Trop de tentatives : réessaie dans … | attends le délai indiqué (protection contre les essais au hasard) |
 | Le relais doit être mis à jour | utilise ton lien d'invitation ; le Fondateur doit relancer le workflow du relais |
 | Ce navigateur ne sait pas encore où est ton compte | ouvre le lien de connexion reçu avec l'invitation, ou le QR code d'un appareil connecté |
+| Cet identifiant est déjà pris par un autre compte | (Fondateur, à la migration) choisis-en un autre |
+| Identifiant ou code de récupération incorrect | (mot de passe oublié) vérifie le code ; chacun ne sert qu'une fois |
 
 ## Technique
 
@@ -135,6 +160,52 @@ recevras un nouveau lien pour choisir un nouveau mot de passe. Tes données sont
    ne rend la charge scellée qu'au bon mot de passe. Le compte ne peut écrire que l'identifiant que le Fondateur lui a
    attribué en publiant l'invitation (`acces-proprio:<h>`) : pas d'usurpation d'un autre prénom.
 
+### Relais : version 9 — le Fondateur, les sessions, le style, le secours (`relais/sessions.mjs`, tests `relais/coffre-serveur.test.mjs`, `bureau/connexionV9.test.ts`)
+
+**Clés et preuve.** Le mot de passe (forme canonique) passe par **Argon2id** (19 Mio, 2 passes, 1 fil : le minimum
+OWASP, ~1 s sur iPhone en JavaScript), avec un sel propre à l'identifiant. Du résultat, HKDF tire DEUX valeurs
+séparées : la **clé** qui ouvre la charge de l'accès, et la **preuve** d'authentification. Le serveur ne garde que
+l'empreinte SHA-256 de la preuve ; il ne voit jamais le mot de passe, la clé, ni la clé maîtresse du coffre. Le coffre
+lui-même (enveloppes de la clé maîtresse) s'ouvre ensuite par le mot de passe avec sa propre dérivation Argon2id :
+c'est elle qui déchiffre les données, sur l'appareil.
+
+**Le Fondateur** (`compte: principal`) a son accès comme un ami, posé par lui seul (jeton maître, ou sa session).
+Une preuve juste lui rend un **jeton de session** `s1.<64 hexa>` tiré au hasard : le relais n'en garde que
+l'empreinte (`session:<empreinte>`, 180 jours, prolongée à l'usage, révocable : `DELETE /v9/sessions/courante`, ou
+toutes : `DELETE /v9/sessions`). La session vaut le jeton maître pour le compte (synchro, invitations, Tsuzuku,
+Esport : `/jeton/verifier` la reconnaît comme compte `principal`), sauf l'export complet de la boîte. **Le jeton
+maître reste un secret du serveur** (et du PC historique, `relais-local.json`).
+
+| Route (version 9) | Jeton | Rôle |
+| --- | --- | --- |
+| `GET /acces/<h>` | aucun | sel et paramètres ; **identifiant inconnu : sel « leurre » stable** (HMAC du jeton maître), même forme |
+| `POST /acces/<h>/ouvrir` | aucun (preuve) | charge scellée (+ session pour le Fondateur) ; identifiant inconnu = mot de passe faux (403 `mot-de-passe`, mêmes délais) ; révocation annoncée seulement après une preuve juste |
+| `POST /acces/<h>/secours` | aucun (preuve d'un code de récupération) | même chose, par un des codes de récupération du Fondateur |
+| `PUT /acces/<h>` | compte (ou Fondateur) | 409 `identifiant-pris` si l'identifiant est à un autre compte |
+| `GET /v9/theme/<h>` | aucun | `{ theme }` : le NOM du thème seulement ; inconnu ou sans thème : `{ theme: null }` ; 240 demandes / 15 min / adresse |
+| `PUT /v9/theme/<h>` | le compte | publie le nom de son thème (fait seul par l'app quand le thème du compte change) |
+
+**Anti-force brute** (inchangé, et appliqué aussi aux identifiants inconnus) : 5 essais libres par identifiant puis
+délai doublé (30 s → 1 h), même en changeant d'adresse ; 10 échecs par adresse IP puis délai jusqu'à 15 min.
+
+**Mot de passe oublié (Fondateur).** À la migration, dix codes de récupération sont tirés ; chacun dérive (Argon2id,
+sel commun : les codes ont 80 bits d'aléa) une preuve dont le relais garde l'empreinte, et une clé qui scelle la même
+charge. « Mot de passe oublié » : identifiant + un code → session → coffre ouvert par ce code → nouveau mot de passe,
+dix nouveaux codes (affichés), accès republié. Un ami, lui, passe par « Réinitialiser l'accès » (séquestre, voir
+`docs/hub/sequestre.md`).
+
+**Migration du Fondateur** (`bureau/ConnexionFondateur.tsx`, `Session.passerAConnexionParIdentifiant`) : identité
+revérifiée (mot de passe actuel + code à six chiffres), codes tirés, accès et secours publiés AVANT de toucher au coffre
+(un identifiant pris ne change rien), puis coffre rescellé par le nouveau mot de passe (forme canonique), code à six
+chiffres plus exigé (comme pour les amis : marque scellée par la clé maîtresse), coffre téléversé, thème publié. La clé
+maîtresse ne change pas : aucune donnée n'est rechiffrée. **Ce que la suppression du code à six chiffres change** :
+ce code ne protégeait que l'accès par l'application (voir `src/securite/README.md`) ; il est remplacé par la preuve
+vérifiée par le serveur et ses délais. Un appareil pas encore à jour garde son coffre local (ancien mot de passe)
+jusqu'à sa prochaine ouverture à jour.
+
+**Amis existants** : rien à faire, leur accès d'avant (identifiant + mot de passe) marche tel quel ; la réponse pour un
+identifiant inconnu est seulement devenue neutre.
+
 ### Relais : version 6 (`relais/worker.mjs`, tests `relais/connexion.test.mjs`)
 
 | Route | Jeton | Rôle |
@@ -145,7 +216,7 @@ recevras un nouveau lien pour choisir un nouveau mot de passe. Tes données sont
 | `POST /invitations/<id>/utiliser` | **aucun** (preuve) | usage unique : marque utilisée, efface la charge |
 | `PUT /acces/<h>` | compte (son identifiant attribué) ou maître | accès par identifiant |
 | `DELETE /acces/<h>` | maître ou compte | retire l'accès (réinitialisation, révocation) |
-| `GET /acces/<h>` | **aucun** | sel et paramètres Argon2id (404 `identifiant-inconnu`) |
+| `GET /acces/<h>` | **aucun** | sel et paramètres Argon2id (version 9 : sel leurre pour un identifiant inconnu, plus de 404) |
 | `POST /acces/<h>/ouvrir` | **aucun** (preuve) | charge scellée, ou 403 `mot-de-passe` |
 | `PUT` / `DELETE` / `GET /revocations/<id>` | maître | révoque (ou rétablit) le jeton de profil du compte : 403 `revoque` partout |
 
@@ -170,15 +241,17 @@ ou `npm run relais:deployer` sur le PC. **Tant qu'il n'est pas fait**, tout cont
 ### Adresse du relais pour un appareil neuf
 
 Pour « Se connecter » sans lien, le site doit connaître l'adresse du relais (rien de secret) : fichier `relais.json`
-publié avec le site (workflow « Site » : variable GitHub **`RELAIS_URL`** ; sur le PC, `npm run relais:site` l'écrit
-seul), ou lien de connexion `…/#relais=<adresse>` (dans le message d'invitation), ou mémoire du navigateur. Sinon, le
+publié avec le site (sur o2switch : `https://appdashboard.fr/relais.json` → `https://relais.appdashboard.fr`), ou lien
+de connexion `…/#relais=<adresse>` (dans le message d'invitation), ou mémoire du navigateur. Sinon, le
 message « Ce navigateur ne sait pas encore où est ton compte » oriente vers le lien ou le QR code.
 
 ### Compatibilité
 
-- Les amis déjà connectés continuent comme avant (code de liaison, prénom, mot de passe **et** code à six chiffres) :
-  leur coffre n'a pas d'exemption, l'écran demande toujours le code. Leurs identifiants restent valables jusqu'à une
-  réinitialisation (après laquelle ils choisissent leur mot de passe et n'ont plus de code).
+- Les amis déjà connectés sur un navigateur continuent comme avant. Plus de « code de connexion au site » (`AB1.…`) :
+  un ami « à l'ancienne » (mot de passe tiré au hasard + code à six chiffres, sans accès par identifiant) reçoit un
+  lien par « Réinitialiser l'accès » et choisit son mot de passe ; ses données sont gardées.
+- Un ancien lien `#liaison=AB1.…` n'ouvre plus rien (il est retiré de l'adresse) ; un navigateur qui gardait déjà un
+  code continue de marcher.
 - Un coffre accepté par invitation n'est plus bloqué par une « invitation expirée » restée dans une projection pas
   encore resynchronisée (l'acceptation prouve que le lien a servi à temps).
 - Un ancien appareil (application pas à jour) ne connaît pas l'exemption : il demanderait encore un code pour un ami

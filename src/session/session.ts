@@ -94,7 +94,7 @@ export class ErreurTemporisation extends ErreurSession {
 export class ErreurCoffreDifferent extends ErreurSession {
   constructor() {
     super(
-      'Ces identifiants ouvrent le compte publié par votre PC, mais ce navigateur garde les données d’un autre coffre : utilisez « Lier à mon compte (code de liaison) » pour le remplacer.',
+      'Ces identifiants ouvrent le compte publié par votre PC, mais ce navigateur garde les données d’un autre coffre (créé ici autrefois). Pour le remplacer : effacez les données de ce site dans les réglages du navigateur, puis « Se connecter » avec votre identifiant et votre mot de passe (vos données reviennent du serveur).',
     );
     this.name = 'ErreurCoffreDifferent';
   }

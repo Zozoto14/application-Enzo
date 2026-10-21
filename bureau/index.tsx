@@ -114,6 +114,7 @@ import {
   liaisonPourCompte,
   lireLiaisons,
   oublierSuivi,
+  preparerLiaison,
   CLES_MEMOIRE,
   retenirLiaison,
   synchroniserAnnuaire,
@@ -151,6 +152,7 @@ import { aleatoireParDefaut } from '../src/securite/aleatoire';
 import { apercuTheme } from '../src/ui/theme';
 import { lireThemeAppareil } from '../src/hub/themeAppareil';
 import { deposerCoffreSiChange } from '../src/sync/relais/synchroniser';
+import { viderCoffreServeur } from '../src/sync/relais/coffreServeur';
 import {
   ErreurInvitation,
   decoderInvitation,
@@ -737,6 +739,16 @@ function Racine() {
       // Ancien lien de liaison (QR code d'avant) : retiré de l'adresse, on se connecte par identifiant.
       if (lienDeLiaisonPerime()) effacerFragment();
       const liaisons = lireLiaisons(memoireNavigateur);
+      // Navigateur déjà relié au compte d'un ami (avant la version 9) dont la liste des comptes manque ici :
+      // sa projection est relue sur le serveur (même chose qu'à la connexion), sans rien demander.
+      const seuleLiaison = Object.values(liaisons.comptes);
+      if (!pont() && !liaisons.maitre && seuleLiaison.length === 1 && !annuaire.restreint && !aDesAmis(annuaire)) {
+        const relie = await auPlus(preparerLiaison(seuleLiaison[0]), 15_000);
+        if (relie?.compte) {
+          await ecrireAnnuaireDisque(relie.annuaire);
+          annuaire = relie.annuaire;
+        }
+      }
       // Comptes ajoutés ou modifiés ailleurs : l'écran prénom les connaît avant la connexion.
       const maitre = liaisons.maitre ? decoderLiaison(liaisons.maitre) : await liaisonDuPont();
       if (maitre && !annuaire.restreint) {
@@ -1744,6 +1756,9 @@ function Racine() {
         }
         exiger(profil, 'regenerer-identifiants', ami);
         await effacerFichiers(id);
+        // Nouvelle clé maîtresse : l'ancien coffre serveur de ce compte ne s'ouvrirait plus, il est effacé.
+        const maitreRegen = await liaisonMaitre();
+        if (maitreRegen) await viderCoffreServeur(maitreRegen, id).catch(e => console.warn('Coffre serveur :', erreurTexte(e)));
         const { identifiants, depot } = await creerCoffreAmi(id, ami.nom, clePublique());
         await rafraichirAdmin(deposerSequestre(annuaireCourant(), id, depot), true);
         return { ...identifiants, invitation: await inviter(id, ami.nom, identifiants.motDePasse, 7) };

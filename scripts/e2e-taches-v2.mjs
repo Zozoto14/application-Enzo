@@ -29,7 +29,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { allerPageAdministration, allerPageApplications, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
+import { accepterInvitationAmi, allerPageAdministration, allerPageApplications, lienInvitationDuPanneau, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
 import { mesurer } from './mobile-outils.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
@@ -196,10 +196,12 @@ async function creerAmi(page, nom) {
   await page.getByTestId('admin-identifiants').waitFor({ timeout: 60_000 });
   const motDePasse = (await page.getByTestId('admin-mot-de-passe').innerText()).replace(/^\s*Mot de passe\s*/, '').trim();
   const secret = (await page.getByTestId('admin-secret-totp').innerText()).replace(/^\s*Clé TOTP\s*/, '').replace(/\s+/g, '');
+  // Relais version 9 : l'ami se connecte par son invitation (plus de code de connexion au site).
+  const lien = await lienInvitationDuPanneau(page);
   await page.getByTestId('admin-transmis').click().catch(() => undefined);
   await page.getByTestId('admin-termine').click();
   const ligne = await page.locator('[data-testid^="admin-ligne-"]').filter({ hasText: nom }).first().getAttribute('data-testid');
-  return { motDePasse, secret, id: ligne.replace('admin-ligne-', '') };
+  return { motDePasse, secret, lien, id: ligne.replace('admin-ligne-', '') };
 }
 /** Ouvre Tâches ; elle s'ouvre sur le calendrier de la semaine, puis (par défaut) on passe en Liste. */
 async function ouvrirTaches(page, { liste = true } = {}) {
@@ -331,10 +333,7 @@ try {
   const lea = await creerAmi(pc, 'Léa');
   await pc.getByTestId('admin-liste').getByText('Léa', { exact: true }).first().click();
   await pc.getByTestId('admin-detail').waitFor({ timeout: 20_000 });
-  await pc.getByTestId('admin-code-site-generer').click();
-  await identiteSiDemandee(pc);
-  await pc.getByTestId('admin-code-site').waitFor({ timeout: 20_000 });
-  const codeLea = (await pc.getByTestId('admin-code-site').innerText()).trim();
+  const codeLea = lea.lien;
   await quitterTaches(pc).catch(() => pc.getByTestId('retour-hub').first().click());
 
   log('iPad : Léa relie son navigateur');
@@ -344,14 +343,7 @@ try {
     erreursPage.push(e.message);
     log('erreur page iPad :', e.message);
   });
-  await ipad.goto(`${SITE}#liaison=${codeLea}`);
-  await ipad.getByTestId('accueil-site').waitFor({ timeout: 60_000 });
-  await ipad.getByTestId('bouton-relier-accueil').click();
-  await ipad.getByTestId('connexion-prenom').waitFor({ timeout: 60_000 });
-  await ipad.getByTestId('connexion-prenom').fill('Léa');
-  await ipad.getByTestId('connexion-continuer').click();
-  await ipad.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
-  await deverrouiller(ipad, lea.motDePasse, lea.secret);
+  await accepterInvitationAmi(ipad, codeLea, SITE);
   await fermerPopups(ipad);
   verifier(await attendre(async () => (await relancer(ipad), kv.has(`p:${lea.id}:tsuzuku-cle`)), 120_000, 3000), 'Léa a publié sa clé de réception');
 

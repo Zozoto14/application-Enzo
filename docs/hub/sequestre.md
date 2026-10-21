@@ -406,3 +406,35 @@ Détail et tableau complet : `docs/synchro-relais.md` (« Portées du relais »,
   `profils` de son appareil) — l'administrateur ne la relit jamais, ses accès font foi. Un gestionnaire relié avec son
   seul code n'a pas d'Administration sur ce navigateur (il ne connaît que son compte) : il gère ses amis depuis
   l'appareil de l'administrateur.
+
+## 9. Le serveur devient la référence (relais version 9) : ce qui change, ce qui ne change pas
+
+Voir `docs/synchro-relais.md` (coffre serveur) et `docs/connexion-amis.md` (connexion par identifiant).
+
+**Ce qui ne change pas** : la cryptographie du séquestre. Chaque compte garde SA clé maîtresse `K` ; elle est toujours
+scellée (ECIES X25519) pour chaque titulaire de rang strictement supérieur, et un titulaire ne l'ouvre qu'avec sa clé
+privée ET le code d'accès de ce compte. Un Fondateur n'est scellé pour personne.
+
+**Ce qui change** :
+
+- Les données d'un compte ne sont plus seulement dans son fichier `portefeuille-<id>` : elles sont aussi, enregistrement
+  par enregistrement, dans SON **coffre serveur** (`/v9/coffre/<id>`), scellé par `cleDerivee('synchro')` de CE
+  compte (contexte `applibourse/synchro/profil/<id>/v1|`). Le serveur ne peut pas le lire ; un ami ne peut pas lire
+  celui d'un autre (403, et sa clé ne l'ouvrirait de toute façon pas).
+- **Rouvrir un compte inférieur** (séquestre) : le titulaire obtient `K` comme avant ; avec `K` il ouvre le coffre et
+  la base du compte, ET peut déchiffrer son coffre serveur (même dérivation). Le relais laisse le titulaire délégué
+  (`PUT /rangs`) lire et écrire ce coffre serveur, jamais l'effacer. Le fichier `portefeuille-<id>` reste publié
+  pour l'ouverture par séquestre sur un appareil du titulaire.
+- **Mot de passe oublié d'un ami** : « Réinitialiser l'accès » (fiche du compte) passe toujours par le séquestre : le
+  titulaire rescelle le coffre de l'ami par un mot de passe temporaire et lui envoie un lien ; l'ami choisit un nouveau
+  mot de passe, son **accès par identifiant** est republié sur le serveur. Ses données sont gardées : `K` ne change
+  pas, son coffre serveur reste lisible avec le nouveau mot de passe.
+- **Mot de passe oublié du Fondateur** : personne ne peut rouvrir son compte (il n'est scellé pour personne). Sa
+  solution de secours, ce sont ses **codes de récupération** (dix, notés sur papier à la migration) : chacun ouvre son
+  coffre ET, sur le serveur, un **accès de secours** (`POST /acces/<h>/secours`, preuve tirée du code, même anti-force
+  brute). Sur n'importe quel navigateur : « Mot de passe oublié ? », identifiant + un code + nouveau mot de passe ;
+  dix nouveaux codes sont alors affichés. **Sans mot de passe ni code, les données du Fondateur sont perdues** : c'est
+  le prix du chiffrement de bout en bout (le serveur ne peut rien rouvrir).
+- **Régénérer les identifiants** d'un compte (nouvelle `K`, le compte repart de zéro, comme avant) : son ancien coffre
+  serveur ne s'ouvrirait plus avec la nouvelle clé, il est effacé du serveur. **Supprimer un compte** efface aussi son
+  coffre serveur (avec son espace, son accès par identifiant, et la révocation de son jeton).

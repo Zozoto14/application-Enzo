@@ -4,8 +4,9 @@ App du hub « **Journal** » (`src/journal/`, id `journal`, page « Applications
 Chaque soir, elle écrit **seule** une page de journal pour la journée, à partir de ce
 qui s'est passé dans les autres apps. On relit le carnet comme un livre.
 
-Rien n'est envoyé à un service externe, aucune IA n'est nécessaire, et le journal
-**n'écrit rien sur le relais**.
+Rien n'est envoyé à un service externe et aucune IA n'est nécessaire. Depuis la version 9 du relais (serveur
+o2switch), le journal est **partagé entre les appareils du compte** par le coffre serveur chiffré (voir
+« Synchronisation » plus bas).
 
 ## Ce que fait l'app
 
@@ -45,9 +46,16 @@ Rien n'est envoyé à un service externe, aucune IA n'est nécessaire, et le jou
   ouvrir un compte inférieur) s'applique au coffre entier, donc au journal ; le journal n'ajoute aucun
   accès.
 
-## Relais : zéro écriture
+## Synchronisation (relais version 9)
 
-La limite du relais est d'environ 1000 écritures KV par jour. Le journal **ne l'appelle jamais** :
+Les pages voyagent **une par jour** (`journal:page:<jour>`, la plus récente gagne pour ce jour-là, l'autre version est
+gardée dans l'historique du serveur), les réglages tels quels, et la boîte du journal **par union** (deux appareils
+n'effacent jamais les événements de l'autre) : `src/sync/relais/entitesApps.ts`. Notes, humeurs et épingles passent donc
+d'un appareil à l'autre. Tout est chiffré par la clé du compte : le serveur ne lit rien.
+
+### Avant (Cloudflare KV, historique)
+
+La limite du relais était d'environ 1000 écritures KV par jour. Le journal **ne l'appelait jamais** :
 
 - une page = au plus **3 écritures locales** (le mois, l'index des mois la première fois, un petit
   résumé), jamais une écriture par événement ;
@@ -57,8 +65,8 @@ La limite du relais est d'environ 1000 écritures KV par jour. Le journal **ne l
 - les sources **lisent** des données locales déjà synchronisées (Claude Office : le journal du PC, et les
   copies chiffrées déjà présentes sur le relais — lues, jamais écrites).
 
-Conséquence : chaque appareil écrit ses propres pages à partir de ses données ; les notes et humeurs
-ne passent pas d'un appareil à l'autre pour l'instant.
+Conséquence (avant la version 9) : chaque appareil écrivait ses propres pages ; les notes et humeurs ne passaient pas
+d'un appareil à l'autre.
 
 ## Architecture
 

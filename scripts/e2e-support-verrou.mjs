@@ -187,9 +187,8 @@ async function creerAmi(page, nom) {
 
 /** Relie un navigateur neuf avec un code (lien #liaison=) et attend l'écran suivant. */
 async function relier(page, code) {
+  // Navigateur déjà relié (relais version 9 : plus de carte « code de liaison » à l'accueil).
   await page.goto(`${SITE}#liaison=${code}`);
-  await page.getByTestId('accueil-site').waitFor({ timeout: 60_000 });
-  await page.getByTestId('bouton-relier-accueil').click();
 }
 
 

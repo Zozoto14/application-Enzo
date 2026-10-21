@@ -165,9 +165,8 @@ try {
 
   // ----- Appareil B : « Lier à mon compte », déverrouillage
   log('B : liaison');
+  // Navigateur déjà relié avant la mise à jour (relais sans coffre serveur : ancienne synchronisation).
   await B.goto(URL_SITE);
-  await B.getByTestId('bouton-relier-accueil').waitFor({ timeout: 60_000 });
-  await B.getByTestId('bouton-relier-accueil').click();
   await B.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
   await deverrouiller(B, secret);
   await B.getByTestId('synchro-indicateur').waitFor({ timeout: 60_000 });
@@ -239,9 +238,10 @@ try {
   const libHors = await libelleSynchro(A);
   verifier(/en attente \(hors ligne\)/.test(libHors), `A hors ligne : « ${libHors} »`);
   await A.screenshot({ path: join(CAPTURES, '05-A-hors-ligne-en-attente.png') });
-  await A.getByTestId('parametres-section-synchro').click();
+  // Plus de section Synchronisation : l'état de la connexion au serveur est dans Général (« Réessayer »).
+  await A.getByTestId('parametres-section-general').click();
   await A.getByTestId('synchro-maintenant').scrollIntoViewIfNeeded();
-  await A.screenshot({ path: join(CAPTURES, '05b-A-parametres-synchronisation.png') });
+  await A.screenshot({ path: join(CAPTURES, '05b-A-parametres-connexion-serveur.png') });
   const putsAvant = compteurs.put;
   log('A : retour du réseau');
   await contexteA.setOffline(false);
@@ -347,8 +347,9 @@ try {
   verifier((await fondDe(A, 'entete-app')) === TERMINAL, 'portefeuille au thème Terminal (celui du hub)');
   await A.screenshot({ path: join(CAPTURES, '07-portefeuille-pastille-synchro.png') });
   await A.locator('[data-testid="entete-app"] [data-testid="synchro-indicateur"]').click();
-  await A.getByTestId('parametres-panneau-synchro').waitFor({ timeout: 10_000 });
-  verifier(true, 'la pastille du portefeuille ouvre Paramètres › Synchronisation');
+  await A.getByTestId('parametres-panneau-general').waitFor({ timeout: 10_000 });
+  await A.getByTestId('reglage-synchro-etat').waitFor({ timeout: 10_000 });
+  verifier(true, 'la pastille du portefeuille ouvre Paramètres › Général (connexion au serveur)');
   await A.getByTestId('hub-parametres-fermer').click();
   await A.getByTestId('entete-app').waitFor({ timeout: 10_000 });
   verifier(true, 'Retour ramène au portefeuille');
@@ -383,12 +384,13 @@ try {
   // Chaque section, la recherche, le clavier.
   log('A : sections, recherche, clavier');
   await A.getByTestId('hub-parametres-ouvrir').click();
-  for (const id of ['general', 'synchro', 'securite', 'portefeuille', 'administration', 'nouveautes', 'apropos']) {
+  for (const id of ['general', 'securite', 'portefeuille', 'administration', 'nouveautes', 'apropos']) {
     await A.getByTestId(`parametres-section-${id}`).click();
     await A.getByTestId(`parametres-panneau-${id}`).waitFor({ timeout: 10_000 });
     await A.screenshot({ path: join(CAPTURES, `11-parametres-${id}.png`) });
   }
-  verifier(true, 'les sept sections s’ouvrent');
+  verifier((await A.getByTestId('parametres-section-synchro').count()) === 0, 'plus de section « Synchronisation »');
+  verifier(true, 'les sections s’ouvrent');
   await A.getByTestId('parametres-recherche').fill('récupération');
   await A.getByTestId('parametres-resultats').waitFor({ timeout: 10_000 });
   const trouves = await A.locator('[data-testid^="reglage-"]').count();
@@ -400,7 +402,7 @@ try {
   await A.getByTestId('parametres-section-general').focus();
   await A.keyboard.press('ArrowDown');
   await pause(300);
-  verifier((await A.getByTestId('parametres-section-synchro').getAttribute('aria-selected')) === 'true', 'flèche bas : section suivante');
+  verifier((await A.getByTestId('parametres-section-securite').getAttribute('aria-selected')) === 'true', 'flèche bas : section suivante');
   await A.keyboard.press('ArrowUp');
   await pause(300);
   verifier((await A.getByTestId('parametres-section-general').getAttribute('aria-selected')) === 'true', 'flèche haut : section précédente');
@@ -465,7 +467,7 @@ try {
   await pause(300);
   // Téléphone : les Paramètres s'ouvrent par la barre basse (« Réglages ») ; liste → sous-page → « ‹ Réglages ».
   await A.getByTestId('barre-basse-parametres').click();
-  for (const id of ['general', 'synchro', 'securite', 'portefeuille', 'administration', 'apropos']) {
+  for (const id of ['general', 'securite', 'portefeuille', 'administration', 'apropos']) {
     if (id !== 'general') await A.getByTestId('parametres-retour').click();
     await A.getByTestId(`parametres-section-${id}`).click();
     await A.getByTestId(`parametres-panneau-${id}`).waitFor({ timeout: 10_000 });

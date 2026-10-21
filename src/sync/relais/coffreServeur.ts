@@ -420,3 +420,15 @@ export async function historiqueServeur(o: Pick<OptionsServeur, 'liaison' | 'cle
     }
   });
 }
+
+/**
+ * Efface le coffre serveur d'un compte (jeton maître) : compte supprimé, ou identifiants régénérés
+ * (nouvelle clé maîtresse : l'ancien coffre ne s'ouvrirait plus). Sans coffre serveur sur ce relais :
+ * rien à faire.
+ */
+export async function viderCoffreServeur(liaison: Liaison, compte: string, requete: Fetch = fetch): Promise<void> {
+  const reponse = await appeler(liaison, `/v9/coffre/${encodeURIComponent(compte)}`, { methode: 'DELETE' }, requete);
+  if (!reponse.ok && reponse.status !== 404 && reponse.status !== 501) {
+    throw new ErreurRelais(`Le serveur a répondu ${reponse.status} (coffre du compte).`, reponse.status);
+  }
+}

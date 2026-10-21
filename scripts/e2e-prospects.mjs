@@ -21,7 +21,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { allerPageAdministration, nouveauContexte, ONGLET_ADMINISTRATION } from './e2e-acceptation.mjs';
+import { accepterInvitationAmi, allerPageAdministration, lienInvitationDuPanneau, nouveauContexte, ONGLET_ADMINISTRATION } from './e2e-acceptation.mjs';
 import { mesurer } from './mobile-outils.mjs';
 
 const racine = fileURLToPath(new URL('..', import.meta.url));
@@ -310,26 +310,13 @@ try {
   verifier((await pc.locator('[data-testid*="prospects"]').count()) === 0, 'Administration : Prospects n’est jamais proposée aux amis');
   await pc.getByTestId('admin-creer').click();
   await pc.getByTestId('admin-identifiants').waitFor({ timeout: 60_000 });
-  const mdpAmie = (await pc.getByTestId('admin-mot-de-passe').innerText()).replace(/^\s*Mot de passe\s*/, '').trim();
-  const secretAmie = (await pc.getByTestId('admin-secret-totp').innerText()).replace(/^\s*Clé TOTP\s*/, '').replace(/\s+/g, '');
+  // Relais version 9 : l'amie se connecte par son invitation (plus de code de connexion au site).
+  const lienAmie = await lienInvitationDuPanneau(pc);
   await pc.getByTestId('admin-transmis').click().catch(() => undefined);
   await pc.getByTestId('admin-termine').click();
-  await pc.getByTestId('admin-liste').getByText('Léa', { exact: true }).first().click();
-  await pc.getByTestId('admin-detail').waitFor({ timeout: 20_000 });
-  await pc.getByTestId('admin-code-site-generer').click();
-  await identiteSiDemandee(pc);
-  await pc.getByTestId('admin-code-site').waitFor({ timeout: 20_000 });
-  const codeAmie = (await pc.getByTestId('admin-code-site').innerText()).trim();
   const amie = await (await nouveauContexte(navigateur, options)).newPage();
   amie.on('pageerror', e => log('erreur page amie :', e.message));
-  await amie.goto(`${SITE}#liaison=${codeAmie}`);
-  await amie.getByTestId('accueil-site').waitFor({ timeout: 60_000 });
-  await amie.getByTestId('bouton-relier-accueil').click();
-  await amie.getByTestId('connexion-prenom').waitFor({ timeout: 60_000 });
-  await amie.getByTestId('connexion-prenom').fill('Léa');
-  await amie.getByTestId('connexion-continuer').click();
-  await amie.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
-  await deverrouiller(amie, mdpAmie, secretAmie);
+  await accepterInvitationAmi(amie, lienAmie, SITE);
   await fermerPopups(amie);
   await pause(4000);
   verifier((await amie.locator('[data-testid="tuile-prospects"], [data-testid="cellule-prospects"]').count()) === 0, 'l’amie ne voit pas la tuile Prospects');

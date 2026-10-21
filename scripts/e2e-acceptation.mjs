@@ -98,3 +98,39 @@ export async function relierCommePc(page, code) {
   }, code);
   await page.reload();
 }
+
+/**
+ * Relais version 9 : plus de « code de connexion au site » pour un ami. Juste après « Créer » dans
+ * l'Administration, le panneau montre le lien d'invitation : on le lit ici (avant « Terminé »).
+ */
+export async function lienInvitationDuPanneau(page) {
+  await page.locator('[data-testid="admin-invitation"], [data-testid="admin-invitation-erreur"], [data-testid="admin-invitation-indisponible"]').first().waitFor({ timeout: 90_000 });
+  return (await page.getByTestId('admin-invitation-lien').first().innerText({ timeout: 10_000 })).trim();
+}
+
+/** L'ami ouvre son invitation sur un appareil neuf et choisit son mot de passe ; rend quand son hub est affiché. */
+export async function accepterInvitationAmi(page, lien, site, motDePasse = 'Une phrase d’ami 2026 !') {
+  await page.goto(lien.replace(/^https?:\/\/[^/]+\//, site));
+  await page.getByTestId('invitation-mdp').waitFor({ timeout: 90_000 });
+  await page.getByTestId('invitation-mdp').fill(motDePasse);
+  await page.getByTestId('invitation-mdp-confirmation').fill(motDePasse);
+  await page.getByTestId('invitation-valider').click();
+  await page.getByTestId('hub').waitFor({ timeout: 120_000 });
+  return motDePasse;
+}
+
+/**
+ * Code d'un navigateur DÉJÀ relié au compte d'un ami avant la version 9 (plus de « code de connexion au site »
+ * dans l'app) : le test le calcule comme le faisait le PC (jeton de profil = HMAC du jeton maître).
+ */
+export async function codeAmiDejaRelie(relais, jetonMaitre, id) {
+  const { createHmac } = await import('node:crypto');
+  const jeton = `p1.${id}.${createHmac('sha256', jetonMaitre).update(`applibourse-profil-v1|${id}`).digest('hex')}`;
+  return 'AB1.' + Buffer.from(JSON.stringify({ r: relais, j: jeton })).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** Identifiant opaque d'un compte, lu sur sa ligne dans l'Administration (onglet Utilisateurs ouvert). */
+export async function idCompteAdmin(page, nom) {
+  const ligne = await page.locator('[data-testid^="admin-ligne-"]').filter({ hasText: nom }).first().getAttribute('data-testid');
+  return ligne.replace('admin-ligne-', '');
+}
