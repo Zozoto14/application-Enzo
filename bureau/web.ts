@@ -58,7 +58,7 @@ export function oublierLiaisonDuSite(): void {
 async function viaRelais(chemin: string, corps: unknown): Promise<Response> {
   const relais = relaisActif() ?? liaisonDuSite();
   if (!relais) {
-    throw new Error('Reliez d’abord ce site au relais : Paramètres › Synchronisation.');
+    throw new Error('Connectez-vous d’abord (identifiant et mot de passe) : ce site passe par le serveur.');
   }
   const reponse = await fetch(`${relais.relais}${chemin}`, {
     method: 'POST',

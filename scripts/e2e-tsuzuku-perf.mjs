@@ -401,6 +401,7 @@ async function importerSources(pg, mode) {
   await retourHub(pg);
 }
 
+let secretSite = null;
 /** Le parcours complet sur une plateforme ; rend les temps (ms) de chaque étape. */
 async function parcours(navigateur, mode) {
   const t = {};
@@ -413,7 +414,18 @@ async function parcours(navigateur, mode) {
     await pg.exposeFunction('__tsuLecteur', async () => true);
   }
   const activerPontPc = () => (mode === 'pc' ? pg.evaluate(() => { globalThis.applibourse = { tsuzuku: { requete: r => globalThis.__tsuRequete(r), lecteur: u => globalThis.__tsuLecteur(u) } }; }) : undefined);
-  const secret = await creerCoffre(pg, estSite(mode) ? `${SITE}#liaison=${CODE_PC}` : SITE);
+  // Relais version 9 : le compte du site vit sur le serveur ; la 2e plateforme « site » rouvre le MÊME compte.
+  let secret;
+  if (estSite(mode) && secretSite) {
+    await pg.goto(`${SITE}#liaison=${CODE_PC}`);
+    await pg.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
+    await deverrouiller(pg, secretSite);
+    await fermerPopups(pg);
+    secret = secretSite;
+  } else {
+    secret = await creerCoffre(pg, estSite(mode) ? `${SITE}#liaison=${CODE_PC}` : SITE);
+    if (estSite(mode)) secretSite = secret;
+  }
   await activerPontPc();
   await importerSources(pg, mode);
   await brider(pg, mode);
@@ -507,18 +519,22 @@ async function parcours(navigateur, mode) {
   t.requetesSources = requetes.filter(r => !['img-exemple.fr', 'lecteur-exemple.fr'].includes(r.hote)).length;
   verifier(erreurs.length === 0, `${mode} : aucune erreur JavaScript (${erreurs.join(' | ').slice(0, 200)})`);
   await contexte.close();
-  if (estSite(mode)) Object.assign(t, await secondAppareil(navigateur, mode));
+  if (estSite(mode)) Object.assign(t, await secondAppareil(navigateur, mode, secret));
   return t;
 }
 
 /** Site : un SECOND appareil (cache de l'appareil vide), relié au même relais, ouvre la même fiche. */
-async function secondAppareil(navigateur, mode) {
+async function secondAppareil(navigateur, mode, secret) {
   const t = {};
   const contexte = await contexteSimule(navigateur, mode);
   const pg = await contexte.newPage();
   const erreurs = [];
   pg.on('pageerror', e => erreurs.push(e.message));
-  await creerCoffre(pg, `${SITE}#liaison=${CODE_PC}`);
+  // Relais version 9 : le second appareil est un autre navigateur du MÊME compte (déjà relié), cache vide.
+  await pg.goto(`${SITE}#liaison=${CODE_PC}`);
+  await pg.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
+  await deverrouiller(pg, secret);
+  await fermerPopups(pg);
   await importerSources(pg, `${mode} (2e appareil)`);
   await brider(pg, mode);
   log(`${mode} : second appareil, même fiche`);

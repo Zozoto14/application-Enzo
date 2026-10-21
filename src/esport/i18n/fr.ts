@@ -567,7 +567,7 @@ export const fr = {
   'racineEsport.reessayer': 'Réessayer',
   'racineEsport.tous_les_depots_des': 'Tous les dépôts des teams où vous rédigez les résumés.',
   'racineEsport.retour': 'Retour : {titre}',
-  'racineEsport.cet_appareil_n_est': 'Cet appareil n’est pas relié au relais : l’Esport utilise votre compte du hub, par le relais (Paramètres › Synchronisation).',
+  'racineEsport.cet_appareil_n_est': 'Cet appareil n’est pas encore connecté au serveur : l’Esport utilise votre compte du hub (connectez-vous avec votre identifiant et votre mot de passe).',
   'racineEsport.le_serveur_esport_worker': 'Le serveur Esport (Worker Cloudflare « applibourse-esport ») n’est pas encore déployé, ou le relais n’est pas encore en version 7. La marche à suivre tient en quelques étapes.',
   'racineEsport.le_fondateur_n_a': 'Le Fondateur n’a pas encore activé l’Esport. Réessayez plus tard.',
   'racineEsport.esport_pas_encore_active': 'Esport pas encore activé',

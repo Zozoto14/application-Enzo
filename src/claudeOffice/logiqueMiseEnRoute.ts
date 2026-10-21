@@ -87,7 +87,7 @@ export function etapesMiseEnRoute(o: EntreeMiseEnRoute): Etape[] {
     etapes.push(evenement());
     // 3. Copie chiffrée (pour voir le bureau sur le site et le téléphone).
     if (!o.relais) {
-      etapes.push({ id: 'copie', niveau: 'info', titre: 'Copie chiffrée indisponible', detail: 'Relie le compte principal au relais (Paramètres › Synchronisation).' });
+      etapes.push({ id: 'copie', niveau: 'info', titre: 'Copie chiffrée indisponible', detail: 'Connecte le compte principal au serveur (identifiant et mot de passe).' });
     } else if (!o.copie?.active) {
       etapes.push({ id: 'copie', niveau: 'attention', titre: 'Copie chiffrée désactivée', detail: 'Le site et le téléphone ne voient rien de ce PC.', action: { genre: 'activer-copie', titre: 'Activer la copie' } });
     } else if (o.copie.erreur) {

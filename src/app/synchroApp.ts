@@ -172,8 +172,11 @@ export function useSynchro({
         setLiaisonDuPc(liaison);
       }
     };
-    Linking.getInitialURL?.().then(depuisLien).catch(() => undefined);
-    const abonnement = Linking.addEventListener?.('url', ({ url }) => depuisLien(url));
+    // App iPhone native : lien applibourse://liaison?code=… (ancien parcours, gardé tant que l'app native n'a pas
+    // l'écran de connexion). Sur le site et le PC (version 9) : plus de code de liaison lu dans l'adresse.
+    const natif = Platform.OS !== 'web';
+    if (natif) Linking.getInitialURL?.().then(depuisLien).catch(() => undefined);
+    const abonnement = natif ? Linking.addEventListener?.('url', ({ url }) => depuisLien(url)) : undefined;
     return () => {
       abonnement?.remove?.();
       if (minuterie) {

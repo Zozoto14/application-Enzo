@@ -15,7 +15,7 @@ import { reseauDepuisFetch, type FonctionFetch, type Reseau } from '../moteur/re
 export const HOTES_CATALOGUE: readonly string[] = ['api.jikan.moe', 'graphql.anilist.co', 'api.themoviedb.org'];
 
 export const MESSAGE_SITE =
-  'Sur le site, les sources se lisent par le relais, pour le seul compte Fondateur relié au relais (Paramètres › Synchronisation, code de liaison du PC). Sinon : lecture des sources sur l’app PC/iPhone, ou collez un lien direct.';
+  'Sur le site, les sources se lisent par le relais, pour le seul compte Fondateur connecté (identifiant et mot de passe). Sinon : lecture des sources sur l’app PC/iPhone, ou collez un lien direct.';
 
 export function hoteDeCatalogue(url: string): boolean {
   const a = analyserAdresse(url);

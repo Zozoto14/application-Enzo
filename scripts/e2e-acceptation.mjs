@@ -4,7 +4,7 @@
  * point l'acceptent automatiquement : la case puis « Continuer » sont cliquées dès que l'écran apparaît.
  * (Le scénario qui le teste, e2e-support-verrou.mjs, n'utilise pas cette aide.)
  */
-const SCRIPT = `
+export const SCRIPT_PC = `
 (() => {
   // PC simulé (relais version 9 : plus de code de liaison dans l'app) : un lien de test \`#liaison=AB1.…\` tient lieu
   // du fichier relais-local.json du PC (jeton maître) ou d'un navigateur déjà relié avant la mise à jour.
@@ -39,6 +39,12 @@ const SCRIPT = `
   } catch (e) {
     // Lien de test illisible : rien.
   }
+})();
+`;
+
+const SCRIPT = `
+(() => {
+  /* PC simulé : voir SCRIPT_PC */
   const essayer = () => {
     // Migration du Fondateur vers la connexion par identifiant (relais version 9) : reportée (« Plus tard »)
     // dans les scénarios qui ne la testent pas (e2e-synchro-serveur.mjs la garde : e2e.migration = garder).
@@ -57,6 +63,7 @@ const SCRIPT = `
 
 export async function nouveauContexte(navigateur, options) {
   const contexte = await navigateur.newContext({ locale: 'fr-FR', ...options });
+  await contexte.addInitScript(SCRIPT_PC);
   await contexte.addInitScript(SCRIPT);
   return contexte;
 }
@@ -134,3 +141,6 @@ export async function idCompteAdmin(page, nom) {
   const ligne = await page.locator('[data-testid^="admin-ligne-"]').filter({ hasText: nom }).first().getAttribute('data-testid');
   return ligne.replace('admin-ligne-', '');
 }
+
+/** Reporte (« Plus tard ») la migration du Fondateur vers la connexion par identifiant, pour les scénarios qui ne la testent pas. */
+export const SCRIPT_REPORTER_MIGRATION = `setInterval(() => document.querySelector('[data-testid="fondateur-plus-tard"]')?.click(), 400);`;

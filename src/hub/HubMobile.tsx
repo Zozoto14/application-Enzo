@@ -1,7 +1,7 @@
 /**
  * Le hub sur téléphone.
  *
- *  - en-tête compact : logo, nom, pastille de synchro condensée (→ Paramètres › Synchronisation),
+ *  - en-tête compact : logo, nom, pastille de connexion au serveur condensée (→ Paramètres › Général),
  *    bouton « Personnaliser » ;
  *  - salutation courte, bandeaux (abonnement, mise à jour disponible) lisibles en pleine largeur ;
  *  - tuiles compactes avec leur info en direct : 2 colonnes (grille) ou lignes (liste) ; une tuile

@@ -1049,9 +1049,15 @@ function Racine() {
     };
     planifier();
     const desabonner = sessionFondateur.session.surOuverture(planifier);
+    // Verrouillé : l'écran de migration se retire (il revient à la prochaine ouverture) ; les codes à noter restent.
+    const desabonnerFermeture = sessionFondateur.session.surFermeture(() => {
+      if (minuterie) clearTimeout(minuterie);
+      setEcranFondateur(courant => (courant && courant.mode !== 'codes' ? undefined : courant));
+    });
     return () => {
       if (minuterie) clearTimeout(minuterie);
       desabonner();
+      desabonnerFermeture();
     };
   }, [sessionFondateur]);
 
@@ -1658,7 +1664,7 @@ function Racine() {
   const inviter = async (id: string, prenom: string, motDePasse: string, jours: number, politique?: PolitiqueMdp): Promise<InvitationAffichee> => {
     const maitre = await liaisonMaitre();
     if (!maitre) {
-      return { erreur: 'Invitation impossible depuis cet appareil : reliez-le d’abord au relais (Paramètres › Synchronisation). En attendant, transmettez les identifiants ci-dessous.' };
+      return { erreur: 'Invitation impossible depuis cet appareil : il ne connaît pas encore le serveur (ouvrez AppDashboard sur le PC, ou connectez-vous avec votre identifiant). En attendant, transmettez les identifiants ci-dessous.' };
     }
     try {
       const invitation = await creerInvitation({ maitre, compte: id, prenom, motDePasse, fondateur: profil.nom, jours, politique });
@@ -1691,7 +1697,7 @@ function Racine() {
         if (!ami) throw new Error('Compte introuvable.');
         exiger(profil, 'regenerer-identifiants', ami);
         const maitre = await liaisonMaitre();
-        if (!maitre) throw new Error('Reliez d’abord cet appareil au relais (Paramètres › Synchronisation) : l’invitation passe par lui.');
+        if (!maitre) throw new Error('Cet appareil ne connaît pas encore le serveur (connectez-vous avec votre identifiant) : l’invitation passe par lui.');
         // Le coffre le plus récent de l'ami (s'il a changé de mot de passe ailleurs) avant de le réinitialiser.
         await auPlus(planComptes.current?.maintenant?.() ?? Promise.resolve(), 30_000);
         const nomCoffre = fichiersDuProfil(id).coffre as NomFichier;
@@ -2119,7 +2125,7 @@ function Racine() {
           <App key={`${profil.id}-${adminSur ?? ''}`} session={session.session} chargementAutomatique profils={controle} hub />
         </GardeErreur>
       </View>
-      {ecranFondateur && profil.admin && !adminSur ? (
+      {ecranFondateur && profil.admin && !adminSur && (ecranFondateur.mode === 'codes' || session.session.statut() === 'deverrouille') ? (
         <View style={[StyleSheet.absoluteFill, { backgroundColor: palette.fond, zIndex: 50 }]}>
           <EcranConnexionFondateur
             identifiantInitial={profil.nom && profil.nom !== 'Moi' ? profil.nom : undefined}

@@ -701,7 +701,7 @@ export function OngletBureau({ theme, contexte, office, mouvementReduit, horloge
             </>
           ) : (
             <Text style={attenue}>
-              Pour le voir ailleurs, relie le compte principal au relais (Paramètres › Synchronisation) : ce PC pourra alors déposer une copie chiffrée de son activité.
+              Pour le voir ailleurs, connecte le compte principal au serveur (identifiant et mot de passe) : ce PC pourra alors déposer une copie chiffrée de son activité.
             </Text>
           )}
           {etatHook ? <Text style={attenue} testID="bureau-hook-etat">Hook d’historique : {LIBELLE_HOOK_HISTORIQUE[etatHook]}</Text> : null}

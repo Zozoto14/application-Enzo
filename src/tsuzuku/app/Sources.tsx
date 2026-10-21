@@ -482,7 +482,7 @@ function PastilleSynchro() {
       ? 'Synchronisé avec vos autres appareils'
       : etat.etat === 'en-attente'
         ? 'En attente de synchronisation…'
-        : 'Synchronisation entre appareils non configurée (Paramètres › Synchronisation)';
+        : 'Pas encore connecté au serveur (connectez-vous avec votre identifiant et votre mot de passe)';
   const couleur = etat.etat === 'synchronise' ? theme.ok : etat.etat === 'en-attente' ? theme.alerte : theme.attenue;
   return (
     <View testID="sources-synchro" accessibilityLabel={texte} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>

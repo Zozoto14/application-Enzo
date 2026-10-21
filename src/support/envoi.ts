@@ -34,7 +34,7 @@ async function motifDe(reponse: Response): Promise<string> {
 
 export async function envoyerTicket(liaison: LiaisonSupport | undefined, ticket: Ticket, requete: Requete = fetch, auteur?: string): Promise<ResultatEnvoi> {
   if (!liaison) {
-    return { ok: false, motif: 'Relais non relié : la demande part dès que cet appareil sera relié (Paramètres › Synchronisation).', reessayer: true };
+    return { ok: false, motif: 'Pas encore connecté au serveur : la demande part dès que cet appareil le sera (identifiant et mot de passe).', reessayer: true };
   }
   let reponse: Response;
   try {

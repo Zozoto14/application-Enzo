@@ -1,6 +1,6 @@
 /**
  * Ce que toute page d'app partage avec l'en-tête du hub : la pastille de
- * synchronisation (état, clic → Paramètres › Synchronisation) et le bouton
+ * synchronisation (état, clic → Paramètres › Général › Connexion au serveur) et le bouton
  * « Paramètres » qui ouvre LA page Paramètres. Portefeuille, Administration et
  * futures apps n'ont ainsi ni réglages ni indicateur à eux : elles montrent
  * celle-ci.

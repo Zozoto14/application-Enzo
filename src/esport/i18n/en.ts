@@ -519,7 +519,7 @@ export const en: Record<Cle, string> = {
   'racineEsport.reessayer': 'Try again',
   'racineEsport.tous_les_depots_des': 'All submissions from the teams where you write the summaries.',
   'racineEsport.retour': 'Back: {titre}',
-  'racineEsport.cet_appareil_n_est': 'This device isn’t linked to the relay: Esport uses your hub account through the relay (Settings › Sync).',
+  'racineEsport.cet_appareil_n_est': 'This device isn’t signed in to the server yet: Esport uses your hub account (sign in with your username and password).',
   'racineEsport.le_serveur_esport_worker': 'The Esport server (Cloudflare Worker “applibourse-esport”) isn’t deployed yet, or the relay isn’t on version 7 yet. The steps to follow take just a few minutes.',
   'racineEsport.le_fondateur_n_a': 'The Founder hasn’t enabled Esport yet. Please try again later.',
   'racineEsport.esport_pas_encore_active': 'Esport not enabled yet',

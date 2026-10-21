@@ -97,7 +97,7 @@ describe('réseau du site par le relais', () => {
     const cas: Array<[number, unknown, RegExp]> = [
       [404, { erreur: 'Adresse inconnue.' }, /mettez à jour le relais/],
       [404, null, /relais:deployer/],
-      [401, { erreur: 'x' }, /reliez-le de nouveau/],
+      [401, { erreur: 'x' }, /reconnectez-vous/],
       [403, { erreur: 'Réservé…', code: 'interdit' }, /réserve la lecture des sources au compte Fondateur/],
       [403, { erreur: 'Origine non autorisée.', code: 'origine' }, /ORIGINES_SITE/],
       [429, { erreur: 'Trop', code: 'debit' }, /Trop de requêtes vers le relais/],

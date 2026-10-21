@@ -2657,7 +2657,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
       case 'connexion-identifiant':
         return profils?.connexionServeur ? (
           <View style={{ gap: 8 }} testID="reglage-connexion-identifiant-contenu">
-            <Text style={{ color: themeDuHub.texte }}>
+            <Text style={{ color: themeDuHub.texte, fontSize: telephone ? 15 : 14, lineHeight: telephone ? 21 : 20 }}>
               {profils.connexionServeur.identifiant
                 ? `Identifiant : ${profils.connexionServeur.identifiant}. Sur n’importe quel appareil : « Se connecter », cet identifiant et votre mot de passe.`
                 : 'Pas encore défini : choisissez un identifiant et un mot de passe pour vous connecter sur n’importe quel navigateur, sans code de liaison.'}

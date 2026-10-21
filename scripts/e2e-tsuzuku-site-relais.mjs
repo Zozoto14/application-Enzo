@@ -630,7 +630,7 @@ try {
   await creerCoffre(autre, MDP_AUTRE, SITE);
   await ouvrirTsuzuku(autre);
   const texteSans = await autre.getByTestId('tsuzuku-site').innerText().catch(() => '');
-  verifier(/relais/.test(texteSans) && /Paramètres › Synchronisation/.test(texteSans) && /app PC\/iPhone/.test(texteSans), 'sans relais : « … relié au relais (Paramètres › Synchronisation…) ; sinon app PC/iPhone »');
+  verifier(/relais/.test(texteSans) && /identifiant/.test(texteSans) && /app PC\/iPhone/.test(texteSans), 'sans relais : « … compte Fondateur connecté (identifiant et mot de passe) ; sinon app PC/iPhone »');
   await autre.getByTestId('onglet-app-sources').click();
   verifier(await visible(autre, 'sources-site'), 'page Sources : le navigateur ne lit pas les pages (CORS), comment faire');
   await autre.getByTestId('sources-import-texte').fill(JSON.stringify({ sources: [SOURCES[2]].map(s => ({ ...s, enabled: true })) }));
@@ -640,7 +640,9 @@ try {
   await autre.getByTestId('fiche-sources-echec-message').waitFor({ timeout: 30_000 });
   const messageSans = await autre.getByTestId('fiche-sources-echec-message').innerText();
   verifier(/CORS/.test(messageSans) && /relais/.test(messageSans), 'fiche sans relais : CORS expliqué, et comment lire les sources');
-  verifier(journalRelais.length === avantAutre, 'aucun appel au relais depuis ce navigateur');
+  // Le PC du Fondateur, resté ouvert, continue ses tours (toutes les 30 s depuis la version 9) : seuls comptent
+  // les appels sans jeton connu, ceux de ce navigateur.
+  verifier(journalRelais.slice(avantAutre).every(a => a.portee === 'maitre' || /^[a-z0-9]{6,16}$/.test(a.portee ?? '')), 'aucun appel au relais depuis ce navigateur');
   await voir(autre, 'fiche-sources');
   await capture(autre, '10-sans-relais-message');
 

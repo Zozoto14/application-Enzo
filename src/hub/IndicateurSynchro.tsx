@@ -60,7 +60,7 @@ export function IndicateurSynchro({
   const taille = mobile ? 15 : 13;
   const teinte = couleur(theme, resume.niveau);
   const rayon = Math.min(theme.rayonMoyen, 10);
-  // Cliquable (« ouvrir Paramètres › Synchronisation ») quand l'hôte donne `onPress`.
+  // Cliquable (« ouvrir Paramètres › Général › Connexion au serveur ») quand l'hôte donne `onPress`.
   const Pastille: React.ComponentType<Record<string, unknown>> = onPress ? Pressable : View;
   return (
     <View style={detaille ? { gap: 10 } : undefined}>

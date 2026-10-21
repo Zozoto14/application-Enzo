@@ -254,6 +254,9 @@ export function BlocConnexion({
   onIdentifiant?(identifiant: string): void;
 }) {
   const palette = usePalette();
+  // Téléphone : textes de 15 px au moins (lisibles sans zoom).
+  const mobile = useMobile();
+  const secondaire = { color: palette.texteSecondaire, ...(mobile ? { fontSize: 15, lineHeight: 21 } : {}) };
   const [identifiant, setIdentifiantBrut] = useState(identifiantInitial ?? '');
   const setIdentifiant = (v: string) => {
     setIdentifiantBrut(v);
@@ -294,7 +297,7 @@ export function BlocConnexion({
     <>
       <View style={[styles.cadre, { borderColor: palette.accent, backgroundColor: palette.surface }]} testID="connexion-identifiant">
         <Text style={{ color: palette.texte, fontWeight: '800', fontSize: 18 }}>🔑 Se connecter</Text>
-        <Text style={{ color: palette.texteSecondaire }}>
+        <Text style={secondaire}>
           Ton identifiant (ton prénom) et le mot de passe que tu as choisi.{relaisConnu ? '' : ' Première fois ? Ouvre plutôt le lien d’invitation reçu.'}
         </Text>
         <Champ
@@ -330,7 +333,7 @@ export function BlocConnexion({
         {onSecours && oubli ? (
           <View style={{ gap: ESPACEMENT.s }} testID="connexion-secours">
             <Text style={{ color: palette.texte, fontWeight: '700' }}>Mot de passe oublié</Text>
-            <Text style={{ color: palette.texteSecondaire }}>
+            <Text style={secondaire}>
               Ton identifiant ci-dessus, un de tes codes de récupération (notés sur papier ; chacun ne sert qu’une fois) et ton nouveau mot de passe. Ami :
               demande plutôt au Fondateur de réinitialiser ton accès.
             </Text>
@@ -355,7 +358,7 @@ export function BlocConnexion({
       </View>
       <View style={[styles.cadre, { borderColor: palette.bordure }]} testID="invitation-saisie-bloc">
         <Text style={{ color: palette.texte, fontWeight: '700', fontSize: 16 }}>✉️ J’ai reçu une invitation</Text>
-        <Text style={{ color: palette.texteSecondaire }}>Colle le lien reçu (ou tape le code court, par exemple K7M2Q-9XH4T).</Text>
+        <Text style={secondaire}>Colle le lien reçu (ou tape le code court, par exemple K7M2Q-9XH4T).</Text>
         <Champ
           etiquette="Lien ou code d’invitation"
           value={invitation}

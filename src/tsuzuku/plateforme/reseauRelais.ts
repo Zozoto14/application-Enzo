@@ -50,7 +50,7 @@ interface ReponseRelais {
 export const MESSAGES_RELAIS = {
   pasAJour:
     'Le relais ne connaît pas encore la lecture des sources : mettez à jour le relais (GitHub › Actions › « Déployer le relais », ou « npm run relais:deployer » sur le PC), puis « Réessayer ».',
-  jeton: 'Le relais refuse le jeton de ce site : reliez-le de nouveau (Paramètres › Synchronisation, code de liaison du PC).',
+  jeton: 'Le serveur refuse la session de ce site : reconnectez-vous (identifiant et mot de passe).',
   interdit: 'Le relais réserve la lecture des sources au compte Fondateur relié au relais (code de liaison du PC) : ce compte n’y a pas accès sur le site.',
   origine: 'Le relais n’autorise pas l’adresse de ce site : ajoutez-la à ORIGINES_SITE (relais/wrangler.toml), puis mettez à jour le relais.',
   debit: 'Trop de requêtes vers le relais (limite par minute) : patientez un instant, puis « Réessayer ».',

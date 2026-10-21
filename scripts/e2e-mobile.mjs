@@ -17,6 +17,7 @@
  */
 
 import { mkdirSync } from 'node:fs';
+import { SCRIPT_PC, SCRIPT_REPORTER_MIGRATION } from './e2e-acceptation.mjs';
 import { join } from 'node:path';
 import { chargerPlaywright, demarrerRelais, demarrerSite, deverrouiller, mesurer, optionsIphone, pause, premierLancement, racine, toucher, visible } from './mobile-outils.mjs';
 
@@ -51,6 +52,9 @@ const { chromium } = chargerPlaywright();
 const navigateur = await chromium.launch({ headless: true });
 try {
   const contexte = await navigateur.newContext(optionsIphone({ largeur: 390, hauteur: 844 }));
+  // PC simulé (relais version 9) : le lien de test tient lieu du relais-local.json ; migration reportée.
+  await contexte.addInitScript(SCRIPT_PC);
+  await contexte.addInitScript(SCRIPT_REPORTER_MIGRATION);
   const page = await contexte.newPage();
   const erreursPage = [];
   page.on('pageerror', e => {
@@ -67,7 +71,8 @@ try {
     etape: async nom => {
       await controler(page, nom);
       if (nom === 'accueil-site') {
-        verifier(await visible(page, 'pied-collant', 2000), 'accueil : « Relier ce navigateur » est collé en bas de l’écran');
+        // Relais version 9 : plus de « Relier ce navigateur » (code de liaison) ; on se connecte par identifiant.
+        verifier(await visible(page, 'connexion-id-valider', 2000), 'accueil : « Se connecter » (identifiant + mot de passe) est là, sans code de liaison');
       }
       if (nom === 'premier-lancement') {
         const types = await page.locator('input[type=password]').evaluateAll(els => els.map(e => `${e.getAttribute('autocomplete')}/${e.getAttribute('enterkeyhint')}`));
@@ -192,9 +197,12 @@ try {
   }
 
   // Écrans d'entrée dans un navigateur neuf (thème par défaut)
-  const neuf = await (await navigateur.newContext(optionsIphone())).newPage();
+  const contexteNeuf = await navigateur.newContext(optionsIphone());
+  await contexteNeuf.addInitScript(SCRIPT_REPORTER_MIGRATION);
+  const neuf = await contexteNeuf.newPage();
   rang = 0;
-  await neuf.goto(`${site.url}#liaison=${relais.code}`);
+  // Navigateur NEUF : aucun compte ici (relais version 9 : on s'y connecterait par identifiant).
+  await neuf.goto(site.url);
   await neuf.getByTestId('accueil-site').waitFor({ timeout: 60_000 });
   await pause(500);
   await capture(neuf, 'entree', 'accueil-site');
