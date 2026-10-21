@@ -7,6 +7,10 @@
  * anti-escalade comprise) : créer un compte (Fondateur, sur son appareil),
  * ajouter un compte existant à une team, changer son rôle, le retirer d'une
  * team, le suspendre, renvoyer ou révoquer l'invitation (Fondateur).
+ *
+ * Discord ID (migration 0015) : badge « Discord ID manquant » et filtre ; le
+ * Fondateur SEUL le modifie (le serveur refuse tout autre rôle, Propriétaire
+ * compris).
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -26,13 +30,17 @@ import { CreationCompte } from './CreationCompte';
 import { DemandesCompte } from './DemandesCompte';
 import { useIdentite } from './Identite';
 import { dateJour } from '../libelles';
-import { tr, trn } from '../i18n';
+import { langueCourante, tr, trn } from '../i18n';
+import { BadgeDiscordManquant, DiscordIdMembre } from './DiscordId';
 import { nomRole, nomPoste } from '../client';
 
-type FiltreStatut = 'tous' | 'invite' | 'actif' | 'suspendu' | 'sansteam';
+type FiltreStatut = 'tous' | 'invite' | 'actif' | 'suspendu' | 'sansteam' | 'sansdiscord';
+
+/** Fiche Esport sans Discord ID (le bot ne peut pas la pinger) ; un compte du hub sans fiche n'en a pas encore. */
+export const discordIdManquant = (c: CompteEsport): boolean => !c.horsEsport && !c.discordId;
 
 /** Statut affiché d'un compte : invité, suspendu (dans toutes ses teams visibles) ou actif. */
-export function statutAffiche(c: CompteEsport): Exclude<FiltreStatut, 'tous' | 'sansteam'> {
+export function statutAffiche(c: CompteEsport): Exclude<FiltreStatut, 'tous' | 'sansteam' | 'sansdiscord'> {
   if (c.statut === 'invite') return 'invite';
   if (c.appartenances.length > 0 && c.appartenances.every(a => a.statut === 'suspendu')) return 'suspendu';
   return 'actif';
@@ -42,17 +50,18 @@ export function statutAffiche(c: CompteEsport): Exclude<FiltreStatut, 'tous' | '
 export function filtrerComptes(comptes: readonly CompteEsport[], f: { recherche: string; team: string; role: string; statut: FiltreStatut }): CompteEsport[] {
   const q = f.recherche.trim().toLocaleLowerCase('fr');
   return comptes.filter(c => {
-    if (q && !`${c.pseudo} ${c.riotId ?? ''} ${c.discord ?? ''}`.toLocaleLowerCase('fr').includes(q)) return false;
+    if (q && !`${c.pseudo} ${c.riotId ?? ''} ${c.discord ?? ''} ${c.discordId ?? ''}`.toLocaleLowerCase('fr').includes(q)) return false;
     if (f.team !== 'toutes' && !c.appartenances.some(a => a.teamId === f.team)) return false;
     if (f.role !== 'tous' && !c.appartenances.some(a => (f.team === 'toutes' || a.teamId === f.team) && a.role.nom === f.role)) return false;
     if (f.statut === 'sansteam') return c.appartenances.length === 0;
+    if (f.statut === 'sansdiscord') return discordIdManquant(c);
     if (f.statut === 'suspendu') return c.appartenances.some(a => a.statut === 'suspendu');
     if (f.statut !== 'tous' && statutAffiche(c) !== f.statut) return false;
     return true;
   });
 }
 
-const LIBELLES_STATUT: Record<Exclude<FiltreStatut, 'tous' | 'sansteam'>, string> = { get invite() {
+const LIBELLES_STATUT: Record<Exclude<FiltreStatut, 'tous' | 'sansteam' | 'sansdiscord'>, string> = { get invite() {
       return tr('membresGlobal.invite');
     }, get actif() {
       return tr('membresGlobal.actif');
@@ -101,6 +110,7 @@ export function MembresGlobal({
   const listeComplete = Boolean(annuaire?.superAdmin && contexte.profils && !contexte.profils.restreint && !contexte.profils.gestion);
   const tous = useMemo(() => (annuaire ? [...annuaire.comptes, ...comptesHubSansEsport(annuaire.comptes, contexte.profils?.tous, listeComplete)] : []), [annuaire, contexte.profils, listeComplete]);
   const sansTeam = tous.filter(c => c.appartenances.length === 0).length;
+  const sansDiscord = tous.filter(discordIdManquant).length;
   const visibles = useMemo(() => filtrerComptes(tous, { recherche, team, role, statut }), [tous, recherche, team, role, statut]);
   const nomsRoles = useMemo(() => [...new Set((annuaire?.teams ?? []).filter(t => team === 'toutes' || t.id === team).flatMap(t => t.roles.map(r => r.nom)))], [annuaire, team]);
   const orphelins = useMemo(
@@ -148,6 +158,11 @@ export function MembresGlobal({
         <View style={communs.ligne}>
           <Pilule theme={theme} texte={tr('membresGlobal.demandes_en_attente', { demandesEnAttente: annuaire.demandesEnAttente })} couleur={theme.alerte} testID="esport-membres-badge-demandes" />
         </View>
+      ) : null}
+      {annuaire && sansDiscord > 0 ? (
+        <Pressable onPress={() => setStatut('sansdiscord')} accessibilityRole="button" testID="esport-membres-bandeau-discord">
+          <Avis theme={theme} genre="alerte" texte={tr('discordId.bandeau_manquants', { n: sansDiscord })} />
+        </Pressable>
       ) : null}
       {!annuaire && !erreur ? <SqueletteCartes theme={theme} n={2} large={large} /> : null}
       {!capacite.creer && peutAjouter ? <Text style={attenue} testID="esport-membres-creation-indisponible">{capacite.raison}</Text> : null}
@@ -222,7 +237,14 @@ export function MembresGlobal({
             theme={theme}
             libelle={tr('membresGlobal.statut')}
             valeur={statut}
-            options={[['tous', tr('journal.tous')], ['invite', tr('membresGlobal.invites')], ['actif', tr('membresGlobal.actifs')], ['suspendu', tr('membresGlobal.suspendus')], ['sansteam', tr('membresGlobal.sans_team')]]}
+            options={[
+              ['tous', tr('journal.tous')],
+              ['invite', tr('membresGlobal.invites')],
+              ['actif', tr('membresGlobal.actifs')],
+              ['suspendu', tr('membresGlobal.suspendus')],
+              ['sansteam', tr('membresGlobal.sans_team')],
+              ['sansdiscord', tr('discordId.filtre_manquant', { n: sansDiscord })],
+            ]}
             onChoisir={setStatut}
             testID="esport-membres-statut"
           />
@@ -367,6 +389,7 @@ function LigneCompte({
             <Pilule theme={theme} texte={LIBELLES_STATUT[statut]} couleur={couleur} testID={`esport-compte-statut-${compte.compte}`} />
           )}
           {compte.appartenances.length === 0 ? <Pilule theme={theme} texte={tr('membresGlobal.sans_team')} couleur={theme.alerte} testID={`esport-compte-sans-team-${compte.compte}`} /> : null}
+          {discordIdManquant(compte) ? <BadgeDiscordManquant theme={theme} compte={compte.compte} /> : null}
         </View>
         {large || ouvert ? (
           <View style={[communs.ligne, { paddingLeft: 44 }]}>
@@ -383,6 +406,7 @@ function LigneCompte({
       ) : null}
       {ouvert ? (
         <View style={{ padding: 12, paddingTop: 0, gap: 12 }}>
+          {!compte.horsEsport ? <DiscordIdMembre theme={theme} client={client} compte={compte} modifiable={Boolean(annuaire.peutModifierDiscordId)} onFait={onRecharger} /> : null}
           {compte.appartenances.map(a => {
             const t = teamDe(a.teamId);
             return t ? <Appartenance key={a.membreId} theme={theme} compte={compte} a={a} team={t} occupe={occupe} client={client} onAction={onAction} onOuvrirTeam={onOuvrirTeam} /> : null;
@@ -408,7 +432,9 @@ function LigneCompte({
                   nom={compte.pseudo}
                   invitation={invitation}
                   email={emailDe(contexte, compte.compte)}
-                  modele={modeleInvitationEsport(nomsTeams)}
+                  modele={modeleInvitationEsport(nomsTeams, 'fr')}
+                  modeleEn={modeleInvitationEsport(nomsTeams, 'en')}
+                  langueInitiale={langueCourante()}
                   fondateur={contexte.profils?.actuel.nom}
                   onEnvoye={canal => noterEnvoiEsport(contexte, compte.compte, compte.pseudo, canal)}
                 />

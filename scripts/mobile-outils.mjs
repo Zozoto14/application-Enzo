@@ -72,9 +72,10 @@ export async function demarrerRelais(port, jeton = 'jeton-e2e-mobile-0123456789a
   const discord = [];
   const fetchReel = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
-    if (String(url) === WEBHOOK) {
-      discord.push({ body: init?.body });
-      return new Response(null, { status: 204 });
+    // Le relais poste sur `<webhook>?wait=true` (et `&thread_id=` pour les réponses) : préfixe.
+    if (String(url).startsWith(WEBHOOK)) {
+      discord.push({ url: String(url), body: init?.body });
+      return Response.json({ id: `80000000000000${String(discord.length).padStart(4, '0')}`, channel_id: '700000000000000001' });
     }
     return fetchReel(url, init);
   };

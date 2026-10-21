@@ -25,6 +25,7 @@ async function preparer() {
 const preinscription = (A, B, extra = {}) => ({
   compte: 'zoe12345',
   pseudo: 'Zoé',
+  discordId: '412345678901234567',
   affectations: [
     { teamId: A.teamId, roleId: A.roles.joueur.id, posteJeu: 'Duelliste' },
     { teamId: B.teamId, roleId: B.roles.remplacant.id },
@@ -96,7 +97,7 @@ test('invitation directe : réservée au Fondateur ; pseudo pris, compte existan
 
 test('isolation : un invité ne voit que ses teams (liste, détail, dashboard, membres)', async () => {
   const { b, A, B, f, api } = await preparer();
-  await api('/comptes', f, { methode: 'POST', corps: { compte: 'ian12345', pseudo: 'Ian', affectations: [{ teamId: A.teamId, roleId: A.roles.joueur.id }] } });
+  await api('/comptes', f, { methode: 'POST', corps: { compte: 'ian12345', pseudo: 'Ian', discordId: '412345678901234568', affectations: [{ teamId: A.teamId, roleId: A.roles.joueur.id }] } });
   const ian = await b.session('ian12345');
   assert.deepEqual((await api('/teams', ian)).corps.teams.map(t => t.nom), ['Team Alpha']);
   assert.equal((await api(`/teams/${B.teamId}`, ian)).statut, 404);
@@ -231,7 +232,7 @@ test('ajout multi-teams : compte pré-enregistré, actif et jamais vu, en une fo
   const affectations = (...liste) => liste.map(([T, role, posteJeu]) => ({ teamId: T.teamId, roleId: T.roles[role].id, ...(posteJeu ? { posteJeu } : {}) }));
 
   // Jamais vu (compte du hub sans fiche Esport) : pré-enregistré dans deux teams d'un coup, pseudo du hub.
-  let r = await api('/comptes/luca12345/teams', f, { methode: 'POST', corps: { pseudo: 'LUCA', affectations: affectations([A, 'joueur'], [B, 'coach']) } });
+  let r = await api('/comptes/luca12345/teams', f, { methode: 'POST', corps: { pseudo: 'LUCA', discordId: '412345678901234569', affectations: affectations([A, 'joueur'], [B, 'coach']) } });
   assert.equal(r.statut, 200, JSON.stringify(r.corps));
   assert.equal(r.corps.statut, 'invite');
   assert.deepEqual(r.corps.appartenances.map(a => [a.teamId, a.role.nom]).sort(), [[A.teamId, 'Joueur'], [B.teamId, 'Coach']].sort());
@@ -272,7 +273,7 @@ test('ajout multi-teams : compte pré-enregistré, actif et jamais vu, en une fo
   r = await api('/comptes/ana12345/teams', f, { methode: 'POST', corps: { affectations: affectations([D, 'joueur'], [D, 'coach']) } });
   assert.equal(r.statut, 400, 'même team deux fois');
   // POST /comptes pour un compte déjà connu : message exact (et non « pseudo pris »).
-  r = await api('/comptes', f, { methode: 'POST', corps: { compte: 'luca12345', pseudo: 'LUCA', affectations: affectations([D, 'joueur']) } });
+  r = await api('/comptes', f, { methode: 'POST', corps: { compte: 'luca12345', pseudo: 'LUCA', discordId: '412345678901234570', affectations: affectations([D, 'joueur']) } });
   assert.equal(r.corps.code, 'compte-existe');
 
   // Retirer d'une team sans toucher aux autres.
@@ -300,7 +301,7 @@ test('ajout multi-teams : anti-escalade (Manager), compte invisible, Joueur refu
   // Compte d'une team invisible pour Max : introuvable ; compte jamais vu : le Fondateur seul le crée.
   r = await api('/comptes/tom12345/teams', max, { methode: 'POST', corps: { affectations: [af(C, 'joueur')] } });
   assert.equal(r.statut, 404);
-  r = await api('/comptes/neuf12345/teams', max, { methode: 'POST', corps: { pseudo: 'Neuf', affectations: [af(C, 'joueur')] } });
+  r = await api('/comptes/neuf12345/teams', max, { methode: 'POST', corps: { pseudo: 'Neuf', discordId: '412345678901234571', affectations: [af(C, 'joueur')] } });
   assert.equal(r.statut, 404);
   // Un Joueur n'ajoute personne.
   r = await api('/comptes/coa12345/teams', A.sessions.lea12345, { methode: 'POST', corps: { affectations: [af(A, 'joueur')] } });

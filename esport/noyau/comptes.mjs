@@ -20,6 +20,7 @@
  * attribuer (anti-escalade de service.mjs).
  */
 
+import { discordIdLibre, lireDiscordId } from './discordId.mjs';
 import { evenement } from './evenements.mjs';
 import { CLE_PROPRIETAIRE, autorise } from './permissions.mjs';
 import { lirePseudo } from './service.mjs';
@@ -73,6 +74,8 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
   async function preinscrire(acteur, corps) {
     if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Seul le Fondateur crée des comptes : il faut ses clés du hub (Administration).');
     const pseudo = lirePseudo(corps?.pseudo);
+    // Discord ID obligatoire à la création (migration 0015) : le bot pingue les convoqués avec.
+    const discordId = lireDiscordId(corps?.discordId, { obligatoire: true });
     const affectations = await lireAffectations(acteur, corps?.affectations);
     // Compte déjà connu : message exact (et non « pseudo pris », qui serait le sien), avant le contrôle du pseudo.
     if (corps?.verifier !== true) {
@@ -80,6 +83,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       if (deja) throw echec(409, 'compte-existe', 'Ce compte a déjà un profil Esport : ajoutez-le à ses teams depuis la page Membres.');
     }
     await pseudoLibre(pseudo);
+    await discordIdLibre(base, discordId);
     // Validation d'une demande de compte (members.create) : la demande doit être en attente ; close dans le même lot.
     const demande = corps?.demandeId !== undefined && corps?.demandeId !== null ? await demandes.aValider(acteur, corps.demandeId) : null;
     if (corps?.verifier === true) return { ok: true, verifie: true };
@@ -91,8 +95,8 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
     const date = iso(t);
     const lot = [
       {
-        sql: 'INSERT INTO comptes (id, pseudo, pseudo_cle, cree_le, maj_le, invite_par, invite_le) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        params: [compte, pseudo, pseudo.toLocaleLowerCase('fr'), date, date, acteur.compte, date],
+        sql: 'INSERT INTO comptes (id, pseudo, pseudo_cle, cree_le, maj_le, invite_par, invite_le, discord_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [compte, pseudo, pseudo.toLocaleLowerCase('fr'), date, date, acteur.compte, date, discordId],
       },
     ];
     for (const { ctx, role, posteJeu } of affectations) {
@@ -117,6 +121,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       await base.lot(lot);
     } catch (e) {
       // Deux créations simultanées du même pseudo : la contrainte UNIQUE tranche.
+      if (/discord_id/i.test(String(e?.message ?? e))) throw echec(409, 'discord-id-pris', 'Ce Discord ID est déjà celui d’un autre membre de l’Esport.');
       if (/unique/i.test(String(e?.message ?? e))) throw echec(409, 'pseudo-pris', 'Ce pseudo est déjà pris dans l’Esport.');
       throw e;
     }
@@ -138,7 +143,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
     const fiche = await base.premier('SELECT * FROM comptes WHERE id = ?', [id]);
     if (!fiche) {
       if (!acteur.superAdmin) throw echec(404, 'compte-introuvable', 'Compte introuvable (il doit déjà être membre d’une de vos teams).');
-      return preinscrire(acteur, { compte: id, pseudo: corps?.pseudo, affectations: corps?.affectations });
+      return preinscrire(acteur, { compte: id, pseudo: corps?.pseudo, discordId: corps?.discordId, affectations: corps?.affectations });
     }
     const liste = corps?.affectations;
     if (!Array.isArray(liste) || liste.length === 0) throw echec(400, 'affectations', 'Choisissez au moins une team et un rôle.');
@@ -284,8 +289,8 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
     const lignes =
       idsVus.length > 0
         ? await base.tous(
-            `SELECT m.id, m.team_id, m.compte_id, m.role_id, m.poste_jeu, m.statut, m.rejoint_le, c.pseudo, c.pseudo_cle, c.riot_id, c.discord, c.invite_le, c.active_le
-               FROM membres m JOIN comptes c ON c.id = m.compte_id
+            `SELECT m.id, m.team_id, m.compte_id, m.role_id, m.poste_jeu, m.statut, m.rejoint_le, c.pseudo, c.pseudo_cle, c.riot_id, c.discord, c.discord_id, c.invite_le, c.active_le, dc.discord_user_id AS discord_lie
+               FROM membres m JOIN comptes c ON c.id = m.compte_id LEFT JOIN discord_comptes dc ON dc.compte_id = c.id
               WHERE m.team_id IN (${idsVus.map(() => '?').join(', ')}) ORDER BY c.pseudo_cle`,
             idsVus,
           )
@@ -296,6 +301,9 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       pseudo: l.pseudo,
       riotId: l.riot_id ?? null,
       discord: l.discord ?? null,
+      // Discord ID (champ du membre) et liaison /lier vérifiée (elle prime pour les pings).
+      discordId: l.discord_id ?? null,
+      discordLie: Boolean(l.discord_lie),
       statut: statutCompte(l),
       inviteLe: l.invite_le ?? null,
       activeLe: l.active_le ?? null,
@@ -318,7 +326,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
     }
     if (acteur.superAdmin) {
       // Le Fondateur voit aussi les comptes sans team (retirés de toutes, ou rattachement à refaire).
-      for (const c of await base.tous('SELECT * FROM comptes WHERE id NOT IN (SELECT compte_id FROM membres) ORDER BY pseudo_cle', [])) {
+      for (const c of await base.tous('SELECT c.*, dc.discord_user_id AS discord_lie FROM comptes c LEFT JOIN discord_comptes dc ON dc.compte_id = c.id WHERE c.id NOT IN (SELECT compte_id FROM membres) ORDER BY c.pseudo_cle', [])) {
         if (!comptes.has(c.id)) comptes.set(c.id, fiche(c));
       }
     }
@@ -328,7 +336,15 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       acteur.superAdmin ? "SELECT COUNT(*) AS n FROM demandes_compte WHERE statut = 'en_attente'" : "SELECT COUNT(*) AS n FROM demandes_compte WHERE statut = 'en_attente' AND demandeur_id = ?",
       acteur.superAdmin ? [] : [acteur.compte],
     );
-    return { superAdmin: acteur.superAdmin, peutCreerCompte: acteur.superAdmin, teams, comptes: liste, demandesEnAttente: Number(attente?.n ?? 0) };
+    return {
+      superAdmin: acteur.superAdmin,
+      peutCreerCompte: acteur.superAdmin,
+      // Seul le Fondateur modifie un Discord ID (contrôle serveur : majDiscordId).
+      peutModifierDiscordId: acteur.superAdmin,
+      teams,
+      comptes: liste,
+      demandesEnAttente: Number(attente?.n ?? 0),
+    };
   }
 
   async function ficheCompte(acteur, compte) {
@@ -393,6 +409,8 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       { sql: 'DELETE FROM ical_jetons WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM discord_comptes WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM discord_codes WHERE compte_id = ?', params: [compte] },
+      // Récapitulatif e-mail (migration 0015) : l'adresse chiffrée disparaît avec le compte.
+      { sql: 'DELETE FROM courriel_recap WHERE compte_id = ?', params: [compte] },
       // Anonymisation, comme « Supprimer mes données » : plus rien n'est attribué à ce compte.
       { sql: 'UPDATE taches SET assigne_id = NULL WHERE assigne_id = ?', params: [compte] },
       { sql: 'UPDATE objectifs SET proprietaire_id = NULL WHERE proprietaire_id = ?', params: [compte] },
@@ -408,5 +426,25 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
     return { ok: true, retire: true, teams: membres.length };
   }
 
-  return { preinscrire, ajouterATeams, ajouterMembre, annuaire, activer, retirerCompte };
+  /**
+   * `PUT /comptes/:compte/discord-id` `{ discordId }` : le Fondateur SEUL (super admin) pose, corrige ou
+   * retire (`null`) le Discord ID d'un membre. Tout autre rôle, Propriétaire compris : 403.
+   */
+  async function majDiscordId(acteur, compteId, corps) {
+    if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Seul le Fondateur modifie le Discord ID d’un membre.');
+    const id = compteId === 'principal' ? 'principal' : lireCompte(compteId);
+    const fiche = await base.premier('SELECT id FROM comptes WHERE id = ?', [id]);
+    if (!fiche) throw echec(404, 'compte-introuvable', 'Compte introuvable.');
+    const discordId = corps?.discordId === null ? null : lireDiscordId(corps?.discordId, { obligatoire: true });
+    await discordIdLibre(base, discordId, id);
+    try {
+      await base.executer('UPDATE comptes SET discord_id = ?, maj_le = ? WHERE id = ?', [discordId, iso(maintenant()), id]);
+    } catch (e) {
+      if (/unique|discord_id/i.test(String(e?.message ?? e))) throw echec(409, 'discord-id-pris', 'Ce Discord ID est déjà celui d’un autre membre de l’Esport.');
+      throw e;
+    }
+    return ficheCompte(acteur, id);
+  }
+
+  return { preinscrire, ajouterATeams, ajouterMembre, annuaire, activer, retirerCompte, majDiscordId };
 }

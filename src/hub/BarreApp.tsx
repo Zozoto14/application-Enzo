@@ -25,7 +25,7 @@ export function useBarreApp(): React.ReactNode {
   return useContext(BarreAppContexte);
 }
 
-export function BarreApp({ theme, synchro, onParametres, onSupport }: { theme: ThemeHub; synchro?: SynchroHub; onParametres(section?: IdSection): void; onSupport?(): void }) {
+export function BarreApp({ theme, synchro, onParametres, onSupport, supportNonLus = 0 }: { theme: ThemeHub; synchro?: SynchroHub; onParametres(section?: IdSection): void; onSupport?(): void; supportNonLus?: number }) {
   const { width } = useWindowDimensions();
   if (useMobile()) {
     // Téléphone : dans l'en-tête compact, la synchro condensée et l'icône des Paramètres (le Support
@@ -48,7 +48,13 @@ export function BarreApp({ theme, synchro, onParametres, onSupport }: { theme: T
         onPress={() => onParametres()}
       />
       {onSupport ? (
-        <BoutonHub theme={theme} titre={width >= 520 ? '? Support' : '?'} libelle="Support : écrire à l’équipe" testID="app-support-ouvrir" onPress={onSupport} />
+        <BoutonHub
+          theme={theme}
+          titre={`${width >= 520 ? '? Support' : '?'}${supportNonLus > 0 ? ` 🔔 ${supportNonLus}` : ''}`}
+          libelle={supportNonLus > 0 ? `Support : ${supportNonLus} réponse(s) non lue(s)` : 'Support : écrire à l’équipe'}
+          testID="app-support-ouvrir"
+          onPress={onSupport}
+        />
       ) : null}
     </View>
   );

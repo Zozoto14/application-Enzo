@@ -319,7 +319,7 @@ describe('écrans du hub selon le mode', () => {
     forcerModeAffichage('telephone');
     let ferme = 0;
     await render(<PageSupport theme={theme} infos={{ version: '1', plateforme: 'site', rang: 'fondateur' } as never} tickets={[]} onFermer={() => ferme++} />);
-    expect(screen.getByTestId('support-sujet').props.enterKeyHint).toBe('next');
+    expect(screen.getByTestId('support-titre').props.enterKeyHint).toBe('next');
     expect(screen.getByTestId('support-message').props.multiline).toBe(true);
     await fireEvent.press(screen.getByTestId('hub-support-fermer'));
     expect(ferme).toBe(1);

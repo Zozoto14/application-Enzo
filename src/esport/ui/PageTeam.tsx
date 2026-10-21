@@ -39,6 +39,7 @@ import { apiMonDiscord, type CodeLiaison, type MonDiscord } from '../discord/api
 import { AvatarTeam, Badge, Carte, ESP, EtatVide, LARGEUR_CONTENU, MenuActions, Onglets, Squelette, TitreCarte, TYPO, attenue as styleAttenue, couleurTeam, texte as styleTexte, titre as styleTitreEsport, type EtatPresse } from './design';
 import { definirLangue, tr, trn, useLangue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
+import { ReglageRecapCourriel } from './DiscordId';
 
 export type SectionTeam = 'accueil' | 'membres' | 'journal' | 'parametres' | `module:${string}`;
 export type GroupeTeam = 'accueil' | 'agenda' | 'jeu' | 'equipe' | 'reglages';
@@ -682,6 +683,7 @@ export function MonProfil({ theme, client, onExporter, onSupprime }: { theme: Th
         testID="esport-profil-langue"
       />
       <LierDiscord theme={theme} client={client} />
+      <ReglageRecapCourriel theme={theme} client={client} />
       <View style={styles.ligne}>
         <BoutonHub
           theme={theme}

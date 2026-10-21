@@ -149,9 +149,12 @@ Avant de commencer, munissez-vous de :
 - **le mot de passe PostgreSQL** (étape A2) ;
 - **le jeton maître du relais** : sur le PC, fichier `relais/relais-local.json` du dossier de l'app, valeur de
   `"jeton"`. Il faut **le même** qu'aujourd'hui : les jetons des amis en sont dérivés ;
-- facultatif : l'adresse du **webhook Discord du support** (celle posée sur Cloudflare en `DISCORD_WEBHOOK_URL`), et
-  pour le **bot Discord** : `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY` (Discord Developer Portal › votre app ›
-  **General Information**) et `DISCORD_BOT_TOKEN` (onglet **Bot** › **Reset Token** si vous ne l'avez plus).
+- facultatif : l'adresse du **webhook Discord du support**. Celle posée sur Cloudflare ne se relit PAS (secret) :
+  créez-en une nouvelle dans Discord (voir [support.md](support.md) § 1) ; et pour le **bot Discord** :
+  `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY` (Discord Developer Portal › votre app › **General Information**) et
+  `DISCORD_BOT_TOKEN` (onglet **Bot** › **Reset Token** si vous ne l'avez plus) ;
+- facultatif : la boîte d'envoi **noreply@appdashboard.fr** et son mot de passe, pour les **e-mails envoyés par le
+  serveur** (invitations, réponses du support, Messagerie) : voir [emails.md](emails.md) §§ 1 et 2.
 
 Dans le **Terminal** cPanel :
 
@@ -180,6 +183,12 @@ LIEN_APP=https://appdashboard.fr
 DISCORD_APPLICATION_ID=
 DISCORD_PUBLIC_KEY=
 DISCORD_BOT_TOKEN=
+# Récapitulatif e-mail de l'Esport (facultatif, docs/emails.md) : les mêmes lignes que dans relais.env
+SMTP_HOST=
+SMTP_PORT=465
+SMTP_USER=
+SMTP_PASS=
+MAIL_FROM=AppDashboard <noreply@appdashboard.fr>
 ```
 
 Enregistrez : **Ctrl+O**, **Entrée**, puis **Ctrl+X**. Ensuite :
@@ -198,9 +207,20 @@ PGPASSWORD=MOT_DE_PASSE_POSTGRES
 JETON=JETON_MAITRE
 URL_PUBLIQUE=https://relais.appdashboard.fr
 ORIGINES_SITE=https://appdashboard.fr,https://www.appdashboard.fr,https://applibourse-ef0ddb.pages.dev
-# Support Discord (facultatif) :
+# Support Discord (facultatif, docs/support.md) : URL du webhook du salon support
 DISCORD_WEBHOOK_URL=
+# Salon support de type TEXTE seulement : le bot ouvre un fil par demande (même jeton que esport.env)
+DISCORD_BOT_TOKEN=
+# E-mails envoyés par le serveur (facultatif, docs/emails.md)
+SMTP_HOST=mail.appdashboard.fr
+SMTP_PORT=465
+SMTP_USER=noreply@appdashboard.fr
+SMTP_PASS=MOT_DE_PASSE_DE_LA_BOITE_NOREPLY
+MAIL_FROM=AppDashboard <noreply@appdashboard.fr>
+LIEN_APP=https://appdashboard.fr
 ```
+
+(Sans `SMTP_*`, laissez ces lignes vides : l'app garde l'envoi par votre messagerie, `mailto:`.)
 
 **Ctrl+O**, **Entrée**, **Ctrl+X**, puis :
 
@@ -458,6 +478,9 @@ Ensuite seulement (rien de tout cela n'est automatique) :
 | Le site affiche une page d'o2switch | `public_html/index.html` absent : voir la ligne précédente. Votre ancien contenu est dans `~/sauvegardes/`. |
 | Dans l'app : « Esport pas encore activé » | Sur le site : `https://appdashboard.fr/esport.json` doit contenir `https://esport.appdashboard.fr`. Sur PC/iPhone : l'adresse se déduit du relais ; synchronisez une fois. |
 | Lecture des sources Tsuzuku refusée depuis le site (CORS) | `ORIGINES_SITE` de `relais.env` doit contenir l'adresse exacte du site (avec ou sans `www`). |
+| Support : rien n'arrive dans Discord | **Administration › Support** dit si le webhook est absent, mal formé, ou le motif du dernier échec. `DISCORD_WEBHOOK_URL` dans `relais.env`, puis redémarrez le relais ([support.md](support.md)). Les demandes déjà reçues : bouton **Renvoyer sur Discord**. |
+| E-mails : « l'envoi par le serveur n'est pas configuré » | Les cinq lignes `SMTP_*` / `MAIL_FROM` de `relais.env` ([emails.md](emails.md)), puis redémarrez le relais. `tail ~/logs/relais-passenger.log` dit laquelle manque. |
+| E-mails en spam | cPanel › **Email Deliverability** : SPF et DKIM « Valide » ([emails.md](emails.md) § 2). |
 | Discord : « interactions endpoint url could not be verified » | `DISCORD_PUBLIC_KEY` et `DISCORD_APPLICATION_ID` dans `esport.env`, app redémarrée, puis réessayez. `curl -s https://esport.appdashboard.fr/sante` doit montrer `"bot":true`. |
 | L'import Esport dit « contient déjà des données » | Il ne fusionne jamais (protection). Si c'était une répétition : demandez de l'aide pour vider le schéma `appdashboard`, puis relancez. |
 | « Clés du serveur NON reprises » | Le Worker n'était pas en lecture seule : étape C1, puis relancez l'import avec `--fichiers-seulement`. |

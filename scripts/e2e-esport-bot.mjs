@@ -6,8 +6,10 @@
  *  - PC (1440 × 900), le Fondateur : Réglages › Discord › « Lier un serveur Discord » affiche un code ; une
  *    interaction /esport-lier-serveur SIGNÉE (comme Discord) lie le serveur ; l'écran montre le salon ;
  *  - Léa lie son compte (code de l'API, /lier signé) ; l'écran montre « 1 compte lié » ;
- *  - un scrim créé au planning arrive au faux Discord : embed, mention de Léa SEULE, allowed_mentions strict,
- *    boutons RSVP ;
+ *  - Discord ID (migration 0015) : le Fondateur renseigne celui de Tom dans Esport › Membres (badge « Discord
+ *    ID manquant » avant) ; un Propriétaire de team reçoit 403 en voulant le modifier ;
+ *  - un scrim créé au planning arrive au faux Discord : embed, mention de Léa (liaison /lier, qui prime sur
+ *    son Discord ID saisi) et de Tom (par son Discord ID), allowed_mentions strict, boutons RSVP ;
  *  - un clic « Oui » simulé et signé met à jour la présence : visible dans l'app (liste de présence du
  *    Fondateur), et l'annonce est rééditée chez le faux Discord avec les compteurs.
  *
@@ -39,6 +41,8 @@ const GUILD = '700000000000000001';
 const SALON = '710000000000000001';
 const ADMIN = '800000000000000009';
 const LEA = '800000000000000001';
+const LEA_CHAMP = '412345678901234560';
+const TOM = '412345678901234561';
 const log = (...a) => console.log('[e2e-esport-bot]', ...a);
 let echecs = 0;
 const verifier = (ok, message) => {
@@ -146,7 +150,7 @@ try {
   const faucons = (await api('/teams', sessFond, { methode: 'POST', corps: { nom: 'Faucons Valorant', jeu: 'valorant', preset: 'valorant_complet' } })).corps.team;
   const roles = (await api(`/teams/${faucons.id}/roles`, sessFond)).corps.roles;
   const sessions = {};
-  for (const [compte, pseudo, role] of [['lea12345', 'Léa', 'joueur'], ['tom12345', 'Tom', 'remplacant']]) {
+  for (const [compte, pseudo, role] of [['lea12345', 'Léa', 'joueur'], ['tom12345', 'Tom', 'remplacant'], ['bob12345', 'Bob', 'proprietaire']]) {
     sessions[compte] = (await api('/session', await jetonDeProfil(JETON, compte), { methode: 'POST' })).corps.session;
     await api('/moi', sessions[compte], { methode: 'PUT', corps: { pseudo } });
     await api(`/teams/${faucons.id}/membres`, sessFond, { methode: 'POST', corps: { compte, roleId: roles.find(r => r.cle === role).id } });
@@ -190,6 +194,28 @@ try {
   verifier(/Comptes Discord liés : 1 \//.test(await pc.getByTestId('esport-bot-comptes').innerText()), 'écran : 1 compte lié (Léa)');
   await capture(pc, '02-pc-bot-lie');
 
+  // ================================================================ Discord ID : le Fondateur seul
+  log('PC : Esport › Membres, le Fondateur renseigne le Discord ID de Tom (badge « manquant » avant)');
+  verifier((await api('/comptes/tom12345/discord-id', sessions.bob12345, { methode: 'PUT', corps: { discordId: TOM } })).statut === 403, 'un Propriétaire de team ne peut PAS modifier un Discord ID (403)');
+  verifier((await api('/comptes/lea12345/discord-id', sessions.lea12345, { methode: 'PUT', corps: { discordId: LEA_CHAMP } })).statut === 403, 'le membre lui-même non plus (403)');
+  verifier((await api('/comptes/lea12345/discord-id', sessFond, { methode: 'PUT', corps: { discordId: LEA_CHAMP } })).statut === 200, 'le Fondateur pose un Discord ID à Léa (sa liaison /lier primera)');
+  await pc.getByTestId('esport-nav-membres').click({ timeout: 20_000 });
+  await pc.getByTestId('esport-discord-manquant-tom12345').waitFor({ timeout: 20_000 });
+  verifier(true, 'Membres : Tom porte le badge « Discord ID manquant »');
+  await pc.getByTestId('esport-membres-statut-sansdiscord').click();
+  verifier((await pc.getByTestId('esport-compte-lea12345').count()) === 0 && (await pc.getByTestId('esport-compte-tom12345').count()) === 1, 'filtre « Discord ID manquant » : Tom, pas Léa');
+  await pc.getByLabel('Gérer Tom').click();
+  await pc.getByTestId('esport-discord-id-modifier-tom12345').click();
+  await pc.getByTestId('esport-discord-id-champ-tom12345').fill(TOM);
+  await capture(pc, '02b-pc-discord-id-tom');
+  await pc.getByTestId('esport-discord-id-enregistrer-tom12345').click();
+  await attendre(async () => (await pc.getByTestId('esport-discord-manquant-tom12345').count()) === 0);
+  verifier((await esport.base.premier("SELECT discord_id FROM comptes WHERE id = 'tom12345'", []))?.discord_id === TOM, 'serveur : Discord ID de Tom enregistré');
+  await pc.getByTestId('esport-membres-statut-tous').click();
+  await pc.getByTestId('esport-nav-teams').click({ timeout: 10_000 });
+  await pc.getByTestId('esport-team-faucons-valorant').click({ timeout: 20_000 });
+  await pc.getByTestId('esport-barre').waitFor({ timeout: 20_000 });
+
   // ================================================================ Annonce d'un scrim
   log('API : un scrim est créé, l’annonce part au faux Discord');
   const jour = new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10);
@@ -198,11 +224,13 @@ try {
   verifier(await attendre(() => recus.some(r => r.methode === 'POST' && r.chemin === `/api/v10/channels/${SALON}/messages`)), 'le faux Discord a reçu l’annonce dans le salon lié');
   const annonce = recus.find(r => r.methode === 'POST' && r.chemin === `/api/v10/channels/${SALON}/messages`);
   verifier(annonce?.auth === 'Bot jeton-bot-e2e-jamais-reel', 'API du bot (jeton du bot)');
-  verifier(annonce?.corps.content === `<@${LEA}>`, 'seule Léa (convoquée liée) est mentionnée ; Tom (non lié) ne l’est pas');
-  verifier(JSON.stringify(annonce?.corps.allowed_mentions) === JSON.stringify({ parse: [], users: [LEA] }), 'allowed_mentions : exactement Léa');
+  const mentions = (annonce?.corps.content ?? '').split(' ').sort();
+  verifier(JSON.stringify(mentions) === JSON.stringify([`<@${LEA}>`, `<@${TOM}>`].sort()), `convoqués pingués : Léa par /lier (pas son ID saisi), Tom par son Discord ID (${annonce?.corps.content})`);
+  verifier(!String(annonce?.corps.content).includes(LEA_CHAMP), 'la liaison /lier vérifiée prime sur le Discord ID saisi');
+  verifier(JSON.stringify([...(annonce?.corps.allowed_mentions?.users ?? [])].sort()) === JSON.stringify([LEA, TOM].sort()) && JSON.stringify(annonce?.corps.allowed_mentions?.parse) === '[]', 'allowed_mentions : exactement Léa et Tom');
   const embed = annonce?.corps.embeds?.[0];
   verifier(embed?.title?.startsWith('⚔️ Scrim · Scrim') && !/@everyone/.test(embed.title), 'embed : titre du scrim, @everyone neutralisé');
-  verifier(embed?.color === 0x7c3aed && /Tom/.test(JSON.stringify(embed.fields)), 'embed : couleur du scrim, Tom cité par son pseudo');
+  verifier(embed?.color === 0x7c3aed, 'embed : couleur du scrim');
   const boutons = annonce?.corps.components?.[0]?.components ?? [];
   verifier(boutons.map(b => b.style).join(',') === '3,2,4,5', 'boutons : Oui (vert), Peut-être (gris), Non (rouge), lien');
 

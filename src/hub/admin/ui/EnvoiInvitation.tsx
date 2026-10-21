@@ -1,23 +1,26 @@
 /**
- * Panneau « Invitation de … » : envoyer le lien d'invitation par e-mail (la
- * messagerie de l'appareil s'ouvre, pré-remplie, par un lien `mailto:`),
- * copier le message, le partager (feuille de partage de l'iPhone/iPad), copier
- * le lien seul, ou le montrer en QR code.
+ * Panneau « Invitation de … » : envoyer le lien d'invitation par e-mail —
+ * DIRECTEMENT par le serveur (SMTP du relais : beau modèle HTML et texte, FR ou
+ * EN, `src/messagerie/courriel.ts`) quand il est configuré, sinon par la
+ * messagerie de l'appareil (lien `mailto:` pré-rempli, toujours proposé en
+ * secours) —, copier le message, le partager (feuille de partage de
+ * l'iPhone/iPad), copier le lien seul, ou le montrer en QR code.
  *
- * Rien ne part d'un serveur : l'e-mail est envoyé par la messagerie de
- * l'appareil, depuis la boîte du Fondateur. Chaque transmission est notée dans
- * l'historique du compte (date, canal), dans les données chiffrées de
- * l'Administration ; le journal dit « par e-mail », jamais l'adresse.
+ * L'adresse vient des données chiffrées de l'Administration : elle part avec la
+ * demande d'envoi et le serveur ne la garde pas (journal d'envoi : adresse
+ * masquée). Chaque transmission est notée dans l'historique du compte (date,
+ * canal) ; le journal dit « par e-mail », jamais l'adresse.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Linking, Platform, Share, Text, View } from 'react-native';
 import { QrCode } from '../../../ui/ecrans/CarteSynchro';
 import type { InvitationAffichee } from '../../../profils/identifiants';
 import { police, teinteTransparente, type ThemeHub } from '../../themes';
 import type { CanalInvitation } from '../contacts';
-import { dateExpiration, lienMailto, prenomFondateur, rendreModele, type ModeleInvitation, type ValeursModele } from '../modeleInvitation';
-import { Avis, BoutonHub, commun, dateLisible } from './commun';
+import { courrielDisponible, envoyerCourriel, libelleErreurCourriel, type LangueCourriel } from '../../../messagerie/courriel';
+import { MODELE_INVITATION_DEFAUT_EN, dateExpiration, lienMailto, prenomFondateur, rendreModele, type ModeleInvitation, type ValeursModele } from '../modeleInvitation';
+import { Avis, BoutonHub, Segments, commun, dateLisible } from './commun';
 
 /** Copie dans le presse-papiers (web, Electron) ; faux si indisponible. */
 export async function copier(texte: string): Promise<boolean> {
@@ -56,11 +59,11 @@ export async function partager(titre: string, texte: string): Promise<boolean> {
 }
 
 /** Valeurs du modèle pour une invitation affichée. */
-export function valeursInvitation(invitation: InvitationAffichee, nom: string, fondateur: string | undefined): ValeursModele {
+export function valeursInvitation(invitation: InvitationAffichee, nom: string, fondateur: string | undefined, langue: 'fr' | 'en' = 'fr'): ValeursModele {
   return {
     prenom: invitation.prenom ?? nom,
     lien: invitation.lien ?? '',
-    expiration: dateExpiration(invitation.expire),
+    expiration: dateExpiration(invitation.expire, langue),
     fondateur: prenomFondateur(invitation.fondateur ?? fondateur),
     code: invitation.codeCourt && invitation.site ? invitation.codeCourt : '',
     site: invitation.codeCourt && invitation.site ? invitation.site : '',
@@ -111,6 +114,8 @@ export function PanneauInvitation({
   invitation,
   email,
   modele,
+  modeleEn,
+  langueInitiale = 'fr',
   fondateur,
   onEnvoye,
 }: {
@@ -123,20 +128,51 @@ export function PanneauInvitation({
   modele?: ModeleInvitation;
   /** Prénom de l'acteur, si l'hôte ne l'a pas mis dans l'invitation. */
   fondateur?: string;
+  /** Modèle anglais (Esport : message des teams en anglais) ; absent : modèle anglais par défaut. */
+  modeleEn?: ModeleInvitation;
+  /** Langue proposée pour l'e-mail direct. */
+  langueInitiale?: LangueCourriel;
   /** Une transmission a eu lieu (historique et journal). */
   onEnvoye?(canal: CanalInvitation): void;
 }) {
   const [retour, setRetour] = useState<string | undefined>();
   const [qr, setQr] = useState(true);
+  const [langue, setLangue] = useState<LangueCourriel>(langueInitiale);
+  const [direct, setDirect] = useState<boolean | undefined>();
+  const [envoi, setEnvoi] = useState<'enCours' | 'ok' | undefined>();
+  const [erreurDirect, setErreurDirect] = useState<string | undefined>();
+  useEffect(() => {
+    let vivant = true;
+    // Le serveur sait-il envoyer des e-mails ? (jeton maître, SMTP configuré) ; sinon : mailto seulement.
+    void courrielDisponible().then(d => vivant && setDirect(d));
+    return () => {
+      vivant = false;
+    };
+  }, []);
   const attenue = { color: theme.attenue, ...police(theme.policeTexte) };
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   if (invitation.erreur || !invitation.lien) {
     return <Avis theme={theme} genre="critique" texte={invitation.erreur ?? 'Invitation impossible.'} testID="admin-invitation-erreur" />;
   }
   const jour = invitation.expire ? dateLisible(invitation.expire, true) : '';
-  const valeurs = valeursInvitation(invitation, nom, fondateur);
-  const message = rendreModele(modele, valeurs);
+  const valeurs = valeursInvitation(invitation, nom, fondateur, langue);
+  const message = rendreModele(langue === 'en' ? (modeleEn ?? MODELE_INVITATION_DEFAUT_EN) : modele, valeurs);
   const mailto = lienMailto(email, message, valeurs);
+  const envoyerDirect = async () => {
+    if (!email || !invitation.lien) return;
+    setEnvoi('enCours');
+    setErreurDirect(undefined);
+    const r = await envoyerCourriel({ destinataires: [{ adresse: email, nom, langue }], modele: 'invitation', langue, objet: message.objet, message: message.corps, lien: invitation.lien, ref: 'invitation' });
+    if (r.ok) {
+      setEnvoi('ok');
+      setRetour(`E-mail d’invitation envoyé à ${email} (${langue === 'en' ? 'anglais' : 'français'}).`);
+      onEnvoye?.('email');
+      return;
+    }
+    setEnvoi(undefined);
+    if (r.nonConfigure) setDirect(false);
+    setErreurDirect(r.nonConfigure ? 'Le serveur n’envoie pas d’e-mails pour l’instant : utilisez « Ouvrir ma messagerie ».' : `E-mail non envoyé : ${libelleErreurCourriel(r.resultats[0]?.erreur ?? r.erreur)}. Réessayez, ou utilisez « Ouvrir ma messagerie ».`);
+  };
   const copierTexte = (valeur: string, quoi: string, canal: CanalInvitation) =>
     void copier(valeur).then(ok => {
       setRetour(ok ? `${quoi} copié : collez-le dans votre messagerie.` : 'Copie impossible ici : sélectionnez le texte ci-dessous.');
@@ -157,11 +193,28 @@ export function PanneauInvitation({
         </Text>
       ) : null}
       {invitation.avertissement ? <Avis theme={theme} genre="alerte" texte={invitation.avertissement} testID="admin-invitation-avertissement" /> : null}
+      {email && direct ? (
+        <View style={{ gap: 6 }} testID="admin-invitation-direct">
+          <View style={[commun.actions, { alignItems: 'center' }]}>
+            <BoutonHub
+              theme={theme}
+              variante="plein"
+              titre={envoi === 'enCours' ? 'Envoi…' : envoi === 'ok' ? '✓ E-mail envoyé — renvoyer' : `✉️ Envoyer l’e-mail maintenant`}
+              desactive={envoi === 'enCours'}
+              onPress={() => void envoyerDirect()}
+              testID="admin-invitation-envoyer-direct"
+            />
+            <Segments<LangueCourriel> theme={theme} libelle="Langue de l’e-mail" valeur={langue} options={[['fr', 'FR'], ['en', 'EN']]} onChoisir={setLangue} testID="admin-invitation-langue" />
+          </View>
+          <Text style={[attenue, { fontSize: 12 }]}>Envoyé directement par le serveur, depuis l’adresse d’AppDashboard, avec un bouton vers le lien.</Text>
+          {erreurDirect ? <Avis theme={theme} genre="alerte" texte={erreurDirect} testID="admin-invitation-direct-erreur" /> : null}
+        </View>
+      ) : null}
       <View style={commun.actions}>
         <LienEmail
           theme={theme}
           url={mailto.url}
-          titre={email ? `✉️ Envoyer l’invitation par e-mail` : '✉️ Écrire l’e-mail d’invitation'}
+          titre={email && direct ? 'Ouvrir ma messagerie' : email ? `✉️ Envoyer l’invitation par e-mail` : '✉️ Écrire l’e-mail d’invitation'}
           onOuvert={() => {
             setRetour(email ? `Votre messagerie s’ouvre, adressée à ${email} : vérifiez puis envoyez.` : 'Votre messagerie s’ouvre : ajoutez le destinataire, puis envoyez.');
             onEnvoye?.('email');
@@ -209,7 +262,9 @@ export function PanneauInvitation({
           Message long : l’e-mail contient une version courte (le lien et sa validité). « Copier le message » donne le texte complet.
         </Text>
       ) : null}
-      <Text style={[attenue, { fontSize: 12 }]}>Aucun e-mail ne part d’un serveur : c’est votre messagerie qui l’envoie.</Text>
+      <Text style={[attenue, { fontSize: 12 }]}>
+        {direct ? 'L’adresse part seulement avec l’envoi : le serveur ne la garde pas (journal : adresse masquée).' : 'L’envoi direct par le serveur n’est pas configuré : c’est votre messagerie qui envoie l’e-mail.'}
+      </Text>
       {retour ? (
         <Text style={{ color: theme.ok, fontSize: 13 }} testID="admin-invitation-copie">
           {retour}

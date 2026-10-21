@@ -69,7 +69,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
   // -------------------------------------------------------------- Lectures internes
 
   async function profilDe(compte) {
-    return base.premier('SELECT id, pseudo, riot_id, discord, langue, cree_le, maj_le FROM comptes WHERE id = ?', [compte]);
+    return base.premier('SELECT id, pseudo, riot_id, discord, discord_id, langue, cree_le, maj_le FROM comptes WHERE id = ?', [compte]);
   }
 
   async function exigerProfil(acteur) {
@@ -747,7 +747,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       format: 'applibourse-esport-mes-donnees',
       version: 2,
       compte,
-      profil: profil ? { pseudo: profil.pseudo, riotId: profil.riot_id ?? null, discord: profil.discord ?? null, langue: lireLangue(profil.langue), creeLe: profil.cree_le, majLe: profil.maj_le } : null,
+      profil: profil ? { pseudo: profil.pseudo, riotId: profil.riot_id ?? null, discord: profil.discord ?? null, discordId: profil.discord_id ?? null, langue: lireLangue(profil.langue), creeLe: profil.cree_le, majLe: profil.maj_le } : null,
       teams: appartenances.map(a => ({ team: a.team, role: a.role, posteJeu: a.poste_jeu ?? null, statut: a.statut, rejointLe: a.rejoint_le })),
       notifications: (await q('SELECT type, team_id, charge, lue_le, cree_le FROM notifications WHERE compte_id = ? ORDER BY cree_le')).map(n => ({ type: n.type, team: team(n.team_id), charge: jsonOu(n.charge, {}), lue: Boolean(n.lue_le), date: n.cree_le })),
       journal: (await q('SELECT team_id, action, entite_type, meta, cree_le FROM journal WHERE acteur_id = ? ORDER BY cree_le')).map(a => ({ team: team(a.team_id), action: a.action, entite: a.entite_type, meta: jsonOu(a.meta, {}), date: a.cree_le })),
@@ -769,6 +769,11 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       discord: await (async () => {
         const l = await base.premier('SELECT discord_user_id, discord_nom, lie_le FROM discord_comptes WHERE compte_id = ?', [compte]);
         return l ? { lie: true, discordUserId: l.discord_user_id, discordNom: l.discord_nom || null, lieLe: l.lie_le } : { lie: false };
+      })(),
+      // Récapitulatif e-mail (migration 0015) : réglage seulement (l'adresse reste chiffrée sur le serveur).
+      recapCourriel: await (async () => {
+        const l = await base.premier('SELECT frequence, dernier_envoi_le, cree_le FROM courriel_recap WHERE compte_id = ?', [compte]);
+        return l ? { actif: true, frequence: l.frequence, dernierEnvoi: l.dernier_envoi_le ?? null, depuis: l.cree_le } : { actif: false };
       })(),
       // Suivi des joueurs : les notes du staff PARTAGÉES avec lui (auteur selon son choix). Les notes privées du staff
       // ne figurent que dans l'export demandé par le Fondateur (`notesStaffPrivees`) : voir docs/esport/suivi-joueurs.md.
@@ -836,6 +841,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       // Bot Discord : liaison du compte et codes en cours.
       { sql: 'DELETE FROM discord_comptes WHERE compte_id = ?', params: [compte] },
       { sql: 'DELETE FROM discord_codes WHERE compte_id = ?', params: [compte] },
+      // Récapitulatif e-mail (migration 0015) : l'adresse chiffrée disparaît avec le compte.
+      { sql: 'DELETE FROM courriel_recap WHERE compte_id = ?', params: [compte] },
       // Anonymisation : plus rien n'est attribué à ce compte.
       { sql: 'UPDATE taches SET assigne_id = NULL WHERE assigne_id = ?', params: [compte] },
       { sql: 'UPDATE objectifs SET proprietaire_id = NULL WHERE proprietaire_id = ?', params: [compte] },

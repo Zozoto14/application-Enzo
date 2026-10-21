@@ -133,6 +133,10 @@ export interface CompteEsport {
   pseudo: string;
   riotId: string | null;
   discord: string | null;
+  /** Discord ID (17 à 20 chiffres) saisi par le Fondateur ; `null` : « Discord ID manquant ». */
+  discordId?: string | null;
+  /** Compte Discord lié par /lier (vérifié) : il prime pour les pings du bot. */
+  discordLie?: boolean;
   /** « invite » : créé depuis l'Esport, jamais connecté. */
   statut: 'invite' | 'actif';
   inviteLe: string | null;
@@ -169,6 +173,8 @@ export interface TeamAnnuaire {
 export interface Annuaire {
   superAdmin: boolean;
   peutCreerCompte: boolean;
+  /** Seul le Fondateur modifie un Discord ID (contrôle serveur, 403 sinon). */
+  peutModifierDiscordId?: boolean;
   teams: TeamAnnuaire[];
   comptes: CompteEsport[];
   /** Demandes de compte en attente (Fondateur : toutes ; sinon les siennes). */
@@ -188,6 +194,8 @@ export interface DemandeCompte {
   /** Adresse proposée : visible du Fondateur et du demandeur tant que la demande attend. */
   email: string | null;
   posteJeu: string | null;
+  /** Discord ID proposé par le demandeur (facultatif). */
+  discordId?: string | null;
   message: string;
   statut: 'en_attente' | 'validee' | 'refusee' | 'annulee';
   compte: string | null;
@@ -199,6 +207,14 @@ export interface ListeDemandes {
   demandes: DemandeCompte[];
   enAttente: number;
   fondateur: boolean;
+}
+/** Récapitulatif e-mail : adresse MASQUÉE seulement (chiffrée sur le serveur). */
+export interface RecapCourriel {
+  actif: boolean;
+  frequence: 'quotidien' | 'hebdomadaire';
+  adresse: string | null;
+  dernierEnvoi: string | null;
+  dernierStatut?: string | null;
 }
 export interface Affectation {
   teamId: string;
@@ -546,7 +562,7 @@ export interface ClientEsport {
   /** Demandes de compte : les siennes (Fondateur : toutes celles en attente). */
   demandes(): Promise<ListeDemandes>;
   /** Dépose une demande de compte (permission « Créer des membres »). */
-  demanderCompte(d: { teamId: string; roleId: string; pseudo: string; email: string; posteJeu?: string; message?: string }): Promise<DemandeCompte>;
+  demanderCompte(d: { teamId: string; roleId: string; pseudo: string; email: string; discordId?: string; posteJeu?: string; message?: string }): Promise<DemandeCompte>;
   /** Fondateur : refuse une demande. */
   refuserDemande(id: string, motif?: string): Promise<DemandeCompte>;
   /** Le demandeur annule sa demande en attente. */
@@ -557,14 +573,19 @@ export interface ClientEsport {
   /** Dashboard : résumé de toutes ses teams (une seule requête). */
   tableau(): Promise<Tableau>;
   /** Fondateur : contrôle une invitation directe AVANT de créer le compte du hub (rien n'est écrit). */
-  verifierPreinscription(c: { pseudo: string; affectations: Affectation[]; demandeId?: string }): Promise<void>;
+  verifierPreinscription(c: { pseudo: string; discordId: string; affectations: Affectation[]; demandeId?: string }): Promise<void>;
   /**
    * Ajoute un compte à une ou plusieurs teams d'un coup (un rôle par team) : compte connu (invité, actif, avec
    * ou sans team) ; compte du hub jamais connecté (Fondateur : `pseudo` requis). Tout ou rien.
    */
-  ajouterATeams(compte: string, c: { affectations: Affectation[]; pseudo?: string }): Promise<CompteEsport | null>;
+  ajouterATeams(compte: string, c: { affectations: Affectation[]; pseudo?: string; discordId?: string }): Promise<CompteEsport | null>;
   /** Fondateur : pré-enregistre le compte du hub tout juste créé, avec ses teams. */
-  preinscrire(c: { compte: string; pseudo: string; affectations: Affectation[]; demandeId?: string }): Promise<CompteEsport | null>;
+  preinscrire(c: { compte: string; pseudo: string; discordId: string; affectations: Affectation[]; demandeId?: string }): Promise<CompteEsport | null>;
+  /** Fondateur SEUL : pose, corrige ou retire (`null`) le Discord ID d'un membre (403 pour tout autre rôle). */
+  majDiscordId(compte: string, discordId: string | null): Promise<CompteEsport | null>;
+  /** Récapitulatif e-mail des notifications importantes (désactivé par défaut). */
+  recapCourriel(): Promise<RecapCourriel>;
+  reglerRecapCourriel(r: { actif: boolean; adresse?: string; frequence?: 'quotidien' | 'hebdomadaire' }): Promise<RecapCourriel>;
   /** Fondateur : compte supprimé dans l'Administration → retiré de l'Esport. */
   retirerCompte(compte: string): Promise<{ ok: boolean; retire: boolean; teams: number }>;
   notifications(): Promise<Notifications>;
@@ -715,6 +736,9 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
       await appel(`/admin/comptes/${encodeURIComponent(compte)}`, 'DELETE');
     },
     preinscrire: c => appel('/comptes', 'POST', c),
+    majDiscordId: (compte, discordId) => appel(`/comptes/${encodeURIComponent(compte)}/discord-id`, 'PUT', { discordId }),
+    recapCourriel: () => appel('/moi/recap-courriel'),
+    reglerRecapCourriel: r => appel('/moi/recap-courriel', 'PUT', r),
     ajouterATeams: (compte, c) => appel(`/comptes/${encodeURIComponent(compte)}/teams`, 'POST', c),
     retirerCompte: compte => appel(`/admin/comptes/${encodeURIComponent(compte)}/hub`, 'DELETE'),
     notifications: () => appel('/notifications'),

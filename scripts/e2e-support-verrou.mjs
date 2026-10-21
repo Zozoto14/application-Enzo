@@ -41,9 +41,10 @@ const WEBHOOK = 'https://discord.com/api/webhooks/123456789012345678/AbCdEfGhIjK
 const discord = [];
 const fetchReel = globalThis.fetch;
 globalThis.fetch = async (url, init) => {
-  if (String(url) === WEBHOOK) {
-    discord.push({ contentType: init?.headers?.['Content-Type'] ?? init?.headers?.['content-type'] ?? '', body: init?.body });
-    return new Response(null, { status: 204 });
+  // Le relais poste sur `<webhook>?wait=true` : Discord rend le message (et le fil d'un salon forum).
+  if (String(url).startsWith(WEBHOOK)) {
+    discord.push({ url: String(url), contentType: init?.headers?.['Content-Type'] ?? init?.headers?.['content-type'] ?? '', body: init?.body });
+    return Response.json({ id: '800000000000000001', channel_id: '700000000000000001' });
   }
   return fetchReel(url, init);
 };
@@ -245,19 +246,20 @@ try {
   await page.getByTestId('hub-support-ouvrir').click();
   await page.getByTestId('hub-support').waitFor({ timeout: 10_000 });
   await page.getByTestId('support-categorie-bug').click();
-  await page.getByTestId('support-sujet').fill('Le graphique est vide');
+  await page.getByTestId('support-titre').fill('Le graphique est vide');
   await page.getByTestId('support-message').fill('Depuis ce matin le graphique reste vide. @everyone regardez vite !');
   await capture(page, '03-support-formulaire');
   await page.getByTestId('support-envoyer').click();
   const envoye = await attendre(async () => discord.length === 1, 30_000, 300);
   verifier(envoye, 'le relais a posté un message sur le webhook (faux Discord)');
   await page.getByTestId('support-resultat').waitFor({ timeout: 10_000 });
-  verifier(/Ticket n° 1 envoyé/.test(await page.getByTestId('support-resultat').innerText()), 'l’application annonce « Ticket n° 1 envoyé »');
+  verifier(/Demande n° 1 envoyée/.test(await page.getByTestId('support-resultat').innerText()), 'l’application annonce « Demande n° 1 envoyée »');
   const posté = JSON.parse(typeof discord[0]?.body === 'string' ? discord[0].body : '{}');
   verifier(JSON.stringify(posté.allowed_mentions) === '{"parse":[]}', 'allowed_mentions : { parse: [] } (aucune mention ne notifie)');
-  verifier(/Le graphique est vide/.test(JSON.stringify(posté)), 'le sujet du ticket est dans le message Discord');
+  verifier(/Le graphique est vide/.test(JSON.stringify(posté)), 'le titre de la demande est dans le message Discord');
+  verifier(posté.embeds?.[0]?.color === 0xe5484d && /Bug/.test(posté.embeds?.[0]?.title ?? ''), 'embed : couleur et libellé de la catégorie « Bug »');
   verifier(!/mot de passe|jeton-e2e|AbCdEf/i.test(JSON.stringify(posté)), 'aucun secret (jeton, webhook) dans le message Discord');
-  verifier((await page.getByTestId('support-ticket-1-statut').innerText()) === 'Envoyé', '« Mes tickets » : ticket n° 1, état Envoyé');
+  verifier((await page.getByTestId('support-ticket-1-statut').innerText()) === 'Ouverte', '« Mes demandes » : demande n° 1, statut « Ouverte »');
   await capture(page, '04-support-ticket-envoye');
   // L'adresse du webhook n'est nulle part côté client.
   const fuites = await page.evaluate(async webhook => {
@@ -269,7 +271,8 @@ try {
     return trouves;
   }, WEBHOOK);
   verifier(fuites.length === 0, `l’adresse du webhook n’apparaît ni dans la page ni dans le stockage du navigateur (${fuites.join(',') || 'rien'})`);
-  verifier(![...kv.keys()].some(c => /ticket|support/i.test(c) && !c.startsWith('support:limite:')), `aucun ticket n’est stocké sur le relais (seul le compteur de limite de débit existe : ${[...kv.keys()].filter(c => /support/.test(c)).join(', ')})`);
+  verifier([...kv.keys()].some(c => c.startsWith('support:t:principal:')), 'la demande est rangée sur le relais, sous le compte qui l’a envoyée');
+  verifier(![...kv.values()].some(v => String(v).includes('AbCdEfGhIj')), 'le webhook n’est rangé nulle part dans la boîte');
   // Retour sans jeton : refus.
   const sansJeton = await fetchReel(`https://localhost:${PORT_RELAIS}/support`, { method: 'POST', body: '{}' }).then(r => r.status, () => 0).catch(() => 0);
   verifier(sansJeton === 401 || sansJeton === 0, 'POST /support sans jeton refusé (401)');

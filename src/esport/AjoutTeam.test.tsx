@@ -65,10 +65,13 @@ describe('Membres et rôles › ajouter un compte existant', () => {
     // La team courante est cochée d'avance ; on coche la seconde, en Manager.
     await fireEvent.press(await screen.findByTestId('esport-ajout-team-luca000001-valorant'));
     await fireEvent.press(screen.getByTestId('esport-ajout-role-luca000001-valorant-r-man-2'));
+    // Fiche Esport créée ici : Discord ID obligatoire.
+    await fireEvent.changeText(screen.getByTestId('esport-ajout-discord-id-luca000001'), '412345678901234567');
     await fireEvent.press(screen.getByTestId('esport-ajout-valider-luca000001'));
     await waitFor(() =>
       expect(ajouterATeams).toHaveBeenCalledWith('luca000001', {
         pseudo: 'LUCA',
+        discordId: '412345678901234567',
         affectations: [
           { teamId: 't1', roleId: 'r-jou' },
           { teamId: 't2', roleId: 'r-man-2' },
@@ -82,6 +85,7 @@ describe('Membres et rôles › ajouter un compte existant', () => {
     await monter(client({ annuaire: async () => annuaire([]), ajouterATeams }));
     await fireEvent.press(await screen.findByTestId('esport-ajouter-compte-ouvrir'));
     await fireEvent.press(await screen.findByTestId('esport-ajouter-compte-choix-luca000001'));
+    await fireEvent.changeText(await screen.findByTestId('esport-ajout-discord-id-luca000001'), '412345678901234567');
     await fireEvent.press(await screen.findByTestId('esport-ajout-valider-luca000001'));
     expect(await screen.findByTestId('esport-ajout-luca000001-erreur')).toHaveTextContent(/plus élevé que le vôtre/);
   });

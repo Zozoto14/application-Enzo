@@ -19,6 +19,7 @@
  * avec la permission (404 sinon) ; le demandeur ne voit que les siennes.
  */
 
+import { discordIdLibre, lireDiscordId } from './discordId.mjs';
 import { evenement } from './evenements.mjs';
 import { lirePseudo } from './service.mjs';
 import { echec, iso, nouvelId, texteNettoye } from './outils.mjs';
@@ -61,6 +62,8 @@ export function servicesDemandes({ base, maintenant = () => Date.now(), noyau })
       pseudo: l.pseudo,
       email: l.statut === 'en_attente' && (acteur.superAdmin || l.demandeur_id === acteur.compte) ? (l.email ?? null) : null,
       posteJeu: l.poste_jeu ?? null,
+      // Discord ID proposé par le demandeur (facultatif) : le Fondateur le vérifie à la validation.
+      discordId: l.discord_id ?? null,
       message: l.message ?? '',
       statut: l.statut,
       compte: l.compte_id ?? null,
@@ -79,6 +82,8 @@ export function servicesDemandes({ base, maintenant = () => Date.now(), noyau })
     await exigerRoleGerable(ctx, role, 'Vous ne pouvez pas proposer un rôle plus élevé que le vôtre.');
     const pseudo = lirePseudo(corps?.pseudo);
     const email = lireEmail(corps?.email);
+    const discordId = lireDiscordId(corps?.discordId);
+    await discordIdLibre(base, discordId);
     const cle = pseudo.toLocaleLowerCase('fr');
     if (await base.premier('SELECT id FROM comptes WHERE pseudo_cle = ?', [cle])) {
       throw echec(409, 'pseudo-pris', 'Ce pseudo est déjà pris dans l’Esport : si ce compte existe déjà, ajoutez-le simplement à la team.');
@@ -93,9 +98,9 @@ export function servicesDemandes({ base, maintenant = () => Date.now(), noyau })
     const poste = corps?.posteJeu ? texteNettoye(corps.posteJeu, 30) || null : null;
     await base.lot([
       {
-        sql: `INSERT INTO demandes_compte (id, team_id, role_id, demandeur_id, pseudo, pseudo_cle, email, poste_jeu, message, statut, cree_le, maj_le)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'en_attente', ?, ?)`,
-        params: [id, ctx.team.id, role.id, acteur.compte, pseudo, cle, email, poste, texteNettoye(corps?.message, 200), iso(t), iso(t)],
+        sql: `INSERT INTO demandes_compte (id, team_id, role_id, demandeur_id, pseudo, pseudo_cle, email, poste_jeu, message, statut, cree_le, maj_le, discord_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'en_attente', ?, ?, ?)`,
+        params: [id, ctx.team.id, role.id, acteur.compte, pseudo, cle, email, poste, texteNettoye(corps?.message, 200), iso(t), iso(t), discordId],
       },
       // Jamais l'adresse dans l'événement : il alimente le journal et Discord.
       evenement('member.account_requested', { teamId: ctx.team.id, acteur: acteur.compte, entiteType: 'demande', entiteId: id, charge: { pseudo, role: role.nom }, maintenant: t }),

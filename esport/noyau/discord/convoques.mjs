@@ -11,13 +11,13 @@ import { convocationDe, convoques as convoquesRegle, groupeDe, normaliserConvoca
 
 /**
  * Membres actifs d'une team, avec ce que les convocations et le bot doivent
- * savoir : `{ compte, pseudo, cle, rejointLe, proprietaire, perms, staff, discordId }`.
+ * savoir : `{ compte, pseudo, cle, rejointLe, proprietaire, perms, staff, discordId, discordLie }`.
  * « Staff » : groupe staff des convocations (Manager, Coach, Analyste, rôles
  * qui marquent la présence ou créent au planning) ou Propriétaire.
  */
 export async function membresTeam(base, teamId) {
   const lignes = await base.tous(
-    `SELECT m.compte_id, m.rejoint_le, c.pseudo, r.cle_systeme, rp.permission, dc.discord_user_id FROM membres m
+    `SELECT m.compte_id, m.rejoint_le, c.pseudo, c.discord_id, r.cle_systeme, rp.permission, dc.discord_user_id FROM membres m
        JOIN roles r ON r.id = m.role_id
        JOIN comptes c ON c.id = m.compte_id
        LEFT JOIN role_permissions rp ON rp.role_id = r.id
@@ -35,7 +35,9 @@ export async function membresTeam(base, teamId) {
         rejointLe: l.rejoint_le ?? null,
         proprietaire: l.cle_systeme === 'proprietaire',
         perms: new Set(),
-        discordId: l.discord_user_id ?? null,
+        // Qui pinger : la liaison /lier VÉRIFIÉE prime ; sinon le Discord ID saisi par le Fondateur (migration 0015).
+        discordId: l.discord_user_id ?? l.discord_id ?? null,
+        discordLie: Boolean(l.discord_user_id),
       });
     }
     if (l.permission) parCompte.get(l.compte_id).perms.add(l.permission);

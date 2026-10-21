@@ -1,9 +1,11 @@
 /**
  * « Créer un compte » depuis l'Esport (Fondateur, sur son appareil) : nom ou
- * pseudo, adresse e-mail, teams avec un rôle par team et, en option, le poste
- * en jeu. Une action crée le compte du hub (modèle « Esport seulement ») et
- * le pré-enregistre dans ses teams ; puis le message d'invitation s'ouvre
- * dans la messagerie de l'appareil (`mailto:`), prêt à partir.
+ * pseudo, adresse e-mail, Discord ID (OBLIGATOIRE : le bot pingue les
+ * convoqués avec), teams avec un rôle par team et, en option, le poste en jeu.
+ * Une action crée le compte du hub (modèle « Esport seulement ») et le
+ * pré-enregistre dans ses teams ; puis l'invitation part par e-mail —
+ * directement par le serveur s'il est configuré, sinon par la messagerie de
+ * l'appareil (`mailto:`).
  */
 
 import React, { useMemo, useState } from 'react';
@@ -15,8 +17,9 @@ import type { AppHub, ContexteHub } from '../../hub/types';
 import type { Affectation, Annuaire, ClientEsport, DemandeCompte, TeamAnnuaire } from '../client';
 import { creerCompteEsport, erreurSaisie, modeleInvitationEsport, noterEnvoiEsport, rattacherCompte, type CompteCree } from '../comptesHub';
 import { Choix, Retours, styles as communs, useAgir, Intertitre, Panneau } from './commun';
-import { tr } from '../i18n';
+import { langueCourante, tr } from '../i18n';
 import { nomRole } from '../client';
+import { ChampDiscordId } from './DiscordId';
 
 type Choisie = { roleId: string; poste: string };
 
@@ -53,6 +56,7 @@ export function CreationCompte({
   const teams = useMemo(() => annuaire.teams.filter(t => t.droits.ajouter && !t.archivee), [annuaire.teams]);
   const [nom, setNom] = useState(demande?.pseudo ?? '');
   const [email, setEmail] = useState(demande?.email ?? '');
+  const [discordId, setDiscordId] = useState(demande?.discordId ?? '');
   const [choisies, setChoisies] = useState<Record<string, Choisie>>(() => {
     if (demande && teams.some(x => x.id === demande.teamId)) return { [demande.teamId]: { roleId: demande.role.id, poste: demande.posteJeu ?? '' } };
     const t = teams.find(x => x.id === equipeInitiale) ?? (teams.length === 1 ? teams[0] : undefined);
@@ -66,12 +70,12 @@ export function CreationCompte({
 
   const affectations: Affectation[] = Object.entries(choisies).map(([teamId, c]) => ({ teamId, roleId: c.roleId, ...(c.poste.trim() ? { posteJeu: c.poste.trim() } : {}) }));
   const nomsTeams = affectations.map(a => teams.find(t => t.id === a.teamId)?.nom ?? '?');
-  const probleme = erreurSaisie({ nom, email, affectations });
+  const probleme = erreurSaisie({ nom, email, discordId, affectations });
 
   const creer = () =>
     exigerIdentite(tr('creationCompte.creer_le_compte_de', { v: nom.trim() }), () =>
       void agir('creation', async () => {
-        const r = await creerCompteEsport({ contexte, registre, client, saisie: { nom, email, affectations, ...(demande ? { demandeId: demande.id } : {}) }, nomsTeams, maintenant: contexte.maintenant ?? Date.now() });
+        const r = await creerCompteEsport({ contexte, registre, client, saisie: { nom, email, discordId, affectations, ...(demande ? { demandeId: demande.id } : {}) }, nomsTeams, maintenant: contexte.maintenant ?? Date.now() });
         setCree(r);
         return r.erreurEsport ? undefined : tr('creationCompte.compte_de_cree_envoyez', { nom: r.nom, v: nomsTeams.join(', ') });
       }),
@@ -97,7 +101,7 @@ export function CreationCompte({
               desactive={Boolean(enCours)}
               onPress={() =>
                 void agir('rattacher', async () => {
-                  const fiche = await rattacherCompte(client, cree.id, cree.nom, affectations, demande?.id);
+                  const fiche = await rattacherCompte(client, cree.id, cree.nom, affectations, demande?.id, cree.discordId);
                   setCree({ ...cree, fiche, erreurEsport: undefined });
                   return tr('creationCompte.est_ajoute_a_ses', { nom: cree.nom });
                 })
@@ -114,7 +118,9 @@ export function CreationCompte({
           nom={cree.nom}
           invitation={cree.invitation}
           email={cree.email}
-          modele={modeleInvitationEsport(nomsTeams)}
+          modele={modeleInvitationEsport(nomsTeams, 'fr')}
+          modeleEn={modeleInvitationEsport(nomsTeams, 'en')}
+          langueInitiale={langueCourante()}
           fondateur={contexte.profils?.actuel.nom}
           onEnvoye={canal => noterEnvoiEsport(contexte, cree.id, cree.nom, canal)}
         />
@@ -136,6 +142,7 @@ export function CreationCompte({
         <Champ theme={theme} libelle={tr('creationCompte.adresse_e_mail')} valeur={email} onChanger={setEmail} maxLength={254} placeholder={tr('creationCompte.ex_email')} testID="esport-compte-email" style={{ flexGrow: 1, flexBasis: 260 }} />
       </View>
       <Text style={attenue}>{tr('creationCompte.l_adresse_reste_chiffree')}</Text>
+      <ChampDiscordId theme={theme} valeur={discordId} onChanger={setDiscordId} obligatoire testID="esport-compte-discord-id" />
       <Intertitre theme={theme}>{tr('creationCompte.teams_et_roles')}</Intertitre>
       {teams.length === 0 ? <Text style={attenue}>{tr('creationCompte.aucune_team_creez_d')}</Text> : null}
       {teams.map(t => {
@@ -184,7 +191,7 @@ export function CreationCompte({
           </View>
         );
       })}
-      {nom || email ? <Text style={[attenue, { color: probleme ? theme.alerte : theme.ok }]} testID="esport-compte-etat">{probleme ?? tr('creationCompte.pret_le_compte_sera')}</Text> : null}
+      {nom || email || discordId ? <Text style={[attenue, { color: probleme ? theme.alerte : theme.ok }]} testID="esport-compte-etat">{probleme ?? tr('creationCompte.pret_le_compte_sera')}</Text> : null}
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-compte" />
       <View style={[communs.ligne, { justifyContent: 'flex-end' }]}>
         <BoutonHub theme={theme} titre={tr('assistant.annuler')} onPress={onAnnuler} testID="esport-compte-annuler" />

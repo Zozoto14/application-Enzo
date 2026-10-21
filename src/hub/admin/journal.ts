@@ -27,6 +27,8 @@ export const TYPES_EVENEMENT = [
   'export',
   'role',
   'abonnement',
+  'messagerie',
+  'support',
 ] as const;
 export type TypeEvenement = (typeof TYPES_EVENEMENT)[number];
 
@@ -43,6 +45,8 @@ export const LIBELLES_TYPE: Record<TypeEvenement, string> = {
   export: 'Export',
   role: 'Rôle',
   abonnement: 'Abonnement',
+  messagerie: 'Messagerie',
+  support: 'Support',
 };
 
 export interface EvenementAudit {

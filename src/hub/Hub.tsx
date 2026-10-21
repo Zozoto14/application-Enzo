@@ -72,6 +72,8 @@ export interface HubProps {
   onParametres?(section?: IdSection): void;
   /** Ouvre la page Support (ticket vers l'équipe) ; absent : pas de bouton. */
   onSupport?(): void;
+  /** Réponses du support pas encore lues (notification sur le bouton). */
+  supportNonLus?: number;
   /** État de la synchronisation PC ↔ site ; absent : pas d'indicateur (compte non relié). */
   synchro?: SynchroHub;
   /**
@@ -135,7 +137,7 @@ export function Hub(props: HubProps) {
   return useMobile() ? <HubMobile {...props} /> : <HubBureau {...props} />;
 }
 
-function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, onOuvrirOnglet, ouvertes, prefs, onPrefs, onVerrouiller, onChangerProfil, onParametres, onSupport, synchro, demande, heure, page: pageDemandee, onPage }: HubProps) {
+function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, onOuvrirOnglet, ouvertes, prefs, onPrefs, onVerrouiller, onChangerProfil, onParametres, onSupport, supportNonLus = 0, synchro, demande, heure, page: pageDemandee, onPage }: HubProps) {
   const { width } = useWindowDimensions();
   const [menuOuvert, setMenuOuvert] = useState(false);
   const maj = useMiseAJour();
@@ -234,9 +236,9 @@ function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, onOuvrirOngle
               {onSupport ? (
                 <BoutonHub
                   theme={theme}
-                  titre={width >= 520 ? '? Support' : '?'}
+                  titre={`${width >= 520 ? '? Support' : '?'}${supportNonLus > 0 ? ` 🔔 ${supportNonLus}` : ''}`}
                   testID="hub-support-ouvrir"
-                  libelle="Support : écrire à l’équipe"
+                  libelle={supportNonLus > 0 ? `Support : ${supportNonLus} réponse(s) non lue(s)` : 'Support : écrire à l’équipe'}
                   onPress={() => {
                     setMenuOuvert(false);
                     onSupport();

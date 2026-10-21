@@ -276,7 +276,7 @@ test('événements : planning, membres, rôles, tâches et résumés mis en file
 
   // Membre rejoint : compte créé depuis l'Esport (invitation directe), annoncé à sa première session.
   const avant = p.discord.contenus().length;
-  const pre = await p.api('/comptes', p.s.fondateur, { methode: 'POST', corps: { compte: 'nou12345', pseudo: 'Nouveau', affectations: [{ teamId: p.A.teamId, roleId: p.A.roles.joueur.id }] } });
+  const pre = await p.api('/comptes', p.s.fondateur, { methode: 'POST', corps: { compte: 'nou12345', pseudo: 'Nouveau', discordId: '712345678901234567', affectations: [{ teamId: p.A.teamId, roleId: p.A.roles.joueur.id }] } });
   assert.equal(pre.statut, 200);
   assert.equal(p.discord.contenus().length, avant, 'rien d’annoncé tant que le compte n’est pas connecté');
   await p.b.session('nou12345');

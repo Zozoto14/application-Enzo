@@ -29,7 +29,7 @@ import { autorise, rangDe } from '../hub/admin/roles';
 import type { AppHub, ContexteHub } from '../hub/types';
 import type { InvitationAffichee } from '../profils/identifiants';
 import type { Affectation, ClientEsport, CompteEsport } from './client';
-import { tr, traduire } from './i18n';
+import { langueCourante, tr, traduire, type Langue } from './i18n';
 
 /** Même règle que le serveur (esport/noyau/service.mjs) : le pseudo sert aussi d'identifiant dans le hub. */
 export const MOTIF_PSEUDO = /^[\p{L}\p{N}][\p{L}\p{N} _.\-]{1,23}$/u;
@@ -63,6 +63,8 @@ export function capaciteComptes(contexte: ContexteHub, superAdmin: boolean): Cap
 export interface SaisieCompte {
   nom: string;
   email: string;
+  /** Discord ID (17 à 20 chiffres), obligatoire : le bot pingue les convoqués avec. */
+  discordId: string;
   affectations: Affectation[];
   /** Validation d'une demande de compte (permission « Créer des membres ») : close avec le pré-enregistrement. */
   demandeId?: string;
@@ -75,8 +77,19 @@ export function erreurSaisie(saisie: SaisieCompte): string | undefined {
   if (!saisie.email.trim()) return tr('comptesHub.l_adresse_e_mail');
   const email = erreurEmail(saisie.email);
   if (email) return email;
+  const discord = erreurDiscordId(saisie.discordId, true);
+  if (discord) return discord;
   if (saisie.affectations.length === 0) return tr('comptesHub.choisissez_au_moins_une');
   return undefined;
+}
+
+/** Même règle que le serveur (esport/noyau/discordId.mjs) : 17 à 20 chiffres ; une mention collée est acceptée. */
+export const MOTIF_DISCORD_ID = /^[1-9]\d{16,19}$/;
+export const normaliserDiscordId = (v: string): string => v.trim().replace(/^<@!?(\d+)>$/, '$1').replace(/\s+/g, '');
+export function erreurDiscordId(v: string, obligatoire: boolean): string | undefined {
+  const id = normaliserDiscordId(v);
+  if (!id) return obligatoire ? tr('discordId.obligatoire') : undefined;
+  return MOTIF_DISCORD_ID.test(id) ? undefined : tr('discordId.invalide');
 }
 
 function optionsInvitation(donnees: DonneesAdmin) {
@@ -99,6 +112,7 @@ export interface CompteCree {
   id: string;
   nom: string;
   email: string;
+  discordId: string;
   invitation: InvitationAffichee;
   /** Fiche Esport (pré-enregistrement réussi). */
   fiche: CompteEsport | null;
@@ -129,7 +143,8 @@ export async function creerCompteEsport({
   const nom = saisie.nom.trim();
   const email = normaliserEmail(saisie.email);
   // 1. Serveur Esport d'abord : un pseudo pris ne doit pas laisser un compte du hub orphelin.
-  await client.verifierPreinscription({ pseudo: nom, affectations: saisie.affectations, ...(saisie.demandeId ? { demandeId: saisie.demandeId } : {}) });
+  const discordId = normaliserDiscordId(saisie.discordId);
+  await client.verifierPreinscription({ pseudo: nom, discordId, affectations: saisie.affectations, ...(saisie.demandeId ? { demandeId: saisie.demandeId } : {}) });
   // 2. Compte du hub, comme l'Administration (modèle « Esport seulement »).
   const donnees = chargerDonnees(contexte.admin!.stockage);
   const { apps, niveaux } = versAutorisations(registre, niveauxDuModele(registre, 'esport'));
@@ -147,17 +162,17 @@ export async function creerCompteEsport({
   );
   // 4. Pré-enregistrement Esport.
   try {
-    const fiche = await client.preinscrire({ compte: id, pseudo: nom, affectations: saisie.affectations, ...(saisie.demandeId ? { demandeId: saisie.demandeId } : {}) });
-    return { id, nom, email, invitation: valeurs.invitation ?? { erreur: tr('comptesHub.invitation_indisponible_sur_ce') }, fiche };
+    const fiche = await client.preinscrire({ compte: id, pseudo: nom, discordId, affectations: saisie.affectations, ...(saisie.demandeId ? { demandeId: saisie.demandeId } : {}) });
+    return { id, nom, email, discordId, invitation: valeurs.invitation ?? { erreur: tr('comptesHub.invitation_indisponible_sur_ce') }, fiche };
   } catch (e) {
     const texte = e instanceof Error ? e.message : String(e);
-    return { id, nom, email, invitation: valeurs.invitation ?? { erreur: tr('comptesHub.invitation_indisponible_sur_ce') }, fiche: null, erreurEsport: texte };
+    return { id, nom, email, discordId, invitation: valeurs.invitation ?? { erreur: tr('comptesHub.invitation_indisponible_sur_ce') }, fiche: null, erreurEsport: texte };
   }
 }
 
 /** Refait le pré-enregistrement Esport d'un compte du hub déjà créé (après un échec réseau). */
-export async function rattacherCompte(client: ClientEsport, id: string, nom: string, affectations: Affectation[], demandeId?: string): Promise<CompteEsport | null> {
-  return client.preinscrire({ compte: id, pseudo: nom, affectations, ...(demandeId ? { demandeId } : {}) });
+export async function rattacherCompte(client: ClientEsport, id: string, nom: string, affectations: Affectation[], demandeId?: string, discordId = ''): Promise<CompteEsport | null> {
+  return client.preinscrire({ compte: id, pseudo: nom, discordId: normaliserDiscordId(discordId), affectations, ...(demandeId ? { demandeId } : {}) });
 }
 
 /** Nouveau lien d'invitation (l'ancien cesse de marcher) : même action que l'Administration. */
@@ -219,25 +234,26 @@ export function modelePersonnalise(contexte: ContexteHub): ModeleInvitation | un
 const sansAccolades = (texte: string) => texte.replace(/[{}]/g, '').trim();
 
 /** Message d'invitation Esport (variables du modèle de l'Administration ; les noms de teams sont du texte). */
-export function modeleInvitationEsport(teams: readonly string[]): ModeleInvitation {
+export function modeleInvitationEsport(teams: readonly string[], langue: Langue = langueCourante()): ModeleInvitation {
+  const t = (cle: Parameters<typeof traduire>[1], vars?: Parameters<typeof traduire>[2]) => traduire(langue, cle, vars);
   const liste = teams.map(sansAccolades).filter(Boolean);
-  const phraseTeams = liste.length === 0 ? tr('comptesHub.dans_l_esport') : liste.length === 1 ? tr('comptesHub.dans_la_team', { v: liste[0] }) : tr('comptesHub.dans_les_teams_et', { v: liste.slice(0, -1).join(', '), v2: liste[liste.length - 1] });
+  const phraseTeams = liste.length === 0 ? t('comptesHub.dans_l_esport') : liste.length === 1 ? t('comptesHub.dans_la_team', { v: liste[0] }) : t('comptesHub.dans_les_teams_et', { v: liste.slice(0, -1).join(', '), v2: liste[liste.length - 1] });
   return {
-    objet: tr('comptesHub.t_invite_dans_l'),
+    objet: t('comptesHub.t_invite_dans_l'),
     corps: [
-      tr('comptesHub.salut'),
+      t('comptesHub.salut'),
       '',
-      tr('comptesHub.t_a_ajoute', { phraseTeams }),
+      t('comptesHub.t_a_ajoute', { phraseTeams }),
       '',
-      tr('comptesHub.1_ouvre_ce_lien'),
+      t('comptesHub.1_ouvre_ce_lien'),
       '{lien}',
-      tr('comptesHub.2_choisis_ton_mot'),
-      tr('comptesHub.3_ouvre_la_tuile'),
+      t('comptesHub.2_choisis_ton_mot'),
+      t('comptesHub.3_ouvre_la_tuile'),
       '',
-      tr('comptesHub.le_lien_ne_marche'),
+      t('comptesHub.le_lien_ne_marche'),
       '',
-      tr('comptesHub.si_le_lien_ne'),
-      tr('comptesHub.plus_tard_sur_un'),
+      t('comptesHub.si_le_lien_ne'),
+      t('comptesHub.plus_tard_sur_un'),
     ].join('\n'),
   };
 }

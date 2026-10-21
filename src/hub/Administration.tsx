@@ -1,8 +1,9 @@
 /**
  * App « Administration » du hub, réservée au profil administrateur.
  *
- * Sept sections : Tableau de bord · Utilisateurs · Accès par app (matrice
- * comptes × apps) · Applications · Sécurité · Journal · Réglages (`admin/ui/`). Le suivi des abonnements est une app à part
+ * Neuf sections : Tableau de bord · Utilisateurs · Accès par app (matrice
+ * comptes × apps) · Applications · Sécurité · Journal · Réglages · Support (demandes
+ * des utilisateurs, réponses) · Messagerie (e-mails envoyés par le serveur) (`admin/ui/`). Le suivi des abonnements est une app à part
  * (`abonnements/AppAbonnements.tsx`, page « Administration » du hub).
  * Cet écran assemble les sections et leur fournit
  * les outils communs (`OutilsAdmin`) :
@@ -30,6 +31,8 @@ import type { EvenementAudit } from './admin/journal';
 import { apresVerification, confianceValide, doitVerrouiller, etatInitial, noterActivite, verrouiller, type EtatVerrouPanel } from './admin/verrouillage';
 import { Applications } from './admin/ui/Applications';
 import { Avis, BoutonHub, Champ, Panneau, styleTitre, type IdSection, type OutilsAdmin } from './admin/ui/commun';
+import { Messagerie } from './admin/ui/Messagerie';
+import { SupportAdmin } from './admin/ui/Support';
 import { Journal } from './admin/ui/Journal';
 import { Matrice } from './admin/ui/Matrice';
 import { Reglages } from './admin/ui/Reglages';
@@ -43,7 +46,7 @@ import { useInfoOnglet } from './multi/contexte';
 
 /** Sections par rang : un gestionnaire n'a ni applications globales, ni sécurité, ni réglages ; un administrateur, pas les apps globales. */
 const SECTIONS_PAR_RANG: Record<Rang, readonly IdSection[]> = {
-  fondateur: ['tableau', 'utilisateurs', 'acces', 'applications', 'securite', 'journal', 'reglages'],
+  fondateur: ['tableau', 'utilisateurs', 'acces', 'applications', 'securite', 'journal', 'reglages', 'support', 'messagerie'],
   administrateur: ['tableau', 'utilisateurs', 'acces', 'securite', 'journal', 'reglages'],
   gestionnaire: ['tableau', 'utilisateurs', 'acces', 'journal'],
   ami: [],
@@ -57,7 +60,11 @@ const SECTIONS: ReadonlyArray<readonly [IdSection, string, string]> = [
   ['securite', '🛡', 'Sécurité'],
   ['journal', '☰', 'Journal'],
   ['reglages', '⚙', 'Réglages'],
+  ['support', '🛟', 'Support'],
+  ['messagerie', '✉', 'Messagerie'],
 ];
+/** Support et Messagerie passent par le jeton maître du relais : le compte historique du Fondateur seulement. */
+const SECTIONS_JETON_MAITRE: readonly IdSection[] = ['support', 'messagerie'];
 
 /** Laisse l'indicateur s'afficher avant Argon2id, qui bloque le fil un instant. */
 function apresRendu<T>(action: () => Promise<T>): Promise<T> {
@@ -82,7 +89,7 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
   const estGestionnaire = role === 'gestionnaire';
   // Rang d'Administration autre que le compte historique : ses actions partent aussi, scellées, au journal des Fondateurs.
   const horsHistorique = Boolean(acteur && !acteur.admin && role !== 'ami');
-  const sectionsPermises = SECTIONS_PAR_RANG[role].filter(id => id !== 'applications' || acteur?.admin || Boolean(controle?.onPolitique));
+  const sectionsPermises = SECTIONS_PAR_RANG[role].filter(id => (id !== 'applications' || acteur?.admin || Boolean(controle?.onPolitique)) && (!SECTIONS_JETON_MAITRE.includes(id) || Boolean(acteur?.admin)));
   const { width } = useWindowDimensions();
   const large = width >= 900;
   const maintenant = useCallback(() => contexte.maintenant ?? Date.now(), [contexte.maintenant]);
@@ -395,6 +402,8 @@ export function Administration({ contexte, theme, registre, onRetour, onParametr
           ) : null}
           {section === 'journal' ? <Journal outils={outils} /> : null}
           {section === 'reglages' && sectionsPermises.includes('reglages') ? <Reglages outils={outils} /> : null}
+          {section === 'support' && sectionsPermises.includes('support') ? <SupportAdmin outils={outils} /> : null}
+          {section === 'messagerie' && sectionsPermises.includes('messagerie') ? <Messagerie outils={outils} /> : null}
         </View>
         <Text style={[texte, { fontSize: 12, marginTop: 24, color: theme.attenue }]}>
           Aucun secret n’est conservé ni journalisé : mots de passe, clés et codes de récupération ne s’affichent qu’une fois.

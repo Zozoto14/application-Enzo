@@ -10,11 +10,13 @@
  *   URL_PUBLIQUE      adresse publique du serveur (https://esport.appdashboard.fr)
  *   CREATION_TEAMS    « fondateur » (défaut) ou « tous »
  *   CLE_DISCORD, LIEN_APP, DISCORD_APPLICATION_ID, DISCORD_PUBLIC_KEY, DISCORD_BOT_TOKEN : comme sur le Worker.
+ *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM : récapitulatif e-mail (facultatif, docs/emails.md).
  */
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { chargerEnv, fichierEnvParDefaut } from './commun.mjs';
+import { configSmtp } from './courriel-smtp.mjs';
 
 export function chargerConfigEsport(env = process.env) {
   const fichier = chargerEnv(env.ESPORT_ENV || fichierEnvParDefaut('esport'), env);
@@ -28,6 +30,8 @@ export function chargerConfigEsport(env = process.env) {
     cleDiscord: env.CLE_DISCORD || undefined,
     lienApp: env.LIEN_APP || '',
     discordBot: { applicationId: env.DISCORD_APPLICATION_ID, publicKey: env.DISCORD_PUBLIC_KEY, jetonBot: env.DISCORD_BOT_TOKEN },
+    // E-mails (récapitulatif Esport, docs/emails.md) : mêmes variables SMTP que relais.env, facultatives.
+    smtp: configSmtp(env),
     baseConfiguree: Boolean(env.DATABASE_URL || env.PGDATABASE || env.PGHOST),
   };
 }

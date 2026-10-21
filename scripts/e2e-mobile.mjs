@@ -131,7 +131,7 @@ try {
   await page.getByTestId('hub-support').waitFor({ timeout: 10_000 });
   await controler(page, 'support');
   await toucher(page, 'support-categorie-bug');
-  await page.getByTestId('support-sujet').fill('Affichage sur téléphone');
+  await page.getByTestId('support-titre').fill('Affichage sur téléphone');
   await page.getByTestId('support-message').fill('Test de bout en bout du formulaire mobile.');
   await toucher(page, 'support-envoyer');
   const envoye = await page.getByTestId('support-resultat').waitFor({ timeout: 30_000 }).then(() => true, () => false);

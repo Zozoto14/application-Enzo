@@ -148,9 +148,10 @@ import { ReglageJuridique, ReglageSupport } from '../hub/ReglagesSupportJuridiqu
 import { ReglageVerrouAuto } from '../hub/ReglageVerrouAuto';
 import { useSupport } from '../support/useSupport';
 import { infosTechniques } from '../support/tickets';
+import { langueCourante } from '../esport/i18n';
 import { ecrireDelaiAppareil, lireDelaiAppareil, lireSurchargeEssai, messageVerrou, type MotifVerrou } from '../securite/verrouAuto';
 import { accepter, doitAccepter, lireAcceptations, versionJuridique, type IdDocument } from '../juridique/modele';
-import { relaisActif } from '../sync/relais/actif';
+import { relaisDuCompte } from '../sync/relais/actif';
 import { versionApp } from '../hub/version';
 import { BarreApp, BarreAppContexte } from '../hub/BarreApp';
 import { IndicateurSynchro, type SynchroHub } from '../hub/IndicateurSynchro';
@@ -2411,6 +2412,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   };
 
   const [supportOuvert, setSupportOuvert] = useState(false);
+  // Infos techniques du support (liste fermée : version, plateforme, appareil, app ouverte, langue, rang).
+  const infoSupport = () =>
+    infosTechniques({ version: versionApp(), plateforme: plateformeSynchro, rang: profils?.actuel.role ?? (profils?.actuel.admin === false ? 'ami' : 'fondateur'), app: ongletsApps.actif ?? 'hub', langue: langueCourante() });
+  const infoSupportRef = useRef(infoSupport);
+  infoSupportRef.current = infoSupport;
   const [juridiqueOuvert, setJuridiqueOuvert] = useState<{ id?: IdDocument } | undefined>();
   const depotSupport = useMemo(() => {
     if (!deverrouille) return undefined;
@@ -2423,19 +2429,23 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         ? {
             depot: depotSupport,
             liaison: async () => {
-              const actif = relaisActif() ?? liaisonDuPc;
+              // Sur le site, un ami connecté par identifiant + mot de passe n'a PAS de configuration de relais :
+              // sa liaison (jeton de profil) est celle du compte (relaisDuCompte). Avant, seul le relais « actif »
+              // était lu : ses demandes restaient « en attente » pour toujours (panne du support).
+              const actif = relaisDuCompte() ?? liaisonDuPc;
               if (actif) return { relais: actif.relais, jeton: actif.jeton };
               const pont = (globalThis as { applibourse?: { relais?: { config?(): Promise<{ relais: string; jeton: string } | undefined> } } }).applibourse?.relais;
               const config = await pont?.config?.();
               return config ? { relais: config.relais, jeton: config.jeton } : undefined;
             },
-            technique: () => infosTechniques({ version: versionApp(), plateforme: plateformeSynchro, rang: profils?.actuel.role ?? (profils?.actuel.admin === false ? 'ami' : 'fondateur'), idCompte: profils?.actuel.id }),
+            technique: () => infoSupportRef.current(),
+            auteur: () => profils?.actuel.nom,
           }
         : undefined,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [depotSupport],
   );
-  const { service: serviceSupport, tickets: ticketsSupport } = useSupport(optionsSupport);
+  const { service: serviceSupport, tickets: ticketsSupport, nonLus: supportNonLus } = useSupport(optionsSupport);
   const ouvrirSupport = useCallback(() => {
     setParametres(undefined);
     setSupportOuvert(true);
@@ -2466,7 +2476,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     }
   }, [hubAffiche, annexe, versionLien, acceptationRequise]);
 
-  const barreApp = <BarreApp theme={themeDuHub} synchro={synchroHub} onParametres={ouvrirParametres} onSupport={ouvrirSupport} />;
+  const barreApp = <BarreApp theme={themeDuHub} synchro={synchroHub} onParametres={ouvrirParametres} onSupport={ouvrirSupport} supportNonLus={supportNonLus} />;
   const surParametres = Boolean(parametres) && deverrouille && Boolean(contenuComplet && tableau);
   const fermerParametres = useCallback(() => setParametres(undefined), []);
   const depuisParametres = (action: () => void) => () => {
@@ -3177,7 +3187,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           <PageSupport
             theme={themeDuHub}
             service={serviceSupport}
-            infos={infosTechniques({ version: versionApp(), plateforme: plateformeSynchro, rang: profils?.actuel.role ?? (profils?.actuel.admin === false ? 'ami' : 'fondateur'), idCompte: profils?.actuel.id })}
+            infos={infoSupport()}
             tickets={ticketsSupport}
             actif={!devblog}
             onFermer={() => setSupportOuvert(false)}
@@ -3215,6 +3225,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           onVerrouiller={verrouiller}
           onParametres={ouvrirParametres}
           onSupport={ouvrirSupport}
+          supportNonLus={supportNonLus}
           synchro={synchroHub}
           demande={demandeHub}
           page={pageHub}

@@ -3,10 +3,10 @@
  * Fondateur seulement), rendu avec les variables de l'invitation, et lien
  * `mailto:` qui ouvre la messagerie de l'appareil, pré-remplie.
  *
- * **Aucun e-mail ne part d'un serveur** (ni du relais, ni d'un service tiers) :
- * c'est la messagerie de l'appareil (Mail sur iPhone/iPad, Outlook ou Gmail sur
- * le PC…) qui envoie, depuis la boîte du Fondateur. Le lien d'invitation ne
- * quitte donc l'appareil que dans le message qu'il envoie lui-même.
+ * Deux façons d'envoyer : DIRECTEMENT par le serveur (SMTP du relais, si
+ * configuré : `src/messagerie/courriel.ts`, docs/emails.md), avec un modèle
+ * HTML soigné et un bouton vers le lien ; ou, en secours, par la messagerie de
+ * l'appareil (`mailto:`, Mail sur iPhone/iPad, Outlook ou Gmail sur le PC…).
  *
  * Variables : {prenom}, {lien}, {expiration}, {fondateur} (obligatoires dans le
  * sens où elles ont toujours une valeur), et {code}, {site}, {connexion},
@@ -61,6 +61,26 @@ export const MODELE_INVITATION_DEFAUT: ModeleInvitation = {
   ].join('\n'),
 };
 
+/** Modèle anglais (e-mail envoyé directement en anglais, voir docs/emails.md). */
+export const MODELE_INVITATION_DEFAUT_EN: ModeleInvitation = {
+  objet: '{fondateur} invites you to AppDashboard',
+  corps: [
+    'Hi {prenom}!',
+    '',
+    '{fondateur} invites you to AppDashboard.',
+    '',
+    '1. Open this link (on your phone or computer):',
+    '{lien}',
+    '2. Choose your password ({longueur} characters at least). Your username: {prenom}',
+    '3. That’s it: you are signed in.',
+    '',
+    'The link works only once, until {expiration}. Do not forward it to anyone.',
+    '',
+    'If the link does not open: go to {site}, tap “I have an invitation” and type the code {code}.',
+    'Later, on another device: {connexion} then your name and your password.',
+  ].join('\n'),
+};
+
 export type ValeursModele = Partial<Record<VariableModele, string>>;
 
 const MOTIF_VARIABLE = /\{([a-zA-Z]+)\}/g;
@@ -72,12 +92,12 @@ export function prenomFondateur(nom: string | undefined): string {
   return propre && propre !== 'Moi' ? propre.slice(0, 30) : 'Ton administrateur';
 }
 
-/** Date lisible d'expiration (« 22 octobre à 14:05 »). */
-export function dateExpiration(iso: string | undefined): string {
+/** Date lisible d'expiration (« 22 octobre », « 22 October »). */
+export function dateExpiration(iso: string | undefined, langue: 'fr' | 'en' = 'fr'): string {
   if (!iso) return '';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
+  return date.toLocaleDateString(langue === 'en' ? 'en-GB' : 'fr-FR', { day: 'numeric', month: 'long' });
 }
 
 /** Texte d'une ligne de modèle : sans caractères de contrôle (sauf retours à la ligne pour le corps), borné. */

@@ -14,7 +14,8 @@ import { Text, View } from 'react-native';
 import { BoutonHub, Case, Champ } from '../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../hub/themes';
 import { ErreurEsport, type Affectation, type Annuaire, type ClientEsport, type CompteEsport, nomRole } from '../client';
-import { MOTIF_PSEUDO } from '../comptesHub';
+import { MOTIF_PSEUDO, erreurDiscordId, normaliserDiscordId } from '../comptesHub';
+import { ChampDiscordId } from './DiscordId';
 import { Choix, Retours, styles as communs, useAgir, Intertitre } from './commun';
 import { roleParDefaut } from './CreationCompte';
 import { tr } from '../i18n';
@@ -53,6 +54,8 @@ export function AjoutTeams({
   });
   const [pseudo, setPseudo] = useState(compte.pseudo);
   const [pseudoPris, setPseudoPris] = useState(false);
+  // Compte du hub sans fiche Esport : sa fiche est CRÉÉE ici, le Discord ID est obligatoire (comme « Créer un compte »).
+  const [discordId, setDiscordId] = useState('');
   const { enCours, erreur, avis, agir } = useAgir();
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
@@ -64,13 +67,13 @@ export function AjoutTeams({
     .filter(t => choisies[t.id] && !dejaMembre(t.id))
     .map(t => ({ teamId: t.id, roleId: choisies[t.id].roleId, ...(choisies[t.id].poste.trim() ? { posteJeu: choisies[t.id].poste.trim() } : {}) }));
   const nomsChoisis = affectations.map(a => teams.find(t => t.id === a.teamId)?.nom ?? '?');
-  const probleme = compte.horsEsport && !MOTIF_PSEUDO.test(pseudoFinal) ? tr('ajoutTeams.pseudo_esport_2_a') : undefined;
+  const probleme = compte.horsEsport && !MOTIF_PSEUDO.test(pseudoFinal) ? tr('ajoutTeams.pseudo_esport_2_a') : compte.horsEsport ? erreurDiscordId(discordId, true) : undefined;
   const libres = teams.filter(t => !dejaMembre(t.id)).length;
 
   const valider = () =>
     void agir('ajout', async () => {
       try {
-        const fiche = await client.ajouterATeams(compte.compte, { affectations, ...(compte.horsEsport ? { pseudo: pseudoFinal } : {}) });
+        const fiche = await client.ajouterATeams(compte.compte, { affectations, ...(compte.horsEsport ? { pseudo: pseudoFinal, discordId: normaliserDiscordId(discordId) } : {}) });
         setChoisies({});
         setPseudoPris(false);
         await onFait();
@@ -150,6 +153,7 @@ export function AjoutTeams({
           <Champ theme={theme} libelle={tr('ajoutTeams.pseudo_esport')} valeur={pseudo} onChanger={setPseudo} maxLength={24} testID={`esport-ajout-pseudo-${compte.compte}`} />
         </>
       ) : null}
+      {compte.horsEsport ? <ChampDiscordId theme={theme} valeur={discordId} onChanger={setDiscordId} obligatoire testID={`esport-ajout-discord-id-${compte.compte}`} /> : null}
       {affectations.length > 0 && probleme ? <Text style={[attenue, { color: theme.alerte }]}>{probleme}</Text> : null}
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe={`esport-ajout-${compte.compte}`} />
       {libres > 0 ? (

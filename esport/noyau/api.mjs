@@ -21,6 +21,7 @@ import { servicesPlanning } from './planning/service.mjs';
 import { catalogue } from './permissions.mjs';
 import { servicesComptes } from './comptes.mjs';
 import { servicesDemandes } from './demandes.mjs';
+import { servicesRecap } from './recap.mjs';
 import { servicesEsport } from './service.mjs';
 import { servicesTableau } from './tableau.mjs';
 import { creerSession, lireSession } from './session.mjs';
@@ -120,6 +121,7 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
   // Premier niveau (toutes teams) : invitation directe, annuaire des membres, dashboard.
   const dm = servicesDemandes({ base, maintenant, noyau: s });
   const cp = servicesComptes({ base, maintenant, noyau: s, demandes: dm });
+  const rc = servicesRecap({ base, cle: secretDiscord, maintenant });
   const tb = servicesTableau({ base, maintenant, noyau: s });
   // Bot Discord (interactions HTTP) : DISCORD_APPLICATION_ID et DISCORD_PUBLIC_KEY (variables), DISCORD_BOT_TOKEN (secret).
   const configBot = { applicationId: discordBot.applicationId || '', publicKey: discordBot.publicKey || '' };
@@ -187,6 +189,14 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       await limite('profil', acteur.compte);
       return s.majLangue(acteur, await lireCorps(requete));
     }
+    // Récapitulatif e-mail des notifications importantes (migration 0015) : réglé par l'utilisateur lui-même.
+    if (chemin === '/moi/recap-courriel') {
+      if (m === 'GET') return rc.lire(acteur);
+      if (m === 'PUT') {
+        await limite('profil', acteur.compte);
+        return rc.regler(acteur, await lireCorps(requete));
+      }
+    }
     const liaisonsDiscord = await routesLiaisons(lb, { methode: m, chemin, acteur, lireCorps: () => lireCorps(requete), limite });
     if (liaisonsDiscord !== undefined) return liaisonsDiscord;
     if (chemin === '/moi/export' && m === 'GET') {
@@ -211,6 +221,9 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     // Ajouter un compte à une ou plusieurs teams d'un coup (un rôle par team).
     const ajoutTeams = /^\/comptes\/([^/]+)\/teams$/.exec(chemin);
     if (ajoutTeams && m === 'POST') return cp.ajouterATeams(acteur, decodeURIComponent(ajoutTeams[1]), await lireCorps(requete));
+    // Discord ID d'un membre (migration 0015) : le Fondateur SEUL (403 pour tout autre rôle, Propriétaire compris).
+    const discordId = /^\/comptes\/([^/]+)\/discord-id$/.exec(chemin);
+    if (discordId && m === 'PUT') return cp.majDiscordId(acteur, decodeURIComponent(discordId[1]), await lireCorps(requete));
     // Demandes de compte (members.create) : dépôt (borné), suivi, refus (Fondateur), annulation (demandeur).
     if (chemin === '/comptes/demandes') {
       if (m === 'GET') return dm.liste(acteur);

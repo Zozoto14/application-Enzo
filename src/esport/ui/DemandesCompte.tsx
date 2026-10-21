@@ -19,7 +19,8 @@ import { Text, View } from 'react-native';
 import { BoutonHub, Champ, Pilule } from '../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../hub/themes';
 import type { Annuaire, ClientEsport, DemandeCompte, ListeDemandes } from '../client';
-import { MOTIF_PSEUDO } from '../comptesHub';
+import { MOTIF_PSEUDO, erreurDiscordId, normaliserDiscordId } from '../comptesHub';
+import { ChampDiscordId } from './DiscordId';
 import { BoutonConfirme, Choix, Retours, styles as communs, useAgir, Intertitre, Panneau } from './commun';
 import { roleParDefaut } from './CreationCompte';
 import { dateJour } from '../libelles';
@@ -100,6 +101,7 @@ export function DemandesCompte({
                 <Text style={attenue}>{`  ${nomRole(d.role.nom)} · ${d.team ?? '?'}${d.posteJeu ? ` · ${d.posteJeu}` : ''}`}</Text>
               </Text>
               <Text style={attenue}>{tr('demandesCompte.propose_par', { nom: d.demandeurPseudo ?? tr('creationCompte.un_membre'), date: dateJour(d.creeLe.slice(0, 10)), email: d.email ? ` · ${d.email}` : '' })}</Text>
+              {d.discordId ? <Text style={attenue}>{tr('discordId.valeur', { id: d.discordId })}</Text> : null}
               {d.message ? <Text style={attenue}>{`« ${d.message} »`}</Text> : null}
               <View style={communs.ligne}>
                 <BoutonHub theme={theme} titre={tr('demandesCompte.valider')} variante="plein" desactive={occupe || Boolean(enCours) || !peutValider} onPress={() => onValider(d)} testID={`esport-demande-valider-${d.id}`} />
@@ -183,9 +185,11 @@ function Proposer({
   const [email, setEmail] = useState('');
   const [poste, setPoste] = useState('');
   const [message, setMessage] = useState('');
+  // Discord ID proposé (facultatif) : le Fondateur le vérifie, et il est OBLIGATOIRE à la validation.
+  const [discordId, setDiscordId] = useState('');
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   if (!team) return null;
-  const pret = MOTIF_PSEUDO.test(pseudo.trim()) && Boolean(roleId) && (mode === 'existant' || /^\S+@\S+\.\S+$/.test(email.trim()));
+  const pret = MOTIF_PSEUDO.test(pseudo.trim()) && Boolean(roleId) && (mode === 'existant' || (/^\S+@\S+\.\S+$/.test(email.trim()) && !erreurDiscordId(discordId, false)));
   return (
     <Panneau theme={theme} testID="esport-proposer">
       <Intertitre theme={theme}>{tr('demandesCompte.proposer_un_membre')}</Intertitre>
@@ -225,6 +229,7 @@ function Proposer({
         {mode === 'nouveau' ? <Champ theme={theme} libelle={tr('creationCompte.adresse_e_mail')} valeur={email} onChanger={setEmail} maxLength={254} testID="esport-proposer-email" style={{ flexGrow: 1, flexBasis: 240 }} /> : null}
       </View>
       <Champ theme={theme} libelle={tr('ajoutTeams.poste_en_jeu_facultatif')} valeur={poste} onChanger={setPoste} maxLength={30} testID="esport-proposer-poste" />
+      {mode === 'nouveau' ? <ChampDiscordId theme={theme} valeur={discordId} onChanger={setDiscordId} obligatoire={false} testID="esport-proposer-discord-id" /> : null}
       {mode === 'nouveau' ? <Champ theme={theme} libelle={tr('demandesCompte.mot_pour_le_fondateur')} valeur={message} onChanger={setMessage} maxLength={200} testID="esport-proposer-message" /> : null}
       <View style={[communs.ligne, { justifyContent: 'flex-end' }]}>
         <BoutonHub
@@ -236,13 +241,14 @@ function Proposer({
             onAction(mode === 'nouveau' ? 'demande' : 'ajout', async () => {
               const extra = poste.trim() ? { posteJeu: poste.trim() } : {};
               if (mode === 'nouveau') {
-                await client.demanderCompte({ teamId: team.id, roleId: roleId!, pseudo: pseudo.trim(), email: email.trim(), ...extra, ...(message.trim() ? { message: message.trim() } : {}) });
+                await client.demanderCompte({ teamId: team.id, roleId: roleId!, pseudo: pseudo.trim(), email: email.trim(), ...(discordId.trim() ? { discordId: normaliserDiscordId(discordId) } : {}), ...extra, ...(message.trim() ? { message: message.trim() } : {}) });
               } else {
                 await client.ajouterMembre(team.id, { pseudo: pseudo.trim(), roleId: roleId!, ...extra });
               }
               const nom = pseudo.trim();
               setPseudo('');
               setEmail('');
+              setDiscordId('');
               setPoste('');
               setMessage('');
               return mode === 'nouveau' ? tr('demandesCompte.demande_envoyee_au_fondateur', { nom }) : tr('demandesCompte.est_ajoute_a', { nom, nom2: team.nom });

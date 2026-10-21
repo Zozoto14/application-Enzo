@@ -119,6 +119,29 @@ Chaque joueur, une fois :
 Le Fondateur, un Propriétaire ou un Manager voit qui est lié : **Réglages › Discord › Comptes Discord liés**.
 Chacun peut se délier (**Délier mon Discord** dans l'app, ou `/delier`).
 
+### 9. Le Discord ID de chaque membre (ping même sans `/lier`)
+
+Pour que le bot puisse pinger un joueur convoqué **sans attendre qu'il fasse `/lier`**, chaque membre de l'Esport a un
+champ **Discord ID** : son identifiant numérique Discord (17 à 20 chiffres, par exemple `412345678901234567`).
+
+- **Obligatoire à la création** d'un compte Esport : **Esport › Membres › Créer un compte**, **Ajouter à une team**
+  (compte du hub qui n'a pas encore de fiche Esport) et **Valider** une demande de compte. Un membre qui propose un
+  compte peut déjà donner le Discord ID ; le Fondateur le vérifie à la validation.
+- **Modifiable seulement par le Fondateur** : **Esport › Membres › (le membre) › Modifier le Discord ID**. Le serveur
+  refuse (403) tout autre rôle, **Propriétaire compris** ; les autres le voient seulement.
+- **Membres existants sans ID** : badge **« Discord ID manquant »**, bandeau en haut de la page Membres et filtre
+  **« Discord ID manquant (N) »** pour les compléter un par un.
+- **Comment trouver un Discord ID** (aussi rappelé dans l'app, lien « Comment trouver un Discord ID ? ») :
+  1. Discord › **Paramètres utilisateur** › **Avancés** › activez **Mode développeur** ;
+  2. clic droit sur le membre (appui long sur téléphone) › **Copier l'identifiant de l'utilisateur** ;
+  3. collez-le dans l'app (une mention `<@412…>` collée est aussi acceptée).
+
+**Qui est pingé ?** Pour chaque convoqué : sa **liaison `/lier` vérifiée** si elle existe (c'est lui qui a prouvé
+que ce compte Discord est le sien), **sinon** le **Discord ID** saisi par le Fondateur. Sans l'un ni l'autre, il est
+cité par son pseudo, sans notification. Le Discord ID ne sert QU'AUX mentions : pour utiliser les commandes (`/dispo`,
+boutons Oui / Non…), le joueur doit toujours lier son compte avec `/lier` (le bot ne fait confiance qu'à une liaison
+vérifiée pour savoir qui agit).
+
 ---
 
 ## Ce que fait le bot
@@ -136,7 +159,8 @@ Chacun peut se délier (**Délier mon Discord** dans l'app, ou `/delier`).
   groupes Joueurs / Staff / Tout le monde, choix nominatifs, exclusions, liste propre à une date. Sans choix : les
   joueurs. Un Propriétaire (ou le Fondateur) n'est **jamais** convoqué sans être coché.
   `/evenement-creer` propose « joueurs » (par défaut), « staff » ou « tous ».
-- **Comptes non liés** : cités par leur pseudo, sans notification.
+- **Comptes non liés** : mentionnés par leur **Discord ID** s'il est renseigné (étape 9), sinon cités par leur pseudo,
+  sans notification.
 - **Ping par type** : Réglages › Discord › Bot Discord › « Mentionner les convoqués » (Scrim, Match…). Éteint :
   l'annonce part quand même, sans mention.
 - **Réunions staff** (réunion dont tous les convoqués sont du staff) : **jamais annoncées**, ni rappelées.
@@ -210,8 +234,9 @@ Quelqu'un qui n'a pas lié son compte reçoit : **« Lie ton compte avec /lier �
   10 minutes et par compte Discord.
 - **Mentions** : uniquement les identifiants des convoqués liés, listés un à un (`allowed_mentions`) ; tout texte
   venu des utilisateurs est neutralisé (`@everyone`, `<@…>` deviennent inoffensifs).
-- **Vos données** : l'identifiant Discord lié figure dans **Exporter mes données** ; **Supprimer mes données** (ou
-  la suppression du compte par le Fondateur) l'efface.
+- **Vos données** : l'identifiant Discord lié et le Discord ID du membre figurent dans **Exporter mes données** (et
+  dans l'export RGPD demandé par le Fondateur) ; **Supprimer mes données** (ou la suppression du compte par le
+  Fondateur, ou dans l'Administration) les efface.
 - Limite de débit de Discord (429) : le bot attend le délai demandé ; erreurs passagères : nouvel essai dans 1, 5,
   15 min, 1 h, 3 h ; refus (salon supprimé, bot retiré) : abandon, écrit dans le Journal.
 
@@ -223,6 +248,7 @@ Quelqu'un qui n'a pas lié son compte reçoit : **« Lie ton compte avec /lier �
 | « L'application n'a pas répondu » | L'adresse des interactions (étape 4) est fausse, ou la Public Key ne correspond pas : vérifiez les variables puis relancez le workflow. |
 | « Ce serveur n'est lié à aucune team » | Étape 7. |
 | « Lie ton compte avec /lier » | Étape 8. |
+| Un convoqué n'est pas pingé | Badge « Discord ID manquant » dans Esport › Membres : le Fondateur renseigne son Discord ID (étape 9), ou le joueur fait `/lier`. |
 | Rien n'arrive dans le salon | Le bot doit voir le salon et pouvoir y écrire (permissions du salon) ; regardez **Réglages › Discord › Derniers envois** et le Journal. |
 | « Bot non configuré (DISCORD_BOT_TOKEN) » dans les envois | Le secret `DISCORD_BOT_TOKEN` manque : étape 3, puis relancez le workflow. |
 | Le jeton a fuité | Portail › Bot › **Reset Token**, mettez le nouveau dans le secret GitHub, relancez le workflow. |
@@ -235,7 +261,13 @@ Quelqu'un qui n'a pas lié son compte reçoit : **« Lie ton compte avec /lier �
   Le Worker ne fait que brancher `DISCORD_*` (`esport/worker.mjs`).
 - **Qui pinger** : une seule fonction, `comptesConvoques()` dans `esport/noyau/discord/convoques.mjs`, branchée sur
   la règle des convocations du planning (`esport/noyau/planning/convocations.mjs`, convocation de la date sinon de la
-  série). Le webhook nomme les convoqués et ne fait qu'une mention de rôle ; le bot mentionne chaque convoqué lié.
+  série). Le webhook nomme les convoqués et ne fait qu'une mention de rôle ; le bot mentionne chaque convoqué :
+  `membresTeam()` rend `discordId = discord_comptes.discord_user_id ?? comptes.discord_id` (la liaison `/lier`
+  prime).
+- Discord ID : migration `0015_discord_id_courriel.sql` (`comptes.discord_id` unique, `demandes_compte.discord_id`),
+  validation `esport/noyau/discordId.mjs`, route `PUT /comptes/:compte/discord-id` (Fondateur seul, 403 sinon),
+  champ `discordId` de `POST /comptes`, `POST /comptes/:c/teams` et `POST /comptes/demandes`. Tests :
+  `esport/test/discord-id.test.mjs`, `src/esport/InvitationsDirectes.test.tsx`.
 - Base : migration `0011_bot_discord.sql` (`discord_serveurs`, `discord_comptes`, `discord_codes`,
   `discord_bot_pings`, `discord_annonces`, `discord_debuts`, colonnes `canal`, `operation`, `salon_id` de la file).
 - Routes : `POST /discord/interactions` (Discord, sans session) ; `GET|DELETE /moi/discord`,

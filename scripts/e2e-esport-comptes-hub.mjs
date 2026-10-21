@@ -182,12 +182,16 @@ try {
   await pc.getByTestId(`esport-ajout-team-${idLuca}-the-final`).click();
   await pc.getByTestId(`esport-ajout-role-${idLuca}-the-final-${coach2.id}`).click();
   verifier((await pc.getByTestId(`esport-ajout-pseudo-${idLuca}`).count()) === 0, 'pseudo du hub réutilisé (pas de double saisie)');
+  // Sa fiche Esport est créée ici : le Discord ID est obligatoire (le bot pingue les convoqués avec).
+  verifier(await pc.getByTestId(`esport-ajout-valider-${idLuca}`).isDisabled(), 'Discord ID vide : « Ajouter » désactivé');
+  await pc.getByTestId(`esport-ajout-discord-id-${idLuca}`).fill('412345678901234570');
   await capture(pc, '01b-pc-ajout-deux-teams');
   await pc.getByTestId(`esport-ajout-valider-${idLuca}`).click();
   await pc.getByTestId('esport-membres-global-avis').waitFor({ timeout: 20_000 });
   verifier(/Luca est ajouté à Faucons Valorant et The Final/.test(await pc.getByTestId('esport-membres-global-avis').innerText()), 'Luca ajouté à Faucons Valorant et The Final en une fois');
   const fiche = await esport.base.premier('SELECT id, invite_le, active_le FROM comptes WHERE id = ?', [idLuca]);
   verifier(Boolean(fiche?.invite_le) && !fiche?.active_le, 'pré-enregistrement côté serveur : statut invité');
+  verifier((await esport.base.premier('SELECT discord_id FROM comptes WHERE id = ?', [idLuca]))?.discord_id === '412345678901234570', 'serveur : Discord ID de Luca enregistré');
   const membre = await esport.base.premier('SELECT role_id FROM membres WHERE compte_id = ? AND team_id = ?', [idLuca, teamId]);
   verifier(membre?.role_id === joueur.id, 'membre de Faucons Valorant (Joueur)');
   const membre2 = await esport.base.premier('SELECT role_id FROM membres WHERE compte_id = ? AND team_id = ?', [idLuca, teamId2]);

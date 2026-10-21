@@ -162,6 +162,14 @@ describe('Esport › Membres : invitation directe', () => {
     await fireEvent.changeText(screen.getByTestId('esport-compte-email'), 'lea@exemple');
     expect(screen.getByTestId('esport-compte-etat')).toHaveTextContent(/Adresse e-mail invalide/);
     await fireEvent.changeText(screen.getByTestId('esport-compte-email'), ' Lea@Exemple.FR ');
+    // Discord ID obligatoire (le bot pingue les convoqués avec), validé, aide visible.
+    expect(screen.getByTestId('esport-compte-etat')).toHaveTextContent(/Discord ID est obligatoire/);
+    await fireEvent.changeText(screen.getByTestId('esport-compte-discord-id'), '1234');
+    expect(screen.getByTestId('esport-compte-discord-id-erreur')).toHaveTextContent(/17 à 20 chiffres/);
+    await fireEvent.press(screen.getByTestId('esport-compte-discord-id-aide'));
+    expect(screen.getByTestId('esport-compte-discord-id-aide-texte')).toHaveTextContent(/Mode développeur/);
+    await fireEvent.changeText(screen.getByTestId('esport-compte-discord-id'), '<@412345678901234567>');
+    expect(screen.queryByTestId('esport-compte-discord-id-erreur')).toBeNull();
     expect(screen.getByTestId('esport-compte-etat')).toHaveTextContent(/au moins une team/);
     await fireEvent.press(screen.getByTestId('esport-compte-team-faucons'));
     // Rôle Joueur proposé par défaut ; poste facultatif.
@@ -173,11 +181,11 @@ describe('Esport › Membres : invitation directe', () => {
     await screen.findByTestId('esport-compte-cree');
     // Contrôle Esport AVANT le compte du hub, puis pré-enregistrement.
     expect(appels).toEqual(['verification', 'hub', 'esport']);
-    expect(verifierPreinscription).toHaveBeenCalledWith({ pseudo: 'Léa', affectations: [{ teamId: 't1', roleId: 'r-jou', posteJeu: 'Duelliste' }] });
+    expect(verifierPreinscription).toHaveBeenCalledWith({ pseudo: 'Léa', discordId: '412345678901234567', affectations: [{ teamId: 't1', roleId: 'r-jou', posteJeu: 'Duelliste' }] });
     expect(creations[0][0]).toBe('Léa');
     expect(creations[0][1]).toEqual(['esport']);
     expect(creations[0][3]).toEqual({ politique: { longueurMin: 10, forceMin: 1 } });
-    expect(preinscrire).toHaveBeenCalledWith({ compte: 'lea0000001', pseudo: 'Léa', affectations: [{ teamId: 't1', roleId: 'r-jou', posteJeu: 'Duelliste' }] });
+    expect(preinscrire).toHaveBeenCalledWith({ compte: 'lea0000001', pseudo: 'Léa', discordId: '412345678901234567', affectations: [{ teamId: 't1', roleId: 'r-jou', posteJeu: 'Duelliste' }] });
     // Adresse chiffrée dans l'Administration, journal sans l'adresse.
     expect(chargerDonnees(stockage).contacts.lea0000001.email).toBe('Lea@exemple.fr');
     expect(JSON.stringify(chargerDonnees(stockage).journal)).toMatch(/créé depuis l’Esport/);
@@ -210,6 +218,7 @@ describe('Esport › Membres : invitation directe', () => {
     await fireEvent.press(await screen.findByTestId('esport-membres-creer'));
     await fireEvent.changeText(screen.getByTestId('esport-compte-nom'), 'Léa');
     await fireEvent.changeText(screen.getByTestId('esport-compte-email'), 'lea@exemple.fr');
+    await fireEvent.changeText(screen.getByTestId('esport-compte-discord-id'), '412345678901234567');
     await fireEvent.press(screen.getByTestId('esport-compte-team-aigles'));
     await fireEvent.press(screen.getByTestId('esport-compte-creer'));
     await confirmerIdentite();
@@ -351,8 +360,11 @@ describe('Esport › Membres : comptes du hub créés dans l’Administration (s
     await fireEvent.press(screen.getByTestId('esport-ajout-role-luca000001-faucons-r-jou'));
     // Pseudo du hub réutilisé : aucun champ à saisir.
     expect(screen.queryByTestId('esport-ajout-pseudo-luca000001')).toBeNull();
+    // Sa fiche Esport est créée ici : Discord ID obligatoire.
+    expect(screen.getByTestId('esport-ajout-valider-luca000001').props.accessibilityState?.disabled).toBe(true);
+    await fireEvent.changeText(screen.getByTestId('esport-ajout-discord-id-luca000001'), '412345678901234567');
     await fireEvent.press(screen.getByTestId('esport-ajout-valider-luca000001'));
-    await waitFor(() => expect(ajouterATeams).toHaveBeenCalledWith('luca000001', { pseudo: 'LUCA', affectations: [{ teamId: 't1', roleId: 'r-jou' }] }));
+    await waitFor(() => expect(ajouterATeams).toHaveBeenCalledWith('luca000001', { pseudo: 'LUCA', discordId: '412345678901234567', affectations: [{ teamId: 't1', roleId: 'r-jou' }] }));
     expect(await screen.findByText('LUCA est ajouté à Faucons : il verra ses teams à sa prochaine ouverture de l’Esport.')).toBeTruthy();
     // Rechargé : LUCA a une fiche (invité) et une team ; plus « sans team ».
     await fireEvent.press(screen.getByTestId('esport-membres-statut-tous'));
@@ -386,11 +398,13 @@ describe('Esport › Membres : ajouter un compte à plusieurs teams', () => {
     await fireEvent.press(screen.getByTestId('esport-ajout-team-luca000001-aigles'));
     await fireEvent.press(screen.getByTestId('esport-ajout-role-luca000001-aigles-r-man-2'));
     await fireEvent.changeText(screen.getByTestId('esport-ajout-poste-luca000001-faucons'), 'Sentinelle');
+    await fireEvent.changeText(screen.getByTestId('esport-ajout-discord-id-luca000001'), '412345678901234567');
     expect(screen.getByTestId('esport-ajout-valider-luca000001')).toHaveTextContent('Ajouter à 2 teams');
     await fireEvent.press(screen.getByTestId('esport-ajout-valider-luca000001'));
     await waitFor(() =>
       expect(ajouterATeams).toHaveBeenCalledWith('luca000001', {
         pseudo: 'LUCA',
+        discordId: '412345678901234567',
         affectations: [
           { teamId: 't1', roleId: 'r-jou', posteJeu: 'Sentinelle' },
           { teamId: 't2', roleId: 'r-man-2' },
@@ -437,11 +451,12 @@ describe('Esport › Membres : ajouter un compte à plusieurs teams', () => {
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
     await fireEvent.press(await screen.findByTestId('esport-compte-ajouter-luca000001'));
     await fireEvent.press(screen.getByTestId('esport-ajout-team-luca000001-faucons'));
+    await fireEvent.changeText(screen.getByTestId('esport-ajout-discord-id-luca000001'), '412345678901234567');
     await fireEvent.press(screen.getByTestId('esport-ajout-valider-luca000001'));
     expect(await screen.findByTestId('esport-ajout-luca000001-erreur')).toHaveTextContent('Ce pseudo est déjà pris dans l’Esport.');
     await fireEvent.changeText(await screen.findByTestId('esport-ajout-pseudo-luca000001'), 'LUCA2');
     await fireEvent.press(screen.getByTestId('esport-ajout-valider-luca000001'));
-    await waitFor(() => expect(ajouterATeams).toHaveBeenLastCalledWith('luca000001', { pseudo: 'LUCA2', affectations: [{ teamId: 't1', roleId: 'r-jou' }] }));
+    await waitFor(() => expect(ajouterATeams).toHaveBeenLastCalledWith('luca000001', { pseudo: 'LUCA2', discordId: '412345678901234567', affectations: [{ teamId: 't1', roleId: 'r-jou' }] }));
   });
 
   it('doublon (compte déjà membre côté serveur) : erreur nette affichée', async () => {
@@ -452,6 +467,7 @@ describe('Esport › Membres : ajouter un compte à plusieurs teams', () => {
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
     await fireEvent.press(await screen.findByTestId('esport-compte-ajouter-luca000001'));
     await fireEvent.press(screen.getByTestId('esport-ajout-team-luca000001-faucons'));
+    await fireEvent.changeText(screen.getByTestId('esport-ajout-discord-id-luca000001'), '412345678901234567');
     await fireEvent.press(screen.getByTestId('esport-ajout-valider-luca000001'));
     expect(await screen.findByTestId('esport-ajout-luca000001-erreur')).toHaveTextContent('LUCA est déjà membre de Faucons.');
   });
@@ -497,6 +513,7 @@ describe('Esport › Membres : demandes de compte (« Créer des membres »)', (
     pseudo: 'Noa',
     email: 'noa@exemple.fr',
     posteJeu: 'Sentinelle',
+    discordId: '512345678901234567',
     message: 'Ma cousine',
     statut: 'en_attente' as const,
     compte: null,
@@ -530,13 +547,15 @@ describe('Esport › Membres : demandes de compte (« Créer des membres »)', (
     // Saisie préremplie : nom, adresse, team et rôle de la demande.
     expect(screen.getByTestId('esport-compte-nom').props.value).toBe('Noa');
     expect(screen.getByTestId('esport-compte-email').props.value).toBe('noa@exemple.fr');
+    // Discord ID proposé par le demandeur : prérempli, le Fondateur le vérifie.
+    expect(screen.getByTestId('esport-compte-discord-id').props.value).toBe('512345678901234567');
     await fireEvent.press(screen.getByTestId('esport-compte-creer'));
     await confirmerIdentite();
     await screen.findByTestId('esport-compte-cree');
     expect(appels).toEqual(['verification', 'hub', 'esport']);
     const affectations = [{ teamId: 't1', roleId: 'r-jou', posteJeu: 'Sentinelle' }];
-    expect(verifierPreinscription).toHaveBeenCalledWith({ pseudo: 'Noa', affectations, demandeId: 'd1' });
-    expect(preinscrire).toHaveBeenCalledWith({ compte: 'lea0000001', pseudo: 'Noa', affectations, demandeId: 'd1' });
+    expect(verifierPreinscription).toHaveBeenCalledWith({ pseudo: 'Noa', discordId: '512345678901234567', affectations, demandeId: 'd1' });
+    expect(preinscrire).toHaveBeenCalledWith({ compte: 'lea0000001', pseudo: 'Noa', discordId: '512345678901234567', affectations, demandeId: 'd1' });
   });
 
   it('Joueur autorisé : demande au Fondateur (nom, e-mail, team, rôle), statut suivi ; ajout d’un compte Esport existant par pseudo', async () => {
@@ -553,11 +572,15 @@ describe('Esport › Membres : demandes de compte (« Créer des membres »)', (
     await screen.findByTestId('esport-proposer');
     await fireEvent.changeText(screen.getByTestId('esport-proposer-pseudo'), 'Noa');
     await fireEvent.changeText(screen.getByTestId('esport-proposer-email'), 'noa@exemple.fr');
+    // Discord ID facultatif dans une demande, mais validé s'il est saisi.
+    await fireEvent.changeText(screen.getByTestId('esport-proposer-discord-id'), '99');
+    expect(screen.getByTestId('esport-proposer-discord-id-erreur')).toBeTruthy();
+    await fireEvent.changeText(screen.getByTestId('esport-proposer-discord-id'), '512345678901234567');
     await act(async () => {
       fireEvent.press(screen.getByTestId('esport-proposer-envoyer'));
       await new Promise<void>(r => setTimeout(r, 20));
     });
-    expect(demanderCompte).toHaveBeenCalledWith({ teamId: 't1', roleId: 'r-jou', pseudo: 'Noa', email: 'noa@exemple.fr' });
+    expect(demanderCompte).toHaveBeenCalledWith({ teamId: 't1', roleId: 'r-jou', pseudo: 'Noa', email: 'noa@exemple.fr', discordId: '512345678901234567' });
     expect(await screen.findByTestId('esport-ma-demande-statut-d1')).toHaveTextContent('En attente');
     // Compte qui a déjà l'Esport : ajouté tout de suite, sans le Fondateur.
     await fireEvent.press(screen.getByTestId('esport-proposer-mode-existant'));
@@ -567,5 +590,57 @@ describe('Esport › Membres : demandes de compte (« Créer des membres »)', (
       await new Promise<void>(r => setTimeout(r, 20));
     });
     expect(ajouterMembre).toHaveBeenCalledWith('t1', { pseudo: 'Bob', roleId: 'r-jou' });
+  });
+});
+
+describe('Esport › Membres : Discord ID', () => {
+  const rangJoueur = { teamId: 't1', membreId: 'm-lea', role: { id: 'r-jou', nom: 'Joueur', couleur: '#16a34a', cle: 'joueur' }, posteJeu: null, statut: 'actif' as const, rejointLe: '', gerable: true };
+
+  it('Fondateur : badge « Discord ID manquant », filtre, puis saisie validée (aide visible)', async () => {
+    const { ctx } = contexteFondateur([fondateur]);
+    let lea = compte('lea12345', 'Léa', { appartenances: [rangJoueur], discordId: null });
+    const tom = compte('tom12345', 'Tom', { appartenances: [{ ...rangJoueur, membreId: 'm-tom' }], discordId: '412345678901234568', discordLie: true });
+    const majDiscordId = jest.fn(async (id: string, discordId: string | null) => {
+      lea = { ...lea, discordId };
+      return lea;
+    });
+    fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => ({ ...annuaire(true, [lea, tom]), peutModifierDiscordId: true }), majDiscordId });
+    await monter(ctx);
+    await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    expect(await screen.findByTestId('esport-discord-manquant-lea12345')).toHaveTextContent('Discord ID manquant');
+    expect(screen.queryByTestId('esport-discord-manquant-tom12345')).toBeNull();
+    expect(screen.getByTestId('esport-membres-bandeau-discord')).toHaveTextContent(/1 membre\(s\) sans Discord ID/);
+    // Filtre « Discord ID manquant (1) ».
+    await fireEvent.press(screen.getByTestId('esport-membres-statut-sansdiscord'));
+    expect(screen.getByTestId('esport-membres-statut-sansdiscord')).toHaveTextContent('Discord ID manquant (1)');
+    expect(screen.queryByTestId('esport-compte-tom12345')).toBeNull();
+    // Saisie (Fondateur) : refusée tant qu'elle n'est pas un identifiant numérique, puis enregistrée.
+    await fireEvent.press(screen.getByLabelText('Gérer Léa'));
+    await fireEvent.press(screen.getByTestId('esport-discord-id-modifier-lea12345'));
+    await fireEvent.changeText(screen.getByTestId('esport-discord-id-champ-lea12345'), 'Léa#1234');
+    expect(screen.getByTestId('esport-discord-id-enregistrer-lea12345').props.accessibilityState?.disabled).toBe(true);
+    await fireEvent.press(screen.getByTestId('esport-discord-id-champ-lea12345-aide'));
+    expect(screen.getByTestId('esport-discord-id-champ-lea12345-aide-texte')).toHaveTextContent(/Copier l’identifiant/);
+    await fireEvent.changeText(screen.getByTestId('esport-discord-id-champ-lea12345'), '412345678901234567');
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-discord-id-enregistrer-lea12345'));
+      await new Promise<void>(r => setTimeout(r, 20));
+    });
+    expect(majDiscordId).toHaveBeenCalledWith('lea12345', '412345678901234567');
+    await waitFor(() => expect(screen.queryByTestId('esport-discord-manquant-lea12345')).toBeNull());
+  });
+
+  it('Propriétaire / Manager : le Discord ID se lit, ne se modifie pas (le serveur refuserait de toute façon)', async () => {
+    const lea = compte('lea12345', 'Léa', { appartenances: [rangJoueur], discordId: '412345678901234567' });
+    const bob = compte('bob12345', 'Bob', { appartenances: [{ ...rangJoueur, membreId: 'm-bob' }], discordId: null });
+    fabrique.client = () => fauxClient({ ouvrir: moi(false), annuaire: async () => ({ ...annuaire(false, [lea, bob]), peutModifierDiscordId: false }) });
+    await monter({ profil: { id: 'max12345', nom: 'Max', admin: false, creeLe: '', apps: ['esport'] } });
+    await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByLabelText('Gérer Léa'));
+    expect(screen.getByTestId('esport-discord-id-valeur-lea12345')).toHaveTextContent('Discord ID : 412345678901234567');
+    expect(screen.queryByTestId('esport-discord-id-modifier-lea12345')).toBeNull();
+    await fireEvent.press(screen.getByLabelText('Gérer Bob'));
+    expect(screen.queryByTestId('esport-discord-id-modifier-bob12345')).toBeNull();
+    expect(screen.getByText('Seul le Fondateur peut le renseigner.')).toBeTruthy();
   });
 });

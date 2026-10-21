@@ -135,6 +135,13 @@ try {
   await pc.getByTestId('esport-compte-email').fill('lea@exemple.fr');
   await pc.getByTestId('esport-compte-team-faucons-valorant').click();
   await pc.getByTestId('esport-compte-poste-faucons-valorant').fill('Duelliste');
+  // Discord ID obligatoire : refusé vide ou mal formé, aide visible.
+  verifier(/Discord ID est obligatoire/.test(await pc.getByTestId('esport-compte-etat').innerText()) && (await pc.getByTestId('esport-compte-creer').isDisabled()), 'Discord ID vide : création impossible (« obligatoire »)');
+  await pc.getByTestId('esport-compte-discord-id').fill('Léa#1234');
+  verifier(/17 à 20 chiffres/.test(await pc.getByTestId('esport-compte-discord-id-erreur').innerText()), 'Discord ID mal formé : « 17 à 20 chiffres »');
+  await pc.getByTestId('esport-compte-discord-id-aide').click();
+  verifier(/Mode développeur/.test(await pc.getByTestId('esport-compte-discord-id-aide-texte').innerText()), 'aide « Comment trouver un Discord ID ? » visible');
+  await pc.getByTestId('esport-compte-discord-id').fill('412345678901234567');
   await capture(pc, '01-pc-creer-compte');
   await pc.getByTestId('esport-compte-creer').click();
   await confirmerIdentite(pc);
@@ -152,6 +159,7 @@ try {
   verifier(Boolean(ligne.invite_le) && !ligne.active_le, 'serveur : compte pré-enregistré « invité »');
   const membre = await esport.base.premier('SELECT m.poste_jeu, r.nom FROM membres m JOIN roles r ON r.id = m.role_id WHERE m.compte_id = ? AND m.team_id = ?', [idLea, faucons.id]);
   verifier(membre?.nom === 'Joueur' && membre?.poste_jeu === 'Duelliste', 'serveur : Léa dans Faucons Valorant (Joueur, Duelliste)');
+  verifier((await esport.base.premier('SELECT discord_id FROM comptes WHERE id = ?', [idLea]))?.discord_id === '412345678901234567', 'serveur : Discord ID de Léa enregistré');
   verifier(!JSON.stringify(await esport.base.tous('SELECT * FROM comptes', [])).includes('exemple.fr'), 'serveur Esport : jamais l’adresse e-mail');
   await pc.getByTestId('esport-compte-termine').click();
   await pc.getByTestId(`esport-compte-statut-${idLea}`).waitFor({ timeout: 20_000 });

@@ -14,12 +14,26 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { basePostgres, optionsDepuisEnv } from '../adaptateurs/postgres.mjs';
 import { tachesPlanifiees } from '../noyau/cron.mjs';
+import { tacheRecap } from '../noyau/recap.mjs';
+import { creerEnvoyeur } from './courriel-smtp.mjs';
 import { purgerKvExpire } from '../../relais/serveur/kv-postgres.mjs';
 import { chargerConfigEsport } from './config.mjs';
 
 /** Exécute une fois toutes les tâches ; rend le rapport. */
-export async function executerCron(base, config, { fetch, maintenant } = {}) {
+export async function executerCron(base, config, { fetch, maintenant, creerTransport } = {}) {
   const rapport = await tachesPlanifiees(base, { cle: config.cleDiscord || config.cleSession, lienApp: config.lienApp, jetonBot: config.discordBot?.jetonBot, fetch, maintenant });
+  // Récapitulatif e-mail (Node seulement : SMTP de esport.env) ; sans SMTP, rien n'est fait.
+  if (config.smtp) {
+    const envoyer = await creerEnvoyeur(config.smtp, { creerTransport });
+    try {
+      const b = await tacheRecap(base, { cle: config.cleDiscord || config.cleSession, envoyer, maintenant: maintenant ? maintenant() : Date.now(), lienApp: config.lienApp });
+      rapport.push({ tache: 'récapitulatifs e-mail', ok: b.echecs === 0, n: b.envoyes, ...(b.echecs ? { erreur: `${b.echecs} échec(s)` } : {}) });
+    } catch (e) {
+      rapport.push({ tache: 'récapitulatifs e-mail', ok: false, erreur: String(e?.code ?? 'erreur') });
+    } finally {
+      envoyer?.fermer?.();
+    }
+  }
   try {
     const n = await purgerKvExpire(base, maintenant ? maintenant() : Date.now());
     rapport.push({ tache: 'clés expirées du relais', ok: true, n });

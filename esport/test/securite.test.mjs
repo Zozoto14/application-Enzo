@@ -313,7 +313,7 @@ test('anti-escalade : le Manager ne crée pas de rôle plus fort que le sien, n�
   assert.equal(inv.statut, 403);
   assert.equal(inv.corps.code, 'escalade');
   // Invitation directe (création de compte) : réservée au Fondateur.
-  const creation = await b.appel('/comptes', { methode: 'POST', jeton: max, corps: { compte: 'neo12345', pseudo: 'Neo', affectations: [{ teamId: A.teamId, roleId: A.roles.joueur.id }] } });
+  const creation = await b.appel('/comptes', { methode: 'POST', jeton: max, corps: { compte: 'neo12345', pseudo: 'Neo', discordId: '612345678901234567', affectations: [{ teamId: A.teamId, roleId: A.roles.joueur.id }] } });
   assert.equal(creation.statut, 403);
   // Il ne touche pas non plus au Propriétaire.
   assert.equal((await b.appel(`/teams/${A.teamId}/membres/${A.membres.own12345.id}`, { methode: 'DELETE', jeton: max })).statut, 403);

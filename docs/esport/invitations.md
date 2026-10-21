@@ -7,14 +7,16 @@ directement sa team à sa première connexion.
 
 1. **Esport › Membres › Créer un compte** (sur votre PC ou votre iPhone, là où vous êtes connecté
    en Fondateur : il faut vos clés, comme dans l'Administration).
-2. Remplissez : **nom ou pseudo** (ce sera aussi son identifiant de connexion), **adresse e-mail**, une
-   ou plusieurs **teams** avec un **rôle** par team (Joueur proposé par défaut) et, si vous voulez, son
-   **poste en jeu** (Duelliste, IGL…).
+2. Remplissez : **nom ou pseudo** (ce sera aussi son identifiant de connexion), **adresse e-mail**, son
+   **Discord ID** (obligatoire : le bot pingue les convoqués avec ; « Comment trouver un Discord ID ? » sous le
+   champ, voir [bot-discord.md](bot-discord.md) § 9), une ou plusieurs **teams** avec un **rôle** par team (Joueur
+   proposé par défaut) et, si vous voulez, son **poste en jeu** (Duelliste, IGL…).
 3. **Créer le compte et l'invitation** › confirmez votre identité (mot de passe + code à 6 chiffres,
    valable 5 minutes comme dans l'Administration).
-4. Le panneau **Invitation de …** s'ouvre : **✉️ Envoyer l'invitation par e-mail** ouvre votre messagerie,
-   message prêt (lien à usage unique, team, « aucun code à saisir »). Vous pouvez aussi copier le
-   message, le partager ou montrer le QR code.
+4. Le panneau **Invitation de …** s'ouvre : **✉️ Envoyer l'e-mail maintenant** l'envoie DIRECTEMENT par le serveur
+   (si le SMTP est configuré, [../emails.md](../emails.md)), en français ou en anglais, avec un bouton vers le lien ;
+   sinon **✉️ Envoyer l'invitation par e-mail** ouvre votre messagerie, message prêt (lien à usage unique, team,
+   « aucun code à saisir »). Vous pouvez aussi copier le message, le partager ou montrer le QR code.
 
 Ce que fait cette seule action :
 

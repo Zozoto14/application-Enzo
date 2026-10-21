@@ -96,11 +96,11 @@ test('demande : le Joueur autorisé dépose, le Fondateur valide (compte et team
   assert.equal((await api(`/comptes/demandes/${id}`, s.kai12345, { methode: 'DELETE' })).statut, 404);
   // Seul le Fondateur valide (il faut ses clés du hub) : POST /comptes avec demandeId → 403 pour les autres.
   const affectations = [{ teamId: A.teamId, roleId: A.roles.joueur.id, posteJeu: 'Sentinelle' }];
-  assert.equal((await api('/comptes', s.max12345, { methode: 'POST', corps: { compte: 'noa12345', pseudo: 'Noa', affectations, demandeId: id } })).statut, 403);
+  assert.equal((await api('/comptes', s.max12345, { methode: 'POST', corps: { compte: 'noa12345', pseudo: 'Noa', discordId: '512345678901234567', affectations, demandeId: id } })).statut, 403);
 
   // Validation en un clic : contrôle, puis création (compte du hub créé par l'app du Fondateur, ici simulé).
-  assert.equal((await api('/comptes', s.fondateur, { methode: 'POST', corps: { pseudo: 'Noa', affectations, demandeId: id, verifier: true } })).statut, 200);
-  const v = await api('/comptes', s.fondateur, { methode: 'POST', corps: { compte: 'noa12345', pseudo: 'Noa', affectations, demandeId: id } });
+  assert.equal((await api('/comptes', s.fondateur, { methode: 'POST', corps: { pseudo: 'Noa', discordId: '512345678901234567', affectations, demandeId: id, verifier: true } })).statut, 200);
+  const v = await api('/comptes', s.fondateur, { methode: 'POST', corps: { compte: 'noa12345', pseudo: 'Noa', discordId: '512345678901234567', affectations, demandeId: id } });
   assert.equal(v.statut, 200, JSON.stringify(v.corps));
   assert.equal(v.corps.statut, 'invite');
   const membre = (await api(`/teams/${A.teamId}/membres`, s.fondateur)).corps.membres.find(m => m.compte === 'noa12345');
@@ -109,7 +109,7 @@ test('demande : le Joueur autorisé dépose, le Fondateur valide (compte et team
   const ligne = await b.base.premier('SELECT * FROM demandes_compte WHERE id = ?', [id]);
   assert.deepEqual([ligne.statut, ligne.compte_id, ligne.email], ['validee', 'noa12345', null], 'adresse effacée du serveur Esport');
   // Déjà traitée : 409.
-  assert.equal((await api('/comptes', s.fondateur, { methode: 'POST', corps: { compte: 'zoe12345', pseudo: 'Zoé', affectations, demandeId: id } })).statut, 409);
+  assert.equal((await api('/comptes', s.fondateur, { methode: 'POST', corps: { compte: 'zoe12345', pseudo: 'Zoé', discordId: '512345678901234568', affectations, demandeId: id } })).statut, 409);
   // Le demandeur suit le statut (et est prévenu) ; Noa voit sa team dès sa première session.
   const miennes = (await api('/comptes/demandes', s.lea12345)).corps.demandes;
   assert.deepEqual([miennes[0].statut, miennes[0].email], ['validee', null]);
