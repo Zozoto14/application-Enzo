@@ -27,10 +27,11 @@ describe('src/config/site.json', () => {
 
   it('l’adresse est celle du projet déclaré, jamais une adresse de tiers', () => {
     expect(config.projetPages).toMatch(/^[a-z0-9-]+$/);
-    expect(config.site).toBe(`https://${config.projetPages}.pages.dev`);
+    // Le site est chez o2switch (docs/o2switch.md) ; l'ancienne adresse Cloudflare Pages reste reconnue.
+    expect([`https://${config.projetPages}.pages.dev`, 'https://appdashboard.fr']).toContain(config.site);
     const domaines: string[] = JSON.stringify(config).match(/[a-z0-9-]+\.pages\.dev/g) ?? [];
     expect(domaines.filter(d => d !== `${config.projetPages}.pages.dev`)).toEqual([]);
-    expect(JSON.stringify(config)).not.toContain('appdashboard');
+    if (config.site === 'https://appdashboard.fr') expect(config.anciensSites).toContain(`https://${config.projetPages}.pages.dev`);
   });
 
   it('est marqué vérifié', () => {

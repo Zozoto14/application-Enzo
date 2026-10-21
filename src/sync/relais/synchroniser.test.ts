@@ -210,8 +210,10 @@ describe('enveloppes et code de liaison', () => {
 
   it('le lien du site vient de la configuration, vérifiée, et jamais d\'une adresse inconnue', () => {
     expect(SITE_VERIFIE).toBe(true);
-    expect(SITE_PRINCIPAL).toBe('https://applibourse-ef0ddb.pages.dev');
+    expect(SITE_PRINCIPAL).toBe('https://appdashboard.fr');
     expect(estSiteConnu(SITE_PRINCIPAL)).toBe(true);
+    // L'ancienne adresse Cloudflare Pages reste reconnue (anciens liens et QR codes).
+    expect(estSiteConnu('https://applibourse-ef0ddb.pages.dev')).toBe(true);
     const lien = lienSite({ relais: RELAIS, jeton: JETON })!;
     expect(lien.startsWith(`${SITE_PRINCIPAL}/#liaison=AB1.`)).toBe(true);
     // Un code qui porte l'adresse d'un tiers ne fabrique pas de lien vers elle.
