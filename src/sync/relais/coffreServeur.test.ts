@@ -239,10 +239,10 @@ describe('coffre serveur : le serveur est la référence', () => {
     b.fermer();
   });
 
-  it('relais sans coffre serveur (Cloudflare, pas encore à jour) : annoncé, l’appareil garde l’ancienne synchronisation', async () => {
+  it('relais sans coffre serveur (Cloudflare sans PostgreSQL) : pas annoncé, l’appareil garde l’ancienne synchronisation', async () => {
     const ancien = relaisV9({ avecCoffre: false });
-    // Le relais annonce la fonction, mais le magasin manque : la route répond 501.
-    expect(await relaisAvecCoffre(MAITRE, ancien.requete)).toBe(true);
+    expect(await relaisAvecCoffre(MAITRE, ancien.requete)).toBe(false);
+    // Et si un appareil essayait quand même : 501, rien n'est perdu.
     await expect(tour(ancien, appareil())).rejects.toThrow(/501/);
   });
 });

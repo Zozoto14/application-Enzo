@@ -900,8 +900,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         coffreLocal: session.statut() !== 'non-initialise',
       });
     });
-  // Sur le site, l'hôte fournit son propre « Lier » (tous les comptes, remplacement d'un ancien coffre).
-  const lier = profils?.lier ?? (!estAdmin ? undefined : {
+  // Site et PC (hôte bureau) : plus de « Lier » par code de liaison (relais version 9 : identifiant + mot de passe).
+  // L'app iPhone native, sans hôte, garde l'ancien parcours tant qu'elle n'a pas l'écran de connexion du site.
+  const lier = profils ? profils.lier : (!estAdmin ? undefined : {
     codeConnu: codeLiaisonConnu && decoderLiaison(codeLiaisonConnu) ? codeLiaisonConnu : undefined,
     onLier: async (code: string) => {
       const liaison = decoderLiaison(code);

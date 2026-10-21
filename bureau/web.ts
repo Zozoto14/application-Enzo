@@ -12,9 +12,10 @@
  *    relié). Le jeton est celui de la liaison déjà en place : aucun nouveau
  *    secret. Clé distincte du pont du PC (`tsuzuku`) : le site n'est jamais
  *    pris pour l'app PC ;
- *  - savoir quel relais utiliser. Le QR code affiché par le PC ouvre le site
- *    avec `#liaison=AB1.…` : le code est gardé, et Paramètres ›
- *    Synchronisation le propose sans rien recopier.
+ *  - savoir quel relais utiliser : la liaison retenue par ce navigateur à la
+ *    connexion (identifiant + mot de passe : jeton de session du Fondateur, ou
+ *    jeton de profil d'un ami). Plus de code de liaison dans l'adresse (relais
+ *    version 9) : un ancien lien `#liaison=AB1.…` n'est plus lu.
  *
  * Les données restent dans le navigateur (IndexedDB), chiffrées comme sur le
  * PC, et arrivent par la synchronisation.
@@ -43,15 +44,15 @@ function ecrireStockage(cle: string, valeur: string): void {
   }
 }
 
-/** Liaison apportée par le lien scanné, ou gardée d'une visite précédente. */
-export function liaisonDuSite(adresse: string = globalThis.location?.href ?? ''): Liaison | undefined {
-  const depuisLien = decoderLiaison(adresse);
-  if (depuisLien) {
-    ecrireStockage(CLE_LIAISON, adresse.slice(adresse.indexOf('AB1.')));
-    return depuisLien;
-  }
+/** Liaison retenue par ce navigateur à la connexion (jamais lue dans l'adresse). */
+export function liaisonDuSite(): Liaison | undefined {
   const garde = lireStockage(CLE_LIAISON);
   return garde ? decoderLiaison(garde) : undefined;
+}
+
+/** Oublie la liaison retenue (déconnexion). */
+export function oublierLiaisonDuSite(): void {
+  ecrireStockage(CLE_LIAISON, '');
 }
 
 async function viaRelais(chemin: string, corps: unknown): Promise<Response> {

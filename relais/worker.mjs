@@ -936,7 +936,8 @@ export default {
     }
 
     if (pathname === '/sante') {
-      return reponse({ ok: true, version: VERSION_RELAIS, fonctions: FONCTIONS_RELAIS, portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}), heure: Date.now() });
+      // Sans magasin de coffres (Worker sans PostgreSQL), le coffre serveur n'est pas annoncé : les appareils gardent l'ancienne synchronisation.
+      return reponse({ ok: true, version: VERSION_RELAIS, fonctions: env.COFFRES ? FONCTIONS_RELAIS : FONCTIONS_RELAIS.filter(f => f !== 'coffre-serveur'), portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}), heure: Date.now() });
     }
     if (pathname === '/heure') {
       // Ultra léger : l'appareil compare son horloge (codes TOTP) à celle du relais.

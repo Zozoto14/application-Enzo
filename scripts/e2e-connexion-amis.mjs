@@ -105,7 +105,7 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
   }
   const requete = new Request(`${RELAIS}${req.url}`, { method: req.method, headers: entetes, body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps });
   let reponse = await worker.fetch(requete, env);
-  if (relais.ancien && chemin === '/sante' && reponse.ok) {
+  if (relais.ancien && chemin === '/sante' && req.method === 'GET' && reponse.ok) {
     const lu = await reponse.json();
     delete lu.fonctions;
     reponse = new Response(JSON.stringify({ ...lu, version: 5 }), { status: 200, headers: reponse.headers });
@@ -353,11 +353,13 @@ try {
   await pcLea.getByTestId('connexion-id-identifiant').fill('Lucas');
   await pcLea.getByTestId('connexion-id-mdp').fill(MDP_LEA);
   await pcLea.getByTestId('connexion-id-valider').click();
-  verifier(/Identifiant inconnu/.test(await texteDe(pcLea, 'connexion-id-erreur')), 'identifiant inconnu : message précis');
+  const erreurInconnu = await texteDe(pcLea, 'connexion-id-erreur');
   await pcLea.getByTestId('connexion-id-identifiant').fill(' LÉA ');
   await pcLea.getByTestId('connexion-id-mdp').fill('mauvais mot de passe');
   await pcLea.getByTestId('connexion-id-valider').click();
-  verifier(/Mot de passe incorrect/.test(await texteDe(pcLea, 'connexion-id-erreur')), 'mot de passe faux : « Mot de passe incorrect »');
+  const erreurMdp = await texteDe(pcLea, 'connexion-id-erreur');
+  // Relais version 9 : la même réponse pour un identifiant inconnu et un mot de passe faux (pas d'énumération des comptes).
+  verifier(/Identifiant ou mot de passe incorrect/.test(erreurInconnu) && erreurInconnu === erreurMdp, `identifiant inconnu et mot de passe faux : même message neutre (« ${erreurMdp.slice(0, 50)}… »)`);
   await pcLea.getByTestId('connexion-id-mdp').fill(`${MDP_LEA}\n`);
   await pcLea.getByTestId('connexion-id-valider').click();
   await pcLea.getByTestId('hub').waitFor({ timeout: 90_000 });
@@ -383,23 +385,9 @@ try {
   // Le délai est levé (simulé) pour la suite.
   for (const cle of [...kv.keys()].filter(c => c.startsWith('limite:acces:'))) kv.delete(cle);
 
-  // ================================================================ Ancien ami : toujours OK
-  log('Hugo (ancienne méthode : code de liaison + mot de passe + TOTP) se connecte toujours');
-  await pc.getByTestId('admin-onglet-utilisateurs').click();
-  await pc.getByText('Hugo', { exact: true }).first().click();
-  await pc.getByTestId('admin-code-site-generer').click();
-  await confirmerIdentite(pc, secretAdmin);
-  const codeHugo = (await pc.getByTestId('admin-code-site').innerText()).trim();
-  const telHugo = await nouvelIphone();
-  await telHugo.goto(`${SITE}#liaison=${codeHugo}`);
-  await telHugo.getByTestId('bouton-relier-accueil').click({ timeout: 60_000 });
-  await telHugo.getByTestId('connexion-prenom').waitFor({ timeout: 60_000 });
-  await telHugo.getByTestId('connexion-prenom').fill('hugo');
-  await telHugo.getByTestId('connexion-continuer').click();
-  await telHugo.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
-  verifier((await telHugo.locator('input').count()) === 2, 'ancien compte : mot de passe ET code à six chiffres demandés, comme avant');
-  await deverrouiller(telHugo, `${hugo.motDePasse}\n`, hugo.secret);
-  verifier(true, 'ancien ami connecté avec ses anciens identifiants');
+  // Relais version 9 : plus de « code de connexion au site » (AB1) ; un ancien ami (comme Hugo) se connecte par
+  // identifiant + mot de passe après « Réinitialiser l'accès » (nouveau lien), voir docs/connexion-amis.md.
+  void hugo;
 
   // ================================================================ Profil pas encore publié
   log('Zoé : le PC « s’éteint » avant de publier son compte');
@@ -483,7 +471,7 @@ try {
   await pcAncien.getByTestId('connexion-id-identifiant').fill('Léa');
   await pcAncien.getByTestId('connexion-id-mdp').fill(MDP_LEA);
   await pcAncien.getByTestId('connexion-id-valider').click();
-  verifier(/Mot de passe incorrect/.test(await texteDe(pcAncien, 'connexion-id-erreur')), 'l’ancien mot de passe ne marche plus');
+  verifier(/mot de passe incorrect/i.test(await texteDe(pcAncien, 'connexion-id-erreur')), 'l’ancien mot de passe ne marche plus');
   await pcAncien.getByTestId('connexion-id-mdp').fill('Nouvelle phrase de Léa 2027');
   await pcAncien.getByTestId('connexion-id-valider').click();
   await pcAncien.getByTestId('hub').waitFor({ timeout: 90_000 });
@@ -549,7 +537,7 @@ try {
   await capture(pc, '17-pc-liste-acces');
 } catch (erreur) {
   echecs++;
-  console.log('  ECHEC', erreur instanceof Error ? erreur.message.split('\n')[0] : erreur);
+  console.log("  ECHEC", erreur instanceof Error ? erreur.message.split("\n").slice(0, 4).join(" | ") : erreur);
   for (const [i, contexte] of navigateur.contexts().entries()) {
     for (const [j, page] of contexte.pages().entries()) {
       await page.screenshot({ path: join(CAPTURES, `echec-${i}-${j}.png`) }).catch(() => undefined);
