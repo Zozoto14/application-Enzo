@@ -112,7 +112,7 @@ test('deployer.sh : code, dépendances, migrations, redémarrage, site ; idempot
   assert.match(journalDe(), /serveurs Esport et relais redémarrés/);
   assert.match(journalDe(), /site : public_html à jour/);
   // public_html reste lisible par le serveur web (le dossier temporaire en 700 ne doit pas déteindre : 403 sinon).
-  assert.equal(statSync(pub).mode & 0o777, 0o750);
+  assert.equal(statSync(pub).mode & 0o777, 0o755);
   assert.equal(statSync(join(pub, 'assets')).mode & 0o005, 0o005);
   assert.equal(statSync(join(pub, 'index.html')).mode & 0o004, 0o004);
 

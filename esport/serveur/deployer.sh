@@ -133,8 +133,10 @@ if [ "$SANS_SITE" = 0 ]; then
       if [ -f "$TMP/htaccess-appdashboard.conf" ]; then
         "$NODE" scripts/htaccess-o2switch.mjs fusionner "$TMP/htaccess-appdashboard.conf" "$SITE_DIR/.htaccess" >> "$JOURNAL" 2>&1 || echec "fusion du .htaccess"
       fi
-      # public_html doit rester lisible par le serveur web (750 : réglage habituel de cPanel).
-      chmod 750 "$SITE_DIR" 2>/dev/null || true
+      # public_html doit rester lisible par le serveur web. 755 et non 750 : cPanel met d'habitude
+      # le groupe « nobody » (serveur web) sur public_html, mais une copie peut le remplacer par le
+      # groupe de l'utilisateur, que celui-ci ne peut pas remettre ; avec 750, ce serait 403 partout.
+      chmod 755 "$SITE_DIR" 2>/dev/null || true
       echo "$SITE" > "$SITE_DIR/.appdashboard-site"
       echo "$SITE" > "$ETAT/site-deploye"
       journal "site : public_html à jour ($(git log -1 --format='%h %s' "origin/$BRANCHE_SITE" | cut -c1-90))"
