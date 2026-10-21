@@ -219,7 +219,7 @@ export function Historique({ theme, contexte, office, filtreInitial, debutDemo }
         inchangee: 'Rien de nouveau à déposer.',
         echec: `Échec du dépôt : ${r.etat.erreur ?? 'relais injoignable'}.`,
         desactivee: 'La synchro est désactivée.',
-        indisponible: 'Relais non relié (compte principal seulement) ou journal pas encore lu.',
+        indisponible: 'Pas encore connecté au serveur (compte Fondateur seulement) ou journal pas encore lu.',
       }[r.issue];
     });
 

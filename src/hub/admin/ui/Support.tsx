@@ -41,7 +41,7 @@ export function SupportAdmin({ outils }: { outils: OutilsAdmin }) {
   const charger = useCallback(async () => {
     const liaison = liaisonCourriel.relais();
     if (!liaison) {
-      setErreur('Cet appareil n’est pas relié au relais : Paramètres › Synchronisation.');
+      setErreur('Cet appareil n’est pas encore connecté au serveur : connecte-toi avec ton identifiant et ton mot de passe.');
       return;
     }
     const [lu, e] = await Promise.all([listerTickets(liaison, liaisonCourriel.requete(), true), etatSupport(liaison, liaisonCourriel.requete())]);

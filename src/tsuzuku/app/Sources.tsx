@@ -296,7 +296,7 @@ export function Sources({ comptes = [], partageActif = true, onCles, ajoutInitia
       {vue !== 'assistant' && vue !== 'json' ? <Avis genre="alerte" texte={RAPPEL_DROITS} testID="sources-rappel" /> : null}
       {!s.lectureSources ? (
         <Avis
-          texte="Sur le site web, le navigateur ne peut pas lire les pages des sources (CORS) : elles passent par le relais, pour le seul compte Fondateur relié au relais (Paramètres › Synchronisation, code de liaison du PC). Sinon, test et lecture sur l’app PC/iPhone. Vous pouvez néanmoins préparer, importer et partager vos sources ici."
+          texte="Sur le site web, le navigateur ne peut pas lire les pages des sources (CORS) : elles passent par le relais, pour le seul compte Fondateur connecté au serveur (identifiant et mot de passe). Sinon, test et lecture sur l’app PC/iPhone. Vous pouvez néanmoins préparer, importer et partager vos sources ici."
           testID="sources-site"
         />
       ) : s.viaRelais ? (

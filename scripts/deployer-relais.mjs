@@ -250,7 +250,7 @@ try {
   etape('Terminé');
   console.log(`Relais : ${local.relais ?? '?'}`);
   console.log(`Site de secours : ${local.site ?? '?'}`);
-  console.log('\nOuvrez AppDashboard sur le PC › Paramètres › Synchronisation : le relais est reconnu tout seul.');
+  console.log('\nOuvrez AppDashboard sur le PC : le relais est reconnu tout seul (Paramètres › Général › Connexion au serveur).');
   console.log('Choisissez le mot de passe de synchronisation, puis scannez le QR code avec l’iPhone.');
 } catch (erreur) {
   console.error(`\n✖ ${erreur instanceof Error ? erreur.message : erreur}`);
