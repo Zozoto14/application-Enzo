@@ -4,9 +4,9 @@
  * l'interface propose alors de transcrire plus tard depuis un PC (case décochée par défaut).
  */
 
-import type { CapaciteAppareil } from './appareil';
+import type { CapaciteAppareil } from './typesAppareil';
 
-export type { CapaciteAppareil } from './appareil';
+export type { CapaciteAppareil } from './typesAppareil';
 
 export function capaciteAppareil(): CapaciteAppareil {
   const n = (globalThis as { navigator?: { userAgent?: string; platform?: string; maxTouchPoints?: number; deviceMemory?: number; hardwareConcurrency?: number } }).navigator ?? {};
