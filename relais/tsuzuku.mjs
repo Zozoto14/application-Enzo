@@ -60,9 +60,13 @@ export const LIMITE_PAR_MINUTE = 60;
 export const DUREES_CACHE_S = { recherche: 15 * 60, page: 30 * 60 };
 /** Au-delà, une réponse n'est pas gardée (une très grosse page coûte plus à garder qu'à relire). */
 export const TAILLE_MAX_CACHE = 1024 * 1024;
-/** Cache mémoire de l'instance : entrées et caractères au plus (les plus anciennes partent d'abord). */
-export const CACHE_MEMOIRE_ENTREES = 200;
-export const CACHE_MEMOIRE_CARACTERES = 16 * 1024 * 1024;
+/**
+ * Cache mémoire de l'instance : entrées et caractères au plus (les plus anciennes partent d'abord).
+ * Sur o2switch (un seul processus Node, pas de cache Cloudflare), c'est le cache du relais : relevé
+ * avec la version 9 (1 000 pages, 48 Mio).
+ */
+export const CACHE_MEMOIRE_ENTREES = 1000;
+export const CACHE_MEMOIRE_CARACTERES = 48 * 1024 * 1024;
 const FENETRE_MS = 60_000;
 const DOH = 'https://cloudflare-dns.com/dns-query';
 

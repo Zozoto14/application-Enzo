@@ -586,7 +586,7 @@ describe('synchronisation chiffrée par le relais', () => {
     expect(lireCopie(lea.m.get(CLES_TACHES.copie)).cle).toBeUndefined();
   });
 
-  it('budget d’écritures : jamais deux dépôts à moins de 30 s', async () => {
+  it('regroupement des rafales : jamais deux dépôts à moins de 3 s (plus de quota KV depuis la version 9)', async () => {
     const relais = relaisPortees();
     const espF = espacesDuRelais(maitre, relais.requete);
     const pc = mem();
@@ -598,10 +598,10 @@ describe('synchronisation chiffrée par le relais', () => {
     expect(r.depots).toBe(1);
     const ecrire = (n: number) => pc.base.ecrire(CLES_TACHES.donnees, JSON.stringify(creerEspace(lireDonnees(pc.m.get(CLES_TACHES.donnees)), `E${n}`, f()).donnees));
     ecrire(1);
-    r = await tour(r.etat, 5000);
-    expect(r.depots).toBe(0); // 5 s après : reporté
+    r = await tour(r.etat, 2000);
+    expect(r.depots).toBe(0); // 1 s après : reporté
     ecrire(2);
-    r = await tour(r.etat, 30_000);
+    r = await tour(r.etat, 5_000);
     expect(r.depots).toBe(1); // les deux changements partent ensemble
     const puts = relais.appels.filter(x => x.methode === 'PUT');
     expect(puts).toHaveLength(2);

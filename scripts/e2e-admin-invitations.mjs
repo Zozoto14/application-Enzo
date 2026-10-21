@@ -445,9 +445,8 @@ try {
   log('iPhone du Fondateur (même coffre) : création de Nina avec e-mail, mailto et Partager');
   const telF = await (await contexteTest(navigateur, iphone)).newPage();
   telF.on('pageerror', e => log('erreur page iPhone Fondateur :', e.message));
+  // iPhone déjà relié au compte du Fondateur (relais version 9 : plus de carte « code de liaison » à l'accueil).
   await telF.goto(`${SITE}#liaison=${CODE_PC}`);
-  await telF.getByTestId('bouton-relier-accueil').waitFor({ timeout: 60_000 });
-  await telF.getByTestId('bouton-relier-accueil').click();
   await telF.locator('[data-testid="bouton-deverrouiller"], [data-testid="connexion-prenom"]').first().waitFor({ timeout: 90_000 });
   if (await telF.getByTestId('connexion-prenom').count()) {
     await telF.getByTestId('connexion-prenom').fill('admin');

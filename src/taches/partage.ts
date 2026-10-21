@@ -85,7 +85,8 @@ export const CLES_TACHES = {
 
 export const OBJET_TACHES = 'taches';
 const ESPACE_ADMIN = 'principal';
-export const DELAI_MIN_DEPOTS_MS = 30_000;
+/** Relais version 9 (PostgreSQL) : plus de quota d'écritures, seulement un regroupement des rafales. */
+export const DELAI_MIN_DEPOTS_MS = 3_000;
 const usage = (id: string) => `taches|${id}`;
 /** Données associées d'un paquet de projet : lié au projet et à son auteur (pas de rejeu ailleurs). */
 const etiquettePaquet = (projetId: string, code: Auteur) => `tp|${projetId}|${code}`;

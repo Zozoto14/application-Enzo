@@ -24,10 +24,14 @@ import { ESPACE_ADMIN, estMaitre } from '../sync/relais/portees';
 import { entreeValide, type EntreeHistorique } from './logiqueHistorique';
 
 export const PREFIXE_OBJET = 'office-historique-';
-/** Délai minimal entre deux dépôts automatiques (limite d'écritures KV du relais gratuit). */
-export const DELAI_MIN_ENVOI_MS = 15 * 60_000;
+/**
+ * Délai minimal entre deux dépôts automatiques. Il valait 15 min à cause de la limite d'écritures de
+ * Cloudflare KV ; serveur PostgreSQL (relais version 9) : 2 min, pour ne pas renvoyer une grosse
+ * copie à chaque requête de Claude Code.
+ */
+export const DELAI_MIN_ENVOI_MS = 2 * 60_000;
 /** Délai minimal pour « Synchroniser maintenant ». */
-export const DELAI_MIN_MANUEL_MS = 60_000;
+export const DELAI_MIN_MANUEL_MS = 10_000;
 /** Au plus ces entrées (les plus récentes), et ce volume, par appareil. */
 export const MAX_ENTREES_SYNCHRO = 5_000;
 export const MAX_OCTETS_SYNCHRO = 3_000_000;
@@ -180,8 +184,9 @@ export function creerServiceHistorique(
 
 export const PREFIXE_PRESENCE = 'office-presence-';
 const FORMAT_PRESENCE = 'claude-office-presence';
-export const DELAI_MIN_PRESENCE_MS = 5 * 60_000;
-export const MAX_PRESENCES_JOUR = 48;
+// Relais version 9 (PostgreSQL, plus de quota KV) : présence toutes les minutes au plus, sans plafond pratique.
+export const DELAI_MIN_PRESENCE_MS = 60_000;
+export const MAX_PRESENCES_JOUR = 1440;
 /** Fenêtre d'activité récente gardée dans la présence. */
 export const FENETRE_PRESENCE_MS = 3 * 3_600_000;
 export const MAX_ENTREES_PRESENCE = 300;

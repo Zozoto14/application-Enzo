@@ -164,7 +164,7 @@ une session ou le minuteur du Fondateur.
   calendrier des dividendes) → tâches. Le portefeuille donne ces deux listes à l'hôte (`ResumePortefeuille.rappelsTaches`),
   rien n'y est écrit.
 - Passe des liens : à l'ouverture de Tâches, puis toutes les 5 min au plus avec le tour du hub ; n'écrit que s'il y
-  a du nouveau (budget KV inchangé : la synchronisation garde ses 30 s minimum entre deux dépôts).
+  a du nouveau (3 s au moins entre deux dépôts depuis le relais version 9).
 
 ## Ce que fait la V3
 
@@ -406,10 +406,10 @@ n'est scellé pour un membre retiré : son dépôt est réécrit sans le projet,
 tourne : la nouvelle ne part que chez ceux qui restent ; ce que l'ancien membre scellerait encore avec l'ancienne est
 refusé — elle n'ouvre ni n'authentifie plus rien de nouveau.
 
-**Budget d'écritures KV** : rien n'est déposé sans changement (empreintes) ; jamais deux dépôts du même objet à moins
-de 30 s (les changements intermédiaires partent avec le suivant, testé) ; une frappe n'écrit rien (les textes sont
-enregistrés à la validation) ; le tour des comptes part ~5 s après la dernière écriture, toutes les 2 min et au retour
-au premier plan. Un dépôt coûte 2 écritures (valeur + index). Usage typique : quelques dizaines d'écritures par jour.
+**Écritures** (relais version 9, PostgreSQL : plus de quota KV) : rien n'est déposé sans changement (empreintes) ;
+jamais deux dépôts du même objet à moins de 3 s (les rafales partent ensemble, testé ; c'était 30 s avec Cloudflare KV) ;
+une frappe n'écrit rien (les textes sont enregistrés à la validation) ; le tour des comptes part ~2 s après la dernière
+écriture, toutes les 30 s et au retour au premier plan. Un dépôt coûte 2 écritures (valeur + index). Usage typique : quelques dizaines d'écritures par jour.
 V3 : un membre ne reçoit un nouveau dépôt que si SA projection a changé (une modification d'un projet privé n'écrit
 rien chez les membres) ; la clé de chaque projet partagé est créée une fois. Mesuré (`v3.test.ts`, relais en
 mémoire) : premier envoi à 3 membres = 3 dépôts ; puis une modification de Léa dans un projet vu par les 3 = 1

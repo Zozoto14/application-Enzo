@@ -161,8 +161,8 @@ describe('bureau : présence rapide sur le relais (garde-fous)', () => {
     expect((await presenceSiDue({ service, base, appareilId: 'aaaaaaaaaaaa', entrees, maintenant: t })).issue).toBe('envoyee');
     const stocke = espaces.objets.get('office-presence-aaaaaaaaaaaa')!;
     for (const clair of ['export CSV', 'budget', 'PC-bureau', 'SORTIE-SECRETE', 'Bash']) expect(stocke.charge).not.toContain(clair);
-    // Rythme : pas avant 5 min ; ensuite, rien si l'activité n'a pas changé.
-    expect((await presenceSiDue({ service, base, appareilId: 'aaaaaaaaaaaa', entrees: [...entrees, ev(ilYaS(1))], maintenant: new Date(T0 + 60_000) })).issue).toBe('trop-tot');
+    // Rythme : pas avant le délai minimal (1 min depuis la version 9) ; ensuite, rien si l'activité n'a pas changé.
+    expect((await presenceSiDue({ service, base, appareilId: 'aaaaaaaaaaaa', entrees: [...entrees, ev(ilYaS(1))], maintenant: new Date(T0 + DELAI_MIN_PRESENCE_MS / 2) })).issue).toBe('trop-tot');
     expect((await presenceSiDue({ service, base, appareilId: 'aaaaaaaaaaaa', entrees, maintenant: new Date(T0 + DELAI_MIN_PRESENCE_MS) })).issue).toBe('inchangee');
     expect(espaces.deposer).toHaveBeenCalledTimes(1);
     // Plafond quotidien atteint : pause jusqu'au lendemain.
