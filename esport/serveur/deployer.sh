@@ -123,7 +123,9 @@ if [ "$SANS_SITE" = 0 ]; then
         while IFS= read -r ligne; do [ -n "$ligne" ] && [ "${ligne#\#}" = "$ligne" ] && FILTRES+=(--filter="P $ligne"); done < "$ETAT/site-garder.txt"
       fi
       if command -v rsync >/dev/null 2>&1; then
-        rsync -a --delete "${FILTRES[@]}" "$TMP/" "$SITE_DIR/" >> "$JOURNAL" 2>&1 || echec "rsync vers $SITE_DIR"
+        # --chmod : le dossier temporaire (mktemp) est en 700 ; sans cela, rsync recopie ce 700 sur
+        # public_html et le serveur web répond 403 partout (Let's Encrypt compris).
+        rsync -a --delete --chmod=D755,F644 "${FILTRES[@]}" "$TMP/" "$SITE_DIR/" >> "$JOURNAL" 2>&1 || echec "rsync vers $SITE_DIR"
       else
         journal "site : rsync absent, copie simple (les anciens fichiers ne sont pas effacés)"
         ( cd "$TMP" && tar -c --exclude=./htaccess-appdashboard.conf --exclude=./LISEZMOI-deploiement.md . ) | tar -x -C "$SITE_DIR" || echec "copie vers $SITE_DIR"
@@ -131,6 +133,8 @@ if [ "$SANS_SITE" = 0 ]; then
       if [ -f "$TMP/htaccess-appdashboard.conf" ]; then
         "$NODE" scripts/htaccess-o2switch.mjs fusionner "$TMP/htaccess-appdashboard.conf" "$SITE_DIR/.htaccess" >> "$JOURNAL" 2>&1 || echec "fusion du .htaccess"
       fi
+      # public_html doit rester lisible par le serveur web (750 : réglage habituel de cPanel).
+      chmod 750 "$SITE_DIR" 2>/dev/null || true
       echo "$SITE" > "$SITE_DIR/.appdashboard-site"
       echo "$SITE" > "$ETAT/site-deploye"
       journal "site : public_html à jour ($(git log -1 --format='%h %s' "origin/$BRANCHE_SITE" | cut -c1-90))"
