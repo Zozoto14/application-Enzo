@@ -1,0 +1,206 @@
+/**
+ * Reconnaissance des fichiers vidéo et audio par leurs OCTETS (jamais par le nom ni le type annoncé),
+ * et lecture légère des métadonnées d'un MP4 / MOV (atomes `moov` : durée, codecs) ou d'un WebM / MKV
+ * (identifiants de codec). Fonctions PURES, sans dépendance : aucune conversion sur le serveur.
+ *
+ *  - Vidéo (review et réunions) : MP4, MOV, WebM, MKV.
+ *  - Audio (réunions seulement) : M4A, MP3, AAC (ADTS), WAV, OGG / Opus, FLAC.
+ *
+ * Avertissement « peu compatible avec iPhone » : conteneur MKV, ou codec vidéo connu autre que H.264.
+ */
+
+const ascii = (o, debut, n) => String.fromCharCode(...o.subarray(debut, debut + n));
+const u32 = (o, i) => ((o[i] << 24) | (o[i + 1] << 16) | (o[i + 2] << 8) | o[i + 3]) >>> 0;
+const u64 = (o, i) => u32(o, i) * 0x100000000 + u32(o, i + 4);
+
+export const FORMATS = {
+  mp4: { genre: 'video', mime: 'video/mp4', extension: 'mp4', nom: 'MP4' },
+  mov: { genre: 'video', mime: 'video/quicktime', extension: 'mov', nom: 'MOV' },
+  webm: { genre: 'video', mime: 'video/webm', extension: 'webm', nom: 'WebM' },
+  mkv: { genre: 'video', mime: 'video/x-matroska', extension: 'mkv', nom: 'MKV' },
+  m4a: { genre: 'audio', mime: 'audio/mp4', extension: 'm4a', nom: 'M4A' },
+  mp3: { genre: 'audio', mime: 'audio/mpeg', extension: 'mp3', nom: 'MP3' },
+  aac: { genre: 'audio', mime: 'audio/aac', extension: 'aac', nom: 'AAC' },
+  wav: { genre: 'audio', mime: 'audio/wav', extension: 'wav', nom: 'WAV' },
+  ogg: { genre: 'audio', mime: 'audio/ogg', extension: 'ogg', nom: 'OGG' },
+  flac: { genre: 'audio', mime: 'audio/flac', extension: 'flac', nom: 'FLAC' },
+};
+
+/** Formats acceptés selon l'usage. */
+export const FORMATS_PERMIS = {
+  review: ['mp4', 'mov', 'webm', 'mkv'],
+  reunion: ['mp4', 'mov', 'webm', 'mkv', 'm4a', 'mp3', 'aac', 'wav', 'ogg', 'flac'],
+};
+
+const MARQUES_AUDIO = new Set(['M4A ', 'M4B ', 'M4P ', 'F4A ', 'F4B ']);
+const ATOMES_QUICKTIME = new Set(['moov', 'mdat', 'wide', 'free', 'skip', 'pnot']);
+
+/** Conteneur reconnu d'après les premiers octets (au moins 12 ; 64 conseillés), ou null. */
+export function reconnaitre(octets) {
+  const o = octets instanceof Uint8Array ? octets : new Uint8Array(octets ?? []);
+  if (o.length < 12) return null;
+  const quatre = ascii(o, 4, 4);
+  if (quatre === 'ftyp') {
+    const marque = ascii(o, 8, 4);
+    if (marque === 'qt  ') return 'mov';
+    if (MARQUES_AUDIO.has(marque)) return 'm4a';
+    return 'mp4';
+  }
+  if (ATOMES_QUICKTIME.has(quatre) && u32(o, 0) >= 8) return 'mov';
+  if (o[0] === 0x1a && o[1] === 0x45 && o[2] === 0xdf && o[3] === 0xa3) {
+    // En-tête EBML : le DocType (élément 0x4282) dit « webm » ou « matroska ».
+    const debut = ascii(o, 0, Math.min(o.length, 96));
+    if (debut.includes('webm')) return 'webm';
+    if (debut.includes('matroska')) return 'mkv';
+    return null;
+  }
+  const premiers = ascii(o, 0, 4);
+  if (premiers === 'RIFF' && ascii(o, 8, 4) === 'WAVE') return 'wav';
+  if (premiers === 'OggS') return 'ogg';
+  if (premiers === 'fLaC') return 'flac';
+  if (ascii(o, 0, 3) === 'ID3') return 'mp3';
+  if (o[0] === 0xff && (o[1] & 0xe0) === 0xe0) {
+    // Synchro de trame : couche 00 = AAC (ADTS), sinon MPEG audio (MP3).
+    if ((o[1] & 0x06) === 0) return (o[1] & 0x10) === 0x10 ? 'aac' : null;
+    return (o[1] & 0x18) !== 0x08 && (o[2] & 0xf0) !== 0xf0 ? 'mp3' : null;
+  }
+  return null;
+}
+
+const CODECS_MP4 = { avc1: 'h264', avc3: 'h264', hvc1: 'hevc', hev1: 'hevc', av01: 'av1', vp09: 'vp9', vp08: 'vp8', mp4v: 'mpeg4', 'mp4a': 'aac', 'Opus': 'opus', 'ac-3': 'ac3', 'ec-3': 'eac3', alac: 'alac', '.mp3': 'mp3', fLaC: 'flac' };
+
+/** Boîtes ISO-BMFF d'un tampon : [{ type, debut (contenu), fin }]. */
+function boites(o, debut, fin) {
+  const sortie = [];
+  let i = debut;
+  while (i + 8 <= fin) {
+    let taille = u32(o, i);
+    const type = ascii(o, i + 4, 4);
+    let entete = 8;
+    if (taille === 1) {
+      if (i + 16 > fin) break;
+      taille = u64(o, i + 8);
+      entete = 16;
+    } else if (taille === 0) taille = fin - i;
+    if (taille < entete || i + taille > fin) {
+      sortie.push({ type, debut: i + entete, fin, tronquee: true });
+      break;
+    }
+    sortie.push({ type, debut: i + entete, fin: i + taille });
+    i += taille;
+  }
+  return sortie;
+}
+
+/** Lit un `moov` complet : durée (s) et codecs des pistes vidéo / audio. */
+function lireMoov(o, debut, fin) {
+  const infos = {};
+  for (const b of boites(o, debut, fin)) {
+    if (b.type === 'mvhd' && !b.tronquee) {
+      const version = o[b.debut];
+      const echelle = version === 1 ? u32(o, b.debut + 20) : u32(o, b.debut + 12);
+      const duree = version === 1 ? u64(o, b.debut + 24) : u32(o, b.debut + 16);
+      if (echelle > 0) infos.duree = Math.round((duree / echelle) * 10) / 10;
+    }
+    if (b.type !== 'trak' || b.tronquee) continue;
+    const mdia = boites(o, b.debut, b.fin).find(x => x.type === 'mdia');
+    if (!mdia) continue;
+    const dans = boites(o, mdia.debut, mdia.fin);
+    const hdlr = dans.find(x => x.type === 'hdlr');
+    const genre = hdlr ? ascii(o, hdlr.debut + 8, 4) : '';
+    const minf = dans.find(x => x.type === 'minf');
+    const stbl = minf ? boites(o, minf.debut, minf.fin).find(x => x.type === 'stbl') : undefined;
+    const stsd = stbl ? boites(o, stbl.debut, stbl.fin).find(x => x.type === 'stsd') : undefined;
+    if (!stsd || stsd.debut + 16 > stsd.fin) continue;
+    // stsd : version/drapeaux (4), nombre d'entrées (4), puis la première entrée : taille (4), type (4).
+    const fourcc = ascii(o, stsd.debut + 12, 4);
+    const codec = CODECS_MP4[fourcc] ?? fourcc.trim();
+    if (genre === 'vide' && !infos.codecVideo) infos.codecVideo = codec;
+    if (genre === 'soun' && !infos.codecAudio) infos.codecAudio = codec;
+  }
+  return infos;
+}
+
+/** Cherche un `moov` dans les premiers octets d'un MP4 / MOV (boîtes de premier niveau). */
+function moovAuDebut(o) {
+  for (const b of boites(o, 0, o.length)) {
+    if (b.type === 'moov') return b.tronquee ? { tronque: true } : lireMoov(o, b.debut, b.fin);
+    if (b.tronquee) return null;
+  }
+  return null;
+}
+
+/** Cherche un `moov` complet dans la FIN du fichier (MP4 non « faststart »). */
+function moovALaFin(o) {
+  for (let i = o.length - 8; i >= 4; i--) {
+    if (o[i] !== 0x6d || ascii(o, i, 4) !== 'moov') continue;
+    const taille = u32(o, i - 4);
+    if (taille >= 8 && i - 4 + taille <= o.length) return lireMoov(o, i + 4, i - 4 + taille);
+  }
+  return null;
+}
+
+const CODECS_MATROSKA = [
+  ['V_MPEG4/ISO/AVC', 'h264'],
+  ['V_MPEGH/ISO/HEVC', 'hevc'],
+  ['V_AV1', 'av1'],
+  ['V_VP9', 'vp9'],
+  ['V_VP8', 'vp8'],
+  ['A_OPUS', 'opus'],
+  ['A_VORBIS', 'vorbis'],
+  ['A_AAC', 'aac'],
+];
+
+/**
+ * Analyse du début d'un fichier (premier morceau) : `{ format, genre, mime, codecVideo?, codecAudio?,
+ * duree?, moovAuDebut? }`, ou null si ce n'est ni une vidéo ni un audio reconnu.
+ */
+export function analyserDebut(octets) {
+  const o = octets instanceof Uint8Array ? octets : new Uint8Array(octets ?? []);
+  const format = reconnaitre(o);
+  if (!format) return null;
+  const sortie = { format, genre: FORMATS[format].genre, mime: FORMATS[format].mime };
+  if (format === 'mp4' || format === 'mov' || format === 'm4a') {
+    const moov = moovAuDebut(o);
+    if (moov && !moov.tronque) Object.assign(sortie, moov, { moovAuDebut: true });
+    else sortie.moovAuDebut = false;
+  }
+  if (format === 'webm' || format === 'mkv') {
+    const texte = ascii(o, 0, Math.min(o.length, 64 * 1024));
+    for (const [id, codec] of CODECS_MATROSKA) {
+      if (!texte.includes(id)) continue;
+      if (id.startsWith('V_') && !sortie.codecVideo) sortie.codecVideo = codec;
+      if (id.startsWith('A_') && !sortie.codecAudio) sortie.codecAudio = codec;
+    }
+  }
+  return sortie;
+}
+
+/** Complète l'analyse avec la fin du fichier (le `moov` d'un MP4 enregistré sans « faststart »). */
+export function completerAvecFin(analyse, octetsFin) {
+  if (!analyse || analyse.moovAuDebut !== false) return analyse;
+  const moov = moovALaFin(octetsFin instanceof Uint8Array ? octetsFin : new Uint8Array(octetsFin ?? []));
+  return moov ? { ...analyse, ...moov } : analyse;
+}
+
+/** Le format est-il peu compatible avec l'iPhone (Safari) ? */
+export function peuCompatibleIphone(analyse) {
+  if (!analyse) return false;
+  if (analyse.format === 'mkv') return true;
+  return analyse.genre === 'video' && Boolean(analyse.codecVideo) && analyse.codecVideo !== 'h264';
+}
+
+/** Résumé public (renvoyé à l'app). */
+export function analysePublique(analyse) {
+  if (!analyse) return null;
+  return {
+    format: analyse.format,
+    nomFormat: FORMATS[analyse.format]?.nom ?? analyse.format,
+    genre: analyse.genre,
+    mime: analyse.mime,
+    codecVideo: analyse.codecVideo ?? null,
+    codecAudio: analyse.codecAudio ?? null,
+    duree: Number.isFinite(analyse.duree) ? analyse.duree : null,
+    peuCompatibleIphone: peuCompatibleIphone(analyse),
+  };
+}

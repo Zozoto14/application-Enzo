@@ -69,6 +69,9 @@ export const TABLES = [
   ['notes_joueurs', 'id'],
   // Migration 0015 : récapitulatif e-mail (adresse CHIFFRÉE dans l'export).
   ['courriel_recap', 'compte_id'],
+  // Vidéos et transcriptions (migration 0014) : envois par morceaux, transcriptions des réunions.
+  ['envois', 'id'],
+  ['transcriptions', 'id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

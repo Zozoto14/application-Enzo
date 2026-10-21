@@ -11,12 +11,19 @@
  *   CREATION_TEAMS    « fondateur » (défaut) ou « tous »
  *   CLE_DISCORD, LIEN_APP, DISCORD_APPLICATION_ID, DISCORD_PUBLIC_KEY, DISCORD_BOT_TOKEN : comme sur le Worker.
  *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM : récapitulatif e-mail (facultatif, docs/emails.md).
+ *   ESPORT_VIDEO_MAX       plafond d'une vidéo ou d'un enregistrement déposé (« 10G » par défaut)
+ *   ESPORT_TAILLE_MORCEAU  taille des morceaux d'envoi (« 8M » par défaut, de 1 à 64 Mio) : sous la limite
+ *                          de corps de requête de l'hébergeur (docs/esport/videos.md)
+ *   TRANSCRIPTION_API, TRANSCRIPTION_API_CLE… : transcription par une API externe, désactivée par défaut
+ *                          (docs/esport/resumes.md)
  */
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { chargerEnv, fichierEnvParDefaut } from './commun.mjs';
 import { configSmtp } from './courriel-smtp.mjs';
+import { configMedias } from '../noyau/medias/service.mjs';
+import { configTranscriptionExterne } from '../noyau/medias/transcription.mjs';
 
 export function chargerConfigEsport(env = process.env) {
   const fichier = chargerEnv(env.ESPORT_ENV || fichierEnvParDefaut('esport'), env);
@@ -33,6 +40,8 @@ export function chargerConfigEsport(env = process.env) {
     // E-mails (récapitulatif Esport, docs/emails.md) : mêmes variables SMTP que relais.env, facultatives.
     smtp: configSmtp(env),
     baseConfiguree: Boolean(env.DATABASE_URL || env.PGDATABASE || env.PGHOST),
+    medias: configMedias(env),
+    transcriptionExterne: configTranscriptionExterne(env),
   };
 }
 

@@ -33,6 +33,7 @@ import { SectionObjectifs } from './Objectifs';
 import { SectionResumes } from './Resumes';
 import { ECRANS_MODULES, moduleAccessible } from './modules';
 import { AccueilPlanning, ReglagesPlanning } from './planning/AccueilPlanning';
+import { EspaceTeam } from './medias/Espace';
 import { BoutonConfirme, Panneau, PastilleRole, Retours, TitreSection, styles, useAgir } from './commun';
 import { CodeAffiche } from './CodeLiaison';
 import { apiMonDiscord, type CodeLiaison, type MonDiscord } from '../discord/api';
@@ -553,6 +554,7 @@ function Parametres({
   const droite = (
     <View style={{ gap: ESP.m, flex: large ? 1 : undefined, minWidth: 0 }}>
       <ReglagesPlanning theme={theme} client={client} detail={detail} onChange={onChange} />
+      {peut('team.manage') ? <EspaceTeam theme={theme} client={client} teamId={detail.team.id} /> : null}
       <MonProfil theme={theme} client={client} onExporter={onExporter} />
       {peut('team.delete') ? (
         <Panneau theme={theme} style={{ borderColor: teinteTransparente(theme.critique, 0.5) }}>

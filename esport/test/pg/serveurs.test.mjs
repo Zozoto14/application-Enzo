@@ -136,6 +136,66 @@ test('o2switch : relais + Esport sur PostgreSQL, team, dépôt de PDF, cron', op
   }
 });
 
+test('o2switch : vidéo envoyée en morceaux de 8 Mio par HTTP (corps de requête), lue par plages EN FLUX (206), cron', options, async () => {
+  const { createHash } = await import('node:crypto');
+  const { mp4Factice } = await import('../medias-aide.mjs');
+  const { base } = await schemaNeuf();
+  await migrer(base);
+  const relais = await demarrerRelais({ port: 0, hote: '127.0.0.1', base, config: { JETON, ORIGINES_SITE: 'https://appdashboard.fr', baseConfiguree: true } });
+  const dossier = mkdtempSync(join(tmpdir(), 'esport-o2switch-videos-'));
+  // Réglages par défaut d'o2switch (configMedias) : morceaux de 8 Mio ; le serveur HTTP accepte un morceau entier.
+  const { configMedias } = await import('../../noyau/medias/service.mjs');
+  const esport = await demarrerEsport({ port: 0, hote: '127.0.0.1', base, config: configEsport(relais.url, dossier, { medias: configMedias({}) }) });
+  try {
+    const f = await sessionFondateur(esport.url);
+    await api(esport.url, '/moi', { methode: 'PUT', jeton: f, corps: { pseudo: 'Fondateur' } });
+    const teamId = (await api(esport.url, '/teams', { methode: 'POST', jeton: f, corps: { nom: 'Team vidéo', jeu: 'valorant', preset: 'valorant_complet' } })).corps.team.id;
+    const video = mp4Factice({ taille: 8 * 1024 * 1024 + 300_000, duree: 95 });
+    const debut = await api(esport.url, `/teams/${teamId}/review/envois`, { methode: 'POST', jeton: f, corps: { nom: 'scrim.mp4', taille: video.length } });
+    assert.equal(debut.statut, 200, JSON.stringify(debut.corps));
+    assert.equal(debut.corps.tailleMorceau, 8 * 1024 * 1024);
+    assert.equal(debut.corps.morceaux, 2);
+    const chemin = `${esport.url}/teams/${teamId}/review/envois/${debut.corps.id}`;
+    for (let i = 0; i < 2; i++) {
+      const part = video.subarray(i * 8 * 1024 * 1024, (i + 1) * 8 * 1024 * 1024);
+      const r = await fetch(`${chemin}/morceaux/${i}`, { method: 'PUT', headers: { Authorization: `Bearer ${f}`, 'Content-Type': 'application/octet-stream', 'X-Sha256': createHash('sha256').update(part).digest('hex') }, body: part });
+      assert.equal(r.status, 200, await r.text());
+    }
+    const fin = await api(esport.url, `/teams/${teamId}/review/envois/${debut.corps.id}/fin`, { methode: 'POST', jeton: f, corps: { sha256: createHash('sha256').update(video).digest('hex') } });
+    assert.equal(fin.statut, 200, JSON.stringify(fin.corps));
+    assert.equal(fin.corps.media.duree, 95);
+    const review = await api(esport.url, `/teams/${teamId}/review`, { methode: 'POST', jeton: f, corps: { titre: 'Scrim', envoi: debut.corps.id } });
+    assert.equal(review.statut, 200, JSON.stringify(review.corps));
+    // Fichier sur le disque, sous un nom aléatoire, hors de tout dossier public.
+    const ligne = await base.premier('SELECT * FROM fichiers WHERE entite_type = ?', ['review_video']);
+    assert.equal(statSync(join(dossier, ligne.cle_stockage)).size, video.length);
+    assert.match(ligne.cle_stockage, /^teams\/[0-9a-f-]+\/videos\/[0-9a-f-]+\.media$/);
+    const lien = (await api(esport.url, `/teams/${teamId}/review/${review.corps.id}/video/lien`, { methode: 'POST', jeton: f })).corps;
+    assert.ok(lien.url.startsWith(esport.url));
+    const plage = await fetch(lien.url, { headers: { Range: 'bytes=8388000-8388999' } });
+    assert.equal(plage.status, 206);
+    assert.equal(plage.headers.get('content-range'), `bytes 8388000-8388999/${video.length}`);
+    assert.deepEqual(new Uint8Array(await plage.arrayBuffer()), video.subarray(8388000, 8389000));
+    // Sans plage : le fichier entier, envoyé en flux.
+    const entier = await fetch(lien.url);
+    assert.equal(entier.status, 200);
+    assert.equal(Number(entier.headers.get('content-length')), video.length);
+    assert.equal(createHash('sha256').update(new Uint8Array(await entier.arrayBuffer())).digest('hex'), createHash('sha256').update(video).digest('hex'));
+    // Un morceau plus gros que la limite du serveur HTTP : refusé (413) sans faire tomber le serveur.
+    const trop = await fetch(`${esport.url}/teams/${teamId}/review/envois`, { method: 'POST', headers: { Authorization: `Bearer ${f}`, 'Content-Type': 'application/json' }, body: 'x'.repeat(26 * 1024 * 1024) });
+    assert.equal(trop.status, 413);
+    assert.equal((await api(esport.url, '/sante')).statut, 200);
+    // Cron : la tâche de ménage des envois passe.
+    const rapport = await executerCron(base, configEsport(relais.url, dossier, { medias: configMedias({}) }));
+    assert.deepEqual(rapport.filter(r => !r.ok), []);
+    assert.ok(rapport.some(r => r.tache === 'envois inachevés'));
+  } finally {
+    await esport.fermer();
+    await relais.fermer();
+    await base.fermer();
+  }
+});
+
 test('o2switch : déménagement d’un ancien serveur (base et fichiers) vers PostgreSQL avec importer.mjs, comptes vérifiés', options, async () => {
   // L'« ancien » serveur : SQLite + fichiers, avec le même relais (comme le Worker Cloudflare).
   const cible = await schemaNeuf();

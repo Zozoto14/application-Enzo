@@ -49,6 +49,9 @@ const ROUTES_TEAM = [
   ['POST', '/invitations', null],
   ['DELETE', `/invitations/${UUID}`, null],
   ['GET', '/stats', null],
+  // Espace utilisé (Paramètres).
+  ['GET', '/espace', null],
+  ['DELETE', `/espace/${UUID}`, null],
   ['GET', '/m/planning', 'planning'],
   // Journal.
   ['GET', '/journal', 'activity_log'],
@@ -94,6 +97,17 @@ const ROUTES_TEAM = [
   ['POST', `/resumes/${UUID}/vu`, 'meeting_summaries'],
   ['POST', `/resumes/${UUID}/lien`, 'meeting_summaries'],
   ['PUT', `/resumes/${UUID}/pdf`, 'meeting_summaries'],
+  // Enregistrements déposés et transcription (migration 0014).
+  ['POST', '/resumes/envois', 'meeting_summaries'],
+  ['GET', `/resumes/envois/${UUID}`, 'meeting_summaries'],
+  ['DELETE', `/resumes/envois/${UUID}`, 'meeting_summaries'],
+  ['PUT', `/resumes/envois/${UUID}/morceaux/0`, 'meeting_summaries'],
+  ['POST', `/resumes/envois/${UUID}/fin`, 'meeting_summaries'],
+  ['POST', `/resumes/${UUID}/enregistrement/lien`, 'meeting_summaries'],
+  ['GET', `/resumes/${UUID}/transcription`, 'meeting_summaries'],
+  ['PUT', `/resumes/${UUID}/transcription`, 'meeting_summaries'],
+  ['POST', `/resumes/${UUID}/transcription/lien`, 'meeting_summaries'],
+  ['POST', `/resumes/${UUID}/transcription/externe`, 'meeting_summaries'],
   // Objectifs et tâches.
   ['GET', '/objectifs', 'goals_tasks'],
   ['POST', '/objectifs', 'goals_tasks'],
@@ -124,6 +138,13 @@ const ROUTES_TEAM = [
   ['PATCH', `/review/${UUID}`, 'video_review'],
   ['DELETE', `/review/${UUID}`, 'video_review'],
   ['GET', `/review/${UUID}/export.md`, 'video_review'],
+  // Vidéos déposées (migration 0014).
+  ['POST', `/review/${UUID}/video/lien`, 'video_review'],
+  ['POST', '/review/envois', 'video_review'],
+  ['GET', `/review/envois/${UUID}`, 'video_review'],
+  ['DELETE', `/review/envois/${UUID}`, 'video_review'],
+  ['PUT', `/review/envois/${UUID}/morceaux/0`, 'video_review'],
+  ['POST', `/review/envois/${UUID}/fin`, 'video_review'],
   ['POST', `/review/${UUID}/reperes`, 'video_review'],
   ['PATCH', `/review/${UUID}/reperes/${UUID}`, 'video_review'],
   ['DELETE', `/review/${UUID}/reperes/${UUID}`, 'video_review'],

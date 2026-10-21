@@ -33,7 +33,8 @@
 import { evenement } from '../evenements.mjs';
 import { autorise } from '../permissions.mjs';
 import { echec, iso, nouvelId, texteNettoye } from '../outils.mjs';
-import { pseudosDe } from '../requetes.mjs';
+import { lignesParIds, pseudosDe } from '../requetes.mjs';
+import { fichierPublic } from '../medias/service.mjs';
 import { CATEGORIES, exporterMarkdown, nomFichierExport } from './export.mjs';
 import { lireDessin, validerDessin } from './dessin.mjs';
 import { nettoyerNote } from './markdown.mjs';
@@ -61,7 +62,7 @@ function lireSecondes(valeur, quoi) {
   return Math.round(n * 10) / 10;
 }
 
-export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
+export function servicesReview({ base, maintenant = () => Date.now(), socle, medias }) {
   const { contexteTeam } = socle;
   const peut = (ctx, p) => autorise(ctx.permissions, ctx.modules, p);
 
@@ -92,11 +93,14 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
     return r;
   }
 
-  const reviewPublique = (r, noms, nbReperes) => ({
+  const reviewPublique = (r, noms, nbReperes, videos = new Map()) => ({
     id: r.id,
     titre: r.titre,
+    // Source : YouTube (url, videoId) OU fichier déposé (video : nom, taille, format, avertissement iPhone).
+    source: r.source === 'fichier' ? 'fichier' : 'youtube',
     url: r.url,
     videoId: r.video_id,
+    ...(r.source === 'fichier' ? { video: fichierPublic(videos.get(r.fichier_id)) } : {}),
     reference: r.reference,
     creePar: personne(r.cree_par, noms),
     creeLe: r.cree_le,
@@ -159,6 +163,10 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
 
   // -------------------------------------------------------------- Lectures
 
+  async function videosDe(lignes) {
+    return new Map((await lignesParIds(base, 'SELECT * FROM fichiers WHERE id', lignes.filter(r => r.source === 'fichier').map(r => r.fichier_id))).map(f => [f.id, f]));
+  }
+
   async function liste(acteur, teamId) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'video_review.view');
@@ -166,7 +174,8 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
     const compteurs = await base.tous('SELECT review_id, COUNT(*) AS n FROM review_reperes WHERE team_id = ? AND supprime_le IS NULL GROUP BY review_id', [teamId]);
     const parReview = new Map(compteurs.map(c => [c.review_id, Number(c.n)]));
     const noms = await pseudos(lignes.map(r => r.cree_par));
-    return { reviews: lignes.map(r => reviewPublique(r, noms, parReview.get(r.id) ?? 0)), droits: droitsDe(ctx) };
+    const videos = await videosDe(lignes);
+    return { reviews: lignes.map(r => reviewPublique(r, noms, parReview.get(r.id) ?? 0, videos)), droits: droitsDe(ctx) };
   }
 
   async function detail(acteur, teamId, id) {
@@ -178,7 +187,7 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
       [teamId],
     );
     return {
-      review: reviewPublique(review, await pseudos([review.cree_par])),
+      review: reviewPublique(review, await pseudos([review.cree_par]), undefined, await videosDe([review])),
       reperes: await reperesDe(ctx, review),
       membres,
       droits: droitsDe(ctx),
@@ -191,6 +200,12 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
 
   /** Titre et adresse validés d'une nouvelle review. */
   function lireNouvelle(corps) {
+    if (corps?.envoi) {
+      // Vidéo déposée sur le site : l'envoi (déjà terminé) est rattaché dans le même lot.
+      const titre = texteNettoye(corps?.titre, 120);
+      if (titre.length < 2) throw echec(400, 'titre', 'Titre : 2 caractères au moins.');
+      return { titre, videoId: '', url: '', reference: texteNettoye(corps?.reference, 120), envoi: corps.envoi };
+    }
     const youtube = extraireYoutube(corps?.url);
     if (!youtube) throw echec(400, 'url-youtube', 'Adresse YouTube invalide (watch, youtu.be, shorts, embed ou live).');
     const titre = texteNettoye(corps?.titre, 120);
@@ -211,21 +226,29 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
     const s = lireNouvelle(corps);
     const t = maintenant();
     const id = nouvelId();
+    let rattachement = null;
+    if (s.envoi) {
+      if (!medias) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
+      rattachement = await medias.preparerRattachement(ctx, s.envoi, 'review', { entiteType: 'review_video', entiteId: id });
+    }
     const instructions = [
+      ...(rattachement?.instructions ?? []),
       {
-        sql: 'INSERT INTO reviews (id, team_id, titre, url, video_id, reference, cree_par, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        params: [id, teamId, s.titre, s.url, s.videoId, s.reference, acteur.compte, iso(t), iso(t)],
+        sql: 'INSERT INTO reviews (id, team_id, titre, url, video_id, reference, source, fichier_id, cree_par, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [id, teamId, s.titre, s.url, s.videoId, s.reference, rattachement ? 'fichier' : 'youtube', rattachement?.fichierId ?? null, acteur.compte, iso(t), iso(t)],
       },
       evenement('review.created', {
         teamId,
         acteur: acteur.compte,
         entiteType: 'review',
         entiteId: id,
-        charge: { titre: s.titre, videoId: s.videoId, url: s.url, reference: s.reference, ...supplementCharge },
+        charge: rattachement
+          ? { titre: s.titre, source: 'fichier', reference: s.reference, ...supplementCharge }
+          : { titre: s.titre, videoId: s.videoId, url: s.url, reference: s.reference, ...supplementCharge },
         maintenant: t,
       }),
     ];
-    return { id, instructions, depart: extraireYoutube(corps?.url)?.debut ?? null };
+    return { id, instructions, depart: rattachement ? null : (extraireYoutube(corps?.url)?.debut ?? null) };
   }
 
   async function creer(acteur, teamId, corps) {
@@ -234,7 +257,7 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
     const { id, instructions, depart } = await preparerCreation(ctx, acteur, corps);
     await base.lot(instructions);
     const r = await reviewDeTeam(teamId, id);
-    return { ...reviewPublique(r, await pseudos([r.cree_par]), 0), depart };
+    return { ...reviewPublique(r, await pseudos([r.cree_par]), 0, await videosDe([r])), depart };
   }
 
   async function modifier(acteur, teamId, id, corps) {
@@ -256,7 +279,7 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
       ]);
     }
     const apres = await reviewDeTeam(teamId, id);
-    return reviewPublique(apres, await pseudos([apres.cree_par]));
+    return reviewPublique(apres, await pseudos([apres.cree_par]), undefined, await videosDe([apres]));
   }
 
   async function supprimer(acteur, teamId, id) {
@@ -270,7 +293,18 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
       { sql: 'UPDATE planning_evenements SET review_id = NULL WHERE review_id = ? AND team_id = ?', params: [id, teamId] },
       evenement('review.deleted', { teamId, acteur: acteur.compte, entiteType: 'review', entiteId: id, charge: { titre: r.titre }, maintenant: t }),
     ]);
+    // Vidéo déposée : plus lisible avec la review, ses octets sont effacés (espace libéré).
+    if (r.source === 'fichier' && r.fichier_id) await medias?.effacerOctets(r.fichier_id);
     return { ok: true };
+  }
+
+  /** Lien signé (2 h) vers la vidéo déposée d'une review (lecture en streaming, requêtes Range). */
+  async function lienVideo(acteur, teamId, id) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exiger(ctx, 'video_review.view');
+    const r = await reviewDeTeam(teamId, id);
+    if (r.source !== 'fichier' || !r.fichier_id || !medias) throw echec(404, 'pas-de-video', 'Cette review n’a pas de vidéo déposée.');
+    return medias.lienMedia(acteur, await medias.fichier(r.fichier_id));
   }
 
   // -------------------------------------------------------------- Repères
@@ -461,7 +495,7 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
     const review = await reviewDeTeam(teamId, id);
     const reperes = await reperesDe(ctx, review);
     const contenu = exporterMarkdown({
-      review: { titre: review.titre, url: review.url, videoId: review.video_id, reference: review.reference },
+      review: { titre: review.titre, url: review.url, videoId: review.video_id, reference: review.reference, source: review.source, nomFichier: review.source === 'fichier' ? (await medias?.fichier(review.fichier_id))?.nom_original : undefined },
       reperes: reperes.map(r => ({
         debut: r.debut,
         fin: r.fin,
@@ -480,5 +514,5 @@ export function servicesReview({ base, maintenant = () => Date.now(), socle }) {
     return { nom: nomFichierExport(review.titre), type: 'text/markdown; charset=utf-8', contenu };
   }
 
-  return { liste, detail, creer, modifier, supprimer, ajouterRepere, modifierRepere, supprimerRepere, commenter, supprimerCommentaire, reagir, exporter, preparerCreation, reviewDeTeam, exiger };
+  return { liste, detail, creer, modifier, supprimer, lienVideo, ajouterRepere, modifierRepere, supprimerRepere, commenter, supprimerCommentaire, reagir, exporter, preparerCreation, reviewDeTeam, exiger };
 }

@@ -19,8 +19,11 @@
 import { evenement } from './evenements.mjs';
 import { cheminSigne, cleStockageResume, empreinteSha256, lireOctets, nomOriginal, validerPdf, verifierEntetesPdf, verifierLien } from './fichiers.mjs';
 import { autorise } from './permissions.mjs';
-import { echec, iso, nouvelId, texteLong, texteNettoye } from './outils.mjs';
+import { echec, iso, jsonOu, nouvelId, texteLong, texteNettoye } from './outils.mjs';
 import { lignesParIds, pseudosDe } from './requetes.mjs';
+import { fichierPublic } from './medias/service.mjs';
+import { pdfTranscription } from './medias/pdf.mjs';
+import { LANGUES_TRANSCRIPTION, preResume, transcrireParApi, validerSegments } from './medias/transcription.mjs';
 
 export const MODULE_RESUMES = 'meeting_summaries';
 export const STATUTS_REUNION = ['a_resumer', 'en_cours', 'termine'];
@@ -66,7 +69,7 @@ const exigerUuid = (valeur, quoi) => {
  * permissions effectives). `stockage` : interface de fichiers (facultative :
  * sans elle, le dépôt de PDF répond 503).
  */
-export function servicesResumes({ base, stockage, cleSession, maintenant = () => Date.now(), socle }) {
+export function servicesResumes({ base, stockage, cleSession, maintenant = () => Date.now(), socle, medias, transcriptionExterne = { actif: false }, fetchTranscription }) {
   const { contexteTeam } = socle;
   const peut = (ctx, permission) => autorise(ctx.permissions, ctx.modules, permission);
 
@@ -101,7 +104,8 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     return lignes;
   }
 
-  function reunionPublique(r, type, pseudos, ctx, team) {
+  function reunionPublique(r, type, pseudos, ctx, team, enregistrements = new Map()) {
+    const enr = r.enregistrement_id ? enregistrements.get(r.enregistrement_id) : null;
     return {
       id: r.id,
       team: { id: r.team_id, nom: team?.nom ?? null },
@@ -118,16 +122,26 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       nouveau: !r.vu_le,
       vu: r.vu_le ? { le: r.vu_le, par: r.vu_par } : null,
       moi: { deposant: r.depose_par === ctx.acteur.compte, redacteur: redacteur(ctx) },
+      // Enregistrement déposé (vidéo ou audio) et transcription automatique.
+      enregistrement: enr ? fichierPublic(enr) : null,
+      transcription: {
+        statut: r.transcription_statut ?? 'aucune',
+        pdf: Boolean(r.transcription_pdf_id),
+        peutTranscrire: Boolean(enr && !enr.supprime_le) && (r.depose_par === ctx.acteur.compte || redacteur(ctx)),
+        // Point d'extension : transcription par une API externe, si le serveur l'a activée.
+        externe: Boolean(transcriptionExterne?.actif),
+      },
     };
   }
 
   async function publier(lignes, ctxParTeam) {
     const pseudos = await noms(lignes.flatMap(l => [l.depose_par, l.resume_par]));
     const types = new Map((await lignesParIds(base, 'SELECT * FROM types_reunion WHERE id', lignes.map(l => l.type_id))).map(y => [y.id, y]));
+    const enregistrements = new Map((await lignesParIds(base, 'SELECT * FROM fichiers WHERE id', lignes.map(l => l.enregistrement_id))).map(f => [f.id, f]));
     const sortie = [];
     for (const l of lignes) {
       const ctx = ctxParTeam.get(l.team_id);
-      sortie.push(reunionPublique(l, types.get(l.type_id), pseudos, ctx, ctx.team));
+      sortie.push(reunionPublique(l, types.get(l.type_id), pseudos, ctx, ctx.team, enregistrements));
     }
     return sortie;
   }
@@ -233,7 +247,10 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     const ctx = await contexteTeam(acteur, teamId);
     exigerUne(ctx, P.deposer);
     const lien = String(corps?.lien ?? '').trim();
-    if (!lienValide(lien)) throw echec(400, 'lien', 'Lien de l’enregistrement : une adresse http(s) valide.');
+    // L'enregistrement est soit DÉPOSÉ (envoi par morceaux déjà terminé), soit un lien externe ; les deux sont possibles.
+    const envoiId = corps?.envoi ?? null;
+    if (!envoiId && !lienValide(lien)) throw echec(400, 'lien', 'Lien de l’enregistrement : une adresse http(s) valide.');
+    if (lien && !lienValide(lien)) throw echec(400, 'lien', 'Lien de l’enregistrement : une adresse http(s) valide.');
     const titre = texteNettoye(corps?.titre, 120);
     if (titre.length < 2) throw echec(400, 'titre', 'Titre : 2 caractères au moins.');
     const date = String(corps?.dateReunion ?? '');
@@ -244,13 +261,19 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     const note = texteLong(corps?.note, 2000);
     const t = maintenant();
     const id = nouvelId();
+    let rattachement = null;
+    if (envoiId) {
+      if (!medias) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
+      rattachement = await medias.preparerRattachement(ctx, envoiId, 'reunion', { entiteType: 'reunion_enregistrement', entiteId: id });
+    }
     await base.lot([
+      ...(rattachement?.instructions ?? []),
       {
-        sql: `INSERT INTO reunions (id, team_id, depose_par, lien, type_id, date_reunion, titre, note, statut, cree_le, maj_le)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'a_resumer', ?, ?)`,
-        params: [id, teamId, acteur.compte, lien, type.id, date, titre, note, iso(t), iso(t)],
+        sql: `INSERT INTO reunions (id, team_id, depose_par, lien, type_id, date_reunion, titre, note, statut, enregistrement_id, transcription_statut, cree_le, maj_le)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'a_resumer', ?, ?, ?, ?)`,
+        params: [id, teamId, acteur.compte, lien, type.id, date, titre, note, rattachement?.fichierId ?? null, rattachement ? 'a_faire' : 'aucune', iso(t), iso(t)],
       },
-      evenement('meeting.submitted', { teamId, acteur: acteur.compte, entiteType: 'reunion', entiteId: id, charge: { titre, type: type.nom, dateReunion: date }, maintenant: t }),
+      evenement('meeting.submitted', { teamId, acteur: acteur.compte, entiteType: 'reunion', entiteId: id, charge: { titre, type: type.nom, dateReunion: date, ...(rattachement ? { enregistrement: true } : {}) }, maintenant: t }),
     ]);
     return (await publier([await base.premier('SELECT * FROM reunions WHERE id = ?', [id])], new Map([[teamId, ctx]])))[0];
   }
@@ -309,6 +332,8 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       { sql: 'UPDATE reunions SET supprime_le = ?, maj_le = ? WHERE id = ?', params: [iso(t), iso(t), r.id] },
       evenement('meeting.deleted', { teamId, acteur: acteur.compte, entiteType: 'reunion', entiteId: r.id, charge: { titre: r.titre }, maintenant: t }),
     ]);
+    // L'enregistrement (gros fichier) n'est plus lisible : ses octets sont effacés.
+    if (r.enregistrement_id) await medias?.effacerOctets(r.enregistrement_id);
     return { ok: true };
   }
 
@@ -512,6 +537,200 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     return { octets: objet.octets, type: f.type_mime, nom: f.nom_original, telecharger };
   }
 
+  // -------------------------------------------------------------- Enregistrement et transcription
+
+  /** Le déposant et les rédacteurs transcrivent et corrigent ; les autres lecteurs du dépôt lisent seulement. */
+  const peutEcrireTranscription = (ctx, r) => r.depose_par === ctx.acteur.compte || redacteur(ctx);
+
+  /** Lien signé (2 h) vers l'enregistrement déposé : mêmes règles de visibilité que le dépôt. */
+  async function lienEnregistrement(acteur, teamId, reunionId, corps = {}) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exigerModule(ctx);
+    const { r } = await reunionDeTeam(ctx, reunionId);
+    if (!r.enregistrement_id || !medias) throw echec(404, 'pas-d-enregistrement', 'Aucun enregistrement déposé pour cette réunion.');
+    return medias.lienMedia(acteur, await medias.fichier(r.enregistrement_id), { telecharger: Boolean(corps?.telecharger) });
+  }
+
+  async function transcriptionPublique(ctx, r) {
+    const x = await base.premier('SELECT * FROM transcriptions WHERE reunion_id = ? AND team_id = ?', [r.id, r.team_id]);
+    const pdf = r.transcription_pdf_id ? await base.premier('SELECT * FROM fichiers WHERE id = ?', [r.transcription_pdf_id]) : null;
+    const noms = await noms_([x?.auteur_id, x?.modifie_par]);
+    return {
+      statut: r.transcription_statut ?? 'aucune',
+      langue: x?.langue ?? 'fr',
+      moteur: x?.moteur ?? '',
+      segments: jsonOu(x?.segments, []).map(([debut, fin, texte]) => ({ debut, fin, texte })),
+      duree: x?.duree_s ?? null,
+      progression: Number(x?.progression_s ?? 0),
+      partielle: x ? Number(x.partielle) === 1 : true,
+      preResume: jsonOu(x?.pre_resume, []),
+      erreur: x?.erreur || null,
+      pdf: pdf && !pdf.supprime_le ? fichierPublic(pdf) : null,
+      auteur: x?.auteur_id ? { compte: x.auteur_id, pseudo: noms[x.auteur_id] ?? null } : null,
+      modifiePar: x?.modifie_par ? { compte: x.modifie_par, pseudo: noms[x.modifie_par] ?? null } : null,
+      majLe: x?.maj_le ?? null,
+      enregistrement: r.enregistrement_id ? fichierPublic(await base.premier('SELECT * FROM fichiers WHERE id = ?', [r.enregistrement_id])) : null,
+      peutModifier: peutEcrireTranscription(ctx, r),
+      externe: Boolean(transcriptionExterne?.actif),
+    };
+  }
+  const noms_ = ids => noms(ids.filter(Boolean));
+
+  async function transcription(acteur, teamId, reunionId) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exigerModule(ctx);
+    const { r } = await reunionDeTeam(ctx, reunionId);
+    return transcriptionPublique(ctx, r);
+  }
+
+  /**
+   * Enregistre une transcription (partielle pendant le travail, pour reprendre après une coupure ;
+   * complète à la fin). Complète : pré-résumé, PDF généré et attaché (« reunion_transcription »),
+   * statut « prete », notification au déposant et aux rédacteurs la première fois.
+   */
+  async function sauverTranscription(ctx, r, type, s) {
+    const t = maintenant();
+    const existante = await base.premier('SELECT * FROM transcriptions WHERE reunion_id = ?', [r.id]);
+    const resume = s.partielle ? [] : preResume(s.segments);
+    const duree = s.duree ?? (s.segments.length ? s.segments[s.segments.length - 1][1] : null);
+    const lot = [];
+    if (existante) {
+      lot.push({
+        sql: 'UPDATE transcriptions SET langue = ?, moteur = ?, segments = ?, duree_s = ?, progression_s = ?, partielle = ?, pre_resume = ?, erreur = ?, modifie_par = ?, maj_le = ? WHERE id = ?',
+        params: [s.langue, s.moteur, JSON.stringify(s.segments), duree, s.progression, s.partielle ? 1 : 0, JSON.stringify(resume), '', s.compte, iso(t), existante.id],
+      });
+    } else {
+      lot.push({
+        sql: `INSERT INTO transcriptions (id, team_id, reunion_id, langue, moteur, segments, duree_s, progression_s, partielle, pre_resume, erreur, auteur_id, modifie_par, cree_le, maj_le)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)`,
+        params: [nouvelId(), r.team_id, r.id, s.langue, s.moteur, JSON.stringify(s.segments), duree, s.progression, s.partielle ? 1 : 0, JSON.stringify(resume), s.compte, s.compte, iso(t), iso(t)],
+      });
+    }
+    let pdfId = null;
+    let cle = null;
+    if (!s.partielle && stockage) {
+      const octets = pdfTranscription(
+        { titre: r.titre, team: ctx.team.nom, type: type?.nom ?? '', date: r.date_reunion, duree, langue: s.langue, moteur: s.moteur, genereLe: iso(t), langueDoc: s.langueDoc === 'en' ? 'en' : 'fr' },
+        s.segments,
+        resume,
+      );
+      pdfId = nouvelId();
+      cle = cleStockageResume(r.team_id);
+      await stockage.deposer(cle, octets, { type: 'application/pdf' });
+      lot.push({
+        sql: `INSERT INTO fichiers (id, team_id, entite_type, entite_id, cle_stockage, type_mime, taille, nom_original, empreinte, depose_par, cree_le)
+              VALUES (?, ?, 'reunion_transcription', ?, ?, 'application/pdf', ?, ?, ?, ?, ?)`,
+        params: [pdfId, r.team_id, r.id, cle, octets.length, nomOriginal(`Transcription - ${r.titre}.pdf`), await empreinteSha256(octets), s.compte ?? '', iso(t)],
+      });
+    }
+    const statut = s.partielle ? 'en_cours' : 'prete';
+    lot.push({
+      sql: 'UPDATE reunions SET transcription_statut = ?, transcription_pdf_id = ?, maj_le = ? WHERE id = ?',
+      params: [statut, pdfId ?? (s.partielle ? r.transcription_pdf_id : null), iso(t), r.id],
+    });
+    if (!s.partielle) {
+      const premiere = r.transcription_statut !== 'prete';
+      lot.push(
+        evenement(premiere ? 'meeting.transcription_ready' : 'meeting.transcription_updated', {
+          teamId: r.team_id,
+          acteur: s.compte,
+          entiteType: 'reunion',
+          entiteId: r.id,
+          charge: { titre: r.titre, deposePar: r.depose_par, segments: s.segments.length, moteur: s.moteur },
+          maintenant: t,
+        }),
+      );
+    }
+    try {
+      await base.lot(lot);
+    } catch (e) {
+      if (cle) await stockage.supprimer(cle).catch(() => undefined);
+      throw e;
+    }
+    // L'ancien PDF de transcription est remplacé (le texte reste la référence) : ses octets sont effacés.
+    if (pdfId && r.transcription_pdf_id && r.transcription_pdf_id !== pdfId) await medias?.effacerOctets(r.transcription_pdf_id);
+  }
+
+  async function enregistrerTranscription(acteur, teamId, reunionId, corps) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exigerModule(ctx);
+    const { r, type } = await reunionDeTeam(ctx, reunionId);
+    if (!peutEcrireTranscription(ctx, r)) throw echec(403, 'permission', 'Seuls le déposant et les rédacteurs modifient la transcription.');
+    const segments = validerSegments(corps?.segments);
+    const langue = LANGUES_TRANSCRIPTION.includes(corps?.langue) ? corps.langue : 'fr';
+    const moteur = texteNettoye(corps?.moteur, 60) || 'navigateur';
+    const duree = Number.isFinite(Number(corps?.duree)) && Number(corps.duree) > 0 ? Math.min(86400, Math.round(Number(corps.duree) * 10) / 10) : null;
+    const partielle = corps?.partielle === true;
+    const progression = Number.isFinite(Number(corps?.progression)) ? Math.max(0, Math.min(86400, Number(corps.progression))) : (duree ?? 0);
+    await sauverTranscription(ctx, r, type, { segments, langue, moteur, duree, partielle, progression, compte: acteur.compte, langueDoc: acteur.langue });
+    return transcriptionPublique(ctx, await base.premier('SELECT * FROM reunions WHERE id = ?', [r.id]));
+  }
+
+  /** Lien signé (5 min) vers le PDF de transcription : mêmes règles de visibilité que le dépôt. */
+  async function lienTranscription(acteur, teamId, reunionId, corps = {}) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exigerModule(ctx);
+    const { r } = await reunionDeTeam(ctx, reunionId);
+    if (!r.transcription_pdf_id) throw echec(404, 'pas-de-transcription', 'La transcription n’est pas encore prête.');
+    const f = await base.premier("SELECT id, supprime_le FROM fichiers WHERE id = ? AND entite_type = 'reunion_transcription' AND team_id = ?", [r.transcription_pdf_id, teamId]);
+    if (!f || f.supprime_le) throw echec(404, 'pas-de-transcription', 'La transcription n’est pas encore prête.');
+    return cheminSigne(cleSession, { fichierId: f.id, compte: acteur.compte, maintenant: maintenant(), telecharger: Boolean(corps?.telecharger) });
+  }
+
+  /** Point d'extension (désactivé par défaut) : demande la transcription par l'API externe ; le cron la fait. */
+  async function demanderTranscriptionExterne(acteur, teamId, reunionId, corps = {}) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exigerModule(ctx);
+    const { r } = await reunionDeTeam(ctx, reunionId);
+    if (!peutEcrireTranscription(ctx, r)) throw echec(403, 'permission', 'Seuls le déposant et les rédacteurs modifient la transcription.');
+    if (!transcriptionExterne?.actif) throw echec(503, 'transcription-externe-desactivee', 'La transcription par le serveur n’est pas activée : transcrivez dans le navigateur.');
+    if (!r.enregistrement_id) throw echec(404, 'pas-d-enregistrement', 'Aucun enregistrement déposé pour cette réunion.');
+    const langue = LANGUES_TRANSCRIPTION.includes(corps?.langue) ? corps.langue : 'fr';
+    const t = iso(maintenant());
+    const existante = await base.premier('SELECT id FROM transcriptions WHERE reunion_id = ?', [r.id]);
+    await base.lot([
+      existante
+        ? { sql: "UPDATE transcriptions SET langue = ?, erreur = '', modifie_par = ?, maj_le = ? WHERE id = ?", params: [langue, acteur.compte, t, existante.id] }
+        : {
+            sql: "INSERT INTO transcriptions (id, team_id, reunion_id, langue, moteur, segments, partielle, auteur_id, modifie_par, cree_le, maj_le) VALUES (?, ?, ?, ?, 'api', '[]', 1, ?, ?, ?, ?)",
+            params: [nouvelId(), teamId, r.id, langue, acteur.compte, acteur.compte, t, t],
+          },
+      { sql: "UPDATE reunions SET transcription_statut = 'externe', maj_le = ? WHERE id = ?", params: [t, r.id] },
+    ]);
+    return transcriptionPublique(ctx, await base.premier('SELECT * FROM reunions WHERE id = ?', [r.id]));
+  }
+
+  /** Cron : transcriptions demandées à l'API externe (quelques-unes par passage). Rend le nombre traité. */
+  async function traiterTranscriptionsExternes({ limite = 2 } = {}) {
+    if (!transcriptionExterne?.actif || !stockage) return 0;
+    const lignes = await base.tous("SELECT * FROM reunions WHERE transcription_statut = 'externe' AND supprime_le IS NULL ORDER BY maj_le LIMIT ?", [limite]);
+    let n = 0;
+    for (const r of lignes) {
+      const x = await base.premier('SELECT * FROM transcriptions WHERE reunion_id = ?', [r.id]);
+      const team = await base.premier('SELECT * FROM teams WHERE id = ?', [r.team_id]);
+      const type = await base.premier('SELECT * FROM types_reunion WHERE id = ?', [r.type_id]);
+      const f = r.enregistrement_id ? await base.premier('SELECT * FROM fichiers WHERE id = ?', [r.enregistrement_id]) : null;
+      const compte = x?.modifie_par ?? x?.auteur_id ?? r.depose_par;
+      try {
+        if (!f || f.supprime_le) throw new Error('Enregistrement introuvable.');
+        if (Number(f.taille) > transcriptionExterne.tailleMax) throw new Error('Enregistrement trop gros pour l’API de transcription.');
+        const objet = await stockage.lire(f.cle_stockage);
+        if (!objet) throw new Error('Enregistrement introuvable.');
+        const { segments, duree } = await transcrireParApi({ octets: objet.octets, nom: f.nom_original, type: f.type_mime, langue: x?.langue ?? 'fr', config: transcriptionExterne, fetch: fetchTranscription });
+        const profil = await base.premier('SELECT langue FROM comptes WHERE id = ?', [compte]);
+        await sauverTranscription({ team, acteur: { compte } }, r, type, { segments, langue: x?.langue ?? 'fr', moteur: `API (${transcriptionExterne.modele})`, duree, partielle: false, progression: duree ?? 0, compte, langueDoc: profil?.langue });
+      } catch (e) {
+        const t = iso(maintenant());
+        await base.lot([
+          { sql: "UPDATE reunions SET transcription_statut = 'echec', maj_le = ? WHERE id = ?", params: [t, r.id] },
+          { sql: 'UPDATE transcriptions SET erreur = ?, maj_le = ? WHERE reunion_id = ?', params: [String(e?.message ?? e).slice(0, 200), t, r.id] },
+        ]);
+      }
+      n++;
+    }
+    return n;
+  }
+
   return {
     typesReunion,
     creerTypeReunion,
@@ -528,5 +747,11 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     deposerPdf,
     lienFichier,
     lireFichierSigne,
+    lienEnregistrement,
+    transcription,
+    enregistrerTranscription,
+    lienTranscription,
+    demanderTranscriptionExterne,
+    traiterTranscriptionsExternes,
   };
 }

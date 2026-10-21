@@ -358,6 +358,36 @@ export interface Depot {
   nouveau: boolean;
   vu: { le: string; par: string } | null;
   moi: { deposant: boolean; redacteur: boolean };
+  /** Enregistrement déposé (vidéo ou audio), ou null (lien externe seulement). */
+  enregistrement?: FichierMedia | null;
+  /** Transcription automatique (distincte du résumé rédigé). */
+  transcription?: { statut: StatutTranscription; pdf: boolean; peutTranscrire: boolean; externe?: boolean };
+}
+
+/** aucune · a_faire (enregistrement déposé) · en_cours (partielle) · externe (API serveur) · prete · echec. */
+export type StatutTranscription = 'aucune' | 'a_faire' | 'en_cours' | 'externe' | 'prete' | 'echec';
+
+/** Analyse d'un média déposé (octets magiques, atomes MP4) : format, codecs, durée. */
+export interface InfosMedia {
+  format: string;
+  nomFormat: string;
+  genre: 'video' | 'audio';
+  mime: string;
+  codecVideo: string | null;
+  codecAudio: string | null;
+  duree: number | null;
+  peuCompatibleIphone: boolean;
+}
+
+/** Fichier stocké sur le serveur (vidéo, enregistrement, PDF). */
+export interface FichierMedia {
+  id: string;
+  nom: string;
+  taille: number;
+  type: string;
+  creeLe: string;
+  supprime: boolean;
+  media?: InfosMedia | null;
 }
 export interface FichierDepot {
   id: string;
@@ -595,7 +625,8 @@ export interface ClientEsport {
   creerTypeReunion(id: string, t: { nom: string; couleur?: string; visibilite: 'team' | 'staff'; global?: boolean }): Promise<TypeReunion>;
   modifierTypeReunion(id: string, typeId: string, t: Partial<{ nom: string; couleur: string; visibilite: 'team' | 'staff' }>): Promise<TypeReunion>;
   supprimerTypeReunion(id: string, typeId: string): Promise<void>;
-  deposerReunion(id: string, d: { lien: string; typeId: string; dateReunion: string; titre: string; note?: string }): Promise<Depot>;
+  /** Dépôt d'une réunion : lien externe, ou enregistrement déposé (`envoi` terminé), ou les deux. */
+  deposerReunion(id: string, d: { lien?: string; envoi?: string; typeId: string; dateReunion: string; titre: string; note?: string }): Promise<Depot>;
   mesDepots(id: string): Promise<Depot[]>;
   resumesTeam(id: string, limite?: number): Promise<Depot[]>;
   depot(id: string, depotId: string): Promise<DetailDepot>;
@@ -618,6 +649,8 @@ export interface ClientEsport {
   exporterObjectifs(id: string): Promise<FichierServeur>;
   /** Appel générique avec la session (modules : planning, etc. ; voir src/esport/planning/api.ts). */
   requete<T>(chemin: string, methode?: string, corps?: unknown): Promise<T>;
+  /** Envoi binaire avec la session (morceau d'une vidéo) : réponse JSON. */
+  binaire<T>(chemin: string, methode: string, octets: Uint8Array, entetes?: Record<string, string>, options?: { delai?: number; signal?: unknown }): Promise<T>;
 }
 
 /** Paramètres d'URL (valeurs vides ignorées). */
@@ -632,7 +665,7 @@ export function requeteUrl(params: Record<string, string | number | boolean | un
 export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.fetch as unknown as Fetch, maintenant: () => number = Date.now): ClientEsport {
   const cle = `${config.adresse}|${config.jetonRelais}`;
 
-  async function brut<T>(chemin: string, methode = 'GET', corps?: unknown, jeton?: string, binaire?: { octets: ArrayBuffer | Uint8Array; type: string; entetes: Record<string, string> }): Promise<T> {
+  async function brut<T>(chemin: string, methode = 'GET', corps?: unknown, jeton?: string, binaire?: { octets: ArrayBuffer | Uint8Array; type: string; entetes: Record<string, string>; delai?: number; signal?: unknown }): Promise<T> {
     let r: Awaited<ReturnType<Fetch>>;
     try {
       r = await auPlus(
@@ -640,11 +673,13 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
           method: methode,
           headers: { 'Content-Type': binaire ? binaire.type : 'application/json', 'Accept-Language': langueCourante(), ...(binaire?.entetes ?? {}), ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}) },
           body: binaire ? binaire.octets : corps === undefined ? undefined : JSON.stringify(corps),
+          ...(binaire?.signal ? { signal: binaire.signal } : {}),
         }),
-        binaire ? 120_000 : 15_000,
+        binaire?.delai ?? (binaire ? 120_000 : 15_000),
       );
     } catch (e) {
       if (e instanceof ErreurEsport) throw e;
+      if ((e as { name?: string })?.name === 'AbortError') throw new ErreurEsport(tr('client.envoi_annule'), 0, 'annule');
       throw new ErreurEsport(tr('client.le_serveur_esport_est'), 0, 'injoignable');
     }
     let lu: unknown;
@@ -779,6 +814,8 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     exporterTaches: (id, f = {}) => appel(`${t(id)}/taches/export.csv${requeteUrl({ ...f, format: 'json' })}`),
     exporterObjectifs: id => appel(`${t(id)}/objectifs/export.csv?format=json`),
     requete: (chemin, methode, corps) => appel(chemin, methode, corps),
+    binaire: (chemin, methode, octets, entetes = {}, options = {}) =>
+      appel(chemin, methode, undefined, { octets, type: 'application/octet-stream', entetes, delai: options.delai ?? 180_000, signal: options.signal }),
   };
 }
 

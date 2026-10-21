@@ -67,8 +67,14 @@ Invitation directe (voir [invitations.md](invitations.md)) : plus aucun code à 
   magiques `%PDF-` ; nom de stockage aléatoire (`teams/<team>/resumes/<uuid>.pdf`), nom d'origine nettoyé ; bucket R2
   privé.
 - Miniatures de strats : PNG ou JPEG vérifiés par leurs octets magiques, 256 Ko au plus.
-- Lecture uniquement par **lien signé** HMAC (5 min pour un PDF, 1 h pour une miniature), lié au compte et à
-  l'option « télécharger » : lien modifié (compte, date, signature) → 403, expiré → 410, membre retiré → 403.
+- **Vidéos et enregistrements** (migration 0014, [videos.md](videos.md)) : envoi par morceaux, à soi seulement (l'envoi
+  d'un autre membre est introuvable), plafond par fichier (`ESPORT_VIDEO_MAX`, 10 Go), morceaux dans l'ordre, taille
+  exacte et SHA-256 de chaque morceau, puis du fichier entier ; octets magiques au premier morceau (MP4, MOV, WebM,
+  MKV ; audio pour une réunion) ; aucune conversion ; nom de stockage aléatoire ; envois abandonnés effacés après 24 h.
+  Transcriptions : segments validés (20 000 au plus, 1,5 Mo de texte), PDF écrit par le serveur (texte échappé).
+- Lecture uniquement par **lien signé** HMAC (5 min pour un PDF, 1 h pour une miniature, 2 h pour une vidéo), lié au
+  compte et à l'option « télécharger » : lien modifié (compte, date, signature) → 403, expiré → 410, membre retiré →
+  403. Les vidéos sont servies par plages (`Range` → 206, plage impossible → 416), en flux, 64 Mo au plus par réponse.
 
 ## Secrets
 
@@ -118,7 +124,9 @@ rien ne sort pour une réunion staff ou une strat privée.
 - **Export** (membre : Paramètres › Exporter mes données ; Fondateur : Membres et rôles › un membre › Exporter ses
   données) : profil, teams, notifications, actions du journal, disponibilités, présences, réunions déposées, tâches
   et objectifs, repères et commentaires de review, strats et entrées de playbook créées, abonnements iCal (sans
-  jeton), invitations créées (sans code), **notes du staff partagées avec lui** (`notesPartagees`) et le nombre de
+  jeton), invitations créées (sans code), **vidéos et enregistrements déposés** (`mediasDeposes` : nom, taille, date et
+  lien signé de téléchargement valable 72 h), **transcriptions de ses réunions** (`transcriptions` : texte et lien du
+  PDF), **notes du staff partagées avec lui** (`notesPartagees`) et le nombre de
   notes qu'il a rédigées par team (`notesRedigees`, sans leur contenu : il s'agit de données d'autres joueurs).
 - **Notes privées du staff** (Suivi joueurs, [suivi-joueurs.md](suivi-joueurs.md)) : ce sont des données
   personnelles du joueur concerné, mais elles ne figurent PAS dans l'export qu'il fait lui-même. Quand le Fondateur
@@ -127,7 +135,8 @@ rien ne sort pour une réunion staff ou une strat privée.
   s'il exerce son droit d'accès, après avoir vérifié qu'elles ne contiennent rien sur un tiers.
 - **Suppression** (membre ou Fondateur) : compte, appartenances, notifications, disponibilités, présences,
   abonnements iCal effacés ; tâches, objectifs et repères qui le visaient désattribués ; ce qu'il a écrit pour la
-  team reste, sans pseudo (« Compte supprimé »). Notes du staff : celles **sur** lui sont effacées, celles qu'il a
+  team reste, sans pseudo (« Compte supprimé »), y compris ses vidéos, enregistrements et transcriptions (déposant et
+  auteur effacés) ; ses envois inachevés sont effacés par le cron. Notes du staff : celles **sur** lui sont effacées, celles qu'il a
   **écrites** restent, sans auteur (anonymisées). Journalisé (`account.deleted`, `member.left` / `member.removed`).
 - **Minimisation** : pas d'adresse e-mail ; Riot ID et Discord facultatifs ; journal conservé 1 an par défaut,
   réglable par la team (30 jours à 2 ans, ou illimité), purgé par le cron ; événements traités effacés après

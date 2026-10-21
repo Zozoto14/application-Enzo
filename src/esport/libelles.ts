@@ -134,6 +134,12 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
       return tr(m.remplacement ? 'jr.summary_replaced' : 'jr.summary_published', { qui, titre: texte(m.titre) });
     case 'meeting.deleted':
       return tr('jr.meeting_deleted', { qui, titre: texte(m.titre) });
+    case 'meeting.transcription_ready':
+      return tr('jr.transcription_ready', { qui, titre: texte(m.titre) });
+    case 'meeting.transcription_updated':
+      return tr('jr.transcription_updated', { qui, titre: texte(m.titre) });
+    case 'media.deleted':
+      return tr('jr.media_deleted', { qui, nom: texte(m.nom) });
     case 'meeting_type.created':
       return tr('jr.meeting_type_created', { qui, nom: texte(m.nom), staff: m.visibilite === 'staff' ? tr('jr.staff_entre_parentheses') : '' });
     case 'meeting_type.updated':
@@ -245,6 +251,8 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
       return tr('nt.resume_depose', { membre: nom(noms, c.membre), team, titre: typeof c.titre === 'string' ? tr('nt.titre_apres_deux_points', { titre: c.titre }) : '' });
     case 'resume-publie':
       return tr(c.remplacement ? 'nt.resume_mis_a_jour' : 'nt.resume_pret', { titre: str(c.titre, tr('nt.votre_reunion')), team });
+    case 'transcription-prete':
+      return tr('nt.transcription_prete', { titre: str(c.titre, tr('nt.votre_reunion')), team });
     case 'tache-assignee':
       return tr('nt.tache_assignee', {
         membre: nom(noms, c.membre),

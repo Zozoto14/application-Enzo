@@ -23,6 +23,8 @@ import { traiterFile } from '../noyau/discord/file.mjs';
 import { debutsDiscord, rappelsDiscord } from '../noyau/discord/rappels.mjs';
 import { distribuer } from '../noyau/evenements.mjs';
 import { rappelsPresence } from '../noyau/planning/rappels.mjs';
+import { envoyerFlux } from '../serveur/commun.mjs';
+import { configMedias, nettoyerEnvois } from '../noyau/medias/service.mjs';
 
 function kvMemoire() {
   const donnees = new Map();
@@ -33,7 +35,8 @@ function kvMemoire() {
  * Démarre le serveur. Options : `port`, `base` (chemin SQLite ou ':memory:'),
  * `relais` (adresse d'un relais réel) OU `jetonDev` (relais en mémoire),
  * `cle`, `creationTeams`, `graines`, `fetchDiscord` (envoi vers Discord, simulé en test),
- * `cleDiscord`, `lienApp`, `discordBot` ({ applicationId, publicKey, jetonBot }). Rend `{ url, base, envRelais, fermer }`.
+ * `cleDiscord`, `lienApp`, `discordBot` ({ applicationId, publicKey, jetonBot }), `medias` ({ plafond, tailleMorceau } :
+ * vidéos déposées). Rend `{ url, base, envRelais, fermer }`.
  */
 export async function demarrerServeurEsport({
   port = 8790,
@@ -48,6 +51,7 @@ export async function demarrerServeurEsport({
   cleDiscord = process.env.ESPORT_CLE_DISCORD,
   lienApp = process.env.ESPORT_LIEN_APP ?? '',
   discordBot = { applicationId: process.env.DISCORD_APPLICATION_ID, publicKey: process.env.DISCORD_PUBLIC_KEY, jetonBot: process.env.DISCORD_BOT_TOKEN },
+  medias = configMedias(process.env),
 } = {}) {
   const base = await baseSqliteMigree(chemin);
   // Fichiers (PDF des résumés) : à côté de la base SQLite (dossier `<base>.fichiers/`), en mémoire sinon.
@@ -66,7 +70,7 @@ export async function demarrerServeurEsport({
     const existe = await base.premier('SELECT id FROM teams LIMIT 1', []);
     if (!existe) await semer(base, { stockage });
   }
-  const traiter = creerApi({ base, stockage, cleSession: cle, verifierJeton, creationTeams, cleDiscord, fetchDiscord, lienApp, discordBot });
+  const traiter = creerApi({ base, stockage, cleSession: cle, verifierJeton, creationTeams, cleDiscord, fetchDiscord, lienApp, discordBot, medias });
   // Cron du Worker (rappels de présence, d'échéance et Discord, événements en attente, file Discord), toutes les 15 minutes.
   const cron = setInterval(() => {
     void (async () => {
@@ -82,6 +86,7 @@ export async function demarrerServeurEsport({
       const { purgerLimites } = await import('../noyau/limites.mjs');
       await purgerJournal(base, { maintenant: Date.now() });
       await purgerLimites(base, Date.now());
+      await nettoyerEnvois(base, stockage, { maintenant: Date.now() });
     })().catch(e => console.error('[esport] cron local', e));
   }, 15 * 60 * 1000);
   cron.unref?.();
@@ -98,7 +103,8 @@ export async function demarrerServeurEsport({
         }),
       );
       res.writeHead(reponse.status, Object.fromEntries(reponse.headers));
-      res.end(Buffer.from(await reponse.arrayBuffer()));
+      if (req.method === 'HEAD' || !reponse.body) res.end();
+      else await envoyerFlux(reponse.body, res);
     } catch (e) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ erreur: String(e?.message ?? e) }));

@@ -26,6 +26,8 @@ import { stockageR2 } from './adaptateurs/stockage.mjs';
 import { creerApi, reponseJson } from './noyau/api.mjs';
 import { verificateurRelais } from './noyau/authentification.mjs';
 import { tachesPlanifiees } from './noyau/cron.mjs';
+import { configMedias } from './noyau/medias/service.mjs';
+import { configTranscriptionExterne } from './noyau/medias/transcription.mjs';
 
 function api(env) {
   return creerApi({
@@ -39,6 +41,9 @@ function api(env) {
     discordBot: { applicationId: env.DISCORD_APPLICATION_ID, publicKey: env.DISCORD_PUBLIC_KEY, jetonBot: env.DISCORD_BOT_TOKEN },
     // Fenêtre de déménagement seulement (LECTURE_SEULE) : l'importeur o2switch reprend les clés (docs/o2switch.md).
     secretsExportables: env.LECTURE_SEULE === '1',
+    // Vidéos : morceaux de 5 Mio au moins (parties d'un envoi R2 en plusieurs fois).
+    medias: configMedias(env, { minimum: 5 * 1024 * 1024 }),
+    transcriptionExterne: configTranscriptionExterne(env),
   });
 }
 
@@ -85,6 +90,15 @@ export default {
   async scheduled(_evenement, env, ctx) {
     if (!env.BASE || cibleValide(env.ESPORT_CIBLE) || env.LECTURE_SEULE === '1') return;
     const base = baseD1(env.BASE);
-    ctx.waitUntil(tachesPlanifiees(base, { cle: env.CLE_DISCORD || env.CLE_ESPORT, lienApp: env.LIEN_APP, jetonBot: env.DISCORD_BOT_TOKEN }));
+    ctx.waitUntil(
+      tachesPlanifiees(base, {
+        cle: env.CLE_DISCORD || env.CLE_ESPORT,
+        lienApp: env.LIEN_APP,
+        jetonBot: env.DISCORD_BOT_TOKEN,
+        stockage: env.FICHIERS ? stockageR2(env.FICHIERS) : undefined,
+        cleSession: env.CLE_ESPORT,
+        transcriptionExterne: configTranscriptionExterne(env),
+      }),
+    );
   },
 };

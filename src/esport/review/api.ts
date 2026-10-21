@@ -4,7 +4,7 @@
  * (esport/noyau/review/service.mjs, esport/noyau/scouting/service.mjs).
  */
 
-import type { ClientEsport } from '../client';
+import type { ClientEsport, FichierMedia } from '../client';
 import type { Dessin } from './dessin';
 
 export type CategorieRepere = 'erreur' | 'bonne_action' | 'utilitaires' | 'placement' | 'comms';
@@ -18,8 +18,11 @@ export interface PersonneReview {
 export interface ReviewListee {
   id: string;
   titre: string;
+  /** YouTube (url, videoId) ou vidéo déposée sur le site (`video`). */
+  source?: 'youtube' | 'fichier';
   url: string;
   videoId: string;
+  video?: FichierMedia | null;
   reference: string;
   creePar: PersonneReview | null;
   creeLe: string;
@@ -186,7 +189,10 @@ export function apiReview(client: ClientEsport, teamId: string) {
   const t = `/teams/${e(teamId)}/review`;
   return {
     liste: () => client.requete<{ reviews: ReviewListee[]; droits: DroitsReview }>(t),
-    creer: (s: { titre: string; url: string; reference?: string }) => client.requete<ReviewListee & { depart: number | null }>(t, 'POST', s),
+    /** YouTube (`url`) ou vidéo déposée (`envoi` : envoi par morceaux terminé). */
+    creer: (s: { titre: string; url?: string; envoi?: string; reference?: string }) => client.requete<ReviewListee & { depart: number | null }>(t, 'POST', s),
+    /** Lien signé (2 h) de la vidéo déposée (lecture en streaming). */
+    lienVideo: (id: string) => client.requete<{ url: string; expire: string }>(`${t}/${e(id)}/video/lien`, 'POST', {}),
     detail: (id: string) => client.requete<DetailReview>(`${t}/${e(id)}`),
     modifier: (id: string, s: { titre?: string; reference?: string }) => client.requete<ReviewListee>(`${t}/${e(id)}`, 'PATCH', s),
     supprimer: (id: string) => client.requete<{ ok: true }>(`${t}/${e(id)}`, 'DELETE'),

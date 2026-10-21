@@ -26,6 +26,10 @@ import { ChampNote } from './ChampNote';
 import { BoutonConfirme, Choix, PastilleRole, Retours, styles, useAgir, Intertitre, Panneau } from './commun';
 import { NoteMarkdown } from './review/Note';
 import { Carte, ESP, EnTetePage, EtatVide, Onglets } from './design';
+import { ACCEPT_REUNION, choisirFichier, choixFichierDisponible, type FichierNavigateur } from '../medias/choixFichier';
+import { capaciteAppareil } from '../transcription/appareil';
+import { BarreEnvoi, InfosFichier, useEnvoi } from './medias/EnvoiMedia';
+import { PanneauTranscription, demarrerTranscription, type LangueTranscription } from './medias/Transcription';
 import { tr, trn } from '../i18n';
 
 type VueResumes = 'deposer' | 'miens' | 'bibliotheque' | 'boite' | 'types';
@@ -115,6 +119,13 @@ export function SectionResumes({ theme, client, detail, large }: { theme: ThemeH
 
 function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub; client: ClientEsport; teamId: string; onDepose(): void }) {
   const [types, setTypes] = useState<TypeReunion[]>([]);
+  // L'enregistrement est déposé directement (par défaut sur le site et le PC) ; le lien externe reste possible.
+  const [mode, setMode] = useState<'fichier' | 'lien'>(choixFichierDisponible ? 'fichier' : 'lien');
+  const [fichier, setFichier] = useState<FichierNavigateur | undefined>();
+  const capacite = useMemo(() => capaciteAppareil(), []);
+  const [transcrire, setTranscrire] = useState(capacite.transcription && !capacite.iphone && !capacite.faible);
+  const [langue, setLangue] = useState<LangueTranscription>('fr');
+  const envoi = useEnvoi();
   const [lien, setLien] = useState('');
   const [typeId, setTypeId] = useState<string | undefined>();
   const [date, setDate] = useState(dateJour(aujourdhui()));
@@ -133,7 +144,67 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
   return (
     <Panneau theme={theme} style={{ maxWidth: 820 }} testID="esport-depot-formulaire">
       <Intertitre theme={theme}>{tr('resumes.nouveau_depot')}</Intertitre>
-      <Champ theme={theme} libelle={tr('resumes.lien_de_l_enregistrement')} valeur={lien} onChanger={setLien} placeholder="https://…" maxLength={500} testID="esport-depot-lien" />
+      {choixFichierDisponible ? (
+        <Segments
+          theme={theme}
+          libelle={tr('transcription.depot.mode')}
+          valeur={mode}
+          options={[
+            ['fichier', tr('transcription.depot.fichier')],
+            ['lien', tr('transcription.depot.lien')],
+          ]}
+          onChoisir={v => setMode(v === 'lien' ? 'lien' : 'fichier')}
+          testID="esport-depot-mode"
+        />
+      ) : null}
+      {mode === 'fichier' ? (
+        <View style={{ gap: 8 }}>
+          <View style={[styles.ligne, { alignItems: 'center' }]}>
+            <BoutonHub
+              theme={theme}
+              titre={fichier ? tr('medias.changer_de_fichier') : tr('transcription.depot.choisir')}
+              desactive={envoi.enCours}
+              onPress={() =>
+                void choisirFichier(ACCEPT_REUNION, 'esport-depot-fichier-champ').then(f => {
+                  if (!f) return;
+                  setFichier(f);
+                  envoi.effacer();
+                  if (titre.trim().length < 2) setTitre(f.nom.replace(/\.[a-z0-9]{2,4}$/i, '').slice(0, 120));
+                })
+              }
+              testID="esport-depot-fichier"
+            />
+            {fichier ? <InfosFichier theme={theme} nom={fichier.nom} taille={fichier.taille} testID="esport-depot-fichier-infos" /> : null}
+          </View>
+          <Text style={attenue}>{tr('transcription.depot.formats')}</Text>
+          <BarreEnvoi theme={theme} progression={envoi.progression} enCours={envoi.enCours} onAnnuler={envoi.annuler} testID="esport-depot-envoi" />
+          <Champ theme={theme} libelle={tr('transcription.depot.lien_facultatif')} valeur={lien} onChanger={setLien} placeholder="https://…" maxLength={500} testID="esport-depot-lien" />
+          {capacite.transcription ? (
+            <View style={{ gap: 6 }}>
+              <View style={styles.ligne}>
+                <Case theme={theme} coche={transcrire} libelle={tr('transcription.depot.transcrire')} onChanger={setTranscrire} testID="esport-depot-transcrire" />
+                <Text style={{ color: theme.texte, flex: 1, ...police(theme.policeTexte) }}>{tr('transcription.depot.transcrire')}</Text>
+              </View>
+              {transcrire ? (
+                <Segments
+                  theme={theme}
+                  libelle={tr('transcription.langue')}
+                  valeur={langue}
+                  options={[
+                    ['fr', tr('transcription.francais')],
+                    ['en', tr('transcription.anglais')],
+                  ]}
+                  onChoisir={v => setLangue(v === 'en' ? 'en' : 'fr')}
+                  testID="esport-depot-langue"
+                />
+              ) : null}
+              <Text style={attenue}>{capacite.iphone || capacite.faible ? tr('transcription.appareil_faible') : tr('transcription.depot.explication')}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : (
+        <Champ theme={theme} libelle={tr('resumes.lien_de_l_enregistrement')} valeur={lien} onChanger={setLien} placeholder="https://…" maxLength={500} testID="esport-depot-lien" />
+      )}
       <Choix theme={theme} libelle={tr('resumes.type_de_reunion')} valeur={typeId} options={types.map(t => ({ id: t.id, nom: t.visibilite === 'staff' && !/staff/i.test(t.nom) ? tr('resumes.staff_2', { nom: nomTypeReunion(t.nom) }) : nomTypeReunion(t.nom), couleur: t.couleur }))} onChoisir={setTypeId} testID="esport-depot-type" />
       {type?.visibilite === 'staff' ? <Text style={attenue}>{tr('resumes.resume_visible_du_staff')}</Text> : null}
       <View style={[styles.ligne, { alignItems: 'flex-start' }]}>
@@ -143,9 +214,9 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
       <ChampNote theme={theme} libelle={tr('resumes.note_facultative')} valeur={note} onChanger={setNote} maxLength={2000} testID="esport-depot-note" />
       <BoutonHub
         theme={theme}
-        titre={enCours === 'depot' ? tr('resumes.envoi') : tr('resumes.deposer_la_reunion')}
+        titre={enCours === 'depot' ? (envoi.enCours ? tr('medias.envoi.envoi_en_cours') : tr('resumes.envoi')) : tr('resumes.deposer_la_reunion')}
         variante="plein"
-        desactive={Boolean(enCours) || !lien.trim() || titre.trim().length < 2 || !typeId}
+        desactive={Boolean(enCours) || (mode === 'fichier' ? !fichier : !lien.trim()) || titre.trim().length < 2 || !typeId}
         onPress={() => {
           const iso = lireDateSaisie(date);
           if (!iso) {
@@ -153,12 +224,23 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
             return;
           }
           void agir('depot', async () => {
-            await client.deposerReunion(teamId, { lien: lien.trim(), typeId: typeId!, dateReunion: iso, titre: titre.trim(), note: note.trim() || undefined });
+            if (mode === 'fichier' && fichier) {
+              // Envoi par morceaux (reprise possible), puis dépôt avec cet enregistrement.
+              const { etat, oublier } = await envoi.lancer({ client, teamId, section: 'resumes', fichier });
+              const depot = await client.deposerReunion(teamId, { envoi: etat.id, ...(lien.trim() ? { lien: lien.trim() } : {}), typeId: typeId!, dateReunion: iso, titre: titre.trim(), note: note.trim() || undefined });
+              oublier();
+              // Transcription dans ce navigateur, avec le fichier encore ouvert (rien à retélécharger) ; elle continue en arrière-plan.
+              if (transcrire) await demarrerTranscription({ client, teamId, depot, fichier: fichier.fichier as Blob, langue });
+              setFichier(undefined);
+              envoi.effacer();
+            } else {
+              await client.deposerReunion(teamId, { lien: lien.trim(), typeId: typeId!, dateReunion: iso, titre: titre.trim(), note: note.trim() || undefined });
+            }
             setLien('');
             setTitre('');
             setNote('');
             onDepose();
-            return tr('resumes.reunion_deposee_le_redacteur');
+            return mode === 'fichier' && transcrire ? tr('transcription.depot.depose_et_transcription') : tr('resumes.reunion_deposee_le_redacteur');
           });
         }}
         testID="esport-depot-envoyer"
@@ -174,12 +256,18 @@ function LigneDepot({
   onOuvrirPdf,
   onSupprimer,
   avecDeposant,
+  client,
+  teamId,
+  onChange,
 }: {
   theme: ThemeHub;
   depot: Depot;
   onOuvrirPdf?(telecharger: boolean): void;
   onSupprimer?(): void;
   avecDeposant?: boolean;
+  client?: ClientEsport;
+  teamId?: string;
+  onChange?(): void;
 }) {
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   return (
@@ -203,6 +291,7 @@ function LigneDepot({
           {onSupprimer ? <BoutonConfirme theme={theme} titre={tr('resumes.retirer')} confirmation={tr('resumes.oui_retirer_ce_depot')} onConfirme={onSupprimer} testID={`esport-depot-retirer-${depot.id}`} /> : null}
         </View>
       ) : null}
+      {client && teamId ? <PanneauTranscription theme={theme} client={client} teamId={teamId} depot={depot} onChange={onChange} /> : null}
     </View>
   );
 }
@@ -224,6 +313,9 @@ function MesDepots({ theme, client, teamId }: { theme: ThemeHub; client: ClientE
           key={d.id}
           theme={theme}
           depot={d}
+          client={client}
+          teamId={teamId}
+          onChange={() => void charger()}
           onOuvrirPdf={telecharger => void agir('PDF', () => ouvrirPdf(client, teamId, d.id, { telecharger }))}
           onSupprimer={
             d.statut === 'a_resumer'
@@ -253,7 +345,7 @@ function Bibliotheque({ theme, client, teamId }: { theme: ThemeHub; client: Clie
       <Retours theme={theme} erreur={erreur} prefixe="esport-bibliotheque" />
       {resumes?.length === 0 ? <Text style={{ color: theme.attenue }}>{tr('accueilPhase3.aucun_resume_publie_pour')}</Text> : null}
       {resumes?.map(d => (
-        <LigneDepot key={d.id} theme={theme} depot={d} avecDeposant onOuvrirPdf={telecharger => void agir('PDF', () => ouvrirPdf(client, teamId, d.id, { telecharger }))} />
+        <LigneDepot key={d.id} theme={theme} depot={d} avecDeposant client={client} teamId={teamId} onOuvrirPdf={telecharger => void agir('PDF', () => ouvrirPdf(client, teamId, d.id, { telecharger }))} />
       ))}
     </Panneau>
   );
@@ -474,11 +566,23 @@ function DetailDepotRedacteur({
       <Text style={attenue}>
         {tr('resumes.detail_ligne', { team: d.team.nom ?? tr('demandesCompte.team'), date: dateJour(d.dateReunion), nom: d.deposePar.pseudo ?? tr('resumes.un_compte_supprime'), creeLe: dateCourte(d.creeLe) })}
       </Text>
-      <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(d.lien)} testID="esport-detail-lien">
-        <Text style={{ color: theme.accent, textDecorationLine: 'underline', ...police(theme.policeTexte) }} numberOfLines={2}>
-          {d.lien}
-        </Text>
-      </Pressable>
+      {d.lien ? (
+        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(d.lien)} testID="esport-detail-lien">
+          <Text style={{ color: theme.accent, textDecorationLine: 'underline', ...police(theme.policeTexte) }} numberOfLines={2}>
+            {d.lien}
+          </Text>
+        </Pressable>
+      ) : null}
+      <PanneauTranscription
+        theme={theme}
+        client={client}
+        teamId={teamId}
+        depot={d}
+        onChange={() => {
+          void client.depot(teamId, depotId).then(setD, () => undefined);
+          onChange();
+        }}
+      />
       {d.note ? <NoteMarkdown theme={theme} source={d.note} testID="esport-detail-note" /> : null}
       {d.moi.redacteur ? (
         <>

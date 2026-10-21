@@ -278,7 +278,42 @@
   "Le Discord ID est obligatoire : il permet au bot de pinger le joueur quand il est convoqué.": "The Discord ID is required: the bot uses it to ping the player when they are called up.",
   "Discord ID invalide : 17 à 20 chiffres (Discord › Mode développeur › clic droit › Copier l’identifiant).": "Invalid Discord ID: 17 to 20 digits (Discord › Developer Mode › right-click › Copy User ID).",
   "Le serveur Esport n’a pas de clé pour chiffrer l’adresse (CLE_ESPORT ou CLE_DISCORD).": "The Esport server has no key to encrypt the address (CLE_ESPORT or CLE_DISCORD).",
-  "Adresse e-mail invalide.": "Invalid e-mail address."
+  "Adresse e-mail invalide.": "Invalid e-mail address.",
+  "Morceau trop gros.": "Chunk too large.",
+  "Le stockage des fichiers n’est pas branché sur le serveur Esport.": "File storage isn’t connected to the Esport server.",
+  "Envoi introuvable (annulé ou effacé après 24 h) : recommencez.": "Upload not found (cancelled or deleted after 24 h): start again.",
+  "Taille du fichier invalide.": "Invalid file size.",
+  "Trop d’envois en cours : terminez-en ou annulez-en un.": "Too many uploads in progress: finish or cancel one.",
+  "Cet envoi est déjà terminé.": "This upload is already finished.",
+  "Numéro de morceau invalide.": "Invalid chunk number.",
+  "Empreinte SHA-256 du morceau absente (en-tête X-Sha256).": "Chunk SHA-256 missing (X-Sha256 header).",
+  "Ce morceau a déjà été reçu avec un autre contenu : recommencez l’envoi.": "This chunk was already received with different content: start the upload again.",
+  "Morceau hors ordre : reprenez au morceau attendu.": "Chunk out of order: resume from the expected chunk.",
+  "Taille du morceau inattendue.": "Unexpected chunk size.",
+  "Morceau abîmé pendant l’envoi (SHA-256 différent) : renvoyez-le.": "Chunk damaged during the upload (different SHA-256): send it again.",
+  "Ce morceau est déjà en cours d’envoi : reprenez l’envoi.": "This chunk is already being uploaded: resume the upload.",
+  "Il manque des morceaux : reprenez l’envoi.": "Some chunks are missing: resume the upload.",
+  "Empreinte SHA-256 du fichier absente.": "File SHA-256 missing.",
+  "Le fichier reçu ne correspond pas à l’original (SHA-256 différent) : recommencez l’envoi.": "The received file doesn’t match the original (different SHA-256): start the upload again.",
+  "Ce fichier est déjà utilisé.": "This file is already in use.",
+  "Fichier introuvable (supprimé ?).": "File not found (deleted?).",
+  "Le résumé actuel ne se supprime pas ici : remplacez-le d’abord.": "The current summary can’t be deleted here: replace it first.",
+  "Transcription illisible (liste de segments attendue).": "Unreadable transcript (list of segments expected).",
+  "Transcription trop longue.": "Transcript too long.",
+  "Segment invalide : début en secondes attendu.": "Invalid segment: start in seconds expected.",
+  "Aucun enregistrement déposé pour cette réunion.": "No recording uploaded for this meeting.",
+  "Seuls le déposant et les rédacteurs modifient la transcription.": "Only the submitter and the writers can edit the transcript.",
+  "La transcription n’est pas encore prête.": "The transcript isn’t ready yet.",
+  "La transcription par le serveur n’est pas activée : transcrivez dans le navigateur.": "Server transcription isn’t enabled: transcribe in the browser.",
+  "Cette review n’a pas de vidéo déposée.": "This review has no uploaded video.",
+  "État SHA-256 illisible.": "Unreadable SHA-256 state.",
+  "Transcription externe désactivée.": "External transcription disabled.",
+  "Enregistrement trop gros pour l’API de transcription.": "Recording too large for the transcription API.",
+  "API de transcription injoignable.": "Transcription API unreachable.",
+  "Enregistrement introuvable.": "Recording not found.",
+  "Ce fichier n’est pas une vidéo reconnue (MP4, MOV, WebM ou MKV).": "This file isn’t a recognised video (MP4, MOV, WebM or MKV).",
+  "Ce fichier n’est ni une vidéo ni un audio reconnu (MP4, MOV, WebM, MKV, M4A, MP3, WAV, OGG, FLAC).": "This file isn’t a recognised video or audio file (MP4, MOV, WebM, MKV, M4A, MP3, WAV, OGG, FLAC).",
+  "Contexte indisponible dans le cron.": "Context unavailable in the scheduled task."
  },
  "motifs": [
   [
@@ -408,6 +443,14 @@
   [
    "^Discord n’a pas accepté le message de test \\((.+)\\)\\.$",
    "Discord didn’t accept the test message ($1)."
+  ],
+  [
+   "^Fichier trop gros : (\\d+) Mo au plus\\.$",
+   "File too large: $1 MB at most."
+  ],
+  [
+   "^API de transcription : refus \\(HTTP (\\d+)\\)\\.$",
+   "Transcription API: refused (HTTP $1)."
   ]
  ]
 }

@@ -118,7 +118,9 @@ export function creerServeurHttp(traiter, { urlPublique, tailleMax = 25 * 1024 *
       });
       for (const [k, v] of Object.entries(entetes)) if (!reponse.headers.has(k)) sortie[k] = v;
       res.writeHead(reponse.status, sortie);
-      res.end(req.method === 'HEAD' ? undefined : Buffer.from(await reponse.arrayBuffer()));
+      if (req.method === 'HEAD' || !reponse.body) res.end();
+      // Corps en flux (vidéo lue par plages) : jamais tout en mémoire ; coupé proprement si le client s'en va.
+      else await envoyerFlux(reponse.body, res);
     } catch (e) {
       journal.error('[serveur] erreur', e);
       if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', ...entetes });
@@ -127,6 +129,27 @@ export function creerServeurHttp(traiter, { urlPublique, tailleMax = 25 * 1024 *
       await Promise.all(enAttente);
     }
   });
+}
+
+/** Recopie un ReadableStream (Response.body) dans la réponse Node, en respectant la contre-pression. */
+export async function envoyerFlux(flux, res) {
+  const lecteur = flux.getReader();
+  let coupe = false;
+  res.once('close', () => {
+    coupe = !res.writableFinished;
+    if (coupe) lecteur.cancel().catch(() => undefined);
+  });
+  try {
+    for (;;) {
+      const { done, value } = await lecteur.read();
+      if (done || coupe) break;
+      if (!res.write(value)) await new Promise(ok => res.once('drain', ok).once('close', ok));
+    }
+  } catch {
+    // Client parti ou flux interrompu : rien à ajouter.
+  } finally {
+    if (!res.writableEnded) res.end();
+  }
 }
 
 /** Écoute sur PORT (Passenger le fournit et redirige lui-même) ; rend l'adresse locale. */

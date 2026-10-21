@@ -6,6 +6,7 @@
 
 import type React from 'react';
 import type { ThemeHub } from '../../../hub/themes';
+import type { FichierMedia } from '../../client';
 
 export interface CommandeLecteur {
   /** Temps courant, en secondes (0 si le lecteur n'est pas intégré). */
@@ -40,3 +41,13 @@ export interface PropsLecteur {
 }
 
 export const VITESSES = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
+
+/** Lecteur maison d'une vidéo déposée (site, app PC : `LecteurFichier.web.tsx` ; iOS : lien vers la vidéo). */
+export interface PropsLecteurFichier extends Omit<PropsLecteur, 'videoId'> {
+  /** Lien signé (2 h) vers la vidéo : redemandé s'il expire pendant la lecture. */
+  obtenirUrl(): Promise<string>;
+  /** Fichier déposé (nom, format, avertissement « peu compatible avec iPhone »). */
+  video?: FichierMedia | null;
+  /** Touches « , » et « . » (image par image) actives. */
+  raccourcis?: boolean;
+}

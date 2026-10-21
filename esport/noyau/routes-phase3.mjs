@@ -18,7 +18,13 @@
  *   PATCH  /teams/:t/resumes/:id                   changer le statut (rédacteur)
  *   PUT    /teams/:t/resumes/:id/pdf               déposer / remplacer le PDF (corps binaire application/pdf)
  *   POST   /teams/:t/resumes/:id/lien              lien signé temporaire vers le PDF
- *   GET    /fichiers/:id?c=&exp=&sig=              lecture par lien signé (sans session)
+ *   GET    /fichiers/:id?c=&exp=&sig=              lecture par lien signé (sans session ; Range accepté)
+ *   POST   /teams/:t/resumes/envois                ; GET|DELETE …/envois/:e ; PUT …/envois/:e/morceaux/:i ; POST …/envois/:e/fin
+ *   POST   /teams/:t/resumes/:id/enregistrement/lien   lien signé (2 h) de l'enregistrement déposé
+ *   GET    /teams/:t/resumes/:id/transcription     transcription horodatée (même visibilité que le dépôt)
+ *   PUT    /teams/:t/resumes/:id/transcription     enregistrer (partielle ou complète → PDF) : déposant, rédacteurs
+ *   POST   /teams/:t/resumes/:id/transcription/lien     lien signé du PDF de transcription
+ *   POST   /teams/:t/resumes/:id/transcription/externe  API externe (désactivée par défaut)
  *
  *   GET|POST          /teams/:t/objectifs          ; PATCH|DELETE /teams/:t/objectifs/:id
  *   GET|POST          /teams/:t/taches             (?filtre=miennes|retard&statut=&objectif=&assigne=&priorite=)
@@ -28,26 +34,18 @@
 
 import { servicesObjectifs } from './objectifs.mjs';
 import { servicesResumes } from './resumes.mjs';
-import { ENTETES_SECURITE, disposition, reponseFichier } from './entetes.mjs';
+import { reponseFichier } from './entetes.mjs';
 import { echec } from './outils.mjs';
+import { routesEnvois } from './review/routes.mjs';
 
-const ENTETES_PDF = {
-  'Access-Control-Allow-Origin': '*',
-  'Cache-Control': 'private, no-store',
-  ...ENTETES_SECURITE,
-  // Pas de « sandbox » : Chrome refuserait d'afficher le PDF.
-  'Content-Security-Policy': "frame-ancestors 'none'",
-};
-
-/** Lecture d'un fichier par lien signé : avant la session (le lien porte la preuve). */
-export async function routeFichierSigne(resumes, url) {
+/**
+ * Lecture d'un fichier par lien signé : avant la session (le lien porte la preuve). Entier, ou par
+ * plage (en-tête Range → 206) pour les vidéos et les enregistrements (medias/lecture.mjs).
+ */
+export async function routeFichierSigne(medias, url, requete) {
   const f = /^\/fichiers\/([^/]+)$/.exec(url.pathname.replace(/^\/api\/esport(?=\/|$)/, ''));
   if (!f) return undefined;
-  const { octets, type, nom, telecharger } = await resumes.lireFichierSigne(f[1], url.searchParams);
-  return new Response(octets, {
-    status: 200,
-    headers: { ...ENTETES_PDF, 'Content-Type': type, 'Content-Length': String(octets.length), 'Content-Disposition': disposition(nom, !telecharger) },
-  });
+  return medias.servirFichierSigne(f[1], url.searchParams, requete);
 }
 
 const filtresTaches = q => ({
@@ -58,9 +56,9 @@ const filtresTaches = q => ({
   priorite: q.get('priorite') || undefined,
 });
 
-export function servicesPhase3({ base, stockage, cleSession, maintenant, socle }) {
+export function servicesPhase3({ base, stockage, cleSession, maintenant, socle, medias, transcriptionExterne, fetchTranscription }) {
   return {
-    resumes: servicesResumes({ base, stockage, cleSession, maintenant, socle }),
+    resumes: servicesResumes({ base, stockage, cleSession, maintenant, socle, medias, transcriptionExterne, fetchTranscription }),
     objectifs: servicesObjectifs({ base, maintenant, socle }),
   };
 }
@@ -69,7 +67,10 @@ export function servicesPhase3({ base, stockage, cleSession, maintenant, socle }
  * Routeur des routes authentifiées de la phase 3. Rend `undefined` si la
  * route n'est pas la sienne (api.mjs continue alors).
  */
-export async function routerPhase3({ resumes, objectifs }, { requete, url, chemin, acteur, lireCorps }) {
+/** Corps JSON d'une transcription (jusqu'à 2 Mo). */
+const TAILLE_MAX_TRANSCRIPTION = 2 * 1024 * 1024;
+
+export async function routerPhase3({ resumes, objectifs }, { requete, url, chemin, acteur, lireCorps, medias }) {
   const m = requete.method;
   const q = url.searchParams;
 
@@ -87,9 +88,23 @@ export async function routerPhase3({ resumes, objectifs }, { requete, url, chemi
     });
   }
 
-  const r = /^\/teams\/([^/]+)\/(resumes|objectifs|taches)(?:\/([^/]+))?(?:\/([^/]+))?(?:\/([^/]+))?$/.exec(chemin);
+  const r = /^\/teams\/([^/]+)\/(resumes|objectifs|taches)(?:\/([^/]+))?(?:\/([^/]+))?(?:\/([^/]+))?(?:\/([^/]+))?$/.exec(chemin);
   if (!r) return undefined;
-  const [, teamId, section, a, b, c] = r;
+  const [, teamId, section, a, b, c, d] = r;
+  const prefixe = url.pathname.startsWith('/api/esport') ? '/api/esport' : '';
+  const lienAbsolu = ({ chemin: lien, expire }) => ({ url: `${url.origin}${prefixe}${lien}`, expire: new Date(expire).toISOString() });
+
+  if (section === 'resumes' && a === 'envois' && medias) {
+    return routesEnvois({ medias, acteur, teamId, usage: 'reunion', p: [b, c, d].filter(Boolean), methode: m, requete, lireCorps: () => lireCorps(requete) });
+  }
+  if (section === 'resumes' && a && a !== 'miens' && a !== 'types') {
+    if (b === 'enregistrement' && c === 'lien' && !d && m === 'POST') return lienAbsolu(await resumes.lienEnregistrement(acteur, teamId, a, await lireCorps(requete)));
+    if (b === 'transcription' && !c && m === 'GET') return resumes.transcription(acteur, teamId, a);
+    if (b === 'transcription' && !c && m === 'PUT') return resumes.enregistrerTranscription(acteur, teamId, a, await lireCorps(requete, TAILLE_MAX_TRANSCRIPTION));
+    if (b === 'transcription' && c === 'lien' && !d && m === 'POST') return lienAbsolu(await resumes.lienTranscription(acteur, teamId, a, await lireCorps(requete)));
+    if (b === 'transcription' && c === 'externe' && !d && m === 'POST') return resumes.demanderTranscriptionExterne(acteur, teamId, a, await lireCorps(requete));
+  }
+  if (d) throw echec(404, 'route', 'Adresse inconnue.');
 
   if (section === 'resumes') {
     if (!a) {

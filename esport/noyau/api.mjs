@@ -40,6 +40,7 @@ import { servicesPlaybook } from './strats/playbook.mjs';
 import { routePubliqueStrats, routesStrats } from './strats/routes.mjs';
 import { servicesStrats } from './strats/service.mjs';
 import { routesSuivi, servicesSuivi } from './suivi/service.mjs';
+import { configMedias, servicesMedias } from './medias/service.mjs';
 
 export const VERSION_ESPORT = 4;
 const TAILLE_MAX_CORPS = 64 * 1024;
@@ -93,6 +94,8 @@ async function lireCorps(requete, max = TAILLE_MAX_CORPS) {
   }
 }
 
+const prefixeApi = url => (url.pathname.startsWith('/api/esport') ? '/api/esport' : '');
+
 const jetonPorteur = requete => (requete.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim();
 
 /**
@@ -101,15 +104,33 @@ const jetonPorteur = requete => (requete.headers.get('Authorization') ?? '').rep
  *  - `cleSession` : secret CLE_ESPORT ; `verifierJeton(jeton, ip)` : voir authentification.mjs ;
  *  - `creationTeams` : « fondateur » ou « tous » ; `maintenant` : horloge (tests).
  */
-export function creerApi({ base, stockage, cleSession, verifierJeton, creationTeams = 'fondateur', maintenant = () => Date.now(), cleDiscord, fetchDiscord, lienApp = '', discordBot = {}, attenteDiffere, secretsExportables = false }) {
+export function creerApi({
+  base,
+  stockage,
+  cleSession,
+  verifierJeton,
+  creationTeams = 'fondateur',
+  maintenant = () => Date.now(),
+  cleDiscord,
+  fetchDiscord,
+  lienApp = '',
+  discordBot = {},
+  attenteDiffere,
+  secretsExportables = false,
+  medias: configDesMedias = configMedias(),
+  transcriptionExterne = { actif: false },
+  fetchTranscription,
+}) {
   const s = servicesEsport({ base, maintenant, creationTeams });
-  const s3 = servicesPhase3({ base, stockage, cleSession, maintenant, socle: s });
+  // Vidéos et enregistrements (envoi par morceaux, lecture par plages, espace utilisé).
+  const md = servicesMedias({ base, stockage, cleSession, maintenant, socle: s, config: configDesMedias });
+  const s3 = servicesPhase3({ base, stockage, cleSession, maintenant, socle: s, medias: md, transcriptionExterne, fetchTranscription });
   const p = servicesPlanning({ base, maintenant, noyau: s });
   // Discord : secret de chiffrement des webhooks (CLE_DISCORD, sinon dérivé de CLE_ESPORT) ; `fetchDiscord` : réseau simulé en test.
   const secretDiscord = cleDiscord || cleSession;
   const envoiDiscord = fetchDiscord ?? ((...a) => globalThis.fetch(...a));
   const d = servicesDiscord({ base, maintenant, noyau: s, cle: secretDiscord, fetch: envoiDiscord });
-  const rv = servicesReview({ base, maintenant, socle: s });
+  const rv = servicesReview({ base, maintenant, socle: s, medias: md });
   const sc = servicesScouting({ base, maintenant, socle: s, review: rv });
   const st = servicesStrats({ base, stockage, cleSession, maintenant, socle: s });
   const pb = servicesPlaybook({ base, maintenant, socle: s, strats: st });
@@ -153,10 +174,19 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     const ip = adresseIp(requete);
 
     if (chemin === '/sante' && m === 'GET') {
-      return { ok: true, service: 'esport', version: VERSION_ESPORT, stockage: Boolean(stockage), session: Boolean(cleSession), bot: Boolean(configBot.applicationId && configBot.publicKey && jetonBot), heure: maintenant() };
+      return {
+        ok: true,
+        service: 'esport',
+        version: VERSION_ESPORT,
+        stockage: Boolean(stockage),
+        session: Boolean(cleSession),
+        bot: Boolean(configBot.applicationId && configBot.publicKey && jetonBot),
+        medias: { plafond: configDesMedias.plafond, tailleMorceau: configDesMedias.tailleMorceau, transcriptionExterne: Boolean(transcriptionExterne?.actif) },
+        heure: maintenant(),
+      };
     }
     if (chemin === '/catalogue' && m === 'GET') return catalogue;
-    if (chemin.startsWith('/fichiers/') && m === 'GET') return routeFichierSigne(s3.resumes, url);
+    if (chemin.startsWith('/fichiers/') && (m === 'GET' || m === 'HEAD')) return routeFichierSigne(md, url, requete);
     const publique = await routePublique({ p, chemin, methode: m, url });
     if (publique !== undefined) return publique;
     const partage = await routePubliqueStrats({ strats: st, chemin, methode: m, url });
@@ -201,7 +231,8 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     if (liaisonsDiscord !== undefined) return liaisonsDiscord;
     if (chemin === '/moi/export' && m === 'GET') {
       await limite('export', acteur.compte);
-      return s.exporterMesDonnees(acteur);
+      // Vidéos, enregistrements et transcriptions : liste et liens signés (72 h).
+      return { ...(await s.exporterMesDonnees(acteur)), ...(await md.exportRgpd(acteur.compte, `${url.origin}${prefixeApi(url)}`)) };
     }
     if (chemin === '/notifications' && m === 'GET') return s.notifications(acteur);
     if (chemin === '/notifications/lues' && m === 'POST') return s.marquerLues(acteur, await lireCorps(requete));
@@ -247,7 +278,7 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
       const compte = decodeURIComponent(rgpd[1]);
       if (rgpd[2] && m === 'GET') {
         await limite('export', acteur.compte);
-        return s.exporterCompte(acteur, compte);
+        return { ...(await s.exporterCompte(acteur, compte)), ...(await md.exportRgpd(compte, `${url.origin}${prefixeApi(url)}`)) };
       }
       if (!rgpd[2] && m === 'DELETE') return s.supprimerCompteMembre(acteur, compte);
     }
@@ -291,7 +322,7 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
     if (planning !== undefined) return planning;
     const discord = await routerDiscord(d, { methode: m, chemin, acteur, lireCorps: () => lireCorps(requete) });
     if (discord !== undefined) return discord;
-    const reviewScouting = await routesReview({ review: rv, scouting: sc, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete) });
+    const reviewScouting = await routesReview({ review: rv, scouting: sc, medias: md, acteur, chemin, methode: m, url, requete, lireCorps: () => lireCorps(requete) });
     if (reviewScouting !== undefined) return reviewScouting;
     const suiviJoueurs = await routesSuivi({ suivi: sj, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete) });
     if (suiviJoueurs !== undefined) return suiviJoueurs;
@@ -347,8 +378,13 @@ export function creerApi({ base, stockage, cleSession, verifierJeton, creationTe
         return stt.stats(acteur, teamId, { du: q.get('du') || undefined, au: q.get('au') || undefined });
       }
       if (section === 'm' && sousId) return s.moduleFutur(acteur, teamId, sousId);
+      // Espace utilisé (Paramètres) : vidéos, enregistrements et PDF de la team ; suppression selon le module.
+      if (section === 'espace') {
+        if (!sousId && m === 'GET') return md.espace(acteur, teamId);
+        if (sousId && m === 'DELETE') return md.supprimerFichierEspace(acteur, teamId, sousId);
+      }
     }
-    const phase3 = await routerPhase3(s3, { requete, url, chemin, acteur, lireCorps });
+    const phase3 = await routerPhase3(s3, { requete, url, chemin, acteur, lireCorps, medias: md });
     if (phase3 !== undefined) return phase3;
     throw echec(404, 'route', 'Adresse inconnue.');
   }

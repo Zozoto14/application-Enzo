@@ -14,6 +14,7 @@ import { teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { BarreOnglets } from '../../ui/mobile/BarreOnglets';
 import { Compteur, ESP, attenue, rayonControle, texte, type EtatPresse } from './design';
 import { tr } from '../i18n';
+import { BandeauTranscriptions } from './medias/Transcription';
 
 export type OngletEsport = 'dashboard' | 'teams' | 'membres';
 
@@ -117,6 +118,8 @@ export function CadreEsport({
     return (
       <View style={{ flex: 1 }}>
         {enTeteMobile}
+        {/* Transcriptions en cours dans l'onglet : visibles sur tous les écrans de l'Esport. */}
+        <BandeauTranscriptions theme={theme} />
         <View style={{ flex: 1 }}>{children}</View>
         {barreBasse ?? (
           <BarreOnglets
@@ -160,7 +163,10 @@ export function CadreEsport({
           </Text>
         ) : null}
       </View>
-      <View style={{ flex: 1, minWidth: 0 }}>{children}</View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <BandeauTranscriptions theme={theme} />
+        <View style={{ flex: 1 }}>{children}</View>
+      </View>
     </View>
   );
 }

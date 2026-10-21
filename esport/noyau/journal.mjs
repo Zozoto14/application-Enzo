@@ -32,7 +32,7 @@ const MAX_EXPORT = 20_000;
 
 /** Familles d'actions (préfixes) par module ; « coeur » : team, membres, rôles, invitations, comptes. */
 export const ACTIONS_PAR_MODULE = {
-  coeur: ['team', 'modules', 'role', 'member', 'invitation', 'account'],
+  coeur: ['team', 'modules', 'role', 'member', 'invitation', 'account', 'media'],
   planning: ['event', 'ical'],
   availability: ['availability'],
   attendance: ['attendance'],

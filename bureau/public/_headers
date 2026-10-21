@@ -14,6 +14,15 @@
 #   connect-src https://www.youtube.com
 # (même liste pour l'app PC si une CSP y est posée ; voir docs/esport/review-video.md).
 
+# Vidéos déposées et transcription des réunions (Esport) : la vidéo est lue par lien signé sur le serveur
+# Esport (requêtes Range), la transcription charge à la demande transformers.js depuis cdn.jsdelivr.net
+# (version figée, empreinte SHA-256 vérifiée, importée depuis un blob:) et le modèle Whisper depuis
+# Hugging Face. AUCUNE CSP aujourd'hui : rien à ouvrir. Si une CSP est ajoutée, autoriser au minimum :
+#   media-src   https://esport.appdashboard.fr blob:
+#   script-src  blob: 'wasm-unsafe-eval' https://cdn.jsdelivr.net
+#   connect-src https://esport.appdashboard.fr https://cdn.jsdelivr.net https://huggingface.co https://*.huggingface.co https://*.hf.co
+# (voir docs/esport/videos.md et docs/esport/resumes.md).
+
 # Éditeur de strats Esport (images Riot sous la politique « Legal Jibber Jabber ») : données et images
 # chargées à l'exécution depuis valorant-api.com (JSON) et media.valorant-api.com (images, lues par fetch
 # puis converties en blob: pour garder l'export PNG possible). AUCUNE politique CSP n'est posée

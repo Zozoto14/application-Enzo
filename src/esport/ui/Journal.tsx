@@ -17,7 +17,7 @@ import { tr, trn } from '../i18n';
 
 /** Familles d'actions par module (même table que le serveur, esport/noyau/journal.mjs). */
 export const ACTIONS_PAR_MODULE: Record<string, readonly string[]> = {
-  coeur: ['team', 'modules', 'role', 'member', 'invitation', 'account'],
+  coeur: ['team', 'modules', 'role', 'member', 'invitation', 'account', 'media'],
   planning: ['event', 'ical'],
   availability: ['availability'],
   attendance: ['attendance'],

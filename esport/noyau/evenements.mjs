@@ -53,6 +53,10 @@ export const TYPES_EVENEMENTS = [
   'meeting_type.created',
   'meeting_type.updated',
   'meeting_type.deleted',
+  // Enregistrements déposés et transcription automatique (migration 0014).
+  'meeting.transcription_ready',
+  'meeting.transcription_updated',
+  'media.deleted',
   'goal.created',
   'goal.updated',
   'goal.deleted',
@@ -142,6 +146,15 @@ export async function abonneNotifications(base, ev) {
       if (await base.premier("SELECT id FROM comptes WHERE id = 'principal'", [])) redacteurs.add('principal');
       for (const compte of redacteurs) {
         if (compte !== ev.acteur_id) await notifier(base, ev, compte, 'resume-depose', { membre: ev.acteur_id, titre: charge.titre ?? null, reunion: ev.entite_id });
+      }
+      return;
+    }
+    case 'meeting.transcription_ready': {
+      // Transcription prête : le déposant et les rédacteurs (ceux qui voient le dépôt et peuvent la corriger).
+      const destinataires = new Set(await comptesAvecPermission(base, ev.team_id, 'meeting_summaries.write_summary'));
+      if (charge.deposePar) destinataires.add(charge.deposePar);
+      for (const compte of destinataires) {
+        if (compte !== ev.acteur_id) await notifier(base, ev, compte, 'transcription-prete', { titre: charge.titre ?? null, reunion: ev.entite_id });
       }
       return;
     }

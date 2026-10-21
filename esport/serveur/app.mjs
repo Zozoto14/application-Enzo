@@ -40,6 +40,8 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     discordBot: config.discordBot,
     fetchDiscord,
     secretsExportables,
+    medias: config.medias,
+    transcriptionExterne: config.transcriptionExterne,
   });
   return { traiter: api, base: b, stockage: st, config, problemes, fermer: async () => (base ? undefined : b.fermer()) };
 }
@@ -48,7 +50,9 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
 export async function demarrer({ port, hote, ...options } = {}) {
   exigerNode(22);
   const esport = await preparerEsport(options);
-  const serveur = creerServeurHttp(esport.traiter, { urlPublique: esport.config.urlPublique });
+  // Corps de requête borné : un morceau de vidéo (ESPORT_TAILLE_MORCEAU) passe, avec de la marge ; au moins 25 Mo (import, PDF).
+  const tailleMax = Math.max(25 * 1024 * 1024, (esport.config.medias?.tailleMorceau ?? 0) + 1024 * 1024);
+  const serveur = creerServeurHttp(esport.traiter, { urlPublique: esport.config.urlPublique, tailleMax });
   const url = await ecouter(serveur, { port, hote });
   return {
     url,

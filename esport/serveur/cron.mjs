@@ -13,6 +13,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { basePostgres, optionsDepuisEnv } from '../adaptateurs/postgres.mjs';
+import { stockageDisque } from '../adaptateurs/stockage.mjs';
 import { tachesPlanifiees } from '../noyau/cron.mjs';
 import { tacheRecap } from '../noyau/recap.mjs';
 import { creerEnvoyeur } from './courriel-smtp.mjs';
@@ -20,8 +21,18 @@ import { purgerKvExpire } from '../../relais/serveur/kv-postgres.mjs';
 import { chargerConfigEsport } from './config.mjs';
 
 /** Exécute une fois toutes les tâches ; rend le rapport. */
-export async function executerCron(base, config, { fetch, maintenant, creerTransport } = {}) {
-  const rapport = await tachesPlanifiees(base, { cle: config.cleDiscord || config.cleSession, lienApp: config.lienApp, jetonBot: config.discordBot?.jetonBot, fetch, maintenant });
+export async function executerCron(base, config, { fetch, maintenant, stockage, creerTransport } = {}) {
+  const fichiers = stockage ?? (config.dossierFichiers ? await stockageDisque(config.dossierFichiers) : undefined);
+  const rapport = await tachesPlanifiees(base, {
+    cle: config.cleDiscord || config.cleSession,
+    lienApp: config.lienApp,
+    jetonBot: config.discordBot?.jetonBot,
+    fetch,
+    maintenant,
+    stockage: fichiers,
+    cleSession: config.cleSession,
+    transcriptionExterne: config.transcriptionExterne,
+  });
   // Récapitulatif e-mail (Node seulement : SMTP de esport.env) ; sans SMTP, rien n'est fait.
   if (config.smtp) {
     const envoyer = await creerEnvoyeur(config.smtp, { creerTransport });

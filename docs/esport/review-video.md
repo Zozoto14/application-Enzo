@@ -1,6 +1,7 @@
 # Esport : review vidéo (phase 5)
 
-Module `video_review` : analyser un match ou un scrim posé sur YouTube, avec des repères horodatés, des notes,
+Module `video_review` : analyser un match ou un scrim posé sur YouTube **ou déposé sur le site** (vidéo envoyée par
+morceaux, lecteur maison : voir [videos.md](videos.md)), avec des repères horodatés, des notes,
 un fil de commentaires par repère, des réactions 👍 / 👎 et des dessins posés sur la vidéo (v2). Rien à
 déployer à la main : relancer le workflow « Esport (Worker) » applique les migrations
 `esport/migrations/0005_review_scouting.sql` et `0010_review_v2.sql`.
@@ -30,6 +31,10 @@ hôte (`youtube.com.exemple.fr`…) est refusé. L'adresse stockée est canoniqu
 position de départ.
 
 ## Lecteur
+
+Une review a une **source** : YouTube (ci-dessous) ou un **fichier déposé** (lecteur HTML5 maison, lecture par plages,
+image par image avec « , » et « . », plein écran ; détails dans [videos.md](videos.md)). Timeline, repères, réactions,
+commentaires et dessin sont les mêmes pour les deux.
 
 - **Site et app PC** : API YouTube IFrame (script `https://www.youtube.com/iframe_api`, chargé à l'ouverture
   d'une review ; vidéo servie par `youtube-nocookie.com`). Temps courant interrogé 4 fois par seconde,

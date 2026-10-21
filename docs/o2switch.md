@@ -29,7 +29,7 @@ Elles servent partout dans ce guide. Aucune n'est secrète.
 | Base PostgreSQL | `jayo8828_Data__esport` (attention : **deux** tirets bas avant `esport`) |
 | Utilisateur PostgreSQL | `jayo8828_esport` |
 | Dossier du code | `/home/jayo8828/application-enzo` |
-| Dossier des fichiers Esport (PDF, miniatures) | `/home/jayo8828/esport-fichiers` (jamais dans `public_html`) |
+| Dossier des fichiers Esport (PDF, miniatures, vidéos, enregistrements) | `/home/jayo8828/esport-fichiers` (jamais dans `public_html`) |
 | Fichiers de configuration (secrets) | `/home/jayo8828/.appdashboard/esport.env` et `relais.env` (jamais dans le dépôt) |
 | Journaux | `/home/jayo8828/logs/` |
 
@@ -189,6 +189,9 @@ SMTP_PORT=465
 SMTP_USER=
 SMTP_PASS=
 MAIL_FROM=AppDashboard <noreply@appdashboard.fr>
+# Vidéos déposées (facultatif, voir docs/esport/videos.md) : plafond par fichier, taille des morceaux d'envoi.
+# ESPORT_VIDEO_MAX=10G
+# ESPORT_TAILLE_MORCEAU=8M
 ```
 
 Enregistrez : **Ctrl+O**, **Entrée**, puis **Ctrl+X**. Ensuite :
@@ -302,7 +305,8 @@ cPanel › section **Avancé** › **Tâches Cron**.
    ```
 
 La première met à jour code, base, apps et site ; la seconde fait le travail planifié de l'Esport (rappels,
-file d'envoi Discord, purge du journal selon la durée de chaque team, ménage) et efface les clés expirées du relais.
+file d'envoi Discord, purge du journal selon la durée de chaque team, ménage, envois de vidéos inachevés depuis plus de
+24 h, transcriptions demandées à une API externe si elle est activée) et efface les clés expirées du relais.
 Toutes deux se protègent contre une exécution en double.
 
 *Variante sans cron de déploiement* : cPanel › **Git Version Control** › **Gérer** › onglet **Pull or Deploy** ›
@@ -331,7 +335,7 @@ pour changer de domaine).
 ## Partie B — Vérifier avant la bascule
 
 - `curl -s https://esport.appdashboard.fr/sante` répond `"ok":true` (étape A8).
-- `tail ~/logs/esport-cron.log` : « 10/10 tâches faites » toutes les 5 minutes.
+- `tail ~/logs/esport-cron.log` : « 12/12 tâches faites » toutes les 5 minutes.
 - `tail ~/logs/esport-deploy.log` : rien de rouge.
 - https://appdashboard.fr s'ouvre.
 - Répétition sans risque de l'import du relais (il est rejouable, il ne supprime rien) :
@@ -484,6 +488,7 @@ Ensuite seulement (rien de tout cela n'est automatique) :
 | Discord : « interactions endpoint url could not be verified » | `DISCORD_PUBLIC_KEY` et `DISCORD_APPLICATION_ID` dans `esport.env`, app redémarrée, puis réessayez. `curl -s https://esport.appdashboard.fr/sante` doit montrer `"bot":true`. |
 | L'import Esport dit « contient déjà des données » | Il ne fusionne jamais (protection). Si c'était une répétition : demandez de l'aide pour vider le schéma `appdashboard`, puis relancez. |
 | « Clés du serveur NON reprises » | Le Worker n'était pas en lecture seule : étape C1, puis relancez l'import avec `--fichiers-seulement`. |
+| Envoi d'une vidéo bloqué dès le premier morceau (413, « Requête refusée ») | Pare-feu de l'hébergeur : `ESPORT_TAILLE_MORCEAU=2M` dans `esport.env`, redémarrez l'app ; sinon cPanel › **ModSecurity** › désactivé pour `esport.appdashboard.fr`. Détails : [docs/esport/videos.md](esport/videos.md). |
 | « Trop de demandes en peu de temps » pour tout le monde | Les limites de débit se basent sur l'adresse IP vue par le serveur ; pendant la transmission depuis Cloudflare, les appareils pas encore à jour partagent l'adresse de Cloudflare. Ça disparaît quand ils ont suivi. |
 
 Journaux utiles : `~/logs/esport-deploy.log` (déploiements), `~/logs/esport-cron.log` (tâches planifiées),

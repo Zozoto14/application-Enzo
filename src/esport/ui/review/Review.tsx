@@ -44,6 +44,9 @@ import { BarreDessin } from './BarreDessin';
 import { ApercuDessin, EditeurDessin, dessinDisponible } from './dessinVideo';
 import { FormulaireRepere, type InitialRepere } from './FormulaireRepere';
 import { Lecteur, VITESSES, lecteurIntegre } from './Lecteur';
+import { LecteurFichier } from './LecteurFichier';
+import { ACCEPT_VIDEO, choisirFichier, choixFichierDisponible, type FichierNavigateur } from '../../medias/choixFichier';
+import { BarreEnvoi, InfosFichier, useEnvoi } from '../medias/EnvoiMedia';
 import { NoteMarkdown as Note } from './Note';
 import { BoutonsReaction } from './Reactions';
 import { Timeline } from './Timeline';
@@ -74,17 +77,34 @@ export function Review({ theme, client, detail, large, reviewId, onExporter }: P
       />
     );
   }
-  return <ListeReviews theme={theme} api={api} message={message} onOuvrir={(id, depart) => setOuverte({ id, depart })} />;
+  return <ListeReviews theme={theme} api={api} client={client} teamId={teamId} message={message} onOuvrir={(id, depart) => setOuverte({ id, depart })} />;
 }
 
 // ---------------------------------------------------------------- Liste
 
-function ListeReviews({ theme, api, message, onOuvrir }: { theme: ThemeHub; api: ApiReview; message?: string; onOuvrir(id: string, depart?: number): void }) {
+function ListeReviews({
+  theme,
+  api,
+  client,
+  teamId,
+  message,
+  onOuvrir,
+}: {
+  theme: ThemeHub;
+  api: ApiReview;
+  client: PropsModule['client'];
+  teamId: string;
+  message?: string;
+  onOuvrir(id: string, depart?: number): void;
+}) {
   const [liste, setListe] = useState<Awaited<ReturnType<ApiReview['liste']>> | undefined>();
+  const [source, setSource] = useState<'youtube' | 'fichier'>('youtube');
   const [url, setUrl] = useState('');
+  const [fichier, setFichier] = useState<FichierNavigateur | undefined>();
   const [titre, setTitre] = useState('');
   const [reference, setReference] = useState('');
-  const { erreur, avis, agir } = useAgir();
+  const { enCours, erreur, avis, agir } = useAgir();
+  const envoi = useEnvoi();
   const recharger = useCallback(async () => setListe(await api.liste()), [api]);
   useEffect(() => {
     void agir('', recharger);
@@ -96,6 +116,15 @@ function ListeReviews({ theme, api, message, onOuvrir }: { theme: ThemeHub; api:
       const r = await api.creer({ titre, url, reference });
       onOuvrir(r.id, r.depart ?? undefined);
     });
+  // Vidéo déposée : envoi par morceaux (reprise possible), puis création de la review avec ce fichier.
+  const creerAvecFichier = () =>
+    void agir('creation', async () => {
+      if (!fichier) return;
+      const { etat, oublier } = await envoi.lancer({ client, teamId, section: 'review', fichier });
+      const r = await api.creer({ titre, envoi: etat.id, reference });
+      oublier();
+      onOuvrir(r.id);
+    });
 
   return (
     <View style={{ gap: 16 }} testID="esport-review">
@@ -104,15 +133,65 @@ function ListeReviews({ theme, api, message, onOuvrir }: { theme: ThemeHub; api:
       {liste?.droits.creer ? (
         <Panneau theme={theme} testID="esport-review-nouvelle">
           <Intertitre theme={theme}>{tr('review.review.nouvelle_review')}</Intertitre>
-          <Champ theme={theme} libelle={tr('review.review.adresse_youtube_watch_youtu')} valeur={url} onChanger={setUrl} testID="esport-review-url" placeholder="https://www.youtube.com/watch?v=…" />
-          {url.trim() ? (
-            <Text testID="esport-review-url-etat" style={{ color: id ? theme.ok : theme.critique, fontSize: 13, ...police(theme.policeTexte) }}>
-              {id ? tr('review.review.video_reconnue', { id: id.id }) : tr('review.review.adresse_youtube_non_reconnue')}
-            </Text>
-          ) : null}
+          <Segments
+            theme={theme}
+            libelle={tr('medias.review.source')}
+            valeur={source}
+            options={[
+              ['youtube', tr('medias.review.youtube')],
+              ['fichier', tr('medias.review.fichier')],
+            ]}
+            onChoisir={v => setSource(v === 'fichier' ? 'fichier' : 'youtube')}
+            testID="esport-review-source"
+          />
+          {source === 'youtube' ? (
+            <>
+              <Champ theme={theme} libelle={tr('review.review.adresse_youtube_watch_youtu')} valeur={url} onChanger={setUrl} testID="esport-review-url" placeholder="https://www.youtube.com/watch?v=…" />
+              {url.trim() ? (
+                <Text testID="esport-review-url-etat" style={{ color: id ? theme.ok : theme.critique, fontSize: 13, ...police(theme.policeTexte) }}>
+                  {id ? tr('review.review.video_reconnue', { id: id.id }) : tr('review.review.adresse_youtube_non_reconnue')}
+                </Text>
+              ) : null}
+            </>
+          ) : choixFichierDisponible ? (
+            <View style={{ gap: 8 }}>
+              <Text style={{ color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) }}>{tr('medias.review.conseil_format')}</Text>
+              <View style={[styles.ligne, { alignItems: 'center' }]}>
+                <BoutonHub
+                  theme={theme}
+                  titre={fichier ? tr('medias.changer_de_fichier') : tr('medias.review.choisir_video')}
+                  desactive={envoi.enCours}
+                  onPress={() =>
+                    void choisirFichier(ACCEPT_VIDEO, 'esport-review-fichier-champ').then(f => {
+                      if (!f) return;
+                      setFichier(f);
+                      envoi.effacer();
+                      if (titre.trim().length < 2) setTitre(f.nom.replace(/\.[a-z0-9]{2,4}$/i, '').slice(0, 120));
+                    })
+                  }
+                  testID="esport-review-fichier"
+                />
+                {fichier ? <InfosFichier theme={theme} nom={fichier.nom} taille={fichier.taille} testID="esport-review-fichier-infos" /> : null}
+              </View>
+              <BarreEnvoi theme={theme} progression={envoi.progression} enCours={envoi.enCours} onAnnuler={envoi.annuler} testID="esport-review-envoi" />
+            </View>
+          ) : (
+            <Text style={{ color: theme.attenue, ...police(theme.policeTexte) }}>{tr('medias.depuis_site_ou_pc')}</Text>
+          )}
           <Champ theme={theme} libelle={tr('objectifs.titre')} valeur={titre} onChanger={setTitre} testID="esport-review-titre" maxLength={120} placeholder={tr('review.review.faucons_vs_nova_ascent')} />
           <Champ theme={theme} libelle={tr('review.review.match_ou_scrim_concerne')} valeur={reference} onChanger={setReference} testID="esport-review-reference" maxLength={120} />
-          <BoutonHub theme={theme} titre={tr('review.review.creer_la_review')} variante="plein" onPress={creer} desactive={!id || titre.trim().length < 2} testID="esport-review-creer" />
+          {source === 'youtube' ? (
+            <BoutonHub theme={theme} titre={tr('review.review.creer_la_review')} variante="plein" onPress={creer} desactive={!id || titre.trim().length < 2} testID="esport-review-creer" />
+          ) : (
+            <BoutonHub
+              theme={theme}
+              titre={envoi.enCours ? tr('medias.envoi.envoi_en_cours') : tr('medias.review.envoyer_et_creer')}
+              variante="plein"
+              onPress={creerAvecFichier}
+              desactive={!fichier || titre.trim().length < 2 || Boolean(enCours)}
+              testID="esport-review-creer-fichier"
+            />
+          )}
         </Panneau>
       ) : null}
       <View style={{ gap: 8 }} testID="esport-review-liste">
@@ -125,7 +204,14 @@ function ListeReviews({ theme, api, message, onOuvrir }: { theme: ThemeHub; api:
             accessibilityLabel={tr('review.review.ouvrir_la_review', { titre: r.titre })}
             onPress={() => onOuvrir(r.id)}
             style={{ flexDirection: 'row', gap: 12, padding: 10, borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface, borderRadius: theme.rayonMoyen, alignItems: 'center' }}>
-            <Image source={{ uri: miniatureYoutube(r.videoId) }} accessibilityLabel="" style={{ width: 120, height: 68, borderRadius: 6, backgroundColor: theme.fond }} />
+            {r.source === 'fichier' ? (
+              <View testID={`esport-review-miniature-fichier-${r.id}`} style={{ width: 120, height: 68, borderRadius: 6, backgroundColor: theme.fond, alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+                <Text style={{ color: theme.accent, fontSize: 22 }}>▶</Text>
+                <Text style={{ color: theme.attenue, fontSize: 11, ...police(theme.policeTexte) }}>{r.video?.supprime ? tr('medias.video_supprimee') : (r.video?.media?.nomFormat ?? tr('medias.review.fichier'))}</Text>
+              </View>
+            ) : (
+              <Image source={{ uri: miniatureYoutube(r.videoId) }} accessibilityLabel="" style={{ width: 120, height: 68, borderRadius: 6, backgroundColor: theme.fond }} />
+            )}
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={{ color: theme.texte, fontWeight: '700', fontSize: 15, ...police(theme.policeTexte) }} numberOfLines={2}>
                 {r.titre}
@@ -191,6 +277,8 @@ function DetailReviewEcran({
   useEffect(() => {
     void agir('', recharger);
   }, [agir, recharger]);
+  // Vidéo déposée : lien signé redemandé à chaque (re)chargement du lecteur.
+  const obtenirUrl = useCallback(async () => (await api.lienVideo(id)).url, [api, id]);
 
   const surPret = useCallback((c: CommandeLecteur | undefined) => {
     commande.current = c;
@@ -331,11 +419,21 @@ function DetailReviewEcran({
       return ok ? tr('review.review.boite_d_impression_ouverte') : tr('review.review.l_impression_n_est');
     });
 
+  const fichierVideo = data.review.source === 'fichier';
+  const LecteurChoisi = fichierVideo ? LecteurFichierReview : Lecteur;
   const colLecteur = (
     <View style={{ gap: 12, flex: large ? 3 : undefined, minWidth: 0 }}>
-      <Lecteur
+      {fichierVideo && data.review.video?.supprime ? (
+        <Text testID="esport-review-video-supprimee" style={{ color: theme.alerte, ...police(theme.policeTexte) }}>
+          {tr('medias.video_supprimee_explication')}
+        </Text>
+      ) : null}
+      <LecteurChoisi
         theme={theme}
         videoId={data.review.videoId}
+        video={data.review.video}
+        obtenirUrl={obtenirUrl}
+        raccourcis={!formulaire && !dessin}
         depart={depart}
         large={large}
         onPret={surPret}
@@ -630,7 +728,7 @@ function CarteRepere({
       ) : null}
       <BoutonsReaction theme={theme} reactions={r.reactions} peutReagir={Boolean(droits.reagir)} onReagir={v => onReagir(v)} testID={`esport-repere-reaction-${r.id}`} />
       <View style={styles.ligne}>
-        {!lecteurIntegre ? <BoutonHub theme={theme} titre={tr('review.review.ouvrir_dans_youtube_a_2', { v: formatTemps(r.debut) })} onPress={() => void Linking.openURL(lienYoutubeA(videoId, r.debut))} testID={`esport-repere-youtube-${r.id}`} /> : null}
+        {!lecteurIntegre && videoId ? <BoutonHub theme={theme} titre={tr('review.review.ouvrir_dans_youtube_a_2', { v: formatTemps(r.debut) })} onPress={() => void Linking.openURL(lienYoutubeA(videoId, r.debut))} testID={`esport-repere-youtube-${r.id}`} /> : null}
         <BoutonHub theme={theme} titre={tr('review.review.commentaires', { length: r.commentaires.length })} onPress={onBascule} testID={`esport-repere-commentaires-${r.id}`} />
         {lecteurIntegre && r.peutModifier ? <BoutonHub theme={theme} titre={tr('membresRoles.modifier')} onPress={onModifier} testID={`esport-repere-modifier-${r.id}`} /> : null}
         {lecteurIntegre && r.peutSupprimer ? <BoutonConfirme theme={theme} titre={tr('discord.supprimer')} confirmation={tr('planning.planning.oui_supprimer')} onConfirme={onSupprimer} testID={`esport-repere-supprimer-${r.id}`} /> : null}
@@ -671,3 +769,8 @@ function CarteRepere({
   );
 }
 
+
+/** Adaptateur : le lecteur maison accepte les mêmes props que le lecteur YouTube (videoId ignoré). */
+function LecteurFichierReview(props: React.ComponentProps<typeof LecteurFichier> & { videoId?: string }) {
+  return <LecteurFichier {...props} />;
+}

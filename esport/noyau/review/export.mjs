@@ -32,7 +32,8 @@ export function exporterMarkdown({ review, reperes, equipe, exporteLe }) {
   const l = [];
   l.push(`# ${ligneSure(review.titre, 120)}`, '');
   l.push(`- Équipe : ${ligneSure(equipe ?? '', 80) || '—'}`);
-  l.push(`- Vidéo : ${review.url}`);
+  const fichier = review.source === 'fichier';
+  l.push(fichier ? `- Vidéo : fichier déposé sur le site${review.nomFichier ? ` (${ligneSure(review.nomFichier, 120)})` : ''}` : `- Vidéo : ${review.url}`);
   if (review.reference) l.push(`- Référence : ${ligneSure(review.reference, 120)}`);
   l.push(`- Repères : ${reperes.length}`, `- Exporté le ${jour(exporteLe)}`, '');
   if (reperes.length === 0) l.push('_Aucun repère pour l’instant._', '');
@@ -43,7 +44,7 @@ export function exporterMarkdown({ review, reperes, equipe, exporteLe }) {
     if (r.cible) meta.push(`Joueur : ${ligneSure(r.cible, 60)}`);
     if (r.auteur) meta.push(`Auteur : ${ligneSure(r.auteur, 60)}`);
     l.push(`**${meta.join('** · **')}**`, '');
-    l.push(`[Ouvrir à ${formatTemps(r.debut)}](${lienYoutubeA(review.videoId, r.debut)})`, '');
+    if (!fichier) l.push(`[Ouvrir à ${formatTemps(r.debut)}](${lienYoutubeA(review.videoId, r.debut)})`, '');
     const like = Number(r.reactions?.like) || 0;
     const dislike = Number(r.reactions?.dislike) || 0;
     if (like || dislike) l.push(`Réactions : 👍 ${like} · 👎 ${dislike}`, '');

@@ -848,6 +848,12 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       { sql: 'UPDATE objectifs SET proprietaire_id = NULL WHERE proprietaire_id = ?', params: [compte] },
       { sql: 'UPDATE review_reperes SET cible_id = NULL WHERE cible_id = ?', params: [compte] },
       { sql: 'DELETE FROM review_reactions WHERE compte_id = ?', params: [compte] },
+      // Vidéos, enregistrements et transcriptions (migration 0014) : ce qu'il a déposé reste pour la team, sans
+      // auteur ; ses envois inachevés sont confiés au cron (effacés au passage suivant).
+      { sql: 'UPDATE transcriptions SET auteur_id = NULL WHERE auteur_id = ?', params: [compte] },
+      { sql: 'UPDATE transcriptions SET modifie_par = NULL WHERE modifie_par = ?', params: [compte] },
+      { sql: "UPDATE fichiers SET depose_par = '' WHERE depose_par = ? AND entite_type IN ('review_video', 'reunion_enregistrement', 'reunion_transcription')", params: [compte] },
+      { sql: "UPDATE envois SET compte_id = '', maj_le = '1970-01-01T00:00:00.000Z' WHERE compte_id = ? AND fichier_id IS NULL", params: [compte] },
       // Suivi des joueurs : les notes du staff SUR lui sont effacées (ses données) ; celles qu'il a écrites restent, sans auteur.
       { sql: 'DELETE FROM notes_joueurs WHERE joueur_id = ?', params: [compte] },
       { sql: 'UPDATE notes_joueurs SET auteur_id = NULL, auteur_masque = 1 WHERE auteur_id = ?', params: [compte] },

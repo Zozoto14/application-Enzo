@@ -12,12 +12,13 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [invitations.md](invitations.md) | Fondateur, staff | Inviter un joueur (création de compte depuis l'Esport), page Membres |
 | [deploiement.md](deploiement.md) | Fondateur | Activer le serveur Esport (Cloudflare + GitHub), ajouter un joueur |
 | [planning.md](planning.md) | Tout le monde | Planning, disponibilités, présence, agenda iCal |
-| [resumes.md](resumes.md) | Tout le monde | Déposer une réunion, boîte du rédacteur, PDF |
+| [resumes.md](resumes.md) | Tout le monde | Déposer une réunion (fichier ou lien), transcription automatique en PDF, boîte du rédacteur |
 | [objectifs-taches.md](objectifs-taches.md) | Tout le monde | Objectifs, tâches, kanban |
 | [suivi-joueurs.md](suivi-joueurs.md) | Staff, Fondateur | Suivi joueurs : notes du staff, partage, RGPD |
 | [bot-discord.md](bot-discord.md) | Fondateur, tout le monde | Bot Discord : activation, commandes, pings des convoqués, /lier |
 | [discord.md](discord.md) | Propriétaire, Manager | Webhook (repli sans bot), messages, sécurité |
 | [review-video.md](review-video.md) | Coach, Analyste, joueurs | Review YouTube, repères, export |
+| [videos.md](videos.md) | Coach, Analyste, Fondateur | Vidéos déposées sur le site, lecteur maison, formats, espace utilisé |
 | [scouting.md](scouting.md) | Staff | Fiches adversaires, VODs |
 | [strats-playbook.md](strats-playbook.md) | Coach, Analyste, joueurs | Éditeur de strats, partage, playbook, licences Riot |
 | [securite.md](securite.md) | Fondateur | Revue de sécurité, RGPD, limites |
