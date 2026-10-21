@@ -34,6 +34,7 @@ import { aleatoireParDefaut, type SourceAleatoire } from '../securite/aleatoire'
 import { PARAMETRES_KDF_DEFAUT, deriverCle, type ParametresKdf } from '../securite/kdf';
 import { descellerAvecContexte, normaliserNom, scellerAvecContexte, utf8DepuisOctets } from '../securite/sequestre';
 import { normaliserCrockford, versCrockford } from '../securite/encodage';
+import { normaliserCode as normaliserCodeRecuperation } from '../securite/codes-recuperation';
 
 // ------------------------------------------------------------ Saisies
 
@@ -422,12 +423,15 @@ export function empreinteIdentifiant(prenom: string): string {
   return bytesToHex(sha256(utf8ToBytes(`applibourse/acces/identifiant/v1|${cleIdentifiant(prenom)}`)));
 }
 
-/** Ce que l'accès scelle : de quoi retrouver le compte. */
+/**
+ * Ce que l'accès scelle : de quoi retrouver le compte. Le compte `principal` (Fondateur, version 9)
+ * n'a pas de jeton dans sa charge : le relais lui remet un jeton de SESSION à chaque connexion.
+ */
 export interface ContenuAcces {
   v: 1;
   compte: string;
   prenom: string;
-  jeton: string;
+  jeton?: string;
   relais: string;
   site?: string;
 }
@@ -439,6 +443,15 @@ export interface DepotAcces {
   kdf: ParametresKdf;
   verif: string;
   charge: string;
+  /** Accès de secours (version 9) : un code de récupération ouvre aussi la charge. */
+  secours?: DepotSecours;
+}
+
+/** Une entrée par code de récupération : empreinte de sa preuve, charge scellée par une clé tirée du code. */
+export interface DepotSecours {
+  sel: string;
+  kdf: ParametresKdf;
+  entrees: Array<{ verif: string; charge: string }>;
 }
 
 function clesAcces(motDePasse: string, sel: Uint8Array, kdf: ParametresKdf): { cle: Uint8Array; preuve: string } {
@@ -469,6 +482,29 @@ export function preparerAcces(motDePasse: string, contenu: ContenuAcces, alea: S
   }
 }
 
+/**
+ * Accès de secours : chaque code de récupération (normalisé : casse, tirets, confusions de lecture)
+ * dérive, avec un sel COMMUN (les codes ont 80 bits d'aléa : une seule dérivation à la connexion),
+ * une preuve dont le relais garde l'empreinte, et la clé qui scelle la même charge.
+ */
+export function preparerSecours(codes: readonly string[], contenu: ContenuAcces, alea: SourceAleatoire = aleatoireParDefaut, kdf: ParametresKdf = PARAMETRES_KDF_DEFAUT): DepotSecours {
+  const sel = alea(16);
+  const entrees = codes.map(code => {
+    const { cle, preuve } = clesAcces(normaliserCodeRecuperation(code), sel, kdf);
+    try {
+      return { verif: bytesToHex(sha256(utf8ToBytes(preuve))), charge: scellerAvecContexte(cle, utf8ToBytes(JSON.stringify(contenu)), `acces/${contenu.compte}`, alea) };
+    } finally {
+      cle.fill(0);
+    }
+  });
+  return { sel: bytesToHex(sel), kdf, entrees };
+}
+
+/** Preuve et clé d'un code de récupération saisi (même normalisation qu'au dépôt). */
+export function preuveSecours(code: string, selHexa: string, kdf: ParametresKdf): { cle: Uint8Array; preuve: string } {
+  return clesAcces(normaliserCodeRecuperation(code), hexToBytes(selHexa), kdf);
+}
+
 export function lireKdf(brut: unknown): ParametresKdf | undefined {
   const o = brut && typeof brut === 'object' ? (brut as Record<string, unknown>) : {};
   const n = (v: unknown, min: number, max: number) => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
@@ -484,8 +520,16 @@ export function preuveAcces(motDePasse: string, selHexa: string, kdf: Parametres
 export function ouvrirAcces(charge: string, cle: Uint8Array, compte: string): ContenuAcces {
   try {
     const o = JSON.parse(utf8DepuisOctets(descellerAvecContexte(cle, charge, `acces/${compte}`))) as Record<string, unknown>;
-    if (o.v === 1 && o.compte === compte && typeof o.jeton === 'string' && o.jeton.startsWith(`p1.${compte}.`) && adresseValide(o.relais) && typeof o.prenom === 'string') {
-      return { v: 1, compte, prenom: o.prenom, jeton: o.jeton, relais: propreAdresse(o.relais), ...(adresseValide(o.site) ? { site: propreAdresse(o.site) } : {}) };
+    const jetonValide = compte === 'principal' ? o.jeton === undefined : typeof o.jeton === 'string' && o.jeton.startsWith(`p1.${compte}.`);
+    if (o.v === 1 && o.compte === compte && jetonValide && adresseValide(o.relais) && typeof o.prenom === 'string') {
+      return {
+        v: 1,
+        compte,
+        prenom: o.prenom,
+        ...(typeof o.jeton === 'string' ? { jeton: o.jeton } : {}),
+        relais: propreAdresse(o.relais),
+        ...(adresseValide(o.site) ? { site: propreAdresse(o.site) } : {}),
+      };
     }
   } catch {
     // Rien : erreur ci-dessous.
@@ -509,7 +553,9 @@ export type CodeErreurConnexion =
   | 'trop-de-tentatives'
   | 'lien-illisible'
   | 'code-court-illisible'
-  | 'acces-revoque';
+  | 'acces-revoque'
+  | 'identifiant-pris'
+  | 'code-recuperation';
 
 /**
  * Message précis et actionnable pour chaque cause d'échec. `qui` : prénom du
@@ -521,7 +567,12 @@ export function messageErreur(code: CodeErreurConnexion, o: { qui?: string; atte
     case 'identifiant-inconnu':
       return `Identifiant inconnu : vérifie ton prénom tel que ${qui} l’a écrit (les majuscules, accents et espaces ne comptent pas).`;
     case 'mot-de-passe':
-      return 'Mot de passe incorrect. Vérifie-le (majuscules, accents) ; s’il est oublié, demande un lien de réinitialisation.';
+      // Même message pour un identifiant inconnu (le serveur ne dit pas lequel des deux est faux).
+      return 'Identifiant ou mot de passe incorrect. Vérifie-les (majuscules et accents du mot de passe) ; s’il est oublié : « Mot de passe oublié ».';
+    case 'identifiant-pris':
+      return 'Cet identifiant est déjà pris par un autre compte : choisis-en un autre (par exemple ton prénom suivi d’une initiale).';
+    case 'code-recuperation':
+      return 'Identifiant ou code de récupération incorrect (un code ne sert qu’une fois).';
     case 'invitation-expiree':
       return `Cette invitation a expiré. Demande à ${qui} de t’en renvoyer une (Administration › ton compte › Renvoyer une invitation).`;
     case 'invitation-utilisee':

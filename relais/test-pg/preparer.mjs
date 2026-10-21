@@ -17,6 +17,7 @@ import relais from '../worker.mjs';
 import { basePostgres } from '../../esport/adaptateurs/postgres.mjs';
 import { demarrer } from '../serveur/app.mjs';
 import { creerTableKv, kvPostgres, TABLE_KV } from '../serveur/kv-postgres.mjs';
+import { coffresPostgres, creerTablesCoffres } from '../serveur/coffres-postgres.mjs';
 
 const URL_PG = process.env.RELAIS_TEST_PG || process.env.ESPORT_TEST_PG;
 if (!URL_PG) throw new Error('RELAIS_TEST_PG (ou ESPORT_TEST_PG) attendu : adresse postgres://… d’une base de test.');
@@ -27,10 +28,17 @@ await admin.script(`CREATE SCHEMA ${schema}`);
 await admin.fermer();
 const base = await basePostgres({ connexion: URL_PG, schema, max: 4 });
 await creerTableKv(base);
+await creerTablesCoffres(base);
 const kvPg = kvPostgres(base);
 const kvPgSansListe = { get: kvPg.get, put: kvPg.put, delete: kvPg.delete, getWithMetadata: kvPg.getWithMetadata };
 
 const environnements = new Map();
+// Coffre serveur (version 9) : chaque magasin mémoire d'un test devient un magasin PostgreSQL à lui.
+const coffresPg = new WeakMap();
+const coffresDe = memoire => {
+  if (!coffresPg.has(memoire)) coffresPg.set(memoire, coffresPostgres(base, { espace: randomBytes(6).toString('hex') }));
+  return coffresPg.get(memoire);
+};
 // Le vrai serveur de l'app (relais/serveur/app.mjs : préparation, pont HTTP, en-têtes), sur un port local.
 const s = await demarrer({ port: 0, hote: '127.0.0.1', base, envPour: requete => environnements.get(requete.headers.get('x-test-env')) });
 s.serveur.unref();
@@ -100,7 +108,8 @@ relais.fetch = (requete, env, _ctx) =>
     const boite = env?.BOITE;
     const miroir = boite && boite.donnees instanceof Map;
     if (miroir) await versPg(boite);
-    const envServeur = miroir ? { ...env, BOITE: typeof boite.list === 'function' ? kvPg : kvPgSansListe } : env;
+    let envServeur = miroir ? { ...env, BOITE: typeof boite.list === 'function' ? kvPg : kvPgSansListe } : env;
+    if (env?.COFFRES?.memoire) envServeur = { ...envServeur, COFFRES: coffresDe(env.COFFRES) };
     environnements.set(id, envServeur);
     try {
       const corps = ['GET', 'HEAD'].includes(requete.method) ? undefined : Buffer.from(await requete.arrayBuffer());

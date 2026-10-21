@@ -108,3 +108,35 @@ test('import de la boîte : clés, métadonnées et expirations ; clés déjà e
   assert.equal((await kv.list({ prefix: 'inv:' })).keys[0].expiration, Math.floor(t / 1000) + 3600);
   await base.fermer();
 });
+
+test('coffre serveur PostgreSQL : révisions, pages bornées, conflits, corbeille, écritures concurrentes sérialisées', options, async () => {
+  const { coffresPostgres, creerTablesCoffres, purgerHistoriqueCoffres } = await import('../serveur/coffres-postgres.mjs');
+  const base = await nouvelleBase();
+  await creerTablesCoffres(base);
+  await creerTablesCoffres(base);
+  const store = coffresPostgres(base);
+  const id = n => n.toString(16).padStart(32, '0');
+  const r1 = await store.ecrire('principal', [1, 2, 3].map(n => ({ id: id(n), base: 0, date: `2026-10-0${n}`, supprime: false, valeur: 'x'.repeat(10) })));
+  assert.equal(r1.rev, 3);
+  const page = await store.lire('principal', 0, 10, 15);
+  assert.equal(page.enregistrements.length, 1, 'bornée en octets');
+  assert.equal(page.suite, true);
+  // Deux appareils écrivent en même temps sur des enregistrements différents : aucune révision en double.
+  await Promise.all([4, 5, 6, 7, 8].map(n => store.ecrire('principal', [{ id: id(n), base: 0, date: '2026-10-09', supprime: false, valeur: 'v' }])));
+  const tous = await store.lire('principal', 0, 100);
+  assert.deepEqual(tous.enregistrements.map(e => e.rev), [1, 2, 3, 4, 5, 6, 7, 8]);
+  // Conflit et suppression : rien n'est perdu.
+  const perdu = await store.ecrire('principal', [{ id: id(1), base: 0, date: '2026-01-01', supprime: false, valeur: 'vieux' }]);
+  assert.equal(perdu.resultats[0].etat, 'perdu');
+  await store.ecrire('principal', [{ id: id(2), base: 2, date: '2026-10-10', supprime: true, valeur: 'tombe' }]);
+  assert.deepEqual((await store.historique('principal')).map(h => h.raison), ['suppression', 'conflit']);
+  // Une valeur de plusieurs Mio passe (TEXT).
+  const gros = 'g'.repeat(3 * 1024 * 1024);
+  await store.ecrire('lea12345', [{ id: id(9), base: 0, date: 'd', supprime: false, valeur: gros }]);
+  assert.equal((await store.lire('lea12345')).enregistrements[0].valeur.length, gros.length);
+  assert.deepEqual(await store.etat('lea12345'), { rev: 1, enregistrements: 1, octets: gros.length, historique: 0 });
+  assert.equal(await purgerHistoriqueCoffres(base, Date.now() + 400 * 86_400_000), 2);
+  await store.vider('lea12345');
+  assert.equal((await store.lire('lea12345')).enregistrements.length, 0);
+  await base.fermer();
+});

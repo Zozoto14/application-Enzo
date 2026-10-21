@@ -56,6 +56,11 @@ export interface ControleProfils {
   onPolitique?(politique: PolitiqueHub): Promise<void>;
   /** Navigateur relié avec le code d'un titulaire : ce qui exige l'annuaire complet n'est pas disponible ici. */
   restreint?: boolean;
+  /**
+   * Fondateur (relais version 9) : identifiant et mot de passe de connexion (`identifiant` absent :
+   * pas encore défini). `onConfigurer` ouvre l'écran qui les définit ou les change.
+   */
+  connexionServeur?: { identifiant?: string; onConfigurer(): void };
   /** Revenir à « Qui utilise AppDashboard ? ». */
   onChanger(): void;
   onAjouter(nom: string): Promise<void>;

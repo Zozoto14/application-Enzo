@@ -136,8 +136,8 @@ export const ETAPES_VISITE: readonly EtapeVisite[] = [
   {
     id: 'synchro',
     emoji: '🔄',
-    titre: 'Vos appareils synchronisés',
-    texte: 'Le PC, l’iPhone et le site de secours partagent le même portefeuille, chiffré. Dans Paramètres › Synchronisation : le code de liaison, puis le QR code pour l’iPhone.',
+    titre: 'Vos données sont sur le serveur',
+    texte: 'Tout est enregistré, chiffré, sur appdashboard.fr : sur n’importe quel appareil, votre identifiant et votre mot de passe suffisent. La pastille en haut dit si vous êtes en ligne.',
     destination: 'reglages',
   },
 ];

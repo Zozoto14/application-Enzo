@@ -138,7 +138,7 @@ function PageParametresBureau({ theme, section, n, disponibles, rendu, synchro, 
       <Text style={[titreStyle, { fontSize: large ? 30 : 24, flex: 1 }]} accessibilityRole="header">
         Paramètres
       </Text>
-      {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} onPress={() => aller('synchro')} /> : null}
+      {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} onPress={() => aller('general')} /> : null}
     </View>
   );
 

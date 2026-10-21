@@ -38,6 +38,12 @@
  * (`DISCORD_WEBHOOK_URL`) : ni dans le code, ni dans l'application, ni dans les
  * données synchronisées. E-mails (`/courriel/…`, relais/courriel.mjs, docs/emails.md) :
  * transport SMTP fourni par le serveur Node seulement.
+ *
+ * Version 9 (le serveur devient la référence, docs/synchro-relais.md) : coffre serveur chiffré de
+ * chaque compte (`/v9/coffre/<compte>`, relais/coffres.mjs), connexion du Fondateur par identifiant
+ * et mot de passe (`/acces/<h>` accepte `principal` ; une preuve juste rend un jeton de SESSION,
+ * relais/sessions.mjs), réponses neutres pour un identifiant inconnu, style public
+ * (`/v9/theme/<h>`), accès de secours par code de récupération (`POST /acces/<h>/secours`).
  */
 
 import {
@@ -49,12 +55,14 @@ import {
 import { CHEMIN_TSUZUKU, routeTsuzuku } from './tsuzuku.mjs';
 import { envoyerCourriel, routeCourriel } from './courriel.mjs';
 import { routeSupport } from './support.mjs';
+import { routeCoffre } from './coffres.mjs';
+import { creerSession, estJetonSession, porteeSession, routeSessions, routeTheme, selLeurre } from './sessions.mjs';
 
-export const VERSION_RELAIS = 8;
+export const VERSION_RELAIS = 9;
 /** Fonctions annoncées par `/sante` (le site adapte ses écrans à un relais pas encore redéployé). */
-export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations', 'verification-jeton', 'export-boite', 'demenagement', 'support-v2', 'courriel'];
-/** Une enveloppe chiffrée : quelques centaines de Kio en pratique. */
-const TAILLE_MAX_ENVELOPPE = 20 * 1024 * 1024;
+export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations', 'verification-jeton', 'export-boite', 'demenagement', 'support-v2', 'courriel', 'coffre-serveur', 'sessions', 'theme', 'acces-fondateur', 'secours'];
+/** Une enveloppe chiffrée (fichier d'un compte) : relevée avec PostgreSQL (plus de limite KV). */
+const TAILLE_MAX_ENVELOPPE = 48 * 1024 * 1024;
 const IDENTIFIANT_APPAREIL = /^[a-z0-9]{4,32}$/;
 /** Compte d'ami (même motif que l'annuaire) ; `principal` est l'espace de l'administrateur. */
 const IDENTIFIANT_PROFIL = /^(principal|[a-z0-9]{6,16})$/;
@@ -116,13 +124,19 @@ export async function jetonDeProfil(jetonMaitre, id) {
   return `${PREFIXE_JETON_PROFIL}${id}.${hexa(signature)}`;
 }
 
-/** Portée du jeton présenté : `{ maitre: true }`, `{ profil: id }`, ou rien (refusé). */
-export async function porteeDuJeton(recu, jetonMaitre) {
+/**
+ * Portée du jeton présenté : `{ maitre: true }`, `{ profil: id }`, `{ maitre: true, session }` (session
+ * du Fondateur ouverte par son mot de passe, version 9 : `boite` requise), ou rien (refusé).
+ */
+export async function porteeDuJeton(recu, jetonMaitre, boite) {
   if (typeof jetonMaitre !== 'string' || jetonMaitre.length < 16 || typeof recu !== 'string') {
     return undefined;
   }
   if (jetonValide(recu, jetonMaitre)) {
     return { maitre: true };
+  }
+  if (estJetonSession(recu)) {
+    return porteeSession(boite, recu);
   }
   const morceaux = /^p1\.([a-z0-9]{6,16})\.[0-9a-f]{64}$/.exec(recu);
   if (!morceaux || morceaux[1] === 'principal') {
@@ -138,13 +152,11 @@ export async function porteeDuJeton(recu, jetonMaitre) {
 // de synchronisation. Deux dépôts simultanés peuvent encore s'y écraser
 // (lecture-modification-écriture) ; mais chaque valeur porte ses métadonnées
 // ({ date, taille }), et l'index est RÉPARÉ à partir de la liste de la boîte
-// (`KV.list`) au plus une fois par heure (six pour un espace) : les listes
-// sont comptées à part sur l'offre gratuite (1 000 par jour), on ne peut pas
-// en faire une à chaque tour.
+// toutes les 5 minutes au plus (PostgreSQL : plus de quota de listes comme sur KV gratuit).
 
 const REPARE = '~repare';
-const DELAI_REPARATION_BOITE_MS = 3_600_000;
-const DELAI_REPARATION_ESPACE_MS = 6 * 3_600_000;
+const DELAI_REPARATION_BOITE_MS = 5 * 60_000;
+const DELAI_REPARATION_ESPACE_MS = 5 * 60_000;
 const DATE_INCONNUE = '1970-01-01T00:00:00.000Z';
 
 async function lireIndexCle(env, cle) {
@@ -616,28 +628,64 @@ async function invitations(requete, env, portee, id, action) {
   return erreur('Méthode non autorisée.', 405);
 }
 
-function lireDepotAcces(corps) {
-  const kdf = corps?.kdf;
+const KDF_DEFAUT_ACCES = { algorithme: 'argon2id', passes: 2, memoireKio: 19456, fils: 1, longueurCle: 32 };
+const MAX_SECOURS = 16;
+
+function lireKdfAcces(kdf) {
   const entier = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+  if (!kdf || kdf.algorithme !== 'argon2id' || !entier(kdf.passes, 1, 10) || !entier(kdf.memoireKio, 8, 262144) || !entier(kdf.fils, 1, 4) || kdf.longueurCle !== 32) {
+    return undefined;
+  }
+  return { algorithme: 'argon2id', passes: kdf.passes, memoireKio: kdf.memoireKio, fils: kdf.fils, longueurCle: 32 };
+}
+
+/**
+ * Dépôt d'accès par identifiant. Version 9 : le compte `principal` (Fondateur) est accepté, et un
+ * accès de SECOURS facultatif (`secours` : un sel commun, et pour chaque code de récupération
+ * l'empreinte de sa preuve et la charge scellée par une clé tirée du code).
+ */
+function lireDepotAcces(corps) {
+  const kdf = lireKdfAcces(corps?.kdf);
   if (
     !corps ||
-    !MOTIF_COMPTE.test(corps.compte ?? '') ||
-    corps.compte === 'principal' ||
+    !MOTIF_COMPTE_OU_PRINCIPAL.test(corps.compte ?? '') ||
     !/^[0-9a-f]{32}$/.test(corps.sel ?? '') ||
     !MOTIF_EMPREINTE.test(corps.verif ?? '') ||
     typeof corps.charge !== 'string' ||
     !/^[0-9a-f]+$/.test(corps.charge) ||
     corps.charge.length > TAILLE_MAX_CHARGE ||
-    !kdf ||
-    kdf.algorithme !== 'argon2id' ||
-    !entier(kdf.passes, 1, 10) ||
-    !entier(kdf.memoireKio, 8, 262144) ||
-    !entier(kdf.fils, 1, 4) ||
-    kdf.longueurCle !== 32
+    !kdf
   ) {
     return undefined;
   }
-  return { compte: corps.compte, sel: corps.sel, kdf: { algorithme: 'argon2id', passes: kdf.passes, memoireKio: kdf.memoireKio, fils: kdf.fils, longueurCle: 32 }, verif: corps.verif, charge: corps.charge };
+  let secours;
+  if (corps.secours !== undefined) {
+    const s = corps.secours;
+    const kdfSecours = lireKdfAcces(s?.kdf);
+    if (
+      !s ||
+      !/^[0-9a-f]{32}$/.test(s.sel ?? '') ||
+      !kdfSecours ||
+      !Array.isArray(s.entrees) ||
+      s.entrees.length > MAX_SECOURS ||
+      !s.entrees.every(e => e && MOTIF_EMPREINTE.test(e.verif ?? '') && typeof e.charge === 'string' && /^[0-9a-f]+$/.test(e.charge) && e.charge.length <= TAILLE_MAX_CHARGE)
+    ) {
+      return undefined;
+    }
+    secours = { sel: s.sel, kdf: kdfSecours, entrees: s.entrees.map(e => ({ verif: e.verif, charge: e.charge })) };
+  }
+  return { compte: corps.compte, sel: corps.sel, kdf, verif: corps.verif, charge: corps.charge, ...(secours ? { secours } : {}) };
+}
+
+const MOTIF_COMPTE_OU_PRINCIPAL = /^(principal|[a-z0-9]{6,16})$/;
+
+/** Échec de preuve (mot de passe faux OU identifiant inconnu : même réponse, mêmes délais). */
+async function echecPreuve(env, h, ip, maintenant, limite) {
+  echecIp(ip, maintenant);
+  const echecs = limite.echecs + 1;
+  const attenteS = attenteApres(echecs, ESSAIS_LIBRES_IDENTIFIANT, ATTENTE_MAX_IDENTIFIANT_S);
+  await env.BOITE.put(`limite:acces:${h}`, JSON.stringify({ echecs, jusqua: attenteS > 0 ? maintenant + attenteS * 1000 : 0 }), { expirationTtl: 86_400 });
+  return reponse({ erreur: 'Identifiant ou mot de passe incorrect.', motif: 'mot-de-passe', ...(attenteS > 0 ? { attente: attenteS } : { restants: ESSAIS_LIBRES_IDENTIFIANT - echecs }) }, 403);
 }
 
 async function acces(requete, env, portee, h, action) {
@@ -648,17 +696,26 @@ async function acces(requete, env, portee, h, action) {
   if (action === undefined && (requete.method === 'PUT' || requete.method === 'DELETE')) {
     if (!portee) return erreur('Jeton du relais manquant ou incorrect.', 401);
     const proprio = await env.BOITE.get(`acces-proprio:${h}`);
+    const existant = await lireJsonKv(env, `acces:${h}`);
     if (requete.method === 'DELETE') {
       if (!portee.maitre && (!proprio || portee.profil !== proprio)) return erreur('Cet identifiant n’est pas le vôtre.', 403);
       await env.BOITE.delete(`acces:${h}`);
       await env.BOITE.delete(`limite:acces:${h}`);
+      await env.BOITE.delete(`theme:${h}`);
       return reponse({ ok: true });
     }
     const depot = lireDepotAcces(await corpsJson(requete));
     if (!depot) return erreur('Accès illisible.', 400);
-    // Le compte n'écrit que l'identifiant que le Fondateur lui a attribué (posé avec l'invitation).
-    if (!portee.maitre && (portee.profil !== depot.compte || proprio !== depot.compte)) {
+    if (depot.compte === 'principal') {
+      // L'accès du Fondateur : posé par lui seul (jeton maître, ou sa session).
+      if (!portee.maitre) return erreur('Cet identifiant n’est pas le vôtre.', 403);
+    } else if (!portee.maitre && (portee.profil !== depot.compte || proprio !== depot.compte)) {
+      // Le compte n'écrit que l'identifiant que le Fondateur lui a attribué (posé avec l'invitation).
       return erreur('Cet identifiant n’est pas le vôtre.', 403);
+    }
+    // Un identifiant déjà pris par un autre compte n'est jamais réattribué en silence.
+    if ((existant && existant.compte !== depot.compte) || (proprio && proprio !== depot.compte)) {
+      return reponse({ erreur: 'Cet identifiant est déjà pris par un autre compte.', motif: 'identifiant-pris' }, 409);
     }
     await env.BOITE.put(`acces:${h}`, JSON.stringify(depot));
     await env.BOITE.delete(`limite:acces:${h}`);
@@ -669,32 +726,40 @@ async function acces(requete, env, portee, h, action) {
   const attente = attenteIp(ip, maintenant);
   if (attente > 0) return tropDeTentatives(attente);
   const depot = await lireJsonKv(env, `acces:${h}`);
-  if (!depot) {
-    echecIp(ip, maintenant);
-    return reponse({ erreur: 'Identifiant inconnu.', motif: 'identifiant-inconnu' }, 404);
-  }
-  if (await env.BOITE.get(`revoque:${depot.compte}`)) {
-    return reponse({ erreur: 'Accès révoqué.', motif: 'revoque' }, 403);
-  }
   if (action === undefined && requete.method === 'GET') {
-    return reponse({ sel: depot.sel, kdf: depot.kdf });
+    // Identifiant inconnu : sels stables tirés du jeton maître, même forme de réponse (pas d'énumération).
+    if (!depot) {
+      return reponse({ sel: await selLeurre(env.JETON, h), kdf: KDF_DEFAUT_ACCES, secours: { sel: await selLeurre(env.JETON, h, 'secours'), kdf: KDF_DEFAUT_ACCES } });
+    }
+    const secours = depot.secours ? { sel: depot.secours.sel, kdf: depot.secours.kdf } : { sel: await selLeurre(env.JETON, h, 'secours'), kdf: KDF_DEFAUT_ACCES };
+    return reponse({ sel: depot.sel, kdf: depot.kdf, secours });
   }
-  if (action === 'ouvrir' && requete.method === 'POST') {
+  if ((action === 'ouvrir' || action === 'secours') && requete.method === 'POST') {
     const limite = (await lireJsonKv(env, `limite:acces:${h}`)) ?? { echecs: 0, jusqua: 0 };
     if (limite.jusqua > maintenant) {
       return tropDeTentatives(Math.ceil((limite.jusqua - maintenant) / 1000));
     }
     const corps = await corpsJson(requete);
     const preuve = typeof corps?.preuve === 'string' ? corps.preuve : '';
-    if (!/^[0-9a-f]{64}$/.test(preuve) || !egal(await empreinteHex(preuve), depot.verif)) {
-      echecIp(ip, maintenant);
-      const echecs = limite.echecs + 1;
-      const attenteS = attenteApres(echecs, ESSAIS_LIBRES_IDENTIFIANT, ATTENTE_MAX_IDENTIFIANT_S);
-      await env.BOITE.put(`limite:acces:${h}`, JSON.stringify({ echecs, jusqua: attenteS > 0 ? maintenant + attenteS * 1000 : 0 }), { expirationTtl: 86_400 });
-      return reponse({ erreur: 'Mot de passe incorrect.', motif: 'mot-de-passe', ...(attenteS > 0 ? { attente: attenteS } : { restants: ESSAIS_LIBRES_IDENTIFIANT - echecs }) }, 403);
+    if (!depot || !/^[0-9a-f]{64}$/.test(preuve)) return echecPreuve(env, h, ip, maintenant, limite);
+    const empreinte = await empreinteHex(preuve);
+    let charge;
+    let indexSecours;
+    if (action === 'ouvrir') {
+      if (egal(empreinte, depot.verif)) charge = depot.charge;
+    } else {
+      indexSecours = (depot.secours?.entrees ?? []).findIndex(e => egal(empreinte, e.verif));
+      if (indexSecours >= 0) charge = depot.secours.entrees[indexSecours].charge;
+    }
+    if (!charge) return echecPreuve(env, h, ip, maintenant, limite);
+    // Compte révoqué : annoncé seulement après une preuve juste.
+    if (depot.compte !== 'principal' && (await env.BOITE.get(`revoque:${depot.compte}`))) {
+      return reponse({ erreur: 'Accès révoqué.', motif: 'revoque' }, 403);
     }
     if (limite.echecs > 0) await env.BOITE.delete(`limite:acces:${h}`);
-    return reponse({ compte: depot.compte, charge: depot.charge });
+    // Le Fondateur reçoit un jeton de SESSION (le jeton maître ne quitte jamais le serveur).
+    const jeton = depot.compte === 'principal' ? await creerSession(env.BOITE, 'principal', maintenant) : undefined;
+    return reponse({ compte: depot.compte, charge, ...(jeton ? { jeton } : {}), ...(indexSecours !== undefined ? { secours: indexSecours } : {}) });
   }
   return erreur('Méthode non autorisée.', 405);
 }
@@ -826,18 +891,25 @@ export default {
     // `ctx.waitUntil` : la mise en cache d'une page lue finit après la réponse.
     if (new URL(requete.url).pathname === CHEMIN_TSUZUKU) {
       const deps = typeof ctx?.waitUntil === 'function' ? { waitUntil: p => ctx.waitUntil(p) } : {};
-      return routeTsuzuku(requete, env, () => porteeDuJeton((requete.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, ''), env.JETON), deps);
+      return routeTsuzuku(requete, env, () => porteeDuJeton((requete.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, ''), env.JETON, env.BOITE), deps);
     }
     if (requete.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: ENTETES_CORS });
     }
     const autorisation = requete.headers.get('Authorization') ?? '';
-    const portee = await porteeDuJeton(autorisation.replace(/^Bearer\s+/i, ''), env.JETON);
+    const portee = await porteeDuJeton(autorisation.replace(/^Bearer\s+/i, ''), env.JETON, env.BOITE);
     const { pathname } = new URL(requete.url);
+
+    // Version 9 : style public d'un identifiant (sans jeton pour la lecture).
+    const routeTheme9 = /^\/v9\/theme\/([^/]+)\/?$/.exec(pathname);
+    if (routeTheme9) {
+      if (!env.BOITE) return erreur('Boîte non configurée sur le relais.', 500);
+      return routeTheme(requete, env, portee, routeTheme9[1], adresseIp(requete));
+    }
 
     // Invitations et accès par identifiant : certaines routes se passent de jeton (voir plus haut).
     const routeInvitation = /^\/invitations\/([^/]+)(?:\/(utiliser))?\/?$/.exec(pathname);
-    const routeAcces = /^\/acces\/([^/]+)(?:\/(ouvrir))?\/?$/.exec(pathname);
+    const routeAcces = /^\/acces\/([^/]+)(?:\/(ouvrir|secours))?\/?$/.exec(pathname);
     if (routeInvitation || routeAcces) {
       if (!env.BOITE) {
         return erreur('Boîte non configurée sur le relais.', 500);
@@ -887,7 +959,17 @@ export default {
       if (!env.BOITE) {
         return erreur('Boîte non configurée sur le relais.', 500);
       }
-      return portee.maitre ? exporterBoite(requete, env) : erreur('Réservé au jeton de l’administrateur.', 403);
+      return portee.maitre && !portee.session ? exporterBoite(requete, env) : erreur('Réservé au jeton de l’administrateur.', 403);
+    }
+    // Version 9 : coffre serveur de chaque compte, et sessions du Fondateur.
+    const routeCoffre9 = /^\/v9\/coffre\/([^/]+)(?:\/(historique|etat))?\/?$/.exec(pathname);
+    if (routeCoffre9) {
+      return routeCoffre(requete, env, portee, decodeURIComponent(routeCoffre9[1]), routeCoffre9[2], env.BOITE ? (titulaire, id) => delegue(env, titulaire, id) : undefined);
+    }
+    const routeSessions9 = /^\/v9\/sessions(?:\/(courante))?\/?$/.exec(pathname);
+    if (routeSessions9) {
+      if (!env.BOITE) return erreur('Boîte non configurée sur le relais.', 500);
+      return routeSessions(requete, env, portee, routeSessions9[1]);
     }
     if (pathname === '/rangs') {
       if (!env.BOITE) {

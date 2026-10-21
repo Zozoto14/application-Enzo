@@ -1,9 +1,11 @@
 /**
- * Synchronisation automatique par le relais. Un tour part :
- * à l'ouverture (après déverrouillage), au retour au premier plan, quand le
- * réseau revient, quelques secondes après une modification locale, toutes les
- * deux minutes, et à la fermeture de la page (envoi `keepalive`). Après un
- * échec, nouvel essai à 5 s, 30 s, 2 min puis 10 min (voir planificateur.ts).
+ * Synchronisation automatique avec le serveur. Relais version 9 : le COFFRE
+ * SERVEUR du compte est la référence (src/sync/relais/coffreServeur.ts), pour
+ * le Fondateur comme pour chaque ami ; relais plus ancien : l'ancienne boîte
+ * par appareil (Fondateur seulement). Un tour part : à l'ouverture (après
+ * déverrouillage), au retour au premier plan, quand le réseau revient, ~1,5 s
+ * après une modification locale, toutes les 30 secondes, et à la fermeture de
+ * la page. Après un échec, nouvel essai à 5 s, 30 s, 2 min puis 10 min.
  *
  * Sorti d'App.tsx pour qu'on puisse le lire d'un seul tenant.
  */
@@ -27,13 +29,18 @@ import {
   synchroniser,
   testerLiaison,
 } from '../sync/relais/synchroniser';
-import { definirRelaisActif, liaisonEnAttente } from '../sync/relais/actif';
+import { definirRelaisActif, liaisonEnAttente, relaisDuCompte } from '../sync/relais/actif';
+import { relaisAvecCoffre, synchroniserServeur } from '../sync/relais/coffreServeur';
+import { deposerCoffreSiChange } from '../sync/relais/synchroniser';
+import { compteDeLiaison } from '../sync/relais/portees';
 import { chargerModule } from '../natif/modules';
 import { cachesSynchro } from '../sync/relais/caches';
 import {
   PROFIL_DEMARRAGE,
   integrerEntrant,
+  modeServeur,
   noterEtatDemarrage,
+  noterModeServeur,
   noterLus,
   preparerSortant,
   signalerDeverrouillage,
@@ -219,14 +226,31 @@ export function useSynchro({
     let reussi = false;
     let rappelerDans: number | undefined;
     try {
-      const resultat = await synchroniser({
-        force: raison === 'manuel',
-        pilote: session.base(),
-        appareil: identifiantAppareil(new DepotParametres(session.base()), PARAMETRES.identifiantAppareil),
-        moi: { plateforme, expireLe: expireLe.current },
-        // Déposé pour qu'un nouvel appareil puisse se « Lier » avec le même compte.
-        coffre: session.coffreActuel(),
-      });
+      const pilote = session.base();
+      const config = lireConfigRelais(pilote)!;
+      const compte = profilCourant();
+      const appareil = identifiantAppareil(new DepotParametres(pilote), PARAMETRES.identifiantAppareil);
+      let resultat: { bilan: { ajoutes: number; modifies: number; supprimes: number }; erreurs: string[]; differeDans?: number; recus?: number };
+      if (await relaisAvecCoffre(config)) {
+        // Le serveur est la référence : tirer, appliquer, pousser la file.
+        resultat = await synchroniserServeur({ pilote, liaison: config, cle: config.cle, compte, appareil });
+        noterModeServeur();
+        if (compte === 'principal') {
+          // Le coffre (enveloppes du mot de passe) reste publié : un navigateur neuf s'y connecte.
+          await deposerCoffreSiChange(pilote, config, session.coffreActuel()).catch(() => undefined);
+        }
+      } else if (compte === 'principal') {
+        resultat = await synchroniser({
+          force: raison === 'manuel',
+          pilote,
+          appareil,
+          moi: { plateforme, expireLe: expireLe.current },
+          // Déposé pour qu'un nouvel appareil puisse se « Lier » avec le même compte.
+          coffre: session.coffreActuel(),
+        });
+      } else {
+        return true;
+      }
       const changes = resultat.bilan.ajoutes + resultat.bilan.modifies + resultat.bilan.supprimes;
       if (changes > 0) {
         rafraichir();
@@ -242,7 +266,7 @@ export function useSynchro({
         recus: (courant.recus ?? 0) + (changes > 0 ? 1 : 0),
         message:
           changes > 0
-            ? `${changes} changement${changes > 1 ? 's' : ''} reçu${changes > 1 ? 's' : ''} des autres appareils.`
+            ? `${changes} changement${changes > 1 ? 's' : ''} reçu${changes > 1 ? 's' : ''} du serveur.`
             : courant.message,
       }));
     } catch (erreur) {
@@ -374,6 +398,8 @@ export function useSynchro({
     const { cible, document } = navigateur();
     const vidageFermeture = () => {
       preparerCaches();
+      // Coffre serveur : la file reste dans la base ; elle part au prochain tour (rien à déposer par appareil).
+      if (modeServeur()) return;
       deposerAvantFermeture({
         pilote: session.base(),
         appareil: identifiantAppareil(new DepotParametres(session.base()), PARAMETRES.identifiantAppareil),
@@ -471,11 +497,24 @@ export function useSynchro({
       setVersion(v => v + 1);
       return;
     }
-    const connue = liaisonDuPc ?? decoderLiaison(liaisonEnAttente() ?? '');
-    // Seul le code de l'administrateur (jeton maître) relie sa synchronisation ; le code d'un ami ne sert qu'à son compte.
-    if (!actuelle && connue && estMaitre(connue)) {
+    const compte = profilCourant();
+    // Fondateur : liaison du PC (jeton maître) ou du navigateur (session ouverte par son mot de passe).
+    // Ami (version 9) : la liaison de SON compte (jeton de profil), gardée par le navigateur.
+    const duCompte = relaisDuCompte();
+    const connue =
+      compte === 'principal'
+        ? liaisonDuPc ?? decoderLiaison(liaisonEnAttente() ?? '')
+        : duCompte && (compteDeLiaison(duCompte) === compte || estMaitre(duCompte))
+          ? duCompte
+          : undefined;
+    const valable = connue && (compte === 'principal' ? estMaitre(connue) : true);
+    if (!actuelle && valable) {
       ecrireConfigRelais(pilote, { ...connue, cle, nom: nomParDefaut(plateforme) });
-      setEtat(courant => ({ ...courant, message: 'Appareil relié automatiquement.' }));
+      setEtat(courant => ({ ...courant, message: 'Connecté au serveur.' }));
+      setVersion(v => v + 1);
+    } else if (actuelle && valable && !liaisonDuPc && connue.relais === actuelle.relais && connue.jeton !== actuelle.jeton) {
+      // Nouvelle connexion sur ce navigateur (nouvelle session) : le jeton retenu suit.
+      ecrireConfigRelais(pilote, { ...actuelle, jeton: connue.jeton });
       setVersion(v => v + 1);
     }
   }, [deverrouille, session, liaisonDuPc, plateforme]);

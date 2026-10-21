@@ -285,6 +285,24 @@ export function changerMotDePasse(
   };
 }
 
+/** Remplace les codes de récupération par ceux donnés (tirés à part, par exemple pour un accès de secours publié avant). */
+export function remplacerCodesRecuperation(
+  coffre: Coffre,
+  cleMaitresse: Uint8Array,
+  codes: readonly string[],
+  options: { kdf?: ParametresKdf; alea?: SourceAleatoire } = {},
+): Coffre {
+  const alea = options.alea ?? aleatoireParDefaut;
+  const parametres = options.kdf ?? PARAMETRES_KDF_DEFAUT;
+  return {
+    ...coffre,
+    enveloppes: [
+      ...coffre.enveloppes.filter(enveloppe => enveloppe.usage !== 'recuperation'),
+      ...codes.map(code => creerEnveloppe(cleMaitresse, normaliserCode(code), 'recuperation', parametres, alea)),
+    ],
+  };
+}
+
 /** Remplace tous les codes de récupération, par exemple après en avoir consommé un. */
 export function regenererCodesRecuperation(
   coffre: Coffre,

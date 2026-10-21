@@ -13,7 +13,7 @@
  * marcherait pas sur la plateforme ou pour le rôle du compte.
  */
 
-export type IdSection = 'general' | 'synchro' | 'securite' | 'portefeuille' | 'administration' | 'tsuzuku' | 'taches' | 'nouveautes' | 'support' | 'apropos';
+export type IdSection = 'general' | 'securite' | 'portefeuille' | 'administration' | 'tsuzuku' | 'taches' | 'nouveautes' | 'support' | 'apropos';
 
 export interface SectionParametres {
   id: IdSection;
@@ -25,7 +25,6 @@ export interface SectionParametres {
 /** Ordre d'affichage de la page. */
 export const SECTIONS: readonly SectionParametres[] = [
   { id: 'general', titre: 'Général', icone: '⚙︎', description: 'Thème unique, disposition, langue, compte.' },
-  { id: 'synchro', titre: 'Synchronisation', icone: '⇄', description: 'Appareils liés, synchronisation entre appareils.' },
   { id: 'securite', titre: 'Sécurité', icone: '🔒', description: 'Mot de passe, code d’authentification, récupération, sauvegardes.' },
   { id: 'portefeuille', titre: 'Portefeuille', icone: '▦', description: 'Cours, alertes, podcast, affichage des montants.' },
   { id: 'administration', titre: 'Administration', icone: '🛡', description: 'Panneau, comptes, journal, verrouillage, Tsuzuku (sources, clés).' },
@@ -43,7 +42,7 @@ export type IdReglage =
   | 'compte'
   | 'visite'
   | 'synchro-etat'
-  | 'synchro-appareils'
+  | 'connexion-identifiant'
   | 'securite-coffre'
   | 'codes-recuperation'
   | 'sauvegarde-auto'
@@ -120,24 +119,24 @@ export const REGLAGES: readonly Reglage[] = [
     mots: ['session', 'profil', 'verrouiller', 'deconnexion', 'utilisateur'],
     ancienEmplacement: ['Hub › Paramètres › Session', 'Hub › en-tête (Verrouiller, Changer de compte)'],
   },
-  // --- Synchronisation
+  // --- Connexion au serveur (plus de réglages de synchronisation : tout est sur le serveur)
   {
     id: 'synchro-etat',
-    section: 'synchro',
-    titre: 'État de la synchronisation',
-    description: 'Dernière synchronisation, changements en attente, synchroniser maintenant.',
-    mots: ['synchroniser', 'maintenant', 'etat', 'en ligne', 'hors ligne', 'relais', 'attente'],
-    ancienEmplacement: ['Hub › Paramètres › Synchronisation', 'Hub › en-tête (pastille)'],
-  },
-  {
-    id: 'synchro-appareils',
-    section: 'synchro',
-    titre: 'Appareils liés',
-    description: 'Relier un autre appareil, voir les appareils liés, en oublier un, désactiver la synchronisation.',
-    mots: ['appareil', 'relier', 'lier', 'iphone', 'ipad', 'pc', 'qr', 'code', 'oublier', 'delier'],
-    ancienEmplacement: ['Portefeuille › Paramètres › Synchronisation entre appareils'],
+    section: 'general',
+    titre: 'Connexion au serveur',
+    description: 'En ligne, hors ligne, modifications en attente d’envoi ; réessayer.',
+    mots: ['synchroniser', 'synchronisation', 'serveur', 'etat', 'en ligne', 'hors ligne', 'attente', 'reessayer'],
+    ancienEmplacement: ['Hub › Paramètres › Synchronisation', 'Hub › en-tête (pastille)', 'Portefeuille › Paramètres › Synchronisation entre appareils'],
   },
   // --- Sécurité
+  {
+    id: 'connexion-identifiant',
+    section: 'securite',
+    titre: 'Identifiant et mot de passe de connexion',
+    description: 'Se connecter sur n’importe quel appareil avec un identifiant et un mot de passe.',
+    mots: ['identifiant', 'connexion', 'mot de passe', 'se connecter', 'navigateur', 'site', 'code de liaison', 'oublie'],
+    ancienEmplacement: ['Paramètres › Synchronisation › Relier un autre appareil (code de liaison)'],
+  },
   {
     id: 'securite-coffre',
     section: 'securite',

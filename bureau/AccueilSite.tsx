@@ -1,17 +1,18 @@
 /**
- * Premier lancement sur un navigateur (site, téléphone) : on RELIE d'abord
- * son compte existant ; créer un nouveau coffre ne vient qu'en second, avec
- * un avertissement.
+ * Premier lancement sur un navigateur (site, téléphone) : on SE CONNECTE avec son identifiant et
+ * son mot de passe — le Fondateur comme ses amis (relais version 9). Plus de code de liaison :
+ * « J'ai reçu une invitation » reste pour la première connexion d'un invité, « Mot de passe
+ * oublié » ouvre le compte avec un code de récupération. Créer un nouveau coffre ne vient
+ * qu'en dernier, avec un avertissement.
  *
- * Deuxième écran : ce navigateur contient déjà un coffre (créé ici
- * autrefois) et l'on relie son compte. On propose d'abord d'en télécharger
- * une sauvegarde, puis de remplacer les données du navigateur par celles du
- * compte relié — jamais sans confirmation.
+ * Deuxième écran (`RemplacerDonnees`) : ce navigateur contient déjà un coffre (créé ici
+ * autrefois) et l'on se connecte à un autre compte. On propose d'abord d'en télécharger une
+ * sauvegarde, puis de remplacer les données du navigateur — jamais sans confirmation.
  */
 
 import React, { useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import { Alerte, Bouton, Champ, SousTitre, Titre, usePalette } from '../src/ui/composants';
+import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alerte, Bouton, SousTitre, Titre, usePalette } from '../src/ui/composants';
 import { ESPACEMENT, RAYON, stylesPartages } from '../src/ui/theme';
 import { BoutonPrincipal } from '../src/ui/mobile/BoutonPrincipal';
 import { EcranMobile } from '../src/ui/mobile/EcranMobile';
@@ -20,69 +21,40 @@ import { Cellule, GroupeCellules } from '../src/ui/mobile/ListeCellules';
 import { useMobile } from '../src/ui/mobile/useMobile';
 import { BlocConnexion } from './Invitation';
 
-/** Connexion d'un ami (identifiant + mot de passe) et ouverture d'une invitation collée. */
+/** Connexion (identifiant + mot de passe, pour tous), mot de passe oublié, invitation collée. */
 export interface OptionsConnexionAccueil {
   relaisConnu: boolean;
   identifiantInitial?: string;
   onConnexion(identifiant: string, motDePasse: string): Promise<void>;
   onInvitation(texte: string): Promise<void>;
+  /** « Mot de passe oublié » : identifiant, un code de récupération et le nouveau mot de passe. */
+  onSecours?(identifiant: string, code: string, nouveau: string): Promise<void>;
+  /** L'identifiant tapé change : l'hôte applique le style de ce compte (nom du thème seulement). */
+  onIdentifiant?(identifiant: string): void;
 }
 
 function message(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : String(erreur);
 }
 
-export function AccueilSite({
-  codeConnu,
-  erreur: erreurInitiale,
-  onRelier,
-  onCreer,
-  connexion,
-}: {
-  /** Code apporté par un lien `#liaison=` : rien à recopier. */
-  codeConnu?: string;
-  erreur?: string;
-  onRelier(code: string): Promise<void>;
-  onCreer(): void;
-  connexion?: OptionsConnexionAccueil;
-}) {
+export function AccueilSite({ erreur: erreurInitiale, onCreer, connexion }: { erreur?: string; onCreer(): void; connexion: OptionsConnexionAccueil }) {
   const palette = usePalette();
-  const [code, setCode] = useState('');
-  const [enCours, setEnCours] = useState(false);
-  const [erreur, setErreur] = useState<string | undefined>(erreurInitiale);
   const [creer, setCreer] = useState(false);
-  const utilise = code.trim() || codeConnu || '';
   const mobile = useMobile();
-
-  const relier = () => {
-    setErreur(undefined);
-    setEnCours(true);
-    onRelier(utilise)
-      .catch(e => setErreur(message(e)))
-      .finally(() => setEnCours(false));
-  };
+  const avertissement = (
+    <Text style={{ color: palette.danger, fontSize: mobile ? 16 : undefined, lineHeight: mobile ? 23 : undefined }} testID="accueil-avertissement">
+      ⚠️ Ce coffre sera NEUF et indépendant : il ne contiendra aucune de vos données, et il ne s’ouvrira pas avec votre identifiant. Si vous avez déjà un
+      compte, connectez-vous plutôt.
+    </Text>
+  );
 
   if (mobile) {
-    // Téléphone : relier est l'action principale (bouton collant) ; créer un coffre neuf passe par une
-    // feuille basse qui porte l'avertissement.
     return (
-      <EcranMobile
-        testID="accueil-site"
-        pied={!connexion || utilise ? <BoutonPrincipal titre="Relier ce navigateur" desactive={!utilise} enCours={enCours} onPress={relier} testID="bouton-relier-accueil" /> : undefined}>
+      <EcranMobile testID="accueil-site">
         <Titre>Bienvenue sur AppDashboard</Titre>
-        <SousTitre>{connexion && !codeConnu ? 'Connecte-toi avec ton identifiant et ton mot de passe, ou ouvre ton invitation.' : 'Retrouvez votre compte : même prénom, même mot de passe et même code qu’ailleurs.'}</SousTitre>
-        {connexion && !codeConnu ? <BlocConnexion {...connexion} /> : null}
-        <GroupeCellules titre={connexion && !codeConnu ? 'Administrateur : relier avec le code du PC' : 'J’ai déjà un compte'} note="Administrateur : le code de liaison de votre PC (Paramètres › Synchronisation › Appareils liés › Relier un autre appareil). Ami : le code de connexion envoyé par l’administrateur. Il commence par AB1. et ne se saisit qu’une fois.">
-          {codeConnu ? (
-            <Cellule titre="Code de liaison reçu par le lien" sousTitre="Rien à recopier." glyphe="✓" teinte={palette.hausse} testID="accueil-code-connu" />
-          ) : (
-            <View style={{ padding: ESPACEMENT.m }}>
-              <Champ etiquette="Code de liaison" placeholder="AB1.…" value={code} onChangeText={setCode} nature="codeLiaison" onSubmitEditing={relier} testID="champ-code-accueil" />
-            </View>
-          )}
-        </GroupeCellules>
-        {erreur ? <Alerte message={erreur} /> : null}
-        {enCours ? <SousTitre>Recherche du compte sur le relais…</SousTitre> : null}
+        <SousTitre>Connecte-toi avec ton identifiant et ton mot de passe, ou ouvre ton invitation.</SousTitre>
+        <BlocConnexion {...connexion} />
+        {erreurInitiale ? <Alerte message={erreurInitiale} /> : null}
         <GroupeCellules>
           <Cellule titre="Je n’ai pas de compte" sousTitre="Créer un nouveau coffre sur ce navigateur." glyphe="+" chevron onPress={() => setCreer(true)} testID="accueil-creer" />
         </GroupeCellules>
@@ -97,10 +69,7 @@ export function AccueilSite({
               <BoutonPrincipal titre="Annuler" variante="discret" onPress={() => setCreer(false)} />
             </>
           }>
-          <Text style={{ color: palette.danger, fontSize: 16, lineHeight: 23 }} testID="accueil-avertissement">
-            ⚠️ Ce coffre sera NEUF et indépendant : il ne contiendra ni votre portefeuille du PC, ni les comptes de vos amis,
-            et il ne s’ouvrira pas avec les identifiants de votre PC. Si vous avez déjà un compte, reliez-le plutôt.
-          </Text>
+          {avertissement}
         </FeuilleBasse>
       </EcranMobile>
     );
@@ -113,50 +82,14 @@ export function AccueilSite({
       keyboardShouldPersistTaps="handled"
       testID="accueil-site">
       <Titre>Bienvenue sur AppDashboard</Titre>
-      <SousTitre>Sur ce navigateur, rien n’est encore installé. Retrouvez votre compte, avec le même prénom, le même mot de passe et le même code qu’ailleurs.</SousTitre>
-
-      {connexion && !codeConnu ? <BlocConnexion {...connexion} /> : null}
-
-      <View style={[styles.cadre, { borderColor: connexion && !codeConnu ? palette.bordure : palette.accent, backgroundColor: palette.surface }]}>
-        <Text style={{ color: palette.texte, fontWeight: '800', fontSize: 18 }}>{connexion && !codeConnu ? '🔗 Administrateur : relier avec le code de liaison' : '🔗 J’ai déjà un compte (le relier)'}</Text>
-        <Text style={{ color: palette.texteSecondaire }}>
-          Administrateur : le code de liaison de votre PC (Paramètres › Synchronisation › Appareils liés › Relier un autre appareil). Ami : le code
-          de connexion que l’administrateur vous a envoyé. Il commence par AB1. et ne se saisit qu’une fois.
-        </Text>
-        {codeConnu ? (
-          <Text style={{ color: palette.hausse, fontWeight: '600' }} testID="accueil-code-connu">
-            ✅ Code de liaison reçu par le lien : rien à recopier.
-          </Text>
-        ) : (
-          <Champ
-            etiquette="Code de liaison"
-            placeholder="AB1.…"
-            value={code}
-            onChangeText={setCode}
-            autoCapitalize="none"
-            autoCorrect={false}
-            testID="champ-code-accueil"
-          />
-        )}
-        {erreur ? <Alerte message={erreur} /> : null}
-        {enCours ? (
-          <View style={{ alignItems: 'center', gap: ESPACEMENT.s }}>
-            <ActivityIndicator color={palette.accent} />
-            <SousTitre>Recherche du compte sur le relais…</SousTitre>
-          </View>
-        ) : (
-          <Bouton pleineLargeur titre="Relier ce navigateur" desactive={!utilise} onPress={relier} testID="bouton-relier-accueil" />
-        )}
-      </View>
-
+      <SousTitre>Connecte-toi avec ton identifiant et ton mot de passe : tes apps et tes données sont sur le serveur, chiffrées.</SousTitre>
+      <BlocConnexion {...connexion} />
+      {erreurInitiale ? <Alerte message={erreurInitiale} /> : null}
       <View style={[styles.cadre, { borderColor: palette.bordure }]}>
         {creer ? (
           <>
             <Text style={{ color: palette.texte, fontWeight: '700' }}>Créer un nouveau coffre ?</Text>
-            <Text style={{ color: palette.danger }} testID="accueil-avertissement">
-              ⚠️ Ce coffre sera NEUF et indépendant : il ne contiendra ni votre portefeuille du PC, ni les comptes de vos amis,
-              et il ne s’ouvrira pas avec les identifiants de votre PC. Si vous avez déjà un compte, reliez-le plutôt.
-            </Text>
+            {avertissement}
             <View style={{ flexDirection: 'row', gap: ESPACEMENT.s, flexWrap: 'wrap' }}>
               <Bouton titre="Oui, créer un nouveau coffre" variante="discret" onPress={onCreer} testID="accueil-creer-confirmer" />
               <Bouton titre="Annuler" variante="discret" onPress={() => setCreer(false)} />
@@ -228,8 +161,8 @@ export function RemplacerDonnees({
       <View style={[styles.cadre, { borderColor: palette.danger }]}>
         <Text style={{ color: palette.texte, fontWeight: '700' }}>2. Remplacer</Text>
         <Text style={{ color: palette.texteSecondaire }}>
-          L’ancien coffre et tout ce qu’il contient sont effacés de ce navigateur ; vous vous connectez ensuite exactement comme
-          sur le PC (prénom, mot de passe, code).
+          L’ancien coffre et tout ce qu’il contient sont effacés de ce navigateur ; votre compte s’ouvre ensuite avec votre identifiant et votre mot de
+          passe.
         </Text>
         {erreur ? <Alerte message={erreur} /> : null}
         <Bouton

@@ -232,21 +232,42 @@ export function EcranInvitation({
   );
 }
 
-/** « Se connecter » (identifiant + mot de passe) et « J'ai une invitation ». */
+/**
+ * « Se connecter » (identifiant + mot de passe, pour TOUS : Fondateur compris), « Mot de passe
+ * oublié » (code de récupération) et « J'ai une invitation ». Dès qu'on tape l'identifiant, l'hôte
+ * applique le style de ce compte (`onIdentifiant`).
+ */
 export function BlocConnexion({
   relaisConnu,
   identifiantInitial,
   onConnexion,
   onInvitation,
+  onSecours,
+  onIdentifiant,
 }: {
   /** Faux : ce navigateur ne sait pas où est le serveur (message précis à l'envoi). */
   relaisConnu: boolean;
   identifiantInitial?: string;
   onConnexion(identifiant: string, motDePasse: string): Promise<void>;
   onInvitation(texte: string): Promise<void>;
+  onSecours?(identifiant: string, code: string, nouveau: string): Promise<void>;
+  onIdentifiant?(identifiant: string): void;
 }) {
   const palette = usePalette();
-  const [identifiant, setIdentifiant] = useState(identifiantInitial ?? '');
+  const [identifiant, setIdentifiantBrut] = useState(identifiantInitial ?? '');
+  const setIdentifiant = (v: string) => {
+    setIdentifiantBrut(v);
+    onIdentifiant?.(v);
+  };
+  React.useEffect(() => {
+    if (identifiantInitial) onIdentifiant?.(identifiantInitial);
+    // Une seule fois : l'identifiant retenu sur ce navigateur donne tout de suite son style.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [oubli, setOubli] = useState(false);
+  const [code, setCode] = useState('');
+  const [nouveau, setNouveau] = useState('');
+  const [confirmation, setConfirmation] = useState('');
   const [mdp, setMdp] = useState('');
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<string | undefined>();
@@ -303,6 +324,34 @@ export function BlocConnexion({
         ) : (
           <Bouton pleineLargeur titre="Se connecter" desactive={!identifiant.trim() || !mdp} onPress={connecter} testID="connexion-id-valider" />
         )}
+        {onSecours && !oubli ? (
+          <Bouton titre="Mot de passe oublié ?" variante="discret" onPress={() => setOubli(true)} testID="connexion-oubli" />
+        ) : null}
+        {onSecours && oubli ? (
+          <View style={{ gap: ESPACEMENT.s }} testID="connexion-secours">
+            <Text style={{ color: palette.texte, fontWeight: '700' }}>Mot de passe oublié</Text>
+            <Text style={{ color: palette.texteSecondaire }}>
+              Ton identifiant ci-dessus, un de tes codes de récupération (notés sur papier ; chacun ne sert qu’une fois) et ton nouveau mot de passe. Ami :
+              demande plutôt au Fondateur de réinitialiser ton accès.
+            </Text>
+            <Champ etiquette="Code de récupération" value={code} onChangeText={setCode} autoCapitalize="characters" autoCorrect={false} spellCheck={false} testID="connexion-secours-code" />
+            <ChampMotDePasse etiquette="Nouveau mot de passe" valeur={nouveau} onChanger={setNouveau} nouveau testID="connexion-secours-mdp" desactive={enCours} />
+            <ChampMotDePasse etiquette="Confirme le nouveau mot de passe" valeur={confirmation} onChanger={setConfirmation} nouveau testID="connexion-secours-confirmation" desactive={enCours} />
+            <Bouton
+              pleineLargeur
+              titre="Ouvrir mon compte avec ce code"
+              desactive={enCours || !identifiant.trim() || code.trim().length < 8 || !evaluerMotDePasse(nouveau, identifiant).valide || formeCanonique(confirmation) !== formeCanonique(nouveau)}
+              onPress={() => {
+                setErreur(undefined);
+                setEnCours(true);
+                onSecours(identifiant, code, nouveau)
+                  .catch(e => setErreur(message(e)))
+                  .finally(() => setEnCours(false));
+              }}
+              testID="connexion-secours-valider"
+            />
+          </View>
+        ) : null}
       </View>
       <View style={[styles.cadre, { borderColor: palette.bordure }]} testID="invitation-saisie-bloc">
         <Text style={{ color: palette.texte, fontWeight: '700', fontSize: 16 }}>✉️ J’ai reçu une invitation</Text>

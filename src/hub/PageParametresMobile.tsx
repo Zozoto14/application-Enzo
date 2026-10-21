@@ -114,7 +114,7 @@ export function PageParametresMobile({ theme, section, n, disponibles, rendu, sy
             onRetour={onFermer}
             libelleRetour="Accueil"
             testIDRetour="hub-parametres-fermer"
-            droite={synchro ? <IndicateurSynchro theme={theme} synchro={synchro} condense onPress={() => setOuverte('synchro')} /> : undefined}
+            droite={synchro ? <IndicateurSynchro theme={theme} synchro={synchro} condense onPress={() => setOuverte('general')} /> : undefined}
           />
         }>
         <ChampMobile

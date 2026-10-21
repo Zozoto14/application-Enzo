@@ -17,9 +17,10 @@ function page(props: Partial<React.ComponentProps<typeof PageParametres>> = {}) 
 }
 
 describe('page Paramètres', () => {
-  it('montre les huit sections et ouvre la première, Général', async () => {
+  it('montre les sections (plus de « Synchronisation » : tout est sur le serveur) et ouvre la première, Général', async () => {
     await render(page());
-    for (const id of ['general', 'synchro', 'securite', 'portefeuille', 'administration', 'tsuzuku', 'nouveautes', 'apropos']) {
+    expect(screen.queryByTestId('parametres-section-synchro')).toBeNull();
+    for (const id of ['general', 'securite', 'portefeuille', 'administration', 'tsuzuku', 'nouveautes', 'apropos']) {
       expect(screen.getByTestId(`parametres-section-${id}`)).toBeTruthy();
     }
     expect(screen.getByTestId('parametres-section-general').props.accessibilityState.selected).toBe(true);
@@ -37,13 +38,14 @@ describe('page Paramètres', () => {
   });
 
   it('un changement de demande ramène la page sur la section voulue', async () => {
-    const { rerender } = await render(page({ section: 'general', n: 1 }));
-    await rerender(page({ section: 'synchro', n: 2 }));
+    const { rerender } = await render(page({ section: 'securite', n: 1 }));
+    await rerender(page({ section: 'general', n: 2 }));
+    // L'état de la connexion au serveur est dans Général.
     expect(screen.getByTestId('reglage-synchro-etat')).toBeTruthy();
   });
 
   it('ne montre ni section ni réglage qui ne sont pas disponibles pour ce compte ou cette plateforme', async () => {
-    const amis = TOUS.filter(id => !['admin-panel', 'admin-reglages', 'admin-comptes', 'role-gestionnaire', 'synchro-etat', 'synchro-appareils', 'admin-tsuzuku-sources', 'admin-tsuzuku-cles'].includes(id));
+    const amis = TOUS.filter(id => !['admin-panel', 'admin-reglages', 'admin-comptes', 'role-gestionnaire', 'synchro-etat', 'admin-tsuzuku-sources', 'admin-tsuzuku-cles'].includes(id));
     await render(page({ disponibles: amis }));
     expect(screen.queryByTestId('parametres-section-administration')).toBeNull();
     expect(screen.queryByTestId('parametres-section-synchro')).toBeNull();
@@ -77,7 +79,7 @@ describe('page Paramètres', () => {
     await render(page());
     const nav = screen.getByLabelText('Sections des paramètres');
     await fireEvent(nav, 'keyDown', { key: 'ArrowDown', preventDefault: () => undefined });
-    expect(screen.getByTestId('parametres-section-synchro').props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId('parametres-section-securite').props.accessibilityState.selected).toBe(true);
     await fireEvent(nav, 'keyDown', { key: 'End', preventDefault: () => undefined });
     expect(screen.getByTestId('parametres-section-apropos').props.accessibilityState.selected).toBe(true);
     await fireEvent(nav, 'keyDown', { key: 'ArrowDown', preventDefault: () => undefined });
@@ -88,10 +90,11 @@ describe('page Paramètres', () => {
     expect(screen.getByTestId('parametres-section-general').props.accessibilityState.selected).toBe(true);
   });
 
-  it('la pastille de synchro de l’en-tête ouvre la section Synchronisation', async () => {
-    await render(page({ synchro: { vue: { enCours: false, enLigne: true }, onSynchroniser: jest.fn() } }));
+  it('la pastille de connexion au serveur de l’en-tête ouvre Général (état de la connexion)', async () => {
+    await render(page({ section: 'securite', synchro: { vue: { enCours: false, enLigne: true }, onSynchroniser: jest.fn() } }));
     await fireEvent.press(screen.getByTestId('synchro-indicateur'));
-    expect(screen.getByTestId('parametres-section-synchro').props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId('parametres-section-general').props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId('reglage-synchro-etat')).toBeTruthy();
   });
 });
 

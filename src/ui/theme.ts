@@ -16,7 +16,7 @@
 import { StyleSheet } from 'react-native';
 import { cleLocale, profilCourant } from '../profils/espace';
 import { themeHub, teinteTransparente, type IdThemeHub, type ThemeHub } from '../hub/themes';
-import { CLE_CACHE_FOND, CLE_CACHE_THEME, lireThemeMemorise, stockageLocalAppareil, themeUnique } from '../hub/themeUnique';
+import { CLE_CACHE_FOND, CLE_CACHE_THEME, idThemeHubValide, lireThemeMemorise, stockageLocalAppareil, themeUnique } from '../hub/themeUnique';
 
 export interface Palette {
   fond: string;
@@ -228,6 +228,20 @@ export function definirTheme(id: IdThemeHub | string | undefined): void {
   } catch {
     // Stockage indisponible : le thème sera relu de la base au déverrouillage.
   }
+}
+
+/**
+ * Aperçu d'un thème, SANS le retenir (écran de connexion : style du compte dont on tape
+ * l'identifiant). Rend vrai si le thème affiché a changé. Le prochain changement de compte relit
+ * le cache de l'appareil, et le déverrouillage pose le thème du compte.
+ */
+export function apercuTheme(id: string | undefined): boolean {
+  const valide = idThemeHubValide(id);
+  if (!valide || valide === themeCourant()) return false;
+  themeActif = valide;
+  profilDuTheme = profilCourant();
+  appliquerAuDocument(themeHub(valide));
+  return true;
 }
 
 /** Thème dont le document (web) porte déjà le fond, les polices et la couleur de barre. */

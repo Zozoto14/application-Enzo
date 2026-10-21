@@ -3,15 +3,27 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { AccueilSite, RemplacerDonnees } from './AccueilSite';
 import { Deverrouillage } from '../src/ui/ecrans/Deverrouillage';
 
-describe('premier lancement sur un navigateur', () => {
-  it('propose d’abord de relier son compte ; créer un coffre ne vient qu’après un avertissement', async () => {
-    const onRelier = jest.fn().mockResolvedValue(undefined);
+const connexion = (o: Partial<Parameters<typeof AccueilSite>[0]['connexion']> = {}) => ({
+  relaisConnu: true,
+  onConnexion: jest.fn().mockResolvedValue(undefined),
+  onInvitation: jest.fn().mockResolvedValue(undefined),
+  ...o,
+});
+
+describe('premier lancement sur un navigateur (version 9 : identifiant + mot de passe pour tous)', () => {
+  it('plus de carte « code de liaison » : on se connecte, ou on ouvre son invitation ; créer un coffre vient après un avertissement', async () => {
+    const options = connexion();
     const onCreer = jest.fn();
-    await render(<AccueilSite onRelier={onRelier} onCreer={onCreer} />);
-    expect(screen.getByText(/J’ai déjà un compte \(le relier\)/)).toBeTruthy();
-    await fireEvent.changeText(screen.getByTestId('champ-code-accueil'), ' AB1.abc ');
-    await fireEvent.press(screen.getByTestId('bouton-relier-accueil'));
-    expect(onRelier).toHaveBeenCalledWith('AB1.abc');
+    await render(<AccueilSite onCreer={onCreer} connexion={options} />);
+    expect(screen.queryByText(/code de liaison/i)).toBeNull();
+    expect(screen.queryByText(/AB1/)).toBeNull();
+    expect(screen.queryByTestId('champ-code-accueil')).toBeNull();
+    expect(screen.queryByTestId('bouton-relier-accueil')).toBeNull();
+    expect(screen.getByText(/J’ai reçu une invitation/)).toBeTruthy();
+    await fireEvent.changeText(screen.getByTestId('connexion-id-identifiant'), 'Enzo');
+    await fireEvent.changeText(screen.getByTestId('connexion-id-mdp'), 'mon mot de passe');
+    await fireEvent.press(screen.getByTestId('connexion-id-valider'));
+    expect(options.onConnexion).toHaveBeenCalledWith('Enzo', 'mon mot de passe');
 
     await fireEvent.press(screen.getByTestId('accueil-creer'));
     expect(onCreer).not.toHaveBeenCalled();
@@ -20,13 +32,27 @@ describe('premier lancement sur un navigateur', () => {
     expect(onCreer).toHaveBeenCalled();
   });
 
-  it('un lien #liaison= évite de recopier le code ; une erreur du relais s’affiche', async () => {
-    const onRelier = jest.fn().mockRejectedValue(new Error('Votre compte n’est pas encore publié'));
-    await render(<AccueilSite codeConnu="AB1.lien" onRelier={onRelier} onCreer={jest.fn()} />);
-    expect(screen.getByTestId('accueil-code-connu')).toBeTruthy();
-    await fireEvent.press(screen.getByTestId('bouton-relier-accueil'));
-    expect(onRelier).toHaveBeenCalledWith('AB1.lien');
-    expect(await screen.findByText(/pas encore publié/)).toBeTruthy();
+  it('chaque lettre tapée dans l’identifiant est signalée (style du compte) ; une erreur s’affiche', async () => {
+    const onIdentifiant = jest.fn();
+    const options = connexion({ onIdentifiant, onConnexion: jest.fn().mockRejectedValue(new Error('Identifiant ou mot de passe incorrect.')) });
+    await render(<AccueilSite onCreer={jest.fn()} connexion={options} />);
+    await fireEvent.changeText(screen.getByTestId('connexion-id-identifiant'), 'Lé');
+    expect(onIdentifiant).toHaveBeenLastCalledWith('Lé');
+    await fireEvent.changeText(screen.getByTestId('connexion-id-mdp'), 'faux');
+    await fireEvent.press(screen.getByTestId('connexion-id-valider'));
+    expect(await screen.findByText(/Identifiant ou mot de passe incorrect/)).toBeTruthy();
+  });
+
+  it('mot de passe oublié : identifiant, code de récupération et nouveau mot de passe (deux fois)', async () => {
+    const onSecours = jest.fn().mockResolvedValue(undefined);
+    await render(<AccueilSite onCreer={jest.fn()} connexion={connexion({ onSecours })} />);
+    await fireEvent.press(screen.getByTestId('connexion-oubli'));
+    await fireEvent.changeText(screen.getByTestId('connexion-id-identifiant'), 'Enzo');
+    await fireEvent.changeText(screen.getByTestId('connexion-secours-code'), 'ABCD-EFGH-JKMN-PQRS');
+    await fireEvent.changeText(screen.getByTestId('connexion-secours-mdp'), 'Une nouvelle phrase 2026');
+    await fireEvent.changeText(screen.getByTestId('connexion-secours-confirmation'), 'Une nouvelle phrase 2026');
+    await fireEvent.press(screen.getByTestId('connexion-secours-valider'));
+    expect(onSecours).toHaveBeenCalledWith('Enzo', 'ABCD-EFGH-JKMN-PQRS', 'Une nouvelle phrase 2026');
   });
 });
 

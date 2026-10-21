@@ -36,13 +36,39 @@ function Texte({ theme, children, testID, fort }: { theme: ThemeHub; children: R
 }
 
 /** Le thème, un seul pour toute l'application. */
-export function ReglageTheme({ theme, onTheme }: { theme: ThemeHub; onTheme(id: IdThemeHub): void }) {
+export function ReglageTheme({
+  theme,
+  onTheme,
+  pourCetAppareil,
+  onPourCetAppareil,
+}: {
+  theme: ThemeHub;
+  onTheme(id: IdThemeHub): void;
+  /** Le style choisi ici ne vaut que pour cet appareil (stockage local, jamais synchronisé). */
+  pourCetAppareil?: boolean;
+  onPourCetAppareil?(actif: boolean): void;
+}) {
   const rayon = rayonDe(theme);
   return (
     <View style={{ gap: 10 }}>
       <Texte theme={theme}>
-        Ce thème s’applique partout : hub, portefeuille, administration et futures apps. Le portefeuille garde son identité par la couleur d’accent du thème.
+        Ce thème s’applique partout : hub, portefeuille, administration et futures apps. Il est enregistré sur le serveur avec votre compte et
+        s’applique sur tous vos appareils, dès que vous tapez votre identifiant.
       </Texte>
+      {onPourCetAppareil ? (
+        <Pressable
+          testID="parametres-theme-appareil"
+          accessibilityRole="switch"
+          accessibilityState={{ checked: Boolean(pourCetAppareil) }}
+          aria-checked={Boolean(pourCetAppareil)}
+          onPress={() => onPourCetAppareil(!pourCetAppareil)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 }}>
+          <Text style={{ fontSize: tt(18), color: theme.texte }}>{pourCetAppareil ? '☑' : '☐'}</Text>
+          <Text style={{ color: theme.texte, fontSize: tt(14), flexShrink: 1 }}>
+            Pour cet appareil uniquement (le style choisi ici reste sur cet appareil et y prend le dessus ; vos autres appareils gardent le style du compte)
+          </Text>
+        </Pressable>
+      ) : null}
       <View style={styles.themes} accessibilityRole="radiogroup" accessibilityLabel="Thème de l’application">
         {THEMES_HUB.map(candidat => {
           const choisi = candidat.id === theme.id;

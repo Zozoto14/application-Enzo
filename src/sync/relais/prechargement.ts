@@ -224,6 +224,7 @@ export function preparerSortant(o: {
   caches?: CachesSynchro;
   maintenant?: () => Date;
 }): Promise<void> {
+  if (!o.caches && modeServeur()) return Promise.resolve();
   const caches = o.caches ?? cachesSynchro();
   // Caches déjà en mémoire : tout le calcul (lecture de la base, scellement) est synchrone,
   // ce qui permet de l'appeler juste avant de verrouiller ou de fermer la page.
@@ -432,7 +433,7 @@ export class Prechargeur {
   }
 
   async passage(): Promise<void> {
-    if (this.arrete || this.suspendu || this.enCours) {
+    if (this.arrete || this.suspendu || this.enCours || modeServeur()) {
       return;
     }
     this.annuler();
@@ -500,6 +501,27 @@ export interface EtatDemarrage {
 }
 
 export const CLE_ETAT_DEMARRAGE = 'applibourse.synchro.demarrage';
+
+/**
+ * Relais version 9 : cet appareil synchronise avec le coffre serveur (plus de dépôt par appareil).
+ * Le préchargement sans clé et l'enveloppe `sortant` de l'ancienne boîte n'ont alors plus d'objet :
+ * la file d'envoi est dans la base de l'appareil et part au premier tour après le déverrouillage.
+ */
+export const CLE_MODE_SERVEUR = 'applibourse.synchro.serveur';
+export function noterModeServeur(memoire: Memoire | undefined = memoireLocale()): void {
+  try {
+    memoire?.setItem(CLE_MODE_SERVEUR, '1');
+  } catch {
+    // Stockage interdit : rien de grave, le préchargement reste un simple aller-retour.
+  }
+}
+export function modeServeur(memoire: Memoire | undefined = memoireLocale()): boolean {
+  try {
+    return memoire?.getItem(CLE_MODE_SERVEUR) === '1';
+  } catch {
+    return false;
+  }
+}
 type Memoire = { getItem(cle: string): string | null; setItem(cle: string, valeur: string): void };
 const memoireLocale = (): Memoire | undefined => (globalThis as { localStorage?: Memoire }).localStorage;
 const ecoutesEtat = new Set<(etat: EtatDemarrage) => void>();

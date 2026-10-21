@@ -115,7 +115,6 @@ import {
   lireLiaisons,
   oublierSuivi,
   CLES_MEMOIRE,
-  preparerLiaison,
   retenirLiaison,
   synchroniserAnnuaire,
   lireAbonnementAmi,
@@ -124,36 +123,46 @@ import {
   type CompteRelie,
   type Memoire,
 } from './synchroComptes';
-import { decoderLiaison, encoderLiaison, lienSite, type Liaison } from '../src/sync/relais/liaison';
-import { compteDeLiaison, estMaitre, liaisonPourProfil } from '../src/sync/relais/portees';
+import { decoderLiaison, type Liaison } from '../src/sync/relais/liaison';
+import { estMaitre } from '../src/sync/relais/portees';
 import { definirLiaisonCompte } from '../src/sync/relais/actif';
 import { lireConfigRelais, mesurerEcartHorloge } from '../src/sync/relais/synchroniser';
 import { formaterDiagnostic, lireEnvironnement } from '../src/diagnostic/deverrouillage';
 import { empreinte as empreinteCanonique } from '../src/sync/relais/fusionLww';
 import { versionApp } from '../src/hub/version';
 import { versBase64 } from '../src/sync/relais/chiffrement';
-import type { OptionsLier } from '../src/ui/ecrans/LierCompte';
 import { EcranInvitation } from './Invitation';
 import {
   accepterInvitation,
   chargerCodeCourt,
   chargerInvitation,
   connecterParIdentifiant,
+  connecterParSecours,
   creerInvitation,
   nettoyerCompteRelais,
+  publierAccesFondateur,
+  type ConnexionIdentifiant,
+  siteDesLiens,
   type InvitationChargee,
 } from './connexionAmis';
+import { EcranConnexionFondateur, type ResultatMigration } from './ConnexionFondateur';
+import { genererCodeRecuperation } from '../src/securite/codes-recuperation';
+import { aleatoireParDefaut } from '../src/securite/aleatoire';
+import { apercuTheme } from '../src/ui/theme';
+import { lireThemeAppareil } from '../src/hub/themeAppareil';
+import { deposerCoffreSiChange } from '../src/sync/relais/synchroniser';
 import {
   ErreurInvitation,
   decoderInvitation,
   empreinteIdentifiant,
+  lienConnexion,
   normaliserCodeCourt,
   politiqueDeContenu,
   relaisDuLien,
   type LienInvitation,
   type PolitiqueMdp,
 } from '../src/profils/invitation';
-import { compteRevoque, revoquerCompte, supprimerAcces } from '../src/sync/relais/connexionAmis';
+import { compteRevoque, lireThemePublic, publierThemePublic, revoquerCompte, supprimerAcces, versionRelais } from '../src/sync/relais/connexionAmis';
 import { espacesDuRelais } from '../src/sync/relais/espaces';
 import { empreinteOctets } from '../src/sync/relais/fichiers';
 import { changerMotDePasse as changerMotDePasseCoffre, type Coffre } from '../src/securite/coffre';
@@ -226,8 +235,8 @@ type Etat =
       autreCoffre?: boolean;
     }
   | { phase: 'echec'; motif: string }
-  /** Navigateur neuf : relier un compte existant (d'abord), ou créer un coffre. */
-  | { phase: 'accueil'; code?: string; erreur?: string }
+  /** Navigateur neuf : se connecter (identifiant + mot de passe), ouvrir une invitation, ou créer un coffre. */
+  | { phase: 'accueil'; erreur?: string }
   /** Ce navigateur a déjà un coffre : remplacer ses données par celles du compte relié ? */
   | { phase: 'remplacer'; relie: CompteRelie };
 
@@ -237,6 +246,10 @@ const encodeur = new TextEncoder();
 const PARAM_CONNEXIONS = 'compte.connexions';
 const PARAM_ACCES_ADMIN = 'compte.accesAdmin';
 const PARAM_APPAREILS = 'compte.appareils';
+/** Identifiant de connexion du Fondateur (relais version 9), dans sa base : synchronisé avec ses données. */
+const PARAM_IDENTIFIANT = 'compte.identifiant';
+/** Thème publié pour l'écran de connexion (empreinte d'identifiant | thème), pour ne le republier qu'au changement. */
+const CLE_THEME_PUBLIE = 'applibourse.theme.publie';
 
 /** Nom lisible de cet appareil (« iPhone · Safari », « Windows · Chrome », « PC (application) »). */
 export function nomAppareil(ua: string, application: boolean): string {
@@ -306,14 +319,12 @@ const memoireNavigateur: Memoire = {
   },
 };
 
-/** Code apporté par un lien `…/#liaison=AB1.…` (site ouvert depuis un QR code). */
-function codeDuLien(): string | undefined {
-  try {
-    const trouve = /AB1\.[A-Za-z0-9_-]+/.exec(decodeURIComponent(globalThis.location?.hash ?? ''));
-    return trouve && decoderLiaison(trouve[0]) ? trouve[0] : undefined;
-  } catch {
-    return undefined;
-  }
+/**
+ * Ancien lien `…/#liaison=AB1.…` (QR code d'avant la version 9) : il n'ouvre plus rien (plus de
+ * code de liaison) ; il est seulement retiré de l'adresse. On se connecte par identifiant.
+ */
+function lienDeLiaisonPerime(): boolean {
+  return /liaison=AB1\./.test(globalThis.location?.hash ?? '');
 }
 
 /** Dernier identifiant (prénom) d'un ami connecté sur ce navigateur, et adresse du relais connue ici. */
@@ -382,13 +393,22 @@ async function liaisonDuPont(): Promise<Liaison | undefined> {
   }
 }
 
+/** Liaison MAÎTRE du compte du Fondateur sur cet appareil : configuration du relais (base), code retenu, ou PC. */
+async function liaisonMaitreDe(session: SessionBureau): Promise<Liaison | undefined> {
+  const config = session.session.statut() === 'deverrouille' ? lireConfigRelais(session.session.base()) : undefined;
+  const maitre: Liaison | undefined = config
+    ? { relais: config.relais, jeton: config.jeton, ...(config.site ? { site: config.site } : {}) }
+    : liaisonPourCompte(memoireNavigateur, ID_PRINCIPAL, await liaisonDuPont());
+  return maitre && estMaitre(maitre) ? maitre : undefined;
+}
+
 /** Au plus `ms` : le réseau ne bloque jamais l'ouverture (hors ligne, on continue avec ce qu'on a). */
 function auPlus<T>(promesse: Promise<T>, ms: number): Promise<T | undefined> {
   return Promise.race([promesse.catch(() => undefined), new Promise<undefined>(ok => setTimeout(() => ok(undefined), ms))]);
 }
 
-/** Délai entre deux tours de synchronisation des comptes. */
-const INTERVALLE_COMPTES_MS = 120_000;
+/** Délai entre deux tours de synchronisation des comptes (serveur PostgreSQL : plus de quota d'écritures). */
+const INTERVALLE_COMPTES_MS = 30_000;
 
 /** Clés d'usage de l'administrateur, tirées de sa clé maîtresse (à effacer après usage). */
 function clesAdminDe(session: SessionBureau): ClesAdmin {
@@ -497,6 +517,12 @@ function Racine() {
 
   const [etat, setEtat] = useState<Etat>({ phase: 'chargement' });
   const fabriqueRef = useRef<unknown>(undefined);
+  /** Migration du Fondateur vers la connexion par identifiant : proposée, ouverte depuis les Paramètres, ou codes à noter. */
+  const [ecranFondateur, setEcranFondateur] = useState<undefined | { mode: 'proposer' | 'modifier' } | { mode: 'codes'; resultat: ResultatMigration }>(undefined);
+  const fondateurReporte = useRef(false);
+  /** Style de l'écran de connexion : le thème du compte dont on tape l'identifiant (aperçu, rien n'est retenu). */
+  const [, setVersionStyle] = useState(0);
+  const minuterieStyle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   /** Pour le diagnostic du déverrouillage : coffre publié sur le relais lu à l'ouverture (jamais affiché). */
   const diagnosticOuverture = useRef<{ coffreRelais?: unknown; compteAdmin?: boolean }>({});
   const stockage = useMemo(() => stockageCourant(), []);
@@ -530,7 +556,20 @@ function Racine() {
    * `cle` : clé maîtresse relue du séquestre (session administrateur).
    */
   const ouvrir = useCallback(
-    async (compte: CompteTrouve, options: { cle?: Uint8Array; adminSur?: string; rangSur?: Rang; creation?: boolean; motDePasse?: string } = {}) => {
+    async (
+      compte: CompteTrouve,
+      options: {
+        cle?: Uint8Array;
+        adminSur?: string;
+        rangSur?: Rang;
+        creation?: boolean;
+        motDePasse?: string;
+        /** « Mot de passe oublié » : code de récupération et nouveau mot de passe. */
+        recuperation?: { code: string; nouveau: string };
+        /** Après un déverrouillage réussi (republier l'accès, montrer les codes…). */
+        apres?(session: SessionBureau): Promise<void>;
+      } = {},
+    ) => {
       setEtat({ phase: 'chargement', message: options.adminSur ? `Ouverture du compte de ${compte.nom}…` : undefined });
       try {
         fabriqueRef.current ??= await initSqlJs({ locateFile: () => urlWasm });
@@ -609,6 +648,14 @@ function Racine() {
             // L'écran de déverrouillage s'affiche, avec son message.
           }
         }
+        if (options.recuperation && !options.cle) {
+          // Mot de passe oublié : le code de récupération ouvre le coffre, le nouveau mot de passe le remplace.
+          session.session.recuperer({ codeRecuperation: options.recuperation.code, nouveauMotDePasse: options.recuperation.nouveau });
+          await session.vider();
+        }
+        if (options.apres && session.session.statut() === 'deverrouille') {
+          await options.apres(session);
+        }
         let transparence: { dernierAccesAdmin?: string; sequestreActif: boolean; par?: string; rangPar?: string } | undefined;
         if (options.cle) {
           session.session.ouvrirAvecCle(options.cle);
@@ -661,9 +708,9 @@ function Racine() {
         const coffre = await stockage.lire('coffre');
         if (!coffre || coffre.length === 0) {
           const liaisons = lireLiaisons(memoireNavigateur);
-          // Navigateur neuf : relier d'abord. Un navigateur déjà relié (code de l'administrateur) ouvre son compte.
+          // Navigateur neuf : se connecter. Un navigateur déjà connecté au compte du Fondateur l'ouvre.
           if (!liaisons.maitre) {
-            setEtat({ phase: 'accueil', code: codeDuLien() });
+            setEtat({ phase: 'accueil' });
             return;
           }
         }
@@ -687,14 +734,9 @@ function Racine() {
         setEtat({ phase: 'invitation', erreur: new ErreurInvitation('lien-illisible').message });
         return;
       }
-      const lien = codeDuLien();
+      // Ancien lien de liaison (QR code d'avant) : retiré de l'adresse, on se connecte par identifiant.
+      if (lienDeLiaisonPerime()) effacerFragment();
       const liaisons = lireLiaisons(memoireNavigateur);
-      const connus = [liaisons.maitre, ...Object.values(liaisons.comptes)];
-      if (!pont() && lien && !connus.includes(encoderLiaison(decoderLiaison(lien)!))) {
-        // Lien de liaison nouveau pour ce navigateur : on propose de relier ce compte.
-        setEtat({ phase: 'accueil', code: lien });
-        return;
-      }
       // Comptes ajoutés ou modifiés ailleurs : l'écran prénom les connaît avant la connexion.
       const maitre = liaisons.maitre ? decoderLiaison(liaisons.maitre) : await liaisonDuPont();
       if (maitre && !annuaire.restreint) {
@@ -780,7 +822,8 @@ function Racine() {
       retenirLiaison(memoireNavigateur, relie.liaison);
       memoireNavigateur.setItem(CLE_RELAIS_CONNU, relie.liaison.relais);
       memoireNavigateur.setItem(CLE_IDENTIFIANT, prenom);
-      const id = relie.compte as string;
+      // Fondateur (session ouverte par son mot de passe) : son compte est le compte principal.
+      const id = relie.compte ?? ID_PRINCIPAL;
       if (coffre) {
         const nom = fichiersDuProfil(id).coffre as NomFichier;
         await stockage.ecrire(nom, coffre.octets);
@@ -841,34 +884,94 @@ function Racine() {
     [installerCompteAmi, ouvrir],
   );
 
-  /** Appareil neuf : identifiant + mot de passe (relais version 6). */
+  /**
+   * Installe sur ce navigateur le compte ouvert par identifiant. Fondateur : un navigateur qui garde
+   * déjà SON compte (même serveur) n'est pas vidé (sa copie hors ligne et sa file d'envoi restent) ;
+   * un coffre étranger créé ici autrefois passe par l'écran « Remplacer » (sauvegarde proposée).
+   */
+  const installerConnexion = useCallback(
+    async (c: ConnexionIdentifiant): Promise<'ouvrir' | 'remplacer'> => {
+      if (c.fondateur) {
+        const dejaIci = lireLiaisons(memoireNavigateur).maitre;
+        const memeServeur = dejaIci ? decoderLiaison(dejaIci)?.relais === c.relie.liaison.relais : false;
+        const coffre = await stockage.lire('coffre');
+        if (memeServeur && coffre && coffre.length > 0) {
+          retenirLiaison(memoireNavigateur, c.relie.liaison);
+          memoireNavigateur.setItem(CLE_IDENTIFIANT, c.acces.prenom);
+          effacerFragment();
+          return 'ouvrir';
+        }
+        if (coffre && coffre.length > 0) {
+          setEtat({ phase: 'remplacer', relie: c.relie });
+          return 'remplacer';
+        }
+      }
+      await installerCompteAmi(c.relie, c.acces.prenom);
+      annuaireRef.current = c.relie.annuaire;
+      return 'ouvrir';
+    },
+    [installerCompteAmi, stockage],
+  );
+
+  /** Appareil neuf : identifiant + mot de passe, POUR TOUS (Fondateur compris, relais version 9). */
   const connecterIdentifiant = useCallback(
     async (identifiant: string, motDePasse: string) => {
       const relais = await relaisConnu();
       if (!relais) throw new ErreurInvitation('relais-inconnu');
-      const { relie, acces } = await connecterParIdentifiant(relais, identifiant, motDePasse);
-      const id = await installerCompteAmi(relie, acces.prenom);
-      annuaireRef.current = relie.annuaire;
-      await ouvrir({ id, nom: acces.prenom, admin: false }, { motDePasse });
+      const c = await connecterParIdentifiant(relais, identifiant, motDePasse);
+      if ((await installerConnexion(c)) === 'remplacer') return;
+      await ouvrir({ id: c.fondateur ? ID_PRINCIPAL : (c.relie.compte as string), nom: c.acces.prenom, admin: c.fondateur }, { motDePasse });
     },
-    [installerCompteAmi, ouvrir],
+    [installerConnexion, ouvrir],
   );
 
-  /** « Relier » : vérifie le code, puis installe — ou demande d'abord s'il faut remplacer un ancien coffre. */
-  const relier = useCallback(
-    async (code: string) => {
-      const relie = await preparerLiaison(code);
-      const annuaire = await lireAnnuaireDisque();
-      const coffre = await stockage.lire('coffre');
-      const ancien = (coffre && coffre.length > 0) || aDesAmis(annuaire);
-      if (ancien) {
-        setEtat({ phase: 'remplacer', relie });
-      } else {
-        await installerLiaison(relie);
-      }
+  /**
+   * « Mot de passe oublié » du Fondateur : identifiant + code de récupération. Le coffre s'ouvre par
+   * le code, le nouveau mot de passe le remplace, dix nouveaux codes sont tirés (à noter) et l'accès
+   * par identifiant est republié avec eux (l'ancien mot de passe et les anciens codes ne valent plus).
+   */
+  const connecterSecours = useCallback(
+    async (identifiant: string, code: string, nouveau: string) => {
+      const relais = await relaisConnu();
+      if (!relais) throw new ErreurInvitation('relais-inconnu');
+      const c = await connecterParSecours(relais, identifiant, code);
+      if ((await installerConnexion(c)) === 'remplacer') return;
+      await ouvrir(
+        { id: ID_PRINCIPAL, nom: c.acces.prenom, admin: true },
+        {
+          recuperation: { code, nouveau },
+          apres: async session => {
+            const codes = session.session.renouvelerCodesRecuperation();
+            await session.vider();
+            await publierAccesFondateur({ maitre: c.relie.liaison, identifiant: c.acces.prenom, motDePasse: nouveau, codes });
+            await deposerCoffreSiChange(session.session.base(), c.relie.liaison, session.session.coffreActuel()).catch(() => undefined);
+            setEcranFondateur({ mode: 'codes', resultat: { identifiant: c.acces.prenom, codes } });
+          },
+        },
+      );
     },
-    [lireAnnuaireDisque, stockage, installerLiaison],
+    [installerConnexion, ouvrir],
   );
+
+  /**
+   * L'identifiant tapé change : le style (nom du thème) de ce compte s'applique à l'écran, en aperçu.
+   * Ordre : le style propre à CET appareil, sinon celui du compte (serveur, réponse neutre si
+   * l'identifiant n'existe pas). Rien n'est retenu.
+   */
+  const appliquerStyleIdentifiant = useCallback((identifiant: string) => {
+    if (minuterieStyle.current) clearTimeout(minuterieStyle.current);
+    minuterieStyle.current = setTimeout(() => {
+      void (async () => {
+        if (identifiant.trim().length < 2) return;
+        const annuaire = annuaireRef.current;
+        const trouve = annuaire && !annuaire.restreint ? trouverCompte(annuaire, identifiant) : undefined;
+        const local = trouve ? lireThemeAppareil(trouve.id) : undefined;
+        const relais = local ? undefined : await relaisConnu();
+        const theme = local ?? (relais ? await lireThemePublic(relais, empreinteIdentifiant(identifiant)) : undefined);
+        if (theme && apercuTheme(theme)) setVersionStyle(v => v + 1);
+      })();
+    }, 350);
+  }, []);
 
   /** Sauvegarde de l'ancien contenu du navigateur, tel quel (chiffré), dans un fichier téléchargé. */
   const exporterAncien = useCallback(async () => {
@@ -912,6 +1015,68 @@ function Racine() {
     };
   }, [etat]);
 
+  // ------------------------------------------------ Connexion par identifiant du Fondateur (migration)
+  const sessionFondateur = etat.phase === 'prete' && etat.profil.admin && !etat.adminSur ? etat.session : undefined;
+  useEffect(() => {
+    if (!sessionFondateur) return undefined;
+    let minuterie: ReturnType<typeof setTimeout> | undefined;
+    const verifier = async () => {
+      if (fondateurReporte.current || sessionFondateur.session.statut() !== 'deverrouille') return;
+      // L'identifiant voyage avec les données (coffre serveur) : un appareil qui vient d'ouvrir attend son premier tour.
+      if (new DepotParametres(sessionFondateur.session.base()).lire(PARAM_IDENTIFIANT)) return;
+      const maitre = await liaisonMaitreDe(sessionFondateur);
+      if (!maitre) return;
+      const version = await versionRelais(maitre);
+      if (!version?.fonctions.includes('acces-fondateur')) return;
+      if (new DepotParametres(sessionFondateur.session.base()).lire(PARAM_IDENTIFIANT)) return;
+      setEcranFondateur(courant => courant ?? { mode: 'proposer' });
+    };
+    const planifier = () => {
+      if (minuterie) clearTimeout(minuterie);
+      minuterie = setTimeout(() => void verifier().catch(() => undefined), 6_000);
+    };
+    planifier();
+    const desabonner = sessionFondateur.session.surOuverture(planifier);
+    return () => {
+      if (minuterie) clearTimeout(minuterie);
+      desabonner();
+    };
+  }, [sessionFondateur]);
+
+  /**
+   * Le Fondateur choisit son identifiant et son mot de passe : identité revérifiée, codes de
+   * récupération tirés, accès (et secours) publié AVANT de toucher au coffre (un identifiant déjà
+   * pris ne change rien), puis coffre rescellé, enregistré et téléversé, thème publié.
+   */
+  const configurerConnexionFondateur = useCallback(
+    async (o: { identifiant: string; motDePasseActuel: string; codeTotp: string; nouveau: string }): Promise<ResultatMigration> => {
+      const courant = etatRef.current;
+      if (courant.phase !== 'prete' || !courant.profil.admin || courant.adminSur) throw new Error('Réservé au Fondateur, sur son compte.');
+      const session = courant.session;
+      const maitre = await liaisonMaitreDe(session);
+      if (!maitre) throw new Error('Cet appareil ne connaît pas le serveur : ouvrez AppDashboard sur votre PC (déjà relié), puis réessayez.');
+      session.session.verifierIdentite({ motDePasse: o.motDePasseActuel, codeTotp: o.codeTotp });
+      const codes = Array.from({ length: 10 }, () => genererCodeRecuperation(aleatoireParDefaut));
+      const depot = new DepotParametres(session.session.base());
+      const ancien = depot.lire(PARAM_IDENTIFIANT);
+      const h = await publierAccesFondateur({ maitre, identifiant: o.identifiant, motDePasse: o.nouveau, codes });
+      if (ancien && empreinteIdentifiant(ancien) !== h) await supprimerAcces(maitre, empreinteIdentifiant(ancien)).catch(() => undefined);
+      const { coffre } = session.session.passerAConnexionParIdentifiant({ motDePasseActuel: o.motDePasseActuel, codeTotp: o.codeTotp, nouveauMotDePasse: o.nouveau, codes });
+      depot.ecrire(PARAM_IDENTIFIANT, o.identifiant.trim().slice(0, 30));
+      await session.vider();
+      await deposerCoffreSiChange(session.session.base(), maitre, coffre).catch(e => console.warn('Coffre :', erreurTexte(e)));
+      const theme = depot.lire('hub.theme');
+      if (theme) {
+        await publierThemePublic(maitre, h, theme)
+          .then(() => memoireNavigateur.setItem(CLE_THEME_PUBLIE, `${h}|${theme}`))
+          .catch(() => undefined);
+      }
+      memoireNavigateur.setItem(CLE_IDENTIFIANT, o.identifiant.trim());
+      return { identifiant: o.identifiant.trim(), codes };
+    },
+    [],
+  );
+
   // Tours de synchronisation des comptes, une fois le compte déverrouillé (voir synchroComptes.ts).
   const etatRef = useRef(etat);
   etatRef.current = etat;
@@ -927,6 +1092,17 @@ function Racine() {
     let dernier = 0;
     let minuterie: ReturnType<typeof setTimeout> | undefined;
     const plan: { enTour: boolean; demander(delai?: number): void; maintenant?(): Promise<void> } = { enTour: false, demander: () => undefined };
+    /** Nom du thème du compte, publié pour l'écran de connexion quand il change (rien d'autre). */
+    const publierTheme = async (liaison: Liaison, identifiant: string | undefined) => {
+      if (!identifiant || session.session.statut() !== 'deverrouille') return;
+      const theme = new DepotParametres(session.session.base()).lire('hub.theme');
+      if (!theme) return;
+      const h = empreinteIdentifiant(identifiant);
+      const cle = profil.id === ID_PRINCIPAL ? CLE_THEME_PUBLIE : `${CLE_THEME_PUBLIE}@${profil.id}`;
+      if (memoireNavigateur.getItem(cle) === `${h}|${theme}`) return;
+      await publierThemePublic(liaison, h, theme);
+      memoireNavigateur.setItem(cle, `${h}|${theme}`);
+    };
     const effacerDe = async (id: string) => {
       const noms = fichiersDuProfil(id) as { coffre: NomFichier; portefeuille: NomFichier };
       await stockage.ecrire(noms.coffre, new Uint8Array(0));
@@ -979,6 +1155,7 @@ function Racine() {
           if (bilan.erreurs.length > 0) {
             console.warn('Synchronisation des comptes :', bilan.erreurs[0]);
           }
+          await publierTheme(liaison, depot.lire(PARAM_IDENTIFIANT)).catch(() => undefined);
         } else {
           const liaison = liaisonPourCompte(memoireNavigateur, profil.id, pontMaitre);
           if (!liaison) {
@@ -1001,6 +1178,7 @@ function Racine() {
           if (bilan.abonnementChange || bilan.tachesChange) {
             setVersionComptes(v => v + 1);
           }
+          await publierTheme(liaison, profil.nom).catch(() => undefined);
           if (bilan.annuaireChange && annuaireRef.current) {
             const suivant = profilAmi(annuaireRef.current, profil.id, profil.nom);
             let profilsVus: Profil[] = [suivant];
@@ -1043,7 +1221,7 @@ function Racine() {
       }
     }, 3_000);
     const ecoute = session.session.surEcriture?.(() => {
-      if (!plan.enTour) plan.demander(5_000);
+      if (!plan.enTour) plan.demander(2_000);
     });
     const visible = () => {
       if (document.visibilityState === 'visible') plan.demander(500);
@@ -1085,17 +1263,17 @@ function Racine() {
   if (etat.phase === 'accueil') {
     return (
       <AccueilSite
-        codeConnu={etat.code}
         erreur={etat.erreur}
         connexion={{
           relaisConnu: Boolean(memoireNavigateur.getItem(CLE_RELAIS_CONNU) || lireLiaisons(memoireNavigateur).maitre),
           identifiantInitial: memoireNavigateur.getItem(CLE_IDENTIFIANT) ?? undefined,
           onConnexion: connecterIdentifiant,
           onInvitation: ouvrirInvitationSaisie,
+          onSecours: connecterSecours,
+          onIdentifiant: appliquerStyleIdentifiant,
         }}
-        onRelier={relier}
         onCreer={() => {
-          // Coffre neuf, indépendant : le code d'un autre compte retenu ici ne s'applique plus.
+          // Coffre neuf, indépendant : le compte d'un autre retenu ici ne s'applique plus.
           for (const cle of ['applibourse.liaisons', 'applibourse.liaison']) memoireNavigateur.removeItem(cle);
           void ouvrir({ id: ID_PRINCIPAL, nom: 'Moi', admin: true }, { creation: true });
         }}
@@ -1139,6 +1317,7 @@ function Racine() {
         enCours={etat.enCours}
         erreur={etat.erreur}
         prenomInitial={annuaireRef.current?.restreint ? memoireNavigateur.getItem(CLE_IDENTIFIANT) ?? undefined : undefined}
+        onPrenom={appliquerStyleIdentifiant}
         onContinuer={prenom => {
           const annuaire = annuaireRef.current;
           const trouve = annuaire ? trouverCompte(annuaire, prenom) : undefined;
@@ -1306,15 +1485,8 @@ function Racine() {
     await stockage.ecrire(fichiers.portefeuille, new Uint8Array(0));
   };
 
-  // Site : « Lier à mon compte » pour TOUS (administrateur avec le code du PC, ami avec le sien).
+  // Plus de « Lier à mon compte (code de liaison) » : chacun se connecte par identifiant + mot de passe.
   const liaisonsIci = lireLiaisons(memoireNavigateur);
-  const lierSite: ControleProfils['lier'] = pont()
-    ? undefined
-    : {
-        codeConnu: liaisonsIci.comptes[profil.id] ?? liaisonsIci.maitre ?? Object.values(liaisonsIci.comptes)[0],
-        onLier: relier,
-        suggererAutreCoffre: Boolean(etat.autreCoffre),
-      };
   /** Liaison employée par ce compte (le leurre : la même qu'à l'ouverture, voir avantOuverture). */
   const liaisonIci = () => {
     const propre = profil.id === 'leurre' ? undefined : liaisonPourCompte(memoireNavigateur, profil.id);
@@ -1350,21 +1522,22 @@ function Racine() {
     deverrouillage: adminSur ? undefined : deverrouillageSite,
     actuel: profil,
     tous: profils,
-    lier: adminSur ? undefined : lierSite,
     versionComptes,
     abonnement: profil.admin || adminSur || profil.id === 'leurre' ? undefined : lireAbonnementAmi(memoireNavigateur, profil.id),
     peutChanger: Boolean(adminSur) || (annuaireRef.current ? aDesAmis(annuaireRef.current) : false) || profil.id === 'leurre',
-    // Ami sur un navigateur relié : connecter un autre appareil (lien de SON compte, prénom et mot de passe exigés ensuite).
+    // Ami : connecter un autre appareil (lien du site avec l'adresse du serveur, rien de secret ; identifiant et mot de passe ensuite).
     autreAppareil: (() => {
       if (profil.admin || adminSur || profil.id === 'leurre') return undefined;
       const code = liaisonsIci.comptes[profil.id];
       const liaison = code ? decoderLiaison(code) : undefined;
       if (!liaison) return undefined;
-      const site = lienSite(liaison);
-      const origine = globalThis.location?.origin;
-      const lien = site ?? (origine && /^https?:/.test(origine) ? `${origine}/#liaison=${code}` : undefined);
-      return lien ? { lien } : undefined;
+      return { lien: lienConnexion(siteDesLiens(liaison.site), liaison.relais) };
     })(),
+    // Fondateur : identifiant et mot de passe de connexion (Paramètres › Sécurité).
+    connexionServeur:
+      profil.admin && !adminSur && session.session.statut() === 'deverrouille'
+        ? { identifiant: new DepotParametres(session.session.base()).lire(PARAM_IDENTIFIANT), onConfigurer: () => setEcranFondateur({ mode: 'modifier' }) }
+        : undefined,
     politique: annuaireRef.current?.politique,
     juridique: annuaireRef.current?.juridique,
     // Textes légaux : seul un Fondateur, et seulement là où l'annuaire complet est disponible (pas sur un navigateur relié).
@@ -1603,24 +1776,7 @@ function Racine() {
           exiger(profil, 'acces-sequestre', profils.find(p => p.id === id));
           await rafraichirAdmin(retablirSequestre(annuaire, id), true);
         }),
-      onCodeSite: async (id: string) => {
-        exigerAdmin();
-        if (!profils.some(p => p.id === id && !p.admin)) {
-          throw new Error('Compte introuvable.');
-        }
-        exiger(profil, 'code-site', profils.find(p => p.id === id));
-        const config = lireConfigRelais(session.session.base());
-        const maitre: Liaison | undefined = config
-          ? { relais: config.relais, jeton: config.jeton, ...(config.site ? { site: config.site } : {}) }
-          : liaisonPourCompte(memoireNavigateur, ID_PRINCIPAL, await liaisonDuPont());
-        if (!maitre || !estMaitre(maitre)) {
-          throw new Error('Reliez d’abord cet appareil au relais (Paramètres › Synchronisation), puis réessayez.');
-        }
-        const liaison = liaisonPourProfil(maitre, id);
-        // Son compte (projection, coffre, portefeuille) part tout de suite sur le relais.
-        planComptes.current?.demander(300);
-        return { code: encoderLiaison(liaison), lien: lienSite(liaison) };
-      },
+      // Plus de « code de connexion au site » (AB1) : l'ami se connecte par identifiant + mot de passe (invitation).
       onOuvrirCompte: async (id: string, code: string) => {
         const ami = profils.find(p => p.id === id && !p.admin);
         if (!ami) {
@@ -1948,6 +2104,22 @@ function Racine() {
           <App key={`${profil.id}-${adminSur ?? ''}`} session={session.session} chargementAutomatique profils={controle} hub />
         </GardeErreur>
       </View>
+      {ecranFondateur && profil.admin && !adminSur ? (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: palette.fond, zIndex: 50 }]}>
+          <EcranConnexionFondateur
+            identifiantInitial={profil.nom && profil.nom !== 'Moi' ? profil.nom : undefined}
+            dejaFait={ecranFondateur.mode === 'modifier' ? controle.connexionServeur?.identifiant : undefined}
+            codeDemande={Boolean(session.session.etatCoffre()?.codeDemande)}
+            resultat={ecranFondateur.mode === 'codes' ? ecranFondateur.resultat : undefined}
+            onValider={configurerConnexionFondateur}
+            onPlusTard={() => {
+              fondateurReporte.current = true;
+              setEcranFondateur(undefined);
+              setVersionComptes(v => v + 1);
+            }}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }

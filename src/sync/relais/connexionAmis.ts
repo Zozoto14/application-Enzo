@@ -74,6 +74,8 @@ async function causeDe(reponse: Response, qui?: string): Promise<ErreurInvitatio
       return typeof lu.attente === 'number' ? erreur('trop-de-tentatives', lu.attente) : erreur('mot-de-passe');
     case 'revoque':
       return erreur('acces-revoque');
+    case 'identifiant-pris':
+      return erreur('identifiant-pris');
     case 'preuve':
       return erreur('lien-illisible');
     default:
@@ -167,21 +169,65 @@ export async function publierAcces(liaison: Liaison, h: string, depot: DepotAcce
   }
 }
 
-export async function lireSelAcces(relais: string, h: string, requete: Fetch = fetch): Promise<{ sel: string; kdf: ParametresKdf }> {
+export async function lireSelAcces(relais: string, h: string, requete: Fetch = fetch): Promise<{ sel: string; kdf: ParametresKdf; secours?: { sel: string; kdf: ParametresKdf } }> {
   const reponse = await demander(relais, `/acces/${h}`, {}, requete);
   if (!reponse.ok) throw await causeDe(reponse);
   const lu = await corps(reponse);
   const kdf = lu.kdf as ParametresKdf | undefined;
   if (typeof lu.sel !== 'string' || !kdf) throw new ErreurInvitation('relais-injoignable', 'Réponse illisible du serveur de synchronisation.');
-  return { sel: lu.sel, kdf };
+  const s = lu.secours as { sel?: unknown; kdf?: ParametresKdf } | undefined;
+  return { sel: lu.sel, kdf, ...(s && typeof s.sel === 'string' && s.kdf ? { secours: { sel: s.sel, kdf: s.kdf } } : {}) };
 }
 
-export async function ouvrirAccesRelais(relais: string, h: string, preuve: string, requete: Fetch = fetch): Promise<{ compte: string; charge: string }> {
-  const reponse = await demander(relais, `/acces/${h}/ouvrir`, { methode: 'POST', corps: { preuve } }, requete);
-  if (!reponse.ok) throw await causeDe(reponse);
+/**
+ * Preuve présentée au relais. Version 9 : le Fondateur reçoit en plus un jeton de SESSION (`jeton`),
+ * et l'accès de secours (`secours`) dit lequel des codes de récupération a servi.
+ */
+export async function ouvrirAccesRelais(
+  relais: string,
+  h: string,
+  preuve: string,
+  requete: Fetch = fetch,
+  route: 'ouvrir' | 'secours' = 'ouvrir',
+): Promise<{ compte: string; charge: string; jeton?: string; secours?: number }> {
+  const reponse = await demander(relais, `/acces/${h}/${route}`, { methode: 'POST', corps: { preuve } }, requete);
+  if (!reponse.ok) {
+    const erreur = await causeDe(reponse);
+    if (route === 'secours' && erreur.code === 'mot-de-passe') throw new ErreurInvitation('code-recuperation', messageErreur('code-recuperation'));
+    throw erreur;
+  }
   const lu = await corps(reponse);
   if (typeof lu.compte !== 'string' || typeof lu.charge !== 'string') throw new ErreurInvitation('relais-injoignable', 'Réponse illisible du serveur de synchronisation.');
-  return { compte: lu.compte, charge: lu.charge };
+  return {
+    compte: lu.compte,
+    charge: lu.charge,
+    ...(typeof lu.jeton === 'string' && /^s1\.[0-9a-f]{64}$/.test(lu.jeton) ? { jeton: lu.jeton } : {}),
+    ...(typeof lu.secours === 'number' ? { secours: lu.secours } : {}),
+  };
+}
+
+// ------------------------------------------------------------ Style public (version 9)
+
+/** Nom du thème d'un identifiant (rien d'autre ; `undefined` : aucun, inconnu, ou serveur injoignable). */
+export async function lireThemePublic(relais: string, h: string, requete: Fetch = fetch): Promise<string | undefined> {
+  try {
+    const reponse = await demander(relais, `/v9/theme/${h}`, {}, requete);
+    if (!reponse.ok) return undefined;
+    const lu = await corps(reponse);
+    return typeof lu.theme === 'string' && /^[a-z0-9-]{1,40}$/.test(lu.theme) ? lu.theme : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function publierThemePublic(liaison: Liaison, h: string, theme: string | null, requete: Fetch = fetch): Promise<void> {
+  const reponse = await demander(liaison.relais, `/v9/theme/${h}`, { methode: 'PUT', jeton: liaison.jeton, corps: { theme } }, requete);
+  if (!reponse.ok) throw await causeDe(reponse);
+}
+
+/** Ferme la session de ce navigateur (Fondateur). */
+export async function fermerSession(liaison: Liaison, requete: Fetch = fetch): Promise<void> {
+  await demander(liaison.relais, '/v9/sessions/courante', { methode: 'DELETE', jeton: liaison.jeton }, requete).catch(() => undefined);
 }
 
 /** Heure du relais (jeton de profil), pour juger une expiration sans se fier à l'horloge de l'appareil. */

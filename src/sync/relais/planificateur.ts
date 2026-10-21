@@ -5,7 +5,7 @@
  *  - à l'ouverture (`demarrer`), après déverrouillage ;
  *  - au retour au premier plan, et quand le réseau revient ;
  *  - après une modification locale, avec un léger délai (`DELAI_MODIFICATION_MS`) ;
- *  - toutes les deux minutes ;
+ *  - toutes les 30 secondes ;
  *  - après un échec : nouvel essai rapide, de plus en plus espacé
  *    (5 s, 30 s, 2 min, 10 min), au lieu d'attendre le tour suivant.
  *
@@ -13,8 +13,9 @@
  * déclenche un nouveau tour dès que le premier finit (rien n'est perdu).
  */
 
-export const INTERVALLE_SYNCHRO_MS = 2 * 60_000;
-export const DELAI_MODIFICATION_MS = 3_000;
+/** Serveur PostgreSQL (plus de quota d'écritures) : la synchro tourne en continu. */
+export const INTERVALLE_SYNCHRO_MS = 30_000;
+export const DELAI_MODIFICATION_MS = 1_500;
 /** Attentes successives après un échec ; le dernier palier se répète. */
 export const DELAIS_REESSAI_MS: readonly number[] = [5_000, 30_000, 2 * 60_000, 10 * 60_000];
 
@@ -32,7 +33,7 @@ export type RaisonTour =
 export type IssueTour = boolean | { ok: boolean; rappelerDans?: number };
 
 /** Deux retours au premier plan / retours en ligne rapprochés ne font qu'un tour (économie de lectures du relais). */
-export const ECART_MIN_TOURS_MS = 10_000;
+export const ECART_MIN_TOURS_MS = 3_000;
 
 export interface Minuteries {
   setTimeout(action: () => void, ms: number): unknown;

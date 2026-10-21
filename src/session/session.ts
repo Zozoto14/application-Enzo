@@ -32,6 +32,7 @@ import {
   lireSecretTotp,
   totpExige,
   regenererCodesRecuperation,
+  remplacerCodesRecuperation,
   type Coffre,
 } from '../securite/coffre';
 import type { ParametresKdf } from '../securite/kdf';
@@ -519,6 +520,37 @@ export class Session {
         alea: this.alea,
       }),
     );
+  }
+
+  /**
+   * Connexion par identifiant + mot de passe (relais version 9, migration du Fondateur) : l'identité
+   * est revérifiée (mot de passe actuel, et code à six chiffres si le coffre en exige un), puis le
+   * coffre est rescellé par le NOUVEAU mot de passe sous sa forme canonique, le code à six chiffres
+   * n'est plus exigé (le serveur vérifie une preuve du mot de passe et freine les essais), et de
+   * nouveaux codes de récupération sont tirés (rendus en clair, une seule fois). La clé maîtresse
+   * ne change pas : aucune donnée n'est rechiffrée, la base s'ouvre comme avant.
+   */
+  passerAConnexionParIdentifiant(options: {
+    motDePasseActuel: string;
+    codeTotp: string;
+    nouveauMotDePasse: string;
+    nombreCodes?: number;
+    /** Codes déjà tirés (et publiés pour l'accès de secours) : ils remplacent les anciens. */
+    codes?: readonly string[];
+  }): { coffre: Coffre; codesRecuperation: string[] } {
+    this.verifierIdentite({ motDePasse: options.motDePasseActuel, codeTotp: options.codeTotp });
+    const cle = this.exigerCleMaitresse();
+    const nouveau = formeCanonique(options.nouveauMotDePasse);
+    if (nouveau.length === 0) {
+      throw new ErreurSession('Choisissez un mot de passe.');
+    }
+    const avecMotDePasse = changerMotDePasseCoffre(this.exigerCoffre(), cle, nouveau, { kdf: this.deps.kdf, alea: this.alea });
+    const { coffre: avecCodes, codesRecuperation } = options.codes
+      ? { coffre: remplacerCodesRecuperation(avecMotDePasse, cle, options.codes, { kdf: this.deps.kdf, alea: this.alea }), codesRecuperation: [...options.codes] }
+      : regenererCodesRecuperation(avecMotDePasse, cle, { nombreCodes: options.nombreCodes, kdf: this.deps.kdf, alea: this.alea });
+    const final: Coffre = { ...exempterTotp(avecCodes, cle, this.alea), canonique: true };
+    this.deps.stockage.ecrire(final);
+    return { coffre: final, codesRecuperation };
   }
 
   /** Remplace tous les codes de récupération, par exemple après en avoir consommé un. */

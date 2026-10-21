@@ -87,7 +87,7 @@ test('mode transmission : chaque requête (avec ou sans jeton, préliminaire com
     assert.equal(env.BOITE.donnees.size, 0, 'rien n’est écrit sur Cloudflare');
     // Cible invalide : relais normal.
     const normal = await appel({ JETON, BOITE: kvListable(), RELAIS_CIBLE: 'http://pirate.exemple' }, '/sante');
-    assert.equal((await normal.json()).version, 8);
+    assert.equal((await normal.json()).version, 9);
   } finally {
     globalThis.fetch = original;
   }

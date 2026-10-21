@@ -62,7 +62,7 @@ export function resumerSynchro(vue: VueSynchroHub, maintenant: number): ResumeSy
       niveau: 'attente',
       icone: '⏳',
       libelle: attente > 0 ? `${elements(attente)} en attente (hors ligne)` : 'Hors ligne',
-      detail: 'Vos modifications sont gardées ici et partiront toutes seules au retour de la connexion.',
+      detail: 'Hors ligne : vous travaillez sur la copie de cet appareil. Vos modifications partiront toutes seules vers le serveur au retour de la connexion.',
     };
   }
   if (vue.erreur || (vue.enAttente && vue.enAttente.essais > 0)) {
@@ -70,8 +70,8 @@ export function resumerSynchro(vue: VueSynchroHub, maintenant: number): ResumeSy
     return {
       niveau: 'erreur',
       icone: '⚠',
-      libelle: attente > 0 ? `${elements(attente)} en attente · synchronisation impossible` : 'Synchronisation impossible',
-      detail: `${motif ?? 'Le relais ne répond pas.'} Nouvel essai automatique ; vous pouvez aussi synchroniser maintenant.`,
+      libelle: attente > 0 ? `${elements(attente)} en attente · serveur injoignable` : 'Serveur injoignable',
+      detail: `${motif ?? 'Le serveur ne répond pas.'} Nouvel essai automatique ; vous pouvez aussi réessayer maintenant.`,
     };
   }
   if (attente > 0) {
@@ -81,6 +81,6 @@ export function resumerSynchro(vue: VueSynchroHub, maintenant: number): ResumeSy
     niveau: 'ok',
     icone: '✓',
     libelle: vue.derniere ? `À jour · ${ilYA(vue.derniere, maintenant)}` : 'Pas encore synchronisé',
-    detail: vue.derniere ? `Dernière synchronisation ${ilYA(vue.derniere, maintenant)}.` : undefined,
+    detail: vue.derniere ? `Données enregistrées sur le serveur ; dernier échange ${ilYA(vue.derniere, maintenant)}.` : undefined,
   };
 }

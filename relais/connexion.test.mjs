@@ -136,17 +136,22 @@ test('accès par identifiant : déposé par SON compte seulement (identifiant at
   assert.equal((await appel(env, `/acces/${H}`, { methode: 'DELETE', jeton: hugo })).status, 403);
   // Lecture sans jeton : le sel et les paramètres seulement.
   const sel = await (await appel(env, `/acces/${H}`, { ip: nouvelleIp() })).json();
-  assert.deepEqual(Object.keys(sel).sort(), ['kdf', 'sel']);
+  assert.deepEqual(Object.keys(sel).sort(), ['kdf', 'secours', 'sel']);
   // Bonne preuve : la charge (scellée) ; mauvaise : 403.
   const ok = await appel(env, `/acces/${H}/ouvrir`, { methode: 'POST', corps: { preuve: PREUVE }, ip: nouvelleIp() });
   assert.deepEqual(await ok.json(), { compte: 'lea12345', charge: 'abcdef0123' });
   const faux = await appel(env, `/acces/${H}/ouvrir`, { methode: 'POST', corps: { preuve: hex(64, '2') }, ip: nouvelleIp() });
   assert.equal(faux.status, 403);
   assert.equal((await faux.json()).motif, 'mot-de-passe');
-  // Identifiant inconnu : 404 précis.
+  // Identifiant inconnu (version 9) : réponse de même forme, sel stable, rien ne dit qu'il n'existe pas.
   const inconnu = await appel(env, `/acces/${hex(64, 'd')}`, { ip: nouvelleIp() });
-  assert.equal(inconnu.status, 404);
-  assert.equal((await inconnu.json()).motif, 'identifiant-inconnu');
+  assert.equal(inconnu.status, 200);
+  const leurre = await inconnu.json();
+  assert.deepEqual(Object.keys(leurre).sort(), ['kdf', 'secours', 'sel']);
+  assert.deepEqual(leurre, await (await appel(env, `/acces/${hex(64, 'd')}`, { ip: nouvelleIp() })).json(), 'sel stable');
+  const ouvrirInconnu = await appel(env, `/acces/${hex(64, 'd')}/ouvrir`, { methode: 'POST', corps: { preuve: PREUVE }, ip: nouvelleIp() });
+  assert.equal(ouvrirInconnu.status, 403);
+  assert.equal((await ouvrirInconnu.json()).motif, 'mot-de-passe', 'même réponse qu’un mot de passe faux');
 });
 
 test('force brute sur un identifiant : délai progressif même en changeant d’adresse IP, levé par le bon mot de passe', async () => {
@@ -182,7 +187,11 @@ test('révocation : le jeton du compte ne vaut plus rien, ni son accès par iden
   const r = await appel(env, '/p/lea12345/boite', { jeton: lea });
   assert.equal(r.status, 403);
   assert.equal((await r.json()).motif, 'revoque');
-  assert.equal((await appel(env, `/acces/${H}`, { ip: nouvelleIp() })).status, 403);
+  // Version 9 : le sel reste neutre ; la révocation n'est dite qu'après une preuve juste.
+  assert.equal((await appel(env, `/acces/${H}`, { ip: nouvelleIp() })).status, 200);
+  const revoque = await appel(env, `/acces/${H}/ouvrir`, { methode: 'POST', corps: { preuve: PREUVE }, ip: nouvelleIp() });
+  assert.equal(revoque.status, 403);
+  assert.equal((await revoque.json()).motif, 'revoque');
   assert.equal((await appel(env, `/invitations/${ID}`, { ip: nouvelleIp() })).status, 410);
   // Les autres comptes et le jeton maître ne sont pas touchés.
   assert.equal((await appel(env, '/p/lea12345/boite', { jeton: JETON })).status, 200);

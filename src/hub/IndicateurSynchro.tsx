@@ -1,7 +1,8 @@
 /**
- * Indicateur de synchronisation : petit point coloré + pictogramme + texte
- * (l'état ne repose jamais sur la seule couleur), et le bouton « Synchroniser
- * maintenant » dans sa version détaillée (Paramètres du hub).
+ * Indicateur de connexion au serveur : petit point coloré + pictogramme + texte
+ * (l'état ne repose jamais sur la seule couleur). Il n'y a plus de réglage de
+ * synchronisation (tout est sur le serveur) : la version détaillée (Paramètres ›
+ * Général) n'offre qu'un bouton « Réessayer », quand quelque chose attend ou a échoué.
  */
 
 import React, { useEffect, useState } from 'react';
@@ -68,7 +69,7 @@ export function IndicateurSynchro({
         accessible
         accessibilityRole={onPress ? 'button' : 'text'}
         accessibilityLiveRegion="polite"
-        accessibilityLabel={`Synchronisation : ${resume.libelle}${onPress ? ' (ouvrir les paramètres de synchronisation)' : ''}`}
+        accessibilityLabel={`Serveur : ${resume.libelle}${onPress ? ' (ouvrir l’état de la connexion)' : ''}`}
         onPress={onPress}
         title={resume.detail} // infobulle (web)
         style={[
@@ -90,15 +91,11 @@ export function IndicateurSynchro({
               {resume.detail}
             </Text>
           ) : null}
-          <View style={styles.actions}>
-            <BoutonHub
-              theme={theme}
-              titre={synchro.vue.enCours ? 'Synchronisation…' : 'Synchroniser maintenant'}
-              desactive={synchro.vue.enCours}
-              onPress={synchro.onSynchroniser}
-              testID="synchro-maintenant"
-            />
-          </View>
+          {resume.niveau === 'erreur' || resume.niveau === 'attente' ? (
+            <View style={styles.actions}>
+              <BoutonHub theme={theme} titre="Réessayer" onPress={synchro.onSynchroniser} testID="synchro-maintenant" />
+            </View>
+          ) : null}
         </>
       ) : null}
     </View>

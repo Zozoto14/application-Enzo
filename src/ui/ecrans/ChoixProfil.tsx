@@ -23,8 +23,11 @@ export function Connexion({
   enCours,
   erreur,
   prenomInitial,
+  onPrenom,
 }: {
   onContinuer(prenom: string): void;
+  /** Le prénom tapé change : l'hôte applique le style de ce compte (aperçu). */
+  onPrenom?(prenom: string): void;
   enCours?: boolean;
   /** Identifiant inconnu sur ce navigateur relié à un seul compte (message précis). */
   erreur?: string;
@@ -55,7 +58,10 @@ export function Connexion({
           etiquette="Prénom"
           indication="Administrateur : votre prénom ou « admin ». Compte créé avant la mise à jour : saisissez votre prénom, il sera retenu."
           value={prenom}
-          onChangeText={setPrenom}
+          onChangeText={v => {
+            setPrenom(v);
+            onPrenom?.(v);
+          }}
           onSubmitEditing={valider}
           autoCapitalize="none"
           autoCorrect={false}

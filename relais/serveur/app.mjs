@@ -25,6 +25,7 @@ import { chargerEnv, creerServeurHttp, ecouter, exigerNode, fichierEnvParDefaut 
 import relais from '../worker.mjs';
 import { configSmtp, creerEnvoyeur, manquesSmtp } from '../../esport/serveur/courriel-smtp.mjs';
 import { creerTableKv, kvPostgres, purgerKvExpire } from './kv-postgres.mjs';
+import { coffresPostgres, creerTablesCoffres } from './coffres-postgres.mjs';
 
 export const ORIGINES_PAR_DEFAUT = 'https://appdashboard.fr,https://www.appdashboard.fr,https://applibourse-ef0ddb.pages.dev';
 
@@ -66,9 +67,12 @@ export async function preparerRelais({ config = chargerConfigRelais(), base, env
   if (!envoyeur && config.smtpManques?.length > 0 && config.smtpManques.length < 4) {
     console.error(`[relais] e-mails désactivés : ${config.smtpManques.join(', ')} manquant(s) dans relais.env (docs/emails.md).`);
   }
+  // Coffre serveur des comptes (version 9) : tables créées au démarrage, sans migration à lancer.
+  await creerTablesCoffres(b);
   const env = {
     JETON: config.JETON,
     BOITE: kvPostgres(b),
+    COFFRES: coffresPostgres(b),
     DISCORD_WEBHOOK_URL: config.DISCORD_WEBHOOK_URL,
     DISCORD_BOT_TOKEN: config.DISCORD_BOT_TOKEN,
     LIEN_APP: config.LIEN_APP,
@@ -95,8 +99,8 @@ export async function preparerRelais({ config = chargerConfigRelais(), base, env
 export async function demarrer({ port, hote, ...options } = {}) {
   exigerNode(22);
   const r = await preparerRelais(options);
-  // Enveloppes chiffrées : jusqu'à 20 Mio (même limite que le Worker), un peu de marge.
-  const serveur = creerServeurHttp(r.traiter, { urlPublique: r.config.urlPublique, tailleMax: 21 * 1024 * 1024, entetes: { 'X-Content-Type-Options': 'nosniff', 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' } });
+  // Envois chiffrés : jusqu'à 48 Mio (enveloppes et lots du coffre serveur), un peu de marge.
+  const serveur = creerServeurHttp(r.traiter, { urlPublique: r.config.urlPublique, tailleMax: 50 * 1024 * 1024, entetes: { 'X-Content-Type-Options': 'nosniff', 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' } });
   const url = await ecouter(serveur, { port, hote });
   return {
     url,

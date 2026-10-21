@@ -109,7 +109,7 @@ export function HubMobile({ registre, contexte, theme, onOuvrir, onOuvrirOnglet,
             AppDashboard
           </Text>
         </View>
-        {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} condense onPress={() => onParametres?.('synchro')} /> : null}
+        {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} condense onPress={() => onParametres?.('general')} /> : null}
         {modifie ? null : <SelecteurOngletsMobile theme={theme} />}
         {personnalisable && !modifie ? (
           <BoutonIcone theme={theme} titre="✎" libelle="Personnaliser l’accueil" onPress={() => setEdition(true)} testID="hub-personnaliser" />

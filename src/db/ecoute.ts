@@ -11,14 +11,15 @@
  * en relancerait un autre.
  */
 
-import { PARAMETRES_A_SYNCHRONISER } from '../sync/relais/entites';
+import { PARAMETRES_A_SYNCHRONISER, PREFIXES_A_SYNCHRONISER } from '../sync/relais/entites';
 import type { PiloteSqlite, ValeurSql } from './pilote';
 
 const TABLES_PARTAGEES = /\b(comptes|titres|transactions|watchlist)\b/i;
 
 export function ecritureSynchronisee(sql: string, parametres?: readonly ValeurSql[]): boolean {
   if (/\bparametres\b/i.test(sql)) {
-    return typeof parametres?.[0] === 'string' && PARAMETRES_A_SYNCHRONISER.includes(parametres[0]);
+    const cle = parametres?.[0];
+    return typeof cle === 'string' && (PARAMETRES_A_SYNCHRONISER.includes(cle) || PREFIXES_A_SYNCHRONISER.some(p => cle.startsWith(p)));
   }
   return TABLES_PARTAGEES.test(sql);
 }

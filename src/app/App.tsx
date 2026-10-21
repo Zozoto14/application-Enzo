@@ -97,7 +97,7 @@ import { dateSaisie, reglageVersementDepuisJson } from '../ui/vues/versementMens
 import type { FormulaireOperation } from '../ui/vues/saisie';
 import { CLE_PLANNING_LOCAL, stockageLocal, useNotificationsBureau } from './notificationsBureau';
 import { useSauvegardes } from './sauvegardesApp';
-import { nomParDefaut, useSynchro } from './synchroApp';
+import { useSynchro } from './synchroApp';
 import { decoderLiaison, encoderLiaison } from '../sync/relais/liaison';
 import { definirLiaisonEnAttente, liaisonEnAttente } from '../sync/relais/actif';
 import { lireConfigRelais, mesurerEcartHorloge, recupererCoffre } from '../sync/relais/synchroniser';
@@ -109,7 +109,6 @@ import { useResumeClaudeOffice } from '../claudeOffice/resumeHub';
 import { APP_CLAUDE_OFFICE } from '../claudeOffice/registre';
 import { formaterDiagnostic, lireEnvironnement, messageHorloge } from '../diagnostic/deverrouillage';
 import type { Coffre } from '../securite/coffre';
-import { CarteSynchro } from '../ui/ecrans/CarteSynchro';
 import { CarteProfils, type ControleProfils } from '../ui/ecrans/CarteProfils';
 import { Hub } from '../hub/Hub';
 import { GardeInactivite, type RelaisFenetres } from '../hub/GardeInactivite';
@@ -180,6 +179,7 @@ import { GardeErreur } from '../ui/GardeErreur';
 import { appsVisibles, etatTuile, peutOuvrir } from '../hub/permissions';
 import { niveauProfil } from '../hub/admin/comptes';
 import { chargerPrefs, enregistrerPrefs, reinitialiser, CLE_THEME, type PrefsHub } from '../hub/personnalisation';
+import { definirThemeAppareil, lireThemeAppareil, themeEffectif } from '../hub/themeAppareil';
 import { Devblog } from '../hub/devblog/Devblog';
 import { useRappelsTaches } from '../taches/resume';
 import { ReglagesTachesFondateur, ReglagesTachesPerso } from '../taches/ui/ParametresTaches';
@@ -482,6 +482,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   // synchrone dans le cache de l'appareil (l'écran de connexion est déjà au bon thème, sans
   // flash). Après déverrouillage : réconcilié avec la valeur du profil (voir plus bas).
   const [themeHubId, setThemeHubId] = useState<IdThemeHub>(() => themeCourant());
+  // Style « pour cet appareil uniquement » (stockage local, par compte) : prend le dessus ici.
+  const [themeAppareil, setThemeAppareil] = useState<IdThemeHub | undefined>(() => lireThemeAppareil());
   const [parametres, setParametres] = useState<{ section?: IdSection; n: number } | undefined>();
   const ouvrirParametres = useCallback((section?: IdSection) => setParametres(precedent => ({ section, n: (precedent?.n ?? 0) + 1 })), []);
 
@@ -876,11 +878,9 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     synchro,
     liaisonDuPc,
     plateforme: plateformeSynchro,
-    relier: relierSynchro,
-    delier: delierSynchro,
-    oublier: oublierAppareilSynchro,
     synchroniserMaintenant,
-  } = useSynchro({ session, deverrouille: deverrouille && estAdmin && !annexe, rafraichir, apresReception, admin: estAdmin });
+    // Version 9 : chaque compte (Fondateur et amis) synchronise avec SON coffre serveur.
+  } = useSynchro({ session, deverrouille: deverrouille && !annexe && profils?.actuel.id !== 'leurre', rafraichir, apresReception, admin: estAdmin });
 
   // « Lier à mon compte » : ce nouvel appareil adopte le compte du PC.
   const [messageDeverrouillage, setMessageDeverrouillage] = useState<string | undefined>();
@@ -1548,7 +1548,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
 
   // Thème unique : appliqué avant de dessiner. Verrouillé, c'est celui du cache de l'appareil ;
   // déverrouillé, celui du profil (réconcilié dès le déverrouillage, avant le premier affichage).
-  const themeAffiche: IdThemeHub = deverrouille ? themeHubId : themeCourant();
+  const themeAffiche: IdThemeHub = deverrouille ? themeEffectif(themeHubId, themeAppareil) : themeCourant();
   if (themeAffiche !== themeCourant()) {
     definirTheme(themeAffiche);
   } else {
@@ -2064,15 +2064,30 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   }, [hub, deverrouille, stockagePrefs, versionSynchro, prefsMemorisees]);
   const choisirTheme = useCallback(
     (id: IdThemeHub) => {
-      setThemeHubId(id);
       definirTheme(id);
+      if (themeAppareil) {
+        // Style propre à cet appareil : rien ne part sur le serveur.
+        definirThemeAppareil(id);
+        setThemeAppareil(id);
+        return;
+      }
+      setThemeHubId(id);
       try {
         stockagePrefs.ecrire(CLE_THEME, id);
       } catch {
         // Non mémorisé : le thème reste appliqué jusqu'à la fermeture.
       }
     },
-    [stockagePrefs],
+    [stockagePrefs, themeAppareil],
+  );
+  const basculerThemeAppareil = useCallback(
+    (actif: boolean) => {
+      const id = actif ? themeEffectif(themeHubId, themeAppareil) : undefined;
+      definirThemeAppareil(id);
+      setThemeAppareil(id);
+      definirTheme(id ?? themeHubId);
+    },
+    [themeHubId, themeAppareil],
   );
   const hubAffiche = hub && deverrouille && Boolean(contenuComplet && tableau);
   // Côte à côte : écrans larges seulement (PC, iPad paysage) ; téléphone et écrans étroits : un onglet à la fois.
@@ -2491,6 +2506,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     'theme',
     'langue',
     'compte',
+    ...(profils?.connexionServeur ? (['connexion-identifiant'] as const) : []),
     'securite-coffre',
     'codes-recuperation',
     'verrou-auto',
@@ -2502,7 +2518,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     ...(portefeuillePermis ? (['visite', 'cours-intervalle', 'cours-fournisseur', 'symboles', 'historique-cours', 'discretion', 'notifications', 'podcast'] as const) : []),
     ...(portefeuillePermis && pontEnregistrerSous ? (['export-excel'] as const) : []),
     ...(synchroHub ? (['synchro-etat'] as const) : []),
-    ...(estAdmin ? (['synchro-appareils'] as const) : []),
     ...(fichiers ? (['sauvegarde-auto', 'sauvegardes'] as const) : []),
     ...(profils?.transparence && !estAdmin ? (['confidentialite'] as const) : []),
     ...(hub && administrationVisible ? (['admin-panel'] as const) : []),
@@ -2606,7 +2621,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     const depot = () => new DepotParametres(session.base());
     switch (id) {
       case 'theme':
-        return <ReglageTheme theme={themeDuHub} onTheme={choisirTheme} />;
+        return <ReglageTheme theme={themeDuHub} onTheme={choisirTheme} pourCetAppareil={Boolean(themeAppareil)} onPourCetAppareil={basculerThemeAppareil} />;
       case 'tuiles':
         return (
           <ReglageTuiles
@@ -2638,17 +2653,24 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         return <ReglageVisite onRevoir={depuisParametres(() => setEtapesVisite(ETAPES_VISITE))} />;
       case 'synchro-etat':
         return synchroHub ? <IndicateurSynchro theme={themeDuHub} synchro={synchroHub} detaille /> : null;
-      case 'synchro-appareils':
-        return (
-          <CarteSynchro
-            synchro={synchro}
-            liaisonDuPc={liaisonDuPc}
-            nomParDefaut={nomParDefaut(plateformeSynchro)}
-            onRelier={relierSynchro}
-            onDelier={delierSynchro}
-            onOublier={autre => void oublierAppareilSynchro(autre)}
-          />
-        );
+      case 'connexion-identifiant':
+        return profils?.connexionServeur ? (
+          <View style={{ gap: 8 }} testID="reglage-connexion-identifiant-contenu">
+            <Text style={{ color: themeDuHub.texte }}>
+              {profils.connexionServeur.identifiant
+                ? `Identifiant : ${profils.connexionServeur.identifiant}. Sur n’importe quel appareil : « Se connecter », cet identifiant et votre mot de passe.`
+                : 'Pas encore défini : choisissez un identifiant et un mot de passe pour vous connecter sur n’importe quel navigateur, sans code de liaison.'}
+            </Text>
+            <View style={{ alignSelf: 'flex-start' }}>
+              <Bouton
+                titre={profils.connexionServeur.identifiant ? 'Changer l’identifiant ou le mot de passe' : 'Définir mon identifiant et mon mot de passe'}
+                variante="discret"
+                testID="connexion-identifiant-configurer"
+                onPress={depuisParametres(profils.connexionServeur.onConfigurer)}
+              />
+            </View>
+          </View>
+        ) : null;
       case 'securite-coffre':
         return <ReglageCoffre theme={themeDuHub} etat={session.etatCoffre()} />;
       case 'codes-recuperation':
@@ -3652,7 +3674,6 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           flux={onglets!.flux}
           impots={onglets!.impots}
           ventes={onglets!.ventes}
-          onRecupererAppareils={synchro.configure ? undefined : () => ouvrirParametres('synchro')}
           onCreerCompte={() => {
             setCompteEdite(undefined);
             setEcran('compte');

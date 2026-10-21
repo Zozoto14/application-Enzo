@@ -35,7 +35,9 @@ import {
   ouvrirAcces,
   ouvrirContenu,
   preparerAcces,
+  preparerSecours,
   preuveAcces,
+  preuveSecours,
   scellerContenu,
   secretsCodeCourt,
   secretsInvitation,
@@ -378,23 +380,79 @@ export async function republierAcces(liaison: Liaison, compte: string, prenom: s
 export interface ConnexionIdentifiant {
   relie: CompteRelie;
   acces: ContenuAcces;
+  /** Vrai pour le Fondateur (compte `principal`, session ouverte par son mot de passe). */
+  fondateur: boolean;
+  /** Connexion par code de récupération : rang du code utilisé (à retirer de l'accès de secours). */
+  secours?: number;
 }
 
 /**
- * Nouvel appareil : identifiant + mot de passe. Le relais vérifie une preuve
- * tirée du mot de passe (sans le connaître) et freine les essais ; il rend
- * de quoi retrouver le compte, scellé par une clé tirée du même mot de passe.
+ * Nouvel appareil : identifiant + mot de passe, POUR TOUS (Fondateur compris, version 9). Le relais
+ * vérifie une preuve tirée du mot de passe (Argon2id puis HKDF, séparée de la clé qui ouvre la
+ * charge : il ne voit ni l'un ni l'autre) et freine les essais ; il rend de quoi retrouver le compte,
+ * scellé par une clé tirée du même mot de passe. Le Fondateur reçoit en plus un jeton de SESSION
+ * (le jeton maître reste sur le serveur). Un identifiant inconnu échoue exactement comme un mauvais
+ * mot de passe.
  */
 export async function connecterParIdentifiant(relais: string, identifiant: string, motDePasse: string, requete?: Fetch): Promise<ConnexionIdentifiant> {
   const h = empreinteIdentifiant(identifiant);
   const { sel, kdf } = await lireSelAcces(relais, h, requete);
   const { cle, preuve } = preuveAcces(motDePasse, sel, kdf);
   try {
-    const { compte, charge } = await ouvrirAccesRelais(relais, h, preuve, requete);
-    const acces = ouvrirAcces(charge, cle, compte);
-    const relie = await relierCompte(liaisonDe(acces), undefined, requete);
-    return { relie, acces };
+    const ouvert = await ouvrirAccesRelais(relais, h, preuve, requete);
+    return await terminerConnexion(ouvert, cle, requete);
   } finally {
     cle.fill(0);
   }
+}
+
+/** « Mot de passe oublié » : identifiant + un code de récupération (accès de secours). */
+export async function connecterParSecours(relais: string, identifiant: string, code: string, requete?: Fetch): Promise<ConnexionIdentifiant> {
+  const h = empreinteIdentifiant(identifiant);
+  const lu = await lireSelAcces(relais, h, requete);
+  if (!lu.secours) throw new ErreurInvitation('relais-ancien');
+  const { cle, preuve } = preuveSecours(code, lu.secours.sel, lu.secours.kdf);
+  try {
+    const ouvert = await ouvrirAccesRelais(relais, h, preuve, requete, 'secours');
+    return await terminerConnexion(ouvert, cle, requete);
+  } finally {
+    cle.fill(0);
+  }
+}
+
+async function terminerConnexion(ouvert: { compte: string; charge: string; jeton?: string; secours?: number }, cle: Uint8Array, requete?: Fetch): Promise<ConnexionIdentifiant> {
+  const acces = ouvrirAcces(ouvert.charge, cle, ouvert.compte);
+  const fondateur = ouvert.compte === 'principal';
+  const jeton = fondateur ? ouvert.jeton : acces.jeton;
+  if (!jeton) throw new ErreurInvitation('relais-ancien');
+  const relie = await relierCompte({ relais: acces.relais, jeton, ...(acces.site ? { site: acces.site } : {}) }, undefined, requete);
+  return { relie, acces, fondateur, ...(ouvert.secours !== undefined ? { secours: ouvert.secours } : {}) };
+}
+
+export interface AccesFondateur {
+  /** Liaison du Fondateur (jeton maître du PC, ou sa session). */
+  maitre: Liaison;
+  /** Identifiant choisi (son prénom, par exemple) : majuscules, accents et espaces ne comptent pas. */
+  identifiant: string;
+  motDePasse: string;
+  /** Codes de récupération en clair (accès de secours si le mot de passe est oublié). */
+  codes?: readonly string[];
+  requete?: Fetch;
+  alea?: SourceAleatoire;
+  kdf?: ParametresKdf;
+}
+
+/**
+ * Publie l'accès par identifiant du Fondateur (migration de son compte) : preuve tirée du mot de
+ * passe, charge scellée (relais, site, identifiant ; jamais de jeton), accès de secours par codes de
+ * récupération. 409 « identifiant-pris » si un autre compte l'a déjà.
+ */
+export async function publierAccesFondateur(o: AccesFondateur): Promise<string> {
+  const identifiant = o.identifiant.trim().slice(0, 30);
+  const contenu: ContenuAcces = { v: 1, compte: 'principal', prenom: identifiant, relais: o.maitre.relais, ...(o.maitre.site ? { site: o.maitre.site } : {}) };
+  const h = empreinteIdentifiant(identifiant);
+  const depot = preparerAcces(o.motDePasse, contenu, o.alea, o.kdf);
+  if (o.codes && o.codes.length > 0) depot.secours = preparerSecours(o.codes, contenu, o.alea, o.kdf);
+  await publierAcces(o.maitre, h, depot, o.requete);
+  return h;
 }

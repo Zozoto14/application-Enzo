@@ -25,10 +25,9 @@ describe('recensement des réglages', () => {
     }
   });
 
-  it('a les dix sections demandées, dans l’ordre, et aucune n’est vide', () => {
+  it('a les neuf sections demandées (plus de Synchronisation), dans l’ordre, et aucune n’est vide', () => {
     expect(SECTIONS.map(s => s.titre)).toEqual([
       'Général',
-      'Synchronisation',
       'Sécurité',
       'Portefeuille',
       'Administration',
@@ -49,7 +48,7 @@ describe('recensement des réglages', () => {
       'Portefeuille › Paramètres › Apparence': 'theme',
       'Administration › Réglages › Apparence du hub': 'theme',
       'Hub › Paramètres › Synchronisation': 'synchro-etat',
-      'Portefeuille › Paramètres › Synchronisation entre appareils': 'synchro-appareils',
+      'Portefeuille › Paramètres › Synchronisation entre appareils': 'synchro-etat',
       'Portefeuille › Paramètres › Codes de récupération': 'codes-recuperation',
       'Portefeuille › Sauvegarde › Sauvegarde automatique': 'sauvegarde-auto',
       'Portefeuille › Paramètres › Cours automatiques': 'cours-intervalle',

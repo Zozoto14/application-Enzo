@@ -209,7 +209,7 @@ function HubBureau({ registre, contexte, theme, onTheme, onOuvrir, onOuvrirOngle
               <Text style={[titreStyle, { fontSize: 16 }]}>AppDashboard</Text>
             </View>
             <View style={styles.actionsEntete}>
-              {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} onPress={() => onParametres?.('synchro')} /> : null}
+              {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} onPress={() => onParametres?.('general')} /> : null}
               {personnalisable ? (
                 <BoutonHub
                   theme={theme}

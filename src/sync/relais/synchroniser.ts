@@ -500,6 +500,26 @@ export function deposerAvantFermeture(options: OptionsSynchro): boolean {
   }
 }
 
+/**
+ * Publie le coffre du compte (enveloppes du mot de passe et des codes de récupération, jamais la clé)
+ * s'il a changé depuis le dernier dépôt : un navigateur neuf s'y connecte avec le mot de passe.
+ */
+export async function deposerCoffreSiChange(pilote: PiloteSqlite, liaison: Liaison, coffre: unknown, requete: Fetch = fetch): Promise<boolean> {
+  if (!coffre) return false;
+  const etat = lireEtatSynchro(pilote);
+  const signature = empreinte(coffre);
+  if (signature === etat.coffreEnvoye) return false;
+  const reponse = await appeler(
+    liaison,
+    `/boite/${ID_COFFRE}`,
+    { methode: 'PUT', corps: JSON.stringify({ format: 'applibourse-relais', version: 1, appareil: ID_COFFRE, date: new Date().toISOString(), charge: JSON.stringify(coffre) }) },
+    requete,
+  );
+  if (!reponse.ok) throw new ErreurRelais(`Coffre refusé par le relais (${reponse.status}).`, reponse.status);
+  new DepotParametres(pilote).ecrire(PARAMETRES.etatSynchro, JSON.stringify({ ...lireEtatSynchro(pilote), coffreEnvoye: signature }));
+  return true;
+}
+
 /** Retire un ancien appareil du relais. */
 export async function oublierAppareil(pilote: PiloteSqlite, autre: string, requete: Fetch = fetch): Promise<void> {
   const config = lireConfigRelais(pilote);

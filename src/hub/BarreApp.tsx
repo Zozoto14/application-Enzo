@@ -32,14 +32,14 @@ export function BarreApp({ theme, synchro, onParametres, onSupport, supportNonLu
     // reste à un geste : Paramètres › Support, ou la barre basse du hub).
     return (
       <View style={styles.barreMobile} testID="barre-app-entete">
-        {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} condense onPress={() => onParametres('synchro')} /> : null}
+        {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} condense onPress={() => onParametres('general')} /> : null}
         <BoutonIcone theme={theme} titre="⚙︎" libelle="Paramètres" onPress={() => onParametres()} testID="app-parametres-ouvrir" />
       </View>
     );
   }
   return (
     <View style={styles.barre} testID="barre-app">
-      {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} onPress={() => onParametres('synchro')} /> : null}
+      {synchro ? <IndicateurSynchro theme={theme} synchro={synchro} onPress={() => onParametres('general')} /> : null}
       <BoutonHub
         theme={theme}
         titre={width >= 520 ? '⚙︎ Paramètres' : '⚙︎'}

@@ -7,6 +7,10 @@ module.exports = {
   transform: { ...preset.transform, '^.+\\.mjs$': 'babel-jest' },
   // Mode d'affichage « large » par défaut dans les tests (voir jest.setup.js).
   setupFiles: ['./jest.setup.js'],
+  // Les modules .mjs du relais (relais/worker.mjs) sont transformés comme le reste : les tests de la
+  // synchronisation parlent au VRAI relais, en mémoire (src/sync/relais/__fixtures__/relaisV9.ts).
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'mjs', 'json', 'node'],
+  transform: { ...preset.transform, '^.+\\.mjs$': 'babel-jest' },
   // @noble/hashes et @noble/ciphers sont publiés en modules ES. Jest les lit
   // depuis node_modules, que le preset exclut de la transformation par
   // defaut : sans cette exception, leurs `export` provoquent une erreur de
