@@ -118,9 +118,12 @@ export function CadreEsport({
     return (
       <View style={{ flex: 1 }}>
         {enTeteMobile}
-        {/* Transcriptions en cours dans l'onglet : visibles sur tous les écrans de l'Esport. */}
-        <BandeauTranscriptions theme={theme} />
-        <View style={{ flex: 1 }}>{children}</View>
+        {/* Transcriptions en cours dans l'onglet : visibles sur tous les écrans de l'Esport. Même arbre que sur
+            PC (position, profondeur) : passer de l'un à l'autre ne remonte pas l'écran ouvert (formulaires gardés). */}
+        <View style={{ flex: 1 }}>
+          <BandeauTranscriptions theme={theme} />
+          <View style={{ flex: 1 }}>{children}</View>
+        </View>
         {barreBasse ?? (
           <BarreOnglets
             theme={theme}

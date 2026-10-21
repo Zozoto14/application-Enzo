@@ -184,6 +184,8 @@ try {
   await lea.getByTestId('esport-depot-formulaire').waitFor({ timeout: 20_000 });
   verifier((await lea.getByTestId('esport-resumes-vue-boite').count()) === 0, 'Joueur : pas de boîte de réception');
   verifier((await lea.getByTestId('esport-resumes-vue-types').count()) === 0, 'Joueur : pas de gestion des types');
+  // Dépôt par lien externe (le dépôt du fichier, par défaut sur le site, est testé par e2e-esport-videos.mjs).
+  await lea.getByTestId('esport-depot-mode-lien').click();
   await lea.getByTestId('esport-depot-lien').fill('https://www.youtube.com/watch?v=reunion-lundi');
   await lea.getByTestId('esport-depot-type-00000000-0000-4000-8000-000000000001').click();
   await lea.getByTestId('esport-depot-date').fill('19/10/2026');
