@@ -9,7 +9,7 @@ d'« appareils liés », plus de code de liaison : chaque appareil parle au serv
 | Avant (Cloudflare KV, ≤ v8) | Maintenant (o2switch, v9) |
 | --- | --- |
 | Chaque appareil du Fondateur déposait SON état dans `/boite/<appareil>` ; les autres lisaient tous les dépôts | Un **coffre serveur par compte** (`/v9/coffre/<compte>`) : un enregistrement chiffré par donnée, avec un numéro de révision |
-| Synchro limitée par le quota KV (≈ 1 000 écritures/jour) : 30 s mini entre deux dépôts, tour toutes les 2 min, journal jamais synchronisé | Plus de quota. Version 10 : envoi ~150 ms après une modification (une requête), les autres appareils prévenus aussitôt par le serveur (flux SSE, sinon attente longue, sinon sondage) ; tour complet en filet toutes les 3 min |
+| Synchro limitée par le quota KV (≈ 1 000 écritures/jour) : 30 s mini entre deux dépôts, tour toutes les 2 min, journal jamais synchronisé | Plus de quota. Version 10 : envoi ~150 ms après une modification (une requête), les autres appareils prévenus par le serveur (mode choisi par l'hébergeur, `SYNCHRO_TEMPS_REEL` : sondage de 15 s par défaut, attente longue, ou flux SSE), une seule écoute par navigateur ; tour complet en filet toutes les 3 min |
 | Seuls le portefeuille, le thème, les tuiles et les sources Tsuzuku voyageaient | En plus : pages et boîte du **journal automatique**, notes et équipe de Claude Office, espace perso et pilote de semaine des Tâches, carnet d'un gestionnaire, réglages de notifications et de cours, documents légaux acceptés, **tout Tsuzuku** titre par titre (`src/sync/relais/entitesApps.ts`, `entitesTsuzukuDonnees.ts`) |
 | Amis : leur base entière en un fichier (`p/<id>/boite/portefeuille`), « le plus récent gagne » au niveau du fichier | Amis : le même coffre serveur que le Fondateur (enregistrement par enregistrement), le fichier reste publié pour le séquestre |
 | Nouvel appareil du Fondateur : code de liaison `AB1.…` (portant le jeton maître) | Identifiant + mot de passe (`docs/connexion-amis.md`), le serveur rend un jeton de **session** ; le jeton maître ne quitte plus le serveur |
@@ -20,9 +20,9 @@ d'« appareils liés », plus de code de liaison : chaque appareil parle au serv
 | --- | --- | --- |
 | Départ d'une modification | ~1,5 s après (puis tirer + pousser : 2 requêtes au moins) | **~150 ms** après (micro-regroupement des frappes, plafonné à 1 s pour une rafale continue), **une seule requête** (`POST` des enregistrements modifiés) |
 | Arrivée sur un autre appareil | au tour suivant de cet appareil : jusqu'à 30 s | **avis du serveur** « coffre X : révision N » (aucune donnée), puis l'appareil tire les différences |
-| Délai mesuré A → B (e2e, deux navigateurs, local) | médiane **29,6 s** (de 2,4 à 29,6 s : le tour de 30 s de l’autre appareil) | médiane **~0,29 s** avec SSE, **~0,30 s** sans SSE (attente longue) |
+| Délai mesuré A → B (e2e, deux navigateurs, local) | médiane **29,6 s** (de 2,4 à 29,6 s : le tour de 30 s de l’autre appareil) | mode `sondage` (défaut) : médiane **13,5 s**, max **14,7 s** ; `attente` : médiane **0,38 s**, max **0,43 s** ; `sse` : médiane **0,35 s** (e2e du 22/10/2026) |
 | Tour complet | toutes les 30 s | filet toutes les **3 min** (30 s face à un relais v9) |
-| Réessais hors ligne | 5 s, 30 s, 2 min, 10 min | **1 s, 3 s, 10 s, 30 s, 2 min, 5 min**, et tout de suite au retour du réseau (`online`) |
+| Réessais hors ligne | 5 s, 30 s, 2 min, 10 min | **1 s, 3 s, 10 s, 30 s, 2 min, 5 min** (+ 0 à 50 % au hasard), et tout de suite au retour du réseau (`online`) |
 | Onglet / app fermé pendant l'envoi | la file attendait la prochaine ouverture | **`fetch` keepalive** à `pagehide` / page masquée (file gardée dans la base aussi) |
 
 **Envoi (`synchroniserServeur`, option `pousserDabord`).** Le chiffrement ne change pas : seuls les enregistrements
@@ -36,21 +36,52 @@ d'abord dans la base de l'appareil.
 porter le jeton dans `Authorization`), 60 Kio au plus ; la file et ses dates sont notées dans la base, et le tour
 suivant relit d'abord (`serveur.relire`) : il y retrouve ces enregistrements identiques, sans doublon ni faux conflit.
 
-**Avis du serveur (`relais/avis.mjs`, client `src/sync/relais/veille.ts`).**
+**Avis du serveur (`relais/avis.mjs`, client `src/sync/relais/veille.ts`).** Le mode est fixé par le serveur
+(`SYNCHRO_TEMPS_REEL` dans relais.env, annoncé par `/sante` : `tempsReel`, `pasSondage`) ; l'appareil ne monte
+jamais au-dessus. Défaut : `sondage`, le plus sûr sur un hébergement mutualisé (incident du 22/10/2026 : flux SSE
+par onglet et par appareil, reconnexions rapides, IP du Fondateur bannie par le pare-feu ; voir docs/o2switch.md).
 
-| Mode | Route | Quand |
+| Mode du serveur | Route | Comportement |
 | --- | --- | --- |
-| `flux` (SSE) | `GET /v10/coffre/<compte>/flux?rev=N` | par défaut. Lu par `fetch` en continu (`EventSource` ne sait pas porter le jeton). Le serveur envoie la révision courante à l'ouverture (bourrage de 2 Kio), un battement de cœur toutes les 15 s, ferme au bout de 5 min (reconnexion aussitôt). En-têtes `X-Accel-Buffering: no`, `Cache-Control: no-transform`, jamais compressé |
-| `attente` | `GET /v10/coffre/<compte>/attendre?rev=N&delai=25` | le premier avis du flux n'arrive pas en 4 s (frontal qui retient la réponse, ancien relais Cloudflare qui transmet), ou pas de lecture en continu (app iPhone). Répond dès que la révision dépasse N, ou au bout de 25 s |
-| `sondage` | `GET /v10/coffre/<compte>/version` | toutes les 15 s, si le serveur refuse une connexion de plus (429 `trop-de-connexions`). Un étage plus haut est retenté toutes les 5 min |
+| `sondage` (défaut) | `GET /v10/coffre/<compte>/version` | requête courte toutes les **15 s**, page visible seulement, un seul onglet par navigateur ; réveil immédiat au focus / retour au premier plan. `/attendre` et `/flux` répondent tout de suite 429 `mode-sondage` (les onglets d'une ancienne version passent ainsi au sondage) |
+| `attente` | `GET /v10/coffre/<compte>/attendre?rev=N&delai=50` | répond dès que la révision dépasse N, ou au bout de **50 s** ; un espace toutes les 15 s (le JSON reste valide) garde la connexion en vie ; jamais compressé. Une attente vide revenue en moins de 5 s compte comme une erreur (mandataire qui coupe) : pause croissante, puis sondage |
+| `sse` | `GET /v10/coffre/<compte>/flux?rev=N` | flux lu par `fetch` (bourrage de 2 Kio, battement 15 s, fermé au bout de 5 min). Premier avis absent en 4 s → attente longue. Un flux coupé avant 30 s compte comme une erreur |
 
-Limites (hébergement mutualisé, une instance Node) : 6 connexions tenues par compte, 300 en tout ; une page masquée
-ferme la sienne. Les avis passent en mémoire du processus ; la révision est relue en base toutes les 30 s pendant un
-flux (un second processus éventuel est rattrapé). PostgreSQL : une écriture verrouille la ligne du compte dans
-`relais_coffre_rev` (révisions monotones par coffre), la lecture des différences passe par l'index `(profil, rev)`,
-`/version` lit une ligne par clé primaire. Réponses JSON compressées (gzip) au-delà d'1 Kio. Aller-retour mesuré
-(envoi d'un enregistrement + relecture, serveur Node réel, local) : médiane **3,8 ms** en mémoire, **10,8 ms** avec
-PostgreSQL (`relais/avis.test.mjs`).
+Sobriété (côté serveur) : au plus **2 connexions tenues par compte et par adresse IP**, 4 par compte, 60 en tout ;
+au-delà, réponse immédiate 429 `trop-de-connexions` avec `mode: "sondage"`, la révision courante et `Retry-After`
+(aucune connexion gardée ouverte). Au plus 60 appels d'avis par minute et par adresse (429 `trop-de-requetes`,
+`Retry-After: 60`). Chaque connexion tenue est libérée quand l'appareil s'en va (annulation de la réponse), a une
+durée maximale, et un balayage ferme les orphelines (aucune minuterie qui survit). Une nouvelle connexion tenue du
+MÊME appareil (`&appareil=<id>`, identifiant de l'appareil) remplace l'ancienne : un navigateur ou un frontal qui ne
+signale pas tout de suite l'abandon d'une requête (onglet masqué puis revenu) n'en laisse jamais deux.
+
+Sobriété (côté appareil) :
+- **une seule écoute par navigateur** (`src/sync/relais/meneurOnglets.ts`) : verrou Web Locks par relais et par
+  compte ; le meneur (un onglet visible) écoute et relaie par `BroadcastChannel` (`version`), et un onglet qui vient
+  d'envoyer prévient les autres (`ecrit`) : ils relisent sans attendre le serveur. Les fenêtres de l'app de bureau
+  partagent la même origine : une écoute par appareil. Sans Web Locks (app iPhone) : une écoute par app ;
+- page masquée, `pagehide` : l'écoute est fermée (connexion longue annulée) et le verrou rendu ; pas de tour de
+  filet page masquée ;
+- erreurs (réseau, 429, 503) : attente exponentielle avec part au hasard (2 s, 4 s, 8 s… plafond 5 min, jamais
+  moins de la moitié), `Retry-After` respecté ; trois erreurs de suite dans un mode tenu → étage du dessous ;
+- au plus **30 requêtes de synchro par minute** par onglet (`src/sync/relais/sobriete.ts`) : au-delà, la requête
+  attend son tour ;
+- un avis d'une révision déjà tirée (sa propre écriture, un autre onglet plus rapide) ne relit rien ; les anciens
+  dépôts par appareil (`/boite`, transition du Fondateur) ne sont relus qu'une fois toutes les 10 min, plus à
+  chaque tour ;
+- requêtes de veille sans `cache: 'no-store'` (qui forçait Chromium à refaire la requête CORS préalable `OPTIONS` à
+  chaque fois : deux requêtes au lieu d'une).
+
+| Connexions par navigateur (5 onglets ouverts) | Avant (v10 du 22/10) | Maintenant |
+| --- | --- | --- |
+| Connexions longues | **5** (une par onglet visible ; plus les reconnexions à 250 ms) | **0** en `sondage`, **1** en `attente`/`sse` |
+| Requêtes d'avis par minute | flux tenus en continu, rouverts 250 ms après chaque coupure | **4** (`/version` toutes les 15 s, un seul onglet ; mesuré : 8 par minute pour 2 navigateurs dont un à 5 onglets) |
+| Limite serveur | 6 par compte, 300 en tout | 2 par compte et par IP, 4 par compte, 60 en tout |
+
+PostgreSQL : une écriture verrouille la ligne du compte dans `relais_coffre_rev` (révisions monotones par coffre), la
+lecture des différences passe par l'index `(profil, rev)`, `/version` lit une ligne par clé primaire. Réponses JSON
+compressées (gzip) au-delà d'1 Kio. Aller-retour mesuré (envoi d'un enregistrement + relecture, serveur Node réel,
+local) : médiane **3,8 ms** en mémoire, **10,8 ms** avec PostgreSQL (`relais/avis.test.mjs`).
 
 **Compatibilité.** `/v10/coffre/…` = les routes v9 + les avis ; `/v9/coffre/…` reste (appareils v9 pendant le
 déploiement : le cron met le serveur à jour avant les apps). Un appareil v10 face à un relais v9 (pas de `coffre-v10`
@@ -58,10 +89,13 @@ dans `/sante`) garde les routes v9 et le tour de 30 s. Derrière l'ancien relais
 passe s'il n'est pas retenu, sinon l'attente longue prend le relais. Un `PUT`/`DELETE` refusé ou abîmé par un
 intermédiaire (400, 405, 411, 501) est réessayé une fois en `POST` + `X-Methode`, traité par le relais comme l'original.
 
-Tests : `relais/avis.test.mjs` (flux, attente, limites, gzip, latence ; aussi PostgreSQL), `src/sync/relais/veille.test.ts`
-(replis flux → attente → sondage), `planificateur.test.ts` (micro-regroupement, réessais),
+Tests : `relais/avis.test.mjs` (flux, attente, modes, limites par compte et par IP, réponse immédiate sans connexion
+au-delà, plafond par minute, balayage, gzip, latence ; aussi PostgreSQL), `src/sync/relais/veille.test.ts` (plafond du
+serveur, replis, backoff avec jitter, Retry-After, plafond de requêtes), `meneurOnglets.test.ts` (un seul meneur pour
+5 onglets, relais), `planificateur.test.ts` (micro-regroupement, réessais),
 `synchroRapide.test.ts` (une requête par modification, différences, keepalive, délai A → B par mode : ~160 ms),
-bout en bout `scripts/e2e-synchro-rapide.mjs` (deux navigateurs, avec et sans SSE, hors ligne, onglet fermé ; captures
+bout en bout `scripts/e2e-synchro-rapide.mjs` (deux navigateurs, mode du serveur par `SYNCHRO_TEMPS_REEL`, 5 onglets
+= au plus une connexion longue, hors ligne, onglet fermé ; captures
 `docs/captures-synchro-rapide/`).
 
 ## Un tour de synchronisation (`src/sync/relais/coffreServeur.ts`)

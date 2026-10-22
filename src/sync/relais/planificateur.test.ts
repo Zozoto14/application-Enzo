@@ -60,7 +60,7 @@ describe('Planificateur de synchro', () => {
     p = new Planificateur(async raison => {
       raisons.push(raison);
       return issues.length > 0 ? issues.shift()! : defaut;
-    }, h.minuteries, h.maintenant);
+    }, h.minuteries, h.maintenant, { alea: () => 0 });
   };
   beforeEach(() => {
     h = horlogeFausse();

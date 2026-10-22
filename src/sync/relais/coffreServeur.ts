@@ -99,6 +99,13 @@ export interface CapacitesCoffre {
   v10: boolean;
   /** Avis de nouvelle révision (flux SSE, attente longue, sondage). */
   avis: boolean;
+  /**
+   * Comment écouter les avis, fixé par le serveur (SYNCHRO_TEMPS_REEL) : `sondage` (défaut, et pour un
+   * serveur qui ne l'annonce pas : le plus sûr sur un mutualisé), `attente` ou `sse`.
+   */
+  tempsReel: 'sse' | 'attente' | 'sondage';
+  /** Pas du sondage conseillé par le serveur (ms). */
+  pasSondageMs?: number;
 }
 const capacites = new Map<string, CapacitesCoffre>();
 export async function capacitesCoffre(liaison: Liaison, requete: Fetch = fetch): Promise<CapacitesCoffre> {
@@ -106,9 +113,11 @@ export async function capacitesCoffre(liaison: Liaison, requete: Fetch = fetch):
   if (connu !== undefined) return connu;
   const reponse = await appeler(liaison, '/sante', {}, requete);
   if (!reponse.ok) throw new ErreurRelais(`Le relais a répondu ${reponse.status}.`, reponse.status);
-  const corps = (await reponse.json()) as { fonctions?: unknown };
+  const corps = (await reponse.json()) as { fonctions?: unknown; tempsReel?: unknown; pasSondage?: unknown };
   const fonctions = Array.isArray(corps.fonctions) ? corps.fonctions : [];
-  const lues: CapacitesCoffre = { coffre: fonctions.includes('coffre-serveur'), v10: fonctions.includes('coffre-v10'), avis: fonctions.includes('avis') };
+  const tempsReel = corps.tempsReel === 'sse' || corps.tempsReel === 'attente' ? corps.tempsReel : 'sondage';
+  const pas = typeof corps.pasSondage === 'number' && corps.pasSondage > 0 ? corps.pasSondage * 1000 : undefined;
+  const lues: CapacitesCoffre = { coffre: fonctions.includes('coffre-serveur'), v10: fonctions.includes('coffre-v10'), avis: fonctions.includes('avis'), tempsReel, ...(pas ? { pasSondageMs: pas } : {}) };
   capacites.set(liaison.relais, lues);
   return lues;
 }
@@ -118,8 +127,17 @@ export async function relaisAvecCoffre(liaison: Liaison, requete: Fetch = fetch)
 }
 /** Capacités déjà connues pour ce relais (sans appel réseau). */
 export const capacitesConnues = (relais: string): CapacitesCoffre | undefined => capacites.get(relais);
-/** Tests : oublie les capacités mémorisées. */
-export const oublierCapacites = (): void => capacites.clear();
+/**
+ * Anciens dépôts par appareil (transition) : relus au plus toutes les 10 minutes par appareil, pas à
+ * chaque tour (une requête de moins par tour, sobriété sur un hébergement mutualisé).
+ */
+export const PAS_ANCIENS_MS = 10 * 60_000;
+const anciensLusLe = new Map<string, number>();
+/** Tests : oublie les capacités mémorisées (et la date de la dernière relecture des anciens dépôts). */
+export const oublierCapacites = (): void => {
+  capacites.clear();
+  anciensLusLe.clear();
+};
 
 /** Préfixe des routes du coffre : `/v10/coffre` si le relais le connaît, sinon `/v9/coffre` (relais pas encore à jour). */
 export const cheminCoffre = (compte: string, api: 9 | 10 = 9): string => `/v${api}/coffre/${encodeURIComponent(compte)}`;
@@ -205,8 +223,11 @@ export async function synchroniserServeur(o: OptionsServeur): Promise<ResultatSe
   try {
     // ------------------------------------------------ Anciens dépôts par appareil (transition, Fondateur)
     // (Pas pendant un envoi rapide : une modification part seule, en une requête.)
-    if (compte === 'principal' && estMaitre(liaison) && !(o.pousserDabord && avant.serveur?.migreLe)) {
+    const cleAnciens = `${liaison.relais}|${o.appareil ?? ''}`;
+    const anciensRecents = horloge().getTime() - (anciensLusLe.get(cleAnciens) ?? -Infinity) < PAS_ANCIENS_MS;
+    if (compte === 'principal' && estMaitre(liaison) && !(o.pousserDabord && avant.serveur?.migreLe) && !(anciensRecents && avant.serveur?.migreLe)) {
       etat = await importerAnciens(o, etat, resultat, horloge);
+      anciensLusLe.set(cleAnciens, horloge().getTime());
       sauver();
     }
 

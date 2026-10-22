@@ -224,6 +224,8 @@ SMTP_USER=noreply@appdashboard.fr
 SMTP_PASS=MOT_DE_PASSE_DE_LA_BOITE_NOREPLY
 MAIL_FROM=AppDashboard <noreply@appdashboard.fr>
 LIEN_APP=https://appdashboard.fr
+# Avis des autres appareils : sondage (défaut, le plus sûr), attente ou sse (voir partie H)
+SYNCHRO_TEMPS_REEL=sondage
 ```
 
 (Sans `SMTP_*`, laissez ces lignes vides : l'app garde l'envoi par votre messagerie, `mailto:`.)
@@ -520,14 +522,35 @@ effacés (rien n'est perdu).
 fonctions `coffre-v10`, `avis`, `a2f`, `methode-post`. Les appareils en version 9 continuent de marcher pendant le
 déploiement (mêmes routes `/v9/…`).
 
-- **Avis en temps réel (SSE).** Un appareil ouvert garde UNE connexion vers le relais (`/v10/coffre/<compte>/flux`) ;
-  le serveur y écrit « nouvelle révision » à chaque modification d'un autre appareil. La réponse porte
-  `X-Accel-Buffering: no` et `Cache-Control: no-transform` (Passenger et LiteSpeed ne la retiennent pas), un bourrage
-  de 2 Kio à l'ouverture et un battement de cœur toutes les 15 s. **Si un frontal retient malgré tout le flux**,
-  l'appareil le voit en 4 s et passe seul à l'attente longue (`/attendre`, 25 s), puis au sondage (15 s) : aucune
-  action nécessaire (le délai reste sous la seconde avec l'attente longue). Seulement si la vérification ci-dessous
-  montre un flux qui arrive par paquets, vous pouvez essayer, dans le `.htaccess` du dossier racine du sous-domaine
-  `relais.` (au-dessus des lignes de Passenger), d'empêcher LiteSpeed de le compresser :
+- **Avis des autres appareils : sobres par défaut (réglage `SYNCHRO_TEMPS_REEL`).** Depuis l'incident du 22 octobre
+  2026 (site inaccessible pour le Fondateur juste après la version 10 : adresse IP très probablement bannie par le
+  pare-feu pour trop de connexions longues ouvertes et rouvertes, un flux SSE par onglet et par appareil), le relais
+  ne garde **aucune connexion ouverte** sauf si vous le demandez. Ligne à ajouter (facultative) dans
+  `~/.appdashboard/relais.env`, puis redémarrer l'app Node (« Setup Node.js App » › **Restart**) :
+
+  ```ini
+  # sondage (DÉFAUT, le plus sûr) : chaque appareil demande « quelle révision ? » toutes les 15 s, page visible
+  #   seulement, et UN SEUL onglet par navigateur le fait ; délai A → B ≤ 15 s environ.
+  # attente : attente longue de 50 s (un espace toutes les 15 s la garde en vie), une par navigateur ; délai < 1 s.
+  # sse : flux continu (comme la première version 10) ; à éviter sur un mutualisé.
+  SYNCHRO_TEMPS_REEL=sondage
+  ```
+
+  Les appareils lisent ce réglage dans `/sante` (`"tempsReel":"sondage"`) et ne montent jamais au-dessus. Les
+  modifications, elles, partent toujours ~150 ms après la frappe (requête courte). Commencez par `sondage` ; passez
+  à `attente` seulement après une semaine sans blocage, en surveillant les « entry processes » (ci-dessous).
+
+  Garde-fous côté serveur, quel que soit le mode : au plus **2 connexions tenues par compte et par adresse IP**
+  (4 par compte, 60 en tout) ; au-delà, réponse **immédiate** « utilise le sondage » (429 + `Retry-After`, rien
+  n'est gardé ouvert) ; au plus **60 appels d'avis par minute et par adresse** ; chaque connexion tenue a une durée
+  maximale (50 s, ou 5 min pour un flux), est libérée dès que l'appareil part, et un balayage ferme les orphelines.
+  Côté appareils : une seule écoute par navigateur (les onglets se relaient), arrêtée dès que la page est masquée,
+  au plus 30 requêtes de synchro par minute, et des réessais de plus en plus espacés (2 s → 5 min, au hasard) :
+  jamais de reconnexion rapide en boucle.
+
+  En mode `sse` seulement : si la vérification ci-dessous montre un flux qui arrive par paquets, vous pouvez
+  essayer, dans le `.htaccess` du dossier racine du sous-domaine `relais.` (au-dessus des lignes de Passenger),
+  d'empêcher LiteSpeed de le compresser :
 
   ```apache
   <IfModule LiteSpeed>
@@ -535,15 +558,14 @@ déploiement (mêmes routes `/v9/…`).
   </IfModule>
   ```
 
-  Vérification (doit afficher `event: version` immédiatement, puis `: coeur` toutes les 15 s ; Ctrl+C pour sortir) :
+  Vérification du mode annoncé (doit afficher `"tempsReel":"sondage"`, ou ce que vous avez choisi) :
 
   ```bash
-  curl -N https://relais.appdashboard.fr/v10/coffre/principal/flux -H "Authorization: Bearer $(grep ^JETON= ~/.appdashboard/relais.env | cut -d= -f2)"
+  curl -s https://relais.appdashboard.fr/sante -H "Authorization: Bearer $(grep ^JETON= ~/.appdashboard/relais.env | cut -d= -f2)"
   ```
 
-- **Connexions et processus.** Au plus 6 connexions tenues par compte et 300 en tout (au-delà : sondage). Une seule
-  instance Node suffit (les avis passent en mémoire ; un second processus serait rattrapé par la relecture en base,
-  30 s au plus). Un onglet masqué ferme sa connexion.
+- **Connexions et processus.** Une seule instance Node suffit (les avis passent en mémoire ; un second processus
+  serait rattrapé par la relecture en base, 30 s au plus).
 - **Compression.** Les réponses JSON de plus d'1 Kio sont compressées (gzip) par le relais lui-même.
 - **PUT sans corps.** Certains frontaux mutualisés refusent les `PUT` ou en perdent le corps : c'était la cause du
   « Le serveur de synchronisation a répondu 400 » de la migration du Fondateur (dépôt d'accès reçu vide). Les appareils
@@ -554,6 +576,42 @@ déploiement (mêmes routes `/v9/…`).
   **avant** la première activation, et ne la changez plus (sinon les A2F déjà activées ne se vérifient plus : il
   faudrait les réactiver).
 
+
+### H bis. Site « inaccessible » : adresse IP bannie, processus pleins
+
+**Symptôme.** Le site ou le relais ne répond plus pour UN appareil ou UNE connexion Internet (Opera : « Ce site est
+inaccessible, la connexion réseau a été perdue » ; Safari : « la connexion a été perdue »), alors qu'il marche en 4G
+ou chez quelqu'un d'autre : c'est votre adresse IP qui est bannie par le pare-feu d'o2switch (CSF/LFD, Tiger
+Protect), souvent pour trop de connexions simultanées ou répétées. S'il ne répond plus pour PERSONNE, ce sont plutôt
+les processus de l'hébergement qui sont pleins (voir « entry processes »).
+
+**Débloquer une adresse IP bannie.**
+
+1. Trouvez votre adresse publique : depuis l'appareil bloqué, ouvrez <https://ifconfig.me> (ou cherchez « mon
+   adresse IP »).
+2. **cPanel** (connexion par <https://cpanel.o2switch.net> ou l'espace client) › section **Sécurité** › outil
+   **Tiger Protect** (selon la version : « Autorisation SSH » / « Déblocage IP ») : collez l'adresse, **Débloquer**,
+   puis **Ajouter à la liste blanche** si l'outil le propose (votre box change rarement d'adresse).
+3. Si l'outil n'existe pas ou que l'adresse reste bloquée : **espace client o2switch**
+   (<https://clients.o2switch.fr>) › **Support** › **Ouvrir un ticket**, ou le chat, avec : le domaine
+   (`appdashboard.fr`, `relais.appdashboard.fr`), l'adresse IP bloquée, l'heure approximative, et la phrase
+   « Merci de débloquer cette IP dans le pare-feu (CSF/LFD) et de me dire la règle déclenchée ». Le support répond
+   en général en moins d'une heure.
+4. En attendant : le site marche depuis une autre connexion (partage 4G du téléphone).
+5. Après le déblocage, **fermez les onglets restés ouverts sur une ancienne version** (ou rechargez-les) et
+   rouvrez l'app de bureau : la nouvelle version n'ouvre qu'une écoute par navigateur.
+
+**Voir les « entry processes » (CloudLinux).** cPanel › section **Métriques** › **Statistiques de ressources**
+(« Resource Usage » / LVE ; parfois dans **Statistiques et limites**) › **Détails** ou **Instantané**. Colonnes
+utiles : **EP** (*entry processes* : requêtes en cours de traitement en même temps, limite souvent 20 à 30 sur un
+mutualisé), **NPROC** (processus), **CPU**, **PMEM**. Une barre rouge ou des « faults » sur EP au moment du blocage =
+trop de requêtes tenues en même temps : restez (ou revenez) en `SYNCHRO_TEMPS_REEL=sondage`. L'onglet
+**Instantané** montre les requêtes en cours à l'instant : en mode `sondage`, aucune ne doit durer plus d'une ou deux
+secondes.
+
+**Prévenir.** Gardez `SYNCHRO_TEMPS_REEL=sondage` (défaut). Le journal du relais (`~/logs/relais.log` ou celui de
+Passenger) ne doit pas montrer de rafales de `/attendre` ou `/flux` ; un `429` « trop-de-connexions » ou
+« trop-de-requetes » de temps en temps est normal (le serveur protège l'adresse avant le pare-feu).
 ---
 
 ## Partie H — Transcription des réunions sur le serveur

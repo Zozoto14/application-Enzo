@@ -7,7 +7,12 @@
  * après une modification locale (envoi seul, une requête), dès que le serveur
  * annonce une révision plus récente (version 10 : flux SSE, attente longue ou
  * sondage, voir sync/relais/veille.ts), et en filet toutes les 3 min (30 s sans
- * avis). À la fermeture de la page, la file part en `fetch` keepalive. Après un
+ * avis ; jamais page masquée).
+ *
+ * Sobriété (hébergement mutualisé, docs/o2switch.md) : UN SEUL onglet par
+ * navigateur écoute le serveur (sync/relais/meneurOnglets.ts) et relaie aux
+ * autres ; l'écoute s'arrête dès que la page est masquée ; le serveur choisit
+ * le mode (sondage par défaut) ; au plus 30 requêtes de synchro par minute. À la fermeture de la page, la file part en `fetch` keepalive. Après un
  * échec, nouvel essai à 1 s, 3 s, 10 s, 30 s, 2 min puis 5 min.
  *
  * Sorti d'App.tsx pour qu'on puisse le lire d'un seul tenant.
@@ -23,7 +28,9 @@ import { decoderLiaison, type Liaison } from '../sync/relais/liaison';
 import { estMaitre } from '../sync/relais/portees';
 import type { EnAttente, InfoAppareil } from '../sync/relais/moteur';
 import { INTERVALLE_AVEC_AVIS_MS, INTERVALLE_SYNCHRO_MS, Planificateur, type IssueTour, type RaisonTour } from '../sync/relais/planificateur';
-import { Veilleur, type ModeVeille } from '../sync/relais/veille';
+import { Veilleur, plafondDe, type ModeVeille } from '../sync/relais/veille';
+import { MeneurOnglets } from '../sync/relais/meneurOnglets';
+import { LimiteurRequetes, REQUETES_PAR_MINUTE, requeteLimitee } from '../sync/relais/sobriete';
 import {
   deposerAvantFermeture,
   ecrireConfigRelais,
@@ -57,6 +64,13 @@ import { telechargerMiseAJour } from '../maj/telechargement';
 export { INTERVALLE_SYNCHRO_MS } from '../sync/relais/planificateur';
 /** L'app iPhone regarde s'il y a une nouvelle version au plus toutes les 6 heures. */
 const INTERVALLE_MAJ_MS = 6 * 3_600_000;
+
+/**
+ * Plafond des requêtes de synchronisation de cet onglet (tours, envois, veille) : 30 par minute. Au-delà,
+ * la requête attend son tour (aucune n'est perdue, rien ne boucle).
+ */
+const limiteurSynchro = new LimiteurRequetes(REQUETES_PAR_MINUTE);
+const requeteSynchro = requeteLimitee(limiteurSynchro);
 
 export interface EtatSynchroApp {
   configure: boolean;
@@ -239,8 +253,16 @@ export function useSynchro({
       const config = lireConfigRelais(pilote)!;
       const compte = profilCourant();
       const appareil = identifiantAppareil(new DepotParametres(pilote), PARAMETRES.identifiantAppareil);
-      let resultat: { bilan: { ajoutes: number; modifies: number; supprimes: number }; erreurs: string[]; differeDans?: number; recus?: number };
+      let resultat: { bilan: { ajoutes: number; modifies: number; supprimes: number }; erreurs: string[]; differeDans?: number; recus?: number; envoyes?: number };
       const capacites = await capacitesCoffre(config);
+      if (capacites.coffre && raison === 'notification' && revAnnoncee.current !== undefined) {
+        // Avis d'une révision déjà tirée (sa propre écriture, ou un autre onglet plus rapide) : rien à relire.
+        const local = lireEtatSynchro(pilote) as EtatServeur;
+        if ((local.serveur?.rev ?? 0) >= revAnnoncee.current && !local.enAttente?.cles.length) {
+          reussi = true;
+          return true;
+        }
+      }
       if (capacites.coffre) {
         // Le serveur est la référence. Après une modification ici : la file part d'abord (une requête) ;
         // sinon (ouverture, avis d'un autre appareil, filet) : tirer les différences, puis pousser.
@@ -253,9 +275,11 @@ export function useSynchro({
           api: capacites.v10 ? 10 : 9,
           pousserDabord: raison === 'modification',
           revConnue: revAnnoncee.current,
+          requete: requeteSynchro,
         });
         noterModeServeur();
         avisDisponibles.current = capacites.avis;
+        capacitesAvis.current = capacites;
         if (compte === 'principal') {
           // Le coffre (enveloppes du mot de passe) reste publié : un navigateur neuf s'y connecte.
           await deposerCoffreSiChange(pilote, config, session.coffreActuel()).catch(() => undefined);
@@ -280,6 +304,7 @@ export function useSynchro({
       const nouvelleVersion = await verifierMiseAJourDuSite();
       reussi = true;
       rappelerDans = resultat.differeDans;
+      envoyesAuDernierTour.current = resultat.envoyes ?? 0;
       setEtat(courant => ({
         ...courant,
         erreur: resultat.erreurs[0],
@@ -307,6 +332,9 @@ export function useSynchro({
   /** Dernière révision annoncée par le serveur (avis), et le serveur sait-il en envoyer ? */
   const revAnnoncee = useRef<number | undefined>(undefined);
   const avisDisponibles = useRef(false);
+  /** Enregistrements envoyés par le dernier tour (les autres onglets ne relisent que s'il y en a eu). */
+  const envoyesAuDernierTour = useRef(0);
+  const capacitesAvis = useRef<{ tempsReel: 'sse' | 'attente' | 'sondage'; pasSondageMs?: number } | undefined>(undefined);
 
   /** Caches du démarrage (voir sync/relais/prechargement.ts) : `sortant` prêt, `lus` recopiés. */
   const preparerCaches = useCallback(() => {
@@ -397,46 +425,99 @@ export function useSynchro({
       return;
     }
     // Veille des avis du serveur (version 10) : démarrée après le premier tour qui confirme les avis,
-    // seulement page visible (une connexion tenue de moins quand l'onglet est masqué).
+    // seulement page visible, et par UN SEUL onglet du navigateur (le meneur) qui relaie aux autres.
     let veille: Veilleur | undefined;
     const pageVisible = () => (navigateur().document?.visibilityState ?? 'visible') !== 'hidden';
-    const arreterVeille = () => {
-      veille?.arreter();
-      veille = undefined;
-    };
-    const demarrerVeille = () => {
-      if (veille || !avisDisponibles.current || !pageVisible()) return;
+    let meneur: MeneurOnglets | undefined;
+    const coordination = (): MeneurOnglets | undefined => {
+      if (meneur) return meneur;
       let conf: ReturnType<typeof lireConfigRelais>;
       try {
         conf = lireConfigRelais(session.base());
       } catch {
-        return;
+        return undefined;
       }
-      if (!conf) return;
-      const v = new Veilleur({
-        liaison: { relais: conf.relais, jeton: conf.jeton },
-        compte: profilCourant(),
-        revConnue: () => {
-          try {
-            return Math.max((lireEtatSynchro(session.base()) as EtatServeur).serveur?.rev ?? 0, revAnnoncee.current ?? 0);
-          } catch {
-            return Number.MAX_SAFE_INTEGER; // Verrouillé : rien à tirer.
-          }
+      if (!conf) return undefined;
+      meneur = new MeneurOnglets({
+        nom: `${conf.relais}|${profilCourant()}`,
+        surMessage: m => {
+          // Un autre onglet a appris une révision, ou vient d'envoyer : relire (page visible seulement ;
+          // masqué, le retour au premier plan relira).
+          if (m.type === 'version') revAnnoncee.current = Math.max(revAnnoncee.current ?? 0, m.rev);
+          if (pageVisible()) plan.notification();
         },
-        surVersion: rev => {
-          revAnnoncee.current = Math.max(revAnnoncee.current ?? 0, rev);
-          plan.notification();
-        },
-        surMode: mode => setEtat(courant => (courant.veille === mode ? courant : { ...courant, veille: mode })),
       });
-      veille = v;
-      v.demarrer();
+      return meneur;
+    };
+    // Identifiant de l'appareil pour la veille (le même pour tous les onglets du navigateur).
+    const appareilVeille = (): string | undefined => {
+      try {
+        return identifiantAppareil(new DepotParametres(session.base()), PARAMETRES.identifiantAppareil);
+      } catch {
+        return undefined;
+      }
+    };
+    const arreterVeille = () => {
+      meneur?.renoncer();
+      veille?.arreter();
+      veille = undefined;
+    };
+    const demarrerVeille = () => {
+      if (!avisDisponibles.current || !pageVisible()) return;
+      const m = coordination();
+      if (!m || m.estCandidat) return;
+      m.briguer(() => {
+        let conf: ReturnType<typeof lireConfigRelais>;
+        try {
+          conf = lireConfigRelais(session.base());
+        } catch {
+          return () => undefined;
+        }
+        if (!conf) return () => undefined;
+        const caps = capacitesAvis.current;
+        const v = new Veilleur({
+          liaison: { relais: conf.relais, jeton: conf.jeton },
+          compte: profilCourant(),
+          plafond: plafondDe(caps?.tempsReel),
+          pasSondageMs: caps?.pasSondageMs,
+          limiteur: limiteurSynchro,
+          appareil: appareilVeille(),
+          revConnue: () => {
+            try {
+              return Math.max((lireEtatSynchro(session.base()) as EtatServeur).serveur?.rev ?? 0, revAnnoncee.current ?? 0);
+            } catch {
+              return Number.MAX_SAFE_INTEGER; // Verrouillé : rien à tirer.
+            }
+          },
+          surVersion: rev => {
+            revAnnoncee.current = Math.max(revAnnoncee.current ?? 0, rev);
+            m.diffuser({ type: 'version', rev });
+            plan.notification();
+          },
+          surMode: mode => setEtat(courant => (courant.veille === mode ? courant : { ...courant, veille: mode })),
+        });
+        veille = v;
+        v.demarrer();
+        return () => {
+          v.arreter();
+          if (veille === v) veille = undefined;
+        };
+      });
     };
     const plan = new Planificateur(async raison => {
+      // Page masquée : pas de tour de filet (le retour au premier plan en fera un).
+      if (raison === 'periodique' && !pageVisible()) return true;
+      envoyesAuDernierTour.current = 0;
       const issue = await tourRef.current(raison);
+      // Cet onglet a VRAIMENT envoyé quelque chose : les autres onglets du navigateur relisent tout de suite.
+      // (Jamais pour un tour qui n'a fait que relire : sinon les onglets se relanceraient en boucle.)
+      if (envoyesAuDernierTour.current > 0) meneur?.diffuser({ type: 'ecrit' });
       // Avis du serveur disponibles : le tour périodique n'est plus qu'un filet (3 min).
       plan.definirIntervalle(avisDisponibles.current ? INTERVALLE_AVEC_AVIS_MS : INTERVALLE_SYNCHRO_MS);
-      if (avisDisponibles.current) demarrerVeille();
+      if (avisDisponibles.current) {
+        coordination();
+        demarrerVeille();
+      }
       return issue;
     });
     planificateur.current = plan;
@@ -502,6 +583,8 @@ export function useSynchro({
     cible?.addEventListener?.('online', surEnLigne);
     cible?.addEventListener?.('offline', surHorsLigne);
     cible?.addEventListener?.('pagehide', vidageFermeture);
+    // Page quittée ou mise en cache (bfcache) : la connexion d'écoute est fermée proprement.
+    cible?.addEventListener?.('pagehide', arreterVeille);
     cible?.addEventListener?.('focus', surVisibilite);
     document?.addEventListener?.('visibilitychange', surVisibilite);
     return () => {
@@ -509,12 +592,14 @@ export function useSynchro({
       if (minuterieSortant) clearTimeout(minuterieSortant);
       setEtat(courant => ({ ...courant, premierTourFait: false, veille: undefined }));
       arreterVeille();
+      meneur?.fermer();
       plan.arreter();
       abonnement?.remove?.();
       ecoute?.();
       cible?.removeEventListener?.('online', surEnLigne);
       cible?.removeEventListener?.('offline', surHorsLigne);
       cible?.removeEventListener?.('pagehide', vidageFermeture);
+      cible?.removeEventListener?.('pagehide', arreterVeille);
       cible?.removeEventListener?.('focus', surVisibilite);
       document?.removeEventListener?.('visibilitychange', surVisibilite);
       if (planificateur.current === plan) {

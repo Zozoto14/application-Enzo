@@ -1,8 +1,11 @@
 /**
- * Veille des avis du serveur (version 10) : flux SSE, repli sur l'attente longue (flux retenu par un
- * mandataire, pas de lecture en continu), puis sur le sondage (429, serveur sans avis).
+ * Veille des avis du serveur (version 10) : le serveur fixe le plafond (sondage par défaut) ; flux SSE,
+ * repli sur l'attente longue (flux retenu par un mandataire, pas de lecture en continu), puis sur le
+ * sondage (429 « utilise le sondage », serveur sans avis) ; backoff exponentiel avec jitter, plafond
+ * de requêtes par minute.
  */
-import { Veilleur, oublierFluxRetenus, type ModeVeille } from './veille';
+import { Veilleur, oublierFluxRetenus, plafondDe, type ModeVeille } from './veille';
+import { LimiteurRequetes, attenteExponentielle } from './sobriete';
 
 const RELAIS = 'https://relais.test';
 const liaison = { relais: RELAIS, jeton: 's1.' + 'a'.repeat(64) };
@@ -82,6 +85,9 @@ describe('Veilleur (avis du serveur)', () => {
       delaiPremierAvisMs: 60,
       pasSondageMs: 25,
       attenteS: 1,
+      plafond: 'flux',
+      alea: () => 0,
+      dureeMinFluxMs: 0,
       ...o,
     });
     v.demarrer();
@@ -153,11 +159,12 @@ describe('Veilleur (avis du serveur)', () => {
     expect(recues.slice(0, 3)).toEqual([4, 5, 6]);
   });
 
-  it('trop de connexions (429) → sondage ; serveur sans avis (404) → sondage', async () => {
+  it('« utilise le sondage » (429) → sondage, révision du refus annoncée ; serveur sans avis (404) → sondage', async () => {
     let version = 3;
-    creer(async url => (url.includes('/flux') ? reponse(429, { motif: 'trop-de-connexions' }) : reponse(200, { rev: version })));
+    creer(async url => (url.includes('/flux') ? reponse(429, { motif: 'trop-de-connexions', mode: 'sondage', rev: 4 }) : reponse(200, { rev: version })));
     await pause(10);
     expect(v!.mode).toBe('sondage');
+    expect(recues).toEqual([4]);
     version = 9;
     await pause(60);
     expect(recues).toContain(9);
@@ -175,9 +182,94 @@ describe('Veilleur (avis du serveur)', () => {
     await pause(30);
     const n = appels.length;
     expect(n).toBeGreaterThanOrEqual(1);
-    expect(n).toBeLessThanOrEqual(2); // première pause : 1 s
+    expect(n).toBeLessThanOrEqual(2); // première pause : 1 à 2 s (exponentiel avec jitter)
     v!.arreter();
-    await pause(1100);
+    await pause(2100);
     expect(appels.length).toBe(n);
+  });
+  it('attente : l’identifiant d’appareil part avec la requête (le serveur remplace une ancienne connexion du même appareil)', async () => {
+    creer(async () => reponse(200, { rev: 3, attente: 1 }), { plafond: 'attente', appareil: '0a1b2c3d' });
+    await pause(5);
+    expect(appels[0]).toBe('/v10/coffre/principal/attendre?rev=3&delai=1&appareil=0a1b2c3d');
+  });
+
+  it('le serveur fixe le plafond : « sondage » par défaut, jamais de flux ni d’attente au-dessus', async () => {
+    expect([plafondDe(undefined), plafondDe('sondage'), plafondDe('attente'), plafondDe('sse')]).toEqual(['sondage', 'sondage', 'attente', 'flux']);
+    creer(async () => reponse(200, { rev: 3 }), { plafond: undefined });
+    await pause(80);
+    expect(v!.mode).toBe('sondage');
+    expect(appels.every(a => a.endsWith('/version'))).toBe(true);
+    v!.arreter();
+    appels = [];
+    creer(async () => reponse(200, { rev: 3, attente: 1 }), { plafond: 'attente', modeInitial: 'flux' });
+    await pause(10);
+    expect(appels.some(a => a.includes('/flux'))).toBe(false);
+  });
+
+  it('attente coupée trop tôt par un mandataire : pause croissante puis sondage, jamais de boucle rapide', async () => {
+    creer(async () => reponse(200, { rev: 3 }), { plafond: 'attente', alea: () => 0 });
+    await pause(300);
+    // 1re réponse vide et rapide : pause d'au moins 1 s (2 s × jitter ≥ 1/2) avant la suivante.
+    expect(appels).toHaveLength(1);
+    expect(v!.mode).toBe('attente');
+  });
+
+  it('flux qui parle puis se coupe aussitôt : pas de reconnexion à 250 ms, pause exponentielle', async () => {
+    let n = 0;
+    creer(
+      async () => {
+        n++;
+        const f = fluxPilote();
+        f.pousser('event: version\ndata: {"rev":3}\n\n');
+        f.fermer();
+        return reponse(200, f.corps, 'text/event-stream');
+      },
+      { dureeMinFluxMs: 30_000 },
+    );
+    await pause(400);
+    expect(n).toBe(1);
+  });
+
+  it('503 ou réseau : backoff exponentiel avec jitter, plafonné à 5 min, jamais sous la moitié du palier', () => {
+    const bas = [0, 1, 2, 3, 4, 5, 6, 7, 8, 20].map(e => attenteExponentielle(e, { alea: () => 0 }));
+    const haut = [0, 1, 2, 3, 4, 5, 6, 7, 8, 20].map(e => attenteExponentielle(e, { alea: () => 1 }));
+    expect(haut).toEqual([2_000, 4_000, 8_000, 16_000, 32_000, 64_000, 128_000, 256_000, 300_000, 300_000]);
+    expect(bas).toEqual(haut.map(x => x / 2));
+    for (let e = 0; e < 12; e++) {
+      const x = attenteExponentielle(e);
+      expect(x).toBeGreaterThanOrEqual(1_000);
+      expect(x).toBeLessThanOrEqual(300_000);
+    }
+  });
+
+  it('sondage en 503 avec Retry-After : on attend au moins ce que le serveur demande', async () => {
+    let n = 0;
+    creer(
+      async () => {
+        n++;
+        return { ok: false, status: 503, headers: { get: (h: string) => (h === 'Retry-After' ? '1' : null) }, json: async () => ({}) } as unknown as Response;
+      },
+      { plafond: 'sondage' },
+    );
+    await pause(600);
+    expect(n).toBe(1);
+  });
+
+  it('plafond de requêtes par minute : le veilleur attend son tour au lieu d’insister', async () => {
+    let t = 0;
+    const limiteur = new LimiteurRequetes(30, 60_000, () => t);
+    for (let i = 0; i < 30; i++) expect(limiteur.prendre()).toBe(true);
+    expect(limiteur.prendre()).toBe(false);
+    expect(limiteur.attente()).toBe(60_000);
+    t = 59_999;
+    expect(limiteur.prendre()).toBe(false);
+    t = 60_000;
+    expect(limiteur.prendre()).toBe(true);
+    expect(limiteur.dansLaFenetre).toBe(1);
+    // Veilleur en sondage très rapide (pas 25 ms) : au plus 3 requêtes passent avec un plafond de 3.
+    const etroit = new LimiteurRequetes(3, 60_000);
+    creer(async () => reponse(200, { rev: 3 }), { plafond: 'sondage', limiteur: etroit });
+    await pause(250);
+    expect(appels).toHaveLength(3);
   });
 });

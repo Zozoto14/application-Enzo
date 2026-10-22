@@ -9,9 +9,9 @@
  *  - à l'avis du serveur « nouvelle révision » (version 10, voir veille.ts) : tout de suite ;
  *  - tour complet périodique : toutes les 30 s sans avis (relais d'avant la version 10), toutes les
  *    3 min avec les avis (simple filet de sécurité) ;
- *  - après un échec : nouvel essai rapide, de plus en plus espacé
- *    (1 s, 3 s, 10 s, 30 s, 2 min, 5 min), au lieu d'attendre le tour suivant ; le retour du réseau
- *    (`online`) relance tout de suite.
+ *  - après un échec : nouvel essai de plus en plus espacé (1 s, 3 s, 10 s, 30 s, 2 min, 5 min, chacun
+ *    allongé au hasard de 0 à 50 % pour que les appareils ne reviennent pas tous ensemble), au lieu
+ *    d'attendre le tour suivant ; le retour du réseau (`online`) relance tout de suite.
  *
  * Un seul tour à la fois : une demande reçue pendant un tour est gardée et
  * déclenche un nouveau tour dès que le premier finit (rien n'est perdu).
@@ -63,12 +63,18 @@ export const minuteriesSysteme: Minuteries = {
 export const delaiReessai = (essai: number): number =>
   DELAIS_REESSAI_MS[Math.min(Math.max(0, essai), DELAIS_REESSAI_MS.length - 1)];
 
+/** Même attente, allongée au hasard de 0 à 50 % (jitter) : jamais plus courte que le palier. */
+export const delaiReessaiAleatoire = (essai: number, alea: () => number = Math.random): number =>
+  Math.round(delaiReessai(essai) * (1 + 0.5 * Math.max(0, Math.min(1, alea()))));
+
 export interface ReglagesPlanificateur {
   /** Micro-regroupement des modifications (défaut : `DELAI_MODIFICATION_MS`). */
   delaiModificationMs?: number;
   plafondModificationMs?: number;
   /** Tour périodique (défaut : `INTERVALLE_SYNCHRO_MS`) ; `definirIntervalle` le change en route. */
   intervalleMs?: number;
+  /** Hasard du jitter des réessais (tests : `() => 0`). */
+  alea?: () => number;
 }
 
 export class Planificateur {
@@ -216,7 +222,7 @@ export class Planificateur {
         }, rappelerDans + 500);
       }
     } else {
-      const attente = delaiReessai(this.echecs);
+      const attente = delaiReessaiAleatoire(this.echecs, this.reglages.alea);
       this.echecs++;
       this.minuterieReessai = this.minuteries.setTimeout(() => {
         this.minuterieReessai = undefined;

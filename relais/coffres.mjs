@@ -15,8 +15,10 @@
  *
  * Version 10 (mêmes routes sous `/v10/coffre/…`, plus les avis de relais/avis.mjs) :
  *   GET    /v10/coffre/<compte>/version                 révision courante (sondage)
- *   GET    /v10/coffre/<compte>/attendre?rev=<n>        attente longue (25 s au plus)
- *   GET    /v10/coffre/<compte>/flux?rev=<n>            flux SSE des nouvelles révisions
+ *   GET    /v10/coffre/<compte>/attendre?rev=<n>        attente longue (50 s au plus ; mode « attente » ou « sse »)
+ *   GET    /v10/coffre/<compte>/flux?rev=<n>            flux SSE des nouvelles révisions (mode « sse »)
+ *          Mode fixé par SYNCHRO_TEMPS_REEL (relais.env, « sondage » par défaut) ; limites par compte et
+ *          par adresse IP : relais/avis.mjs.
  *   POST   rend aussi `avant` : la révision du coffre juste avant cet envoi (si c'est celle que
  *          l'appareil connaissait, il n'a rien à relire : personne d'autre n'a écrit entre-temps).
  *
@@ -34,7 +36,7 @@
  * tout à o2switch), les routes répondent 501 et les appareils restent sur l'ancienne synchronisation.
  */
 
-import { avisDe, routeAttendre, routeFlux, routeVersion } from './avis.mjs';
+import { avisDe, ipDe, modeTempsReel, routeAttendre, routeFlux, routeVersion } from './avis.mjs';
 
 export const TAILLE_MAX_VALEUR = 8 * 1024 * 1024;
 export const MAX_PAR_ENVOI = 1000;
@@ -203,9 +205,11 @@ export async function routeCoffre(requete, env, portee, compte, action, delegue,
     return json(await store.etat(compte));
   }
   if (version >= 10 && requete.method === 'GET' && typeof store.version === 'function') {
-    if (action === 'version') return routeVersion(store, compte);
-    if (action === 'attendre') return routeAttendre(store, avisDe(env), compte, url);
-    if (action === 'flux') return routeFlux(store, avisDe(env), compte, url);
+    // Mode choisi par l'hébergeur (SYNCHRO_TEMPS_REEL) et adresse de l'appareil (limites par adresse).
+    const contexte = { ip: ipDe(requete), mode: modeTempsReel(env) };
+    if (action === 'version') return routeVersion(store, avisDe(env), compte, contexte);
+    if (action === 'attendre') return routeAttendre(store, avisDe(env), compte, url, contexte);
+    if (action === 'flux') return routeFlux(store, avisDe(env), compte, url, contexte);
   }
   if (action !== undefined) return refus('Adresse inconnue.', 404);
 

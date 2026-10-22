@@ -9,9 +9,11 @@
  *  2. navigateur neuf : aide « Administrateur : première connexion ? » ; identifiant + mot de passe →
  *     le serveur demande le code ; code faux refusé ; bon code → connecté ; ce code rejoué sur un
  *     troisième navigateur → refusé ;
- *  3. délai A ↔ B mesuré (modification sur l'un, visible sur l'autre, SANS aucun événement de focus) :
- *     avec les avis par flux SSE, puis SANS SSE (un mandataire retient le flux, comme un tampon
- *     LiteSpeed/Apache : repli seul sur l'attente longue) ;
+ *  3. délai A ↔ B mesuré (modification sur l'un, visible sur l'autre, SANS aucun événement de focus)
+ *     dans le mode choisi par le serveur (SYNCHRO_TEMPS_REEL, « sondage » par défaut : < 20 s ;
+ *     « attente » : < 2 s ; « sse » : < 1 s, puis SANS SSE quand un mandataire retient le flux) ;
+ *  3 bis. sobriété : 5 onglets ouverts dans le navigateur A = au plus UNE connexion longue (et un seul
+ *     sondage) pour tout le navigateur ; une connexion longue fermée quand l'onglet se masque ;
  *  4. hors ligne puis retour du réseau ; onglet fermé juste après une modification (keepalive).
  *
  * Avec DIST=<dossier d'un ancien build> (relais toujours en version 10), seules les mesures de délai
@@ -20,7 +22,7 @@
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-synchro-rapide.mjs
  *
- * Variables : PLAYWRIGHT_PATH, CAPTURES (défaut docs/captures-synchro-rapide), DIST, MESURES (nombre de mesures, 5),
+ * Variables : SYNCHRO_TEMPS_REEL (sondage par défaut, attente, sse), PLAYWRIGHT_PATH, CAPTURES (défaut docs/captures-synchro-rapide), DIST, MESURES (nombre de mesures, 5),
  * PC_DIRECT=1 (le PC parle directement au nouveau relais), PUT_INTACT=1 (aucun corps de PUT perdu).
  */
 
@@ -61,12 +63,15 @@ const SITE = `http://localhost:${PORT_SITE}/`;
 const MDP_PC = 'ancien-mot-de-passe-du-pc-e2e-42';
 // Le Fondateur GARDE son mot de passe actuel à la migration (le changer est facultatif).
 const MDP = MDP_PC;
+const MODE = ['sse', 'attente', 'sondage'].includes(process.env.SYNCHRO_TEMPS_REEL) ? process.env.SYNCHRO_TEMPS_REEL : 'sondage';
+const PLAFOND_DELAI_MS = { sse: 1_000, attente: 2_000, sondage: 20_000 }[MODE];
 const FONDS = { sauge: 'rgb(238, 242, 236)', terminal: 'rgb(10, 10, 10)', nuit: 'rgb(11, 15, 23)' };
 
 // ------------------------------------------------------------- Relais (vrai worker, réponses en flux)
 const kv = new Map();
 const env = {
   JETON,
+  SYNCHRO_TEMPS_REEL: MODE,
   COFFRES: coffresMemoire(),
   BOITE: {
     get: async cle => (kv.has(cle) ? kv.get(cle) : null),
@@ -79,6 +84,8 @@ const journal = [];
 /** Simule un mandataire qui RETIENT les flux (tampon) : rien ne part avant la fin de la réponse. */
 let tamponSse = false;
 const fluxOuverts = new Set();
+/** Connexions longues (attente, flux) en cours vers le relais, et le maximum vu. */
+const longues = { ouvertes: 0, max: 0, versions: 0, parJeton: {}, ouvertesPar: {} };
 const dossier = mkdtempSync(join(tmpdir(), 'e2e-rapide-'));
 execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(dossier, 'k.pem'), '-out', join(dossier, 'c.pem'), '-subj', '/CN=localhost', '-days', '1'], { stdio: 'ignore' });
 const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pem')), cert: readFileSync(join(dossier, 'c.pem')) }, async (req, res) => {
@@ -88,9 +95,25 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
   const perdu = req.method === 'PUT' && !PUT_INTACT;
   if (perdu) journal.push({ methode: 'PUT', chemin: req.url.split('?')[0], statut: 'corps perdu', le: Date.now() });
   const requete = new Request(`${RELAIS}${req.url}`, { method: req.method, headers: { ...req.headers, 'cf-connecting-ip': '198.51.100.9' }, body: ['GET', 'HEAD'].includes(req.method) || perdu ? undefined : Buffer.concat(morceaux) });
+  const cheminLong = /\/(attendre|flux)$/.test(req.url.split('?')[0]);
+  if (req.method === 'GET' && /\/version$/.test(req.url.split('?')[0])) {
+    longues.versions++;
+    const qui = String(req.headers.authorization ?? '').slice(-6);
+    longues.parJeton[qui] = (longues.parJeton[qui] ?? 0) + 1;
+  }
+  if (cheminLong) {
+    const qui = String(req.headers.authorization ?? '').slice(-6);
+    longues.ouvertes++;
+    longues.ouvertesPar[qui] = (longues.ouvertesPar[qui] ?? 0) + 1;
+    longues.max = Math.max(longues.max, longues.ouvertes);
+    res.once('close', () => {
+      longues.ouvertes--;
+      longues.ouvertesPar[qui]--;
+    });
+  }
   const reponse = await traiterRequete(requete, env, {});
   const chemin = req.url.split('?')[0];
-  journal.push({ methode: req.method, chemin, statut: reponse.status, le: Date.now() });
+  journal.push({ methode: req.method, chemin, statut: reponse.status, le: Date.now(), jeton: String(req.headers.authorization ?? '').slice(-6) });
   res.writeHead(reponse.status, Object.fromEntries(reponse.headers));
   if (!reponse.body) return res.end();
   if (/event-stream/.test(reponse.headers.get('content-type') ?? '')) {
@@ -215,7 +238,8 @@ async function mesurerDelais(source, cible, nom, nombre = NB_MESURES, plafond = 
       .then(() => true, () => false);
     const d = Date.now() - debut;
     delais.push(vu ? d : plafond);
-    await pause(400);
+    // Rythme d'un humain (et en dessous du plafond de 30 requêtes par minute et par client).
+    await pause(1_500);
   }
   await fermerParametres(source);
   log(`${nom} : ${delais.join(', ')} ms (médiane ${mediane(delais)} ms)`);
@@ -350,27 +374,102 @@ try {
   await pause(3000);
 
   // ================================================================ 3. Délais A ↔ B
-  log('Délai B → A et A → B (aucun événement de focus : seuls les avis du serveur ou le tour périodique)');
+  log(`Délai B → A et A → B, mode du serveur « ${MODE} » (aucun événement de focus : seuls les avis du serveur ou le tour périodique)`);
   journal.length = 0;
-  mesures.sse = [...(await mesurerDelais(B, A, `B → A${AVANT ? ' (avant)' : ' (flux SSE)'}`)), ...(await mesurerDelais(A, B, `A → B${AVANT ? ' (avant)' : ' (flux SSE)'}`))];
-  const flux = fluxOuverts.size;
+  const etiquette = AVANT ? 'avant' : MODE;
+  mesures[MODE] = [...(await mesurerDelais(B, A, `B → A (${etiquette})`, NB_MESURES, PLAFOND_DELAI_MS * 3)), ...(await mesurerDelais(A, B, `A → B (${etiquette})`, NB_MESURES, PLAFOND_DELAI_MS * 3))];
   if (!AVANT) {
-    verifier(flux >= 2, `avis par flux SSE (${flux} flux ouverts en ce moment, un par appareil)`);
-    verifier(Math.max(...mesures.sse) < 1000, `délai < 1 s avec SSE (médiane ${mediane(mesures.sse)} ms, max ${Math.max(...mesures.sse)} ms)`);
+    verifier(Math.max(...mesures[MODE]) < PLAFOND_DELAI_MS, `délai < ${PLAFOND_DELAI_MS / 1000} s en mode ${MODE} (médiane ${mediane(mesures[MODE])} ms, max ${Math.max(...mesures[MODE])} ms)`);
     const posts = journal.filter(j => j.methode === 'POST' && /\/v10\/coffre\/principal$/.test(j.chemin)).length;
-    verifier(posts >= mesures.sse.length, `chaque modification part par /v10 (${posts} envois)`);
-    await capture(A, '06-mesure-sse');
-
+    verifier(posts >= mesures[MODE].length, `chaque modification part par /v10 (${posts} envois)`);
+    const fluxDemandes = journal.filter(j => j.chemin.endsWith('/flux')).length;
+    const attentes = journal.filter(j => j.chemin.endsWith('/attendre')).length;
+    if (MODE === 'sondage') verifier(fluxDemandes + attentes === 0, `mode sondage : aucune connexion longue demandée (${fluxDemandes} flux, ${attentes} attentes)`);
+    if (MODE === 'attente') verifier(fluxDemandes === 0 && attentes > 0, `mode attente : attentes longues (${attentes}), aucun flux`);
+    await capture(A, `06-mesure-${MODE}`);
+  }
+  if (!AVANT && MODE === 'sse') {
+    const flux = fluxOuverts.size;
+    verifier(flux >= 2, `avis par flux SSE (${flux} flux ouverts en ce moment, un par navigateur)`);
     log('Sans SSE : un mandataire retient le flux (tampon) → repli sur l’attente longue');
     tamponSse = true;
     for (const r of fluxOuverts) r.destroy();
     await pause(6_000);
     journal.length = 0;
-    mesures.attente = [...(await mesurerDelais(B, A, 'B → A (sans SSE)')), ...(await mesurerDelais(A, B, 'A → B (sans SSE)'))];
+    mesures.attenteRepli = [...(await mesurerDelais(B, A, 'B → A (sans SSE)')), ...(await mesurerDelais(A, B, 'A → B (sans SSE)'))];
     const attentes = journal.filter(j => j.chemin.endsWith('/attendre')).length;
     verifier(attentes > 0, `repli sur l’attente longue (${attentes} attentes)`);
-    verifier(Math.max(...mesures.attente) < 1000, `délai < 1 s sans SSE (médiane ${mediane(mesures.attente)} ms, max ${Math.max(...mesures.attente)} ms)`);
+    verifier(Math.max(...mesures.attenteRepli) < 2000, `délai < 2 s sans SSE (médiane ${mediane(mesures.attenteRepli)} ms, max ${Math.max(...mesures.attenteRepli)} ms)`);
     tamponSse = false;
+  }
+
+  if (!AVANT) {
+    // ================================================================ 3 bis. Cinq onglets, une connexion
+    log('Sobriété : 5 onglets dans le navigateur A (B reste ouvert à côté) → une seule écoute pour A');
+    const onglets = [];
+    for (let i = 0; i < 4; i++) {
+      const p = await contexteA.newPage();
+      await p.goto(SITE);
+      if (!(await p.getByTestId('hub').waitFor({ timeout: 8_000 }).then(() => true, () => false))) await deverrouiller(p, MDP_PC, secret);
+      await fermerBulles(p);
+      onglets.push(p);
+    }
+    const visibles = await Promise.all([A, ...onglets].map(p => p.evaluate(() => document.visibilityState)));
+    log(`onglets de A : ${visibles.join(', ')}`);
+    await pause(4_000);
+    longues.max = longues.ouvertes;
+    longues.versions = 0;
+    longues.parJeton = {};
+    const verrous = await A.evaluate(async () => {
+      const q = await navigator.locks?.query?.();
+      return q ? { tenus: q.held.map(l => l.name), enAttente: q.pending.map(l => l.name) } : 'pas de Web Locks';
+    });
+    log(`verrous du navigateur A : ${JSON.stringify(verrous)}`);
+    const fenetre = 45_000;
+    await pause(fenetre);
+    const parMinute = Math.round((longues.versions * 60_000) / fenetre);
+    log(`requêtes /version par jeton pendant ${fenetre / 1000} s : ${JSON.stringify(longues.parJeton)}`);
+    mesures.cinqOnglets = { connexionsLonguesMax: longues.max, sondagesParMinute: parMinute };
+    // Deux navigateurs en tout (A avec 5 onglets, B) : au plus 1 connexion longue chacun.
+    verifier(longues.max <= 2, `5 onglets dans A + B : au plus ${longues.max} connexion(s) longue(s) en même temps (≤ 1 par navigateur)`);
+    if (MODE === 'sondage') verifier(parMinute <= 2 * 4 + 2, `sondage : ${parMinute} requêtes /version par minute pour les deux navigateurs (≈ 4 chacun, pas 4 × 6 onglets)`);
+    // Modification depuis un onglet de A : visible sur B, et sur les autres onglets de A (relais local).
+    mesures.depuisOnglet = await mesurerDelais(onglets[2], B, `onglet 4 de A → B (${MODE})`, 2, PLAFOND_DELAI_MS * 3);
+    verifier(Math.max(...mesures.depuisOnglet) < PLAFOND_DELAI_MS, `modification sur un onglet de A visible sur B en < ${PLAFOND_DELAI_MS / 1000} s`);
+    const themeB = await themeCourant(B);
+    const memes = await Promise.all([A, ...onglets].map(p => p.waitForFunction(f => getComputedStyle(document.body).backgroundColor === f, FONDS[themeB], { polling: 50, timeout: 5_000 }).then(() => true, () => false)));
+    verifier(memes.every(Boolean), `les ${memes.length} onglets de A ont la modification (relais entre onglets, < 5 s)`);
+    await capture(onglets[0], `09-cinq-onglets-${MODE}`);
+    // Fermer les onglets en trop : leurs connexions éventuelles se ferment avec eux.
+    for (const p of onglets) await p.close();
+    await pause(1_500);
+    verifier(longues.ouvertes <= 2, `onglets fermés : ${longues.ouvertes} connexion(s) longue(s) restante(s)`);
+    if (MODE !== 'sondage') {
+      // Onglet masqué : sa connexion longue est fermée proprement (B parle directement au relais ; A passe
+      // par l'ancien relais qui transmet, dont la connexion vers le nouveau ne se coupe qu'à la fin de l'attente).
+      const masquer = (page, etat) =>
+        page.evaluate(e => {
+          Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => e });
+          document.dispatchEvent(new Event('visibilitychange'));
+        }, etat);
+      await pause(2_000);
+      // A parle avec le jeton maître (code AB1) ; B avec sa session : l'autre jeton.
+      const jetonB = Object.keys(longues.ouvertesPar).find(k => longues.ouvertesPar[k] > 0 && k !== JETON.slice(-6));
+      const deB = () => (jetonB ? longues.ouvertesPar[jetonB] : -1);
+      log(`connexions longues par jeton : ${JSON.stringify(longues.ouvertesPar)}`);
+      verifier(deB() === 1, `B visible : une connexion longue (${deB()})`);
+      const attentesB = () => journal.filter(j => j.chemin.endsWith('/attendre') && j.jeton === jetonB);
+      const avantMasque = attentesB().length;
+      await masquer(B, 'hidden');
+      await pause(1_000);
+      const verrousB = await B.evaluate(async () => (await navigator.locks.query()).held.length);
+      await pause(6_000);
+      verifier(verrousB === 0 && attentesB().length === avantMasque, `B masqué : écoute arrêtée tout de suite (requête annulée, verrou rendu), aucune nouvelle attente en 7 s`);
+      await masquer(B, 'visible');
+      await pause(2_000);
+      const refus = attentesB().slice(avantMasque).filter(j => j.statut === 429).length;
+      verifier(deB() === 1 && refus === 0, `B de nouveau visible : une seule connexion longue (${deB()}) ; l’éventuelle ancienne, pas encore vue fermée, est remplacée par le serveur (${refus} refus)`);
+    }
 
     // ================================================================ 4. Hors ligne, puis retour du réseau
     log('B hors ligne : modification gardée, partie au retour du réseau');

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { jetonDeProfil, traiterRequete } from './worker.mjs';
 import { coffresMemoire } from './coffres.mjs';
-import { MAX_PAR_COMPTE } from './avis.mjs';
+import { ATTENTE_MAX_S, LIMITE_MINUTE_IP, MAX_PAR_COMPTE, MAX_PAR_COMPTE_IP, avisDe, creerAvis, modeTempsReel } from './avis.mjs';
 import { compresser } from './serveur/compression.mjs';
 import { creerServeurHttp, ecouter } from '../esport/serveur/commun.mjs';
 
@@ -19,7 +19,8 @@ const JETON = 'jeton-de-test-avis-0123456789abcdef';
 const PG = process.env.RELAIS_TEST_PG || '';
 let adresse;
 let fermer = async () => {};
-const env = { JETON, BOITE: undefined, COFFRES: undefined };
+// Mode « sse » pour éprouver toutes les routes ; le mode par défaut (sondage) a son propre test.
+const env = { JETON, BOITE: undefined, COFFRES: undefined, SYNCHRO_TEMPS_REEL: 'sse' };
 
 function kv() {
   const donnees = new Map();
@@ -63,8 +64,10 @@ before(async () => {
 });
 after(() => fermer());
 
-const appel = (chemin, { methode = 'GET', jeton = JETON, corps, signal, entetes = {} } = {}) =>
-  fetch(`${adresse}${chemin}`, { method: methode, signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jeton}`, ...entetes }, body: corps === undefined ? undefined : JSON.stringify(corps) });
+// `ip` : adresse vue par le relais (X-Forwarded-For, comme derrière le frontal d'o2switch).
+let ipAuto = 0;
+const appel = (chemin, { methode = 'GET', jeton = JETON, corps, signal, entetes = {}, ip = `10.0.${Math.floor(++ipAuto / 250)}.${ipAuto % 250}` } = {}) =>
+  fetch(`${adresse}${chemin}`, { method: methode, signal, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jeton}`, 'X-Forwarded-For': ip, ...entetes }, body: corps === undefined ? undefined : JSON.stringify(corps) });
 let n = 0;
 const enr = (o = {}) => ({ id: (++n).toString(16).padStart(32, '0'), base: 0, date: new Date().toISOString(), valeur: `chiffre-${n}`, ...o });
 const ecrire = (compte, nombre = 1) => appel(`/v10/coffre/${compte}`, { methode: 'POST', corps: { enregistrements: Array.from({ length: nombre }, () => enr()) } }).then(r => r.json());
@@ -174,39 +177,156 @@ test('attente longue : répond dès la nouvelle révision, ou à la fin du déla
   assert.deepEqual(vide, { rev: rev + 1, attente: 1 });
 });
 
-test('limites : au plus MAX_PAR_COMPTE connexions tenues par compte, ensuite 429 (sondage)', async () => {
+test('limites : 2 connexions tenues par compte et par IP, MAX_PAR_COMPTE par compte ; au-delà, « sondage » tout de suite, sans connexion ouverte', async () => {
   const compte = 'avis00004';
-  await ecrire(compte);
+  const { rev } = await ecrire(compte);
+  const avis = avisDe(env);
   const ouverts = [];
-  for (let i = 0; i < MAX_PAR_COMPTE; i++) {
+  const ouvrir = async (ip, route = 'flux') => {
     const c = new AbortController();
-    const r = await appel(`/v10/coffre/${compte}/flux?rev=0`, { signal: c.signal });
-    assert.equal(r.status, 200);
-    ouverts.push({ c, f: lireFlux(r) });
+    const r = await appel(`/v10/coffre/${compte}/${route}?rev=${rev}&delai=30`, { signal: c.signal, ip });
+    return { c, r };
+  };
+  // Même adresse : 2 connexions tenues (flux + attente), la 3e est refusée aussitôt.
+  for (const route of ['flux', 'attendre']) {
+    const o = await ouvrir('192.0.2.10', route);
+    assert.equal(o.r.status, 200, route);
+    ouverts.push(o);
   }
-  const refus = await appel(`/v10/coffre/${compte}/flux?rev=0`);
-  assert.equal(refus.status, 429);
-  assert.equal((await refus.json()).motif, 'trop-de-connexions');
+  await new Promise(ok => setTimeout(ok, 30));
+  assert.equal(avis.nombreIp(compte, '192.0.2.10'), MAX_PAR_COMPTE_IP);
+  for (const route of ['flux', 'attendre']) {
+    const debut = performance.now();
+    const refus = await appel(`/v10/coffre/${compte}/${route}?rev=${rev}&delai=30`, { ip: '192.0.2.10' });
+    const duree = performance.now() - debut;
+    assert.equal(refus.status, 429, route);
+    assert.equal(refus.headers.get('retry-after'), '15');
+    const corps = await refus.json();
+    assert.equal(corps.motif, 'trop-de-connexions');
+    assert.equal(corps.mode, 'sondage');
+    assert.equal(corps.rev, rev, 'la révision courante est donnée : le sondage commence informé');
+    assert.ok(duree < 500, `réponse immédiate (${duree.toFixed(0)} ms)`);
+  }
+  assert.equal(avis.nombre(compte), 2, 'aucune connexion de plus n’est gardée');
+  // Autres adresses : jusqu'à MAX_PAR_COMPTE pour le compte.
+  for (let i = avis.nombre(compte); i < MAX_PAR_COMPTE; i++) {
+    const o = await ouvrir(`192.0.2.${20 + i}`);
+    assert.equal(o.r.status, 200);
+    ouverts.push(o);
+  }
+  assert.equal((await appel(`/v10/coffre/${compte}/flux?rev=0`, { ip: '192.0.2.99' })).status, 429, 'plafond du compte');
   assert.equal((await appel(`/v10/coffre/${compte}/attendre?rev=0&delai=1`)).status, 200, 'déjà en retard : réponse immédiate, sans connexion tenue');
   // Un autre compte n'est pas gêné.
   const autre = new AbortController();
-  assert.equal((await appel('/v10/coffre/avis00005/flux?rev=0', { signal: autre.signal })).status, 200);
+  assert.equal((await appel('/v10/coffre/avis00005/flux?rev=0', { signal: autre.signal, ip: '192.0.2.10' })).status, 200);
   autre.abort();
-  for (const o of ouverts) {
-    await o.f.fermer();
-    o.c.abort();
-  }
   // Une connexion fermée par l'appareil libère sa place (dès que le serveur voit la fermeture).
-  let statut = 0;
-  for (let i = 0; i < 40 && statut !== 200; i++) {
-    await new Promise(ok => setTimeout(ok, 50));
-    const c = new AbortController();
-    const r = await appel(`/v10/coffre/${compte}/flux?rev=0`, { signal: c.signal });
-    statut = r.status;
-    if (statut === 200) await r.body.cancel().catch(() => undefined);
-    c.abort();
+  for (const o of ouverts) o.c.abort();
+  for (let i = 0; i < 40 && avis.nombre(compte) > 0; i++) await new Promise(ok => setTimeout(ok, 50));
+  assert.equal(avis.nombre(compte), 0, 'toutes les places sont rendues');
+  assert.equal(avis.total(), 0, 'aucune fuite de connexion');
+});
+
+test('attente longue : battement (espaces) puis JSON valide ; jamais retenue pour gzip', async () => {
+  const compte = 'avis00007';
+  const { rev } = await ecrire(compte);
+  const r = await appel(`/v10/coffre/${compte}/attendre?rev=${rev}&delai=1`, { entetes: { 'Accept-Encoding': 'gzip' } });
+  assert.equal(r.headers.get('content-encoding'), null);
+  assert.equal(r.headers.get('x-accel-buffering'), 'no');
+  assert.deepEqual(await r.json(), { rev, attente: 1 });
+  // Délai demandé trop long : borné à ATTENTE_MAX_S.
+  assert.equal(ATTENTE_MAX_S, 50);
+});
+
+test('mode par défaut « sondage » : flux et attente refusés aussitôt (429 mode-sondage), version toujours là', async () => {
+  assert.equal(modeTempsReel({}), 'sondage');
+  assert.equal(modeTempsReel({ SYNCHRO_TEMPS_REEL: ' Attente ' }), 'attente');
+  assert.equal(modeTempsReel({ SYNCHRO_TEMPS_REEL: 'n’importe quoi' }), 'sondage');
+  const compte = 'avis00008';
+  const { rev } = await ecrire(compte);
+  const avant = env.SYNCHRO_TEMPS_REEL;
+  delete env.SYNCHRO_TEMPS_REEL;
+  try {
+    const sante = await (await appel('/sante')).json();
+    assert.equal(sante.tempsReel, 'sondage');
+    assert.equal(sante.pasSondage, 15);
+    for (const route of ['flux', 'attendre']) {
+      const debut = performance.now();
+      const r = await appel(`/v10/coffre/${compte}/${route}?rev=${rev}`);
+      assert.equal(r.status, 429);
+      const corps = await r.json();
+      assert.equal(corps.motif, 'mode-sondage');
+      assert.equal(corps.rev, rev);
+      assert.ok(performance.now() - debut < 500);
+    }
+    assert.equal(avisDe(env).nombre(compte), 0);
+    assert.equal((await (await appel(`/v10/coffre/${compte}/version`)).json()).rev, rev);
+    // Mode « attente » : l'attente longue oui, le flux non.
+    env.SYNCHRO_TEMPS_REEL = 'attente';
+    assert.equal((await (await appel('/sante')).json()).tempsReel, 'attente');
+    assert.equal((await (await appel(`/v10/coffre/${compte}/flux?rev=0`)).json()).motif, 'mode-attente');
+    assert.equal((await appel(`/v10/coffre/${compte}/attendre?rev=${rev}&delai=1`)).status, 200);
+  } finally {
+    env.SYNCHRO_TEMPS_REEL = avant;
   }
-  assert.equal(statut, 200);
+});
+
+test('plafond de requêtes par adresse : au-delà de LIMITE_MINUTE_IP, « sondage espacé » (Retry-After 60)', async () => {
+  const compte = 'avis00009';
+  await ecrire(compte);
+  let statut = 200;
+  let n = 0;
+  while (statut === 200 && n < LIMITE_MINUTE_IP + 5) {
+    statut = (await appel(`/v10/coffre/${compte}/version`, { ip: '198.51.100.7' })).status;
+    n++;
+  }
+  assert.equal(n, LIMITE_MINUTE_IP + 1);
+  const r = await appel(`/v10/coffre/${compte}/version`, { ip: '198.51.100.7' });
+  assert.equal(r.status, 429);
+  assert.equal(r.headers.get('retry-after'), '60');
+  assert.equal((await r.json()).motif, 'trop-de-requetes');
+  assert.equal((await appel(`/v10/coffre/${compte}/version`, { ip: '198.51.100.8' })).status, 200, 'les autres adresses ne sont pas gênées');
+});
+
+test('même appareil : la nouvelle connexion tenue remplace l’ancienne (jamais deux, même si l’ancienne n’a pas été vue fermée)', async () => {
+  const compte = 'avis00010';
+  const { rev } = await ecrire(compte);
+  const avis = avisDe(env);
+  const ancienne = appel(`/v10/coffre/${compte}/attendre?rev=${rev}&delai=30&appareil=onglet-abc123`, { ip: '203.0.113.5' }).then(r => r.json());
+  await new Promise(ok => setTimeout(ok, 50));
+  const c = new AbortController();
+  const nouvelle = await appel(`/v10/coffre/${compte}/attendre?rev=${rev}&delai=30&appareil=onglet-abc123`, { ip: '203.0.113.5', signal: c.signal });
+  assert.equal(nouvelle.status, 200);
+  // L'ancienne a répondu tout de suite (révision courante, attente terminée) : sa place est rendue.
+  assert.deepEqual(await ancienne, { rev, attente: 30 });
+  assert.equal(avis.nombreIp(compte, '203.0.113.5'), 1);
+  // Un autre appareil de la même adresse a sa propre place (2 par compte et par IP).
+  const c2 = new AbortController();
+  assert.equal((await appel(`/v10/coffre/${compte}/attendre?rev=${rev}&delai=30&appareil=autre-xyz789`, { ip: '203.0.113.5', signal: c2.signal })).status, 200);
+  assert.equal(avis.nombreIp(compte, '203.0.113.5'), 2);
+  c.abort();
+  c2.abort();
+  for (let i = 0; i < 40 && avis.nombre(compte) > 0; i++) await new Promise(ok => setTimeout(ok, 50));
+  assert.equal(avis.nombre(compte), 0);
+});
+
+test('bus : balayage des connexions orphelines, désabonnement idempotent, compteurs justes', () => {
+  let t = 0;
+  const bus = creerAvis({ maintenant: () => t });
+  let fermees = 0;
+  const d1 = bus.abonner('c', () => {}, { ip: 'a', fermer: () => fermees++ });
+  const d2 = bus.abonner('c', () => {}, { ip: 'a', fermer: () => fermees++ });
+  assert.ok(d1 && d2);
+  assert.equal(bus.abonner('c', () => {}, { ip: 'a' }), undefined, '2 par compte et par IP');
+  d1();
+  d1();
+  assert.equal(bus.nombreIp('c', 'a'), 1);
+  t += 10 * 60_000;
+  bus.balayer();
+  assert.equal(fermees, 1);
+  assert.equal(bus.total(), 0);
+  d2();
+  assert.equal(bus.total(), 0, 'désabonner après le balayage ne fausse rien');
 });
 
 test('gzip : grosses réponses JSON compressées si l’appareil l’accepte ; latence d’un aller-retour', async () => {

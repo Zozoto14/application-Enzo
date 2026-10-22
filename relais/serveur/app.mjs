@@ -15,6 +15,8 @@
  *   CLE_A2F               facultatif (32 caractères au moins, à ne jamais changer) : chiffre les secrets de
  *                         validation en deux étapes ; sans elle, une clé tirée du JETON
  *   LIMITE_TSUZUKU_MINUTE facultatif ; URL_PUBLIQUE : https://relais.appdashboard.fr
+ *   SYNCHRO_TEMPS_REEL    sondage (défaut, le plus sûr sur un mutualisé : aucune connexion tenue),
+ *                         attente (attente longue de 50 s) ou sse (flux) : voir docs/o2switch.md
  *   RELAIS_CIBLE, SITE_CIBLE  retour arrière seulement : tout transmettre à un autre relais (et l'annoncer)
  *
  * Les limites de débit gardées en mémoire par le relais valent pour UN processus : une seule instance
@@ -25,7 +27,7 @@ import { pathToFileURL } from 'node:url';
 import { basePostgres, optionsDepuisEnv } from '../../esport/adaptateurs/postgres.mjs';
 import { chargerEnv, creerServeurHttp, ecouter, exigerNode, fichierEnvParDefaut } from '../../esport/serveur/commun.mjs';
 import { traiterRequete } from '../worker.mjs';
-import { creerAvis } from '../avis.mjs';
+import { creerAvis, modeTempsReel } from '../avis.mjs';
 import { compresser } from './compression.mjs';
 import { configSmtp, creerEnvoyeur, manquesSmtp } from '../../esport/serveur/courriel-smtp.mjs';
 import { creerTableKv, kvPostgres, purgerKvExpire } from './kv-postgres.mjs';
@@ -47,6 +49,8 @@ export function chargerConfigRelais(env = process.env) {
     LIMITE_TSUZUKU_MINUTE: env.LIMITE_TSUZUKU_MINUTE || undefined,
     // Clé du serveur qui chiffre les secrets de validation en deux étapes (facultative : sinon tirée du JETON).
     CLE_A2F: env.CLE_A2F || undefined,
+    // Avis « nouvelle révision » : sondage (défaut), attente ou sse (relais/avis.mjs).
+    SYNCHRO_TEMPS_REEL: modeTempsReel(env),
     // Retour arrière (docs/o2switch.md) : ce relais transmet tout à RELAIS_CIBLE et l'annonce aux appareils.
     RELAIS_CIBLE: env.RELAIS_CIBLE || undefined,
     SITE_CIBLE: env.SITE_CIBLE || undefined,
@@ -81,6 +85,7 @@ export async function preparerRelais({ config = chargerConfigRelais(), base, env
     COFFRES: coffresPostgres(b),
     // Avis « nouvelle révision du coffre » (version 10) : en mémoire de CE processus (une instance).
     AVIS: creerAvis(),
+    SYNCHRO_TEMPS_REEL: config.SYNCHRO_TEMPS_REEL ?? modeTempsReel({}),
     CLE_A2F: config.CLE_A2F,
     DISCORD_WEBHOOK_URL: config.DISCORD_WEBHOOK_URL,
     DISCORD_BOT_TOKEN: config.DISCORD_BOT_TOKEN,
@@ -125,7 +130,7 @@ export async function demarrer({ port, hote, ...options } = {}) {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href || globalThis.__appdashboardDemarrer === 'relais') {
   demarrer()
-    .then(s => console.log(`[relais] serveur prêt (${s.url})${s.relais.config.fichierEnv ? `, configuration : ${s.relais.config.fichierEnv}` : ''}`))
+    .then(s => console.log(`[relais] serveur prêt (${s.url}), temps réel : ${s.relais.env?.SYNCHRO_TEMPS_REEL ?? '—'}${s.relais.config.fichierEnv ? `, configuration : ${s.relais.config.fichierEnv}` : ''}`))
     .catch(e => {
       console.error('[relais] démarrage impossible :', e);
       process.exit(1);

@@ -41,7 +41,7 @@ describe('synchro quasi immédiate (version 10)', () => {
   });
 
   it('le relais annonce v10 et les avis ; une modification part en une seule requête, sans relecture', async () => {
-    expect(await capacitesCoffre(MAITRE, relais.requete)).toEqual({ coffre: true, v10: true, avis: true });
+    expect(await capacitesCoffre(MAITRE, relais.requete)).toEqual({ coffre: true, v10: true, avis: true, tempsReel: 'sondage', pasSondageMs: 15_000 });
     const a = appareil();
     new DepotComptes(a).enregistrer(compte());
     await tour(relais, a);
@@ -151,7 +151,9 @@ describe('synchro quasi immédiate (version 10)', () => {
     let attendu = '';
     planA.demarrer();
     planB.demarrer();
-    const veille = new Veilleur({ liaison: MAITRE, compte: 'principal', revConnue: () => revDe(b), surVersion: () => planB.notification(), requete: relais.requete, modeInitial: mode, pasSondageMs: 100 });
+    // Le serveur permet ce mode (SYNCHRO_TEMPS_REEL), la veille le prend pour plafond.
+    (relais.env as Record<string, unknown>).SYNCHRO_TEMPS_REEL = mode === 'flux' ? 'sse' : mode;
+    const veille = new Veilleur({ liaison: MAITRE, compte: 'principal', revConnue: () => revDe(b), surVersion: () => planB.notification(), requete: relais.requete, plafond: mode, pasSondageMs: 100 });
     veille.demarrer();
     await pause(50);
     const delais: number[] = [];

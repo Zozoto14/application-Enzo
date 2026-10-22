@@ -60,6 +60,7 @@ import { CHEMIN_TSUZUKU, routeTsuzuku } from './tsuzuku.mjs';
 import { envoyerCourriel, routeCourriel } from './courriel.mjs';
 import { routeSupport } from './support.mjs';
 import { routeCoffre } from './coffres.mjs';
+import { PAS_SONDAGE_S, modeTempsReel } from './avis.mjs';
 import { lireA2f, routeA2f, verifierCodeConnexion } from './a2f.mjs';
 import { creerSession, estJetonSession, porteeSession, routeSessions, routeTheme, selLeurre } from './sessions.mjs';
 
@@ -976,8 +977,10 @@ const relaisWorker = {
     }
 
     if (pathname === '/sante') {
+      // `tempsReel` : comment les appareils apprennent les écritures des autres (SYNCHRO_TEMPS_REEL,
+      // « sondage » par défaut : aucune connexion tenue ouverte ; relais/avis.mjs).
       // Sans magasin de coffres (Worker sans PostgreSQL), le coffre serveur n'est pas annoncé : les appareils gardent l'ancienne synchronisation.
-      return reponse({ ok: true, version: VERSION_RELAIS, fonctions: env.COFFRES ? FONCTIONS_RELAIS : FONCTIONS_RELAIS.filter(f => !FONCTIONS_COFFRE.includes(f)), portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}), heure: Date.now() });
+      return reponse({ ok: true, version: VERSION_RELAIS, fonctions: env.COFFRES ? FONCTIONS_RELAIS : FONCTIONS_RELAIS.filter(f => !FONCTIONS_COFFRE.includes(f)), portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}), ...(env.COFFRES ? { tempsReel: modeTempsReel(env), pasSondage: PAS_SONDAGE_S } : {}), heure: Date.now() });
     }
     if (pathname === '/heure') {
       // Ultra léger : l'appareil compare son horloge (codes TOTP) à celle du relais.

@@ -16,7 +16,9 @@ export async function compresser(requete, reponse) {
     requete.method === 'HEAD' ||
     !/\bgzip\b/i.test(requete.headers.get('Accept-Encoding') ?? '') ||
     !/^application\/json/i.test(type) ||
-    reponse.headers.has('Content-Encoding')
+    reponse.headers.has('Content-Encoding') ||
+    // Réponse tenue ouverte (attente longue : battements puis JSON) : jamais retenue pour la compresser.
+    reponse.headers.get('X-Accel-Buffering') === 'no'
   ) {
     return reponse;
   }
