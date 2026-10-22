@@ -129,6 +129,11 @@ test('deployer.sh : code, dépendances, migrations, redémarrage, site ; idempot
   git(source, 'commit', '-q', '-m', 'v2');
   git(source, 'push', '-q', nu, 'HEAD:refs/heads/main');
   writeFileSync(join(site, 'index.html'), '<!doctype html><title>v2</title>');
+  // Nouveau build : l'ancien morceau haché (app-1234.js) disparaît de la branche, un nouveau (app-5678.js) arrive.
+  execFileSync('git', ['rm', '-q', 'assets/app-1234.js'], { cwd: site });
+  mkdirSync(join(site, 'assets'), { recursive: true });
+  writeFileSync(join(site, 'assets', 'app-5678.js'), 'console.log(2)');
+  git(site, 'add', '-A');
   git(site, 'commit', '-q', '-am', 'site 2');
   git(site, 'push', '-q', nu, 'deploiement-o2switch');
   // Deux exécutions simultanées : le verrou laisse passer une seule mise à jour, sans erreur.
@@ -139,6 +144,21 @@ test('deployer.sh : code, dépendances, migrations, redémarrage, site ; idempot
   assert.match(readFileSync(join(pub, 'index.html'), 'utf8'), /v2/);
   assert.equal(readFileSync(join(pub, '.htaccess'), 'utf8').split('BEGIN AppDashboard').length, 2);
   assert.equal(journalDe().split('\n').filter(l => l.includes('code :')).length, 1, 'une seule mise à jour du code pour v2');
+
+  // Assets hachés : l'ancien morceau reste après le nouveau déploiement (un onglet ouvert en a encore besoin)…
+  assert.ok(existsSync(join(pub, 'assets', 'app-1234.js')), 'ancien asset conservé après le déploiement');
+  assert.ok(existsSync(join(pub, 'assets', 'app-5678.js')));
+  // … alors que le reste du site garde la synchronisation stricte (fichier retiré = effacé).
+  const jours = n => String(Math.floor(Date.now() / 1000) + n * 86400);
+  const dans = async n => assert.equal((await lancer({ ...env, DEPLOYER_MAINTENANT: jours(n) })).code, 0);
+  await dans(13);
+  assert.ok(existsSync(join(pub, 'assets', 'app-1234.js')), 'encore là à 13 jours');
+  await dans(15);
+  assert.equal(existsSync(join(pub, 'assets', 'app-1234.js')), false, 'purgé après 14 jours');
+  assert.ok(existsSync(join(pub, 'assets', 'app-5678.js')), 'l\'asset du build courant n\'est jamais purgé');
+  assert.match(journalDe(), /1 ancien\(s\) fichier\(s\) de assets\/ purgé/);
+  assert.equal(statSync(pub).mode & 0o777, 0o755);
+  assert.equal(readFileSync(join(pub, '.well-known', 'acme-challenge', 'jeton'), 'utf8'), 'letsencrypt');
   await admin.script(`DROP SCHEMA ${schema} CASCADE`);
   await admin.fermer();
 });

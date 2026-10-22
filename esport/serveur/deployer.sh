@@ -9,6 +9,9 @@
 #   4. le redémarrage des deux apps Node (Passenger : touch tmp/restart.txt) ;
 #   5. le site : branche deploiement-o2switch (construite par GitHub Actions), copiée dans public_html
 #      (rsync --delete, en protégeant .htaccess, .well-known, cgi-bin, maj/… ; bloc .htaccess fusionné).
+#      Les fichiers hachés de assets/ ne sont PAS effacés tout de suite : un onglet resté ouvert sur l'ancienne
+#      version en a encore besoin (sinon « Failed to fetch dynamically imported module »). Ils restent
+#      DELAI_ASSETS_JOURS jours (14) après leur dernière présence dans un build, puis sont purgés.
 #
 # Idempotent (rien à faire = rien de fait) et protégé contre deux exécutions simultanées (flock).
 # Journal : ~/logs/esport-deploy.log. Tâche cron cPanel (une ligne) :
@@ -16,7 +19,8 @@
 #
 # Options : --forcer (refait tout même sans nouveauté), --sans-git (code déjà à jour : bouton
 # « Deploy HEAD Commit » de cPanel, voir .cpanel.yml), --sans-site, --sans-code.
-# Réglages (variables, facultatives) : DEPOT, BRANCHE, BRANCHE_SITE, SITE_DIR, NODE_BIN, NPM_BIN, JOURNAL.
+# Réglages (variables, facultatives) : DEPOT, BRANCHE, BRANCHE_SITE, SITE_DIR, NODE_BIN, NPM_BIN, JOURNAL,
+# DELAI_ASSETS_JOURS (14) ; DEPLOYER_MAINTENANT (date simulée en secondes Unix, pour les tests).
 
 set -uo pipefail
 
@@ -26,6 +30,8 @@ BRANCHE_SITE="${BRANCHE_SITE:-deploiement-o2switch}"
 SITE_DIR="${SITE_DIR:-$HOME/public_html}"
 JOURNAL="${JOURNAL:-$HOME/logs/esport-deploy.log}"
 ETAT="$HOME/.appdashboard"
+DELAI_ASSETS_JOURS="${DELAI_ASSETS_JOURS:-14}"
+MAINTENANT="${DEPLOYER_MAINTENANT:-$(date +%s)}"
 FORCER=0; SANS_GIT=0; SANS_SITE=0; SANS_CODE=0
 for a in "$@"; do
   case "$a" in
@@ -118,6 +124,7 @@ if [ "$SANS_SITE" = 0 ]; then
       # et la liste personnelle ~/.appdashboard/site-garder.txt (un chemin par ligne, ex. /mon-dossier/).
       FILTRES=(--filter='P /.htaccess' --filter='P /.well-known/' --filter='P /cgi-bin/' --filter='P /.user.ini' --filter='P /php.ini'
         --filter='P /maj/' --filter='P /esport.appdashboard.fr/' --filter='P /relais.appdashboard.fr/' --filter='P /.appdashboard-site'
+        --filter='P /assets/***'
         --exclude='/htaccess-appdashboard.conf' --exclude='/.htaccess' --exclude='/LISEZMOI-deploiement.md')
       if [ -f "$ETAT/site-garder.txt" ]; then
         while IFS= read -r ligne; do [ -n "$ligne" ] && [ "${ligne#\#}" = "$ligne" ] && FILTRES+=(--filter="P $ligne"); done < "$ETAT/site-garder.txt"
@@ -137,10 +144,42 @@ if [ "$SANS_SITE" = 0 ]; then
       # le groupe « nobody » (serveur web) sur public_html, mais une copie peut le remplacer par le
       # groupe de l'utilisateur, que celui-ci ne peut pas remettre ; avec 750, ce serait 403 partout.
       chmod 755 "$SITE_DIR" 2>/dev/null || true
+      # Assets hachés : on note la date de dernière présence dans un build (un fichier témoin par asset,
+      # dans ~/.appdashboard/assets-vus/, daté d'aujourd'hui) et la liste du build courant.
+      if [ -d "$TMP/assets" ]; then
+        ( cd "$TMP" && find assets -type f ) | sort > "$ETAT/assets-courant.txt"
+        while IFS= read -r f; do
+          mkdir -p "$ETAT/assets-vus/$(dirname "$f")"
+          touch -d "@$MAINTENANT" "$ETAT/assets-vus/$f"
+        done < "$ETAT/assets-courant.txt"
+      fi
       echo "$SITE" > "$SITE_DIR/.appdashboard-site"
       echo "$SITE" > "$ETAT/site-deploye"
       journal "site : public_html à jour ($(git log -1 --format='%h %s' "origin/$BRANCHE_SITE" | cut -c1-90))"
     fi
+  fi
+fi
+
+# ---------------------------------------------------------------- 6. Purge des anciens assets hachés
+# À chaque passage (peu coûteux) : un fichier de assets/ absent du build courant et dont la dernière
+# présence dans un build date de plus de DELAI_ASSETS_JOURS jours est effacé. Un fichier sans témoin
+# (déployé avant ce mécanisme) reçoit un témoin daté d'aujourd'hui : il part dans 14 jours.
+if [ "$SANS_SITE" = 0 ] && [ -d "$SITE_DIR/assets" ] && [ -f "$ETAT/assets-courant.txt" ]; then
+  PURGES=0
+  while IFS= read -r f; do
+    f="assets/${f#"$SITE_DIR/assets/"}"
+    grep -qxF -- "$f" "$ETAT/assets-courant.txt" && continue
+    temoin="$ETAT/assets-vus/$f"
+    if [ ! -e "$temoin" ]; then
+      mkdir -p "$(dirname "$temoin")"; touch -d "@$MAINTENANT" "$temoin"; continue
+    fi
+    if [ $(( MAINTENANT - $(stat -c %Y "$temoin") )) -gt $(( DELAI_ASSETS_JOURS * 86400 )) ]; then
+      rm -f -- "$SITE_DIR/$f" "$temoin" && PURGES=$(( PURGES + 1 ))
+    fi
+  done < <(find "$SITE_DIR/assets" -type f)
+  if [ "$PURGES" -gt 0 ]; then
+    find "$SITE_DIR/assets" -mindepth 1 -type d -empty -delete 2>/dev/null
+    journal "site : $PURGES ancien(s) fichier(s) de assets/ purgé(s) (absents des builds depuis plus de $DELAI_ASSETS_JOURS jours)"
   fi
 fi
 exit 0

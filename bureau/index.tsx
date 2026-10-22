@@ -28,6 +28,8 @@ import { Bouton, Titre } from '../src/ui/composants';
 import { ESPACEMENT, assurerThemeDocument, palettePour } from '../src/ui/theme';
 import { useFondDocument } from './Bureau';
 import { BandeauMiseAJour } from './MiseAJour';
+import { BandeauNouvelleVersion } from './NouvelleVersion';
+import { installerEcouteursChunks } from '../src/ui/versionPerimee';
 import { ouvrirSessionBureau, type SessionBureau } from './session';
 import { pont, stockageCachesBureau, stockageCourant, type NomFichier, type Stockage } from './stockage';
 import { definirStockageCaches, cachesSynchro } from '../src/sync/relais/caches';
@@ -2211,6 +2213,7 @@ function Racine() {
   return (
     <View style={[styles.pleinEcran, { backgroundColor: palette.fond }]}>
       <BandeauMiseAJour palette={palette} />
+      <BandeauNouvelleVersion palette={palette} />
       {adminSur ? (
         <View style={[styles.bandeauAdmin, { backgroundColor: palette.danger }]} testID="bandeau-session-admin" accessibilityRole="alert">
           <Text style={{ color: '#fff', fontWeight: '700', flex: 1 }} testID="bandeau-session-texte">
@@ -2257,6 +2260,9 @@ const styles = StyleSheet.create({
   boutonBandeau: { borderWidth: 1, borderColor: '#fff', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14, minHeight: 36, justifyContent: 'center' },
   bandeauAdmin: { flexDirection: 'row', alignItems: 'center', gap: ESPACEMENT.s, paddingVertical: ESPACEMENT.s, paddingHorizontal: ESPACEMENT.m, flexWrap: 'wrap' },
 });
+
+// Morceaux JS périmés après un déploiement (site et app Electron) : un seul rechargement automatique.
+installerEcouteursChunks();
 
 createRoot(document.getElementById('racine')!).render(
   <SafeAreaProvider>{contexteAnnexe ? <RacineAnnexe contexte={contexteAnnexe} /> : <Racine />}</SafeAreaProvider>,

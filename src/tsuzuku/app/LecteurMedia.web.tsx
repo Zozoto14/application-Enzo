@@ -20,6 +20,7 @@ import { useInfoOnglet } from '../../hub/multi/contexte';
 import { useTsuzuku } from './contexte';
 import type { PropsMedia } from './typesMedia';
 import { Avis } from './ui';
+import { traiterErreurChunk } from '../../ui/versionPerimee';
 
 /** Cloisonnement de l'iframe d'hôte : ses scripts et son origine (le lecteur en a besoin), le plein écran ; ni navigation du parent, ni fenêtres. */
 export const SANDBOX_LECTEUR = 'allow-scripts allow-same-origin allow-presentation';
@@ -114,7 +115,9 @@ function VideoWeb({ lecteur, titre, onFin, debut, onPosition, onVivant, onEchec 
         h.loadSource(lecteur.url);
         h.attachMedia(video);
       })
-      .catch(() => {
+      .catch(erreur => {
+        // Morceau périmé après un déploiement : rechargement unique (src/ui/versionPerimee.ts).
+        traiterErreurChunk(erreur);
         setErreur('Le lecteur HLS n’a pas pu être chargé.');
         veilleRef.current.echec('lecteur HLS indisponible');
       });

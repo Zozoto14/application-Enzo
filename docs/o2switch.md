@@ -335,7 +335,8 @@ Toutes deux se protègent contre une exécution en double.
      (Let's Encrypt), `cgi-bin/`, `.user.ini`, `php.ini`, `maj/` (mises à jour de l'iPhone). Pour garder d'autres
      fichiers, écrivez leur chemin (ex. `/mon-dossier/`), un par ligne, dans `~/.appdashboard/site-garder.txt` ;
    - le bloc `.htaccess` reproduit Cloudflare Pages : HTTPS obligatoire, en-têtes de `bureau/public/_headers`
-     (cache d'un an des fichiers `assets/`), repli « une page » vers `index.html`.
+     (cache d'un an des fichiers `assets/`), repli « une page » vers `index.html` ;
+   - les anciens fichiers de `assets/` sont **gardés 14 jours** après leur dernier build (un onglet resté ouvert en a encore besoin), puis purgés par le cron ; l'app se recharge seule une fois si un morceau manque.
 3. Ouvrez **https://appdashboard.fr** : l'écran d'ouverture de l'app s'affiche.
 
 `esport.json` et `relais.json` du site pointent vers `https://esport.appdashboard.fr` et

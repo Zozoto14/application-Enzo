@@ -30,17 +30,38 @@ function versionApp() {
   return commit ? `${paquet} (${commit})` : paquet;
 }
 
+/** Identifiant unique du build : commit + date. Publié dans version.json (servi sans cache). */
+const ID_BUILD = (() => {
+  let commit = 'sans-git';
+  try {
+    commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ici('.'), encoding: 'utf8' }).trim();
+  } catch {
+    // Pas de git : la date suffit.
+  }
+  return `${commit}-${Date.now().toString(36)}`;
+})();
+
+/** Publie version.json à la racine du build : l'app compare son __BUILD_ID__ à celui du serveur. */
+const publierVersion = () => ({
+  name: 'publier-version',
+  apply: 'build',
+  generateBundle() {
+    this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ id: ID_BUILD }) + '\n' });
+  },
+});
+
 export default defineConfig({
   root: 'bureau',
   // Chemins relatifs : l'application livree charge ses fichiers depuis le
   // disque (file://), ou une racine absolue ne resoudrait rien.
   base: './',
-  plugins: [react()],
+  plugins: [react(), publierVersion()],
   define: {
     // Attendu par react-native-web et par plusieurs modules du noyau.
     global: 'globalThis',
     __DEV__: JSON.stringify(process.env.NODE_ENV !== 'production'),
     __VERSION_APP__: JSON.stringify(versionApp()),
+    __BUILD_ID__: JSON.stringify(ID_BUILD),
   },
   resolve: {
     alias: [

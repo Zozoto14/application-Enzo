@@ -5,6 +5,10 @@
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
+# version.json : jamais mis en cache (l'app le relit au retour sur l'onglet pour proposer « Nouvelle version »).
+/version.json
+  Cache-Control: no-cache
+
 # Review vidéo Esport (lecteur YouTube IFrame, miniatures ytimg). AUCUNE politique CSP n'est posée
 # aujourd'hui (le site charge librement les relais, polices et lecteurs de Tsuzuku) : YouTube
 # fonctionne donc tel quel. Le jour où une CSP sera ajoutée ici, elle devra autoriser au minimum :
