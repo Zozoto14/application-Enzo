@@ -42,6 +42,7 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     secretsExportables,
     medias: config.medias,
     transcriptionExterne: config.transcriptionExterne,
+    transcriptionServeur: config.transcriptionServeur,
   });
   return { traiter: api, base: b, stockage: st, config, problemes, fermer: async () => (base ? undefined : b.fermer()) };
 }

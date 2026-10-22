@@ -25,6 +25,8 @@
  *   PUT    /teams/:t/resumes/:id/transcription     enregistrer (partielle ou complète → PDF) : déposant, rédacteurs
  *   POST   /teams/:t/resumes/:id/transcription/lien     lien signé du PDF de transcription
  *   POST   /teams/:t/resumes/:id/transcription/externe  API externe (désactivée par défaut)
+ *   POST   /teams/:t/resumes/:id/transcription/serveur  transcription sur le serveur (file) ; DELETE : annuler
+ *   GET    /teams/:t/resumes/reglages-transcription     mode de transcription de la team ; PATCH (team.manage)
  *
  *   GET|POST          /teams/:t/objectifs          ; PATCH|DELETE /teams/:t/objectifs/:id
  *   GET|POST          /teams/:t/taches             (?filtre=miennes|retard&statut=&objectif=&assigne=&priorite=)
@@ -56,9 +58,9 @@ const filtresTaches = q => ({
   priorite: q.get('priorite') || undefined,
 });
 
-export function servicesPhase3({ base, stockage, cleSession, maintenant, socle, medias, transcriptionExterne, fetchTranscription }) {
+export function servicesPhase3({ base, stockage, cleSession, maintenant, socle, medias, transcriptionExterne, fetchTranscription, transcriptionServeur }) {
   return {
-    resumes: servicesResumes({ base, stockage, cleSession, maintenant, socle, medias, transcriptionExterne, fetchTranscription }),
+    resumes: servicesResumes({ base, stockage, cleSession, maintenant, socle, medias, transcriptionExterne, fetchTranscription, ...(transcriptionServeur ? { transcriptionServeur } : {}) }),
     objectifs: servicesObjectifs({ base, maintenant, socle }),
   };
 }
@@ -97,7 +99,14 @@ export async function routerPhase3({ resumes, objectifs }, { requete, url, chemi
   if (section === 'resumes' && a === 'envois' && medias) {
     return routesEnvois({ medias, acteur, teamId, usage: 'reunion', p: [b, c, d].filter(Boolean), methode: m, requete, lireCorps: () => lireCorps(requete) });
   }
+  // Paramètres de la team : mode de transcription par défaut (serveur, navigateur, API externe).
+  if (section === 'resumes' && a === 'reglages-transcription' && !b) {
+    if (m === 'GET') return resumes.reglagesTranscription(acteur, teamId);
+    if (m === 'PATCH') return resumes.changerReglagesTranscription(acteur, teamId, await lireCorps(requete));
+  }
   if (section === 'resumes' && a && a !== 'miens' && a !== 'types') {
+    if (b === 'transcription' && c === 'serveur' && !d && m === 'POST') return resumes.demanderTranscriptionServeur(acteur, teamId, a, await lireCorps(requete));
+    if (b === 'transcription' && c === 'serveur' && !d && m === 'DELETE') return resumes.annulerTranscriptionServeur(acteur, teamId, a);
     if (b === 'enregistrement' && c === 'lien' && !d && m === 'POST') return lienAbsolu(await resumes.lienEnregistrement(acteur, teamId, a, await lireCorps(requete)));
     if (b === 'transcription' && !c && m === 'GET') return resumes.transcription(acteur, teamId, a);
     if (b === 'transcription' && !c && m === 'PUT') return resumes.enregistrerTranscription(acteur, teamId, a, await lireCorps(requete, TAILLE_MAX_TRANSCRIPTION));

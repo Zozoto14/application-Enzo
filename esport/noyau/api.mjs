@@ -120,11 +120,12 @@ export function creerApi({
   medias: configDesMedias = configMedias(),
   transcriptionExterne = { actif: false },
   fetchTranscription,
+  transcriptionServeur,
 }) {
   const s = servicesEsport({ base, maintenant, creationTeams });
   // Vidéos et enregistrements (envoi par morceaux, lecture par plages, espace utilisé).
   const md = servicesMedias({ base, stockage, cleSession, maintenant, socle: s, config: configDesMedias });
-  const s3 = servicesPhase3({ base, stockage, cleSession, maintenant, socle: s, medias: md, transcriptionExterne, fetchTranscription });
+  const s3 = servicesPhase3({ base, stockage, cleSession, maintenant, socle: s, medias: md, transcriptionExterne, fetchTranscription, transcriptionServeur });
   const p = servicesPlanning({ base, maintenant, noyau: s });
   // Discord : secret de chiffrement des webhooks (CLE_DISCORD, sinon dérivé de CLE_ESPORT) ; `fetchDiscord` : réseau simulé en test.
   const secretDiscord = cleDiscord || cleSession;
@@ -181,7 +182,12 @@ export function creerApi({
         stockage: Boolean(stockage),
         session: Boolean(cleSession),
         bot: Boolean(configBot.applicationId && configBot.publicKey && jetonBot),
-        medias: { plafond: configDesMedias.plafond, tailleMorceau: configDesMedias.tailleMorceau, transcriptionExterne: Boolean(transcriptionExterne?.actif) },
+        medias: {
+          plafond: configDesMedias.plafond,
+          tailleMorceau: configDesMedias.tailleMorceau,
+          transcriptionExterne: Boolean(transcriptionExterne?.actif),
+          transcriptionServeur: Boolean(transcriptionServeur?.disponible),
+        },
         heure: maintenant(),
       };
     }

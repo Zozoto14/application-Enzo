@@ -313,7 +313,16 @@
   "Enregistrement introuvable.": "Recording not found.",
   "Ce fichier n’est pas une vidéo reconnue (MP4, MOV, WebM ou MKV).": "This file isn’t a recognised video (MP4, MOV, WebM or MKV).",
   "Ce fichier n’est ni une vidéo ni un audio reconnu (MP4, MOV, WebM, MKV, M4A, MP3, WAV, OGG, FLAC).": "This file isn’t a recognised video or audio file (MP4, MOV, WebM, MKV, M4A, MP3, WAV, OGG, FLAC).",
-  "Contexte indisponible dans le cron.": "Context unavailable in the scheduled task."
+  "Contexte indisponible dans le cron.": "Context unavailable in the scheduled task.",
+  "Mode de transcription : serveur, navigateur ou externe.": "Transcription mode: server, browser or external.",
+  "La transcription sur le serveur n’est pas installée : transcrivez dans le navigateur.": "Server transcription isn’t installed: transcribe in the browser.",
+  "Interrompue trop souvent (limite de l’hébergeur ou redémarrage).": "Interrupted too often (hosting limit or restart).",
+  "Enregistrement supprimé : rien à transcrire.": "Recording deleted: nothing to transcribe.",
+  "Enregistrement sans piste audio lisible.": "Recording without a readable audio track.",
+  "Enregistrement introuvable dans le stockage.": "Recording not found in storage.",
+  "Format non lisible sans ffmpeg : relancez esport/serveur/installer-transcription.sh (ou déposez un WAV).": "Format unreadable without ffmpeg: run esport/serveur/installer-transcription.sh again (or upload a WAV).",
+  "WAV illisible.": "Unreadable WAV.",
+  "WAV non pris en charge (PCM ou flottant attendu).": "Unsupported WAV (PCM or float expected)."
  },
  "motifs": [
   [
@@ -451,6 +460,18 @@
   [
    "^API de transcription : refus \\(HTTP (\\d+)\\)\\.$",
    "Transcription API: refused (HTTP $1)."
+  ],
+  [
+   "^Délai maximal dépassé \\((\\d+(?:[.,]\\d+)?) h\\)\\.$",
+   "Maximum delay exceeded ($1 h)."
+  ],
+  [
+   "^Mémoire insuffisante sur le serveur pour le modèle « (\\w+) » : choisissez un modèle plus petit \\(TRANSCRIPTION_MODELE=tiny\\) ou transcrivez dans le navigateur\\.$",
+   "Not enough memory on the server for the “$1” model: choose a smaller model (TRANSCRIPTION_MODELE=tiny) or transcribe in the browser."
+  ],
+  [
+   "^ffmpeg n’a pas pu lire l’enregistrement \\((.*)\\)\\.$",
+   "ffmpeg couldn’t read the recording ($1)."
   ]
  ]
 }

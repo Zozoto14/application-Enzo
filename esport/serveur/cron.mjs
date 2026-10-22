@@ -1,6 +1,7 @@
 /**
  * Tâches planifiées de l'Esport (les mêmes que le cron du Worker : rappels, file Discord, purge du
- * journal…), plus la purge des clés expirées du relais. Lancé par une tâche cron cPanel toutes les
+ * journal…), plus la purge des clés expirées du relais et le lancement du processus de transcription
+ * sur le serveur (esport/serveur/transcription/, s'il est installé et que des réunions attendent). Lancé par une tâche cron cPanel toutes les
  * 5 minutes :
  *
  *   node /home/jayo8828/application-enzo/esport/serveur/cron.mjs >> /home/jayo8828/logs/esport-cron.log 2>&1
@@ -19,9 +20,10 @@ import { tacheRecap } from '../noyau/recap.mjs';
 import { creerEnvoyeur } from './courriel-smtp.mjs';
 import { purgerKvExpire } from '../../relais/serveur/kv-postgres.mjs';
 import { chargerConfigEsport } from './config.mjs';
+import { lancerTravailleur } from './transcription/lanceur.mjs';
 
-/** Exécute une fois toutes les tâches ; rend le rapport. */
-export async function executerCron(base, config, { fetch, maintenant, stockage, creerTransport } = {}) {
+/** Exécute une fois toutes les tâches ; rend le rapport. `lancer` : lanceur de la transcription (tests). */
+export async function executerCron(base, config, { fetch, maintenant, stockage, creerTransport, lancer = lancerTravailleur } = {}) {
   const fichiers = stockage ?? (config.dossierFichiers ? await stockageDisque(config.dossierFichiers) : undefined);
   const rapport = await tachesPlanifiees(base, {
     cle: config.cleDiscord || config.cleSession,
@@ -43,6 +45,15 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
       rapport.push({ tache: 'récapitulatifs e-mail', ok: false, erreur: String(e?.code ?? 'erreur') });
     } finally {
       envoyer?.fermer?.();
+    }
+  }
+  // Transcription sur le serveur : processus de fond détaché (un seul à la fois), si des réunions attendent.
+  if (config.transcriptionServeur?.disponible) {
+    try {
+      const r = await lancer({ base, config, ...(maintenant ? { maintenant } : {}) });
+      rapport.push({ tache: 'transcription serveur', ok: true, n: r.n ?? 0, etat: r.raison });
+    } catch (e) {
+      rapport.push({ tache: 'transcription serveur', ok: false, erreur: String(e?.message ?? e) });
     }
   }
   try {

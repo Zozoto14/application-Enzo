@@ -361,11 +361,37 @@ export interface Depot {
   /** Enregistrement déposé (vidéo ou audio), ou null (lien externe seulement). */
   enregistrement?: FichierMedia | null;
   /** Transcription automatique (distincte du résumé rédigé). */
-  transcription?: { statut: StatutTranscription; pdf: boolean; peutTranscrire: boolean; externe?: boolean };
+  transcription?: { statut: StatutTranscription; pdf: boolean; peutTranscrire: boolean; externe?: boolean; serveur?: boolean; travail?: TravailServeur | null };
 }
 
-/** aucune · a_faire (enregistrement déposé) · en_cours (partielle) · externe (API serveur) · prete · echec. */
-export type StatutTranscription = 'aucune' | 'a_faire' | 'en_cours' | 'externe' | 'prete' | 'echec';
+/**
+ * aucune · a_faire (enregistrement déposé) · en_cours (partielle, navigateur) · externe (API serveur) ·
+ * serveur (file de transcription du serveur) · prete · echec.
+ */
+export type StatutTranscription = 'aucune' | 'a_faire' | 'en_cours' | 'externe' | 'serveur' | 'prete' | 'echec';
+
+/** Où se fait la transcription : sur le serveur (automatique), dans ce navigateur, ou par l'API externe. */
+export type ModeTranscription = 'serveur' | 'navigateur' | 'externe';
+
+/** Travail de la file de transcription du serveur (migration 0016). */
+export interface TravailServeur {
+  statut: 'attente' | 'en_cours' | 'termine' | 'echec' | 'annule';
+  modele: string;
+  langue: string;
+  progression: number;
+  duree: number | null;
+  pourcentage: number;
+  /** Temps restant estimé (secondes), quand on le connaît. */
+  restantS: number | null;
+  /** Réunions avant celle-ci dans la file. */
+  rang: number;
+  essais: number;
+  prochainEssai: string | null;
+  erreur: string | null;
+  debutLe: string | null;
+  finLe: string | null;
+  majLe: string;
+}
 
 /** Analyse d'un média déposé (octets magiques, atomes MP4) : format, codecs, durée. */
 export interface InfosMedia {
@@ -626,7 +652,7 @@ export interface ClientEsport {
   modifierTypeReunion(id: string, typeId: string, t: Partial<{ nom: string; couleur: string; visibilite: 'team' | 'staff' }>): Promise<TypeReunion>;
   supprimerTypeReunion(id: string, typeId: string): Promise<void>;
   /** Dépôt d'une réunion : lien externe, ou enregistrement déposé (`envoi` terminé), ou les deux. */
-  deposerReunion(id: string, d: { lien?: string; envoi?: string; typeId: string; dateReunion: string; titre: string; note?: string }): Promise<Depot>;
+  deposerReunion(id: string, d: { lien?: string; envoi?: string; typeId: string; dateReunion: string; titre: string; note?: string; transcription?: ModeTranscription; langue?: string }): Promise<Depot>;
   mesDepots(id: string): Promise<Depot[]>;
   resumesTeam(id: string, limite?: number): Promise<Depot[]>;
   depot(id: string, depotId: string): Promise<DetailDepot>;

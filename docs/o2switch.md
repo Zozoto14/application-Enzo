@@ -192,6 +192,9 @@ MAIL_FROM=AppDashboard <noreply@appdashboard.fr>
 # Vidéos déposées (facultatif, voir docs/esport/videos.md) : plafond par fichier, taille des morceaux d'envoi.
 # ESPORT_VIDEO_MAX=10G
 # ESPORT_TAILLE_MORCEAU=8M
+# Transcription des réunions sur le serveur (facultatif, partie H) :
+# TRANSCRIPTION_MODELE=base
+# TRANSCRIPTION_THREADS=1
 ```
 
 Enregistrez : **Ctrl+O**, **Entrée**, puis **Ctrl+X**. Ensuite :
@@ -306,7 +309,8 @@ cPanel › section **Avancé** › **Tâches Cron**.
 
 La première met à jour code, base, apps et site ; la seconde fait le travail planifié de l'Esport (rappels,
 file d'envoi Discord, purge du journal selon la durée de chaque team, ménage, envois de vidéos inachevés depuis plus de
-24 h, transcriptions demandées à une API externe si elle est activée) et efface les clés expirées du relais.
+24 h, transcriptions demandées à une API externe si elle est activée, lancement de la transcription sur le serveur
+quand une réunion attend : partie H) et efface les clés expirées du relais.
 Toutes deux se protègent contre une exécution en double.
 
 *Variante sans cron de déploiement* : cPanel › **Git Version Control** › **Gérer** › onglet **Pull or Deploy** ›
@@ -552,6 +556,103 @@ déploiement (mêmes routes `/v9/…`).
 
 ---
 
+## Partie H — Transcription des réunions sur le serveur
+
+Depuis la migration `0016`, le **serveur o2switch transcrit lui-même** les réunions déposées (Esport › Résumés) :
+plus besoin qu'un PC reste ouvert, et ça marche aussi pour un dépôt fait depuis un iPhone. Le moteur est
+**Whisper** (le même modèle d'OpenAI que dans le navigateur), calculé sur le processeur du serveur avec **ONNX
+Runtime** (binaires tout faits pour Linux : rien à compiler, aucun droit administrateur). Détails côté app :
+[esport/resumes.md](esport/resumes.md).
+
+### H1. Installer (une seule fois, 5 minutes)
+
+Dans le **Terminal** cPanel :
+
+```bash
+bash ~/application-enzo/esport/serveur/installer-transcription.sh
+```
+
+Le script vérifie la machine, installe le moteur dans `~/esport-modeles/moteur` (ONNX Runtime et ffmpeg, environ
+300 Mo), télécharge le modèle Whisper « base » (environ 160 Mo) dans `~/esport-modeles/whisper-base`, transcrit un
+court enregistrement d'exemple (une phrase en anglais : « After early nightfall… »), redémarre l'app Esport, puis
+affiche **« Transcription serveur prête »**. L'app propose alors « Serveur (automatique) » au dépôt.
+
+Rien d'autre à faire : la tâche cron Esport (étape A9, toutes les 5 minutes) lance la transcription quand une réunion
+attend. Le déploiement automatique (`deployer.sh`) ne touche jamais à `~/esport-modeles` : le modèle n'est téléchargé
+qu'une fois. Relancer le script ne retélécharge que ce qui manque (`--forcer` pour tout refaire).
+
+Réglages facultatifs, à ajouter dans `~/.appdashboard/esport.env` (puis relancer le script si vous changez de modèle,
+et redémarrer l'app Esport). Attention : un commentaire `#` va sur **sa propre ligne**, jamais au bout d'une valeur :
+
+```ini
+# Transcription des réunions sur le serveur (facultatif : ces valeurs sont celles par défaut).
+# Mode par défaut des teams : serveur, navigateur ou externe
+TRANSCRIPTION_MODE=serveur
+# Modèle : tiny (rapide, moins juste), base (conseillé), small (plus juste, lent)
+TRANSCRIPTION_MODELE=base
+# Fils de calcul : 1 (sage) ou 2 (deux fois plus de processeur)
+TRANSCRIPTION_THREADS=1
+TRANSCRIPTION_DOSSIER_MODELES=/home/jayo8828/esport-modeles
+# Garde-fous (rarement utiles) : mémoire au-delà de laquelle on s'arrête proprement ; pause après chaque
+# morceau (0.25 = le processeur se repose 20 % du temps) ; essais avant l'échec ; heures au plus entre le
+# dépôt et la fin ; minutes de travail d'un processus avant de passer la main.
+# TRANSCRIPTION_RAM_MAX=2G
+# TRANSCRIPTION_REPOS=0.25
+# TRANSCRIPTION_ESSAIS=3
+# TRANSCRIPTION_DELAI_MAX=24
+# TRANSCRIPTION_DUREE_TRAVAILLEUR=120
+```
+
+Changer de modèle : `bash ~/application-enzo/esport/serveur/installer-transcription.sh --modele small`, puis
+`TRANSCRIPTION_MODELE=small` dans `esport.env` et **Restart** de l'app Esport.
+
+### H2. Combien de temps ?
+
+Mesuré sur un processeur de serveur x64 (Xeon 2,1 GHz), avec un enregistrement de réunion en français, **sans** les
+pauses de ménagement ; le serveur o2switch peut être 1,5 à 2 fois plus lent selon la charge :
+
+| Modèle | Mémoire | 1 h de réunion, 1 fil | 1 h de réunion, 2 fils | Qualité (français) |
+| --- | --- | --- | --- | --- |
+| tiny | 360 Mo | 9 min | 6 min 30 | Correcte, des mots déformés |
+| **base** (conseillé) | 510 Mo | **18 min** | 12 min | Bonne |
+| small | 970 Mo | 60 min | 44 min | Très bonne |
+
+Avec la pause de 25 % et un serveur partagé, comptez **20 à 45 minutes pour 1 h de réunion** avec « base » sur 1
+fil. Une seule réunion à la fois : les suivantes attendent leur tour (l'app affiche « En file d'attente »).
+
+### H3. Les limites du mutualisé (et ce qui est prévu)
+
+o2switch annonce des ressources « illimitées », mais en **usage raisonnable** : CloudLinux limite par compte le
+processeur, la mémoire et le nombre de processus (limites « LVE »), et peut ralentir ou arrêter un processus lourd.
+La transcription est faite pour rester discrète :
+
+- **une seule transcription à la fois** (verrou), avec la **priorité la plus basse** (`nice 19`) : les pages du site
+  passent avant ;
+- **1 fil de calcul** par défaut, une **pause** après chaque morceau de 30 s ;
+- **mémoire surveillée** (2 Go au plus par défaut) : au-delà, arrêt propre et message « choisissez un modèle plus
+  petit » ;
+- chaque morceau de 30 s est **enregistré** : si l'hébergeur arrête le processus (ou en cas de redémarrage), la tâche
+  cron suivante en relance un qui **reprend au dernier morceau fait** ;
+- après **3 échecs** (ou 24 h), la réunion passe en « Échec de la transcription » : le déposant est prévenu et l'app
+  propose de la transcrire **dans le navigateur** d'un PC ;
+- l'audio est décodé une fois dans `~/esport-modeles/travail` (environ 115 Mo par heure de réunion), effacé à la fin.
+
+Pour voir ce que consomme votre compte : cPanel › **Statistiques** (colonne de gauche) › « Utilisation du processeur
+et de la mémoire » (ou **Resource Usage**). Si vous voyez des « fautes » (limites atteintes) pendant les
+transcriptions : gardez `TRANSCRIPTION_THREADS=1`, montez `TRANSCRIPTION_REPOS=1` (le processeur se repose la
+moitié du temps) ou passez au modèle `tiny`.
+
+### H4. Vérifier que ça marche
+
+```bash
+tail -n 20 ~/logs/esport-transcription.log    # « transcription : 1 terminée(s)… »
+tail -n 5 ~/logs/esport-cron.log              # la ligne du cron compte « transcription serveur »
+cat ~/esport-modeles/pret.json                # modèles vérifiés par l'installation
+curl -s https://esport.appdashboard.fr/sante  # "transcriptionServeur":true
+```
+
+---
+
 ## Sauvegardes
 
 - **Base** : cPanel › **Sauvegarde** (« Backup ») sauvegarde aussi les bases PostgreSQL ; o2switch garde en plus
@@ -585,10 +686,18 @@ déploiement (mêmes routes `/v9/…`).
 | L'import Esport dit « contient déjà des données » | Il ne fusionne jamais (protection). Si c'était une répétition : demandez de l'aide pour vider le schéma `appdashboard`, puis relancez. |
 | « Clés du serveur NON reprises » | Le Worker n'était pas en lecture seule : étape C1, puis relancez l'import avec `--fichiers-seulement`. |
 | Envoi d'une vidéo bloqué dès le premier morceau (413, « Requête refusée ») | Pare-feu de l'hébergeur : `ESPORT_TAILLE_MORCEAU=2M` dans `esport.env`, redémarrez l'app ; sinon cPanel › **ModSecurity** › désactivé pour `esport.appdashboard.fr`. Détails : [docs/esport/videos.md](esport/videos.md). |
+| Transcription : l'app ne propose pas « Serveur (automatique) » | L'installation n'est pas faite ou pas vérifiée : relancez `bash ~/application-enzo/esport/serveur/installer-transcription.sh` (il doit finir par « Transcription serveur prête »), puis **Restart** de l'app Esport. Le modèle de `TRANSCRIPTION_MODELE` doit être celui installé (`cat ~/esport-modeles/pret.json`). |
+| Transcription : « En file d'attente » depuis plus de 10 minutes | La tâche cron Esport (étape A9) tourne-t-elle ? `tail ~/logs/esport-cron.log` puis `tail -n 30 ~/logs/esport-transcription.log`. Lancer à la main pour voir l'erreur : `cd ~/application-enzo && /home/jayo8828/nodevenv/application-enzo/esport/22/bin/node esport/serveur/transcription/travailleur.mjs`. |
+| Transcription : « Interrompue trop souvent (limite de l'hébergeur ou redémarrage) » | Le processus est arrêté avant d'avancer (mémoire ou processeur du compte) : cPanel › Statistiques, puis `TRANSCRIPTION_MODELE=tiny` (relancer l'installation avec `--modele tiny`) ou `TRANSCRIPTION_REPOS=1`. Dans l'app : « Réessayer sur le serveur », ou « Transcrire » dans le navigateur d'un PC. |
+| Transcription : « Mémoire insuffisante… » | Modèle trop gros pour le compte : `--modele tiny` (ou `base` si vous aviez `small`), ou montez `TRANSCRIPTION_RAM_MAX` si cPanel › Statistiques montre de la marge. |
+| Installation : « glibc trop ancienne » ou erreur au chargement d'ONNX Runtime | Le serveur est trop ancien pour les binaires tout faits : gardez la transcription dans le navigateur (`TRANSCRIPTION_MODE=navigateur`) et signalez-le au support o2switch (ils migrent les comptes vers des serveurs récents). |
+| Installation : « Hugging Face indisponible » | Rien à faire : le script prend l'archive GitHub à la place (plus grosse, environ 200 Mo pour « base »). Si GitHub échoue aussi : réessayez plus tard. |
+| Transcription : « ffmpeg n'a pas pu lire l'enregistrement » | Fichier abîmé ou format exotique : déposez un MP4, M4A, MP3 ou WAV. |
 | « Trop de demandes en peu de temps » pour tout le monde | Les limites de débit se basent sur l'adresse IP vue par le serveur ; pendant la transmission depuis Cloudflare, les appareils pas encore à jour partagent l'adresse de Cloudflare. Ça disparaît quand ils ont suivi. |
 
 Journaux utiles : `~/logs/esport-deploy.log` (déploiements), `~/logs/esport-cron.log` (tâches planifiées),
-`~/logs/esport-passenger.log` et `~/logs/relais-passenger.log` (les deux apps).
+`~/logs/esport-transcription.log` (transcriptions sur le serveur), `~/logs/esport-passenger.log` et
+`~/logs/relais-passenger.log` (les deux apps).
 
 Pour les curieux : les fichiers concernés sont `esport/serveur/` (serveur Esport, cron, migrations, import,
 `deployer.sh`), `relais/serveur/` (relais et sa boîte PostgreSQL), `esport/adaptateurs/postgres.mjs`,

@@ -35,7 +35,8 @@ effacé automatiquement au bout de **24 heures**.
   `/home/jayo8828/esport-fichiers` (jamais dans `public_html`).
 - Lecture par **lien signé** valable **2 heures**, lié au compte ; les droits sont revérifiés à chaque lecture (un
   membre retiré ne lit plus rien). Lien modifié : refusé (403) ; expiré : 410 (le lecteur en redemande un tout seul).
-- Aucune conversion sur le serveur (pas de ffmpeg sur l'hébergement mutualisé) : le fichier est gardé tel quel.
+- Aucune conversion sur le serveur : le fichier est gardé tel quel (la transcription sur le serveur en lit seulement
+  l'audio, avec un ffmpeg installé à part : [resumes.md](resumes.md)).
 
 ## Formats conseillés
 

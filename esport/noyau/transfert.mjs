@@ -72,6 +72,8 @@ export const TABLES = [
   // Vidéos et transcriptions (migration 0014) : envois par morceaux, transcriptions des réunions.
   ['envois', 'id'],
   ['transcriptions', 'id'],
+  // Transcription sur le serveur (migration 0016) : file de travaux.
+  ['travaux_transcription', 'id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

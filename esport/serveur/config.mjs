@@ -16,6 +16,8 @@
  *                          de corps de requête de l'hébergeur (docs/esport/videos.md)
  *   TRANSCRIPTION_API, TRANSCRIPTION_API_CLE… : transcription par une API externe, désactivée par défaut
  *                          (docs/esport/resumes.md)
+ *   TRANSCRIPTION_MODE, TRANSCRIPTION_MODELE, TRANSCRIPTION_THREADS, TRANSCRIPTION_DOSSIER_MODELES… :
+ *                          transcription sur le serveur (Whisper), installée par installer-transcription.sh
  */
 
 import { homedir } from 'node:os';
@@ -24,6 +26,16 @@ import { chargerEnv, fichierEnvParDefaut } from './commun.mjs';
 import { configSmtp } from './courriel-smtp.mjs';
 import { configMedias } from '../noyau/medias/service.mjs';
 import { configTranscriptionExterne } from '../noyau/medias/transcription.mjs';
+import { configTranscriptionServeur } from '../noyau/medias/fileTranscription.mjs';
+import { dossierModelesParDefaut, etatInstallation } from './transcription/moteur.mjs';
+
+/** Réglages de la transcription sur le serveur, avec l'état de l'installation (moteur et modèle prêts ?). */
+export function chargerTranscriptionServeur(env = process.env) {
+  const c = configTranscriptionServeur(env);
+  if (!c.dossierModeles) c.dossierModeles = dossierModelesParDefaut();
+  const etat = etatInstallation(c);
+  return { ...c, disponible: etat.installe, raison: etat.raison ?? null };
+}
 
 export function chargerConfigEsport(env = process.env) {
   const fichier = chargerEnv(env.ESPORT_ENV || fichierEnvParDefaut('esport'), env);
@@ -42,6 +54,7 @@ export function chargerConfigEsport(env = process.env) {
     baseConfiguree: Boolean(env.DATABASE_URL || env.PGDATABASE || env.PGHOST),
     medias: configMedias(env),
     transcriptionExterne: configTranscriptionExterne(env),
+    transcriptionServeur: chargerTranscriptionServeur(env),
   };
 }
 

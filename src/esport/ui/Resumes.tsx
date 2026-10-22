@@ -30,6 +30,8 @@ import { ACCEPT_REUNION, choisirFichier, choixFichierDisponible, type FichierNav
 import { capaciteAppareil } from '../transcription/appareil';
 import { BarreEnvoi, InfosFichier, useEnvoi } from './medias/EnvoiMedia';
 import { PanneauTranscription, demarrerTranscription, type LangueTranscription } from './medias/Transcription';
+import { ChoixModeTranscription, modeParDefaut, modesProposes, useReglagesTranscription } from './medias/TranscriptionServeur';
+import type { ModeTranscription } from '../client';
 import { tr, trn } from '../i18n';
 
 type VueResumes = 'deposer' | 'miens' | 'bibliotheque' | 'boite' | 'types';
@@ -123,7 +125,14 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
   const [mode, setMode] = useState<'fichier' | 'lien'>(choixFichierDisponible ? 'fichier' : 'lien');
   const [fichier, setFichier] = useState<FichierNavigateur | undefined>();
   const capacite = useMemo(() => capaciteAppareil(), []);
-  const [transcrire, setTranscrire] = useState(capacite.transcription && !capacite.iphone && !capacite.faible);
+  // Où transcrire : sur le serveur (automatique, même depuis un iPhone), dans ce navigateur, ou par l'API externe.
+  const { reglages } = useReglagesTranscription(client, teamId);
+  const modes = useMemo(() => modesProposes(reglages, capacite.transcription), [reglages, capacite.transcription]);
+  const [modeChoisi, setModeChoisi] = useState<ModeTranscription | undefined>();
+  const modeTranscription = modeChoisi && modes.includes(modeChoisi) ? modeChoisi : modeParDefaut(reglages, modes);
+  const [transcrireChoisi, setTranscrire] = useState<boolean | undefined>();
+  // Cochée par défaut sur le serveur (partout) ; dans le navigateur, seulement sur un PC assez puissant.
+  const transcrire = transcrireChoisi ?? (modeTranscription === 'serveur' || modeTranscription === 'externe' || (modeTranscription === 'navigateur' && !capacite.iphone && !capacite.faible));
   const [langue, setLangue] = useState<LangueTranscription>('fr');
   const envoi = useEnvoi();
   const [lien, setLien] = useState('');
@@ -179,12 +188,13 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
           <Text style={attenue}>{tr('transcription.depot.formats')}</Text>
           <BarreEnvoi theme={theme} progression={envoi.progression} enCours={envoi.enCours} onAnnuler={envoi.annuler} testID="esport-depot-envoi" />
           <Champ theme={theme} libelle={tr('transcription.depot.lien_facultatif')} valeur={lien} onChanger={setLien} placeholder="https://…" maxLength={500} testID="esport-depot-lien" />
-          {capacite.transcription ? (
+          {modeTranscription ? (
             <View style={{ gap: 6 }}>
               <View style={styles.ligne}>
                 <Case theme={theme} coche={transcrire} libelle={tr('transcription.depot.transcrire')} onChanger={setTranscrire} testID="esport-depot-transcrire" />
                 <Text style={{ color: theme.texte, flex: 1, ...police(theme.policeTexte) }}>{tr('transcription.depot.transcrire')}</Text>
               </View>
+              {transcrire ? <ChoixModeTranscription theme={theme} modes={modes} valeur={modeTranscription} onChoisir={setModeChoisi} serveurAbsent={Boolean(reglages) && !reglages?.disponibles.serveur} /> : null}
               {transcrire ? (
                 <Segments
                   theme={theme}
@@ -198,7 +208,7 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
                   testID="esport-depot-langue"
                 />
               ) : null}
-              <Text style={attenue}>{capacite.iphone || capacite.faible ? tr('transcription.appareil_faible') : tr('transcription.depot.explication')}</Text>
+              {modeTranscription === 'navigateur' && (capacite.iphone || capacite.faible) ? <Text style={attenue}>{tr('transcription.appareil_faible')}</Text> : null}
             </View>
           ) : null}
         </View>
@@ -224,13 +234,29 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
             return;
           }
           void agir('depot', async () => {
+            let suite: string | undefined;
             if (mode === 'fichier' && fichier) {
               // Envoi par morceaux (reprise possible), puis dépôt avec cet enregistrement.
               const { etat, oublier } = await envoi.lancer({ client, teamId, section: 'resumes', fichier });
-              const depot = await client.deposerReunion(teamId, { envoi: etat.id, ...(lien.trim() ? { lien: lien.trim() } : {}), typeId: typeId!, dateReunion: iso, titre: titre.trim(), note: note.trim() || undefined });
+              const depot = await client.deposerReunion(teamId, {
+                envoi: etat.id,
+                ...(lien.trim() ? { lien: lien.trim() } : {}),
+                typeId: typeId!,
+                dateReunion: iso,
+                titre: titre.trim(),
+                note: note.trim() || undefined,
+                ...(transcrire && modeTranscription ? { transcription: modeTranscription, langue } : {}),
+              });
               oublier();
-              // Transcription dans ce navigateur, avec le fichier encore ouvert (rien à retélécharger) ; elle continue en arrière-plan.
-              if (transcrire) await demarrerTranscription({ client, teamId, depot, fichier: fichier.fichier as Blob, langue });
+              const statutT = depot.transcription?.statut;
+              // Le serveur (ou l'API) s'en charge : rien à faire ici.
+              if (transcrire && (statutT === 'serveur' || statutT === 'externe')) suite = statutT === 'serveur' ? tr('transcription.depot.depose_serveur') : tr('transcription.sur_le_serveur_demandee');
+              // Navigateur choisi, ou serveur indisponible : transcription dans ce navigateur, avec le fichier encore
+              // ouvert (rien à retélécharger) ; elle continue en arrière-plan.
+              else if (transcrire && capacite.transcription) {
+                await demarrerTranscription({ client, teamId, depot, fichier: fichier.fichier as Blob, langue });
+                suite = modeTranscription === 'navigateur' ? tr('transcription.depot.depose_et_transcription') : tr('transcription.depot.repli_navigateur');
+              } else if (transcrire) suite = tr('transcription.depot.repli_plus_tard');
               setFichier(undefined);
               envoi.effacer();
             } else {
@@ -240,7 +266,7 @@ function FormulaireDepot({ theme, client, teamId, onDepose }: { theme: ThemeHub;
             setTitre('');
             setNote('');
             onDepose();
-            return mode === 'fichier' && transcrire ? tr('transcription.depot.depose_et_transcription') : tr('resumes.reunion_deposee_le_redacteur');
+            return suite ?? tr('resumes.reunion_deposee_le_redacteur');
           });
         }}
         testID="esport-depot-envoyer"

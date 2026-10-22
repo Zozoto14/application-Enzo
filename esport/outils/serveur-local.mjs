@@ -52,6 +52,8 @@ export async function demarrerServeurEsport({
   lienApp = process.env.ESPORT_LIEN_APP ?? '',
   discordBot = { applicationId: process.env.DISCORD_APPLICATION_ID, publicKey: process.env.DISCORD_PUBLIC_KEY, jetonBot: process.env.DISCORD_BOT_TOKEN },
   medias = configMedias(process.env),
+  // Transcription sur le serveur (tests de bout en bout : déclarée « installée », processus simulé).
+  transcriptionServeur,
 } = {}) {
   const base = await baseSqliteMigree(chemin);
   // Fichiers (PDF des résumés) : à côté de la base SQLite (dossier `<base>.fichiers/`), en mémoire sinon.
@@ -70,7 +72,7 @@ export async function demarrerServeurEsport({
     const existe = await base.premier('SELECT id FROM teams LIMIT 1', []);
     if (!existe) await semer(base, { stockage });
   }
-  const traiter = creerApi({ base, stockage, cleSession: cle, verifierJeton, creationTeams, cleDiscord, fetchDiscord, lienApp, discordBot, medias });
+  const traiter = creerApi({ base, stockage, cleSession: cle, verifierJeton, creationTeams, cleDiscord, fetchDiscord, lienApp, discordBot, medias, ...(transcriptionServeur ? { transcriptionServeur } : {}) });
   // Cron du Worker (rappels de présence, d'échéance et Discord, événements en attente, file Discord), toutes les 15 minutes.
   const cron = setInterval(() => {
     void (async () => {

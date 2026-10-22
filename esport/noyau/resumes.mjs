@@ -24,6 +24,7 @@ import { lignesParIds, pseudosDe } from './requetes.mjs';
 import { fichierPublic } from './medias/service.mjs';
 import { pdfTranscription } from './medias/pdf.mjs';
 import { LANGUES_TRANSCRIPTION, preResume, transcrireParApi, validerSegments } from './medias/transcription.mjs';
+import { MODES_TRANSCRIPTION, configTranscriptionServeur, servicesFileTranscription } from './medias/fileTranscription.mjs';
 
 export const MODULE_RESUMES = 'meeting_summaries';
 export const STATUTS_REUNION = ['a_resumer', 'en_cours', 'termine'];
@@ -69,8 +70,11 @@ const exigerUuid = (valeur, quoi) => {
  * permissions effectives). `stockage` : interface de fichiers (facultative :
  * sans elle, le dépôt de PDF répond 503).
  */
-export function servicesResumes({ base, stockage, cleSession, maintenant = () => Date.now(), socle, medias, transcriptionExterne = { actif: false }, fetchTranscription }) {
+export function servicesResumes({ base, stockage, cleSession, maintenant = () => Date.now(), socle, medias, transcriptionExterne = { actif: false }, fetchTranscription, transcriptionServeur = configTranscriptionServeur() }) {
   const { contexteTeam } = socle;
+  // Transcription sur le serveur (migration 0016) : file de travaux ; `disponible` = moteur installé.
+  const file = servicesFileTranscription({ base, maintenant, config: transcriptionServeur });
+  const serveurDisponible = () => Boolean(transcriptionServeur?.disponible) && Boolean(stockage);
   const peut = (ctx, permission) => autorise(ctx.permissions, ctx.modules, permission);
 
   function exigerModule(ctx) {
@@ -104,7 +108,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     return lignes;
   }
 
-  function reunionPublique(r, type, pseudos, ctx, team, enregistrements = new Map()) {
+  function reunionPublique(r, type, pseudos, ctx, team, enregistrements = new Map(), travaux = new Map()) {
     const enr = r.enregistrement_id ? enregistrements.get(r.enregistrement_id) : null;
     return {
       id: r.id,
@@ -130,6 +134,9 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
         peutTranscrire: Boolean(enr && !enr.supprime_le) && (r.depose_par === ctx.acteur.compte || redacteur(ctx)),
         // Point d'extension : transcription par une API externe, si le serveur l'a activée.
         externe: Boolean(transcriptionExterne?.actif),
+        // Transcription sur le serveur : moteur installé ? travail en file (progression, temps restant) ?
+        serveur: serveurDisponible(),
+        travail: travaux.get(r.id) ?? null,
       },
     };
   }
@@ -138,10 +145,11 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     const pseudos = await noms(lignes.flatMap(l => [l.depose_par, l.resume_par]));
     const types = new Map((await lignesParIds(base, 'SELECT * FROM types_reunion WHERE id', lignes.map(l => l.type_id))).map(y => [y.id, y]));
     const enregistrements = new Map((await lignesParIds(base, 'SELECT * FROM fichiers WHERE id', lignes.map(l => l.enregistrement_id))).map(f => [f.id, f]));
+    const travaux = await file.etatsDe(lignes.filter(l => l.transcription_statut === 'serveur' || l.transcription_statut === 'echec').map(l => l.id));
     const sortie = [];
     for (const l of lignes) {
       const ctx = ctxParTeam.get(l.team_id);
-      sortie.push(reunionPublique(l, types.get(l.type_id), pseudos, ctx, ctx.team, enregistrements));
+      sortie.push(reunionPublique(l, types.get(l.type_id), pseudos, ctx, ctx.team, enregistrements, travaux));
     }
     return sortie;
   }
@@ -259,6 +267,10 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     const type = await base.premier('SELECT * FROM types_reunion WHERE id = ? AND (team_id IS NULL OR team_id = ?) AND supprime_le IS NULL', [corps.typeId, teamId]);
     if (!type) throw echec(400, 'type', 'Type de réunion inconnu.');
     const note = texteLong(corps?.note, 2000);
+    // Transcription demandée au dépôt : « serveur » (file de travaux), « externe » (API), « navigateur »
+    // (l'app la lance elle-même) ; sans précision : « à transcrire » (comportement d'avant).
+    const modeDemande = MODES_TRANSCRIPTION.includes(corps?.transcription) ? corps.transcription : null;
+    const langue = LANGUES_TRANSCRIPTION.includes(corps?.langue) ? corps.langue : 'fr';
     const t = maintenant();
     const id = nouvelId();
     let rattachement = null;
@@ -266,13 +278,25 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       if (!medias) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
       rattachement = await medias.preparerRattachement(ctx, envoiId, 'reunion', { entiteType: 'reunion_enregistrement', entiteId: id });
     }
+    const surServeur = Boolean(rattachement) && modeDemande === 'serveur' && serveurDisponible();
+    const parApi = Boolean(rattachement) && modeDemande === 'externe' && Boolean(transcriptionExterne?.actif);
+    const statutTranscription = !rattachement ? 'aucune' : surServeur ? 'serveur' : parApi ? 'externe' : 'a_faire';
     await base.lot([
       ...(rattachement?.instructions ?? []),
       {
         sql: `INSERT INTO reunions (id, team_id, depose_par, lien, type_id, date_reunion, titre, note, statut, enregistrement_id, transcription_statut, cree_le, maj_le)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'a_resumer', ?, ?, ?, ?)`,
-        params: [id, teamId, acteur.compte, lien, type.id, date, titre, note, rattachement?.fichierId ?? null, rattachement ? 'a_faire' : 'aucune', iso(t), iso(t)],
+        params: [id, teamId, acteur.compte, lien, type.id, date, titre, note, rattachement?.fichierId ?? null, statutTranscription, iso(t), iso(t)],
       },
+      ...(surServeur ? file.instructionsEnfiler({ reunionId: id, teamId, langue, demandePar: acteur.compte, t }) : []),
+      ...(parApi
+        ? [
+            {
+              sql: "INSERT INTO transcriptions (id, team_id, reunion_id, langue, moteur, segments, partielle, auteur_id, modifie_par, cree_le, maj_le) VALUES (?, ?, ?, ?, 'api', '[]', 1, ?, ?, ?, ?)",
+              params: [nouvelId(), teamId, id, langue, acteur.compte, acteur.compte, iso(t), iso(t)],
+            },
+          ]
+        : []),
       evenement('meeting.submitted', { teamId, acteur: acteur.compte, entiteType: 'reunion', entiteId: id, charge: { titre, type: type.nom, dateReunion: date, ...(rattachement ? { enregistrement: true } : {}) }, maintenant: t }),
     ]);
     return (await publier([await base.premier('SELECT * FROM reunions WHERE id = ?', [id])], new Map([[teamId, ctx]])))[0];
@@ -330,6 +354,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     const t = maintenant();
     await base.lot([
       { sql: 'UPDATE reunions SET supprime_le = ?, maj_le = ? WHERE id = ?', params: [iso(t), iso(t), r.id] },
+      file.instructionAnnuler(r.id),
       evenement('meeting.deleted', { teamId, acteur: acteur.compte, entiteType: 'reunion', entiteId: r.id, charge: { titre: r.titre }, maintenant: t }),
     ]);
     // L'enregistrement (gros fichier) n'est plus lisible : ses octets sont effacés.
@@ -572,6 +597,8 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       enregistrement: r.enregistrement_id ? fichierPublic(await base.premier('SELECT * FROM fichiers WHERE id = ?', [r.enregistrement_id])) : null,
       peutModifier: peutEcrireTranscription(ctx, r),
       externe: Boolean(transcriptionExterne?.actif),
+      serveur: serveurDisponible(),
+      travail: await file.etatPublic(await file.travailDe(r.id)),
     };
   }
   const noms_ = ids => noms(ids.filter(Boolean));
@@ -628,12 +655,14 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
       sql: 'UPDATE reunions SET transcription_statut = ?, transcription_pdf_id = ?, maj_le = ? WHERE id = ?',
       params: [statut, pdfId ?? (s.partielle ? r.transcription_pdf_id : null), iso(t), r.id],
     });
+    lot.push(...(s.instructions ?? []));
     if (!s.partielle) {
       const premiere = r.transcription_statut !== 'prete';
       lot.push(
         evenement(premiere ? 'meeting.transcription_ready' : 'meeting.transcription_updated', {
           teamId: r.team_id,
-          acteur: s.compte,
+          // Transcription faite par le serveur : pas d'acteur (le déposant est prévenu lui aussi).
+          acteur: s.acteur === undefined ? s.compte : s.acteur,
           entiteType: 'reunion',
           entiteId: r.id,
           charge: { titre: r.titre, deposePar: r.depose_par, segments: s.segments.length, moteur: s.moteur },
@@ -662,7 +691,8 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     const duree = Number.isFinite(Number(corps?.duree)) && Number(corps.duree) > 0 ? Math.min(86400, Math.round(Number(corps.duree) * 10) / 10) : null;
     const partielle = corps?.partielle === true;
     const progression = Number.isFinite(Number(corps?.progression)) ? Math.max(0, Math.min(86400, Number(corps.progression))) : (duree ?? 0);
-    await sauverTranscription(ctx, r, type, { segments, langue, moteur, duree, partielle, progression, compte: acteur.compte, langueDoc: acteur.langue });
+    // Transcrite (ou corrigée) ailleurs que sur le serveur : un travail serveur en file est annulé.
+    await sauverTranscription(ctx, r, type, { segments, langue, moteur, duree, partielle, progression, compte: acteur.compte, langueDoc: acteur.langue, instructions: [file.instructionAnnuler(r.id)] });
     return transcriptionPublique(ctx, await base.premier('SELECT * FROM reunions WHERE id = ?', [r.id]));
   }
 
@@ -731,7 +761,225 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     return n;
   }
 
+  // -------------------------------------------------------------- Transcription sur le serveur (migration 0016)
+
+  /** Mode de transcription de la team (Paramètres) ; sinon celui du serveur (TRANSCRIPTION_MODE). */
+  async function configModule(teamId) {
+    const l = await base.premier('SELECT config FROM team_modules WHERE team_id = ? AND module = ?', [teamId, MODULE_RESUMES]);
+    return jsonOu(l?.config, {}) ?? {};
+  }
+
+  function modesDisponibles() {
+    return { serveur: serveurDisponible(), navigateur: true, externe: Boolean(transcriptionExterne?.actif) };
+  }
+
+  async function reglagesTranscription(acteur, teamId) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exigerUne(ctx, P.deposer, P.lire, P.rediger, P.tout);
+    const config = await configModule(teamId);
+    const choisi = MODES_TRANSCRIPTION.includes(config.transcriptionMode) ? config.transcriptionMode : null;
+    const disponibles = modesDisponibles();
+    const defaut = transcriptionServeur?.mode ?? 'serveur';
+    const voulu = choisi ?? defaut;
+    // Mode effectif : celui voulu s'il marche ; sinon le serveur s'il est installé, sinon le navigateur.
+    const effectif = disponibles[voulu] ? voulu : disponibles.serveur ? 'serveur' : 'navigateur';
+    return {
+      mode: effectif,
+      choisi,
+      defautServeur: defaut,
+      disponibles,
+      modele: transcriptionServeur?.modele ?? 'base',
+      modifiable: ctx.permissions.has('team.manage') || Boolean(acteur.superAdmin),
+    };
+  }
+
+  /** Paramètres de la team (`team.manage`) : mode par défaut de la transcription (null = celui du serveur). */
+  async function changerReglagesTranscription(acteur, teamId, corps) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exigerModule(ctx);
+    if (!ctx.permissions.has('team.manage') && !acteur.superAdmin) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    const mode = corps?.mode ?? null;
+    if (mode !== null && !MODES_TRANSCRIPTION.includes(mode)) throw echec(400, 'mode', 'Mode de transcription : serveur, navigateur ou externe.');
+    const config = { ...(await configModule(teamId)), transcriptionMode: mode };
+    if (mode === null) delete config.transcriptionMode;
+    const t = maintenant();
+    await base.lot([
+      { sql: 'UPDATE team_modules SET config = ?, maj_le = ? WHERE team_id = ? AND module = ?', params: [JSON.stringify(config), iso(t), teamId, MODULE_RESUMES] },
+      evenement('team.updated', { teamId, acteur: acteur.compte, entiteType: 'team', entiteId: teamId, charge: { champs: ['transcription_mode'], mode }, maintenant: t }),
+    ]);
+    return reglagesTranscription(acteur, teamId);
+  }
+
+  /** Met la réunion dans la file du serveur (ou l'y remet : « Retranscrire », nouvel essai après un échec). */
+  async function demanderTranscriptionServeur(acteur, teamId, reunionId, corps = {}) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exigerModule(ctx);
+    const { r } = await reunionDeTeam(ctx, reunionId);
+    if (!peutEcrireTranscription(ctx, r)) throw echec(403, 'permission', 'Seuls le déposant et les rédacteurs modifient la transcription.');
+    if (!serveurDisponible()) throw echec(503, 'transcription-serveur-absente', 'La transcription sur le serveur n’est pas installée : transcrivez dans le navigateur.');
+    const f = r.enregistrement_id ? await base.premier('SELECT * FROM fichiers WHERE id = ?', [r.enregistrement_id]) : null;
+    if (!f || f.supprime_le) throw echec(404, 'pas-d-enregistrement', 'Aucun enregistrement déposé pour cette réunion.');
+    const w = await file.travailDe(r.id);
+    if (w && (w.statut === 'attente' || w.statut === 'en_cours')) return transcriptionPublique(ctx, r);
+    const langue = LANGUES_TRANSCRIPTION.includes(corps?.langue) ? corps.langue : 'fr';
+    const t = maintenant();
+    await base.lot([
+      ...file.instructionsEnfiler({ reunionId: r.id, teamId, langue, demandePar: acteur.compte, t }),
+      // Nouvelle transcription complète : la précédente (partielle d'un navigateur, ou ancienne) est remplacée à la fin.
+      { sql: "UPDATE transcriptions SET erreur = '', progression_s = 0, segments = CASE WHEN partielle = 1 THEN '[]' ELSE segments END, maj_le = ? WHERE reunion_id = ?", params: [iso(t), r.id] },
+      { sql: "UPDATE reunions SET transcription_statut = 'serveur', maj_le = ? WHERE id = ?", params: [iso(t), r.id] },
+    ]);
+    return transcriptionPublique(ctx, await base.premier('SELECT * FROM reunions WHERE id = ?', [r.id]));
+  }
+
+  /** Annule le travail du serveur (on transcrira autrement) : statut « à transcrire » (ou « prête » s'il y en avait une). */
+  async function annulerTranscriptionServeur(acteur, teamId, reunionId) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exigerModule(ctx);
+    const { r } = await reunionDeTeam(ctx, reunionId);
+    if (!peutEcrireTranscription(ctx, r)) throw echec(403, 'permission', 'Seuls le déposant et les rédacteurs modifient la transcription.');
+    const t = iso(maintenant());
+    const lot = [file.instructionAnnuler(r.id)];
+    if (r.transcription_statut === 'serveur') {
+      lot.push({ sql: 'UPDATE reunions SET transcription_statut = ?, maj_le = ? WHERE id = ?', params: [r.transcription_pdf_id ? 'prete' : 'a_faire', t, r.id] });
+    }
+    await base.lot(lot);
+    return transcriptionPublique(ctx, await base.premier('SELECT * FROM reunions WHERE id = ?', [r.id]));
+  }
+
+  // ---- Côté processus de fond (aucun acteur : appelé par esport/serveur/transcription/travailleur.mjs)
+
+  /** Travaux morts ou trop vieux : remis en file, ou échec définitif signalé. Rend le nombre d'échecs. */
+  async function recupererTravauxServeur() {
+    const echoues = await file.recuperer();
+    for (const w of echoues) await signalerEchec(w, w.erreur);
+    return echoues.length;
+  }
+
+  /**
+   * Prend le prochain travail. Rend `{ travail, reunion, fichier, segments, progression }` (segments
+   * déjà faits : reprise), ou null. Un travail dont la réunion ou l'enregistrement a disparu est
+   * annulé ou mis en échec, puis on passe au suivant.
+   */
+  async function prochainTravailServeur() {
+    for (let i = 0; i < 20; i++) {
+      const w = await file.prendre();
+      if (!w) return null;
+      const r = await base.premier('SELECT * FROM reunions WHERE id = ?', [w.reunion_id]);
+      if (!r || r.supprime_le) {
+        await base.executer("UPDATE travaux_transcription SET statut = 'annule', verrou_jusqua = NULL, maj_le = ? WHERE id = ?", [iso(maintenant()), w.id]);
+        continue;
+      }
+      const f = r.enregistrement_id ? await base.premier('SELECT * FROM fichiers WHERE id = ?', [r.enregistrement_id]) : null;
+      if (!f || f.supprime_le) {
+        await echecTravailServeur(w, 'Enregistrement supprimé : rien à transcrire.', { definitif: true });
+        continue;
+      }
+      const x = await base.premier('SELECT * FROM transcriptions WHERE reunion_id = ?', [r.id]);
+      // Reprise : segments partiels du serveur, jusqu'à la progression enregistrée.
+      const progression = Number(w.progression_s ?? 0);
+      const reprise = progression > 0 && x && Number(x.partielle) === 1;
+      const segments = reprise ? jsonOu(x.segments, []).filter(s => Number(s[1]) <= progression + 0.05) : [];
+      return { travail: w, reunion: r, fichier: f, segments, progression: reprise ? progression : 0 };
+    }
+    return null;
+  }
+
+  /**
+   * Enregistre l'avancée (segments faits, progression, bail renouvelé), en une transaction. Rend false
+   * si le travail n'est plus à nous (annulé, ou repris ailleurs) : le processus arrête alors ce travail.
+   */
+  async function progresserServeur(w, { segments, progression, duree, langue, moteur, secondesCalcul, audioCalcule }) {
+    const t = maintenant();
+    const propres = validerSegments(segments);
+    const x = await base.premier('SELECT id FROM transcriptions WHERE reunion_id = ?', [w.reunion_id]);
+    const ecrire = x
+      ? {
+          // Jamais par-dessus une transcription faite ailleurs entre-temps (travail annulé) : condition sur le travail.
+          sql: "UPDATE transcriptions SET langue = ?, moteur = ?, segments = ?, duree_s = ?, progression_s = ?, partielle = 1, erreur = '', maj_le = ? WHERE id = ? AND EXISTS (SELECT 1 FROM travaux_transcription WHERE id = ? AND statut = 'en_cours')",
+          params: [langue, moteur, JSON.stringify(propres), duree, progression, iso(t), x.id, w.id],
+        }
+      : {
+          sql: `INSERT INTO transcriptions (id, team_id, reunion_id, langue, moteur, segments, duree_s, progression_s, partielle, pre_resume, erreur, auteur_id, modifie_par, cree_le, maj_le)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, '[]', '', ?, ?, ?, ?)`,
+          params: [nouvelId(), w.team_id, w.reunion_id, langue, moteur, JSON.stringify(propres), duree, progression, w.demande_par, w.demande_par, iso(t), iso(t)],
+        };
+    if (!(await file.toujoursEnCours(w.id))) return false;
+    const [, maj] = await base.lot([ecrire, file.instructionProgression(w.id, { progression, duree, secondesCalcul, audioCalcule })]);
+    return Boolean(maj?.changements);
+  }
+
+  /** Fin : segments enregistrés, PDF généré, statut « prête », notification au déposant et aux rédacteurs. */
+  async function terminerTravailServeur(w, { segments, duree, langue, moteur }) {
+    if (!(await file.toujoursEnCours(w.id))) return false;
+    const r = await base.premier('SELECT * FROM reunions WHERE id = ?', [w.reunion_id]);
+    if (!r || r.supprime_le) return false;
+    const team = await base.premier('SELECT * FROM teams WHERE id = ?', [r.team_id]);
+    const type = await base.premier('SELECT * FROM types_reunion WHERE id = ?', [r.type_id]);
+    const compte = w.demande_par ?? r.depose_par;
+    const profil = compte ? await base.premier('SELECT langue FROM comptes WHERE id = ?', [compte]) : null;
+    await sauverTranscription({ team, acteur: { compte } }, r, type, {
+      segments: validerSegments(segments),
+      langue: LANGUES_TRANSCRIPTION.includes(langue) ? langue : 'fr',
+      moteur,
+      duree,
+      partielle: false,
+      progression: duree ?? 0,
+      compte,
+      acteur: null,
+      langueDoc: profil?.langue,
+      instructions: [file.instructionTerminer(w.id)],
+    });
+    return true;
+  }
+
+  async function signalerEchec(w, erreur) {
+    const t = maintenant();
+    const r = await base.premier('SELECT * FROM reunions WHERE id = ?', [w.reunion_id]);
+    if (!r || r.supprime_le) return;
+    const message = String(erreur ?? '').slice(0, 200);
+    const x = await base.premier('SELECT id FROM transcriptions WHERE reunion_id = ?', [r.id]);
+    await base.lot([
+      // La transcription précédente (prête) reste lisible ; sinon le dépôt passe en « échec ».
+      { sql: 'UPDATE reunions SET transcription_statut = ?, maj_le = ? WHERE id = ? AND transcription_statut = ?', params: [r.transcription_pdf_id ? 'prete' : 'echec', iso(t), r.id, 'serveur'] },
+      x
+        ? { sql: 'UPDATE transcriptions SET erreur = ?, maj_le = ? WHERE id = ?', params: [message, iso(t), x.id] }
+        : {
+            sql: "INSERT INTO transcriptions (id, team_id, reunion_id, langue, moteur, segments, partielle, erreur, auteur_id, modifie_par, cree_le, maj_le) VALUES (?, ?, ?, ?, '', '[]', 1, ?, ?, ?, ?, ?)",
+            params: [nouvelId(), r.team_id, r.id, w.langue ?? 'fr', message, w.demande_par, w.demande_par, iso(t), iso(t)],
+          },
+      evenement('meeting.transcription_failed', {
+        teamId: r.team_id,
+        acteur: null,
+        entiteType: 'reunion',
+        entiteId: r.id,
+        charge: { titre: r.titre, deposePar: r.depose_par, demandePar: w.demande_par ?? null, erreur: message },
+        maintenant: t,
+      }),
+    ]);
+  }
+
+  /** Échec d'un essai : nouvel essai plus tard, ou échec définitif signalé (statut, notification). */
+  async function echecTravailServeur(w, erreur, { definitif = false } = {}) {
+    const r = await file.echouer(w.id, erreur, { definitif });
+    if (r.definitif) await signalerEchec(w, erreur);
+    return r;
+  }
+
   return {
+    // Transcription sur le serveur (migration 0016).
+    file,
+    reglagesTranscription,
+    changerReglagesTranscription,
+    demanderTranscriptionServeur,
+    annulerTranscriptionServeur,
+    recupererTravauxServeur,
+    prochainTravailServeur,
+    progresserServeur,
+    terminerTravailServeur,
+    echecTravailServeur,
+    rendreTravailServeur: w => file.rendre(w.id),
+    prolongerTravailServeur: w => file.prolonger(w.id),
     typesReunion,
     creerTypeReunion,
     modifierTypeReunion,

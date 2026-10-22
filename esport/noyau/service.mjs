@@ -852,6 +852,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       // auteur ; ses envois inachevés sont confiés au cron (effacés au passage suivant).
       { sql: 'UPDATE transcriptions SET auteur_id = NULL WHERE auteur_id = ?', params: [compte] },
       { sql: 'UPDATE transcriptions SET modifie_par = NULL WHERE modifie_par = ?', params: [compte] },
+      // Transcription sur le serveur (migration 0016) : qui l'a demandée.
+      { sql: 'UPDATE travaux_transcription SET demande_par = NULL WHERE demande_par = ?', params: [compte] },
       { sql: "UPDATE fichiers SET depose_par = '' WHERE depose_par = ? AND entite_type IN ('review_video', 'reunion_enregistrement', 'reunion_transcription')", params: [compte] },
       { sql: "UPDATE envois SET compte_id = '', maj_le = '1970-01-01T00:00:00.000Z' WHERE compte_id = ? AND fichier_id IS NULL", params: [compte] },
       // Suivi des joueurs : les notes du staff SUR lui sont effacées (ses données) ; celles qu'il a écrites restent, sans auteur.

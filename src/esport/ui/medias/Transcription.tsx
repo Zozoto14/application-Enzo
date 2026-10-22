@@ -25,6 +25,8 @@ import { travaux, type EtatTravail, type TravailTranscription } from '../../tran
 import { ouvrirLienDiffere } from '../ouvrirLien';
 import { Retours, styles, useAgir } from '../commun';
 import { tr } from '../../i18n';
+import { traduireServeur } from '../../i18n/erreurs';
+import { ProgressionServeur, useSuiviServeur } from './TranscriptionServeur';
 
 export type LangueTranscription = 'fr' | 'en';
 
@@ -160,9 +162,24 @@ export function PanneauTranscription({ theme, client, teamId, depot, onChange }:
   const [langue, setLangue] = useState<LangueTranscription>('fr');
   const [editeur, setEditeur] = useState(false);
   const { enCours, erreur, avis, agir } = useAgir();
-  const statut = depot.transcription?.statut ?? 'aucune';
   const capacite = useMemo(() => capaciteAppareil(), []);
   const fin = etat?.phase === 'termine';
+  // Transcription sur le serveur : suivie toutes les 15 s tant qu'elle tourne (on peut fermer l'app).
+  const [statutLocal, setStatutLocal] = useState(depot.transcription?.statut ?? 'aucune');
+  useEffect(() => setStatutLocal(depot.transcription?.statut ?? 'aucune'), [depot.transcription?.statut]);
+  const statut = statutLocal;
+  const suivi = useSuiviServeur({
+    client,
+    teamId,
+    depotId: depot.id,
+    initial: depot.transcription?.travail,
+    actif: statut === 'serveur',
+    onFini: t => {
+      setStatutLocal(t.statut);
+      onChange?.();
+    },
+  });
+  const serveur = Boolean(depot.transcription?.serveur);
   useEffect(() => {
     if (fin) onChange?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -174,6 +191,18 @@ export function PanneauTranscription({ theme, client, teamId, depot, onChange }:
   const lancer = (recommencer = false) =>
     void agir('transcrire', async () => {
       await demarrerTranscription({ client, teamId, depot, langue, recommencer });
+    });
+  const travailServeur = suivi.travail;
+  const surServeur = statut === 'serveur';
+  const echecServeur = statut === 'echec' && travailServeur?.statut === 'echec';
+  const peutServeur = serveur && Boolean(depot.transcription?.peutTranscrire) && depot.enregistrement && !depot.enregistrement.supprime && !surServeur && statut !== 'externe' && !travail?.enCours;
+  const lancerServeur = () =>
+    void agir('serveur', async () => {
+      const t = await api.demanderTranscriptionServeur(depot.id, langue);
+      suivi.setTravail(t.travail ?? null);
+      setStatutLocal(t.statut);
+      onChange?.();
+      return tr('transcription.serveur.demandee');
     });
   return (
     <View testID={idt} style={{ gap: 6, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: 8 }}>
@@ -199,7 +228,44 @@ export function PanneauTranscription({ theme, client, teamId, depot, onChange }:
           <CommandesTravail theme={theme} travail={travail} etat={etat} testID={idt} />
         </>
       ) : null}
-      {!travail?.enCours && peut && statut !== 'externe' && depot.enregistrement && !depot.enregistrement.supprime ? (
+      {surServeur && travailServeur ? (
+        <View style={{ gap: 6 }}>
+          <ProgressionServeur theme={theme} travail={travailServeur} testID={idt} />
+          <Text style={attenue}>{tr('transcription.serveur.fermer_app')}</Text>
+          {depot.transcription?.peutTranscrire ? (
+            <BoutonHub
+              theme={theme}
+              titre={tr('transcription.serveur.annuler')}
+              desactive={Boolean(enCours)}
+              onPress={() =>
+                void agir('annuler', async () => {
+                  const t = await api.annulerTranscriptionServeur(depot.id);
+                  suivi.setTravail(t.travail ?? null);
+                  setStatutLocal(t.statut);
+                  onChange?.();
+                })
+              }
+              testID={`${idt}-serveur-annuler`}
+            />
+          ) : null}
+        </View>
+      ) : null}
+      {echecServeur ? (
+        <Text testID={`${idt}-serveur-echec`} style={[attenue, { color: theme.critique }]}>
+          {tr('transcription.serveur.echec_repli', { v: traduireServeur(travailServeur?.erreur ?? '') })}
+        </Text>
+      ) : null}
+      {peutServeur ? (
+        <BoutonHub
+          theme={theme}
+          titre={statut === 'prete' ? tr('transcription.serveur.retranscrire') : echecServeur ? tr('transcription.serveur.reessayer') : tr('transcription.serveur.transcrire')}
+          variante={statut === 'prete' ? undefined : 'plein'}
+          desactive={Boolean(enCours)}
+          onPress={lancerServeur}
+          testID={`${idt}-serveur-lancer`}
+        />
+      ) : null}
+      {!travail?.enCours && peut && statut !== 'externe' && !surServeur && depot.enregistrement && !depot.enregistrement.supprime ? (
         <View style={{ gap: 6 }}>
           {capacite.iphone || capacite.faible ? <Text style={[attenue, { color: theme.alerte }]}>{tr('transcription.appareil_faible')}</Text> : null}
           <View style={[styles.ligne, { alignItems: 'flex-end' }]}>
@@ -224,7 +290,7 @@ export function PanneauTranscription({ theme, client, teamId, depot, onChange }:
           </View>
         </View>
       ) : null}
-      {!travail?.enCours && depot.transcription?.externe && depot.transcription.peutTranscrire && !['prete', 'externe'].includes(statut) && depot.enregistrement && !depot.enregistrement.supprime ? (
+      {!travail?.enCours && depot.transcription?.externe && depot.transcription.peutTranscrire && !['prete', 'externe', 'serveur'].includes(statut) && depot.enregistrement && !depot.enregistrement.supprime ? (
         <BoutonHub
           theme={theme}
           titre={tr('transcription.sur_le_serveur')}

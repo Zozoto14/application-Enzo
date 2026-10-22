@@ -56,6 +56,8 @@ export const TYPES_EVENEMENTS = [
   // Enregistrements déposés et transcription automatique (migration 0014).
   'meeting.transcription_ready',
   'meeting.transcription_updated',
+  // Transcription sur le serveur (migration 0016) : échec définitif (le déposant est prévenu).
+  'meeting.transcription_failed',
   'media.deleted',
   'goal.created',
   'goal.updated',
@@ -156,6 +158,12 @@ export async function abonneNotifications(base, ev) {
       for (const compte of destinataires) {
         if (compte !== ev.acteur_id) await notifier(base, ev, compte, 'transcription-prete', { titre: charge.titre ?? null, reunion: ev.entite_id });
       }
+      return;
+    }
+    case 'meeting.transcription_failed': {
+      // Échec de la transcription sur le serveur : le déposant (et celui qui l'a demandée) peuvent la lancer dans le navigateur.
+      const destinataires = new Set([charge.deposePar, charge.demandePar].filter(Boolean));
+      for (const compte of destinataires) await notifier(base, ev, compte, 'transcription-echec', { titre: charge.titre ?? null, reunion: ev.entite_id });
       return;
     }
     case 'meeting.summary_published':

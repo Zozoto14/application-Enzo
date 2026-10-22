@@ -225,6 +225,10 @@ export async function stockageDisque(dossier) {
       // Lecture en flux : le serveur n'a jamais toute la vidéo en mémoire.
       return { flux: Readable.toWeb(createReadStream(c, { start: debut, end: Math.min(fin, taille - 1) })), taille };
     },
+    /** Chemin du fichier sur le disque (transcription sur le serveur : lecture directe par ffmpeg). */
+    cheminLocal(cle) {
+      return chemin(cle);
+    },
     async tailleDe(cle) {
       try {
         return (await stat(chemin(cle))).size;

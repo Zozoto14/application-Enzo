@@ -135,7 +135,10 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
     case 'meeting.deleted':
       return tr('jr.meeting_deleted', { qui, titre: texte(m.titre) });
     case 'meeting.transcription_ready':
-      return tr('jr.transcription_ready', { qui, titre: texte(m.titre) });
+      // Faite par le serveur (migration 0016) : pas d'acteur.
+      return e.acteur ? tr('jr.transcription_ready', { qui, titre: texte(m.titre) }) : tr('jr.transcription_ready_serveur', { titre: texte(m.titre) });
+    case 'meeting.transcription_failed':
+      return tr('jr.transcription_failed', { titre: texte(m.titre) });
     case 'meeting.transcription_updated':
       return tr('jr.transcription_updated', { qui, titre: texte(m.titre) });
     case 'media.deleted':
@@ -253,6 +256,8 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
       return tr(c.remplacement ? 'nt.resume_mis_a_jour' : 'nt.resume_pret', { titre: str(c.titre, tr('nt.votre_reunion')), team });
     case 'transcription-prete':
       return tr('nt.transcription_prete', { titre: str(c.titre, tr('nt.votre_reunion')), team });
+    case 'transcription-echec':
+      return tr('nt.transcription_echec', { titre: str(c.titre, tr('nt.votre_reunion')), team });
     case 'tache-assignee':
       return tr('nt.tache_assignee', {
         membre: nom(noms, c.membre),
