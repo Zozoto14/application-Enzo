@@ -1,5 +1,5 @@
 /**
- * Écran Esport : Worker absent (« Esport pas encore activé », rien ne casse),
+ * Écran Esport : serveur absent (« Esport pas encore activé », rien ne casse),
  * pseudo à choisir, navigation Dashboard · Teams · Membres, team visible sans
  * code, page d'une team.
  */
@@ -86,8 +86,8 @@ describe('Esport', () => {
     expect(screen.getByText('Esport pas encore activé')).toBeTruthy();
   });
 
-  it('Worker pas encore déployé : « pas encore activé » et lien vers la marche à suivre (Fondateur)', async () => {
-    fabrique.relais = () => ({ relais: 'https://applibourse-relais.enzo.workers.dev', jeton: 'jeton-maitre-de-test-0123456789' });
+  it('serveur pas encore en ligne : « pas encore activé » et lien vers la marche à suivre (Fondateur)', async () => {
+    fabrique.relais = () => ({ relais: 'https://relais.appdashboard.fr', jeton: 'jeton-maitre-de-test-0123456789' });
     fabrique.client = () => fauxClient({ ouvrir: async () => Promise.reject(new ErreurEsport('injoignable', 0, 'injoignable')) });
     const ouvrir = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
     await monter();
@@ -98,7 +98,7 @@ describe('Esport', () => {
   });
 
   it('ami : pas de lien de doc, seulement « réessayer »', async () => {
-    fabrique.relais = () => ({ relais: 'https://applibourse-relais.enzo.workers.dev', jeton: 'p1.lea12345.' + 'a'.repeat(64) });
+    fabrique.relais = () => ({ relais: 'https://relais.appdashboard.fr', jeton: 'p1.lea12345.' + 'a'.repeat(64) });
     fabrique.client = () => fauxClient({ ouvrir: async () => Promise.reject(new ErreurEsport('ancien', 503, 'relais-ancien')) });
     await monter({ contexte: { profil: { id: 'lea12345', nom: 'Léa', admin: false, creeLe: '', apps: ['esport'] } } });
     await screen.findByTestId('esport-inactif');
@@ -108,7 +108,7 @@ describe('Esport', () => {
 
   it('premier passage : pseudo obligatoire, mention des données en clair', async () => {
     const majProfil = jest.fn(async (p: { pseudo: string }) => ({ compte: 'lea12345', superAdmin: false, profil: { pseudo: p.pseudo, riotId: null, discord: null }, peutCreerTeam: false }));
-    fabrique.relais = () => ({ relais: 'https://applibourse-relais.enzo.workers.dev', jeton: 'x'.repeat(20) });
+    fabrique.relais = () => ({ relais: 'https://relais.appdashboard.fr', jeton: 'x'.repeat(20) });
     fabrique.client = () => fauxClient({ ouvrir: async () => ({ compte: 'lea12345', superAdmin: false, profil: null, peutCreerTeam: false }), majProfil });
     await monter();
     await screen.findByTestId('esport-profil-initial');
@@ -126,7 +126,7 @@ describe('Esport', () => {
 
   it('plus de code : la team où le Fondateur l’a ajouté est déjà là ; Teams et Dashboard l’ouvrent ; barre limitée aux modules', async () => {
     const teams = [{ ...DETAIL.team, membres: 2, modules: ['activity_log', 'planning'], role: { nom: 'Joueur', couleur: '#16a34a' }, suspendu: false }];
-    fabrique.relais = () => ({ relais: 'https://applibourse-relais.enzo.workers.dev', jeton: 'x'.repeat(20) });
+    fabrique.relais = () => ({ relais: 'https://relais.appdashboard.fr', jeton: 'x'.repeat(20) });
     fabrique.client = () =>
       fauxClient({
         teams: async () => teams,
@@ -182,7 +182,7 @@ describe('Esport', () => {
   });
 
   it('s’affiche dans les 8 thèmes (clairs et sombres) et sur téléphone', async () => {
-    fabrique.relais = () => ({ relais: 'https://applibourse-relais.enzo.workers.dev', jeton: 'x'.repeat(20) });
+    fabrique.relais = () => ({ relais: 'https://relais.appdashboard.fr', jeton: 'x'.repeat(20) });
     fabrique.client = () => fauxClient();
     expect(THEMES_HUB.length).toBe(8);
     for (const t of THEMES_HUB) {

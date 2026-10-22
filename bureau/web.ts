@@ -1,8 +1,8 @@
 /**
  * Site de secours : la même interface, dans Safari, sans Electron.
  *
- * Deux choses manquent à un navigateur ordinaire, et le relais Cloudflare
- * les fournit :
+ * Deux choses manquent à un navigateur ordinaire, et le relais
+ * (https://relais.appdashboard.fr) les fournit :
  *
  *  - joindre Yahoo Finance et les médias, ce que le navigateur interdit
  *    d'une origine à l'autre. Les mêmes fonctions que le pont d'Electron

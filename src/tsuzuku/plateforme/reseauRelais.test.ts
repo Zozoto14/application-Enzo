@@ -29,7 +29,7 @@ function fauxTransport(repondre: (d: DemandeRelais) => { statut: number; json: u
 }
 
 describe('réponse du relais → format du moteur', () => {
-  it('texte décodé par le Worker, en-têtes en minuscules, troncature signalée', () => {
+  it('texte décodé par le relais, en-têtes en minuscules, troncature signalée', () => {
     expect(lireReponseRelais(html('<p>Été</p>', { headers: { 'Content-Type': 'text/html', 'x-tsuzuku-cookie': '1' }, tronque: true }))).toEqual({
       statut: 200,
       entetes: { 'content-type': 'text/html', 'x-tsuzuku-cookie': '1', 'x-tsuzuku-tronque': '1' },
@@ -96,7 +96,7 @@ describe('réseau du site par le relais', () => {
   it('erreurs claires : relais pas à jour (404), jeton refusé (401), non autorisé (403), origine (403), débit (429), injoignable', async () => {
     const cas: Array<[number, unknown, RegExp]> = [
       [404, { erreur: 'Adresse inconnue.' }, /mettez à jour le relais/],
-      [404, null, /relais:deployer/],
+      [404, null, /docs\/o2switch.md/],
       [401, { erreur: 'x' }, /reconnectez-vous/],
       [403, { erreur: 'Réservé…', code: 'interdit' }, /réserve la lecture des sources au compte Fondateur/],
       [403, { erreur: 'Origine non autorisée.', code: 'origine' }, /ORIGINES_SITE/],

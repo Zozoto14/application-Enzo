@@ -13,7 +13,7 @@
 
 export type IdDocument = 'conditions' | 'confidentialite' | 'cookies' | 'mentions';
 
-export const VERSION_MODELE = 1;
+export const VERSION_MODELE = 2;
 
 export const AVERTISSEMENT_JURIDIQUE = 'Modèle informatif à faire relire par un professionnel du droit ; ne constitue pas un conseil juridique.';
 
@@ -68,8 +68,8 @@ Vos données sont gardées sur vos appareils, chiffrées, et il n’existe aucun
 - Vos préférences : thème, disposition, verrouillage automatique, historique de vos tickets de support.
 Tout cela est chiffré localement (dérivation de clé Argon2id, chiffrement XChaCha20-Poly1305) avant d’être écrit sur l’appareil ou déposé sur le relais.
 
-## 3. Synchronisation et relais Cloudflare
-Pour relier vos appareils, l’application peut déposer des données chiffrées sur un relais hébergé chez Cloudflare (Workers et KV). Le relais ne voit que du contenu chiffré qu’il ne peut pas lire : ni montants, ni noms. Il voit en revanche des métadonnées techniques (adresse réseau de l’appareil, taille et date des dépôts). Le site de secours est également servi par Cloudflare.
+## 3. Synchronisation et relais
+Pour relier vos appareils, l’application peut déposer des données chiffrées sur un relais hébergé en France chez o2switch. Le relais ne voit que du contenu chiffré qu’il ne peut pas lire : ni montants, ni noms. Il voit en revanche des métadonnées techniques (adresse réseau de l’appareil, taille et date des dépôts). Le site et le serveur Esport sont hébergés au même endroit.
 
 ## 4. Services tiers contactés
 Selon les fonctions que vous utilisez, l’application contacte :
@@ -124,7 +124,7 @@ AppDashboard est édité à titre personnel par : [à compléter par le Fondateu
 Pour toute question ou demande, utilisez la section Support de l’application. [À compléter : adresse de contact, si vous en souhaitez une en plus.]
 
 ## Hébergement
-Le site de secours et le relais de synchronisation sont hébergés par Cloudflare, Inc., 101 Townsend Street, San Francisco, CA 94107, États-Unis. Les tickets de support sont reçus sur Discord (Discord Inc., États-Unis).
+Le site (appdashboard.fr), le relais de synchronisation et le serveur Esport sont hébergés en France par SAS o2switch, Chemin des Pardiaux, 63000 Clermont-Ferrand. Les tickets de support sont reçus sur Discord (Discord Inc., États-Unis).
 
 ## Propriété intellectuelle
 Le code et la conception de l’application appartiennent à son éditeur. Les titres, résumés et visuels affichés par Tsuzuku appartiennent à leurs ayants droit et proviennent de services de catalogue tiers ; Tsuzuku ne les héberge pas. Les marques citées appartiennent à leurs propriétaires.

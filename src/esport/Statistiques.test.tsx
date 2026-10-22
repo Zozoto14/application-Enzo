@@ -115,7 +115,7 @@ const derniersFiltres = (client: ClientEsport): Record<string, string> => {
 };
 
 async function monter(client: ClientEsport, mode: 'large' | 'telephone' = 'large', contexte = {}) {
-  fabrique.relais = () => ({ relais: 'https://applibourse-relais.x.workers.dev', jeton: 'jeton' });
+  fabrique.relais = () => ({ relais: 'https://relais.appdashboard.fr', jeton: 'jeton' });
   fabrique.client = () => client;
   return await render(
     <ModeAffichageForce mode={mode}>

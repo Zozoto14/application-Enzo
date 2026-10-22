@@ -37,7 +37,7 @@ function DetailDiagnostic({ diagnostic, message, oeuvre, testID }: { diagnostic:
     <View style={{ gap: 6 }} testID={`${testID}-detail`}>
       {s.viaRelais ? (
         <Text selectable style={styleAttenue(theme, 12)} testID={`${testID}-via-relais`}>
-          Plateforme : {libellePlateforme(s)} (pages lues par le relais Cloudflare, sans cookie)
+          Plateforme : {libellePlateforme(s)} (pages lues par le relais, sans cookie)
         </Text>
       ) : null}
       {lignesDiagnostic(diagnostic).map((l, i) => (

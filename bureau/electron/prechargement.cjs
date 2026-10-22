@@ -138,7 +138,7 @@ contextBridge.exposeInMainWorld('applibourse', {
   },
 
   relais: {
-    /** Relais installé par `npm run relais:deployer` sur ce PC, s'il existe. */
+    /** Relais de ce PC (relais/relais-local.json), s'il existe. */
     config: () => ipcRenderer.invoke('relais:config'),
   },
 });

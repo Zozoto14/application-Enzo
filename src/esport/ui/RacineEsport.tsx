@@ -6,8 +6,8 @@
  * (iPhone) : voir CadreEsport.tsx. Puis la page d'une team, ses modules
  * rangés en cinq sections (PageTeam.tsx).
  *
- * Tout passe par le Worker Esport (esport/), avec le jeton du relais déjà
- * gardé par l'app. Worker pas encore déployé (ou relais pas encore en
+ * Tout passe par le serveur Esport (esport/), avec le jeton du relais déjà
+ * gardé par l'app. Serveur pas encore en ligne (ou relais pas encore en
  * version 7) : écran « Esport pas encore activé » avec le lien vers la
  * marche à suivre ; rien d'autre ne casse.
  */

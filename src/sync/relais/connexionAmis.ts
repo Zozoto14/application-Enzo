@@ -1,6 +1,6 @@
 /**
  * Appels au relais pour les invitations et la connexion par identifiant
- * (relais version 6, voir relais/worker.mjs et docs/connexion-amis.md).
+ * (relais version 6, voir relais/relais.mjs et docs/connexion-amis.md).
  *
  * Chaque échec est traduit en une cause PRÉCISE (`ErreurInvitation.code`) :
  * relais injoignable, relais pas encore redéployé, invitation expirée,

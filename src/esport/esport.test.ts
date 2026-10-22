@@ -1,7 +1,7 @@
 /**
  * Esport côté app : périmètre « Esport seulement » dans le hub, modèle de
- * l'Administration, adresse du Worker, client (session, nouvel essai,
- * Worker absent), phrases du journal, barre latérale.
+ * l'Administration, adresse du serveur, client (session, nouvel essai,
+ * serveur absent), phrases du journal, barre latérale.
  */
 
 import { ID_ADMINISTRATION, REGISTRE } from '../hub/registre';
@@ -54,13 +54,11 @@ describe('périmètre esport_only dans le hub', () => {
   });
 });
 
-describe('adresse du Worker Esport', () => {
-  it('déduite du relais (même compte Cloudflare)', () => {
-    expect(adresseDepuisRelais('https://applibourse-relais.enzo.workers.dev')).toBe('https://applibourse-esport.enzo.workers.dev');
-    expect(adresseDepuisRelais('https://applibourse-relais.enzo.workers.dev/')).toBe('https://applibourse-esport.enzo.workers.dev');
-    expect(adresseDepuisRelais('https://autre.exemple.fr')).toBeUndefined();
-    // Hébergement o2switch : relais.<domaine> → esport.<domaine>.
+describe('adresse du serveur Esport', () => {
+  it('déduite du relais (hébergement o2switch : relais.<domaine> → esport.<domaine>)', () => {
     expect(adresseDepuisRelais('https://relais.appdashboard.fr')).toBe('https://esport.appdashboard.fr');
+    expect(adresseDepuisRelais('https://relais.appdashboard.fr/')).toBe('https://esport.appdashboard.fr');
+    expect(adresseDepuisRelais('https://autre.exemple.fr')).toBeUndefined();
     expect(adresseDepuisRelais('https://RELAIS.AppDashboard.fr/')).toBe('https://esport.appdashboard.fr');
     expect(adresseDepuisRelais('https://relais.appdashboard.fr/chemin')).toBeUndefined();
     expect(adresseDepuisRelais('http://relais.appdashboard.fr')).toBeUndefined();
@@ -68,7 +66,7 @@ describe('adresse du Worker Esport', () => {
   });
 
   it('adresses acceptées : https, ou http local seulement', () => {
-    expect(adresseValide('https://applibourse-esport.enzo.workers.dev')).toBe(true);
+    expect(adresseValide('https://esport.appdashboard.fr')).toBe(true);
     expect(adresseValide('http://localhost:8790')).toBe(true);
     expect(adresseValide('http://exemple.fr')).toBe(false);
     expect(adresseValide('javascript:alert(1)')).toBe(false);
@@ -77,8 +75,8 @@ describe('adresse du Worker Esport', () => {
   it('sans relais relié : pas de configuration (écran « pas encore activé »)', async () => {
     expect(await trouverConfig(undefined, undefined)).toEqual({ raison: 'sans-relais' });
     expect(await trouverConfig({ relais: 'https://autre.exemple.fr', jeton: 'x'.repeat(20) }, undefined)).toEqual({ raison: 'sans-adresse' });
-    expect((await trouverConfig({ relais: 'https://applibourse-relais.enzo.workers.dev', jeton: 'p1.lea12345.abc' }, undefined)).config).toEqual({
-      adresse: 'https://applibourse-esport.enzo.workers.dev',
+    expect((await trouverConfig({ relais: 'https://relais.appdashboard.fr', jeton: 'p1.lea12345.abc' }, undefined)).config).toEqual({
+      adresse: 'https://esport.appdashboard.fr',
       jetonRelais: 'p1.lea12345.abc',
     });
   });
@@ -155,7 +153,7 @@ describe('client Esport', () => {
     expect(n).toBe(2);
   });
 
-  it('Worker absent (page HTML de Cloudflare, ou réseau) : erreur « inactif »', async () => {
+  it('serveur absent (page HTML de l’hébergeur, ou réseau) : erreur « inactif »', async () => {
     const html = fauxServeur(() => ({ status: 404, html: true }));
     const e1 = await clientEsport(config, html.requete).ouvrir().catch(e => e);
     expect(estInactif(e1)).toBe(true);

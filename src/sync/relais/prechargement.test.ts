@@ -32,12 +32,12 @@ import { ecrireConfigRelais, lireEtatSynchro, synchroniser } from './synchronise
 
 const KDF_RAPIDE = { algorithme: 'argon2id' as const, passes: 1, memoireKio: 8, fils: 1, longueurCle: 32 };
 const JETON = 'jeton-du-relais-0123456789';
-const RELAIS = 'https://relais.exemple.workers.dev';
+const RELAIS = 'https://relais.exemple.exemple.fr';
 const LIAISON = { relais: RELAIS, jeton: JETON };
 const PC = 'aaaa1111';
 const TEL = 'bbbb2222';
 
-/** Relais en mémoire (même contrat que relais/worker.mjs), qui compte les appels et peut être coupé. */
+/** Relais en mémoire (même contrat que relais/relais.mjs), qui compte les appels et peut être coupé. */
 function relaisMemoire() {
   const boite = new Map<string, string>();
   const index: Record<string, { date: string }> = {};
@@ -238,7 +238,7 @@ describe('synchronisation dès le démarrage', () => {
     ).rejects.toThrow();
     expect(relais.appels.length).toBe(appels);
     // Relais changé : les enveloppes de l'ancien ne sont pas fusionnées.
-    ecrireConfigRelais(tel, { relais: 'https://autre.exemple.workers.dev', jeton: JETON, cle, nom: 'iPhone' });
+    ecrireConfigRelais(tel, { relais: 'https://autre.exemple.exemple.fr', jeton: JETON, cle, nom: 'iPhone' });
     const autre = integrerEntrant({ pilote: tel, appareil: TEL, profil: 'principal', caches, maintenant });
     expect(autre.recus).toBe(0);
     expect(new DepotComptes(tel).tous()).toHaveLength(0);

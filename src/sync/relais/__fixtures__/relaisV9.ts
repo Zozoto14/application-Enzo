@@ -1,13 +1,13 @@
 /**
- * Le VRAI relais (relais/worker.mjs, version 9) en mémoire, pour les tests : boîte KV et coffre
+ * Le VRAI relais (relais/relais.mjs, version 9) en mémoire, pour les tests : boîte et coffre
  * serveur en mémoire, `fetch` simulé. `horsLigne` coupe le réseau (l'appel lève, comme un vrai
  * `fetch` sans connexion). `appels` garde méthode et chemin de chaque requête.
  */
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-const worker = require('../../../../relais/worker.mjs').default as { fetch(r: Request, env: unknown): Promise<Response> };
+const worker = { fetch: (require('../../../../relais/relais.mjs') as { traiterRequete(r: Request, env: unknown): Promise<Response> }).traiterRequete };
 const { coffresMemoire } = require('../../../../relais/coffres.mjs') as { coffresMemoire(): unknown };
-const { jetonDeProfil } = require('../../../../relais/worker.mjs') as { jetonDeProfil(j: string, id: string): Promise<string> };
+const { jetonDeProfil } = require('../../../../relais/relais.mjs') as { jetonDeProfil(j: string, id: string): Promise<string> };
 
 export const RELAIS_V9 = 'https://relais.appdashboard.test';
 export const JETON_V9 = 'jeton-maitre-v9-0123456789abcdef';
@@ -52,7 +52,7 @@ export function relaisV9({ avecCoffre = true }: { avecCoffre?: boolean } = {}): 
       if (r.horsLigne) throw new TypeError('Failed to fetch');
       const adresse = String(url);
       const entetes = new Headers((init.headers as Record<string, string>) ?? {});
-      entetes.set('CF-Connecting-IP', r.ip);
+      entetes.set('X-Adresse-Client', r.ip);
       const requete = new Request(adresse, { method: init.method ?? 'GET', headers: entetes, body: init.body as string | undefined });
       const reponse = await worker.fetch(requete, r.env);
       r.appels.push({ methode: init.method ?? 'GET', chemin: new URL(adresse).pathname, statut: reponse.status });

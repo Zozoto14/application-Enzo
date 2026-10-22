@@ -1,19 +1,17 @@
 /**
- * Client de l'API Esport (Worker `applibourse-esport`, voir esport/).
+ * Client de l'API Esport (serveur https://esport.appdashboard.fr, voir esport/).
  *
  * Authentification : le jeton du relais déjà gardé par l'app (`relaisActif()` :
  * jeton de profil d'un ami, ou jeton maître du Fondateur) est présenté UNE fois
- * à `POST /session` ; le Worker le fait valider par le relais et rend une
+ * à `POST /session` ; le serveur le fait valider par le relais et rend une
  * session courte (`es1.…`, une heure), seule envoyée ensuite.
  *
- * Adresse du Worker, dans l'ordre :
- *  1. `esport.json` publié avec le site (`{ "esport": "https://…" }`, variable
- *     GitHub ESPORT_URL du workflow du site) ;
- *  2. déduite de l'adresse du relais : `applibourse-relais.<vous>.workers.dev`
- *     → `applibourse-esport.<vous>.workers.dev` (même compte Cloudflare), ou
- *     `relais.<domaine>` → `esport.<domaine>` (serveurs hébergés chez o2switch,
- *     docs/o2switch.md).
- * Sans réponse du Worker : « Esport pas encore activé », rien d'autre ne casse.
+ * Adresse du serveur, dans l'ordre :
+ *  1. `esport.json` publié avec le site (`{ "esport": "https://…" }`, écrit par
+ *     le workflow « Site (o2switch) ») ;
+ *  2. déduite de l'adresse du relais : `relais.<domaine>` → `esport.<domaine>`
+ *     (serveurs hébergés chez o2switch, docs/o2switch.md).
+ * Sans réponse du serveur : « Esport pas encore activé », rien d'autre ne casse.
  */
 
 import catalogueBrut from '../../esport/noyau/catalogue.json';
@@ -600,7 +598,7 @@ export class ErreurEsport extends Error {
   }
 }
 
-/** Le Worker ne répond pas (pas déployé, pas encore relié) : l'app affiche « Esport pas encore activé ». */
+/** Le serveur ne répond pas (pas en ligne, pas encore relié) : l'app affiche « Esport pas encore activé ». */
 export const CODES_INACTIF = ['injoignable', 'non-configure', 'relais-ancien', 'relais-absent', 'relais-injoignable'];
 
 export const estInactif = (e: unknown): boolean => e instanceof ErreurEsport && CODES_INACTIF.includes(e.code);
@@ -611,7 +609,7 @@ export const DOC_ACTIVATION = 'https://github.com/Zozoto14/application-Enzo/blob
 /** Mention affichée dans l'app (données en clair côté serveur). */
 export const mentionDonnees = (): string => tr('client.mention_donnees');
 
-// ------------------------------------------------------------------ Adresse du Worker
+// ------------------------------------------------------------------ Adresse du serveur
 
 type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string | ArrayBuffer | Uint8Array; signal?: unknown; keepalive?: boolean }) => Promise<{
   ok: boolean;
@@ -624,14 +622,9 @@ export function adresseValide(adresse: unknown): adresse is string {
   return typeof adresse === 'string' && (/^https:\/\/[a-z0-9.-]+(:\d+)?(\/[^\s]*)?$/i.test(adresse) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(adresse));
 }
 
-/**
- * `https://applibourse-relais.x.workers.dev` → `https://applibourse-esport.x.workers.dev` ;
- * `https://relais.appdashboard.fr` → `https://esport.appdashboard.fr` (même domaine, hébergement o2switch).
- */
+/** `https://relais.appdashboard.fr` → `https://esport.appdashboard.fr` (même domaine, hébergement o2switch). */
 export function adresseDepuisRelais(relais: string | undefined): string | undefined {
   const propre = relais?.trim() ?? '';
-  const trouve = /^https:\/\/applibourse-relais\.([a-z0-9-]+)\.workers\.dev\/?$/i.exec(propre);
-  if (trouve) return `https://applibourse-esport.${trouve[1].toLowerCase()}.workers.dev`;
   const domaine = /^https:\/\/relais\.((?:[a-z0-9-]+\.)+[a-z]{2,})\/?$/i.exec(propre);
   return domaine ? `https://esport.${domaine[1].toLowerCase()}` : undefined;
 }
@@ -844,7 +837,7 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     }
     if (!r.ok) {
       const o = (lu ?? {}) as { erreur?: string; code?: string; details?: Record<string, unknown> };
-      // Pas de JSON de l'API (page d'erreur Cloudflare d'un Worker absent) : pas encore activé.
+      // Pas de JSON de l'API (page d'erreur de l'hébergeur, serveur absent) : pas encore activé.
       if (!o.code) throw new ErreurEsport(tr('client.le_serveur_esport_ne_2'), r.status, 'injoignable');
       throw new ErreurEsport(o.erreur ? traduireServeur(o.erreur) : tr('client.erreur', { status: r.status }), r.status, o.code, o.details);
     }
@@ -864,7 +857,7 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     try {
       r = await brut<T>(chemin, methode, corps, await session(), binaire);
     } catch (e) {
-      // Session expirée (ou Worker redéployé avec une nouvelle clé) : une nouvelle, une fois.
+      // Session expirée (ou serveur redémarré avec une nouvelle clé) : une nouvelle, une fois.
       if (e instanceof ErreurEsport && e.code === 'session') r = await brut<T>(chemin, methode, corps, await session(true), binaire);
       else throw e;
     }
@@ -991,7 +984,7 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
 
 /**
  * Configuration de l'Esport sur cet appareil : relais relié (jeton) et
- * adresse du Worker. `undefined` + raison si l'Esport ne peut pas s'ouvrir.
+ * adresse du serveur. `undefined` + raison si l'Esport ne peut pas s'ouvrir.
  */
 export async function trouverConfig(
   relais: { relais: string; jeton: string } | undefined,

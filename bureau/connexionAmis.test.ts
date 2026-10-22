@@ -2,7 +2,7 @@
  * Parcours d'accès d'un ami, de bout en bout côté logique : le PC du
  * Fondateur crée Léa et son invitation ; un navigateur NEUF ouvre le lien,
  * Léa choisit son mot de passe ; un autre appareil se connecte ensuite par
- * identifiant + mot de passe. Relais en mémoire (contrat de relais/worker.mjs,
+ * identifiant + mot de passe. Relais en mémoire (contrat de relais/relais.mjs,
  * version 6 ou ancienne).
  */
 import { createHash } from 'node:crypto';

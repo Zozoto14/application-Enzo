@@ -1,7 +1,7 @@
 /**
  * Accès réseau restreints, partagés par le processus principal d'Electron et
- * par le relais Cloudflare (relais/worker.mjs) qui sert le site de secours
- * et l'iPhone.
+ * par le relais (relais/relais.mjs, https://relais.appdashboard.fr) qui sert
+ * le site et l'iPhone.
  *
  * Dans les deux cas la règle est la même : une **liste fermée** d'adresses.
  * Ni la fenêtre du bureau ni un visiteur du relais ne peuvent s'en servir

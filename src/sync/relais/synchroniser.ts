@@ -109,44 +109,6 @@ export async function appeler(
   return reponse;
 }
 
-/**
- * Adresse annoncée par l'en-tête `X-Relais-Deplace` (relais version 8 en mode transmission), si elle est
- * valable (https, sans chemin) et différente de l'adresse actuelle.
- */
-export function adresseDeplacee(
-  reponse: { headers?: { get?(nom: string): string | null } },
-  actuelle: string,
-  entete: 'X-Relais-Deplace' | 'X-Site-Deplace' = 'X-Relais-Deplace',
-): string | undefined {
-  const brut = reponse.headers?.get?.(entete)?.trim().replace(/\/+$/, '');
-  if (!brut || !/^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(brut)) {
-    return undefined;
-  }
-  return brut.toLowerCase() === actuelle.trim().replace(/\/+$/, '').toLowerCase() ? undefined : brut;
-}
-
-/**
- * Suit un déménagement du relais : la nouvelle adresse n'est retenue qu'après avoir vérifié qu'elle
- * répond et accepte le MÊME jeton (`/sante`). Le site annoncé (mises à jour de l'iPhone, signées : un
- * site ne peut pas imposer de code) suit avec lui. La clé et le nom ne changent pas.
- * Rend vrai si la configuration a été mise à jour.
- */
-export async function suivreDeplacement(
-  pilote: PiloteSqlite,
-  config: ConfigRelais,
-  adresse: string,
-  requete: Fetch = fetch,
-  site?: string,
-): Promise<boolean> {
-  try {
-    await testerLiaison({ ...config, relais: adresse }, requete);
-  } catch {
-    return false;
-  }
-  ecrireConfigRelais(pilote, { ...config, relais: adresse, ...(site ? { site } : {}) });
-  return true;
-}
-
 /** Vérifie l'adresse et le jeton avant de les enregistrer. */
 export async function testerLiaison(liaison: Liaison, requete: Fetch = fetch): Promise<void> {
   const reponse = await appeler(liaison, '/sante', {}, requete);
@@ -237,8 +199,8 @@ export interface OptionsSynchro {
 }
 
 /**
- * Délai minimal entre deux dépôts sur le relais (le stockage Cloudflare KV
- * gratuit limite les écritures : ~1 000 par jour, et chaque dépôt en coûte deux).
+ * Délai minimal entre deux dépôts sur le relais (ancienne synchronisation par
+ * enveloppes : chaque dépôt réécrit tout l'état de l'appareil).
  * Les modifications faites entre-temps sont regroupées dans le dépôt suivant.
  */
 export const DELAI_MIN_DEPOTS_MS = 30_000;
@@ -336,9 +298,6 @@ export async function synchroniser(options: OptionsSynchro): Promise<ResultatSyn
       throw new ErreurRelais(`Le relais a répondu ${reponseIndex.status}.`, reponseIndex.status);
     }
     const index = ((await reponseIndex.json()) as { appareils?: Record<string, { date: string }> }).appareils ?? {};
-    // Relais déménagé (Worker Cloudflare en mode transmission, docs/o2switch.md) : nouvelles adresses annoncées.
-    const deplace = adresseDeplacee(reponseIndex, config!.relais);
-    const siteDeplace = config!.site ? adresseDeplacee(reponseIndex, config!.site, 'X-Site-Deplace') : undefined;
 
     for (const [autre, { date }] of Object.entries(index)) {
       if (autre === appareil || autre === ID_COFFRE || (etat.lus[autre] ?? '') >= date) {
@@ -436,9 +395,6 @@ export async function synchroniser(options: OptionsSynchro): Promise<ResultatSyn
 
     etat = { ...etat, derniereSynchro: maintenant };
     sauver(etat);
-    if (deplace) {
-      await suivreDeplacement(pilote, config!, deplace, requete, siteDeplace);
-    }
     return { recus, bilan, envoye, differeDans, erreurs, appareils: etat.appareils };
   }
 }

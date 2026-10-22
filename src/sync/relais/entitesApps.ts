@@ -2,7 +2,7 @@
  * Données des apps du hub dans la synchronisation (version 9 : le serveur est la référence).
  *
  * Avant, seules les données du portefeuille, le thème, les tuiles et les sources Tsuzuku
- * voyageaient (limite d'écritures de Cloudflare KV) : le journal, les notes de Claude Office,
+ * voyageaient (limite d'écritures de l'ancien relais) : le journal, les notes de Claude Office,
  * le carnet d'un gestionnaire… restaient sur l'appareil où ils avaient été écrits. Ici :
  *
  *  - `kv:<clé>` : un réglage ou une donnée d'app rangée telle quelle dans la base du profil

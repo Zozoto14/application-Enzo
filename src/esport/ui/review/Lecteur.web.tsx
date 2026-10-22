@@ -8,7 +8,7 @@
  * lecture (`setPlaybackRate`), lecture et pause. Si la vidéo interdit la lecture
  * intégrée (codes 101 et 150), un lien ouvre YouTube au bon instant.
  *
- * CSP à autoriser (site, app PC, _headers Cloudflare Pages) : voir
+ * CSP à autoriser (site, app PC, bureau/public/_headers) : voir
  * docs/esport/review-video.md.
  */
 

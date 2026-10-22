@@ -1,32 +1,25 @@
 /**
- * Adresse du site de secours : une seule source, lue partout (liens de
- * liaison, script de déploiement, workflow, docs).
- *
- * Le fichier `site.json` est partagé avec `scripts/deployer-relais.mjs`, qui
- * ne peut pas importer de TypeScript.
+ * Adresse du site (https://appdashboard.fr, hébergé chez o2switch) : une seule
+ * source, lue partout (liens de liaison, tests, docs). Le fichier `site.json`
+ * est aussi lu par les tests du relais (relais/tsuzuku.test.mjs).
  */
 
 import config from './site.json';
 
-/** Nom du projet Cloudflare Pages. */
-export const PROJET_PAGES: string = config.projetPages;
-
-/** Adresse actuelle du site de secours (sans « / » final). */
+/** Adresse actuelle du site (sans « / » final). */
 export const SITE_PRINCIPAL: string = config.site;
 
 /**
- * Vrai seulement si le projet Pages de `site` a été vu dans le compte
- * Cloudflare de l'utilisateur (écrit par `npm run relais:site`). Les noms
- * *.pages.dev sont uniques mondialement : une adresse jamais vérifiée peut
- * appartenir à un tiers, et un lien de liaison porte le code d'accès au relais.
+ * Vrai seulement si `site` appartient bien au Fondateur (domaine
+ * appdashboard.fr) : un lien de liaison porte le code d'accès au relais, il ne
+ * doit jamais pointer vers une adresse qui pourrait appartenir à un tiers.
  */
 export const SITE_VERIFIE: boolean = config.verifie === true;
 
 /**
- * Anciennes adresses : les codes de liaison déjà émis (AB1.…) les portent
- * encore. Le relais accepte toutes les origines (CORS ouvert, l'accès se
- * fait par le jeton) : les deux sites parlent donc au même relais pendant la
- * transition.
+ * Anciennes adresses du site encore reconnues (codes de liaison AB1.… déjà
+ * émis qui les portent) : aucune aujourd'hui. À remplir le temps d'un futur
+ * changement d'adresse.
  */
 export const ANCIENS_SITES: readonly string[] = config.anciensSites;
 

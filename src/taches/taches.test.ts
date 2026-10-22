@@ -586,7 +586,7 @@ describe('synchronisation chiffrée par le relais', () => {
     expect(lireCopie(lea.m.get(CLES_TACHES.copie)).cle).toBeUndefined();
   });
 
-  it('regroupement des rafales : jamais deux dépôts à moins de 3 s (plus de quota KV depuis la version 9)', async () => {
+  it('regroupement des rafales : jamais deux dépôts à moins de 3 s (pas de quota d’écritures depuis la version 9)', async () => {
     const relais = relaisPortees();
     const espF = espacesDuRelais(maitre, relais.requete);
     const pc = mem();

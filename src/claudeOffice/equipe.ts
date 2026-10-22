@@ -2,7 +2,7 @@
  * Claude Office v4 : PERSONNALISATION DES AGENTS (écran « Équipe ») et NOTES
  * par session. Logique pure + petit magasin en mémoire branché sur la base du
  * profil ouvert (clés `claude-office.equipe` et `claude-office.notes`), donc
- * PROPRE À L'APPAREIL : rien ne part sur le relais (aucune écriture KV).
+ * PROPRE À L'APPAREIL : rien ne part sur le relais (aucune écriture).
  *
  * Point d'entrée pour la scène : `apparenceAgent(projet, session)` (surnom,
  * couleur, accessoire, favori ; la session l'emporte sur le projet) et

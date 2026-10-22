@@ -89,7 +89,7 @@ function fauxClient(surcharges: Partial<ClientEsport> = {}): ClientEsport {
 }
 
 async function monter(client = fauxClient()) {
-  fabrique.relais = () => ({ relais: 'https://applibourse-relais.enzo.workers.dev', jeton: 'x'.repeat(20) });
+  fabrique.relais = () => ({ relais: 'https://relais.appdashboard.fr', jeton: 'x'.repeat(20) });
   fabrique.client = () => client;
   return render(
     <ModeAffichageForce mode="large">

@@ -9,7 +9,7 @@
  * contenu est scellé par la clé de synchronisation (XChaCha20-Poly1305, voir
  * src/sync/relais/chiffrement.ts) : le relais ne voit que du bruit.
  *
- * Écritures KV bornées : jamais une écriture par requête, mais au plus un
+ * Écritures bornées : jamais une écriture par requête, mais au plus un
  * dépôt toutes les `DELAI_MIN_ENVOI_MS` (et seulement si quelque chose a
  * changé) : la copie remplace la précédente, en un seul objet par appareil.
  */
@@ -25,9 +25,8 @@ import { entreeValide, type EntreeHistorique } from './logiqueHistorique';
 
 export const PREFIXE_OBJET = 'office-historique-';
 /**
- * Délai minimal entre deux dépôts automatiques. Il valait 15 min à cause de la limite d'écritures de
- * Cloudflare KV ; serveur PostgreSQL (relais version 9) : 2 min, pour ne pas renvoyer une grosse
- * copie à chaque requête de Claude Code.
+ * Délai minimal entre deux dépôts automatiques (relais PostgreSQL, version 9) : 2 min, pour ne pas
+ * renvoyer une grosse copie à chaque requête de Claude Code.
  */
 export const DELAI_MIN_ENVOI_MS = 2 * 60_000;
 /** Délai minimal pour « Synchroniser maintenant ». */
@@ -173,18 +172,16 @@ export function creerServiceHistorique(
 //
 // Petite copie de l'activité RÉCENTE (dernières heures) d'un PC, déposée plus
 // souvent que l'historique pour que le bureau du site et du téléphone soit
-// moins en retard — sans toucher au Worker ni dépasser le budget KV gratuit
-// (~1 000 écritures/jour ; un dépôt = 2 écritures, valeur + index) :
+// moins en retard, sans surcharger le relais :
 //  - désactivée par défaut, et seulement si la copie de l'historique est active ;
 //  - au plus un dépôt toutes les `DELAI_MIN_PRESENCE_MS`, seulement si
 //    l'activité récente a changé (rien quand Claude Code ne fait rien) ;
 //  - au plus `MAX_PRESENCES_JOUR` dépôts par jour et par PC, puis pause
-//    jusqu'au lendemain (la copie de 15 min continue).
-// Pire cas par PC : 96 dépôts d'historique + 48 présences = 288 écritures/jour.
+//    jusqu'au lendemain.
 
 export const PREFIXE_PRESENCE = 'office-presence-';
 const FORMAT_PRESENCE = 'claude-office-presence';
-// Relais version 9 (PostgreSQL, plus de quota KV) : présence toutes les minutes au plus, sans plafond pratique.
+// Relais version 9 (PostgreSQL) : présence toutes les minutes au plus, sans plafond pratique.
 export const DELAI_MIN_PRESENCE_MS = 60_000;
 export const MAX_PRESENCES_JOUR = 1440;
 /** Fenêtre d'activité récente gardée dans la présence. */

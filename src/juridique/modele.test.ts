@@ -26,7 +26,7 @@ describe('modèle des documents légaux', () => {
     const tout = DOCUMENTS.map(d => MODELES[d.id]).join('\n').toLowerCase();
     expect(tout).toContain('chiffr');
     expect(tout).toMatch(/aucun cookie (de suivi|publicitaire)|aucun cookie/);
-    for (const tiers of ['jikan', 'anilist', 'tmdb', 'discord', 'cloudflare']) expect(tout).toContain(tiers);
+    for (const tiers of ['jikan', 'anilist', 'tmdb', 'discord', 'o2switch']) expect(tout).toContain(tiers);
     expect(tout).toContain('support');
     expect(tout).toMatch(/ne héberge, ne stocke et ne distribue aucun film/);
     expect(tout).toMatch(/droit d’auteur|droit d'auteur/);

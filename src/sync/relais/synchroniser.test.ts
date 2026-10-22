@@ -6,13 +6,13 @@ import { migrer } from '../../db/schema';
 import { deriverCleSynchro, depuisBase64, ouvrirEnveloppe, sceller, versBase64 } from './chiffrement';
 import { SITE_PRINCIPAL, SITE_VERIFIE, choisirSite, estSiteConnu } from '../../config/site';
 import { decoderLiaison, encoderLiaison, lienSite } from './liaison';
-import { adresseDeplacee, ecrireConfigRelais, lireConfigRelais, lireEtatSynchro, recupererCoffre, synchroniser } from './synchroniser';
+import { ecrireConfigRelais, lireEtatSynchro, recupererCoffre, synchroniser } from './synchroniser';
 
 const KDF_RAPIDE = { algorithme: 'argon2id' as const, passes: 1, memoireKio: 8, fils: 1, longueurCle: 32 };
 const JETON = 'jeton-du-relais-0123456789';
-const RELAIS = 'https://relais.exemple.workers.dev';
+const RELAIS = 'https://relais.exemple.fr';
 
-/** Relais en mémoire, même contrat que relais/worker.mjs. */
+/** Relais en mémoire, même contrat que relais/relais.mjs. */
 function relaisMemoire() {
   const boite = new Map<string, string>();
   const index: Record<string, { date: string }> = {};
@@ -212,79 +212,24 @@ describe('enveloppes et code de liaison', () => {
     expect(SITE_VERIFIE).toBe(true);
     expect(SITE_PRINCIPAL).toBe('https://appdashboard.fr');
     expect(estSiteConnu(SITE_PRINCIPAL)).toBe(true);
-    // L'ancienne adresse Cloudflare Pages reste reconnue (anciens liens et QR codes).
-    expect(estSiteConnu('https://applibourse-ef0ddb.pages.dev')).toBe(true);
+    expect(estSiteConnu('https://intrus-inconnu.exemple')).toBe(false);
     const lien = lienSite({ relais: RELAIS, jeton: JETON })!;
     expect(lien.startsWith(`${SITE_PRINCIPAL}/#liaison=AB1.`)).toBe(true);
     // Un code qui porte l'adresse d'un tiers ne fabrique pas de lien vers elle.
-    const tiers = lienSite({ relais: RELAIS, jeton: JETON, site: 'https://intrus-inconnu.pages.dev' })!;
+    const tiers = lienSite({ relais: RELAIS, jeton: JETON, site: 'https://intrus-inconnu.exemple' })!;
     expect(tiers.startsWith(`${SITE_PRINCIPAL}/#`)).toBe(true);
     expect(tiers).not.toContain('intrus');
     expect(decoderLiaison(encoderLiaison({ relais: 'http://pas-https', jeton: JETON }))).toBeUndefined();
   });
 
   it('site non vérifié : aucun lien, le code seul', () => {
-    const config = { principal: 'https://x.pages.dev', verifie: false, anciens: [] as string[] };
+    const config = { principal: 'https://x.exemple', verifie: false, anciens: [] as string[] };
     expect(choisirSite(undefined, config)).toBeUndefined();
-    expect(choisirSite('https://x.pages.dev', config)).toBeUndefined();
+    expect(choisirSite('https://x.exemple', config)).toBeUndefined();
     const ok = { ...config, verifie: true };
-    expect(choisirSite(undefined, ok)).toBe('https://x.pages.dev');
-    expect(choisirSite('https://autre.pages.dev/', ok)).toBe('https://x.pages.dev');
-  });
-});
-
-describe('déménagement du relais (Cloudflare → o2switch)', () => {
-  const NOUVEAU = 'https://relais.appdashboard.fr';
-  const cle = deriverCleSynchro('mot de passe commun', JETON, KDF_RAPIDE);
-  /** Ancien relais en mode transmission : il répond et annonce la nouvelle adresse ; le nouveau accepte le même jeton. */
-  function relaisDeplace({ nouveauRepond = true, annonce = NOUVEAU }: { nouveauRepond?: boolean; annonce?: string } = {}) {
-    const appels: string[] = [];
-    const requete = (async (url: string, init: RequestInit = {}) => {
-      appels.push(url);
-      const autorise = (init.headers as Record<string, string>).Authorization === `Bearer ${JETON}`;
-      const entetes = new Map([
-        ['x-relais-deplace', annonce],
-        ['x-site-deplace', 'https://appdashboard.fr'],
-      ]);
-      const reponse = (corps: unknown, status = 200, avecEntete = false) =>
-        ({ ok: status < 300, status, headers: { get: (n: string) => (avecEntete ? entetes.get(n.toLowerCase()) ?? null : null) }, json: async () => corps }) as unknown as Response;
-      if (!autorise) return reponse({}, 401);
-      if (url.startsWith(NOUVEAU)) return nouveauRepond ? reponse({ ok: true }) : reponse({}, 503);
-      if (url === `${RELAIS}/boite`) return reponse({ appareils: {} }, 200, true);
-      return reponse({ ok: true }, 200, true);
-    }) as unknown as typeof fetch;
-    return { appels, requete };
-  }
-
-  it('adresse annoncée : https sans chemin, différente de l’actuelle', () => {
-    const r = (v: string | null) => ({ headers: { get: () => v } });
-    expect(adresseDeplacee(r(NOUVEAU), RELAIS)).toBe(NOUVEAU);
-    expect(adresseDeplacee(r(`${NOUVEAU}/`), RELAIS)).toBe(NOUVEAU);
-    expect(adresseDeplacee(r(RELAIS), RELAIS)).toBeUndefined();
-    expect(adresseDeplacee(r('http://relais.appdashboard.fr'), RELAIS)).toBeUndefined();
-    expect(adresseDeplacee(r('https://relais.appdashboard.fr/piege'), RELAIS)).toBeUndefined();
-    expect(adresseDeplacee(r(null), RELAIS)).toBeUndefined();
-    expect(adresseDeplacee({}, RELAIS)).toBeUndefined();
-  });
-
-  it('un tour sur l’ancien relais bascule l’appareil vers la nouvelle adresse, après vérification du jeton', async () => {
-    const pilote = ouvrirBaseNode();
-    migrer(pilote);
-    ecrireConfigRelais(pilote, { relais: RELAIS, jeton: JETON, cle, nom: 'PC', site: 'https://applibourse-ef0ddb.pages.dev' });
-    const relais = relaisDeplace();
-    await synchroniser({ pilote, appareil: 'aaaa1111', moi: { plateforme: 'bureau' }, maintenant, requete: relais.requete });
-    expect(relais.appels).toContain(`${NOUVEAU}/sante`);
-    // Le site annoncé suit (mises à jour de l'iPhone) ; clé et nom inchangés.
-    expect(lireConfigRelais(pilote)).toEqual({ relais: NOUVEAU, jeton: JETON, cle, nom: 'PC', site: 'https://appdashboard.fr' });
-    pilote.fermer();
-  });
-
-  it('nouvelle adresse injoignable : l’appareil garde l’ancienne (qui continue de marcher)', async () => {
-    const pilote = ouvrirBaseNode();
-    migrer(pilote);
-    ecrireConfigRelais(pilote, { relais: RELAIS, jeton: JETON, cle, nom: 'PC' });
-    await synchroniser({ pilote, appareil: 'aaaa1111', moi: { plateforme: 'bureau' }, maintenant, requete: relaisDeplace({ nouveauRepond: false }).requete });
-    expect(lireConfigRelais(pilote)?.relais).toBe(RELAIS);
-    pilote.fermer();
+    expect(choisirSite(undefined, ok)).toBe('https://x.exemple');
+    expect(choisirSite('https://autre.exemple/', ok)).toBe('https://x.exemple');
+    // Une ancienne adresse déclarée reste reconnue (anciens liens et QR codes).
+    expect(choisirSite('https://ancien.exemple/', { ...ok, anciens: ['https://ancien.exemple'] })).toBe('https://ancien.exemple');
   });
 });

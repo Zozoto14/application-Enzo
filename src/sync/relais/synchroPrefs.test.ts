@@ -33,7 +33,7 @@ import {
 } from './synchroniser';
 
 const JETON = 'jeton-du-relais-0123456789';
-const RELAIS = 'https://relais.exemple.workers.dev';
+const RELAIS = 'https://relais.exemple.exemple.fr';
 const KDF = { algorithme: 'argon2id' as const, passes: 1, memoireKio: 8, fils: 1, longueurCle: 32 };
 
 function relaisMemoire() {

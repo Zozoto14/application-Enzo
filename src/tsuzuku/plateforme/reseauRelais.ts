@@ -1,6 +1,6 @@
 /**
  * `Reseau` du site (navigateur) PAR LE RELAIS : les pages des sources sont lues
- * par la route `POST /tsuzuku/requete` du relais Cloudflare (relais/tsuzuku.mjs),
+ * par la route `POST /tsuzuku/requete` du relais (relais/tsuzuku.mjs),
  * avec le jeton du compte Fondateur déjà gardé par la liaison au relais (aucun
  * nouveau secret). Le relais refait toute la garde anti-SSRF, n'envoie ni ne
  * rend aucun cookie et ne suit aucune redirection : la 3xx revient ici, et le
@@ -49,12 +49,12 @@ interface ReponseRelais {
 
 export const MESSAGES_RELAIS = {
   pasAJour:
-    'Le relais ne connaît pas encore la lecture des sources : mettez à jour le relais (GitHub › Actions › « Déployer le relais », ou « npm run relais:deployer » sur le PC), puis « Réessayer ».',
+    'Le relais ne connaît pas encore la lecture des sources : mettez à jour le relais (serveur o2switch : docs/o2switch.md), puis « Réessayer ».',
   jeton: 'Le serveur refuse la session de ce site : reconnectez-vous (identifiant et mot de passe).',
   interdit: 'Le relais réserve la lecture des sources au compte Fondateur relié au relais (code de liaison du PC) : ce compte n’y a pas accès sur le site.',
-  origine: 'Le relais n’autorise pas l’adresse de ce site : ajoutez-la à ORIGINES_SITE (relais/wrangler.toml), puis mettez à jour le relais.',
+  origine: 'Le relais n’autorise pas l’adresse de ce site : ajoutez-la à ORIGINES_SITE (relais.env du serveur), puis redémarrez le relais.',
   debit: 'Trop de requêtes vers le relais (limite par minute) : patientez un instant, puis « Réessayer ».',
-  injoignable: 'Relais injoignable : vérifiez la connexion. Si cela persiste, le relais n’est peut-être pas déployé ou à jour (docs/relais-deploiement-github.md).',
+  injoignable: 'Relais injoignable : vérifiez la connexion. Si cela persiste, le relais n’est peut-être pas en ligne ou à jour (docs/o2switch.md).',
   illisible: 'Réponse illisible du relais : mettez-le à jour, puis « Réessayer ».',
 } as const;
 

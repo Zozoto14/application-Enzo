@@ -1,12 +1,12 @@
 /**
- * Relais en mémoire pour les tests Jest : même contrat que relais/worker.mjs
+ * Relais en mémoire pour les tests Jest : même contrat que relais/relais.mjs
  * (jeton maître, jetons de profil, espaces `p/<id>/`, routes historiques).
- * Les tests `node --test relais/worker.test.mjs` vérifient le vrai relais.
+ * Les tests `node --test relais/relais.test.mjs` vérifient le vrai relais.
  */
 
 import { jetonDeProfil } from '../portees';
 
-/** Objets qu'un jeton de profil écrit dans son espace (même liste que relais/worker.mjs). */
+/** Objets qu'un jeton de profil écrit dans son espace (même liste que relais/relais.mjs). */
 const OBJETS_DU_COMPTE = ['coffre', 'portefeuille', 'compte', 'tsuzuku-cle'];
 
 export const RELAIS_TEST = 'https://relais.test';

@@ -24,7 +24,7 @@
  *     un champ réservé (source d'une autre app, sessions liées, minuteur d'un
  *     autre, lien GitHub).
  *
- * Budget d'écritures KV : rien n'est déposé sans changement (empreintes), et
+ * Budget d'écritures : rien n'est déposé sans changement (empreintes), et
  * jamais deux dépôts du même objet à moins de 30 s (les changements
  * intermédiaires partent avec le suivant). Une frappe ne fait pas de dépôt :
  * l'app n'enregistre un texte qu'à la validation, et le tour des comptes ne

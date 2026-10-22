@@ -5,7 +5,7 @@ import { genererClesSignature, signerPaquet } from './manifeste';
 import { telechargerMiseAJour } from './telechargement';
 
 const CLES = genererClesSignature();
-const SITE = 'https://ab.pages.dev';
+const SITE = 'https://ab.exemple.org';
 
 function siteAvec(fichiers: Record<string, Uint8Array | string>) {
   return (async (url: string) => {

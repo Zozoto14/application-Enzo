@@ -64,7 +64,7 @@ import { espacesDuRelais, octetsEnCharge, chargeEnOctets } from '../src/sync/rel
 import { encoderLiaison, type Liaison } from '../src/sync/relais/liaison';
 import { jetonDeProfil } from '../src/sync/relais/portees';
 import { ErreurRelais } from '../src/sync/relais/synchroniser';
-import { choisirSite } from '../src/config/site';
+import { SITE_PRINCIPAL, choisirSite } from '../src/config/site';
 import { viderCoffreServeur } from '../src/sync/relais/coffreServeur';
 import { preparerLiaison, type CompteRelie } from './synchroComptes';
 
@@ -117,7 +117,7 @@ export function siteDesLiens(site?: string): string {
   const choisi = choisirSite(site) ?? choisirSite(undefined);
   if (choisi) return choisi;
   const origine = (globalThis as { location?: { origin?: string } }).location?.origin;
-  return origine && /^https?:\/\//.test(origine) ? origine : 'https://applibourse-ef0ddb.pages.dev';
+  return origine && /^https?:\/\//.test(origine) ? origine : SITE_PRINCIPAL;
 }
 
 export async function creerInvitation(o: OptionsCreation): Promise<InvitationCreee> {
@@ -188,7 +188,7 @@ export async function creerInvitation(o: OptionsCreation): Promise<InvitationCre
     avertissement:
       version === undefined
         ? 'Relais injoignable pour l’instant : l’invitation marche quand même (lien complet), mais pensez à garder l’app ouverte pour publier le compte.'
-        : 'Relais à mettre à jour (workflow GitHub « Relais (Cloudflare Worker) ») : en attendant, le lien marche, mais l’usage unique et l’expiration sont vérifiés par l’appareil, et la connexion par identifiant sur un nouvel appareil n’est pas disponible.',
+        : 'Relais à mettre à jour (serveur o2switch, docs/o2switch.md) : en attendant, le lien marche, mais l’usage unique et l’expiration sont vérifiés par l’appareil, et la connexion par identifiant sur un nouvel appareil n’est pas disponible.',
   };
 }
 

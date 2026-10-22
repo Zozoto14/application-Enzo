@@ -38,7 +38,7 @@ const HORLOGE = 1_700_000_000_000;
 const JETON = `p1.lea12345.${'a'.repeat(64)}`;
 
 function contenu(o: Partial<ContenuInvitation> = {}): ContenuInvitation {
-  return { v: 1, compte: 'lea12345', prenom: 'Léa', jeton: JETON, relais: 'https://relais.exemple.workers.dev', site: 'https://site.pages.dev', mdp: 'abcde-FGHJK-23456-mnpqr', expire: new Date(HORLOGE + 7 * 86_400_000).toISOString(), fondateur: 'Enzo', creeLe: new Date(HORLOGE).toISOString(), ...o };
+  return { v: 1, compte: 'lea12345', prenom: 'Léa', jeton: JETON, relais: 'https://relais.exemple.exemple.fr', site: 'https://site.exemple.org', mdp: 'abcde-FGHJK-23456-mnpqr', expire: new Date(HORLOGE + 7 * 86_400_000).toISOString(), fondateur: 'Enzo', creeLe: new Date(HORLOGE).toISOString(), ...o };
 }
 
 function session(stockage = stockageMemoire()) {
@@ -90,23 +90,23 @@ describe('saisies robustes', () => {
 describe('code d’invitation', () => {
   it('mode relais : seul le secret voyage, relu même abîmé par une messagerie', () => {
     const secret = nouveauSecret(aleatoireDeterministe(1));
-    const code = encoderInvitation({ mode: 'relais', relais: 'https://r.workers.dev', site: 'https://s.pages.dev', secret });
-    const lien = lienInvitation('https://s.pages.dev/', code);
-    expect(lien).toMatch(/^https:\/\/s\.pages\.dev\/#invitation=AI1\./);
+    const code = encoderInvitation({ mode: 'relais', relais: 'https://r.exemple.fr', site: 'https://s.exemple.org', secret });
+    const lien = lienInvitation('https://s.exemple.org/', code);
+    expect(lien).toMatch(/^https:\/\/s\.exemple\.org\/#invitation=AI1\./);
     const coupe = `« ${lien.slice(0, 40)}\n${lien.slice(40)} »`;
-    expect(decoderInvitation(coupe)).toEqual({ mode: 'relais', relais: 'https://r.workers.dev', site: 'https://s.pages.dev', secret });
+    expect(decoderInvitation(coupe)).toEqual({ mode: 'relais', relais: 'https://r.exemple.fr', site: 'https://s.exemple.org', secret });
     expect(decoderInvitation(encodeURIComponent(lien))).toEqual(decoderInvitation(lien));
     expect(decoderInvitation('AI1.abc')).toBeUndefined();
     expect(decoderInvitation('rien')).toBeUndefined();
   });
 
   it('mode lien (ancien relais) : le contenu est dans le lien, validé', () => {
-    const code = encoderInvitation({ mode: 'lien', relais: 'https://r.workers.dev', contenu: contenu() });
+    const code = encoderInvitation({ mode: 'lien', relais: 'https://r.exemple.fr', contenu: contenu() });
     const lu = decoderInvitation(code);
     expect(lu?.mode).toBe('lien');
     expect(lu && lu.mode === 'lien' ? lu.contenu.prenom : '').toBe('Léa');
     // Jeton d'un autre compte : refusé.
-    const triche = encoderInvitation({ mode: 'lien', relais: 'https://r.workers.dev', contenu: contenu({ jeton: `p1.autre1234.${'b'.repeat(64)}` }) });
+    const triche = encoderInvitation({ mode: 'lien', relais: 'https://r.exemple.fr', contenu: contenu({ jeton: `p1.autre1234.${'b'.repeat(64)}` }) });
     expect(decoderInvitation(triche)).toBeUndefined();
   });
 
@@ -139,8 +139,8 @@ describe('code d’invitation', () => {
   });
 
   it('liens de connexion des appareils suivants', () => {
-    const lien = lienConnexion('https://s.pages.dev', 'https://r.x.workers.dev/');
-    expect(relaisDuLien(lien.slice(lien.indexOf('#')))).toBe('https://r.x.workers.dev');
+    const lien = lienConnexion('https://s.exemple.org', 'https://r.x.exemple.fr/');
+    expect(relaisDuLien(lien.slice(lien.indexOf('#')))).toBe('https://r.x.exemple.fr');
     expect(relaisDuLien('#relais=http%3A%2F%2Fpas-https')).toBeUndefined();
   });
 
@@ -163,7 +163,7 @@ describe('code d’invitation', () => {
 
 describe('accès par identifiant (relais v6)', () => {
   it('le relais ne garde rien d’ouvrable ; le bon mot de passe (même saisi autrement) rouvre', () => {
-    const depot = preparerAcces('Été à Biarritz', { v: 1, compte: 'lea12345', prenom: 'Léa', jeton: JETON, relais: 'https://r.workers.dev' }, aleatoireDeterministe(8), KDF);
+    const depot = preparerAcces('Été à Biarritz', { v: 1, compte: 'lea12345', prenom: 'Léa', jeton: JETON, relais: 'https://r.exemple.fr' }, aleatoireDeterministe(8), KDF);
     expect(JSON.stringify(depot)).not.toContain(JETON);
     expect(JSON.stringify(depot)).not.toContain('Biarritz');
     const { cle, preuve } = preuveAcces(' Été à Biarritz\n', depot.sel, depot.kdf);

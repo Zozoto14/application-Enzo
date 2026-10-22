@@ -37,7 +37,7 @@ const fondateur: Profil = { id: ID_PRINCIPAL, nom: 'Enzo', admin: true, creeLe: 
 
 beforeEach(() => {
   oublierVerification();
-  fabrique.relais = () => ({ relais: 'https://applibourse-relais.enzo.workers.dev', jeton: 'jeton-maitre-de-test-0123456789' });
+  fabrique.relais = () => ({ relais: 'https://relais.appdashboard.fr', jeton: 'jeton-maitre-de-test-0123456789' });
 });
 afterEach(() => {
   fabrique.relais = relaisReel;
@@ -303,7 +303,7 @@ describe('Une seule source de vérité : suppression dans l’Administration', (
   it('retrait : Esport pas activé → rien ; serveur en panne → erreur (à reprendre depuis Esport › Membres)', async () => {
     fabrique.relais = () => undefined;
     expect(await retirerCompteEsport('lea0000001')).toEqual({ retire: false, teams: 0, inactif: true });
-    fabrique.relais = () => ({ relais: 'https://applibourse-relais.enzo.workers.dev', jeton: 'jeton-maitre-de-test-0123456789' });
+    fabrique.relais = () => ({ relais: 'https://relais.appdashboard.fr', jeton: 'jeton-maitre-de-test-0123456789' });
     fabrique.client = () =>
       fauxClient({
         retirerCompte: async () => {

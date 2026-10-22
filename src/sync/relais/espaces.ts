@@ -35,7 +35,7 @@ export interface MetaObjet {
 
 /**
  * Objets qu'un compte écrit lui-même dans son espace (même liste que
- * `OBJETS_DU_COMPTE` de relais/worker.mjs). Tout le reste est publié par
+ * `OBJETS_DU_COMPTE` de relais/relais.mjs). Tout le reste est publié par
  * l'administrateur seul (voir « Qui peut écrire quoi », docs/synchro-relais.md).
  */
 export const OBJETS_DU_COMPTE = ['coffre', 'portefeuille', 'compte', 'tsuzuku-cle'] as const;

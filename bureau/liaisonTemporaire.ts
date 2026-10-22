@@ -12,8 +12,9 @@
  *
  * Vérifications gardées (comme avant la version 9) : code lisible (`decoderLiaison` : https, jeton),
  * jeton MAÎTRE (un code d'ami ne sert plus : l'ami se connecte par identifiant), relais connu
- * (celui du site, https://relais.appdashboard.fr, ou l'ancien relais Cloudflare
- * `applibourse-relais.<sous-domaine>.workers.dev`), compte réellement trouvé sur ce relais.
+ * (celui du site ou https://relais.appdashboard.fr), compte réellement trouvé sur ce relais. Un code
+ * émis pour une ancienne adresse du relais (qui n'existe plus) n'est essayé QUE sur le relais du site,
+ * avec le même jeton : le jeton n'est jamais envoyé à un serveur inconnu.
  */
 
 import { decoderLiaison, normaliserAdresse, type Liaison } from '../src/sync/relais/liaison';
@@ -33,12 +34,11 @@ export function ab1TemporaireOuvert(maintenant: Date = new Date(), termineIci = 
   return maintenant.getTime() < Date.parse(`${AB1_TEMPORAIRE_JUSQU_AU}T23:59:59.999Z`);
 }
 
-/** Adresse de relais acceptée : celle du site, le relais officiel, ou l'ancien relais Cloudflare. */
+/** Adresse de relais acceptée : celle du site, ou le relais officiel. */
 export function relaisAutorise(relais: string, relaisDuSite?: string): boolean {
   const r = normaliserAdresse(relais).toLowerCase();
   if (relaisDuSite && r === normaliserAdresse(relaisDuSite).toLowerCase()) return true;
-  if (r === RELAIS_OFFICIEL) return true;
-  return /^https:\/\/applibourse-relais\.[a-z0-9-]+\.workers\.dev$/.test(r);
+  return r === RELAIS_OFFICIEL;
 }
 
 /** Code AB1 apporté par l'adresse (`#liaison=AB1.…`), s'il est lisible. */
@@ -53,7 +53,8 @@ export function codeAb1DuLien(fragment: string): string | undefined {
 
 /**
  * Lit et vérifie un code AB1 administrateur. Rend les liaisons à essayer, dans l'ordre : le relais
- * du site d'abord (même jeton : les clés ont déménagé avec les données), puis celui du code.
+ * du site d'abord (même jeton : les clés ont déménagé avec les données), puis celui du code s'il est
+ * connu. Un code qui désigne un autre serveur (ancienne adresse) : le relais du site seulement.
  */
 export function liaisonsAEssayer(code: string, relaisDuSite?: string): Liaison[] {
   const liaison = decoderLiaison(code);
@@ -61,9 +62,12 @@ export function liaisonsAEssayer(code: string, relaisDuSite?: string): Liaison[]
   if (!estMaitre(liaison)) {
     throw new Error('Ce code n’est pas celui de l’administrateur. Ami : connecte-toi avec ton identifiant et ton mot de passe (ou ton invitation).');
   }
-  if (!relaisAutorise(liaison.relais, relaisDuSite)) throw new Error('Ce code désigne un serveur inconnu : il n’est pas accepté ici.');
-  const candidats: Liaison[] = [];
   const site = relaisDuSite && relaisAutorise(relaisDuSite) ? normaliserAdresse(relaisDuSite) : undefined;
+  if (!relaisAutorise(liaison.relais, relaisDuSite)) {
+    if (!site) throw new Error('Ce code désigne un serveur inconnu : il n’est pas accepté ici.');
+    return [{ relais: site, jeton: liaison.jeton }];
+  }
+  const candidats: Liaison[] = [];
   if (site && site.toLowerCase() !== liaison.relais.toLowerCase()) candidats.push({ relais: site, jeton: liaison.jeton });
   candidats.push({ relais: liaison.relais, jeton: liaison.jeton });
   return candidats;

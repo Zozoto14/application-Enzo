@@ -223,7 +223,7 @@ const journal = () => [
   ev(il(200), { session: 'sess-attend', projet: 'hub', texte: 'Pousse la branche' }),
   ev(il(5), { session: 'sess-attend', projet: 'hub', type: 'attente', motif: 'permission', outil: 'Bash', resume: 'Autoriser Bash (git push) ?' }),
   ev(il(30), { session: 'sess-lit', projet: 'relais', texte: 'Lis le worker' }),
-  ev(il(8), { session: 'sess-lit', projet: 'relais', type: 'outil', outil: 'Read', resume: 'worker.mjs' }),
+  ev(il(8), { session: 'sess-lit', projet: 'relais', type: 'outil', outil: 'Read', resume: 'relais.mjs' }),
 ];
 
 describe('rendu : bureau v3', () => {

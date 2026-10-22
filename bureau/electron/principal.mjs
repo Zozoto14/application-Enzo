@@ -306,13 +306,14 @@ function installerPasserelle() {
 // bloque ces appels entre origines. Le processus principal les fait à sa
 // place, sur une liste fermée d'adresses — la fenêtre ne peut pas s'en
 // servir pour joindre autre chose. Le code est dans reseau.mjs, partagé
-// avec le relais Cloudflare.
+// avec le relais (relais/relais.mjs).
 
-// ------------------------------------------------------ Relais Cloudflare
+// ------------------------------------------------------ Relais
 //
-// scripts/deployer-relais.mjs écrit relais/relais-local.json dans le dossier
-// du projet : adresse du relais, jeton, adresse du site. La fenêtre le lit
-// pour se relier sans rien saisir, et afficher le QR code de l'iPhone.
+// relais/relais-local.json, dans le dossier du projet (jamais sur GitHub) :
+// adresse du relais (https://relais.appdashboard.fr), jeton maître, adresse
+// du site (https://appdashboard.fr). La fenêtre le lit pour se relier sans
+// rien saisir, et afficher le QR code de l'iPhone.
 
 async function lireRelaisLocal() {
   const version = await lireVersionBuild();
@@ -325,28 +326,6 @@ async function lireRelaisLocal() {
   } catch {
     return undefined;
   }
-}
-
-/**
- * Après une mise à jour du code, republie le site de secours en fond, pour
- * qu'il reste au niveau de l'application. Silencieux : un échec (pas de
- * connexion, session Cloudflare expirée) laisse simplement l'ancien site.
- */
-async function republierSiteEnFond() {
-  const version = await lireVersionBuild();
-  const dossier = version?.dossierSource;
-  if (!dossier || !(await lireRelaisLocal())?.site) {
-    return;
-  }
-  const enfant = spawn('npm', ['run', 'relais:site'], {
-    cwd: dossier,
-    shell: process.platform === 'win32',
-    stdio: 'ignore',
-    windowsHide: true,
-    detached: true,
-  });
-  enfant.on('error', () => undefined);
-  enfant.unref();
 }
 
 // ------------------------------------------------------------ Mises à jour
@@ -755,9 +734,6 @@ function creerFenetre() {
           appliquees: [...(globalThis.miseAJourAuLancement ?? []), ...resultat.lancement.appliquees],
           erreur: resultat.lancement.erreur ?? globalThis.erreurAuLancement,
         };
-        if (lancement.appliquees?.length) {
-          void republierSiteEnFond();
-        }
         // La version réellement affichée : c'est à elle qu'on compare ensuite.
         void retenirCommitAuLancement();
         return fenetre.loadFile(resultat.chemin);

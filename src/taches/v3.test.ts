@@ -320,7 +320,7 @@ describe('trois membres par le relais en mémoire', () => {
     expect(lireDonnees(pc.m.get(CLES_TACHES.donnees)).taches[s.t1].statut).toBe('en-cours');
     expect(r.depots).toBe(4); // principal + Léa, Hugo, Zoé (le projet A a changé pour les trois)
     const ecritures = relais.appels.filter(x => x.methode === 'PUT' || x.methode === 'DELETE').length - ecrituresAvant;
-    // 3 dépôts initiaux + 1 retour de Léa + 4 dépôts = 8 objets (chaque dépôt : valeur + index sur le KV).
+    // 3 dépôts initiaux + 1 retour de Léa + 4 dépôts = 8 objets (chaque dépôt : valeur + index sur la boîte).
     expect(ecritures).toBe(8);
     // Un tour sans changement n'écrit rien.
     r = await tourF();

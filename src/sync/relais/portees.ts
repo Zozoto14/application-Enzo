@@ -1,7 +1,7 @@
 /**
  * Portées du relais, côté application.
  *
- * Le relais reconnaît deux sortes de jetons (voir relais/worker.mjs) :
+ * Le relais reconnaît deux sortes de jetons (voir relais/relais.mjs) :
  *  - le jeton MAÎTRE, celui de l'administrateur : tous les droits ;
  *  - un jeton de PROFIL `p1.<id>.<HMAC-SHA256(jeton maître, « applibourse-profil-v1|<id> »)>`,
  *    qui n'ouvre que l'espace `p/<id>/` de ce compte (et la passerelle).

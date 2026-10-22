@@ -1,8 +1,8 @@
 /**
  * Migration du Fondateur par le VRAI pont HTTP du serveur Node (esport/serveur/commun.mjs, celui de
- * Passenger chez o2switch), directement ET à travers l'ancien relais qui transmet (`proxifier` de
- * relais/worker.mjs, le Worker Cloudflare en mode RELAIS_CIBLE) : publication de l'accès (identifiant
- * « admin »), de l'A2F, puis connexion avec mot de passe + code. Un refus affiche la raison réelle.
+ * Passenger chez o2switch), directement ET derrière un intermédiaire qui perd le corps des PUT :
+ * publication de l'accès (identifiant « admin »), de l'A2F, puis connexion avec mot de passe + code.
+ * Un refus affiche la raison réelle.
  */
 import { aleatoireDeterministe } from '../src/securite/aleatoire';
 import type { ParametresKdf } from '../src/securite/kdf';
@@ -13,9 +13,8 @@ import { empreinteIdentifiant, preuveAcces } from '../src/profils/invitation';
 import { publierAccesFondateur } from './connexionAmis';
 
 /* eslint-disable @typescript-eslint/no-var-requires */
-const { traiterRequete, proxifier } = require('../relais/worker.mjs') as {
+const { traiterRequete } = require('../relais/relais.mjs') as {
   traiterRequete(r: Request, env: unknown, ctx: unknown): Promise<Response>;
-  proxifier(r: Request, cible: string, site?: string): Promise<Response>;
 };
 const { coffresMemoire } = require('../relais/coffres.mjs') as { coffresMemoire(): unknown };
 const { creerServeurHttp, ecouter } = require('../esport/serveur/commun.mjs') as {
@@ -27,10 +26,9 @@ const KDF: ParametresKdf = { algorithme: 'argon2id', passes: 1, memoireKio: 64, 
 const JETON = 'jeton-maitre-transmission-0123456789';
 jest.setTimeout(60_000);
 
-describe('migration du Fondateur : relais direct et ancien relais qui transmet', () => {
+describe('migration du Fondateur : relais direct et intermédiaire qui perd le corps', () => {
   const serveurs: Array<{ close(f: () => void): void; closeAllConnections(): void }> = [];
   let direct = '';
-  let transmis = '';
   let sansCorps = '';
   const donnees = new Map<string, string>();
   const env = {
@@ -41,15 +39,13 @@ describe('migration du Fondateur : relais direct et ancien relais qui transmet',
   beforeAll(async () => {
     const s1 = creerServeurHttp(r => traiterRequete(r, env, {}), { journal: { error: () => undefined } });
     direct = await ecouter(s1, { port: 0, hote: '127.0.0.1' });
-    const s2 = creerServeurHttp(r => proxifier(r, direct), { journal: { error: () => undefined } });
-    transmis = await ecouter(s2, { port: 0, hote: '127.0.0.1' });
     // Intermédiaire d'hébergement qui PERD le corps des PUT (cause possible du « 400 » de la migration).
     const s3 = creerServeurHttp(
       async r => (r.method === 'PUT' ? traiterRequete(new Request(r.url, { method: 'PUT', headers: r.headers }), env, {}) : traiterRequete(r, env, {})),
       { journal: { error: () => undefined } },
     );
     sansCorps = await ecouter(s3, { port: 0, hote: '127.0.0.1' });
-    serveurs.push(s1, s2, s3);
+    serveurs.push(s1, s3);
   });
   afterAll(async () => {
     for (const s of serveurs) {
@@ -58,8 +54,8 @@ describe('migration du Fondateur : relais direct et ancien relais qui transmet',
     }
   });
 
-  it.each(['direct', 'transmis', 'sans-corps'])('par le relais %s : accès « admin » + A2F publiés, connexion avec mot de passe puis code', async mode => {
-    const relais = mode === 'direct' ? direct : mode === 'transmis' ? transmis : sansCorps;
+  it.each(['direct', 'sans-corps'])('par le relais %s : accès « admin » + A2F publiés, connexion avec mot de passe puis code', async mode => {
+    const relais = mode === 'direct' ? direct : sansCorps;
     const maitre = { relais, jeton: JETON };
     const alea = aleatoireDeterministe(mode.length);
     const secret = genererSecretTotp(alea);
@@ -85,7 +81,7 @@ describe('migration du Fondateur : relais direct et ancien relais qui transmet',
   });
 
   it('un dépôt illisible : la raison réelle (champ fautif) est affichée, pas seulement « 400 »', async () => {
-    const maitre = { relais: transmis, jeton: JETON };
+    const maitre = { relais: direct, jeton: JETON };
     const depot = { compte: 'principal', sel: 'a'.repeat(32), kdf: { ...KDF, longueurCle: 16 }, verif: 'b'.repeat(64), charge: 'cc' };
     await expect(publierAcces(maitre, 'e'.repeat(64), depot as never)).rejects.toThrow(/champ « kdf »/);
   });

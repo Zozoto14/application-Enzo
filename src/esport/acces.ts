@@ -5,7 +5,7 @@
  * d'invitation habituel), de rang Ami, dont la liste d'apps est `['esport']` :
  * son périmètre est « Esport seulement » (modèle de permissions du même nom
  * dans l'Administration). Le hub ne lui montre que l'Esport (règle générale de
- * `hub/permissions.ts`), le relais ne lui ouvre que son espace, et le Worker
+ * `hub/permissions.ts`), le relais ne lui ouvre que son espace, et le serveur Esport
  * Esport ne sert que l'Esport. L'interface Esport ne touche jamais aux rangs
  * du hub : rôles d'équipe et rangs du hub sont deux mondes séparés.
  */
