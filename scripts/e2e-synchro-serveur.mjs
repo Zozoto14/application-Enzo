@@ -195,6 +195,9 @@ try {
   await A.getByTestId('fondateur-identifiant').fill('Enzo');
   await A.getByTestId('fondateur-mdp-actuel').fill(MDP_PC);
   await A.getByTestId('fondateur-totp').fill(totp(secret));
+  const pasMigration = Math.floor(Date.now() / 30_000);
+  // Changer de mot de passe est facultatif (version 10) : on le change ici.
+  await A.getByTestId('fondateur-changer-mdp').click();
   await A.getByTestId('fondateur-mdp').fill(MDP_ENZO);
   await A.getByTestId('fondateur-mdp-confirmation').fill(MDP_ENZO);
   await A.getByTestId('fondateur-valider').click();
@@ -249,10 +252,16 @@ try {
   verifier(/Identifiant ou mot de passe incorrect/.test(refus), `mauvais mot de passe : « ${refus.slice(0, 60)} »`);
   await B.getByTestId('connexion-id-mdp').fill(MDP_ENZO);
   await B.getByTestId('connexion-id-valider').click();
+  // Version 10 : le code à six chiffres du PC est gardé, le serveur le demande (le pas de la migration est consommé).
+  if (await B.getByTestId('connexion-id-code').waitFor({ timeout: 60_000 }).then(() => true, () => false)) {
+    while (Math.floor(Date.now() / 30_000) <= pasMigration) await pause(500);
+    await B.getByTestId('connexion-id-code').fill(totp(secret));
+    await B.getByTestId('connexion-id-valider').click();
+  }
   await B.getByTestId('hub').waitFor({ timeout: 120_000 });
   await fermerBulles(B);
   verifier(true, 'le Fondateur est connecté sur un navigateur neuf avec son nom et son mot de passe, sans code');
-  const jetons = journal.filter(a => a.jeton !== 'maitre' && a.jeton !== '' && a.chemin.startsWith('/v9/coffre/principal'));
+  const jetons = journal.filter(a => a.jeton !== 'maitre' && a.jeton !== '' && /^\/v(9|10)\/coffre\/principal/.test(a.chemin));
   verifier(jetons.length > 0 && jetons.every(a => a.jeton === 's1.'), 'le navigateur parle au serveur avec une SESSION (jamais le jeton maître)');
   const recu = await attendre(async () => (await fond(B)) === FONDS.sauge, 60_000, 1000);
   verifier(recu, 'ses données arrivent du serveur : thème Sauge');
@@ -332,7 +341,7 @@ try {
   verifier(coffreLea, 'Léa a son propre coffre serveur (ses données y sont, chiffrées par sa clé)');
   await capture(autre, '09-amie-autre-appareil');
   async function coffresLea() {
-    const p = journal.find(a => /^\/v9\/coffre\/(?!principal)[a-z0-9]+$/.test(a.chemin));
+    const p = journal.find(a => /^\/v(9|10)\/coffre\/(?!principal)[a-z0-9]+$/.test(a.chemin));
     return p?.chemin.split('/')[3];
   }
 } catch (erreur) {

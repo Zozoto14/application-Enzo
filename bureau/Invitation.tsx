@@ -248,7 +248,8 @@ export function BlocConnexion({
   /** Faux : ce navigateur ne sait pas où est le serveur (message précis à l'envoi). */
   relaisConnu: boolean;
   identifiantInitial?: string;
-  onConnexion(identifiant: string, motDePasse: string): Promise<void>;
+  /** `code` : code à six chiffres, quand le serveur l'a demandé (validation en deux étapes). */
+  onConnexion(identifiant: string, motDePasse: string, code?: string): Promise<void>;
   onInvitation(texte: string): Promise<void>;
   onSecours?(identifiant: string, code: string, nouveau: string): Promise<void>;
   onIdentifiant?(identifiant: string): void;
@@ -277,12 +278,28 @@ export function BlocConnexion({
   const [invitation, setInvitation] = useState('');
   const [erreurInvitation, setErreurInvitation] = useState<string | undefined>();
   const [ouvrant, setOuvrant] = useState(false);
+  // Validation en deux étapes : le serveur demande le code après un mot de passe juste.
+  const [demandeCode, setDemandeCode] = useState(false);
+  const [codeA2f, setCodeA2f] = useState('');
+  const [aideAdmin, setAideAdmin] = useState(false);
+  const [refuse, setRefuse] = useState(false);
+  const codeValide = /^\d{6}$/.test(codeA2f.replace(/\s/g, ''));
   const connecter = () => {
-    if (!identifiant.trim() || !mdp || enCours) return;
+    if (!identifiant.trim() || !mdp || enCours || (demandeCode && !codeValide)) return;
     setErreur(undefined);
     setEnCours(true);
-    onConnexion(identifiant, mdp)
-      .catch(e => setErreur(message(e)))
+    (demandeCode ? onConnexion(identifiant, mdp, codeA2f.replace(/\s/g, '')) : onConnexion(identifiant, mdp))
+      .catch(e => {
+        const code = (e as { code?: string })?.code;
+        if (code === 'a2f-requis') {
+          setDemandeCode(true);
+          setCodeA2f('');
+          return;
+        }
+        if (code === 'a2f-code') setCodeA2f('');
+        setRefuse(code === 'mot-de-passe');
+        setErreur(message(e));
+      })
       .finally(() => setEnCours(false));
   };
   const ouvrir = () => {
@@ -313,7 +330,34 @@ export function BlocConnexion({
           maxLength={40}
           testID="connexion-id-identifiant"
         />
-        <ChampMotDePasse etiquette="Mot de passe" valeur={mdp} onChanger={setMdp} onValider={connecter} testID="connexion-id-mdp" desactive={enCours} />
+        <ChampMotDePasse
+          etiquette="Mot de passe"
+          valeur={mdp}
+          onChanger={v => {
+            setMdp(v);
+            setDemandeCode(false);
+          }}
+          onValider={connecter}
+          testID="connexion-id-mdp"
+          desactive={enCours}
+        />
+        {demandeCode ? (
+          <View style={{ gap: ESPACEMENT.xs }} testID="connexion-id-a2f">
+            <Text style={secondaire}>Validation en deux étapes : le code à six chiffres affiché par ton application d’authentification.</Text>
+            <Champ
+              etiquette="Code à six chiffres"
+              value={codeA2f}
+              onChangeText={setCodeA2f}
+              keyboardType="number-pad"
+              autoComplete="one-time-code"
+              textContentType="oneTimeCode"
+              maxLength={7}
+              autoFocus
+              onSubmitEditing={connecter}
+              testID="connexion-id-code"
+            />
+          </View>
+        ) : null}
         {erreur ? (
           <View testID="connexion-id-erreur">
             <Alerte message={erreur} />
@@ -325,8 +369,23 @@ export function BlocConnexion({
             <SousTitre>Connexion…</SousTitre>
           </View>
         ) : (
-          <Bouton pleineLargeur titre="Se connecter" desactive={!identifiant.trim() || !mdp} onPress={connecter} testID="connexion-id-valider" />
+          <Bouton pleineLargeur titre="Se connecter" desactive={!identifiant.trim() || !mdp || (demandeCode && !codeValide)} onPress={connecter} testID="connexion-id-valider" />
         )}
+        {/* Aide neutre (ne dit rien d'un compte en particulier) : le Fondateur active sa connexion par identifiant sur son PC. */}
+        <Bouton titre="Administrateur : première connexion ?" variante="discret" onPress={() => setAideAdmin(a => !a)} testID="connexion-aide-admin" />
+        {aideAdmin || refuse ? (
+          <View style={{ gap: ESPACEMENT.xs }} testID="connexion-aide-admin-texte">
+            <Text style={secondaire}>
+              Administrateur (Fondateur) : ton identifiant n’existe sur le serveur qu’après l’avoir choisi sur ton PC. Tant que ce n’est pas fait, la connexion répond
+              « Identifiant ou mot de passe incorrect ».
+            </Text>
+            <Text style={secondaire}>
+              1. Sur ton PC, ouvre AppDashboard à jour et déverrouille-le comme d’habitude (mot de passe et code à six chiffres).{'\n'}2. L’écran « Se connecter
+              partout avec un identifiant » s’ouvre seul (sinon : Paramètres › Sécurité › Identifiant et mot de passe de connexion) : choisis ton identifiant et
+              ton mot de passe.{'\n'}3. Ici : cet identifiant, ce mot de passe, puis le code à six chiffres de ton application d’authentification.
+            </Text>
+          </View>
+        ) : null}
         {onSecours && !oubli ? (
           <Bouton titre="Mot de passe oublié ?" variante="discret" onPress={() => setOubli(true)} testID="connexion-oubli" />
         ) : null}

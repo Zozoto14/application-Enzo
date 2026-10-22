@@ -2,6 +2,7 @@ import {
   DELAIS_REESSAI_MS,
   DELAI_MODIFICATION_MS,
   ECART_MIN_TOURS_MS,
+  INTERVALLE_AVEC_AVIS_MS,
   INTERVALLE_SYNCHRO_MS,
   Planificateur,
   delaiReessai,
@@ -127,13 +128,13 @@ describe('Planificateur de synchro', () => {
     expect(raisons).toEqual(['ouverture', 'modification']);
   });
 
-  it('réessaie après un échec à 5 s, 30 s, 2 min, 10 min, puis reste à 10 min (sans tic périodique)', async () => {
+  it('réessaie après un échec à 1 s, 3 s, 10 s, 30 s, 2 min, 5 min, puis reste à 5 min (sans tic périodique)', async () => {
     creer(false);
     p.demarrer();
     await attendre();
     expect(p.echecsConsecutifs).toBe(1);
     let t = 0;
-    for (const [i, delai] of [...DELAIS_REESSAI_MS, DELAIS_REESSAI_MS[3]].entries()) {
+    for (const [i, delai] of [...DELAIS_REESSAI_MS, DELAIS_REESSAI_MS[DELAIS_REESSAI_MS.length - 1]].entries()) {
       await h.avancer(delai - 1);
       t += delai - 1;
       expect(raisons.filter(r => r === 'reessai')).toHaveLength(i);
@@ -143,11 +144,11 @@ describe('Planificateur de synchro', () => {
       expect(p.echecsConsecutifs).toBe(i + 2);
     }
     expect(raisons.includes('periodique')).toBe(false);
-    expect(t).toBe(5_000 + 30_000 + 120_000 + 600_000 + 600_000);
+    expect(t).toBe(1_000 + 3_000 + 10_000 + 30_000 + 120_000 + 300_000 + 300_000);
   });
 
   it('les paliers de réessai', () => {
-    expect([0, 1, 2, 3, 4, 10].map(delaiReessai)).toEqual([5_000, 30_000, 120_000, 600_000, 600_000, 600_000]);
+    expect([0, 1, 2, 3, 4, 5, 10].map(delaiReessai)).toEqual([1_000, 3_000, 10_000, 30_000, 120_000, 300_000, 300_000]);
   });
 
   it('un succès remet le compteur d’échecs à zéro et arrête les réessais', async () => {
@@ -156,7 +157,7 @@ describe('Planificateur de synchro', () => {
     p.demarrer();
     await attendre();
     expect(p.echecsConsecutifs).toBe(1);
-    await h.avancer(5_000);
+    await h.avancer(1_000);
     expect(raisons.slice(0, 2)).toEqual(['ouverture', 'reessai']);
     expect(p.echecsConsecutifs).toBe(0);
     const n = raisons.length;
@@ -169,7 +170,7 @@ describe('Planificateur de synchro', () => {
     creer(true);
     p.demarrer();
     await attendre();
-    await h.avancer(5_000); // second échec ; prochain palier : 30 s
+    await h.avancer(1_000); // second échec ; prochain palier : 3 s
     p.enLigne();
     await attendre();
     expect(raisons).toEqual(['ouverture', 'reessai', 'en-ligne']);
@@ -239,5 +240,55 @@ describe('Planificateur de synchro', () => {
     p.enLigne();
     await h.avancer(60 * 60_000);
     expect(raisons).toEqual(['ouverture']);
+  });
+
+  it('micro-regroupement : une modification part ~150 ms après, une rafale continue part au plus tard au bout d’1 s', async () => {
+    creer(true);
+    p.demarrer();
+    await attendre();
+    raisons.length = 0;
+    p.modification();
+    await h.avancer(DELAI_MODIFICATION_MS - 1);
+    expect(raisons).toEqual([]);
+    await h.avancer(1);
+    expect(raisons).toEqual(['modification']);
+    // Frappes toutes les 100 ms pendant 3 s : un envoi par seconde au plus, jamais d'attente infinie.
+    raisons.length = 0;
+    for (let i = 0; i < 30; i++) {
+      p.modification();
+      await h.avancer(100);
+    }
+    await h.avancer(DELAI_MODIFICATION_MS);
+    const n = raisons.filter(r => r === 'modification').length;
+    expect(n).toBeGreaterThanOrEqual(3);
+    expect(n).toBeLessThanOrEqual(4);
+  });
+
+  it('délais réglables, avis du serveur immédiat, intervalle changé en route (filet de 3 min)', async () => {
+    p = new Planificateur(
+      async raison => {
+        raisons.push(raison);
+        return true;
+      },
+      h.minuteries,
+      h.maintenant,
+      { delaiModificationMs: 40, intervalleMs: INTERVALLE_SYNCHRO_MS },
+    );
+    p.demarrer();
+    await attendre();
+    raisons.length = 0;
+    p.modification();
+    await h.avancer(40);
+    expect(raisons).toEqual(['modification']);
+    p.notification();
+    await attendre();
+    expect(raisons).toEqual(['modification', 'notification']);
+    p.definirIntervalle(INTERVALLE_AVEC_AVIS_MS);
+    expect(p.intervalle).toBe(INTERVALLE_AVEC_AVIS_MS);
+    raisons.length = 0;
+    await h.avancer(INTERVALLE_SYNCHRO_MS * 2);
+    expect(raisons).toEqual([]);
+    await h.avancer(INTERVALLE_AVEC_AVIS_MS - INTERVALLE_SYNCHRO_MS * 2);
+    expect(raisons).toEqual(['periodique']);
   });
 });

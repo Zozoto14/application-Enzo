@@ -5,7 +5,7 @@
  *  1. Au lancement (et à chaque retour du réseau), sans clé : lire l'index du
  *     relais, télécharger les dépôts plus récents des autres appareils dans
  *     le cache `entrant`, et pousser l'enveloppe du cache `sortant` préparée
- *     pendant une session précédente. Réessais 5 s, 30 s, 2 min, 10 min.
+ *     pendant une session précédente. Réessais 1 s, 3 s, 10 s, 30 s, 2 min, 5 min.
  *  2. Pendant une session déverrouillée : après chaque tour et chaque
  *     modification, l'enveloppe de ce qui n'est pas encore parti est scellée
  *     et rangée dans `sortant` (`preparerSortant`).
@@ -372,7 +372,7 @@ export function integrerEntrant(o: {
 
 /**
  * Lance le préchargement au démarrage, puis le relance : au retour du
- * réseau, après un échec (5 s, 30 s, 2 min, 10 min), et toutes les 5
+ * réseau, après un échec (1 s, 3 s, 10 s, 30 s, 2 min, 5 min), et toutes les 5
  * minutes tant que l'appareil reste verrouillé. Suspendu pendant une session
  * déverrouillée : le tour de synchronisation habituel prend le relais.
  */

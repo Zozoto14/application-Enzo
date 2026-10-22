@@ -3,9 +3,12 @@
  * SERVEUR du compte est la référence (src/sync/relais/coffreServeur.ts), pour
  * le Fondateur comme pour chaque ami ; relais plus ancien : l'ancienne boîte
  * par appareil (Fondateur seulement). Un tour part : à l'ouverture (après
- * déverrouillage), au retour au premier plan, quand le réseau revient, ~1,5 s
- * après une modification locale, toutes les 30 secondes, et à la fermeture de
- * la page. Après un échec, nouvel essai à 5 s, 30 s, 2 min puis 10 min.
+ * déverrouillage), au retour au premier plan, quand le réseau revient, ~150 ms
+ * après une modification locale (envoi seul, une requête), dès que le serveur
+ * annonce une révision plus récente (version 10 : flux SSE, attente longue ou
+ * sondage, voir sync/relais/veille.ts), et en filet toutes les 3 min (30 s sans
+ * avis). À la fermeture de la page, la file part en `fetch` keepalive. Après un
+ * échec, nouvel essai à 1 s, 3 s, 10 s, 30 s, 2 min puis 5 min.
  *
  * Sorti d'App.tsx pour qu'on puisse le lire d'un seul tenant.
  */
@@ -19,7 +22,8 @@ import { identifiantAppareil } from '../sync/identite';
 import { decoderLiaison, type Liaison } from '../sync/relais/liaison';
 import { estMaitre } from '../sync/relais/portees';
 import type { EnAttente, InfoAppareil } from '../sync/relais/moteur';
-import { Planificateur, type IssueTour, type RaisonTour } from '../sync/relais/planificateur';
+import { INTERVALLE_AVEC_AVIS_MS, INTERVALLE_SYNCHRO_MS, Planificateur, type IssueTour, type RaisonTour } from '../sync/relais/planificateur';
+import { Veilleur, type ModeVeille } from '../sync/relais/veille';
 import {
   deposerAvantFermeture,
   ecrireConfigRelais,
@@ -30,7 +34,7 @@ import {
   testerLiaison,
 } from '../sync/relais/synchroniser';
 import { definirRelaisActif, liaisonEnAttente, relaisDuCompte } from '../sync/relais/actif';
-import { relaisAvecCoffre, synchroniserServeur } from '../sync/relais/coffreServeur';
+import { capacitesCoffre, capacitesConnues, envoyerAvantFermeture, synchroniserServeur, type EtatServeur } from '../sync/relais/coffreServeur';
 import { deposerCoffreSiChange } from '../sync/relais/synchroniser';
 import { compteDeLiaison } from '../sync/relais/portees';
 import { chargerModule } from '../natif/modules';
@@ -77,6 +81,8 @@ export interface EtatSynchroApp {
   premierTourFait?: boolean;
   /** Nombre de tours reçus avec des changements (pour recharger l'affichage). */
   recus?: number;
+  /** Comment cet appareil apprend les changements des autres (version 10) ; absent : tour périodique seul. */
+  veille?: ModeVeille;
 }
 
 type PontRelais = { relais?: { config?(): Promise<Liaison | undefined> } };
@@ -234,10 +240,22 @@ export function useSynchro({
       const compte = profilCourant();
       const appareil = identifiantAppareil(new DepotParametres(pilote), PARAMETRES.identifiantAppareil);
       let resultat: { bilan: { ajoutes: number; modifies: number; supprimes: number }; erreurs: string[]; differeDans?: number; recus?: number };
-      if (await relaisAvecCoffre(config)) {
-        // Le serveur est la référence : tirer, appliquer, pousser la file.
-        resultat = await synchroniserServeur({ pilote, liaison: config, cle: config.cle, compte, appareil });
+      const capacites = await capacitesCoffre(config);
+      if (capacites.coffre) {
+        // Le serveur est la référence. Après une modification ici : la file part d'abord (une requête) ;
+        // sinon (ouverture, avis d'un autre appareil, filet) : tirer les différences, puis pousser.
+        resultat = await synchroniserServeur({
+          pilote,
+          liaison: config,
+          cle: config.cle,
+          compte,
+          appareil,
+          api: capacites.v10 ? 10 : 9,
+          pousserDabord: raison === 'modification',
+          revConnue: revAnnoncee.current,
+        });
         noterModeServeur();
+        avisDisponibles.current = capacites.avis;
         if (compte === 'principal') {
           // Le coffre (enveloppes du mot de passe) reste publié : un navigateur neuf s'y connecte.
           await deposerCoffreSiChange(pilote, config, session.coffreActuel()).catch(() => undefined);
@@ -286,6 +304,9 @@ export function useSynchro({
 
   const tourRef = useRef(tour);
   tourRef.current = tour;
+  /** Dernière révision annoncée par le serveur (avis), et le serveur sait-il en envoyer ? */
+  const revAnnoncee = useRef<number | undefined>(undefined);
+  const avisDisponibles = useRef(false);
 
   /** Caches du démarrage (voir sync/relais/prechargement.ts) : `sortant` prêt, `lus` recopiés. */
   const preparerCaches = useCallback(() => {
@@ -375,7 +396,49 @@ export function useSynchro({
     if (!deverrouille || !config) {
       return;
     }
-    const plan = new Planificateur(raison => tourRef.current(raison));
+    // Veille des avis du serveur (version 10) : démarrée après le premier tour qui confirme les avis,
+    // seulement page visible (une connexion tenue de moins quand l'onglet est masqué).
+    let veille: Veilleur | undefined;
+    const pageVisible = () => (navigateur().document?.visibilityState ?? 'visible') !== 'hidden';
+    const arreterVeille = () => {
+      veille?.arreter();
+      veille = undefined;
+    };
+    const demarrerVeille = () => {
+      if (veille || !avisDisponibles.current || !pageVisible()) return;
+      let conf: ReturnType<typeof lireConfigRelais>;
+      try {
+        conf = lireConfigRelais(session.base());
+      } catch {
+        return;
+      }
+      if (!conf) return;
+      const v = new Veilleur({
+        liaison: { relais: conf.relais, jeton: conf.jeton },
+        compte: profilCourant(),
+        revConnue: () => {
+          try {
+            return Math.max((lireEtatSynchro(session.base()) as EtatServeur).serveur?.rev ?? 0, revAnnoncee.current ?? 0);
+          } catch {
+            return Number.MAX_SAFE_INTEGER; // Verrouillé : rien à tirer.
+          }
+        },
+        surVersion: rev => {
+          revAnnoncee.current = Math.max(revAnnoncee.current ?? 0, rev);
+          plan.notification();
+        },
+        surMode: mode => setEtat(courant => (courant.veille === mode ? courant : { ...courant, veille: mode })),
+      });
+      veille = v;
+      v.demarrer();
+    };
+    const plan = new Planificateur(async raison => {
+      const issue = await tourRef.current(raison);
+      // Avis du serveur disponibles : le tour périodique n'est plus qu'un filet (3 min).
+      plan.definirIntervalle(avisDisponibles.current ? INTERVALLE_AVEC_AVIS_MS : INTERVALLE_SYNCHRO_MS);
+      if (avisDisponibles.current) demarrerVeille();
+      return issue;
+    });
     planificateur.current = plan;
     plan.demarrer();
     // Sécurité : sans réponse rapide (relais lent), le devblog et le reste ne restent pas en attente.
@@ -385,7 +448,9 @@ export function useSynchro({
     const abonnement = AppState.addEventListener?.('change', statut => {
       if (statut === 'active') {
         plan.retourPremierPlan();
+        demarrerVeille();
       } else {
+        arreterVeille();
         void plan.demander('premier-plan');
       }
     });
@@ -401,8 +466,19 @@ export function useSynchro({
     const { cible, document } = navigateur();
     const vidageFermeture = () => {
       preparerCaches();
-      // Coffre serveur : la file reste dans la base ; elle part au prochain tour (rien à déposer par appareil).
-      if (modeServeur()) return;
+      // Coffre serveur : la file reste dans la base (elle repartira au prochain tour) ET part tout de
+      // suite en `fetch` keepalive, qui survit à la fermeture de l'onglet.
+      if (modeServeur()) {
+        try {
+          const pilote = session.base();
+          const conf = lireConfigRelais(pilote);
+          const caps = conf ? capacitesConnues(conf.relais) : undefined;
+          if (conf && caps?.coffre) envoyerAvantFermeture({ pilote, liaison: conf, cle: conf.cle, compte: profilCourant(), api: caps.v10 ? 10 : 9 });
+        } catch {
+          // Session déjà verrouillée.
+        }
+        return;
+      }
       deposerAvantFermeture({
         pilote: session.base(),
         appareil: identifiantAppareil(new DepotParametres(session.base()), PARAMETRES.identifiantAppareil),
@@ -412,7 +488,9 @@ export function useSynchro({
     const surVisibilite = () => {
       if (document?.visibilityState === 'visible') {
         plan.retourPremierPlan();
+        demarrerVeille();
       } else {
+        arreterVeille();
         vidageFermeture();
       }
     };
@@ -429,7 +507,8 @@ export function useSynchro({
     return () => {
       clearTimeout(garde);
       if (minuterieSortant) clearTimeout(minuterieSortant);
-      setEtat(courant => ({ ...courant, premierTourFait: false }));
+      setEtat(courant => ({ ...courant, premierTourFait: false, veille: undefined }));
+      arreterVeille();
       plan.arreter();
       abonnement?.remove?.();
       ecoute?.();

@@ -399,14 +399,16 @@ export interface ConnexionIdentifiant {
  * charge : il ne voit ni l'un ni l'autre) et freine les essais ; il rend de quoi retrouver le compte,
  * scellé par une clé tirée du même mot de passe. Le Fondateur reçoit en plus un jeton de SESSION
  * (le jeton maître reste sur le serveur). Un identifiant inconnu échoue exactement comme un mauvais
- * mot de passe.
+ * mot de passe. Compte avec validation en deux étapes : `code` (six chiffres), vérifié par le serveur ;
+ * sans lui, `ErreurInvitation('a2f-requis')`.
  */
-export async function connecterParIdentifiant(relais: string, identifiant: string, motDePasse: string, requete?: Fetch): Promise<ConnexionIdentifiant> {
+export async function connecterParIdentifiant(relais: string, identifiant: string, motDePasse: string, requete?: Fetch, code?: string): Promise<ConnexionIdentifiant> {
   const h = empreinteIdentifiant(identifiant);
   const { sel, kdf } = await lireSelAcces(relais, h, requete);
   const { cle, preuve } = preuveAcces(motDePasse, sel, kdf);
   try {
-    const ouvert = await ouvrirAccesRelais(relais, h, preuve, requete);
+    // Validation en deux étapes (version 10) : sans code, le serveur répond `a2f-requis` (rien d'autre).
+    const ouvert = await ouvrirAccesRelais(relais, h, preuve, requete, 'ouvrir', code);
     return await terminerConnexion(ouvert, cle, requete);
   } finally {
     cle.fill(0);

@@ -53,6 +53,8 @@ export interface SuiviServeur {
   migreLe?: string;
   /** Dernier ménage des anciens dépôts par appareil. */
   menageLe?: string;
+  /** Un envoi de fermeture (keepalive) a pu partir : le tour suivant relit d'abord (il y retrouvera ses enregistrements). */
+  relire?: boolean;
 }
 
 export type EtatServeur = EtatSynchro & { serveur?: SuiviServeur };
@@ -89,20 +91,38 @@ interface EnregistrementServeur {
   valeur: string;
 }
 
-/** Le relais a-t-il un coffre serveur ? (mémorisé par adresse pour la durée de la page) */
-const capacites = new Map<string, boolean>();
-export async function relaisAvecCoffre(liaison: Liaison, requete: Fetch = fetch): Promise<boolean> {
+/** Ce que le relais sait faire du coffre serveur (mémorisé par adresse pour la durée de la page). */
+export interface CapacitesCoffre {
+  /** Coffre serveur (version 9). */
+  coffre: boolean;
+  /** Routes `/v10/coffre/…` (version 10). */
+  v10: boolean;
+  /** Avis de nouvelle révision (flux SSE, attente longue, sondage). */
+  avis: boolean;
+}
+const capacites = new Map<string, CapacitesCoffre>();
+export async function capacitesCoffre(liaison: Liaison, requete: Fetch = fetch): Promise<CapacitesCoffre> {
   const connu = capacites.get(liaison.relais);
   if (connu !== undefined) return connu;
   const reponse = await appeler(liaison, '/sante', {}, requete);
   if (!reponse.ok) throw new ErreurRelais(`Le relais a répondu ${reponse.status}.`, reponse.status);
   const corps = (await reponse.json()) as { fonctions?: unknown };
-  const avec = Array.isArray(corps.fonctions) && corps.fonctions.includes('coffre-serveur');
-  capacites.set(liaison.relais, avec);
-  return avec;
+  const fonctions = Array.isArray(corps.fonctions) ? corps.fonctions : [];
+  const lues: CapacitesCoffre = { coffre: fonctions.includes('coffre-serveur'), v10: fonctions.includes('coffre-v10'), avis: fonctions.includes('avis') };
+  capacites.set(liaison.relais, lues);
+  return lues;
 }
+/** Le relais a-t-il un coffre serveur ? */
+export async function relaisAvecCoffre(liaison: Liaison, requete: Fetch = fetch): Promise<boolean> {
+  return (await capacitesCoffre(liaison, requete)).coffre;
+}
+/** Capacités déjà connues pour ce relais (sans appel réseau). */
+export const capacitesConnues = (relais: string): CapacitesCoffre | undefined => capacites.get(relais);
 /** Tests : oublie les capacités mémorisées. */
 export const oublierCapacites = (): void => capacites.clear();
+
+/** Préfixe des routes du coffre : `/v10/coffre` si le relais le connaît, sinon `/v9/coffre` (relais pas encore à jour). */
+export const cheminCoffre = (compte: string, api: 9 | 10 = 9): string => `/v${api}/coffre/${encodeURIComponent(compte)}`;
 
 export interface OptionsServeur {
   pilote: PiloteSqlite;
@@ -115,6 +135,16 @@ export interface OptionsServeur {
   appareil?: string;
   maintenant?: () => Date;
   requete?: Fetch;
+  /** Version des routes (10 : `/v10/coffre`, réponse d'envoi avec `avant`). */
+  api?: 9 | 10;
+  /**
+   * Envoi rapide (après une modification ici) : la file part D'ABORD, et la relecture n'a lieu que si
+   * quelqu'un d'autre a écrit entre-temps (révision `avant` du serveur ≠ celle qu'on connaissait, ou
+   * avis d'une révision plus récente : `revConnue`). Une modification part ainsi en UNE requête.
+   */
+  pousserDabord?: boolean;
+  /** Révision annoncée par un avis du serveur (version 10). */
+  revConnue?: number;
 }
 
 export interface ResultatServeur {
@@ -158,7 +188,7 @@ function retirerFile(etat: EtatServeur, cles: ReadonlySet<string>): EtatServeur 
 }
 
 export async function synchroniserServeur(o: OptionsServeur): Promise<ResultatServeur> {
-  const { pilote, liaison, cle, compte } = o;
+  const { pilote, liaison, compte } = o;
   const requete = o.requete ?? fetch;
   const horloge = o.maintenant ?? (() => new Date());
   const resultat: ResultatServeur = { recus: 0, envoyes: 0, conflits: 0, bilan: { ajoutes: 0, modifies: 0, supprimes: 0, echecs: [] }, erreurs: [], anciens: 0, enAttente: 0 };
@@ -174,7 +204,8 @@ export async function synchroniserServeur(o: OptionsServeur): Promise<ResultatSe
 
   try {
     // ------------------------------------------------ Anciens dépôts par appareil (transition, Fondateur)
-    if (compte === 'principal' && estMaitre(liaison)) {
+    // (Pas pendant un envoi rapide : une modification part seule, en une requête.)
+    if (compte === 'principal' && estMaitre(liaison) && !(o.pousserDabord && avant.serveur?.migreLe)) {
       etat = await importerAnciens(o, etat, resultat, horloge);
       sauver();
     }
@@ -186,76 +217,65 @@ export async function synchroniserServeur(o: OptionsServeur): Promise<ResultatSe
       sauver();
     }
 
-    // ------------------------------------------------ Tirer
-    let suite = true;
-    while (suite) {
-      const reponse = await appeler(liaison, `/v9/coffre/${encodeURIComponent(compte)}?depuis=${etat.serveur!.rev}&limite=500`, {}, requete);
-      if (!reponse.ok) throw new ErreurRelais(`Le serveur a répondu ${reponse.status} (lecture du coffre).`, reponse.status);
-      const page = (await reponse.json()) as { enregistrements?: EnregistrementServeur[]; suite?: boolean };
-      const enregistrements = page.enregistrements ?? [];
-      etat = appliquerEnregistrements(o, etat, enregistrements, resultat, false);
-      const derniere = enregistrements.length > 0 ? enregistrements[enregistrements.length - 1].rev : etat.serveur!.rev;
-      etat = { ...etat, serveur: { ...etat.serveur!, rev: Math.max(etat.serveur!.rev, derniere) } };
-      sauver();
-      suite = Boolean(page.suite) && enregistrements.length > 0;
-    }
+    const chemin = cheminCoffre(compte, o.api ?? 9);
+    const tirer = async () => {
+      let suite = true;
+      while (suite) {
+        const reponse = await appeler(liaison, `${chemin}?depuis=${etat.serveur!.rev}&limite=500`, {}, requete);
+        if (!reponse.ok) throw new ErreurRelais(`Le serveur a répondu ${reponse.status} (lecture du coffre).`, reponse.status);
+        const page = (await reponse.json()) as { enregistrements?: EnregistrementServeur[]; suite?: boolean };
+        const enregistrements = page.enregistrements ?? [];
+        etat = appliquerEnregistrements(o, etat, enregistrements, resultat, false);
+        const derniere = enregistrements.length > 0 ? enregistrements[enregistrements.length - 1].rev : etat.serveur!.rev;
+        etat = { ...etat, serveur: { ...etat.serveur!, rev: Math.max(etat.serveur!.rev, derniere) } };
+        sauver();
+        suite = Boolean(page.suite) && enregistrements.length > 0;
+      }
+    };
 
-    // ------------------------------------------------ Pousser
-    etat = noterChangementsLocaux(etat, extraireEntites(pilote), horloge().toISOString()) as EtatServeur;
-    const entites = extraireEntites(pilote);
-    const file = etat.enAttente?.cles ?? [];
-    const lots: Array<Array<{ cle: string; enr: { id: string; base: number; date: string; supprime: boolean; valeur: string } }>> = [];
-    let lot: (typeof lots)[number] = [];
-    let octets = 0;
-    const sansObjet = new Set<string>();
-    for (const c of file) {
-      const present = c in entites;
-      const supprime = !present && c in etat.supprimes;
-      if (!present && !supprime) {
-        sansObjet.add(c);
-        continue;
-      }
-      const date = (present ? etat.dates[c] : etat.supprimes[c]) ?? horloge().toISOString();
-      const id = idEnregistrement(cle, c);
-      const valeur = scellerEnregistrement(cle, compte, id, present ? { cle: c, date, valeur: entites[c] } : { cle: c, date, supprime: true });
-      if (valeur.length > TAILLE_MAX_VALEUR) {
-        resultat.erreurs.push(`« ${c} » est trop volumineux pour le serveur : gardé sur cet appareil.`);
-        continue;
-      }
-      if (lot.length >= LOT_ENREGISTREMENTS || (lot.length > 0 && octets + valeur.length > LOT_OCTETS)) {
-        lots.push(lot);
-        lot = [];
-        octets = 0;
-      }
-      lot.push({ cle: c, enr: { id, base: etat.serveur!.base[c] ?? 0, date, supprime, valeur } });
-      octets += valeur.length;
-    }
-    if (lot.length > 0) lots.push(lot);
-    etat = retirerFile(etat, sansObjet);
-
-    for (const l of lots) {
-      const reponse = await appeler(liaison, `/v9/coffre/${encodeURIComponent(compte)}`, { methode: 'POST', corps: JSON.stringify({ enregistrements: l.map(x => x.enr) }) }, requete);
-      if (!reponse.ok) throw new ErreurRelais(`Le serveur a refusé l’envoi (${reponse.status}).`, reponse.status);
-      const corps = (await reponse.json()) as { resultats?: Array<{ id: string; rev: number; etat: string; actuel?: EnregistrementServeur }> };
-      const parId = new Map(l.map(x => [x.enr.id, x.cle]));
-      const faits = new Set<string>();
-      const perdus: EnregistrementServeur[] = [];
-      const base = { ...etat.serveur!.base };
-      for (const r of corps.resultats ?? []) {
-        const c = parId.get(r.id);
-        if (!c) continue;
-        faits.add(c);
-        if (r.etat === 'ok') {
-          base[c] = r.rev;
-          resultat.envoyes++;
-        } else if (r.actuel) {
-          perdus.push(r.actuel);
-          resultat.conflits++;
+    /** Pousse la file ; rend vrai si personne d'autre n'a écrit pendant ce temps (rien à relire). */
+    const pousser = async (): Promise<boolean> => {
+      etat = noterChangementsLocaux(etat, extraireEntites(pilote), horloge().toISOString()) as EtatServeur;
+      const lots = preparerLots(o, etat, resultat);
+      etat = retirerFile(etat, lots.sansObjet);
+      let seul = true;
+      for (const l of lots.lots) {
+        const reponse = await appeler(liaison, chemin, { methode: 'POST', corps: JSON.stringify({ enregistrements: l.map(x => x.enr) }) }, requete);
+        if (!reponse.ok) throw new ErreurRelais(`Le serveur a refusé l’envoi (${reponse.status}).`, reponse.status);
+        const corps = (await reponse.json()) as { rev?: number; avant?: number; resultats?: Array<{ id: string; rev: number; etat: string; actuel?: EnregistrementServeur }> };
+        const parId = new Map(l.map(x => [x.enr.id, x.cle]));
+        const faits = new Set<string>();
+        const perdus: EnregistrementServeur[] = [];
+        const base = { ...etat.serveur!.base };
+        for (const r of corps.resultats ?? []) {
+          const c = parId.get(r.id);
+          if (!c) continue;
+          faits.add(c);
+          if (r.etat === 'ok') {
+            base[c] = r.rev;
+            resultat.envoyes++;
+          } else if (r.actuel) {
+            perdus.push(r.actuel);
+            resultat.conflits++;
+          }
         }
+        // Le serveur était à la révision qu'on connaissait : les révisions de cet envoi sont les nôtres, rien à relire.
+        const contigu = typeof corps.avant === 'number' && typeof corps.rev === 'number' && corps.avant === etat.serveur!.rev;
+        if (!contigu) seul = false;
+        etat = retirerFile({ ...etat, serveur: { ...etat.serveur!, base, ...(contigu ? { rev: corps.rev! } : {}) } }, faits);
+        if (perdus.length > 0) etat = appliquerEnregistrements(o, etat, perdus, resultat, true);
+        sauver();
       }
-      etat = retirerFile({ ...etat, serveur: { ...etat.serveur!, base } }, faits);
-      if (perdus.length > 0) etat = appliquerEnregistrements(o, etat, perdus, resultat, true);
-      sauver();
+      return seul;
+    };
+
+    if (o.pousserDabord && etat.serveur?.migreLe && !etat.serveur.relire) {
+      const seul = await pousser();
+      if (!seul || (o.revConnue ?? 0) > etat.serveur!.rev) await tirer();
+    } else {
+      await tirer();
+      if (etat.serveur!.relire) etat = { ...etat, serveur: { ...etat.serveur!, relire: undefined } };
+      await pousser();
     }
 
     // Réponse du serveur bien arrivée : la file restante (le cas échéant) repart au prochain tour.
@@ -283,6 +303,77 @@ export async function synchroniserServeur(o: OptionsServeur): Promise<ResultatSe
     }
     sauver();
     throw erreur;
+  }
+}
+
+type Lot = Array<{ cle: string; enr: { id: string; base: number; date: string; supprime: boolean; valeur: string } }>;
+
+/** Scelle la file d'envoi en lots (au plus `LOT_ENREGISTREMENTS` ou `LOT_OCTETS` chacun). */
+function preparerLots(o: OptionsServeur, etat: EtatServeur, resultat: Pick<ResultatServeur, 'erreurs'>, limiteOctets = LOT_OCTETS): { lots: Lot[]; sansObjet: Set<string> } {
+  const { pilote, cle, compte } = o;
+  const horloge = o.maintenant ?? (() => new Date());
+  const entites = extraireEntites(pilote);
+  const lots: Lot[] = [];
+  let lot: Lot = [];
+  let octets = 0;
+  const sansObjet = new Set<string>();
+  for (const c of etat.enAttente?.cles ?? []) {
+    const present = c in entites;
+    const supprime = !present && c in etat.supprimes;
+    if (!present && !supprime) {
+      sansObjet.add(c);
+      continue;
+    }
+    const date = (present ? etat.dates[c] : etat.supprimes[c]) ?? horloge().toISOString();
+    const id = idEnregistrement(cle, c);
+    const valeur = scellerEnregistrement(cle, compte, id, present ? { cle: c, date, valeur: entites[c] } : { cle: c, date, supprime: true });
+    if (valeur.length > TAILLE_MAX_VALEUR) {
+      resultat.erreurs.push(`« ${c} » est trop volumineux pour le serveur : gardé sur cet appareil.`);
+      continue;
+    }
+    if (lot.length >= LOT_ENREGISTREMENTS || (lot.length > 0 && octets + valeur.length > limiteOctets)) {
+      lots.push(lot);
+      lot = [];
+      octets = 0;
+    }
+    lot.push({ cle: c, enr: { id, base: etat.serveur?.base[c] ?? 0, date, supprime, valeur } });
+    octets += valeur.length;
+  }
+  if (lot.length > 0) lots.push(lot);
+  return { lots, sansObjet };
+}
+
+/** Taille maximale d'un envoi `keepalive` (le navigateur refuse au-delà de 64 Kio en tout). */
+export const OCTETS_KEEPALIVE = 60_000;
+
+/**
+ * Fermeture de l'onglet ou de l'app pendant qu'une modification attend : la file part en `fetch`
+ * `keepalive` (qui survit à la page, et porte le jeton dans l'en-tête, contrairement à `sendBeacon`).
+ * La file reste dans la base de l'appareil (notée, avec ses dates). Au prochain tour, la relecture
+ * retrouve ces enregistrements identiques à ceux d'ici et les retire de la file (pas de doublon,
+ * pas de conflit) ; si l'envoi s'est perdu, ils repartent. Rend vrai si un envoi est parti.
+ */
+export function envoyerAvantFermeture(o: OptionsServeur): boolean {
+  try {
+    const etat = noterChangementsLocaux(lireEtatSynchro(o.pilote), extraireEntites(o.pilote), (o.maintenant ?? (() => new Date()))().toISOString()) as EtatServeur;
+    if (!etat.serveur?.migreLe || !etat.enAttente || etat.enAttente.cles.length === 0) return false;
+    const { lots } = preparerLots(o, etat, { erreurs: [] }, OCTETS_KEEPALIVE);
+    const premier = lots[0];
+    if (!premier) return false;
+    const corps = JSON.stringify({ enregistrements: premier.map(x => x.enr) });
+    if (corps.length > OCTETS_KEEPALIVE + 4_000) return false;
+    // La file et ses dates sont notées (le tour suivant enverra exactement la même chose s'il le faut),
+    // et ce tour relira d'abord : il y retrouvera ces enregistrements, sans doublon ni faux conflit.
+    sauverEtat(o.pilote, { ...etat, serveur: { ...etat.serveur, relire: true } });
+    void (o.requete ?? fetch)(`${o.liaison.relais}${cheminCoffre(o.compte, o.api ?? 9)}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${o.liaison.jeton}`, 'Content-Type': 'application/json' },
+      body: corps,
+      keepalive: true,
+    }).catch(() => undefined);
+    return true;
+  } catch {
+    return false;
   }
 }
 

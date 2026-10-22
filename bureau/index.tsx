@@ -164,7 +164,9 @@ import {
   type LienInvitation,
   type PolitiqueMdp,
 } from '../src/profils/invitation';
-import { compteRevoque, lireThemePublic, publierThemePublic, revoquerCompte, supprimerAcces, versionRelais } from '../src/sync/relais/connexionAmis';
+import { activerA2f, compteRevoque, desactiverA2f, etatA2f, lireThemePublic, publierThemePublic, revoquerCompte, supprimerAcces, versionRelais } from '../src/sync/relais/connexionAmis';
+import { genererSecretTotp, uriOtpauth } from '../src/securite/totp';
+import type { ServicesA2f } from '../src/hub/ReglageA2f';
 import { espacesDuRelais } from '../src/sync/relais/espaces';
 import { empreinteOctets } from '../src/sync/relais/fichiers';
 import { changerMotDePasse as changerMotDePasseCoffre, type Coffre } from '../src/securite/coffre';
@@ -404,6 +406,38 @@ async function liaisonMaitreDe(session: SessionBureau): Promise<Liaison | undefi
   return maitre && estMaitre(maitre) ? maitre : undefined;
 }
 
+/**
+ * Validation en deux étapes du compte ouvert (Paramètres › Sécurité, relais version 10) : le secret est
+ * confié au serveur, qui vérifie le code à chaque connexion par identifiant. Le Fondateur reprend le
+ * secret de son coffre (même application d'authentification) ; un ami en reçoit un nouveau.
+ */
+function servicesA2f(session: SessionBureau, profil: Profil, identifiant: string | undefined): ServicesA2f {
+  const compte = profil.admin ? ID_PRINCIPAL : profil.id;
+  const liaison = async (): Promise<Liaison> => {
+    const config = session.session.statut() === 'deverrouille' ? lireConfigRelais(session.session.base()) : undefined;
+    const l = profil.admin ? await liaisonMaitreDe(session) : config ? { relais: config.relais, jeton: config.jeton } : undefined;
+    if (!l) throw new Error('Cet appareil ne connaît pas encore le serveur : réessayez après la synchronisation.');
+    return l;
+  };
+  return {
+    lire: async () => etatA2f(await liaison(), compte),
+    preparer: () => {
+      const existant = profil.admin ? session.session.secretTotp() : undefined;
+      const secret = existant ?? genererSecretTotp(aleatoireParDefaut);
+      return { secret, uri: uriOtpauth({ secret, compte: identifiant ?? profil.nom }), reprend: Boolean(existant) };
+    },
+    activer: async (secret, code) => activerA2f(await liaison(), compte, secret, code),
+    desactiver: async code => {
+      await desactiverA2f(await liaison(), compte, code);
+      // Plus de code nulle part : le coffre de cet appareil cesse aussi de le demander (republié au tour suivant).
+      if (session.session.etatCoffre()?.codeDemande) {
+        session.session.exempterCodeLocal();
+        await session.vider();
+      }
+    },
+  };
+}
+
 /** Au plus `ms` : le réseau ne bloque jamais l'ouverture (hors ligne, on continue avec ce qu'on a). */
 function auPlus<T>(promesse: Promise<T>, ms: number): Promise<T | undefined> {
   return Promise.race([promesse.catch(() => undefined), new Promise<undefined>(ok => setTimeout(() => ok(undefined), ms))]);
@@ -566,6 +600,8 @@ function Racine() {
         rangSur?: Rang;
         creation?: boolean;
         motDePasse?: string;
+        /** Code à six chiffres déjà saisi à la connexion (validation en deux étapes). */
+        codeTotp?: string;
         /** « Mot de passe oublié » : code de récupération et nouveau mot de passe. */
         recuperation?: { code: string; nouveau: string };
         /** Après un déverrouillage réussi (republier l'accès, montrer les codes…). */
@@ -645,7 +681,7 @@ function Racine() {
         if (options.motDePasse && !options.cle) {
           // Juste après l'invitation (ou la connexion par identifiant) : le mot de passe vient d'être saisi.
           try {
-            session.session.deverrouiller({ motDePasse: options.motDePasse, codeTotp: '' });
+            session.session.deverrouiller({ motDePasse: options.motDePasse, codeTotp: options.codeTotp ?? '' });
           } catch {
             // L'écran de déverrouillage s'affiche, avec son message.
           }
@@ -927,12 +963,14 @@ function Racine() {
 
   /** Appareil neuf : identifiant + mot de passe, POUR TOUS (Fondateur compris, relais version 9). */
   const connecterIdentifiant = useCallback(
-    async (identifiant: string, motDePasse: string) => {
+    async (identifiant: string, motDePasse: string, code?: string) => {
       const relais = await relaisConnu();
       if (!relais) throw new ErreurInvitation('relais-inconnu');
-      const c = await connecterParIdentifiant(relais, identifiant, motDePasse);
+      // Validation en deux étapes : le serveur vérifie le code avant de rendre quoi que ce soit ; le même code
+      // ouvre ensuite le coffre ici s'il l'exige encore (coffre du Fondateur avec code à six chiffres).
+      const c = await connecterParIdentifiant(relais, identifiant, motDePasse, undefined, code);
       if ((await installerConnexion(c)) === 'remplacer') return;
-      await ouvrir({ id: c.fondateur ? ID_PRINCIPAL : (c.relie.compte as string), nom: c.acces.prenom, admin: c.fondateur }, { motDePasse });
+      await ouvrir({ id: c.fondateur ? ID_PRINCIPAL : (c.relie.compte as string), nom: c.acces.prenom, admin: c.fondateur }, { motDePasse, ...(code ? { codeTotp: code } : {}) });
     },
     [installerConnexion, ouvrir],
   );
@@ -1074,12 +1112,22 @@ function Racine() {
       const maitre = await liaisonMaitreDe(session);
       if (!maitre) throw new Error('Cet appareil ne connaît pas le serveur : ouvrez AppDashboard sur votre PC (déjà relié), puis réessayez.');
       session.session.verifierIdentite({ motDePasse: o.motDePasseActuel, codeTotp: o.codeTotp });
+      // Validation en deux étapes gardée (relais version 10) : le secret TOTP du coffre (la même application
+      // d'authentification) est confié au serveur AVANT de publier l'accès — jamais d'accès sans le code.
+      const secret = session.session.etatCoffre()?.codeDemande ? session.session.secretTotp() : undefined;
+      if (secret) {
+        const version = await versionRelais(maitre);
+        if (!version?.fonctions.includes('a2f')) {
+          throw new Error('Le serveur n’est pas encore à jour pour garder ton code à six chiffres : réessaie dans quelques minutes (il se met à jour seul).');
+        }
+        await activerA2f(maitre, ID_PRINCIPAL, secret, o.codeTotp);
+      }
       const codes = Array.from({ length: 10 }, () => genererCodeRecuperation(aleatoireParDefaut));
       const depot = new DepotParametres(session.session.base());
       const ancien = depot.lire(PARAM_IDENTIFIANT);
       const h = await publierAccesFondateur({ maitre, identifiant: o.identifiant, motDePasse: o.nouveau, codes });
       if (ancien && empreinteIdentifiant(ancien) !== h) await supprimerAcces(maitre, empreinteIdentifiant(ancien)).catch(() => undefined);
-      const { coffre } = session.session.passerAConnexionParIdentifiant({ motDePasseActuel: o.motDePasseActuel, codeTotp: o.codeTotp, nouveauMotDePasse: o.nouveau, codes });
+      const { coffre } = session.session.passerAConnexionParIdentifiant({ motDePasseActuel: o.motDePasseActuel, codeTotp: o.codeTotp, nouveauMotDePasse: o.nouveau, codes, garderCode: Boolean(secret) });
       depot.ecrire(PARAM_IDENTIFIANT, o.identifiant.trim().slice(0, 30));
       await session.vider();
       await deposerCoffreSiChange(session.session.base(), maitre, coffre).catch(e => console.warn('Coffre :', erreurTexte(e)));
@@ -1090,7 +1138,7 @@ function Racine() {
           .catch(() => undefined);
       }
       memoireNavigateur.setItem(CLE_IDENTIFIANT, o.identifiant.trim());
-      return { identifiant: o.identifiant.trim(), codes };
+      return { identifiant: o.identifiant.trim(), codes, a2f: Boolean(secret) };
     },
     [],
   );
@@ -1555,6 +1603,10 @@ function Racine() {
     connexionServeur:
       profil.admin && !adminSur && session.session.statut() === 'deverrouille'
         ? { identifiant: new DepotParametres(session.session.base()).lire(PARAM_IDENTIFIANT), onConfigurer: () => setEcranFondateur({ mode: 'modifier' }) }
+        : undefined,
+    a2f:
+      !adminSur && profil.id !== 'leurre' && session.session.statut() === 'deverrouille'
+        ? servicesA2f(session, profil, profil.admin ? new DepotParametres(session.session.base()).lire(PARAM_IDENTIFIANT) : profil.nom)
         : undefined,
     politique: annuaireRef.current?.politique,
     juridique: annuaireRef.current?.juridique,

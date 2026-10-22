@@ -37,8 +37,8 @@ const enr = (n, o = {}) => ({ id: id(n), base: 0, date: `2026-10-0${(n % 9) + 1}
 
 test('/sante annonce la version 9 et le coffre serveur', async () => {
   const corps = await (await appel(env0(), '/sante', { jeton: JETON })).json();
-  assert.equal(corps.version, 9);
-  for (const f of ['coffre-serveur', 'sessions', 'theme', 'acces-fondateur', 'secours']) assert.ok(corps.fonctions.includes(f), f);
+  assert.ok(corps.version >= 9);
+  for (const f of ['coffre-serveur', 'sessions', 'theme', 'acces-fondateur', 'secours', 'coffre-v10', 'avis', 'a2f']) assert.ok(corps.fonctions.includes(f), f);
 });
 
 test('coffre : écrire, relire par pages depuis une révision, rien en clair d’autre que ce qui est envoyé', async () => {
@@ -204,4 +204,25 @@ test('style public : le nom du thème seulement ; identifiant inconnu = compte s
   // Accès retiré : le thème part avec.
   await appel(env, `/acces/${H}`, { methode: 'DELETE', jeton: JETON });
   assert.deepEqual(await (await appel(env, `/v9/theme/${H}`)).json(), { theme: null });
+});
+
+test('version 10 : un PUT arrivé en POST + X-Methode est traité comme l’original ; un dépôt d’accès illisible dit pourquoi', async () => {
+  const env = env0();
+  const H = hex(64, 'd');
+  // Corps perdu en route (frontal mutualisé) : la raison est rendue et lisible.
+  const vide = await relais.fetch(new Request(`https://relais.test/acces/${H}`, { method: 'PUT', headers: { Authorization: `Bearer ${JETON}`, 'Content-Type': 'application/json' } }), env);
+  assert.equal(vide.status, 400);
+  assert.deepEqual(await vide.json(), { erreur: 'Accès illisible (corps-vide).', motif: 'acces-illisible', champ: 'corps-vide', recu: 0 });
+  const kdf = await appel(env, `/acces/${H}`, { methode: 'PUT', jeton: JETON, corps: { ...depotAcces('principal'), kdf: { algorithme: 'argon2id', passes: 2, memoireKio: 19456, fils: 1, longueurCle: 16 } } });
+  assert.equal((await kdf.json()).champ, 'kdf');
+  // Même dépôt en POST + X-Methode : accepté.
+  const r = await relais.fetch(
+    new Request(`https://relais.test/acces/${H}`, { method: 'POST', headers: { Authorization: `Bearer ${JETON}`, 'Content-Type': 'application/json', 'X-Methode': 'PUT' }, body: JSON.stringify(depotAcces('principal')) }),
+    env,
+  );
+  assert.equal(r.status, 200);
+  assert.equal((await appel(env, `/acces/${H}/ouvrir`, { methode: 'POST', corps: { preuve: hex(64, '1') } })).status, 200);
+  // Le préliminaire CORS autorise l'en-tête.
+  const options = await relais.fetch(new Request(`https://relais.test/acces/${H}`, { method: 'OPTIONS' }), env);
+  assert.match(options.headers.get('Access-Control-Allow-Headers'), /X-Methode/);
 });

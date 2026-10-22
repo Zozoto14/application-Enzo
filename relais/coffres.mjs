@@ -13,6 +13,13 @@
  *   GET    /v9/coffre/<compte>/etat                     révision, nombre d'enregistrements, taille
  *   DELETE /v9/coffre/<compte>                          jeton maître seulement (compte supprimé)
  *
+ * Version 10 (mêmes routes sous `/v10/coffre/…`, plus les avis de relais/avis.mjs) :
+ *   GET    /v10/coffre/<compte>/version                 révision courante (sondage)
+ *   GET    /v10/coffre/<compte>/attendre?rev=<n>        attente longue (25 s au plus)
+ *   GET    /v10/coffre/<compte>/flux?rev=<n>            flux SSE des nouvelles révisions
+ *   POST   rend aussi `avant` : la révision du coffre juste avant cet envoi (si c'est celle que
+ *          l'appareil connaissait, il n'a rien à relire : personne d'autre n'a écrit entre-temps).
+ *
  * Règle de conflit, PAR ENREGISTREMENT, sans perte :
  *  - l'appareil envoie la révision qu'il connaissait (`base`) ;
  *  - même révision qu'ici (ou enregistrement nouveau) : accepté ;
@@ -26,6 +33,8 @@
  * serveur de développement). Sans magasin (`env.COFFRES` absent, ex. Worker Cloudflare qui transmet
  * tout à o2switch), les routes répondent 501 et les appareils restent sur l'ancienne synchronisation.
  */
+
+import { avisDe, routeAttendre, routeFlux, routeVersion } from './avis.mjs';
 
 export const TAILLE_MAX_VALEUR = 8 * 1024 * 1024;
 export const MAX_PAR_ENVOI = 1000;
@@ -130,8 +139,12 @@ export function coffresMemoire({ maintenant = () => Date.now() } = {}) {
       }
       return { rev: p.rev, enregistrements: page, suite: page.length < tries.length };
     },
+    async version(profil) {
+      return profils.get(profil)?.rev ?? 0;
+    },
     async ecrire(profil, enregistrements) {
       const p = de(profil);
+      const avant = p.rev;
       const resultats = [];
       for (const e of enregistrements) {
         const existant = p.enregistrements.get(e.id);
@@ -146,7 +159,7 @@ export function coffresMemoire({ maintenant = () => Date.now() } = {}) {
         p.enregistrements.set(e.id, { id: e.id, rev, date: e.date, supprime: e.supprime, valeur: e.valeur });
         resultats.push({ id: e.id, rev, etat: 'ok' });
       }
-      return { rev: p.rev, resultats };
+      return { rev: p.rev, avant, resultats };
     },
     async historique(profil, limite = 200) {
       return [...de(profil).historique].reverse().slice(0, limite).map(h => ({ ...h }));
@@ -169,7 +182,7 @@ export function coffresMemoire({ maintenant = () => Date.now() } = {}) {
  * `/v9/coffre/<compte>[/historique|/etat]`. `portee` : portée du jeton (maître, session du
  * Fondateur, ou profil) ; `delegue(titulaire, id)` : délégation d'un rang supérieur (lecture et écriture).
  */
-export async function routeCoffre(requete, env, portee, compte, action, delegue) {
+export async function routeCoffre(requete, env, portee, compte, action, delegue, version = 9) {
   const store = env.COFFRES;
   if (!store) return refus('Coffre serveur indisponible sur ce relais.', 501, 'coffre-indisponible');
   if (!MOTIF_COMPTE.test(compte)) return refus('Compte invalide.', 400);
@@ -188,6 +201,11 @@ export async function routeCoffre(requete, env, portee, compte, action, delegue)
   }
   if (action === 'etat' && requete.method === 'GET') {
     return json(await store.etat(compte));
+  }
+  if (version >= 10 && requete.method === 'GET' && typeof store.version === 'function') {
+    if (action === 'version') return routeVersion(store, compte);
+    if (action === 'attendre') return routeAttendre(store, avisDe(env), compte, url);
+    if (action === 'flux') return routeFlux(store, avisDe(env), compte, url);
   }
   if (action !== undefined) return refus('Adresse inconnue.', 404);
 
@@ -209,11 +227,15 @@ export async function routeCoffre(requete, env, portee, compte, action, delegue)
     }
     const lu = lireEnvoi(corps);
     if (lu.erreur) return refus(lu.erreur, 400);
-    return json(await store.ecrire(compte, lu.enregistrements));
+    const ecrit = await store.ecrire(compte, lu.enregistrements);
+    // Avis aux autres appareils du compte : « nouvelle révision », sans aucune donnée.
+    if (ecrit.resultats.some(r => r.etat === 'ok')) avisDe(env).publier(compte, ecrit.rev);
+    return json(ecrit);
   }
   if (requete.method === 'DELETE') {
     if (!portee.maitre || portee.session) return refus('Réservé au jeton de l’administrateur.', 403);
     await store.vider(compte);
+    avisDe(env).publier(compte, 0);
     return json({ ok: true });
   }
   return refus('Méthode non autorisée.', 405);

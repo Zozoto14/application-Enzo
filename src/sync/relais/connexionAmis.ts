@@ -22,21 +22,35 @@ type Fetch = typeof fetch;
 /** Version minimale du relais pour les invitations, l'accès par identifiant et les révocations. */
 export const VERSION_CONNEXION = 6;
 
+/** Statuts d'un PUT/DELETE refusé ou abîmé en route : on réessaie une fois en POST + `X-Methode`. */
+export const STATUTS_SURCHARGE = [400, 405, 411, 501];
+
 async function demander(adresse: string, chemin: string, options: { methode?: string; corps?: unknown; jeton?: string } = {}, requete: Fetch = fetch): Promise<Response> {
-  const controle = typeof AbortController === 'undefined' ? undefined : new AbortController();
-  const minuterie = controle ? setTimeout(() => controle.abort(), 25_000) : undefined;
-  try {
-    return await requete(`${adresse}${chemin}`, {
-      method: options.methode ?? 'GET',
-      headers: { 'Content-Type': 'application/json', ...(options.jeton ? { Authorization: `Bearer ${options.jeton}` } : {}) },
-      body: options.corps === undefined ? undefined : JSON.stringify(options.corps),
-      signal: controle?.signal,
-    });
-  } catch {
-    throw new ErreurInvitation('relais-injoignable');
-  } finally {
-    if (minuterie) clearTimeout(minuterie);
+  const envoyer = async (methode: string, surcharge?: string) => {
+    const controle = typeof AbortController === 'undefined' ? undefined : new AbortController();
+    const minuterie = controle ? setTimeout(() => controle.abort(), 25_000) : undefined;
+    try {
+      return await requete(`${adresse}${chemin}`, {
+        method: methode,
+        headers: { 'Content-Type': 'application/json', ...(options.jeton ? { Authorization: `Bearer ${options.jeton}` } : {}), ...(surcharge ? { 'X-Methode': surcharge } : {}) },
+        body: options.corps === undefined ? undefined : JSON.stringify(options.corps),
+        signal: controle?.signal,
+      });
+    } catch {
+      throw new ErreurInvitation('relais-injoignable');
+    } finally {
+      if (minuterie) clearTimeout(minuterie);
+    }
+  };
+  const methode = options.methode ?? 'GET';
+  const reponse = await envoyer(methode);
+  // Hébergement mutualisé : certains intermédiaires refusent les PUT ou en perdent le corps (relais
+  // version 10 : POST + `X-Methode` est traité exactement comme l'original).
+  if ((methode === 'PUT' || methode === 'DELETE') && STATUTS_SURCHARGE.includes(reponse.status)) {
+    const autre = await envoyer('POST', methode).catch(() => undefined);
+    if (autre && (autre.ok || ![404, 405].includes(autre.status))) return autre;
   }
+  return reponse;
 }
 
 async function corps(reponse: Response): Promise<Record<string, unknown>> {
@@ -53,6 +67,9 @@ async function causeDe(reponse: Response, qui?: string): Promise<ErreurInvitatio
   const lu = await corps(reponse);
   const motif = typeof lu.motif === 'string' ? lu.motif : '';
   const erreur = (code: CodeErreurConnexion, attenteS?: number) => new ErreurInvitation(code, messageErreur(code, { qui, attenteS }));
+  // Validation en deux étapes (version 10) : code demandé, ou faux / déjà servi.
+  if (motif === 'a2f-requis') return erreur('a2f-requis');
+  if (motif === 'a2f-code') return typeof lu.attente === 'number' ? erreur('trop-de-tentatives', lu.attente) : erreur('a2f-code');
   // Un relais d'avant la version 6 exige un jeton partout (401), et ne connaît pas ces routes (404/405 sans motif).
   if (reponse.status === 401 || ((reponse.status === 404 || reponse.status === 405) && !motif)) return erreur('relais-ancien');
   if (reponse.status === 429) {
@@ -78,8 +95,20 @@ async function causeDe(reponse: Response, qui?: string): Promise<ErreurInvitatio
       return erreur('identifiant-pris');
     case 'preuve':
       return erreur('lien-illisible');
-    default:
-      return new ErreurInvitation('relais-injoignable', `Le serveur de synchronisation a répondu ${reponse.status}. Réessaie dans un instant.`);
+    case 'acces-illisible':
+      return new ErreurInvitation(
+        'relais-injoignable',
+        `Le serveur a refusé l’accès envoyé (champ « ${typeof lu.champ === 'string' ? lu.champ : '?'} », ${typeof lu.recu === 'number' ? `${lu.recu} octets reçus` : 'taille inconnue'}). Réessaie ; si cela recommence, envoie ce message au support.`,
+      );
+    default: {
+      // Toujours la raison réelle quand le serveur en donne une (et le code HTTP), jamais un simple « 400 ».
+      const raison = typeof lu.erreur === 'string' ? lu.erreur.slice(0, 160) : '';
+      const intermediaire = !raison && !reponse.headers.get('Content-Type')?.includes('json');
+      return new ErreurInvitation(
+        'relais-injoignable',
+        `Le serveur de synchronisation a refusé la demande (${reponse.status}${raison ? ` : ${raison}` : intermediaire ? ' : réponse d’un intermédiaire, pas du relais' : ''}${motif ? `, ${motif}` : ''}). Réessaie dans un instant.`,
+      );
+    }
   }
 }
 
@@ -165,7 +194,7 @@ export async function utiliserInvitationRelais(relais: string, id: string, preuv
 export async function publierAcces(liaison: Liaison, h: string, depot: DepotAcces, requete: Fetch = fetch): Promise<void> {
   const reponse = await demander(liaison.relais, `/acces/${h}`, { methode: 'PUT', jeton: liaison.jeton, corps: depot }, requete);
   if (!reponse.ok) {
-    throw reponse.status === 404 || reponse.status === 405 ? new ErreurInvitation('relais-ancien') : await causeDe(reponse);
+    throw reponse.status === 404 ? new ErreurInvitation('relais-ancien') : await causeDe(reponse);
   }
 }
 
@@ -189,8 +218,11 @@ export async function ouvrirAccesRelais(
   preuve: string,
   requete: Fetch = fetch,
   route: 'ouvrir' | 'secours' = 'ouvrir',
+  /** Code à six chiffres (validation en deux étapes, version 10), vérifié par le serveur. */
+  code?: string,
 ): Promise<{ compte: string; charge: string; jeton?: string; secours?: number }> {
-  const reponse = await demander(relais, `/acces/${h}/${route}`, { methode: 'POST', corps: { preuve } }, requete);
+  const propre = code?.replace(/\s/g, '');
+  const reponse = await demander(relais, `/acces/${h}/${route}`, { methode: 'POST', corps: { preuve, ...(propre ? { code: propre } : {}) } }, requete);
   if (!reponse.ok) {
     const erreur = await causeDe(reponse);
     if (route === 'secours' && erreur.code === 'mot-de-passe') throw new ErreurInvitation('code-recuperation', messageErreur('code-recuperation'));
@@ -204,6 +236,39 @@ export async function ouvrirAccesRelais(
     ...(typeof lu.jeton === 'string' && /^s1\.[0-9a-f]{64}$/.test(lu.jeton) ? { jeton: lu.jeton } : {}),
     ...(typeof lu.secours === 'number' ? { secours: lu.secours } : {}),
   };
+}
+
+// ------------------------------------------------------------ Validation en deux étapes (version 10)
+
+/** L'A2F est-elle active pour ce compte sur le serveur ? (`undefined` : serveur injoignable ou pas à jour) */
+export async function etatA2f(liaison: Liaison, compte: string, requete: Fetch = fetch): Promise<boolean | undefined> {
+  try {
+    const reponse = await demander(liaison.relais, `/v10/a2f/${compte}`, { jeton: liaison.jeton }, requete);
+    if (!reponse.ok) return undefined;
+    return (await corps(reponse)).active === true;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Active l'A2F du compte sur le serveur : le secret TOTP (base 32) y est rangé chiffré par une clé du
+ * serveur, et le code prouve que l'application d'authentification est bien enrôlée.
+ */
+export async function activerA2f(liaison: Liaison, compte: string, secret: string, code: string, requete: Fetch = fetch): Promise<void> {
+  // POST (accepté comme PUT) : passe mieux les intermédiaires qui filtrent les PUT.
+  const reponse = await demander(liaison.relais, `/v10/a2f/${compte}`, { methode: 'POST', jeton: liaison.jeton, corps: { secret, code: code.replace(/\s/g, '') } }, requete);
+  if (!reponse.ok) {
+    throw reponse.status === 404 || reponse.status === 405 ? new ErreurInvitation('relais-ancien') : await causeDe(reponse);
+  }
+}
+
+/** Désactive l'A2F du compte (code à six chiffres exigé, sauf jeton maître). */
+export async function desactiverA2f(liaison: Liaison, compte: string, code: string, requete: Fetch = fetch): Promise<void> {
+  const reponse = await demander(liaison.relais, `/v10/a2f/${compte}`, { methode: 'DELETE', jeton: liaison.jeton, corps: { code: code.replace(/\s/g, '') } }, requete);
+  if (!reponse.ok) {
+    throw reponse.status === 404 || reponse.status === 405 ? new ErreurInvitation('relais-ancien') : await causeDe(reponse);
+  }
 }
 
 // ------------------------------------------------------------ Style public (version 9)

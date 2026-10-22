@@ -12,6 +12,8 @@
  *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM   envoi d'e-mails (facultatif, docs/emails.md)
  *   LIEN_APP              adresse du site dans les e-mails et Discord (défaut : https://appdashboard.fr)
  *   ORIGINES_SITE         origines du site pour /tsuzuku/requete (défaut : https://appdashboard.fr et l'ancien site Pages)
+ *   CLE_A2F               facultatif (32 caractères au moins, à ne jamais changer) : chiffre les secrets de
+ *                         validation en deux étapes ; sans elle, une clé tirée du JETON
  *   LIMITE_TSUZUKU_MINUTE facultatif ; URL_PUBLIQUE : https://relais.appdashboard.fr
  *   RELAIS_CIBLE, SITE_CIBLE  retour arrière seulement : tout transmettre à un autre relais (et l'annoncer)
  *
@@ -22,7 +24,9 @@
 import { pathToFileURL } from 'node:url';
 import { basePostgres, optionsDepuisEnv } from '../../esport/adaptateurs/postgres.mjs';
 import { chargerEnv, creerServeurHttp, ecouter, exigerNode, fichierEnvParDefaut } from '../../esport/serveur/commun.mjs';
-import relais from '../worker.mjs';
+import { traiterRequete } from '../worker.mjs';
+import { creerAvis } from '../avis.mjs';
+import { compresser } from './compression.mjs';
 import { configSmtp, creerEnvoyeur, manquesSmtp } from '../../esport/serveur/courriel-smtp.mjs';
 import { creerTableKv, kvPostgres, purgerKvExpire } from './kv-postgres.mjs';
 import { coffresPostgres, creerTablesCoffres } from './coffres-postgres.mjs';
@@ -41,6 +45,8 @@ export function chargerConfigRelais(env = process.env) {
     smtpManques: manquesSmtp(env),
     ORIGINES_SITE: env.ORIGINES_SITE || ORIGINES_PAR_DEFAUT,
     LIMITE_TSUZUKU_MINUTE: env.LIMITE_TSUZUKU_MINUTE || undefined,
+    // Clé du serveur qui chiffre les secrets de validation en deux étapes (facultative : sinon tirée du JETON).
+    CLE_A2F: env.CLE_A2F || undefined,
     // Retour arrière (docs/o2switch.md) : ce relais transmet tout à RELAIS_CIBLE et l'annonce aux appareils.
     RELAIS_CIBLE: env.RELAIS_CIBLE || undefined,
     SITE_CIBLE: env.SITE_CIBLE || undefined,
@@ -73,6 +79,9 @@ export async function preparerRelais({ config = chargerConfigRelais(), base, env
     JETON: config.JETON,
     BOITE: kvPostgres(b),
     COFFRES: coffresPostgres(b),
+    // Avis « nouvelle révision du coffre » (version 10) : en mémoire de CE processus (une instance).
+    AVIS: creerAvis(),
+    CLE_A2F: config.CLE_A2F,
     DISCORD_WEBHOOK_URL: config.DISCORD_WEBHOOK_URL,
     DISCORD_BOT_TOKEN: config.DISCORD_BOT_TOKEN,
     LIEN_APP: config.LIEN_APP,
@@ -82,8 +91,9 @@ export async function preparerRelais({ config = chargerConfigRelais(), base, env
     RELAIS_CIBLE: config.RELAIS_CIBLE,
     SITE_CIBLE: config.SITE_CIBLE,
   };
-  const fetchWorker = relais.fetch.bind(relais);
-  const traiter = (requete, { attendre } = {}) => fetchWorker(requete, envPour ? envPour(requete) : env, { waitUntil: p => (attendre ? attendre(p) : p) });
+  // Réponses JSON compressées (gzip) quand l'appareil l'accepte ; jamais les flux (SSE).
+  const traiter = async (requete, { attendre } = {}) =>
+    compresser(requete, await traiterRequete(requete, envPour ? envPour(requete) : env, { waitUntil: p => (attendre ? attendre(p) : p) }));
   return {
     traiter,
     base: b,

@@ -13,7 +13,7 @@ import { DepotComptes } from '../src/db/depots';
 import { Session, coffreValide } from '../src/session/session';
 import { stockageMemoire } from '../src/session/stockage-coffre';
 import { empreinteIdentifiant } from '../src/profils/invitation';
-import { lireThemePublic, publierThemePublic } from '../src/sync/relais/connexionAmis';
+import { activerA2f, desactiverA2f, etatA2f, lireThemePublic, publierThemePublic } from '../src/sync/relais/connexionAmis';
 import { deposerCoffreSiChange, ecrireConfigRelais, recupererCoffre } from '../src/sync/relais/synchroniser';
 import { synchroniserServeur } from '../src/sync/relais/coffreServeur';
 import { compte } from '../src/core/testing/fixtures';
@@ -155,5 +155,62 @@ describe('connexion par identifiant + mot de passe (version 9)', () => {
       body: JSON.stringify({ profil: 'hugo123456', expire: new Date(Date.now() + 86_400_000).toISOString(), charge: 'x', verif: 'a'.repeat(64), acces: empreinteIdentifiant('Hugo') }),
     });
     await expect(publierAccesFondateur({ maitre: MAITRE, identifiant: 'Hugo', motDePasse: 'Une phrase solide 2026', requete: relais.requete, kdf: KDF })).rejects.toMatchObject({ code: 'identifiant-pris' });
+  });
+});
+
+describe('validation en deux étapes vérifiée par le serveur (version 10)', () => {
+  /** Code d'un pas qui ne bascule pas pendant le test. */
+  async function pasStable() {
+    const reste = 30_000 - (Date.now() % 30_000);
+    if (reste < 5_000) await new Promise(ok => setTimeout(ok, reste + 50));
+  }
+
+  it('migration du Fondateur AVEC son code à six chiffres : même secret confié au serveur ; navigateur neuf : mot de passe puis code ; faux et rejoué refusés', async () => {
+    const relais = relaisV9();
+    const pc = pcDuFondateur(relais);
+    await pasStable();
+    // Migration (comme bureau/index.tsx) : secret du coffre confié au serveur AVANT l'accès, coffre qui garde le code.
+    const alea = aleatoireDeterministe(13);
+    const codes = Array.from({ length: 10 }, () => genererCodeRecuperation(alea));
+    const code = codeTotp(pc.secretTotp, Date.now());
+    pc.session.verifierIdentite({ motDePasse: 'ancien mot de passe du PC', codeTotp: code });
+    const secret = pc.session.secretTotp();
+    expect(secret).toBe(pc.secretTotp);
+    await activerA2f(MAITRE, 'principal', secret!, code, relais.requete);
+    expect(await etatA2f(MAITRE, 'principal', relais.requete)).toBe(true);
+    await publierAccesFondateur({ maitre: MAITRE, identifiant: 'admin', motDePasse: 'Une phrase solide 2026', codes, requete: relais.requete, kdf: KDF });
+    const { coffre } = pc.session.passerAConnexionParIdentifiant({ motDePasseActuel: 'ancien mot de passe du PC', codeTotp: code, nouveauMotDePasse: 'Une phrase solide 2026', codes, garderCode: true });
+    expect(pc.session.etatCoffre()?.codeDemande).toBe(true);
+    await deposerCoffreSiChange(pc.session.base(), MAITRE, coffre, relais.requete);
+    // Le secret n'est jamais rangé en clair sur le serveur.
+    expect([...relais.env.BOITE.donnees.values()].join('\n')).not.toContain(pc.secretTotp);
+
+    // Navigateur neuf : mot de passe juste, mais pas de code → le serveur le demande, sans rien rendre.
+    await expect(connecterParIdentifiant(RELAIS_V9, ' Admin ', 'Une phrase solide 2026', relais.requete)).rejects.toMatchObject({ code: 'a2f-requis' });
+    // Mauvais mot de passe : même réponse qu'avant (le code n'est même pas demandé).
+    await expect(connecterParIdentifiant(RELAIS_V9, 'admin', 'pas le bon', relais.requete, '123456')).rejects.toMatchObject({ code: 'mot-de-passe' });
+    // Code faux.
+    const suivant = codeTotp(pc.secretTotp, Date.now() + 30_000);
+    const faux = ['000000', '111111'].find(c => c !== suivant && c !== codeTotp(pc.secretTotp, Date.now()))!;
+    await expect(connecterParIdentifiant(RELAIS_V9, 'admin', 'Une phrase solide 2026', relais.requete, faux)).rejects.toMatchObject({ code: 'a2f-code' });
+    // Bon code (le pas suivant : celui de la migration est déjà consommé).
+    const c = await connecterParIdentifiant(RELAIS_V9, 'admin', 'Une phrase solide 2026', relais.requete, suivant);
+    expect(c.fondateur).toBe(true);
+    expect(c.relie.liaison.jeton).toMatch(/^s1\./);
+    // Code rejoué : refusé.
+    await expect(connecterParIdentifiant(RELAIS_V9, 'admin', 'Une phrase solide 2026', relais.requete, suivant)).rejects.toMatchObject({ code: 'a2f-code' });
+    // Le coffre récupéré s'ouvre avec le mot de passe ET le même code (même secret qu'avant).
+    const recupere = await recupererCoffre(c.relie.liaison, relais.requete);
+    const navigateur = new Session({ stockage: stockageMemoire(recupere as never), ouvrirBase: () => ouvrirBaseNode(), kdf: KDF });
+    expect(() => navigateur.deverrouiller({ motDePasse: 'Une phrase solide 2026', codeTotp: '' })).toThrow();
+    navigateur.deverrouiller({ motDePasse: 'Une phrase solide 2026', codeTotp: suivant });
+    expect(navigateur.statut()).toBe('deverrouille');
+    // Codes de récupération : toujours une autre porte, sans code à six chiffres.
+    const parSecours = await connecterParSecours(RELAIS_V9, 'admin', codes[0], relais.requete);
+    expect(parSecours.fondateur).toBe(true);
+    // Désactivation : un code exigé (le jeton maître du PC peut aussi la retirer).
+    await expect(desactiverA2f(c.relie.liaison, 'principal', '000000', relais.requete)).rejects.toMatchObject({ code: expect.stringMatching(/a2f-code|trop-de-tentatives/) });
+    await desactiverA2f(MAITRE, 'principal', '', relais.requete);
+    expect(await etatA2f(MAITRE, 'principal', relais.requete)).toBe(false);
   });
 });

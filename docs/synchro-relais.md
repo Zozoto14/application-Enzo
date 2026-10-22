@@ -1,4 +1,4 @@
-# Synchronisation : le serveur est la référence (relais version 9)
+# Synchronisation : le serveur est la référence (relais version 9, quasi immédiate depuis la version 10)
 
 Depuis la version 9 du relais (hébergé chez o2switch, `https://relais.appdashboard.fr`, PostgreSQL), **toutes les
 données de chaque compte sont sur le serveur**, chiffrées de bout en bout. Plus d'échange d'appareil à appareil, plus
@@ -9,10 +9,60 @@ d'« appareils liés », plus de code de liaison : chaque appareil parle au serv
 | Avant (Cloudflare KV, ≤ v8) | Maintenant (o2switch, v9) |
 | --- | --- |
 | Chaque appareil du Fondateur déposait SON état dans `/boite/<appareil>` ; les autres lisaient tous les dépôts | Un **coffre serveur par compte** (`/v9/coffre/<compte>`) : un enregistrement chiffré par donnée, avec un numéro de révision |
-| Synchro limitée par le quota KV (≈ 1 000 écritures/jour) : 30 s mini entre deux dépôts, tour toutes les 2 min, journal jamais synchronisé | Plus de quota : envoi ~1,5 s après une modification, tour toutes les 30 s, au retour au premier plan et au retour du réseau |
+| Synchro limitée par le quota KV (≈ 1 000 écritures/jour) : 30 s mini entre deux dépôts, tour toutes les 2 min, journal jamais synchronisé | Plus de quota. Version 10 : envoi ~150 ms après une modification (une requête), les autres appareils prévenus aussitôt par le serveur (flux SSE, sinon attente longue, sinon sondage) ; tour complet en filet toutes les 3 min |
 | Seuls le portefeuille, le thème, les tuiles et les sources Tsuzuku voyageaient | En plus : pages et boîte du **journal automatique**, notes de Claude Office, espace perso et pilote de semaine des Tâches, carnet d'un gestionnaire, réglages de notifications et de cours, bibliothèque Tsuzuku… (`src/sync/relais/entitesApps.ts`) |
 | Amis : leur base entière en un fichier (`p/<id>/boite/portefeuille`), « le plus récent gagne » au niveau du fichier | Amis : le même coffre serveur que le Fondateur (enregistrement par enregistrement), le fichier reste publié pour le séquestre |
 | Nouvel appareil du Fondateur : code de liaison `AB1.…` (portant le jeton maître) | Identifiant + mot de passe (`docs/connexion-amis.md`), le serveur rend un jeton de **session** ; le jeton maître ne quitte plus le serveur |
+
+## Synchro quasi immédiate (relais version 10)
+
+| | Avant (v9) | Maintenant (v10) |
+| --- | --- | --- |
+| Départ d'une modification | ~1,5 s après (puis tirer + pousser : 2 requêtes au moins) | **~150 ms** après (micro-regroupement des frappes, plafonné à 1 s pour une rafale continue), **une seule requête** (`POST` des enregistrements modifiés) |
+| Arrivée sur un autre appareil | au tour suivant de cet appareil : jusqu'à 30 s | **avis du serveur** « coffre X : révision N » (aucune donnée), puis l'appareil tire les différences |
+| Délai mesuré A → B (e2e, deux navigateurs, local) | médiane **29,6 s** (de 2,4 à 29,6 s : le tour de 30 s de l’autre appareil) | médiane **~0,29 s** avec SSE, **~0,30 s** sans SSE (attente longue) |
+| Tour complet | toutes les 30 s | filet toutes les **3 min** (30 s face à un relais v9) |
+| Réessais hors ligne | 5 s, 30 s, 2 min, 10 min | **1 s, 3 s, 10 s, 30 s, 2 min, 5 min**, et tout de suite au retour du réseau (`online`) |
+| Onglet / app fermé pendant l'envoi | la file attendait la prochaine ouverture | **`fetch` keepalive** à `pagehide` / page masquée (file gardée dans la base aussi) |
+
+**Envoi (`synchroniserServeur`, option `pousserDabord`).** Le chiffrement ne change pas : seuls les enregistrements
+modifiés partent, scellés par la clé du compte. La réponse d'un envoi porte `avant`, la révision du coffre juste avant
+lui : si c'est celle que l'appareil connaissait, personne d'autre n'a écrit, la révision avance sans relire. Sinon,
+relecture des différences (`?depuis=N`). Un seul tour à la fois par appareil (planificateur) ; une demande arrivée
+pendant un tour en déclenche un nouveau (la file fusionne). L'interface n'attend jamais le serveur : tout est écrit
+d'abord dans la base de l'appareil.
+
+**Fermeture pendant l'envoi (`envoyerAvantFermeture`).** `fetch` avec `keepalive` (pas `sendBeacon`, qui ne sait pas
+porter le jeton dans `Authorization`), 60 Kio au plus ; la file et ses dates sont notées dans la base, et le tour
+suivant relit d'abord (`serveur.relire`) : il y retrouve ces enregistrements identiques, sans doublon ni faux conflit.
+
+**Avis du serveur (`relais/avis.mjs`, client `src/sync/relais/veille.ts`).**
+
+| Mode | Route | Quand |
+| --- | --- | --- |
+| `flux` (SSE) | `GET /v10/coffre/<compte>/flux?rev=N` | par défaut. Lu par `fetch` en continu (`EventSource` ne sait pas porter le jeton). Le serveur envoie la révision courante à l'ouverture (bourrage de 2 Kio), un battement de cœur toutes les 15 s, ferme au bout de 5 min (reconnexion aussitôt). En-têtes `X-Accel-Buffering: no`, `Cache-Control: no-transform`, jamais compressé |
+| `attente` | `GET /v10/coffre/<compte>/attendre?rev=N&delai=25` | le premier avis du flux n'arrive pas en 4 s (frontal qui retient la réponse, ancien relais Cloudflare qui transmet), ou pas de lecture en continu (app iPhone). Répond dès que la révision dépasse N, ou au bout de 25 s |
+| `sondage` | `GET /v10/coffre/<compte>/version` | toutes les 15 s, si le serveur refuse une connexion de plus (429 `trop-de-connexions`). Un étage plus haut est retenté toutes les 5 min |
+
+Limites (hébergement mutualisé, une instance Node) : 6 connexions tenues par compte, 300 en tout ; une page masquée
+ferme la sienne. Les avis passent en mémoire du processus ; la révision est relue en base toutes les 30 s pendant un
+flux (un second processus éventuel est rattrapé). PostgreSQL : une écriture verrouille la ligne du compte dans
+`relais_coffre_rev` (révisions monotones par coffre), la lecture des différences passe par l'index `(profil, rev)`,
+`/version` lit une ligne par clé primaire. Réponses JSON compressées (gzip) au-delà d'1 Kio. Aller-retour mesuré
+(envoi d'un enregistrement + relecture, serveur Node réel, local) : médiane **3,8 ms** en mémoire, **10,8 ms** avec
+PostgreSQL (`relais/avis.test.mjs`).
+
+**Compatibilité.** `/v10/coffre/…` = les routes v9 + les avis ; `/v9/coffre/…` reste (appareils v9 pendant le
+déploiement : le cron met le serveur à jour avant les apps). Un appareil v10 face à un relais v9 (pas de `coffre-v10`
+dans `/sante`) garde les routes v9 et le tour de 30 s. Derrière l'ancien relais Cloudflare (mode transmission), le flux
+passe s'il n'est pas retenu, sinon l'attente longue prend le relais. Un `PUT`/`DELETE` refusé ou abîmé par un
+intermédiaire (400, 405, 411, 501) est réessayé une fois en `POST` + `X-Methode`, traité par le relais comme l'original.
+
+Tests : `relais/avis.test.mjs` (flux, attente, limites, gzip, latence ; aussi PostgreSQL), `src/sync/relais/veille.test.ts`
+(replis flux → attente → sondage), `planificateur.test.ts` (micro-regroupement, réessais),
+`synchroRapide.test.ts` (une requête par modification, différences, keepalive, délai A → B par mode : ~160 ms),
+bout en bout `scripts/e2e-synchro-rapide.mjs` (deux navigateurs, avec et sans SSE, hors ligne, onglet fermé ; captures
+`docs/captures-synchro-rapide/`).
 
 ## Un tour de synchronisation (`src/sync/relais/coffreServeur.ts`)
 
@@ -40,7 +90,7 @@ d'enregistrements, leur taille, leurs dates et révisions. Il ne voit ni la clé
 
 **Hors ligne.** L'appareil garde une copie complète (sa base chiffrée) : tout s'affiche et se modifie sans réseau ; la
 pastille dit « Hors ligne » ou « N éléments en attente » ; tout part au retour du réseau (événement `online`,
-réessais à 5 s, 30 s, 2 min, 10 min, bouton « Réessayer »).
+réessais à 1 s, 3 s, 10 s, 30 s, 2 min, 5 min, bouton « Réessayer »).
 
 **Réglages.** Il n'y a plus de section « Synchronisation » dans les Paramètres : seulement l'état de la **connexion au
 serveur** (Paramètres › Général, et la pastille de l'en-tête), avec « Réessayer » quand quelque chose attend.
@@ -60,7 +110,7 @@ les caches (cours, Tsuzuku).
 
 ## Compatibilité et déploiement
 
-- `/sante` annonce `version: 9` et `coffre-serveur` **seulement si le serveur a son magasin PostgreSQL** (le Worker
+- `/sante` annonce `version: 10`, et `coffre-serveur`, `coffre-v10`, `avis` **seulement si le serveur a son magasin PostgreSQL** (le Worker
   Cloudflare, qui transmet tout à o2switch, ne l'annonce pas lui-même). Un appareil à jour face à un relais qui ne
   l'annonce pas garde l'ancienne synchronisation (ci-dessous) : rien ne casse pendant le déploiement.
 - Un appareil pas encore à jour continue de déposer dans `/boite/<appareil>` : ses changements sont fusionnés par les

@@ -20,12 +20,38 @@ comment un ami est invité. La partie technique (sécurité, relais, compatibili
 
 1. Mettez à jour l'app du PC et ouvrez-la (déverrouillée, comme d'habitude : mot de passe et code à six chiffres).
 2. Quelques secondes après, l'écran **« Se connecter partout avec un identifiant »** s'affiche : choisissez votre
-   identifiant (votre prénom), tapez votre mot de passe actuel (et le code à six chiffres une dernière fois), puis
-   votre **nouveau mot de passe** deux fois (10 caractères au moins ; une phrase est idéale).
+   identifiant (« admin », votre prénom…), tapez votre **mot de passe actuel** et votre **code à six chiffres**.
+   « Changer de mot de passe » est **facultatif** (décoché : votre mot de passe actuel sert partout).
 3. L'app affiche **dix nouveaux codes de récupération** : notez-les sur papier. Les anciens ne marchent plus.
 4. C'est tout : sur https://appdashboard.fr, l'iPhone ou un autre PC, « Se connecter », votre identifiant, votre mot
-   de passe. Plus de code de liaison, plus de code à six chiffres. (« Plus tard » repousse l'écran ; il est aussi dans
-   Paramètres › Sécurité › « Identifiant et mot de passe de connexion », qui sert ensuite à les changer.)
+   de passe, puis **le code à six chiffres** (même application d'authentification qu'avant : relais version 10, voir
+   « Validation en deux étapes » plus bas). Plus de code de liaison. (« Plus tard » repousse l'écran ; il est aussi
+   dans Paramètres › Sécurité › « Identifiant et mot de passe de connexion », qui sert ensuite à les changer.
+   Refaire l'écran ne casse rien : accès, A2F et codes sont republiés, les clés ne changent pas.)
+
+**Tant que l'étape 2 n'est pas faite, le serveur ne connaît aucun identifiant pour le Fondateur** : sur le site, la
+connexion répond « Identifiant ou mot de passe incorrect » (comme pour tout identifiant inconnu : pas d'énumération
+des comptes). Le bouton **« Administrateur : première connexion ? »** de l'écran de connexion explique la démarche
+(il s'affiche aussi après un refus) sans rien dire d'un compte en particulier.
+
+### Validation en deux étapes (A2F, relais version 10)
+
+- Le code à six chiffres (TOTP, application d'authentification) est vérifié **par le serveur**, après la preuve du mot
+  de passe et **avant** de rendre quoi que ce soit (charge scellée, session) : `POST /acces/<h>/ouvrir` répond
+  `a2f-requis` sans code, `a2f-code` pour un code faux ou déjà servi (`relais/a2f.mjs`).
+- Fenêtre de ±1 pas de 30 s ; **anti-rejeu** (un pas ne sert qu'une fois, jamais un pas plus ancien que le dernier
+  accepté : le code tapé à la migration ne resservira pas, attendez le suivant) ; 5 codes faux, puis attente doublée
+  (30 s → 15 min).
+- Secret stocké **chiffré** (AES-256-GCM, clé du serveur : `CLE_A2F` de `relais.env`, sinon tirée du jeton maître),
+  jamais rendu. Il est confié au serveur à la migration du Fondateur (le secret de son coffre : même application) ou
+  à l'activation.
+- **Paramètres › Sécurité › Validation en deux étapes**, pour tout compte : activer (QR code, ou le secret du coffre
+  pour le Fondateur, puis un code), désactiver (un code). Le Fondateur peut retirer l'A2F d'un ami (téléphone perdu).
+- Les **codes de récupération** (« Mot de passe oublié ? ») restent une autre porte, sans code à six chiffres.
+- L'identifiant reste insensible à la casse, aux accents, aux caractères invisibles et aux espaces **au bord**
+  (`cleIdentifiant`) ; deux espaces au milieu comptent pour un, mais « Enzo Axel » ≠ « EnzoAxel ».
+- Un `PUT` (dépôt d'accès, A2F…) refusé ou vidé en route par un frontal d'hébergement est réessayé en `POST` +
+  `X-Methode` ; un refus affiche la raison réelle du serveur (champ fautif), jamais un simple « 400 ».
 
 ## Pourquoi ça a changé (les vraies causes des échecs)
 
@@ -195,12 +221,13 @@ dix nouveaux codes (affichés), accès republié. Un ami, lui, passe par « Réi
 `docs/hub/sequestre.md`).
 
 **Migration du Fondateur** (`bureau/ConnexionFondateur.tsx`, `Session.passerAConnexionParIdentifiant`) : identité
-revérifiée (mot de passe actuel + code à six chiffres), codes tirés, accès et secours publiés AVANT de toucher au coffre
-(un identifiant pris ne change rien), puis coffre rescellé par le nouveau mot de passe (forme canonique), code à six
-chiffres plus exigé (comme pour les amis : marque scellée par la clé maîtresse), coffre téléversé, thème publié. La clé
-maîtresse ne change pas : aucune donnée n'est rechiffrée. **Ce que la suppression du code à six chiffres change** :
-ce code ne protégeait que l'accès par l'application (voir `src/securite/README.md`) ; il est remplacé par la preuve
-vérifiée par le serveur et ses délais. Un appareil pas encore à jour garde son coffre local (ancien mot de passe)
+revérifiée (mot de passe actuel + code à six chiffres), secret TOTP du coffre confié au serveur (version 10) AVANT
+l'accès, codes tirés, accès et secours publiés AVANT de toucher au coffre (un identifiant pris ne change rien), puis
+coffre rescellé par le mot de passe (l'actuel par défaut, forme canonique), code à six chiffres GARDÉ s'il existait
+(sinon exemption scellée par la clé maîtresse, comme pour les amis), coffre téléversé, thème publié. La clé
+maîtresse ne change pas : aucune donnée n'est rechiffrée. **Sans code à six chiffres** (compte qui n'en avait
+pas, ou A2F désactivée) : ce code ne protégeait que l'accès par l'application (voir `src/securite/README.md`) ; seule
+reste la preuve vérifiée par le serveur et ses délais. Un appareil pas encore à jour garde son coffre local (ancien mot de passe)
 jusqu'à sa prochaine ouverture à jour.
 
 **Amis existants** : rien à faire, leur accès d'avant (identifiant + mot de passe) marche tel quel ; la réponse pour un

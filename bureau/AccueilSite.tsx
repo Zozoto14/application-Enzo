@@ -25,7 +25,7 @@ import { BlocConnexion } from './Invitation';
 export interface OptionsConnexionAccueil {
   relaisConnu: boolean;
   identifiantInitial?: string;
-  onConnexion(identifiant: string, motDePasse: string): Promise<void>;
+  onConnexion(identifiant: string, motDePasse: string, code?: string): Promise<void>;
   onInvitation(texte: string): Promise<void>;
   /** « Mot de passe oublié » : identifiant, un code de récupération et le nouveau mot de passe. */
   onSecours?(identifiant: string, code: string, nouveau: string): Promise<void>;

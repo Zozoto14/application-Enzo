@@ -555,7 +555,9 @@ export type CodeErreurConnexion =
   | 'code-court-illisible'
   | 'acces-revoque'
   | 'identifiant-pris'
-  | 'code-recuperation';
+  | 'code-recuperation'
+  | 'a2f-requis'
+  | 'a2f-code';
 
 /**
  * Message précis et actionnable pour chaque cause d'échec. `qui` : prénom du
@@ -573,6 +575,10 @@ export function messageErreur(code: CodeErreurConnexion, o: { qui?: string; atte
       return 'Cet identifiant est déjà pris par un autre compte : choisis-en un autre (par exemple ton prénom suivi d’une initiale).';
     case 'code-recuperation':
       return 'Identifiant ou code de récupération incorrect (un code ne sert qu’une fois).';
+    case 'a2f-requis':
+      return 'Validation en deux étapes : tape le code à six chiffres affiché par ton application d’authentification.';
+    case 'a2f-code':
+      return 'Code à six chiffres incorrect ou déjà utilisé : attends le code suivant de ton application d’authentification (et vérifie l’heure du téléphone). Sans téléphone : « Mot de passe oublié » avec un code de récupération.';
     case 'invitation-expiree':
       return `Cette invitation a expiré. Demande à ${qui} de t’en renvoyer une (Administration › ton compte › Renvoyer une invitation).`;
     case 'invitation-utilisee':

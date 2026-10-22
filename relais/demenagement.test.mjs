@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import relais, { jetonDeProfil } from './worker.mjs';
+import relais, { VERSION_RELAIS, jetonDeProfil } from './worker.mjs';
 
 const JETON = 'jeton-de-test-demenagement-0123456789';
 
@@ -87,7 +87,7 @@ test('mode transmission : chaque requête (avec ou sans jeton, préliminaire com
     assert.equal(env.BOITE.donnees.size, 0, 'rien n’est écrit sur Cloudflare');
     // Cible invalide : relais normal.
     const normal = await appel({ JETON, BOITE: kvListable(), RELAIS_CIBLE: 'http://pirate.exemple' }, '/sante');
-    assert.equal((await normal.json()).version, 9);
+    assert.equal((await normal.json()).version, VERSION_RELAIS);
   } finally {
     globalThis.fetch = original;
   }

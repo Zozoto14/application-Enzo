@@ -78,22 +78,30 @@ export async function appeler(
   options: { methode?: string; corps?: string; keepalive?: boolean } = {},
   requete: Fetch = fetch,
 ): Promise<Response> {
-  let reponse: Response;
-  const controle = typeof AbortController === 'undefined' ? undefined : new AbortController();
-  const minuterie = controle && !options.keepalive ? setTimeout(() => controle.abort(), DELAI_APPEL_MS) : undefined;
-  try {
-    reponse = await requete(`${liaison.relais}${chemin}`, {
-      method: options.methode ?? 'GET',
-      headers: { Authorization: `Bearer ${liaison.jeton}`, 'Content-Type': 'application/json' },
-      body: options.corps,
-      ...(options.keepalive ? { keepalive: true } : { signal: controle?.signal }),
-    });
-  } catch {
-    throw new ErreurRelais('Relais injoignable : pas de connexion, ou adresse incorrecte.');
-  } finally {
-    if (minuterie) {
-      clearTimeout(minuterie);
+  const envoyer = async (methode: string, surcharge?: string): Promise<Response> => {
+    const controle = typeof AbortController === 'undefined' ? undefined : new AbortController();
+    const minuterie = controle && !options.keepalive ? setTimeout(() => controle.abort(), DELAI_APPEL_MS) : undefined;
+    try {
+      return await requete(`${liaison.relais}${chemin}`, {
+        method: methode,
+        headers: { Authorization: `Bearer ${liaison.jeton}`, 'Content-Type': 'application/json', ...(surcharge ? { 'X-Methode': surcharge } : {}) },
+        body: options.corps,
+        ...(options.keepalive ? { keepalive: true } : { signal: controle?.signal }),
+      });
+    } catch {
+      throw new ErreurRelais('Relais injoignable : pas de connexion, ou adresse incorrecte.');
+    } finally {
+      if (minuterie) {
+        clearTimeout(minuterie);
+      }
     }
+  };
+  const methode = options.methode ?? 'GET';
+  let reponse = await envoyer(methode);
+  // PUT/DELETE refusé ou abîmé par un intermédiaire : une fois en POST + `X-Methode` (relais version 10).
+  if ((methode === 'PUT' || methode === 'DELETE') && [400, 405, 411, 501].includes(reponse.status)) {
+    const autre = await envoyer('POST', methode).catch(() => undefined);
+    if (autre && (autre.ok || ![404, 405].includes(autre.status))) reponse = autre;
   }
   if (reponse.status === 401) {
     throw new ErreurRelais('Le relais refuse ce code de liaison.', 401);

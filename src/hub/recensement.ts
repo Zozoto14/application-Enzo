@@ -43,6 +43,7 @@ export type IdReglage =
   | 'visite'
   | 'synchro-etat'
   | 'connexion-identifiant'
+  | 'a2f'
   | 'securite-coffre'
   | 'codes-recuperation'
   | 'sauvegarde-auto'
@@ -136,6 +137,14 @@ export const REGLAGES: readonly Reglage[] = [
     description: 'Se connecter sur n’importe quel appareil avec un identifiant et un mot de passe.',
     mots: ['identifiant', 'connexion', 'mot de passe', 'se connecter', 'navigateur', 'site', 'code de liaison', 'oublie'],
     ancienEmplacement: ['Paramètres › Synchronisation › Relier un autre appareil (code de liaison)'],
+  },
+  {
+    id: 'a2f',
+    section: 'securite',
+    titre: 'Validation en deux étapes',
+    description: 'Code à six chiffres d’une application d’authentification, vérifié par le serveur à chaque connexion sur un nouvel appareil.',
+    mots: ['a2f', '2fa', 'deux etapes', 'double authentification', 'totp', 'code', 'six chiffres', 'authentificateur', 'google authenticator'],
+    ancienEmplacement: [],
   },
   {
     id: 'securite-coffre',

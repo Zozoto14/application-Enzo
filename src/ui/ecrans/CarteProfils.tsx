@@ -4,6 +4,7 @@
  * ne voit que son profil et le bouton pour changer.
  */
 
+import type { ServicesA2f } from '../../hub/ReglageA2f';
 import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Alerte, Bouton, Champ, SousTitre, usePalette } from '../composants';
@@ -61,6 +62,8 @@ export interface ControleProfils {
    * pas encore défini). `onConfigurer` ouvre l'écran qui les définit ou les change.
    */
   connexionServeur?: { identifiant?: string; onConfigurer(): void };
+  /** Validation en deux étapes vérifiée par le serveur (relais version 10), pour ce compte. */
+  a2f?: ServicesA2f;
   /** Revenir à « Qui utilise AppDashboard ? ». */
   onChanger(): void;
   onAjouter(nom: string): Promise<void>;

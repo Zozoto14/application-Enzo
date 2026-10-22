@@ -537,6 +537,11 @@ export class Session {
     nombreCodes?: number;
     /** Codes déjà tirés (et publiés pour l'accès de secours) : ils remplacent les anciens. */
     codes?: readonly string[];
+    /**
+     * Validation en deux étapes gardée (version 10 : le serveur vérifie le code à la connexion) : le
+     * coffre continue d'exiger le code à six chiffres ici aussi, avec le même secret.
+     */
+    garderCode?: boolean;
   }): { coffre: Coffre; codesRecuperation: string[] } {
     this.verifierIdentite({ motDePasse: options.motDePasseActuel, codeTotp: options.codeTotp });
     const cle = this.exigerCleMaitresse();
@@ -548,9 +553,25 @@ export class Session {
     const { coffre: avecCodes, codesRecuperation } = options.codes
       ? { coffre: remplacerCodesRecuperation(avecMotDePasse, cle, options.codes, { kdf: this.deps.kdf, alea: this.alea }), codesRecuperation: [...options.codes] }
       : regenererCodesRecuperation(avecMotDePasse, cle, { nombreCodes: options.nombreCodes, kdf: this.deps.kdf, alea: this.alea });
-    const final: Coffre = { ...exempterTotp(avecCodes, cle, this.alea), canonique: true };
+    const final: Coffre = { ...(options.garderCode && avecCodes.totp ? avecCodes : exempterTotp(avecCodes, cle, this.alea)), canonique: true };
     this.deps.stockage.ecrire(final);
     return { coffre: final, codesRecuperation };
+  }
+
+  /**
+   * Secret TOTP de ce coffre (session déverrouillée) : confié au serveur, qui vérifie le code à la
+   * connexion par identifiant (validation en deux étapes, relais version 10). Même secret : la même
+   * application d'authentification continue de servir.
+   */
+  secretTotp(): string | undefined {
+    return lireSecretTotp(this.exigerCoffre(), this.exigerCleMaitresse());
+  }
+
+  /** Le code à six chiffres n'est plus exigé à l'ouverture sur cet appareil (A2F désactivée). */
+  exempterCodeLocal(): Coffre {
+    const final = exempterTotp(this.exigerCoffre(), this.exigerCleMaitresse(), this.alea);
+    this.deps.stockage.ecrire(final);
+    return final;
   }
 
   /** Remplace tous les codes de récupération, par exemple après en avoir consommé un. */

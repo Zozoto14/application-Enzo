@@ -44,6 +44,10 @@
  * et mot de passe (`/acces/<h>` accepte `principal` ; une preuve juste rend un jeton de SESSION,
  * relais/sessions.mjs), réponses neutres pour un identifiant inconnu, style public
  * (`/v9/theme/<h>`), accès de secours par code de récupération (`POST /acces/<h>/secours`).
+ *
+ * Version 10 (synchro quasi immédiate) : `/v10/coffre/<compte>…` (mêmes routes que v9, plus les avis
+ * de nouvelle révision — flux SSE, attente longue, sondage : relais/avis.mjs), et validation en deux
+ * étapes vérifiée par le serveur (`/v10/a2f/<compte>`, code exigé par `/acces/<h>/ouvrir` : relais/a2f.mjs).
  */
 
 import {
@@ -56,11 +60,14 @@ import { CHEMIN_TSUZUKU, routeTsuzuku } from './tsuzuku.mjs';
 import { envoyerCourriel, routeCourriel } from './courriel.mjs';
 import { routeSupport } from './support.mjs';
 import { routeCoffre } from './coffres.mjs';
+import { lireA2f, routeA2f, verifierCodeConnexion } from './a2f.mjs';
 import { creerSession, estJetonSession, porteeSession, routeSessions, routeTheme, selLeurre } from './sessions.mjs';
 
-export const VERSION_RELAIS = 9;
+export const VERSION_RELAIS = 10;
 /** Fonctions annoncées par `/sante` (le site adapte ses écrans à un relais pas encore redéployé). */
-export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations', 'verification-jeton', 'export-boite', 'demenagement', 'support-v2', 'courriel', 'coffre-serveur', 'sessions', 'theme', 'acces-fondateur', 'secours'];
+export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations', 'verification-jeton', 'export-boite', 'demenagement', 'support-v2', 'courriel', 'coffre-serveur', 'sessions', 'theme', 'acces-fondateur', 'secours', 'coffre-v10', 'avis', 'a2f', 'methode-post'];
+/** Fonctions qui n'existent qu'avec un magasin de coffres (serveur Node + PostgreSQL). */
+const FONCTIONS_COFFRE = ['coffre-serveur', 'coffre-v10', 'avis'];
 /** Une enveloppe chiffrée (fichier d'un compte) : relevée avec PostgreSQL (plus de limite KV). */
 const TAILLE_MAX_ENVELOPPE = 48 * 1024 * 1024;
 const IDENTIFIANT_APPAREIL = /^[a-z0-9]{4,32}$/;
@@ -74,7 +81,7 @@ const PREFIXE_JETON_PROFIL = 'p1.';
 const ENTETES_CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, PUT, POST, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Methode',
   'Access-Control-Max-Age': '86400',
 };
 
@@ -645,36 +652,37 @@ function lireKdfAcces(kdf) {
  * l'empreinte de sa preuve et la charge scellée par une clé tirée du code).
  */
 function lireDepotAcces(corps) {
-  const kdf = lireKdfAcces(corps?.kdf);
-  if (
-    !corps ||
-    !MOTIF_COMPTE_OU_PRINCIPAL.test(corps.compte ?? '') ||
-    !/^[0-9a-f]{32}$/.test(corps.sel ?? '') ||
-    !MOTIF_EMPREINTE.test(corps.verif ?? '') ||
-    typeof corps.charge !== 'string' ||
-    !/^[0-9a-f]+$/.test(corps.charge) ||
-    corps.charge.length > TAILLE_MAX_CHARGE ||
-    !kdf
-  ) {
-    return undefined;
-  }
+  return verifierDepotAcces(corps).depot;
+}
+
+/**
+ * Même lecture, avec la RAISON d'un refus (champ fautif, sans aucune valeur) : renvoyée à l'appareil
+ * (`motif: 'acces-illisible'`, `champ`) et notée dans le journal du serveur, pour qu'un échec se
+ * diagnostique sans deviner.
+ */
+export function verifierDepotAcces(corps) {
+  if (!corps || typeof corps !== 'object') return { raison: 'corps' };
+  if (!MOTIF_COMPTE_OU_PRINCIPAL.test(corps.compte ?? '')) return { raison: 'compte' };
+  if (!/^[0-9a-f]{32}$/.test(corps.sel ?? '')) return { raison: 'sel' };
+  if (!MOTIF_EMPREINTE.test(corps.verif ?? '')) return { raison: 'verif' };
+  if (typeof corps.charge !== 'string' || !/^[0-9a-f]+$/.test(corps.charge)) return { raison: 'charge' };
+  if (corps.charge.length > TAILLE_MAX_CHARGE) return { raison: 'charge-taille' };
+  const kdf = lireKdfAcces(corps.kdf);
+  if (!kdf) return { raison: 'kdf' };
   let secours;
-  if (corps.secours !== undefined) {
+  if (corps.secours !== undefined && corps.secours !== null) {
     const s = corps.secours;
     const kdfSecours = lireKdfAcces(s?.kdf);
-    if (
-      !s ||
-      !/^[0-9a-f]{32}$/.test(s.sel ?? '') ||
-      !kdfSecours ||
-      !Array.isArray(s.entrees) ||
-      s.entrees.length > MAX_SECOURS ||
-      !s.entrees.every(e => e && MOTIF_EMPREINTE.test(e.verif ?? '') && typeof e.charge === 'string' && /^[0-9a-f]+$/.test(e.charge) && e.charge.length <= TAILLE_MAX_CHARGE)
-    ) {
-      return undefined;
+    if (!s || typeof s !== 'object') return { raison: 'secours' };
+    if (!/^[0-9a-f]{32}$/.test(s.sel ?? '')) return { raison: 'secours-sel' };
+    if (!kdfSecours) return { raison: 'secours-kdf' };
+    if (!Array.isArray(s.entrees) || s.entrees.length > MAX_SECOURS) return { raison: 'secours-entrees' };
+    if (!s.entrees.every(e => e && MOTIF_EMPREINTE.test(e.verif ?? '') && typeof e.charge === 'string' && /^[0-9a-f]+$/.test(e.charge) && e.charge.length <= TAILLE_MAX_CHARGE)) {
+      return { raison: 'secours-entree' };
     }
     secours = { sel: s.sel, kdf: kdfSecours, entrees: s.entrees.map(e => ({ verif: e.verif, charge: e.charge })) };
   }
-  return { compte: corps.compte, sel: corps.sel, kdf, verif: corps.verif, charge: corps.charge, ...(secours ? { secours } : {}) };
+  return { depot: { compte: corps.compte, sel: corps.sel, kdf, verif: corps.verif, charge: corps.charge, ...(secours ? { secours } : {}) } };
 }
 
 const MOTIF_COMPTE_OU_PRINCIPAL = /^(principal|[a-z0-9]{6,16})$/;
@@ -704,8 +712,20 @@ async function acces(requete, env, portee, h, action) {
       await env.BOITE.delete(`theme:${h}`);
       return reponse({ ok: true });
     }
-    const depot = lireDepotAcces(await corpsJson(requete));
-    if (!depot) return erreur('Accès illisible.', 400);
+    const texte = await requete.text().catch(() => '');
+    let corpsDepot;
+    try {
+      corpsDepot = JSON.parse(texte);
+    } catch {
+      corpsDepot = undefined;
+    }
+    const lu = verifierDepotAcces(corpsDepot);
+    if (!lu.depot) {
+      const raison = corpsDepot === undefined ? (texte ? 'json' : 'corps-vide') : lu.raison;
+      console.warn(`[relais] dépôt d'accès refusé : ${raison} (${texte.length} octets reçus, ${requete.headers.get('Content-Type') ?? 'sans type'})`);
+      return reponse({ erreur: `Accès illisible (${raison}).`, motif: 'acces-illisible', champ: raison, recu: texte.length }, 400);
+    }
+    const depot = lu.depot;
     if (depot.compte === 'principal') {
       // L'accès du Fondateur : posé par lui seul (jeton maître, ou sa session).
       if (!portee.maitre) return erreur('Cet identifiant n’est pas le vôtre.', 403);
@@ -755,6 +775,20 @@ async function acces(requete, env, portee, h, action) {
     // Compte révoqué : annoncé seulement après une preuve juste.
     if (depot.compte !== 'principal' && (await env.BOITE.get(`revoque:${depot.compte}`))) {
       return reponse({ erreur: 'Accès révoqué.', motif: 'revoque' }, 403);
+    }
+    // Validation en deux étapes (version 10, relais/a2f.mjs) : le code est vérifié ICI, avant de rendre
+    // la charge ou une session. Les codes de récupération (`secours`) restent une autre porte.
+    if (action === 'ouvrir') {
+      const a2f = await lireA2f(env, depot.compte);
+      if (a2f) {
+        const v = await verifierCodeConnexion(env, depot.compte, a2f, typeof corps?.code === 'string' ? corps.code : '', maintenant);
+        if (!v.ok) {
+          if (v.corps.motif === 'a2f-code') echecIp(ip, maintenant);
+          const r = reponse(v.corps, v.statut);
+          if (v.attente) r.headers.set('Retry-After', String(v.attente));
+          return r;
+        }
+      }
     }
     if (limite.echecs > 0) await env.BOITE.delete(`limite:acces:${h}`);
     // Le Fondateur reçoit un jeton de SESSION (le jeton maître ne quitte jamais le serveur).
@@ -881,7 +915,7 @@ export async function proxifier(requete, cible, site) {
   return new Response(r.body, { status: r.status, statusText: r.statusText, headers: sortie });
 }
 
-export default {
+const relaisWorker = {
   async fetch(requete, env, ctx) {
     // Après la bascule vers o2switch : tout part vers le nouveau relais (docs/o2switch.md).
     if (cibleValide(env?.RELAIS_CIBLE)) {
@@ -895,6 +929,12 @@ export default {
     }
     if (requete.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: ENTETES_CORS });
+    }
+    // Version 10 : un PUT ou un DELETE peut arriver en POST avec `X-Methode` (certains intermédiaires
+    // d'hébergement mutualisé refusent les PUT ou en perdent le corps). Traité exactement comme l'original.
+    const surcharge = requete.method === 'POST' ? (requete.headers.get('X-Methode') ?? '').trim().toUpperCase() : '';
+    if (surcharge === 'PUT' || surcharge === 'DELETE') {
+      requete = new Request(requete, { method: surcharge });
     }
     const autorisation = requete.headers.get('Authorization') ?? '';
     const portee = await porteeDuJeton(autorisation.replace(/^Bearer\s+/i, ''), env.JETON, env.BOITE);
@@ -937,7 +977,7 @@ export default {
 
     if (pathname === '/sante') {
       // Sans magasin de coffres (Worker sans PostgreSQL), le coffre serveur n'est pas annoncé : les appareils gardent l'ancienne synchronisation.
-      return reponse({ ok: true, version: VERSION_RELAIS, fonctions: env.COFFRES ? FONCTIONS_RELAIS : FONCTIONS_RELAIS.filter(f => f !== 'coffre-serveur'), portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}), heure: Date.now() });
+      return reponse({ ok: true, version: VERSION_RELAIS, fonctions: env.COFFRES ? FONCTIONS_RELAIS : FONCTIONS_RELAIS.filter(f => !FONCTIONS_COFFRE.includes(f)), portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}), heure: Date.now() });
     }
     if (pathname === '/heure') {
       // Ultra léger : l'appareil compare son horloge (codes TOTP) à celle du relais.
@@ -963,9 +1003,15 @@ export default {
       return portee.maitre && !portee.session ? exporterBoite(requete, env) : erreur('Réservé au jeton de l’administrateur.', 403);
     }
     // Version 9 : coffre serveur de chaque compte, et sessions du Fondateur.
-    const routeCoffre9 = /^\/v9\/coffre\/([^/]+)(?:\/(historique|etat))?\/?$/.exec(pathname);
+    // Version 10 : mêmes routes, plus les avis de nouvelle version (relais/avis.mjs).
+    const routeCoffre9 = /^\/v(9|10)\/coffre\/([^/]+)(?:\/(historique|etat|version|attendre|flux))?\/?$/.exec(pathname);
     if (routeCoffre9) {
-      return routeCoffre(requete, env, portee, decodeURIComponent(routeCoffre9[1]), routeCoffre9[2], env.BOITE ? (titulaire, id) => delegue(env, titulaire, id) : undefined);
+      return routeCoffre(requete, env, portee, decodeURIComponent(routeCoffre9[2]), routeCoffre9[3], env.BOITE ? (titulaire, id) => delegue(env, titulaire, id) : undefined, Number(routeCoffre9[1]));
+    }
+    const routeA2f10 = /^\/v10\/a2f\/([^/]+)\/?$/.exec(pathname);
+    if (routeA2f10) {
+      if (!env.BOITE) return erreur('Boîte non configurée sur le relais.', 500);
+      return routeA2f(requete, env, portee, decodeURIComponent(routeA2f10[1]), { reponse, erreur });
     }
     const routeSessions9 = /^\/v9\/sessions(?:\/(courante))?\/?$/.exec(pathname);
     if (routeSessions9) {
@@ -997,3 +1043,7 @@ export default {
     return passerelle(requete, pathname);
   },
 };
+
+/** Le gestionnaire d'origine (le serveur Node l'appelle directement, même si un test remplace `fetch`). */
+export const traiterRequete = relaisWorker.fetch.bind(relaisWorker);
+export default relaisWorker;

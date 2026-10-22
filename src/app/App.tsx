@@ -173,6 +173,7 @@ import {
   ReglageVersion,
   ReglagesAdministration,
 } from '../hub/ReglagesHub';
+import { ReglageA2f } from '../hub/ReglageA2f';
 import type { IdReglage, IdSection } from '../hub/recensement';
 import { CLE_CACHE_AFFICHAGE, lireAffichageMemorise, memoriserAffichage, migrerThemeUnique, stockageLocalAppareil } from '../hub/themeUnique';
 import { GardeErreur } from '../ui/GardeErreur';
@@ -2508,6 +2509,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     'langue',
     'compte',
     ...(profils?.connexionServeur ? (['connexion-identifiant'] as const) : []),
+    ...(profils?.a2f ? (['a2f'] as const) : []),
     'securite-coffre',
     'codes-recuperation',
     'verrou-auto',
@@ -2672,6 +2674,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             </View>
           </View>
         ) : null;
+      case 'a2f':
+        return profils?.a2f ? <ReglageA2f theme={themeDuHub} services={profils.a2f} /> : null;
       case 'securite-coffre':
         return <ReglageCoffre theme={themeDuHub} etat={session.etatCoffre()} />;
       case 'codes-recuperation':

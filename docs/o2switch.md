@@ -471,41 +471,84 @@ redémarrage, le relais crée lui-même ses trois nouvelles tables PostgreSQL (`
 curl -s https://relais.appdashboard.fr/sante -H "Authorization: Bearer $(grep ^JETON= ~/.appdashboard/relais.env | cut -d= -f2)" | grep -o '"version":[0-9]*'
 ```
 
-Attendu : `"version":9`. L'ancien relais Cloudflare transmet tout à o2switch : rien à y faire non plus.
+Attendu : `"version":10` (9 avant la synchro quasi immédiate, partie H). L'ancien relais Cloudflare transmet tout à
+o2switch : rien à y faire non plus.
 
 **Ce que vous faites, dans cet ordre :**
 
 1. **Le PC d'abord.** Installez la dernière version de l'app (comme d'habitude), ouvrez-la et déverrouillez-la (mot de
-   passe et code à six chiffres, une dernière fois). Laissez-la ouverte 1 minute : elle envoie toutes vos données au
+   passe et code à six chiffres, comme d'habitude). Laissez-la ouverte 1 minute : elle envoie toutes vos données au
    serveur (première synchronisation). Puis l'écran **« Se connecter partout avec un identifiant »** apparaît :
-   - **Identifiant** : votre prénom (par exemple « Enzo ») ;
-   - **Mot de passe actuel** et **code à six chiffres** (vérification) ;
-   - **Nouveau mot de passe**, deux fois (10 caractères au moins ; une phrase facile à retenir est idéale) ;
+   - **Identifiant** : par exemple « admin » (majuscules, accents et espaces au bord ne comptent pas) ;
+   - **Mot de passe actuel** et **code à six chiffres** ;
+   - **« Changer de mot de passe »** reste **décoché** (facultatif) : votre mot de passe actuel sert partout ;
    - **Activer la connexion par identifiant**.
+   Votre code à six chiffres est **gardé** (version 10) : son secret est confié au serveur, chiffré, et le serveur le
+   demandera à chaque connexion sur un nouvel appareil (même application d'authentification qu'aujourd'hui).
    L'app affiche **dix codes de récupération** : **notez-les sur papier** et rangez-les (c'est votre seule solution si
-   vous oubliez votre mot de passe : personne, pas même le serveur, ne peut rouvrir votre compte). Puis « J'ai noté
-   mes codes ». Si vous aviez cliqué « Plus tard » : Paramètres › Sécurité › « Identifiant et mot de passe de
-   connexion ».
-2. **Le site** : ouvrez **https://appdashboard.fr** (sur n'importe quel ordinateur). L'écran « Bienvenue sur
-   AppDashboard » n'a plus de carte « code de liaison » : tapez votre identifiant (l'écran prend aussitôt votre style),
-   votre nouveau mot de passe, « Se connecter ». Toutes vos apps et vos données arrivent du serveur. Un navigateur
-   qui était déjà relié marche comme avant : au prochain déverrouillage, c'est le nouveau mot de passe (si l'écran
-   demande encore le code à six chiffres, tapez-le une dernière fois).
-3. **L'iPhone** : dans Safari, https://appdashboard.fr → identifiant + mot de passe (vous pouvez l'ajouter à l'écran
-   d'accueil). L'app AltStore déjà reliée continue de marcher après sa mise à jour habituelle (elle synchronise avec
-   le serveur, avec le nouveau mot de passe au prochain déverrouillage ; si l'écran demande encore le code à six
-   chiffres, tapez-le une dernière fois). Sur un iPhone neuf, utilisez le site : la connexion par identifiant n'est pas
-   encore dans l'app native.
+   vous oubliez votre mot de passe ou perdez votre téléphone). Puis « J'ai noté mes codes ». Si vous aviez cliqué
+   « Plus tard » : Paramètres › Sécurité › « Identifiant et mot de passe de connexion ». Un échec (réseau…) ne casse
+   rien : refaites simplement l'écran.
+2. **Le site** : ouvrez **https://appdashboard.fr** (sur n'importe quel ordinateur). Tapez votre identifiant (l'écran
+   prend aussitôt votre style), votre mot de passe, « Se connecter », puis **le code à six chiffres** que le serveur
+   demande. Toutes vos apps et vos données arrivent du serveur. Tant que l'étape 1 n'est pas faite, le serveur ne
+   connaît aucun identifiant pour vous : la connexion répond « Identifiant ou mot de passe incorrect » (le bouton
+   « Administrateur : première connexion ? » de l'écran le rappelle).
+3. **L'iPhone** : dans Safari, https://appdashboard.fr → identifiant + mot de passe + code (vous pouvez l'ajouter à
+   l'écran d'accueil). L'app AltStore déjà reliée continue de marcher après sa mise à jour habituelle. Sur un iPhone
+   neuf, utilisez le site : la connexion par identifiant n'est pas encore dans l'app native.
 4. **Les amis** : rien à faire. Leur identifiant et leur mot de passe marchent tels quels, sur n'importe quel appareil.
    Un ami « à l'ancienne » (code de liaison + code à six chiffres) : Administration › son compte › **Réinitialiser
    l'accès** et envoyez-lui le lien (il choisit son mot de passe ; ses données sont gardées).
 
-**Mot de passe oublié ?** Sur l'écran de connexion : « Mot de passe oublié ? », votre identifiant, UN de vos codes de
-récupération et un nouveau mot de passe. Dix nouveaux codes s'affichent : notez-les (les anciens ne marchent plus).
+**Mot de passe oublié ou téléphone perdu ?** Sur l'écran de connexion : « Mot de passe oublié ? », votre identifiant,
+UN de vos codes de récupération (pas de code à six chiffres) et un nouveau mot de passe. Dix nouveaux codes
+s'affichent : notez-les (les anciens ne marchent plus). La validation en deux étapes se gère dans **Paramètres ›
+Sécurité › Validation en deux étapes** (activer, désactiver : pour tout compte).
 
 **Anciens appareils de la liste « Appareils liés »** (« Site de secours · il y a 22 jours ») : ils disparaissent seuls.
 Leurs données sont reprises dans le serveur à la première ouverture d'un appareil à jour, puis leurs vieux dépôts sont
 effacés (rien n'est perdu).
+
+## Partie H — Synchro quasi immédiate et validation en deux étapes (relais version 10)
+
+**Côté serveur : rien d'obligatoire.** Le cron installe la version 10 ; `/sante` annonce `"version":10` et les
+fonctions `coffre-v10`, `avis`, `a2f`, `methode-post`. Les appareils en version 9 continuent de marcher pendant le
+déploiement (mêmes routes `/v9/…`).
+
+- **Avis en temps réel (SSE).** Un appareil ouvert garde UNE connexion vers le relais (`/v10/coffre/<compte>/flux`) ;
+  le serveur y écrit « nouvelle révision » à chaque modification d'un autre appareil. La réponse porte
+  `X-Accel-Buffering: no` et `Cache-Control: no-transform` (Passenger et LiteSpeed ne la retiennent pas), un bourrage
+  de 2 Kio à l'ouverture et un battement de cœur toutes les 15 s. **Si un frontal retient malgré tout le flux**,
+  l'appareil le voit en 4 s et passe seul à l'attente longue (`/attendre`, 25 s), puis au sondage (15 s) : aucune
+  action nécessaire (le délai reste sous la seconde avec l'attente longue). Seulement si la vérification ci-dessous
+  montre un flux qui arrive par paquets, vous pouvez essayer, dans le `.htaccess` du dossier racine du sous-domaine
+  `relais.` (au-dessus des lignes de Passenger), d'empêcher LiteSpeed de le compresser :
+
+  ```apache
+  <IfModule LiteSpeed>
+    SetEnvIf Request_URI "/flux$" no-gzip=1 dont-vary=1
+  </IfModule>
+  ```
+
+  Vérification (doit afficher `event: version` immédiatement, puis `: coeur` toutes les 15 s ; Ctrl+C pour sortir) :
+
+  ```bash
+  curl -N https://relais.appdashboard.fr/v10/coffre/principal/flux -H "Authorization: Bearer $(grep ^JETON= ~/.appdashboard/relais.env | cut -d= -f2)"
+  ```
+
+- **Connexions et processus.** Au plus 6 connexions tenues par compte et 300 en tout (au-delà : sondage). Une seule
+  instance Node suffit (les avis passent en mémoire ; un second processus serait rattrapé par la relecture en base,
+  30 s au plus). Un onglet masqué ferme sa connexion.
+- **Compression.** Les réponses JSON de plus d'1 Kio sont compressées (gzip) par le relais lui-même.
+- **PUT sans corps.** Certains frontaux mutualisés refusent les `PUT` ou en perdent le corps : c'était la cause du
+  « Le serveur de synchronisation a répondu 400 » de la migration du Fondateur (dépôt d'accès reçu vide). Les appareils
+  à jour réessaient alors en `POST` avec l'en-tête `X-Methode: PUT`, que le relais traite comme l'original ; le
+  journal du relais note la raison de chaque dépôt d'accès refusé (`[relais] dépôt d'accès refusé : corps-vide…`).
+- **Clé des secrets A2F (facultatif).** Les secrets TOTP sont chiffrés par une clé tirée du `JETON`. Pour une clé à
+  part, ajoutez à `relais.env` une ligne `CLE_A2F=` suivie de 32 caractères aléatoires (`openssl rand -hex 32`),
+  **avant** la première activation, et ne la changez plus (sinon les A2F déjà activées ne se vérifient plus : il
+  faudrait les réactiver).
 
 ---
 

@@ -308,7 +308,7 @@ describe('lanceur au démarrage : réessais et suspension', () => {
   }
   const attendre = () => new Promise<void>(ok => setTimeout(ok, 0));
 
-  it('réessaie à 5 s, 30 s, 2 min puis 10 min ; reprend tout de suite au retour du réseau', async () => {
+  it('réessaie à 1 s, 3 s, 10 s, 30 s, 2 min puis 5 min ; reprend tout de suite au retour du réseau', async () => {
     const relais = relaisMemoire();
     relais.etat.coupe = true;
     const m = fausseMinuterie();
@@ -321,14 +321,14 @@ describe('lanceur au démarrage : réessais et suspension', () => {
       surBilan: b => bilans.push(b.reussi),
     });
     p.demarrer();
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < DELAIS_REESSAI_MS.length + 1; i++) {
       await attendre();
       await attendre();
       m.declencher();
     }
     await attendre();
     await attendre();
-    expect(m.attentes.slice(0, 5)).toEqual([...DELAIS_REESSAI_MS, DELAIS_REESSAI_MS[DELAIS_REESSAI_MS.length - 1]]);
+    expect(m.attentes.slice(0, DELAIS_REESSAI_MS.length + 1)).toEqual([...DELAIS_REESSAI_MS, DELAIS_REESSAI_MS[DELAIS_REESSAI_MS.length - 1]]);
     relais.etat.coupe = false;
     p.enLigne();
     await attendre();

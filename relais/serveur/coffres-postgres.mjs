@@ -80,6 +80,7 @@ export function coffresPostgres(base, { espace = '', maintenant = () => Date.now
         await client.query('INSERT INTO relais_coffre_rev (profil, rev) VALUES ($1, 0) ON CONFLICT (profil) DO NOTHING', [cle]);
         // Verrou du compte : les écritures concurrentes d'un même compte passent l'une après l'autre.
         let rev = Number((await client.query('SELECT rev FROM relais_coffre_rev WHERE profil = $1 FOR UPDATE', [cle])).rows[0].rev);
+        const avant = rev;
         const existants = new Map(
           (
             await client.query('SELECT id, rev, date, supprime, valeur FROM relais_coffre WHERE profil = $1 AND id = ANY($2)', [cle, enregistrements.map(e => e.id)])
@@ -130,13 +131,19 @@ export function coffresPostgres(base, { espace = '', maintenant = () => Date.now
           );
         }
         await client.query('COMMIT');
-        return { rev, resultats };
+        return { rev, avant, resultats };
       } catch (e) {
         await client.query('ROLLBACK').catch(() => {});
         throw e;
       } finally {
         client.release();
       }
+    },
+
+    /** Révision courante du coffre (une ligne, clé primaire) : sert aux avis et au sondage (v10). */
+    async version(profil) {
+      const r = (await pool.query('SELECT rev FROM relais_coffre_rev WHERE profil = $1', [p(profil)])).rows[0];
+      return Number(r?.rev ?? 0);
     },
 
     async historique(profil, limite = 200) {
