@@ -2,7 +2,8 @@
  * Tâches planifiées de l'Esport (toutes les 15 minutes sur Cloudflare, toutes les 5 minutes par une
  * tâche cron sur un serveur Node) : rappels de présence, d'échéance des tâches et J-1/H-1 Discord,
  * débuts d'événements, événements en attente (nouvel essai), file d'envoi Discord (réessais), purge de
- * rétention (journal selon la durée de chaque team, événements traités), ménage des compteurs de débit
+ * rétention (journal selon la durée de chaque team, événements traités), agrégation journalière et rétention (90 jours)
+ * des statistiques d'usage, ménage des compteurs de débit
  * et des tentatives anciennes, envois de vidéos inachevés (plus de 24 h), transcriptions demandées à une
  * API externe (désactivé par défaut). Partagé par esport/worker.mjs et esport/serveur/cron.mjs.
  *
@@ -18,6 +19,7 @@ import { rappelsEcheances } from './objectifs.mjs';
 import { rappelsPresence } from './planning/rappels.mjs';
 import { nettoyerEnvois, servicesMedias } from './medias/service.mjs';
 import { servicesResumes } from './resumes.mjs';
+import { agregerUsage, purgerUsage } from './usage/collecte.mjs';
 
 /**
  * Rend `[{ tache, ok, erreur? }]`. Options : `cle` (CLE_DISCORD sinon CLE_ESPORT), `lienApp`, `jetonBot`, `fetch`,
@@ -39,6 +41,9 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     ['événements en attente', () => distribuer(base, { maintenant: maintenant(), limite: 500 })],
     ['file Discord', () => traiterFile(base, { cle, maintenant: maintenant(), lienApp, jetonBot, ...(fetch ? { fetch } : {}) })],
     ['rétention du journal', () => purgerJournal(base, { maintenant: maintenant() })],
+    // Statistiques d'usage : agrégation des jours terminés (une fois par jour), puis détail brut de plus de 90 jours effacé.
+    ['agrégation de l’usage', () => agregerUsage(base, { maintenant: maintenant() })],
+    ['rétention de l’usage', () => purgerUsage(base, { maintenant: maintenant() })],
     ['limites de débit', () => purgerLimites(base, maintenant())],
     ['tentatives anciennes', () => base.executer('DELETE FROM tentatives WHERE maj_le < ?', [new Date(maintenant() - 7 * 86_400_000).toISOString()])],
     ['envois inachevés', () => nettoyerEnvois(base, stockage, { maintenant: maintenant() })],

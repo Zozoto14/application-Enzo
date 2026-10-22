@@ -5,6 +5,7 @@
  * code des modules qu'on n'ouvre pas.
  */
 
+import type React from 'react';
 import { differe } from './attente';
 import type { PropsModule } from './modules';
 
@@ -18,3 +19,5 @@ export const Playbook = differe<PropsModule>(async () => (await import('./strats
 export const SuiviJoueurs = differe<PropsModule>(async () => (await import('./suivi/SuiviJoueurs')).SuiviJoueurs);
 export const Discord = differe<PropsModule>(async () => (await import('./Discord')).Discord);
 export const Ressources = differe<PropsModule>(async () => (await import('./ressources/Ressources')).Ressources);
+// Page « Statistiques » (Fondateur) : chargée seulement quand il l'ouvre.
+export const Statistiques = differe<React.ComponentProps<typeof import('./Statistiques').Statistiques>>(async () => (await import('./Statistiques')).Statistiques);

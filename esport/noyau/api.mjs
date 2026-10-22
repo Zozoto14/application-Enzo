@@ -43,6 +43,8 @@ import { routesSuivi, servicesSuivi } from './suivi/service.mjs';
 import { configMedias, servicesMedias } from './medias/service.mjs';
 import { routesRessources } from './ressources/routes.mjs';
 import { servicesRessources } from './ressources/service.mjs';
+import { exportUsage, servicesCollecte } from './usage/collecte.mjs';
+import { exigerFondateur, servicesStatistiques } from './usage/statistiques.mjs';
 
 export const VERSION_ESPORT = 4;
 const TAILLE_MAX_CORPS = 64 * 1024;
@@ -150,6 +152,9 @@ export function creerApi({
   const cp = servicesComptes({ base, maintenant, noyau: s, demandes: dm });
   const rc = servicesRecap({ base, cle: secretDiscord, maintenant });
   const tb = servicesTableau({ base, maintenant, noyau: s });
+  // Statistiques d'usage internes (migration 0018) : collecte par lots, page réservée au Fondateur.
+  const us = servicesCollecte({ base, maintenant });
+  const sts = servicesStatistiques({ base, maintenant });
   // Bot Discord (interactions HTTP) : DISCORD_APPLICATION_ID et DISCORD_PUBLIC_KEY (variables), DISCORD_BOT_TOKEN (secret).
   const configBot = { applicationId: discordBot.applicationId || '', publicKey: discordBot.publicKey || '' };
   const jetonBot = discordBot.jetonBot || undefined;
@@ -243,7 +248,7 @@ export function creerApi({
     if (chemin === '/moi/export' && m === 'GET') {
       await limite('export', acteur.compte);
       // Vidéos, enregistrements et transcriptions : liste et liens signés (72 h).
-      return { ...(await s.exporterMesDonnees(acteur)), ...(await md.exportRgpd(acteur.compte, `${url.origin}${prefixeApi(url)}`)) };
+      return { ...(await s.exporterMesDonnees(acteur)), ...(await md.exportRgpd(acteur.compte, `${url.origin}${prefixeApi(url)}`)), usage: await exportUsage(base, acteur.compte) };
     }
     if (chemin === '/notifications' && m === 'GET') return s.notifications(acteur);
     if (chemin === '/notifications/lues' && m === 'POST') return s.marquerLues(acteur, await lireCorps(requete));
@@ -251,6 +256,24 @@ export function creerApi({
     if (chemin === '/invitations/accepter' && m === 'POST') {
       await limite('acceptation_ip', ip);
       return s.accepterInvitation(acteur, await lireCorps(requete), ip);
+    }
+    // Statistiques d'usage : lots de l'app (bornés par compte), sans rien d'autre que des métadonnées.
+    if (chemin === '/usage' && m === 'POST') {
+      const corps = await lireCorps(requete);
+      await limite('usage', acteur.compte);
+      return us.ingerer(acteur, corps);
+    }
+    // Page « Statistiques » : le Fondateur SEUL ; tout autre compte (Propriétaire compris) reçoit 404.
+    if (chemin === '/statistiques' || chemin.startsWith('/statistiques/')) {
+      exigerFondateur(acteur);
+      const q = url.searchParams;
+      const periode = { du: q.get('du') || undefined, au: q.get('au') || undefined };
+      if (chemin === '/statistiques' && m === 'GET') return sts.tableau(acteur, { ...periode, team: q.get('team') || undefined, role: q.get('role') || undefined, appareil: q.get('appareil') || undefined, absents: q.get('absents') || undefined });
+      if (chemin === '/statistiques/reglages' && m === 'GET') return sts.reglages(acteur);
+      if (chemin === '/statistiques/reglages' && m === 'PUT') return sts.changerReglages(acteur, await lireCorps(requete));
+      const fiche = /^\/statistiques\/membres\/([^/]+)$/.exec(chemin);
+      if (fiche && m === 'GET') return sts.ficheMembre(acteur, decodeURIComponent(fiche[1]), periode);
+      throw echec(404, 'route', 'Adresse inconnue.');
     }
     // Premier niveau : dashboard agrégé, annuaire des membres, invitation directe (Fondateur).
     if (chemin === '/dashboard' && m === 'GET') return tb.tableau(acteur);
@@ -289,7 +312,7 @@ export function creerApi({
       const compte = decodeURIComponent(rgpd[1]);
       if (rgpd[2] && m === 'GET') {
         await limite('export', acteur.compte);
-        return { ...(await s.exporterCompte(acteur, compte)), ...(await md.exportRgpd(compte, `${url.origin}${prefixeApi(url)}`)) };
+        return { ...(await s.exporterCompte(acteur, compte)), ...(await md.exportRgpd(compte, `${url.origin}${prefixeApi(url)}`)), usage: await exportUsage(base, compte) };
       }
       if (!rgpd[2] && m === 'DELETE') return s.supprimerCompteMembre(acteur, compte);
     }
@@ -410,8 +433,9 @@ export function creerApi({
   return async function traiter(requete, { attendre } = {}) {
     if (requete.method === 'OPTIONS') return new Response(null, { status: 204, headers: ENTETES });
     let reponse;
+    let chemin = '';
     try {
-      const chemin = new URL(requete.url).pathname.replace(/^\/api\/esport(?=\/|$)/, '').replace(/\/+$/, '');
+      chemin = new URL(requete.url).pathname.replace(/^\/api\/esport(?=\/|$)/, '').replace(/\/+$/, '');
       // Discord appelle cette adresse (signature Ed25519, pas de session) : le bot répond lui-même.
       const resultat = chemin === '/discord/interactions' && requete.method === 'POST' ? await bot.traiter(requete, { attendre }) : await router(requete);
       // Fichiers (iCal, CSV) : réponse déjà faite par la route.
@@ -419,7 +443,8 @@ export function creerApi({
     } catch (e) {
       reponse = reponseErreur(e);
     }
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(requete.method)) {
+    // Lots de statistiques d'usage : rien à distribuer (pas d'événement du bus), aucune requête de plus (hébergement mutualisé).
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(requete.method) && chemin !== '/usage') {
       // Distribution du bus, puis envoi immédiat des messages Discord mis en file (le cron reprend les réessais).
       const travail = distribuer(base, { maintenant: maintenant() })
         .then(() => traiterFile(base, { cle: secretDiscord, fetch: envoiDiscord, maintenant: maintenant(), lienApp, jetonBot }))

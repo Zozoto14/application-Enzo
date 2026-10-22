@@ -1229,7 +1229,7 @@ export const en: Record<Cle, string> = {
   'fmt.octets': '{n} B',
   'fmt.ko': '{n} KB',
   'fmt.mo': '{n} MB',
-  'client.mention_donnees': 'Esport data is stored in clear text on the Esport server (Cloudflare, encrypted at rest): it is not end-to-end encrypted like the rest of the app. The server keeps: your nickname (required), your Riot ID and your Discord name (optional), never an email address (an invitee’s address stays encrypted in the Founder’s Administration); your teams, roles and position; your availability, responses and attendance; the meetings you submit and their PDF summaries; the team’s tasks, goals, review markers and comments, strats and scouting sheets; the activity journal (kept for the period chosen by the team, 1 year by default). This data is used only to run the team, is neither sold nor shared, except for the messages the team chooses to send to its Discord. You can export your data (JSON) or delete your Esport account below at any time; the Founder can also do it at your request. Minor member: a legal guardian’s consent is required.',
+  'client.mention_donnees': 'Esport data is stored in clear text on the Esport server (Cloudflare, encrypted at rest): it is not end-to-end encrypted like the rest of the app. The server keeps: your nickname (required), your Riot ID and your Discord name (optional), never an email address (an invitee’s address stays encrypted in the Founder’s Administration); your teams, roles and position; your availability, responses and attendance; the meetings you submit and their PDF summaries; the team’s tasks, goals, review markers and comments, strats and scouting sheets; the activity journal (kept for the period chosen by the team, 1 year by default). Internal usage statistics, visible to the administrator (the Founder): pages opened and durations, key actions, device type, language and technical errors, never any content or IP address, no third-party tracker (details kept 90 days, then only daily totals). This data is used only to run the team, is neither sold nor shared, except for the messages the team chooses to send to its Discord. You can export your data (JSON) or delete your Esport account below at any time; the Founder can also do it at your request. Minor member: a legal guardian’s consent is required.',
   'planning.libelles.n_fois': ' · {n} times',
   'planning.libelles.recurrence': '{rythme}: {jours}{fin}',
   'planning.libelles.a_cree': '{qui} created “{titre}” ({type})',
@@ -2157,4 +2157,7 @@ export const en: Record<Cle, string> = {
   'ressources.multi.publier.other': 'Post to {n} teams',
   'ressources.multi.publiee.one': 'Posted to {n} team: {teams}',
   'ressources.multi.publiee.other': 'Posted to {n} teams: {teams}',
+  // Page « Statistiques » (Fondateur) : l'entrée de navigation ; le reste est dans i18n/statistiques.ts (chargé avec la page).
+  'statistiques.titre': 'Analytics',
+  'statistiques.description_nav': 'Analytics: who uses the app, most and least used pages (Founder)',
 };

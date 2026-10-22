@@ -128,6 +128,8 @@ rien ne sort pour une réunion staff ou une strat privée.
   lien signé de téléchargement valable 72 h), **transcriptions de ses réunions** (`transcriptions` : texte et lien du
   PDF), **notes du staff partagées avec lui** (`notesPartagees`) et le nombre de
   notes qu'il a rédigées par team (`notesRedigees`, sans leur contenu : il s'agit de données d'autres joueurs).
+  Statistiques d'usage (`usage` : détail brut de 90 jours, totaux par jour et par page), voir
+  [statistiques.md](statistiques.md).
 - **Notes privées du staff** (Suivi joueurs, [suivi-joueurs.md](suivi-joueurs.md)) : ce sont des données
   personnelles du joueur concerné, mais elles ne figurent PAS dans l'export qu'il fait lui-même. Quand le Fondateur
   exporte les données d'un membre (Administration, demande d'accès RGPD transmise), l'export contient en plus
@@ -138,9 +140,12 @@ rien ne sort pour une réunion staff ou une strat privée.
   team reste, sans pseudo (« Compte supprimé »), y compris ses vidéos, enregistrements et transcriptions (déposant et
   auteur effacés) ; ses envois inachevés sont effacés par le cron. Notes du staff : celles **sur** lui sont effacées, celles qu'il a
   **écrites** restent, sans auteur (anonymisées). Journalisé (`account.deleted`, `member.left` / `member.removed`).
+  Ses statistiques d'usage (détail et agrégats) sont effacées.
 - **Minimisation** : pas d'adresse e-mail ; Riot ID et Discord facultatifs ; journal conservé 1 an par défaut,
   réglable par la team (30 jours à 2 ans, ou illimité), purgé par le cron ; événements traités effacés après
-  30 jours.
+  30 jours. Statistiques d'usage : métadonnées seulement (ni contenu, ni adresse IP, ni traceur tiers), détail brut
+  gardé 90 jours puis seulement des totaux par jour ; page réservée au Fondateur (404 pour tout autre compte) ; la
+  collecte se coupe depuis cette page ([statistiques.md](statistiques.md)).
 
 ## Limites connues (risques acceptés)
 

@@ -18,6 +18,7 @@
  * et aucune ne peut mentionner qui que ce soit (`allowed_mentions.parse: []`).
  */
 
+import { noterCommandeBot } from '../../usage/collecte.mjs';
 import { evenement } from '../../evenements.mjs';
 import { LANGUE_DEFAUT, langueDepuisLocale, lireLangue, nomRoleSysteme, texte as T, texteNombre, traduireErreur } from '../../langues.mjs';
 import { ErreurEsport, echec, jsonOu } from '../../outils.mjs';
@@ -648,6 +649,10 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     } catch (e) {
       return json(erreur(i, texteErreur(e, lg(i))));
     }
+    // Statistiques d'usage (fonction « bot ») : la commande est comptée pour le compte Esport lié, sans retarder la réponse.
+    const usage = noterCommandeBot(base, utilisateur.id, maintenant());
+    if (attendre) attendre(usage);
+    else await usage;
     const travail = executer(i);
     const premier = await Promise.race([travail, attendreLent().then(() => LENT)]);
     if (premier !== LENT) return json(premier);

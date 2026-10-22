@@ -31,6 +31,7 @@ import { aleatoire, echec, iso, jsonOu, nouvelId, slugDe, texteLong, texteNettoy
 import { lireLangue } from './langues.mjs';
 import { lignesParIds, pseudosDe } from './requetes.mjs';
 import { lireDessin } from './review/dessin.mjs';
+import { effacementUsage } from './usage/collecte.mjs';
 
 const MOTIF_PSEUDO = /^[\p{L}\p{N}][\p{L}\p{N} _.\-]{1,23}$/u;
 const MOTIF_RIOT = /^[^#\s][^#]{2,15}#[\p{L}\p{N}]{3,5}$/u;
@@ -873,6 +874,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       { sql: 'DELETE FROM notes_joueurs WHERE joueur_id = ?', params: [compte] },
       { sql: 'UPDATE notes_joueurs SET auteur_id = NULL, auteur_masque = 1 WHERE auteur_id = ?', params: [compte] },
       { sql: 'DELETE FROM tentatives WHERE cle = ?', params: [`invitation:compte:${compte}`] },
+      // Statistiques d'usage (migration 0018) : détail et agrégats du compte effacés.
+      ...effacementUsage(compte),
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, ...(compte === acteur.compte ? {} : { parFondateur: true }) }, maintenant: t }),
     );

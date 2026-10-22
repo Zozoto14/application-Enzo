@@ -347,7 +347,15 @@
   "Seules les vidéos YouTube s’ouvrent en review.": "Only YouTube videos open in review.",
   "Salon Discord : son identifiant numérique (clic droit sur le salon › Copier l’identifiant).": "Discord channel: its numeric ID (right-click the channel › Copy ID).",
   "Choisissez au moins une team.": "Choose at least one team.",
-  "Un fichier se dépose dans une team à la fois.": "A file is uploaded to one team at a time."
+  "Un fichier se dépose dans une team à la fois.": "A file is uploaded to one team at a time.",
+  "Lot d’usage illisible (session).": "Unreadable usage batch (session).",
+  "Lot d’usage illisible (appareil).": "Unreadable usage batch (device).",
+  "Lot d’usage illisible.": "Unreadable usage batch.",
+  "100 événements au plus par lot.": "100 events at most per batch.",
+  "Team inconnue.": "Unknown team.",
+  "Rôle inconnu.": "Unknown role.",
+  "Appareil inconnu.": "Unknown device.",
+  "Collecte : true ou false.": "Collection: true or false."
  },
  "motifs": [
   [

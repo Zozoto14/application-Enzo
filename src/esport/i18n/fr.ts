@@ -1362,7 +1362,7 @@ export const fr = {
   'fmt.octets': '{n} o',
   'fmt.ko': '{n} Ko',
   'fmt.mo': '{n} Mo',
-  'client.mention_donnees': 'Les données Esport sont stockées en clair sur le serveur Esport (Cloudflare, chiffrées au repos) : elles ne sont pas chiffrées de bout en bout comme le reste de l’app. Le serveur garde : votre pseudo (obligatoire), votre Riot ID et votre nom Discord (facultatifs), jamais d’adresse e-mail (celle d’un invité reste chiffrée dans l’Administration du Fondateur) ; vos teams, rôles et poste ; vos disponibilités, réponses et présences ; les réunions que vous déposez et leurs résumés PDF ; les tâches, objectifs, repères et commentaires de review, strats et fiches de scouting de la team ; le journal d’activité (conservé selon la durée choisie par la team, 1 an par défaut). Ces données servent uniquement au fonctionnement de la team, ne sont ni vendues ni transmises, sauf les messages que la team choisit d’envoyer sur son Discord. Vous pouvez à tout moment exporter vos données (JSON) ou supprimer votre compte Esport ci-dessous ; le Fondateur peut aussi le faire à votre demande. Membre mineur : l’accord d’un représentant légal est nécessaire.',
+  'client.mention_donnees': 'Les données Esport sont stockées en clair sur le serveur Esport (Cloudflare, chiffrées au repos) : elles ne sont pas chiffrées de bout en bout comme le reste de l’app. Le serveur garde : votre pseudo (obligatoire), votre Riot ID et votre nom Discord (facultatifs), jamais d’adresse e-mail (celle d’un invité reste chiffrée dans l’Administration du Fondateur) ; vos teams, rôles et poste ; vos disponibilités, réponses et présences ; les réunions que vous déposez et leurs résumés PDF ; les tâches, objectifs, repères et commentaires de review, strats et fiches de scouting de la team ; le journal d’activité (conservé selon la durée choisie par la team, 1 an par défaut). Statistiques d’usage internes, visibles par l’administrateur (le Fondateur) : pages ouvertes et durées, actions clés, type d’appareil, langue et erreurs techniques, jamais de contenu ni d’adresse IP, sans traceur tiers (détail gardé 90 jours, puis seulement des totaux par jour). Ces données servent uniquement au fonctionnement de la team, ne sont ni vendues ni transmises, sauf les messages que la team choisit d’envoyer sur son Discord. Vous pouvez à tout moment exporter vos données (JSON) ou supprimer votre compte Esport ci-dessous ; le Fondateur peut aussi le faire à votre demande. Membre mineur : l’accord d’un représentant légal est nécessaire.',
   'planning.libelles.n_fois': ' · {n} fois',
   'planning.libelles.recurrence': '{rythme} : {jours}{fin}',
   'planning.libelles.a_cree': '{qui} a créé « {titre} » ({type})',
@@ -2360,6 +2360,9 @@ export const fr = {
   'ressources.multi.publier.other': 'Publier dans {n} teams',
   'ressources.multi.publiee.one': 'Publiée dans {n} team : {teams}',
   'ressources.multi.publiee.other': 'Publiée dans {n} teams : {teams}',
+  // Page « Statistiques » (Fondateur) : l'entrée de navigation ; le reste est dans i18n/statistiques.ts (chargé avec la page).
+  'statistiques.titre': 'Statistiques',
+  'statistiques.description_nav': 'Statistiques : qui utilise l’app, pages les plus et les moins utilisées (Fondateur)',
 } as const;
 
 export type Cle = keyof typeof fr;

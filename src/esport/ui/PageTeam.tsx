@@ -42,6 +42,7 @@ import { AvatarTeam, Badge, Carte, ESP, EtatVide, LARGEUR_CONTENU, MenuActions, 
 import { definirLangue, tr, trn, useLangue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
 import { ReglageRecapCourriel } from './DiscordId';
+import { noterPage, pageDeSection } from '../usage';
 
 export type SectionTeam = 'accueil' | 'membres' | 'journal' | 'parametres' | `module:${string}`;
 export type GroupeTeam = 'accueil' | 'agenda' | 'jeu' | 'equipe' | 'reglages';
@@ -201,6 +202,12 @@ export function PageTeam({
   }, [client, onChangerTeam]);
   const sections = useMemo(() => (detail ? sectionsTeam(detail) : []), [detail]);
   const naviguer = (o: OngletEsport) => (onNaviguer ? onNaviguer(o) : onQuitter());
+  // Statistiques d'usage : section ouverte (« team.agenda.planning »…), une fois la team chargée.
+  const sectionVue: SectionTeam = sections.some(g => g.entrees.some(e => e.id === section)) ? section : 'accueil';
+  const charge = Boolean(detail);
+  useEffect(() => {
+    if (charge) noterPage(pageDeSection(groupeDe(sectionVue), sectionVue), teamId);
+  }, [charge, sectionVue, teamId]);
 
   if (!detail) {
     return (
@@ -330,7 +337,7 @@ export function PageTeam({
   );
 
   return (
-    <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} blocTeam={blocTeam} enTeteMobile={enTeteMobile} barreBasse={barreBasse}>
+    <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} fondateur={detail.moi.superAdmin} blocTeam={blocTeam} enTeteMobile={enTeteMobile} barreBasse={barreBasse}>
       <View style={{ flex: 1 }} testID="esport-team">
         {large ? <View style={{ height: 4, backgroundColor: couleur }} /> : null}
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: large ? ESP.xxl : ESP.m, paddingTop: large ? ESP.l : ESP.m, paddingBottom: ESP.xxxl, gap: large ? ESP.l : ESP.m, maxWidth: LARGEUR_CONTENU + 2 * ESP.xxl, width: '100%', alignSelf: 'center' }}>

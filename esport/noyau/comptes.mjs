@@ -25,6 +25,7 @@ import { evenement } from './evenements.mjs';
 import { CLE_PROPRIETAIRE, autorise } from './permissions.mjs';
 import { lirePseudo } from './service.mjs';
 import { echec, iso, nouvelId, texteNettoye } from './outils.mjs';
+import { effacementUsage } from './usage/collecte.mjs';
 
 const MOTIF_COMPTE = /^[a-z0-9]{6,16}$/;
 const AFFECTATIONS_MAX = 20;
@@ -426,6 +427,8 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       // Suivi des joueurs : les notes du staff SUR lui sont effacées (ses données) ; celles qu'il a écrites restent, sans auteur.
       { sql: 'DELETE FROM notes_joueurs WHERE joueur_id = ?', params: [compte] },
       { sql: 'UPDATE notes_joueurs SET auteur_id = NULL, auteur_masque = 1 WHERE auteur_id = ?', params: [compte] },
+      // Statistiques d'usage (migration 0018) : détail et agrégats du compte effacés.
+      ...effacementUsage(compte),
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, par: 'administration' }, maintenant: t }),
     );

@@ -32,6 +32,8 @@ import { AvatarTeam, Badge, Carte, ESP, EnTetePage, EtatVide, Grille, LARGEUR_PC
 import { definirLangue, langueAppareil, langueCourante, tr, trn, useLangue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
 import { PublierMulti } from './ressources/PublierMulti';
+import { Statistiques } from './differe';
+import { demarrerUsage, noterPage } from '../usage';
 
 type Etat =
   | { e: 'chargement' }
@@ -76,6 +78,14 @@ export function Esport(props: PropsRacineApp) {
   useEffect(() => {
     void ouvrir();
   }, [ouvrir]);
+
+  // Statistiques d'usage internes (métadonnées seulement, par lots) : le temps de la session Esport ouverte.
+  const clientPret = etat.e === 'pret' ? etat.client : undefined;
+  useEffect(() => (clientPret ? demarrerUsage(clientPret) : undefined), [clientPret]);
+  const pageVue = etat.e !== 'pret' ? null : !etat.moi.profil ? 'esport.profil' : vue.v === 'team' ? null : vue.v === 'statistiques' && !etat.moi.superAdmin ? 'esport.dashboard' : `esport.${vue.v}`;
+  useEffect(() => {
+    if (pageVue) noterPage(pageVue);
+  }, [pageVue]);
 
   const exporter = contexte.enregistrerFichier ? (nom: string, contenu: string, type = 'application/json') => contexte.enregistrerFichier!(nom, contenu, type) : undefined;
   const fondateur = !contexte.profil || contexte.profil.admin;
@@ -150,6 +160,8 @@ export function Esport(props: PropsRacineApp) {
           onTeams={() => setVue({ v: 'teams' })}
         />
       );
+    } else if (onglet === 'statistiques' && etat.moi.superAdmin) {
+      page = <Statistiques theme={theme} client={etat.client} large={large} onExporter={exporter} />;
     } else if (onglet === 'membres') {
       page = <MembresGlobal theme={theme} client={etat.client} contexte={contexte} registre={registre} large={large} onOuvrirTeam={id => setVue({ v: 'team', id })} onOuvrirApp={onOuvrirApp} />;
     } else {
@@ -169,7 +181,7 @@ export function Esport(props: PropsRacineApp) {
       );
     }
     contenu = (
-      <CadreEsport theme={theme} large={large} onglet={onglet} onOnglet={o => setVue({ v: o })} pseudo={etat.moi.profil.pseudo}>
+      <CadreEsport theme={theme} large={large} onglet={onglet} onOnglet={o => setVue({ v: o })} pseudo={etat.moi.profil.pseudo} fondateur={etat.moi.superAdmin}>
         {page}
       </CadreEsport>
     );

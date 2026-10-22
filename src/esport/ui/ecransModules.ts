@@ -9,3 +9,4 @@ export { Scouting } from './scouting/Scouting';
 export { Playbook } from './strats/Playbook';
 export { Strats } from './strats/Strats';
 export { SuiviJoueurs } from './suivi/SuiviJoueurs';
+export { Statistiques } from './Statistiques';

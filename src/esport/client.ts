@@ -486,6 +486,94 @@ export interface FiltresTaches {
   priorite?: Priorite;
 }
 
+// ------------------------------------------------------------------ Statistiques d'usage (Fondateur)
+
+export type AppareilUsage = 'pc' | 'tablette' | 'telephone' | 'app_pc' | 'discord';
+export interface FiltresStatistiques {
+  du?: string;
+  au?: string;
+  team?: string;
+  role?: string;
+  appareil?: AppareilUsage;
+  absents?: number;
+}
+export interface BlocApercu {
+  actifs: number;
+  sessions: number;
+  vues: number;
+  dureeMs: number;
+  dureeMoyenneMs: number;
+  actions: number;
+  inscriptions: number;
+  invitationsAcceptees: number;
+}
+export interface UtilisateurUsage {
+  compte: string;
+  pseudo: string;
+  teams: Array<{ id: string; nom: string | null; role: string; cle: string | null; statut: string }>;
+  statut: 'invite' | 'actif';
+  inscritLe: string;
+  derniereActivite: string | null;
+  source: 'mesure' | 'journal' | null;
+  jamaisConnecte: boolean;
+  inactif: boolean;
+  inactifJours: number | null;
+  sessions: number;
+  dureeMs: number;
+  vues: number;
+  actions: number;
+  appareil: AppareilUsage | null;
+  pagesPreferees: Array<{ page: string; vues: number }>;
+}
+export interface PageUsage {
+  page: string;
+  module: string | null;
+  vues: number;
+  visiteurs: number;
+  dureeMs: number;
+  dureeMoyenneMs: number;
+}
+export interface StatistiquesUsage {
+  genereLe: string;
+  fuseau: string;
+  periode: { du: string; au: string; jours: number; precedente: { du: string; au: string } };
+  filtres: { team: string | null; role: string | null; appareil: AppareilUsage | null; absents: number };
+  collecte: { actif: boolean; debut: string | null; agregeJusqua: string | null };
+  historique: { reconstitue: boolean; du?: string; au?: string; tronque?: boolean };
+  choix: { teams: Array<{ id: string; nom: string; slug: string }>; roles: string[]; appareils: AppareilUsage[]; pages: string[] };
+  apercu: { actifsJour: number; actifsSemaine: number; actifsMois: number; periode: BlocApercu; precedente: BlocApercu };
+  utilisateurs: UtilisateurUsage[];
+  pages: { classement: PageUsage[]; jamais: string[]; nonUtilises: Array<{ team: { id: string; nom: string; slug: string }; modules: string[] }> };
+  activite: {
+    chaleur: number[][];
+    quotidien: Array<{ jour: string; actifs: number; vues: number; sessions: number; actions: number; reconstitue: boolean }>;
+    appareils: Array<{ appareil: AppareilUsage; visiteurs: number; sessions: number; vues: number; dureeMs: number }>;
+    langues: Array<{ langue: string; visiteurs: number; sessions: number }>;
+  };
+  teams: Array<{ id: string; nom: string; slug: string; membres: number; visiteurs: number; adoption: number; vues: number; dureeMs: number; actions: number; actionsReconstituees: number }>;
+  fonctions: Array<{ fonction: string; n: number; reconstitue: number; utilisateurs: number; actions: Record<string, number> }>;
+  erreurs: Array<{ empreinte: string; message: string; page: string | null; n: number; utilisateurs: number; appareils: string[]; derniere: string }>;
+}
+export interface FicheUsage {
+  compte: string;
+  pseudo: string | null;
+  inscritLe: string | null;
+  premiereConnexion: string | null;
+  statut: 'invite' | 'actif';
+  teams: Array<{ id: string; nom: string; role: string; statut: string }>;
+  periode: { du: string; au: string };
+  totaux: { sessions: number; vues: number; dureeMs: number; actions: number };
+  appareils: string[];
+  parJour: Array<{ jour: string; sessions: number; vues: number; dureeMs: number; actions: number }>;
+  pages: Array<{ page: string; vues: number; dureeMs: number }>;
+  chronologie: Array<{ date: string; source: 'mesure' | 'journal'; genre: 'page' | 'action' | 'erreur'; page: string | null; team: string | null; action: string | null; dureeMs: number; appareil: string | null; erreur: string | null }>;
+}
+export interface ReglagesUsage {
+  collecte: boolean;
+  debut: string | null;
+  agregeJusqua: string | null;
+}
+
 // ------------------------------------------------------------------ Erreurs
 
 export class ErreurEsport extends Error {
@@ -512,7 +600,7 @@ export const mentionDonnees = (): string => tr('client.mention_donnees');
 
 // ------------------------------------------------------------------ Adresse du Worker
 
-type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string | ArrayBuffer | Uint8Array; signal?: unknown }) => Promise<{
+type Fetch = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string | ArrayBuffer | Uint8Array; signal?: unknown; keepalive?: boolean }) => Promise<{
   ok: boolean;
   status: number;
   json(): Promise<unknown>;
@@ -580,6 +668,25 @@ const sessions = new Map<string, { session: string; expire: number }>();
 export function oublierSessions(): void {
   sessions.clear();
 }
+
+/** Écouteurs des appels d'écriture réussis (statistiques d'usage : actions clés), voir src/esport/usage. */
+const ecouteursAppels = new Set<(methode: string, chemin: string) => void>();
+export function ecouterAppels(f: (methode: string, chemin: string) => void): () => void {
+  ecouteursAppels.add(f);
+  return () => {
+    ecouteursAppels.delete(f);
+  };
+}
+const signalerAppel = (methode: string, chemin: string): void => {
+  if (methode === 'GET') return;
+  for (const f of [...ecouteursAppels]) {
+    try {
+      f(methode, chemin);
+    } catch {
+      // un écouteur ne casse jamais un appel
+    }
+  }
+};
 
 export interface ClientEsport {
   config: ConfigEsport;
@@ -673,6 +780,8 @@ export interface ClientEsport {
   supprimerTache(id: string, tacheId: string): Promise<void>;
   exporterTaches(id: string, filtres?: FiltresTaches): Promise<FichierServeur>;
   exporterObjectifs(id: string): Promise<FichierServeur>;
+  /** Statistiques d'usage : envoie un lot (`keepalive` : départ de la page, sans attendre la réponse). */
+  envoyerUsage?(lot: unknown, keepalive?: boolean): Promise<{ actif?: boolean } | undefined>;
   /** Appel générique avec la session (modules : planning, etc. ; voir src/esport/planning/api.ts). */
   requete<T>(chemin: string, methode?: string, corps?: unknown): Promise<T>;
   /** Envoi binaire avec la session (morceau d'une vidéo) : réponse JSON. */
@@ -732,13 +841,16 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
   }
 
   async function appel<T>(chemin: string, methode = 'GET', corps?: unknown, binaire?: Parameters<typeof brut>[4]): Promise<T> {
+    let r: T;
     try {
-      return await brut<T>(chemin, methode, corps, await session(), binaire);
+      r = await brut<T>(chemin, methode, corps, await session(), binaire);
     } catch (e) {
       // Session expirée (ou Worker redéployé avec une nouvelle clé) : une nouvelle, une fois.
-      if (e instanceof ErreurEsport && e.code === 'session') return brut<T>(chemin, methode, corps, await session(true), binaire);
-      throw e;
+      if (e instanceof ErreurEsport && e.code === 'session') r = await brut<T>(chemin, methode, corps, await session(true), binaire);
+      else throw e;
     }
+    signalerAppel(methode, chemin);
+    return r;
   }
 
   const t = (id: string) => `/teams/${encodeURIComponent(id)}`;
@@ -839,6 +951,16 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     },
     exporterTaches: (id, f = {}) => appel(`${t(id)}/taches/export.csv${requeteUrl({ ...f, format: 'json' })}`),
     exporterObjectifs: id => appel(`${t(id)}/objectifs/export.csv?format=json`),
+    envoyerUsage: async (lot, keepalive = false) => {
+      if (!keepalive) return appel<{ actif?: boolean }>('/usage', 'POST', lot);
+      // Départ de la page : `keepalive` (la requête survit à la fermeture), session déjà connue seulement.
+      const connue = sessions.get(cle);
+      if (!connue || connue.expire <= maintenant()) return undefined;
+      void Promise.resolve()
+        .then(() => requete(`${config.adresse}/usage`, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${connue.session}` }, body: JSON.stringify(lot) }))
+        .catch(() => undefined);
+      return undefined;
+    },
     requete: (chemin, methode, corps) => appel(chemin, methode, corps),
     binaire: (chemin, methode, octets, entetes = {}, options = {}) =>
       appel(chemin, methode, undefined, { octets, type: 'application/octet-stream', entetes, delai: options.delai ?? 180_000, signal: options.signal }),

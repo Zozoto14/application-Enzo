@@ -82,6 +82,14 @@ export const TABLES = [
   ['ressource_commentaires', 'id'],
   ['ressource_visites', 'team_id, compte_id'],
   ['ressource_reglages', 'team_id'],
+  // Statistiques d'usage (migration 0018) : détail brut (90 jours) et agrégats journaliers.
+  ['usage_evenements', 'id'],
+  ['usage_jour_pages', 'jour, compte_id, team_id, page, appareil'],
+  ['usage_jour_membres', 'jour, compte_id, appareil'],
+  ['usage_jour_actions', 'jour, compte_id, team_id, action, appareil'],
+  ['usage_jour_heures', 'jour, heure, compte_id, team_id, appareil'],
+  ['usage_jour_erreurs', 'jour, empreinte, page, compte_id, appareil'],
+  ['usage_reglages', 'cle'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;
