@@ -67,7 +67,7 @@ export async function creerEnvoyeur(config, { creerTransport } = {}) {
     socketTimeout: 30_000,
     ...(config.sansTls ? { ignoreTLS: true, secure: false } : { tls: { minVersion: 'TLSv1.2' }, requireTLS: !config.securise }),
   });
-  const envoyer = async ({ a, nom, objet, texte, html }) => {
+  const envoyer = async ({ a, nom, objet, texte, html, langue }) => {
     if (!MOTIF_ADRESSE.test(a) || /[\r\n]/.test(a) || /[\r\n]/.test(objet)) throw Object.assign(new Error('adresse invalide'), { code: 'EENVELOPE' });
     const info = await transport.sendMail({
       from: config.de,
@@ -76,7 +76,7 @@ export async function creerEnvoyeur(config, { creerTransport } = {}) {
       subject: objet,
       text: texte,
       html,
-      headers: { 'Auto-Submitted': 'auto-generated', 'X-Auto-Response-Suppress': 'All' },
+      headers: { 'Auto-Submitted': 'auto-generated', 'X-Auto-Response-Suppress': 'All', ...(langue === 'en' || langue === 'fr' ? { 'Content-Language': langue } : {}) },
     });
     return { id: info?.messageId };
   };

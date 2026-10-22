@@ -747,7 +747,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
         const objet = await stockage.lire(f.cle_stockage);
         if (!objet) throw new Error('Enregistrement introuvable.');
         const { segments, duree } = await transcrireParApi({ octets: objet.octets, nom: f.nom_original, type: f.type_mime, langue: x?.langue ?? 'fr', config: transcriptionExterne, fetch: fetchTranscription });
-        const profil = await base.premier('SELECT langue FROM comptes WHERE id = ?', [compte]);
+        const profil = await base.premier('SELECT COALESCE(langue, langue_defaut) AS langue FROM comptes WHERE id = ?', [compte]);
         await sauverTranscription({ team, acteur: { compte } }, r, type, { segments, langue: x?.langue ?? 'fr', moteur: `API (${transcriptionExterne.modele})`, duree, partielle: false, progression: duree ?? 0, compte, langueDoc: profil?.langue });
       } catch (e) {
         const t = iso(maintenant());
@@ -917,7 +917,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     const team = await base.premier('SELECT * FROM teams WHERE id = ?', [r.team_id]);
     const type = await base.premier('SELECT * FROM types_reunion WHERE id = ?', [r.type_id]);
     const compte = w.demande_par ?? r.depose_par;
-    const profil = compte ? await base.premier('SELECT langue FROM comptes WHERE id = ?', [compte]) : null;
+    const profil = compte ? await base.premier('SELECT COALESCE(langue, langue_defaut) AS langue FROM comptes WHERE id = ?', [compte]) : null;
     await sauverTranscription({ team, acteur: { compte } }, r, type, {
       segments: validerSegments(segments),
       langue: LANGUES_TRANSCRIPTION.includes(langue) ? langue : 'fr',

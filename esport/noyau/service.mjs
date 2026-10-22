@@ -70,7 +70,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
   // -------------------------------------------------------------- Lectures internes
 
   async function profilDe(compte) {
-    return base.premier('SELECT id, pseudo, riot_id, discord, discord_id, langue, cree_le, maj_le FROM comptes WHERE id = ?', [compte]);
+    return base.premier('SELECT id, pseudo, riot_id, discord, discord_id, langue, langue_defaut, cree_le, maj_le FROM comptes WHERE id = ?', [compte]);
   }
 
   async function exigerProfil(acteur) {
@@ -181,14 +181,21 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
 
   // -------------------------------------------------------------- Profil
 
+  /** Langue par défaut réglée par le Fondateur avant la création de la fiche Esport du compte (migration 0019). */
+  async function langueEnAttente(compte) {
+    return lireLangue((await base.premier('SELECT langue FROM langues_attente WHERE compte_id = ?', [compte]))?.langue);
+  }
+
   async function moi(acteur) {
     const profil = await profilDe(acteur.compte);
     return {
       compte: acteur.compte,
       superAdmin: acteur.superAdmin,
       profil: profil ? { pseudo: profil.pseudo, riotId: profil.riot_id ?? null, discord: profil.discord ?? null } : null,
-      // Langue choisie dans le profil (null : jamais choisie, l'app suit la langue de l'appareil).
+      // Langue choisie par l'utilisateur dans son profil (null : jamais choisie ; elle PRIME sur la langue par défaut).
       langue: lireLangue(profil?.langue),
+      // Langue par défaut définie par l'administrateur (migration 0019) : sert tant que l'utilisateur n'a pas choisi la sienne.
+      langueDefaut: profil ? (lireLangue(profil.langue_defaut) ?? 'fr') : ((await langueEnAttente(acteur.compte)) ?? undefined),
       peutCreerTeam: acteur.superAdmin || creationTeams === 'tous',
     };
   }
@@ -206,19 +213,25 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     const langue = corps?.langue === undefined || corps?.langue === null ? null : lireLangue(corps.langue);
     if (corps?.langue !== undefined && corps?.langue !== null && !langue) throw echec(400, 'langue', 'Langue : fr ou en.');
     const date = iso(maintenant());
+    // Nouvelle fiche : la langue par défaut déjà réglée par le Fondateur (Administration) s'applique, sinon le français.
+    const attente = await langueEnAttente(acteur.compte);
     await base.executer(
-      `INSERT INTO comptes (id, pseudo, pseudo_cle, riot_id, discord, langue, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO comptes (id, pseudo, pseudo_cle, riot_id, discord, langue, langue_defaut, cree_le, maj_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (id) DO UPDATE SET pseudo = excluded.pseudo, pseudo_cle = excluded.pseudo_cle, riot_id = excluded.riot_id, discord = excluded.discord,
          langue = COALESCE(excluded.langue, comptes.langue), maj_le = excluded.maj_le`,
-      [acteur.compte, pseudo, cle, riot || null, discord || null, langue, date, date],
+      [acteur.compte, pseudo, cle, riot || null, discord || null, langue, attente ?? 'fr', date, date],
     );
+    if (attente) await base.executer('DELETE FROM langues_attente WHERE compte_id = ?', [acteur.compte]);
     return moi(acteur);
   }
 
-  /** `PUT /moi/langue` { langue } : change la langue du profil (français / anglais). */
+  /**
+   * `PUT /moi/langue` { langue } : change la langue du profil (français / anglais). `{ langue: null }` efface
+   * le choix de l'utilisateur : la langue définie par l'administrateur s'applique de nouveau.
+   */
   async function majLangue(acteur, corps) {
-    const langue = lireLangue(corps?.langue);
-    if (!langue) throw echec(400, 'langue', 'Langue : fr ou en.');
+    const langue = corps?.langue === null ? null : lireLangue(corps?.langue);
+    if (corps?.langue !== null && !langue) throw echec(400, 'langue', 'Langue : fr ou en.');
     await exigerProfil(acteur);
     await base.executer('UPDATE comptes SET langue = ?, maj_le = ? WHERE id = ?', [langue, iso(maintenant()), acteur.compte]);
     return moi(acteur);
@@ -748,7 +761,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       format: 'applibourse-esport-mes-donnees',
       version: 2,
       compte,
-      profil: profil ? { pseudo: profil.pseudo, riotId: profil.riot_id ?? null, discord: profil.discord ?? null, discordId: profil.discord_id ?? null, langue: lireLangue(profil.langue), creeLe: profil.cree_le, majLe: profil.maj_le } : null,
+      profil: profil ? { pseudo: profil.pseudo, riotId: profil.riot_id ?? null, discord: profil.discord ?? null, discordId: profil.discord_id ?? null, langue: lireLangue(profil.langue), langueDefaut: lireLangue(profil.langue_defaut) ?? 'fr', creeLe: profil.cree_le, majLe: profil.maj_le } : null,
       teams: appartenances.map(a => ({ team: a.team, role: a.role, posteJeu: a.poste_jeu ?? null, statut: a.statut, rejointLe: a.rejoint_le })),
       notifications: (await q('SELECT type, team_id, charge, lue_le, cree_le FROM notifications WHERE compte_id = ? ORDER BY cree_le')).map(n => ({ type: n.type, team: team(n.team_id), charge: jsonOu(n.charge, {}), lue: Boolean(n.lue_le), date: n.cree_le })),
       journal: (await q('SELECT team_id, action, entite_type, meta, cree_le FROM journal WHERE acteur_id = ? ORDER BY cree_le')).map(a => ({ team: team(a.team_id), action: a.action, entite: a.entite_type, meta: jsonOu(a.meta, {}), date: a.cree_le })),
@@ -849,6 +862,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       { sql: 'DELETE FROM discord_codes WHERE compte_id = ?', params: [compte] },
       // Récapitulatif e-mail (migration 0015) : l'adresse chiffrée disparaît avec le compte.
       { sql: 'DELETE FROM courriel_recap WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM langues_attente WHERE compte_id = ?', params: [compte] },
       // Anonymisation : plus rien n'est attribué à ce compte.
       { sql: 'UPDATE taches SET assigne_id = NULL WHERE assigne_id = ?', params: [compte] },
       { sql: 'UPDATE objectifs SET proprietaire_id = NULL WHERE proprietaire_id = ?', params: [compte] },

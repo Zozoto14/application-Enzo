@@ -289,6 +289,9 @@ export function creerApi({
     // Discord ID d'un membre (migration 0015) : le Fondateur SEUL (403 pour tout autre rôle, Propriétaire compris).
     const discordId = /^\/comptes\/([^/]+)\/discord-id$/.exec(chemin);
     if (discordId && m === 'PUT') return cp.majDiscordId(acteur, decodeURIComponent(discordId[1]), await lireCorps(requete));
+    // Langue par défaut d'un compte (migration 0019) : le Fondateur SEUL (403 pour tout autre rôle).
+    const langueDefaut = /^\/comptes\/([^/]+)\/langue-defaut$/.exec(chemin);
+    if (langueDefaut && m === 'PUT') return cp.majLangueDefaut(acteur, decodeURIComponent(langueDefaut[1]), await lireCorps(requete));
     // Demandes de compte (members.create) : dépôt (borné), suivi, refus (Fondateur), annulation (demandeur).
     if (chemin === '/comptes/demandes') {
       if (m === 'GET') return dm.liste(acteur);

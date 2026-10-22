@@ -21,6 +21,7 @@
  */
 
 import { discordIdLibre, lireDiscordId } from './discordId.mjs';
+import { lireLangue } from './langues.mjs';
 import { evenement } from './evenements.mjs';
 import { CLE_PROPRIETAIRE, autorise } from './permissions.mjs';
 import { lirePseudo } from './service.mjs';
@@ -34,6 +35,14 @@ function lireCompte(valeur) {
   // « principal » : le Fondateur (jeton maître), jamais un compte d'ami.
   if (typeof valeur !== 'string' || !MOTIF_COMPTE.test(valeur) || valeur === 'principal') throw echec(400, 'compte', 'Identifiant de compte invalide.');
   return valeur;
+}
+
+/** Langue par défaut d'un compte : 'fr' ou 'en' ; absente, français ; autre valeur : 400. */
+function lireLangueDefaut(valeur) {
+  if (valeur === undefined || valeur === null) return 'fr';
+  const langue = lireLangue(valeur);
+  if (!langue) throw echec(400, 'langue', 'Langue : fr ou en.');
+  return langue;
 }
 
 const lirePoste = valeur => (valeur ? texteNettoye(valeur, 30) || null : null);
@@ -77,6 +86,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
     const pseudo = lirePseudo(corps?.pseudo);
     // Discord ID obligatoire à la création (migration 0015) : le bot pingue les convoqués avec.
     const discordId = lireDiscordId(corps?.discordId, { obligatoire: true });
+    const langueDefaut = lireLangueDefaut(corps?.langue);
     const affectations = await lireAffectations(acteur, corps?.affectations);
     // Compte déjà connu : message exact (et non « pseudo pris », qui serait le sien), avant le contrôle du pseudo.
     if (corps?.verifier !== true) {
@@ -95,9 +105,10 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
     const t = maintenant();
     const date = iso(t);
     const lot = [
+      { sql: 'DELETE FROM langues_attente WHERE compte_id = ?', params: [compte] },
       {
-        sql: 'INSERT INTO comptes (id, pseudo, pseudo_cle, cree_le, maj_le, invite_par, invite_le, discord_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        params: [compte, pseudo, pseudo.toLocaleLowerCase('fr'), date, date, acteur.compte, date, discordId],
+        sql: 'INSERT INTO comptes (id, pseudo, pseudo_cle, cree_le, maj_le, invite_par, invite_le, discord_id, langue_defaut) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        params: [compte, pseudo, pseudo.toLocaleLowerCase('fr'), date, date, acteur.compte, date, discordId, langueDefaut],
       },
     ];
     for (const { ctx, role, posteJeu } of affectations) {
@@ -144,7 +155,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
     const fiche = await base.premier('SELECT * FROM comptes WHERE id = ?', [id]);
     if (!fiche) {
       if (!acteur.superAdmin) throw echec(404, 'compte-introuvable', 'Compte introuvable (il doit déjà être membre d’une de vos teams).');
-      return preinscrire(acteur, { compte: id, pseudo: corps?.pseudo, discordId: corps?.discordId, affectations: corps?.affectations });
+      return preinscrire(acteur, { compte: id, pseudo: corps?.pseudo, discordId: corps?.discordId, langue: corps?.langue, affectations: corps?.affectations });
     }
     const liste = corps?.affectations;
     if (!Array.isArray(liste) || liste.length === 0) throw echec(400, 'affectations', 'Choisissez au moins une team et un rôle.');
@@ -290,7 +301,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
     const lignes =
       idsVus.length > 0
         ? await base.tous(
-            `SELECT m.id, m.team_id, m.compte_id, m.role_id, m.poste_jeu, m.statut, m.rejoint_le, c.pseudo, c.pseudo_cle, c.riot_id, c.discord, c.discord_id, c.invite_le, c.active_le, dc.discord_user_id AS discord_lie
+            `SELECT m.id, m.team_id, m.compte_id, m.role_id, m.poste_jeu, m.statut, m.rejoint_le, c.pseudo, c.pseudo_cle, c.riot_id, c.discord, c.discord_id, c.langue, c.langue_defaut, c.invite_le, c.active_le, dc.discord_user_id AS discord_lie
                FROM membres m JOIN comptes c ON c.id = m.compte_id LEFT JOIN discord_comptes dc ON dc.compte_id = c.id
               WHERE m.team_id IN (${idsVus.map(() => '?').join(', ')}) ORDER BY c.pseudo_cle`,
             idsVus,
@@ -305,6 +316,8 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       // Discord ID (champ du membre) et liaison /lier vérifiée (elle prime pour les pings).
       discordId: l.discord_id ?? null,
       discordLie: Boolean(l.discord_lie),
+      // Langue par défaut (réglée par le Fondateur) et choix de l'utilisateur : visibles du Fondateur seul.
+      ...(acteur.superAdmin ? { langueDefaut: lireLangue(l.langue_defaut) ?? 'fr', langueChoisie: lireLangue(l.langue) } : {}),
       statut: statutCompte(l),
       inviteLe: l.invite_le ?? null,
       activeLe: l.active_le ?? null,
@@ -342,6 +355,8 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       peutCreerCompte: acteur.superAdmin,
       // Seul le Fondateur modifie un Discord ID (contrôle serveur : majDiscordId).
       peutModifierDiscordId: acteur.superAdmin,
+      // Idem pour la langue par défaut d'un compte (migration 0019).
+      peutModifierLangue: acteur.superAdmin,
       teams,
       comptes: liste,
       demandesEnAttente: Number(attente?.n ?? 0),
@@ -384,6 +399,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
   async function retirerCompte(acteur, compte) {
     if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Réservé au Fondateur.');
     lireCompte(compte);
+    await base.executer('DELETE FROM langues_attente WHERE compte_id = ?', [compte]);
     const membres = await base.tous('SELECT m.*, r.cle_systeme FROM membres m JOIN roles r ON r.id = m.role_id WHERE m.compte_id = ?', [compte]);
     const existe = await base.premier('SELECT id, pseudo FROM comptes WHERE id = ?', [compte]);
     if (!existe && membres.length === 0) return { ok: true, retire: false, teams: 0 };
@@ -412,6 +428,7 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       { sql: 'DELETE FROM discord_codes WHERE compte_id = ?', params: [compte] },
       // Récapitulatif e-mail (migration 0015) : l'adresse chiffrée disparaît avec le compte.
       { sql: 'DELETE FROM courriel_recap WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM langues_attente WHERE compte_id = ?', params: [compte] },
       // Anonymisation, comme « Supprimer mes données » : plus rien n'est attribué à ce compte.
       { sql: 'UPDATE taches SET assigne_id = NULL WHERE assigne_id = ?', params: [compte] },
       { sql: 'UPDATE objectifs SET proprietaire_id = NULL WHERE proprietaire_id = ?', params: [compte] },
@@ -456,5 +473,30 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
     return ficheCompte(acteur, id);
   }
 
-  return { preinscrire, ajouterATeams, ajouterMembre, annuaire, activer, retirerCompte, majDiscordId };
+  /**
+   * `PUT /comptes/:compte/langue-defaut` `{ langue }` : le Fondateur SEUL (super admin) règle la langue par défaut
+   * d'un compte (interface Esport tant que l'utilisateur n'a pas choisi la sienne, e-mails, bot Discord). Pour un
+   * compte sans fiche Esport, elle est gardée en attente (`langues_attente`) jusqu'à sa première ouverture de l'Esport.
+   * Tout autre rôle, Propriétaire compris : 403.
+   */
+  async function majLangueDefaut(acteur, compteId, corps) {
+    if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Seul le Fondateur règle la langue par défaut d’un compte.');
+    const id = compteId === 'principal' ? 'principal' : lireCompte(compteId);
+    const langue = lireLangue(corps?.langue);
+    if (!langue) throw echec(400, 'langue', 'Langue : fr ou en.');
+    const fiche = await base.premier('SELECT id FROM comptes WHERE id = ?', [id]);
+    const date = iso(maintenant());
+    if (!fiche) {
+      // Compte du hub sans fiche Esport (jamais connecté) : la langue attend sa première ouverture de l'Esport.
+      await base.executer(
+        'INSERT INTO langues_attente (compte_id, langue, cree_le) VALUES (?, ?, ?) ON CONFLICT (compte_id) DO UPDATE SET langue = excluded.langue, cree_le = excluded.cree_le',
+        [id, langue, date],
+      );
+      return { compte: id, langueDefaut: langue, enAttente: true };
+    }
+    await base.executer('UPDATE comptes SET langue_defaut = ?, maj_le = ? WHERE id = ?', [langue, date, id]);
+    return ficheCompte(acteur, id);
+  }
+
+  return { preinscrire, ajouterATeams, ajouterMembre, annuaire, activer, retirerCompte, majDiscordId, majLangueDefaut };
 }

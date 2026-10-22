@@ -108,7 +108,7 @@ function ligneNotification(n, langue) {
 export async function tacheRecap(base, { cle, envoyer, maintenant = Date.now(), lienApp }) {
   const bilan = { envoyes: 0, echecs: 0, rien: 0 };
   if (!envoyer || !cle) return bilan;
-  const lignes = await base.tous('SELECT r.*, c.langue, c.pseudo FROM courriel_recap r JOIN comptes c ON c.id = r.compte_id', []);
+  const lignes = await base.tous('SELECT r.*, COALESCE(c.langue, c.langue_defaut) AS langue, c.pseudo FROM courriel_recap r JOIN comptes c ON c.id = r.compte_id', []);
   for (const r of lignes) {
     const depuis = r.dernier_envoi_le ?? r.cree_le;
     if (r.dernier_envoi_le && maintenant - Date.parse(r.dernier_envoi_le) < FREQUENCES[r.frequence]) continue;
@@ -131,7 +131,7 @@ export async function tacheRecap(base, { cle, envoyer, maintenant = Date.now(), 
     else {
       const m = rendreCourriel({ modele: 'recap', langue, site: lienApp || 'https://appdashboard.fr', variables: { prenom: r.pseudo, elements: notifs.map(n => ligneNotification(n, langue)) } });
       try {
-        await envoyer({ a: adresse, nom: r.pseudo, objet: m.objet, texte: m.texte, html: m.html });
+        await envoyer({ a: adresse, nom: r.pseudo, objet: m.objet, texte: m.texte, html: m.html, langue });
       } catch {
         statut = 'echec';
       }

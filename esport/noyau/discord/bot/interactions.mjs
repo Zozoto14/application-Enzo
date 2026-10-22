@@ -139,11 +139,11 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     return l ? { compte: l.compte_id, superAdmin: Number(l.super_admin) === 1, langue } : null;
   }
 
-  /** Langue des réponses : celle du compte Esport lié, sinon la locale Discord de l'interaction (`locale`), sinon le français. */
+  /** Langue des réponses : celle du compte Esport lié (son choix, sinon la langue définie par l'administrateur), sinon la locale Discord de l'interaction (`locale`), sinon le français. */
   async function resoudreLangue(i) {
     const utilisateur = i.member?.user ?? i.user;
     const l = utilisateur?.id
-      ? await base.premier('SELECT c.langue FROM discord_comptes dc JOIN comptes c ON c.id = dc.compte_id WHERE dc.discord_user_id = ?', [utilisateur.id])
+      ? await base.premier('SELECT COALESCE(c.langue, c.langue_defaut) AS langue FROM discord_comptes dc JOIN comptes c ON c.id = dc.compte_id WHERE dc.discord_user_id = ?', [utilisateur.id])
       : null;
     return lireLangue(l?.langue) ?? langueDepuisLocale(i.locale);
   }

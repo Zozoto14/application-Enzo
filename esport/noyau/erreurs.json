@@ -275,6 +275,7 @@
   "Seul l’auteur (ou qui peut supprimer les notes) modifie cette note.": "Only the author (or someone who can delete notes) can edit this note.",
   "Ce Discord ID est déjà celui d’un autre membre de l’Esport.": "This Discord ID already belongs to another Esport member.",
   "Seul le Fondateur modifie le Discord ID d’un membre.": "Only the Founder can change a member’s Discord ID.",
+  "Seul le Fondateur règle la langue par défaut d’un compte.": "Only the Founder can set an account’s default language.",
   "Le Discord ID est obligatoire : il permet au bot de pinger le joueur quand il est convoqué.": "The Discord ID is required: the bot uses it to ping the player when they are called up.",
   "Discord ID invalide : 17 à 20 chiffres (Discord › Mode développeur › clic droit › Copier l’identifiant).": "Invalid Discord ID: 17 to 20 digits (Discord › Developer Mode › right-click › Copy User ID).",
   "Le serveur Esport n’a pas de clé pour chiffrer l’adresse (CLE_ESPORT ou CLE_DISCORD).": "The Esport server has no key to encrypt the address (CLE_ESPORT or CLE_DISCORD).",

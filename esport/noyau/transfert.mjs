@@ -69,6 +69,8 @@ export const TABLES = [
   ['notes_joueurs', 'id'],
   // Migration 0015 : récapitulatif e-mail (adresse CHIFFRÉE dans l'export).
   ['courriel_recap', 'compte_id'],
+  // Migration 0019 : langue par défaut réglée avant la création de la fiche Esport du compte.
+  ['langues_attente', 'compte_id'],
   // Vidéos et transcriptions (migration 0014) : envois par morceaux, transcriptions des réunions.
   ['envois', 'id'],
   ['transcriptions', 'id'],

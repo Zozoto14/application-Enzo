@@ -642,3 +642,21 @@ test('e2e : un faux Discord local reçoit l’annonce d’un scrim avec les ment
     serveur.close();
   }
 });
+
+test('langue des réponses : la langue par défaut du compte (Fondateur) s’applique, le choix de l’utilisateur prime, null y revient', async () => {
+  const p = await preparerLie();
+  const demander = async () => p.texteReponse(await p.commande('taches', {}, { qui: D.lea }));
+  const fr = await demander();
+  assert.doesNotMatch(fr, /open/i, fr);
+  // Le Fondateur règle l'anglais par défaut : le bot répond en anglais, sans choix de Léa.
+  assert.equal((await p.b.appel('/comptes/lea12345/langue-defaut', { methode: 'PUT', jeton: p.fond, corps: { langue: 'en' } })).statut, 200);
+  const en = await demander();
+  assert.notEqual(en, fr);
+  assert.match(en, /open|overdue|no tasks|task/i, en);
+  // Léa choisit le français : son choix prime.
+  await p.b.appel('/moi/langue', { methode: 'PUT', jeton: p.s.lea12345, corps: { langue: 'fr' } });
+  assert.equal(await demander(), fr);
+  // Elle revient à la langue définie par l'administrateur.
+  await p.b.appel('/moi/langue', { methode: 'PUT', jeton: p.s.lea12345, corps: { langue: null } });
+  assert.equal(await demander(), en);
+});

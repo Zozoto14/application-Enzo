@@ -65,7 +65,7 @@ test('courriel : message libre envoyé par le vrai transport au faux SMTP (HTML 
   assert.equal(r.status, 200);
   const lu = await r.json();
   assert.equal(lu.ok, true);
-  assert.deepEqual(lu.resultats, [{ a: 'l***@e***.fr', statut: 'envoye' }, { a: 't***@e***.fr', statut: 'envoye' }], 'doublon ignoré, adresses masquées');
+  assert.deepEqual(lu.resultats, [{ a: 'l***@e***.fr', statut: 'envoye', langue: 'fr' }, { a: 't***@e***.fr', statut: 'envoye', langue: 'en' }], 'doublon ignoré, adresses masquées');
   const recus = smtp.messages.slice(avant);
   assert.equal(recus.length, 2);
   assert.deepEqual(recus.map(m => m.a), [['lea@exemple.fr'], ['tom@exemple.fr']], 'personne ne voit l’adresse des autres');
@@ -162,4 +162,88 @@ test('courriel : modèles et aides (Markdown sûr, adresses)', () => {
   assert.match(s.texte, /Bonjour Léa/);
   const r = rendreCourriel({ modele: 'recap', langue: 'en', variables: { prenom: 'Sam', elements: [{ titre: 'Match tomorrow', texte: '20:00' }] } });
   assert.match(r.objet, /digest \(1 notification/);
+});
+
+test('courriel : envoi groupé mixte — chaque destinataire reçoit l’habillage (en-tête de langue, pied, sujet) dans SA langue, le corps reste celui du Fondateur', async () => {
+  const env = { JETON, BOITE: kvMemoire(), ENVOYER_COURRIEL: envoyeur, LIEN_APP: 'https://appdashboard.fr' };
+  const avant = smtp.messages.length;
+  const r = await appel(env, '/courriel/envoyer', {
+    corps: { destinataires: [{ adresse: 'lea@exemple.fr', nom: 'Léa', langue: 'fr' }, { adresse: 'sam@exemple.com', nom: 'Sam', langue: 'en' }, { adresse: 'zoe@exemple.fr' }], langue: 'fr', variables: { objet: 'Tournoi samedi', message: 'Rendez-vous **samedi**, salle B.' } },
+  });
+  assert.equal(r.status, 200);
+  assert.deepEqual((await r.json()).resultats.map(x => x.langue), ['fr', 'en', 'fr']);
+  const recus = Object.fromEntries(smtp.messages.slice(avant).map(m => [m.a[0], decoderMessage(m.donnees)]));
+  const html = a => recus[a].parties.find(p => /text\/html/.test(p.entetes)).corps;
+  assert.match(html('lea@exemple.fr'), /<html lang="fr">/);
+  assert.match(html('lea@exemple.fr'), /Vous recevez cet e-mail parce que vous avez un compte AppDashboard/);
+  assert.match(html('sam@exemple.com'), /<html lang="en">/);
+  assert.match(html('sam@exemple.com'), /You are receiving this e-mail because you have an AppDashboard account/);
+  assert.doesNotMatch(html('sam@exemple.com'), /Vous recevez/);
+  assert.match(html('zoe@exemple.fr'), /<html lang="fr">/);
+  assert.match(recus['sam@exemple.com'].entetes, /Content-Language: en/);
+  assert.match(recus['lea@exemple.fr'].entetes, /Content-Language: fr/);
+  // Le corps est tel que le Fondateur l'a écrit, dans les deux langues.
+  for (const a of Object.keys(recus)) assert.match(html(a), /Rendez-vous <strong>samedi<\/strong>, salle B\./);
+  const journal = await (await appel(env, '/courriel/journal', { methode: 'GET' })).json();
+  assert.deepEqual(journal.envois[0].resultats.map(x => x.langue), ['fr', 'en', 'fr']);
+});
+
+test('courriel : deux versions FR/EN du message — chacun reçoit la sienne (objet, texte, HTML)', async () => {
+  const env = { JETON, BOITE: kvMemoire(), ENVOYER_COURRIEL: envoyeur };
+  const avant = smtp.messages.length;
+  const r = await appel(env, '/courriel/envoyer', {
+    corps: {
+      destinataires: [{ adresse: 'lea@exemple.fr', langue: 'fr' }, { adresse: 'sam@exemple.com', langue: 'en' }],
+      variables: { objet: 'Tournoi samedi', message: 'Salle B, 14 h.', en: { objet: 'Tournament on Saturday', message: 'Room B, 2 pm.' } },
+    },
+  });
+  assert.equal(r.status, 200);
+  const recus = Object.fromEntries(smtp.messages.slice(avant).map(m => [m.a[0], decoderMessage(m.donnees)]));
+  assert.match(recus['lea@exemple.fr'].entetes, /Subject: Tournoi samedi/);
+  assert.match(recus['lea@exemple.fr'].texte, /Salle B, 14 h\./);
+  assert.doesNotMatch(recus['lea@exemple.fr'].texte, /Room B/);
+  assert.match(recus['sam@exemple.com'].entetes, /Subject: Tournament on Saturday/);
+  assert.match(recus['sam@exemple.com'].texte, /Room B, 2 pm\./);
+  assert.doesNotMatch(recus['sam@exemple.com'].texte, /Salle B/);
+  // Sans version anglaise, l'anglophone reçoit le texte principal (habillage anglais).
+  const avant2 = smtp.messages.length;
+  await appel(env, '/courriel/envoyer', { corps: { destinataires: [{ adresse: 'sam@exemple.com', langue: 'en' }], variables: { objet: 'Salut', message: 'Coucou tout le monde' } } });
+  assert.match(decoderMessage(smtp.messages[avant2].donnees).texte, /Coucou tout le monde/);
+  // Version anglaise invalide : refusée.
+  for (const en of [{ objet: '', message: 'x y' }, { objet: 'ok', message: '' }, 'texte', { objet: 'ok' }]) {
+    assert.equal((await appel(env, '/courriel/envoyer', { corps: { destinataires: ['a@b.fr'], variables: { objet: 'x', message: 'yy', en } } })).status, 400, JSON.stringify(en));
+  }
+});
+
+test('courriel : aperçu dans la langue choisie (objet, texte, HTML) — sans envoi, sans SMTP, sans adresse, jeton maître seulement', async () => {
+  const env = { JETON, BOITE: kvMemoire(), LIEN_APP: 'https://appdashboard.fr' };
+  const apercu = (corps, jeton) => appel(env, '/courriel/apercu', { corps, jeton });
+  const corps = { variables: { objet: 'Tournoi', message: 'Salle B', en: { objet: 'Tournament', message: 'Room B' } } };
+  const fr = await (await apercu({ ...corps, langue: 'fr' })).json();
+  const en = await (await apercu({ ...corps, langue: 'en' })).json();
+  assert.equal(fr.langue, 'fr');
+  assert.equal(fr.objet, 'Tournoi');
+  assert.match(fr.html, /Vous recevez cet e-mail/);
+  assert.match(fr.html, /Salle B/);
+  assert.equal(en.langue, 'en');
+  assert.equal(en.objet, 'Tournament');
+  assert.match(en.html, /You are receiving this e-mail/);
+  assert.match(en.texte, /Room B/);
+  const inv = await (await apercu({ modele: 'invitation', langue: 'en', variables: { objet: 'Invite', message: 'Hi Sam!', lien: 'https://appdashboard.fr/#invitation=abc' } })).json();
+  assert.match(inv.html, /Accept the invitation/);
+  assert.equal((await apercu({ variables: { objet: '', message: 'x' } })).status, 400);
+  assert.equal((await apercu({ modele: 'support', variables: { objet: 'x', message: 'yy' } })).status, 400);
+  const ami = await jetonDeProfil(JETON, 'abc123def');
+  assert.equal((await apercu({ ...corps, langue: 'en' }, ami)).status, 403);
+  assert.equal([...env.BOITE.donnees.keys()].some(c => c.startsWith('courriel:journal')), false, 'un aperçu ne laisse aucune trace');
+});
+
+test('courriel : réponse au support dans la langue du compte (celle de l’app prime sur celle de la demande)', async () => {
+  const fr = rendreCourriel({ modele: 'support', langue: 'fr', variables: { numero: 12, titre: 'Bug', reponse: 'Corrigé.', prenom: 'Léa' } });
+  const en = rendreCourriel({ modele: 'support', langue: 'en', variables: { numero: 12, titre: 'Bug', reponse: 'Fixed.', prenom: 'Lea' } });
+  assert.equal(fr.objet, 'Réponse à votre demande #12 : Bug');
+  assert.equal(en.objet, 'Reply to your request #12: Bug');
+  assert.match(en.html, /Hello Lea,/);
+  assert.match(en.texte, /Support › My requests/);
+  assert.match(fr.texte, /Support › Mes demandes/);
 });

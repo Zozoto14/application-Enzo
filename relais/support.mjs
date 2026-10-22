@@ -530,10 +530,12 @@ async function ajouterMessage(requete, env, portee, t, o) {
   // Réponse du Fondateur : e-mail à l'auteur si l'app a joint son adresse (jamais gardée ici, seulement masquée au journal).
   let courriel;
   if (equipe && corps?.courriel && typeof env.ENVOYER_COURRIEL === 'function' && o.envoyerCourriel) {
+    // Langue de l'e-mail : celle du compte de l'auteur si l'app la donne (langue par défaut réglée par le Fondateur), sinon celle de la demande.
+    const langueMail = corps.courriel.langue === 'en' || corps.courriel.langue === 'fr' ? corps.courriel.langue : t.langue === 'en' ? 'en' : 'fr';
     courriel = await o.envoyerCourriel(env, {
-      destinataires: [{ adresse: corps.courriel.adresse, nom: t.auteur, langue: corps.courriel.langue ?? t.langue }],
+      destinataires: [{ adresse: corps.courriel.adresse, nom: t.auteur, langue: langueMail }],
       modele: 'support',
-      langue: corps.courriel.langue === 'en' || t.langue === 'en' ? 'en' : 'fr',
+      langue: langueMail,
       variables: { numero: t.numero, titre: t.titre, reponse: texte, prenom: t.auteur },
       ref: `support:${t.id}`,
     });
