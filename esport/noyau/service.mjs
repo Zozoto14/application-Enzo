@@ -3,7 +3,7 @@
  *
  * Indépendante du runtime : elle ne parle qu'à une `base` (interface décrite
  * dans adaptateurs/sqlite.mjs : `tous`, `premier`, `executer`, `lot`) avec du
- * SQL standard (paramètres `?`, UUID texte, dates ISO), compatible SQLite (D1)
+ * SQL standard (paramètres `?`, UUID texte, dates ISO), compatible SQLite
  * et Postgres. Toute vérification de droits est faite ICI, côté serveur :
  * l'app n'affiche que ce que le serveur permet, mais ne décide de rien.
  *

@@ -1,6 +1,6 @@
 /**
  * Test de bout en bout : modifier les permissions d'un rôle existant (Esport › team › Équipe ›
- * Membres et rôles), sans Cloudflare ni réseau réel (faux relais, serveur Esport local).
+ * Membres et rôles) sans réseau réel (faux relais, serveur Esport local).
  *
  *  - PC (1440 × 900), le Fondateur : team « Faucons Valorant » (API) ; compte du hub « Zed »
  *    (modèle « Esport seulement », Administration) ajouté à la team en Coach ;
@@ -45,7 +45,7 @@ const capture = async (page, nom) => {
   log(`capture ${nom}`);
 };
 
-const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
+const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { demarrerServeurEsport } = await import(pathToFileURL(join(racine, 'esport/outils/serveur-local.mjs')).href);
 
 // ------------------------------------------------------------- Serveurs
