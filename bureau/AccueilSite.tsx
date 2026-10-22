@@ -12,7 +12,7 @@
 
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
-import { Alerte, Bouton, SousTitre, Titre, usePalette } from '../src/ui/composants';
+import { Alerte, Bouton, Champ, SousTitre, Titre, usePalette } from '../src/ui/composants';
 import { ESPACEMENT, RAYON, stylesPartages } from '../src/ui/theme';
 import { BoutonPrincipal } from '../src/ui/mobile/BoutonPrincipal';
 import { EcranMobile } from '../src/ui/mobile/EcranMobile';
@@ -37,7 +37,61 @@ function message(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : String(erreur);
 }
 
-export function AccueilSite({ erreur: erreurInitiale, onCreer, connexion }: { erreur?: string; onCreer(): void; connexion: OptionsConnexionAccueil }) {
+/** TEMPORAIRE (voir liaisonTemporaire.ts) : relier ce navigateur avec le code AB1 de l'administrateur. */
+export interface OptionsLiaisonTemporaire {
+  /** Code apporté par un lien `#liaison=AB1.…` : rien à recopier. */
+  codeConnu?: string;
+  onRelier(code: string): Promise<void>;
+}
+
+function CarteLiaisonTemporaire({ codeConnu, onRelier }: OptionsLiaisonTemporaire) {
+  const palette = usePalette();
+  const [ouvert, setOuvert] = useState(Boolean(codeConnu));
+  const [code, setCode] = useState('');
+  const [enCours, setEnCours] = useState(false);
+  const [erreur, setErreur] = useState<string | undefined>();
+  const utilise = code.trim() || codeConnu || '';
+  const relier = () => {
+    setErreur(undefined);
+    setEnCours(true);
+    onRelier(utilise)
+      .catch(e => setErreur(message(e)))
+      .finally(() => setEnCours(false));
+  };
+  if (!ouvert) {
+    return <Bouton titre="Administrateur : relier avec un code de liaison (temporaire)" variante="discret" onPress={() => setOuvert(true)} testID="accueil-ab1-ouvrir" />;
+  }
+  return (
+    <View style={[styles.cadre, { borderColor: palette.bordure }]} testID="accueil-ab1">
+      <Text style={{ color: palette.texte, fontWeight: '700' }}>🔗 Administrateur : relier avec un code de liaison (temporaire)</Text>
+      <Text style={{ color: palette.texteSecondaire }}>
+        Seulement pour activer ta connexion par identifiant loin de ton PC : colle ton code AB1, déverrouille avec ton mot de passe et ton code à six chiffres,
+        puis choisis ton identifiant (Paramètres › Sécurité).
+      </Text>
+      {codeConnu ? (
+        <Text style={{ color: palette.hausse, fontWeight: '600' }} testID="accueil-code-connu">
+          ✅ Code de liaison reçu par le lien : rien à recopier.
+        </Text>
+      ) : (
+        <Champ etiquette="Code de liaison" placeholder="AB1.…" value={code} onChangeText={setCode} autoCapitalize="none" autoCorrect={false} onSubmitEditing={relier} testID="champ-code-accueil" />
+      )}
+      {erreur ? <Alerte message={erreur} /> : null}
+      {enCours ? <SousTitre>Recherche du compte sur le serveur…</SousTitre> : <Bouton pleineLargeur titre="Relier ce navigateur" desactive={!utilise} onPress={relier} testID="bouton-relier-accueil" />}
+    </View>
+  );
+}
+
+export function AccueilSite({
+  erreur: erreurInitiale,
+  onCreer,
+  connexion,
+  liaisonTemporaire,
+}: {
+  erreur?: string;
+  onCreer(): void;
+  connexion: OptionsConnexionAccueil;
+  liaisonTemporaire?: OptionsLiaisonTemporaire;
+}) {
   const palette = usePalette();
   const [creer, setCreer] = useState(false);
   const mobile = useMobile();
@@ -54,6 +108,7 @@ export function AccueilSite({ erreur: erreurInitiale, onCreer, connexion }: { er
         <Titre>Bienvenue sur AppDashboard</Titre>
         <SousTitre>Connecte-toi avec ton identifiant et ton mot de passe, ou ouvre ton invitation.</SousTitre>
         <BlocConnexion {...connexion} />
+        {liaisonTemporaire ? <CarteLiaisonTemporaire {...liaisonTemporaire} /> : null}
         {erreurInitiale ? <Alerte message={erreurInitiale} /> : null}
         <GroupeCellules>
           <Cellule titre="Je n’ai pas de compte" sousTitre="Créer un nouveau coffre sur ce navigateur." glyphe="+" chevron onPress={() => setCreer(true)} testID="accueil-creer" />
@@ -84,6 +139,7 @@ export function AccueilSite({ erreur: erreurInitiale, onCreer, connexion }: { er
       <Titre>Bienvenue sur AppDashboard</Titre>
       <SousTitre>Connecte-toi avec ton identifiant et ton mot de passe : tes apps et tes données sont sur le serveur, chiffrées.</SousTitre>
       <BlocConnexion {...connexion} />
+      {liaisonTemporaire ? <CarteLiaisonTemporaire {...liaisonTemporaire} /> : null}
       {erreurInitiale ? <Alerte message={erreurInitiale} /> : null}
       <View style={[styles.cadre, { borderColor: palette.bordure }]}>
         {creer ? (

@@ -34,6 +34,31 @@ connexion répond « Identifiant ou mot de passe incorrect » (comme pour tout i
 des comptes). Le bouton **« Administrateur : première connexion ? »** de l'écran de connexion explique la démarche
 (il s'affiche aussi après un refus) sans rien dire d'un compte en particulier.
 
+#### TEMPORAIRE : activer depuis un autre appareil avec le code AB1 (sans le PC)
+
+Pour un Fondateur loin de son PC qui garde son ancien **code de liaison** (`AB1.…`) : jusqu'au **30 novembre 2026**
+(`AB1_TEMPORAIRE_JUSQU_AU`, `bureau/liaisonTemporaire.ts`), l'accueil du site montre un lien discret
+**« Administrateur : relier avec un code de liaison (temporaire) »** (un lien `https://appdashboard.fr/#liaison=AB1.…`
+l'ouvre avec le code déjà rempli).
+
+1. Sur la tablette (navigateur neuf) : ce lien, coller le code AB1, « Relier ce navigateur ».
+2. La page se recharge : « admin » (ou votre prénom) si l'écran du prénom s'affiche, puis votre **mot de passe** et
+   votre **code à six chiffres** (comme l'ancien site de secours). Vos données arrivent.
+3. Quelques secondes après, « Se connecter partout avec un identifiant » s'ouvre seul (sinon Paramètres › Sécurité ›
+   « Identifiant et mot de passe de connexion ») : identifiant `admin`, mot de passe actuel, code → les dix codes.
+4. Ensuite, partout : « Se connecter », `admin`, mot de passe, code à six chiffres.
+
+Gardé de l'ancien parcours : code lisible, **jeton maître** seulement (un code d'ami est refusé), relais **connu**
+(celui du site via `relais.json`, `https://relais.appdashboard.fr` ou l'ancien `applibourse-relais.<…>.workers.dev` ; le
+relais du site est essayé d'abord avec le même jeton), coffre réellement trouvé. Le code AB1 ne donne que la boîte
+CHIFFRÉE : sans le mot de passe et le code à six chiffres, rien ne s'ouvre.
+
+Retrait automatique : après la date, la carte et la lecture du lien disparaissent. Avant, dès que la connexion par
+identifiant est active (coffre publié « canonique », constaté APRÈS lecture avec le jeton du code, donc rien n'est
+révélé à un visiteur anonyme), le code est refusé (« déjà active ») et le lien disparaît de ce navigateur. Testé par
+`scripts/e2e-ab1-temporaire.mjs`. À supprimer après la date : `bureau/liaisonTemporaire.ts`, la carte de
+`bureau/AccueilSite.tsx`, `relierTemporaire` dans `bureau/index.tsx`, ce paragraphe et l'e2e.
+
 ### Validation en deux étapes (A2F, relais version 10)
 
 - Le code à six chiffres (TOTP, application d'authentification) est vérifié **par le serveur**, après la preuve du mot

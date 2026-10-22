@@ -107,6 +107,7 @@ import { CLE_CARNET_GESTION, ajouterAuCarnet, ecrireCarnet, lireCarnet } from '.
 import type { TypeEvenement } from '../src/hub/admin/journal';
 import { CLE_DONNEES } from '../src/hub/admin/donnees';
 import { AccueilSite, RemplacerDonnees } from './AccueilSite';
+import { ab1TemporaireOuvert, CLE_AB1_TERMINE, codeAb1DuLien, connexionParIdentifiantActive, liaisonsAEssayer } from './liaisonTemporaire';
 import {
   avantOuverture,
   coffreAdminEtranger,
@@ -124,10 +125,10 @@ import {
   type CompteRelie,
   type Memoire,
 } from './synchroComptes';
-import { decoderLiaison, type Liaison } from '../src/sync/relais/liaison';
+import { decoderLiaison, encoderLiaison, type Liaison } from '../src/sync/relais/liaison';
 import { estMaitre } from '../src/sync/relais/portees';
 import { definirLiaisonCompte } from '../src/sync/relais/actif';
-import { lireConfigRelais, mesurerEcartHorloge } from '../src/sync/relais/synchroniser';
+import { lireConfigRelais, mesurerEcartHorloge, recupererCoffre } from '../src/sync/relais/synchroniser';
 import { formaterDiagnostic, lireEnvironnement } from '../src/diagnostic/deverrouillage';
 import { empreinte as empreinteCanonique } from '../src/sync/relais/fusionLww';
 import { versionApp } from '../src/hub/version';
@@ -240,7 +241,7 @@ type Etat =
     }
   | { phase: 'echec'; motif: string }
   /** Navigateur neuf : se connecter (identifiant + mot de passe), ouvrir une invitation, ou créer un coffre. */
-  | { phase: 'accueil'; erreur?: string }
+  | { phase: 'accueil'; erreur?: string; /** TEMPORAIRE : code AB1 apporté par un lien `#liaison=` (liaisonTemporaire.ts). */ codeAb1?: string }
   /** Ce navigateur a déjà un coffre : remplacer ses données par celles du compte relié ? */
   | { phase: 'remplacer'; relie: CompteRelie };
 
@@ -329,6 +330,11 @@ const memoireNavigateur: Memoire = {
  */
 function lienDeLiaisonPerime(): boolean {
   return /liaison=AB1\./.test(globalThis.location?.hash ?? '');
+}
+
+/** TEMPORAIRE (liaisonTemporaire.ts) : le code AB1 de l'administrateur est-il encore accepté sur ce site ? */
+function ab1Accepte(): boolean {
+  return !pont() && ab1TemporaireOuvert(new Date(), Boolean(memoireNavigateur.getItem(CLE_AB1_TERMINE)));
 }
 
 /** Dernier identifiant (prénom) d'un ami connecté sur ce navigateur, et adresse du relais connue ici. */
@@ -773,8 +779,14 @@ function Racine() {
         return;
       }
       // Ancien lien de liaison (QR code d'avant) : retiré de l'adresse, on se connecte par identifiant.
+      // TEMPORAIRE : un code AB1 administrateur nouveau pour ce navigateur est proposé sur l'accueil.
+      const codeAb1 = lienDeLiaisonPerime() && ab1Accepte() ? codeAb1DuLien(globalThis.location?.hash ?? '') : undefined;
       if (lienDeLiaisonPerime()) effacerFragment();
       const liaisons = lireLiaisons(memoireNavigateur);
+      if (codeAb1 && decoderLiaison(codeAb1)?.jeton !== (liaisons.maitre ? decoderLiaison(liaisons.maitre)?.jeton : undefined)) {
+        setEtat({ phase: 'accueil', codeAb1 });
+        return;
+      }
       // Navigateur déjà relié au compte d'un ami (avant la version 9) dont la liste des comptes manque ici :
       // sa projection est relue sur le serveur (même chose qu'à la connexion), sans rien demander.
       const seuleLiaison = Object.values(liaisons.comptes);
@@ -836,6 +848,46 @@ function Racine() {
       window.location.reload();
     },
     [fichiersLocaux, stockage, ecrireAnnuaireDisque],
+  );
+
+  /**
+   * TEMPORAIRE (liaisonTemporaire.ts) : « Relier ce navigateur » avec le code AB1 de l'administrateur.
+   * Code lisible, jeton maître, relais connu ; refusé si la connexion par identifiant est déjà active
+   * (constaté sur le coffre lu AVEC ce jeton). Puis comme avant la version 9 : installer (ou proposer
+   * de remplacer un ancien coffre d'ici), recharger, déverrouiller (mot de passe + code à six chiffres).
+   */
+  const relierTemporaire = useCallback(
+    async (code: string) => {
+      if (!ab1Accepte()) throw new Error('Le code de liaison n’est plus accepté : connectez-vous avec votre identifiant et votre mot de passe.');
+      const candidats = liaisonsAEssayer(code, await relaisConnu());
+      let derniere: unknown;
+      for (const liaison of candidats) {
+        let coffre: unknown;
+        try {
+          coffre = await recupererCoffre(liaison);
+        } catch (e) {
+          derniere = e;
+          continue;
+        }
+        if (connexionParIdentifiantActive(coffre)) {
+          memoireNavigateur.setItem(CLE_AB1_TERMINE, new Date().toISOString());
+          throw new Error(
+            'Ta connexion par identifiant est déjà active : connecte-toi avec ton identifiant, ton mot de passe et ton code à six chiffres (ou « Mot de passe oublié ? »). Le code de liaison ne sert plus.',
+          );
+        }
+        const relie = await preparerLiaison(encoderLiaison(liaison));
+        const annuaire = await lireAnnuaireDisque();
+        const local = await stockage.lire('coffre');
+        if ((local && local.length > 0) || aDesAmis(annuaire)) {
+          setEtat({ phase: 'remplacer', relie });
+        } else {
+          await installerLiaison(relie);
+        }
+        return;
+      }
+      throw derniere instanceof Error ? derniere : new Error('Serveur injoignable : réessayez dans un instant.');
+    },
+    [installerLiaison, lireAnnuaireDisque, stockage],
   );
 
   /** Ce navigateur contient-il déjà un autre compte que `id` (coffre de l'administrateur, autres comptes) ? */
@@ -1330,6 +1382,7 @@ function Racine() {
     return (
       <AccueilSite
         erreur={etat.erreur}
+        liaisonTemporaire={ab1Accepte() ? { codeConnu: etat.codeAb1, onRelier: relierTemporaire } : undefined}
         connexion={{
           relaisConnu: Boolean(memoireNavigateur.getItem(CLE_RELAIS_CONNU) || lireLiaisons(memoireNavigateur).maitre),
           identifiantInitial: memoireNavigateur.getItem(CLE_IDENTIFIANT) ?? undefined,

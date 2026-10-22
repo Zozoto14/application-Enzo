@@ -234,7 +234,8 @@ try {
   await B.goto(SITE);
   await B.getByTestId('accueil-site').waitFor({ timeout: 60_000 });
   const accueil = await B.locator('body').innerText();
-  verifier(!/code de liaison|AB1/i.test(accueil), 'accueil : aucune mention de code de liaison');
+  // Seule exception, TEMPORAIRE (bureau/liaisonTemporaire.ts) : le lien discret « relier avec un code de liaison (temporaire) ».
+  verifier(!/code de liaison|AB1/i.test(accueil.replace('Administrateur : relier avec un code de liaison (temporaire)', '')), 'accueil : aucune mention de code de liaison');
   verifier(/J’ai reçu une invitation/.test(accueil), 'accueil : « J’ai reçu une invitation » est gardé');
   await capture(B, '04-navigateur-neuf-accueil');
   const avant = await fond(B);
