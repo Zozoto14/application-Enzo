@@ -10,6 +10,9 @@
  *  - Zed : plus de bouton « Nouvelle strat », et l'API répond 403 ; Journal du Fondateur ;
  *  - Fondateur : « Rétablir les permissions par défaut » → Zed retrouve le bouton, l'API répond 200.
  *
+ * L'app passe par un faux frontal o2switch (scripts/frontal-restrictif.mjs) qui refuse PATCH, PUT
+ * et DELETE : l'enregistrement des permissions (PATCH) part en POST + X-Methode.
+ *
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-esport-roles.mjs
  *
@@ -22,6 +25,7 @@ import { extname, join, normalize } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ongletTeam } from './esport-navigation.mjs';
 import { allerPageAdministration, allerPageApplications, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
+import { demarrerFrontalRestrictif } from './frontal-restrictif.mjs';
 import { chargerPlaywright, demarrerRelais, deverrouiller, pause, premierLancement, racine, totp } from './mobile-outils.mjs';
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-esport-roles');
@@ -51,6 +55,8 @@ const { demarrerServeurEsport } = await import(pathToFileURL(join(racine, 'espor
 // ------------------------------------------------------------- Serveurs
 const relais = await demarrerRelais(PORT_RELAIS, JETON);
 const esport = await demarrerServeurEsport({ port: PORT_ESPORT, jetonDev: JETON });
+// L'app passe par un faux frontal o2switch qui refuse PATCH, PUT et DELETE (POST + X-Methode).
+const frontal = await demarrerFrontalRestrictif({ cible: esport.url, port: PORT_ESPORT + 100 });
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2', '.woff': 'font/woff' };
 const dist = join(racine, 'bureau/dist');
 if (!existsSync(join(dist, 'index.html'))) throw new Error('bureau/dist absent : lancez « npx vite build » d’abord');
@@ -58,7 +64,7 @@ const serveurSite = http.createServer((req, res) => {
   const chemin = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^(\.\.[/\\])+/, '');
   if (chemin === '/relais.json' || chemin === '/esport.json') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(chemin === '/relais.json' ? { relais: `https://localhost:${PORT_RELAIS}` } : { esport: esport.url }));
+    res.end(JSON.stringify(chemin === '/relais.json' ? { relais: `https://localhost:${PORT_RELAIS}` } : { esport: frontal.url }));
     return;
   }
   let fichier = join(dist, chemin);
@@ -228,6 +234,8 @@ try {
   verifier((await zed.getByTestId('esport-strats-nouvelle').count()) === 1, 'Coach : bouton « Nouvelle strat » revenu');
   verifier((await creerStrat()).statut === 200, 'Coach : création de strat acceptée par le serveur');
   await capture(zed, '08-coach-strats-retabli');
+  // Frontal o2switch simulé : aucun PATCH/PUT/DELETE de l'app n'y est passé (tout en POST + X-Methode).
+  verifier(frontal.refus.length === 0, `frontal restrictif : aucune requête de l’app coupée (${frontal.refus.join(', ') || 'aucune'})`);
 } catch (e) {
   echecs++;
   console.error(e);

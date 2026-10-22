@@ -9,6 +9,7 @@ export const fr = {
   'client.le_serveur_esport_ne': 'Le serveur Esport ne répond pas.',
   'client.le_serveur_esport_est': 'Le serveur Esport est injoignable.',
   'client.le_serveur_esport_ne_2': 'Le serveur Esport ne répond pas comme prévu.',
+  'client.requete_refusee_frontal': 'Le serveur Esport répond, mais l’hébergeur a bloqué cette modification en route (filtre du frontal). Réessayez ; si cela continue, prévenez le Fondateur.',
   'client.erreur': 'Erreur {status}',
 
   // comptesHub

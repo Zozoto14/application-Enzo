@@ -10,6 +10,7 @@ import type { Cle } from './fr';
 export const en: Record<Cle, string> = {
   'client.le_serveur_esport_ne': 'The Esport server isn’t responding.',
   'client.le_serveur_esport_est': 'The Esport server is unreachable.',
+  'client.requete_refusee_frontal': 'The Esport server is up, but the host blocked this change on the way (front-end filter). Try again; if it keeps happening, tell the Founder.',
   'client.le_serveur_esport_ne_2': 'The Esport server didn’t respond as expected.',
   'client.erreur': 'Error {status}',
   'comptesHub.seul_le_fondateur_cree': 'Only the Founder creates accounts (it takes his hub keys). You can add an account that already exists to your teams.',

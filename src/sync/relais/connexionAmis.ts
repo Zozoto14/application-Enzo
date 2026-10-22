@@ -43,7 +43,16 @@ async function demander(adresse: string, chemin: string, options: { methode?: st
     }
   };
   const methode = options.methode ?? 'GET';
-  const reponse = await envoyer(methode);
+  let reponse: Response;
+  try {
+    reponse = await envoyer(methode);
+  } catch (e) {
+    // Coupé en route (préliminaire CORS ou méthode bloqués par le frontal) : une fois en POST + `X-Methode`.
+    if (methode !== 'PUT' && methode !== 'DELETE') throw e;
+    const autre = await envoyer('POST', methode).catch(() => undefined);
+    if (!autre || (!autre.ok && [404, 405].includes(autre.status))) throw e;
+    return autre;
+  }
   // Hébergement mutualisé : certains intermédiaires refusent les PUT ou en perdent le corps (relais
   // version 10 : POST + `X-Methode` est traité exactement comme l'original).
   if ((methode === 'PUT' || methode === 'DELETE') && STATUTS_SURCHARGE.includes(reponse.status)) {

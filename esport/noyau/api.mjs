@@ -27,7 +27,7 @@ import { servicesTableau } from './tableau.mjs';
 import { creerSession, lireSession } from './session.mjs';
 import { ErreurEsport, echec } from './outils.mjs';
 import { exporterBase, importerBase } from './transfert.mjs';
-import { ENTETES_CORS, ENTETES_SECURITE, reponseFichier } from './entetes.mjs';
+import { ENTETES_CORS, ENTETES_SECURITE, methodeSurchargee, reponseFichier } from './entetes.mjs';
 import { servicesJournal } from './journal.mjs';
 import { LANGUE_DEFAUT, langueDepuisEntete } from './langues.mjs';
 import { limiter } from './limites.mjs';
@@ -47,6 +47,8 @@ import { exportUsage, servicesCollecte } from './usage/collecte.mjs';
 import { exigerFondateur, servicesStatistiques } from './usage/statistiques.mjs';
 
 export const VERSION_ESPORT = 4;
+/** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
+export const FONCTIONS = ['surcharge-methode'];
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
@@ -189,6 +191,8 @@ export function creerApi({
         ok: true,
         service: 'esport',
         version: VERSION_ESPORT,
+        // Fonctions annoncées : « surcharge-methode » = POST + X-Methode accepté (voir entetes.mjs).
+        fonctions: FONCTIONS,
         stockage: Boolean(stockage),
         session: Boolean(cleSession),
         bot: Boolean(configBot.applicationId && configBot.publicKey && jetonBot),
@@ -214,7 +218,7 @@ export function creerApi({
       // Compte pré-enregistré par le Fondateur : sa première session (jeton validé par le relais) l'active.
       await cp.activer(qui.compte);
       const { jeton, expire } = await creerSession(cleSession, qui, maintenant());
-      return { session: jeton, expire: new Date(expire).toISOString(), ...(await s.moi(qui)) };
+      return { session: jeton, expire: new Date(expire).toISOString(), fonctions: FONCTIONS, ...(await s.moi(qui)) };
     }
 
     // ---- Tout le reste : session Esport obligatoire.
@@ -436,6 +440,11 @@ export function creerApi({
    */
   return async function traiter(requete, { attendre } = {}) {
     if (requete.method === 'OPTIONS') return new Response(null, { status: 204, headers: ENTETES });
+    // POST + `X-Methode: PATCH|PUT|DELETE` (frontal mutualisé qui bloque ces méthodes) : la requête
+    // devient l'originale, puis suit exactement le même chemin (routeur, contrôles, bus d'événements).
+    const surcharge = methodeSurchargee(requete);
+    if (surcharge === null) return reponseErreur(echec(400, 'methode', 'Surcharge de méthode refusée (X-Methode : PATCH, PUT ou DELETE).'));
+    if (surcharge) requete = new Request(requete, { method: surcharge });
     let reponse;
     let chemin = '';
     try {

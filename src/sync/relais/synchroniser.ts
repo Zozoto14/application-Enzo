@@ -69,6 +69,17 @@ export class ErreurRelais extends Error {
   }
 }
 
+/**
+ * Relais dont le frontal (hébergement mutualisé) a refusé ou coupé un PUT/DELETE, alors que le même
+ * appel en POST + `X-Methode` (relais version 10) est passé : les suivants y partent directement en
+ * POST (y compris le dépôt `keepalive` de fermeture, qui ne peut pas être rejoué).
+ */
+const relaisEnSurcharge = new Set<string>();
+export const relaisEnSurchargeConnu = (relais: string): boolean => relaisEnSurcharge.has(relais);
+export function oublierRelaisEnSurcharge(): void {
+  relaisEnSurcharge.clear();
+}
+
 /** Au-delà, un appel sans réponse est abandonné (sinon un tour resterait bloqué). */
 export const DELAI_APPEL_MS = 25_000;
 
@@ -97,11 +108,28 @@ export async function appeler(
     }
   };
   const methode = options.methode ?? 'GET';
-  let reponse = await envoyer(methode);
-  // PUT/DELETE refusé ou abîmé par un intermédiaire : une fois en POST + `X-Methode` (relais version 10).
-  if ((methode === 'PUT' || methode === 'DELETE') && [400, 405, 411, 501].includes(reponse.status)) {
-    const autre = await envoyer('POST', methode).catch(() => undefined);
-    if (autre && (autre.ok || ![404, 405].includes(autre.status))) reponse = autre;
+  const surchargeable = methode === 'PUT' || methode === 'DELETE';
+  let reponse: Response;
+  if (surchargeable && relaisEnSurcharge.has(liaison.relais)) {
+    reponse = await envoyer('POST', methode);
+  } else {
+    try {
+      reponse = await envoyer(methode);
+    } catch (e) {
+      // Coupé en route (préliminaire CORS ou méthode bloqués par le frontal : le navigateur ne voit
+      // qu'une erreur réseau) : une fois en POST + `X-Methode`, sinon l'erreur d'origine.
+      if (!surchargeable) throw e;
+      const autre = await envoyer('POST', methode).catch(() => undefined);
+      if (!autre || (!autre.ok && [404, 405].includes(autre.status))) throw e;
+      if (autre.ok) relaisEnSurcharge.add(liaison.relais);
+      reponse = autre;
+    }
+    // PUT/DELETE refusé ou abîmé par un intermédiaire : une fois en POST + `X-Methode` (relais version 10).
+    if (surchargeable && [400, 405, 411, 501].includes(reponse.status)) {
+      const autre = await envoyer('POST', methode).catch(() => undefined);
+      if (autre && (autre.ok || ![404, 405].includes(autre.status))) reponse = autre;
+      if (autre?.ok) relaisEnSurcharge.add(liaison.relais);
+    }
   }
   if (reponse.status === 401) {
     throw new ErreurRelais('Le relais refuse ce code de liaison.', 401);
@@ -452,9 +480,10 @@ export function deposerAvantFermeture(options: OptionsSynchro): boolean {
       return false;
     }
     dernierVidage = pret.signature;
+    const surcharge = relaisEnSurcharge.has(pret.config.relais);
     void (options.requete ?? fetch)(`${pret.config.relais}/boite/${encodeURIComponent(appareil)}`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${pret.config.jeton}`, 'Content-Type': 'application/json' },
+      method: surcharge ? 'POST' : 'PUT',
+      headers: { Authorization: `Bearer ${pret.config.jeton}`, 'Content-Type': 'application/json', ...(surcharge ? { 'X-Methode': 'PUT' } : {}) },
       body: corps,
       keepalive: true,
     }).catch(() => undefined);

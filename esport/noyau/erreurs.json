@@ -2,6 +2,7 @@
  "_": "Messages d'erreur de l'API (français, avec un code stable) -> anglais. Utilisé par l'app (src/esport/i18n) et le bot Discord ; contrôlé par esport/test/langues.test.mjs.",
  "messages": {
   "Requête trop volumineuse.": "Request too large.",
+  "Surcharge de méthode refusée (X-Methode : PATCH, PUT ou DELETE).": "Method override refused (X-Methode: PATCH, PUT or DELETE).",
   "Corps JSON attendu (Content-Type: application/json).": "JSON body expected (Content-Type: application/json).",
   "Requête illisible (JSON attendu).": "Unreadable request (JSON expected).",
   "Le serveur Esport n’a pas de clé de session (CLE_ESPORT).": "The Esport server has no session key (CLE_ESPORT).",

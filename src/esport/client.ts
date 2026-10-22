@@ -668,8 +668,25 @@ export interface ConfigEsport {
   jetonRelais: string;
 }
 
-/** Sessions déjà obtenues, par adresse et jeton du relais (rien n'est écrit sur le disque). */
-const sessions = new Map<string, { session: string; expire: number }>();
+/**
+ * Sessions déjà obtenues, par adresse et jeton du relais (rien n'est écrit sur le disque).
+ * `surcharge` : le serveur annonce « surcharge-methode » (réponse de /session).
+ */
+const sessions = new Map<string, { session: string; expire: number; surcharge: boolean }>();
+
+/**
+ * Surcharge de méthode : le frontal mutualisé d'o2switch (LiteSpeed / ModSecurity) bloque ou perd
+ * des PATCH, PUT et DELETE (ou leur préliminaire CORS), ce que le navigateur rapporte comme une
+ * erreur réseau (« injoignable »), pas comme un code HTTP. Dès que le serveur annonce la fonction
+ * « surcharge-methode » (à l'ouverture de session, sans requête de plus), ces méthodes partent
+ * TOUJOURS en POST + `X-Methode` ; le serveur les traite exactement comme l'original
+ * (esport/noyau/entetes.mjs). Un serveur ancien (sans l'annonce) reçoit la méthode d'origine.
+ */
+export const METHODES_SURCHARGEES = ['PATCH', 'PUT', 'DELETE'];
+export const FONCTION_SURCHARGE = 'surcharge-methode';
+
+/** Réponse non JSON d'un intermédiaire qui refuse la requête (pare-feu applicatif, méthode interdite). */
+const STATUTS_FRONTAL = [403, 405, 406, 411, 501];
 
 export function oublierSessions(): void {
   sessions.clear();
@@ -812,13 +829,36 @@ export function requeteUrl(params: Record<string, string | number | boolean | un
 export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.fetch as unknown as Fetch, maintenant: () => number = Date.now): ClientEsport {
   const cle = `${config.adresse}|${config.jetonRelais}`;
 
-  async function brut<T>(chemin: string, methode = 'GET', corps?: unknown, jeton?: string, binaire?: { octets: ArrayBuffer | Uint8Array; type: string; entetes: Record<string, string>; delai?: number; signal?: unknown }): Promise<T> {
+  /** Le serveur répond-il (GET /sante) ? Sert à distinguer une panne d'un refus du frontal. */
+  async function serveurRepond(): Promise<boolean> {
+    try {
+      return (await auPlus(requete(`${config.adresse}/sante`, { headers: { Accept: 'application/json' } }), 5000)).ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async function brut<T>(
+    chemin: string,
+    methode = 'GET',
+    corps?: unknown,
+    jeton?: string,
+    binaire?: { octets: ArrayBuffer | Uint8Array; type: string; entetes: Record<string, string>; delai?: number; signal?: unknown },
+    surcharger = false,
+  ): Promise<T> {
     let r: Awaited<ReturnType<Fetch>>;
+    const surcharge = surcharger && METHODES_SURCHARGEES.includes(methode);
     try {
       r = await auPlus(
         requete(`${config.adresse}${chemin}`, {
-          method: methode,
-          headers: { 'Content-Type': binaire ? binaire.type : 'application/json', 'Accept-Language': langueCourante(), ...(binaire?.entetes ?? {}), ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}) },
+          method: surcharge ? 'POST' : methode,
+          headers: {
+            'Content-Type': binaire ? binaire.type : 'application/json',
+            'Accept-Language': langueCourante(),
+            ...(binaire?.entetes ?? {}),
+            ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}),
+            ...(surcharge ? { 'X-Methode': methode } : {}),
+          },
           body: binaire ? binaire.octets : corps === undefined ? undefined : JSON.stringify(corps),
           ...(binaire?.signal ? { signal: binaire.signal } : {}),
         }),
@@ -827,6 +867,8 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     } catch (e) {
       if (e instanceof ErreurEsport) throw e;
       if ((e as { name?: string })?.name === 'AbortError') throw new ErreurEsport(tr('client.envoi_annule'), 0, 'annule');
+      // Écriture coupée en route alors que le serveur répond : refus du frontal, pas une panne.
+      if (methode !== 'GET' && chemin !== '/sante' && (await serveurRepond())) throw new ErreurEsport(tr('client.requete_refusee_frontal'), 0, 'refuse-frontal');
       throw new ErreurEsport(tr('client.le_serveur_esport_est'), 0, 'injoignable');
     }
     let lu: unknown;
@@ -838,7 +880,11 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     if (!r.ok) {
       const o = (lu ?? {}) as { erreur?: string; code?: string; details?: Record<string, unknown> };
       // Pas de JSON de l'API (page d'erreur de l'hébergeur, serveur absent) : pas encore activé.
-      if (!o.code) throw new ErreurEsport(tr('client.le_serveur_esport_ne_2'), r.status, 'injoignable');
+      if (!o.code) {
+        // Page d'erreur d'un intermédiaire sur une écriture (pare-feu, méthode interdite) alors que le serveur répond.
+        if (methode !== 'GET' && STATUTS_FRONTAL.includes(r.status) && (await serveurRepond())) throw new ErreurEsport(tr('client.requete_refusee_frontal'), r.status, 'refuse-frontal');
+        throw new ErreurEsport(tr('client.le_serveur_esport_ne_2'), r.status, 'injoignable');
+      }
       throw new ErreurEsport(o.erreur ? traduireServeur(o.erreur) : tr('client.erreur', { status: r.status }), r.status, o.code, o.details);
     }
     return lu as T;
@@ -847,19 +893,23 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
   async function session(forcer = false): Promise<string> {
     const connue = sessions.get(cle);
     if (!forcer && connue && connue.expire - 60_000 > maintenant()) return connue.session;
-    const r = await brut<Moi & { session: string; expire: string }>('/session', 'POST', {}, config.jetonRelais);
-    sessions.set(cle, { session: r.session, expire: Date.parse(r.expire) });
+    const r = await brut<Moi & { session: string; expire: string; fonctions?: unknown }>('/session', 'POST', {}, config.jetonRelais);
+    sessions.set(cle, { session: r.session, expire: Date.parse(r.expire), surcharge: Array.isArray(r.fonctions) && r.fonctions.includes(FONCTION_SURCHARGE) });
     return r.session;
   }
 
   async function appel<T>(chemin: string, methode = 'GET', corps?: unknown, binaire?: Parameters<typeof brut>[4]): Promise<T> {
     let r: T;
+    const surcharge = () => sessions.get(cle)?.surcharge ?? false;
     try {
-      r = await brut<T>(chemin, methode, corps, await session(), binaire);
+      const jeton = await session();
+      r = await brut<T>(chemin, methode, corps, jeton, binaire, surcharge());
     } catch (e) {
       // Session expirée (ou serveur redémarré avec une nouvelle clé) : une nouvelle, une fois.
-      if (e instanceof ErreurEsport && e.code === 'session') r = await brut<T>(chemin, methode, corps, await session(true), binaire);
-      else throw e;
+      if (e instanceof ErreurEsport && e.code === 'session') {
+        const jeton = await session(true);
+        r = await brut<T>(chemin, methode, corps, jeton, binaire, surcharge());
+      } else throw e;
     }
     signalerAppel(methode, chemin);
     return r;

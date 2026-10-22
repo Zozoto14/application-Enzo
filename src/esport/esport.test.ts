@@ -177,6 +177,72 @@ describe('client Esport', () => {
   });
 });
 
+describe('client Esport : surcharge de méthode (frontal o2switch qui bloque PATCH, PUT, DELETE)', () => {
+  beforeEach(() => oublierSessions());
+  const config = { adresse: 'https://esport.test', jetonRelais: 'p1.lea12345.' + 'a'.repeat(64) };
+  const session = (fonctions?: string[]) => ({ status: 200, corps: { session: 'es1.x.y', expire: new Date(Date.now() + 3600_000).toISOString(), ...(fonctions ? { fonctions } : {}) } });
+
+  it('serveur qui annonce « surcharge-methode » : PATCH, PUT et DELETE partent en POST + X-Methode (rôle, tâche, planning, ressource, binaire)', async () => {
+    const s = fauxServeur(a => (a.url.endsWith('/session') ? session(['surcharge-methode']) : { status: 200, corps: {} }));
+    const c = clientEsport(config, s.requete);
+    await c.modifierRole('t1', 'r1', { permissions: ['strats.view'] });
+    await c.modifierTache('t1', 'ta1', { titre: 'x' });
+    await c.requete('/teams/t1/planning/e1', 'PATCH', { titre: 'y' });
+    await c.requete('/teams/t1/ressources/x1', 'DELETE');
+    await c.changerModules('t1', {});
+    await c.binaire('/teams/t1/medias/m1/morceaux/0', 'PUT', new Uint8Array([1, 2]), { 'X-Sha256': 'abc' });
+    await c.teams();
+    await c.creerTeam({ nom: 'A' } as never);
+    const vus = s.appels.filter(a => !a.url.endsWith('/session')).map(a => `${a.method ?? 'GET'} ${a.headers?.['X-Methode'] ?? '-'} ${a.url.replace(config.adresse, '')}`);
+    expect(vus).toEqual([
+      'POST PATCH /teams/t1/roles/r1',
+      'POST PATCH /teams/t1/taches/ta1',
+      'POST PATCH /teams/t1/planning/e1',
+      'POST DELETE /teams/t1/ressources/x1',
+      'POST PUT /teams/t1/modules',
+      'POST PUT /teams/t1/medias/m1/morceaux/0',
+      'GET - /teams',
+      'POST - /teams',
+    ]);
+    // Corps et Content-Type inchangés (le serveur garde son contrôle anti-CSRF).
+    const role = s.appels.find(a => a.url.endsWith('/roles/r1'))!;
+    expect(role.headers?.['Content-Type']).toBe('application/json');
+    expect(JSON.parse(role.body as string)).toEqual({ permissions: ['strats.view'] });
+    expect(s.appels.find(a => a.url.includes('/morceaux/'))?.headers?.['Content-Type']).toBe('application/octet-stream');
+  });
+
+  it('serveur ancien (sans l’annonce) : méthode d’origine, pas d’en-tête X-Methode', async () => {
+    const s = fauxServeur(a => (a.url.endsWith('/session') ? session() : { status: 200, corps: {} }));
+    await clientEsport(config, s.requete).modifierRole('t1', 'r1', { permissions: [] });
+    const role = s.appels.find(a => a.url.endsWith('/roles/r1'))!;
+    expect(role.method).toBe('PATCH');
+    expect(role.headers?.['X-Methode']).toBeUndefined();
+  });
+
+  it('écriture coupée en route alors que le serveur répond : « refus du frontal », pas « injoignable »', async () => {
+    const s = fauxServeur(a => {
+      if (a.url.endsWith('/session')) return session();
+      if (a.url.endsWith('/sante')) return { status: 200, corps: { ok: true } };
+      if (a.method === 'PATCH') throw new TypeError('Failed to fetch');
+      return { status: 501, html: true };
+    });
+    const c = clientEsport(config, s.requete);
+    const e = await c.modifierRole('t1', 'r1', { permissions: [] }).catch(x => x);
+    expect(e).toBeInstanceOf(ErreurEsport);
+    expect(e.code).toBe('refuse-frontal');
+    expect(estInactif(e)).toBe(false);
+    const e2 = await c.requete<unknown>('/teams/t1/ressources/x1', 'DELETE').then(() => undefined, (x: ErreurEsport) => x);
+    expect(e2?.code).toBe('refuse-frontal');
+    expect(e2?.statut).toBe(501);
+    // Vraie panne (le serveur ne répond pas du tout) : toujours « injoignable ».
+    oublierSessions();
+    const panne = clientEsport(config, async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    expect((await panne.ouvrir().catch(x => x)).code).toBe('injoignable');
+  });
+});
+
 describe('libellés', () => {
   const noms = { max12345: 'Max', lea12345: 'Léa' };
   it('journal lisible : « X a changé le rôle de Y de Joueur à Coach »', () => {

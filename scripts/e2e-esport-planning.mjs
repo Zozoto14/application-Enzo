@@ -23,6 +23,7 @@ import { extname, join, normalize } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ongletPresent, ongletTeam } from './esport-navigation.mjs';
 import { allerPageAdministration, allerPageApplications, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
+import { demarrerFrontalRestrictif } from './frontal-restrictif.mjs';
 import { chargerPlaywright, demarrerRelais, deverrouiller, optionsIphone, pause, premierLancement, racine, totp } from './mobile-outils.mjs';
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-esport-planning');
@@ -60,6 +61,8 @@ const APRES = plusJours(DEMAIN, 2);
 // ------------------------------------------------------------- Serveurs
 const relais = await demarrerRelais(PORT_RELAIS, JETON);
 const esport = await demarrerServeurEsport({ port: PORT_ESPORT, jetonDev: JETON });
+// L'app passe par un faux frontal o2switch qui refuse PATCH, PUT et DELETE (POST + X-Methode).
+const frontal = await demarrerFrontalRestrictif({ cible: esport.url, port: PORT_ESPORT + 100 });
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2', '.woff': 'font/woff' };
 function site(port) {
   const dist = join(racine, 'bureau/dist');
@@ -68,7 +71,7 @@ function site(port) {
     const chemin = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^(\.\.[/\\])+/, '');
     if (chemin === '/relais.json' || chemin === '/esport.json') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(chemin === '/relais.json' ? { relais: `https://localhost:${PORT_RELAIS}` } : { esport: esport.url }));
+      res.end(JSON.stringify(chemin === '/relais.json' ? { relais: `https://localhost:${PORT_RELAIS}` } : { esport: frontal.url }));
       return;
     }
     let fichier = join(dist, chemin);
