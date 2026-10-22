@@ -75,7 +75,12 @@ export function Historique({ theme, contexte, office, filtreInitial, debutDemo }
   const [occupe, setOccupe] = useState(false);
   const [synchro, setSynchro] = useState<EtatSynchroHistorique>(() => lireEtatSynchro(base));
   const monte = useRef(true);
-  useEffect(() => () => void (monte.current = false), []);
+  // Remis à vrai à chaque montage : un onglet masqué (`<Activity mode="hidden">`) retire ses effets puis les
+  // relance quand il revient ; sans cela, l'écran ne prenait plus aucune lecture (journal vide, état du hook absent).
+  useEffect(() => {
+    monte.current = true;
+    return () => void (monte.current = false);
+  }, []);
 
   const lireEtatHook = useCallback(async () => {
     try {

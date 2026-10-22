@@ -23,7 +23,7 @@ export interface ServicesA2f {
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const codeValide = (c: string) => /^\d{6}$/.test(c.replace(/\s/g, ''));
 
-export function ReglageA2f({ theme, services }: { theme: ThemeHub; services: ServicesA2f }) {
+export function ReglageA2f({ theme, services, telephone = false }: { theme: ThemeHub; services: ServicesA2f; telephone?: boolean }) {
   const [active, setActive] = useState<boolean | undefined | 'lecture'>('lecture');
   const [prepare, setPrepare] = useState<ReturnType<ServicesA2f['preparer']> | undefined>();
   const [code, setCode] = useState('');
@@ -43,8 +43,9 @@ export function ReglageA2f({ theme, services }: { theme: ThemeHub; services: Ser
     // Une lecture à l'ouverture de la carte (l'hôte recrée `services` à chaque rendu).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const texte = { color: theme.texte, fontSize: 14, lineHeight: 20 };
-  const discret = { color: theme.attenue, fontSize: 13, lineHeight: 19 };
+  // Téléphone : 15 px au moins (lisibilité, comme les autres réglages de Paramètres › Sécurité).
+  const texte = { color: theme.texte, fontSize: telephone ? 15 : 14, lineHeight: telephone ? 21 : 20 };
+  const discret = { color: theme.attenue, fontSize: telephone ? 15 : 13, lineHeight: telephone ? 21 : 19 };
   const agir = (action: () => Promise<void>, apres: () => void) => {
     setErreur(undefined);
     setEnCours(true);

@@ -2694,7 +2694,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
           </View>
         ) : null;
       case 'a2f':
-        return profils?.a2f ? <ReglageA2f theme={themeDuHub} services={profils.a2f} /> : null;
+        return profils?.a2f ? <ReglageA2f theme={themeDuHub} services={profils.a2f} telephone={telephone} /> : null;
       case 'securite-coffre':
         return <ReglageCoffre theme={themeDuHub} etat={session.etatCoffre()} />;
       case 'codes-recuperation':

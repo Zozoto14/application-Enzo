@@ -171,7 +171,8 @@ const styles = StyleSheet.create({
   apercu: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   champ: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, minHeight: 44, fontSize: 16 },
   grille: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  pastilleCouleur: { width: 44, height: 44, borderRadius: 22, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
+  // 48 px et pas de rétrécissement : une pastille de 44 px tout juste passait sous 44 au rendu (sous-pixel) sur téléphone.
+  pastilleCouleur: { width: 48, height: 48, borderRadius: 24, borderWidth: 3, flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
   coche: { color: '#FFFFFF', fontWeight: '900', fontSize: 18 },
   choixAccessoire: { width: 96, minHeight: 88, borderWidth: 2, borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 4, padding: 6 },
 });
