@@ -1,6 +1,6 @@
 /**
- * Test de bout en bout de l'Esport, phase 6 (éditeur de strats et playbook), sans Cloudflare ni
- * réseau réel : faux relais (le vrai relais/worker.mjs), serveur Esport local (SQLite en mémoire,
+ * Test de bout en bout de l'Esport, phase 6 (éditeur de strats et playbook), sans
+ * réseau réel : faux relais (le vrai relais/relais.mjs), serveur Esport local (SQLite en mémoire,
  * stockage mémoire pour les miniatures) et FAUX valorant-api.com local (JSON des cartes et agents,
  * images PNG générées) vers lequel le navigateur est redirigé (aucune requête ne sort).
  *
@@ -47,7 +47,7 @@ const capture = async (page, nom) => {
   log(`capture ${nom}`);
 };
 
-const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
+const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { demarrerServeurEsport } = await import(pathToFileURL(join(racine, 'esport/outils/serveur-local.mjs')).href);
 
 // ------------------------------------------------------------- Faux valorant-api.com

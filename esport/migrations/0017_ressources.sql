@@ -1,6 +1,6 @@
 -- Esport, migration 0017 : module « Ressources » (clé `resources`), le canal de ressources de la team.
 --
--- SQL standard, compatible SQLite / D1 ET PostgreSQL (mêmes conventions que 0001 : UUID et dates ISO 8601
+-- SQL standard, compatible SQLite ET PostgreSQL (mêmes conventions que 0001 : UUID et dates ISO 8601
 -- en TEXT, booléens 0/1, JSON en TEXT, aucune fonction propre à un moteur).
 --
 -- 1. Catégories configurables par team. Les sept catégories par défaut (Guides, Vidéos pros, Lineups,
@@ -119,7 +119,7 @@ ALTER TABLE discord_file ADD COLUMN webhook_chiffre TEXT;
 
 -- 7. Envois par morceaux : nouvel usage « ressource » (fichier déposé dans le canal). La contrainte
 --    CHECK d'origine ne se modifie pas en SQLite : la table est reconstruite (mêmes colonnes, mêmes
---    lignes, mêmes index), ce qui marche aussi sur PostgreSQL et D1.
+--    lignes, mêmes index), ce qui marche aussi sur PostgreSQL et SQLite.
 CREATE TABLE envois_v17 (
   id TEXT PRIMARY KEY,
   team_id TEXT NOT NULL REFERENCES teams (id) ON DELETE CASCADE,

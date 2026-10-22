@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import relais, { jetonDeProfil, nettoyerTexteDiscord, validerTicket } from './worker.mjs';
+import { relais, jetonDeProfil, nettoyerTexteDiscord, validerTicket } from './relais.mjs';
 
 const JETON = 'jeton-de-test-0123456789abcdef';
 const WEBHOOK = 'https://discord.com/api/webhooks/123456789012345678/SECRET-token-tres-secret_abcdef0123456789';
@@ -41,7 +41,7 @@ function fauxDiscord({ statut = 200, mode = 'forum' } = {}) {
 
 const ticket = (plus = {}) => ({ categorie: 'bug', titre: 'Le graphique ne charge pas', message: 'Depuis hier, le **graphique** du portefeuille reste vide.', auteur: 'Léa', technique: { version: '2026.10.21', plateforme: 'web', appareil: 'iPhone', app: 'portefeuille', langue: 'fr' }, ...plus });
 const appel = (env, chemin, { methode = 'POST', corps, jeton = JETON, brut = false } = {}) =>
-  relais.fetch(
+  relais.traiter(
     new Request(`https://relais.test${chemin}`, {
       method: methode,
       headers: { ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}), 'Content-Type': 'application/json' },
@@ -351,7 +351,7 @@ test('support : réponse du Fondateur avec e-mail (adresse jamais rangée)', asy
 
 test('support : l’adresse du webhook n’apparaît nulle part dans le code du relais', async () => {
   const { readFileSync } = await import('node:fs');
-  for (const f of ['./worker.mjs', './support.mjs', './courriel.mjs']) {
+  for (const f of ['./relais.mjs', './support.mjs', './courriel.mjs']) {
     assert.ok(!/discord(app)?\.com\/api\/webhooks\/\d/.test(readFileSync(new URL(f, import.meta.url), 'utf8')), f);
   }
 });

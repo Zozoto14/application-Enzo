@@ -3,8 +3,8 @@
  *
  * Pourquoi sur le relais (et pas sur le serveur Esport) : TOUS les comptes du hub ont un jeton du
  * relais (maître pour le Fondateur, jeton de profil `p1.<id>.<hmac>` pour chaque ami), alors que
- * seuls les membres de l'Esport ont une session Esport. Le relais a déjà sa boîte (KV sur
- * Cloudflare, table `relais_kv` dans PostgreSQL chez o2switch). Chaque demande est rangée sous
+ * seuls les membres de l'Esport ont une session Esport. Le relais a déjà sa boîte (table `relais_kv`
+ * dans PostgreSQL chez o2switch). Chaque demande est rangée sous
  * l'identifiant du compte VÉRIFIÉ par le jeton (`support:t:<compte>:<id>`) : un compte ne lit, ne
  * complète et ne marque lues que SES demandes (404 sinon, même réponse qu'une demande inexistante) ;
  * seul le jeton maître (le Fondateur) les liste toutes et y répond.

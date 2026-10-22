@@ -16,11 +16,9 @@
  *    normalise) ; ni `localhost`, ni `.local`/`.internal`/`.lan`/…, ni nom sans
  *    point, ni le relais lui-même ;
  *  - le NOM est résolu (DNS sur HTTPS) avant l'appel : s'il pointe vers une
- *    adresse non publique, refus. LIMITE : un Worker n'a pas la main sur la
+ *    adresse non publique, refus. LIMITE : `fetch` n'a pas la main sur la
  *    connexion ; l'adresse vérifiée n'est donc pas forcément celle qui sert
- *    (« DNS rebinding » possible entre les deux). Le réseau de Cloudflare
- *    n'atteint de toute façon ni le réseau local de l'utilisateur ni ses
- *    propres adresses internes ;
+ *    (« DNS rebinding » possible entre les deux) ;
  *  - les redirections ne sont PAS suivies (`redirect: 'manual'`) : la réponse
  *    3xx est rendue au site, dont le moteur revérifie chaque saut (5 au plus) ;
  *  - aucun cookie : aucun n'est envoyé (en-têtes sortants en liste blanche),
@@ -29,15 +27,15 @@
  *  - délai 15 s, réponse bornée (2 Mo : au-delà, elle est TRONQUÉE et le dit),
  *    requête bornée (corps JSON 96 Kio, corps sortant 64 Kio) ;
  *  - débit limité par jeton (60 requêtes par minute par défaut, compteur en
- *    mémoire du Worker : rien n'est écrit dans la boîte KV) ;
+ *    mémoire du serveur : rien n'est écrit dans la boîte) ;
  *  - CORS restreint aux origines du site (`ORIGINES_SITE`), réponses
  *    `Cache-Control: no-store`, erreurs uniformes `{ erreur, code }` sans
  *    détail interne ; le journal ne garde que l'hôte, le statut et la durée ;
  *  - CACHE DU RELAIS (temps de réponse) : un GET que le site DEMANDE de garder
  *    (`cache: { nature: 'recherche' | 'page' }`) et qui a réussi (200, entier,
  *    pas une page anti-robot) est gardé 15 min (recherche) ou 30 min (page de
- *    série ou d'épisode) : en mémoire de l'instance du Worker, et dans l'API
- *    Cache de Cloudflare (`caches.default`, gratuite ; pas KV). Clé : empreinte
+ *    série ou d'épisode) : en mémoire du processus, et dans un cache partagé
+ *    facultatif (`deps.cache`, interface Cache : match/put). Clé : empreinte
  *    SHA-256 de la méthode, de l'adresse normalisée et des en-têtes envoyés
  *    (jamais le jeton, jamais de cookie : aucun n'est envoyé ni rendu, la page
  *    gardée est la version publique, la même pour tous). Jamais un POST.
@@ -62,7 +60,7 @@ export const DUREES_CACHE_S = { recherche: 15 * 60, page: 30 * 60 };
 export const TAILLE_MAX_CACHE = 1024 * 1024;
 /**
  * Cache mémoire de l'instance : entrées et caractères au plus (les plus anciennes partent d'abord).
- * Sur o2switch (un seul processus Node, pas de cache Cloudflare), c'est le cache du relais : relevé
+ * Sur o2switch (un seul processus Node), c'est le cache du relais : relevé
  * avec la version 9 (1 000 pages, 48 Mio).
  */
 export const CACHE_MEMOIRE_ENTREES = 1000;
@@ -300,7 +298,7 @@ export async function cleDeCache(demande) {
   return hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texte)));
 }
 
-/** Adresse sous laquelle `caches.default` range une entrée (jamais appelée : seulement une clé). */
+/** Adresse sous laquelle le cache partagé range une entrée (jamais appelée : seulement une clé). */
 export const adresseDeCache = (hoteRelais, cle) => `https://${hoteRelais}/__tsuzuku-cache/v1/${cle}`;
 
 const MARQUES_ANTI_ROBOT = /just a moment|cf-chl|challenge-platform|captcha|ddos-guard|attention required|are you a robot|access denied/i;
@@ -313,7 +311,7 @@ export function gardable(sortie) {
   return !MARQUES_ANTI_ROBOT.test(sortie.texte.slice(0, 6000));
 }
 
-/** Cache mémoire de l'instance du Worker (borné) : sert même là où l'API Cache est sans effet (*.workers.dev). */
+/** Cache mémoire du processus (borné). */
 export function creerCacheMemoire({ entrees = CACHE_MEMOIRE_ENTREES, caracteres = CACHE_MEMOIRE_CARACTERES } = {}) {
   const lignes = new Map();
   let total = 0;
@@ -353,7 +351,7 @@ const cacheMemoire = creerCacheMemoire();
 /** Tests : le cache mémoire du module. */
 export const cacheMemoireDuRelais = cacheMemoire;
 
-/** Lit l'entrée gardée (mémoire, puis API Cache) ; `undefined` si absente ou expirée. */
+/** Lit l'entrée gardée (mémoire, puis cache partagé) ; `undefined` si absente ou expirée. */
 async function lireCache(cle, adresse, cacheCf, maintenant) {
   const l = cacheMemoire.lire(cle, maintenant);
   if (l) return { texte: l.texte, a: l.a };
@@ -382,12 +380,9 @@ async function ecrireCache(cle, adresse, cacheCf, texte, a, dureeS) {
       new Response(texte, { headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': `public, max-age=${dureeS}`, 'x-tsuzuku-a': String(a), 'x-tsuzuku-expire': String(expire) } }),
     );
   } catch {
-    // Sans cache Cloudflare (aperçu, quota) : la mémoire suffit.
+    // Cache partagé indisponible : la mémoire suffit.
   }
 }
-
-/** `caches.default` s'il existe (Cloudflare) ; absent sous Node et dans les tests sans `deps.cache`. */
-const cacheCloudflare = () => (typeof globalThis.caches === 'object' && globalThis.caches?.default) || undefined;
 
 // ------------------------------------------------------------------ Corps : jeu de caractères
 
@@ -423,7 +418,7 @@ export function decoderTexte(octets, charset) {
     return new TextDecoder(charset).decode(octets);
   } catch {
     if (charset === 'windows-1252') {
-      // Par blocs : peu de temps de calcul (offre gratuite des Workers : ~10 ms par requête).
+      // Par blocs : peu de temps de calcul.
       const codes = new Uint16Array(octets.length);
       for (let i = 0; i < octets.length; i++) {
         const o = octets[i];
@@ -504,7 +499,7 @@ const MESSAGES = {
   403: 'Réservé au compte Fondateur relié au relais.',
 };
 
-/** Limite de débit par jeton, en mémoire du Worker (une instance = un compteur ; rien dans KV). */
+/** Limite de débit par jeton, en mémoire du serveur (un processus = un compteur ; rien dans la boîte). */
 export function creerLimiteur({ limite = LIMITE_PAR_MINUTE, fenetreMs = FENETRE_MS } = {}) {
   const dates = new Map();
   return (qui, maintenant = Date.now()) => {
@@ -591,7 +586,7 @@ export async function routeTsuzuku(requete, env, obtenirPortee, deps = {}) {
   }
   // Cache du relais : une page déjà lue (adresse vérifiée ci-dessus) ne repart pas vers le site.
   const maintenant = deps.maintenant?.() ?? Date.now();
-  const cacheCf = deps.cache === undefined ? cacheCloudflare() : deps.cache ?? undefined;
+  const cacheCf = deps.cache ?? undefined;
   let cle;
   let adresseCache;
   if (demande.cache) {
@@ -624,7 +619,7 @@ export async function routeTsuzuku(requete, env, obtenirPortee, deps = {}) {
       headers: demande.entetes,
       body: demande.corps,
       redirect: 'manual',
-      // Pas de `credentials` : non pris en charge par fetch des Workers, qui n'a de toute façon aucun cookie.
+      // Pas de `credentials` : le relais n'a de toute façon aucun cookie.
       signal: controleur.signal,
     });
     const entetes = {};
@@ -658,7 +653,7 @@ export async function routeTsuzuku(requete, env, obtenirPortee, deps = {}) {
     if (demande.cache) {
       if (gardable(sortie)) {
         const ecriture = ecrireCache(cle, adresseCache, cacheCf, JSON.stringify(sortie), maintenant, DUREES_CACHE_S[demande.cache.nature]);
-        // Cloudflare : l'écriture finit après la réponse (`waitUntil`) ; ailleurs, on l'attend.
+        // Avec `waitUntil`, l'écriture finit après la réponse ; sinon, on l'attend.
         if (deps.waitUntil) deps.waitUntil(ecriture);
         else await ecriture;
       }

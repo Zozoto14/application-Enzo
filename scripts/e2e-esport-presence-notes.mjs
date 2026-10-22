@@ -1,8 +1,8 @@
 /**
  * Test de bout en bout de la REFONTE DE LA PRÉSENCE et du SUIVI DES JOUEURS
- * (notes du staff), sans Cloudflare :
+ * (notes du staff) :
  *
- *  - faux relais (relais/worker.mjs) et serveur Esport local ;
+ *  - faux relais (relais/relais.mjs) et serveur Esport local ;
  *  - préparation (API) : team « valorant_complet » (le Suivi joueurs y est), Léa
  *    et Kai (Joueurs), Zed (Coach), et un entraînement d'hier soir où les
  *    joueurs sont convoqués ;
@@ -53,7 +53,7 @@ const capture = async (page, nom) => {
   log(`capture ${nom}`);
 };
 
-const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
+const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { demarrerServeurEsport } = await import(pathToFileURL(join(racine, 'esport/outils/serveur-local.mjs')).href);
 
 const parisAujourdhui = () => {

@@ -1,8 +1,8 @@
 /**
- * Test de bout en bout : langue par défaut des comptes et e-mails en anglais, sans Cloudflare, sans vrai serveur de messagerie.
+ * Test de bout en bout : langue par défaut des comptes et e-mails en anglais, sans vrai serveur de messagerie.
  *
- *  - le VRAI relais (relais/worker.mjs) avec le VRAI transport SMTP (nodemailer) vers un FAUX serveur SMTP local
- *    (relais/test-smtp/faux-smtp.mjs) ; serveur Esport local (même API que le Worker) ;
+ *  - le VRAI relais (relais/relais.mjs) avec le VRAI transport SMTP (nodemailer) vers un FAUX serveur SMTP local
+ *    (relais/test-smtp/faux-smtp.mjs) ; serveur Esport local (même API que le serveur o2switch) ;
  *  - PC (navigateur en français), le Fondateur : Esport › Membres › Créer un compte « Sam » en ENGLISH → l'invitation est
  *    proposée en anglais et part par e-mail : le faux SMTP la reçoit en anglais (objet, HTML, texte, pied de page) ;
  *  - iPhone (navigateur en FRANÇAIS), Sam : ouvre le lien reçu par e-mail, choisit son mot de passe ; son interface Esport

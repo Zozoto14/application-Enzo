@@ -1,6 +1,6 @@
 /**
  * Test de bout en bout du module RESSOURCES de l'Esport (canal de ressources de la team), sans
- * Cloudflare et sans réseau réel :
+ * réseau réel :
  *
  *  - faux relais et serveur Esport local ; l'aperçu des liens passe par un téléchargeur SIMULÉ côté
  *    serveur (la vraie protection anti-SSRF refuserait de toute façon une page locale) ; YouTube est un
@@ -87,7 +87,7 @@ const apercuLiens = {
   },
 };
 
-const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
+const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { demarrerServeurEsport } = await import(pathToFileURL(join(racine, 'esport/outils/serveur-local.mjs')).href);
 
 // ------------------------------------------------------------- Serveurs

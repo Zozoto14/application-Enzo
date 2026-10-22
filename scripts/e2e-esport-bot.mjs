@@ -1,6 +1,6 @@
 /**
- * Test de bout en bout du BOT Discord de l'Esport, sans Cloudflare ni vrai Discord : faux relais (le vrai
- * relais/worker.mjs), serveur Esport local (SQLite en mémoire) configuré avec une clé Ed25519 DE TEST générée
+ * Test de bout en bout du BOT Discord de l'Esport, sans vrai Discord : faux relais (le vrai
+ * relais/relais.mjs), serveur Esport local (SQLite en mémoire) configuré avec une clé Ed25519 DE TEST générée
  * ici, et FAUX serveur Discord local (http) qui reçoit les messages du bot à la place de discord.com.
  *
  *  - PC (1440 × 900), le Fondateur : Réglages › Discord › « Lier un serveur Discord » affiche un code ; une
@@ -56,7 +56,7 @@ const capture = async (page, nom) => {
 };
 const hexa = o => Buffer.from(o).toString('hex');
 
-const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
+const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { demarrerServeurEsport } = await import(pathToFileURL(join(racine, 'esport/outils/serveur-local.mjs')).href);
 
 // ------------------------------------------------------------- Clé de test (jamais une vraie clé)

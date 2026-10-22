@@ -1,5 +1,5 @@
 /**
- * Test de bout en bout de l'ÉDITEUR DE NOTES de l'Esport (ChampNote), sans Cloudflare et SANS
+ * Test de bout en bout de l'ÉDITEUR DE NOTES de l'Esport (ChampNote), SANS
  * appeler YouTube (faux script IFrame, comme e2e-esport-review.mjs) :
  *
  *  - PC (1440 × 900), le Fondateur : ouvre un repère (touche M), vérifie la grande zone de saisie

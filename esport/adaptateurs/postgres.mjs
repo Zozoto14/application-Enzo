@@ -1,5 +1,5 @@
 /**
- * Adaptateur PostgreSQL (paquet `pg`) : même interface `base` que D1 et
+ * Adaptateur PostgreSQL (paquet `pg`) : même interface `base` que
  * SQLite (adaptateurs/sqlite.mjs), pour le serveur Node autonome
  * (esport/serveur/, hébergement o2switch ou tout serveur avec Postgres).
  *

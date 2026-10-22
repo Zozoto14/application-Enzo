@@ -9,7 +9,7 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { jetonDeProfil, traiterRequete } from './worker.mjs';
+import { jetonDeProfil, traiterRequete } from './relais.mjs';
 import { coffresMemoire } from './coffres.mjs';
 import { ATTENTE_MAX_S, LIMITE_MINUTE_IP, MAX_PAR_COMPTE, MAX_PAR_COMPTE_IP, avisDe, creerAvis, modeTempsReel } from './avis.mjs';
 import { compresser } from './serveur/compression.mjs';

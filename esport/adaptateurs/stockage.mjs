@@ -17,67 +17,14 @@
  *
  * Les morceaux arrivent dans l'ordre (indice 0, 1, 2…) ; seul le dernier peut être plus court.
  *
- * Adaptateurs : R2 (bucket privé `esport-fichiers`) sur Cloudflare ; mémoire
- * pour les tests ; disque (serveur local, et vrai serveur) ; S3 plus tard
- * (même interface, voir docs/esport/migration-serveur.md).
+ * Adaptateurs : disque (serveur o2switch, serveur local) ; mémoire pour les
+ * tests ; S3 plus tard (même interface, voir docs/esport/migration-serveur.md).
  */
 
 const MOTIF_CLE = /^[a-z0-9][a-z0-9/_.-]{0,200}$/;
 
 function exigerCle(cle) {
   if (typeof cle !== 'string' || !MOTIF_CLE.test(cle) || cle.includes('..')) throw new Error('Clé de fichier invalide.');
-}
-
-export function stockageR2(bucket) {
-  return {
-    async deposer(cle, octets, { type = 'application/octet-stream' } = {}) {
-      exigerCle(cle);
-      await bucket.put(cle, octets, { httpMetadata: { contentType: type } });
-    },
-    async lire(cle) {
-      exigerCle(cle);
-      const objet = await bucket.get(cle);
-      if (!objet) return null;
-      return { octets: new Uint8Array(await objet.arrayBuffer()), type: objet.httpMetadata?.contentType ?? 'application/octet-stream' };
-    },
-    async supprimer(cle) {
-      exigerCle(cle);
-      await bucket.delete(cle);
-    },
-    // Envoi par morceaux : « multipart upload » de R2 (parties de 5 Mio au moins, sauf la dernière).
-    async debuterEnvoi(cle, { type = 'application/octet-stream' } = {}) {
-      exigerCle(cle);
-      const envoi = await bucket.createMultipartUpload(cle, { httpMetadata: { contentType: type } });
-      return envoi.uploadId;
-    },
-    async ecrireMorceau(cle, { jeton, indice, octets }) {
-      exigerCle(cle);
-      const partie = await bucket.resumeMultipartUpload(cle, jeton).uploadPart(indice + 1, octets);
-      return JSON.stringify({ partNumber: partie.partNumber, etag: partie.etag });
-    },
-    async terminerEnvoi(cle, { jeton, etiquettes }) {
-      exigerCle(cle);
-      await bucket.resumeMultipartUpload(cle, jeton).complete(etiquettes.map(e => JSON.parse(e)));
-    },
-    async abandonnerEnvoi(cle, { jeton }) {
-      exigerCle(cle);
-      await bucket
-        .resumeMultipartUpload(cle, jeton)
-        .abort()
-        .catch(() => undefined);
-    },
-    async lireTranche(cle, debut, fin) {
-      exigerCle(cle);
-      const objet = await bucket.get(cle, { range: { offset: debut, length: fin - debut + 1 } });
-      if (!objet) return null;
-      return { flux: objet.body, taille: objet.size };
-    },
-    async tailleDe(cle) {
-      exigerCle(cle);
-      const objet = await bucket.head(cle);
-      return objet ? objet.size : null;
-    },
-  };
 }
 
 export function stockageMemoire() {

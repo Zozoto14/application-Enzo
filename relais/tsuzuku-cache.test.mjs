@@ -1,7 +1,7 @@
 /**
  * Cache du relais pour Tsuzuku (`/tsuzuku/requete` avec `cache: { nature }`) :
  * HIT / MISS, durée, clé, ce qui n'est jamais gardé, droits et garde anti-SSRF
- * inchangés, API Cache de Cloudflare (`caches.default`) simulée.
+ * inchangés, cache partagé facultatif (`deps.cache`) simulé.
  */
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,7 +15,7 @@ import {
   routeTsuzuku,
   validerDemande,
 } from './tsuzuku.mjs';
-import { porteeDuJeton, jetonDeProfil } from './worker.mjs';
+import { porteeDuJeton, jetonDeProfil } from './relais.mjs';
 
 const JETON = 'jeton-de-test-tsuzuku-cache-0123456789';
 const SITE = 'https://site-exemple.fr';
@@ -32,7 +32,7 @@ function fauxFetch(reponse = () => new Response('<ul><li><a href="/serie/a">A</a
   return fn;
 }
 
-/** Faux `caches.default` : une Map, comme une colo de Cloudflare. */
+/** Faux cache partagé (interface Cache : match/put) : une Map. */
 function fauxCacheCf() {
   const m = new Map();
   return {
@@ -186,7 +186,7 @@ test('droits et garde inchangés : jeton de profil 403, adresse privée 400, mê
   assert.equal(f.appels.length, 1);
 });
 
-test('API Cache de Cloudflare : écrite avec sa durée, relue quand la mémoire de l’instance est vide', async () => {
+test('cache partagé : écrite avec sa durée, relue quand la mémoire de l’instance est vide', async () => {
   const cf = fauxCacheCf();
   const f = fauxFetch();
   const attentes = [];
@@ -197,7 +197,7 @@ test('API Cache de Cloudflare : écrite avec sa durée, relue quand la mémoire 
   const [adresse, entree] = [...cf.m.entries()][0];
   assert.match(adresse, /^https:\/\/relais\.test\/__tsuzuku-cache\/v1\/[0-9a-f]{64}$/);
   assert.equal(new Headers(entree.entetes).get('cache-control'), 'public, max-age=900');
-  cacheMemoireDuRelais.vider(); // Autre instance du Worker, même colo.
+  cacheMemoireDuRelais.vider(); // Autre processus, même cache partagé.
   const b = await appeler(RECHERCHE, { fetch: f, cache: cf, maintenant: T0 + 5000 });
   assert.equal(b.json.cache, 'HIT');
   assert.equal(b.json.ageS, 5);

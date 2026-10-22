@@ -16,7 +16,7 @@
  *  - iPhone du Fondateur (même coffre, relié) : création avec e-mail, mailto et
  *    « Partager » (feuille de partage d'iOS, simulée).
  *
- * Faux relais local qui exécute relais/worker.mjs (version 6).
+ * Faux relais local qui exécute relais/relais.mjs (version 6).
  *
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-admin-invitations.mjs
@@ -39,7 +39,7 @@ import { allerPageAdministration, nouveauContexte } from './e2e-acceptation.mjs'
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium, devices } = requireGlobal('playwright');
-const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href)).default;
+const { relais: coeurRelais } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-admin-invitations');
 mkdirSync(CAPTURES, { recursive: true });
@@ -52,7 +52,7 @@ const MDP_ADMIN = 'mot-de-passe-du-fondateur-e2e-43';
 const EMAIL_LEA = 'lea.martin+amis@exemple.fr';
 const EMAIL_NINA = 'nina@exemple.fr';
 
-// ------------------------------------------------------------- Faux relais (vrai worker, KV en mémoire)
+// ------------------------------------------------------------- Faux relais (vrai relais, boîte en mémoire)
 const kv = new Map();
 const metas = new Map();
 const env = {
@@ -77,8 +77,8 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
   const morceaux = [];
   for await (const m of req) morceaux.push(m);
   const corps = Buffer.concat(morceaux);
-  const requete = new Request(`${RELAIS}${req.url}`, { method: req.method, headers: { ...req.headers, 'cf-connecting-ip': '198.51.100.7' }, body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps });
-  const reponse = await worker.fetch(requete, env);
+  const requete = new Request(`${RELAIS}${req.url}`, { method: req.method, headers: { ...req.headers, 'x-adresse-client': '198.51.100.7' }, body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps });
+  const reponse = await coeurRelais.traiter(requete, env);
   res.writeHead(reponse.status, Object.fromEntries(reponse.headers));
   res.end(Buffer.from(await reponse.arrayBuffer()));
 });
@@ -436,7 +436,7 @@ try {
   const restes = () => [...kv.keys()].filter(c => c.startsWith(`p:${idHugo}:`) && !(c.endsWith('~index') && Object.keys(JSON.parse(kv.get(c) ?? '{}')).every(n => n.startsWith('~'))));
   const nettoye = await attendre(async () => restes().length === 0, 30_000, 500);
   verifier(nettoye, `plus aucune copie de Hugo sur le relais${nettoye ? '' : ` (restes : ${restes().join(', ')})`}`);
-  const revoque = await worker.fetch(new Request(`https://relais/revocations/${idHugo}`, { headers: { Authorization: `Bearer ${JETON}` } }), env);
+  const revoque = await coeurRelais.traiter(new Request(`https://relais/revocations/${idHugo}`, { headers: { Authorization: `Bearer ${JETON}` } }), env);
   verifier(revoque.ok && (await revoque.json()).revoque === true, 'jeton de Hugo révoqué sur le relais');
   await pc.getByTestId('admin-onglet-journal').click();
   verifier((await pc.getByText(/Copies de Hugo effacées du relais/).count()) > 0, 'journal : nettoyage du relais inscrit');

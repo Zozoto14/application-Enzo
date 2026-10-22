@@ -27,7 +27,7 @@ import { deverrouiller, mesurer, premierLancement, totp } from './mobile-outils.
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium } = requireGlobal('playwright');
-const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href)).default;
+const { relais: coeurRelais } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-journal');
 mkdirSync(CAPTURES, { recursive: true });
@@ -64,7 +64,7 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
   const morceaux = [];
   for await (const m of req) morceaux.push(m);
   const requete = new Request(`https://localhost:${PORT_RELAIS}${req.url}`, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(morceaux) });
-  const reponse = await worker.fetch(requete, env);
+  const reponse = await coeurRelais.traiter(requete, env);
   res.writeHead(reponse.status, Object.fromEntries(reponse.headers));
   res.end(Buffer.from(await reponse.arrayBuffer()));
 });

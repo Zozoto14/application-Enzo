@@ -1,13 +1,13 @@
 /**
  * Export et import JSON de toute la base Esport, en ligne de commande.
  *
- *  Exporter (Worker déployé, jeton maître du Fondateur dans la variable ESPORT_JETON) :
- *    node esport/outils/transfert.mjs exporter --url https://applibourse-esport.<vous>.workers.dev --sortie esport-export.json
+ *  Exporter (serveur en ligne, jeton maître du Fondateur dans la variable ESPORT_JETON) :
+ *    node esport/outils/transfert.mjs exporter --url https://esport.appdashboard.fr --sortie esport-export.json
  *  Exporter une base SQLite locale :
  *    node esport/outils/transfert.mjs exporter --sqlite esport/esport-local.db --sortie esport-export.json
  *  Importer dans une base SQLite neuve (vrai serveur) :
  *    node esport/outils/transfert.mjs importer --sqlite /srv/esport/esport.db --entree esport-export.json
- *  Importer dans un Worker déployé (base vide) :
+ *  Importer dans un serveur en ligne (base vide) :
  *    node esport/outils/transfert.mjs importer --url https://… --entree esport-export.json
  *
  * Le jeton n'est jamais passé en argument (il resterait dans l'historique du

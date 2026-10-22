@@ -1,6 +1,6 @@
 /**
- * Export et import JSON de TOUTE la base Esport (déménagement vers un vrai
- * serveur, sauvegarde). Le format ne dépend ni de D1 ni de SQLite : des
+ * Export et import JSON de TOUTE la base Esport (migration vers un autre
+ * serveur, sauvegarde). Le format ne dépend ni de PostgreSQL ni de SQLite : des
  * tables, des lignes, des valeurs texte ou nombre.
  *
  * L'import ne se fait que dans une base VIDE (schéma déjà migré) : il ne

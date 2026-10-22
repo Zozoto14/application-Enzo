@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import relais, { jetonDeProfil } from './worker.mjs';
+import { relais, jetonDeProfil } from './relais.mjs';
 import {
   CHEMIN_TSUZUKU,
   TAILLE_MAX_REPONSE,
@@ -37,11 +37,11 @@ const demande = (corps, { jeton = JETON, origine = SITE, methode = 'POST', brut 
     body: methode === 'GET' || methode === 'OPTIONS' ? undefined : brut ?? JSON.stringify(corps),
   });
 
-/** Appelle la route avec la vraie vérification de jeton du Worker. */
+/** Appelle la route avec la vraie vérification de jeton du relais. */
 async function appeler(corps, options = {}, deps = {}, e = env()) {
   const journal = [];
   const requete = demande(corps, options);
-  const { porteeDuJeton } = await import('./worker.mjs');
+  const { porteeDuJeton } = await import('./relais.mjs');
   const rep = await routeTsuzuku(requete, e, () => porteeDuJeton((requete.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, ''), e.JETON), {
     resoudre: PUBLIQUE,
     journal: l => journal.push(l),
@@ -129,17 +129,17 @@ test('méthode : POST seulement (GET 405) ; méthode sortante GET ou POST seulem
 // ------------------------------------------------------------------ CORS
 
 test('CORS : préliminaire OPTIONS pour l’origine du site seulement ; autre origine refusée ; no-store partout', async () => {
-  const ok = await relais.fetch(new Request(`https://relais.test${CHEMIN_TSUZUKU}`, { method: 'OPTIONS', headers: { Origin: SITE, 'Access-Control-Request-Method': 'POST' } }), env());
+  const ok = await relais.traiter(new Request(`https://relais.test${CHEMIN_TSUZUKU}`, { method: 'OPTIONS', headers: { Origin: SITE, 'Access-Control-Request-Method': 'POST' } }), env());
   assert.equal(ok.status, 204);
   assert.equal(ok.headers.get('Access-Control-Allow-Origin'), SITE);
   assert.match(ok.headers.get('Access-Control-Allow-Headers'), /Authorization/);
   assert.match(ok.headers.get('Access-Control-Allow-Methods'), /POST/);
   assert.equal(ok.headers.get('Vary'), 'Origin');
-  const autre = await relais.fetch(new Request(`https://relais.test${CHEMIN_TSUZUKU}`, { method: 'OPTIONS', headers: { Origin: 'https://pirate-exemple.fr' } }), env());
+  const autre = await relais.traiter(new Request(`https://relais.test${CHEMIN_TSUZUKU}`, { method: 'OPTIONS', headers: { Origin: 'https://pirate-exemple.fr' } }), env());
   assert.equal(autre.status, 403);
   assert.equal(autre.headers.get('Access-Control-Allow-Origin'), null);
   // Sans ORIGINES_SITE : aucune origine de navigateur.
-  const sansVar = await relais.fetch(new Request(`https://relais.test${CHEMIN_TSUZUKU}`, { method: 'OPTIONS', headers: { Origin: SITE } }), { JETON });
+  const sansVar = await relais.traiter(new Request(`https://relais.test${CHEMIN_TSUZUKU}`, { method: 'OPTIONS', headers: { Origin: SITE } }), { JETON });
   assert.equal(sansVar.status, 403);
 
   const fetch = fauxFetch();
@@ -153,7 +153,7 @@ test('CORS : préliminaire OPTIONS pour l’origine du site seulement ; autre or
   assert.equal(bon.rep.headers.get('Cache-Control'), 'no-store');
   assert.equal(refuse.rep.headers.get('Cache-Control'), 'no-store');
   // Les autres routes gardent leur CORS d'origine.
-  const boite = await relais.fetch(new Request('https://relais.test/boite', { method: 'OPTIONS' }), env());
+  const boite = await relais.traiter(new Request('https://relais.test/boite', { method: 'OPTIONS' }), env());
   assert.equal(boite.headers.get('Access-Control-Allow-Origin'), '*');
 });
 
@@ -181,7 +181,7 @@ test('en-têtes sortants en liste blanche, jamais de cookie ; redirect manuel', 
   assert.equal(init.method, 'POST');
   assert.equal(init.body, 'action=recherche&terme=voyage');
   assert.equal(init.redirect, 'manual');
-  assert.equal('credentials' in init, false, 'option inconnue des Workers : jamais passée');
+  assert.equal('credentials' in init, false, 'aucun cookie : option jamais passée');
   assert.deepEqual(Object.keys(init.headers).sort(), ['accept', 'accept-language', 'content-type', 'referer', 'user-agent', 'x-requested-with']);
   // Valeurs piégées écartées.
   const piege = await appeler({ url: 'https://spa-exemple.fr/', headers: { 'User-Agent': 'a\r\nCookie: x', 'X-Requested-With': 'autre', Referer: 'javascript:1' } }, {}, { fetch });
@@ -208,7 +208,7 @@ test('réponse : en-têtes filtrés, Set-Cookie jamais rendu (seulement signalé
   assert.equal(JSON.stringify(json).includes('valeur-secrete'), false);
 });
 
-test('jeu de caractères : ISO-8859-1 (en-tête ou <meta>) décodé côté Worker ; binaire en base64', async () => {
+test('jeu de caractères : ISO-8859-1 (en-tête ou <meta>) décodé côté relais ; binaire en base64', async () => {
   const latin = Buffer.from('<ul><li>Été éternel — œuvre</li></ul>', 'latin1');
   const parEntete = await appeler({ url: 'https://latin-exemple.fr/' }, {}, { fetch: fauxFetch(() => new Response(latin, { headers: { 'content-type': 'text/html; charset=ISO-8859-1' } })) });
   assert.equal(parEntete.json.charset, 'windows-1252');
@@ -273,8 +273,8 @@ test('erreurs uniformes : site injoignable sans fuite (ni IP, ni pile), journal 
   assert.match(ok.journal[0], /^tsuzuku spa-exemple\.fr 200 \d+ms$/);
 });
 
-test('débit : au-delà de la limite par minute, 429 avec Retry-After (compteur en mémoire, pas de KV)', async () => {
-  const e = env({ LIMITE_TSUZUKU_MINUTE: '3', BOITE: { get: async () => assert.fail('KV lu'), put: async () => assert.fail('KV écrit') } });
+test('débit : au-delà de la limite par minute, 429 avec Retry-After (compteur en mémoire, rien dans la boîte)', async () => {
+  const e = env({ LIMITE_TSUZUKU_MINUTE: '3', BOITE: { get: async () => assert.fail('boîte lue'), put: async () => assert.fail('boîte écrite') } });
   const fetch = fauxFetch();
   for (let i = 0; i < 3; i++) assert.equal((await appeler({ url: 'https://spa-exemple.fr/' }, {}, { fetch }, e)).rep.status, 200);
   const { rep, json } = await appeler({ url: 'https://spa-exemple.fr/' }, {}, { fetch }, e);
@@ -290,7 +290,7 @@ test('débit : au-delà de la limite par minute, 429 avec Retry-After (compteur 
   assert.equal(limiteur('x', 60_001).ok, true);
 });
 
-test('Worker complet : la route passe par le fetch global, les autres routes ne changent pas', async () => {
+test('relais complet : la route passe par le fetch global, les autres routes ne changent pas', async () => {
   const fetchOrigine = globalThis.fetch;
   const vus = [];
   globalThis.fetch = async (url, init) => {
@@ -302,37 +302,23 @@ test('Worker complet : la route passe par le fetch global, les autres routes ne 
     return new Response('{"ok":true}', { headers: { 'content-type': 'application/json' } });
   };
   try {
-    const rep = await relais.fetch(demande({ url: 'https://api-worker-exemple.fr/v1?q=1' }), env());
+    const rep = await relais.traiter(demande({ url: 'https://api-worker-exemple.fr/v1?q=1' }), env());
     const json = await rep.json();
     assert.equal(rep.status, 200);
     assert.equal(json.texte, '{"ok":true}');
     assert.ok(vus.some(u => u.includes('dns-query') && u.includes('api-worker-exemple.fr')), 'résolution DNS sur HTTPS avant l’appel');
     assert.ok(vus.includes('https://api-worker-exemple.fr/v1?q=1'));
-    const ami = await relais.fetch(demande({ url: 'https://api-worker-exemple.fr/' }, { jeton: await jetonDeProfil(JETON, 'amilea0001') }), env());
+    const ami = await relais.traiter(demande({ url: 'https://api-worker-exemple.fr/' }, { jeton: await jetonDeProfil(JETON, 'amilea0001') }), env());
     assert.equal(ami.status, 403);
-    const sante = await relais.fetch(new Request('https://relais.test/sante', { headers: { Authorization: `Bearer ${JETON}` } }), env());
+    const sante = await relais.traiter(new Request('https://relais.test/sante', { headers: { Authorization: `Bearer ${JETON}` } }), env());
     assert.ok((await sante.json()).version >= 5);
   } finally {
     globalThis.fetch = fetchOrigine;
   }
 });
 
-test('le modèle wrangler.toml autorise l’origine du site déclarée dans src/config/site.json', () => {
-  const toml = readFileSync(new URL('./wrangler.toml', import.meta.url), 'utf8');
+test('le serveur du relais autorise par défaut l’origine du site déclarée dans src/config/site.json', async () => {
+  const { ORIGINES_PAR_DEFAUT } = await import('./serveur/app.mjs');
   const { site } = JSON.parse(readFileSync(new URL('../src/config/site.json', import.meta.url), 'utf8'));
-  assert.match(toml, /^\[vars\]$/m);
-  // L'origine du site Pages, plus celle du site hébergé chez o2switch (docs/o2switch.md).
-  assert.ok(/ORIGINES_SITE = "([^"]+)"/.exec(toml)?.[1].split(',').includes(site));
-  assert.equal(/JETON|DISCORD/.test(toml.replace(/#.*$/gm, '')), false, 'aucun secret dans le modèle');
-});
-
-test('workflow de déploiement : à la main seulement, réservé à main, ne touche jamais au secret JETON', () => {
-  const yml = readFileSync(new URL('../.github/workflows/relais.yml', import.meta.url), 'utf8');
-  const actif = yml.replace(/^\s*#.*$/gm, '');
-  assert.match(actif, /^on:\n\s+workflow_dispatch:\s*$/m);
-  assert.equal(/\bpush:|pull_request|schedule:/.test(actif), false);
-  assert.match(actif, /if: github\.ref == 'refs\/heads\/main'/);
-  assert.equal(/secret\s+(put|delete|bulk)|secrets\.JETON|\bJETON\b(?!\|)/.test(actif.replace(/JETON\|DISCORD_WEBHOOK/g, '')), false);
-  assert.match(actif, /wrangler@4 deploy --config relais\/wrangler\.ci\.toml/);
-  assert.match(actif, /\/sante/);
+  assert.ok(ORIGINES_PAR_DEFAUT.split(',').includes(site));
 });

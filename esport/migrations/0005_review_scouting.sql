@@ -1,8 +1,8 @@
 -- Esport, migration 0005 : review vidéo YouTube et scouting adverse (phase 5).
 --
--- SQL standard (SQLite / D1 et Postgres), mêmes conventions que 0001 : UUID et
+-- SQL standard (SQLite et Postgres), mêmes conventions que 0001 : UUID et
 -- dates ISO 8601 en TEXT, booléens 0/1, JSON en TEXT, aucune fonction propre
--- à D1. Indépendante de 0002 à 0004 : le migrateur accepte les trous de
+-- à SQLite. Indépendante de 0002 à 0004 : le migrateur accepte les trous de
 -- numéros, chaque migration n'est appliquée qu'une fois (par nom).
 --
 -- Les comptes (auteur, joueur ciblé) sont gardés par identifiant sans clé

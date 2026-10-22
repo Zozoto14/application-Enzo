@@ -1,15 +1,13 @@
 /**
- * Infrastructure : migrations versionnées, adaptateur D1 et entrée du Worker
- * (sur un faux D1 bâti sur node:sqlite, même API que Cloudflare), graines,
- * export/import en ligne de commande, serveur local.
+ * Infrastructure : migrations versionnées, graines, export/import en ligne de
+ * commande, serveur local, stockage.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
-import relais, { jetonDeProfil } from '../../relais/worker.mjs';
+import { jetonDeProfil } from '../../relais/relais.mjs';
 import { baseSqliteMigree } from '../adaptateurs/sqlite.mjs';
 import { baseMigree, baseVierge, lireMigrations, nomsTables } from './base.mjs';
 import { stockageDisque, stockageMemoire } from '../adaptateurs/stockage.mjs';
@@ -18,47 +16,13 @@ import { exporterBase } from '../noyau/transfert.mjs';
 import { COMPTES_GRAINES, semer } from '../outils/graines.mjs';
 import { demarrerServeurEsport } from '../outils/serveur-local.mjs';
 import { principal as transfert } from '../outils/transfert.mjs';
-import worker from '../worker.mjs';
-import { kvMemoire } from './aide.mjs';
-
-/** Faux D1 : prepare/bind/all/first/run/batch/exec, comme l'API Cloudflare. */
-function fauxD1() {
-  const db = new DatabaseSync(':memory:');
-  db.exec('PRAGMA foreign_keys = ON');
-  const instruction = (sql, params = []) => ({
-    bind: (...p) => instruction(sql, p),
-    all: async () => ({ results: db.prepare(sql).all(...params).map(l => ({ ...l })) }),
-    first: async () => {
-      const l = db.prepare(sql).get(...params);
-      return l ? { ...l } : null;
-    },
-    run: async () => ({ meta: { changes: Number(db.prepare(sql).run(...params).changes) } }),
-    _executer: () => ({ meta: { changes: Number(db.prepare(sql).run(...params).changes) } }),
-  });
-  return {
-    prepare: sql => instruction(sql),
-    batch: async liste => {
-      db.exec('BEGIN');
-      try {
-        const r = liste.map(i => i._executer());
-        db.exec('COMMIT');
-        return r;
-      } catch (e) {
-        db.exec('ROLLBACK');
-        throw e;
-      }
-    },
-    exec: async sql => db.exec(sql),
-    db,
-  };
-}
 
 test('migrations : fichiers NNNN_nom.sql, appliquées une seule fois, schéma complet', async () => {
   const migrations = lireMigrations();
   assert.ok(migrations.length >= 1);
   assert.equal(migrations[0].nom, '0001_fondations.sql');
   for (const { sql } of migrations) {
-    // SQL standard : rien de propre à D1/SQLite (AUTOINCREMENT, datetime(), strftime, json_…, PRAGMA, WITHOUT ROWID).
+    // SQL standard : rien de propre à SQLite (AUTOINCREMENT, datetime(), strftime, json_…, PRAGMA, WITHOUT ROWID).
     assert.doesNotMatch(sql, /AUTOINCREMENT|datetime\(|strftime|json_|PRAGMA|WITHOUT ROWID|INSERT OR /i);
   }
   const base = await baseVierge();
@@ -81,45 +45,6 @@ test('lot atomique : une instruction en échec annule tout le lot', async () => 
     ]),
   );
   assert.equal(await base.premier('SELECT * FROM comptes', []), null);
-});
-
-test('Worker Cloudflare (entrée worker.mjs + adaptateur D1) : session par la liaison RELAIS, team, journal, cron', async () => {
-  const d1 = fauxD1();
-  for (const { sql } of lireMigrations()) d1.db.exec(sql);
-  const JETON = 'jeton-maitre-worker-esport-0123456789';
-  const envRelais = { JETON, BOITE: kvMemoire() };
-  const env = {
-    BASE: d1,
-    FICHIERS: undefined,
-    CLE_ESPORT: 'cle-esport-du-worker-de-test-0123456789abcdef',
-    RELAIS: { fetch: (url, init) => relais.fetch(new Request(url, init), envRelais) },
-  };
-  const attentes = [];
-  const ctx = { waitUntil: p => attentes.push(p) };
-  const appel = async (chemin, { methode = 'GET', jeton, corps } = {}) => {
-    const r = await worker.fetch(new Request(`https://esport.test${chemin}`, { method: methode, headers: { 'Content-Type': 'application/json', ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}) }, body: corps ? JSON.stringify(corps) : undefined }), env, ctx);
-    await Promise.all(attentes.splice(0));
-    return { statut: r.status, corps: await r.json() };
-  };
-  const s = (await appel('/session', { methode: 'POST', jeton: JETON })).corps.session;
-  assert.equal((await appel('/moi', { methode: 'PUT', jeton: s, corps: { pseudo: 'Fondateur' } })).statut, 200);
-  const team = await appel('/teams', { methode: 'POST', jeton: s, corps: { nom: 'Team Worker', preset: 'minimal' } });
-  assert.equal(team.statut, 200);
-  const journal = await appel(`/teams/${team.corps.team.id}/journal`, { jeton: s });
-  assert.deepEqual(journal.corps.entrees.map(e => e.action), ['team.created']);
-  // Ami : jeton de profil → session de son compte, pas super admin.
-  const lea = await appel('/session', { methode: 'POST', jeton: await jetonDeProfil(JETON, 'lea12345') });
-  assert.equal(lea.corps.compte, 'lea12345');
-  assert.equal(lea.corps.superAdmin, false);
-  assert.equal((await appel(`/teams/${team.corps.team.id}`, { jeton: lea.corps.session })).statut, 404);
-  // Sans D1 : réponse claire, pas de plantage.
-  const r = await worker.fetch(new Request('https://esport.test/sante'), {}, ctx);
-  assert.equal(r.status, 503);
-  // Cron : distribue ce qui reste.
-  d1.db.prepare("INSERT INTO evenements (id, type, team_id, acteur_id, charge, cree_le, essais) VALUES ('e1', 'team.updated', ?, 'principal', '{}', ?, 0)").run(team.corps.team.id, new Date().toISOString());
-  await worker.scheduled({}, env, ctx);
-  await Promise.all(attentes.splice(0));
-  assert.ok(d1.db.prepare("SELECT traite_le FROM evenements WHERE id = 'e1'").get().traite_le);
 });
 
 test('graines : une team Valorant complète avec ses membres et rôles', async () => {
@@ -206,65 +131,4 @@ test('stockage mémoire (interface des fichiers) : dépôt, lecture, suppression
   await st.supprimer('teams/a/resume.pdf');
   assert.equal(await st.lire('teams/a/resume.pdf'), null);
   await assert.rejects(st.deposer('../evasion', new Uint8Array()));
-});
-
-test('Worker en déménagement : LECTURE_SEULE refuse les écritures (sauf la session), clés exportables ; ESPORT_CIBLE transmet tout', async () => {
-  const d1 = fauxD1();
-  for (const { sql } of lireMigrations()) d1.db.exec(sql);
-  const JETON = 'jeton-maitre-worker-esport-0123456789';
-  const envRelais = { JETON, BOITE: kvMemoire() };
-  const base = {
-    BASE: d1,
-    CLE_ESPORT: 'cle-esport-du-worker-de-test-0123456789abcdef',
-    CLE_DISCORD: 'cle-discord-du-worker-0123456789',
-    RELAIS: { fetch: (url, init) => relais.fetch(new Request(url, init), envRelais) },
-  };
-  const attentes = [];
-  const ctx = { waitUntil: p => attentes.push(p) };
-  const appel = async (env, chemin, { methode = 'GET', jeton, corps } = {}) => {
-    const r = await worker.fetch(new Request(`https://esport.test${chemin}`, { method: methode, headers: { 'Content-Type': 'application/json', ...(jeton ? { Authorization: `Bearer ${jeton}` } : {}) }, body: corps ? JSON.stringify(corps) : undefined }), env, ctx);
-    await Promise.all(attentes.splice(0));
-    return { statut: r.status, corps: await r.json(), entetes: r.headers };
-  };
-  // Normal : pas de clés exportées.
-  const s = (await appel(base, '/session', { methode: 'POST', jeton: JETON })).corps.session;
-  assert.equal((await appel(base, '/admin/secrets', { jeton: s })).statut, 404);
-  // Lecture seule : session et lectures permises, écritures refusées, clés pour le Fondateur seulement.
-  const ls = { ...base, LECTURE_SEULE: '1' };
-  const s2 = (await appel(ls, '/session', { methode: 'POST', jeton: JETON })).corps.session;
-  assert.ok(s2);
-  assert.equal((await appel(ls, '/teams', { jeton: s2 })).statut, 200);
-  const refus = await appel(ls, '/teams', { methode: 'POST', jeton: s2, corps: { nom: 'Pendant le déménagement' } });
-  assert.equal(refus.statut, 503);
-  assert.equal(refus.corps.code, 'lecture-seule');
-  assert.equal(refus.entetes.get('Retry-After'), '300');
-  assert.deepEqual((await appel(ls, '/admin/secrets', { jeton: s2 })).corps, { cleEsport: base.CLE_ESPORT, cleDiscord: base.CLE_DISCORD });
-  const lea = (await appel(ls, '/session', { methode: 'POST', jeton: await jetonDeProfil(JETON, 'lea12345') })).corps.session;
-  assert.equal((await appel(ls, '/admin/secrets', { jeton: lea })).statut, 403);
-  // Le cron ne tourne pas en lecture seule.
-  d1.db.prepare("INSERT INTO evenements (id, type, charge, cree_le, essais) VALUES ('e-ls', 'team.updated', '{}', ?, 0)").run(new Date().toISOString());
-  await worker.scheduled({}, ls, ctx);
-  await Promise.all(attentes.splice(0));
-  assert.equal(d1.db.prepare("SELECT traite_le FROM evenements WHERE id = 'e-ls'").get().traite_le, null);
-  // Transmission : chaque requête part telle quelle vers le nouveau serveur ; l'en-tête annonce l'adresse.
-  const recues = [];
-  const original = globalThis.fetch;
-  globalThis.fetch = async (url, init) => {
-    recues.push({ url: String(url), methode: init.method, auth: new Headers(init.headers).get('Authorization'), corps: init.body ? new TextDecoder().decode(init.body) : undefined });
-    return new Response(JSON.stringify({ ok: true, ici: 'o2switch' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
-  };
-  try {
-    const t = { ...base, ESPORT_CIBLE: 'https://esport.appdashboard.fr' };
-    const r = await appel(t, '/teams?x=1', { methode: 'POST', jeton: 'es1.session', corps: { nom: 'A' } });
-    assert.equal(r.statut, 201);
-    assert.equal(r.corps.ici, 'o2switch');
-    assert.equal(r.entetes.get('X-Esport-Deplace'), 'https://esport.appdashboard.fr');
-    assert.deepEqual(recues, [{ url: 'https://esport.appdashboard.fr/teams?x=1', methode: 'POST', auth: 'Bearer es1.session', corps: '{"nom":"A"}' }]);
-    await worker.scheduled({}, t, ctx);
-    assert.equal(attentes.length, 0, 'pas de cron sur l’ancien serveur après la bascule');
-    // Une cible invalide (http, chemin) est ignorée : Worker normal.
-    assert.equal((await appel({ ...base, ESPORT_CIBLE: 'http://pirate.exemple' }, '/sante')).corps.service, 'esport');
-  } finally {
-    globalThis.fetch = original;
-  }
 });

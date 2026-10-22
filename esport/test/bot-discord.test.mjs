@@ -75,7 +75,7 @@ async function preparer({ bot = true, attenteDiffere, lienApp = 'https://app.exe
   const fond = A.sessions.fondateur;
   const differes = [];
 
-  /** Interaction signée (ou altérée) envoyée au Worker. */
+  /** Interaction signée (ou altérée) envoyée au serveur. */
   async function interaction(corps, { horodatage = Math.floor(b.horloge.t / 1000), signer = true, cle = k.paire.privateKey, signature } = {}) {
     const texte = JSON.stringify(corps);
     const sig = signature ?? (signer ? hexa(await crypto.subtle.sign('Ed25519', cle, new TextEncoder().encode(`${horodatage}${texte}`))) : undefined);
@@ -83,7 +83,7 @@ async function preparer({ bot = true, attenteDiffere, lienApp = 'https://app.exe
     if (sig) entetes['X-Signature-Ed25519'] = sig;
     const r = await b.traiter(new Request('https://esport.test/discord/interactions', { method: 'POST', headers: entetes, body: texte }), { attendre: p => differes.push(p) });
     const lu = await r.text();
-    // Distribution du bus et suivis différés (waitUntil du Worker) : attendus ici.
+    // Distribution du bus et suivis différés (tâches après la réponse) : attendus ici.
     await Promise.all(differes.splice(0));
     return { statut: r.status, corps: lu ? JSON.parse(lu) : null };
   }

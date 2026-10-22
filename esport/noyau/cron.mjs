@@ -1,11 +1,10 @@
 /**
- * Tâches planifiées de l'Esport (toutes les 15 minutes sur Cloudflare, toutes les 5 minutes par une
- * tâche cron sur un serveur Node) : rappels de présence, d'échéance des tâches et J-1/H-1 Discord,
+ * Tâches planifiées de l'Esport (toutes les 5 minutes par une tâche cron sur le serveur Node) : rappels de présence, d'échéance des tâches et J-1/H-1 Discord,
  * débuts d'événements, événements en attente (nouvel essai), file d'envoi Discord (réessais), purge de
  * rétention (journal selon la durée de chaque team, événements traités), agrégation journalière et rétention (90 jours)
  * des statistiques d'usage, ménage des compteurs de débit
  * et des tentatives anciennes, envois de vidéos inachevés (plus de 24 h), transcriptions demandées à une
- * API externe (désactivé par défaut). Partagé par esport/worker.mjs et esport/serveur/cron.mjs.
+ * API externe (désactivé par défaut). Lancé par esport/serveur/cron.mjs.
  *
  * Chaque étape est isolée : une erreur est consignée (rapport) sans empêcher les suivantes.
  */

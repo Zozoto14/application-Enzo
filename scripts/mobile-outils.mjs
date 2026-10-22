@@ -2,7 +2,7 @@
  * Outils partagés par l'audit et le test de bout en bout de l'affichage téléphone
  * (scripts/audit-mobile.mjs, scripts/e2e-mobile.mjs) :
  *
- *  - site statique (bureau/dist), faux relais (relais/worker.mjs, KV en mémoire, faux webhook Discord),
+ *  - site statique (bureau/dist), faux relais (relais/relais.mjs, boîte en mémoire, faux webhook Discord),
  *    faux « internet » de Tsuzuku (catalogues, images, lecteur neutre) ;
  *  - émulation d'iPhone (390×844 ou 375×667, densité 3, tactile) ;
  *  - mesures faites DANS la page : débordement horizontal, zones tactiles < 44 px, textes < 15 px,
@@ -63,9 +63,9 @@ export async function demarrerSite(port) {
   return { url: `http://localhost:${port}/`, fermer: () => serveur.close() };
 }
 
-/** Faux relais : le vrai worker, une KV en mémoire, et un faux webhook Discord (pour le Support). */
+/** Faux relais : le vrai relais, une boîte en mémoire, et un faux webhook Discord (pour le Support). */
 export async function demarrerRelais(port, jeton = 'jeton-e2e-mobile-0123456789abcdef', extraEnv = {}) {
-  const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href)).default;
+  const { relais: coeurRelais } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
   const kv = new Map();
   const metas = new Map();
   const WEBHOOK = 'https://discord.com/api/webhooks/123456789012345678/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789';
@@ -111,7 +111,7 @@ export async function demarrerRelais(port, jeton = 'jeton-e2e-mobile-0123456789a
       headers: req.headers,
       body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(morceaux),
     });
-    const reponse = await worker.fetch(requete, env);
+    const reponse = await coeurRelais.traiter(requete, env);
     res.writeHead(reponse.status, Object.fromEntries(reponse.headers));
     res.end(Buffer.from(await reponse.arrayBuffer()));
   });

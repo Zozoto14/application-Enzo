@@ -1,6 +1,6 @@
 /**
  * Test de bout en bout de la review vidéo et du scouting Esport (phase 5), sans
- * Cloudflare et SANS appeler YouTube :
+ * appeler YouTube :
  *
  *  - faux relais et serveur Esport local ; PC (1440 × 900), le Fondateur ;
  *  - l'API YouTube IFrame est remplacée par un FAUX SCRIPT local (interception de

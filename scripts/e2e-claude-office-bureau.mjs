@@ -1,7 +1,7 @@
 /**
  * Bureau natif de Claude Office (onglet « Bureau ») : un vrai journal d'essai est écrit par le hook
  * (scripts/office-historique-hook.mjs, dossier temporaire), servi à l'écran par un faux pont du PC ; la copie
- * chiffrée est déposée sur un faux relais local (le vrai relais/worker.mjs, KV en mémoire), puis relue par le
+ * chiffrée est déposée sur un faux relais local (le vrai relais/relais.mjs, boîte en mémoire), puis relue par le
  * site, en fenêtre de PC (1280×800), d'iPad (820×1180) puis de téléphone (390×844). Vérifie : agents et états,
  * open space dessiné (un personnage par session, animations gelées onglet masqué), « en direct » sur le PC, âge du
  * dépôt ailleurs, secrets masqués, mode « démo » étiqueté et réversible, thèmes nuit et jour, rien d'installé sans

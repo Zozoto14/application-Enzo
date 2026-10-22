@@ -23,7 +23,7 @@ const dossier = join(racine, 'docs/esport/bot');
 const apercus = join(dossier, 'apercus');
 mkdirSync(apercus, { recursive: true });
 const identite = JSON.parse(readFileSync(join(dossier, 'identite.json'), 'utf8'));
-const LIEN = 'https://applibourse.pages.dev/esport';
+const LIEN = 'https://appdashboard.fr/esport';
 const T = Date.parse('2026-10-21T17:00:00Z');
 const DEBUT = Date.parse('2026-10-22T18:30:00Z');
 const IDS = { lea: '800000000000000001', tom: '800000000000000002', zed: '800000000000000003', nox: '800000000000000004' };

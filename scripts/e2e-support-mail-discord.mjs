@@ -1,7 +1,7 @@
 /**
  * Test de bout en bout : support → Discord, réponse du Fondateur, e-mails envoyés par le serveur.
  *
- * Tout tourne en local, sans Cloudflare, sans vrai Discord, sans vrai serveur de messagerie :
+ * Tout tourne en local, sans vrai Discord, sans vrai serveur de messagerie :
  *  - le VRAI relais en serveur Node (relais/serveur/app.mjs, comme chez o2switch) avec sa boîte dans
  *    PostgreSQL (schéma de test neuf) et le VRAI transport SMTP (nodemailer) ;
  *  - un FAUX Discord local (http) : le relais y poste à la place de discord.com (embed, pièce jointe

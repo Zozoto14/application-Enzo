@@ -1,5 +1,5 @@
 /**
- * API Esport de bout en bout (sans Cloudflare) : session par le relais,
+ * API Esport de bout en bout : session par le relais,
  * teams, modules, rôles, membres, invitations, journal, notifications, RGPD,
  * export/import. Tests négatifs : un membre de la team A n'accède jamais à la
  * team B ; anti-escalade ; dernier Propriétaire ; force brute.

@@ -8,18 +8,15 @@
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-tsuzuku-perf.mjs
  *
  * Variables : MODES=pc,site,site4g (défaut : les trois) ; SORTIE=fichier.json (mesures brutes) ;
- * SEUILS=0 pour mesurer sans vérifier les seuils (mesure de la version d'avant) ;
- * RELAIS_WORKER=chemin/worker.mjs pour jouer le site contre un AUTRE relais (ex. l'ancien, sans
- * route `/tsuzuku/lot` ni cache : le site doit se replier tout seul) ; CACHE_RELAIS=0 : relais sans
- * cache Cloudflare (`caches.default` absent, comme sous l'offre qui ne l'aurait pas).
+ * SEUILS=0 pour mesurer sans vérifier les seuils (mesure de la version d'avant).
  *
- * Le relais local imite Cloudflare : HTTP/2 (requêtes multiplexées sur une connexion), réponses
- * compressées (gzip) si le navigateur l'accepte, et un cache `caches.default` en mémoire (API Cache
- * des Workers) partagé entre les « appareils » du même parcours.
+ * Le relais local imite le serveur o2switch derrière son frontal HTTPS : HTTP/2 (requêtes
+ * multiplexées sur une connexion), réponses compressées (gzip) si le navigateur l'accepte, et le
+ * cache mémoire du relais partagé entre les « appareils » du même parcours.
  *
  * Mode `site4g` : le site sur un iPhone/iPad en 4G médiocre : le navigateur est bridé par Chrome
  * (150 ms d'aller-retour, 1,6 Mbit/s descendant, 750 kbit/s montant : profil « Slow 4G » de
- * Lighthouse), en plus des 80 ms navigateur → Cloudflare et des 200 à 800 ms Cloudflare → site.
+ * Lighthouse), en plus des 80 ms navigateur → relais et des 200 à 800 ms relais → site.
  * Les modes `site` et `site4g` finissent par un SECOND APPAREIL (nouveau navigateur, cache vide :
  * l'iPhone après l'iPad) qui ouvre la même fiche.
  *
@@ -49,10 +46,9 @@ const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium } = requireGlobal('playwright');
 const { requeteTsuzuku } = await import(pathToFileURL(join(racine, 'bureau/electron/tsuzuku.mjs')).href);
-const RELAIS_WORKER = process.env.RELAIS_WORKER ?? join(racine, 'relais/worker.mjs');
-const worker = (await import(pathToFileURL(RELAIS_WORKER).href)).default;
+const { traiterRequete } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 // Cache MÉMOIRE de l'instance du relais (relais à jour seulement) : vidé entre deux modes, comme l'API Cache.
-const moduleTsuzukuRelais = await import(pathToFileURL(join(RELAIS_WORKER, '..', 'tsuzuku.mjs')).href);
+const moduleTsuzukuRelais = await import(pathToFileURL(join(racine, 'relais/tsuzuku.mjs')).href);
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-tsuzuku-perf');
 mkdirSync(CAPTURES, { recursive: true });
@@ -156,7 +152,7 @@ const requeterVersInternetLocal = (url, options, rappel) =>
   http.request({ host: '127.0.0.1', port: PORT_INTERNET, path: url.pathname + url.search, method: options.method, headers: { ...options.headers, host: url.hostname } }, rappel);
 const pontRequete = requete => requeteTsuzuku(requete, { requeter: requeterVersInternetLocal });
 
-// ------------------------------------------------------------- Relais local (HTTPS) : le vrai Worker, sorties vers l'internet local
+// ------------------------------------------------------------- Relais local (HTTPS) : le vrai relais, sorties vers l'internet local
 const fetchNatif = globalThis.fetch.bind(globalThis);
 globalThis.fetch = async (entree, init = {}) => {
   const url = new URL(typeof entree === 'string' ? entree : entree.url);
@@ -185,46 +181,27 @@ const env = {
     list: async ({ prefix = '' } = {}) => ({ keys: [...kv.keys()].filter(c => c.startsWith(prefix)).sort().map(name => ({ name })), list_complete: true }),
   },
 };
-// API Cache des Workers (`caches.default`), en mémoire : une « colo » Cloudflare partagée par les appareils.
-const cacheColo = new Map();
-const clefCache = r => (typeof r === 'string' ? r : r.url);
-if (process.env.CACHE_RELAIS !== '0') {
-  globalThis.caches = {
-    default: {
-      async match(r) {
-        const garde = cacheColo.get(clefCache(r));
-        return garde ? new Response(garde.corps, { status: garde.status, headers: garde.headers }) : undefined;
-      },
-      async put(r, reponse) {
-        cacheColo.set(clefCache(r), { corps: await reponse.arrayBuffer(), status: reponse.status, headers: [...reponse.headers] });
-      },
-      async delete(r) {
-        return cacheColo.delete(clefCache(r));
-      },
-    },
-  };
-}
 let appelsRelais = 0;
 const logOrigine = console.log;
 // Journal du relais (« tsuzuku hôte statut durée ») : muet pendant la mesure.
 console.log = (...a) => (typeof a[0] === 'string' && a[0].startsWith('tsuzuku ') ? undefined : logOrigine(...a));
 const dossier = mkdtempSync(join(tmpdir(), 'e2e-perf-'));
 execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', join(dossier, 'k.pem'), '-out', join(dossier, 'c.pem'), '-subj', '/CN=localhost', '-days', '1'], { stdio: 'ignore' });
-// HTTP/2 comme Cloudflare (une connexion, requêtes multiplexées) ; HTTP/1.1 accepté aussi.
+// HTTP/2 comme le frontal de l'hébergeur (une connexion, requêtes multiplexées) ; HTTP/1.1 accepté aussi.
 const serveurRelais = http2.createSecureServer({ key: readFileSync(join(dossier, 'k.pem')), cert: readFileSync(join(dossier, 'c.pem')), allowHTTP1: true }, async (req, res) => {
   const morceaux = [];
   for await (const m of req) morceaux.push(m);
   const corps = Buffer.concat(morceaux);
   if (req.url.startsWith('/tsuzuku/') && req.method === 'POST') {
     appelsRelais += 1;
-    // Aller-retour navigateur → Cloudflare (réseau mobile ou ADSL).
+    // Aller-retour navigateur → relais (réseau mobile ou ADSL).
     await dormir(ALLER_RETOUR_RELAIS_MS);
   }
   const entetesRequete = Object.fromEntries(Object.entries(req.headers).filter(([k]) => !k.startsWith(':')));
   const requete = new Request(`https://localhost:${PORT_RELAIS}${req.url}`, { method: req.method, headers: entetesRequete, body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps });
-  const reponse = await worker.fetch(requete, env);
+  const reponse = await traiterRequete(requete, env);
   const entetes = Object.fromEntries([...reponse.headers].filter(([k]) => !['content-length', 'connection', 'transfer-encoding'].includes(k)));
-  // Compression de Cloudflare (gzip ici) pour le JSON, flux compris (chaque morceau envoyé aussitôt).
+  // Compression (gzip) pour le JSON, flux compris (chaque morceau envoyé aussitôt).
   const compresser = /gzip/.test(String(req.headers['accept-encoding'] ?? '')) && /json/.test(entetes['content-type'] ?? '') && !entetes['content-encoding'];
   if (compresser) entetes['content-encoding'] = 'gzip';
   res.writeHead(reponse.status, entetes);
@@ -582,8 +559,7 @@ try {
   for (const mode of MODES) {
     requetes.length = 0;
     appelsRelais = 0;
-    cacheColo.clear(); // chaque mode part d'un relais au cache vide
-    moduleTsuzukuRelais.cacheMemoireDuRelais?.vider();
+    moduleTsuzukuRelais.cacheMemoireDuRelais?.vider(); // chaque mode part d'un relais au cache vide
     mesures[mode] = await parcours(navigateur, mode);
     if (estSite(mode)) mesures[mode].appelsRelais = appelsRelais;
     mesures[mode].journal = requetes.map(r => `${r.quand} ${r.hote}${r.chemin}`);
@@ -606,8 +582,6 @@ if (process.env.SORTIE) writeFileSync(process.env.SORTIE, JSON.stringify(mesures
 
 // Seuils (version optimisée) : raisonnables pour une machine de test chargée.
 // Seuils de la 2e passe (latence) : marge d'environ 40 % sur les mesures, machine de test chargée.
-// Le relais ANCIEN (RELAIS_WORKER) n'a pas de cache : le 2e appareil n'y est pas plus rapide.
-const ANCIEN_RELAIS = Boolean(process.env.RELAIS_WORKER) || process.env.CACHE_RELAIS === '0';
 for (const mode of MODES) {
   const m = mesures[mode] ?? {};
   const en4g = mode === 'site4g';
@@ -621,8 +595,7 @@ for (const mode of MODES) {
   seuil(m.ficheSources2, 1000, `${mode} : 2e ouverture quasi instantanée (cache)`);
   seuil(m.autreSources, en4g ? 4000 : 3500, `${mode} : autre titre, source prioritaire connue lente (sans l'attendre)`);
   seuil(m.ficheSources3, 1500, `${mode} : après rechargement (cache persistant)`);
-  if (estSite(mode) && !ANCIEN_RELAIS) seuil(m.appareil2Sources, en4g ? 3000 : 2500, `${mode} : 2e appareil (cache du relais)`);
-  if (estSite(mode) && ANCIEN_RELAIS) seuil(m.appareil2Sources, en4g ? 6000 : 5500, `${mode} : 2e appareil, ancien relais (sans cache)`);
+  if (estSite(mode)) seuil(m.appareil2Sources, en4g ? 3000 : 2500, `${mode} : 2e appareil (cache du relais)`);
 }
 if (echecs > 0) {
   logOrigine(`E2E ECHEC (${echecs})`);

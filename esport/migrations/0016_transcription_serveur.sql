@@ -1,6 +1,6 @@
 -- Esport, migration 0016 : transcription automatique SUR LE SERVEUR (file de travaux).
 --
--- SQL standard, compatible SQLite / D1 ET PostgreSQL (mêmes conventions que 0001 et 0014).
+-- SQL standard, compatible SQLite ET PostgreSQL (mêmes conventions que 0001 et 0014).
 --
 -- Un dépôt de réunion avec enregistrement, en mode « serveur », crée une ligne « attente ». Un
 -- processus de fond (lancé par le cron, un seul à la fois) la prend (« en_cours ») avec un BAIL

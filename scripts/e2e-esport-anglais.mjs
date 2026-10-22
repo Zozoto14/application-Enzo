@@ -1,5 +1,5 @@
 /**
- * Test de bout en bout de la traduction anglaise de l'Esport, sans Cloudflare (même montage que e2e-esport.mjs) :
+ * Test de bout en bout de la traduction anglaise de l'Esport (même montage que e2e-esport.mjs) :
  *
  *  - le navigateur est en français (fr-FR) : à l'ouverture, l'Esport est en français ;
  *  - au premier profil, on choisit « English » (changement instantané, sans recharger) ;
@@ -34,7 +34,7 @@ const verifier = (ok, message) => {
   if (!ok) echecs++;
 };
 
-const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
+const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { demarrerServeurEsport } = await import(pathToFileURL(join(racine, 'esport/outils/serveur-local.mjs')).href);
 
 // ------------------------------------------------------------- Serveurs

@@ -30,7 +30,7 @@ import { nouveauContexte, relierCommePc } from './e2e-acceptation.mjs';
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium, devices } = requireGlobal('playwright');
-const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href)).default;
+const { relais: coeurRelais } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { coffresMemoire } = await import(pathToFileURL(join(racine, 'relais/coffres.mjs')).href);
 
 const CAPTURES = process.env.CAPTURES ?? join(tmpdir(), 'captures-ab1-temporaire');
@@ -43,7 +43,7 @@ const SITE = `http://localhost:${PORT_SITE}/`;
 const MDP_PC = 'ancien-mot-de-passe-du-pc-e2e-42';
 const FONDS = { sauge: 'rgb(238, 242, 236)', terminal: 'rgb(10, 10, 10)', nuit: 'rgb(11, 15, 23)' };
 
-// ------------------------------------------------------------- Faux relais (vrai worker, boîte et coffre en mémoire)
+// ------------------------------------------------------------- Faux relais (vrai relais, boîte et coffre en mémoire)
 const kv = new Map();
 const metas = new Map();
 const coffres = coffresMemoire();
@@ -71,8 +71,8 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
   const morceaux = [];
   for await (const m of req) morceaux.push(m);
   const corps = Buffer.concat(morceaux);
-  const requete = new Request(`${RELAIS}${req.url}`, { method: req.method, headers: { ...req.headers, 'cf-connecting-ip': '198.51.100.9' }, body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps });
-  const reponse = await worker.fetch(requete, env);
+  const requete = new Request(`${RELAIS}${req.url}`, { method: req.method, headers: { ...req.headers, 'x-adresse-client': '198.51.100.9' }, body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps });
+  const reponse = await coeurRelais.traiter(requete, env);
   const jeton = String(req.headers.authorization ?? '').replace(/^Bearer\s+/, '');
   journal.push({ methode: req.method, chemin: req.url.split('?')[0], statut: reponse.status, jeton: jeton === JETON ? 'maitre' : jeton.slice(0, 3) });
   res.writeHead(reponse.status, Object.fromEntries(reponse.headers));

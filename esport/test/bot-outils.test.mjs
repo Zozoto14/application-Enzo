@@ -24,12 +24,12 @@ test('enregistrement : commandes (PUT), adresse des interactions, identité ; le
     appels.push({ url, methode: init.method, corps: JSON.parse(init.body), auth: init.headers.Authorization });
     return appels.length === 1 ? new Response('[]', { status: 200 }) : new Response(`{"message":"refus ${jeton}"}`, { status: 400 });
   };
-  const r = await executer({ env: { DISCORD_APPLICATION_ID: '424242424242424242', DISCORD_BOT_TOKEN: jeton }, args: ['--adresse', 'https://esport.exemple.workers.dev/'], fetch, journal: (...l) => lignes.push(l.join(' ')) });
+  const r = await executer({ env: { DISCORD_APPLICATION_ID: '424242424242424242', DISCORD_BOT_TOKEN: jeton }, args: ['--adresse', 'https://esport.exemple.fr/'], fetch, journal: (...l) => lignes.push(l.join(' ')) });
   assert.equal(appels[0].url, 'https://discord.com/api/v10/applications/424242424242424242/commands');
   assert.equal(appels[0].methode, 'PUT');
   assert.equal(appels[0].auth, `Bot ${jeton}`);
   assert.ok(appels[0].corps.some(c => c.name === 'rsvp'));
-  assert.deepEqual(appels[1].corps, { interactions_endpoint_url: 'https://esport.exemple.workers.dev/discord/interactions' });
+  assert.deepEqual(appels[1].corps, { interactions_endpoint_url: 'https://esport.exemple.fr/discord/interactions' });
   assert.equal(r.erreurs, 1);
   assert.ok(!lignes.join('\n').includes(jeton), 'jeton masqué dans les messages');
   // Identité : description, icône et bannière de l'application, avatar et bannière du bot.

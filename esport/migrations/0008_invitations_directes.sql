@@ -1,6 +1,6 @@
 -- Esport, migration 0008 : invitations directes (comptes créés depuis l'Esport).
 --
--- SQL standard (SQLite / D1 et Postgres). Le numéro 0007 est pris par la
+-- SQL standard (SQLite et Postgres). Le numéro 0007 est pris par la
 -- phase 7 (index) : le migrateur accepte les trous.
 --
 -- Le Fondateur crée le compte du hub d'un joueur depuis l'Esport, puis le

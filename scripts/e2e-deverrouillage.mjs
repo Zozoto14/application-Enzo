@@ -30,7 +30,7 @@ import { nouveauContexte } from './e2e-acceptation.mjs';
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium } = requireGlobal('playwright');
-const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href)).default;
+const { relais: coeurRelais } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-deverrouillage');
 mkdirSync(CAPTURES, { recursive: true });
@@ -40,7 +40,7 @@ const PORT_SITE = 5207;
 const MDP_ADMIN = 'mot-de-passe-du-pc-e2e-très-long-42';
 const MDP_AUTRE = 'coffre-d-un-autre-compte-e2e-long-17';
 
-// ------------------------------------------------------------- Faux relais (KV avec liste et métadonnées)
+// ------------------------------------------------------------- Faux relais (boîte avec liste et métadonnées)
 const kv = new Map();
 const metas = new Map();
 const compteurs = { put: 0, get: 0, list: 0 };
@@ -78,7 +78,7 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
     headers: req.headers,
     body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps,
   });
-  const reponse = await worker.fetch(requete, env);
+  const reponse = await coeurRelais.traiter(requete, env);
   const jeton = String(req.headers.authorization ?? '').replace(/^Bearer\s+/, '');
   journalRelais.push({ methode: req.method, chemin: req.url, statut: reponse.status, portee: jeton === JETON ? 'maitre' : jeton.startsWith('p1.') ? jeton.split('.')[1] : '?' });
   res.writeHead(reponse.status, Object.fromEntries(reponse.headers));

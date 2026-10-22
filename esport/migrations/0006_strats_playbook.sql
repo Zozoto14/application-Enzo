@@ -1,8 +1,8 @@
 -- Esport, migration 0006 : éditeur de strats et playbook (phase 6).
 --
--- SQL standard (SQLite / D1 et Postgres), mêmes conventions que 0001 :
+-- SQL standard (SQLite et Postgres), mêmes conventions que 0001 :
 -- UUID et dates ISO 8601 en TEXT, booléens 0/1, JSON en TEXT, aucune
--- fonction propre à D1. Indépendante de 0005 (phase 5) : chaque migration
+-- fonction propre à SQLite. Indépendante de 0005 (phase 5) : chaque migration
 -- n'est appliquée qu'une fois (par nom), les numéros peuvent arriver dans
 -- n'importe quel ordre.
 

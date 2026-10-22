@@ -1,9 +1,8 @@
 /**
- * Migrations versionnées (esport/migrations/NNNN_nom.sql), pour les bases
- * qui ne passent pas par `wrangler d1 migrations apply` : SQLite local
- * (tests, serveur de dev) et Postgres plus tard. La table de suivi
- * `migrations_esport` est propre à ce migrateur ; sur D1, wrangler tient la
- * sienne (`d1_migrations`). Les fichiers SQL sont les mêmes.
+ * Migrations versionnées (esport/migrations/NNNN_nom.sql) : PostgreSQL
+ * (serveur o2switch, esport/serveur/migrer.mjs) et SQLite local (tests,
+ * serveur de dev). La table de suivi `migrations_esport` dit ce qui est
+ * déjà passé. Les fichiers SQL sont les mêmes pour les deux.
  */
 
 export const MOTIF_MIGRATION = /^(\d{4})_[a-z0-9_]+\.sql$/;

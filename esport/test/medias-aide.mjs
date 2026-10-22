@@ -96,7 +96,7 @@ export async function morceau(b, jeton, cheminEnvoi, indice, octets, { empreinte
   const r = await b.traiter(
     new Request(`https://esport.test${cheminEnvoi}/morceaux/${indice}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/octet-stream', Authorization: `Bearer ${jeton}`, 'X-Sha256': empreinte ?? sha(octets), 'CF-Connecting-IP': '198.51.100.9' },
+      headers: { 'Content-Type': 'application/octet-stream', Authorization: `Bearer ${jeton}`, 'X-Sha256': empreinte ?? sha(octets), 'X-Adresse-Client': '198.51.100.9' },
       body: octets,
     }),
   );

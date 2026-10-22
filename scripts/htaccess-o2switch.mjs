@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Site hébergé chez o2switch (Apache) : traduit les règles Cloudflare Pages
+ * Site hébergé chez o2switch (Apache) : traduit les règles du site
  * (bureau/public/_headers ; _redirects s'il existe) en un bloc .htaccess, et
  * le fusionne dans le .htaccess de public_html SANS toucher au reste (règles
  * ajoutées par cPanel, Let's Encrypt, PHP…) : seul le bloc entre les
@@ -9,7 +9,7 @@
  *   node scripts/htaccess-o2switch.mjs generer bureau/public > site-dist/htaccess-appdashboard.conf
  *   node scripts/htaccess-o2switch.mjs fusionner site/htaccess-appdashboard.conf ~/public_html/.htaccess
  *
- * Comportements de Pages reproduits : HTTPS obligatoire, en-têtes de _headers,
+ * Comportements assurés : HTTPS obligatoire, en-têtes de _headers,
  * repli « application d'une page » (une adresse inconnue sert index.html),
  * index.html / manifeste / maj revalidés à chaque visite.
  */
@@ -52,7 +52,7 @@ export function lireRedirects(texte) {
 }
 
 const echapperRegex = s => s.replace(/[.+?^${}()|[\]\\#]/g, '\\$&');
-/** Motif Pages (`/assets/*`, `/:nom`) → expression régulière Apache. */
+/** Motif de _headers / _redirects (`/assets/*`, `/:nom`) → expression régulière Apache. */
 export const motifVersRegex = motif => `^${echapperRegex(motif).replace(/\*/g, '.*').replace(/:[a-z]+/gi, '[^/]+')}$`;
 const guillemets = v => `"${String(v).replace(/"/g, '\\"')}"`;
 
@@ -67,7 +67,7 @@ export function genererBloc({ headers = '', redirects = '' } = {}) {
     if (code === 200) l.push(`RewriteRule ${regle} ${r.cible} [L]`);
     else l.push(`RewriteRule ${regle} ${r.cible} [L,R=${Number.isFinite(code) ? code : 301}]`);
   }
-  l.push('# Application d’une page : une adresse inconnue sert index.html (comme Cloudflare Pages).');
+  l.push('# Application d’une page : une adresse inconnue sert index.html.');
   l.push('RewriteCond %{REQUEST_FILENAME} !-f', 'RewriteCond %{REQUEST_FILENAME} !-d', 'RewriteCond %{REQUEST_URI} !^/(assets|maj|esport-assets|\\.well-known)/', 'RewriteRule ^ index.html [L]');
   l.push('</IfModule>', '');
   l.push('<IfModule mod_headers.c>', 'Header always set X-Content-Type-Options "nosniff"');

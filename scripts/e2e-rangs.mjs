@@ -4,7 +4,7 @@
  * → connexion en Hugo sur le PC puis sur un navigateur relié avec SON code :
  * il ouvre Léa avec son code d'accès (bandeau, journal), ne voit ni n'ouvre
  * le Fondateur → le Fondateur rétrograde Hugo → Hugo n'a plus accès.
- * Faux relais local qui exécute relais/worker.mjs.
+ * Faux relais local qui exécute relais/relais.mjs.
  *
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-rangs.mjs
@@ -27,7 +27,7 @@ import { ONGLET_ADMINISTRATION, allerPageAdministration, codeAmiDejaRelie, idCom
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium } = requireGlobal('playwright');
-const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href)).default;
+const { relais: coeurRelais } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-rangs');
 mkdirSync(CAPTURES, { recursive: true });
@@ -36,7 +36,7 @@ const PORT_RELAIS = 8791;
 const PORT_SITE = 5201;
 const MDP_ADMIN = 'mot-de-passe-du-pc-e2e-très-long-42';
 
-// ------------------------------------------------------------- Faux relais (KV avec liste et métadonnées)
+// ------------------------------------------------------------- Faux relais (boîte avec liste et métadonnées)
 const kv = new Map();
 const metas = new Map();
 const compteurs = { put: 0, get: 0, list: 0 };
@@ -74,7 +74,7 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
     headers: req.headers,
     body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps,
   });
-  const reponse = await worker.fetch(requete, env);
+  const reponse = await coeurRelais.traiter(requete, env);
   const jeton = String(req.headers.authorization ?? '').replace(/^Bearer\s+/, '');
   journalRelais.push({ methode: req.method, chemin: req.url, statut: reponse.status, portee: jeton === JETON ? 'maitre' : jeton.startsWith('p1.') ? jeton.split('.')[1] : '?' });
   res.writeHead(reponse.status, Object.fromEntries(reponse.headers));
@@ -243,7 +243,7 @@ async function ouvrirCompteDe(page, nom, motDePasse, secret) {
 }
 
 const tuileAdministration = page => page.locator('[data-testid="cellule-administration"], [data-testid="tuile-administration"]');
-const avecJeton = (jeton, chemin) => worker.fetch(new Request(`https://relais${chemin}`, { headers: { Authorization: `Bearer ${jeton}` } }), env);
+const avecJeton = (jeton, chemin) => coeurRelais.traiter(new Request(`https://relais${chemin}`, { headers: { Authorization: `Bearer ${jeton}` } }), env);
 const charge = cle => JSON.parse(JSON.parse(kv.get(cle)).charge ?? 'null');
 
 const navigateur = await chromium.launch({ headless: true });

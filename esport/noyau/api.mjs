@@ -1,7 +1,7 @@
 /**
  * API HTTP de l'Esport : routeur et middleware, en Request/Response standard
- * (Workers, Node 22, Deno, Bun…). Aucune dépendance au runtime Cloudflare :
- * le Worker (esport/worker.mjs) et le serveur local (esport/outils/
+ * (Node 22, Deno, Bun…). Aucune dépendance au runtime : le serveur Node
+ * (esport/serveur/app.mjs) et le serveur local (esport/outils/
  * serveur-local.mjs) ne font que fournir la base, le stockage, la clé de
  * session et le vérificateur de jeton.
  *
@@ -71,7 +71,7 @@ function reponseErreur(e) {
 }
 
 export function adresseIp(requete) {
-  return requete.headers.get('CF-Connecting-IP') ?? ((requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || null);
+  return requete.headers.get('X-Adresse-Client') ?? ((requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || null);
 }
 
 /** Type de contenu annoncé, sans paramètres (« application/json; charset=utf-8 » → « application/json »). */
@@ -320,15 +320,15 @@ export function creerApi({
       if (!rgpd[2] && m === 'DELETE') return s.supprimerCompteMembre(acteur, compte);
     }
 
-    // Déménagement (esport/serveur/importer.mjs) : les clés du serveur (session, Discord), pour que les liens de
-    // partage de strats et les webhooks Discord chiffrés restent valables sur le nouveau serveur. Seulement pour le
-    // Fondateur ET pendant la fenêtre de déménagement (Worker en lecture seule) ; jamais sinon.
+    // Migration vers un autre serveur (esport/serveur/importer.mjs) : les clés du serveur (session, Discord), pour
+    // que les liens de partage de strats et les webhooks Discord chiffrés restent valables sur le nouveau serveur.
+    // Seulement pour le Fondateur ET si le serveur l'autorise (option `secretsExportables`, désactivée par défaut).
     if (chemin === '/admin/secrets' && m === 'GET') {
       if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Réservé au Fondateur.');
       if (!secretsExportables) throw echec(404, 'route', 'Adresse inconnue.');
       return { cleEsport: cleSession, ...(cleDiscord ? { cleDiscord } : {}) };
     }
-    // Déménagement (esport/serveur/importer.mjs) : un fichier privé (PDF, miniature) par sa clé, Fondateur seulement.
+    // Migration (esport/serveur/importer.mjs) : un fichier privé (PDF, miniature) par sa clé, Fondateur seulement.
     if (chemin === '/admin/fichier' && m === 'GET') {
       if (!acteur.superAdmin) throw echec(403, 'super-admin', 'Réservé au Fondateur.');
       if (!stockage) throw echec(503, 'stockage', 'Le stockage des fichiers n’est pas branché.');
@@ -430,7 +430,7 @@ export function creerApi({
   }
 
   /**
-   * Traite une requête. `attendre(promesse)` (Worker : `ctx.waitUntil`) laisse
+   * Traite une requête. `attendre(promesse)` (pont HTTP du serveur Node) laisse
    * la distribution des événements finir après la réponse ; sans lui, elle
    * est attendue avant de répondre (tests, serveur local).
    */

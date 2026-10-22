@@ -219,7 +219,7 @@ export function extraireMeta(html, adresse) {
 // ------------------------------------------------------------------ Téléchargement
 
 /**
- * Téléchargeur portable (fetch du runtime : Worker, Node) : aucune redirection suivie, délai,
+ * Téléchargeur portable (fetch du runtime) : aucune redirection suivie, délai,
  * lecture bornée, HTML seulement. Rend `{ statut, type, location, corps }`.
  */
 export function telechargeurFetch(fetchFn = (...a) => globalThis.fetch(...a)) {

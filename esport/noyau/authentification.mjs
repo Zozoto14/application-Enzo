@@ -1,14 +1,14 @@
 /**
  * Validation d'un jeton du relais par le relais lui-même (route
- * `POST /jeton/verifier`, relais version 7). Le Worker Esport ne connaît pas
+ * `POST /jeton/verifier`, relais version 7). Le serveur Esport ne connaît pas
  * le jeton maître : il demande seulement « ce jeton est-il valable, révoqué,
  * et de quel compte ? ».
  *
- * Deux transports, au choix :
- *  - liaison de service Cloudflare (`env.RELAIS`, recommandé : appel interne,
- *    sans passer par Internet) ;
- *  - adresse publique du relais (`env.RELAIS_URL`) : repli, et serveur hors
- *    Cloudflare plus tard.
+ * Deux transports :
+ *  - adresse publique du relais (`RELAIS_URL`, https://relais.appdashboard.fr) :
+ *    le serveur o2switch ;
+ *  - `liaison` : un objet `{ fetch(url, init) }` qui appelle un relais dans le
+ *    même processus (serveur local de développement, tests).
  */
 
 import { echec } from './outils.mjs';
@@ -33,7 +33,7 @@ export function verificateurRelais({ liaison, adresse, fetch: requete = globalTh
     if (adresse) {
       return requete(`${String(adresse).replace(/\/+$/, '')}/jeton/verifier`, init);
     }
-    throw echec(503, 'relais-absent', 'Le Worker Esport n’est relié à aucun relais (liaison RELAIS ou variable RELAIS_URL).');
+    throw echec(503, 'relais-absent', 'Le serveur Esport n’est relié à aucun relais (variable RELAIS_URL).');
   };
 
   return async function verifierJeton(jeton, ip) {

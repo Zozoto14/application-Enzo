@@ -1,9 +1,8 @@
 /**
  * Bout en bout de la synchro quasi immédiate (relais version 10) et de la validation en deux étapes :
  *
- *  1. le PC du Fondateur (jeton maître) crée son coffre AVEC son code à six chiffres et parle à l'ANCIEN
- *     relais (Worker Cloudflare en mode transmission : `proxifier`) ; en route, un intermédiaire PERD le
- *     corps des PUT (comme certains frontaux mutualisés) — la cause probable du « 400 » de la
+ *  1. le PC du Fondateur (jeton maître) crée son coffre AVEC son code à six chiffres et parle au
+ *     relais ; en route, un intermédiaire PERD le corps des PUT (comme certains frontaux mutualisés) — la cause probable du « 400 » de la
  *     migration. Il migre en gardant son mot de passe actuel : identifiant « admin », mot de passe
  *     actuel, code à six chiffres ; son secret TOTP est confié au serveur (même application) ;
  *  2. navigateur neuf : aide « Administrateur : première connexion ? » ; identifiant + mot de passe →
@@ -23,10 +22,10 @@
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-synchro-rapide.mjs
  *
  * Variables : SYNCHRO_TEMPS_REEL (sondage par défaut, attente, sse), PLAYWRIGHT_PATH, CAPTURES (défaut docs/captures-synchro-rapide), DIST, MESURES (nombre de mesures, 5),
- * PC_DIRECT=1 (le PC parle directement au nouveau relais), PUT_INTACT=1 (aucun corps de PUT perdu).
+ * PUT_INTACT=1 (aucun corps de PUT perdu).
  */
 
-// L'ancien relais (même processus) transmet par `fetch` au nouveau, dont le certificat est auto-signé.
+// Certificat auto-signé du relais local (appels faits depuis ce processus).
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 import { execFileSync } from 'node:child_process';
@@ -43,7 +42,7 @@ import { nouveauContexte, relierCommePc } from './e2e-acceptation.mjs';
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium } = requireGlobal('playwright');
-const { traiterRequete, proxifier } = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
+const { traiterRequete } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { coffresMemoire } = await import(pathToFileURL(join(racine, 'relais/coffres.mjs')).href);
 const { envoyerFlux } = await import(pathToFileURL(join(racine, 'esport/serveur/commun.mjs')).href);
 
@@ -55,9 +54,6 @@ const JETON = 'jeton-e2e-rapide-0123456789abcdef';
 const PORT_RELAIS = 8871;
 const PORT_SITE = 5271;
 const RELAIS = `https://localhost:${PORT_RELAIS}`;
-const PORT_ANCIEN = 8872;
-const RELAIS_ANCIEN = `https://localhost:${PORT_ANCIEN}`;
-const PC_DIRECT = Boolean(process.env.PC_DIRECT);
 const PUT_INTACT = Boolean(process.env.PUT_INTACT);
 const SITE = `http://localhost:${PORT_SITE}/`;
 const MDP_PC = 'ancien-mot-de-passe-du-pc-e2e-42';
@@ -67,7 +63,7 @@ const MODE = ['sse', 'attente', 'sondage'].includes(process.env.SYNCHRO_TEMPS_RE
 const PLAFOND_DELAI_MS = { sse: 1_000, attente: 2_000, sondage: 20_000 }[MODE];
 const FONDS = { sauge: 'rgb(238, 242, 236)', terminal: 'rgb(10, 10, 10)', nuit: 'rgb(11, 15, 23)' };
 
-// ------------------------------------------------------------- Relais (vrai worker, réponses en flux)
+// ------------------------------------------------------------- Relais (vrai cœur du relais, réponses en flux)
 const kv = new Map();
 const env = {
   JETON,
@@ -94,7 +90,7 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
   // Intermédiaire mutualisé (simulé) : le corps d'un PUT n'arrive jamais au relais.
   const perdu = req.method === 'PUT' && !PUT_INTACT;
   if (perdu) journal.push({ methode: 'PUT', chemin: req.url.split('?')[0], statut: 'corps perdu', le: Date.now() });
-  const requete = new Request(`${RELAIS}${req.url}`, { method: req.method, headers: { ...req.headers, 'cf-connecting-ip': '198.51.100.9' }, body: ['GET', 'HEAD'].includes(req.method) || perdu ? undefined : Buffer.concat(morceaux) });
+  const requete = new Request(`${RELAIS}${req.url}`, { method: req.method, headers: { ...req.headers, 'x-adresse-client': '198.51.100.9' }, body: ['GET', 'HEAD'].includes(req.method) || perdu ? undefined : Buffer.concat(morceaux) });
   const cheminLong = /\/(attendre|flux)$/.test(req.url.split('?')[0]);
   if (req.method === 'GET' && /\/version$/.test(req.url.split('?')[0])) {
     longues.versions++;
@@ -137,21 +133,6 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
   res.end(Buffer.from(await reponse.arrayBuffer()));
 });
 await new Promise(ok => serveurRelais.listen(PORT_RELAIS, ok));
-// Ancien relais (Worker Cloudflare en mode RELAIS_CIBLE) : transmet tout au nouveau, tel quel.
-const serveurAncien = https.createServer({ key: readFileSync(join(dossier, 'k.pem')), cert: readFileSync(join(dossier, 'c.pem')) }, async (req, res) => {
-  const morceaux = [];
-  for await (const m of req) morceaux.push(m);
-  const requete = new Request(`${RELAIS_ANCIEN}${req.url}`, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(morceaux) });
-  const reponse = await proxifier(requete, RELAIS).catch(e => new Response(JSON.stringify({ erreur: String(e) }), { status: 502 }));
-  journal.push({ methode: req.method, chemin: `ancien:${req.url.split('?')[0]}`, statut: reponse.status, le: Date.now() });
-  const entetes = Object.fromEntries(reponse.headers);
-  delete entetes['content-encoding'];
-  delete entetes['content-length'];
-  res.writeHead(reponse.status, entetes);
-  if (!reponse.body) return res.end();
-  return envoyerFlux(reponse.body, res);
-});
-await new Promise(ok => serveurAncien.listen(PORT_ANCIEN, ok));
 
 // ------------------------------------------------------------- Site statique
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '.woff2': 'font/woff2', '.woff': 'font/woff' };
@@ -189,7 +170,7 @@ async function pasStable(marge = 8_000) {
   if (reste < marge) await pause(reste + 100);
 }
 const base64url = t => Buffer.from(t).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-const CODE_PC = 'AB1.' + base64url(JSON.stringify({ r: PC_DIRECT ? RELAIS : RELAIS_ANCIEN, j: JETON }));
+const CODE_PC = 'AB1.' + base64url(JSON.stringify({ r: RELAIS, j: JETON }));
 const pause = ms => new Promise(ok => setTimeout(ok, ms));
 const log = (...a) => console.log('[e2e]', ...a);
 let echecs = 0;
@@ -304,7 +285,6 @@ try {
   if (!AVANT) {
     const perdus = journal.filter(j => j.statut === 'corps perdu').length;
     verifier(PUT_INTACT || perdus > 0, `migration réussie malgré ${perdus} PUT dont le corps a été perdu en route (repli POST + X-Methode)`);
-    verifier(PC_DIRECT || journal.some(j => j.chemin.startsWith('ancien:/acces/')), `le PC passe par ${PC_DIRECT ? 'le nouveau relais' : 'l’ancien relais qui transmet'}`);
   }
   const fait = await A.getByTestId('fondateur-connexion-faite').innerText();
   if (!AVANT) {
@@ -445,8 +425,7 @@ try {
     await pause(1_500);
     verifier(longues.ouvertes <= 2, `onglets fermés : ${longues.ouvertes} connexion(s) longue(s) restante(s)`);
     if (MODE !== 'sondage') {
-      // Onglet masqué : sa connexion longue est fermée proprement (B parle directement au relais ; A passe
-      // par l'ancien relais qui transmet, dont la connexion vers le nouveau ne se coupe qu'à la fin de l'attente).
+      // Onglet masqué : sa connexion longue est fermée proprement.
       const masquer = (page, etat) =>
         page.evaluate(e => {
           Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => e });
@@ -508,7 +487,6 @@ try {
 } finally {
   await navigateur.close();
   serveurRelais.close();
-  serveurAncien.close();
   serveurSite.close();
 }
 console.log(`\nMESURES ${JSON.stringify(mesures)}`);

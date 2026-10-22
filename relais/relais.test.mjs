@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import relais, { jetonDeProfil, jetonValide, porteeDuJeton } from './worker.mjs';
+import { relais, jetonDeProfil, jetonValide, porteeDuJeton } from './relais.mjs';
 
 const JETON = 'jeton-de-test-0123456789abcdef';
 
@@ -34,7 +34,7 @@ function kvMemoire({ sansListe = false } = {}) {
 }
 
 const appeler = (env, chemin, options = {}) =>
-  relais.fetch(
+  relais.traiter(
     new Request(`https://relais.test${chemin}`, {
       ...options,
       headers: { Authorization: `Bearer ${JETON}`, ...(options.headers ?? {}) },
@@ -47,7 +47,7 @@ const enveloppe = (appareil, date = '2026-09-26T10:00:00Z') =>
 
 test('refuse sans le bon jeton', async () => {
   const env = { JETON, BOITE: kvMemoire() };
-  const sans = await relais.fetch(new Request('https://relais.test/sante'), env);
+  const sans = await relais.traiter(new Request('https://relais.test/sante'), env);
   assert.equal(sans.status, 401);
   const faux = await appeler(env, '/sante', { headers: { Authorization: 'Bearer autre-jeton-0123456789ab' } });
   assert.equal(faux.status, 401);
@@ -56,7 +56,7 @@ test('refuse sans le bon jeton', async () => {
 
 test('/heure donne l’heure du relais (écart d’horloge), seulement avec le jeton', async () => {
   const env = { JETON, BOITE: kvMemoire() };
-  assert.equal((await relais.fetch(new Request('https://relais.test/heure'), env)).status, 401);
+  assert.equal((await relais.traiter(new Request('https://relais.test/heure'), env)).status, 401);
   const avant = Date.now();
   const corps = await (await appeler(env, '/heure')).json();
   assert.ok(corps.heure >= avant && corps.heure <= Date.now());
@@ -72,7 +72,7 @@ test('un jeton trop court ne vaut rien, même identique', () => {
 });
 
 test('répond au prévol CORS sans jeton', async () => {
-  const r = await relais.fetch(new Request('https://relais.test/boite', { method: 'OPTIONS' }), { JETON });
+  const r = await relais.traiter(new Request('https://relais.test/boite', { method: 'OPTIONS' }), { JETON });
   assert.equal(r.status, 204);
   assert.equal(r.headers.get('Access-Control-Allow-Origin'), '*');
 });
@@ -115,7 +115,7 @@ test('la passerelle refuse les adresses hors liste', async () => {
 // ------------------------------------------------------------------ Portées
 
 const avec = (env, jeton, chemin, options = {}) =>
-  relais.fetch(new Request(`https://relais.test${chemin}`, { ...options, headers: { Authorization: `Bearer ${jeton}` } }), env);
+  relais.traiter(new Request(`https://relais.test${chemin}`, { ...options, headers: { Authorization: `Bearer ${jeton}` } }), env);
 
 test('jeton de profil : dérivé du jeton maître, propre au compte, jamais pour principal', async () => {
   const a = await jetonDeProfil(JETON, 'ami001');

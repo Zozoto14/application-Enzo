@@ -1,12 +1,12 @@
 -- Esport, migration 0004 : notifications Discord (phase 4).
 --
--- SQL standard (SQLite / D1 et Postgres), mêmes conventions que 0001 :
--- UUID et dates ISO 8601 en TEXT, booléens 0/1, aucune fonction propre à D1.
+-- SQL standard (SQLite et Postgres), mêmes conventions que 0001 :
+-- UUID et dates ISO 8601 en TEXT, booléens 0/1, aucune fonction propre à SQLite.
 -- Indépendante de 0002, 0003 et 0005 : chaque migration n'est appliquée qu'une
 -- fois (par nom), les numéros peuvent arriver dans n'importe quel ordre.
 
 -- Un webhook par team. L'adresse n'est JAMAIS stockée en clair : `url_chiffree`
--- (AES-GCM, clé dérivée d'un secret du Worker, liée à la team). `fin` : les 4
+-- (AES-GCM, clé dérivée d'un secret du serveur, liée à la team). `fin` : les 4
 -- derniers caractères du jeton, pour l'affichage masqué « …/abcd ».
 CREATE TABLE discord_webhooks (
   team_id TEXT PRIMARY KEY REFERENCES teams (id) ON DELETE CASCADE,

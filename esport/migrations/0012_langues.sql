@@ -1,6 +1,6 @@
 -- Esport, migration 0012 : langues (français / anglais).
 --
--- SQL standard (SQLite / D1 et Postgres), mêmes conventions que 0001.
+-- SQL standard (SQLite et Postgres), mêmes conventions que 0001.
 --
 -- `comptes.langue` : langue choisie par l'utilisateur dans son profil Esport
 -- ('fr' ou 'en'). NULL tant qu'il n'a rien choisi (l'app prend alors la langue de

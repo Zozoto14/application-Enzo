@@ -1,12 +1,12 @@
 /**
- * Serveur Esport LOCAL (Node 22, sans Cloudflare) : même API que le Worker,
+ * Serveur Esport LOCAL (Node 22) : même API que le serveur o2switch,
  * base SQLite (fichier ou mémoire), et, sauf `--relais`, un relais de
- * développement en mémoire (le vrai relais/worker.mjs) avec un jeton maître
+ * développement en mémoire (le vrai relais/relais.mjs) avec un jeton maître
  * de développement. Sert au développement, aux tests de bout en bout, et de
  * point de départ pour un vrai serveur (docs/esport/migration-serveur.md).
  *
  *   node esport/outils/serveur-local.mjs [--port 8790] [--base esport/esport-local.db]
- *        [--relais https://applibourse-relais.<vous>.workers.dev] [--graines]
+ *        [--relais https://relais.appdashboard.fr] [--graines]
  *
  * Variables : ESPORT_CLE (clé de session ; tirée au hasard sinon),
  * ESPORT_JETON_DEV (jeton maître du relais de développement).
@@ -66,9 +66,9 @@ export async function demarrerServeurEsport({
   if (relais) {
     verifierJeton = verificateurRelais({ adresse: relais });
   } else {
-    const relaisWorker = (await import('../../relais/worker.mjs')).default;
+    const { relais: coeurRelais } = await import('../../relais/relais.mjs');
     envRelais = { JETON: jetonDev, BOITE: kvMemoire() };
-    verifierJeton = verificateurRelais({ liaison: { fetch: (url, init) => relaisWorker.fetch(new Request(url, init), envRelais) } });
+    verifierJeton = verificateurRelais({ liaison: { fetch: (url, init) => coeurRelais.traiter(new Request(url, init), envRelais) } });
   }
   if (graines) {
     const { semer } = await import('./graines.mjs');
@@ -76,7 +76,7 @@ export async function demarrerServeurEsport({
     if (!existe) await semer(base, { stockage });
   }
   const traiter = creerApi({ base, stockage, cleSession: cle, verifierJeton, creationTeams, cleDiscord, fetchDiscord, lienApp, discordBot, medias, ...(transcriptionServeur ? { transcriptionServeur } : {}), apercuLiens: apercuLiens ?? { telecharger: telechargeurNode() } });
-  // Cron du Worker (rappels de présence, d'échéance et Discord, événements en attente, file Discord), toutes les 15 minutes.
+  // Tâches planifiées (rappels de présence, d'échéance et Discord, événements en attente, file Discord), toutes les 15 minutes.
   const cron = setInterval(() => {
     void (async () => {
       const { rappelsEcheances } = await import('../noyau/objectifs.mjs');
@@ -144,7 +144,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   });
   console.log(`Esport local : ${s.url} (santé : ${s.url}/sante)`);
   if (s.jetonDev) {
-    const { jetonDeProfil } = await import('../../relais/worker.mjs');
+    const { jetonDeProfil } = await import('../../relais/relais.mjs');
     console.log(`Relais de développement en mémoire. Jeton maître (Fondateur) : ${s.jetonDev}`);
     console.log(`Jeton de profil de Léa (lea12345) : ${await jetonDeProfil(s.jetonDev, 'lea12345')}`);
   }

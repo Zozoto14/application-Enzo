@@ -1,7 +1,7 @@
 /**
  * Lecture d'un fichier privé par lien signé, avec les requêtes « Range » (réponse 206) : c'est ce que
  * fait la balise <video> pour avancer, reculer ou reprendre sans tout télécharger. Les octets sont lus
- * EN FLUX dans le stockage (disque, R2) : le serveur n'a jamais toute la vidéo en mémoire.
+ * EN FLUX dans le stockage (disque) : le serveur n'a jamais toute la vidéo en mémoire.
  */
 
 import { ENTETES_SECURITE, disposition } from '../entetes.mjs';

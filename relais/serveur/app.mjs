@@ -1,24 +1,23 @@
 /**
- * Relais AppDashboard en serveur Node autonome (Node 22 + PostgreSQL), hors Cloudflare : le MÊME code
- * que le Worker (relais/worker.mjs), avec la boîte KV `BOITE` rangée dans PostgreSQL (table relais_kv,
+ * Relais AppDashboard en serveur Node autonome (Node 22 + PostgreSQL) : le cœur HTTP du relais
+ * (relais/relais.mjs), avec la boîte clé/valeur `BOITE` rangée dans PostgreSQL (table relais_kv,
  * relais/serveur/kv-postgres.mjs). Compatible Passenger (o2switch « Setup Node.js App » : fichier de
  * démarrage `serveur/app.cjs`). Mode d'emploi : docs/o2switch.md.
  *
  * Configuration (variables de « Setup Node.js App » et/ou fichier ~/.appdashboard/relais.env, HORS du
  * dépôt et de public_html ; chemin modifiable par RELAIS_ENV) :
- *   JETON                 jeton maître (le MÊME que sur Cloudflare : les jetons de profil des amis en dérivent)
+ *   JETON                 jeton maître (ne jamais le changer : les jetons de profil des amis en dérivent)
  *   DATABASE_URL          postgres://… (ou PGHOST, PGUSER, PGPASSWORD, PGDATABASE), même base que l'Esport
  *   DISCORD_WEBHOOK_URL   salon du support (facultatif, docs/support.md) ; DISCORD_BOT_TOKEN : fils dans un salon texte
  *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM   envoi d'e-mails (facultatif, docs/emails.md)
  *   MAIL_COPIE_ENVOYES, IMAP_HOST, IMAP_PORT, IMAP_DOSSIER   copie dans « Envoyés » (défaut : activée, docs/emails.md)
  *   LIEN_APP              adresse du site dans les e-mails et Discord (défaut : https://appdashboard.fr)
- *   ORIGINES_SITE         origines du site pour /tsuzuku/requete (défaut : https://appdashboard.fr et l'ancien site Pages)
+ *   ORIGINES_SITE         origines du site pour /tsuzuku/requete (défaut : https://appdashboard.fr et www)
  *   CLE_A2F               facultatif (32 caractères au moins, à ne jamais changer) : chiffre les secrets de
  *                         validation en deux étapes ; sans elle, une clé tirée du JETON
  *   LIMITE_TSUZUKU_MINUTE facultatif ; URL_PUBLIQUE : https://relais.appdashboard.fr
  *   SYNCHRO_TEMPS_REEL    sondage (défaut, le plus sûr sur un mutualisé : aucune connexion tenue),
  *                         attente (attente longue de 50 s) ou sse (flux) : voir docs/o2switch.md
- *   RELAIS_CIBLE, SITE_CIBLE  retour arrière seulement : tout transmettre à un autre relais (et l'annoncer)
  *
  * Les limites de débit gardées en mémoire par le relais valent pour UN processus : une seule instance
  * suffit largement (voir docs/o2switch.md).
@@ -27,14 +26,14 @@
 import { pathToFileURL } from 'node:url';
 import { basePostgres, optionsDepuisEnv } from '../../esport/adaptateurs/postgres.mjs';
 import { chargerEnv, creerServeurHttp, ecouter, exigerNode, fichierEnvParDefaut } from '../../esport/serveur/commun.mjs';
-import { traiterRequete } from '../worker.mjs';
+import { traiterRequete } from '../relais.mjs';
 import { creerAvis, modeTempsReel } from '../avis.mjs';
 import { compresser } from './compression.mjs';
 import { configSmtp, creerEnvoyeur, manquesSmtp } from '../../esport/serveur/courriel-smtp.mjs';
 import { creerTableKv, kvPostgres, purgerKvExpire } from './kv-postgres.mjs';
 import { coffresPostgres, creerTablesCoffres } from './coffres-postgres.mjs';
 
-export const ORIGINES_PAR_DEFAUT = 'https://appdashboard.fr,https://www.appdashboard.fr,https://applibourse-ef0ddb.pages.dev';
+export const ORIGINES_PAR_DEFAUT = 'https://appdashboard.fr,https://www.appdashboard.fr';
 
 export function chargerConfigRelais(env = process.env) {
   const fichierEnv = chargerEnv(env.RELAIS_ENV || fichierEnvParDefaut('relais'), env);
@@ -52,9 +51,6 @@ export function chargerConfigRelais(env = process.env) {
     CLE_A2F: env.CLE_A2F || undefined,
     // Avis « nouvelle révision » : sondage (défaut), attente ou sse (relais/avis.mjs).
     SYNCHRO_TEMPS_REEL: modeTempsReel(env),
-    // Retour arrière (docs/o2switch.md) : ce relais transmet tout à RELAIS_CIBLE et l'annonce aux appareils.
-    RELAIS_CIBLE: env.RELAIS_CIBLE || undefined,
-    SITE_CIBLE: env.SITE_CIBLE || undefined,
     urlPublique: env.URL_PUBLIQUE || undefined,
     baseConfiguree: Boolean(env.DATABASE_URL || env.PGDATABASE || env.PGHOST),
   };
@@ -94,8 +90,6 @@ export async function preparerRelais({ config = chargerConfigRelais(), base, env
     ...(envoyeur ? { ENVOYER_COURRIEL: envoyeur, MAIL_FROM_AFFICHE: config.smtp.adresseDe } : {}),
     ORIGINES_SITE: config.ORIGINES_SITE,
     LIMITE_TSUZUKU_MINUTE: config.LIMITE_TSUZUKU_MINUTE,
-    RELAIS_CIBLE: config.RELAIS_CIBLE,
-    SITE_CIBLE: config.SITE_CIBLE,
   };
   // Réponses JSON compressées (gzip) quand l'appareil l'accepte ; jamais les flux (SSE).
   const traiter = async (requete, { attendre } = {}) =>

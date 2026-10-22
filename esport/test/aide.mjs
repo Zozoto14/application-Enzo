@@ -1,10 +1,10 @@
 /**
- * Banc de test de l'Esport, sans Cloudflare : base SQLite en mémoire
- * (node:sqlite), VRAI relais (relais/worker.mjs, KV en mémoire) branché comme
- * la liaison de service, horloge réglable.
+ * Banc de test de l'Esport : base SQLite en mémoire (node:sqlite), VRAI
+ * relais (relais/relais.mjs, boîte en mémoire) appelé dans le même processus,
+ * horloge réglable.
  */
 
-import relais, { jetonDeProfil } from '../../relais/worker.mjs';
+import { relais, jetonDeProfil } from '../../relais/relais.mjs';
 import { baseMigree } from './base.mjs';
 import { stockageMemoire } from '../adaptateurs/stockage.mjs';
 import { creerApi } from '../noyau/api.mjs';
@@ -26,7 +26,7 @@ export async function banc({ creationTeams = 'fondateur', relaisAncien = false, 
   const liaison = {
     fetch: async (url, init) => {
       if (relaisAncien) return new Response(JSON.stringify({ erreur: 'Adresse inconnue.' }), { status: 404 });
-      return relais.fetch(new Request(url, init), envRelais);
+      return relais.traiter(new Request(url, init), envRelais);
     },
   };
   const traiter = creerApi({
@@ -51,7 +51,7 @@ export async function banc({ creationTeams = 'fondateur', relaisAncien = false, 
   });
   let ipCompteur = 0;
   async function appel(chemin, { methode = 'GET', jeton, corps, ip, type = 'application/json', entetes = {} } = {}) {
-    const headers = { 'Content-Type': type, 'CF-Connecting-IP': ip ?? `198.51.100.${(++ipCompteur % 200) + 1}`, ...entetes };
+    const headers = { 'Content-Type': type, 'X-Adresse-Client': ip ?? `198.51.100.${(++ipCompteur % 200) + 1}`, ...entetes };
     if (jeton) headers.Authorization = `Bearer ${jeton}`;
     const r = await traiter(new Request(`https://esport.test${chemin}`, { method: methode, headers, body: corps === undefined ? undefined : JSON.stringify(corps) }));
     const texte = await r.text();
@@ -71,7 +71,7 @@ export async function banc({ creationTeams = 'fondateur', relaisAncien = false, 
   }
   /** Envoi binaire (PDF) : `type` = Content-Type annoncé, `nom` = en-tête X-Nom-Fichier. */
   async function envoyer(chemin, { methode = 'PUT', jeton, octets, type = 'application/pdf', nom, entetes = {} } = {}) {
-    const headers = { 'Content-Type': type, 'CF-Connecting-IP': '198.51.100.250', ...entetes };
+    const headers = { 'Content-Type': type, 'X-Adresse-Client': '198.51.100.250', ...entetes };
     if (jeton) headers.Authorization = `Bearer ${jeton}`;
     if (nom) headers['X-Nom-Fichier'] = encodeURIComponent(nom);
     const r = await traiter(new Request(`https://esport.test${chemin}`, { method: methode, headers, body: octets }));

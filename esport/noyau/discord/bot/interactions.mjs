@@ -1,7 +1,7 @@
 /**
  * Bot Discord de l'Esport par INTERACTIONS HTTP (slash commands, boutons,
  * menus) : Discord appelle POST /discord/interactions ; aucune connexion
- * permanente (gateway), adapté à un Worker. Cœur portable (Request/Response).
+ * permanente (gateway), adapté au serveur Node. Cœur portable (Request/Response).
  *
  *  1. Signature Ed25519 vérifiée (signature.mjs) ; PING → PONG.
  *  2. L'utilisateur Discord doit être LIÉ à un compte Esport (/lier), sinon :
@@ -616,7 +616,7 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     });
   }
 
-  /** Traite POST /discord/interactions. `attendre(promesse)` : waitUntil du Worker (suivi des réponses différées). */
+  /** Traite POST /discord/interactions. `attendre(promesse)` : tâche finie après la réponse (suivi des réponses différées). */
   async function traiter(requete, { attendre } = {}) {
     if (!config.publicKey || !config.applicationId) return json({ erreur: 'Bot Discord non configuré (DISCORD_PUBLIC_KEY, DISCORD_APPLICATION_ID).', code: 'bot-absent' }, 503);
     const longueur = Number(requete.headers.get('Content-Length') ?? 0);

@@ -1,7 +1,7 @@
 /**
- * Test de bout en bout des STATISTIQUES D'USAGE de l'Esport (page réservée au Fondateur), sans Cloudflare :
+ * Test de bout en bout des STATISTIQUES D'USAGE de l'Esport (page réservée au Fondateur) :
  *
- *  - faux relais (relais/worker.mjs), serveur Esport local, site construit (bureau/dist) ;
+ *  - faux relais (relais/relais.mjs), serveur Esport local, site construit (bureau/dist) ;
  *  - le Fondateur (PC) crée dans l'Administration les comptes de Léa (Joueuse) et de Kai (Propriétaire) ;
  *  - Léa (iPhone) et Kai (iPad) ouvrent l'Esport et NAVIGUENT : l'app envoie ses lots d'usage (intervalle
  *    raccourci pour le test), et un dernier lot part au départ de la page (keepalive) ;
@@ -43,7 +43,7 @@ const capture = async (page, nom) => {
   log(`capture ${nom}`);
 };
 
-const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
+const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { demarrerServeurEsport } = await import(pathToFileURL(join(racine, 'esport/outils/serveur-local.mjs')).href);
 
 // ------------------------------------------------------------- Serveurs

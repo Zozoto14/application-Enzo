@@ -1,7 +1,7 @@
 /**
- * Test de bout en bout : invitation directe depuis l'Esport, sans Cloudflare.
+ * Test de bout en bout : invitation directe depuis l'Esport.
  *
- *  - faux relais (le vrai relais/worker.mjs) et serveur Esport local (même API que le Worker) ;
+ *  - faux relais (le vrai relais/relais.mjs) et serveur Esport local (même API que le serveur o2switch) ;
  *  - PC (1440 × 900), le Fondateur : Esport › Membres › « Créer un compte » (nom, e-mail, team,
  *    rôle, poste) → vérification d'identité → compte du hub « Esport seulement » créé, adresse
  *    enregistrée, compte pré-enregistré « invité » dans sa team → e-mail d'invitation (mailto) ;

@@ -1,7 +1,7 @@
 /**
  * Limites de débit (rate limiting) de l'Esport, en fenêtre fixe, dans la
  * table `limites` (migration 0007) : rien en mémoire, donc valable quel que
- * soit le nombre d'instances du Worker.
+ * soit le nombre de processus du serveur.
  *
  * Complète l'anti-force brute des codes d'invitation (service.mjs : attente
  * doublée après 5 échecs) : ici on borne le VOLUME d'appels coûteux ou
@@ -9,7 +9,7 @@
  *
  * La fenêtre est approximative (lecture puis écriture, sans verrou) : sous
  * forte concurrence, quelques appels de plus peuvent passer. C'est voulu :
- * pas de transaction longue sur D1, et l'ordre de grandeur suffit.
+ * pas de transaction longue, et l'ordre de grandeur suffit.
  */
 
 import { echec, iso } from './outils.mjs';

@@ -34,7 +34,7 @@ import { mesurer } from './mobile-outils.mjs';
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium } = requireGlobal('playwright');
-const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href)).default;
+const { relais: coeurRelais } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-taches');
 mkdirSync(CAPTURES, { recursive: true });
@@ -43,7 +43,7 @@ const PORT_RELAIS = 8813;
 const PORT_SITE = 5223;
 const MDP_ADMIN = 'mot-de-passe-du-pc-e2e-taches-v3-42';
 
-// ------------------------------------------------------------- Faux relais (KV avec liste et métadonnées)
+// ------------------------------------------------------------- Faux relais (boîte avec liste et métadonnées)
 const kv = new Map();
 const metas = new Map();
 let ecrituresKv = 0;
@@ -72,7 +72,7 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
   const morceaux = [];
   for await (const m of req) morceaux.push(m);
   const requete = new Request(`https://localhost:${PORT_RELAIS}${req.url}`, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(morceaux) });
-  const reponse = await worker.fetch(requete, env);
+  const reponse = await coeurRelais.traiter(requete, env);
   res.writeHead(reponse.status, Object.fromEntries(reponse.headers));
   res.end(Buffer.from(await reponse.arrayBuffer()));
 });

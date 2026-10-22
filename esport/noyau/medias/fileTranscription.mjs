@@ -10,7 +10,7 @@
  * Ce module ne contient que la file (SQL standard, SQLite et PostgreSQL) : prise d'un travail avec un
  * BAIL (`verrou_jusqua`, renouvelé à chaque morceau : un travail dont le processus est mort redevient
  * disponible), réessais espacés, délai maximal, progression et temps restant estimé. Le moteur
- * (Whisper) et l'audio sont côté serveur Node, jamais ici (portable Cloudflare).
+ * (Whisper) et l'audio sont côté serveur Node, jamais ici (cœur portable).
  */
 
 import { iso, nouvelId } from '../outils.mjs';

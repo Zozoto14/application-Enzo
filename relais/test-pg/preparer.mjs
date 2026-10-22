@@ -3,7 +3,7 @@
  * pont HTTP réel sur un port local) et la boîte PostgreSQL (relais_kv), sans réécrire les tests :
  * chargé par `node --import` (voir lancer.mjs, `npm run relais:tester:pg`).
  *
- * Chaque appel `relais.fetch(requete, env)` d'un test devient une vraie requête HTTP vers le serveur
+ * Chaque appel `relais.traiter(requete, env)` d'un test devient une vraie requête HTTP vers le serveur
  * Node ; l'environnement du test (JETON, webhook Discord, origines…) lui est passé en mémoire (même
  * processus) et sa boîte est remplacée par la boîte PostgreSQL. Les tests qui inspectent leur boîte
  * en mémoire (`env.BOITE.donnees`) continuent de marcher : son contenu est recopié dans PostgreSQL avant
@@ -13,7 +13,7 @@
 import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { after } from 'node:test';
-import relais from '../worker.mjs';
+import { relais } from '../relais.mjs';
 import { basePostgres } from '../../esport/adaptateurs/postgres.mjs';
 import { demarrer } from '../serveur/app.mjs';
 import { creerTableKv, kvPostgres, TABLE_KV } from '../serveur/kv-postgres.mjs';
@@ -78,9 +78,9 @@ function envoyer(requete, corps, id) {
   requete.headers.forEach((v, k) => {
     entetes[k] = v;
   });
-  // L'IP « Cloudflare » du test devient la dernière entrée de X-Forwarded-For, comme derrière le proxy d'o2switch.
-  const ip = requete.headers.get('CF-Connecting-IP');
-  delete entetes['cf-connecting-ip'];
+  // L'IP du test (X-Adresse-Client) devient la dernière entrée de X-Forwarded-For, comme derrière le proxy d'o2switch.
+  const ip = requete.headers.get('X-Adresse-Client');
+  delete entetes['x-adresse-client'];
   const xff = [requete.headers.get('X-Forwarded-For'), ip].filter(Boolean).join(', ');
   if (xff) entetes['x-forwarded-for'] = xff;
   entetes['x-test-env'] = id;
@@ -102,7 +102,7 @@ function envoyer(requete, corps, id) {
   });
 }
 
-relais.fetch = (requete, env, _ctx) =>
+relais.traiter = (requete, env, _ctx) =>
   exclusif(async () => {
     const id = randomBytes(6).toString('hex');
     const boite = env?.BOITE;

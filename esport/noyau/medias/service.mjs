@@ -78,8 +78,8 @@ export const NATURES = {
 
 /**
  * Réglages des médias depuis l'environnement : ESPORT_VIDEO_MAX (plafond par fichier, « 10G » par
- * défaut) et ESPORT_TAILLE_MORCEAU (taille des morceaux, « 8M » par défaut, de 1 à 64 Mio ; 5 Mio au
- * moins sur R2).
+ * défaut) et ESPORT_TAILLE_MORCEAU (taille des morceaux, « 8M » par défaut, de 1 à 64 Mio ; un
+ * minimum peut être imposé).
  */
 export function configMedias(env = {}, { minimum = MORCEAU_MIN } = {}) {
   const plafond = lireTaille(env.ESPORT_VIDEO_MAX, PLAFOND_DEFAUT);

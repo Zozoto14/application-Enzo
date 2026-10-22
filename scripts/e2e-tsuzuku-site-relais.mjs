@@ -6,8 +6,8 @@
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-tsuzuku-site-relais.mjs
  *
- * Le relais est le VRAI `relais/worker.mjs` (route `relais/tsuzuku.mjs`) servi en
- * HTTPS local ; seuls ses appels sortants (`fetch` global du Worker) sont
+ * Le relais est le VRAI `relais/relais.mjs` (route `relais/tsuzuku.mjs`) servi en
+ * HTTPS local ; seuls ses appels sortants (`fetch` global du relais) sont
  * détournés vers un « internet » local NEUTRE (domaines fictifs *-exemple.fr,
  * aucun site réel), DNS sur HTTPS compris. Sites simulés : application
  * JavaScript (+ API JSON), AJAX en POST, ISO-8859-1, protection anti-robot,
@@ -40,8 +40,8 @@ import { allerPageAdministration, allerPageApplications, nouveauContexte } from 
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium } = requireGlobal('playwright');
-const moduleRelais = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
-const worker = moduleRelais.default;
+const moduleRelais = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
+const worker = { fetch: moduleRelais.relais.traiter };
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-tsuzuku-site-relais');
 mkdirSync(CAPTURES, { recursive: true });
@@ -131,7 +131,7 @@ function repondre(hote, methode, chemin, corpsRecu) {
       if (/episode-\d+$/.test(p)) return lecteur(`miroir-${p.split('-').pop()}`);
       break;
     case 'latin-exemple.fr': {
-      // Pas de <meta charset> : seul l'en-tête dit ISO-8859-1, décodé par le Worker.
+      // Pas de <meta charset> : seul l'en-tête dit ISO-8859-1, décodé par le relais.
       const latin = corps => ({ statut: 200, type: 'text/html; charset=iso-8859-1', corps: Buffer.from(`<!doctype html><html><body>${corps}</body></html>`, 'latin1') });
       if (p === '/recherche') return latin('<ul class="res"><li><a href="/serie/ete">Été éternel</a></li></ul>');
       if (p === '/serie/ete') return latin(`<ul class="eps">${episodes('/serie/ete', 1, 2)}</ul>`);
@@ -160,7 +160,7 @@ function repondre(hote, methode, chemin, corpsRecu) {
   return { statut: 404, type: 'text/plain', corps: 'introuvable' };
 }
 
-// ------------------------------------------------------------- Sortie du Worker : DNS sur HTTPS et « internet » local
+// ------------------------------------------------------------- Sortie du relais : DNS sur HTTPS et « internet » local
 const fetchNatif = globalThis.fetch.bind(globalThis);
 const sortants = [];
 const resolutions = [];
@@ -182,7 +182,7 @@ globalThis.fetch = async (entree, init = {}) => {
   return fetchNatif(entree, init);
 };
 
-// ------------------------------------------------------------- Relais local (HTTPS) : le vrai Worker
+// ------------------------------------------------------------- Relais local (HTTPS) : le vrai relais
 const kv = new Map();
 const metas = new Map();
 const env = {
@@ -223,7 +223,7 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
       : new Response(JSON.stringify({ erreur: 'Adresse inconnue.' }), { status: 404, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' } });
   } else {
     const requete = new Request(`https://localhost:${PORT_RELAIS}${req.url}`, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps });
-    // Le journal du Worker (console.log) est capturé pour vérifier qu'il ne contient ni adresse complète ni corps.
+    // Le journal du relais (console.log) est capturé pour vérifier qu'il ne contient ni adresse complète ni corps.
     console.log = (...a) => journalWorker.push(a.join(' '));
     try {
       reponse = await worker.fetch(requete, env);
@@ -450,7 +450,7 @@ try {
   await voir(pg, 'fiche-tester-sources');
   await capture(pg, '03-site-tests-via-relais');
   await ouvrirFiche(pg, 3);
-  verifier(/Test réussi/.test(await testerSurFiche(pg, 'latin')), '« Site ISO-8859-1 » : accents décodés par le Worker, « Été éternel » reconnu');
+  verifier(/Test réussi/.test(await testerSurFiche(pg, 'latin')), '« Site ISO-8859-1 » : accents décodés par le relais, « Été éternel » reconnu');
 
   // ============================================================ Lecture
   log('Lecture : seule la source « API JSON » active');
@@ -488,7 +488,7 @@ try {
   verifier(cookie.statut === 200 && cookie.json.headers['x-tsuzuku-cookie'] === '1' && !JSON.stringify(cookie.json).includes('valeur-secrete') && !('cookie' in dernier.entetes) && !('authorization' in dernier.entetes), 'aucun cookie envoyé ni rendu (Set-Cookie seulement signalé)');
   verifier(sortants.every(a => a.redirect === 'manual' && !Object.keys(a.entetes).some(n => /^(cookie|authorization|origin)$/i.test(n))), 'chaque appel sortant : redirect manuel, ni cookie, ni identifiants, ni origine');
   verifier(resolutions.includes('spa-exemple.fr') && resolutions.includes('interne-exemple.fr'), 'chaque nom est résolu (DNS sur HTTPS) avant l’appel');
-  verifier(journalWorker.length > 0 && journalWorker.every(l => !/\/recherche|\?|api_key|terme=|CLE-FICTIVE/.test(l)), `journal du Worker : hôte, statut et durée seulement (${journalWorker[0]})`);
+  verifier(journalWorker.length > 0 && journalWorker.every(l => !/\/recherche|\?|api_key|terme=|CLE-FICTIVE/.test(l)), `journal du relais : hôte, statut et durée seulement (${journalWorker[0]})`);
 
   // ============================================================ Relais pas à jour, limite de débit
   log('Relais pas encore mis à jour (404), puis limite de débit (429)');

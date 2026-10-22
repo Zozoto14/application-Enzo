@@ -101,7 +101,7 @@ test('plages Range : formes acceptées, plafond par réponse, plages impossibles
   assert.deepEqual(lirePlage('bytes=0-', 200 * 1024 * 1024), { debut: 0, fin: 64 * 1024 * 1024 - 1 });
 });
 
-test('réglages : tailles lisibles (10G, 8M), morceaux bornés, 5 Mio au moins pour R2', () => {
+test('réglages : tailles lisibles (10G, 8M), morceaux bornés, minimum imposé', () => {
   assert.equal(lireTaille('10G', 1), 10 * 1024 ** 3);
   assert.equal(lireTaille('500 Mo', 1), 500 * 1024 ** 2);
   assert.equal(lireTaille('abc', 7), 7);

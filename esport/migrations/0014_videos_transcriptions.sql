@@ -1,7 +1,7 @@
 -- Esport, migration 0014 : vidéos déposées sur le site (review vidéo), enregistrements des réunions
 -- et transcription automatique en PDF.
 --
--- SQL standard, compatible SQLite / D1 ET PostgreSQL : clés textes, entiers (BIGINT sur Postgres : une
+-- SQL standard, compatible SQLite ET PostgreSQL : clés textes, entiers (BIGINT sur Postgres : une
 -- taille de 10 Go dépasse 32 bits), dates ISO 8601 en texte, JSON en texte, aucune fonction propre à
 -- SQLite, aucune clé auto-incrémentée.
 --

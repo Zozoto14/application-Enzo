@@ -1,13 +1,13 @@
 /**
- * Briques communes aux serveurs Node autonomes (Esport et relais), pour un
- * hébergement hors Cloudflare (o2switch « Setup Node.js App » / Passenger, ou
- * tout serveur derrière un proxy HTTPS). Aucune dépendance.
+ * Briques communes aux serveurs Node autonomes (Esport et relais), hébergés
+ * chez o2switch (« Setup Node.js App » / Passenger) ou sur tout serveur
+ * derrière un proxy HTTPS. Aucune dépendance.
  *
  *  - `chargerEnv(fichier)` : lit un fichier `.env` (CLE=valeur) HORS du dépôt ;
  *    les variables déjà définies (interface cPanel) gardent la priorité ;
  *  - `creerServeurHttp(traiter, options)` : pont node:http ↔ Request/Response
- *    standard (le cœur des Workers tourne tel quel), corps borné, adresse IP
- *    du client fiable (anti-usurpation de CF-Connecting-IP), en-têtes de
+ *    standard (le cœur HTTP tourne tel quel), corps borné, adresse IP du
+ *    client fiable (en-tête X-Adresse-Client, jamais repris du client), en-têtes de
  *    sécurité, tâches « après la réponse » (équivalent de `ctx.waitUntil`).
  */
 
@@ -99,12 +99,12 @@ export function creerServeurHttp(traiter, { urlPublique, tailleMax = 25 * 1024 *
       const headers = new Headers();
       for (const [nom, valeur] of Object.entries(req.headers)) {
         if (valeur === undefined) continue;
-        // Jamais d'en-tête « Cloudflare » venu du client : CF-Connecting-IP est recalculé ici.
-        if (nom === 'cf-connecting-ip' || nom.startsWith(':')) continue;
+        // Jamais d'adresse IP posée par le client : X-Adresse-Client est recalculé ici.
+        if (nom === 'x-adresse-client' || nom.startsWith(':')) continue;
         headers.set(nom, Array.isArray(valeur) ? valeur.join(', ') : valeur);
       }
       const ip = ipClient(req, { confianceProxy });
-      if (ip) headers.set('CF-Connecting-IP', ip);
+      if (ip) headers.set('X-Adresse-Client', ip);
       const origine = base ?? `${req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http'}://${req.headers.host ?? 'localhost'}`;
       const requete = new Request(`${origine}${req.url}`, {
         method: req.method,

@@ -17,20 +17,21 @@ bureau/electron/version-build.json
 # Résultat de vite build, régénéré à chaque compilation
 bureau/dist/
 
-# Relais Cloudflare : jeton et identifiants propres à votre compte (scripts/deployer-relais.mjs)
+# Relais : jeton maître et adresses de ce PC (lu par l'app de bureau), jamais versionné
 relais/relais-local.json
+site-dist/
+# Restes locaux de l'ancien hébergement (outil wrangler) : jamais versionnés
 relais/wrangler.local.toml
 relais/.wrangler/
-site-dist/
 .wrangler/
-# Paquets JavaScript signés (npm run publier-maj), publiés avec le site de secours
+# Paquets JavaScript signés (npm run publier-maj), publiés avec le site
 /maj/
 
 # Claude Office (dépôt à part) posé dans le dossier du projet : jamais versionné ici (docs/claude-office.md)
 /Claude Office/
 /claude-office/
 
-# Esport : base locale (*.db déjà ignoré), configuration temporaire du workflow, exports de la base
+# Esport : base locale (*.db déjà ignoré), restes locaux de l'ancien hébergement, exports de la base
 esport/wrangler.ci.toml
 esport/.wrangler/
 esport-export*.json

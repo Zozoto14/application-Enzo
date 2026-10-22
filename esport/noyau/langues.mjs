@@ -1,6 +1,6 @@
 /**
  * Langues du serveur Esport (français / anglais) : textes des messages Discord, des réponses du
- * bot et des exports CSV. Sans dépendance, pur (Worker et Node).
+ * bot et des exports CSV. Sans dépendance, pur.
  *
  *  - `texte(langue, 'cle', { variable })` : interpolation `{variable}` ;
  *  - `texteNombre(langue, 'cle', n, vars)` : pluriel (clés `cle.one` / `cle.other`, `{n}` fourni) ;

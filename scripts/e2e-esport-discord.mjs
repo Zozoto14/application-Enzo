@@ -1,6 +1,6 @@
 /**
- * Test de bout en bout de l'Esport, phase 4 (notifications Discord), sans Cloudflare ni vrai
- * Discord : faux relais (le vrai relais/worker.mjs), serveur Esport local (SQLite en mémoire) et
+ * Test de bout en bout de l'Esport, phase 4 (notifications Discord), sans vrai
+ * Discord : faux relais (le vrai relais/relais.mjs), serveur Esport local (SQLite en mémoire) et
  * FAUX serveur Discord local (http) qui reçoit les messages à la place de discord.com.
  *
  *  - PC (1440 × 900), le Fondateur : team « Faucons Valorant » (par l'API) ; onglet « Discord » ;
@@ -51,7 +51,7 @@ const capture = async (page, nom) => {
   log(`capture ${nom}`);
 };
 
-const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
+const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { demarrerServeurEsport } = await import(pathToFileURL(join(racine, 'esport/outils/serveur-local.mjs')).href);
 
 // ------------------------------------------------------------- Faux Discord

@@ -1,7 +1,7 @@
 /**
  * Suivi des joueurs (module `player_notes`) : notes du staff sur chaque joueur.
  *
- * Même contrat que les autres services : SQL standard (SQLite / D1 et
+ * Même contrat que les autres services : SQL standard (SQLite et
  * PostgreSQL), aucune dépendance au runtime, contrôles dans l'ordre
  * authentification (api.mjs) → appartenance (`contexteTeam`) → module activé
  * → permission (`exiger`). Toute écriture ajoute son événement de domaine à

@@ -6,12 +6,12 @@
  *
  *   DISCORD_APPLICATION_ID=… DISCORD_BOT_TOKEN=… node esport/outils/discord-commandes.mjs
  *        [--identite]          description, avatar et bannière (docs/esport/bot/)
- *        [--adresse https://applibourse-esport.<vous>.workers.dev]   Interactions Endpoint URL
+ *        [--adresse https://esport.appdashboard.fr]   Interactions Endpoint URL
  *        [--essai]             affiche ce qui serait envoyé, sans rien envoyer
  *
  * Le jeton n'est lu que dans l'environnement (jamais en argument, jamais
  * affiché). Sans jeton ni identifiant : message, puis sortie sans erreur
- * (étape facultative du workflow Esport).
+ * (étape facultative).
  */
 
 import { existsSync, readFileSync } from 'node:fs';

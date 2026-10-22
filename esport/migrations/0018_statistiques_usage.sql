@@ -1,6 +1,6 @@
 -- Esport, migration 0018 : statistiques d'usage internes (page « Statistiques », réservée au Fondateur).
 --
--- SQL standard, compatible SQLite / D1 ET PostgreSQL (mêmes conventions que 0001 : UUID et dates ISO 8601
+-- SQL standard, compatible SQLite ET PostgreSQL (mêmes conventions que 0001 : UUID et dates ISO 8601
 -- en TEXT, booléens 0/1, JSON en TEXT, aucune fonction propre à un moteur). Voir docs/esport/statistiques.md.
 --
 -- Confidentialité : uniquement des MÉTADONNÉES d'usage (page ouverte, durée, action clé, type d'appareil,

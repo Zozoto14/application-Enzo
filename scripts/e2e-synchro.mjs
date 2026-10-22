@@ -1,6 +1,6 @@
 /**
  * Test de bout en bout de la synchronisation : deux « appareils » (deux
- * contextes Chromium) et un faux relais local qui exécute relais/worker.mjs.
+ * contextes Chromium) et un faux relais local qui exécute relais/relais.mjs.
  *
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-synchro.mjs
@@ -25,7 +25,7 @@ import { allerPageAdministration, allerPageApplications, nouveauContexte, tuileA
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium } = requireGlobal('playwright');
-const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href)).default;
+const { relais: coeurRelais } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-synchro');
 mkdirSync(CAPTURES, { recursive: true });
@@ -59,7 +59,7 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
     headers: req.headers,
     body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps,
   });
-  const reponse = await worker.fetch(requete, env);
+  const reponse = await coeurRelais.traiter(requete, env);
   res.writeHead(reponse.status, Object.fromEntries(reponse.headers));
   res.end(Buffer.from(await reponse.arrayBuffer()));
 });

@@ -489,7 +489,7 @@ export function servicesResumes({ base, stockage, cleSession, maintenant = () =>
     const ctx = await contexteTeam(acteur, teamId);
     exigerUne(ctx, P.rediger);
     const { r } = await reunionDeTeam(ctx, reunionId);
-    if (!stockage) throw echec(503, 'stockage-absent', 'Le stockage des fichiers (R2) n’est pas branché sur le serveur Esport : voir docs/esport/deploiement.md.');
+    if (!stockage) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport : voir docs/o2switch.md.');
     const contentType = requete.headers.get('Content-Type');
     verifierEntetesPdf({ contentType, tailleAnnoncee: requete.headers.get('Content-Length') ?? 0 });
     const octets = await lireOctets(requete);

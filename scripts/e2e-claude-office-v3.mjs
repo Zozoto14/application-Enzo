@@ -2,7 +2,7 @@
  * Claude Office v3 (zones, salle d'attente, « attend ta réponse », mise en route, détail, statistiques), en vrai
  * navigateur. Le journal est écrit par le VRAI hook (scripts/office-historique-hook.mjs, dossier temporaire) au fil du
  * test, puis servi par un faux pont du PC ; le site relit la copie chiffrée d'un faux relais local (le vrai
- * relais/worker.mjs, KV en mémoire).
+ * relais/relais.mjs, boîte en mémoire).
  *
  * Parcours : mise en route (site : aucune copie, commande à copier ; PC : hook à mettre à jour → installé) ; un agent
  * passe de la Bibliothèque à l'Atelier puis à la Salle d'attente ; un autre lève la main au guichet ; détail (récap,

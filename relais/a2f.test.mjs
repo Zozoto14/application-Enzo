@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, createHmac } from 'node:crypto';
-import relais, { jetonDeProfil } from './worker.mjs';
+import { relais, jetonDeProfil } from './relais.mjs';
 import { coffresMemoire } from './coffres.mjs';
 import { depuisBase32, pasValide } from './a2f.mjs';
 
@@ -28,9 +28,9 @@ function kv() {
 }
 const env0 = () => ({ JETON, BOITE: kv(), COFFRES: coffresMemoire() });
 function appel(env, chemin, { methode = 'GET', jeton, corps } = {}) {
-  const headers = { 'Content-Type': 'application/json', 'CF-Connecting-IP': `198.51.100.${++ip % 250}` };
+  const headers = { 'Content-Type': 'application/json', 'X-Adresse-Client': `198.51.100.${++ip % 250}` };
   if (jeton) headers.Authorization = `Bearer ${jeton}`;
-  return relais.fetch(new Request(`https://relais.test${chemin}`, { method: methode, headers, body: corps === undefined ? undefined : JSON.stringify(corps) }), env);
+  return relais.traiter(new Request(`https://relais.test${chemin}`, { method: methode, headers, body: corps === undefined ? undefined : JSON.stringify(corps) }), env);
 }
 function totp(secret, decalage = 0, instant = Date.now()) {
   const t = Buffer.alloc(8);

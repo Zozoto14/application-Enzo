@@ -1,5 +1,5 @@
 /**
- * Tâches planifiées de l'Esport (les mêmes que le cron du Worker : rappels, file Discord, purge du
+ * Tâches planifiées de l'Esport (esport/noyau/cron.mjs : rappels, file Discord, purge du
  * journal…), plus la purge des clés expirées du relais et le lancement du processus de transcription
  * sur le serveur (esport/serveur/transcription/, s'il est installé et que des réunions attendent). Lancé par une tâche cron cPanel toutes les
  * 5 minutes :

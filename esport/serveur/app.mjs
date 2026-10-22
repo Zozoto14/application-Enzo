@@ -1,5 +1,5 @@
 /**
- * Serveur Esport autonome (Node 22 + PostgreSQL), hors Cloudflare : même API que le Worker
+ * Serveur Esport autonome (Node 22 + PostgreSQL) : l'API du cœur portable
  * (esport/noyau/api.mjs), fichiers sur le disque (adaptateurs/stockage.mjs), jetons validés par le
  * relais en HTTPS (RELAIS_URL, POST /jeton/verifier). Compatible Passenger (o2switch « Setup Node.js
  * App » : fichier de démarrage `serveur/app.cjs`, qui charge celui-ci) ; PORT fourni par l'hébergeur.

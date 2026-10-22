@@ -3,7 +3,7 @@
  *
  * Le transport n'est PAS ici : le serveur Node du relais (relais/serveur/app.mjs) le fournit dans
  * `env.ENVOYER_COURRIEL` quand SMTP_HOST, SMTP_USER, SMTP_PASS et MAIL_FROM sont dans relais.env
- * (esport/serveur/courriel-smtp.mjs, nodemailer). Sans lui (Worker Cloudflare, ou .env incomplet) :
+ * (esport/serveur/courriel-smtp.mjs, nodemailer). Sans lui (.env incomplet) :
  * 503 `non-configure`, et l'app retombe sur sa messagerie (`mailto:`).
  *
  * Confidentialité : les adresses e-mail vivent dans la base CHIFFRÉE du Fondateur, sur ses

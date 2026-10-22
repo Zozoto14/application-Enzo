@@ -2,7 +2,7 @@
  * Vérification des requêtes d'interactions de Discord : signature Ed25519 de
  * `X-Signature-Timestamp + corps brut`, avec la clé publique de l'application
  * (DISCORD_PUBLIC_KEY, 64 caractères hexadécimaux). WebCrypto uniquement
- * (Workers et Node 22) : aucune dépendance.
+ * (Node 22) : aucune dépendance.
  *
  * En plus de la signature, l'horodatage doit être récent (5 minutes, dans les
  * deux sens) : une requête signée rejouée plus tard est refusée.
@@ -19,13 +19,7 @@ const octetsHexa = hexa => Uint8Array.from(hexa.match(/../g).map(o => Number.par
 async function importer(cleHexa) {
   if (cache.has(cleHexa)) return cache.get(cleHexa);
   const brute = octetsHexa(cleHexa);
-  let cle;
-  try {
-    cle = await globalThis.crypto.subtle.importKey('raw', brute, { name: 'Ed25519' }, false, ['verify']);
-  } catch {
-    // Anciens runtimes Cloudflare : nom propriétaire de l'algorithme.
-    cle = await globalThis.crypto.subtle.importKey('raw', brute, { name: 'NODE-ED25519', namedCurve: 'NODE-ED25519' }, false, ['verify']);
-  }
+  const cle = await globalThis.crypto.subtle.importKey('raw', brute, { name: 'Ed25519' }, false, ['verify']);
   cache.set(cleHexa, cle);
   return cle;
 }
@@ -41,8 +35,7 @@ export async function verifierSignature({ clePublique, signature, horodatage, co
   if (Math.abs(maintenant / 1000 - Number(horodatage)) > FENETRE_HORODATAGE_S) return { ok: false, motif: 'horodatage' };
   try {
     const cle = await importer(clePublique.toLowerCase());
-    const algo = cle.algorithm?.name === 'NODE-ED25519' ? { name: 'NODE-ED25519' } : { name: 'Ed25519' };
-    const valide = await globalThis.crypto.subtle.verify(algo, cle, octetsHexa(signature), encodeur.encode(`${horodatage}${corps}`));
+    const valide = await globalThis.crypto.subtle.verify({ name: 'Ed25519' }, cle, octetsHexa(signature), encodeur.encode(`${horodatage}${corps}`));
     return valide ? { ok: true } : { ok: false, motif: 'signature' };
   } catch {
     return { ok: false, motif: 'signature' };

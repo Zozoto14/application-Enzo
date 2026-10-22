@@ -1,5 +1,5 @@
 /**
- * Planning, disponibilités et présence par l'API (sans Cloudflare) :
+ * Planning, disponibilités et présence par l'API :
  * permissions (un Joueur reçoit 403), tests négatifs entre teams, modules
  * désactivés, occurrences et séries, RSVP et marquage, statistiques et CSV,
  * heatmap et seuil, iCal (export, abonnement, jeton révoqué), rappels du

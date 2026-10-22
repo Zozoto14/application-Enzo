@@ -11,7 +11,7 @@
  * requête SQL filtre sur `team_id` : l'adversaire d'une autre team est
  * introuvable. Le Joueur (sans scouting.view) reçoit 403, même en appel direct.
  *
- * Logo : adresse https uniquement (pas de fichier R2 : voir docs/esport/scouting.md).
+ * Logo : adresse https uniquement (pas de fichier déposé : voir docs/esport/scouting.md).
  */
 
 import { evenement } from '../evenements.mjs';

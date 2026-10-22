@@ -1,8 +1,8 @@
 /**
- * Test de bout en bout de l'Esport (phase 1), sans Cloudflare :
+ * Test de bout en bout de l'Esport (phase 1) :
  *
- *  - faux relais (le vrai relais/worker.mjs, version 7) et serveur Esport local (esport/outils/
- *    serveur-local.mjs : même API que le Worker, base SQLite en mémoire) ;
+ *  - faux relais (le vrai relais/relais.mjs, version 7) et serveur Esport local (esport/outils/
+ *    serveur-local.mjs : même API que le serveur o2switch, base SQLite en mémoire) ;
  *  - PC (1440 × 900), le Fondateur : tuile Esport (Dashboard · Teams · Membres), pseudo, assistant
  *    de création en 3 étapes, seconde team « Team B » ;
  *  - Léa a un compte « Esport seulement » créé dans l'Administration (avant l'invitation directe) :
@@ -48,7 +48,7 @@ const capture = async (page, nom) => {
   log(`capture ${nom}`);
 };
 
-const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
+const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { demarrerServeurEsport } = await import(pathToFileURL(join(racine, 'esport/outils/serveur-local.mjs')).href);
 
 // ------------------------------------------------------------- Serveurs

@@ -2,7 +2,7 @@
 --
 -- 1. Index sur les requêtes fréquentes (team_id, dates, statut). Rien n'est
 --    modifié dans les données : la migration est sans risque et se relance
---    (IF NOT EXISTS). SQL standard, compatible SQLite (D1) et Postgres.
+--    (IF NOT EXISTS). SQL standard, compatible SQLite et Postgres.
 -- 2. Table `limites` : compteurs de débit par fenêtre (session, création de
 --    team, de compte, d'invitations…), passagère (purgée par le cron, jamais
 --    exportée).

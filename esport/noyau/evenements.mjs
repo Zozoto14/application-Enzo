@@ -7,7 +7,7 @@
  * in-app, et plus tard Discord) lisent ces lignes ; aucun module ne les
  * appelle directement.
  *
- * Distribution : juste après la requête (Worker : `waitUntil`), et par le
+ * Distribution : juste après la requête (tâche après la réponse), et par le
  * cron (événements en échec : nouvel essai). Chaque abonné est idempotent
  * (identifiants dérivés de l'événement, `ON CONFLICT DO NOTHING`) : un
  * événement traité deux fois ne laisse qu'une trace. Pour une file de jobs

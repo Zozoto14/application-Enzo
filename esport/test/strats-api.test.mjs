@@ -97,7 +97,7 @@ test('enregistrement versionné : révisions, conflit (409), historique, documen
   assert.ok(journal.includes('strat.created') && journal.includes('strat.updated'));
 });
 
-test('miniature : stockée (R2 via l’interface), lien signé lisible, remplacée, refusée si ce n’est pas une image', async () => {
+test('miniature : stockée (interface de stockage), lien signé lisible, remplacée, refusée si ce n’est pas une image', async () => {
   const { b, sessions, url, creer } = await preparer();
   const id = (await creer(sessions.coach123)).corps.id;
   let r = await b.appel(`${url}/${id}`, { methode: 'PUT', jeton: sessions.coach123, corps: { revision: 1, donnees: docExemple(), miniature: jpegDataUrl() } });

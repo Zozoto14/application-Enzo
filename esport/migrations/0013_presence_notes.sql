@@ -1,6 +1,6 @@
 -- Esport, migration 0013 : refonte de la présence et suivi des joueurs (notes du staff).
 --
--- SQL standard, compatible SQLite / D1 ET PostgreSQL : insertions idempotentes
+-- SQL standard, compatible SQLite ET PostgreSQL : insertions idempotentes
 -- par ON CONFLICT DO NOTHING, clés textes, booléens en entiers 0/1,
 -- dates ISO 8601 en texte, aucune fonction propre à SQLite.
 --

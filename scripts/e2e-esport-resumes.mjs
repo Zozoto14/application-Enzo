@@ -1,6 +1,6 @@
 /**
- * Test de bout en bout de l'Esport, phase 3 (résumés de réunions, objectifs et tâches), sans
- * Cloudflare : faux relais (le vrai relais/worker.mjs), serveur Esport local (base SQLite en
+ * Test de bout en bout de l'Esport, phase 3 (résumés de réunions, objectifs et tâches), :
+ * faux relais (le vrai relais/relais.mjs), serveur Esport local (base SQLite en
  * mémoire, stockage des fichiers en mémoire).
  *
  *  - PC (1440 × 900), le Fondateur : team « Faucons Valorant » (par l'API), compte de Léa dans
@@ -47,7 +47,7 @@ const capture = async (page, nom) => {
   log(`capture ${nom}`);
 };
 
-const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
+const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { demarrerServeurEsport } = await import(pathToFileURL(join(racine, 'esport/outils/serveur-local.mjs')).href);
 const { pdfDeDemo } = await import(pathToFileURL(join(racine, 'esport/outils/graines.mjs')).href);
 

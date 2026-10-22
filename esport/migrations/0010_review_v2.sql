@@ -1,6 +1,6 @@
 -- Esport, migration 0010 : review vidéo v2 (réactions et dessins).
 --
--- SQL standard (SQLite / D1 et Postgres). Le numéro 0009 est pris par le
+-- SQL standard (SQLite et Postgres). Le numéro 0009 est pris par le
 -- planning (convocations) : le migrateur accepte les trous, chaque migration
 -- n'est appliquée qu'une fois (par nom).
 --

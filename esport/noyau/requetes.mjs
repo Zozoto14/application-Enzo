@@ -1,10 +1,10 @@
 /**
  * Lectures groupées (performances) : une requête `IN (…)` par paquet au lieu
- * d'une requête par ligne (N+1). Les paquets restent sous la limite de D1
- * (100 paramètres liés par requête) ; SQL standard, compatible Postgres.
+ * d'une requête par ligne (N+1). Les paquets restent petits (100 paramètres
+ * liés par requête au plus) ; SQL standard, compatible SQLite et PostgreSQL.
  */
 
-/** Taille d'un paquet d'identifiants (D1 : 100 paramètres au plus, on garde de la marge). */
+/** Taille d'un paquet d'identifiants (100 paramètres au plus, on garde de la marge). */
 export const TAILLE_PAQUET = 80;
 
 /** Découpe une liste en paquets. */

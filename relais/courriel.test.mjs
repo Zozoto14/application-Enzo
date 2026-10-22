@@ -5,7 +5,7 @@
 
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import relais, { jetonDeProfil } from './worker.mjs';
+import { relais, jetonDeProfil } from './relais.mjs';
 import { configSmtp, creerEnvoyeur, manquesSmtp } from '../esport/serveur/courriel-smtp.mjs';
 import { adresseValide, markdownVersHtml, markdownVersTexte, masquerAdresse, rendreCourriel } from './courriel-modeles.mjs';
 import { decoderMessage, fauxSmtp } from './test-smtp/faux-smtp.mjs';
@@ -29,7 +29,7 @@ after(async () => {
 });
 
 const appel = (env, chemin, { methode = 'POST', corps, jeton = JETON } = {}) =>
-  relais.fetch(new Request(`https://relais.test${chemin}`, { method: methode, headers: { Authorization: `Bearer ${jeton}`, 'Content-Type': 'application/json' }, ...(corps ? { body: JSON.stringify(corps) } : {}) }), env);
+  relais.traiter(new Request(`https://relais.test${chemin}`, { method: methode, headers: { Authorization: `Bearer ${jeton}`, 'Content-Type': 'application/json' }, ...(corps ? { body: JSON.stringify(corps) } : {}) }), env);
 
 test('courriel : configuration SMTP lue dans le .env, incomplète = désactivée', () => {
   assert.equal(configSmtp({}), undefined);
@@ -41,7 +41,7 @@ test('courriel : configuration SMTP lue dans le .env, incomplète = désactivée
   assert.equal(configSmtp({ ...smtp.env, MAIL_FROM: 'pas une adresse' }), undefined);
 });
 
-test('courriel : sans transport (Worker Cloudflare) → 503 non-configure ; réservé au jeton maître', async () => {
+test('courriel : sans transport SMTP → 503 non-configure ; réservé au jeton maître', async () => {
   const env = { JETON, BOITE: kvMemoire() };
   const r = await appel(env, '/courriel/envoyer', { corps: { destinataires: ['lea@exemple.fr'], variables: { objet: 'Salut', message: 'Coucou' } } });
   assert.equal(r.status, 503);

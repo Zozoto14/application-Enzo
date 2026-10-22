@@ -32,8 +32,7 @@
  * L'historique est gardé `RETENTION_HISTORIQUE_JOURS` jours (au plus `MAX_HISTORIQUE` lignes par compte).
  *
  * Deux magasins : PostgreSQL (relais/serveur/coffres-postgres.mjs, o2switch) et la mémoire (tests,
- * serveur de développement). Sans magasin (`env.COFFRES` absent, ex. Worker Cloudflare qui transmet
- * tout à o2switch), les routes répondent 501 et les appareils restent sur l'ancienne synchronisation.
+ * serveur de développement). Sans magasin (`env.COFFRES` absent), les routes répondent 501 et les appareils restent sur l'ancienne synchronisation.
  */
 
 import { avisDe, ipDe, modeTempsReel, routeAttendre, routeFlux, routeVersion } from './avis.mjs';

@@ -3,13 +3,13 @@
  * variables de « Setup Node.js App » et/ou fichier ~/.appdashboard/esport.env
  * (HORS du dépôt et de public_html ; chemin modifiable par ESPORT_ENV).
  *
- *   CLE_ESPORT        clé de session (obligatoire ; la même que sur Cloudflare garde les sessions ouvertes)
+ *   CLE_ESPORT        clé de session (obligatoire ; ne pas la changer : sessions et liens de partage en dépendent)
  *   DATABASE_URL      postgres://utilisateur:motdepasse@localhost:5432/base (ou PGHOST, PGUSER, PGPASSWORD, PGDATABASE)
  *   RELAIS_URL        adresse du relais qui valide les jetons (https://relais.appdashboard.fr)
  *   FICHIERS_DIR      dossier des PDF et miniatures (défaut ~/esport-fichiers, jamais dans public_html)
  *   URL_PUBLIQUE      adresse publique du serveur (https://esport.appdashboard.fr)
  *   CREATION_TEAMS    « fondateur » (défaut) ou « tous »
- *   CLE_DISCORD, LIEN_APP, DISCORD_APPLICATION_ID, DISCORD_PUBLIC_KEY, DISCORD_BOT_TOKEN : comme sur le Worker.
+ *   CLE_DISCORD, LIEN_APP, DISCORD_APPLICATION_ID, DISCORD_PUBLIC_KEY, DISCORD_BOT_TOKEN : Discord (docs/esport/bot-discord.md).
  *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM : récapitulatif e-mail (facultatif, docs/emails.md).
  *   ESPORT_VIDEO_MAX       plafond d'une vidéo ou d'un enregistrement déposé (« 10G » par défaut)
  *   ESPORT_TAILLE_MORCEAU  taille des morceaux d'envoi (« 8M » par défaut, de 1 à 64 Mio) : sous la limite

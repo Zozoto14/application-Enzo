@@ -1,6 +1,6 @@
 -- Esport, migration 0015 : Discord ID des membres et récapitulatif par e-mail.
 --
--- SQL standard (SQLite / D1 et Postgres), mêmes conventions que 0001. Le numéro
+-- SQL standard (SQLite et Postgres), mêmes conventions que 0001. Le numéro
 -- 0014 est pris par d'autres travaux (vidéos) : le migrateur accepte les trous.
 --
 -- 1. `comptes.discord_id` : identifiant numérique Discord du membre (17 à 20

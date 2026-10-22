@@ -1,6 +1,6 @@
 /**
  * Synchronisation dès le démarrage, de bout en bout : deux « appareils » (deux
- * contextes Chromium) et un faux relais local qui exécute relais/worker.mjs.
+ * contextes Chromium) et un faux relais local qui exécute relais/relais.mjs.
  *
  *  - B change le thème et crée un compte pendant que A est fermé ;
  *  - A démarre (verrouillé) : « 1 mise à jour reçue, en attente de déverrouillage » ;
@@ -32,7 +32,7 @@ import { nouveauContexte } from './e2e-acceptation.mjs';
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium } = requireGlobal('playwright');
-const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href)).default;
+const { relais: coeurRelais } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-demarrage');
 mkdirSync(CAPTURES, { recursive: true });
@@ -71,7 +71,7 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
     headers: req.headers,
     body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps,
   });
-  const reponse = await worker.fetch(requete, env);
+  const reponse = await coeurRelais.traiter(requete, env);
   res.writeHead(reponse.status, Object.fromEntries(reponse.headers));
   res.end(Buffer.from(await reponse.arrayBuffer()));
 });

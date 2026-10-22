@@ -9,7 +9,7 @@
  * profil pas encore publié, relais injoignable, réinitialisation, révocation,
  * ancien ami (code de liaison + TOTP) toujours valable, et relais pas encore
  * redéployé (invitation « lien », message « relais à mettre à jour »).
- * Faux relais local qui exécute relais/worker.mjs (version 6).
+ * Faux relais local qui exécute relais/relais.mjs (version 6).
  *
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-connexion-amis.mjs
@@ -32,8 +32,8 @@ import { allerPageAdministration, nouveauContexte } from './e2e-acceptation.mjs'
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium, devices } = requireGlobal('playwright');
-const moduleRelais = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
-const worker = moduleRelais.default;
+const moduleRelais = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
+const worker = { fetch: moduleRelais.relais.traiter };
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-connexion-amis');
 mkdirSync(CAPTURES, { recursive: true });
@@ -45,7 +45,7 @@ const SITE = `http://localhost:${PORT_SITE}/`;
 const MDP_ADMIN = 'mot-de-passe-du-fondateur-e2e-42';
 const MDP_LEA = 'Été à Biarritz 2026';
 
-// ------------------------------------------------------------- Faux relais (vrai worker, KV en mémoire)
+// ------------------------------------------------------------- Faux relais (vrai relais, boîte en mémoire)
 const kv = new Map();
 const metas = new Map();
 const env = {
@@ -86,7 +86,7 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
   const morceaux = [];
   for await (const m of req) morceaux.push(m);
   const corps = Buffer.concat(morceaux);
-  const entetes = { ...req.headers, 'cf-connecting-ip': relais.ip };
+  const entetes = { ...req.headers, 'x-adresse-client': relais.ip };
   const chemin = req.url.split('?')[0];
   const nouvelleRoute = /^\/(invitations|acces|revocations)\//.test(chemin);
   if (relais.ancien && nouvelleRoute && req.method !== 'OPTIONS') {

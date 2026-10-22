@@ -1,5 +1,5 @@
 /**
- * Test de bout en bout de la review vidéo v2 (Esport), sans Cloudflare et SANS
+ * Test de bout en bout de la review vidéo v2 (Esport), SANS
  * appeler YouTube (faux script local intercepté, comme e2e-esport-review.mjs) :
  *
  *  - PC (1440 × 900), le Fondateur : GRAS par Ctrl+B dans la note d'un repère

@@ -2,8 +2,7 @@
 # changement de l'app sur main, puis poussé (fichiers construits SEULEMENT) sur la branche
 # `deploiement-o2switch`. Le serveur o2switch tire cette branche toutes les 5 minutes
 # (esport/serveur/deployer.sh) : aucun accès entrant, aucun secret d'hébergement ici.
-# Mode d'emploi : docs/o2switch.md. Le workflow « Site (Cloudflare Pages) » continue en parallèle jusqu'à
-# la bascule.
+# Mode d'emploi : docs/o2switch.md.
 #
 # La branche deploiement-o2switch ne contient jamais de code : elle est réécrite à chaque construction
 # (un seul commit), pour ne pas faire grossir le dépôt cloné sur l'hébergement.

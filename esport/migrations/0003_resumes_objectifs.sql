@@ -1,7 +1,7 @@
 -- Esport, migration 0003 : résumés de réunions, fichiers, objectifs et tâches (phase 3).
 --
--- SQL standard (SQLite / D1 et Postgres), mêmes conventions que 0001 :
--- UUID et dates ISO 8601 en TEXT, booléens 0/1, aucune fonction propre à D1.
+-- SQL standard (SQLite et Postgres), mêmes conventions que 0001 :
+-- UUID et dates ISO 8601 en TEXT, booléens 0/1, aucune fonction propre à SQLite.
 -- Indépendante de 0002 (phase 2, planning) : les numéros peuvent arriver dans
 -- n'importe quel ordre, chaque migration n'est appliquée qu'une fois (par nom).
 
@@ -28,7 +28,7 @@ INSERT INTO types_reunion (id, team_id, nom, couleur, visibilite, position, cree
   ('00000000-0000-4000-8000-000000000004', NULL, 'Staff', '#d64545', 'staff', 4, '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z'),
   ('00000000-0000-4000-8000-000000000005', NULL, 'Autre', '#64748b', 'team', 5, '2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z');
 
--- Fichiers privés (bucket R2 ou équivalent) : nom de stockage aléatoire, jamais
+-- Fichiers privés (stockage de fichiers du serveur) : nom de stockage aléatoire, jamais
 -- public. `remplace_le` : version remplacée (gardée dans l'historique).
 CREATE TABLE fichiers (
   id TEXT PRIMARY KEY,

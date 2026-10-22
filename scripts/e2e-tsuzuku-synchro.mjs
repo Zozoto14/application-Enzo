@@ -7,7 +7,7 @@
  *  3. navigateur B NEUF : connexion par identifiant + mot de passe. L'écran « Avant de commencer »
  *     n'apparaît JAMAIS (pas même un instant) ; la bibliothèque, la source et la progression sont là.
  *
- * Faux relais : le VRAI worker (relais/worker.mjs) avec le coffre serveur en mémoire. Catalogue
+ * Faux relais : le VRAI relais (relais/relais.mjs) avec le coffre serveur en mémoire. Catalogue
  * (Jikan, AniList) et images simulés. Aucun site réel : *-exemple.fr.
  *
  *   npx vite build
@@ -30,7 +30,7 @@ import { SCRIPT_PC, allerPageApplications, relierCommePc } from './e2e-acceptati
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium } = requireGlobal('playwright');
-const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href)).default;
+const { relais: coeurRelais } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { coffresMemoire } = await import(pathToFileURL(join(racine, 'relais/coffres.mjs')).href);
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-tsuzuku-synchro');
@@ -43,7 +43,7 @@ const SITE = `http://localhost:${PORT_SITE}/`;
 const MDP_PC = 'mot-de-passe-du-pc-e2e-tsuzuku-42';
 const MDP_ENZO = 'Ma phrase de connexion Tsuzuku 2026';
 
-// ------------------------------------------------------------- Faux relais (vrai worker, coffre en mémoire)
+// ------------------------------------------------------------- Faux relais (vrai relais, coffre en mémoire)
 const kv = new Map();
 const metas = new Map();
 const coffres = coffresMemoire();
@@ -69,8 +69,8 @@ execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyo
 const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pem')), cert: readFileSync(join(dossier, 'c.pem')) }, async (req, res) => {
   const morceaux = [];
   for await (const m of req) morceaux.push(m);
-  const requete = new Request(`${RELAIS}${req.url}`, { method: req.method, headers: { ...req.headers, 'cf-connecting-ip': '198.51.100.9' }, body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(morceaux) });
-  const reponse = await worker.fetch(requete, env);
+  const requete = new Request(`${RELAIS}${req.url}`, { method: req.method, headers: { ...req.headers, 'x-adresse-client': '198.51.100.9' }, body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(morceaux) });
+  const reponse = await coeurRelais.traiter(requete, env);
   res.writeHead(reponse.status, Object.fromEntries(reponse.headers));
   res.end(Buffer.from(await reponse.arrayBuffer()));
 });

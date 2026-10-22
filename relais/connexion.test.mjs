@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import relais, { attenteApres, jetonDeProfil } from './worker.mjs';
+import { relais, attenteApres, jetonDeProfil } from './relais.mjs';
 
 const JETON = 'jeton-de-test-connexion-0123456789';
 const sha = t => createHash('sha256').update(t).digest('hex');
@@ -26,9 +26,9 @@ function kv() {
 }
 
 function appel(env, chemin, { methode = 'GET', jeton, corps, ip } = {}) {
-  const headers = { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip ?? '198.51.100.7' };
+  const headers = { 'Content-Type': 'application/json', 'X-Adresse-Client': ip ?? '198.51.100.7' };
   if (jeton) headers.Authorization = `Bearer ${jeton}`;
-  return relais.fetch(new Request(`https://relais.test${chemin}`, { method: methode, headers, body: corps === undefined ? undefined : JSON.stringify(corps) }), env);
+  return relais.traiter(new Request(`https://relais.test${chemin}`, { method: methode, headers, body: corps === undefined ? undefined : JSON.stringify(corps) }), env);
 }
 
 const PREUVE = hex(64, '1');

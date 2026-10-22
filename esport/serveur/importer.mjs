@@ -1,20 +1,21 @@
 /**
- * Import UNIQUE des données Esport de Cloudflare (D1 + fichiers R2) dans PostgreSQL et sur le disque,
- * lancé depuis le terminal cPanel. Méthode : le serveur o2switch TIRE lui-même les données du Worker
- * Cloudflare par ses routes d'administration (export JSON `GET /admin/export`, puis chaque fichier par
- * `GET /admin/fichier?cle=…`), avec une session du Fondateur ouverte par le jeton maître. Rien ne passe
- * par GitHub, aucun fichier d'export ne traîne.
+ * Import des données Esport d'un AUTRE serveur Esport (base + fichiers) dans PostgreSQL et sur le disque :
+ * outil générique de migration entre deux serveurs, lancé depuis le terminal du NOUVEAU serveur. Méthode :
+ * il TIRE lui-même les données de l'ancien par ses routes d'administration (export JSON `GET /admin/export`,
+ * puis chaque fichier par `GET /admin/fichier?cle=…`), avec une session du Fondateur ouverte par le jeton
+ * maître. Rien ne passe par GitHub, aucun fichier d'export ne traîne.
  *
- *   ESPORT_SOURCE=https://applibourse-esport.<vous>.workers.dev node esport/serveur/importer.mjs
+ *   ESPORT_SOURCE=https://ancien-esport.exemple node esport/serveur/importer.mjs
  *
  * Le jeton maître est lu dans ~/.appdashboard/relais.env (JETON) — jamais en argument. Étapes :
  *  1. migrations PostgreSQL (idempotentes) ;
- *  2. export de la base du Worker, import dans une base VIDE (refus sinon : l'import ne fusionne jamais) ;
+ *  2. export de la base de l'ancien serveur, import dans une base VIDE (refus sinon : l'import ne fusionne jamais) ;
  *  3. vérification : nombre de lignes de chaque table, export contre PostgreSQL ;
  *  4. copie des fichiers (PDF, miniatures) dans FICHIERS_DIR ; un fichier déjà copié est sauté ;
- *  5. reprise des clés du serveur (CLE_ESPORT, CLE_DISCORD) quand le Worker est en LECTURE SEULE : écrites dans
- *     ~/.appdashboard/esport.env (copie de l'ancien fichier gardée), pour que les liens de partage de strats
- *     et les webhooks Discord (chiffrés) restent valables ; l'app Esport est ensuite redémarrée.
+ *  5. reprise des clés du serveur (CLE_ESPORT, CLE_DISCORD) si l'ancien serveur les expose (option
+ *     `secretsExportables` de preparerEsport, désactivée par défaut) : écrites dans ~/.appdashboard/esport.env
+ *     (copie de l'ancien fichier gardée), pour que les liens de partage de strats et les webhooks Discord
+ *     (chiffrés) restent valables ; l'app Esport est ensuite redémarrée. Sinon, recopiez ces deux clés à la main.
  * `--fichiers-seulement` : refait seulement l'étape 4 (reprise après coupure).
  * Variante hors ligne : `--entree esport-export.json` (export fait par esport/outils/transfert.mjs).
  */
@@ -82,7 +83,7 @@ export function majFichierEnv(chemin, valeurs) {
     if (!m || !restantes.has(m[1])) return [l];
     const v = restantes.get(m[1]);
     restantes.delete(m[1]);
-    return v === null ? [`# ${m[1]} retirée par l'import (la valeur de Cloudflare n'en avait pas)`] : [`${m[1]}=${v}`];
+    return v === null ? [`# ${m[1]} retirée par l'import (l’ancien serveur n’en avait pas)`] : [`${m[1]}=${v}`];
   });
   for (const [cle, v] of restantes) if (v !== null) lignes.push(`${cle}=${v}`);
   writeFileSync(chemin, `${lignes.join('\n').replace(/\n+$/, '')}\n`, { mode: 0o600 });
@@ -101,7 +102,7 @@ export async function principal(args, env = process.env, { fetch: requete = glob
   const source = (env.ESPORT_SOURCE || option('--source') || '').replace(/\/+$/, '');
   const entree = option('--entree');
   const fichiersSeulement = args.includes('--fichiers-seulement');
-  if (!entree && !source) throw new Error('ESPORT_SOURCE absente : adresse de l’ancien serveur Esport (https://applibourse-esport.<vous>.workers.dev).');
+  if (!entree && !source) throw new Error('ESPORT_SOURCE absente : adresse de l’ancien serveur Esport (https://…).');
   if (source && !jeton) throw new Error('JETON absent de ~/.appdashboard/relais.env (jeton maître : il ouvre la session du Fondateur sur l’ancien serveur).');
 
   const base = await basePostgres({ ...optionsDepuisEnv(env), max: 2 });
@@ -132,12 +133,12 @@ export async function principal(args, env = process.env, { fetch: requete = glob
     const lireDistant = async cle => {
       const r = await requete(`${source}/admin/fichier?cle=${encodeURIComponent(cle)}`, { headers: { Authorization: `Bearer ${session}` } });
       if (r.status === 404) return null;
-      if (!r.ok) throw new Error(`Fichier ${cle} : HTTP ${r.status} (Worker Esport à redéployer ? route /admin/fichier)`);
+      if (!r.ok) throw new Error(`Fichier ${cle} : HTTP ${r.status} (route /admin/fichier absente de l’ancien serveur ?)`);
       return { octets: new Uint8Array(await r.arrayBuffer()), type: r.headers.get('X-Type-Fichier') ?? undefined };
     };
     const f = await copierFichiers(base, stockage, lireDistant);
-    journal.log(`Fichiers : ${f.copies} copiés, ${f.deja} déjà présents, ${f.absents.length} introuvables sur Cloudflare${f.absents.length ? ` (${f.absents.slice(0, 5).join(', ')})` : ''} → ${config.dossierFichiers}`);
-    // Clés du serveur : seulement si le Worker est en lecture seule (fenêtre de déménagement).
+    journal.log(`Fichiers : ${f.copies} copiés, ${f.deja} déjà présents, ${f.absents.length} introuvables sur l’ancien serveur${f.absents.length ? ` (${f.absents.slice(0, 5).join(', ')})` : ''} → ${config.dossierFichiers}`);
+    // Clés du serveur : seulement si l'ancien serveur les expose (option secretsExportables).
     let cles = false;
     const rs = await requete(`${source}/admin/secrets`, { headers: { Authorization: `Bearer ${session}` } });
     if (rs.ok) {
@@ -149,10 +150,10 @@ export async function principal(args, env = process.env, { fetch: requete = glob
         mkdirSync(dirname(redemarrage), { recursive: true });
         writeFileSync(redemarrage, new Date().toISOString());
         cles = true;
-        journal.log(`Clés du serveur reprises de Cloudflare (CLE_ESPORT${lu.cleDiscord ? ', CLE_DISCORD' : ''}) dans ${fichierEnv} ; app Esport redémarrée. Liens de partage et webhooks Discord conservés.`);
+        journal.log(`Clés du serveur reprises de l’ancien serveur (CLE_ESPORT${lu.cleDiscord ? ', CLE_DISCORD' : ''}) dans ${fichierEnv} ; app Esport redémarrée. Liens de partage et webhooks Discord conservés.`);
       }
     } else {
-      journal.log('Clés du serveur NON reprises (Worker pas en lecture seule) : relancez avec --fichiers-seulement une fois ESPORT_LECTURE_SEULE=1, sinon les liens de partage de strats et les webhooks Discord seront à refaire.');
+      journal.log('Clés du serveur NON reprises (l’ancien serveur ne les expose pas) : recopiez CLE_ESPORT et CLE_DISCORD de son esport.env, sinon les liens de partage de strats et les webhooks Discord seront à refaire.');
     }
     return { ok: true, fichiers: f, cles };
   } finally {

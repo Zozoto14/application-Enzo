@@ -1,11 +1,10 @@
 -- Esport, migration 0001 : fondations (phase 1).
 --
--- SQL standard, compatible SQLite (Cloudflare D1) et Postgres :
+-- SQL standard, compatible SQLite et PostgreSQL :
 --  - identifiants UUID en TEXT, dates ISO 8601 (UTC) en TEXT ;
 --  - booléens en INTEGER 0/1, JSON en TEXT ;
---  - aucune fonction propre à D1 ou à SQLite.
--- Appliquée par `wrangler d1 migrations apply` (D1) ou par
--- esport/noyau/migrations.mjs (SQLite local, Postgres plus tard).
+--  - aucune fonction propre à SQLite.
+-- Appliquée par esport/noyau/migrations.mjs (PostgreSQL du serveur, SQLite local).
 
 -- Profil Esport d'un compte du hub (l'identifiant est celui du compte du
 -- relais ; « principal » pour le Fondateur). Minimisation : pseudo obligatoire,

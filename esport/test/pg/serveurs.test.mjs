@@ -2,7 +2,7 @@
  * Intégration « comme sur o2switch » : le relais (relais/serveur/app.mjs) et le serveur Esport
  * (esport/serveur/app.mjs) démarrés en VRAI (HTTP), sur PostgreSQL, fichiers sur le disque ; l'Esport
  * fait valider les jetons par le relais en HTTP (RELAIS_URL). On crée une team, on dépose un PDF, on
- * lance le cron ; puis on déménage un « ancien » serveur (SQLite) vers PostgreSQL avec importer.mjs.
+ * lance le cron ; puis on migre un « ancien » serveur (SQLite) vers PostgreSQL avec importer.mjs.
  * Lancé par `npm run esport:tester:pg` (sauté sans ESPORT_TEST_PG).
  */
 
@@ -12,7 +12,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdtempSync, readFileSync, existsSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { jetonDeProfil } from '../../../relais/worker.mjs';
+import { jetonDeProfil } from '../../../relais/relais.mjs';
 import { basePostgres } from '../../adaptateurs/postgres.mjs';
 import { baseSqliteMigree } from '../../adaptateurs/sqlite.mjs';
 import { stockageDisque } from '../../adaptateurs/stockage.mjs';
@@ -72,7 +72,7 @@ test('o2switch : relais + Esport sur PostgreSQL, team, dépôt de PDF, cron', op
   const dossier = mkdtempSync(join(tmpdir(), 'esport-o2switch-'));
   const esport = await demarrerEsport({ port: 0, hote: '127.0.0.1', base, config: configEsport(relais.url, dossier) });
   try {
-    // Santé des deux serveurs, en-têtes de sécurité et CORS comme sur Cloudflare.
+    // Santé des deux serveurs, en-têtes de sécurité et CORS.
     const sante = await api(esport.url, '/sante');
     assert.equal(sante.statut, 200);
     assert.equal(sante.corps.service, 'esport');
@@ -84,8 +84,8 @@ test('o2switch : relais + Esport sur PostgreSQL, team, dépôt de PDF, cron', op
     assert.equal(pre.status, 204);
     assert.match(pre.headers.get('access-control-allow-headers') ?? '', /Authorization/);
     assert.equal((await api(relais.url, '/sante', { jeton: JETON })).corps.version >= 8, true);
-    // Une IP usurpée (CF-Connecting-IP posé par le client) n'est jamais crue.
-    const usurpe = await fetch(`${relais.url}/jeton/verifier`, { method: 'POST', headers: { 'CF-Connecting-IP': '1.2.3.4' }, body: '{}' });
+    // Une IP usurpée (X-Adresse-Client posé par le client) n'est jamais crue.
+    const usurpe = await fetch(`${relais.url}/jeton/verifier`, { method: 'POST', headers: { 'X-Adresse-Client': '1.2.3.4' }, body: '{}' });
     assert.equal(usurpe.status, 200);
 
     // Session du Fondateur : jeton maître validé par le relais EN HTTP.
@@ -112,7 +112,7 @@ test('o2switch : relais + Esport sur PostgreSQL, team, dépôt de PDF, cron', op
     const fichier = await base.premier('SELECT cle_stockage FROM fichiers WHERE team_id = ?', [teamId]);
     assert.ok(existsSync(join(dossier, fichier.cle_stockage)));
     assert.deepEqual(new Uint8Array(readFileSync(join(dossier, fichier.cle_stockage))), PDF);
-    // Lecture par l'admin (route du déménagement) : mêmes octets.
+    // Lecture par l'admin (route de migration) : mêmes octets.
     const lu = await fetch(`${esport.url}/admin/fichier?cle=${encodeURIComponent(fichier.cle_stockage)}`, { headers: { Authorization: `Bearer ${f}` } });
     assert.equal(lu.status, 200);
     assert.equal(lu.headers.get('x-type-fichier'), 'application/pdf');
@@ -196,20 +196,20 @@ test('o2switch : vidéo envoyée en morceaux de 8 Mio par HTTP (corps de requêt
   }
 });
 
-test('o2switch : déménagement d’un ancien serveur (base et fichiers) vers PostgreSQL avec importer.mjs, comptes vérifiés', options, async () => {
-  // L'« ancien » serveur : SQLite + fichiers, avec le même relais (comme le Worker Cloudflare).
+test('o2switch : migration d’un ancien serveur (base et fichiers) vers PostgreSQL avec importer.mjs, comptes vérifiés', options, async () => {
+  // L'« ancien » serveur : SQLite + fichiers, avec le même relais.
   const cible = await schemaNeuf();
   const relais = await demarrerRelais({ port: 0, hote: '127.0.0.1', base: cible.base, config: { JETON, baseConfiguree: true } });
   await migrer(cible.base);
   const ancienneBase = await baseSqliteMigree();
   const ancienDossier = mkdtempSync(join(tmpdir(), 'esport-ancien-'));
-  // Comme le Worker en LECTURE_SEULE : les clés du serveur sont reprises par l'importeur.
-  const ancien = await demarrerEsport({ port: 0, hote: '127.0.0.1', base: ancienneBase, stockage: await stockageDisque(ancienDossier), config: configEsport(relais.url, ancienDossier, { cleDiscord: 'cle-discord-de-cloudflare-0123456789' }), secretsExportables: true });
+  // Option secretsExportables : les clés du serveur sont reprises par l'importeur.
+  const ancien = await demarrerEsport({ port: 0, hote: '127.0.0.1', base: ancienneBase, stockage: await stockageDisque(ancienDossier), config: configEsport(relais.url, ancienDossier, { cleDiscord: 'cle-discord-ancien-serveur-0123456789' }), secretsExportables: true });
   const nouveauDossier = mkdtempSync(join(tmpdir(), 'esport-nouveau-'));
   try {
     const f = await sessionFondateur(ancien.url);
     await api(ancien.url, '/moi', { methode: 'PUT', jeton: f, corps: { pseudo: 'Fondateur' } });
-    const teamId = (await api(ancien.url, '/teams', { methode: 'POST', jeton: f, corps: { nom: 'Team Cloudflare', jeu: 'valorant', preset: 'valorant_complet' } })).corps.team.id;
+    const teamId = (await api(ancien.url, '/teams', { methode: 'POST', jeton: f, corps: { nom: 'Team Ancienne', jeu: 'valorant', preset: 'valorant_complet' } })).corps.team.id;
     const depot = await api(ancien.url, `/teams/${teamId}/resumes`, { methode: 'POST', jeton: f, corps: { lien: 'https://youtu.be/abc123', typeId: HEBDO, dateReunion: '2026-10-19', titre: 'À déménager' } });
     assert.equal((await api(ancien.url, `/teams/${teamId}/resumes/${depot.corps.id}/pdf`, { methode: 'PUT', jeton: f, octets: PDF })).statut, 200);
 
@@ -221,15 +221,15 @@ test('o2switch : déménagement d’un ancien serveur (base et fichiers) vers Po
     assert.equal(r.ok, true);
     assert.ok(messages.some(m => /mêmes nombres de lignes/.test(m)), messages.join('\n'));
     assert.ok(messages.some(m => /Fichiers : 1 copiés/.test(m)), messages.join('\n'));
-    // Clés reprises : CLE_ESPORT et CLE_DISCORD de « Cloudflare » dans le fichier .env (privé), sauvegarde gardée.
+    // Clés reprises : CLE_ESPORT et CLE_DISCORD de l’ancien serveur dans le fichier .env (privé), sauvegarde gardée.
     assert.equal(r.cles, true);
     const lu = readFileSync(fichierEnv, 'utf8');
     assert.match(lu, new RegExp(`^CLE_ESPORT=${CLE}$`, 'm'));
-    assert.match(lu, /^CLE_DISCORD=cle-discord-de-cloudflare-0123456789$/m);
+    assert.match(lu, /^CLE_DISCORD=cle-discord-ancien-serveur-0123456789$/m);
     assert.match(lu, /^RELAIS_URL=/m);
     assert.equal(statSync(fichierEnv).mode & 0o777, 0o600);
     assert.ok(existsSync(`${fichierEnv}.avant-import`));
-    assert.equal((await cible.base.premier('SELECT nom FROM teams', [])).nom, 'Team Cloudflare');
+    assert.equal((await cible.base.premier('SELECT nom FROM teams', [])).nom, 'Team Ancienne');
     const cle = (await cible.base.premier('SELECT cle_stockage FROM fichiers', [])).cle_stockage;
     assert.deepEqual(new Uint8Array(readFileSync(join(nouveauDossier, cle))), PDF);
     // Rejouer : refusé (base non vide) ; reprise des fichiers seulement : rien à recopier.
@@ -241,8 +241,8 @@ test('o2switch : déménagement d’un ancien serveur (base et fichiers) vers Po
     const nouveau = await demarrerEsport({ port: 0, hote: '127.0.0.1', base: cible.base, stockage: await stockageDisque(nouveauDossier), config: configEsport(relais.url, nouveauDossier) });
     try {
       const f2 = await sessionFondateur(nouveau.url);
-      assert.deepEqual((await api(nouveau.url, '/teams', { jeton: f2 })).corps.teams.map(t => t.nom), ['Team Cloudflare']);
-      // Hors déménagement, jamais de clé exportée.
+      assert.deepEqual((await api(nouveau.url, '/teams', { jeton: f2 })).corps.teams.map(t => t.nom), ['Team Ancienne']);
+      // Sans l'option, jamais de clé exportée.
       assert.equal((await api(nouveau.url, '/admin/secrets', { jeton: f2 })).statut, 404);
       // Une session ouverte sur l'ancien serveur reste valable (même CLE_ESPORT).
       assert.equal((await api(nouveau.url, '/moi', { jeton: f })).statut, 200);

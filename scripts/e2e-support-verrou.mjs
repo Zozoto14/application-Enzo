@@ -1,6 +1,6 @@
 /**
  * Test de bout en bout : verrouillage automatique, Support (tickets vers un faux webhook Discord par le VRAI
- * relais/worker.mjs), documents légaux et acceptation à la première connexion.
+ * relais/relais.mjs), documents légaux et acceptation à la première connexion.
  *
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-support-verrou.mjs
@@ -23,7 +23,7 @@ import { SCRIPT_PC, allerPageAdministration } from './e2e-acceptation.mjs';
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium } = requireGlobal('playwright');
-const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href)).default;
+const { relais: coeurRelais } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-support');
 mkdirSync(CAPTURES, { recursive: true });
@@ -33,7 +33,7 @@ const PORT_SITE = 5197;
 const MDP_ADMIN = 'mot-de-passe-du-pc-e2e-très-long-42';
 const MDP_ANCIEN = 'ancien-coffre-du-site-e2e-long-17';
 
-// ------------------------------------------------------------- Faux relais (KV avec liste et métadonnées)
+// ------------------------------------------------------------- Faux relais (boîte avec liste et métadonnées)
 const kv = new Map();
 const metas = new Map();
 const compteurs = { put: 0, get: 0, list: 0 };
@@ -83,7 +83,7 @@ const serveurRelais = https.createServer({ key: readFileSync(join(dossier, 'k.pe
     headers: req.headers,
     body: ['GET', 'HEAD'].includes(req.method) ? undefined : corps,
   });
-  const reponse = await worker.fetch(requete, env);
+  const reponse = await coeurRelais.traiter(requete, env);
   const jeton = String(req.headers.authorization ?? '').replace(/^Bearer\s+/, '');
   journalRelais.push({ methode: req.method, chemin: req.url, statut: reponse.status, portee: jeton === JETON ? 'maitre' : jeton.startsWith('p1.') ? jeton.split('.')[1] : '?' });
   res.writeHead(reponse.status, Object.fromEntries(reponse.headers));

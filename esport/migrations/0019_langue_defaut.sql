@@ -1,6 +1,6 @@
 -- Esport, migration 0019 : langue par défaut d'un compte, réglée par le Fondateur.
 --
--- SQL standard (SQLite / D1 et Postgres), mêmes conventions que 0001.
+-- SQL standard (SQLite et Postgres), mêmes conventions que 0001.
 --
 -- `comptes.langue_defaut` : langue définie par l'administrateur (Fondateur) à la création du compte
 -- ou depuis Esport › Membres / Administration. Elle sert à l'interface Esport tant que

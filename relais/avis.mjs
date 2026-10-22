@@ -62,9 +62,9 @@ export function modeTempsReel(env) {
   return MODES_TEMPS_REEL.includes(m) ? m : MODE_TEMPS_REEL_DEFAUT;
 }
 
-/** Adresse de l'appareil (le pont Node la recalcule dans CF-Connecting-IP ; Cloudflare aussi). */
+/** Adresse de l'appareil (le pont du serveur Node la recalcule dans X-Adresse-Client). */
 export function ipDe(requete) {
-  return requete.headers.get('CF-Connecting-IP') || (requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || 'inconnue';
+  return requete.headers.get('X-Adresse-Client') || (requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || 'inconnue';
 }
 
 /** Bus en mémoire : abonnés par compte, bornés par compte et adresse, par compte, et en tout. */

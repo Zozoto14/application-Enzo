@@ -1,7 +1,7 @@
 /**
  * Adaptateur SQLite pour Node (module intégré `node:sqlite`, Node 22.13+) :
  * tests, serveur de développement local, et première étape d'un vrai
- * serveur (un fichier .db). Même interface que l'adaptateur D1.
+ * serveur (un fichier .db). Même interface que l'adaptateur PostgreSQL.
  *
  * Interface `base` (commune à tous les adaptateurs) :
  *   tous(sql, params)     → lignes (objets)

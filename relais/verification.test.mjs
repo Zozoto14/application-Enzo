@@ -1,10 +1,9 @@
 /**
- * Relais version 7 : `POST /jeton/verifier`, appelé par le Worker Esport
- * (liaison de service). Rétrocompatible : les routes existantes ne changent pas.
+ * Relais version 7 : `POST /jeton/verifier`, appelé par le serveur Esport. Rétrocompatible : les routes existantes ne changent pas.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import relais, { FONCTIONS_RELAIS, VERSION_RELAIS, jetonDeProfil } from './worker.mjs';
+import { relais, FONCTIONS_RELAIS, VERSION_RELAIS, jetonDeProfil } from './relais.mjs';
 
 const JETON = 'jeton-de-test-verification-0123456789';
 let ip = 0;
@@ -15,16 +14,16 @@ function kv() {
 }
 
 async function verifier(env, jeton, { methode = 'POST', adresse } = {}) {
-  const headers = { 'CF-Connecting-IP': adresse ?? `198.51.100.${++ip}` };
+  const headers = { 'X-Adresse-Client': adresse ?? `198.51.100.${++ip}` };
   if (jeton !== undefined) headers.Authorization = `Bearer ${jeton}`;
-  const r = await relais.fetch(new Request('https://relais.test/jeton/verifier', { method: methode, headers, body: methode === 'POST' ? '{}' : undefined }), env);
+  const r = await relais.traiter(new Request('https://relais.test/jeton/verifier', { method: methode, headers, body: methode === 'POST' ? '{}' : undefined }), env);
   return { statut: r.status, corps: await r.json() };
 }
 
 test('version 7 annoncée, avec la fonction verification-jeton', async () => {
   assert.ok(VERSION_RELAIS >= 7);
   assert.ok(FONCTIONS_RELAIS.includes('verification-jeton'));
-  const r = await relais.fetch(new Request('https://relais.test/sante', { headers: { Authorization: `Bearer ${JETON}` } }), { JETON, BOITE: kv() });
+  const r = await relais.traiter(new Request('https://relais.test/sante', { headers: { Authorization: `Bearer ${JETON}` } }), { JETON, BOITE: kv() });
   const corps = await r.json();
   assert.equal(corps.version, VERSION_RELAIS);
 });
@@ -69,6 +68,6 @@ test('anti-force brute : trop d’échecs depuis une adresse → 429', async () 
 test('GET refusé (405) ; routes existantes inchangées (401 sans jeton)', async () => {
   const env = { JETON, BOITE: kv() };
   assert.equal((await verifier(env, JETON, { methode: 'GET' })).statut, 405);
-  const r = await relais.fetch(new Request('https://relais.test/sante'), env);
+  const r = await relais.traiter(new Request('https://relais.test/sante'), env);
   assert.equal(r.status, 401);
 });

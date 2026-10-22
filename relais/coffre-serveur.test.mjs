@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import relais, { jetonDeProfil } from './worker.mjs';
+import { relais, jetonDeProfil } from './relais.mjs';
 import { coffresMemoire, decider } from './coffres.mjs';
 
 const JETON = 'jeton-de-test-coffre-0123456789abcd';
@@ -28,9 +28,9 @@ function kv() {
 const env0 = () => ({ JETON, BOITE: kv(), COFFRES: coffresMemoire() });
 
 function appel(env, chemin, { methode = 'GET', jeton, corps, ip } = {}) {
-  const headers = { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip ?? nouvelleIp() };
+  const headers = { 'Content-Type': 'application/json', 'X-Adresse-Client': ip ?? nouvelleIp() };
   if (jeton) headers.Authorization = `Bearer ${jeton}`;
-  return relais.fetch(new Request(`https://relais.test${chemin}`, { method: methode, headers, body: corps === undefined ? undefined : JSON.stringify(corps) }), env);
+  return relais.traiter(new Request(`https://relais.test${chemin}`, { method: methode, headers, body: corps === undefined ? undefined : JSON.stringify(corps) }), env);
 }
 const id = n => n.toString(16).padStart(32, '0');
 const enr = (n, o = {}) => ({ id: id(n), base: 0, date: `2026-10-0${(n % 9) + 1}T10:00:00.000Z`, valeur: `chiffre-${n}`, ...o });
@@ -101,7 +101,7 @@ test('coffre : portées (compte, autre compte, Fondateur, délégation, sans mag
   assert.equal((await (await appel(env, '/v9/coffre/lea12345', { jeton: JETON })).json()).enregistrements.length, 0);
   // Envoi illisible, trop d'enregistrements.
   assert.equal((await appel(env, '/v9/coffre/lea12345', { methode: 'POST', jeton: lea, corps: { enregistrements: [{ id: 'x' }] } })).status, 400);
-  // Relais sans magasin (Worker Cloudflare) : 501, les appareils gardent l'ancienne synchronisation.
+  // Relais sans magasin de coffres : 501, les appareils gardent l'ancienne synchronisation.
   const sans = { JETON, BOITE: kv() };
   const r = await appel(sans, '/v9/coffre/principal', { jeton: JETON });
   assert.equal(r.status, 501);
@@ -210,19 +210,19 @@ test('version 10 : un PUT arrivé en POST + X-Methode est traité comme l’orig
   const env = env0();
   const H = hex(64, 'd');
   // Corps perdu en route (frontal mutualisé) : la raison est rendue et lisible.
-  const vide = await relais.fetch(new Request(`https://relais.test/acces/${H}`, { method: 'PUT', headers: { Authorization: `Bearer ${JETON}`, 'Content-Type': 'application/json' } }), env);
+  const vide = await relais.traiter(new Request(`https://relais.test/acces/${H}`, { method: 'PUT', headers: { Authorization: `Bearer ${JETON}`, 'Content-Type': 'application/json' } }), env);
   assert.equal(vide.status, 400);
   assert.deepEqual(await vide.json(), { erreur: 'Accès illisible (corps-vide).', motif: 'acces-illisible', champ: 'corps-vide', recu: 0 });
   const kdf = await appel(env, `/acces/${H}`, { methode: 'PUT', jeton: JETON, corps: { ...depotAcces('principal'), kdf: { algorithme: 'argon2id', passes: 2, memoireKio: 19456, fils: 1, longueurCle: 16 } } });
   assert.equal((await kdf.json()).champ, 'kdf');
   // Même dépôt en POST + X-Methode : accepté.
-  const r = await relais.fetch(
+  const r = await relais.traiter(
     new Request(`https://relais.test/acces/${H}`, { method: 'POST', headers: { Authorization: `Bearer ${JETON}`, 'Content-Type': 'application/json', 'X-Methode': 'PUT' }, body: JSON.stringify(depotAcces('principal')) }),
     env,
   );
   assert.equal(r.status, 200);
   assert.equal((await appel(env, `/acces/${H}/ouvrir`, { methode: 'POST', corps: { preuve: hex(64, '1') } })).status, 200);
   // Le préliminaire CORS autorise l'en-tête.
-  const options = await relais.fetch(new Request(`https://relais.test/acces/${H}`, { method: 'OPTIONS' }), env);
+  const options = await relais.traiter(new Request(`https://relais.test/acces/${H}`, { method: 'OPTIONS' }), env);
   assert.match(options.headers.get('Access-Control-Allow-Headers'), /X-Methode/);
 });

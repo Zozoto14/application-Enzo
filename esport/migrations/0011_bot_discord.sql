@@ -1,11 +1,11 @@
 -- Esport, migration 0011 : bot Discord (interactions HTTP, slash commands).
 --
--- SQL standard (SQLite / D1 et Postgres), mêmes conventions que 0001. Les
+-- SQL standard (SQLite et Postgres), mêmes conventions que 0001. Les
 -- numéros 0009 (convocations) et 0010 (review vidéo) sont pris par d'autres
 -- travaux : le migrateur accepte les trous.
 --
 -- AUCUN secret ici : le jeton du bot (DISCORD_BOT_TOKEN) est un secret du
--- Worker. On ne stocke que des identifiants Discord (publics) et l'EMPREINTE
+-- serveur. On ne stocke que des identifiants Discord (publics) et l'EMPREINTE
 -- des codes de liaison, jamais le code lui-même.
 
 -- Serveur Discord lié à une team (un serveur peut porter plusieurs teams ;

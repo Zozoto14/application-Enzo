@@ -1,6 +1,6 @@
 -- Esport, migration 0002 : planning, disponibilités, présence (phase 2).
 --
--- Mêmes règles que 0001 : SQL standard (SQLite/D1 et Postgres), UUID en TEXT,
+-- Mêmes règles que 0001 : SQL standard (SQLite et Postgres), UUID en TEXT,
 -- instants ISO 8601 UTC en TEXT, booléens 0/1, JSON en TEXT.
 -- Les heures « murales » récurrentes (règle hebdomadaire, créneau de
 -- disponibilité) sont gardées avec leur fuseau : elles sont converties en UTC

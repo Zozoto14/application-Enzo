@@ -3,7 +3,7 @@
  * simulé, relié au relais) ajoute une source avec l'assistant (page neutre
  * locale), la partage à Léa seulement ; Léa la voit (pas Hugo), sans pouvoir la
  * modifier ; retrait du partage : elle disparaît chez Léa.
- * Faux relais local qui exécute relais/worker.mjs ; pages lues par le VRAI
+ * Faux relais local qui exécute relais/relais.mjs ; pages lues par le VRAI
  * module `bureau/electron/tsuzuku.mjs` (garde anti-SSRF), transport détourné
  * vers un « internet » local. Aucun site réel : fixtures neutres faites main.
  *
@@ -27,8 +27,8 @@ import { allerPageAdministration, nouveauContexte } from './e2e-acceptation.mjs'
 const racine = fileURLToPath(new URL('..', import.meta.url));
 const requireGlobal = createRequire(join(process.env.PLAYWRIGHT_PATH ?? '/opt/node22/lib/node_modules', 'x.js'));
 const { chromium } = requireGlobal('playwright');
-const moduleRelais = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
-const worker = moduleRelais.default;
+const moduleRelais = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
+const worker = { fetch: moduleRelais.relais.traiter };
 const { requeteTsuzuku } = await import(pathToFileURL(join(racine, 'bureau/electron/tsuzuku.mjs')).href);
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-tsuzuku-partage');

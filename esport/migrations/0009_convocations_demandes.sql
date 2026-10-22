@@ -1,6 +1,6 @@
 -- Esport, migration 0009 : convocations explicites et demandes de compte.
 --
--- SQL standard (SQLite / D1 et Postgres). Le numéro 0010 est pris par la
+-- SQL standard (SQLite et Postgres). Le numéro 0010 est pris par la
 -- review vidéo : le migrateur accepte les trous et l'ordre de livraison.
 --
 -- 1. Convocations. Chaque événement porte sa liste de convoqués sous forme de

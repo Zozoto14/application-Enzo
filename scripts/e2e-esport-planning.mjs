@@ -1,7 +1,7 @@
 /**
- * Test de bout en bout du planning Esport (phase 2), sans Cloudflare :
+ * Test de bout en bout du planning Esport (phase 2) :
  *
- *  - faux relais (relais/worker.mjs) et serveur Esport local (esport/outils/serveur-local.mjs) ;
+ *  - faux relais (relais/relais.mjs) et serveur Esport local (esport/outils/serveur-local.mjs) ;
  *  - PC (1440 × 900), le Fondateur : team et invitation (API), compte du hub de Léa
  *    (Administration, modèle « Esport seulement »), puis CRÉATION D'UN ÉVÉNEMENT RÉCURRENT dans
  *    l'écran Planning (vue mois) ;
@@ -44,7 +44,7 @@ const capture = async (page, nom) => {
   log(`capture ${nom}`);
 };
 
-const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
+const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { demarrerServeurEsport } = await import(pathToFileURL(join(racine, 'esport/outils/serveur-local.mjs')).href);
 
 // ------------------------------------------------------------- Dates (Paris)

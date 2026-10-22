@@ -1,18 +1,23 @@
 /**
- * Relais Cloudflare d'AppDashboard.
+ * Relais d'AppDashboard (cœur HTTP, Request → Response), servi par le serveur Node
+ * relais/serveur/app.mjs (o2switch, https://relais.appdashboard.fr ; docs/o2switch.md).
  *
- * Deux services, sur un compte Cloudflare gratuit :
+ * Deux services :
  *
  *  - une **boîte aux lettres** où chaque appareil dépose son état, chiffré
  *    sur l'appareil avant l'envoi. Le relais ne voit que du bruit : ni
  *    montant, ni valeur, ni nom. Il ne connaît pas le mot de passe de
  *    synchronisation et ne peut rien déchiffrer ;
- *  - une **passerelle** vers Yahoo Finance et les médias, pour le site de
- *    secours : un navigateur n'a pas le droit de les appeler lui-même. Même
- *    liste fermée d'adresses que l'application de bureau (reseau.mjs).
+ *  - une **passerelle** vers Yahoo Finance et les médias, pour le site web :
+ *    un navigateur n'a pas le droit de les appeler lui-même. Même liste fermée
+ *    d'adresses que l'application de bureau (reseau.mjs).
+ *
+ * La boîte (`env.BOITE`) est un magasin clé/valeur : get, put (métadonnées, expiration),
+ * delete, list ; en production, la table relais_kv de PostgreSQL (relais/serveur/kv-postgres.mjs),
+ * en mémoire dans les tests.
  *
  * Tout appel exige un jeton (`Authorization: Bearer …`) : le jeton maître,
- * tiré au hasard au déploiement (administrateur), ou un jeton de PROFIL qui
+ * tiré au hasard à l'installation (administrateur), ou un jeton de PROFIL qui
  * n'ouvre que l'espace de son compte (`/p/<id>/…`, voir « Portées » plus bas
  * et docs/synchro-relais.md). Sans jeton valable, personne ne peut remplir la
  * boîte ni se servir du relais comme d'un proxy.
@@ -21,23 +26,18 @@
  * le site web, avec le jeton MAÎTRE seulement (voir tsuzuku.mjs et
  * src/tsuzuku/README.md) ; son CORS est restreint aux origines du site.
  *
- * Version 7 : `POST /jeton/verifier` dit au Worker Esport (esport/worker.mjs,
- * liaison de service) si le jeton présenté est valable, révoqué, et de quel
- * compte il est (voir « Vérification de jeton » plus bas). Rien d'autre.
+ * Version 7 : `POST /jeton/verifier` dit au serveur Esport (esport/serveur/app.mjs)
+ * si le jeton présenté est valable, révoqué, et de quel compte il est (voir
+ * « Vérification de jeton » plus bas). Rien d'autre.
  *
- * Version 8 (déménagement vers o2switch, docs/o2switch.md) : `GET /admin/boite`
- * (jeton maître) rend toute la boîte, page par page, pour l'import sur le
- * nouveau serveur ; avec la variable `RELAIS_CIBLE` (https://relais.appdashboard.fr),
- * le Worker transmet chaque requête au nouveau serveur (les appareils qui ont
- * encore l'ancienne adresse continuent de marcher) et l'annonce par l'en-tête
- * `X-Relais-Deplace` (et le nouveau site, `SITE_CIBLE`, par `X-Site-Deplace`) :
- * l'app vérifie la nouvelle adresse avec le même jeton, puis la retient. Le même fichier tourne sous Node (relais/serveur/app.mjs).
+ * Version 8 : `GET /admin/boite` (jeton maître) rend toute la boîte, page par page : export
+ * générique, repris par relais/serveur/importer.mjs pour copier la boîte d'un relais vers une autre base.
  *
  * Support (`/support…`, relais/support.mjs, docs/support.md) : demandes rangées sur
  * le relais et annoncées sur un salon Discord. L'adresse du webhook est un SECRET
  * (`DISCORD_WEBHOOK_URL`) : ni dans le code, ni dans l'application, ni dans les
  * données synchronisées. E-mails (`/courriel/…`, relais/courriel.mjs, docs/emails.md) :
- * transport SMTP fourni par le serveur Node seulement.
+ * transport SMTP fourni par le serveur Node.
  *
  * Version 9 (le serveur devient la référence, docs/synchro-relais.md) : coffre serveur chiffré de
  * chaque compte (`/v9/coffre/<compte>`, relais/coffres.mjs), connexion du Fondateur par identifiant
@@ -48,6 +48,9 @@
  * Version 10 (synchro quasi immédiate) : `/v10/coffre/<compte>…` (mêmes routes que v9, plus les avis
  * de nouvelle révision — flux SSE, attente longue, sondage : relais/avis.mjs), et validation en deux
  * étapes vérifiée par le serveur (`/v10/a2f/<compte>`, code exigé par `/acces/<h>/ouvrir` : relais/a2f.mjs).
+ *
+ * Adresse IP du client : en-tête `X-Adresse-Client`, posé par le pont HTTP du serveur Node
+ * (esport/serveur/commun.mjs) d'après la connexion et le proxy de l'hébergeur ; jamais celui du client.
  */
 
 import {
@@ -66,10 +69,10 @@ import { creerSession, estJetonSession, porteeSession, routeSessions, routeTheme
 
 export const VERSION_RELAIS = 10;
 /** Fonctions annoncées par `/sante` (le site adapte ses écrans à un relais pas encore redéployé). */
-export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations', 'verification-jeton', 'export-boite', 'demenagement', 'support-v2', 'courriel', 'coffre-serveur', 'sessions', 'theme', 'acces-fondateur', 'secours', 'coffre-v10', 'avis', 'a2f', 'methode-post'];
+export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations', 'verification-jeton', 'export-boite', 'support-v2', 'courriel', 'coffre-serveur', 'sessions', 'theme', 'acces-fondateur', 'secours', 'coffre-v10', 'avis', 'a2f', 'methode-post'];
 /** Fonctions qui n'existent qu'avec un magasin de coffres (serveur Node + PostgreSQL). */
 const FONCTIONS_COFFRE = ['coffre-serveur', 'coffre-v10', 'avis'];
-/** Une enveloppe chiffrée (fichier d'un compte) : relevée avec PostgreSQL (plus de limite KV). */
+/** Une enveloppe chiffrée (fichier d'un compte) : taille maximale (PostgreSQL). */
 const TAILLE_MAX_ENVELOPPE = 48 * 1024 * 1024;
 const IDENTIFIANT_APPAREIL = /^[a-z0-9]{4,32}$/;
 /** Compte d'ami (même motif que l'annuaire) ; `principal` est l'espace de l'administrateur. */
@@ -160,7 +163,7 @@ export async function porteeDuJeton(recu, jetonMaitre, boite) {
 // de synchronisation. Deux dépôts simultanés peuvent encore s'y écraser
 // (lecture-modification-écriture) ; mais chaque valeur porte ses métadonnées
 // ({ date, taille }), et l'index est RÉPARÉ à partir de la liste de la boîte
-// toutes les 5 minutes au plus (PostgreSQL : plus de quota de listes comme sur KV gratuit).
+// toutes les 5 minutes au plus.
 
 const REPARE = '~repare';
 const DELAI_REPARATION_BOITE_MS = 5 * 60_000;
@@ -462,7 +465,7 @@ export { nettoyerTexteDiscord, validerTicket } from './support.mjs';
 //  - `GET /acces/<h>` (sans jeton) : sel et paramètres de dérivation ;
 //    `POST /acces/<h>/ouvrir` (sans jeton, avec la preuve tirée du mot de
 //    passe) : la charge scellée, ou 403. Délai progressif PAR IDENTIFIANT
-//    (KV) et PAR ADRESSE IP (mémoire du Worker) : anti-force brute.
+//    (boîte) et PAR ADRESSE IP (mémoire du serveur) : anti-force brute.
 //  - `PUT`/`DELETE /revocations/<id>` (jeton maître) : le jeton de profil de
 //    ce compte est refusé partout (403, motif `revoque`) tant que la
 //    révocation n'est pas levée.
@@ -479,8 +482,11 @@ const ESSAIS_LIBRES_IP = 10;
 const ATTENTE_MAX_IP_S = 900;
 const limitesIp = new Map();
 
+/** Adresse IP du client, posée par le pont HTTP du serveur Node (esport/serveur/commun.mjs). */
+export const ENTETE_ADRESSE_CLIENT = 'X-Adresse-Client';
+
 export function adresseIp(requete) {
-  return requete.headers.get('CF-Connecting-IP') ?? ((requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || 'inconnue');
+  return requete.headers.get(ENTETE_ADRESSE_CLIENT) ?? ((requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || 'inconnue');
 }
 
 /** Délai à attendre (secondes) après `echecs` échecs, au-delà de `libres` essais. */
@@ -824,7 +830,7 @@ async function revocations(requete, env, portee, id) {
 // `POST /jeton/verifier`, jeton à vérifier dans `Authorization: Bearer …` :
 // réponse 200 `{ valide, revoque, compte, maitre }` (`compte` : « principal »
 // pour le jeton maître, l'identifiant du compte pour un jeton de profil).
-// Appelée par le Worker Esport (liaison de service), qui n'a donc jamais
+// Appelée par le serveur Esport (en HTTPS), qui n'a donc jamais
 // besoin du jeton maître. La réponse ne parle que du jeton présenté : elle
 // n'apprend rien de plus que `/sante` à qui le détient déjà. Les échecs
 // comptent dans l'anti-force brute par adresse IP.
@@ -836,8 +842,8 @@ async function verifierJeton(requete, env, portee) {
     return erreur('Méthode non autorisée.', 405);
   }
   const maintenant = Date.now();
-  // Par la liaison de service, l'adresse vue est celle du Worker Esport : celui-ci transmet celle du
-  // navigateur dans X-Forwarded-For, prise ici en premier (sinon tous les comptes partageraient un compteur).
+  // L'adresse vue est celle du serveur Esport : celui-ci transmet celle du navigateur dans
+  // X-Forwarded-For, prise ici en premier (sinon tous les comptes partageraient un compteur).
   const ip = (requete.headers.get('X-Forwarded-For') ?? '').split(',')[0].trim() || adresseIp(requete);
   const attente = attenteIp(ip, maintenant);
   if (attente > 0) return tropDeTentatives(attente);
@@ -879,14 +885,14 @@ async function passerelle(requete, chemin) {
   }
 }
 
-// ------------------------------------------------- Déménagement (version 8)
+// ------------------------------------------------- Export de la boîte (version 8)
 
 /** Toute la boîte, par pages (jeton maître) : clé, valeur, métadonnées, expiration (secondes Unix). */
 async function exporterBoite(requete, env) {
   if (requete.method !== 'GET') return erreur('Méthode non permise.', 405);
   if (typeof env.BOITE.list !== 'function') return erreur('Cette boîte ne sait pas se lister.', 501);
   const curseur = new URL(requete.url).searchParams.get('curseur') || undefined;
-  // 100 clés par page : sous la limite d'opérations KV par requête d'un Worker gratuit.
+  // 100 clés par page : des réponses de taille raisonnable.
   const page = await env.BOITE.list({ cursor: curseur, limit: 100 });
   const cles = [];
   for (const cle of page.keys ?? []) {
@@ -897,156 +903,138 @@ async function exporterBoite(requete, env) {
   return reponse({ cles, suite: page.list_complete === false ? page.cursor : null });
 }
 
-const cibleValide = c => typeof c === 'string' && /^https:\/\/[a-z0-9.-]+(:\d+)?\/?$/i.test(c.trim());
+/**
+ * Traite une requête du relais. `env` : JETON, BOITE, COFFRES, AVIS… (relais/serveur/app.mjs) ;
+ * `ctx.waitUntil(promesse)` (facultatif) : travail fini après la réponse (mise en cache de Tsuzuku).
+ */
+export async function traiterRequete(requete, env, ctx) {
+  // Lecture des sources de Tsuzuku (site web) : CORS, jeton et règles à part, préliminaire compris.
+  // `ctx.waitUntil` : la mise en cache d'une page lue finit après la réponse.
+  if (new URL(requete.url).pathname === CHEMIN_TSUZUKU) {
+    const deps = typeof ctx?.waitUntil === 'function' ? { waitUntil: p => ctx.waitUntil(p) } : {};
+    return routeTsuzuku(requete, env, () => porteeDuJeton((requete.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, ''), env.JETON, env.BOITE), deps);
+  }
+  if (requete.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: ENTETES_CORS });
+  }
+  // Version 10 : un PUT ou un DELETE peut arriver en POST avec `X-Methode` (certains intermédiaires
+  // d'hébergement mutualisé refusent les PUT ou en perdent le corps). Traité exactement comme l'original.
+  const surcharge = requete.method === 'POST' ? (requete.headers.get('X-Methode') ?? '').trim().toUpperCase() : '';
+  if (surcharge === 'PUT' || surcharge === 'DELETE') {
+    requete = new Request(requete, { method: surcharge });
+  }
+  const autorisation = requete.headers.get('Authorization') ?? '';
+  const portee = await porteeDuJeton(autorisation.replace(/^Bearer\s+/i, ''), env.JETON, env.BOITE);
+  const { pathname } = new URL(requete.url);
 
-/** Transmet la requête telle quelle au nouveau relais ; la réponse annonce la nouvelle adresse. */
-export async function proxifier(requete, cible, site) {
-  const source = new URL(requete.url);
-  const destination = new URL(`${source.pathname}${source.search}`, `${String(cible).trim().replace(/\/+$/, '')}/`);
-  const entetes = new Headers(requete.headers);
-  entetes.delete('host');
-  const corps = ['GET', 'HEAD'].includes(requete.method) ? undefined : await requete.arrayBuffer();
-  const r = await fetch(destination, { method: requete.method, headers: entetes, body: corps, redirect: 'manual' });
-  const sortie = new Headers(r.headers);
-  sortie.set('X-Relais-Deplace', destination.origin);
-  // Nouveau site (paquets de mise à jour de l'iPhone, liens de liaison) : annoncé aussi s'il est connu.
-  if (cibleValide(site)) sortie.set('X-Site-Deplace', String(site).trim().replace(/\/+$/, ''));
-  const exposes = sortie.get('Access-Control-Expose-Headers');
-  sortie.set('Access-Control-Expose-Headers', `${exposes ? `${exposes}, ` : ''}X-Relais-Deplace, X-Site-Deplace`);
-  return new Response(r.body, { status: r.status, statusText: r.statusText, headers: sortie });
-}
+  // Version 9 : style public d'un identifiant (sans jeton pour la lecture).
+  const routeTheme9 = /^\/v9\/theme\/([^/]+)\/?$/.exec(pathname);
+  if (routeTheme9) {
+    if (!env.BOITE) return erreur('Boîte non configurée sur le relais.', 500);
+    return routeTheme(requete, env, portee, routeTheme9[1], adresseIp(requete));
+  }
 
-const relaisWorker = {
-  async fetch(requete, env, ctx) {
-    // Après la bascule vers o2switch : tout part vers le nouveau relais (docs/o2switch.md).
-    if (cibleValide(env?.RELAIS_CIBLE)) {
-      return proxifier(requete, env.RELAIS_CIBLE, env.SITE_CIBLE);
+  // Invitations et accès par identifiant : certaines routes se passent de jeton (voir plus haut).
+  const routeInvitation = /^\/invitations\/([^/]+)(?:\/(utiliser))?\/?$/.exec(pathname);
+  const routeAcces = /^\/acces\/([^/]+)(?:\/(ouvrir|secours))?\/?$/.exec(pathname);
+  if (routeInvitation || routeAcces) {
+    if (!env.BOITE) {
+      return erreur('Boîte non configurée sur le relais.', 500);
     }
-    // Lecture des sources de Tsuzuku (site web) : CORS, jeton et règles à part, préliminaire compris.
-    // `ctx.waitUntil` : la mise en cache d'une page lue finit après la réponse.
-    if (new URL(requete.url).pathname === CHEMIN_TSUZUKU) {
-      const deps = typeof ctx?.waitUntil === 'function' ? { waitUntil: p => ctx.waitUntil(p) } : {};
-      return routeTsuzuku(requete, env, () => porteeDuJeton((requete.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, ''), env.JETON, env.BOITE), deps);
-    }
-    if (requete.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: ENTETES_CORS });
-    }
-    // Version 10 : un PUT ou un DELETE peut arriver en POST avec `X-Methode` (certains intermédiaires
-    // d'hébergement mutualisé refusent les PUT ou en perdent le corps). Traité exactement comme l'original.
-    const surcharge = requete.method === 'POST' ? (requete.headers.get('X-Methode') ?? '').trim().toUpperCase() : '';
-    if (surcharge === 'PUT' || surcharge === 'DELETE') {
-      requete = new Request(requete, { method: surcharge });
-    }
-    const autorisation = requete.headers.get('Authorization') ?? '';
-    const portee = await porteeDuJeton(autorisation.replace(/^Bearer\s+/i, ''), env.JETON, env.BOITE);
-    const { pathname } = new URL(requete.url);
-
-    // Version 9 : style public d'un identifiant (sans jeton pour la lecture).
-    const routeTheme9 = /^\/v9\/theme\/([^/]+)\/?$/.exec(pathname);
-    if (routeTheme9) {
-      if (!env.BOITE) return erreur('Boîte non configurée sur le relais.', 500);
-      return routeTheme(requete, env, portee, routeTheme9[1], adresseIp(requete));
-    }
-
-    // Invitations et accès par identifiant : certaines routes se passent de jeton (voir plus haut).
-    const routeInvitation = /^\/invitations\/([^/]+)(?:\/(utiliser))?\/?$/.exec(pathname);
-    const routeAcces = /^\/acces\/([^/]+)(?:\/(ouvrir|secours))?\/?$/.exec(pathname);
-    if (routeInvitation || routeAcces) {
-      if (!env.BOITE) {
-        return erreur('Boîte non configurée sur le relais.', 500);
-      }
-      if (portee?.profil && (await env.BOITE.get(`revoque:${portee.profil}`))) {
-        return reponse({ erreur: 'Accès révoqué par l’administrateur.', motif: 'revoque' }, 403);
-      }
-      return routeInvitation
-        ? invitations(requete, env, portee, routeInvitation[1], routeInvitation[2])
-        : acces(requete, env, portee, routeAcces[1], routeAcces[2]);
-    }
-
-    // Vérification de jeton (version 7) : répond aussi pour un jeton refusé ou révoqué.
-    if (pathname === CHEMIN_VERIFICATION) {
-      return verifierJeton(requete, env, portee);
-    }
-
-    if (!portee) {
-      return erreur('Jeton du relais manquant ou incorrect.', 401);
-    }
-    // Compte révoqué par l'administrateur : son jeton ne vaut plus rien.
-    if (portee.profil && env.BOITE && (await env.BOITE.get(`revoque:${portee.profil}`))) {
+    if (portee?.profil && (await env.BOITE.get(`revoque:${portee.profil}`))) {
       return reponse({ erreur: 'Accès révoqué par l’administrateur.', motif: 'revoque' }, 403);
     }
+    return routeInvitation
+      ? invitations(requete, env, portee, routeInvitation[1], routeInvitation[2])
+      : acces(requete, env, portee, routeAcces[1], routeAcces[2]);
+  }
 
-    if (pathname === '/sante') {
-      // `tempsReel` : comment les appareils apprennent les écritures des autres (SYNCHRO_TEMPS_REEL,
-      // « sondage » par défaut : aucune connexion tenue ouverte ; relais/avis.mjs).
-      // Sans magasin de coffres (Worker sans PostgreSQL), le coffre serveur n'est pas annoncé : les appareils gardent l'ancienne synchronisation.
-      return reponse({ ok: true, version: VERSION_RELAIS, fonctions: env.COFFRES ? FONCTIONS_RELAIS : FONCTIONS_RELAIS.filter(f => !FONCTIONS_COFFRE.includes(f)), portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}), ...(env.COFFRES ? { tempsReel: modeTempsReel(env), pasSondage: PAS_SONDAGE_S } : {}), heure: Date.now() });
-    }
-    if (pathname === '/heure') {
-      // Ultra léger : l'appareil compare son horloge (codes TOTP) à celle du relais.
-      return reponse({ heure: Date.now() });
-    }
-    if (pathname === '/support' || pathname.startsWith('/support/')) {
-      return routeSupport(requete, env, portee, pathname, { reponse, erreur, envoyerCourriel });
-    }
-    if (pathname.startsWith('/courriel/')) {
-      return routeCourriel(requete, env, portee, pathname, { reponse, erreur });
-    }
-    const routeRevocation = /^\/revocations\/([^/]+)\/?$/.exec(pathname);
-    if (routeRevocation) {
-      if (!env.BOITE) {
-        return erreur('Boîte non configurée sur le relais.', 500);
-      }
-      return revocations(requete, env, portee, routeRevocation[1]);
-    }
-    if (pathname === '/admin/boite') {
-      if (!env.BOITE) {
-        return erreur('Boîte non configurée sur le relais.', 500);
-      }
-      return portee.maitre && !portee.session ? exporterBoite(requete, env) : erreur('Réservé au jeton de l’administrateur.', 403);
-    }
-    // Version 9 : coffre serveur de chaque compte, et sessions du Fondateur.
-    // Version 10 : mêmes routes, plus les avis de nouvelle version (relais/avis.mjs).
-    const routeCoffre9 = /^\/v(9|10)\/coffre\/([^/]+)(?:\/(historique|etat|version|attendre|flux))?\/?$/.exec(pathname);
-    if (routeCoffre9) {
-      return routeCoffre(requete, env, portee, decodeURIComponent(routeCoffre9[2]), routeCoffre9[3], env.BOITE ? (titulaire, id) => delegue(env, titulaire, id) : undefined, Number(routeCoffre9[1]));
-    }
-    const routeA2f10 = /^\/v10\/a2f\/([^/]+)\/?$/.exec(pathname);
-    if (routeA2f10) {
-      if (!env.BOITE) return erreur('Boîte non configurée sur le relais.', 500);
-      return routeA2f(requete, env, portee, decodeURIComponent(routeA2f10[1]), { reponse, erreur });
-    }
-    const routeSessions9 = /^\/v9\/sessions(?:\/(courante))?\/?$/.exec(pathname);
-    if (routeSessions9) {
-      if (!env.BOITE) return erreur('Boîte non configurée sur le relais.', 500);
-      return routeSessions(requete, env, portee, routeSessions9[1]);
-    }
-    if (pathname === '/rangs') {
-      if (!env.BOITE) {
-        return erreur('Boîte non configurée sur le relais.', 500);
-      }
-      return portee.maitre ? rangs(requete, env) : erreur('Réservé au jeton de l’administrateur.', 403);
-    }
-    const dansEspace = /^\/p\/([^/]+)\/boite(?:\/([^/]*))?\/?$/.exec(pathname);
-    if (dansEspace || pathname === '/boite' || pathname.startsWith('/boite/')) {
-      if (!env.BOITE) {
-        return erreur('Boîte non configurée sur le relais.', 500);
-      }
-      if (dansEspace) {
-        const nom = dansEspace[2] ? decodeURIComponent(dansEspace[2]) : undefined;
-        return espace(requete, env, portee, decodeURIComponent(dansEspace[1]), nom);
-      }
-      if (!portee.maitre) {
-        return erreur('Réservé au jeton de l’administrateur.', 403);
-      }
-      return pathname === '/boite' || pathname === '/boite/'
-        ? boite(requete, env, undefined)
-        : boite(requete, env, decodeURIComponent(pathname.slice('/boite/'.length)));
-    }
-    return passerelle(requete, pathname);
-  },
-};
+  // Vérification de jeton (version 7) : répond aussi pour un jeton refusé ou révoqué.
+  if (pathname === CHEMIN_VERIFICATION) {
+    return verifierJeton(requete, env, portee);
+  }
 
-/** Le gestionnaire d'origine (le serveur Node l'appelle directement, même si un test remplace `fetch`). */
-export const traiterRequete = relaisWorker.fetch.bind(relaisWorker);
-export default relaisWorker;
+  if (!portee) {
+    return erreur('Jeton du relais manquant ou incorrect.', 401);
+  }
+  // Compte révoqué par l'administrateur : son jeton ne vaut plus rien.
+  if (portee.profil && env.BOITE && (await env.BOITE.get(`revoque:${portee.profil}`))) {
+    return reponse({ erreur: 'Accès révoqué par l’administrateur.', motif: 'revoque' }, 403);
+  }
+
+  if (pathname === '/sante') {
+    // `tempsReel` : comment les appareils apprennent les écritures des autres (SYNCHRO_TEMPS_REEL,
+    // « sondage » par défaut : aucune connexion tenue ouverte ; relais/avis.mjs).
+    // Sans magasin de coffres (`env.COFFRES`), le coffre serveur n'est pas annoncé : les appareils gardent l'ancienne synchronisation.
+    return reponse({ ok: true, version: VERSION_RELAIS, fonctions: env.COFFRES ? FONCTIONS_RELAIS : FONCTIONS_RELAIS.filter(f => !FONCTIONS_COFFRE.includes(f)), portee: portee.maitre ? 'maitre' : 'profil', ...(portee.profil ? { profil: portee.profil } : {}), ...(env.COFFRES ? { tempsReel: modeTempsReel(env), pasSondage: PAS_SONDAGE_S } : {}), heure: Date.now() });
+  }
+  if (pathname === '/heure') {
+    // Ultra léger : l'appareil compare son horloge (codes TOTP) à celle du relais.
+    return reponse({ heure: Date.now() });
+  }
+  if (pathname === '/support' || pathname.startsWith('/support/')) {
+    return routeSupport(requete, env, portee, pathname, { reponse, erreur, envoyerCourriel });
+  }
+  if (pathname.startsWith('/courriel/')) {
+    return routeCourriel(requete, env, portee, pathname, { reponse, erreur });
+  }
+  const routeRevocation = /^\/revocations\/([^/]+)\/?$/.exec(pathname);
+  if (routeRevocation) {
+    if (!env.BOITE) {
+      return erreur('Boîte non configurée sur le relais.', 500);
+    }
+    return revocations(requete, env, portee, routeRevocation[1]);
+  }
+  if (pathname === '/admin/boite') {
+    if (!env.BOITE) {
+      return erreur('Boîte non configurée sur le relais.', 500);
+    }
+    return portee.maitre && !portee.session ? exporterBoite(requete, env) : erreur('Réservé au jeton de l’administrateur.', 403);
+  }
+  // Version 9 : coffre serveur de chaque compte, et sessions du Fondateur.
+  // Version 10 : mêmes routes, plus les avis de nouvelle version (relais/avis.mjs).
+  const routeCoffre9 = /^\/v(9|10)\/coffre\/([^/]+)(?:\/(historique|etat|version|attendre|flux))?\/?$/.exec(pathname);
+  if (routeCoffre9) {
+    return routeCoffre(requete, env, portee, decodeURIComponent(routeCoffre9[2]), routeCoffre9[3], env.BOITE ? (titulaire, id) => delegue(env, titulaire, id) : undefined, Number(routeCoffre9[1]));
+  }
+  const routeA2f10 = /^\/v10\/a2f\/([^/]+)\/?$/.exec(pathname);
+  if (routeA2f10) {
+    if (!env.BOITE) return erreur('Boîte non configurée sur le relais.', 500);
+    return routeA2f(requete, env, portee, decodeURIComponent(routeA2f10[1]), { reponse, erreur });
+  }
+  const routeSessions9 = /^\/v9\/sessions(?:\/(courante))?\/?$/.exec(pathname);
+  if (routeSessions9) {
+    if (!env.BOITE) return erreur('Boîte non configurée sur le relais.', 500);
+    return routeSessions(requete, env, portee, routeSessions9[1]);
+  }
+  if (pathname === '/rangs') {
+    if (!env.BOITE) {
+      return erreur('Boîte non configurée sur le relais.', 500);
+    }
+    return portee.maitre ? rangs(requete, env) : erreur('Réservé au jeton de l’administrateur.', 403);
+  }
+  const dansEspace = /^\/p\/([^/]+)\/boite(?:\/([^/]*))?\/?$/.exec(pathname);
+  if (dansEspace || pathname === '/boite' || pathname.startsWith('/boite/')) {
+    if (!env.BOITE) {
+      return erreur('Boîte non configurée sur le relais.', 500);
+    }
+    if (dansEspace) {
+      const nom = dansEspace[2] ? decodeURIComponent(dansEspace[2]) : undefined;
+      return espace(requete, env, portee, decodeURIComponent(dansEspace[1]), nom);
+    }
+    if (!portee.maitre) {
+      return erreur('Réservé au jeton de l’administrateur.', 403);
+    }
+    return pathname === '/boite' || pathname === '/boite/'
+      ? boite(requete, env, undefined)
+      : boite(requete, env, decodeURIComponent(pathname.slice('/boite/'.length)));
+  }
+  return passerelle(requete, pathname);
+}
+
+/**
+ * Le relais vu des tests : `relais.traiter(requete, env, ctx)`. La suite PostgreSQL
+ * (relais/test-pg/preparer.mjs) remplace `traiter` pour faire passer chaque appel par le vrai
+ * serveur Node ; celui-ci appelle toujours `traiterRequete` directement.
+ */
+export const relais = { traiter: (requete, env, ctx) => traiterRequete(requete, env, ctx) };

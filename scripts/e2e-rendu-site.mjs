@@ -7,7 +7,7 @@
  *  - rappel « Échap » seulement là où un clavier est probable (pas sur tablette ni téléphone) ;
  *  - Historique de Claude Office sur téléphone : champs ≥ 16 px (pas de zoom de Safari au focus),
  *    filtres ≥ 44 px, textes ≥ 15 px ;
- *  - favicon déclaré, ressources à empreinte gardées en cache (`_headers` de Cloudflare Pages).
+ *  - favicon déclaré, ressources à empreinte gardées en cache (`_headers`, traduit en .htaccess pour o2switch).
  *
  *   npx vite build
  *   PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-rendu-site.mjs

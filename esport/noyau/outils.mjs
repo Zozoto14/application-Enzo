@@ -1,5 +1,5 @@
 /**
- * Outils communs du Worker Esport, sans dépendance au runtime Cloudflare :
+ * Outils communs du serveur Esport, sans dépendance au runtime :
  * WebCrypto (`globalThis.crypto`), Request et Response existent aussi sous
  * Node 22, où tournent les tests et le serveur local.
  */

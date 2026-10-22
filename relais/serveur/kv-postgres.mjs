@@ -1,6 +1,6 @@
 /**
- * Boîte clé/valeur du relais (équivalent de Cloudflare KV `BOITE`) dans PostgreSQL, table `relais_kv`
- * de la même base que l'Esport. Même interface que KV pour ce qu'utilise relais/worker.mjs :
+ * Boîte clé/valeur du relais (`BOITE`) dans PostgreSQL, table `relais_kv` de la même base que
+ * l'Esport. Interface utilisée par relais/relais.mjs :
  *
  *   get(cle[, 'json' | { type }])                 → valeur (texte) ou null
  *   getWithMetadata(cle)                          → { value, metadata }
@@ -8,7 +8,7 @@
  *   delete(cle)
  *   list({ prefix, cursor, limit })               → { keys: [{ name, metadata, expiration }], list_complete, cursor }
  *
- * Expiration : `expirationTtl` (secondes) ou `expiration` (instant Unix, secondes), comme KV. Une clé
+ * Expiration : `expirationTtl` (secondes) ou `expiration` (instant Unix, secondes). Une clé
  * expirée n'est plus jamais rendue ; la purge (esport/serveur/cron.mjs) l'efface ensuite.
  * Les valeurs restent ce que le relais y met : des enveloppes déjà chiffrées sur les appareils.
  *
@@ -41,7 +41,7 @@ const texteDe = valeur => {
   return String(valeur);
 };
 
-/** Boîte KV sur `base`. `maintenant` : horloge (tests). */
+/** Boîte clé/valeur sur `base`. `maintenant` : horloge (tests). */
 export function kvPostgres(base, { maintenant = () => Date.now() } = {}) {
   const lire = async cle => base.premier(`SELECT valeur, meta FROM ${TABLE_KV} WHERE cle = ? AND (expire_le IS NULL OR expire_le > ?)`, [String(cle), maintenant()]);
   const convertir = (valeur, type) => {

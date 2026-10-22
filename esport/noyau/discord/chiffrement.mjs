@@ -1,9 +1,9 @@
 /**
  * Secret du webhook Discord d'une team : validation de l'adresse, chiffrement
- * au repos (AES-GCM 256) et masquage. WebCrypto uniquement (Workers, Node 22).
+ * au repos (AES-GCM 256) et masquage. WebCrypto uniquement (Node 22).
  *
  * Choix de clé (documenté dans docs/esport/discord.md) : la clé AES est
- * DÉRIVÉE par HKDF-SHA-256 d'un secret du Worker, avec un contexte dédié
+ * DÉRIVÉE par HKDF-SHA-256 d'un secret du serveur, avec un contexte dédié
  * (`info`). Par défaut ce secret est `CLE_ESPORT` (aucun nouveau secret à
  * gérer) ; un secret séparé `CLE_DISCORD`, s'il existe, a la priorité (il
  * permet de changer `CLE_ESPORT` sans perdre les webhooks). Le contexte HKDF

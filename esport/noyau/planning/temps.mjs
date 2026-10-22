@@ -1,5 +1,5 @@
 /**
- * Fuseaux horaires sans bibliothèque (Intl, disponible sous Node, Workers,
+ * Fuseaux horaires sans bibliothèque (Intl, disponible sous Node et dans les
  * navigateurs). Fonctions PURES.
  *
  * Règle de stockage de l'Esport : tout instant est stocké en UTC (ISO 8601).

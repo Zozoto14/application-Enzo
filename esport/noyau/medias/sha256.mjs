@@ -1,5 +1,5 @@
 /**
- * SHA-256 INCRÉMENTAL, en JavaScript pur (Workers, Node, navigateur), dont l'état se sérialise.
+ * SHA-256 INCRÉMENTAL, en JavaScript pur (Node, navigateur), dont l'état se sérialise.
  *
  * Pourquoi pas WebCrypto : `crypto.subtle.digest` veut tout le fichier d'un coup, et une vidéo de
  * plusieurs gigaoctets arrive en morceaux, dans des requêtes séparées (voire des processus différents

@@ -1,5 +1,5 @@
 /**
- * Modèles des e-mails d'AppDashboard (pur, sans dépendance : tourne sous Node et dans un Worker).
+ * Modèles des e-mails d'AppDashboard (pur, sans dépendance).
  *
  * Chaque e-mail a DEUX versions (multipart/alternative) : HTML soigné (mise en page en tableaux,
  * styles en ligne : ce que comprennent Gmail, Outlook, Apple Mail) et texte brut. FR ou EN.

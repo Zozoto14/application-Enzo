@@ -3,7 +3,7 @@
  * nom de stockage aléatoire, liens signés temporaires.
  *
  * Les octets passent par l'interface de stockage (adaptateurs/stockage.mjs :
- * R2, mémoire, disque ou S3 plus tard). Rien n'est jamais public : un fichier
+ * disque, mémoire, ou S3 plus tard). Rien n'est jamais public : un fichier
  * se lit soit par une route qui vérifie les droits, soit par un lien signé
  * (HMAC-SHA256 avec CLE_ESPORT) valable quelques minutes, délivré par une
  * route qui a elle-même vérifié les droits.

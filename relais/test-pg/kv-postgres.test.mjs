@@ -1,6 +1,6 @@
 /**
  * Boîte du relais dans PostgreSQL (relais/serveur/kv-postgres.mjs) : interface KV, expiration,
- * métadonnées, liste paginée par préfixe, et réparation de l'index du Worker par cette liste.
+ * métadonnées, liste paginée par préfixe, et réparation de l'index du relais par cette liste.
  * Lancé par `npm run relais:tester:pg` (sauté sans PostgreSQL).
  */
 
@@ -76,11 +76,11 @@ test('KV PostgreSQL : liste par préfixe exact (sensible à la casse, % et _ san
   await base.fermer();
 });
 
-test('Worker sur la boîte PostgreSQL : dépôts simultanés, index réparé depuis la liste', options, async () => {
-  const { default: relais } = await import('../worker.mjs');
+test('relais sur la boîte PostgreSQL : dépôts simultanés, index réparé depuis la liste', options, async () => {
+  const { relais } = await import('../relais.mjs');
   const base = await nouvelleBase();
   const env = { JETON: 'jeton-de-test-0123456789abcdef', BOITE: kvPostgres(base) };
-  const appeler = (chemin, init = {}) => relais.fetch(new Request(`https://relais.test${chemin}`, { ...init, headers: { Authorization: `Bearer ${env.JETON}` } }), env);
+  const appeler = (chemin, init = {}) => relais.traiter(new Request(`https://relais.test${chemin}`, { ...init, headers: { Authorization: `Bearer ${env.JETON}` } }), env);
   const noms = ['pc000001', 'ip000002', 'si000003', 'ta000004', 'mc000005'];
   const enveloppe = n => JSON.stringify({ format: 'applibourse-relais', version: 1, appareil: n, date: '2026-09-26T10:00:00Z', charge: 'abcd' });
   await Promise.all(noms.map(n => appeler(`/boite/${n}`, { method: 'PUT', body: enveloppe(n) })));

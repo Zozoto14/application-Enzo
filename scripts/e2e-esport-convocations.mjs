@@ -1,8 +1,8 @@
 /**
  * Test de bout en bout des CONVOCATIONS de l'Esport et du correctif des
- * statistiques de présence, sans Cloudflare :
+ * statistiques de présence :
  *
- *  - faux relais (relais/worker.mjs) et serveur Esport local ;
+ *  - faux relais (relais/relais.mjs) et serveur Esport local ;
  *  - PC (1440 × 900), le Fondateur crée une RÉUNION dans l'écran Planning en
  *    convoquant 2 joueurs (Léa, Kai) et 1 Propriétaire choisi (Olga) : pas
  *    lui-même, ni Tom (Joueur non coché) ;
@@ -47,7 +47,7 @@ const capture = async (page, nom) => {
   log(`capture ${nom}`);
 };
 
-const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href);
+const { jetonDeProfil } = await import(pathToFileURL(join(racine, 'relais/relais.mjs')).href);
 const { demarrerServeurEsport } = await import(pathToFileURL(join(racine, 'esport/outils/serveur-local.mjs')).href);
 const { rappelsPresence } = await import(pathToFileURL(join(racine, 'esport/noyau/planning/rappels.mjs')).href);
 const { distribuer } = await import(pathToFileURL(join(racine, 'esport/noyau/evenements.mjs')).href);

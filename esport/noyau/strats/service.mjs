@@ -5,7 +5,7 @@
  *    un verrou optimiste (`revision`) et l'historique des enregistrements
  *    (`strat_versions`, les 30 derniers).
  *  - Miniature : image (JPEG ou PNG, 256 Ko au plus) générée par l'app à
- *    l'enregistrement, stockée par l'interface de stockage (R2 en
+ *    l'enregistrement, stockée par l'interface de stockage (disque en
  *    production) dans `fichiers`, lue par un lien signé d'une heure. Sans
  *    stockage branché, la strat s'enregistre sans miniature.
  *  - Partage : visibilité « team » (toute la team qui a strats.view) ou

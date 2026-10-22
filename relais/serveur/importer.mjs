@@ -1,9 +1,10 @@
 /**
- * Import de la boîte du relais Cloudflare (KV `BOITE`) dans PostgreSQL (table relais_kv), lancé depuis
- * le terminal cPanel. Le serveur o2switch TIRE lui-même les données du Worker par la route protégée
- * `GET /admin/boite` (relais version 8, jeton maître) : rien ne transite par GitHub ni par un fichier.
+ * Copie de la boîte d'un relais (toutes ses clés) dans PostgreSQL (table relais_kv) : outil générique
+ * de migration entre deux serveurs, lancé depuis le terminal du NOUVEAU serveur. Celui-ci TIRE lui-même
+ * les données de l'ancien relais par la route protégée `GET /admin/boite` (version 8, jeton maître) :
+ * rien ne transite par GitHub ni par un fichier.
  *
- *   RELAIS_SOURCE=https://applibourse-relais.<vous>.workers.dev node relais/serveur/importer.mjs
+ *   RELAIS_SOURCE=https://ancien-relais.exemple node relais/serveur/importer.mjs
  *
  * Le jeton maître est lu dans ~/.appdashboard/relais.env (JETON), jamais en argument. Rejouable sans
  * danger : chaque clé est écrite ou remplacée (dernière version), rien n'est effacé. Vérifie à la fin
@@ -25,7 +26,7 @@ export async function lireBoiteDistante(source, jeton, { fetch: requete = global
     const url = `${source.replace(/\/+$/, '')}/admin/boite${suite ? `?curseur=${encodeURIComponent(suite)}` : ''}`;
     const r = await requete(url, { headers: { Authorization: `Bearer ${jeton}` } });
     const corps = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(`Export refusé par ${source} (HTTP ${r.status}) : ${corps.erreur ?? 'relais en version 8 attendu (workflow « Relais »)'}`);
+    if (!r.ok) throw new Error(`Export refusé par ${source} (HTTP ${r.status}) : ${corps.erreur ?? 'relais en version 8 au moins attendu'}`);
     cles.push(...(corps.cles ?? []));
     suite = corps.suite ?? null;
   } while (suite);
@@ -69,7 +70,7 @@ export async function principal(args, env = process.env) {
     cles = JSON.parse(readFileSync(entree, 'utf8')).cles;
   } else {
     const source = env.RELAIS_SOURCE || option('--source');
-    if (!source) throw new Error('RELAIS_SOURCE absente : adresse de l’ancien relais Cloudflare (https://applibourse-relais.<vous>.workers.dev).');
+    if (!source) throw new Error('RELAIS_SOURCE absente : adresse du relais à copier (https://…).');
     if (!config.JETON) throw new Error('JETON absent de ~/.appdashboard/relais.env (le jeton maître du relais).');
     cles = await lireBoiteDistante(source, config.JETON);
   }

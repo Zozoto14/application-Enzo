@@ -3,13 +3,13 @@
  *
  * L'app présente une fois son jeton du relais (jeton de profil `p1.<id>.<hmac>`
  * d'un ami, ou jeton maître du Fondateur) ; le relais le valide (route
- * `POST /jeton/verifier`, version 7). Le Worker Esport délivre alors une
+ * `POST /jeton/verifier`, version 7). Le serveur Esport délivre alors une
  * session signée d'environ une heure :
  *
  *   es1.<charge base64url>.<HMAC-SHA256(CLE_ESPORT, charge) base64url>
  *
  * La charge ne contient que l'identifiant du compte, le drapeau super admin
- * et les dates. `CLE_ESPORT` est un secret du Worker (`wrangler secret put`),
+ * et les dates. `CLE_ESPORT` est un secret du serveur (~/.appdashboard/esport.env),
  * jamais dans le dépôt ; le jeton maître, lui, n'est jamais copié ici.
  */
 
