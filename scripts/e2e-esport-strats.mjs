@@ -24,7 +24,7 @@ import { pathToFileURL } from 'node:url';
 import { deflateSync } from 'node:zlib';
 import { ongletTeam } from './esport-navigation.mjs';
 import { nouveauContexte, allerPageApplications, tuileApp } from './e2e-acceptation.mjs';
-import { chargerPlaywright, demarrerRelais, deverrouiller, pause, premierLancement, racine } from './mobile-outils.mjs';
+import { chargerPlaywright, connecterAppareilFondateur, demarrerRelais, deverrouiller, pause, premierLancement, racine } from './mobile-outils.mjs';
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-esport-strats');
 mkdirSync(CAPTURES, { recursive: true });
@@ -179,7 +179,7 @@ async function fermerPopups(page) {
 const pages = [];
 const secrets = new Map();
 const requetesExternes = [];
-async function compte(contexte, url, code, nom) {
+async function compte(contexte, url, code, nom, fondateur) {
   const page = await contexte.newPage();
   pages.push([nom, page]);
   page.on('pageerror', e => log(`erreur page (${nom}) :`, e.message));
@@ -187,7 +187,10 @@ async function compte(contexte, url, code, nom) {
     const u = new URL(r.url());
     if (!['localhost', '127.0.0.1'].includes(u.hostname) && !u.hostname.endsWith('valorant-api.com') && !['data:', 'blob:'].includes(u.protocol)) requetesExternes.push(r.url());
   });
-  const secret = await premierLancement(page, { site: url, code, motDePasse: MDP });
+  // Autre appareil du Fondateur : SON coffre, relu sur le serveur (pas de nouveau coffre).
+  const secret = fondateur
+    ? await connecterAppareilFondateur(page, { site: url, code, motDePasse: MDP, secret: secrets.get(fondateur) })
+    : await premierLancement(page, { site: url, code, motDePasse: MDP });
   secrets.set(page, secret);
   await page.getByTestId('hub').waitFor({ timeout: 60_000 }).catch(() => deverrouiller(page, MDP, secret));
   await fermerPopups(page);
@@ -376,7 +379,7 @@ try {
     userAgent: 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
   });
   await rediriger(ctxIpad);
-  const ipad = await compte(ctxIpad, siteAvec.url, relais.code, 'iPad');
+  const ipad = await compte(ctxIpad, siteAvec.url, relais.code, 'iPad', pc);
   await allerModule(ipad, 'strat_editor');
   await ipad.getByTestId(`esport-strat-ouvrir-${id}`).tap();
   await ipad.locator('[data-testid="esport-canevas"] canvas').first().waitFor({ timeout: 30_000 });

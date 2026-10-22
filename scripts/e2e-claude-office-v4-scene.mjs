@@ -12,7 +12,7 @@
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { allerPageAdministration } from './e2e-acceptation.mjs';
+import { allerPageAdministration, nouveauContexte } from './e2e-acceptation.mjs';
 import { chargerPlaywright, demarrerRelais, demarrerSite, deverrouiller, pause, premierLancement, racine, toucher } from './mobile-outils.mjs';
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-claude-office');
@@ -33,7 +33,9 @@ const { chromium } = chargerPlaywright();
 const navigateur = await chromium.launch({ headless: true });
 try {
   // Écran tactile ET souris : la même page sert au survol (souris réelle) et aux touchers (iPad, iPhone).
-  const contexte = await navigateur.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, hasTouch: true, ignoreHTTPSErrors: true });
+  // PC simulé (relais version 9 : le site ne lit plus de code de liaison dans l'adresse) : le lien de test
+  // `#liaison=` tient lieu du fichier relais-local.json du PC (jeton maître), voir SCRIPT_PC.
+  const contexte = await nouveauContexte(navigateur, { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, hasTouch: true, ignoreHTTPSErrors: true });
   const page = await contexte.newPage();
   const erreurs = [];
   page.on('pageerror', e => erreurs.push(e.message));

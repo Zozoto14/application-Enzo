@@ -31,7 +31,7 @@ import { extname, join, normalize } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ongletPresent, ongletTeam } from './esport-navigation.mjs';
 import { allerPageAdministration, allerPageApplications, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
-import { chargerPlaywright, demarrerRelais, deverrouiller, optionsIphone, pause, premierLancement, racine, totp } from './mobile-outils.mjs';
+import { chargerPlaywright, connecterAppareilFondateur, demarrerRelais, deverrouiller, optionsIphone, pause, premierLancement, racine, totp } from './mobile-outils.mjs';
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-esport-presence-notes');
 mkdirSync(CAPTURES, { recursive: true });
@@ -213,7 +213,8 @@ try {
   const iph = await ctxIph.newPage();
   pages.push(['iPhone', iph]);
   iph.on('pageerror', e => log('erreur page (iPhone) :', e.message));
-  const secretIph = await premierLancement(iph, { site: leSite.url, code: relais.code, motDePasse: MDP });
+  // Autre appareil du Fondateur, Léa arrivée : écran prénom, puis SON coffre (relu sur le serveur).
+  const secretIph = await connecterAppareilFondateur(iph, { site: leSite.url, code: relais.code, motDePasse: MDP, secret });
   await iph.getByTestId('hub').waitFor({ timeout: 60_000 }).catch(() => deverrouiller(iph, MDP, secretIph));
   await fermerPopups(iph);
   await ouvrirEsport(iph);

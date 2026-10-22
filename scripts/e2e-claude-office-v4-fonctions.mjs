@@ -16,7 +16,7 @@
 
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { allerPageAdministration } from './e2e-acceptation.mjs';
+import { allerPageAdministration, nouveauContexte } from './e2e-acceptation.mjs';
 import { chargerPlaywright, demarrerRelais, demarrerSite, deverrouiller, pause, premierLancement, racine, toucher } from './mobile-outils.mjs';
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-claude-office');
@@ -36,7 +36,9 @@ const site = await demarrerSite(PORT_SITE);
 const { chromium } = chargerPlaywright();
 const navigateur = await chromium.launch({ headless: true });
 try {
-  const contexte = await navigateur.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, ignoreHTTPSErrors: true });
+  // PC simulé (relais version 9 : le site ne lit plus de code de liaison dans l'adresse) : le lien de test
+  // `#liaison=` tient lieu du fichier relais-local.json du PC (jeton maître), voir SCRIPT_PC.
+  const contexte = await nouveauContexte(navigateur, { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, ignoreHTTPSErrors: true });
   await contexte.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: site.url });
   const page = await contexte.newPage();
   const erreurs = [];
@@ -57,6 +59,8 @@ try {
     await allerPageAdministration(page);
     await tuile.first().waitFor({ timeout: 20_000 });
     await tuile.first().click();
+    // L'onglet de l'app garde sa page (onglets du hub) : on revient explicitement sur « Bureau ».
+    await page.getByTestId('claude-office-onglet-bureau').click({ timeout: 20_000 });
     await page.getByTestId('bureau').waitFor({ timeout: 20_000 });
   };
   const changerTheme = async theme => {

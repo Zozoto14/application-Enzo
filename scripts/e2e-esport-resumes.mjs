@@ -26,7 +26,7 @@ import { extname, join, normalize } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ongletPresent, ongletTeam } from './esport-navigation.mjs';
 import { allerPageAdministration, allerPageApplications, nouveauContexte, tuileApp } from './e2e-acceptation.mjs';
-import { chargerPlaywright, demarrerRelais, deverrouiller, optionsIphone, pause, premierLancement, racine, totp } from './mobile-outils.mjs';
+import { chargerPlaywright, connecterAppareilFondateur, demarrerRelais, deverrouiller, optionsIphone, pause, premierLancement, racine, totp } from './mobile-outils.mjs';
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-esport-resumes');
 mkdirSync(CAPTURES, { recursive: true });
@@ -87,11 +87,14 @@ async function fermerPopups(page) {
 }
 
 const pages = [];
-async function compte(contexte, url, code, nom) {
+async function compte(contexte, url, code, nom, fondateur) {
   const page = await contexte.newPage();
   pages.push([nom, page]);
   page.on('pageerror', e => log(`erreur page (${nom}) :`, e.message));
-  const secret = await premierLancement(page, { site: url, code, motDePasse: MDP });
+  // Autre appareil du Fondateur : SON coffre, relu sur le serveur (Léa arrivée : écran prénom d'abord).
+  const secret = fondateur
+    ? await connecterAppareilFondateur(page, { site: url, code, motDePasse: MDP, secret: fondateur.secret })
+    : await premierLancement(page, { site: url, code, motDePasse: MDP });
   await page.getByTestId('hub').waitFor({ timeout: 60_000 }).catch(() => deverrouiller(page, MDP, secret));
   await fermerPopups(page);
   page.secret = secret;
@@ -282,7 +285,7 @@ try {
   const faite = (await api(`/teams/${faucons.id}/taches`, sessFond, { methode: 'POST', corps: { titre: 'Compo de Lotus', objectifId: obj.id } })).corps;
   await api(`/teams/${faucons.id}/taches/${faite.id}`, sessFond, { methode: 'PATCH', corps: { statut: 'fait' } });
   const ctxIpad = await nouveauContexte(navigateur, { viewport: { width: 1024, height: 1366 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, ignoreHTTPSErrors: true });
-  const ipad = await compte(ctxIpad, siteAvec.url, relais.code, 'iPad');
+  const ipad = await compte(ctxIpad, siteAvec.url, relais.code, 'iPad', pc);
   await ouvrirEsport(ipad);
   await ipad.getByTestId('esport-team-faucons-valorant').click();
   await ipad.getByTestId('esport-accueil-retard').waitFor({ timeout: 20_000 });

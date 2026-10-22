@@ -17,7 +17,7 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { lireJournal } from '../bureau/electron/officeHistorique.mjs';
-import { allerPageAdministration } from './e2e-acceptation.mjs';
+import { allerPageAdministration, nouveauContexte } from './e2e-acceptation.mjs';
 import { chargerPlaywright, demarrerRelais, demarrerSite, deverrouiller, pause, premierLancement, racine, toucher } from './mobile-outils.mjs';
 
 const CAPTURES = process.env.CAPTURES ?? join(racine, 'docs/captures-claude-office');
@@ -61,7 +61,9 @@ const site = await demarrerSite(PORT_SITE);
 const { chromium } = chargerPlaywright();
 const navigateur = await chromium.launch({ headless: true });
 try {
-  const contexte = await navigateur.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, ignoreHTTPSErrors: true });
+  // PC simulé (relais version 9 : le site ne lit plus de code de liaison dans l'adresse) : le lien de test
+  // `#liaison=` tient lieu du fichier relais-local.json du PC (jeton maître), voir SCRIPT_PC.
+  const contexte = await nouveauContexte(navigateur, { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, ignoreHTTPSErrors: true });
   const page = await contexte.newPage();
   // Requêtes faites pendant l'écran Claude Office : seulement le site et le relais local.
   let surveiller = false;

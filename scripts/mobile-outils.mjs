@@ -253,6 +253,31 @@ export async function premierLancement(page, { site, code, motDePasse, etape = a
   return secret;
 }
 
+/**
+ * Autre appareil du Fondateur relié au relais par le jeton maître (comme le PC avec relais-local.json). Le coffre
+ * du Fondateur est sur le serveur (relais version 9, « serveur = référence ») : l'appareil n'en crée pas un autre,
+ * il n'y a donc pas d'accueil « créer un coffre » (réservé à un navigateur sans compte). Si un ami existe déjà,
+ * l'annuaire relu sur le relais compte plusieurs comptes : écran prénom, où le Fondateur tape « admin » ; sinon,
+ * l'écran de déverrouillage de son coffre s'affiche directement. Mot de passe et code à six chiffres du premier
+ * appareil (même coffre, même secret TOTP). Rend le secret quand le hub est affiché.
+ */
+export async function connecterAppareilFondateur(page, { site, code, motDePasse, secret }) {
+  await page.goto(`${site}#liaison=${code}`);
+  const ecran = await Promise.race([
+    page.getByTestId('connexion-prenom').waitFor({ timeout: 60_000 }).then(() => 'prenom', () => null),
+    page.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 }).then(() => 'verrou', () => null),
+  ]);
+  if (!ecran) throw new Error('ni écran prénom ni déverrouillage sur l’appareil du Fondateur');
+  if ((await page.getByTestId('accueil-site').count()) !== 0) throw new Error('accueil « créer un coffre » sur un appareil du Fondateur');
+  if (ecran === 'prenom') {
+    await page.getByTestId('connexion-prenom').fill('admin');
+    await toucher(page, 'connexion-continuer');
+    await page.getByTestId('bouton-deverrouiller').waitFor({ timeout: 60_000 });
+  }
+  await deverrouiller(page, motDePasse, secret);
+  return secret;
+}
+
 export async function deverrouiller(page, motDePasse, secret, attendu = 'hub') {
   for (const decalage of [0, 1, -1]) {
     await page.locator('input[type=password]').first().fill(motDePasse);
