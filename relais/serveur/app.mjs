@@ -10,6 +10,7 @@
  *   DATABASE_URL          postgres://… (ou PGHOST, PGUSER, PGPASSWORD, PGDATABASE), même base que l'Esport
  *   DISCORD_WEBHOOK_URL   salon du support (facultatif, docs/support.md) ; DISCORD_BOT_TOKEN : fils dans un salon texte
  *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM   envoi d'e-mails (facultatif, docs/emails.md)
+ *   MAIL_COPIE_ENVOYES, IMAP_HOST, IMAP_PORT, IMAP_DOSSIER   copie dans « Envoyés » (défaut : activée, docs/emails.md)
  *   LIEN_APP              adresse du site dans les e-mails et Discord (défaut : https://appdashboard.fr)
  *   ORIGINES_SITE         origines du site pour /tsuzuku/requete (défaut : https://appdashboard.fr et l'ancien site Pages)
  *   CLE_A2F               facultatif (32 caractères au moins, à ne jamais changer) : chiffre les secrets de
@@ -105,7 +106,7 @@ export async function preparerRelais({ config = chargerConfigRelais(), base, env
     env,
     config,
     fermer: async () => {
-      envoyeur?.fermer?.();
+      await envoyeur?.fermer?.();
       if (!base) await b.fermer();
     },
   };

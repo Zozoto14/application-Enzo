@@ -218,7 +218,8 @@ DISCORD_WEBHOOK_URL=
 # Salon support de type TEXTE seulement : le bot ouvre un fil par demande (même jeton que esport.env)
 DISCORD_BOT_TOKEN=
 # E-mails envoyés par le serveur (facultatif, docs/emails.md)
-SMTP_HOST=mail.appdashboard.fr
+# Nom du serveur affiché par cPanel (pas mail.appdashboard.fr : son certificat ne correspond pas)
+SMTP_HOST=poisson.o2switch.net
 SMTP_PORT=465
 SMTP_USER=noreply@appdashboard.fr
 SMTP_PASS=MOT_DE_PASSE_DE_LA_BOITE_NOREPLY
@@ -227,6 +228,11 @@ LIEN_APP=https://appdashboard.fr
 # Avis des autres appareils : sondage (défaut, le plus sûr), attente ou sse (voir partie H)
 SYNCHRO_TEMPS_REEL=sondage
 ```
+
+Pour `SMTP_HOST`, prenez le **nom du serveur** affiché par cPanel (**Connect Devices**), ici `poisson.o2switch.net` :
+le certificat de `mail.appdashboard.fr` est celui du serveur et ne contient pas ce nom, l'envoi échouerait avec
+« certificat SMTP ne correspond pas au nom du serveur ». Une copie de chaque e-mail arrive dans « Envoyés » de la
+boîte (webmail), réglages dans [emails.md](emails.md).
 
 (Sans `SMTP_*`, laissez ces lignes vides : l'app garde l'envoi par votre messagerie, `mailto:`.)
 

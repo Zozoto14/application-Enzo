@@ -103,7 +103,7 @@ export async function fauxSmtp({ utilisateur = 'noreply@appdashboard.test', motD
     set refuser(f) {
       etat.refuser = f;
     },
-    env: { SMTP_HOST: '127.0.0.1', SMTP_PORT: String(serveur.address().port), SMTP_USER: utilisateur, SMTP_PASS: motDePasse, MAIL_FROM: `AppDashboard <${utilisateur}>`, SMTP_SANS_TLS: '1' },
+    env: { SMTP_HOST: '127.0.0.1', SMTP_PORT: String(serveur.address().port), SMTP_USER: utilisateur, SMTP_PASS: motDePasse, MAIL_FROM: `AppDashboard <${utilisateur}>`, SMTP_SANS_TLS: '1', MAIL_COPIE_ENVOYES: '0' },
     fermer: () => new Promise(ok => serveur.close(() => ok())),
   };
 }

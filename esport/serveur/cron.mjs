@@ -44,7 +44,7 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
     } catch (e) {
       rapport.push({ tache: 'récapitulatifs e-mail', ok: false, erreur: String(e?.code ?? 'erreur') });
     } finally {
-      envoyer?.fermer?.();
+      await envoyer?.fermer?.();
     }
   }
   // Transcription sur le serveur : processus de fond détaché (un seul à la fois), si des réunions attendent.

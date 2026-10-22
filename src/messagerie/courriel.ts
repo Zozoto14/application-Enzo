@@ -75,7 +75,8 @@ export const liaisonCourriel: { relais: () => LiaisonRelais | undefined; requete
 const LIBELLES_ERREURS: Record<string, string> = {
   'adresse-invalide': 'adresse invalide',
   'destinataire-refuse': 'destinataire refusé par le serveur de messagerie',
-  'smtp-authentification': 'identifiants SMTP refusés (SMTP_USER / SMTP_PASS)',
+  'smtp-authentification': 'identifiants SMTP refusés : vérifie SMTP_USER (adresse complète) et SMTP_PASS',
+  'smtp-certificat': 'certificat SMTP ne correspond pas au nom du serveur : utilise SMTP_HOST=<nom du serveur> (celui affiché par cPanel)',
   'smtp-injoignable': 'serveur SMTP injoignable',
   'smtp-temporaire': 'refus temporaire du serveur SMTP',
   'smtp-erreur': 'erreur du serveur SMTP',

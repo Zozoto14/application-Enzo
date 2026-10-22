@@ -286,6 +286,7 @@ export function Messagerie({ outils }: { outils: OutilsAdmin }) {
       </Panneau>
       <Panneau theme={theme} testID="admin-messagerie-historique">
         <Intertitre theme={theme}>Historique des envois</Intertitre>
+        <Text style={attenue}>Une copie de chaque e-mail arrive aussi dans le dossier « Envoyés » de la boîte noreply (webmail).</Text>
         {journal === undefined ? <Text style={attenue}>Historique indisponible (serveur injoignable).</Text> : journal.length === 0 ? <Text style={attenue}>Aucun envoi pour l’instant.</Text> : null}
         {(journal ?? []).slice(0, 50).map(e => {
           const ok = e.resultats.filter(r => r.statut === 'envoye').length;

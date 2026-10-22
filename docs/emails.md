@@ -8,7 +8,7 @@ serveur SMTP d'o2switch :
   lien) et une version texte ;
 - **réponse au support** (Administration › Support, case « Prévenir aussi par e-mail ») ;
 - **Messagerie** (Administration › Messagerie) : un e-mail à un ou plusieurs utilisateurs, ou à tous les membres d'une
-  team Esport, avec l'éditeur riche ; historique des envois et statut (Envoyé, Échec) ;
+  team Esport, avec l'éditeur riche ; historique des envois et statut (Envoyé, Échec), plus une copie dans « Envoyés » de la boîte noreply (webmail) ;
 - **récapitulatif Esport** (facultatif, désactivé par défaut) : chaque utilisateur peut l'activer dans
   **Esport › Mon profil › Récapitulatif par e-mail** (quotidien ou hebdomadaire).
 
@@ -25,8 +25,8 @@ Tant que le SMTP n'est pas configuré, rien ne change : l'app ouvre votre messag
 3. **Mot de passe** : **Générer**, puis copiez-le (il ira dans `relais.env`). Espace de stockage : 250 Mo suffisent.
 4. **+ Créer**.
 5. Sur la ligne `noreply@appdashboard.fr` › **Connect Devices** (« Connecter les appareils ») : notez le
-   **serveur sortant (SMTP)** et le **port SSL**. Chez o2switch c'est en général `mail.appdashboard.fr` (ou le nom
-   du serveur, par exemple `xxx.o2switch.net`) et le port **465** (SSL/TLS). Utilisez exactement ce que cPanel affiche.
+   **serveur sortant (SMTP)** et le **port SSL** (**465**, SSL/TLS). Utilisez le **nom du serveur** affiché par cPanel
+   (chez o2switch : `poisson.o2switch.net`), pas `mail.appdashboard.fr` : voir la note sur le certificat plus bas.
 
 ## 2. Ne pas finir en spam : SPF et DKIM (cPanel, 2 minutes)
 
@@ -51,7 +51,7 @@ Ajoutez à la fin (remplacez les MAJUSCULES) :
 
 ```ini
 # E-mails envoyés par le serveur (docs/emails.md)
-SMTP_HOST=mail.appdashboard.fr
+SMTP_HOST=poisson.o2switch.net
 SMTP_PORT=465
 SMTP_USER=noreply@appdashboard.fr
 SMTP_PASS=MOT_DE_PASSE_DE_LA_BOITE
@@ -75,7 +75,29 @@ touch ~/application-enzo/relais/tmp/restart.txt
 **Vérifier** : Administration › Messagerie affiche « Envoi direct par le serveur ». Envoyez-vous un e-mail d'essai
 (mettez votre adresse dans votre propre fiche… ou invitez un compte de test). Si rien n'arrive : le journal
 `~/logs/relais-passenger.log` dit « e-mails désactivés : … manquant(s) » si une ligne manque ; l'historique de la
-Messagerie donne le motif d'un échec (« identifiants SMTP refusés », « serveur SMTP injoignable »…).
+Messagerie donne le motif d'un échec (« identifiants SMTP refusés », « certificat SMTP ne correspond pas au nom du
+serveur », « serveur SMTP injoignable »…).
+
+### Note : SMTP_HOST=poisson.o2switch.net, à cause du certificat
+
+Le certificat TLS présenté par `mail.appdashboard.fr` est celui du **serveur** o2switch : il ne contient pas ce nom, et
+l'envoi échoue avec « certificat SMTP ne correspond pas au nom du serveur ». Mettez dans `SMTP_HOST` le **nom du
+serveur** affiché par cPanel (ici `poisson.o2switch.net`, port 465), dont le certificat est valide. La vérification du
+certificat n'est jamais désactivée.
+
+### Voir les e-mails envoyés
+
+- **Contenu** : webmail (Roundcube) de `noreply@appdashboard.fr › Envoyés`. Après chaque envoi réussi, le serveur y
+  dépose une copie exacte du message (IMAP, marquée « lu », à la date d'envoi), avec la même identité et le même mot
+  de passe que le SMTP.
+- **État de remise** (arrivé, différé, refusé) : cPanel › **E-mail** › **Suivre la remise** (« Track Delivery »).
+- Réglages (tous facultatifs, dans `relais.env` et `esport.env`) : `MAIL_COPIE_ENVOYES=0` désactive la copie (activée
+  par défaut dès que SMTP est configuré) ; `IMAP_HOST` (défaut : `SMTP_HOST`) ; `IMAP_PORT` (défaut `993`, SSL/TLS) ;
+  `IMAP_DOSSIER` si le dossier n'est pas trouvé tout seul (détection : attribut `\Sent`, puis `Sent`, puis
+  `INBOX.Sent`), par exemple `IMAP_DOSSIER=INBOX.Sent`.
+- Un échec de la copie (IMAP indisponible, dossier introuvable) **n'empêche jamais l'envoi** : une ligne
+  `[courriel] copie dans « Envoyés » impossible (code)` est écrite dans le journal, sans adresse ; après un échec la
+  copie est suspendue 60 secondes.
 
 ## Langue des comptes et des e-mails
 

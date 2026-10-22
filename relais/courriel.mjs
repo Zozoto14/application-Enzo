@@ -104,6 +104,7 @@ export function codeErreur(e) {
   const code = String(e?.code ?? '');
   const reponse = Number(e?.responseCode);
   if (code === 'EAUTH' || reponse === 535) return 'smtp-authentification';
+  if (/ERR_TLS_CERT_ALTNAME_INVALID|does not match certificate'?s altnames/i.test(`${code} ${e?.cause?.code ?? ''} ${e?.message ?? ''}`)) return 'smtp-certificat';
   if (code === 'ECONNECTION' || code === 'ETIMEDOUT' || code === 'ESOCKET' || code === 'EDNS') return 'smtp-injoignable';
   if (code === 'EENVELOPE' || (reponse >= 550 && reponse < 560)) return 'destinataire-refuse';
   if (reponse >= 400 && reponse < 500) return 'smtp-temporaire';
