@@ -157,9 +157,11 @@ describe('verrouillage automatique : réglage d’appareil', () => {
 import { PARAMETRES } from '../db/depots';
 import { PARAMETRES_A_SYNCHRONISER, PARAMETRES_PARTAGES } from '../sync/relais/entites';
 
-describe('réglages propres à l’appareil ou au compte, jamais synchronisés', () => {
-  it('ni le délai de verrouillage, ni les tickets, ni les acceptations ne partent au relais', () => {
+describe('réglages propres à l’appareil, jamais synchronisés', () => {
+  it('ni le délai de verrouillage, ni les tickets ne partent au relais ; les acceptations, elles, valent pour tout le compte', () => {
     const synchronises = new Set([...PARAMETRES_PARTAGES, ...PARAMETRES_A_SYNCHRONISER]);
-    for (const cle of [PARAMETRES.verrouAutoMinutes, PARAMETRES.ticketsSupport, PARAMETRES.acceptationsJuridiques]) expect(synchronises.has(cle)).toBe(false);
+    for (const cle of [PARAMETRES.verrouAutoMinutes, PARAMETRES.ticketsSupport]) expect(synchronises.has(cle)).toBe(false);
+    // Avant : « restent sur chaque appareil » (l'écran « Avant de commencer » revenait à chaque connexion).
+    expect(synchronises.has(PARAMETRES.acceptationsJuridiques)).toBe(true);
   });
 });

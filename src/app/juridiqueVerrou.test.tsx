@@ -114,6 +114,34 @@ describe('documents légaux et verrouillage automatique dans l’application', (
     expect(acceptations[0].date).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  it('compte relié au serveur : l’écran n’apparaît pas (ni ne clignote) avant le premier tour de synchro, qui peut rapporter l’acceptation', async () => {
+    const fetchAvant = globalThis.fetch;
+    // Serveur qui ne répond pas encore : on attend, puis (au plus 10 s) on décide avec la copie locale.
+    globalThis.fetch = jest.fn(() => new Promise<Response>(() => undefined)) as unknown as typeof fetch;
+    try {
+      const session = creerSession(depot =>
+        depot.ecrire(PARAMETRES.relaisSynchro, JSON.stringify({ relais: 'https://relais.exemple.test', jeton: 'jeton-de-test-0123456789', cle: '00'.repeat(32), nom: 'PC' })),
+      );
+      const { secretTotp } = session.initialiser({ motDePasse: MOT_DE_PASSE });
+      session.verrouiller();
+      await render(<App session={session} hub />);
+      await deverrouiller(secretTotp);
+      expect(screen.getByTestId('acceptation-attente')).toBeTruthy();
+      expect(screen.queryByTestId('acceptation-juridique')).toBeNull();
+      expect(screen.queryByTestId('hub')).toBeNull();
+      for (let i = 0; i < 11; i += 1) {
+        await act(async () => {
+          jest.advanceTimersByTime(1000);
+          await Promise.resolve();
+        });
+      }
+      expect(screen.queryByTestId('acceptation-attente')).toBeNull();
+      expect(screen.getByTestId('acceptation-juridique')).toBeTruthy();
+    } finally {
+      globalThis.fetch = fetchAvant;
+    }
+  });
+
   it('une version différente des documents redemande l’acceptation', async () => {
     const session = creerSession(depot => depot.ecrire(PARAMETRES.acceptationsJuridiques, JSON.stringify([{ version: '0.9', date: '2026-01-01T00:00:00Z' }])));
     const { secretTotp } = session.initialiser({ motDePasse: MOT_DE_PASSE });

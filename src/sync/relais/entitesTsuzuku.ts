@@ -18,14 +18,19 @@
  * renaît pas. Tout part dans la charge scellée par `cleDerivee('synchro')` :
  * le relais ne voit jamais une clé d'API ni une adresse de source en clair.
  * Chaque entité reçue est revalidée (adresse publique, sélecteurs, bornes).
+ *
+ * Les données PERSONNELLES (bibliothèque, progression, historique, liens
+ * manuels, langue par série, choix des sources partagées, fiabilité des
+ * lecteurs, position de lecture) sont dans entitesTsuzukuDonnees.ts.
  */
 
 import { ecrireAvances, ecrirePartages, ecrireTests, lireAvances, lireListeSources, lirePartages, lireTests } from '../../tsuzuku/app/gestion';
 import { importerSources, type DefinitionSource } from '../../tsuzuku/moteur/sources';
 import { CLES as CLES_TSUZUKU } from '../../tsuzuku/plateforme/stockage';
+import { CLES_DONNEES_TSUZUKU, QUOI_DONNEES, ecrireEntiteDonnees, entitesDonneesTsuzuku, supprimerEntiteDonnees } from './entitesTsuzukuDonnees';
 
 /** Clés de paramètres (base du profil) portées par ces entités. */
-export const CLES_TSUZUKU_SYNCHRONISEES: readonly string[] = [CLES_TSUZUKU.sources, CLES_TSUZUKU.partages, CLES_TSUZUKU.testsSources, CLES_TSUZUKU.avance];
+export const CLES_TSUZUKU_SYNCHRONISEES: readonly string[] = [CLES_TSUZUKU.sources, CLES_TSUZUKU.partages, CLES_TSUZUKU.testsSources, CLES_TSUZUKU.avance, ...CLES_DONNEES_TSUZUKU];
 
 export interface AccesParametres {
   lire(cle: string): string | undefined | null;
@@ -37,6 +42,17 @@ const ID_AVANCE = 'avance';
 
 /** Entités `tsuzuku:*` de la base (vide si le profil n'a rien). */
 export function entitesTsuzuku(lire: AccesParametres['lire']): Record<string, unknown> {
+  return entitesTsuzukuAvecEtat(lire).entites;
+}
+
+/** Entités, et préfixes d'entités momentanément illisibles (à ne pas croire supprimées). */
+export function entitesTsuzukuAvecEtat(lire: AccesParametres['lire']): { entites: Record<string, unknown>; illisibles: string[] } {
+  const donnees = entitesDonneesTsuzuku(lire);
+  return { entites: { ...entitesSources(lire), ...donnees.entites }, illisibles: donnees.illisibles };
+}
+
+/** Entités des sources du compte (définition, partage, test, ordre, réglages avancés). */
+function entitesSources(lire: AccesParametres['lire']): Record<string, unknown> {
   const sortie: Record<string, unknown> = {};
   const sources = lireListeSources(lire(CLES_TSUZUKU.sources));
   for (const s of sources) sortie[`tsuzuku:source:${s.id}`] = JSON.parse(JSON.stringify(s));
@@ -68,6 +84,7 @@ function ranger(liste: DefinitionSource[], ordre: readonly string[]): Definition
  */
 export function ecrireEntiteTsuzuku(base: AccesParametres, id: string, valeur: unknown): boolean {
   const { quoi, cle } = decouperId(id);
+  if (QUOI_DONNEES.includes(quoi)) return ecrireEntiteDonnees(base, quoi, cle, valeur);
   switch (quoi) {
     case 'source': {
       const lue = importerSources([valeur]).sources[0];
@@ -109,6 +126,10 @@ export function ecrireEntiteTsuzuku(base: AccesParametres, id: string, valeur: u
 /** Applique une suppression (pierre tombale) venue d'un autre appareil. */
 export function supprimerEntiteTsuzuku(base: AccesParametres, id: string): void {
   const { quoi, cle } = decouperId(id);
+  if (QUOI_DONNEES.includes(quoi)) {
+    supprimerEntiteDonnees(base, quoi, cle);
+    return;
+  }
   if (quoi === 'source') {
     const liste = lireListeSources(base.lire(CLES_TSUZUKU.sources));
     if (liste.some(s => s.id === cle)) base.ecrire(CLES_TSUZUKU.sources, JSON.stringify(liste.filter(s => s.id !== cle)));
@@ -150,10 +171,12 @@ export function etatPastilleTsuzuku(
     etat = {};
   }
   const connus = etat.connus ?? {};
-  const locales = entitesTsuzuku(lire);
+  // La pastille de la page Sources ne parle que des sources (pas de la bibliothèque).
+  const deSource = (cle: string) => cle.startsWith('tsuzuku:') && !QUOI_DONNEES.includes(decouperId(cle.slice('tsuzuku:'.length)).quoi);
+  const locales = entitesSources(lire);
   const change =
     Object.entries(locales).some(([cle, v]) => connus[cle] !== empreinte(v)) ||
-    Object.keys(connus).some(cle => cle.startsWith('tsuzuku:') && !(cle in locales)) ||
-    (etat.enAttente?.cles ?? []).some(cle => cle.startsWith('tsuzuku:'));
+    Object.keys(connus).some(cle => deSource(cle) && !(cle in locales)) ||
+    (etat.enAttente?.cles ?? []).some(deSource);
   return change ? { etat: 'en-attente' } : { etat: 'synchronise', depuis: etat.derniereSynchro };
 }

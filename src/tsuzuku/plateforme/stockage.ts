@@ -39,13 +39,17 @@ export const CLES = {
   avance: 'tsuzuku.avance',
   /** Réglages de confort (doublage, épisode suivant, déjà vus). */
   reglages: 'tsuzuku.reglages',
-  /** Langue choisie (VF / VOSTFR) par série, sur CET appareil (non synchronisée). */
+  /** Langue choisie (VF / VOSTFR) par série (synchronisée, une entrée par série). */
   languesSeries: 'tsuzuku.langues',
+  /** Fiabilité des lecteurs, par source (synchronisée : les lecteurs qui marchent passent en premier partout). */
+  fiabiliteLecteurs: 'tsuzuku.lecteurs.fiabilite',
+  /** Position de lecture dans l'épisode en cours, par titre (vidéo directe ; synchronisée). */
+  positions: 'tsuzuku.positions',
   /** Titre choisi à la main pour chercher une fiche sur les sources (« Chercher avec un autre titre »), par fiche. */
   titresRecherche: 'tsuzuku.recherche.titres',
   /** Dernier mode ouvert (animés ou films). */
   mode: 'tsuzuku.mode',
-  /** Cache (catalogue, recherches sur les sources, lecteurs) : sur CET appareil, borné, jamais synchronisé. */
+  /** Cache (catalogue, recherches sur les sources, lecteurs, temps de réponse des sites) : sur CET appareil, borné, jamais synchronisé (régénérable). */
   cache: 'tsuzuku.cache',
 } as const;
 

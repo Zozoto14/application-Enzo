@@ -27,7 +27,7 @@ import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
 import { DepotParametres, PARAMETRES } from '../../db/depots';
 import type { PiloteSqlite } from '../../db/pilote';
 import { ouvrirEnveloppe, sceller, type Enveloppe } from './chiffrement';
-import { ecrireEntite, empreinte, extraireEntites } from './entites';
+import { ecrireEntite, empreinte, estFusionnable, extraireEntites } from './entites';
 import type { Liaison } from './liaison';
 import { appliquerCharge, noterChangementsLocaux, type BilanFusion, type Charge, type EtatSynchro } from './moteur';
 import { ErreurRelais, appeler, appliquerDepot, cumulerBilan, lireEtatSynchro } from './synchroniser';
@@ -402,8 +402,9 @@ function appliquerEnregistrements(o: OptionsServeur, etatEntree: EtatServeur, en
     // Notre propre écriture, déjà connue.
     if (!forcer && base[contenu.cle] === e.rev) continue;
     const identique = contenu.supprime ? !(contenu.cle in locales) : contenu.cle in locales && empreinte(locales[contenu.cle]) === empreinte(contenu.valeur);
-    if (!forcer && !identique && estUnionApp(contenu.cle) && !contenu.supprime) {
-      // Événements du journal : réunis ici (jamais l'un à la place de l'autre), la réunion repart.
+    if (!forcer && !identique && estFusionnable(contenu.cle) && !contenu.supprime) {
+      // Événements du journal, titres Tsuzuku, acceptations… : réunis ici (jamais l'un à la place de
+      // l'autre) ; si la réunion diffère de la version du serveur, elle repart.
       unions.push({ cle: contenu.cle, valeur: contenu.valeur });
       base[contenu.cle] = e.rev;
       continue;
@@ -433,7 +434,9 @@ function appliquerEnregistrements(o: OptionsServeur, etatEntree: EtatServeur, en
   }
   if (unions.length > 0) {
     // La réunion diffère de ce qu'a le serveur : notée comme changement d'ici, elle repart au prochain envoi.
-    etat = noterChangementsLocaux(etat, extraireEntites(pilote), (o.maintenant ?? (() => new Date()))().toISOString()) as EtatServeur;
+    const instant = (o.maintenant ?? (() => new Date()))().toISOString();
+    etat = noterChangementsLocaux(etat, extraireEntites(pilote), instant) as EtatServeur;
+    etat = renvoyerFusions(etat, extraireEntites(pilote), unions, instant);
   }
   if (recues.length === 0) return etat;
   const applique = appliquerCharge(pilote, etat, charge);
@@ -447,10 +450,21 @@ function appliquerEnregistrements(o: OptionsServeur, etatEntree: EtatServeur, en
     const supprimeLaBas = c in charge.supprimes;
     if (supprimeLaBas ? !(c in apres) : c in apres && empreinte(apres[c]) === empreinte(charge.entites[c])) alignees.add(c);
   }
-  return retirerFile(etat, alignees);
+  etat = retirerFile(etat, alignees);
+  // Une entité fusionnée (conflit perdu compris) qui diffère de la version du serveur repart : la réunion
+  // gagne partout, et la version perdante reste dans l'historique du serveur.
+  const fusionnees = recues.filter(c => estFusionnable(c) && !(c in charge.supprimes)).map(c => ({ cle: c, valeur: charge.entites[c] }));
+  return renvoyerFusions(etat, apres, fusionnees, (o.maintenant ?? (() => new Date()))().toISOString());
 }
 
-const estUnionApp = (cle: string): boolean => cle.startsWith('journal:boite:');
+/** Remet dans la file (datée de maintenant) chaque entité fusionnée ici qui diffère de la version reçue. */
+function renvoyerFusions(etat: EtatServeur, apres: Record<string, unknown>, recues: ReadonlyArray<{ cle: string; valeur: unknown }>, instant: string): EtatServeur {
+  const differentes = recues.filter(r => r.cle in apres && empreinte(apres[r.cle]) !== empreinte(r.valeur)).map(r => r.cle);
+  if (differentes.length === 0) return etat;
+  const dates = { ...etat.dates };
+  for (const c of differentes) dates[c] = instant;
+  return ajouterFile({ ...etat, dates }, differentes, instant);
+}
 
 /**
  * Transition : les appareils pas encore à jour déposent encore leur état dans `/boite/<appareil>`.

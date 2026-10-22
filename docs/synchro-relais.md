@@ -10,7 +10,7 @@ d'« appareils liés », plus de code de liaison : chaque appareil parle au serv
 | --- | --- |
 | Chaque appareil du Fondateur déposait SON état dans `/boite/<appareil>` ; les autres lisaient tous les dépôts | Un **coffre serveur par compte** (`/v9/coffre/<compte>`) : un enregistrement chiffré par donnée, avec un numéro de révision |
 | Synchro limitée par le quota KV (≈ 1 000 écritures/jour) : 30 s mini entre deux dépôts, tour toutes les 2 min, journal jamais synchronisé | Plus de quota. Version 10 : envoi ~150 ms après une modification (une requête), les autres appareils prévenus aussitôt par le serveur (flux SSE, sinon attente longue, sinon sondage) ; tour complet en filet toutes les 3 min |
-| Seuls le portefeuille, le thème, les tuiles et les sources Tsuzuku voyageaient | En plus : pages et boîte du **journal automatique**, notes de Claude Office, espace perso et pilote de semaine des Tâches, carnet d'un gestionnaire, réglages de notifications et de cours, bibliothèque Tsuzuku… (`src/sync/relais/entitesApps.ts`) |
+| Seuls le portefeuille, le thème, les tuiles et les sources Tsuzuku voyageaient | En plus : pages et boîte du **journal automatique**, notes et équipe de Claude Office, espace perso et pilote de semaine des Tâches, carnet d'un gestionnaire, réglages de notifications et de cours, documents légaux acceptés, **tout Tsuzuku** titre par titre (`src/sync/relais/entitesApps.ts`, `entitesTsuzukuDonnees.ts`) |
 | Amis : leur base entière en un fichier (`p/<id>/boite/portefeuille`), « le plus récent gagne » au niveau du fichier | Amis : le même coffre serveur que le Fondateur (enregistrement par enregistrement), le fichier reste publié pour le séquestre |
 | Nouvel appareil du Fondateur : code de liaison `AB1.…` (portant le jeton maître) | Identifiant + mot de passe (`docs/connexion-amis.md`), le serveur rend un jeton de **session** ; le jeton maître ne quitte plus le serveur |
 
@@ -105,8 +105,102 @@ les abonnements. Leurs freins d'écriture (30 s mini, tour de 2 min) sont levés
 modification.
 
 **Restent sur l'appareil** (choix voulus) : l'identifiant d'appareil, l'état de la synchro, le mode discret, le délai de
-verrouillage, les tickets de support et les documents légaux acceptés, les secrets « jamais synchronisés » des Tâches,
-les caches (cours, Tsuzuku).
+verrouillage, le thème « pour cet appareil uniquement », les onglets et fenêtres ouverts, la voix du podcast, les tickets
+de support (leur liste fait foi sur le serveur du support), les secrets « jamais synchronisés » des Tâches et ses
+préférences d'affichage, les journaux de notifications déjà envoyées, les brouillons, et les caches régénérables
+(cours, catalogue et recherches de Tsuzuku, temps de réponse des sites).
+
+## Fusion plutôt que remplacement (entités « fusionnables »)
+
+La règle reste « le plus récent gagne, par enregistrement, l'autre version dans l'historique du serveur ». Pour
+quelques données, deux versions ne doivent JAMAIS se remplacer : elles sont **fusionnées** à la réception
+(`estFusionnable`, `src/sync/relais/entites.ts`), par une fusion déterministe, commutative et idempotente (même
+résultat dans les deux sens, refusionner ne change rien : tous les appareils convergent, sans aller-retour). Si la
+réunion diffère de la version du serveur, elle repart (`renvoyerFusions`, `coffreServeur.ts`) — y compris après un
+conflit perdu au serveur (la version perdante reste dans son historique).
+
+| Entité | Fusion |
+| --- | --- |
+| `journal:boite:<mois>` | union des événements |
+| `kv:juridique.acceptations` | union par version des textes (la première date gardée) |
+| `tsuzuku:titre:<anime\|movie>:<id>` | fiche à la plus récente, progression au maximum (ci-dessous) |
+| `tsuzuku:historique` | union des épisodes vus (200 au plus, les plus récents) |
+| `tsuzuku:fiabilite:<source>` | par lecteur, le résultat le plus récent |
+| `tsuzuku:position:<titre>` | la plus récente |
+
+## Documents légaux : acceptation par compte
+
+Avant, l'acceptation (`juridique.acceptations`) restait sur chaque appareil : l'écran « Avant de commencer » revenait
+sur chaque navigateur, et après chaque connexion par identifiant (base du navigateur neuve). Maintenant :
+
+- elle est dans le coffre serveur du compte (`kv:juridique.acceptations` : version des textes et date, chiffrées),
+  réunie par union entre appareils, avec la copie locale pour le hors ligne ;
+- elle n'est redemandée que si la version des textes (`versionJuridique` : modèle + révision du Fondateur) n'a jamais
+  été acceptée par le compte ;
+- **pas d'écran trop tôt** : sur un appareil qui ne la connaît pas encore, l'app attend le premier tour de synchro
+  (écran neutre « Ouverture de votre compte… », `acceptation-attente`, 10 s au plus, `DELAI_MAX_ATTENTE_ACCEPTATION_MS`)
+  avant de décider ; rien ne clignote ;
+- migration : un appareil qui gardait l'acceptation pour lui la remonte au premier tour (nouvelle clé synchronisée).
+
+Tests : `src/sync/relais/acceptationJuridique.test.ts`, `src/app/juridiqueVerrou.test.tsx`, bout en bout
+`scripts/e2e-tsuzuku-synchro.mjs`.
+
+## Tsuzuku : tout dans le coffre serveur
+
+| Donnée | Où (base chiffrée du profil, sauf mention) | Avant | Maintenant |
+| --- | --- | --- | --- |
+| Bibliothèque : titres, liste « à voir », favoris, notes, commentaires, statut, épisode courant (épisodes vus), « vu ailleurs » | `tsuzuku.bibliotheque` | un seul bloc `kv:tsuzuku.bibliotheque`, le dernier gagnant écrasait TOUTE la bibliothèque | un enregistrement par titre `tsuzuku:titre:*`, fusionné |
+| Historique des épisodes vus | `tsuzuku.bibliotheque` (`history`) | dans le bloc | `tsuzuku:historique`, union |
+| Liens manuels (motif d'épisodes, lien de film) | `tsuzuku.bibliotheque` (`manualSources`) | dans le bloc | `tsuzuku:liens:<anime\|movies>:<id>`, dernier gagnant |
+| Position de lecture dans l'épisode | n'existait pas (mémoire vive, seulement pour changer de langue) | non | `tsuzuku.positions` → `tsuzuku:position:<titre>` (vidéo directe ; reprise sur un autre appareil) |
+| Sources ajoutées, ordre, partage, dernier test, clés d'API et options | `tsuzuku.sources`, `.partages`, `.sources.tests`, `.avance` | oui (`tsuzuku:source:*`…) | inchangé |
+| Sources partagées reçues | `tsuzuku.sources.partagees` | non (recopiées du canal de partage sur chaque appareil) | inchangé : régénérées par le canal `tsuzuku-sources` |
+| Choix personnel d'une source partagée (activée ou non) | `tsuzuku.sources.choix` | **non** | `tsuzuku:choix:<source>` |
+| Préférence VF / VOSTFR par série | `tsuzuku.langues` | **non** | `tsuzuku:langue:<série>` |
+| Préférence VF / VOSTFR par défaut, épisode suivant auto, masquer les vus | `tsuzuku.reglages` | oui (`kv`) | inchangé |
+| Fiabilité des lecteurs (lecteurs qui marchent en premier) | cache `tsuzuku.cache` (`fiabilite-lecteurs`) | **non** | `tsuzuku.lecteurs.fiabilite` → `tsuzuku:fiabilite:<source>` (reprise une fois du cache) |
+| Titre choisi « chercher avec un autre titre » | `tsuzuku.recherche.titres` | oui (`kv`) | inchangé |
+| Dernier mode ouvert (animés / films) | `tsuzuku.mode` | oui (`kv`) | inchangé |
+| Paire de réception du partage | `tsuzuku.reception` | oui (`kv`, chiffrée) | inchangé |
+| Catalogue (fiches, métadonnées), recherches sur les sources, lecteurs trouvés | cache `tsuzuku.cache` (600 Ko au plus) | non | **reste local** : public et régénérable ; le site profite déjà du cache du relais pour les pages des sources |
+| Affiches | cache HTTP du navigateur / de l'app | non | **reste local** (régénérable, volumineux) |
+| Temps de réponse des sites | cache `tsuzuku.cache` (`latences`) | non | **reste local** : mesure propre au réseau de l'appareil |
+| Préchargement (intentions, épisode suivant) | mémoire vive | non | sans objet (rien de durable) |
+
+**Progression : le maximum, pas le plus récent.** Deux appareils hors ligne : sur l'un on voit l'épisode 7, sur l'autre
+(plus tard) le 4 → l'épisode 7 est gardé (le plus loin gagne : un épisode vu n'est jamais « dévu » par un appareil en
+retard). Le maximum porte sur `(génération, épisode, date)` : corriger l'épisode à la BAISSE exprès ouvre une nouvelle
+génération (`_sync.generation`), qui l'emporte. Statut, dates de visionnage et « vu ailleurs » suivent la progression
+gagnante ; la fiche (note, favori, commentaire…) suit la modification la plus récente (`_sync.fiche`). Les
+estampilles sont posées par `DepotBibliotheque.modifier` (`src/tsuzuku/moteur/fusionBibliotheque.ts`). Titres
+d'avant les estampilles : la progression la plus avancée gagne, et chacun garde ce qu'il sait (favori, note…).
+
+**Migration (premier lancement de cette version).** Les données locales de chaque appareil entrent dans la file et
+sont fusionnées dans le coffre, titre par titre (même titre = même identifiant : pas de doublon ; historique réuni) ;
+l'ancien bloc `kv:tsuzuku.bibliotheque` déjà sur le serveur, ou encore envoyé par un appareil pas à jour, est fusionné
+de la même façon (avant les suppressions reçues, pour qu'un titre supprimé ne renaisse pas). Il n'est plus émis, et sa
+disparition n'est jamais diffusée comme une suppression (`ENTITES_RETIREES`). Une bibliothèque locale illisible n'est
+pas prise pour une bibliothèque vide : rien n'est supprimé ailleurs, et la version du serveur la répare.
+
+**Limites.** Un appareil pas encore à jour ne reçoit plus les changements de bibliothèque faits ailleurs (il lit
+l'ancien bloc) : mettez à jour tous les appareils. Deux sources identiques ajoutées séparément sur deux appareils
+(identifiants différents) restent deux sources.
+
+Tests : `src/sync/relais/synchroTsuzukuDonnees.test.ts` (fusion bibliothèque, progression, recul, historique,
+sources, migration, ancien bloc, bibliothèque illisible), `src/tsuzuku/app/fiabiliteLecteurs.test.ts` ; bout en bout
+`scripts/e2e-tsuzuku-synchro.mjs` (captures `docs/captures-tsuzuku-synchro/`).
+
+## Autres apps du hub : données restées locales (corrigé)
+
+| Donnée | Avant | Maintenant |
+| --- | --- | --- |
+| Claude Office : personnalisation des agents (écran « Équipe » : surnom, couleur, accessoire, favori) — `claude-office.equipe` | sur l'appareil seulement | `kv:claude-office.equipe` |
+| Documents légaux acceptés — `juridique.acceptations` | sur l'appareil seulement | `kv:juridique.acceptations` (union) |
+
+Déjà synchronisés (vérifié) : Portefeuille (comptes, titres, opérations, watchlist, carnet, objectifs), Tâches (espace
+perso, pilote ; données du Fondateur et partages sur leur canal), Journal (pages, boîte, réglages), Prospects et
+Abonnements (canal d'administration), Claude Office (notes, alertes, préférences ; historique et présence sur leur
+canal), réglages du hub (tuiles, disposition) et thème unique.
 
 ## Compatibilité et déploiement
 

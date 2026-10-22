@@ -2,10 +2,9 @@
  * Langue choisie (VF / VOSTFR) : par série, et par défaut dans Paramètres ›
  * Tsuzuku (VF, VOSTFR, ou « au choix à chaque fois »).
  *
- * Rangement : la base du profil, sur CET appareil (`tsuzuku.langues`). Il
- * n'existe pas d'entité synchronisée pour les réglages de confort de Tsuzuku
- * (seules les sources du Fondateur voyagent) : la préférence n'en crée pas une
- * nouvelle (aucune écriture de plus sur le relais) et reste locale.
+ * Rangement : la base du profil (`tsuzuku.langues`), synchronisée avec le
+ * coffre serveur du compte (une entrée par série, `tsuzuku:langue:<série>`) :
+ * le choix fait sur le PC vaut aussi sur le téléphone et le site.
  *
  * « Au choix à chaque fois » : rien n'est retenu entre deux ouvertures de
  * l'app ; le choix fait dans le lecteur vaut pour la séance (mémoire vive).

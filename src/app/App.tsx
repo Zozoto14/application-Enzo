@@ -371,6 +371,10 @@ const METRIQUES_DE_REPLI = {
  */
 const DELAI_CONFIRMATION_DEMARRAGE = 4000;
 
+/** Attente maximale du premier tour de synchro avant de décider s'il faut demander l'acceptation des documents légaux. */
+export const DELAI_MAX_ATTENTE_ACCEPTATION_MS = 10_000;
+const stylesAcceptation = StyleSheet.create({ attente: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 } });
+
 /**
  * Seuils d'alerte des titres detenus, prets a afficher.
  * Les alertes ne portent que sur les positions ouvertes : surveiller une
@@ -2474,14 +2478,29 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const versionJuridiqueCourante = versionJuridique(profils?.juridique);
   const acceptations = deverrouille ? lireAcceptations(new DepotParametres(session.base()).lire(PARAMETRES.acceptationsJuridiques)) : [];
   void versionAcceptation;
-  const acceptationRequise = hub && deverrouille && !profils?.sessionAdmin && !annexe && doitAccepter(acceptations, versionJuridiqueCourante);
+  // L'acceptation est gardée dans le coffre serveur du compte (synchronisée, copie locale pour le hors ligne).
+  // Sur un appareil qui ne l'a pas encore, on attend le premier tour de synchro (10 s au plus) avant de
+  // décider : l'écran « Avant de commencer » ne s'affiche (et ne clignote) que si le compte ne l'a vraiment
+  // jamais acceptée, ou si la version des textes a changé.
+  const [delaiAcceptationEcoule, setDelaiAcceptationEcoule] = useState(false);
+  useEffect(() => {
+    setDelaiAcceptationEcoule(false);
+    if (!deverrouille) return undefined;
+    const minuterie = setTimeout(() => setDelaiAcceptationEcoule(true), DELAI_MAX_ATTENTE_ACCEPTATION_MS);
+    return () => clearTimeout(minuterie);
+  }, [deverrouille]);
+  const acceptationAVerifier = hub && deverrouille && !profils?.sessionAdmin && !annexe && doitAccepter(acceptations, versionJuridiqueCourante);
+  const serveurAttendu =
+    profils?.actuel.id !== 'leurre' && (synchro.configure || Boolean(liaisonDuPc || liaisonEnAttente() || relaisDuCompte()));
+  const attenteAcceptation = Boolean(acceptationAVerifier && serveurAttendu && !synchro.premierTourFait && !delaiAcceptationEcoule);
+  const acceptationRequise = Boolean(acceptationAVerifier && !attenteAcceptation);
   const ouvrirAppRef = useRef(ouvrirApp);
   ouvrirAppRef.current = ouvrirApp;
   const contexteHubRef = useRef(contexteHub);
   contexteHubRef.current = contexteHub;
   useEffect(() => {
     const id = lienEnAttente.current;
-    if (!id || !hubAffiche || annexe || acceptationRequise) return;
+    if (!id || !hubAffiche || annexe || acceptationRequise || attenteAcceptation) return;
     lienEnAttente.current = undefined;
     effacerLienProfond();
     const decision = decisionLienProfond(id, REGISTRE, contexteHubRef.current);
@@ -2491,7 +2510,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     } else {
       setAvisOnglets(decision.message);
     }
-  }, [hubAffiche, annexe, versionLien, acceptationRequise]);
+  }, [hubAffiche, annexe, versionLien, acceptationRequise, attenteAcceptation]);
 
   const barreApp = <BarreApp theme={themeDuHub} synchro={synchroHub} onParametres={ouvrirParametres} onSupport={ouvrirSupport} supportNonLus={supportNonLus} />;
   const surParametres = Boolean(parametres) && deverrouille && Boolean(contenuComplet && tableau);
@@ -2835,7 +2854,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const mobile = useMobile();
 
   // --- Onglets : ce qui est à l'écran -----------------------------------------
-  const surOverlay = Boolean(juridiqueOuvert) || acceptationRequise || (supportOuvert && deverrouille) || surParametres;
+  const surOverlay = Boolean(juridiqueOuvert) || acceptationRequise || attenteAcceptation || (supportOuvert && deverrouille) || surParametres;
   // Le hub, les pages par-dessus (Paramètres, Support…) et le portefeuille vivent dans la « vue principale » ;
   // chaque autre app ouverte a son panneau, gardé monté tant que son onglet est ouvert.
   const scene = useRef<React.ElementRef<typeof View>>(null);
@@ -3197,7 +3216,11 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
             }
           />
         )
-) : acceptationRequise ? (
+) : attenteAcceptation ? (
+        <View style={stylesAcceptation.attente} testID="acceptation-attente" accessibilityLabel="Ouverture du compte">
+          <Text style={{ color: themeDuHub.attenue }}>Ouverture de votre compte…</Text>
+        </View>
+      ) : acceptationRequise ? (
         <AcceptationJuridique
           theme={themeDuHub}
           nouvelleVersion={acceptations.length > 0}

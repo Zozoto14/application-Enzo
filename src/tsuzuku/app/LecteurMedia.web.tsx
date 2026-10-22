@@ -72,7 +72,7 @@ function documentLisible(cadre: HTMLIFrameElement): Document | null {
   }
 }
 
-function VideoWeb({ lecteur, titre, onFin, debut, onPosition, onVivant, onEchec }: { lecteur: Lecteur; titre: string; onFin?(): void; debut?: number; onPosition?(s: number): void; onVivant?(): void; onEchec?(raison: string): void }) {
+function VideoWeb({ lecteur, titre, onFin, debut, onPosition, onVivant, onEchec }: { lecteur: Lecteur; titre: string; onFin?(): void; debut?: number; onPosition?(s: number, duree?: number): void; onVivant?(): void; onEchec?(raison: string): void }) {
   const ref = useRef<HTMLVideoElement | null>(null);
   const [erreur, setErreur] = useState<string | undefined>();
   const { affiche } = useInfoOnglet();
@@ -140,7 +140,7 @@ function VideoWeb({ lecteur, titre, onFin, debut, onPosition, onVivant, onEchec 
           veille.vivant();
           if (debut && debut > 0 && Number.isFinite(e.currentTarget.duration) && debut < e.currentTarget.duration) e.currentTarget.currentTime = debut;
         },
-        onTimeUpdate: (e: { currentTarget: HTMLVideoElement }) => onPosition?.(e.currentTarget.currentTime),
+        onTimeUpdate: (e: { currentTarget: HTMLVideoElement }) => onPosition?.(e.currentTarget.currentTime, Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : undefined),
         onError: () => {
           setErreur('La vidéo ne peut pas être lue depuis cette adresse.');
           veille.echec('erreur de lecture');

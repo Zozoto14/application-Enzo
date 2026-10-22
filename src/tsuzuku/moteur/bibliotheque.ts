@@ -15,6 +15,7 @@
 
 import { adresseEnTexte, analyserAdresse } from './adresse';
 import { echec } from './erreurs';
+import { estampiller } from './fusionBibliotheque';
 import { assurerLiens, type LiensManuels } from './liensManuels';
 import { estObjet, genererIdentifiant, horlogeSysteme, instantDe, jourDe, normaliserTexte, type Horloge } from './outils';
 
@@ -653,6 +654,7 @@ export class DepotBibliotheque {
   constructor(
     private readonly stockage: Stockage,
     private readonly cle = 'tsuzuku.bibliotheque',
+    private readonly horloge: Horloge = horlogeSysteme,
   ) {}
 
   async lire(): Promise<Bibliotheque> {
@@ -664,11 +666,17 @@ export class DepotBibliotheque {
     return migrerFichierHerite(texte);
   }
 
-  /** Applique `fn` sur une copie fraiche, puis enregistre. Serialise les appels concurrents. */
+  /**
+   * Applique `fn` sur une copie fraiche, puis enregistre. Serialise les appels concurrents.
+   * Chaque titre modifie recoit son estampille (`_sync`, fiche et progression datees) : c'est
+   * elle qui departage deux appareils (voir fusionBibliotheque.ts).
+   */
   modifier<T>(fn: (db: Bibliotheque) => T | Promise<T>): Promise<T> {
     const tache = this.file.then(async () => {
       const db = await this.lire();
+      const avant = { anime: db.anime.map(e => ({ ...e })), movies: db.movies.map(e => ({ ...e })) };
       const resultat = await fn(db);
+      estampiller(avant, db, instantDe(this.horloge));
       await this.stockage.ecrire(this.cle, JSON.stringify(db));
       return resultat;
     });

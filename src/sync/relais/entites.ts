@@ -25,8 +25,9 @@ import {
 } from '../../db/depots';
 import type { PiloteSqlite } from '../../db/pilote';
 import { reconstruireTransaction } from '../../sauvegarde/archive';
-import { CLES_TSUZUKU_SYNCHRONISEES, ecrireEntiteTsuzuku, entitesTsuzuku, supprimerEntiteTsuzuku } from './entitesTsuzuku';
-import { PARAMETRES_APPS_A_SYNCHRONISER, PREFIXES_APPS_A_SYNCHRONISER, ecrireEntiteApp, entitesApps, supprimerEntiteApp } from './entitesApps';
+import { CLES_TSUZUKU_SYNCHRONISEES, ecrireEntiteTsuzuku, entitesTsuzukuAvecEtat, supprimerEntiteTsuzuku } from './entitesTsuzuku';
+import { QUOI_FUSIONNES } from './entitesTsuzukuDonnees';
+import { CLES_KV_FUSIONNEES, PARAMETRES_APPS_A_SYNCHRONISER, PREFIXES_APPS_A_SYNCHRONISER, ecrireEntiteApp, entitesApps, supprimerEntiteApp } from './entitesApps';
 
 /** Genres connus depuis la première version de la synchro (charge sans numéro de version). */
 export type GenreV1 = 'compte' | 'titre' | 'operation' | 'surveille' | 'these' | 'parametre';
@@ -73,6 +74,32 @@ const TAILLE_MAX_PREF = 50_000;
 export const genreConnu = (cle: string): boolean => GENRES_CONNUS.includes(decouper(cle).genre);
 export const estGenreV2 = (cle: string): boolean => (GENRES_V2 as readonly string[]).includes(decouper(cle).genre);
 export const estUnion = (cle: string): boolean => GENRES_UNION.includes(decouper(cle).genre);
+
+/**
+ * Entités FUSIONNÉES à la réception au lieu d'être remplacées (le plus récent gagne) : la version
+ * reçue est réunie avec celle d'ici par une fusion déterministe (union, maximum…), et le résultat
+ * repart s'il diffère de ce qu'a le serveur. Événements du journal, acceptations des documents
+ * légaux, titres, historique, fiabilité des lecteurs et position de lecture de Tsuzuku.
+ */
+export function estFusionnable(cle: string): boolean {
+  if (cle.startsWith('journal:boite:')) return true;
+  if (cle.startsWith('kv:')) return CLES_KV_FUSIONNEES.includes(cle.slice(3));
+  if (!cle.startsWith('tsuzuku:')) return false;
+  const reste = cle.slice('tsuzuku:'.length);
+  const i = reste.indexOf(':');
+  return QUOI_FUSIONNES.includes(i < 0 ? reste : reste.slice(0, i));
+}
+
+/**
+ * Entités qui ne sont plus émises (remplacées par un découpage plus fin) mais encore LUES quand un
+ * appareil pas à jour les envoie : leur disparition d'ici ne doit jamais devenir une suppression
+ * (elle effacerait la bibliothèque des appareils pas encore à jour).
+ */
+export const ENTITES_RETIREES: readonly string[] = ['kv:tsuzuku.bibliotheque'];
+
+/** Préfixes d'entités momentanément illisibles sur cet appareil (propriété cachée des entités extraites). */
+export const ENTITES_ILLISIBLES = Symbol('entites-illisibles');
+export const prefixesIllisibles = (entites: Entites): readonly string[] => (entites as { [ENTITES_ILLISIBLES]?: string[] })[ENTITES_ILLISIBLES] ?? [];
 
 /** Versions vues, lues sans jamais lever (valeur brute d'un paramètre ou entité reçue). */
 export function versionsVues(brut: unknown): string[] {
@@ -180,8 +207,10 @@ export function extraireEntites(pilote: PiloteSqlite): Entites {
   if (brutVues !== undefined) {
     entites[cleEntite('devblog', ID_DEVBLOG_VUES)] = unionVues(brutVues, undefined);
   }
-  Object.assign(entites, entitesTsuzuku(cle => parametres.lire(cle)));
+  const tsuzuku = entitesTsuzukuAvecEtat(cle => parametres.lire(cle));
+  Object.assign(entites, tsuzuku.entites);
   Object.assign(entites, entitesApps(pilote));
+  if (tsuzuku.illisibles.length) Object.defineProperty(entites, ENTITES_ILLISIBLES, { value: tsuzuku.illisibles, enumerable: false });
   return entites;
 }
 

@@ -18,15 +18,18 @@
 
 import type { PiloteSqlite } from '../../db/pilote';
 import {
+  ENTITES_RETIREES,
   ORDRE_ECRITURE,
   VERSION_CHARGE,
   decouper,
   ecrireEntite,
   empreinte,
+  estFusionnable,
   estGenreV2,
   estUnion,
   extraireEntites,
   genreConnu,
+  prefixesIllisibles,
   supprimerEntite,
   unionVues,
   type Entites,
@@ -126,8 +129,19 @@ export function noterChangementsLocaux(etat: EtatSynchro, entites: Entites, main
       changees.add(cle);
     }
   }
+  const illisibles = prefixesIllisibles(entites);
   for (const cle of Object.keys(etat.connus)) {
     if (!(cle in entites)) {
+      if (illisibles.some(p => cle.startsWith(p))) {
+        // Donnée illisible ici pour l'instant (pas supprimée) : rien ne part, elle reste connue.
+        connus[cle] = etat.connus[cle];
+        continue;
+      }
+      if (ENTITES_RETIREES.includes(cle)) {
+        // Ancienne forme (remplacée par un découpage plus fin) : jamais diffusée comme suppression.
+        delete dates[cle];
+        continue;
+      }
       if (estUnion(cle)) {
         // Une version vue ne se « désvoit » jamais : pas de suppression à diffuser.
         delete dates[cle];
@@ -174,16 +188,27 @@ export function appliquerCharge(
   etat: EtatSynchro,
   charge: Charge,
 ): { etat: EtatSynchro; bilan: BilanFusion } {
+  // Anciennes formes (bibliothèque Tsuzuku d'un seul bloc…) : fusionnées AVANT les suppressions reçues,
+  // pour qu'un titre supprimé depuis ne renaisse pas d'un vieux bloc.
+  const retirees = Object.entries(charge.entites ?? {}).filter(([cle]) => ENTITES_RETIREES.includes(cle));
+  const bilanRetirees: BilanFusion = { ajoutes: 0, modifies: 0, supprimes: 0, echecs: [] };
+  for (const [cle, valeur] of retirees) {
+    try {
+      if (ecrireEntite(pilote, cle, valeur, id => id)) bilanRetirees.modifies++;
+    } catch (erreur) {
+      bilanRetirees.echecs.push({ cle, motif: erreur instanceof Error ? erreur.message : String(erreur) });
+    }
+  }
   const locales = extraireEntites(pilote);
   // Charge d'un ancien appareil (sans version) ou d'un plus récent : on lit ce qu'on connaît.
-  const entitesRecues = Object.fromEntries(Object.entries(charge.entites ?? {}).filter(([cle]) => genreConnu(cle)));
+  const entitesRecues = Object.fromEntries(Object.entries(charge.entites ?? {}).filter(([cle]) => genreConnu(cle) && !ENTITES_RETIREES.includes(cle)));
   const suppressionsRecues = Object.fromEntries(
     Object.entries(charge.supprimes ?? {}).filter(([cle]) => genreConnu(cle) && !estUnion(cle)),
   );
   const datesRecues = charge.dates ?? {};
   const dates = { ...etat.dates };
   const supprimes = { ...etat.supprimes };
-  const bilan: BilanFusion = { ajoutes: 0, modifies: 0, supprimes: 0, echecs: [] };
+  const bilan: BilanFusion = bilanRetirees;
 
   // Valeur connue ici sous un autre identifiant : on la retrouve par ISIN.
   const parIsin = new Map<string, string>();
@@ -249,6 +274,22 @@ export function appliquerCharge(
           }
         }
         dates[cle] = plusRecent(dates[cle], date) ?? date;
+        continue;
+      }
+      if (estFusionnable(cle) && !((supprimes[cle] ?? '') >= date && supprimes[cle] !== undefined)) {
+        // Fusion (union, maximum…) : jamais l'une à la place de l'autre ; on n'écrit que s'il y a du nouveau.
+        const locale = locales[cle];
+        if (locale !== undefined && empreinte(locale) === empreinte(valeur)) {
+          dates[cle] = plusRecent(dates[cle], date)!;
+          continue;
+        }
+        let ecrite = false;
+        if (tenter(cle, () => (ecrite = ecrireEntite(pilote, cle, valeur, versLocal))) && ecrite) {
+          if (locale === undefined) bilan.ajoutes++;
+          else bilan.modifies++;
+          dates[cle] = plusRecent(dates[cle], date) ?? date;
+          delete supprimes[cle];
+        }
         continue;
       }
       if (alias.has(decouper(cle).id) && cle.startsWith('titre:')) {

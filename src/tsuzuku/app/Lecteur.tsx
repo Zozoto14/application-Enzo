@@ -18,6 +18,7 @@ import { texteMesure } from './diagnosticTexte';
 import { texteDiagnosticLecteurs } from '../moteur/lecteursEpisode';
 import { PanneauEchec } from './DiagnosticSources';
 import { choisirLangue, langueVoulue, type OrigineLangue } from './langues';
+import { enregistrerPosition, INTERVALLE_ENREGISTREMENT_MS, positionReprise } from './positions';
 import { SelecteurLangue } from './SelecteurLangue';
 import { LIBELLE_LANGUE_VERSION, type LangueVersion } from '../moteur/langues';
 import { Avis, Bouton, Etat, Puce, Titre, styleAttenue } from './ui';
@@ -74,12 +75,33 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
     const lecteurs = await lecteursParFiabilite(s, lecture.sourceId, lecture.lecteurs);
     return { meta, lecture, lecteurs, suivantAuto: (await s.reglages()).suivantAuto, perso: (await lireTitresPerso(s))[`${kind}:${id}`], origine: langueChoisie ? origine ?? voulue.origine : voulue.origine, auChoix: voulue.auChoix };
   }, [s, kind, id, n, essai, langueChoisie]);
-  // Autre épisode : la position ne se reporte pas.
+  // Autre épisode : la position ne se reporte pas ; celle enregistrée (cet appareil ou un autre du compte) est reprise.
+  const duree = useRef<number | undefined>(undefined);
+  const enregistreLe = useRef(0);
   useEffect(() => {
     setDebut(undefined);
     setBascule(false);
     position.current = 0;
-  }, [id, n]);
+    duree.current = undefined;
+    enregistreLe.current = Date.now();
+    let actif = true;
+    void positionReprise(s, `${kind}:${id}`, n).then(p => {
+      if (actif && p !== undefined && position.current === 0) setDebut(p);
+    });
+    return () => {
+      actif = false;
+      // En quittant l'épisode (ou le lecteur) : la position est retenue pour la reprise.
+      if (position.current > 0) void enregistrerPosition(s, `${kind}:${id}`, n, position.current, duree.current);
+    };
+  }, [s, kind, id, n]);
+  const surPosition = (t: number, d?: number) => {
+    position.current = t;
+    duree.current = d;
+    if (Date.now() - enregistreLe.current >= INTERVALLE_ENREGISTREMENT_MS) {
+      enregistreLe.current = Date.now();
+      void enregistrerPosition(s, `${kind}:${id}`, n, t, d);
+    }
+  };
   const changerLangue = (l: LangueVersion) => {
     setDebut(position.current > 5 ? position.current : undefined);
     setBascule(true);
@@ -246,7 +268,7 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
                     : charge.donnees?.auChoix
                       ? 'Au choix à chaque fois (Paramètres › Tsuzuku) : ce choix vaut pour cette séance.'
                       : charge.donnees?.origine === 'serie'
-                        ? `${lecture.langue ? LIBELLE_LANGUE_VERSION[lecture.langue] : 'Langue'} retenue pour cette série (sur cet appareil). Vu / reprendre restent communs aux deux langues.`
+                        ? `${lecture.langue ? LIBELLE_LANGUE_VERSION[lecture.langue] : 'Langue'} retenue pour cette série (sur tous vos appareils). Vu / reprendre restent communs aux deux langues.`
                         : 'Langue par défaut : Paramètres › Tsuzuku. Vu / reprendre restent communs aux deux langues.'
                 }
               />
@@ -259,7 +281,7 @@ export function LecteurEcran({ kind, id, numero }: { kind: Genre; id: string; nu
                 titre={meta.titre}
                 onFin={fin}
                 debut={debut}
-                onPosition={t => (position.current = t)}
+                onPosition={surPosition}
                 onVivant={() => vivantLecteur(indiceCourant)}
                 onEchec={() => echecLecteur(indiceCourant)}
               />
