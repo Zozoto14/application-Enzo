@@ -74,6 +74,14 @@ export const TABLES = [
   ['transcriptions', 'id'],
   // Transcription sur le serveur (migration 0016) : file de travaux.
   ['travaux_transcription', 'id'],
+  // Module Ressources (migration 0017) : le webhook dédié reste CHIFFRÉ dans l'export.
+  ['ressource_categories', 'id'],
+  ['ressources', 'id'],
+  ['ressource_favoris', 'ressource_id, compte_id'],
+  ['ressource_reactions', 'id'],
+  ['ressource_commentaires', 'id'],
+  ['ressource_visites', 'team_id, compte_id'],
+  ['ressource_reglages', 'team_id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

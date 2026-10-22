@@ -5,6 +5,8 @@
  *
  *  - Vidéo (review et réunions) : MP4, MOV, WebM, MKV.
  *  - Audio (réunions seulement) : M4A, MP3, AAC (ADTS), WAV, OGG / Opus, FLAC.
+ *  - Documents (module Ressources seulement) : PDF, images (PNG, JPEG, GIF, WebP), archives (ZIP, 7z,
+ *    RAR). Jamais de SVG ni de HTML (ils pourraient porter du script).
  *
  * Avertissement « peu compatible avec iPhone » : conteneur MKV, ou codec vidéo connu autre que H.264.
  */
@@ -24,12 +26,21 @@ export const FORMATS = {
   wav: { genre: 'audio', mime: 'audio/wav', extension: 'wav', nom: 'WAV' },
   ogg: { genre: 'audio', mime: 'audio/ogg', extension: 'ogg', nom: 'OGG' },
   flac: { genre: 'audio', mime: 'audio/flac', extension: 'flac', nom: 'FLAC' },
+  pdf: { genre: 'document', mime: 'application/pdf', extension: 'pdf', nom: 'PDF' },
+  png: { genre: 'image', mime: 'image/png', extension: 'png', nom: 'PNG' },
+  jpeg: { genre: 'image', mime: 'image/jpeg', extension: 'jpg', nom: 'JPEG' },
+  gif: { genre: 'image', mime: 'image/gif', extension: 'gif', nom: 'GIF' },
+  webp: { genre: 'image', mime: 'image/webp', extension: 'webp', nom: 'WebP' },
+  zip: { genre: 'archive', mime: 'application/zip', extension: 'zip', nom: 'ZIP' },
+  '7z': { genre: 'archive', mime: 'application/x-7z-compressed', extension: '7z', nom: '7z' },
+  rar: { genre: 'archive', mime: 'application/vnd.rar', extension: 'rar', nom: 'RAR' },
 };
 
 /** Formats acceptés selon l'usage. */
 export const FORMATS_PERMIS = {
   review: ['mp4', 'mov', 'webm', 'mkv'],
   reunion: ['mp4', 'mov', 'webm', 'mkv', 'm4a', 'mp3', 'aac', 'wav', 'ogg', 'flac'],
+  ressource: ['pdf', 'png', 'jpeg', 'gif', 'webp', 'zip', '7z', 'rar', 'mp4', 'mov', 'webm', 'mkv'],
 };
 
 const MARQUES_AUDIO = new Set(['M4A ', 'M4B ', 'M4P ', 'F4A ', 'F4B ']);
@@ -55,6 +66,15 @@ export function reconnaitre(octets) {
     return null;
   }
   const premiers = ascii(o, 0, 4);
+  // Documents, images et archives (module Ressources).
+  if (premiers === '%PDF') return 'pdf';
+  if (o[0] === 0x89 && ascii(o, 1, 3) === 'PNG' && o[4] === 0x0d && o[5] === 0x0a) return 'png';
+  if (o[0] === 0xff && o[1] === 0xd8 && o[2] === 0xff) return 'jpeg';
+  if (ascii(o, 0, 6) === 'GIF87a' || ascii(o, 0, 6) === 'GIF89a') return 'gif';
+  if (premiers === 'RIFF' && ascii(o, 8, 4) === 'WEBP') return 'webp';
+  if (premiers === 'PK\u0003\u0004' || premiers === 'PK\u0005\u0006') return 'zip';
+  if (o[0] === 0x37 && o[1] === 0x7a && o[2] === 0xbc && o[3] === 0xaf && o[4] === 0x27 && o[5] === 0x1c) return '7z';
+  if (ascii(o, 0, 6) === 'Rar!\u001a\u0007') return 'rar';
   if (premiers === 'RIFF' && ascii(o, 8, 4) === 'WAVE') return 'wav';
   if (premiers === 'OggS') return 'ogg';
   if (premiers === 'fLaC') return 'flac';

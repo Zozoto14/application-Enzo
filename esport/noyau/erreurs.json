@@ -322,7 +322,32 @@
   "Enregistrement introuvable dans le stockage.": "Recording not found in storage.",
   "Format non lisible sans ffmpeg : relancez esport/serveur/installer-transcription.sh (ou déposez un WAV).": "Format unreadable without ffmpeg: run esport/serveur/installer-transcription.sh again (or upload a WAV).",
   "WAV illisible.": "Unreadable WAV.",
-  "WAV non pris en charge (PCM ou flottant attendu).": "Unsupported WAV (PCM or float expected)."
+  "WAV non pris en charge (PCM ou flottant attendu).": "Unsupported WAV (PCM or float expected).",
+  "Fichier non reconnu : PDF, image (PNG, JPEG, GIF, WebP), vidéo (MP4, MOV, WebM, MKV) ou archive (ZIP, 7z, RAR).": "Unrecognized file: PDF, image (PNG, JPEG, GIF, WebP), video (MP4, MOV, WebM, MKV) or archive (ZIP, 7z, RAR).",
+  "Adresse refusée : seules les pages web publiques (http ou https) ont un aperçu.": "Address refused: only public web pages (http or https) get a preview.",
+  "Page injoignable : pas d’aperçu.": "Page unreachable: no preview.",
+  "La page met trop de temps à répondre : pas d’aperçu.": "The page takes too long to respond: no preview.",
+  "Trop de redirections : pas d’aperçu.": "Too many redirects: no preview.",
+  "Ressource introuvable.": "Resource not found.",
+  "Catégorie introuvable.": "Category not found.",
+  "Nom de la catégorie : 2 caractères au moins.": "Category name: at least 2 characters.",
+  "Une catégorie porte déjà ce nom.": "A category already has this name.",
+  "Ordre illisible : donnez toutes les catégories, une fois chacune.": "Unreadable order: give every category, once each.",
+  "Type de ressource : lien, youtube, fichier ou note.": "Resource type: link, youtube, file or note.",
+  "Adresse YouTube non reconnue.": "YouTube address not recognized.",
+  "Adresse invalide : http(s) seulement.": "Invalid address: http(s) only.",
+  "Niveau : débutant, intermédiaire ou avancé.": "Level: beginner, intermediate or advanced.",
+  "Visibilité : toute la team ou le staff seulement.": "Visibility: the whole team or staff only.",
+  "Une note a besoin d’un texte.": "A note needs some text.",
+  "Déposez d’abord le fichier.": "Upload the file first.",
+  "Cette ressource n’attend pas de validation.": "This resource isn’t awaiting approval.",
+  "Cette ressource n’est pas encore publiée.": "This resource isn’t published yet.",
+  "Réaction inconnue.": "Unknown reaction.",
+  "Le commentaire est vide.": "The comment is empty.",
+  "Seules les vidéos YouTube s’ouvrent en review.": "Only YouTube videos open in review.",
+  "Salon Discord : son identifiant numérique (clic droit sur le salon › Copier l’identifiant).": "Discord channel: its numeric ID (right-click the channel › Copy ID).",
+  "Choisissez au moins une team.": "Choose at least one team.",
+  "Un fichier se dépose dans une team à la fois.": "A file is uploaded to one team at a time."
  },
  "motifs": [
   [
@@ -472,6 +497,18 @@
   [
    "^ffmpeg n’a pas pu lire l’enregistrement \\((.*)\\)\\.$",
    "ffmpeg couldn’t read the recording ($1)."
+  ],
+  [
+   "^Une team a (\\d+) catégories au plus\\.$",
+   "A team has $1 categories at most."
+  ],
+  [
+   "^Une team garde (\\d+) ressources au plus\\.$",
+   "A team keeps $1 resources at most."
+  ],
+  [
+   "^(\\d+) teams au plus d’un coup\\.$",
+   "$1 teams at most at once."
   ]
  ]
 }

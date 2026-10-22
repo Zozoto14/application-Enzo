@@ -3,6 +3,7 @@ export { Discord } from './Discord';
 export { Disponibilites } from './planning/Disponibilites';
 export { Planning } from './planning/Planning';
 export { Presence } from './planning/Presence';
+export { Ressources } from './ressources/Ressources';
 export { Review } from './review/Review';
 export { Scouting } from './scouting/Scouting';
 export { Playbook } from './strats/Playbook';

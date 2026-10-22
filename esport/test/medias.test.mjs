@@ -68,7 +68,8 @@ test('formats : octets magiques (MP4, MOV, WebM, MKV, audio), codec et durée lu
   assert.equal(reconnaitre(mkvFactice({ doc: 'webm' })), 'webm');
   assert.equal(reconnaitre(wavFactice(0.1)), 'wav');
   assert.equal(reconnaitre(Uint8Array.from([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0, 0, 0])), 'mp3');
-  assert.equal(reconnaitre(new TextEncoder().encode('%PDF-1.4 pas une vidéo')), null);
+  // Un PDF est reconnu (module Ressources), mais jamais accepté pour une review ni une réunion (FORMATS_PERMIS).
+  assert.equal(reconnaitre(new TextEncoder().encode('%PDF-1.4 pas une vidéo')), 'pdf');
   assert.equal(reconnaitre(new Uint8Array(4)), null);
   const a = analyserDebut(mp4Factice({ codec: 'avc1', duree: 83.5 }));
   assert.equal(a.codecVideo, 'h264');

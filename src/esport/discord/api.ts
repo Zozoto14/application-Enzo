@@ -195,4 +195,7 @@ export const LIBELLES_DISCORD: Record<string, string> = {
   get review_created() {
       return tr('discord.api.review_creee');
     },
+  get resource_created() {
+      return tr('ressources.discord_nouvelle');
+    },
 };

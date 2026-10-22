@@ -11,6 +11,7 @@
 import { pathToFileURL } from 'node:url';
 import { basePostgres, optionsDepuisEnv } from '../adaptateurs/postgres.mjs';
 import { stockageDisque } from '../adaptateurs/stockage.mjs';
+import { telechargeurNode } from '../adaptateurs/apercuNode.mjs';
 import { creerApi, reponseJson } from '../noyau/api.mjs';
 import { verificateurRelais } from '../noyau/authentification.mjs';
 import { chargerConfigEsport, problemesConfig } from './config.mjs';
@@ -43,6 +44,8 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     medias: config.medias,
     transcriptionExterne: config.transcriptionExterne,
     transcriptionServeur: config.transcriptionServeur,
+    // Aperçus des liens (Ressources) : chaque adresse IP est vérifiée au moment de la connexion (anti-SSRF).
+    apercuLiens: { telecharger: telechargeurNode() },
   });
   return { traiter: api, base: b, stockage: st, config, problemes, fermer: async () => (base ? undefined : b.fermer()) };
 }

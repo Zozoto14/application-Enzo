@@ -18,7 +18,7 @@ import { ErreurEsport, type ClientEsport, type InfosMedia } from '../client';
 import { tr } from '../i18n';
 import { ajouter, nouvelEtat, sha256Hex, terminer, type EtatSha256 } from './sha256';
 
-export type SectionEnvoi = 'review' | 'resumes';
+export type SectionEnvoi = 'review' | 'resumes' | 'ressources';
 
 /** Un fichier de l'appareil, lu par tranches (jamais en entier). */
 export interface FichierLocal {
@@ -32,7 +32,7 @@ export interface FichierLocal {
 
 export interface EtatEnvoi {
   id: string;
-  usage: 'review' | 'reunion';
+  usage: 'review' | 'reunion' | 'ressource';
   nom: string;
   taille: number;
   tailleMorceau: number;
@@ -212,7 +212,7 @@ export async function envoyerFichier({ client, teamId, section, fichier, onProgr
       oublier();
     }
     // Fichier refusé (format, empreinte du fichier) : l'envoi n'existe plus, rien à reprendre.
-    if (e instanceof ErreurEsport && ['format-video', 'empreinte-fichier', 'envoi-introuvable', 'morceau-different'].includes(e.code)) oublier();
+    if (e instanceof ErreurEsport && ['format-video', 'format-fichier', 'empreinte-fichier', 'envoi-introuvable', 'morceau-different'].includes(e.code)) oublier();
     throw e;
   }
 }

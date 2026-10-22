@@ -56,6 +56,14 @@ const MOTIF_SHA = /^[0-9a-f]{64}$/;
 export const USAGES = {
   review: { module: 'video_review', permission: 'video_review.create', dossier: 'videos' },
   reunion: { module: 'meeting_summaries', permission: 'meeting_summaries.submit', dossier: 'reunions' },
+  // Ressources : publier (resources.post), ou proposer quand la team l'ouvre aux joueurs (voir `autoriser`).
+  ressource: {
+    module: 'resources',
+    permission: 'resources.post',
+    dossier: 'ressources',
+    autoriser: async (base, ctx) =>
+      ctx.permissions.has('resources.view') && Number((await base.premier('SELECT propositions FROM ressource_reglages WHERE team_id = ?', [ctx.team.id]))?.propositions ?? 0) === 1,
+  },
 };
 
 /** Natures de fichiers (entite_type) affichées dans « Espace utilisé », et la permission qui les supprime. */
@@ -65,6 +73,7 @@ export const NATURES = {
   reunion_transcription: { nature: 'transcription', permission: 'meeting_summaries.write_summary' },
   reunion: { nature: 'resume', permission: 'meeting_summaries.write_summary' },
   strat: { nature: 'miniature', permission: null },
+  ressource_fichier: { nature: 'ressource', permission: 'resources.manage' },
 };
 
 /**
@@ -159,7 +168,7 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
 
   function exiger(ctx, permission) {
     const [module] = permission.split('.');
-    const mod = module === 'video_review' || module === 'meeting_summaries' ? module : null;
+    const mod = { video_review: 'video_review', meeting_summaries: 'meeting_summaries', resources: 'resources' }[module] ?? null;
     if (mod && !ctx.modules.has(mod)) throw echec(404, 'module-desactive', 'Ce module n’est pas activé pour cette team.');
     if (!peut(ctx, permission)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
   }
@@ -169,7 +178,7 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
     if (!u) throw echec(404, 'route', 'Adresse inconnue.');
     const ctx = await contexteTeam(acteur, teamId);
     if (!ctx.modules.has(u.module)) throw echec(404, 'module-desactive', 'Ce module n’est pas activé pour cette team.');
-    if (!peut(ctx, u.permission)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    if (!peut(ctx, u.permission) && !(u.autoriser && (await u.autoriser(base, ctx)))) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
     if (!stockage || typeof stockage.debuterEnvoi !== 'function') throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
     return ctx;
   }
@@ -216,7 +225,7 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
     }
     const ouverts = await base.premier("SELECT COUNT(*) AS n FROM envois WHERE compte_id = ? AND statut = 'en_cours'", [acteur.compte]);
     if (Number(ouverts?.n ?? 0) >= ENVOIS_OUVERTS_MAX) throw echec(429, 'trop-d-envois', 'Trop d’envois en cours : terminez-en ou annulez-en un.');
-    const nom = nomMedia(corps?.nom, usage === 'review' ? 'video' : 'enregistrement');
+    const nom = nomMedia(corps?.nom, { review: 'video', reunion: 'enregistrement', ressource: 'fichier' }[usage]);
     const typeAnnonce = texteNettoye(corps?.type, 100);
     const tailleMorceau = config.tailleMorceau;
     const morceaux = Math.ceil(taille / tailleMorceau);
@@ -284,6 +293,7 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
       analyse = analyserDebut(octets);
       if (!analyse || !FORMATS_PERMIS[usage].includes(analyse.format)) {
         await oublier(e);
+        if (usage === 'ressource') throw echec(415, 'format-fichier', 'Fichier non reconnu : PDF, image (PNG, JPEG, GIF, WebP), vidéo (MP4, MOV, WebM, MKV) ou archive (ZIP, 7z, RAR).');
         throw echec(415, 'format-video', usage === 'review' ? 'Ce fichier n’est pas une vidéo reconnue (MP4, MOV, WebM ou MKV).' : 'Ce fichier n’est ni une vidéo ni un audio reconnu (MP4, MOV, WebM, MKV, M4A, MP3, WAV, OGG, FLAC).');
       }
     }
@@ -420,8 +430,9 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
     const reviews = new Map((await lignesParIds(base, 'SELECT id, titre FROM reviews WHERE team_id = ? AND id', lignes.filter(f => f.entite_type === 'review_video').map(f => f.entite_id), { paramsAvant: [teamId] })).map(r => [r.id, r.titre]));
     const reunions = new Map((await lignesParIds(base, 'SELECT id, titre FROM reunions WHERE team_id = ? AND id', lignes.filter(f => f.entite_type.startsWith('reunion')).map(f => f.entite_id), { paramsAvant: [teamId] })).map(r => [r.id, r.titre]));
     const strats = new Map((await lignesParIds(base, 'SELECT id, titre FROM strats WHERE team_id = ? AND id', lignes.filter(f => f.entite_type === 'strat').map(f => f.entite_id), { paramsAvant: [teamId] })).map(r => [r.id, r.titre]));
+    const ressources = new Map((await lignesParIds(base, 'SELECT id, titre FROM ressources WHERE team_id = ? AND id', lignes.filter(f => f.entite_type === 'ressource_fichier').map(f => f.entite_id), { paramsAvant: [teamId] })).map(r => [r.id, r.titre]));
     const noms = await pseudosDe(base, lignes.map(f => f.depose_par));
-    const titre = f => (f.entite_type === 'review_video' ? reviews.get(f.entite_id) : f.entite_type === 'strat' ? strats.get(f.entite_id) : reunions.get(f.entite_id)) ?? null;
+    const titre = f => (f.entite_type === 'review_video' ? reviews.get(f.entite_id) : f.entite_type === 'strat' ? strats.get(f.entite_id) : f.entite_type === 'ressource_fichier' ? ressources.get(f.entite_id) : reunions.get(f.entite_id)) ?? null;
     const fichiers = lignes.map(f => ({
       ...fichierPublic(f),
       nature: NATURES[f.entite_type]?.nature ?? 'autre',
@@ -473,7 +484,7 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
    */
   async function exportRgpd(compte, origine = '') {
     const deposes = await base.tous(
-      "SELECT f.*, t.nom AS team_nom FROM fichiers f JOIN teams t ON t.id = f.team_id WHERE f.depose_par = ? AND f.entite_type IN ('review_video', 'reunion_enregistrement') AND f.supprime_le IS NULL ORDER BY f.cree_le LIMIT 2000",
+      "SELECT f.*, t.nom AS team_nom FROM fichiers f JOIN teams t ON t.id = f.team_id WHERE f.depose_par = ? AND f.entite_type IN ('review_video', 'reunion_enregistrement', 'ressource_fichier') AND f.supprime_le IS NULL ORDER BY f.cree_le LIMIT 2000",
       [compte],
     );
     const transcrits = await base.tous(

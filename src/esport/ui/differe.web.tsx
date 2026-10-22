@@ -1,6 +1,6 @@
 /**
  * Site et app PC : les écrans lourds des modules (planning, disponibilités,
- * présence, review vidéo, scouting, strats, playbook, Discord) sont chargés à
+ * présence, review vidéo, scouting, strats, playbook, ressources, Discord) sont chargés à
  * la demande, dans des fichiers séparés : l'Esport s'ouvre sans attendre le
  * code des modules qu'on n'ouvre pas.
  */
@@ -17,3 +17,4 @@ export const Strats = differe<PropsModule>(async () => (await import('./strats/S
 export const Playbook = differe<PropsModule>(async () => (await import('./strats/Playbook')).Playbook);
 export const SuiviJoueurs = differe<PropsModule>(async () => (await import('./suivi/SuiviJoueurs')).SuiviJoueurs);
 export const Discord = differe<PropsModule>(async () => (await import('./Discord')).Discord);
+export const Ressources = differe<PropsModule>(async () => (await import('./ressources/Ressources')).Ressources);

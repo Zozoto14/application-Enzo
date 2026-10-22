@@ -53,3 +53,5 @@ export function choisirFichier(accept: string, testID = 'esport-fichier-champ'):
 
 export const ACCEPT_VIDEO = 'video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.m4v,.mov,.webm,.mkv';
 export const ACCEPT_REUNION = `${ACCEPT_VIDEO},audio/*,.m4a,.mp3,.aac,.wav,.ogg,.opus,.flac`;
+/** Ressources : PDF, images, vidéos, archives (jamais de SVG ni de HTML : refusés par le serveur). */
+export const ACCEPT_RESSOURCE = `application/pdf,.pdf,image/png,image/jpeg,image/gif,image/webp,.png,.jpg,.jpeg,.gif,.webp,${ACCEPT_VIDEO},.zip,.7z,.rar,application/zip,application/x-7z-compressed,application/vnd.rar`;

@@ -44,6 +44,7 @@ export const ACTIONS_PAR_MODULE = {
   strat_editor: ['strat'],
   playbook: ['playbook'],
   player_notes: ['player_note'],
+  resources: ['resource', 'resource_category', 'resources'],
 };
 
 /** Module d'une action (« event.created » → « planning »), ou « coeur ». */

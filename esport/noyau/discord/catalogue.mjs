@@ -187,6 +187,16 @@ export const EVENEMENTS_DISCORD = [
     modele: '**Playbook** : {titre} est validée{surCarte}, par {acteur}.',
     variables: variables({ titre: 'Titre de l’entrée', surCarte: 'Carte (« sur Ascent », vide sans carte)', acteur: 'Qui l’a validée' }),
   },
+  {
+    cle: 'resource_created',
+    libelle: 'Nouvelle ressource',
+    description: 'Une ressource est publiée dans le canal (module Ressources), ou une proposition est validée. Jamais pour une ressource réservée au staff. Salon dédié possible (Ressources › Réglages).',
+    types: ['resource.created', 'resource.validated'],
+    modules: ['resources'],
+    defaut: false,
+    modele: '**Nouvelle ressource** : {titre} ({categorie}), par {acteur}.',
+    variables: variables({ titre: 'Titre de la ressource', categorie: 'Catégorie', genre: 'Type (lien, vidéo, fichier, note)', acteur: 'Qui l’a publiée' }),
+  },
 ];
 
 export const CLES_EVENEMENTS_DISCORD = EVENEMENTS_DISCORD.map(e => e.cle);
@@ -237,6 +247,8 @@ export const EXEMPLES = {
   carte: 'Ascent',
   side: 'Attaque',
   surCarte: ' sur Ascent',
+  categorie: 'Lineups',
+  genre: 'Vidéo YouTube',
   lien: 'https://app.exemple',
 };
 
@@ -345,6 +357,12 @@ const TEXTES_EN = {
     modele: '**Playbook**: {titre} is validated{surCarte}, by {acteur}.',
     variables: { titre: 'Entry title', surCarte: 'Map (“ on Ascent”, empty without a map)', acteur: 'Who validated it' },
   },
+  resource_created: {
+    libelle: 'New resource',
+    description: 'A resource is posted in the channel (Resources module), or a proposal is approved. Never for a staff-only resource. A dedicated channel is possible (Resources › Settings).',
+    modele: '**New resource**: {titre} ({categorie}), by {acteur}.',
+    variables: { titre: 'Resource title', categorie: 'Category', genre: 'Type (link, video, file, note)', acteur: 'Who posted it' },
+  },
 };
 
 /** Libellé, description, modèle par défaut et variables d'un type de message dans une langue. */
@@ -377,6 +395,8 @@ export function exemples(langue = 'fr') {
     carte: 'Ascent',
     side: 'Attack',
     surCarte: ' on Ascent',
+    categorie: 'Lineups',
+    genre: 'YouTube video',
     lien: 'https://app.exemple',
   };
 }

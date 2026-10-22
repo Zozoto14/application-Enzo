@@ -3,7 +3,7 @@
  *
  * Les modules sont rangés en cinq sections (barre latérale sur PC, barre
  * basse sur iPhone) : Accueil · Agenda (Planning, Disponibilités, Présence) ·
- * Jeu (Strats, Playbook, Review vidéo, Scouting) · Équipe (Résumés, Objectifs
+ * Jeu (Strats, Playbook, Ressources, Review vidéo, Scouting) · Équipe (Résumés, Objectifs
  * et tâches, Membres et rôles) · Réglages (Paramètres, Discord, Journal).
  * Dans une section, un sous-onglet par module activé et permis (aucun quand
  * la section n'en a qu'un).
@@ -19,6 +19,7 @@ export const GROUPES_TEAM = {
   'module-attendance': 'agenda',
   'module-strat_editor': 'jeu',
   'module-playbook': 'jeu',
+  'module-resources': 'jeu',
   'module-video_review': 'jeu',
   'module-scouting': 'jeu',
   'module-meeting_summaries': 'equipe',

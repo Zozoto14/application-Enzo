@@ -62,6 +62,7 @@ const MESSAGES = {
   review_created: { emoji: '🎬', couleur: '#7c3aed' },
   strat_created: { emoji: '🗺️', couleur: '#7c3aed' },
   playbook_validated: { emoji: '📘', couleur: '#16a34a' },
+  resource_created: { emoji: '📚', couleur: '#0d9488' },
   test: { emoji: '🛰️', couleur: ACCENT },
 };
 
@@ -195,6 +196,49 @@ export function embedMessage({ cle = 'test', titre, texte: message = '', team = 
     footer: { text: `${ligne(team.nom || 'Esport', 80)} · Esport`, ...(https(team.logo) ? { icon_url: team.logo } : {}) },
     timestamp: new Date(maintenant).toISOString(),
   });
+}
+
+/** Emoji d'un type de ressource. */
+export const EMOJIS_RESSOURCE = Object.freeze({ lien: '🔗', youtube: '▶️', fichier: '📎', note: '📝' });
+
+/**
+ * Embed d'une ressource publiée (module Ressources) : titre (lien vers la ressource si c'est une page
+ * web), catégorie, type, niveau, map ou agent, auteur, aperçu (description et image de la page, ou
+ * miniature de la vidéo), message de la team, pied et horodatage. Tout texte est neutralisé.
+ *  - `ressource` : `{ titre, genre, url, niveau, carte, agent, apercu: { titre, description, image, site } }` ;
+ *  - `categorie` : nom affiché ; `auteur` : pseudo ; `texte` : modèle rendu ; `lien` : adresse de l'app.
+ */
+export function embedRessource({ ressource, categorie = '', auteur = '', texte: message = '', team = {}, lien = '', maintenant = Date.now(), langue = 'fr' }) {
+  const genre = ressource.genre in EMOJIS_RESSOURCE ? ressource.genre : 'lien';
+  const apercu = ressource.apercu ?? {};
+  const champs = [{ name: `🗂️ ${T(langue, 'ressource.categorie')}`, value: ligne(categorie || T(langue, 'ressource.sans_categorie'), 80), inline: true }];
+  champs.push({ name: `${EMOJIS_RESSOURCE[genre]} ${T(langue, 'ressource.type')}`, value: T(langue, `ressource.genre.${genre}`), inline: true });
+  if (ressource.niveau) champs.push({ name: `📈 ${T(langue, 'ressource.niveau')}`, value: T(langue, `ressource.niveau.${ressource.niveau}`), inline: true });
+  if (ressource.carte) champs.push({ name: `🗺️ ${T(langue, 'embed.map')}`, value: ligne(ressource.carte, 40), inline: true });
+  if (ressource.agent) champs.push({ name: `🎭 ${T(langue, 'ressource.agent')}`, value: ligne(ressource.agent, 40), inline: true });
+  if (auteur) champs.push({ name: `✍️ ${T(langue, 'ressource.par')}`, value: ligne(auteur, 60), inline: true });
+  const cible = ressource.genre === 'lien' || ressource.genre === 'youtube' ? https(ressource.url) : null;
+  const description = [message ? texte(message, 1200) : '', apercu.description ? `> ${ligne(apercu.description, 400)}` : ''].filter(Boolean).join('\n\n');
+  const image = https(apercu.image);
+  return bornerEmbed({
+    author: { name: `📚 ${T(langue, 'ressource.entete')}${apercu.site ? ` · ${ligne(apercu.site, 60)}` : ''}` },
+    title: `${EMOJIS_RESSOURCE[genre]} ${ligne(ressource.titre, 200)}`,
+    ...(cible ?? https(lien) ? { url: cible ?? https(lien) } : {}),
+    color: couleurEntier(MESSAGES.resource_created.couleur),
+    ...(description ? { description } : {}),
+    fields: champs,
+    ...(image ? { image: { url: image } } : https(team.logo) ? { thumbnail: { url: team.logo } } : {}),
+    footer: { text: `${ligne(team.nom || 'Esport', 80)} · Esport`, ...(https(team.logo) ? { icon_url: team.logo } : {}) },
+    timestamp: new Date(maintenant).toISOString(),
+  });
+}
+
+/** Boutons d'une ressource : « Ouvrir le lien » (page web ou vidéo) et « Ouvrir dans l'app ». */
+export function boutonsRessource(urlRessource, lien, langue = 'fr') {
+  const boutons = [];
+  if (https(urlRessource)) boutons.push({ type: 2, style: 5, label: T(langue, 'ressource.ouvrir_lien'), emoji: { name: '🔗' }, url: urlRessource });
+  if (https(lien)) boutons.push({ type: 2, style: 5, label: T(langue, 'bouton.ouvrir_app'), emoji: { name: '📲' }, url: lien });
+  return boutons.length ? [{ type: 1, components: boutons }] : [];
 }
 
 /** Embed de réponse à une commande : titre, couleur, lignes `{ nom, valeur }` en champs, pied facultatif. */

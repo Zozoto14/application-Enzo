@@ -397,7 +397,7 @@ export interface TravailServeur {
 export interface InfosMedia {
   format: string;
   nomFormat: string;
-  genre: 'video' | 'audio';
+  genre: 'video' | 'audio' | 'document' | 'image' | 'archive';
   mime: string;
   codecVideo: string | null;
   codecAudio: string | null;

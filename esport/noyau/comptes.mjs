@@ -416,6 +416,13 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       { sql: 'UPDATE objectifs SET proprietaire_id = NULL WHERE proprietaire_id = ?', params: [compte] },
       { sql: 'UPDATE review_reperes SET cible_id = NULL WHERE cible_id = ?', params: [compte] },
       { sql: 'DELETE FROM review_reactions WHERE compte_id = ?', params: [compte] },
+      // Ressources (migration 0017) : publiées et commentaires restent, anonymes ; favoris, réactions et visites effacés.
+      { sql: 'UPDATE ressources SET auteur_id = NULL WHERE auteur_id = ?', params: [compte] },
+      { sql: 'UPDATE ressources SET valide_par = NULL WHERE valide_par = ?', params: [compte] },
+      { sql: 'UPDATE ressource_commentaires SET auteur_id = NULL WHERE auteur_id = ?', params: [compte] },
+      { sql: 'DELETE FROM ressource_favoris WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM ressource_reactions WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM ressource_visites WHERE compte_id = ?', params: [compte] },
       // Suivi des joueurs : les notes du staff SUR lui sont effacées (ses données) ; celles qu'il a écrites restent, sans auteur.
       { sql: 'DELETE FROM notes_joueurs WHERE joueur_id = ?', params: [compte] },
       { sql: 'UPDATE notes_joueurs SET auteur_id = NULL, auteur_masque = 1 WHERE auteur_id = ?', params: [compte] },

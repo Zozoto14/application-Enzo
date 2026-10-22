@@ -31,6 +31,7 @@ import { Panneau, PastilleRole, Retours, styles as communs, useAgir } from './co
 import { AvatarTeam, Badge, Carte, ESP, EnTetePage, EtatVide, Grille, LARGEUR_PC, SqueletteCartes, TitreCarte, attenue, couleurTeam, texte } from './design';
 import { definirLangue, langueAppareil, langueCourante, tr, trn, useLangue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
+import { PublierMulti } from './ressources/PublierMulti';
 
 type Etat =
   | { e: 'chargement' }
@@ -279,6 +280,7 @@ function MesTeams({
   const [notifs, setNotifs] = useState<Notifications | undefined>();
   const [boite, setBoite] = useState<Boite | undefined>();
   const [profil, setProfil] = useState(false);
+  const [ressources, setRessources] = useState(false);
   const { erreur, avis, agir } = useAgir();
 
   const recharger = useCallback(async () => {
@@ -303,6 +305,7 @@ function MesTeams({
         action={
           <>
             {moi.superAdmin ? <BoutonHub theme={theme} titre={tr('racineEsport.inviter_un_joueur')} onPress={onMembres} testID="esport-teams-inviter" /> : null}
+            {moi.superAdmin ? <BoutonHub theme={theme} titre={tr('ressources.multi.bouton')} libelle={tr('ressources.multi.titre')} onPress={() => setRessources(true)} testID="esport-teams-ressources" /> : null}
             <BoutonHub theme={theme} titre={profil ? tr('racineEsport.fermer_mon_profil') : tr('racineEsport.mon_profil')} onPress={() => setProfil(p => !p)} testID="esport-mon-profil-ouvrir" />
             {moi.peutCreerTeam ? <BoutonHub theme={theme} titre={tr('racineEsport.creer_une_team')} variante="plein" onPress={onCreer} testID="esport-creer" /> : null}
           </>
@@ -326,6 +329,7 @@ function MesTeams({
         </Carte>
       ) : null}
       {profil ? <MonProfil theme={theme} client={client} onExporter={onExporter} onSupprime={onProfilSupprime} /> : null}
+      {ressources ? <PublierMulti theme={theme} client={client} onFermer={() => setRessources(false)} /> : null}
       {!teams ? <SqueletteCartes theme={theme} n={large ? 3 : 2} large={large} /> : null}
       {teams?.length === 0 ? (
         <Carte theme={theme}>

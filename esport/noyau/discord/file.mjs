@@ -24,7 +24,7 @@ import { dechiffrerWebhook } from './chiffrement.mjs';
 import { CLES_OCCURRENCE, clesPourType, evenementDiscord, libelleTypeEvenement, textesEvenement } from './catalogue.mjs';
 import { lireLangue, nomRoleSysteme, texte as T } from '../langues.mjs';
 import { estReunionStaff, membresTeam } from './convoques.mjs';
-import { boutonLien, boutonsRsvp } from './embeds.mjs';
+import { boutonLien, boutonsRessource, boutonsRsvp, embedRessource } from './embeds.mjs';
 import { formaterDelai, formaterInstant } from './formats.mjs';
 import { construireCharge, rendreModele } from './messages.mjs';
 import { contexteOccurrence, embedOccurrence, variablesOccurrence } from './occurrence.mjs';
@@ -133,9 +133,41 @@ async function variablesDe(base, ev, cle, charge, team) {
     }
     case 'playbook_validated':
       return { ...base_, titre: charge.titre ?? '', surCarte: charge.carte ? T(L, 'var.sur_carte', { carte: charge.carte }) : '', acteur: await pseudo(ev.acteur_id) };
+    case 'resource_created': {
+      // Seulement une ressource publiée, visible de toute la team (jamais « staff seulement »), encore là.
+      const r = await ressourceAnnoncable(base, ev.entite_id, ev.team_id);
+      if (!r) return null;
+      return { ...base_, titre: r.titre, categorie: await nomCategorieRessource(base, r, L), genre: T(L, `ressource.genre.${r.genre}`), acteur: await pseudo(r.auteur_id), _ressource: r.id };
+    }
     default:
       return null;
   }
+}
+
+/** Ressource publiée et visible de toute la team (sinon null : rien ne part sur Discord). */
+async function ressourceAnnoncable(base, id, teamId) {
+  if (!id) return null;
+  const r = await base.premier('SELECT * FROM ressources WHERE id = ? AND team_id = ?', [id, teamId]);
+  if (!r || r.supprime_le || r.statut !== 'publiee' || r.visibilite !== 'team') return null;
+  return r;
+}
+
+/** Nom affiché de la catégorie d'une ressource (une catégorie par défaut est traduite). */
+async function nomCategorieRessource(base, r, langue) {
+  const c = r.categorie_id ? await base.premier('SELECT nom, cle_defaut, supprime_le FROM ressource_categories WHERE id = ? AND team_id = ?', [r.categorie_id, r.team_id]) : null;
+  if (!c || c.supprime_le) return T(langue, 'ressource.sans_categorie');
+  return c.cle_defaut ? T(langue, `ressource.cat.${c.cle_defaut}`) : c.nom;
+}
+
+/**
+ * Salon dédié aux ressources (Ressources › Réglages) : salon du bot (`discord_salon_id`, si le bot est
+ * lié) ou webhook propre (chiffré). Rend `{ canal, salonId, webhook }` ou null (salon de la team).
+ */
+async function cibleRessources(base, teamId, serveur) {
+  const r = await base.premier('SELECT discord_salon_id, discord_webhook FROM ressource_reglages WHERE team_id = ?', [teamId]);
+  if (r?.discord_salon_id && serveur) return { canal: 'bot', salonId: r.discord_salon_id, webhook: null };
+  if (r?.discord_webhook) return { canal: 'webhook', salonId: null, webhook: r.discord_webhook };
+  return null;
 }
 
 // ------------------------------------------------------------------ Abonné du bus
@@ -203,9 +235,10 @@ export async function abonneDiscord(base, ev) {
   }
   const cles = clesPourType(ev.type);
   if (cles.length === 0 || !ev.team_id) return;
-  // Le bot (serveur lié) a la priorité ; sinon le webhook ; sinon rien.
+  // Le bot (serveur lié) a la priorité ; sinon le webhook ; sinon rien. Ressources : salon dédié possible.
   const serveur = await serveurBot(base, ev.team_id);
-  if (!serveur && !(await base.premier('SELECT team_id FROM discord_webhooks WHERE team_id = ?', [ev.team_id]))) return;
+  const dedie = cles.includes('resource_created') ? await cibleRessources(base, ev.team_id, serveur) : null;
+  if (!serveur && !dedie && !(await base.premier('SELECT team_id FROM discord_webhooks WHERE team_id = ?', [ev.team_id]))) return;
   const team = await base.premier('SELECT nom, fuseau, langue_discord FROM teams WHERE id = ? AND supprimee_le IS NULL AND archivee_le IS NULL', [ev.team_id]);
   if (!team) return;
   const langue = lireLangue(team.langue_discord) ?? 'fr';
@@ -230,10 +263,11 @@ export async function abonneDiscord(base, ev) {
     // Un rappel n'a plus de sens une fois l'événement commencé ; « c'est maintenant » vaut 30 min ; les autres 24 h.
     const debut = Date.parse(charge.debut);
     const expire = cle.startsWith('reminder_') && Number.isFinite(debut) ? debut : cle === 'event_now' && Number.isFinite(debut) ? debut + 30 * 60_000 : creeMs + VALIDITE_MESSAGE_MS;
+    const cible = cle === 'resource_created' && dedie ? dedie : { canal: serveur ? 'bot' : 'webhook', salonId: serveur?.salon_id ?? null, webhook: null };
     await base.executer(
-      `INSERT INTO discord_file (id, team_id, evenement_id, cle, modele, variables, role_mention, statut, essais, prochain_essai_le, expire_le, cree_le, maj_le, canal, salon_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'attente', 0, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`,
-      [idDeLigne(ev, cle, variables), ev.team_id, ev.id, cle, reglage.modele, JSON.stringify(variables), reglage.roleMention, ev.cree_le, iso(expire), ev.cree_le, ev.cree_le, serveur ? 'bot' : 'webhook', serveur?.salon_id ?? null],
+      `INSERT INTO discord_file (id, team_id, evenement_id, cle, modele, variables, role_mention, statut, essais, prochain_essai_le, expire_le, cree_le, maj_le, canal, salon_id, webhook_chiffre)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'attente', 0, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`,
+      [idDeLigne(ev, cle, variables), ev.team_id, ev.id, cle, reglage.modele, JSON.stringify(variables), reglage.roleMention, ev.cree_le, iso(expire), ev.cree_le, ev.cree_le, cible.canal, cible.salonId, cible.webhook],
     );
   }
 }
@@ -320,6 +354,23 @@ async function chargeDeLigne(base, ligne, { team, bot, lienApp, t }) {
   const variables = jsonOu(ligne.variables, {});
   const langue = lireLangue(variables._langue) ?? 'fr';
   const occurrence = CLES_OCCURRENCE.includes(ligne.cle) && variables.evenementId && variables.occurrence;
+  if (ligne.cle === 'resource_created') {
+    // Relue au moment de l'envoi : passée « staff seulement », supprimée ou dépubliée entre-temps → rien ne part.
+    const r = await ressourceAnnoncable(base, variables._ressource, ligne.team_id);
+    if (!r) return { abandon: 'Ressource supprimée ou réservée au staff', silencieux: true };
+    const contenu = rendreModele(ligne.modele, { ...variables, lien: lienApp });
+    const embed = embedRessource({
+      ressource: { titre: r.titre, genre: r.genre, url: r.url, niveau: r.niveau, carte: r.carte_nom, agent: r.agent_nom, apercu: jsonOu(r.apercu, null) },
+      categorie: variables.categorie ?? '',
+      auteur: variables.acteur ?? '',
+      texte: contenu,
+      team: { nom: team.nom, logo: team.logo_url },
+      lien: lienApp,
+      maintenant: t,
+      langue,
+    });
+    return { charge: construireCharge(contenu, { roleId: ligne.role_mention, nomTeam: team.nom, embed, composants: boutonsRessource(r.genre === 'fichier' || r.genre === 'note' ? null : r.url, lienApp, langue), maintenant: t, langue }) };
+  }
   if (!occurrence) {
     const contenu = rendreModele(ligne.modele, { ...variables, lien: lienApp });
     const def = evenementDiscord(ligne.cle);
@@ -388,8 +439,10 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
       continue;
     }
     const team = await base.premier('SELECT nom, logo_url FROM teams WHERE id = ? AND supprimee_le IS NULL AND archivee_le IS NULL', [ligne.team_id]);
-    const cible = bot ? await serveurBot(base, ligne.team_id) : await base.premier('SELECT * FROM discord_webhooks WHERE team_id = ?', [ligne.team_id]);
-    const table = bot ? 'discord_serveurs' : 'discord_webhooks';
+    // Webhook propre (salon dédié aux ressources) : pas de ligne de suivi dans discord_webhooks.
+    const propre = !bot && Boolean(ligne.webhook_chiffre);
+    const cible = bot ? await serveurBot(base, ligne.team_id) : propre ? {} : await base.premier('SELECT * FROM discord_webhooks WHERE team_id = ?', [ligne.team_id]);
+    const table = bot ? 'discord_serveurs' : propre ? null : 'discord_webhooks';
     if (!team || !cible) {
       await abandonner(ligne, bot ? 'Team ou serveur Discord délié' : 'Team ou webhook supprimé', { journal: false });
       continue;
@@ -424,7 +477,7 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
         url = `${API_DISCORD}/channels/${ligne.salon_id || cible.salon_id}/messages`;
       }
     } else {
-      url = await dechiffrerWebhook(cle, ligne.team_id, cible.url_chiffree);
+      url = await dechiffrerWebhook(cle, ligne.team_id, propre ? ligne.webhook_chiffre : cible.url_chiffree);
       if (!url) {
         await abandonner(ligne, 'Adresse du webhook illisible (clé de chiffrement changée ?) : saisissez-la à nouveau');
         continue;
@@ -447,7 +500,7 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
     if (resultat.ok) {
       const lot = [
         { sql: "UPDATE discord_file SET statut = 'envoye', envoye_le = ?, essais = essais + 1, derniere_erreur = NULL, verrou_jusqua = NULL, maj_le = ? WHERE id = ?", params: [iso(t), iso(t), ligne.id] },
-        { sql: `UPDATE ${table} SET dernier_succes_le = ?, bloque_jusqua = NULL WHERE team_id = ?`, params: [iso(t), ligne.team_id] },
+        ...(table ? [{ sql: `UPDATE ${table} SET dernier_succes_le = ?, bloque_jusqua = NULL WHERE team_id = ?`, params: [iso(t), ligne.team_id] }] : []),
       ];
       // Annonce d'une occurrence par le bot : retenue pour être éditée quand les réponses changent.
       if (bot && methode === 'POST' && resultat.messageId && prepare.contexte && !['rsvp_missing', 'rsvp_relance'].includes(prepare.genre)) {
@@ -466,7 +519,7 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
       const jusqua = iso(t + resultat.retryApresS * 1000);
       await base.lot([
         { sql: 'UPDATE discord_file SET prochain_essai_le = ?, verrou_jusqua = NULL, derniere_erreur = ?, maj_le = ? WHERE id = ?', params: [jusqua, resultat.motif, iso(t), ligne.id] },
-        { sql: `UPDATE ${table} SET bloque_jusqua = ? WHERE team_id = ?`, params: [jusqua, ligne.team_id] },
+        ...(table ? [{ sql: `UPDATE ${table} SET bloque_jusqua = ? WHERE team_id = ?`, params: [jusqua, ligne.team_id] }] : []),
       ]);
       teamsBloquees.add(cleBlocage);
       bilan.reportes++;
@@ -476,7 +529,7 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
     const essais = Number(ligne.essais) + 1;
     // Une annonce supprimée dans Discord (édition en 404) n'invalide pas le salon.
     const perdu = resultat.webhookPerdu && methode !== 'PATCH';
-    await base.executer(`UPDATE ${table} SET dernier_echec_le = ?, invalide_le = CASE WHEN ? = 1 THEN ? ELSE invalide_le END WHERE team_id = ?`, [iso(t), perdu ? 1 : 0, iso(t), ligne.team_id]);
+    if (table) await base.executer(`UPDATE ${table} SET dernier_echec_le = ?, invalide_le = CASE WHEN ? = 1 THEN ? ELSE invalide_le END WHERE team_id = ?`, [iso(t), perdu ? 1 : 0, iso(t), ligne.team_id]);
     if (methode === 'PATCH' && resultat.statut === 404) await base.executer('DELETE FROM discord_annonces WHERE evenement_id = ? AND occurrence = ?', [jsonOu(ligne.variables, {}).evenementId, jsonOu(ligne.variables, {}).occurrence]);
     if (resultat.definitif || essais >= ESSAIS_MAX) {
       await base.executer('UPDATE discord_file SET essais = ? WHERE id = ?', [essais, ligne.id]);

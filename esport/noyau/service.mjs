@@ -764,6 +764,11 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       reviewCommentaires: (await q('SELECT team_id, texte, cree_le FROM review_commentaires WHERE auteur_id = ? AND supprime_le IS NULL ORDER BY cree_le')).map(c => ({ team: team(c.team_id), texte: c.texte, date: c.cree_le })),
       strats: (await q('SELECT team_id, titre, carte_nom, side, type, visibilite, cree_le FROM strats WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), titre: x.titre, carte: x.carte_nom, side: x.side, type: x.type, visibilite: x.visibilite, creeLe: x.cree_le })),
       playbook: (await q('SELECT team_id, titre, statut, cree_le FROM playbook_entrees WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), titre: x.titre, statut: x.statut, creeLe: x.cree_le })),
+      // Ressources (migration 0017) : celles qu'il a publiées ou proposées, ses commentaires, réactions et favoris.
+      ressources: (await q('SELECT team_id, genre, titre, description, url, tags, visibilite, statut, cree_le, publie_le FROM ressources WHERE auteur_id = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), genre: x.genre, titre: x.titre, description: x.description, url: x.url ?? null, tags: jsonOu(x.tags, []), visibilite: x.visibilite, statut: x.statut, creeLe: x.cree_le, publieLe: x.publie_le ?? null })),
+      ressourcesCommentaires: (await q('SELECT c.team_id, r.titre, c.texte, c.cree_le FROM ressource_commentaires c JOIN ressources r ON r.id = c.ressource_id WHERE c.auteur_id = ? AND c.supprime_le IS NULL ORDER BY c.cree_le')).map(c => ({ team: team(c.team_id), ressource: c.titre, texte: c.texte, date: c.cree_le })),
+      ressourcesReactions: (await q('SELECT x.team_id, r.titre, x.emoji, x.cree_le FROM ressource_reactions x JOIN ressources r ON r.id = x.ressource_id WHERE x.compte_id = ? ORDER BY x.cree_le')).map(x => ({ team: team(x.team_id), ressource: x.titre, reaction: x.emoji, date: x.cree_le })),
+      ressourcesFavoris: (await q('SELECT f.team_id, r.titre, f.cree_le FROM ressource_favoris f JOIN ressources r ON r.id = f.ressource_id WHERE f.compte_id = ? ORDER BY f.cree_le')).map(x => ({ team: team(x.team_id), ressource: x.titre, date: x.cree_le })),
       abonnementsIcal: (await q('SELECT team_id, libelle, cree_le, dernier_acces_le, revoque_le FROM ical_jetons WHERE compte_id = ? ORDER BY cree_le')).map(j => ({ team: team(j.team_id), libelle: j.libelle, creeLe: j.cree_le, dernierAcces: j.dernier_acces_le, revoqueLe: j.revoque_le })),
       // Bot Discord : liaison du compte (identifiant Discord public, jamais de code).
       discord: await (async () => {
@@ -848,13 +853,21 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       { sql: 'UPDATE objectifs SET proprietaire_id = NULL WHERE proprietaire_id = ?', params: [compte] },
       { sql: 'UPDATE review_reperes SET cible_id = NULL WHERE cible_id = ?', params: [compte] },
       { sql: 'DELETE FROM review_reactions WHERE compte_id = ?', params: [compte] },
+      // Ressources (migration 0017) : ce qu'il a publié et ses commentaires restent, anonymes ; ses favoris, ses
+      // réactions et ses visites du canal sont effacés.
+      { sql: 'UPDATE ressources SET auteur_id = NULL WHERE auteur_id = ?', params: [compte] },
+      { sql: 'UPDATE ressources SET valide_par = NULL WHERE valide_par = ?', params: [compte] },
+      { sql: 'UPDATE ressource_commentaires SET auteur_id = NULL WHERE auteur_id = ?', params: [compte] },
+      { sql: 'DELETE FROM ressource_favoris WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM ressource_reactions WHERE compte_id = ?', params: [compte] },
+      { sql: 'DELETE FROM ressource_visites WHERE compte_id = ?', params: [compte] },
       // Vidéos, enregistrements et transcriptions (migration 0014) : ce qu'il a déposé reste pour la team, sans
       // auteur ; ses envois inachevés sont confiés au cron (effacés au passage suivant).
       { sql: 'UPDATE transcriptions SET auteur_id = NULL WHERE auteur_id = ?', params: [compte] },
       { sql: 'UPDATE transcriptions SET modifie_par = NULL WHERE modifie_par = ?', params: [compte] },
       // Transcription sur le serveur (migration 0016) : qui l'a demandée.
       { sql: 'UPDATE travaux_transcription SET demande_par = NULL WHERE demande_par = ?', params: [compte] },
-      { sql: "UPDATE fichiers SET depose_par = '' WHERE depose_par = ? AND entite_type IN ('review_video', 'reunion_enregistrement', 'reunion_transcription')", params: [compte] },
+      { sql: "UPDATE fichiers SET depose_par = '' WHERE depose_par = ? AND entite_type IN ('review_video', 'reunion_enregistrement', 'reunion_transcription', 'ressource_fichier')", params: [compte] },
       { sql: "UPDATE envois SET compte_id = '', maj_le = '1970-01-01T00:00:00.000Z' WHERE compte_id = ? AND fichier_id IS NULL", params: [compte] },
       // Suivi des joueurs : les notes du staff SUR lui sont effacées (ses données) ; celles qu'il a écrites restent, sans auteur.
       { sql: 'DELETE FROM notes_joueurs WHERE joueur_id = ?', params: [compte] },

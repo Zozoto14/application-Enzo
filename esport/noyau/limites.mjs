@@ -37,6 +37,8 @@ export const LIMITES = {
   discord_lier: { max: 10, fenetreS: 600 },
   discord_commande: { max: 40, fenetreS: 60 },
   discord_relance: { max: 3, fenetreS: 3600 },
+  // Aperçus de liens (Ressources) : chaque appel fait une requête sortante du serveur.
+  apercu: { max: 60, fenetreS: 3600 },
 };
 
 /**

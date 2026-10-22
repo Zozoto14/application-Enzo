@@ -364,7 +364,7 @@ describe('journal', () => {
     expect(phraseJournal(e('discord.delivery_failed', { cle: 'event_created', essai: 2, sur: 6, motif: 'Discord injoignable' }), noms)).toBe('Envoi Discord « Nouvel événement » échoué (essai 2/6) : Discord injoignable');
     expect(phraseJournal(e('discord.delivery_abandoned', { cle: 'task_assigned', motif: 'Webhook refusé ou supprimé (HTTP 404)' }), noms)).toBe('Envoi Discord « Tâche assignée » abandonné : Webhook refusé ou supprimé (HTTP 404)');
     expect(phraseJournal(e('event.reminder_h1', { titre: 'Scrim' }), noms)).toBe('Rappel H-1 préparé pour « Scrim »');
-    expect(Object.keys(LIBELLES_DISCORD)).toHaveLength(13);
+    expect(Object.keys(LIBELLES_DISCORD)).toHaveLength(14);
     expect(phraseJournal(e('discord.server_linked', { salon: 'scrims' }), noms)).toMatch(/a lié un serveur Discord à la team \(salon #scrims\)/);
     expect(phraseJournal(e('discord.command_used', { commande: 'prochain' }), noms)).toMatch(/a utilisé \/prochain sur Discord/);
     expect(phraseJournal(e('attendance.relance', { titre: 'Scrim' }), noms)).toMatch(/relancé sur Discord/);

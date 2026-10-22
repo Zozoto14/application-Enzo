@@ -3,7 +3,7 @@
  *
  *  - Accueil ;
  *  - Agenda : Planning, Disponibilités, Présence ;
- *  - Jeu : Strats, Playbook, Review vidéo, Scouting ;
+ *  - Jeu : Strats, Playbook, Ressources, Review vidéo, Scouting ;
  *  - Équipe : Résumés, Objectifs et tâches, Suivi joueurs, Membres et rôles ;
  *  - Réglages : Paramètres, Discord, Journal.
  *
@@ -65,7 +65,7 @@ export const GROUPES_TEAM: ReadonlyArray<{ id: GroupeTeam; libelle: string; glyp
       return tr('assistant.jeu');
     }, glyphe: '◎', get description() {
       return tr('pageTeam.jeu_strats_playbook_review');
-    }, sections: ['module:strat_editor', 'module:playbook', 'module:video_review', 'module:scouting'] },
+    }, sections: ['module:strat_editor', 'module:playbook', 'module:resources', 'module:video_review', 'module:scouting'] },
   { id: 'equipe', get libelle() {
       return tr('pageTeam.equipe');
     }, glyphe: '⚑', get description() {
