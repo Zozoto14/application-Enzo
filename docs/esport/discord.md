@@ -130,14 +130,14 @@ de mentionner `@everyone`/rôles donné au webhook).
 
 ## Sécurité
 
-- **Chiffrée au repos.** L'adresse est chiffrée en **AES-GCM 256** avant d'être écrite dans la base D1
+- **Chiffrée au repos.** L'adresse est chiffrée en **AES-GCM 256** avant d'être écrite dans la base
   (`discord_webhooks.url_chiffree`). On ne garde en clair que ses 4 derniers caractères, pour l'affichage masqué.
-- **Choix de la clé.** La clé AES est **dérivée par HKDF-SHA-256 d'un secret du Worker**, avec un contexte dédié
+- **Choix de la clé.** La clé AES est **dérivée par HKDF-SHA-256 d'un secret du serveur**, avec un contexte dédié
   (`applibourse-esport/discord-webhook/aes-gcm/v1`). Par défaut ce secret est **`CLE_ESPORT`** : rien de plus à
   configurer. Le contexte rend la clé AES sans rapport avec celle des sessions, même secret. L'identifiant de la
   team est lié au chiffré (donnée authentifiée) : un chiffré recopié dans une autre team ne s'ouvre pas.
 - **Secret séparé, facultatif.** Si vous voulez pouvoir changer `CLE_ESPORT` sans perdre les webhooks, posez un
-  secret **`CLE_DISCORD`** (`npx wrangler secret put CLE_DISCORD --config esport/wrangler.toml`, 32 caractères au
+  secret **`CLE_DISCORD`** (ligne `CLE_DISCORD=…` de `~/.appdashboard/esport.env` sur le serveur, 32 caractères au
   moins) **avant** d'enregistrer des webhooks : il a la priorité. Sinon, **changer `CLE_ESPORT` rend les webhooks
   illisibles** : les messages en file sont abandonnés avec la mention « adresse illisible » et il suffit de
   saisir de nouveau l'adresse dans l'écran Discord. On ne passe jamais en clair par défaut : sans clé, le serveur
@@ -161,7 +161,7 @@ de mentionner `@everyone`/rôles donné au webhook).
 | Nom | Rôle |
 | --- | --- |
 | `CLE_DISCORD` (secret) | clé de chiffrement des webhooks, à la place de `CLE_ESPORT` |
-| `LIEN_APP` (variable) | adresse de l'app, remplace `{lien}` dans les messages (par exemple `https://….pages.dev`) ; sans elle `{lien}` est vide |
+| `LIEN_APP` (variable) | adresse de l'app, remplace `{lien}` dans les messages (`https://appdashboard.fr`) ; sans elle `{lien}` est vide |
 
 Serveur local de développement : `ESPORT_CLE_DISCORD`, `ESPORT_LIEN_APP`.
 

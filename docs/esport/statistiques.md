@@ -64,7 +64,7 @@ app en arrière-plan), un dernier lot part avec `keepalive`. 100 événements au
 
 ### Stockage, agrégation, rétention
 
-Migration **`0018_statistiques_usage.sql`** (SQL commun SQLite / D1 / PostgreSQL) :
+Migration **`0018_statistiques_usage.sql`** (SQL commun SQLite / PostgreSQL) :
 
 | Table | Contenu | Durée |
 | --- | --- | --- |
@@ -76,8 +76,7 @@ Migration **`0018_statistiques_usage.sql`** (SQL commun SQLite / D1 / PostgreSQL
 | `usage_jour_erreurs` | par jour, empreinte du message, page, membre, appareil | illimitée |
 | `usage_reglages` | collecte active, premier jour mesuré, dernier jour agrégé | — |
 
-Les agrégats sont calculés **une fois par jour** par la tâche planifiée (cron du Worker toutes les 15 minutes, cron
-cPanel toutes les 5 minutes : l'étape « agrégation de l'usage » ne travaille que lorsqu'un jour de Paris est terminé
+Les agrégats sont calculés **une fois par jour** par la tâche planifiée (cron cPanel toutes les 5 minutes : l'étape « agrégation de l'usage » ne travaille que lorsqu'un jour de Paris est terminé
 depuis plus d'une heure, et rattrape les jours manquants). La page lit les agrégats pour les jours passés et le détail
 brut pour les jours pas encore agrégés (aujourd'hui) : les chiffres sont les mêmes avant et après l'agrégation. Les
 filtres par team, rôle et appareil restent exacts sur n'importe quelle période (une ligne d'agrégat par combinaison).
@@ -105,9 +104,8 @@ sessions pour eux. La reconstitution dépend de la durée de conservation du jou
 
 ## Actions du Fondateur
 
-1. **Mettre à jour le serveur Esport** : la migration `0018_statistiques_usage.sql` est appliquée au redéploiement
-   (workflow « Esport (Worker) » sur Cloudflare, ou `npm run migrer --prefix esport` / déploiement cPanel sur
-   o2switch). Rien à configurer : la collecte démarre seule.
+1. **Mettre à jour le serveur Esport** : la migration `0018_statistiques_usage.sql` est appliquée par le déploiement
+   automatique du serveur o2switch (ou `npm run migrer --prefix esport`). Rien à configurer : la collecte démarre seule.
 2. **Publier le site** (et l'app PC) comme d'habitude, pour que les membres envoient leurs statistiques.
 3. Ouvrir **Esport › Statistiques**. Les premiers chiffres arrivent dès que les membres utilisent l'app ; avant, la
    page montre l'historique reconstitué depuis le journal.

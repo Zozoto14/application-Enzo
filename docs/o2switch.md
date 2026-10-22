@@ -1,18 +1,17 @@
-# Tout le dashboard chez o2switch (au lieu de Cloudflare)
+# Le dashboard chez o2switch
 
-Ce guide déménage **les trois parties en ligne** du dashboard sur l'hébergement o2switch du Fondateur :
+Les **trois parties en ligne** du dashboard tournent sur l'hébergement o2switch du Fondateur (SAS o2switch,
+Chemin des Pardiaux, 63000 Clermont-Ferrand) :
 
-| Quoi | Aujourd'hui (Cloudflare) | Demain (o2switch) |
-| --- | --- | --- |
-| **Site** (l'app dans le navigateur) | `https://applibourse-ef0ddb.pages.dev` | **https://appdashboard.fr** (dossier `public_html`) |
-| **Relais** (synchro chiffrée, invitations, connexion des amis, Tsuzuku, support…) | `https://applibourse-relais.<vous>.workers.dev` | **https://relais.appdashboard.fr** |
-| **Serveur Esport** (teams, planning, résumés, Discord…) | `https://applibourse-esport.<vous>.workers.dev` | **https://esport.appdashboard.fr** |
+| Quoi | Adresse |
+| --- | --- |
+| **Site** (l'app dans le navigateur) | **https://appdashboard.fr** (dossier `public_html`) |
+| **Relais** (synchro chiffrée, invitations, connexion des amis, Tsuzuku, support, e-mails…) | **https://relais.appdashboard.fr** (Node + PostgreSQL) |
+| **Serveur Esport** (teams, planning, résumés, vidéos, Discord…) | **https://esport.appdashboard.fr** (Node + PostgreSQL + disque) |
 
-Tout reste en place sur Cloudflare jusqu'à la bascule (partie C), et même après : l'ancien relais et l'ancien
-serveur Esport **transmettent** alors tout à o2switch, pour que les appareils pas encore à jour continuent de marcher.
-Rien n'est supprimé sur Cloudflare (partie F explique comment le couper, plus tard).
-
-Comptez **1 h 30** pour la préparation (parties A et B, sans rien casser) et **30 minutes** pour la bascule (partie C).
+Ce guide sert à **installer ou réinstaller** ces serveurs (partie A, environ 1 h 30), puis à suivre les évolutions
+(parties G et H), les sauvegardes et le dépannage. L'ancien hébergement Cloudflare est retiré : voir « Historique »
+à la fin.
 
 ---
 
@@ -36,38 +35,36 @@ Elles servent partout dans ce guide. Aucune n'est secrète.
 Les **secrets** (mot de passe PostgreSQL, jeton maître du relais…) ne sont écrits **que** dans les deux fichiers
 `.env` ci-dessus, sur le serveur. Jamais dans GitHub, jamais dans ce guide.
 
-Dans les commandes, remplacez seulement ce qui est en MAJUSCULES : `MOT_DE_PASSE_POSTGRES`, `JETON_MAITRE`,
-`VOTRE-SOUS-DOMAINE` (la partie entre `applibourse-relais.` et `.workers.dev` de vos adresses Cloudflare actuelles).
+Dans les commandes, remplacez seulement ce qui est en MAJUSCULES : `MOT_DE_PASSE_POSTGRES`, `JETON_MAITRE`.
 
 ### Comment ça marche (en bref)
 
-- **Deux petites apps Node** dans « Setup Node.js App » : le **relais** et le **serveur Esport**. Elles font tourner
-  exactement le même code que sur Cloudflare.
+- **Deux petites apps Node** dans « Setup Node.js App » : le **relais** (`relais/serveur/app.mjs`) et le **serveur
+  Esport** (`esport/serveur/app.mjs`).
 - **Une seule base PostgreSQL** pour les deux, dans un schéma `appdashboard` (créé tout seul) : les tables de
-  l'Esport, et la table `relais_kv` qui remplace la « boîte » Cloudflare KV du relais (les données y restent
+  l'Esport, la table `relais_kv` (la « boîte » du relais) et les tables du coffre serveur (les données y restent
   chiffrées par vos appareils : le serveur ne peut pas les lire).
-- **L'Esport fait vérifier les jetons par le relais** en HTTPS (`https://relais.appdashboard.fr/jeton/verifier`),
-  comme sur Cloudflare. On garde ce chemin plutôt que de tout mettre dans un seul programme : ainsi le serveur
+- **L'Esport fait vérifier les jetons par le relais** en HTTPS (`https://relais.appdashboard.fr/jeton/verifier`).
+  On garde ce chemin plutôt que de tout mettre dans un seul programme : ainsi le serveur
   Esport ne connaît **jamais** le jeton maître (seul le relais l'a), et une panne de l'un ne bloque pas l'autre.
 - **Mises à jour automatiques « par pull »** : o2switch n'accepte pas de connexion venue de GitHub, et il n'y a pas
   de jeton API cPanel. C'est donc le serveur qui va chercher les nouveautés : toutes les 5 minutes, une tâche cron
   lance `esport/serveur/deployer.sh`, qui récupère le code (clé de déploiement GitHub en **lecture seule**), installe
   les dépendances, met la base à jour, redémarre les deux apps, et recopie le site construit par GitHub.
-- **Déménagement des données** : c'est le serveur o2switch qui **tire** lui-même les données des Workers Cloudflare,
-  par des routes d'administration protégées par le jeton maître. Pas de fichier d'export à télécharger, pas
-  d'artefact GitHub : rien ne traîne nulle part.
+- **Migration vers un autre serveur** (un jour, si besoin) : le nouveau serveur **tire** lui-même les données de
+  l'ancien par des routes d'administration protégées par le jeton maître (`relais/serveur/importer.mjs`,
+  `esport/serveur/importer.mjs` : voir « Migrer vers un autre serveur »). Pas de fichier d'export à télécharger.
 
 ---
 
-## Partie A — Préparer (rien ne change pour les utilisateurs)
+## Partie A — Installer (ou réinstaller)
 
-### A1. Mettre à jour les deux Workers Cloudflare (2 minutes)
+### A1. Ce qu'il faut avoir sous la main
 
-Ils apprennent les routes du déménagement (export de la boîte, des fichiers), sans rien changer d'autre.
-
-1. GitHub › dépôt **application-Enzo** › onglet **Actions** › **Relais (Cloudflare Worker)** › **Run workflow** ›
-   branche `main` › **Run workflow**. Attendez la coche verte.
-2. **Actions** › **Esport (Worker)** › **Run workflow** › `main` › **Run workflow**. Coche verte.
+- l'accès à cPanel (o2switch) et au dépôt GitHub **application-Enzo** (réglages du dépôt) ;
+- le **jeton maître** du relais (étape A6) : les jetons des amis en dérivent, il ne change jamais ;
+- pour une réinstallation : les clés `CLE_ESPORT` et `CLE_DISCORD` de l'ancien `esport.env` (sinon les sessions,
+  les liens de partage des strats et les webhooks Discord des teams sont à refaire).
 
 ### A2. La base PostgreSQL (5 minutes)
 
@@ -148,9 +145,8 @@ Avant de commencer, munissez-vous de :
 
 - **le mot de passe PostgreSQL** (étape A2) ;
 - **le jeton maître du relais** : sur le PC, fichier `relais/relais-local.json` du dossier de l'app, valeur de
-  `"jeton"`. Il faut **le même** qu'aujourd'hui : les jetons des amis en sont dérivés ;
-- facultatif : l'adresse du **webhook Discord du support**. Celle posée sur Cloudflare ne se relit PAS (secret) :
-  créez-en une nouvelle dans Discord (voir [support.md](support.md) § 1) ; et pour le **bot Discord** :
+  `"jeton"` (ou l'ancien `relais.env`). Toujours **le même** : les jetons des amis en sont dérivés ;
+- facultatif : l'adresse du **webhook Discord du support** (voir [support.md](support.md) § 1) ; et pour le **bot Discord** :
   `DISCORD_APPLICATION_ID`, `DISCORD_PUBLIC_KEY` (Discord Developer Portal › votre app › **General Information**) et
   `DISCORD_BOT_TOKEN` (onglet **Bot** › **Reset Token** si vous ne l'avez plus) ;
 - facultatif : la boîte d'envoi **noreply@appdashboard.fr** et son mot de passe, pour les **e-mails envoyés par le
@@ -164,8 +160,8 @@ openssl rand -hex 32
 nano ~/.appdashboard/esport.env
 ```
 
-La ligne `openssl` affiche une longue clé : copiez-la (clé **provisoire** : l'import de la partie C la remplace
-par celle de Cloudflare). Dans l'éditeur qui s'ouvre, collez ceci, puis remplacez les MAJUSCULES :
+La ligne `openssl` affiche une longue clé : copiez-la (pour une réinstallation, reprenez plutôt l'ancienne
+`CLE_ESPORT` ; ensuite, ne la changez plus : les sessions et les liens de partage en dépendent). Dans l'éditeur qui s'ouvre, collez ceci, puis remplacez les MAJUSCULES :
 
 ```ini
 # Serveur Esport (o2switch) : NE JAMAIS copier ce fichier ailleurs.
@@ -212,7 +208,7 @@ PGUSER=jayo8828_esport
 PGPASSWORD=MOT_DE_PASSE_POSTGRES
 JETON=JETON_MAITRE
 URL_PUBLIQUE=https://relais.appdashboard.fr
-ORIGINES_SITE=https://appdashboard.fr,https://www.appdashboard.fr,https://applibourse-ef0ddb.pages.dev
+ORIGINES_SITE=https://appdashboard.fr,https://www.appdashboard.fr
 # Support Discord (facultatif, docs/support.md) : URL du webhook du salon support
 DISCORD_WEBHOOK_URL=
 # Salon support de type TEXTE seulement : le bot ouvre un fil par demande (même jeton que esport.env)
@@ -334,7 +330,7 @@ Toutes deux se protègent contre une exécution en double.
    - sont **toujours gardés** : `.htaccess` (seul le bloc « AppDashboard » est remplacé), `.well-known/`
      (Let's Encrypt), `cgi-bin/`, `.user.ini`, `php.ini`, `maj/` (mises à jour de l'iPhone). Pour garder d'autres
      fichiers, écrivez leur chemin (ex. `/mon-dossier/`), un par ligne, dans `~/.appdashboard/site-garder.txt` ;
-   - le bloc `.htaccess` reproduit Cloudflare Pages : HTTPS obligatoire, en-têtes de `bureau/public/_headers`
+   - le bloc `.htaccess` (généré depuis `bureau/public/_headers` par `scripts/htaccess-o2switch.mjs`) : HTTPS obligatoire, en-têtes de `bureau/public/_headers`
      (cache d'un an des fichiers `assets/`), repli « une page » vers `index.html` ;
    - les anciens fichiers de `assets/` sont **gardés 14 jours** après leur dernier build (un onglet resté ouvert en a encore besoin), puis purgés par le cron ; l'app se recharge seule une fois si un morceau manque.
 3. Ouvrez **https://appdashboard.fr** : l'écran d'ouverture de l'app s'affiche.
@@ -345,127 +341,17 @@ pour changer de domaine).
 
 ---
 
-## Partie B — Vérifier avant la bascule
+## Partie B — Vérifier
 
 - `curl -s https://esport.appdashboard.fr/sante` répond `"ok":true` (étape A8).
 - `tail ~/logs/esport-cron.log` : « 12/12 tâches faites » toutes les 5 minutes.
 - `tail ~/logs/esport-deploy.log` : rien de rouge.
-- https://appdashboard.fr s'ouvre.
-- Répétition sans risque de l'import du relais (il est rejouable, il ne supprime rien) :
-
-  ```bash
-  source /home/jayo8828/nodevenv/application-enzo/esport/22/bin/activate
-  cd ~/application-enzo
-  RELAIS_SOURCE=https://applibourse-relais.VOTRE-SOUS-DOMAINE.workers.dev node relais/serveur/importer.mjs
-  ```
-
-  Attendu : « Boîte du relais : N clés exportées, N écrites… » puis « toutes les clés sont relues à l'identique ».
-
-Ne lancez **pas** encore l'import de l'Esport : il se fait une seule fois, à la bascule.
-
----
-
-## Partie C — La bascule (30 minutes, un jour calme)
-
-Prévenez les membres : pendant environ 10 minutes, l'Esport est en **lecture seule** et il vaut mieux ne rien
-modifier dans les apps. Rien ne sera perdu.
-
-Dans GitHub, les variables se règlent dans **Settings** › **Secrets and variables** › **Actions** › onglet
-**Variables** › **New repository variable** (ou le crayon pour modifier).
-
-1. **Esport en lecture seule** : variable `ESPORT_LECTURE_SEULE` = `1` › **Actions** › **Esport (Worker)** ›
-   **Run workflow**. (Les écritures répondent « déménagement en cours » ; les lectures marchent.)
-2. **Import de l'Esport** (Terminal cPanel) :
-
-   ```bash
-   source /home/jayo8828/nodevenv/application-enzo/esport/22/bin/activate
-   cd ~/application-enzo
-   ESPORT_SOURCE=https://applibourse-esport.VOTRE-SOUS-DOMAINE.workers.dev node esport/serveur/importer.mjs
-   ```
-
-   Il ouvre une session du Fondateur sur l'ancien serveur (avec le jeton maître de `relais.env`), puis :
-   - copie toute la base dans PostgreSQL et **vérifie le nombre de lignes de chaque table** (« mêmes nombres de
-     lignes que l'export ») ;
-   - copie les fichiers (PDF, miniatures) dans `/home/jayo8828/esport-fichiers` (« Fichiers : N copiés ») ;
-   - reprend les **clés** du serveur Cloudflare (`CLE_ESPORT`, `CLE_DISCORD`) dans `esport.env` : les liens de
-     partage des strats, les webhooks Discord des teams et les sessions ouvertes restent valables ; l'app Esport
-     redémarre.
-
-   En cas de coupure pendant la copie des fichiers : relancez avec `--fichiers-seulement` à la fin de la commande.
-3. **Import final du relais** (même Terminal) :
-
-   ```bash
-   RELAIS_SOURCE=https://applibourse-relais.VOTRE-SOUS-DOMAINE.workers.dev node relais/serveur/importer.mjs
-   ```
-
-4. **Relais : transmission vers o2switch** : variables `RELAIS_CIBLE` = `https://relais.appdashboard.fr` et
-   `SITE_CIBLE` = `https://appdashboard.fr` › **Actions** › **Relais (Cloudflare Worker)** › **Run workflow**.
-   L'ancien relais transmet désormais tout à o2switch et annonce la nouvelle adresse aux appareils.
-5. **Esport : transmission vers o2switch** : variable `ESPORT_CIBLE` = `https://esport.appdashboard.fr`, et
-   **supprimez** `ESPORT_LECTURE_SEULE` › **Actions** › **Esport (Worker)** › **Run workflow**.
-6. **Site Cloudflare Pages** : variable `SITE_CLOUDFLARE_ARRET` = `1`. Le workflow « Site (Cloudflare Pages) » ne
-   publie plus (l'ancien site reste en ligne tel quel et marche, puisque ses serveurs transmettent à o2switch).
-   Puis demandez à Claude la petite modification de `src/config/site.json` :
-   `"site": "https://appdashboard.fr"` et `"anciensSites": ["https://applibourse-ef0ddb.pages.dev"]` (les nouveaux
-   liens de liaison et QR codes pointent alors vers appdashboard.fr).
-7. **Discord** (si le bot est utilisé) : [Discord Developer Portal](https://discord.com/developers/applications) ›
-   votre app › **General Information** › **Interactions Endpoint URL** :
-   `https://esport.appdashboard.fr/discord/interactions` › **Save Changes** (Discord vérifie l'adresse aussitôt :
-   « All your edits have been carefully recorded »). Les webhooks des teams (onglet Discord) ne changent pas.
-8. **Vérifier** :
-   - `curl -s https://esport.appdashboard.fr/sante` ;
-   - https://appdashboard.fr : connexion, synchro, tuile Esport, une team, un PDF de résumé s'ouvre ;
-   - dans Discord, une commande `/prochain` répond.
-
-### Ce qu'il faut faire sur chaque appareil
-
-Presque rien : **les appareils suivent tout seuls**.
-
-| Appareil | Que faire |
-| --- | --- |
-| **PC** (app Electron) | Installer la dernière version de l'app (comme d'habitude). Ouvrir l'app › **Paramètres** › **Synchronisation** › **Synchroniser maintenant** : l'app voit que le relais a déménagé, vérifie la nouvelle adresse avec son jeton, et l'enregistre. L'Esport suit (adresse déduite : `relais.appdashboard.fr` → `esport.appdashboard.fr`). |
-| **iPhone** (AltStore) | Mettre l'app à jour (mise à jour JavaScript habituelle, ou nouvelle version AltStore). Ouvrir l'app › **Synchroniser maintenant**. Le site des mises à jour suit aussi (appdashboard.fr). Pour publier une mise à jour JavaScript après la bascule : déposez `main.jsbundle` et `manifeste.json` dans `public_html/maj/` (cPanel › **Gestionnaire de fichiers**). |
-| **Site** | Utiliser **https://appdashboard.fr** (l'ancienne adresse `pages.dev` marche encore, et suit aussi). Tout le monde se connecte avec son identifiant et son mot de passe (partie G). |
-| **Amis** | Rien. Leur appareil suit au premier « Synchroniser » ; un appareil qui n'est pas mis à jour continue de marcher par l'ancienne adresse, tant que Cloudflare n'est pas coupé. |
-
-Un appareil a suivi quand sa synchronisation marche encore après la coupure de Cloudflare… ce qu'on ne fait
-qu'à la toute fin (partie E), quand plus aucune requête n'arrive sur l'ancien relais.
-
----
-
-## Partie D — Retour arrière (si quelque chose ne va pas)
-
-Tant que Cloudflare n'est pas coupé, revenir est possible :
-
-1. GitHub › variables : supprimez `RELAIS_CIBLE`, `SITE_CIBLE`, `ESPORT_CIBLE` et `SITE_CLOUDFLARE_ARRET` ›
-   relancez **Relais (Cloudflare Worker)**, **Esport (Worker)** et **Site (Cloudflare Pages)**. Cloudflare sert de
-   nouveau **ses** données, telles qu'au moment de la bascule.
-2. Appareils qui ont déjà suivi o2switch : renvoyez-les vers Cloudflare en ajoutant à `~/.appdashboard/relais.env`
-   la ligne `RELAIS_CIBLE=https://applibourse-relais.VOTRE-SOUS-DOMAINE.workers.dev` (et
-   `SITE_CIBLE=https://applibourse-ef0ddb.pages.dev`), puis
-   `touch ~/application-enzo/relais/tmp/restart.txt`. Le relais o2switch transmet et annonce l'ancienne adresse :
-   les appareils reviennent d'eux-mêmes.
-3. Discord : remettez l'ancienne **Interactions Endpoint URL** (`https://applibourse-esport.VOTRE-SOUS-DOMAINE.workers.dev/discord/interactions`).
-4. Données Esport modifiées sur o2switch depuis la bascule : elles ne sont pas sur Cloudflare. Pour les y
-   reporter, exportez-les (`ESPORT_JETON='…' node esport/outils/transfert.mjs exporter --url https://esport.appdashboard.fr`)
-   et demandez de l'aide pour les réimporter (l'import ne se fait que dans une base vide). Dans les premières
-   heures, le plus simple est d'accepter de refaire ces quelques changements.
-
----
-
-## Partie E — Plus tard : couper Cloudflare
-
-Attendez que **tous** les appareils aient suivi (quelques semaines). Pour vérifier : dash.cloudflare.com ›
-**Workers & Pages** › `applibourse-relais` › **Metrics** : plus aucune requête depuis plusieurs jours.
-
-Ensuite seulement (rien de tout cela n'est automatique) :
-
-1. **Workers & Pages** › `applibourse-relais` › **Settings** › **Delete** ; pareil pour `applibourse-esport`.
-2. **Storage & Databases** › **D1** › `applibourse-esport` › **Delete** ; **R2** › `esport-fichiers` › vider puis
-   supprimer ; **KV** › la boîte du relais › **Delete**.
-3. **Workers & Pages** › le projet Pages `applibourse-ef0ddb` › **Settings** › **Delete project**.
-4. Dans GitHub, vous pouvez alors désactiver les workflows Cloudflare (**Actions** › le workflow › **⋯** ›
-   **Disable workflow**).
+- https://appdashboard.fr s'ouvre ; connexion, tuile Esport, une team, un PDF de résumé s'ouvre.
+- **Discord** (si le bot est utilisé) : [Discord Developer Portal](https://discord.com/developers/applications) ›
+  votre app › **General Information** › **Interactions Endpoint URL** =
+  `https://esport.appdashboard.fr/discord/interactions` ; une commande `/prochain` répond.
+- **PC** : `relais/relais-local.json` (dossier de l'app) doit contenir `"relais": "https://relais.appdashboard.fr"`
+  et `"site": "https://appdashboard.fr"`.
 
 ---
 
@@ -484,8 +370,7 @@ redémarrage, le relais crée lui-même ses trois nouvelles tables PostgreSQL (`
 curl -s https://relais.appdashboard.fr/sante -H "Authorization: Bearer $(grep ^JETON= ~/.appdashboard/relais.env | cut -d= -f2)" | grep -o '"version":[0-9]*'
 ```
 
-Attendu : `"version":10` (9 avant la synchro quasi immédiate, partie H). L'ancien relais Cloudflare transmet tout à
-o2switch : rien à y faire non plus.
+Attendu : `"version":10` (9 avant la synchro quasi immédiate, partie H).
 
 **Ce que vous faites, dans cet ordre :**
 
@@ -749,7 +634,7 @@ curl -s https://esport.appdashboard.fr/sante  # "transcriptionServeur":true
 | E-mails en spam | cPanel › **Email Deliverability** : SPF et DKIM « Valide » ([emails.md](emails.md) § 2). |
 | Discord : « interactions endpoint url could not be verified » | `DISCORD_PUBLIC_KEY` et `DISCORD_APPLICATION_ID` dans `esport.env`, app redémarrée, puis réessayez. `curl -s https://esport.appdashboard.fr/sante` doit montrer `"bot":true`. |
 | L'import Esport dit « contient déjà des données » | Il ne fusionne jamais (protection). Si c'était une répétition : demandez de l'aide pour vider le schéma `appdashboard`, puis relancez. |
-| « Clés du serveur NON reprises » | Le Worker n'était pas en lecture seule : étape C1, puis relancez l'import avec `--fichiers-seulement`. |
+| « Clés du serveur NON reprises » | L'ancien serveur n'expose pas ses clés : recopiez `CLE_ESPORT` et `CLE_DISCORD` de son `esport.env` dans le nouveau, puis redémarrez l'app Esport. |
 | Envoi d'une vidéo bloqué dès le premier morceau (413, « Requête refusée ») | Pare-feu de l'hébergeur : `ESPORT_TAILLE_MORCEAU=2M` dans `esport.env`, redémarrez l'app ; sinon cPanel › **ModSecurity** › désactivé pour `esport.appdashboard.fr`. Détails : [docs/esport/videos.md](esport/videos.md). |
 | Transcription : l'app ne propose pas « Serveur (automatique) » | L'installation n'est pas faite ou pas vérifiée : relancez `bash ~/application-enzo/esport/serveur/installer-transcription.sh` (il doit finir par « Transcription serveur prête »), puis **Restart** de l'app Esport. Le modèle de `TRANSCRIPTION_MODELE` doit être celui installé (`cat ~/esport-modeles/pret.json`). |
 | Transcription : « En file d'attente » depuis plus de 10 minutes | La tâche cron Esport (étape A9) tourne-t-elle ? `tail ~/logs/esport-cron.log` puis `tail -n 30 ~/logs/esport-transcription.log`. Lancer à la main pour voir l'erreur : `cd ~/application-enzo && /home/jayo8828/nodevenv/application-enzo/esport/22/bin/node esport/serveur/transcription/travailleur.mjs`. |
@@ -758,7 +643,7 @@ curl -s https://esport.appdashboard.fr/sante  # "transcriptionServeur":true
 | Installation : « glibc trop ancienne » ou erreur au chargement d'ONNX Runtime | Le serveur est trop ancien pour les binaires tout faits : gardez la transcription dans le navigateur (`TRANSCRIPTION_MODE=navigateur`) et signalez-le au support o2switch (ils migrent les comptes vers des serveurs récents). |
 | Installation : « Hugging Face indisponible » | Rien à faire : le script prend l'archive GitHub à la place (plus grosse, environ 200 Mo pour « base »). Si GitHub échoue aussi : réessayez plus tard. |
 | Transcription : « ffmpeg n'a pas pu lire l'enregistrement » | Fichier abîmé ou format exotique : déposez un MP4, M4A, MP3 ou WAV. |
-| « Trop de demandes en peu de temps » pour tout le monde | Les limites de débit se basent sur l'adresse IP vue par le serveur ; pendant la transmission depuis Cloudflare, les appareils pas encore à jour partagent l'adresse de Cloudflare. Ça disparaît quand ils ont suivi. |
+| « Trop de demandes en peu de temps » pour tout le monde | Les limites de débit se basent sur l'adresse IP vue par le serveur (dernière entrée de `X-Forwarded-For` posée par le frontal d'o2switch) : un intermédiaire commun (VPN, réseau d'entreprise) peut faire partager un compteur à plusieurs appareils. Patientez quelques minutes. |
 
 Journaux utiles : `~/logs/esport-deploy.log` (déploiements), `~/logs/esport-cron.log` (tâches planifiées),
 `~/logs/esport-transcription.log` (transcriptions sur le serveur), `~/logs/esport-passenger.log` et
@@ -767,3 +652,36 @@ Journaux utiles : `~/logs/esport-deploy.log` (déploiements), `~/logs/esport-cro
 Pour les curieux : les fichiers concernés sont `esport/serveur/` (serveur Esport, cron, migrations, import,
 `deployer.sh`), `relais/serveur/` (relais et sa boîte PostgreSQL), `esport/adaptateurs/postgres.mjs`,
 `scripts/htaccess-o2switch.mjs`, `.github/workflows/site-o2switch.yml` et `.cpanel.yml`.
+
+---
+
+## Migrer vers un autre serveur
+
+Les outils de migration sont génériques (d'un serveur Node à un autre) : sur le **nouveau** serveur, une fois la
+partie A faite avec le même jeton maître,
+
+```bash
+RELAIS_SOURCE=https://ADRESSE-DE-L-ANCIEN-RELAIS node relais/serveur/importer.mjs
+ESPORT_SOURCE=https://ADRESSE-DE-L-ANCIEN-ESPORT node esport/serveur/importer.mjs
+```
+
+Le premier copie toute la boîte du relais (`GET /admin/boite`, rejouable, rien n'est effacé) ; le second copie la
+base Esport dans une base **vide**, vérifie le nombre de lignes de chaque table, puis les fichiers
+(`--fichiers-seulement` pour reprendre après une coupure). Les clés `CLE_ESPORT` et `CLE_DISCORD` se recopient à la
+main depuis l'ancien `esport.env`. Le coffre serveur (tables `relais_coffre…`) se copie avec la base PostgreSQL
+(sauvegarde cPanel puis restauration). Export JSON hors ligne : `esport/outils/transfert.mjs`.
+
+---
+
+## Historique : le déménagement depuis Cloudflare (octobre 2026)
+
+Jusqu'en octobre 2026, le site était sur Cloudflare Pages, le relais et le serveur Esport sur deux Workers Cloudflare
+(boîte KV, base D1, fichiers R2). Le déménagement vers o2switch s'est fait en trois temps : installation ci-dessus,
+import des données par les outils de « Migrer vers un autre serveur », puis bascule (les anciens Workers ont transmis
+quelques semaines les requêtes vers o2switch, le temps que tous les appareils suivent). Le compte Cloudflare et toutes
+ses ressources ont ensuite été supprimés, et le code propre à Cloudflare (Workers, workflows de déploiement, mode
+transmission) a été retiré du dépôt.
+
+Un appareil resté sur une ancienne adresse (relais `…workers.dev`, site `…pages.dev`) ne se synchronise plus : il
+suffit de se reconnecter sur https://appdashboard.fr avec son identifiant et son mot de passe (sur le PC, mettre à
+jour `relais/relais-local.json`, voir partie B).

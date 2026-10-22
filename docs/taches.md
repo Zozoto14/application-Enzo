@@ -406,19 +406,19 @@ n'est scellé pour un membre retiré : son dépôt est réécrit sans le projet,
 tourne : la nouvelle ne part que chez ceux qui restent ; ce que l'ancien membre scellerait encore avec l'ancienne est
 refusé — elle n'ouvre ni n'authentifie plus rien de nouveau.
 
-**Écritures** (relais version 9, PostgreSQL : plus de quota KV) : rien n'est déposé sans changement (empreintes) ;
-jamais deux dépôts du même objet à moins de 3 s (les rafales partent ensemble, testé ; c'était 30 s avec Cloudflare KV) ;
+**Écritures** (relais version 9, PostgreSQL : plus de quota d'écritures) : rien n'est déposé sans changement (empreintes) ;
+jamais deux dépôts du même objet à moins de 3 s (les rafales partent ensemble, testé ; c'était 30 s avec l'ancien relais) ;
 une frappe n'écrit rien (les textes sont enregistrés à la validation) ; le tour des comptes part ~2 s après la dernière
 écriture, toutes les 30 s et au retour au premier plan. Un dépôt coûte 2 écritures (valeur + index). Usage typique : quelques dizaines d'écritures par jour.
 V3 : un membre ne reçoit un nouveau dépôt que si SA projection a changé (une modification d'un projet privé n'écrit
 rien chez les membres) ; la clé de chaque projet partagé est créée une fois. Mesuré (`v3.test.ts`, relais en
 mémoire) : premier envoi à 3 membres = 3 dépôts ; puis une modification de Léa dans un projet vu par les 3 = 1
-retour + 4 dépôts (principal et les 3 membres) = 5 objets, soit 10 écritures KV ; un tour sans changement : 0.
+retour + 4 dépôts (principal et les 3 membres) = 5 objets, soit 10 écritures ; un tour sans changement : 0.
 Mesuré de bout en bout (`e2e-taches-v3`, relais local, objets `taches` et `compte` comptés) : un commentaire du
-Fondateur avec mention, dans un projet vu par 3 membres = 5 objets de Tâches, soit 10 écritures KV (les autres
+Fondateur avec mention, dans un projet vu par 3 membres = 5 objets de Tâches, soit 10 écritures (les autres
 apps des comptes de test écrivent aussi pendant ce temps, sans lien avec Tâches).
 
-**Relais : inchangé** (`relais/worker.mjs` non modifié en V1, V2 et V3 : pas de redéploiement).
+**Relais : inchangé** (`relais/relais.mjs` non modifié en V1, V2 et V3 : pas de redéploiement).
 
 ## Limites connues
 

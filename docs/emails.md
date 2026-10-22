@@ -176,7 +176,7 @@ boîte), adresses validées (pas de retour à la ligne : pas d'injection d'en-t�
 - Relais : `relais/courriel.mjs` (routes `GET /courriel/etat`, `POST /courriel/envoyer`, `POST /courriel/apercu`,
   `GET /courriel/journal`, jeton maître ; `variables.en` = version anglaise), `relais/courriel-modeles.mjs` (modèles HTML et texte FR/EN, Markdown sûr), transport
   `esport/serveur/courriel-smtp.mjs` (nodemailer) injecté par `relais/serveur/app.mjs` (`env.ENVOYER_COURRIEL`) :
-  le Worker Cloudflare n'en a pas (503 `non-configure`, l'app garde le `mailto`).
+  sans lui (SMTP absent de `relais.env`) : 503 `non-configure`, l'app garde le `mailto`.
 - Langue des comptes : migration `esport/migrations/0019_langue_defaut.sql`, `PUT /comptes/:compte/langue-defaut`
   (Fondateur seul, `esport/noyau/comptes.mjs`), `PUT /moi/langue` (`{ langue: null }` revient à la langue par défaut),
   fiche du compte `src/hub/admin/contacts.ts` (`langue`, `langueEffective`), `src/esport/ui/LangueCompte.tsx`,

@@ -1,8 +1,8 @@
 # Esport : planning, disponibilités et présence (phase 2)
 
 Trois modules de team, activables séparément : **Planning** (`planning`), **Disponibilités** (`availability`)
-et **Présence** (`attendance`). Rien à déployer à la main : relancer le workflow « Esport (Worker) » applique
-la migration `esport/migrations/0002_planning.sql` et le cron existant (toutes les 15 minutes) envoie les
+et **Présence** (`attendance`). Rien à déployer à la main : le déploiement automatique du serveur applique
+la migration `esport/migrations/0002_planning.sql` et la tâche planifiée (toutes les 5 minutes) envoie les
 rappels.
 
 ## Ce que voit chacun
@@ -88,7 +88,7 @@ Code : `esport/noyau/planning/convocations.mjs` (règles pures, serveur) et `src
   - **Toute la série** : modifier (changer l'horaire ou la règle efface les exceptions) ou supprimer
     (suppression logique : présences et journal restent).
 - **iCal** : « Exporter (.ics) » (fichier) ou « Créer un lien d'abonnement » : URL privée
-  `https://applibourse-esport…/ical/ical_….ics` (jeton aléatoire, seule son empreinte est stockée, montré
+  `https://esport.appdashboard.fr/ical/ical_….ics` (jeton aléatoire, seule son empreinte est stockée, montré
   une fois). Révocable dans la même carte ; le lien cesse aussi de marcher si son titulaire quitte la team,
   perd la permission ou si le module est désactivé. Sur iPhone : remplacer `https:` par `webcal:`.
 
@@ -284,7 +284,7 @@ Ajouter `?format=json` aux exports pour recevoir `{ nom, type, contenu }` (utili
 
 - Cœur portable : `esport/noyau/planning/` — `temps.mjs` (fuseaux), `recurrence.mjs`, `convocations.mjs`, `dispos.mjs`
   (heatmap), `presence.mjs` (statistiques, définitions, séries, CSV), `ical.mjs`, `service.mjs`, `routes.mjs`, `bus.mjs`,
-  `rappels.mjs` (cron). SQL standard (SQLite/D1, Postgres).
+  `rappels.mjs` (cron). SQL standard (SQLite, PostgreSQL).
 - App : `src/esport/planning/` (client, libellés) et `src/esport/ui/planning/` ; écrans branchés par
   `src/esport/ui/modules.tsx`.
 - Graines : `esport/outils/graines-planning.mjs` (`npm run esport:local`).

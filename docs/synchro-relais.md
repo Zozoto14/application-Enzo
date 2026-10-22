@@ -6,10 +6,10 @@ d'« appareils liés », plus de code de liaison : chaque appareil parle au serv
 
 ## Le modèle, en bref
 
-| Avant (Cloudflare KV, ≤ v8) | Maintenant (o2switch, v9) |
+| Avant (≤ v8, boîte à quota d'écritures) | Maintenant (o2switch, v9) |
 | --- | --- |
 | Chaque appareil du Fondateur déposait SON état dans `/boite/<appareil>` ; les autres lisaient tous les dépôts | Un **coffre serveur par compte** (`/v9/coffre/<compte>`) : un enregistrement chiffré par donnée, avec un numéro de révision |
-| Synchro limitée par le quota KV (≈ 1 000 écritures/jour) : 30 s mini entre deux dépôts, tour toutes les 2 min, journal jamais synchronisé | Plus de quota. Version 10 : envoi ~150 ms après une modification (une requête), les autres appareils prévenus par le serveur (mode choisi par l'hébergeur, `SYNCHRO_TEMPS_REEL` : sondage de 15 s par défaut, attente longue, ou flux SSE), une seule écoute par navigateur ; tour complet en filet toutes les 3 min |
+| Synchro limitée par le quota d'écritures de l'ancien hébergeur (≈ 1 000 par jour) : 30 s mini entre deux dépôts, tour toutes les 2 min, journal jamais synchronisé | Plus de quota. Version 10 : envoi ~150 ms après une modification (une requête), les autres appareils prévenus par le serveur (mode choisi par l'hébergeur, `SYNCHRO_TEMPS_REEL` : sondage de 15 s par défaut, attente longue, ou flux SSE), une seule écoute par navigateur ; tour complet en filet toutes les 3 min |
 | Seuls le portefeuille, le thème, les tuiles et les sources Tsuzuku voyageaient | En plus : pages et boîte du **journal automatique**, notes et équipe de Claude Office, espace perso et pilote de semaine des Tâches, carnet d'un gestionnaire, réglages de notifications et de cours, documents légaux acceptés, **tout Tsuzuku** titre par titre (`src/sync/relais/entitesApps.ts`, `entitesTsuzukuDonnees.ts`) |
 | Amis : leur base entière en un fichier (`p/<id>/boite/portefeuille`), « le plus récent gagne » au niveau du fichier | Amis : le même coffre serveur que le Fondateur (enregistrement par enregistrement), le fichier reste publié pour le séquestre |
 | Nouvel appareil du Fondateur : code de liaison `AB1.…` (portant le jeton maître) | Identifiant + mot de passe (`docs/connexion-amis.md`), le serveur rend un jeton de **session** ; le jeton maître ne quitte plus le serveur |
@@ -85,8 +85,8 @@ local) : médiane **3,8 ms** en mémoire, **10,8 ms** avec PostgreSQL (`relais/a
 
 **Compatibilité.** `/v10/coffre/…` = les routes v9 + les avis ; `/v9/coffre/…` reste (appareils v9 pendant le
 déploiement : le cron met le serveur à jour avant les apps). Un appareil v10 face à un relais v9 (pas de `coffre-v10`
-dans `/sante`) garde les routes v9 et le tour de 30 s. Derrière l'ancien relais Cloudflare (mode transmission), le flux
-passe s'il n'est pas retenu, sinon l'attente longue prend le relais. Un `PUT`/`DELETE` refusé ou abîmé par un
+dans `/sante`) garde les routes v9 et le tour de 30 s. Derrière un intermédiaire qui retient le flux SSE,
+l'attente longue prend le relais. Un `PUT`/`DELETE` refusé ou abîmé par un
 intermédiaire (400, 405, 411, 501) est réessayé une fois en `POST` + `X-Methode`, traité par le relais comme l'original.
 
 Tests : `relais/avis.test.mjs` (flux, attente, modes, limites par compte et par IP, réponse immédiate sans connexion
@@ -238,8 +238,7 @@ canal), réglages du hub (tuiles, disposition) et thème unique.
 
 ## Compatibilité et déploiement
 
-- `/sante` annonce `version: 10`, et `coffre-serveur`, `coffre-v10`, `avis` **seulement si le serveur a son magasin PostgreSQL** (le Worker
-  Cloudflare, qui transmet tout à o2switch, ne l'annonce pas lui-même). Un appareil à jour face à un relais qui ne
+- `/sante` annonce `version: 10`, et `coffre-serveur`, `coffre-v10`, `avis` **seulement si le serveur a son magasin PostgreSQL**. Un appareil à jour face à un relais qui ne
   l'annonce pas garde l'ancienne synchronisation (ci-dessous) : rien ne casse pendant le déploiement.
 - Un appareil pas encore à jour continue de déposer dans `/boite/<appareil>` : ses changements sont fusionnés par les
   appareils à jour. L'inverse n'est pas vrai : **mettez à jour tous les appareils**.
@@ -276,7 +275,7 @@ site ou le téléphone du même compte. Elles partent maintenant ~3 s après cha
 `PARAMETRES_A_SYNCHRONISER`), dans la charge scellée (`cleDerivee('synchro')`) : le relais ne voit ni adresse de source
 ni clé d'API en clair. La page Sources affiche une pastille « Synchronisé / En attente » (`etatPastilleTsuzuku`).
 Limite : un Fondateur autre que le compte historique synchronise sa base comme un fichier entier (fichiers d'un ami,
-dernier gagnant au niveau du fichier) ; aucun changement du relais n'est nécessaire (rien de neuf côté Worker : tout
+dernier gagnant au niveau du fichier) ; aucun changement du relais n'est nécessaire (rien de neuf côté relais : tout
 voyage dans `/boite/<appareil>`, réservé au jeton maître, et `tsuzuku-sources` reste interdit en écriture aux jetons de
 profil).
 
@@ -348,7 +347,7 @@ reçues, en attente de déverrouillage », « N éléments prêts à envoyer »,
 (`applibourse.synchro.demarrage`) est **global à l'appareil** et ne contient que deux compteurs et une date : le même
 texte s'affiche quel que soit le prénom saisi (vrai compte ou leurre), il ne dit rien d'un compte.
 
-**Scénario de bout en bout** : `scripts/e2e-demarrage.mjs` (faux relais exécutant `relais/worker.mjs`, deux
+**Scénario de bout en bout** : `scripts/e2e-demarrage.mjs` (faux relais exécutant `relais/relais.mjs`, deux
 appareils), captures dans `docs/captures-demarrage/` : B change le thème et crée un compte pendant que A est fermé ;
 A démarre verrouillé (« 1 mise à jour reçue, en attente de déverrouillage ») ; A se déverrouille relais coupé : Ivoire
 dès la première image du hub, compte présent ; A change le thème relais coupé, redémarre (« 1 élément prêt à
@@ -373,7 +372,7 @@ les comptes d'amis ne synchronisent pas par `/boite` et ne sont pas concernés.
    dès que le dernier est à jour. Un ancien appareil qui recevrait quand même un genre récent l'ignore (au pire il
    garde une date inutile pour cette clé).
 
-## Budget d'écritures Cloudflare KV (historique : levé depuis PostgreSQL, voir plus haut)
+## Budget d'écritures de l'ancienne boîte (historique : levé depuis PostgreSQL, voir plus haut)
 
 - Un dépôt (`PUT /boite/<appareil>`) coûte **2 écritures** (dépôt + index). Le coffre (`PUT /boite/coffre`) : 1 écriture,
   seulement quand il change (changement de mot de passe).
@@ -390,12 +389,11 @@ les comptes d'amis ne synchronisent pas par `/boite` et ne sont pas concernés.
 
 ## Course sur l'index du relais (corrigée)
 
-Chaque dépôt porte désormais ses métadonnées KV (`{ date, taille }`) et l'index (`index` pour les appareils,
-`p:<id>:~index` pour un espace de compte) est **réparé à partir de `KV.list`** au plus une fois par heure (six heures pour
-un espace) : une entrée perdue par deux dépôts simultanés revient seule. On ne liste pas à chaque tour : l'offre gratuite
-ne compte que **1 000 listes par jour** (contre 100 000 lectures). Un dépôt coûte toujours 2 écritures (valeur + index).
+Chaque dépôt porte désormais ses métadonnées (`{ date, taille }`) et l'index (`index` pour les appareils,
+`p:<id>:~index` pour un espace de compte) est **réparé à partir de la liste de la boîte** au plus une fois par heure (six heures pour
+un espace) : une entrée perdue par deux dépôts simultanés revient seule. Un dépôt coûte toujours 2 écritures (valeur + index).
 La réparation côté client (redépôt si absent de l'index, une fois par heure) reste en place pour les relais pas encore
-redéployés. Tests : `relais/worker.test.mjs` (« course sur l'index… »).
+redéployés. Tests : `relais/relais.test.mjs` (« course sur l'index… »).
 
 ## Portées du relais (version 2)
 
@@ -412,26 +410,23 @@ redéployés. Tests : `relais/worker.test.mjs` (« course sur l'index… »).
   l'objet existe ou non** (pas de 404 révélateur).
 - Rétrocompatible : les routes `/sante`, `/boite`, `/boite/<appareil>` sont inchangées pour le jeton maître ; les anciens
   appareils continuent de fonctionner sans mise à jour.
-- **Redéploiement nécessaire** du relais pour les espaces (`npm run relais:deployer`, qui reprend boîte et jeton).
 - **Rangs (version 3 du relais)** : `GET`/`PUT /rangs` (jeton maître seulement) lit/publie
-  `{ delegations: { <titulaire>: [<ids inférieurs>] } }` (clé KV `rangs`, validée : identifiants, jamais
+  `{ delegations: { <titulaire>: [<ids inférieurs>] } }` (clé `rangs` de la boîte, validée : identifiants, jamais
   `principal` ni le titulaire lui-même). Le relais la relit à chaque accès croisé (1 lecture). Le compte
   historique la republie quand elle change (`delegationsDe`, `bureau/synchroComptes.ts`) — rien tant
   qu'aucun titulaire n'existe (un relais pas encore redéployé ne produit donc aucune erreur). Une
-  rétrogradation retire la délégation au tour suivant : l'accès cesse aussitôt (403). Redéployer le
-  relais pour les rangs.
+  rétrogradation retire la délégation au tour suivant : l'accès cesse aussitôt (403).
 
 ## Lecture des sources de Tsuzuku pour le site (version 5 du relais)
 
 - `POST /tsuzuku/requete` (`relais/tsuzuku.mjs`) : **jeton maître seulement** (compte Fondateur historique,
   celui du code de liaison du PC). Tout jeton de profil — Ami, Gestionnaire, Administrateur, autre Fondateur —
   reçoit 403 : le relais ne connaît pas d'autre liste de Fondateurs (`/rangs` ne porte que des délégations).
-- CORS **restreint** aux origines `ORIGINES_SITE` (variable non secrète de `relais/wrangler.toml`, la même
-  adresse que `src/config/site.json`) ; préliminaire `OPTIONS` propre à cette route ; les autres routes gardent
-  leur CORS (`*`) et leur comportement. Rien n'est écrit dans KV (débit compté en mémoire du Worker).
+- CORS **restreint** aux origines `ORIGINES_SITE` (variable non secrète de `relais.env`, par défaut
+  https://appdashboard.fr et www, la même adresse que `src/config/site.json`) ; préliminaire `OPTIONS` propre à cette route ; les autres routes gardent
+  leur CORS (`*`) et leur comportement. Rien n'est écrit dans la boîte (débit compté en mémoire du serveur).
 - Règles de sécurité, limites et erreurs : `src/tsuzuku/README.md` (« Site web : lecture par le relais »).
-- Redéploiement nécessaire (sans PC : `docs/relais-deploiement-github.md` ; sur le PC : `npm run relais:deployer`).
-  Tant qu'il n'est pas fait, la route répond 404 et le site affiche « mettez à jour le relais ».
+- Un relais d'avant la version 5 répond 404 : le site affiche « mettez à jour le relais ».
 
 **Passerelle Yahoo / médias (`/yahoo/*`, `/medias/*`) : inchangée.** Tout jeton valable (maître ou de profil)
 peut s'en servir, et c'est voulu : un ami ouvre son portefeuille (cours) et les actualités sur le site, qui
@@ -447,7 +442,7 @@ clé tirée du secret du lien, usage unique, expiration, une seule invitation ac
 `PUT/DELETE /acces/<h>` (le compte, pour l'identifiant que le Fondateur lui a attribué) et `GET /acces/<h>`,
 `POST /acces/<h>/ouvrir` **sans jeton** (preuve tirée du mot de passe, délai progressif par identifiant et par adresse
 IP), `PUT/DELETE/GET /revocations/<id>` (jeton maître : le jeton de profil est refusé partout, 403 `revoque`).
-Clés KV : `inv:<id>`, `inv-profil:<compte>`, `acces:<h>`, `acces-proprio:<h>`, `limite:acces:<h>`, `revoque:<compte>`.
+Clés de la boîte : `inv:<id>`, `inv-profil:<compte>`, `acces:<h>`, `acces-proprio:<h>`, `limite:acces:<h>`, `revoque:<compte>`.
 Le relais n'y voit ni mot de passe, ni clé, ni jeton d'ami en clair. Les routes d'avant sont inchangées ; un relais pas
 encore redéployé fait passer les invitations en mode « lien » (contenu dans le lien) et le site l'annonce.
 
@@ -461,7 +456,7 @@ encore redéployé fait passer les invitations en mode « lien » (contenu dans 
 | `/p/principal/boite/admin` | données d'administration (réglages, notes, journal, connexions vues, robustesse, abonnements, carnet Prospects — voir `docs/prospects.md`) | enveloppe scellée par `cleDerivee('synchro')` | jeton maître, et seul l'administrateur l'ouvre |
 | `/p/<id>/boite/annuaire` | **projection** de l'ami : son entrée, le sel, la politique des apps, la clé PUBLIQUE de séquestre | opaque | l'ami (son code) et l'administrateur |
 | `/p/<id>/boite/annuaire` (titulaire) | **projection par rang** : son entrée (sa paire et son bloc privé, scellés par SA clé) et les comptes de rang STRICTEMENT inférieur (empreinte, prénom scellé, accès, SON séquestre). Rien d'un Fondateur ni d'un autre Administrateur, ni registre, ni clé commune, ni bloc privé / empreinte / clé privée du compte historique (testé) | opaque | le titulaire (son code) et le compte historique |
-| `/rangs` (clé KV) | délégations des titulaires (identifiants seulement) | aucun secret | jeton maître |
+| `/rangs` (clé de la boîte) | délégations des titulaires (identifiants seulement) | aucun secret | jeton maître |
 | `/p/<id>/boite/coffre`, `…/portefeuille` | fichiers de l'ami tels que sur disque | coffre : Argon2id ; portefeuille : clé maîtresse de l'ami | l'ami et l'administrateur (qui ne peut pas les ouvrir) |
 | `/p/<id>/boite/compte` | ce que l'ami renvoie : suivi de connexion (scellé pour l'administrateur), dépôt de séquestre (scellé), invitation acceptée ; pour un titulaire, aussi sa paire et son bloc privé, SES séquestres (conversions, codes, révocations), ses modifications d'accès et son journal (scellé pour le compte historique) | scellés | le titulaire (ou l'ami) et le compte historique |
 | `/p/<id>/boite/tsuzuku-cle` | clé PUBLIQUE X25519 de réception des sources Tsuzuku (la privée reste dans la base du compte) | aucun secret | le compte (qui l'écrit) et le compte historique |
@@ -475,7 +470,7 @@ L'annuaire complet n'est **jamais** déposé dans un espace lisible par un ami.
 
 ## Qui peut écrire quoi
 
-Règle du relais (`OBJETS_DU_COMPTE`, `relais/worker.mjs`, même liste dans `src/sync/relais/espaces.ts`) : dans son
+Règle du relais (`OBJETS_DU_COMPTE`, `relais/relais.mjs`, même liste dans `src/sync/relais/espaces.ts`) : dans son
 espace, un jeton de profil n'écrit (`PUT`) ni n'efface (`DELETE`) **que** `coffre`, `portefeuille`, `compte` et
 `tsuzuku-cle`. Tout autre nom — objets publiés par l'administrateur, et tout nom inconnu ou futur — répond **403**
 pour lui ; seul le jeton maître l'écrit. La lecture (`GET`, liste) de son espace reste ouverte au compte.
@@ -496,7 +491,7 @@ pour lui ; seul le jeton maître l'écrit. La lecture (`GET`, liste) de son espa
 
 **Estampille d'auteur.** Chaque dépôt dans un espace est estampillé PAR LE RELAIS (`auteur` : `maitre`, `compte`
 ou `delegue`, selon le jeton présenté ; une valeur envoyée par l'appareil est remplacée), dans l'enveloppe relue et
-dans la liste de l'espace (métadonnée KV). Il n'existe pas de primitive de signature de l'administrateur pour ces
+dans la liste de l'espace (métadonnée de la boîte). Il n'existe pas de primitive de signature de l'administrateur pour ces
 objets (la clé ed25519 existante ne signe que les mises à jour ; la clé de séquestre est une clé de chiffrement
 X25519, qu'un ami ne peut pas vérifier) : l'estampille du relais en tient lieu.
 
@@ -512,8 +507,8 @@ d'abonnement ou des sources partagées estampillées par un autre que `maitre` s
 précédente reste). Sans estampille (relais pas encore redéployé, ou dépôt d'avant), l'objet est lu comme avant.
 
 **Limites.**
-- Tant que le relais n'est pas redéployé (`npm run relais:deployer`), un ami peut encore écrire ces objets et
-  aucune estampille n'existe : c'est le redéploiement qui ferme la faille.
+- Sur un relais d'avant cette version, un ami pouvait encore écrire ces objets et aucune estampille n'existait :
+  c'est la mise à jour du relais qui a fermé la faille.
 - L'estampille repose sur le relais : un relais compromis (ou le détenteur du jeton maître) peut tout écrire.
 - Un ami qui modifie SON appareil (stockage du navigateur, code) peut changer SON affichage (se voir « À jour »,
   masquer le rappel) : cela ne change **rien** au statut réel, tenu dans la base chiffrée de l'administrateur, ni
@@ -578,6 +573,6 @@ précédente reste). Sans estampille (relais pas encore redéployé, ou dépôt 
    déverrouillage du site, pour tous ; après un échec, un navigateur dont le coffre n'est pas celui du compte relié
    propose « Ce navigateur contient un autre coffre : reprendre celui de ton compte ? ».
 
-Tests : `relais/worker.test.mjs`, `bureau/synchroComptes.test.ts`, `bureau/rangsRelais.test.ts`,
+Tests : `relais/relais.test.mjs`, `bureau/synchroComptes.test.ts`, `bureau/rangsRelais.test.ts`,
 `bureau/AccueilSite.test.tsx`, `src/sync/relais/fusionLww.test.ts` ; bout en bout : `scripts/e2e-site-connexion.mjs`
 (captures dans `docs/captures-connexion/`) et `scripts/e2e-rangs.mjs` (rangs : `docs/captures-rangs/`).

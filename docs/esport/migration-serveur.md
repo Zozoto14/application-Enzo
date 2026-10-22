@@ -1,18 +1,16 @@
-# Esport : passer de Cloudflare à un vrai serveur
+# Esport : architecture du serveur et changement d'hébergeur
 
-> **Hébergement o2switch (cPanel)** : c'est fait. Serveur Node + PostgreSQL prêt à l'emploi (`esport/serveur/`,
-> `esport/adaptateurs/postgres.mjs`) et mode d'emploi pas à pas : **[docs/o2switch.md](../o2switch.md)**. Ce document
-> reste la description générale (autre hébergeur, serveur à soi).
+> **Hébergement actuel : o2switch** (https://esport.appdashboard.fr, Node + PostgreSQL + disque). Mode d'emploi pas
+> à pas : **[docs/o2switch.md](../o2switch.md)**. Ce document décrit l'architecture et comment changer un jour
+> d'hébergeur (autre mutualisé, serveur à soi).
 
-Le serveur Esport a été écrit pour déménager sans réécriture. Ce document dit ce qui change et comment faire.
+## Le cœur portable
 
-## Ce qui ne bouge pas
-
-Tout le cœur est dans `esport/noyau/` et ne dépend pas de Cloudflare :
+Tout le cœur est dans `esport/noyau/` et ne dépend d'aucun hébergeur :
 
 | Fichier | Rôle |
 | --- | --- |
-| `api.mjs` | Routes HTTP et middleware (Request/Response standard : Node 22, Deno, Bun, Workers) |
+| `api.mjs` | Routes HTTP et middleware (Request/Response standard : Node 22, Deno, Bun) |
 | `service.mjs` | Logique métier et contrôles d'accès (appartenance → module → permission, anti-escalade…) |
 | `permissions.mjs`, `catalogue.json` | Modules, permissions, rôles système, presets (fonctions pures) |
 | `session.mjs` | Session courte signée (HMAC-SHA256, clé `CLE_ESPORT`) |
@@ -21,66 +19,42 @@ Tout le cœur est dans `esport/noyau/` et ne dépend pas de Cloudflare :
 | `transfert.mjs` | Export / import JSON de toute la base |
 | `migrations.mjs` + `esport/migrations/*.sql` | Migrations versionnées, SQL standard |
 
-Le SQL est standard (compatible SQLite et Postgres) : identifiants UUID en texte, dates ISO 8601 en texte,
-booléens en entiers 0/1, JSON en texte, `ON CONFLICT … DO NOTHING / DO UPDATE` (même syntaxe dans les deux),
-aucune fonction propre à D1. Un test (`esport/test/outils.test.mjs`) refuse les tournures propres à SQLite.
+Le SQL est standard (compatible SQLite et PostgreSQL) : identifiants UUID en texte, dates ISO 8601 en texte,
+booléens en entiers 0/1, JSON en texte, `ON CONFLICT … DO NOTHING / DO UPDATE`. Un test
+(`esport/test/outils.test.mjs`) refuse les tournures propres à SQLite.
 
-## Ce qui change : trois branchements
+## Trois branchements
 
-Le Worker (`esport/worker.mjs`) ne fait que brancher le runtime sur le cœur. Le serveur local
-(`esport/outils/serveur-local.mjs`) montre la même chose sous Node : c'est la base du futur serveur.
+Le serveur (`esport/serveur/app.mjs`) ne fait que brancher le cœur sur l'hébergement :
 
 1. **Base de données** (`base`) : interface `tous`, `premier`, `executer`, `lot` (atomique), `script`.
-   - Aujourd'hui : `adaptateurs/d1.mjs` (D1) ; en local et dans les tests : `adaptateurs/sqlite.mjs` (fichier
-     SQLite, module intégré `node:sqlite`).
-   - Postgres : écrire `adaptateurs/postgres.mjs` sur le même modèle (paquet `pg`) : convertir les `?` en
-     `$1, $2…`, `lot` dans une transaction (`BEGIN` / `COMMIT`), `script` pour les migrations. Rien d'autre.
-2. **Fichiers** (`stockage`) : interface `deposer`, `lire`, `supprimer` (`adaptateurs/stockage.mjs`).
-   Aujourd'hui R2 ; sur un serveur : `stockageDisque(dossier)` (déjà écrit, utilisé par le serveur local) ou un
-   stockage S3 (même interface).
-3. **Vérification des jetons** : par l'adresse publique du relais (`verificateurRelais({ adresse })`) au lieu
-   de la liaison de service. Le relais peut rester sur Cloudflare.
+   PostgreSQL en production (`adaptateurs/postgres.mjs`), SQLite pour les tests et le serveur local
+   (`adaptateurs/sqlite.mjs`, module intégré `node:sqlite`).
+2. **Fichiers** (`stockage`) : interface de `adaptateurs/stockage.mjs` (dépôt, lecture, envoi par morceaux,
+   lecture par plages). Disque en production (`stockageDisque`), mémoire pour les tests ; un stockage S3 pourrait
+   suivre la même interface.
+3. **Vérification des jetons** : par l'adresse publique du relais (`RELAIS_URL`, `verificateurRelais({ adresse })`).
 
-Le cron (toutes les 15 minutes) devient une tâche planifiée (systemd timer, cron) qui appelle
-`rappelsEcheances()` de `objectifs.mjs` puis `distribuer()` de `evenements.mjs` (le serveur local le fait déjà).
+Les tâches planifiées (`esport/noyau/cron.mjs`) sont lancées par `esport/serveur/cron.mjs`, toutes les 5 minutes.
 
-## Déménager, pas à pas
+## Changer d'hébergeur, pas à pas
 
-1. **Exporter** la base Cloudflare (jeton maître du Fondateur dans une variable, jamais en argument) :
-
-   ```bash
-   ESPORT_JETON='…jeton maître…' node esport/outils/transfert.mjs exporter \
-     --url https://applibourse-esport.<vous>.workers.dev --sortie esport-export.json
-   ```
-
-   (Variante sans l'API : `npx wrangler d1 export applibourse-esport --remote --output esport.sql`.)
-2. **Préparer le serveur** : Node 22 (ou plus), le dépôt cloné, une clé `ESPORT_CLE` longue et aléatoire (secret
-   du serveur, jamais dans le dépôt).
-3. **Importer** dans la base neuve (les migrations sont appliquées d'abord, l'import refuse une base non vide) :
+1. Installer le nouveau serveur comme dans [docs/o2switch.md](../o2switch.md) partie A (Node 22, PostgreSQL, les
+   deux fichiers `.env`, avec le **même** jeton maître et les **mêmes** `CLE_ESPORT` / `CLE_DISCORD`).
+2. Sur le nouveau serveur, tirer les données de l'ancien (base vide exigée, nombres de lignes vérifiés, fichiers
+   copiés ; `--fichiers-seulement` pour reprendre) :
 
    ```bash
-   node esport/outils/transfert.mjs importer --sqlite /srv/esport/esport.db --entree esport-export.json
+   ESPORT_SOURCE=https://ADRESSE-DE-L-ANCIEN-ESPORT node esport/serveur/importer.mjs
    ```
 
-   Pour Postgres : même commande avec l'adaptateur Postgres (même `importerBase`).
-4. **Démarrer** le serveur (derrière un proxy HTTPS : Caddy, Nginx…) :
-
-   ```bash
-   ESPORT_CLE='…' node esport/outils/serveur-local.mjs --port 8790 --base /srv/esport/esport.db \
-     --relais https://applibourse-relais.<vous>.workers.dev
-   ```
-
-   (Pour la production, gardez ce fichier comme modèle et ajoutez journalisation et redémarrage automatique.)
-5. **Pointer l'app** vers le nouveau serveur : variable GitHub `ESPORT_URL` = adresse HTTPS du serveur, puis
-   workflow « Site (Cloudflare Pages) » (fichier `esport.json`). Les apps PC et iPhone lisent l'adresse
-   déduite du relais : publiez une version qui la lit aussi depuis la configuration si besoin.
-6. **Fichiers** (PDF des résumés) : copier le bucket R2 `esport-fichiers` vers le disque ou S3 (`rclone` sait lire
-   R2) en gardant les mêmes clés (`teams/<team>/resumes/<uuid>.pdf`), puis brancher l'adaptateur correspondant
-   (`stockageDisque` : le serveur local range les fichiers dans `<base>.fichiers/`). L'export JSON de la base ne
-   contient pas les fichiers, seulement leurs clés.
-7. Vérifier (`/sante`, connexion, une team), puis arrêter le Worker Cloudflare.
+   Variante hors ligne : `ESPORT_JETON='…' node esport/outils/transfert.mjs exporter --url https://esport.appdashboard.fr --sortie esport-export.json`,
+   puis `importer.mjs --entree esport-export.json` (les fichiers se copient alors à la main, mêmes clés).
+3. Pointer les adresses : le site publie `esport.json` (workflow « Site (o2switch) », variable GitHub facultative
+   `O2SWITCH_ESPORT_URL`) ; les apps déduisent aussi l'adresse du relais (`relais.<domaine>` → `esport.<domaine>`).
+4. Vérifier (`/sante`, connexion, une team, un PDF), puis éteindre l'ancien serveur.
 
 ## Sauvegardes
 
-- Base : l'export JSON ci-dessus (à planifier), ou la sauvegarde de la base (fichier SQLite / `pg_dump`).
-- D1 garde aussi un historique de 30 jours (« Time Travel ») tant que vous êtes sur Cloudflare.
+- Base : sauvegardes cPanel / JetBackup (PostgreSQL), ou `pg_dump` ; export JSON à la demande (`transfert.mjs`).
+- Fichiers : le dossier `FICHIERS_DIR` (compris dans les sauvegardes cPanel).

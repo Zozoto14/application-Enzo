@@ -34,7 +34,7 @@ L'assigné fait toujours avancer **sa** tâche (statut), même avec la seule lec
 ## Notifications
 
 - **Assignation** (`task.assigned`) : l'assigné est prévenu, sauf s'il s'est assigné lui-même.
-- **Échéance** (`task.due_soon`) : le cron du Worker (toutes les 15 minutes) prévient une fois l'assigné d'une tâche
+- **Échéance** (`task.due_soon`) : la tâche planifiée du serveur (toutes les 5 minutes) prévient une fois l'assigné d'une tâche
   non faite dont l'échéance est demain, aujourd'hui ou passée. Changer l'échéance ou l'assigné relance le rappel.
   En local, `serveur-local.mjs` fait de même toutes les 15 minutes.
 

@@ -84,7 +84,7 @@ Une note est une **donnée personnelle du joueur concerné** (et, pour son auteu
 ## Code et tests
 
 - Serveur : `esport/noyau/suivi/service.mjs` (service et routes), migration `0013_presence_notes.sql`, SQL compatible
-  SQLite / D1 et PostgreSQL (pas d'`INSERT OR IGNORE`, booléens 0/1, dates ISO en texte).
+  SQLite et PostgreSQL (pas d'`INSERT OR IGNORE`, booléens 0/1, dates ISO en texte).
 - App : `src/esport/suivi/api.ts`, `src/esport/ui/suivi/SuiviJoueurs.tsx`, `src/esport/ui/MonSuivi.tsx` (accueil du
   joueur). Libellés FR et EN (`src/esport/i18n`).
 - Tests : `esport/test/presence-notes.test.mjs` (permissions, invisibilité pour le joueur et les autres joueurs,

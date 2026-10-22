@@ -53,9 +53,9 @@ gardée dans l'historique du serveur), les réglages tels quels, et la boîte du
 n'effacent jamais les événements de l'autre) : `src/sync/relais/entitesApps.ts`. Notes, humeurs et épingles passent donc
 d'un appareil à l'autre. Tout est chiffré par la clé du compte : le serveur ne lit rien.
 
-### Avant (Cloudflare KV, historique)
+### Avant (ancienne boîte à quota, historique)
 
-La limite du relais était d'environ 1000 écritures KV par jour. Le journal **ne l'appelait jamais** :
+La limite du relais était d'environ 1000 écritures par jour. Le journal **ne l'appelait jamais** :
 
 - une page = au plus **3 écritures locales** (le mois, l'index des mois la première fois, un petit
   résumé), jamais une écriture par événement ;

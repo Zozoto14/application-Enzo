@@ -19,7 +19,7 @@ app ──(jeton du compte)──▶ relais (range la demande) ──(DISCORD_WE
    non relié », la demande restait « en attente » pour toujours, sans erreur visible. Corrigé : l'app utilise
    la liaison du compte (`relaisDuCompte()`).
 2. **Après le déménagement chez o2switch, le webhook manquait sans doute.** L'adresse du webhook était un secret
-   Cloudflare (`wrangler secret put`), qu'on ne peut pas relire ; `DISCORD_WEBHOOK_URL` est « facultatif » dans
+   de l'ancien hébergeur, qu'on ne peut pas relire ; `DISCORD_WEBHOOK_URL` est « facultatif » dans
    `relais.env` : s'il est vide, le relais répondait 503 « support pas configuré » et la demande passait en
    « Erreur ». Maintenant la demande est **toujours enregistrée** et l'Administration le dit (diagnostic en haut de
    Administration › Support), avec un bouton **Renvoyer sur Discord** une fois le webhook posé.
@@ -105,7 +105,7 @@ d'informations techniques, l'adresse du webhook n'apparaît jamais dans une rép
 ## Pour les développeurs
 
 - Relais : `relais/support.mjs` (routes `POST /support`, `GET /support/tickets[?tous=1]`,
-  `POST /support/tickets/:id/{messages,lu,statut,discord}`, `GET /support/etat`), branché dans `relais/worker.mjs`.
+  `POST /support/tickets/:id/{messages,lu,statut,discord}`, `GET /support/etat`), branché dans `relais/relais.mjs`.
 - App : `src/support/` (formulaire, historique local, synchronisation des réponses), `src/hub/PageSupport.tsx`,
   `src/hub/admin/ui/Support.tsx`.
 - Tests : `relais/support.test.mjs` (`npm run relais:tester`, et contre PostgreSQL `npm run relais:tester:pg`),

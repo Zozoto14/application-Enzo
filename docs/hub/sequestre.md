@@ -200,7 +200,7 @@ Code : `src/hub/admin/roles.ts` (règle des rangs, seule source de vérité des 
 `src/hub/admin/actions.ts` (chaque action revérifie acteur ET cible), `src/profils/rangs.ts`
 (séquestre par rang, registre des Fondateurs, promotion/rétrogradation), `bureau/index.tsx`
 (hôte : PC et site). Tests : `src/hub/admin/roles.test.ts`, `src/profils/rangs.test.ts`,
-`bureau/rangsRelais.test.ts`, `relais/worker.test.mjs` ; bout en bout : `scripts/e2e-rangs.mjs`
+`bureau/rangsRelais.test.ts`, `relais/relais.test.mjs` ; bout en bout : `scripts/e2e-rangs.mjs`
 (captures dans `docs/captures-rangs/`).
 
 ### Règle

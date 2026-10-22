@@ -40,7 +40,7 @@ Le champ `jeu` (document, strats, playbook) garde la structure prête pour d'aut
 
 ### CSP
 
-- **Site (Cloudflare Pages, `bureau/public/_headers`) et app PC (Electron)** : aucune Content-Security-Policy
+- **Site (`bureau/public/_headers`, traduit en `.htaccess` chez o2switch) et app PC (Electron)** : aucune Content-Security-Policy
   n'est posée aujourd'hui, donc rien à ouvrir. Le jour où une CSP sera ajoutée, elle devra autoriser au
   minimum `connect-src https://valorant-api.com https://media.valorant-api.com` et
   `img-src https://media.valorant-api.com blob: data:` (rappel en commentaire dans `_headers`).
@@ -73,9 +73,9 @@ Sur l'**app iOS native** (pas de WebView) : la strat s'ouvre en **lecture seule*
   d'une version antérieure est migrée à la lecture). Chaque enregistrement crée une **révision** (historique :
   les 30 dernières). Si quelqu'un a enregistré entre-temps, l'éditeur le dit (« recharger » ou « garder la
   mienne ») : rien n'est écrasé sans le vouloir.
-- **Miniature** : générée à chaque enregistrement (JPEG 320 px de l'étape affichée), stockée dans **R2** via
-  l'interface de stockage (`fichiers`), affichée dans les grilles par un lien signé d'une heure. Choix : R2
-  plutôt qu'une data URL en base, pour garder les listes légères. Sans R2, la strat s'enregistre sans
+- **Miniature** : générée à chaque enregistrement (JPEG 320 px de l'étape affichée), stockée dans le **stockage de
+  fichiers** du serveur (`fichiers`, disque), affichée dans les grilles par un lien signé d'une heure. Choix : un
+  fichier plutôt qu'une data URL en base, pour garder les listes légères. Sans stockage, la strat s'enregistre sans
   miniature.
 - **Exporter en PNG** : l'étape affichée, carte entière, 2000 × 2000.
 - **Dupliquer la strat**.

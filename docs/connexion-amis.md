@@ -49,8 +49,9 @@ l'ouvre avec le code déjà rempli).
 4. Ensuite, partout : « Se connecter », `admin`, mot de passe, code à six chiffres.
 
 Gardé de l'ancien parcours : code lisible, **jeton maître** seulement (un code d'ami est refusé), relais **connu**
-(celui du site via `relais.json`, `https://relais.appdashboard.fr` ou l'ancien `applibourse-relais.<…>.workers.dev` ; le
-relais du site est essayé d'abord avec le même jeton), coffre réellement trouvé. Le code AB1 ne donne que la boîte
+(celui du site via `relais.json` ou `https://relais.appdashboard.fr` ; le relais du site est essayé d'abord avec le
+même jeton ; un code qui porte une ancienne adresse du relais n'est essayé que sur le relais du site, jamais sur le
+serveur inconnu), coffre réellement trouvé. Le code AB1 ne donne que la boîte
 CHIFFRÉE : sans le mot de passe et le code à six chiffres, rien ne s'ouvre.
 
 Retrait automatique : après la date, la carte et la lecture du lien disparaissent. Avant, dès que la connexion par
@@ -258,7 +259,7 @@ jusqu'à sa prochaine ouverture à jour.
 **Amis existants** : rien à faire, leur accès d'avant (identifiant + mot de passe) marche tel quel ; la réponse pour un
 identifiant inconnu est seulement devenue neutre.
 
-### Relais : version 6 (`relais/worker.mjs`, tests `relais/connexion.test.mjs`)
+### Relais : version 6 (`relais/relais.mjs`, tests `relais/connexion.test.mjs`)
 
 | Route | Jeton | Rôle |
 | --- | --- | --- |
@@ -272,16 +273,16 @@ identifiant inconnu est seulement devenue neutre.
 | `POST /acces/<h>/ouvrir` | **aucun** (preuve) | charge scellée, ou 403 `mot-de-passe` |
 | `PUT` / `DELETE` / `GET /revocations/<id>` | maître | révoque (ou rétablit) le jeton de profil du compte : 403 `revoque` partout |
 
-**Anti-force brute** : par identifiant (boîte KV), 5 essais libres puis délai doublé à chaque échec (30 s, 1 min,
+**Anti-force brute** : par identifiant (boîte du relais), 5 essais libres puis délai doublé à chaque échec (30 s, 1 min,
 2 min… jusqu'à 1 h, 429 + `Retry-After`), même en changeant d'adresse IP, levé par le bon mot de passe ; par adresse IP
-(mémoire du Worker, pour ne pas épuiser les écritures KV gratuites), 10 échecs libres puis délai progressif jusqu'à
+(mémoire du serveur), 10 échecs libres puis délai progressif jusqu'à
 15 min, sur les invitations et identifiants inconnus. Une attaque hors ligne reste bornée par Argon2id (coffre et
 accès), comme avant.
 
 `/sante` annonce `version: 6` et `fonctions`. Les routes d'avant ne changent pas.
 
-**Redéploiement** : relancer le workflow GitHub **« Relais (Cloudflare Worker) »** (`docs/relais-deploiement-github.md`)
-ou `npm run relais:deployer` sur le PC. **Tant qu'il n'est pas fait**, tout continue de marcher :
+**Relais d'avant la version 6** (le serveur o2switch se met à jour tout seul, `docs/o2switch.md`) : tout continue de
+marcher :
 
 - l'invitation passe en mode **« lien »** : le contenu voyage dans le lien lui-même ; l'usage unique tient au mot de
   passe temporaire (remplacé à l'acceptation) ; l'expiration est jugée à l'heure du relais (`/heure`) par l'appareil ;
@@ -320,7 +321,7 @@ message « Ce navigateur ne sait pas encore où est ton compte » oriente vers l
   n'est vérifiée que par l'appareil.
 - Le leurre de l'écran prénom subsiste sur les appareils du Fondateur (annuaire complet) ; sur le navigateur d'un ami
   (un seul compte), un prénom inconnu donne un message précis.
-- L'empreinte d'un identifiant n'est pas salée par compte : quelqu'un qui a accès à la boîte KV peut tester des prénoms
+- L'empreinte d'un identifiant n'est pas salée par compte : quelqu'un qui a accès à la boîte du relais peut tester des prénoms
   (comme pour l'annuaire publié, dont le sel est à côté). Il ne peut rien ouvrir sans le mot de passe.
 
 Tests : `src/profils/invitation.test.ts`, `bureau/connexionAmis.test.ts`, `relais/connexion.test.mjs` ; bout en bout :

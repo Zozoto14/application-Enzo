@@ -108,9 +108,9 @@ donc protégée contre la falsification de requêtes côté serveur (`esport/noy
 - 60 aperçus par heure et par compte. Une page muette ou trop lente n'empêche pas de publier (lien
   sans aperçu) ; une adresse interdite, si.
 
-Sur Cloudflare (Worker), le téléchargement passe par `fetch` (sans redirection automatique) : les mêmes
-règles d'adresse s'appliquent, et le réseau de Cloudflare ne joint de toute façon pas les adresses
-privées.
+Sur le serveur Node (o2switch), le téléchargement vérifie chaque adresse IP au moment de la connexion
+(`esport/adaptateurs/apercuNode.mjs`, anti-SSRF), sans redirection automatique : les mêmes règles d'adresse
+s'appliquent.
 
 ## Vos données (RGPD)
 

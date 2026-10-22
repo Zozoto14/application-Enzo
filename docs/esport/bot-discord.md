@@ -17,8 +17,8 @@ Autres aperçus (rendus avec le vrai code du bot) : [rappel H-1](bot/apercus/02-
 [/aide](bot/apercus/07-commande-aide.png), [clic sur Oui](bot/apercus/08-rsvp-confirme.png). Tous :
 [bot/apercus/index.html](bot/apercus/index.html).
 
-Pas de serveur à faire tourner : Discord appelle le serveur Esport (le Worker Cloudflare) quand quelqu'un tape une
-commande ou clique un bouton.
+Pas de programme de plus à faire tourner : Discord appelle le serveur Esport (https://esport.appdashboard.fr) quand
+quelqu'un tape une commande ou clique un bouton.
 
 ---
 
@@ -40,35 +40,30 @@ commande ou clique un bouton.
    - Laissez **Public Bot** comme vous voulez (désactivé : vous seul pouvez l'inviter). Les « Privileged Gateway
      Intents » ne servent pas : laissez-les éteints.
 
-### 3. Poser les valeurs (GitHub)
+### 3. Poser les valeurs (serveur o2switch)
 
-Sur GitHub, dépôt **application-Enzo** › **Settings** › **Secrets and variables** › **Actions** :
+Dans cPanel › **Terminal**, `nano ~/.appdashboard/esport.env`, et remplissez les trois lignes du bot :
 
-1. Onglet **Variables** › **New repository variable** :
-   - `DISCORD_APPLICATION_ID` = l'Application ID ;
-   - `DISCORD_PUBLIC_KEY` = la Public Key.
-2. Onglet **Secrets** › **New repository secret** :
-   - `DISCORD_BOT_TOKEN` = le Bot Token.
-
-Le workflow Esport pose tout seul le jeton sur le serveur. Autre façon (sur un PC, dans le dossier de l'app) :
-
-```
-npx wrangler secret put DISCORD_BOT_TOKEN --config esport/wrangler.toml
+```ini
+DISCORD_APPLICATION_ID=l'Application ID
+DISCORD_PUBLIC_KEY=la Public Key
+DISCORD_BOT_TOKEN=le Bot Token
 ```
 
-(il demande le jeton ; rien n'est écrit dans le dépôt).
+**Ctrl+O**, **Entrée**, **Ctrl+X**, puis redémarrez l'app Esport : `touch ~/application-enzo/esport/tmp/restart.txt`
+(ou **Setup Node.js App** › l'app Esport › **Restart**). Le fichier reste sur le serveur, jamais dans le dépôt.
 
 ### 4. Donner l'adresse des interactions à Discord
 
 Page **General Information** de l'application, champ **Interactions Endpoint URL** :
 
 ```
-https://applibourse-esport.zozoto1404.workers.dev/discord/interactions
+https://esport.appdashboard.fr/discord/interactions
 ```
 
 Puis **Save Changes**. Discord vérifie l'adresse tout de suite : si le message « The specified interactions endpoint
-url could not be verified » apparaît, faites d'abord l'étape 6 (le serveur doit connaître la Public Key), puis
-revenez enregistrer. Le workflow de l'étape 6 essaie aussi de la poser lui-même.
+url could not be verified » apparaît, vérifiez l'étape 3 (le serveur doit connaître la Public Key, app redémarrée),
+puis revenez enregistrer. L'étape 6 peut aussi la poser elle-même.
 
 ### 5. Inviter le bot sur le serveur de la team
 
@@ -83,18 +78,25 @@ Il demande les scopes **bot** et **applications.commands**, et seulement ces per
 **envoyer des messages**, **intégrer des liens**, **mentionner** (pour les rôles qu'on choisit de prévenir). Le bot
 ne mentionne jamais `@everyone` ni `@here`. Choisissez le serveur, **Autoriser**.
 
-### 6. Relancer le workflow Esport
+### 6. Enregistrer les commandes
 
-GitHub › **Actions** › **Esport (Worker)** › **Run workflow** (branche **main**). Cochez **« mettre à jour
-l'avatar, la bannière et le À propos »** la première fois. Le workflow :
+Dans le **Terminal** cPanel (avec **votre** chemin de Node, voir [docs/o2switch.md](../o2switch.md) étape A7) :
 
-- pose l'Application ID et la Public Key sur le serveur Esport, et le jeton du bot ;
+```bash
+cd ~/application-enzo
+set -a; . ~/.appdashboard/esport.env; set +a
+/home/jayo8828/nodevenv/application-enzo/esport/22/bin/node esport/outils/discord-commandes.mjs --identite --adresse https://esport.appdashboard.fr
+```
+
+(`--identite` seulement la première fois.) Le script :
+
 - enregistre les commandes auprès de Discord (elles apparaissent quand on tape `/` dans le serveur, parfois après
   une minute) ;
 - pose l'adresse des interactions (étape 4) ;
-- si la case est cochée : avatar, bannière et description du bot (« Esport HQ »).
+- avec `--identite` : avatar, bannière et description du bot (« Esport HQ »).
 
-À la fin, `…/sante` répond `"bot":true`.
+Le jeton n'est lu que dans l'environnement (jamais en argument, jamais affiché). À la fin,
+`curl -s https://esport.appdashboard.fr/sante` répond `"bot":true`.
 
 ### 7. Lier le serveur à la team : `/esport-lier-serveur`
 
@@ -211,8 +213,8 @@ Quelqu'un qui n'a pas lié son compte reçoit : **« Lie ton compte avec /lier �
 - Les messages d'erreur de l'API restent des codes ; le bot les traduit avec la même table que l'app
   (`esport/noyau/erreurs.json`).
 
-**Après la mise à jour**, relancez le workflow **Esport (Worker)** (étape 6) : il applique la migration `0012` et
-**enregistre les traductions des commandes** auprès de Discord.
+**Après la mise à jour** (la migration `0012` est appliquée par le déploiement automatique), relancez l'étape 6 :
+elle **enregistre les traductions des commandes** auprès de Discord.
 
 ## Identité visuelle
 
@@ -220,14 +222,14 @@ Quelqu'un qui n'a pas lié son compte reçoit : **« Lie ton compte avec /lier �
   /aide pour commencer, /lier pour relier ton compte.* (`docs/esport/bot/identite.json`).
 - Avatar et bannière : `docs/esport/bot/avatar.png` (1024 × 1024) et `banniere.png` (1360 × 480), fabriqués à
   partir des SVG du même dossier (`node esport/outils/discord-identite.mjs`, qui refait aussi les aperçus).
-- Posés par le workflow (case cochée). **À la main** : portail développeur › votre application ›
+- Posés par l'étape 6 (`--identite`). **À la main** : portail développeur › votre application ›
   **General Information** › **App Icon** (avatar.png) et **Description** (le « À propos ») ; menu **Bot** ›
   **Icon** (avatar.png) et **Banner** (banniere.png) › **Save Changes**.
 
 ## Sécurité et données
 
-- **Aucun secret dans le dépôt.** Le jeton du bot est un secret GitHub, posé sur le Worker ; l'Application ID et la
-  Public Key sont publics.
+- **Aucun secret dans le dépôt.** Le jeton du bot est dans `~/.appdashboard/esport.env` sur le serveur ;
+  l'Application ID et la Public Key sont publics.
 - **Chaque appel de Discord est vérifié** : signature Ed25519 avec la Public Key, et horodatage de moins de
   5 minutes. Sinon : refus (401).
 - **Codes de liaison** : 10 minutes, une seule fois ; seule leur empreinte est gardée ; 10 essais au plus par
@@ -244,21 +246,21 @@ Quelqu'un qui n'a pas lié son compte reçoit : **« Lie ton compte avec /lier �
 
 | Constat | Que faire |
 | --- | --- |
-| Les commandes n'apparaissent pas avec `/` | Relancez le workflow Esport (étape 6) ; attendez une minute ; vérifiez que le bot est bien invité avec le scope **applications.commands**. |
-| « L'application n'a pas répondu » | L'adresse des interactions (étape 4) est fausse, ou la Public Key ne correspond pas : vérifiez les variables puis relancez le workflow. |
+| Les commandes n'apparaissent pas avec `/` | Relancez l'étape 6 ; attendez une minute ; vérifiez que le bot est bien invité avec le scope **applications.commands**. |
+| « L'application n'a pas répondu » | L'adresse des interactions (étape 4) est fausse, ou la Public Key ne correspond pas : vérifiez `esport.env`, redémarrez l'app Esport, puis relancez l'étape 6. |
 | « Ce serveur n'est lié à aucune team » | Étape 7. |
 | « Lie ton compte avec /lier » | Étape 8. |
 | Un convoqué n'est pas pingé | Badge « Discord ID manquant » dans Esport › Membres : le Fondateur renseigne son Discord ID (étape 9), ou le joueur fait `/lier`. |
 | Rien n'arrive dans le salon | Le bot doit voir le salon et pouvoir y écrire (permissions du salon) ; regardez **Réglages › Discord › Derniers envois** et le Journal. |
-| « Bot non configuré (DISCORD_BOT_TOKEN) » dans les envois | Le secret `DISCORD_BOT_TOKEN` manque : étape 3, puis relancez le workflow. |
-| Le jeton a fuité | Portail › Bot › **Reset Token**, mettez le nouveau dans le secret GitHub, relancez le workflow. |
+| « Bot non configuré (DISCORD_BOT_TOKEN) » dans les envois | `DISCORD_BOT_TOKEN` manque dans `esport.env` : étape 3. |
+| Le jeton a fuité | Portail › Bot › **Reset Token**, mettez le nouveau dans `esport.env` (et `relais.env` s'il y est), redémarrez les apps. |
 
 ## Pour les développeurs
 
 - Cœur portable : `esport/noyau/discord/bot/` (`signature.mjs` Ed25519, `interactions.mjs` commandes, boutons,
   réponses différées, `liaisons.mjs` codes et routes de l'app, `commandes.mjs` définitions) ;
   `esport/noyau/discord/embeds.mjs` (mise en page, limites de Discord), `occurrence.mjs`, `convoques.mjs`.
-  Le Worker ne fait que brancher `DISCORD_*` (`esport/worker.mjs`).
+  Le serveur ne fait que brancher `DISCORD_*` (`esport/serveur/config.mjs`).
 - **Qui pinger** : une seule fonction, `comptesConvoques()` dans `esport/noyau/discord/convoques.mjs`, branchée sur
   la règle des convocations du planning (`esport/noyau/planning/convocations.mjs`, convocation de la date sinon de la
   série). Le webhook nomme les convoqués et ne fait qu'une mention de rôle ; le bot mentionne chaque convoqué :

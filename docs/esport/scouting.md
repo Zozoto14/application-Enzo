@@ -14,7 +14,7 @@ module (404) → permission (403) ; toute requête filtre sur `team_id` (un adve
 
 ## Contenu d'une fiche
 
-- **Fiche** : nom, logo (adresse `https://…` ; pas de fichier R2 : une adresse suffit et évite un stockage public),
+- **Fiche** : nom, logo (adresse `https://…` ; pas de fichier déposé : une adresse suffit et évite un stockage public),
   notes générales.
 - **Joueurs adverses** : pseudo, Riot ID, rôle, agents joués, notes.
 - **Tendances par map et par side** (attaque, défense, les deux) : notes, compositions habituelles (une par ligne),

@@ -177,8 +177,8 @@ résultat (PDF, notification) est le même que dans le navigateur.
 
 ## Fichiers
 
-- Stockage par l'interface `stockage` (`esport/adaptateurs/stockage.mjs`) : R2 privé `esport-fichiers` sur Cloudflare,
-  dossier sur le disque en local (`<base>.fichiers/`), mémoire dans les tests.
+- Stockage par l'interface `stockage` (`esport/adaptateurs/stockage.mjs`) : dossier privé sur le disque du serveur
+  (`FICHIERS_DIR`, o2switch), dossier sur le disque en local (`<base>.fichiers/`), mémoire dans les tests.
 - Contrôles, dans l'ordre : session → appartenance → module → `write_summary` → stockage présent → type annoncé
   `application/pdf` → taille (20 Mo, annoncée puis réelle) → octets magiques `%PDF-` au tout début. Un faux PDF
   n'écrit rien.
@@ -186,7 +186,7 @@ résultat (PDF, notification) est le même que dans le navigateur.
 - Lecture : `POST /teams/:t/resumes/:id/lien` vérifie les droits et rend un **lien signé** (HMAC avec `CLE_ESPORT`)
   valable **5 minutes**, lié au compte et au fichier : `GET /fichiers/:id?c=&exp=&sig=` (en-têtes `no-store`,
   `nosniff`). Lien falsifié : 403 ; expiré : 410.
-- Sans stockage branché (R2 pas activé), le dépôt de PDF répond 503 « stockage-absent » ; le reste marche.
+- Sans stockage branché (`FICHIERS_DIR` absent), le dépôt de PDF répond 503 « stockage-absent » ; le reste marche.
 
 ## API
 

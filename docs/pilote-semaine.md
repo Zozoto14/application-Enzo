@@ -126,7 +126,7 @@ l'utilisateur, modifiable), l'échéance devient `jour + heure du créneau` (l'�
 l'**historique** de la tâche, qui la note). Les relances, paiements, versements, dividendes, récurrences et épisodes ne
 touchent **rien** (rien n'est écrit dans Prospects, Abonnements ni Portefeuille). C'est **une seule modification** des
 données de Tâches (`etat.maj`) : un seul enregistrement local et donc, si l'appareil est relié, un seul dépôt par la
-synchronisation existante (voir `docs/taches.md`, « Budget d'écritures KV »). Les tâches terminées, supprimées ou
+synchronisation existante (voir `docs/taches.md`, « Écritures »). Les tâches terminées, supprimées ou
 devenues non modifiables depuis la proposition sont ignorées et comptées dans le message. Un membre n'applique que ses
 tâches, dans sa copie, comme n'importe quelle modification de sa part (le Fondateur revérifie tout ce qui revient).
 

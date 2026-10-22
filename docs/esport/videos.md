@@ -139,7 +139,7 @@ Les mêmes routes d'envoi existent sous `/teams/:t/resumes/envois` pour les enre
 
 - Serveur (cœur portable) : `esport/noyau/medias/` (`service.mjs` envois, espace, RGPD ; `formats.mjs` octets magiques
   et atomes MP4 ; `lecture.mjs` plages Range ; `sha256.mjs` SHA-256 incrémental ; `pdf.mjs`, `transcription.mjs`),
-  stockage `esport/adaptateurs/stockage.mjs` (disque, R2, mémoire : écriture par morceaux, lecture par plages en flux),
+  stockage `esport/adaptateurs/stockage.mjs` (disque, mémoire : écriture par morceaux, lecture par plages en flux),
   migration `esport/migrations/0014_videos_transcriptions.sql`.
 - App : `src/esport/medias/` (envoi, SHA-256, choix du fichier), `src/esport/ui/review/LecteurFichier.web.tsx`,
   `src/esport/ui/medias/` (barre d'envoi, espace utilisé, transcription).

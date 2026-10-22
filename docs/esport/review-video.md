@@ -3,7 +3,7 @@
 Module `video_review` : analyser un match ou un scrim posé sur YouTube **ou déposé sur le site** (vidéo envoyée par
 morceaux, lecteur maison : voir [videos.md](videos.md)), avec des repères horodatés, des notes,
 un fil de commentaires par repère, des réactions 👍 / 👎 et des dessins posés sur la vidéo (v2). Rien à
-déployer à la main : relancer le workflow « Esport (Worker) » applique les migrations
+déployer à la main : le déploiement automatique du serveur (o2switch) applique les migrations
 `esport/migrations/0005_review_scouting.sql` et `0010_review_v2.sql`.
 
 ## Ce que voit chacun
@@ -131,7 +131,7 @@ cadre 16:9).
 
 ## CSP et en-têtes
 
-- **Site** (Cloudflare Pages, `bureau/public/_headers`) et **app PC** : aucune CSP n'est posée aujourd'hui, YouTube
+- **Site** (`bureau/public/_headers`, traduit en `.htaccess` chez o2switch) et **app PC** : aucune CSP n'est posée aujourd'hui, YouTube
   fonctionne donc tel quel. Le jour où une CSP sera ajoutée, autoriser au minimum :
   `script-src https://www.youtube.com https://s.ytimg.com` ; `frame-src https://www.youtube.com
   https://www.youtube-nocookie.com` ; `img-src https://i.ytimg.com https://*.ytimg.com` ;
@@ -168,7 +168,7 @@ Notifications in-app : nouvelle review (lecteurs de la review), commentaire sur 
 ## Code et tests
 
 - Cœur portable : `esport/noyau/review/` (`youtube.mjs`, `markdown.mjs`, `dessin.mjs`, `export.mjs`, `service.mjs`, `routes.mjs`,
-  `bus.mjs`). SQL standard (SQLite/D1, Postgres).
+  `bus.mjs`). SQL standard (SQLite, PostgreSQL).
 - App : `src/esport/review/` (client, libellés, Markdown, `formatage.ts`, `dessin.ts`, impression) et
   `src/esport/ui/review/` ; `Lecteur.web.tsx` (IFrame, calque par-dessus) / `Lecteur.tsx` (iOS),
   `dessinVideo.web.tsx` (SVG + Konva) / `dessinVideo.tsx` (iOS), `BarreDessin.tsx`, `Reactions.tsx`,

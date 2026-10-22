@@ -1,74 +1,39 @@
-# Site de secours AppDashboard : publication
+# Site AppDashboard : publication
 
-Adresse : **https://applibourse-ef0ddb.pages.dev** (projet Cloudflare Pages
-`applibourse-ef0ddb`, dans votre compte ; le nom affiché de l'app reste
-AppDashboard). Elle est définie **une seule fois** dans
-`src/config/site.json`, lue par l'app (`src/config/site.ts`), le script
-`npm run relais:site` et le workflow `.github/workflows/site.yml`.
+Adresse : **https://appdashboard.fr**, hébergée chez o2switch (dossier `public_html`). Elle est définie **une seule
+fois** dans `src/config/site.json`, lue par l'app (`src/config/site.ts`) et par les tests.
 
-## Première publication (à faire une fois, sur le PC)
+## Mises à jour automatiques
 
-1. Dans le dossier du projet : `npm run relais:site`.
-2. Une fenêtre Cloudflare s'ouvre : connectez-vous et acceptez.
-3. Le script vérifie que le projet Pages `applibourse-ef0ddb` est dans votre
-   compte (sinon il s'arrête, sans rien créer), construit le site et le publie.
-   Il affiche `Site de secours : https://applibourse-ef0ddb.pages.dev`.
-4. Vérifiez : ouvrez cette adresse (l'écran de connexion d'AppDashboard
-   apparaît) ; sur le PC, Paramètres › Synchronisation affiche le même lien.
+À chaque push sur `main` qui touche le code (pas les docs seules), le workflow GitHub **« Site (o2switch) »**
+(`.github/workflows/site-o2switch.yml`) vérifie les types, lance les tests, construit le site et le pose sur la
+branche `deploiement-o2switch` (fichiers construits seulement). Le serveur o2switch tire cette branche toutes les
+5 minutes (`esport/serveur/deployer.sh`) et la recopie dans `public_html`. Aucun secret d'hébergement dans GitHub.
+Installation et dépannage : [o2switch.md](o2switch.md) (étape A10).
 
-Les noms *.pages.dev sont uniques mondialement : n'utilisez jamais un nom qui
-n'est pas dans votre compte (`verifie` doit rester vrai seulement pour un
-projet que vous possédez). Un test vérifie que `site` correspond à `projetPages`.
+Le paquet de mise à jour de l'app iPhone (`/maj`, signé sur le PC avec `npm run publier-maj`) n'est jamais effacé
+par la publication : déposez `main.jsbundle` et `manifeste.json` dans `public_html/maj/` (cPanel › Gestionnaire de
+fichiers). Voir [iphone.md](iphone.md).
 
-## Mises à jour automatiques (GitHub Actions)
+## Adresses des serveurs (`relais.json`, `esport.json`)
 
-À chaque push sur `main` qui touche le code (pas les docs seules), le workflow
-« Site (Cloudflare Pages) » vérifie les types, lance les tests, construit le
-site et le publie. Il ne publie **jamais** une autre branche que `main`.
-
-À faire une fois :
-
-1. **Créer le jeton Cloudflare** : dash.cloudflare.com › My Profile › API
-   Tokens › Create Token › « Create Custom Token » ; permission
-   **Account › Cloudflare Pages › Edit** ; ressource : votre compte. Copiez le
-   jeton (affiché une seule fois).
-2. **Trouver l'identifiant de compte** : dash.cloudflare.com › Workers & Pages
-   (colonne de droite : « Account ID »).
-3. **Les coller dans GitHub** : dépôt › Settings › Secrets and variables ›
-   Actions › New repository secret, deux fois :
-   `CLOUDFLARE_API_TOKEN` (le jeton) et `CLOUDFLARE_ACCOUNT_ID` (l'identifiant).
-   Ne les écrivez nulle part ailleurs (ni code, ni docs, ni chat).
-4. **Vérifier** : onglet Actions › « Site (Cloudflare Pages) » › Run workflow
-   (branche `main`). Le job doit finir en vert, puis
-   https://applibourse-ef0ddb.pages.dev se met à jour. Sans les secrets, le job
-   s'arrête tout de suite avec un message qui nomme le secret manquant.
-
-Le paquet de mise à jour de l'app iPhone (`/maj`, signé sur le PC) est repris
-tel qu'il est en ligne : la publication automatique ne l'efface pas. Il ne se
-renouvelle que par `npm run relais:site` sur le PC.
-
-## Adresse du relais (`relais.json`)
-
-Le site publie, quand il la connaît, l'adresse du relais dans `relais.json` (rien de secret) : un ami qui ouvre le
-site sur un appareil neuf peut alors « Se connecter » avec son prénom et son mot de passe (voir
-`docs/connexion-amis.md`). Workflow GitHub : variable de dépôt **`RELAIS_URL`** ; sur le PC, `npm run relais:site`
-l'écrit depuis `relais/relais-local.json`. Sans elle, l'ami utilise le lien de son invitation (ou le lien de
-connexion `#relais=` qu'elle contient).
+Le site publie l'adresse du relais dans `relais.json` et celle du serveur Esport dans `esport.json` (rien de
+secret) : un ami qui ouvre le site sur un appareil neuf peut alors se connecter avec son identifiant et son mot de
+passe (voir `docs/connexion-amis.md`). Par défaut `https://relais.appdashboard.fr` et `https://esport.appdashboard.fr` ;
+variables GitHub facultatives `O2SWITCH_RELAIS_URL` et `O2SWITCH_ESPORT_URL` pour changer de domaine.
 
 ## Et le relais ?
 
-Ce workflow ne publie que le site. Le relais Cloudflare (Worker) se met à jour à part, à la main :
-GitHub › Actions › « Relais (Cloudflare Worker) » › Run workflow, ou `npm run relais:deployer` sur
-le PC. Mode d'emploi : `docs/relais-deploiement-github.md`.
+Le relais et le serveur Esport se mettent à jour tout seuls, par la même tâche cron (`deployer.sh`) : rien à lancer.
+Voir [o2switch.md](o2switch.md).
 
 ## Rendu et cache
 
-- `bureau/public/_headers` (copié dans le site à la construction) : les fichiers
-  de `assets/`, dont le nom porte une empreinte, sont gardés un an par le
-  navigateur ; `index.html`, le manifeste et `/maj` sont revalidés à chaque
-  visite, donc une nouvelle version est vue au chargement suivant.
-- Couleur de la barre du navigateur (`theme-color`) et polices : celles du thème
-  affiché, posées dès l'écran d'accueil, même sans thème jamais choisi.
+- `bureau/public/_headers` est traduit en règles Apache (bloc « AppDashboard » du `.htaccess`, par
+  `scripts/htaccess-o2switch.mjs`) : les fichiers de `assets/`, dont le nom porte une empreinte, sont gardés un an
+  par le navigateur ; `index.html`, le manifeste et `/maj` sont revalidés à chaque visite, donc une nouvelle version
+  est vue au chargement suivant.
+- Couleur de la barre du navigateur (`theme-color`) et polices : celles du thème affiché, posées dès l'écran
+  d'accueil, même sans thème jamais choisi.
 - Contrôle : `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-rendu-site.mjs`
-  (après `npx vite build`), sur PC, iPad et iPhone. Captures avant/après :
-  `docs/captures-rendu-site/`.
+  (après `npx vite build`), sur PC, iPad et iPhone. Captures avant/après : `docs/captures-rendu-site/`.

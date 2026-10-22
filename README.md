@@ -93,5 +93,5 @@ acceptable ; l'appel à l'API iOS reste à brancher.
 **Le reste de la feuille de route** (V2 et V3 du cadrage) : fiscalité avancée,
 performance TWR/MWR, dividendes, synchronisation Syncthing, alertes.
 
-Site de secours : https://applibourse-ef0ddb.pages.dev (adresse dans `src/config/site.json`) ; publication et mises à jour automatiques : `docs/site-deploiement.md`.
+Site : https://appdashboard.fr (adresse dans `src/config/site.json`), relais https://relais.appdashboard.fr et serveur Esport https://esport.appdashboard.fr, tous hébergés chez o2switch : `docs/o2switch.md` ; publication et mises à jour automatiques du site : `docs/site-deploiement.md`.
 Support (tickets vers Discord par le relais) : `docs/support-discord.md`.

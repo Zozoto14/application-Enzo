@@ -10,7 +10,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | --- | --- | --- |
 | [README.md](README.md) (ce guide) | Tout le monde | Utilisation, rôles, vos données, limites connues |
 | [invitations.md](invitations.md) | Fondateur, staff | Inviter un joueur (création de compte depuis l'Esport), page Membres |
-| [deploiement.md](deploiement.md) | Fondateur | Activer le serveur Esport (Cloudflare + GitHub), ajouter un joueur |
+| [deploiement.md](deploiement.md) | Fondateur | Activer le serveur Esport (o2switch), ajouter un joueur |
 | [planning.md](planning.md) | Tout le monde | Planning, disponibilités, présence, agenda iCal |
 | [resumes.md](resumes.md) | Tout le monde | Déposer une réunion (fichier ou lien), transcription automatique en PDF, boîte du rédacteur |
 | [objectifs-taches.md](objectifs-taches.md) | Tout le monde | Objectifs, tâches, kanban |
@@ -24,7 +24,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [ressources.md](ressources.md) | Tout le monde | Canal de ressources : liens, vidéos YouTube, fichiers, notes ; catégories, propositions, Discord |
 | [statistiques.md](statistiques.md) | Fondateur | Page Statistiques (réservée au Fondateur) : qui utilise l'app, pages les plus et les moins utilisées, ce qui est collecté |
 | [securite.md](securite.md) | Fondateur | Revue de sécurité, RGPD, limites |
-| [migration-serveur.md](migration-serveur.md) | Fondateur | Quitter Cloudflare pour un vrai serveur, sauvegardes |
+| [migration-serveur.md](migration-serveur.md) | Fondateur | Architecture du serveur, changer d'hébergeur, sauvegardes |
 
 ## Les trois pages de l'Esport
 
@@ -142,8 +142,8 @@ et `modifie`. Aucune migration : les rôles système sont, depuis la phase 1, de
 
 ### Mettre l'Esport en route (une fois)
 
-Suivez [deploiement.md](deploiement.md) (10 minutes depuis le navigateur). Pour cette version, relancez simplement
-le workflow **« Esport (Worker) »** : il applique les migrations `0007_finitions.sql` (index et limites de débit),
+Suivez [deploiement.md](deploiement.md). Les mises à jour s'installent toutes seules (déploiement automatique
+du serveur o2switch, [docs/o2switch.md](../o2switch.md)) : il applique les migrations `0007_finitions.sql` (index et limites de débit),
 `0008_invitations_directes.sql` (invitation directe) et `0009_convocations_demandes.sql` (convocations
 explicites, demandes de compte). La migration `0017_ressources.sql` ajoute le canal de ressources : activez le
 module **Ressources** dans les Paramètres des teams existantes ([ressources.md](ressources.md)). La migration
@@ -229,7 +229,7 @@ Markdown), strats (PNG), journal (CSV).
 
 ### Vos données
 
-Les données Esport sont gardées **en clair** sur le serveur Esport (chiffrées au repos par Cloudflare), pas
+Les données Esport sont gardées **en clair** sur le serveur Esport (hébergé en France chez o2switch), pas
 chiffrées de bout en bout comme le reste de l'app. Jamais d'adresse e-mail. L'app envoie aussi des **statistiques d'usage internes**, visibles par
 l'administrateur (le Fondateur) : pages ouvertes et durées, actions clés, type d'appareil, langue, erreurs techniques ;
 jamais de contenu ni d'adresse IP, aucun traceur tiers ([statistiques.md](statistiques.md)). **Paramètres de la team › Mon profil
@@ -275,7 +275,7 @@ lecteurs d'écran.
 - **Hors ligne** : l'Esport a besoin du serveur ; sans réseau, il affiche un message et le reste de l'app marche.
 - **Discord** : notifications par webhook (pas de bot ni de commandes) ; un message envoyé ne se retire pas.
 - **Fichiers** : PDF de 20 Mo au plus ; pas d'antivirus (type, taille et contenu vérifiés).
-- **Sauvegardes** : Time Travel de D1 (30 jours) tant que l'Esport est sur Cloudflare ; prévoir un export régulier
+- **Sauvegardes** : sauvegardes cPanel / JetBackup d'o2switch (base et fichiers) ; export JSON à la demande
   (voir [migration-serveur.md](migration-serveur.md)).
 - Le **journal** garde l'identifiant technique (sans pseudo) d'un compte supprimé jusqu'à la fin de sa durée de
   conservation.

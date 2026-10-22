@@ -1,6 +1,6 @@
 # Esport : revue de sécurité (phase 7)
 
-Revue complète du serveur Esport (`esport/`, Worker Cloudflare et serveur local) et de l'app (`src/esport/`),
+Revue complète du serveur Esport (`esport/`, serveur Node o2switch et serveur local) et de l'app (`src/esport/`),
 faite à la fin du module (phase 7). Chaque point a au moins un **test négatif** automatique :
 `esport/test/securite.test.mjs` (serveur) et `src/esport/Finitions.test.tsx` (app), en plus des tests des
 phases précédentes. Résumé : 8 failles ou faiblesses trouvées et corrigées, aucune critique.
@@ -64,8 +64,8 @@ Invitation directe (voir [invitations.md](invitations.md)) : plus aucun code à 
 ## Fichiers
 
 - PDF des résumés : type annoncé `application/pdf`, 20 Mo au plus (annoncés puis réels, lecture en flux), octets
-  magiques `%PDF-` ; nom de stockage aléatoire (`teams/<team>/resumes/<uuid>.pdf`), nom d'origine nettoyé ; bucket R2
-  privé.
+  magiques `%PDF-` ; nom de stockage aléatoire (`teams/<team>/resumes/<uuid>.pdf`), nom d'origine nettoyé ; dossier
+  privé sur le disque du serveur (hors de `public_html`).
 - Miniatures de strats : PNG ou JPEG vérifiés par leurs octets magiques, 256 Ko au plus.
 - **Vidéos et enregistrements** (migration 0014, [videos.md](videos.md)) : envoi par morceaux, à soi seulement (l'envoi
   d'un autre membre est introuvable), plafond par fichier (`ESPORT_VIDEO_MAX`, 10 Go), morceaux dans l'ordre, taille
@@ -81,7 +81,7 @@ Invitation directe (voir [invitations.md](invitations.md)) : plus aucun code à 
 - Adresse du webhook Discord chiffrée au repos (AES-GCM 256, clé dérivée par HKDF, team en donnée authentifiée),
   jamais renvoyée en clair (seulement masquée), jamais journalisée ni placée dans le bus d'événements ; l'export de
   la base la garde chiffrée.
-- `CLE_ESPORT` (et `CLE_DISCORD`) : secrets du Worker, jamais dans le dépôt. Les sessions ne sont jamais écrites en
+- `CLE_ESPORT` (et `CLE_DISCORD`) : secrets du serveur (`~/.appdashboard/esport.env`), jamais dans le dépôt. Les sessions ne sont jamais écrites en
   base ; le jeton maître du Fondateur n'arrive jamais au serveur Esport (vérification par le relais).
 
 ## XSS, CSRF, en-têtes
@@ -156,7 +156,7 @@ rien ne sort pour une réunion staff ou une strat privée.
 - Les **liens publics** (agenda iCal, partage de strat) sont des secrets au porteur : qui a le lien lit. Ils sont
   révocables (et le partage peut expirer).
 - Après une suppression de compte, le **journal** garde l'identifiant technique du compte (sans pseudo) jusqu'à la
-  fin de sa durée de conservation ; les **sauvegardes** (Time Travel de D1, 30 jours) aussi.
+  fin de sa durée de conservation ; les **sauvegardes** de l'hébergeur (cPanel / JetBackup) aussi.
 - Les PDF ne passent pas par un antivirus (seulement type, taille et octets magiques) ; ils sont servis avec
   `nosniff` et jamais dans un cadre.
 - Les messages déjà envoyés sur Discord échappent ensuite à l'app.

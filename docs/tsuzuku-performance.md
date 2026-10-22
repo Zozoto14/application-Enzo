@@ -6,7 +6,7 @@ Demande : « Optimise le temps de réponse sur Tsuzuku car c'est beaucoup trop l
 
 `scripts/e2e-tsuzuku-perf.mjs` joue le parcours complet dans un vrai navigateur, sur le **PC** (vrai
 module réseau d'Electron, `bureau/electron/tsuzuku.mjs`) et sur le **site** (vrai relais
-`relais/worker.mjs`, route `/tsuzuku/requete`, + 80 ms d'aller-retour navigateur → relais). Les sites
+`relais/relais.mjs`, route `/tsuzuku/requete`, + 80 ms d'aller-retour navigateur → relais). Les sites
 sont un « internet » local NEUTRE (domaines `*-exemple.fr`) à latences réalistes et déterministes :
 200 à 800 ms par requête (catalogue compris), et une source prioritaire **lente** (3,5 à 4,5 s par
 requête) qui n'a pas le titre ; la seconde source a « Le Long Voyage » et « Le Long Voyage (VF) »,
@@ -66,7 +66,7 @@ Analyse HTML : ~45 ms pour une page de 270 Ko (1 500 épisodes) sous Jest ; ce n
 
 ## Non mesuré
 
-Vrais sites de streaming, vrai Cloudflare (latence réelle du Worker et de ses sorties), réseau
+Vrais sites de streaming, vrai serveur (latence réelle du relais et de ses sorties), réseau
 mobile de l'iPad : les chiffres ci-dessus sont ceux de l'internet simulé.
 
 Captures : `docs/captures-tsuzuku-perf/`.
@@ -79,8 +79,7 @@ Captures : `docs/captures-tsuzuku-perf/`.
 
 Même `scripts/e2e-tsuzuku-perf.mjs`, enrichi :
 
-- **site** : relais local qui imite Cloudflare (HTTP/2, JSON compressé en gzip, API Cache
-  `caches.default`), 80 ms navigateur → relais, 200 à 800 ms relais → site, source prioritaire lente
+- **site** : relais local qui imite l'hébergement (HTTP/2, JSON compressé en gzip, cache du relais), 80 ms navigateur → relais, 200 à 800 ms relais → site, source prioritaire lente
   (3,5 à 4,5 s par page) qui n'a pas les titres ;
 - **site4g** : idem, navigateur bridé par Chrome en « Slow 4G » (150 ms d'aller-retour,
   1,6 Mbit/s descendant, 750 kbit/s montant ; +150 ms sur le catalogue servi par Playwright) ;
@@ -94,7 +93,7 @@ Même `scripts/e2e-tsuzuku-perf.mjs`, enrichi :
 ```
 npx vite build
 PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node scripts/e2e-tsuzuku-perf.mjs            # pc, site, site4g + seuils
-MODES=site RELAIS_WORKER=chemin/ancien/relais/worker.mjs node scripts/e2e-tsuzuku-perf.mjs  # site + ANCIEN relais
+MODES=site node scripts/e2e-tsuzuku-perf.mjs                                              # site seulement
 ```
 
 ## Résultats (avant → après)
@@ -141,28 +140,24 @@ second appareil (4,21 s site, 4,43 s en 4G : rien n'est gardé par le relais).
 - **Sources connues pour être lentes** (temps par site mesuré sur l'appareil) : les autres partent
   aussitôt, et le délai de grâce est abrégé quand la lente ne peut pas finir à temps (diagnostic :
   « connue pour être lente »). Même source retenue sinon.
-- **Cache du relais** (15 min recherche, 30 min page ; mémoire de l'instance + API Cache de
-  Cloudflare), demandé par le site ; « Réessayer » relit toujours le site.
+- **Cache du relais** (15 min recherche, 30 min page ; mémoire du serveur du relais), demandé par le site ; « Réessayer » relit toujours le site.
 - **PC** : adresses DNS vérifiées gardées 60 s.
 
 ## Pistes écartées (mesurées ou raisonnées)
 
-- **Route « lot » (`/tsuzuku/lot`)** : le site parle à Cloudflare en HTTP/2 ; des requêtes parallèles
+- **Route « lot » (`/tsuzuku/lot`)** : le site parle au relais en HTTP/2 ; des requêtes parallèles
   partagent déjà la connexion, regrouper n'enlève aucun aller-retour, et une réponse groupée ferait
   attendre les pages rapides derrière la source lente (4 s). Non faite.
-- **Compression** : Cloudflare compresse déjà le JSON du relais ; le relais local de l'e2e l'imite.
+- **Compression** : le serveur du relais compresse déjà son JSON (gzip, `relais/serveur/compression.mjs`) ; le relais local de l'e2e l'imite.
 - **Écrire le cache de l'appareil « au calme du réseau »** : essayé, retiré : un rechargement juste
   après une recherche perdait son résultat (4 s au lieu de 0,1 s).
 - **Web Worker pour l'analyse HTML** : toujours inutile (45 ms pour 270 Ko).
 
 ## À savoir
 
-- **Relais modifié** : le cache n'existe qu'une fois le relais redéployé (GitHub › Actions ›
-  « Relais (Cloudflare Worker) »). Sans redéploiement, tout le reste des gains s'applique.
-- L'API Cache de Cloudflare est sans effet sur une adresse `*.workers.dev` (documentation
-  Cloudflare) : il reste le cache MÉMOIRE de l'instance du Worker (souvent la même pendant quelques
-  minutes, sans garantie). Pour un cache garanti, mettre le relais sur un domaine personnel.
-- Non mesuré : vrais sites, vrai Cloudflare, vraie 4G de l'iPad ; chiffres de l'internet simulé.
+- **Relais** : le cache est la mémoire du processus Node du relais (o2switch, un seul processus) : il se vide
+  au redémarrage de l'app.
+- Non mesuré : vrais sites, vrai serveur, vraie 4G de l'iPad ; chiffres de l'internet simulé.
 
 ## Lecteurs : bascule automatique et préchargement de la suite
 

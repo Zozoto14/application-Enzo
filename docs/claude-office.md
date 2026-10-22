@@ -158,8 +158,8 @@ captures `docs/captures-claude-office/v4-*.jpg`, avant/après : `v4-avant-pc-som
 
 Quatrième onglet, une section à la fois (`Suivi.tsx`), pour ne rien ajouter sur le Bureau. La pastille
 **« Suivi · N »** compte les alertes non lues (aussi un indicateur « Alertes » sur la tuile du hub). Tout est calculé
-et rangé **sur l'appareil** (base du profil, clés `claude-office.*`) : **aucune écriture KV de plus**, le Worker n'est
-pas modifié.
+et rangé **sur l'appareil** (base du profil, clés `claude-office.*`) : **aucune écriture de plus sur le relais**, le relais
+n'est pas modifié.
 
 - **Récap** (`logiqueRecap.ts`) : aujourd'hui ou 7 derniers jours — sessions, demandes, outils, temps actif (même règle
   que « Aujourd'hui »), projets, outils les plus utilisés, faits marquants (3 sessions les plus longues avec leur
@@ -286,8 +286,8 @@ que les petites présences, jamais les copies d'historique.
 
 - **Notification quand l'app est fermée ou sur le téléphone** : la notification « attend ta réponse » ne part que du PC,
   tant que l'onglet Bureau est ouvert. Ailleurs, il faudrait un service de notifications push et un dépôt par attente
-  (écritures KV en plus, et du temps réel que le relais gratuit n'offre pas).
-- **« Vu » partagé entre appareils** : volontairement local (aucune écriture KV de plus) ; vu sur le PC, l'agent reste
+  (écritures en plus sur le relais, et un service de notifications push).
+- **« Vu » partagé entre appareils** : volontairement local (aucune écriture de plus sur le relais) ; vu sur le PC, l'agent reste
   « à voir » sur le téléphone jusqu'au délai.
 - **Outil « en cours » en direct** : le hook ne note pas le début d'un outil au journal (seulement un repère pour sa
   durée), pour ne pas doubler la taille du journal et des copies ; « utilise un outil » reste « vient d'en finir un ».
@@ -310,12 +310,11 @@ que les petites présences, jamais les copies d'historique.
 1. **Le hook reste nécessaire sur la machine où tourne Claude Code** (`npm run office:hooks`, ou « Installer le hook
    d'historique… » dans l'état vide du bureau sur le PC). C'est lui qui écrit le journal ; un appareil sans le hook
    n'apparaît pas. Rien à installer, en revanche, sur les appareils qui regardent.
-2. **Pas de temps réel à distance.** Le relais (Cloudflare KV gratuit, ~1 000 écritures/jour, 2 écritures par dépôt)
-   ne permet pas un flux en direct : le PC dépose sa copie chiffrée au plus toutes les **15 min** (désactivée par
+2. **Pas de temps réel à distance.** Le relais ne diffuse pas de flux en direct de l'activité : le PC dépose sa
+   copie chiffrée au plus toutes les **2 min** (désactivée par
    défaut, à activer dans l'onglet Bureau du PC : « Déposer la copie chiffrée de ce PC »). Facultative, la **présence
    rapide** dépose en plus l'activité récente (3 dernières heures, 300 événements, sans contenu d'outil) toutes les
-   **5 min** pendant que Claude Code travaille, seulement si elle a changé, **48 fois par jour au plus** puis pause
-   jusqu'au lendemain. Pire cas par PC : 96 + 48 dépôts = 288 écritures/jour. **Le Worker n'est pas modifié**
+   **minute** au plus pendant que Claude Code travaille, seulement si elle a changé. **Le relais n'est pas modifié**
    (objets `office-historique-<appareil>` et `office-presence-<appareil>` de l'espace `principal`, jeton maître).
 3. **PC fermé** : l'app de bureau doit tourner sur le PC pour déposer (le hook, lui, écrit toujours le journal).
 4. Réservé au **Fondateur** (tuile et écran) ; la copie du relais au **compte principal** (jeton maître). Rien en clair
@@ -325,7 +324,7 @@ que les petites présences, jamais les copies d'historique.
 ## Pourquoi le vrai Claude Office n'est pas embarqué
 
 1. Claude Office est d'abord un **serveur Node local** (Express + WebSocket + SQLite `better-sqlite3`, `claude -p`)
-   alimenté par des **hooks de Claude Code** : rien de cela ne peut tourner dans l'app web (Cloudflare Pages) ni sur
+   alimenté par des **hooks de Claude Code** : rien de cela ne peut tourner dans l'app web (site statique) ni sur
    le téléphone, et son interface React 18 + DOM ne s'intègre pas à l'arbre React Native du hub.
 2. Ses ~100 Mo de sprites n'ont rien à faire dans le bundle du site : le bureau natif est fait de simples vues
    (aucune image, aucune police d'icônes).

@@ -18,7 +18,7 @@ même quand AppDashboard et Claude Office sont fermés. L'onglet « Historique �
    en lecture seule, activité des 6 dernières heures sans contenu d'outil) ; la fenêtre n'a que sept canaux
    `claude-office:historique-*`, sans chemin libre.
 5. **Copie chiffrée facultative** (désactivée par défaut) : un objet par PC dans l'espace `principal` du relais,
-   scellé par la clé de synchronisation, au plus toutes les 2 min (15 min avant le serveur PostgreSQL) — **aucune modification du Worker**.
+   scellé par la clé de synchronisation, au plus toutes les 2 min (15 min avant le serveur PostgreSQL) — **aucune modification du relais**.
 
 ## Limites (à lire)
 
@@ -109,7 +109,7 @@ sont ignorés à l'affichage.
   liés au chiffré) : le relais ne voit que du bruit. Un ami, un gestionnaire ou un compte promu (jeton de profil)
   n'a aucun accès.
 - Écritures : jamais une par requête. Au plus un dépôt toutes les 2 minutes (10 s pour « Synchroniser maintenant » ;
-  c'était 15 min et 1 min avec le quota de Cloudflare KV, levé par le relais version 9), seulement si le contenu a changé, en **un seul objet par PC** qui remplace le précédent (5 000 entrées
+  c'était 15 min et 1 min avec le quota d'écritures de l'ancien relais, levé par le relais version 9), seulement si le contenu a changé, en **un seul objet par PC** qui remplace le précédent (5 000 entrées
   les plus récentes, 3 Mo au plus). Une suppression sur le PC se propage au dépôt suivant.
 - Sur le site, le téléphone ou un autre PC (compte principal relié) : l'onglet lit et fusionne les copies de tous les
   PC équipés, en lecture seule. L'onglet « Bureau » s'en sert aussi (avec la présence rapide facultative, voir

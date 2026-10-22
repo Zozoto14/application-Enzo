@@ -6,7 +6,7 @@ Trois morceaux, qui se protègent l'un l'autre :
 |---|---|---|
 | **App iPhone** | L'application installée par AltStore, gratuite | Elle expire au bout de 7 jours sans renouvellement… |
 | **Site de secours** | La même application dans Safari, sur l'écran d'accueil | …et le site prend le relais, avec les mêmes données |
-| **Relais** | Une boîte aux lettres chiffrée sur Cloudflare (gratuit) | Chaque appareil garde tout ; la synchro reprend au retour |
+| **Relais** | Une boîte aux lettres chiffrée sur le serveur o2switch (relais.appdashboard.fr) | Chaque appareil garde tout ; la synchro reprend au retour |
 
 **À savoir avant tout : une app expirée ne perd rien.** Elle refuse seulement
 de s'ouvrir. Dès qu'AltStore la renouvelle, tout est là. Les données ne
@@ -24,33 +24,16 @@ renouvelez-la.
 > Paramètres › Administration › Comptes des proches › Ajouter un profil (réservé à l'administrateur, le
 > profil d'origine). Au démarrage, AppDashboard demande qui l'utilise.
 
-## 1. Le relais et le site (sur le PC, une fois)
+## 1. Le relais et le site
 
-1. Créez un compte gratuit sur **dash.cloudflare.com** (un e-mail suffit, pas
-   de carte bancaire).
-2. Dans le dossier d'AppDashboard, ouvrez un terminal et lancez :
+Ils sont en ligne chez o2switch, rien à installer : le site **https://appdashboard.fr** et le relais
+**https://relais.appdashboard.fr** (installation et mises à jour : [o2switch.md](o2switch.md)). Sur le PC, le
+fichier `relais/relais-local.json` (jamais sur GitHub) donne l'adresse du relais et le jeton maître ; l'app le lit
+toute seule.
 
-   ```
-   npm run relais:deployer
-   ```
+Ouvrez AppDashboard sur le PC › **Paramètres › Synchronisation** : le relais est reconnu tout seul.
 
-   Le navigateur s'ouvre pour vous connecter à Cloudflare : acceptez. Le
-   script crée la boîte aux lettres, installe le relais, publie le site, puis
-   affiche leurs adresses. Si Cloudflare demande de choisir un
-   sous-domaine « workers.dev », tapez un nom (par exemple votre pseudo).
-
-   Relancer la commande ne recrée rien. Les identifiants restent sur le PC
-   (`relais/relais-local.json`), jamais sur GitHub.
-
-3. Ouvrez AppDashboard sur le PC › **Paramètres › Synchronisation**. Le relais est reconnu tout seul. Choisissez un **mot de passe
-   de synchronisation** (8 caractères minimum), notez-le dans Bitwarden, puis
-   **Relier cet appareil**.
-
-Ce mot de passe chiffre tout ce qui part sur internet. Il n'est enregistré
-nulle part : il vous sera demandé une fois sur chaque appareil.
-
-Ensuite, le site se remet à jour tout seul : à chaque mise à jour du PC,
-l'application le republie en arrière-plan.
+Le site se met à jour tout seul à chaque changement de l'app sur GitHub (workflow « Site (o2switch) »).
 
 ## 2. Le site de secours sur l'iPhone
 
@@ -138,7 +121,7 @@ ressusciteront pas.
 ## Sécurité, en bref
 
 - Tout est chiffré **sur l'appareil** (XChaCha20-Poly1305, clé tirée du mot de
-  passe par Argon2id) avant d'aller sur le relais. Cloudflare ne voit ni
+  passe par Argon2id) avant d'aller sur le relais. Le serveur ne voit ni
   montant, ni valeur, ni nom.
 - Le relais exige un jeton tiré au hasard à l'installation ; sans lui,
   personne ne peut y déposer ni s'en servir pour joindre Yahoo.

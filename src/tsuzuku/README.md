@@ -221,7 +221,8 @@ navigation du parent, pas de fenetre).
 ### Site web : lecture par le relais (`POST /tsuzuku/requete`)
 
 Le navigateur ne peut pas lire une page d'un autre site (CORS). Pour le compte Fondateur dont le site
-est relie au relais avec le code du PC (jeton MAITRE), le moteur passe par le relais Cloudflare :
+est relie au relais avec le code du PC (jeton MAITRE), le moteur passe par le relais
+(https://relais.appdashboard.fr, serveur o2switch) :
 
 - `choisirReseau` (site) : `lectureSources` et `viaRelais` sont relus a chaque fois (la liaison peut
   arriver apres l'ouverture) ; `creerServices` ne les garde vrais que pour le rang **Fondateur**.
@@ -229,8 +230,8 @@ est relie au relais avec le code du PC (jeton MAITRE), le moteur passe par le re
   le relais leur repond de toute facon 403.
 - Fiche « Sur vos sources » : « Site web : lecture via le relais » ; diagnostic copie :
   « Plateforme : site web (navigateur), via le relais ».
-- Erreurs du relais traduites (`erreurRelais`) : 404 → « mettez a jour le relais (GitHub › Actions ›
-  « Deployer le relais », ou `npm run relais:deployer`) » ; 401 → relier de nouveau ; 403 → reserve au
+- Erreurs du relais traduites (`erreurRelais`) : 404 → « mettez a jour le relais (serveur o2switch :
+  docs/o2switch.md) » ; 401 → relier de nouveau ; 403 → reserve au
   Fondateur relie (ou origine du site absente d'`ORIGINES_SITE`) ; 429 → trop de requetes, patienter ;
   injoignable → verifier la connexion / le deploiement.
 
@@ -240,21 +241,18 @@ identifiants dans l'adresse, ports hors 80/443/8080/8443 ; toute IP ecrite en du
 locale, lien local, metadonnees cloud, IPv4 mappee, notations decimale/octale/hexa) ; `localhost`,
 `.local`, `.internal`, `.lan`, `.test`, `.arpa`, nom sans point, le relais lui-meme ; un nom qui RESOUT
 (DNS sur HTTPS) vers une adresse non publique ; un corps de requete > 96 Kio (corps sortant > 64 Kio) ;
-plus de 60 requetes par minute (compteur memoire du Worker, rien dans KV, 429 + Retry-After).
+plus de 60 requetes par minute (compteur memoire du serveur, rien dans la boite, 429 + Retry-After).
 Elle ne suit aucune redirection, n'envoie que Accept, Accept-Language, Content-Type, Referer,
 User-Agent et X-Requested-With (`XMLHttpRequest`), ne rend aucun Set-Cookie (signale par
-`x-tsuzuku-cookie`), coupe a 15 s (504) et tronque la reponse a 2 Mo (`tronque: true`). Le Worker decode
+`x-tsuzuku-cookie`), coupe a 15 s (504) et tronque la reponse a 2 Mo (`tronque: true`). Le relais decode
 le texte (en-tete, `<meta charset>`, ISO-8859-1 → windows-1252) ; un binaire revient en `bodyBase64`.
 Journal : hote, statut, duree (ni adresse complete, ni corps). Reponses `Cache-Control: no-store`.
 
-Limites honnetes : un Worker ne choisit pas l'IP de connexion, la verification DNS precede l'appel
-(« DNS rebinding » possible entre les deux ; le reseau de Cloudflare n'atteint ni le reseau local de
-l'utilisateur ni ses propres adresses internes) ; pas de rendu JavaScript (une SPA sans API JSON reste
-illisible) ; les protections anti-robot visent souvent les adresses de Cloudflare elles-memes : un site
-lisible depuis le PC peut repondre « Just a moment… » au relais (affiche comme tel, jamais contourne).
-Offre gratuite des Workers : ~10 ms de calcul par requete (l'attente reseau ne compte pas) ; une tres
-grosse page (proche de 2 Mo) peut depasser ce budget et revenir en erreur « injoignable ».
-Deploiement sans PC : `docs/relais-deploiement-github.md`. E2E : `scripts/e2e-tsuzuku-site-relais.mjs`.
+Limites honnetes : `fetch` ne choisit pas l'IP de connexion, la verification DNS precede l'appel
+(« DNS rebinding » possible entre les deux) ; pas de rendu JavaScript (une SPA sans API JSON reste
+illisible) ; les protections anti-robot visent souvent les adresses des hebergeurs : un site lisible
+depuis le PC peut repondre « Just a moment… » au relais (affiche comme tel, jamais contourne).
+Deploiement : automatique sur le serveur o2switch (`docs/o2switch.md`). E2E : `scripts/e2e-tsuzuku-site-relais.mjs`.
 
 ### Temps de reponse (`moteur/parallele.ts`, `app/cache.ts`)
 
@@ -294,7 +292,7 @@ Tableau avant/apres : `docs/tsuzuku-performance.md`.
 #### 2e passe : latence du site (iPhone/iPad, 4G)
 
 Mesure : `scripts/e2e-tsuzuku-perf.mjs`, modes `site` et `site4g` (Chrome bride « Slow 4G »,
-relais local en HTTP/2 compresse comme Cloudflare), plus un SECOND APPAREIL et un AUTRE TITRE.
+relais local en HTTP/2 compresse comme le serveur), plus un SECOND APPAREIL et un AUTRE TITRE.
 Tableau : `docs/tsuzuku-performance.md`.
 
 - **Recherche des le toucher** (`app/precharge.ts`, `app/intention.ts`) : `onPressIn` d'une carte
@@ -316,19 +314,17 @@ Tableau : `docs/tsuzuku-performance.md`.
   recherche) ou `'page'` (`chargerPage` : serie, episode) ; le relais garde 15 / 30 min une reponse
   200 entiere, texte, < 1 Mo, sans marque anti-robot ni `cf-mitigated` ; jamais un POST. Cle :
   SHA-256 de la methode, de l'adresse normalisee (sans `#`) et des en-tetes sortants (liste blanche :
-  ni cookie, ni jeton). Deux niveaux : memoire de l'instance du Worker (200 entrees / 16 M
-  caracteres) et API Cache de Cloudflare (`caches.default`, `Cache-Control: max-age`, ecriture par
-  `waitUntil`). LIMITE : l'API Cache est sans effet sur une adresse `*.workers.dev` (doc Cloudflare) ;
-  elle sert si le relais est sur un domaine personnel ; la memoire de l'instance sert partout, tant
-  que l'instance vit. HIT : ni DNS ni sortie vers le site ; `cache: 'HIT' | 'MISS'`, `ageS`, en-tete
+  ni cookie, ni jeton). Memoire du processus du relais (entrees et caracteres bornes),
+  plus un cache partage facultatif (`deps.cache`, interface Cache : match/put) ; la memoire sert tant
+  que le processus vit. HIT : ni DNS ni sortie vers le site ; `cache: 'HIT' | 'MISS'`, `ageS`, en-tete
   `x-tsuzuku-cache`. Les garde-fous restent AVANT le cache (jeton maitre, origine, debit, adresse) ;
   la page gardee est la version publique (aucun cookie envoye) : rien de personnel. « Reessayer »,
   rafraichissement en arriere-plan et tests de source passent par `ctxFrais` (`cache.frais`) : le
   site est relu, le cache remis a jour. Un ANCIEN relais ignore `cache` : tout marche comme avant.
 - **PC** : adresses DNS verifiees publiques gardees 60 s (`lookupPublic`, jamais un refus).
-- **Pas de route « lot »** : le site parle au relais en HTTP/2 (Cloudflare), les requetes paralleles
+- **Pas de route « lot »** : le site parle au relais en HTTP/2, les requetes paralleles
   partagent deja une connexion ; regrouper n'enleverait aucun aller-retour et ferait attendre les
-  pages rapides derriere les lentes. Compression : faite par Cloudflare (JSON).
+  pages rapides derriere les lentes. Compression : faite par le serveur du relais (gzip, JSON).
 
 ### Stockage et isolation
 
