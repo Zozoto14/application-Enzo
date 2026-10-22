@@ -82,8 +82,8 @@ auteur (prénom et début de l'identifiant du compte), titre, message, champs **
 1. **Administration › Support** : toutes les demandes, filtre par statut (Ouverte, En cours, Répondu, Résolue),
    pastille « À traiter ».
 2. Touchez une demande : message, infos techniques, conversation. Écrivez la réponse (mise en forme possible).
-3. **Prévenir aussi par e-mail** (coché par défaut) : si la fiche du compte a une adresse, un e-mail part (voir
-   [emails.md](emails.md)).
+3. **Prévenir aussi par e-mail** (coché par défaut) : si la fiche du compte a une adresse, un e-mail part, **dans la
+   langue du compte** (langue par défaut de sa fiche, sinon celle de la demande ; voir [emails.md](emails.md)).
 4. **Répondre** : la réponse arrive
    - dans l'app de l'utilisateur : bouton **? Support 🔔 1**, badge « Nouvelle réponse » dans Mes demandes ;
    - dans le **fil Discord** de la demande ;

@@ -10,7 +10,10 @@ directement sa team à sa première connexion.
 2. Remplissez : **nom ou pseudo** (ce sera aussi son identifiant de connexion), **adresse e-mail**, son
    **Discord ID** (obligatoire : le bot pingue les convoqués avec ; « Comment trouver un Discord ID ? » sous le
    champ, voir [bot-discord.md](bot-discord.md) § 9), une ou plusieurs **teams** avec un **rôle** par team (Joueur
-   proposé par défaut) et, si vous voulez, son **poste en jeu** (Duelliste, IGL…).
+   proposé par défaut) et, si vous voulez, son **poste en jeu** (Duelliste, IGL…). Choisissez aussi sa **langue**
+   (Français par défaut, ou English) : celle de son interface Esport tant qu'il n'a pas choisi la sienne, de ses
+   e-mails (l'invitation part dans cette langue) et du bot Discord ; modifiable ensuite dans Membres
+   (voir [../emails.md](../emails.md) § « Langue des comptes et des e-mails »).
 3. **Créer le compte et l'invitation** › confirmez votre identité (mot de passe + code à 6 chiffres,
    valable 5 minutes comme dans l'Administration).
 4. Le panneau **Invitation de …** s'ouvre : **✉️ Envoyer l'e-mail maintenant** l'envoie DIRECTEMENT par le serveur

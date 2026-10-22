@@ -64,7 +64,7 @@ export async function demarrerSite(port) {
 }
 
 /** Faux relais : le vrai worker, une KV en mémoire, et un faux webhook Discord (pour le Support). */
-export async function demarrerRelais(port, jeton = 'jeton-e2e-mobile-0123456789abcdef') {
+export async function demarrerRelais(port, jeton = 'jeton-e2e-mobile-0123456789abcdef', extraEnv = {}) {
   const worker = (await import(pathToFileURL(join(racine, 'relais/worker.mjs')).href)).default;
   const kv = new Map();
   const metas = new Map();
@@ -82,6 +82,8 @@ export async function demarrerRelais(port, jeton = 'jeton-e2e-mobile-0123456789a
   const env = {
     JETON: jeton,
     DISCORD_WEBHOOK_URL: WEBHOOK,
+    // Facultatif : par exemple `ENVOYER_COURRIEL` (vrai transport vers un FAUX serveur SMTP local) pour tester les e-mails.
+    ...extraEnv,
     BOITE: {
       get: async cle => (kv.has(cle) ? kv.get(cle) : null),
       put: async (cle, valeur, options) => {

@@ -202,8 +202,8 @@ Quelqu'un qui n'a pas lié son compte reçoit : **« Lie ton compte avec /lier �
   réglée dans **Réglages › Discord › Langue des messages Discord** (français par défaut). Les modèles par défaut, les
   noms des types d'événement, les dates (`mercredi 21 octobre` / `Wednesday 21 October`) et les boutons suivent cette
   langue. Un **modèle personnalisé** n'est jamais traduit ; un message déjà en file garde la langue de sa création.
-- **Réponses aux commandes** (éphémères) : la langue du **compte lié** (profil Esport, Français / English) ; sans
-  langue choisie, ou compte non lié, la **locale Discord** de la personne (`locale` de l'interaction : `en-US`,
+- **Réponses aux commandes** (éphémères) : la langue du **compte lié** (son choix dans le profil Esport, sinon la
+  **langue par défaut** réglée par le Fondateur, Français / English) ; compte non lié, la **locale Discord** de la personne (`locale` de l'interaction : `en-US`,
   `en-GB` → English, le reste → français).
 - **Noms des commandes** inchangés (`/prochain`, `/planning`…) : Discord affiche leurs **descriptions en anglais**
   aux clients en `en-US` / `en-GB` (`description_localizations`, noms des choix compris). `/evenement-creer` accepte
