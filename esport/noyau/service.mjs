@@ -41,9 +41,6 @@ const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const STATUTS_MEMBRE = ['actif', 'suspendu'];
 
 /** Pseudo saisi (nettoyé) ou erreur 400. */
-/** Permissions qu'un Propriétaire peut donner ou retirer à un rôle SYSTÈME (Joueur, Coach…), sans le dupliquer. */
-export const PERMISSIONS_AJUSTABLES = ['members.create'];
-
 export function lirePseudo(saisie) {
   const pseudo = texteNettoye(saisie, 24);
   if (!MOTIF_PSEUDO.test(pseudo)) throw echec(400, 'pseudo', 'Pseudo : 2 à 24 caractères (lettres, chiffres, espace, _ . -).');
@@ -157,15 +154,28 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     return role?.cle_systeme === CLE_PROPRIETAIRE && membre.statut === 'actif' && (await nombreProprietairesActifs(teamId)) <= 1;
   }
 
-  const rolePublic = async role => ({
-    id: role.id,
-    nom: role.nom,
-    couleur: role.couleur,
-    systeme: Number(role.systeme) === 1,
-    cle: role.cle_systeme ?? null,
-    position: Number(role.position),
-    permissions: await permissionsDuRole(role),
-  });
+  const rolePublic = async role => {
+    const permissions = await permissionsDuRole(role);
+    return {
+      id: role.id,
+      nom: role.nom,
+      couleur: role.couleur,
+      systeme: Number(role.systeme) === 1,
+      cle: role.cle_systeme ?? null,
+      position: Number(role.position),
+      permissions,
+      ...rolesParDefaut(role, permissions),
+    };
+  };
+
+  /** Rôle système (hors Propriétaire) : ses permissions par défaut et s'il a été modifié dans cette team. */
+  function rolesParDefaut(role, permissions) {
+    if (Number(role.systeme) !== 1 || !role.cle_systeme) return {};
+    if (role.cle_systeme === CLE_PROPRIETAIRE) return { verrouille: true, modifie: false };
+    const defaut = [...new Set(permissionsRoleSysteme(role.cle_systeme))].sort();
+    const actuelles = [...permissions].sort();
+    return { permissionsParDefaut: defaut, modifie: defaut.length !== actuelles.length || defaut.some((p, i) => p !== actuelles[i]) };
+  }
 
   const teamPublique = t => ({
     id: t.id,
@@ -486,40 +496,80 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     return rolePublic(await roleDeTeam(teamId, id));
   }
 
+  /**
+   * Garde-fous communs à toute modification d'un rôle existant (personnalisé ou système) :
+   *  - `roles.manage` exigé ; le rôle Propriétaire est verrouillé (toujours toutes les permissions) ;
+   *  - hiérarchie : hors Propriétaire et Fondateur, on ne modifie qu'un rôle placé SOUS le sien
+   *    (un Manager ne touche ni au Propriétaire, ni au Manager) ;
+   *  - anti-escalade : chaque permission AJOUTÉE doit être détenue par l'acteur ;
+   *  - la team garde toujours au moins un membre actif capable de gérer les rôles.
+   */
+  async function verifierModificationRole(ctx, teamId, role, nouvelles) {
+    exiger(ctx, 'roles.manage');
+    if (role.cle_systeme === CLE_PROPRIETAIRE) throw echec(403, 'role-verrouille', 'Le rôle Propriétaire est verrouillé : il a toujours toutes les permissions.');
+    const libre = ctx.acteur.superAdmin || ctx.role?.cle_systeme === CLE_PROPRIETAIRE;
+    if (!libre && (!ctx.role || Number(role.position) <= Number(ctx.role.position))) {
+      throw echec(403, 'role-superieur', 'Vous ne pouvez pas modifier un rôle égal ou supérieur au vôtre.');
+    }
+    const actuelles = await permissionsDuRole(role);
+    if (!nouvelles) return { actuelles, ajoutees: [], retirees: [] };
+    const ajoutees = nouvelles.filter(p => !actuelles.includes(p));
+    const retirees = actuelles.filter(p => !nouvelles.includes(p));
+    exigerSousEnsemble(ctx, ajoutees);
+    if (retirees.includes('roles.manage')) {
+      const reste = await base.premier(
+        `SELECT COUNT(*) AS n FROM membres m JOIN roles r ON r.id = m.role_id
+          WHERE m.team_id = ? AND m.statut = 'actif' AND r.id <> ?
+            AND (r.cle_systeme = ? OR EXISTS (SELECT 1 FROM role_permissions rp WHERE rp.role_id = r.id AND rp.permission = 'roles.manage'))`,
+        [teamId, role.id, CLE_PROPRIETAIRE],
+      );
+      if (Number(reste?.n ?? 0) === 0) throw echec(409, 'dernier-gestionnaire', 'La team doit garder au moins un membre capable de gérer les rôles.');
+    }
+    return { actuelles, ajoutees, retirees };
+  }
+
+  /** Remplace les permissions d'un rôle et journalise ajouts et retraits (effet à la requête suivante : aucun cache). */
+  async function enregistrerRole(acteur, teamId, role, { nom, couleur, permissions, ajoutees, retirees, retabli = false }) {
+    const t = maintenant();
+    const lot = [{ sql: 'UPDATE roles SET nom = ?, couleur = ?, maj_le = ? WHERE id = ?', params: [nom, couleur, iso(t), role.id] }];
+    if (permissions) {
+      lot.push({ sql: 'DELETE FROM role_permissions WHERE role_id = ?', params: [role.id] });
+      for (const p of permissions) lot.push({ sql: 'INSERT INTO role_permissions (role_id, permission) VALUES (?, ?)', params: [role.id, p] });
+    }
+    const charge = { nom, ajoutees, retirees, systeme: Number(role.systeme) === 1 };
+    if (retabli) charge.retabli = true;
+    lot.push(evenement('role.updated', { teamId, acteur: acteur.compte, entiteType: 'role', entiteId: role.id, charge, maintenant: t }));
+    await base.lot(lot);
+    return rolePublic(await roleDeTeam(teamId, role.id));
+  }
+
+  /**
+   * Modifier un rôle existant. Personnalisé : nom, couleur, permissions. Système (Manager, Coach,
+   * Analyste, Joueur, Remplaçant) : permissions seulement, propres à la team (chaque team a sa copie).
+   */
   async function modifierRole(acteur, teamId, roleId, corps) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'roles.manage');
     const role = await roleDeTeam(teamId, roleId);
-    const actuelles = await permissionsDuRole(role);
-    if (Number(role.systeme) === 1) {
-      // Rôle système : ni nom ni couleur ; seules les permissions AJUSTABLES (members.create) se donnent ou se retirent.
-      const saisiSysteme = lireRoleSaisi(corps, true);
-      const changees = saisiSysteme.permissions ? [...saisiSysteme.permissions.filter(p => !actuelles.includes(p)), ...actuelles.filter(p => !saisiSysteme.permissions.includes(p))] : [];
-      const ajustable = role.cle_systeme !== CLE_PROPRIETAIRE && corps?.nom === undefined && corps?.couleur === undefined && saisiSysteme.permissions && changees.every(p => PERMISSIONS_AJUSTABLES.includes(p));
-      if (!ajustable) throw echec(403, 'role-systeme', 'Un rôle système ne se modifie pas (sauf « Créer des membres ») : dupliquez-le en rôle personnalisé.');
+    const systeme = Number(role.systeme) === 1;
+    if (systeme && role.cle_systeme !== CLE_PROPRIETAIRE && (corps?.nom !== undefined || corps?.couleur !== undefined)) {
+      throw echec(403, 'role-systeme', 'Le nom et la couleur d’un rôle système ne changent pas : seules ses permissions se modifient.');
     }
-    exigerSousEnsemble(ctx, actuelles, 'Ce rôle a des permissions que vous n’avez pas : vous ne pouvez pas le modifier.');
     const saisi = lireRoleSaisi(corps, true);
-    if (saisi.permissions) exigerSousEnsemble(ctx, saisi.permissions);
+    const { ajoutees, retirees } = await verifierModificationRole(ctx, teamId, role, saisi.permissions);
     if (saisi.nom) await nomDeRoleLibre(teamId, saisi.nom, roleId);
-    const t = maintenant();
-    const lot = [
-      {
-        sql: 'UPDATE roles SET nom = ?, couleur = ?, maj_le = ? WHERE id = ?',
-        params: [saisi.nom ?? role.nom, saisi.couleur ?? role.couleur, iso(t), roleId],
-      },
-    ];
-    let ajoutees = [];
-    let retirees = [];
-    if (saisi.permissions) {
-      ajoutees = saisi.permissions.filter(p => !actuelles.includes(p));
-      retirees = actuelles.filter(p => !saisi.permissions.includes(p));
-      lot.push({ sql: 'DELETE FROM role_permissions WHERE role_id = ?', params: [roleId] });
-      for (const p of saisi.permissions) lot.push({ sql: 'INSERT INTO role_permissions (role_id, permission) VALUES (?, ?)', params: [roleId, p] });
-    }
-    lot.push(evenement('role.updated', { teamId, acteur: acteur.compte, entiteType: 'role', entiteId: roleId, charge: { nom: saisi.nom ?? role.nom, ajoutees, retirees }, maintenant: t }));
-    await base.lot(lot);
-    return rolePublic(await roleDeTeam(teamId, roleId));
+    return enregistrerRole(acteur, teamId, role, { nom: saisi.nom ?? role.nom, couleur: saisi.couleur ?? role.couleur, permissions: saisi.permissions, ajoutees, retirees });
+  }
+
+  /** Rétablir les permissions par défaut d'un rôle système (catalogue), pour cette team seulement. */
+  async function retablirRole(acteur, teamId, roleId) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exiger(ctx, 'roles.manage');
+    const role = await roleDeTeam(teamId, roleId);
+    if (Number(role.systeme) !== 1 || !role.cle_systeme) throw echec(400, 'role-personnalise', 'Seul un rôle système a des permissions par défaut.');
+    const defaut = validerPermissions(permissionsRoleSysteme(role.cle_systeme));
+    const { ajoutees, retirees } = await verifierModificationRole(ctx, teamId, role, defaut);
+    return enregistrerRole(acteur, teamId, role, { nom: role.nom, couleur: role.couleur, permissions: defaut, ajoutees, retirees, retabli: true });
   }
 
   async function supprimerRole(acteur, teamId, roleId) {
@@ -985,6 +1035,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     listeRoles,
     creerRole,
     modifierRole,
+    retablirRole,
     supprimerRole,
     listeMembres,
     modifierMembre,

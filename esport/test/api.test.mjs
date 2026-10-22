@@ -240,11 +240,11 @@ test('anti-escalade : un Manager ne crée pas de rôle plus fort que lui, n’in
   r = await b.appel(`/teams/${teamId}/membres/${membres.lea12345.id}`, { methode: 'PATCH', jeton: max, corps: { roleId: capitaine.id } });
   assert.equal(r.statut, 200);
   assert.equal(r.corps.role.nom, 'Capitaine');
-  // Un Manager ne peut pas s'attribuer un rôle plus fort, ni modifier un rôle système.
+  // Un Manager ne peut pas s'attribuer un rôle plus fort, ni modifier un rôle égal ou supérieur au sien.
   assert.equal((await b.appel(`/teams/${teamId}/membres/${membres.max12345.id}`, { methode: 'PATCH', jeton: max, corps: { roleId: roles.proprietaire.id } })).statut, 403);
-  r = await b.appel(`/teams/${teamId}/roles/${roles.joueur.id}`, { methode: 'PATCH', jeton: max, corps: { permissions: ['planning.view'] } });
+  r = await b.appel(`/teams/${teamId}/roles/${roles.manager.id}`, { methode: 'PATCH', jeton: max, corps: { permissions: ['planning.view'] } });
   assert.equal(r.statut, 403);
-  assert.equal(r.corps.code, 'role-systeme');
+  assert.equal(r.corps.code, 'role-superieur');
   // Un Coach ne gère pas les rôles du tout.
   assert.equal((await b.appel(`/teams/${teamId}/roles`, { methode: 'POST', jeton: sessions.coach123, corps: { nom: 'X', permissions: [] } })).statut, 403);
 });

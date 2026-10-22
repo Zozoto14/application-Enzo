@@ -102,6 +102,11 @@ export interface Role {
   position: number;
   permissions: string[];
   membres: number;
+  /** Rôle système (hors Propriétaire) : ses permissions par défaut, et s'il a été modifié dans cette team. */
+  permissionsParDefaut?: string[];
+  modifie?: boolean;
+  /** Propriétaire : verrouillé (toujours toutes les permissions). */
+  verrouille?: boolean;
 }
 export interface Membre {
   id: string;
@@ -718,6 +723,8 @@ export interface ClientEsport {
   creerRole(id: string, r: { nom: string; couleur: string; permissions: string[] }): Promise<Role>;
   modifierRole(id: string, roleId: string, r: Partial<{ nom: string; couleur: string; permissions: string[] }>): Promise<Role>;
   supprimerRole(id: string, roleId: string): Promise<void>;
+  /** Rétablit les permissions par défaut d'un rôle système, pour cette team. */
+  retablirRole(id: string, roleId: string): Promise<Role>;
   membres(id: string): Promise<Membre[]>;
   modifierMembre(id: string, membreId: string, m: Partial<{ roleId: string; posteJeu: string | null; statut: 'actif' | 'suspendu' }>): Promise<Membre>;
   retirerMembre(id: string, membreId: string): Promise<void>;
@@ -892,6 +899,7 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     roles: async id => (await appel<{ roles: Role[] }>(`${t(id)}/roles`)).roles,
     creerRole: (id, r) => appel(`${t(id)}/roles`, 'POST', r),
     modifierRole: (id, roleId, r) => appel(`${t(id)}/roles/${encodeURIComponent(roleId)}`, 'PATCH', r),
+    retablirRole: (id, roleId) => appel(`${t(id)}/roles/${encodeURIComponent(roleId)}/retablir`, 'POST'),
     supprimerRole: async (id, roleId) => {
       await appel(`${t(id)}/roles/${encodeURIComponent(roleId)}`, 'DELETE');
     },
@@ -1036,6 +1044,14 @@ export const nomModule = (cle: string): string => trOu(`cat.module.${cle}.nom`, 
 export const descriptionModule = (cle: string): string => trOu(`cat.module.${cle}.description`, CATALOGUE.modules.find(m => m.cle === cle)?.description ?? '');
 export const nomGroupe = (g: GroupeCatalogue): string => trOu(`cat.groupe.${g.cle}`, g.nom);
 export const libellePermission = (p: PermissionCatalogue): string => trOu(`cat.perm.${p.cle}`, p.libelle);
+/** « Strats : Créer » pour une clé `strats.create` (la clé telle quelle si inconnue). */
+export function nomPermission(cle: string): string {
+  for (const g of CATALOGUE.groupes) {
+    const p = g.permissions.find(x => x.cle === cle);
+    if (p) return `${nomGroupe(g)} : ${libellePermission(p)}`;
+  }
+  return cle;
+}
 /** Nom d'un rôle : les six rôles système (reconnus à leur nom français) sont traduits, pas les rôles créés par la team. */
 export const nomRole = (nom: string): string => {
   const systeme = CATALOGUE.rolesSysteme.find(r => r.nom === nom);

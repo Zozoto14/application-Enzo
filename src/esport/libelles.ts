@@ -3,7 +3,7 @@
  * (« Max a changé le rôle de Léa de Joueur à Coach »). Pur, testé.
  */
 
-import { nomModule, nomRole, type AlerteTableau, type EntreeJournal, type Notification, type Priorite, type StatutDepot, type StatutTache } from './client';
+import { nomModule, nomPermission, nomRole, type AlerteTableau, type EntreeJournal, type Notification, type Priorite, type StatutDepot, type StatutTache } from './client';
 
 /** Statuts d'un dépôt de réunion. */
 export const LIBELLES_STATUT_DEPOT: Record<StatutDepot, string> = { get a_resumer() {
@@ -94,8 +94,15 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
     }
     case 'role.created':
       return tr('jr.role_created', { qui, nom: texte(m.nom) });
-    case 'role.updated':
-      return tr('jr.role_updated', { qui, nom: texte(m.nom) });
+    case 'role.updated': {
+      const ajouts = liste(m.ajoutees);
+      const retraits = liste(m.retirees);
+      if (!ajouts.length && !retraits.length) return tr('jr.role_updated', { qui, nom: nomRole(texte(m.nom)) });
+      const parts = [];
+      if (ajouts.length) parts.push(tr('jr.role_ajouts', { liste: ajouts.map(nomPermission).join(', ') }));
+      if (retraits.length) parts.push(tr('jr.role_retraits', { liste: retraits.map(nomPermission).join(', ') }));
+      return tr(m.retabli ? 'jr.role_permissions_retablies' : 'jr.role_permissions_updated', { qui, nom: nomRole(texte(m.nom)), details: parts.join(' ; ') });
+    }
     case 'role.deleted':
       return tr('jr.role_deleted', { qui, nom: texte(m.nom) });
     case 'member.joined':

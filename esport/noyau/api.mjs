@@ -367,9 +367,9 @@ export function creerApi({
     if (canalRessources !== undefined) return canalRessources;
     const stratsPlaybook = await routesStrats({ strats: st, playbook: pb, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max) });
     if (stratsPlaybook !== undefined) return stratsPlaybook;
-    const t = /^\/teams\/([^/]+)(?:\/([a-z]+)(?:\/([^/]+))?(?:\/.*)?)?$/.exec(chemin);
+    const t = /^\/teams\/([^/]+)(?:\/([a-z]+)(?:\/([^/]+)(?:\/([a-z]+))?)?(?:\/.*)?)?$/.exec(chemin);
     if (t) {
-      const [, teamId, section, sousId] = t;
+      const [, teamId, section, sousId, action] = t;
       if (!section) {
         if (m === 'GET') return s.detailTeam(acteur, teamId);
         if (m === 'PATCH') return s.modifierTeam(acteur, teamId, await lireCorps(requete));
@@ -380,6 +380,7 @@ export function creerApi({
         if (!sousId && m === 'GET') return { roles: await s.listeRoles(acteur, teamId) };
         if (!sousId && m === 'POST') return s.creerRole(acteur, teamId, await lireCorps(requete));
         if (sousId && m === 'PATCH') return s.modifierRole(acteur, teamId, sousId, await lireCorps(requete));
+        if (sousId && m === 'POST' && action === 'retablir') return s.retablirRole(acteur, teamId, sousId);
         if (sousId && m === 'DELETE') return s.supprimerRole(acteur, teamId, sousId);
       }
       if (section === 'membres') {

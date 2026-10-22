@@ -187,6 +187,10 @@ describe('libellés', () => {
     expect(phraseJournal({ ...e, action: 'modules.changed', meta: { actives: ['planning'], desactives: ['scouting'] } }, noms)).toBe('Max a activé Planning et désactivé Scouting');
     expect(phraseJournal({ ...e, acteur: 'parti123', action: 'member.left', meta: {} }, noms)).toBe('Un compte supprimé a quitté la team');
     expect(phraseJournal({ ...e, acteur: 'principal', action: 'team.created', meta: {} }, {})).toBe('Le Fondateur a créé la team');
+    expect(phraseJournal({ ...e, action: 'role.updated', meta: { nom: 'Coach', ajoutees: ['planning.create'], retirees: ['strats.create'] } }, noms)).toMatch(
+      /^Max a modifié les permissions du rôle Coach : ajout de .+ ; retrait de Strats.+Créer$/,
+    );
+    expect(phraseJournal({ ...e, action: 'role.updated', meta: { nom: 'Capitaine', ajoutees: [], retirees: [] } }, noms)).toBe('Max a modifié le rôle Capitaine');
   });
   it('notifications', () => {
     const n = { id: '1', type: 'membre-arrive', team: { id: 't', nom: 'Faucons' }, charge: { membre: 'lea12345', role: 'Joueur' }, lue: false, date: '' };

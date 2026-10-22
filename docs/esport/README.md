@@ -104,6 +104,40 @@ personnalisé) la permission **« Créer des membres »** : ses membres proposen
 Fondateur valide en un clic ([invitations.md](invitations.md)). Le **Fondateur** (vous, le propriétaire de l'app) a tous les
 droits partout.
 
+### Modifier un rôle existant
+
+**Team › Équipe › Membres et rôles**, bloc **Rôles et permissions** : choisissez le rôle, puis :
+
+- **rôle personnalisé** › **Modifier** : nom, couleur et permissions ;
+- **rôle système** (Manager, Coach, Analyste, Joueur, Remplaçant) › **Modifier les permissions** : les cases de la
+  matrice (modules × voir, créer, modifier, supprimer, spéciales). Le changement ne vaut que pour **cette team** (chaque
+  team a sa propre copie des rôles système). Un rôle système modifié porte une `*` dans la liste et le bouton
+  **Rétablir les permissions par défaut** (permissions du catalogue) ;
+- le **Propriétaire** est verrouillé : il a toujours toutes les permissions.
+
+Pendant l'édition, chaque case changée est **surlignée** et le nombre de changements non enregistrés s'affiche ;
+**Annuler** les défait, **Enregistrer** les envoie (avec une confirmation pour un rôle système). L'effet est
+immédiat : les membres qui ont ce rôle voient la différence à leur prochaine action (le serveur relit les
+permissions à chaque requête, il n'y a pas de cache). Le Journal note « X a modifié les permissions du rôle Y :
+ajout de … ; retrait de … » (ou « a rétabli les permissions par défaut… »). Rien ne part sur Discord (l'annonce
+« Changement de rôle » concerne le rôle d'un membre, pas les permissions d'un rôle).
+
+Garde-fous, appliqués par le serveur :
+
+| Règle | Refus |
+| --- | --- |
+| Il faut la permission **Gérer les rôles** (`roles.manage`) | 403 `permission` |
+| Le rôle Propriétaire ne se modifie pas (ni ne se « rétablit ») | 403 `role-verrouille` |
+| Hors Propriétaire et Fondateur, on ne modifie qu'un rôle placé **sous** le sien (un Manager ne touche ni au Propriétaire ni au Manager) | 403 `role-superieur` |
+| Anti-escalade : on n'**ajoute** qu'une permission que l'on a soi-même (retirer reste possible) | 403 `escalade` |
+| La team garde toujours au moins un membre actif capable de gérer les rôles | 409 `dernier-gestionnaire` |
+| Nom et couleur d'un rôle système : fixes | 403 `role-systeme` |
+
+API : `PATCH /teams/:id/roles/:roleId` (`{ nom?, couleur?, permissions? }`) et
+`POST /teams/:id/roles/:roleId/retablir`. La liste des rôles indique pour un rôle système `permissionsParDefaut`
+et `modifie`. Aucune migration : les rôles système sont, depuis la phase 1, des lignes propres à chaque team
+(`roles`, `role_permissions`).
+
 ## Pour le Fondateur
 
 ### Mettre l'Esport en route (une fois)

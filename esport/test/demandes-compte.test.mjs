@@ -1,7 +1,7 @@
 /**
  * Permission « Créer des membres » (`members.create`) et demandes de compte :
  *  - un Joueur sans la permission → 403 ; le Propriétaire la donne au rôle
- *    Joueur (rôle système : seule cette permission est ajustable) ;
+ *    Joueur (rôle système : ses permissions se modifient pour la team) ;
  *  - avec la permission → DEMANDE (nom, e-mail, team, rôle ≤ au sien) ;
  *    anti-escalade ; isolation entre teams ; plafond et limite de débit ;
  *  - le Fondateur la voit (liste, badge, notification, Discord sans l'adresse)
@@ -42,7 +42,7 @@ async function preparer() {
   return { b, A, B, s, api, demander, permissionJoueur, appels };
 }
 
-test('permission : un Joueur sans « Créer des membres » reçoit 403 ; le Propriétaire la donne au rôle Joueur (seule permission ajustable d’un rôle système)', async () => {
+test('permission : un Joueur sans « Créer des membres » reçoit 403 ; le Propriétaire la donne au rôle Joueur', async () => {
   const { A, s, api, demander, permissionJoueur } = await preparer();
   const r = await demander('lea12345');
   assert.equal(r.statut, 403);
@@ -52,10 +52,11 @@ test('permission : un Joueur sans « Créer des membres » reçoit 403 ; le Prop
   for (const cle of ['joueur', 'manager', 'coach', 'remplacant']) assert.ok(!roles.find(x => x.cle === cle).permissions.includes('members.create'), cle);
   // Un Manager (roles.manage, sans members.create) ne peut pas la donner : anti-escalade.
   assert.equal((await permissionJoueur(true, s.max12345)).statut, 403);
-  // Le Propriétaire : oui. Mais rien d'autre sur un rôle système (nom, autre permission, rôle Propriétaire).
+  // Le Propriétaire : oui. Mais ni le nom d'un rôle système, ni le rôle Propriétaire (verrouillé).
   const joueur = roles.find(x => x.cle === 'joueur');
   assert.equal((await api(`/teams/${A.teamId}/roles/${joueur.id}`, s.fondateur, { methode: 'PATCH', corps: { nom: 'Pirate' } })).statut, 403);
-  assert.equal((await api(`/teams/${A.teamId}/roles/${joueur.id}`, s.fondateur, { methode: 'PATCH', corps: { permissions: [...joueur.permissions, 'team.manage'] } })).statut, 403);
+  const proprietaire = roles.find(x => x.cle === 'proprietaire');
+  assert.equal((await api(`/teams/${A.teamId}/roles/${proprietaire.id}`, s.fondateur, { methode: 'PATCH', corps: { permissions: ['members.view'] } })).statut, 403);
   const ok = await permissionJoueur(true);
   assert.equal(ok.statut, 200, JSON.stringify(ok.corps));
   assert.ok(ok.corps.permissions.includes('members.create'));

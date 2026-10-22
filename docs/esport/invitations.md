@@ -62,9 +62,9 @@ rôle supérieur.
 
 La permission **`members.create`** (« Créer des membres (demande au Fondateur) », colonne spéciale de la ligne
 Membres et rôles) est **désactivée par défaut** pour tous les rôles sauf le Propriétaire. Le Propriétaire la donne
-au rôle **Joueur** (ou à tout rôle système sauf Propriétaire : case **« créer des membres »** sous la matrice
-d'un rôle système, la seule permission qu'on peut y ajuster) ou à tout **rôle personnalisé** (matrice). Personne
-ne la donne sans l'avoir (anti-escalade : un Manager ne peut pas).
+au rôle **Joueur** (ou à tout rôle système sauf Propriétaire : **Modifier les permissions**, case « Créer des
+membres » de la matrice, voir [README.md](README.md#modifier-un-rôle-existant)) ou à tout **rôle personnalisé**.
+Personne ne la donne sans l'avoir (anti-escalade : un Manager ne peut pas).
 
 Créer un compte du hub exige les clés du Fondateur (séquestre), sur un appareil où il est connecté. Donc, pour un
 membre qui a la permission sans être le Fondateur :
