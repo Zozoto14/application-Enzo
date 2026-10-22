@@ -71,7 +71,7 @@ export function SupportAdmin({ outils }: { outils: OutilsAdmin }) {
       liaisonCourriel.relais(),
       t.id,
       'messages',
-      { texte: reponse.trim(), statut: statutApres, ...(adresse ? { courriel: { adresse, langue: t.technique?.langue === 'en' ? 'en' : 'fr' } } : {}) },
+      { texte: reponse.trim(), statut: statutApres, ...(adresse ? { courriel: { adresse, langue: (t.compte ? donnees.contacts[t.compte]?.langue : undefined) ?? (t.technique?.langue === 'en' ? 'en' : 'fr') } } : {}) },
       liaisonCourriel.requete(),
     );
     setEnCours(false);

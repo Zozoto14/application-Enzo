@@ -21,6 +21,8 @@ import {
   annulerInvitationPar,
   appliquerGroupePar,
   avecEmailCreationPar,
+  avecLangueComptePar,
+  avecLangueCreationPar,
   avecEmailPar,
   avecEnvoiPar,
   avecNotePar,
@@ -36,7 +38,7 @@ import {
   verifierGroupeRang,
   verifierSur,
 } from '../actions';
-import { LIBELLES_CANAL, erreurEmail, normaliserEmail, type CanalInvitation } from '../contacts';
+import { LANGUES_COMPTE, LIBELLES_CANAL, NOMS_LANGUES, erreurEmail, langueDuCompte, normaliserEmail, type CanalInvitation, type LangueCompte } from '../contacts';
 import { LIBELLES_TYPE } from '../journal';
 import { PanneauInvitation } from './EnvoiInvitation';
 import { LIBELLES_STATUT, filtrerComptes, niveauProfil, niveauxProfil, recapitulatif, statutCompte, versAutorisations, type StatutCompte, type TriComptes } from '../comptes';
@@ -44,8 +46,8 @@ import { LONGUEUR_MAX_NOTE } from '../donnees';
 import { CE_QUE_NE_PERMET_PAS, CE_QUE_PERMET, LIBELLES_RANG, NIVEAU_RANG, RANGS, autorise, rangDe, rangsAttribuables, type Rang } from '../roles';
 import { LIBELLES_NIVEAU, MODELES, modeleCorrespondant, niveauxDe, niveauxDuModele, type IdModele, type NiveauAcces, type Niveaux } from '../niveaux';
 import { etatApp } from '../politique';
-import { ID_ESPORT, perimetreEsportSeul } from '../../../esport/acces';
-import { retirerCompteEsport } from '../../../esport/synchroAdmin';
+import { ID_ESPORT, aAccesEsport, perimetreEsportSeul } from '../../../esport/acces';
+import { pousserLangueEsport, retirerCompteEsport } from '../../../esport/synchroAdmin';
 import { Avis, BoutonHub, Case, Champ, Intertitre, Panneau, Pilule, Segments, commun, dansJours, dateLisible, relatif, styleTitre, type OutilsAdmin } from './commun';
 
 type Filtre = StatutCompte | 'tous';
@@ -262,6 +264,7 @@ export function Utilisateurs({ outils, cible }: { outils: OutilsAdmin; cible?: s
                 invitation={invitation}
                 email={outils.donnees.contacts[id]?.email}
                 modele={outils.donnees.modeleInvitation}
+                langueInitiale={langueDuCompte(outils.donnees.contacts[id])}
                 fondateur={outils.acteur.nom}
                 onEnvoye={canal => noterEnvoi(outils, id, nom, canal)}
               />
@@ -549,6 +552,8 @@ function Fiche({
   const [joursInvitation, setJoursInvitation] = useState(String(outils.donnees.reglages.invitationJours || 7));
   const contact = donnees.contacts[profil.id];
   const [email, setEmail] = useState(contact?.email ?? '');
+  const [langue, setLangue] = useState<LangueCompte>(langueDuCompte(contact));
+  const [retourLangue, setRetourLangue] = useState<string | undefined>();
   const [nettoyerRelais, setNettoyerRelais] = useState(true);
   useEffect(() => {
     let actif = true;
@@ -785,6 +790,44 @@ function Fiche({
             />
           </View>
           {erreurEmail(email) ? <Text style={{ color: theme.critique, fontSize: 12 }} testID="admin-fiche-email-erreur">{erreurEmail(email)}</Text> : null}
+          <View style={[commun.grille, { alignItems: 'flex-end' }]}>
+            <Segments<LangueCompte>
+              theme={theme}
+              libelle="Langue par défaut du compte"
+              valeur={langue}
+              options={LANGUES_COMPTE.map(l => [l, NOMS_LANGUES[l]] as const)}
+              onChoisir={setLangue}
+              testID="admin-fiche-langue"
+            />
+            <BoutonHub
+              theme={theme}
+              titre="Enregistrer la langue"
+              desactive={langue === langueDuCompte(contact)}
+              onPress={() => {
+                outils.majDonnees(d => avecLangueComptePar(outils.acteur, d, outils.tous, profil.id, langue));
+                outils.journaliser({ type: 'compte', ...cibleJournal, action: `Langue par défaut de ${profil.nom} réglée sur ${NOMS_LANGUES[langue]}` });
+                setRetourLangue(undefined);
+                // Le serveur Esport l'applique à l'interface (tant que l'utilisateur n'a pas choisi la sienne), au récapitulatif et au bot.
+                if (!aAccesEsport(profil)) {
+                  setRetourLangue(`Langue enregistrée : ${NOMS_LANGUES[langue]} (e-mails).`);
+                  return;
+                }
+                void pousserLangueEsport(profil.id, langue).then(
+                  b => setRetourLangue(b === 'refuse' ? 'Langue enregistrée pour les e-mails ; le serveur Esport n’a pas accepté la modification (réservée au Fondateur).' : `Langue enregistrée : ${NOMS_LANGUES[langue]} (e-mails, interface Esport, bot Discord).`),
+                  () => setRetourLangue('Langue enregistrée pour les e-mails ; le serveur Esport est injoignable : réglez-la aussi dans Esport › Membres.'),
+                );
+              }}
+              testID="admin-fiche-langue-enregistrer"
+            />
+          </View>
+          <Text style={[attenue, { fontSize: 12 }]} testID="admin-fiche-langue-aide">
+            Langue des e-mails (invitation, support, Messagerie), de l’interface Esport tant que {profil.nom} n’a pas choisi la sienne, et du bot Discord. Son propre choix dans Esport › Mon profil reste prioritaire.
+          </Text>
+          {retourLangue ? (
+            <Text style={{ color: theme.ok, fontSize: 12 }} testID="admin-fiche-langue-retour">
+              {retourLangue}
+            </Text>
+          ) : null}
           <View style={{ gap: 2 }} testID="admin-historique-invitations">
             {contact && contact.envois.length > 0 ? (
               [...contact.envois]
@@ -1051,6 +1094,7 @@ function Fiche({
               invitation={invitation}
               email={contact?.email}
               modele={donnees.modeleInvitation}
+              langueInitiale={langueDuCompte(contact)}
               fondateur={outils.acteur.nom}
               onEnvoye={canal => noterEnvoi(outils, profil.id, profil.nom, canal)}
             />
@@ -1292,6 +1336,7 @@ function FormulaireCreation({
   const [expiration, setExpiration] = useState('');
   const [informe, setInforme] = useState(false);
   const [email, setEmail] = useState('');
+  const [langue, setLangue] = useState<LangueCompte>('fr');
   const texte = { color: theme.texte, ...police(theme.policeTexte) };
   const problemeEmail = erreurEmail(email);
   const expirationValide = expiration === '' || (/^\d{4}-\d{2}-\d{2}$/.test(expiration) && !Number.isNaN(Date.parse(expiration)));
@@ -1310,15 +1355,19 @@ function FormulaireCreation({
         optionsInvitation(outils),
       );
       const adresse = normaliserEmail(email);
-      if (adresse && valeurs.id) {
-        // Chiffrée avec les données de l'Administration ; jamais dans la liste des profils ni sur le relais.
-        outils.majDonnees(d => avecEmailCreationPar(outils.acteur, d, valeurs.id!, adresse, outils.maintenant()));
+      // Interface Esport, récapitulatif et bot : le serveur Esport garde la langue jusqu'à la première ouverture de l'Esport du compte.
+      if (valeurs.id && ouvertes.includes(ID_ESPORT)) void pousserLangueEsport(valeurs.id, langue).catch(() => undefined);
+      if (valeurs.id) {
+        // Adresse (chiffrée avec les données de l'Administration ; jamais dans la liste des profils ni sur le relais) et langue
+        // par défaut du compte (e-mails, interface Esport, bot) : une seule écriture.
+        const id = valeurs.id;
+        outils.majDonnees(d => avecLangueCreationPar(outils.acteur, adresse ? avecEmailCreationPar(outils.acteur, d, id, adresse, outils.maintenant()) : d, id, langue));
       }
       outils.journaliser({
         type: 'compte',
         ...(valeurs.id ? { cible: valeurs.id } : {}),
         nomCible: nom.trim(),
-        action: `Compte de ${nom.trim()} créé (apps : ${ouvertes.join(', ') || 'aucune'} ; séquestre créé pour les rangs supérieurs ; ami averti${adresse ? ' ; adresse e-mail enregistrée' : ''})`,
+        action: `Compte de ${nom.trim()} créé (apps : ${ouvertes.join(', ') || 'aucune'} ; séquestre créé pour les rangs supérieurs ; ami averti${adresse ? ' ; adresse e-mail enregistrée' : ''} ; langue : ${NOMS_LANGUES[langue]})`,
       });
       onCree(nom.trim(), valeurs);
       return `Compte de ${nom.trim()} créé.`;
@@ -1343,6 +1392,15 @@ function FormulaireCreation({
       ) : (
         <Text style={{ color: theme.attenue, fontSize: 12 }}>Chiffrée avec vos données d’administration : jamais visible des autres comptes, jamais en clair sur le relais.</Text>
       )}
+      <Segments<LangueCompte>
+        theme={theme}
+        libelle="Langue du compte"
+        valeur={langue}
+        options={LANGUES_COMPTE.map(l => [l, NOMS_LANGUES[l]] as const)}
+        onChoisir={setLangue}
+        testID="admin-nouveau-langue"
+      />
+      <Text style={{ color: theme.attenue, fontSize: 12 }}>Langue de ses e-mails (invitation comprise), de l’interface Esport tant qu’il n’a pas choisi la sienne, et du bot Discord. Modifiable ensuite dans sa fiche.</Text>
       <Intertitre theme={theme}>Permissions</Intertitre>
       <Segments
         theme={theme}
@@ -1419,6 +1477,7 @@ function PanneauIdentifiants({ outils, nom, valeurs, id, onTermine }: { outils: 
           invitation={valeurs.invitation}
           email={id ? outils.donnees.contacts[id]?.email : undefined}
           modele={outils.donnees.modeleInvitation}
+          langueInitiale={langueDuCompte(id ? outils.donnees.contacts[id] : undefined)}
           fondateur={outils.acteur.nom}
           onEnvoye={canal => noterEnvoi(outils, id, nom, canal)}
         />

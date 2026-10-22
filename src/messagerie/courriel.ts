@@ -23,6 +23,8 @@ export interface ResultatDestinataire {
   a: string;
   statut: 'envoye' | 'echec';
   erreur?: string;
+  /** Langue dans laquelle l'e-mail est parti (ou aurait dû partir). */
+  langue?: LangueCourriel;
 }
 
 export interface ResultatCourriel {
@@ -41,6 +43,20 @@ export interface EnvoiJournal {
   objet: string;
   ref?: string;
   resultats: ResultatDestinataire[];
+}
+
+/** Version anglaise d'un message (objet et corps), pour les destinataires en anglais. */
+export interface VersionCourriel {
+  objet: string;
+  message: string;
+}
+
+/** Aperçu rendu par le serveur : exactement ce que recevra le destinataire. */
+export interface ApercuCourriel {
+  langue: LangueCourriel;
+  objet: string;
+  texte: string;
+  html: string;
 }
 
 export interface LiaisonRelais {
@@ -102,6 +118,8 @@ export async function envoyerCourriel(demande: {
   langue?: LangueCourriel;
   objet: string;
   message: string;
+  /** Version anglaise (facultative) : les destinataires en anglais la reçoivent à la place du texte principal. */
+  en?: VersionCourriel;
   lien?: string;
   ref?: string;
 }): Promise<ResultatCourriel> {
@@ -111,7 +129,7 @@ export async function envoyerCourriel(demande: {
       destinataires: demande.destinataires,
       modele: demande.modele ?? 'libre',
       langue: demande.langue ?? 'fr',
-      variables: { objet: demande.objet, message: demande.message, ...(demande.lien ? { lien: demande.lien } : {}) },
+      variables: { objet: demande.objet, message: demande.message, ...(demande.en ? { en: demande.en } : {}), ...(demande.lien ? { lien: demande.lien } : {}) },
       ...(demande.ref ? { ref: demande.ref } : {}),
     }),
   });
@@ -125,6 +143,31 @@ export async function envoyerCourriel(demande: {
     resultats: Array.isArray(c.resultats) ? c.resultats : [],
     ...(typeof c.erreur === 'string' ? { erreur: c.erreur } : {}),
   };
+}
+
+/**
+ * Aperçu de l'e-mail dans une langue (objet, texte brut, HTML), rendu par le serveur avec les MÊMES modèles que
+ * l'envoi : aucune adresse n'est envoyée et rien n'est expédié (marche même sans SMTP). `undefined` : indisponible.
+ */
+export async function apercuCourriel(demande: {
+  langue: LangueCourriel;
+  modele?: ModeleCourriel;
+  objet: string;
+  message: string;
+  en?: VersionCourriel;
+  lien?: string;
+}): Promise<ApercuCourriel | undefined> {
+  const r = await appel<Partial<ApercuCourriel>>('/courriel/apercu', {
+    method: 'POST',
+    body: JSON.stringify({
+      modele: demande.modele ?? 'libre',
+      langue: demande.langue,
+      variables: { objet: demande.objet, message: demande.message, ...(demande.en ? { en: demande.en } : {}), ...(demande.lien ? { lien: demande.lien } : {}) },
+    }),
+  });
+  const c = r.corps;
+  if (r.statut !== 200 || !c || typeof c.html !== 'string' || typeof c.objet !== 'string') return undefined;
+  return { langue: c.langue === 'en' ? 'en' : 'fr', objet: c.objet, texte: String(c.texte ?? ''), html: c.html };
 }
 
 /** Historique des envois (adresses masquées). */

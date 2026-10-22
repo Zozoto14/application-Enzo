@@ -17,7 +17,8 @@ import type { AppHub, ContexteHub } from '../../hub/types';
 import type { Affectation, Annuaire, ClientEsport, DemandeCompte, TeamAnnuaire } from '../client';
 import { creerCompteEsport, erreurSaisie, modeleInvitationEsport, noterEnvoiEsport, rattacherCompte, type CompteCree } from '../comptesHub';
 import { Choix, Retours, styles as communs, useAgir, Intertitre, Panneau } from './commun';
-import { langueCourante, tr } from '../i18n';
+import { tr, type Langue } from '../i18n';
+import { ChoixLangue } from './ChoixLangue';
 import { nomRole } from '../client';
 import { ChampDiscordId } from './DiscordId';
 
@@ -57,6 +58,8 @@ export function CreationCompte({
   const [nom, setNom] = useState(demande?.pseudo ?? '');
   const [email, setEmail] = useState(demande?.email ?? '');
   const [discordId, setDiscordId] = useState(demande?.discordId ?? '');
+  // Langue par défaut du compte : français sauf choix du Fondateur (interface, e-mails, bot Discord).
+  const [langue, setLangue] = useState<Langue>('fr');
   const [choisies, setChoisies] = useState<Record<string, Choisie>>(() => {
     if (demande && teams.some(x => x.id === demande.teamId)) return { [demande.teamId]: { roleId: demande.role.id, poste: demande.posteJeu ?? '' } };
     const t = teams.find(x => x.id === equipeInitiale) ?? (teams.length === 1 ? teams[0] : undefined);
@@ -75,7 +78,7 @@ export function CreationCompte({
   const creer = () =>
     exigerIdentite(tr('creationCompte.creer_le_compte_de', { v: nom.trim() }), () =>
       void agir('creation', async () => {
-        const r = await creerCompteEsport({ contexte, registre, client, saisie: { nom, email, discordId, affectations, ...(demande ? { demandeId: demande.id } : {}) }, nomsTeams, maintenant: contexte.maintenant ?? Date.now() });
+        const r = await creerCompteEsport({ contexte, registre, client, saisie: { nom, email, discordId, langue, affectations, ...(demande ? { demandeId: demande.id } : {}) }, nomsTeams, maintenant: contexte.maintenant ?? Date.now() });
         setCree(r);
         return r.erreurEsport ? undefined : tr('creationCompte.compte_de_cree_envoyez', { nom: r.nom, v: nomsTeams.join(', ') });
       }),
@@ -101,7 +104,7 @@ export function CreationCompte({
               desactive={Boolean(enCours)}
               onPress={() =>
                 void agir('rattacher', async () => {
-                  const fiche = await rattacherCompte(client, cree.id, cree.nom, affectations, demande?.id, cree.discordId);
+                  const fiche = await rattacherCompte(client, cree.id, cree.nom, affectations, demande?.id, cree.discordId, cree.langue);
                   setCree({ ...cree, fiche, erreurEsport: undefined });
                   return tr('creationCompte.est_ajoute_a_ses', { nom: cree.nom });
                 })
@@ -120,7 +123,7 @@ export function CreationCompte({
           email={cree.email}
           modele={modeleInvitationEsport(nomsTeams, 'fr')}
           modeleEn={modeleInvitationEsport(nomsTeams, 'en')}
-          langueInitiale={langueCourante()}
+          langueInitiale={cree.langue}
           fondateur={contexte.profils?.actuel.nom}
           onEnvoye={canal => noterEnvoiEsport(contexte, cree.id, cree.nom, canal)}
         />
@@ -143,6 +146,8 @@ export function CreationCompte({
       </View>
       <Text style={attenue}>{tr('creationCompte.l_adresse_reste_chiffree')}</Text>
       <ChampDiscordId theme={theme} valeur={discordId} onChanger={setDiscordId} obligatoire testID="esport-compte-discord-id" />
+      <ChoixLangue theme={theme} libelle={tr('langueCompte.libelle')} valeur={langue} onChoisir={setLangue} testID="esport-compte-langue" />
+      <Text style={attenue}>{tr('langueCompte.aide')}</Text>
       <Intertitre theme={theme}>{tr('creationCompte.teams_et_roles')}</Intertitre>
       {teams.length === 0 ? <Text style={attenue}>{tr('creationCompte.aucune_team_creez_d')}</Text> : null}
       {teams.map(t => {

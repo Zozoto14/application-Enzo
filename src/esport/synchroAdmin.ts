@@ -11,7 +11,8 @@
 
 import type { Profil } from '../profils/profils';
 import { aAccesEsport } from './acces';
-import { estInactif, trouverConfig, type CompteEsport } from './client';
+import { ErreurEsport, estInactif, trouverConfig, type CompteEsport } from './client';
+import type { Langue } from './i18n';
 import { fabrique } from './fabrique';
 
 export interface BilanRetrait {
@@ -32,6 +33,28 @@ export async function retirerCompteEsport(id: string): Promise<BilanRetrait> {
     return { retire: r.retire, teams: r.teams };
   } catch (e) {
     if (estInactif(e)) return { retire: false, teams: 0, inactif: true };
+    throw e;
+  }
+}
+
+export type BilanLangue = 'ok' | 'absent' | 'inactif' | 'refuse';
+
+/**
+ * Transmet au serveur Esport la langue par défaut d'un compte réglée dans l'Administration (interface Esport tant que
+ * l'utilisateur n'a pas choisi la sienne, récapitulatif e-mail, bot Discord). `absent` : le compte n'a pas encore de
+ * fiche Esport (la langue reste dans sa fiche de l'Administration et sert aux e-mails envoyés depuis l'app du Fondateur) ;
+ * `inactif` : Esport pas activé ou injoignable ; `refuse` : le serveur a répondu 403 (ce n'est pas le Fondateur).
+ */
+export async function pousserLangueEsport(id: string, langue: Langue): Promise<BilanLangue> {
+  const { config } = await trouverConfig(fabrique.relais());
+  if (!config) return 'inactif';
+  try {
+    await fabrique.client(config).majLangueDefaut(id, langue);
+    return 'ok';
+  } catch (e) {
+    if (estInactif(e)) return 'inactif';
+    if (e instanceof ErreurEsport && e.statut === 404) return 'absent';
+    if (e instanceof ErreurEsport && e.statut === 403) return 'refuse';
     throw e;
   }
 }

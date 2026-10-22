@@ -57,8 +57,10 @@ export interface ProfilEsport {
 }
 export interface Moi {
   compte: string;
-  /** Langue choisie dans le profil (null : jamais choisie, on suit la langue de l'appareil). */
+  /** Langue choisie par l'utilisateur dans son profil (null : jamais choisie ; elle PRIME sur la langue par défaut). */
   langue?: Langue | null;
+  /** Langue par défaut du compte, définie par l'administrateur (Fondateur) : sert tant que `langue` est null. */
+  langueDefaut?: Langue;
   superAdmin: boolean;
   profil: ProfilEsport | null;
   peutCreerTeam: boolean;
@@ -137,6 +139,10 @@ export interface CompteEsport {
   discordId?: string | null;
   /** Compte Discord lié par /lier (vérifié) : il prime pour les pings du bot. */
   discordLie?: boolean;
+  /** Langue par défaut du compte (interface, e-mails, bot) : visible du Fondateur seul. */
+  langueDefaut?: Langue;
+  /** Langue choisie par l'utilisateur lui-même (prime sur la langue par défaut) : visible du Fondateur seul. */
+  langueChoisie?: Langue | null;
   /** « invite » : créé depuis l'Esport, jamais connecté. */
   statut: 'invite' | 'actif';
   inviteLe: string | null;
@@ -175,6 +181,8 @@ export interface Annuaire {
   peutCreerCompte: boolean;
   /** Seul le Fondateur modifie un Discord ID (contrôle serveur, 403 sinon). */
   peutModifierDiscordId?: boolean;
+  /** Seul le Fondateur règle la langue par défaut d'un compte (contrôle serveur, 403 sinon). */
+  peutModifierLangue?: boolean;
   teams: TeamAnnuaire[];
   comptes: CompteEsport[];
   /** Demandes de compte en attente (Fondateur : toutes ; sinon les siennes). */
@@ -696,6 +704,8 @@ export interface ClientEsport {
   majProfil(p: { pseudo: string; riotId?: string; discord?: string }): Promise<Moi>;
   /** Langue du profil (français / anglais), enregistrée sur le compte : le bot et les exports la connaissent. */
   majLangue(langue: Langue): Promise<Moi>;
+  /** Efface le choix de l'utilisateur : la langue définie par l'administrateur s'applique de nouveau. */
+  reinitialiserLangue(): Promise<Moi>;
   exporterMesDonnees(): Promise<unknown>;
   supprimerMesDonnees(): Promise<void>;
   teams(): Promise<TeamListee[]>;
@@ -741,9 +751,11 @@ export interface ClientEsport {
    * Ajoute un compte à une ou plusieurs teams d'un coup (un rôle par team) : compte connu (invité, actif, avec
    * ou sans team) ; compte du hub jamais connecté (Fondateur : `pseudo` requis). Tout ou rien.
    */
-  ajouterATeams(compte: string, c: { affectations: Affectation[]; pseudo?: string; discordId?: string }): Promise<CompteEsport | null>;
+  ajouterATeams(compte: string, c: { affectations: Affectation[]; pseudo?: string; discordId?: string; langue?: Langue }): Promise<CompteEsport | null>;
   /** Fondateur : pré-enregistre le compte du hub tout juste créé, avec ses teams. */
-  preinscrire(c: { compte: string; pseudo: string; discordId: string; affectations: Affectation[]; demandeId?: string }): Promise<CompteEsport | null>;
+  preinscrire(c: { compte: string; pseudo: string; discordId: string; affectations: Affectation[]; demandeId?: string; langue?: Langue }): Promise<CompteEsport | null>;
+  /** Fondateur SEUL : langue par défaut d'un compte (interface tant que l'utilisateur n'a pas choisi, e-mails, bot) ; 403 pour tout autre rôle. */
+  majLangueDefaut(compte: string, langue: Langue): Promise<CompteEsport | null>;
   /** Fondateur SEUL : pose, corrige ou retire (`null`) le Discord ID d'un membre (403 pour tout autre rôle). */
   majDiscordId(compte: string, discordId: string | null): Promise<CompteEsport | null>;
   /** Récapitulatif e-mail des notifications importantes (désactivé par défaut). */
@@ -864,6 +876,7 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     moi: () => appel('/moi'),
     majProfil: p => appel('/moi', 'PUT', p),
     majLangue: langue => appel('/moi/langue', 'PUT', { langue }),
+    reinitialiserLangue: () => appel('/moi/langue', 'PUT', { langue: null }),
     exporterMesDonnees: () => appel('/moi/export'),
     supprimerMesDonnees: async () => {
       await appel('/moi', 'DELETE');
@@ -910,6 +923,7 @@ export function clientEsport(config: ConfigEsport, requete: Fetch = globalThis.f
     },
     preinscrire: c => appel('/comptes', 'POST', c),
     majDiscordId: (compte, discordId) => appel(`/comptes/${encodeURIComponent(compte)}/discord-id`, 'PUT', { discordId }),
+    majLangueDefaut: (compte, langue) => appel(`/comptes/${encodeURIComponent(compte)}/langue-defaut`, 'PUT', { langue }),
     recapCourriel: () => appel('/moi/recap-courriel'),
     reglerRecapCourriel: r => appel('/moi/recap-courriel', 'PUT', r),
     ajouterATeams: (compte, c) => appel(`/comptes/${encodeURIComponent(compte)}/teams`, 'POST', c),

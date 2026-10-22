@@ -14,6 +14,8 @@ import {
   avecEmailCreationPar,
   avecEmailPar,
   avecEnvoiPar,
+  avecLangueComptePar,
+  avecLangueCreationPar,
   avecModeleInvitationPar,
   avecReglagesComptesPar,
   avecReglagesPar,
@@ -22,7 +24,7 @@ import {
   verifierGroupeRang,
 } from './actions';
 import { alertesComptes, definirNiveaux, statistiques } from './comptes';
-import { avecEmail, avecEnvoi, emailValide, erreurEmail, lireContacts, normaliserEmail, sansContact } from './contacts';
+import { avecEmail, avecEnvoi, avecLangue, emailValide, erreurEmail, langueDuCompte, langueEffective, lireContacts, normaliserEmail, sansContact } from './contacts';
 import { donneesVides, ecrireDonnees, lireDonnees, REGLAGES_DEFAUT } from './donnees';
 import { donneesDepuisEntites, entitesDonnees } from './fusionDonnees';
 import { encoderParametre, lienMailto, LONGUEUR_MAX_MAILTO, MODELE_INVITATION_DEFAUT, prenomFondateur, rendreModele, rendreTexte, validerModele, type ValeursModele } from './modeleInvitation';
@@ -104,6 +106,44 @@ describe('contacts : stockage chiffré avec les données de l’Administration',
   });
 });
 
+describe('langue par défaut d’un compte (fiche de l’Administration)', () => {
+  it('français sans réglage ; enregistrée avec l’adresse, relue, synchronisée, effacée avec le contact', () => {
+    let d = avecEmail(donneesVides(), 'hugo000002', 'hugo@exemple.fr', T);
+    expect(langueDuCompte(d.contacts.hugo000002)).toBe('fr');
+    d = avecLangue(d, 'hugo000002', 'en');
+    expect(d.contacts.hugo000002.langue).toBe('en');
+    expect(d.contacts.hugo000002.email).toBe('hugo@exemple.fr');
+    // Changer l'adresse ou noter un envoi ne perd pas la langue.
+    d = avecEnvoi(avecEmail(d, 'hugo000002', 'hugo2@exemple.fr', T), 'hugo000002', 'email', T);
+    expect(langueDuCompte(d.contacts.hugo000002)).toBe('en');
+    // Relue défensivement (valeur inconnue écartée) et synchronisée telle quelle.
+    expect(lireDonnees(ecrireDonnees(d)).contacts).toEqual(d.contacts);
+    expect(lireContacts({ hugo000002: { email: 'hugo@exemple.fr', langue: 'de', envois: [] } }).hugo000002.langue).toBeUndefined();
+    expect(donneesDepuisEntites(entitesDonnees(d), T).contacts.hugo000002.langue).toBe('en');
+    // Une langue seule (compte sans adresse) est gardée aussi.
+    expect(lireContacts({ zoe0000003: { langue: 'en', envois: [] } }).zoe0000003.langue).toBe('en');
+    expect(() => avecLangue(d, 'hugo000002', 'de' as never)).toThrow(/Langue/);
+    expect(langueDuCompte(avecLangue(d, 'hugo000002', undefined).contacts.hugo000002)).toBe('fr');
+  });
+
+  it('langue effective d’un e-mail : le choix de l’utilisateur (Esport) prime, puis la langue par défaut du serveur Esport, puis la fiche, puis le français', () => {
+    const contact = { langue: 'en' as const, envois: [] };
+    expect(langueEffective(undefined)).toBe('fr');
+    expect(langueEffective(contact)).toBe('en');
+    expect(langueEffective(contact, { langueChoisie: null, langueDefaut: 'fr' })).toBe('fr');
+    expect(langueEffective({ envois: [] }, { langueChoisie: 'en', langueDefaut: 'fr' })).toBe('en');
+    expect(langueEffective(contact, { langueChoisie: 'fr', langueDefaut: 'en' })).toBe('fr');
+  });
+
+  it('droits : comme l’adresse (gestionnaire sur ses amis, jamais sur un rang égal ou supérieur) ; création par un rang qui crée des amis', () => {
+    const d = donneesVides();
+    expect(avecLangueComptePar(gest, d, liste, 'zoe0000003', 'en').contacts.zoe0000003.langue).toBe('en');
+    expect(() => avecLangueComptePar(gest, d, liste, 'adm0000005', 'en')).toThrow(ErreurPermission);
+    expect(avecLangueCreationPar(gest, d, 'nouv000009', 'en').contacts.nouv000009.langue).toBe('en');
+    expect(() => avecLangueCreationPar(hugo, d, 'nouv000009', 'en')).toThrow(ErreurPermission);
+  });
+});
+
 describe('modèle du message d’invitation', () => {
   it('rend les variables ; une ligne dont la variable facultative est vide disparaît', () => {
     const complet = rendreModele(undefined, VALEURS);
@@ -118,6 +158,7 @@ describe('modèle du message d’invitation', () => {
     expect(sansCode.corps).not.toMatch(/\n{3,}/);
     expect(rendreTexte('A {inconnue} B', VALEURS)).toBe('A {inconnue} B');
     expect(prenomFondateur('Moi')).toBe('Ton administrateur');
+    expect(prenomFondateur('Moi', 'en')).toBe('Your administrator');
     expect(prenomFondateur(' Enzo ')).toBe('Enzo');
   });
 

@@ -23,7 +23,7 @@ import {
   type ActionGroupee,
 } from './comptes';
 import { avecNote, avecReglages, REGLAGES_COMPTES, type DonneesAdmin, type ReglagesAdmin } from './donnees';
-import { avecEmail, avecEnvoi, sansContact, type CanalInvitation } from './contacts';
+import { avecEmail, avecEnvoi, avecLangue, sansContact, type CanalInvitation, type LangueCompte } from './contacts';
 import { validerModele, type ModeleInvitation } from './modeleInvitation';
 import { exporterCsv, exporterJson, type EvenementAudit } from './journal';
 import type { Niveaux } from './niveaux';
@@ -190,6 +190,12 @@ export function avecEmailPar(acteur: Acteur | undefined, donnees: DonneesAdmin, 
   return avecEmail(donnees, id, email, maintenant);
 }
 
+/** Langue par défaut d'un compte (e-mails, interface Esport tant que l'utilisateur n'a pas choisi la sienne) : chiffrée avec les données de l'Administration. */
+export function avecLangueComptePar(acteur: Acteur | undefined, donnees: DonneesAdmin, profils: readonly Profil[], id: string, langue: LangueCompte | undefined): DonneesAdmin {
+  verifierSur(acteur, 'contact-ami', profils, id);
+  return avecLangue(donnees, id, langue);
+}
+
 /** Note qu'une invitation a été transmise à ce compte, et par quel canal. */
 export function avecEnvoiPar(acteur: Acteur | undefined, donnees: DonneesAdmin, profils: readonly Profil[], id: string, canal: CanalInvitation, maintenant: number): DonneesAdmin {
   verifierSur(acteur, 'contact-ami', profils, id);
@@ -246,6 +252,12 @@ export function verifierGroupeRang(acteur: Acteur | undefined, profils: readonly
   for (const id of ids) {
     exigerRang(acteur, cibleDe(profils, id), rang);
   }
+}
+
+/** Langue choisie à la création d'un compte (le compte vient d'être créé par l'acteur : il n'est pas encore dans sa liste). */
+export function avecLangueCreationPar(acteur: Acteur | undefined, donnees: DonneesAdmin, id: string, langue: LangueCompte): DonneesAdmin {
+  exiger(acteur, 'creer-ami');
+  return avecLangue(donnees, id, langue);
 }
 
 /** Adresse saisie à la création d'un compte (le compte vient d'être créé par l'acteur : il n'est pas encore dans sa liste). */

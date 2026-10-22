@@ -185,7 +185,7 @@ describe('Esport › Membres : invitation directe', () => {
     expect(creations[0][0]).toBe('Léa');
     expect(creations[0][1]).toEqual(['esport']);
     expect(creations[0][3]).toEqual({ politique: { longueurMin: 10, forceMin: 1 } });
-    expect(preinscrire).toHaveBeenCalledWith({ compte: 'lea0000001', pseudo: 'Léa', discordId: '412345678901234567', affectations: [{ teamId: 't1', roleId: 'r-jou', posteJeu: 'Duelliste' }] });
+    expect(preinscrire).toHaveBeenCalledWith({ compte: 'lea0000001', pseudo: 'Léa', discordId: '412345678901234567', langue: 'fr', affectations: [{ teamId: 't1', roleId: 'r-jou', posteJeu: 'Duelliste' }] });
     // Adresse chiffrée dans l'Administration, journal sans l'adresse.
     expect(chargerDonnees(stockage).contacts.lea0000001.email).toBe('Lea@exemple.fr');
     expect(JSON.stringify(chargerDonnees(stockage).journal)).toMatch(/créé depuis l’Esport/);
@@ -555,7 +555,7 @@ describe('Esport › Membres : demandes de compte (« Créer des membres »)', (
     expect(appels).toEqual(['verification', 'hub', 'esport']);
     const affectations = [{ teamId: 't1', roleId: 'r-jou', posteJeu: 'Sentinelle' }];
     expect(verifierPreinscription).toHaveBeenCalledWith({ pseudo: 'Noa', discordId: '512345678901234567', affectations, demandeId: 'd1' });
-    expect(preinscrire).toHaveBeenCalledWith({ compte: 'lea0000001', pseudo: 'Noa', discordId: '512345678901234567', affectations, demandeId: 'd1' });
+    expect(preinscrire).toHaveBeenCalledWith({ compte: 'lea0000001', pseudo: 'Noa', discordId: '512345678901234567', langue: 'fr', affectations, demandeId: 'd1' });
   });
 
   it('Joueur autorisé : demande au Fondateur (nom, e-mail, team, rôle), statut suivi ; ajout d’un compte Esport existant par pseudo', async () => {
@@ -642,5 +642,72 @@ describe('Esport › Membres : Discord ID', () => {
     await fireEvent.press(screen.getByLabelText('Gérer Bob'));
     expect(screen.queryByTestId('esport-discord-id-modifier-bob12345')).toBeNull();
     expect(screen.getByText('Seul le Fondateur peut le renseigner.')).toBeTruthy();
+  });
+});
+
+describe('Esport › Membres : langue par défaut des comptes', () => {
+  const rangJoueur = { teamId: 't1', membreId: 'm-lea', role: { id: 'r-jou', nom: 'Joueur', couleur: '#16a34a', cle: 'joueur' }, posteJeu: null, statut: 'actif' as const, rejointLe: '', gerable: true };
+
+  it('Fondateur : choisir English à la création → serveur Esport, fiche de l’Administration, invitation proposée en anglais', async () => {
+    const ouvrir = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    const { ctx, stockage } = contexteFondateur([fondateur]);
+    const preinscrire = jest.fn(async (c: { compte: string; pseudo: string }) => compte(c.compte, c.pseudo, { statut: 'invite', langueDefaut: 'en' }));
+    fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true), verifierPreinscription: async () => undefined, preinscrire });
+    await monter(ctx);
+    await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-creer'));
+    // Français par défaut, choix Français / English à la création.
+    expect(screen.getByTestId('esport-compte-langue-fr').props.accessibilityState?.checked).toBe(true);
+    await fireEvent.press(screen.getByTestId('esport-compte-langue-en'));
+    await fireEvent.changeText(screen.getByTestId('esport-compte-nom'), 'Sam');
+    await fireEvent.changeText(screen.getByTestId('esport-compte-email'), 'sam@exemple.com');
+    await fireEvent.changeText(screen.getByTestId('esport-compte-discord-id'), '412345678901234567');
+    await fireEvent.press(screen.getByTestId('esport-compte-team-faucons'));
+    await fireEvent.press(screen.getByTestId('esport-compte-creer'));
+    await confirmerIdentite();
+    await screen.findByTestId('esport-compte-cree');
+    expect(preinscrire).toHaveBeenCalledWith(expect.objectContaining({ pseudo: 'Sam', langue: 'en' }));
+    expect(chargerDonnees(stockage).contacts.lea0000001.langue).toBe('en');
+    expect(JSON.stringify(chargerDonnees(stockage).journal)).not.toMatch(/exemple\.com/);
+    // L'invitation est préparée en anglais (message anglais, langue de l'e-mail direct en EN).
+    await fireEvent.press(screen.getByTestId('admin-invitation-email'));
+    const corps = decodeURIComponent(ouvrir.mock.calls[0][0].split('body=')[1]);
+    expect(corps).toMatch(/Open this link|link/i);
+    expect(corps).not.toMatch(/Ouvre ce lien/);
+    ouvrir.mockRestore();
+  });
+
+  it('Fondateur : régler la langue d’un membre (serveur Esport + fiche de l’Administration) ; l’utilisateur garde la priorité', async () => {
+    const lea: Profil = { id: 'lea12345', nom: 'Léa', admin: false, creeLe: '', apps: ['esport'], actif: true };
+    const { ctx, stockage } = contexteFondateur([fondateur, lea]);
+    let fiche = compte('lea12345', 'Léa', { appartenances: [rangJoueur], discordId: '412345678901234567', langueDefaut: 'fr', langueChoisie: 'en' });
+    const majLangueDefaut = jest.fn(async (_id: string, langue: 'fr' | 'en') => {
+      fiche = { ...fiche, langueDefaut: langue };
+      return fiche;
+    });
+    fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => ({ ...annuaire(true, [fiche]), peutModifierLangue: true }), majLangueDefaut });
+    await monter(ctx);
+    await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByLabelText('Gérer Léa'));
+    expect(screen.getByTestId('esport-langue-compte-valeur-lea12345')).toHaveTextContent('Langue par défaut : Français · choix de l’utilisateur : English (il prime)');
+    expect(screen.getByTestId('esport-langue-compte-enregistrer-lea12345').props.accessibilityState?.disabled).toBe(true);
+    await fireEvent.press(screen.getByTestId('esport-langue-compte-choix-lea12345-en'));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('esport-langue-compte-enregistrer-lea12345'));
+      await new Promise<void>(r => setTimeout(r, 20));
+    });
+    expect(majLangueDefaut).toHaveBeenCalledWith('lea12345', 'en');
+    expect(chargerDonnees(stockage).contacts.lea12345.langue).toBe('en');
+    expect(JSON.stringify(chargerDonnees(stockage).journal)).toMatch(/Langue par défaut de Léa réglée sur English|Default language of Léa/);
+    await waitFor(() => expect(screen.getByTestId('esport-langue-compte-valeur-lea12345')).toHaveTextContent(/Langue par défaut : English/));
+  });
+
+  it('Propriétaire / Manager : aucune réglage de langue (le serveur répond 403 à toute modification)', async () => {
+    const lea = compte('lea12345', 'Léa', { appartenances: [rangJoueur], discordId: '412345678901234567' });
+    fabrique.client = () => fauxClient({ ouvrir: moi(false), annuaire: async () => ({ ...annuaire(false, [lea]), peutModifierLangue: false }) });
+    await monter({ profil: { id: 'max12345', nom: 'Max', admin: false, creeLe: '', apps: ['esport'] } });
+    await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByLabelText('Gérer Léa'));
+    expect(screen.queryByTestId('esport-langue-compte-lea12345')).toBeNull();
   });
 });

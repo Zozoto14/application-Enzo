@@ -18,7 +18,7 @@
  * clés pour le séquestre, comme dans l'Administration) : voir `capaciteComptes`.
  */
 
-import { avecEmailCreationPar, avecEnvoiPar, desactiverPar } from '../hub/admin/actions';
+import { avecEmailCreationPar, avecEnvoiPar, avecLangueComptePar, avecLangueCreationPar, desactiverPar } from '../hub/admin/actions';
 import { versAutorisations } from '../hub/admin/comptes';
 import { erreurEmail, normaliserEmail, type CanalInvitation, LIBELLES_CANAL } from '../hub/admin/contacts';
 import { avecEvenement, chargerDonnees, enregistrerDonnees, type DonneesAdmin } from '../hub/admin/donnees';
@@ -29,7 +29,7 @@ import { autorise, rangDe } from '../hub/admin/roles';
 import type { AppHub, ContexteHub } from '../hub/types';
 import type { InvitationAffichee } from '../profils/identifiants';
 import type { Affectation, ClientEsport, CompteEsport } from './client';
-import { langueCourante, tr, traduire, type Langue } from './i18n';
+import { NOM_LANGUE, langueCourante, tr, traduire, type Langue } from './i18n';
 
 /** Même règle que le serveur (esport/noyau/service.mjs) : le pseudo sert aussi d'identifiant dans le hub. */
 export const MOTIF_PSEUDO = /^[\p{L}\p{N}][\p{L}\p{N} _.\-]{1,23}$/u;
@@ -65,6 +65,8 @@ export interface SaisieCompte {
   email: string;
   /** Discord ID (17 à 20 chiffres), obligatoire : le bot pingue les convoqués avec. */
   discordId: string;
+  /** Langue par défaut du compte (interface Esport tant qu'il n'a pas choisi la sienne, e-mails, bot Discord) ; français sans choix. */
+  langue?: Langue;
   affectations: Affectation[];
   /** Validation d'une demande de compte (permission « Créer des membres ») : close avec le pré-enregistrement. */
   demandeId?: string;
@@ -113,6 +115,7 @@ export interface CompteCree {
   nom: string;
   email: string;
   discordId: string;
+  langue: Langue;
   invitation: InvitationAffichee;
   /** Fiche Esport (pré-enregistrement réussi). */
   fiche: CompteEsport | null;
@@ -152,27 +155,28 @@ export async function creerCompteEsport({
   const valeurs = await controle.onCreerCompte!(nom, apps, { niveaux, invitationExpireLe: new Date(maintenant + jours * 86_400_000).toISOString() }, optionsInvitation(donnees));
   if (!valeurs.id) throw new Error(tr('comptesHub.le_compte_a_ete'));
   const id = valeurs.id;
-  // 3. Adresse (chiffrée, base du Fondateur) et journal de l'Administration.
+  // 3. Adresse et langue par défaut (chiffrées, base du Fondateur) et journal de l'Administration.
+  const langue: Langue = saisie.langue === 'en' ? 'en' : 'fr';
   majDonnees(contexte, d =>
     avecEvenement(
-      avecEmailCreationPar(acteur, d, id, email, maintenant),
+      avecLangueCreationPar(acteur, avecEmailCreationPar(acteur, d, id, email, maintenant), id, langue),
       { type: 'compte', cible: id, nomCible: nom, app: 'esport', action: traduire('fr', 'comptesHub.compte_de_cree_depuis', { nom, v: nomsTeams.join(', ') }) },
       maintenant,
     ),
   );
   // 4. Pré-enregistrement Esport.
   try {
-    const fiche = await client.preinscrire({ compte: id, pseudo: nom, discordId, affectations: saisie.affectations, ...(saisie.demandeId ? { demandeId: saisie.demandeId } : {}) });
-    return { id, nom, email, discordId, invitation: valeurs.invitation ?? { erreur: tr('comptesHub.invitation_indisponible_sur_ce') }, fiche };
+    const fiche = await client.preinscrire({ compte: id, pseudo: nom, discordId, langue, affectations: saisie.affectations, ...(saisie.demandeId ? { demandeId: saisie.demandeId } : {}) });
+    return { id, nom, email, discordId, langue, invitation: valeurs.invitation ?? { erreur: tr('comptesHub.invitation_indisponible_sur_ce') }, fiche };
   } catch (e) {
     const texte = e instanceof Error ? e.message : String(e);
-    return { id, nom, email, discordId, invitation: valeurs.invitation ?? { erreur: tr('comptesHub.invitation_indisponible_sur_ce') }, fiche: null, erreurEsport: texte };
+    return { id, nom, email, discordId, langue, invitation: valeurs.invitation ?? { erreur: tr('comptesHub.invitation_indisponible_sur_ce') }, fiche: null, erreurEsport: texte };
   }
 }
 
 /** Refait le pré-enregistrement Esport d'un compte du hub déjà créé (après un échec réseau). */
-export async function rattacherCompte(client: ClientEsport, id: string, nom: string, affectations: Affectation[], demandeId?: string, discordId = ''): Promise<CompteEsport | null> {
-  return client.preinscrire({ compte: id, pseudo: nom, discordId: normaliserDiscordId(discordId), affectations, ...(demandeId ? { demandeId } : {}) });
+export async function rattacherCompte(client: ClientEsport, id: string, nom: string, affectations: Affectation[], demandeId?: string, discordId = '', langue: Langue = 'fr'): Promise<CompteEsport | null> {
+  return client.preinscrire({ compte: id, pseudo: nom, discordId: normaliserDiscordId(discordId), langue, affectations, ...(demandeId ? { demandeId } : {}) });
 }
 
 /** Nouveau lien d'invitation (l'ancien cesse de marcher) : même action que l'Administration. */
@@ -224,6 +228,32 @@ export function noterEnvoiEsport(contexte: ContexteHub, id: string, nom: string,
 export function emailDe(contexte: ContexteHub, id: string): string | undefined {
   if (!contexte.admin) return undefined;
   return chargerDonnees(contexte.admin.stockage).contacts[id]?.email;
+}
+
+/** Langue par défaut enregistrée dans la fiche d'un compte (données de l'Administration) ; français sans réglage. */
+export function langueDe(contexte: ContexteHub, id: string): Langue {
+  if (!contexte.admin) return 'fr';
+  return chargerDonnees(contexte.admin.stockage).contacts[id]?.langue ?? 'fr';
+}
+
+/**
+ * Change la langue par défaut d'un compte depuis l'Esport (Fondateur seulement : 403 côté serveur pour les autres) : serveur
+ * Esport d'abord (interface, e-mails de récapitulatif, bot), puis la fiche de l'Administration (e-mails d'invitation,
+ * de support, Messagerie) quand les données de l'Administration sont accessibles sur cet appareil.
+ */
+export async function changerLangueCompte(contexte: ContexteHub, client: ClientEsport | null, id: string, nom: string, langue: Langue, maintenant = Date.now()): Promise<CompteEsport | null> {
+  // Compte sans fiche Esport (jamais connecté) : le serveur garde la langue en attente jusqu'à sa première ouverture de l'Esport.
+  const fiche = client ? await client.majLangueDefaut(id, langue) : null;
+  const controle = contexte.profils;
+  if (contexte.admin && controle && controle.tous.some(p => p.id === id)) {
+    try {
+      majDonnees(contexte, d => avecLangueComptePar(controle.actuel, d, controle.tous, id, langue));
+      journaliser(contexte, { type: 'compte', cible: id, nomCible: nom, action: traduire('fr', 'comptesHub.langue_de_regl_e', { nom, v: NOM_LANGUE[langue] }) }, maintenant);
+    } catch {
+      // Compte pas encore dans la liste de cet appareil (synchronisation en cours) : le serveur Esport a la bonne langue.
+    }
+  }
+  return fiche;
 }
 
 /** Modèle personnalisé de l'Administration, s'il y en a un (sinon : modèle Esport). */

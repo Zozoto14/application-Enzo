@@ -40,10 +40,21 @@ export interface EnvoiInvitation {
   relance?: boolean;
 }
 
+/** Langue d'un compte pour les e-mails (et l'interface Esport tant que l'utilisateur n'a pas choisi la sienne). */
+export type LangueCompte = 'fr' | 'en';
+export const LANGUES_COMPTE: readonly LangueCompte[] = ['fr', 'en'];
+export const NOMS_LANGUES: Record<LangueCompte, string> = { fr: 'Français', en: 'English' };
+export const estLangueCompte = (v: unknown): v is LangueCompte => v === 'fr' || v === 'en';
+
 export interface ContactCompte {
   email?: string;
   /** Dernière modification de l'adresse (ISO) : départage deux appareils. */
   emailLe?: string;
+  /**
+   * Langue par défaut du compte, réglée par le Fondateur (absente : français). Elle suit l'adresse : chiffrée
+   * avec les données de l'Administration, jointe à la demande d'envoi d'un e-mail (le serveur ne la garde pas).
+   */
+  langue?: LangueCompte;
   envois: EnvoiInvitation[];
 }
 
@@ -91,10 +102,11 @@ export function lireContact(brut: unknown): ContactCompte | undefined {
   const contact: ContactCompte = { envois: [] };
   if (typeof o.email === 'string' && emailValide(o.email)) contact.email = normaliserEmail(o.email);
   if (typeof o.emailLe === 'string' && !Number.isNaN(Date.parse(o.emailLe))) contact.emailLe = o.emailLe;
+  if (estLangueCompte(o.langue)) contact.langue = o.langue;
   if (Array.isArray(o.envois)) {
     contact.envois = o.envois.map(lireEnvoi).filter((e): e is EnvoiInvitation => Boolean(e)).sort((a, b) => a.date.localeCompare(b.date)).slice(-MAX_ENVOIS);
   }
-  return contact.email || contact.envois.length > 0 || contact.emailLe ? contact : undefined;
+  return contact.email || contact.langue || contact.envois.length > 0 || contact.emailLe ? contact : undefined;
 }
 
 export function lireContacts(brut: unknown): Record<string, ContactCompte> {
@@ -118,6 +130,26 @@ export function avecEmail<T extends AvecContacts>(donnees: T, id: string, saisie
   const suivant: ContactCompte = { ...avant, envois: [...avant.envois], emailLe: new Date(maintenant).toISOString() };
   if (email) suivant.email = email;
   else delete suivant.email;
+  return { ...donnees, contacts: { ...donnees.contacts, [id]: suivant } };
+}
+
+/** Langue par défaut d'un compte (français sans réglage). */
+export const langueDuCompte = (contact: ContactCompte | undefined): LangueCompte => contact?.langue ?? 'fr';
+
+/**
+ * Langue d'un e-mail pour un compte : la langue effective côté Esport quand on la connaît (choix de l'utilisateur,
+ * sinon langue par défaut du serveur Esport), sinon la langue par défaut de sa fiche, sinon le français.
+ */
+export const langueEffective = (contact: ContactCompte | undefined, esport?: { langueChoisie?: LangueCompte | null; langueDefaut?: LangueCompte }): LangueCompte =>
+  esport?.langueChoisie ?? esport?.langueDefaut ?? contact?.langue ?? 'fr';
+
+/** Règle la langue par défaut d'un compte ; `undefined` revient au français. Lève si la langue est inconnue. */
+export function avecLangue<T extends AvecContacts>(donnees: T, id: string, langue: LangueCompte | undefined): T {
+  if (langue !== undefined && !estLangueCompte(langue)) throw new Error('Langue : fr ou en.');
+  const avant = donnees.contacts[id] ?? { envois: [] };
+  const suivant: ContactCompte = { ...avant, envois: [...avant.envois] };
+  if (langue) suivant.langue = langue;
+  else delete suivant.langue;
   return { ...donnees, contacts: { ...donnees.contacts, [id]: suivant } };
 }
 

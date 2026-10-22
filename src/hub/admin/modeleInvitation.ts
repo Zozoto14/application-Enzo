@@ -86,10 +86,10 @@ export type ValeursModele = Partial<Record<VariableModele, string>>;
 const MOTIF_VARIABLE = /\{([a-zA-Z]+)\}/g;
 const FACULTATIVES: readonly VariableModele[] = ['code', 'site', 'connexion', 'longueur'];
 
-/** Le prénom « Moi » (coffre créé sans prénom) ne s'affiche pas dans un message. */
-export function prenomFondateur(nom: string | undefined): string {
+/** Le prénom « Moi » (coffre créé sans prénom) ne s'affiche pas dans un message : « Ton administrateur » / « Your administrator ». */
+export function prenomFondateur(nom: string | undefined, langue: 'fr' | 'en' = 'fr'): string {
   const propre = (nom ?? '').trim();
-  return propre && propre !== 'Moi' ? propre.slice(0, 30) : 'Ton administrateur';
+  return propre && propre !== 'Moi' ? propre.slice(0, 30) : langue === 'en' ? 'Your administrator' : 'Ton administrateur';
 }
 
 /** Date lisible d'expiration (« 22 octobre », « 22 October »). */

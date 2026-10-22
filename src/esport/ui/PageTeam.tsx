@@ -39,7 +39,7 @@ import { BoutonConfirme, Panneau, PastilleRole, Retours, TitreSection, styles, u
 import { CodeAffiche } from './CodeLiaison';
 import { apiMonDiscord, type CodeLiaison, type MonDiscord } from '../discord/api';
 import { AvatarTeam, Badge, Carte, ESP, EtatVide, LARGEUR_CONTENU, MenuActions, Onglets, Squelette, TitreCarte, TYPO, attenue as styleAttenue, couleurTeam, texte as styleTexte, titre as styleTitreEsport, type EtatPresse } from './design';
-import { definirLangue, tr, trn, useLangue } from '../i18n';
+import { NOM_LANGUE, definirLangue, tr, trn, useLangue, type Langue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
 import { ReglageRecapCourriel } from './DiscordId';
 import { noterPage, pageDeSection } from '../usage';
@@ -668,8 +668,13 @@ export function MonProfil({ theme, client, onExporter, onSupprime }: { theme: Th
   const [profil, setProfil] = useState<{ pseudo: string; riotId: string; discord: string } | undefined>();
   const { enCours, erreur, avis, agir } = useAgir();
   const langue = useLangue();
+  // Langue choisie par l'utilisateur (prime) et langue définie par l'administrateur (sert tant qu'il n'a rien choisi).
+  const [langues, setLangues] = useState<{ choisie: Langue | null; defaut: Langue }>({ choisie: null, defaut: 'fr' });
   useEffect(() => {
-    client.moi().then(m => setProfil({ pseudo: m.profil?.pseudo ?? '', riotId: m.profil?.riotId ?? '', discord: m.profil?.discord ?? '' }), () => undefined);
+    client.moi().then(m => {
+      setProfil({ pseudo: m.profil?.pseudo ?? '', riotId: m.profil?.riotId ?? '', discord: m.profil?.discord ?? '' });
+      setLangues({ choisie: m.langue ?? null, defaut: m.langueDefaut ?? 'fr' });
+    }, () => undefined);
   }, [client]);
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
   if (!profil) return null;
@@ -688,11 +693,33 @@ export function MonProfil({ theme, client, onExporter, onSupprime }: { theme: Th
           definirLangue(l);
           void agir('langue', async () => {
             await client.majLangue(l);
+            setLangues(v => ({ ...v, choisie: l }));
             return tr('profil.langue_enregistree');
           });
         }}
         testID="esport-profil-langue"
       />
+      {langues.choisie ? (
+        <BoutonHub
+          theme={theme}
+          titre={tr('profil.langue_admin', { langue: NOM_LANGUE[langues.defaut] })}
+          onPress={() =>
+            void agir('langue', async () => {
+              // Le choix de l'utilisateur est effacé : la langue définie par l'administrateur s'applique de nouveau.
+              const m = await client.reinitialiserLangue();
+              const defaut = m.langueDefaut ?? langues.defaut;
+              setLangues({ choisie: null, defaut });
+              definirLangue(defaut);
+              return tr('profil.langue_admin_retablie', { langue: NOM_LANGUE[defaut] });
+            })
+          }
+          testID="esport-profil-langue-admin"
+        />
+      ) : (
+        <Text style={attenue} testID="esport-profil-langue-defaut">
+          {tr('profil.langue_definie_par_admin', { langue: NOM_LANGUE[langues.defaut] })}
+        </Text>
+      )}
       <LierDiscord theme={theme} client={client} />
       <ReglageRecapCourriel theme={theme} client={client} />
       <View style={styles.ligne}>

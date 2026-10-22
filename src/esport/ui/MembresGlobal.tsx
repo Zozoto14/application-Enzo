@@ -21,7 +21,7 @@ import { Avis, BoutonHub, Champ, Pilule, Segments } from '../../hub/admin/ui/com
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { AppHub, ContexteHub } from '../../hub/types';
 import type { Annuaire, AppartenanceCompte, ClientEsport, CompteEsport, DemandeCompte, TeamAnnuaire } from '../client';
-import { capaciteComptes, emailDe, modeleInvitationEsport, noterEnvoiEsport, renvoyerInvitation, revoquerCompte } from '../comptesHub';
+import { capaciteComptes, emailDe, langueDe, modeleInvitationEsport, noterEnvoiEsport, renvoyerInvitation, revoquerCompte } from '../comptesHub';
 import { comptesHubSansEsport, comptesOrphelins } from '../synchroAdmin';
 import { BoutonConfirme, Choix, PastilleRole, Retours, styles as communs, useAgir, Intertitre, Panneau } from './commun';
 import { ESP, EnTetePage, EtatVide, SqueletteCartes } from './design';
@@ -30,8 +30,9 @@ import { CreationCompte } from './CreationCompte';
 import { DemandesCompte } from './DemandesCompte';
 import { useIdentite } from './Identite';
 import { dateJour } from '../libelles';
-import { langueCourante, tr, trn } from '../i18n';
+import { tr, trn } from '../i18n';
 import { BadgeDiscordManquant, DiscordIdMembre } from './DiscordId';
+import { LangueCompte } from './LangueCompte';
 import { nomRole, nomPoste } from '../client';
 
 type FiltreStatut = 'tous' | 'invite' | 'actif' | 'suspendu' | 'sansteam' | 'sansdiscord';
@@ -407,6 +408,7 @@ function LigneCompte({
       {ouvert ? (
         <View style={{ padding: 12, paddingTop: 0, gap: 12 }}>
           {!compte.horsEsport ? <DiscordIdMembre theme={theme} client={client} compte={compte} modifiable={Boolean(annuaire.peutModifierDiscordId)} onFait={onRecharger} /> : null}
+          <LangueCompte theme={theme} client={client} contexte={contexte} compte={compte} modifiable={Boolean(annuaire.peutModifierLangue) || (compte.horsEsport === true && capacite)} onFait={onRecharger} />
           {compte.appartenances.map(a => {
             const t = teamDe(a.teamId);
             return t ? <Appartenance key={a.membreId} theme={theme} compte={compte} a={a} team={t} occupe={occupe} client={client} onAction={onAction} onOuvrirTeam={onOuvrirTeam} /> : null;
@@ -434,7 +436,7 @@ function LigneCompte({
                   email={emailDe(contexte, compte.compte)}
                   modele={modeleInvitationEsport(nomsTeams, 'fr')}
                   modeleEn={modeleInvitationEsport(nomsTeams, 'en')}
-                  langueInitiale={langueCourante()}
+                  langueInitiale={compte.langueDefaut ?? langueDe(contexte, compte.compte)}
                   fondateur={contexte.profils?.actuel.nom}
                   onEnvoye={canal => noterEnvoiEsport(contexte, compte.compte, compte.pseudo, canal)}
                 />

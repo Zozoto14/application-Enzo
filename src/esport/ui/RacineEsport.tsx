@@ -66,8 +66,9 @@ export function Esport(props: PropsRacineApp) {
     const client = fabrique.client(config);
     try {
       const moi = await client.ouvrir();
-      // Langue du compte si elle a été choisie, sinon celle de l'appareil (jamais celle d'un compte précédent).
-      definirLangue(moi.langue ?? langueAppareil());
+      // Langue choisie par l'utilisateur ; à défaut, celle définie par l'administrateur pour son compte ; à défaut, celle de
+      // l'appareil (jamais celle d'un compte précédent).
+      definirLangue(moi.langue ?? moi.langueDefaut ?? langueAppareil());
       setEtat({ e: 'pret', client, moi });
     } catch (e) {
       if (estInactif(e)) setEtat({ e: 'inactif', raison: 'serveur' });
@@ -250,7 +251,8 @@ function ProfilInitial({ theme, client, onFait }: { theme: ThemeHub; client: Cli
             void agir('profil', async () => {
               const moi = await client.majProfil({ pseudo: pseudo.trim(), riotId: riotId.trim() || undefined, discord: discord.trim() || undefined });
               // La langue affichée devient celle du compte (le bot Discord et les exports la connaissent) ; sans bloquer l'entrée.
-              const avecLangue = await client.majLangue?.(langueCourante()).catch(() => undefined);
+              // Un nouveau profil a le français pour langue par défaut : on n'enregistre un CHOIX que si la langue affichée en diffère.
+              const avecLangue = langueCourante() === moi.langueDefaut ? undefined : await client.majLangue?.(langueCourante()).catch(() => undefined);
               onFait(avecLangue ?? moi);
             })
           }

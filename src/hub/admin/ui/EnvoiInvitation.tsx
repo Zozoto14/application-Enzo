@@ -64,7 +64,7 @@ export function valeursInvitation(invitation: InvitationAffichee, nom: string, f
     prenom: invitation.prenom ?? nom,
     lien: invitation.lien ?? '',
     expiration: dateExpiration(invitation.expire, langue),
-    fondateur: prenomFondateur(invitation.fondateur ?? fondateur),
+    fondateur: prenomFondateur(invitation.fondateur ?? fondateur, langue),
     code: invitation.codeCourt && invitation.site ? invitation.codeCourt : '',
     site: invitation.codeCourt && invitation.site ? invitation.site : '',
     connexion: invitation.lienConnexion ?? '',

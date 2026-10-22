@@ -126,6 +126,44 @@ describe('Administration : invitation par e-mail', () => {
   });
 });
 
+describe('Administration : langue par défaut d’un compte', () => {
+  it('création : Français par défaut, English au choix → fiche chiffrée, invitation proposée en anglais', async () => {
+    const { ctx, stockage } = contexte(fondateur, [fondateur, hugo]);
+    await rendre(ctx);
+    await fireEvent.press(screen.getByTestId('admin-onglet-utilisateurs'));
+    await fireEvent.press(screen.getByTestId('admin-nouveau'));
+    expect(screen.getByTestId('admin-nouveau-langue-fr').props.accessibilityState?.checked ?? screen.getByTestId('admin-nouveau-langue-fr').props.accessibilityState?.selected).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('admin-nouveau-langue-en'));
+    await fireEvent.changeText(screen.getByTestId('admin-nom'), 'Lucas');
+    await fireEvent.changeText(screen.getByTestId('admin-nouveau-email'), 'lucas@exemple.com');
+    await fireEvent.press(screen.getByTestId('admin-nouveau-informe'));
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('admin-creer'));
+      await new Promise<void>(r => setTimeout(r, 80));
+    });
+    const donnees = chargerDonnees(stockage);
+    expect(donnees.contacts.lucas00009.langue).toBe('en');
+    expect(donnees.contacts.lucas00009.email).toBe('lucas@exemple.com');
+    expect(JSON.stringify(ctx.profils!.tous)).not.toMatch(/"langue"/);
+    expect(JSON.stringify(donnees.journal)).toMatch(/langue : English/);
+    // Message d'invitation en anglais d'emblée (langue du compte).
+    expect(screen.getByTestId('admin-invitation-message')).toHaveTextContent(/Open this link/);
+  });
+
+  it('fiche : régler la langue par défaut (journalisée), l’invitation suit', async () => {
+    const { ctx, stockage } = contexte(fondateur, [fondateur, hugo]);
+    await rendre(ctx);
+    await fireEvent.press(screen.getByTestId('admin-onglet-utilisateurs'));
+    await fireEvent.press(screen.getByTestId('admin-ligne-hugo000002'));
+    expect(screen.getByTestId('admin-fiche-langue-enregistrer').props.accessibilityState?.disabled).toBe(true);
+    await fireEvent.press(screen.getByTestId('admin-fiche-langue-en'));
+    await fireEvent.press(screen.getByTestId('admin-fiche-langue-enregistrer'));
+    expect(chargerDonnees(stockage).contacts.hugo000002.langue).toBe('en');
+    expect(JSON.stringify(chargerDonnees(stockage).journal)).toMatch(/Langue par défaut de Hugo réglée sur English/);
+    expect(await screen.findByTestId('admin-fiche-langue-retour')).toHaveTextContent(/English/);
+  });
+});
+
 describe('Administration : matrice et actions groupées', () => {
   it('une case de la matrice change l’accès d’un compte à une app', async () => {
     const { ctx, modifications } = contexte(fondateur, [fondateur, hugo]);

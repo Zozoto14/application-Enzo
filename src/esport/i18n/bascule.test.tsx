@@ -171,6 +171,39 @@ describe('bascule de langue', () => {
     expect(langueCourante()).toBe('fr');
   });
 
+  it('langue par défaut définie par l’administrateur : appliquée tant que l’utilisateur n’a pas choisi, son choix prime', async () => {
+    const base = { compte: 'lea12345', superAdmin: false, profil: { pseudo: 'Léa', riotId: null, discord: null }, peutCreerTeam: false };
+    // Pas de choix personnel + langue par défaut English : l'interface s'ouvre en anglais (même si l'appareil est en français).
+    const { unmount } = await monter(fauxClient({ ouvrir: async () => ({ ...base, langue: null, langueDefaut: 'en' as const }) }));
+    expect(await screen.findByText('All your teams at a glance: key figures, the week ahead, alerts.')).toBeTruthy();
+    await unmount();
+    // Choix personnel (français) : il prime sur la langue par défaut English.
+    await monter(fauxClient({ ouvrir: async () => ({ ...base, langue: 'fr' as const, langueDefaut: 'en' as const }) }));
+    expect(await screen.findByText('Toutes vos teams en un coup d’œil : chiffres clés, semaine à venir, alertes.')).toBeTruthy();
+    expect(langueCourante()).toBe('fr');
+  });
+
+  it('« Revenir à la langue définie par l’administrateur » : le choix est effacé, la langue par défaut s’applique', async () => {
+    const base = { compte: 'lea12345', superAdmin: false, profil: { pseudo: 'Léa', riotId: null, discord: null }, peutCreerTeam: false };
+    const reinitialiserLangue = jest.fn(async () => ({ ...base, langue: null, langueDefaut: 'en' as const }));
+    const moi = async () => ({ ...base, langue: 'fr' as const, langueDefaut: 'en' as const });
+    await monter(fauxClient({ ouvrir: moi, moi, reinitialiserLangue }));
+    await screen.findByTestId('esport-dashboard');
+    await fireEvent.press(screen.getByTestId('esport-nav-teams'));
+    await screen.findByTestId('esport-teams');
+    await fireEvent.press(await screen.findByTestId('esport-mon-profil-ouvrir'));
+    const bouton = await screen.findByTestId('esport-profil-langue-admin');
+    expect(bouton).toHaveTextContent('Revenir à la langue définie par l’administrateur (English)');
+    await act(async () => {
+      fireEvent.press(bouton);
+      await new Promise<void>(r => setTimeout(r, 20));
+    });
+    expect(reinitialiserLangue).toHaveBeenCalledTimes(1);
+    expect(langueCourante()).toBe('en');
+    expect(screen.queryByTestId('esport-profil-langue-admin')).toBeNull();
+    expect(screen.getByTestId('esport-profil-langue-defaut')).toHaveTextContent(/Your account language, set by the administrator: English/);
+  });
+
   it('« Esport pas encore activé » (hors serveur) suit la langue de l’appareil puis celle choisie', async () => {
     fabrique.relais = () => undefined;
     (globalThis as { __ESPORT_LANGUE_APPAREIL__?: string }).__ESPORT_LANGUE_APPAREIL__ = 'en-GB';
