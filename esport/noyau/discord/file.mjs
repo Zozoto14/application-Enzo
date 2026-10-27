@@ -343,14 +343,26 @@ const AGENT = 'DiscordBot (https://github.com/Zozoto14/application-Enzo, 1)';
  * Appel à Discord (webhook, ou API du bot avec `jetonBot`). Rend `{ ok, statut, corps? }`, ou
  * `{ ok: false, statut, retryApresS?, definitif, motif }`. Ne lit la réponse que pour `retry_after`
  * (429) et, si `lireCorps`, l'identifiant du message créé ; ne suit aucune redirection.
+ *
+ * `fichiers` (facultatif ; annonces des posts CM, reseaux/annonces.mjs) : `[{ nom, type, octets }]` envoyés en
+ * pièces jointes (multipart : `payload_json` + `files[n]`) ; l'embed peut les citer par `attachment://<nom>`. Avec
+ * `lireCorps`, la réponse rend aussi `imageUrl` : l'adresse (CDN de Discord) de l'image du premier embed.
  */
-export async function appelerDiscord(fetchDiscord, url, charge, { methode = 'POST', jetonBot, lireCorps = false } = {}) {
+export async function appelerDiscord(fetchDiscord, url, charge, { methode = 'POST', jetonBot, lireCorps = false, fichiers } = {}) {
   let r;
+  const multipart = Array.isArray(fichiers) && fichiers.length > 0;
+  let corpsRequete = JSON.stringify(charge);
+  if (multipart) {
+    corpsRequete = new FormData();
+    corpsRequete.append('payload_json', JSON.stringify({ ...charge, attachments: fichiers.map((f, i) => ({ id: i, filename: f.nom })) }));
+    fichiers.forEach((f, i) => corpsRequete.append(`files[${i}]`, new Blob([f.octets], { type: f.type }), f.nom));
+  }
   try {
     r = await fetchDiscord(url, {
       method: methode,
-      headers: { 'Content-Type': 'application/json', ...(jetonBot ? { Authorization: `Bot ${jetonBot}`, 'User-Agent': AGENT } : {}) },
-      body: JSON.stringify(charge),
+      // Multipart : le Content-Type (et sa frontière) est posé par fetch.
+      headers: { ...(multipart ? {} : { 'Content-Type': 'application/json' }), ...(jetonBot ? { Authorization: `Bot ${jetonBot}`, 'User-Agent': AGENT } : {}) },
+      body: corpsRequete,
       redirect: 'manual',
       signal: AbortSignal.timeout(DELAI_ENVOI_MS),
     });
@@ -368,7 +380,8 @@ export async function appelerDiscord(fetchDiscord, url, charge, { methode = 'POS
     }
     const id = v => (typeof v === 'string' && /^\d{5,25}$/.test(v) ? v : null);
     // `salonId` : salon du message créé (webhook avec ?wait=true : salon réel, ou post de forum).
-    return { ok: true, statut: r.status, messageId: id(corps?.id), salonId: id(corps?.channel_id) };
+    const image = corps?.embeds?.[0]?.image?.url;
+    return { ok: true, statut: r.status, messageId: id(corps?.id), salonId: id(corps?.channel_id), imageUrl: typeof image === 'string' && /^https:\/\/[^\s"<>]+$/.test(image) && image.length <= 2000 ? image : null };
   }
   if (r.status === 429) {
     let corps = {};

@@ -26,6 +26,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [tournois-resultats.md](tournois-resultats.md) | Staff, tout le monde | Tournois (inscription, roster, parcours, matchs au planning, classement) et résultats (score selon le jeu, bilans, Discord) |
 | [cm.md](cm.md) | Fondateur, CM, correspondants, joueurs | Section CM : tableaux façon Trello, posts FR / EN par réseau, validation, calendrier, clips des joueurs, dépôts des teams, import Trello |
 | [visuels.md](visuels.md) | Fondateur, CM | Visuels de la section CM : charte graphique (thème cyberpunk), modèles d'affiches par défaut (4 formats, FR / EN), éditeur, génération PNG / JPEG jointe aux posts |
+| [reseaux-stats.md](reseaux-stats.md) | Fondateur, CM | Page Réseaux du CM : comptes du club et des teams, annonce Discord des posts publiés (anglais + fil français), statistiques des posts, vidéos et comptes (relevés datés, engagement, tableaux de bord, import / export CSV) |
 | [sponsors.md](sponsors.md) | Fondateur, Responsable CM | Sponsors & partenaires (rubrique du CM) : pipeline des prospects, partenaires, contrats et contreparties, tableau de bord, import / export CSV, RGPD des contacts |
 | [statistiques.md](statistiques.md) | Fondateur | Page Statistiques (réservée au Fondateur) : qui utilise l'app, pages les plus et les moins utilisées, ce qui est collecté |
 | [securite.md](securite.md) | Fondateur | Revue de sécurité, RGPD, limites |
@@ -67,7 +68,7 @@ Esport
 │       ├── Équipe       Résumés · Objectifs et tâches · Suivi joueurs · CM · Membres et rôles
 │       └── Réglages     Paramètres · Discord · Journal
 ├── Membres
-├── CM                   (section CM du club, voir cm.md ; onglets Visuels, voir visuels.md, et Sponsors, voir sponsors.md)
+├── CM                   (section CM du club, voir cm.md ; onglets Visuels, voir visuels.md, Réseaux, voir reseaux-stats.md, et Sponsors, voir sponsors.md)
 ├── Jeux                 (profils de jeu et assistant IA, voir profils-jeu.md)
 └── Statistiques         (Fondateur seulement : statistiques d'usage, voir statistiques.md)
 ```
@@ -166,6 +167,8 @@ La migration `0023_cm.sql` ajoute la **section CM** : affectez le Responsable CM
 Équipe CM**) et activez le module **CM** dans les teams existantes ([cm.md](cm.md)).
 La migration `0024_sponsors.sql` ajoute la rubrique **Sponsors** du CM, ouverte par défaut au Responsable CM
 (permissions `sponsors.voir` / `sponsors.gerer`, modifiables dans **Esport › CM › Équipe CM**) ([sponsors.md](sponsors.md)).
+La migration `0026_cm_reseaux.sql` ajoute la page **Réseaux** du CM : enregistrez les comptes du club, réglez
+l'annonce Discord de chacun (**Esport › CM › Réseaux**) ([reseaux-stats.md](reseaux-stats.md)).
 
 ### Créer une team
 

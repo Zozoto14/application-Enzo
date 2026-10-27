@@ -23,6 +23,7 @@
 import { effacementCompetition } from './competition/rgpd.mjs';
 import { effacementCm } from './cm/rgpd.mjs';
 import { effacementSponsors } from './sponsors/rgpd.mjs';
+import { effacementReseaux } from './reseaux/rgpd.mjs';
 import { discordIdLibre, lireDiscordId } from './discordId.mjs';
 import { lireLangue } from './langues.mjs';
 import { evenement } from './evenements.mjs';
@@ -455,6 +456,8 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       ...(await effacementCm(base, compte)),
       // Sponsors (migration 0024) : plus responsable de rien ; ce qu'il a écrit reste, sans auteur.
       ...effacementSponsors(compte),
+      // Réseaux (migration 0026) : ce qu'il a saisi reste, sans auteur.
+      ...effacementReseaux(compte),
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, par: 'administration' }, maintenant: t }),
     );

@@ -1,7 +1,8 @@
 /**
  * Espace CM du club (entrée « CM » de la navigation de l'Esport) : tableaux (club et teams), file « À
  * valider », calendrier éditorial, clips des joueurs, visuels (modèles, charte, éditeur ; docs/esport/visuels.md), et pour le gestionnaire (cm.gerer) : équipe et rôles
- * CM, import Trello, réglages (suggestions automatiques), journal de la section. Rubrique « Sponsors » pour qui a
+ * CM, import Trello, réglages (suggestions automatiques), journal de la section. Page « Réseaux » (comptes, bot
+ * d'annonce Discord, statistiques ; docs/esport/reseaux-stats.md) pour qui voit la section CM. Rubrique « Sponsors » pour qui a
  * sponsors.voir (affectation « club ») : seule visible pour un compte qui n'a QUE les Sponsors. Tout est décidé
  * par le serveur ; l'écran n'affiche que ce que la réponse permet.
  */
@@ -26,10 +27,11 @@ import { GalerieClips } from './Clips';
 import { ImportTrello } from './ImportTrello';
 import { RolesCm } from './RolesCm';
 import { EspaceSponsors } from '../sponsors/EspaceSponsors';
+import { EspaceReseaux } from './reseaux/EspaceReseaux';
 import { Visuels } from './visuels/Visuels';
 import { trVi } from '../../i18n/visuels';
 
-type OngletCm = 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'visuels' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
+type OngletCm = 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'visuels' | 'reseaux' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
 
 export function EspaceCm({ theme, client, large, moi, onExporter }: { theme: ThemeHub; client: ClientEsport; large: boolean; moi: MoiCm; onExporter?(nom: string, contenu: string, type?: string): Promise<boolean> }) {
   const api = useMemo(() => apiCm(client), [client]);
@@ -48,6 +50,8 @@ export function EspaceCm({ theme, client, large, moi, onExporter }: { theme: The
           { id: 'calendrier', libelle: trCm('espace.calendrier') },
           { id: 'clips', libelle: trCm('espace.clips') },
           { id: 'visuels', libelle: trVi('espace.titre') },
+          // Page Réseaux (migration 0026) : comptes, annonce Discord des posts publiés, statistiques.
+          { id: 'reseaux', libelle: trCm('espace.reseaux') },
         ]
       : []),
     ...(sponsors ? [{ id: 'sponsors', libelle: trCm('espace.sponsors') }] : []),
@@ -88,6 +92,7 @@ export function EspaceCm({ theme, client, large, moi, onExporter }: { theme: The
       {onglet === 'valider' ? <FileValidation theme={theme} api={api} large={large} version={etat?.aValider} onOuvrir={id => { setOuvert(id); setOnglet('tableaux'); }} /> : null}
       {onglet === 'calendrier' ? <Calendrier theme={theme} api={api} large={large} onOuvrirTableau={id => { setOuvert(id); setOnglet('tableaux'); }} /> : null}
       {onglet === 'clips' ? <GalerieClips theme={theme} api={api} large={large} teams={teams} /> : null}
+      {onglet === 'reseaux' && voirCm ? <EspaceReseaux theme={theme} client={client} large={large} onExporter={onExporter} /> : null}
       {onglet === 'visuels' && voirCm ? <Visuels theme={theme} apiCm={api} large={large} moi={moi} /> : null}
       {onglet === 'equipe' && moi.gerer ? <RolesCm theme={theme} api={api} large={large} /> : null}
       {onglet === 'import' && moi.gerer ? <ImportTrello theme={theme} api={api} large={large} onOuvrir={id => { setOuvert(id); setOnglet('tableaux'); }} /> : null}

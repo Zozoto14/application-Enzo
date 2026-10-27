@@ -338,4 +338,17 @@ export const EN = {
   'visuel.bilan_nuls': '{v} W · {n} D · {d} L',
   'visuel.semaine': 'Week of {du} – {au}',
   'visuel.programme_vide': 'No match scheduled this week',
+
+  // ---- CM space, Social page: Discord announcement of a published post
+  'reseaux.modele_defaut': 'New {reseau} post from {compte}: {titre}\n{url}',
+  'reseaux.club': 'the club',
+  'reseaux.nouveau_post': 'New post · {reseau}',
+  'reseaux.test_titre': 'Test message · {reseau}',
+  'reseaux.champ_compte': 'Account',
+  'reseaux.champ_reseau': 'Network',
+  'reseaux.champ_team': 'Team',
+  'reseaux.voir_post': 'View the post',
+  'reseaux.exemple_titre': '2-0 win against the Falcons',
+  'reseaux.test_exemple': 'Example post (test message)',
+  'reseaux.test_salon': 'Test message: the “{salon}” channel will receive announcements of published posts.',
 };

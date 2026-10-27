@@ -148,6 +148,14 @@ export const TABLES = [
   ['cm_modele_versions', 'id'],
   ['cm_visuels', 'id'],
   ['cm_visuel_images', 'fichier_id'],
+  // Page « Réseaux » de l'espace CM (migration 0026) : l'adresse des webhooks des salons du club reste CHIFFRÉE.
+  ['cm_rs_salons', 'id'],
+  ['cm_rs_comptes', 'id'],
+  ['cm_rs_cibles', 'compte_id, cle'],
+  ['cm_rs_publications', 'id'],
+  ['cm_rs_releves_posts', 'id'],
+  ['cm_rs_releves_comptes', 'id'],
+  ['cm_rs_annonces', 'id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

@@ -339,4 +339,17 @@ export const FR = {
   'visuel.bilan_nuls': '{v} V · {n} N · {d} D',
   'visuel.semaine': 'Semaine du {du} au {au}',
   'visuel.programme_vide': 'Pas de match prévu cette semaine',
+
+  // ---- Page Réseaux de l'espace CM : annonce Discord d'un post publié
+  'reseaux.modele_defaut': 'Nouveau post {reseau} de {compte} : {titre}\n{url}',
+  'reseaux.club': 'le club',
+  'reseaux.nouveau_post': 'Nouveau post · {reseau}',
+  'reseaux.test_titre': 'Message de test · {reseau}',
+  'reseaux.champ_compte': 'Compte',
+  'reseaux.champ_reseau': 'Réseau',
+  'reseaux.champ_team': 'Team',
+  'reseaux.voir_post': 'Voir le post',
+  'reseaux.exemple_titre': 'Victoire 2-0 contre les Faucons',
+  'reseaux.test_exemple': 'Exemple de post (message de test)',
+  'reseaux.test_salon': 'Message de test : le salon « {salon} » recevra les annonces des posts publiés.',
 };

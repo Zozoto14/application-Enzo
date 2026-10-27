@@ -35,6 +35,7 @@ import { aPermissionJeux, jeuValidePourTeam, nomsDesJeux } from './jeux/service.
 import { effacementCompetition } from './competition/rgpd.mjs';
 import { effacementCm, exportCm } from './cm/rgpd.mjs';
 import { effacementSponsors, exportSponsors } from './sponsors/rgpd.mjs';
+import { effacementReseaux, exportReseaux } from './reseaux/rgpd.mjs';
 
 const MOTIF_PSEUDO = /^[\p{L}\p{N}][\p{L}\p{N} _.\-]{1,23}$/u;
 const MOTIF_RIOT = /^[^#\s][^#]{2,15}#[\p{L}\p{N}]{3,5}$/u;
@@ -899,6 +900,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       ...(await exportCm(base, compte)),
       // Sponsors (migration 0024) : fiches dont il est responsable, échanges qu'il a notés.
       ...(await exportSponsors(base, compte)),
+      // Réseaux (migration 0026) : comptes réseaux et publications ajoutés, relevés saisis.
+      ...(await exportReseaux(base, compte)),
     };
   }
 
@@ -993,6 +996,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       ...(await effacementCm(base, compte)),
       // Sponsors (migration 0024) : plus responsable de rien ; ce qu'il a écrit reste, sans auteur.
       ...effacementSponsors(compte),
+      // Réseaux (migration 0026) : ce qu'il a saisi reste, sans auteur.
+      ...effacementReseaux(compte),
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, ...(compte === acteur.compte ? {} : { parFondateur: true }) }, maintenant: t }),
     );

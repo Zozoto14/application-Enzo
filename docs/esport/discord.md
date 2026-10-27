@@ -6,6 +6,11 @@
 > **embeds** (couleur et emoji du type d'événement, horodatages, lien vers l'app). Les relances « RSVP manquant »
 > sont groupées en un seul message par événement.
 
+> **Annonce des posts publiés (CM › Réseaux)** : quand un post de la section CM est marqué publié avec son adresse,
+> un message (anglais + fil français, rôle facultatif, visuel) part dans les salons choisis pour le compte du réseau :
+> le salon Discord d'une team (celui réglé ici : bot ou webhook) ou un salon du club (webhook chiffré propre à la page
+> Réseaux). Réglages, idempotence et réessais : [reseaux-stats.md](reseaux-stats.md).
+
 Chaque team peut envoyer des messages dans **un salon Discord** : nouvel événement au planning, rappels,
 résumé publié, tâche assignée… Le serveur Esport poste sur un **webhook** (une adresse secrète fournie par
 Discord). Rien à installer côté Discord, pas de bot.
@@ -235,6 +240,9 @@ Serveur local de développement : `ESPORT_CLE_DISCORD`, `ESPORT_LIEN_APP`.
 - Routes : `GET /teams/:t/discord`, `PUT|DELETE /teams/:t/discord/webhook`, `POST /teams/:t/discord/test`,
   `PUT /teams/:t/discord/parametres/:cle`, `PUT /teams/:t/discord/langue`, `PUT /teams/:t/discord/bilingue`
   (`{ filFr }`).
+- Annonces des posts publiés (page Réseaux du CM) : `esport/noyau/reseaux/annonces.mjs`, file `cm_rs_annonces`
+  (migration 0026), mêmes briques (`appelerDiscord`, qui sait aussi joindre un fichier, `bilingue.mjs`, modèles et
+  mentions de `messages.mjs`) ; un salon de team utilise le bot ou le webhook réglés ici.
 - Fil français : `bilingue.mjs` et `traiterFile()` (`file.mjs`) ; migration `0020_discord_bilingue.sql` ; tests
   `esport/test/discord-bilingue.test.mjs` (formatage anglais, fil simulé, forum, alerte au Fondateur et anti-spam,
   idempotence des réessais, réglage, message de test).

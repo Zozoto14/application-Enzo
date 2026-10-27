@@ -4,6 +4,7 @@
  */
 
 import { tr } from '../i18n';
+import { traduireServeur } from '../i18n/erreurs';
 
 const texte = (v: unknown, secours = '?'): string => (typeof v === 'string' && v ? v : secours);
 
@@ -37,6 +38,37 @@ export function phraseJournalCm(action: string, qui: string, m: Record<string, u
       return tr('cm.jr.post_invalide', { titre });
     case 'cm.post_publie':
       return tr('cm.jr.post_publie', { qui, titre });
+    case 'cm.post_adresses':
+      return tr('cm.jr.post_adresses', { qui, titre });
+    // Page Réseaux (migration 0026).
+    case 'cm.reseau_compte_cree':
+    case 'cm.reseau_compte_modifie':
+    case 'cm.reseau_compte_supprime':
+      return tr('cm.jr.reseau_compte', { qui, compte: texte(m.identifiant) });
+    case 'cm.reseau_annonce_modifiee':
+      return tr('cm.jr.reseau_annonce', { qui, compte: texte(m.identifiant) });
+    case 'cm.reseau_salon_ajoute':
+    case 'cm.reseau_salon_modifie':
+    case 'cm.reseau_salon_supprime':
+      return tr('cm.jr.reseau_salon', { qui, nom: texte(m.nom) });
+    case 'cm.reseau_publication_ajoutee':
+    case 'cm.reseau_publication_modifiee':
+    case 'cm.reseau_publication_supprimee':
+      return tr('cm.jr.reseau_publication', { qui, titre });
+    case 'cm.reseau_releve':
+      return tr('cm.jr.reseau_releve', { qui });
+    case 'cm.reseau_import':
+      return tr('cm.jr.reseau_import', { qui });
+    case 'cm.reseau_export':
+      return tr('cm.jr.reseau_export', { qui });
+    case 'cm.reseau_reglages':
+      return tr('cm.jr.reseau_reglages', { qui });
+    case 'cm.reseau_rappel_releve':
+      return tr('cm.jr.reseau_rappel', { titre });
+    case 'cm.annonce_abandonnee':
+      return tr('cm.jr.annonce_abandonnee', { reseau: texte(m.reseau), motif: traduireServeur(texte(m.motif)) });
+    case 'cm.annonce_fil_impossible':
+      return tr('cm.jr.annonce_fil', { reseau: texte(m.reseau), motif: traduireServeur(texte(m.motif)) });
     case 'cm.clip_propose':
       return tr('cm.jr.clip_propose', { qui, titre });
     case 'cm.clip_decide':
@@ -86,6 +118,8 @@ export function phraseNotificationCm(type: string, team: string, c: Record<strin
             : tr('cm.nt.clip_propose_retour', { titre });
     case 'cm-affecte':
       return tr('cm.nt.affecte', { role: texte(c.role) });
+    case 'cm-releve':
+      return tr('cm.nt.releve', { titre, reseau: texte(c.reseau), j: typeof c.j === 'number' ? c.j : '?' });
     default:
       return undefined;
   }

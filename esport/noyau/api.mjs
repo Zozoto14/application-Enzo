@@ -54,10 +54,13 @@ import { servicesCm } from './cm/service.mjs';
 import { routeFichierCm, routesCm } from './cm/routes.mjs';
 import { servicesSponsors } from './sponsors/service.mjs';
 import { routesSponsors } from './sponsors/routes.mjs';
+import { servicesReseaux } from './reseaux/service.mjs';
+import { routesReseaux } from './reseaux/routes.mjs';
+import { traiterAnnoncesReseaux } from './reseaux/annonces.mjs';
 
 export const VERSION_ESPORT = 4;
 /** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
-export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors'];
+export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux'];
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
@@ -181,6 +184,8 @@ export function creerApi({
   const cm = servicesCm({ base, maintenant, medias: md, cleSession, stockage });
   // Sponsors & partenaires (migration 0024) : rubrique de l'espace CM, permissions du club sponsors.voir / sponsors.gerer.
   const sp = servicesSponsors({ base, maintenant, medias: md, cleSession, stockage });
+  // Page « Réseaux » de l'espace CM (migration 0026) : comptes, bot d'annonce Discord des posts publiés, statistiques.
+  const rsx = servicesReseaux({ base, maintenant, cle: secretDiscord, fetch: envoiDiscord, jetonBot: discordBot.jetonBot || undefined, lienApp });
   // Bot Discord (interactions HTTP) : DISCORD_APPLICATION_ID et DISCORD_PUBLIC_KEY (variables), DISCORD_BOT_TOKEN (secret).
   const configBot = { applicationId: discordBot.applicationId || '', publicKey: discordBot.publicKey || '' };
   const jetonBot = discordBot.jetonBot || undefined;
@@ -386,6 +391,8 @@ export function creerApi({
     }
     const sponsors = await routesSponsors({ sp, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
     if (sponsors !== undefined) return sponsors;
+    const reseaux = await routesReseaux({ rs: rsx, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
+    if (reseaux !== undefined) return reseaux;
     const sectionCm = await routesCm({ cm, medias: md, acteur, chemin, methode: m, url, requete, lireCorps: max => lireCorps(requete, max), limite });
     if (sectionCm !== undefined) return sectionCm;
     const profilsJeu = await routesJeux({ jeux: jx, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
@@ -494,6 +501,8 @@ export function creerApi({
       // Distribution du bus, puis envoi immédiat des messages Discord mis en file (le cron reprend les réessais).
       const travail = distribuer(base, { maintenant: maintenant() })
         .then(() => traiterFile(base, { cle: secretDiscord, fetch: envoiDiscord, maintenant: maintenant(), lienApp, jetonBot }))
+        // Annonces Discord des posts publiés (page Réseaux) : même principe, leur propre file.
+        .then(() => traiterAnnoncesReseaux(base, { cle: secretDiscord, fetch: envoiDiscord, maintenant: maintenant(), lienApp, jetonBot, stockage }))
         .catch(e => console.error('[esport] distribution', e));
       if (attendre) attendre(travail);
       else await travail;

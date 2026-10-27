@@ -1,8 +1,8 @@
 /**
  * Événements de domaine de la section CM et leur abonné « notifications in-app ». Le journal reçoit déjà
  * tout événement (abonneJournal : actions `cm.*`, module « CM » des filtres du journal de la team pour une
- * portée de team ; journal de la section pour le club). Pas de Discord à cette étape : `cm.post_publie`
- * porte déjà de quoi annoncer un post publié (réseaux, adresses, liens) pour la prochaine étape.
+ * portée de team ; journal de la section pour le club). `cm.post_publie` et `cm.post_adresses` sont consommés
+ * par la page Réseaux (reseaux/annonces.mjs : annonce Discord, publications suivies pour les statistiques).
  *
  * Notifications : membres assignés à une carte, personnes @mentionnées dans un commentaire, valideurs
  * (post soumis, ou repassé « à valider » après une modification), auteur du post (validé, refusé), CM
@@ -27,6 +27,8 @@ export const TYPES_CM = [
   'cm.post_refuse',
   'cm.post_invalide',
   'cm.post_publie',
+  // Adresse ajoutée ou changée sur un post déjà publié (migration 0026 : l'annonce Discord est rééditée).
+  'cm.post_adresses',
   'cm.clip_propose',
   'cm.clip_decide',
   'cm.import_trello',

@@ -20,13 +20,17 @@ import { nettoyerEnvois, servicesMedias } from './medias/service.mjs';
 import { servicesResumes } from './resumes.mjs';
 import { agregerUsage, purgerUsage } from './usage/collecte.mjs';
 import { rappelsSponsors } from './sponsors/rappels.mjs';
+import { rappelsReseaux } from './reseaux/rappels.mjs';
+import { traiterAnnoncesReseaux } from './reseaux/annonces.mjs';
+import { releverAutomatiquement } from './reseaux/adaptateurs.mjs';
 
 /**
  * Rend `[{ tache, ok, erreur? }]`. Options : `cle` (CLE_DISCORD sinon CLE_ESPORT), `lienApp`, `jetonBot`, `fetch`,
  * `maintenant`, `stockage` (fichiers : ménage des envois), `cleSession`, `transcriptionExterne` et
- * `fetchTranscription` (API de transcription facultative).
+ * `fetchTranscription` (API de transcription facultative), `adaptateursReseaux` (relevés automatiques des
+ * statistiques des réseaux : aucun en V1, voir reseaux/adaptateurs.mjs).
  */
-export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, maintenant = () => Date.now(), journal = console, stockage, cleSession, transcriptionExterne, fetchTranscription } = {}) {
+export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, maintenant = () => Date.now(), journal = console, stockage, cleSession, transcriptionExterne, fetchTranscription, adaptateursReseaux = [] } = {}) {
   const transcrire = async () => {
     if (!transcriptionExterne?.actif || !stockage) return 0;
     const socle = { contexteTeam: async () => { throw new Error('Contexte indisponible dans le cron.'); } };
@@ -40,8 +44,12 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     ['débuts Discord', () => debutsDiscord(base, { maintenant: maintenant() })],
     // Sponsors : prochaines actions, contreparties à faire avant l'échéance, contrats en fin de préavis.
     ['rappels Sponsors', () => rappelsSponsors(base, { maintenant: maintenant() })],
+    // Réseaux (page de l'espace CM) : relevés automatiques (adaptateurs d'API, aucun en V1), rappels J+1 / J+7.
+    ['relevés automatiques des réseaux', () => releverAutomatiquement(base, { adaptateurs: adaptateursReseaux, maintenant: maintenant() })],
+    ['rappels Réseaux', () => rappelsReseaux(base, { maintenant: maintenant() })],
     ['événements en attente', () => distribuer(base, { maintenant: maintenant(), limite: 500 })],
     ['file Discord', () => traiterFile(base, { cle, maintenant: maintenant(), lienApp, jetonBot, ...(fetch ? { fetch } : {}) })],
+    ['annonces Réseaux', () => traiterAnnoncesReseaux(base, { cle, maintenant: maintenant(), lienApp, jetonBot, stockage, ...(fetch ? { fetch } : {}) })],
     ['rétention du journal', () => purgerJournal(base, { maintenant: maintenant() })],
     // Statistiques d'usage : agrégation des jours terminés (une fois par jour), puis détail brut de plus de 90 jours effacé.
     ['agrégation de l’usage', () => agregerUsage(base, { maintenant: maintenant() })],

@@ -1182,7 +1182,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
   /**
    * `POST /cm/cartes/:id/publier` `{ publications: { x: url } }` : un post VALIDÉ passe « publié » (copié à la
    * main sur les réseaux), avec l'adresse du post par réseau. Relancé sur un post publié : met à jour les
-   * adresses. Événement `cm.post_publie` (la prochaine étape s'y abonnera : annonce Discord, statistiques).
+   * adresses. Événement `cm.post_publie` (première fois) ou `cm.post_adresses` (adresse ajoutée ou changée) :
+   * la page Réseaux s'y abonne (annonce Discord, idempotente ; publications suivies pour les statistiques).
    */
   async function publier(acteur, id, corps) {
     const { carte: c, tableau: tb, ctx } = await postVisible(acteur, id);
@@ -1191,16 +1192,20 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     // Garde-fou : le contenu publié est bien celui qui a été validé.
     if (c.statut === 'valide' && (await empreinteContenu(await contenuDe(c))) !== c.empreinte_validee) throw echec(409, 'validation-requise', 'Le contenu a changé depuis la validation : faites-le valider de nouveau.');
     const reseaux = jsonOu(c.reseaux, []);
-    const publications = { ...jsonOu(c.publications, {}), ...lirePublications(corps?.publications, reseaux) };
+    const avant = jsonOu(c.publications, {});
+    const publications = { ...avant, ...lirePublications(corps?.publications, reseaux) };
     const t = maintenant();
     const premiere = c.statut !== 'publie';
+    const changees = Object.keys(publications).filter(r => publications[r] !== avant[r]);
     await base.lot([
       { sql: "UPDATE cm_cartes SET statut = 'publie', publications = ?, publie_par = COALESCE(publie_par, ?), publie_le = COALESCE(publie_le, ?), version = version + 1, maj_le = ? WHERE id = ?", params: [JSON.stringify(publications), acteur.compte, iso(t), iso(t), c.id] },
       ...(premiere ? await rangerDansListe(tb, c.id, 'publie', c.liste_id) : []),
       activite(c.id, tb.id, acteur.compte, premiere ? 'publiee' : 'adresses', { reseaux: Object.keys(publications) }, t),
       ...(premiere
         ? [evenement('cm.post_publie', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_carte', entiteId: c.id, charge: { titre: c.titre, tableau: tb.id, portee: tb.portee, team: c.team_id ?? null, reseaux, publications, liens: jsonOu(c.liens, {}), datePublication: c.date_publication ?? null }, maintenant: t })]
-        : []),
+        : changees.length
+          ? [evenement('cm.post_adresses', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_carte', entiteId: c.id, charge: { titre: c.titre, tableau: tb.id, portee: tb.portee, reseaux: changees, publications }, maintenant: t })]
+          : []),
       versionTableau(tb.id, t),
     ]);
     return carte(acteur, id);

@@ -565,7 +565,34 @@
   "Ce visuel a été modifié entre-temps : rechargez-le.": "This visual was changed in the meantime: reload it.",
   "Les données ont changé depuis l’ouverture : le visuel va être régénéré.": "The data changed since it was opened: the visual will be regenerated.",
   "Carte d’une autre portée.": "Card from another space.",
-  "Ce visuel n’a pas encore été généré.": "This visual hasn't been generated yet."
+  "Ce visuel n’a pas encore été généré.": "This visual hasn't been generated yet.",
+  "Publication introuvable.": "Publication not found.",
+  "Identifiant invalide pour ce réseau.": "Invalid handle for this network.",
+  "L’identifiant ne correspond pas à l’adresse du profil.": "The handle does not match the profile address.",
+  "Ce compte est déjà enregistré.": "This account is already registered.",
+  "Position invalide.": "Invalid position.",
+  "Choisissez au moins un salon Discord pour ce compte.": "Choose at least one Discord channel for this account.",
+  "Salon introuvable.": "Channel not found.",
+  "Langue inconnue.": "Unknown language.",
+  "Période d’un an au plus.": "Period of one year at most.",
+  "Date de publication invalide.": "Invalid publication date.",
+  "Compte inconnu pour ce réseau.": "Unknown account for this network.",
+  "Cette publication est déjà suivie.": "This post is already tracked.",
+  "L’adresse et la date d’un post de la section CM se modifient sur sa carte.": "The address and date of a CM post are changed on its card.",
+  "Date du relevé invalide (AAAA-MM-JJ, pas dans le futur).": "Invalid snapshot date (YYYY-MM-DD, not in the future).",
+  "Valeur illisible : un nombre positif est attendu.": "Unreadable value: a positive number is expected.",
+  "Saisissez au moins une valeur.": "Enter at least one value.",
+  "Relevé introuvable.": "Snapshot not found.",
+  "Adaptateur de statistiques invalide (nom, reseaux, releverCompte ou releverPost).": "Invalid statistics adapter (nom, reseaux, releverCompte or releverPost).",
+  "Indiquez la colonne de l’adresse du post.": "Indicate the column with the post address.",
+  "Indiquez la colonne du compte.": "Indicate the account column.",
+  "Team supprimée ou archivée": "Team deleted or archived",
+  "Team sans salon Discord (ni bot ni webhook)": "Team without a Discord channel (no bot, no webhook)",
+  "Salon du club supprimé": "Club channel deleted",
+  "Post dépublié ou supprimé": "Post unpublished or deleted",
+  "Annonce désactivée pour ce compte": "Announcement disabled for this account",
+  "Salon Discord changé depuis l’annonce : message non modifiable": "Discord channel changed since the announcement: message cannot be edited",
+  "Annonce supprimée dans Discord : rien à modifier": "Announcement deleted in Discord: nothing to edit"
  },
  "motifs": [
   [
@@ -839,6 +866,22 @@
   [
    "^Visuel invalide \\((.+) : (.+)\\)\\.$",
    "Invalid visual ($1: $2)."
+  ],
+  [
+   "^(\\d+) comptes au plus\\.$",
+   "$1 accounts at most."
+  ],
+  [
+   "^(\\d+) salons au plus\\.$",
+   "$1 channels at most."
+  ],
+  [
+   "^Salons cibles illisibles \\((\\d+) au plus\\)\\.$",
+   "Unreadable target channels ($1 at most)."
+  ],
+  [
+   "^Adresse du profil invalide : https:// sur (.+), page du compte\\.$",
+   "Invalid profile address: https:// on $1, the account page."
   ]
  ]
 }

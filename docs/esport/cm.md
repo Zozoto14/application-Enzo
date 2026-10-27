@@ -8,7 +8,8 @@ se copient, les médias se téléchargent). Elle a deux niveaux :
 - la **partie CM de chaque team** (module `cm`, onglet **CM** dans la section **Équipe**), où le correspondant de
   la team dépose les informations et où les joueurs proposent leurs clips.
 
-Visuels (charte, modèles, éditeur, génération d'affiches) : [visuels.md](visuels.md).
+Visuels (charte, modèles, éditeur, génération d'affiches) : [visuels.md](visuels.md). Comptes des réseaux, annonce
+Discord des posts publiés et statistiques (onglet **Réseaux**) : [reseaux-stats.md](reseaux-stats.md).
 
 Migration : `esport/migrations/0023_cm.sql`. Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
 
@@ -97,7 +98,10 @@ Circuit :
 4. **Publier** (`cm.editer`) : seulement un post validé (409 `validation-requise`). On publie à la main, puis on colle
    l'**adresse du post** par réseau (https sur le domaine du réseau). Le post passe **Publié**, son contenu est
    verrouillé (« Annuler la publication » le ramène à Validé). Événement **`cm.post_publie`** (réseaux, adresses,
-   liens, team) : il servira à la prochaine étape (annonce Discord, statistiques).
+   liens, team) à la première publication, **`cm.post_adresses`** quand une adresse est ajoutée ou changée ensuite :
+   la page **Réseaux** s'y abonne — **annonce Discord** du post (une par réseau et par salon, jamais en double ; une
+   adresse changée réédite le message) et **publication suivie** pour les statistiques
+   ([reseaux-stats.md](reseaux-stats.md)).
 
 Les cartes se déplacent librement : glisser un post dans « Publié » ne le publie pas (le badge montre son statut).
 
@@ -174,8 +178,9 @@ Journal (bus) : actions `cm.*` (tableaux, cartes, commentaires, dépôts, soumis
 invalidations, publications, clips, import Trello, rôles, affectations, réglages). Une action sur un tableau de team
 va dans le journal de la team (filtre « CM ») ; celles du club dans **CM › Journal** (gestionnaires).
 
-**Discord : rien à cette étape** (le travail du CM est interne ; l'annonce d'un post publié, en anglais avec un fil
-français, viendra à la prochaine étape à partir de `cm.post_publie`).
+**Discord** : le travail du CM reste interne (aucun message pour une carte, une validation, un clip) ; seule l'**annonce
+d'un post publié** part sur Discord, en anglais avec un fil français, réglée compte par compte dans **CM › Réseaux**
+(salons, rôle, messages, test : [reseaux-stats.md](reseaux-stats.md)).
 
 ## Données (migration 0023)
 
@@ -216,6 +221,9 @@ des joueurs liés aux posts ; ce qu'il a écrit pour le club reste, sans auteur.
 | `/cm/portees/:portee/envois…` (envoi par morceaux, portée `club` ou une team) ; `GET /cm/fichiers/:id?c&exp&sig` (lien signé) | editer, deposer ou proposer |
 
 Limites de débit (par compte et par heure) : 20 imports Trello, 30 clips, 30 dépôts.
+
+La migration `0026_cm_reseaux.sql` ajoute la page **Réseaux** (comptes, annonces, statistiques : tables `cm_rs_*`,
+voir [reseaux-stats.md](reseaux-stats.md)).
 
 ## Code et tests
 
