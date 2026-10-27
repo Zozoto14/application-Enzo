@@ -108,6 +108,49 @@ L'app **refuse** `@everyone`, `@here` et tout ce qui n'est pas un identifiant. L
 par les webhooks (réglage du rôle dans Discord : « Autoriser tout le monde à @mentionner ce rôle », ou le droit
 de mentionner `@everyone`/rôles donné au webhook).
 
+## Anglais d'abord, puis un fil français
+
+Réglage : **Réglages › Discord › Langue principale : anglais (défaut) + fil français** (activé par défaut pour
+toutes les teams ; permission `discord.manage`).
+
+1. Le message part **en anglais** dans le salon (texte du modèle, embed, boutons, dates), par le bot ou par le
+   webhook. Les **pings** (convoqués liés, rôle choisi) sont sur ce message, et seulement sur lui.
+2. Juste après, le **bot** ouvre un **fil** (thread) sur ce message : « 🇫🇷 Version française · <titre> »
+   (100 caractères au plus, archivé après 24 h d'inactivité). Pour un webhook, le message est envoyé avec
+   `?wait=true` (Discord rend son identifiant et son salon) et le fil est créé par le bot
+   (`POST /channels/{salon}/messages/{message}/threads`) : il faut donc que le bot soit configuré
+   (`DISCORD_BOT_TOKEN`) et présent sur le serveur, même si la team n'utilise que le webhook.
+3. La **version française** complète (même embed traduit, boutons RSVP compris, aucune mention) est postée
+   dans ce fil : par le webhook (`?thread_id=`) ou par le bot. Quand les réponses RSVP changent, l'annonce
+   anglaise et sa version française sont rééditées.
+4. **Salon forum** (webhook créé dans un forum) : le message anglais ouvre un **post** (son titre = titre anglais
+   de l'embed) et la version française est la première réponse de ce post ; le bot n'est pas nécessaire.
+
+**Fil impossible** (bot non configuré, absent du serveur, ou permission manquante : 403 / codes Discord 50001,
+50013) : le message anglais est **toujours** gardé, et **aucun second message français** n'est envoyé. À la place,
+une courte alerte (anglais puis français) est postée dans le même salon ; elle **mentionne le Fondateur** (compte
+Discord lié par `/lier`, sinon le Discord ID saisi sur le compte Fondateur ; sans l'un ni l'autre : le texte
+« Fondateur » sans ping, et le Journal le signale) et nomme la permission manquante. **Au plus une alerte par salon
+et par 24 h** (table `discord_alertes_fil`), mais chaque fil impossible est écrit dans le Journal et dans les
+derniers envois. L'écran Réglages › Discord affiche la liste des permissions, le dernier fil créé et, en rouge, le
+dernier échec et son motif. Le bouton **Envoyer un message de test** essaie aussi le fil et dit s'il a pu être créé
+(sans alerte dans le salon).
+
+**Permissions du bot à activer dans le salon** (rôle « Esport HQ » ou permissions du salon) : View Channel, Send
+Messages, Embed Links, Read Message History, **Create Public Threads**, **Send Messages in Threads**. Le lien
+d'invitation de l'app les demande toutes (`permissions=309237861376`) ; un bot invité avant doit les recevoir à la
+main (voir [bot-discord.md](bot-discord.md), étape 5).
+
+**Une seule tâche, sans doublon** : l'anglais, le fil et le français forment une seule ligne de la file d'envoi.
+Chaque étape réussie est enregistrée avant la suivante (`message_id`, `fil_id`) : un réessai (429, erreur réseau,
+5xx) reprend à l'étape suivante sans jamais reposter l'anglais ni recréer le fil (un fil déjà créé, code 160004, est
+réutilisé). Par le bot, chaque message porte un `nonce` stable avec `enforce_nonce` : Discord ignore un envoi
+rejoué. Une limite de débit (429) reporte l'étape sans compter d'essai ; si le français échoue encore après 6 essais,
+l'envoi est terminé (l'anglais est parti) et le motif est gardé.
+
+**Désactivé** : un seul message, dans la langue choisie sous l'interrupteur (français par défaut). Un modèle
+personnalisé n'est jamais traduit : il sert pour l'anglais et pour le fil.
+
 ## Comment ça marche (envoi, réessais)
 
 1. Une action dans l'app (événement créé, tâche assignée…) publie un **événement** dans le bus interne. Le
@@ -185,7 +228,11 @@ Serveur local de développement : `ESPORT_CLE_DISCORD`, `ESPORT_LIEN_APP`.
 - Base : migration `0004_discord.sql` (`discord_webhooks`, `discord_notification_settings`, `discord_file`,
   `discord_rappels`). SQL standard, comme le reste.
 - Routes : `GET /teams/:t/discord`, `PUT|DELETE /teams/:t/discord/webhook`, `POST /teams/:t/discord/test`,
-  `PUT /teams/:t/discord/parametres/:cle`.
+  `PUT /teams/:t/discord/parametres/:cle`, `PUT /teams/:t/discord/langue`, `PUT /teams/:t/discord/bilingue`
+  (`{ filFr }`).
+- Fil français : `bilingue.mjs` et `traiterFile()` (`file.mjs`) ; migration `0020_discord_bilingue.sql` ; tests
+  `esport/test/discord-bilingue.test.mjs` (formatage anglais, fil simulé, forum, alerte au Fondateur et anti-spam,
+  idempotence des réessais, réglage, message de test).
 - **Ajouter un type de message** : une entrée dans `catalogue.mjs` (événement de domaine, module requis, variables,
   modèle) et le calcul de ses variables dans `variablesDe()` de `file.mjs` ; le libellé côté app dans
   `LIBELLES_DISCORD` (`src/esport/discord/api.ts`).

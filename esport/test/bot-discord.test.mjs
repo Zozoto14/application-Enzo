@@ -88,10 +88,11 @@ async function preparer({ bot = true, attenteDiffere, lienApp = 'https://app.exe
     return { statut: r.status, corps: lu ? JSON.parse(lu) : null };
   }
   const utilisateur = id => ({ id, username: `u${id.slice(-3)}`, global_name: `Joueur ${id.slice(-3)}` });
-  /** Commande tapée dans un serveur. */
-  const commande = (nom, options = {}, { qui = D.lea, guild = G1, salon = SALON, permissions = '0' } = {}) =>
+  /** Commande tapée dans un serveur (client Discord en français par défaut : `locale`). */
+  const commande = (nom, options = {}, { qui = D.lea, guild = G1, salon = SALON, permissions = '0', locale = 'fr' } = {}) =>
     interaction({
       type: 2,
+      ...(locale ? { locale } : {}),
       id: '1',
       token: `jeton-interaction-${nom}`,
       application_id: APP,
@@ -101,10 +102,10 @@ async function preparer({ bot = true, attenteDiffere, lienApp = 'https://app.exe
       member: { user: utilisateur(qui), permissions },
       data: { name: nom, options: Object.entries(options).map(([name, value]) => ({ name, value })) },
     });
-  const composant = (customId, { qui = D.lea, guild = G1, valeurs } = {}) =>
-    interaction({ type: 3, id: '2', token: 'jeton-composant', application_id: APP, guild_id: guild, channel_id: SALON, member: { user: utilisateur(qui), permissions: '0' }, data: { custom_id: customId, component_type: valeurs ? 3 : 2, ...(valeurs ? { values: valeurs } : {}) } });
-  const autocomplete = (nom, options, { qui = D.coach, guild = G1 } = {}) =>
-    interaction({ type: 4, id: '3', token: 't', application_id: APP, guild_id: guild, channel_id: SALON, member: { user: utilisateur(qui), permissions: '0' }, data: { name: nom, options } });
+  const composant = (customId, { qui = D.lea, guild = G1, valeurs, locale = 'fr' } = {}) =>
+    interaction({ type: 3, ...(locale ? { locale } : {}), id: '2', token: 'jeton-composant', application_id: APP, guild_id: guild, channel_id: SALON, member: { user: utilisateur(qui), permissions: '0' }, data: { custom_id: customId, component_type: valeurs ? 3 : 2, ...(valeurs ? { values: valeurs } : {}) } });
+  const autocomplete = (nom, options, { qui = D.coach, guild = G1, locale = 'fr' } = {}) =>
+    interaction({ type: 4, ...(locale ? { locale } : {}), id: '3', token: 't', application_id: APP, guild_id: guild, channel_id: SALON, member: { user: utilisateur(qui), permissions: '0' }, data: { name: nom, options } });
 
   /** Liaisons : code demandé dans l'app, tapé dans Discord. */
   async function lierServeur(teamId, jeton, guild, salon, admin = D.admin) {
@@ -189,7 +190,7 @@ test('liaison serveur : admin du serveur seulement, code à usage unique, salon 
   const etat = (await p.b.appel(`/teams/${p.A.teamId}/discord/bot`, { jeton: p.s.max12345 })).corps;
   assert.equal(etat.serveur.salonNom, 'annonces');
   assert.equal(etat.serveur.serveur, `${G1.slice(0, 4)}…${G1.slice(-4)}`, 'identifiant masqué');
-  assert.match(etat.invitation, new RegExp(`client_id=${APP}&scope=bot%20applications.commands&permissions=150528`));
+  assert.match(etat.invitation, new RegExp(`client_id=${APP}&scope=bot%20applications.commands&permissions=309237861376`));
   assert.equal((await p.b.appel(`/teams/${p.A.teamId}/discord/bot`, { jeton: p.s.lea12345 })).statut, 403, 'un Joueur ne voit pas qui est lié');
   const journal = await p.b.base.tous("SELECT action FROM journal WHERE team_id = ? AND action = 'discord.server_linked'", [p.A.teamId]);
   assert.equal(journal.length, 1);
@@ -616,7 +617,7 @@ test('e2e : un faux Discord local reçoit l’annonce d’un scrim avec les ment
       const r = await b.traiter(new Request('https://esport.test/discord/interactions', { method: 'POST', headers: { 'X-Signature-Ed25519': sig, 'X-Signature-Timestamp': h, 'Content-Type': 'application/json' }, body: texte }));
       return r.json();
     };
-    const cmd = (qui, nom, options, permissions = '0') => signer({ type: 2, token: 't', guild_id: G1, channel_id: SALON, channel: { id: SALON, name: 'scrims' }, member: { user: { id: qui, username: 'x' }, permissions }, data: { name: nom, options: Object.entries(options).map(([name, value]) => ({ name, value })) } });
+    const cmd = (qui, nom, options, permissions = '0') => signer({ type: 2, locale: 'fr', token: 't', guild_id: G1, channel_id: SALON, channel: { id: SALON, name: 'scrims' }, member: { user: { id: qui, username: 'x' }, permissions }, data: { name: nom, options: Object.entries(options).map(([name, value]) => ({ name, value })) } });
     await cmd(D.admin, 'esport-lier-serveur', { code: (await b.appel(`/teams/${A.teamId}/discord/bot/code`, { methode: 'POST', jeton: A.sessions.max12345 })).corps.code }, '8');
     await cmd(D.lea, 'lier', { code: (await b.appel('/moi/discord/code', { methode: 'POST', jeton: A.sessions.lea12345 })).corps.code });
     // Un scrim créé dans l'app : l'annonce part vers le faux Discord.
@@ -628,7 +629,7 @@ test('e2e : un faux Discord local reçoit l’annonce d’un scrim avec les ment
     assert.deepEqual(annonce.corps.allowed_mentions, { parse: [], users: [D.lea] });
     assert.equal(annonce.corps.embeds[0].title, '⚔️ Scrim · Scrim e2e');
     // Clic « Oui » simulé et signé.
-    const r = await signer({ type: 3, token: 't', guild_id: G1, channel_id: SALON, member: { user: { id: D.lea, username: 'lea' }, permissions: '0' }, data: { custom_id: annonce.corps.components[0].components[0].custom_id, component_type: 2 } });
+    const r = await signer({ type: 3, locale: 'fr', token: 't', guild_id: G1, channel_id: SALON, member: { user: { id: D.lea, username: 'lea' }, permissions: '0' }, data: { custom_id: annonce.corps.components[0].components[0].custom_id, component_type: 2 } });
     assert.match(texteCharge(r.data), /C’est noté/);
     const vu = (await b.appel(`/teams/${A.teamId}/planning`, { jeton: A.sessions.lea12345 })).corps.occurrences.find(o => o.titre === 'Scrim e2e');
     assert.equal(vu.monRsvp, 'oui', 'visible dans l’app');
@@ -643,20 +644,26 @@ test('e2e : un faux Discord local reçoit l’annonce d’un scrim avec les ment
   }
 });
 
-test('langue des réponses : la langue par défaut du compte (Fondateur) s’applique, le choix de l’utilisateur prime, null y revient', async () => {
+test('langue des réponses : anglais par défaut ; locale Discord française → français ; le choix de l’utilisateur prime ; la langue par défaut réglée par le Fondateur ne compte plus', async () => {
   const p = await preparerLie();
-  const demander = async () => p.texteReponse(await p.commande('taches', {}, { qui: D.lea }));
-  const fr = await demander();
-  assert.doesNotMatch(fr, /open/i, fr);
-  // Le Fondateur règle l'anglais par défaut : le bot répond en anglais, sans choix de Léa.
-  assert.equal((await p.b.appel('/comptes/lea12345/langue-defaut', { methode: 'PUT', jeton: p.fond, corps: { langue: 'en' } })).statut, 200);
-  const en = await demander();
-  assert.notEqual(en, fr);
+  const demander = async locale => p.texteReponse(await p.commande('taches', {}, { qui: D.lea, locale }));
+  const en = await demander(null);
   assert.match(en, /open|overdue|no tasks|task/i, en);
-  // Léa choisit le français : son choix prime.
+  assert.equal(await demander('en-US'), en);
+  assert.equal(await demander('de'), en, 'toute autre locale : anglais');
+  const fr = await demander('fr');
+  assert.notEqual(fr, en);
+  assert.doesNotMatch(fr, /open/i, fr);
+  // Langue par défaut du compte réglée par le Fondateur : sans effet sur le bot (il reste en anglais par défaut).
+  assert.equal((await p.b.appel('/comptes/lea12345/langue-defaut', { methode: 'PUT', jeton: p.fond, corps: { langue: 'fr' } })).statut, 200);
+  assert.equal(await demander(null), en);
+  // Léa choisit le français dans son profil : son choix prime, même avec un client Discord anglais.
   await p.b.appel('/moi/langue', { methode: 'PUT', jeton: p.s.lea12345, corps: { langue: 'fr' } });
-  assert.equal(await demander(), fr);
-  // Elle revient à la langue définie par l'administrateur.
+  assert.equal(await demander('en-US'), fr);
+  // Elle choisit l'anglais : son choix prime sur la locale française.
+  await p.b.appel('/moi/langue', { methode: 'PUT', jeton: p.s.lea12345, corps: { langue: 'en' } });
+  assert.equal(await demander('fr'), en);
+  // Retour à « pas de choix » : la locale décide.
   await p.b.appel('/moi/langue', { methode: 'PUT', jeton: p.s.lea12345, corps: { langue: null } });
-  assert.equal(await demander(), en);
+  assert.equal(await demander('fr'), fr);
 });

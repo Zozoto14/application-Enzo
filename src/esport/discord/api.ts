@@ -55,9 +55,34 @@ export interface EnvoiDiscord {
   envoyeLe: string | null;
 }
 
+/** Messages bilingues : anglais dans le salon, version française dans un fil (activé par défaut). */
+export interface BilingueDiscord {
+  filFr: boolean;
+  dernierFil: string | null;
+  dernierEchec: string | null;
+  /** Motif du dernier fil impossible (texte du serveur, traduit par traduireServeur). */
+  motifEchec: string | null;
+  /** Le dernier essai a échoué (plus récent que le dernier fil réussi). */
+  probleme: boolean;
+  /** Le serveur Esport a le jeton du bot (DISCORD_BOT_TOKEN) : sans lui, pas de fil. */
+  botConfigure: boolean;
+  botLie: boolean;
+  /** Permissions du bot à activer dans le salon (noms Discord, en anglais). */
+  permissions: string[];
+}
+
+export interface ResultatTestDiscord {
+  ok: boolean;
+  /** Avec le fil français : fil créé, ou motif du refus. */
+  fil?: { cree: boolean; motif: string | null };
+}
+
 export interface EtatDiscord {
-  /** Langue des messages Discord de la team (français par défaut). */
+  /** Langue d'un message unique, quand le fil français est désactivé (français par défaut). */
   langue?: Langue;
+  /** Langue du message posté dans le salon (anglais avec le fil français). */
+  languePrincipale?: Langue;
+  bilingue?: BilingueDiscord;
   webhook: WebhookDiscord;
   parametres: ParametreDiscord[];
   file: { enAttente: number; abandonnes: number };
@@ -80,10 +105,9 @@ export function apiDiscord(client: ClientEsport, teamId: string) {
     supprimerWebhook: async () => {
       await client.requete(`${base}/webhook`, 'DELETE');
     },
-    tester: async () => {
-      await client.requete(`${base}/test`, 'POST', {});
-    },
+    tester: () => client.requete<ResultatTestDiscord>(`${base}/test`, 'POST', {}),
     majLangue: (langue: Langue) => client.requete<{ langue: Langue }>(`${base}/langue`, 'PUT', { langue }),
+    majBilingue: (filFr: boolean) => client.requete<BilingueDiscord>(`${base}/bilingue`, 'PUT', { filFr }),
     majParametre: (cle: string, champs: ChampsParametreDiscord) => client.requete<ParametreDiscord>(`${base}/parametres/${encodeURIComponent(cle)}`, 'PUT', champs),
   };
 }

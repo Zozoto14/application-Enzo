@@ -50,6 +50,17 @@ export const FR = {
   'message.titre_defaut': 'Notification',
   'message.expediteur': 'Esport · {team}',
 
+  // ---- Messages bilingues : fil français
+  'fil.nom': '🇫🇷 Version française · {titre}',
+  'fil.fondateur': 'Fondateur',
+  'fil.alerte.titre': 'Fil français impossible',
+  'fil.alerte.texte': 'Le bot n’a pas accès pour créer le fil français dans ce salon ({permission}). Le message anglais est parti ; la version française, non. Corrigez les permissions du bot (Esport › Réglages › Discord).',
+  'fil.permission.bot_absent': 'le bot Discord n’est pas configuré sur le serveur Esport',
+  'fil.permission.acces': 'permission manquante : Voir le salon (View Channel), ou le bot n’est pas sur ce serveur',
+  'fil.permission.creer_fil': 'permission manquante : Créer des fils publics (Create Public Threads)',
+  'fil.permission.ecrire_fil': 'permission manquante : Envoyer des messages dans les fils (Send Messages in Threads)',
+  'fil.permission.autre': 'Discord a refusé la demande (HTTP {statut})',
+
   // ---- Rôles système (reconnus à leur nom français)
   'role.proprietaire': 'Propriétaire',
   'role.manager': 'Manager',

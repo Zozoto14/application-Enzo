@@ -19,7 +19,7 @@ import { FR } from '../noyau/textes/fr.mjs';
 import { CLES_TEXTES_EN, EVENEMENTS_DISCORD, exemples, libelleTypeEvenement, textesEvenement } from '../noyau/discord/catalogue.mjs';
 import { embedEvenement, texteConvoques, texteReponses, boutonsRsvp, boutonsPagination, nomType } from '../noyau/discord/embeds.mjs';
 import { formaterDelai, formaterInstant } from '../noyau/discord/formats.mjs';
-import { LOCALES_ANGLAIS, definitionsCommandes } from '../noyau/discord/bot/commandes.mjs';
+import { LOCALES_FRANCAIS, definitionsCommandes } from '../noyau/discord/bot/commandes.mjs';
 import { lireDateSaisie } from '../noyau/discord/bot/interactions.mjs';
 import { texteCharge } from '../noyau/discord/messages.mjs';
 import { traiterFile } from '../noyau/discord/file.mjs';
@@ -190,33 +190,34 @@ test('saisie de date du bot : « today » et « tomorrow » acceptés en plus d�
 
 // ------------------------------------------------------------------ Slash commands
 
-test('commandes slash : mêmes noms, descriptions et choix localisés en anglais (en-US, en-GB), limites Discord respectées', () => {
+test('commandes slash : mêmes noms, descriptions et choix en anglais par défaut, traduits en français (fr), limites Discord respectées', () => {
   const defs = definitionsCommandes();
   assert.deepEqual(
     defs.map(d => d.name),
     ['aide', 'lier', 'delier', 'prochain', 'planning', 'rsvp', 'dispo', 'taches', 'strat', 'resume', 'evenement-creer', 'relancer', 'esport-lier-serveur'],
   );
-  assert.deepEqual(LOCALES_ANGLAIS, ['en-US', 'en-GB']);
+  assert.deepEqual(LOCALES_FRANCAIS, ['fr']);
   const verifier = (o, chemin) => {
     assert.ok(o.description_localizations, `${chemin} sans traduction`);
-    for (const l of LOCALES_ANGLAIS) {
-      const en = o.description_localizations[l];
-      assert.ok(en && en !== o.description, `${chemin} (${l})`);
-      assert.ok(en.length >= 1 && en.length <= 100, `${chemin} : ${en.length} caractères`);
-    }
+    const fr = o.description_localizations.fr;
+    assert.ok(fr && fr !== o.description, `${chemin} (fr)`);
+    assert.ok(fr.length >= 1 && fr.length <= 100, `${chemin} : ${fr.length} caractères`);
     assert.ok(o.description.length <= 100, chemin);
     for (const c of o.choices ?? []) {
-      assert.ok(c.name_localizations?.['en-US'], `${chemin} choix ${c.value}`);
-      assert.ok(c.name_localizations['en-US'].length <= 100);
+      assert.ok(c.name_localizations?.fr, `${chemin} choix ${c.value}`);
+      assert.ok(c.name_localizations.fr.length <= 100);
     }
   };
   for (const d of defs) {
     verifier(d, d.name);
     for (const opt of d.options ?? []) verifier(opt, `${d.name}.${opt.name}`);
   }
+  assert.equal(defs.find(d => d.name === 'aide').description, 'What the Esport bot can do');
+  assert.equal(defs.find(d => d.name === 'aide').description_localizations.fr, 'Ce que sait faire le bot Esport');
   const creer = defs.find(d => d.name === 'evenement-creer');
-  assert.equal(creer.options[0].choices[2].name_localizations['en-US'], 'Tournament');
-  assert.equal(creer.options[0].choices[3].name_localizations['en-GB'], 'Practice');
+  assert.equal(creer.options[0].choices[2].name, 'Tournament');
+  assert.equal(creer.options[0].choices[2].name_localizations.fr, 'Tournoi');
+  assert.equal(creer.options[0].choices[3].name_localizations.fr, 'Entraînement');
 });
 
 // ------------------------------------------------------------------ API : langue du compte et de la team

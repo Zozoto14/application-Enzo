@@ -361,7 +361,15 @@
   "Team inconnue.": "Unknown team.",
   "Rôle inconnu.": "Unknown role.",
   "Appareil inconnu.": "Unknown device.",
-  "Collecte : true ou false.": "Collection: true or false."
+  "Collecte : true ou false.": "Collection: true or false.",
+  "Fil français impossible : bot Discord non configuré sur le serveur (DISCORD_BOT_TOKEN)": "French thread unavailable: Discord bot not configured on the server (DISCORD_BOT_TOKEN)",
+  "Fil français impossible : le bot n’a pas accès à ce salon (Voir le salon)": "French thread unavailable: the bot has no access to this channel (View Channel)",
+  "Fil français impossible : permission « Créer des fils publics » manquante": "French thread unavailable: missing “Create Public Threads” permission",
+  "Fil français impossible : permission « Envoyer des messages dans les fils » manquante": "French thread unavailable: missing “Send Messages in Threads” permission",
+  "Version française non publiée : message périmé": "French version not posted: expired message",
+  "Version française non publiée : identifiant du message absent": "French version not posted: message ID missing",
+  "Version française non publiée : adresse du webhook illisible": "French version not posted: unreadable webhook address",
+  "Fil français : vrai ou faux.": "French thread: true or false."
  },
  "motifs": [
   [
@@ -523,6 +531,14 @@
   [
    "^(\\d+) teams au plus d’un coup\\.$",
    "$1 teams at most at once."
+  ],
+  [
+   "^Fil français impossible \\(HTTP (\\d+)\\)$",
+   "French thread unavailable (HTTP $1)"
+  ],
+  [
+   "^Version française non publiée : (.*)$",
+   "French version not posted: $1"
   ]
  ]
 }

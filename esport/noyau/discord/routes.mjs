@@ -7,7 +7,8 @@
  *   PUT    /teams/:t/discord/webhook             enregistrer / remplacer l'adresse ({ url })
  *   DELETE /teams/:t/discord/webhook             supprimer le webhook
  *   POST   /teams/:t/discord/test                envoyer un message de test
- *   PUT    /teams/:t/discord/langue              { langue } : langue des messages (fr par défaut, en)
+ *   PUT    /teams/:t/discord/langue              { langue } : langue d'un message unique (sans fil français)
+ *   PUT    /teams/:t/discord/bilingue            { filFr } : anglais d'abord + fil français (défaut : oui)
  *   PUT|PATCH /teams/:t/discord/parametres/:cle  { actif?, modele?, roleMention? }
  */
 
@@ -27,6 +28,7 @@ export async function routerDiscord(d, { methode: m, chemin, acteur, lireCorps }
   }
   if (section === 'test' && !sousId && m === 'POST') return d.tester(acteur, teamId);
   if (section === 'langue' && !sousId && (m === 'PUT' || m === 'PATCH')) return d.majLangue(acteur, teamId, await lireCorps());
+  if (section === 'bilingue' && !sousId && (m === 'PUT' || m === 'PATCH')) return d.majBilingue(acteur, teamId, await lireCorps());
   if (section === 'parametres' && sousId && (m === 'PUT' || m === 'PATCH')) return d.majParametre(acteur, teamId, sousId, await lireCorps());
   throw echec(404, 'route', 'Adresse inconnue.');
 }

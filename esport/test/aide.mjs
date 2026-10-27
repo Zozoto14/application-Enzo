@@ -88,11 +88,18 @@ export async function banc({ creationTeams = 'fondateur', relaisAncien = false, 
  * compte ouvre sa session (pseudo), puis le Fondateur l'ajoute à la team avec
  * son rôle (invitation directe, sans code).
  */
-export async function teamAvecMembres(b, { nom = 'Team Alpha', preset = 'valorant_complet', modules, membres = {} } = {}) {
+/**
+ * Team de test avec ses membres. `filFr` : messages Discord bilingues (anglais + fil français, le
+ * DÉFAUT d'une vraie team). Les tests historiques des messages Discord vérifient un message unique
+ * dans la langue de la team : ils gardent `filFr: false` (défaut ICI seulement) ; le mode bilingue a
+ * ses propres tests (discord-bilingue.test.mjs).
+ */
+export async function teamAvecMembres(b, { nom = 'Team Alpha', preset = 'valorant_complet', modules, membres = {}, filFr = false } = {}) {
   const fondateur = await b.session('principal', 'Fondateur');
   const creation = await b.appel('/teams', { methode: 'POST', jeton: fondateur, corps: { nom, jeu: 'valorant', preset, modules } });
   if (creation.statut !== 200) throw new Error(`création : ${creation.statut} ${JSON.stringify(creation.corps)}`);
   const teamId = creation.corps.team.id;
+  if (!filFr) await b.base.executer("INSERT INTO discord_bilingue (team_id, fil_fr, maj_le) VALUES (?, 0, '2026-01-01T00:00:00.000Z')", [teamId]);
   const roles = Object.fromEntries((await b.appel(`/teams/${teamId}/roles`, { jeton: fondateur })).corps.roles.map(r => [r.cle ?? r.nom, r]));
   const sessions = { fondateur };
   for (const [compte, { pseudo, role }] of Object.entries(membres)) {

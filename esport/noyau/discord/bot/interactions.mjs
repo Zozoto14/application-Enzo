@@ -20,7 +20,7 @@
 
 import { noterCommandeBot } from '../../usage/collecte.mjs';
 import { evenement } from '../../evenements.mjs';
-import { LANGUE_DEFAUT, langueDepuisLocale, lireLangue, nomRoleSysteme, texte as T, texteNombre, traduireErreur } from '../../langues.mjs';
+import { lireLangue, nomRoleSysteme, texte as T, texteNombre, traduireErreur } from '../../langues.mjs';
 import { ErreurEsport, echec, jsonOu } from '../../outils.mjs';
 import { ajouterJours, dateLocale, lireDate, lireHeure, texteDate, texteHeure } from '../../planning/temps.mjs';
 import { convocationParGroupe } from '../convoques.mjs';
@@ -60,8 +60,15 @@ const LENT = Symbol('lent');
 const TYPES_STRAT = ['default', 'execute', 'eco', 'pistol', 'retake', 'other'];
 const PRIORITES = ['basse', 'normale', 'haute', 'urgente'];
 
-/** Langue des réponses de cette interaction (résolue une fois par `resoudreLangue`) : compte lié, sinon locale Discord. */
-const lg = i => lireLangue(i.langueEsport) ?? LANGUE_DEFAUT;
+/**
+ * Langue des réponses du bot : ANGLAIS par défaut (comme les messages du salon). Une interaction
+ * dont la locale Discord est française (`fr`) reçoit sa réponse éphémère en français ; le choix
+ * explicite de l'utilisateur dans son profil Esport prime sur la locale.
+ */
+export const LANGUE_BOT = 'en';
+export const langueInteraction = locale => (/^fr([-_]|$)/i.test(String(locale ?? '').trim()) ? 'fr' : LANGUE_BOT);
+/** Langue des réponses de cette interaction (résolue une fois par `resoudreLangue`). */
+const lg = i => lireLangue(i.langueEsport) ?? LANGUE_BOT;
 const rsvpTexte = (i, cle) => T(lg(i), `bot.rsvp.${cle in { oui: 1, peut_etre: 1, non: 1 } ? cle : 'sans_reponse'}`);
 
 const json = (corps, statut = 200) => new Response(JSON.stringify(corps), { status: statut, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
@@ -80,7 +87,7 @@ const PAS_LIE = i => avis(T(lg(i), 'bot.pas_lie.titre'), T(lg(i), 'bot.pas_lie.d
 const opt = (i, nom) => (i.data?.options ?? []).find(o => o.name === nom)?.value;
 
 /** Message lisible d'une erreur des services. */
-function texteErreur(e, langue = LANGUE_DEFAUT) {
+function texteErreur(e, langue = LANGUE_BOT) {
   if (!(e instanceof ErreurEsport)) {
     console.error('[esport] bot', e);
     return T(langue, 'bot.erreur.interne');
@@ -139,13 +146,18 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     return l ? { compte: l.compte_id, superAdmin: Number(l.super_admin) === 1, langue } : null;
   }
 
-  /** Langue des réponses : celle du compte Esport lié (son choix, sinon la langue définie par l'administrateur), sinon la locale Discord de l'interaction (`locale`), sinon le français. */
+  /**
+   * Langue des réponses (toujours éphémères) : 1. la langue CHOISIE par l'utilisateur dans son profil
+   * Esport (compte lié) ; 2. sinon la locale Discord de l'interaction : français (`fr`) → français ;
+   * 3. sinon l'anglais. La langue par défaut d'un compte réglée par le Fondateur (`langue_defaut`,
+   * française pour tous les comptes existants) ne s'applique plus au bot : il parle anglais par défaut.
+   */
   async function resoudreLangue(i) {
     const utilisateur = i.member?.user ?? i.user;
     const l = utilisateur?.id
-      ? await base.premier('SELECT COALESCE(c.langue, c.langue_defaut) AS langue FROM discord_comptes dc JOIN comptes c ON c.id = dc.compte_id WHERE dc.discord_user_id = ?', [utilisateur.id])
+      ? await base.premier('SELECT c.langue FROM discord_comptes dc JOIN comptes c ON c.id = dc.compte_id WHERE dc.discord_user_id = ?', [utilisateur.id])
       : null;
-    return lireLangue(l?.langue) ?? langueDepuisLocale(i.locale);
+    return lireLangue(l?.langue) ?? langueInteraction(i.locale);
   }
 
   /** Teams liées à ce serveur où l'acteur peut entrer (membre actif, ou Fondateur). */

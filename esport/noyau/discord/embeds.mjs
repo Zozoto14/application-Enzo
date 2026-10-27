@@ -64,6 +64,7 @@ const MESSAGES = {
   playbook_validated: { emoji: '📘', couleur: '#16a34a' },
   resource_created: { emoji: '📚', couleur: '#0d9488' },
   test: { emoji: '🛰️', couleur: ACCENT },
+  alerte_fil: { emoji: '⚠️', couleur: '#d97706' },
 };
 
 const texte = (v, max) => nettoyerTexteDiscord(v, max).trim();

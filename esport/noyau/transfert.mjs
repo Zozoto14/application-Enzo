@@ -92,6 +92,9 @@ export const TABLES = [
   ['usage_jour_heures', 'jour, heure, compte_id, team_id, appareil'],
   ['usage_jour_erreurs', 'jour, empreinte, page, compte_id, appareil'],
   ['usage_reglages', 'cle'],
+  // Messages Discord bilingues (migration 0020) : réglage du fil français, anti-spam des alertes.
+  ['discord_bilingue', 'team_id'],
+  ['discord_alertes_fil', 'salon_id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

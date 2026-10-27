@@ -236,9 +236,10 @@ export function Discord({ theme, client, detail }: PropsModule) {
     });
   const tester = () =>
     void agir('test', async () => {
-      await api.tester();
+      const r = await api.tester();
       await recharger();
-      return tr('discord.message_de_test_envoye');
+      if (r?.fil && !r.fil.cree) return tr('discord.test_fil_impossible', { motif: traduireServeur(r.fil.motif) });
+      return r?.fil?.cree ? tr('discord.test_fil_cree') : tr('discord.message_de_test_envoye');
     });
   const supprimer = () =>
     void agir('webhook', async () => {
@@ -255,6 +256,9 @@ export function Discord({ theme, client, detail }: PropsModule) {
 
   const attenue = { color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) };
   const w = etat?.webhook;
+  const bilingue = etat?.bilingue;
+  // Fil français : activé par défaut (serveur ancien sans le champ : même défaut).
+  const filFr = bilingue?.filFr ?? true;
   return (
     <View style={{ gap: 16 }} testID="esport-discord">
       <TitreSection theme={theme} titre="Discord" sous={tr('discord.les_evenements_de_la')} />
@@ -264,20 +268,63 @@ export function Discord({ theme, client, detail }: PropsModule) {
 
       <Panneau theme={theme} testID="esport-discord-langue-panneau">
         <Intertitre theme={theme}>{tr('discord.langue_des_messages')}</Intertitre>
-        <Text style={attenue}>{tr('discord.langue_des_messages_aide')}</Text>
-        <ChoixLangue
-          theme={theme}
-          libelle={tr('discord.langue_des_messages')}
-          valeur={etat?.langue ?? 'fr'}
-          onChoisir={l =>
-            void agir('langue', async () => {
-              await api.majLangue(l);
-              await recharger();
-              return tr('discord.langue_enregistree');
-            })
-          }
-          testID="esport-discord-langue"
-        />
+        <View style={[styles.ligne, { justifyContent: 'space-between', flexWrap: 'nowrap' }]}>
+          <Text style={{ color: theme.texte, flex: 1, fontWeight: '700', ...police(theme.policeTexte) }}>{tr('discord.bilingue_libelle')}</Text>
+          <Interrupteur
+            theme={theme}
+            libelle={tr('discord.bilingue_libelle')}
+            valeur={filFr}
+            desactive={occupe || !etat}
+            onChanger={v =>
+              void agir('bilingue', async () => {
+                await api.majBilingue(v);
+                await recharger();
+                return tr(v ? 'discord.bilingue_active' : 'discord.bilingue_coupe');
+              })
+            }
+            testID="esport-discord-fil-fr"
+          />
+        </View>
+        {filFr ? (
+          <View style={{ gap: 6 }} testID="esport-discord-bilingue">
+            <Text style={attenue}>{tr('discord.bilingue_aide')}</Text>
+            <Text style={{ color: theme.texte, fontSize: 13, ...police(theme.policeTexte) }} testID="esport-discord-permissions">
+              {tr('discord.bilingue_permissions', { v: (bilingue?.permissions ?? []).join(', ') })}
+            </Text>
+            <Text style={attenue}>{tr('discord.bilingue_repli')}</Text>
+            {bilingue && !bilingue.botConfigure ? (
+              <Text style={{ color: theme.alerte, fontSize: 13 }} testID="esport-discord-fil-bot-absent">
+                {tr('discord.bilingue_bot_absent')}
+              </Text>
+            ) : null}
+            {bilingue?.probleme ? (
+              <Text style={{ color: theme.critique, fontSize: 13 }} testID="esport-discord-fil-probleme">
+                {tr('discord.bilingue_probleme', { date: dateCourte(bilingue.dernierEchec ?? ''), motif: traduireServeur(bilingue.motifEchec) })}
+              </Text>
+            ) : bilingue?.dernierFil ? (
+              <Text style={attenue} testID="esport-discord-fil-ok">
+                {tr('discord.bilingue_dernier_fil', { date: dateCourte(bilingue.dernierFil) })}
+              </Text>
+            ) : null}
+          </View>
+        ) : (
+          <View style={{ gap: 6 }}>
+            <Text style={attenue}>{tr('discord.langue_des_messages_aide')}</Text>
+            <ChoixLangue
+              theme={theme}
+              libelle={tr('discord.langue_des_messages')}
+              valeur={etat?.langue ?? 'fr'}
+              onChoisir={l =>
+                void agir('langue', async () => {
+                  await api.majLangue(l);
+                  await recharger();
+                  return tr('discord.langue_enregistree');
+                })
+              }
+              testID="esport-discord-langue"
+            />
+          </View>
+        )}
       </Panneau>
 
       <Panneau theme={theme} testID="esport-discord-webhook">

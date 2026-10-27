@@ -71,12 +71,21 @@ Le plus simple : dans l'app, **Esport › votre team › Réglages › Discord �
 bouton apparaît après l'étape 6). Sinon, remplacez `APPLICATION_ID` dans ce lien et ouvrez-le :
 
 ```
-https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot%20applications.commands&permissions=150528
+https://discord.com/oauth2/authorize?client_id=APPLICATION_ID&scope=bot%20applications.commands&permissions=309237861376
 ```
 
-Il demande les scopes **bot** et **applications.commands**, et seulement ces permissions : **voir les salons**,
-**envoyer des messages**, **intégrer des liens**, **mentionner** (pour les rôles qu'on choisit de prévenir). Le bot
-ne mentionne jamais `@everyone` ni `@here`. Choisissez le serveur, **Autoriser**.
+Il demande les scopes **bot** et **applications.commands**, et seulement ces permissions : **voir les salons**
+(View Channel), **envoyer des messages** (Send Messages), **intégrer des liens** (Embed Links), **voir les anciens
+messages** (Read Message History), **mentionner** (pour les rôles qu'on choisit de prévenir), et pour le **fil
+français** : **créer des fils publics** (Create Public Threads) et **envoyer des messages dans les fils** (Send
+Messages in Threads). Le bot ne mentionne jamais `@everyone` ni `@here`. Choisissez le serveur, **Autoriser**.
+
+**Bot déjà invité avant le fil français** (lien avec `permissions=150528`) : il lui manque les permissions de fil.
+Deux façons de les donner : rouvrir le nouveau lien ci-dessus (Discord met à jour le rôle du bot), ou **Paramètres
+du serveur › Rôles › Esport HQ** (ou les permissions du salon des annonces) et cocher **Créer des fils publics**,
+**Envoyer des messages dans les fils** et **Voir les anciens messages**. Une permission refusée au niveau du salon
+l'emporte sur le rôle : vérifiez aussi **Modifier le salon › Permissions**. Vérification : **Réglages › Discord ›
+Envoyer un message de test** (le résultat dit si le fil français a pu être créé).
 
 ### 6. Enregistrer les commandes
 
@@ -198,23 +207,39 @@ les teams liées au serveur** où elle est tapée. Tout est écrit dans le **Jou
 
 Quelqu'un qui n'a pas lié son compte reçoit : **« Lie ton compte avec /lier »**.
 
-## Langues : français et English
+## Langues : anglais d'abord, fil français
 
-- **Messages publics** (annonces, rappels, relances, message de test du webhook, embeds) : la **langue de la team**,
-  réglée dans **Réglages › Discord › Langue des messages Discord** (français par défaut). Les modèles par défaut, les
-  noms des types d'événement, les dates (`mercredi 21 octobre` / `Wednesday 21 October`) et les boutons suivent cette
-  langue. Un **modèle personnalisé** n'est jamais traduit ; un message déjà en file garde la langue de sa création.
-- **Réponses aux commandes** (éphémères) : la langue du **compte lié** (son choix dans le profil Esport, sinon la
-  **langue par défaut** réglée par le Fondateur, Français / English) ; compte non lié, la **locale Discord** de la personne (`locale` de l'interaction : `en-US`,
-  `en-GB` → English, le reste → français).
-- **Noms des commandes** inchangés (`/prochain`, `/planning`…) : Discord affiche leurs **descriptions en anglais**
-  aux clients en `en-US` / `en-GB` (`description_localizations`, noms des choix compris). `/evenement-creer` accepte
-  aussi `today` et `tomorrow`.
+- **Messages du salon** (annonces, rappels, « c'est maintenant », relances, résumés, tâches, objectifs, ressources,
+  review, strats, membres… par le bot comme par le webhook) : par défaut, chaque message part **en anglais** (texte,
+  embed, boutons, dates : `Wednesday 21 October`), avec les **pings** des convoqués et le rôle mentionné. Juste
+  après, le bot ouvre un **fil** (thread) sur ce message, nommé « 🇫🇷 Version française · <titre> », et y poste la
+  **version française** complète (même embed traduit, boutons RSVP compris : ils marchent aussi dans le fil),
+  **sans aucune mention**. Quand les réponses changent, l'annonce anglaise et sa version française sont rééditées.
+  Détails, salon forum et réglage : [discord.md](discord.md#anglais-dabord-puis-un-fil-français).
+- **Fil impossible** (bot non configuré, bot absent du serveur, permission **Create Public Threads** ou **Send
+  Messages in Threads** manquante) : le message anglais reste ; **aucun second message français**. Le bot poste
+  dans le salon une courte **alerte** (anglais puis français) qui **mentionne le Fondateur** (son compte Discord lié
+  par `/lier`, sinon le Discord ID saisi pour le compte Fondateur ; sans l'un ni l'autre, le texte « Fondateur »
+  sans ping, et le Journal le signale) avec la permission manquante — **au plus une alerte par salon et par 24 h**.
+- **Désactiver le fil** : **Réglages › Discord › Langue principale : anglais (défaut) + fil français**. Sans fil,
+  un seul message part, dans la langue choisie juste en dessous (français par défaut).
+- Un **modèle personnalisé** n'est jamais traduit (il sert pour l'anglais et pour le fil) ; un message déjà en file
+  garde la langue de sa création.
+- **Réponses aux commandes** (toujours éphémères, seul l'auteur les voit) : **anglais par défaut**. Ordre : 1. la
+  langue **choisie** par la personne dans son profil Esport (compte lié) ; 2. sinon la **locale Discord** de
+  l'interaction : `fr` → français ; 3. sinon anglais. Choix : rester cohérent avec les messages du salon (anglais),
+  tout en servant en français, en privé, quelqu'un dont Discord est en français. La « langue par défaut » d'un compte
+  réglée par le Fondateur (française pour tous les comptes existants) **ne s'applique plus au bot** ; elle vaut
+  toujours pour l'app et les e-mails.
+- **Noms des commandes** inchangés (`/prochain`, `/planning`…) ; leurs **descriptions sont en anglais**, traduites
+  en français pour les clients Discord en `fr` (`description_localizations`, noms des choix compris).
+  `/evenement-creer` accepte `today`/`tomorrow` comme `aujourd'hui`/`demain`.
 - Les messages d'erreur de l'API restent des codes ; le bot les traduit avec la même table que l'app
   (`esport/noyau/erreurs.json`).
 
-**Après la mise à jour** (la migration `0012` est appliquée par le déploiement automatique), relancez l'étape 6 :
-elle **enregistre les traductions des commandes** auprès de Discord.
+**Après la mise à jour** (la migration `0020` est appliquée par le déploiement automatique) : relancez l'étape 6
+(elle **enregistre les descriptions anglaises et leurs traductions françaises** auprès de Discord) et donnez au bot
+les permissions de fil (étape 5).
 
 ## Identité visuelle
 
@@ -253,6 +278,7 @@ elle **enregistre les traductions des commandes** auprès de Discord.
 | Un convoqué n'est pas pingé | Badge « Discord ID manquant » dans Esport › Membres : le Fondateur renseigne son Discord ID (étape 9), ou le joueur fait `/lier`. |
 | Rien n'arrive dans le salon | Le bot doit voir le salon et pouvoir y écrire (permissions du salon) ; regardez **Réglages › Discord › Derniers envois** et le Journal. |
 | « Bot non configuré (DISCORD_BOT_TOKEN) » dans les envois | `DISCORD_BOT_TOKEN` manque dans `esport.env` : étape 3. |
+| Alerte « French thread unavailable · Fil français impossible » dans le salon | Donnez au bot **Create Public Threads**, **Send Messages in Threads** et **Read Message History** sur ce salon (étape 5), puis **Envoyer un message de test**. L'alerte ne revient pas avant 24 h dans ce salon. |
 | Le jeton a fuité | Portail › Bot › **Reset Token**, mettez le nouveau dans `esport.env` (et `relais.env` s'il y est), redémarrez les apps. |
 
 ## Pour les développeurs
@@ -279,6 +305,10 @@ elle **enregistre les traductions des commandes** auprès de Discord.
 - Langues : `esport/noyau/langues.mjs` et `esport/noyau/textes/{fr,en}.mjs` (textes du serveur), `catalogue.mjs`
   (modèles par défaut en anglais), migration `0012_langues.sql` (`comptes.langue`, `teams.langue_discord`), routes
   `PUT /moi/langue` et `PUT /teams/:t/discord/langue`. Test : `esport/test/langues.test.mjs`.
+- Messages bilingues : `esport/noyau/discord/bilingue.mjs` (noms de fil, nonce, motifs, alerte au Fondateur) et
+  `traiterFile()` de `file.mjs` (tâche en trois étapes) ; migration `0020_discord_bilingue.sql`
+  (`discord_bilingue`, `discord_alertes_fil`, colonnes de progression de `discord_file`, version française des
+  annonces) ; route `PUT /teams/:t/discord/bilingue` `{ filFr }`. Test : `esport/test/discord-bilingue.test.mjs`.
 - Tests : `esport/test/bot-discord.test.mjs`, `bot-embeds.test.mjs`, `bot-outils.test.mjs` (fetch simulé, clé de
   test générée, faux Discord local), `src/esport/Discord.test.tsx` (écrans), `scripts/e2e-esport-bot.mjs`
   (navigateur). Aucun test n'appelle le vrai Discord.

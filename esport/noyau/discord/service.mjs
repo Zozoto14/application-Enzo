@@ -13,13 +13,17 @@ import { echec, iso, nouvelId } from '../outils.mjs';
 import { EVENEMENTS_DISCORD, evenementDiscord, exemples, textesEvenement } from './catalogue.mjs';
 import { lireLangue, texte as T } from '../langues.mjs';
 import { chiffrerWebhook, dechiffrerWebhook, finDeWebhook, masquerWebhook, validerUrlWebhook } from './chiffrement.mjs';
-import { posterWebhook, reglageEffectif } from './file.mjs';
+import { API_DISCORD, appelerDiscord, filFrActif, reglageEffectif, serveurBot } from './file.mjs';
+import { ARCHIVAGE_FIL_MIN, avecParams, motifRefusFil, nomFil, texteMotifFil } from './bilingue.mjs';
 import { apercuModele, construireCharge, lireRoleMention, validerModele } from './messages.mjs';
 
 export const MODULE_DISCORD = 'discord';
 const INTERVALLE_TEST_MS = 10_000;
 
-export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cle, fetch: fetchDiscord = (...a) => globalThis.fetch(...a) }) {
+/** Permissions du bot à activer dans le salon pour le fil français (affichées dans Réglages › Discord). */
+export const PERMISSIONS_FIL = Object.freeze(['View Channel', 'Send Messages', 'Embed Links', 'Read Message History', 'Create Public Threads', 'Send Messages in Threads']);
+
+export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cle, fetch: fetchDiscord = (...a) => globalThis.fetch(...a), jetonBot }) {
   async function contexte(acteur, teamId) {
     const ctx = await noyau.contexteTeam(acteur, teamId);
     noyau.exiger(ctx, 'discord.manage');
@@ -48,7 +52,9 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
     const actifs = ctx.modules;
     // Libellés et descriptions : langue de l'utilisateur ; modèles par défaut et aperçus : langue des messages de la team.
     const langueUi = lireLangue(acteur.langue) ?? 'fr';
-    const langueTeam = lireLangue(ctx.team.langue_discord) ?? 'fr';
+    // Fil français (défaut) : le message principal est en anglais ; sinon la langue choisie par la team.
+    const bilingue = await etatBilingue(teamId);
+    const langueTeam = bilingue.filFr ? 'en' : (lireLangue(ctx.team.langue_discord) ?? 'fr');
     const lignes = await base.tous('SELECT * FROM discord_notification_settings WHERE team_id = ?', [teamId]);
     const parametres = EVENEMENTS_DISCORD.map(def => {
       const r = reglageEffectif(def, lignes.find(l => l.cle === def.cle), langueTeam);
@@ -79,7 +85,10 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
     );
     return {
       webhook: webhookPublic(await ligneWebhook(teamId)),
-      langue: langueTeam,
+      // `langue` : langue choisie pour un message unique (sans fil français) ; `languePrincipale` : celle du salon.
+      langue: lireLangue(ctx.team.langue_discord) ?? 'fr',
+      languePrincipale: langueTeam,
+      bilingue,
       parametres,
       exemples: exemples(langueTeam),
       file: { enAttente: Number(compte?.attente ?? 0), abandonnes: Number(compte?.abandonnes ?? 0) },
@@ -94,6 +103,22 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
         creeLe: e.cree_le,
         envoyeLe: e.envoye_le ?? null,
       })),
+    };
+  }
+
+  /** Réglage du fil français et dernier état observé (fil créé, ou impossible et pourquoi). */
+  async function etatBilingue(teamId) {
+    const l = await base.premier('SELECT * FROM discord_bilingue WHERE team_id = ?', [teamId]);
+    return {
+      filFr: !l || Number(l.fil_fr) === 1,
+      dernierFil: l?.dernier_fil_le ?? null,
+      dernierEchec: l?.dernier_echec_fil_le ?? null,
+      motifEchec: l?.dernier_echec_fil_motif ?? null,
+      // L'échec est « actuel » s'il est plus récent que le dernier fil réussi.
+      probleme: Boolean(l?.dernier_echec_fil_le && (!l.dernier_fil_le || l.dernier_echec_fil_le > l.dernier_fil_le)),
+      botConfigure: Boolean(jetonBot),
+      botLie: Boolean(await serveurBot(base, teamId)),
+      permissions: [...PERMISSIONS_FIL],
     };
   }
 
@@ -140,11 +165,14 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
       e.attente = Math.ceil((INTERVALLE_TEST_MS - (t - Date.parse(w.dernier_test_le))) / 1000);
       throw e;
     }
-    const langueTeam = lireLangue(ctx.team.langue_discord) ?? 'fr';
+    const filFr = await filFrActif(base, teamId);
+    const langueTeam = filFr ? 'en' : (lireLangue(ctx.team.langue_discord) ?? 'fr');
     const url = await dechiffrerWebhook(cle, teamId, w.url_chiffree);
     if (!url) throw echec(409, 'webhook-illisible', 'L’adresse enregistrée est illisible (clé de chiffrement changée) : saisissez-la à nouveau.');
     await base.executer('UPDATE discord_webhooks SET dernier_test_le = ? WHERE team_id = ?', [iso(t), teamId]);
-    const r = await posterWebhook(fetchDiscord, url, construireCharge(T(langueTeam, 'test.message', { team: ctx.team.nom }), { nomTeam: ctx.team.nom, titre: T(langueTeam, 'test.titre'), cle: 'test', langue: langueTeam }));
+    const charge = l => construireCharge(T(l, 'test.message', { team: ctx.team.nom }), { nomTeam: ctx.team.nom, titre: T(l, 'test.titre'), cle: 'test', langue: l });
+    // Avec le fil français, le test vérifie aussi le fil : ?wait=true rend l'identifiant du message anglais.
+    const r = await appelerDiscord(fetchDiscord, filFr ? avecParams(url, { wait: 'true' }) : url, charge(langueTeam), { lireCorps: filFr });
     if (!r.ok) {
       await base.executer('UPDATE discord_webhooks SET dernier_echec_le = ?, invalide_le = CASE WHEN ? = 1 THEN ? ELSE invalide_le END WHERE team_id = ?', [iso(t), r.webhookPerdu ? 1 : 0, iso(t), teamId]);
       if (r.statut === 429) {
@@ -154,11 +182,42 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
       }
       throw echec(502, r.webhookPerdu ? 'webhook-refuse' : 'discord-echec', r.webhookPerdu ? 'Discord ne reconnaît plus ce webhook : recréez-le dans Discord puis saisissez la nouvelle adresse.' : `Discord n’a pas accepté le message de test (${r.motif}).`);
     }
+    const fil = filFr ? await testerFil(teamId, url, r, charge('fr'), t) : null;
     await base.lot([
       { sql: 'UPDATE discord_webhooks SET dernier_succes_le = ?, invalide_le = NULL WHERE team_id = ?', params: [iso(t), teamId] },
-      evenement('discord.test_sent', { teamId, acteur: acteur.compte, entiteType: 'discord', entiteId: teamId, charge: {}, maintenant: t }),
+      evenement('discord.test_sent', { teamId, acteur: acteur.compte, entiteType: 'discord', entiteId: teamId, charge: fil ? { fil: fil.cree } : {}, maintenant: t }),
     ]);
-    return { ok: true };
+    return { ok: true, ...(fil ? { fil } : {}) };
+  }
+
+  /**
+   * Fil français du message de test : créé par le bot, version française postée par le webhook.
+   * L'état est retenu pour l'écran ; aucune alerte dans le salon (la personne voit le résultat).
+   */
+  async function testerFil(teamId, url, r, chargeFr, t) {
+    let motif = null;
+    let statut;
+    if (!jetonBot) motif = 'bot_absent';
+    else if (!r.messageId || !r.salonId) motif = 'acces';
+    else {
+      const f = await appelerDiscord(fetchDiscord, `${API_DISCORD}/channels/${r.salonId}/messages/${r.messageId}/threads`, { name: nomFil(chargeFr), auto_archive_duration: ARCHIVAGE_FIL_MIN }, { jetonBot, lireCorps: true });
+      if (f.ok || f.code === 160004) {
+        const fr = await appelerDiscord(fetchDiscord, avecParams(url, { wait: 'true', thread_id: (f.ok && f.messageId) || r.messageId }), chargeFr, { lireCorps: true });
+        if (!fr.ok) [motif, statut] = [motifRefusFil(fr, 'ecrire'), fr.statut];
+      } else {
+        [motif, statut] = [motifRefusFil(f, 'creer'), f.statut];
+      }
+    }
+    const texte = motif ? texteMotifFil(motif, statut) : null;
+    await base.executer(
+      motif
+        ? `INSERT INTO discord_bilingue (team_id, fil_fr, dernier_echec_fil_le, dernier_echec_fil_motif, maj_le) VALUES (?, 1, ?, ?, ?)
+           ON CONFLICT (team_id) DO UPDATE SET dernier_echec_fil_le = excluded.dernier_echec_fil_le, dernier_echec_fil_motif = excluded.dernier_echec_fil_motif`
+        : `INSERT INTO discord_bilingue (team_id, fil_fr, dernier_fil_le, maj_le) VALUES (?, 1, ?, ?)
+           ON CONFLICT (team_id) DO UPDATE SET dernier_fil_le = excluded.dernier_fil_le`,
+      motif ? [teamId, iso(t), texte, iso(t)] : [teamId, iso(t), iso(t)],
+    );
+    return { cree: !motif, motif: texte };
   }
 
   async function majParametre(acteur, teamId, cleEvenement, corps) {
@@ -166,7 +225,7 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
     const def = evenementDiscord(cleEvenement);
     if (!def) throw echec(404, 'discord-evenement', 'Type de notification inconnu.');
     const ligne = await base.premier('SELECT * FROM discord_notification_settings WHERE team_id = ? AND cle = ?', [teamId, cleEvenement]);
-    const avant = reglageEffectif(def, ligne, lireLangue(ctx.team.langue_discord) ?? 'fr');
+    const avant = reglageEffectif(def, ligne, (await filFrActif(base, teamId)) ? 'en' : (lireLangue(ctx.team.langue_discord) ?? 'fr'));
     const manquants = def.modules.filter(m => !ctx.modules.has(m));
     let actif = avant.actif;
     if (corps?.actif !== undefined) {
@@ -212,5 +271,24 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
     return { langue };
   }
 
-  return { etat, definirWebhook, supprimerWebhook, tester, majParametre, majLangue };
+  /** `PUT /teams/:t/discord/bilingue` { filFr } : anglais d'abord + fil français (défaut), ou un seul message. */
+  async function majBilingue(acteur, teamId, corps) {
+    await contexte(acteur, teamId);
+    if (typeof corps?.filFr !== 'boolean') throw echec(400, 'fil-fr', 'Fil français : vrai ou faux.');
+    const avant = await filFrActif(base, teamId);
+    const t = maintenant();
+    await base.lot([
+      {
+        sql: `INSERT INTO discord_bilingue (team_id, fil_fr, maj_le) VALUES (?, ?, ?)
+              ON CONFLICT (team_id) DO UPDATE SET fil_fr = excluded.fil_fr, maj_le = excluded.maj_le`,
+        params: [teamId, corps.filFr ? 1 : 0, iso(t)],
+      },
+      ...(corps.filFr !== avant
+        ? [evenement('discord.settings_changed', { teamId, acteur: acteur.compte, entiteType: 'discord', entiteId: nouvelId(), charge: { notification: 'fil_fr', champs: ['filFr'], filFr: corps.filFr }, maintenant: t })]
+        : []),
+    ]);
+    return etatBilingue(teamId);
+  }
+
+  return { etat, definirWebhook, supprimerWebhook, tester, majParametre, majLangue, majBilingue };
 }

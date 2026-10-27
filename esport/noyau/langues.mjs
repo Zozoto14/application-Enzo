@@ -5,7 +5,9 @@
  *  - `texte(langue, 'cle', { variable })` : interpolation `{variable}` ;
  *  - `texteNombre(langue, 'cle', n, vars)` : pluriel (clés `cle.one` / `cle.other`, `{n}` fourni) ;
  *  - la langue d'un compte est enregistrée dans `comptes.langue` (migration 0012), celle d'une
- *    team pour ses messages Discord dans `teams.langue_discord` (défaut : français).
+ *    team pour ses messages Discord dans `teams.langue_discord` (défaut : français), utilisée quand le
+ *    fil français est désactivé ; sinon les messages Discord partent en anglais avec leur version
+ *    française dans un fil (discord/bilingue.mjs, migration 0020).
  *
  * Les messages d'erreur de l'API restent en français avec un `code` stable : l'app et le bot les
  * traduisent par `traduireErreur` (table `erreurs.json`).

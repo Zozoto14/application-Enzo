@@ -326,6 +326,42 @@ describe('écran Discord', () => {
     expect((await screen.findByTestId('esport-discord-erreur')).props.children).toMatch(/@everyone et @here/);
   });
 
+  it('langue : anglais + fil français par défaut, permissions et problème affichés ; désactivé → choix d’une seule langue', async () => {
+    let bilingue = {
+      filFr: true,
+      dernierFil: '2026-10-19T10:00:00.000Z',
+      dernierEchec: '2026-10-20T10:00:00.000Z',
+      motifEchec: 'Fil français impossible : permission « Créer des fils publics » manquante',
+      probleme: true,
+      botConfigure: true,
+      botLie: true,
+      permissions: ['View Channel', 'Send Messages', 'Embed Links', 'Read Message History', 'Create Public Threads', 'Send Messages in Threads'],
+    };
+    const { requete, appels } = fauxServeur((chemin, methode, corps) => {
+      if (chemin.endsWith('/discord/bilingue') && methode === 'PUT') {
+        bilingue = { ...bilingue, filFr: (corps as { filFr: boolean }).filFr };
+        return bilingue;
+      }
+      if (chemin.endsWith('/discord')) return { ...etatInitial(), langue: 'fr', languePrincipale: bilingue.filFr ? 'en' : 'fr', bilingue };
+      return undefined;
+    });
+    await monter(requete, detail(MANAGER));
+    await screen.findByTestId('esport-discord-bilingue');
+    expect(screen.getByTestId('esport-discord-permissions').props.children).toMatch(/Create Public Threads, Send Messages in Threads/);
+    expect(screen.getByTestId('esport-discord-fil-probleme').props.children).toMatch(/Fil français impossible le .*Créer des fils publics/);
+    expect(screen.queryByTestId('esport-discord-langue')).toBeNull();
+    await fireEvent(screen.getByTestId('esport-discord-fil-fr'), 'valueChange', false);
+    await waitFor(() => expect(appels.some(a => a.chemin.endsWith('/discord/bilingue') && a.methode === 'PUT' && (a.corps as { filFr: boolean }).filFr === false)).toBe(true));
+    await waitFor(() => expect(screen.queryByTestId('esport-discord-bilingue')).toBeNull());
+  });
+
+  it('message de test avec fil français impossible : le motif est affiché', async () => {
+    const { requete } = fauxServeur(chemin => (chemin.endsWith('/discord/test') ? { ok: true, fil: { cree: false, motif: 'Fil français impossible : bot Discord non configuré sur le serveur (DISCORD_BOT_TOKEN)' } } : chemin.endsWith('/discord') ? { ...etatInitial(), webhook: { configure: true, masque: '…/abcd' } } : undefined));
+    await monter(requete, detail(MANAGER));
+    await fireEvent.press(await screen.findByTestId('esport-discord-test'));
+    expect((await screen.findByTestId('esport-discord-avis')).props.children).toMatch(/fil français est impossible : Fil français impossible : bot Discord non configuré/);
+  });
+
   it('derniers envois : statut, essais et motif des échecs', async () => {
     const { requete } = fauxServeur(chemin => {
       if (chemin.endsWith('/discord')) {

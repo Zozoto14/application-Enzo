@@ -137,7 +137,8 @@ export function creerApi({
   // Discord : secret de chiffrement des webhooks (CLE_DISCORD, sinon dérivé de CLE_ESPORT) ; `fetchDiscord` : réseau simulé en test.
   const secretDiscord = cleDiscord || cleSession;
   const envoiDiscord = fetchDiscord ?? ((...a) => globalThis.fetch(...a));
-  const d = servicesDiscord({ base, maintenant, noyau: s, cle: secretDiscord, fetch: envoiDiscord });
+  // Jeton du bot (DISCORD_BOT_TOKEN, secret) : le fil français des messages et du message de test.
+  const d = servicesDiscord({ base, maintenant, noyau: s, cle: secretDiscord, fetch: envoiDiscord, jetonBot: discordBot.jetonBot || undefined });
   const rv = servicesReview({ base, maintenant, socle: s, medias: md });
   const sc = servicesScouting({ base, maintenant, socle: s, review: rv });
   const st = servicesStrats({ base, stockage, cleSession, maintenant, socle: s });

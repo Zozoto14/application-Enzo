@@ -13,15 +13,16 @@ const PARTOUT = [0, 1];
 
 /**
  * Les noms des commandes et des options restent les mêmes (français) ; leurs descriptions et les
- * noms des choix ont une traduction anglaise (`*_localizations`, locales Discord en-US et en-GB) :
- * Discord affiche la bonne selon la langue de chaque utilisateur.
+ * noms des choix sont en ANGLAIS par défaut (langue par défaut du bot) avec une traduction française
+ * (`*_localizations`, locale Discord `fr`) : Discord affiche la bonne selon la langue de chaque
+ * utilisateur. Après un changement : relancer esport/outils/discord-commandes.mjs.
  */
-export const LOCALES_ANGLAIS = ['en-US', 'en-GB'];
-const loc = en => Object.fromEntries(LOCALES_ANGLAIS.map(l => [l, en]));
-/** Description en français (par défaut) et en anglais. */
-const desc = (fr, en) => ({ description: fr, description_localizations: loc(en) });
-/** Choix de liste : nom français et nom anglais. */
-const choix = (fr, en, value) => ({ name: fr, name_localizations: loc(en), value });
+export const LOCALES_FRANCAIS = ['fr'];
+const loc = fr => Object.fromEntries(LOCALES_FRANCAIS.map(l => [l, fr]));
+/** Description en anglais (par défaut) et en français. */
+const desc = (fr, en) => ({ description: en, description_localizations: loc(fr) });
+/** Choix de liste : nom anglais (par défaut) et nom français. */
+const choix = (fr, en, value) => ({ name: en, name_localizations: loc(fr), value });
 
 const optionTeam = { type: T.CHAINE, name: 'team', ...desc('La team (si ce serveur en a plusieurs)', 'The team (if this server has several)'), required: false, autocomplete: true };
 

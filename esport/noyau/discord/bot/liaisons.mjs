@@ -20,8 +20,12 @@ import { nomType } from '../embeds.mjs';
 
 export const DUREE_CODE_MS = 10 * 60_000;
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
-/** Permissions demandées à l'invitation : voir les salons, envoyer, intégrer des liens, mentionner (rôles). */
-export const PERMISSIONS_BOT = String(1024 + 2048 + 16384 + 131072);
+/**
+ * Permissions demandées à l'invitation : voir les salons (1 << 10), envoyer (1 << 11), intégrer des
+ * liens (1 << 14), lire l'historique (1 << 16), mentionner les rôles (1 << 17), et pour le fil
+ * français : créer des fils publics (1 << 35), envoyer dans les fils (1 << 38).
+ */
+export const PERMISSIONS_BOT = String(2 ** 10 + 2 ** 11 + 2 ** 14 + 2 ** 16 + 2 ** 17 + 2 ** 35 + 2 ** 38);
 
 /** Code lisible de 8 caractères (sans I, L, O, 0, 1), affiché « ABCD-EFGH ». */
 export function nouveauCode() {

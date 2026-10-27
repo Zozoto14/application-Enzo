@@ -49,6 +49,17 @@ export const EN = {
   'message.titre_defaut': 'Notification',
   'message.expediteur': 'Esport · {team}',
 
+  // ---- Bilingual messages: French thread
+  'fil.nom': '🇫🇷 French version · {titre}',
+  'fil.fondateur': 'Founder',
+  'fil.alerte.titre': 'French thread unavailable',
+  'fil.alerte.texte': 'The bot does not have access to create the French thread in this channel ({permission}). The English message was posted; the French version was not. Fix the bot’s permissions (Esport › Settings › Discord).',
+  'fil.permission.bot_absent': 'the Discord bot is not configured on the Esport server',
+  'fil.permission.acces': 'missing permission: View Channel, or the bot is not on this server',
+  'fil.permission.creer_fil': 'missing permission: Create Public Threads',
+  'fil.permission.ecrire_fil': 'missing permission: Send Messages in Threads',
+  'fil.permission.autre': 'Discord refused the request (HTTP {statut})',
+
   // ---- System roles (recognized by their French name)
   'role.proprietaire': 'Owner',
   'role.manager': 'Manager',
