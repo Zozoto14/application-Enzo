@@ -16,12 +16,14 @@ import { creerApi, reponseJson } from '../noyau/api.mjs';
 import { verificateurRelais } from '../noyau/authentification.mjs';
 import { chargerConfigEsport, problemesConfig } from './config.mjs';
 import { creerServeurHttp, ecouter, exigerNode } from './commun.mjs';
+import { nettoyerOrphelinIaLocale } from './ia-locale/gestionnaire.mjs';
+import { creerIaLocale } from './ia-locale/service.mjs';
 
 /**
  * Prépare le gestionnaire HTTP. `base` et `stockage` peuvent être fournis (tests) ; sinon Postgres
  * (environnement) et le dossier FICHIERS_DIR. Rend `{ traiter, base, stockage, config, fermer }`.
  */
-export async function preparerEsport({ config = chargerConfigEsport(), base, stockage, fetchDiscord, verifierJeton, secretsExportables = false, fetchIa, travauxIa } = {}) {
+export async function preparerEsport({ config = chargerConfigEsport(), base, stockage, fetchDiscord, verifierJeton, secretsExportables = false, fetchIa, travauxIa, iaLocale } = {}) {
   const problemes = problemesConfig({ ...config, baseConfiguree: config.baseConfiguree || Boolean(base) });
   if (problemes.length) {
     console.error(`[esport] configuration incomplète :\n - ${problemes.join('\n - ')}`);
@@ -29,6 +31,16 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     return { traiter, config, problemes, fermer: async () => {} };
   }
   const b = base ?? (await basePostgres(optionsDepuisEnv()));
+  // IA locale : moteur resté orphelin après un redémarrage de l'app (Passenger) arrêté tout de suite.
+  if (config.iaLocale?.installation?.installe) {
+    try {
+      const n = nettoyerOrphelinIaLocale({ dossier: config.iaLocale.dossier });
+      if (n.nettoye) console.warn(`[esport] IA locale : moteur orphelin arrêté${n.pid ? ` (pid ${n.pid})` : ''}.`);
+    } catch (e) {
+      console.error('[esport] IA locale : nettoyage impossible', e?.message ?? e);
+    }
+  }
+  const local = iaLocale ?? creerIaLocale(config.iaLocale, { role: 'app' });
   const st = stockage ?? (await stockageDisque(config.dossierFichiers));
   const api = creerApi({
     base: b,
@@ -47,7 +59,8 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     // Aperçus des liens (Ressources) : chaque adresse IP est vérifiée au moment de la connexion (anti-SSRF).
     apercuLiens: { telecharger: telechargeurNode() },
     // Assistant IA des profils de jeu (IA_API_URL, IA_API_CLE, IA_MODELE) : pages web lues avec la même protection.
-    ia: { config: config.ia, telecharger: telechargeurNode(), resoudre: resoudreNode, ...(fetchIa ? { fetch: fetchIa } : {}) },
+    // IA locale (llama.cpp, 127.0.0.1 seulement) : à la place ou en secours de la clé d'API (Administration IA).
+    ia: { config: config.ia, telecharger: telechargeurNode(), resoudre: resoudreNode, ...(fetchIa ? { fetch: fetchIa } : {}), ...(local ? { local } : {}) },
     ...(travauxIa ? { travauxIa } : {}),
   });
   return { traiter: api, base: b, stockage: st, config, problemes, fermer: async () => (base ? undefined : b.fermer()) };

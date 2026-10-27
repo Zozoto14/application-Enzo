@@ -307,6 +307,39 @@ test('Administration IA (Fondateur) : fournisseur, modèle, clé présente sans 
   expect(screen.queryByTestId('esport-jeux-onglet-admin')).toBeNull();
 });
 
+test('Administration IA : IA locale (modèle, état, vitesse, temps de réponse), choix du moteur, test de l’IA locale', async () => {
+  const LOCAL: EtatIa = {
+    ...ETAT,
+    mode: 'local-api',
+    modesPossibles: ['local', 'api', 'local-api'],
+    reglages: { ...ETAT.reglages, mode: 'local-api' },
+    local: { installe: true, raison: null, modele: 'qwen2.5-7b', nomModele: 'Qwen2.5-7B-Instruct (Q4_K_M)', threads: 8, contexte: 16384, enMarche: false, file: 0, derniereVitesse: { jetonsParSeconde: 6.4, le: null, source: 'requete' }, dernierTempsReponseMs: 41_500 },
+  };
+  const { client, requete } = clientJeux();
+  const base = requete.getMockImplementation()!;
+  requete.mockImplementation(async (chemin: string, methode = 'GET', corps?: unknown) => {
+    if (chemin === '/jeux/ia') return LOCAL;
+    if (chemin === '/jeux/ia/reglages') return { ...LOCAL, mode: (corps as { mode: 'local' }).mode };
+    if (chemin === '/jeux/ia/test') return { ok: true, reponse: true, dureeMs: 30_000, cible: 'local', etat: LOCAL };
+    return base(chemin, methode, corps);
+  });
+  await monterJeux(client);
+  await fireEvent.press(await screen.findByTestId('esport-jeux-onglet-admin'));
+  const carte = await screen.findByTestId('esport-jeux-admin-local');
+  expect(within(carte).getByText('Qwen2.5-7B-Instruct (Q4_K_M)')).toBeTruthy();
+  expect(within(carte).getByText('arrêtée (démarre à la demande)')).toBeTruthy();
+  expect(within(carte).getByText('6.4 jetons/s')).toBeTruthy();
+  expect(within(carte).getByText('41.5 s')).toBeTruthy();
+  await fireEvent.press(screen.getByTestId('esport-jeux-admin-tester-local'));
+  expect(await screen.findByText('Connexion réussie (30 s).')).toBeTruthy();
+  expect(requete).toHaveBeenCalledWith('/jeux/ia/test', 'POST', { cible: 'local' });
+  // En mode « locale d'abord », le bouton de la carte API teste la clé d'API seule.
+  await fireEvent.press(screen.getByTestId('esport-jeux-admin-tester'));
+  expect(requete).toHaveBeenCalledWith('/jeux/ia/test', 'POST', { cible: 'api' });
+  await fireEvent.press(screen.getByTestId('esport-jeux-admin-mode-local'));
+  expect(requete).toHaveBeenCalledWith('/jeux/ia/reglages', 'PUT', { mode: 'local' });
+});
+
 test('anglais : la page Jeux suit la langue', async () => {
   definirLangue('en');
   const { client } = clientJeux({ ia: false });

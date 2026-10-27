@@ -18,6 +18,8 @@
  *                          (docs/esport/resumes.md)
  *   IA_API_URL, IA_API_CLE, IA_MODELE, IA_FOURNISSEUR, IA_RECHERCHE : assistant IA des profils de jeu
  *                          (facultatif ; sans clé, tout se fait à la main) : docs/esport/profils-jeu.md
+ *   IA_LOCALE_DOSSIER, IA_LOCALE_MODELE, IA_LOCALE_THREADS… : IA LOCALE (llama.cpp sur le serveur, à la place
+ *                          ou en secours de la clé d'API), installée par installer-ia-locale.sh : docs/esport/ia-locale.md
  *   TRANSCRIPTION_MODE, TRANSCRIPTION_MODELE, TRANSCRIPTION_THREADS, TRANSCRIPTION_DOSSIER_MODELES… :
  *                          transcription sur le serveur (Whisper), installée par installer-transcription.sh
  */
@@ -31,6 +33,7 @@ import { configTranscriptionExterne } from '../noyau/medias/transcription.mjs';
 import { configTranscriptionServeur } from '../noyau/medias/fileTranscription.mjs';
 import { dossierModelesParDefaut, etatInstallation } from './transcription/moteur.mjs';
 import { configIa } from '../noyau/ia/connecteur.mjs';
+import { chargerIaLocale } from './ia-locale/service.mjs';
 
 /** Réglages de la transcription sur le serveur, avec l'état de l'installation (moteur et modèle prêts ?). */
 export function chargerTranscriptionServeur(env = process.env) {
@@ -60,6 +63,8 @@ export function chargerConfigEsport(env = process.env) {
     transcriptionServeur: chargerTranscriptionServeur(env),
     // Assistant IA des profils de jeu : la clé reste dans une fermeture (jamais sérialisée).
     ia: configIa(env),
+    // IA locale (llama.cpp) : réglages et état de l'installation (~/.appdashboard/ia-locale).
+    iaLocale: chargerIaLocale(env),
   };
 }
 

@@ -189,6 +189,27 @@ export interface PropositionJeu {
   statut: 'en_attente' | 'acceptee' | 'refusee' | 'obsolete';
   creeLe: string;
 }
+export type ModeIa = 'local' | 'api' | 'local-api';
+/** IA locale (llama.cpp sur le serveur) : installation, moteur en marche ou non, mesures. */
+export interface EtatIaLocale {
+  installe: boolean;
+  raison: string | null;
+  modele?: string | null;
+  nomModele?: string | null;
+  moteur?: { version: string | null; route: string | null } | null;
+  threads?: number | null;
+  contexte?: number | null;
+  enMarche?: boolean;
+  ailleurs?: boolean;
+  demarrage?: boolean;
+  depuis?: string | null;
+  file?: number;
+  derniereErreur?: string | null;
+  derniereVitesse?: { jetonsParSeconde: number; le: string | null; source: 'requete' | 'test' } | null;
+  benchmark?: { jetonsParSeconde: number; le: string | null } | null;
+  dernierTempsReponseMs?: number | null;
+  dernierAppelLe?: string | null;
+}
 export interface EtatIa {
   configure: boolean;
   raison: string | null;
@@ -202,9 +223,14 @@ export interface EtatIa {
   disponible: boolean;
   lectureWeb: boolean;
   fondateur: boolean;
-  reglages: { quotaAppels: number; quotaVerifications: number; autoActif: boolean };
-  usage: { mois: string; appels: number; verifications: number; plafondAppels: number; plafondVerifications: number };
-  dernierAppel: { le: string; genre: string; statut: string; modele: string | null; dureeMs: number | null; erreur: string | null; jeu: string | null } | null;
+  /** Moteur utilisé : IA locale (serveur), clé d'API, ou locale d'abord avec l'API en secours. */
+  mode?: ModeIa;
+  /** Modes utilisables avec ce qui est installé / configuré. */
+  modesPossibles?: ModeIa[];
+  local?: EtatIaLocale;
+  reglages: { quotaAppels: number; quotaVerifications: number; autoActif: boolean; mode?: ModeIa };
+  usage: { mois: string; appels: number; appelsLocaux?: number; verifications: number; plafondAppels: number; plafondVerifications: number };
+  dernierAppel: { le: string; genre: string; statut: string; fournisseur?: string | null; modele: string | null; dureeMs: number | null; erreur: string | null; jeu: string | null } | null;
   verifications: Array<{ id: string; jeu: string; statut: string; declenchement: string; erreur: { code: string; message: string } | null; le: string; finiLe: string | null }>;
 }
 export interface Gestionnaire {
@@ -243,7 +269,7 @@ export function apiJeux(client: ClientEsport) {
       client.requete<{ acceptees: number; refusees: number; obsoletes: number; jeu: ProfilJeu }>(`${j(cle)}/propositions/decider`, 'POST', d),
     etatIa: () => client.requete<EtatIa>('/jeux/ia'),
     reglerIa: (r: Partial<EtatIa['reglages']>) => client.requete<EtatIa>('/jeux/ia/reglages', 'PUT', r),
-    testerIa: () => client.requete<{ ok: boolean; reponse?: boolean; dureeMs?: number | null; erreur?: { code: string; message: string }; etat: EtatIa }>('/jeux/ia/test', 'POST', {}),
+    testerIa: (cible?: 'local' | 'api') => client.requete<{ ok: boolean; reponse?: boolean; dureeMs?: number | null; cible?: 'local' | 'api'; erreur?: { code: string; message: string }; etat: EtatIa }>('/jeux/ia/test', 'POST', cible ? { cible } : {}),
     gestionnaires: async () => (await client.requete<{ gestionnaires: Gestionnaire[] }>('/jeux/ia/gestionnaires')).gestionnaires,
     reglerGestionnaires: async (d: { ajouter?: string[]; retirer?: string[] }) => (await client.requete<{ gestionnaires: Gestionnaire[] }>('/jeux/ia/gestionnaires', 'PUT', d)).gestionnaires,
     lancerBrouillon: (d: { nom: string; urls?: string[]; consignes?: string; jeu?: string }) => client.requete<TravailIa>('/jeux/ia/brouillons', 'POST', d),

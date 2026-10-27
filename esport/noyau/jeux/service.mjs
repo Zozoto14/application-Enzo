@@ -369,6 +369,16 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
 
   // -------------------------------------------------------------- IA : réglages, quota, appels
 
+  /**
+   * Mode tant que le Fondateur n'en a pas choisi : IA_FOURNISSEUR=local → IA locale (clé d'API en secours
+   * si elle existe) ; sinon la clé d'API, ou l'IA locale si elle est installée et qu'il n'y a pas de clé.
+   */
+  function modeParDefaut() {
+    if (config?.modeDefaut === 'local') return connecteur.disponible() ? 'local-api' : 'local';
+    if (!connecteur.disponible() && localPret()) return 'local';
+    return 'api';
+  }
+
   async function reglagesIa() {
     const lignes = await base.tous('SELECT cle, valeur FROM ia_reglages', []);
     const r = { ...REGLAGES_IA_DEFAUT };
@@ -378,7 +388,7 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
       if (l.cle === 'auto_actif') r.autoActif = l.valeur === '1';
       if (l.cle === 'mode' && MODES_IA.includes(l.valeur)) r.mode = l.valeur;
     }
-    r.mode ??= MODES_IA.includes(config?.modeDefaut) ? config.modeDefaut : 'api';
+    r.mode ??= modeParDefaut();
     return r;
   }
 

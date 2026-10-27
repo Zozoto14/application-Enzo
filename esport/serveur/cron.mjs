@@ -21,12 +21,15 @@ import { creerEnvoyeur } from './courriel-smtp.mjs';
 import { purgerKvExpire } from '../../relais/serveur/kv-postgres.mjs';
 import { chargerConfigEsport } from './config.mjs';
 import { lancerTravailleur } from './transcription/lanceur.mjs';
+import { nettoyerOrphelinIaLocale } from './ia-locale/gestionnaire.mjs';
+import { creerIaLocale } from './ia-locale/service.mjs';
+import { lancerTravailleurIaLocale } from './ia-locale/lanceur.mjs';
 import { resoudreNode, telechargeurNode } from '../adaptateurs/apercuNode.mjs';
 import { servicesJeux } from '../noyau/jeux/service.mjs';
 import { distribuer } from '../noyau/evenements.mjs';
 
 /** Exécute une fois toutes les tâches ; rend le rapport. `lancer` : lanceur de la transcription (tests). */
-export async function executerCron(base, config, { fetch, maintenant, stockage, creerTransport, lancer = lancerTravailleur, fetchIa, telechargerPages } = {}) {
+export async function executerCron(base, config, { fetch, maintenant, stockage, creerTransport, lancer = lancerTravailleur, fetchIa, telechargerPages, lancerIaLocale = lancerTravailleurIaLocale } = {}) {
   const fichiers = stockage ?? (config.dossierFichiers ? await stockageDisque(config.dossierFichiers) : undefined);
   const rapport = await tachesPlanifiees(base, {
     cle: config.cleDiscord || config.cleSession,
@@ -51,18 +54,26 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
     }
   }
   // Profils de jeu : vérification automatique limitée (au plus une par passage, plafond mensuel), si l'IA est configurée.
+  // IA locale : le cron ne calcule pas lui-même ; il arrête un moteur orphelin et lance le processus de fond.
   try {
+    if (config.iaLocale?.installation?.installe) {
+      const n = nettoyerOrphelinIaLocale({ dossier: config.iaLocale.dossier });
+      if (n.nettoye) rapport.push({ tache: 'IA locale : moteur orphelin', ok: true, n: n.pid ? 1 : 0 });
+    }
+    const local = creerIaLocale(config.iaLocale, { role: 'cron', lancer: lancerIaLocale });
     const jeux = servicesJeux({
       base,
       ...(maintenant ? { maintenant } : {}),
       socle: {},
-      ia: { config: config.ia, telecharger: telechargerPages ?? telechargeurNode(), resoudre: telechargerPages ? undefined : resoudreNode, ...(fetchIa ? { fetch: fetchIa } : {}) },
+      ia: { config: config.ia, telecharger: telechargerPages ?? telechargeurNode(), resoudre: telechargerPages ? undefined : resoudreNode, ...(fetchIa ? { fetch: fetchIa } : {}), ...(local ? { local } : {}) },
       travauxIa: 'synchrone',
     });
     const r = await jeux.tacheCron();
     // Notifications (« mises à jour proposées ») tout de suite, sans attendre le passage suivant.
     if (r.n) await distribuer(base, { maintenant: maintenant ? maintenant() : Date.now() });
-    rapport.push({ tache: 'profils de jeu (IA)', ok: true, n: r.n, ...(r.raison ? { etat: r.raison } : {}) });
+    let etat = r.raison;
+    if (r.raison === 'ia-locale' && r.aFaire > 0) etat = `ia-locale : ${(await local.lancerTravailleur()).raison}`;
+    rapport.push({ tache: 'profils de jeu (IA)', ok: true, n: r.n, ...(etat ? { etat } : {}) });
   } catch (e) {
     rapport.push({ tache: 'profils de jeu (IA)', ok: false, erreur: String(e?.code ?? e?.message ?? e) });
   }

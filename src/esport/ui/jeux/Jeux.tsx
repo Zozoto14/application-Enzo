@@ -20,7 +20,7 @@ import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
 import { ErreurEsport, type ClientEsport, type CompteEsport } from '../../client';
 import { dateCourte } from '../../libelles';
-import { apiJeux, type ApiJeux, type EtatIa, type Gestionnaire, type JeuListe, type ListeJeux, type ProfilJeu, type PropositionJeu, type TravailIa, type VersionJeu } from '../../jeux/api';
+import { apiJeux, type ApiJeux, type EtatIa, type Gestionnaire, type JeuListe, type ListeJeux, type ProfilJeu, type PropositionJeu, type TravailIa, type VersionJeu, type ModeIa } from '../../jeux/api';
 import { donneesVides, hote, oublierProfilsTeams } from '../../jeux/profil';
 import { trJeux, trnJeux } from '../../i18n/jeux';
 import { PageEsport } from '../CadreEsport';
@@ -591,11 +591,64 @@ function Propositions({ theme, api, large, propositions, onDecide }: { theme: Th
 
 // ------------------------------------------------------------------ Administration de l'IA (Fondateur)
 
+/** Moteur de l'IA (locale, clé d'API, locale d'abord) et état de l'IA locale installée sur le serveur. */
+function CarteIaLocale({ theme, etat, enCours, ligne, onMode, onTester, test }: {
+  theme: ThemeHub;
+  etat: EtatIa;
+  enCours: string | undefined;
+  ligne: (libelle: string, valeur: string, testID?: string) => React.ReactElement;
+  onMode: (m: ModeIa) => void;
+  onTester: () => void;
+  test: string | undefined;
+}) {
+  const l = etat.local;
+  const mode: ModeIa = etat.mode ?? etat.reglages.mode ?? 'api';
+  const possibles = etat.modesPossibles?.length ? etat.modesPossibles : [mode];
+  const options = (['local', 'api', 'local-api'] as const).filter(m => m === mode || possibles.includes(m));
+  const marche = !l?.installe ? trJeux('jeux.local_non_installee') : l.demarrage ? trJeux('jeux.local_demarrage') : l.enMarche ? trJeux('jeux.local_en_marche') : trJeux('jeux.local_arretee');
+  const vitesse = l?.derniereVitesse ? trJeux('jeux.local_vitesse_valeur', { n: Math.round(l.derniereVitesse.jetonsParSeconde * 10) / 10 }) : '—';
+  return (
+    <Carte theme={theme} testID="esport-jeux-admin-local">
+      <TitreCarte theme={theme} titre={trJeux('jeux.moteur_ia')} sous={trJeux('jeux.moteur_ia_aide')} droite={<Badge theme={theme} texte={marche} ton={l?.installe ? 'ok' : 'alerte'} />} />
+      {options.length > 1 ? (
+        <Segments<ModeIa>
+          theme={theme}
+          libelle={trJeux('jeux.mode_ia')}
+          valeur={mode}
+          options={options.map(m => [m, trJeux(`jeux.mode_ia.${m}`)] as [ModeIa, string])}
+          onChoisir={onMode}
+          testID="esport-jeux-admin-mode"
+        />
+      ) : (
+        ligne(trJeux('jeux.mode_ia'), trJeux(`jeux.mode_ia.${mode}`), 'esport-jeux-admin-mode-seul')
+      )}
+      {l?.installe ? (
+        <>
+          {ligne(trJeux('jeux.modele'), l.nomModele ?? l.modele ?? '—', 'esport-jeux-admin-local-modele')}
+          {ligne(trJeux('jeux.local_fils'), l.threads ? String(l.threads) : '—')}
+          {ligne(trJeux('jeux.local_vitesse'), vitesse, 'esport-jeux-admin-local-vitesse')}
+          {ligne(trJeux('jeux.local_temps_reponse'), l.dernierTempsReponseMs != null ? `${Math.round(l.dernierTempsReponseMs / 100) / 10} s` : '—', 'esport-jeux-admin-local-temps')}
+          {l.file ? ligne(trJeux('jeux.local_file'), String(l.file)) : null}
+          {l.derniereErreur ? ligne(trJeux('jeux.local_erreur'), l.derniereErreur) : null}
+          <Text style={attenue(theme, 12)}>{trJeux('jeux.local_aide')}</Text>
+          <View style={{ alignSelf: 'flex-start' }}>
+            <BoutonHub theme={theme} titre={enCours === 'test-local' ? trJeux('jeux.test_local_en_cours') : trJeux('jeux.tester_local')} desactive={Boolean(enCours)} onPress={onTester} testID="esport-jeux-admin-tester-local" />
+          </View>
+          {test ? <Text style={texte(theme, 13)} testID="esport-jeux-admin-test-local">{test}</Text> : null}
+        </>
+      ) : (
+        <Text style={attenue(theme, 13)} testID="esport-jeux-admin-local-absente">{trJeux('jeux.local_installer')}</Text>
+      )}
+    </Carte>
+  );
+}
+
 function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api: ApiJeux; client: ClientEsport; large: boolean }) {
   const [etat, setEtat] = useState<EtatIa | undefined>();
   const [quotaAppels, setQuotaAppels] = useState('');
   const [quotaVerifs, setQuotaVerifs] = useState('');
   const [test, setTest] = useState<string | undefined>();
+  const [testLocal, setTestLocal] = useState<string | undefined>();
   const [gestionnaires, setGestionnaires] = useState<Gestionnaire[] | undefined>();
   const [comptes, setComptes] = useState<CompteEsport[] | undefined>();
   const [ajout, setAjout] = useState('');
@@ -624,6 +677,17 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
     <View style={{ gap: ESP.m }}>
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-jeux-admin" />
       <Grille min={large ? 340 : 280}>
+        <CarteIaLocale theme={theme} etat={etat} enCours={enCours} ligne={ligne}
+          onMode={mode => void agir('mode', async () => { appliquer(await api.reglerIa({ mode })); return trJeux('jeux.mode_enregistre'); })}
+          onTester={() =>
+            void agir('test-local', async () => {
+              const r = await api.testerIa('local');
+              appliquer(r.etat);
+              setTestLocal(r.ok ? trJeux('jeux.test_ok', { duree: Math.round((r.dureeMs ?? 0) / 100) / 10 }) : trJeux('jeux.test_echec', { message: r.erreur?.message ?? '' }));
+            })
+          }
+          test={testLocal}
+        />
         <Carte theme={theme} testID="esport-jeux-admin-etat">
           <TitreCarte theme={theme} titre={trJeux('jeux.admin_etat')} droite={<Badge theme={theme} texte={etat.disponible ? trJeux('jeux.ia_active') : trJeux('jeux.ia_inactive')} ton={etat.disponible ? 'ok' : 'alerte'} />} />
           {ligne(trJeux('jeux.fournisseur'), etat.fournisseur ? trJeux(`jeux.fournisseur.${(['openai', 'mistral', 'gemini', 'deepseek', 'groq'] as const).find(f => f === etat.fournisseur) ?? 'autre'}`) : '—')}
@@ -636,10 +700,10 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
             <BoutonHub
               theme={theme}
               titre={enCours === 'test' ? trJeux('jeux.test_en_cours') : trJeux('jeux.tester')}
-              desactive={!etat.disponible || Boolean(enCours)}
+              desactive={(etat.mode && etat.mode !== 'api' ? etat.cle !== 'presente' || !etat.configure : !etat.disponible) || Boolean(enCours)}
               onPress={() =>
                 void agir('test', async () => {
-                  const r = await api.testerIa();
+                  const r = await api.testerIa(etat.mode && etat.mode !== 'api' ? 'api' : undefined);
                   appliquer(r.etat);
                   setTest(r.ok ? trJeux('jeux.test_ok', { duree: Math.round((r.dureeMs ?? 0) / 100) / 10 }) : trJeux('jeux.test_echec', { message: r.erreur?.message ?? '' }));
                 })
@@ -652,6 +716,7 @@ function AdministrationIa({ theme, api, client, large }: { theme: ThemeHub; api:
         <Carte theme={theme} testID="esport-jeux-admin-quota">
           <TitreCarte theme={theme} titre={trJeux('jeux.quota')} sous={trJeux('jeux.quota_aide', { mois: etat.usage.mois })} />
           {ligne(trJeux('jeux.appels_mois'), `${etat.usage.appels} / ${etat.usage.plafondAppels}`, 'esport-jeux-admin-usage-appels')}
+          {etat.usage.appelsLocaux ? ligne(trJeux('jeux.appels_locaux_mois'), String(etat.usage.appelsLocaux), 'esport-jeux-admin-usage-locaux') : null}
           {ligne(trJeux('jeux.verifications_mois'), `${etat.usage.verifications} / ${etat.usage.plafondVerifications}`, 'esport-jeux-admin-usage-verifications')}
           <View style={[styles.ligne, { gap: ESP.s, alignItems: 'flex-end' }]}>
             <Champ theme={theme} libelle={trJeux('jeux.plafond_appels')} valeur={quotaAppels} onChanger={v => setQuotaAppels(v.replace(/\D/g, ''))} clavier="number-pad" maxLength={5} testID="esport-jeux-admin-quota-appels" style={{ width: 150 }} />
