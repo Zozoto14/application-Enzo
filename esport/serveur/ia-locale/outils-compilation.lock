@@ -1,5 +1,6 @@
 # Paquets conda-forge FIGÉS du compilateur de l'IA locale (installer-ia-locale.sh, route « compilation »).
-# GCC 14.4, cmake 4.4.3, make 4.4.1, sysroot glibc 2.28. Chaque ligne : adresse#SHA-256 (vérifié par micromamba).
+# GCC 14.4, cmake 4.4.3, make 4.4.1, sysroot glibc 2.28. Chaque ligne : adresse#SHA-256, vérifié par installer.mjs
+# avant l’installation hors ligne (micromamba ne vérifie pas les empreintes d’une liste explicite).
 # Généré avec micromamba 2.9.0 (CONDA_OVERRIDE_GLIBC=2.28) le 27/10/2026 ; ne pas modifier à la main.
 @EXPLICIT
 https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda#1dd3fffd892081df9726d7eb7e0dea6198962ba775bd88842135a4ddb4deb3c9
