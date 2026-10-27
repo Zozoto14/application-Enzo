@@ -259,6 +259,29 @@ jusqu'à sa prochaine ouverture à jour.
 **Amis existants** : rien à faire, leur accès d'avant (identifiant + mot de passe) marche tel quel ; la réponse pour un
 identifiant inconnu est seulement devenue neutre.
 
+### Jeton de profil de l'ami : calculé par le serveur (correctif d'octobre 2026)
+
+Bug de production « Le relais refuse ce code de liaison » au clic sur « Créer mon accès » (ou après
+« Réinitialiser l'accès ») : sur un **navigateur**, le Fondateur connecté par identifiant n'a qu'un
+jeton de SESSION `s1.…`. L'invitation scellait un jeton de profil `p1.<id>.<HMAC>` calculé avec cette
+session, que le serveur (HMAC du jeton MAÎTRE) refuse (401). Correctif (`bureau/connexionAmis.ts`,
+`relais/relais.mjs`, tests `bureau/invitationSession.test.ts`, `scripts/e2e-invitation-session.mjs`) :
+
+| Route | Jeton | Rôle |
+| --- | --- | --- |
+| `GET /v10/jeton-profil/<id>` | maître ou session du Fondateur | jeton de profil d'un compte, pour l'inviter depuis un navigateur |
+| `POST /invitations/<id>/jeton` | aucun (preuve de l'invitation) | le VRAI jeton de profil du compte invité ; ne consomme pas l'invitation (410/404 : expirée, utilisée, révoquée, introuvable) |
+
+- À l'acceptation, l'appareil de l'ami demande toujours ce jeton au serveur : les invitations déjà
+  émises avec un mauvais jeton marchent sans être renvoyées.
+- Une ancienne adresse de relais CONNUE (`applibourse-relais.<…>.workers.dev`) dans un lien, une
+  invitation ou un accès est réécrite vers le relais du site (`relais.json`), à défaut
+  `https://relais.appdashboard.fr` ; aucune autre adresse n'est devinée, aucun jeton ne part vers un hôte inconnu.
+- Un PUT/DELETE coupé par le frontal (erreur réseau, 400/405/411/501, ou 403 HTML d'un pare-feu) est
+  rejoué une fois en POST + `X-Methode`.
+- Messages : invitation expirée, déjà utilisée, révoquée, introuvable sur le serveur (« demande… de la
+  renvoyer »), jeton refusé (`jeton-refuse` : « demande… de te renvoyer une invitation »), pare-feu de l'hébergeur.
+
 ### Relais : version 6 (`relais/relais.mjs`, tests `relais/connexion.test.mjs`)
 
 | Route | Jeton | Rôle |

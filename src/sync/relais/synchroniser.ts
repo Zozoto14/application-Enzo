@@ -125,7 +125,7 @@ export async function appeler(
       reponse = autre;
     }
     // PUT/DELETE refusé ou abîmé par un intermédiaire : une fois en POST + `X-Methode` (relais version 10).
-    if (surchargeable && [400, 405, 411, 501].includes(reponse.status)) {
+    if (surchargeable && ([400, 405, 411, 501].includes(reponse.status) || (reponse.status === 403 && !(reponse.headers?.get?.('Content-Type') ?? '').includes('json')))) {
       const autre = await envoyer('POST', methode).catch(() => undefined);
       if (autre && (autre.ok || ![404, 405].includes(autre.status))) reponse = autre;
       if (autre?.ok) relaisEnSurcharge.add(liaison.relais);

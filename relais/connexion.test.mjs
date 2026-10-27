@@ -207,3 +207,37 @@ test('compatibilité : les routes d’avant ne changent pas (jeton exigé, même
   assert.equal((await appel(env, '/boite', { jeton: await jetonDeProfil(JETON, 'lea12345') })).status, 403);
   assert.equal((await appel(env, '/boite', { jeton: JETON })).status, 200);
 });
+
+test('jeton de l’invitation : le serveur rend le VRAI jeton de profil contre la preuve, sans consommer l’invitation', async () => {
+  const env = { JETON, BOITE: kv() };
+  assert.equal((await appel(env, `/invitations/${ID}`, { methode: 'PUT', jeton: JETON, corps: invitation() })).status, 200);
+  // Mauvaise preuve : refus, rien n'est rendu.
+  const faux = await appel(env, `/invitations/${ID}/jeton`, { methode: 'POST', corps: { preuve: hex(64, '2') }, ip: nouvelleIp() });
+  assert.equal(faux.status, 403);
+  assert.equal((await faux.json()).jeton, undefined);
+  const r = await appel(env, `/invitations/${ID}/jeton`, { methode: 'POST', corps: { preuve: PREUVE }, ip: nouvelleIp() });
+  assert.equal(r.status, 200);
+  assert.deepEqual(await r.json(), { profil: 'lea12345', jeton: await jetonDeProfil(JETON, 'lea12345') });
+  // Toujours utilisable ensuite.
+  assert.equal((await appel(env, `/invitations/${ID}`, { ip: nouvelleIp() })).status, 200);
+  // Utilisée, puis inconnue : la vraie raison (410 « utilisee », 404 « inconnue »).
+  assert.equal((await appel(env, `/invitations/${ID}/utiliser`, { methode: 'POST', corps: { preuve: PREUVE }, ip: nouvelleIp() })).status, 200);
+  const apres = await appel(env, `/invitations/${ID}/jeton`, { methode: 'POST', corps: { preuve: PREUVE }, ip: nouvelleIp() });
+  assert.equal(apres.status, 410);
+  assert.equal((await apres.json()).motif, 'utilisee');
+  const inconnue = await appel(env, `/invitations/${hex(32, 'e')}/jeton`, { methode: 'POST', corps: { preuve: PREUVE }, ip: nouvelleIp() });
+  assert.equal(inconnue.status, 404);
+  assert.equal((await inconnue.json()).motif, 'inconnue');
+});
+
+test('jeton de profil pour le Fondateur : jeton maître ou session, jamais un ami ni « principal »', async () => {
+  const env = { JETON, BOITE: kv() };
+  const r = await appel(env, '/v10/jeton-profil/lea12345', { jeton: JETON });
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).jeton, await jetonDeProfil(JETON, 'lea12345'));
+  const lea = await jetonDeProfil(JETON, 'lea12345');
+  assert.equal((await appel(env, '/v10/jeton-profil/tom12345', { jeton: lea })).status, 403);
+  assert.equal((await appel(env, '/v10/jeton-profil/tom12345')).status, 401);
+  assert.equal((await appel(env, '/v10/jeton-profil/principal', { jeton: JETON })).status, 400);
+  assert.equal((await appel(env, '/v10/jeton-profil/lea12345', { methode: 'POST', jeton: JETON })).status, 405);
+});

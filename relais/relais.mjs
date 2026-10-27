@@ -69,7 +69,7 @@ import { creerSession, estJetonSession, porteeSession, routeSessions, routeTheme
 
 export const VERSION_RELAIS = 10;
 /** Fonctions annoncées par `/sante` (le site adapte ses écrans à un relais pas encore redéployé). */
-export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations', 'verification-jeton', 'export-boite', 'support-v2', 'courriel', 'coffre-serveur', 'sessions', 'theme', 'acces-fondateur', 'secours', 'coffre-v10', 'avis', 'a2f', 'methode-post'];
+export const FONCTIONS_RELAIS = ['espaces', 'rangs', 'tsuzuku', 'tsuzuku-cache', 'invitations', 'acces', 'revocations', 'verification-jeton', 'export-boite', 'support-v2', 'courriel', 'coffre-serveur', 'sessions', 'theme', 'acces-fondateur', 'secours', 'coffre-v10', 'avis', 'a2f', 'methode-post', 'jeton-invitation'];
 /** Fonctions qui n'existent qu'avec un magasin de coffres (serveur Node + PostgreSQL). */
 const FONCTIONS_COFFRE = ['coffre-serveur', 'coffre-v10', 'avis'];
 /** Une enveloppe chiffrée (fichier d'un compte) : taille maximale (PostgreSQL). */
@@ -458,6 +458,13 @@ export { nettoyerTexteDiscord, validerTicket } from './support.mjs';
 //    (410 et le motif sinon ; 404 si elle n'existe pas).
 //  - `POST /invitations/<id>/utiliser` (sans jeton, avec la preuve) : marque
 //    l'invitation utilisée et efface sa charge (usage unique).
+//  - `POST /invitations/<id>/jeton` (sans jeton, avec la preuve) : le jeton de
+//    profil du compte invité, calculé ICI avec le jeton maître du serveur. Ne
+//    consomme pas l'invitation. Répare les invitations créées depuis une
+//    session du Fondateur (jeton `s1.` : le jeton de profil scellé dedans ne
+//    vaut rien) ou avant un changement de serveur.
+//  - `GET /v10/jeton-profil/<id>` (jeton maître ou session du Fondateur) : le
+//    jeton de profil d'un compte, pour l'inviter depuis un navigateur.
 //  - `PUT /acces/<h>` (jeton du compte, ou maître) : l'« accès » d'un
 //    identifiant (empreinte `h`) pour se connecter depuis un appareil neuf.
 //    Le compte n'écrit que l'identifiant que le Fondateur lui a attribué
@@ -624,6 +631,16 @@ async function invitations(requete, env, portee, id, action) {
   }
   if (action === undefined && requete.method === 'GET') {
     return reponse({ charge: lue.charge, expire: new Date(principale.expire).toISOString(), heure: maintenant });
+  }
+  if (action === 'jeton' && requete.method === 'POST') {
+    const corps = await corpsJson(requete);
+    const preuve = typeof corps?.preuve === 'string' ? corps.preuve : '';
+    if (!/^[0-9a-f]{64}$/.test(preuve) || !egal(await empreinteHex(preuve), lue.verif)) {
+      echecIp(ip, maintenant);
+      return reponse({ erreur: 'Preuve refusée.', motif: 'preuve' }, 403);
+    }
+    if (await env.BOITE.get(`revoque:${principale.profil}`)) return reponse({ erreur: 'Accès révoqué.', motif: 'revoque' }, 403);
+    return reponse({ profil: principale.profil, jeton: await jetonDeProfil(env.JETON, principale.profil) });
   }
   if (action === 'utiliser' && requete.method === 'POST') {
     const corps = await corpsJson(requete);
@@ -935,7 +952,7 @@ export async function traiterRequete(requete, env, ctx) {
   }
 
   // Invitations et accès par identifiant : certaines routes se passent de jeton (voir plus haut).
-  const routeInvitation = /^\/invitations\/([^/]+)(?:\/(utiliser))?\/?$/.exec(pathname);
+  const routeInvitation = /^\/invitations\/([^/]+)(?:\/(utiliser|jeton))?\/?$/.exec(pathname);
   const routeAcces = /^\/acces\/([^/]+)(?:\/(ouvrir|secours))?\/?$/.exec(pathname);
   if (routeInvitation || routeAcces) {
     if (!env.BOITE) {
@@ -996,6 +1013,16 @@ export async function traiterRequete(requete, env, ctx) {
   const routeCoffre9 = /^\/v(9|10)\/coffre\/([^/]+)(?:\/(historique|etat|version|attendre|flux))?\/?$/.exec(pathname);
   if (routeCoffre9) {
     return routeCoffre(requete, env, portee, decodeURIComponent(routeCoffre9[2]), routeCoffre9[3], env.BOITE ? (titulaire, id) => delegue(env, titulaire, id) : undefined, Number(routeCoffre9[1]));
+  }
+  // Jeton de profil d'un compte (Fondateur : jeton maître ou SESSION) : un navigateur connecté par
+  // identifiant n'a pas le jeton maître et ne peut pas le calculer lui-même.
+  const routeJetonProfil = /^\/v10\/jeton-profil\/([^/]+)\/?$/.exec(pathname);
+  if (routeJetonProfil) {
+    if (requete.method !== 'GET') return erreur('Méthode non autorisée.', 405);
+    if (!portee.maitre) return erreur('Réservé au Fondateur.', 403);
+    const id = decodeURIComponent(routeJetonProfil[1]);
+    if (!MOTIF_COMPTE.test(id) || id === 'principal') return erreur('Compte invalide.', 400);
+    return reponse({ profil: id, jeton: await jetonDeProfil(env.JETON, id) });
   }
   const routeA2f10 = /^\/v10\/a2f\/([^/]+)\/?$/.exec(pathname);
   if (routeA2f10) {

@@ -554,6 +554,7 @@ export type CodeErreurConnexion =
   | 'lien-illisible'
   | 'code-court-illisible'
   | 'acces-revoque'
+  | 'jeton-refuse'
   | 'identifiant-pris'
   | 'code-recuperation'
   | 'a2f-requis'
@@ -586,7 +587,7 @@ export function messageErreur(code: CodeErreurConnexion, o: { qui?: string; atte
     case 'invitation-revoquee':
       return `Cette invitation a été annulée ou remplacée par une plus récente. Demande à ${qui} le dernier lien.`;
     case 'invitation-inconnue':
-      return `Invitation introuvable : le lien est peut-être incomplet (copie-le en entier) ou a été annulé. Demande à ${qui} de le renvoyer.`;
+      return `Invitation introuvable sur le serveur : le lien est peut-être incomplet (copie-le en entier), ou l’invitation n’a jamais été enregistrée. Demande à ${qui} de la renvoyer (Administration › ton compte › Renvoyer une invitation).`;
     case 'non-publie':
       return `Ton compte n’est pas encore publié sur le serveur : demande à ${qui} d’ouvrir AppDashboard (déverrouillé) pour synchroniser, puis réessaie dans une minute.`;
     case 'relais-injoignable':
@@ -606,6 +607,8 @@ export function messageErreur(code: CodeErreurConnexion, o: { qui?: string; atte
       return 'Code d’invitation illisible : 10 lettres ou chiffres, par exemple K7M2Q-9XH4T.';
     case 'acces-revoque':
       return `Ton accès a été révoqué. Contacte ${qui} si c’est une erreur.`;
+    case 'jeton-refuse':
+      return `Le serveur ne reconnaît pas le code d’accès de ce compte (créé avec un ancien code). Demande à ${qui} de te renvoyer une invitation (Administration › ton compte › Renvoyer une invitation).`;
     default:
       return 'Connexion impossible.';
   }

@@ -25,6 +25,15 @@ export const VERSION_CONNEXION = 6;
 /** Statuts d'un PUT/DELETE refusé ou abîmé en route : on réessaie une fois en POST + `X-Methode`. */
 export const STATUTS_SURCHARGE = [400, 405, 411, 501];
 
+/**
+ * PUT/DELETE refusé ou abîmé en route : statut typique (400, 405, 411, 501), ou page HTML d'un
+ * pare-feu applicatif (403 de ModSecurity, sans corps JSON du relais).
+ */
+export function refusParIntermediaire(reponse: Response): boolean {
+  if (STATUTS_SURCHARGE.includes(reponse.status)) return true;
+  return reponse.status === 403 && !(reponse.headers?.get?.('Content-Type') ?? '').includes('json');
+}
+
 async function demander(adresse: string, chemin: string, options: { methode?: string; corps?: unknown; jeton?: string } = {}, requete: Fetch = fetch): Promise<Response> {
   const envoyer = async (methode: string, surcharge?: string) => {
     const controle = typeof AbortController === 'undefined' ? undefined : new AbortController();
@@ -55,7 +64,7 @@ async function demander(adresse: string, chemin: string, options: { methode?: st
   }
   // Hébergement mutualisé : certains intermédiaires refusent les PUT ou en perdent le corps (relais
   // version 10 : POST + `X-Methode` est traité exactement comme l'original).
-  if ((methode === 'PUT' || methode === 'DELETE') && STATUTS_SURCHARGE.includes(reponse.status)) {
+  if ((methode === 'PUT' || methode === 'DELETE') && refusParIntermediaire(reponse)) {
     const autre = await envoyer('POST', methode).catch(() => undefined);
     if (autre && (autre.ok || ![404, 405].includes(autre.status))) return autre;
   }
@@ -115,7 +124,9 @@ async function causeDe(reponse: Response, qui?: string): Promise<ErreurInvitatio
       const intermediaire = !raison && !reponse.headers.get('Content-Type')?.includes('json');
       return new ErreurInvitation(
         'relais-injoignable',
-        `Le serveur de synchronisation a refusé la demande (${reponse.status}${raison ? ` : ${raison}` : intermediaire ? ' : réponse d’un intermédiaire, pas du relais' : ''}${motif ? `, ${motif}` : ''}). Réessaie dans un instant.`,
+        intermediaire
+          ? `Le pare-feu de l’hébergeur a refusé la demande (${reponse.status}, réponse qui ne vient pas du serveur AppDashboard). Réessaie dans un instant ; si cela recommence, préviens l’administrateur.`
+          : `Le serveur de synchronisation a refusé la demande (${reponse.status}${raison ? ` : ${raison}` : ''}${motif ? `, ${motif}` : ''}). Réessaie dans un instant.`,
       );
     }
   }
@@ -193,6 +204,31 @@ export async function lireInvitationRelais(relais: string, id: string, qui?: str
   const lu = await corps(reponse);
   if (typeof lu.charge !== 'string' || typeof lu.expire !== 'string') throw new ErreurInvitation('lien-illisible');
   return { charge: lu.charge, expire: lu.expire, ...(typeof lu.heure === 'number' ? { heure: lu.heure } : {}) };
+}
+
+/**
+ * Jeton de profil du compte invité, calculé par le serveur (relais à jour) avec la preuve de
+ * l'invitation : celui scellé dans l'invitation peut ne rien valoir (invitation créée depuis une
+ * session du Fondateur, ou avant un changement de serveur). `undefined` : relais trop ancien.
+ */
+export async function jetonInvitationRelais(relais: string, id: string, preuve: string, requete: Fetch = fetch): Promise<string | undefined> {
+  const reponse = await demander(relais, `/invitations/${id}/jeton`, { methode: 'POST', corps: { preuve } }, requete);
+  if (!reponse.ok) {
+    const erreur = await causeDe(reponse);
+    if (erreur.code === 'relais-ancien') return undefined;
+    throw erreur;
+  }
+  const lu = await corps(reponse);
+  return typeof lu.jeton === 'string' && /^p1\.[a-z0-9]{6,16}\.[0-9a-f]{64}$/.test(lu.jeton) ? lu.jeton : undefined;
+}
+
+/** Jeton de profil d'un compte, demandé au serveur (Fondateur connecté par SESSION, sans jeton maître). */
+export async function jetonProfilRelais(maitre: Liaison, compte: string, requete: Fetch = fetch): Promise<string> {
+  const reponse = await demander(maitre.relais, `/v10/jeton-profil/${compte}`, { jeton: maitre.jeton }, requete);
+  if (!reponse.ok) throw reponse.status === 404 || reponse.status === 405 ? new ErreurInvitation('relais-ancien') : await causeDe(reponse);
+  const lu = await corps(reponse);
+  if (typeof lu.jeton !== 'string' || !/^p1\.[a-z0-9]{6,16}\.[0-9a-f]{64}$/.test(lu.jeton)) throw new ErreurInvitation('relais-injoignable', 'Réponse illisible du serveur de synchronisation.');
+  return lu.jeton;
 }
 
 export async function utiliserInvitationRelais(relais: string, id: string, preuve: string, requete: Fetch = fetch): Promise<void> {

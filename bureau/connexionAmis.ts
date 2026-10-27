@@ -49,6 +49,8 @@ import {
 } from '../src/profils/invitation';
 import {
   heureRelais,
+  jetonInvitationRelais,
+  jetonProfilRelais,
   lireInvitationRelais,
   revoquerCompte,
   supprimerAcces,
@@ -61,7 +63,8 @@ import {
   versionRelais,
 } from '../src/sync/relais/connexionAmis';
 import { espacesDuRelais, octetsEnCharge, chargeEnOctets } from '../src/sync/relais/espaces';
-import { encoderLiaison, type Liaison } from '../src/sync/relais/liaison';
+import { encoderLiaison, normaliserAdresse, type Liaison } from '../src/sync/relais/liaison';
+import { RELAIS_OFFICIEL } from './liaisonTemporaire';
 import { jetonDeProfil } from '../src/sync/relais/portees';
 import { ErreurRelais } from '../src/sync/relais/synchroniser';
 import { SITE_PRINCIPAL, choisirSite } from '../src/config/site';
@@ -120,6 +123,33 @@ export function siteDesLiens(site?: string): string {
   return origine && /^https?:\/\//.test(origine) ? origine : SITE_PRINCIPAL;
 }
 
+/** Ancienne adresse du relais (Worker Cloudflare, supprimé) : ses invitations et accès la portent encore. */
+const ANCIEN_RELAIS = /^https:\/\/applibourse-relais\.[a-z0-9-]+\.workers\.dev$/i;
+
+/**
+ * Adresse à utiliser pour un relais lu dans une invitation ou un accès : une ancienne adresse CONNUE
+ * (Worker Cloudflare) devient celle du relais du site (`relaisDuSite`, lu sur le site lui-même), à
+ * défaut le relais officiel. Toute autre adresse reste telle quelle : aucune n'est devinée, et aucun
+ * jeton ne part vers un hôte que ni le Fondateur ni le site n'ont désigné.
+ */
+export function relaisActuel(adresse: string, relaisDuSite?: string): string {
+  const propre = normaliserAdresse(adresse);
+  if (!ANCIEN_RELAIS.test(propre)) return propre;
+  const site = relaisDuSite ? normaliserAdresse(relaisDuSite) : '';
+  return /^https:\/\/[^\s/]+$/.test(site) && !ANCIEN_RELAIS.test(site) ? site : RELAIS_OFFICIEL;
+}
+
+const estJetonSession = (jeton: string): boolean => /^s1\.[0-9a-f]{64}$/.test(jeton);
+
+/**
+ * Jeton de profil de l'ami. Le PC (jeton maître) le calcule lui-même ; un navigateur connecté par
+ * identifiant n'a qu'une SESSION (`s1.…`) : un HMAC de la session ne vaut rien sur le serveur
+ * (« Le relais refuse ce code de liaison »), il le demande donc au serveur.
+ */
+async function jetonAmi(maitre: Liaison, compte: string, requete?: Fetch): Promise<string> {
+  return estJetonSession(maitre.jeton) ? jetonProfilRelais(maitre, compte, requete) : jetonDeProfil(maitre.jeton, compte);
+}
+
 export async function creerInvitation(o: OptionsCreation): Promise<InvitationCreee> {
   const alea = o.alea ?? aleatoireParDefaut;
   const maintenant = (o.maintenant ?? Date.now)();
@@ -130,7 +160,7 @@ export async function creerInvitation(o: OptionsCreation): Promise<InvitationCre
     v: 1,
     compte: o.compte,
     prenom: o.prenom.trim().slice(0, 30),
-    jeton: jetonDeProfil(o.maitre.jeton, o.compte),
+    jeton: await jetonAmi(o.maitre, o.compte, o.requete),
     relais: o.maitre.relais,
     ...(o.maitre.site ? { site: o.maitre.site } : {}),
     mdp: o.motDePasse,
@@ -257,15 +287,23 @@ export interface InvitationChargee {
 }
 
 /** Ouvre une invitation : vérifie qu'elle est encore bonne et dit pour qui elle est. */
-export async function chargerInvitation(lien: LienInvitation, requete?: Fetch, maintenant: () => number = Date.now): Promise<InvitationChargee> {
+export async function chargerInvitation(
+  brut: LienInvitation,
+  requete?: Fetch,
+  maintenant: () => number = Date.now,
+  /** Relais annoncé par le site (relais.json) : remplace une ancienne adresse connue. */
+  relaisDuSite?: string,
+): Promise<InvitationChargee> {
+  const lien = { ...brut, relais: relaisActuel(brut.relais, relaisDuSite) } as LienInvitation;
   if (lien.mode === 'relais') {
     const secrets = secretsInvitation(lien.secret);
     const lu = await lireInvitationRelais(lien.relais, secrets.id, undefined, requete);
-    const contenu = ouvrirContenu(lu.charge, secrets);
+    const contenu = adresserContenu(ouvrirContenu(lu.charge, secrets), lien.relais);
     return { lien, contenu, secrets };
   }
   // Ancien relais : l'expiration est jugée à l'heure du relais (horloge de l'appareil possiblement décalée).
-  const contenu = lien.contenu;
+  const contenu = adresserContenu(lien.contenu, lien.relais, relaisDuSite);
+  lien.contenu = contenu;
   const heure = (await heureRelais({ relais: contenu.relais, jeton: contenu.jeton }, requete)) ?? maintenant();
   if (invitationExpiree(contenu, heure)) {
     throw new ErreurInvitation('invitation-expiree', messageErreur('invitation-expiree', { qui: contenu.fondateur }));
@@ -277,8 +315,17 @@ export async function chargerInvitation(lien: LienInvitation, requete?: Fetch, m
 export async function chargerCodeCourt(relais: string, code: string, requete?: Fetch, kdf?: ParametresKdf): Promise<InvitationChargee> {
   const secrets = secretsCodeCourt(code, kdf);
   const lu = await lireInvitationRelais(relais, secrets.id, undefined, requete);
-  const contenu = ouvrirContenu(lu.charge, secrets);
+  const contenu = adresserContenu(ouvrirContenu(lu.charge, secrets), relais);
   return { lien: { mode: 'relais', relais, secret: '' }, contenu, secrets };
+}
+
+/**
+ * Contenu d'une invitation dont le relais est une ancienne adresse : il prend celle qui vient de
+ * répondre (mode relais), ou celle du site. Une adresse inconnue n'est pas touchée.
+ */
+function adresserContenu(contenu: ContenuInvitation, relaisLu: string, relaisDuSite?: string): ContenuInvitation {
+  if (!ANCIEN_RELAIS.test(normaliserAdresse(contenu.relais))) return contenu;
+  return { ...contenu, relais: ANCIEN_RELAIS.test(relaisLu) ? relaisActuel(contenu.relais, relaisDuSite) : relaisLu };
 }
 
 const liaisonDe = (c: Pick<ContenuInvitation, 'relais' | 'jeton' | 'site'>): Liaison => ({ relais: c.relais, jeton: c.jeton, ...(c.site ? { site: c.site } : {}) });
@@ -290,6 +337,8 @@ async function relierCompte(liaison: Liaison, qui: string | undefined, requete?:
   } catch (erreur) {
     if (erreur instanceof ErreurRelais) {
       if (erreur.statut === 404) throw new ErreurInvitation('non-publie', messageErreur('non-publie', { qui }));
+      // Jeton de profil refusé (invitation créée depuis une session, ou pour un autre serveur) : la vraie raison.
+      if (erreur.statut === 401) throw new ErreurInvitation('jeton-refuse', messageErreur('jeton-refuse', { qui }));
       if (erreur.statut === 403) throw new ErreurInvitation('acces-revoque', messageErreur('acces-revoque', { qui }));
       if (erreur.statut === undefined && /injoignable/i.test(erreur.message)) throw new ErreurInvitation('relais-injoignable');
     }
@@ -323,11 +372,18 @@ export interface OptionsAcceptation {
  * pas), puis son accès par identifiant est déposé.
  */
 export async function accepterInvitation(o: OptionsAcceptation): Promise<Acceptation> {
-  const { contenu } = o.invitation;
+  let { contenu } = o.invitation;
   const qui = contenu.fondateur;
   // La politique réglée par le Fondateur est revérifiée ici, pas seulement par l'écran.
   const evaluation = evaluerMotDePasse(o.motDePasse, contenu.prenom, politiqueDeContenu(contenu));
   if (!evaluation.valide) throw new Error(`Mot de passe refusé : ${evaluation.erreurs.join(' ')}`);
+  if (o.invitation.secrets) {
+    // Le jeton de profil fait foi côté serveur (relais à jour) : celui scellé dans l'invitation a pu être
+    // calculé depuis une session du Fondateur, ou pour un autre serveur. Expirée, utilisée, révoquée ou
+    // introuvable : la cause exacte remonte ici, avant tout dépôt.
+    const jeton = await jetonInvitationRelais(contenu.relais, o.invitation.secrets.id, o.invitation.secrets.preuve, o.requete);
+    if (jeton && jeton !== contenu.jeton) contenu = { ...contenu, jeton };
+  }
   const liaison = liaisonDe(contenu);
   const relie = await relierCompte(liaison, qui, o.requete);
   const espaces = espacesDuRelais(liaison, o.requete);
@@ -409,7 +465,7 @@ export async function connecterParIdentifiant(relais: string, identifiant: strin
   try {
     // Validation en deux étapes (version 10) : sans code, le serveur répond `a2f-requis` (rien d'autre).
     const ouvert = await ouvrirAccesRelais(relais, h, preuve, requete, 'ouvrir', code);
-    return await terminerConnexion(ouvert, cle, requete);
+    return await terminerConnexion(ouvert, cle, relais, requete);
   } finally {
     cle.fill(0);
   }
@@ -423,14 +479,16 @@ export async function connecterParSecours(relais: string, identifiant: string, c
   const { cle, preuve } = preuveSecours(code, lu.secours.sel, lu.secours.kdf);
   try {
     const ouvert = await ouvrirAccesRelais(relais, h, preuve, requete, 'secours');
-    return await terminerConnexion(ouvert, cle, requete);
+    return await terminerConnexion(ouvert, cle, relais, requete);
   } finally {
     cle.fill(0);
   }
 }
 
-async function terminerConnexion(ouvert: { compte: string; charge: string; jeton?: string; secours?: number }, cle: Uint8Array, requete?: Fetch): Promise<ConnexionIdentifiant> {
-  const acces = ouvrirAcces(ouvert.charge, cle, ouvert.compte);
+async function terminerConnexion(ouvert: { compte: string; charge: string; jeton?: string; secours?: number }, cle: Uint8Array, relais: string, requete?: Fetch): Promise<ConnexionIdentifiant> {
+  const lu = ouvrirAcces(ouvert.charge, cle, ouvert.compte);
+  // Accès publié avec une ancienne adresse du relais : celle qui vient de répondre la remplace.
+  const acces = ANCIEN_RELAIS.test(normaliserAdresse(lu.relais)) ? { ...lu, relais: normaliserAdresse(relais) } : lu;
   const fondateur = ouvert.compte === 'principal';
   const jeton = fondateur ? ouvert.jeton : acces.jeton;
   if (!jeton) throw new ErreurInvitation('relais-ancien');

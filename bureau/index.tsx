@@ -140,6 +140,7 @@ import {
   accepterInvitation,
   chargerCodeCourt,
   chargerInvitation,
+  relaisActuel,
   connecterParIdentifiant,
   connecterParSecours,
   creerInvitation,
@@ -370,23 +371,32 @@ function effacerFragment(): void {
  * retenus, ou fichier `relais.json` publié avec le site (rien de secret).
  */
 async function relaisConnu(): Promise<string | undefined> {
+  // Ancienne adresse connue (Worker Cloudflare supprimé) : le relais du site la remplace (relais.json lu seulement alors).
+  const actuel = async (adresse: string) => (/\.workers\.dev\/*$/i.test(adresse) ? relaisActuel(adresse, await relaisDuSite()) : adresse);
   const duLien = relaisDuLien(globalThis.location?.hash ?? '');
   if (duLien) {
-    memoireNavigateur.setItem(CLE_RELAIS_CONNU, duLien);
-    return duLien;
+    const adresse = await actuel(duLien);
+    memoireNavigateur.setItem(CLE_RELAIS_CONNU, adresse);
+    return adresse;
   }
   const retenu = memoireNavigateur.getItem(CLE_RELAIS_CONNU);
-  if (retenu && /^https:\/\//.test(retenu)) return retenu;
+  if (retenu && /^https:\/\//.test(retenu)) return actuel(retenu);
   const liaisons = lireLiaisons(memoireNavigateur);
   const code = liaisons.maitre ?? Object.values(liaisons.comptes)[0];
   const liaison = code ? decoderLiaison(code) : undefined;
-  if (liaison) return liaison.relais;
+  if (liaison) return actuel(liaison.relais);
+  // Pas de fichier : le lien de connexion reçu avec l'invitation le donnera.
+  return relaisDuSite();
+}
+
+/** Relais annoncé par le site lui-même (`relais.json`, publié avec lui), ou rien. */
+async function relaisDuSite(): Promise<string | undefined> {
   try {
     const reponse = await auPlus(fetch('relais.json', { cache: 'no-store' }), 4_000);
     const lu = reponse?.ok ? ((await reponse.json()) as { relais?: unknown }) : undefined;
     if (typeof lu?.relais === 'string' && /^https:\/\/[^\s/]+/.test(lu.relais)) return lu.relais.replace(/\/+$/, '');
   } catch {
-    // Pas de fichier : le lien de connexion reçu avec l'invitation le donnera.
+    // Pas de fichier.
   }
   return undefined;
 }
@@ -948,7 +958,9 @@ function Racine() {
     async (lien: LienInvitation) => {
       setEtat({ phase: 'invitation' });
       try {
-        const chargee = await chargerInvitation(lien);
+        // Invitation d'avant la fin de Cloudflare : le relais du site remplace l'ancienne adresse.
+        const ancienne = /\.workers\.dev/i.test(lien.relais) || (lien.mode === 'lien' && /\.workers\.dev/i.test(lien.contenu.relais));
+        const chargee = await chargerInvitation(lien, undefined, undefined, ancienne ? await relaisDuSite() : undefined);
         setEtat({ phase: 'invitation', chargee, autreCompteIci: await autreCompteIci(chargee.contenu.compte) });
       } catch (erreur) {
         setEtat({ phase: 'invitation', erreur: erreurTexte(erreur) });
