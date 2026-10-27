@@ -10,6 +10,7 @@
  *   node esport/outils/graines.mjs [fichier.db]   (base SQLite locale, migrée au besoin)
  */
 
+import { semerCompetition } from './graines-competition.mjs';
 import { pathToFileURL } from 'node:url';
 import { servicesComptes } from '../noyau/comptes.mjs';
 import { servicesPlanning } from '../noyau/planning/service.mjs';
@@ -106,6 +107,7 @@ export async function semer(base, { maintenant = () => Date.now(), stockage } = 
   await o.creerTache(zed, team.id, { titre: 'Réserver le créneau de scrim', echeance: jour(4), priorite: 'basse' });
   await semerReview(base, team.id, { maintenant, noyau: s });
   await semerStrats(base, team.id, { maintenant, noyau: s, stockage });
+  await semerCompetition(base, team.id, { maintenant, noyau: s });
   // Suivi des joueurs : quelques notes du Coach (une épinglée, une partagée avec Léa).
   const suivi = servicesSuivi({ base, maintenant, socle: s, planning: servicesPlanning({ base, maintenant, noyau: s }) });
   await suivi.creer(zed, team.id, 'lea12345', { contenu: '**Très bon** entry sur Ascent : timings propres, à garder.', categorie: 'performance', ton: 'positif', tags: ['entry', 'ascent'], date: jour(-6), partagee: true });

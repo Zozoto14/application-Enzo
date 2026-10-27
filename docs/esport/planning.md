@@ -27,6 +27,8 @@ La migration 0002 ajoute aux rôles système **déjà créés** : `availability.
 - Vues **mois**, **semaine**, **liste** ; filtres par type, par membre convoqué et **« Où je suis convoqué »**
   (`membre=moi`) ; navigation par période.
 - Types et couleurs : Entraînement (bleu), Scrim (violet), Match (rouge), Tournoi (ambre), Réunion (cyan), Autre (gris).
+  Un match de tournoi daté (module Tournois) crée et tient à jour son événement « Tournoi », convoquant le roster
+  du tournoi ([tournois-resultats.md](tournois-resultats.md)).
 - Champs : type, titre, date, début, fin (une fin avant le début tombe le lendemain), lieu ou lien,
   description, **convoqués** (voir ci-dessous), `adversaireId` (facultatif, pour le scouting de la phase 5) et
   `reviewId` (phase 5).

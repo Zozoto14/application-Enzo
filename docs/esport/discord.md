@@ -64,6 +64,10 @@ mentionner** (facultatif).
 | Demande de compte | un membre (permission « Créer des membres ») propose un nouveau compte, à valider par le Fondateur ; jamais l'adresse e-mail | oui |
 | Changement de rôle | le rôle d'un membre change | non |
 | Review créée | une review vidéo est créée (phase 5) | non |
+| Inscription à un tournoi | la team est inscrite à un tournoi publiable (module Tournois) | oui |
+| Annonce d'un match de tournoi | un match de tournoi est daté ; remplace « Nouvel événement » pour son événement du planning | oui |
+| Résultat d'un match | un résultat publiable est saisi (module Résultats ; jamais un résultat staff, un scrim seulement s'il est coché « publiable ») | oui |
+| Classement final d'un tournoi | un tournoi publiable passe à « terminé » | oui |
 
 Une notification dont le **module est absent** (par exemple « Review créée » sans le module Review vidéo) est
 grisée et ne peut pas être activée.
@@ -90,7 +94,8 @@ Scrim ce soir : {titre} ({type}), {date} à {heure}. Réponds dans l'app !
 Variables communes à tous les messages : `{team}` (nom de la team) et `{lien}` (adresse de l'app, si le serveur la
 connaît, voir plus bas). Les autres dépendent du message et sont listées sous le champ : `{titre}`, `{type}`,
 `{date}`, `{heure}`, `{delai}`, `{convoques}`, `{membre}`, `{acteur}`, `{assigne}`, `{echeance}`, `{role}`, `{de}`,
-`{vers}`, `{etat}`.
+`{vers}`, `{etat}` ; tournois et résultats : `{tournoi}`, `{tour}`, `{adversaire}`, `{score}`, `{issue}`,
+`{resultat}`, `{place}`, `{classement}`, `{gains}`, `{dates}` (voir [tournois-resultats.md](tournois-resultats.md)).
 
 - Une variable inconnue est **refusée** à l'enregistrement (le message d'erreur donne la liste permise).
 - Modèle vide : on revient au modèle par défaut (bouton **Modèle par défaut**).

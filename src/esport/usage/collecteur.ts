@@ -229,6 +229,8 @@ const MOTIFS_ACTIONS: ReadonlyArray<readonly [string, RegExp, string]> = [
   ['POST', new RegExp(`^${T}/taches$`), 'tache.creee'],
   ['POST', new RegExp(`^${T}/objectifs$`), 'objectif.cree'],
   ['POST', new RegExp(`^${T}/scouting/adversaires$`), 'scouting.fiche'],
+  ['POST', new RegExp(`^${T}/tournois$`), 'tournoi.cree'],
+  ['POST', new RegExp(`^${T}/resultats$`), 'resultat.saisi'],
 ];
 
 /** Action clé d'un appel réussi de l'API (`undefined` : rien à noter). */

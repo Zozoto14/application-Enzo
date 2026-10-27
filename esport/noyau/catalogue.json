@@ -13,7 +13,9 @@
     { "cle": "strat_editor", "nom": "Strats", "phase": 6, "description": "Éditeur de stratégies sur la carte." },
     { "cle": "playbook", "nom": "Playbook", "phase": 6, "description": "Bibliothèque de strats par carte, side et type." },
     { "cle": "player_notes", "nom": "Suivi joueurs", "phase": 7, "description": "Notes du staff sur chaque joueur, partage note par note." },
-    { "cle": "resources", "nom": "Ressources", "phase": 8, "description": "Canal de ressources : liens, vidéos, fichiers et notes, par catégorie." }
+    { "cle": "resources", "nom": "Ressources", "phase": 8, "description": "Canal de ressources : liens, vidéos, fichiers et notes, par catégorie." },
+    { "cle": "tournois", "nom": "Tournois", "phase": 9, "description": "Tournois : fiche, inscription et check-in, roster, parcours, matchs au planning, classement et gains." },
+    { "cle": "resultats", "nom": "Résultats", "phase": 9, "description": "Résultats des matchs selon le score du jeu : maps et manches, classement, joueurs, bilans." }
   ],
   "groupes": [
     {
@@ -162,6 +164,24 @@
       ]
     },
     {
+      "cle": "tournois",
+      "nom": "Tournois",
+      "module": "tournois",
+      "permissions": [
+        { "cle": "tournois.voir", "action": "voir", "libelle": "Voir" },
+        { "cle": "tournois.gerer", "action": "modifier", "libelle": "Gérer (fiche, inscription, roster, matchs, classement)" }
+      ]
+    },
+    {
+      "cle": "resultats",
+      "nom": "Résultats",
+      "module": "resultats",
+      "permissions": [
+        { "cle": "resultats.voir", "action": "voir", "libelle": "Voir" },
+        { "cle": "resultats.saisir", "action": "creer", "libelle": "Saisir et modifier" }
+      ]
+    },
+    {
       "cle": "activity_log",
       "nom": "Journal",
       "module": "activity_log",
@@ -187,6 +207,7 @@
         "video_review.view", "video_review.react", "scouting.view", "strats.view", "playbook.view",
         "player_notes.view", "player_notes.write", "player_notes.delete",
         "resources.view", "resources.post", "resources.manage",
+        "tournois.voir", "tournois.gerer", "resultats.voir", "resultats.saisir",
         "activity_log.view"
       ]
     },
@@ -207,7 +228,8 @@
         "strats.view", "strats.create", "strats.update", "strats.delete", "strats.share",
         "playbook.view", "playbook.manage",
         "player_notes.view", "player_notes.write", "player_notes.delete",
-        "resources.view", "resources.post", "resources.manage"
+        "resources.view", "resources.post", "resources.manage",
+        "tournois.voir", "tournois.gerer", "resultats.voir", "resultats.saisir"
       ]
     },
     {
@@ -226,7 +248,8 @@
         "strats.view", "strats.create", "strats.update", "strats.share",
         "playbook.view", "playbook.manage",
         "player_notes.view", "player_notes.write",
-        "resources.view", "resources.post", "resources.manage"
+        "resources.view", "resources.post", "resources.manage",
+        "tournois.voir", "resultats.voir", "resultats.saisir"
       ]
     },
     {
@@ -242,7 +265,8 @@
         "goals_tasks.view",
         "video_review.view", "video_review.annotate", "video_review.react",
         "strats.view", "playbook.view",
-        "resources.view"
+        "resources.view",
+        "tournois.voir", "resultats.voir"
       ]
     },
     {
@@ -250,7 +274,7 @@
       "nom": "Remplaçant / Invité",
       "couleur": "#8b8b9a",
       "description": "Lecture limitée.",
-      "permissions": ["members.view", "planning.view", "availability.edit_own", "attendance.rsvp_own", "playbook.view", "resources.view"]
+      "permissions": ["members.view", "planning.view", "availability.edit_own", "attendance.rsvp_own", "playbook.view", "resources.view", "tournois.voir", "resultats.voir"]
     }
   ],
   "presets": [
@@ -258,7 +282,7 @@
       "cle": "valorant_complet",
       "nom": "Team Valorant complète",
       "description": "Tous les modules.",
-      "modules": ["activity_log", "planning", "availability", "attendance", "meeting_summaries", "goals_tasks", "discord", "video_review", "scouting", "strat_editor", "playbook", "player_notes", "resources"]
+      "modules": ["activity_log", "planning", "availability", "attendance", "meeting_summaries", "goals_tasks", "discord", "video_review", "scouting", "strat_editor", "playbook", "player_notes", "resources", "tournois", "resultats"]
     },
     { "cle": "minimal", "nom": "Minimal", "description": "Journal, planning et disponibilités.", "modules": ["activity_log", "planning", "availability"] },
     { "cle": "personnalise", "nom": "Personnalisé", "description": "Vous choisissez chaque module.", "modules": null }

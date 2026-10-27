@@ -21,10 +21,11 @@
 
 import { iso, jsonOu, nouvelId } from '../outils.mjs';
 import { dechiffrerWebhook } from './chiffrement.mjs';
-import { CLES_OCCURRENCE, clesPourType, evenementDiscord, libelleTypeEvenement, textesEvenement } from './catalogue.mjs';
+import { CLES_COMPETITION, CLES_OCCURRENCE, clesPourType, evenementDiscord, libelleTypeEvenement, textesEvenement } from './catalogue.mjs';
 import { lireLangue, nomRoleSysteme, texte as T } from '../langues.mjs';
 import { estReunionStaff, membresTeam } from './convoques.mjs';
-import { boutonLien, boutonsRessource, boutonsRsvp, embedRessource } from './embeds.mjs';
+import { boutonLien, boutonsCompetition, boutonsRessource, boutonsRsvp, embedCompetition, embedRessource } from './embeds.mjs';
+import { resumeAnnonce, resumeResultat, resumeTournoi } from '../competition/resume.mjs';
 import { formaterDelai, formaterInstant } from './formats.mjs';
 import { construireCharge, rendreModele } from './messages.mjs';
 import { contexteOccurrence, embedOccurrence, variablesOccurrence } from './occurrence.mjs';
@@ -81,7 +82,37 @@ async function variablesDe(base, ev, cle, charge, team, L) {
   const instant = { titre: charge.titre ?? '', type: libelleTypeEvenement(charge.type, L), ...quand, evenementId, occurrence };
   switch (cle) {
     case 'event_created':
+      // Événement d'un match de tournoi : l'annonce « Match à venir » (plus riche) le remplace, si elle est active.
+      if (charge.tournoiMatchId && (await annonceTournoiActive(base, ev.team_id))) return null;
       return { ...base_, ...instant, acteur: await pseudo(ev.acteur_id) };
+    case 'tournament_registered':
+    case 'tournament_final': {
+      const r = await resumeTournoi(base, ev.team_id, ev.entite_id, { langue: L });
+      if (!r || !r.publiable) return null;
+      const jour = r.debut ? formaterInstant(team.fuseau, `${r.debut}T12:00:00.000Z`, L).date : '';
+      return { ...base_, tournoi: r.nom, dates: jour ? T(L, 'var.le_jour', { date: jour }) : '', resultat: r.phraseFinal, classement: r.texteClassement ?? '', gains: r.gains ?? '', acteur: await pseudo(ev.acteur_id), _competition: { genre: 'tournoi', id: r.id } };
+    }
+    case 'match_announced': {
+      const r = await resumeAnnonce(base, ev.team_id, ev.entite_id, { langue: L });
+      if (!r || !r.publiable) return null;
+      return { ...base_, titre: r.titre, tournoi: r.tournoi.nom, tour: r.tour ?? '', adversaire: r.adversaires.map(a => a.nom).join(', ') || '?', date: r.quand.date, heure: r.quand.heure, _competition: { genre: 'annonce', id: r.id } };
+    }
+    case 'match_result': {
+      const r = await resumeResultat(base, ev.team_id, ev.entite_id, { langue: L });
+      if (!r || !r.publiable) return null;
+      return {
+        ...base_,
+        resultat: r.phrase,
+        issue: r.libelleIssue,
+        score: r.score,
+        adversaire: r.adversaires.map(a => a.nom).join(', '),
+        place: r.libellePlace ?? '',
+        titre: r.titre,
+        tournoi: r.tournoi?.nom ?? '',
+        acteur: await pseudo(ev.acteur_id),
+        _competition: { genre: 'resultat', id: r.id },
+      };
+    }
     case 'reminder_d1':
     case 'reminder_h1':
       return { ...base_, ...instant, delai: formaterDelai(Date.parse(charge.debut) - t, L), convoques: await pseudosListe(base, charge.convoques, L) };
@@ -142,6 +173,21 @@ async function variablesDe(base, ev, cle, charge, team, L) {
     default:
       return null;
   }
+}
+
+/** Annonce « Match à venir » active pour la team (module Tournois activé et message activé) ? */
+async function annonceTournoiActive(base, teamId) {
+  const module = await base.premier("SELECT active FROM team_modules WHERE team_id = ? AND module = 'tournois'", [teamId]);
+  if (!module || Number(module.active) !== 1) return false;
+  const ligne = await base.premier("SELECT * FROM discord_notification_settings WHERE team_id = ? AND cle = 'match_announced'", [teamId]);
+  return reglageEffectif(evenementDiscord('match_announced'), ligne).actif;
+}
+
+/** Résumé publiable d'un message compétition (relu à l'envoi) ; null s'il a disparu. */
+function resumeCompetition(base, teamId, c, langue) {
+  if (c.genre === 'resultat') return resumeResultat(base, teamId, c.id, { langue });
+  if (c.genre === 'annonce') return resumeAnnonce(base, teamId, c.id, { langue });
+  return resumeTournoi(base, teamId, c.id, { langue });
 }
 
 /** Ressource publiée et visible de toute la team (sinon null : rien ne part sur Discord). */
@@ -398,6 +444,14 @@ async function chargeDeLigne(base, ligne, { team, bot, lienApp, t, mentions = tr
       langue,
     });
     return { charge: construireCharge(contenu, { roleId, nomTeam: team.nom, embed, composants: boutonsRessource(r.genre === 'fichier' || r.genre === 'note' ? null : r.url, lienApp, langue), maintenant: t, langue }) };
+  }
+  if (CLES_COMPETITION.includes(ligne.cle) && variables._competition) {
+    // Relu au moment de l'envoi : supprimé, passé « staff » ou « non publiable » entre-temps → rien ne part.
+    const r = await resumeCompetition(base, ligne.team_id, variables._competition, langue);
+    if (!r || !r.publiable) return { abandon: 'Plus publiable', silencieux: true };
+    const contenu = rendreModele(ligne.modele, { ...variables, lien: lienApp });
+    const embed = embedCompetition({ cle: ligne.cle, resume: r, texte: contenu, lien: lienApp, maintenant: t, langue });
+    return { charge: construireCharge(contenu, { roleId, nomTeam: team.nom, embed, composants: boutonsCompetition(r.tournoi?.lien ?? r.lien, lienApp, langue), maintenant: t, langue }) };
   }
   if (!occurrence) {
     const contenu = rendreModele(ligne.modele, { ...variables, lien: lienApp });

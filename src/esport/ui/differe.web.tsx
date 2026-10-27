@@ -19,6 +19,8 @@ export const Playbook = differe<PropsModule>(async () => (await import('./strats
 export const SuiviJoueurs = differe<PropsModule>(async () => (await import('./suivi/SuiviJoueurs')).SuiviJoueurs);
 export const Discord = differe<PropsModule>(async () => (await import('./Discord')).Discord);
 export const Ressources = differe<PropsModule>(async () => (await import('./ressources/Ressources')).Ressources);
+export const Tournois = differe<PropsModule>(async () => (await import('./competition/Tournois')).Tournois);
+export const Resultats = differe<PropsModule>(async () => (await import('./competition/Resultats')).Resultats);
 // Page « Statistiques » (Fondateur) : chargée seulement quand il l'ouvre.
 export const Statistiques = differe<React.ComponentProps<typeof import('./Statistiques').Statistiques>>(async () => (await import('./Statistiques')).Statistiques);
 // Page « Jeux » (profils de jeu, assistant IA) : chargée seulement quand on l'ouvre.

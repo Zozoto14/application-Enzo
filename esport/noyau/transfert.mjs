@@ -84,6 +84,13 @@ export const TABLES = [
   ['ressource_commentaires', 'id'],
   ['ressource_visites', 'team_id, compte_id'],
   ['ressource_reglages', 'team_id'],
+  // Tournois et résultats (migration 0022).
+  ['tournois', 'id'],
+  ['tournoi_roster', 'tournoi_id, compte_id'],
+  ['tournoi_matchs', 'id'],
+  ['resultats', 'id'],
+  ['resultat_manches', 'id'],
+  ['resultat_joueurs', 'id'],
   // Statistiques d'usage (migration 0018) : détail brut (90 jours) et agrégats journaliers.
   ['usage_evenements', 'id'],
   ['usage_jour_pages', 'jour, compte_id, team_id, page, appareil'],

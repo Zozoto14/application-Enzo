@@ -397,7 +397,41 @@
   "Travail introuvable.": "Job not found.",
   "Plafond mensuel de vérifications atteint (réglable dans Administration › IA).": "Monthly check limit reached (adjustable in Administration › AI).",
   "Ce brouillon n’est plus à valider.": "This draft is no longer awaiting validation.",
-  "Aucun changement choisi.": "No change selected."
+  "Aucun changement choisi.": "No change selected.",
+  "Devise invalide (code à trois lettres : EUR, USD…).": "Invalid currency (three-letter code: EUR, USD…).",
+  "Liste d’adversaires illisible.": "Unreadable list of opponents.",
+  "Résultat introuvable.": "Result not found.",
+  "Tournoi inconnu.": "Unknown tournament.",
+  "Type de match inconnu.": "Unknown match type.",
+  "Statistiques illisibles.": "Unreadable stats.",
+  "Statistiques : 15 au plus par joueur.": "Stats: 15 per player at most.",
+  "Ce match a déjà un résultat.": "This match already has a result.",
+  "Événement inconnu.": "Unknown event.",
+  "Date du match requise.": "Match date required.",
+  "Un joueur aligné ne fait pas partie de la team.": "A player in the line-up isn’t part of the team.",
+  "Un joueur est aligné deux fois.": "A player is in the line-up twice.",
+  "Personnages : 5 au plus par joueur.": "Characters: 5 per player at most.",
+  "Personnage inconnu pour ce jeu.": "Unknown character for this game.",
+  "Le MVP doit être un joueur aligné.": "The MVP must be in the line-up.",
+  "Visibilité inconnue.": "Unknown visibility.",
+  "Match introuvable.": "Match not found.",
+  "Tournoi introuvable.": "Tournament not found.",
+  "Score invalide.": "Invalid score.",
+  "Format inconnu pour ce jeu.": "Unknown format for this game.",
+  "BO non prévu par ce format.": "This format doesn’t allow this BO.",
+  "Phases : 8 au plus.": "Stages: 8 at most.",
+  "Type de phase inconnu.": "Unknown stage type.",
+  "La fin du check-in doit suivre son ouverture.": "Check-in must close after it opens.",
+  "La place finale dépasse le nombre de participants.": "The final placement exceeds the number of participants.",
+  "Roster illisible.": "Unreadable roster.",
+  "Un joueur du roster ne fait pas partie de la team.": "A roster player isn’t part of the team.",
+  "Ce tournoi est terminé ou annulé.": "This tournament is finished or cancelled.",
+  "La date limite d’inscription est passée.": "The registration deadline has passed.",
+  "Inscrivez d’abord la team.": "Register the team first.",
+  "Le check-in n’est pas encore ouvert.": "Check-in isn’t open yet.",
+  "Le check-in est fermé.": "Check-in is closed.",
+  "Phase inconnue.": "Unknown stage.",
+  "Résultat inconnu.": "Unknown result."
  },
  "motifs": [
   [
@@ -567,6 +601,34 @@
   [
    "^Version française non publiée : (.*)$",
    "French version not posted: $1"
+  ],
+  [
+   "^Statistique illisible \\((.+)\\)\\.$",
+   "Unreadable stat ($1)."
+  ],
+  [
+   "^(\\d+) titulaires au plus pour ce jeu\\.$",
+   "$1 starters at most for this game."
+  ],
+  [
+   "^(\\d+) remplaçants au plus pour ce jeu\\.$",
+   "$1 substitutes at most for this game."
+  ],
+  [
+   "^Il faut au moins (\\d+) titulaires pour s’inscrire\\.$",
+   "At least $1 starters are needed to register."
+  ],
+  [
+   "^Une team garde (\\d+) tournois au plus\\.$",
+   "A team keeps $1 tournaments at most."
+  ],
+  [
+   "^Un tournoi garde (\\d+) matchs au plus\\.$",
+   "A tournament keeps $1 matches at most."
+  ],
+  [
+   "^(\\d+) joueurs au plus pour ce format\\.$",
+   "$1 players at most for this format."
   ]
  ]
 }

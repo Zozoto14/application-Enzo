@@ -17,6 +17,8 @@
     { "id": "team.jeu.resources", "module": "resources" },
     { "id": "team.jeu.video_review", "module": "video_review" },
     { "id": "team.jeu.scouting", "module": "scouting" },
+    { "id": "team.competition.tournois", "module": "tournois" },
+    { "id": "team.competition.resultats", "module": "resultats" },
     { "id": "team.equipe.meeting_summaries", "module": "meeting_summaries" },
     { "id": "team.equipe.goals_tasks", "module": "goals_tasks" },
     { "id": "team.equipe.player_notes", "module": "player_notes" },
@@ -43,7 +45,9 @@
     { "id": "tache.creee", "fonction": "taches" },
     { "id": "objectif.cree", "fonction": "taches" },
     { "id": "scouting.fiche", "fonction": "scouting" },
+    { "id": "tournoi.cree", "fonction": "competition" },
+    { "id": "resultat.saisi", "fonction": "competition" },
     { "id": "bot.commande", "fonction": "bot" }
   ],
-  "fonctions": ["connexion", "planning", "rsvp", "disponibilites", "resumes", "reperes", "strats", "ressources", "taches", "scouting", "bot"]
+  "fonctions": ["connexion", "planning", "rsvp", "disponibilites", "resumes", "reperes", "strats", "ressources", "taches", "scouting", "competition", "bot"]
 }

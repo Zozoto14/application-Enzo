@@ -63,6 +63,10 @@ const MESSAGES = {
   strat_created: { emoji: '🗺️', couleur: '#7c3aed' },
   playbook_validated: { emoji: '📘', couleur: '#16a34a' },
   resource_created: { emoji: '📚', couleur: '#0d9488' },
+  tournament_registered: { emoji: '📝', couleur: '#d97706' },
+  match_announced: { emoji: '🏟️', couleur: '#d97706' },
+  match_result: { emoji: '🏁', couleur: ACCENT },
+  tournament_final: { emoji: '🏆', couleur: '#d97706' },
   test: { emoji: '🛰️', couleur: ACCENT },
   alerte_fil: { emoji: '⚠️', couleur: '#d97706' },
 };
@@ -238,6 +242,101 @@ export function embedRessource({ ressource, categorie = '', auteur = '', texte: 
 export function boutonsRessource(urlRessource, lien, langue = 'fr') {
   const boutons = [];
   if (https(urlRessource)) boutons.push({ type: 2, style: 5, label: T(langue, 'ressource.ouvrir_lien'), emoji: { name: '🔗' }, url: urlRessource });
+  if (https(lien)) boutons.push({ type: 2, style: 5, label: T(langue, 'bouton.ouvrir_app'), emoji: { name: '📲' }, url: lien });
+  return boutons.length ? [{ type: 1, components: boutons }] : [];
+}
+
+/** Couleur d'un résultat : vert (victoire), rouge (défaite), gris (nul), or (podium d'un classement). */
+function couleurResultat(r) {
+  if (r.systeme === 'classement') return r.place === 1 ? '#d4a017' : r.place && r.place <= 3 ? '#16a34a' : ACCENT;
+  return r.issue === 'victoire' ? COULEUR_OK : r.issue === 'defaite' ? COULEUR_ERREUR : '#64748b';
+}
+
+const EMOJI_ISSUE = { victoire: '✅', defaite: '❌', nul: '➖' };
+
+/**
+ * Embed d'un message « compétition » (modules Tournois et Résultats), tiré du RÉSUMÉ PUBLIABLE
+ * (competition/resume.mjs) : annonce de match, résultat (score, maps et manches, MVP, alignés),
+ * inscription ou classement final d'un tournoi (classement, parcours, gains). Tout texte est neutralisé.
+ *  - `cle` : match_announced | match_result | tournament_registered | tournament_final ;
+ *  - `resume` : résumé dans la langue du message ; `texte` : modèle rendu ; `lien` : adresse de l'app.
+ */
+export function embedCompetition({ cle, resume: r, texte: message = '', lien = '', maintenant = Date.now(), langue = 'fr' }) {
+  const m = MESSAGES[cle] ?? { emoji: '🏆', couleur: ACCENT };
+  const champs = [];
+  const adversaires = (r.adversaires ?? []).map(a => ligne(a.nom, 40)).filter(Boolean);
+  const pied = { text: `${ligne(r.team?.nom || 'Esport', 80)}${r.jeu?.nom ? ` · ${ligne(r.jeu.nom, 30)}` : ''} · Esport`, ...(https(r.team?.logo) ? { icon_url: r.team.logo } : {}) };
+  const lienApp = https(lien);
+  let entete;
+  let titre;
+  let couleur = m.couleur;
+  const description = message ? texte(message, 1500) : '';
+  let miniature = https(r.team?.logo);
+  if (cle === 'match_result') {
+    entete = `${m.emoji} ${T(langue, 'competition.entete.resultat')} · ${ligne(r.libelleGenre ?? '', 40)}`;
+    titre = r.systeme === 'classement' ? `${r.place === 1 ? '🥇' : r.place === 2 ? '🥈' : r.place === 3 ? '🥉' : '🏁'} ${ligne(r.phrase, 200)}` : `${EMOJI_ISSUE[r.issue] ?? '🏁'} ${ligne(r.phrase, 200)}`;
+    couleur = couleurResultat(r);
+    if (r.tournoi) champs.push({ name: `🏟️ ${T(langue, 'competition.champ.tournoi')}`, value: ligne([r.tournoi.nom, r.tour].filter(Boolean).join(' · '), 120), inline: true });
+    if (adversaires.length) champs.push({ name: `🆚 ${T(langue, adversaires.length > 1 ? 'competition.champ.adversaires' : 'embed.adversaire')}`, value: adversaires.slice(0, 8).join(', '), inline: true });
+    if (r.format || r.bo) champs.push({ name: `🎮 ${T(langue, 'competition.champ.format')}`, value: [r.format?.libelle, r.bo && r.systeme === 'serie' ? `BO${r.bo}` : null].filter(Boolean).join(' · '), inline: true });
+    if (r.systeme === 'classement') {
+      if (r.participants) champs.push({ name: `📊 ${T(langue, 'competition.champ.classement')}`, value: T(langue, 'competition.place_sur', { place: r.libellePlace ?? '', n: r.participants }), inline: true });
+      if (r.points !== null && r.points !== undefined) champs.push({ name: `🔢 ${T(langue, 'competition.champ.points')}`, value: T(langue, 'competition.points', { n: r.points }), inline: true });
+    }
+    const manches = (r.manches ?? []).map(x => {
+      const nom = [x.carte, x.mode].filter(Boolean).map(v => ligne(v, 30)).join(' · ') || T(langue, 'competition.manche', { n: x.numero });
+      if (r.systeme === 'classement') return `${nom} — ${x.place ? `#${x.place}` : '?'}${x.points !== null && x.points !== undefined ? ` · ${T(langue, 'competition.points', { n: x.points })}` : ''}`;
+      return `${EMOJI_ISSUE[x.issue] ?? '·'} ${nom}${x.score ? ` — **${x.score}**` : ''}${x.prolongations ? ` (${T(langue, 'competition.prolongations')})` : ''}`;
+    });
+    if (manches.length) champs.push({ name: `🗺️ ${T(langue, 'competition.champ.manches')}`, value: manches.slice(0, 12).join('\n'), inline: false });
+    if (r.mvp) champs.push({ name: `⭐ ${T(langue, 'competition.champ.mvp')}`, value: ligne(r.mvp, 40), inline: true });
+    if (r.joueurs?.length) champs.push({ name: `👥 ${T(langue, 'competition.champ.joueurs')}`, value: r.joueurs.map(j => `${ligne(j.pseudo ?? '?', 30)}${j.personnages?.length ? ` (${j.personnages.slice(0, 3).map(p => ligne(p, 20)).join(', ')})` : ''}`).slice(0, 10).join(' · '), inline: false });
+  } else if (cle === 'match_announced') {
+    entete = `${m.emoji} ${T(langue, 'competition.entete.annonce')}`;
+    titre = `🏟️ ${ligne(r.titre, 200)}`;
+    if (Number.isFinite(Date.parse(r.debut))) champs.push({ name: `🕒 ${T(langue, 'embed.quand')}`, value: `${horodatage(Date.parse(r.debut), 'F')} · ${horodatage(Date.parse(r.debut), 'R')}`, inline: false });
+    if (adversaires.length) champs.push({ name: `🆚 ${T(langue, adversaires.length > 1 ? 'competition.champ.adversaires' : 'embed.adversaire')}`, value: adversaires.slice(0, 8).join(', '), inline: true });
+    if (r.format || r.bo) champs.push({ name: `🎮 ${T(langue, 'competition.champ.format')}`, value: [r.format?.libelle, r.bo ? `BO${r.bo}` : null].filter(Boolean).join(' · '), inline: true });
+    if (r.lieu) champs.push({ name: `📍 ${T(langue, 'embed.lieu')}`, value: ligne(r.lieu, 100), inline: true });
+    if (r.roster?.length) champs.push({ name: `👥 ${T(langue, 'competition.champ.roster')}`, value: r.roster.map(p => ligne(p, 30)).slice(0, 12).join(' · '), inline: false });
+    const logoAdv = (r.adversaires ?? []).map(a => https(a.logoUrl)).find(Boolean);
+    if (logoAdv) miniature = logoAdv;
+  } else {
+    // Tournoi : inscription ou classement final.
+    const final = cle === 'tournament_final';
+    entete = `${m.emoji} ${T(langue, final ? 'competition.entete.classement' : 'competition.entete.inscription')}`;
+    titre = `${final ? (r.classementFinal === 1 ? '🥇' : r.classementFinal === 2 ? '🥈' : r.classementFinal === 3 ? '🥉' : '🏆') : '📝'} ${ligne(final ? r.phraseFinal : r.phraseInscription, 200)}`;
+    if (final && r.classementFinal === 1) couleur = '#d4a017';
+    if (r.organisateur) champs.push({ name: `🏢 ${T(langue, 'competition.champ.organisateur')}`, value: ligne(r.organisateur, 80), inline: true });
+    if (r.debut) champs.push({ name: `📅 ${T(langue, 'competition.champ.dates')}`, value: r.fin && r.fin !== r.debut ? T(langue, 'competition.du_au', { debut: r.debut, fin: r.fin }) : r.debut, inline: true });
+    if (r.format) champs.push({ name: `🎮 ${T(langue, 'competition.champ.format')}`, value: ligne(r.format.libelle, 40), inline: true });
+    if (r.lieu) champs.push({ name: `📍 ${T(langue, 'embed.lieu')}`, value: ligne(r.lieu, 100), inline: true });
+    if (final && r.texteClassement) champs.push({ name: `📊 ${T(langue, 'competition.champ.classement')}`, value: ligne(r.texteClassement, 60), inline: true });
+    if (final && r.gains) champs.push({ name: `💰 ${T(langue, 'competition.champ.gains')}`, value: ligne(r.gains, 40), inline: true });
+    if (final && r.parcours?.length) {
+      const lignes = r.parcours.slice(0, 12).map(p => `${EMOJI_ISSUE[p.issue] ?? '·'} ${p.tour ? `${ligne(p.tour, 30)} — ` : ''}${p.adversaires.map(a => ligne(a.nom, 30)).join(', ') || '?'}${p.score ? ` **${ligne(p.score, 12)}**` : p.place ? ` #${p.place}` : ''}`);
+      champs.push({ name: `🧭 ${T(langue, 'competition.champ.parcours')}`, value: lignes.join('\n'), inline: false });
+    }
+    if (r.roster?.length) champs.push({ name: `👥 ${T(langue, 'competition.champ.roster')}`, value: r.roster.map(p => ligne(p.pseudo, 30)).slice(0, 12).join(' · '), inline: false });
+  }
+  const cible = https(r.tournoi?.lien ?? r.lien) ?? lienApp;
+  return bornerEmbed({
+    author: { name: entete },
+    title: titre,
+    ...(cible ? { url: cible } : {}),
+    color: couleurEntier(couleur),
+    ...(description ? { description } : {}),
+    fields: champs,
+    ...(miniature ? { thumbnail: { url: miniature } } : {}),
+    footer: pied,
+    timestamp: new Date(maintenant).toISOString(),
+  });
+}
+
+/** Boutons d'un message compétition : « Page du tournoi » (si https) et « Ouvrir dans l'app ». */
+export function boutonsCompetition(lienTournoi, lien, langue = 'fr') {
+  const boutons = [];
+  if (https(lienTournoi)) boutons.push({ type: 2, style: 5, label: T(langue, 'competition.page_tournoi'), emoji: { name: '🏟️' }, url: lienTournoi });
   if (https(lien)) boutons.push({ type: 2, style: 5, label: T(langue, 'bouton.ouvrir_app'), emoji: { name: '📲' }, url: lien });
   return boutons.length ? [{ type: 1, components: boutons }] : [];
 }

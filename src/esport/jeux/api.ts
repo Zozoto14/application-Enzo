@@ -25,7 +25,8 @@ export interface ScoreJeu {
   type: TypeScore;
   roundsGagnants?: number;
   roundsParMiTemps?: number;
-  prolongations?: { active: boolean; regle: string };
+  /** `ecart` : rounds d'écart qui terminent les prolongations (absent : 2). */
+  prolongations?: { active: boolean; regle: string; ecart?: number };
   pointsCible?: number;
   bareme?: Array<{ place: number; points: number }>;
   manchesGagnantes?: number;

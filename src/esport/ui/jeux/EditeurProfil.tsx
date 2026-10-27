@@ -296,9 +296,14 @@ export function EditeurProfil({
               </View>
               {score.type === 'rounds' ? (
                 <View style={[styles.ligne, { gap: ESP.s, alignItems: 'center' }]}>
-                  <Case theme={theme} coche={Boolean(score.prolongations?.active)} libelle={trJeux('jeux.prolongations')} onChanger={v => majScore({ prolongations: { active: v, regle: score.prolongations?.regle ?? '' } })} testID={`${testID}-score-prolongations`} />
+                  <Case theme={theme} coche={Boolean(score.prolongations?.active)} libelle={trJeux('jeux.prolongations')} onChanger={v => majScore({ prolongations: { ...score.prolongations, active: v, regle: score.prolongations?.regle ?? '' } })} testID={`${testID}-score-prolongations`} />
                   <Text style={texte(theme, 14)}>{trJeux('jeux.prolongations')}</Text>
-                  {score.prolongations?.active ? <Champ theme={theme} libelle={trJeux('jeux.regle_prolongations')} valeur={score.prolongations.regle} onChanger={v => majScore({ prolongations: { active: true, regle: v } })} maxLength={200} testID={`${testID}-score-regle`} style={{ flex: 1, minWidth: 200 }} /> : null}
+                  {score.prolongations?.active ? (
+                    <>
+                      <Champ theme={theme} libelle={trJeux('jeux.ecart_prolongations')} valeur={enTexte(score.prolongations.ecart)} onChanger={v => majScore({ prolongations: { ...score.prolongations, active: true, regle: score.prolongations?.regle ?? '', ecart: v.trim() ? nombre(v) : undefined } })} clavier="number-pad" maxLength={2} testID={`${testID}-score-ecart`} style={{ width: 160 }} />
+                      <Champ theme={theme} libelle={trJeux('jeux.regle_prolongations')} valeur={score.prolongations.regle} onChanger={v => majScore({ prolongations: { ...score.prolongations, active: true, regle: v } })} maxLength={200} testID={`${testID}-score-regle`} style={{ flex: 1, minWidth: 200 }} />
+                    </>
+                  ) : null}
                 </View>
               ) : null}
               {score.type === 'placement' ? (

@@ -45,6 +45,8 @@ export const ACTIONS_PAR_MODULE = {
   playbook: ['playbook'],
   player_notes: ['player_note'],
   resources: ['resource', 'resource_category', 'resources'],
+  tournois: ['tournoi'],
+  resultats: ['match'],
 };
 
 /** Module d'une action (« event.created » → « planning »), ou « coeur ». */

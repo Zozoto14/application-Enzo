@@ -1,9 +1,10 @@
 /**
- * Page d'une team. Les modules activés sont rangés en cinq sections :
+ * Page d'une team. Les modules activés sont rangés en six sections :
  *
  *  - Accueil ;
  *  - Agenda : Planning, Disponibilités, Présence ;
  *  - Jeu : Strats, Playbook, Ressources, Review vidéo, Scouting ;
+ *  - Compétition : Tournois, Résultats ;
  *  - Équipe : Résumés, Objectifs et tâches, Suivi joueurs, Membres et rôles ;
  *  - Réglages : Paramètres, Discord, Journal.
  *
@@ -26,6 +27,7 @@ import { CATALOGUE, mentionDonnees, nomModule, type ClientEsport, type DetailTea
 import { dateCourte, phraseNotification } from '../libelles';
 import type { SaisieEvenement } from '../planning/api';
 import { AccueilPhase3 } from './AccueilPhase3';
+import { AccueilCompetition } from './AccueilCompetition';
 import { MonSuivi } from './MonSuivi';
 import { CadreEsport, EntreeLaterale, type OngletEsport } from './CadreEsport';
 import { Journal } from './Journal';
@@ -47,12 +49,12 @@ import { ReglageRecapCourriel } from './DiscordId';
 import { noterPage, pageDeSection } from '../usage';
 
 export type SectionTeam = 'accueil' | 'membres' | 'journal' | 'parametres' | `module:${string}`;
-export type GroupeTeam = 'accueil' | 'agenda' | 'jeu' | 'equipe' | 'reglages';
+export type GroupeTeam = 'accueil' | 'agenda' | 'jeu' | 'competition' | 'equipe' | 'reglages';
 
 /** Modules déjà disponibles (les autres activés apparaissent « bientôt »). */
 const MODULES_DISPONIBLES = new Set(['meeting_summaries', 'goals_tasks']);
 
-/** Les cinq sections d'une team, et l'ordre de leurs sous-onglets. */
+/** Les six sections d'une team, et l'ordre de leurs sous-onglets. */
 export const GROUPES_TEAM: ReadonlyArray<{ id: GroupeTeam; libelle: string; glyphe: string; description: string; sections: readonly SectionTeam[] }> = [
   { id: 'accueil', get libelle() {
       return tr('pageTeam.accueil');
@@ -69,6 +71,11 @@ export const GROUPES_TEAM: ReadonlyArray<{ id: GroupeTeam; libelle: string; glyp
     }, glyphe: '◎', get description() {
       return tr('pageTeam.jeu_strats_playbook_review');
     }, sections: ['module:strat_editor', 'module:playbook', 'module:resources', 'module:video_review', 'module:scouting'] },
+  { id: 'competition', get libelle() {
+      return tr('pageTeam.competition');
+    }, glyphe: '♛', get description() {
+      return tr('pageTeam.competition_description');
+    }, sections: ['module:tournois', 'module:resultats'] },
   { id: 'equipe', get libelle() {
       return tr('pageTeam.equipe');
     }, glyphe: '⚑', get description() {
@@ -440,6 +447,7 @@ function AccueilTeam({ theme, client, detail, large, onAller }: { theme: ThemeHu
         <View style={{ gap: ESP.m, flex: large ? 1.6 : undefined, minWidth: 0 }}>
           <AccueilPlanning theme={theme} client={client} detail={detail} onAller={onAller} />
           <MonSuivi theme={theme} client={client} detail={detail} />
+          <AccueilCompetition theme={theme} client={client} detail={detail} onAller={onAller} />
           <AccueilPhase3 theme={theme} client={client} detail={detail} onAller={onAller} />
         </View>
         {colonneDroite}

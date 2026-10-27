@@ -22,6 +22,8 @@ export const GROUPES_TEAM = {
   'module-resources': 'jeu',
   'module-video_review': 'jeu',
   'module-scouting': 'jeu',
+  'module-tournois': 'competition',
+  'module-resultats': 'competition',
   'module-meeting_summaries': 'equipe',
   'module-goals_tasks': 'equipe',
   'module-player_notes': 'equipe',

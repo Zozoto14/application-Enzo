@@ -57,7 +57,10 @@ test('graines : une team Valorant complète avec ses membres et rôles', async (
   const roles = await base.tous('SELECT nom FROM roles WHERE team_id = ?', [id]);
   assert.ok(roles.some(r => r.nom === 'Capitaine'));
   const modules = await base.tous('SELECT module FROM team_modules WHERE team_id = ? AND active = 1', [id]);
-  assert.equal(modules.length, 13);
+  assert.equal(modules.length, 15);
+  // Tournois et résultats (migration 0022) : un tournoi en cours, un terminé, des résultats.
+  assert.equal((await base.tous('SELECT id FROM tournois WHERE team_id = ?', [id])).length, 2);
+  assert.equal((await base.tous('SELECT id FROM resultats WHERE team_id = ?', [id])).length, 3);
   // Planning : des événements (dont une série), des disponibilités, des présences marquées.
   const evenements = await base.tous('SELECT type, recurrence FROM planning_evenements WHERE team_id = ?', [id]);
   assert.deepEqual([...new Set(evenements.map(e => e.type))].sort(), ['match', 'meeting', 'other', 'scrim', 'tournament', 'training']);

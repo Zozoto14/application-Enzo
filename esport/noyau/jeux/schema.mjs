@@ -5,7 +5,7 @@
  *
  *   formats      [{ cle, nom, equipes, joueursParEquipe, bo: [1, 3, 5], notes }]   (3v3v3v3 = 4 équipes de 3)
  *   score        { type: rounds|points|placement|manches, roundsGagnants, roundsParMiTemps,
- *                  prolongations: { active, regle }, pointsCible, bareme: [{ place, points }],
+ *                  prolongations: { active, regle, ecart? }, pointsCible, bareme: [{ place, points }],
  *                  manchesGagnantes, notes }
  *   modes        [{ cle, nom, description, formats: [cle de format], actif }]
  *   cartes       [{ cle, nom, image, actif (dans le pool), modes: [cle de mode] }]
@@ -197,7 +197,12 @@ function lireScore(v, c = 'score') {
   facultatif('roundsParMiTemps', 1, 100);
   facultatif('pointsCible', 1, 1_000_000);
   facultatif('manchesGagnantes', 1, 20);
-  if (estObjet(v.prolongations)) sortie.prolongations = { active: booleen(v.prolongations.active, false), regle: texteNettoye(v.prolongations.regle, 200) };
+  if (estObjet(v.prolongations)) {
+    sortie.prolongations = { active: booleen(v.prolongations.active, false), regle: texteNettoye(v.prolongations.regle, 200) };
+    // Écart de rounds qui termine les prolongations (« deux rounds d'écart ») ; absent : 2 (module Résultats).
+    const ecart = entier(v.prolongations.ecart, `${c}.prolongations.ecart`, 1, 10, { facultatif: true });
+    if (ecart !== null) sortie.prolongations.ecart = ecart;
+  }
   if (Array.isArray(v.bareme)) {
     if (v.bareme.length > 64) throw new Invalide(`${c}.bareme`, 'trop-elements');
     const places = new Set();

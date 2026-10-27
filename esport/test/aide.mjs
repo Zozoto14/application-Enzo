@@ -97,9 +97,9 @@ export async function banc({ creationTeams = 'fondateur', relaisAncien = false, 
  * dans la langue de la team : ils gardent `filFr: false` (défaut ICI seulement) ; le mode bilingue a
  * ses propres tests (discord-bilingue.test.mjs).
  */
-export async function teamAvecMembres(b, { nom = 'Team Alpha', preset = 'valorant_complet', modules, membres = {}, filFr = false } = {}) {
+export async function teamAvecMembres(b, { nom = 'Team Alpha', preset = 'valorant_complet', modules, membres = {}, filFr = false, jeu = 'valorant' } = {}) {
   const fondateur = await b.session('principal', 'Fondateur');
-  const creation = await b.appel('/teams', { methode: 'POST', jeton: fondateur, corps: { nom, jeu: 'valorant', preset, modules } });
+  const creation = await b.appel('/teams', { methode: 'POST', jeton: fondateur, corps: { nom, jeu, preset, modules } });
   if (creation.statut !== 200) throw new Error(`création : ${creation.statut} ${JSON.stringify(creation.corps)}`);
   const teamId = creation.corps.team.id;
   if (!filFr) await b.base.executer("INSERT INTO discord_bilingue (team_id, fil_fr, maj_le) VALUES (?, 0, '2026-01-01T00:00:00.000Z')", [teamId]);

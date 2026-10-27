@@ -22,6 +22,7 @@ import { PastilleRole, Retours, useAgir } from './commun';
 import { AvatarTeam, Badge, Carte, ChiffreCle, ESP, EnTetePage, EtatVide, Grille, SqueletteCartes, TitreCarte, attenue, couleurTeam, texte, type EtatPresse } from './design';
 import { tr, trn } from '../i18n';
 import { nomRole } from '../client';
+import { nomIssue, ordinal } from '../competition/libelles';
 
 /** « jeu. 22/10 · 20:00 » (heure de l'appareil). */
 export function quandCourt(iso: string): string {
@@ -290,6 +291,28 @@ function CarteDashboard({ theme, carte, onOuvrir }: { theme: ThemeHub; carte: Ca
               </View>
             );
           })}
+        </View>
+      ) : null}
+      {carte.competition && (carte.competition.prochains?.length || carte.competition.derniers?.length) ? (
+        <View style={{ gap: ESP.xxs }} testID={`esport-carte-competition-${team.slug}`}>
+          <Text style={{ ...attenue(theme), fontWeight: '700' }}>{tr('competition.accueil.titre')}</Text>
+          {carte.competition.prochains?.slice(0, 2).map(m => (
+            <View key={m.id} style={{ flexDirection: 'row', gap: ESP.xs, alignItems: 'center' }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: typeEvenement('tournament').couleur }} />
+              <Text style={{ ...attenue(theme), minWidth: 104, ...police(theme.policeChiffres) }}>{quandCourt(m.debut)}</Text>
+              <Text style={{ ...texte(theme, 14), flex: 1 }} numberOfLines={1}>
+                {[m.tournoi.nom, m.adversaires.length ? tr('competition.contre_court', { adversaire: m.adversaires.join(', ') }) : null].filter(Boolean).join(' · ')}
+              </Text>
+            </View>
+          ))}
+          {carte.competition.derniers?.slice(0, 2).map(r => (
+            <View key={r.id} style={{ flexDirection: 'row', gap: ESP.xs, alignItems: 'center' }}>
+              <Badge theme={theme} ton={r.issue === 'victoire' ? 'ok' : r.issue === 'defaite' ? 'critique' : 'neutre'} texte={r.issue ? `${nomIssue(r.issue)}${r.score ? ` ${r.score}` : ''}` : ordinal(r.place, true)} />
+              <Text style={{ ...texte(theme, 14), flex: 1 }} numberOfLines={1}>
+                {r.adversaires.join(', ')}
+              </Text>
+            </View>
+          ))}
         </View>
       ) : null}
       <View style={{ flex: 1 }} />

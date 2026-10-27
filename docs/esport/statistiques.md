@@ -44,7 +44,7 @@ L'app note, **par compte**, uniquement des métadonnées :
   arrière-plan (bornée à 4 h) ;
 - les **actions clés** (liste fermée) : connexion (ouverture de l'Esport), création d'événement, RSVP, présence
   marquée, disponibilités, dépôt de réunion, résumé publié, review créée, repère ajouté, commentaire de review, strat
-  créée ou modifiée, ajout au playbook, ressource publiée, tâche, objectif, fiche de scouting ; les **commandes du bot
+  créée ou modifiée, ajout au playbook, ressource publiée, tâche, objectif, fiche de scouting, tournoi créé, résultat saisi ; les **commandes du bot
   Discord** sont comptées par le serveur pour le compte lié ;
 - le **type d'appareil** (PC, tablette, téléphone, app PC) et la **langue** de l'app ;
 - les **erreurs JS** (exceptions non rattrapées) : message tronqué à 200 caractères et **nettoyé** (adresses web,

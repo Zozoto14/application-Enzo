@@ -1,7 +1,7 @@
 # Esport : guide d'utilisation
 
 L'Esport est l'espace des teams (Valorant d'abord) dans l'app : planning, disponibilités, présence, résumés de
-réunions, objectifs et tâches, review vidéo, scouting, strats et playbook, canal de ressources, notifications Discord, journal. Ce guide
+réunions, objectifs et tâches, review vidéo, scouting, strats et playbook, canal de ressources, tournois et résultats, notifications Discord, journal. Ce guide
 explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pour les **joueurs**.
 
 ## Sommaire de la documentation Esport
@@ -23,6 +23,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [strats-playbook.md](strats-playbook.md) | Coach, Analyste, joueurs | Éditeur de strats, partage, playbook, licences Riot |
 | [ressources.md](ressources.md) | Tout le monde | Canal de ressources : liens, vidéos YouTube, fichiers, notes ; catégories, propositions, Discord |
 | [profils-jeu.md](profils-jeu.md) | Fondateur | Profils de jeu (formats, score, maps, personnages), assistant IA, mises à jour proposées |
+| [tournois-resultats.md](tournois-resultats.md) | Staff, tout le monde | Tournois (inscription, roster, parcours, matchs au planning, classement) et résultats (score selon le jeu, bilans, Discord) |
 | [statistiques.md](statistiques.md) | Fondateur | Page Statistiques (réservée au Fondateur) : qui utilise l'app, pages les plus et les moins utilisées, ce qui est collecté |
 | [securite.md](securite.md) | Fondateur | Revue de sécurité, RGPD, limites |
 | [migration-serveur.md](migration-serveur.md) | Fondateur | Architecture du serveur, changer d'hébergeur, sauvegardes |
@@ -44,9 +45,9 @@ Chaque bloc du Dashboard n'apparaît que si le module est activé dans la team *
 permet de le voir (un Joueur ne voit pas la présence de toute l'équipe ni le détail du journal). Le
 serveur ne renvoie jamais rien d'une team où vous n'êtes pas.
 
-### Dans une team : cinq sections
+### Dans une team : six sections
 
-Les modules activés sont rangés en cinq sections ; une section n'apparaît que si elle contient au moins un
+Les modules activés sont rangés en six sections ; une section n'apparaît que si elle contient au moins un
 module ouvert à votre rôle, et chaque section n'affiche que ses modules activés (en sous-onglets) :
 
 ```
@@ -58,6 +59,7 @@ Esport
 │       │                l'équipe, notifications, statistiques
 │       ├── Agenda       Planning · Disponibilités · Présence
 │       ├── Jeu          Strats · Playbook · Ressources · Review vidéo · Scouting
+│       ├── Compétition  Tournois · Résultats
 │       ├── Équipe       Résumés · Objectifs et tâches · Suivi joueurs · Membres et rôles
 │       └── Réglages     Paramètres · Discord · Journal
 ├── Membres
@@ -66,11 +68,11 @@ Esport
 ```
 
 - **PC et iPad paysage** : sous Dashboard · Teams · Membres, la barre latérale montre la team ouverte (logo ou
-  initiales sur sa couleur, nom, votre rôle), le bouton **⇄ Changer de team** et les cinq sections. En haut de la
+  initiales sur sa couleur, nom, votre rôle), le bouton **⇄ Changer de team** et les six sections. En haut de la
   page, un fil d'Ariane (**Teams › Faucons Valorant › Agenda**) ramène à la liste des teams, puis les
   sous-onglets de la section.
 - **iPhone** : en-tête **‹ Teams**, logo et nom de la team, **⇄** pour changer de team, sous-onglets juste
-  dessous ; les cinq sections dans la barre d'onglets en bas.
+  dessous ; les six sections dans la barre d'onglets en bas.
 - Chaque section se souvient du dernier sous-onglet ouvert. En changeant de team, vous restez sur la même section
   si elle existe dans l'autre team.
 - Sur chaque page : une seule action principale, à droite du titre (**+ Nouvel événement**, **+ Nouvelle strat**,
@@ -96,9 +98,9 @@ Chaque membre a **un rôle par team** (on peut être Coach dans une team et Joue
 | --- | --- |
 | **Propriétaire** | Tout, y compris supprimer la team et choisir ses modules |
 | **Manager** | Membres, rôles, invitations, planning, résumés, Discord, journal |
-| **Coach** | Planning, présence, review, strats, playbook, scouting, objectifs, ressources |
-| **Analyste** | Review, strats, playbook, scouting ; lit le planning |
-| **Joueur** | Lit la team, donne ses disponibilités, répond aux événements où il est convoqué, dépose des réunions, commente les reviews |
+| **Coach** | Planning, présence, review, strats, playbook, scouting, objectifs, ressources, tournois, résultats |
+| **Analyste** | Review, strats, playbook, scouting, saisie des résultats ; lit le planning et les tournois |
+| **Joueur** | Lit la team (tournois et résultats compris), donne ses disponibilités, répond aux événements où il est convoqué, dépose des réunions, commente les reviews |
 | **Remplaçant** | Lecture limitée |
 
 Le Propriétaire et le Manager peuvent créer des **rôles personnalisés** (Membres et rôles › Rôles) ; personne ne
@@ -153,6 +155,8 @@ module **Ressources** dans les Paramètres des teams existantes ([ressources.md]
 `0018_statistiques_usage.sql` ajoute la page **Statistiques** ([statistiques.md](statistiques.md)) : rien à régler.
 La migration `0021_profils_jeu.sql` ajoute les **profils de jeu** (Valorant préconfiguré, teams existantes rattachées) ;
 l'assistant IA est facultatif ([profils-jeu.md](profils-jeu.md), [o2switch.md partie I](../o2switch.md)).
+La migration `0022_tournois_resultats.sql` ajoute les modules **Tournois** et **Résultats** (section Compétition) :
+activez-les dans les Paramètres des teams concernées ([tournois-resultats.md](tournois-resultats.md)).
 
 ### Créer une team
 

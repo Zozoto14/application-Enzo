@@ -61,6 +61,8 @@ export const ACTION_DU_JOURNAL = {
   'task.created': 'tache.creee',
   'goal.created': 'objectif.cree',
   'opponent.created': 'scouting.fiche',
+  'tournoi.cree': 'tournoi.cree',
+  'match.resultat_saisi': 'resultat.saisi',
 };
 
 const n = v => Number(v ?? 0);

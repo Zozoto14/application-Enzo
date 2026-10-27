@@ -11,3 +11,5 @@ export { Strats } from './strats/Strats';
 export { SuiviJoueurs } from './suivi/SuiviJoueurs';
 export { Statistiques } from './Statistiques';
 export { Jeux } from './jeux/Jeux';
+export { Tournois } from './competition/Tournois';
+export { Resultats } from './competition/Resultats';

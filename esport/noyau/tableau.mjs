@@ -133,6 +133,41 @@ export function servicesTableau({ base, maintenant = () => Date.now(), noyau }) 
       for (const c of await base.tous(`SELECT id, pseudo FROM comptes WHERE id IN (${acteurs.map(() => '?').join(', ')})`, acteurs)) pseudos.set(c.id, c.pseudo);
     }
 
+    // ---- Compétition (migration 0022) : prochains matchs de tournoi et tournois à venir (tournois.voir), derniers
+    //      résultats (resultats.voir ; un résultat « staff » seulement pour resultats.saisir).
+    const voitTournois = c => peut(c, 'tournois.voir');
+    const voitResultats = c => peut(c, 'resultats.voir');
+    const matchsTournoi = await dans(
+      choisis =>
+        base.tous(
+          `SELECT m.team_id, m.id, m.tour, m.debut, m.adversaires, t.id AS tournoi_id, t.nom FROM tournoi_matchs m JOIN tournois t ON t.id = m.tournoi_id
+            WHERE m.team_id IN (${choisis.map(() => '?').join(', ')}) AND m.supprime_le IS NULL AND t.supprime_le IS NULL AND m.statut = 'a_jouer' AND m.fin >= ? AND m.debut < ?
+            ORDER BY m.debut`,
+          [...choisis, iso(t), iso(au)],
+        ),
+      voitTournois,
+    );
+    const tournoisAVenir = await dans(
+      choisis =>
+        base.tous(
+          `SELECT team_id, id, nom, debut, fin, statut FROM tournois
+            WHERE team_id IN (${choisis.map(() => '?').join(', ')}) AND supprime_le IS NULL AND statut IN ('a_venir', 'inscrit', 'en_cours') AND (fin IS NULL OR fin >= ?)
+            ORDER BY debut`,
+          [...choisis, iso(t).slice(0, 10)],
+        ),
+      voitTournois,
+    );
+    const derniersResultats = await dans(
+      choisis =>
+        base.tous(
+          `SELECT team_id, id, genre, date_match, systeme, issue, place, manches_nous, manches_eux, adversaires, visibilite FROM resultats
+            WHERE team_id IN (${choisis.map(() => '?').join(', ')}) AND supprime_le IS NULL AND date_match >= ?
+            ORDER BY date_match DESC`,
+          [...choisis, iso(t - 90 * JOUR_MS)],
+        ),
+      voitResultats,
+    );
+
     // ---- Assemblage, team par team.
     const teams = [];
     const alertes = [];
@@ -185,8 +220,32 @@ export function servicesTableau({ base, maintenant = () => Date.now(), noyau }) 
 
       const derniere = dernieres.filter(d => d.team_id === id).sort((a, b) => b.cree_le.localeCompare(a.cree_le))[0];
       const journalVisible = peut(ctx, 'activity_log.view');
+      let competition = null;
+      if (voitTournois(ctx) || voitResultats(ctx)) {
+        const staffResultats = peut(ctx, 'resultats.saisir');
+        competition = {
+          prochains: voitTournois(ctx) ? matchsTournoi.filter(m => m.team_id === id).slice(0, 3).map(m => ({ id: m.id, tournoi: { id: m.tournoi_id, nom: m.nom }, tour: m.tour, debut: m.debut, adversaires: jsonOu(m.adversaires, []).map(a => a.nom) })) : null,
+          tournois: voitTournois(ctx) ? tournoisAVenir.filter(x => x.team_id === id).slice(0, 3).map(x => ({ id: x.id, nom: x.nom, debut: x.debut ?? null, fin: x.fin ?? null, statut: x.statut })) : null,
+          derniers: voitResultats(ctx)
+            ? derniersResultats
+                .filter(x => x.team_id === id && (x.visibilite === 'team' || staffResultats))
+                .slice(0, 3)
+                .map(x => ({
+                  id: x.id,
+                  genre: x.genre,
+                  date: x.date_match,
+                  systeme: x.systeme,
+                  issue: x.issue ?? null,
+                  place: x.place === null || x.place === undefined ? null : Number(x.place),
+                  score: x.systeme === 'serie' && x.manches_nous !== null && x.manches_nous !== undefined ? `${x.manches_nous}-${x.manches_eux}` : x.place ? `#${x.place}` : '',
+                  adversaires: jsonOu(x.adversaires, []).map(a => a.nom),
+                }))
+            : null,
+        };
+      }
       teams.push({
         team: noyau.teamPublique(ctx.team),
+        competition,
         role: ctx.role ? { nom: ctx.role.nom, couleur: ctx.role.couleur, cle: ctx.role.cle_systeme ?? null } : null,
         effectif,
         prochains: planning ? planning.slice(0, 3) : null,

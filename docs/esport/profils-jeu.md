@@ -3,8 +3,8 @@
 Chaque jeu a ses règles : Valorant se joue en 5v5, 13 rounds gagnants avec changement de côté après 12 rounds ;
 The Finals en 3v3 ou en 3v3v3v3 avec un classement ; les maps et les personnages ne sont pas les mêmes. Un **profil
 de jeu** décrit tout cela **avant** la création d'une team. Les modules (Strats, Playbook, Ressources, Scouting) lisent
-ensuite les maps et personnages du profil du jeu de la team, et les futurs modules Tournois / Résultats s'appuieront
-sur ses formats et son système de score.
+ensuite les maps et personnages du profil du jeu de la team, et les modules Tournois / Résultats s'appuient
+sur ses formats et son système de score ([tournois-resultats.md](tournois-resultats.md)).
 
 Page : **Esport › Jeux** (le Fondateur, et les comptes à qui il confie la gestion). Migration : `0021_profils_jeu.sql`.
 
@@ -14,7 +14,7 @@ Page : **Esport › Jeux** (le Fondateur, et les comptes à qui il confie la ges
 | --- | --- |
 | Le jeu | Nom, clé (adresse unique, ex. `the-finals`), couleur, icône (adresse https facultative) |
 | Formats de match | Taille des équipes et nombre d'équipes en même temps (5v5 = 2 × 5 ; 3v3v3v3 = 4 × 3), BO joués (1, 2, 3, 5, 7) |
-| Système de score | **Rounds** (rounds pour gagner, rounds par mi-temps, prolongations et leur règle), **points** (points pour gagner), **classement** (barème de points par place, jeux à plusieurs équipes), **manches** (manches pour gagner), notes |
+| Système de score | **Rounds** (rounds pour gagner, rounds par mi-temps, prolongations, leur règle et l'écart qui les termine, 2 par défaut), **points** (points pour gagner), **classement** (barème de points par place, jeux à plusieurs équipes), **manches** (manches pour gagner), notes |
 | Modes de jeu | Nom, description, formats où ils se jouent, joué en compétition ou non |
 | Maps | Nom, image facultative, **dans le pool** ou retirée, modes |
 | Classes et personnages | Rôles des personnages (Duelliste, Light…) ; agents / champions / builds avec leur classe, jouables ou non |
@@ -66,6 +66,8 @@ autre valeur devient Valorant.
 | Playbook | Maps des filtres et des nouvelles entrées |
 | Ressources | Maps et personnages des précisions d'une ressource |
 | Scouting | Suggestions (maps du pool, personnages, rôles) sous les champs map, agents et rôle ; la saisie reste libre |
+| Tournois | Formats et BO proposés, taille du roster (titulaires, remplaçants), phases |
+| Résultats | Validation du score (série en rounds avec mi-temps et prolongations, points, manches ; classement multi-équipes avec barème), maps, modes et personnages par manche |
 
 **Ce qui reste propre à Valorant** (profil dont la base est `valorant`) :
 

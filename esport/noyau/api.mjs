@@ -43,6 +43,9 @@ import { routesSuivi, servicesSuivi } from './suivi/service.mjs';
 import { configMedias, servicesMedias } from './medias/service.mjs';
 import { routesRessources } from './ressources/routes.mjs';
 import { servicesRessources } from './ressources/service.mjs';
+import { servicesTournois } from './competition/tournois.mjs';
+import { servicesResultats } from './competition/resultats.mjs';
+import { routesCompetition } from './competition/routes.mjs';
 import { exportUsage, servicesCollecte } from './usage/collecte.mjs';
 import { exigerFondateur, servicesStatistiques } from './usage/statistiques.mjs';
 import { servicesJeux } from './jeux/service.mjs';
@@ -156,6 +159,9 @@ export function creerApi({
   const sj = servicesSuivi({ base, maintenant, socle: s, planning: p });
   // Ressources : aperçu des liens récupéré par le serveur (`apercuLiens` : { telecharger, resoudre }, anti-SSRF).
   const rs = servicesRessources({ base, maintenant, socle: s, medias: md, review: rv, cleDiscord: secretDiscord, apercu: apercuLiens });
+  // Tournois et Résultats (migration 0022) : les matchs de tournoi passent au planning (convocation = roster).
+  const tn = servicesTournois({ base, maintenant, socle: s, planning: p });
+  const rsl = servicesResultats({ base, maintenant, socle: s });
   const limite = (genre, qui) => limiter(base, genre, qui, maintenant());
   // Premier niveau (toutes teams) : invitation directe, annuaire des membres, dashboard.
   const dm = servicesDemandes({ base, maintenant, noyau: s });
@@ -381,6 +387,8 @@ export function creerApi({
     if (suiviJoueurs !== undefined) return suiviJoueurs;
     const canalRessources = await routesRessources({ ressources: rs, medias: md, acteur, chemin, methode: m, url, requete, lireCorps: () => lireCorps(requete), limite });
     if (canalRessources !== undefined) return canalRessources;
+    const competition = await routesCompetition({ tournois: tn, resultats: rsl, socle: s, base, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete) });
+    if (competition !== undefined) return competition;
     const stratsPlaybook = await routesStrats({ strats: st, playbook: pb, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max) });
     if (stratsPlaybook !== undefined) return stratsPlaybook;
     const t = /^\/teams\/([^/]+)(?:\/([a-z]+)(?:\/([^/]+)(?:\/([a-z]+))?)?(?:\/.*)?)?$/.exec(chemin);

@@ -258,6 +258,12 @@ export interface CarteTeam {
   presence: { jours: number; marques: number; presents: number; taux: number | null } | null;
   resumes: { aResumer: number; enCours: number; plusAncien: string | null; redacteur: boolean } | null;
   taches: { enRetard: number } | null;
+  /** Tournois et résultats (migration 0022) : `null` sans module ni permission ; chaque liste aussi. */
+  competition?: {
+    prochains: Array<{ id: string; tournoi: { id: string; nom: string }; tour: string; debut: string; adversaires: string[] }> | null;
+    tournois: Array<{ id: string; nom: string; debut: string | null; fin: string | null; statut: string }> | null;
+    derniers: Array<{ id: string; genre: string; date: string; systeme: string; issue: 'victoire' | 'defaite' | 'nul' | null; place: number | null; score: string; adversaires: string[] }> | null;
+  } | null;
   /** Date de la dernière activité ; le détail seulement avec le Journal. */
   derniereActivite: { date: string; action?: string; acteur?: string | null; pseudo?: string | null; meta?: Record<string, unknown> } | null;
 }

@@ -6,4 +6,4 @@
  * écran dans un fichier séparé, seulement quand on l'ouvre.
  */
 
-export { Discord, Disponibilites, Jeux, Planning, Playbook, Presence, Ressources, Review, Scouting, Statistiques, Strats, SuiviJoueurs } from './ecransModules';
+export { Discord, Disponibilites, Jeux, Planning, Playbook, Presence, Ressources, Resultats, Review, Scouting, Statistiques, Strats, SuiviJoueurs, Tournois } from './ecransModules';

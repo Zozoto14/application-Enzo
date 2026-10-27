@@ -334,8 +334,8 @@ test('migration 0003 : les rôles système des teams existantes reçoivent les n
   }
   await appliquerMigrations(base, migrations);
   const perms = async role => (await base.tous('SELECT permission FROM role_permissions WHERE role_id = ? ORDER BY permission', [role])).map(l => l.permission);
-  assert.deepEqual(await perms('manager'), ['meeting_summaries.view_staff', 'meeting_summaries.write_summary', 'player_notes.delete', 'player_notes.view', 'player_notes.write', 'resources.manage', 'resources.post', 'resources.view', 'scouting.view', 'video_review.react', 'video_review.view']); // + 0005 : review et scouting ; 0010 : réactions ; 0013 : suivi des joueurs ; 0017 : ressources
-  assert.deepEqual(await perms('joueur'), ['resources.view', 'video_review.annotate', 'video_review.react', 'video_review.view']); // 0005 : le Joueur commente la review ; 0010 : il réagit ; 0013 : JAMAIS le suivi des joueurs ; 0017 : il lit les ressources
+  assert.deepEqual(await perms('manager'), ['meeting_summaries.view_staff', 'meeting_summaries.write_summary', 'player_notes.delete', 'player_notes.view', 'player_notes.write', 'resources.manage', 'resources.post', 'resources.view', 'resultats.saisir', 'resultats.voir', 'scouting.view', 'tournois.gerer', 'tournois.voir', 'video_review.react', 'video_review.view']); // + 0005 : review et scouting ; 0010 : réactions ; 0013 : suivi des joueurs ; 0017 : ressources ; 0022 : tournois et résultats
+  assert.deepEqual(await perms('joueur'), ['resources.view', 'resultats.voir', 'tournois.voir', 'video_review.annotate', 'video_review.react', 'video_review.view']); // 0005 : le Joueur commente la review ; 0010 : il réagit ; 0013 : JAMAIS le suivi des joueurs ; 0017 : il lit les ressources ; 0022 : il voit tournois et résultats
   assert.deepEqual((await perms('coach')).filter(p => p.startsWith('meeting_summaries.')), ['meeting_summaries.view_staff']);
   assert.equal((await base.tous('SELECT id FROM types_reunion WHERE team_id IS NULL', [])).length, 5);
 });

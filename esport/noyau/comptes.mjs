@@ -20,6 +20,7 @@
  * attribuer (anti-escalade de service.mjs).
  */
 
+import { effacementCompetition } from './competition/rgpd.mjs';
 import { discordIdLibre, lireDiscordId } from './discordId.mjs';
 import { lireLangue } from './langues.mjs';
 import { evenement } from './evenements.mjs';
@@ -446,6 +447,8 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       { sql: 'UPDATE notes_joueurs SET auteur_id = NULL, auteur_masque = 1 WHERE auteur_id = ?', params: [compte] },
       // Statistiques d'usage (migration 0018) : détail et agrégats du compte effacés.
       ...effacementUsage(compte),
+      // Tournois et résultats (migration 0022) : retiré des rosters ; ses lignes de résultat restent, anonymes.
+      ...effacementCompetition(compte),
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, par: 'administration' }, maintenant: t }),
     );

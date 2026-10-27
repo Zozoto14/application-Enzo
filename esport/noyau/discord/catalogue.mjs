@@ -197,6 +197,47 @@ export const EVENEMENTS_DISCORD = [
     modele: '**Nouvelle ressource** : {titre} ({categorie}), par {acteur}.',
     variables: variables({ titre: 'Titre de la ressource', categorie: 'Catégorie', genre: 'Type (lien, vidéo, fichier, note)', acteur: 'Qui l’a publiée' }),
   },
+  // Modules Tournois et Résultats (migration 0022) : embeds tirés du résumé publiable (competition/resume.mjs).
+  {
+    cle: 'tournament_registered',
+    libelle: 'Inscription à un tournoi',
+    description: 'La team est inscrite à un tournoi (module Tournois). Rien ne part pour un tournoi marqué « non publiable ».',
+    types: ['tournoi.inscrit'],
+    modules: ['tournois'],
+    defaut: true,
+    modele: '**Inscription** : {tournoi}{dates}.',
+    variables: variables({ tournoi: 'Nom du tournoi', dates: 'Dates (« , le 2026-11-08 », vide sans date)', acteur: 'Qui a inscrit la team' }),
+  },
+  {
+    cle: 'match_announced',
+    libelle: 'Annonce d’un match de tournoi',
+    description: 'Un match de tournoi reçoit sa date (module Tournois) : adversaire, format, roster. Remplace l’annonce « Nouvel événement » de son événement au planning (les rappels restent).',
+    types: ['tournoi.match_planifie'],
+    modules: ['tournois'],
+    defaut: true,
+    modele: '**Match à venir** : {titre} contre {adversaire}, le {date} à {heure}.',
+    variables: variables({ titre: 'Tournoi et tour', tournoi: 'Nom du tournoi', tour: 'Tour (« Quart de finale »)', adversaire: 'Adversaire(s)', date: 'Date (jour et mois)', heure: 'Heure (fuseau de la team)' }),
+  },
+  {
+    cle: 'match_result',
+    libelle: 'Résultat d’un match',
+    description: 'Un résultat est saisi (module Résultats), s’il est publiable : jamais un résultat réservé au staff ; un scrim seulement si on l’a coché « publiable ».',
+    types: ['match.resultat_saisi'],
+    modules: ['resultats'],
+    defaut: true,
+    modele: '**Résultat** : {resultat} ({titre}).',
+    variables: variables({ resultat: 'Phrase du résultat (« Victoire 2-1 contre Nova », « 3e place »)', issue: 'Victoire, défaite ou match nul', score: 'Score (« 2-1 », « 13-11 »)', adversaire: 'Adversaire(s)', place: 'Place (classement)', titre: 'Tournoi et tour, ou type de match', tournoi: 'Nom du tournoi', acteur: 'Qui a saisi le résultat' }),
+  },
+  {
+    cle: 'tournament_final',
+    libelle: 'Classement final d’un tournoi',
+    description: 'Un tournoi passe à « terminé » (module Tournois) : classement final, parcours, gains.',
+    types: ['tournoi.termine'],
+    modules: ['tournois'],
+    defaut: true,
+    modele: '**Classement final** : {resultat}.',
+    variables: variables({ resultat: 'Phrase (« Coupe d’automne : 3e sur 16 »)', tournoi: 'Nom du tournoi', classement: 'Classement (« 3e sur 16 »)', gains: 'Gains', acteur: 'Qui a clos le tournoi' }),
+  },
 ];
 
 export const CLES_EVENEMENTS_DISCORD = EVENEMENTS_DISCORD.map(e => e.cle);
@@ -250,10 +291,23 @@ export const EXEMPLES = {
   categorie: 'Lineups',
   genre: 'Vidéo YouTube',
   lien: 'https://app.exemple',
+  tournoi: 'Coupe d’automne',
+  tour: 'Quart de finale',
+  dates: ', le 2026-11-08',
+  adversaire: 'Nova',
+  score: '2-1',
+  issue: 'Victoire',
+  resultat: 'Victoire 2-1 contre Nova',
+  place: '3e',
+  classement: '3e sur 16',
+  gains: '150,00 €',
 };
 
 /** Messages qui montrent une occurrence du planning (embed riche, boutons RSVP et mentions avec le bot). */
 export const CLES_OCCURRENCE = ['event_created', 'reminder_d1', 'reminder_h1', 'event_now', 'rsvp_missing', 'rsvp_relance'];
+
+/** Messages des modules Tournois et Résultats : embed reconstruit à l'envoi depuis le résumé publiable. */
+export const CLES_COMPETITION = ['tournament_registered', 'match_announced', 'match_result', 'tournament_final'];
 
 // ------------------------------------------------------------------ Textes anglais
 
@@ -363,6 +417,30 @@ const TEXTES_EN = {
     modele: '**New resource**: {titre} ({categorie}), by {acteur}.',
     variables: { titre: 'Resource title', categorie: 'Category', genre: 'Type (link, video, file, note)', acteur: 'Who posted it' },
   },
+  tournament_registered: {
+    libelle: 'Tournament registration',
+    description: 'The team is registered for a tournament (Tournaments module). Nothing is sent for a tournament marked “not publishable”.',
+    modele: '**Registered**: {tournoi}{dates}.',
+    variables: { tournoi: 'Tournament name', dates: 'Dates (“, on 2026-11-08”, empty without a date)', acteur: 'Who registered the team' },
+  },
+  match_announced: {
+    libelle: 'Tournament match announcement',
+    description: 'A tournament match gets its date (Tournaments module): opponent, format, roster. Replaces the “New event” announcement of its schedule event (reminders stay).',
+    modele: '**Upcoming match**: {titre} vs {adversaire}, on {date} at {heure}.',
+    variables: { titre: 'Tournament and round', tournoi: 'Tournament name', tour: 'Round (“Quarter-final”)', adversaire: 'Opponent(s)', date: 'Date (day and month)', heure: 'Time (team time zone)' },
+  },
+  match_result: {
+    libelle: 'Match result',
+    description: 'A result is entered (Results module), if it is publishable: never a staff-only result; a scrim only if it was ticked “publishable”.',
+    modele: '**Result**: {resultat} ({titre}).',
+    variables: { resultat: 'Result sentence (“Victory 2-1 vs Nova”, “3rd place”)', issue: 'Victory, defeat or draw', score: 'Score (“2-1”, “13-11”)', adversaire: 'Opponent(s)', place: 'Placement (standings)', titre: 'Tournament and round, or match type', tournoi: 'Tournament name', acteur: 'Who entered the result' },
+  },
+  tournament_final: {
+    libelle: 'Tournament final standings',
+    description: 'A tournament moves to “finished” (Tournaments module): final placement, run, winnings.',
+    modele: '**Final standings**: {resultat}.',
+    variables: { resultat: 'Sentence (“Autumn Cup: 3rd of 16”)', tournoi: 'Tournament name', classement: 'Placement (“3rd of 16”)', gains: 'Winnings', acteur: 'Who closed the tournament' },
+  },
 };
 
 /** Libellé, description, modèle par défaut et variables d'un type de message dans une langue. */
@@ -398,5 +476,15 @@ export function exemples(langue = 'fr') {
     categorie: 'Lineups',
     genre: 'YouTube video',
     lien: 'https://app.exemple',
+    tournoi: 'Autumn Cup',
+    tour: 'Quarter-final',
+    dates: ', on 2026-11-08',
+    adversaire: 'Nova',
+    score: '2-1',
+    issue: 'Victory',
+    resultat: 'Victory 2-1 vs Nova',
+    place: '3rd',
+    classement: '3rd of 16',
+    gains: '€150.00',
   };
 }

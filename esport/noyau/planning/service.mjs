@@ -374,7 +374,11 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
   /** Comptes choisis nommément (ancienne colonne `concernes`, gardée pour les anciennes lectures). */
   const nominatifs = c => JSON.stringify([...new Set([...c.membres, ...c.proprietaires])].sort());
 
-  async function lireSaisie(ctx, corps, existant) {
+  /**
+   * Saisie d'un événement. `interne.adversaireLibre` (module Tournois, jamais une route) : l'adversaire
+   * doit être de la team, sans exiger `scouting.view` (le tournoi le montre à son roster).
+   */
+  async function lireSaisie(ctx, corps, existant, interne = {}) {
     const s = {};
     const champ = nom => corps?.[nom] !== undefined;
     if (!existant || champ('type')) {
@@ -391,7 +395,7 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     if (champ('adversaireId')) {
       s.adversaire_id = uuidOuNull(corps.adversaireId, 'adversaire');
       if (s.adversaire_id && s.adversaire_id !== existant?.adversaire_id) {
-        const ok = peut(ctx, 'scouting.view') && (await base.premier('SELECT id FROM adversaires WHERE id = ? AND team_id = ? AND supprime_le IS NULL', [s.adversaire_id, ctx.team.id]));
+        const ok = (interne.adversaireLibre || peut(ctx, 'scouting.view')) && (await base.premier('SELECT id FROM adversaires WHERE id = ? AND team_id = ? AND supprime_le IS NULL', [s.adversaire_id, ctx.team.id]));
         if (!ok) throw echec(400, 'adversaire', 'Adversaire inconnu.');
       }
     }
@@ -437,10 +441,14 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
     return convoques(normaliserConvocation(convocation) ?? CONVOCATION_DEFAUT, await membresActifs(teamId)).map(m => m.compte);
   }
 
-  async function creer(acteur, teamId, corps) {
+  /**
+   * Crée un événement. `interne` (module Tournois seulement, jamais depuis une route) :
+   * `{ adversaireLibre, charge }` — `charge` complète celle de `event.created` (ex. `tournoiMatchId`).
+   */
+  async function creer(acteur, teamId, corps, interne = {}) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'planning.create');
-    const s = await lireSaisie(ctx, corps);
+    const s = await lireSaisie(ctx, corps, undefined, interne);
     const t = maintenant();
     const id = nouvelId();
     const convoquesListe = await comptesConvoques(teamId, s.convocation);
@@ -450,17 +458,17 @@ export function servicesPlanning({ base, maintenant = () => Date.now(), noyau })
               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         params: [id, teamId, s.type, s.titre, s.description ?? '', s.debut, s.fin, s.fuseau, s.lieu ?? '', s.adversaire_id ?? null, s.review_id ?? null, s.recurrence, s.fin_serie, s.concernes ?? '[]', s.convocation, acteur.compte, iso(t), iso(t)],
       },
-      evenement('event.created', { teamId, acteur: acteur.compte, entiteType: 'evenement', entiteId: id, charge: { titre: s.titre, type: s.type, debut: s.debut, recurrent: Boolean(s.recurrence), convoques: convoquesListe }, maintenant: t }),
+      evenement('event.created', { teamId, acteur: acteur.compte, entiteType: 'evenement', entiteId: id, charge: { ...(interne.charge ?? {}), titre: s.titre, type: s.type, debut: s.debut, recurrent: Boolean(s.recurrence), convoques: convoquesListe }, maintenant: t }),
     ]);
     return detail(acteur, teamId, id);
   }
 
   /** Modifie toute la série (ou l'événement simple). Horaire ou règle changés : les exceptions de la série tombent. */
-  async function modifier(acteur, teamId, evId, corps) {
+  async function modifier(acteur, teamId, evId, corps, interne = {}) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'planning.update');
     const ev = await evenementDeTeam(teamId, evId);
-    const s = await lireSaisie(ctx, corps, ev);
+    const s = await lireSaisie(ctx, corps, ev, interne);
     const champs = Object.keys(s).filter(c => s[c] !== ev[c]);
     if (champs.length === 0) return detail(acteur, teamId, evId);
     const t = maintenant();

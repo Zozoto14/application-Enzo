@@ -21,6 +21,7 @@ import { TYPES_PLANNING, abonnePlanning } from './planning/bus.mjs';
 import { TYPES_REVIEW, abonneReview } from './review/bus.mjs';
 import { TYPES_STRATS, abonneStrats } from './strats/bus.mjs';
 import { TYPES_RESSOURCES, abonneRessources } from './ressources/bus.mjs';
+import { TYPES_COMPETITION, abonneCompetition } from './competition/bus.mjs';
 
 export const TYPES_EVENEMENTS = [
   'team.created',
@@ -81,6 +82,8 @@ export const TYPES_EVENEMENTS = [
   'player_note.deleted',
   // Module Ressources (migration 0017) : canal, catégories, file de validation, réactions, commentaires.
   ...TYPES_RESSOURCES,
+  // Modules Tournois et Résultats (migration 0022) : tournois, roster, parcours, résultats des matchs.
+  ...TYPES_COMPETITION,
   // Profils de jeu (migration 0021) : événements GLOBAUX (sans team) ; brouillon IA prêt, différences proposées.
   'game.created',
   'game.updated',
@@ -225,7 +228,7 @@ export async function abonneNotifications(base, ev) {
   }
 }
 
-export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord, abonneReview, abonneStrats, abonneRessources];
+export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord, abonneReview, abonneStrats, abonneRessources, abonneCompetition];
 
 /**
  * Distribue les événements en attente aux abonnés. Un événement dont un

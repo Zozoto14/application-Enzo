@@ -32,6 +32,7 @@ import { lignesParIds, pseudosDe } from './requetes.mjs';
 import { lireDessin } from './review/dessin.mjs';
 import { effacementUsage } from './usage/collecte.mjs';
 import { aPermissionJeux, jeuValidePourTeam, nomsDesJeux } from './jeux/service.mjs';
+import { effacementCompetition } from './competition/rgpd.mjs';
 
 const MOTIF_PSEUDO = /^[\p{L}\p{N}][\p{L}\p{N} _.\-]{1,23}$/u;
 const MOTIF_RIOT = /^[^#\s][^#]{2,15}#[\p{L}\p{N}]{3,5}$/u;
@@ -865,6 +866,22 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       // Profils de jeu (migration 0021) : permissions globales reçues et versions de profils enregistrées.
       permissionsGlobales: (await q('SELECT permission, cree_le FROM permissions_globales WHERE compte_id = ? ORDER BY cree_le')).map(p => ({ permission: p.permission, depuis: p.cree_le })),
       versionsProfilsJeu: (await q('SELECT jeu_cle, version, motif, cree_le FROM jeu_versions WHERE auteur_id = ? ORDER BY cree_le')).map(v => ({ jeu: v.jeu_cle, version: Number(v.version), motif: v.motif, date: v.cree_le })),
+      // Tournois et résultats (migration 0022) : rosters où il est inscrit, matchs où il a été aligné (ses personnages et
+      // ses statistiques), résultats et tournois qu'il a saisis.
+      tournois: (await q('SELECT r.team_id, t.nom, t.debut, t.fin, t.statut, r.role FROM tournoi_roster r JOIN tournois t ON t.id = r.tournoi_id WHERE r.compte_id = ? AND t.supprime_le IS NULL ORDER BY t.debut')).map(x => ({ team: team(x.team_id), tournoi: x.nom, debut: x.debut ?? null, fin: x.fin ?? null, statut: x.statut, role: x.role })),
+      resultatsJoues: (await q('SELECT j.team_id, r.date_match, r.genre, r.issue, r.place, r.adversaires, r.mvp_id, j.personnages, j.stats FROM resultat_joueurs j JOIN resultats r ON r.id = j.resultat_id WHERE j.compte_id = ? AND r.supprime_le IS NULL ORDER BY r.date_match')).map(x => ({
+        team: team(x.team_id),
+        date: x.date_match,
+        genre: x.genre,
+        issue: x.issue ?? null,
+        place: x.place === null || x.place === undefined ? null : Number(x.place),
+        adversaires: jsonOu(x.adversaires, []).map(a => a.nom),
+        mvp: x.mvp_id === compte,
+        personnages: jsonOu(x.personnages, []),
+        stats: jsonOu(x.stats, {}),
+      })),
+      resultatsSaisis: (await q('SELECT team_id, COUNT(*) AS n FROM resultats WHERE saisi_par = ? GROUP BY team_id')).map(x => ({ team: team(x.team_id), resultats: Number(x.n) })),
+      tournoisCrees: (await q('SELECT team_id, nom, cree_le FROM tournois WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), tournoi: x.nom, creeLe: x.cree_le })),
     };
   }
 
@@ -954,6 +971,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       { sql: 'UPDATE jeu_versions SET auteur_id = NULL WHERE auteur_id = ?', params: [compte] },
       { sql: 'UPDATE ia_travaux SET demande_par = NULL WHERE demande_par = ?', params: [compte] },
       { sql: 'UPDATE ia_propositions SET decide_par = NULL WHERE decide_par = ?', params: [compte] },
+      ...effacementCompetition(compte),
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, ...(compte === acteur.compte ? {} : { parFondateur: true }) }, maintenant: t }),
     );

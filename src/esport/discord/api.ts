@@ -222,4 +222,16 @@ export const LIBELLES_DISCORD: Record<string, string> = {
   get resource_created() {
       return tr('ressources.discord_nouvelle');
     },
+  get tournament_registered() {
+      return tr('competition.discord.tournament_registered');
+    },
+  get match_announced() {
+      return tr('competition.discord.match_announced');
+    },
+  get match_result() {
+      return tr('competition.discord.match_result');
+    },
+  get tournament_final() {
+      return tr('competition.discord.tournament_final');
+    },
 };
