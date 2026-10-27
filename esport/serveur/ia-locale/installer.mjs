@@ -255,19 +255,24 @@ async function moteurCompile(c, { threads, avx2 }) {
   ok(`sources vérifiées (commit ${LLAMA_CPP.commit.slice(0, 12)})`);
   // 4. compilation (llama-server seul), binaire autonome
   const build = join(o, 'build');
+  rmSync(build, { recursive: true, force: true });
   const jeu = avx2 ? 'ON' : 'OFF';
   info(`compilation (${threads} fils, priorité basse) : 10 à 30 minutes…`);
+  // Compilateur appelé directement (sans « micromamba run », dont les drapeaux ajouteraient au binaire un
+  // chemin de bibliothèques vers le dossier des outils, effacé ensuite).
+  const bin = join(envOutils, 'bin');
+  const envCompil = { ...process.env, PATH: `${bin}:${process.env.PATH ?? '/usr/bin:/bin'}`, CC: join(bin, 'x86_64-conda-linux-gnu-gcc'), CXX: join(bin, 'x86_64-conda-linux-gnu-g++'), LDFLAGS: '', CFLAGS: '', CXXFLAGS: '', CPPFLAGS: '' };
   executer(
-    mm,
+    join(bin, 'cmake'),
     [
-      'run', '-p', envOutils, 'cmake', '-S', src, '-B', build, '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_SHARED_LIBS=OFF', '-DGGML_NATIVE=OFF', '-DGGML_AVX=ON',
+      '-S', src, '-B', build, '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_SHARED_LIBS=OFF', '-DGGML_NATIVE=OFF', '-DGGML_AVX=ON',
       `-DGGML_AVX2=${jeu}`, `-DGGML_FMA=${jeu}`, `-DGGML_F16C=${jeu}`, `-DGGML_BMI2=${jeu}`, '-DGGML_OPENMP=OFF', '-DGGML_CCACHE=OFF', '-DLLAMA_OPENSSL=OFF',
       '-DLLAMA_BUILD_TESTS=OFF', '-DLLAMA_BUILD_EXAMPLES=OFF', '-DLLAMA_BUILD_SERVER=ON', '-DLLAMA_BUILD_UI=OFF', '-DLLAMA_BUILD_MTMD=OFF',
       '-DCMAKE_EXE_LINKER_FLAGS=-static-libstdc++ -static-libgcc',
     ],
-    { env },
+    { env: envCompil },
   );
-  executer(mm, ['run', '-p', envOutils, 'cmake', '--build', build, '--target', 'llama-server', '-j', String(threads)], { env });
+  executer(join(bin, 'cmake'), ['--build', build, '--target', 'llama-server', '-j', String(threads)], { env: envCompil });
   const dossier = join(c.moteur, `compile-${LLAMA_CPP.version}`);
   mkdirSync(dossier, { recursive: true });
   const binaire = join(dossier, 'llama-server');

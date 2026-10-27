@@ -195,6 +195,10 @@ MAIL_FROM=AppDashboard <noreply@appdashboard.fr>
 # IA_API_URL=https://api.mistral.ai/v1
 # IA_API_CLE=VOTRE_CLE_D_API
 # IA_MODELE=mistral-small-latest
+# IA locale sur le serveur (facultatif, partie J) : à la place ou en secours de la clé d'API.
+# IA_FOURNISSEUR=local
+# IA_LOCALE_MODELE=qwen2.5-7b
+# IA_LOCALE_THREADS=8
 ```
 
 Enregistrez : **Ctrl+O**, **Entrée**, puis **Ctrl+X**. Ensuite :
@@ -614,7 +618,7 @@ La page **Esport › Jeux** (profils de jeu : formats, score, maps, personnages�
 Claude : celui que vous choisissez), le bouton **Préparer avec l'IA** prépare un brouillon de profil, et une
 vérification hebdomadaire propose des mises à jour à valider. Tout fournisseur qui offre une API « chat
 completions » compatible OpenAI convient : OpenAI, Mistral, Google Gemini (adresse compatible OpenAI), DeepSeek,
-Groq…
+Groq… Sans clé d'API, une **IA installée sur le serveur** peut faire le même travail, plus lentement : partie J.
 
 ### I1. Ajouter la clé (5 minutes)
 
@@ -666,6 +670,101 @@ export ou la base.
 
 ---
 
+## Partie J — IA locale sur le serveur (facultatif)
+
+L'assistant des profils de jeu peut utiliser une **IA installée sur le serveur o2switch** au lieu (ou en secours)
+d'une clé d'API : moteur **llama.cpp** et modèle **Qwen2.5-7B-Instruct** (licence Apache 2.0), calculés sur le
+processeur. Gratuit, rien ne sort du serveur, mais plus lent (un brouillon : 5 à 15 minutes). Fonctionnement,
+sécurité et réglages : [esport/ia-locale.md](esport/ia-locale.md).
+
+### J1. Installer (une fois, 20 à 45 minutes, sans rester devant)
+
+Le déploiement automatique doit d'abord avoir amené le code (cron `deployer.sh`, 5 minutes après la fusion ; vérifiez
+que `ls ~/application-enzo/esport/serveur/installer-ia-locale.sh` répond). Puis, dans le **Terminal** cPanel :
+
+```bash
+# 1. Voir le plan (rien n'est téléchargé ni écrit) :
+bash ~/application-enzo/esport/serveur/installer-ia-locale.sh --dry-run
+# 2. Installer et mesurer (moteur, modèle, banc d'essai) :
+bash ~/application-enzo/esport/serveur/installer-ia-locale.sh --test
+```
+
+Le script vérifie la machine et l'espace disque, **compile le moteur** llama.cpp (CloudLinux 8 : les binaires tout
+faits demandent une glibc plus récente ; la compilation se fait sans droit administrateur avec un GCC récent
+téléchargé et vérifié, 10 à 30 minutes), télécharge le modèle (≈ 4,7 Go, avec reprise si la connexion coupe, empreinte
+SHA-256 vérifiée), lance un **banc d'essai** (chargement, jetons par seconde, mémoire, un JSON en anglais, un résumé en
+français) et termine par une **recommandation** et les lignes à copier. Si le Terminal se ferme en route : relancez
+la même commande, elle reprend où elle en était (rien n'est refait inutilement).
+
+Espace disque : ≈ 2,5 Go de plus pendant la compilation (effacés à la fin) ; au final **≈ 4,7 Go** (≈ 2,5 Go avec
+`--petit`), dans `~/.appdashboard/ia-locale` (hors du dépôt et de `public_html` ; `deployer.sh` n'y touche pas).
+
+Serveur trop lent d'après le banc d'essai : modèle plus petit et deux fois plus rapide (Qwen3-4B, Apache 2.0) :
+
+```bash
+bash ~/application-enzo/esport/serveur/installer-ia-locale.sh --petit --test
+```
+
+### J2. Brancher (2 minutes)
+
+```bash
+nano ~/.appdashboard/esport.env
+```
+
+Ajoutez les lignes **affichées à la fin du script** (exemple avec les valeurs par défaut ; `qwen3-4b` après `--petit`) :
+
+```ini
+# IA locale (docs/esport/ia-locale.md)
+IA_FOURNISSEUR=local
+IA_LOCALE_MODELE=qwen2.5-7b
+IA_LOCALE_THREADS=8
+```
+
+Gardez `IA_API_URL`, `IA_API_CLE` et `IA_MODELE` si vous avez une clé d'API : elle servira de secours. Enregistrez
+(**Ctrl+O**, **Entrée**, **Ctrl+X**) puis redémarrez l'app Esport :
+
+```bash
+mkdir -p ~/application-enzo/esport/tmp && touch ~/application-enzo/esport/tmp/restart.txt
+```
+
+### J3. Choisir et tester
+
+**Esport › Jeux › Administration IA › Moteur de l'IA** : **IA locale**, **Clé API** ou **Locale d'abord, API en
+secours**, puis **Tester l'IA locale** (le premier test charge le modèle : jusqu'à une minute). La carte affiche le
+modèle, « en marche » ou « arrêtée (démarre à la demande) », la dernière vitesse et le dernier temps de réponse.
+
+Le moteur ne tourne **que quand une tâche arrive** (écoute sur `127.0.0.1` seulement) et s'arrête après 5 minutes
+sans travail. Les brouillons et vérifications sont calculés par un **processus de fond** (lancé par l'app, relancé
+par la tâche cron Esport si besoin) : rien à ajouter dans les tâches cron.
+
+### J4. Vérifier, dépanner
+
+```bash
+tail -n 30 ~/logs/esport-ia-locale.log        # démarrages / arrêts du moteur, travaux du processus de fond
+tail -n 5 ~/logs/esport-cron.log              # « profils de jeu (IA) » : ia-locale : lancé / rien à faire
+cat ~/.appdashboard/ia-locale/pret.json       # moteur, modèle, empreintes, mesures du --test
+pgrep -af llama-server                        # moteur en marche (rien = arrêté, c'est normal au repos)
+```
+
+- **« IA locale occupée »** : une autre tâche utilise le moteur (une à la fois) ; réessayez, ou choisissez « Locale
+  d'abord, API en secours ».
+- **« L'IA locale n'a pas pu démarrer »** : voir `~/logs/esport-ia-locale.log` ; relancez
+  `bash ~/application-enzo/esport/serveur/installer-ia-locale.sh --test`.
+- **Site plus lent pendant un calcul** ou fautes dans cPanel › **Resource Usage** : `IA_LOCALE_THREADS=4` dans
+  `esport.env` (puis restart), ou le modèle `--petit`.
+
+### J5. Désinstaller
+
+```bash
+rm -rf ~/.appdashboard/ia-locale
+rm -f ~/logs/esport-ia-locale.log
+```
+
+Retirez `IA_FOURNISSEUR=local` et les lignes `IA_LOCALE_*` de `~/.appdashboard/esport.env`, puis redémarrez l'app
+(`touch ~/application-enzo/esport/tmp/restart.txt`).
+
+---
+
 ## Sauvegardes
 
 - **Base** : cPanel › **Sauvegarde** (« Backup ») sauvegarde aussi les bases PostgreSQL ; o2switch garde en plus
@@ -709,6 +808,7 @@ export ou la base.
 | Jeux : « Assistant IA non configuré (clé d'API absente) » | Les lignes `IA_API_URL`, `IA_API_CLE`, `IA_MODELE` de `esport.env` (partie I), puis **Restart** de l'app Esport. **Jeux › Administration IA** dit ce qui manque. |
 | Jeux : « Le service d'IA refuse la clé d'API » | Clé fausse ou révoquée chez le fournisseur : recopiez-la dans `IA_API_CLE`, **Restart**. |
 | Jeux : « Modèle ou adresse inconnus du service d'IA » | `IA_MODELE` doit être un modèle de votre fournisseur ; `IA_API_URL` son adresse de base (tableau de la partie I). |
+| Jeux : « IA locale non installée » / « IA locale occupée » / « n'a pas pu démarrer » | Partie J : installer (`installer-ia-locale.sh --test`), lignes `IA_LOCALE_*` de `esport.env`, `~/logs/esport-ia-locale.log`. « Occupée » : une tâche à la fois, réessayer ou choisir « Locale d'abord, API en secours ». |
 | Jeux : « Plafond mensuel … atteint » | **Jeux › Administration IA** › Plafonds mensuels : montez-les, ou attendez le mois suivant. |
 | « Trop de demandes en peu de temps » pour tout le monde | Les limites de débit se basent sur l'adresse IP vue par le serveur (dernière entrée de `X-Forwarded-For` posée par le frontal d'o2switch) : un intermédiaire commun (VPN, réseau d'entreprise) peut faire partager un compteur à plusieurs appareils. Patientez quelques minutes. |
 
