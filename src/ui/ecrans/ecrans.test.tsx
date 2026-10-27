@@ -72,6 +72,21 @@ describe('Deverrouillage', () => {
     expect(screen.queryByTestId('bouton-deverrouiller')).toBeNull();
   });
 
+  it('base de l’appareil scellée par une ancienne clé : explication claire et reprise explicite depuis le serveur, avec les facteurs saisis', async () => {
+    const onRepartirDuServeur = jest.fn();
+    await render(
+      <Deverrouillage {...props} sansCode baseIllisible onRepartirDuServeur={onRepartirDuServeur} erreur="Ton mot de passe est bon, mais…" />,
+    );
+    expect(screen.queryByText(/mauvaise clé, ou fichier altéré/)).toBeNull();
+    expect(screen.getByText(/Ton mot de passe est bon, mais les données de cet appareil sont scellées par une ancienne clé/)).toBeTruthy();
+    expect(screen.getByText(/rien n’est effacé/)).toBeTruthy();
+    expect(screen.getByTestId('repartir-du-serveur').props.accessibilityState.disabled).toBe(true);
+    await fireEvent.changeText(screen.getByLabelText('Mot de passe'), 'Nouveau mot de passe 2026');
+    await fireEvent.press(screen.getByTestId('repartir-du-serveur'));
+    expect(onRepartirDuServeur).toHaveBeenCalledWith('Nouveau mot de passe 2026', '');
+    expect(props.onDeverrouiller).not.toHaveBeenCalled();
+  });
+
   it('affiche l’erreur sans révéler quel facteur est faux', async () => {
     await render(<Deverrouillage {...props} erreur="Mot de passe ou code incorrect" />);
     expect(screen.getByText('Mot de passe ou code incorrect')).toBeTruthy();

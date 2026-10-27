@@ -88,6 +88,7 @@ export {
 
 export {
   ErreurScelle,
+  ErreurScelleCle,
   LONGUEUR_NONCE,
   SIGNATURE,
   VERSION_SCELLE,

@@ -24,6 +24,7 @@ import { EcranEntree } from './EcranEntree';
 import { useMobile } from '../mobile/useMobile';
 import { TEXTE } from '../mobile/jetons';
 import { LierCompte, type OptionsLier } from './LierCompte';
+import { useLangueSaisie } from '../motDePasse/SaisieMotDePasse';
 
 export interface DeverrouillageProps {
   onDeverrouiller(motDePasse: string, codeTotp: string): void;
@@ -55,7 +56,32 @@ export interface DeverrouillageProps {
   sansCode?: boolean;
   /** Mot de passe oublié d'un ami : à qui demander un lien de réinitialisation. */
   aideOubli?: string;
+  /**
+   * Mot de passe juste, mais la base de cet appareil est scellée par une ancienne clé du compte
+   * (`ErreurBaseIllisible`) : l'explication remplace le message d'erreur, et ce bouton reprend
+   * les données du serveur avec le mot de passe et le code déjà saisis.
+   */
+  onRepartirDuServeur?: (motDePasse: string, codeTotp: string) => void;
+  baseIllisible?: boolean;
 }
+
+/** Textes de la base illisible (FR/EN) : le message dit ce qui se passe ET quoi faire. */
+const TEXTES_BASE_ILLISIBLE = {
+  fr: {
+    titre: 'Ton mot de passe est bon, mais les données de cet appareil sont scellées par une ancienne clé de ton compte.',
+    pourquoi:
+      'Ton compte a été recréé (ou son accès réinitialisé) pendant que cet appareil gardait une ancienne copie : ton nouveau mot de passe ne peut pas l’ouvrir. Ce n’est pas une erreur de saisie.',
+    quoi: 'Touche « Reprendre mes données du serveur » : tout ce qui est enregistré sur le serveur revient. L’ancienne copie de cet appareil est mise de côté, rien n’est effacé.',
+    bouton: 'Reprendre mes données du serveur',
+  },
+  en: {
+    titre: 'Your password is correct, but the data on this device is sealed with an old key of your account.',
+    pourquoi:
+      'Your account was recreated (or its access reset) while this device kept an old copy: your new password cannot open it. This is not a typing mistake.',
+    quoi: 'Tap “Restore my data from the server”: everything saved on the server comes back. The old copy on this device is set aside, nothing is deleted.',
+    bouton: 'Restore my data from the server',
+  },
+} as const;
 
 /** Le code saisi ou collé, réduit à six chiffres (« 123 456 », chiffres pleine chasse). */
 export function chiffresDuCode(saisi: string): string {
@@ -79,7 +105,11 @@ export function Deverrouillage({
   diagnostic,
   sansCode = false,
   aideOubli,
+  onRepartirDuServeur,
+  baseIllisible = false,
 }: DeverrouillageProps) {
+  const langue = useLangueSaisie();
+  const textesBase = TEXTES_BASE_ILLISIBLE[langue === 'en' ? 'en' : 'fr'];
   const [montrerAideOubli, setMontrerAideOubli] = useState(false);
   const [visible, setVisible] = useState(false);
   const [montrerLier, setMontrerLier] = useState(false);
@@ -308,7 +338,22 @@ export function Deverrouillage({
       />
       )}
 
-      {erreur ? <Alerte message={erreur} /> : null}
+      {baseIllisible && onRepartirDuServeur ? (
+        <View style={{ gap: ESPACEMENT.s }} testID="base-illisible" accessibilityLiveRegion="polite">
+          <Alerte message={textesBase.titre} />
+          <Text style={{ color: palette.texte, fontSize: mobile ? TEXTE.legende : undefined }}>{textesBase.pourquoi}</Text>
+          <Text style={{ color: palette.texte, fontWeight: '600', fontSize: mobile ? TEXTE.legende : undefined }}>{textesBase.quoi}</Text>
+          <Bouton
+            titre={textesBase.bouton}
+            pleineLargeur
+            desactive={!complet || enCours || verrouille}
+            onPress={() => onRepartirDuServeur(motDePasse, code)}
+            testID="repartir-du-serveur"
+          />
+        </View>
+      ) : erreur ? (
+        <Alerte message={erreur} />
+      ) : null}
       {avisHorloge ? (
         <View testID="avis-horloge">
           <Alerte message={avisHorloge} />

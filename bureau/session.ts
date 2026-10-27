@@ -23,9 +23,10 @@
  * Les écritures repartent vers le disque en arrière-plan.
  */
 
-import { Session } from '../src/session/session';
+import { ErreurBaseIllisible, Session, type OptionsOuvertureBase } from '../src/session/session';
 import type { Coffre } from '../src/securite/coffre';
-import { descellerOctets, scellerOctets } from '../src/securite/scelle';
+import type { ParametresKdf } from '../src/securite/kdf';
+import { ErreurScelleCle, descellerOctets, scellerOctets } from '../src/securite/scelle';
 import type { StockageCoffre } from '../src/session/stockage-coffre';
 import { ouvrirBaseSqlJs, type FabriqueSqlJs, type PiloteMemoire } from '../src/db/pilotes/sqljs';
 import type { PiloteSqlite, ValeurSql } from '../src/db/pilote';
@@ -73,6 +74,18 @@ export interface OptionsSessionBureau {
   verifierOuverture?(): void;
   /** Coffres du même compte publiés ailleurs (relais), essayés si le coffre local refuse le mot de passe. */
   coffresAlternatifs?(): readonly Coffre[];
+  /** Paramètres de dérivation des coffres créés ici (tests). */
+  kdf?: ParametresKdf;
+  /**
+   * Autres copies scellées du portefeuille de ce compte (celle du relais, quand celle d'ici a
+   * changé depuis le dernier échange), essayées si celle d'ici ne s'ouvre pas avec la clé du
+   * coffre : adoptée seulement si ELLE s'ouvre (même clé, donc authentique).
+   */
+  portefeuillesAlternatifs?(): ReadonlyArray<Uint8Array | undefined>;
+}
+
+function memesOctets(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((octet, index) => octet === b[index]);
 }
 
 /**
@@ -126,18 +139,33 @@ export async function ouvrirSessionBureau(
   let enAttente: ReturnType<typeof setTimeout> | undefined;
   let dernierPilote: PiloteMemoire | undefined;
   let derniereCle: Uint8Array | undefined;
+  const nomEcarte = `ecarte-${fichiers.portefeuille}` as NomFichier;
 
-  const ecrire = async () => {
+  // Écritures du portefeuille, dans l'ordre : la copie mise de côté est sur le disque AVANT que
+  // le fichier qu'elle sauve ne soit remplacé.
+  let fileEcritures: Promise<void> = Promise.resolve();
+  const enchainer = (action: () => Promise<void>): Promise<void> => {
+    const suite = fileEcritures.then(action);
+    fileEcritures = suite.catch(signaler);
+    return suite;
+  };
+
+  const ecrire = (): Promise<void> => {
     if (!dernierPilote || !derniereCle) {
-      return;
+      return fileEcritures;
     }
-    const octets = dernierPilote.exporter();
-    const nouveau = scellerOctets(derniereCle, octets);
+    let nouveau: Uint8Array;
+    try {
+      nouveau = scellerOctets(derniereCle, dernierPilote.exporter());
+    } catch (erreur) {
+      signaler(erreur);
+      return Promise.reject(erreur);
+    }
     // Garde aussi la copie en mémoire à jour : un reverrouillage suivi d'un
     // déverrouillage, sans recharger la page, rouvre ce qui vient d'être écrit
     // (et non l'état lu au démarrage, qui ferait perdre les modifications).
     scelle = nouveau;
-    await stockage.ecrire(fichiers.portefeuille, nouveau);
+    return enchainer(() => stockage.ecrire(fichiers.portefeuille, nouveau));
   };
 
   const planifier = () => {
@@ -146,14 +174,56 @@ export async function ouvrirSessionBureau(
     }
     enAttente = setTimeout(() => {
       enAttente = undefined;
-      void ecrire().catch(signaler);
+      void ecrire().catch(() => undefined);
     }, delai);
   };
 
-  const ouvrirBase = (cleHexadecimale: string): PiloteSqlite => {
+  /**
+   * Base de cet appareil scellée par une AUTRE clé que celle du coffre (compte recréé pendant
+   * que cet appareil gardait l'ancienne base) : une autre copie du même compte (celle du
+   * serveur) est essayée ; à défaut, et seulement sur demande (`repartir`), une base neuve,
+   * remplie ensuite par la synchronisation. L'ancienne copie est toujours mise de côté.
+   */
+  const descellerOuReprendre = (cle: Uint8Array, repartir: boolean): Uint8Array | undefined => {
+    if (!scelle || scelle.length === 0) return undefined;
+    try {
+      return descellerOctets(cle, scelle);
+    } catch (erreur) {
+      if (!(erreur instanceof ErreurScelleCle)) throw erreur;
+    }
+    const illisible = scelle;
+    let reprise: { scelle: Uint8Array; octets: Uint8Array } | undefined;
+    for (const autre of options.portefeuillesAlternatifs?.() ?? []) {
+      if (!autre || autre.length === 0 || memesOctets(autre, illisible)) continue;
+      try {
+        reprise = { scelle: autre, octets: descellerOctets(cle, autre) };
+        break;
+      } catch {
+        // Copie scellée elle aussi par une autre clé, ou abîmée : la suivante.
+      }
+    }
+    if (!reprise && !repartir) throw new ErreurBaseIllisible();
+    void enchainer(() => stockage.ecrire(nomEcarte, illisible)).catch(() => undefined);
+    if (!reprise) {
+      scelle = undefined;
+      return undefined;
+    }
+    const adoptee = reprise.scelle;
+    scelle = adoptee;
+    void enchainer(() => stockage.ecrire(fichiers.portefeuille, adoptee)).catch(() => undefined);
+    return reprise.octets;
+  };
+
+  const ouvrirBase = (cleHexadecimale: string, ouverture?: OptionsOuvertureBase): PiloteSqlite => {
     options.verifierOuverture?.();
     const cle = octetsDepuisHexa(cleHexadecimale);
-    const octets = scelle && scelle.length > 0 ? descellerOctets(cle, scelle) : undefined;
+    let octets: Uint8Array | undefined;
+    try {
+      octets = descellerOuReprendre(cle, Boolean(ouverture?.repartir));
+    } catch (erreur) {
+      cle.fill(0);
+      throw erreur;
+    }
     const pilote = ouvrirBaseSqlJs(fabrique, octets);
 
     dernierPilote = pilote;
@@ -174,9 +244,19 @@ export async function ouvrirSessionBureau(
         return resultat;
       },
       fermer() {
+        // Écriture encore en attente (verrouillage moins de `delai` après une modification) :
+        // scellée tout de suite, base encore ouverte. Sans cela elle était perdue — et un
+        // compte créé puis verrouillé aussitôt (creerAccesAmi) ne laissait aucune base sur le
+        // disque, si bien que l'ancienne, scellée par une autre clé, restait sur le relais.
+        if (enAttente) {
+          clearTimeout(enAttente);
+          enAttente = undefined;
+          void ecrire().catch(() => undefined);
+        }
         pilote.fermer();
         dernierPilote = undefined;
         derniereCle = undefined;
+        cle.fill(0);
       },
     };
   };
@@ -189,11 +269,11 @@ export async function ouvrirSessionBureau(
       clearTimeout(enAttente);
       enAttente = undefined;
     }
-    void stockage.ecrire(fichiers.portefeuille, new Uint8Array(0)).catch(signaler);
+    void enchainer(() => stockage.ecrire(fichiers.portefeuille, new Uint8Array(0))).catch(() => undefined);
   };
 
   return {
-    session: new Session({ stockage: stockageCoffre, ouvrirBase, reinitialiserBase, profil: options.profil ?? ID_PRINCIPAL, coffresAlternatifs: options.coffresAlternatifs }),
+    session: new Session({ stockage: stockageCoffre, ouvrirBase, reinitialiserBase, profil: options.profil ?? ID_PRINCIPAL, coffresAlternatifs: options.coffresAlternatifs, ...(options.kdf ? { kdf: options.kdf } : {}) }),
     emplacement,
     surDisque: stockage.surDisque,
     async vider() {
@@ -202,6 +282,7 @@ export async function ouvrirSessionBureau(
         enAttente = undefined;
       }
       await ecrire();
+      await fileEcritures;
     },
   };
 }

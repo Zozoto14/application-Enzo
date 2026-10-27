@@ -12,7 +12,7 @@ export const MOTIF_PROFIL = /^(principal|[a-z0-9]{6,16})$/;
  */
 export function fichierAutorise(nom, porteeCourante, etendues = []) {
   if (porteeCourante === undefined || porteeCourante === 'principal' || nom === 'profils') return true;
-  if ([porteeCourante, ...etendues].some(id => nom === `coffre-${id}` || nom === `portefeuille-${id}`)) return true;
+  if ([porteeCourante, ...etendues].some(id => nom === `coffre-${id}` || nom === `portefeuille-${id}` || nom === `ecarte-portefeuille-${id}`)) return true;
   // Caches de synchronisation : ceux du compte ouvert seulement (jamais ceux d'un compte géré).
   return nom === `synchro-entrant-${porteeCourante}` || nom === `synchro-sortant-${porteeCourante}`;
 }
@@ -22,8 +22,9 @@ export function fichierAutorise(nom, porteeCourante, etendues = []) {
  * court fait de lettres et de chiffres seulement — pas de « ../ » possible.
  */
 export function fichierDeProfil(nom) {
-  const trouve = /^(portefeuille|coffre|synchro-entrant|synchro-sortant)-([a-z0-9]{6,16})$/.exec(String(nom));
+  const trouve = /^(portefeuille|coffre|synchro-entrant|synchro-sortant|ecarte-portefeuille)-([a-z0-9]{6,16})$/.exec(String(nom));
   if (!trouve) return undefined;
+  if (trouve[1] === 'ecarte-portefeuille') return `portefeuille-${trouve[2]}.ecarte.ab`;
   return trouve[1] === 'portefeuille' ? `portefeuille-${trouve[2]}.ab` : `${trouve[1]}-${trouve[2]}.json`;
 }
 

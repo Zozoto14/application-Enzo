@@ -47,6 +47,21 @@ export class ErreurScelle extends Error {
   }
 }
 
+/**
+ * Le scellé est bien formé, mais cette clé ne l'ouvre pas : il a été scellé par une autre clé
+ * (compte régénéré, autre compte), ou il est abîmé. Les deux restent indiscernables (c'est voulu) ;
+ * l'appelant qui sait pourquoi une autre clé est possible (base d'un appareil, voir
+ * `session.ts`) en fait un message qui dit quoi faire.
+ */
+export class ErreurScelleCle extends ErreurScelle {
+  constructor() {
+    super(
+      'Ces données ne s’ouvrent pas avec cette clé : elles ont été scellées par une autre clé (compte réinitialisé ou recréé, autre compte), ou le fichier est abîmé.',
+    );
+    this.name = 'ErreurScelleCle';
+  }
+}
+
 /** Scelle un contenu binaire. Le résultat est autonome et autodescriptif. */
 export function scellerOctets(
   cleMaitresse: Uint8Array,
@@ -98,9 +113,7 @@ export function descellerOctets(cleMaitresse: Uint8Array, scelle: Uint8Array): U
   } catch {
     // L'authentification ne dit pas ce qui cloche, et c'est voulu : distinguer
     // « mauvaise cle » de « contenu altere » renseignerait un attaquant.
-    throw new ErreurScelle(
-      'Le déchiffrement a échoué : mauvaise clé, ou fichier altéré.',
-    );
+    throw new ErreurScelleCle();
   }
 }
 

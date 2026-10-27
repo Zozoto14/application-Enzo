@@ -74,6 +74,10 @@ test('noms logiques des caches : liste fermée, pas de chemin libre', () => {
   assert.equal(fichierDeProfil('synchro-sortant-lea0000001'), 'synchro-sortant-lea0000001.json');
   assert.equal(fichierDeProfil('coffre-lea0000001'), 'coffre-lea0000001.json');
   assert.equal(fichierDeProfil('portefeuille-lea0000001'), 'portefeuille-lea0000001.ab');
+  // Ancienne base mise de côté (scellée par une autre clé) : un fichier à part, jamais le portefeuille.
+  assert.equal(fichierDeProfil('ecarte-portefeuille-lea0000001'), 'portefeuille-lea0000001.ecarte.ab');
+  assert.equal(fichierAutorise('ecarte-portefeuille-lea0000001', 'lea0000001'), true);
+  assert.equal(fichierAutorise('ecarte-portefeuille-hugo000002', 'lea0000001'), false);
   for (const nom of ['synchro-entrant-../x', 'synchro-autre-lea0000001', 'synchro-entrant-LEA0000001', '../synchro-entrant', 'synchro-entrant-lea0000001/../coffre']) {
     assert.equal(fichierDeProfil(nom), undefined, nom);
   }

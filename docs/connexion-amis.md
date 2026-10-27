@@ -135,7 +135,13 @@ Dans la liste, chaque compte montre son état (**Invitation en attente**, **Invi
 | **Rétablir l'accès** | après une révocation | il peut revenir (envoie-lui un lien s'il a oublié son mot de passe) |
 
 « Réinitialiser » passe par ton accès de séquestre (la clé de son compte, que tu peux ouvrir) : rien n'est perdu. Si
-le séquestre a été révoqué, il faut « Régénérer les identifiants » (son portefeuille repart de zéro).
+le séquestre a été révoqué, il faut « Régénérer les identifiants » (son portefeuille repart de zéro). La clé du
+séquestre est d'abord éprouvée contre le coffre de l'ami : si elle ne lui correspond plus (compte recréé depuis),
+la réinitialisation est annulée avec un message, au lieu de publier un coffre qui ouvrirait une autre clé.
+
+**Réinitialiser ne change pas la clé du compte, Régénérer si.** Après une réinitialisation, ses appareils rouvrent
+leur copie avec le nouveau mot de passe (y compris ce qui n'était pas encore parti). Après une régénération, une copie
+gardée sur un de ses appareils est scellée par l'ancienne clé : voir « Mes données ne s'ouvrent plus » ci-dessous.
 
 Les invitations partent de l'appareil **relié au relais avec le code maître** (le PC du Fondateur, ou le site relié
 avec le code du PC).
@@ -160,7 +166,15 @@ avec le code du PC).
   l'appareil photo de l'autre appareil, puis prénom et mot de passe.
 
 **Mot de passe oublié ?** Touche « Mot de passe oublié » : demande au Fondateur de **Réinitialiser ton accès** ; tu
-recevras un nouveau lien pour choisir un nouveau mot de passe. Tes données sont gardées.
+recevras un nouveau lien pour choisir un nouveau mot de passe. Tes données sont gardées. Ouvre le lien où tu veux
+(le même appareil ou un autre) : ensuite, sur chacun de tes appareils, ton prénom puis ton **nouveau** mot de passe
+(l'ancien ne marche plus, sauf sur un appareil resté hors ligne depuis, jusqu'à son retour en ligne).
+
+**« Ton mot de passe est bon, mais les données de cet appareil sont scellées par une ancienne clé »** : ton compte a été
+recréé (ou réinitialisé) pendant que cet appareil gardait une ancienne copie. Ce n'est pas une faute de frappe. Touche
+**Reprendre mes données du serveur** : tout ce qui est enregistré sur le serveur revient ; l'ancienne copie de cet
+appareil est mise de côté (jamais effacée). Le plus souvent l'écran n'apparaît même pas : quand le serveur a une copie
+qui s'ouvre avec ta clé, elle est reprise toute seule.
 
 ### Ce que disent les messages
 
@@ -176,6 +190,7 @@ recevras un nouveau lien pour choisir un nouveau mot de passe. Tes données sont
 | Ce navigateur ne sait pas encore où est ton compte | ouvre le lien de connexion reçu avec l'invitation, ou le QR code d'un appareil connecté |
 | Cet identifiant est déjà pris par un autre compte | (Fondateur, à la migration) choisis-en un autre |
 | Identifiant ou code de récupération incorrect | (mot de passe oublié) vérifie le code ; chacun ne sert qu'une fois |
+| Ton mot de passe est bon, mais les données de cet appareil sont scellées par une ancienne clé de ton compte | touche « Reprendre mes données du serveur » (l'ancienne copie est mise de côté) |
 
 ## Technique
 
@@ -281,6 +296,41 @@ session, que le serveur (HMAC du jeton MAÎTRE) refuse (401). Correctif (`bureau
   rejoué une fois en POST + `X-Methode`.
 - Messages : invitation expirée, déjà utilisée, révoquée, introuvable sur le serveur (« demande… de la
   renvoyer »), jeton refusé (`jeton-refuse` : « demande… de te renvoyer une invitation »), pare-feu de l'hébergeur.
+
+### Base d'un appareil scellée par une autre clé (correctif d'octobre 2026)
+
+Bug de production : après « Réinitialiser l'accès » et un nouveau mot de passe, l'écran « Déverrouiller » répondait
+« Le déchiffrement a échoué : mauvaise clé, ou fichier altéré. » — même avec le bon mot de passe, et même sur un
+appareil neuf. Le coffre (enveloppes du mot de passe) et la base (`portefeuille-<id>`, scellée par la **clé
+maîtresse**) voyagent comme deux fichiers distincts, « le plus récent gagne ». Réinitialiser ne change pas la clé
+maîtresse ; **Régénérer les identifiants** si. Or la nouvelle base créée par la régénération n'était jamais écrite :
+`creerAccesAmi` verrouille la session aussitôt, et l'écriture planifiée (400 ms) était abandonnée au verrouillage. Le
+relais gardait donc la base de l'**ancienne** clé à côté du coffre de la **nouvelle** ; chaque appareil la reprenait,
+et aucune réinitialisation suivante (qui garde la clé) ne pouvait réparer. Un appareil qui gardait une copie modifiée
+depuis son dernier envoi la gardait aussi (le fichier local « changé ici » gagne), et pouvait la renvoyer.
+
+Correctif (`bureau/session.ts`, `bureau/synchroComptes.ts`, `bureau/connexionAmis.ts`, `src/session/session.ts`,
+tests `bureau/reinitialisationAcces.test.ts`) :
+
+- **verrouillage** : une écriture en attente est scellée (base encore ouverte) au lieu d'être perdue ; une
+  régénération publie bien sa base neuve ;
+- **ouverture** : si la base d'ici ne se descelle pas avec la clé du coffre, la copie du relais (lue par
+  `avantOuverture` quand celle d'ici a changé depuis le dernier échange) est essayée et adoptée si ELLE s'ouvre (même
+  clé, donc authentique) ; sinon `ErreurBaseIllisible` (mot de passe juste : aucune tentative comptée) et l'écran
+  propose **Reprendre mes données du serveur** (`deverrouiller({ repartirDuServeur: true })`, seulement après mot de
+  passe et code vérifiés) : base neuve, remplie par le coffre serveur. Dans les deux cas l'ancienne copie est d'abord
+  écrite dans `ecarte-portefeuille-<id>` (Electron : `portefeuille-<id>.ecarte.ab`), jamais effacée ;
+- **envoi** : la base d'un ami ne part plus tant que le coffre a changé sur le serveur depuis le dernier échange
+  (réinitialisation, régénération) : une base de l'ancienne clé n'écrase plus celle du serveur ;
+- **lien ouvert sur l'appareil qui a déjà le compte** (même serveur) : sa base et son suivi sont gardés à
+  l'installation (avant : effacés, d'où la perte de ce qui n'était pas parti) ;
+- **réinitialisation** : la clé du séquestre est éprouvée contre le coffre (`cleOuvreCoffre`) ;
+- **message** : `descellerOctets` lève `ErreurScelleCle` (« Ces données ne s'ouvrent pas avec cette clé… ») au lieu
+  de « mauvaise clé, ou fichier altéré » ; l'écran explique (FR/EN) et dit quoi faire.
+
+Limite : une base scellée par l'ancienne clé ne peut pas être relue avec le nouveau mot de passe (aucun séquestre de
+l'ancienne clé après une régénération) ; ce qu'elle seule contenait (modifications jamais envoyées au serveur) reste
+dans la copie mise de côté, illisible sans l'ancienne clé. Ce qui était sur le serveur revient.
 
 ### Relais : version 6 (`relais/relais.mjs`, tests `relais/connexion.test.mjs`)
 

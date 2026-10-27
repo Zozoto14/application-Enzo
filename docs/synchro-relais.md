@@ -466,6 +466,14 @@ encore redéployé fait passer les invitations en mode « lien » (contenu dans 
 | champ `taches` de `/p/<id>/boite/compte` | tâches modifiées par l'ami dans les projets partagés en écriture | XChaCha20-Poly1305 par la clé de partage | écrit par l'ami (son retour), lu et revérifié par le Fondateur |
 | `/p/<id>/boite/abonnement` | SA ligne d'abonnement (`projectionPour`) : mode, échéance, jours d'avance, rappel activé, message déjà rédigé. Ni notes privées, ni paiements, ni autre compte | aucun secret (rien d'autre que ce qui s'affiche chez lui) | écrit/effacé par le jeton maître SEUL ; lu par le compte |
 
+**Coffre et portefeuille d'un ami vont ensemble** (correctif d'octobre 2026, voir `docs/connexion-amis.md`, « Base
+d'un appareil scellée par une autre clé ») : ce sont deux fichiers « le plus récent gagne », mais le portefeuille est
+scellé par la clé maîtresse que le coffre ouvre. Un appareil n'envoie plus son portefeuille tant que le coffre a changé
+sur le serveur depuis son dernier échange ; à l'ouverture, une base d'ici qui ne s'ouvre pas avec la clé du coffre
+cède la place à la copie du serveur si celle-ci s'ouvre, sinon l'écran propose « Reprendre mes données du serveur »
+(base neuve, remplie par le coffre serveur) ; l'ancienne est mise de côté (`ecarte-portefeuille-<id>`), jamais
+effacée. Un verrouillage moins de 400 ms après une écriture ne la perd plus.
+
 L'annuaire complet n'est **jamais** déposé dans un espace lisible par un ami.
 
 ## Qui peut écrire quoi

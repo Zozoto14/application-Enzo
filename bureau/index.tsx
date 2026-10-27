@@ -116,6 +116,7 @@ import {
   memeCoffre,
   liaisonPourCompte,
   lireLiaisons,
+  garderPourMemeCompte,
   oublierSuivi,
   preparerLiaison,
   CLES_MEMOIRE,
@@ -140,6 +141,7 @@ import {
   accepterInvitation,
   chargerCodeCourt,
   chargerInvitation,
+  coffreReinitialise,
   relaisActuel,
   connecterParIdentifiant,
   connecterParSecours,
@@ -173,7 +175,7 @@ import { genererSecretTotp, uriOtpauth } from '../src/securite/totp';
 import type { ServicesA2f } from '../src/hub/ReglageA2f';
 import { espacesDuRelais } from '../src/sync/relais/espaces';
 import { empreinteOctets } from '../src/sync/relais/fichiers';
-import { changerMotDePasse as changerMotDePasseCoffre, type Coffre } from '../src/securite/coffre';
+import type { Coffre } from '../src/securite/coffre';
 import { genererMotDePasse, type InvitationAffichee } from '../src/profils/identifiants';
 
 /**
@@ -643,6 +645,7 @@ function Racine() {
         await pont()?.profil?.ouvrir(compte.id);
         const annuaire = annuaireRef.current ?? (await lireAnnuaireDisque());
         let coffreRelais: unknown;
+        let portefeuilleRelais: Uint8Array | undefined;
         if (!options.adminSur) {
           // Le coffre de CE compte (et, pour un ami, son portefeuille) s'il est plus récent sur le relais.
           await auPlus(
@@ -653,6 +656,9 @@ function Racine() {
               pontMaitre: await liaisonDuPont(),
               surCoffreRelais: publie => {
                 coffreRelais = publie;
+              },
+              surPortefeuilleRelais: octets => {
+                portefeuilleRelais = octets;
               },
             }),
             15_000,
@@ -691,6 +697,8 @@ function Racine() {
           },
           // Mot de passe changé sur le PC : le coffre qu'il a publié est essayé si celui d'ici refuse.
           coffresAlternatifs: compte.admin && !options.adminSur ? () => (coffreValide(coffreRelais) ? [coffreRelais] : []) : undefined,
+          // Base d'ici scellée par une autre clé que le coffre (compte recréé) : la copie du relais est essayée.
+          portefeuillesAlternatifs: () => (portefeuilleRelais ? [portefeuilleRelais] : []),
           // Compte fermé : refusé seulement après un mot de passe et un code justes.
           verifierOuverture: compte.admin || options.adminSur
             ? undefined
@@ -850,7 +858,8 @@ function Racine() {
   const fichiersLocaux = useCallback(async (): Promise<NomFichier[]> => {
     const annuaire = await lireAnnuaireDisque();
     const ids = annuaire.heritage ? annuaire.heritage.map(p => p.id) : [ID_PRINCIPAL, ...annuaire.comptes.map(c => c.id)];
-    return ['profils', ...[...new Set([ID_PRINCIPAL, ...ids])].flatMap(id => Object.values(fichiersDuProfil(id)) as NomFichier[])];
+    // Avec la copie mise de côté (base scellée par une autre clé) : elle part avec le compte.
+    return ['profils', ...[...new Set([ID_PRINCIPAL, ...ids])].flatMap(id => [...Object.values(fichiersDuProfil(id)), `ecarte-${fichiersDuProfil(id).portefeuille}`] as NomFichier[])];
   }, [lireAnnuaireDisque]);
 
   /** Installe le compte relié : l'ancien contenu du navigateur est effacé, le code retenu. */
@@ -932,12 +941,16 @@ function Racine() {
   const installerCompteAmi = useCallback(
     async (relie: CompteRelie, prenom: string, coffre?: { octets: Uint8Array; date: string }) => {
       setEtat({ phase: 'chargement', message: 'Installation de ton compte…' });
+      // Même compte déjà ici (lien de réinitialisation ouvert sur son appareil) : sa base est gardée,
+      // avec ce qui n'est pas encore parti (la réinitialisation garde la clé du compte).
+      const garder = garderPourMemeCompte(memoireNavigateur, relie.compte, relie.liaison.relais);
       for (const nom of await fichiersLocaux()) {
-        if (nom !== 'profils') await stockage.ecrire(nom, new Uint8Array(0));
+        if (nom !== 'profils' && !garder.fichiers.includes(nom)) await stockage.ecrire(nom, new Uint8Array(0));
       }
       await cachesSynchro().vider(ID_PRINCIPAL);
       noterEtatDemarrage({ le: undefined, recus: 0, aEnvoyer: 0 });
       oublierSuivi(memoireNavigateur);
+      garder.restaurer();
       memoireNavigateur.removeItem(CLES_MEMOIRE.liaisons);
       memoireNavigateur.removeItem(CLES_MEMOIRE.liaisonHistorique);
       await ecrireAnnuaireDisque(relie.annuaire);
@@ -1626,6 +1639,7 @@ function Racine() {
     const fichiers = fichiersDuProfil(id) as { coffre: NomFichier; portefeuille: NomFichier };
     await stockage.ecrire(fichiers.coffre, new Uint8Array(0));
     await stockage.ecrire(fichiers.portefeuille, new Uint8Array(0));
+    await stockage.ecrire(`ecarte-${fichiers.portefeuille}` as NomFichier, new Uint8Array(0));
   };
 
   // Plus de « Lier à mon compte (code de liaison) » : chacun se connecte par identifiant + mot de passe.
@@ -1847,7 +1861,8 @@ function Racine() {
           const cle = ouvrirSequestre(annuaire, id, code.code, cles);
           try {
             // Nouveau mot de passe temporaire : l'ancien mot de passe (et toute ancienne invitation) cesse de marcher.
-            const suivant = changerMotDePasseCoffre(coffre!, cle, temporaire);
+            // Clé du séquestre éprouvée contre le coffre : un séquestre périmé publierait un coffre qui ouvre une autre clé.
+            const suivant = coffreReinitialise(coffre!, cle, temporaire);
             await stockage.ecrire(nomCoffre, encodeur.encode(JSON.stringify(suivant)));
           } finally {
             cle.fill(0);

@@ -32,7 +32,7 @@ import {
   type RetourAmi,
 } from '../src/profils/synchroAnnuaire';
 import { ID_PRINCIPAL, fichiersDuProfil } from '../src/profils/profils';
-import { espacesDuRelais, publieParAdmin, publierDelegations, type Espaces } from '../src/sync/relais/espaces';
+import { chargeEnOctets, espacesDuRelais, publieParAdmin, publierDelegations, type Espaces } from '../src/sync/relais/espaces';
 import { NIVEAU_RANG } from '../src/hub/admin/roles';
 import {
   empreinte,
@@ -44,7 +44,7 @@ import {
 } from '../src/sync/relais/fusionLww';
 import { synchroniserFichier, type EtatFichiers } from '../src/sync/relais/fichiers';
 import { ouvrirEnveloppe, sceller, type Enveloppe } from '../src/sync/relais/chiffrement';
-import { decoderLiaison, encoderLiaison, type Liaison } from '../src/sync/relais/liaison';
+import { decoderLiaison, encoderLiaison, normaliserAdresse, type Liaison } from '../src/sync/relais/liaison';
 import { ESPACE_ADMIN, compteDeLiaison, estMaitre, peutOuvrirEspace } from '../src/sync/relais/portees';
 import { ErreurRelais, recupererCoffre } from '../src/sync/relais/synchroniser';
 import { lireDonnees, ecrireDonnees } from '../src/hub/admin/donnees';
@@ -179,6 +179,31 @@ export function liaisonPourCompte(memoire: Memoire, id: string, pontMaitre?: Lia
     id !== ID_PRINCIPAL && liaisons.comptes[id] ? decoderLiaison(liaisons.comptes[id]) : undefined,
   ];
   return candidates.find((l): l is Liaison => Boolean(l) && (id === ID_PRINCIPAL ? estMaitre(l!) : peutOuvrirEspace(l!, id)));
+}
+
+/**
+ * Installation d'un compte d'ami (invitation acceptée, connexion par identifiant) sur un appareil
+ * qui a DÉJÀ ce compte, sur le même serveur (lien de réinitialisation ouvert là où l'ami avait sa
+ * base) : sa base locale (scellée par la clé du compte, que la réinitialisation garde) et son
+ * suivi sont gardés, au lieu d'être effacés avec le reste — elle peut porter des modifications
+ * pas encore parties. `fichiers` : ce qu'il ne faut pas effacer ; `restaurer()` remet le suivi de
+ * ces fichiers après `oublierSuivi`. Un autre compte, ou un autre serveur : rien n'est gardé.
+ */
+export function garderPourMemeCompte(memoire: Memoire, id: string | undefined, relais?: string): { fichiers: string[]; restaurer(): void } {
+  const rien = { fichiers: [] as string[], restaurer: () => undefined };
+  if (!id || id === ID_PRINCIPAL) return rien;
+  const deja = lireLiaisons(memoire).comptes[id];
+  const liaison = deja ? decoderLiaison(deja) : undefined;
+  if (!liaison || (relais !== undefined && normaliserAdresse(liaison.relais) !== normaliserAdresse(relais))) return rien;
+  const nom = fichiersDuProfil(id).portefeuille;
+  const suivi = lireJson<EtatFichiers>(memoire, CLES_MEMOIRE.fichiers, {})[nom];
+  return {
+    fichiers: [nom, `ecarte-${nom}`],
+    restaurer: () => {
+      if (!suivi) return;
+      ecrireJson(memoire, CLES_MEMOIRE.fichiers, { ...lireJson<EtatFichiers>(memoire, CLES_MEMOIRE.fichiers, {}), [nom]: suivi });
+    },
+  };
 }
 
 /** Oublie tout le suivi de synchronisation des comptes (remplacement des données du navigateur). */
@@ -733,6 +758,11 @@ export async function synchroniserCompteAmi(o: OptionsSynchroAmi): Promise<Bilan
 
   let etatFichiers = lireJson<EtatFichiers>(o.memoire, CLES_MEMOIRE.fichiers, {});
   const noms = fichiersDuProfil(o.id);
+  // Coffre changé sur le serveur depuis le dernier échange (réinitialisation, compte recréé) : la
+  // base ouverte ici est peut-être scellée par une clé que ce coffre n'ouvre plus. Elle ne part
+  // pas (elle écraserait celle du serveur) ; elle repartira après la prochaine ouverture, une fois
+  // le nouveau coffre adopté. Les données, elles, passent par le coffre serveur, enregistrement par enregistrement.
+  const coffreChangeLaBas = Boolean(objets.coffre?.date && objets.coffre.date > (etatFichiers[noms.coffre]?.date ?? ''));
   for (const objet of ['coffre', 'portefeuille'] as const) {
     const issue = await synchroniserFichier({
       espaces,
@@ -744,6 +774,7 @@ export async function synchroniserCompteAmi(o: OptionsSynchroAmi): Promise<Bilan
       maintenant: horloge().toISOString(),
       dateDistante: objets[objet]?.date ?? null,
       tirer: false,
+      ...(objet === 'portefeuille' && coffreChangeLaBas ? { pousser: false } : {}),
     });
     etatFichiers = issue.etat;
     if (issue.envoye) bilan.depots++;
@@ -803,6 +834,12 @@ export interface OptionsAvantOuverture {
    * local pour le diagnostic. Jamais écrit ici.
    */
   surCoffreRelais?(coffre: unknown): void;
+  /**
+   * Ami : portefeuille plus récent sur le relais, mais pas repris parce que celui d'ici a changé
+   * depuis le dernier échange. Ses octets (scellés) sont rendus ici : si la base d'ici ne s'ouvre
+   * pas avec la clé du coffre (compte recréé entre-temps), celle-ci est essayée. Jamais écrite ici.
+   */
+  surPortefeuilleRelais?(octets: Uint8Array): void;
 }
 
 /**
@@ -855,6 +892,7 @@ export async function avantOuverture(o: OptionsAvantOuverture): Promise<boolean>
   let etatFichiers = lireJson<EtatFichiers>(o.memoire, CLES_MEMOIRE.fichiers, {});
   const noms = fichiersDuProfil(o.compte);
   let coffreRecu = false;
+  const portefeuilleVu = etatFichiers[noms.portefeuille]?.date ?? '';
   for (const objet of ['coffre', 'portefeuille'] as const) {
     const issue = await synchroniserFichier({
       espaces,
@@ -869,6 +907,16 @@ export async function avantOuverture(o: OptionsAvantOuverture): Promise<boolean>
     });
     etatFichiers = issue.etat;
     if (objet === 'coffre' && issue.recu) coffreRecu = true;
+    const dateRelais = objets.portefeuille?.date;
+    if (objet === 'portefeuille' && !issue.recu && o.surPortefeuilleRelais && dateRelais && dateRelais > portefeuilleVu) {
+      try {
+        const lu = await espaces.lire(o.compte, 'portefeuille');
+        const octets = lu ? chargeEnOctets(lu.charge) : undefined;
+        if (octets && octets.length > 0) o.surPortefeuilleRelais(octets);
+      } catch {
+        // Seulement un recours au déverrouillage : son absence n'empêche rien.
+      }
+    }
   }
   ecrireJson(o.memoire, CLES_MEMOIRE.fichiers, etatFichiers);
   return coffreRecu;

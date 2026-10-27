@@ -15,7 +15,7 @@
  */
 
 import { ErreurInvitationUtilisee, coffreApresInvitation, coffreValide } from '../src/session/session';
-import type { Coffre } from '../src/securite/coffre';
+import { changerMotDePasse, cleOuvreCoffre, type Coffre } from '../src/securite/coffre';
 import type { ParametresKdf } from '../src/securite/kdf';
 import { aleatoireParDefaut, type SourceAleatoire } from '../src/securite/aleatoire';
 import {
@@ -275,6 +275,22 @@ export async function nettoyerCompteRelais(maitre: Liaison, compte: string, pren
     bilan.restes.push(e instanceof ErreurInvitation && e.code === 'relais-ancien' ? 'révocation : relais à mettre à jour' : `révocation : ${e instanceof Error ? e.message : String(e)}`);
   }
   return bilan;
+}
+
+/**
+ * « Réinitialiser l'accès » : le coffre de l'ami reçoit un nouveau mot de passe TEMPORAIRE, scellant
+ * la clé maîtresse relue du séquestre. Cette clé est d'abord éprouvée contre le coffre : un
+ * séquestre périmé (compte recréé depuis) ferait ouvrir à l'ami une AUTRE clé que celle de sa
+ * base, et son appareil ne pourrait plus la desceller. Ses données restent alors intactes : le
+ * Fondateur est prévenu au lieu de publier un coffre faux.
+ */
+export function coffreReinitialise(coffre: Coffre, cle: Uint8Array, temporaire: string, options: { kdf?: ParametresKdf; alea?: SourceAleatoire } = {}): Coffre {
+  if (cleOuvreCoffre(coffre, cle) === false) {
+    throw new Error(
+      'La clé de séquestre de ce compte ne correspond plus à son coffre (compte recréé depuis le dépôt du séquestre) : réinitialisation annulée, rien n’a changé. Seule issue : « Régénérer les identifiants » (nouvelle clé : son portefeuille repart de zéro).',
+    );
+  }
+  return changerMotDePasse(coffre, cle, temporaire, options);
 }
 
 // ------------------------------------------------------------ Côté ami

@@ -23,6 +23,9 @@ export type NomFichier =
   | 'profils'
   | `portefeuille-${string}`
   | `coffre-${string}`
+  /** Ancienne base scellée par une autre clé que le coffre, mise de côté (voir session.ts). */
+  | 'ecarte-portefeuille'
+  | `ecarte-portefeuille-${string}`
   /** Caches de synchronisation (enveloppes chiffrées), voir src/sync/relais/caches.ts. */
   | 'synchro-entrant'
   | 'synchro-sortant'

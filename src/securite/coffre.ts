@@ -387,6 +387,25 @@ export function totpExige(coffre: Coffre, cleMaitresse: Uint8Array): boolean {
   }
 }
 
+/**
+ * Cette clé est-elle bien la clé maîtresse de ce coffre ? Éprouvée contre ce que le coffre scelle
+ * par elle (secret TOTP, marque d'exemption) : une enveloppe de mot de passe créée avec une AUTRE
+ * clé (séquestre périmé, compte régénéré entre-temps) ouvrirait ensuite cette autre clé, et la
+ * base du compte ne se descellerait plus. `undefined` : rien dans ce coffre ne permet de le dire.
+ */
+export function cleOuvreCoffre(coffre: Coffre, cleMaitresse: Uint8Array): boolean | undefined {
+  if (coffre.totp) {
+    try {
+      lireSecretTotp(coffre, cleMaitresse);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  if (coffre.sansTotp) return !totpExige(coffre, cleMaitresse);
+  return undefined;
+}
+
 /** Clé au format attendu par SQLCipher (`PRAGMA key = "x'...'"`). */
 export function cleHexadecimale(cleMaitresse: Uint8Array): string {
   return bytesToHex(cleMaitresse);

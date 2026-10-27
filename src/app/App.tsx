@@ -40,7 +40,7 @@ import {
 import { FOURNISSEURS, fournisseurParId } from '../cours/fournisseurs';
 import { rafraichirCours, resumeRafraichissement } from '../cours/rafraichir';
 import { ErreurDeverrouillage } from '../securite/coffre';
-import { ErreurCoffreDifferent, ErreurTemporisation, Session } from '../session/session';
+import { ErreurBaseIllisible, ErreurCoffreDifferent, ErreurTemporisation, Session } from '../session/session';
 import { construireDashboard, type VueDashboard } from '../ui/vues/dashboard';
 import { anneesDisponibles, construireRapportAnnuel } from '../rapport/annuel';
 import { ecrireRapport } from '../rapport/fichiers';
@@ -614,14 +614,18 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
     [executer, session],
   );
 
+  /** Mot de passe juste, base de cet appareil scellée par une ancienne clé du compte (voir ErreurBaseIllisible). */
+  const [baseIllisible, setBaseIllisible] = useState(false);
   const deverrouiller = useCallback(
-    (motDePasse: string, codeTotp: string) =>
+    (motDePasse: string, codeTotp: string, repartirDuServeur = false) =>
       executer(() => {
         try {
-          session.deverrouiller({ motDePasse, codeTotp });
+          session.deverrouiller({ motDePasse, codeTotp, ...(repartirDuServeur ? { repartirDuServeur: true } : {}) });
           setEchecsAuth(0);
           setAvisHorloge(undefined);
+          setBaseIllisible(false);
         } catch (e) {
+          setBaseIllisible(e instanceof ErreurBaseIllisible);
           if (e instanceof ErreurCoffreDifferent) {
             // Identifiants du PC justes, base d'ici scellée par un autre coffre : « relier » tout de suite.
             setEchecsAuth(n => Math.max(n + 1, 2));
@@ -644,6 +648,7 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   useEffect(() => {
     setEchecsAuth(0);
     setAvisHorloge(undefined);
+    setBaseIllisible(false);
   }, [session]);
 
   // Mot de passe oublié : un code de récupération rouvre la base, et un
@@ -659,7 +664,18 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
   const recuperer = useCallback(
     (codeRecuperation: string, nouveauMotDePasse: string) =>
       executer(() => {
-        const { codesRestants } = session.recuperer({ codeRecuperation, nouveauMotDePasse });
+        let codesRestants: number;
+        try {
+          ({ codesRestants } = session.recuperer({ codeRecuperation, nouveauMotDePasse }));
+        } catch (e) {
+          if (e instanceof ErreurBaseIllisible) {
+            // Nouveau mot de passe enregistré, mais base d'ici scellée par une ancienne clé : l'écran
+            // de déverrouillage propose de reprendre les données du serveur.
+            setEnRecuperation(false);
+            setBaseIllisible(true);
+          }
+          throw e;
+        }
         setEnRecuperation(false);
         setAvisRecuperation(
           `Accès retrouvé : votre nouveau mot de passe est enregistré. Il vous reste ${codesRestants} code${
@@ -3195,6 +3211,8 @@ export function App({ session, genererId, aujourdhui, chargementAutomatique = fa
         ) : (
           <Deverrouillage
             onDeverrouiller={deverrouiller}
+            baseIllisible={baseIllisible}
+            onRepartirDuServeur={(motDePasse, codeTotp) => deverrouiller(motDePasse, codeTotp, true)}
             onRecuperer={() => {
               setErreur(undefined);
               setEnRecuperation(true);

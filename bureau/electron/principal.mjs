@@ -54,6 +54,8 @@ const DEV = process.env.APPLIBOURSE_DEV;
  */
 const FICHIERS = {
   portefeuille: 'portefeuille.ab',
+  // Ancienne base scellée par une autre clé que celle du coffre, mise de côté (jamais effacée).
+  'ecarte-portefeuille': 'portefeuille.ecarte.ab',
   coffre: 'coffre.json',
   profils: 'profils.json',
   // Caches de synchronisation du démarrage : enveloppes chiffrées seulement (voir src/sync/relais/caches.ts).

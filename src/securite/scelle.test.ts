@@ -2,6 +2,7 @@ import { utf8ToBytes } from '@noble/hashes/utils.js';
 import { aleatoireDeterministe } from './aleatoire';
 import {
   ErreurScelle,
+  ErreurScelleCle,
   LONGUEUR_NONCE,
   SIGNATURE,
   VERSION_SCELLE,
@@ -55,7 +56,8 @@ describe('descellerOctets', () => {
     const scelle = scellerOctets(CLE, CONTENU, aleatoireDeterministe(1));
 
     expect(() => descellerOctets(AUTRE_CLE, scelle)).toThrow(ErreurScelle);
-    expect(() => descellerOctets(AUTRE_CLE, scelle)).toThrow(/mauvaise clé, ou fichier altéré/);
+    expect(() => descellerOctets(AUTRE_CLE, scelle)).toThrow(/scellées par une autre clé/);
+    expect(() => descellerOctets(AUTRE_CLE, scelle)).toThrow(ErreurScelleCle);
   });
 
   it('refuse un contenu altéré', () => {

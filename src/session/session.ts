@@ -101,6 +101,25 @@ export class ErreurCoffreDifferent extends ErreurSession {
 }
 
 /**
+ * Mot de passe (et code) JUSTES, mais la base gardée sur cet appareil est scellée par une autre
+ * clé maîtresse que celle du coffre du compte : compte recréé (« Régénérer les identifiants »)
+ * pendant que cet appareil gardait l'ancienne base, ou copie publiée par un appareil resté sur
+ * l'ancienne clé. Le mot de passe ne peut rien y faire (une réinitialisation garde la clé du
+ * compte) : la base du serveur, qui fait référence, est reprise sur demande explicite
+ * (`deverrouiller({ repartirDuServeur: true })`), l'ancienne copie mise de côté, jamais effacée.
+ * Ce n'est pas un échec d'authentification : aucune tentative n'est comptée.
+ */
+export class ErreurBaseIllisible extends ErreurSession {
+  readonly code = 'base-autre-cle';
+  constructor() {
+    super(
+      'Ton mot de passe est bon, mais les données gardées sur cet appareil sont scellées par une ancienne clé de ton compte (compte recréé, ou accès réinitialisé alors que cet appareil gardait une ancienne copie) : elles ne s’ouvrent plus. Touche « Reprendre mes données du serveur » : tes données enregistrées sur le serveur reviennent, et l’ancienne copie de cet appareil est mise de côté (rien n’est effacé).',
+    );
+    this.name = 'ErreurBaseIllisible';
+  }
+}
+
+/**
  * Le mot de passe temporaire d'une invitation n'ouvre plus le coffre : il a
  * déjà été remplacé (invitation utilisée), ou le Fondateur a réinitialisé l'accès.
  */
@@ -190,7 +209,7 @@ export interface DependancesSession {
    * Ouvre la base avec la clé donnée, au format hexadécimal attendu par
    * SQLCipher. C'est le seul endroit qui connaît le pilote concret.
    */
-  ouvrirBase(cleHexadecimale: string): PiloteSqlite;
+  ouvrirBase(cleHexadecimale: string, options?: OptionsOuvertureBase): PiloteSqlite;
   /** Horloge injectable, pour tester temporisations et fenêtres. */
   horloge?: () => number;
   alea?: SourceAleatoire;
@@ -236,6 +255,19 @@ export interface OptionsInitialisation {
 export interface OptionsDeverrouillage {
   motDePasse: string;
   codeTotp: string;
+  /**
+   * Après `ErreurBaseIllisible` seulement, sur demande explicite : la base de cet appareil
+   * (scellée par une autre clé) est mise de côté et une base neuve s'ouvre, que la
+   * synchronisation remplit depuis le serveur. Sans effet si la base s'ouvre normalement, et
+   * jamais avant que mot de passe et code aient été vérifiés.
+   */
+  repartirDuServeur?: boolean;
+}
+
+/** Ce que `ouvrirBase` reçoit en plus de la clé. */
+export interface OptionsOuvertureBase {
+  /** Voir `OptionsDeverrouillage.repartirDuServeur`. */
+  repartir?: boolean;
 }
 
 export interface OptionsRecuperation {
@@ -365,7 +397,7 @@ export class Session {
     }
 
     if (trouve.coffre === coffre) {
-      this.ouvrir(trouve.cle);
+      this.ouvrir(trouve.cle, options.repartirDuServeur ? { repartir: true } : undefined);
       return;
     }
     // Coffre plus récent publié par un autre appareil : adopté seulement s'il
@@ -714,9 +746,9 @@ export class Session {
     this.cleMaitresse = undefined;
   }
 
-  private ouvrir(cleMaitresse: Uint8Array): void {
+  private ouvrir(cleMaitresse: Uint8Array, options?: OptionsOuvertureBase): void {
     try {
-      const brut = this.deps.ouvrirBase(cleHexadecimale(cleMaitresse));
+      const brut = options ? this.deps.ouvrirBase(cleHexadecimale(cleMaitresse), options) : this.deps.ouvrirBase(cleHexadecimale(cleMaitresse));
       migrer(brut);
       this.pilote = ecouterEcritures(brut, this.ecouteurs);
     } catch (erreur) {
