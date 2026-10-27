@@ -16,6 +16,8 @@
  *                          de corps de requête de l'hébergeur (docs/esport/videos.md)
  *   TRANSCRIPTION_API, TRANSCRIPTION_API_CLE… : transcription par une API externe, désactivée par défaut
  *                          (docs/esport/resumes.md)
+ *   IA_API_URL, IA_API_CLE, IA_MODELE, IA_FOURNISSEUR, IA_RECHERCHE : assistant IA des profils de jeu
+ *                          (facultatif ; sans clé, tout se fait à la main) : docs/esport/profils-jeu.md
  *   TRANSCRIPTION_MODE, TRANSCRIPTION_MODELE, TRANSCRIPTION_THREADS, TRANSCRIPTION_DOSSIER_MODELES… :
  *                          transcription sur le serveur (Whisper), installée par installer-transcription.sh
  */
@@ -28,6 +30,7 @@ import { configMedias } from '../noyau/medias/service.mjs';
 import { configTranscriptionExterne } from '../noyau/medias/transcription.mjs';
 import { configTranscriptionServeur } from '../noyau/medias/fileTranscription.mjs';
 import { dossierModelesParDefaut, etatInstallation } from './transcription/moteur.mjs';
+import { configIa } from '../noyau/ia/connecteur.mjs';
 
 /** Réglages de la transcription sur le serveur, avec l'état de l'installation (moteur et modèle prêts ?). */
 export function chargerTranscriptionServeur(env = process.env) {
@@ -55,6 +58,8 @@ export function chargerConfigEsport(env = process.env) {
     medias: configMedias(env),
     transcriptionExterne: configTranscriptionExterne(env),
     transcriptionServeur: chargerTranscriptionServeur(env),
+    // Assistant IA des profils de jeu : la clé reste dans une fermeture (jamais sérialisée).
+    ia: configIa(env),
   };
 }
 

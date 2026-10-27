@@ -19,7 +19,7 @@ import { LIBELLES_SIDE, LIBELLES_STATUT_PLAYBOOK, LIBELLES_TYPE_STRAT, TYPES_STR
 import { BoutonConfirme, Choix, Retours, styles, useAgir, Intertitre, Panneau } from '../commun';
 import { ESP, EnTetePage, Pliable } from '../design';
 import type { PropsModule } from '../modules';
-import { Etiquette, Filtre, MentionRiot, Miniature, demanderStrat, useAssets } from './commun';
+import { Etiquette, Filtre, MentionRiot, Miniature, demanderStrat, useAssetsTeam } from './commun';
 import { tr, trn } from '../../i18n';
 
 const couleurStatut = (theme: ThemeHub, s: StatutPlaybook) => ({ brouillon: theme.attenue, validee: theme.ok, archivee: theme.alerte })[s];
@@ -27,7 +27,7 @@ const couleurStatut = (theme: ThemeHub, s: StatutPlaybook) => ({ brouillon: them
 export function Playbook({ theme, client, detail, large, onAller }: PropsModule) {
   const teamId = detail.team.id;
   const api = useMemo(() => apiStrats(client), [client]);
-  const assets = useAssets();
+  const assets = useAssetsTeam(client, detail.team);
   const [donnees, setDonnees] = useState<DonneesPlaybook | undefined>();
   const [filtres, setFiltres] = useState<FiltresPlaybook>({});
   const [recherche, setRecherche] = useState('');
@@ -180,7 +180,7 @@ export function Playbook({ theme, client, detail, large, onAller }: PropsModule)
         ))}
       </View>
       {donnees && donnees.entrees.length === 0 ? <Text style={attenue}>{tr('strats.playbook.aucune_entree_pour_ces')}</Text> : null}
-      <MentionRiot theme={theme} />
+      <MentionRiot theme={theme} jeu={assets?.jeu} />
     </View>
   );
 }

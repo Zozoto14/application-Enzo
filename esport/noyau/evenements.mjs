@@ -81,6 +81,13 @@ export const TYPES_EVENEMENTS = [
   'player_note.deleted',
   // Module Ressources (migration 0017) : canal, catégories, file de validation, réactions, commentaires.
   ...TYPES_RESSOURCES,
+  // Profils de jeu (migration 0021) : événements GLOBAUX (sans team) ; brouillon IA prêt, différences proposées.
+  'game.created',
+  'game.updated',
+  'game.archived',
+  'game.deleted',
+  'game.draft_ready',
+  'game.updates_proposed',
 ];
 
 const ESSAIS_MAX = 8;
@@ -196,6 +203,16 @@ export async function abonneNotifications(base, ev) {
       // Note partagée avec le joueur : il est prévenu (sans le contenu) ; jamais quand le partage est retiré.
       if (charge.partagee === true && charge.compte && charge.compte !== ev.acteur_id) await notifier(base, ev, charge.compte, 'note-partagee', {});
       return;
+    case 'game.draft_ready':
+      // Brouillon « Préparer avec l'IA » prêt : celui qui l'a demandé (même s'il est l'« acteur » du travail).
+      if (charge.demandePar) await notifier(base, ev, charge.demandePar, 'jeu-brouillon-pret', { nom: charge.nom ?? null, travail: ev.entite_id });
+      return;
+    case 'game.updates_proposed': {
+      // Différences proposées par l'IA : le Fondateur et les comptes qui gèrent les profils de jeu.
+      const destinataires = new Set(['principal', ...(await base.tous("SELECT compte_id FROM permissions_globales WHERE permission = 'jeux.gerer'", [])).map(l => l.compte_id)]);
+      for (const compte of destinataires) await notifier(base, ev, compte, 'jeu-maj-proposee', { nom: charge.nom ?? null, jeu: ev.entite_id, n: charge.n ?? 0, auto: Boolean(charge.auto) });
+      return;
+    }
     case 'modules.changed': {
       const membres = await base.tous("SELECT compte_id AS compte FROM membres WHERE team_id = ? AND statut = 'actif'", [ev.team_id]);
       for (const { compte } of membres) {

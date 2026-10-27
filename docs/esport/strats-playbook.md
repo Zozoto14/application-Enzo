@@ -36,7 +36,11 @@ Les images passent par `fetch` puis une adresse `blob:` locale : le canevas n'es
 l'export PNG marche toujours. Le document d'une strat garde l'adresse des icônes : le serveur n'accepte que le
 CDN `https://media.valorant-api.com/…` ou un fichier du dossier `esport-assets/` (rien d'autre, ni `data:`).
 
-Le champ `jeu` (document, strats, playbook) garde la structure prête pour d'autres jeux.
+**Maps et agents du profil de jeu** ([profils-jeu.md](profils-jeu.md)) : les listes (création d'une strat, pastilles
+de l'éditeur, filtres, playbook, ressources) viennent du profil du jeu de la team ; pour Valorant, les images Riot
+ci-dessus habillent les maps et agents du profil (une map retirée du pool n'est plus proposée à la création, mais une
+strat existante sur cette map reste éditable). **Autre jeu** (champ `jeu` = `autre` dans le document) : éditeur
+générique, sans fond de carte ni capacités, pions à initiales, et sans la mention Riot.
 
 ### CSP
 

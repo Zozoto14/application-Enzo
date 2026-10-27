@@ -16,7 +16,7 @@ import { Compteur, ESP, attenue, rayonControle, texte, type EtatPresse } from '.
 import { tr } from '../i18n';
 import { BandeauTranscriptions } from './medias/Transcription';
 
-export type OngletEsport = 'dashboard' | 'teams' | 'membres' | 'statistiques';
+export type OngletEsport = 'dashboard' | 'teams' | 'membres' | 'statistiques' | 'jeux';
 
 export const NAV_ESPORT: ReadonlyArray<{ cle: OngletEsport; libelle: string; glyphe: string; description: string }> = [
   { cle: 'dashboard', get libelle() {
@@ -34,6 +34,12 @@ export const NAV_ESPORT: ReadonlyArray<{ cle: OngletEsport; libelle: string; gly
     }, glyphe: '☺', get description() {
       return tr('cadreEsport.membres_tous_les_comptes');
     } },
+  // Profils de jeu (formats, score, maps, personnages…) : le Fondateur et les comptes à qui il confie « jeux.gerer ».
+  { cle: 'jeux', get libelle() {
+      return tr('jeux.nav');
+    }, glyphe: '◈', get description() {
+      return tr('jeux.nav_description');
+    } },
   // Réservée au Fondateur : l'entrée n'apparaît que pour lui (et le serveur répond 404 à tout autre compte).
   { cle: 'statistiques', get libelle() {
       return tr('statistiques.titre');
@@ -42,8 +48,8 @@ export const NAV_ESPORT: ReadonlyArray<{ cle: OngletEsport; libelle: string; gly
     } },
 ];
 
-/** Entrées de premier niveau visibles : « Statistiques » pour le Fondateur seulement. */
-export const navEsport = (fondateur?: boolean) => NAV_ESPORT.filter(n => n.cle !== 'statistiques' || fondateur);
+/** Entrées de premier niveau visibles : « Statistiques » pour le Fondateur seulement ; « Jeux » avec la permission jeux.gerer. */
+export const navEsport = (fondateur?: boolean, gererJeux?: boolean) => NAV_ESPORT.filter(n => (n.cle !== 'statistiques' || fondateur) && (n.cle !== 'jeux' || Boolean(gererJeux)));
 
 export const LARGEUR_BARRE_LATERALE = 252;
 
@@ -107,12 +113,15 @@ export function CadreEsport({
   barreBasse,
   enTeteMobile,
   fondateur,
+  gererJeux,
   children,
 }: {
   theme: ThemeHub;
   large: boolean;
   /** Fondateur (super admin) : l'entrée « Statistiques » s'ajoute à Dashboard · Teams · Membres. */
   fondateur?: boolean;
+  /** Permission globale « Gérer les profils de jeu » : l'entrée « Jeux ». */
+  gererJeux?: boolean;
   /** Onglet de premier niveau actif (« teams » dans une team). */
   onglet: OngletEsport;
   onOnglet(o: OngletEsport): void;
@@ -142,7 +151,7 @@ export function CadreEsport({
             testID="esport-nav"
             actif={onglet}
             onChoisir={c => onOnglet(c as OngletEsport)}
-            entrees={navEsport(fondateur).map(n => ({ cle: n.cle, libelle: n.libelle, glyphe: n.glyphe, description: n.description, pastille: compteurs?.[n.cle] ? String(compteurs[n.cle]) : undefined }))}
+            entrees={navEsport(fondateur, gererJeux).map(n => ({ cle: n.cle, libelle: n.libelle, glyphe: n.glyphe, description: n.description, pastille: compteurs?.[n.cle] ? String(compteurs[n.cle]) : undefined }))}
           />
         )}
       </View>
@@ -156,7 +165,7 @@ export function CadreEsport({
         aria-label={tr('cadreEsport.navigation_de_l_esport')}>
         <View style={{ gap: ESP.xxs }} testID="esport-nav" accessibilityRole="tablist" accessibilityLabel="Esport">
           <Text style={{ ...attenue(theme, 12), fontWeight: '700', letterSpacing: 1.2, paddingHorizontal: ESP.s, paddingBottom: ESP.xxs }}>{tr('cadre.esport')}</Text>
-          {navEsport(fondateur).map(n => (
+          {navEsport(fondateur, gererJeux).map(n => (
             <EntreeLaterale
               key={n.cle}
               theme={theme}

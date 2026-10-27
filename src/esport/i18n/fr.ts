@@ -2401,6 +2401,24 @@ export const fr = {
   // Page « Statistiques » (Fondateur) : l'entrée de navigation ; le reste est dans i18n/statistiques.ts (chargé avec la page).
   'statistiques.titre': 'Statistiques',
   'statistiques.description_nav': 'Statistiques : qui utilise l’app, pages les plus et les moins utilisées (Fondateur)',
+  // Profils de jeu (page Jeux : textes dans i18n/jeux.ts ; ici ce qui s'affiche hors de la page)
+  'jeux.nav': 'Jeux',
+  'jeux.nav_description': 'Jeux : profils de jeu (formats, score, maps, personnages), assistant IA',
+  'nt.jeu_brouillon_pret': 'Brouillon de profil de jeu prêt à relire : {nom}',
+  'nt.jeu_maj_proposee': 'Mises à jour proposées pour le profil {nom} : {n} changement(s) à valider',
+  'scouting.suggestions_profil': 'Suggestions du profil du jeu',
+  'scouting.suggestion': 'Choisir {nom}',
+  'assistant.jeu_obligatoire': 'Jeu de la team (obligatoire)',
+  'assistant.choisissez_le_jeu': 'Choisissez le jeu de la team.',
+  'assistant.jeux_chargement': 'Chargement des jeux…',
+  'assistant.jeu_absent': 'Le jeu n’est pas dans la liste ? Son profil (formats, score, maps…) se configure d’abord dans Esport › Jeux.',
+  'assistant.configurer_un_jeu': 'Configurer un jeu',
+  'assistant.preset_complet': 'Team complète',
+  'assistant.jeu_maps': '{n} maps sur {total}',
+  'assistant.jeu_personnages': '{n} personnages',
+  'assistant.jeu_roster': 'roster {titulaires} + {remplacants}',
+  'pageTeam.jeu_de_la_team': 'Jeu de la team',
+  'pageTeam.jeu_change_aide': 'Changer de jeu change les maps et personnages proposés dans les modules ; les strats et fiches existantes restent.',
 } as const;
 
 export type Cle = keyof typeof fr;

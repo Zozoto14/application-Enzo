@@ -20,6 +20,8 @@ import { BoutonHub, Champ } from '../../hub/admin/ui/commun';
 import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import type { ContexteHub } from '../../hub/types';
 import { BarreOnglets } from '../../ui/mobile/BarreOnglets';
+import { apiJeux } from '../jeux/api';
+import { oublierProfilsTeams } from '../jeux/profil';
 import { CATALOGUE, mentionDonnees, nomModule, type ClientEsport, type DetailTeam, type Notifications, type TeamListee, nomRole, nomJeu, descriptionModule } from '../client';
 import { dateCourte, phraseNotification } from '../libelles';
 import type { SaisieEvenement } from '../planning/api';
@@ -35,7 +37,7 @@ import { ECRANS_MODULES, moduleAccessible } from './modules';
 import { AccueilPlanning, ReglagesPlanning } from './planning/AccueilPlanning';
 import { EspaceTeam } from './medias/Espace';
 import { ReglagesTranscriptionTeam } from './medias/TranscriptionServeur';
-import { BoutonConfirme, Panneau, PastilleRole, Retours, TitreSection, styles, useAgir } from './commun';
+import { BoutonConfirme, Choix, Panneau, PastilleRole, Retours, TitreSection, styles, useAgir } from './commun';
 import { CodeAffiche } from './CodeLiaison';
 import { apiMonDiscord, type CodeLiaison, type MonDiscord } from '../discord/api';
 import { AvatarTeam, Badge, Carte, ESP, EtatVide, LARGEUR_CONTENU, MenuActions, Onglets, Squelette, TitreCarte, TYPO, attenue as styleAttenue, couleurTeam, texte as styleTexte, titre as styleTitreEsport, type EtatPresse } from './design';
@@ -157,6 +159,7 @@ export function PageTeam({
   onExporter,
   onMembresGlobal,
   onNaviguer,
+  gererJeux,
   onChangerTeam,
   pseudo,
   contexte,
@@ -172,6 +175,8 @@ export function PageTeam({
   onMembresGlobal?(): void;
   /** Navigation de premier niveau (barre latérale, PC). Défaut : retour aux teams. */
   onNaviguer?(o: OngletEsport): void;
+  /** Permission globale « Gérer les profils de jeu » (entrée « Jeux » de la navigation). */
+  gererJeux?: boolean;
   /** Sélecteur rapide : ouvrir une autre team, sur la même section si elle y existe. */
   onChangerTeam?(id: string, section: SectionTeam): void;
   pseudo?: string;
@@ -238,7 +243,7 @@ export function PageTeam({
       />
     ) : null;
   const couleur = couleurTeam(detail.team.slug);
-  const jeu = nomJeu(detail.team.jeu);
+  const jeu = nomJeu(detail.team.jeu, detail.team.jeuNom);
 
   let contenu: React.ReactNode;
   if (active === 'membres') contenu = <MembresRoles theme={theme} client={client} detail={detail} large={large} onExporter={onExporter} onMembresGlobal={onMembresGlobal} contexte={contexte} />;
@@ -337,7 +342,7 @@ export function PageTeam({
   );
 
   return (
-    <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} fondateur={detail.moi.superAdmin} blocTeam={blocTeam} enTeteMobile={enTeteMobile} barreBasse={barreBasse}>
+    <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} fondateur={detail.moi.superAdmin} gererJeux={gererJeux} blocTeam={blocTeam} enTeteMobile={enTeteMobile} barreBasse={barreBasse}>
       <View style={{ flex: 1 }} testID="esport-team">
         {large ? <View style={{ height: 4, backgroundColor: couleur }} /> : null}
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: large ? ESP.xxl : ESP.m, paddingTop: large ? ESP.l : ESP.m, paddingBottom: ESP.xxxl, gap: large ? ESP.l : ESP.m, maxWidth: LARGEUR_CONTENU + 2 * ESP.xxl, width: '100%', alignSelf: 'center' }}>
@@ -373,7 +378,7 @@ function AccueilTeam({ theme, client, detail, large, onAller }: { theme: ThemeHu
   }, [client]);
   const actifs = detail.modules.filter(m => m.active).map(m => m.cle);
   const miennes = notifs?.liste.filter(n => n.team?.id === detail.team.id).slice(0, 5) ?? [];
-  const jeu = nomJeu(detail.team.jeu);
+  const jeu = nomJeu(detail.team.jeu, detail.team.jeuNom);
   const couleur = couleurTeam(detail.team.slug);
   const colonneDroite = (
     <View style={{ gap: ESP.m, flex: large ? 1 : undefined, minWidth: 0 }}>
@@ -463,7 +468,25 @@ function Parametres({
 }) {
   const [nom, setNom] = useState(detail.team.nom);
   const [description, setDescription] = useState(detail.team.description);
+  // Jeu de la team (profil de jeu) : profils actifs, plus celui qu'elle a (même archivé).
+  const [jeu, setJeu] = useState(detail.team.jeu);
+  const [jeux, setJeux] = useState<Array<{ id: string; nom: string; couleur?: string }> | undefined>();
   const { enCours, erreur, avis, agir } = useAgir();
+  useEffect(() => {
+    let vivant = true;
+    Promise.resolve()
+      .then(() => apiJeux(client).liste())
+      .then(l => {
+        if (!vivant || !Array.isArray(l?.jeux)) return;
+        const actifs = l.jeux.filter(j => j.statut === 'actif').map(j => ({ id: j.cle, nom: nomJeu(j.cle, j.nom), couleur: j.couleur }));
+        if (!actifs.some(j => j.id === detail.team.jeu)) actifs.unshift({ id: detail.team.jeu, nom: nomJeu(detail.team.jeu, detail.team.jeuNom), couleur: detail.team.jeuCouleur ?? '#8b8b9a' });
+        setJeux(actifs);
+      })
+      .catch(() => undefined);
+    return () => {
+      vivant = false;
+    };
+  }, [client, detail.team.jeu, detail.team.jeuNom, detail.team.jeuCouleur]);
   const peut = (p: string) => detail.moi.permissions.includes(p);
   const gerer = peut('modules.manage');
   // Modules rangés par section (comme la navigation de la team).
@@ -478,6 +501,12 @@ function Parametres({
           <TitreCarte theme={theme} titre={tr('pageTeam.la_team')} sous={tr('pageTeam.nom_et_description_visibles')} />
           <Champ theme={theme} libelle={tr('pageTeam.nom')} valeur={nom} onChanger={setNom} maxLength={60} testID="esport-parametres-nom" />
           <Champ theme={theme} libelle={tr('pageTeam.description')} valeur={description} onChanger={setDescription} maxLength={500} multiligne testID="esport-parametres-description" />
+          {jeux && jeux.length > 1 ? (
+            <>
+              <Choix<string> theme={theme} libelle={tr('pageTeam.jeu_de_la_team')} valeur={jeu} options={jeux} onChoisir={setJeu} testID="esport-parametres-jeu" />
+              {jeu !== detail.team.jeu ? <Text style={styleAttenue(theme, 12)}>{tr('pageTeam.jeu_change_aide')}</Text> : null}
+            </>
+          ) : null}
           <View style={{ alignSelf: 'flex-start' }}>
             <BoutonHub
               theme={theme}
@@ -486,7 +515,8 @@ function Parametres({
               desactive={Boolean(enCours)}
               onPress={() =>
                 void agir('team', async () => {
-                  await client.modifierTeam(detail.team.id, { nom: nom.trim(), description });
+                  await client.modifierTeam(detail.team.id, { nom: nom.trim(), description, ...(jeu !== detail.team.jeu ? { jeu } : {}) });
+                  if (jeu !== detail.team.jeu) oublierProfilsTeams();
                   await onChange();
                   return tr('pageTeam.team_enregistree');
                 })

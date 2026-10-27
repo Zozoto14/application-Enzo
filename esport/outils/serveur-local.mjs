@@ -18,6 +18,7 @@ import { pathToFileURL } from 'node:url';
 import { baseSqliteMigree } from '../adaptateurs/sqlite.mjs';
 import { stockageDisque, stockageMemoire } from '../adaptateurs/stockage.mjs';
 import { creerApi } from '../noyau/api.mjs';
+import { configIa } from '../noyau/ia/connecteur.mjs';
 import { telechargeurNode } from '../adaptateurs/apercuNode.mjs';
 import { verificateurRelais } from '../noyau/authentification.mjs';
 import { traiterFile } from '../noyau/discord/file.mjs';
@@ -57,6 +58,8 @@ export async function demarrerServeurEsport({
   transcriptionServeur,
   // Aperçus des liens (Ressources) : téléchargeur Node protégé (IP vérifiée à la connexion) ; simulé en e2e.
   apercuLiens,
+  // Assistant IA des profils de jeu : configuration (IA_API_URL, IA_API_CLE, IA_MODELE…) et réseau simulé en e2e.
+  ia = { config: configIa(process.env), telecharger: telechargeurNode() },
 } = {}) {
   const base = await baseSqliteMigree(chemin);
   // Fichiers (PDF des résumés) : à côté de la base SQLite (dossier `<base>.fichiers/`), en mémoire sinon.
@@ -75,7 +78,7 @@ export async function demarrerServeurEsport({
     const existe = await base.premier('SELECT id FROM teams LIMIT 1', []);
     if (!existe) await semer(base, { stockage });
   }
-  const traiter = creerApi({ base, stockage, cleSession: cle, verifierJeton, creationTeams, cleDiscord, fetchDiscord, lienApp, discordBot, medias, ...(transcriptionServeur ? { transcriptionServeur } : {}), apercuLiens: apercuLiens ?? { telecharger: telechargeurNode() } });
+  const traiter = creerApi({ base, stockage, cleSession: cle, verifierJeton, creationTeams, cleDiscord, fetchDiscord, lienApp, discordBot, medias, ...(transcriptionServeur ? { transcriptionServeur } : {}), apercuLiens: apercuLiens ?? { telecharger: telechargeurNode() }, ia });
   // Tâches planifiées (rappels de présence, d'échéance et Discord, événements en attente, file Discord), toutes les 15 minutes.
   const cron = setInterval(() => {
     void (async () => {

@@ -11,7 +11,7 @@
 import { pathToFileURL } from 'node:url';
 import { basePostgres, optionsDepuisEnv } from '../adaptateurs/postgres.mjs';
 import { stockageDisque } from '../adaptateurs/stockage.mjs';
-import { telechargeurNode } from '../adaptateurs/apercuNode.mjs';
+import { resoudreNode, telechargeurNode } from '../adaptateurs/apercuNode.mjs';
 import { creerApi, reponseJson } from '../noyau/api.mjs';
 import { verificateurRelais } from '../noyau/authentification.mjs';
 import { chargerConfigEsport, problemesConfig } from './config.mjs';
@@ -21,7 +21,7 @@ import { creerServeurHttp, ecouter, exigerNode } from './commun.mjs';
  * Prépare le gestionnaire HTTP. `base` et `stockage` peuvent être fournis (tests) ; sinon Postgres
  * (environnement) et le dossier FICHIERS_DIR. Rend `{ traiter, base, stockage, config, fermer }`.
  */
-export async function preparerEsport({ config = chargerConfigEsport(), base, stockage, fetchDiscord, verifierJeton, secretsExportables = false } = {}) {
+export async function preparerEsport({ config = chargerConfigEsport(), base, stockage, fetchDiscord, verifierJeton, secretsExportables = false, fetchIa, travauxIa } = {}) {
   const problemes = problemesConfig({ ...config, baseConfiguree: config.baseConfiguree || Boolean(base) });
   if (problemes.length) {
     console.error(`[esport] configuration incomplète :\n - ${problemes.join('\n - ')}`);
@@ -46,6 +46,9 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     transcriptionServeur: config.transcriptionServeur,
     // Aperçus des liens (Ressources) : chaque adresse IP est vérifiée au moment de la connexion (anti-SSRF).
     apercuLiens: { telecharger: telechargeurNode() },
+    // Assistant IA des profils de jeu (IA_API_URL, IA_API_CLE, IA_MODELE) : pages web lues avec la même protection.
+    ia: { config: config.ia, telecharger: telechargeurNode(), resoudre: resoudreNode, ...(fetchIa ? { fetch: fetchIa } : {}) },
+    ...(travauxIa ? { travauxIa } : {}),
   });
   return { traiter: api, base: b, stockage: st, config, problemes, fermer: async () => (base ? undefined : b.fermer()) };
 }

@@ -223,17 +223,18 @@ export function extraireMeta(html, adresse) {
  * lecture bornée, HTML seulement. Rend `{ statut, type, location, corps }`.
  */
 export function telechargeurFetch(fetchFn = (...a) => globalThis.fetch(...a)) {
-  return async (url, { delai = DELAI_APERCU_MS, max = TAILLE_MAX_APERCU } = {}) => {
+  return async (url, { delai = DELAI_APERCU_MS, max = TAILLE_MAX_APERCU, types = /html|xml/i, agent = AGENT } = {}) => {
     const r = await fetchFn(url, {
       method: 'GET',
       redirect: 'manual',
+      credentials: 'omit',
       signal: AbortSignal.timeout(delai),
-      headers: { 'User-Agent': AGENT, Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1' },
+      headers: { 'User-Agent': agent, Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1' },
     });
     const type = r.headers?.get?.('content-type') ?? '';
     const location = r.headers?.get?.('location') ?? null;
     let corps = '';
-    if (r.status >= 200 && r.status < 300 && /html|xml/i.test(type) && r.body) {
+    if (r.status >= 200 && r.status < 300 && types.test(type) && r.body) {
       const lecteur = r.body.getReader();
       const morceaux = [];
       let total = 0;

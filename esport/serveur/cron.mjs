@@ -21,9 +21,12 @@ import { creerEnvoyeur } from './courriel-smtp.mjs';
 import { purgerKvExpire } from '../../relais/serveur/kv-postgres.mjs';
 import { chargerConfigEsport } from './config.mjs';
 import { lancerTravailleur } from './transcription/lanceur.mjs';
+import { resoudreNode, telechargeurNode } from '../adaptateurs/apercuNode.mjs';
+import { servicesJeux } from '../noyau/jeux/service.mjs';
+import { distribuer } from '../noyau/evenements.mjs';
 
 /** Exécute une fois toutes les tâches ; rend le rapport. `lancer` : lanceur de la transcription (tests). */
-export async function executerCron(base, config, { fetch, maintenant, stockage, creerTransport, lancer = lancerTravailleur } = {}) {
+export async function executerCron(base, config, { fetch, maintenant, stockage, creerTransport, lancer = lancerTravailleur, fetchIa, telechargerPages } = {}) {
   const fichiers = stockage ?? (config.dossierFichiers ? await stockageDisque(config.dossierFichiers) : undefined);
   const rapport = await tachesPlanifiees(base, {
     cle: config.cleDiscord || config.cleSession,
@@ -46,6 +49,22 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
     } finally {
       await envoyer?.fermer?.();
     }
+  }
+  // Profils de jeu : vérification automatique limitée (au plus une par passage, plafond mensuel), si l'IA est configurée.
+  try {
+    const jeux = servicesJeux({
+      base,
+      ...(maintenant ? { maintenant } : {}),
+      socle: {},
+      ia: { config: config.ia, telecharger: telechargerPages ?? telechargeurNode(), resoudre: telechargerPages ? undefined : resoudreNode, ...(fetchIa ? { fetch: fetchIa } : {}) },
+      travauxIa: 'synchrone',
+    });
+    const r = await jeux.tacheCron();
+    // Notifications (« mises à jour proposées ») tout de suite, sans attendre le passage suivant.
+    if (r.n) await distribuer(base, { maintenant: maintenant ? maintenant() : Date.now() });
+    rapport.push({ tache: 'profils de jeu (IA)', ok: true, n: r.n, ...(r.raison ? { etat: r.raison } : {}) });
+  } catch (e) {
+    rapport.push({ tache: 'profils de jeu (IA)', ok: false, erreur: String(e?.code ?? e?.message ?? e) });
   }
   // Transcription sur le serveur : processus de fond détaché (un seul à la fois), si des réunions attendent.
   if (config.transcriptionServeur?.disponible) {

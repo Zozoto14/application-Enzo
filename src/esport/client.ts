@@ -62,12 +62,18 @@ export interface Moi {
   superAdmin: boolean;
   profil: ProfilEsport | null;
   peutCreerTeam: boolean;
+  /** Permission globale « Gérer les profils de jeu » (Fondateur, ou délégué par lui). */
+  peutGererJeux?: boolean;
 }
 export interface Team {
   id: string;
   nom: string;
   slug: string;
+  /** Clé du profil de jeu de la team (src/esport/jeux). */
   jeu: string;
+  /** Nom et couleur du profil de jeu (serveurs avec profils de jeu). */
+  jeuNom?: string;
+  jeuCouleur?: string | null;
   description: string;
   logoUrl: string | null;
   fuseau: string;
@@ -1106,6 +1112,7 @@ export const nomTypeReunion = (nom: string): string => (TYPES_REUNION_SYSTEME[no
 export const descriptionRole = (r: { cle: string; description: string }): string => trOu(`cat.role.${r.cle}.description`, r.description);
 export const nomPreset = (p: { cle: string; nom: string }): string => trOu(`cat.preset.${p.cle}.nom`, p.nom);
 export const descriptionPreset = (p: { cle: string; description: string }): string => trOu(`cat.preset.${p.cle}.description`, p.description);
-export const nomJeu = (cle: string): string => trOu(`cat.jeu.${cle}`, CATALOGUE.jeux.find(j => j.cle === cle)?.nom ?? cle);
+/** Nom d'un jeu : traduit pour les jeux du catalogue (Valorant, Autre jeu), sinon le nom de son profil. */
+export const nomJeu = (cle: string, nom?: string | null): string => trOu(`cat.jeu.${cle}`, nom ?? CATALOGUE.jeux.find(j => j.cle === cle)?.nom ?? cle);
 /** Poste d'un jeu (« Duelliste » / « Duelist »). */
 export const nomPoste = (poste: string): string => trOu(`cat.poste.${slugPoste(poste)}`, poste);

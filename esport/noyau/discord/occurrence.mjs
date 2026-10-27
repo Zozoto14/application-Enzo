@@ -16,7 +16,7 @@ const JOUR = 86_400_000;
 export async function contexteOccurrence(base, teamId, evenementId, occurrenceIso, maintenant = Date.now()) {
   const cle = Date.parse(occurrenceIso);
   if (!Number.isFinite(cle)) return null;
-  const team = await base.premier('SELECT id, nom, fuseau, logo_url FROM teams WHERE id = ? AND supprimee_le IS NULL AND archivee_le IS NULL', [teamId]);
+  const team = await base.premier('SELECT id, nom, jeu, fuseau, logo_url FROM teams WHERE id = ? AND supprimee_le IS NULL AND archivee_le IS NULL', [teamId]);
   if (!team) return null;
   const p = servicesPlanning({ base, maintenant: () => maintenant, noyau: { contexteTeam: null, exiger: null } });
   const toutes = await p.occurrencesTeam(teamId, cle - 32 * JOUR, cle + 32 * JOUR);
@@ -55,7 +55,8 @@ export async function contexteOccurrence(base, teamId, evenementId, occurrenceIs
     reponses,
     presenceActive,
     modules,
-    carte: carteDans(titre, o.lieu ?? ev.lieu, o.description ?? ev.description),
+    // Vignette d'une map citée : maps Valorant seulement (images Riot) ; aucune pour une team d'un autre jeu.
+    carte: team.jeu === 'valorant' ? carteDans(titre, o.lieu ?? ev.lieu, o.description ?? ev.description) : null,
     adversaire,
     staff: estReunionStaff(ev, membres, o),
     termine: o.fin <= maintenant,

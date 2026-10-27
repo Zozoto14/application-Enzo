@@ -45,10 +45,12 @@ import { routesRessources } from './ressources/routes.mjs';
 import { servicesRessources } from './ressources/service.mjs';
 import { exportUsage, servicesCollecte } from './usage/collecte.mjs';
 import { exigerFondateur, servicesStatistiques } from './usage/statistiques.mjs';
+import { servicesJeux } from './jeux/service.mjs';
+import { routesJeux } from './jeux/routes.mjs';
 
 export const VERSION_ESPORT = 4;
 /** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
-export const FONCTIONS = ['surcharge-methode'];
+export const FONCTIONS = ['surcharge-methode', 'profils-jeu'];
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
@@ -108,7 +110,10 @@ const jetonPorteur = requete => (requete.headers.get('Authorization') ?? '').rep
  * Fabrique le gestionnaire HTTP.
  *  - `base` : interface de base (adaptateurs/) ; `stockage` : fichiers (facultatif en phase 1) ;
  *  - `cleSession` : secret CLE_ESPORT ; `verifierJeton(jeton, ip)` : voir authentification.mjs ;
- *  - `creationTeams` : « fondateur » ou « tous » ; `maintenant` : horloge (tests).
+ *  - `creationTeams` : « fondateur » ou « tous » ; `maintenant` : horloge (tests) ;
+ *  - `ia` : assistant des profils de jeu { config (ia/connecteur.mjs : configIa), fetch (réseau simulé en
+ *    test), telecharger (lecture des pages web, anti-SSRF), resoudre } ; `travauxIa` : « fond » (défaut :
+ *    après la réponse) ou « synchrone » (tests).
  */
 export function creerApi({
   base,
@@ -128,6 +133,8 @@ export function creerApi({
   fetchTranscription,
   transcriptionServeur,
   apercuLiens = {},
+  ia = {},
+  travauxIa = 'fond',
 }) {
   const s = servicesEsport({ base, maintenant, creationTeams });
   // Vidéos et enregistrements (envoi par morceaux, lecture par plages, espace utilisé).
@@ -158,6 +165,8 @@ export function creerApi({
   // Statistiques d'usage internes (migration 0018) : collecte par lots, page réservée au Fondateur.
   const us = servicesCollecte({ base, maintenant });
   const sts = servicesStatistiques({ base, maintenant });
+  // Profils de jeu (migration 0021) et assistant IA (clé d'API dans esport.env, jamais renvoyée).
+  const jx = servicesJeux({ base, maintenant, socle: s, ia, travauxIa });
   // Bot Discord (interactions HTTP) : DISCORD_APPLICATION_ID et DISCORD_PUBLIC_KEY (variables), DISCORD_BOT_TOKEN (secret).
   const configBot = { applicationId: discordBot.applicationId || '', publicKey: discordBot.publicKey || '' };
   const jetonBot = discordBot.jetonBot || undefined;
@@ -360,6 +369,8 @@ export function creerApi({
         return s.creerTeam(acteur, corps);
       }
     }
+    const profilsJeu = await routesJeux({ jeux: jx, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
+    if (profilsJeu !== undefined) return profilsJeu;
     const planning = await routesPlanning({ p, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete) });
     if (planning !== undefined) return planning;
     const discord = await routerDiscord(d, { methode: m, chemin, acteur, lireCorps: () => lireCorps(requete) });

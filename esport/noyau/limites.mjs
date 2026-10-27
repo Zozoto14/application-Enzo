@@ -39,6 +39,8 @@ export const LIMITES = {
   discord_relance: { max: 3, fenetreS: 3600 },
   // Aperçus de liens (Ressources) : chaque appel fait une requête sortante du serveur.
   apercu: { max: 60, fenetreS: 3600 },
+  // Assistant IA des profils de jeu (brouillon, vérification manuelle, test) : par compte, en plus du plafond mensuel.
+  ia: { max: 20, fenetreS: 3600 },
   // Statistiques d'usage : lots de l'app (un toutes les 45 s au plus, plus les envois au départ de la page), par compte.
   usage: { max: 150, fenetreS: 3600 },
 };

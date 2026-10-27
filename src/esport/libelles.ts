@@ -286,6 +286,11 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
       });
     case 'note-partagee':
       return tr('nt.note_partagee', { team });
+    // Profils de jeu (notifications globales, sans team).
+    case 'jeu-brouillon-pret':
+      return tr('nt.jeu_brouillon_pret', { nom: str(c.nom, '?') });
+    case 'jeu-maj-proposee':
+      return tr('nt.jeu_maj_proposee', { nom: str(c.nom, '?'), n: typeof c.n === 'number' ? c.n : '?' });
     case 'tache-echeance':
       return tr(c.retard ? 'nt.tache_en_retard' : 'nt.tache_echeance_proche', {
         titre: str(c.titre, tr('nt.une_tache')),

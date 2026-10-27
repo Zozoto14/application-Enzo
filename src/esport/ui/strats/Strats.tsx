@@ -23,13 +23,15 @@ import { Choix, Retours, styles, useAgir, Intertitre, Panneau } from '../commun'
 import { Carte, ESP, EnTetePage, EtatVide, Grille, MenuActions, Pliable, SqueletteCartes } from '../design';
 import type { PropsModule } from '../modules';
 import { Editeur } from './Editeur';
-import { Etiquette, Filtre, MentionRiot, Miniature, prendreStratDemandee, useAssets } from './commun';
+import { Etiquette, Filtre, MentionRiot, Miniature, prendreStratDemandee, useAssetsTeam } from './commun';
+import { cartesDuPool } from '../../jeux/profil';
 import { tr } from '../../i18n';
 
 export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
   const teamId = detail.team.id;
   const api = useMemo(() => apiStrats(client), [client]);
-  const assets = useAssets();
+  // Maps et agents du profil de jeu de la team (Valorant : avec les images Riot).
+  const assets = useAssetsTeam(client, detail.team);
   const peut = (p: string) => detail.moi.permissions.includes(p);
   const [ouverte, setOuverte] = useState<string | undefined>(() => prendreStratDemandee());
   const [strats, setStrats] = useState<Strat[] | undefined>();
@@ -77,7 +79,7 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
       {creation ? (
         <NouvelleStrat
           theme={theme}
-          cartes={cartes.map(c => ({ cle: c.cle, nom: c.nom, image: c.minimap }))}
+          cartes={cartesDuPool(assets).map(c => ({ cle: c.cle, nom: c.nom, image: c.minimap }))}
           onCreer={corps =>
             void agir('creation', async () => {
               const s = await api.creer(teamId, corps);
@@ -186,7 +188,7 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
           </Panneau>
         ))}
       </Grille>
-      <MentionRiot theme={theme} />
+      <MentionRiot theme={theme} jeu={assets?.jeu} />
     </View>
   );
 }

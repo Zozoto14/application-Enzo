@@ -41,6 +41,7 @@ import { ChampNote } from '../ChampNote';
 import { Retours, styles, useAgir, Intertitre, Panneau } from '../commun';
 import type { ExportCanevas, Outil } from './CanevasStrat.web';
 import { MentionRiot } from './commun';
+import { agentsActifs, cartesDuPool } from '../../jeux/profil';
 import type { PropsEditeur } from './types';
 import { tr } from '../../i18n';
 
@@ -149,7 +150,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
   const doc = h?.present;
   const peutModifier = Boolean(strat?.moi.modifier);
   const modifie = Boolean(doc && enregistre && doc !== enregistre);
-  const agents = assets?.agents ?? [];
+  const agents = agentsActifs(assets);
   const agent: AgentAsset | undefined = (agentCle ? trouverAgent(assets, agentCle) : undefined) ?? (joueur !== null && doc?.joueurs[joueur]?.agent ? trouverAgent(assets, doc.joueurs[joueur].agent as string) : undefined) ?? agents[0];
   const capacite = agent?.capacites.find(c => c.cle === capaciteCle) ?? agent?.capacites[0];
   const couleur = couleurLibre ?? (joueur !== null ? (doc?.joueurs[joueur]?.couleur ?? '#ffffff') : '#ffffff');
@@ -489,7 +490,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
             testID="esport-editeur-side"
           />
           <View style={[styles.ligne, { gap: 4, flex: 1 }]} accessibilityRole="radiogroup" accessibilityLabel={tr('strats.editeur.carte')}>
-            {(assets?.cartes ?? []).map(c => (
+            {cartesDuPool(assets, doc.carte.cle).map(c => (
               <Pastille key={c.cle} theme={theme} actif={doc.carte.cle === c.cle} onPress={() => faire({ type: 'carte', carte: { cle: c.cle, nom: c.nom, image: c.minimap } })} libelle={tr('strats.editeur.carte_2', { nom: c.nom })} testID={`esport-editeur-carte-${c.cle}`}>
                 <Text style={{ color: theme.texte, fontSize: 12 }}>{c.nom}</Text>
               </Pastille>
@@ -530,7 +531,7 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
         </View>
         {peutModifier ? <View style={{ width: large ? 320 : '100%' }}>{palette}</View> : null}
       </View>
-      <MentionRiot theme={theme} />
+      <MentionRiot theme={theme} jeu={assets?.jeu} />
     </View>
   );
 }

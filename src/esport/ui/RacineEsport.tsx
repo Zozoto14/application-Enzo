@@ -32,7 +32,7 @@ import { AvatarTeam, Badge, Carte, ESP, EnTetePage, EtatVide, Grille, LARGEUR_PC
 import { definirLangue, langueAppareil, langueCourante, tr, trn, useLangue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
 import { PublierMulti } from './ressources/PublierMulti';
-import { Statistiques } from './differe';
+import { Jeux, Statistiques } from './differe';
 import { demarrerUsage, noterPage } from '../usage';
 
 type Etat =
@@ -83,7 +83,7 @@ export function Esport(props: PropsRacineApp) {
   // Statistiques d'usage internes (métadonnées seulement, par lots) : le temps de la session Esport ouverte.
   const clientPret = etat.e === 'pret' ? etat.client : undefined;
   useEffect(() => (clientPret ? demarrerUsage(clientPret) : undefined), [clientPret]);
-  const pageVue = etat.e !== 'pret' ? null : !etat.moi.profil ? 'esport.profil' : vue.v === 'team' ? null : vue.v === 'statistiques' && !etat.moi.superAdmin ? 'esport.dashboard' : `esport.${vue.v}`;
+  const pageVue = etat.e !== 'pret' ? null : !etat.moi.profil ? 'esport.profil' : vue.v === 'team' ? null : (vue.v === 'statistiques' && !etat.moi.superAdmin) || (vue.v === 'jeux' && !etat.moi.peutGererJeux) ? 'esport.dashboard' : `esport.${vue.v}`;
   useEffect(() => {
     if (pageVue) noterPage(pageVue);
   }, [pageVue]);
@@ -125,6 +125,7 @@ export function Esport(props: PropsRacineApp) {
         onExporter={exporter}
         onMembresGlobal={() => setVue({ v: 'membres' })}
         onNaviguer={o => setVue({ v: o })}
+        gererJeux={Boolean(etat.moi.peutGererJeux)}
         onChangerTeam={(id, section) => setVue({ v: 'team', id, section })}
         pseudo={etat.moi.profil.pseudo}
         contexte={contexte}
@@ -134,7 +135,16 @@ export function Esport(props: PropsRacineApp) {
     const onglet: Onglet = vue.v === 'assistant' || vue.v === 'boite' ? 'teams' : vue.v;
     let page: React.ReactNode;
     if (vue.v === 'assistant') {
-      page = <Assistant theme={theme} client={etat.client} large={large} onAnnuler={() => setVue({ v: 'teams' })} onCreee={d => setVue({ v: 'team', id: d.team.id, section: 'membres' })} />;
+      page = (
+        <Assistant
+          theme={theme}
+          client={etat.client}
+          large={large}
+          onAnnuler={() => setVue({ v: 'teams' })}
+          onCreee={d => setVue({ v: 'team', id: d.team.id, section: 'membres' })}
+          onJeux={etat.moi.peutGererJeux ? () => setVue({ v: 'jeux' }) : undefined}
+        />
+      );
     } else if (vue.v === 'boite') {
       page = (
         <PageEsport large={large} testID="esport-boite-globale">
@@ -163,6 +173,9 @@ export function Esport(props: PropsRacineApp) {
       );
     } else if (onglet === 'statistiques' && etat.moi.superAdmin) {
       page = <Statistiques theme={theme} client={etat.client} large={large} onExporter={exporter} />;
+    } else if (onglet === 'jeux' && etat.moi.peutGererJeux) {
+      // Profils de jeu, assistant IA, mises à jour proposées, Administration de l'IA (Fondateur).
+      page = <Jeux theme={theme} client={etat.client} large={large} fondateur={etat.moi.superAdmin} />;
     } else if (onglet === 'membres') {
       page = <MembresGlobal theme={theme} client={etat.client} contexte={contexte} registre={registre} large={large} onOuvrirTeam={id => setVue({ v: 'team', id })} onOuvrirApp={onOuvrirApp} />;
     } else {
@@ -182,7 +195,7 @@ export function Esport(props: PropsRacineApp) {
       );
     }
     contenu = (
-      <CadreEsport theme={theme} large={large} onglet={onglet} onOnglet={o => setVue({ v: o })} pseudo={etat.moi.profil.pseudo} fondateur={etat.moi.superAdmin}>
+      <CadreEsport theme={theme} large={large} onglet={onglet} onOnglet={o => setVue({ v: o })} pseudo={etat.moi.profil.pseudo} fondateur={etat.moi.superAdmin} gererJeux={Boolean(etat.moi.peutGererJeux)}>
         {page}
       </CadreEsport>
     );
@@ -406,7 +419,7 @@ function MesTeams({
 /** Carte d'une team (page Teams) : logo et couleur, rôle, effectif, sections. */
 function CarteTeamListe({ theme, team: t, onOuvrir }: { theme: ThemeHub; team: TeamListee; onOuvrir(): void }) {
   const couleur = couleurTeam(t.slug);
-  const jeu = nomJeu(t.jeu);
+  const jeu = nomJeu(t.jeu, t.jeuNom);
   // Sections de la team, d'après ses modules (comme la navigation dans la team).
   const groupes = GROUPES_TEAM.filter(g => g.id !== 'accueil' && g.id !== 'reglages' && t.modules.some(m => g.sections.includes(`module:${m}`)));
   return (

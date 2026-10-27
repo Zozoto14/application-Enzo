@@ -14,7 +14,6 @@
 import { evenement } from './evenements.mjs';
 import {
   CLE_PROPRIETAIRE,
-  JEUX,
   MODULES,
   ROLES_SYSTEME,
   TOUTES_PERMISSIONS,
@@ -32,6 +31,7 @@ import { lireLangue } from './langues.mjs';
 import { lignesParIds, pseudosDe } from './requetes.mjs';
 import { lireDessin } from './review/dessin.mjs';
 import { effacementUsage } from './usage/collecte.mjs';
+import { aPermissionJeux, jeuValidePourTeam, nomsDesJeux } from './jeux/service.mjs';
 
 const MOTIF_PSEUDO = /^[\p{L}\p{N}][\p{L}\p{N} _.\-]{1,23}$/u;
 const MOTIF_RIOT = /^[^#\s][^#]{2,15}#[\p{L}\p{N}]{3,5}$/u;
@@ -177,11 +177,13 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     return { permissionsParDefaut: defaut, modifie: defaut.length !== actuelles.length || defaut.some((p, i) => p !== actuelles[i]) };
   }
 
-  const teamPublique = t => ({
+  /** Team telle que l'app la voit ; `jeux` (facultatif) : noms des profils de jeu (`jeuNom`, `jeuCouleur`). */
+  const teamPublique = (t, jeux) => ({
     id: t.id,
     nom: t.nom,
     slug: t.slug,
     jeu: t.jeu,
+    ...(jeux ? { jeuNom: jeux.get(t.jeu)?.nom ?? t.jeu, jeuCouleur: jeux.get(t.jeu)?.couleur ?? null } : {}),
     description: t.description,
     logoUrl: t.logo_url ?? null,
     fuseau: t.fuseau,
@@ -207,6 +209,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       // Langue par défaut définie par l'administrateur (migration 0019) : sert tant que l'utilisateur n'a pas choisi la sienne.
       langueDefaut: profil ? (lireLangue(profil.langue_defaut) ?? 'fr') : ((await langueEnAttente(acteur.compte)) ?? undefined),
       peutCreerTeam: acteur.superAdmin || creationTeams === 'tous',
+      // Permission globale « Gérer les profils de jeu » (migration 0021) : le Fondateur, et ceux à qui il l'accorde.
+      peutGererJeux: await aPermissionJeux(base, acteur),
     };
   }
 
@@ -270,10 +274,11 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     );
     const modulesParTeam = new Map(ids.map(id => [id, []]));
     for (const m of await lignesParIds(base, 'SELECT team_id, module FROM team_modules WHERE active = 1 AND team_id', ids)) modulesParTeam.get(m.team_id)?.push(m.module);
+    const jeux = await nomsDesJeux(base);
     const teams = [];
     for (const l of lignes) {
       teams.push({
-        ...teamPublique(l),
+        ...teamPublique(l, jeux),
         membres: effectifs.get(l.id) ?? 0,
         modules: MODULES.filter(m => modulesParTeam.get(l.id)?.includes(m)),
         role: l.membre_id ? { nom: l.role_nom, couleur: l.role_couleur } : null,
@@ -296,8 +301,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     await exigerProfil(acteur);
     const nom = texteNettoye(corps?.nom, 60);
     if (nom.length < 2) throw echec(400, 'nom', 'Nom de la team : 2 caractères au moins.');
-    const jeu = corps?.jeu ?? 'valorant';
-    if (!JEUX.some(j => j.cle === jeu)) throw echec(400, 'jeu', 'Jeu inconnu.');
+    // Profil de jeu obligatoire (migration 0021) : un profil actif, configuré avant la création de la team.
+    const jeu = await jeuValidePourTeam(base, corps?.jeu);
     const modules = modulesDuPreset(corps?.preset ?? 'valorant_complet', Array.isArray(corps?.modules) ? corps.modules : []);
     if (!modules) throw echec(400, 'preset', 'Preset inconnu.');
     const description = texteLong(corps?.description, 500);
@@ -342,7 +347,7 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     const modules = await base.tous('SELECT module, active FROM team_modules WHERE team_id = ?', [teamId]);
     const n = await base.premier("SELECT COUNT(*) AS n FROM membres WHERE team_id = ? AND statut = 'actif'", [teamId]);
     return {
-      team: teamPublique(ctx.team),
+      team: teamPublique(ctx.team, await nomsDesJeux(base)),
       modules: MODULES.map(cle => ({ cle, active: modules.some(m => m.module === cle && Number(m.active) === 1) })),
       membres: Number(n?.n ?? 0),
       moi: {
@@ -371,9 +376,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       valeurs.push(texteLong(corps.description, 500));
     }
     if (corps?.jeu !== undefined) {
-      if (!JEUX.some(j => j.cle === corps.jeu)) throw echec(400, 'jeu', 'Jeu inconnu.');
       champs.push('jeu');
-      valeurs.push(corps.jeu);
+      valeurs.push(await jeuValidePourTeam(base, corps.jeu, { actuel: ctx.team.jeu }));
     }
     if (corps?.fuseau !== undefined) {
       const fuseau = texteNettoye(corps.fuseau, 60);
@@ -858,6 +862,9 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
         : {}),
       notesRedigees: (await q('SELECT team_id, COUNT(*) AS n FROM notes_joueurs WHERE auteur_id = ? GROUP BY team_id')).map(n => ({ team: team(n.team_id), notes: Number(n.n) })),
       invitationsCreees: (await q('SELECT team_id, libelle, expire_le, utilisations, utilisations_max, cree_le FROM invitations WHERE cree_par = ? ORDER BY cree_le')).map(i => ({ team: team(i.team_id), libelle: i.libelle, expireLe: i.expire_le, utilisations: Number(i.utilisations), utilisationsMax: Number(i.utilisations_max), creeLe: i.cree_le })),
+      // Profils de jeu (migration 0021) : permissions globales reçues et versions de profils enregistrées.
+      permissionsGlobales: (await q('SELECT permission, cree_le FROM permissions_globales WHERE compte_id = ? ORDER BY cree_le')).map(p => ({ permission: p.permission, depuis: p.cree_le })),
+      versionsProfilsJeu: (await q('SELECT jeu_cle, version, motif, cree_le FROM jeu_versions WHERE auteur_id = ? ORDER BY cree_le')).map(v => ({ jeu: v.jeu_cle, version: Number(v.version), motif: v.motif, date: v.cree_le })),
     };
   }
 
@@ -940,6 +947,13 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       { sql: 'DELETE FROM tentatives WHERE cle = ?', params: [`invitation:compte:${compte}`] },
       // Statistiques d'usage (migration 0018) : détail et agrégats du compte effacés.
       ...effacementUsage(compte),
+      // Profils de jeu (migration 0021) : sa délégation disparaît ; ce qu'il a écrit ou décidé reste, sans auteur.
+      { sql: 'DELETE FROM permissions_globales WHERE compte_id = ?', params: [compte] },
+      { sql: 'UPDATE jeux SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
+      { sql: 'UPDATE jeux SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
+      { sql: 'UPDATE jeu_versions SET auteur_id = NULL WHERE auteur_id = ?', params: [compte] },
+      { sql: 'UPDATE ia_travaux SET demande_par = NULL WHERE demande_par = ?', params: [compte] },
+      { sql: 'UPDATE ia_propositions SET decide_par = NULL WHERE decide_par = ?', params: [compte] },
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, ...(compte === acteur.compte ? {} : { parFondateur: true }) }, maintenant: t }),
     );

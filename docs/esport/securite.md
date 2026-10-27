@@ -83,6 +83,12 @@ Invitation directe (voir [invitations.md](invitations.md)) : plus aucun code à 
   la base la garde chiffrée.
 - `CLE_ESPORT` (et `CLE_DISCORD`) : secrets du serveur (`~/.appdashboard/esport.env`), jamais dans le dépôt. Les sessions ne sont jamais écrites en
   base ; le jeton maître du Fondateur n'arrive jamais au serveur Esport (vérification par le relais).
+- `IA_API_CLE` (assistant IA des profils de jeu, facultatif) : seulement dans `esport.env`, gardée dans une fermeture
+  (jamais sérialisée), envoyée seulement dans l'en-tête `Authorization` vers l'adresse https configurée ; jamais
+  renvoyée par l'API (« présente / absente »), journalisée, exportée ni écrite en base. Les pages web lues pour l'IA
+  passent par la même protection anti-SSRF que les aperçus de liens, en https seulement, avec l'adresse IP vérifiée
+  à la connexion ; les réponses du modèle sont des données validées par schéma, jamais exécutées ni appliquées sans
+  validation du Fondateur. Détails : [profils-jeu.md](profils-jeu.md#sécurité).
 
 ## XSS, CSRF, en-têtes
 

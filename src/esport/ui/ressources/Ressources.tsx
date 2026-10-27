@@ -50,7 +50,8 @@ import type { PropsModule } from '../modules';
 import { ouvrirLienDiffere } from '../ouvrirLien';
 import { Lecteur } from '../review/Lecteur';
 import { NoteMarkdown } from '../review/Note';
-import { Filtre, useAssets } from '../strats/commun';
+import { Filtre, useAssetsTeam } from '../strats/commun';
+import { agentsActifs, cartesDuPool } from '../../jeux/profil';
 
 type Onglet = 'fil' | 'file' | 'miennes';
 type Vue = 'liste' | 'grille';
@@ -641,7 +642,8 @@ function FormulaireRessource({
   onFermer(): void;
   onEnregistree(r: DetailRessource, message?: string): void;
 }) {
-  const assets = useAssets();
+  // Maps et personnages du profil de jeu de la team.
+  const assets = useAssetsTeam(client, teamId);
   const [genre, setGenre] = useState<GenreRessource>(existante?.genre ?? 'lien');
   const [url, setUrl] = useState(existante?.url ?? '');
   const [apercu, setApercu] = useState<ApercuLien | null | undefined>(existante?.apercu ?? undefined);
@@ -656,8 +658,8 @@ function FormulaireRessource({
   const [fichier, setFichier] = useState<FichierNavigateur | undefined>();
   const envoi = useEnvoi();
   const { enCours, erreur, avis, agir } = useAgir();
-  const cartes = assets?.cartes ?? [];
-  const agents = assets?.agents ?? [];
+  const cartes = cartesDuPool(assets, existante?.carte?.cle);
+  const agents = agentsActifs(assets);
   const youtube = genre === 'youtube' || (genre === 'lien' && extraireYoutube(url));
   const genres = GENRES_RESSOURCE.filter(g => g !== 'fichier' || choixFichierDisponible || existante?.genre === 'fichier');
 

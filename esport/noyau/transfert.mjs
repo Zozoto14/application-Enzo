@@ -95,6 +95,15 @@ export const TABLES = [
   // Messages Discord bilingues (migration 0020) : réglage du fil français, anti-spam des alertes.
   ['discord_bilingue', 'team_id'],
   ['discord_alertes_fil', 'salon_id'],
+  // Profils de jeu et assistant IA (migration 0021) : profils, historique, travaux, propositions, usage, réglages,
+  // délégations. Jamais la clé d'API (elle reste dans esport.env).
+  ['jeux', 'cle'],
+  ['jeu_versions', 'jeu_cle, version'],
+  ['ia_travaux', 'id'],
+  ['ia_propositions', 'id'],
+  ['ia_appels', 'id'],
+  ['ia_reglages', 'cle'],
+  ['permissions_globales', 'compte_id, permission'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;
@@ -129,6 +138,11 @@ export async function importerBase(base, donnees, { tailleLot = 50 } = {}) {
     const lignes = Array.isArray(donnees.tables[table]) ? donnees.tables[table] : [];
     // Types de réunion globaux posés par la migration : remplacés par ceux de l'export (éventuellement modifiés).
     if (table === 'types_reunion' && lignes.length > 0) await base.executer('DELETE FROM types_reunion WHERE team_id IS NULL', []);
+    // Profils préconfigurés posés par la migration 0021 : remplacés par ceux de l'export (modifiés depuis).
+    if (table === 'jeux' && lignes.length > 0) {
+      await base.executer('DELETE FROM jeu_versions', []);
+      await base.executer('DELETE FROM jeux', []);
+    }
     bilan[table] = lignes.length;
     let lot = [];
     for (const ligne of lignes) {

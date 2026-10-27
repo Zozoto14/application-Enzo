@@ -22,6 +22,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [scouting.md](scouting.md) | Staff | Fiches adversaires, VODs |
 | [strats-playbook.md](strats-playbook.md) | Coach, Analyste, joueurs | Éditeur de strats, partage, playbook, licences Riot |
 | [ressources.md](ressources.md) | Tout le monde | Canal de ressources : liens, vidéos YouTube, fichiers, notes ; catégories, propositions, Discord |
+| [profils-jeu.md](profils-jeu.md) | Fondateur | Profils de jeu (formats, score, maps, personnages), assistant IA, mises à jour proposées |
 | [statistiques.md](statistiques.md) | Fondateur | Page Statistiques (réservée au Fondateur) : qui utilise l'app, pages les plus et les moins utilisées, ce qui est collecté |
 | [securite.md](securite.md) | Fondateur | Revue de sécurité, RGPD, limites |
 | [migration-serveur.md](migration-serveur.md) | Fondateur | Architecture du serveur, changer d'hébergeur, sauvegardes |
@@ -36,6 +37,7 @@ paysage, elles sont dans la **barre latérale** à gauche ; sur iPhone, dans la 
 | **Dashboard** (ouvre par défaut) | Résumé de toutes vos teams. En haut, quatre chiffres clés (teams, événements des 7 jours, résumés à rédiger ou tâches en retard, alertes), puis la semaine à venir (toutes teams) et les alertes (tâches en retard, résumé en attente depuis plus de 7 jours, présence faible, invités pas encore connectés). Puis une carte par team : membres, présence des 14 derniers jours, résumés en attente, tâches en retard, prochains événements, dernière activité. Touchez une carte pour ouvrir la team. |
 | **Teams** | Vos teams, création d'une team (Fondateur), notifications, votre profil Esport ; **Ressources** (Fondateur) : publier une même ressource dans plusieurs teams d'un coup. |
 | **Membres** | Tous les membres des teams dont vous voyez les membres (le Fondateur : aussi les comptes du hub qui ont l'Esport sans être dans aucune team, voir plus bas) : filtres (team, rôle, statut invité / actif / suspendu / sans team), recherche, création de compte (Fondateur), **demandes de compte** (badge « Demandes en attente » du Fondateur ; « Proposer un membre » avec la permission « Créer des membres »), ajout à une team, rôle, suspension, retrait, invitations. Voir [invitations.md](invitations.md). |
+| **Jeux** (Fondateur, et les comptes à qui il confie la gestion) | Profils de jeu : formats de match, système de score, modes, maps, personnages, roster, rôles ; assistant IA facultatif (brouillon à relire, mises à jour proposées à valider) ; Administration de l'IA. Voir [profils-jeu.md](profils-jeu.md). |
 | **Statistiques** (Fondateur seulement) | Statistiques d'usage internes : utilisateurs actifs, sessions, pages les plus et les moins utilisées, heures d'activité, appareils, fonctionnalités, erreurs. Absente pour tous les autres comptes (le serveur répond 404). Voir [statistiques.md](statistiques.md). |
 
 Chaque bloc du Dashboard n'apparaît que si le module est activé dans la team **et** que votre rôle
@@ -59,6 +61,7 @@ Esport
 │       ├── Équipe       Résumés · Objectifs et tâches · Suivi joueurs · Membres et rôles
 │       └── Réglages     Paramètres · Discord · Journal
 ├── Membres
+├── Jeux                 (profils de jeu et assistant IA, voir profils-jeu.md)
 └── Statistiques         (Fondateur seulement : statistiques d'usage, voir statistiques.md)
 ```
 
@@ -148,12 +151,16 @@ du serveur o2switch, [docs/o2switch.md](../o2switch.md)) : il applique les migra
 explicites, demandes de compte). La migration `0017_ressources.sql` ajoute le canal de ressources : activez le
 module **Ressources** dans les Paramètres des teams existantes ([ressources.md](ressources.md)). La migration
 `0018_statistiques_usage.sql` ajoute la page **Statistiques** ([statistiques.md](statistiques.md)) : rien à régler.
+La migration `0021_profils_jeu.sql` ajoute les **profils de jeu** (Valorant préconfiguré, teams existantes rattachées) ;
+l'assistant IA est facultatif ([profils-jeu.md](profils-jeu.md), [o2switch.md partie I](../o2switch.md)).
 
 ### Créer une team
 
 1. Hub › tuile **Esport** › choisissez votre pseudo (la première fois).
-2. **Créer une team** : nom, jeu et preset (« Team Valorant complète », « Minimal » ou « Personnalisé »), puis les
-   modules. Vous pourrez activer ou désactiver un module plus tard sans rien perdre (Paramètres de la team).
+2. **Créer une team** : nom, **jeu (obligatoire)** et preset (« Team Valorant complète », « Minimal » ou
+   « Personnalisé »), puis les modules. Le jeu est un **profil de jeu** configuré avant dans **Esport › Jeux** (formats,
+   score, maps, personnages… ; Valorant est préconfiguré) : voir [profils-jeu.md](profils-jeu.md). Vous pourrez activer
+   ou désactiver un module plus tard sans rien perdre (Paramètres de la team).
 
 ### Inviter un joueur
 

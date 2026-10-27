@@ -21,3 +21,5 @@ export const Discord = differe<PropsModule>(async () => (await import('./Discord
 export const Ressources = differe<PropsModule>(async () => (await import('./ressources/Ressources')).Ressources);
 // Page « Statistiques » (Fondateur) : chargée seulement quand il l'ouvre.
 export const Statistiques = differe<React.ComponentProps<typeof import('./Statistiques').Statistiques>>(async () => (await import('./Statistiques')).Statistiques);
+// Page « Jeux » (profils de jeu, assistant IA) : chargée seulement quand on l'ouvre.
+export const Jeux = differe<React.ComponentProps<typeof import('./jeux/Jeux').Jeux>>(async () => (await import('./jeux/Jeux')).Jeux);

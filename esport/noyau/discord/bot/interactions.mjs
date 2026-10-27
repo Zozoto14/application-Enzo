@@ -458,7 +458,8 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
         valeur: [[e.side ? T(l, `bot.side.${e.side === 'defense' ? 'defense' : 'attaque'}`) : '', TYPES_STRAT.includes(e.type) ? T(l, `bot.strat.${e.type}`) : e.type].filter(Boolean).join(' · '), e.description ? nettoyerVariable(e.description).slice(0, 180) : '', e.tags.length ? e.tags.map(t => `\`${nettoyerVariable(t)}\``).join(' ') : ''].filter(Boolean).join('\n'),
       })),
       couleur: couleurType('scrim'),
-      miniature: imageCarte(carte.cle),
+      // Vignette Riot : teams Valorant seulement.
+      miniature: ctx.team.jeu === 'valorant' ? imageCarte(carte.cle) : null,
       pied: T(l, 'embed.pied_page', { page: pg.page, pages: pg.pages }),
       lien,
     });

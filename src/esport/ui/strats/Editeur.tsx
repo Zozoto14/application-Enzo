@@ -47,7 +47,7 @@ export function Editeur({ theme, api, teamId, stratId, onRetour }: PropsEditeur)
               {e.note ? <NoteMarkdown theme={theme} source={e.note} /> : <Text style={attenue}>{tr('strats.editeur.pas_de_note')}</Text>}
             </Panneau>
           ))}
-          <MentionRiot theme={theme} />
+          <MentionRiot theme={theme} jeu={strat.jeu} />
         </>
       ) : null}
     </View>

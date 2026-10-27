@@ -38,6 +38,8 @@ const ROUTES_TEAM = [
   ['PATCH', '', null],
   ['DELETE', '', null],
   ['PUT', '/modules', null],
+  // Profil du jeu de la team (migration 0021) : tout membre, rien pour les autres.
+  ['GET', '/jeu', null],
   ['GET', '/roles', null],
   ['POST', '/roles', null],
   ['PATCH', `/roles/${UUID}`, null],
@@ -381,8 +383,8 @@ test('limites de débit : ouverture de session (par IP), profil, création de te
   assert.equal((await b.appel('/moi', { methode: 'PUT', jeton: s, corps: { pseudo: 'RayZ' } })).statut, 429);
 
   // Création de team : par compte.
-  for (let i = 0; i < LIMITES.team.max; i++) assert.equal((await b.appel('/teams', { methode: 'POST', jeton: s, corps: { nom: `Team ${i}`, preset: 'minimal' } })).statut, 200);
-  const trop = await b.appel('/teams', { methode: 'POST', jeton: s, corps: { nom: 'Team de trop', preset: 'minimal' } });
+  for (let i = 0; i < LIMITES.team.max; i++) assert.equal((await b.appel('/teams', { methode: 'POST', jeton: s, corps: { nom: `Team ${i}`, jeu: 'valorant', preset: 'minimal' } })).statut, 200);
+  const trop = await b.appel('/teams', { methode: 'POST', jeton: s, corps: { nom: 'Team de trop', jeu: 'valorant', preset: 'minimal' } });
   assert.equal(trop.statut, 429);
 
   // Invitations : par compte.

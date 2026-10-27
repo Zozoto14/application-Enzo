@@ -4,12 +4,15 @@
  * d'une strat à ouvrir du Playbook vers l'éditeur.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, Text, View } from 'react-native';
 import { police, teinteTransparente, type ThemeHub } from '../../../hub/themes';
 import { MENTION_RIOT, assetsRepli, chargerAssets, initiales, type Assets, type FetchAssets, type StockageAssets } from '../../strats/assets';
 import { styles } from '../commun';
 import { tr } from '../../i18n';
+import type { ClientEsport, DetailTeam } from '../../client';
+import type { ProfilJeu } from '../../jeux/api';
+import { assetsDepuisProfil, estValorant, profilDeTeam } from '../../jeux/profil';
 
 // ------------------------------------------------------------------ Assets (une fois par session)
 
@@ -36,9 +39,11 @@ export function fournirAssets(a: Assets | undefined): void {
   assetsEnCours = a ? Promise.resolve(a) : undefined;
 }
 
-export function useAssets(): Assets | undefined {
+/** Assets Riot (Valorant). `actif` faux : rien n'est chargé (jeu d'une team qui n'est pas Valorant). */
+export function useAssets(actif = true): Assets | undefined {
   const [assets, setAssets] = useState<Assets | undefined>();
   useEffect(() => {
+    if (!actif) return undefined;
     let vivant = true;
     obtenirAssets().then(a => {
       if (vivant) setAssets(a);
@@ -46,8 +51,44 @@ export function useAssets(): Assets | undefined {
     return () => {
       vivant = false;
     };
-  }, []);
+  }, [actif]);
   return assets;
+}
+
+/** Profil du jeu de la team (undefined : en cours ; null : le serveur ne le donne pas). */
+export function useProfilJeuTeam(client: ClientEsport, teamId: string): ProfilJeu | null | undefined {
+  const [profil, setProfil] = useState<ProfilJeu | null | undefined>();
+  useEffect(() => {
+    let vivant = true;
+    setProfil(undefined);
+    profilDeTeam(client, teamId).then(p => {
+      if (vivant) setProfil(p);
+    });
+    return () => {
+      vivant = false;
+    };
+  }, [client, teamId]);
+  return profil;
+}
+
+/**
+ * Maps et personnages des modules de la team (Strats, Playbook, Ressources) : ceux du PROFIL DE JEU de la
+ * team, avec les images Riot pour Valorant. Serveur sans profils de jeu : les assets Riot comme avant.
+ */
+export function useAssetsTeam(client: ClientEsport, team: DetailTeam['team'] | string): Assets | undefined {
+  const teamId = typeof team === 'string' ? team : team.id;
+  const jeuTeam = typeof team === 'string' ? undefined : team.jeu;
+  const profil = useProfilJeuTeam(client, teamId);
+  // Sans profil lisible (serveur ancien, réseau) : les assets Riot comme avant, sauf pour une team d'un autre jeu.
+  const sansProfilRiot = jeuTeam === undefined || jeuTeam === 'valorant' || jeuTeam === 'autre';
+  const valorant = profil ? estValorant(profil) : profil === null ? sansProfilRiot : jeuTeam === 'valorant';
+  const riot = useAssets(valorant);
+  return useMemo(() => {
+    if (profil === undefined) return undefined;
+    if (profil === null) return sansProfilRiot ? riot : { jeu: jeuTeam ?? 'autre', source: 'profil', cartes: [], agents: [], majLe: 0 };
+    if (valorant && !riot) return undefined;
+    return assetsDepuisProfil(profil, riot);
+  }, [profil, riot, valorant, sansProfilRiot, jeuTeam]);
 }
 
 // ------------------------------------------------------------------ Navigation Playbook → éditeur
@@ -142,7 +183,9 @@ export function Etiquette({ theme, texte, couleur }: { theme: ThemeHub; texte: s
 }
 
 /** Mention obligatoire de la politique Riot « Legal Jibber Jabber ». */
-export function MentionRiot({ theme }: { theme: ThemeHub }) {
+/** Mention imposée par la politique Riot : seulement quand des assets Riot sont affichés (Valorant). */
+export function MentionRiot({ theme, jeu }: { theme: ThemeHub; jeu?: string }) {
+  if (jeu !== undefined && jeu !== 'valorant') return null;
   return (
     <Text testID="esport-mention-riot" style={{ color: theme.attenue, fontSize: 11, ...police(theme.policeTexte) }}>
       {MENTION_RIOT}

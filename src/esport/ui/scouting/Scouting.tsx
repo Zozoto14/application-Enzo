@@ -10,7 +10,7 @@
  * dans la barre et reçoit 403 en appel direct).
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { Image, Linking, Pressable, Text, View } from 'react-native';
 import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
@@ -22,6 +22,37 @@ import { BoutonConfirme, Choix, Retours, TitreSection, styles, useAgir, Intertit
 import { NoteMarkdown } from '../review/Note';
 import type { PropsModule } from '../modules';
 import { tr, trn } from '../../i18n';
+import { useProfilJeuTeam } from '../strats/commun';
+
+/** Maps, personnages et rôles du PROFIL DE JEU de la team : suggestions des formulaires (la saisie reste libre). */
+interface SuggestionsJeu {
+  cartes: string[];
+  personnages: string[];
+  roles: string[];
+}
+const SUGGESTIONS_VIDES: SuggestionsJeu = { cartes: [], personnages: [], roles: [] };
+const ContexteSuggestions = createContext<SuggestionsJeu>(SUGGESTIONS_VIDES);
+
+/** Pastilles de suggestions : un appui remplit (ou complète) le champ. */
+function Suggestions({ theme, noms, onChoisir, testID }: { theme: ThemeHub; noms: string[]; onChoisir(nom: string): void; testID: string }) {
+  if (noms.length === 0) return null;
+  return (
+    <View style={[styles.ligne, { gap: 4 }]} accessibilityLabel={tr('scouting.suggestions_profil')} testID={testID}>
+      {noms.slice(0, 40).map(n => (
+        <Pressable
+          key={n}
+          accessibilityRole="button"
+          accessibilityLabel={tr('scouting.suggestion', { nom: n })}
+          onPress={() => onChoisir(n)}
+          hitSlop={6}
+          style={{ minHeight: 32, justifyContent: 'center', paddingHorizontal: 8, borderRadius: 8, borderWidth: 1, borderColor: theme.ligne, backgroundColor: theme.surface }}
+          testID={`${testID}-${n}`}>
+          <Text style={{ color: theme.texte, fontSize: 12, ...police(theme.policeTexte) }}>{n}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
 
 const listeTexte = (t: string): string[] => [...new Set(t.split(/[,;]/).map(x => x.trim()).filter(Boolean))];
 const compos = (t: string): string[][] => t.split('\n').map(listeTexte).filter(l => l.length > 0);
@@ -31,8 +62,21 @@ export function Scouting({ theme, client, detail, large, onAller }: PropsModule)
   const api = useMemo(() => apiScouting(client, teamId), [client, teamId]);
   const [ouvert, setOuvert] = useState<string | undefined>();
   const [message, setMessage] = useState<string | undefined>();
+  const profil = useProfilJeuTeam(client, teamId);
+  const suggestions = useMemo<SuggestionsJeu>(
+    () =>
+      profil
+        ? {
+            cartes: profil.donnees.cartes.filter(c => c.actif).map(c => c.nom),
+            personnages: profil.donnees.personnages.filter(p => p.actif).map(p => p.nom),
+            roles: [...new Set([...profil.donnees.rolesJoueurs.map(r => r.nom), ...profil.donnees.classes.map(c => c.nom)])],
+          }
+        : SUGGESTIONS_VIDES,
+    [profil],
+  );
   if (ouvert) {
     return (
+      <ContexteSuggestions.Provider value={suggestions}>
       <FicheAdversaire
         key={ouvert}
         theme={theme}
@@ -45,6 +89,7 @@ export function Scouting({ theme, client, detail, large, onAller }: PropsModule)
         }}
         onReview={reviewId => onAller('module:video_review', undefined, reviewId)}
       />
+      </ContexteSuggestions.Provider>
     );
   }
   return <ListeAdversaires theme={theme} api={api} message={message} large={large} onOuvrir={setOuvert} />;
@@ -300,12 +345,15 @@ function FormulaireJoueur({ theme, initial, onEnregistrer, onAnnuler }: { theme:
   const [role, setRole] = useState(initial?.role ?? '');
   const [agents, setAgents] = useState(initial?.agents.join(', ') ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
+  const suggestions = useContext(ContexteSuggestions);
   return (
     <View style={{ gap: 8 }} testID="esport-joueur-adverse-form">
       <Champ theme={theme} libelle={tr('scouting.scouting.pseudo')} valeur={pseudo} onChanger={setPseudo} testID="esport-joueur-adverse-pseudo" maxLength={40} />
       <Champ theme={theme} libelle={tr('scouting.scouting.riot_id_2')} valeur={riotId} onChanger={setRiotId} testID="esport-joueur-adverse-riot" placeholder="Pseudo#TAG" maxLength={40} />
-      <Champ theme={theme} libelle={tr('membresGlobal.role')} valeur={role} onChanger={setRole} testID="esport-joueur-adverse-role" placeholder={tr('scouting.scouting.duelliste_controleur')} maxLength={30} />
-      <Champ theme={theme} libelle={tr('scouting.scouting.agents_joues_separes_par')} valeur={agents} onChanger={setAgents} testID="esport-joueur-adverse-agents" placeholder="Jett, Raze" />
+      <Champ theme={theme} libelle={tr('membresGlobal.role')} valeur={role} onChanger={setRole} testID="esport-joueur-adverse-role" placeholder={suggestions.roles.length ? suggestions.roles.slice(0, 2).join(', ') : tr('scouting.scouting.duelliste_controleur')} maxLength={30} />
+      <Suggestions theme={theme} noms={suggestions.roles} onChoisir={setRole} testID="esport-joueur-adverse-role-suggestion" />
+      <Champ theme={theme} libelle={tr('scouting.scouting.agents_joues_separes_par')} valeur={agents} onChanger={setAgents} testID="esport-joueur-adverse-agents" placeholder={suggestions.personnages.length ? suggestions.personnages.slice(0, 2).join(', ') : 'Jett, Raze'} />
+      <Suggestions theme={theme} noms={suggestions.personnages} onChoisir={n => setAgents(a => listeTexte(`${a},${n}`).join(', '))} testID="esport-joueur-adverse-agent-suggestion" />
       <ChampNote theme={theme} libelle={tr('scouting.scouting.notes')} valeur={notes} onChanger={setNotes} testID="esport-joueur-adverse-notes" maxLength={1000} />
       <View style={styles.ligne}>
         <BoutonHub theme={theme} titre={tr('discord.enregistrer')} variante="plein" desactive={pseudo.trim() === ''} onPress={() => onEnregistrer({ pseudo, riotId, role, agents: listeTexte(agents), notes })} testID="esport-joueur-adverse-enregistrer" />
@@ -366,6 +414,7 @@ function FormulaireTendance({ theme, initial, onEnregistrer, onAnnuler }: { them
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [lignes, setLignes] = useState(initial?.compos.map(c => c.join(', ')).join('\n') ?? '');
   const [erreur, setErreur] = useState<string | undefined>();
+  const suggestions = useContext(ContexteSuggestions);
   const valider = () => {
     let t: number | null = null;
     if (taux.trim() !== '') {
@@ -377,7 +426,8 @@ function FormulaireTendance({ theme, initial, onEnregistrer, onAnnuler }: { them
   };
   return (
     <View style={{ gap: 8 }} testID="esport-tendance-form">
-      <Champ theme={theme} libelle={tr('scouting.scouting.map')} valeur={map} onChanger={setMap} testID="esport-tendance-map" placeholder={tr('scouting.scouting.ascent')} maxLength={30} />
+      <Champ theme={theme} libelle={tr('scouting.scouting.map')} valeur={map} onChanger={setMap} testID="esport-tendance-map" placeholder={suggestions.cartes[0] ?? tr('scouting.scouting.ascent')} maxLength={30} />
+      <Suggestions theme={theme} noms={suggestions.cartes} onChoisir={setMap} testID="esport-tendance-map-suggestion" />
       <Choix<SideTendance> theme={theme} libelle={tr('scouting.scouting.side')} valeur={side} options={sidesTendance().map(([id, nom]) => ({ id, nom }))} onChoisir={setSide} testID="esport-tendance-side" />
       <Champ theme={theme} libelle={tr('scouting.scouting.taux_de_victoire_en')} valeur={taux} onChanger={setTaux} testID="esport-tendance-taux" clavier="number-pad" />
       <ChampNote theme={theme} libelle={tr('scouting.scouting.tendances_rush_defauts_lineups')} valeur={notes} onChanger={setNotes} testID="esport-tendance-notes" maxLength={2000} />

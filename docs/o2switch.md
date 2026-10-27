@@ -191,6 +191,10 @@ MAIL_FROM=AppDashboard <noreply@appdashboard.fr>
 # Transcription des réunions sur le serveur (facultatif, partie H) :
 # TRANSCRIPTION_MODELE=base
 # TRANSCRIPTION_THREADS=1
+# Assistant IA des profils de jeu (facultatif, partie I) : sans ces lignes, tout se fait à la main.
+# IA_API_URL=https://api.mistral.ai/v1
+# IA_API_CLE=VOTRE_CLE_D_API
+# IA_MODELE=mistral-small-latest
 ```
 
 Enregistrez : **Ctrl+O**, **Entrée**, puis **Ctrl+X**. Ensuite :
@@ -603,6 +607,65 @@ curl -s https://esport.appdashboard.fr/sante  # "transcriptionServeur":true
 
 ---
 
+## Partie I — Assistant IA des profils de jeu (facultatif)
+
+La page **Esport › Jeux** (profils de jeu : formats, score, maps, personnages… voir
+[docs/esport/profils-jeu.md](esport/profils-jeu.md)) marche sans IA. Avec une clé d'API d'un fournisseur d'IA (pas
+Claude : celui que vous choisissez), le bouton **Préparer avec l'IA** prépare un brouillon de profil, et une
+vérification hebdomadaire propose des mises à jour à valider. Tout fournisseur qui offre une API « chat
+completions » compatible OpenAI convient : OpenAI, Mistral, Google Gemini (adresse compatible OpenAI), DeepSeek,
+Groq…
+
+### I1. Ajouter la clé (5 minutes)
+
+1. Créez une clé d'API chez le fournisseur choisi (son espace « API keys ») et notez le nom d'un modèle.
+2. Dans le **Terminal** cPanel :
+
+   ```bash
+   nano ~/.appdashboard/esport.env
+   ```
+
+3. Ajoutez à la fin ces trois lignes (exemple Mistral ; les valeurs ci-dessous sont **factices**, remplacez-les) :
+
+   ```ini
+   # Assistant IA des profils de jeu (docs/esport/profils-jeu.md) : jamais dans le dépôt.
+   IA_API_URL=https://api.mistral.ai/v1
+   IA_API_CLE=cle-factice-a-remplacer-0123456789
+   IA_MODELE=mistral-small-latest
+   ```
+
+   Autres fournisseurs (même principe, adresse de base de leur API) :
+
+   | Fournisseur | `IA_API_URL` | Exemple de `IA_MODELE` |
+   | --- | --- | --- |
+   | OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
+   | Mistral | `https://api.mistral.ai/v1` | `mistral-small-latest` |
+   | Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.0-flash` |
+   | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
+   | Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` |
+
+   Lignes facultatives :
+
+   ```ini
+   # openai, mistral, gemini, deepseek, groq ou autre (sinon déduit de l'adresse) :
+   # IA_FOURNISSEUR=mistral
+   # serveur (défaut : le serveur lit lui-même quelques pages web), modele (le modèle sait chercher), aucune :
+   # IA_RECHERCHE=serveur
+   ```
+
+4. Enregistrez (**Ctrl+O**, **Entrée**, **Ctrl+X**), puis redémarrez l'app Esport : cPanel › **Setup Node.js App** ›
+   l'app Esport › **Restart** (ou `touch ~/application-enzo/esport/tmp/restart.txt`). Le cron relit le fichier tout
+   seul à son passage suivant.
+
+### I2. Vérifier
+
+Dans l'app : **Esport › Jeux › Administration IA** : fournisseur et modèle détectés, « Clé d'API : présente (jamais
+affichée) », puis **Tester la connexion**. Les plafonds mensuels (30 appels et 8 vérifications par défaut) se règlent
+au même endroit, avec le compteur du mois. La clé n'est jamais renvoyée par le serveur, ni écrite dans un journal, un
+export ou la base.
+
+---
+
 ## Sauvegardes
 
 - **Base** : cPanel › **Sauvegarde** (« Backup ») sauvegarde aussi les bases PostgreSQL ; o2switch garde en plus
@@ -643,6 +706,10 @@ curl -s https://esport.appdashboard.fr/sante  # "transcriptionServeur":true
 | Installation : « glibc trop ancienne » ou erreur au chargement d'ONNX Runtime | Le serveur est trop ancien pour les binaires tout faits : gardez la transcription dans le navigateur (`TRANSCRIPTION_MODE=navigateur`) et signalez-le au support o2switch (ils migrent les comptes vers des serveurs récents). |
 | Installation : « Hugging Face indisponible » | Rien à faire : le script prend l'archive GitHub à la place (plus grosse, environ 200 Mo pour « base »). Si GitHub échoue aussi : réessayez plus tard. |
 | Transcription : « ffmpeg n'a pas pu lire l'enregistrement » | Fichier abîmé ou format exotique : déposez un MP4, M4A, MP3 ou WAV. |
+| Jeux : « Assistant IA non configuré (clé d'API absente) » | Les lignes `IA_API_URL`, `IA_API_CLE`, `IA_MODELE` de `esport.env` (partie I), puis **Restart** de l'app Esport. **Jeux › Administration IA** dit ce qui manque. |
+| Jeux : « Le service d'IA refuse la clé d'API » | Clé fausse ou révoquée chez le fournisseur : recopiez-la dans `IA_API_CLE`, **Restart**. |
+| Jeux : « Modèle ou adresse inconnus du service d'IA » | `IA_MODELE` doit être un modèle de votre fournisseur ; `IA_API_URL` son adresse de base (tableau de la partie I). |
+| Jeux : « Plafond mensuel … atteint » | **Jeux › Administration IA** › Plafonds mensuels : montez-les, ou attendez le mois suivant. |
 | « Trop de demandes en peu de temps » pour tout le monde | Les limites de débit se basent sur l'adresse IP vue par le serveur (dernière entrée de `X-Forwarded-For` posée par le frontal d'o2switch) : un intermédiaire commun (VPN, réseau d'entreprise) peut faire partager un compteur à plusieurs appareils. Patientez quelques minutes. |
 
 Journaux utiles : `~/logs/esport-deploy.log` (déploiements), `~/logs/esport-cron.log` (tâches planifiées),

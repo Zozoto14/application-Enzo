@@ -15,7 +15,8 @@
  *     leurs capacités, en français) ;
  *  4. cache local périmé ;
  *  5. repli générique intégré (noms seulement : formes et initiales).
- * Le champ `jeu` garde la structure prête pour d'autres jeux.
+ * Autres jeux : les modules lisent le profil du jeu de la team (src/esport/jeux/profil.ts,
+ * `assetsDepuisProfil`) ; pour Valorant, les maps et agents du profil reprennent les images Riot d'ici.
  */
 
 import { langueCourante, tr } from '../i18n';
@@ -42,6 +43,8 @@ export interface AgentAsset {
   role: string | null;
   icone: string | null;
   capacites: CapaciteAsset[];
+  /** Profil de jeu : personnage encore jouable (absent : oui). */
+  actif?: boolean;
 }
 export interface CarteAsset {
   cle: string;
@@ -50,10 +53,13 @@ export interface CarteAsset {
   minimap: string | null;
   /** Vignette (listes). */
   vignette: string | null;
+  /** Profil de jeu : map dans le pool compétitif (absent : oui). */
+  actif?: boolean;
 }
 export interface Assets {
-  jeu: 'valorant';
-  source: 'local' | 'cache' | 'api' | 'cache-perime' | 'repli';
+  /** « valorant » (assets Riot), ou la clé du profil d'un autre jeu (src/esport/jeux/profil.ts). */
+  jeu: string;
+  source: 'local' | 'cache' | 'api' | 'cache-perime' | 'repli' | 'profil';
   cartes: CarteAsset[];
   agents: AgentAsset[];
   majLe: number;

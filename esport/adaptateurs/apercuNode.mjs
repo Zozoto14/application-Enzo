@@ -8,7 +8,7 @@
  * délai, lecture bornée, HTML seulement ; rend `{ statut, type, location, corps }`.
  */
 
-import { lookup as lookupDns } from 'node:dns';
+import { lookup as lookupDns, promises as dnsPromesses } from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
 import { ipInterdite } from '../noyau/ressources/apercu.mjs';
@@ -30,8 +30,18 @@ export function lookupPublic(hote, options, rappel) {
   });
 }
 
+/** Résolution DNS (toutes les adresses) : vérification préalable, AVANT la connexion épinglée par `lookupPublic`. */
+export async function resoudreNode(hote) {
+  return (await dnsPromesses.lookup(hote, { all: true })).map(a => a.address);
+}
+
+/**
+ * Options par appel : `delai`, `max` (octets lus), `types` (types de contenu acceptés, HTML par défaut ;
+ * l'assistant IA des profils de jeu accepte aussi le texte brut et le JSON), `agent` (User-Agent).
+ * Jamais de cookie ni d'identifiant envoyé ; https ou http selon l'adresse (l'appelant choisit).
+ */
 export function telechargeurNode({ lookup = lookupPublic } = {}) {
-  return (adresse, { delai = 4000, max = 512 * 1024 } = {}) =>
+  return (adresse, { delai = 4000, max = 512 * 1024, types = /html|xml/i, agent = 'AppDashboardEsport/1.0 (apercu de lien)' } = {}) =>
     new Promise((ok, ko) => {
       const url = new URL(adresse);
       const module = url.protocol === 'https:' ? https : http;
@@ -47,13 +57,13 @@ export function telechargeurNode({ lookup = lookupPublic } = {}) {
         {
           method: 'GET',
           lookup,
-          headers: { 'User-Agent': 'AppDashboardEsport/1.0 (apercu de lien)', Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1', 'Accept-Encoding': 'identity' },
+          headers: { 'User-Agent': agent, Accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1', 'Accept-Encoding': 'identity' },
         },
         res => {
           const type = String(res.headers['content-type'] ?? '');
           const location = res.headers.location ?? null;
           const statut = res.statusCode ?? 0;
-          if (statut < 200 || statut >= 300 || !/html|xml/i.test(type)) {
+          if (statut < 200 || statut >= 300 || !types.test(type)) {
             res.resume();
             terminer(ok, { statut, type, location, corps: '' });
             req.destroy();

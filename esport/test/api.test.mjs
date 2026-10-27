@@ -92,7 +92,9 @@ test('création de team : réservée au Fondateur par défaut ; « tous » l’o
   assert.equal((await b.appel('/teams', { methode: 'POST', jeton: lea, corps: { nom: 'Team Léa' } })).statut, 403);
   b = await banc({ creationTeams: 'tous' });
   const lea2 = await b.session('lea12345', 'Léa');
-  const r = await b.appel('/teams', { methode: 'POST', jeton: lea2, corps: { nom: 'Team Léa', preset: 'minimal' } });
+  // Jeu obligatoire (profils de jeu, migration 0021).
+  assert.equal((await b.appel('/teams', { methode: 'POST', jeton: lea2, corps: { nom: 'Team Léa', preset: 'minimal' } })).corps.code, 'jeu-requis');
+  const r = await b.appel('/teams', { methode: 'POST', jeton: lea2, corps: { nom: 'Team Léa', jeu: 'valorant', preset: 'minimal' } });
   assert.equal(r.statut, 200);
   assert.deepEqual(r.corps.modules.filter(m => m.active).map(m => m.cle).sort(), ['activity_log', 'availability', 'planning']);
   assert.equal(r.corps.moi.role.cle, 'proprietaire');
