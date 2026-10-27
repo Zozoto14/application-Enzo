@@ -347,6 +347,16 @@ export function creerGestionnaireIaLocale({
       });
       if (!enfant.pid) throw new Error('lancement');
       majVerrou({ pid: enfant.pid, port, demarreLe: iso(debut) });
+      // Battement dès le lancement : un chargement long (jusqu'à demarrageMs) ne doit pas passer pour un orphelin.
+      clearInterval(battement);
+      battement = setInterval(() => {
+        try {
+          majVerrou({});
+        } catch {
+          // Disque plein… le prochain battement réessaiera.
+        }
+      }, BATTEMENT_MS);
+      battement.unref?.();
       const limiteSante = Math.min(limite, maintenant() + demarrageMs);
       for (;;) {
         if (fini.termine) throw new Error(`le moteur s’est arrêté (code ${fini.code})`);
@@ -357,19 +367,11 @@ export function creerGestionnaireIaLocale({
       serveur = { enfant, pid: enfant.pid, port, cle, depuis: maintenant() };
       enMarche.add(moi);
       surveillerSortie();
-      clearInterval(battement);
-      battement = setInterval(() => {
-        try {
-          majVerrou({});
-        } catch {
-          // Disque plein… le prochain battement réessaiera.
-        }
-      }, BATTEMENT_MS);
-      battement.unref?.();
       dernierDemarrageMs = maintenant() - debut;
       derniereErreur = null;
       log.log?.(`[esport] IA locale démarrée en ${Math.round(dernierDemarrageMs / 1000)} s (127.0.0.1, ${threads} fils).`);
     } catch (e) {
+      clearInterval(battement);
       if (enfant?.pid) {
         try {
           process.kill(enfant.pid, 'SIGKILL');

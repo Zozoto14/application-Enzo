@@ -278,7 +278,27 @@ async function moteurCompile(c, { threads, avx2 }) {
   const binaire = join(dossier, 'llama-server');
   copyFileSync(join(build, 'bin', 'llama-server'), binaire);
   chmodSync(binaire, 0o755);
+  // Le GCC de conda-forge inscrit toujours « -rpath <outils>/env/lib » (ses specs) : ce dossier est effacé
+  // ensuite ; le chemin est remplacé sur place par $ORIGIN (comme « chrpath -r »), le binaire n'en a pas besoin.
+  remplacerRpath(binaire, join(envOutils, 'lib'));
   return binaire;
+}
+
+/**
+ * Remplace, dans un binaire ELF, la chaîne exacte `ancien` (chemin de bibliothèques, terminée par un octet nul)
+ * par « $ORIGIN » complété d'octets nuls (même longueur : rien d'autre ne bouge). Une seule occurrence attendue.
+ */
+export function remplacerRpath(binaire, ancien) {
+  const octets = readFileSync(binaire);
+  const motif = Buffer.from(`${ancien}\0`);
+  const i = octets.indexOf(motif);
+  if (i < 0) return false;
+  if (octets.indexOf(motif, i + 1) >= 0) arreter('Chemin de bibliothèques présent plusieurs fois dans le moteur compilé.');
+  const nouveau = Buffer.alloc(motif.length, 0);
+  nouveau.write('$ORIGIN');
+  nouveau.copy(octets, i);
+  writeFileSync(binaire, octets, { mode: 0o755 });
+  return true;
 }
 
 // ------------------------------------------------------------------ Modèle (Hugging Face)
