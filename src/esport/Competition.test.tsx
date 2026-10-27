@@ -15,7 +15,7 @@ import { apercuSerie, lireStatsTexte, systemeDe } from './competition/score';
 import { definirLangue } from './i18n';
 import { phraseJournal, phraseNotification } from './libelles';
 import { fauxPlanning } from './planning/faux';
-import { PageTeam, sectionsTeam } from './ui/PageTeam';
+import { groupeDe, PageTeam, sectionsTeam } from './ui/PageTeam';
 
 const theme = themeHub('nuit');
 const MODULES = ['activity_log', 'planning', 'scouting', 'tournois', 'resultats'];
@@ -229,6 +229,18 @@ describe('compétition (tournois, résultats)', () => {
     expect(competition(STAFF, ['planning', 'resultats'])).toEqual(['module:resultats']);
     expect(competition(JOUEUR, ['planning'])).toEqual([]);
     expect(sectionsTeam(detail(JOUEUR)).map(g => g.id)).toEqual(['accueil', 'agenda', 'competition', 'equipe', 'reglages']);
+  });
+
+  it('petite largeur : plus de section « Compétition », Tournois et Résultats rangés dans « Agenda » (modules et permissions respectés)', () => {
+    const agenda = (p: string[], modules?: string[]) => sectionsTeam(detail(p, modules), false).find(g => g.id === 'agenda')?.entrees.map(e => e.id) ?? [];
+    expect(sectionsTeam(detail(JOUEUR), false).map(g => g.id)).toEqual(['accueil', 'agenda', 'equipe', 'reglages']);
+    expect(agenda(JOUEUR, ['planning', 'tournois', 'resultats'])).toEqual(['module:planning', 'module:tournois', 'module:resultats']);
+    expect(agenda(STAFF, ['planning', 'resultats'])).toEqual(['module:planning', 'module:resultats']);
+    expect(sectionsTeam(detail(JOUEUR, ['tournois']), false).map(g => g.id)).toEqual(['accueil', 'agenda', 'equipe', 'reglages']);
+    expect(groupeDe('module:tournois', false)).toBe('agenda');
+    expect(groupeDe('module:resultats', false)).toBe('agenda');
+    expect(groupeDe('module:tournois')).toBe('competition');
+    expect(sectionsTeam(detail(JOUEUR)).map(g => g.id)).toContain('competition');
   });
 
   it('tournois (staff) : liste, création selon le profil du jeu, fiche, roster, match ajouté au planning', async () => {

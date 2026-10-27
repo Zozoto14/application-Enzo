@@ -4,7 +4,8 @@
  *  - Accueil ;
  *  - Agenda : Planning, Disponibilités, Présence ;
  *  - Jeu : Strats, Playbook, Ressources, Review vidéo, Scouting ;
- *  - Compétition : Tournois, Résultats ;
+ *  - Compétition : Tournois, Résultats (sur petite largeur : rangés dans Agenda,
+ *    la barre basse reste à cinq sections) ;
  *  - Équipe : Résumés, Objectifs et tâches, Suivi joueurs, Membres et rôles ;
  *  - Réglages : Paramètres, Discord, Journal.
  *
@@ -107,8 +108,12 @@ const COURTS: Record<string, string> = {
     },
 };
 
-/** Groupe d'une section (une section inconnue va dans « Équipe »). */
-export function groupeDe(section: SectionTeam): GroupeTeam {
+/** Sections de la section « Compétition » repliées dans « Agenda » sur petite largeur (la barre basse ne porte que cinq sections). */
+const COMPETITION_MOBILE: readonly SectionTeam[] = ['module:tournois', 'module:resultats'];
+
+/** Groupe d'une section (une section inconnue va dans « Équipe »). Sur petite largeur (`large` faux), Tournois et Résultats sont dans « Agenda ». */
+export function groupeDe(section: SectionTeam, large = true): GroupeTeam {
+  if (!large && COMPETITION_MOBILE.includes(section)) return 'agenda';
   return GROUPES_TEAM.find(g => g.sections.includes(section))?.id ?? 'equipe';
 }
 
@@ -138,18 +143,19 @@ export interface SectionNav {
 }
 
 /** Sections visibles de la team (non vides), avec leurs sous-onglets dans l'ordre. */
-export function sectionsTeam(detail: DetailTeam): SectionNav[] {
+export function sectionsTeam(detail: DetailTeam, large = true): SectionNav[] {
   const entrees = entreesBarre(detail);
-  return GROUPES_TEAM.map(g => ({
+  return GROUPES_TEAM.filter(g => large || g.id !== 'competition').map(g => ({
     id: g.id,
     libelle: g.libelle,
     glyphe: g.glyphe,
     description: g.description,
     entrees: entrees
-      .filter(e => groupeDe(e.id) === g.id)
+      .filter(e => groupeDe(e.id, large) === g.id)
       .sort((a, b) => {
-        const ia = g.sections.indexOf(a.id);
-        const ib = g.sections.indexOf(b.id);
+        const ordre = large || g.id !== 'agenda' ? g.sections : [...g.sections, ...COMPETITION_MOBILE];
+        const ia = ordre.indexOf(a.id);
+        const ib = ordre.indexOf(b.id);
         return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
       })
       .map(e => ({ ...e, court: COURTS[e.id] ?? e.libelle })),
@@ -198,8 +204,8 @@ export function PageTeam({
   const aller = useCallback((s: SectionTeam, b?: Partial<SaisieEvenement>, reviewId?: string) => {
     setBrouillon(x => ({ n: x.n + 1, b, reviewId }));
     setSection(s);
-    setDerniers(d => ({ ...d, [groupeDe(s)]: s }));
-  }, []);
+    setDerniers(d => ({ ...d, [groupeDe(s, large)]: s }));
+  }, [large]);
   const { erreur, agir } = useAgir();
 
   const recharger = useCallback(async () => setDetail(await client.team(teamId)), [client, teamId]);
@@ -212,7 +218,7 @@ export function PageTeam({
       .then(() => client.teams())
       .then(setTeams, () => undefined);
   }, [client, onChangerTeam]);
-  const sections = useMemo(() => (detail ? sectionsTeam(detail) : []), [detail]);
+  const sections = useMemo(() => (detail ? sectionsTeam(detail, large) : []), [detail, large]);
   const naviguer = (o: OngletEsport) => (onNaviguer ? onNaviguer(o) : onQuitter());
   // Statistiques d'usage : section ouverte (« team.agenda.planning »…), une fois la team chargée.
   const sectionVue: SectionTeam = sections.some(g => g.entrees.some(e => e.id === section)) ? section : 'accueil';
