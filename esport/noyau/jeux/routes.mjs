@@ -12,9 +12,9 @@
  *   POST   /jeux/:cle/verifier                    vérification manuelle (IA)
  *   GET    /jeux/propositions                     différences proposées (?jeu=&statut=)
  *   POST   /jeux/:cle/propositions/decider        { acceptees, refusees, corrections }
- *   GET    /jeux/ia                               état de l'IA (fournisseur, modèle, clé présente/absente, quota)
- *   PUT    /jeux/ia/reglages                      plafonds mensuels, automatique (Fondateur)
- *   POST   /jeux/ia/test                          test de connexion (Fondateur)
+ *   GET    /jeux/ia                               état de l'IA (mode, IA locale, fournisseur, modèle, clé présente/absente, quota)
+ *   PUT    /jeux/ia/reglages                      mode (local, api, local-api), plafonds mensuels, automatique (Fondateur)
+ *   POST   /jeux/ia/test                          test de connexion { cible?: local | api } (Fondateur)
  *   GET|PUT /jeux/ia/gestionnaires                délégation de jeux.gerer (Fondateur)
  *   POST   /jeux/ia/brouillons                    « Préparer avec l'IA »
  *   GET    /jeux/ia/travaux                       brouillons et vérifications (?genre=&jeu=)
@@ -42,8 +42,9 @@ export async function routesJeux({ jeux, acteur, chemin, methode: m, url, lireCo
     if (p.length === 1 && m === 'GET') return jeux.etatIa(acteur);
     if (p[1] === 'reglages' && p.length === 2 && m === 'PUT') return jeux.reglerIa(acteur, await lireCorps());
     if (p[1] === 'test' && p.length === 2 && m === 'POST') {
+      const corps = await lireCorps();
       await limite('ia', acteur.compte);
-      return jeux.testerIa(acteur);
+      return jeux.testerIa(acteur, corps);
     }
     if (p[1] === 'gestionnaires' && p.length === 2) {
       if (m === 'GET') return jeux.gestionnaires(acteur);

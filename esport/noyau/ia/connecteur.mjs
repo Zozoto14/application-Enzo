@@ -7,7 +7,9 @@
  *   IA_API_CLE      clé d'API (secret : jamais renvoyée par le serveur, jamais journalisée)
  *   IA_MODELE       modèle (ex. gpt-4o-mini, mistral-small-latest, gemini-2.0-flash…)
  *   IA_FOURNISSEUR  facultatif : openai, mistral, gemini, deepseek, groq, autre (déduit de l'adresse sinon) ;
- *                   règle les petites différences (sortie JSON forcée ou non)
+ *                   règle les petites différences (sortie JSON forcée ou non). « local » : l'IA LOCALE
+ *                   (llama.cpp sur le serveur, voir `configIaLocale` et docs/esport/ia-locale.md) est le mode
+ *                   par défaut ; une clé d'API éventuelle sert alors de secours (mode « Locale d'abord »)
  *   IA_FORMAT       facultatif : « openai-chat » (seul format pour l'instant ; voir ADAPTATEURS)
  *   IA_RECHERCHE    facultatif : « serveur » (défaut : le serveur lit lui-même quelques pages web),
  *                   « modele » (le modèle sait naviguer : il cherche lui-même), « aucune »
@@ -79,6 +81,8 @@ export function configIa(env = process.env) {
   const fournisseurDemande = String(env.IA_FOURNISSEUR ?? '').trim().toLowerCase();
   const urlBrute = String(env.IA_API_URL ?? '').trim();
   const fournisseur = FOURNISSEURS[fournisseurDemande] ? fournisseurDemande : urlBrute ? fournisseurDeUrl(urlBrute) : 'autre';
+  // IA_FOURNISSEUR=local : mode par défaut « IA locale » (le choix se change dans Administration IA).
+  const modeDefaut = fournisseurDemande === 'local' ? 'local' : 'api';
   const url = adresseCompletions(urlBrute || FOURNISSEURS[fournisseur]?.url || '');
   const format = ['openai-chat'].includes(env.IA_FORMAT) ? env.IA_FORMAT : 'openai-chat';
   const recherche = ['serveur', 'modele', 'aucune'].includes(env.IA_RECHERCHE) ? env.IA_RECHERCHE : 'serveur';
@@ -94,6 +98,7 @@ export function configIa(env = process.env) {
     url,
     format,
     recherche,
+    modeDefaut,
     // La clé reste dans une fermeture : elle ne sort jamais par JSON.stringify ni par l'API.
     lireCle: () => cle,
     etatPublic() {
@@ -115,10 +120,12 @@ export function configIa(env = process.env) {
 
 export const ADAPTATEURS = {
   'openai-chat': {
-    requete(config, messages, { json = true, maxJetons = 4000, temperature = 0.2 } = {}) {
+    requete(config, messages, { json = true, maxJetons = 4000, temperature = 0.2, schema = null } = {}) {
       const corps = { model: config.modele, messages, temperature, max_tokens: maxJetons };
+      // IA locale (llama-server) : sortie CONTRAINTE par le schéma JSON (grammaire), sinon un objet JSON.
+      if (json && config.fournisseur === 'local') corps.response_format = schema ? { type: 'json_schema', json_schema: { name: 'reponse', schema, strict: true } } : { type: 'json_object' };
       // Sortie JSON forcée chez les fournisseurs qui la gèrent (le prompt la demande de toute façon).
-      if (json && (FOURNISSEURS[config.fournisseur]?.jsonForce ?? false)) corps.response_format = { type: 'json_object' };
+      else if (json && (FOURNISSEURS[config.fournisseur]?.jsonForce ?? false)) corps.response_format = { type: 'json_object' };
       return {
         url: config.url,
         init: {
@@ -132,7 +139,9 @@ export const ADAPTATEURS = {
       const texte = json?.choices?.[0]?.message?.content;
       if (typeof texte !== 'string' || !texte.trim()) return null;
       const u = json?.usage ?? {};
-      return { texte, jetons: { entree: Number.isFinite(u.prompt_tokens) ? u.prompt_tokens : null, sortie: Number.isFinite(u.completion_tokens) ? u.completion_tokens : null } };
+      // llama-server ajoute ses mesures (`timings`) : vitesse de génération en jetons par seconde.
+      const v = Number(json?.timings?.predicted_per_second);
+      return { texte, jetons: { entree: Number.isFinite(u.prompt_tokens) ? u.prompt_tokens : null, sortie: Number.isFinite(u.completion_tokens) ? u.completion_tokens : null }, ...(Number.isFinite(v) && v > 0 ? { vitesse: v } : {}) };
     },
   },
 };
@@ -166,6 +175,36 @@ async function lireBorne(reponse, max) {
 }
 
 /**
+ * Un échange « chat completions » : requête de l'adaptateur, délai, lecture bornée, erreurs au code
+ * stable dont le message ne contient JAMAIS la clé. Partagé par le connecteur d'API et l'IA locale.
+ */
+async function echanger({ adaptateur, config, messages, options, fetchIa, delai, maintenant }) {
+  const { url, init } = adaptateur.requete(config, messages, options);
+  const debut = maintenant();
+  let r;
+  try {
+    r = await fetchIa(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(options.delai ?? delai) });
+  } catch (e) {
+    if (e?.name === 'TimeoutError' || e?.name === 'AbortError') throw echec(504, 'ia-delai', 'Le service d’IA met trop de temps à répondre.');
+    throw echec(502, 'ia-injoignable', 'Service d’IA injoignable.');
+  }
+  const texte = await lireBorne(r, TAILLE_MAX_REPONSE_IA).catch(() => null);
+  if (r.status === 401 || r.status === 403) throw echec(502, 'ia-cle-refusee', 'Le service d’IA refuse la clé d’API (vérifiez IA_API_CLE).');
+  if (r.status === 429) throw echec(502, 'ia-limite-fournisseur', 'Le service d’IA limite les appels (quota du fournisseur atteint) : réessayez plus tard.');
+  if (r.status === 404) throw echec(502, 'ia-modele', 'Modèle ou adresse inconnus du service d’IA (vérifiez IA_MODELE et IA_API_URL).');
+  if (!r.ok) throw echec(502, 'ia-injoignable', 'Service d’IA injoignable.');
+  let json;
+  try {
+    json = texte === null ? null : JSON.parse(texte);
+  } catch {
+    json = null;
+  }
+  const sortie = json ? adaptateur.reponse(json) : null;
+  if (!sortie) throw echec(502, 'ia-reponse', 'Réponse du service d’IA illisible.');
+  return { ...sortie, dureeMs: maintenant() - debut };
+}
+
+/**
  * Connecteur prêt à l'emploi. `fetch` est injectable (tests : faux serveur, jamais de réseau réel).
  * `discuter(messages, options)` → { texte, jetons, dureeMs } ; erreurs : ErreurEsport au code stable
  * (ia-non-configuree, ia-cle-refusee, ia-limite-fournisseur, ia-delai, ia-injoignable, ia-reponse),
@@ -178,29 +217,78 @@ export function creerConnecteur(config, { fetch: fetchIa = (...a) => globalThis.
     disponible: () => Boolean(config?.actif && adaptateur),
     async discuter(messages, options = {}) {
       if (!config?.actif || !adaptateur) throw echec(503, 'ia-non-configuree', 'Assistant IA non configuré (clé d’API absente).');
-      const { url, init } = adaptateur.requete(config, messages, options);
-      const debut = maintenant();
-      let r;
-      try {
-        r = await fetchIa(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(options.delai ?? delai) });
-      } catch (e) {
-        if (e?.name === 'TimeoutError' || e?.name === 'AbortError') throw echec(504, 'ia-delai', 'Le service d’IA met trop de temps à répondre.');
-        throw echec(502, 'ia-injoignable', 'Service d’IA injoignable.');
-      }
-      const texte = await lireBorne(r, TAILLE_MAX_REPONSE_IA).catch(() => null);
-      if (r.status === 401 || r.status === 403) throw echec(502, 'ia-cle-refusee', 'Le service d’IA refuse la clé d’API (vérifiez IA_API_CLE).');
-      if (r.status === 429) throw echec(502, 'ia-limite-fournisseur', 'Le service d’IA limite les appels (quota du fournisseur atteint) : réessayez plus tard.');
-      if (r.status === 404) throw echec(502, 'ia-modele', 'Modèle ou adresse inconnus du service d’IA (vérifiez IA_MODELE et IA_API_URL).');
-      if (!r.ok) throw echec(502, 'ia-injoignable', 'Service d’IA injoignable.');
-      let json;
-      try {
-        json = texte === null ? null : JSON.parse(texte);
-      } catch {
-        json = null;
-      }
-      const sortie = json ? adaptateur.reponse(json) : null;
-      if (!sortie) throw echec(502, 'ia-reponse', 'Réponse du service d’IA illisible.');
-      return { ...sortie, dureeMs: maintenant() - debut };
+      return echanger({ adaptateur, config, messages, options, fetchIa, delai, maintenant });
+    },
+  };
+}
+
+// ------------------------------------------------------------------ IA locale
+
+const entier = (v, defaut, min, max) => {
+  const n = Number.parseInt(String(v ?? '').trim(), 10);
+  return Number.isInteger(n) ? Math.min(max, Math.max(min, n)) : defaut;
+};
+
+/**
+ * Réglages de l'IA LOCALE (llama.cpp sur le serveur, installée par esport/serveur/installer-ia-locale.sh) :
+ *
+ *   IA_LOCALE_DOSSIER          dossier de l'installation (défaut ~/.appdashboard/ia-locale, rempli par le serveur)
+ *   IA_LOCALE_MODELE           qwen2.5-7b (défaut) ou qwen3-4b (plus petit, plus rapide)
+ *   IA_LOCALE_THREADS          fils de calcul (défaut 8, de 1 à 32)
+ *   IA_LOCALE_CONTEXTE         taille du contexte en jetons (défaut 16384, de 4096 à 32768)
+ *   IA_LOCALE_INACTIVITE_MIN   arrêt du moteur après N minutes sans requête (défaut 5 ; 0 = tout de suite)
+ *   IA_LOCALE_DELAI_MIN        durée maximale d'UNE requête, attente comprise (défaut 20 min)
+ *   IA_LOCALE_DEMARRAGE_S      chargement du modèle au plus (défaut 300 s)
+ *   IA_LOCALE_JETONS_MAX       jetons générés au plus par requête (défaut 4096)
+ *   IA_LOCALE_FILE_MAX         requêtes en attente au plus (défaut 4)
+ *   IA_LOCALE_NICE             priorité du moteur (défaut 19, la plus basse)
+ *   IA_LOCALE_DUREE_TRAVAILLEUR_MIN  durée de travail d'un processus de fond avant de passer la main (défaut 60)
+ *
+ * Pas de quota mensuel ici (rien n'est payé) : la durée et la concurrence sont bornées à la place.
+ */
+export function configIaLocale(env = process.env) {
+  const modele = String(env.IA_LOCALE_MODELE ?? '').trim().toLowerCase() || 'qwen2.5-7b';
+  return {
+    dossier: String(env.IA_LOCALE_DOSSIER ?? '').trim() || null,
+    modele: /^[a-z0-9._-]{1,40}$/.test(modele) ? modele : 'qwen2.5-7b',
+    threads: entier(env.IA_LOCALE_THREADS, 8, 1, 32),
+    contexte: entier(env.IA_LOCALE_CONTEXTE, 16_384, 4096, 32_768),
+    inactiviteMs: entier(env.IA_LOCALE_INACTIVITE_MIN, 5, 0, 120) * 60_000,
+    delaiMs: entier(env.IA_LOCALE_DELAI_MIN, 20, 1, 120) * 60_000,
+    demarrageMs: entier(env.IA_LOCALE_DEMARRAGE_S, 300, 10, 1800) * 1000,
+    jetonsMax: entier(env.IA_LOCALE_JETONS_MAX, 4096, 256, 16_384),
+    fileMax: entier(env.IA_LOCALE_FILE_MAX, 4, 1, 20),
+    nice: entier(env.IA_LOCALE_NICE, 19, 0, 19),
+    dureeTravailleurMs: entier(env.IA_LOCALE_DUREE_TRAVAILLEUR_MIN, 60, 5, 600) * 60_000,
+  };
+}
+
+/**
+ * Connecteur de l'IA locale : même contrat que `creerConnecteur`. `gestionnaire.executer(fn)` démarre le
+ * serveur d'inférence au besoin et passe `{ port, cle }`. L'adresse est construite ICI, et seulement ici :
+ * http://127.0.0.1:<port entier>/v1/chat/completions — c'est la seule exception à « https public seulement »,
+ * réservée au serveur local géré (jamais une adresse venue de la configuration, d'une page ou du modèle).
+ */
+export function creerConnecteurLocal(gestionnaire, { modele = 'local', jetonsMax = 4096, delai = 20 * 60_000, fetch: fetchIa = (...a) => globalThis.fetch(...a), maintenant = () => Date.now() } = {}) {
+  const adaptateur = ADAPTATEURS['openai-chat'];
+  return {
+    local: true,
+    modele,
+    disponible: () => Boolean(gestionnaire),
+    async discuter(messages, options = {}) {
+      if (!gestionnaire) throw echec(503, 'ia-locale-absente', 'IA locale non installée (lancer esport/serveur/installer-ia-locale.sh).');
+      const total = options.delaiLocal ?? delai;
+      const r = await gestionnaire.executer(
+        async ({ port, cle, limite }) => {
+          if (!Number.isInteger(port) || port < 1024 || port > 65535) throw echec(502, 'ia-injoignable', 'Service d’IA injoignable.');
+          const config = { fournisseur: 'local', modele, url: `http://127.0.0.1:${port}/v1/chat/completions`, lireCle: () => cle };
+          const reste = Math.max(1000, limite - maintenant());
+          return echanger({ adaptateur, config, messages, options: { ...options, json: options.json ?? true, maxJetons: Math.min(options.maxJetons ?? jetonsMax, jetonsMax), delai: reste }, fetchIa, delai: reste, maintenant });
+        },
+        { delai: total },
+      );
+      gestionnaire.noterMesure?.({ jetonsParSeconde: r.vitesse, dureeMs: r.dureeMs });
+      return r;
     },
   };
 }

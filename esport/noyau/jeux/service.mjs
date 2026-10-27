@@ -11,6 +11,13 @@
  * Versions : chaque écriture d'un profil crée une version (données complètes + résumé des différences),
  * avec un contrôle de concurrence (version attendue). Les travaux de l'IA (brouillon, vérification)
  * tournent après la réponse HTTP (ou dans le cron) ; leur résultat attend la validation du Fondateur.
+ *
+ * Deux moteurs, choisis par le Fondateur (Administration IA, réglage `mode`) :
+ *  - « api » : clé d'API d'un fournisseur (plafond mensuel d'appels) ;
+ *  - « local » : IA LOCALE (llama.cpp sur le serveur, `ia.local`), sans plafond mensuel mais une requête à
+ *    la fois, durée bornée ; ses travaux longs tournent dans un processus de fond (lancé tout de suite, et
+ *    par le cron en secours), pas dans l'app Passenger qui peut être endormie à tout moment ;
+ *  - « local-api » : locale d'abord, l'API en secours si l'IA locale échoue (démarrage, délai, occupée…).
  */
 
 import { distribuer, evenement } from '../evenements.mjs';
@@ -25,6 +32,9 @@ import { MOTIF_CLE_JEU, SECTIONS_LISTES, SECTIONS_OBJETS, Invalide, libelleForma
 export const PERMISSION_JEUX = 'jeux.gerer';
 export const PERMISSIONS_GLOBALES = [PERMISSION_JEUX];
 export const REGLAGES_IA_DEFAUT = { quotaAppels: 30, quotaVerifications: 8, autoActif: true };
+export const MODES_IA = ['local', 'api', 'local-api'];
+const ORDRE_MODE = { local: ['local'], api: ['api'], 'local-api': ['local', 'api'] };
+const DELAI_TEST_LOCAL_MS = 4 * 60_000;
 const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const MOTIF_COMPTE = /^(principal|[a-z0-9]{6,16})$/;
 const DUREE_EN_COURS_MAX_MS = 15 * 60_000;
@@ -68,10 +78,19 @@ export async function aPermissionJeux(base, acteur) {
   return Boolean(await base.premier('SELECT compte_id FROM permissions_globales WHERE compte_id = ? AND permission = ?', [acteur.compte, PERMISSION_JEUX]));
 }
 
+/**
+ * `ia` : { config (configIa), fetch, telecharger, resoudre, local } ; `local` (IA locale, facultatif) :
+ * { connecteur (creerConnecteurLocal), disponible(), raison, info: { modele, nomModele, moteur, threads,
+ * contexte, delaiMs, benchmark }, etat() (en marche, dernière vitesse…), lancerTravailleur() }.
+ */
 export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = {}, travauxIa = 'fond', journal = console }) {
   const config = ia.config ?? null;
   const connecteur = creerConnecteur(config, { ...(ia.fetch ? { fetch: ia.fetch } : {}), maintenant });
+  const local = ia.local ?? null;
+  const localPret = () => Boolean(local?.disponible?.() && local.connecteur);
   const optionsRecherche = { telecharger: ia.telecharger, resoudre: ia.resoudre, maintenant };
+  // Un travail local (deux requêtes de 20 min au plus) dure plus longtemps qu'un appel d'API.
+  const dureeEnCoursMax = localPret() ? Math.max(DUREE_EN_COURS_MAX_MS, 2 * (local.info?.delaiMs ?? 20 * 60_000) + 10 * 60_000) : DUREE_EN_COURS_MAX_MS;
 
   // -------------------------------------------------------------- Droits
 
@@ -133,7 +152,7 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
           ? { teams: teams.get(j.cle) ?? 0, propositions: attentes.get(j.cle) ?? 0, majAuto: Number(j.maj_auto) === 1, frequenceJours: Number(j.frequence_jours), derniereVerif: j.derniere_verif_le ?? null, majLe: j.maj_le }
           : {}),
       })),
-      ...(gerer ? { ia: { disponible: connecteur.disponible(), raison: config?.raison ?? 'cle-absente' } } : {}),
+      ...(gerer ? { ia: await disponibilite().then(d => ({ disponible: d.disponible, raison: d.raison })) } : {}),
     };
   }
 
@@ -357,15 +376,70 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
       if (l.cle === 'quota_appels') r.quotaAppels = Number(l.valeur);
       if (l.cle === 'quota_verifications') r.quotaVerifications = Number(l.valeur);
       if (l.cle === 'auto_actif') r.autoActif = l.valeur === '1';
+      if (l.cle === 'mode' && MODES_IA.includes(l.valeur)) r.mode = l.valeur;
     }
+    r.mode ??= MODES_IA.includes(config?.modeDefaut) ? config.modeDefaut : 'api';
     return r;
   }
 
+  /** Moteurs utilisables pour un mode, dans l'ordre d'essai. */
+  const moteursDe = mode => ORDRE_MODE[mode].filter(f => (f === 'local' ? localPret() : connecteur.disponible()));
+
+  /** L'assistant peut-il travailler ? `{ disponible, raison, mode, moteurs }` (raison : de quoi il manque). */
+  async function disponibilite() {
+    const { mode } = await reglagesIa();
+    const moteurs = moteursDe(mode);
+    let raison = null;
+    if (!moteurs.length) raison = mode === 'api' ? (config?.raison ?? 'cle-absente') : (local?.raison ?? 'locale-absente');
+    return { disponible: moteurs.length > 0, raison, mode, moteurs };
+  }
+
+  /** Erreur « assistant indisponible », adaptée au mode (clé absente / IA locale absente). */
+  const indisponible = d => (d.mode === 'api' ? echec(503, 'ia-non-configuree', 'Assistant IA non configuré (clé d’API absente).') : echec(503, 'ia-locale-absente', 'IA locale non installée (lancer esport/serveur/installer-ia-locale.sh).'));
+
+  // Les plafonds mensuels portent sur les appels à l'API EXTERNE : les appels à l'IA locale ne comptent pas.
+  const SQL_APPELS_API = "SELECT COUNT(*) AS n FROM ia_appels WHERE cree_le >= ? AND (fournisseur IS NULL OR fournisseur <> 'local')";
+
   async function usageMois(t = maintenant()) {
     const depuis = debutMois(t);
-    const appels = await base.premier('SELECT COUNT(*) AS n FROM ia_appels WHERE cree_le >= ?', [depuis]);
+    const appels = await base.premier(SQL_APPELS_API, [depuis]);
+    const locaux = await base.premier("SELECT COUNT(*) AS n FROM ia_appels WHERE cree_le >= ? AND fournisseur = 'local'", [depuis]);
     const verifs = await base.premier("SELECT COUNT(*) AS n FROM ia_travaux WHERE genre = 'verification' AND cree_le >= ?", [depuis]);
-    return { mois: depuis.slice(0, 7), appels: Number(appels?.n ?? 0), verifications: Number(verifs?.n ?? 0) };
+    return { mois: depuis.slice(0, 7), appels: Number(appels?.n ?? 0), appelsLocaux: Number(locaux?.n ?? 0), verifications: Number(verifs?.n ?? 0) };
+  }
+
+  /** État de l'IA locale pour l'Administration IA (installation, moteur en marche, mesures). */
+  async function etatLocal() {
+    if (!local) return { installe: false, raison: 'non-installee' };
+    const dernier = await base.premier("SELECT cree_le, duree_ms, statut FROM ia_appels WHERE fournisseur = 'local' AND statut = 'ok' ORDER BY cree_le DESC LIMIT 1", []);
+    let marche = {};
+    try {
+      marche = local.etat?.() ?? {};
+    } catch {
+      marche = {};
+    }
+    const info = local.info ?? {};
+    const mesure = marche.mesure && Number.isFinite(marche.mesure.jetonsParSeconde) ? { jetonsParSeconde: marche.mesure.jetonsParSeconde, le: marche.mesure.le ?? null, source: 'requete' } : null;
+    const banc = info.benchmark && Number.isFinite(info.benchmark.jetonsParSeconde) ? { jetonsParSeconde: info.benchmark.jetonsParSeconde, le: info.benchmark.le ?? null, source: 'test' } : null;
+    return {
+      installe: localPret(),
+      raison: localPret() ? null : (local.raison ?? 'non-installee'),
+      modele: info.modele ?? null,
+      nomModele: info.nomModele ?? null,
+      moteur: info.moteur ?? null,
+      threads: info.threads ?? null,
+      contexte: info.contexte ?? null,
+      enMarche: Boolean(marche.enMarche),
+      ailleurs: Boolean(marche.ailleurs),
+      demarrage: Boolean(marche.demarrage),
+      depuis: marche.depuis ?? null,
+      file: Number(marche.file ?? 0),
+      derniereErreur: marche.derniereErreur?.code ?? null,
+      derniereVitesse: mesure ?? banc,
+      benchmark: banc,
+      dernierTempsReponseMs: dernier ? Number(dernier.duree_ms) : null,
+      dernierAppelLe: dernier?.cree_le ?? null,
+    };
   }
 
   async function etatIa(acteur) {
@@ -376,12 +450,15 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     const travaux = await base.tous("SELECT id, genre, jeu_cle, statut, declenchement, erreur, cree_le, fini_le FROM ia_travaux WHERE genre = 'verification' ORDER BY cree_le DESC LIMIT 10", []);
     return {
       ...(config ? config.etatPublic() : { configure: false, raison: 'cle-absente', fournisseur: null, modele: null, hote: null, format: 'openai-chat', recherche: 'serveur', cle: 'absente' }),
-      disponible: connecteur.disponible(),
+      disponible: (await disponibilite()).disponible,
+      mode: reglages.mode,
+      modesPossibles: MODES_IA.filter(m => ORDRE_MODE[m].every(f => (f === 'local' ? localPret() : connecteur.disponible()))),
+      local: await etatLocal(),
       lectureWeb: typeof ia.telecharger === 'function',
       fondateur: Boolean(acteur.superAdmin),
       reglages,
       usage: { ...usage, plafondAppels: reglages.quotaAppels, plafondVerifications: reglages.quotaVerifications },
-      dernierAppel: dernier ? { le: dernier.cree_le, genre: dernier.genre, statut: dernier.statut, modele: dernier.modele ?? null, dureeMs: dernier.duree_ms === null ? null : Number(dernier.duree_ms), erreur: dernier.erreur ?? null, jeu: dernier.jeu_cle ?? null } : null,
+      dernierAppel: dernier ? { le: dernier.cree_le, genre: dernier.genre, statut: dernier.statut, fournisseur: dernier.fournisseur ?? null, modele: dernier.modele ?? null, dureeMs: dernier.duree_ms === null ? null : Number(dernier.duree_ms), erreur: dernier.erreur ?? null, jeu: dernier.jeu_cle ?? null } : null,
       verifications: travaux.map(x => ({ id: x.id, jeu: x.jeu_cle, statut: x.statut, declenchement: x.declenchement, erreur: jsonOu(x.erreur, null), le: x.cree_le, finiLe: x.fini_le ?? null })),
     };
   }
@@ -402,45 +479,86 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
       poser('quota_verifications', String(n));
     }
     if (corps?.autoActif !== undefined) poser('auto_actif', corps.autoActif ? '1' : '0');
+    if (corps?.mode !== undefined) {
+      if (!MODES_IA.includes(corps.mode)) throw echec(400, 'mode-ia', 'Mode de l’IA inconnu (local, api ou local-api).');
+      poser('mode', corps.mode);
+    }
     if (lot.length) await base.lot(lot);
     return etatIa(acteur);
   }
 
   /**
-   * Appel au modèle, compté et plafonné : la ligne `ia_appels` est écrite AVANT l'appel, puis on compte
-   * les appels du mois (elle comprise) ; au-delà du plafond, elle est retirée et l'appel refusé (429).
+   * Appel à l'API EXTERNE, compté et plafonné : la ligne `ia_appels` est écrite AVANT l'appel, puis on
+   * compte les appels d'API du mois (elle comprise) ; au-delà du plafond, elle est retirée et l'appel refusé (429).
+   */
+  async function appelApi(genre, jeuCle, messages, options) {
+    const t = maintenant();
+    const id = nouvelId();
+    await base.executer("INSERT INTO ia_appels (id, genre, jeu_cle, statut, fournisseur, modele, cree_le) VALUES (?, ?, ?, 'en_cours', ?, ?, ?)", [id, genre, jeuCle ?? null, config.fournisseur, config.modele, iso(t)]);
+    const { quotaAppels } = await reglagesIa();
+    const n = await base.premier(SQL_APPELS_API, [debutMois(t)]);
+    if (Number(n?.n ?? 0) > quotaAppels) {
+      await base.executer('DELETE FROM ia_appels WHERE id = ?', [id]);
+      throw echec(429, 'quota-ia', 'Plafond mensuel d’appels à l’IA atteint (réglable dans Administration › IA).');
+    }
+    return suivre(id, t, () => connecteur.discuter(messages, options));
+  }
+
+  /** Appel à l'IA LOCALE : noté (statistiques, dernier temps de réponse) mais pas plafonné au mois. */
+  async function appelLocal(genre, jeuCle, messages, options) {
+    const t = maintenant();
+    const id = nouvelId();
+    await base.executer("INSERT INTO ia_appels (id, genre, jeu_cle, statut, fournisseur, modele, cree_le) VALUES (?, ?, ?, 'en_cours', 'local', ?, ?)", [id, genre, jeuCle ?? null, local.info?.modele ?? null, iso(t)]);
+    return suivre(id, t, () => local.connecteur.discuter(messages, { ...options, ...(genre === 'test' ? { delaiLocal: DELAI_TEST_LOCAL_MS } : {}) }));
+  }
+
+  async function suivre(id, t, appel) {
+    try {
+      const r = await appel();
+      await base.executer("UPDATE ia_appels SET statut = 'ok', duree_ms = ?, jetons_entree = ?, jetons_sortie = ? WHERE id = ?", [r.dureeMs ?? null, r.jetons?.entree ?? null, r.jetons?.sortie ?? null, id]);
+      return r;
+    } catch (e) {
+      await base.executer("UPDATE ia_appels SET statut = 'echec', duree_ms = ?, erreur = ? WHERE id = ?", [maintenant() - t, String(e?.code ?? 'erreur').slice(0, 60), id]);
+      throw e;
+    }
+  }
+
+  /**
+   * Appel au modèle selon le mode : IA locale, API, ou locale d'abord puis l'API en secours si la locale
+   * échoue (démarrage impossible, délai, occupée, réponse illisible…). `options.cible` (test de connexion)
+   * force l'un des deux.
    */
   function appeleur(jeuCle) {
-    return async (genre, messages, options) => {
-      if (!connecteur.disponible()) throw echec(503, 'ia-non-configuree', 'Assistant IA non configuré (clé d’API absente).');
-      const t = maintenant();
-      const id = nouvelId();
-      await base.executer("INSERT INTO ia_appels (id, genre, jeu_cle, statut, fournisseur, modele, cree_le) VALUES (?, ?, ?, 'en_cours', ?, ?, ?)", [id, genre, jeuCle ?? null, config.fournisseur, config.modele, iso(t)]);
-      const { quotaAppels } = await reglagesIa();
-      const n = await base.premier('SELECT COUNT(*) AS n FROM ia_appels WHERE cree_le >= ?', [debutMois(t)]);
-      if (Number(n?.n ?? 0) > quotaAppels) {
-        await base.executer('DELETE FROM ia_appels WHERE id = ?', [id]);
-        throw echec(429, 'quota-ia', 'Plafond mensuel d’appels à l’IA atteint (réglable dans Administration › IA).');
+    return async (genre, messages, options = {}) => {
+      const { cible, ...reste } = options;
+      const d = await disponibilite();
+      const moteurs = cible ? (ORDRE_MODE[cible] ? [cible].filter(f => (f === 'local' ? localPret() : connecteur.disponible())) : []) : d.moteurs;
+      if (!moteurs.length) throw cible === 'local' || (!cible && d.mode !== 'api') ? indisponible({ mode: 'local' }) : indisponible({ mode: 'api' });
+      for (let i = 0; i < moteurs.length; i++) {
+        try {
+          return await (moteurs[i] === 'local' ? appelLocal : appelApi)(genre, jeuCle, messages, reste);
+        } catch (e) {
+          const secours = moteurs[i] === 'local' && i < moteurs.length - 1 && (e?.statut ?? 500) >= 500;
+          if (!secours) throw e;
+          journal.warn?.(`[esport] IA locale en échec (${e?.code ?? 'erreur'}) : la clé d’API prend le relais.`);
+        }
       }
-      try {
-        const r = await connecteur.discuter(messages, options);
-        await base.executer("UPDATE ia_appels SET statut = 'ok', duree_ms = ?, jetons_entree = ?, jetons_sortie = ? WHERE id = ?", [r.dureeMs ?? null, r.jetons?.entree ?? null, r.jetons?.sortie ?? null, id]);
-        return r;
-      } catch (e) {
-        await base.executer("UPDATE ia_appels SET statut = 'echec', duree_ms = ?, erreur = ? WHERE id = ?", [maintenant() - t, String(e?.code ?? 'erreur').slice(0, 60), id]);
-        throw e;
-      }
+      throw indisponible(d);
     };
   }
 
-  async function testerIa(acteur) {
+  /** Consignes compactes (petit modèle) dès que l'IA locale peut répondre. */
+  const compactPour = d => d.moteurs.includes('local');
+
+  async function testerIa(acteur, corps = {}) {
     exigerFondateur(acteur);
+    const cible = ['local', 'api'].includes(corps?.cible) ? corps.cible : undefined;
     try {
-      const r = await testerConnexion({ appeler: appeleur(null) });
-      return { ok: true, reponse: r.reponse, dureeMs: r.dureeMs, etat: await etatIa(acteur) };
+      const r = await testerConnexion({ appeler: appeleur(null), cible });
+      return { ok: true, reponse: r.reponse, dureeMs: r.dureeMs, ...(cible ? { cible } : {}), etat: await etatIa(acteur) };
     } catch (e) {
-      if (e?.statut === 403 || e?.code === 'quota-ia' || e?.code === 'ia-non-configuree') throw e;
-      return { ok: false, erreur: erreurPublique(e), etat: await etatIa(acteur) };
+      if (e?.statut === 403 || e?.code === 'quota-ia' || e?.code === 'ia-non-configuree' || e?.code === 'ia-locale-absente') throw e;
+      return { ok: false, erreur: erreurPublique(e), ...(cible ? { cible } : {}), etat: await etatIa(acteur) };
     }
   }
 
@@ -471,8 +589,20 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     return x;
   }
 
-  /** Lance un travail : après la réponse (défaut), ou attendu (tests, cron). */
-  async function demarrer(id) {
+  /**
+   * Lance un travail : après la réponse (défaut), ou attendu (tests, cron). Avec l'IA locale, un travail
+   * dure plusieurs minutes : il est confié au processus de fond (lancé tout de suite ; le cron en relance
+   * un si besoin) plutôt qu'à l'app Passenger, qui peut être arrêtée pendant le calcul.
+   */
+  async function demarrer(id, d) {
+    if (d && compactPour(d) && travauxIa !== 'synchrone') {
+      try {
+        await local.lancerTravailleur?.();
+      } catch (e) {
+        journal.error('[esport] IA locale : processus de fond', e?.message ?? e);
+      }
+      return;
+    }
     // Après le travail : distribution de ses événements (notification « brouillon prêt », « mises à jour proposées »).
     const travail = executerTravail(id)
       .then(() => distribuer(base, { maintenant: maintenant() }))
@@ -489,7 +619,8 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
   /** `POST /jeux/ia/brouillons` : « Préparer avec l'IA » (nom du jeu, pages facultatives, consignes). */
   async function lancerBrouillon(acteur, corps) {
     await exigerGestion(acteur);
-    if (!connecteur.disponible()) throw echec(503, 'ia-non-configuree', 'Assistant IA non configuré (clé d’API absente).');
+    const d = await disponibilite();
+    if (!d.disponible) throw indisponible(d);
     const nom = texteNettoye(corps?.nom, 60);
     if (nom.length < 2) throw echec(400, 'nom', 'Nom du jeu : 2 caractères au moins.');
     const urls = lireUrls(corps?.urls);
@@ -500,18 +631,22 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
       "INSERT INTO ia_travaux (id, genre, jeu_cle, demande, statut, declenchement, demande_par, cree_le, maj_le) VALUES (?, 'brouillon', ?, ?, 'attente', 'manuel', ?, ?, ?)",
       [id, jeu, JSON.stringify({ nom, urls, consignes: texteLong(corps?.consignes, 1000) }), acteur.compte, iso(t), iso(t)],
     );
-    await demarrer(id);
+    await demarrer(id, d);
     return travail(acteur, id);
   }
 
-  /** Vérification d'un profil (mise à jour limitée) : manuelle (gestionnaire) ou automatique (cron). Plafond mensuel. */
-  async function creerVerification(cle, { acteur = null, declenchement }) {
+  /**
+   * Vérification d'un profil (mise à jour limitée) : manuelle (gestionnaire) ou automatique (cron). Plafond
+   * mensuel en mode « api » seulement (l'IA locale ne coûte rien ; ses appels sont bornés en durée).
+   */
+  async function creerVerification(cle, { acteur = null, declenchement, sansPlafond = false }) {
     const t = maintenant();
     const id = nouvelId();
     await base.executer(
       "INSERT INTO ia_travaux (id, genre, jeu_cle, demande, statut, declenchement, demande_par, cree_le, maj_le) VALUES (?, 'verification', ?, '{}', 'attente', ?, ?, ?, ?)",
       [id, cle, declenchement, acteur, iso(t), iso(t)],
     );
+    if (sansPlafond) return id;
     const { quotaVerifications } = await reglagesIa();
     const n = await base.premier("SELECT COUNT(*) AS n FROM ia_travaux WHERE genre = 'verification' AND cree_le >= ?", [debutMois(t)]);
     if (Number(n?.n ?? 0) > quotaVerifications) {
@@ -524,11 +659,12 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
   async function lancerVerification(acteur, cle) {
     await exigerGestion(acteur);
     const j = await ligneJeu(cle);
-    if (!connecteur.disponible()) throw echec(503, 'ia-non-configuree', 'Assistant IA non configuré (clé d’API absente).');
+    const d = await disponibilite();
+    if (!d.disponible) throw indisponible(d);
     const enCours = await base.premier("SELECT id FROM ia_travaux WHERE genre = 'verification' AND jeu_cle = ? AND statut IN ('attente', 'en_cours')", [j.cle]);
     if (enCours) return travail(acteur, enCours.id);
-    const id = await creerVerification(j.cle, { acteur: acteur.compte, declenchement: 'manuel' });
-    await demarrer(id);
+    const id = await creerVerification(j.cle, { acteur: acteur.compte, declenchement: 'manuel', sansPlafond: d.mode !== 'api' });
+    await demarrer(id, d);
     return travail(acteur, id);
   }
 
@@ -539,10 +675,11 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     if (pris.changements === 0) return;
     const x = await base.premier('SELECT * FROM ia_travaux WHERE id = ?', [id]);
     const demande = jsonOu(x.demande, {});
+    const compact = compactPour(await disponibilite());
     try {
       if (x.genre === 'brouillon') {
         const existant = x.jeu_cle ? await base.premier('SELECT * FROM jeux WHERE cle = ?', [x.jeu_cle]) : null;
-        const r = await preparerBrouillon(demande, { appeler: appeleur(x.jeu_cle), recherche: config?.recherche, ...optionsRecherche, existant: existant ? donneesDe(existant) : null });
+        const r = await preparerBrouillon(demande, { appeler: appeleur(x.jeu_cle), recherche: config?.recherche, ...optionsRecherche, existant: existant ? donneesDe(existant) : null, compact });
         const t = maintenant();
         await base.lot([
           {
@@ -563,7 +700,7 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
       }
       // Vérification : différences proposées, enregistrées une par une (sans doublon d'une proposition en attente).
       const j = await ligneJeu(x.jeu_cle);
-      const r = await verifierProfil({ nom: j.nom, donnees: donneesDe(j) }, { appeler: appeleur(j.cle), recherche: config?.recherche, ...optionsRecherche });
+      const r = await verifierProfil({ nom: j.nom, donnees: donneesDe(j) }, { appeler: appeleur(j.cle), recherche: config?.recherche, ...optionsRecherche, compact });
       const enAttente = await base.tous("SELECT section, operation, cle_element, apres FROM ia_propositions WHERE jeu_cle = ? AND statut = 'en_attente'", [j.cle]);
       const deja = new Set(enAttente.map(p => `${p.section}|${p.operation}|${p.cle_element ?? ''}|${p.apres ?? ''}`));
       const t = maintenant();
@@ -750,34 +887,51 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
    * Tâche planifiée : reprend les travaux restés en attente (processus arrêté), marque en échec ceux
    * bloqués « en cours », puis lance AU PLUS une vérification automatique due (profil actif, mise à jour
    * automatique activée, plafond mensuel non atteint). Rend un petit bilan.
+   *
+   * Avec l'IA locale (mode « local » ou « local-api ») : le cron ne fait que le ménage et rend
+   * `{ raison: 'ia-locale', aFaire }` ; c'est le PROCESSUS DE FOND (esport/serveur/ia-locale/travailleur.mjs,
+   * `executionLocale: true`) qui exécute les travaux, sans attendre (`reprise` immédiate).
    */
-  async function tacheCron({ limite = 1 } = {}) {
+  async function tacheCron({ limite = 1, executionLocale = false } = {}) {
     const t = maintenant();
-    await base.executer("UPDATE ia_travaux SET statut = 'echec', erreur = ?, maj_le = ?, fini_le = ? WHERE statut = 'en_cours' AND maj_le < ?", [JSON.stringify({ code: 'interrompu', message: 'Travail interrompu.' }), iso(t), iso(t), iso(t - DUREE_EN_COURS_MAX_MS)]);
+    await base.executer("UPDATE ia_travaux SET statut = 'echec', erreur = ?, maj_le = ?, fini_le = ? WHERE statut = 'en_cours' AND maj_le < ?", [JSON.stringify({ code: 'interrompu', message: 'Travail interrompu.' }), iso(t), iso(t), iso(t - dureeEnCoursMax)]);
     // Compteur d'usage : les appels de plus de 13 mois ne servent plus (plafonds mensuels).
     await base.executer('DELETE FROM ia_appels WHERE cree_le < ?', [iso(t - 400 * 86_400_000)]);
-    if (!connecteur.disponible()) return { n: 0, raison: config?.raison ?? 'cle-absente' };
-    const enAttente = await base.tous("SELECT id FROM ia_travaux WHERE statut = 'attente' AND cree_le < ? ORDER BY cree_le LIMIT 2", [iso(t - ATTENTE_REPRISE_MS)]);
-    for (const { id } of enAttente) await executerTravail(id);
+    const d = await disponibilite();
+    if (!d.disponible) return { n: 0, raison: d.raison };
+    const locale = compactPour(d);
     const reglages = await reglagesIa();
-    if (!reglages.autoActif) return { n: 0, repris: enAttente.length, raison: 'auto-desactive' };
-    const candidats = (await base.tous("SELECT * FROM jeux WHERE statut = 'actif' AND maj_auto = 1 ORDER BY cle", [])).filter(j => verificationDue(j, t));
-    candidats.sort((a, b) => String(a.derniere_verif_le ?? a.cree_le).localeCompare(String(b.derniere_verif_le ?? b.cree_le)));
+    const candidatsDus = async () => {
+      if (!reglages.autoActif) return [];
+      const c = (await base.tous("SELECT * FROM jeux WHERE statut = 'actif' AND maj_auto = 1 ORDER BY cle", [])).filter(j => verificationDue(j, t));
+      c.sort((a, b) => String(a.derniere_verif_le ?? a.cree_le).localeCompare(String(b.derniere_verif_le ?? b.cree_le)));
+      return c;
+    };
+    if (locale && !executionLocale) {
+      const attente = await base.premier("SELECT COUNT(*) AS n FROM ia_travaux WHERE statut = 'attente'", []);
+      const aFaire = Number(attente?.n ?? 0) + Math.min(limite, (await candidatsDus()).length);
+      return { n: 0, raison: 'ia-locale', aFaire };
+    }
+    if (!locale && executionLocale) return { n: 0, raison: 'mode-api' };
+    const reprise = executionLocale ? iso(t + 1) : iso(t - ATTENTE_REPRISE_MS);
+    const enAttente = await base.tous("SELECT id FROM ia_travaux WHERE statut = 'attente' AND cree_le < ? ORDER BY cree_le LIMIT 2", [reprise]);
+    for (const { id } of enAttente) await executerTravail(id);
+    if (!reglages.autoActif) return { n: executionLocale ? enAttente.length : 0, repris: enAttente.length, raison: 'auto-desactive' };
     let n = 0;
-    for (const j of candidats.slice(0, limite)) {
+    for (const j of (await candidatsDus()).slice(0, limite)) {
       const occupe = await base.premier("SELECT id FROM ia_travaux WHERE genre = 'verification' AND jeu_cle = ? AND statut IN ('attente', 'en_cours')", [j.cle]);
       if (occupe) continue;
       let id;
       try {
-        id = await creerVerification(j.cle, { declenchement: 'auto' });
+        id = await creerVerification(j.cle, { declenchement: 'auto', sansPlafond: d.mode !== 'api' });
       } catch (e) {
-        if (e?.code === 'quota-verifications') return { n, repris: enAttente.length, raison: 'quota' };
+        if (e?.code === 'quota-verifications') return { n: n + (executionLocale ? enAttente.length : 0), repris: enAttente.length, raison: 'quota' };
         throw e;
       }
       await executerTravail(id);
       n++;
     }
-    return { n, repris: enAttente.length };
+    return { n: n + (executionLocale ? enAttente.length : 0), repris: enAttente.length };
   }
 
   return {
