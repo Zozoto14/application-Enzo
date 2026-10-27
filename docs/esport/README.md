@@ -24,6 +24,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [ressources.md](ressources.md) | Tout le monde | Canal de ressources : liens, vidéos YouTube, fichiers, notes ; catégories, propositions, Discord |
 | [profils-jeu.md](profils-jeu.md) | Fondateur | Profils de jeu (formats, score, maps, personnages), assistant IA, mises à jour proposées |
 | [tournois-resultats.md](tournois-resultats.md) | Staff, tout le monde | Tournois (inscription, roster, parcours, matchs au planning, classement) et résultats (score selon le jeu, bilans, Discord) |
+| [cm.md](cm.md) | Fondateur, CM, correspondants, joueurs | Section CM : tableaux façon Trello, posts FR / EN par réseau, validation, calendrier, clips des joueurs, dépôts des teams, import Trello |
 | [statistiques.md](statistiques.md) | Fondateur | Page Statistiques (réservée au Fondateur) : qui utilise l'app, pages les plus et les moins utilisées, ce qui est collecté |
 | [securite.md](securite.md) | Fondateur | Revue de sécurité, RGPD, limites |
 | [migration-serveur.md](migration-serveur.md) | Fondateur | Architecture du serveur, changer d'hébergeur, sauvegardes |
@@ -38,6 +39,7 @@ paysage, elles sont dans la **barre latérale** à gauche ; sur iPhone, dans la 
 | **Dashboard** (ouvre par défaut) | Résumé de toutes vos teams. En haut, quatre chiffres clés (teams, événements des 7 jours, résumés à rédiger ou tâches en retard, alertes), puis la semaine à venir (toutes teams) et les alertes (tâches en retard, résumé en attente depuis plus de 7 jours, présence faible, invités pas encore connectés). Puis une carte par team : membres, présence des 14 derniers jours, résumés en attente, tâches en retard, prochains événements, dernière activité. Touchez une carte pour ouvrir la team. |
 | **Teams** | Vos teams, création d'une team (Fondateur), notifications, votre profil Esport ; **Ressources** (Fondateur) : publier une même ressource dans plusieurs teams d'un coup. |
 | **Membres** | Tous les membres des teams dont vous voyez les membres (le Fondateur : aussi les comptes du hub qui ont l'Esport sans être dans aucune team, voir plus bas) : filtres (team, rôle, statut invité / actif / suspendu / sans team), recherche, création de compte (Fondateur), **demandes de compte** (badge « Demandes en attente » du Fondateur ; « Proposer un membre » avec la permission « Créer des membres »), ajout à une team, rôle, suspension, retrait, invitations. Voir [invitations.md](invitations.md). |
+| **CM** (selon vos droits CM) | Section CM du club : tableaux de contenus façon Trello, posts X / Instagram / TikTok en français et en anglais, file « À valider », calendrier éditorial, clips proposés par les joueurs ; pour le gestionnaire : équipe et rôles CM, import Trello, réglages. Sur iPhone, si la barre du bas est pleine, « CM » s'ouvre depuis la page Teams. Voir [cm.md](cm.md). |
 | **Jeux** (Fondateur, et les comptes à qui il confie la gestion) | Profils de jeu : formats de match, système de score, modes, maps, personnages, roster, rôles ; assistant IA facultatif (brouillon à relire, mises à jour proposées à valider) ; Administration de l'IA. Voir [profils-jeu.md](profils-jeu.md). |
 | **Statistiques** (Fondateur seulement) | Statistiques d'usage internes : utilisateurs actifs, sessions, pages les plus et les moins utilisées, heures d'activité, appareils, fonctionnalités, erreurs. Absente pour tous les autres comptes (le serveur répond 404). Voir [statistiques.md](statistiques.md). |
 
@@ -60,9 +62,10 @@ Esport
 │       ├── Agenda       Planning · Disponibilités · Présence
 │       ├── Jeu          Strats · Playbook · Ressources · Review vidéo · Scouting
 │       ├── Compétition  Tournois · Résultats
-│       ├── Équipe       Résumés · Objectifs et tâches · Suivi joueurs · Membres et rôles
+│       ├── Équipe       Résumés · Objectifs et tâches · Suivi joueurs · CM · Membres et rôles
 │       └── Réglages     Paramètres · Discord · Journal
 ├── Membres
+├── CM                   (section CM du club, voir cm.md)
 ├── Jeux                 (profils de jeu et assistant IA, voir profils-jeu.md)
 └── Statistiques         (Fondateur seulement : statistiques d'usage, voir statistiques.md)
 ```
@@ -157,6 +160,8 @@ La migration `0021_profils_jeu.sql` ajoute les **profils de jeu** (Valorant pré
 l'assistant IA est facultatif ([profils-jeu.md](profils-jeu.md), [o2switch.md partie I](../o2switch.md)).
 La migration `0022_tournois_resultats.sql` ajoute les modules **Tournois** et **Résultats** (section Compétition) :
 activez-les dans les Paramètres des teams concernées ([tournois-resultats.md](tournois-resultats.md)).
+La migration `0023_cm.sql` ajoute la **section CM** : affectez le Responsable CM et les correspondants (**Esport › CM ›
+Équipe CM**) et activez le module **CM** dans les teams existantes ([cm.md](cm.md)).
 
 ### Créer une team
 

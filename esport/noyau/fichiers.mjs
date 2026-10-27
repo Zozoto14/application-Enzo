@@ -102,22 +102,31 @@ async function signer(secret, texte) {
   return base64url(await globalThis.crypto.subtle.sign('HMAC', cle, encodeur.encode(texte)));
 }
 
+/**
+ * Genres de liens signés : `fichier` (table `fichiers`, route `/fichiers/<id>`) et `cm` (table `cm_fichiers`,
+ * route `/cm/fichiers/<id>`, section CM). Le genre entre dans la signature : un lien de l'un ne vaut rien
+ * pour l'autre.
+ */
+const GENRES_LIEN = { fichier: { signature: 'fichier', chemin: '/fichiers/' }, cm: { signature: 'cm-fichier', chemin: '/cm/fichiers/' } };
+
 /** Chemin signé `/fichiers/<id>?c=<compte>&exp=<ms>&sig=…` (à préfixer par l'adresse du serveur). */
-export async function cheminSigne(secret, { fichierId, compte, maintenant, duree = DUREE_LIEN_MS, telecharger = false }) {
+export async function cheminSigne(secret, { fichierId, compte, maintenant, duree = DUREE_LIEN_MS, telecharger = false, genre = 'fichier' }) {
+  const g = GENRES_LIEN[genre];
   const exp = maintenant + duree;
-  const sig = await signer(secret, `fichier|${fichierId}|${compte}|${exp}|${telecharger ? 1 : 0}`);
+  const sig = await signer(secret, `${g.signature}|${fichierId}|${compte}|${exp}|${telecharger ? 1 : 0}`);
   const p = new URLSearchParams({ c: compte, exp: String(exp), ...(telecharger ? { t: '1' } : {}), sig });
-  return { chemin: `/fichiers/${fichierId}?${p.toString()}`, expire: exp };
+  return { chemin: `${g.chemin}${fichierId}?${p.toString()}`, expire: exp };
 }
 
 /** Vérifie un lien signé ; rend `{ fichierId, compte, telecharger }` ou lève 403/410. */
-export async function verifierLien(secret, fichierId, params, maintenant) {
+export async function verifierLien(secret, fichierId, params, maintenant, { genre = 'fichier' } = {}) {
+  const g = GENRES_LIEN[genre];
   const compte = params.get('c') ?? '';
   const exp = Number(params.get('exp'));
   const telecharger = params.get('t') === '1';
   const sig = params.get('sig') ?? '';
   if (!compte || !Number.isFinite(exp) || !sig) throw echec(403, 'lien-invalide', 'Lien de fichier invalide.');
-  if (!egal(sig, await signer(secret, `fichier|${fichierId}|${compte}|${exp}|${telecharger ? 1 : 0}`))) throw echec(403, 'lien-invalide', 'Lien de fichier invalide.');
+  if (!egal(sig, await signer(secret, `${g.signature}|${fichierId}|${compte}|${exp}|${telecharger ? 1 : 0}`))) throw echec(403, 'lien-invalide', 'Lien de fichier invalide.');
   if (exp <= maintenant) throw echec(410, 'lien-expire', 'Ce lien a expiré : rouvrez le résumé depuis l’app.');
   return { fichierId, compte, telecharger };
 }

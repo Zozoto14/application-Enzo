@@ -33,6 +33,7 @@ import { lireDessin } from './review/dessin.mjs';
 import { effacementUsage } from './usage/collecte.mjs';
 import { aPermissionJeux, jeuValidePourTeam, nomsDesJeux } from './jeux/service.mjs';
 import { effacementCompetition } from './competition/rgpd.mjs';
+import { effacementCm, exportCm } from './cm/rgpd.mjs';
 
 const MOTIF_PSEUDO = /^[\p{L}\p{N}][\p{L}\p{N} _.\-]{1,23}$/u;
 const MOTIF_RIOT = /^[^#\s][^#]{2,15}#[\p{L}\p{N}]{3,5}$/u;
@@ -343,6 +344,16 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
     return detailTeam(acteur, teamId);
   }
 
+  /** Permissions CM données par les rôles CM du compte (club, ou cette team) quand le module CM est activé. */
+  async function permissionsCmDeTeam(ctx) {
+    if (!ctx.modules.has('cm') || !ctx.membre || ctx.membre.statut !== 'actif') return [];
+    const lignes = await base.tous(
+      "SELECT DISTINCT rp.permission FROM cm_affectations a JOIN cm_role_permissions rp ON rp.role_id = a.role_id WHERE a.compte_id = ? AND (a.portee = 'club' OR a.portee = ?)",
+      [ctx.acteur.compte, ctx.team.id],
+    );
+    return lignes.map(l => l.permission);
+  }
+
   async function detailTeam(acteur, teamId) {
     const ctx = await contexteTeam(acteur, teamId);
     const modules = await base.tous('SELECT module, active FROM team_modules WHERE team_id = ?', [teamId]);
@@ -354,8 +365,9 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       moi: {
         membreId: ctx.membre?.id ?? null,
         role: ctx.role ? { id: ctx.role.id, nom: ctx.role.nom, couleur: ctx.role.couleur, cle: ctx.role.cle_systeme ?? null } : null,
-        // Permissions utilisables : celles du rôle dont le module est activé.
-        permissions: [...ctx.permissions].filter(p => autorise(ctx.permissions, ctx.modules, p)).sort(),
+        // Permissions utilisables : celles du rôle dont le module est activé (et, module CM activé, celles des rôles
+        // CM du compte valables pour cette team : l'onglet CM s'affiche pour le correspondant de la team).
+        permissions: [...new Set([...[...ctx.permissions].filter(p => autorise(ctx.permissions, ctx.modules, p)), ...(await permissionsCmDeTeam(ctx))])].sort(),
         superAdmin: acteur.superAdmin,
       },
     };
@@ -882,6 +894,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       })),
       resultatsSaisis: (await q('SELECT team_id, COUNT(*) AS n FROM resultats WHERE saisi_par = ? GROUP BY team_id')).map(x => ({ team: team(x.team_id), resultats: Number(x.n) })),
       tournoisCrees: (await q('SELECT team_id, nom, cree_le FROM tournois WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), tournoi: x.nom, creeLe: x.cree_le })),
+      // Section CM (migration 0023) : rôles CM, cartes créées ou assignées, commentaires, clips proposés, fichiers déposés.
+      ...(await exportCm(base, compte)),
     };
   }
 
@@ -972,6 +986,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       { sql: 'UPDATE ia_travaux SET demande_par = NULL WHERE demande_par = ?', params: [compte] },
       { sql: 'UPDATE ia_propositions SET decide_par = NULL WHERE decide_par = ?', params: [compte] },
       ...effacementCompetition(compte),
+      // Section CM (migration 0023) : affectations et assignations effacées ; ce qu'il a écrit reste, sans auteur.
+      ...(await effacementCm(base, compte)),
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, ...(compte === acteur.compte ? {} : { parFondateur: true }) }, maintenant: t }),
     );

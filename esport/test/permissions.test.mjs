@@ -23,7 +23,8 @@ import {
 
 test('catalogue : permissions uniques, de la forme module.action, modules connus', () => {
   assert.equal(new Set(TOUTES_PERMISSIONS).size, TOUTES_PERMISSIONS.length);
-  for (const p of TOUTES_PERMISSIONS) assert.match(p, /^[a-z_]+\.[a-z_]+$/);
+  // module.action, ou module.objet.action (« cm.clips.proposer »).
+  for (const p of TOUTES_PERMISSIONS) assert.match(p, /^[a-z_]+(\.[a-z_]+){1,2}$/);
   for (const g of GROUPES) if (g.module) assert.ok(MODULES.includes(g.module), g.module);
   // Les clés citées par le plan existent.
   for (const p of ['team.manage', 'team.delete', 'modules.manage', 'members.invite', 'roles.manage', 'meeting_summaries.write_summary', 'activity_log.view', 'strats.view']) {

@@ -431,7 +431,72 @@
   "Le check-in n’est pas encore ouvert.": "Check-in isn’t open yet.",
   "Le check-in est fermé.": "Check-in is closed.",
   "Phase inconnue.": "Unknown stage.",
-  "Résultat inconnu.": "Unknown result."
+  "Résultat inconnu.": "Unknown result.",
+  "Instant invalide (ex. 12:34).": "Invalid timestamp (e.g. 12:34).",
+  "Clip introuvable.": "Clip not found.",
+  "Match inconnu.": "Unknown match.",
+  "Adresse invalide : https://… sans espace.": "Invalid address: https://… without spaces.",
+  "Clip : lien ou fichier.": "Clip: link or file.",
+  "Ce post est publié : son contenu ne se modifie plus (dépubliez-le d’abord).": "This post is published: its content can no longer be changed (unpublish it first).",
+  "Le tableau du club n’a plus de liste ouverte.": "The club board has no open list left.",
+  "Ce clip est un lien.": "This clip is a link.",
+  "Un rôle CM porte déjà ce nom.": "A CM role already has this name.",
+  "Le nom et la couleur d’un rôle système ne changent pas.": "The name and colour of a system role can’t be changed.",
+  "Seul un rôle système se rétablit.": "Only a system role can be reset.",
+  "Compte inconnu.": "Unknown account.",
+  "Ce compte n’a pas encore de profil Esport.": "This account has no Esport profile yet.",
+  "Un correspondant doit être membre actif de la team.": "A correspondent must be an active member of the team.",
+  "Affectation introuvable.": "Assignment not found.",
+  "Réglages illisibles.": "Unreadable settings.",
+  "Réseau inconnu.": "Unknown network.",
+  "Adresse invalide : https://… sans espace (5 au plus).": "Invalid address: https://… without spaces (5 at most).",
+  "Le tableau de la team n’a plus de liste ouverte.": "The team board has no open list left.",
+  "Genre inconnu (resultat, annonce, tournoi).": "Unknown kind (resultat, annonce, tournoi).",
+  "Ce contenu n’est pas publiable (réservé au staff, scrim non publiable, annulé…).": "This content can’t be published (staff only, non-publishable scrim, cancelled…).",
+  "Fichier illisible : choisissez l’export JSON d’un tableau Trello.": "Unreadable file: choose the JSON export of a Trello board.",
+  "Ce fichier n’est pas un export de tableau Trello lisible.": "This file isn’t a readable Trello board export.",
+  "Ce tableau Trello est déjà importé dans une autre partie CM.": "This Trello board is already imported into another CM area.",
+  "Réseaux illisibles.": "Unreadable networks.",
+  "Textes illisibles.": "Unreadable texts.",
+  "Liens illisibles.": "Unreadable links.",
+  "Lien illisible.": "Unreadable link.",
+  "Clips illisibles.": "Unreadable clips.",
+  "Membres illisibles.": "Unreadable members.",
+  "Adresses illisibles.": "Unreadable addresses.",
+  "Ce réseau n’est pas ciblé par le post.": "This network isn’t targeted by the post.",
+  "Adresse du post invalide : https:// sur le domaine du réseau.": "Invalid post address: https:// on the network’s domain.",
+  "Titre obligatoire.": "Title required.",
+  "Nom obligatoire.": "Name required.",
+  "Tableau introuvable.": "Board not found.",
+  "Carte introuvable.": "Card not found.",
+  "Liste introuvable.": "List not found.",
+  "Le tableau par défaut ne s’archive pas.": "The default board can’t be archived.",
+  "Le tableau par défaut ne se supprime pas.": "The default board can’t be deleted.",
+  "Étiquette introuvable.": "Label not found.",
+  "Ce compte n’a pas accès à ce tableau.": "This account has no access to this board.",
+  "Cette carte a été modifiée entre-temps : rechargez-la.": "This card was changed in the meantime: reload it.",
+  "Ce post est soumis, validé ou publié : il reste un post.": "This post is submitted, approved or published: it stays a post.",
+  "Étiquettes illisibles.": "Unreadable labels.",
+  "Couverture illisible.": "Unreadable cover.",
+  "La couverture doit être une image jointe à la carte.": "The cover must be an image attached to the card.",
+  "Checklist introuvable.": "Checklist not found.",
+  "Texte obligatoire.": "Text required.",
+  "Commentaire vide.": "Empty comment.",
+  "Seul l’auteur modifie son commentaire.": "Only the author can edit their comment.",
+  "Pièce jointe : lien ou fichier.": "Attachment: link or file.",
+  "Pièce jointe introuvable.": "Attachment not found.",
+  "Cette pièce jointe est un lien.": "This attachment is a link.",
+  "Cette carte n’est pas un post.": "This card isn’t a post.",
+  "Ce post est déjà validé ou publié.": "This post is already approved or published.",
+  "Le post n’est pas prêt : un texte manque ou dépasse la limite d’un réseau.": "The post isn’t ready: a text is missing or exceeds a network’s limit.",
+  "Ce post n’est pas à valider.": "This post isn’t awaiting approval.",
+  "Ce post a été modifié entre-temps : relisez-le avant de le valider.": "This post was changed in the meantime: read it again before approving it.",
+  "Dites pourquoi (motif du refus).": "Say why (reason for the rejection).",
+  "Un post doit être validé avant d’être publié.": "A post must be approved before it’s published.",
+  "Le contenu a changé depuis la validation : faites-le valider de nouveau.": "The content changed since it was approved: get it approved again.",
+  "Ce post n’est pas publié.": "This post isn’t published.",
+  "Période invalide (du, au : AAAA-MM-JJ).": "Invalid period (du, au: YYYY-MM-DD).",
+  "Période de 4 mois au plus.": "Period of 4 months at most."
  },
  "motifs": [
   [
@@ -629,6 +694,46 @@
   [
    "^(\\d+) joueurs au plus pour ce format\\.$",
    "$1 players at most for this format."
+  ],
+  [
+   "^(\\d+) tableaux au plus\\.$",
+   "$1 boards at most."
+  ],
+  [
+   "^(\\d+) listes au plus\\.$",
+   "$1 lists at most."
+  ],
+  [
+   "^(\\d+) cartes au plus par tableau\\.$",
+   "$1 cards per board at most."
+  ],
+  [
+   "^(\\d+) étiquettes au plus\\.$",
+   "$1 labels at most."
+  ],
+  [
+   "^(\\d+) checklists au plus\\.$",
+   "$1 checklists at most."
+  ],
+  [
+   "^(\\d+) éléments au plus\\.$",
+   "$1 items at most."
+  ],
+  [
+   "^(\\d+) pièces jointes au plus\\.$",
+   "$1 attachments at most."
+  ],
+  [
+   "^(\\d+) fichiers au plus\\.$",
+   "$1 files at most."
+  ],
+  [
+   "^Texte trop long \\((\\d+) caractères au plus\\)\\.$",
+   "Text too long ($1 characters at most)."
+  ],
+  [
+   "^(\\d+) clips en attente au plus : patientez le temps que le CM les trie\\.$",
+   "$1 pending clips at most: wait until the CM sorts them."
   ]
  ]
 }

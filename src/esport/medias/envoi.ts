@@ -18,7 +18,8 @@ import { ErreurEsport, type ClientEsport, type InfosMedia } from '../client';
 import { tr } from '../i18n';
 import { ajouter, nouvelEtat, sha256Hex, terminer, type EtatSha256 } from './sha256';
 
-export type SectionEnvoi = 'review' | 'resumes' | 'ressources';
+/** Section de l'URL d'envoi ; « cm » : section CM, `teamId` est alors la portée (« club » ou une team). */
+export type SectionEnvoi = 'review' | 'resumes' | 'ressources' | 'cm';
 
 /** Un fichier de l'appareil, lu par tranches (jamais en entier). */
 export interface FichierLocal {
@@ -32,7 +33,7 @@ export interface FichierLocal {
 
 export interface EtatEnvoi {
   id: string;
-  usage: 'review' | 'reunion' | 'ressource';
+  usage: 'review' | 'reunion' | 'ressource' | 'cm';
   nom: string;
   taille: number;
   tailleMorceau: number;
@@ -119,7 +120,7 @@ export interface OptionsEnvoi {
  * appeler une fois le fichier rattaché (review créée, réunion déposée).
  */
 export async function envoyerFichier({ client, teamId, section, fichier, onProgression, signal, memoire = memoireLocale(), attendre = attendreDefaut, maintenant = Date.now }: OptionsEnvoi): Promise<{ etat: EtatEnvoi; oublier(): void }> {
-  const base = `/teams/${encodeURIComponent(teamId)}/${section}/envois`;
+  const base = section === 'cm' ? `/cm/portees/${encodeURIComponent(teamId)}/envois` : `/teams/${encodeURIComponent(teamId)}/${section}/envois`;
   const cle = cleReprise(client, teamId, section, fichier);
   const oublier = () => memoire.oublier(cle);
   const verifierAnnulation = () => {

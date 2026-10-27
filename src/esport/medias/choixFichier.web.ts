@@ -55,3 +55,7 @@ export const ACCEPT_VIDEO = 'video/mp4,video/quicktime,video/webm,video/x-matros
 export const ACCEPT_REUNION = `${ACCEPT_VIDEO},audio/*,.m4a,.mp3,.aac,.wav,.ogg,.opus,.flac`;
 /** Ressources : PDF, images, vidéos, archives (jamais de SVG ni de HTML : refusés par le serveur). */
 export const ACCEPT_RESSOURCE = `application/pdf,.pdf,image/png,image/jpeg,image/gif,image/webp,.png,.jpg,.jpeg,.gif,.webp,${ACCEPT_VIDEO},.zip,.7z,.rar,application/zip,application/x-7z-compressed,application/vnd.rar`;
+/** Section CM : mêmes formats que les ressources (pièces jointes, clips). */
+export const ACCEPT_CM = ACCEPT_RESSOURCE;
+/** Export JSON d'un tableau Trello. */
+export const ACCEPT_JSON = 'application/json,.json';

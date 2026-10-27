@@ -21,6 +21,9 @@ export const Discord = differe<PropsModule>(async () => (await import('./Discord
 export const Ressources = differe<PropsModule>(async () => (await import('./ressources/Ressources')).Ressources);
 export const Tournois = differe<PropsModule>(async () => (await import('./competition/Tournois')).Tournois);
 export const Resultats = differe<PropsModule>(async () => (await import('./competition/Resultats')).Resultats);
+// Section CM (onglet de team et espace du club) : chargée seulement quand on l'ouvre.
+export const CmTeam = differe<PropsModule>(async () => (await import('./cm/CmTeam')).CmTeam);
+export const EspaceCm = differe<React.ComponentProps<typeof import('./cm/EspaceCm').EspaceCm>>(async () => (await import('./cm/EspaceCm')).EspaceCm);
 // Page « Statistiques » (Fondateur) : chargée seulement quand il l'ouvre.
 export const Statistiques = differe<React.ComponentProps<typeof import('./Statistiques').Statistiques>>(async () => (await import('./Statistiques')).Statistiques);
 // Page « Jeux » (profils de jeu, assistant IA) : chargée seulement quand on l'ouvre.

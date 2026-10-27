@@ -15,7 +15,8 @@
     { "cle": "player_notes", "nom": "Suivi joueurs", "phase": 7, "description": "Notes du staff sur chaque joueur, partage note par note." },
     { "cle": "resources", "nom": "Ressources", "phase": 8, "description": "Canal de ressources : liens, vidéos, fichiers et notes, par catégorie." },
     { "cle": "tournois", "nom": "Tournois", "phase": 9, "description": "Tournois : fiche, inscription et check-in, roster, parcours, matchs au planning, classement et gains." },
-    { "cle": "resultats", "nom": "Résultats", "phase": 9, "description": "Résultats des matchs selon le score du jeu : maps et manches, classement, joueurs, bilans." }
+    { "cle": "resultats", "nom": "Résultats", "phase": 9, "description": "Résultats des matchs selon le score du jeu : maps et manches, classement, joueurs, bilans." },
+    { "cle": "cm", "nom": "CM", "phase": 10, "description": "Partie CM de la team : dépôt d’informations pour le community manager, clips proposés par les joueurs." }
   ],
   "groupes": [
     {
@@ -182,6 +183,16 @@
       ]
     },
     {
+      "cle": "cm",
+      "nom": "CM",
+      "module": "cm",
+      "permissions": [
+        { "cle": "cm.voir", "action": "voir", "libelle": "Voir la partie CM de la team" },
+        { "cle": "cm.deposer", "action": "creer", "libelle": "Déposer des informations" },
+        { "cle": "cm.clips.proposer", "action": "special", "libelle": "Proposer des clips" }
+      ]
+    },
+    {
       "cle": "activity_log",
       "nom": "Journal",
       "module": "activity_log",
@@ -208,6 +219,7 @@
         "player_notes.view", "player_notes.write", "player_notes.delete",
         "resources.view", "resources.post", "resources.manage",
         "tournois.voir", "tournois.gerer", "resultats.voir", "resultats.saisir",
+        "cm.voir", "cm.deposer", "cm.clips.proposer",
         "activity_log.view"
       ]
     },
@@ -229,7 +241,8 @@
         "playbook.view", "playbook.manage",
         "player_notes.view", "player_notes.write", "player_notes.delete",
         "resources.view", "resources.post", "resources.manage",
-        "tournois.voir", "tournois.gerer", "resultats.voir", "resultats.saisir"
+        "tournois.voir", "tournois.gerer", "resultats.voir", "resultats.saisir",
+        "cm.clips.proposer"
       ]
     },
     {
@@ -249,7 +262,8 @@
         "playbook.view", "playbook.manage",
         "player_notes.view", "player_notes.write",
         "resources.view", "resources.post", "resources.manage",
-        "tournois.voir", "resultats.voir", "resultats.saisir"
+        "tournois.voir", "resultats.voir", "resultats.saisir",
+        "cm.clips.proposer"
       ]
     },
     {
@@ -266,7 +280,8 @@
         "video_review.view", "video_review.annotate", "video_review.react",
         "strats.view", "playbook.view",
         "resources.view",
-        "tournois.voir", "resultats.voir"
+        "tournois.voir", "resultats.voir",
+        "cm.clips.proposer"
       ]
     },
     {
@@ -274,7 +289,7 @@
       "nom": "Remplaçant / Invité",
       "couleur": "#8b8b9a",
       "description": "Lecture limitée.",
-      "permissions": ["members.view", "planning.view", "availability.edit_own", "attendance.rsvp_own", "playbook.view", "resources.view", "tournois.voir", "resultats.voir"]
+      "permissions": ["members.view", "planning.view", "availability.edit_own", "attendance.rsvp_own", "playbook.view", "resources.view", "tournois.voir", "resultats.voir", "cm.clips.proposer"]
     }
   ],
   "presets": [
@@ -282,7 +297,7 @@
       "cle": "valorant_complet",
       "nom": "Team Valorant complète",
       "description": "Tous les modules.",
-      "modules": ["activity_log", "planning", "availability", "attendance", "meeting_summaries", "goals_tasks", "discord", "video_review", "scouting", "strat_editor", "playbook", "player_notes", "resources", "tournois", "resultats"]
+      "modules": ["activity_log", "planning", "availability", "attendance", "meeting_summaries", "goals_tasks", "discord", "video_review", "scouting", "strat_editor", "playbook", "player_notes", "resources", "tournois", "resultats", "cm"]
     },
     { "cle": "minimal", "nom": "Minimal", "description": "Journal, planning et disponibilités.", "modules": ["activity_log", "planning", "availability"] },
     { "cle": "personnalise", "nom": "Personnalisé", "description": "Vous choisissez chaque module.", "modules": null }

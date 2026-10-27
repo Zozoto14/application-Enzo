@@ -65,6 +65,7 @@ import { phraseJournalReview, phraseNotificationReview } from './review/libelles
 import { phraseJournalStrats, phraseNotificationStrats } from './strats/libelles';
 import { phraseJournalRessources, phraseNotificationRessources } from './ressources/libelles';
 import { phraseJournalCompetition, phraseNotificationCompetition } from './competition/libelles';
+import { phraseJournalCm, phraseNotificationCm } from './cm/libelles';
 
 const nom = (noms: Record<string, string | null>, id: unknown): string =>
   typeof id === 'string' ? (noms[id] ?? (id === 'principal' ? tr('jr.fondateur') : tr('jr.compte_supprime'))) : tr('jr.quelquun');
@@ -217,7 +218,7 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
     case 'event.reminder_h1':
       return tr('jr.event_reminder', { delai: e.action === 'event.reminder_d1' ? 'J-1' : 'H-1', titre: texte(m.titre) });
     default:
-      return phraseJournalPlanning(e.action, qui, m, id => nom(noms, id)) ?? phraseJournalReview(e.action, qui, m) ?? phraseJournalStrats(e.action, qui, m) ?? phraseJournalRessources(e.action, qui, m) ?? phraseJournalCompetition(e.action, qui, m) ?? `${qui} : ${e.action}`;
+      return phraseJournalPlanning(e.action, qui, m, id => nom(noms, id)) ?? phraseJournalReview(e.action, qui, m) ?? phraseJournalStrats(e.action, qui, m) ?? phraseJournalRessources(e.action, qui, m) ?? phraseJournalCompetition(e.action, qui, m) ?? phraseJournalCm(e.action, qui, m) ?? `${qui} : ${e.action}`;
   }
 }
 
@@ -244,6 +245,7 @@ export function filtresJournal(): ReadonlyArray<readonly [string, string]> {
     ['resource', tr('cat.groupe.resources')],
     ['tournoi', tr('cat.groupe.tournois')],
     ['match', tr('cat.groupe.resultats')],
+    ['cm', tr('cat.groupe.cm')],
   ];
 }
 
@@ -300,7 +302,7 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
         echeance: typeof c.echeance === 'string' ? ` (${dateJour(c.echeance)})` : '',
       });
     default:
-      return phraseNotificationPlanning(n.type, team, c) ?? phraseNotificationReview(n.type, team, c) ?? phraseNotificationStrats(n.type, team, c) ?? phraseNotificationRessources(n.type, team, c) ?? phraseNotificationCompetition(n.type, team, c) ?? `${team} : ${n.type}`;
+      return phraseNotificationPlanning(n.type, team, c) ?? phraseNotificationReview(n.type, team, c) ?? phraseNotificationStrats(n.type, team, c) ?? phraseNotificationRessources(n.type, team, c) ?? phraseNotificationCompetition(n.type, team, c) ?? phraseNotificationCm(n.type, team, c, id => nom(noms, id)) ?? `${team} : ${n.type}`;
   }
 }
 

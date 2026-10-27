@@ -18,3 +18,5 @@ export async function choisirFichier(_accept: string, _testID?: string): Promise
 export const ACCEPT_VIDEO = '';
 export const ACCEPT_REUNION = '';
 export const ACCEPT_RESSOURCE = '';
+export const ACCEPT_CM = '';
+export const ACCEPT_JSON = '';

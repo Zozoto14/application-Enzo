@@ -43,6 +43,10 @@ export const LIMITES = {
   ia: { max: 20, fenetreS: 3600 },
   // Statistiques d'usage : lots de l'app (un toutes les 45 s au plus, plus les envois au départ de la page), par compte.
   usage: { max: 150, fenetreS: 3600 },
+  // Section CM : imports Trello (gros fichiers analysés par le serveur), clips proposés et dépôts d'informations, par compte.
+  cm_import: { max: 20, fenetreS: 3600 },
+  cm_clip: { max: 30, fenetreS: 3600 },
+  cm_depot: { max: 30, fenetreS: 3600 },
 };
 
 /**

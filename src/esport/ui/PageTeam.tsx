@@ -81,7 +81,7 @@ export const GROUPES_TEAM: ReadonlyArray<{ id: GroupeTeam; libelle: string; glyp
       return tr('pageTeam.equipe');
     }, glyphe: '⚑', get description() {
       return tr('pageTeam.equipe_resumes_objectifs_et');
-    }, sections: ['module:meeting_summaries', 'module:goals_tasks', 'module:player_notes', 'membres'] },
+    }, sections: ['module:meeting_summaries', 'module:goals_tasks', 'module:player_notes', 'module:cm', 'membres'] },
   { id: 'reglages', get libelle() {
       return tr('pageTeam.reglages');
     }, glyphe: '⚙︎', get description() {
@@ -173,6 +173,7 @@ export function PageTeam({
   onMembresGlobal,
   onNaviguer,
   gererJeux,
+  cm,
   onChangerTeam,
   pseudo,
   contexte,
@@ -190,6 +191,8 @@ export function PageTeam({
   onNaviguer?(o: OngletEsport): void;
   /** Permission globale « Gérer les profils de jeu » (entrée « Jeux » de la navigation). */
   gererJeux?: boolean;
+  /** Droit CM : l'entrée « CM » de la navigation. */
+  cm?: boolean;
   /** Sélecteur rapide : ouvrir une autre team, sur la même section si elle y existe. */
   onChangerTeam?(id: string, section: SectionTeam): void;
   pseudo?: string;
@@ -355,7 +358,7 @@ export function PageTeam({
   );
 
   return (
-    <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} fondateur={detail.moi.superAdmin} gererJeux={gererJeux} blocTeam={blocTeam} enTeteMobile={enTeteMobile} barreBasse={barreBasse}>
+    <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} fondateur={detail.moi.superAdmin} gererJeux={gererJeux} cm={cm} blocTeam={blocTeam} enTeteMobile={enTeteMobile} barreBasse={barreBasse}>
       <View style={{ flex: 1 }} testID="esport-team">
         {large ? <View style={{ height: 4, backgroundColor: couleur }} /> : null}
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: large ? ESP.xxl : ESP.m, paddingTop: large ? ESP.l : ESP.m, paddingBottom: ESP.xxxl, gap: large ? ESP.l : ESP.m, maxWidth: LARGEUR_CONTENU + 2 * ESP.xxl, width: '100%', alignSelf: 'center' }}>

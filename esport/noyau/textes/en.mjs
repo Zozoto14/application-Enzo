@@ -323,4 +323,13 @@ export const EN = {
   'competition.phrase.final': '{tournoi}: {classement}',
   'competition.phrase.final_sans_place': '{tournoi}: finished',
   'competition.page_tournoi': 'Tournament page',
+
+  // ---- CM section: automatic suggestions (card titles, start of the post texts)
+  'cm.suggestion.tournoi': 'Announcement: {nom}',
+  'cm.suggestion.j1': 'D-1 · {titre}',
+  'cm.suggestion.jourj': 'Match day · {titre}',
+  'cm.suggestion.resultat': 'Result · {titre} · {phrase}',
+  'cm.suggestion.final': 'Final standing: {nom}',
+  'cm.prefixe.j1': 'Tomorrow:',
+  'cm.prefixe.jourj': 'Today!',
 };

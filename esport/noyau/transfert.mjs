@@ -111,6 +111,26 @@ export const TABLES = [
   ['ia_appels', 'id'],
   ['ia_reglages', 'cle'],
   ['permissions_globales', 'compte_id, permission'],
+  // Section CM (migration 0023) : rôles CM (les deux rôles système posés par la migration sont remplacés par ceux de
+  // l'export), affectations, réglages, tableaux, listes, étiquettes, cartes et leurs détails, fichiers, clips, imports.
+  ['cm_roles', 'id'],
+  ['cm_role_permissions', 'role_id, permission'],
+  ['cm_affectations', 'id'],
+  ['cm_reglages', 'cle'],
+  ['cm_tableaux', 'id'],
+  ['cm_listes', 'id'],
+  ['cm_etiquettes', 'id'],
+  ['cm_cartes', 'id'],
+  ['cm_carte_etiquettes', 'carte_id, etiquette_id'],
+  ['cm_carte_membres', 'carte_id, compte_id'],
+  ['cm_checklists', 'id'],
+  ['cm_checklist_elements', 'id'],
+  ['cm_commentaires', 'id'],
+  ['cm_fichiers', 'id'],
+  ['cm_pieces', 'id'],
+  ['cm_activite', 'id'],
+  ['cm_clips', 'id'],
+  ['cm_imports', 'id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;
@@ -146,6 +166,11 @@ export async function importerBase(base, donnees, { tailleLot = 50 } = {}) {
     // Types de réunion globaux posés par la migration : remplacés par ceux de l'export (éventuellement modifiés).
     if (table === 'types_reunion' && lignes.length > 0) await base.executer('DELETE FROM types_reunion WHERE team_id IS NULL', []);
     // Profils préconfigurés posés par la migration 0021 : remplacés par ceux de l'export (modifiés depuis).
+    // Rôles CM système posés par la migration 0023 : remplacés par ceux de l'export (permissions modifiées depuis).
+    if (table === 'cm_roles' && lignes.length > 0) {
+      await base.executer('DELETE FROM cm_role_permissions', []);
+      await base.executer('DELETE FROM cm_roles', []);
+    }
     if (table === 'jeux' && lignes.length > 0) {
       await base.executer('DELETE FROM jeu_versions', []);
       await base.executer('DELETE FROM jeux', []);

@@ -324,4 +324,13 @@ export const FR = {
   'competition.phrase.final': '{tournoi} : {classement}',
   'competition.phrase.final_sans_place': '{tournoi} : terminé',
   'competition.page_tournoi': 'Page du tournoi',
+
+  // ---- Section CM : suggestions automatiques (titres des cartes, début des textes des posts)
+  'cm.suggestion.tournoi': 'Annonce : {nom}',
+  'cm.suggestion.j1': 'J-1 · {titre}',
+  'cm.suggestion.jourj': 'Jour J · {titre}',
+  'cm.suggestion.resultat': 'Résultat · {titre} · {phrase}',
+  'cm.suggestion.final': 'Classement final : {nom}',
+  'cm.prefixe.j1': 'Demain :',
+  'cm.prefixe.jourj': 'C’est aujourd’hui !',
 };

@@ -27,6 +27,7 @@ export const GROUPES_TEAM = {
   'module-meeting_summaries': 'equipe',
   'module-goals_tasks': 'equipe',
   'module-player_notes': 'equipe',
+  'module-cm': 'equipe',
   membres: 'equipe',
   parametres: 'reglages',
   'module-discord': 'reglages',

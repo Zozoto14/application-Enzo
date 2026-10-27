@@ -32,7 +32,9 @@ import { AvatarTeam, Badge, Carte, ESP, EnTetePage, EtatVide, Grille, LARGEUR_PC
 import { definirLangue, langueAppareil, langueCourante, tr, trn, useLangue } from '../i18n';
 import { ChoixLangue } from './ChoixLangue';
 import { PublierMulti } from './ressources/PublierMulti';
-import { Jeux, Statistiques } from './differe';
+import { EspaceCm, Jeux, Statistiques } from './differe';
+import { apiCm, type MoiCm } from '../cm/api';
+import { navEsport } from './CadreEsport';
 import { demarrerUsage, noterPage } from '../usage';
 
 type Etat =
@@ -53,6 +55,8 @@ export function Esport(props: PropsRacineApp) {
   useLangue();
   const [etat, setEtat] = useState<Etat>({ e: 'chargement' });
   const [vue, setVue] = useState<Vue>({ v: 'dashboard' });
+  // Section CM (GET /cm/moi) : entrée « CM » de la navigation ; un ancien serveur sans section CM n'affiche rien.
+  const [moiCm, setMoiCm] = useState<MoiCm | undefined>();
   const { width } = useWindowDimensions();
   const large = width >= LARGEUR_PC;
 
@@ -83,7 +87,22 @@ export function Esport(props: PropsRacineApp) {
   // Statistiques d'usage internes (métadonnées seulement, par lots) : le temps de la session Esport ouverte.
   const clientPret = etat.e === 'pret' ? etat.client : undefined;
   useEffect(() => (clientPret ? demarrerUsage(clientPret) : undefined), [clientPret]);
-  const pageVue = etat.e !== 'pret' ? null : !etat.moi.profil ? 'esport.profil' : vue.v === 'team' ? null : (vue.v === 'statistiques' && !etat.moi.superAdmin) || (vue.v === 'jeux' && !etat.moi.peutGererJeux) ? 'esport.dashboard' : `esport.${vue.v}`;
+  const profilPret = etat.e === 'pret' && Boolean(etat.moi.profil);
+  useEffect(() => {
+    if (!clientPret || !profilPret) return;
+    let vivant = true;
+    Promise.resolve()
+      .then(() => apiCm(clientPret).moi())
+      .then(m => {
+        if (vivant) setMoiCm(m);
+      })
+      .catch(() => undefined);
+    return () => {
+      vivant = false;
+    };
+  }, [clientPret, profilPret]);
+  const cm = Boolean(moiCm?.espace);
+  const pageVue = etat.e !== 'pret' ? null : !etat.moi.profil ? 'esport.profil' : vue.v === 'team' ? null : (vue.v === 'statistiques' && !etat.moi.superAdmin) || (vue.v === 'jeux' && !etat.moi.peutGererJeux) || (vue.v === 'cm' && !cm) ? 'esport.dashboard' : `esport.${vue.v}`;
   useEffect(() => {
     if (pageVue) noterPage(pageVue);
   }, [pageVue]);
@@ -126,6 +145,7 @@ export function Esport(props: PropsRacineApp) {
         onMembresGlobal={() => setVue({ v: 'membres' })}
         onNaviguer={o => setVue({ v: o })}
         gererJeux={Boolean(etat.moi.peutGererJeux)}
+        cm={cm}
         onChangerTeam={(id, section) => setVue({ v: 'team', id, section })}
         pseudo={etat.moi.profil.pseudo}
         contexte={contexte}
@@ -176,6 +196,9 @@ export function Esport(props: PropsRacineApp) {
     } else if (onglet === 'jeux' && etat.moi.peutGererJeux) {
       // Profils de jeu, assistant IA, mises à jour proposées, Administration de l'IA (Fondateur).
       page = <Jeux theme={theme} client={etat.client} large={large} fondateur={etat.moi.superAdmin} />;
+    } else if (onglet === 'cm' && cm && moiCm) {
+      // Section CM du club : tableaux, À valider, calendrier, clips ; équipe CM, import Trello, réglages (cm.gerer).
+      page = <EspaceCm theme={theme} client={etat.client} large={large} moi={moiCm} />;
     } else if (onglet === 'membres') {
       page = <MembresGlobal theme={theme} client={etat.client} contexte={contexte} registre={registre} large={large} onOuvrirTeam={id => setVue({ v: 'team', id })} onOuvrirApp={onOuvrirApp} />;
     } else {
@@ -191,11 +214,13 @@ export function Esport(props: PropsRacineApp) {
           onMembres={() => setVue({ v: 'membres' })}
           onExporter={exporter}
           onProfilSupprime={() => void ouvrir()}
+          // Téléphone : sans place dans la barre du bas, la section CM s'ouvre d'ici.
+          onCm={cm && !large && !navEsport(etat.moi.superAdmin, Boolean(etat.moi.peutGererJeux), true, true).some(n => n.cle === 'cm') ? () => setVue({ v: 'cm' }) : undefined}
         />
       );
     }
     contenu = (
-      <CadreEsport theme={theme} large={large} onglet={onglet} onOnglet={o => setVue({ v: o })} pseudo={etat.moi.profil.pseudo} fondateur={etat.moi.superAdmin} gererJeux={Boolean(etat.moi.peutGererJeux)}>
+      <CadreEsport theme={theme} large={large} onglet={onglet} onOnglet={o => setVue({ v: o })} pseudo={etat.moi.profil.pseudo} fondateur={etat.moi.superAdmin} gererJeux={Boolean(etat.moi.peutGererJeux)} cm={cm}>
         {page}
       </CadreEsport>
     );
@@ -291,6 +316,7 @@ function MesTeams({
   onMembres,
   onExporter,
   onProfilSupprime,
+  onCm,
 }: {
   theme: ThemeHub;
   client: ClientEsport;
@@ -302,6 +328,8 @@ function MesTeams({
   onMembres(): void;
   onExporter?(nom: string, contenu: string): Promise<boolean>;
   onProfilSupprime(): void;
+  /** Ouvrir la section CM (téléphone, quand elle n'a pas de place dans la barre du bas). */
+  onCm?(): void;
 }) {
   const [teams, setTeams] = useState<TeamListee[] | undefined>();
   const [notifs, setNotifs] = useState<Notifications | undefined>();
@@ -333,6 +361,7 @@ function MesTeams({
           <>
             {moi.superAdmin ? <BoutonHub theme={theme} titre={tr('racineEsport.inviter_un_joueur')} onPress={onMembres} testID="esport-teams-inviter" /> : null}
             {moi.superAdmin ? <BoutonHub theme={theme} titre={tr('ressources.multi.bouton')} libelle={tr('ressources.multi.titre')} onPress={() => setRessources(true)} testID="esport-teams-ressources" /> : null}
+            {onCm ? <BoutonHub theme={theme} titre={tr('cm.nav')} libelle={tr('cm.nav_description')} onPress={onCm} testID="esport-teams-cm" /> : null}
             <BoutonHub theme={theme} titre={profil ? tr('racineEsport.fermer_mon_profil') : tr('racineEsport.mon_profil')} onPress={() => setProfil(p => !p)} testID="esport-mon-profil-ouvrir" />
             {moi.peutCreerTeam ? <BoutonHub theme={theme} titre={tr('racineEsport.creer_une_team')} variante="plein" onPress={onCreer} testID="esport-creer" /> : null}
           </>

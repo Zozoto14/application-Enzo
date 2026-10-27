@@ -21,6 +21,7 @@
  */
 
 import { effacementCompetition } from './competition/rgpd.mjs';
+import { effacementCm } from './cm/rgpd.mjs';
 import { discordIdLibre, lireDiscordId } from './discordId.mjs';
 import { lireLangue } from './langues.mjs';
 import { evenement } from './evenements.mjs';
@@ -449,6 +450,8 @@ export function servicesComptes({ base, maintenant = () => Date.now(), noyau, de
       ...effacementUsage(compte),
       // Tournois et résultats (migration 0022) : retiré des rosters ; ses lignes de résultat restent, anonymes.
       ...effacementCompetition(compte),
+      // Section CM (migration 0023) : affectations et assignations effacées ; ce qu'il a écrit reste, sans auteur.
+      ...(await effacementCm(base, compte)),
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, par: 'administration' }, maintenant: t }),
     );

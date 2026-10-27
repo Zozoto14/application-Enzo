@@ -50,10 +50,12 @@ import { exportUsage, servicesCollecte } from './usage/collecte.mjs';
 import { exigerFondateur, servicesStatistiques } from './usage/statistiques.mjs';
 import { servicesJeux } from './jeux/service.mjs';
 import { routesJeux } from './jeux/routes.mjs';
+import { servicesCm } from './cm/service.mjs';
+import { routeFichierCm, routesCm } from './cm/routes.mjs';
 
 export const VERSION_ESPORT = 4;
 /** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
-export const FONCTIONS = ['surcharge-methode', 'profils-jeu'];
+export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm'];
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
@@ -173,6 +175,8 @@ export function creerApi({
   const sts = servicesStatistiques({ base, maintenant });
   // Profils de jeu (migration 0021) et assistant IA (clé d'API dans esport.env, jamais renvoyée).
   const jx = servicesJeux({ base, maintenant, socle: s, ia, travauxIa });
+  // Section CM (migration 0023) : espace du club et partie CM des teams ; fichiers par envoi par morceaux (usage « cm »).
+  const cm = servicesCm({ base, maintenant, medias: md, cleSession, stockage });
   // Bot Discord (interactions HTTP) : DISCORD_APPLICATION_ID et DISCORD_PUBLIC_KEY (variables), DISCORD_BOT_TOKEN (secret).
   const configBot = { applicationId: discordBot.applicationId || '', publicKey: discordBot.publicKey || '' };
   const jetonBot = discordBot.jetonBot || undefined;
@@ -223,6 +227,7 @@ export function creerApi({
     }
     if (chemin === '/catalogue' && m === 'GET') return catalogue;
     if (chemin.startsWith('/fichiers/') && (m === 'GET' || m === 'HEAD')) return routeFichierSigne(md, url, requete);
+    if (chemin.startsWith('/cm/fichiers/') && (m === 'GET' || m === 'HEAD')) return routeFichierCm(cm, url, requete);
     const publique = await routePublique({ p, chemin, methode: m, url });
     if (publique !== undefined) return publique;
     const partage = await routePubliqueStrats({ strats: st, chemin, methode: m, url });
@@ -375,6 +380,8 @@ export function creerApi({
         return s.creerTeam(acteur, corps);
       }
     }
+    const sectionCm = await routesCm({ cm, medias: md, acteur, chemin, methode: m, url, requete, lireCorps: max => lireCorps(requete, max), limite });
+    if (sectionCm !== undefined) return sectionCm;
     const profilsJeu = await routesJeux({ jeux: jx, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
     if (profilsJeu !== undefined) return profilsJeu;
     const planning = await routesPlanning({ p, acteur, chemin, methode: m, url, lireCorps: () => lireCorps(requete) });

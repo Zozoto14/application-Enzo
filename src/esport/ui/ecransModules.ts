@@ -13,3 +13,5 @@ export { Statistiques } from './Statistiques';
 export { Jeux } from './jeux/Jeux';
 export { Tournois } from './competition/Tournois';
 export { Resultats } from './competition/Resultats';
+export { CmTeam } from './cm/CmTeam';
+export { EspaceCm } from './cm/EspaceCm';

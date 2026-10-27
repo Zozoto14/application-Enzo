@@ -10,7 +10,7 @@ import type { ClientEsport, DetailTeam } from '../client';
 import type { SaisieEvenement } from '../planning/api';
 import { PERMISSION_DISCORD } from '../discord/api';
 // Sur le web, chargés à la demande (differe.web.tsx) : bundle principal plus léger.
-import { Discord, Disponibilites, Planning, Playbook, Presence, Ressources, Resultats, Review, Scouting, Strats, SuiviJoueurs, Tournois } from './differe';
+import { CmTeam, Discord, Disponibilites, Planning, Playbook, Presence, Ressources, Resultats, Review, Scouting, Strats, SuiviJoueurs, Tournois } from './differe';
 
 export type SectionModule = `module:${string}`;
 
@@ -41,6 +41,7 @@ export const ECRANS_MODULES: Record<string, (props: PropsModule) => React.ReactE
   resources: Ressources,
   tournois: Tournois,
   resultats: Resultats,
+  cm: CmTeam,
 };
 
 /** Permissions dont l'une ouvre l'écran du module (sinon, pas d'entrée dans la barre). */
@@ -59,6 +60,8 @@ const ACCES_MODULES: Record<string, string[]> = {
   resources: ['resources.view'],
   tournois: ['tournois.voir'],
   resultats: ['resultats.voir'],
+  // Section CM : le correspondant (déposer), les joueurs (proposer des clips), ceux qui voient la partie CM.
+  cm: ['cm.voir', 'cm.deposer', 'cm.clips.proposer'],
 };
 
 export function moduleAccessible(cle: string, permissions: readonly string[]): boolean {

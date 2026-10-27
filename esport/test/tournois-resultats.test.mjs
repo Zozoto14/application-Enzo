@@ -157,7 +157,7 @@ test('migration 0022 sur une base existante : rôles système complétés, donn�
   await base.executer("INSERT INTO roles (id, team_id, cle_systeme, nom, couleur, systeme, position, cree_le, maj_le) VALUES ('perso', 't', NULL, 'Perso', '#000000', 0, 9, ?, ?)", [d, d]);
   await base.executer("INSERT INTO team_modules (team_id, module, active, config, maj_le) VALUES ('t', 'planning', 1, '{}', ?)", [d]);
   await base.executer("INSERT INTO planning_evenements (id, team_id, type, titre, description, debut, fin, fuseau, lieu, concernes, cree_par, cree_le, maj_le) VALUES ('e', 't', 'tournament', 'Cup', '', ?, ?, 'Europe/Paris', '', '[]', 'principal', ?, ?)", [d, d, d, d]);
-  assert.deepEqual(await appliquerMigrations(base, migrations), ['0022_tournois_resultats.sql']);
+  assert.deepEqual(await appliquerMigrations(base, migrations.filter(m => m.nom < '0023')), ['0022_tournois_resultats.sql']);
   const perms = async role => (await base.tous("SELECT permission FROM role_permissions WHERE role_id = ? AND (permission LIKE 'tournois.%' OR permission LIKE 'resultats.%') ORDER BY permission", [role])).map(l => l.permission);
   assert.deepEqual(await perms('manager'), ['resultats.saisir', 'resultats.voir', 'tournois.gerer', 'tournois.voir']);
   assert.deepEqual(await perms('analyste'), ['resultats.saisir', 'resultats.voir', 'tournois.voir']);
@@ -166,7 +166,7 @@ test('migration 0022 sur une base existante : rôles système complétés, donn�
   assert.equal((await base.tous("SELECT module FROM team_modules WHERE team_id = 't' AND module IN ('tournois', 'resultats')", [])).length, 0);
   assert.equal((await base.premier("SELECT titre FROM planning_evenements WHERE id = 'e'", [])).titre, 'Cup');
   // Rejouée : rien ne bouge (suivi des migrations).
-  assert.deepEqual(await appliquerMigrations(base, migrations), []);
+  assert.deepEqual(await appliquerMigrations(base, migrations.filter(m => m.nom < '0023')), []);
 });
 
 // ------------------------------------------------------------------ API

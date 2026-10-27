@@ -64,6 +64,9 @@ export const USAGES = {
     autoriser: async (base, ctx) =>
       ctx.permissions.has('resources.view') && Number((await base.premier('SELECT propositions FROM ressource_reglages WHERE team_id = ?', [ctx.team.id]))?.propositions ?? 0) === 1,
   },
+  // Section CM (migration 0023) : pièces jointes et clips, pour le club (sans team) ou une team. Le contexte
+  // (droits sur la portée) est fourni par la section CM (`brancherContexte`) ; les fichiers vont dans `cm_fichiers`.
+  cm: { module: null, permission: null, dossier: 'cm', externe: true },
 };
 
 /** Natures de fichiers (entite_type) affichées dans « Espace utilisé », et la permission qui les supprime. */
@@ -165,6 +168,9 @@ export async function nettoyerEnvois(base, stockage, { maintenant = Date.now(), 
 export function servicesMedias({ base, stockage, cleSession, maintenant = () => Date.now(), socle, config = configMedias() }) {
   const { contexteTeam } = socle;
   const peut = (ctx, p) => autorise(ctx.permissions, ctx.modules, p);
+  /** Contextes fournis par d'autres services pour les usages « externes » (section CM : portée club ou team). */
+  const contextesExternes = new Map();
+  const portee = ctx => ctx.portee ?? ctx.team.id;
 
   function exiger(ctx, permission) {
     const [module] = permission.split('.');
@@ -176,6 +182,13 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
   async function contexteEnvoi(acteur, teamId, usage) {
     const u = USAGES[usage];
     if (!u) throw echec(404, 'route', 'Adresse inconnue.');
+    if (u.externe) {
+      const resoudre = contextesExternes.get(usage);
+      if (!resoudre) throw echec(404, 'route', 'Adresse inconnue.');
+      const ctx = await resoudre(acteur, teamId);
+      if (!stockage || typeof stockage.debuterEnvoi !== 'function') throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
+      return ctx;
+    }
     const ctx = await contexteTeam(acteur, teamId);
     if (!ctx.modules.has(u.module)) throw echec(404, 'module-desactive', 'Ce module n’est pas activé pour cette team.');
     if (!peut(ctx, u.permission) && !(u.autoriser && (await u.autoriser(base, ctx)))) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
@@ -185,7 +198,7 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
 
   async function envoiDe(ctx, usage, id) {
     exigerUuid(id, 'envoi');
-    const e = await base.premier('SELECT * FROM envois WHERE id = ? AND team_id = ? AND usage = ? AND compte_id = ?', [id, ctx.team.id, usage, ctx.acteur.compte]);
+    const e = await base.premier('SELECT * FROM envois WHERE id = ? AND portee = ? AND usage = ? AND compte_id = ?', [id, portee(ctx), usage, ctx.acteur.compte]);
     if (!e) throw echec(404, 'envoi-introuvable', 'Envoi introuvable (annulé ou effacé après 24 h) : recommencez.');
     return e;
   }
@@ -225,19 +238,19 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
     }
     const ouverts = await base.premier("SELECT COUNT(*) AS n FROM envois WHERE compte_id = ? AND statut = 'en_cours'", [acteur.compte]);
     if (Number(ouverts?.n ?? 0) >= ENVOIS_OUVERTS_MAX) throw echec(429, 'trop-d-envois', 'Trop d’envois en cours : terminez-en ou annulez-en un.');
-    const nom = nomMedia(corps?.nom, { review: 'video', reunion: 'enregistrement', ressource: 'fichier' }[usage]);
+    const nom = nomMedia(corps?.nom, { review: 'video', reunion: 'enregistrement', ressource: 'fichier', cm: 'fichier' }[usage]);
     const typeAnnonce = texteNettoye(corps?.type, 100);
     const tailleMorceau = config.tailleMorceau;
     const morceaux = Math.ceil(taille / tailleMorceau);
     const id = nouvelId();
-    const cle = `teams/${ctx.team.id}/${USAGES[usage].dossier}/${nouvelId()}.media`;
+    const cle = ctx.team.id ? `teams/${ctx.team.id}/${USAGES[usage].dossier}/${nouvelId()}.media` : `club/${USAGES[usage].dossier}/${nouvelId()}.media`;
     const jeton = String((await stockage.debuterEnvoi(cle, { type: 'application/octet-stream' })) ?? '');
     const t = iso(maintenant());
     try {
       await base.executer(
-        `INSERT INTO envois (id, team_id, compte_id, usage, nom_original, type_annonce, taille, taille_morceau, morceaux, recus, empreinte_etat, jeton_stockage, cle_stockage, statut, cree_le, maj_le)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 'en_cours', ?, ?)`,
-        [id, ctx.team.id, acteur.compte, usage, nom, typeAnnonce, taille, tailleMorceau, morceaux, exporterEtat(nouvelEtat()), jeton, cle, t, t],
+        `INSERT INTO envois (id, team_id, portee, compte_id, usage, nom_original, type_annonce, taille, taille_morceau, morceaux, recus, empreinte_etat, jeton_stockage, cle_stockage, statut, cree_le, maj_le)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 'en_cours', ?, ?)`,
+        [id, ctx.team.id ?? null, portee(ctx), acteur.compte, usage, nom, typeAnnonce, taille, tailleMorceau, morceaux, exporterEtat(nouvelEtat()), jeton, cle, t, t],
       );
     } catch (err) {
       await stockage.abandonnerEnvoi(cle, { jeton }).catch(() => undefined);
@@ -293,7 +306,7 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
       analyse = analyserDebut(octets);
       if (!analyse || !FORMATS_PERMIS[usage].includes(analyse.format)) {
         await oublier(e);
-        if (usage === 'ressource') throw echec(415, 'format-fichier', 'Fichier non reconnu : PDF, image (PNG, JPEG, GIF, WebP), vidéo (MP4, MOV, WebM, MKV) ou archive (ZIP, 7z, RAR).');
+        if (usage === 'ressource' || usage === 'cm') throw echec(415, 'format-fichier', 'Fichier non reconnu : PDF, image (PNG, JPEG, GIF, WebP), vidéo (MP4, MOV, WebM, MKV) ou archive (ZIP, 7z, RAR).');
         throw echec(415, 'format-video', usage === 'review' ? 'Ce fichier n’est pas une vidéo reconnue (MP4, MOV, WebM ou MKV).' : 'Ce fichier n’est ni une vidéo ni un audio reconnu (MP4, MOV, WebM, MKV, M4A, MP3, WAV, OGG, FLAC).');
       }
     }
@@ -360,6 +373,21 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
     const analyse = jsonOu(e.meta_media, null);
     const fichierId = nouvelId();
     const t = iso(maintenant());
+    if (USAGES[usage]?.externe) {
+      return {
+        fichierId,
+        analyse,
+        envoi: e,
+        instructions: [
+          {
+            sql: `INSERT INTO cm_fichiers (id, portee, team_id, cle_stockage, type_mime, taille, nom_original, empreinte, depose_par, meta, cree_le)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            params: [fichierId, portee(ctx), ctx.team.id ?? null, e.cle_stockage, FORMATS[analyse?.format]?.mime ?? 'application/octet-stream', Number(e.taille), e.nom_original, e.empreinte, ctx.acteur.compte, JSON.stringify(analyse), t],
+          },
+          { sql: 'UPDATE envois SET fichier_id = ?, maj_le = ? WHERE id = ? AND fichier_id IS NULL', params: [fichierId, t, e.id] },
+        ],
+      };
+    }
     return {
       fichierId,
       analyse,
@@ -518,8 +546,14 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
     return { mediasDeposes: medias, transcriptions };
   }
 
+  /** Section CM : contexte d'envoi d'un usage externe (`(acteur, portee) → { acteur, team: { id }, portee }`). */
+  function brancherContexte(usage, resoudre) {
+    contextesExternes.set(usage, resoudre);
+  }
+
   return {
     config,
+    brancherContexte,
     debuterEnvoi,
     etatEnvoi,
     recevoirMorceau,

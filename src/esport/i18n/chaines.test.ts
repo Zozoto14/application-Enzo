@@ -52,7 +52,7 @@ function fichiers(dossier: string): string[] {
 /** Attributs JSX qui portent un texte lu par l'utilisateur. */
 const ATTRIBUTS_AFFICHES = new Set(['libelle', 'titre', 'texte', 'sous', 'placeholder', 'label', 'accessibilityLabel', 'accessibilityHint', 'title', 'description', 'detail']);
 /** Noms propres et sigles identiques dans toutes les langues. */
-const MARQUES = new Set(['Discord', 'Esport', 'PDF', 'Riot', 'Playbook', 'Scouting', 'Review', 'Strats', 'Jett, Raze']);
+const MARQUES = new Set(['Discord', 'Esport', 'PDF', 'Riot', 'Playbook', 'Scouting', 'Review', 'Strats', 'Jett, Raze', 'Trello']);
 
 /** Exemples de saisie identiques dans toutes les langues : adresses, fuseaux IANA, Riot ID. */
 const EXEMPLE_TECHNIQUE = /^(https?:\/\/|[A-Z][a-z]+\/[A-Z][a-z_]+$|[A-Za-z]+#[A-Z]+$)/;

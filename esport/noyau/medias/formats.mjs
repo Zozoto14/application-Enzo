@@ -41,6 +41,8 @@ export const FORMATS_PERMIS = {
   review: ['mp4', 'mov', 'webm', 'mkv'],
   reunion: ['mp4', 'mov', 'webm', 'mkv', 'm4a', 'mp3', 'aac', 'wav', 'ogg', 'flac'],
   ressource: ['pdf', 'png', 'jpeg', 'gif', 'webp', 'zip', '7z', 'rar', 'mp4', 'mov', 'webm', 'mkv'],
+  // Section CM : visuels, vidéos (clips), PDF et archives.
+  cm: ['pdf', 'png', 'jpeg', 'gif', 'webp', 'zip', '7z', 'rar', 'mp4', 'mov', 'webm', 'mkv'],
 };
 
 const MARQUES_AUDIO = new Set(['M4A ', 'M4B ', 'M4P ', 'F4A ', 'F4B ']);
