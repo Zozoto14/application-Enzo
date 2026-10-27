@@ -198,13 +198,15 @@ export interface ChampProps extends TextInputProps {
   indication?: string;
   /** Clavier et remplissage automatique (téléphone) : voir `ChampMobile`. */
   nature?: NatureChamp;
+  /** Faux : l'écran fournit son propre bouton « Afficher » (téléphone : le champ n'ajoute pas le sien). */
+  boutonVoir?: boolean;
 }
 
-export function Champ({ etiquette, indication, style, nature, ...reste }: ChampProps) {
+export function Champ({ etiquette, indication, style, nature, boutonVoir, ...reste }: ChampProps) {
   const palette = usePalette();
   // Téléphone : le champ du système de design mobile (48 px, 17 px, bon clavier).
   if (useMobile()) {
-    return <ChampMobile etiquette={etiquette} indication={indication} nature={nature} style={style} {...reste} />;
+    return <ChampMobile etiquette={etiquette} indication={indication} nature={nature} style={style} boutonVoir={boutonVoir} {...reste} />;
   }
   return (
     <View style={styles.champ}>

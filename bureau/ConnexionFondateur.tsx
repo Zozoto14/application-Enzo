@@ -21,7 +21,8 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { Alerte, Bouton, Champ, SousTitre, Titre, usePalette } from '../src/ui/composants';
 import { ESPACEMENT, RAYON, stylesPartages } from '../src/ui/theme';
 import { evaluerMotDePasse, formeCanonique } from '../src/profils/invitation';
-import { ChampMotDePasse } from './Invitation';
+import { ChampMotDePasse, SaisieNouveauMotDePasse, useLangueSaisie } from '../src/ui/motDePasse/SaisieMotDePasse';
+import { texteEcran } from '../src/ui/motDePasse/textes';
 
 export interface ResultatMigration {
   identifiant: string;
@@ -49,6 +50,7 @@ export function EcranConnexionFondateur({
   onPlusTard(): void;
 }) {
   const palette = usePalette();
+  const l = useLangueSaisie();
   const [identifiant, setIdentifiant] = useState(dejaFait ?? identifiantInitial ?? '');
   const [actuel, setActuel] = useState('');
   const [code, setCode] = useState('');
@@ -105,16 +107,14 @@ export function EcranConnexionFondateur({
       contentContainerStyle={[stylesPartages.contenu, stylesPartages.accueil, { paddingVertical: ESPACEMENT.xl, gap: ESPACEMENT.m }]}
       keyboardShouldPersistTaps="handled"
       testID="fondateur-connexion">
-      <Titre>{dejaFait ? 'Identifiant et mot de passe de connexion' : 'Se connecter partout avec un identifiant'}</Titre>
+      <Titre>{texteEcran(l, dejaFait ? 'fond.titre.fait' : 'fond.titre.neuf')}</Titre>
       <SousTitre>
-        {dejaFait
-          ? 'Change ton identifiant ou ton mot de passe de connexion. Tes données ne bougent pas.'
-          : 'Toutes tes données sont maintenant sur le serveur, chiffrées : choisis un identifiant (ton prénom par exemple). Avec ton mot de passe actuel (et ton code à six chiffres s’il est activé), il suffira pour te connecter sur n’importe quel navigateur — plus besoin de code de liaison.'}
+        {texteEcran(l, dejaFait ? 'fond.intro.fait' : 'fond.intro.neuf')}
       </SousTitre>
       <View style={[styles.cadre, { borderColor: palette.accent, backgroundColor: palette.surface }]}>
         <Champ
-          etiquette="Identifiant"
-          indication="Majuscules, accents et espaces ne comptent pas."
+          etiquette={texteEcran(l, 'fond.identifiant')}
+          indication={texteEcran(l, 'fond.identifiant.note')}
           value={identifiant}
           onChangeText={setIdentifiant}
           autoCapitalize="none"
@@ -124,9 +124,9 @@ export function EcranConnexionFondateur({
           maxLength={30}
           testID="fondateur-identifiant"
         />
-        <ChampMotDePasse etiquette="Mot de passe actuel" valeur={actuel} onChanger={setActuel} onValider={changer ? undefined : valider} testID="fondateur-mdp-actuel" desactive={enCours} />
+        <ChampMotDePasse etiquette={texteEcran(l, 'fond.actuel')} valeur={actuel} onChanger={setActuel} onValider={changer ? undefined : valider} testID="fondateur-mdp-actuel" desactive={enCours} />
         {codeDemande ? (
-          <Champ etiquette="Code à six chiffres" value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={8} testID="fondateur-totp" />
+          <Champ etiquette={texteEcran(l, 'fond.code')} value={code} onChangeText={setCode} keyboardType="number-pad" maxLength={8} testID="fondateur-totp" />
         ) : null}
         <Pressable
           accessibilityRole="checkbox"
@@ -135,13 +135,25 @@ export function EcranConnexionFondateur({
           style={{ flexDirection: 'row', alignItems: 'center', gap: ESPACEMENT.s, paddingVertical: ESPACEMENT.xs }}
           testID="fondateur-changer-mdp">
           <Text style={{ color: palette.texte, fontSize: 18 }}>{changer ? '☑' : '☐'}</Text>
-          <Text style={{ color: palette.texte, flex: 1 }}>Changer de mot de passe (facultatif : sinon, ton mot de passe actuel reste le même partout)</Text>
+          <Text style={{ color: palette.texte, flex: 1 }}>{texteEcran(l, 'fond.changer')}</Text>
         </Pressable>
         {changer ? (
           <>
-            <ChampMotDePasse etiquette="Nouveau mot de passe" valeur={nouveau} onChanger={setNouveau} nouveau testID="fondateur-mdp" desactive={enCours} indication="10 caractères au moins ; une phrase facile à retenir est idéale." />
-            {nouveau && !evaluation.valide ? <Text style={{ color: palette.danger }}>{evaluation.erreurs.join(' ')}</Text> : null}
-            <ChampMotDePasse etiquette="Confirme le nouveau mot de passe" valeur={confirmation} onChanger={setConfirmation} nouveau onValider={valider} testID="fondateur-mdp-confirmation" desactive={enCours} />
+            <SaisieNouveauMotDePasse
+              profil="ami"
+              valeur={nouveau}
+              onChanger={setNouveau}
+              confirmation={confirmation}
+              onChangerConfirmation={setConfirmation}
+              etiquette={texteEcran(l, 'fond.nouveau')}
+              etiquetteConfirmation={texteEcran(l, 'fond.confirmation')}
+              identifiant={identifiant}
+              langue={l}
+              desactive={enCours}
+              onValider={valider}
+              testIDs={{ mdp: 'fondateur-mdp', confirmation: 'fondateur-mdp-confirmation' }}
+              prefixe="fondateur"
+            />
           </>
         ) : null}
         {erreur ? (
@@ -152,13 +164,13 @@ export function EcranConnexionFondateur({
         {enCours ? (
           <View style={{ alignItems: 'center', gap: ESPACEMENT.s }}>
             <ActivityIndicator color={palette.accent} />
-            <SousTitre>Chiffrement et envoi au serveur…</SousTitre>
+            <SousTitre>{texteEcran(l, 'fond.chiffrement')}</SousTitre>
           </View>
         ) : (
-          <Bouton pleineLargeur titre={dejaFait ? 'Enregistrer' : 'Activer la connexion par identifiant'} desactive={!pret} onPress={valider} testID="fondateur-valider" />
+          <Bouton pleineLargeur titre={texteEcran(l, dejaFait ? 'fond.enregistrer' : 'fond.activer')} desactive={!pret} onPress={valider} testID="fondateur-valider" />
         )}
       </View>
-      <Bouton titre={dejaFait ? 'Annuler' : 'Plus tard'} variante="discret" onPress={onPlusTard} testID="fondateur-plus-tard" />
+      <Bouton titre={texteEcran(l, dejaFait ? 'fond.annuler' : 'fond.plusTard')} variante="discret" onPress={onPlusTard} testID="fondateur-plus-tard" />
     </ScrollView>
   );
 }

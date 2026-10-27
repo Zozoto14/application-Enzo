@@ -69,9 +69,11 @@ export interface ChampMobileProps extends TextInputProps {
   erreur?: string;
   nature?: NatureChamp;
   theme?: ThemeHub;
+  /** Faux : pas de bouton « Afficher » dans le champ (l'écran fournit le sien, commun à plusieurs champs). */
+  boutonVoir?: boolean;
 }
 
-export function ChampMobile({ etiquette, indication, erreur, nature = 'texte', theme: themeDonne, style, testID, ...reste }: ChampMobileProps) {
+export function ChampMobile({ etiquette, indication, erreur, nature = 'texte', theme: themeDonne, style, testID, boutonVoir = true, ...reste }: ChampMobileProps) {
   const theme = themeActif(themeDonne);
   const prereglages = prereglagesClavier(nature);
   const secret = Boolean(reste.secureTextEntry ?? prereglages.secureTextEntry);
@@ -96,7 +98,7 @@ export function ChampMobile({ etiquette, indication, erreur, nature = 'texte', t
             style,
           ]}
         />
-        {secret ? (
+        {secret && boutonVoir ? (
           <Pressable
             testID={testID ? `${testID}-voir` : undefined}
             accessibilityRole="button"

@@ -15,101 +15,17 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Alerte, Bouton, Champ, SousTitre, Titre, usePalette } from '../src/ui/composants';
+import { ChampMotDePasse, SaisieNouveauMotDePasse, useLangueSaisie } from '../src/ui/motDePasse/SaisieMotDePasse';
+import { texteEcran, type LangueSaisie } from '../src/ui/motDePasse/textes';
 import { ESPACEMENT, RAYON, stylesPartages } from '../src/ui/theme';
-import { LIBELLES_FORCE, POLITIQUE_MDP_DEFAUT, evaluerMotDePasse, formeCanonique, type PolitiqueMdp } from '../src/profils/invitation';
+import { evaluerMotDePasse, formeCanonique, type PolitiqueMdp } from '../src/profils/invitation';
 import { useMobile } from '../src/ui/mobile/useMobile';
 
 function message(erreur: unknown): string {
   return erreur instanceof Error ? erreur.message : String(erreur);
 }
 
-/** Saisie d'un mot de passe, avec « Afficher / Masquer ». */
-export function ChampMotDePasse({
-  etiquette,
-  valeur,
-  onChanger,
-  nouveau = false,
-  indication,
-  onValider,
-  testID,
-  desactive = false,
-}: {
-  etiquette: string;
-  valeur: string;
-  onChanger(v: string): void;
-  nouveau?: boolean;
-  indication?: string;
-  onValider?(): void;
-  testID: string;
-  desactive?: boolean;
-}) {
-  const palette = usePalette();
-  const [visible, setVisible] = useState(false);
-  // Téléphone : le champ a déjà son bouton « Afficher » (ChampMobile).
-  const mobile = useMobile();
-  return (
-    <View style={{ gap: 4 }}>
-      <Champ
-        etiquette={etiquette}
-        value={valeur}
-        onChangeText={onChanger}
-        secureTextEntry={!visible}
-        autoCapitalize="none"
-        autoCorrect={false}
-        spellCheck={false}
-        autoComplete={nouveau ? 'new-password' : 'current-password'}
-        textContentType={nouveau ? 'newPassword' : 'password'}
-        nature={nouveau ? 'nouveauMotDePasse' : 'motDePasse'}
-        enterKeyHint={onValider ? 'go' : 'next'}
-        onSubmitEditing={onValider}
-        editable={!desactive}
-        indication={indication}
-        testID={testID}
-      />
-      {mobile ? null : (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
-          onPress={() => setVisible(v => !v)}
-          testID={`${testID}-voir`}
-          style={{ alignSelf: 'flex-end', paddingVertical: 8, paddingHorizontal: 4, minHeight: 36 }}>
-          <Text style={{ color: palette.accent, fontWeight: '600' }}>{visible ? '🙈 Masquer' : '👁 Afficher'}</Text>
-        </Pressable>
-      )}
-    </View>
-  );
-}
-
-/** Barre de force et règles du nouveau mot de passe. */
-function IndicateurForce({ motDePasse, prenom, politique = POLITIQUE_MDP_DEFAUT }: { motDePasse: string; prenom: string; politique?: PolitiqueMdp }) {
-  const palette = usePalette();
-  const e = evaluerMotDePasse(motDePasse, prenom, politique);
-  const couleurs = [palette.danger, '#d9822b', '#c9a227', palette.hausse, palette.hausse];
-  const vide = motDePasse.length === 0;
-  return (
-    <View style={{ gap: 6 }} testID="invitation-force">
-      <View style={{ flexDirection: 'row', gap: 4 }}>
-        {[0, 1, 2, 3].map(i => (
-          <View key={i} style={{ flex: 1, height: 6, borderRadius: 3, backgroundColor: !vide && e.force > i ? couleurs[e.force] : palette.bordure }} />
-        ))}
-      </View>
-      <Text style={{ color: vide ? palette.texteSecondaire : couleurs[e.force], fontWeight: '600' }} testID="invitation-force-libelle">
-        {vide
-          ? `Au moins ${politique.longueurMin} caractères${politique.forceMin > 1 ? `, force « ${LIBELLES_FORCE[politique.forceMin]} » au moins` : ''}. Une phrase facile à retenir est idéale.`
-          : `Force : ${e.libelle}`}
-      </Text>
-      {!vide && e.erreurs.length > 0 ? (
-        <View testID="invitation-regles">
-          {e.erreurs.map(err => (
-            <Text key={err} style={{ color: palette.danger }}>
-              • {err}
-            </Text>
-          ))}
-        </View>
-      ) : null}
-    </View>
-  );
-}
+export { ChampMotDePasse };
 
 export interface InfosInvitation {
   prenom: string;
@@ -117,6 +33,8 @@ export interface InfosInvitation {
   expire: string;
   /** Politique du mot de passe réglée par le Fondateur (absente : règles de base). */
   politique?: PolitiqueMdp;
+  /** Langue de l'invitation (« fr » ou « en ») ; absente : celle du compte, puis de l'appareil. */
+  langue?: LangueSaisie;
 }
 
 export function EcranInvitation({
@@ -143,8 +61,8 @@ export function EcranInvitation({
   const [erreur, setErreur] = useState<string | undefined>();
   const [remplacer, setRemplacer] = useState(false);
   const affichee = erreur ?? erreurInitiale;
+  const l = useLangueSaisie(infos?.langue);
   const evaluation = evaluerMotDePasse(mdp, infos?.prenom ?? '', infos?.politique);
-  const differents = confirmation.length > 0 && formeCanonique(confirmation) !== formeCanonique(mdp);
   const pret = Boolean(infos) && evaluation.valide && formeCanonique(confirmation) === formeCanonique(mdp) && (!autreCompteIci || remplacer) && !enCours;
   const valider = () => {
     if (!pret) return;
@@ -154,45 +72,48 @@ export function EcranInvitation({
       .catch(e => setErreur(message(e)))
       .finally(() => setEnCours(false));
   };
-  const jour = infos ? new Date(infos.expire).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
+  const jour = infos ? new Date(infos.expire).toLocaleDateString(l === 'en' ? 'en-GB' : 'fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
   return (
     <ScrollView
       style={[stylesPartages.ecran, { backgroundColor: palette.fond }]}
       contentContainerStyle={[stylesPartages.contenu, stylesPartages.accueil, { paddingVertical: ESPACEMENT.xl, gap: ESPACEMENT.m }]}
       keyboardShouldPersistTaps="handled"
       testID="invitation-ecran">
-      <Titre>{infos ? `Bienvenue, ${infos.prenom} !` : 'Invitation'}</Titre>
+      <Titre>{infos ? texteEcran(l, 'inv.bienvenue', { prenom: infos.prenom }) : texteEcran(l, 'inv.titre')}</Titre>
       {chargement && !infos ? (
         <View style={{ alignItems: 'center', gap: ESPACEMENT.s }}>
           <ActivityIndicator color={palette.accent} />
-          <SousTitre>Vérification de l’invitation…</SousTitre>
+          <SousTitre>{texteEcran(l, 'inv.verification')}</SousTitre>
         </View>
       ) : null}
       {infos ? (
         <>
           <SousTitre>
-            {infos.fondateur ? `${infos.fondateur} t’invite sur AppDashboard.` : 'Tu es invité sur AppDashboard.'} Choisis ton mot de passe : c’est tout. Invitation valable
-            jusqu’au {jour}, une seule fois.
+            {infos.fondateur ? texteEcran(l, 'inv.intro.avec', { fondateur: infos.fondateur }) : texteEcran(l, 'inv.intro.sans')} {texteEcran(l, 'inv.intro.suite', { jour })}
           </SousTitre>
           <View style={[styles.cadre, { borderColor: palette.accent, backgroundColor: palette.surface }]}>
-            <Text style={{ color: palette.texteSecondaire }}>Ton identifiant (à retenir)</Text>
+            <Text style={{ color: palette.texteSecondaire }}>{texteEcran(l, 'inv.identifiant')}</Text>
             <Text style={{ color: palette.texte, fontWeight: '800', fontSize: 22 }} testID="invitation-identifiant" selectable>
               {infos.prenom}
             </Text>
-            <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>Majuscules, accents et espaces n’ont pas d’importance pour l’identifiant.</Text>
+            <Text style={{ color: palette.texteSecondaire, fontSize: 13 }}>{texteEcran(l, 'inv.identifiant.note')}</Text>
             {/* Gestionnaire de mots de passe : l'identifiant accompagne le nouveau mot de passe. */}
             <TextInput value={infos.prenom} editable={false} autoComplete="username" textContentType="username" style={{ height: 1, width: 1, opacity: 0, padding: 0 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" testID="invitation-identifiant-cache" />
-            <ChampMotDePasse etiquette="Ton mot de passe" valeur={mdp} onChanger={setMdp} nouveau testID="invitation-mdp" desactive={enCours} />
-            <IndicateurForce motDePasse={mdp} prenom={infos.prenom} politique={infos.politique} />
-            <ChampMotDePasse
-              etiquette="Confirme ton mot de passe"
-              valeur={confirmation}
-              onChanger={setConfirmation}
-              nouveau
-              onValider={valider}
-              testID="invitation-mdp-confirmation"
+            <SaisieNouveauMotDePasse
+              profil="ami"
+              valeur={mdp}
+              onChanger={setMdp}
+              confirmation={confirmation}
+              onChangerConfirmation={setConfirmation}
+              etiquette={texteEcran(l, 'inv.mdp')}
+              etiquetteConfirmation={texteEcran(l, 'inv.confirmation')}
+              identifiant={infos.prenom}
+              politique={infos.politique}
+              langue={l}
               desactive={enCours}
-              indication={differents ? 'Les deux mots de passe sont différents.' : 'Les espaces au début et à la fin ne comptent pas.'}
+              onValider={valider}
+              testIDs={{ mdp: 'invitation-mdp', confirmation: 'invitation-mdp-confirmation' }}
+              prefixe="invitation"
             />
             {autreCompteIci ? (
               <Pressable
@@ -203,7 +124,7 @@ export function EcranInvitation({
                 style={{ flexDirection: 'row', gap: ESPACEMENT.s, alignItems: 'center', minHeight: 44 }}>
                 <Text style={{ fontSize: 20 }}>{remplacer ? '☑' : '☐'}</Text>
                 <Text style={{ color: palette.texte, flex: 1 }}>
-                  Ce navigateur contient déjà un autre compte : il sera retiré de ce navigateur (rien n’est effacé ailleurs). Je confirme.
+                  {texteEcran(l, 'inv.remplacer')}
                 </Text>
               </Pressable>
             ) : null}
@@ -215,10 +136,10 @@ export function EcranInvitation({
             {enCours ? (
               <View style={{ alignItems: 'center', gap: ESPACEMENT.s }}>
                 <ActivityIndicator color={palette.accent} />
-                <SousTitre>Création de ton accès (chiffrement sur cet appareil)…</SousTitre>
+                <SousTitre>{texteEcran(l, 'inv.creation')}</SousTitre>
               </View>
             ) : (
-              <Bouton pleineLargeur titre="Créer mon accès" desactive={!pret} onPress={valider} testID="invitation-valider" />
+              <Bouton pleineLargeur titre={texteEcran(l, 'inv.valider')} desactive={!pret} onPress={valider} testID="invitation-valider" />
             )}
           </View>
         </>
@@ -227,7 +148,7 @@ export function EcranInvitation({
           <Alerte message={affichee} />
         </View>
       ) : null}
-      <Bouton titre="Revenir à l’accueil" variante="discret" onPress={onAccueil} testID="invitation-accueil" />
+      <Bouton titre={texteEcran(l, 'inv.accueil')} variante="discret" onPress={onAccueil} testID="invitation-accueil" />
     </ScrollView>
   );
 }
@@ -255,6 +176,7 @@ export function BlocConnexion({
   onIdentifiant?(identifiant: string): void;
 }) {
   const palette = usePalette();
+  const ls = useLangueSaisie();
   // Téléphone : textes de 15 px au moins (lisibles sans zoom).
   const mobile = useMobile();
   const secondaire = { color: palette.texteSecondaire, ...(mobile ? { fontSize: 15, lineHeight: 21 } : {}) };
@@ -391,17 +313,26 @@ export function BlocConnexion({
         ) : null}
         {onSecours && oubli ? (
           <View style={{ gap: ESPACEMENT.s }} testID="connexion-secours">
-            <Text style={{ color: palette.texte, fontWeight: '700' }}>Mot de passe oublié</Text>
-            <Text style={secondaire}>
-              Ton identifiant ci-dessus, un de tes codes de récupération (notés sur papier ; chacun ne sert qu’une fois) et ton nouveau mot de passe. Ami :
-              demande plutôt au Fondateur de réinitialiser ton accès.
-            </Text>
-            <Champ etiquette="Code de récupération" value={code} onChangeText={setCode} autoCapitalize="characters" autoCorrect={false} spellCheck={false} testID="connexion-secours-code" />
-            <ChampMotDePasse etiquette="Nouveau mot de passe" valeur={nouveau} onChanger={setNouveau} nouveau testID="connexion-secours-mdp" desactive={enCours} />
-            <ChampMotDePasse etiquette="Confirme le nouveau mot de passe" valeur={confirmation} onChanger={setConfirmation} nouveau testID="connexion-secours-confirmation" desactive={enCours} />
+            <Text style={{ color: palette.texte, fontWeight: '700' }}>{texteEcran(ls, 'secours.titre')}</Text>
+            <Text style={secondaire}>{texteEcran(ls, 'secours.intro')}</Text>
+            <Champ etiquette={texteEcran(ls, 'secours.code')} value={code} onChangeText={setCode} autoCapitalize="characters" autoCorrect={false} spellCheck={false} testID="connexion-secours-code" />
+            <SaisieNouveauMotDePasse
+              profil="ami"
+              valeur={nouveau}
+              onChanger={setNouveau}
+              confirmation={confirmation}
+              onChangerConfirmation={setConfirmation}
+              etiquette={texteEcran(ls, 'secours.mdp')}
+              etiquetteConfirmation={texteEcran(ls, 'secours.confirmation')}
+              identifiant={identifiant}
+              langue={ls}
+              desactive={enCours}
+              testIDs={{ mdp: 'connexion-secours-mdp', confirmation: 'connexion-secours-confirmation' }}
+              prefixe="connexion-secours"
+            />
             <Bouton
               pleineLargeur
-              titre="Ouvrir mon compte avec ce code"
+              titre={texteEcran(ls, 'secours.valider')}
               desactive={enCours || !identifiant.trim() || code.trim().length < 8 || !evaluerMotDePasse(nouveau, identifiant).valide || formeCanonique(confirmation) !== formeCanonique(nouveau)}
               onPress={() => {
                 setErreur(undefined);

@@ -297,12 +297,17 @@ try {
   const champ = tel.getByTestId('invitation-mdp');
   const attributs = await champ.evaluate(e => ({ cap: e.getAttribute('autocapitalize'), cor: e.getAttribute('autocorrect'), ortho: e.getAttribute('spellcheck'), auto: e.getAttribute('autocomplete'), type: e.getAttribute('type') }));
   verifier((attributs.cap === 'none' || attributs.cap === 'off') && attributs.cor === 'off' && attributs.ortho === 'false' && attributs.auto === 'new-password' && attributs.type === 'password', `champ sans majuscule ni correction automatiques, gestionnaire de mots de passe (${JSON.stringify(attributs)})`);
+  verifier(await tel.getByTestId('invitation-aide').isVisible(), 'l’aide « Quel mot de passe choisir ? » est visible');
+  verifier(/mon chat mange 3 croquettes/.test(await texteDe(tel, 'invitation-aide')) && /gestionnaire de mots de passe/.test(await texteDe(tel, 'invitation-aide')), 'l’aide donne l’exemple de phrase et le rappel');
+  verifier(/^○/.test(await texteDe(tel, 'invitation-regle-longueur')), 'checklist : longueur pas encore cochée (○)');
   await champ.fill('lea12345');
   await tel.getByTestId('invitation-mdp-confirmation').fill('lea12345');
   verifier((await tel.getByTestId('invitation-valider').getAttribute('aria-disabled')) === 'true', 'mot de passe trop faible : refusé, règles affichées');
   verifier(/10 caractères/.test(await texteDe(tel, 'invitation-regles', 5_000)), 'règle « 10 caractères au moins » affichée');
   await capture(tel, '02-iphone-invitation-regles');
   await champ.fill(MDP_LEA);
+  verifier(/^✓/.test(await texteDe(tel, 'invitation-regle-longueur')) && /^✓/.test(await texteDe(tel, 'invitation-regle-chiffres')), 'checklist : longueur et « pas seulement des chiffres » cochées (✓)');
+  verifier(/Il manque|ne correspondent pas/.test(await texteDe(tel, 'invitation-confirmation-erreur')), 'message précis : les deux mots de passe ne correspondent pas');
   // Confirmation collée depuis une note : espaces et retour à la ligne autour.
   await tel.getByTestId('invitation-mdp-confirmation').fill(`  ${MDP_LEA}\n`);
   verifier(/Force : (Solide|Excellent|Bien)/.test(await texteDe(tel, 'invitation-force-libelle')), `indicateur de force : ${await texteDe(tel, 'invitation-force-libelle')}`);

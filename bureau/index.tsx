@@ -356,6 +356,16 @@ function invitationAbimee(): boolean {
   return /invitation=/.test(fragment) && !decoderInvitation(fragment);
 }
 
+/** Langue demandée par le lien d'invitation (`?lang=en` ou `?lang=fr`) ; absente : celle du compte, puis de l'appareil. */
+function langueDuLien(): 'fr' | 'en' | undefined {
+  try {
+    const m = /[?&]lang=(fr|en)(?:[&#]|$)/i.exec(window.location.search);
+    return m ? (m[1].toLowerCase() as 'fr' | 'en') : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Fragment retiré de l'adresse : un rechargement ne rejoue ni l'invitation, ni le code. */
 function effacerFragment(): void {
   try {
@@ -1418,7 +1428,7 @@ function Racine() {
     const contenu = etat.chargee?.contenu;
     return (
       <EcranInvitation
-        infos={contenu ? { prenom: contenu.prenom, fondateur: contenu.fondateur, expire: contenu.expire, politique: politiqueDeContenu(contenu) } : undefined}
+        infos={contenu ? { prenom: contenu.prenom, fondateur: contenu.fondateur, expire: contenu.expire, politique: politiqueDeContenu(contenu), langue: langueDuLien() } : undefined}
         chargement={!etat.chargee && !etat.erreur}
         erreur={etat.erreur}
         autreCompteIci={etat.autreCompteIci}

@@ -120,28 +120,64 @@ export interface EvaluationMotDePasse {
  * passe courant. L'indicateur de force compte la longueur et la variété.
  */
 export function evaluerMotDePasse(saisi: string, prenom = '', politique: PolitiqueMdp = POLITIQUE_MDP_DEFAUT): EvaluationMotDePasse {
-  const mdp = formeCanonique(saisi);
+  const d = detaillerMotDePasse(saisi, prenom, politique);
   const erreurs: string[] = [];
-  const longueurMin = Math.max(LONGUEUR_MIN_AMI, politique.longueurMin);
-  if (mdp.length < longueurMin) erreurs.push(`${longueurMin} caractères au moins (${mdp.length} pour l’instant).`);
-  if (mdp.length > 0 && /^\d+$/.test(mdp)) erreurs.push('Pas seulement des chiffres.');
-  const bas = normaliserNom(mdp).replace(/\s+/g, '');
-  const nom = normaliserNom(prenom).replace(/\s+/g, '');
-  const lettres = bas.replace(/[^a-z]/g, '');
-  if (nom.length >= 3 && lettres.includes(nom.replace(/[^a-z]/g, '')) && lettres.length - nom.length < 4) erreurs.push('Pas ton prénom (ou presque).');
-  if (COURANTS.some(c => (bas.startsWith(c) && bas.length - c.length <= 4) || (lettres.startsWith(c) && lettres.length - c.length < 3))) erreurs.push('Trop courant : choisis autre chose.');
-  if (mdp.length > 0 && new Set(mdp).size <= 2) erreurs.push('Trop répétitif.');
-  const classes = [/[a-zà-ÿ]/, /[A-ZÀ-Þ]/, /\d/, /[^A-Za-zÀ-ÿ0-9]/].filter(m => m.test(mdp)).length;
+  if (!d.longueurOk) erreurs.push(`${d.longueurMin} caractères au moins (${d.longueur} pour l’instant).`);
+  if (d.queChiffres) erreurs.push('Pas seulement des chiffres.');
+  if (d.prenom) erreurs.push('Pas ton prénom (ou presque).');
+  if (d.courant) erreurs.push('Trop courant : choisis autre chose.');
+  if (d.repetitif) erreurs.push('Trop répétitif.');
   let force: EvaluationMotDePasse['force'] = 0;
   if (erreurs.length === 0) {
-    const points = (mdp.length >= 12 ? 1 : 0) + (mdp.length >= 16 ? 1 : 0) + (mdp.length >= 20 ? 1 : 0) + (classes >= 3 ? 1 : 0) + (classes >= 2 ? 1 : 0);
-    force = Math.max(1, Math.min(4, points)) as EvaluationMotDePasse['force'];
+    force = d.force;
     if (force < politique.forceMin) {
       erreurs.push(`Plus solide : force « ${LIBELLES_FORCE[politique.forceMin]} » au moins (ajoute des mots, des chiffres ou des symboles).`);
     }
   }
   const libelle = LIBELLES_FORCE[force];
   return { valide: erreurs.length === 0, erreurs, force, libelle };
+}
+
+/** Détail règle par règle (mêmes tests que `evaluerMotDePasse`, qui s'appuie dessus) : sert à l'aide de saisie. */
+export interface DetailMotDePasse {
+  /** Longueur après forme canonique. */
+  longueur: number;
+  /** Longueur minimale effective (au moins 10, durcie par la politique). */
+  longueurMin: number;
+  longueurOk: boolean;
+  /** Que des chiffres (refusé). */
+  queChiffres: boolean;
+  /** Contient le prénom / l'identifiant, ou presque (refusé). */
+  prenom: boolean;
+  /** Mot de passe courant (refusé). */
+  courant: boolean;
+  /** Au plus deux caractères différents (refusé). */
+  repetitif: boolean;
+  /** Nombre de familles de caractères (minuscules, majuscules, chiffres, autres), 0 à 4. */
+  classes: number;
+  /** Force « brute » 1 à 4 (longueur et variété), sans tenir compte des refus. */
+  force: 1 | 2 | 3 | 4;
+}
+
+export function detaillerMotDePasse(saisi: string, prenom = '', politique: PolitiqueMdp = POLITIQUE_MDP_DEFAUT): DetailMotDePasse {
+  const mdp = formeCanonique(saisi);
+  const longueurMin = Math.max(LONGUEUR_MIN_AMI, politique.longueurMin);
+  const bas = normaliserNom(mdp).replace(/\s+/g, '');
+  const nom = normaliserNom(prenom).replace(/\s+/g, '');
+  const lettres = bas.replace(/[^a-z]/g, '');
+  const classes = [/[a-zà-ÿ]/, /[A-ZÀ-Þ]/, /\d/, /[^A-Za-zÀ-ÿ0-9]/].filter(m => m.test(mdp)).length;
+  const points = (mdp.length >= 12 ? 1 : 0) + (mdp.length >= 16 ? 1 : 0) + (mdp.length >= 20 ? 1 : 0) + (classes >= 3 ? 1 : 0) + (classes >= 2 ? 1 : 0);
+  return {
+    longueur: mdp.length,
+    longueurMin,
+    longueurOk: mdp.length >= longueurMin,
+    queChiffres: mdp.length > 0 && /^\d+$/.test(mdp),
+    prenom: nom.length >= 3 && lettres.includes(nom.replace(/[^a-z]/g, '')) && lettres.length - nom.length < 4,
+    courant: COURANTS.some(c => (bas.startsWith(c) && bas.length - c.length <= 4) || (lettres.startsWith(c) && lettres.length - c.length < 3)),
+    repetitif: mdp.length > 0 && new Set(mdp).size <= 2,
+    classes,
+    force: Math.max(1, Math.min(4, points)) as 1 | 2 | 3 | 4,
+  };
 }
 
 // ------------------------------------------------------------ Code d'invitation

@@ -12,6 +12,8 @@ import { ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native
 import { Actions, Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { joursAvantProchaine } from '../../sauvegarde/automatique';
 import { Explication } from '../indicateurs';
+import { SaisieNouveauMotDePasse, useLangueSaisie } from '../motDePasse/SaisieMotDePasse';
+import { texteEcran } from '../motDePasse/textes';
 import { ESPACEMENT, palettePour, stylesPartages } from '../theme';
 import type { SauvegardeSurDisque } from '../../sauvegarde/fichiers';
 
@@ -57,6 +59,7 @@ export function Sauvegarde({
 }: SauvegardeProps) {
   const sombre = useColorScheme() === 'dark';
   const palette = usePalette();
+  const langue = useLangueSaisie();
 
   const [motDePasse, setMotDePasse] = useState('');
   const [confirmation, setConfirmation] = useState('');
@@ -139,30 +142,22 @@ export function Sauvegarde({
           sauvegarde, un téléphone perdu emporte tout le portefeuille avec lui.
         </SousTitre>
 
-        <Champ
-          etiquette="Mot de passe de la sauvegarde"
-          value={motDePasse}
-          onChangeText={setMotDePasse}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={disponible && !enCours}
-          textContentType="newPassword"
-          indication="Il peut différer de celui de l'application. Une sauvegarde doit rester lisible même après un changement de mot de passe."
-        />
+        <SousTitre>{texteEcran(langue, 'sauv.indication')}</SousTitre>
 
-        <Champ
-          etiquette="Confirmation"
-          value={confirmation}
-          onChangeText={setConfirmation}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-          editable={disponible && !enCours}
-          textContentType="newPassword"
+        <SaisieNouveauMotDePasse
+          profil="coffre"
+          longueurMin={LONGUEUR_MINIMALE}
+          valeur={motDePasse}
+          onChanger={setMotDePasse}
+          confirmation={confirmation}
+          onChangerConfirmation={setConfirmation}
+          etiquette={texteEcran(langue, 'sauv.mdp')}
+          etiquetteConfirmation={texteEcran(langue, 'sauv.confirmation')}
+          langue={langue}
+          desactive={!disponible || enCours}
+          testIDs={{ mdp: 'champ-mot-de-passe-sauvegarde', confirmation: 'champ-confirmation-sauvegarde' }}
+          prefixe="sauvegarde"
         />
-
-        {discordant ? <Alerte message="Les deux saisies diffèrent." /> : null}
 
         <Bouton
           titre={enCours ? 'Chiffrement en cours…' : 'Créer la sauvegarde'}

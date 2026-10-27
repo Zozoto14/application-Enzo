@@ -15,6 +15,8 @@ import { formatValide } from '../../securite/codes-recuperation';
 import { Alerte, Bouton, Champ, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, palettePour, stylesPartages } from '../theme';
 import { LONGUEUR_MINIMALE_MOT_DE_PASSE } from './PremierLancement';
+import { SaisieNouveauMotDePasse, useLangueSaisie } from '../motDePasse/SaisieMotDePasse';
+import { texte, texteEcran } from '../motDePasse/textes';
 
 export interface RecuperationProps {
   onRecuperer(code: string, nouveauMotDePasse: string): void;
@@ -31,16 +33,19 @@ export function Recuperation({ onRecuperer, onAnnuler, erreur, enCours = false }
   const [probleme, setProbleme] = useState<string | undefined>();
   const palette = usePalette();
   const sombre = useColorScheme() === 'dark';
+  const l = useLangueSaisie();
 
   const valider = () => {
     if (!formatValide(code)) {
       return setProbleme('Le code de récupération compte 16 caractères, en quatre groupes : XXXX-XXXX-XXXX-XXXX.');
     }
+    // Les messages précis (« il manque 3 caractères », « les deux mots de passe ne correspondent pas »)
+    // sont affichés en direct sous les champs ; ici, seulement le cas où rien n'a encore été saisi.
     if (motDePasse.length < LONGUEUR_MINIMALE_MOT_DE_PASSE) {
-      return setProbleme(`Le nouveau mot de passe doit faire au moins ${LONGUEUR_MINIMALE_MOT_DE_PASSE} caractères.`);
+      return setProbleme(motDePasse.length === 0 ? texte(l, 'erreur.manque.other', { n: LONGUEUR_MINIMALE_MOT_DE_PASSE }) : undefined);
     }
     if (motDePasse !== confirmation) {
-      return setProbleme('Les deux mots de passe ne correspondent pas.');
+      return setProbleme(confirmation.length === 0 ? texte(l, 'erreur.differents') : undefined);
     }
     setProbleme(undefined);
     onRecuperer(code, motDePasse);
@@ -79,28 +84,19 @@ export function Recuperation({ onRecuperer, onAnnuler, erreur, enCours = false }
         testID="champ-code-recuperation"
         indication="Tirets, espaces et majuscules n’ont pas d’importance ; O et 0, I et 1 sont confondus exprès."
       />
-      <Champ
-        etiquette="Nouveau mot de passe"
-        value={motDePasse}
-        onChangeText={setMotDePasse}
-        secureTextEntry
-        autoCapitalize="none"
-        nature="nouveauMotDePasse"
-        autoComplete="new-password"
-        testID="champ-nouveau-mot-de-passe"
-        indication={`${LONGUEUR_MINIMALE_MOT_DE_PASSE} caractères au minimum.`}
-      />
-      <Champ
-        etiquette="Confirmer le nouveau mot de passe"
-        value={confirmation}
-        onChangeText={setConfirmation}
-        secureTextEntry
-        autoCapitalize="none"
-        nature="nouveauMotDePasse"
-        autoComplete="new-password"
-        enterKeyHint="go"
-        onSubmitEditing={valider}
-        testID="champ-confirmation-mot-de-passe"
+      <SaisieNouveauMotDePasse
+        profil="coffre"
+        longueurMin={LONGUEUR_MINIMALE_MOT_DE_PASSE}
+        valeur={motDePasse}
+        onChanger={setMotDePasse}
+        confirmation={confirmation}
+        onChangerConfirmation={setConfirmation}
+        etiquette={texteEcran(l, 'recup.mdp')}
+        etiquetteConfirmation={texteEcran(l, 'recup.confirmation')}
+        langue={l}
+        onValider={valider}
+        testIDs={{ mdp: 'champ-nouveau-mot-de-passe', confirmation: 'champ-confirmation-mot-de-passe' }}
+        prefixe="recuperation"
       />
 
       {probleme ? <Alerte message={probleme} /> : erreur ? <Alerte message={erreur} /> : null}

@@ -17,9 +17,11 @@ import { FeuilleBasse } from '../mobile/FeuilleBasse';
 import { Cellule, GroupeCellules } from '../mobile/ListeCellules';
 import { useMobile } from '../mobile/useMobile';
 import { EcranEntree } from './EcranEntree';
-import { Alerte, Bouton, Carte, Champ, SousTitre, Titre, usePalette } from '../composants';
+import { Alerte, Bouton, Carte, SousTitre, Titre, usePalette } from '../composants';
 import { ESPACEMENT, RAYON, palettePour, stylesPartages } from '../theme';
 import { LierCompte, type OptionsLier } from './LierCompte';
+import { SaisieNouveauMotDePasse, useLangueSaisie } from '../motDePasse/SaisieMotDePasse';
+import { texteEcran } from '../motDePasse/textes';
 
 export interface SecretsInitiaux {
   codesRecuperation: string[];
@@ -75,6 +77,7 @@ function Creation({
 }) {
   const [motDePasse, setMotDePasse] = useState('');
   const [confirmation, setConfirmation] = useState('');
+  const l = useLangueSaisie();
 
   const tropCourt = motDePasse.length < LONGUEUR_MINIMALE_MOT_DE_PASSE;
   const discordant = confirmation.length > 0 && confirmation !== motDePasse;
@@ -123,42 +126,25 @@ function Creation({
           <Text style={{ color: palettePour().texteSecondaire, textAlign: 'center' }}>— ou, nouveau compte sur cet appareil —</Text>
         </>
       ) : null}
-      <Titre>Protéger vos données</Titre>
-      <SousTitre>
-        Ce mot de passe chiffre l'intégralité de votre portefeuille sur cet
-        appareil. Utilisez un mot de passe long, généré par votre gestionnaire.
-      </SousTitre>
+      <Titre>{texteEcran(l, 'coffre.titre')}</Titre>
+      <SousTitre>{texteEcran(l, 'coffre.intro')}</SousTitre>
 
-      <Champ
-        etiquette="Mot de passe"
-        value={motDePasse}
-        onChangeText={setMotDePasse}
-        secureTextEntry
-        autoCapitalize="none"
-        autoCorrect={false}
-        editable={!enCours}
-        textContentType="newPassword"
-        autoComplete="new-password"
-        nature="nouveauMotDePasse"
-        indication={`${LONGUEUR_MINIMALE_MOT_DE_PASSE} caractères au minimum, sans maximum. Un mot de passe de 128 caractères généré par votre gestionnaire convient parfaitement : il se colle, il ne se tape pas.`}
+      <SaisieNouveauMotDePasse
+        profil="coffre"
+        longueurMin={LONGUEUR_MINIMALE_MOT_DE_PASSE}
+        valeur={motDePasse}
+        onChanger={setMotDePasse}
+        confirmation={confirmation}
+        onChangerConfirmation={setConfirmation}
+        etiquette={texteEcran(l, 'coffre.mdp')}
+        etiquetteConfirmation={texteEcran(l, 'coffre.confirmation')}
+        langue={l}
+        desactive={enCours}
+        onValider={creer}
+        testIDs={{ mdp: 'champ-mot-de-passe-coffre', confirmation: 'champ-confirmation-coffre' }}
+        prefixe="coffre"
       />
 
-      <Champ
-        etiquette="Confirmation"
-        value={confirmation}
-        onChangeText={setConfirmation}
-        secureTextEntry
-        autoCapitalize="none"
-        autoCorrect={false}
-        editable={!enCours}
-        textContentType="newPassword"
-        autoComplete="new-password"
-        nature="nouveauMotDePasse"
-        enterKeyHint="done"
-        onSubmitEditing={creer}
-      />
-
-      {discordant ? <Alerte message="Les deux saisies diffèrent." /> : null}
       {erreur ? <Alerte message={erreur} /> : null}
     </EcranEntree>
   );

@@ -195,7 +195,7 @@ describe('PremierLancement', () => {
     await fireEvent.changeText(screen.getByLabelText('Mot de passe'), 'motdepassesuffisant');
     await fireEvent.changeText(screen.getByLabelText('Confirmation'), 'autrechosedutout');
 
-    expect(screen.getByText('Les deux saisies diffèrent.')).toBeTruthy();
+    expect(screen.getByText('Les deux mots de passe ne correspondent pas.')).toBeTruthy();
     expect(screen.getByTestId('bouton-creer').props.accessibilityState.disabled).toBe(
       true,
     );
