@@ -496,7 +496,55 @@
   "Le contenu a changé depuis la validation : faites-le valider de nouveau.": "The content changed since it was approved: get it approved again.",
   "Ce post n’est pas publié.": "This post isn’t published.",
   "Période invalide (du, au : AAAA-MM-JJ).": "Invalid period (du, au: YYYY-MM-DD).",
-  "Période de 4 mois au plus.": "Period of 4 months at most."
+  "Période de 4 mois au plus.": "Period of 4 months at most.",
+  "Sponsors illisibles.": "Unreadable sponsors.",
+  "Partenaire inconnu.": "Unknown partner.",
+  "Adresse du site : https://…": "Website address: https://…",
+  "Téléphone invalide.": "Invalid phone number.",
+  "Réseaux : un pseudo (@nom) ou une adresse https://…": "Social accounts: a handle (@name) or an https://… address",
+  "5 réseaux au plus.": "5 social accounts at most.",
+  "Intérêt : 0 à 3.": "Interest: 0 to 3.",
+  "Étape inconnue.": "Unknown stage.",
+  "Prospect introuvable.": "Prospect not found.",
+  "Partenaire introuvable.": "Partner not found.",
+  "Teams illisibles.": "Unreadable teams.",
+  "Responsable inconnu.": "Unknown owner.",
+  "Ce compte ne voit pas la rubrique Sponsors.": "This account cannot see the Sponsors area.",
+  "Cette étape ne s’archive pas.": "This stage cannot be archived.",
+  "Déplacez d’abord les prospects de cette étape.": "Move the prospects out of this stage first.",
+  "Signé et Perdu restent en dernier.": "Signed and Lost stay last.",
+  "Un nouveau prospect commence dans une étape ouverte.": "A new prospect starts in an open stage.",
+  "Ce prospect a changé entre-temps : rechargez la fiche.": "This prospect has changed in the meantime: reload it.",
+  "Étape archivée.": "Archived stage.",
+  "Indiquez la raison de la perte.": "Give the reason it was lost.",
+  "Ce prospect est déjà un partenaire.": "This prospect is already a partner.",
+  "Prospect ou partenaire attendu.": "Prospect or partner expected.",
+  "Contact introuvable.": "Contact not found.",
+  "Type d’échange : appel, e-mail, réunion ou note.": "Interaction type: call, email, meeting or note.",
+  "Résumé de l’échange obligatoire.": "Summary of the interaction required.",
+  "Ce contact n’est pas celui de la fiche.": "This contact does not belong to this record.",
+  "Échange introuvable.": "Interaction not found.",
+  "Contrat introuvable.": "Contract not found.",
+  "Le logo est une image jointe à la fiche.": "The logo must be an image attached to this record.",
+  "Cette fiche a changé entre-temps : rechargez-la.": "This record has changed in the meantime: reload it.",
+  "Préavis : 0 à 365 jours.": "Notice: 0 to 365 days.",
+  "La fin du contrat précède son début.": "The contract ends before it starts.",
+  "Quantité : 1 à 1000 par période.": "Quantity: 1 to 1000 per period.",
+  "Rappel : 0 à 90 jours avant l’échéance.": "Reminder: 0 to 90 days before the deadline.",
+  "Ce contrat est celui d’un autre partenaire.": "This contract belongs to another partner.",
+  "La fin précède le début.": "The end is before the start.",
+  "Contrepartie introuvable.": "Deliverable not found.",
+  "Période inconnue pour cette contrepartie.": "Unknown period for this deliverable.",
+  "Quantité faite : 0 à 1000.": "Quantity done: 0 to 1000.",
+  "Fichier CSV vide.": "Empty CSV file.",
+  "Fichier trop volumineux (1 Mo au plus).": "File too large (1 MB at most).",
+  "Fichier CSV illisible.": "Unreadable CSV file.",
+  "Correspondance des colonnes illisible.": "Unreadable column mapping.",
+  "Indiquez la colonne du nom (entreprise ou marque).": "Choose the name column (company or brand).",
+  "Étape de départ : une étape ouverte.": "Starting stage: an open stage.",
+  "Plafond de prospects atteint.": "Prospect limit reached.",
+  "Valeur inconnue.": "Unknown value.",
+  "Montant illisible (en euros, ex. 1500 ou 1 500,50).": "Unreadable amount (in euros, e.g. 1500 or 1,500.50)."
  },
  "motifs": [
   [
@@ -734,6 +782,22 @@
   [
    "^(\\d+) clips en attente au plus : patientez le temps que le CM les trie\\.$",
    "$1 pending clips at most: wait until the CM sorts them."
+  ],
+  [
+   "^(\\d+) prospects au plus\\.$",
+   "$1 prospects at most."
+  ],
+  [
+   "^(\\d+) étapes au plus\\.$",
+   "$1 stages at most."
+  ],
+  [
+   "^(\\d+) contacts au plus\\.$",
+   "$1 contacts at most."
+  ],
+  [
+   "^Colonne en double : (.+)\\.$",
+   "Duplicate column: $1."
   ]
  ]
 }

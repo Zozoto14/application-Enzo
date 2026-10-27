@@ -1,8 +1,9 @@
 /**
  * Espace CM du club (entrée « CM » de la navigation de l'Esport) : tableaux (club et teams), file « À
  * valider », calendrier éditorial, clips des joueurs, et pour le gestionnaire (cm.gerer) : équipe et rôles
- * CM, import Trello, réglages (suggestions automatiques), journal de la section. Tout est décidé par le
- * serveur ; l'écran n'affiche que ce que la réponse permet.
+ * CM, import Trello, réglages (suggestions automatiques), journal de la section. Rubrique « Sponsors » pour qui a
+ * sponsors.voir (affectation « club ») : seule visible pour un compte qui n'a QUE les Sponsors. Tout est décidé
+ * par le serveur ; l'écran n'affiche que ce que la réponse permet.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -24,20 +25,29 @@ import { Calendrier } from './Calendrier';
 import { GalerieClips } from './Clips';
 import { ImportTrello } from './ImportTrello';
 import { RolesCm } from './RolesCm';
+import { EspaceSponsors } from '../sponsors/EspaceSponsors';
 
-type OngletCm = 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'equipe' | 'import' | 'reglages' | 'journal';
+type OngletCm = 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
 
-export function EspaceCm({ theme, client, large, moi }: { theme: ThemeHub; client: ClientEsport; large: boolean; moi: MoiCm }) {
+export function EspaceCm({ theme, client, large, moi, onExporter }: { theme: ThemeHub; client: ClientEsport; large: boolean; moi: MoiCm; onExporter?(nom: string, contenu: string, type?: string): Promise<boolean> }) {
   const api = useMemo(() => apiCm(client), [client]);
-  const [onglet, setOnglet] = useState<OngletCm>('tableaux');
+  // Rubrique Sponsors (migration 0024) : permissions du club, indépendantes de la section CM.
+  const voirCm = moi.club.includes('cm.voir') || moi.teams.some(t => t.permissions.includes('cm.voir'));
+  const sponsors = Boolean(moi.sponsors?.includes('sponsors.voir'));
+  const [onglet, setOnglet] = useState<OngletCm>(voirCm || !sponsors ? 'tableaux' : 'sponsors');
   const [ouvert, setOuvert] = useState<string | undefined>();
-  const { etat } = useEtatCm(api);
+  const { etat } = useEtatCm(api, voirCm);
   const teams: TeamCm[] = moi.teams;
   const entrees = [
-    { id: 'tableaux', libelle: trCm('espace.tableaux') },
-    { id: 'valider', libelle: etat?.aValider ? trCm('espace.valider_n', { n: etat.aValider }) : trCm('espace.valider') },
-    { id: 'calendrier', libelle: trCm('espace.calendrier') },
-    { id: 'clips', libelle: trCm('espace.clips') },
+    ...(voirCm
+      ? [
+          { id: 'tableaux', libelle: trCm('espace.tableaux') },
+          { id: 'valider', libelle: etat?.aValider ? trCm('espace.valider_n', { n: etat.aValider }) : trCm('espace.valider') },
+          { id: 'calendrier', libelle: trCm('espace.calendrier') },
+          { id: 'clips', libelle: trCm('espace.clips') },
+        ]
+      : []),
+    ...(sponsors ? [{ id: 'sponsors', libelle: trCm('espace.sponsors') }] : []),
     ...(moi.gerer
       ? [
           { id: 'equipe', libelle: trCm('espace.equipe') },
@@ -51,7 +61,21 @@ export function EspaceCm({ theme, client, large, moi }: { theme: ThemeHub; clien
     <PageEsport large={large} testID="esport-cm" largeur={1600}>
       <EnTetePage theme={theme} large={large} titre={trCm('espace.titre')} sous={trCm('espace.sous')} />
       <Onglets theme={theme} prefixe="esport-cm-onglet" testID="esport-cm-onglets" actif={onglet} onChoisir={id => setOnglet(id as OngletCm)} entrees={entrees} defilant={!large} />
-      {onglet === 'tableaux' ? (
+      {onglet === 'sponsors' && sponsors ? (
+        <EspaceSponsors
+          theme={theme}
+          client={client}
+          large={large}
+          gerer={Boolean(moi.sponsors?.includes('sponsors.gerer'))}
+          teams={teams.map(t => ({ id: t.id, nom: t.nom ?? '' }))}
+          onExporter={onExporter}
+          onOuvrirTableau={id => {
+            setOuvert(id);
+            setOnglet('tableaux');
+          }}
+        />
+      ) : null}
+      {onglet === 'tableaux' && voirCm ? (
         ouvert ? (
           <Tableau theme={theme} api={api} id={ouvert} large={large} teams={teams} versionServeur={etat?.versions[ouvert]} onRetour={() => setOuvert(undefined)} />
         ) : (

@@ -12,7 +12,8 @@ Migration : `esport/migrations/0023_cm.sql`. Code : `esport/noyau/cm/`, `src/esp
 
 ## Qui fait quoi
 
-Six permissions :
+Six permissions (plus deux pour la rubrique **Sponsors**, `sponsors.voir` et `sponsors.gerer`, portées aussi par les
+rôles CM : voir [sponsors.md](sponsors.md)) :
 
 | Permission | Ce qu'elle ouvre |
 | --- | --- |

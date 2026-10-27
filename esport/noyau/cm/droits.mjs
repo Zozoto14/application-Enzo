@@ -13,12 +13,13 @@
 import { evenement } from '../evenements.mjs';
 import { echec, iso, jsonOu, nouvelId, texteNettoye } from '../outils.mjs';
 import { lignesParIds, pseudosDe } from '../requetes.mjs';
-import { MOTIF_COMPTE, MOTIF_COULEUR, PERMISSIONS_CM, PORTEE_CLUB, contexteCm, exiger, exigerUuid, lirePortee, porteesDe, teamDePortee } from './commun.mjs';
+import { MOTIF_COMPTE, MOTIF_COULEUR, PORTEE_CLUB, contexteCm, exiger, exigerUuid, lirePortee, porteesDe, teamDePortee } from './commun.mjs';
 import { CLES_RESEAUX } from './reseaux.mjs';
+import { PERMISSIONS_ROLES_CM, droitsSponsors } from '../sponsors/commun.mjs';
 
-/** Permissions par défaut des rôles CM système (migration 0023). */
+/** Permissions par défaut des rôles CM système (migration 0023 ; 0024 : Sponsors pour le Responsable CM). */
 export const ROLES_CM_SYSTEME = Object.freeze({
-  responsable: ['cm.voir', 'cm.deposer', 'cm.editer', 'cm.valider', 'cm.gerer', 'cm.clips.proposer'],
+  responsable: ['cm.voir', 'cm.deposer', 'cm.editer', 'cm.valider', 'cm.gerer', 'cm.clips.proposer', 'sponsors.voir', 'sponsors.gerer'],
   correspondant: ['cm.voir', 'cm.deposer', 'cm.clips.proposer'],
 });
 
@@ -44,7 +45,7 @@ export async function lireReglagesCm(base) {
 }
 
 function lirePermissionsCm(v) {
-  if (!Array.isArray(v) || v.length > 20 || v.some(p => !PERMISSIONS_CM.includes(p))) throw echec(400, 'permissions', 'Permissions inconnues ou illisibles.');
+  if (!Array.isArray(v) || v.length > 20 || v.some(p => !PERMISSIONS_ROLES_CM.includes(p))) throw echec(400, 'permissions', 'Permissions inconnues ou illisibles.');
   return [...new Set(v)].sort();
 }
 
@@ -52,7 +53,8 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
   async function ctxClub(acteur) {
     const ctx = await contexteCm(base, acteur, PORTEE_CLUB);
     exiger(ctx, 'cm.gerer');
-    return ctx;
+    // Anti-escalade : les permissions Sponsors de l'acteur (affectation « club ») comptent aussi.
+    return { ...ctx, permissions: new Set([...ctx.permissions, ...(await droitsSponsors(base, acteur))]) };
   }
 
   function antiEscalade(ctx, demandees) {
@@ -98,7 +100,7 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
     const n = new Map((await base.tous('SELECT role_id, COUNT(*) AS n FROM cm_affectations GROUP BY role_id', [])).map(l => [l.role_id, Number(l.n)]));
     const sortie = [];
     for (const r of lignes) sortie.push(await rolePublic(r, n.get(r.id) ?? 0));
-    return { roles: sortie, permissions: [...PERMISSIONS_CM] };
+    return { roles: sortie, permissions: [...PERMISSIONS_ROLES_CM] };
   }
 
   async function creerRole(acteur, corps) {
@@ -296,9 +298,12 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
   async function moi(acteur) {
     const portees = await porteesDe(base, acteur);
     const teams = [...portees.teams].map(([id, s]) => ({ ...portees.noms.get(id), permissions: [...s].sort() }));
-    const espace = portees.club.has('cm.voir') || teams.some(t => t.permissions.includes('cm.voir'));
+    // Sponsors (migration 0024) : la rubrique s'ouvre aussi à qui n'a QUE sponsors.voir (affectation « club »).
+    const sponsors = [...(await droitsSponsors(base, acteur))].sort();
+    const espace = portees.club.has('cm.voir') || teams.some(t => t.permissions.includes('cm.voir')) || sponsors.includes('sponsors.voir');
     return {
       espace,
+      sponsors,
       club: [...portees.club].sort(),
       teams,
       gerer: portees.club.has('cm.gerer'),

@@ -21,11 +21,11 @@ const decodeur = new TextDecoder();
 const INFO = 'applibourse-esport/courriel-recap/aes-gcm/v1';
 const FREQUENCES = { quotidien: 20 * 3_600_000, hebdomadaire: 6.5 * 86_400_000 };
 /** Types de notifications in-app jugés importants pour le récapitulatif. */
-export const TYPES_IMPORTANTS = ['evenement-nouveau', 'evenement-modifie', 'evenement-annule', 'rappel-rsvp', 'demande-compte', 'demande-compte-validee', 'demande-compte-refusee', 'tache-assignee', 'objectif-assigne', 'jeu-maj-proposee'];
+export const TYPES_IMPORTANTS = ['evenement-nouveau', 'evenement-modifie', 'evenement-annule', 'rappel-rsvp', 'demande-compte', 'demande-compte-validee', 'demande-compte-refusee', 'tache-assignee', 'objectif-assigne', 'jeu-maj-proposee', 'sp-action', 'sp-obligation', 'sp-contrat', 'sp-responsable'];
 
 const LIBELLES = {
-  fr: { 'evenement-nouveau': 'Nouvel événement', 'evenement-modifie': 'Événement modifié', 'evenement-annule': 'Événement annulé', 'rappel-rsvp': 'Réponse attendue', 'demande-compte': 'Demande de compte', 'demande-compte-validee': 'Demande validée', 'demande-compte-refusee': 'Demande refusée', 'tache-assignee': 'Tâche assignée', 'objectif-assigne': 'Objectif assigné', 'jeu-maj-proposee': 'Mise à jour de profil de jeu à valider' },
-  en: { 'evenement-nouveau': 'New event', 'evenement-modifie': 'Event updated', 'evenement-annule': 'Event cancelled', 'rappel-rsvp': 'Reply expected', 'demande-compte': 'Account request', 'demande-compte-validee': 'Request approved', 'demande-compte-refusee': 'Request refused', 'tache-assignee': 'Task assigned', 'objectif-assigne': 'Goal assigned', 'jeu-maj-proposee': 'Game profile update to review' },
+  fr: { 'evenement-nouveau': 'Nouvel événement', 'evenement-modifie': 'Événement modifié', 'evenement-annule': 'Événement annulé', 'rappel-rsvp': 'Réponse attendue', 'demande-compte': 'Demande de compte', 'demande-compte-validee': 'Demande validée', 'demande-compte-refusee': 'Demande refusée', 'tache-assignee': 'Tâche assignée', 'objectif-assigne': 'Objectif assigné', 'jeu-maj-proposee': 'Mise à jour de profil de jeu à valider', 'sp-action': 'Sponsors : action prévue', 'sp-obligation': 'Sponsors : contrepartie à faire', 'sp-contrat': 'Sponsors : contrat bientôt terminé', 'sp-responsable': 'Sponsors : fiche confiée' },
+  en: { 'evenement-nouveau': 'New event', 'evenement-modifie': 'Event updated', 'evenement-annule': 'Event cancelled', 'rappel-rsvp': 'Reply expected', 'demande-compte': 'Account request', 'demande-compte-validee': 'Request approved', 'demande-compte-refusee': 'Request refused', 'tache-assignee': 'Task assigned', 'objectif-assigne': 'Goal assigned', 'jeu-maj-proposee': 'Game profile update to review', 'sp-action': 'Sponsors: planned action', 'sp-obligation': 'Sponsors: deliverable due', 'sp-contrat': 'Sponsors: contract ending soon', 'sp-responsable': 'Sponsors: record assigned to you' },
 };
 
 async function cleAes(secret, usage) {

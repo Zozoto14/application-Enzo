@@ -5,7 +5,8 @@
 
 import { requeteUrl, type ClientEsport } from '../client';
 
-export type PermissionCm = 'cm.voir' | 'cm.deposer' | 'cm.editer' | 'cm.valider' | 'cm.gerer' | 'cm.clips.proposer';
+/** Permissions d'un rôle CM : celles de la section, et celles de la rubrique Sponsors (migration 0024, niveau club). */
+export type PermissionCm = 'cm.voir' | 'cm.deposer' | 'cm.editer' | 'cm.valider' | 'cm.gerer' | 'cm.clips.proposer' | 'sponsors.voir' | 'sponsors.gerer';
 export type Reseau = 'x' | 'instagram' | 'tiktok';
 export type StatutPost = 'brouillon' | 'a_valider' | 'valide' | 'refuse' | 'publie';
 export type CleListe = 'idees' | 'preparation' | 'a_valider' | 'valide' | 'publie';
@@ -19,6 +20,8 @@ export interface LiensCarte {
   teamId?: string;
   clips?: string[];
   membres?: string[];
+  /** Partenaires mentionnés (« mention sponsor ») : un post publié compte pour leurs contreparties. */
+  sponsors?: string[];
 }
 
 export const PORTEE_CLUB = 'club';
@@ -33,6 +36,8 @@ export interface TeamCm {
 }
 export interface MoiCm {
   espace: boolean;
+  /** Permissions de la rubrique Sponsors (affectation « club ») : sponsors.voir, sponsors.gerer. */
+  sponsors?: string[];
   club: PermissionCm[];
   teams: Array<TeamCm & { permissions: PermissionCm[] }>;
   gerer: boolean;
@@ -184,6 +189,8 @@ export interface CarteDetail {
   activite: Activite[];
   clips: Array<{ id: string; titre: string; statut: StatutClip; genre: 'fichier' | 'lien' }>;
   resumes: { resultat?: ResumeLie; match?: ResumeLie; tournoi?: ResumeLie };
+  /** Partenaires mentionnés, nom seulement (serveur récent). */
+  sponsors?: Array<{ id: string; nom: string }>;
 }
 export type ResumeLie = { titre: string; phrase: string } | { masque: true };
 export interface ProblemePost {

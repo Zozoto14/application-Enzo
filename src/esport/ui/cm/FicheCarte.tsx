@@ -27,6 +27,7 @@ import { Badge, ESP, attenue, texte, type EtatPresse } from '../design';
 import { BarreEnvoi, useEnvoi } from '../medias/EnvoiMedia';
 import { ouvrirLienDiffere } from '../ouvrirLien';
 import { Aide, BadgeStatut, ChampInstant, PALETTE, PastilleReseau, Teinte, copierTexte, nomListe, quand } from './commun';
+import { MentionsSponsors } from '../sponsors/MentionsSponsors';
 
 const vide = { fr: '', en: '' };
 
@@ -508,6 +509,7 @@ function Liens({ theme, api, c, liens, editer, teamId, onChanger, personnes }: {
       {ligne('match')}
       {ligne('tournoi')}
       {c.clips.length ? <Text style={texte(theme, 13)}>{trCm('lien.clips', { liste: c.clips.map(x => x.titre).join(', ') })}</Text> : null}
+      <MentionsSponsors theme={theme} client={api.client} liens={liens} noms={c.sponsors ?? []} editer={editer} onChanger={onChanger} />
       {liens.membres?.length ? <Text style={texte(theme, 13)} testID="esport-cm-lien-membres">{trCm('lien.membres', { liste: liens.membres.map(m => noms.get(m) ?? '?').join(', ') })}</Text> : null}
       {editer && membresTeam?.length ? (
         <View style={[styles.ligne, { gap: ESP.xs }]} accessibilityLabel={trCm('lien.choisir_membres')}>

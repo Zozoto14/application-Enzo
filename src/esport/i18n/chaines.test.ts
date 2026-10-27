@@ -28,6 +28,7 @@ const EXCEPTIONS: ReadonlyArray<readonly [string, string, string]> = [
   ['strats/assets.ts', 'Grenade', 'emplacement de capacité du jeu (clé stable)'],
   ['strats/assets.ts', 'Legal Jibber Jabber', 'mention légale imposée par Riot Games (anglais)'],
   ['i18n/', 'Français', 'nom de la langue, écrit dans sa langue'],
+  ['sponsors/api.ts', 'aucun', 'valeur technique du renouvellement d’un contrat (API), traduite à l’affichage'],
 ];
 
 const MOTS_FRANCAIS = new Set(

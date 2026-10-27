@@ -198,7 +198,7 @@ export function Esport(props: PropsRacineApp) {
       page = <Jeux theme={theme} client={etat.client} large={large} fondateur={etat.moi.superAdmin} />;
     } else if (onglet === 'cm' && cm && moiCm) {
       // Section CM du club : tableaux, À valider, calendrier, clips ; équipe CM, import Trello, réglages (cm.gerer).
-      page = <EspaceCm theme={theme} client={etat.client} large={large} moi={moiCm} />;
+      page = <EspaceCm theme={theme} client={etat.client} large={large} moi={moiCm} onExporter={exporter} />;
     } else if (onglet === 'membres') {
       page = <MembresGlobal theme={theme} client={etat.client} contexte={contexte} registre={registre} large={large} onOuvrirTeam={id => setVue({ v: 'team', id })} onOuvrirApp={onOuvrirApp} />;
     } else {

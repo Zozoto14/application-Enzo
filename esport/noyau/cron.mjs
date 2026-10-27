@@ -19,6 +19,7 @@ import { rappelsPresence } from './planning/rappels.mjs';
 import { nettoyerEnvois, servicesMedias } from './medias/service.mjs';
 import { servicesResumes } from './resumes.mjs';
 import { agregerUsage, purgerUsage } from './usage/collecte.mjs';
+import { rappelsSponsors } from './sponsors/rappels.mjs';
 
 /**
  * Rend `[{ tache, ok, erreur? }]`. Options : `cle` (CLE_DISCORD sinon CLE_ESPORT), `lienApp`, `jetonBot`, `fetch`,
@@ -37,6 +38,8 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     ['rappels d’échéance', () => rappelsEcheances(base, { maintenant: maintenant() })],
     ['rappels Discord', () => rappelsDiscord(base, { maintenant: maintenant() })],
     ['débuts Discord', () => debutsDiscord(base, { maintenant: maintenant() })],
+    // Sponsors : prochaines actions, contreparties à faire avant l'échéance, contrats en fin de préavis.
+    ['rappels Sponsors', () => rappelsSponsors(base, { maintenant: maintenant() })],
     ['événements en attente', () => distribuer(base, { maintenant: maintenant(), limite: 500 })],
     ['file Discord', () => traiterFile(base, { cle, maintenant: maintenant(), lienApp, jetonBot, ...(fetch ? { fetch } : {}) })],
     ['rétention du journal', () => purgerJournal(base, { maintenant: maintenant() })],

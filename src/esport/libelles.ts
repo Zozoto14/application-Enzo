@@ -66,6 +66,7 @@ import { phraseJournalStrats, phraseNotificationStrats } from './strats/libelles
 import { phraseJournalRessources, phraseNotificationRessources } from './ressources/libelles';
 import { phraseJournalCompetition, phraseNotificationCompetition } from './competition/libelles';
 import { phraseJournalCm, phraseNotificationCm } from './cm/libelles';
+import { phraseNotificationSponsors } from './sponsors/libelles';
 
 const nom = (noms: Record<string, string | null>, id: unknown): string =>
   typeof id === 'string' ? (noms[id] ?? (id === 'principal' ? tr('jr.fondateur') : tr('jr.compte_supprime'))) : tr('jr.quelquun');
@@ -302,7 +303,7 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
         echeance: typeof c.echeance === 'string' ? ` (${dateJour(c.echeance)})` : '',
       });
     default:
-      return phraseNotificationPlanning(n.type, team, c) ?? phraseNotificationReview(n.type, team, c) ?? phraseNotificationStrats(n.type, team, c) ?? phraseNotificationRessources(n.type, team, c) ?? phraseNotificationCompetition(n.type, team, c) ?? phraseNotificationCm(n.type, team, c, id => nom(noms, id)) ?? `${team} : ${n.type}`;
+      return phraseNotificationPlanning(n.type, team, c) ?? phraseNotificationReview(n.type, team, c) ?? phraseNotificationStrats(n.type, team, c) ?? phraseNotificationRessources(n.type, team, c) ?? phraseNotificationCompetition(n.type, team, c) ?? phraseNotificationCm(n.type, team, c, id => nom(noms, id)) ?? phraseNotificationSponsors(n.type, c, id => nom(noms, id)) ?? `${team} : ${n.type}`;
   }
 }
 

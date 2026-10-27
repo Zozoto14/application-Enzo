@@ -46,8 +46,9 @@ export function lireTextes(v) {
 }
 
 /**
- * Liens d'une carte : `{ resultatId, tournoiId, matchId, teamId, clips: [id], membres: [compte] }`
- * (identifiants seulement ; l'existence est vérifiée par l'appelant quand il le faut).
+ * Liens d'une carte : `{ resultatId, tournoiId, matchId, teamId, clips: [id], membres: [compte], sponsors: [id] }`
+ * (identifiants seulement ; l'existence est vérifiée par l'appelant quand il le faut). `sponsors` : partenaires
+ * mentionnés par le post (« mention sponsor », migration 0024) ; un post publié compte pour leurs contreparties.
  */
 export function lireLiens(v) {
   if (v === undefined || v === null) return {};
@@ -65,6 +66,10 @@ export function lireLiens(v) {
   if (v.membres !== undefined && v.membres !== null) {
     if (!Array.isArray(v.membres) || v.membres.length > 30 || v.membres.some(c => typeof c !== 'string' || !MOTIF_COMPTE.test(c))) throw echec(400, 'liens', 'Membres illisibles.');
     if (v.membres.length) sortie.membres = [...new Set(v.membres)];
+  }
+  if (v.sponsors !== undefined && v.sponsors !== null) {
+    if (!Array.isArray(v.sponsors) || v.sponsors.length > 10 || v.sponsors.some(c => typeof c !== 'string' || !MOTIF_UUID.test(c))) throw echec(400, 'liens', 'Sponsors illisibles.');
+    if (v.sponsors.length) sortie.sponsors = [...new Set(v.sponsors)];
   }
   return sortie;
 }

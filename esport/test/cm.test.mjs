@@ -85,7 +85,7 @@ test('migration 0023 sur une base existante : rôles CM système, permissions de
     "INSERT INTO envois (id, team_id, compte_id, usage, nom_original, taille, taille_morceau, morceaux, recus, empreinte_etat, cle_stockage, statut, cree_le, maj_le) VALUES ('e1', 't', 'abc123', 'review', 'v.mp4', 10, 10, 1, 0, '{}', 'teams/t/videos/x.media', 'en_cours', ?, ?)",
     [d, d],
   );
-  assert.deepEqual(await appliquerMigrations(base, migrations), ['0023_cm.sql']);
+  assert.deepEqual(await appliquerMigrations(base, migrations.filter(m => m.nom < '0024')), ['0023_cm.sql']);
   const perms = async role => (await base.tous("SELECT permission FROM role_permissions WHERE role_id = ? AND permission LIKE 'cm.%' ORDER BY permission", [role])).map(l => l.permission);
   assert.deepEqual(await perms('manager'), ['cm.clips.proposer', 'cm.deposer', 'cm.voir']);
   assert.deepEqual(await perms('joueur'), ['cm.clips.proposer']);
@@ -96,7 +96,7 @@ test('migration 0023 sur une base existante : rôles CM système, permissions de
   const roles = await base.tous('SELECT cle_systeme FROM cm_roles ORDER BY position', []);
   assert.deepEqual(roles.map(r => r.cle_systeme), ['responsable', 'correspondant']);
   assert.equal((await base.tous("SELECT module FROM team_modules WHERE module = 'cm'", [])).length, 0, 'module pas activé d’office');
-  assert.deepEqual(await appliquerMigrations(base, migrations), []);
+  assert.deepEqual(await appliquerMigrations(base, migrations.filter(m => m.nom < '0024')), []);
 });
 
 // ------------------------------------------------------------------ Banc

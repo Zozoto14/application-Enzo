@@ -2524,6 +2524,11 @@ export const fr = {
   'cm.nt.clip_propose_retour': 'Votre clip « {titre} » est de nouveau en attente',
   'cm.nt.affecte': 'Vous avez maintenant le rôle CM « {role} »',
   'cm.nt.motif': ' : {motif}',
+  // Sponsors & partenaires (migration 0024) : notifications. Les écrans ont leurs textes dans i18n/sponsors.ts.
+  'sp.nt.action': 'Sponsors · action prévue aujourd’hui pour « {titre} » : {action}',
+  'sp.nt.obligation': 'Sponsors · contrepartie à faire pour {titre} : « {intitule} » ({fait} / {quantite}, avant le {fin})',
+  'sp.nt.contrat': 'Sponsors · le contrat de {titre} se termine le {fin}',
+  'sp.nt.responsable': 'Sponsors · {membre} vous a confié la fiche « {titre} »',
 } as const;
 
 export type Cle = keyof typeof fr;

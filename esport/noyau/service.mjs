@@ -34,6 +34,7 @@ import { effacementUsage } from './usage/collecte.mjs';
 import { aPermissionJeux, jeuValidePourTeam, nomsDesJeux } from './jeux/service.mjs';
 import { effacementCompetition } from './competition/rgpd.mjs';
 import { effacementCm, exportCm } from './cm/rgpd.mjs';
+import { effacementSponsors, exportSponsors } from './sponsors/rgpd.mjs';
 
 const MOTIF_PSEUDO = /^[\p{L}\p{N}][\p{L}\p{N} _.\-]{1,23}$/u;
 const MOTIF_RIOT = /^[^#\s][^#]{2,15}#[\p{L}\p{N}]{3,5}$/u;
@@ -896,6 +897,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       tournoisCrees: (await q('SELECT team_id, nom, cree_le FROM tournois WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: team(x.team_id), tournoi: x.nom, creeLe: x.cree_le })),
       // Section CM (migration 0023) : rôles CM, cartes créées ou assignées, commentaires, clips proposés, fichiers déposés.
       ...(await exportCm(base, compte)),
+      // Sponsors (migration 0024) : fiches dont il est responsable, échanges qu'il a notés.
+      ...(await exportSponsors(base, compte)),
     };
   }
 
@@ -988,6 +991,8 @@ export function servicesEsport({ base, maintenant = () => Date.now(), creationTe
       ...effacementCompetition(compte),
       // Section CM (migration 0023) : affectations et assignations effacées ; ce qu'il a écrit reste, sans auteur.
       ...(await effacementCm(base, compte)),
+      // Sponsors (migration 0024) : plus responsable de rien ; ce qu'il a écrit reste, sans auteur.
+      ...effacementSponsors(compte),
       { sql: 'DELETE FROM comptes WHERE id = ?', params: [compte] },
       evenement('account.deleted', { acteur: acteur.compte, entiteType: 'compte', entiteId: compte, charge: { teams: membres.length, ...(compte === acteur.compte ? {} : { parFondateur: true }) }, maintenant: t }),
     );

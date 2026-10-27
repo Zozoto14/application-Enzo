@@ -25,6 +25,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [profils-jeu.md](profils-jeu.md) | Fondateur | Profils de jeu (formats, score, maps, personnages), assistant IA, mises à jour proposées |
 | [tournois-resultats.md](tournois-resultats.md) | Staff, tout le monde | Tournois (inscription, roster, parcours, matchs au planning, classement) et résultats (score selon le jeu, bilans, Discord) |
 | [cm.md](cm.md) | Fondateur, CM, correspondants, joueurs | Section CM : tableaux façon Trello, posts FR / EN par réseau, validation, calendrier, clips des joueurs, dépôts des teams, import Trello |
+| [sponsors.md](sponsors.md) | Fondateur, Responsable CM | Sponsors & partenaires (rubrique du CM) : pipeline des prospects, partenaires, contrats et contreparties, tableau de bord, import / export CSV, RGPD des contacts |
 | [statistiques.md](statistiques.md) | Fondateur | Page Statistiques (réservée au Fondateur) : qui utilise l'app, pages les plus et les moins utilisées, ce qui est collecté |
 | [securite.md](securite.md) | Fondateur | Revue de sécurité, RGPD, limites |
 | [migration-serveur.md](migration-serveur.md) | Fondateur | Architecture du serveur, changer d'hébergeur, sauvegardes |
@@ -65,7 +66,7 @@ Esport
 │       ├── Équipe       Résumés · Objectifs et tâches · Suivi joueurs · CM · Membres et rôles
 │       └── Réglages     Paramètres · Discord · Journal
 ├── Membres
-├── CM                   (section CM du club, voir cm.md)
+├── CM                   (section CM du club, voir cm.md ; onglet Sponsors, voir sponsors.md)
 ├── Jeux                 (profils de jeu et assistant IA, voir profils-jeu.md)
 └── Statistiques         (Fondateur seulement : statistiques d'usage, voir statistiques.md)
 ```
@@ -162,6 +163,8 @@ La migration `0022_tournois_resultats.sql` ajoute les modules **Tournois** et **
 activez-les dans les Paramètres des teams concernées ([tournois-resultats.md](tournois-resultats.md)).
 La migration `0023_cm.sql` ajoute la **section CM** : affectez le Responsable CM et les correspondants (**Esport › CM ›
 Équipe CM**) et activez le module **CM** dans les teams existantes ([cm.md](cm.md)).
+La migration `0024_sponsors.sql` ajoute la rubrique **Sponsors** du CM, ouverte par défaut au Responsable CM
+(permissions `sponsors.voir` / `sponsors.gerer`, modifiables dans **Esport › CM › Équipe CM**) ([sponsors.md](sponsors.md)).
 
 ### Créer une team
 

@@ -131,6 +131,17 @@ export const TABLES = [
   ['cm_activite', 'id'],
   ['cm_clips', 'id'],
   ['cm_imports', 'id'],
+  // Sponsors & partenaires (migration 0024) : les étapes par défaut posées par la migration sont remplacées par
+  // celles de l'export (renommées, réordonnées depuis).
+  ['sp_etapes', 'id'],
+  ['sp_prospects', 'id'],
+  ['sp_partenaires', 'id'],
+  ['sp_contrats', 'id'],
+  ['sp_obligations', 'id'],
+  ['sp_suivi', 'id'],
+  ['sp_contacts', 'id'],
+  ['sp_echanges', 'id'],
+  ['sp_pieces', 'id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;
@@ -171,6 +182,7 @@ export async function importerBase(base, donnees, { tailleLot = 50 } = {}) {
       await base.executer('DELETE FROM cm_role_permissions', []);
       await base.executer('DELETE FROM cm_roles', []);
     }
+    if (table === 'sp_etapes' && lignes.length > 0) await base.executer('DELETE FROM sp_etapes', []);
     if (table === 'jeux' && lignes.length > 0) {
       await base.executer('DELETE FROM jeu_versions', []);
       await base.executer('DELETE FROM jeux', []);

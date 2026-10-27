@@ -24,6 +24,7 @@ import { TYPES_RESSOURCES, abonneRessources } from './ressources/bus.mjs';
 import { TYPES_COMPETITION, abonneCompetition } from './competition/bus.mjs';
 import { TYPES_CM, abonneCm } from './cm/bus.mjs';
 import { abonneCmSuggestions } from './cm/suggestions.mjs';
+import { TYPES_SPONSORS, abonneSponsors } from './sponsors/bus.mjs';
 
 export const TYPES_EVENEMENTS = [
   'team.created',
@@ -88,6 +89,8 @@ export const TYPES_EVENEMENTS = [
   ...TYPES_COMPETITION,
   // Section CM (migration 0023) : tableaux, cartes, circuit de validation des posts, clips, import Trello, rôles CM.
   ...TYPES_CM,
+  // Sponsors & partenaires (migration 0024) : événements SANS team (jamais dans le journal d'une team), rappels.
+  ...TYPES_SPONSORS,
   // Profils de jeu (migration 0021) : événements GLOBAUX (sans team) ; brouillon IA prêt, différences proposées.
   'game.created',
   'game.updated',
@@ -232,7 +235,7 @@ export async function abonneNotifications(base, ev) {
   }
 }
 
-export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord, abonneReview, abonneStrats, abonneRessources, abonneCompetition, abonneCm, abonneCmSuggestions];
+export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord, abonneReview, abonneStrats, abonneRessources, abonneCompetition, abonneCm, abonneCmSuggestions, abonneSponsors];
 
 /**
  * Distribue les événements en attente aux abonnés. Un événement dont un

@@ -595,13 +595,26 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       post,
       reseaux: post ? lireReseaux(corps?.reseaux ?? ['x', 'instagram', 'tiktok']) : [],
       textes: post ? lireTextes(corps?.textes) : {},
-      liens: lireLiens(corps?.liens),
+      liens: await liensVerifies(corps?.liens),
       datePublication: lireInstantCm(corps?.datePublication, ctx.team?.fuseau ?? FUSEAU_CLUB),
       acteur: acteur.compte,
       t,
     });
     await base.lot([...instructions, evenement('cm.carte_creee', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_carte', entiteId: id, charge: { titre: lireTitre(corps?.titre), tableau: tb.id, post }, maintenant: t })]);
     return carte(acteur, id);
+  }
+
+  /**
+   * Liens saisis ; un partenaire NOUVELLEMENT mentionné (« mention sponsor ») doit exister (rubrique Sponsors).
+   * Celui que la carte mentionnait déjà reste accepté même s'il a été supprimé depuis (la carte se modifie encore).
+   */
+  async function liensVerifies(v, avant = []) {
+    const liens = lireLiens(v);
+    if (liens.sponsors) {
+      const connus = new Set((await lignesParIds(base, 'SELECT id FROM sp_partenaires WHERE supprime_le IS NULL AND id', liens.sponsors)).map(l => l.id));
+      if (liens.sponsors.some(id => !connus.has(id) && !avant.includes(id))) throw echec(400, 'sponsor-inconnu', 'Partenaire inconnu.');
+    }
+    return liens;
   }
 
   async function premierePosition(listeId) {
@@ -681,6 +694,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
         }),
         activite: journal.map(a => ({ id: a.id, acteur: a.acteur_id ?? null, action: a.action, meta: jsonOu(a.meta, {}), date: a.cree_le })),
         clips: clips.map(x => ({ id: x.id, titre: x.titre, statut: x.statut, genre: x.genre })),
+        // Partenaires mentionnés (nom seulement : rien de la rubrique Sponsors).
+        sponsors: (await lignesParIds(base, 'SELECT id, nom FROM sp_partenaires WHERE supprime_le IS NULL AND id', liens.sponsors ?? [])).map(x => ({ id: x.id, nom: x.nom })),
         resumes: await resumesLies(c.team_id ?? liens.teamId ?? null, liens, langue),
       },
       droits: { ...droitsDe(ctx), modifier: peutModifierCarte(ctx, c) },
@@ -762,7 +777,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     }
     if (corps?.reseaux !== undefined) contenu.reseaux = champs.reseaux = lireReseaux(corps.reseaux);
     if (corps?.textes !== undefined) contenu.textes = champs.textes = lireTextes(corps.textes);
-    if (corps?.liens !== undefined) contenu.liens = champs.liens = lireLiens(corps.liens);
+    if (corps?.liens !== undefined) contenu.liens = champs.liens = await liensVerifies(corps.liens, jsonOu(c.liens, {}).sponsors ?? []);
     if (corps?.etiquettes !== undefined) {
       if (!Array.isArray(corps.etiquettes) || corps.etiquettes.length > MAX_ETIQUETTES || corps.etiquettes.some(e => typeof e !== 'string' || !MOTIF_UUID.test(e))) throw echec(400, 'etiquettes', 'Étiquettes illisibles.');
       const connues = new Set((await base.tous('SELECT id FROM cm_etiquettes WHERE tableau_id = ?', [tb.id])).map(l => l.id));

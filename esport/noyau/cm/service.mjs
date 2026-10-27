@@ -22,10 +22,16 @@ import { servicesDroitsCm } from './droits.mjs';
 import { servicesEquipeCm } from './equipe.mjs';
 import { servicesClipsCm } from './clips.mjs';
 import { servicesImportTrello } from './importTrello.mjs';
+import { PORTEE_SPONSORS, contexteSponsors, droitsSponsors } from '../sponsors/commun.mjs';
 
 export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSession, stockage }) {
   // Envois par morceaux de la section : il faut pouvoir écrire quelque chose dans la portée.
   medias?.brancherContexte('cm', async (acteur, portee) => {
+    // Sponsors (migration 0024) : pièces des prospects et partenaires, portée « sponsors » (sponsors.gerer).
+    if (portee === PORTEE_SPONSORS) {
+      await contexteSponsors(base, acteur, { gerer: true });
+      return { acteur, team: { id: null }, portee: PORTEE_SPONSORS };
+    }
     const ctx = await contexteCm(base, acteur, portee);
     exiger(ctx, 'cm.editer', 'cm.deposer', 'cm.clips.proposer');
     return { acteur, team: { id: teamDePortee(ctx.portee) }, portee: ctx.portee };
@@ -39,6 +45,8 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
   /** Le compte peut-il encore lire ce fichier (cm.voir sur sa portée, ou auteur d'un clip qui l'utilise) ? */
   async function peutLire(compte, f) {
     if (compte === 'principal') return true;
+    // Fichier de la rubrique Sponsors : sponsors.voir seulement (jamais la seule section CM).
+    if (f.portee === PORTEE_SPONSORS) return (await droitsSponsors(base, { compte, superAdmin: false })).has('sponsors.voir');
     try {
       const ctx = await contexteCm(base, { compte, superAdmin: false }, f.portee);
       if (ctx.permissions.has('cm.voir')) return true;

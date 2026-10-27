@@ -2319,4 +2319,9 @@ export const en: Record<Cle, string> = {
   'cm.nt.clip_propose_retour': 'Your clip “{titre}” is pending again',
   'cm.nt.affecte': 'You now have the CM role “{role}”',
   'cm.nt.motif': ': {motif}',
+  // Sponsors & partners (migration 0024): notifications. Screens: i18n/sponsors.ts.
+  'sp.nt.action': 'Sponsors · action planned today for “{titre}”: {action}',
+  'sp.nt.obligation': 'Sponsors · deliverable due for {titre}: “{intitule}” ({fait} / {quantite}, before {fin})',
+  'sp.nt.contrat': 'Sponsors · the contract of {titre} ends on {fin}',
+  'sp.nt.responsable': 'Sponsors · {membre} assigned you the record “{titre}”',
 };
