@@ -332,4 +332,10 @@ export const EN = {
   'cm.suggestion.final': 'Final standing: {nom}',
   'cm.prefixe.j1': 'Tomorrow:',
   'cm.prefixe.jourj': 'Today!',
+  'visuel.roster.titulaire': 'Starter',
+  'visuel.roster.remplacant': 'Substitute',
+  'visuel.bilan': '{v} W · {d} L',
+  'visuel.bilan_nuls': '{v} W · {n} D · {d} L',
+  'visuel.semaine': 'Week of {du} – {au}',
+  'visuel.programme_vide': 'No match scheduled this week',
 };

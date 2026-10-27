@@ -36,6 +36,11 @@ export const TYPES_CM = [
   'cm.affectation_ajoutee',
   'cm.affectation_retiree',
   'cm.reglages_modifies',
+  'cm.charte_modifiee',
+  'cm.modele_cree',
+  'cm.modele_modifie',
+  'cm.modele_supprime',
+  'cm.visuel_genere',
 ];
 
 async function notifier(base, ev, compte, type, charge) {

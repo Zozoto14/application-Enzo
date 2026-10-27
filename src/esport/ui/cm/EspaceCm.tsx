@@ -1,6 +1,6 @@
 /**
  * Espace CM du club (entrée « CM » de la navigation de l'Esport) : tableaux (club et teams), file « À
- * valider », calendrier éditorial, clips des joueurs, et pour le gestionnaire (cm.gerer) : équipe et rôles
+ * valider », calendrier éditorial, clips des joueurs, visuels (modèles, charte, éditeur ; docs/esport/visuels.md), et pour le gestionnaire (cm.gerer) : équipe et rôles
  * CM, import Trello, réglages (suggestions automatiques), journal de la section. Rubrique « Sponsors » pour qui a
  * sponsors.voir (affectation « club ») : seule visible pour un compte qui n'a QUE les Sponsors. Tout est décidé
  * par le serveur ; l'écran n'affiche que ce que la réponse permet.
@@ -26,8 +26,10 @@ import { GalerieClips } from './Clips';
 import { ImportTrello } from './ImportTrello';
 import { RolesCm } from './RolesCm';
 import { EspaceSponsors } from '../sponsors/EspaceSponsors';
+import { Visuels } from './visuels/Visuels';
+import { trVi } from '../../i18n/visuels';
 
-type OngletCm = 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
+type OngletCm = 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'visuels' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
 
 export function EspaceCm({ theme, client, large, moi, onExporter }: { theme: ThemeHub; client: ClientEsport; large: boolean; moi: MoiCm; onExporter?(nom: string, contenu: string, type?: string): Promise<boolean> }) {
   const api = useMemo(() => apiCm(client), [client]);
@@ -45,6 +47,7 @@ export function EspaceCm({ theme, client, large, moi, onExporter }: { theme: The
           { id: 'valider', libelle: etat?.aValider ? trCm('espace.valider_n', { n: etat.aValider }) : trCm('espace.valider') },
           { id: 'calendrier', libelle: trCm('espace.calendrier') },
           { id: 'clips', libelle: trCm('espace.clips') },
+          { id: 'visuels', libelle: trVi('espace.titre') },
         ]
       : []),
     ...(sponsors ? [{ id: 'sponsors', libelle: trCm('espace.sponsors') }] : []),
@@ -85,6 +88,7 @@ export function EspaceCm({ theme, client, large, moi, onExporter }: { theme: The
       {onglet === 'valider' ? <FileValidation theme={theme} api={api} large={large} version={etat?.aValider} onOuvrir={id => { setOuvert(id); setOnglet('tableaux'); }} /> : null}
       {onglet === 'calendrier' ? <Calendrier theme={theme} api={api} large={large} onOuvrirTableau={id => { setOuvert(id); setOnglet('tableaux'); }} /> : null}
       {onglet === 'clips' ? <GalerieClips theme={theme} api={api} large={large} teams={teams} /> : null}
+      {onglet === 'visuels' && voirCm ? <Visuels theme={theme} apiCm={api} large={large} moi={moi} /> : null}
       {onglet === 'equipe' && moi.gerer ? <RolesCm theme={theme} api={api} large={large} /> : null}
       {onglet === 'import' && moi.gerer ? <ImportTrello theme={theme} api={api} large={large} onOuvrir={id => { setOuvert(id); setOnglet('tableaux'); }} /> : null}
       {onglet === 'reglages' && moi.gerer ? <Reglages theme={theme} api={api} /> : null}

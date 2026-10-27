@@ -8,6 +8,8 @@ se copient, les médias se téléchargent). Elle a deux niveaux :
 - la **partie CM de chaque team** (module `cm`, onglet **CM** dans la section **Équipe**), où le correspondant de
   la team dépose les informations et où les joueurs proposent leurs clips.
 
+Visuels (charte, modèles, éditeur, génération d'affiches) : [visuels.md](visuels.md).
+
 Migration : `esport/migrations/0023_cm.sql`. Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
 
 ## Qui fait quoi

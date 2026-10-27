@@ -142,6 +142,12 @@ export const TABLES = [
   ['sp_contacts', 'id'],
   ['sp_echanges', 'id'],
   ['sp_pieces', 'id'],
+  // Visuels de la section CM (migration 0025).
+  ['cm_charte', 'id'],
+  ['cm_modeles', 'id'],
+  ['cm_modele_versions', 'id'],
+  ['cm_visuels', 'id'],
+  ['cm_visuel_images', 'fichier_id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

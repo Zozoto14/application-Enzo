@@ -544,7 +544,28 @@
   "Étape de départ : une étape ouverte.": "Starting stage: an open stage.",
   "Plafond de prospects atteint.": "Prospect limit reached.",
   "Valeur inconnue.": "Unknown value.",
-  "Montant illisible (en euros, ex. 1500 ou 1 500,50).": "Unreadable amount (in euros, e.g. 1500 or 1,500.50)."
+  "Montant illisible (en euros, ex. 1500 ou 1 500,50).": "Unreadable amount (in euros, e.g. 1500 or 1,500.50).",
+  "La charte a changé entre-temps : rechargez-la.": "The brand kit changed in the meantime: reload it.",
+  "Logo : importez d’abord l’image.": "Logo: import the image first.",
+  "Logo : image d’une autre team.": "Logo: image from another team.",
+  "Rendu : PNG ou JPEG.": "Render: PNG or JPEG.",
+  "Image : PNG, JPEG, GIF ou WebP.": "Image: PNG, JPEG, GIF or WebP.",
+  "Image illisible ou trop grande (8192 px de côté au plus).": "Unreadable or too large image (8192 px per side at most).",
+  "Image inconnue : importez-la dans l’éditeur.": "Unknown image: import it in the editor.",
+  "Modèle introuvable.": "Template not found.",
+  "Genre de visuel inconnu.": "Unknown visual type.",
+  "Ce modèle a été modifié entre-temps : rechargez-le.": "This template was changed in the meantime: reload it.",
+  "Source d’une autre team.": "Source from another team.",
+  "Choisissez la team.": "Choose the team.",
+  "Modèle inconnu.": "Unknown template.",
+  "Modèle d’une autre team.": "Template from another team.",
+  "Visuel introuvable.": "Visual not found.",
+  "Format : carre, portrait, story ou paysage.": "Format: carre, portrait, story or paysage.",
+  "Ce modèle n’existe pas dans ce format.": "This template doesn't exist in this format.",
+  "Ce visuel a été modifié entre-temps : rechargez-le.": "This visual was changed in the meantime: reload it.",
+  "Les données ont changé depuis l’ouverture : le visuel va être régénéré.": "The data changed since it was opened: the visual will be regenerated.",
+  "Carte d’une autre portée.": "Card from another space.",
+  "Ce visuel n’a pas encore été généré.": "This visual hasn't been generated yet."
  },
  "motifs": [
   [
@@ -798,6 +819,26 @@
   [
    "^Colonne en double : (.+)\\.$",
    "Duplicate column: $1."
+  ],
+  [
+   "^Image trop lourde : (\\d+) Mo au plus\\.$",
+   "Image too heavy: $1 MB at most."
+  ],
+  [
+   "^Le rendu doit faire exactement (\\d+)×(\\d+) px\\.$",
+   "The render must be exactly $1×$2 px."
+  ],
+  [
+   "^(\\d+) modèles au plus\\.$",
+   "$1 templates at most."
+  ],
+  [
+   "^(\\d+) visuels au plus par carte\\.$",
+   "$1 visuals per card at most."
+  ],
+  [
+   "^Visuel invalide \\((.+) : (.+)\\)\\.$",
+   "Invalid visual ($1: $2)."
   ]
  ]
 }

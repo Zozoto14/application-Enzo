@@ -1024,6 +1024,34 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     return carte(acteur, c.id);
   }
 
+  /**
+   * Joint un fichier CM DÉJÀ enregistré (visuel généré : `cm_fichiers` de la portée du tableau) à une carte,
+   * en remplaçant au besoin une pièce précédente (`remplacer`). Usage interne (service des visuels) : jamais
+   * branché sur une route, l'identifiant du fichier ne vient pas de la requête. Rend l'identifiant de la pièce.
+   */
+  async function attacherFichier(acteur, carteId, { fichierId, nom, remplacer = null }) {
+    const { carte: c, tableau: tb, ctx } = await carteVisible(acteur, carteId);
+    exiger(ctx, 'cm.editer');
+    const f = await base.premier('SELECT id, portee FROM cm_fichiers WHERE id = ? AND supprime_le IS NULL', [fichierId]);
+    if (!f || f.portee !== tb.portee) throw echec(404, 'fichier-introuvable', 'Fichier introuvable.');
+    const ancienne = remplacer ? await base.premier('SELECT * FROM cm_pieces WHERE id = ? AND carte_id = ? AND supprime_le IS NULL', [remplacer, c.id]) : null;
+    const actuelles = await piecesIds(c.id);
+    if (!ancienne && actuelles.length >= MAX_PIECES) throw echec(409, 'trop-de-pieces', `${MAX_PIECES} pièces jointes au plus.`);
+    const t = maintenant();
+    const id = nouvelId();
+    const lot = [{ sql: "INSERT INTO cm_pieces (id, carte_id, genre, nom, fichier_id, cree_par, cree_le) VALUES (?, ?, 'fichier', ?, ?, ?, ?)", params: [id, c.id, texteNettoye(nom, 140) || 'visuel.png', f.id, acteur.compte, iso(t)] }];
+    if (ancienne) {
+      lot.push({ sql: 'UPDATE cm_pieces SET supprime_le = ? WHERE id = ?', params: [iso(t), ancienne.id] });
+      const couv = jsonOu(c.couverture, null);
+      if (couv?.pieceId === ancienne.id) lot.push({ sql: 'UPDATE cm_cartes SET couverture = ? WHERE id = ?', params: [JSON.stringify({ pieceId: id }), c.id] });
+    }
+    if (Number(c.post)) lot.push(...(await invalidationSiBesoin(c, tb, await contenuDe(c, { pieces: [...actuelles.filter(x => x !== ancienne?.id), id] }), acteur.compte, t)));
+    lot.push(activite(c.id, tb.id, acteur.compte, 'visuel_joint', { nom: texteNettoye(nom, 140) }, t), { sql: 'UPDATE cm_cartes SET version = version + 1, maj_le = ? WHERE id = ?', params: [iso(t), c.id] }, versionTableau(tb.id, t));
+    await base.lot(lot);
+    if (ancienne?.fichier_id && ancienne.fichier_id !== f.id) await effacerFichierSiOrphelin(ancienne.fichier_id, t);
+    return { pieceId: id, tableau: tb, carte: c };
+  }
+
   async function pieceVisible(acteur, id) {
     exigerUuid(id, 'piece');
     const p = await base.premier('SELECT * FROM cm_pieces WHERE id = ? AND supprime_le IS NULL', [id]);
@@ -1031,12 +1059,15 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     return { p, ...(await carteVisible(acteur, p.carte_id)) };
   }
 
-  /** Efface les octets d'un fichier CM s'il n'est plus utilisé par aucune pièce ni aucun clip. */
+  /** Efface les octets d'un fichier CM s'il n'est plus utilisé par aucune pièce, aucun clip ni aucun visuel. */
   async function effacerFichierSiOrphelin(fichierId, t) {
     if (!fichierId) return;
     const pieces = await base.premier('SELECT COUNT(*) AS n FROM cm_pieces WHERE fichier_id = ? AND supprime_le IS NULL', [fichierId]);
     const clips = await base.premier('SELECT COUNT(*) AS n FROM cm_clips WHERE fichier_id = ? AND supprime_le IS NULL', [fichierId]);
-    if (Number(pieces?.n ?? 0) + Number(clips?.n ?? 0) > 0) return;
+    // Rendu d'un visuel (ou image importée dans l'éditeur) encore utilisé : on garde les octets.
+    const visuels = await base.premier('SELECT COUNT(*) AS n FROM cm_visuels WHERE fichier_id = ? AND supprime_le IS NULL', [fichierId]);
+    const images = await base.premier('SELECT COUNT(*) AS n FROM cm_visuel_images WHERE fichier_id = ? AND supprime_le IS NULL', [fichierId]);
+    if (Number(pieces?.n ?? 0) + Number(clips?.n ?? 0) + Number(visuels?.n ?? 0) + Number(images?.n ?? 0) > 0) return;
     const f = await base.premier('SELECT * FROM cm_fichiers WHERE id = ? AND supprime_le IS NULL', [fichierId]);
     if (!f) return;
     if (stockage) await stockage.supprimer(f.cle_stockage).catch(() => undefined);
@@ -1314,5 +1345,6 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     personnesTableau,
     effacerFichierSiOrphelin,
     contexteEnvoi,
+    attacherFichier,
   };
 }

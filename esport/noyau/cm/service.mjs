@@ -6,6 +6,7 @@
  *  - equipe.mjs : partie CM d'une team (dépôts, matchs publiables, pré-remplissage) ;
  *  - clips.mjs : clips proposés par les joueurs ; droits.mjs : rôles CM, affectations, réglages ;
  *  - trello.mjs, importTrello.mjs : import d'un export JSON de Trello ; suggestions.mjs, bus.mjs : abonnés ;
+ *  - visuels/ : charte graphique, modèles personnalisés, visuels générés (docs/esport/visuels.md) ;
  *  - rgpd.mjs : export et effacement.
  *
  * Fichiers (pièces jointes, clips) : envoi par morceaux du module médias (usage « cm », portée club ou team),
@@ -16,13 +17,14 @@
 import { echec } from '../outils.mjs';
 import { verifierLien } from '../fichiers.mjs';
 import { reponseFichierStocke } from '../medias/lecture.mjs';
-import { contexteCm, exiger, exigerUuid, teamDePortee } from './commun.mjs';
+import { PORTEE_CLUB, contexteCm, exiger, exigerUuid, porteesDe, teamDePortee } from './commun.mjs';
 import { servicesTableauxCm } from './tableaux.mjs';
 import { servicesDroitsCm } from './droits.mjs';
 import { servicesEquipeCm } from './equipe.mjs';
 import { servicesClipsCm } from './clips.mjs';
 import { servicesImportTrello } from './importTrello.mjs';
 import { PORTEE_SPONSORS, contexteSponsors, droitsSponsors } from '../sponsors/commun.mjs';
+import { servicesVisuelsCm } from './visuels/service.mjs';
 
 export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSession, stockage }) {
   // Envois par morceaux de la section : il faut pouvoir écrire quelque chose dans la portée.
@@ -41,8 +43,12 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
   const equipe = servicesEquipeCm({ base, maintenant, medias });
   const clips = servicesClipsCm({ base, maintenant, medias, cleSession, tableaux });
   const trello = servicesImportTrello({ base, maintenant, tableaux });
+  const visuels = servicesVisuelsCm({ base, maintenant, medias, cleSession, stockage, tableaux });
 
-  /** Le compte peut-il encore lire ce fichier (cm.voir sur sa portée, ou auteur d'un clip qui l'utilise) ? */
+  /**
+   * Le compte peut-il encore lire ce fichier (cm.voir sur sa portée, image du club — logo, fond — et cm.voir
+   * quelque part, ou auteur d'un clip qui l'utilise) ?
+   */
   async function peutLire(compte, f) {
     if (compte === 'principal') return true;
     // Fichier de la rubrique Sponsors : sponsors.voir seulement (jamais la seule section CM).
@@ -52,6 +58,10 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
       if (ctx.permissions.has('cm.voir')) return true;
     } catch {
       // Pas d'accès à la portée : peut-être l'auteur du clip.
+    }
+    if (f.portee === PORTEE_CLUB && (await base.premier("SELECT fichier_id FROM cm_visuel_images WHERE fichier_id = ? AND portee = 'club' AND supprime_le IS NULL", [f.id]))) {
+      const p = await porteesDe(base, { compte, superAdmin: false });
+      if ([...p.teams.values()].some(x => x.has('cm.voir'))) return true;
     }
     return Boolean(await base.premier('SELECT id FROM cm_clips WHERE fichier_id = ? AND propose_par = ? AND supprime_le IS NULL', [f.id, compte]));
   }
@@ -70,5 +80,5 @@ export function servicesCm({ base, maintenant = () => Date.now(), medias, cleSes
     },
   };
 
-  return { tableaux, droits, equipe, clips, trello, fichiers };
+  return { tableaux, droits, equipe, clips, trello, fichiers, visuels };
 }

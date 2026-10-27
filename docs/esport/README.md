@@ -25,6 +25,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [profils-jeu.md](profils-jeu.md) | Fondateur | Profils de jeu (formats, score, maps, personnages), assistant IA, mises à jour proposées |
 | [tournois-resultats.md](tournois-resultats.md) | Staff, tout le monde | Tournois (inscription, roster, parcours, matchs au planning, classement) et résultats (score selon le jeu, bilans, Discord) |
 | [cm.md](cm.md) | Fondateur, CM, correspondants, joueurs | Section CM : tableaux façon Trello, posts FR / EN par réseau, validation, calendrier, clips des joueurs, dépôts des teams, import Trello |
+| [visuels.md](visuels.md) | Fondateur, CM | Visuels de la section CM : charte graphique (thème cyberpunk), modèles d'affiches par défaut (4 formats, FR / EN), éditeur, génération PNG / JPEG jointe aux posts |
 | [sponsors.md](sponsors.md) | Fondateur, Responsable CM | Sponsors & partenaires (rubrique du CM) : pipeline des prospects, partenaires, contrats et contreparties, tableau de bord, import / export CSV, RGPD des contacts |
 | [statistiques.md](statistiques.md) | Fondateur | Page Statistiques (réservée au Fondateur) : qui utilise l'app, pages les plus et les moins utilisées, ce qui est collecté |
 | [securite.md](securite.md) | Fondateur | Revue de sécurité, RGPD, limites |
@@ -66,7 +67,7 @@ Esport
 │       ├── Équipe       Résumés · Objectifs et tâches · Suivi joueurs · CM · Membres et rôles
 │       └── Réglages     Paramètres · Discord · Journal
 ├── Membres
-├── CM                   (section CM du club, voir cm.md ; onglet Sponsors, voir sponsors.md)
+├── CM                   (section CM du club, voir cm.md ; onglets Visuels, voir visuels.md, et Sponsors, voir sponsors.md)
 ├── Jeux                 (profils de jeu et assistant IA, voir profils-jeu.md)
 └── Statistiques         (Fondateur seulement : statistiques d'usage, voir statistiques.md)
 ```

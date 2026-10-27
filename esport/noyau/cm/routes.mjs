@@ -23,12 +23,25 @@
  *   GET|PUT           /cm/reglages ; GET /cm/journal?avant
  *   GET               /cm/import/portees ; POST /cm/import/trello/apercu ; POST /cm/import/trello
  *   POST|GET|PUT|DEL  /cm/portees/:p/envois…                     envoi d'un fichier par morceaux (portée club ou team)
+ *
+ *   Visuels (docs/esport/visuels.md) :
+ *   GET|PUT           /cm/charte                                 charte graphique (modifier : cm.gerer du club)
+ *   GET|POST          /cm/visuels/images ; POST /cm/visuels/fichiers/:id/lien   images importées ; lien signé
+ *   GET               /cm/visuels/donnees?portee&genre&teamId&id&date            données d'une source (FR et EN)
+ *   GET|POST          /cm/modeles ; GET|PATCH|DELETE /cm/modeles/:id ; POST …/dupliquer
+ *   GET               /cm/modeles/:id/versions ; GET …/versions/:v ; POST …/versions/:v/restaurer
+ *   GET|POST          /cm/visuels ; GET|PATCH|DELETE /cm/visuels/:id ; POST …/(rendu|carte|lien)
+ *   GET               /cm/cartes/:id/visuels                     visuels d'une carte et proposition
  */
 
 import { echec } from '../outils.mjs';
 import { routesEnvois } from '../review/routes.mjs';
 import { lireLangue } from '../langues.mjs';
 import { TAILLE_MAX_TRELLO } from './trello.mjs';
+import { TAILLE_MAX_DOCUMENT } from './visuels/document.mjs';
+
+/** Corps d'un modèle (quatre documents) ou d'un visuel retouché. */
+const TAILLE_CORPS_MODELE = 4 * TAILLE_MAX_DOCUMENT + 64 * 1024;
 
 const segment = s => {
   try {
@@ -56,7 +69,7 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
   const [a, b, c] = p;
   const origine = prefixeDe(url);
   const langue = lireLangue(q.get('langue')) ?? acteur.langue ?? 'fr';
-  const { tableaux: tb, droits, equipe, clips, trello } = cm;
+  const { tableaux: tb, droits, equipe, clips, trello, visuels: vi } = cm;
 
   if (n === 1 && a === 'moi' && m === 'GET') return droits.moi(acteur);
   if (n === 1 && a === 'etat' && m === 'GET') return tb.etat(acteur);
@@ -84,6 +97,44 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
     if (m === 'PATCH') return tb.modifierEtiquette(acteur, b, await lireCorps());
     if (m === 'DELETE') return tb.supprimerEtiquette(acteur, b);
   }
+  if (n === 1 && a === 'charte') {
+    if (m === 'GET') return vi.charte(acteur);
+    if (m === 'PUT') return vi.changerCharte(acteur, await lireCorps());
+  }
+  if (a === 'modeles') {
+    if (n === 1 && m === 'GET') return vi.modeles(acteur, { portee: q.get('portee') || undefined });
+    if (n === 1 && m === 'POST') return vi.creerModele(acteur, await lireCorps(TAILLE_CORPS_MODELE));
+    if (n === 2 && m === 'GET') return vi.modele(acteur, b);
+    if (n === 2 && m === 'PATCH') return vi.modifierModele(acteur, b, await lireCorps(TAILLE_CORPS_MODELE));
+    if (n === 2 && m === 'DELETE') return vi.supprimerModele(acteur, b);
+    if (n === 3 && c === 'dupliquer' && m === 'POST') return vi.dupliquerModele(acteur, b, await lireCorps());
+    if (n === 3 && c === 'versions' && m === 'GET') return vi.versionsModele(acteur, b);
+    if (n === 4 && c === 'versions' && m === 'GET') return vi.versionModele(acteur, b, p[3]);
+    if (n === 5 && c === 'versions' && p[4] === 'restaurer' && m === 'POST') return vi.restaurerModele(acteur, b, p[3], await lireCorps());
+  }
+  if (a === 'visuels') {
+    if (n === 2 && b === 'images' && m === 'GET') return vi.images(acteur, { portee: q.get('portee') || undefined });
+    if (n === 2 && b === 'images' && m === 'POST') {
+      const corps = await lireCorps();
+      await limite('cm_visuel', acteur.compte);
+      return vi.importerImage(acteur, corps);
+    }
+    if (n === 4 && b === 'fichiers' && p[3] === 'lien' && m === 'POST') return lienComplet(url, await vi.lienFichier(acteur, c, await lireCorps()));
+    if (n === 2 && b === 'donnees' && m === 'GET') return vi.donnees(acteur, Object.fromEntries(['portee', 'genre', 'teamId', 'id', 'date'].map(k => [k, q.get(k) || undefined])));
+    if (n === 1 && m === 'GET') return vi.visuels(acteur, { portee: q.get('portee') || undefined, carte: q.get('carte') || undefined });
+    if (n === 1 && m === 'POST') return vi.creerVisuel(acteur, await lireCorps());
+    if (n === 2 && m === 'GET') return vi.visuel(acteur, b);
+    if (n === 2 && m === 'PATCH') return vi.modifierVisuel(acteur, b, await lireCorps(TAILLE_CORPS_MODELE));
+    if (n === 2 && m === 'DELETE') return vi.supprimerVisuel(acteur, b);
+    if (n === 3 && c === 'rendu' && m === 'POST') {
+      const corps = await lireCorps();
+      await limite('cm_visuel', acteur.compte);
+      return vi.rendu(acteur, b, corps);
+    }
+    if (n === 3 && c === 'carte' && m === 'POST') return vi.lierCarte(acteur, b, await lireCorps());
+    if (n === 3 && c === 'lien' && m === 'POST') return lienComplet(url, await vi.lienRendu(acteur, b, await lireCorps()));
+  }
+  if (a === 'cartes' && n === 3 && c === 'visuels' && m === 'GET') return vi.visuelsCarte(acteur, b);
   if (a === 'cartes') {
     if (n === 2 && m === 'GET') return tb.carte(acteur, b, { origine, langue });
     if (n === 2 && m === 'PATCH') return tb.modifierCarte(acteur, b, await lireCorps());

@@ -333,4 +333,10 @@ export const FR = {
   'cm.suggestion.final': 'Classement final : {nom}',
   'cm.prefixe.j1': 'Demain :',
   'cm.prefixe.jourj': 'C’est aujourd’hui !',
+  'visuel.roster.titulaire': 'Titulaire',
+  'visuel.roster.remplacant': 'Remplaçant',
+  'visuel.bilan': '{v} V · {d} D',
+  'visuel.bilan_nuls': '{v} V · {n} N · {d} D',
+  'visuel.semaine': 'Semaine du {du} au {au}',
+  'visuel.programme_vide': 'Pas de match prévu cette semaine',
 };

@@ -6,7 +6,8 @@
  * Carte de contenu (« post ») : réseaux ciblés, textes FR et EN par réseau avec compteur de caractères,
  * hashtags et mentions, bouton « Copier » par réseau et par langue, date de publication prévue, liens vers un
  * match / tournoi / résultat (pré-remplissage depuis le résumé publiable), clips et joueurs liés ; circuit de
- * validation (soumettre, valider, refuser avec motif, publier avec l'adresse du post par réseau). Toute
+ * validation (soumettre, valider, refuser avec motif, publier avec l'adresse du post par réseau) ; visuels
+ * du post (« Générer le visuel », docs/esport/visuels.md). Toute
  * modification du contenu d'un post validé le repasse « à valider » : c'est le serveur qui décide.
  */
 
@@ -28,6 +29,7 @@ import { BarreEnvoi, useEnvoi } from '../medias/EnvoiMedia';
 import { ouvrirLienDiffere } from '../ouvrirLien';
 import { Aide, BadgeStatut, ChampInstant, PALETTE, PastilleReseau, Teinte, copierTexte, nomListe, quand } from './commun';
 import { MentionsSponsors } from '../sponsors/MentionsSponsors';
+import { PanneauVisuelsCarte } from './visuels/VisuelsCarte';
 
 const vide = { fr: '', en: '' };
 
@@ -84,6 +86,18 @@ export function FicheCarte({
         <BoutonHub theme={theme} titre={trCm('post.transformer')} onPress={() => void faire('post', () => api.modifierCarte(c.id, { post: true }))} testID="esport-cm-fiche-en-post" />
       ) : null}
       {c.post ? <BlocPost theme={theme} api={api} r={r} large={large} fuseau={fuseau} personnes={tableau.personnes} teams={teams} faire={faire} onCopie={setAvis} /> : null}
+      {c.post ? (
+        <PanneauVisuelsCarte
+          theme={theme}
+          apiCm={api}
+          carteId={c.id}
+          teams={teams}
+          onChange={() => {
+            void charger();
+            onChange();
+          }}
+        />
+      ) : null}
 
       <Panneau theme={theme} testID="esport-cm-fiche-description">
         <Intertitre theme={theme}>{trCm('fiche.description')}</Intertitre>

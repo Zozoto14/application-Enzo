@@ -49,6 +49,8 @@ export const LIMITES = {
   cm_depot: { max: 30, fenetreS: 3600 },
   // Sponsors : imports CSV de prospects (aperçu compris), par compte.
   sp_import: { max: 30, fenetreS: 3600 },
+  // Visuels : rendus envoyés et images importées dans l'éditeur (chacun lu et vérifié par le serveur).
+  cm_visuel: { max: 200, fenetreS: 3600 },
 };
 
 /**
