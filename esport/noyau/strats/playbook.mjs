@@ -15,7 +15,7 @@ import { autorise } from '../permissions.mjs';
 import { echec, iso, jsonOu, nouvelId, texteLong, texteNettoye } from '../outils.mjs';
 import { lignesParIds, pseudosDe } from '../requetes.mjs';
 import { SIDES, TYPES_STRAT } from './document.mjs';
-import { MODULE_STRATS, normaliser, tagsPropres } from './service.mjs';
+import { DUREE_CORBEILLE_STRATS_MS, MODULE_STRATS, normaliser, tagsPropres } from './service.mjs';
 
 export const MODULE_PLAYBOOK = 'playbook';
 export const STATUTS_PLAYBOOK = ['brouillon', 'validee', 'archivee'];
@@ -230,11 +230,27 @@ export function servicesPlaybook({ base, maintenant = () => Date.now(), socle, s
     const e = await entreeDeTeam(teamId, id);
     const t = maintenant();
     await base.lot([
-      { sql: 'UPDATE playbook_entrees SET supprime_le = ?, maj_le = ? WHERE id = ?', params: [iso(t), iso(t), id] },
+      { sql: 'UPDATE playbook_entrees SET supprime_le = ?, supprime_par = ?, maj_le = ? WHERE id = ?', params: [iso(t), acteur.compte, iso(t), id] },
       evenement('playbook.deleted', { teamId, acteur: acteur.compte, entiteType: 'playbook', entiteId: id, charge: { titre: e.titre }, maintenant: t }),
     ]);
     return { ok: true };
   }
 
-  return { liste, creer, modifier, supprimer };
+  /** Remet une entrée retirée du playbook depuis moins de 30 jours (le « Annuler » du retrait). */
+  async function restaurer(acteur, teamId, id, { origine } = {}) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exiger(ctx, 'playbook.manage');
+    if (typeof id !== 'string' || !MOTIF_UUID.test(id)) throw echec(404, 'entree-introuvable', 'Entrée introuvable.');
+    const e = await base.premier('SELECT * FROM playbook_entrees WHERE id = ? AND team_id = ? AND supprime_le IS NOT NULL', [id, teamId]);
+    if (!e || e.supprime_le < iso(maintenant() - DUREE_CORBEILLE_STRATS_MS)) throw echec(404, 'entree-introuvable', 'Entrée introuvable dans la corbeille.');
+    // La strat liée a pu être effacée entre-temps : l'entrée revient alors sans elle.
+    const t = maintenant();
+    await base.lot([
+      { sql: 'UPDATE playbook_entrees SET supprime_le = NULL, supprime_par = NULL, maj_le = ? WHERE id = ?', params: [iso(t), id] },
+      evenement('playbook.restored', { teamId, acteur: acteur.compte, entiteType: 'playbook', entiteId: id, charge: { titre: e.titre }, maintenant: t }),
+    ]);
+    return (await entreesPubliques(ctx, [await entreeDeTeam(teamId, id)], origine))[0];
+  }
+
+  return { liste, creer, modifier, supprimer, restaurer };
 }

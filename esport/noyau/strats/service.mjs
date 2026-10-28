@@ -21,12 +21,13 @@
 import { evenement } from '../evenements.mjs';
 import { cheminSigne, empreinteSha256 } from '../fichiers.mjs';
 import { autorise } from '../permissions.mjs';
-import { base64url, depuisBase64url, echec, egal, iso, jsonOu, nouvelId, texteLong, texteNettoye } from '../outils.mjs';
+import { ErreurEsport, base64url, depuisBase64url, echec, egal, iso, jsonOu, nouvelId, texteLong, texteNettoye } from '../outils.mjs';
 import { pseudosDe } from '../requetes.mjs';
 import { SIDES, TYPES_STRAT, documentVide, validerDocument } from './document.mjs';
 
 export const MODULE_STRATS = 'strat_editor';
 export const VERSIONS_GARDEES = 30;
+export const DUREE_CORBEILLE_STRATS_MS = 30 * 86_400_000;
 export const TAILLE_MAX_MINIATURE = 256 * 1024;
 export const DUREE_LIEN_MINIATURE_MS = 60 * 60 * 1000;
 export const LIBELLES_TYPES = { default: 'Default', execute: 'Exécution', eco: 'Éco', pistol: 'Pistol', retake: 'Retake', other: 'Autre' };
@@ -334,20 +335,94 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
     return detail(acteur, teamId, nouvel, { origine });
   }
 
+  /** Droit de supprimer (ou de restaurer) une strat : strats.delete, ou son auteur qui a strats.create. */
+  const peutSupprimer = (ctx, s) => peut(ctx, 'strats.delete') || (s.cree_par === ctx.acteur.compte && peut(ctx, 'strats.create'));
+
+  /** Met une strat à la corbeille (suppression logique, restaurable 30 jours). */
+  async function mettreALaCorbeille(ctx, id) {
+    const s = await stratDeTeam(ctx, id);
+    if (!peutSupprimer(ctx, s)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    const t = maintenant();
+    // Les liens de lecture seule sont révoqués (ils ne reviennent pas à la restauration). Le playbook GARDE le lien
+    // vers la strat : l'entrée s'affiche sans elle tant qu'elle est à la corbeille et la retrouve à la restauration.
+    await base.lot([
+      { sql: 'UPDATE strats SET supprime_le = ?, supprime_par = ?, maj_le = ? WHERE id = ?', params: [iso(t), ctx.acteur.compte, iso(t), id] },
+      { sql: 'UPDATE strat_partages SET revoque_le = ? WHERE strat_id = ? AND revoque_le IS NULL', params: [iso(t), id] },
+      evenement('strat.deleted', { teamId: ctx.team.id, acteur: ctx.acteur.compte, entiteType: 'strat', entiteId: id, charge: { titre: s.titre }, maintenant: t }),
+    ]);
+  }
+
   async function supprimer(acteur, teamId, id) {
     const ctx = await contexteTeam(acteur, teamId);
     exiger(ctx, 'strats.view');
-    const s = await stratDeTeam(ctx, id);
-    if (!peut(ctx, 'strats.delete') && !(s.cree_par === acteur.compte && peut(ctx, 'strats.create'))) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
-    const t = maintenant();
-    // Suppression logique ; les liens de lecture seule sont révoqués, le playbook garde ses entrées (sans la strat).
-    await base.lot([
-      { sql: 'UPDATE strats SET supprime_le = ?, maj_le = ? WHERE id = ?', params: [iso(t), iso(t), id] },
-      { sql: 'UPDATE strat_partages SET revoque_le = ? WHERE strat_id = ? AND revoque_le IS NULL', params: [iso(t), id] },
-      { sql: 'UPDATE playbook_entrees SET strat_id = NULL, maj_le = ? WHERE strat_id = ?', params: [iso(t), id] },
-      evenement('strat.deleted', { teamId, acteur: acteur.compte, entiteType: 'strat', entiteId: id, charge: { titre: s.titre }, maintenant: t }),
-    ]);
+    await mettreALaCorbeille(ctx, id);
     return { ok: true };
+  }
+
+  /** Suppression de plusieurs strats d'un coup (50 au plus) : celles qui échouent sont listées avec leur code. */
+  async function supprimerLot(acteur, teamId, ids) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exiger(ctx, 'strats.view');
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > 50) throw echec(400, 'ids', 'Choisissez de 1 à 50 strats.');
+    const supprimees = [];
+    const echecs = [];
+    for (const id of [...new Set(ids)]) {
+      try {
+        await mettreALaCorbeille(ctx, id);
+        supprimees.push(id);
+      } catch (e) {
+        if (!(e instanceof ErreurEsport)) throw e;
+        echecs.push({ id, code: e.code });
+      }
+    }
+    return { ok: true, supprimees, echecs };
+  }
+
+  // -------------------------------------------------------------- Corbeille (30 jours)
+
+  const expiration = ligne => iso(Date.parse(ligne.supprime_le) + DUREE_CORBEILLE_STRATS_MS);
+
+  /** Strats à la corbeille depuis moins de 30 jours que l'acteur peut restaurer. */
+  async function corbeille(acteur, teamId, { origine } = {}) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exiger(ctx, 'strats.view');
+    const limite = iso(maintenant() - DUREE_CORBEILLE_STRATS_MS);
+    const lignes = await base.tous(
+      'SELECT id, team_id, titre, carte, carte_nom, side, type, visibilite, miniature_id, cree_par, supprime_le, supprime_par FROM strats WHERE team_id = ? AND supprime_le IS NOT NULL AND supprime_le >= ? ORDER BY supprime_le DESC LIMIT 200',
+      [teamId, limite],
+    );
+    const retenues = lignes.filter(s => visible(ctx, s) && peutSupprimer(ctx, s));
+    const noms = await pseudos(retenues.flatMap(s => [s.supprime_par]).filter(Boolean));
+    return Promise.all(
+      retenues.map(async s => ({
+        id: s.id,
+        titre: s.titre,
+        carte: { cle: s.carte, nom: s.carte_nom },
+        side: s.side,
+        type: s.type,
+        visibilite: s.visibilite,
+        miniature: await lienMiniature(s.miniature_id, ctx.acteur.compte, origine),
+        supprimeLe: s.supprime_le,
+        supprimePar: s.supprime_par ? { compte: s.supprime_par, pseudo: noms[s.supprime_par] ?? null } : null,
+        expireLe: expiration(s),
+      })),
+    );
+  }
+
+  /** Remet une strat de la corbeille (30 jours au plus) ; les liens de partage révoqués restent révoqués. */
+  async function restaurer(acteur, teamId, id, { origine } = {}) {
+    const ctx = await contexteTeam(acteur, teamId);
+    exiger(ctx, 'strats.view');
+    exigerUuid(id, 'strat');
+    const s = await base.premier('SELECT * FROM strats WHERE id = ? AND team_id = ? AND supprime_le IS NOT NULL', [id, teamId]);
+    if (!s || !visible(ctx, s) || s.supprime_le < iso(maintenant() - DUREE_CORBEILLE_STRATS_MS)) throw echec(404, 'strat-introuvable', 'Strat introuvable dans la corbeille.');
+    if (!peutSupprimer(ctx, s)) throw echec(403, 'permission', 'Vous n’avez pas la permission de faire cela.');
+    const t = maintenant();
+    await base.lot([
+      { sql: 'UPDATE strats SET supprime_le = NULL, supprime_par = NULL, maj_le = ? WHERE id = ?', params: [iso(t), id] },
+      evenement('strat.restored', { teamId, acteur: acteur.compte, entiteType: 'strat', entiteId: id, charge: { titre: s.titre }, maintenant: t }),
+    ]);
+    return detail(acteur, teamId, id, { origine });
   }
 
   // -------------------------------------------------------------- Historique
@@ -464,7 +539,7 @@ export function servicesStrats({ base, stockage, cleSession, maintenant = () => 
     };
   }
 
-  return { liste, detail, creer, enregistrer, modifier, dupliquer, supprimer, versions, version, partages, creerPartage, revoquerPartage, lirePartage, lienMiniature, peut, exiger, visible };
+  return { liste, detail, creer, enregistrer, modifier, dupliquer, supprimer, supprimerLot, corbeille, restaurer, versions, version, partages, creerPartage, revoquerPartage, lirePartage, lienMiniature, peut, exiger, visible };
 }
 
 /** Texte comparable (minuscules, sans accents) pour la recherche. */
@@ -474,4 +549,29 @@ export function normaliser(texte) {
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .trim();
+}
+
+/**
+ * Cron : efface définitivement les strats et entrées du playbook à la corbeille depuis plus de 30 jours.
+ * Une strat effacée emporte son historique, ses liens de partage et sa miniature (lignes, puis octets) ; les entrées
+ * du playbook qui la citaient restent, sans strat liée, et une copie perd sa référence d'origine. Rend les nombres effacés.
+ */
+export async function purgerCorbeilleStrats(base, stockage, { maintenant = Date.now(), duree = DUREE_CORBEILLE_STRATS_MS, limite = 200 } = {}) {
+  const avant = iso(maintenant - duree);
+  const strats = await base.tous('SELECT id FROM strats WHERE supprime_le IS NOT NULL AND supprime_le < ? ORDER BY supprime_le LIMIT ?', [avant, limite]);
+  for (const { id } of strats) {
+    const fichiers = await base.tous("SELECT cle_stockage FROM fichiers WHERE entite_type = 'strat' AND entite_id = ?", [id]);
+    await base.lot([
+      { sql: 'UPDATE playbook_entrees SET strat_id = NULL WHERE strat_id = ?', params: [id] },
+      { sql: 'UPDATE strats SET origine_id = NULL WHERE origine_id = ?', params: [id] },
+      { sql: 'DELETE FROM strat_versions WHERE strat_id = ?', params: [id] },
+      { sql: 'DELETE FROM strat_partages WHERE strat_id = ?', params: [id] },
+      { sql: 'DELETE FROM strats WHERE id = ?', params: [id] },
+      { sql: "DELETE FROM fichiers WHERE entite_type = 'strat' AND entite_id = ?", params: [id] },
+    ]);
+    if (stockage) for (const f of fichiers) await stockage.supprimer(f.cle_stockage).catch(() => undefined);
+  }
+  const entrees = await base.tous('SELECT id FROM playbook_entrees WHERE supprime_le IS NOT NULL AND supprime_le < ? ORDER BY supprime_le LIMIT ?', [avant, limite]);
+  for (const { id } of entrees) await base.executer('DELETE FROM playbook_entrees WHERE id = ?', [id]);
+  return { strats: strats.length, entrees: entrees.length };
 }

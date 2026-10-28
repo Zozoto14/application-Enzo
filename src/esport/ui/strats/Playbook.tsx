@@ -21,6 +21,8 @@ import { ESP, EnTetePage, Pliable } from '../design';
 import type { PropsModule } from '../modules';
 import { Etiquette, Filtre, MentionRiot, Miniature, demanderStrat, useAssetsTeam } from './commun';
 import { tr, trn } from '../../i18n';
+import { trSs } from '../../i18n/stratsSuppr';
+import { ToastAnnuler } from './Suppression';
 
 const couleurStatut = (theme: ThemeHub, s: StatutPlaybook) => ({ brouillon: theme.attenue, validee: theme.ok, archivee: theme.alerte })[s];
 
@@ -32,6 +34,7 @@ export function Playbook({ theme, client, detail, large, onAller }: PropsModule)
   const [filtres, setFiltres] = useState<FiltresPlaybook>({});
   const [recherche, setRecherche] = useState('');
   const [creation, setCreation] = useState(false);
+  const [toast, setToast] = useState<{ cle: string; texte: string; id?: string } | undefined>();
   const { enCours, erreur, avis, agir } = useAgir();
   const stratsActif = detail.modules.some(m => m.cle === 'strat_editor' && m.active);
   const listerStrats = useCallback(() => api.liste(teamId), [api, teamId]);
@@ -42,6 +45,14 @@ export function Playbook({ theme, client, detail, large, onAller }: PropsModule)
   }, [agir, recharger]);
 
   const gerer = Boolean(donnees?.gerer);
+  const annulerRetrait = async (id: string) => {
+    setToast(undefined);
+    await agir('restauration', async () => {
+      const e = await api.restaurerEntree(teamId, id);
+      await recharger();
+      setToast({ cle: `${Date.now()}`, texte: trSs('pb.restauree', { titre: e.titre }) });
+    });
+  };
   const modifier = (e: EntreePlaybook, champs: Parameters<typeof api.modifierEntree>[2], message?: string) =>
     void agir('playbook', async () => {
       await api.modifierEntree(teamId, e.id, champs);
@@ -164,12 +175,13 @@ export function Playbook({ theme, client, detail, large, onAller }: PropsModule)
               {gerer ? (
                 <BoutonConfirme
                   theme={theme}
-                  titre={tr('resumes.retirer')}
+                  titre={`🗑 ${tr('resumes.retirer')}`}
                   confirmation={tr('planning.disponibilites.oui_retirer')}
                   onConfirme={() =>
                     void agir('suppression', async () => {
                       await api.supprimerEntree(teamId, e.id);
                       await recharger();
+                      setToast({ cle: `${Date.now()}`, texte: trSs('pb.retiree', { titre: e.titre }), id: e.id });
                     })
                   }
                   testID={`esport-playbook-supprimer-${e.id}`}
@@ -181,6 +193,16 @@ export function Playbook({ theme, client, detail, large, onAller }: PropsModule)
       </View>
       {donnees && donnees.entrees.length === 0 ? <Text style={attenue}>{tr('strats.playbook.aucune_entree_pour_ces')}</Text> : null}
       <MentionRiot theme={theme} jeu={assets?.jeu} />
+      {toast ? (
+        <ToastAnnuler
+          theme={theme}
+          cle={toast.cle}
+          texte={toast.texte}
+          action={toast.id ? { titre: trSs('toast.annuler'), onPress: () => void annulerRetrait(toast.id ?? '') } : undefined}
+          onFermer={() => setToast(undefined)}
+          testID="esport-playbook-toast"
+        />
+      ) : null}
     </View>
   );
 }

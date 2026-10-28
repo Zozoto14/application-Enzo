@@ -13,7 +13,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
-import { BoutonHub, Champ, Segments } from '../../../hub/admin/ui/commun';
+import { BoutonHub, Case, Champ, Segments } from '../../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../../hub/themes';
 import { dateCourte } from '../../libelles';
 import { apiStrats, type FiltresStrats, type PartageStrat, type Strat } from '../../strats/api';
@@ -26,6 +26,8 @@ import { Editeur } from './Editeur';
 import { Etiquette, Filtre, MentionRiot, Miniature, prendreStratDemandee, useAssetsTeam } from './commun';
 import { cartesDuPool } from '../../jeux/profil';
 import { tr } from '../../i18n';
+import { trSs, trnSs } from '../../i18n/stratsSuppr';
+import { BoutonPoubelle, ConfirmationSuppression, CorbeilleStrats, ToastAnnuler } from './Suppression';
 
 export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
   const teamId = detail.team.id;
@@ -40,6 +42,11 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
   const [creation, setCreation] = useState(false);
   const [partage, setPartage] = useState<string | undefined>();
   const [aSupprimer, setASupprimer] = useState<string | undefined>();
+  // Sélection multiple (undefined : hors mode sélection), confirmation du lot, corbeille, toast « Annuler ».
+  const [selection, setSelection] = useState<Set<string> | undefined>();
+  const [confirmationLot, setConfirmationLot] = useState(false);
+  const [vueCorbeille, setVueCorbeille] = useState(false);
+  const [toast, setToast] = useState<{ cle: string; texte: string; ids?: string[] } | undefined>();
   const { enCours, erreur, avis, agir } = useAgir();
 
   const recharger = useCallback(async () => setStrats(await api.liste(teamId, { ...filtres, q: recherche.trim() || undefined })), [api, teamId, filtres, recherche]);
@@ -47,8 +54,25 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
     if (!ouverte) void agir('', recharger);
   }, [agir, recharger, ouverte]);
 
+  const annoncerSuppression = (supprimees: Array<{ id: string; titre: string }>) => {
+    if (supprimees.length === 0) return;
+    setToast({ cle: `${Date.now()}`, texte: supprimees.length === 1 ? trSs('toast.une', { titre: supprimees[0].titre }) : trSs('toast.n', { n: supprimees.length }), ids: supprimees.map(x => x.id) });
+  };
+  const annuler = (ids: string[]) => {
+    setToast(undefined);
+    void agir('restauration', async () => {
+      for (const id of ids) await api.restaurer(teamId, id);
+      await recharger();
+      setToast({ cle: `${Date.now()}`, texte: trnSs('toast.restauree', ids.length) });
+    });
+  };
+  const toastEl = toast ? (
+    <ToastAnnuler theme={theme} cle={toast.cle} texte={toast.texte} action={toast.ids ? { titre: trSs('toast.annuler'), onPress: () => annuler(toast.ids ?? []) } : undefined} onFermer={() => setToast(undefined)} />
+  ) : null;
+
   if (ouverte) {
     return (
+      <>
       <Editeur
         theme={theme}
         api={api}
@@ -58,13 +82,49 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
         assets={assets}
         onRetour={() => setOuverte(undefined)}
         onOuvrir={id => setOuverte(id)}
+        onSupprimee={x => {
+          setOuverte(undefined);
+          annoncerSuppression([x]);
+        }}
       />
+      {toastEl}
+      </>
     );
   }
 
   const cartes = assets?.cartes ?? [];
   const playbookActif = detail.modules.some(m => m.cle === 'playbook' && m.active) && peut('playbook.manage');
   const attenue = { color: theme.attenue, fontSize: 12, ...police(theme.policeTexte) };
+  const peutCorbeille = peut('strats.delete') || peut('strats.create');
+  const supprimables = (strats ?? []).filter(s => s.moi.supprimer);
+  const choisies = supprimables.filter(s => selection?.has(s.id));
+  const basculer = (id: string) =>
+    setSelection(cur => {
+      const n = new Set(cur);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const quitterSelection = () => {
+    setSelection(undefined);
+    setConfirmationLot(false);
+  };
+
+  if (vueCorbeille) {
+    return (
+      <View style={{ gap: ESP.l }} testID="esport-strats-corbeille">
+        <EnTetePage
+          theme={theme}
+          large={large}
+          titre={trSs('corbeille.titre')}
+          action={<BoutonHub theme={theme} titre={trSs('corbeille.retour')} onPress={() => setVueCorbeille(false)} testID="esport-strats-corbeille-retour" />}
+        />
+        <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-strats" />
+        <CorbeilleStrats theme={theme} api={api} teamId={teamId} large={large} onRestauree={titre => setToast({ cle: `${Date.now()}`, texte: trSs('corbeille.restauree', { titre }) })} />
+        {toastEl}
+      </View>
+    );
+  }
 
   return (
     <View style={{ gap: ESP.l }} testID="esport-strats">
@@ -76,6 +136,55 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
         action={peut('strats.create') ? <BoutonHub theme={theme} titre={creation ? tr('discord.fermer') : tr('strats.strats.nouvelle_strat_2')} variante={creation ? 'normal' : 'plein'} onPress={() => setCreation(!creation)} testID="esport-strats-nouvelle" /> : undefined}
       />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-strats" />
+      {supprimables.length > 0 || peutCorbeille ? (
+        <View style={[styles.ligne, { gap: ESP.xs }]} testID="esport-strats-barre-suppression">
+          {supprimables.length > 0 ? (
+            <BoutonHub theme={theme} titre={selection ? trSs('selection.terminer') : trSs('selection.activer')} variante={selection ? 'plein' : 'normal'} onPress={() => (selection ? quitterSelection() : setSelection(new Set()))} testID="esport-strats-selection" />
+          ) : null}
+          {peutCorbeille ? <BoutonHub theme={theme} titre={`🗑 ${trSs('corbeille.ouvrir')}`} libelle={trSs('corbeille.ouvrir')} onPress={() => (quitterSelection(), setVueCorbeille(true))} testID="esport-strats-corbeille-ouvrir" /> : null}
+        </View>
+      ) : null}
+      {selection ? (
+        <Panneau theme={theme} style={{ gap: ESP.xs }} testID="esport-strats-selection-barre">
+          <Text style={{ color: theme.texte, fontWeight: '700', ...police(theme.policeTexte) }} testID="esport-strats-selection-compte">
+            {trnSs('selection.n', choisies.length)}
+          </Text>
+          <View style={[styles.ligne, { gap: ESP.xs }]}>
+            <BoutonHub
+              theme={theme}
+              titre={choisies.length === supprimables.length ? trSs('selection.rien') : trSs('selection.tout')}
+              onPress={() => setSelection(choisies.length === supprimables.length ? new Set() : new Set(supprimables.map(s => s.id)))}
+              testID="esport-strats-selection-tout"
+            />
+            <BoutonHub theme={theme} titre={trSs('selection.supprimer')} variante="danger" desactive={choisies.length === 0 || Boolean(enCours)} onPress={() => setConfirmationLot(true)} testID="esport-strats-selection-supprimer" />
+          </View>
+          {confirmationLot && choisies.length > 0 ? (
+            <ConfirmationSuppression
+              theme={theme}
+              testID="esport-strats-selection-confirmation"
+              titre={trnSs('confirm.lot', choisies.length)}
+              details={choisies.map(s => s.titre)}
+              texte={trSs('confirm.lot.texte')}
+              oui={trSs('confirm.lot.oui')}
+              desactive={Boolean(enCours)}
+              onAnnuler={() => setConfirmationLot(false)}
+              onConfirmer={() =>
+                void agir('suppression', async () => {
+                  const r = await api.supprimerLot(
+                    teamId,
+                    choisies.map(s => s.id),
+                  );
+                  const titres = new Map(choisies.map(s => [s.id, s.titre]));
+                  quitterSelection();
+                  await recharger();
+                  annoncerSuppression(r.supprimees.map(id => ({ id, titre: titres.get(id) ?? '' })));
+                  return r.echecs.length > 0 ? trnSs('toast.refus', r.echecs.length) : undefined;
+                })
+              }
+            />
+          ) : null}
+        </Panneau>
+      ) : null}
       {creation ? (
         <NouvelleStrat
           theme={theme}
@@ -116,9 +225,13 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
         {strats?.map(s => (
           <Panneau key={s.id} theme={theme} style={{ gap: ESP.s, height: '100%' }} testID={`esport-strat-${s.id}`}>
             <Miniature theme={theme} url={s.miniature?.url} carte={s.carte.nom} taille={large ? 130 : 180} testID="esport-strat-miniature" />
-            <Text style={{ color: theme.texte, fontWeight: '700', fontSize: 15, ...police(theme.policeTexte) }} numberOfLines={2}>
-              {s.titre}
-            </Text>
+            <View style={[styles.ligne, { gap: ESP.xs, flexWrap: 'nowrap', alignItems: 'flex-start', justifyContent: 'space-between' }]}>
+              {selection && s.moi.supprimer ? <Case theme={theme} coche={selection.has(s.id)} libelle={trSs('selection.case', { titre: s.titre })} onChanger={() => basculer(s.id)} testID={`esport-strat-case-${s.id}`} /> : null}
+              <Text style={{ flex: 1, minWidth: 0, color: theme.texte, fontWeight: '700', fontSize: 15, ...police(theme.policeTexte) }} numberOfLines={2}>
+                {s.titre}
+              </Text>
+              {!selection && s.moi.supprimer ? <BoutonPoubelle theme={theme} libelle={trSs('supprimer.libelle', { titre: s.titre })} onPress={() => setASupprimer(aSupprimer === s.id ? undefined : s.id)} testID={`esport-strat-supprimer-${s.id}`} /> : null}
+            </View>
             <View style={[styles.ligne, { gap: 4 }]}>
               <Etiquette theme={theme} texte={s.carte.nom} />
               <Etiquette theme={theme} texte={LIBELLES_SIDE[s.side]} couleur={s.side === 'attaque' ? theme.critique : theme.accent} />
@@ -161,34 +274,34 @@ export function Strats({ theme, client, detail, large, onAller }: PropsModule) {
                       }),
                   },
                   s.moi.partager && { titre: partage === s.id ? tr('strats.strats.masquer_le_partage') : tr('strats.strats.partage_et_lien'), testID: `esport-strat-lien-${s.id}`, onPress: () => setPartage(partage === s.id ? undefined : s.id) },
-                  s.moi.supprimer && { titre: tr('strats.strats.supprimer'), danger: true, testID: `esport-strat-supprimer-${s.id}`, onPress: () => setASupprimer(s.id) },
                 ]}
               />
             </View>
-            {aSupprimer === s.id ? (
-              <View style={[styles.ligne, { gap: ESP.xs }]}>
-                <BoutonHub
-                  theme={theme}
-                  titre={tr('planning.planning.oui_supprimer')}
-                  variante="danger"
-                  onPress={() =>
-                    void agir('suppression', async () => {
-                      setASupprimer(undefined);
-                      await api.supprimer(teamId, s.id);
-                      await recharger();
-                      return tr('strats.strats.strat_supprimee');
-                    })
-                  }
-                  testID={`esport-strat-supprimer-${s.id}-confirmer`}
-                />
-                <BoutonHub theme={theme} titre={tr('assistant.annuler')} onPress={() => setASupprimer(undefined)} testID={`esport-strat-supprimer-${s.id}-annuler`} />
-              </View>
+            {aSupprimer === s.id && !selection ? (
+              <ConfirmationSuppression
+                theme={theme}
+                testID={`esport-strat-supprimer-${s.id}-confirmation`}
+                titre={trSs('confirm.titre', { titre: s.titre })}
+                texte={trSs('confirm.texte')}
+                oui={trSs('confirm.oui')}
+                desactive={Boolean(enCours)}
+                onAnnuler={() => setASupprimer(undefined)}
+                onConfirmer={() =>
+                  void agir('suppression', async () => {
+                    setASupprimer(undefined);
+                    await api.supprimer(teamId, s.id);
+                    await recharger();
+                    annoncerSuppression([{ id: s.id, titre: s.titre }]);
+                  })
+                }
+              />
             ) : null}
             {partage === s.id ? <Partages theme={theme} api={api} teamId={teamId} strat={s} /> : null}
           </Panneau>
         ))}
       </Grille>
       <MentionRiot theme={theme} jeu={assets?.jeu} />
+      {toastEl}
     </View>
   );
 }

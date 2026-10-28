@@ -12,6 +12,7 @@ export const TYPES_STRATS = [
   'strat.updated',
   'strat.duplicated',
   'strat.deleted',
+  'strat.restored',
   'strat.share_created',
   'strat.share_revoked',
   'playbook.created',
@@ -19,6 +20,7 @@ export const TYPES_STRATS = [
   'playbook.validated',
   'playbook.archived',
   'playbook.deleted',
+  'playbook.restored',
 ];
 
 /** Membres actifs qui lisent le playbook (Propriétaires compris). */

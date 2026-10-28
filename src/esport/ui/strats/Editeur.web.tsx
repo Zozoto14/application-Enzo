@@ -43,6 +43,8 @@ import type { ExportCanevas, Outil } from './CanevasStrat.web';
 import { MentionRiot } from './commun';
 import { agentsActifs, cartesDuPool } from '../../jeux/profil';
 import type { PropsEditeur } from './types';
+import { ConfirmationSuppression } from './Suppression';
+import { trSs } from '../../i18n/stratsSuppr';
 import { tr } from '../../i18n';
 
 export type { PropsEditeur };
@@ -111,8 +113,9 @@ function Pastille({ theme, actif, onPress, libelle, testID, children, couleur }:
   );
 }
 
-export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, onOuvrir }: PropsEditeur) {
+export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, onOuvrir, onSupprimee }: PropsEditeur) {
   const [strat, setStrat] = useState<Strat | undefined>();
+  const [confirmerSuppression, setConfirmerSuppression] = useState(false);
   const [h, setH] = useState<Historique | undefined>();
   const [revision, setRevision] = useState(0);
   const [enregistre, setEnregistre] = useState<Historique['present'] | undefined>();
@@ -469,8 +472,28 @@ export function Editeur({ theme, api, teamId, stratId, large, assets, onRetour, 
               testID="esport-editeur-dupliquer"
             />
           ) : null}
+          {strat.moi.supprimer ? (
+            <BoutonHub theme={theme} titre={`🗑 ${trSs('supprimer')}`} libelle={trSs('supprimer.libelle', { titre: strat.titre })} variante="danger" desactive={Boolean(enCours)} onPress={() => setConfirmerSuppression(c => !c)} testID="esport-editeur-supprimer" />
+          ) : null}
         </View>
       </View>
+      {confirmerSuppression && strat.moi.supprimer ? (
+        <ConfirmationSuppression
+          theme={theme}
+          testID="esport-editeur-supprimer-confirmation"
+          titre={trSs('confirm.titre', { titre: strat.titre })}
+          texte={trSs('confirm.texte')}
+          oui={trSs('confirm.oui')}
+          desactive={Boolean(enCours)}
+          onAnnuler={() => setConfirmerSuppression(false)}
+          onConfirmer={() =>
+            void agir('suppression', async () => {
+              await api.supprimer(teamId, strat.id);
+              onSupprimee({ id: strat.id, titre: strat.titre });
+            })
+          }
+        />
+      ) : null}
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-editeur" />
       {conflit !== undefined ? (
         <View style={styles.ligne}>

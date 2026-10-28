@@ -15,12 +15,15 @@ import { NoteMarkdown } from '../review/Note';
 import { Etiquette, MentionRiot, Miniature } from './commun';
 import type { PropsEditeur } from './types';
 import { tr } from '../../i18n';
+import { trSs } from '../../i18n/stratsSuppr';
+import { ConfirmationSuppression } from './Suppression';
 
 export type { PropsEditeur };
 
-export function Editeur({ theme, api, teamId, stratId, onRetour }: PropsEditeur) {
+export function Editeur({ theme, api, teamId, stratId, onRetour, onSupprimee }: PropsEditeur) {
   const [strat, setStrat] = useState<Strat | undefined>();
-  const { erreur, agir } = useAgir();
+  const [confirmer, setConfirmer] = useState(false);
+  const { enCours, erreur, agir } = useAgir();
   useEffect(() => {
     void agir('', async () => setStrat(await api.detail(teamId, stratId)));
   }, [agir, api, teamId, stratId]);
@@ -29,7 +32,25 @@ export function Editeur({ theme, api, teamId, stratId, onRetour }: PropsEditeur)
     <View style={{ gap: 12 }} testID="esport-strat-lecture">
       <View style={styles.ligne}>
         <BoutonHub theme={theme} titre={tr('strats.editeur.strats')} onPress={onRetour} testID="esport-strat-retour" />
+        {strat?.moi.supprimer ? <BoutonHub theme={theme} titre={`🗑 ${trSs('supprimer')}`} libelle={trSs('supprimer.libelle', { titre: strat.titre })} variante="danger" desactive={Boolean(enCours)} onPress={() => setConfirmer(c => !c)} testID="esport-strat-lecture-supprimer" /> : null}
       </View>
+      {confirmer && strat?.moi.supprimer ? (
+        <ConfirmationSuppression
+          theme={theme}
+          testID="esport-strat-lecture-supprimer-confirmation"
+          titre={trSs('confirm.titre', { titre: strat.titre })}
+          texte={trSs('confirm.texte')}
+          oui={trSs('confirm.oui')}
+          desactive={Boolean(enCours)}
+          onAnnuler={() => setConfirmer(false)}
+          onConfirmer={() =>
+            void agir('suppression', async () => {
+              await api.supprimer(teamId, strat.id);
+              onSupprimee({ id: strat.id, titre: strat.titre });
+            })
+          }
+        />
+      ) : null}
       <Retours theme={theme} erreur={erreur} prefixe="esport-strat-lecture" />
       {strat ? (
         <>

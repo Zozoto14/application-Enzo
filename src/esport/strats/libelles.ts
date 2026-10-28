@@ -6,6 +6,7 @@
 import type { StatutPlaybook } from './api';
 import type { Side, TypeStrat } from './document';
 import { tr } from '../i18n';
+import { trSs } from '../i18n/stratsSuppr';
 
 export const LIBELLES_SIDE: Record<Side, string> = { get attaque() {
       return tr('strats.editeur.attaque');
@@ -60,6 +61,8 @@ export function phraseJournalStrats(action: string, qui: string, m: Record<strin
       return tr('strats.libelles.a_duplique_en', { qui, v: texte(m.sourceTitre), v2: texte(m.titre) });
     case 'strat.deleted':
       return tr('strats.libelles.a_supprime_la_strat', { qui, v: texte(m.titre) });
+    case 'strat.restored':
+      return trSs('jr.strat_restauree', { qui, v: texte(m.titre) });
     case 'strat.share_created':
       return tr('strats.libelles.a_cree_un_lien', { qui, v: texte(m.titre) });
     case 'strat.share_revoked':
@@ -74,6 +77,8 @@ export function phraseJournalStrats(action: string, qui: string, m: Record<strin
       return tr('strats.libelles.a_archive_dans_le', { qui, v: texte(m.titre) });
     case 'playbook.deleted':
       return tr('strats.libelles.a_retire_du_playbook', { qui, v: texte(m.titre) });
+    case 'playbook.restored':
+      return trSs('jr.entree_restauree', { qui, v: texte(m.titre) });
     default:
       return undefined;
   }

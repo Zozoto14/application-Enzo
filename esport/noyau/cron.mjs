@@ -24,6 +24,7 @@ import { rappelsReseaux } from './reseaux/rappels.mjs';
 import { traiterAnnoncesReseaux } from './reseaux/annonces.mjs';
 import { releverAutomatiquement } from './reseaux/adaptateurs.mjs';
 import { purgerCorbeilleDrive, verifierAlerteDrive } from './cm/drive/service.mjs';
+import { purgerCorbeilleStrats } from './strats/service.mjs';
 import { configDrive } from './cm/drive/regles.mjs';
 
 /**
@@ -61,6 +62,8 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     ['envois inachevés', () => nettoyerEnvois(base, stockage, { maintenant: maintenant() })],
     // Drive de la section CM : corbeille de plus de 30 jours effacée (octets compris), alerte d'espace à 80 %.
     ['corbeille du Drive', () => purgerCorbeilleDrive(base, stockage, { maintenant: maintenant() })],
+    // Strats : corbeille de plus de 30 jours effacée (strats, miniatures, entrées du playbook retirées).
+    ['corbeille des strats', () => purgerCorbeilleStrats(base, stockage, { maintenant: maintenant() })],
     ['espace du Drive', () => verifierAlerteDrive(base, { quota: drive?.quota, maintenant: maintenant() })],
     ['transcriptions externes', transcrire],
   ];
