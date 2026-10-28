@@ -4,7 +4,8 @@ La section CM prépare la communication du club sur les réseaux (**X, Instagram
 idées, posts à préparer, à **valider**, puis à **publier à la main** (aucune connexion aux réseaux : les textes
 se copient, les médias se téléchargent). Elle a deux niveaux :
 
-- l'**espace CM du club** (entrée **CM** de la navigation de l'Esport), tenu par le CM commun ;
+- l'**espace CM du club** (carte **CM du club** en tête de la page **Teams** de l'Esport, sur PC comme sur téléphone ;
+  ce n'est plus une entrée de la navigation principale), tenu par le CM commun ;
 - la **partie CM de chaque team** (module `cm`, onglet **CM** dans la section **Équipe**), où le correspondant de
   la team dépose les informations et où les joueurs proposent leurs clips.
 
@@ -31,7 +32,7 @@ Six permissions (plus deux pour la rubrique **Sponsors**, `sponsors.voir` et `sp
 
 Elles viennent de deux endroits :
 
-1. **Rôles CM** (niveau club, **Esport › CM › Équipe CM**) : « **Responsable CM** » (les six permissions, Sponsors et
+1. **Rôles CM** (niveau club, **Esport › Teams › CM du club › Équipe CM**) : « **Responsable CM** » (les six permissions, Sponsors et
    tout le Drive) et « **Correspondant CM** » (voir, déposer, proposer des clips ; voir et alimenter le Drive de sa
    team) sont des rôles système dont les permissions se
    modifient (bouton **Rétablir**) ; le Fondateur crée d'autres rôles (« Rédacteur », « Vidéaste »…) avec les
@@ -246,7 +247,7 @@ que quand plus rien ne s'en sert (`esport/noyau/cm/utilisations.mjs`).
 
 1. Mettre à jour le serveur Esport (déploiement automatique o2switch, ou `npm run migrer --prefix esport`) : la
    migration `0023_cm.sql` s'applique seule. Publier le site et l'app PC.
-2. **Esport › CM › Équipe CM** : affecter le rôle **Responsable CM** au CM du club (portée « Club »), et
+2. **Esport › Teams › CM du club › Équipe CM** : affecter le rôle **Responsable CM** au CM du club (portée « Club »), et
    **Correspondant CM** à une personne de chaque team (portée = la team ; elle doit en être membre).
 3. Dans chaque team : **Paramètres › Modules › CM** (activé d'office pour une nouvelle team « complète »).
 4. Facultatif : **CM › Réglages** (suggestions, hashtags) ; **CM › Import Trello** pour reprendre les tableaux Trello.

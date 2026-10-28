@@ -2,10 +2,13 @@
  * Cadre de navigation de l'Esport.
  *
  *  - PC et iPad paysage (≥ 900 px) : barre latérale. En haut, l'Esport
- *    (Dashboard · Teams · Membres, et Statistiques pour le Fondateur) ; dans une team, en dessous, la team
+ *    (Dashboard · Teams · Membres, Jeux et Statistiques selon les droits) ; dans une team, en dessous, la team
  *    (logo, nom, sélecteur rapide) et ses sections.
  *  - iPhone et petites fenêtres : barre d'onglets en bas. Dashboard · Teams ·
  *    Membres au premier niveau ; les sections de la team dans une team.
+ *
+ * L'espace CM du club n'est pas une entrée de premier niveau : il est rangé dans Teams (carte « CM du club »
+ * en tête de la page Teams ; l'entrée « Teams » reste surlignée dans l'espace CM). Voir RacineEsport.tsx.
  */
 
 import React from 'react';
@@ -16,7 +19,7 @@ import { Compteur, ESP, attenue, rayonControle, texte, type EtatPresse } from '.
 import { tr } from '../i18n';
 import { BandeauTranscriptions } from './medias/Transcription';
 
-export type OngletEsport = 'dashboard' | 'teams' | 'membres' | 'cm' | 'statistiques' | 'jeux';
+export type OngletEsport = 'dashboard' | 'teams' | 'membres' | 'statistiques' | 'jeux';
 
 export const NAV_ESPORT: ReadonlyArray<{ cle: OngletEsport; libelle: string; glyphe: string; description: string }> = [
   { cle: 'dashboard', get libelle() {
@@ -34,12 +37,6 @@ export const NAV_ESPORT: ReadonlyArray<{ cle: OngletEsport; libelle: string; gly
     }, glyphe: '☺', get description() {
       return tr('cadreEsport.membres_tous_les_comptes');
     } },
-  // Section CM (espace du club) : selon les droits CM du compte (GET /cm/moi).
-  { cle: 'cm', get libelle() {
-      return tr('cm.nav');
-    }, glyphe: '✎', get description() {
-      return tr('cm.nav_description');
-    } },
   // Profils de jeu (formats, score, maps, personnages…) : le Fondateur et les comptes à qui il confie « jeux.gerer ».
   { cle: 'jeux', get libelle() {
       return tr('jeux.nav');
@@ -54,18 +51,11 @@ export const NAV_ESPORT: ReadonlyArray<{ cle: OngletEsport; libelle: string; gly
     } },
 ];
 
-/** Entrées de premier niveau visibles : « Statistiques » pour le Fondateur seulement ; « Jeux » avec la permission jeux.gerer. */
-/** Onglets au plus dans la barre du bas (téléphone) : au-delà, « CM » s'ouvre depuis la page Teams. */
-export const MAX_ONGLETS_MOBILE = 5;
-
 /**
  * Entrées de premier niveau visibles : « Statistiques » pour le Fondateur seulement ; « Jeux » avec la permission
- * jeux.gerer ; « CM » avec un droit CM. Sur téléphone, « CM » ne prend pas une sixième place dans la barre du bas.
+ * jeux.gerer. Cinq au plus : elles tiennent toutes dans la barre du bas du téléphone. Le CM du club est dans Teams.
  */
-export const navEsport = (fondateur?: boolean, gererJeux?: boolean, cm?: boolean, mobile?: boolean) => {
-  const liste = NAV_ESPORT.filter(n => (n.cle !== 'statistiques' || fondateur) && (n.cle !== 'jeux' || Boolean(gererJeux)) && (n.cle !== 'cm' || Boolean(cm)));
-  return mobile && liste.length > MAX_ONGLETS_MOBILE ? liste.filter(n => n.cle !== 'cm') : liste;
-};
+export const navEsport = (fondateur?: boolean, gererJeux?: boolean) => NAV_ESPORT.filter(n => (n.cle !== 'statistiques' || fondateur) && (n.cle !== 'jeux' || Boolean(gererJeux)));
 
 export const LARGEUR_BARRE_LATERALE = 252;
 
@@ -130,7 +120,6 @@ export function CadreEsport({
   enTeteMobile,
   fondateur,
   gererJeux,
-  cm,
   children,
 }: {
   theme: ThemeHub;
@@ -139,8 +128,6 @@ export function CadreEsport({
   fondateur?: boolean;
   /** Permission globale « Gérer les profils de jeu » : l'entrée « Jeux ». */
   gererJeux?: boolean;
-  /** Droit CM (GET /cm/moi : `espace`) : l'entrée « CM ». */
-  cm?: boolean;
   /** Onglet de premier niveau actif (« teams » dans une team). */
   onglet: OngletEsport;
   onOnglet(o: OngletEsport): void;
@@ -170,7 +157,7 @@ export function CadreEsport({
             testID="esport-nav"
             actif={onglet}
             onChoisir={c => onOnglet(c as OngletEsport)}
-            entrees={navEsport(fondateur, gererJeux, cm, true).map(n => ({ cle: n.cle, libelle: n.libelle, glyphe: n.glyphe, description: n.description, pastille: compteurs?.[n.cle] ? String(compteurs[n.cle]) : undefined }))}
+            entrees={navEsport(fondateur, gererJeux).map(n => ({ cle: n.cle, libelle: n.libelle, glyphe: n.glyphe, description: n.description, pastille: compteurs?.[n.cle] ? String(compteurs[n.cle]) : undefined }))}
           />
         )}
       </View>
@@ -184,7 +171,7 @@ export function CadreEsport({
         aria-label={tr('cadreEsport.navigation_de_l_esport')}>
         <View style={{ gap: ESP.xxs }} testID="esport-nav" accessibilityRole="tablist" accessibilityLabel="Esport">
           <Text style={{ ...attenue(theme, 12), fontWeight: '700', letterSpacing: 1.2, paddingHorizontal: ESP.s, paddingBottom: ESP.xxs }}>{tr('cadre.esport')}</Text>
-          {navEsport(fondateur, gererJeux, cm).map(n => (
+          {navEsport(fondateur, gererJeux).map(n => (
             <EntreeLaterale
               key={n.cle}
               theme={theme}

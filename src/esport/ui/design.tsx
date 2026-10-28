@@ -533,7 +533,8 @@ export function Onglets({
   defilant?: boolean;
 }) {
   const rangee = (
-    <View testID={testID} accessibilityRole="tablist" style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: theme.ligne, gap: pleineLargeur ? 0 : ESP.xs, minWidth: '100%' }}>
+    // Sans défilement (PC), la rangée passe à la ligne plutôt que de couper les derniers onglets (l'espace CM en a 12).
+    <View testID={testID} accessibilityRole="tablist" style={{ flexDirection: 'row', flexWrap: defilant ? 'nowrap' : 'wrap', borderBottomWidth: 1, borderBottomColor: theme.ligne, gap: pleineLargeur ? 0 : ESP.xs, minWidth: '100%' }}>
       {entrees.map(e => {
         const choisi = e.id === actif;
         return (

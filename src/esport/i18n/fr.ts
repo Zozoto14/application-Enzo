@@ -2484,7 +2484,14 @@ export const fr = {
   // Section CM (migration 0023) : navigation, catalogue, journal, notifications. Les écrans ont leurs textes dans
   // i18n/cm.ts (chargés avec eux).
   'cm.nav': 'CM',
-  'cm.nav_description': 'CM : tableaux de contenus, posts à valider, calendrier éditorial, clips des joueurs',
+  'cm.nav_description': 'Ouvrir l’espace CM du club : tableaux de contenus, posts à valider, calendrier éditorial, clips, Drive, Sponsors',
+  // Carte « CM du club » en tête de la page Teams (l'espace CM n'est plus une entrée de la navigation principale).
+  'cm.club_titre': 'CM du club',
+  'cm.club_contenus': 'Tableaux, posts à valider, calendrier, clips, visuels, réseaux',
+  'cm.club_drive': 'Drive',
+  'cm.club_sponsors': 'Sponsors',
+  'cm.club_ouvrir': 'Ouvrir l’espace CM',
+  'cm.club_ouvrir_drive': 'Ouvrir le Drive du CM (fichiers du club et des teams)',
   'cat.module.cm.nom': 'CM',
   'cat.module.cm.description': 'Partie CM de la team : dépôt d’informations pour le community manager, clips proposés par les joueurs.',
   'cat.groupe.cm': 'CM',

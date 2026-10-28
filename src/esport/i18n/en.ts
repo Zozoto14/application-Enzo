@@ -2279,7 +2279,14 @@ export const en: Record<Cle, string> = {
   'competition.discord.tournament_final': 'Tournament final standings',
   // CM section (migration 0023): navigation, catalogue, log, notifications. Screens: i18n/cm.ts.
   'cm.nav': 'CM',
-  'cm.nav_description': 'CM: content boards, posts to approve, editorial calendar, players’ clips',
+  'cm.nav_description': 'Open the club’s CM space: content boards, posts to approve, editorial calendar, clips, Drive, Sponsors',
+  // “Club CM” card at the top of the Teams page (the CM space is no longer an entry of the main navigation).
+  'cm.club_titre': 'Club CM',
+  'cm.club_contenus': 'Boards, posts to approve, calendar, clips, visuals, socials',
+  'cm.club_drive': 'Drive',
+  'cm.club_sponsors': 'Sponsors',
+  'cm.club_ouvrir': 'Open the CM space',
+  'cm.club_ouvrir_drive': 'Open the CM Drive (club and team files)',
   'cat.module.cm.nom': 'CM',
   'cat.module.cm.description': 'The team’s CM area: information for the community manager, clips suggested by players.',
   'cat.groupe.cm': 'CM',

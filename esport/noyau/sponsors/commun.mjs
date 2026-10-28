@@ -1,7 +1,7 @@
 /**
  * Sponsors & partenaires : droits et lectures communes.
  *
- * Deux permissions du CLUB, portées par les rôles CM (Esport › CM › Équipe CM) : `sponsors.voir` (lire le
+ * Deux permissions du CLUB, portées par les rôles CM (Esport › Teams › CM du club › Équipe CM) : `sponsors.voir` (lire le
  * pipeline, les fiches, le tableau de bord) et `sponsors.gerer` (tout écrire : prospects, partenaires,
  * contrats, obligations, étapes, import / export, RGPD des contacts). Elles ne valent QUE par une affectation
  * « club » : une affectation de team, un rôle de team ou l'appartenance à une team n'ouvrent jamais rien ici.

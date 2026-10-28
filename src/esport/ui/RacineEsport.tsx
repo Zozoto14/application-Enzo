@@ -1,9 +1,10 @@
 /**
  * App « Esport » du hub. Navigation de premier niveau, avant d'entrer dans une
  * team : Dashboard (résumé de toutes les teams) · Teams (liste, création,
- * notifications, profil) · Membres (tous les membres, création de comptes,
- * invitations), dans la barre latérale (PC) ou la barre d'onglets du bas
- * (iPhone) : voir CadreEsport.tsx. Puis la page d'une team, ses modules
+ * notifications, profil ; en tête, la carte « CM du club » qui ouvre l'espace
+ * CM du club pour qui y a un droit) · Membres (tous les membres, création de
+ * comptes, invitations), dans la barre latérale (PC) ou la barre d'onglets du
+ * bas (iPhone) : voir CadreEsport.tsx. Puis la page d'une team, ses modules
  * rangés en cinq sections (PageTeam.tsx).
  *
  * Tout passe par le serveur Esport (esport/), avec le jeton du relais déjà
@@ -33,8 +34,8 @@ import { definirLangue, langueAppareil, langueCourante, tr, trn, useLangue } fro
 import { ChoixLangue } from './ChoixLangue';
 import { PublierMulti } from './ressources/PublierMulti';
 import { EspaceCm, Jeux, Statistiques } from './differe';
-import { apiCm, type MoiCm } from '../cm/api';
-import { navEsport } from './CadreEsport';
+import { apiCm, voitDrive, type MoiCm } from '../cm/api';
+import type { OngletCm } from './cm/EspaceCm';
 import { demarrerUsage, noterPage } from '../usage';
 
 type Etat =
@@ -44,7 +45,14 @@ type Etat =
   | { e: 'pret'; client: ClientEsport; moi: Moi };
 
 type Onglet = OngletEsport;
-type Vue = { v: Onglet } | { v: 'assistant' } | { v: 'boite' } | { v: 'team'; id: string; section?: SectionTeam };
+/**
+ * Écran affiché. `cm` : l'espace CM du club, rangé dans Teams (l'entrée « Teams » reste surlignée) ; une ancienne
+ * navigation vers « cm » (entrée de premier niveau d'avant) mène toujours à cet écran, ou à Teams sans droit CM.
+ */
+type Vue = { v: Onglet } | { v: 'cm'; onglet?: OngletCm } | { v: 'assistant' } | { v: 'boite' } | { v: 'team'; id: string; section?: SectionTeam };
+
+/** Écrans rangés sous l'entrée « Teams » de la navigation (surlignée quand ils sont ouverts). */
+export const ongletDeVue = (v: Vue['v']): OngletEsport => (v === 'assistant' || v === 'boite' || v === 'cm' || v === 'team' ? 'teams' : v);
 
 /** Fabrique du client (remplaçable par les tests) : voir ../fabrique.ts. */
 export { fabrique };
@@ -55,7 +63,7 @@ export function Esport(props: PropsRacineApp) {
   useLangue();
   const [etat, setEtat] = useState<Etat>({ e: 'chargement' });
   const [vue, setVue] = useState<Vue>({ v: 'dashboard' });
-  // Section CM (GET /cm/moi) : entrée « CM » de la navigation ; un ancien serveur sans section CM n'affiche rien.
+  // Section CM (GET /cm/moi) : carte « CM du club » de la page Teams ; un ancien serveur sans section CM n'affiche rien.
   const [moiCm, setMoiCm] = useState<MoiCm | undefined>();
   const { width } = useWindowDimensions();
   const large = width >= LARGEUR_PC;
@@ -102,7 +110,7 @@ export function Esport(props: PropsRacineApp) {
     };
   }, [clientPret, profilPret]);
   const cm = Boolean(moiCm?.espace);
-  const pageVue = etat.e !== 'pret' ? null : !etat.moi.profil ? 'esport.profil' : vue.v === 'team' ? null : (vue.v === 'statistiques' && !etat.moi.superAdmin) || (vue.v === 'jeux' && !etat.moi.peutGererJeux) || (vue.v === 'cm' && !cm) ? 'esport.dashboard' : `esport.${vue.v}`;
+  const pageVue = etat.e !== 'pret' ? null : !etat.moi.profil ? 'esport.profil' : vue.v === 'team' ? null : (vue.v === 'statistiques' && !etat.moi.superAdmin) || (vue.v === 'jeux' && !etat.moi.peutGererJeux) ? 'esport.dashboard' : vue.v === 'cm' && !cm ? 'esport.teams' : `esport.${vue.v}`;
   useEffect(() => {
     if (pageVue) noterPage(pageVue);
   }, [pageVue]);
@@ -145,14 +153,13 @@ export function Esport(props: PropsRacineApp) {
         onMembresGlobal={() => setVue({ v: 'membres' })}
         onNaviguer={o => setVue({ v: o })}
         gererJeux={Boolean(etat.moi.peutGererJeux)}
-        cm={cm}
         onChangerTeam={(id, section) => setVue({ v: 'team', id, section })}
         pseudo={etat.moi.profil.pseudo}
         contexte={contexte}
       />
     );
   } else {
-    const onglet: Onglet = vue.v === 'assistant' || vue.v === 'boite' ? 'teams' : vue.v;
+    const onglet: Onglet = ongletDeVue(vue.v);
     let page: React.ReactNode;
     if (vue.v === 'assistant') {
       page = (
@@ -196,9 +203,21 @@ export function Esport(props: PropsRacineApp) {
     } else if (onglet === 'jeux' && etat.moi.peutGererJeux) {
       // Profils de jeu, assistant IA, mises à jour proposées, Administration de l'IA (Fondateur).
       page = <Jeux theme={theme} client={etat.client} large={large} fondateur={etat.moi.superAdmin} />;
-    } else if (onglet === 'cm' && cm && moiCm) {
-      // Section CM du club : tableaux, À valider, calendrier, clips ; équipe CM, import Trello, réglages (cm.gerer).
-      page = <EspaceCm theme={theme} client={etat.client} large={large} moi={moiCm} onExporter={exporter} />;
+    } else if (vue.v === 'cm' && cm && moiCm) {
+      // Section CM du club (dans Teams) : tableaux, À valider, calendrier, clips, Drive, Sponsors ; équipe CM, import
+      // Trello, réglages (cm.gerer). `key` : le raccourci « Drive » rouvre l'espace sur son onglet.
+      page = (
+        <EspaceCm
+          key={vue.onglet ?? 'cm'}
+          theme={theme}
+          client={etat.client}
+          large={large}
+          moi={moiCm}
+          onExporter={exporter}
+          ongletInitial={vue.onglet}
+          avant={<LienRetour theme={theme} titre={tr('dashboard.teams')} onPress={() => setVue({ v: 'teams' })} testID="esport-cm-retour" />}
+        />
+      );
     } else if (onglet === 'membres') {
       page = <MembresGlobal theme={theme} client={etat.client} contexte={contexte} registre={registre} large={large} onOuvrirTeam={id => setVue({ v: 'team', id })} onOuvrirApp={onOuvrirApp} />;
     } else {
@@ -214,13 +233,13 @@ export function Esport(props: PropsRacineApp) {
           onMembres={() => setVue({ v: 'membres' })}
           onExporter={exporter}
           onProfilSupprime={() => void ouvrir()}
-          // Téléphone : sans place dans la barre du bas, la section CM s'ouvre d'ici.
-          onCm={cm && !large && !navEsport(etat.moi.superAdmin, Boolean(etat.moi.peutGererJeux), true, true).some(n => n.cle === 'cm') ? () => setVue({ v: 'cm' }) : undefined}
+          moiCm={cm ? moiCm : undefined}
+          onCm={o => setVue({ v: 'cm', onglet: o })}
         />
       );
     }
     contenu = (
-      <CadreEsport theme={theme} large={large} onglet={onglet} onOnglet={o => setVue({ v: o })} pseudo={etat.moi.profil.pseudo} fondateur={etat.moi.superAdmin} gererJeux={Boolean(etat.moi.peutGererJeux)} cm={cm}>
+      <CadreEsport theme={theme} large={large} onglet={onglet} onOnglet={o => setVue({ v: o })} pseudo={etat.moi.profil.pseudo} fondateur={etat.moi.superAdmin} gererJeux={Boolean(etat.moi.peutGererJeux)}>
         {page}
       </CadreEsport>
     );
@@ -316,6 +335,7 @@ function MesTeams({
   onMembres,
   onExporter,
   onProfilSupprime,
+  moiCm,
   onCm,
 }: {
   theme: ThemeHub;
@@ -328,8 +348,10 @@ function MesTeams({
   onMembres(): void;
   onExporter?(nom: string, contenu: string): Promise<boolean>;
   onProfilSupprime(): void;
-  /** Ouvrir la section CM (téléphone, quand elle n'a pas de place dans la barre du bas). */
-  onCm?(): void;
+  /** Droits CM (GET /cm/moi) quand l'espace CM du club est permis : la carte « CM du club » en tête de la page. */
+  moiCm?: MoiCm;
+  /** Ouvrir l'espace CM du club (sur un onglet : « drive »). */
+  onCm(onglet?: OngletCm): void;
 }) {
   const [teams, setTeams] = useState<TeamListee[] | undefined>();
   const [notifs, setNotifs] = useState<Notifications | undefined>();
@@ -361,13 +383,13 @@ function MesTeams({
           <>
             {moi.superAdmin ? <BoutonHub theme={theme} titre={tr('racineEsport.inviter_un_joueur')} onPress={onMembres} testID="esport-teams-inviter" /> : null}
             {moi.superAdmin ? <BoutonHub theme={theme} titre={tr('ressources.multi.bouton')} libelle={tr('ressources.multi.titre')} onPress={() => setRessources(true)} testID="esport-teams-ressources" /> : null}
-            {onCm ? <BoutonHub theme={theme} titre={tr('cm.nav')} libelle={tr('cm.nav_description')} onPress={onCm} testID="esport-teams-cm" /> : null}
             <BoutonHub theme={theme} titre={profil ? tr('racineEsport.fermer_mon_profil') : tr('racineEsport.mon_profil')} onPress={() => setProfil(p => !p)} testID="esport-mon-profil-ouvrir" />
             {moi.peutCreerTeam ? <BoutonHub theme={theme} titre={tr('racineEsport.creer_une_team')} variante="plein" onPress={onCreer} testID="esport-creer" /> : null}
           </>
         }
       />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-teams" />
+      {moiCm?.espace ? <CarteCmClub theme={theme} moi={moiCm} onOuvrir={onCm} /> : null}
       {boite && boite.teams.length > 0 ? (
         <Carte theme={theme} testID="esport-redacteur" accent={theme.accent}>
           <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
@@ -442,6 +464,36 @@ function MesTeams({
         {mentionDonnees()}
       </Text>
     </PageEsport>
+  );
+}
+
+/**
+ * Carte « CM du club » (page Teams, en tête) : l'accès à l'espace CM du club, qui n'est plus une entrée de la
+ * navigation principale. Elle dit ce que le compte y trouve (contenus, Drive, Sponsors : selon GET /cm/moi) et
+ * ouvre directement le Drive pour qui y a droit.
+ */
+export function CarteCmClub({ theme, moi, onOuvrir }: { theme: ThemeHub; moi: MoiCm; onOuvrir(onglet?: OngletCm): void }) {
+  const contenus = moi.club.includes('cm.voir') || moi.teams.some(t => t.permissions.includes('cm.voir'));
+  const drive = voitDrive(moi.club) || moi.teams.some(t => voitDrive(t.permissions));
+  const sponsors = Boolean(moi.sponsors?.includes('sponsors.voir'));
+  const parties = [contenus ? tr('cm.club_contenus') : null, drive ? tr('cm.club_drive') : null, sponsors ? tr('cm.club_sponsors') : null].filter((x): x is string => Boolean(x));
+  return (
+    <Carte theme={theme} testID="esport-teams-cm" accent={theme.accent}>
+      <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
+        <View style={{ flexShrink: 1, gap: ESP.xxs }}>
+          <Text style={{ ...texte(theme, 17), fontWeight: '700' }} accessibilityRole="header">
+            {`✎ ${tr('cm.club_titre')}`}
+          </Text>
+          <Text style={attenue(theme)} testID="esport-teams-cm-contenu">
+            {parties.join(' · ')}
+          </Text>
+        </View>
+        <View style={communs.ligne}>
+          {drive && contenus ? <BoutonHub theme={theme} titre={tr('cm.club_drive')} libelle={tr('cm.club_ouvrir_drive')} onPress={() => onOuvrir('drive')} testID="esport-teams-cm-drive" /> : null}
+          <BoutonHub theme={theme} titre={tr('cm.club_ouvrir')} libelle={tr('cm.nav_description')} variante="plein" onPress={() => onOuvrir()} testID="esport-teams-cm-ouvrir" />
+        </View>
+      </View>
+    </Carte>
   );
 }
 

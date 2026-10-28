@@ -244,7 +244,7 @@ réglages, rappel), sans team, vont dans **CM › Journal** ; notification `cm-r
 
 1. Mettre à jour le serveur Esport (déploiement automatique, ou `npm run migrer --prefix esport`) : la migration
    `0026_cm_reseaux.sql` s'applique seule. Publier le site et l'app PC.
-2. **Esport › CM › Réseaux › Comptes** : ajouter les comptes du club (et des teams) avec l'adresse de leur profil.
+2. **Esport › Teams › CM du club › Réseaux › Comptes** : ajouter les comptes du club (et des teams) avec l'adresse de leur profil.
 3. **Bot Discord** : ajouter le salon du club où annoncer les posts (webhook), ou utiliser le salon Discord d'une team ;
    vérifier que le bot « Esport HQ » est sur le serveur (fil français).
 4. Sur chaque compte : **Annonce Discord** › salons, rôle à mentionner (ex. `@Fans`), messages, **Aperçu**, **Envoyer un

@@ -21,7 +21,7 @@ Les données sont **sensibles** (contacts, montants, contrats). Deux permissions
 | `sponsors.gerer` | tout écrire : prospects, contacts, échanges, partenaires, contrats, contreparties, étapes, import / export, RGPD, journal |
 
 - Le **Fondateur** a tout.
-- Elles se donnent par les **rôles CM** (**Esport › CM › Équipe CM**) et ne valent que par une affectation pour
+- Elles se donnent par les **rôles CM** (**Esport › Teams › CM du club › Équipe CM**) et ne valent que par une affectation pour
   **tout le club** : une affectation de team, un rôle de team (Propriétaire compris) ou l'appartenance à une team
   n'ouvrent **jamais** la rubrique.
 - Par défaut (migration 0024), le rôle système **Responsable CM** les a toutes les deux ; le **Correspondant CM**
@@ -200,6 +200,6 @@ Les modifications d'un prospect ou d'un partenaire acceptent `versionAttendue` (
 
 1. Mettre à jour le serveur Esport (déploiement automatique o2switch, ou `npm run migrer --prefix esport`) : la
    migration `0024_sponsors.sql` s'applique seule. Publier le site et l'app PC.
-2. Décider qui voit la rubrique : par défaut le **Responsable CM**. Pour la réserver, **Esport › CM › Équipe CM** :
+2. Décider qui voit la rubrique : par défaut le **Responsable CM**. Pour la réserver, **Esport › Teams › CM du club › Équipe CM** :
    décocher « Sponsors : voir / gérer » du Responsable CM, ou créer un rôle dédié et l'affecter **pour tout le club**.
 3. Facultatif : renommer les étapes (**CM › Sponsors › Réglages**), importer la liste de prospects existante (CSV).

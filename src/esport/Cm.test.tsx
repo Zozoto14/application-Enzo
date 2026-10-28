@@ -1,7 +1,6 @@
 /**
- * Section CM côté app : onglet CM d'une team (section Équipe), entrée « CM » de la navigation (pas de
- * sixième onglet sur téléphone), compteur de caractères par réseau, tableau (cartes, déplacement au clavier
- * par le menu, filtres), fiche d'un post (textes FR / EN, compteur, circuit de validation), dépôt d'une
+ * Section CM côté app : onglet CM d'une team (section Équipe), pas d'entrée « CM » dans la navigation principale,
+ * compteur de caractères par réseau, tableau (cartes, déplacement au clavier par le menu, filtres), fiche d'un post (textes FR / EN, compteur, circuit de validation), dépôt d'une
  * information, calendrier, phrases du journal et des notifications (FR / EN).
  */
 
@@ -164,12 +163,9 @@ describe('section CM', () => {
     expect(sectionsTeam(detailTeam(['members.view', 'cm.clips.proposer']), false).find(g => g.id === 'equipe')?.entrees.map(e => e.id)).toEqual(['module:cm', 'membres']);
   });
 
-  it('navigation : « CM » selon les droits ; sur téléphone, jamais une sixième entrée dans la barre du bas', () => {
-    expect(navEsport(false, false, true).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'cm']);
-    expect(navEsport(false, false, false).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres']);
-    expect(navEsport(true, true, true).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'cm', 'jeux', 'statistiques']);
-    expect(navEsport(true, true, true, true).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'jeux', 'statistiques']);
-    expect(navEsport(false, false, true, true).map(n => n.cle)).toContain('cm');
+  it('navigation : plus d’entrée « CM » de premier niveau (l’espace CM du club est dans Teams : NavCm.test.tsx)', () => {
+    expect(navEsport(false, false).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres']);
+    expect(navEsport(true, true).map(n => n.cle)).toEqual(['dashboard', 'teams', 'membres', 'jeux', 'statistiques']);
   });
 
   it('compteur de caractères : X pondéré (adresses à 23, emoji à 2), Instagram en caractères ; hashtags', () => {

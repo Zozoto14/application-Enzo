@@ -1,9 +1,14 @@
 # Esport : Drive de la section CM
 
 Le **Drive** range les fichiers des CM au même endroit : logos, photos des joueurs, clips, visuels, fichiers des
-sponsors, rushs bruts… Il y a un Drive pour le **club** (entrée **CM › Drive**) et un par **team** dont le module CM
-est activé (**Team › Équipe › CM › Drive**, et dans **CM › Drive** en choisissant la team). Aucune nouvelle entrée dans
-la barre du bas sur téléphone.
+sponsors, rushs bruts… Il y a un Drive pour le **club** (**Teams › CM du club ›
+Drive**, ou le bouton **Drive** de la carte « CM du club » en tête de la page Teams) et un par **team** dont le module
+CM est activé (**Team › Équipe › CM › Drive**, et dans **CM du club › Drive** en choisissant la team). Aucune nouvelle
+entrée dans la barre du bas sur téléphone.
+
+**« Je ne vois pas le Drive »** : il faut un droit `cm.drive.*` (le Fondateur les a tous, sans affectation) et la
+version du site qui le contient : après une mise à jour, le site est construit par GitHub Actions (~5 min) puis copié
+par le cron du serveur (≤ 5 min) ; **rechargez la page** ensuite (l'app lit vos droits CM à l'ouverture).
 
 Voir aussi : [cm.md](cm.md) (section CM, rôles), [visuels.md](visuels.md), [sponsors.md](sponsors.md).
 
@@ -12,7 +17,7 @@ et `src/esport/ui/cm/drive/` (app), textes `src/esport/i18n/drive.ts`.
 
 ## Qui fait quoi
 
-Trois permissions, portées par les **rôles CM** (Esport › CM › Équipe CM ; jamais par un rôle de team) :
+Trois permissions, portées par les **rôles CM** (Esport › Teams › CM du club › Équipe CM ; jamais par un rôle de team) :
 
 | Permission | Ce qu'elle ouvre |
 | --- | --- |
@@ -163,4 +168,4 @@ Limites de débit (par compte et par heure) : 600 fichiers rangés ou versions, 
    l'espace disque de l'hébergement), `ESPORT_DRIVE_FICHIER_MAX=2G`, `ESPORT_DRIVE_ZIP_MAX=2G`, puis redémarrer l'app
    Node.
 3. Les rôles **Responsable CM** et **Correspondant CM** ont déjà le Drive ; pour un autre rôle CM, cochez les
-   permissions Drive dans **Esport › CM › Équipe CM**.
+   permissions Drive dans **Esport › Teams › CM du club › Équipe CM**.

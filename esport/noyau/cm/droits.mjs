@@ -292,7 +292,7 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
   }
 
   /**
-   * `GET /cm/moi` : ce que l'acteur peut faire dans la section CM (entrée « CM » de la navigation, onglet CM
+   * `GET /cm/moi` : ce que l'acteur peut faire dans la section CM (carte « CM du club » de la page Teams, onglet CM
    * des teams), et le nombre de posts à valider (badge).
    */
   async function moi(acteur) {

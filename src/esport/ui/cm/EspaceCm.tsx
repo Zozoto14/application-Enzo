@@ -1,5 +1,5 @@
 /**
- * Espace CM du club (entrée « CM » de la navigation de l'Esport) : tableaux (club et teams), file « À
+ * Espace CM du club (carte « CM du club » en tête de la page Teams de l'Esport) : tableaux (club et teams), file « À
  * valider », calendrier éditorial, clips des joueurs, visuels (modèles, charte, éditeur ; docs/esport/visuels.md), et pour le gestionnaire (cm.gerer) : équipe et rôles
  * CM, import Trello, réglages (suggestions automatiques), journal de la section. Page « Réseaux » (comptes, bot
  * d'annonce Discord, statistiques ; docs/esport/reseaux-stats.md) pour qui voit la section CM. Drive (dossiers et fichiers du
@@ -33,16 +33,38 @@ import { Visuels } from './visuels/Visuels';
 import { trVi } from '../../i18n/visuels';
 import { Drive } from './drive/Drive';
 
-type OngletCm = 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'visuels' | 'drive' | 'reseaux' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
+export type OngletCm = 'tableaux' | 'valider' | 'calendrier' | 'clips' | 'visuels' | 'drive' | 'reseaux' | 'sponsors' | 'equipe' | 'import' | 'reglages' | 'journal';
 
-export function EspaceCm({ theme, client, large, moi, onExporter }: { theme: ThemeHub; client: ClientEsport; large: boolean; moi: MoiCm; onExporter?(nom: string, contenu: string, type?: string): Promise<boolean> }) {
+export function EspaceCm({
+  theme,
+  client,
+  large,
+  moi,
+  onExporter,
+  ongletInitial,
+  avant,
+}: {
+  theme: ThemeHub;
+  client: ClientEsport;
+  large: boolean;
+  moi: MoiCm;
+  onExporter?(nom: string, contenu: string, type?: string): Promise<boolean>;
+  /** Onglet ouvert d'abord (raccourci « Drive » de la carte « CM du club ») ; ignoré s'il n'est pas permis. */
+  ongletInitial?: OngletCm;
+  /** Au-dessus du titre : le lien de retour vers Teams. */
+  avant?: React.ReactNode;
+}) {
   const api = useMemo(() => apiCm(client), [client]);
   // Rubrique Sponsors (migration 0024) : permissions du club, indépendantes de la section CM.
   const voirCm = moi.club.includes('cm.voir') || moi.teams.some(t => t.permissions.includes('cm.voir'));
   const sponsors = Boolean(moi.sponsors?.includes('sponsors.voir'));
   // Drive (migration 0027) : du club ou d'une team, pour qui y a un droit (un compte peut n'avoir QUE le Drive).
   const drive = voitDrive(moi.club) || moi.teams.some(t => voitDrive(t.permissions));
-  const [onglet, setOnglet] = useState<OngletCm>(voirCm ? 'tableaux' : drive ? 'drive' : sponsors ? 'sponsors' : 'tableaux');
+  const [onglet, setOnglet] = useState<OngletCm>(() => {
+    const permis: Partial<Record<OngletCm, boolean>> = { drive, sponsors, equipe: moi.gerer, import: moi.gerer, reglages: moi.gerer, journal: moi.gerer };
+    if (ongletInitial && (permis[ongletInitial] ?? voirCm)) return ongletInitial;
+    return voirCm ? 'tableaux' : drive ? 'drive' : sponsors ? 'sponsors' : 'tableaux';
+  });
   const [ouvert, setOuvert] = useState<string | undefined>();
   const { etat } = useEtatCm(api, voirCm);
   const teams: TeamCm[] = moi.teams;
@@ -71,7 +93,7 @@ export function EspaceCm({ theme, client, large, moi, onExporter }: { theme: The
   ];
   return (
     <PageEsport large={large} testID="esport-cm" largeur={1600}>
-      <EnTetePage theme={theme} large={large} titre={trCm('espace.titre')} sous={trCm('espace.sous')} />
+      <EnTetePage theme={theme} large={large} titre={trCm('espace.titre')} sous={trCm('espace.sous')} avant={avant} />
       <Onglets theme={theme} prefixe="esport-cm-onglet" testID="esport-cm-onglets" actif={onglet} onChoisir={id => setOnglet(id as OngletCm)} entrees={entrees} defilant={!large} />
       {onglet === 'sponsors' && sponsors ? (
         <EspaceSponsors

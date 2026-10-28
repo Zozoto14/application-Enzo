@@ -173,7 +173,6 @@ export function PageTeam({
   onMembresGlobal,
   onNaviguer,
   gererJeux,
-  cm,
   onChangerTeam,
   pseudo,
   contexte,
@@ -191,8 +190,6 @@ export function PageTeam({
   onNaviguer?(o: OngletEsport): void;
   /** Permission globale « Gérer les profils de jeu » (entrée « Jeux » de la navigation). */
   gererJeux?: boolean;
-  /** Droit CM : l'entrée « CM » de la navigation. */
-  cm?: boolean;
   /** Sélecteur rapide : ouvrir une autre team, sur la même section si elle y existe. */
   onChangerTeam?(id: string, section: SectionTeam): void;
   pseudo?: string;
@@ -358,7 +355,7 @@ export function PageTeam({
   );
 
   return (
-    <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} fondateur={detail.moi.superAdmin} gererJeux={gererJeux} cm={cm} blocTeam={blocTeam} enTeteMobile={enTeteMobile} barreBasse={barreBasse}>
+    <CadreEsport theme={theme} large={large} onglet="teams" onOnglet={naviguer} pseudo={pseudo} fondateur={detail.moi.superAdmin} gererJeux={gererJeux} blocTeam={blocTeam} enTeteMobile={enTeteMobile} barreBasse={barreBasse}>
       <View style={{ flex: 1 }} testID="esport-team">
         {large ? <View style={{ height: 4, backgroundColor: couleur }} /> : null}
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: large ? ESP.xxl : ESP.m, paddingTop: large ? ESP.l : ESP.m, paddingBottom: ESP.xxxl, gap: large ? ESP.l : ESP.m, maxWidth: LARGEUR_CONTENU + 2 * ESP.xxl, width: '100%', alignSelf: 'center' }}>

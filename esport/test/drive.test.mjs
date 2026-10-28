@@ -226,6 +226,24 @@ async function preparer({ drive } = {}) {
 
 // ------------------------------------------------------------------ Permissions
 
+test('Fondateur : GET /cm/moi annonce le Drive (club et chaque team au module CM), sans affectation ; il gère tout le Drive', async () => {
+  const { A, B, s, ok } = await preparer();
+  const moi = await ok('/cm/moi', s.fondateur);
+  assert.equal(moi.espace, true);
+  for (const p of ['cm.drive.voir', 'cm.drive.envoyer', 'cm.drive.gerer']) assert.ok(moi.club.includes(p), `club : ${p}`);
+  assert.deepEqual(moi.teams.map(t => t.id).sort(), [A.teamId, B.teamId].sort());
+  for (const t of moi.teams) assert.ok(t.permissions.includes('cm.drive.gerer'), `team ${t.nom}`);
+  const p = await ok('/cm/drive/portees', s.fondateur);
+  assert.deepEqual(p.portees.map(x => x.droits.gerer), [true, true, true]);
+  assert.ok(p.quota && p.reglages);
+  // Rôles système (après toutes les migrations) : Responsable CM tout, Correspondant CM voir et envoyer.
+  const roles = (await ok('/cm/roles', s.fondateur)).roles;
+  const drive = cle => roles.find(r => r.cle === cle).permissions.filter(x => x.startsWith('cm.drive')).sort();
+  assert.deepEqual(drive('responsable'), ['cm.drive.envoyer', 'cm.drive.gerer', 'cm.drive.voir']);
+  assert.deepEqual(drive('correspondant'), ['cm.drive.envoyer', 'cm.drive.voir']);
+  assert.ok(roles.every(r => r.cle === null || r.modifie === false), 'rôles système conformes à leurs permissions par défaut');
+});
+
 test('permissions : Responsable CM partout, Correspondant dans sa team, joueur au dépôt seulement, autre team, sensible jamais', async () => {
   const { b, A, B, s, api, ok, deposer, dossierCle, lire } = await preparer();
   // Responsable CM (club) : Drive du club et des teams, avec les dossiers par défaut.

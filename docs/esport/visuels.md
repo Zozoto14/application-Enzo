@@ -5,7 +5,7 @@ réglable en permanence : une **charte graphique** du club, des **modèles par d
 cyberpunk), un **éditeur complet** pour les retoucher ou en créer, et la **génération** d'images PNG / JPEG à la taille
 exacte de chaque réseau, jointes directement à la carte post.
 
-Entrée : **Esport › CM › Visuels** (onglets Modèles, Visuels générés, Charte graphique) et, sur une carte post, le
+Entrée : **Esport › Teams › CM du club › Visuels** (onglets Modèles, Visuels générés, Charte graphique) et, sur une carte post, le
 panneau **Visuels** (bouton **Générer le visuel**). Migration : `esport/migrations/0025_cm_visuels.sql`.
 Code : `esport/noyau/cm/visuels/`, `src/esport/cm/visuels/`, `src/esport/ui/cm/visuels/`, textes
 `src/esport/i18n/visuels.ts`.
