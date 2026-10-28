@@ -385,7 +385,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const { tableau: tb, ctx } = await tableauVisible(acteur, id);
     const noms = tb.team_id ? new Map([[tb.team_id, { id: tb.team_id, nom: ctx.team?.nom ?? null, slug: ctx.team?.slug ?? null, logoUrl: ctx.team?.logo_url ?? null }]]) : new Map();
     const listes = await base.tous(`SELECT * FROM cm_listes WHERE tableau_id = ? ${archives ? '' : 'AND archive_le IS NULL'} ORDER BY position, cree_le`, [id]);
-    const etiquettes = await base.tous('SELECT * FROM cm_etiquettes WHERE tableau_id = ? ORDER BY position, nom', [id]);
+    const etiquettes = await base.tous('SELECT * FROM cm_etiquettes WHERE tableau_id = ? ORDER BY position, nom, id', [id]);
     const cartes = await base.tous(
       `SELECT id, liste_id, team_id, titre, CASE WHEN description = '' THEN 0 ELSE 1 END AS a_desc, position, couverture, echeance, echeance_faite, date_publication, post, statut, reseaux, origine, depot_genre, archive_le, version, cree_par, maj_le
          FROM cm_cartes WHERE tableau_id = ? AND supprime_le IS NULL ${archives ? '' : 'AND archive_le IS NULL'} ORDER BY position, cree_le LIMIT ?`,
@@ -400,7 +400,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       }
       return m;
     };
-    const etiq = parCarte(await joint('SELECT ce.carte_id, ce.etiquette_id FROM cm_carte_etiquettes ce JOIN cm_cartes c ON c.id = ce.carte_id WHERE c.tableau_id = ? AND c.supprime_le IS NULL'), l => l.etiquette_id);
+    const etiq = parCarte(await joint('SELECT ce.carte_id, ce.etiquette_id FROM cm_carte_etiquettes ce JOIN cm_cartes c ON c.id = ce.carte_id JOIN cm_etiquettes e ON e.id = ce.etiquette_id WHERE c.tableau_id = ? AND c.supprime_le IS NULL ORDER BY e.position, e.nom, e.id'), l => l.etiquette_id);
     // Cartes (archivées comprises) portant chaque étiquette : annoncé avant une suppression définitive.
     const nbParEtiquette = new Map();
     for (const liste of etiq.values()) for (const eid of liste) nbParEtiquette.set(eid, (nbParEtiquette.get(eid) ?? 0) + 1);
@@ -587,7 +587,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     const { tableau: tb, ctx } = await tableauVisible(acteur, tableauId);
     exiger(ctx, 'cm.editer');
     if (!Array.isArray(corps?.ids) || corps.ids.length > MAX_ETIQUETTES || corps.ids.some(x => typeof x !== 'string' || !MOTIF_UUID.test(x))) throw echec(400, 'etiquettes', 'Étiquettes illisibles.');
-    const existantes = (await base.tous('SELECT id FROM cm_etiquettes WHERE tableau_id = ? ORDER BY position, nom', [tb.id])).map(l => l.id);
+    const existantes = (await base.tous('SELECT id FROM cm_etiquettes WHERE tableau_id = ? ORDER BY position, nom, id', [tb.id])).map(l => l.id);
     const connues = new Set(existantes);
     const choisies = [...new Set(corps.ids)].filter(x => connues.has(x));
     const ordre = [...choisies, ...existantes.filter(x => !choisies.includes(x))];
@@ -691,7 +691,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
   /** `GET /cm/cartes/:id` : la carte complète (checklists, commentaires, pièces, activité, liens résolus). */
   async function carte(acteur, id, { origine = '', langue = 'fr' } = {}) {
     const { carte: c, tableau: tb, ctx } = await carteVisible(acteur, id);
-    const etiquettes = (await base.tous('SELECT etiquette_id FROM cm_carte_etiquettes WHERE carte_id = ?', [c.id])).map(l => l.etiquette_id);
+    const etiquettes = (await base.tous('SELECT ce.etiquette_id FROM cm_carte_etiquettes ce JOIN cm_etiquettes e ON e.id = ce.etiquette_id WHERE ce.carte_id = ? ORDER BY e.position, e.nom, e.id', [c.id])).map(l => l.etiquette_id);
     const membres = (await base.tous('SELECT compte_id FROM cm_carte_membres WHERE carte_id = ?', [c.id])).map(l => l.compte_id);
     const checklists = await base.tous('SELECT * FROM cm_checklists WHERE carte_id = ? ORDER BY position', [c.id]);
     const elements = await base.tous('SELECT * FROM cm_checklist_elements WHERE carte_id = ? ORDER BY position', [c.id]);
