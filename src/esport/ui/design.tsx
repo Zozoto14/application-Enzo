@@ -23,6 +23,7 @@ import { police, teinteTransparente, type ThemeHub } from '../../hub/themes';
 import { tt } from '../../ui/mobile/jetons';
 import { contraste, encreSur } from '../contraste';
 import { tr } from '../i18n';
+import { HAUTEUR_ACTION, placerMenu, type Ancre } from './placementMenu';
 
 /** État d'un Pressable sur le web (survol et focus clavier en plus). */
 export type EtatPresse = { pressed: boolean; hovered?: boolean; focused?: boolean };
@@ -265,19 +266,78 @@ export function EnTetePage({
  * part, aucun conflit d'empilement avec les cartes voisines), sous le bouton ;
  * le voile ou Échap le referment.
  */
+type WebNode = { focus(): void; closest?(sel: string): unknown };
+type WebGlobal = {
+  document?: {
+    activeElement: unknown;
+    querySelectorAll(sel: string): Iterable<WebNode>;
+    addEventListener(t: string, f: (e: never) => void): void;
+    removeEventListener(t: string, f: (e: never) => void): void;
+  };
+  addEventListener(t: string, f: (e: never) => void, capture?: boolean): void;
+  removeEventListener(t: string, f: (e: never) => void, capture?: boolean): void;
+};
+
 export function MenuActions({ theme, actions: brutes, libelle = tr('design.plus_d_actions'), testID = 'esport-menu', titreBouton = '⋯' }: { theme: ThemeHub; actions: ReadonlyArray<ActionSecondaire | false | null | undefined | 0 | ''>; libelle?: string; testID?: string; titreBouton?: string }) {
   const actions = brutes.filter((a): a is ActionSecondaire => Boolean(a));
-  const [position, setPosition] = useState<{ x: number; y: number; l: number } | undefined>();
+  const [ancre, setAncre] = useState<Ancre | undefined>();
   const bouton = React.useRef<React.ComponentRef<typeof Pressable>>(null);
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const ouvrir = () => {
     const n = bouton.current as unknown as { measureInWindow?(cb: (x: number, y: number, l: number, h: number) => void): void } | null;
-    // Ouvert tout de suite (coin haut droit), puis placé sous le bouton dès qu'il est mesuré.
-    setPosition({ x: width - 60, y: 60, l: 44 });
-    n?.measureInWindow?.((x, y, l, h) => setPosition({ x, y: y + h + 6, l }));
+    // Ouvert tout de suite (coin haut droit), puis placé près du bouton dès qu'il est mesuré.
+    setAncre({ x: width - 60, y: 16, l: 44, h: 44 });
+    n?.measureInWindow?.((x, y, l, h) => setAncre({ x, y, l, h }));
   };
-  const largeurMenu = Math.min(260, width - 32);
+  const fermer = () => setAncre(undefined);
+  const placement = ancre ? placerMenu(ancre, { largeur: width, hauteur: height }, actions.length) : undefined;
+  const feuille = placement?.mode === 'feuille';
+  const ouvert = Boolean(ancre);
+  // Web : fermeture au défilement / redimensionnement, flèches, Début/Fin, focus sur la première action, focus rendu au bouton.
+  React.useEffect(() => {
+    const g = globalThis as unknown as WebGlobal;
+    const doc = g.document;
+    if (!ouvert || Platform.OS !== 'web' || !doc) return undefined;
+    const items = () => Array.from(doc.querySelectorAll(`[data-menu="${testID}"] [role="menuitem"]`));
+    const premier = setTimeout(() => items()[0]?.focus(), 0);
+    const surCle = (e: { key: string; preventDefault(): void }) => {
+      const l = items();
+      if (!l.length) return;
+      const i = l.indexOf(doc.activeElement as WebNode);
+      const aller = (k: number) => {
+        e.preventDefault();
+        l[k]?.focus();
+      };
+      if (e.key === 'ArrowDown') aller(i < 0 ? 0 : (i + 1) % l.length);
+      else if (e.key === 'ArrowUp') aller(i <= 0 ? l.length - 1 : i - 1);
+      else if (e.key === 'Home') aller(0);
+      else if (e.key === 'End') aller(l.length - 1);
+      else if (e.key === 'Escape') fermer();
+    };
+    const surDefilement = (e: { target: unknown }) => {
+      const cible = e.target as WebNode | null;
+      if (cible?.closest?.(`[data-menu="${testID}"]`)) return; // défilement interne du menu
+      fermer();
+    };
+    doc.addEventListener('keydown', surCle);
+    g.addEventListener('scroll', surDefilement, true);
+    g.addEventListener('resize', fermer);
+    const noeud = bouton.current as unknown as WebNode | null;
+    return () => {
+      clearTimeout(premier);
+      doc.removeEventListener('keydown', surCle);
+      g.removeEventListener('scroll', surDefilement, true);
+      g.removeEventListener('resize', fermer);
+      noeud?.focus();
+    };
+  }, [ouvert, testID]);
   if (!actions.length) return null;
+  const rayon = rayonControle(theme) === 999 ? 18 : rayonControle(theme);
+  const style: ViewStyle = !placement
+    ? {}
+    : placement.mode === 'feuille'
+      ? { position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: placement.maxHeight, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, borderTopLeftRadius: Math.max(rayon, 16), borderTopRightRadius: Math.max(rayon, 16) }
+      : { position: 'absolute', left: placement.left, width: placement.width, maxHeight: placement.maxHeight, top: placement.top, bottom: placement.bottom, borderRadius: rayon };
   return (
     <View>
       <Pressable
@@ -285,7 +345,7 @@ export function MenuActions({ theme, actions: brutes, libelle = tr('design.plus_
         testID={testID}
         accessibilityRole="button"
         accessibilityLabel={libelle}
-        accessibilityState={{ expanded: Boolean(position) }}
+        accessibilityState={{ expanded: ouvert }}
         onPress={ouvrir}
         style={(etat: EtatPresse) => ({
           minWidth: 44,
@@ -294,49 +354,50 @@ export function MenuActions({ theme, actions: brutes, libelle = tr('design.plus_
           alignItems: 'center',
           justifyContent: 'center',
           borderWidth: 1,
-          borderColor: etat.hovered || position ? theme.accent : theme.ligne,
+          borderColor: etat.hovered || ouvert ? theme.accent : theme.ligne,
           backgroundColor: theme.surface,
           borderRadius: rayonControle(theme),
         })}>
         <Text style={{ color: theme.texte, fontSize: titreBouton === '⋯' ? 18 : 15, fontWeight: titreBouton === '⋯' ? '800' : '600', lineHeight: 20, ...police(theme.policeTexte) }}>{titreBouton}</Text>
       </Pressable>
-      {position ? (
-        <Modal transparent visible animationType="none" onRequestClose={() => setPosition(undefined)}>
-          <Pressable accessibilityRole="button" accessibilityLabel={tr('design.fermer_le_menu')} onPress={() => setPosition(undefined)} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+      {ancre && placement ? (
+        <Modal transparent visible animationType="none" onRequestClose={fermer}>
+          <Pressable accessibilityRole="button" accessibilityLabel={tr('design.fermer_le_menu')} onPress={fermer} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: feuille ? 'rgba(0,0,0,0.42)' : 'transparent' }} />
           <View
             accessibilityRole="menu"
             testID={`${testID}-liste`}
+            {...({ dataSet: { menu: testID } } as object)}
             style={{
-              position: 'absolute',
-              top: position.y,
-              left: Math.max(16, Math.min(position.x + position.l - largeurMenu, width - largeurMenu - 16)),
-              width: largeurMenu,
               padding: ESP.xxs,
+              paddingBottom: feuille ? ESP.xxs + ESP.m : ESP.xxs,
               backgroundColor: theme.surface,
               borderWidth: 1,
               borderColor: theme.ligne,
-              borderRadius: rayonControle(theme) === 999 ? 18 : rayonControle(theme),
+              overflow: 'hidden',
               ...ombre(theme, true),
+              ...style,
             }}>
-            {actions.map(a => (
-            <Pressable
-              key={a.titre}
-              testID={a.testID}
-              accessibilityRole="menuitem"
-              onPress={() => {
-                setPosition(undefined);
-                a.onPress();
-              }}
-              style={(etat: EtatPresse) => ({
-                minHeight: 44,
-                justifyContent: 'center',
-                paddingHorizontal: ESP.s,
-                borderRadius: rayonControle(theme) === 999 ? 14 : Math.max(0, rayonControle(theme) - 4),
-                backgroundColor: etat.hovered || etat.focused ? teinteTransparente(theme.accent, 0.12) : 'transparent',
-              })}>
-              <Text style={{ ...texte(theme), color: a.danger ? theme.critique : theme.texte, fontWeight: '600' }}>{a.titre}</Text>
-            </Pressable>
-          ))}
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator>
+              {actions.map(a => (
+                <Pressable
+                  key={a.titre}
+                  testID={a.testID}
+                  accessibilityRole="menuitem"
+                  onPress={() => {
+                    fermer();
+                    a.onPress();
+                  }}
+                  style={(etat: EtatPresse) => ({
+                    minHeight: HAUTEUR_ACTION,
+                    justifyContent: 'center',
+                    paddingHorizontal: ESP.s,
+                    borderRadius: rayonControle(theme) === 999 ? 14 : Math.max(0, rayonControle(theme) - 4),
+                    backgroundColor: etat.hovered || etat.focused ? teinteTransparente(theme.accent, 0.12) : 'transparent',
+                  })}>
+                  <Text style={{ ...texte(theme), color: a.danger ? theme.critique : theme.texte, fontWeight: '600' }}>{a.titre}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
         </Modal>
       ) : null}
