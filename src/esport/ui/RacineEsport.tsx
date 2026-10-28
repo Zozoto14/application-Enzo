@@ -389,7 +389,6 @@ function MesTeams({
         }
       />
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-teams" />
-      {moiCm?.espace ? <CarteCmClub theme={theme} moi={moiCm} onOuvrir={onCm} /> : null}
       {boite && boite.teams.length > 0 ? (
         <Carte theme={theme} testID="esport-redacteur" accent={theme.accent}>
           <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
@@ -424,9 +423,10 @@ function MesTeams({
           />
         </Carte>
       ) : null}
-      {teams?.length ? (
+      {teams?.length || moiCm?.espace ? (
         <Grille min={large ? 320 : 280} testID="esport-liste-teams">
-          {teams.map(t => (
+          {moiCm?.espace ? <CarteCmClub theme={theme} moi={moiCm} client={client} onOuvrir={onCm} /> : null}
+          {teams?.map(t => (
             <CarteTeamListe key={t.id} theme={theme} team={t} onOuvrir={() => onOuvrir(t.id)} />
           ))}
         </Grille>
@@ -467,32 +467,69 @@ function MesTeams({
   );
 }
 
+/** Couleur du bandeau de la tuile « CM du club » : hors des teintes des teams et des accents des thèmes. */
+export const COULEUR_CM_CLUB = '#D6409F';
+
 /**
- * Carte « CM du club » (page Teams, en tête) : l'accès à l'espace CM du club, qui n'est plus une entrée de la
- * navigation principale. Elle dit ce que le compte y trouve (contenus, Drive, Sponsors : selon GET /cm/moi) et
- * ouvre directement le Drive pour qui y a droit.
+ * Tuile « CM du club » (page Teams, première de la grille) : même gabarit que les cartes de team (bandeau coloré,
+ * pastille « CM », titre, ligne secondaire, description, puces des sections, lien « Ouvrir l'espace CM › »).
+ * Elle dit ce que le compte y trouve (Contenus, Posts à valider, Drive, Sponsors : selon GET /cm/moi) ; la puce
+ * « Drive » ouvre directement le Drive pour qui y a droit.
  */
-export function CarteCmClub({ theme, moi, onOuvrir }: { theme: ThemeHub; moi: MoiCm; onOuvrir(onglet?: OngletCm): void }) {
+export function CarteCmClub({ theme, moi, client, onOuvrir }: { theme: ThemeHub; moi: MoiCm; client?: ClientEsport; onOuvrir(onglet?: OngletCm): void }) {
   const contenus = moi.club.includes('cm.voir') || moi.teams.some(t => t.permissions.includes('cm.voir'));
   const drive = voitDrive(moi.club) || moi.teams.some(t => voitDrive(t.permissions));
   const sponsors = Boolean(moi.sponsors?.includes('sponsors.voir'));
-  const parties = [contenus ? tr('cm.club_contenus') : null, drive ? tr('cm.club_drive') : null, sponsors ? tr('cm.club_sponsors') : null].filter((x): x is string => Boolean(x));
+  const [aValider, setAValider] = useState(0);
+  useEffect(() => {
+    if (!contenus || !client) return;
+    let actif = true;
+    void Promise.resolve()
+      .then(() => apiCm(client).etat())
+      .then(e => actif && setAValider(e?.aValider ?? 0))
+      .catch(() => undefined);
+    return () => {
+      actif = false;
+    };
+  }, [client, contenus]);
+  const nb = Number(contenus) + Number(drive) + Number(sponsors);
+  const couleur = COULEUR_CM_CLUB;
+  const rayon = theme.id === 'terminal' ? 0 : Math.round(48 * 0.28);
   return (
-    <Carte theme={theme} testID="esport-teams-cm" accent={theme.accent}>
-      <View style={[communs.ligne, { justifyContent: 'space-between' }]}>
-        <View style={{ flexShrink: 1, gap: ESP.xxs }}>
-          <Text style={{ ...texte(theme, 17), fontWeight: '700' }} accessibilityRole="header">
-            {`✎ ${tr('cm.club_titre')}`}
-          </Text>
-          <Text style={attenue(theme)} testID="esport-teams-cm-contenu">
-            {parties.join(' · ')}
-          </Text>
+    <Carte theme={theme} testID="esport-teams-cm" accent={couleur} style={{ height: '100%', minHeight: 180 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: ESP.s }}>
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={{ width: 48, height: 48, borderRadius: rayon, backgroundColor: couleur, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 18, fontWeight: '800' }}>CM</Text>
         </View>
-        <View style={communs.ligne}>
-          {drive && contenus ? <BoutonHub theme={theme} titre={tr('cm.club_drive')} libelle={tr('cm.club_ouvrir_drive')} onPress={() => onOuvrir('drive')} testID="esport-teams-cm-drive" /> : null}
-          <BoutonHub theme={theme} titre={tr('cm.club_ouvrir')} libelle={tr('cm.nav_description')} variante="plein" onPress={() => onOuvrir()} testID="esport-teams-cm-ouvrir" />
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text style={{ ...texte(theme, 18), fontWeight: '800' }} numberOfLines={1} accessibilityRole="header">
+            {tr('cm.club_titre')}
+          </Text>
+          <Text style={attenue(theme)} numberOfLines={1}>{trn('cm.tuile_sous', nb)}</Text>
         </View>
       </View>
+      <Text style={attenue(theme, 14)} numberOfLines={2}>
+        {tr('cm.tuile_description')}
+      </Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: ESP.xs }} testID="esport-teams-cm-contenu">
+        {contenus ? <Badge theme={theme} texte={tr('cm.tuile_contenus')} /> : null}
+        {contenus && aValider > 0 ? <Badge theme={theme} texte={`${tr('cm.tuile_a_valider')} (${aValider})`} ton="accent" testID="esport-teams-cm-a-valider" /> : null}
+        {drive && contenus ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={tr('cm.club_ouvrir_drive')} onPress={() => onOuvrir('drive')} testID="esport-teams-cm-drive">
+            <Badge theme={theme} texte={tr('cm.club_drive')} ton="accent" />
+          </Pressable>
+        ) : drive ? (
+          <Badge theme={theme} texte={tr('cm.club_drive')} />
+        ) : null}
+        {sponsors ? <Badge theme={theme} texte={tr('cm.club_sponsors')} /> : null}
+      </View>
+      <View style={{ flex: 1 }} />
+      <Pressable accessibilityRole="button" accessibilityLabel={tr('cm.nav_description')} onPress={() => onOuvrir()} testID="esport-teams-cm-ouvrir">
+        <Text style={{ ...texte(theme, 14), color: theme.accent, fontWeight: '700' }}>{tr('cm.tuile_ouvrir')}</Text>
+      </Pressable>
     </Carte>
   );
 }

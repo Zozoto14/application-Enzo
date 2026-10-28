@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { REGISTRE } from '../hub/registre';
 import { themeHub } from '../hub/themes';
 import { ModeAffichageForce } from '../ui/mobile';
@@ -48,7 +48,7 @@ function fauxClient(moiCm: MoiCm, superAdmin: boolean, langue: 'fr' | 'en') {
     const c = chemin.split('?')[0];
     if (c === '/cm/moi') return moiCm as R;
     if (c === '/cm/tableaux') return { tableaux: [], portees: [] } as R;
-    if (c === '/cm/etat') return { versions: {}, aValider: 0 } as R;
+    if (c === '/cm/etat') return { versions: {}, aValider: moiCm.gerer ? 3 : 0 } as R;
     if (c === '/cm/drive/portees') return { portees: [{ portee: 'club', team: null, droits }], quota, reglages: { rangementVisuels: true, rangementClips: true } } as R;
     if (c === '/cm/drive') return { portee: 'club', team: null, droits, dossier: null, chemin: [], dossiers: [], fichiers: [], noms: {}, tronque: false, quota } as R;
     if (c === '/cm/drive/filtres') return { tags: [], auteurs: [], genres: [] } as R;
@@ -100,9 +100,15 @@ describe('CM rangé dans Teams', () => {
     await fireEvent.press(screen.getByTestId('esport-nav-teams'));
     const carte = await screen.findByTestId('esport-teams-cm');
     expect(carte).toBeTruthy();
-    expect(screen.getByTestId('esport-teams-cm-contenu')).toHaveTextContent('Tableaux, posts à valider, calendrier, clips, visuels, réseaux · Drive · Sponsors');
+    expect(screen.getByTestId('esport-teams-cm-contenu')).toHaveTextContent('ContenusPosts à valider (3)DriveSponsors');
+    // Tuile au gabarit des cartes de team : pastille « CM », titre, ligne secondaire, lien en bas.
+    expect(screen.getByText('CM', { hidden: true })).toBeTruthy();
+    expect(screen.getByText('CM du club')).toBeTruthy();
+    expect(screen.getByText('Espace club · 3 sections')).toBeTruthy();
+    // Première de la grille des teams.
+    expect(within(screen.getByTestId('esport-liste-teams')).getByTestId('esport-teams-cm')).toBeTruthy();
     // Une seule entrée vers le CM sur la page (plus de bouton de repli dans l'en-tête de Teams).
-    expect(screen.getAllByText('Ouvrir l’espace CM')).toHaveLength(1);
+    expect(screen.getAllByText('Ouvrir l’espace CM ›')).toHaveLength(1);
     await fireEvent.press(screen.getByTestId('esport-teams-cm-ouvrir'));
     expect(await screen.findByTestId('esport-cm')).toBeTruthy();
     expect(selectionne('esport-nav-teams')).toBe(true);
@@ -132,7 +138,9 @@ describe('CM rangé dans Teams', () => {
     await monter({ espace: true, sponsors: [], club: ['cm.drive.voir'], teams: [], gerer: false }, { superAdmin: false, langue: 'en' });
     await fireEvent.press(screen.getByTestId('esport-nav-teams'));
     await screen.findByTestId('esport-teams-cm');
-    expect(screen.getByText('✎ Club CM')).toBeTruthy();
+    expect(screen.queryByTestId('esport-teams-cm-a-valider')).toBeNull();
+    expect(screen.getByText('Club CM')).toBeTruthy();
+    expect(screen.getByText('Club space · 1 section')).toBeTruthy();
     expect(screen.getByTestId('esport-teams-cm-contenu')).toHaveTextContent('Drive');
     expect(screen.queryByTestId('esport-teams-cm-drive')).toBeNull();
     await fireEvent.press(screen.getByTestId('esport-teams-cm-ouvrir'));
