@@ -27,7 +27,7 @@ import { creerConnecteur } from '../ia/connecteur.mjs';
 import { preparerBrouillon, testerConnexion, verifierProfil } from '../ia/assistant.mjs';
 import { verifierAdresseHttps } from '../ia/recherche.mjs';
 import { appliquerChangement, resumeDifferences } from './differences.mjs';
-import { MOTIF_CLE_JEU, SECTIONS_LISTES, SECTIONS_OBJETS, Invalide, libelleFormat, lireElement, lireObjet, validerDonnees, validerEntete } from './schema.mjs';
+import { MOTIF_CLE_JEU, SECTIONS_LISTES, cleDe, SECTIONS_OBJETS, Invalide, libelleFormat, lireElement, lireObjet, validerDonnees, validerEntete } from './schema.mjs';
 
 export const PERMISSION_JEUX = 'jeux.gerer';
 export const PERMISSIONS_GLOBALES = [PERMISSION_JEUX];
@@ -39,6 +39,10 @@ const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 const MOTIF_COMPTE = /^(principal|[a-z0-9]{6,16})$/;
 const DUREE_EN_COURS_MAX_MS = 15 * 60_000;
 const ATTENTE_REPRISE_MS = 2 * 60_000;
+/** Progression d'un brouillon notée au plus toutes les 10 s pendant une étape. */
+const PROGRESSION_INTERVALLE_MS = 10_000;
+/** Un brouillon « en cours » sans nouvelle depuis 15 min (processus arrêté) ne bloque plus un nouveau brouillon du même jeu. */
+const EN_COURS_MUET_MS = 15 * 60_000;
 
 /** Premier jour du mois (UTC) de l'instant `t`, en ISO. */
 export const debutMois = t => {
@@ -89,7 +93,8 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
   const local = ia.local ?? null;
   const localPret = () => Boolean(local?.disponible?.() && local.connecteur);
   const optionsRecherche = { telecharger: ia.telecharger, resoudre: ia.resoudre, maintenant };
-  // Un travail local (deux requêtes de 20 min au plus) dure plus longtemps qu'un appel d'API.
+  // Un travail local (plusieurs requêtes de 20 min au plus) dure plus longtemps qu'un appel d'API ; un brouillon
+  // en cours rafraîchit `maj_le` à chaque progression, il n'est donc jamais pris pour un travail bloqué.
   const dureeEnCoursMax = localPret() ? Math.max(DUREE_EN_COURS_MAX_MS, 2 * (local.info?.delaiMs ?? 20 * 60_000) + 10 * 60_000) : DUREE_EN_COURS_MAX_MS;
 
   // -------------------------------------------------------------- Droits
@@ -581,11 +586,13 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     demande: jsonOu(x.demande, {}),
     statut: x.statut,
     declenchement: x.declenchement,
-    resultat: jsonOu(x.resultat, null),
+    resultat: x.statut === 'en_cours' ? null : jsonOu(x.resultat, null),
     sources: jsonOu(x.sources, []),
     incertitudes: jsonOu(x.incertitudes, []),
     avertissements: jsonOu(x.avertissements, []),
     erreur: jsonOu(x.erreur, null),
+    // Pendant le calcul, `resultat` porte la progression (étape n/total, lecture des pages, jetons écrits).
+    progression: x.statut === 'en_cours' ? (jsonOu(x.resultat, null)?.progression ?? null) : null,
     demandePar: x.demande_par ? { compte: x.demande_par, pseudo: noms[x.demande_par] ?? null } : null,
     creeLe: x.cree_le,
     majLe: x.maj_le,
@@ -635,6 +642,12 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     if (nom.length < 2) throw echec(400, 'nom', 'Nom du jeu : 2 caractères au moins.');
     const urls = lireUrls(corps?.urls);
     const jeu = corps?.jeu ? (await ligneJeu(corps.jeu)).cle : null;
+    // Un seul brouillon à la fois pour un même jeu (en attente ou en calcul) : les autres jeux vont dans la file.
+    const encours = await base.tous("SELECT id, jeu_cle, demande FROM ia_travaux WHERE genre = 'brouillon' AND (statut = 'attente' OR (statut = 'en_cours' AND maj_le >= ?))", [iso(maintenant() - EN_COURS_MUET_MS)]);
+    const cle = cleDe(nom);
+    if (encours.some(x => (jeu && x.jeu_cle === jeu) || cleDe(String(jsonOu(x.demande, {})?.nom ?? '')) === cle)) {
+      throw echec(409, 'brouillon-en-cours', 'Un brouillon de ce jeu est déjà en préparation : attendez qu’il soit prêt (ou abandonnez-le).');
+    }
     const t = maintenant();
     const id = nouvelId();
     await base.executer(
@@ -678,6 +691,34 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     return travail(acteur, id);
   }
 
+  /**
+   * Progression d'un brouillon en cours, notée dans `resultat` (et `maj_le`) : à chaque nouvelle étape, et au
+   * plus toutes les 10 s pendant une étape. Écritures à la file (jamais deux à la fois), erreurs ignorées.
+   */
+  const ecrituresProgression = new Map();
+  function suiviProgression(id, debut = maintenant()) {
+    let derniere = 0;
+    let etapeNotee = 0;
+    return p => {
+      const t = maintenant();
+      if (p.n === etapeNotee && t - derniere < PROGRESSION_INTERVALLE_MS) return undefined;
+      derniere = t;
+      etapeNotee = p.n;
+      const progression = { etape: p.n, etapes: p.total, cle: /^[a-z]{1,20}$/.test(p.cle ?? '') ? p.cle : null, libelle: texteNettoye(p.libelle, 60), depuis: iso(debut), ...(p.lecture ? { lecture: { total: p.lecture.total, cache: p.lecture.cache, traites: p.lecture.traites } } : {}), ...(Number.isFinite(p.ecrits) ? { ecrits: p.ecrits } : {}), le: iso(t) };
+      const avant = ecrituresProgression.get(id) ?? Promise.resolve();
+      const suite = avant
+        .then(() => base.executer("UPDATE ia_travaux SET resultat = ?, maj_le = ? WHERE id = ? AND statut = 'en_cours'", [JSON.stringify({ progression }), iso(t), id]))
+        .catch(() => undefined);
+      ecrituresProgression.set(id, suite);
+      return suite;
+    };
+  }
+  /** Attend les écritures de progression d'un travail (avant d'écrire son résultat). */
+  suiviProgression.fin = async id => {
+    await ecrituresProgression.get(id);
+    ecrituresProgression.delete(id);
+  };
+
   /** Exécute un travail en attente (une seule fois : il est « pris » par une mise à jour conditionnelle). */
   async function executerTravail(id) {
     const debut = maintenant();
@@ -689,7 +730,8 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     try {
       if (x.genre === 'brouillon') {
         const existant = x.jeu_cle ? await base.premier('SELECT * FROM jeux WHERE cle = ?', [x.jeu_cle]) : null;
-        const r = await preparerBrouillon(demande, { appeler: appeleur(x.jeu_cle), recherche: config?.recherche, ...optionsRecherche, existant: existant ? donneesDe(existant) : null, compact });
+        const r = await preparerBrouillon(demande, { appeler: appeleur(x.jeu_cle), recherche: config?.recherche, ...optionsRecherche, existant: existant ? donneesDe(existant) : null, compact, etape: suiviProgression(id, debut) });
+        await suiviProgression.fin(id);
         const t = maintenant();
         await base.lot([
           {
@@ -733,8 +775,9 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
       if (n > 0) lot.push(evenement('game.updates_proposed', { acteur: x.demande_par, entiteType: 'jeu', entiteId: j.cle, charge: { nom: j.nom, n, auto: x.declenchement === 'auto' }, maintenant: t }));
       await base.lot(lot);
     } catch (e) {
+      await suiviProgression.fin(id);
       const t = maintenant();
-      await base.executer("UPDATE ia_travaux SET statut = 'echec', erreur = ?, maj_le = ?, fini_le = ? WHERE id = ?", [JSON.stringify(erreurPublique(e)), iso(t), iso(t), id]);
+      await base.executer("UPDATE ia_travaux SET statut = 'echec', resultat = NULL, erreur = ?, maj_le = ?, fini_le = ? WHERE id = ?", [JSON.stringify(erreurPublique(e)), iso(t), iso(t), id]);
       // Une vérification ratée compte comme faite : pas de nouvel essai toutes les 5 minutes.
       if (x.genre === 'verification') await base.executer('UPDATE jeux SET derniere_verif_le = ? WHERE cle = ?', [iso(t), x.jeu_cle]);
       if (!e?.code) journal.error('[esport] travail IA', e);
@@ -756,8 +799,12 @@ export function servicesJeux({ base, maintenant = () => Date.now(), socle, ia = 
     const condition = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const lignes = await base.tous(`SELECT * FROM ia_travaux ${condition} ORDER BY cree_le DESC LIMIT 50`, params);
     const noms = await pseudosDe(base, lignes.map(l => l.demande_par).filter(Boolean));
+    // Place dans la file des travaux en attente (le processus de fond les fait un par un, du plus ancien au plus récent).
+    const file = await base.tous("SELECT id, statut FROM ia_travaux WHERE statut IN ('attente', 'en_cours') ORDER BY cree_le", []);
+    const enCalcul = file.some(x => x.statut === 'en_cours') ? 1 : 0;
+    const places = new Map(file.filter(x => x.statut === 'attente').map((x, i) => [x.id, i + 1 + enCalcul]));
     // La liste reste légère : sans le brouillon complet.
-    return { travaux: lignes.map(l => ({ ...travailPublic(l, noms), resultat: undefined })) };
+    return { travaux: lignes.map(l => ({ ...travailPublic(l, noms), resultat: undefined, ...(places.has(l.id) ? { placeFile: places.get(l.id) } : {}) })) };
   }
 
   async function travail(acteur, id) {

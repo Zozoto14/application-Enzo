@@ -168,6 +168,10 @@ export interface TravailIa {
   incertitudes: Incertitude[];
   avertissements: Avertissement[];
   erreur: { code: string; message: string } | null;
+  /** Pendant le calcul : étape n/total, lecture des pages (jetons), jetons écrits, début du calcul. */
+  progression?: { etape: number; etapes: number; cle?: string | null; libelle: string; lecture?: { total: number; cache: number; traites: number }; ecrits?: number; depuis?: string; le: string } | null;
+  /** Place dans la file d'attente (travail en attente seulement). */
+  placeFile?: number;
   demandePar: { compte: string; pseudo: string | null } | null;
   creeLe: string;
   majLe: string;

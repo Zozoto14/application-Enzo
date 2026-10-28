@@ -1,8 +1,13 @@
 /**
  * Consignes COMPACTES pour un petit modèle (IA locale : Qwen 7B/4B sur le processeur du serveur) :
  * phrases courtes et numérotées, un exemple complet sur un jeu FICTIF, moins de pages et de texte à lire
- * (contexte de 16 384 jetons, et chaque jeton lu coûte du temps de calcul), et un SCHÉMA JSON passé au
+ * (contexte de 8 192 jetons, et chaque jeton lu coûte du temps de calcul), et un SCHÉMA JSON passé au
  * moteur : llama.cpp en tire une grammaire, le modèle ne peut produire qu'un JSON de cette forme.
+ *
+ * Le BROUILLON est fait en plusieurs petites requêtes (`ETAPES_BROUILLON_COMPACT` : formats et score, puis
+ * modes et cartes, puis classes et personnages) plutôt qu'une seule énorme : chaque requête écrit peu (le
+ * moteur écrit ~6 jetons/s), la progression est visible, et le début du message (consignes, pages) est
+ * IDENTIQUE d'une étape à l'autre : le moteur ne le relit pas (`cache_prompt`).
  *
  * La lecture des réponses ne change pas : JSON.parse puis validation STRICTE par schéma (jeux/schema.mjs,
  * jeux/differences.mjs) ; le schéma ci-dessous ne fait que fiabiliser la forme, il ne remplace rien.
@@ -10,10 +15,18 @@
 
 import { TYPES_SCORE } from '../jeux/schema.mjs';
 
-/** Pages et texte lus pour un petit modèle (au lieu de 4 pages de 12 000 caractères). */
+/**
+ * Pages et texte lus pour un petit modèle (au lieu de 4 pages de 12 000 caractères) : 2 pages de 5 000
+ * caractères, soit ≈ 3 000 jetons de pages au plus (le texte utile seulement : menus, pieds de page, encadrés
+ * retirés, voir recherche.mjs). Profil existant tronqué.
+ */
 export const PAGES_MAX_COMPACT = 2;
-export const CARACTERES_PAGE_COMPACT = 6000;
-export const PROFIL_MAX_COMPACT = 14_000;
+export const CARACTERES_PAGE_COMPACT = 5000;
+// Budget d'un contexte de 8 192 jetons : consignes (≈ 700) + profil (≈ 2 400 pour 6 000 caractères de JSON)
+// + pages (≈ 3 100) + écriture (1 500 pour une vérification). Pour un brouillon qui COMPLÈTE un profil, le profil
+// est plus court (4 000 caractères) : l'écriture d'une étape va jusqu'à 1 600 jetons.
+export const PROFIL_MAX_COMPACT = 6000;
+export const PROFIL_MAX_BROUILLON_COMPACT = 4000;
 
 export const REGLES_COMPACTES = [
   'You fill a JSON description of a video game for an esports team app.',
@@ -53,11 +66,44 @@ const EXEMPLE_VERIFICATION = JSON.stringify({
 
 export const CONSIGNE_URLS_COMPACTE = `${REGLES_COMPACTES}\nTask: give at most 3 https URLs of official pages or well-known wikis about the competitive rules, modes, maps and characters of the game.\nAnswer like this: {"urls": ["https://…", "https://…"]}`;
 
-export const CONSIGNE_BROUILLON_COMPACTE = `${REGLES_COMPACTES}
-Task: describe the game. Use the reference pages first, then your own knowledge.
-"score.type" is one of: ${TYPES_SCORE.join(', ')}. "actif" on a map = it is in the current competitive pool.
-Example of the expected shape, for a FAKE game (never copy its values):
-${EXEMPLE_BROUILLON}`;
+// ------------------------------------------------------------------ Brouillon en étapes
+
+/** Consigne SYSTÈME commune à toutes les étapes du brouillon (identique : relue une seule fois par le moteur). */
+export const CONSIGNE_ETAPES_COMPACTE = `${REGLES_COMPACTES}
+7. You describe the game one part at a time: each message ends with the PART to write now. Write only that part.`;
+
+const EXEMPLE_PROFIL = JSON.parse(EXEMPLE_BROUILLON).profil;
+const exemple = v => `Example of the expected shape, for a FAKE game (never copy its values):\n${JSON.stringify(v)}`;
+const EXEMPLE_INCERTITUDE = [{ chemin: 'cartes.port', confiance: 'moyenne', note: 'Présence dans le pool à confirmer.' }];
+
+/**
+ * Étapes du brouillon (IA locale) : `consigne(contexte)` est ajoutée À LA FIN du message (le début, commun,
+ * reste en cache), `schema` contraint la sortie, `maxJetons` borne l'écriture de l'étape.
+ */
+export const ETAPES_BROUILLON_COMPACT = [
+  {
+    cle: 'base',
+    libelle: 'Formats, score et équipe',
+    maxJetons: 900,
+    consigne: () => `PART 1 of 3: official game name, a brand colour (#rrggbb), match formats, scoring, roster size, player roles and labels.
+"score.type" is one of: ${TYPES_SCORE.join(', ')}.
+${exemple({ nom: 'Exemple Arena', couleur: '#3366cc', formats: EXEMPLE_PROFIL.formats, score: EXEMPLE_PROFIL.score, roster: EXEMPLE_PROFIL.roster, rolesJoueurs: EXEMPLE_PROFIL.rolesJoueurs, libelles: EXEMPLE_PROFIL.libelles, incertitudes: [] })}`,
+  },
+  {
+    cle: 'cartes',
+    libelle: 'Modes et cartes',
+    maxJetons: 1400,
+    consigne: ({ formats = [] } = {}) => `PART 2 of 3: game modes and maps. "actif" on a map = it is in the current competitive pool. A mode lists the format keys it is played in${formats.length ? ` (known formats: ${formats.join(', ')})` : ''}; a map lists the mode keys it is played in.
+${exemple({ modes: EXEMPLE_PROFIL.modes, cartes: EXEMPLE_PROFIL.cartes, incertitudes: EXEMPLE_INCERTITUDE })}`,
+  },
+  {
+    cle: 'personnages',
+    libelle: 'Classes et personnages',
+    maxJetons: 1600,
+    consigne: () => `PART 3 of 3: character classes (roles of the characters) and playable characters (agents, heroes, legends… with their class key). If the game has no characters, return empty lists.
+${exemple({ classes: EXEMPLE_PROFIL.classes, personnages: EXEMPLE_PROFIL.personnages, incertitudes: [] })}`,
+  },
+];
 
 export const CONSIGNE_VERIFICATION_COMPACTE = `${REGLES_COMPACTES}
 Task: compare the CURRENT PROFILE with the reference pages. List only real differences written in the pages
@@ -115,6 +161,18 @@ export const SCHEMA_BROUILLON = objet(
   },
   ['nom', 'profil', 'sources', 'incertitudes'],
 );
+
+// Schémas des étapes du brouillon (mêmes formes que SCHEMA_BROUILLON, découpées).
+const PROPRIETES_PROFIL = SCHEMA_BROUILLON.properties.profil.properties;
+const incertitudesEtape = liste(objet({ chemin: chaine, confiance, note: chaine }, ['chemin', 'confiance', 'note']), 6);
+export const SCHEMAS_ETAPES = {
+  base: objet(
+    { nom: chaine, couleur: chaine, formats: PROPRIETES_PROFIL.formats, score: PROPRIETES_PROFIL.score, roster: PROPRIETES_PROFIL.roster, rolesJoueurs: PROPRIETES_PROFIL.rolesJoueurs, libelles: PROPRIETES_PROFIL.libelles, incertitudes: incertitudesEtape },
+    ['nom', 'formats', 'score', 'roster', 'rolesJoueurs', 'incertitudes'],
+  ),
+  cartes: objet({ modes: PROPRIETES_PROFIL.modes, cartes: PROPRIETES_PROFIL.cartes, incertitudes: incertitudesEtape }, ['modes', 'cartes', 'incertitudes']),
+  personnages: objet({ classes: PROPRIETES_PROFIL.classes, personnages: PROPRIETES_PROFIL.personnages, incertitudes: incertitudesEtape }, ['classes', 'personnages', 'incertitudes']),
+};
 
 export const SCHEMA_VERIFICATION = objet(
   {

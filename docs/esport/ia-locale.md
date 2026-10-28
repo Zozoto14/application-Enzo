@@ -63,9 +63,17 @@ Le moteur ne tourne **pas en continu** (serveur partagé) :
   Seul un processus dont la ligne de commande porte **notre** fichier de clé est arrêté, jamais un autre ;
 - **file d'attente** : une requête à la fois (le modèle occupe tous ses fils), 4 en attente au plus (au-delà : « IA
   locale occupée », et en mode « Locale d'abord » l'API prend le relais) ;
-- priorité la plus basse (`nice 19`), **8 fils de calcul** par défaut (`IA_LOCALE_THREADS`), contexte de 16 384 jetons,
-  pas d'attente active des fils, pas de cache mémoire des requêtes, **environnement vidé** (les secrets de
-  `esport.env` ne sont pas transmis au moteur), interface web du moteur coupée. Journal : `~/logs/esport-ia-locale.log`.
+- priorité la plus basse (`nice 19`), **8 fils de calcul** par défaut (`IA_LOCALE_THREADS`), contexte de **8 192
+  jetons** (`IA_LOCALE_CONTEXTE` ; moins de mémoire qu'avant, et les requêtes en étapes y tiennent largement), pas
+  d'attente active des fils, pas de cache mémoire entre requêtes (`--cache-ram 0` ; le début commun des requêtes
+  successives reste réutilisé, voir plus bas), **environnement vidé** (les secrets de `esport.env` ne sont pas
+  transmis au moteur), interface web du moteur coupée. Journal : `~/logs/esport-ia-locale.log`.
+- les requêtes sont envoyées **en flux** (`stream: true`, SSE) : le moteur envoie la progression de la lecture du
+  texte, puis le texte morceau par morceau, et un signe de vie toutes les 30 s ; la connexion n'est donc jamais
+  muette pendant un calcul de plusieurs minutes, la progression s'affiche, et un moteur qui meurt en route est
+  repéré tout de suite. La sortie reste contrainte par le schéma JSON (la grammaire s'applique jeton par jeton).
+  Sans aucun signe de vie pendant 5 minutes, le calcul est abandonné (`ia-locale-bloquee`) ;
+- **mémoire du moteur relevée toutes les 5 s** : si le système le tue, le journal dit combien il occupait juste avant.
 
 ### Qui calcule : le processus de fond
 
@@ -108,9 +116,34 @@ connexion** de la carte de l'API teste alors la clé d'API seule. Le compteur du
 ## Consignes pour un petit modèle
 
 Avec l'IA locale, l'assistant envoie des **consignes compactes** (`esport/noyau/ia/consignes-compactes.mjs`) : règles
-courtes et numérotées, un **exemple complet sur un jeu fictif**, 2 pages de référence de 6 000 caractères au plus (au
-lieu de 4 × 12 000), un profil existant tronqué à 14 000 caractères, et un **schéma JSON** passé au moteur
-(`response_format: json_schema`) : llama.cpp en tire une grammaire, le modèle ne peut écrire qu'un JSON de cette forme.
+courtes et numérotées, un **exemple sur un jeu fictif**, 2 pages de référence de 5 000 caractères au plus (au lieu de
+4 × 12 000, soit ≈ 3 000 jetons de pages), un profil existant tronqué à 6 000 caractères (4 000 pour un brouillon qui le complète), et un **schéma JSON** passé
+au moteur (`response_format: json_schema`) : llama.cpp en tire une grammaire, le modèle ne peut écrire qu'un JSON de
+cette forme. Des pages, seul le **texte utile** est gardé : contenu principal (`<main>`, `<article>`), sans menus,
+pieds de page, encadrés, formulaires ni lignes répétées.
+
+### Le brouillon en étapes
+
+Un brouillon n'est plus **une** énorme requête (lecture de tout, puis jusqu'à 4 000 jetons écrits d'un coup, soit
+plus de 10 minutes sans rien voir) mais **quatre étapes**, affichées dans la liste des brouillons (« Étape 3/4 :
+modes et cartes · 120 jetons écrits ») :
+
+| Étape | Contenu | Écriture au plus |
+| --- | --- | --- |
+| 1/4 | Pages de référence : celles données, sinon le modèle en propose (petite requête), le serveur les lit | 300 jetons |
+| 2/4 | Nom, couleur, formats, score, roster, rôles des joueurs | 900 jetons |
+| 3/4 | Modes et cartes (avec les clés des formats de l'étape 2) | 1 400 jetons |
+| 4/4 | Classes et personnages | 1 600 jetons |
+
+Les étapes 2 à 4 envoient **le même début de message** (consigne système, jeu, notes, profil existant, pages) puis
+la partie à écrire : le moteur garde ce début en mémoire (`cache_prompt`) et ne le relit pas, seule la première
+étape paie la lecture des pages. Une étape 3 ou 4 illisible laisse sa partie vide avec un avertissement (« à
+compléter à la main ») au lieu de faire échouer tout le brouillon.
+
+**File d'attente** : le processus de fond fait **un brouillon à la fois**, du plus ancien au plus récent ; un
+brouillon lancé pendant qu'un autre calcule est « En attente : n° 2 dans la file » et part ensuite. Relancer **le
+même jeu** pendant que son brouillon attend ou calcule est refusé (`brouillon-en-cours`) ; un brouillon resté « en
+préparation » sans nouvelle depuis 15 minutes (processus arrêté) ne bloque plus.
 La **lecture des réponses ne change pas** : `JSON.parse` puis validation **stricte** par schéma (champs inconnus jetés,
 textes bornés, images et sources https publiques), et rien n'est enregistré sans la validation du Fondateur.
 
@@ -135,7 +168,7 @@ textes bornés, images et sources https publiques), et rien n'est enregistré sa
 | `IA_LOCALE_MODELE` | `qwen2.5-7b` | `qwen2.5-7b` ou `qwen3-4b` (installé avec `--petit`) |
 | `IA_LOCALE_THREADS` | `8` | Fils de calcul (1 à 32) |
 | `IA_LOCALE_DOSSIER` | `~/.appdashboard/ia-locale` | Dossier de l'installation (absolu, hors `public_html` et du dépôt) |
-| `IA_LOCALE_CONTEXTE` | `16384` | Taille du contexte en jetons (4 096 à 32 768 ; plus = plus de mémoire) |
+| `IA_LOCALE_CONTEXTE` | `8192` | Taille du contexte en jetons (4 096 à 32 768 ; plus = plus de mémoire) |
 | `IA_LOCALE_INACTIVITE_MIN` | `5` | Arrêt du moteur après N minutes sans requête |
 | `IA_LOCALE_DELAI_MIN` | `20` | Durée maximale d'une requête, attente comprise |
 | `IA_LOCALE_DEMARRAGE_S` | `300` | Chargement du modèle au plus |
@@ -147,13 +180,15 @@ textes bornés, images et sources https publiques), et rien n'est enregistré sa
 ## Vitesse et ressources (ordres de grandeur)
 
 Mesurez sur **votre** serveur : `bash ~/application-enzo/esport/serveur/installer-ia-locale.sh --test` (chargement,
-jetons par seconde, mémoire, un essai JSON en anglais et un résumé en français, puis une recommandation). Estimations
-pour un processeur de serveur récent avec 8 fils, à confirmer par le test :
+jetons par seconde, mémoire, un essai JSON en anglais et un résumé en français, puis un **essai de brouillon
+complet** — même chemin que l'app : flux, étapes, consignes compactes, sur un jeu fictif avec deux pages fictives —
+avec la durée de chaque étape, la durée totale et la mémoire maximale du moteur, puis une recommandation).
+Estimations pour un processeur de serveur récent avec 8 fils, à confirmer par le test :
 
 | Modèle | Mémoire du moteur | Écriture | Brouillon de profil | Test de connexion |
 | --- | --- | --- | --- | --- |
-| Qwen2.5-7B (défaut) | ≈ 6 Go | 4 à 8 jetons/s | 5 à 15 min | 20 à 60 s (chargement compris) |
-| Qwen3-4B (`--petit`) | ≈ 3,5 Go | 8 à 15 jetons/s | 3 à 8 min | 10 à 30 s |
+| Qwen2.5-7B (défaut) | ≈ 5,5 Go | 4 à 8 jetons/s | 5 à 10 min (lecture des pages 1 à 3 min, puis 1 à 3 min par étape) | 20 à 60 s (chargement compris) |
+| Qwen3-4B (`--petit`) | ≈ 3 Go | 8 à 15 jetons/s | 3 à 6 min | 10 à 30 s |
 
 Le compte o2switch a de la marge (40 cœurs, 48 Go), mais le serveur est **partagé** : CloudLinux limite le processeur
 et la mémoire du compte (limites « LVE »). Gardez 8 fils au plus ; si cPanel › **Resource Usage** signale des fautes,
@@ -163,7 +198,8 @@ passez à `IA_LOCALE_THREADS=4` ou au modèle `--petit`.
 
 Tout ce qui concerne le moteur est noté dans **`~/logs/esport-ia-locale.log`** : sorties de `llama-server`, et des
 lignes `[esport] IA locale (rôle, pid …)` qui disent **qui** a fait quoi (`app`, `travailleur` = processus de fond,
-`cron`) : requête échouée avec sa **cause technique** (`ECONNRESET`, `ECONNREFUSED`, `UND_ERR_HEADERS_TIMEOUT`…) et
+`cron`) : moteur prêt (durée du chargement, contexte, mémoire), **chaque requête terminée** (durée, jetons lus dont
+ceux déjà en cache, jetons écrits, vitesses), requête échouée avec sa **cause technique** (`ECONNRESET`, `ECONNREFUSED`, `UND_ERR_HEADERS_TIMEOUT`…) et
 l'état du moteur à cet instant, moteur arrêté de façon imprévue (avec le **signal** reçu : `SIGKILL` = tué, souvent
 par la limite mémoire LVE), moteur orphelin nettoyé (propriétaire, âge du dernier battement). La « dernière erreur » de
 la carte **Moteur de l'IA** est partagée entre l'app et le processus de fond (`etat/incident.json`), effacée dès
@@ -171,10 +207,20 @@ qu'une requête réussit.
 
 | Message / code | Cause probable | Que faire |
 | --- | --- | --- |
+| Brouillon en échec « Le moteur d'IA locale a coupé la connexion pendant le calcul (ECONNRESET) », ou « L'IA locale n'a pas pu démarrer » juste après (version du 28 octobre 2026) | Le moteur s'arrêtait **en plein calcul** d'une seule énorme requête (pages + jusqu'à 4 000 jetons écrits, plus de 10 min). Le délai du moteur n'en est pas la cause : `--timeout` de llama-server b11351 est le délai de lecture/écriture de son serveur HTTP (600 s par défaut), nous le réglons sur `IA_LOCALE_DELAI_MIN` (1 200 s), et une requête en cours de calcul n'est pas coupée par lui. ECONNRESET signifie que le moteur a fermé la connexion sans répondre : cause la plus probable, il a été **tué par le système** (limite mémoire du compte, qui grandit avec la longueur du texte lu) ou s'est planté — à confirmer dans le journal (« arrêté de façon imprévue (signal …) », avec désormais la mémoire relevée juste avant). **Corrigé** : requêtes en flux, brouillon en 4 petites étapes, pages réduites au texte utile, contexte 8 192 (moins de mémoire), message précis (`ia-locale-tuee`, `ia-locale-plantage`), second essai de démarrage après une courte pause, file d'attente des brouillons. | Mettre à jour l'app, redémarrer l'app, relancer **un** brouillon ; s'il échoue encore en `ia-locale-tuee`, voir cette ligne plus bas. |
 | Brouillon en échec « Service d'IA injoignable » alors que **Tester l'IA locale** réussit (avant octobre 2026) | Le `fetch` de Node (undici) abandonne une requête après **300 s sans en-têtes** ; llama-server n'en envoie qu'à la fin de la génération (un brouillon dure 5 à 15 min). **Corrigé** : le moteur local est appelé par `node:http` sans ce délai (`esport/serveur/ia-locale/transport.mjs`) ; seul `IA_LOCALE_DELAI_MIN` borne la requête. | Mettre à jour l'app (déploiement), redémarrer l'app, relancer le brouillon. |
 | `ia-delai-connexion` | Un client HTTP a expiré avant la réponse (cause dans le message : `UND_ERR_HEADERS_TIMEOUT`…) | Ne devrait plus arriver pour l'IA locale ; sinon, signaler avec la ligne du journal. |
 | `ia-delai` | La requête a dépassé `IA_LOCALE_DELAI_MIN` (20 min, attente comprise) | Moins de pages de référence, `IA_LOCALE_JETONS_MAX` plus bas, modèle `--petit`, ou délai plus long. |
-| `ia-locale-coupee` | Le moteur a coupé la connexion pendant le calcul (arrêté ou redémarré) | Chercher juste au-dessus dans le journal « arrêté de façon imprévue (signal …) » ; `SIGKILL` sans ligne « orphelin nettoyé » = limite mémoire : cPanel › Resource Usage, `IA_LOCALE_CONTEXTE=8192` ou `--petit`. |
+| `ia-locale-tuee` | Le **système** a tué le moteur pendant le calcul (`SIGKILL`, sans ligne « orphelin nettoyé ») : presque toujours la **limite mémoire du compte** (LVE). Le journal donne la mémoire relevée juste avant. | cPanel › **Resource Usage** (fautes « mémoire ») ; `IA_LOCALE_CONTEXTE=6144`, `IA_LOCALE_THREADS=4`, ou le modèle `--petit` (≈ 3 Go) ; `--test` affiche la mémoire maximale du moteur. |
+| `ia-locale-plantage` | Le moteur s'est arrêté brutalement (autre signal, `SIGSEGV`, `SIGABRT`, ou code d'erreur) | Les dernières lignes de `llama-server` au-dessus dans le journal ; relancer ; si cela se répète, `installer-ia-locale.sh --forcer`. |
+| `ia-locale-demarrage-memoire` | Le système a tué le moteur **pendant le chargement**, deux fois de suite (un second essai est fait après 5 s) | Comme `ia-locale-tuee`. |
+| `ia-locale-coupee` | Le moteur a coupé la connexion pendant le calcul sans être mort (redémarré, connexion fermée) | Chercher juste au-dessus dans le journal ; relancer. |
+| `ia-locale-bloquee` | Plus aucun signe de vie du moteur pendant 5 minutes (processeur bloqué par la limite CPU du compte ?) | cPanel › Resource Usage ; `IA_LOCALE_THREADS=4`. |
+| `ia-locale-contexte` | La demande ne tient pas dans le contexte (`IA_LOCALE_CONTEXTE`) | Moins de pages de référence, ou contexte plus grand (plus de mémoire). |
+| `ia-locale-refus` | Le moteur a répondu par une erreur (code HTTP et type dans le message) | Le message complet est dans le journal (« requête échouée »). |
+| `ia-reponse-tronquee` | Une étape a atteint sa limite d'écriture (`finish_reason: length`) | Relancer ; `IA_LOCALE_JETONS_MAX` borne aussi chaque étape. |
+| `brouillon-en-cours` | Un brouillon de ce jeu attend ou calcule déjà | Attendre qu'il soit prêt (la liste montre l'étape en cours ou la place dans la file). |
+| « Service d'IA injoignable » en mode **Locale d'abord** | Le moteur local a échoué et la **clé d'API** de secours a échoué à son tour (adresse ou réseau) : c'est le seul chemin qui passe encore par le `fetch` global ; l'IA locale, elle, est toujours appelée par `transport.mjs` (app, processus de fond, installateur). | Corriger `IA_API_URL` / `IA_API_CLE`, ou choisir le mode « IA locale ». |
 | `ia-locale-arretee` | Plus rien n'écoute : le moteur s'était déjà arrêté | Idem. |
 | `ia-locale-arret` (carte) | Le moteur s'est arrêté de lui-même | Idem ; voir les dernières lignes de `llama-server` dans le journal. |
 | `ia-locale-demarrage` | Le moteur n'a pas démarré (binaire, modèle, mémoire, chargement > `IA_LOCALE_DEMARRAGE_S`) | La raison exacte est dans le journal (« démarrage impossible : … »). |
@@ -184,8 +230,11 @@ Garanties (testées dans `esport/test/ia-locale.test.mjs`) : un moteur dont le p
 les 30 s) n'est **jamais** arrêté par l'app, le cron ou un autre processus ; l'arrêt pour inactivité n'a pas lieu pendant
 une requête (le minuteur ne repart qu'à la fin) ; un processus ne retire jamais le verrou ni la clé d'un autre, même
 quand il nettoie un orphelin au moment où un autre processus reprend le moteur ; le verrou du processus de fond est créé
-d'un coup avec son pid (jamais deux processus de fond). Pendant un brouillon, la liste affiche « Calcul en cours depuis
-N minutes ».
+d'un coup avec son pid (jamais deux processus de fond) ; un calcul plus long que le délai d'inactivité d'un faux moteur
+aboutit en flux (et échoue en ECONNRESET sans flux) ; moteur tué (`SIGKILL`) ou planté pendant le calcul → messages
+distincts ; mort au chargement → second essai ; brouillon en étapes (début de message commun, progression, étape
+illisible tolérée), file d'attente et doublons. Pendant un brouillon, la liste affiche « Calcul en cours depuis N
+minutes » et l'étape en cours.
 
 ## Désinstaller
 

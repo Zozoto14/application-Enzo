@@ -21,7 +21,7 @@
  * entrée, sans toucher au reste de l'assistant.
  */
 
-import { echec } from '../outils.mjs';
+import { ErreurEsport, echec } from '../outils.mjs';
 
 /** Adresses par défaut des fournisseurs connus (si IA_API_URL est vide). */
 export const FOURNISSEURS = {
@@ -286,7 +286,7 @@ const entier = (v, defaut, min, max) => {
  *   IA_LOCALE_DOSSIER          dossier de l'installation (défaut ~/.appdashboard/ia-locale, rempli par le serveur)
  *   IA_LOCALE_MODELE           qwen2.5-7b (défaut) ou qwen3-4b (plus petit, plus rapide)
  *   IA_LOCALE_THREADS          fils de calcul (défaut 8, de 1 à 32)
- *   IA_LOCALE_CONTEXTE         taille du contexte en jetons (défaut 16384, de 4096 à 32768)
+ *   IA_LOCALE_CONTEXTE         taille du contexte en jetons (défaut 8192, de 4096 à 32768 ; plus = plus de mémoire)
  *   IA_LOCALE_INACTIVITE_MIN   arrêt du moteur après N minutes sans requête (défaut 5 ; 0 = tout de suite)
  *   IA_LOCALE_DELAI_MIN        durée maximale d'UNE requête, attente comprise (défaut 20 min)
  *   IA_LOCALE_DEMARRAGE_S      chargement du modèle au plus (défaut 300 s)
@@ -303,7 +303,7 @@ export function configIaLocale(env = process.env) {
     dossier: String(env.IA_LOCALE_DOSSIER ?? '').trim() || null,
     modele: /^[a-z0-9._-]{1,40}$/.test(modele) ? modele : 'qwen2.5-7b',
     threads: entier(env.IA_LOCALE_THREADS, 8, 1, 32),
-    contexte: entier(env.IA_LOCALE_CONTEXTE, 16_384, 4096, 32_768),
+    contexte: entier(env.IA_LOCALE_CONTEXTE, 8192, 4096, 32_768),
     inactiviteMs: entier(env.IA_LOCALE_INACTIVITE_MIN, 5, 0, 120) * 60_000,
     delaiMs: entier(env.IA_LOCALE_DELAI_MIN, 20, 1, 120) * 60_000,
     demarrageMs: entier(env.IA_LOCALE_DEMARRAGE_S, 300, 10, 1800) * 1000,
@@ -314,16 +314,197 @@ export function configIaLocale(env = process.env) {
   };
 }
 
+/** Silence maximal du moteur local pendant un calcul en flux (le moteur envoie un signe de vie toutes les 30 s). */
+export const SILENCE_MAX_LOCAL_MS = 5 * 60_000;
+/** Battement demandé au moteur (« ping » SSE) pendant un calcul en flux. */
+export const PING_LOCAL_S = 30;
+const LIGNE_MAX_FLUX = 1024 * 1024;
+const TYPE_ERREUR = /^[a-z_]{1,40}$/;
+
+/** Erreur du moteur local (statut HTTP ≠ 200, ou événement d'erreur dans le flux) → code stable et clair. */
+function erreurMoteurLocal(statut, json) {
+  const e = json?.error && typeof json.error === 'object' ? json.error : {};
+  const type = TYPE_ERREUR.test(String(e.type ?? '')) ? String(e.type) : null;
+  if (type === 'exceed_context_size_error' || /context size|context length/i.test(String(e.message ?? '').slice(0, 300))) {
+    return Object.assign(echec(502, 'ia-locale-contexte', 'La demande dépasse la mémoire de travail (contexte) de l’IA locale : moins de pages de référence, ou IA_LOCALE_CONTEXTE plus grand.'), { cause: type ?? `HTTP_${statut}` });
+  }
+  const detail = `HTTP ${statut}${type ? `, ${type}` : ''}`;
+  return Object.assign(echec(502, 'ia-locale-refus', `Le moteur d’IA locale a refusé la requête (${detail} ; voir ~/logs/esport-ia-locale.log).`), { cause: type ?? `HTTP_${statut}` });
+}
+
+/**
+ * Lit le flux SSE de llama-server (`stream: true`) : morceaux de texte (`delta.content`), progression de la
+ * lecture du texte (`prompt_progress`), fin (`finish_reason`, `[DONE]`), mesures (`usage`, `timings`), erreur
+ * en cours de route (`{"error": …}`), signes de vie (`:`). Lecture bornée ; `surVie` réarme le chien de garde.
+ */
+async function lireFluxLocal(corps, { surMorceau, surVie }) {
+  const lecteur = corps.getReader();
+  const decodeur = new TextDecoder('utf-8', { fatal: false });
+  const etat = { texte: '', fin: null, termine: false, usage: null, timings: null, morceaux: 0 };
+  let tampon = '';
+  const ligne = l => {
+    if (!l.startsWith('data:')) return;
+    const donnee = l.slice(5).trim();
+    if (!donnee) return;
+    if (donnee === '[DONE]') {
+      etat.termine = true;
+      return;
+    }
+    let j;
+    try {
+      j = JSON.parse(donnee);
+    } catch {
+      return;
+    }
+    if (j?.error) throw erreurMoteurLocal(200, j);
+    const choix = Array.isArray(j?.choices) ? j.choices[0] : null;
+    const bout = choix?.delta?.content;
+    if (typeof bout === 'string' && bout) {
+      etat.texte += bout;
+      etat.morceaux += 1;
+      if (etat.texte.length > TAILLE_MAX_REPONSE_IA) throw echec(502, 'ia-reponse', 'Réponse du service d’IA illisible.');
+    }
+    if (typeof choix?.finish_reason === 'string') etat.fin = choix.finish_reason;
+    if (j?.usage && typeof j.usage === 'object') etat.usage = j.usage;
+    if (j?.timings && typeof j.timings === 'object') etat.timings = j.timings;
+    const p = j?.prompt_progress;
+    surMorceau({ lecture: p && Number.isFinite(p.total) ? { total: p.total, cache: Number(p.cache) || 0, traites: Number(p.processed) || 0 } : null, ecrits: etat.morceaux });
+  };
+  for (;;) {
+    const { done, value } = await lecteur.read();
+    if (done) break;
+    surVie();
+    tampon += decodeur.decode(value, { stream: true });
+    if (tampon.length > LIGNE_MAX_FLUX && !tampon.includes('\n')) throw echec(502, 'ia-reponse', 'Réponse du service d’IA illisible.');
+    let i;
+    while ((i = tampon.indexOf('\n')) >= 0) {
+      const l = tampon.slice(0, i).replace(/\r$/, '');
+      tampon = tampon.slice(i + 1);
+      ligne(l);
+    }
+  }
+  if (tampon.trim()) ligne(tampon.trim());
+  return etat;
+}
+
+/**
+ * Un échange avec le MOTEUR LOCAL, en flux (SSE) : la connexion reste vivante pendant tout le calcul (lecture
+ * du texte, puis écriture), la progression est visible, et un moteur qui meurt en route est repéré (flux
+ * interrompu). Sortie JSON contrainte par schéma comme sans flux (la grammaire s'applique jeton par jeton) ;
+ * `cache_prompt` : le début commun des requêtes successives d'un même travail n'est lu qu'une fois.
+ * Un moteur qui répond sans flux (JSON) est lu comme avant.
+ */
+async function echangerLocal({ config, messages, options, fetchIa, delai, maintenant, silenceMaxMs, progression }) {
+  const adaptateur = ADAPTATEURS['openai-chat'];
+  const { url, init } = adaptateur.requete(config, messages, options);
+  const corps = JSON.parse(init.body);
+  Object.assign(corps, { stream: true, stream_options: { include_usage: true }, return_progress: true, cache_prompt: true, sse_ping_interval: PING_LOCAL_S });
+  const debut = maintenant();
+  const garde = new AbortController();
+  let silence = false;
+  let chien = null;
+  const surVie = () => {
+    clearTimeout(chien);
+    chien = setTimeout(() => {
+      silence = true;
+      garde.abort(new DOMException('moteur muet', 'AbortError'));
+    }, silenceMaxMs);
+    chien.unref?.();
+  };
+  const bloquee = () => Object.assign(echec(504, 'ia-locale-bloquee', 'L’IA locale ne donne plus signe de vie : calcul abandonné (voir ~/logs/esport-ia-locale.log).'), { cause: 'SILENCE' });
+  surVie();
+  try {
+    let r;
+    try {
+      r = await fetchIa(url, { ...init, headers: { ...init.headers, Accept: 'text/event-stream, application/json' }, body: JSON.stringify(corps), redirect: 'error', signal: AbortSignal.any([AbortSignal.timeout(delai), garde.signal]) });
+    } catch (e) {
+      throw silence ? bloquee() : erreurTransport(e, true);
+    }
+    surVie();
+    const type = r.headers.get('content-type') ?? '';
+    if (!r.ok) {
+      const texte = await lireBorne(r, 64 * 1024).catch(() => null);
+      let json = null;
+      try {
+        json = texte ? JSON.parse(texte) : null;
+      } catch {
+        json = null;
+      }
+      throw erreurMoteurLocal(r.status, json);
+    }
+    if (!/event-stream/i.test(type)) {
+      // Moteur sans flux : réponse JSON complète, lue comme avant.
+      const texte = await lireBorne(r, TAILLE_MAX_REPONSE_IA).catch(() => null);
+      let json = null;
+      try {
+        json = texte === null ? null : JSON.parse(texte);
+      } catch {
+        json = null;
+      }
+      const sortie = json ? adaptateur.reponse(json) : null;
+      if (!sortie) throw echec(502, 'ia-reponse', 'Réponse du service d’IA illisible.');
+      return { ...sortie, dureeMs: maintenant() - debut };
+    }
+    let flux;
+    try {
+      flux = await lireFluxLocal(r.body, {
+        surVie,
+        surMorceau: m => {
+          try {
+            progression?.(m);
+          } catch {
+            // Affichage de la progression : jamais bloquant.
+          }
+        },
+      });
+    } catch (e) {
+      if (e instanceof ErreurEsport) throw e;
+      throw silence ? bloquee() : erreurTransport(e, true);
+    }
+    if (!flux.termine && !flux.fin) {
+      // Flux fermé sans fin ni [DONE] : le moteur a coupé en route.
+      throw Object.assign(echec(502, 'ia-locale-coupee', 'Le moteur d’IA locale a coupé la connexion pendant le calcul (FLUX_INTERROMPU ; voir ~/logs/esport-ia-locale.log).'), { cause: 'FLUX_INTERROMPU' });
+    }
+    if (flux.fin === 'length') throw Object.assign(echec(502, 'ia-reponse-tronquee', 'Réponse de l’IA locale incomplète (limite de jetons atteinte) : relancez, ou augmentez IA_LOCALE_JETONS_MAX.'), { cause: 'LONGUEUR' });
+    if (!flux.texte.trim()) throw echec(502, 'ia-reponse', 'Réponse du service d’IA illisible.');
+    const u = flux.usage ?? {};
+    const t = flux.timings ?? {};
+    const v = Number(t.predicted_per_second);
+    const l = Number(t.prompt_per_second);
+    return {
+      texte: flux.texte,
+      jetons: { entree: Number.isFinite(u.prompt_tokens) ? u.prompt_tokens : null, sortie: Number.isFinite(u.completion_tokens) ? u.completion_tokens : null },
+      ...(Number.isFinite(v) && v > 0 ? { vitesse: v } : {}),
+      ...(Number.isFinite(l) && l > 0 ? { lecture: l } : {}),
+      ...(Number.isFinite(Number(t.cache_n)) ? { cache: Number(t.cache_n) } : {}),
+      dureeMs: maintenant() - debut,
+    };
+  } finally {
+    clearTimeout(chien);
+  }
+}
+
+const COUPURES_LOCALES = new Set(['ia-locale-coupee', 'ia-locale-arretee', 'ia-locale-bloquee']);
+
 /**
  * Connecteur de l'IA locale : même contrat que `creerConnecteur`. `gestionnaire.executer(fn)` démarre le
- * serveur d'inférence au besoin et passe `{ port, cle }`. L'adresse est construite ICI, et seulement ici :
- * http://127.0.0.1:<port entier>/v1/chat/completions — c'est la seule exception à « https public seulement »,
- * réservée au serveur local géré (jamais une adresse venue de la configuration, d'une page ou du modèle).
+ * serveur d'inférence au besoin et passe `{ port, cle, limite, pid }`. L'adresse est construite ICI, et
+ * seulement ici : http://127.0.0.1:<port entier>/v1/chat/completions — c'est la seule exception à « https public
+ * seulement », réservée au serveur local géré (jamais une adresse venue de la configuration, d'une page ou du
+ * modèle).
+ *
+ * Requête EN FLUX (voir `echangerLocal`). `options.progression({ lecture, ecrits })` : progression du calcul.
+ * Connexion coupée : on regarde si le moteur est MORT (et de quoi) pour un message précis — tué par le système
+ * (SIGKILL : mémoire du compte, limite LVE) ou planté (autre signal, code d'erreur).
  */
-export function creerConnecteurLocal(gestionnaire, { modele = 'local', jetonsMax = 4096, delai = 20 * 60_000, fetch: fetchIa = (...a) => globalThis.fetch(...a), maintenant = () => Date.now() } = {}) {
-  // Diagnostic : la cause réelle d'un échec va dans ~/logs/esport-ia-locale.log (via le gestionnaire).
-  const journaliser = (texte, code) => gestionnaire?.noterIncident?.(texte, code);
-  const adaptateur = ADAPTATEURS['openai-chat'];
+export function creerConnecteurLocal(gestionnaire, { modele = 'local', jetonsMax = 4096, delai = 20 * 60_000, fetch: fetchIa = (...a) => globalThis.fetch(...a), maintenant = () => Date.now(), silenceMaxMs = SILENCE_MAX_LOCAL_MS, attenteSortieMs = 2000 } = {}) {
+  const noter = (texte, code) => {
+    try {
+      gestionnaire?.noterIncident?.(texte, code);
+    } catch {
+      // Journal indisponible : l'erreur reste rendue.
+    }
+  };
   return {
     local: true,
     modele,
@@ -331,16 +512,38 @@ export function creerConnecteurLocal(gestionnaire, { modele = 'local', jetonsMax
     async discuter(messages, options = {}) {
       if (!gestionnaire) throw echec(503, 'ia-locale-absente', 'IA locale non installée (lancer esport/serveur/installer-ia-locale.sh).');
       const total = options.delaiLocal ?? delai;
+      const { progression, ...reste } = options;
       const r = await gestionnaire.executer(
-        async ({ port, cle, limite }) => {
+        async ({ port, cle, limite, pid }) => {
           if (!Number.isInteger(port) || port < 1024 || port > 65535) throw echec(502, 'ia-injoignable', 'Service d’IA injoignable.');
           const config = { fournisseur: 'local', modele, url: `http://127.0.0.1:${port}/v1/chat/completions`, lireCle: () => cle };
-          const reste = Math.max(1000, limite - maintenant());
-          return echanger({ adaptateur, config, messages, options: { ...options, json: options.json ?? true, maxJetons: Math.min(options.maxJetons ?? jetonsMax, jetonsMax), delai: reste }, fetchIa, delai: reste, maintenant, journaliser });
+          const duree = Math.max(1000, limite - maintenant());
+          const debut = maintenant();
+          try {
+            return await echangerLocal({ config, messages, options: { ...reste, json: reste.json ?? true, maxJetons: Math.min(reste.maxJetons ?? jetonsMax, jetonsMax) }, fetchIa, delai: duree, maintenant, silenceMaxMs, progression });
+          } catch (e0) {
+            let e = e0;
+            // Connexion coupée : le moteur est-il mort, et de quoi ?
+            // (Seulement un arrêt IMPRÉVU : nos propres arrêts — inactivité, sortie du processus — ne sont pas des plantages.)
+            const sortie = COUPURES_LOCALES.has(e.code) ? await Promise.resolve(gestionnaire.attendreSortie?.(pid, attenteSortieMs)).then(s => (s?.imprevue ? s : null), () => null) : null;
+            if (sortie?.signal === 'SIGKILL') {
+              e = Object.assign(echec(502, 'ia-locale-tuee', 'Le système a arrêté le moteur d’IA locale pendant le calcul (SIGKILL) : mémoire du compte probablement dépassée (voir ~/logs/esport-ia-locale.log).'), { cause: 'SIGKILL' });
+            } else if (sortie && (sortie.signal || sortie.code !== 0)) {
+              const quoi = sortie.signal ?? `code ${sortie.code}`;
+              e = Object.assign(echec(502, 'ia-locale-plantage', `Le moteur d’IA locale s’est arrêté brutalement pendant le calcul (${quoi} ; voir ~/logs/esport-ia-locale.log).`), { cause: String(quoi).replace(/\s+/g, '_').toUpperCase() });
+            }
+            noter(`requête échouée après ${Math.round((maintenant() - debut) / 1000)} s : ${e.code} (cause ${e.cause ?? causeEchec(e0)})`, e.code ?? 'erreur');
+            throw e;
+          }
         },
         { delai: total },
       );
       gestionnaire.noterMesure?.({ jetonsParSeconde: r.vitesse, dureeMs: r.dureeMs });
+      try {
+        gestionnaire.noter?.(`requête terminée en ${Math.round(r.dureeMs / 1000)} s (lu ${r.jetons?.entree ?? '?'} jetons${Number.isFinite(r.cache) ? ` dont ${r.cache} déjà en cache` : ''}${r.lecture ? ` à ${r.lecture.toFixed(1)}/s` : ''}, écrit ${r.jetons?.sortie ?? '?'} jetons${r.vitesse ? ` à ${r.vitesse.toFixed(1)}/s` : ''}).`);
+      } catch {
+        // Journal indisponible.
+      }
       return r;
     },
   };

@@ -28,23 +28,31 @@ import { creerIaLocale } from '../serveur/ia-locale/service.mjs';
 import { lancerTravailleurIaLocale } from '../serveur/ia-locale/lanceur.mjs';
 import { executerTravailleur, prendreVerrouTravailleur } from '../serveur/ia-locale/travailleur.mjs';
 import { creerFetchLocal, fetchLocal } from '../serveur/ia-locale/transport.mjs';
-import { lireOptions, lirePaquetsOutils, recommandation, telechargerVerifie } from '../serveur/ia-locale/installer.mjs';
+import { essaiBrouillon, lireOptions, lirePaquetsOutils, pagesEssai, recommandation, telechargerVerifie } from '../serveur/ia-locale/installer.mjs';
+import { htmlEnTexte } from '../noyau/ia/recherche.mjs';
 
 const attendre = ms => new Promise(ok => setTimeout(ok, ms));
 const silencieux = { log: () => undefined, warn: () => undefined, error: () => undefined };
 
 /**
  * Faux llama-server (Node) : options lues comme le vrai, écoute sur --host/--port, exige la clé du fichier
- * --api-key-file, /health, /v1/chat/completions (réponse JSON + timings), /env (noms des variables reçues).
- * `FAUX_MODE` dans le nom du binaire : « ok », « plante » (sort tout de suite en erreur).
+ * --api-key-file, /health, /v1/chat/completions (réponse JSON + timings ; EN FLUX si `stream: true`, comme
+ * llama-server : progression de la lecture, morceaux de texte, fin, usage, [DONE]), /env (noms des variables
+ * reçues). Modèle « plante.gguf » : sort tout de suite en erreur ; « tue.gguf » : tué (SIGKILL) pendant le
+ * chargement ; « tue-une-fois.gguf » : tué au premier chargement seulement.
  */
 const SCRIPT_FAUX = `
 import http from 'node:http';
-import { readFileSync, appendFileSync } from 'node:fs';
+import { readFileSync, appendFileSync, existsSync, writeFileSync } from 'node:fs';
 const a = process.argv.slice(2);
 const opt = n => a[a.indexOf(n) + 1];
 if (a.includes('--version')) { console.log('version: 0.5.0-dev (build 1, commit 631109b)'); process.exit(0); }
 if (a.some(x => x.endsWith('plante.gguf'))) { console.error('erreur de chargement'); process.exit(3); }
+if (a.some(x => x.endsWith('tue.gguf'))) process.kill(process.pid, 'SIGKILL');
+if (a.some(x => x.endsWith('tue-une-fois.gguf'))) {
+  const marque = opt('-m') + '.deja';
+  if (!existsSync(marque)) { writeFileSync(marque, '1'); process.kill(process.pid, 'SIGKILL'); }
+}
 const cle = readFileSync(opt('--api-key-file'), 'utf8').trim();
 const journal = opt('-m') + '.requetes';
 const s = http.createServer((req, res) => {
@@ -57,6 +65,23 @@ const s = http.createServer((req, res) => {
     appendFileSync(journal, corps + '\\n');
     // « LENT:<ms> » dans un message : génération longue (aucun en-tête avant la fin, comme llama-server).
     const lent = /LENT:(\\d+)/.exec(corps);
+    if (JSON.parse(corps || '{}').stream) {
+      // Flux SSE : progression de la lecture tout de suite (en-têtes envoyés), puis le texte morceau par morceau.
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      const envoyer = j => res.write('data: ' + JSON.stringify(j) + '\\n\\n');
+      envoyer({ choices: [{ index: 0, delta: { role: 'assistant', content: null } }], prompt_progress: { total: 40, cache: 0, processed: 0, time_ms: 0 } });
+      const morceaux = ['{"ok"', ': ', 'true}'];
+      const pas = (lent ? Number(lent[1]) : 30) / (morceaux.length + 1);
+      let i = 0;
+      const suite = () => {
+        if (i < morceaux.length) { envoyer({ choices: [{ index: 0, delta: { content: morceaux[i++] } }] }); setTimeout(suite, pas); return; }
+        envoyer({ choices: [{ index: 0, finish_reason: 'stop', delta: {} }] });
+        envoyer({ choices: [], usage: { prompt_tokens: 40, completion_tokens: 5 }, timings: { predicted_per_second: 7.5, prompt_per_second: 60, cache_n: 0 } });
+        res.end('data: [DONE]\\n\\n');
+      };
+      setTimeout(suite, pas);
+      return;
+    }
     setTimeout(() => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: '{"ok": true}' } }], usage: { prompt_tokens: 12, completion_tokens: 5 }, timings: { predicted_per_second: 7.5, prompt_per_second: 60 } }));
@@ -83,7 +108,7 @@ function installationFactice() {
 }
 
 function gestionnaire(inst, options = {}) {
-  return creerGestionnaireIaLocale({ dossier: inst.c.dossier, binaire: inst.binaire, fichierModele: inst.fichierModele, threads: 2, contexte: 4096, inactiviteMs: 300, demarrageMs: 15_000, attenteVerrouMs: 300, journal: join(inst.racine, 'moteur.log'), log: silencieux, ...options });
+  return creerGestionnaireIaLocale({ dossier: inst.c.dossier, binaire: inst.binaire, fichierModele: inst.fichierModele, threads: 2, contexte: 4096, inactiviteMs: 300, demarrageMs: 15_000, attenteVerrouMs: 300, journal: join(inst.racine, 'moteur.log'), log: silencieux, pauseApresArretMs: 50, ...options });
 }
 
 /** Requête au faux serveur, comme le connecteur (clé dans l'en-tête). */
@@ -394,12 +419,13 @@ test('concurrence : moteur tué PENDANT une requête → code précis, signal jo
     while (!fond.etat().enMarche) await attendre(20);
     await attendre(200);
     process.kill(JSON.parse(readFileSync(inst.c.verrouServeur, 'utf8')).pid, 'SIGKILL');
-    await assert.rejects(requete, e => ['ia-locale-coupee', 'ia-locale-arretee'].includes(e.code));
+    // Le moteur est mort tué (SIGKILL) : message précis (mémoire du compte), pas un vague « coupé ».
+    await assert.rejects(requete, e => e.code === 'ia-locale-tuee' && e.cause === 'SIGKILL');
     await attendre(100);
     const texte = readFileSync(journal, 'utf8');
-    assert.match(texte, /requête échouée après \d+ s : ia-locale-(coupee|arretee) \(cause [A-Z]+\)/);
-    assert.match(texte, /arrêté de façon imprévue \(signal SIGKILL\)/);
-    assert.ok(['ia-locale-coupee', 'ia-locale-arretee', 'ia-locale-arret'].includes(app.etat().derniereErreur?.code), 'erreur du processus de fond visible dans l’Administration IA');
+    assert.match(texte, /requête échouée après \d+ s : ia-locale-tuee \(cause SIGKILL\)/);
+    assert.match(texte, /arrêté de façon imprévue \(signal SIGKILL : tué par le système, souvent la limite mémoire du compte \(LVE\)\) PENDANT une requête ; mémoire relevée juste avant : \d+,\d Go/);
+    assert.ok(['ia-locale-tuee', 'ia-locale-arret'].includes(app.etat().derniereErreur?.code), 'erreur du processus de fond visible dans l’Administration IA');
     assert.equal(existsSync(inst.c.verrouServeur), false);
     // Redémarrage réussi : l'erreur est effacée partout.
     assert.equal((await creerConnecteurLocal(fond, { fetch: fetchLocal }).discuter([])).texte, '{"ok": true}');
@@ -436,6 +462,209 @@ test('concurrence : moteur tué PENDANT une requête → code précis, signal jo
   }
 });
 
+// ------------------------------------------------------------------ Calcul en flux (SSE), arrêts du moteur
+
+/**
+ * Faux llama-server HTTP programmable (`scenario.mode`) :
+ *  - « ferme-inactif » : comme un serveur à délai d'écriture/lecture (`--timeout`) : une connexion SANS RIEN
+ *    ÉCRIT pendant `fermeApresMs` est coupée (socket détruite) ; en flux, la progression et les morceaux
+ *    gardent la connexion vivante et le calcul aboutit ;
+ *  - « coupe-flux » : envoie la progression et un morceau, puis coupe ;
+ *  - « erreur-flux » : événement d'erreur dans le flux ; « contexte » : HTTP 400 exceed_context_size_error ;
+ *  - « longueur » : fin « length » (limite de jetons) ; « muet » : en-têtes puis plus rien.
+ */
+async function moteurFlux(scenario) {
+  const requetes = [];
+  const s = http.createServer((req, res) => {
+    let corps = '';
+    req.on('data', d => (corps += d));
+    req.on('end', () => {
+      const j = JSON.parse(corps || '{}');
+      requetes.push(j);
+      const envoyer = x => res.write(`data: ${JSON.stringify(x)}\n\n`);
+      const { mode, fermeApresMs = 200, dureeMs = 600 } = scenario;
+      if (mode === 'contexte') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: { code: 400, message: 'request (9000 tokens) exceeds the available context size (8192 tokens), try increasing it', type: 'exceed_context_size_error' } }));
+        return;
+      }
+      if (!j.stream) {
+        // Sans flux : rien n'est écrit avant la fin du calcul → coupé par le délai du serveur.
+        const minuteur = setTimeout(() => req.socket.destroy(), fermeApresMs);
+        setTimeout(() => {
+          clearTimeout(minuteur);
+          if (req.socket.destroyed) return;
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' } }] }));
+        }, dureeMs);
+        return;
+      }
+      // Délai d'inactivité du serveur, réarmé à chaque écriture (en flux, il n'expire jamais pendant le calcul).
+      let inactif = null;
+      const ecrire = res.write.bind(res);
+      res.write = (...x) => {
+        clearTimeout(inactif);
+        if (mode === 'ferme-inactif') inactif = setTimeout(() => req.socket.destroy(), fermeApresMs);
+        return ecrire(...x);
+      };
+      res.on('finish', () => clearTimeout(inactif));
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      envoyer({ choices: [{ index: 0, delta: { role: 'assistant', content: null } }], prompt_progress: { total: 3000, cache: 1000, processed: 0, time_ms: 0 } });
+      if (mode === 'muet') return;
+      if (mode === 'erreur-flux') {
+        envoyer({ error: { code: 500, message: 'erreur interne', type: 'server_error' } });
+        res.end();
+        return;
+      }
+      if (mode === 'coupe-flux') {
+        envoyer({ choices: [{ index: 0, delta: { content: '{"ok"' } }] });
+        setTimeout(() => req.socket.destroy(), 50);
+        return;
+      }
+      // Calcul long : progression de la lecture puis écriture, un événement toutes les `dureeMs / 6` ms
+      // (toujours moins que `fermeApresMs` : la connexion n'est jamais inactive).
+      const pas = dureeMs / 6;
+      const etapes = [
+        () => envoyer({ choices: [{ index: 0, delta: { role: 'assistant', content: null } }], prompt_progress: { total: 3000, cache: 1000, processed: 1000, time_ms: 10 } }),
+        () => envoyer({ choices: [{ index: 0, delta: { role: 'assistant', content: null } }], prompt_progress: { total: 3000, cache: 1000, processed: 2000, time_ms: 20 } }),
+        () => envoyer({ choices: [{ index: 0, delta: { content: '{"ok"' } }] }),
+        () => res.write(':\n\n'),
+        () => envoyer({ choices: [{ index: 0, delta: { content: ': true}' } }] }),
+        () => {
+          envoyer({ choices: [{ index: 0, finish_reason: mode === 'longueur' ? 'length' : 'stop', delta: {} }] });
+          envoyer({ choices: [], usage: { prompt_tokens: 3000, completion_tokens: 4 }, timings: { predicted_per_second: 6.3, prompt_per_second: 41.5, cache_n: 1000 } });
+          res.end('data: [DONE]\n\n');
+        },
+      ];
+      let i = 0;
+      const suite = () => {
+        if (res.destroyed) return;
+        etapes[i++]();
+        if (i < etapes.length) setTimeout(suite, pas);
+      };
+      setTimeout(suite, pas);
+    });
+  });
+  await new Promise(ok => s.listen(0, '127.0.0.1', ok));
+  return { port: s.address().port, requetes, fermer: () => new Promise(ok => s.close(ok)) };
+}
+
+test('flux : un calcul plus long que le délai d’inactivité du moteur aboutit en flux (sans flux : ECONNRESET) ; progression, cache, mesures', async () => {
+  const scenario = { mode: 'ferme-inactif', fermeApresMs: 250, dureeMs: 900 };
+  const m = await moteurFlux(scenario);
+  try {
+    const incidents = [];
+    const g = gestionnaireFactice(m.port, incidents);
+    const schema = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] };
+    // Reproduction du symptôme : sans flux, le moteur coupe une connexion restée muette → ECONNRESET.
+    const sansFlux = await fetchLocal(`http://127.0.0.1:${m.port}/v1/chat/completions`, { method: 'POST', body: '{"stream":false}' }).catch(e => e);
+    assert.equal(causeEchec(sansFlux), 'ECONNRESET');
+    // En flux : la connexion vit pendant tout le calcul (progression, morceaux, signes de vie).
+    const suivi = [];
+    const r = await creerConnecteurLocal(g, { fetch: fetchLocal, jetonsMax: 900 }).discuter([{ role: 'user', content: 'x' }], { schema, maxJetons: 5000, progression: p => suivi.push(p) });
+    assert.equal(r.texte, '{"ok": true}');
+    assert.equal(r.vitesse, 6.3);
+    assert.equal(r.lecture, 41.5);
+    assert.equal(r.cache, 1000);
+    assert.deepEqual(r.jetons, { entree: 3000, sortie: 4 });
+    const corps = m.requetes.at(-1);
+    assert.equal(corps.stream, true);
+    assert.equal(corps.return_progress, true);
+    assert.equal(corps.cache_prompt, true);
+    assert.deepEqual(corps.stream_options, { include_usage: true });
+    assert.equal(corps.max_tokens, 900, 'jetons toujours bornés');
+    assert.deepEqual(corps.response_format, { type: 'json_schema', json_schema: { name: 'reponse', schema, strict: true } }, 'sortie contrainte aussi en flux');
+    assert.ok(suivi.some(p => p.lecture?.traites === 2000 && p.lecture.total === 3000 && p.lecture.cache === 1000), 'progression de la lecture');
+    assert.equal(suivi.at(-1).ecrits, 2, 'morceaux écrits comptés');
+    assert.equal(incidents.length, 0);
+    // Limite de jetons atteinte : réponse tronquée, dite comme telle.
+    scenario.mode = 'longueur';
+    await assert.rejects(creerConnecteurLocal(g, { fetch: fetchLocal }).discuter([]), e => e.code === 'ia-reponse-tronquee');
+    // Moteur qui coupe en plein flux : « coupé pendant le calcul » (cause notée).
+    scenario.mode = 'coupe-flux';
+    await assert.rejects(creerConnecteurLocal(g, { fetch: fetchLocal }).discuter([]), e => e.code === 'ia-locale-coupee' && e.cause === 'ECONNRESET');
+    assert.match(incidents.at(-1).texte, /ia-locale-coupee \(cause ECONNRESET\)/);
+    // Erreur annoncée dans le flux, et demande trop longue pour le contexte : messages précis, pas « injoignable ».
+    scenario.mode = 'erreur-flux';
+    await assert.rejects(creerConnecteurLocal(g, { fetch: fetchLocal }).discuter([]), e => e.code === 'ia-locale-refus' && /HTTP 200, server_error/.test(e.message));
+    scenario.mode = 'contexte';
+    await assert.rejects(creerConnecteurLocal(g, { fetch: fetchLocal }).discuter([]), e => e.code === 'ia-locale-contexte');
+    // Moteur muet (ni progression ni signe de vie) : abandon après le silence maximal, pas d'attente sans fin.
+    scenario.mode = 'muet';
+    await assert.rejects(creerConnecteurLocal(g, { fetch: fetchLocal, silenceMaxMs: 300 }).discuter([]), e => e.code === 'ia-locale-bloquee');
+  } finally {
+    await m.fermer();
+  }
+});
+
+test('installateur --test : essai de brouillon complet (même chemin que l’app : flux, étapes) avec la durée de chaque étape', async () => {
+  const m = await moteurFlux({ mode: 'normal', dureeMs: 60 });
+  try {
+    const lignes = [];
+    const b = await essaiBrouillon({ gestionnaire: gestionnaireFactice(m.port, []), modele: 'qwen2.5-7b', journal: l => lignes.push(l) });
+    assert.equal(b.etapes.length, 4);
+    assert.ok(Number.isFinite(b.dureeS));
+    assert.equal(b.reussi, false, 'le faux moteur ne rend pas un vrai profil');
+    assert.equal(m.requetes.length, 3, 'trois étapes (pages données : pas de recherche)');
+    assert.ok(m.requetes.every(r => r.stream === true));
+    assert.ok(m.requetes[0].messages[1].content.includes('Exemple Arena — règles compétitives'));
+    assert.match(lignes.join('\n'), /étape 2\/4 \(Formats, score et équipe\) : \d+ s/);
+  } finally {
+    await m.fermer();
+  }
+});
+
+test('flux : moteur TUÉ (SIGKILL) ou PLANTÉ pendant le calcul → messages distincts ; mort au chargement → second essai, puis message « mémoire »', async () => {
+  const inst = installationFactice();
+  const journal = join(inst.racine, 'moteur.log');
+  try {
+    const g = gestionnaire(inst, { inactiviteMs: 5000, role: 'travailleur', lireMemoire: () => ({ rssMo: 6042, picMo: 6300 }) });
+    const c = creerConnecteurLocal(g, { fetch: fetchLocal });
+    // Tué par le système (limite mémoire LVE) : SIGKILL.
+    let requete = c.discuter([{ role: 'user', content: 'LENT:5000' }]);
+    while (!g.etat().enMarche) await attendre(20);
+    await attendre(200);
+    process.kill(JSON.parse(readFileSync(inst.c.verrouServeur, 'utf8')).pid, 'SIGKILL');
+    await assert.rejects(requete, e => e.code === 'ia-locale-tuee' && /mémoire du compte/.test(e.message));
+    assert.match(readFileSync(journal, 'utf8'), /PENDANT une requête ; mémoire relevée juste avant : 5,9 Go \(pic 6,2 Go\)/);
+    // Planté (autre signal) : « arrêté brutalement », avec le signal.
+    requete = c.discuter([{ role: 'user', content: 'LENT:5000' }]);
+    while (!g.etat().enMarche) await attendre(20);
+    await attendre(200);
+    process.kill(JSON.parse(readFileSync(inst.c.verrouServeur, 'utf8')).pid, 'SIGABRT');
+    await assert.rejects(requete, e => e.code === 'ia-locale-plantage' && /\(SIGABRT ; voir/.test(e.message));
+    // Le brouillon suivant redémarre le moteur (après une courte pause) et aboutit.
+    assert.equal((await c.discuter([])).texte, '{"ok": true}');
+    await g.arreter();
+  } finally {
+    inst.nettoyer();
+  }
+  // Tué pendant le chargement une fois : second essai réussi (noté) ; toujours tué : message « mémoire », verrou libéré.
+  for (const [modele, attendu] of [['tue-une-fois.gguf', 'ok'], ['tue.gguf', 'ia-locale-demarrage-memoire']]) {
+    const i2 = installationFactice();
+    try {
+      const fichierModele = join(i2.c.modeles, modele);
+      writeFileSync(fichierModele, 'GGUF-factice');
+      const g = gestionnaire(i2, { fichierModele });
+      const r = await creerConnecteurLocal(g, { fetch: fetchLocal }).discuter([]).then(
+        x => x.texte,
+        e => e.code,
+      );
+      assert.equal(r === '{"ok": true}' ? 'ok' : r, attendu);
+      const texte = readFileSync(join(i2.racine, 'moteur.log'), 'utf8');
+      assert.match(texte, /pendant le chargement \(signal SIGKILL\)/);
+      assert.match(texte, /nouvel essai de démarrage/);
+      if (attendu !== 'ok') {
+        assert.equal(g.etat().derniereErreur.code, 'ia-locale-demarrage-memoire');
+        assert.equal(existsSync(i2.c.verrouServeur), false);
+      }
+      await g.arreter();
+    } finally {
+      i2.nettoyer();
+    }
+  }
+});
+
 test('processus de fond : verrou créé d’un coup avec son pid (jamais vide) ; un second processus renonce', () => {
   const inst = installationFactice();
   try {
@@ -462,7 +691,7 @@ function fauxLocal(repondre = () => ({ ok: true })) {
     appels.push({ url, corps });
     const r = await repondre(corps);
     if (r && r.statut) return new Response('{}', { status: r.statut });
-    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(r) } }], timings: { predicted_per_second: 5 } }), { status: 200 });
+    return new Response(JSON.stringify({ choices: [{ message: { content: r?.brut ?? JSON.stringify(r) } }], timings: { predicted_per_second: 5 } }), { status: 200 });
   };
   return {
     appels,
@@ -579,13 +808,90 @@ test('IA locale : brouillon avec consignes compactes et schéma ; adresses local
   const r = (await b.appel('/jeux/ia/brouillons', { methode: 'POST', jeton: f, corps: { nom: 'Exemple Arena' } })).corps;
   assert.equal(r.statut, 'pret', JSON.stringify(r.erreur));
   assert.deepEqual(demandees, ['https://wiki-exemple.fr/jeu'], 'seule l’adresse https publique est lue');
-  assert.match(loc.appels[1].corps.messages[0].content, /FAKE game/);
-  assert.equal(loc.appels[1].corps.response_format.json_schema.schema.required.includes('profil'), true);
+  assert.match(loc.appels[1].corps.messages[1].content, /PART 1 of 3[\s\S]*FAKE game/);
+  assert.equal(loc.appels[1].corps.response_format.json_schema.schema.required.includes('formats'), true);
+  assert.equal(loc.appels.length, 4, 'pages, puis trois étapes');
   // La garde SSRF n'a pas d'exception pour 127.0.0.1 (réservée au moteur géré, hors de recherche.mjs).
   assert.throws(() => verifierAdresseHttps('http://127.0.0.1:41235/v1/chat/completions'));
   assert.throws(() => verifierAdresseHttps('https://127.0.0.1:41235/v1/chat/completions'));
   await assert.rejects(recupererPage('https://127.0.0.1/', { telecharger }));
   assert.deepEqual(lireAdresses('{"urls": ["http://127.0.0.1:8080/", "https://[::1]/", "https://wiki-exemple.fr/a"]}'), ['https://wiki-exemple.fr/a']);
+});
+
+test('brouillon local EN ÉTAPES : début de message commun (cache), progression visible, étape illisible tolérée ; file d’attente et doublons', async () => {
+  const base = await baseMigree();
+  const horloge = { t: Date.parse('2026-10-20T10:00:00.000Z') };
+  const fondateur = { compte: 'principal', superAdmin: true };
+  const vus = [];
+  let app = null;
+  let travailId = null;
+  let illisible = false;
+  const loc = fauxLocal(async corps => {
+    const user = corps.messages[1]?.content ?? '';
+    if (/at most 3 https URLs/.test(corps.messages[0].content)) return { urls: ['https://wiki-exemple.fr/jeu'] };
+    vus.push({ systeme: corps.messages[0].content, user, schema: corps.response_format?.json_schema?.schema, max: corps.max_tokens });
+    if (/PART 1 of 3/.test(user)) return { nom: 'Exemple Arena', couleur: '#3366cc', formats: [{ cle: '5v5', nom: '5v5', equipes: 2, joueursParEquipe: 5, bo: [1, 3] }], score: { type: 'rounds', roundsGagnants: 13 }, roster: { titulaires: 5, remplacants: 2 }, rolesJoueurs: [{ cle: 'igl', nom: 'IGL' }], incertitudes: [] };
+    if (/PART 2 of 3/.test(user)) return { modes: [{ cle: 'classe', nom: 'Classé', formats: ['5v5'] }], cartes: [{ cle: 'port', nom: 'Port', actif: true, modes: ['classe'] }], incertitudes: [{ chemin: 'cartes.port', confiance: 'moyenne', note: 'À confirmer.' }] };
+    // Pendant la dernière étape, la liste montre la progression du brouillon en cours.
+    const enCours = (await app.travaux(fondateur, { genre: 'brouillon' })).travaux.find(t => t.id === travailId);
+    vus.at(-1).progression = enCours?.progression;
+    if (illisible) return { brut: 'pas du JSON' };
+    return { classes: [{ cle: 'attaquant', nom: 'Attaquant' }], personnages: [{ cle: 'nova', nom: 'Nova', classe: 'attaquant' }], incertitudes: [] };
+  });
+  const telecharger = async () => ({ statut: 200, type: 'text/html', location: null, corps: '<title>Wiki</title><p>Exemple Arena : 5v5, carte Port, héros Nova.</p>' });
+  const ia = { config: configIa({ IA_FOURNISSEUR: 'local' }), telecharger, local: loc.local };
+  app = servicesJeux({ base, maintenant: () => horloge.t, socle: {}, ia, travauxIa: 'fond', journal: silencieux });
+  const fond = servicesJeux({ base, maintenant: () => horloge.t, socle: {}, ia, travauxIa: 'synchrone', journal: silencieux });
+  // Deux brouillons de jeux différents : le second attend son tour (file), il n'échoue pas.
+  const a = await app.lancerBrouillon(fondateur, { nom: 'Exemple Arena' });
+  horloge.t += 1000;
+  const b = await app.lancerBrouillon(fondateur, { nom: 'Autre Jeu' });
+  assert.equal(b.statut, 'attente');
+  // Le même jeu une seconde fois (même nom, écrit autrement) : refusé tant que le premier n'est pas fini.
+  await assert.rejects(app.lancerBrouillon(fondateur, { nom: 'exemple  ARENA' }), e => e.code === 'brouillon-en-cours' && e.statut === 409);
+  let liste = (await app.travaux(fondateur, { genre: 'brouillon' })).travaux;
+  assert.equal(liste.find(t => t.id === a.id).placeFile, 1);
+  assert.equal(liste.find(t => t.id === b.id).placeFile, 2);
+  // Le processus de fond les fait UN PAR UN.
+  travailId = a.id;
+  await fond.executerTravail(a.id);
+  const pret = await app.travail(fondateur, a.id);
+  assert.equal(pret.statut, 'pret', JSON.stringify(pret.erreur));
+  assert.equal(vus.length, 3, 'trois étapes');
+  // Même consigne système et même début de message (jeu, pages) à chaque étape : le moteur ne le relit pas.
+  assert.ok(vus.every(v => v.systeme === vus[0].systeme));
+  const debut = vus[0].user.slice(0, vus[0].user.indexOf('PART 1'));
+  assert.ok(debut.includes('<page n="1"'));
+  assert.ok(vus.every(v => v.user.startsWith(debut)));
+  assert.match(vus[1].user, /known formats: 5v5/);
+  assert.deepEqual(vus.map(v => v.schema.required[0]), ['nom', 'modes', 'classes']);
+  assert.ok(vus.every(v => v.max <= 1600), 'écriture bornée par étape');
+  assert.equal(vus[2].progression.etape, 4);
+  assert.equal(vus[2].progression.etapes, 4);
+  assert.equal(vus[2].progression.cle, 'personnages');
+  assert.equal(vus[2].progression.depuis, new Date(horloge.t).toISOString());
+  // Brouillon assemblé et validé comme avant.
+  const d = pret.resultat.donnees;
+  assert.equal(pret.resultat.nom, 'Exemple Arena');
+  assert.deepEqual([d.formats.length, d.modes.length, d.cartes.length, d.personnages.length, d.classes.length], [1, 1, 1, 1, 1]);
+  assert.equal(pret.incertitudes[0].chemin, 'cartes.port');
+  assert.equal(pret.progression, null);
+  // Le second : relancer le même jeu est de nouveau possible une fois le premier prêt ; dernière étape illisible → partie vide signalée.
+  liste = (await app.travaux(fondateur, { genre: 'brouillon' })).travaux;
+  assert.equal(liste.find(t => t.id === b.id).placeFile, 1);
+  illisible = true;
+  travailId = b.id;
+  await fond.executerTravail(b.id);
+  const second = await app.travail(fondateur, b.id);
+  assert.equal(second.statut, 'pret');
+  assert.deepEqual(second.resultat.donnees.personnages, []);
+  assert.ok(second.avertissements.some(x => x.chemin === 'personnages' && x.raison === 'etape-illisible'));
+  const c = await app.lancerBrouillon(fondateur, { nom: 'Exemple Arena' });
+  assert.equal(c.statut, 'attente');
+  // Un brouillon « en cours » resté muet (processus arrêté) ne bloque plus le même jeu.
+  await base.executer("UPDATE ia_travaux SET statut = 'en_cours', maj_le = ? WHERE id = ?", [new Date(horloge.t - 20 * 60_000).toISOString(), c.id]);
+  assert.equal((await app.lancerBrouillon(fondateur, { nom: 'Exemple Arena' })).statut, 'attente');
+  await base.fermer?.();
 });
 
 test('IA locale : travaux confiés au PROCESSUS DE FOND (pas à l’app Passenger) ; le cron le relance ; exécution par le processus', async () => {
@@ -707,6 +1013,10 @@ test('installateur : options, liste figée des paquets (SHA-256), recommandation
   assert.equal(recommandation({ jetonsParSeconde: 10, lectureParSeconde: 80, modele: 'qwen2.5-7b' }).niveau, 'bon');
   assert.match(recommandation({ jetonsParSeconde: 4, lectureParSeconde: 40, modele: 'qwen2.5-7b' }).texte, /--petit/);
   assert.equal(recommandation({ jetonsParSeconde: 1, lectureParSeconde: 10, modele: 'qwen3-4b' }).niveau, 'lent');
+  // Durée mesurée par l'essai de brouillon : c'est elle qui est annoncée.
+  assert.match(recommandation({ jetonsParSeconde: 6.3, lectureParSeconde: 40, modele: 'qwen2.5-7b', brouillonS: 420 }).texte, /environ 7 min/);
+  // Pages de l'essai : la taille de deux vraies pages après nettoyage (≈ 5 000 caractères chacune au plus).
+  for (const html of Object.values(pagesEssai())) assert.ok(htmlEnTexte(html).length > 2500);
   // Faux serveur de fichiers : coupure au milieu, reprise par Range, SHA-256 vérifié.
   const racine = mkdtempSync(join(tmpdir(), 'esport-ia-dl-'));
   try {

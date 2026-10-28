@@ -597,7 +597,13 @@
   "Annonce désactivée pour ce compte": "Announcement disabled for this account",
   "Salon Discord changé depuis l’annonce : message non modifiable": "Discord channel changed since the announcement: message cannot be edited",
   "Annonce supprimée dans Discord : rien à modifier": "Announcement deleted in Discord: nothing to edit",
-  "L’IA locale ne répond plus : son moteur s’est arrêté (voir ~/logs/esport-ia-locale.log).": "The local AI no longer responds: its engine stopped (see ~/logs/esport-ia-locale.log)."
+  "L’IA locale ne répond plus : son moteur s’est arrêté (voir ~/logs/esport-ia-locale.log).": "The local AI no longer responds: its engine stopped (see ~/logs/esport-ia-locale.log).",
+  "La demande dépasse la mémoire de travail (contexte) de l’IA locale : moins de pages de référence, ou IA_LOCALE_CONTEXTE plus grand.": "The request exceeds the local AI’s working memory (context): fewer reference pages, or a larger IA_LOCALE_CONTEXTE.",
+  "L’IA locale ne donne plus signe de vie : calcul abandonné (voir ~/logs/esport-ia-locale.log).": "The local AI stopped showing signs of life: computation abandoned (see ~/logs/esport-ia-locale.log).",
+  "Réponse de l’IA locale incomplète (limite de jetons atteinte) : relancez, ou augmentez IA_LOCALE_JETONS_MAX.": "Incomplete local AI answer (token limit reached): try again, or raise IA_LOCALE_JETONS_MAX.",
+  "Le système a arrêté le moteur d’IA locale pendant le calcul (SIGKILL) : mémoire du compte probablement dépassée (voir ~/logs/esport-ia-locale.log).": "The system stopped the local AI engine during the computation (SIGKILL): the account’s memory limit was probably exceeded (see ~/logs/esport-ia-locale.log).",
+  "L’IA locale n’a pas pu démarrer : le système a arrêté son moteur pendant le chargement (mémoire du compte probablement insuffisante ; voir ~/logs/esport-ia-locale.log).": "The local AI could not start: the system stopped its engine while loading (probably not enough memory for the account; see ~/logs/esport-ia-locale.log).",
+  "Un brouillon de ce jeu est déjà en préparation : attendez qu’il soit prêt (ou abandonnez-le).": "A draft of this game is already being prepared: wait until it is ready (or abandon it)."
  },
  "motifs": [
   [
@@ -899,6 +905,14 @@
   [
    "^Le moteur d’IA locale a coupé la connexion pendant le calcul \\((.+) ; voir ~/logs/esport-ia-locale\\.log\\)\\.$",
    "The local AI engine closed the connection during the computation ($1; see ~/logs/esport-ia-locale.log)."
+  ],
+  [
+   "^Le moteur d’IA locale a refusé la requête \\((.+) ; voir ~/logs/esport-ia-locale\\.log\\)\\.$",
+   "The local AI engine refused the request ($1; see ~/logs/esport-ia-locale.log)."
+  ],
+  [
+   "^Le moteur d’IA locale s’est arrêté brutalement pendant le calcul \\((.+) ; voir ~/logs/esport-ia-locale\\.log\\)\\.$",
+   "The local AI engine stopped abruptly during the computation ($1; see ~/logs/esport-ia-locale.log)."
   ]
  ]
 }

@@ -41,11 +41,29 @@ export function verifierAdresseHttps(brut) {
   return url;
 }
 
-/** HTML → texte brut lisible (titres et paragraphes sur leur ligne), sans scripts, styles ni balises. */
+/**
+ * Contenu PRINCIPAL d'une page (`<main>`, sinon `<article>`), s'il est assez long : sans l'en-tête, les menus
+ * ni le pied de page du site. Sinon la page entière.
+ */
+function contenuPrincipal(html) {
+  for (const balise of ['main', 'article']) {
+    const debut = new RegExp(`<${balise}\\b[^>]*>`, 'i').exec(html);
+    if (!debut) continue;
+    const fin = html.toLowerCase().lastIndexOf(`</${balise}`);
+    const interieur = fin > debut.index ? html.slice(debut.index + debut[0].length, fin) : html.slice(debut.index + debut[0].length);
+    if (interieur.replace(/<[^>]*>/g, '').trim().length >= 500) return interieur;
+  }
+  return html;
+}
+
+/**
+ * HTML → texte brut lisible (titres et paragraphes sur leur ligne), sans scripts, styles ni balises, et sans ce
+ * qui n'est pas du contenu (menus, pieds de page, encadrés, formulaires) : chaque caractère lu coûte du temps
+ * de calcul à l'IA locale. Lignes répétées (menus recopiés) gardées une fois.
+ */
 export function htmlEnTexte(html, max = CARACTERES_MAX_PAGE) {
-  const t = String(html ?? '')
-    .replace(/<!--[\s\S]*?-->/g, ' ')
-    .replace(/<(script|style|noscript|svg|template|iframe|object|head)\b[\s\S]*?<\/\1\s*>/gi, ' ')
+  const t = contenuPrincipal(String(html ?? '').replace(/<!--[\s\S]*?-->/g, ' '))
+    .replace(/<(script|style|noscript|svg|template|iframe|object|head|nav|footer|aside|form|button|select)\b[\s\S]*?<\/\1\s*>/gi, ' ')
     .replace(/<(br|\/p|\/div|\/li|\/tr|\/h[1-6]|\/section|\/table|\/ul|\/ol)\b[^>]*>/gi, '\n')
     .replace(/<(td|th)\b[^>]*>/gi, ' | ')
     .replace(/<[^>]*>/g, ' ');
@@ -55,6 +73,14 @@ export function htmlEnTexte(html, max = CARACTERES_MAX_PAGE) {
     .replace(/[ \t ]+/g, ' ')
     .replace(/ *\n[ \n]*/g, '\n')
     .trim()
+    .split('\n')
+    .filter(
+      (
+        vues => l =>
+          l.length > 40 || (!vues.has(l) && vues.add(l))
+      )(new Set()),
+    )
+    .join('\n')
     .slice(0, max);
 }
 

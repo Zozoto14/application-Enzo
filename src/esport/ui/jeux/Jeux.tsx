@@ -22,7 +22,7 @@ import { ErreurEsport, type ClientEsport, type CompteEsport } from '../../client
 import { dateCourte } from '../../libelles';
 import { apiJeux, type ApiJeux, type EtatIa, type Gestionnaire, type JeuListe, type ListeJeux, type ProfilJeu, type PropositionJeu, type TravailIa, type VersionJeu, type ModeIa } from '../../jeux/api';
 import { donneesVides, hote, oublierProfilsTeams } from '../../jeux/profil';
-import { trJeux, trnJeux } from '../../i18n/jeux';
+import { trJeux, trnJeux, type CleJeux } from '../../i18n/jeux';
 import { PageEsport } from '../CadreEsport';
 import { BoutonConfirme, Choix, Retours, styles, useAgir } from '../commun';
 import { Badge, Carte, ESP, EnTetePage, EtatVide, Grille, MenuActions, Onglets, SqueletteCartes, TitreCarte, attenue, texte } from '../design';
@@ -375,6 +375,17 @@ function minutesDepuis(iso: string | null | undefined): number {
   return Number.isFinite(t) ? Math.max(0, Math.floor((Date.now() - t) / 60_000)) : 0;
 }
 
+/** Progression d'un brouillon en cours : « Étape 3/4 : modes et cartes · lecture des pages 45 % ». */
+function texteProgression(p: NonNullable<TravailIa['progression']>): string {
+  const cle = `jeux.etape_nom.${p.cle ?? ''}` as CleJeux;
+  const nom = p.cle && trJeux(cle) !== cle ? trJeux(cle) : p.libelle;
+  const morceaux = [trJeux('jeux.etape', { n: p.etape, total: p.etapes, libelle: nom })];
+  const l = p.lecture;
+  if (l && l.total > 0 && !p.ecrits) morceaux.push(trJeux('jeux.etape_lecture', { pct: Math.min(100, Math.round((100 * (l.traites + l.cache)) / l.total)) }));
+  if (p.ecrits) morceaux.push(trnJeux('jeux.etape_ecriture', p.ecrits));
+  return morceaux.join(' · ');
+}
+
 function AssistantIa({ theme, api, large, liste, onRelire }: { theme: ThemeHub; api: ApiJeux; large: boolean; liste: ListeJeux | undefined; onRelire(id: string): void }) {
   const [nom, setNom] = useState('');
   const [urls, setUrls] = useState('');
@@ -442,7 +453,9 @@ function AssistantIa({ theme, api, large, liste, onRelire }: { theme: ThemeHub; 
               <Badge theme={theme} texte={trJeux(`jeux.statut.${t.statut}`)} ton={t.statut === 'pret' ? 'accent' : t.statut === 'echec' ? 'critique' : t.statut === 'valide' ? 'ok' : 'neutre'} />
             </View>
             <Text style={attenue(theme, 12)}>{`${dateCourte(t.creeLe)}${t.demandePar?.pseudo ? ` · ${t.demandePar.pseudo}` : ''}`}</Text>
-            {t.statut === 'en_cours' ? <Text style={attenue(theme, 12)} testID={`esport-jeux-brouillon-${t.id}-depuis`}>{trnJeux('jeux.en_cours_depuis', minutesDepuis(t.majLe))}</Text> : null}
+            {t.statut === 'en_cours' ? <Text style={attenue(theme, 12)} testID={`esport-jeux-brouillon-${t.id}-depuis`}>{trnJeux('jeux.en_cours_depuis', minutesDepuis(t.progression?.depuis ?? t.majLe))}</Text> : null}
+            {t.statut === 'en_cours' && t.progression ? <Text style={attenue(theme, 12)} testID={`esport-jeux-brouillon-${t.id}-etape`}>{texteProgression(t.progression)}</Text> : null}
+            {t.statut === 'attente' && t.placeFile ? <Text style={attenue(theme, 12)} testID={`esport-jeux-brouillon-${t.id}-file`}>{trJeux('jeux.place_file', { n: t.placeFile })}</Text> : null}
             {t.erreur ? <Text style={{ color: theme.critique, fontSize: 12 }}>{t.erreur.message}</Text> : null}
             {t.statut === 'pret' ? <BoutonHub theme={theme} titre={trJeux('jeux.relire')} variante="plein" onPress={() => onRelire(t.id)} testID={`esport-jeux-brouillon-${t.id}-relire`} /> : null}
           </View>

@@ -14,7 +14,8 @@
  *     depuis Hugging Face, à une révision précise (commit) : reprise du téléchargement, SHA-256 comparé à
  *     l'empreinte publiée par Hugging Face pour ce fichier ;
  *  4. écrit pret.json (moteur, modèle, empreintes) ; --test : banc d'essai (chargement, jetons/s, mémoire,
- *     JSON en anglais et en français) avec un résumé et une recommandation ;
+ *     JSON en anglais et en français, puis un ESSAI DE BROUILLON complet, en étapes comme dans l'app, sur un
+ *     jeu fictif avec deux pages fictives : durée réelle d'un brouillon) avec un résumé et une recommandation ;
  *  5. affiche les lignes à mettre dans ~/.appdashboard/esport.env.
  *
  * Options : --petit | --modele qwen2.5-7b|qwen3-4b, --dossier <chemin absolu>, --threads N, --test,
@@ -30,9 +31,11 @@ import { dirname, join, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { configIaLocale } from '../../noyau/ia/connecteur.mjs';
+import { configIaLocale, creerConnecteurLocal } from '../../noyau/ia/connecteur.mjs';
+import { preparerBrouillon } from '../../noyau/ia/assistant.mjs';
 import { chargerEnv, fichierEnvParDefaut } from '../commun.mjs';
 import { creerGestionnaireIaLocale, environnementMoteur } from './gestionnaire.mjs';
+import { fetchLocal } from './transport.mjs';
 import { FICHIER_OUTILS, LLAMA_CPP, MICROMAMBA, MODELES_IA_LOCALE, MODELE_IA_LOCALE_DEFAUT, MODELE_IA_LOCALE_PETIT, cheminsIaLocale, dossierIaLocaleParDefaut, dossierRefuse, lireJson } from './installation.mjs';
 
 const DEPOT = fileURLToPath(new URL('../../..', import.meta.url));
@@ -355,10 +358,62 @@ function memoireMaxGo(pid) {
   }
 }
 
-/** Recommandation en français d'après la vitesse de génération (jetons/s) et le traitement du texte lu. */
-export function recommandation({ jetonsParSeconde, lectureParSeconde, modele }) {
-  // Un brouillon : environ 4 000 jetons lus (pages, consignes) et 1 500 écrits.
-  const minutes = (4000 / Math.max(1, lectureParSeconde || jetonsParSeconde * 8) + 1500 / Math.max(0.1, jetonsParSeconde)) / 60;
+/**
+ * Pages FICTIVES de l'essai de brouillon (≈ 2 × 5 000 caractères, comme deux vraies pages de wiki après
+ * nettoyage) : la taille de ce que l'app envoie vraiment au moteur.
+ */
+export function pagesEssai() {
+  const cartes = ['Port', 'Citadelle', 'Désert rouge', 'Station orbitale', 'Marché couvert', 'Barrage', 'Village perché', 'Raffinerie'];
+  const heros = ['Nova', 'Brasier', 'Écho', 'Sentinelle', 'Corbeau', 'Myriade', 'Givre', 'Tempête', 'Ancre', 'Lynx', 'Orbe', 'Vipère'];
+  const regles = `Exemple Arena est un jeu de tir tactique en équipe. Les matchs compétitifs opposent deux équipes de cinq joueurs. Une partie se joue en 13 manches gagnantes, avec changement de camp après 12 manches et prolongations en cas d'égalité à 12-12. Les tournois se jouent en BO1 pour les phases de groupes et en BO3 ou BO5 pour les phases finales. Chaque équipe peut inscrire deux remplaçants. `;
+  const page1 = `<main><h1>Exemple Arena — règles compétitives</h1>${Array.from({ length: 6 }, () => `<p>${regles}</p>`).join('')}<h2>Modes de jeu</h2><ul><li>Classé : le mode compétitif, en 5v5.</li><li>Non classé : mêmes règles, sans enjeu.</li><li>Combat à mort : entraînement libre, chacun pour soi.</li><li>Escarmouche : 2v2 sur des cartes réduites.</li></ul><h2>Cartes</h2><ul>${cartes.map((c, i) => `<li>${c} : ${i < 7 ? 'dans le pool compétitif actuel' : 'retirée du pool compétitif à la saison 4'}, jouable en Classé et Non classé.</li>`).join('')}</ul></main>`;
+  const page2 = `<main><h1>Exemple Arena — héros</h1><p>Les héros se répartissent en quatre classes : Attaquant, Contrôleur, Sentinelle et Initiateur.</p>${heros.map((h, i) => `<h3>${h}</h3><p>${h} est un héros de la classe ${['Attaquant', 'Contrôleur', 'Sentinelle', 'Initiateur'][i % 4]}. Ses capacités lui permettent de ${['prendre un site', 'bloquer la vision', 'tenir une zone', 'révéler les ennemis'][i % 4]} ; il a été ajouté à la saison ${1 + (i % 5)}. Il est apprécié en compétition pour sa polyvalence et sa capacité à soutenir son équipe pendant les manches décisives.</p>`).join('')}</main>`;
+  return { 'https://wiki.exemple.fr/exemple-arena/regles': page1, 'https://wiki.exemple.fr/exemple-arena/heros': page2 };
+}
+
+/**
+ * Essai de BROUILLON (--test) : le même chemin que l'app (connecteur local en flux, étapes, consignes
+ * compactes, schémas), sur un jeu fictif et deux pages fictives. Rend { reussi, dureeS, etapes: [{ n, dureeS }] }.
+ */
+export async function essaiBrouillon({ gestionnaire, modele, jetonsMax = 4096, journal = info, maintenant = () => Date.now() }) {
+  const pages = pagesEssai();
+  const connecteur = creerConnecteurLocal(gestionnaire, { modele, jetonsMax, fetch: fetchLocal });
+  const debut = maintenant();
+  const etapes = [];
+  let courante = null;
+  const etape = e => {
+    if (courante?.n === e.n) return;
+    const t = maintenant();
+    if (courante) {
+      etapes.push({ n: courante.n, libelle: courante.libelle, dureeS: (t - courante.t) / 1000 });
+      journal(`étape ${courante.n}/${e.total} (${courante.libelle}) : ${((t - courante.t) / 1000).toFixed(0)} s`);
+    }
+    courante = { n: e.n, libelle: e.libelle, t };
+  };
+  const r = await preparerBrouillon(
+    { nom: 'Exemple Arena', urls: Object.keys(pages) },
+    {
+      appeler: (genre, messages, options) => connecteur.discuter(messages, options),
+      telecharger: async url => ({ statut: 200, type: 'text/html', location: null, corps: pages[url] ?? '' }),
+      compact: true,
+      etape,
+      maintenant,
+    },
+  );
+  const fin = maintenant();
+  if (courante) {
+    etapes.push({ n: courante.n, libelle: courante.libelle, dureeS: (fin - courante.t) / 1000 });
+    journal(`étape ${courante.n} (${courante.libelle}) : ${((fin - courante.t) / 1000).toFixed(0)} s`);
+  }
+  const d = r.brouillon.donnees;
+  const reussi = d.formats.length > 0 && d.cartes.length > 0 && d.personnages.length > 0;
+  return { reussi, dureeS: (fin - debut) / 1000, etapes, contenu: { formats: d.formats.length, modes: d.modes.length, cartes: d.cartes.length, personnages: d.personnages.length } };
+}
+
+/** Recommandation en français d'après la vitesse de génération (jetons/s), le traitement du texte lu et, s'il a eu lieu, l'essai de brouillon. */
+export function recommandation({ jetonsParSeconde, lectureParSeconde, modele, brouillonS = null }) {
+  // Un brouillon : environ 3 500 jetons lus (pages, consignes ; relus une seule fois) et 1 500 écrits en trois étapes.
+  const minutes = Number.isFinite(brouillonS) && brouillonS > 0 ? brouillonS / 60 : (3500 / Math.max(1, lectureParSeconde || jetonsParSeconde * 8) + 1500 / Math.max(0.1, jetonsParSeconde)) / 60;
   const duree = `un brouillon de profil prendra environ ${Math.max(1, Math.round(minutes))} min`;
   if (jetonsParSeconde >= 8) return { niveau: 'bon', texte: `Vitesse très correcte : ${duree}. Mode conseillé : « IA locale » (ou « Locale d’abord, API en secours »).` };
   if (jetonsParSeconde >= 3) return { niveau: 'moyen', texte: `Vitesse correcte mais lente : ${duree}. Mode conseillé : « Locale d’abord, API en secours » si vous avez une clé d’API.${modele !== MODELE_IA_LOCALE_PETIT ? ' Pour aller deux fois plus vite : relancez avec --petit.' : ''}` };
@@ -369,6 +424,7 @@ async function bancEssai({ c, binaire, fichierModele, threads, modele }) {
   const g = creerGestionnaireIaLocale({ dossier: c.dossier, binaire, fichierModele, threads, contexte: 8192, inactiviteMs: 60_000, demarrageMs: 600_000, delaiMs: 15 * 60_000, attenteVerrouMs: 30_000, log: { log: () => undefined, warn: info, error: info } });
   const resultats = [];
   let memoire = null;
+  let brouillon = null;
   const debut = Date.now();
   try {
     await g.executer(async ({ port, cle }) => {
@@ -399,6 +455,19 @@ async function bancEssai({ c, binaire, fichierModele, threads, modele }) {
       memoire = pid ? memoireMaxGo(pid) : null;
       return { chargementS };
     }, { delai: 30 * 60_000 }).then(x => resultats.push({ chargementS: x.chargementS }));
+    // Essai de brouillon complet (moteur déjà chargé) : la durée qu'aura un vrai brouillon dans l'app.
+    titre('Essai de brouillon (jeu fictif, 2 pages, en étapes comme dans l’app : plusieurs minutes)');
+    const pid = lireJson(c.verrouServeur)?.pid;
+    try {
+      const b = await essaiBrouillon({ gestionnaire: g, modele });
+      brouillon = b;
+      (b.reussi ? ok : info)(`essai de brouillon ${b.reussi ? 'réussi' : 'INCOMPLET'} en ${Math.floor(b.dureeS / 60)} min ${Math.round(b.dureeS % 60)} s (${b.contenu.formats} format(s), ${b.contenu.modes} mode(s), ${b.contenu.cartes} carte(s), ${b.contenu.personnages} personnage(s))`);
+    } catch (e) {
+      brouillon = { reussi: false, dureeS: null, erreur: e?.code ?? 'erreur' };
+      info(`essai de brouillon : ÉCHEC (${e?.message ?? e})`);
+    }
+    const m = pid ? memoireMaxGo(pid) : null;
+    if (m !== null && (memoire === null || m > memoire)) memoire = m;
   } finally {
     await g.arreter();
   }
@@ -406,7 +475,17 @@ async function bancEssai({ c, binaire, fichierModele, threads, modele }) {
   const essais = resultats.filter(r => 'reussi' in r);
   const jetonsParSeconde = Math.round((essais.reduce((s, r) => s + r.jetonsParSeconde, 0) / Math.max(1, essais.length)) * 10) / 10;
   const lectureParSeconde = Math.round((essais.reduce((s, r) => s + r.lectureParSeconde, 0) / Math.max(1, essais.length)) * 10) / 10;
-  return { le: new Date().toISOString(), threads, chargementS, jetonsParSeconde, lectureParSeconde, memoireGo: memoire === null ? null : Math.round(memoire * 10) / 10, essaisReussis: essais.filter(r => r.reussi).length, essais: essais.length };
+  return {
+    le: new Date().toISOString(),
+    threads,
+    chargementS,
+    jetonsParSeconde,
+    lectureParSeconde,
+    memoireGo: memoire === null ? null : Math.round(memoire * 10) / 10,
+    essaisReussis: essais.filter(r => r.reussi).length + (brouillon?.reussi ? 1 : 0),
+    essais: essais.length + (brouillon ? 1 : 0),
+    brouillonS: Number.isFinite(brouillon?.dureeS) ? Math.round(brouillon.dureeS) : null,
+  };
 }
 
 // ------------------------------------------------------------------ Programme
@@ -415,7 +494,8 @@ const AIDE = `Installation de l'IA locale (llama.cpp + modèle GGUF) dans ~/.app
   --petit                 modèle plus petit et plus rapide (${MODELES_IA_LOCALE[MODELE_IA_LOCALE_PETIT].nom})
   --modele <nom>          ${Object.keys(MODELES_IA_LOCALE).join(' ou ')} (défaut : IA_LOCALE_MODELE, sinon ${MODELE_IA_LOCALE_DEFAUT})
   --threads N             fils de calcul (défaut : IA_LOCALE_THREADS, sinon 8)
-  --test                  banc d'essai : chargement, jetons/s, mémoire, JSON anglais et français, recommandation
+  --test                  banc d'essai : chargement, jetons/s, mémoire, JSON anglais et français, essai de
+                          brouillon complet (plusieurs minutes, durée affichée), recommandation
   --dry-run               montre ce qui serait fait, sans rien télécharger ni écrire
   --forcer                refait tout (moteur et modèle)
   --dossier <chemin>      autre dossier (absolu, hors public_html et hors du dépôt)
@@ -537,6 +617,7 @@ export async function principal(argv = process.argv.slice(2)) {
     writeFileSync(c.pret, `${JSON.stringify(pret, null, 2)}\n`, { mode: 0o600 });
     console.log('\nRésumé du banc d’essai :');
     info(`chargement du modèle : ${b.chargementS === null ? '?' : `${b.chargementS.toFixed(0)} s`} ; génération : ${b.jetonsParSeconde} jetons/s ; lecture : ${b.lectureParSeconde} jetons/s`);
+    info(`essai de brouillon complet : ${b.brouillonS === null ? 'échec (voir ci-dessus et ~/logs/esport-ia-locale.log)' : `${Math.floor(b.brouillonS / 60)} min ${b.brouillonS % 60} s`}`);
     info(`mémoire du moteur (pic) : ${b.memoireGo === null ? 'inconnue' : `${b.memoireGo} Go`} ; essais JSON réussis : ${b.essaisReussis}/${b.essais} (${threads} fils)`);
     info(reco.texte);
     if (b.essaisReussis < b.essais) info('Un essai a échoué : l’app le signalera aussi ; relancez --test, ou --forcer si le modèle semble abîmé.');

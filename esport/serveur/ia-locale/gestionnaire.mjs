@@ -29,6 +29,8 @@ import { echec } from '../../noyau/outils.mjs';
 import { cheminsIaLocale, journalIaLocaleParDefaut, lireJson } from './installation.mjs';
 
 export const BATTEMENT_MS = 30_000;
+/** Relevé de la mémoire du moteur (diagnostic d'un arrêt par la limite mémoire du compte). */
+export const RELEVE_MEMOIRE_MS = 5000;
 export const VERROU_PERIME_MS = 3 * 60_000;
 const TAILLE_MAX_JOURNAL = 5 * 1024 * 1024;
 
@@ -53,6 +55,22 @@ export function ligneDeCommande(pid) {
     return [];
   }
 }
+
+/** Mémoire d'un processus (Linux, /proc) en Mo : { rssMo, picMo }, ou null si illisible. */
+export function memoireProcessus(pid) {
+  try {
+    const t = readFileSync(`/proc/${pid}/status`, 'utf8');
+    const ko = nom => Number(new RegExp(`^${nom}:\\s+(\\d+)\\s+kB`, 'm').exec(t)?.[1]);
+    const rss = ko('VmRSS');
+    const pic = ko('VmHWM');
+    if (!Number.isFinite(rss)) return null;
+    return { rssMo: Math.round(rss / 1024), picMo: Number.isFinite(pic) ? Math.round(pic / 1024) : null };
+  } catch {
+    return null;
+  }
+}
+
+const enGo = mo => `${(mo / 1024).toFixed(1).replace('.', ',')} Go`;
 
 /** Est-ce NOTRE serveur d'inférence (lancé avec notre fichier de clé) ? Jamais un autre processus. */
 export function estNotreServeur(pid, fichierCle, lire = ligneDeCommande) {
@@ -217,7 +235,7 @@ export function creerGestionnaireIaLocale({
   binaire,
   fichierModele,
   threads = 8,
-  contexte = 16_384,
+  contexte = 8192,
   inactiviteMs = 5 * 60_000,
   demarrageMs = 300_000,
   delaiMs = 20 * 60_000,
@@ -232,6 +250,8 @@ export function creerGestionnaireIaLocale({
   lire = ligneDeCommande,
   log = console,
   role = null,
+  lireMemoire = memoireProcessus,
+  pauseApresArretMs = 5000,
 } = {}) {
   const c = cheminsIaLocale(dossier);
   const jeton = randomBytes(8).toString('hex');
@@ -244,6 +264,11 @@ export function creerGestionnaireIaLocale({
   let dernierUsage = null;
   let dernierDemarrageMs = null;
   let derniereErreur = null;
+  // Dernière sortie du moteur (pid, code, signal, imprévue ou non) et attentes de `attendreSortie`.
+  let derniereSortie = null;
+  const attentesSortie = new Set();
+  let memoire = null; // dernier relevé { rssMo, picMo }
+  let releveMemoire = null;
 
   const iso = t => new Date(t).toISOString();
   const noter = texte => noterIaLocale(journal, texte, role);
@@ -375,16 +400,27 @@ export function creerGestionnaireIaLocale({
       enfant.on('exit', (code, signal) => {
         fini.termine = true;
         fini.code = code ?? signal;
-        if (serveur?.enfant === enfant) {
+        fini.signal = signal ?? null;
+        const imprevue = serveur?.enfant === enfant;
+        const mem = memoire;
+        derniereSortie = { pid: enfant.pid, code: code ?? null, signal: signal ?? null, imprevue, le: maintenant() };
+        clearInterval(releveMemoire);
+        if (imprevue) {
           serveur = null;
           enMarche.delete(moi);
           clearInterval(battement);
           clearTimeout(minuteurRepos);
           libererVerrou();
-          // Arrêt imprévu (plantage, mémoire, processus tué par un tiers) : noté, avec le signal reçu. (Nos
-          // propres arrêts — inactivité, échec de démarrage, sortie — retirent `serveur` avant de tuer : pas ici.)
-          if (!(code === 0 && !signal)) noterErreur('ia-locale-arret', `moteur pid ${enfant.pid} arrêté de façon imprévue (${signal ? `signal ${signal}` : `code ${code}`})${actif ? ' PENDANT une requête' : ''}.`);
+          // Arrêt imprévu (plantage, mémoire, processus tué par un tiers) : noté, avec le signal reçu et la dernière
+          // mémoire relevée. (Nos propres arrêts — inactivité, échec de démarrage, sortie — retirent `serveur` avant
+          // de tuer : pas ici.)
+          if (!(code === 0 && !signal)) {
+            const quoi = signal ? `signal ${signal}${signal === 'SIGKILL' ? ' : tué par le système, souvent la limite mémoire du compte (LVE)' : ''}` : `code ${code}`;
+            const memTexte = mem ? ` ; mémoire relevée juste avant : ${enGo(mem.rssMo)}${mem.picMo ? ` (pic ${enGo(mem.picMo)})` : ''}` : '';
+            noterErreur('ia-locale-arret', `moteur pid ${enfant.pid} arrêté de façon imprévue (${quoi})${actif ? ' PENDANT une requête' : ''}${memTexte}.`);
+          }
         }
+        for (const a of attentesSortie) if (a.pid === enfant.pid) a.ok(derniereSortie);
       });
       enfant.on('error', () => {
         fini.termine = true;
@@ -401,9 +437,17 @@ export function creerGestionnaireIaLocale({
         }
       }, BATTEMENT_MS);
       battement.unref?.();
+      memoire = null;
+      clearInterval(releveMemoire);
+      const pidMoteur = enfant.pid;
+      releveMemoire = setInterval(() => {
+        const m = lireMemoire(pidMoteur);
+        if (m) memoire = m;
+      }, RELEVE_MEMOIRE_MS);
+      releveMemoire.unref?.();
       const limiteSante = Math.min(limite, maintenant() + demarrageMs);
       for (;;) {
-        if (fini.termine) throw new Error(`le moteur s’est arrêté (code ${fini.code})`);
+        if (fini.termine) throw Object.assign(new Error(`le moteur s’est arrêté pendant le chargement (${fini.signal ? `signal ${fini.signal}` : `code ${fini.code}`})`), { pendantChargement: true, signal: fini.signal });
         if (await sante(port)) break;
         if (maintenant() >= limiteSante) throw new Error('modèle trop long à charger');
         await attendre(250);
@@ -414,8 +458,12 @@ export function creerGestionnaireIaLocale({
       dernierDemarrageMs = maintenant() - debut;
       effacerErreur();
       log.log?.(`[esport] IA locale démarrée en ${Math.round(dernierDemarrageMs / 1000)} s (127.0.0.1, ${threads} fils).`);
+      const m = lireMemoire(enfant.pid);
+      if (m) memoire = m;
+      noter(`moteur pid ${enfant.pid} prêt en ${Math.round(dernierDemarrageMs / 1000)} s (${threads} fils, contexte ${contexte} jetons${m ? `, mémoire ${enGo(m.rssMo)}` : ''}).`);
     } catch (e) {
       clearInterval(battement);
+      clearInterval(releveMemoire);
       if (enfant?.pid) {
         try {
           process.kill(enfant.pid, 'SIGKILL');
@@ -431,8 +479,12 @@ export function creerGestionnaireIaLocale({
         throw e;
       }
       log.error?.(`[esport] IA locale : démarrage impossible (${e?.message ?? e}).`);
+      if (e?.pendantChargement && e.signal === 'SIGKILL') {
+        noterErreur('ia-locale-demarrage-memoire', `démarrage impossible : ${e.message} : tué par le système, souvent la limite mémoire du compte (LVE).`);
+        throw Object.assign(echec(503, 'ia-locale-demarrage-memoire', 'L’IA locale n’a pas pu démarrer : le système a arrêté son moteur pendant le chargement (mémoire du compte probablement insuffisante ; voir ~/logs/esport-ia-locale.log).'), { reprise: true });
+      }
       noterErreur('ia-locale-demarrage', `démarrage impossible : ${e?.message ?? e}.`);
-      throw echec(503, 'ia-locale-demarrage', 'L’IA locale n’a pas pu démarrer (voir ~/logs/esport-ia-locale.log).');
+      throw Object.assign(echec(503, 'ia-locale-demarrage', 'L’IA locale n’a pas pu démarrer (voir ~/logs/esport-ia-locale.log).'), { reprise: Boolean(e?.pendantChargement) });
     } finally {
       if (typeof fd === 'number') closeSync(fd);
     }
@@ -464,6 +516,7 @@ export function creerGestionnaireIaLocale({
     serveur = null;
     enMarche.delete(moi);
     clearInterval(battement);
+    clearInterval(releveMemoire);
     const parti = new Promise(ok => {
       if (s.enfant.exitCode !== null || s.enfant.signalCode !== null) ok();
       else s.enfant.once('exit', ok);
@@ -510,15 +563,31 @@ export function creerGestionnaireIaLocale({
     clearTimeout(minuteurRepos);
     try {
       if (maintenant() >= t.limite) throw echec(504, 'ia-delai', 'Le service d’IA met trop de temps à répondre.');
+      // Moteur mort mais sa sortie pas encore traitée : on ne l'utilise plus.
+      if (serveur && (serveur.enfant.exitCode !== null || serveur.enfant.signalCode !== null)) await attendreSortieDe(serveur.pid, 1000);
       if (!serveur) {
-        demarrage ??= demarrer(t.limite).finally(() => {
-          demarrage = null;
-        });
-        await demarrage;
+        // Juste après un arrêt imprévu (mémoire, plantage), une courte pause avant de relancer le moteur.
+        const depuisArret = derniereSortie?.imprevue ? maintenant() - derniereSortie.le : Infinity;
+        if (depuisArret < pauseApresArretMs) await attendre(pauseApresArretMs - depuisArret);
+        const lancer = () => {
+          demarrage ??= demarrer(t.limite).finally(() => {
+            demarrage = null;
+          });
+          return demarrage;
+        };
+        try {
+          await lancer();
+        } catch (e) {
+          // Moteur mort pendant le chargement : un second essai, après une pause.
+          if (!e?.reprise || maintenant() + pauseApresArretMs >= t.limite) throw e;
+          noter(`nouvel essai de démarrage dans ${Math.round(pauseApresArretMs / 1000)} s.`);
+          await attendre(pauseApresArretMs);
+          await lancer();
+        }
       }
       dernierUsage = maintenant();
       majVerrou({});
-      t.ok(await t.fn({ port: serveur.port, cle: serveur.cle, limite: t.limite }));
+      t.ok(await t.fn({ port: serveur.port, cle: serveur.cle, limite: t.limite, pid: serveur.pid }));
     } catch (e) {
       t.ko(e);
     } finally {
@@ -528,10 +597,29 @@ export function creerGestionnaireIaLocale({
     }
   }
 
+  /** Sortie du moteur `pid` (attendue au plus `ms`) : { pid, code, signal, imprevue }, ou null s'il vit encore. */
+  function attendreSortieDe(pid, ms) {
+    if (!Number.isInteger(pid)) return Promise.resolve(null);
+    if (derniereSortie?.pid === pid) return Promise.resolve(derniereSortie);
+    return new Promise(ok => {
+      const a = {
+        pid,
+        ok: v => {
+          clearTimeout(a.minuteur);
+          attentesSortie.delete(a);
+          ok(v);
+        },
+      };
+      a.minuteur = setTimeout(() => a.ok(null), ms);
+      a.minuteur.unref?.();
+      attentesSortie.add(a);
+    });
+  }
+
   return {
     dossier: c.dossier,
     /**
-     * Exécute `fn({ port, cle, limite })` quand le serveur est prêt (démarré au besoin), une tâche à la
+     * Exécute `fn({ port, cle, limite, pid })` quand le serveur est prêt (démarré au besoin), une tâche à la
      * fois. `delai` : temps total accordé (attente comprise).
      */
     executer(fn, { delai = delaiMs } = {}) {
@@ -558,6 +646,9 @@ export function creerGestionnaireIaLocale({
         mesure: lireJson(c.mesures),
       };
     },
+    attendreSortie: attendreSortieDe,
+    /** Ligne de diagnostic dans le journal (sans changer la « dernière erreur »). */
+    noter,
     /** Dernière vitesse mesurée (jetons générés par seconde), partagée entre processus (etat/mesures.json). */
     noterMesure({ jetonsParSeconde, dureeMs }) {
       if (!Number.isFinite(jetonsParSeconde) && !Number.isFinite(dureeMs)) return;
