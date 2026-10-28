@@ -67,6 +67,9 @@ export const USAGES = {
   // Section CM (migration 0023) : pièces jointes et clips, pour le club (sans team) ou une team. Le contexte
   // (droits sur la portée) est fourni par la section CM (`brancherContexte`) ; les fichiers vont dans `cm_fichiers`.
   cm: { module: null, permission: null, dossier: 'cm', externe: true },
+  // Drive de la section CM (migration 0027) : mêmes portées, formats étendus, plafond et quota du Drive (le
+  // contexte fourni par le Drive porte `plafond` et `avantEnvoi`) ; les fichiers vont aussi dans `cm_fichiers`.
+  drive: { module: null, permission: null, dossier: 'drive', externe: true },
 };
 
 /** Natures de fichiers (entite_type) affichées dans « Espace utilisé », et la permission qui les supprime. */
@@ -231,14 +234,17 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
     const ctx = await contexteEnvoi(acteur, teamId, usage);
     const taille = Number(corps?.taille);
     if (!Number.isSafeInteger(taille) || taille <= 0) throw echec(400, 'taille', 'Taille du fichier invalide.');
-    if (taille > config.plafond) {
-      const e = echec(413, 'fichier-trop-gros', `Fichier trop gros : ${Math.floor(config.plafond / Mio)} Mo au plus.`);
-      e.details = { plafond: config.plafond };
+    const plafond = Math.min(config.plafond, ctx.plafond ?? config.plafond);
+    if (taille > plafond) {
+      const e = echec(413, 'fichier-trop-gros', `Fichier trop gros : ${Math.floor(plafond / Mio)} Mo au plus.`);
+      e.details = { plafond };
       throw e;
     }
+    // Drive : quota (espace utilisé + envois en cours + ce fichier).
+    if (ctx.avantEnvoi) await ctx.avantEnvoi(taille);
     const ouverts = await base.premier("SELECT COUNT(*) AS n FROM envois WHERE compte_id = ? AND statut = 'en_cours'", [acteur.compte]);
     if (Number(ouverts?.n ?? 0) >= ENVOIS_OUVERTS_MAX) throw echec(429, 'trop-d-envois', 'Trop d’envois en cours : terminez-en ou annulez-en un.');
-    const nom = nomMedia(corps?.nom, { review: 'video', reunion: 'enregistrement', ressource: 'fichier', cm: 'fichier' }[usage]);
+    const nom = nomMedia(corps?.nom, { review: 'video', reunion: 'enregistrement', ressource: 'fichier', cm: 'fichier', drive: 'fichier' }[usage]);
     const typeAnnonce = texteNettoye(corps?.type, 100);
     const tailleMorceau = config.tailleMorceau;
     const morceaux = Math.ceil(taille / tailleMorceau);
@@ -303,9 +309,10 @@ export function servicesMedias({ base, stockage, cleSession, maintenant = () => 
     if ((await empreinteSha256(octets)) !== sha) throw echec(422, 'empreinte-morceau', 'Morceau abîmé pendant l’envoi (SHA-256 différent) : renvoyez-le.');
     let analyse = null;
     if (indice === 0) {
-      analyse = analyserDebut(octets);
+      analyse = analyserDebut(octets, { etendu: usage === 'drive' });
       if (!analyse || !FORMATS_PERMIS[usage].includes(analyse.format)) {
         await oublier(e);
+        if (usage === 'drive') throw echec(415, 'format-fichier', 'Type de fichier refusé : images, vidéos, audio, PDF, polices, archives, PSD ou texte (jamais de page web ni de programme).');
         if (usage === 'ressource' || usage === 'cm') throw echec(415, 'format-fichier', 'Fichier non reconnu : PDF, image (PNG, JPEG, GIF, WebP), vidéo (MP4, MOV, WebM, MKV) ou archive (ZIP, 7z, RAR).');
         throw echec(415, 'format-video', usage === 'review' ? 'Ce fichier n’est pas une vidéo reconnue (MP4, MOV, WebM ou MKV).' : 'Ce fichier n’est ni une vidéo ni un audio reconnu (MP4, MOV, WebM, MKV, M4A, MP3, WAV, OGG, FLAC).');
       }

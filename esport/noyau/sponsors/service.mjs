@@ -21,6 +21,7 @@ import { lienSur } from '../review/markdown.mjs';
 import { MOTIF_COMPTE, MOTIF_UUID, porteesDe, positionEntre } from '../cm/commun.mjs';
 import { DUREE_LIEN_CM_MS, lireInstantCm } from '../cm/tableaux.mjs';
 import { PORTEE_SPONSORS, comptesSponsors, contexteSponsors, droitsSponsors } from './commun.mjs';
+import { effacerFichierCmSiOrphelin } from '../cm/utilisations.mjs';
 import {
   CHAMPS_IMPORT,
   CsvInvalide,
@@ -134,7 +135,7 @@ function maj(table, valeurs, id, extra = '', paramsExtra = []) {
   return { sql: `UPDATE ${table} SET ${cols.map(c => `${c} = ?`).join(', ')}${extra} WHERE id = ?`, params: [...cols.map(c => valeurs[c]), ...paramsExtra, id] };
 }
 
-export function servicesSponsors({ base, maintenant = () => Date.now(), medias, cleSession, stockage }) {
+export function servicesSponsors({ base, maintenant = () => Date.now(), medias, cleSession, stockage, drive }) {
   const aujourdhui = () => jourDans(maintenant(), FUSEAU_SPONSORS);
   const ctxVoir = acteur => contexteSponsors(base, acteur);
   const ctxGerer = acteur => contexteSponsors(base, acteur, { gerer: true });
@@ -693,6 +694,11 @@ export function servicesSponsors({ base, maintenant = () => Date.now(), medias, 
       if (!medias) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
       const r = await medias.preparerRattachement(contexteEnvoi(acteur), corps?.envoi, 'cm', { entiteType: 'sp_piece', entiteId: id });
       lot.push(...r.instructions, { sql: "INSERT INTO sp_pieces (id, prospect_id, partenaire_id, contrat_id, genre, categorie, nom, fichier_id, cree_par, cree_le) VALUES (?, ?, ?, ?, 'fichier', ?, ?, ?, ?, ?)", params: [id, cible.prospectId, cible.partenaireId, contratId, categorie, texteNettoye(corps?.nom, 140) || r.envoi.nom_original, r.fichierId, acteur.compte, iso(t)] });
+    } else if (corps?.genre === 'drive') {
+      // Fichier du Drive du club (migration 0027 : logo, deck…) : aucun octet copié ; le Drive du club doit être visible.
+      if (!drive) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
+      const f = await drive.fichierPourIntegration(acteur, corps?.fichierId, { portees: ['club'] });
+      lot.push({ sql: "INSERT INTO sp_pieces (id, prospect_id, partenaire_id, contrat_id, genre, categorie, nom, fichier_id, cree_par, cree_le) VALUES (?, ?, ?, ?, 'fichier', ?, ?, ?, ?, ?)", params: [id, cible.prospectId, cible.partenaireId, contratId, categorie, texteNettoye(corps?.nom, 140) || f.nom, f.fichierId, acteur.compte, iso(t)] });
     } else throw echec(400, 'genre', 'Pièce jointe : lien ou fichier.');
     await base.lot(lot);
     return { pieces: await piecesDe(estProspect, cible.prospectId ?? cible.partenaireId) };
@@ -705,15 +711,12 @@ export function servicesSponsors({ base, maintenant = () => Date.now(), medias, 
     return p;
   }
 
-  /** Efface les octets d'un fichier de la rubrique s'il n'est plus utilisé par aucune pièce. */
+  /**
+   * Efface les octets d'un fichier de la rubrique s'il ne sert plus à rien (utilisations.mjs : une pièce prise
+   * dans le Drive pointe vers un fichier du Drive, qui reste tant que le Drive le garde).
+   */
   async function effacerFichierSiOrphelin(fichierId, t) {
-    if (!fichierId) return;
-    const n = await base.premier('SELECT COUNT(*) AS n FROM sp_pieces WHERE fichier_id = ? AND supprime_le IS NULL', [fichierId]);
-    if (Number(n?.n ?? 0) > 0) return;
-    const f = await base.premier("SELECT * FROM cm_fichiers WHERE id = ? AND portee = 'sponsors' AND supprime_le IS NULL", [fichierId]);
-    if (!f) return;
-    if (stockage) await stockage.supprimer(f.cle_stockage).catch(() => undefined);
-    await base.executer('UPDATE cm_fichiers SET supprime_le = ? WHERE id = ?', [iso(t), f.id]);
+    await effacerFichierCmSiOrphelin(base, stockage, fichierId, t);
   }
 
   async function supprimerPiece(acteur, id) {

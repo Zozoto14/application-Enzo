@@ -103,11 +103,17 @@ async function signer(secret, texte) {
 }
 
 /**
- * Genres de liens signés : `fichier` (table `fichiers`, route `/fichiers/<id>`) et `cm` (table `cm_fichiers`,
- * route `/cm/fichiers/<id>`, section CM). Le genre entre dans la signature : un lien de l'un ne vaut rien
+ * Genres de liens signés : `fichier` (table `fichiers`, route `/fichiers/<id>`), `cm` (table `cm_fichiers`,
+ * route `/cm/fichiers/<id>`, section CM), `drive` et `drive-zip` (Drive de la section CM). Le genre entre dans la signature : un lien de l'un ne vaut rien
  * pour l'autre.
  */
-const GENRES_LIEN = { fichier: { signature: 'fichier', chemin: '/fichiers/' }, cm: { signature: 'cm-fichier', chemin: '/cm/fichiers/' } };
+const GENRES_LIEN = {
+  fichier: { signature: 'fichier', chemin: '/fichiers/' },
+  cm: { signature: 'cm-fichier', chemin: '/cm/fichiers/' },
+  // Drive CM (migration 0027) : une version d'un fichier du Drive (`<élément>.<version>`), et un dossier en ZIP.
+  drive: { signature: 'cm-drive', chemin: '/cm/drive/contenu/' },
+  'drive-zip': { signature: 'cm-drive-zip', chemin: '/cm/drive/zip/' },
+};
 
 /** Chemin signé `/fichiers/<id>?c=<compte>&exp=<ms>&sig=…` (à préfixer par l'adresse du serveur). */
 export async function cheminSigne(secret, { fichierId, compte, maintenant, duree = DUREE_LIEN_MS, telecharger = false, genre = 'fichier' }) {

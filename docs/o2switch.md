@@ -188,6 +188,10 @@ MAIL_FROM=AppDashboard <noreply@appdashboard.fr>
 # Vidéos déposées (facultatif, voir docs/esport/videos.md) : plafond par fichier, taille des morceaux d'envoi.
 # ESPORT_VIDEO_MAX=10G
 # ESPORT_TAILLE_MORCEAU=8M
+# Drive du CM (facultatif, voir docs/esport/drive.md) : espace total (alerte à 80 %), un fichier, un dossier en ZIP.
+# ESPORT_DRIVE_QUOTA=20G
+# ESPORT_DRIVE_FICHIER_MAX=2G
+# ESPORT_DRIVE_ZIP_MAX=2G
 # Transcription des réunions sur le serveur (facultatif, partie H) :
 # TRANSCRIPTION_MODELE=base
 # TRANSCRIPTION_THREADS=1

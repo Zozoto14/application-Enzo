@@ -41,6 +41,7 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
     stockage: fichiers,
     cleSession: config.cleSession,
     transcriptionExterne: config.transcriptionExterne,
+    ...(config.drive ? { drive: config.drive } : {}),
   });
   // Récapitulatif e-mail (Node seulement : SMTP de esport.env) ; sans SMTP, rien n'est fait.
   if (config.smtp) {

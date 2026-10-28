@@ -54,6 +54,9 @@ export const LIMITES = {
   rs_test: { max: 30, fenetreS: 3600 },
   // Visuels : rendus envoyés et images importées dans l'éditeur (chacun lu et vérifié par le serveur).
   cm_visuel: { max: 200, fenetreS: 3600 },
+  // Drive (migration 0027) : fichiers rangés (et versions) par heure ; liens de ZIP (lecture lourde du disque).
+  cm_drive: { max: 600, fenetreS: 3600 },
+  cm_drive_zip: { max: 20, fenetreS: 3600 },
 };
 
 /**

@@ -156,6 +156,13 @@ export const TABLES = [
   ['cm_rs_releves_posts', 'id'],
   ['cm_rs_releves_comptes', 'id'],
   ['cm_rs_annonces', 'id'],
+  // Drive de la section CM (migration 0027) : dossiers, fichiers, versions, étiquettes, favoris (les octets sont
+  // dans `cm_fichiers` et le stockage, comme les autres fichiers).
+  ['cm_drive_dossiers', 'id'],
+  ['cm_drive_fichiers', 'id'],
+  ['cm_drive_versions', 'id'],
+  ['cm_drive_tags', 'element_id, tag'],
+  ['cm_drive_favoris', 'compte_id, element_id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

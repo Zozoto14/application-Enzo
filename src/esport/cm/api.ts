@@ -6,7 +6,21 @@
 import { requeteUrl, type ClientEsport } from '../client';
 
 /** Permissions d'un rôle CM : celles de la section, et celles de la rubrique Sponsors (migration 0024, niveau club). */
-export type PermissionCm = 'cm.voir' | 'cm.deposer' | 'cm.editer' | 'cm.valider' | 'cm.gerer' | 'cm.clips.proposer' | 'sponsors.voir' | 'sponsors.gerer';
+export type PermissionCm =
+  | 'cm.voir'
+  | 'cm.deposer'
+  | 'cm.editer'
+  | 'cm.valider'
+  | 'cm.gerer'
+  | 'cm.clips.proposer'
+  | 'sponsors.voir'
+  | 'sponsors.gerer'
+  // Drive de la section (migration 0027).
+  | 'cm.drive.voir'
+  | 'cm.drive.envoyer'
+  | 'cm.drive.gerer';
+/** Le compte a-t-il un droit sur le Drive (dans une liste de permissions CM) ? */
+export const voitDrive = (p: readonly string[]): boolean => p.some(x => x === 'cm.drive.voir' || x === 'cm.drive.envoyer' || x === 'cm.drive.gerer');
 export type Reseau = 'x' | 'instagram' | 'tiktok';
 export type StatutPost = 'brouillon' | 'a_valider' | 'valide' | 'refuse' | 'publie';
 export type CleListe = 'idees' | 'preparation' | 'a_valider' | 'valide' | 'publie';
@@ -383,6 +397,8 @@ export function apiCm(client: ClientEsport) {
     supprimerCommentaire: (id: string) => r<ReponseCarte>(`/cm/commentaires/${e(id)}`, 'DELETE'),
     ajouterLien: (carteId: string, url: string, nom: string) => r<ReponseCarte>(`/cm/cartes/${e(carteId)}/pieces`, 'POST', { genre: 'lien', url, nom }),
     ajouterFichier: (carteId: string, envoi: string) => r<ReponseCarte>(`/cm/cartes/${e(carteId)}/pieces`, 'POST', { genre: 'fichier', envoi }),
+    /** Pièce jointe prise dans le Drive (même portée que le tableau, ou Drive du club) : aucun octet copié. */
+    ajouterDepuisDrive: (carteId: string, fichierId: string) => r<ReponseCarte>(`/cm/cartes/${e(carteId)}/pieces`, 'POST', { genre: 'drive', fichierId }),
     supprimerPiece: (id: string) => r<ReponseCarte>(`/cm/pieces/${e(id)}`, 'DELETE'),
     lienPiece: (id: string, telecharger = false) => r<{ url: string; expire: string }>(`/cm/pieces/${e(id)}/lien`, 'POST', { telecharger }),
     aValider: () => r<{ cartes: CarteTransverse[]; noms: Record<string, string | null> }>('/cm/a-valider'),

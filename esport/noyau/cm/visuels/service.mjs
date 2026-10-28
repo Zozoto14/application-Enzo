@@ -42,7 +42,7 @@ function valider(fn, v) {
 }
 
 /** Octets d'une tranche du stockage (mémoire : `octets` ; disque : `flux`). */
-async function lireDebut(stockage, cle, n) {
+export async function lireDebut(stockage, cle, n) {
   const r = await stockage?.lireTranche?.(cle, 0, n - 1);
   if (!r) return new Uint8Array();
   if (r.octets) return new Uint8Array(r.octets);
@@ -70,7 +70,7 @@ async function lireDebut(stockage, cle, n) {
   return sortie;
 }
 
-export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias, cleSession, stockage, tableaux }) {
+export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias, cleSession, stockage, tableaux, drive }) {
   // ---------------------------------------------------------------- Contextes
 
   /** Contexte d'une portée avec une des permissions (404 si la portée n'est pas visible, 403 sans la permission). */
@@ -155,9 +155,32 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
     return { ...r, dim };
   }
 
-  /** `POST /cm/visuels/images { portee, envoi }` : image importée dans l'éditeur (fond, photo, logo). */
+  /**
+   * Image prise dans le Drive (migration 0027) : même portée que l'éditeur, ou Drive du club ; aucun octet copié.
+   * L'image garde la portée de son Drive (une image du Drive du club sert à tout le club, logos compris).
+   */
+  async function importerDepuisDrive(acteur, ctx, elementId) {
+    if (!drive) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
+    const f = await drive.fichierPourIntegration(acteur, elementId, { portees: [ctx.portee, PORTEE_CLUB] });
+    if (!FORMATS_IMAGE.includes(f.format)) throw echec(415, 'format-image', 'Image : PNG, JPEG, GIF ou WebP.');
+    if (f.taille > TAILLE_MAX_IMAGE) throw echec(413, 'image-trop-grosse', `Image trop lourde : ${Math.floor(TAILLE_MAX_IMAGE / 1048576)} Mo au plus.`);
+    const cm = await base.premier('SELECT cle_stockage FROM cm_fichiers WHERE id = ?', [f.fichierId]);
+    const dim = dimensionsImage(await lireDebut(stockage, cm.cle_stockage, OCTETS_ENTETE));
+    if (!dimensionsAcceptables(dim)) throw echec(400, 'image-dimensions', 'Image illisible ou trop grande (8192 px de côté au plus).');
+    const nom = texteNettoye(f.nom, 140);
+    const existante = await base.premier('SELECT * FROM cm_visuel_images WHERE fichier_id = ?', [f.fichierId]);
+    if (existante) {
+      if (existante.supprime_le) await base.executer('UPDATE cm_visuel_images SET supprime_le = NULL WHERE fichier_id = ?', [f.fichierId]);
+      return { fichierId: f.fichierId, nom: existante.nom, largeur: dim.largeur, hauteur: dim.hauteur, portee: existante.portee };
+    }
+    await base.executer('INSERT INTO cm_visuel_images (fichier_id, portee, team_id, nom, largeur, hauteur, cree_par, cree_le) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [f.fichierId, f.portee, teamDePortee(f.portee), nom, dim.largeur, dim.hauteur, acteur.compte, iso(maintenant())]);
+    return { fichierId: f.fichierId, nom, largeur: dim.largeur, hauteur: dim.hauteur, portee: f.portee };
+  }
+
+  /** `POST /cm/visuels/images { portee, envoi }` (ou `{ portee, drive }` : fichier du Drive) : image importée dans l'éditeur (fond, photo, logo). */
   async function importerImage(acteur, corps) {
     const ctx = await ctxPortee(acteur, corps?.portee, 'cm.editer', 'cm.gerer');
+    if (corps?.drive !== undefined) return importerDepuisDrive(acteur, ctx, corps.drive);
     const r = await rattacherImage(ctx, corps?.envoi, { formats: FORMATS_IMAGE, tailleMax: TAILLE_MAX_IMAGE, entiteType: 'cm_visuel_image' });
     const nom = texteNettoye(r.envoi.nom_original, 140);
     await base.lot([
@@ -185,7 +208,8 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
     const visuel = f && !image ? await base.premier('SELECT id FROM cm_visuels WHERE fichier_id = ? AND supprime_le IS NULL', [fichierId]) : null;
     if (!f || (!image && !visuel)) throw echec(404, 'fichier-introuvable', 'Fichier introuvable.');
     if (image?.portee === PORTEE_CLUB) await voitSection(acteur);
-    else await ctxPortee(acteur, f.portee, 'cm.voir');
+    // Image prise dans le Drive : sa portée est celle de l'image (les octets peuvent venir d'une copie).
+    else await ctxPortee(acteur, image?.portee ?? f.portee, 'cm.voir');
     return f;
   }
 
@@ -603,6 +627,8 @@ export function servicesVisuelsCm({ base, maintenant = () => Date.now(), medias,
         await base.executer('UPDATE cm_visuels SET piece_id = ? WHERE id = ?', [pieceId, v.id]);
       }
     }
+    // Rendu rangé dans le dossier « Visuels » du Drive de la portée (un nouveau rendu = une nouvelle version).
+    if (drive) await drive.ranger({ origine: 'visuel', origineId: v.id, portee: v.portee, cleDossier: 'visuels', fichierId: r.fichierId, nom: nomRendu(v, r.analyse.format === 'jpeg' ? 'jpg' : 'png'), acteur });
     if (ancien && ancien !== r.fichierId) await tableaux.effacerFichierSiOrphelin(ancien, t);
     return visuel(acteur, v.id);
   }

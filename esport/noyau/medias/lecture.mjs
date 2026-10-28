@@ -16,6 +16,14 @@ export const ENTETES_LIEN = {
   'Content-Security-Policy': "frame-ancestors 'none'",
 };
 
+/**
+ * Types qu'un navigateur pourrait interpréter comme un document actif (SVG : scripts, liens ; texte : rien,
+ * mais par prudence) : servis avec une politique « sandbox » sans aucun script ni ressource externe, même
+ * ouverts directement dans un onglet. Une balise <img> n'exécute de toute façon jamais le script d'un SVG.
+ */
+export const CSP_FICHIER_INERTE = "default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; frame-ancestors 'none'; sandbox";
+export const typeInerte = type => /^image\/svg\+xml\b/i.test(String(type ?? '')) || /^text\//i.test(String(type ?? ''));
+
 /** Au plus 64 Mio par réponse : le navigateur redemande la suite tout seul. */
 export const TRANCHE_MAX = 64 * 1024 * 1024;
 
@@ -47,8 +55,14 @@ export function lirePlage(entete, taille) {
  * Réponse d'un fichier du stockage : entier (200) ou une plage (206), 416 si la plage est impossible.
  * `f` : ligne de `fichiers` ; `nom` : nom affiché ; `telecharger` : pièce jointe plutôt qu'affichage.
  */
-export async function reponseFichierStocke({ stockage, f, requete, telecharger }) {
-  const base = { ...ENTETES_LIEN, 'Content-Type': f.type_mime, 'Accept-Ranges': 'bytes', 'Content-Disposition': disposition(f.nom_original, !telecharger) };
+export async function reponseFichierStocke({ stockage, f, requete, telecharger, nom }) {
+  const base = {
+    ...ENTETES_LIEN,
+    ...(typeInerte(f.type_mime) ? { 'Content-Security-Policy': CSP_FICHIER_INERTE } : {}),
+    'Content-Type': f.type_mime,
+    'Accept-Ranges': 'bytes',
+    'Content-Disposition': disposition(nom ?? f.nom_original, !telecharger),
+  };
   const tete = requete.method === 'HEAD';
   if (typeof stockage.lireTranche !== 'function') {
     // Adaptateur sans lecture par plage : le fichier entier (petits fichiers).

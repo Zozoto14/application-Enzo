@@ -30,6 +30,9 @@ import { chargerImages, chargerPolices, creerChargeurImages, dessiner, rendreBlo
 import { CLES_FORMATS, FORMATS, type Calque, type CleFormat, type DocumentVisuel, type Langue } from '../../../cm/visuels/types';
 import { envoyerFichier } from '../../../medias/envoi';
 import { choisirFichier } from '../../../medias/choixFichier';
+import { ChoixDrive } from '../drive/ChoixDrive';
+import { trDr } from '../../../i18n/drive';
+import { IMAGES_DRIVE } from '../../../cm/drive';
 import { trVi, trViLangue, type CleVi } from '../../../i18n/visuels';
 import { langueCourante } from '../../../i18n';
 import { obtenirAssets } from '../../strats/commun';
@@ -243,6 +246,7 @@ export function EditeurVisuel(props: PropsEditeurVisuel) {
   const [change, setChange] = useState(false);
   const [nomModele, setNomModele] = useState<string | undefined>();
   const [choixImage, setChoixImage] = useState(false);
+  const [imageDrive, setImageDrive] = useState(false);
   const [versions, setVersions] = useState<Array<{ version: number; nom: string; date: string }> | undefined>();
   const [largeurCanevas, setLargeurCanevas] = useState(600);
   const { erreur, avis, agir, enCours } = useAgir();
@@ -549,10 +553,37 @@ export function EditeurVisuel(props: PropsEditeurVisuel) {
       </Volet>
       <Volet theme={theme} visible={choixImage} titre={trVi('editeur.ajouter_image')} onFermer={() => setChoixImage(false)} testID="esport-vi-choix-image">
         <BoutonHub theme={theme} titre={trVi('editeur.importer_image')} variante="plein" onPress={() => void importerImage().then(() => setChoixImage(false))} testID="esport-vi-image-importer" />
+        <BoutonHub
+          theme={theme}
+          titre={trDr('choix.depuis_drive')}
+          onPress={() => {
+            setChoixImage(false);
+            setImageDrive(true);
+          }}
+          testID="esport-vi-image-drive"
+        />
         {(['map_1', 'agent_mvp', 'logo_team', 'logo_club'] as const).map(champ => (
           <BoutonHub key={champ} theme={theme} titre={trVi('editeur.image_champ', { champ })} onPress={() => ajouterImage({ champ })} testID={`esport-vi-image-champ-${champ}`} />
         ))}
       </Volet>
+      <ChoixDrive
+        theme={theme}
+        client={api.client}
+        visible={imageDrive}
+        portees={[portee, 'club']}
+        accepter={f => IMAGES_DRIVE.includes(f.meta.format ?? '') && f.taille <= TAILLE_MAX_IMAGE}
+        aide={trDr('choix.images')}
+        onFermer={() => setImageDrive(false)}
+        onChoisir={f => {
+          setImageDrive(false);
+          void agir('image', async () => {
+            const img = await api.importerImageDepuisDrive(portee, f.id);
+            ajouterImage({ fichier: img.fichierId });
+            return undefined;
+          });
+        }}
+        testID="esport-vi-image-choix-drive"
+      />
       <Volet theme={theme} visible={versions !== undefined} titre={trVi('espace.versions')} onFermer={() => setVersions(undefined)} testID="esport-vi-versions-volet">
         {(versions ?? []).map(v => (
           <View key={v.version} style={[styles.ligne, { justifyContent: 'space-between', gap: ESP.xs }]}>

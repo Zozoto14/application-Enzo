@@ -55,6 +55,7 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
     fetchDiscord,
     secretsExportables,
     medias: config.medias,
+    ...(config.drive ? { drive: config.drive } : {}),
     transcriptionExterne: config.transcriptionExterne,
     transcriptionServeur: config.transcriptionServeur,
     // Aperçus des liens (Ressources) : chaque adresse IP est vérifiée au moment de la connexion (anti-SSRF).

@@ -15,6 +15,12 @@ export async function choisirFichier(_accept: string, _testID?: string): Promise
   return undefined;
 }
 
+/** Plusieurs fichiers (Drive) : rien sur l'app native. */
+export async function choisirFichiers(_accept: string, _testID?: string): Promise<FichierNavigateur[]> {
+  return [];
+}
+
+export const ACCEPT_DRIVE = '';
 export const ACCEPT_VIDEO = '';
 export const ACCEPT_REUNION = '';
 export const ACCEPT_RESSOURCE = '';

@@ -3,13 +3,15 @@
  *  - Déposer (cm.deposer, le correspondant de la team) : une information, une photo, une actu, une recrue…
  *    → une carte dans « Idées » du tableau CM de la team, que le CM du club reprend ;
  *  - Tableau (cm.voir) : le tableau CM de la team ;
- *  - Clips (cm.clips.proposer, les joueurs) : proposer un clip au CM, suivre ses clips.
+ *  - Clips (cm.clips.proposer, les joueurs) : proposer un clip au CM, suivre ses clips ;
+ *  - Drive (cm.drive.*, le correspondant ; docs/esport/drive.md) : le Drive de la team ; un joueur qui propose
+ *    des clips ou dépose des infos n'y voit que le dossier « Dépôt joueurs » et ses propres fichiers.
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import { BoutonHub, Champ } from '../../../hub/admin/ui/commun';
-import { apiCm, type GenreDepot, type PageTeamCm } from '../../cm/api';
+import { apiCm, voitDrive, type GenreDepot, type PageTeamCm } from '../../cm/api';
 import { ACCEPT_CM, choisirFichier, choixFichierDisponible, type FichierNavigateur } from '../../medias/choixFichier';
 import { trCm } from '../../i18n/cm';
 import { ChampNote } from '../ChampNote';
@@ -20,8 +22,9 @@ import type { PropsModule } from '../modules';
 import { Aide, BadgeStatut, nomGenreDepot, nomListe, quand, useEtatCm } from './commun';
 import { ProposerClip, GalerieClips } from './Clips';
 import { Tableau } from './Tableau';
+import { Drive } from './drive/Drive';
 
-type Section = 'deposer' | 'tableau' | 'clips';
+type Section = 'deposer' | 'tableau' | 'clips' | 'drive';
 
 export function CmTeam({ theme, client, detail, large }: PropsModule) {
   const teamId = detail.team.id;
@@ -38,6 +41,8 @@ export function CmTeam({ theme, client, detail, large }: PropsModule) {
     ...(peut('cm.deposer') ? [{ id: 'deposer' as const, libelle: trCm('team.deposer') }] : []),
     ...(peut('cm.voir') && page?.tableaux.length ? [{ id: 'tableau' as const, libelle: trCm('team.tableau') }] : []),
     ...(peut('cm.clips.proposer') || peut('cm.voir') ? [{ id: 'clips' as const, libelle: trCm('team.clips') }] : []),
+    // Drive (migration 0027) : celui de la team, ou son seul dossier « Dépôt joueurs ».
+    ...(page && (voitDrive(page.permissions) || peut('cm.clips.proposer') || peut('cm.deposer')) ? [{ id: 'drive' as const, libelle: trCm('team.drive') }] : []),
   ];
   const actif = section && sections.some(s => s.id === section) ? section : sections[0]?.id;
   const { etat } = useEtatCm(api, actif === 'tableau');
@@ -49,6 +54,7 @@ export function CmTeam({ theme, client, detail, large }: PropsModule) {
       {page && !sections.length ? <Aide theme={theme}>{trCm('team.rien')}</Aide> : null}
       {page && actif === 'deposer' ? <Deposer theme={theme} api={api} page={page} large={large} onDepose={() => void charger()} /> : null}
       {page && actif === 'tableau' && page.tableaux[0] ? <Tableau theme={theme} api={api} id={page.tableaux[0].id} large={large} versionServeur={etat?.versions[page.tableaux[0].id]} /> : null}
+      {page && actif === 'drive' ? <Drive theme={theme} client={client} large={large} porteeFixe={teamId} /> : null}
       {page && actif === 'clips' ? (
         peut('cm.clips.proposer') ? <ProposerClip theme={theme} api={api} teamId={teamId} large={large} /> : <GalerieClips theme={theme} api={api} large={large} teamId={teamId} />
       ) : null}

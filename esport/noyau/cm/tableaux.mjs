@@ -21,6 +21,7 @@ import { echec, iso, jsonOu, nouvelId, texteLong, texteNettoye } from '../outils
 import { lignesParIds, pseudosDe } from '../requetes.mjs';
 import { NOTE_MAX, lienSur, nettoyerNote } from '../review/markdown.mjs';
 import { cheminSigne } from '../fichiers.mjs';
+import { effacerFichierCmSiOrphelin } from './utilisations.mjs';
 import { instantMural, lireDate, lireHeure, fuseauValide } from '../planning/temps.mjs';
 import { resumeAnnonce, resumeResultat, resumeTournoi } from '../competition/resume.mjs';
 import {
@@ -157,9 +158,9 @@ export function instructionsCarte({ tableauId, listeId, teamId = null, titre, de
 
 /**
  * `medias` : envois par morceaux (pièces jointes déposées) ; `cleSession` : signature des liens de fichiers ;
- * `stockage` : effacement des octets d'une pièce retirée.
+ * `stockage` : effacement des octets d'une pièce retirée ; `drive` : pièce jointe choisie dans le Drive.
  */
-export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias, cleSession, stockage }) {
+export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias, cleSession, stockage, drive }) {
   // ---------------------------------------------------------------- Lectures internes
 
   async function tableauLigne(id) {
@@ -1017,9 +1018,14 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       if (!medias) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
       const r = await medias.preparerRattachement(contexteEnvoi(ctx, tb.portee), corps?.envoi, 'cm', { entiteType: 'cm_piece', entiteId: id });
       lot.push(...r.instructions, { sql: "INSERT INTO cm_pieces (id, carte_id, genre, nom, fichier_id, cree_par, cree_le) VALUES (?, ?, 'fichier', ?, ?, ?, ?)", params: [id, c.id, r.envoi.nom_original, r.fichierId, acteur.compte, iso(t)] });
+    } else if (corps?.genre === 'drive') {
+      // Fichier du Drive (migration 0027) : même portée que le tableau, ou Drive du club ; aucun octet copié.
+      if (!drive) throw echec(503, 'stockage-absent', 'Le stockage des fichiers n’est pas branché sur le serveur Esport.');
+      const f = await drive.fichierPourIntegration(acteur, corps?.fichierId, { portees: [tb.portee, PORTEE_CLUB] });
+      lot.push({ sql: "INSERT INTO cm_pieces (id, carte_id, genre, nom, fichier_id, cree_par, cree_le) VALUES (?, ?, 'fichier', ?, ?, ?, ?)", params: [id, c.id, f.nom, f.fichierId, acteur.compte, iso(t)] });
     } else throw echec(400, 'genre', 'Pièce jointe : lien ou fichier.');
     if (Number(c.post)) lot.push(...(await invalidationSiBesoin(c, tb, await contenuDe(c, { pieces: [...(await piecesIds(c.id)), id] }), acteur.compte, t)));
-    lot.push(activite(c.id, tb.id, acteur.compte, 'piece_ajoutee', { nom: corps?.genre === 'lien' ? texteNettoye(corps?.nom, 140) : null }, t), { sql: 'UPDATE cm_cartes SET version = version + 1, maj_le = ? WHERE id = ?', params: [iso(t), c.id] }, versionTableau(tb.id, t));
+    lot.push(activite(c.id, tb.id, acteur.compte, 'piece_ajoutee', { nom: corps?.genre === 'lien' ? texteNettoye(corps?.nom, 140) : null, ...(corps?.genre === 'drive' ? { drive: true } : {}) }, t), { sql: 'UPDATE cm_cartes SET version = version + 1, maj_le = ? WHERE id = ?', params: [iso(t), c.id] }, versionTableau(tb.id, t));
     await base.lot(lot);
     return carte(acteur, c.id);
   }
@@ -1059,19 +1065,12 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     return { p, ...(await carteVisible(acteur, p.carte_id)) };
   }
 
-  /** Efface les octets d'un fichier CM s'il n'est plus utilisé par aucune pièce, aucun clip ni aucun visuel. */
+  /**
+   * Efface les octets d'un fichier CM s'il n'est plus utilisé par aucune pièce, aucun clip, aucun visuel, aucune
+   * image importée, aucun sponsor ni aucune version du Drive (utilisations.mjs).
+   */
   async function effacerFichierSiOrphelin(fichierId, t) {
-    if (!fichierId) return;
-    const pieces = await base.premier('SELECT COUNT(*) AS n FROM cm_pieces WHERE fichier_id = ? AND supprime_le IS NULL', [fichierId]);
-    const clips = await base.premier('SELECT COUNT(*) AS n FROM cm_clips WHERE fichier_id = ? AND supprime_le IS NULL', [fichierId]);
-    // Rendu d'un visuel (ou image importée dans l'éditeur) encore utilisé : on garde les octets.
-    const visuels = await base.premier('SELECT COUNT(*) AS n FROM cm_visuels WHERE fichier_id = ? AND supprime_le IS NULL', [fichierId]);
-    const images = await base.premier('SELECT COUNT(*) AS n FROM cm_visuel_images WHERE fichier_id = ? AND supprime_le IS NULL', [fichierId]);
-    if (Number(pieces?.n ?? 0) + Number(clips?.n ?? 0) + Number(visuels?.n ?? 0) + Number(images?.n ?? 0) > 0) return;
-    const f = await base.premier('SELECT * FROM cm_fichiers WHERE id = ? AND supprime_le IS NULL', [fichierId]);
-    if (!f) return;
-    if (stockage) await stockage.supprimer(f.cle_stockage).catch(() => undefined);
-    await base.executer('UPDATE cm_fichiers SET supprime_le = ? WHERE id = ?', [iso(t), f.id]);
+    await effacerFichierCmSiOrphelin(base, stockage, fichierId, t);
   }
 
   async function supprimerPiece(acteur, id) {

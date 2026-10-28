@@ -51,6 +51,36 @@ export function choisirFichier(accept: string, testID = 'esport-fichier-champ'):
   });
 }
 
+/** Plusieurs fichiers d'un coup (Drive) : liste vide si l'utilisateur annule. */
+export function choisirFichiers(accept: string, testID = 'esport-fichiers-champ'): Promise<FichierNavigateur[]> {
+  return new Promise(resoudre => {
+    const doc = (globalThis as { document?: Document }).document;
+    if (!doc) {
+      resoudre([]);
+      return;
+    }
+    const champ = doc.createElement('input');
+    champ.type = 'file';
+    champ.multiple = true;
+    champ.accept = accept;
+    champ.style.display = 'none';
+    champ.setAttribute('data-testid', testID);
+    champ.addEventListener('change', () => {
+      const liste = Array.from(champ.files ?? []).map(depuisFile);
+      champ.remove();
+      resoudre(liste);
+    });
+    champ.addEventListener('cancel', () => {
+      champ.remove();
+      resoudre([]);
+    });
+    doc.body.appendChild(champ);
+    champ.click();
+  });
+}
+
+/** Drive : tous les types courants (le serveur vérifie les octets ; jamais de page web ni de programme). */
+export const ACCEPT_DRIVE = '';
 export const ACCEPT_VIDEO = 'video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.m4v,.mov,.webm,.mkv';
 export const ACCEPT_REUNION = `${ACCEPT_VIDEO},audio/*,.m4a,.mp3,.aac,.wav,.ogg,.opus,.flac`;
 /** Ressources : PDF, images, vidéos, archives (jamais de SVG ni de HTML : refusés par le serveur). */

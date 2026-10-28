@@ -3,8 +3,10 @@
  * Pur, testé.
  */
 
-import { tr } from '../i18n';
+import { langueCourante, tr } from '../i18n';
 import { traduireServeur } from '../i18n/erreurs';
+import { trDr } from '../i18n/drive';
+import { tailleMedia } from '../medias/envoi';
 
 const texte = (v: unknown, secours = '?'): string => (typeof v === 'string' && v ? v : secours);
 
@@ -84,6 +86,27 @@ export function phraseJournalCm(action: string, qui: string, m: Record<string, u
       return tr('cm.jr.affectation', { qui });
     case 'cm.reglages_modifies':
       return tr('cm.jr.reglages', { qui });
+    // Drive (migration 0027).
+    case 'cm.drive_fichier_ajoute':
+      return trDr('jr.ajoute', { qui, nom: texte(m.nom) });
+    case 'cm.drive_fichier_modifie':
+      return trDr('jr.modifie', { qui, nom: texte(m.nom) });
+    case 'cm.drive_version_ajoutee':
+      return trDr('jr.version', { qui, nom: texte(m.nom), v: typeof m.version === 'number' ? m.version : '?' });
+    case 'cm.drive_dossier_cree':
+      return trDr('jr.dossier_cree', { qui, nom: texte(m.nom) });
+    case 'cm.drive_dossier_modifie':
+      return trDr('jr.dossier_modifie', { qui, nom: texte(m.nom) });
+    case 'cm.drive_corbeille':
+      return trDr('jr.corbeille', { qui, nom: texte(m.nom) });
+    case 'cm.drive_restaure':
+      return trDr('jr.restaure', { qui, nom: texte(m.nom) });
+    case 'cm.drive_supprime':
+      return trDr('jr.supprime', { qui, nom: texte(m.nom) });
+    case 'cm.drive_corbeille_videe':
+      return trDr('jr.corbeille_videe', { qui });
+    case 'cm.drive_quota':
+      return trDr('jr.quota', { p: typeof m.pourcent === 'number' ? m.pourcent : '?' });
     default:
       return undefined;
   }
@@ -118,6 +141,10 @@ export function phraseNotificationCm(type: string, team: string, c: Record<strin
             : tr('cm.nt.clip_propose_retour', { titre });
     case 'cm-affecte':
       return tr('cm.nt.affecte', { role: texte(c.role) });
+    case 'cm-drive-quota': {
+      const octets = (v: unknown) => tailleMedia(typeof v === 'number' ? v : 0, langueCourante());
+      return trDr('nt.quota', { p: typeof c.pourcent === 'number' ? c.pourcent : '?', u: octets(c.utilise), l: octets(c.limite) });
+    }
     case 'cm-releve':
       return tr('cm.nt.releve', { titre, reseau: texte(c.reseau), j: typeof c.j === 'number' ? c.j : '?' });
     default:

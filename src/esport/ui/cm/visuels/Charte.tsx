@@ -15,6 +15,9 @@ import { donneesExemple } from '../../../cm/visuels/champs';
 import { modeleDefaut } from '../../../cm/visuels/modeles';
 import { CLES_COULEURS, POLICES, ROLES_POLICES, type Charte, type CleCouleur, type Police, type RolePolice } from '../../../cm/visuels/types';
 import { choisirFichier, choixFichierDisponible } from '../../../medias/choixFichier';
+import { ChoixDrive } from '../drive/ChoixDrive';
+import { IMAGES_DRIVE } from '../../../cm/drive';
+import { trDr } from '../../../i18n/drive';
 import { envoyerFichier } from '../../../medias/envoi';
 import { langueCourante } from '../../../i18n';
 import { trVi, type CleVi } from '../../../i18n/visuels';
@@ -29,6 +32,7 @@ export function CharteClub({ theme, api, large, onChange }: { theme: ThemeHub; a
   const [r, setR] = useState<ReponseCharte | undefined>();
   const [c, setC] = useState<Charte | undefined>();
   const [hex, setHex] = useState<Partial<Record<CleCouleur, string>>>({});
+  const [logoDrive, setLogoDrive] = useState<string | undefined>();
   const { erreur, avis, agir, enCours } = useAgir();
   useEffect(() => {
     void agir('', async () => {
@@ -49,6 +53,13 @@ export function CharteClub({ theme, api, large, onChange }: { theme: ThemeHub; a
       const { etat, oublier } = await envoyerFichier({ client: api.client, teamId: 'club', section: 'cm', fichier: f });
       const img = await api.importerImage('club', etat.id);
       oublier();
+      setC(prev => (prev ? { ...prev, logos: cible === 'club' ? { ...prev.logos, club: img.fichierId } : { ...prev.logos, teams: { ...prev.logos.teams, [cible]: img.fichierId } } } : prev));
+      return undefined;
+    });
+  // Logo pris dans le Drive du club (migration 0027) : importé comme image du club, sans copie des octets.
+  const logoDepuisDrive = (cible: 'club' | string, fichierDrive: string) =>
+    agir('logo', async () => {
+      const img = await api.importerImageDepuisDrive('club', fichierDrive);
       setC(prev => (prev ? { ...prev, logos: cible === 'club' ? { ...prev.logos, club: img.fichierId } : { ...prev.logos, teams: { ...prev.logos.teams, [cible]: img.fichierId } } } : prev));
       return undefined;
     });
@@ -79,6 +90,7 @@ export function CharteClub({ theme, api, large, onChange }: { theme: ThemeHub; a
       {gerer ? (
         <View style={[styles.ligne, { gap: 4 }]}>
           {choixFichierDisponible ? <BoutonHub theme={theme} titre={trVi('charte.logo_choisir')} onPress={() => void importerLogo(cible)} testID={`esport-vi-logo-${cible}`} /> : null}
+          <BoutonHub theme={theme} titre={trDr('choix.depuis_drive')} onPress={() => setLogoDrive(cible)} testID={`esport-vi-logo-${cible}-drive`} />
           {fichier ? <BoutonHub theme={theme} titre={trVi('charte.logo_retirer')} onPress={() => retirerLogo(cible)} testID={`esport-vi-logo-${cible}-retirer`} /> : null}
         </View>
       ) : null}
@@ -88,6 +100,21 @@ export function CharteClub({ theme, api, large, onChange }: { theme: ThemeHub; a
   return (
     <View style={{ gap: ESP.m }} testID="esport-vi-charte">
       <Retours theme={theme} erreur={erreur} avis={avis} prefixe="esport-vi-charte" />
+      <ChoixDrive
+        theme={theme}
+        client={api.client}
+        visible={logoDrive !== undefined}
+        portees={['club']}
+        accepter={f => IMAGES_DRIVE.includes(f.meta.format ?? '')}
+        aide={trDr('choix.images')}
+        onFermer={() => setLogoDrive(undefined)}
+        onChoisir={f => {
+          const cible = logoDrive ?? 'club';
+          setLogoDrive(undefined);
+          void logoDepuisDrive(cible, f.id);
+        }}
+        testID="esport-vi-logo-choix-drive"
+      />
       <Text style={attenue(theme)}>{trVi('charte.aide')}</Text>
       {!gerer ? <Text style={attenue(theme)}>{trVi('charte.lecture_seule')}</Text> : null}
       <View style={{ flexDirection: large ? 'row' : 'column', gap: ESP.m, alignItems: 'flex-start' }}>

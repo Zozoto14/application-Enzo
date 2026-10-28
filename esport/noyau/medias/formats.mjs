@@ -34,6 +34,18 @@ export const FORMATS = {
   zip: { genre: 'archive', mime: 'application/zip', extension: 'zip', nom: 'ZIP' },
   '7z': { genre: 'archive', mime: 'application/x-7z-compressed', extension: '7z', nom: '7z' },
   rar: { genre: 'archive', mime: 'application/vnd.rar', extension: 'rar', nom: 'RAR' },
+  // Drive de la section CM (migration 0027) seulement : reconnus par `analyserDebut(…, { etendu: true })`.
+  gzip: { genre: 'archive', mime: 'application/gzip', extension: 'gz', nom: 'GZIP' },
+  svg: { genre: 'image', mime: 'image/svg+xml', extension: 'svg', nom: 'SVG' },
+  tiff: { genre: 'image', mime: 'image/tiff', extension: 'tif', nom: 'TIFF' },
+  heic: { genre: 'image', mime: 'image/heic', extension: 'heic', nom: 'HEIC' },
+  avif: { genre: 'image', mime: 'image/avif', extension: 'avif', nom: 'AVIF' },
+  psd: { genre: 'creation', mime: 'image/vnd.adobe.photoshop', extension: 'psd', nom: 'PSD' },
+  ttf: { genre: 'police', mime: 'font/ttf', extension: 'ttf', nom: 'TTF' },
+  otf: { genre: 'police', mime: 'font/otf', extension: 'otf', nom: 'OTF' },
+  woff: { genre: 'police', mime: 'font/woff', extension: 'woff', nom: 'WOFF' },
+  woff2: { genre: 'police', mime: 'font/woff2', extension: 'woff2', nom: 'WOFF2' },
+  texte: { genre: 'texte', mime: 'text/plain; charset=utf-8', extension: 'txt', nom: 'Texte' },
 };
 
 /** Formats acceptés selon l'usage. */
@@ -43,7 +55,71 @@ export const FORMATS_PERMIS = {
   ressource: ['pdf', 'png', 'jpeg', 'gif', 'webp', 'zip', '7z', 'rar', 'mp4', 'mov', 'webm', 'mkv'],
   // Section CM : visuels, vidéos (clips), PDF et archives.
   cm: ['pdf', 'png', 'jpeg', 'gif', 'webp', 'zip', '7z', 'rar', 'mp4', 'mov', 'webm', 'mkv'],
+  // Drive CM : tous les types courants (images, vidéos, audio, PDF, polices, archives, fichiers de création, texte).
+  // Jamais de HTML ni d'exécutable ; le SVG est servi sans exécution de script (lecture.mjs).
+  drive: ['pdf', 'png', 'jpeg', 'gif', 'webp', 'svg', 'tiff', 'heic', 'avif', 'psd', 'zip', '7z', 'rar', 'gzip', 'mp4', 'mov', 'webm', 'mkv', 'm4a', 'mp3', 'aac', 'wav', 'ogg', 'flac', 'ttf', 'otf', 'woff', 'woff2', 'texte'],
 };
+
+/** Marques `ftyp` des images HEIF / AVIF (sinon prises pour un MP4). */
+const MARQUES_HEIF = new Set(['heic', 'heix', 'heim', 'heis', 'hevc', 'hevx', 'mif1', 'msf1']);
+const MARQUES_AVIF = new Set(['avif', 'avis']);
+
+/** Texte (UTF-8, sinon Latin-1) sans octet de contrôle binaire (la fin d'un morceau peut couper un caractère). */
+function texteUtf8(o) {
+  const n = Math.min(o.length, 64 * 1024);
+  if (n === 0) return null;
+  for (let i = 0; i < n; i++) {
+    const x = o[i];
+    if (x === 0 || (x < 0x20 && x !== 0x09 && x !== 0x0a && x !== 0x0d && x !== 0x0c)) return null;
+  }
+  // Retire au plus 3 octets d'un caractère coupé à la fin, puis décodage strict.
+  let fin = n;
+  if (n < o.length) {
+    let k = n - 1;
+    while (k > n - 4 && k >= 0 && (o[k] & 0xc0) === 0x80) k--;
+    if (k >= 0 && o[k] >= 0xc0) fin = k;
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(o.subarray(0, fin));
+  } catch {
+    // Texte d'un ancien encodage (CSV exporté en Windows-1252…) : accepté, lu tel quel.
+    return new TextDecoder('latin1').decode(o.subarray(0, n));
+  }
+}
+
+/**
+ * Formats supplémentaires du Drive (aucun autre usage ne les accepte) : SVG, TIFF, HEIC / AVIF, PSD, polices,
+ * GZIP, texte brut. Une page HTML n'est jamais acceptée, même en « texte ».
+ */
+export function reconnaitreEtendu(octets) {
+  const o = octets instanceof Uint8Array ? octets : new Uint8Array(octets ?? []);
+  if (o.length >= 12 && ascii(o, 4, 4) === 'ftyp') {
+    const marque = ascii(o, 8, 4);
+    if (MARQUES_AVIF.has(marque)) return 'avif';
+    if (MARQUES_HEIF.has(marque)) return 'heic';
+  }
+  const base = reconnaitre(o);
+  if (base) return base;
+  if (o.length < 4) return null;
+  const premiers = ascii(o, 0, 4);
+  if (premiers === '8BPS') return 'psd';
+  if ((premiers === 'II*\u0000') || (o[0] === 0x4d && o[1] === 0x4d && o[2] === 0x00 && o[3] === 0x2a)) return 'tiff';
+  if (premiers === 'wOFF') return 'woff';
+  if (premiers === 'wOF2') return 'woff2';
+  if (premiers === 'OTTO') return 'otf';
+  if ((o[0] === 0x00 && o[1] === 0x01 && o[2] === 0x00 && o[3] === 0x00) || premiers === 'true') return 'ttf';
+  if (o[0] === 0x1f && o[1] === 0x8b && o[2] === 0x08) return 'gzip';
+  const texte = texteUtf8(o);
+  if (texte === null) return null;
+  const debut = texte.replace(/^\uFEFF/, '').trimStart().slice(0, 4096).toLowerCase();
+  const tout = texte.slice(0, 64 * 1024).toLowerCase();
+  // Une page HTML (même cachée dans un SVG) n'est jamais acceptée. Un <script> de SVG l'est : le SVG est servi
+  // inerte (politique « sandbox », lecture.mjs) et une balise <img> n'exécute jamais rien.
+  if (/<!doctype\s+html|<html[\s>]|<iframe[\s>]|<body[\s>]|<frameset[\s>]/.test(tout)) return null;
+  if ((debut.startsWith('<?xml') || debut.startsWith('<svg') || debut.startsWith('<!--') || debut.startsWith('<!doctype svg')) && /<svg[\s>]/.test(tout)) return 'svg';
+  if (debut.startsWith('<') || /<script[\s>]/.test(debut)) return null;
+  return 'texte';
+}
 
 const MARQUES_AUDIO = new Set(['M4A ', 'M4B ', 'M4P ', 'F4A ', 'F4B ']);
 const ATOMES_QUICKTIME = new Set(['moov', 'mdat', 'wide', 'free', 'skip', 'pnot']);
@@ -177,9 +253,9 @@ const CODECS_MATROSKA = [
  * Analyse du début d'un fichier (premier morceau) : `{ format, genre, mime, codecVideo?, codecAudio?,
  * duree?, moovAuDebut? }`, ou null si ce n'est ni une vidéo ni un audio reconnu.
  */
-export function analyserDebut(octets) {
+export function analyserDebut(octets, { etendu = false } = {}) {
   const o = octets instanceof Uint8Array ? octets : new Uint8Array(octets ?? []);
-  const format = reconnaitre(o);
+  const format = etendu ? reconnaitreEtendu(o) : reconnaitre(o);
   if (!format) return null;
   const sortie = { format, genre: FORMATS[format].genre, mime: FORMATS[format].mime };
   if (format === 'mp4' || format === 'mov' || format === 'm4a') {

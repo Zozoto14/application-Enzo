@@ -88,6 +88,8 @@ export function apiVisuels(client: ClientEsport) {
     changerCharte: (charte: Partial<Charte>, version?: number) => r<ReponseCharte>('/cm/charte', 'PUT', { charte, version }),
     reinitialiserCharte: () => r<ReponseCharte>('/cm/charte', 'PUT', { reinitialiser: true }),
     importerImage: (portee: string, envoi: string) => r<ImageImportee>('/cm/visuels/images', 'POST', { portee, envoi }),
+    /** Image prise dans le Drive (portée de l'éditeur ou Drive du club) : aucun octet copié. */
+    importerImageDepuisDrive: (portee: string, fichierDrive: string) => r<ImageImportee>('/cm/visuels/images', 'POST', { portee, drive: fichierDrive }),
     images: (portee: string) => r<{ images: ImageImportee[] }>(`/cm/visuels/images${qs({ portee })}`),
     lienFichier: (id: string) => r<{ url: string; expire: string }>(`/cm/visuels/fichiers/${e(id)}/lien`, 'POST', {}),
     modeles: (portee?: string) => r<ListeModeles>(`/cm/modeles${qs({ portee })}`),

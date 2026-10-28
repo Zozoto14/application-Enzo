@@ -23,14 +23,16 @@ import { rappelsSponsors } from './sponsors/rappels.mjs';
 import { rappelsReseaux } from './reseaux/rappels.mjs';
 import { traiterAnnoncesReseaux } from './reseaux/annonces.mjs';
 import { releverAutomatiquement } from './reseaux/adaptateurs.mjs';
+import { purgerCorbeilleDrive, verifierAlerteDrive } from './cm/drive/service.mjs';
+import { configDrive } from './cm/drive/regles.mjs';
 
 /**
  * Rend `[{ tache, ok, erreur? }]`. Options : `cle` (CLE_DISCORD sinon CLE_ESPORT), `lienApp`, `jetonBot`, `fetch`,
  * `maintenant`, `stockage` (fichiers : ménage des envois), `cleSession`, `transcriptionExterne` et
  * `fetchTranscription` (API de transcription facultative), `adaptateursReseaux` (relevés automatiques des
- * statistiques des réseaux : aucun en V1, voir reseaux/adaptateurs.mjs).
+ * statistiques des réseaux : aucun en V1, voir reseaux/adaptateurs.mjs), `drive` (quota du Drive CM, regles.mjs).
  */
-export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, maintenant = () => Date.now(), journal = console, stockage, cleSession, transcriptionExterne, fetchTranscription, adaptateursReseaux = [] } = {}) {
+export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, maintenant = () => Date.now(), journal = console, stockage, cleSession, transcriptionExterne, fetchTranscription, adaptateursReseaux = [], drive = configDrive() } = {}) {
   const transcrire = async () => {
     if (!transcriptionExterne?.actif || !stockage) return 0;
     const socle = { contexteTeam: async () => { throw new Error('Contexte indisponible dans le cron.'); } };
@@ -57,6 +59,9 @@ export async function tachesPlanifiees(base, { cle, lienApp, jetonBot, fetch, ma
     ['limites de débit', () => purgerLimites(base, maintenant())],
     ['tentatives anciennes', () => base.executer('DELETE FROM tentatives WHERE maj_le < ?', [new Date(maintenant() - 7 * 86_400_000).toISOString()])],
     ['envois inachevés', () => nettoyerEnvois(base, stockage, { maintenant: maintenant() })],
+    // Drive de la section CM : corbeille de plus de 30 jours effacée (octets compris), alerte d'espace à 80 %.
+    ['corbeille du Drive', () => purgerCorbeilleDrive(base, stockage, { maintenant: maintenant() })],
+    ['espace du Drive', () => verifierAlerteDrive(base, { quota: drive?.quota, maintenant: maintenant() })],
     ['transcriptions externes', transcrire],
   ];
   const rapport = [];

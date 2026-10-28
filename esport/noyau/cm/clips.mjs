@@ -31,7 +31,7 @@ export function lireInstantClip(v) {
   throw echec(400, 'instant', 'Instant invalide (ex. 12:34).');
 }
 
-export function servicesClipsCm({ base, maintenant = () => Date.now(), medias, cleSession, tableaux }) {
+export function servicesClipsCm({ base, maintenant = () => Date.now(), medias, cleSession, tableaux, drive }) {
   async function ctxTeam(acteur, teamId) {
     exigerUuid(teamId, 'team');
     return contexteCm(base, acteur, teamId);
@@ -179,6 +179,10 @@ export function servicesClipsCm({ base, maintenant = () => Date.now(), medias, c
       { sql: 'UPDATE cm_clips SET statut = ?, motif = ?, decide_par = ?, decide_le = ?, maj_le = ? WHERE id = ?', params: [statut, motif || null, acteur.compte, iso(t), iso(t), clip.id] },
       ...(statut !== 'propose' ? [evenement('cm.clip_decide', { teamId: clip.team_id, acteur: acteur.compte, entiteType: 'cm_clip', entiteId: clip.id, charge: { titre: clip.titre, statut, motif: motif || null, proposePar: clip.propose_par ?? null }, maintenant: t })] : []),
     ]);
+    // Clip retenu (fichier déposé) : rangé dans le dossier « Clips » du Drive de la team (réglable, docs/esport/drive.md).
+    if ((statut === 'retenu' || statut === 'utilise') && clip.genre === 'fichier' && clip.fichier_id && drive) {
+      await drive.ranger({ origine: 'clip', origineId: clip.id, portee: clip.team_id, cleDossier: 'clips', fichierId: clip.fichier_id, nom: clip.titre || 'clip', acteur });
+    }
     return { ok: true };
   }
 

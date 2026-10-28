@@ -14,6 +14,8 @@
  *   ESPORT_VIDEO_MAX       plafond d'une vidéo ou d'un enregistrement déposé (« 10G » par défaut)
  *   ESPORT_TAILLE_MORCEAU  taille des morceaux d'envoi (« 8M » par défaut, de 1 à 64 Mio) : sous la limite
  *                          de corps de requête de l'hébergeur (docs/esport/videos.md)
+ *   ESPORT_DRIVE_QUOTA     espace total du Drive de la section CM (« 20G » par défaut ; alerte à 80 %)
+ *   ESPORT_DRIVE_FICHIER_MAX  plafond d'un fichier du Drive (« 2G »), ESPORT_DRIVE_ZIP_MAX : dossier en ZIP (« 2G »)
  *   TRANSCRIPTION_API, TRANSCRIPTION_API_CLE… : transcription par une API externe, désactivée par défaut
  *                          (docs/esport/resumes.md)
  *   IA_API_URL, IA_API_CLE, IA_MODELE, IA_FOURNISSEUR, IA_RECHERCHE : assistant IA des profils de jeu
@@ -29,6 +31,7 @@ import { join } from 'node:path';
 import { chargerEnv, fichierEnvParDefaut } from './commun.mjs';
 import { configSmtp } from './courriel-smtp.mjs';
 import { configMedias } from '../noyau/medias/service.mjs';
+import { configDrive } from '../noyau/cm/drive/regles.mjs';
 import { configTranscriptionExterne } from '../noyau/medias/transcription.mjs';
 import { configTranscriptionServeur } from '../noyau/medias/fileTranscription.mjs';
 import { dossierModelesParDefaut, etatInstallation } from './transcription/moteur.mjs';
@@ -59,6 +62,8 @@ export function chargerConfigEsport(env = process.env) {
     smtp: configSmtp(env),
     baseConfiguree: Boolean(env.DATABASE_URL || env.PGDATABASE || env.PGHOST),
     medias: configMedias(env),
+    // Drive de la section CM : ESPORT_DRIVE_QUOTA, ESPORT_DRIVE_FICHIER_MAX, ESPORT_DRIVE_ZIP_MAX (docs/esport/drive.md).
+    drive: configDrive(env),
     transcriptionExterne: configTranscriptionExterne(env),
     transcriptionServeur: chargerTranscriptionServeur(env),
     // Assistant IA des profils de jeu : la clé reste dans une fermeture (jamais sérialisée).

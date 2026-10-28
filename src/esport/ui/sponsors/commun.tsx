@@ -11,6 +11,8 @@ import type { ThemeHub } from '../../../hub/themes';
 import { CATEGORIES_PIECE, GENRES_ECHANGE, PORTEE_SPONSORS, type ApiSponsors, type CategoriePiece, type Cible, type Contact, type Echange, type GenreEchange, type IssueEtape, type Piece, type Priorite } from '../../sponsors/api';
 import { lienMailto, lienReseau, lienTel, prenomDe } from '../../sponsors/regles';
 import { ACCEPT_CM, choisirFichier, choixFichierDisponible } from '../../medias/choixFichier';
+import { ChoixDrive } from '../cm/drive/ChoixDrive';
+import { trDr } from '../../i18n/drive';
 import { tailleMedia } from '../../medias/envoi';
 import { langueCourante, tr } from '../../i18n';
 import { CLES_MODELES, trSp, type CleSp } from '../../i18n/sponsors';
@@ -286,6 +288,7 @@ export function PiecesSp({
   const [url, setUrl] = useState('');
   const [nom, setNom] = useState('');
   const [categorie, setCategorie] = useState<CategoriePiece>('deck');
+  const [choixDrive, setChoixDrive] = useState(false);
   const envoi = useEnvoi();
   const ouvrir = (id: string, telecharger: boolean) => void ouvrirLienDiffere(async () => (await api.lienPiece(id, telecharger)).url);
   return (
@@ -357,8 +360,24 @@ export function PiecesSp({
             ) : (
               <Aide theme={theme}>{trSp('pieces.fichier_depuis_pc')}</Aide>
             )}
+            {/* Drive du club (migration 0027) : logo, deck… déjà rangés, sans copie des octets. */}
+            <BoutonHub theme={theme} titre={trDr('choix.depuis_drive')} onPress={() => setChoixDrive(true)} testID="esport-sp-piece-drive" />
           </View>
           <BarreEnvoi theme={theme} progression={envoi.progression} enCours={envoi.enCours} onAnnuler={envoi.annuler} testID="esport-sp-piece-envoi" />
+          <ChoixDrive
+            theme={theme}
+            client={api.client}
+            visible={choixDrive}
+            portees={['club']}
+            onFermer={() => setChoixDrive(false)}
+            onChoisir={f => {
+              setChoixDrive(false);
+              void faire('drive', async () => {
+                await api.ajouterDepuisDrive(cible, f.id, categorie);
+              });
+            }}
+            testID="esport-sp-piece-choix-drive"
+          />
         </View>
       ) : null}
     </Panneau>

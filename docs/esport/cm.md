@@ -9,14 +9,16 @@ se copient, les médias se téléchargent). Elle a deux niveaux :
   la team dépose les informations et où les joueurs proposent leurs clips.
 
 Visuels (charte, modèles, éditeur, génération d'affiches) : [visuels.md](visuels.md). Comptes des réseaux, annonce
-Discord des posts publiés et statistiques (onglet **Réseaux**) : [reseaux-stats.md](reseaux-stats.md).
+Discord des posts publiés et statistiques (onglet **Réseaux**) : [reseaux-stats.md](reseaux-stats.md). **Drive**
+(dossiers et fichiers du club et des teams, versions, corbeille, dépôt des joueurs) : [drive.md](drive.md).
 
 Migration : `esport/migrations/0023_cm.sql`. Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
 
 ## Qui fait quoi
 
-Six permissions (plus deux pour la rubrique **Sponsors**, `sponsors.voir` et `sponsors.gerer`, portées aussi par les
-rôles CM : voir [sponsors.md](sponsors.md)) :
+Six permissions (plus deux pour la rubrique **Sponsors**, `sponsors.voir` et `sponsors.gerer`, et trois pour le
+**Drive**, `cm.drive.voir`, `cm.drive.envoyer` et `cm.drive.gerer`, portées aussi par les rôles CM : voir
+[sponsors.md](sponsors.md) et [drive.md](drive.md)) :
 
 | Permission | Ce qu'elle ouvre |
 | --- | --- |
@@ -29,8 +31,9 @@ rôles CM : voir [sponsors.md](sponsors.md)) :
 
 Elles viennent de deux endroits :
 
-1. **Rôles CM** (niveau club, **Esport › CM › Équipe CM**) : « **Responsable CM** » (les six permissions) et
-   « **Correspondant CM** » (voir, déposer, proposer des clips) sont des rôles système dont les permissions se
+1. **Rôles CM** (niveau club, **Esport › CM › Équipe CM**) : « **Responsable CM** » (les six permissions, Sponsors et
+   tout le Drive) et « **Correspondant CM** » (voir, déposer, proposer des clips ; voir et alimenter le Drive de sa
+   team) sont des rôles système dont les permissions se
    modifient (bouton **Rétablir**) ; le Fondateur crée d'autres rôles (« Rédacteur », « Vidéaste »…) avec les
    permissions voulues. Une **affectation** donne un rôle à un compte :
    - pour **tout le club** : ses permissions valent pour l'espace du club et pour toutes les teams dont le module
@@ -61,8 +64,8 @@ Contrôles d'une route CM : session → team existante → module `cm` activé (
 - **Listes** : créer, renommer, déplacer (menu de la liste), archiver.
 - **Cartes** : titre, description en **Markdown** (nettoyé par le serveur, rendu par l'app sans HTML), **étiquettes**
   colorées, **échéance** (et « terminé »), **membres assignés** (personnes qui ont accès au tableau), **checklists**,
-  **commentaires** (@pseudo : la personne est prévenue), **pièces jointes** (lien https, ou fichier envoyé par
-  morceaux : PDF, images, vidéos, archives ; jamais de SVG ni HTML), **couverture** (couleur ou image jointe),
+  **commentaires** (@pseudo : la personne est prévenue), **pièces jointes** (lien https, fichier envoyé par
+  morceaux : PDF, images, vidéos, archives ; jamais de SVG ni HTML ; ou fichier choisi **dans le Drive**, sans copie), **couverture** (couleur ou image jointe),
   team concernée (tableau du club), **archivage**, **activité** (qui a fait quoi sur la carte).
 - **Déplacer une carte** : à la souris ou au doigt par la poignée **⠿** (un trait montre où elle arrive ; le tableau
   défile près des bords) ; au clavier et au lecteur d'écran par le menu **⋯** de la carte (Monter, Descendre, Liste
@@ -172,7 +175,7 @@ Trello pour les ouvrir (l'app le dit) ; une image de couverture Trello reste une
 
 Notifications : carte assignée, @mention dans un commentaire, post à valider (et à valider de nouveau après une
 modification), post validé ou refusé (auteur et membres de la carte), dépôt d'une team (CM du club), clip proposé (CM
-de la team), décision sur un clip (proposeur), rôle CM reçu.
+de la team), décision sur un clip (proposeur), rôle CM reçu, Drive rempli à 80 % (gestionnaires du Drive).
 
 Journal (bus) : actions `cm.*` (tableaux, cartes, commentaires, dépôts, soumissions, validations, refus,
 invalidations, publications, clips, import Trello, rôles, affectations, réglages). Une action sur un tableau de team
@@ -223,7 +226,10 @@ des joueurs liés aux posts ; ce qu'il a écrit pour le club reste, sans auteur.
 Limites de débit (par compte et par heure) : 20 imports Trello, 30 clips, 30 dépôts.
 
 La migration `0026_cm_reseaux.sql` ajoute la page **Réseaux** (comptes, annonces, statistiques : tables `cm_rs_*`,
-voir [reseaux-stats.md](reseaux-stats.md)).
+voir [reseaux-stats.md](reseaux-stats.md)). La migration `0027_cm_drive.sql` ajoute le **Drive** (tables `cm_drive_*`,
+usage « drive » des envois, permissions du Drive sur les rôles système : voir [drive.md](drive.md)). Les octets d'un
+fichier CM peuvent servir à plusieurs endroits (pièce jointe prise dans le Drive, visuel rangé…) : ils ne sont effacés
+que quand plus rien ne s'en sert (`esport/noyau/cm/utilisations.mjs`).
 
 ## Code et tests
 

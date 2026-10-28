@@ -330,6 +330,29 @@
   "WAV illisible.": "Unreadable WAV.",
   "WAV non pris en charge (PCM ou flottant attendu).": "Unsupported WAV (PCM or float expected).",
   "Fichier non reconnu : PDF, image (PNG, JPEG, GIF, WebP), vidéo (MP4, MOV, WebM, MKV) ou archive (ZIP, 7z, RAR).": "Unrecognized file: PDF, image (PNG, JPEG, GIF, WebP), video (MP4, MOV, WebM, MKV) or archive (ZIP, 7z, RAR).",
+  "Dossier introuvable.": "Folder not found.",
+  "L’espace du Drive est plein : videz la corbeille ou supprimez des fichiers.": "The Drive is full: empty the trash or delete files.",
+  "Étiquette illisible.": "Unreadable tag.",
+  "Auteur inconnu.": "Unknown author.",
+  "Date : AAAA-MM-JJ.": "Date: YYYY-MM-DD.",
+  "Élément introuvable (supprimé, ou vous n’y avez pas accès).": "Item not found (deleted, or you do not have access to it).",
+  "Étiquettes : 12 au plus, texte court.": "Tags: 12 at most, short text.",
+  "Type de fichier refusé.": "File type refused.",
+  "Nom du fichier : obligatoire.": "File name: required.",
+  "Ce fichier a changé entre-temps : rechargez-le.": "This file changed in the meantime: reload it.",
+  "Les octets de cette version ont été effacés.": "The contents of this version have been erased.",
+  "La version actuelle ne se supprime pas : mettez le fichier à la corbeille.": "The current version cannot be deleted: move the file to the trash.",
+  "Nom du dossier : obligatoire.": "Folder name: required.",
+  "Un dossier par défaut reste à la racine du Drive.": "A default folder stays at the root of the Drive.",
+  "Un dossier ne se range pas dans lui-même.": "A folder cannot be moved into itself.",
+  "Un dossier par défaut ne se supprime pas (renommez-le si besoin).": "A default folder cannot be deleted (rename it if needed).",
+  "Ce dossier contient des éléments d’autres personnes : seul un gestionnaire du Drive peut le supprimer.": "This folder contains other people’s items: only a Drive manager can delete it.",
+  "Élément introuvable dans la corbeille.": "Item not found in the trash.",
+  "Seuls les fichiers se copient.": "Only files can be copied.",
+  "Ce dossier ne contient aucun fichier.": "This folder contains no files.",
+  "Fichier du Drive introuvable.": "Drive file not found.",
+  "Ce fichier est dans le Drive d’une autre team.": "This file is in another team’s Drive.",
+  "Type de fichier refusé : images, vidéos, audio, PDF, polices, archives, PSD ou texte (jamais de page web ni de programme).": "File type refused: images, videos, audio, PDF, fonts, archives, PSD or text (never a web page or a program).",
   "Adresse refusée : seules les pages web publiques (http ou https) ont un aperçu.": "Address refused: only public web pages (http or https) get a preview.",
   "Page injoignable : pas d’aperçu.": "Page unreachable: no preview.",
   "La page met trop de temps à répondre : pas d’aperçu.": "The page takes too long to respond: no preview.",
@@ -861,6 +884,26 @@
   [
    "^Image trop lourde : (\\d+) Mo au plus\\.$",
    "Image too heavy: $1 MB at most."
+  ],
+  [
+   "^(\\d+) dossiers au plus\\.$",
+   "$1 folders at most."
+  ],
+  [
+   "^(\\d+) niveaux de dossiers au plus\\.$",
+   "$1 folder levels at most."
+  ],
+  [
+   "^De 1 à (\\d+) éléments\\.$",
+   "From 1 to $1 items."
+  ],
+  [
+   "^Trop de fichiers pour un ZIP \\((\\d+) au plus\\) : téléchargez les sous-dossiers\\.$",
+   "Too many files for a ZIP ($1 at most): download the subfolders."
+  ],
+  [
+   "^Dossier trop lourd pour un ZIP \\((\\d+) Mo au plus\\) : téléchargez les sous-dossiers\\.$",
+   "Folder too large for a ZIP ($1 MB at most): download the subfolders."
   ],
   [
    "^Le rendu doit faire exactement (\\d+)×(\\d+) px\\.$",

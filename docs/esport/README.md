@@ -27,6 +27,7 @@ explique simplement comment s'en servir, d'abord pour le **Fondateur**, puis pou
 | [cm.md](cm.md) | Fondateur, CM, correspondants, joueurs | Section CM : tableaux façon Trello, posts FR / EN par réseau, validation, calendrier, clips des joueurs, dépôts des teams, import Trello |
 | [visuels.md](visuels.md) | Fondateur, CM | Visuels de la section CM : charte graphique (thème cyberpunk), modèles d'affiches par défaut (4 formats, FR / EN), éditeur, génération PNG / JPEG jointe aux posts |
 | [reseaux-stats.md](reseaux-stats.md) | Fondateur, CM | Page Réseaux du CM : comptes du club et des teams, annonce Discord des posts publiés (anglais + fil français), statistiques des posts, vidéos et comptes (relevés datés, engagement, tableaux de bord, import / export CSV) |
+| [drive.md](drive.md) | Fondateur, CM | Drive du CM : dossiers et fichiers du club et des teams, envoi multiple et glisser-déposer, versions, corbeille (30 jours), recherche, aperçus, ZIP, quota, dépôt des joueurs, pièces jointes et images prises dans le Drive |
 | [sponsors.md](sponsors.md) | Fondateur, Responsable CM | Sponsors & partenaires (rubrique du CM) : pipeline des prospects, partenaires, contrats et contreparties, tableau de bord, import / export CSV, RGPD des contacts |
 | [statistiques.md](statistiques.md) | Fondateur | Page Statistiques (réservée au Fondateur) : qui utilise l'app, pages les plus et les moins utilisées, ce qui est collecté |
 | [securite.md](securite.md) | Fondateur | Revue de sécurité, RGPD, limites |
@@ -68,7 +69,7 @@ Esport
 │       ├── Équipe       Résumés · Objectifs et tâches · Suivi joueurs · CM · Membres et rôles
 │       └── Réglages     Paramètres · Discord · Journal
 ├── Membres
-├── CM                   (section CM du club, voir cm.md ; onglets Visuels, voir visuels.md, Réseaux, voir reseaux-stats.md, et Sponsors, voir sponsors.md)
+├── CM                   (section CM du club, voir cm.md ; onglets Visuels, voir visuels.md, Drive, voir drive.md, Réseaux, voir reseaux-stats.md, et Sponsors, voir sponsors.md)
 ├── Jeux                 (profils de jeu et assistant IA, voir profils-jeu.md)
 └── Statistiques         (Fondateur seulement : statistiques d'usage, voir statistiques.md)
 ```
@@ -169,6 +170,9 @@ La migration `0024_sponsors.sql` ajoute la rubrique **Sponsors** du CM, ouverte 
 (permissions `sponsors.voir` / `sponsors.gerer`, modifiables dans **Esport › CM › Équipe CM**) ([sponsors.md](sponsors.md)).
 La migration `0026_cm_reseaux.sql` ajoute la page **Réseaux** du CM : enregistrez les comptes du club, réglez
 l'annonce Discord de chacun (**Esport › CM › Réseaux**) ([reseaux-stats.md](reseaux-stats.md)).
+La migration `0027_cm_drive.sql` ajoute le **Drive** du CM (club et teams), ouvert par défaut au Responsable CM (tout)
+et aux correspondants (leur team) ; les joueurs n'y voient que le dossier « Dépôt joueurs » ; espace réglable par
+`ESPORT_DRIVE_QUOTA` ([drive.md](drive.md)).
 
 ### Créer une team
 

@@ -6,7 +6,8 @@
  *
  * Notifications : membres assignés à une carte, personnes @mentionnées dans un commentaire, valideurs
  * (post soumis, ou repassé « à valider » après une modification), auteur du post (validé, refusé), CM
- * (dépôt d'une team, clip proposé), proposeur d'un clip (décision), compte affecté à un rôle CM.
+ * (dépôt d'une team, clip proposé), proposeur d'un clip (décision), compte affecté à un rôle CM, gestionnaires
+ * du Drive (espace utilisé à 80 %).
  *
  * Ce fichier n'importe pas evenements.mjs (c'est lui qui nous importe).
  */
@@ -43,6 +44,17 @@ export const TYPES_CM = [
   'cm.modele_modifie',
   'cm.modele_supprime',
   'cm.visuel_genere',
+  // Drive (migration 0027).
+  'cm.drive_fichier_ajoute',
+  'cm.drive_fichier_modifie',
+  'cm.drive_version_ajoutee',
+  'cm.drive_dossier_cree',
+  'cm.drive_dossier_modifie',
+  'cm.drive_corbeille',
+  'cm.drive_restaure',
+  'cm.drive_supprime',
+  'cm.drive_corbeille_videe',
+  'cm.drive_quota',
 ];
 
 async function notifier(base, ev, compte, type, charge) {
@@ -89,6 +101,9 @@ export async function abonneCm(base, ev) {
       return envoyer([charge.proposePar], 'cm-clip-decide', { titre: charge.titre ?? null, statut: charge.statut ?? null, motif: charge.motif ?? null, clip: ev.entite_id });
     case 'cm.affectation_ajoutee':
       return envoyer([charge.compte], 'cm-affecte', { role: charge.role ?? null, portee: charge.portee ?? null });
+    case 'cm.drive_quota':
+      // Drive plein à 80 % (au plus une fois par semaine) : ceux qui gèrent le Drive du club.
+      return envoyer([...(await comptesClubAvec(base, 'cm.drive.gerer'))], 'cm-drive-quota', { pourcent: charge.pourcent ?? null, utilise: charge.utilise ?? null, limite: charge.limite ?? null });
     default:
       return;
   }

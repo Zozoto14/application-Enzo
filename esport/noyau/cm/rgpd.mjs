@@ -2,7 +2,7 @@
  * RGPD de la section CM.
  *
  *  - Export (droit d'accès) : rôles CM, cartes créées, cartes où le compte est assigné, commentaires,
- *    clips proposés, fichiers déposés, modèles de visuels et visuels créés.
+ *    clips proposés, fichiers déposés, modèles de visuels et visuels créés, fichiers du Drive et favoris.
  *  - Suppression du compte : ses affectations et ses assignations disparaissent ; ce qu'il a écrit pour le
  *    club (cartes, commentaires, clips, pièces jointes, modèles et visuels) reste, sans auteur (« Compte
  *    supprimé ») ; il est retiré des membres liés aux posts.
@@ -22,6 +22,9 @@ export async function exportCm(base, compte) {
     cmClips: (await q('SELECT team_id, genre, url, titre, description, instant, statut, motif, cree_le FROM cm_clips WHERE propose_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(x => ({ team: teams.get(x.team_id) ?? null, genre: x.genre, url: x.url ?? null, titre: x.titre, description: x.description, instant: x.instant === null ? null : Number(x.instant), statut: x.statut, motif: x.motif ?? null, date: x.cree_le })),
     cmFichiers: (await q("SELECT nom_original, taille, type_mime, cree_le FROM cm_fichiers WHERE depose_par = ? AND supprime_le IS NULL ORDER BY cree_le")).map(f => ({ nom: f.nom_original, taille: Number(f.taille), type: f.type_mime, date: f.cree_le })),
     cmModeles: (await q('SELECT nom, type, portee, cree_le FROM cm_modeles WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(m => ({ nom: m.nom, type: m.type, portee: m.portee === 'club' ? 'club' : (teams.get(m.portee) ?? m.portee), creeLe: m.cree_le })),
+    // Drive (migration 0027) : fichiers déposés (ou ajoutés en version) et favoris.
+    cmDrive: (await q('SELECT nom, type_mime, taille, portee, version, cree_le FROM cm_drive_fichiers WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(f => ({ nom: f.nom, type: f.type_mime, taille: Number(f.taille), version: Number(f.version), portee: f.portee === 'club' ? 'club' : (teams.get(f.portee) ?? f.portee), date: f.cree_le })),
+    cmDriveFavoris: (await q('SELECT genre, cree_le FROM cm_drive_favoris WHERE compte_id = ? ORDER BY cree_le')).map(f => ({ genre: f.genre, date: f.cree_le })),
     cmVisuels: (await q('SELECT nom, type, format, langue, portee, cree_le FROM cm_visuels WHERE cree_par = ? AND supprime_le IS NULL ORDER BY cree_le')).map(v => ({ nom: v.nom, type: v.type, format: v.format, langue: v.langue, portee: v.portee === 'club' ? 'club' : (teams.get(v.portee) ?? v.portee), creeLe: v.cree_le })),
   };
 }
@@ -49,6 +52,15 @@ export async function effacementCm(base, compte) {
     { sql: 'UPDATE cm_visuels SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
     { sql: 'UPDATE cm_visuels SET rendu_par = NULL WHERE rendu_par = ?', params: [compte] },
     { sql: 'UPDATE cm_visuel_images SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
+    // Drive (migration 0027) : ses fichiers restent au club, sans auteur ; ses favoris disparaissent.
+    { sql: 'DELETE FROM cm_drive_favoris WHERE compte_id = ?', params: [compte] },
+    { sql: 'UPDATE cm_drive_fichiers SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_drive_fichiers SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_drive_fichiers SET supprime_par = NULL WHERE supprime_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_drive_versions SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_drive_dossiers SET cree_par = NULL WHERE cree_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_drive_dossiers SET maj_par = NULL WHERE maj_par = ?', params: [compte] },
+    { sql: 'UPDATE cm_drive_dossiers SET supprime_par = NULL WHERE supprime_par = ?', params: [compte] },
   ];
   lot.push(
     { sql: 'UPDATE cm_cartes SET cree_par = NULL WHERE cree_par = ?', params: [compte] },

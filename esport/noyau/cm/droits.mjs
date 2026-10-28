@@ -17,10 +17,10 @@ import { MOTIF_COMPTE, MOTIF_COULEUR, PORTEE_CLUB, contexteCm, exiger, exigerUui
 import { CLES_RESEAUX } from './reseaux.mjs';
 import { PERMISSIONS_ROLES_CM, droitsSponsors } from '../sponsors/commun.mjs';
 
-/** Permissions par défaut des rôles CM système (migration 0023 ; 0024 : Sponsors pour le Responsable CM). */
+/** Permissions par défaut des rôles CM système (migration 0023 ; 0024 : Sponsors pour le Responsable CM ; 0027 : Drive). */
 export const ROLES_CM_SYSTEME = Object.freeze({
-  responsable: ['cm.voir', 'cm.deposer', 'cm.editer', 'cm.valider', 'cm.gerer', 'cm.clips.proposer', 'sponsors.voir', 'sponsors.gerer'],
-  correspondant: ['cm.voir', 'cm.deposer', 'cm.clips.proposer'],
+  responsable: ['cm.voir', 'cm.deposer', 'cm.editer', 'cm.valider', 'cm.gerer', 'cm.clips.proposer', 'sponsors.voir', 'sponsors.gerer', 'cm.drive.voir', 'cm.drive.envoyer', 'cm.drive.gerer'],
+  correspondant: ['cm.voir', 'cm.deposer', 'cm.clips.proposer', 'cm.drive.voir', 'cm.drive.envoyer'],
 });
 
 /** Types de suggestions automatiques (cartes brouillon dans « Idées »). */
@@ -300,7 +300,9 @@ export function servicesDroitsCm({ base, maintenant = () => Date.now() }) {
     const teams = [...portees.teams].map(([id, s]) => ({ ...portees.noms.get(id), permissions: [...s].sort() }));
     // Sponsors (migration 0024) : la rubrique s'ouvre aussi à qui n'a QUE sponsors.voir (affectation « club »).
     const sponsors = [...(await droitsSponsors(base, acteur))].sort();
-    const espace = portees.club.has('cm.voir') || teams.some(t => t.permissions.includes('cm.voir')) || sponsors.includes('sponsors.voir');
+    // Drive (migration 0027) : un compte qui n'a QUE le Drive (cm.drive.voir) ouvre aussi l'espace.
+    const voitDrive = s => s.has('cm.drive.voir') || s.has('cm.drive.envoyer') || s.has('cm.drive.gerer');
+    const espace = portees.club.has('cm.voir') || teams.some(t => t.permissions.includes('cm.voir')) || sponsors.includes('sponsors.voir') || voitDrive(portees.club) || [...portees.teams.values()].some(voitDrive);
     return {
       espace,
       sponsors,

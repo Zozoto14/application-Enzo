@@ -21,8 +21,14 @@ import { CLE_PROPRIETAIRE } from '../permissions.mjs';
 import { echec, iso, nouvelId } from '../outils.mjs';
 
 export const MODULE_CM = 'cm';
+/**
+ * Drive de la section CM (migration 0027) : voir (parcourir, télécharger), envoyer (déposer, organiser ses
+ * fichiers), gérer (tout, dossiers restreints, corbeille, versions). Portées par les rôles CM seulement
+ * (affectation « club » ou d'une team), jamais par un rôle de team.
+ */
+export const PERMISSIONS_DRIVE_CM = Object.freeze(['cm.drive.voir', 'cm.drive.envoyer', 'cm.drive.gerer']);
 export const PORTEE_CLUB = 'club';
-export const PERMISSIONS_CM = Object.freeze(['cm.voir', 'cm.deposer', 'cm.editer', 'cm.valider', 'cm.gerer', 'cm.clips.proposer']);
+export const PERMISSIONS_CM = Object.freeze(['cm.voir', 'cm.deposer', 'cm.editer', 'cm.valider', 'cm.gerer', 'cm.clips.proposer', ...PERMISSIONS_DRIVE_CM]);
 /** Permissions CM qu'un rôle de TEAM peut porter (catalogue.json, groupe « cm »). */
 export const PERMISSIONS_EQUIPE = Object.freeze(['cm.voir', 'cm.deposer', 'cm.clips.proposer']);
 export const MOTIF_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

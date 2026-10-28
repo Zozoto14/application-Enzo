@@ -317,6 +317,8 @@ export function apiSponsors(client: ClientEsport) {
     supprimerEchange: (id: string) => r<{ ok: true }>(`/sponsors/echanges/${e(id)}`, 'DELETE'),
     ajouterLien: (cible: Cible | { contratId: string }, url: string, nom: string, categorie: CategoriePiece) => r<{ pieces: Piece[] }>('/sponsors/pieces', 'POST', { ...cible, genre: 'lien', url, nom, categorie }),
     ajouterFichier: (cible: Cible | { contratId: string }, envoi: string, categorie: CategoriePiece) => r<{ pieces: Piece[] }>('/sponsors/pieces', 'POST', { ...cible, genre: 'fichier', envoi, categorie }),
+    /** Pièce prise dans le Drive du club (logo, deck…) : aucun octet copié. */
+    ajouterDepuisDrive: (cible: Cible | { contratId: string }, fichierId: string, categorie: CategoriePiece) => r<{ pieces: Piece[] }>('/sponsors/pieces', 'POST', { ...cible, genre: 'drive', fichierId, categorie }),
     supprimerPiece: (id: string) => r<{ ok: true }>(`/sponsors/pieces/${e(id)}`, 'DELETE'),
     lienPiece: (id: string, telecharger = false) => r<{ url: string; expire: string }>(`/sponsors/pieces/${e(id)}/lien`, 'POST', { telecharger }),
     partenaires: (statut?: 'actif' | 'termine') => r<{ partenaires: ResumePartenaire[]; teams: Record<string, string>; noms: Record<string, string | null>; gerer: boolean }>(`/sponsors/partenaires${requeteUrl({ statut })}`),

@@ -52,6 +52,8 @@ import { servicesJeux } from './jeux/service.mjs';
 import { routesJeux } from './jeux/routes.mjs';
 import { servicesCm } from './cm/service.mjs';
 import { routeFichierCm, routesCm } from './cm/routes.mjs';
+import { routeDriveSignee } from './cm/drive/routes.mjs';
+import { configDrive } from './cm/drive/regles.mjs';
 import { servicesSponsors } from './sponsors/service.mjs';
 import { routesSponsors } from './sponsors/routes.mjs';
 import { servicesReseaux } from './reseaux/service.mjs';
@@ -60,7 +62,7 @@ import { traiterAnnoncesReseaux } from './reseaux/annonces.mjs';
 
 export const VERSION_ESPORT = 4;
 /** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
-export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux'];
+export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive'];
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
@@ -139,6 +141,7 @@ export function creerApi({
   attenteDiffere,
   secretsExportables = false,
   medias: configDesMedias = configMedias(),
+  drive: configDuDrive = configDrive(),
   transcriptionExterne = { actif: false },
   fetchTranscription,
   transcriptionServeur,
@@ -181,9 +184,10 @@ export function creerApi({
   // Profils de jeu (migration 0021) et assistant IA (clé d'API dans esport.env, jamais renvoyée).
   const jx = servicesJeux({ base, maintenant, socle: s, ia, travauxIa });
   // Section CM (migration 0023) : espace du club et partie CM des teams ; fichiers par envoi par morceaux (usage « cm »).
-  const cm = servicesCm({ base, maintenant, medias: md, cleSession, stockage });
+  // Drive de la section (migration 0027) : quota, plafond d'un fichier, ZIP (ESPORT_DRIVE_*).
+  const cm = servicesCm({ base, maintenant, medias: md, cleSession, stockage, drive: configDuDrive });
   // Sponsors & partenaires (migration 0024) : rubrique de l'espace CM, permissions du club sponsors.voir / sponsors.gerer.
-  const sp = servicesSponsors({ base, maintenant, medias: md, cleSession, stockage });
+  const sp = servicesSponsors({ base, maintenant, medias: md, cleSession, stockage, drive: cm.drive });
   // Page « Réseaux » de l'espace CM (migration 0026) : comptes, bot d'annonce Discord des posts publiés, statistiques.
   const rsx = servicesReseaux({ base, maintenant, cle: secretDiscord, fetch: envoiDiscord, jetonBot: discordBot.jetonBot || undefined, lienApp });
   // Bot Discord (interactions HTTP) : DISCORD_APPLICATION_ID et DISCORD_PUBLIC_KEY (variables), DISCORD_BOT_TOKEN (secret).
@@ -237,6 +241,7 @@ export function creerApi({
     if (chemin === '/catalogue' && m === 'GET') return catalogue;
     if (chemin.startsWith('/fichiers/') && (m === 'GET' || m === 'HEAD')) return routeFichierSigne(md, url, requete);
     if (chemin.startsWith('/cm/fichiers/') && (m === 'GET' || m === 'HEAD')) return routeFichierCm(cm, url, requete);
+    if ((chemin.startsWith('/cm/drive/contenu/') || chemin.startsWith('/cm/drive/zip/')) && (m === 'GET' || m === 'HEAD')) return routeDriveSignee(cm.drive, url, requete);
     const publique = await routePublique({ p, chemin, methode: m, url });
     if (publique !== undefined) return publique;
     const partage = await routePubliqueStrats({ strats: st, chemin, methode: m, url });

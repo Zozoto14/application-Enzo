@@ -15,7 +15,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
 import { BoutonHub, Case, Champ } from '../../../hub/admin/ui/commun';
 import { teinteTransparente, type ThemeHub } from '../../../hub/themes';
-import type { ApiCm, CarteDetail, DetailTableau, LiensCarte, MatchsTeam, Personne, ReponseCarte, Reseau, TeamCm, TextesPost } from '../../cm/api';
+import { PORTEE_CLUB, type ApiCm, type CarteDetail, type DetailTableau, type LiensCarte, type MatchsTeam, type Personne, type ReponseCarte, type Reseau, type TeamCm, type TextesPost } from '../../cm/api';
 import { CLES_RESEAUX, RESEAUX, analyserTexte } from '../../cm/reseaux';
 import { choisirFichier, choixFichierDisponible, ACCEPT_CM } from '../../medias/choixFichier';
 import { tailleMedia } from '../../medias/envoi';
@@ -26,6 +26,8 @@ import { NoteMarkdown } from '../review/Note';
 import { BoutonConfirme, Choix, Intertitre, Panneau, Retours, styles, useAgir } from '../commun';
 import { Badge, ESP, attenue, texte, type EtatPresse } from '../design';
 import { BarreEnvoi, useEnvoi } from '../medias/EnvoiMedia';
+import { ChoixDrive } from './drive/ChoixDrive';
+import { trDr } from '../../i18n/drive';
 import { ouvrirLienDiffere } from '../ouvrirLien';
 import { Aide, BadgeStatut, ChampInstant, PALETTE, PastilleReseau, Teinte, copierTexte, nomListe, quand } from './commun';
 import { MentionsSponsors } from '../sponsors/MentionsSponsors';
@@ -747,6 +749,7 @@ function Checklists({ theme, api, c, editer, faire }: { theme: ThemeHub; api: Ap
 function Pieces({ theme, api, c, portee, modifier, faire }: { theme: ThemeHub; api: ApiCm; c: CarteDetail; portee: string; modifier: boolean; faire(cle: string, a: () => Promise<unknown>, m?: string): Promise<boolean> }) {
   const [url, setUrl] = useState('');
   const [nom, setNom] = useState('');
+  const [choixDrive, setChoixDrive] = useState(false);
   const envoi = useEnvoi();
   const ouvrir = (id: string, telecharger: boolean) => void ouvrirLienDiffere(async () => (await api.lienPiece(id, telecharger)).url);
   const trello = c.pieces.some(p => p.trello);
@@ -818,8 +821,22 @@ function Pieces({ theme, api, c, portee, modifier, faire }: { theme: ThemeHub; a
             ) : (
               <Aide theme={theme}>{trCm('fiche.fichier_depuis_pc')}</Aide>
             )}
+            {/* Drive (migration 0027) : un fichier déjà rangé, du Drive de la portée ou du club (aucun octet copié). */}
+            <BoutonHub theme={theme} titre={trDr('choix.depuis_drive')} onPress={() => setChoixDrive(true)} testID="esport-cm-piece-drive" />
           </View>
           <BarreEnvoi theme={theme} progression={envoi.progression} enCours={envoi.enCours} onAnnuler={envoi.annuler} testID="esport-cm-piece-envoi" />
+          <ChoixDrive
+            theme={theme}
+            client={api.client}
+            visible={choixDrive}
+            portees={[portee, PORTEE_CLUB]}
+            onFermer={() => setChoixDrive(false)}
+            onChoisir={f => {
+              setChoixDrive(false);
+              void faire('drive', () => api.ajouterDepuisDrive(c.id, f.id));
+            }}
+            testID="esport-cm-piece-choix-drive"
+          />
         </View>
       ) : null}
     </Panneau>

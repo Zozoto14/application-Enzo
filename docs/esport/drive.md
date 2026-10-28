@@ -1,0 +1,166 @@
+# Esport : Drive de la section CM
+
+Le **Drive** range les fichiers des CM au même endroit : logos, photos des joueurs, clips, visuels, fichiers des
+sponsors, rushs bruts… Il y a un Drive pour le **club** (entrée **CM › Drive**) et un par **team** dont le module CM
+est activé (**Team › Équipe › CM › Drive**, et dans **CM › Drive** en choisissant la team). Aucune nouvelle entrée dans
+la barre du bas sur téléphone.
+
+Voir aussi : [cm.md](cm.md) (section CM, rôles), [visuels.md](visuels.md), [sponsors.md](sponsors.md).
+
+Migration : `esport/migrations/0027_cm_drive.sql`. Code : `esport/noyau/cm/drive/` (serveur), `src/esport/cm/drive.ts`
+et `src/esport/ui/cm/drive/` (app), textes `src/esport/i18n/drive.ts`.
+
+## Qui fait quoi
+
+Trois permissions, portées par les **rôles CM** (Esport › CM › Équipe CM ; jamais par un rôle de team) :
+
+| Permission | Ce qu'elle ouvre |
+| --- | --- |
+| `cm.drive.voir` | parcourir, rechercher, prévisualiser, télécharger (et un dossier en ZIP), favoris, lien interne |
+| `cm.drive.envoyer` | déposer des fichiers, créer des dossiers ; renommer, déplacer, étiqueter, remplacer (nouvelle version) et mettre à la corbeille **ses** fichiers et dossiers ; copier |
+| `cm.drive.gerer` | tout, sur tout : dossiers **restreints**, corbeille (restaurer, supprimer définitivement, vider), supprimer une ancienne version, réglages du rangement automatique (Drive du club) |
+
+Gérer implique envoyer, qui implique voir. Par défaut (migration 0027) :
+
+- **Responsable CM** (affectation « club ») : les trois, sur le Drive du club et de toutes les teams ;
+- **Correspondant CM** (affectation d'une team) : voir et envoyer, dans **sa** team seulement ;
+- **joueurs** (et tout membre d'une team qui propose des clips ou dépose des infos, sans droit sur le Drive) : seulement
+  le dossier **« Dépôt joueurs »** de leur team, où ils déposent leurs photos et vidéos et ne voient **que leurs propres
+  fichiers** ;
+- le **Fondateur** : tout.
+
+Un rôle CM sans ces permissions (« Rédacteur »…) ne voit pas le Drive. Le Drive ne contient que ce que les CM y
+déposent : **jamais** les strats, le scouting, les notes du staff (les routes de la team restent fermées au CM, comme
+avant).
+
+**Dossiers restreints** : un dossier marqué restreint (et tout ce qu'il contient) n'existe que pour ceux qui gèrent le
+Drive (404 pour les autres, recherche et ZIP compris) ; un lien obtenu avant la restriction ne lit plus rien.
+
+## Dossiers
+
+- **Dossiers par défaut**, créés à la première ouverture : club — Logos, Photos joueurs, Clips, Visuels, Sponsors,
+  Bruts ; team — les mêmes sans Sponsors, plus **Dépôt joueurs**. Leur nom est traduit par l'app tant qu'on ne le
+  renomme pas (« Rétablir le nom par défaut ») ; ils restent à la racine et ne se suppriment pas.
+- Créer, renommer, déplacer (jamais dans lui-même), mettre à la corbeille un dossier ; 12 niveaux, 5 000 dossiers par
+  Drive au plus. **Fil d'Ariane** en haut.
+- **Télécharger en ZIP** : le dossier et ses sous-dossiers visibles, en flux (rien n'est écrit sur le disque du
+  serveur ; pas de compression : les médias le sont déjà). Limite `ESPORT_DRIVE_ZIP_MAX` (2 Go par défaut) et 2 000
+  fichiers ; au-delà, téléchargez les sous-dossiers. 20 ZIP par heure et par compte.
+
+## Fichiers
+
+- **Envoi** : bouton **Envoyer des fichiers** (plusieurs à la fois) ou **glisser-déposer** sur la zone (site et app
+  PC ; sur iPhone, l'envoi se fait depuis le site ou le PC). Envoi **par morceaux avec reprise** (le même que les
+  vidéos : un envoi coupé reprend où il en était). Taille maximale d'un fichier : `ESPORT_DRIVE_FICHIER_MAX`
+  (2 Go par défaut).
+- **Types acceptés** (reconnus par leurs **octets**, jamais par le nom) : images (PNG, JPEG, GIF, WebP, SVG, TIFF,
+  HEIC, AVIF), vidéos (MP4, MOV, WebM, MKV), audio (MP3, M4A, AAC, WAV, OGG, FLAC), PDF (et `.ai` compatibles PDF),
+  polices (TTF, OTF, WOFF, WOFF2), archives (ZIP — dont `.xd`, `.sketch`, `.docx`… —, 7z, RAR, GZIP), PSD, texte
+  (TXT, CSV, Markdown, JSON, sous-titres…). **Jamais** de page web ni de programme.
+- **Renommer, déplacer, copier** (une copie dans un autre dossier ou le Drive d'une autre team réutilise les mêmes
+  octets : aucun espace en plus), **étiquettes** (12 au plus), **favoris** (personnels), **télécharger**.
+- **Versions** : « Remplacer (nouvelle version) » garde l'ancienne dans l'historique (30 versions au plus par
+  fichier, les plus anciennes partent). Chaque version se télécharge ; **Restaurer** une ancienne version en fait la
+  nouvelle version actuelle ; un gestionnaire peut supprimer une ancienne version.
+- **Aperçus** : vignettes des images (jusqu'à 8 Mo), lecteur vidéo et audio (lecture par plages), PDF dans un nouvel
+  onglet, police (texte d'exemple), début d'un fichier texte ; infos : type, taille, dimensions, durée, codecs,
+  auteur, dates, emplacement, origine, utilisations (cartes CM, visuels, sponsors).
+- **Vue grille ou liste**, **tri** (nom, date, taille, type ; inversable), **sélection** et actions groupées
+  (déplacer, copier, corbeille).
+- **Recherche** sans accents ni casse, dans tout le Drive ou dans le dossier ouvert, avec **filtres** : type,
+  étiquette, auteur, dates, favoris.
+- **Lien interne** : « Copier le lien interne » donne `drive:<identifiant>` ; collé dans la recherche du Drive, il
+  ouvre l'élément — seulement pour qui y a accès (le lien ne donne aucun droit).
+
+## Corbeille
+
+Mettre à la corbeille un dossier y emmène tout son contenu ; **Restaurer** remet tout à sa place (à la racine si son
+dossier n'existe plus). Chacun restaure ce qu'il a jeté ; un gestionnaire restaure tout, supprime définitivement,
+vide la corbeille. Au bout de **30 jours**, le cron efface définitivement (lignes et octets).
+
+Les octets ne partent que quand **plus rien** ne s'en sert : un fichier du Drive joint à une carte, à un sponsor ou
+utilisé comme image de l'éditeur reste lisible là-bas même après sa suppression du Drive.
+
+## Espace (quota)
+
+- Limite totale du Drive : `ESPORT_DRIVE_QUOTA` (20 Go par défaut), corbeille et anciennes versions comprises. Un
+  envoi qui la dépasserait est refusé dès le début (413 `quota-drive`).
+- Barre d'espace dans le Drive ; **alerte à 80 %** : une notification aux gestionnaires du Drive (au plus une par
+  semaine, par l'envoi et par le cron).
+- Pour faire de la place : vider la corbeille, supprimer d'anciennes versions.
+
+## Intégrations
+
+- **Carte CM** : pièces jointes › **Depuis le Drive** (Drive de la portée du tableau ou du club). La personne qui voit
+  la carte lit la pièce, même sans droit sur le Drive.
+- **Éditeur de visuels** : Ajouter une image › **Depuis le Drive** ; **charte** : Logos › **Depuis le Drive** (Drive du
+  club ; PNG, JPEG, GIF, WebP de 15 Mo au plus).
+- **Sponsors** : pièces d'un prospect ou partenaire › **Depuis le Drive** (Drive du club ; deck, logo…).
+- **Rangement automatique** (réglable : **Drive › Réglages**, gestionnaires du Drive du club) : chaque **visuel généré**
+  va dans « Visuels » de sa portée (un nouveau rendu = une nouvelle version du même fichier) ; chaque **clip retenu**
+  (fichier déposé) va dans « Clips » de sa team. Mis à la corbeille, il n'y revient pas.
+
+Rien n'est copié : la pièce, l'image ou le sponsor pointe vers les mêmes octets que le Drive.
+
+## Sécurité
+
+- Type vérifié par les octets au premier morceau ; HTML et exécutables refusés ; nom **assaini** (sans chemin,
+  caractère de contrôle, marque bidirectionnelle ni nom réservé de Windows) et **extension forcée** selon le type
+  reconnu (« script.bat » en texte devient « script.bat.txt ») : un fichier téléchargé n'est jamais lancé comme un
+  programme.
+- Fichiers servis par **lien signé (2 h)** ; chaque lecture revérifie l'accès (rôle retiré, dossier restreint entre-temps :
+  403). En-têtes `X-Content-Type-Options: nosniff`, `Content-Disposition` (affichage ou téléchargement), jamais dans un
+  cadre ; **SVG et texte** servis avec une politique `sandbox` sans aucun script (une balise `<img>` n'exécute jamais le
+  script d'un SVG).
+- Aucune requête PATCH / PUT / DELETE obligatoire : l'app passe en POST + `X-Methode` quand l'hébergement les bloque.
+
+## Données (migration 0027)
+
+| Table | Contenu |
+| --- | --- |
+| `cm_drive_dossiers` | dossiers (portée, parent, nom ou clé du dossier par défaut, restreint, corbeille) |
+| `cm_drive_fichiers` | fichiers (portée, dossier, nom, version actuelle, type, taille, infos, origine, corbeille) |
+| `cm_drive_versions` | versions (octets dans `cm_fichiers`) |
+| `cm_drive_tags`, `cm_drive_favoris` | étiquettes ; favoris par compte |
+
+`envois` est reconstruite (usage « drive »), comme en 0017 et 0023. Les rôles CM système reçoivent leurs permissions
+du Drive. Tout est dans l'**export / import de la base**. **RGPD** : l'export d'un compte liste ses fichiers du Drive
+et ses favoris ; la suppression du compte efface ses favoris, ses fichiers restent au club sans auteur.
+
+## API (préfixe facultatif `/api/esport`)
+
+| Route | Droit |
+| --- | --- |
+| `GET /cm/drive/portees` ; `GET /cm/drive?portee&dossier` ; `GET /cm/drive/arbre?portee` ; `GET /cm/drive/filtres?portee` | voir (ou dépôt) |
+| `GET /cm/drive/recherche?portee&q&genre&tag&auteur&du&au&favoris&dossier` ; `GET /cm/drive/elements/:id` | voir |
+| `/cm/drive/portees/:p/envois…` ; `POST /cm/drive/fichiers { portee, dossierId, envoi, nom?, tags? }` | envoyer (ou dépôt) |
+| `GET\|PATCH\|DELETE /cm/drive/fichiers/:id` ; `POST …/(copier\|lien\|versions)` ; `POST …/versions/:v/restaurer` ; `DELETE …/versions/:v` | voir ; auteur ou gérer ; gérer |
+| `POST /cm/drive/dossiers` ; `PATCH\|DELETE /cm/drive/dossiers/:id` ; `POST …/zip` | envoyer ; auteur ou gérer ; voir |
+| `GET /cm/drive/corbeille?portee` ; `POST /cm/drive/corbeille/:id/restaurer` ; `DELETE /cm/drive/corbeille/:id` ; `POST /cm/drive/corbeille/vider` | voir ; auteur ou gérer ; gérer |
+| `POST /cm/drive/lot { action, elements, dossierId?, portee? }` ; `POST /cm/drive/favoris` | selon l'action |
+| `GET\|PUT /cm/drive/reglages` | gérer (club) |
+| `GET /cm/drive/contenu/<élément>.<version>?c&exp&sig` ; `GET /cm/drive/zip/<dossier>?c&exp&sig` | lien signé (accès revérifié) |
+| `POST /cm/cartes/:id/pieces { genre: 'drive', fichierId }` ; `POST /cm/visuels/images { portee, drive }` ; `POST /sponsors/pieces { genre: 'drive', fichierId, … }` | intégrations |
+
+Limites de débit (par compte et par heure) : 600 fichiers rangés ou versions, 20 ZIP.
+
+## Code et tests
+
+- Serveur : `esport/noyau/cm/drive/regles.mjs` (règles pures : noms, extensions, étiquettes, réglages),
+  `zip.mjs` (ZIP en flux), `service.mjs`, `routes.mjs` ; `esport/noyau/cm/utilisations.mjs` (octets partagés) ;
+  formats étendus dans `esport/noyau/medias/formats.mjs` (`reconnaitreEtendu`).
+- App : `src/esport/cm/drive.ts`, `src/esport/ui/cm/drive/` (Drive, DetailFichier, ChoixDrive, ApercuDrive et
+  ZoneDepot — versions web et native).
+- Tests : `esport/test/drive.test.mjs` (SQLite et PostgreSQL : règles, formats, ZIP, migration, permissions,
+  fichiers, versions, corbeille et purge, quota, sécurité, intégrations, RGPD, export / import),
+  `src/esport/Drive.test.tsx`.
+
+## Pour le Fondateur
+
+1. Mettre à jour le serveur Esport (déploiement automatique o2switch, ou `npm run migrer --prefix esport`) : la
+   migration `0027_cm_drive.sql` s'applique seule. Publier le site et l'app PC.
+2. Facultatif, dans `~/.appdashboard/esport.env` : `ESPORT_DRIVE_QUOTA=20G` (espace total ; gardez de la marge sur
+   l'espace disque de l'hébergement), `ESPORT_DRIVE_FICHIER_MAX=2G`, `ESPORT_DRIVE_ZIP_MAX=2G`, puis redémarrer l'app
+   Node.
+3. Les rôles **Responsable CM** et **Correspondant CM** ont déjà le Drive ; pour un autre rôle CM, cochez les
+   permissions Drive dans **Esport › CM › Équipe CM**.
