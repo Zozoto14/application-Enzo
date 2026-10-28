@@ -10,7 +10,8 @@
  *   GET|PATCH|DELETE  /cm/tableaux/:id                           tableau complet (?archives=1) ; modifier ; supprimer
  *   POST              /cm/tableaux/:id/(listes|etiquettes|cartes) créer une liste, une étiquette, une carte
  *   PATCH             /cm/listes/:id ; POST …/deplacer { index }
- *   PATCH|DELETE      /cm/etiquettes/:id
+ *   PUT               /cm/tableaux/:id/etiquettes/ordre { ids }  réordonner les étiquettes (cm.editer)
+ *   PATCH|DELETE      /cm/etiquettes/:id ; POST …/fusionner { vers }   modifier (cm.editer) ; supprimer définitivement, fusionner (cm.gerer)
  *   GET|PATCH|DELETE  /cm/cartes/:id
  *   POST              /cm/cartes/:id/(deplacer|soumettre|valider|refuser|publier|depublier|checklists|commentaires|pieces)
  *   PATCH|DELETE      /cm/checklists/:id ; POST …/elements ; PATCH|DELETE /cm/elements/:id
@@ -70,7 +71,7 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
   const p = chemin.split('/').slice(2).map(segment);
   const n = p.length;
   const q = url.searchParams;
-  const [a, b, c] = p;
+  const [a, b, c, d] = p;
   const origine = prefixeDe(url);
   const langue = lireLangue(q.get('langue')) ?? acteur.langue ?? 'fr';
   const { tableaux: tb, droits, equipe, clips, trello, visuels: vi } = cm;
@@ -93,6 +94,7 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
     if (n === 2 && m === 'DELETE') return tb.supprimerTableau(acteur, b);
     if (n === 3 && c === 'listes' && m === 'POST') return tb.creerListe(acteur, b, await lireCorps());
     if (n === 3 && c === 'etiquettes' && m === 'POST') return tb.creerEtiquette(acteur, b, await lireCorps());
+    if (n === 4 && c === 'etiquettes' && d === 'ordre' && m === 'PUT') return tb.ordonnerEtiquettes(acteur, b, await lireCorps());
     if (n === 3 && c === 'cartes' && m === 'POST') return tb.creerCarte(acteur, b, await lireCorps());
   }
   if (a === 'listes') {
@@ -103,6 +105,7 @@ export async function routesCm({ cm, medias, acteur, chemin, methode: m, url, re
     if (m === 'PATCH') return tb.modifierEtiquette(acteur, b, await lireCorps());
     if (m === 'DELETE') return tb.supprimerEtiquette(acteur, b);
   }
+  if (a === 'etiquettes' && n === 3 && c === 'fusionner' && m === 'POST') return tb.fusionnerEtiquettes(acteur, b, await lireCorps());
   if (n === 1 && a === 'charte') {
     if (m === 'GET') return vi.charte(acteur);
     if (m === 'PUT') return vi.changerCharte(acteur, await lireCorps());

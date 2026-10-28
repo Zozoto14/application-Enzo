@@ -18,6 +18,9 @@ export const TYPES_CM = [
   'cm.tableau_cree',
   'cm.tableau_modifie',
   'cm.tableau_supprime',
+  'cm.etiquette_modifiee',
+  'cm.etiquette_supprimee',
+  'cm.etiquette_fusionnee',
   'cm.carte_creee',
   'cm.carte_assignee',
   'cm.carte_supprimee',
@@ -55,6 +58,9 @@ export const TYPES_CM = [
   'cm.drive_supprime',
   'cm.drive_corbeille_videe',
   'cm.drive_quota',
+  // Étiquettes (tags) des fichiers du Drive : renommées ou supprimées d'un coup pour toute la portée.
+  'cm.drive_tag_renomme',
+  'cm.drive_tag_supprime',
 ];
 
 async function notifier(base, ev, compte, type, charge) {

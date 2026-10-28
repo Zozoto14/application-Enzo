@@ -8,6 +8,7 @@
  *   GET               /cm/drive/portees                                   portées, droits, quota, réglages
  *   GET               /cm/drive?portee&dossier                            contenu d'un dossier (racine sans dossier)
  *   GET               /cm/drive/arbre?portee ; /cm/drive/filtres?portee ; /cm/drive/recherche?portee&q&genre&tag&auteur&du&au&favoris&dossier
+ *   PATCH|DELETE      /cm/drive/tags { portee, tag, nom } ; ?portee&tag   renommer / retirer une étiquette de tous les fichiers (gérer)
  *   GET               /cm/drive/elements/:id                              où est un élément (lien interne)
  *   POST|GET|PUT|DEL  /cm/drive/portees/:p/envois…                        envoi par morceaux (usage « drive »)
  *   POST              /cm/drive/fichiers { portee, dossierId, envoi, nom?, tags? }
@@ -60,6 +61,10 @@ export async function routesDrive({ drive, medias, acteur, p, methode: m, url, r
   if (n === 2 && b === 'recherche' && m === 'GET') {
     const f = Object.fromEntries(['q', 'genre', 'tag', 'auteur', 'du', 'au', 'dossier'].map(k => [k, q.get(k) || undefined]));
     return drive.rechercher(acteur, { ...f, portee, favoris: q.get('favoris') === '1', origine });
+  }
+  if (n === 2 && b === 'tags') {
+    if (m === 'PATCH') return drive.renommerTag(acteur, await lireCorps());
+    if (m === 'DELETE') return drive.supprimerTag(acteur, { portee, tag: q.get('tag') || undefined });
   }
   if (n === 3 && b === 'elements' && m === 'GET') return drive.element(acteur, c);
   if (b === 'portees' && c && d === 'envois' && medias) return routesEnvois({ medias, acteur, teamId: c, usage: 'drive', p: p.slice(4), methode: m, requete, lireCorps });

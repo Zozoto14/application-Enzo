@@ -120,6 +120,7 @@ export const TABLES = [
   ['cm_tableaux', 'id'],
   ['cm_listes', 'id'],
   ['cm_etiquettes', 'id'],
+  ['cm_etiquettes_retirees', 'tableau_id, trello_id'],
   ['cm_cartes', 'id'],
   ['cm_carte_etiquettes', 'carte_id, etiquette_id'],
   ['cm_carte_membres', 'carte_id, compte_id'],

@@ -163,6 +163,23 @@ describe('Drive CM', () => {
     await waitFor(() => expect(appels.some(a => a.chemin === `/cm/drive/corbeille/${F2}/restaurer` && a.methode === 'POST')).toBe(true));
   });
 
+  it('étiquettes : gestionnaires seulement ; renommer, et supprimer définitivement avec le nombre de fichiers', async () => {
+    const { client, appels } = fauxClient();
+    await render(<Drive theme={theme} client={client} large />);
+    await screen.findByText('affiche.png');
+    await fireEvent.press(await screen.findByTestId('esport-drive-tags-gerer'));
+    expect(await screen.findByTestId('esport-drive-tag-saison')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-drive-tag-saison-renommer'));
+    await fireEvent.changeText(screen.getByTestId('esport-drive-tag-nom'), 'saison-2026');
+    await fireEvent.press(screen.getByTestId('esport-drive-tag-nom-ok'));
+    await waitFor(() => expect(appels.some(a => a.methode === 'PATCH' && a.chemin === '/cm/drive/tags')).toBe(true));
+    expect(appels.find(a => a.methode === 'PATCH' && a.chemin === '/cm/drive/tags')?.corps).toEqual({ portee: 'club', tag: 'saison', nom: 'saison-2026' });
+    await fireEvent.press(screen.getByTestId('esport-drive-tag-saison-supprimer'));
+    expect(screen.getByText(/Retirer définitivement « #saison » de 1 fichier/)).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('esport-drive-tag-saison-supprimer-ok'));
+    await waitFor(() => expect(appels.some(a => a.methode === 'DELETE' && a.chemin === '/cm/drive/tags?portee=club&tag=saison')).toBe(true));
+  });
+
   it('recherche avec filtres, et lien interne collé : ouvre l’élément', async () => {
     const { client, appels } = fauxClient();
     await render(<Drive theme={theme} client={client} large />);

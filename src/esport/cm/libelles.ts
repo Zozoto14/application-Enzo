@@ -20,6 +20,12 @@ export function phraseJournalCm(action: string, qui: string, m: Record<string, u
       return tr('cm.jr.tableau_modifie', { qui });
     case 'cm.tableau_supprime':
       return tr('cm.jr.tableau_supprime', { qui });
+    case 'cm.etiquette_modifiee':
+      return tr('cm.jr.etiquette_modifiee', { qui, nom: texte(m.nom) });
+    case 'cm.etiquette_supprimee':
+      return tr('cm.jr.etiquette_supprimee', { qui, nom: texte(m.nom), n: typeof m.cartes === 'number' ? m.cartes : 0 });
+    case 'cm.etiquette_fusionnee':
+      return tr('cm.jr.etiquette_fusionnee', { qui, nom: texte(m.nom), vers: texte(m.vers), n: typeof m.cartes === 'number' ? m.cartes : 0 });
     case 'cm.carte_creee':
       return tr('cm.jr.carte_creee', { qui, titre });
     case 'cm.carte_assignee':
@@ -105,6 +111,10 @@ export function phraseJournalCm(action: string, qui: string, m: Record<string, u
       return trDr('jr.supprime', { qui, nom: texte(m.nom) });
     case 'cm.drive_corbeille_videe':
       return trDr('jr.corbeille_videe', { qui });
+    case 'cm.drive_tag_renomme':
+      return trDr('jr.tag_renomme', { qui, tag: texte(m.tag), nom: texte(m.nom), n: typeof m.fichiers === 'number' ? m.fichiers : 0 });
+    case 'cm.drive_tag_supprime':
+      return trDr('jr.tag_supprime', { qui, tag: texte(m.tag), n: typeof m.fichiers === 'number' ? m.fichiers : 0 });
     case 'cm.drive_quota':
       return trDr('jr.quota', { p: typeof m.pourcent === 'number' ? m.pourcent : '?' });
     default:

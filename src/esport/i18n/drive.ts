@@ -183,6 +183,22 @@ const fr = {
   'jr.supprime': '{qui} a supprimé définitivement « {nom} »',
   'jr.corbeille_videe': '{qui} a vidé la corbeille du Drive',
   'jr.quota': 'Drive rempli à {p} %',
+  'tags.gerer': 'Gérer les étiquettes',
+  'tags.titre': 'Étiquettes du Drive',
+  'tags.aide': 'Renommer ou supprimer une étiquette change tous les fichiers de ce Drive d’un coup. Si le nouveau nom existe déjà, les deux étiquettes sont fusionnées.',
+  'tags.aucun': 'Aucune étiquette sur les fichiers.',
+  'tags.fichiers.one': '{n} fichier',
+  'tags.fichiers.other': '{n} fichiers',
+  'tags.nom': 'Nouveau nom',
+  'tags.renommer': 'Renommer',
+  'tags.annuler': 'Annuler',
+  'tags.supprimer': 'Supprimer définitivement',
+  'tags.supprimer_question.one': 'Retirer définitivement « #{tag} » de {n} fichier ? Les fichiers eux-mêmes ne sont pas touchés. Cette action est irréversible.',
+  'tags.supprimer_question.other': 'Retirer définitivement « #{tag} » de {n} fichiers ? Les fichiers eux-mêmes ne sont pas touchés. Cette action est irréversible.',
+  'tags.renomme': 'Étiquette renommée.',
+  'tags.supprime': 'Étiquette supprimée.',
+  'jr.tag_renomme': '{qui} a renommé l’étiquette #{tag} en #{nom} dans le Drive ({n} fichiers)',
+  'jr.tag_supprime': '{qui} a supprimé définitivement l’étiquette #{tag} du Drive ({n} fichiers)',
   'nt.quota': 'Le Drive CM est rempli à {p} % ({u} sur {l}) : videz la corbeille ou faites du tri.',
 };
 
@@ -364,6 +380,22 @@ const en: Record<keyof typeof fr, string> = {
   'jr.supprime': '{qui} permanently deleted “{nom}”',
   'jr.corbeille_videe': '{qui} emptied the Drive trash',
   'jr.quota': 'Drive {p}% full',
+  'tags.gerer': 'Manage tags',
+  'tags.titre': 'Drive tags',
+  'tags.aide': 'Renaming or deleting a tag changes every file in this Drive at once. If the new name already exists, the two tags are merged.',
+  'tags.aucun': 'No tags on files.',
+  'tags.fichiers.one': '{n} file',
+  'tags.fichiers.other': '{n} files',
+  'tags.nom': 'New name',
+  'tags.renommer': 'Rename',
+  'tags.annuler': 'Cancel',
+  'tags.supprimer': 'Delete permanently',
+  'tags.supprimer_question.one': 'Permanently remove “#{tag}” from {n} file? The files themselves are untouched. This cannot be undone.',
+  'tags.supprimer_question.other': 'Permanently remove “#{tag}” from {n} files? The files themselves are untouched. This cannot be undone.',
+  'tags.renomme': 'Tag renamed.',
+  'tags.supprime': 'Tag deleted.',
+  'jr.tag_renomme': '{qui} renamed the tag #{tag} to #{nom} in the Drive ({n} files)',
+  'jr.tag_supprime': '{qui} permanently deleted the tag #{tag} from the Drive ({n} files)',
   'nt.quota': 'The CM Drive is {p}% full ({u} of {l}): empty the trash or clean up.',
 };
 
@@ -376,6 +408,6 @@ export function trDr(cle: CleDr, vars?: Variables): string {
 }
 
 /** Pluriel simple (« .one » / « .other ») : n = 1 → one. */
-export function trnDr(cle: 'recherche.resultats' | 'envoi.fini' | 'element.fichiers' | 'selection.n' | 'detail.utilisations_cartes' | 'corbeille.contenu', n: number, vars?: Variables): string {
+export function trnDr(cle: 'recherche.resultats' | 'envoi.fini' | 'element.fichiers' | 'selection.n' | 'detail.utilisations_cartes' | 'corbeille.contenu' | 'tags.fichiers' | 'tags.supprimer_question', n: number, vars?: Variables): string {
   return trDr(`${cle}.${n === 1 ? 'one' : 'other'}` as CleDr, { n, ...vars });
 }

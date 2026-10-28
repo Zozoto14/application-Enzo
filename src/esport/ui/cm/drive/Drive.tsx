@@ -42,12 +42,14 @@ import { ouvrirLienDiffere } from '../../ouvrirLien';
 import { Aide, copierTexte, quand } from '../commun';
 import { BarreQuota, ChoixDestination, Vignette, infosFichier, nomDossier, nomGenre, nomPortee, taille } from './commun';
 import { DetailFichier } from './DetailFichier';
+import { GestionTags } from './GestionTags';
 import { ZoneDepot } from './ZoneDepot';
 
 type Dialogue =
   | { genre: 'dossier'; nom: string; restreint: boolean }
   | { genre: 'renommer'; id: string; nom: string; systeme: boolean }
   | { genre: 'destination'; action: 'deplacer' | 'copier'; elements: ElementDrive[] }
+  | { genre: 'tags' }
   | { genre: 'reglages' };
 
 const cle = (e: ElementDrive) => `${e.genre}:${e.id}`;
@@ -83,6 +85,7 @@ export function Drive({
   const [detail, setDetail] = useState<string | undefined>();
   const [dialogue, setDialogue] = useState<Dialogue | undefined>();
   const [corbeille, setCorbeille] = useState(false);
+  const [versionTags, setVersionTags] = useState(0);
   const [file, setFile] = useState<{ i: number; n: number; nom: string } | undefined>();
   const envoi = useEnvoi();
   const { erreur, avis, agir, setAvis, setErreur } = useAgir();
@@ -186,7 +189,7 @@ export function Drive({
     return () => {
       vivant = false;
     };
-  }, [api, portee, voit]);
+  }, [api, portee, voit, versionTags]);
 
   // ---------------------------------------------------------------- Actions
   const telecharger = (f: FichierDrive) => void ouvrirLienDiffere(async () => (await api.lien(f.id, { telecharger: true })).url);
@@ -368,6 +371,7 @@ export function Drive({
           />
         ) : null}
         {!corbeille && droits?.voir ? <BoutonHub theme={theme} titre={enSelection ? trDr('selection.annuler') : trDr('barre.selection')} onPress={() => { setEnSelection(s => !s); setSelection(new Map()); }} testID="esport-drive-selection" /> : null}
+        {!corbeille && droits?.gerer ? <BoutonHub theme={theme} titre={trDr('tags.gerer')} onPress={() => setDialogue({ genre: 'tags' })} testID="esport-drive-tags-gerer" /> : null}
         {portees?.some(p => p.portee === 'club' && p.droits.gerer) ? <BoutonHub theme={theme} titre={trDr('barre.reglages')} onPress={() => setDialogue({ genre: 'reglages' })} testID="esport-drive-reglages" /> : null}
         {contenu && !droits?.depot ? <BarreQuota theme={theme} quota={contenu.quota} /> : null}
       </View>
@@ -575,6 +579,21 @@ export function Drive({
               const elements = dialogue.elements;
               setDialogue(undefined);
               void enLot(dialogue.action, elements, dossierId, dialogue.action === 'copier' ? p : undefined);
+            }}
+          />
+        </Volet>
+      ) : null}
+      {dialogue?.genre === 'tags' && portee ? (
+        <Volet theme={theme} visible titre={trDr('tags.titre')} onFermer={() => setDialogue(undefined)} testID="esport-drive-volet-tags">
+          <GestionTags
+            theme={theme}
+            api={api}
+            portee={portee}
+            onChange={() => {
+              setFiltres(f => (f.tag ? { ...f, tag: undefined } : f));
+              setVersionTags(v => v + 1);
+              void agir('', charger);
+              if (resultats) setResultats(undefined);
             }}
           />
         </Volet>

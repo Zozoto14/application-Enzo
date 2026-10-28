@@ -634,3 +634,93 @@ test('pièces jointes déposées au niveau du club, RGPD (export, suppression), 
   assert.equal((await b.base.tous("SELECT id FROM cm_affectations WHERE compte_id = 'cm123456'", [])).length, 0);
   assert.equal((await b.base.premier('SELECT auteur_id FROM cm_commentaires WHERE carte_id = ?', [carte.id])).auteur_id, null);
 });
+
+// ------------------------------------------------------------------ Étiquettes : gestion (migration 0029)
+
+test('étiquettes : renommer et recolorer (cm.editer) se voit sur les cartes, supprimer et fusionner (cm.gerer) retirent partout, journal', async () => {
+  const { b, s, api, ok } = await preparer();
+  // Rédacteur : cm.editer sans cm.gerer ; lecteur : cm.voir seulement.
+  const redacteur = await ok('/cm/roles', s.fondateur, { methode: 'POST', corps: { nom: 'Rédacteur seul', couleur: '#123456', permissions: ['cm.voir', 'cm.editer'] } });
+  await ok('/cm/affectations', s.fondateur, { methode: 'POST', corps: { compte: 'red12345', roleId: redacteur.id, portee: 'club' } });
+  const roleLecteur = await ok('/cm/roles', s.fondateur, { methode: 'POST', corps: { nom: 'Lecteur', couleur: '#654321', permissions: ['cm.voir'] } });
+  const lecteur = await b.session('lec12345', 'Lou');
+  await ok('/cm/affectations', s.fondateur, { methode: 'POST', corps: { compte: 'lec12345', roleId: roleLecteur.id, portee: 'club' } });
+  const club = (await ok('/cm/tableaux', s.cm123456)).tableaux.find(t => t.portee === 'club');
+  const nouvelle = async (nom, couleur) => (await ok(`/cm/tableaux/${club.id}/etiquettes`, s.cm123456, { methode: 'POST', corps: { nom, couleur } })).id;
+  const [e1, e2, e3] = [await nouvelle('Vidéo', '#4bce97'), await nouvelle('Urgent', '#f87462'), await nouvelle('Sponso', '#9f8fef')];
+  let t = await ok(`/cm/tableaux/${club.id}`, s.cm123456);
+  const liste = t.listes[0].id;
+  const cartes = [];
+  for (const titre of ['Carte 1', 'Carte 2', 'Carte 3']) cartes.push((await ok(`/cm/tableaux/${club.id}/cartes`, s.cm123456, { methode: 'POST', corps: { titre, listeId: liste } })).carte.id);
+  await ok(`/cm/cartes/${cartes[0]}`, s.cm123456, { methode: 'PATCH', corps: { etiquettes: [e1, e2] } });
+  await ok(`/cm/cartes/${cartes[1]}`, s.cm123456, { methode: 'PATCH', corps: { etiquettes: [e1] } });
+  await ok(`/cm/cartes/${cartes[2]}`, s.cm123456, { methode: 'PATCH', corps: { etiquettes: [e1, e3] } });
+  await ok(`/cm/cartes/${cartes[2]}`, s.cm123456, { methode: 'PATCH', corps: { archive: true } });
+
+  t = await ok(`/cm/tableaux/${club.id}?archives=1`, s.cm123456);
+  assert.deepEqual(t.etiquettes.map(e => [e.nom, e.cartes]), [['Vidéo', 3], ['Urgent', 1], ['Sponso', 1]], 'nombre de cartes par étiquette, archivées comprises');
+
+  // Renommer / recolorer : cm.editer suffit, la carte pointe sur l'identifiant, donc le changement est visible partout.
+  const v0 = t.tableau.version;
+  await ok(`/cm/etiquettes/${e1}`, s.red12345, { methode: 'PATCH', corps: { nom: 'Vidéos', couleur: '#ABCDEF' } });
+  t = await ok(`/cm/tableaux/${club.id}`, s.cm123456);
+  assert.deepEqual([t.etiquettes[0].nom, t.etiquettes[0].couleur], ['Vidéos', '#abcdef']);
+  assert.ok(t.tableau.version > v0, 'les autres écrans relisent le tableau');
+  assert.deepEqual(t.cartes.find(c => c.id === cartes[0]).etiquettes, [e1, e2]);
+  assert.equal((await api(`/cm/etiquettes/${e1}`, s.red12345, { methode: 'PATCH', corps: { couleur: 'rouge' } })).corps.code, 'couleur');
+  assert.equal((await api(`/cm/etiquettes/${e1}`, s.lea12345, { methode: 'PATCH', corps: { nom: 'x' } })).statut, 404, 'joueur : tableau invisible');
+  assert.equal((await api(`/cm/etiquettes/${e1}`, lecteur, { methode: 'PATCH', corps: { nom: 'x' } })).statut, 403);
+
+  // Réordonner (cm.editer) : les étiquettes non citées suivent.
+  await ok(`/cm/tableaux/${club.id}/etiquettes/ordre`, s.red12345, { methode: 'PUT', corps: { ids: [e3, e1] } });
+  t = await ok(`/cm/tableaux/${club.id}`, s.cm123456);
+  assert.deepEqual(t.etiquettes.map(e => e.id), [e3, e1, e2]);
+  assert.equal((await api(`/cm/tableaux/${club.id}/etiquettes/ordre`, s.red12345, { methode: 'PUT', corps: { ids: ['pas-un-id'] } })).corps.code, 'etiquettes');
+
+  // Suppression définitive et fusion : cm.gerer (le rédacteur seul reçoit 403, rien ne bouge).
+  assert.equal((await api(`/cm/etiquettes/${e2}`, s.red12345, { methode: 'DELETE' })).statut, 403);
+  assert.equal((await api(`/cm/etiquettes/${e2}/fusionner`, s.red12345, { methode: 'POST', corps: { vers: e1 } })).statut, 403);
+  assert.equal((await ok(`/cm/tableaux/${club.id}`, s.cm123456)).etiquettes.length, 3);
+  // Fusion : Urgent -> Vidéos ; la carte 1 n'a pas de doublon.
+  const fus = await ok(`/cm/etiquettes/${e2}/fusionner`, s.cm123456, { methode: 'POST', corps: { vers: e1 } });
+  assert.equal(fus.cartes, 1);
+  assert.equal((await api(`/cm/etiquettes/${e1}/fusionner`, s.cm123456, { methode: 'POST', corps: { vers: e1 } })).corps.code, 'fusion');
+  t = await ok(`/cm/tableaux/${club.id}`, s.cm123456);
+  assert.deepEqual(t.etiquettes.map(e => e.id), [e3, e1]);
+  assert.deepEqual(t.cartes.find(c => c.id === cartes[0]).etiquettes, [e1]);
+  // Suppression : retirée de TOUTES les cartes (archivée comprise), sans corbeille.
+  const sup = await ok(`/cm/etiquettes/${e1}`, s.cm123456, { methode: 'DELETE' });
+  assert.equal(sup.cartes, 3);
+  t = await ok(`/cm/tableaux/${club.id}?archives=1`, s.cm123456);
+  assert.deepEqual(t.etiquettes.map(e => e.id), [e3]);
+  assert.deepEqual(t.cartes.map(c => c.etiquettes).sort(), [[], [], [e3]]);
+  assert.equal(Number((await b.base.premier('SELECT COUNT(*) AS n FROM cm_carte_etiquettes WHERE etiquette_id = ?', [e1])).n), 0);
+  assert.equal((await ok(`/cm/cartes/${cartes[0]}`, s.cm123456)).carte.etiquettes.length, 0);
+  assert.equal((await api(`/cm/etiquettes/${e1}`, s.cm123456, { methode: 'DELETE' })).statut, 404);
+
+  // Journal : renommage, fusion, suppression.
+  const actions = (await ok('/cm/journal', s.cm123456)).entrees.map(e => e.action);
+  for (const a of ['cm.etiquette_modifiee', 'cm.etiquette_fusionnee', 'cm.etiquette_supprimee']) assert.ok(actions.includes(a), a);
+});
+
+test('étiquettes importées de Trello : modifiables, supprimables ; relancer l’import ne défait ni le renommage ni la suppression', async () => {
+  const { b, s, ok } = await preparer();
+  const imp = await ok('/cm/import/trello', s.cm123456, { methode: 'POST', corps: { trello: TRELLO } });
+  let tb = await ok(`/cm/tableaux/${imp.tableauId}`, s.cm123456);
+  assert.equal(tb.etiquettes.length, 3);
+  const urgent = tb.etiquettes.find(e => e.nom === 'Urgent');
+  const autre = tb.etiquettes.find(e => e.id !== urgent.id);
+  const reste = tb.etiquettes.find(e => e.id !== urgent.id && e.id !== autre.id);
+  await ok(`/cm/etiquettes/${urgent.id}`, s.cm123456, { methode: 'PATCH', corps: { nom: 'Prioritaire', couleur: '#112233' } });
+  const fusion = await ok(`/cm/etiquettes/${autre.id}/fusionner`, s.cm123456, { methode: 'POST', corps: { vers: reste.id } });
+  const sup = await ok(`/cm/etiquettes/${reste.id}`, s.cm123456, { methode: 'DELETE' });
+  assert.ok(fusion.cartes >= 0 && sup.cartes >= 0);
+  // Relancer l'import (avec un nom changé côté Trello) : ni retour des étiquettes retirées, ni écrasement du renommage.
+  const modifie = copie(TRELLO);
+  for (const l of modifie.labels) l.name = `${l.name ?? ''} (Trello)`;
+  await ok('/cm/import/trello', s.cm123456, { methode: 'POST', corps: { trello: modifie } });
+  tb = await ok(`/cm/tableaux/${imp.tableauId}`, s.cm123456);
+  assert.deepEqual(tb.etiquettes.map(e => [e.id, e.nom, e.couleur]), [[urgent.id, 'Prioritaire', '#112233']]);
+  assert.equal(Number((await b.base.premier('SELECT COUNT(*) AS n FROM cm_etiquettes_retirees WHERE tableau_id = ?', [imp.tableauId])).n), 2);
+  assert.ok(tb.cartes.every(c => c.etiquettes.every(id => id === urgent.id)), 'aucune carte ne garde une étiquette disparue');
+});

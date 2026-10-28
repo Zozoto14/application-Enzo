@@ -95,6 +95,8 @@ export interface Etiquette {
   id: string;
   nom: string;
   couleur: string;
+  /** Cartes (archivées comprises) qui la portent ; absent à la création. */
+  cartes?: number;
 }
 export interface CarteResume {
   id: string;
@@ -375,7 +377,9 @@ export function apiCm(client: ClientEsport) {
     deplacerListe: (id: string, index: number) => r<{ ok: true }>(`/cm/listes/${e(id)}/deplacer`, 'POST', { index }),
     creerEtiquette: (tableauId: string, et: { nom: string; couleur: string }) => r<{ id: string }>(`/cm/tableaux/${e(tableauId)}/etiquettes`, 'POST', et),
     modifierEtiquette: (id: string, et: { nom?: string; couleur?: string }) => r<{ ok: true }>(`/cm/etiquettes/${e(id)}`, 'PATCH', et),
-    supprimerEtiquette: (id: string) => r<{ ok: true }>(`/cm/etiquettes/${e(id)}`, 'DELETE'),
+    supprimerEtiquette: (id: string) => r<{ ok: true; cartes: number }>(`/cm/etiquettes/${e(id)}`, 'DELETE'),
+    ordonnerEtiquettes: (tableauId: string, ids: string[]) => r<{ ok: true }>(`/cm/tableaux/${e(tableauId)}/etiquettes/ordre`, 'PUT', { ids }),
+    fusionnerEtiquettes: (id: string, vers: string) => r<{ ok: true; cartes: number }>(`/cm/etiquettes/${e(id)}/fusionner`, 'POST', { vers }),
     creerCarte: (tableauId: string, c: SaisieCarte & { listeId: string; titre: string; enHaut?: boolean }) => r<ReponseCarte>(`/cm/tableaux/${e(tableauId)}/cartes`, 'POST', c),
     carte: (id: string) => r<ReponseCarte>(`/cm/cartes/${e(id)}`),
     modifierCarte: (id: string, c: SaisieCarte) => r<ReponseCarte>(`/cm/cartes/${e(id)}`, 'PATCH', c),

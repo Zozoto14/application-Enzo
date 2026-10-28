@@ -71,7 +71,10 @@ function tableau(): DetailTableau {
       { id: L1, nom: null, cle: 'idees', position: 1024, archive: false },
       { id: L2, nom: 'Sponsors', cle: null, position: 2048, archive: false },
     ],
-    etiquettes: [{ id: 'e1', nom: 'Vidéo', couleur: '#4bce97' }],
+    etiquettes: [
+      { id: 'e1', nom: 'Vidéo', couleur: '#4bce97', cartes: 1 },
+      { id: 'e2', nom: 'Urgent', couleur: '#f87462', cartes: 0 },
+    ],
     cartes: [
       carte(C1, L1, 'Annonce du tournoi', 1024, { post: true, statut: 'a_valider', reseaux: ['x', 'instagram'], etiquettes: ['e1'], commentaires: 2 }),
       carte(C2, L1, 'Recap de la semaine', 2048),
@@ -252,5 +255,68 @@ describe('section CM', () => {
     definirLangue('en');
     expect(phraseJournal(e as never, noms)).toBe('Clara approved the post “Annonce”');
     expect(phraseNotification(n('cm-a-valider', { titre: 'Annonce', invalide: true }), noms)).toBe('Post changed after approval, to approve again: “Annonce”');
+  });
+  it('étiquettes : gestion depuis le menu du tableau (renommer, couleur libre, supprimer définitivement avec le nombre de cartes)', async () => {
+    const { client, appels } = fauxClient();
+    await render(<Tableau theme={theme} api={apiCm(client)} id={T} large />);
+    await screen.findByTestId(`esport-cm-carte-${C1}`);
+    await fireEvent.press(screen.getByTestId('esport-cm-tableau-menu'));
+    await fireEvent.press(await screen.findByTestId('esport-cm-tableau-etiquettes'));
+    expect(await screen.findByTestId('esport-cm-etiquettes')).toBeTruthy();
+    expect(screen.getByText('sur 1 carte')).toBeTruthy();
+    // Renommer et choisir une couleur libre.
+    await fireEvent.press(screen.getByTestId('esport-cm-etiquettes-e1-modifier'));
+    await fireEvent.changeText(screen.getByTestId('esport-cm-etiquettes-edition-nom'), 'Vidéos');
+    await fireEvent.changeText(screen.getByTestId('esport-cm-etiquettes-edition-libre'), '#112233');
+    await fireEvent.press(screen.getByTestId('esport-cm-etiquettes-edition-ok'));
+    await waitFor(() => expect(appels.some(a => a.methode === 'PATCH' && a.chemin === '/cm/etiquettes/e1')).toBe(true));
+    expect(appels.find(a => a.methode === 'PATCH' && a.chemin === '/cm/etiquettes/e1')?.corps).toEqual({ nom: 'Vidéos', couleur: '#112233' });
+    // Couleur libre invalide : l'enregistrement est bloqué.
+    await fireEvent.press(screen.getByTestId('esport-cm-etiquettes-e2-modifier'));
+    await fireEvent.changeText(screen.getByTestId('esport-cm-etiquettes-edition-libre'), '#12');
+    expect(screen.getByTestId('esport-cm-etiquettes-edition-ok').props.accessibilityState.disabled).toBe(true);
+    await fireEvent.press(screen.getByTestId('esport-cm-etiquettes-edition-annuler'));
+    // Suppression : confirmation avec le nombre de cartes, puis DELETE.
+    await fireEvent.press(screen.getByTestId('esport-cm-etiquettes-e1-supprimer'));
+    expect(screen.getByText(/Elle sera retirée de 1 carte\. Il n’y a pas de corbeille/)).toBeTruthy();
+    expect(appels.some(a => a.methode === 'DELETE')).toBe(false);
+    await fireEvent.press(screen.getByTestId('esport-cm-etiquettes-e1-supprimer-ok'));
+    await waitFor(() => expect(appels.some(a => a.methode === 'DELETE' && a.chemin === '/cm/etiquettes/e1')).toBe(true));
+  });
+
+  it('étiquettes : « Modifier les étiquettes… » depuis la fiche d’une carte', async () => {
+    const { client } = fauxClient();
+    await render(<Tableau theme={theme} api={apiCm(client)} id={T} large />);
+    await fireEvent.press(await screen.findByTestId(`esport-cm-carte-${C1}-tuile`));
+    await fireEvent.press(await screen.findByTestId('esport-cm-etiquettes-gerer'));
+    expect(await screen.findByTestId('esport-cm-fiche-gestion-etiquettes')).toBeTruthy();
+    expect(screen.getByTestId('esport-cm-fiche-gestion-etiquettes-e1-supprimer')).toBeTruthy();
+  });
+
+  it('étiquettes : sans cm.gerer, pas de suppression ni de fusion', async () => {
+    const { client } = fauxClient();
+    const sansGerer = async (chemin: string, methode = 'GET', corps?: unknown) => {
+      const r = (await (client.requete as <R>(c: string, m?: string, b?: unknown) => Promise<R>)(chemin, methode, corps)) as { droits?: Record<string, boolean> };
+      return chemin.startsWith('/cm/tableaux/') && r?.droits ? { ...r, droits: { ...r.droits, gerer: false } } : r;
+    };
+    const api = apiCm({ ...client, requete: sansGerer } as unknown as ClientEsport);
+    await render(<Tableau theme={theme} api={api} id={T} large />);
+    await screen.findByTestId(`esport-cm-carte-${C1}`);
+    await fireEvent.press(screen.getByTestId('esport-cm-tableau-menu'));
+    await fireEvent.press(await screen.findByTestId('esport-cm-tableau-etiquettes'));
+    expect(await screen.findByTestId('esport-cm-etiquettes-e1-modifier')).toBeTruthy();
+    expect(screen.queryByTestId('esport-cm-etiquettes-e1-supprimer')).toBeNull();
+    expect(screen.queryByTestId('esport-cm-etiquettes-e1-fusionner')).toBeNull();
+  });
+
+  it('étiquettes : phrases du journal (renommage, fusion, suppression) et des tags du Drive, en français et en anglais', () => {
+    const noms = { cm123456: 'Clara' };
+    const e = (action: string, meta: Record<string, unknown>) => ({ id: '1', acteur: 'cm123456', action, module: 'cm', entite: 'cm_tableau', entiteId: T, meta, date: '' });
+    expect(phraseJournal(e('cm.etiquette_supprimee', { nom: 'Vidéo', cartes: 3 }) as never, noms)).toBe('Clara a supprimé définitivement l’étiquette « Vidéo » (3 cartes)');
+    expect(phraseJournal(e('cm.etiquette_modifiee', { nom: 'Vidéos' }) as never, noms)).toBe('Clara a modifié l’étiquette « Vidéos »');
+    expect(phraseJournal(e('cm.drive_tag_renomme', { tag: 'roster', nom: 'effectif', fichiers: 2 }) as never, noms)).toBe('Clara a renommé l’étiquette #roster en #effectif dans le Drive (2 fichiers)');
+    definirLangue('en');
+    expect(phraseJournal(e('cm.etiquette_fusionnee', { nom: 'A', vers: 'B', cartes: 2 }) as never, noms)).toBe('Clara merged the label “A” into “B” (2 cards)');
+    expect(phraseJournal(e('cm.drive_tag_supprime', { tag: 'roster', fichiers: 2 }) as never, noms)).toBe('Clara permanently deleted the tag #roster from the Drive (2 files)');
   });
 });

@@ -32,6 +32,7 @@ import { ouvrirLienDiffere } from '../ouvrirLien';
 import { Aide, BadgeStatut, ChampInstant, PALETTE, PastilleReseau, Teinte, copierTexte, nomListe, quand } from './commun';
 import { MentionsSponsors } from '../sponsors/MentionsSponsors';
 import { PanneauVisuelsCarte } from './visuels/VisuelsCarte';
+import { GestionEtiquettes } from './GestionEtiquettes';
 
 const vide = { fr: '', en: '' };
 
@@ -108,7 +109,7 @@ export function FicheCarte({
 
       <Panneau theme={theme} testID="esport-cm-fiche-details">
         <Intertitre theme={theme}>{trCm('fiche.details')}</Intertitre>
-        <Etiquettes theme={theme} api={api} c={c} tableau={tableau} editer={dr.editer} faire={faire} />
+        <Etiquettes theme={theme} api={api} c={c} tableau={tableau} editer={dr.editer} faire={faire} onChangeEtiquettes={() => faire('etiquettes-gestion', async () => undefined)} />
         <Membres theme={theme} c={c} personnes={tableau.personnes} editer={dr.editer} onChanger={membres => faire('membres', () => api.modifierCarte(c.id, { membres }))} />
         {dr.editer ? (
           <>
@@ -575,8 +576,9 @@ function Description({ theme, valeur, joueurs, onEnregistrer }: { theme: ThemeHu
   );
 }
 
-function Etiquettes({ theme, api, c, tableau, editer, faire }: { theme: ThemeHub; api: ApiCm; c: CarteDetail; tableau: DetailTableau; editer: boolean; faire(cle: string, a: () => Promise<unknown>, m?: string): Promise<boolean> }) {
+function Etiquettes({ theme, api, c, tableau, editer, faire, onChangeEtiquettes }: { theme: ThemeHub; api: ApiCm; c: CarteDetail; tableau: DetailTableau; editer: boolean; faire(cle: string, a: () => Promise<unknown>, m?: string): Promise<boolean>; onChangeEtiquettes(): Promise<unknown> }) {
   const [nouvelle, setNouvelle] = useState<{ nom: string; couleur: string } | undefined>();
+  const [gestion, setGestion] = useState(false);
   return (
     <View style={{ gap: ESP.xs }} testID="esport-cm-fiche-etiquettes">
       <Text style={{ ...texte(theme, 13), fontWeight: '600' }}>{trCm('fiche.etiquettes')}</Text>
@@ -601,7 +603,9 @@ function Etiquettes({ theme, api, c, tableau, editer, faire }: { theme: ThemeHub
           );
         })}
         {editer ? <BoutonHub theme={theme} titre={trCm('etiquette.nouvelle')} onPress={() => setNouvelle({ nom: '', couleur: PALETTE[5][0] })} testID="esport-cm-etiquette-nouvelle" /> : null}
+        {editer ? <BoutonHub theme={theme} titre={trCm('etiquette.modifier_fiche')} onPress={() => setGestion(g => !g)} testID="esport-cm-etiquettes-gerer" /> : null}
       </View>
+      {editer && gestion ? <GestionEtiquettes theme={theme} api={api} tableauId={c.tableauId} etiquettes={tableau.etiquettes} droits={tableau.droits} onChange={onChangeEtiquettes} testID="esport-cm-fiche-gestion-etiquettes" /> : null}
       {nouvelle ? (
         <View style={{ gap: ESP.xs }}>
           <Champ theme={theme} libelle={trCm('c.nom')} valeur={nouvelle.nom} onChanger={nom => setNouvelle({ ...nouvelle, nom })} maxLength={40} testID="esport-cm-etiquette-nom" />

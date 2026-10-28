@@ -401,6 +401,9 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       return m;
     };
     const etiq = parCarte(await joint('SELECT ce.carte_id, ce.etiquette_id FROM cm_carte_etiquettes ce JOIN cm_cartes c ON c.id = ce.carte_id WHERE c.tableau_id = ? AND c.supprime_le IS NULL'), l => l.etiquette_id);
+    // Cartes (archivées comprises) portant chaque étiquette : annoncé avant une suppression définitive.
+    const nbParEtiquette = new Map();
+    for (const liste of etiq.values()) for (const eid of liste) nbParEtiquette.set(eid, (nbParEtiquette.get(eid) ?? 0) + 1);
     const memb = parCarte(await joint('SELECT cm.carte_id, cm.compte_id FROM cm_carte_membres cm JOIN cm_cartes c ON c.id = cm.carte_id WHERE c.tableau_id = ? AND c.supprime_le IS NULL'), l => l.compte_id);
     const com = new Map((await joint('SELECT co.carte_id, COUNT(*) AS n FROM cm_commentaires co JOIN cm_cartes c ON c.id = co.carte_id WHERE c.tableau_id = ? AND co.supprime_le IS NULL GROUP BY co.carte_id')).map(l => [l.carte_id, Number(l.n)]));
     const chk = new Map((await joint('SELECT e.carte_id, COUNT(*) AS total, SUM(e.fait) AS faits FROM cm_checklist_elements e JOIN cm_cartes c ON c.id = e.carte_id WHERE c.tableau_id = ? GROUP BY e.carte_id')).map(l => [l.carte_id, { total: Number(l.total), faits: Number(l.faits ?? 0) }]));
@@ -430,7 +433,7 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
       droits: droitsDe(ctx),
       moi: acteur.compte,
       listes: listes.map(l => ({ id: l.id, nom: l.nom ?? null, cle: l.cle ?? null, position: Number(l.position), archive: Boolean(l.archive_le) })),
-      etiquettes: etiquettes.map(e => ({ id: e.id, nom: e.nom, couleur: e.couleur })),
+      etiquettes: etiquettes.map(e => ({ id: e.id, nom: e.nom, couleur: e.couleur, cartes: nbParEtiquette.get(e.id) ?? 0 })),
       cartes: cartes.map(c => {
         const couv = jsonOu(c.couverture, null);
         return {
@@ -550,30 +553,84 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     return { id };
   }
 
-  async function etiquetteVisible(acteur, id) {
+  /** Étiquette et tableau visibles ; `permission` : `cm.editer` (modifier) ou `cm.gerer` (supprimer, fusionner). */
+  async function etiquetteVisible(acteur, id, permission = 'cm.editer') {
     exigerUuid(id, 'etiquette');
     const e = await base.premier('SELECT * FROM cm_etiquettes WHERE id = ?', [id]);
     if (!e) throw echec(404, 'etiquette-introuvable', 'Étiquette introuvable.');
     const { tableau: tb, ctx } = await tableauVisible(acteur, e.tableau_id);
-    exiger(ctx, 'cm.editer');
+    exiger(ctx, permission);
     return { e, tb };
   }
 
+  const nbCartesEtiquette = async id => Number((await base.premier('SELECT COUNT(*) AS n FROM cm_carte_etiquettes ce JOIN cm_cartes c ON c.id = ce.carte_id WHERE ce.etiquette_id = ? AND c.supprime_le IS NULL', [id]))?.n ?? 0);
+
+  const retirerTrello = (tableauId, e) => (e.trello_id ? [{ sql: 'INSERT INTO cm_etiquettes_retirees (tableau_id, trello_id) VALUES (?, ?) ON CONFLICT DO NOTHING', params: [tableauId, e.trello_id] }] : []);
+
+  /** Renomme et/ou recolore (cm.editer) : visible partout (tableau, filtres, fiches) car les cartes ne portent que l'identifiant. */
   async function modifierEtiquette(acteur, id, corps) {
     const { e, tb } = await etiquetteVisible(acteur, id);
     const t = maintenant();
+    const nom = corps?.nom !== undefined ? texteNettoye(corps.nom, 40) : e.nom;
+    const couleur = corps?.couleur !== undefined ? lireCouleur(corps.couleur) : e.couleur;
+    if (nom === e.nom && couleur === e.couleur) return { ok: true };
     await base.lot([
-      { sql: 'UPDATE cm_etiquettes SET nom = ?, couleur = ? WHERE id = ?', params: [corps?.nom !== undefined ? texteNettoye(corps.nom, 40) : e.nom, corps?.couleur !== undefined ? lireCouleur(corps.couleur) : e.couleur, e.id] },
+      { sql: 'UPDATE cm_etiquettes SET nom = ?, couleur = ?, modifie_le = ? WHERE id = ?', params: [nom, couleur, iso(t), e.id] },
+      evenement('cm.etiquette_modifiee', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_tableau', entiteId: tb.id, charge: { nom: nom || e.nom, ancien: nom !== e.nom ? e.nom : null, couleur: couleur !== e.couleur, tableau: tb.id }, maintenant: t }),
       versionTableau(tb.id, t),
     ]);
     return { ok: true };
   }
 
-  async function supprimerEtiquette(acteur, id) {
-    const { e, tb } = await etiquetteVisible(acteur, id);
-    const t = maintenant();
-    await base.lot([{ sql: 'DELETE FROM cm_carte_etiquettes WHERE etiquette_id = ?', params: [e.id] }, { sql: 'DELETE FROM cm_etiquettes WHERE id = ?', params: [e.id] }, versionTableau(tb.id, t)]);
+  /** `PUT /cm/tableaux/:id/etiquettes/ordre { ids }` (cm.editer) : nouvel ordre ; les étiquettes non citées suivent. */
+  async function ordonnerEtiquettes(acteur, tableauId, corps) {
+    const { tableau: tb, ctx } = await tableauVisible(acteur, tableauId);
+    exiger(ctx, 'cm.editer');
+    if (!Array.isArray(corps?.ids) || corps.ids.length > MAX_ETIQUETTES || corps.ids.some(x => typeof x !== 'string' || !MOTIF_UUID.test(x))) throw echec(400, 'etiquettes', 'Étiquettes illisibles.');
+    const existantes = (await base.tous('SELECT id FROM cm_etiquettes WHERE tableau_id = ? ORDER BY position, nom', [tb.id])).map(l => l.id);
+    const connues = new Set(existantes);
+    const choisies = [...new Set(corps.ids)].filter(x => connues.has(x));
+    const ordre = [...choisies, ...existantes.filter(x => !choisies.includes(x))];
+    await base.lot([...ordre.map((x, i) => ({ sql: 'UPDATE cm_etiquettes SET position = ? WHERE id = ?', params: [i, x] })), versionTableau(tb.id, maintenant())]);
     return { ok: true };
+  }
+
+  /**
+   * Suppression DÉFINITIVE (cm.gerer, pas de corbeille) : l'étiquette est retirée de toutes les cartes du
+   * tableau, archivées comprises. Rend le nombre de cartes concernées.
+   */
+  async function supprimerEtiquette(acteur, id) {
+    const { e, tb } = await etiquetteVisible(acteur, id, 'cm.gerer');
+    const t = maintenant();
+    const cartes = await nbCartesEtiquette(e.id);
+    await base.lot([
+      { sql: 'DELETE FROM cm_carte_etiquettes WHERE etiquette_id = ?', params: [e.id] },
+      { sql: 'DELETE FROM cm_etiquettes WHERE id = ?', params: [e.id] },
+      ...retirerTrello(tb.id, e),
+      evenement('cm.etiquette_supprimee', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_tableau', entiteId: tb.id, charge: { nom: e.nom, cartes, tableau: tb.id }, maintenant: t }),
+      versionTableau(tb.id, t),
+    ]);
+    return { ok: true, cartes };
+  }
+
+  /** `POST /cm/etiquettes/:id/fusionner { vers }` (cm.gerer) : les cartes de l'étiquette passent à `vers`, puis elle est supprimée. */
+  async function fusionnerEtiquettes(acteur, id, corps) {
+    const { e, tb } = await etiquetteVisible(acteur, id, 'cm.gerer');
+    exigerUuid(corps?.vers, 'etiquette');
+    const cible = await base.premier('SELECT * FROM cm_etiquettes WHERE id = ? AND tableau_id = ?', [corps.vers, tb.id]);
+    if (!cible) throw echec(404, 'etiquette-introuvable', 'Étiquette introuvable.');
+    if (cible.id === e.id) throw echec(400, 'fusion', 'Choisissez une autre étiquette.');
+    const t = maintenant();
+    const cartes = await nbCartesEtiquette(e.id);
+    await base.lot([
+      { sql: 'INSERT INTO cm_carte_etiquettes (carte_id, etiquette_id) SELECT carte_id, ? FROM cm_carte_etiquettes WHERE etiquette_id = ? AND carte_id NOT IN (SELECT carte_id FROM cm_carte_etiquettes WHERE etiquette_id = ?)', params: [cible.id, e.id, cible.id] },
+      { sql: 'DELETE FROM cm_carte_etiquettes WHERE etiquette_id = ?', params: [e.id] },
+      { sql: 'DELETE FROM cm_etiquettes WHERE id = ?', params: [e.id] },
+      ...retirerTrello(tb.id, e),
+      evenement('cm.etiquette_fusionnee', { teamId: tb.team_id, acteur: acteur.compte, entiteType: 'cm_tableau', entiteId: tb.id, charge: { nom: e.nom, vers: cible.nom, cartes, tableau: tb.id }, maintenant: t }),
+      versionTableau(tb.id, t),
+    ]);
+    return { ok: true, cartes };
   }
 
   // ---------------------------------------------------------------- Cartes
@@ -1317,6 +1374,8 @@ export function servicesTableauxCm({ base, maintenant = () => Date.now(), medias
     creerEtiquette,
     modifierEtiquette,
     supprimerEtiquette,
+    ordonnerEtiquettes,
+    fusionnerEtiquettes,
     creerCarte,
     carte,
     modifierCarte,

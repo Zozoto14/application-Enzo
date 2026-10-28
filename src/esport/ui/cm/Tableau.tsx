@@ -24,6 +24,7 @@ import { Retours, styles, useAgir } from '../commun';
 import { Badge, ESP, MenuActions, Pliable, Volet, attenue, initiales, rayonCarte, texte, type ActionSecondaire, type EtatPresse } from '../design';
 import { BadgeStatut, FUSEAU_CLUB, PastilleReseau, nomListe, nomStatut, nomTableau, quand } from './commun';
 import { FicheCarte } from './FicheCarte';
+import { GestionEtiquettes } from './GestionEtiquettes';
 
 type FiltreEcheance = 'toutes' | 'retard' | 'semaine' | 'sans';
 type FiltreType = 'tout' | 'posts' | 'cartes';
@@ -124,6 +125,7 @@ export function Tableau({
   const [nouvelleListe, setNouvelleListe] = useState<string | undefined>();
   const [renommer, setRenommer] = useState<{ id: string; nom: string } | undefined>();
   const [deplacer, setDeplacer] = useState<CarteResume | undefined>();
+  const [gestionEtiquettes, setGestionEtiquettes] = useState(false);
   const [limites, setLimites] = useState<Record<string, number>>({});
   const [fantome, setFantome] = useState<{ x: number; y: number; l: number; carte: CarteResume } | undefined>();
   const [cible, setCible] = useState<{ listeId: string; index: number } | undefined>();
@@ -327,6 +329,7 @@ export function Tableau({
             testID="esport-cm-tableau-menu"
             actions={[
               { titre: archives ? trCm('tableau.masquer_archives') : trCm('tableau.voir_archives'), onPress: () => setArchives(a => !a), testID: 'esport-cm-tableau-archives' },
+              d.droits.editer && { titre: trCm('etiquette.gerer'), onPress: () => setGestionEtiquettes(true), testID: 'esport-cm-tableau-etiquettes' },
               d.droits.gerer && { titre: trCm('tableau.renommer'), onPress: () => setRenommer({ id: t.id, nom: nomTableau(t) }), testID: 'esport-cm-tableau-renommer' },
               d.droits.gerer &&
                 !t.cleDefaut && {
@@ -588,6 +591,12 @@ export function Tableau({
             }
             testID="esport-cm-liste-creer"
           />
+        </Volet>
+      ) : null}
+
+      {gestionEtiquettes ? (
+        <Volet theme={theme} visible titre={trCm('etiquette.titre')} onFermer={() => setGestionEtiquettes(false)} testID="esport-cm-etiquettes-volet">
+          <GestionEtiquettes theme={theme} api={api} tableauId={t.id} etiquettes={d.etiquettes} droits={d.droits} onChange={() => recharger()} />
         </Volet>
       ) : null}
 

@@ -128,12 +128,14 @@ export function servicesImportTrello({ base, maintenant = () => Date.now(), tabl
     const listesAvant = new Set((await base.tous('SELECT trello_id FROM cm_listes WHERE tableau_id = ? AND trello_id IS NOT NULL', [tb.id])).map(l => l.trello_id));
     const cartesAvant = new Map((await base.tous('SELECT trello_id, post FROM cm_cartes WHERE tableau_id = ? AND trello_id IS NOT NULL', [tb.id])).map(l => [l.trello_id, Number(l.post)]));
     const listes = uniques(m.listes);
-    const etiquettes = uniques(m.etiquettes);
+    // Étiquettes supprimées ou fusionnées dans l'app (migration 0029) : jamais recréées.
+    const retirees = new Set((await base.tous('SELECT trello_id FROM cm_etiquettes_retirees WHERE tableau_id = ?', [tb.id])).map(l => l.trello_id));
+    const etiquettes = uniques(m.etiquettes).filter(e => !retirees.has(e.trelloId));
     await base.lot([
       ...insertions('cm_listes', ['id', 'tableau_id', 'nom', 'position', 'trello_id', 'archive_le', 'cree_le', 'maj_le'], listes.map(l => [nouvelId(), tb.id, l.nom, l.position, l.trelloId, l.archivee ? quand : null, quand, quand]),
         'ON CONFLICT (tableau_id, trello_id) DO UPDATE SET nom = excluded.nom, position = excluded.position, archive_le = excluded.archive_le, maj_le = excluded.maj_le'),
       ...insertions('cm_etiquettes', ['id', 'tableau_id', 'nom', 'couleur', 'position', 'trello_id'], etiquettes.map((e, i) => [nouvelId(), tb.id, e.nom, e.couleur, i, e.trelloId]),
-        'ON CONFLICT (tableau_id, trello_id) DO UPDATE SET nom = excluded.nom, couleur = excluded.couleur'),
+        'ON CONFLICT (tableau_id, trello_id) DO UPDATE SET nom = excluded.nom, couleur = excluded.couleur WHERE cm_etiquettes.modifie_le IS NULL'),
     ]);
     const idListe = new Map((await base.tous('SELECT id, trello_id FROM cm_listes WHERE tableau_id = ? AND trello_id IS NOT NULL', [tb.id])).map(l => [l.trello_id, l.id]));
     const idEtiquette = new Map((await base.tous('SELECT id, trello_id FROM cm_etiquettes WHERE tableau_id = ? AND trello_id IS NOT NULL', [tb.id])).map(l => [l.trello_id, l.id]));

@@ -13,7 +13,7 @@ Visuels (charte, modèles, éditeur, génération d'affiches) : [visuels.md](vis
 Discord des posts publiés et statistiques (onglet **Réseaux**) : [reseaux-stats.md](reseaux-stats.md). **Drive**
 (dossiers et fichiers du club et des teams, versions, corbeille, dépôt des joueurs) : [drive.md](drive.md).
 
-Migration : `esport/migrations/0023_cm.sql`. Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
+Migrations : `esport/migrations/0023_cm.sql` (+ `0029_cm_etiquettes.sql`, étiquettes modifiables). Code : `esport/noyau/cm/`, `src/esport/cm/`, `src/esport/ui/cm/`.
 
 ## Qui fait quoi
 
@@ -25,9 +25,9 @@ Six permissions (plus deux pour la rubrique **Sponsors**, `sponsors.voir` et `sp
 | --- | --- |
 | `cm.voir` | voir les tableaux, cartes, calendrier, clips de la portée |
 | `cm.deposer` | déposer une information (formulaire de la team) ; commenter ; retoucher son dépôt |
-| `cm.editer` | préparer : cartes, listes, étiquettes, checklists, pièces jointes, posts, soumettre, publier ; trier les clips |
+| `cm.editer` | préparer : cartes, listes, étiquettes (créer, renommer, recolorer, réordonner), checklists, pièces jointes, posts, soumettre, publier ; trier les clips |
 | `cm.valider` | valider ou refuser un post |
-| `cm.gerer` | créer, archiver, supprimer un tableau ; équipe et rôles CM ; import Trello ; réglages ; journal de la section |
+| `cm.gerer` | créer, archiver, supprimer un tableau ; fusionner et supprimer définitivement une étiquette ; équipe et rôles CM ; import Trello ; réglages ; journal de la section |
 | `cm.clips.proposer` | proposer un clip au CM |
 
 Elles viennent de deux endroits :
@@ -72,6 +72,22 @@ Contrôles d'une route CM : session → team existante → module `cm` activé (
   défile près des bords) ; au clavier et au lecteur d'écran par le menu **⋯** de la carte (Monter, Descendre, Liste
   précédente / suivante, Déplacer vers…). Le serveur range la carte entre ses voisines (positions décimales,
   renumérotées si besoin).
+- **Étiquettes** : propres à chaque tableau (pas d'étiquettes globales) ; couleur parmi 10 teintes ou **couleur libre**
+  `#RRGGBB`, nom de 40 caractères au plus (peut rester vide, comme sur Trello). **Gérer les étiquettes** : menu **⋯**
+  du tableau, ou **Modifier les étiquettes…** dans la fiche d'une carte (même panneau). On peut **créer, renommer,
+  recolorer, réordonner** (`cm.editer`), **fusionner** deux étiquettes (les cartes de la première passent à la
+  seconde, sans doublon) et **supprimer définitivement** (`cm.gerer`). La suppression demande une confirmation qui
+  indique le **nombre de cartes** concernées (archivées comprises) ; l'étiquette est retirée de toutes les cartes,
+  **sans corbeille**. Les cartes ne portent que l'identifiant de l'étiquette : un renommage ou une couleur
+  changée se voit tout de suite partout (cartes, filtres, fiches, autres écrans via la version du tableau).
+  Les **étiquettes importées de Trello** se gèrent comme les autres, et **relancer l'import** ne défait rien : une
+  étiquette renommée ou recolorée dans l'app garde son nom et sa couleur, une étiquette supprimée ou fusionnée
+  n'est pas recréée (migration `0029_cm_etiquettes.sql` : `cm_etiquettes.modifie_le`, `cm_etiquettes_retirees`).
+  Pourquoi `cm.gerer` pour supprimer et fusionner : c'est une action destructrice qui touche toutes les cartes du
+  tableau, au même niveau que supprimer un tableau ; renommer ou recolorer reste ouvert à qui prépare les cartes
+  (`cm.editer`). Le journal de la section note `cm.etiquette_modifiee`, `cm.etiquette_supprimee` (avec le nombre de
+  cartes) et `cm.etiquette_fusionnee`. Les **étiquettes des fichiers du Drive** (tags) se gèrent dans le Drive :
+  [drive.md](drive.md).
 - **Recherche et filtres** : texte, étiquettes, membres, échéance (en retard, 7 jours, sans), posts / cartes ;
   recherche dans tous les tableaux (titre et description). **Archives** affichables.
 - **Grands tableaux** : sept requêtes par tableau quelle que soit sa taille ; 60 cartes affichées par liste, puis
@@ -213,7 +229,8 @@ des joueurs liés aux posts ; ce qu'il a écrit pour le club reste, sans auteur.
 | --- | --- |
 | `GET /cm/moi` ; `GET /cm/etat` | session |
 | `GET\|POST /cm/tableaux` ; `GET\|PATCH\|DELETE /cm/tableaux/:id` (`?archives=1`) | voir ; gerer |
-| `POST /cm/tableaux/:id/(listes\|etiquettes\|cartes)` ; `PATCH /cm/listes/:id` ; `POST …/deplacer` ; `PATCH\|DELETE /cm/etiquettes/:id` | editer |
+| `POST /cm/tableaux/:id/(listes\|etiquettes\|cartes)` ; `PATCH /cm/listes/:id` ; `POST …/deplacer` ; `PATCH /cm/etiquettes/:id` ; `PUT /cm/tableaux/:id/etiquettes/ordre { ids }` | editer |
+| `DELETE /cm/etiquettes/:id` (définitif, rend `{ cartes }`) ; `POST /cm/etiquettes/:id/fusionner { vers }` | gerer |
 | `GET\|PATCH\|DELETE /cm/cartes/:id` ; `POST /cm/cartes/:id/deplacer` (`{ listeId, index, tableauId? }`) | voir ; editer (auteur d'un dépôt : titre, description, pièces) |
 | `POST /cm/cartes/:id/(soumettre\|publier\|depublier)` ; `…/(valider\|refuser)` | editer ; valider |
 | `POST /cm/cartes/:id/(checklists\|commentaires\|pieces)` ; `PATCH\|DELETE /cm/(checklists\|elements\|commentaires)/:id` ; `DELETE /cm/pieces/:id` ; `POST /cm/pieces/:id/lien` | editer (commenter : deposer ou editer) |

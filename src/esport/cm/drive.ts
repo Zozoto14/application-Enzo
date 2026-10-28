@@ -168,6 +168,8 @@ export function apiDrive(client: ClientEsport) {
     lister: (portee: string, dossier?: string | null) => r<ContenuDrive>(`/cm/drive${requeteUrl({ portee, dossier: dossier ?? undefined })}`),
     arbre: (portee: string) => r<{ portee: string; dossiers: Array<{ id: string; parentId: string | null; nom: string | null; cle: CleDossier | null; restreint: boolean }> }>(`/cm/drive/arbre${requeteUrl({ portee })}`),
     filtres: (portee: string) => r<{ tags: Array<{ tag: string; n: number }>; auteurs: Array<{ compte: string; pseudo: string | null }>; genres: GenreDrive[] }>(`/cm/drive/filtres${requeteUrl({ portee })}`),
+    renommerTag: (c: { portee: string; tag: string; nom: string }) => r<{ ok: true; fichiers: number }>('/cm/drive/tags', 'PATCH', c),
+    supprimerTag: (portee: string, tag: string) => r<{ ok: true; fichiers: number }>(`/cm/drive/tags${requeteUrl({ portee, tag })}`, 'DELETE'),
     rechercher: (portee: string, f: FiltresRecherche) => r<ResultatRechercheDrive>(`/cm/drive/recherche${requeteUrl({ portee, ...f, favoris: f.favoris ? 1 : undefined })}`),
     element: (id: string) => r<{ genre: 'fichier' | 'dossier'; id: string; portee: string; dossierId: string | null }>(`/cm/drive/elements/${e(id)}`),
     ajouter: (c: { portee: string; dossierId: string | null; envoi: string; nom?: string; tags?: string[] }) => r<{ fichier: FichierDrive }>('/cm/drive/fichiers', 'POST', c),

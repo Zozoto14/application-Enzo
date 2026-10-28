@@ -64,6 +64,14 @@ Drive (404 pour les autres, recherche et ZIP compris) ; un lien obtenu avant la 
   (TXT, CSV, Markdown, JSON, sous-titres…). **Jamais** de page web ni de programme.
 - **Renommer, déplacer, copier** (une copie dans un autre dossier ou le Drive d'une autre team réutilise les mêmes
   octets : aucun espace en plus), **étiquettes** (12 au plus), **favoris** (personnels), **télécharger**.
+- **Gérer les étiquettes** (bouton de la barre du Drive, `cm.drive.gerer` seulement) : liste des étiquettes de la
+  portée avec le nombre de fichiers. **Renommer** change l'étiquette sur tous les fichiers de la portée, corbeille
+  comprise (si le nouveau nom existe déjà, les deux sont fusionnées) ; **Supprimer définitivement** la retire de
+  tous les fichiers après une confirmation qui indique leur nombre (les fichiers eux-mêmes ne sont pas touchés ;
+  pas de corbeille pour une étiquette). Les étiquettes du Drive sont de simples mots (pas de couleur) et propres à
+  chaque Drive (club ou team). Les filtres et la recherche suivent aussitôt ; le journal note
+  `cm.drive_tag_renomme` et `cm.drive_tag_supprime`. Un correspondant ou un joueur peut toujours étiqueter ses
+  propres fichiers (fiche du fichier), mais pas renommer ni supprimer une étiquette pour tout le monde.
 - **Versions** : « Remplacer (nouvelle version) » garde l'ancienne dans l'historique (30 versions au plus par
   fichier, les plus anciennes partent). Chaque version se télécharge ; **Restaurer** une ancienne version en fait la
   nouvelle version actuelle ; un gestionnaire peut supprimer une ancienne version.
@@ -143,6 +151,7 @@ et ses favoris ; la suppression du compte efface ses favoris, ses fichiers reste
 | `POST /cm/drive/dossiers` ; `PATCH\|DELETE /cm/drive/dossiers/:id` ; `POST …/zip` | envoyer ; auteur ou gérer ; voir |
 | `GET /cm/drive/corbeille?portee` ; `POST /cm/drive/corbeille/:id/restaurer` ; `DELETE /cm/drive/corbeille/:id` ; `POST /cm/drive/corbeille/vider` | voir ; auteur ou gérer ; gérer |
 | `POST /cm/drive/lot { action, elements, dossierId?, portee? }` ; `POST /cm/drive/favoris` | selon l'action |
+| `PATCH /cm/drive/tags { portee, tag, nom }` ; `DELETE /cm/drive/tags?portee&tag` (étiquette de tous les fichiers de la portée) | gérer |
 | `GET\|PUT /cm/drive/reglages` | gérer (club) |
 | `GET /cm/drive/contenu/<élément>.<version>?c&exp&sig` ; `GET /cm/drive/zip/<dossier>?c&exp&sig` | lien signé (accès revérifié) |
 | `POST /cm/cartes/:id/pieces { genre: 'drive', fichierId }` ; `POST /cm/visuels/images { portee, drive }` ; `POST /sponsors/pieces { genre: 'drive', fichierId, … }` | intégrations |

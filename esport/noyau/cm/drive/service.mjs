@@ -670,6 +670,50 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     return { fichier: (await fichiersPublics(dc, [f], { origine }))[0] };
   }
 
+  // ---------------------------------------------------------------- Étiquettes (tags) de la portée
+
+  const lireUnTag = (v, code) => {
+    const t = typeof v === 'string' ? lireTags([v]) : null;
+    if (!t?.length) throw echec(400, code, 'Étiquette illisible.');
+    return t[0];
+  };
+  const nbFichiersTag = async (portee, tag) => Number((await base.premier('SELECT COUNT(*) AS n FROM cm_drive_tags WHERE tag = ? AND element_id IN (SELECT id FROM cm_drive_fichiers WHERE portee = ?)', [tag, portee]))?.n ?? 0);
+
+  /**
+   * `PATCH /cm/drive/tags { portee, tag, nom }` (cm.drive.gerer) : renomme l'étiquette sur tous les fichiers de la
+   * portée (corbeille comprise). Si `nom` existe déjà, les deux étiquettes sont fusionnées.
+   */
+  async function renommerTag(acteur, corps) {
+    const dc = await ctxDrive(acteur, corps?.portee);
+    exigerGerer(dc);
+    const tag = lireUnTag(corps?.tag, 'tag');
+    const nom = lireUnTag(corps?.nom, 'nom');
+    const fichiers = await nbFichiersTag(dc.portee, tag);
+    if (!fichiers) throw echec(404, 'tag-introuvable', 'Étiquette introuvable.');
+    if (nom === tag) return { ok: true, fichiers };
+    const t = maintenant();
+    await base.lot([
+      { sql: 'DELETE FROM cm_drive_tags WHERE tag = ? AND element_id IN (SELECT id FROM cm_drive_fichiers WHERE portee = ?) AND element_id IN (SELECT element_id FROM cm_drive_tags WHERE tag = ?)', params: [tag, dc.portee, nom] },
+      { sql: 'UPDATE cm_drive_tags SET tag = ? WHERE tag = ? AND element_id IN (SELECT id FROM cm_drive_fichiers WHERE portee = ?)', params: [nom, tag, dc.portee] },
+      evenement('cm.drive_tag_renomme', { teamId: teamDePortee(dc.portee), acteur: acteur.compte, entiteType: 'cm_drive', entiteId: dc.portee, charge: { tag, nom, fichiers, portee: dc.portee }, maintenant: t }),
+    ]);
+    return { ok: true, fichiers };
+  }
+
+  /** `DELETE /cm/drive/tags?portee&tag` (cm.drive.gerer) : retire l'étiquette de tous les fichiers de la portée (définitif). */
+  async function supprimerTag(acteur, { portee, tag } = {}) {
+    const dc = await ctxDrive(acteur, portee);
+    exigerGerer(dc);
+    const nom = lireUnTag(tag, 'tag');
+    const fichiers = await nbFichiersTag(dc.portee, nom);
+    if (!fichiers) throw echec(404, 'tag-introuvable', 'Étiquette introuvable.');
+    await base.lot([
+      { sql: 'DELETE FROM cm_drive_tags WHERE tag = ? AND element_id IN (SELECT id FROM cm_drive_fichiers WHERE portee = ?)', params: [nom, dc.portee] },
+      evenement('cm.drive_tag_supprime', { teamId: teamDePortee(dc.portee), acteur: acteur.compte, entiteType: 'cm_drive', entiteId: dc.portee, charge: { tag: nom, fichiers, portee: dc.portee }, maintenant: maintenant() }),
+    ]);
+    return { ok: true, fichiers };
+  }
+
   /** `PATCH /cm/drive/fichiers/:id { nom?, dossierId?, tags? }` : renommer, déplacer (même portée), étiqueter. */
   async function modifierFichier(acteur, id, corps) {
     const { f, dc, map } = await fichierVisible(acteur, id);
@@ -1261,6 +1305,8 @@ export function servicesDriveCm({ base, maintenant = () => Date.now(), medias, c
     lister,
     arborescence,
     filtres,
+    renommerTag,
+    supprimerTag,
     rechercher,
     detail,
     element,

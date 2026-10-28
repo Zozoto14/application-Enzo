@@ -726,3 +726,47 @@ test('RGPD et export / import : fichiers du Drive exportés, auteur effacé, fav
   assert.equal((await b.base.tous("SELECT * FROM cm_drive_favoris WHERE compte_id = 'kai12345'", [])).length, 0);
   assert.equal((await b.base.premier('SELECT cree_par FROM cm_drive_versions WHERE element_id = ?', [f.id])).cree_par, null);
 });
+
+// ------------------------------------------------------------------ Étiquettes : renommer, supprimer (cm.drive.gerer)
+
+test('étiquettes du Drive : renommer (fusion si le nom existe), supprimer définitivement ; cm.drive.gerer, par portée, journal', async () => {
+  const { A, s, api, ok, deposer } = await preparer();
+  const f1 = await deposer(s.cm123456, 'club', pngFactice(4, 4, 1), 'a.png', { tags: ['saison-2026', 'roster'] });
+  const f2 = await deposer(s.cm123456, 'club', pngFactice(4, 4, 2), 'b.png', { tags: ['roster'] });
+  const f3 = await deposer(s.cm123456, 'club', pngFactice(4, 4, 3), 'c.png', { tags: ['saison-2026', 'equipe'] });
+  const fTeam = await deposer(s.cm123456, A.teamId, pngFactice(4, 4, 4), 'team.png', { tags: ['roster'] });
+  await ok(`/cm/drive/fichiers/${f3.id}`, s.cm123456, { methode: 'DELETE' });
+
+  // Droits : le correspondant de la team (voir + envoyer) et le joueur ne gèrent pas les étiquettes ; autre portée 403/404.
+  for (const jeton of [s.kai12345, s.lea12345]) {
+    assert.equal((await api('/cm/drive/tags', jeton, { methode: 'PATCH', corps: { portee: A.teamId, tag: 'roster', nom: 'effectif' } })).statut, 403);
+    assert.equal((await api(`/cm/drive/tags?portee=${A.teamId}&tag=roster`, jeton, { methode: 'DELETE' })).statut, 403);
+  }
+  assert.equal((await api('/cm/drive/tags', s.nox12345, { methode: 'PATCH', corps: { portee: A.teamId, tag: 'roster', nom: 'x' } })).statut, 404);
+  assert.deepEqual((await ok('/cm/drive/fichiers/' + fTeam.id, s.cm123456)).fichier.tags, ['roster']);
+
+  // Renommer : tous les fichiers du club (corbeille comprise), visible dans les filtres et la recherche ; l'autre portée ne bouge pas.
+  const r = await ok('/cm/drive/tags', s.cm123456, { methode: 'PATCH', corps: { portee: 'club', tag: 'Roster', nom: 'Effectif 26' } });
+  assert.equal(r.fichiers, 2);
+  assert.deepEqual((await ok(`/cm/drive/fichiers/${f1.id}`, s.cm123456)).fichier.tags, ['effectif-26', 'saison-2026']);
+  assert.deepEqual((await ok(`/cm/drive/fichiers/${f2.id}`, s.cm123456)).fichier.tags, ['effectif-26']);
+  assert.deepEqual((await ok(`/cm/drive/fichiers/${fTeam.id}`, s.cm123456)).fichier.tags, ['roster'], 'portée distincte');
+  assert.deepEqual((await ok('/cm/drive/filtres?portee=club', s.cm123456)).tags.map(t => [t.tag, t.n]), [['effectif-26', 2], ['saison-2026', 1]].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])));
+  assert.deepEqual((await ok('/cm/drive/recherche?portee=club&tag=effectif-26', s.cm123456)).fichiers.map(f => f.nom).sort(), ['a.png', 'b.png']);
+  assert.equal((await ok('/cm/drive/recherche?portee=club&tag=roster', s.cm123456)).fichiers.length, 0);
+  // Fusion : « equipe » (fichier à la corbeille) rejoint « effectif-26 » ; f1 n'a pas de doublon.
+  await ok('/cm/drive/tags', s.cm123456, { methode: 'PATCH', corps: { portee: 'club', tag: 'saison-2026', nom: 'effectif-26' } });
+  assert.deepEqual((await ok(`/cm/drive/fichiers/${f1.id}`, s.cm123456)).fichier.tags, ['effectif-26']);
+  assert.equal((await api('/cm/drive/tags', s.cm123456, { methode: 'PATCH', corps: { portee: 'club', tag: 'absent', nom: 'x' } })).statut, 404);
+  assert.equal((await api('/cm/drive/tags', s.cm123456, { methode: 'PATCH', corps: { portee: 'club', tag: 'effectif-26', nom: '   ' } })).corps.code, 'nom');
+
+  // Supprimer définitivement : retirée de tous les fichiers de la portée.
+  const sup = await ok('/cm/drive/tags?portee=club&tag=effectif-26', s.cm123456, { methode: 'DELETE' });
+  assert.equal(sup.fichiers, 3);
+  for (const f of [f1, f2]) assert.deepEqual((await ok(`/cm/drive/fichiers/${f.id}`, s.cm123456)).fichier.tags, []);
+  assert.deepEqual((await ok('/cm/drive/filtres?portee=club', s.cm123456)).tags, []);
+
+  // Journal.
+  const actions = (await ok('/cm/journal', s.fondateur)).entrees.map(e => e.action);
+  assert.ok(actions.includes('cm.drive_tag_renomme') && actions.includes('cm.drive_tag_supprime'));
+});
