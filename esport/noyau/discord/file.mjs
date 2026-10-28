@@ -17,6 +17,10 @@
  * Un refus définitif (webhook supprimé, requête refusée) abandonne tout de
  * suite. Chaque échec et chaque abandon est consigné dans le journal
  * d'activité de la team (jamais l'adresse du webhook ni la réponse de Discord).
+ *
+ * Pings (migration 0031, docs/esport/discord.md) : un joueur n'est mentionné dans le salon qu'UNE fois par
+ * occurrence du planning (registre `discord_mentions`) ; les relances et les messages qui ne concernent qu'un
+ * convoqué partent en MP (`phaseMp`), avec repli dans le salon pour qui n'a pas pu être joint.
  */
 
 import { iso, jsonOu, nouvelId } from '../outils.mjs';
@@ -278,7 +282,7 @@ async function majAnnonce(base, ev) {
 export async function abonneDiscord(base, ev) {
   if (ev.type === 'team.deleted' && ev.team_id) {
     // Team supprimée : l'adresse du webhook (secret), la liaison du bot et la file disparaissent avec elle.
-    for (const table of ['discord_file', 'discord_webhooks', 'discord_serveurs', 'discord_annonces', 'discord_debuts', 'discord_bot_pings', 'discord_codes', 'discord_bilingue', 'discord_alertes_fil']) {
+    for (const table of ['discord_file', 'discord_webhooks', 'discord_serveurs', 'discord_annonces', 'discord_debuts', 'discord_bot_pings', 'discord_codes', 'discord_bilingue', 'discord_alertes_fil', 'discord_mp_reglages', 'discord_mentions', 'discord_mp_envois', 'discord_injoignables']) {
       await base.executer(`DELETE FROM ${table} WHERE team_id = ?`, [ev.team_id]);
     }
     return;
@@ -425,10 +429,42 @@ export async function pingActif(base, teamId, type) {
   return !l || Number(l.ping) === 1;
 }
 
-/** Qui mentionner pour ce message : les convoqués LIÉS (relances : seulement ceux qui n'ont pas répondu). */
-function aMentionner(cle, c) {
-  const cibles = cle === 'rsvp_missing' || cle === 'rsvp_relance' ? c.sansReponse : c.convoques;
-  return cibles.map(m => m.discordId).filter(Boolean);
+/** Relances (RSVP manquant, /relancer) : elles visent les convoqués SANS réponse. */
+export const estRelance = cle => cle === 'rsvp_missing' || cle === 'rsvp_relance';
+
+/** Sujet du registre des mentions (`discord_mentions`) pour une occurrence du planning. */
+export const sujetOccurrence = (evenementId, occurrence) => `occ:${evenementId}:${occurrence}`;
+
+/** Cibles déjà mentionnées dans le salon pour ce sujet (identifiants Discord, ou `role:<id>`). */
+export async function mentionsFaites(base, teamId, sujet) {
+  const l = await base.tous('SELECT cible FROM discord_mentions WHERE team_id = ? AND sujet = ?', [teamId, sujet]);
+  return new Set(l.map(x => x.cible));
+}
+
+/** Option « Relances par MP » de la team (ligne absente : activée). */
+export async function relancesMpActives(base, teamId) {
+  const l = await base.premier('SELECT relances_mp FROM discord_mp_reglages WHERE team_id = ?', [teamId]);
+  return !l || Number(l.relances_mp) === 1;
+}
+
+/** Comptes qu'aucun MP n'a joints pour cette tâche (bilan des MP), ou `null` si la tâche n'est pas passée par les MP. */
+export function bilanMp(ligne) {
+  if (ligne?.mp_bilan === null || ligne?.mp_bilan === undefined) return null;
+  const b = jsonOu(ligne.mp_bilan, null);
+  return new Set(Array.isArray(b?.echecs) ? b.echecs.map(String) : []);
+}
+
+/** Langue d'un MP : celle du profil du joueur, sinon sa langue par défaut (réglée par le Fondateur), sinon l'anglais. */
+export async function langueCompte(base, compte) {
+  const l = await base.premier('SELECT langue, langue_defaut FROM comptes WHERE id = ?', [compte]);
+  return lireLangue(l?.langue) ?? lireLangue(l?.langue_defaut) ?? 'en';
+}
+
+/** Motif d'un MP impossible, pour Réglages › Discord : MP fermés (50007), utilisateur introuvable, autre refus. */
+export function motifMp(r) {
+  if (r.code === 50007) return 'mp_fermes';
+  if (r.code === 10013 || r.statut === 404) return 'introuvable';
+  return 'refuse';
 }
 
 /**
@@ -476,8 +512,15 @@ async function chargeDeLigne(base, ligne, { team, bot, lienApp, t, mentions = tr
   if (c.staff) return { abandon: 'Réunion staff : jamais annoncée publiquement' };
   // Rappels, « c'est maintenant », relances : seulement s'il y a des convoqués (l'annonce part toujours).
   if (c.convoques.length === 0 && ligne.cle !== 'event_created') return { abandon: 'Personne n’est convoqué', silencieux: true };
-  const relance = ligne.cle === 'rsvp_missing' || ligne.cle === 'rsvp_relance';
+  const relance = estRelance(ligne.cle);
   if (relance && c.sansReponse.length === 0) return { abandon: 'Tout le monde a déjà répondu', silencieux: true };
+  // Après les MP (relances, joueur seul) : le salon ne vise plus que les comptes qu'aucun MP n'a joints.
+  const bilan = bilanMp(ligne);
+  let cibles = relance ? c.sansReponse : c.convoques;
+  if (bilan) {
+    cibles = cibles.filter(m => bilan.has(m.compte));
+    if (cibles.length === 0) return { abandon: relance ? 'Tout le monde a déjà répondu' : 'Personne n’est convoqué', silencieux: true };
+  }
   let genre = ligne.cle;
   let modele = ligne.modele;
   if (ligne.operation === 'editer') {
@@ -487,14 +530,45 @@ async function chargeDeLigne(base, ligne, { team, bot, lienApp, t, mentions = tr
     modele = reglageEffectif(def, await base.premier('SELECT * FROM discord_notification_settings WHERE team_id = ? AND cle = ?', [ligne.team_id, genre]), langue).modele;
   }
   const vars = { ...variablesOccurrence(c, t, libelleTypeEvenement, langue), acteur: variables.acteur ?? '', lien: lienApp };
+  if (relance && bilan) vars.membre = cibles.map(m => m.pseudo).join(', ');
   const texte = rendreModele(modele, vars);
   const embed = embedOccurrence(c, { genre, texte, lien: lienApp, maintenant: t, langue });
   const rsvpPossible = bot && c.presenceActive && !c.termine;
   const composants = rsvpPossible ? boutonsRsvp(c.ev.id, c.occurrence.cle, { lien: lienApp, langue }) : boutonLien(lienApp, undefined, langue);
-  // Mentions : uniquement le bot, uniquement les convoqués liés, et seulement si la team garde le ping pour ce type.
-  const utilisateurs = mentions && bot && ligne.operation !== 'editer' && (await pingActif(base, ligne.team_id, c.occurrence.type)) ? aMentionner(ligne.cle, c) : [];
-  const charge = construireCharge(texte, { roleId: ligne.operation === 'editer' ? null : roleId, nomTeam: team.nom, embed, utilisateurs, composants, maintenant: t, langue });
-  return { charge, contexte: c, genre };
+  // Un ping UNE SEULE FOIS par occurrence (registre `discord_mentions`) : un joueur déjà mentionné (annonce,
+  // rappel précédent…) ne l'est plus ; le rôle configuré non plus. Un rôle mentionné couvre les convoqués : jamais
+  // rôle + mention individuelle dans le même message. Mentions individuelles : bot seulement, convoqués liés,
+  // et seulement si la team garde le ping pour ce type. Jamais dans une édition ni dans le fil français.
+  let utilisateurs = [];
+  let role = null;
+  let pings = null;
+  if (mentions && ligne.operation !== 'editer') {
+    const sujet = sujetOccurrence(c.ev.id, c.occurrence.cle);
+    const deja = await mentionsFaites(base, ligne.team_id, sujet);
+    role = roleId && !deja.has(`role:${roleId}`) ? roleId : null;
+    const ids = bot && (await pingActif(base, ligne.team_id, c.occurrence.type)) ? [...new Set(cibles.map(m => m.discordId).filter(Boolean))] : [];
+    utilisateurs = role ? [] : ids.filter(id => !deja.has(id));
+    pings = { sujet, cibles: role ? [`role:${role}`, ...ids] : utilisateurs };
+  }
+  const charge = construireCharge(texte, { roleId: role, nomTeam: team.nom, embed, utilisateurs, composants, maintenant: t, langue });
+  return { charge, contexte: c, genre, pings };
+}
+
+/**
+ * MP d'une occurrence pour UN joueur (relance, ou message qui ne concerne que lui), dans SA langue : modèle
+ * de la team (ou modèle par défaut dans cette langue), embed de l'occurrence, boutons RSVP (ils marchent en MP).
+ * Aucune mention, aucun nom d'expéditeur (API du bot).
+ */
+async function chargeMp(base, ligne, c, membre, { team, lienApp, t, langue }) {
+  const def = evenementDiscord(ligne.cle);
+  const reglage = reglageEffectif(def, await base.premier('SELECT * FROM discord_notification_settings WHERE team_id = ? AND cle = ?', [ligne.team_id, ligne.cle]), langue);
+  const variables = jsonOu(ligne.variables, {});
+  const vars = { ...variablesOccurrence(c, t, libelleTypeEvenement, langue), acteur: variables.acteur ?? '', lien: lienApp, ...(estRelance(ligne.cle) ? { membre: membre.pseudo } : {}) };
+  const texte = rendreModele(reglage.modele, vars);
+  const embed = embedOccurrence(c, { genre: ligne.cle, texte, lien: lienApp, maintenant: t, langue });
+  const composants = c.presenceActive && !c.termine ? boutonsRsvp(c.ev.id, c.occurrence.cle, { lien: lienApp, langue }) : boutonLien(lienApp, undefined, langue);
+  const { username: _u, ...charge } = construireCharge(texte, { nomTeam: team.nom, embed, composants, maintenant: t, langue });
+  return charge;
 }
 
 /**
@@ -563,6 +637,102 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
     );
     await consigner(base, ligne, 'discord.delivery_failed', { essai: essais, sur: ESSAIS_MAX, motif: resultat.motif }, t);
     bilan.reportes++;
+  }
+
+  /** Mentions faites par le message principal : retenues (avec son envoi) pour ne jamais pinger deux fois. */
+  const retenirMentions = (ligne, pings) =>
+    (pings?.cibles ?? []).map(cible => ({
+      sql: 'INSERT INTO discord_mentions (team_id, sujet, cible, ligne_id, cree_le) VALUES (?, ?, ?, ?, ?) ON CONFLICT (team_id, sujet, cible) DO NOTHING',
+      params: [ligne.team_id, pings.sujet, cible, ligne.id, iso(t)],
+    }));
+
+  /** MP du bot : salon privé (POST /users/@me/channels) puis message, avec un nonce (réessai sans doublon). */
+  async function envoyerMp(discordId, charge, ligneId) {
+    const salon = await appelerDiscord(fetchDiscord, `${API_DISCORD}/users/@me/channels`, { recipient_id: discordId }, { jetonBot, lireCorps: true });
+    if (!salon.ok) return salon;
+    if (!salon.messageId) return { ok: false, statut: 0, definitif: false, motif: 'Salon privé Discord sans identifiant' };
+    return appelerDiscord(fetchDiscord, `${API_DISCORD}/channels/${salon.messageId}/messages`, { ...charge, ...(await nonceEnvoi(ligneId, `mp:${discordId}`)) }, { jetonBot, lireCorps: true });
+  }
+
+  /**
+   * Étape « MP » d'un message d'occurrence du bot (avant le salon) : relance (RSVP manquant, /relancer) ou message
+   * qui ne concerne qu'UN convoqué (sans rôle) → un MP à chaque joueur visé, dans sa langue, si la team garde
+   * « Relances par MP ». Chaque MP réussi est retenu (`discord_mp_envois`) : un réessai ne le renvoie pas.
+   * MP impossible (compte non lié, MP fermés : 50007…) → journal, Réglages › Discord, et repli dans le salon
+   * pour ces joueurs seulement (`mp_bilan`), avec au plus une mention par événement.
+   * Rend 'suite' (passer au salon) ou 'stop' (tâche terminée, reportée ou abandonnée).
+   */
+  async function phaseMp(ligne, { team, cleBlocage }) {
+    const deja = bilanMp(ligne);
+    if (deja) {
+      if (deja.size > 0) return 'suite';
+      await terminer(ligne);
+      return 'stop';
+    }
+    if (!(await relancesMpActives(base, ligne.team_id))) return 'suite';
+    const v = jsonOu(ligne.variables, {});
+    const c = await contexteOccurrence(base, ligne.team_id, v.evenementId, v.occurrence, t);
+    // Événement disparu, réunion staff : le salon décidera (abandon), comme avant.
+    if (!c || c.staff) return 'suite';
+    const relance = estRelance(ligne.cle);
+    const cibles = relance ? c.sansReponse : c.convoques;
+    if (cibles.length === 0) return 'suite';
+    // Seuil « joueur seul » : un message qui ne concerne qu'UN convoqué, sans rôle à mentionner, part en MP ;
+    // dès deux convoqués (ou avec un rôle), c'est une annonce d'équipe : elle reste dans le salon.
+    const seul = c.convoques.length === 1 && !ligne.role_mention && (await pingActif(base, ligne.team_id, c.occurrence.type));
+    if (!relance && !seul) return 'suite';
+    const envoyes = new Set((await base.tous('SELECT discord_user_id FROM discord_mp_envois WHERE ligne_id = ?', [ligne.id])).map(l => l.discord_user_id));
+    const echecs = [];
+    const vus = new Set();
+    for (const m of cibles) {
+      if (!m.discordId) {
+        echecs.push(m.compte);
+        continue;
+      }
+      // Deux comptes avec le même Discord : un seul MP.
+      if (vus.has(m.discordId)) continue;
+      vus.add(m.discordId);
+      if (envoyes.has(m.discordId)) continue;
+      const charge = await chargeMp(base, ligne, c, m, { team, lienApp, t, langue: await langueCompte(base, m.compte) });
+      const r = await envoyerMp(m.discordId, charge, ligne.id);
+      if (r.ok) {
+        await base.lot([
+          { sql: 'INSERT INTO discord_mp_envois (ligne_id, discord_user_id, team_id, compte_id, message_id, envoye_le) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (ligne_id, discord_user_id) DO NOTHING', params: [ligne.id, m.discordId, ligne.team_id, m.compte, r.messageId ?? null, iso(t)] },
+          { sql: 'DELETE FROM discord_injoignables WHERE team_id = ? AND compte_id = ?', params: [ligne.team_id, m.compte] },
+        ]);
+        continue;
+      }
+      if (r.statut === 401) {
+        // Jeton du bot refusé : rien ne partira, ni en MP ni dans le salon.
+        await echouer(ligne, r, { table: 'discord_serveurs', cleBlocage });
+        return 'stop';
+      }
+      // 429 (on attend Discord) ou panne passagère : réessai de la tâche ; les MP déjà partis ne repartent pas.
+      if (r.statut === 429 || (!r.definitif && Number(ligne.essais) + 1 < ESSAIS_MAX)) {
+        await echouer(ligne, r, { cleBlocage });
+        return 'stop';
+      }
+      echecs.push(m.compte);
+      const motif = motifMp(r);
+      // Refus de Discord (MP fermés…) : le joueur a une action à faire (Réglages › Discord). Pannes répétées : journal seulement.
+      if (r.definitif) {
+        await base.executer(
+          `INSERT INTO discord_injoignables (team_id, compte_id, discord_user_id, motif, depuis_le, maj_le) VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT (team_id, compte_id) DO UPDATE SET discord_user_id = excluded.discord_user_id, motif = excluded.motif, maj_le = excluded.maj_le`,
+          [ligne.team_id, m.compte, m.discordId, motif, iso(t), iso(t)],
+        );
+      }
+      await consigner(base, ligne, 'discord.dm_failed', { compte: m.compte, motif, code: r.code ?? null, statut: r.statut }, t);
+    }
+    ligne.mp_bilan = JSON.stringify({ echecs: [...new Set(echecs)] });
+    const retenir = { sql: 'UPDATE discord_file SET mp_bilan = ?, maj_le = ? WHERE id = ?', params: [ligne.mp_bilan, iso(t), ligne.id] };
+    if (echecs.length === 0) {
+      // Tout le monde a reçu son MP : rien dans le salon.
+      await terminer(ligne, { lot: [retenir] });
+      return 'stop';
+    }
+    await base.lot([retenir]);
+    return 'suite';
   }
 
   /** Annonce d'une occurrence par le bot : retenue pour être éditée quand les réponses changent. */
@@ -650,7 +820,7 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
       const succes = table ? [{ sql: `UPDATE ${table} SET dernier_succes_le = ?, bloque_jusqua = NULL WHERE team_id = ?`, params: [iso(t), ligne.team_id] }] : [];
       if (!r.messageId) {
         // Réponse sans identifiant (rare) : l'anglais est parti, impossible d'y accrocher un fil.
-        await terminer(ligne, { erreur: 'Version française non publiée : identifiant du message absent', lot: succes });
+        await terminer(ligne, { erreur: 'Version française non publiée : identifiant du message absent', lot: [...succes, ...retenirMentions(ligne, prepare.pings)] });
         return;
       }
       messageId = r.messageId;
@@ -660,6 +830,7 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
       await base.lot([
         { sql: 'UPDATE discord_file SET message_id = ?, message_salon_id = ?, fil_id = ?, maj_le = ? WHERE id = ?', params: [messageId, salonId, filId, iso(t), ligne.id] },
         ...succes,
+        ...retenirMentions(ligne, prepare.pings),
         ...(annoncable(bot, prepare) ? [retenirAnnonce(ligne, prepare, salonId, messageId, 'en')] : []),
       ]);
     }
@@ -783,6 +954,9 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
       }
     }
 
+    // Relance, ou message d'un joueur seul : d'abord les MP (repli dans le salon pour qui n'a pas pu être joint).
+    const occurrenceBot = bot && methode === 'POST' && !commence && CLES_OCCURRENCE.includes(ligne.cle);
+    if (occurrenceBot && (await phaseMp(ligne, { team, cleBlocage })) === 'stop') continue;
     const prepare = await chargeDeLigne(base, ligne, { team, bot, lienApp, t });
     if (prepare.abandon) {
       if (commence) await terminer(ligne, { erreur: prepare.silencieux ? null : prepare.abandon });
@@ -803,7 +977,7 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
     const resultat = await appelerDiscord(fetchDiscord, url, charge, { methode, jetonBot: bot ? jetonBot : undefined, lireCorps: bot && methode === 'POST' });
 
     if (resultat.ok) {
-      const lot = [...(table ? [{ sql: `UPDATE ${table} SET dernier_succes_le = ?, bloque_jusqua = NULL WHERE team_id = ?`, params: [iso(t), ligne.team_id] }] : [])];
+      const lot = [...(table ? [{ sql: `UPDATE ${table} SET dernier_succes_le = ?, bloque_jusqua = NULL WHERE team_id = ?`, params: [iso(t), ligne.team_id] }] : []), ...retenirMentions(ligne, prepare.pings)];
       if (methode === 'POST' && resultat.messageId && annoncable(bot, prepare)) {
         lot.push(retenirAnnonce(ligne, prepare, ligne.salon_id || cible.salon_id, resultat.messageId, lireLangue(jsonOu(ligne.variables, {})._langue) ?? 'fr'));
       }
@@ -827,5 +1001,7 @@ export async function traiterFile(base, { cle, fetch: fetchDiscord = (...a) => g
   await base.executer('DELETE FROM discord_debuts WHERE cree_le < ?', [iso(t - 2 * CONSERVATION_MS)]);
   await base.executer('DELETE FROM discord_annonces WHERE maj_le < ?', [iso(t - 2 * CONSERVATION_MS)]);
   await base.executer('DELETE FROM discord_alertes_fil WHERE alerte_le < ?', [iso(t - CONSERVATION_MS)]);
+  await base.executer('DELETE FROM discord_mp_envois WHERE envoye_le < ?', [iso(t - CONSERVATION_MS)]);
+  await base.executer('DELETE FROM discord_mentions WHERE cree_le < ?', [iso(t - 2 * CONSERVATION_MS)]);
   return bilan;
 }

@@ -60,7 +60,7 @@ export const EVENEMENTS_DISCORD = [
   {
     cle: 'event_now',
     libelle: 'C’est maintenant',
-    description: 'Au début de l’événement (bot : les convoqués liés sont mentionnés).',
+    description: 'Au début de l’événement (bot : les convoqués liés pas encore mentionnés pour cet événement le sont).',
     types: ['event.starting'],
     modules: ['planning'],
     defaut: true,
@@ -70,7 +70,7 @@ export const EVENEMENTS_DISCORD = [
   {
     cle: 'rsvp_relance',
     libelle: 'Relance des convoqués (/relancer)',
-    description: 'Un membre du staff relance, depuis Discord, les convoqués qui n’ont pas répondu (un seul message, groupé).',
+    description: 'Un membre du staff relance, depuis Discord, les convoqués qui n’ont pas répondu (bot : un message privé à chacun ; sinon un seul message, groupé).',
     types: ['attendance.relance'],
     modules: ['planning', 'attendance'],
     defaut: true,
@@ -80,7 +80,7 @@ export const EVENEMENTS_DISCORD = [
   {
     cle: 'rsvp_missing',
     libelle: 'RSVP manquant',
-    description: 'Des convoqués n’ont pas répondu à un événement qui approche (un seul message, groupé).',
+    description: 'Des convoqués n’ont pas répondu à un événement qui approche (bot : un message privé à chacun ; sinon un seul message, groupé).',
     types: ['attendance.reminder'],
     modules: ['planning', 'attendance'],
     defaut: false,
@@ -335,19 +335,19 @@ const TEXTES_EN = {
   },
   event_now: {
     libelle: 'It’s happening now',
-    description: 'When the event starts (bot: the linked called-up players are mentioned).',
+    description: 'When the event starts (bot: linked called-up players not yet mentioned for this event are mentioned).',
     modele: '**Let’s go**: {titre} ({type}) is starting now.',
     variables: { titre: 'Event title', type: 'Type (Scrim, Match…)', date: 'Date (day and month)', heure: 'Time (team time zone)', convoques: 'Nicknames of the called-up players' },
   },
   rsvp_relance: {
     libelle: 'Nudge for called-up players (/relancer)',
-    description: 'A staff member nudges, from Discord, the called-up players who haven’t responded (one single grouped message).',
+    description: 'A staff member nudges, from Discord, the called-up players who haven’t responded (bot: a direct message to each one; otherwise one single grouped message).',
     modele: 'Please respond for {titre} ({date} at {heure}): {membre}.',
     variables: { membre: 'Nicknames of the players without a response', titre: 'Event title', type: 'Type (Scrim, Match…)', date: 'Date (day and month)', heure: 'Time (team time zone)' },
   },
   rsvp_missing: {
     libelle: 'Missing RSVP',
-    description: 'Called-up players haven’t responded to an upcoming event (one single grouped message).',
+    description: 'Called-up players haven’t responded to an upcoming event (bot: a direct message to each one; otherwise one single grouped message).',
     modele: '{membre}: no response yet for {titre} ({date} at {heure}).',
     variables: { membre: 'Nicknames of the players without a response', titre: 'Event title', type: 'Type (Scrim, Match…)', date: 'Date (day and month)', heure: 'Time (team time zone)' },
   },

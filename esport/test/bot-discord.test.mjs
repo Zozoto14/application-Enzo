@@ -54,11 +54,16 @@ function fauxDiscord() {
     const r = programme.length > 0 ? programme.shift() : null;
     if (r instanceof Error) throw r;
     if (r) return new Response(r.corps === undefined ? null : JSON.stringify(r.corps), { status: r.statut, headers: r.entetes ?? {} });
+    // Salon privé (MP) : « 96 » suivi de la fin de l'identifiant du destinataire.
+    if (init.method === 'POST' && /\/users\/@me\/channels$/.test(url)) return new Response(JSON.stringify({ id: `96${corps.recipient_id.slice(2)}`, type: 1 }), { status: 200 });
     if (init.method === 'POST' && /\/channels\/\d+\/messages$/.test(url)) return new Response(JSON.stringify({ id: `90000000000000${String(++n).padStart(4, '0')}` }), { status: 200 });
     return new Response(JSON.stringify({}), { status: 200 });
   };
-  const messages = () => appels.filter(a => a.methode === 'POST' && /\/channels\//.test(a.url));
-  return { appels, programme, fetch, messages, editions: () => appels.filter(a => a.methode === 'PATCH' && /\/channels\//.test(a.url)) };
+  const enMp = a => /\/users\/@me\/|\/channels\/96\d+\//.test(a.url);
+  // Messages du SALON (les MP sont à part : `mps()`, avec le destinataire).
+  const messages = () => appels.filter(a => a.methode === 'POST' && /\/channels\//.test(a.url) && !enMp(a));
+  const mps = () => appels.filter(a => a.methode === 'POST' && /\/channels\/96\d+\/messages$/.test(a.url)).map(a => ({ ...a, destinataire: `80${/\/channels\/96(\d+)\//.exec(a.url)[1]}` }));
+  return { appels, programme, fetch, messages, mps, editions: () => appels.filter(a => a.methode === 'PATCH' && /\/channels\//.test(a.url)) };
 }
 
 async function preparer({ bot = true, attenteDiffere, lienApp = 'https://app.exemple/esport' } = {}) {
@@ -331,11 +336,16 @@ test('commandes d’écriture : /resume (dépôt), /evenement-creer et /relancer
   const r = await p.commande('relancer', { evenement: choix[0].value }, { qui: D.coach });
   assert.match(p.texteReponse(r), /Relance envoyée/);
   await p.traiter();
-  const relances = p.discord.messages().slice(avant);
-  assert.equal(relances.length, 1, 'un seul message pour tous les sans-réponse');
-  assert.equal(relances[0].corps.content, `<@${D.lea}> <@${D.tom}>`);
-  assert.deepEqual(relances[0].corps.allowed_mentions, { parse: [], users: [D.lea, D.tom] });
-  assert.match(relances[0].corps.embeds[0].author.name, /Relance/);
+  // Relances par MP (défaut) : un MP à chaque sans-réponse lié, rien dans le salon (ils sont tous joints).
+  assert.equal(p.discord.messages().length, avant, 'aucun message dans le salon');
+  const relances = p.discord.mps();
+  assert.deepEqual(relances.map(m => m.destinataire).sort(), [D.lea, D.tom].sort());
+  for (const m of relances) {
+    assert.equal(m.corps.content, undefined, 'un MP ne mentionne personne');
+    assert.deepEqual(m.corps.allowed_mentions, { parse: [] });
+    assert.match(m.corps.embeds[0].author.name, /Relance/);
+    assert.equal(m.corps.enforce_nonce, true, 'nonce : un réessai ne double pas le MP');
+  }
   // Journal : création et relance au nom des comptes liés.
   const j = await p.b.base.tous("SELECT action, acteur_id FROM journal WHERE team_id = ? AND action IN ('event.created', 'attendance.relance')", [p.A.teamId]);
   assert.deepEqual(j.map(l => [l.action, l.acteur_id]).sort(), [['attendance.relance', 'coach123'], ['event.created', 'coach123']]);
@@ -366,8 +376,8 @@ test('isolation : chaque serveur ne voit que ses teams ; un bouton d’une autre
   assert.equal((await p.b.base.tous('SELECT * FROM presences WHERE evenement_id = ?', [ev.id])).length, 0);
   // Option « team » : seulement une team liée à ce serveur.
   assert.match(p.texteReponse(await p.commande('planning', { team: p.B.teamId })), /pas liée à ce serveur/);
-  // La file : chaque team poste dans SON salon.
-  await p.scrim({ titre: 'Scrim Bravo' }, p.B.sessions.fondateur, p.B.teamId);
+  // La file : chaque team poste dans SON salon (deux convoqués pour Bravo : annonce d'équipe, pas un MP).
+  await p.scrim({ titre: 'Scrim Bravo', convocation: { groupes: [], membres: ['bob12345', 'principal'] } }, p.B.sessions.fondateur, p.B.teamId);
   await p.traiter();
   const salons = Object.fromEntries(p.discord.messages().map(m => [m.corps.embeds[0].title, m.url]));
   assert.match(salons['⚔️ Scrim · Scrim secret Alpha'], new RegExp(`/channels/${SALON}/messages$`));
@@ -473,7 +483,7 @@ test('réunions staff jamais annoncées ; réunion avec des joueurs annoncée', 
   assert.ok(!p.discord.messages().some(m => /Réunion staff/.test(texteCharge(m.corps))));
 });
 
-test('« c’est maintenant » : publié une fois au début, mentionne les convoqués liés', async () => {
+test('« c’est maintenant » : publié une fois au début, sans re-mentionner les convoqués déjà pingés par l’annonce', async () => {
   const p = await preparerLie();
   await p.scrim({ convocation: { groupes: [], membres: ['lea12345', 'ana12345'] } });
   await p.traiter();
@@ -484,8 +494,10 @@ test('« c’est maintenant » : publié une fois au début, mentionne les convo
   await p.traiter();
   const m = p.discord.messages().at(-1).corps;
   assert.equal(m.embeds[0].author.name, '🔴 C’est maintenant !');
-  assert.equal(m.content, `<@${D.lea}>`);
-  assert.deepEqual(m.allowed_mentions, { parse: [], users: [D.lea] });
+  // Léa a été mentionnée par l'annonce : un ping UNE seule fois par événement.
+  assert.equal(p.discord.messages()[0].corps.content, `<@${D.lea}>`);
+  assert.equal(m.content, undefined);
+  assert.deepEqual(m.allowed_mentions, { parse: [] });
 });
 
 // ------------------------------------------------------------------ File : 429, réessais, abandon

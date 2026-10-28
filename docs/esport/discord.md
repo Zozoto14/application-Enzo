@@ -124,7 +124,8 @@ Réglage : **Réglages › Discord › Langue principale : anglais (défaut) + f
 toutes les teams ; permission `discord.manage`).
 
 1. Le message part **en anglais** dans le salon (texte du modèle, embed, boutons, dates), par le bot ou par le
-   webhook. Les **pings** (convoqués liés, rôle choisi) sont sur ce message, et seulement sur lui.
+   webhook. Les **pings** (convoqués liés, rôle choisi) sont sur ce message, et seulement sur lui (et une seule fois
+   par événement : voir « Pings une seule fois, relances par MP »).
 2. Juste après, le **bot** ouvre un **fil** (thread) sur ce message : « 🇫🇷 Version française · <titre> »
    (100 caractères au plus, archivé après 24 h d'inactivité). Pour un webhook, le message est envoyé avec
    `?wait=true` (Discord rend son identifiant et son salon) et le fil est créé par le bot
@@ -160,6 +161,56 @@ l'envoi est terminé (l'anglais est parti) et le motif est gardé.
 
 **Désactivé** : un seul message, dans la langue choisie sous l'interrupteur (français par défaut). Un modèle
 personnalisé n'est jamais traduit : il sert pour l'anglais et pour le fil.
+
+## Pings une seule fois, relances par MP
+
+Demande du Fondateur : « chaque ping Discord des teams (Valorant / The Finals) apparaît une seule fois, les relances
+se font par MP, et quand un joueur est le seul pingé, il est informé par message privé ». Règles appliquées
+(migration `0031_discord_pings_mp.sql`) :
+
+1. **Un ping une seule fois par événement.** Pour une occurrence du planning, un joueur n'est **mentionné qu'une
+   fois** dans le salon : sur l'annonce (message anglais). Les messages suivants du même événement (rappel J-1,
+   rappel H-1, « C'est maintenant », relance dans le salon, repli après un MP impossible) restent **publiés**, mais
+   sans re-mentionner ceux qui l'ont déjà été (`allowed_mentions` vide). Le fil français ne mentionne **jamais**
+   personne (ni ses rééditions). Un joueur convoqué ou lié après l'annonce est mentionné au **premier** message
+   suivant, puis plus jamais. Le registre `discord_mentions` retient qui (identifiant Discord, ou `role:<id>`) a été
+   mentionné pour quel événement (`occ:<événement>:<occurrence>`), écrit avec l'envoi réussi du message.
+2. **Rôle ou joueurs, jamais les deux.** Si un rôle est réglé pour ce message (« Rôle Discord à mentionner »), le
+   message mentionne **le rôle seul** (il couvre les convoqués) ; sinon chaque convoqué lié. Le rôle suit la même
+   règle « une fois par événement ». Un même identifiant n'apparaît jamais deux fois dans un message (liste
+   dédoublonnée, deux comptes avec le même Discord ID compris).
+3. **Relances par MP.** Les relances (« RSVP manquant », `/relancer`) partent en **message privé** du bot à chaque
+   convoqué sans réponse : texte dans **la langue du joueur** (celle choisie dans son profil, sinon sa langue par
+   défaut réglée par le Fondateur, sinon l'anglais), embed de l'événement et boutons **Oui / Peut-être / Non** (ils
+   fonctionnent en MP) + « Ouvrir dans l'app ». Quand tout le monde a reçu son MP, **rien** n'est posté dans le salon.
+4. **Joueur seul → MP.** Seuil : un message d'événement qui ne concerne **qu'un seul convoqué** et **sans rôle** à
+   mentionner (annonce, rappels, « C'est maintenant ») part en MP à ce joueur, et pas dans le salon. Dès **deux
+   convoqués**, ou avec un rôle, c'est une **annonce d'équipe** : elle reste dans le salon (avec ses mentions, une
+   fois). Si la team a coupé « Mentionner les convoqués » pour ce type d'événement, le message reste dans le salon,
+   sans mention. Les autres notifications (tâches, résumés, tournois…) ne mentionnent personne individuellement :
+   elles ne changent pas.
+5. **Repli.** MP impossible (compte non lié, MP fermés : erreur Discord **50007**, utilisateur introuvable…) : le
+   refus est écrit dans le Journal (`discord.dm_failed`) et, pour ces joueurs seulement, le message est posté dans
+   le salon : ils y sont cités et **mentionnés au plus une fois par événement** (déjà mentionnés : cités sans ping).
+   **Réglages › Discord › Relances par MP** liste les membres injoignables avec l'action à faire (lier son compte,
+   ouvrir ses MP pour ce serveur) ; un joueur en sort dès qu'un MP passe.
+6. **Deux teams.** Le registre, les MP et les relances sont **par team** : un joueur des deux teams (Valorant et The
+   Finals) est mentionné une fois par événement **de chaque team**, dans le salon de chaque team, et reçoit au plus
+   un MP par message de chaque team.
+7. **Débit et réessais.** Les MP passent par la même file d'envoi : un MP réussi est retenu (`discord_mp_envois`)
+   avant le suivant, et porte un `nonce` stable (`enforce_nonce`) : un réessai (429, erreur réseau, 5xx) ne renvoie
+   **jamais** un MP déjà parti. Une limite de débit (429) reporte la tâche sans compter d'essai ; après 6 essais en
+   panne, les joueurs non joints passent au repli. Un jeton du bot refusé (401) arrête tout, comme avant.
+
+**Option par team** : **Réglages › Discord › Relances par MP** (activée par défaut, permission `discord.manage`,
+textes FR/EN). Désactivée : relances et messages d'un joueur seul restent dans le salon, toujours sans mentionner
+deux fois (une relance dans le salon cite donc les sans-réponse, sans ping s'ils ont déjà été mentionnés). Les MP
+exigent le **bot** (serveur lié, `DISCORD_BOT_TOKEN`) : par le seul webhook, tout reste dans le salon (rôle
+mentionné une fois par événement).
+
+**Côté joueurs** : lier son compte (`/lier`) ou avoir son Discord ID renseigné, être sur le serveur où se trouve le
+bot, et autoriser les messages privés des membres de ce serveur (Discord : **Paramètres du serveur › Confidentialité
+› Messages privés**, ou réglage global **Confidentialité et sécurité**), sans bloquer le bot.
 
 ## Comment ça marche (envoi, réessais)
 
@@ -253,6 +304,12 @@ Serveur local de développement : `ESPORT_CLE_DISCORD`, `ESPORT_LIEN_APP`.
   `review.created` (charge : `{ titre }`, `acteur` = l'auteur). Le module Review vidéo doit l'ajouter à
   `TYPES_EVENEMENTS` et le publier dans l'outbox à la création d'une review ; tant que le module est absent pour
   une team, le type est grisé et rien n'est mis en file.
+- Pings une seule fois et MP : `file.mjs` (`chargeDeLigne` : registre `discord_mentions`, rôle ou joueurs ;
+  `phaseMp` : MP, bilan `mp_bilan`, repli), `bot/interactions.mjs` (boutons RSVP cliqués dans un MP) ; migration
+  `0031_discord_pings_mp.sql` (`discord_mp_reglages`, `discord_mentions`, `discord_mp_envois`,
+  `discord_injoignables`, colonne `discord_file.mp_bilan`, toutes dans l'export / import de la base) ; route
+  `PUT /teams/:t/discord/mp` `{ relancesMp }`, état `mp` de `GET /teams/:t/discord`. Test :
+  `esport/test/discord-pings-mp.test.mjs`.
 - Tests : `esport/test/discord.test.mjs` (chiffrement, adresse, modèles, mentions, envoi simulé),
   `esport/test/discord-api.test.mjs` (API, file, réessais, 429, abandon, journal, permissions, isolation, rappels,
   parcours de bout en bout vers un faux serveur Discord local), `src/esport/Discord.test.tsx` (écran),

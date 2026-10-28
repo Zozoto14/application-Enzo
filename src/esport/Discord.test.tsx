@@ -355,6 +355,34 @@ describe('écran Discord', () => {
     await waitFor(() => expect(screen.queryByTestId('esport-discord-bilingue')).toBeNull());
   });
 
+  it('relances par MP : activées par défaut, membres injoignables avec l’action à faire, désactivation', async () => {
+    let mp = {
+      relancesMp: true,
+      botConfigure: true,
+      botLie: true,
+      injoignables: [
+        { compte: 'ana12345', pseudo: 'Ana', motif: 'non_lie' as const, depuis: null },
+        { compte: 'tom12345', pseudo: 'Tom', motif: 'mp_fermes' as const, depuis: '2026-10-20T10:00:00.000Z' },
+      ],
+    };
+    const { requete, appels } = fauxServeur((chemin, methode, corps) => {
+      if (chemin.endsWith('/discord/mp') && methode === 'PUT') {
+        mp = { ...mp, relancesMp: (corps as { relancesMp: boolean }).relancesMp };
+        return mp;
+      }
+      if (chemin.endsWith('/discord')) return { ...etatInitial(), mp };
+      return undefined;
+    });
+    await monter(requete, detail(MANAGER));
+    await screen.findByTestId('esport-discord-mp-panneau');
+    expect(screen.getByTestId('esport-discord-mp').props.value ?? screen.getByTestId('esport-discord-mp').props.accessibilityState?.checked).toBeTruthy();
+    expect(screen.getByTestId('esport-discord-mp-injoignable-ana12345').props.children).toMatch(/Ana : lier son compte Discord/);
+    expect(screen.getByTestId('esport-discord-mp-injoignable-tom12345').props.children).toMatch(/Tom : ouvrir ses messages privés/);
+    expect(screen.queryByTestId('esport-discord-mp-bot')).toBeNull();
+    await fireEvent(screen.getByTestId('esport-discord-mp'), 'valueChange', false);
+    await waitFor(() => expect(appels.some(a => a.chemin.endsWith('/discord/mp') && a.methode === 'PUT' && (a.corps as { relancesMp: boolean }).relancesMp === false)).toBe(true));
+  });
+
   it('message de test avec fil français impossible : le motif est affiché', async () => {
     const { requete } = fauxServeur(chemin => (chemin.endsWith('/discord/test') ? { ok: true, fil: { cree: false, motif: 'Fil français impossible : bot Discord non configuré sur le serveur (DISCORD_BOT_TOKEN)' } } : chemin.endsWith('/discord') ? { ...etatInitial(), webhook: { configure: true, masque: '…/abcd' } } : undefined));
     await monter(requete, detail(MANAGER));
@@ -401,6 +429,8 @@ describe('journal', () => {
     expect(phraseJournal(e('discord.delivery_abandoned', { cle: 'task_assigned', motif: 'Webhook refusé ou supprimé (HTTP 404)' }), noms)).toBe('Envoi Discord « Tâche assignée » abandonné : Webhook refusé ou supprimé (HTTP 404)');
     expect(phraseJournal(e('event.reminder_h1', { titre: 'Scrim' }), noms)).toBe('Rappel H-1 préparé pour « Scrim »');
     expect(Object.keys(LIBELLES_DISCORD)).toHaveLength(18);
+    expect(phraseJournal(e('discord.dm_failed', { cle: 'rsvp_relance', compte: 'inconnu', motif: 'mp_fermes' }), noms)).toMatch(/MP Discord impossible pour .* \(messages privés fermés\) : cité dans le salon/);
+    expect(phraseJournal(e('discord.settings_changed', { notification: 'relances_mp' }), noms)).toMatch(/Relances par MP/);
     expect(phraseJournal(e('discord.server_linked', { salon: 'scrims' }), noms)).toMatch(/a lié un serveur Discord à la team \(salon #scrims\)/);
     expect(phraseJournal(e('discord.command_used', { commande: 'prochain' }), noms)).toMatch(/a utilisé \/prochain sur Discord/);
     expect(phraseJournal(e('attendance.relance', { titre: 'Scrim' }), noms)).toMatch(/relancé sur Discord/);

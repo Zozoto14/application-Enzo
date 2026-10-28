@@ -13,7 +13,8 @@ import { echec, iso, nouvelId } from '../outils.mjs';
 import { EVENEMENTS_DISCORD, evenementDiscord, exemples, textesEvenement } from './catalogue.mjs';
 import { lireLangue, texte as T } from '../langues.mjs';
 import { chiffrerWebhook, dechiffrerWebhook, finDeWebhook, masquerWebhook, validerUrlWebhook } from './chiffrement.mjs';
-import { API_DISCORD, appelerDiscord, filFrActif, reglageEffectif, serveurBot } from './file.mjs';
+import { API_DISCORD, appelerDiscord, filFrActif, reglageEffectif, relancesMpActives, serveurBot } from './file.mjs';
+import { membresTeam } from './convoques.mjs';
 import { ARCHIVAGE_FIL_MIN, avecParams, motifRefusFil, nomFil, texteMotifFil } from './bilingue.mjs';
 import { apercuModele, construireCharge, lireRoleMention, validerModele } from './messages.mjs';
 
@@ -89,6 +90,7 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
       langue: lireLangue(ctx.team.langue_discord) ?? 'fr',
       languePrincipale: langueTeam,
       bilingue,
+      mp: await etatMp(teamId),
       parametres,
       exemples: exemples(langueTeam),
       file: { enAttente: Number(compte?.attente ?? 0), abandonnes: Number(compte?.abandonnes ?? 0) },
@@ -120,6 +122,43 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
       botLie: Boolean(await serveurBot(base, teamId)),
       permissions: [...PERMISSIONS_FIL],
     };
+  }
+
+  /**
+   * Relances par MP (option de la team, activée par défaut) et joueurs que le bot ne peut pas joindre en MP :
+   * compte Discord non lié (ni /lier ni Discord ID), ou dernier MP refusé (MP fermés : 50007, introuvable…).
+   * Les Propriétaires ne sont jamais convoqués sans être cochés : ils ne sont pas listés.
+   */
+  async function etatMp(teamId) {
+    const membres = await membresTeam(base, teamId);
+    const refus = new Map((await base.tous('SELECT compte_id, motif, maj_le FROM discord_injoignables WHERE team_id = ?', [teamId])).map(l => [l.compte_id, l]));
+    const injoignables = membres
+      .filter(m => !m.proprietaire)
+      .flatMap(m => {
+        if (!m.discordId) return [{ compte: m.compte, pseudo: m.pseudo, motif: 'non_lie', depuis: null }];
+        const l = refus.get(m.compte);
+        return l ? [{ compte: m.compte, pseudo: m.pseudo, motif: l.motif, depuis: l.maj_le }] : [];
+      });
+    return { relancesMp: await relancesMpActives(base, teamId), botConfigure: Boolean(jetonBot), botLie: Boolean(await serveurBot(base, teamId)), injoignables };
+  }
+
+  /** `PUT /teams/:t/discord/mp` { relancesMp } : relances (et messages d'un joueur seul) par MP, ou dans le salon. */
+  async function majMp(acteur, teamId, corps) {
+    await contexte(acteur, teamId);
+    if (typeof corps?.relancesMp !== 'boolean') throw echec(400, 'relances-mp', 'Relances par MP : vrai ou faux.');
+    const avant = await relancesMpActives(base, teamId);
+    const t = maintenant();
+    await base.lot([
+      {
+        sql: `INSERT INTO discord_mp_reglages (team_id, relances_mp, maj_le) VALUES (?, ?, ?)
+              ON CONFLICT (team_id) DO UPDATE SET relances_mp = excluded.relances_mp, maj_le = excluded.maj_le`,
+        params: [teamId, corps.relancesMp ? 1 : 0, iso(t)],
+      },
+      ...(corps.relancesMp !== avant
+        ? [evenement('discord.settings_changed', { teamId, acteur: acteur.compte, entiteType: 'discord', entiteId: nouvelId(), charge: { notification: 'relances_mp', champs: ['relancesMp'], relancesMp: corps.relancesMp }, maintenant: t })]
+        : []),
+    ]);
+    return etatMp(teamId);
   }
 
   async function definirWebhook(acteur, teamId, corps) {
@@ -290,5 +329,5 @@ export function servicesDiscord({ base, maintenant = () => Date.now(), noyau, cl
     return etatBilingue(teamId);
   }
 
-  return { etat, definirWebhook, supprimerWebhook, tester, majParametre, majLangue, majBilingue };
+  return { etat, definirWebhook, supprimerWebhook, tester, majParametre, majLangue, majBilingue, majMp };
 }

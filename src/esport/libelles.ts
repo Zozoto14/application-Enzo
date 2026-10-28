@@ -72,7 +72,7 @@ const nom = (noms: Record<string, string | null>, id: unknown): string =>
   typeof id === 'string' ? (noms[id] ?? (id === 'principal' ? tr('jr.fondateur') : tr('jr.compte_supprime'))) : tr('jr.quelquun');
 
 const nombre = (v: unknown): string => (typeof v === 'number' ? String(v) : '?');
-const libelleDiscord = (cle: unknown): string => (typeof cle === 'string' ? (LIBELLES_DISCORD[cle] ?? cle) : '?');
+const libelleDiscord = (cle: unknown): string => (cle === 'relances_mp' ? tr('discord.mp.titre') : typeof cle === 'string' ? (LIBELLES_DISCORD[cle] ?? cle) : '?');
 
 const liste = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
 /** « (Joueur) » après un nom de team ou de compte, quand le rôle est connu. */
@@ -188,6 +188,8 @@ export function phraseJournal(e: EntreeJournal, noms: Record<string, string | nu
       return tr('jr.discord_test_sent', { qui });
     case 'discord.delivery_failed':
       return tr('jr.discord_delivery_failed', { notification: libelleDiscord(m.cle), essai: nombre(m.essai), sur: nombre(m.sur), motif: texte(m.motif) });
+    case 'discord.dm_failed':
+      return tr('jr.discord_dm_failed', { membre: nom(noms, m.compte), motif: tr(`discord.mp.motif.${['mp_fermes', 'introuvable'].includes(String(m.motif)) ? String(m.motif) : 'refuse'}` as 'discord.mp.motif.refuse') });
     case 'discord.delivery_abandoned':
       return tr('jr.discord_delivery_abandoned', { notification: libelleDiscord(m.cle), motif: texte(m.motif) });
     case 'discord.server_linked':

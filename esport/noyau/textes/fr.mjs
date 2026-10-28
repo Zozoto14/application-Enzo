@@ -220,11 +220,11 @@ export const FR = {
   'bot.relancer.personne_titre': '👌 Personne à relancer',
   'bot.relancer.personne_description': 'Tous les convoqués ont déjà répondu.',
   'bot.relancer.titre': '🔔 Relance envoyée',
-  'bot.relancer.description': '{sans} sans réponse pour **{titre}** : {lies} (comptes liés), les autres cités par leur pseudo. Un seul message, dans le salon de la team.',
+  'bot.relancer.description': '{sans} sans réponse pour **{titre}** : {lies} (comptes liés). Avec « Relances par MP » (défaut), chacun reçoit un message privé ; qui ne peut pas être joint est cité dans le salon de la team, mentionné au plus une fois par événement.',
   'bot.relancer.sans.one': '{n} convoqué',
   'bot.relancer.sans.other': '{n} convoqués',
-  'bot.relancer.lies.one': '{n} mentionné',
-  'bot.relancer.lies.other': '{n} mentionnés',
+  'bot.relancer.lies.one': '{n} joignable',
+  'bot.relancer.lies.other': '{n} joignables',
   'bot.autocomplete.staff': ' (staff)',
 
   // ---- Exports CSV

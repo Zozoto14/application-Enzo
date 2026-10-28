@@ -369,12 +369,21 @@ export function creerBot({ base, maintenant = () => Date.now(), services, config
     return miseAJour({ embeds: [embed], components: boutonsRsvp(evId, c.occurrence.cle, { lien, langue: lg(i) }) });
   }
 
+  /** Événement du planning cliqué depuis un MP du bot (relance, joueur seul) : pas de serveur, la team de l'événement. */
+  async function evenementDuMp(evId) {
+    if (typeof evId !== 'string' || !/^[0-9a-f-]{36}$/.test(evId)) return null;
+    return base.premier('SELECT id, team_id FROM planning_evenements WHERE id = ? AND supprime_le IS NULL', [evId]);
+  }
+
   async function bouttonRsvp(i, [evId, occCourte, choix]) {
-    const { acteur, reponse } = await preparer(i);
+    // Bouton d'un MP (pas de serveur) : le compte lié répond pour SA team (appartenance et droits vérifiés par le service).
+    const mp = !i.guild_id;
+    const { acteur, reponse } = await preparer(i, { serveur: !mp });
     if (reponse) return reponse;
     const rsvpChoisi = REPONSES_BOUTONS[choix];
     const occIso = occurrenceLongue(occCourte);
-    const ev = await evenementDuServeur(evId, i.guild_id);
+    const ev = mp ? await evenementDuMp(evId) : await evenementDuServeur(evId, i.guild_id);
+    if (mp && ev) await noyau.contexteTeam(acteur, ev.team_id);
     if (!rsvpChoisi || !occIso || !ev) return erreur(i, T(lg(i), 'bot.erreur.evenement_introuvable'));
     await p.repondre(acteur, ev.team_id, evId, occIso, { rsvp: rsvpChoisi });
     const c = await contexteOccurrence(base, ev.team_id, evId, occIso, maintenant());

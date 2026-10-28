@@ -81,6 +81,9 @@ async function preparer({ canal = 'webhook', jeton = true, fondateur = true, dis
     await b.base.executer('INSERT INTO discord_comptes (compte_id, discord_user_id, discord_nom, super_admin, lie_le) VALUES (?, ?, ?, 0, ?)', ['lea12345', LEA, 'lea', t0]);
   }
   if (fondateur) await b.base.executer("UPDATE comptes SET discord_id = ? WHERE id = 'principal'", [FONDATEUR]);
+  // Léa est la seule convoquée : sans ce réglage, ses messages partiraient en MP (« joueur seul »). Ces tests portent
+  // sur le fil français dans le salon ; les MP ont les leurs (discord-pings-mp.test.mjs).
+  await b.base.executer('INSERT INTO discord_mp_reglages (team_id, relances_mp, maj_le) VALUES (?, 0, ?)', [A.teamId, t0]);
   const scrim = (titre = 'Scrim Faucons', date = '2026-10-22') =>
     b.appel(`/teams/${A.teamId}/planning`, { methode: 'POST', jeton: A.sessions.coach123, corps: { type: 'scrim', titre, date, heureDebut: '20:30', heureFin: '22:00' } });
   const traiter = (maintenant = b.horloge.t) => traiterFile(b.base, { cle: CLE, fetch: discord.fetch, maintenant, lienApp: 'https://app.exemple/esport', jetonBot: jeton ? JETON_BOT : undefined });

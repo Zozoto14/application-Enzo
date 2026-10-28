@@ -80,6 +80,14 @@ messages** (Read Message History), **mentionner** (pour les rôles qu'on choisit
 français** : **créer des fils publics** (Create Public Threads) et **envoyer des messages dans les fils** (Send
 Messages in Threads). Le bot ne mentionne jamais `@everyone` ni `@here`. Choisissez le serveur, **Autoriser**.
 
+**Messages privés (relances par MP)** : aucune permission ni intent de plus. Le bot écrit par l'API HTTP
+(`POST /users/@me/channels` puis `POST /channels/{mp}/messages`) : pas de gateway, donc pas d'intent
+« Direct Messages » à cocher dans le portail (il ne sert qu'à **recevoir** des MP, ce que le bot ne fait pas). Les
+boutons d'un MP arrivent sur la même adresse d'interactions (étape 4). Conditions côté Discord : le joueur partage un
+serveur avec le bot, autorise les messages privés des membres de ce serveur (Paramètres du serveur ›
+Confidentialité › Messages privés) et n'a pas bloqué le bot ; sinon Discord répond **50007** et l'app retombe sur le
+salon (Réglages › Discord › Relances par MP liste qui est injoignable).
+
 **Bot déjà invité avant le fil français** (lien avec `permissions=150528`) : il lui manque les permissions de fil.
 Deux façons de les donner : rouvrir le nouveau lien ci-dessus (Discord met à jour le rôle du bot), ou **Paramètres
 du serveur › Rôles › Esport HQ** (ou les permissions du salon des annonces) et cocher **Créer des fils publics**,
@@ -159,12 +167,16 @@ vérifiée pour savoir qui agit).
 
 | Moment | Message | Qui est mentionné |
 | --- | --- | --- |
-| Un événement est créé | Annonce (titre, type, quand, map ou adversaire, convoqués, réponses) + boutons | les convoqués liés |
-| La veille (J-1) | Rappel + boutons | les convoqués liés |
-| 1 h avant (H-1) | Rappel + boutons | les convoqués liés |
-| Au début | « C'est maintenant ! » | les convoqués liés |
-| `/relancer` (staff) ou rappel « RSVP manquant » | **un seul** message pour tous ceux qui n'ont pas répondu | les sans-réponse liés |
+| Un événement est créé | Annonce (titre, type, quand, map ou adversaire, convoqués, réponses) + boutons | les convoqués liés (ou le rôle réglé), **une fois** |
+| La veille (J-1) | Rappel + boutons | seulement ceux pas encore mentionnés pour cet événement |
+| 1 h avant (H-1) | Rappel + boutons | idem |
+| Au début | « C'est maintenant ! » | idem |
+| `/relancer` (staff) ou rappel « RSVP manquant » | un **MP** à chaque sans-réponse (sa langue, boutons RSVP) ; repli dans le salon pour qui ne peut pas être joint | personne en MP ; au repli, au plus une mention par événement |
+| Un seul convoqué (sans rôle) | annonce, rappels et « C'est maintenant » en **MP** à ce joueur, rien dans le salon | personne |
 | Quelqu'un répond | l'annonce est **modifiée** (compteurs à jour), pas de nouveau message | personne |
+
+Règles complètes (seuil « joueur seul », repli, option **Relances par MP** par team, deux teams) :
+[discord.md, « Pings une seule fois, relances par MP »](discord.md#pings-une-seule-fois-relances-par-mp).
 
 - **Convoqués** : ceux de la convocation de l'événement dans le planning (voir [planning.md](planning.md)) :
   groupes Joueurs / Staff / Tout le monde, choix nominatifs, exclusions, liste propre à une date. Sans choix : les
@@ -275,7 +287,8 @@ les permissions de fil (étape 5).
 | « L'application n'a pas répondu » | L'adresse des interactions (étape 4) est fausse, ou la Public Key ne correspond pas : vérifiez `esport.env`, redémarrez l'app Esport, puis relancez l'étape 6. |
 | « Ce serveur n'est lié à aucune team » | Étape 7. |
 | « Lie ton compte avec /lier » | Étape 8. |
-| Un convoqué n'est pas pingé | Badge « Discord ID manquant » dans Esport › Membres : le Fondateur renseigne son Discord ID (étape 9), ou le joueur fait `/lier`. |
+| Un convoqué n'est pas pingé | Badge « Discord ID manquant » dans Esport › Membres : le Fondateur renseigne son Discord ID (étape 9), ou le joueur fait `/lier`. Rappel : un joueur n'est mentionné **qu'une fois par événement** (sur l'annonce) ; les rappels ne le re-mentionnent pas. |
+| Un joueur ne reçoit pas les MP du bot | Réglages › Discord › Relances par MP : son nom y figure avec l'action (lier son compte, ouvrir ses MP pour ce serveur, ne pas bloquer le bot). En attendant, il est cité dans le salon. |
 | Rien n'arrive dans le salon | Le bot doit voir le salon et pouvoir y écrire (permissions du salon) ; regardez **Réglages › Discord › Derniers envois** et le Journal. |
 | « Bot non configuré (DISCORD_BOT_TOKEN) » dans les envois | `DISCORD_BOT_TOKEN` manque dans `esport.env` : étape 3. |
 | Alerte « French thread unavailable · Fil français impossible » dans le salon | Donnez au bot **Create Public Threads**, **Send Messages in Threads** et **Read Message History** sur ce salon (étape 5), puis **Envoyer un message de test**. L'alerte ne revient pas avant 24 h dans ce salon. |
@@ -309,6 +322,9 @@ les permissions de fil (étape 5).
   `traiterFile()` de `file.mjs` (tâche en trois étapes) ; migration `0020_discord_bilingue.sql`
   (`discord_bilingue`, `discord_alertes_fil`, colonnes de progression de `discord_file`, version française des
   annonces) ; route `PUT /teams/:t/discord/bilingue` `{ filFr }`. Test : `esport/test/discord-bilingue.test.mjs`.
+- Pings une seule fois et MP (migration `0031_discord_pings_mp.sql`) : `phaseMp()` et `chargeDeLigne()` de
+  `file.mjs`, boutons RSVP en MP dans `interactions.mjs` (pas de `guild_id` : l'événement est retrouvé par son
+  identifiant, l'appartenance à la team est vérifiée par le service). Test : `esport/test/discord-pings-mp.test.mjs`.
 - Tests : `esport/test/bot-discord.test.mjs`, `bot-embeds.test.mjs`, `bot-outils.test.mjs` (fetch simulé, clé de
   test générée, faux Discord local), `src/esport/Discord.test.tsx` (écrans), `scripts/e2e-esport-bot.mjs`
   (navigateur). Aucun test n'appelle le vrai Discord.

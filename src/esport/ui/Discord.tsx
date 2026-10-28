@@ -12,7 +12,7 @@ import { BoutonHub, Champ, Interrupteur } from '../../hub/admin/ui/commun';
 import { police, type ThemeHub } from '../../hub/themes';
 import { nomModule, nomRole } from '../client';
 import { typeEvenement } from '../planning/libelles';
-import { apiBot, apiDiscord, type CodeLiaison, type EnvoiDiscord, type EtatBot, type EtatDiscord, type ParametreDiscord } from '../discord/api';
+import { apiBot, apiDiscord, type CodeLiaison, type EnvoiDiscord, type EtatBot, type EtatDiscord, type MpDiscord, type ParametreDiscord } from '../discord/api';
 import { dateCourte } from '../libelles';
 import { BoutonConfirme, Retours, TitreSection, styles, useAgir, Intertitre, Panneau } from './commun';
 import { CodeAffiche } from './CodeLiaison';
@@ -212,6 +212,52 @@ function BotDiscord({ theme, client, teamId }: { theme: ThemeHub; client: PropsM
   );
 }
 
+/** Motif → action à faire pour qu'un membre soit joignable en MP. */
+const ACTIONS_MP: Record<MpDiscord['injoignables'][number]['motif'], () => string> = {
+  non_lie: () => tr('discord.mp.action.non_lie'),
+  mp_fermes: () => tr('discord.mp.action.mp_fermes'),
+  introuvable: () => tr('discord.mp.action.introuvable'),
+  refuse: () => tr('discord.mp.action.refuse'),
+};
+
+/**
+ * « Relances par MP » (activé par défaut) : relances et messages d'un joueur seul en message privé, repli dans le
+ * salon (une mention au plus par événement), et la liste des membres que le bot ne peut pas joindre en MP.
+ */
+function PanneauMp({ theme, mp, occupe, onChanger }: { theme: ThemeHub; mp: MpDiscord; occupe: boolean; onChanger(v: boolean): void }) {
+  const attenue = { color: theme.attenue, fontSize: 13, ...police(theme.policeTexte) };
+  return (
+    <Panneau theme={theme} testID="esport-discord-mp-panneau">
+      <Intertitre theme={theme}>{tr('discord.mp.titre')}</Intertitre>
+      <View style={[styles.ligne, { justifyContent: 'space-between', flexWrap: 'nowrap' }]}>
+        <Text style={{ color: theme.texte, flex: 1, fontWeight: '700', ...police(theme.policeTexte) }}>{tr('discord.mp.libelle')}</Text>
+        <Interrupteur theme={theme} libelle={tr('discord.mp.libelle')} valeur={mp.relancesMp} desactive={occupe} onChanger={onChanger} testID="esport-discord-mp" />
+      </View>
+      <Text style={attenue}>{tr('discord.mp.aide')}</Text>
+      <Text style={attenue}>{tr('discord.mp.repli')}</Text>
+      {mp.relancesMp && (!mp.botConfigure || !mp.botLie) ? (
+        <Text style={{ color: theme.alerte, fontSize: 13 }} testID="esport-discord-mp-bot">
+          {tr('discord.mp.bot_requis')}
+        </Text>
+      ) : null}
+      {mp.injoignables.length > 0 ? (
+        <View style={{ gap: 4 }} testID="esport-discord-mp-injoignables">
+          <Text style={{ color: theme.alerte, fontWeight: '700', fontSize: 13, ...police(theme.policeTexte) }}>{trn('discord.mp.injoignables', mp.injoignables.length)}</Text>
+          {mp.injoignables.map(i => (
+            <Text key={i.compte} style={{ color: theme.texte, fontSize: 13, ...police(theme.policeTexte) }} testID={`esport-discord-mp-injoignable-${i.compte}`}>
+              {tr('discord.mp.ligne', { pseudo: i.pseudo, action: (ACTIONS_MP[i.motif] ?? ACTIONS_MP.refuse)() })}
+            </Text>
+          ))}
+        </View>
+      ) : (
+        <Text style={attenue} testID="esport-discord-mp-tous">
+          {tr('discord.mp.tous_joignables')}
+        </Text>
+      )}
+    </Panneau>
+  );
+}
+
 export function Discord({ theme, client, detail }: PropsModule) {
   const teamId = detail.team.id;
   const api = React.useMemo(() => apiDiscord(client, teamId), [client, teamId]);
@@ -326,6 +372,14 @@ export function Discord({ theme, client, detail }: PropsModule) {
           </View>
         )}
       </Panneau>
+
+      {etat?.mp ? <PanneauMp theme={theme} mp={etat.mp} occupe={occupe || !etat} onChanger={v =>
+        void agir('mp', async () => {
+          await api.majMp(v);
+          await recharger();
+          return tr(v ? 'discord.mp.active' : 'discord.mp.coupe');
+        })
+      } /> : null}
 
       <Panneau theme={theme} testID="esport-discord-webhook">
         <Intertitre theme={theme}>{tr('discord.webhook_du_salon_repli')}</Intertitre>

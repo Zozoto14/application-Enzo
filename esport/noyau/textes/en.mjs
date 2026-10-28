@@ -219,11 +219,11 @@ export const EN = {
   'bot.relancer.personne_titre': '👌 Nobody to nudge',
   'bot.relancer.personne_description': 'Everyone called up has already responded.',
   'bot.relancer.titre': '🔔 Nudge sent',
-  'bot.relancer.description': '{sans} without a response for **{titre}**: {lies} (linked accounts), the others named by nickname. A single message, in the team’s channel.',
+  'bot.relancer.description': '{sans} without a response for **{titre}**: {lies} (linked accounts). With “Nudges by DM” (default), each one gets a direct message; whoever can’t be reached is named in the team’s channel, pinged at most once per event.',
   'bot.relancer.sans.one': '{n} player',
   'bot.relancer.sans.other': '{n} players',
-  'bot.relancer.lies.one': '{n} mentioned',
-  'bot.relancer.lies.other': '{n} mentioned',
+  'bot.relancer.lies.one': '{n} reachable',
+  'bot.relancer.lies.other': '{n} reachable',
   'bot.autocomplete.staff': ' (staff)',
 
   // ---- CSV exports

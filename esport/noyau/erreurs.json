@@ -396,6 +396,7 @@
   "Version française non publiée : identifiant du message absent": "French version not posted: message ID missing",
   "Version française non publiée : adresse du webhook illisible": "French version not posted: unreadable webhook address",
   "Fil français : vrai ou faux.": "French thread: true or false.",
+  "Relances par MP : vrai ou faux.": "Nudges by DM: true or false.",
   "Réponse du service d’IA illisible.": "Unreadable answer from the AI service.",
   "Nom du jeu : 2 caractères au moins.": "Game name: at least 2 characters.",
   "Assistant IA non configuré (clé d’API absente).": "AI assistant not configured (no API key).",

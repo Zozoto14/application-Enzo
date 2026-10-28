@@ -129,6 +129,7 @@ const ROUTES_TEAM = [
   ['PUT', '/discord/parametres/event_created', 'discord'],
   ['PUT', '/discord/langue', 'discord'],
   ['PUT', '/discord/bilingue', 'discord'],
+  ['PUT', '/discord/mp', 'discord'],
   // Bot Discord : liaison du serveur, pings, qui est lié.
   ['GET', '/discord/bot', 'discord'],
   ['POST', '/discord/bot/code', 'discord'],

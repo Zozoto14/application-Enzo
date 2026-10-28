@@ -167,6 +167,12 @@ export const TABLES = [
   // Trombinoscope (migration 0030) : fiches et photos (image et miniature en base64, dans la base).
   ['trombi_fiches', 'compte_id'],
   ['trombi_photos', 'compte_id'],
+  // Pings Discord une seule fois et relances par MP (migration 0031) : option de la team, registre des mentions,
+  // MP déjà envoyés (idempotence des réessais), joueurs injoignables en MP.
+  ['discord_mp_reglages', 'team_id'],
+  ['discord_mentions', 'team_id, sujet, cible'],
+  ['discord_mp_envois', 'ligne_id, discord_user_id'],
+  ['discord_injoignables', 'team_id, compte_id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

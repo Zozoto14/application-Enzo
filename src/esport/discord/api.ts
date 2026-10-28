@@ -71,6 +71,18 @@ export interface BilingueDiscord {
   permissions: string[];
 }
 
+/** Pourquoi le bot ne peut pas joindre un membre en MP. */
+export type MotifInjoignable = 'non_lie' | 'mp_fermes' | 'introuvable' | 'refuse';
+
+/** Relances par MP (option de la team, activée par défaut) et membres injoignables en MP. */
+export interface MpDiscord {
+  relancesMp: boolean;
+  botConfigure: boolean;
+  botLie: boolean;
+  /** Membres convocables que le bot ne peut pas joindre en MP, avec le motif (action à faire). */
+  injoignables: Array<{ compte: string; pseudo: string; motif: MotifInjoignable; depuis: string | null }>;
+}
+
 export interface ResultatTestDiscord {
   ok: boolean;
   /** Avec le fil français : fil créé, ou motif du refus. */
@@ -83,6 +95,8 @@ export interface EtatDiscord {
   /** Langue du message posté dans le salon (anglais avec le fil français). */
   languePrincipale?: Langue;
   bilingue?: BilingueDiscord;
+  /** Absent d'un serveur ancien (avant la migration 0031). */
+  mp?: MpDiscord;
   webhook: WebhookDiscord;
   parametres: ParametreDiscord[];
   file: { enAttente: number; abandonnes: number };
@@ -108,6 +122,7 @@ export function apiDiscord(client: ClientEsport, teamId: string) {
     tester: () => client.requete<ResultatTestDiscord>(`${base}/test`, 'POST', {}),
     majLangue: (langue: Langue) => client.requete<{ langue: Langue }>(`${base}/langue`, 'PUT', { langue }),
     majBilingue: (filFr: boolean) => client.requete<BilingueDiscord>(`${base}/bilingue`, 'PUT', { filFr }),
+    majMp: (relancesMp: boolean) => client.requete<MpDiscord>(`${base}/mp`, 'PUT', { relancesMp }),
     majParametre: (cle: string, champs: ChampsParametreDiscord) => client.requete<ParametreDiscord>(`${base}/parametres/${encodeURIComponent(cle)}`, 'PUT', champs),
   };
 }
