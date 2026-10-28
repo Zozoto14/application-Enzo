@@ -166,6 +166,9 @@ fi
 # (déployé avant ce mécanisme) reçoit un témoin daté d'aujourd'hui : il part dans 14 jours.
 if [ "$SANS_SITE" = 0 ] && [ -d "$SITE_DIR/assets" ] && [ -f "$ETAT/assets-courant.txt" ]; then
   PURGES=0
+  # Liste dans un fichier (pas de substitution de processus <(...) : /dev/fd absent sous CageFS).
+  LISTE_ASSETS="$ETAT/assets-presents.txt"
+  find "$SITE_DIR/assets" -type f > "$LISTE_ASSETS"
   while IFS= read -r f; do
     f="assets/${f#"$SITE_DIR/assets/"}"
     grep -qxF -- "$f" "$ETAT/assets-courant.txt" && continue
@@ -176,7 +179,8 @@ if [ "$SANS_SITE" = 0 ] && [ -d "$SITE_DIR/assets" ] && [ -f "$ETAT/assets-coura
     if [ $(( MAINTENANT - $(stat -c %Y "$temoin") )) -gt $(( DELAI_ASSETS_JOURS * 86400 )) ]; then
       rm -f -- "$SITE_DIR/$f" "$temoin" && PURGES=$(( PURGES + 1 ))
     fi
-  done < <(find "$SITE_DIR/assets" -type f)
+  done < "$LISTE_ASSETS"
+  rm -f "$LISTE_ASSETS"
   if [ "$PURGES" -gt 0 ]; then
     find "$SITE_DIR/assets" -mindepth 1 -type d -empty -delete 2>/dev/null
     journal "site : $PURGES ancien(s) fichier(s) de assets/ purgé(s) (absents des builds depuis plus de $DELAI_ASSETS_JOURS jours)"
