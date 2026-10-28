@@ -263,6 +263,8 @@ export function phraseNotification(n: Notification, noms: Record<string, string 
       return tr('nt.role_change', { team, role: nomRole(str(c.vers, '?')) });
     case 'retire':
       return tr('nt.retire', { team });
+    case 'trombi-modifiee':
+      return tr(c.photo ? 'nt.trombi_photo' : 'nt.trombi_modifiee', { membre: nom(noms, c.membre) });
     case 'modules':
       return tr('nt.modules', { team });
     case 'resume-depose':

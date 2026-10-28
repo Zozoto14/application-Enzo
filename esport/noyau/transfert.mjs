@@ -164,6 +164,9 @@ export const TABLES = [
   ['cm_drive_versions', 'id'],
   ['cm_drive_tags', 'element_id, tag'],
   ['cm_drive_favoris', 'compte_id, element_id'],
+  // Trombinoscope (migration 0030) : fiches et photos (image et miniature en base64, dans la base).
+  ['trombi_fiches', 'compte_id'],
+  ['trombi_photos', 'compte_id'],
 ];
 const NOMS_TABLES = TABLES.map(([t]) => t);
 const MOTIF_COLONNE = /^[a-z_][a-z0-9_]{0,40}$/;

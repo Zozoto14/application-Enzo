@@ -351,4 +351,9 @@ export const EN = {
   'reseaux.exemple_titre': '2-0 win against the Falcons',
   'reseaux.test_exemple': 'Example post (test message)',
   'reseaux.test_salon': 'Test message: the “{salon}” channel will receive announcements of published posts.',
+  'trombi.place_sur': '{place} of {n}',
+  'trombi.texte.team': 'Team',
+  'trombi.texte.elo': 'Elo',
+  'trombi.texte.palmares': 'Achievements',
+  'trombi.texte.structures': 'Former teams',
 };

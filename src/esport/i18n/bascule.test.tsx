@@ -125,6 +125,7 @@ describe('bascule de langue', () => {
     await screen.findByTestId('esport-teams');
     expect(screen.getByText('My teams')).toBeTruthy();
     await fireEvent.press(screen.getByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     expect(await screen.findByTestId('esport-membres-global')).toBeTruthy();
     expect(screen.getAllByText('Members').length).toBeGreaterThan(0);
     await fireEvent.press(screen.getByTestId('esport-nav-teams'));

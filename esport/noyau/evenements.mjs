@@ -26,6 +26,7 @@ import { TYPES_CM, abonneCm } from './cm/bus.mjs';
 import { abonneCmSuggestions } from './cm/suggestions.mjs';
 import { TYPES_SPONSORS, abonneSponsors } from './sponsors/bus.mjs';
 import { TYPES_RESEAUX, abonneReseaux } from './reseaux/bus.mjs';
+import { TYPES_TROMBI, abonneTrombi } from './trombi/bus.mjs';
 
 export const TYPES_EVENEMENTS = [
   'team.created',
@@ -94,6 +95,8 @@ export const TYPES_EVENEMENTS = [
   ...TYPES_SPONSORS,
   // Page « Réseaux » de l'espace CM (migration 0026) : comptes, annonces Discord, statistiques (SANS team).
   ...TYPES_RESEAUX,
+  // Trombinoscope (migration 0030) : fiches et photos (SANS team) ; le joueur est prévenu quand un autre modifie sa fiche.
+  ...TYPES_TROMBI,
   // Profils de jeu (migration 0021) : événements GLOBAUX (sans team) ; brouillon IA prêt, différences proposées.
   'game.created',
   'game.updated',
@@ -238,7 +241,7 @@ export async function abonneNotifications(base, ev) {
   }
 }
 
-export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord, abonneReview, abonneStrats, abonneRessources, abonneCompetition, abonneCm, abonneCmSuggestions, abonneSponsors, abonneReseaux];
+export const ABONNES_PAR_DEFAUT = [abonneJournal, abonneNotifications, abonnePlanning, abonneDiscord, abonneReview, abonneStrats, abonneRessources, abonneCompetition, abonneCm, abonneCmSuggestions, abonneSponsors, abonneReseaux, abonneTrombi];
 
 /**
  * Distribue les événements en attente aux abonnés. Un événement dont un

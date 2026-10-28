@@ -292,7 +292,7 @@ describe('page d’une team', () => {
   it('matrice : seulement le cœur et les modules activés', () => {
     expect(lignesMatrice(['planning']).map(l => l.cle)).toEqual(['team', 'members', 'planning']);
     const membres = lignesMatrice([]).find(l => l.cle === 'members')!;
-    expect(membres.colonnes.voir.map(p => p.cle)).toEqual(['members.view']);
+    expect(membres.colonnes.voir.map(p => p.cle)).toEqual(['members.view', 'membres.trombi.voir']);
     expect(membres.colonnes.special.map(p => p.cle)).toEqual(['members.create', 'roles.manage']);
   });
 

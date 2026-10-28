@@ -352,4 +352,9 @@ export const FR = {
   'reseaux.exemple_titre': 'Victoire 2-0 contre les Faucons',
   'reseaux.test_exemple': 'Exemple de post (message de test)',
   'reseaux.test_salon': 'Message de test : le salon « {salon} » recevra les annonces des posts publiés.',
+  'trombi.place_sur': '{place} / {n}',
+  'trombi.texte.team': 'Team',
+  'trombi.texte.elo': 'Elo',
+  'trombi.texte.palmares': 'Palmarès',
+  'trombi.texte.structures': 'Anciennes structures',
 };

@@ -35,7 +35,8 @@ Elles viennent de deux endroits :
 1. **Rôles CM** (niveau club, **Esport › Teams › CM du club › Équipe CM**) : « **Responsable CM** » (les six permissions, Sponsors et
    tout le Drive) et « **Correspondant CM** » (voir, déposer, proposer des clips ; voir et alimenter le Drive de sa
    team) sont des rôles système dont les permissions se
-   modifient (bouton **Rétablir**) ; le Fondateur crée d'autres rôles (« Rédacteur », « Vidéaste »…) avec les
+   modifient (bouton **Rétablir**) ; depuis la migration 0030, ils portent aussi le **trombinoscope** de la page
+   Membres (Responsable : voir et compléter ; Correspondant : voir — [trombinoscope.md](trombinoscope.md)) ; le Fondateur crée d'autres rôles (« Rédacteur », « Vidéaste »…) avec les
    permissions voulues. Une **affectation** donne un rôle à un compte :
    - pour **tout le club** : ses permissions valent pour l'espace du club et pour toutes les teams dont le module
      CM est activé ;

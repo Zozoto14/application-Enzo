@@ -25,7 +25,7 @@ import { dateCourte, phraseNotification } from '../libelles';
 import { Assistant } from './Assistant';
 import { CadreEsport, PageEsport, type OngletEsport } from './CadreEsport';
 import { Dashboard } from './Dashboard';
-import { MembresGlobal } from './MembresGlobal';
+import { PageMembres, type SousOngletMembres } from './membres/PageMembres';
 import { GROUPES_TEAM, MonProfil, PageTeam, type SectionTeam } from './PageTeam';
 import { BadgeNouveau, BoiteResumes } from './Resumes';
 import { Panneau, PastilleRole, Retours, styles as communs, useAgir } from './commun';
@@ -49,7 +49,7 @@ type Onglet = OngletEsport;
  * Écran affiché. `cm` : l'espace CM du club, rangé dans Teams (l'entrée « Teams » reste surlignée) ; une ancienne
  * navigation vers « cm » (entrée de premier niveau d'avant) mène toujours à cet écran, ou à Teams sans droit CM.
  */
-type Vue = { v: Onglet } | { v: 'cm'; onglet?: OngletCm } | { v: 'assistant' } | { v: 'boite' } | { v: 'team'; id: string; section?: SectionTeam };
+type Vue = { v: Exclude<Onglet, 'membres'> } | { v: 'membres'; sous?: SousOngletMembres } | { v: 'cm'; onglet?: OngletCm } | { v: 'assistant' } | { v: 'boite' } | { v: 'team'; id: string; section?: SectionTeam };
 
 /** Écrans rangés sous l'entrée « Teams » de la navigation (surlignée quand ils sont ouverts). */
 export const ongletDeVue = (v: Vue['v']): OngletEsport => (v === 'assistant' || v === 'boite' || v === 'cm' || v === 'team' ? 'teams' : v);
@@ -150,7 +150,7 @@ export function Esport(props: PropsRacineApp) {
         sectionInitiale={vue.section}
         onQuitter={() => setVue({ v: 'teams' })}
         onExporter={exporter}
-        onMembresGlobal={() => setVue({ v: 'membres' })}
+        onMembresGlobal={() => setVue({ v: 'membres', sous: 'tous' })}
         onNaviguer={o => setVue({ v: o })}
         gererJeux={Boolean(etat.moi.peutGererJeux)}
         onChangerTeam={(id, section) => setVue({ v: 'team', id, section })}
@@ -194,7 +194,7 @@ export function Esport(props: PropsRacineApp) {
           pseudo={etat.moi.profil.pseudo}
           onOuvrir={id => setVue({ v: 'team', id })}
           onBoite={() => setVue({ v: 'boite' })}
-          onMembres={() => setVue({ v: 'membres' })}
+          onMembres={() => setVue({ v: 'membres', sous: 'tous' })}
           onTeams={() => setVue({ v: 'teams' })}
         />
       );
@@ -219,7 +219,21 @@ export function Esport(props: PropsRacineApp) {
         />
       );
     } else if (onglet === 'membres') {
-      page = <MembresGlobal theme={theme} client={etat.client} contexte={contexte} registre={registre} large={large} onOuvrirTeam={id => setVue({ v: 'team', id })} onOuvrirApp={onOuvrirApp} />;
+      // Membres : Trombinoscope (premier sous-onglet) et Tous les membres (liste, création, invitations).
+      page = (
+        <PageMembres
+          key={vue.v === 'membres' ? (vue.sous ?? 'trombi') : 'trombi'}
+          theme={theme}
+          client={etat.client}
+          contexte={contexte}
+          registre={registre}
+          large={large}
+          ongletInitial={vue.v === 'membres' ? vue.sous : undefined}
+          onOuvrirTeam={id => setVue({ v: 'team', id })}
+          onOuvrirApp={onOuvrirApp}
+          onExporter={contexte.enregistrerFichier ? (nom, contenu, type = 'text/plain') => contexte.enregistrerFichier!(nom, contenu, type) : undefined}
+        />
+      );
     } else {
       page = (
         <MesTeams
@@ -230,7 +244,7 @@ export function Esport(props: PropsRacineApp) {
           onOuvrir={id => setVue({ v: 'team', id })}
           onCreer={() => setVue({ v: 'assistant' })}
           onBoite={() => setVue({ v: 'boite' })}
-          onMembres={() => setVue({ v: 'membres' })}
+          onMembres={() => setVue({ v: 'membres', sous: 'tous' })}
           onExporter={exporter}
           onProfilSupprime={() => void ouvrir()}
           moiCm={cm ? moiCm : undefined}
@@ -239,7 +253,7 @@ export function Esport(props: PropsRacineApp) {
       );
     }
     contenu = (
-      <CadreEsport theme={theme} large={large} onglet={onglet} onOnglet={o => setVue({ v: o })} pseudo={etat.moi.profil.pseudo} fondateur={etat.moi.superAdmin} gererJeux={Boolean(etat.moi.peutGererJeux)}>
+      <CadreEsport theme={theme} large={large} onglet={onglet} onOnglet={o => setVue(o === 'membres' ? { v: 'membres' } : { v: o })} pseudo={etat.moi.profil.pseudo} fondateur={etat.moi.superAdmin} gererJeux={Boolean(etat.moi.peutGererJeux)}>
         {page}
       </CadreEsport>
     );

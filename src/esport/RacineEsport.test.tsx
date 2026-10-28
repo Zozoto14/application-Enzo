@@ -189,6 +189,7 @@ describe('Esport', () => {
       const { unmount } = await monter({ theme: t }, 'telephone');
       expect(await screen.findByTestId('esport-dashboard')).toBeTruthy();
       await fireEvent.press(screen.getByTestId('esport-nav-membres'));
+      await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
       expect(await screen.findByTestId('esport-membres-global')).toBeTruthy();
       await unmount();
     }

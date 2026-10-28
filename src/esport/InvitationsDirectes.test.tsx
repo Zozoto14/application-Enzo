@@ -157,6 +157,7 @@ describe('Esport › Membres : invitation directe', () => {
     fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true), verifierPreinscription, preinscrire });
     await monter(ctx);
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     await fireEvent.press(await screen.findByTestId('esport-membres-creer'));
     await fireEvent.changeText(screen.getByTestId('esport-compte-nom'), 'Léa');
     await fireEvent.changeText(screen.getByTestId('esport-compte-email'), 'lea@exemple');
@@ -215,6 +216,7 @@ describe('Esport › Membres : invitation directe', () => {
       });
     await monter(ctx);
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     await fireEvent.press(await screen.findByTestId('esport-membres-creer'));
     await fireEvent.changeText(screen.getByTestId('esport-compte-nom'), 'Léa');
     await fireEvent.changeText(screen.getByTestId('esport-compte-email'), 'lea@exemple.fr');
@@ -233,6 +235,7 @@ describe('Esport › Membres : invitation directe', () => {
     fabrique.client = () => fauxClient({ ouvrir: moi(false), annuaire: async () => annuaire(false, [enzo, lea]), ajouterATeams });
     await monter({ profil: { id: 'max12345', nom: 'Max', admin: false, creeLe: '', apps: ['esport'] } });
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     await screen.findByTestId('esport-compte-lea12345');
     expect(screen.queryByTestId('esport-membres-creer')).toBeNull();
     expect(screen.getByTestId('esport-membres-creation-indisponible')).toHaveTextContent(/Seul le Fondateur crée des comptes/);
@@ -267,6 +270,7 @@ describe('Esport › Membres : invitation directe', () => {
     fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, [invitee]) });
     await monter(ctx);
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     expect(await screen.findByTestId('esport-compte-statut-zoe0000001')).toHaveTextContent('Invité');
     // Filtre « Invités ».
     await fireEvent.press(screen.getByTestId('esport-membres-statut-actif'));
@@ -345,6 +349,7 @@ describe('Esport › Membres : comptes du hub créés dans l’Administration (s
     fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, comptes), ajouterATeams });
     await monter(ctx);
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     await screen.findByTestId('esport-compte-luca000001');
     expect(screen.queryByTestId('esport-compte-zoe0000001')).toBeNull();
     expect(screen.getByText('2 comptes, dont 1 sans team · 2 teams')).toBeTruthy();
@@ -377,6 +382,7 @@ describe('Esport › Membres : comptes du hub créés dans l’Administration (s
     fabrique.client = () => fauxClient({ ouvrir: moi(false), annuaire: async () => annuaire(false, [compte('max12345', 'Max', { moi: true })]) });
     await monter({ ...ctx, profil: { ...fondateur, admin: false } });
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     await screen.findByTestId('esport-compte-max12345');
     expect(screen.queryByTestId('esport-compte-luca000001')).toBeNull();
   });
@@ -392,6 +398,7 @@ describe('Esport › Membres : ajouter un compte à plusieurs teams', () => {
     fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, []), ajouterATeams });
     await monter(ctx);
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     // Action disponible dès la ligne repliée.
     await fireEvent.press(await screen.findByTestId('esport-compte-ajouter-luca000001'));
     await fireEvent.press(screen.getByTestId('esport-ajout-team-luca000001-faucons'));
@@ -421,6 +428,7 @@ describe('Esport › Membres : ajouter un compte à plusieurs teams', () => {
     fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, [ana]), ajouterATeams });
     await monter(ctx);
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     await fireEvent.press(await screen.findByTestId('esport-compte-ajouter-ana0000001'));
     expect(screen.getByTestId('esport-ajout-deja-ana0000001-faucons')).toHaveTextContent('déjà membre');
     expect(screen.queryByTestId('esport-ajout-team-ana0000001-faucons')).toBeNull();
@@ -435,6 +443,7 @@ describe('Esport › Membres : ajouter un compte à plusieurs teams', () => {
     fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, [ana]) });
     await monter(ctx);
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     await fireEvent.press(await screen.findByLabelText('Gérer Ana'));
     expect(screen.getByTestId('esport-ajout-toutes-ana0000001')).toHaveTextContent(/déjà membre de toutes vos teams/);
     expect(screen.queryByTestId('esport-ajout-valider-ana0000001')).toBeNull();
@@ -449,6 +458,7 @@ describe('Esport › Membres : ajouter un compte à plusieurs teams', () => {
     fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, []), ajouterATeams });
     await monter(ctx);
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     await fireEvent.press(await screen.findByTestId('esport-compte-ajouter-luca000001'));
     await fireEvent.press(screen.getByTestId('esport-ajout-team-luca000001-faucons'));
     await fireEvent.changeText(screen.getByTestId('esport-ajout-discord-id-luca000001'), '412345678901234567');
@@ -465,6 +475,7 @@ describe('Esport › Membres : ajouter un compte à plusieurs teams', () => {
     fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true, []), ajouterATeams });
     await monter(ctx);
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     await fireEvent.press(await screen.findByTestId('esport-compte-ajouter-luca000001'));
     await fireEvent.press(screen.getByTestId('esport-ajout-team-luca000001-faucons'));
     await fireEvent.changeText(screen.getByTestId('esport-ajout-discord-id-luca000001'), '412345678901234567');
@@ -541,6 +552,7 @@ describe('Esport › Membres : demandes de compte (« Créer des membres »)', (
       });
     await monter(ctx);
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     expect(await screen.findByTestId('esport-membres-badge-demandes')).toHaveTextContent('Demandes en attente : 1');
     expect(await screen.findByTestId('esport-demande-d1')).toHaveTextContent(/Proposé par Léa/);
     await fireEvent.press(screen.getByTestId('esport-demande-valider-d1'));
@@ -569,6 +581,7 @@ describe('Esport › Membres : demandes de compte (« Créer des membres »)', (
     fabrique.client = () => fauxClient({ ouvrir: moi(false), annuaire: async () => avecDroit, demandes: async () => ({ demandes, enAttente: demandes.length, fondateur: false }), demanderCompte, ajouterMembre });
     await monter({ profil: { id: 'lea12345', nom: 'Léa', admin: false, creeLe: '', apps: ['esport'] } });
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     await screen.findByTestId('esport-proposer');
     await fireEvent.changeText(screen.getByTestId('esport-proposer-pseudo'), 'Noa');
     await fireEvent.changeText(screen.getByTestId('esport-proposer-email'), 'noa@exemple.fr');
@@ -607,6 +620,7 @@ describe('Esport › Membres : Discord ID', () => {
     fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => ({ ...annuaire(true, [lea, tom]), peutModifierDiscordId: true }), majDiscordId });
     await monter(ctx);
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     expect(await screen.findByTestId('esport-discord-manquant-lea12345')).toHaveTextContent('Discord ID manquant');
     expect(screen.queryByTestId('esport-discord-manquant-tom12345')).toBeNull();
     expect(screen.getByTestId('esport-membres-bandeau-discord')).toHaveTextContent(/1 membre\(s\) sans Discord ID/);
@@ -636,6 +650,7 @@ describe('Esport › Membres : Discord ID', () => {
     fabrique.client = () => fauxClient({ ouvrir: moi(false), annuaire: async () => ({ ...annuaire(false, [lea, bob]), peutModifierDiscordId: false }) });
     await monter({ profil: { id: 'max12345', nom: 'Max', admin: false, creeLe: '', apps: ['esport'] } });
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     await fireEvent.press(await screen.findByLabelText('Gérer Léa'));
     expect(screen.getByTestId('esport-discord-id-valeur-lea12345')).toHaveTextContent('Discord ID : 412345678901234567');
     expect(screen.queryByTestId('esport-discord-id-modifier-lea12345')).toBeNull();
@@ -655,6 +670,7 @@ describe('Esport › Membres : langue par défaut des comptes', () => {
     fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => annuaire(true), verifierPreinscription: async () => undefined, preinscrire });
     await monter(ctx);
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     await fireEvent.press(await screen.findByTestId('esport-membres-creer'));
     // Français par défaut, choix Français / English à la création.
     expect(screen.getByTestId('esport-compte-langue-fr').props.accessibilityState?.checked).toBe(true);
@@ -688,6 +704,7 @@ describe('Esport › Membres : langue par défaut des comptes', () => {
     fabrique.client = () => fauxClient({ ouvrir: moi(true), annuaire: async () => ({ ...annuaire(true, [fiche]), peutModifierLangue: true }), majLangueDefaut });
     await monter(ctx);
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     await fireEvent.press(await screen.findByLabelText('Gérer Léa'));
     expect(screen.getByTestId('esport-langue-compte-valeur-lea12345')).toHaveTextContent('Langue par défaut : Français · choix de l’utilisateur : English (il prime)');
     expect(screen.getByTestId('esport-langue-compte-enregistrer-lea12345').props.accessibilityState?.disabled).toBe(true);
@@ -707,6 +724,7 @@ describe('Esport › Membres : langue par défaut des comptes', () => {
     fabrique.client = () => fauxClient({ ouvrir: moi(false), annuaire: async () => ({ ...annuaire(false, [lea]), peutModifierLangue: false }) });
     await monter({ profil: { id: 'max12345', nom: 'Max', admin: false, creeLe: '', apps: ['esport'] } });
     await fireEvent.press(await screen.findByTestId('esport-nav-membres'));
+    await fireEvent.press(await screen.findByTestId('esport-membres-onglet-tous'));
     await fireEvent.press(await screen.findByLabelText('Gérer Léa'));
     expect(screen.queryByTestId('esport-langue-compte-lea12345')).toBeNull();
   });

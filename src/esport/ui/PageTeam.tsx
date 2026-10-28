@@ -48,6 +48,9 @@ import { NOM_LANGUE, definirLangue, tr, trn, useLangue, type Langue } from '../i
 import { ChoixLangue } from './ChoixLangue';
 import { ReglageRecapCourriel } from './DiscordId';
 import { noterPage, pageDeSection } from '../usage';
+import { MaFicheTrombi } from './differe';
+import { apiTrombi } from '../trombi/api';
+import { trTb } from '../i18n/trombi';
 
 export type SectionTeam = 'accueil' | 'membres' | 'journal' | 'parametres' | `module:${string}`;
 export type GroupeTeam = 'accueil' | 'agenda' | 'jeu' | 'competition' | 'equipe' | 'reglages';
@@ -708,6 +711,26 @@ export function LierDiscord({ theme, client }: { theme: ThemeHub; client: Client
 }
 
 /** Profil Esport, mention des données, export et suppression (RGPD). */
+/**
+ * « Ma fiche du trombinoscope » (Mon profil) : photo, réseaux pro, elo, palmarès, anciennes structures, postes et
+ * visibilité de chaque champ — la fiche que le CM et le staff voient dans Membres › Trombinoscope.
+ */
+function MaFicheProfil({ theme, client }: { theme: ThemeHub; client: ClientEsport }) {
+  const [ouvert, setOuvert] = useState(false);
+  const api = useMemo(() => apiTrombi(client), [client]);
+  return (
+    <View style={{ gap: ESP.s, borderTopWidth: 1, borderTopColor: theme.ligne, paddingTop: ESP.s }} testID="esport-profil-trombi">
+      <TitreCarte
+        theme={theme}
+        titre={trTb('profil.titre')}
+        sous={trTb('profil.aide')}
+        droite={<BoutonHub theme={theme} titre={ouvert ? trTb('profil.fermer') : trTb('profil.ouvrir')} onPress={() => setOuvert(o => !o)} testID="esport-profil-trombi-ouvrir" />}
+      />
+      {ouvert ? <MaFicheTrombi theme={theme} api={api} /> : null}
+    </View>
+  );
+}
+
 export function MonProfil({ theme, client, onExporter, onSupprime }: { theme: ThemeHub; client: ClientEsport; onExporter?(nom: string, contenu: string): Promise<boolean>; onSupprime?(): void }) {
   const [profil, setProfil] = useState<{ pseudo: string; riotId: string; discord: string } | undefined>();
   const { enCours, erreur, avis, agir } = useAgir();
@@ -766,6 +789,7 @@ export function MonProfil({ theme, client, onExporter, onSupprime }: { theme: Th
       )}
       <LierDiscord theme={theme} client={client} />
       <ReglageRecapCourriel theme={theme} client={client} />
+      <MaFicheProfil theme={theme} client={client} />
       <View style={styles.ligne}>
         <BoutonHub
           theme={theme}

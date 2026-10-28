@@ -15,3 +15,5 @@ export { Tournois } from './competition/Tournois';
 export { Resultats } from './competition/Resultats';
 export { CmTeam } from './cm/CmTeam';
 export { EspaceCm } from './cm/EspaceCm';
+export { Trombinoscope } from './membres/Trombinoscope';
+export { MaFicheTrombi } from './membres/FicheTrombi';

@@ -57,6 +57,9 @@ export const LIMITES = {
   // Drive (migration 0027) : fichiers rangés (et versions) par heure ; liens de ZIP (lecture lourde du disque).
   cm_drive: { max: 600, fenetreS: 3600 },
   cm_drive_zip: { max: 20, fenetreS: 3600 },
+  // Trombinoscope (migration 0030) : photos envoyées et fiches enregistrées, par compte et par heure.
+  trombi_photo: { max: 30, fenetreS: 3600 },
+  trombi_fiche: { max: 120, fenetreS: 3600 },
 };
 
 /**

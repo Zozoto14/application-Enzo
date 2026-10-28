@@ -21,6 +21,7 @@ import { formaterInstant } from '../../discord/formats.mjs';
 import { ajouterJours, dateLocale, instantMural, lireDate, lundiDe, texteDate } from '../../planning/temps.mjs';
 import { resumeAnnonce, resumeResultat, resumeTournoi, ordinal } from '../../competition/resume.mjs';
 import { adversairesAffiches, adversairesParId } from '../../competition/commun.mjs';
+import { trombiPourVisuel } from '../../trombi/service.mjs';
 
 export const GENRES_SOURCE = Object.freeze(['resultat', 'annonce', 'tournoi', 'membre', 'equipe', 'semaine', 'libre']);
 export const FUSEAU_CLUB = 'Europe/Paris';
@@ -29,7 +30,7 @@ export const FUSEAU_CLUB = 'Europe/Paris';
 export const CHAMPS_TEXTE = Object.freeze([
   'club', 'team', 'jeu', 'titre', 'phrase', 'date', 'date_courte', 'jour', 'heure', 'fuseau', 'date_heure', 'tournoi', 'tour', 'lieu', 'format', 'bo',
   'adversaire', 'adversaires', 'score', 'score_nous', 'score_eux', 'issue', 'place', 'participants', 'points', 'classement', 'mvp', 'mvp_agent',
-  'genre_match', 'cashprize', 'gains', 'organisateur', 'bilan', 'joueur', 'poste', 'semaine', 'victoire',
+  'genre_match', 'cashprize', 'gains', 'organisateur', 'bilan', 'joueur', 'poste', 'semaine', 'victoire', 'elo', 'ancienne_structure',
 ]);
 
 const LANGUES = ['fr', 'en'];
@@ -219,8 +220,11 @@ async function donneesMembre(base, teamId, compte) {
   const m = await base.premier('SELECT m.statut, r.cle_systeme, r.nom AS role_nom, c.pseudo FROM membres m JOIN roles r ON r.id = m.role_id JOIN comptes c ON c.id = m.compte_id WHERE m.team_id = ? AND m.compte_id = ?', [teamId, compte]);
   const team = await teamLigne(base, teamId);
   if (!m || !team) return null;
-  const poste = langue => (m.cle_systeme ? T(langue, `role.${m.cle_systeme}`) : m.role_nom);
-  const parLangue = langue => ({ champs: { joueur: m.pseudo, poste: poste(langue) }, listes: {} });
+  // Trombinoscope (migration 0030) : postes du profil de jeu dans la team, elo, dernière ancienne structure — ce que
+  // tous les membres voient de sa fiche ; sans fiche, le rôle dans la team.
+  const fiche = await trombiPourVisuel(base, teamId, compte);
+  const poste = langue => (fiche?.postes.length ? fiche.postes.join(' / ') : m.cle_systeme ? T(langue, `role.${m.cle_systeme}`) : m.role_nom);
+  const parLangue = langue => ({ champs: { joueur: m.pseudo, poste: poste(langue), elo: fiche?.elo ?? '', ancienne_structure: fiche?.ancienneStructure ?? '' }, listes: {} });
   return { publiable: true, systeme: null, team: { id: team.id, nom: team.nom, fuseau: team.fuseau }, fr: parLangue('fr'), en: parLangue('en'), images: {} };
 }
 

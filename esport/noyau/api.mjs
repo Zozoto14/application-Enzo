@@ -59,10 +59,12 @@ import { routesSponsors } from './sponsors/routes.mjs';
 import { servicesReseaux } from './reseaux/service.mjs';
 import { routesReseaux } from './reseaux/routes.mjs';
 import { traiterAnnoncesReseaux } from './reseaux/annonces.mjs';
+import { servicesTrombi } from './trombi/service.mjs';
+import { routesTrombi } from './trombi/routes.mjs';
 
 export const VERSION_ESPORT = 4;
 /** Fonctions annoncées par /sante et /session (l'app n'utilise la surcharge de méthode que si elle est là). */
-export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive'];
+export const FONCTIONS = ['surcharge-methode', 'profils-jeu', 'cm', 'sponsors', 'reseaux', 'drive', 'trombi'];
 const TAILLE_MAX_CORPS = 64 * 1024;
 const TAILLE_MAX_IMPORT = 20 * 1024 * 1024;
 
@@ -190,6 +192,8 @@ export function creerApi({
   const sp = servicesSponsors({ base, maintenant, medias: md, cleSession, stockage, drive: cm.drive });
   // Page « Réseaux » de l'espace CM (migration 0026) : comptes, bot d'annonce Discord des posts publiés, statistiques.
   const rsx = servicesReseaux({ base, maintenant, cle: secretDiscord, fetch: envoiDiscord, jetonBot: discordBot.jetonBot || undefined, lienApp });
+  // Trombinoscope (migration 0030) : page Membres › Trombinoscope (membres.trombi.voir / membres.trombi.editer).
+  const trb = servicesTrombi({ base, maintenant });
   // Bot Discord (interactions HTTP) : DISCORD_APPLICATION_ID et DISCORD_PUBLIC_KEY (variables), DISCORD_BOT_TOKEN (secret).
   const configBot = { applicationId: discordBot.applicationId || '', publicKey: discordBot.publicKey || '' };
   const jetonBot = discordBot.jetonBot || undefined;
@@ -394,6 +398,8 @@ export function creerApi({
         return s.creerTeam(acteur, corps);
       }
     }
+    const trombi = await routesTrombi({ tb: trb, acteur, chemin, methode: m, lireCorps: max => lireCorps(requete, max), limite });
+    if (trombi !== undefined) return trombi;
     const sponsors = await routesSponsors({ sp, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });
     if (sponsors !== undefined) return sponsors;
     const reseaux = await routesReseaux({ rs: rsx, acteur, chemin, methode: m, url, lireCorps: max => lireCorps(requete, max), limite });

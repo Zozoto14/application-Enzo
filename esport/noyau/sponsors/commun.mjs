@@ -12,11 +12,12 @@
 
 import { echec } from '../outils.mjs';
 import { PERMISSIONS_CM } from '../cm/commun.mjs';
+import { PERMISSIONS_TROMBI } from '../trombi/permissions.mjs';
 
 export const PERMISSIONS_SPONSORS = Object.freeze(['sponsors.voir', 'sponsors.gerer']);
 export const PORTEE_SPONSORS = 'sponsors';
-/** Permissions qu'un rôle CM peut porter (Équipe CM) : celles du CM et celles des Sponsors. */
-export const PERMISSIONS_ROLES_CM = Object.freeze([...PERMISSIONS_CM, ...PERMISSIONS_SPONSORS]);
+/** Permissions qu'un rôle CM peut porter (Équipe CM) : celles du CM, des Sponsors et du trombinoscope (migration 0030). */
+export const PERMISSIONS_ROLES_CM = Object.freeze([...PERMISSIONS_CM, ...PERMISSIONS_SPONSORS, ...PERMISSIONS_TROMBI]);
 
 /** Permissions Sponsors d'un acteur (Set) : Fondateur, ou affectations « club » à un rôle CM qui les porte. */
 export async function droitsSponsors(base, acteur) {

@@ -39,7 +39,9 @@
         { "cle": "members.create", "action": "special", "libelle": "Créer des membres (demande au Fondateur)" },
         { "cle": "members.assign_role", "action": "modifier", "libelle": "Changer les rôles" },
         { "cle": "members.remove", "action": "supprimer", "libelle": "Retirer un membre" },
-        { "cle": "roles.manage", "action": "special", "libelle": "Gérer les rôles" }
+        { "cle": "roles.manage", "action": "special", "libelle": "Gérer les rôles" },
+        { "cle": "membres.trombi.voir", "action": "voir", "libelle": "Trombinoscope : voir toutes les fiches" },
+        { "cle": "membres.trombi.editer", "action": "modifier", "libelle": "Trombinoscope : compléter et corriger les fiches" }
       ]
     },
     {
@@ -208,7 +210,7 @@
       "description": "Membres, rôles, planning, résumés (rédaction comprise), Discord, journal.",
       "permissions": [
         "team.manage",
-        "members.view", "members.invite", "members.assign_role", "members.remove", "roles.manage",
+        "members.view", "members.invite", "members.assign_role", "members.remove", "roles.manage", "membres.trombi.voir", "membres.trombi.editer",
         "planning.view", "planning.create", "planning.update", "planning.delete",
         "availability.view_all", "availability.edit_own",
         "attendance.view_all", "attendance.mark", "attendance.rsvp_own",
@@ -229,7 +231,7 @@
       "couleur": "#2563eb",
       "description": "Planning, review, strats, playbook, scouting, objectifs, présence.",
       "permissions": [
-        "members.view",
+        "members.view", "membres.trombi.voir",
         "planning.view", "planning.create", "planning.update", "planning.delete",
         "availability.view_all", "availability.edit_own",
         "attendance.view_all", "attendance.mark", "attendance.rsvp_own",
@@ -251,7 +253,7 @@
       "couleur": "#0891b2",
       "description": "Review, strats, playbook, scouting ; lecture du planning.",
       "permissions": [
-        "members.view",
+        "members.view", "membres.trombi.voir",
         "planning.view",
         "availability.view_all", "availability.edit_own", "attendance.rsvp_own",
         "meeting_summaries.submit", "meeting_summaries.view_summary", "meeting_summaries.view_staff",

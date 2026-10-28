@@ -630,7 +630,36 @@
   "Réponse de l’IA locale incomplète (limite de jetons atteinte) : relancez, ou augmentez IA_LOCALE_JETONS_MAX.": "Incomplete local AI answer (token limit reached): try again, or raise IA_LOCALE_JETONS_MAX.",
   "Le moteur d’IA locale a été arrêté de force pendant le calcul (SIGKILL), par un autre processus ou par l’hébergeur (voir ~/logs/esport-ia-locale.log).": "The local AI engine was forcibly stopped during the computation (SIGKILL), by another process or by the hosting provider (see ~/logs/esport-ia-locale.log).",
   "L’IA locale n’a pas pu démarrer : son moteur a été arrêté de force (SIGKILL) pendant le chargement, par un autre processus ou par l’hébergeur (voir ~/logs/esport-ia-locale.log).": "The local AI could not start: its engine was forcibly stopped (SIGKILL) while loading, by another process or by the hosting provider (see ~/logs/esport-ia-locale.log).",
-  "Un brouillon de ce jeu est déjà en préparation : attendez qu’il soit prêt (ou abandonnez-le).": "A draft of this game is already being prepared: wait until it is ready (or abandon it)."
+  "Un brouillon de ce jeu est déjà en préparation : attendez qu’il soit prêt (ou abandonnez-le).": "A draft of this game is already being prepared: wait until it is ready (or abandon it).",
+  "Adresse du profil invalide : https://… sur le site du réseau (profil, pas une publication).": "Invalid profile address: https://… on the network’s site (a profile, not a post).",
+  "Ancienne structure : son nom (2 caractères au moins).": "Former team: its name (at least 2 characters).",
+  "Ce champ est privé : seul le joueur le modifie.": "This field is private: only the player edits it.",
+  "Ce profil est déjà dans la liste.": "This profile is already in the list.",
+  "Ce réseau a son propre choix dans la liste (adresse vérifiée).": "This network has its own choice in the list (address checked).",
+  "Date de mise à jour : AAAA-MM-JJ.": "Update date: YYYY-MM-DD.",
+  "Elo : une valeur ou un rang.": "Elo: a value or a rank.",
+  "La fiche a été modifiée entre-temps : rechargez-la.": "The card was changed in the meantime: reload it.",
+  "La miniature est plus grande que la photo.": "The thumbnail is larger than the photo.",
+  "La photo doit être carrée (recadrez-la).": "The photo must be square (crop it).",
+  "Le contenu n’est pas une image JPEG, PNG ou WebP du type annoncé.": "The content is not a JPEG, PNG or WebP image of the stated type.",
+  "Lien de preuve : adresse https://… publique.": "Proof link: a public https://… address.",
+  "Nom du site (2 caractères au moins).": "Site name (at least 2 characters).",
+  "Palmarès : nom de la compétition (2 caractères au moins).": "Achievements: competition name (at least 2 characters).",
+  "Participants : de 2 à 100 000.": "Participants: 2 to 100,000.",
+  "Photo : JPEG, PNG ou WebP.": "Photo: JPEG, PNG or WebP.",
+  "Placement : un rang de 1 à 9999.": "Placement: a rank from 1 to 9999.",
+  "Postes : team inconnue (le joueur doit en être membre).": "Positions: unknown team (the player must be a member).",
+  "Postes illisibles.": "Unreadable positions.",
+  "Requête illisible.": "Unreadable request.",
+  "Seul le joueur règle la visibilité de sa fiche.": "Only the player sets the visibility of their card.",
+  "Un seul elo par jeu.": "Only one elo per game.",
+  "Visibilité illisible.": "Unreadable visibility.",
+  "Date invalide (AAAA, AAAA-MM ou AAAA-MM-JJ).": "Invalid date (YYYY, YYYY-MM or YYYY-MM-DD).",
+  "Choisissez le jeu.": "Choose the game.",
+  "Clé inconnue du profil de jeu de la team.": "Unknown key in the team’s game profile.",
+  "Liste illisible.": "Unreadable list.",
+  "Élément illisible.": "Unreadable item.",
+  "Image illisible.": "Unreadable image."
  },
  "motifs": [
   [
@@ -960,6 +989,18 @@
   [
    "^Le moteur d’IA locale s’est arrêté brutalement pendant le calcul \\((.+) ; voir ~/logs/esport-ia-locale\\.log\\)\\.$",
    "The local AI engine stopped abruptly during the computation ($1; see ~/logs/esport-ia-locale.log)."
+  ],
+  [
+   "^Trop d’éléments \\((\\d+) au plus\\)\\.$",
+   "Too many items ($1 at most)."
+  ],
+  [
+   "^Image trop lourde \\((\\d+) Ko au plus\\)\\.$",
+   "Image too heavy ($1 KB at most)."
+  ],
+  [
+   "^Côté de (\\d+) à (\\d+) px\\.$",
+   "Side from $1 to $2 px."
   ]
  ]
 }

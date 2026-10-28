@@ -43,7 +43,7 @@ et anglais** :
 | Résultat | un résultat | **série** : issue (couleur victoire / défaite), score `2 - 1`, détail des maps / manches avec scores ; **classement multi-équipes** : place, points, classement des équipes (la nôtre surlignée) |
 | Classement final | un tournoi terminé | place, « 3e sur 16 », parcours, bilan, gains |
 | MVP / joueur du match | un résultat (ou un membre) | pseudo du MVP, agent / personnage (image de l'agent pour Valorant), affiche et score |
-| Recrue / Départ | un membre | pseudo, poste, team, logo |
+| Recrue / Départ | un membre | pseudo, poste (postes du profil de jeu choisis dans sa fiche du trombinoscope, sinon son rôle), team, logo ; champs `{elo}` et `{ancienne_structure}` (si visibles de tous les membres, voir [trombinoscope.md](trombinoscope.md)) |
 | Programme de la semaine | une semaine (club : toutes les teams ; ou une team) | une ligne par match publiable : jour, date, heure, affiche |
 | Bannière tournoi / inscription | un tournoi | nom, organisateur, date, lieu, format, cashprize |
 | Citation / annonce libre | — | texte libre, signature `{club}` |
