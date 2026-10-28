@@ -6,6 +6,7 @@
 #   bash ~/application-enzo/esport/serveur/installer-ia-locale.sh --petit    # Qwen3-4B (≈ 2,5 Go, 2x plus rapide)
 #   bash ~/application-enzo/esport/serveur/installer-ia-locale.sh --test     # banc d'essai + recommandation
 #   bash ~/application-enzo/esport/serveur/installer-ia-locale.sh --dry-run  # montre le plan, ne fait rien
+#   bash ~/application-enzo/esport/serveur/installer-ia-locale.sh --diagnostic  # moteur seul : tué par nous ou par l'extérieur ?
 #
 # Il installe le moteur llama.cpp (version figée, SHA-256 / commit vérifiés : archive officielle si la
 # glibc le permet, sinon compilation sans root avec un GCC récent), télécharge le modèle GGUF avec reprise

@@ -20,7 +20,8 @@
  *
  * Options : --petit | --modele qwen2.5-7b|qwen3-4b, --dossier <chemin absolu>, --threads N, --test,
  * --dry-run (rien n'est téléchargé ni écrit), --forcer (tout refaire), --revision <commit Hugging Face>,
- * --route auto|officiel|compilation.
+ * --route auto|officiel|compilation, --diagnostic [--variante http,socket,un-fil,cli] [--duree S]
+ * (moteur lancé seul, en direct : « tué par nous » ou « tué par l'extérieur » ? voir diagnostic.mjs).
  */
 
 import { spawnSync } from 'node:child_process';
@@ -34,9 +35,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { configIaLocale, creerConnecteurLocal } from '../../noyau/ia/connecteur.mjs';
 import { preparerBrouillon } from '../../noyau/ia/assistant.mjs';
 import { chargerEnv, fichierEnvParDefaut } from '../commun.mjs';
-import { creerGestionnaireIaLocale, environnementMoteur } from './gestionnaire.mjs';
+import { VARIANTES, diagnostic } from './diagnostic.mjs';
+import { creerGestionnaireIaLocale, environnementMoteur, verrouActif } from './gestionnaire.mjs';
+import { commandeCourte, dernieresLignesMoteur, limitesMemoire, processusDuCompte, signauxEnvoyesA } from './processus.mjs';
 import { fetchLocal } from './transport.mjs';
-import { FICHIER_OUTILS, LLAMA_CPP, MICROMAMBA, MODELES_IA_LOCALE, MODELE_IA_LOCALE_DEFAUT, MODELE_IA_LOCALE_PETIT, cheminsIaLocale, dossierIaLocaleParDefaut, dossierRefuse, lireJson } from './installation.mjs';
+import { FICHIER_OUTILS, LLAMA_CPP, MICROMAMBA, MODELES_IA_LOCALE, MODELE_IA_LOCALE_DEFAUT, MODELE_IA_LOCALE_PETIT, cheminsIaLocale, dossierIaLocaleParDefaut, dossierRefuse, etatInstallationIaLocale, journalIaLocaleParDefaut, lireJson } from './installation.mjs';
 
 const DEPOT = fileURLToPath(new URL('../../..', import.meta.url));
 const GO = 1024 ** 3;
@@ -51,7 +54,7 @@ const arreter = m => {
 // ------------------------------------------------------------------ Options, machine
 
 export function lireOptions(argv) {
-  const o = { test: false, dryRun: false, forcer: false, route: 'auto' };
+  const o = { test: false, dryRun: false, forcer: false, route: 'auto', diagnostic: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const valeur = () => {
@@ -66,6 +69,9 @@ export function lireOptions(argv) {
     else if (a === '--revision') o.revision = valeur();
     else if (a === '--route') o.route = valeur();
     else if (a === '--test') o.test = true;
+    else if (a === '--diagnostic') o.diagnostic = true;
+    else if (a === '--variante') o.variantes = valeur().split(',').map(x => x.trim()).filter(Boolean);
+    else if (a === '--duree') o.dureeS = Number(valeur());
     else if (a === '--dry-run') o.dryRun = true;
     else if (a === '--forcer') o.forcer = true;
     else if (a === '--aide' || a === '--help' || a === '-h') o.aide = true;
@@ -75,6 +81,10 @@ export function lireOptions(argv) {
   if (o.threads !== undefined && (!Number.isInteger(o.threads) || o.threads < 1 || o.threads > 32)) arreter('--threads : un nombre entier de 1 à 32.');
   if (o.revision !== undefined && !/^[0-9a-f]{40}$/.test(o.revision)) arreter('--revision : un identifiant de commit Hugging Face (40 caractères hexadécimaux).');
   if (!['auto', 'officiel', 'compilation'].includes(o.route)) arreter('--route : auto, officiel ou compilation.');
+  if (o.variantes && (!o.variantes.length || o.variantes.some(v => v !== 'toutes' && !VARIANTES.includes(v)))) arreter(`--variante : ${VARIANTES.join(', ')} ou toutes (séparées par des virgules).`);
+  if (o.variantes?.includes('toutes')) o.variantes = [...VARIANTES];
+  if (o.dureeS !== undefined && (!Number.isInteger(o.dureeS) || o.dureeS < 10 || o.dureeS > 1800)) arreter('--duree : un nombre entier de secondes, de 10 à 1800.');
+  if ((o.variantes || o.dureeS !== undefined) && !o.diagnostic) arreter('--variante et --duree vont avec --diagnostic.');
   return o;
 }
 
@@ -420,56 +430,131 @@ export function recommandation({ jetonsParSeconde, lectureParSeconde, modele, br
   return { niveau: 'lent', texte: `Trop lent pour un usage confortable : ${duree}. ${modele !== MODELE_IA_LOCALE_PETIT ? 'Essayez le modèle plus petit (--petit) ou ' : 'Préférez '}la clé d’API (mode « Clé API »).` };
 }
 
+/**
+ * Cause RÉELLE d'un échec du banc d'essai (au lieu d'un vague « fetch failed ») : sortie du moteur (signal,
+ * code, envoyé par nous ou non), erreur de connexion, signaux de nos programmes vers lui, dernières lignes du moteur.
+ */
+export async function causeReelle(e, { g, pid, journal, depuis = null }) {
+  const lignes = [];
+  const sortie = pid ? await g.attendreSortie(pid, 3000) : null;
+  if (sortie) {
+    const exterieur = sortie.signal && !(sortie.signauxEnvoyes ?? []).includes(sortie.signal);
+    lignes.push(`moteur pid ${pid} arrêté : ${sortie.signal ? `signal ${sortie.signal}` : `code ${sortie.code}`}${exterieur ? (sortie.signal === 'SIGKILL' ? ' — arrêté de force par un autre processus ou par l’hébergeur (ce programme ne lui a envoyé aucun SIGKILL)' : ' — signal reçu de l’extérieur') : sortie.imprevue ? ' — arrêt imprévu' : ' — à notre demande'}`);
+  } else if (pid) lignes.push(`moteur pid ${pid} toujours en marche`);
+  const cause = e?.cause?.code ?? e?.cause?.message ?? null;
+  lignes.push(`erreur : ${e?.code ? `${e.code} — ` : ''}${e?.message ?? e}${cause && cause !== e?.code ? ` (cause : ${cause})` : ''}`);
+  if (pid && journal) {
+    const sig = signauxEnvoyesA(journal, pid, depuis);
+    lignes.push(`signaux envoyés à ce moteur par nos programmes : ${sig.length ? '' : 'aucun'}`);
+    for (const l of sig) lignes.push(`  ${l}`);
+    const fin = dernieresLignesMoteur(journal, 8);
+    if (fin.length) {
+      lignes.push('dernières lignes des moteurs dans le journal :');
+      for (const l of fin) lignes.push(`  | ${l.slice(0, 240)}`);
+    }
+  }
+  return lignes;
+}
+
+/** Processus visibles du compte et limites lisibles : quelques lignes d'information. */
+export function resumeCompte() {
+  const l = processusDuCompte().filter(p => p.pid !== process.pid);
+  const total = l.reduce((t, p) => t + (p.rssMo || 0), 0);
+  const lim = limitesMemoire();
+  return [
+    `processus visibles du compte : ${l.length} (${(total / 1024).toFixed(1)} Go) — ${l.slice(0, 12).map(p => `${commandeCourte(p.args)} ${p.pid}`).join(', ') || 'aucun'}`,
+    `limite mémoire lisible d’ici : ${lim.limiteOctets ? `${(lim.limiteOctets / GO).toFixed(1)} Go` : 'aucune (voir cPanel › Resource Usage › mémoire physique)'}`,
+  ];
+}
+
 async function bancEssai({ c, binaire, fichierModele, threads, modele }) {
-  const g = creerGestionnaireIaLocale({ dossier: c.dossier, binaire, fichierModele, threads, contexte: 8192, inactiviteMs: 60_000, demarrageMs: 600_000, delaiMs: 15 * 60_000, attenteVerrouMs: 30_000, log: { log: () => undefined, warn: info, error: info } });
+  const journal = journalIaLocaleParDefaut();
+  // Un seul moteur pour tout le compte : si l'app ou le processus de fond en tient un, on ATTEND qu'il s'arrête
+  // (1 min sans requête pour l'app, 5 pour le processus de fond) au lieu d'en lancer un second.
+  const v = lireJson(c.verrouServeur);
+  if (v && verrouActif(v)) info(`un moteur tourne déjà (${v.role ?? 'autre processus'}, pid ${v.proprietaire}${v.pid ? `, moteur pid ${v.pid}` : ''}, depuis ${v.demarreLe ?? '?'}) : attente de son arrêt (6 min au plus)…`);
+  for (const l of resumeCompte()) info(l);
+  const g = creerGestionnaireIaLocale({ dossier: c.dossier, binaire, fichierModele, threads, contexte: 8192, inactiviteMs: 60_000, demarrageMs: 600_000, delaiMs: 15 * 60_000, attenteVerrouMs: 6 * 60_000, journal, role: 'installateur', log: { log: () => undefined, warn: info, error: info } });
+  // Ctrl-C, fin de session : moteur arrêté proprement (il est détaché : il ne recevrait pas le signal du terminal).
+  const interrompre = s => {
+    info(`interruption (${s}) : arrêt du moteur…`);
+    void g.arreter(`interruption de l’installateur (${s})`).finally(() => process.exit(130));
+  };
+  for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.once(s, interrompre);
   const resultats = [];
   let memoire = null;
   let brouillon = null;
+  let echecMoteur = false;
   const debut = Date.now();
+  const debutIso = new Date(debut).toISOString();
   try {
-    await g.executer(async ({ port, cle }) => {
-      const chargementS = (Date.now() - debut) / 1000;
-      ok(`modèle chargé en ${chargementS.toFixed(1)} s`);
-      const pid = lireJson(c.verrouServeur)?.pid;
-      for (const e of ESSAIS) {
-        const t0 = Date.now();
-        const r = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cle}` },
-          body: JSON.stringify({ model: modele, messages: e.messages, temperature: 0.2, max_tokens: 400, response_format: { type: 'json_schema', json_schema: { name: 'essai', schema: e.schema, strict: true } } }),
-          signal: AbortSignal.timeout(10 * 60_000),
-        });
-        const j = await r.json().catch(() => null);
-        const texte = j?.choices?.[0]?.message?.content ?? '';
-        let donnees = null;
-        try {
-          donnees = JSON.parse(texte);
-        } catch {
-          donnees = null;
-        }
-        const reussi = r.ok && e.valide(donnees);
-        const t = j?.timings ?? {};
-        resultats.push({ nom: e.nom, reussi, dureeS: (Date.now() - t0) / 1000, jetonsParSeconde: Number(t.predicted_per_second) || 0, lectureParSeconde: Number(t.prompt_per_second) || 0 });
-        (reussi ? ok : info)(`${e.nom} : ${reussi ? 'réussi' : 'ÉCHEC'} en ${((Date.now() - t0) / 1000).toFixed(1)} s, ${(Number(t.predicted_per_second) || 0).toFixed(1)} jetons/s — ${texte.slice(0, 160).replace(/\s+/g, ' ')}`);
-      }
-      memoire = pid ? memoireMaxGo(pid) : null;
-      return { chargementS };
-    }, { delai: 30 * 60_000 }).then(x => resultats.push({ chargementS: x.chargementS }));
-    // Essai de brouillon complet (moteur déjà chargé) : la durée qu'aura un vrai brouillon dans l'app.
-    titre('Essai de brouillon (jeu fictif, 2 pages, en étapes comme dans l’app : plusieurs minutes)');
-    const pid = lireJson(c.verrouServeur)?.pid;
     try {
-      const b = await essaiBrouillon({ gestionnaire: g, modele });
-      brouillon = b;
-      (b.reussi ? ok : info)(`essai de brouillon ${b.reussi ? 'réussi' : 'INCOMPLET'} en ${Math.floor(b.dureeS / 60)} min ${Math.round(b.dureeS % 60)} s (${b.contenu.formats} format(s), ${b.contenu.modes} mode(s), ${b.contenu.cartes} carte(s), ${b.contenu.personnages} personnage(s))`);
+      await g.executer(async ({ port, cle, pid }) => {
+        const chargementS = (Date.now() - debut) / 1000;
+        ok(`modèle chargé en ${chargementS.toFixed(1)} s (moteur pid ${pid})`);
+        for (const e of ESSAIS) {
+          const t0 = Date.now();
+          let r;
+          let j = null;
+          try {
+            // Même transport que l'app (node:http, une connexion par requête), pas le fetch global (undici).
+            r = await fetchLocal(`http://127.0.0.1:${port}/v1/chat/completions`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cle}` },
+              body: JSON.stringify({ model: modele, messages: e.messages, temperature: 0.2, max_tokens: 400, response_format: { type: 'json_schema', json_schema: { name: 'essai', schema: e.schema, strict: true } } }),
+              signal: AbortSignal.timeout(10 * 60_000),
+            });
+            j = await r.json().catch(() => null);
+          } catch (err) {
+            info(`${e.nom} : ÉCHEC après ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+            for (const l of await causeReelle(err, { g, pid, journal, depuis: debutIso })) info(`  ${l}`);
+            resultats.push({ nom: e.nom, reussi: false, dureeS: (Date.now() - t0) / 1000, jetonsParSeconde: 0, lectureParSeconde: 0 });
+            echecMoteur = true;
+            break;
+          }
+          const texte = j?.choices?.[0]?.message?.content ?? '';
+          let donnees = null;
+          try {
+            donnees = JSON.parse(texte);
+          } catch {
+            donnees = null;
+          }
+          const reussi = r.ok && e.valide(donnees);
+          const t = j?.timings ?? {};
+          resultats.push({ nom: e.nom, reussi, dureeS: (Date.now() - t0) / 1000, jetonsParSeconde: Number(t.predicted_per_second) || 0, lectureParSeconde: Number(t.prompt_per_second) || 0 });
+          (reussi ? ok : info)(`${e.nom} : ${reussi ? 'réussi' : 'ÉCHEC'} en ${((Date.now() - t0) / 1000).toFixed(1)} s, ${(Number(t.predicted_per_second) || 0).toFixed(1)} jetons/s — ${texte.slice(0, 160).replace(/\s+/g, ' ')}`);
+        }
+        memoire = pid ? memoireMaxGo(pid) : null;
+        return { chargementS };
+      }, { delai: 30 * 60_000 }).then(x => resultats.push({ chargementS: x.chargementS }));
     } catch (e) {
-      brouillon = { reussi: false, dureeS: null, erreur: e?.code ?? 'erreur' };
-      info(`essai de brouillon : ÉCHEC (${e?.message ?? e})`);
+      if (e?.code === 'ia-locale-occupee') {
+        const o = e.occupant;
+        arreter(`Le moteur d’IA locale est toujours tenu par un autre processus${o ? ` (${o.role ?? 'rôle inconnu'}, pid ${o.pid}${o.moteur ? `, moteur pid ${o.moteur}` : ''})` : ''} après 6 min d’attente : relancez --test plus tard (aucun second moteur n’a été lancé).`);
+      }
+      info(`démarrage du moteur : ÉCHEC — ${e?.code ?? ''} ${e?.message ?? e}`);
+      for (const l of await causeReelle(e, { g, pid: lireJson(c.verrouServeur)?.pid ?? null, journal, depuis: debutIso })) info(`  ${l}`);
+      echecMoteur = true;
     }
-    const m = pid ? memoireMaxGo(pid) : null;
-    if (m !== null && (memoire === null || m > memoire)) memoire = m;
+    if (!echecMoteur) {
+      // Essai de brouillon complet (moteur déjà chargé) : la durée qu'aura un vrai brouillon dans l'app.
+      titre('Essai de brouillon (jeu fictif, 2 pages, en étapes comme dans l’app : plusieurs minutes)');
+      const pid = lireJson(c.verrouServeur)?.pid;
+      try {
+        const b = await essaiBrouillon({ gestionnaire: g, modele });
+        brouillon = b;
+        (b.reussi ? ok : info)(`essai de brouillon ${b.reussi ? 'réussi' : 'INCOMPLET'} en ${Math.floor(b.dureeS / 60)} min ${Math.round(b.dureeS % 60)} s (${b.contenu.formats} format(s), ${b.contenu.modes} mode(s), ${b.contenu.cartes} carte(s), ${b.contenu.personnages} personnage(s))`);
+      } catch (e) {
+        brouillon = { reussi: false, dureeS: null, erreur: e?.code ?? 'erreur' };
+        info('essai de brouillon : ÉCHEC');
+        for (const l of await causeReelle(e, { g, pid, journal, depuis: debutIso })) info(`  ${l}`);
+      }
+      const m = pid ? memoireMaxGo(pid) : null;
+      if (m !== null && (memoire === null || m > memoire)) memoire = m;
+    }
   } finally {
-    await g.arreter();
+    for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.removeListener(s, interrompre);
+    await g.arreter('fin du banc d’essai');
   }
   const chargementS = resultats.find(r => 'chargementS' in r)?.chargementS ?? null;
   const essais = resultats.filter(r => 'reussi' in r);
@@ -483,7 +568,7 @@ async function bancEssai({ c, binaire, fichierModele, threads, modele }) {
     lectureParSeconde,
     memoireGo: memoire === null ? null : Math.round(memoire * 10) / 10,
     essaisReussis: essais.filter(r => r.reussi).length + (brouillon?.reussi ? 1 : 0),
-    essais: essais.length + (brouillon ? 1 : 0),
+    essais: Math.max(essais.length, ESSAIS.length) + 1,
     brouillonS: Number.isFinite(brouillon?.dureeS) ? Math.round(brouillon.dureeS) : null,
   };
 }
@@ -500,7 +585,11 @@ const AIDE = `Installation de l'IA locale (llama.cpp + modèle GGUF) dans ~/.app
   --forcer                refait tout (moteur et modèle)
   --dossier <chemin>      autre dossier (absolu, hors public_html et hors du dépôt)
   --revision <commit>     révision Hugging Face précise du modèle
-  --route <r>             auto (défaut), officiel (archive précompilée) ou compilation`;
+  --route <r>             auto (défaut), officiel (archive précompilée) ou compilation
+  --diagnostic            moteur lancé SEUL, en direct (sans app ni processus de fond), sur une génération
+                          d'une minute par variante : dit s'il est « tué par nous » ou « tué par l'extérieur »
+    --variante <v,…>      http, socket (aucun port TCP), un-fil, cli (sans serveur) ou toutes (défaut)
+    --duree S             secondes de calcul par variante (défaut 60, 600 pour imiter un brouillon)`;
 
 export async function principal(argv = process.argv.slice(2)) {
   const o = lireOptions(argv);
@@ -517,6 +606,10 @@ export async function principal(argv = process.argv.slice(2)) {
   if (refus) arreter(`Dossier refusé (${dossier}) : ${refus}.`);
   const threads = o.threads ?? reglages.threads;
   const c = cheminsIaLocale(dossier);
+  if (o.diagnostic) {
+    await diagnosticInstalle({ o, dossier, modele, threads, reglages });
+    return;
+  }
   console.log(`IA locale du serveur Esport : ${o.dryRun ? 'SIMULATION (--dry-run : rien n’est téléchargé ni écrit)' : 'installation'}`);
 
   titre('1. Machine');
@@ -625,6 +718,28 @@ export async function principal(argv = process.argv.slice(2)) {
     info('Pour mesurer la vitesse sur ce serveur : relancez avec --test (quelques minutes).');
   }
   afficherFin({ modele, threads, dossier });
+}
+
+/** --diagnostic : sur l'installation existante (rien n'est téléchargé ni installé). */
+async function diagnosticInstalle({ o, dossier, modele, threads, reglages }) {
+  const inst = etatInstallationIaLocale({ dossier, modele });
+  if (!inst.installe) arreter(`IA locale non installée pour ${modele} (${inst.raison}) : lancez d’abord l’installation (sans --diagnostic).`);
+  const variantes = o.variantes ?? [...VARIANTES];
+  const dureeS = o.dureeS ?? 60;
+  console.log(`Diagnostic de l’IA locale : moteur lancé SEUL, en direct ; ${variantes.length} variante(s) × ${dureeS} s de calcul (${modele}, ${threads} fils, nice ${reglages.nice}).`);
+  titre('1. Compte et autres processus');
+  const r = await diagnostic({ dossier, binaire: inst.binaire, fichierModele: inst.fichierModele, modele, threads, contexte: Math.min(reglages.contexte, 8192), variantes, dureeS, nice: reglages.nice });
+  if (r.refuse) {
+    process.exitCode = 2;
+    return;
+  }
+  titre(`Verdict : ${r.verdict}`);
+  for (const l of r.lignes) info(l);
+  info(`Journal : grep -E "diagnostic|signal SIG" ~/logs/esport-ia-locale.log | tail -n 40`);
+  if (r.support) {
+    titre('Message prêt à envoyer au support o2switch (aucune donnée secrète)');
+    console.log(`\n${r.support}\n`);
+  }
 }
 
 function afficherFin({ modele, threads, dossier, simulation = false }) {

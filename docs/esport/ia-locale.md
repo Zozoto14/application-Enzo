@@ -190,20 +190,87 @@ Estimations pour un processeur de serveur récent avec 8 fils, à confirmer par 
 | Qwen2.5-7B (défaut) | ≈ 5,5 Go | 4 à 8 jetons/s | 5 à 10 min (lecture des pages 1 à 3 min, puis 1 à 3 min par étape) | 20 à 60 s (chargement compris) |
 | Qwen3-4B (`--petit`) | ≈ 3 Go | 8 à 15 jetons/s | 3 à 6 min | 10 à 30 s |
 
-Le compte o2switch a de la marge (40 cœurs, 48 Go), mais le serveur est **partagé** : CloudLinux limite le processeur
-et la mémoire du compte (limites « LVE »). Gardez 8 fils au plus ; si cPanel › **Resource Usage** signale des fautes,
-passez à `IA_LOCALE_THREADS=4` ou au modèle `--petit`.
+Le compte o2switch a de la marge (48 Go de mémoire physique, 400 processus ; la machine montre 64 cœurs et 125 Go,
+mais c'est l'hôte), et le serveur est **partagé** : CloudLinux limite le processeur, la mémoire et les entrées-sorties
+du compte (limites « LVE » : cPanel › **Resource Usage**). Gardez 8 fils au plus. Le moteur est lancé avec 4 fils HTTP
+(`--threads-http 4`, au lieu d'un par cœur visible) et le modèle en lecture projetée (`mmap`, par défaut de llama.cpp :
+pages du fichier partagées, récupérables ; `--mlock` n'est pas utilisé). Les fautes « IO » au chargement du modèle
+ralentissent mais ne tuent pas.
 
 ## Dépannage
 
 Tout ce qui concerne le moteur est noté dans **`~/logs/esport-ia-locale.log`** : sorties de `llama-server`, et des
 lignes `[esport] IA locale (rôle, pid …)` qui disent **qui** a fait quoi (`app`, `travailleur` = processus de fond,
-`cron`) : moteur prêt (durée du chargement, contexte, mémoire), **chaque requête terminée** (durée, jetons lus dont
-ceux déjà en cache, jetons écrits, vitesses), requête échouée avec sa **cause technique** (`ECONNRESET`, `ECONNREFUSED`, `UND_ERR_HEADERS_TIMEOUT`…) et
-l'état du moteur à cet instant, moteur arrêté de façon imprévue (avec le **signal** reçu : `SIGKILL` = tué, souvent
-par la limite mémoire LVE), moteur orphelin nettoyé (propriétaire, âge du dernier battement). La « dernière erreur » de
-la carte **Moteur de l'IA** est partagée entre l'app et le processus de fond (`etat/incident.json`), effacée dès
-qu'une requête réussit.
+`cron`, `installateur`, `diagnostic`) : moteur prêt (durée du chargement, contexte, mémoire, processus visibles du
+compte), **chaque requête terminée** (durée, jetons lus dont ceux déjà en cache, jetons écrits, vitesses), requête
+échouée avec sa **cause technique** (`ECONNRESET`, `ECONNREFUSED`…) et l'état du moteur à cet instant, **chaque arrêt**
+du moteur (« arrêté à notre demande » ou « arrêté de façon imprévue », avec la phase — chargement, au repos, PENDANT
+une requête, pendant son arrêt — le **signal** reçu et la mémoire relevée juste avant), moteur orphelin nettoyé.
+La « dernière erreur » de la carte **Moteur de l'IA** est partagée entre l'app et le processus de fond
+(`etat/incident.json`), effacée dès qu'une requête réussit.
+
+### « Tué par nous » ou « tué par l'extérieur » ?
+
+**Chaque signal envoyé par notre code** (app, processus de fond, cron, installateur, diagnostic) est noté **avant**
+l'envoi : `signal SIGTERM envoyé à pid 12345 (moteur) : inactivité (300 s sans requête)`, avec le rôle et le pid de
+l'expéditeur. Nous n'envoyons que `SIGTERM` (arrêt propre) ; `SIGKILL` seulement si le moteur est encore là 10 s
+après, et c'est noté aussi. Donc :
+
+```bash
+grep -E "signal SIG|imprévue|orphelin|hors de portée|diagnostic" ~/logs/esport-ia-locale.log | tail -n 60
+```
+
+- une ligne « arrêté de façon imprévue (signal SIGKILL : arrêté de force par un autre processus ou par l'hébergeur ;
+  ce processus ne lui a envoyé aucun signal) » **sans** ligne « signal SIGKILL envoyé à pid <ce pid> » juste avant
+  → **tué par l'extérieur** (aucun de nos programmes) ;
+- une ligne « signal … envoyé à pid <ce pid> » → **tué par nous** : le rôle et la raison sont sur la ligne.
+
+Pour trancher sans l'app : le **diagnostic** lance le moteur SEUL, au premier plan.
+
+```bash
+source /home/jayo8828/nodevenv/application-enzo/esport/22/bin/activate
+cd ~/application-enzo
+bash esport/serveur/installer-ia-locale.sh --petit --diagnostic            # 4 variantes × 60 s de calcul
+bash esport/serveur/installer-ia-locale.sh --petit --diagnostic --duree 600 --variante http   # 10 min, comme un brouillon
+```
+
+Il vérifie et affiche qu'**aucun autre** de nos processus d'IA ne tourne (verrou du moteur libre, pas de processus de
+fond, aucun moteur visible ; sinon il refuse : attendre 1 à 5 min), prend les verrous (l'app et le cron n'en lancent
+pas pendant ce temps), puis essaie : `http` (comme l'app), `socket` (socket Unix : **aucun port TCP ouvert**),
+`un-fil` (1 seul fil de calcul) et `cli` (`llama-completion`/`llama-cli` sans serveur, s'il est installé ; le moteur
+compilé n'a que `llama-server`, la variante `socket` couvre alors le cas « sans port »). Chaque variante : chargement,
+10 s au repos, puis calcul continu ; relevé chaque seconde (mémoire, processeur). Il conclut par **TUÉ PAR NOUS**,
+**TUÉ PAR L'EXTÉRIEUR** (avec ce que les variantes éliminent : port, nombre de fils, calcul), **PLANTAGE DU MOTEUR**
+ou **LE MOTEUR TIENT**, et affiche un **message prêt à envoyer au support o2switch** (heures UTC, phase, fils, mémoire,
+processeur ; ni clé, ni port, ni domaine). En attendant la réponse : mode « Clé API » dans l'Administration IA.
+
+### Un seul moteur pour tout le compte
+
+Le verrou `etat/serveur.json` est un **bail** : le propriétaire y inscrit son pid, son **espace de processus**
+(`/proc/self/ns/pid`), l'identifiant de démarrage de la machine et son heure de démarrage, le pid du moteur et l'heure
+de démarrage du moteur, et le renouvelle toutes les 30 s. Sous CloudLinux/CageFS, l'app (Passenger), le cron et une
+session SSH peuvent **ne pas se voir** (`kill(pid, 0)` répond « n'existe pas » pour un processus bien vivant) : avant
+octobre 2026, un propriétaire vivant pouvait passer pour mort, son verrou et sa clé étaient retirés et un **second
+moteur** était lancé. Désormais :
+
+- le propriétaire est vivant tant que son bail est récent (moins de 3 min), **quoi que dise `kill(pid, 0)`** ; il n'est
+  déclaré mort plus tôt que si c'est **certain** (même espace de processus que nous et disparu, pid réutilisé, machine
+  redémarrée) ;
+- un moteur orphelin n'est arrêté que s'il est **identifié** (visible d'ici, notre fichier de clé sur sa ligne de
+  commande, même heure de démarrage que celle inscrite) : SIGTERM, puis SIGKILL s'il résiste, tout est journalisé ;
+- un moteur orphelin **hors de portée** (autre espace de processus) qui répond encore sur son port avec notre clé :
+  aucun signal, verrou gardé, **aucun second moteur** (« ENCORE EN MARCHE et hors de portée d'ici » dans le journal) ;
+- avant de lancer un moteur, un moteur visible lancé avec notre clé mais inscrit à aucun verrou est arrêté (SIGTERM) ;
+- le moteur est lancé **détaché** (son propre groupe de processus) : la fin d'une session SSH ou un signal adressé au
+  groupe de l'app ne l'atteint pas ; son propriétaire l'arrête lui-même (SIGTERM journalisé, y compris à sa sortie) ;
+- l'installateur (`--test`) passe par le même verrou : si l'app ou le processus de fond tient le moteur, il **attend**
+  (6 min au plus) puis renonce proprement, sans second moteur ; Ctrl-C arrête son moteur proprement ;
+- le verrou du processus de fond suit la même règle (battement plutôt que `kill(pid, 0)`).
+
+Le banc d'essai (`--test`) appelle le moteur par le même transport que l'app (`node:http`, une connexion par requête ;
+plus le `fetch` global, dont la connexion gardée ouverte pouvait être refermée par le moteur entre deux essais), et
+affiche la **cause réelle** d'un échec au lieu de `TypeError: fetch failed` : sortie du moteur (signal, code, envoyé
+par nous ou non), signaux de nos programmes vers lui, dernières lignes du moteur.
 
 | Message / code | Cause probable | Que faire |
 | --- | --- | --- |
@@ -211,9 +278,9 @@ qu'une requête réussit.
 | Brouillon en échec « Service d'IA injoignable » alors que **Tester l'IA locale** réussit (avant octobre 2026) | Le `fetch` de Node (undici) abandonne une requête après **300 s sans en-têtes** ; llama-server n'en envoie qu'à la fin de la génération (un brouillon dure 5 à 15 min). **Corrigé** : le moteur local est appelé par `node:http` sans ce délai (`esport/serveur/ia-locale/transport.mjs`) ; seul `IA_LOCALE_DELAI_MIN` borne la requête. | Mettre à jour l'app (déploiement), redémarrer l'app, relancer le brouillon. |
 | `ia-delai-connexion` | Un client HTTP a expiré avant la réponse (cause dans le message : `UND_ERR_HEADERS_TIMEOUT`…) | Ne devrait plus arriver pour l'IA locale ; sinon, signaler avec la ligne du journal. |
 | `ia-delai` | La requête a dépassé `IA_LOCALE_DELAI_MIN` (20 min, attente comprise) | Moins de pages de référence, `IA_LOCALE_JETONS_MAX` plus bas, modèle `--petit`, ou délai plus long. |
-| `ia-locale-tuee` | Le **système** a tué le moteur pendant le calcul (`SIGKILL`, sans ligne « orphelin nettoyé ») : presque toujours la **limite mémoire du compte** (LVE). Le journal donne la mémoire relevée juste avant. | cPanel › **Resource Usage** (fautes « mémoire ») ; `IA_LOCALE_CONTEXTE=6144`, `IA_LOCALE_THREADS=4`, ou le modèle `--petit` (≈ 3 Go) ; `--test` affiche la mémoire maximale du moteur. |
+| `ia-locale-tuee` | Le moteur a reçu `SIGKILL` pendant le calcul **sans que ce processus le lui ait envoyé** : un autre programme ou l'**hébergeur**. Sur o2switch, cPanel › Resource Usage ne montre aucune faute mémoire (limite 48 Go) : ce n'est pas la limite LVE. | Voir « Tué par nous ou tué par l'extérieur ? » : lignes « signal … envoyé » du journal, puis `--diagnostic`. |
 | `ia-locale-plantage` | Le moteur s'est arrêté brutalement (autre signal, `SIGSEGV`, `SIGABRT`, ou code d'erreur) | Les dernières lignes de `llama-server` au-dessus dans le journal ; relancer ; si cela se répète, `installer-ia-locale.sh --forcer`. |
-| `ia-locale-demarrage-memoire` | Le système a tué le moteur **pendant le chargement**, deux fois de suite (un second essai est fait après 5 s) | Comme `ia-locale-tuee`. |
+| `ia-locale-demarrage-tue` | Le moteur a reçu `SIGKILL` **pendant le chargement**, deux fois de suite (un second essai est fait après 5 s) | Comme `ia-locale-tuee`. |
 | `ia-locale-coupee` | Le moteur a coupé la connexion pendant le calcul sans être mort (redémarré, connexion fermée) | Chercher juste au-dessus dans le journal ; relancer. |
 | `ia-locale-bloquee` | Plus aucun signe de vie du moteur pendant 5 minutes (processeur bloqué par la limite CPU du compte ?) | cPanel › Resource Usage ; `IA_LOCALE_THREADS=4`. |
 | `ia-locale-contexte` | La demande ne tient pas dans le contexte (`IA_LOCALE_CONTEXTE`) | Moins de pages de référence, ou contexte plus grand (plus de mémoire). |
@@ -224,9 +291,12 @@ qu'une requête réussit.
 | `ia-locale-arretee` | Plus rien n'écoute : le moteur s'était déjà arrêté | Idem. |
 | `ia-locale-arret` (carte) | Le moteur s'est arrêté de lui-même | Idem ; voir les dernières lignes de `llama-server` dans le journal. |
 | `ia-locale-demarrage` | Le moteur n'a pas démarré (binaire, modèle, mémoire, chargement > `IA_LOCALE_DEMARRAGE_S`) | La raison exacte est dans le journal (« démarrage impossible : … »). |
-| `ia-locale-occupee` | Un autre processus (souvent le processus de fond en plein brouillon) tient le moteur | Attendre la fin du brouillon ; le test de connexion n'interrompt jamais un calcul. |
+| `ia-locale-occupee` | Un autre processus (souvent le processus de fond en plein brouillon) tient le moteur, ou un moteur sans propriétaire répond encore hors de portée | Attendre la fin du brouillon ; le test de connexion n'interrompt jamais un calcul. Si cela dure : `grep "hors de portée" ~/logs/esport-ia-locale.log`. |
 
-Garanties (testées dans `esport/test/ia-locale.test.mjs`) : un moteur dont le propriétaire est vivant et bat (toutes
+Garanties (testées dans `esport/test/ia-locale.test.mjs` et `esport/test/ia-locale-signaux.test.mjs`, avec une
+visibilité des processus simulée) : un propriétaire invisible mais dont le bail est récent n'est jamais pris pour mort ;
+aucun signal à un moteur non identifié ; SIGTERM avant SIGKILL, chacun journalisé ; un SIGKILL venu d'ailleurs est
+reconnu même pendant notre propre arrêt ; le diagnostic distingue « tué par nous » et « tué par l'extérieur » ; un moteur dont le propriétaire est vivant et bat (toutes
 les 30 s) n'est **jamais** arrêté par l'app, le cron ou un autre processus ; l'arrêt pour inactivité n'a pas lieu pendant
 une requête (le minuteur ne repart qu'à la fin) ; un processus ne retire jamais le verrou ni la clé d'un autre, même
 quand il nettoie un orphelin au moment où un autre processus reprend le moteur ; le verrou du processus de fond est créé
@@ -251,7 +321,9 @@ Esport. L'assistant revient à la clé d'API (ou se coupe s'il n'y en a pas).
 | Fichier | Rôle |
 | --- | --- |
 | `esport/serveur/installer-ia-locale.sh` | Script à lancer (trouve le Node de l'app, `nice 19`) |
-| `esport/serveur/ia-locale/installer.mjs` | Installation, `--test`, `--dry-run` |
+| `esport/serveur/ia-locale/installer.mjs` | Installation, `--test`, `--dry-run`, `--diagnostic` |
+| `esport/serveur/ia-locale/diagnostic.mjs` | `--diagnostic` : moteur lancé seul, « tué par nous » ou « tué par l'extérieur » |
+| `esport/serveur/ia-locale/processus.mjs` | Identité des processus (espace de pid, heure de démarrage), mort certaine, signaux journalisés, mémoire du compte |
 | `esport/serveur/ia-locale/installation.mjs` | Versions figées, modèles, emplacements, état de l'installation |
 | `esport/serveur/ia-locale/outils-compilation.lock` | Paquets conda-forge figés du compilateur (adresse + SHA-256) |
 | `esport/serveur/ia-locale/gestionnaire.mjs` | Démarrage à la demande, verrou, orphelins, file d'attente, arrêt |
@@ -260,4 +332,4 @@ Esport. L'assistant revient à la clé d'API (ou se coupe s'il n'y en a pas).
 | `esport/serveur/ia-locale/lanceur.mjs`, `travailleur.mjs` | Processus de fond |
 | `esport/noyau/ia/connecteur.mjs` | `configIaLocale`, `creerConnecteurLocal` |
 | `esport/noyau/ia/consignes-compactes.mjs` | Consignes et schémas JSON pour un petit modèle |
-| `esport/test/ia-locale.test.mjs` | Tests (faux moteur : aucun modèle, aucun téléchargement) |
+| `esport/test/ia-locale.test.mjs`, `ia-locale-signaux.test.mjs` | Tests (faux moteur : aucun modèle, aucun téléchargement ; visibilité des processus simulée) |

@@ -35,7 +35,7 @@ export async function preparerEsport({ config = chargerConfigEsport(), base, sto
   // IA locale : moteur resté orphelin après un redémarrage de l'app (Passenger) arrêté tout de suite.
   if (config.iaLocale?.installation?.installe) {
     try {
-      const n = nettoyerOrphelinIaLocale({ dossier: config.iaLocale.dossier, journal: journalIaLocaleParDefaut(), role: 'app' });
+      const n = await nettoyerOrphelinIaLocale({ dossier: config.iaLocale.dossier, journal: journalIaLocaleParDefaut(), role: 'app' });
       if (n.nettoye) console.warn(`[esport] IA locale : moteur orphelin arrêté${n.pid ? ` (pid ${n.pid})` : ''}.`);
     } catch (e) {
       console.error('[esport] IA locale : nettoyage impossible', e?.message ?? e);

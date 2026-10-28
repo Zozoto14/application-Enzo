@@ -754,10 +754,11 @@ pgrep -af llama-server                        # moteur en marche (rien = arrêt�
   d'abord, API en secours ».
 - **« L'IA locale n'a pas pu démarrer »** : voir `~/logs/esport-ia-locale.log` ; relancez
   `bash ~/application-enzo/esport/serveur/installer-ia-locale.sh --test`.
-- **« Le système a arrêté le moteur d'IA locale pendant le calcul (SIGKILL) »** (ou « coupé la connexion
-  (ECONNRESET) ») : limite mémoire du compte, le plus souvent. `grep -E "imprévue|requête" ~/logs/esport-ia-locale.log
-  | tail` montre la mémoire relevée juste avant ; essayez `IA_LOCALE_CONTEXTE=6144` ou le modèle `--petit`. Le
-  `--test` fait un **essai de brouillon complet** et affiche sa durée et la mémoire maximale du moteur.
+- **« Le moteur d'IA locale a été arrêté de force pendant le calcul (SIGKILL) »** (ou « coupé la connexion
+  (ECONNRESET) ») : ce n'est pas la limite mémoire (48 Go, aucune faute dans Resource Usage). Chaque signal envoyé par
+  nos programmes est journalisé : `grep -E "signal SIG|imprévue" ~/logs/esport-ia-locale.log | tail -n 40` ; puis
+  `installer-ia-locale.sh --petit --diagnostic` (moteur lancé seul) dit « tué par nous » ou « tué par l'extérieur » et
+  prépare un message pour le support : voir docs/esport/ia-locale.md, « Tué par nous ou tué par l'extérieur ? ».
 - **Site plus lent pendant un calcul** ou fautes dans cPanel › **Resource Usage** : `IA_LOCALE_THREADS=4` dans
   `esport.env` (puis restart), ou le modèle `--petit`.
 

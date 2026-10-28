@@ -5,12 +5,19 @@
  *    démarrage, avec une clé d'accès aléatoire (fichier 0600, jamais sur la ligne de commande) : sur un
  *    serveur mutualisé, l'adresse 127.0.0.1 est partagée avec les autres comptes ; sans la clé, rien ;
  *  - arrêté après `inactiviteMs` sans requête (5 minutes par défaut), ou tout de suite par `arreter()` ;
- *  - UN SEUL serveur pour tout le compte (verrou etat/serveur.json créé en exclusif, avec le pid du
- *    processus Node propriétaire, le pid du serveur et un battement toutes les 30 s) : un autre processus
- *    (app Passenger, travailleur lancé par le cron) attend son tour ou renonce (« IA locale occupée ») ;
- *  - processus ORPHELIN (propriétaire disparu : redémarrage Passenger, processus tué) : arrêté au prochain
- *    usage, au démarrage de l'app et à chaque passage du cron (`nettoyerOrphelinIaLocale`) ; seul un
- *    processus dont la ligne de commande porte NOTRE fichier de clé est arrêté (jamais un autre) ;
+ *  - UN SEUL serveur pour tout le compte (verrou etat/serveur.json créé en exclusif = BAIL : pid, espace de
+ *    pid et heure de démarrage du propriétaire, pid du moteur, battement toutes les 30 s) : un autre processus
+ *    (app Passenger, travailleur, installateur) attend son tour ou renonce (« IA locale occupée »). Le
+ *    propriétaire est tenu pour vivant tant que son battement est récent, MÊME si `kill(pid, 0)` ne le voit
+ *    pas (CageFS : l'app, le cron et SSH ne se voient pas forcément) ; il n'est déclaré mort plus tôt que si
+ *    c'est certain (voir processus.mjs) ;
+ *  - moteur ORPHELIN (bail expiré : redémarrage Passenger, processus tué) : arrêté au prochain usage, au
+ *    démarrage de l'app et à chaque passage du cron (`nettoyerOrphelinIaLocale`), seulement s'il est
+ *    IDENTIFIÉ (visible d'ici, notre fichier de clé sur sa ligne de commande, même heure de démarrage) :
+ *    SIGTERM, puis SIGKILL s'il résiste. Moteur encore vivant mais hors de portée : rien n'est touché, et
+ *    AUCUN second moteur n'est lancé ;
+ *  - chaque signal envoyé par notre code est journalisé (qui, pourquoi, pid) : un moteur tué sans ligne
+ *    « signal … envoyé » l'a été par un autre programme ou par l'hébergeur ;
  *  - FILE D'ATTENTE : une requête à la fois (le modèle occupe déjà tous ses fils de calcul), `fileMax`
  *    requêtes en attente au plus (au-delà : 503 « IA locale occupée ») ;
  *  - priorité basse (`nice`), fils de calcul et contexte bornés, environnement VIDÉ (les secrets de
@@ -22,53 +29,25 @@
 
 import { spawn as spawnNode } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, readFileSync, existsSync, mkdirSync, openSync, renameSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
 import net from 'node:net';
 import { dirname } from 'node:path';
 import { echec } from '../../noyau/outils.mjs';
 import { cheminsIaLocale, journalIaLocaleParDefaut, lireJson } from './installation.mjs';
+import { arreterProcessus, descriptionProcessus, envoyerSignal, espacePid, identiteProcessus, ligneDeCommande, memoireProcessus, moteursVisibles, mortCertaine, noterIaLocale, processusDuCompte, processusVivant, sonderMoteur } from './processus.mjs';
+
+export { ligneDeCommande, memoireProcessus, noterIaLocale, processusVivant };
 
 export const BATTEMENT_MS = 30_000;
-/** Relevé de la mémoire du moteur (diagnostic d'un arrêt par la limite mémoire du compte). */
+/** Relevé de la mémoire du moteur (noté à sa mort, pour le diagnostic). */
 export const RELEVE_MEMOIRE_MS = 5000;
+/** Bail du verrou : sans battement depuis ce délai, le propriétaire est tenu pour parti. */
 export const VERROU_PERIME_MS = 3 * 60_000;
+/** Arrêt d'un moteur : SIGTERM, puis SIGKILL s'il est encore là après ce délai. */
+export const GRACE_ARRET_MS = 10_000;
 const TAILLE_MAX_JOURNAL = 5 * 1024 * 1024;
 
 const attendre = ms => new Promise(ok => setTimeout(ok, ms));
-
-/** Le processus existe-t-il ? (EPERM : il existe mais appartient à un autre compte.) */
-export function processusVivant(pid) {
-  if (!Number.isInteger(pid) || pid <= 1) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    return e?.code === 'EPERM';
-  }
-}
-
-/** Ligne de commande d'un processus (Linux, /proc), ou [] si illisible. */
-export function ligneDeCommande(pid) {
-  try {
-    return readFileSync(`/proc/${pid}/cmdline`, 'latin1').split('\0').filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-/** Mémoire d'un processus (Linux, /proc) en Mo : { rssMo, picMo }, ou null si illisible. */
-export function memoireProcessus(pid) {
-  try {
-    const t = readFileSync(`/proc/${pid}/status`, 'utf8');
-    const ko = nom => Number(new RegExp(`^${nom}:\\s+(\\d+)\\s+kB`, 'm').exec(t)?.[1]);
-    const rss = ko('VmRSS');
-    const pic = ko('VmHWM');
-    if (!Number.isFinite(rss)) return null;
-    return { rssMo: Math.round(rss / 1024), picMo: Number.isFinite(pic) ? Math.round(pic / 1024) : null };
-  } catch {
-    return null;
-  }
-}
 
 const enGo = mo => `${(mo / 1024).toFixed(1).replace('.', ',')} Go`;
 
@@ -85,50 +64,61 @@ function ecrireAtomique(chemin, contenu, mode = 0o600) {
   renameSync(tmp, chemin);
 }
 
-/**
- * Ligne de diagnostic dans ~/logs/esport-ia-locale.log (même fichier que les sorties du moteur) : qui
- * (pid, rôle) a fait quoi et pourquoi. Jamais de clé ni de port. Sans `journal` : rien (tests).
- */
-export function noterIaLocale(journal, texte, role = null) {
-  if (!journal) return;
-  try {
-    mkdirSync(dirname(journal), { recursive: true });
-    appendFileSync(journal, `${new Date().toISOString()} [esport] IA locale${role ? ` (${role}, pid ${process.pid})` : ` (pid ${process.pid})`} : ${texte}\n`);
-  } catch {
-    // Journal indisponible : sans conséquence.
-  }
-}
-
-/** Arrête un processus orphelin (SIGKILL), s'il est bien à nous. */
-function tuerSiNotre(pid, fichierCle, lire) {
-  if (!Number.isInteger(pid) || pid <= 1 || !processusVivant(pid) || !estNotreServeur(pid, fichierCle, lire)) return false;
-  try {
-    process.kill(pid, 'SIGKILL');
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** Verrou lu, ou null. */
 const lireVerrou = chemin => {
   const v = lireJson(chemin);
   return v && typeof v === 'object' ? v : null;
 };
 
-/** Le propriétaire du verrou est-il encore là (processus vivant, battement récent) ? */
-export function verrouActif(v, maintenant = Date.now()) {
+/** Description du propriétaire inscrite dans le verrou (espace de pid, démarrage machine, heure de démarrage). */
+const descProprietaire = v => (v?.ns || v?.boot ? { ns: v.ns ?? null, boot: v.boot ?? null, debut: v.debutProprietaire ?? null } : null);
+
+/**
+ * Le propriétaire du verrou est-il encore là ? Oui tant que son BAIL est valide (battement de moins de
+ * VERROU_PERIME_MS), sauf mort CERTAINE (même espace de pid que nous et disparu, pid réutilisé, machine
+ * redémarrée). `kill(pid, 0)` seul ne suffit JAMAIS à le déclarer mort : sous CageFS, l'app, le cron et une
+ * session SSH ne se voient pas forcément. `systeme` (tests) : { ns, boot, identite, vivant }.
+ */
+export function verrouActif(v, maintenant = Date.now(), systeme = {}) {
   if (!v) return false;
   const maj = Date.parse(v.majLe ?? '');
-  return processusVivant(v.proprietaire) && Number.isFinite(maj) && maintenant - maj < VERROU_PERIME_MS;
+  if (!Number.isFinite(maj) || maintenant - maj >= VERROU_PERIME_MS) return false;
+  return !mortCertaine(v.proprietaire, descProprietaire(v), systeme);
 }
 
 /**
- * Nettoyage d'un serveur orphelin (propriétaire disparu) : arrête le processus s'il est à nous, retire le
- * verrou et la clé. Appelé au démarrage de l'app, par le cron et avant chaque démarrage. Rend
- * `{ nettoye, pid?, raison }`.
+ * Le moteur inscrit au verrou est-il visible d'ici ET identifié comme le nôtre (même heure de démarrage que
+ * celle inscrite, notre fichier de clé sur sa ligne de commande) ? Seul un moteur identifié peut recevoir un signal.
  */
-export function nettoyerOrphelinIaLocale({ dossier, maintenant = Date.now(), lire = ligneDeCommande, journal = null, role = null } = {}) {
+function moteurIdentifie(v, fichierCle, lire, systeme = {}) {
+  if (!Number.isInteger(v?.pid) || v.pid <= 1) return false;
+  const id = (systeme.identite ?? identiteProcessus)(v.pid);
+  if (!id) return false;
+  if (v.debutMoteur && id.debut !== v.debutMoteur) return false;
+  return estNotreServeur(v.pid, fichierCle, lire);
+}
+
+const lireCle = chemin => {
+  try {
+    return readFileSync(chemin, 'utf8').trim() || null;
+  } catch {
+    return null;
+  }
+};
+
+// Un même moteur hors de portée n'est noté qu'une fois par processus (le nettoyage est retenté chaque seconde).
+const horsDePorteeNotes = new Set();
+
+/**
+ * Nettoyage d'un moteur orphelin (bail expiré ou propriétaire mort de façon certaine). Appelé au démarrage
+ * de l'app, par le cron, par le processus de fond et avant chaque démarrage. Rend `{ nettoye, pid?, raison }` :
+ *  - moteur identifié (visible d'ici, notre clé, même heure de démarrage) : SIGTERM, puis SIGKILL s'il résiste
+ *    (chaque signal journalisé), puis verrou et clé retirés ;
+ *  - moteur non identifiable (autre espace de pid) mais qui RÉPOND encore sur son port avec notre clé : rien
+ *    n'est touché ('hors-de-portee') — le verrou reste, donc aucun second moteur n'est lancé ;
+ *  - moteur absent : verrou et clé retirés.
+ */
+export async function nettoyerOrphelinIaLocale({ dossier, maintenant = Date.now(), lire = ligneDeCommande, journal = null, role = null, systeme = {}, sonder = sonderMoteur, graceMs = GRACE_ARRET_MS } = {}) {
   const c = cheminsIaLocale(dossier);
   if (!existsSync(c.verrouServeur)) return { nettoye: false, raison: 'aucun' };
   const v = lireVerrou(c.verrouServeur);
@@ -143,23 +133,51 @@ export function nettoyerOrphelinIaLocale({ dossier, maintenant = Date.now(), lir
     noterIaLocale(journal, 'verrou du moteur illisible retiré.', role);
     return { nettoye: true, raison: 'illisible' };
   }
-  if (verrouActif(v, maintenant)) return { nettoye: false, raison: 'en-service' };
+  if (verrouActif(v, maintenant, systeme)) return { nettoye: false, raison: 'en-service' };
   // Toujours le MÊME verrou (un autre processus a pu le remplacer entre-temps par le sien) ?
   const toujours = () => lireVerrou(c.verrouServeur)?.jeton === v.jeton;
   if (!toujours()) return { nettoye: false, raison: 'remplace' };
   const age = Math.round((maintenant - Date.parse(v.majLe ?? '')) / 1000);
-  const tue = tuerSiNotre(v.pid, c.cle, lire);
+  const certaine = mortCertaine(v.proprietaire, descProprietaire(v), systeme);
+  const proprio = `propriétaire pid ${v.proprietaire}${v.role ? ` (${v.role})` : ''} ${certaine ? 'disparu' : `sans battement depuis ${Number.isFinite(age) ? `${age} s` : '?'}`}`;
+  // Propriétaire VISIBLE et bien vivant (même espace de pid, même heure de démarrage) mais sans battement : suspendu
+  // (Ctrl-Z) ou bloqué ; il n'est pas mort, son moteur n'est pas touché.
+  const desc = descProprietaire(v);
+  const idProprio = !certaine && desc?.ns && desc.ns === (systeme.ns ?? espacePid('self')) ? (systeme.identite ?? identiteProcessus)(v.proprietaire) : null;
+  if (idProprio && desc.debut && idProprio.debut === desc.debut) {
+    if (!horsDePorteeNotes.has(`vivant:${v.jeton}`)) {
+      horsDePorteeNotes.add(`vivant:${v.jeton}`);
+      noterIaLocale(journal, `verrou du moteur sans battement depuis ${Number.isFinite(age) ? `${age} s` : '?'} mais propriétaire pid ${v.proprietaire} toujours vivant (suspendu ?) : rien n'est touché.`, role);
+    }
+    return { nettoye: false, raison: 'proprietaire-vivant' };
+  }
+  let arrete = false;
+  if (Number.isInteger(v.pid) && v.pid > 1) {
+    if (moteurIdentifie(v, c.cle, lire, systeme)) {
+      const r = await arreterProcessus(v.pid, { toujours: () => moteurIdentifie(v, c.cle, lire, systeme), graceMs, cible: 'moteur orphelin', raison: proprio, journal, role });
+      if (!r.parti) {
+        noterIaLocale(journal, `moteur orphelin pid ${v.pid} toujours là après SIGKILL : verrou gardé.`, role);
+        return { nettoye: false, raison: 'resiste', pid: v.pid };
+      }
+      arrete = true;
+    } else if (v.port && toujours()) {
+      const etat = await sonder(v.port, lireCle(c.cle));
+      if (etat === 'notre' || etat === 'inconnu') {
+        if (!horsDePorteeNotes.has(v.jeton)) {
+          horsDePorteeNotes.add(v.jeton);
+          noterIaLocale(journal, `moteur pid ${v.pid} sans propriétaire (${proprio}) mais ENCORE EN MARCHE et hors de portée d'ici (autre espace de processus) : aucun signal envoyé, verrou gardé, aucun second moteur tant qu'il répond.`, role);
+        }
+        return { nettoye: false, raison: 'hors-de-portee', pid: v.pid };
+      }
+    }
+  }
   // La clé AVANT le verrou, et seulement si l'ancien verrou est toujours là : tant qu'il existe, personne
   // n'a pu prendre le moteur ni écrire une nouvelle clé.
-  if (!toujours()) return { nettoye: tue, raison: 'remplace', ...(tue ? { pid: v.pid } : {}) };
+  if (!toujours()) return { nettoye: arrete, raison: 'remplace', ...(arrete ? { pid: v.pid } : {}) };
   rmSync(c.cle, { force: true });
   if (toujours()) rmSync(c.verrouServeur, { force: true });
-  noterIaLocale(
-    journal,
-    `moteur orphelin nettoyé (propriétaire pid ${v.proprietaire} ${processusVivant(v.proprietaire) ? 'vivant' : 'disparu'}, dernier battement il y a ${Number.isFinite(age) ? `${age} s` : '?'}${tue ? `, moteur pid ${v.pid} arrêté` : ''}).`,
-    role,
-  );
-  return { nettoye: true, raison: 'orphelin', ...(tue ? { pid: v.pid } : {}) };
+  noterIaLocale(journal, `moteur orphelin nettoyé (${proprio}${arrete ? `, moteur pid ${v.pid} arrêté` : v.pid ? `, moteur pid ${v.pid} déjà arrêté` : ''}).`, role);
+  return { nettoye: true, raison: 'orphelin', ...(arrete ? { pid: v.pid } : {}) };
 }
 
 /** Un port TCP libre sur 127.0.0.1 (le système le choisit). */
@@ -181,10 +199,11 @@ function trouverNice() {
 }
 
 /** Options de llama-server (b11351) : écoute locale seulement, une requête à la fois, rien d'inutile. */
-export function argumentsServeur({ fichierModele, port, fichierCle, threads, contexte, delaiS }) {
+export function argumentsServeur({ fichierModele, port, fichierCle, threads, contexte, delaiS, hote = '127.0.0.1' }) {
   return [
     '-m', fichierModele,
-    '--host', '127.0.0.1',
+    // `hote` : 127.0.0.1, ou un chemin « ….sock » (socket Unix, aucun port TCP : --diagnostic seulement).
+    '--host', hote,
     '--port', String(port),
     '--api-key-file', fichierCle,
     '-t', String(threads),
@@ -197,6 +216,8 @@ export function argumentsServeur({ fichierModele, port, fichierCle, threads, con
     '--no-webui',
     '--no-slots',
     '--timeout', String(delaiS),
+    // Fils du serveur HTTP : par défaut un par cœur VISIBLE (64 sur o2switch) ; une requête à la fois suffit.
+    '--threads-http', '4',
   ];
 }
 
@@ -211,8 +232,8 @@ export function environnementMoteur(binaire, env = process.env) {
   };
 }
 
-// Arrêt des serveurs encore en marche quand le processus Node se termine normalement (les autres cas :
-// nettoyage des orphelins).
+// Moteurs encore en marche quand le processus Node se termine normalement : SIGTERM (journalisé). Les autres cas
+// (processus tué) : le bail expire, puis le nettoyage des orphelins s'en charge.
 const enMarche = new Set();
 let sortieInstallee = false;
 function surveillerSortie() {
@@ -228,7 +249,9 @@ function surveillerSortie() {
  *  `dossier` (IA_LOCALE_DOSSIER), `binaire`, `fichierModele`, `threads`, `contexte`, `inactiviteMs`,
  *  `demarrageMs` (chargement du modèle), `delaiMs` (une requête), `fileMax`, `attenteVerrouMs` (attente
  *  d'un serveur tenu par un autre processus), `nice` (0-19), `journal` (fichier des sorties du moteur) ;
- *  injectables : `spawn`, `fetch`, `trouverPort`, `maintenant`, `lire` (ligne de commande), `log`.
+ *  injectables : `spawn`, `fetch`, `trouverPort`, `maintenant`, `lire` (ligne de commande), `log`,
+ *  `systeme` (visibilité des processus : { ns, boot, identite, vivant }), `sonder` (moteur sur son port),
+ *  `listerProcessus` (processus visibles du compte), `graceMs` (SIGTERM → SIGKILL).
  */
 export function creerGestionnaireIaLocale({
   dossier,
@@ -252,12 +275,16 @@ export function creerGestionnaireIaLocale({
   role = null,
   lireMemoire = memoireProcessus,
   pauseApresArretMs = 5000,
+  systeme = {},
+  sonder = sonderMoteur,
+  listerProcessus = processusDuCompte,
+  graceMs = GRACE_ARRET_MS,
 } = {}) {
   const c = cheminsIaLocale(dossier);
   const jeton = randomBytes(8).toString('hex');
   const file = [];
   let actif = false;
-  let serveur = null; // { enfant, pid, port, cle, depuis, pret }
+  let serveur = null; // { enfant, suivi, pid, port, cle, depuis }
   let demarrage = null; // promesse du démarrage en cours
   let minuteurRepos = null;
   let battement = null;
@@ -272,6 +299,27 @@ export function creerGestionnaireIaLocale({
 
   const iso = t => new Date(t).toISOString();
   const noter = texte => noterIaLocale(journal, texte, role);
+  const ici = descriptionProcessus();
+
+  /**
+   * Signal à NOTRE moteur (enfant de ce processus : identité certaine), journalisé. `suivi.signaux` garde la
+   * trace de ce que nous avons envoyé : à sa sortie, un signal reçu qui n'en fait pas partie vient d'ailleurs.
+   */
+  function signaler(enfant, suivi, signal, raison) {
+    if (enfant.exitCode !== null || enfant.signalCode !== null) return false;
+    suivi.signaux.push(signal);
+    return envoyerSignal(enfant.pid, signal, { cible: 'moteur', raison, journal, role });
+  }
+
+  /** SIGTERM, puis SIGKILL après `graceMs` s'il n'est pas sorti (minuteur rendu). */
+  function arreterEnfant(enfant, suivi, raison) {
+    suivi.arretDemande ??= raison;
+    signaler(enfant, suivi, 'SIGTERM', raison);
+    const dur = setTimeout(() => signaler(enfant, suivi, 'SIGKILL', `${raison} ; toujours là ${Math.round(graceMs / 1000)} s après SIGTERM`), graceMs);
+    dur.unref?.();
+    enfant.once('exit', () => clearTimeout(dur));
+    return dur;
+  }
 
   /** Erreur notée ici ET partagée entre processus (etat/incident.json) : l'Administration IA la montre. */
   function noterErreur(code, texte) {
@@ -294,13 +342,17 @@ export function creerGestionnaireIaLocale({
     }
   }
 
-  /** Prend le verrou du compte (exclusif). Rend true, ou false s'il est tenu par un processus vivant. */
-  function prendreVerrou() {
+  /**
+   * Prend le verrou du compte (exclusif). Rend true, ou false s'il est tenu (bail valide), ou si un moteur
+   * sans propriétaire répond encore sans pouvoir être arrêté d'ici. Le verrou décrit le propriétaire (espace
+   * de pid, démarrage machine, heure de démarrage) : les autres processus peuvent savoir s'il est mort À COUP SÛR.
+   */
+  async function prendreVerrou() {
     preparerDossier();
     for (let essai = 0; essai < 2; essai++) {
       try {
         const fd = openSync(c.verrouServeur, 'wx', 0o600);
-        writeFileSync(fd, JSON.stringify({ proprietaire: process.pid, jeton, pid: null, port: null, demarreLe: iso(maintenant()), majLe: iso(maintenant()) }));
+        writeFileSync(fd, JSON.stringify({ proprietaire: process.pid, role, ns: ici.ns, boot: ici.boot, debutProprietaire: ici.debut, jeton, pid: null, port: null, demarreLe: iso(maintenant()), majLe: iso(maintenant()) }));
         closeSync(fd);
         return true;
       } catch (e) {
@@ -308,8 +360,8 @@ export function creerGestionnaireIaLocale({
       }
       const v = lireVerrou(c.verrouServeur);
       if (v?.jeton === jeton) return true;
-      if (verrouActif(v, maintenant())) return false;
-      const n = nettoyerOrphelinIaLocale({ dossier: c.dossier, maintenant: maintenant(), lire, journal, role });
+      if (verrouActif(v, maintenant(), systeme)) return false;
+      const n = await nettoyerOrphelinIaLocale({ dossier: c.dossier, maintenant: maintenant(), lire, journal, role, systeme, sonder, graceMs });
       if (n.nettoye) log.warn?.(`[esport] IA locale : serveur orphelin nettoyé${n.pid ? ` (pid ${n.pid})` : ''}.`);
       else if (n.raison !== 'aucun') return false;
     }
@@ -350,15 +402,13 @@ export function creerGestionnaireIaLocale({
     }
   }
 
+  /** Fin du processus Node : SIGTERM au moteur (journalisé), verrou rendu. */
   function arretImmediat() {
     const s = serveur;
     serveur = null;
-    if (s?.pid) {
-      try {
-        process.kill(s.pid, 'SIGKILL');
-      } catch {
-        // Déjà parti.
-      }
+    if (s) {
+      s.suivi.arretDemande ??= 'fin du processus propriétaire';
+      signaler(s.enfant, s.suivi, 'SIGTERM', 'fin du processus propriétaire');
     }
     try {
       libererVerrou();
@@ -368,11 +418,53 @@ export function creerGestionnaireIaLocale({
   }
   const moi = { arretImmediat };
 
+  /** Qui tient le moteur (pour un message) : { role, pid, depuis } ou null. */
+  function occupant() {
+    const v = lireVerrou(c.verrouServeur);
+    if (!v || v.jeton === jeton) return null;
+    return { role: v.role ?? null, pid: v.proprietaire ?? null, moteur: v.pid ?? null, depuis: v.demarreLe ?? null, actif: verrouActif(v, maintenant(), systeme) };
+  }
+
   async function attendreVerrou(limite) {
     for (;;) {
-      if (prendreVerrou()) return;
-      if (maintenant() >= limite) throw echec(503, 'ia-locale-occupee', 'L’IA locale est occupée par une autre tâche : réessayez dans quelques minutes.');
+      if (await prendreVerrou()) return;
+      if (maintenant() >= limite) throw Object.assign(echec(503, 'ia-locale-occupee', 'L’IA locale est occupée par une autre tâche : réessayez dans quelques minutes.'), { occupant: occupant() });
       await attendre(1000);
+    }
+  }
+
+  /**
+   * Moteurs VISIBLES lancés avec notre fichier de clé alors que NOUS tenons le verrou du compte : personne ne
+   * les possède (restes d'un ancien nettoyage, propriétaire tué) ; arrêtés (SIGTERM puis SIGKILL, journalisés)
+   * avant d'en lancer un autre : jamais deux moteurs à la fois.
+   */
+  async function arreterMoteursSansProprietaire() {
+    let liste = [];
+    try {
+      liste = moteursVisibles(c.cle, listerProcessus());
+    } catch {
+      return;
+    }
+    const identite = systeme.identite ?? identiteProcessus;
+    for (const m of liste) {
+      if (m.pid === process.pid) continue;
+      const id = identite(m.pid);
+      if (!id) continue;
+      const toujours = () => {
+        const x = identite(m.pid);
+        return Boolean(x && x.debut === id.debut && estNotreServeur(m.pid, c.cle, lire));
+      };
+      await arreterProcessus(m.pid, { toujours, graceMs, cible: 'moteur sans propriétaire', raison: 'lancé avec notre clé mais inscrit à aucun verrou (ce processus tient le verrou du compte)', journal, role });
+    }
+  }
+
+  /** Mémoire visible du compte (somme des processus visibles d'ici), en Mo, ou null. */
+  function memoireCompte() {
+    try {
+      const l = listerProcessus();
+      return l.length ? { mo: l.reduce((t, p) => t + (p.rssMo || 0), 0), n: l.length } : null;
+    } catch {
+      return null;
     }
   }
 
@@ -381,8 +473,10 @@ export function creerGestionnaireIaLocale({
     const debut = maintenant();
     await attendreVerrou(Math.min(limite, debut + attenteVerrouMs));
     let enfant = null;
+    let suivi = null;
     let fd = 'ignore';
     try {
+      await arreterMoteursSansProprietaire();
       const cle = randomBytes(24).toString('hex');
       ecrireAtomique(c.cle, `${cle}\n`);
       const port = await trouverPort();
@@ -390,43 +484,54 @@ export function creerGestionnaireIaLocale({
       const args = argumentsServeur({ fichierModele, port, fichierCle: c.cle, threads, contexte, delaiS: Math.ceil(delaiMs / 1000) });
       const niceBin = nice > 0 ? trouverNice() : null;
       fd = ouvrirJournal();
+      // DÉTACHÉ (groupe de processus à lui) : un signal adressé au groupe du processus parent (fin d'une session,
+      // arrêt de l'app) ne l'atteint pas ; nous l'arrêtons nous-mêmes, par SIGTERM journalisé.
       enfant = spawn(niceBin ?? binaire, niceBin ? ['-n', String(Math.min(19, Math.max(1, nice))), binaire, ...args] : args, {
         stdio: ['ignore', fd, fd],
         env: environnementMoteur(binaire),
         cwd: c.etat,
-        detached: false,
+        detached: true,
       });
+      const s0 = { signaux: [], arretDemande: null, pret: false };
+      suivi = s0;
       const fini = { code: null, termine: false };
+      const lui = enfant;
       enfant.on('exit', (code, signal) => {
         fini.termine = true;
         fini.code = code ?? signal;
         fini.signal = signal ?? null;
-        const imprevue = serveur?.enfant === enfant;
+        const etaitServeur = serveur?.enfant === lui;
+        // Imprévue : un signal que NOUS n'avons pas envoyé, ou une sortie sans qu'on l'ait demandée.
+        const imprevue = signal ? !s0.signaux.includes(signal) : !s0.arretDemande;
         const mem = memoire;
-        derniereSortie = { pid: enfant.pid, code: code ?? null, signal: signal ?? null, imprevue, le: maintenant() };
+        derniereSortie = { pid: lui.pid, code: code ?? null, signal: signal ?? null, imprevue, le: maintenant(), signauxEnvoyes: [...s0.signaux] };
         clearInterval(releveMemoire);
-        if (imprevue) {
+        const phase = !s0.pret ? 'pendant le chargement' : s0.arretDemande ? 'pendant son arrêt' : actif ? 'PENDANT une requête' : 'au repos';
+        if (etaitServeur) {
           serveur = null;
           enMarche.delete(moi);
           clearInterval(battement);
           clearTimeout(minuteurRepos);
           libererVerrou();
-          // Arrêt imprévu (plantage, mémoire, processus tué par un tiers) : noté, avec le signal reçu et la dernière
-          // mémoire relevée. (Nos propres arrêts — inactivité, échec de démarrage, sortie — retirent `serveur` avant
-          // de tuer : pas ici.)
-          if (!(code === 0 && !signal)) {
-            const quoi = signal ? `signal ${signal}${signal === 'SIGKILL' ? ' : tué par le système, souvent la limite mémoire du compte (LVE)' : ''}` : `code ${code}`;
-            const memTexte = mem ? ` ; mémoire relevée juste avant : ${enGo(mem.rssMo)}${mem.picMo ? ` (pic ${enGo(mem.picMo)})` : ''}` : '';
-            noterErreur('ia-locale-arret', `moteur pid ${enfant.pid} arrêté de façon imprévue (${quoi})${actif ? ' PENDANT une requête' : ''}${memTexte}.`);
-          }
         }
-        for (const a of attentesSortie) if (a.pid === enfant.pid) a.ok(derniereSortie);
+        if (imprevue) {
+          const nos = s0.signaux.length ? `nous lui avions envoyé seulement ${[...new Set(s0.signaux)].join(', ')}` : 'ce processus ne lui a envoyé aucun signal';
+          const quoi = signal ? `signal ${signal}${signal === 'SIGKILL' ? ' : arrêté de force par un autre processus ou par l’hébergeur' : ''} ; ${nos}` : `code ${code}`;
+          const memTexte = mem ? ` ; mémoire relevée juste avant : ${enGo(mem.rssMo)}${mem.picMo ? ` (pic ${enGo(mem.picMo)})` : ''}` : '';
+          const texte = `moteur pid ${lui.pid} arrêté de façon imprévue ${phase} (${quoi})${memTexte}.`;
+          // Au chargement, l'échec du démarrage est noté plus bas (code d'erreur du démarrage).
+          if (s0.pret && !(code === 0 && !signal)) noterErreur('ia-locale-arret', texte);
+          else noter(texte);
+        } else {
+          noter(`moteur pid ${lui.pid} arrêté à notre demande (${signal ? `signal ${signal}` : `code ${code}`}) : ${s0.arretDemande ?? 'arrêt'}.`);
+        }
+        for (const a of attentesSortie) if (a.pid === lui.pid) a.ok(derniereSortie);
       });
       enfant.on('error', () => {
         fini.termine = true;
       });
       if (!enfant.pid) throw new Error('lancement');
-      majVerrou({ pid: enfant.pid, port, demarreLe: iso(debut) });
+      majVerrou({ pid: enfant.pid, port, debutMoteur: (systeme.identite ?? identiteProcessus)(enfant.pid)?.debut ?? null, demarreLe: iso(debut) });
       // Battement dès le lancement : un chargement long (jusqu'à demarrageMs) ne doit pas passer pour un orphelin.
       clearInterval(battement);
       battement = setInterval(() => {
@@ -452,7 +557,8 @@ export function creerGestionnaireIaLocale({
         if (maintenant() >= limiteSante) throw new Error('modèle trop long à charger');
         await attendre(250);
       }
-      serveur = { enfant, pid: enfant.pid, port, cle, depuis: maintenant() };
+      s0.pret = true;
+      serveur = { enfant, suivi: s0, pid: enfant.pid, port, cle, depuis: maintenant() };
       enMarche.add(moi);
       surveillerSortie();
       dernierDemarrageMs = maintenant() - debut;
@@ -460,17 +566,12 @@ export function creerGestionnaireIaLocale({
       log.log?.(`[esport] IA locale démarrée en ${Math.round(dernierDemarrageMs / 1000)} s (127.0.0.1, ${threads} fils).`);
       const m = lireMemoire(enfant.pid);
       if (m) memoire = m;
-      noter(`moteur pid ${enfant.pid} prêt en ${Math.round(dernierDemarrageMs / 1000)} s (${threads} fils, contexte ${contexte} jetons${m ? `, mémoire ${enGo(m.rssMo)}` : ''}).`);
+      const compte = memoireCompte();
+      noter(`moteur pid ${enfant.pid} prêt en ${Math.round(dernierDemarrageMs / 1000)} s (${threads} fils, contexte ${contexte} jetons${m ? `, mémoire ${enGo(m.rssMo)}` : ''}${compte ? ` ; processus visibles du compte : ${compte.n}, ${enGo(compte.mo)} en tout` : ''}).`);
     } catch (e) {
       clearInterval(battement);
       clearInterval(releveMemoire);
-      if (enfant?.pid) {
-        try {
-          process.kill(enfant.pid, 'SIGKILL');
-        } catch {
-          // Déjà parti.
-        }
-      }
+      if (enfant?.pid && suivi) arreterEnfant(enfant, suivi, `échec du démarrage (${e?.code ?? e?.message ?? e})`);
       serveur = null;
       libererVerrou();
       if (e?.code) {
@@ -480,8 +581,8 @@ export function creerGestionnaireIaLocale({
       }
       log.error?.(`[esport] IA locale : démarrage impossible (${e?.message ?? e}).`);
       if (e?.pendantChargement && e.signal === 'SIGKILL') {
-        noterErreur('ia-locale-demarrage-memoire', `démarrage impossible : ${e.message} : tué par le système, souvent la limite mémoire du compte (LVE).`);
-        throw Object.assign(echec(503, 'ia-locale-demarrage-memoire', 'L’IA locale n’a pas pu démarrer : le système a arrêté son moteur pendant le chargement (mémoire du compte probablement insuffisante ; voir ~/logs/esport-ia-locale.log).'), { reprise: true });
+        noterErreur('ia-locale-demarrage-tue', `démarrage impossible : ${e.message} : arrêté de force par un autre processus ou par l’hébergeur (aucun signal envoyé par ce processus).`);
+        throw Object.assign(echec(503, 'ia-locale-demarrage-tue', 'L’IA locale n’a pas pu démarrer : son moteur a été arrêté de force (SIGKILL) pendant le chargement, par un autre processus ou par l’hébergeur (voir ~/logs/esport-ia-locale.log).'), { reprise: true });
       }
       noterErreur('ia-locale-demarrage', `démarrage impossible : ${e?.message ?? e}.`);
       throw Object.assign(echec(503, 'ia-locale-demarrage', 'L’IA locale n’a pas pu démarrer (voir ~/logs/esport-ia-locale.log).'), { reprise: Boolean(e?.pendantChargement) });
@@ -508,7 +609,7 @@ export function creerGestionnaireIaLocale({
     return derniereErreur;
   }
 
-  async function arreter() {
+  async function arreter(raison = 'arrêt demandé') {
     clearTimeout(minuteurRepos);
     minuteurRepos = null;
     const s = serveur;
@@ -521,20 +622,8 @@ export function creerGestionnaireIaLocale({
       if (s.enfant.exitCode !== null || s.enfant.signalCode !== null) ok();
       else s.enfant.once('exit', ok);
     });
-    try {
-      s.enfant.kill('SIGTERM');
-    } catch {
-      // Déjà parti.
-    }
-    const dur = setTimeout(() => {
-      try {
-        s.enfant.kill('SIGKILL');
-      } catch {
-        // Déjà parti.
-      }
-    }, 5000);
+    arreterEnfant(s.enfant, s.suivi, raison);
     await parti;
-    clearTimeout(dur);
     libererVerrou();
     log.log?.('[esport] IA locale arrêtée.');
     return true;
@@ -545,10 +634,10 @@ export function creerGestionnaireIaLocale({
     minuteurRepos = null;
     if (!serveur) return;
     if (inactiviteMs <= 0) {
-      void arreter();
+      void arreter('inactivité');
       return;
     }
-    minuteurRepos = setTimeout(() => void arreter(), inactiviteMs);
+    minuteurRepos = setTimeout(() => void arreter(`inactivité (${Math.round(inactiviteMs / 1000)} s sans requête)`), inactiviteMs);
     minuteurRepos.unref?.();
   }
 
@@ -633,7 +722,7 @@ export function creerGestionnaireIaLocale({
     /** État pour l'Administration IA (rien de secret : ni port, ni clé). */
     etat() {
       const v = lireVerrou(c.verrouServeur);
-      const ailleurs = !serveur && v && v.jeton !== jeton && verrouActif(v, maintenant()) && processusVivant(v.pid);
+      const ailleurs = !serveur && v && v.jeton !== jeton && verrouActif(v, maintenant(), systeme);
       return {
         enMarche: Boolean(serveur) || Boolean(ailleurs),
         ailleurs: Boolean(ailleurs),
@@ -661,7 +750,9 @@ export function creerGestionnaireIaLocale({
         // Mesure perdue : sans gravité.
       }
     },
-    nettoyerOrphelin: () => nettoyerOrphelinIaLocale({ dossier: c.dossier, maintenant: maintenant(), lire, journal, role }),
+    nettoyerOrphelin: () => nettoyerOrphelinIaLocale({ dossier: c.dossier, maintenant: maintenant(), lire, journal, role, systeme, sonder, graceMs }),
+    /** Qui tient le moteur, s'il est tenu par un autre processus : { role, pid, moteur, depuis, actif } ou null. */
+    occupant,
     /** Diagnostic d'une requête échouée (cause réelle), avec l'état du moteur à cet instant. */
     noterIncident(texte, code = null) {
       const moteur = serveur ? `moteur pid ${serveur.pid} ${processusVivant(serveur.pid) ? 'toujours en marche' : 'disparu'}` : 'moteur arrêté';

@@ -495,7 +495,7 @@ const COUPURES_LOCALES = new Set(['ia-locale-coupee', 'ia-locale-arretee', 'ia-l
  *
  * Requête EN FLUX (voir `echangerLocal`). `options.progression({ lecture, ecrits })` : progression du calcul.
  * Connexion coupée : on regarde si le moteur est MORT (et de quoi) pour un message précis — tué par le système
- * (SIGKILL : mémoire du compte, limite LVE) ou planté (autre signal, code d'erreur).
+ * (SIGKILL reçu sans que nous l'ayons envoyé : un autre processus ou l'hébergeur) ou planté (autre signal, code d'erreur).
  */
 export function creerConnecteurLocal(gestionnaire, { modele = 'local', jetonsMax = 4096, delai = 20 * 60_000, fetch: fetchIa = (...a) => globalThis.fetch(...a), maintenant = () => Date.now(), silenceMaxMs = SILENCE_MAX_LOCAL_MS, attenteSortieMs = 2000 } = {}) {
   const noter = (texte, code) => {
@@ -527,7 +527,7 @@ export function creerConnecteurLocal(gestionnaire, { modele = 'local', jetonsMax
             // (Seulement un arrêt IMPRÉVU : nos propres arrêts — inactivité, sortie du processus — ne sont pas des plantages.)
             const sortie = COUPURES_LOCALES.has(e.code) ? await Promise.resolve(gestionnaire.attendreSortie?.(pid, attenteSortieMs)).then(s => (s?.imprevue ? s : null), () => null) : null;
             if (sortie?.signal === 'SIGKILL') {
-              e = Object.assign(echec(502, 'ia-locale-tuee', 'Le système a arrêté le moteur d’IA locale pendant le calcul (SIGKILL) : mémoire du compte probablement dépassée (voir ~/logs/esport-ia-locale.log).'), { cause: 'SIGKILL' });
+              e = Object.assign(echec(502, 'ia-locale-tuee', 'Le moteur d’IA locale a été arrêté de force pendant le calcul (SIGKILL), par un autre processus ou par l’hébergeur (voir ~/logs/esport-ia-locale.log).'), { cause: 'SIGKILL' });
             } else if (sortie && (sortie.signal || sortie.code !== 0)) {
               const quoi = sortie.signal ?? `code ${sortie.code}`;
               e = Object.assign(echec(502, 'ia-locale-plantage', `Le moteur d’IA locale s’est arrêté brutalement pendant le calcul (${quoi} ; voir ~/logs/esport-ia-locale.log).`), { cause: String(quoi).replace(/\s+/g, '_').toUpperCase() });

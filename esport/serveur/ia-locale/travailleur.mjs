@@ -18,7 +18,7 @@ import { linkSync, mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { setPriority } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { cheminsIaLocale, journalIaLocaleParDefaut } from './installation.mjs';
-import { travailleurActif } from './lanceur.mjs';
+import { contenuVerrouTravailleur, travailleurActif } from './lanceur.mjs';
 
 const attendre = ms => new Promise(ok => setTimeout(ok, ms));
 export const PAUSE_SONDAGE_MS = 15_000;
@@ -81,7 +81,7 @@ export function prendreVerrouTravailleur(chemin, pid = process.pid) {
   if (!travailleurActif(chemin)) rmSync(chemin, { force: true });
   const tmp = `${chemin}.${pid}.${randomBytes(4).toString('hex')}.tmp`;
   try {
-    writeFileSync(tmp, String(pid), { mode: 0o600, flag: 'wx' });
+    writeFileSync(tmp, contenuVerrouTravailleur(pid), { mode: 0o600, flag: 'wx' });
     linkSync(tmp, chemin);
     return true;
   } catch {
@@ -110,7 +110,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   }
   const { chargerConfigEsport } = await import('../config.mjs');
   const { creerIaLocale } = await import('./service.mjs');
-  const { nettoyerOrphelinIaLocale } = await import('./gestionnaire.mjs');
+  const { nettoyerOrphelinIaLocale, noterIaLocale } = await import('./gestionnaire.mjs');
   const config = chargerConfigEsport();
   const reglages = config.iaLocale;
   const horodatage = () => new Date().toISOString();
@@ -125,7 +125,11 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     process.exit(0);
   }
   let arreter = false;
-  for (const s of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(s, () => (arreter = true));
+  for (const s of ['SIGTERM', 'SIGINT', 'SIGHUP'])
+    process.on(s, () => {
+      arreter = true;
+      noterIaLocale(journalIaLocaleParDefaut(), `signal ${s} reçu : fin après le travail en cours.`, 'travailleur');
+    });
   const veille = setInterval(() => toucherVerrouTravailleur(c.verrouTravailleur), 30_000);
   veille.unref();
   const { basePostgres, optionsDepuisEnv } = await import('../../adaptateurs/postgres.mjs');
@@ -135,7 +139,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const base = await basePostgres({ ...optionsDepuisEnv(), max: 2 });
   const local = creerIaLocale(reglages, { role: 'travailleur' });
   try {
-    nettoyerOrphelinIaLocale({ dossier: reglages.dossier, journal: journalIaLocaleParDefaut(), role: 'travailleur' });
+    await nettoyerOrphelinIaLocale({ dossier: reglages.dossier, journal: journalIaLocaleParDefaut(), role: 'travailleur' });
     const jeux = servicesJeux({ base, socle: {}, ia: { config: config.ia, telecharger: telechargeurNode(), resoudre: resoudreNode, local }, travauxIa: 'synchrone' });
     const bilan = await executerTravailleur({
       jeux,

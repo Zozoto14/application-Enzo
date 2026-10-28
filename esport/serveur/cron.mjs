@@ -59,7 +59,7 @@ export async function executerCron(base, config, { fetch, maintenant, stockage, 
   // IA locale : le cron ne calcule pas lui-même ; il arrête un moteur orphelin et lance le processus de fond.
   try {
     if (config.iaLocale?.installation?.installe) {
-      const n = nettoyerOrphelinIaLocale({ dossier: config.iaLocale.dossier, journal: journalIaLocaleParDefaut(), role: 'cron' });
+      const n = await nettoyerOrphelinIaLocale({ dossier: config.iaLocale.dossier, journal: journalIaLocaleParDefaut(), role: 'cron' });
       if (n.nettoye) rapport.push({ tache: 'IA locale : moteur orphelin', ok: true, n: n.pid ? 1 : 0 });
     }
     const local = creerIaLocale(config.iaLocale, { role: 'cron', lancer: lancerIaLocale });

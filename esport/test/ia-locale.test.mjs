@@ -28,6 +28,7 @@ import { creerIaLocale } from '../serveur/ia-locale/service.mjs';
 import { lancerTravailleurIaLocale } from '../serveur/ia-locale/lanceur.mjs';
 import { executerTravailleur, prendreVerrouTravailleur } from '../serveur/ia-locale/travailleur.mjs';
 import { creerFetchLocal, fetchLocal } from '../serveur/ia-locale/transport.mjs';
+import { espacePid } from '../serveur/ia-locale/processus.mjs';
 import { essaiBrouillon, lireOptions, lirePaquetsOutils, pagesEssai, recommandation, telechargerVerifie } from '../serveur/ia-locale/installer.mjs';
 import { htmlEnTexte } from '../noyau/ia/recherche.mjs';
 
@@ -217,9 +218,10 @@ test('gestionnaire : moteur ORPHELIN (propriétaire disparu) arrêté ; jamais u
     enfants.push(orphelin);
     await attendre(300);
     const mort = 2 ** 22 + 12345;
-    writeFileSync(inst.c.verrouServeur, JSON.stringify({ proprietaire: mort, jeton: 'x', pid: orphelin.pid, port: 1, majLe: new Date().toISOString() }));
+    // Propriétaire dans NOTRE espace de pid et disparu : mort certaine, même avec un battement récent.
+    writeFileSync(inst.c.verrouServeur, JSON.stringify({ proprietaire: mort, ns: espacePid(), jeton: 'x', pid: orphelin.pid, port: 1, majLe: new Date().toISOString() }));
     const parti = new Promise(ok => orphelin.once('exit', ok));
-    const n = nettoyerOrphelinIaLocale({ dossier: inst.c.dossier });
+    const n = await nettoyerOrphelinIaLocale({ dossier: inst.c.dossier, journal: join(inst.racine, 'moteur.log'), role: 'cron' });
     assert.equal(n.nettoye, true);
     assert.equal(n.pid, orphelin.pid);
     await parti;
@@ -228,14 +230,17 @@ test('gestionnaire : moteur ORPHELIN (propriétaire disparu) arrêté ; jamais u
     // Verrou d'orphelin désignant un processus étranger (pas notre fichier de clé) : PAS tué, verrou retiré.
     const etranger = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { stdio: 'ignore' });
     enfants.push(etranger);
-    writeFileSync(inst.c.verrouServeur, JSON.stringify({ proprietaire: mort, jeton: 'y', pid: etranger.pid, majLe: new Date().toISOString() }));
-    const n2 = nettoyerOrphelinIaLocale({ dossier: inst.c.dossier });
+    writeFileSync(inst.c.verrouServeur, JSON.stringify({ proprietaire: mort, ns: espacePid(), jeton: 'y', pid: etranger.pid, majLe: new Date().toISOString() }));
+    const n2 = await nettoyerOrphelinIaLocale({ dossier: inst.c.dossier });
     assert.equal(n2.nettoye, true);
     assert.equal(n2.pid, undefined);
     assert.equal(processusVivant(etranger.pid), true);
     // Propriétaire vivant et battement récent : rien n'est touché.
     writeFileSync(inst.c.verrouServeur, JSON.stringify({ proprietaire: process.pid, jeton: 'z', pid: etranger.pid, majLe: new Date().toISOString() }));
-    assert.equal(nettoyerOrphelinIaLocale({ dossier: inst.c.dossier }).raison, 'en-service');
+    assert.equal((await nettoyerOrphelinIaLocale({ dossier: inst.c.dossier })).raison, 'en-service');
+    // SIGTERM d'abord (journalisé), pas SIGKILL : le faux moteur s'arrête proprement.
+    assert.match(readFileSync(join(inst.racine, 'moteur.log'), 'utf8'), new RegExp(`\\(cron, pid ${process.pid}\\) : signal SIGTERM envoyé à pid ${orphelin.pid} \\(moteur orphelin\\) : propriétaire pid ${mort} disparu`));
+    assert.doesNotMatch(readFileSync(join(inst.racine, 'moteur.log'), 'utf8'), /SIGKILL/);
     // Le gestionnaire nettoie lui-même un orphelin avant de démarrer (redémarrage de Passenger).
     writeFileSync(inst.c.verrouServeur, JSON.stringify({ proprietaire: mort, jeton: 'w', pid: null, majLe: new Date(Date.now() - 3_600_000).toISOString() }));
     const g = gestionnaire(inst);
@@ -392,7 +397,7 @@ test('concurrence : requête longue du processus de fond → ni arrêt pour inac
     const pid = JSON.parse(readFileSync(inst.c.verrouServeur, 'utf8')).pid;
     await attendre(300);
     // Le cron et l'app (démarrage, test de connexion) pendant le calcul : le moteur légitime n'est pas touché.
-    assert.equal(nettoyerOrphelinIaLocale({ dossier: inst.c.dossier, journal, role: 'cron' }).raison, 'en-service');
+    assert.equal((await nettoyerOrphelinIaLocale({ dossier: inst.c.dossier, journal, role: 'cron' })).raison, 'en-service');
     const app = gestionnaire(inst, { attenteVerrouMs: 200, role: 'app' });
     await assert.rejects(app.executer(async () => true), e => e.code === 'ia-locale-occupee');
     assert.equal(app.etat().ailleurs, true);
@@ -419,12 +424,12 @@ test('concurrence : moteur tué PENDANT une requête → code précis, signal jo
     while (!fond.etat().enMarche) await attendre(20);
     await attendre(200);
     process.kill(JSON.parse(readFileSync(inst.c.verrouServeur, 'utf8')).pid, 'SIGKILL');
-    // Le moteur est mort tué (SIGKILL) : message précis (mémoire du compte), pas un vague « coupé ».
+    // Le moteur est mort tué (SIGKILL) sans que nous l'ayons envoyé : message précis, pas un vague « coupé ».
     await assert.rejects(requete, e => e.code === 'ia-locale-tuee' && e.cause === 'SIGKILL');
     await attendre(100);
     const texte = readFileSync(journal, 'utf8');
     assert.match(texte, /requête échouée après \d+ s : ia-locale-tuee \(cause SIGKILL\)/);
-    assert.match(texte, /arrêté de façon imprévue \(signal SIGKILL : tué par le système, souvent la limite mémoire du compte \(LVE\)\) PENDANT une requête ; mémoire relevée juste avant : \d+,\d Go/);
+    assert.match(texte, /arrêté de façon imprévue PENDANT une requête \(signal SIGKILL : arrêté de force par un autre processus ou par l’hébergeur ; ce processus ne lui a envoyé aucun signal\) ; mémoire relevée juste avant : \d+,\d Go/);
     assert.ok(['ia-locale-tuee', 'ia-locale-arret'].includes(app.etat().derniereErreur?.code), 'erreur du processus de fond visible dans l’Administration IA');
     assert.equal(existsSync(inst.c.verrouServeur), false);
     // Redémarrage réussi : l'erreur est effacée partout.
@@ -444,7 +449,7 @@ test('concurrence : moteur tué PENDANT une requête → code précis, signal jo
     enfants.push(vieux);
     writeFileSync(inst.c.verrouServeur, JSON.stringify({ proprietaire: 2 ** 22 + 12345, jeton: 'vieux', pid: vieux.pid, majLe: new Date(Date.now() - 3_600_000).toISOString() }));
     const nouveau = JSON.stringify({ proprietaire: process.pid, jeton: 'nouveau', pid: null, majLe: new Date().toISOString() });
-    const n = nettoyerOrphelinIaLocale({
+    const n = await nettoyerOrphelinIaLocale({
       dossier: inst.c.dossier,
       lire: () => {
         rmSync(inst.c.verrouServeur);
@@ -614,19 +619,19 @@ test('installateur --test : essai de brouillon complet (même chemin que l’app
   }
 });
 
-test('flux : moteur TUÉ (SIGKILL) ou PLANTÉ pendant le calcul → messages distincts ; mort au chargement → second essai, puis message « mémoire »', async () => {
+test('flux : moteur TUÉ (SIGKILL) ou PLANTÉ pendant le calcul → messages distincts ; mort au chargement → second essai, puis « arrêté de force »', async () => {
   const inst = installationFactice();
   const journal = join(inst.racine, 'moteur.log');
   try {
     const g = gestionnaire(inst, { inactiviteMs: 5000, role: 'travailleur', lireMemoire: () => ({ rssMo: 6042, picMo: 6300 }) });
     const c = creerConnecteurLocal(g, { fetch: fetchLocal });
-    // Tué par le système (limite mémoire LVE) : SIGKILL.
+    // Tué de l'extérieur (SIGKILL que nous n'avons pas envoyé).
     let requete = c.discuter([{ role: 'user', content: 'LENT:5000' }]);
     while (!g.etat().enMarche) await attendre(20);
     await attendre(200);
     process.kill(JSON.parse(readFileSync(inst.c.verrouServeur, 'utf8')).pid, 'SIGKILL');
-    await assert.rejects(requete, e => e.code === 'ia-locale-tuee' && /mémoire du compte/.test(e.message));
-    assert.match(readFileSync(journal, 'utf8'), /PENDANT une requête ; mémoire relevée juste avant : 5,9 Go \(pic 6,2 Go\)/);
+    await assert.rejects(requete, e => e.code === 'ia-locale-tuee' && /arrêté de force pendant le calcul \(SIGKILL\), par un autre processus ou par l’hébergeur/.test(e.message));
+    assert.match(readFileSync(journal, 'utf8'), /PENDANT une requête \(signal SIGKILL : arrêté de force par un autre processus ou par l’hébergeur ; ce processus ne lui a envoyé aucun signal\) ; mémoire relevée juste avant : 5,9 Go \(pic 6,2 Go\)/);
     // Planté (autre signal) : « arrêté brutalement », avec le signal.
     requete = c.discuter([{ role: 'user', content: 'LENT:5000' }]);
     while (!g.etat().enMarche) await attendre(20);
@@ -639,8 +644,8 @@ test('flux : moteur TUÉ (SIGKILL) ou PLANTÉ pendant le calcul → messages dis
   } finally {
     inst.nettoyer();
   }
-  // Tué pendant le chargement une fois : second essai réussi (noté) ; toujours tué : message « mémoire », verrou libéré.
-  for (const [modele, attendu] of [['tue-une-fois.gguf', 'ok'], ['tue.gguf', 'ia-locale-demarrage-memoire']]) {
+  // Tué pendant le chargement une fois : second essai réussi (noté) ; toujours tué : « arrêté de force », verrou libéré.
+  for (const [modele, attendu] of [['tue-une-fois.gguf', 'ok'], ['tue.gguf', 'ia-locale-demarrage-tue']]) {
     const i2 = installationFactice();
     try {
       const fichierModele = join(i2.c.modeles, modele);
@@ -655,7 +660,7 @@ test('flux : moteur TUÉ (SIGKILL) ou PLANTÉ pendant le calcul → messages dis
       assert.match(texte, /pendant le chargement \(signal SIGKILL\)/);
       assert.match(texte, /nouvel essai de démarrage/);
       if (attendu !== 'ok') {
-        assert.equal(g.etat().derniereErreur.code, 'ia-locale-demarrage-memoire');
+        assert.equal(g.etat().derniereErreur.code, 'ia-locale-demarrage-tue');
         assert.equal(existsSync(i2.c.verrouServeur), false);
       }
       await g.arreter();
@@ -670,9 +675,11 @@ test('processus de fond : verrou créé d’un coup avec son pid (jamais vide) ;
   try {
     const ch = inst.c.verrouTravailleur;
     assert.equal(prendreVerrouTravailleur(ch, process.pid), true);
-    assert.equal(readFileSync(ch, 'utf8'), String(process.pid));
+    const contenu = readFileSync(ch, 'utf8');
+    assert.equal(JSON.parse(contenu).pid, process.pid);
+    assert.equal(JSON.parse(contenu).ns, espacePid(), 'espace de pid inscrit (mort certaine seulement dans le même espace)');
     assert.equal(prendreVerrouTravailleur(ch, 999_999), false);
-    assert.equal(readFileSync(ch, 'utf8'), String(process.pid));
+    assert.equal(readFileSync(ch, 'utf8'), contenu);
     assert.deepEqual(readdirSync(inst.c.etat).filter(f => f.endsWith('.tmp')), []);
   } finally {
     inst.nettoyer();

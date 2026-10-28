@@ -73,7 +73,7 @@ export function creerIaLocale(reglages, { role = 'app', gestionnaire, lancer = l
       benchmark: inst.benchmark ?? null,
     },
     etat: () => (g ? g.etat() : {}),
-    lancerTravailleur: () => (role === 'travailleur' ? { lance: false, raison: 'déjà dans le processus de fond' } : lancer({ reglages })),
+    lancerTravailleur: () => (role === 'travailleur' ? { lance: false, raison: 'déjà dans le processus de fond' } : lancer({ reglages, role })),
     arreter: () => g?.arreter() ?? false,
   };
 }
